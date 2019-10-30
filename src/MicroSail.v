@@ -1,0 +1,402 @@
+Require Export Coq.Unicode.Utf8.
+Require Import Coq.ZArith.ZArith.
+Require Import Coq.Strings.String.
+
+Set Implicit Arguments.
+
+Module Type TypeKit.
+
+  (* Names of type constructors. *)
+  Parameter 𝑻 : Set. (* input: \MIT *)
+  (* Names of expression variables. *)
+  Parameter 𝑿 : Set. (* input: \MIX *)
+  Parameter 𝑿_eq_dec : forall x y : 𝑿, {x=y}+{~x=y}.
+
+  Inductive Ty : Set :=
+  | ty_int
+  | ty_bool
+  | ty_bit
+  | ty_string
+  | ty_list (σ : Ty)
+  | ty_prod (σ τ : Ty)
+  | ty_sum  (σ τ : Ty)
+  | ty_unit.
+
+  Record FunTy : Set :=
+    { fun_dom : Ty;
+      fun_cod : Ty
+    }.
+
+  Section Contexts.
+
+    Inductive Ctx (B : Set) : Set :=
+    | ctx_nil
+    | ctx_snoc (Γ : Ctx B) (b : B).
+
+    Global Arguments ctx_nil {_}.
+    Global Arguments ctx_snoc {_} _ _.
+
+    Fixpoint ctx_cat {B : Set} (Γ₁ Γ₂ : Ctx B) {struct Γ₂} : Ctx B :=
+      match Γ₂ with
+      | ctx_nil       => Γ₁
+      | ctx_snoc Γ₂ τ => ctx_snoc (ctx_cat Γ₁ Γ₂) τ
+      end.
+
+    Fixpoint ctx_nth {B : Set} (Γ : Ctx B) (n : nat) {struct Γ} : option B :=
+      match Γ , n with
+      | ctx_snoc _ x , O   => Some x
+      | ctx_snoc Γ _ , S n => ctx_nth Γ n
+      | _            , _   => None
+      end.
+
+    Class InCtx {B : Set} (b : B) (Γ : Ctx B) : Set :=
+      inCtx : { n : nat | ctx_nth Γ n = Some b }.
+
+    Definition inctx_zero {B : Set} {b : B} {Γ : Ctx B} : InCtx b (ctx_snoc Γ b) :=
+      exist _ 0 eq_refl.
+    Definition inctx_succ {B : Set} {b : B} {Γ : Ctx B} {b' : B} (bIn : InCtx b Γ) :
+      InCtx b (ctx_snoc Γ b') := let (n, e) := bIn in exist _ (S n) e.
+
+    Fixpoint ctx_resolve {D : Set} (Γ : Ctx (𝑿 * D)) (x : 𝑿) {struct Γ} : option D :=
+      match Γ with
+      | ctx_nil           => None
+      | ctx_snoc Γ (y, d) => if 𝑿_eq_dec x y then Some d else ctx_resolve Γ x
+      end.
+
+  End Contexts.
+
+  Section Environments.
+
+    Definition Env {X T : Set} (D : T → Set) (Γ : Ctx (X * T)) : Set :=
+      forall (x : X) (τ : T), InCtx (x,τ) Γ -> D τ.
+
+    Definition env_nil {X T : Set} {D : T → Set} : @Env X T D ctx_nil :=
+      fun x τ xIn => let (n, e) := xIn in
+      eq_rec None (λ m, match m with | Some _ => D τ | None => unit end) tt (Some (x, τ)) e.
+
+    Definition env_snoc {X T : Set} {D : T → Set} {Γ : Ctx (X * T)}
+               (E : Env D Γ) (x : X) (τ : T) (d : D τ) : Env D (ctx_snoc Γ (x , τ)).
+    Admitted.
+
+    (* Definition env_nil {X T : Set} {D : T → Set} : @Env X T D ctx_nil := *)
+    (*   fun y σ yIn => *)
+    (*     match yIn in InCtx _ Γx *)
+    (*               return match Γx with *)
+    (*                      | ctx_nil => D σ *)
+    (*                      | ctx_snoc _ _ => unit *)
+    (*                      end *)
+    (*               with *)
+    (*               | inctx_zero _ => tt *)
+    (*               | inctx_succ i => tt *)
+    (*     end. *)
+
+    (* Definition env_snoc {X T : Set} {D : T → Set} {Γ : Ctx (X * T)} *)
+    (*   (E : Env D Γ) (x : X) (τ : T) (d : D τ) : Env D (ctx_snoc Γ (x , τ)) := *)
+    (*   fun y σ yIn => match yIn in InCtx _ Γx *)
+    (*               return match Γx with *)
+    (*                      | ctx_nil => Empty_set *)
+    (*                      | ctx_snoc Γ (_, τ) => Env D Γ → D τ → D σ *)
+    (*                      end *)
+    (*               with *)
+    (*               | inctx_zero _ => λ _ d, d *)
+    (*               | @inctx_succ _ _ _ (_ , _) i => fun E _ => E y σ i *)
+    (*               end E d. *)
+
+    Global Arguments env_snoc {_ _ _ _} _ _ _ _.
+
+    Definition env_drop {X T : Set} {D : T → Set} {Γ : Ctx (X * T)}
+      (x : X) (τ : T) (E : Env D (ctx_snoc Γ (x , τ))) : Env D Γ :=
+      fun y σ yIn => E y σ (inctx_succ yIn).
+
+    Definition env_lookup {X T : Set} {D : T → Set} {Γ : Ctx (X * T)}
+      (E : Env D Γ) {x : X} {τ : T} (i : InCtx (x , τ) Γ) : D τ := E _ _ i.
+    Definition env_update {X T : Set} {D : T → Set} {Γ : Ctx (X * T)}
+      (E : Env D Γ) {x : X} {τ : T} (i : InCtx (x , τ) Γ) (d : D τ) : Env D Γ.
+    Admitted.
+
+  End Environments.
+
+  Module NameResolution.
+
+    Definition IsSome {D : Set} (m : option D) : Set :=
+      match m with
+        | Some _ => unit
+        | None => Empty_set
+      end.
+
+    Definition fromSome {D : Set} (m : option D) : IsSome m -> D :=
+      match m return IsSome m → D with
+      | Some d => fun _ => d
+      | None   => fun p => match p with end
+      end.
+
+    Fixpoint mk_inctx {D : Set} (Γ : Ctx (prod 𝑿 D)) (x : 𝑿) {struct Γ} :
+      let m := ctx_resolve Γ x in forall (p : IsSome m), InCtx (x , fromSome m p) Γ :=
+      match Γ with
+      | ctx_nil => λ p, match p with end
+      | ctx_snoc Γ (y, d) =>
+        match 𝑿_eq_dec x y as s
+        return (∀ p, InCtx (x, fromSome (if s then Some d else ctx_resolve Γ x) p) (ctx_snoc Γ (y, d)))
+        with
+        | left e => fun _ => match e with | eq_refl => inctx_zero end
+        | right _ => fun p => inctx_succ (mk_inctx Γ x p)
+        end
+      end.
+
+  End NameResolution.
+
+  Module NameNotation.
+
+    Notation "'ε'"   := (ctx_nil).
+    Notation "Γ ▻ b" := (ctx_snoc Γ b) (at level 55, left associativity).
+    Notation "Γ₁ ▻▻ Γ₂" := (ctx_cat Γ₁ Γ₂) (at level 55, left associativity).
+    Notation "b ∈ Γ" := (InCtx b Γ)  (at level 80).
+    Notation "E '►' x '∶' τ '↦' d" := (env_snoc E x τ d) (at level 55, left associativity).
+    Notation "E [ x ↦ v ]" := (@env_update _ _ _ _ E x _ _ v) (at level 55, left associativity).
+
+  End NameNotation.
+
+  Section Literals.
+
+    Inductive Bit : Set := bitzero | bitone.
+
+    Fixpoint Lit (σ : Ty) : Set :=
+      match σ with
+      | ty_int => Z
+      | ty_bool => bool
+      | ty_bit => Bit
+      | ty_string => string
+      | ty_list σ' => list (Lit σ')
+      | ty_prod σ₁ σ₂ => Lit σ₁ * Lit σ₂
+      | ty_sum σ₁ σ₂ => Lit σ₁ + Lit σ₂
+      | ty_unit => unit
+      end%type.
+
+    Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Set := Env Lit Γ.
+
+  End Literals.
+
+  Section Expressions.
+
+    Inductive Exp (Γ : Ctx (𝑿 * Ty)) : Ty -> Set :=
+    | exp_var   (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} : Exp Γ σ
+    | exp_lit   (σ : Ty) : Lit σ → Exp Γ σ
+    | exp_plus  (e₁ e₂ : Exp Γ ty_int) : Exp Γ ty_int
+    | exp_times (e₁ e₂ : Exp Γ ty_int) : Exp Γ ty_int
+    | exp_minus (e₁ e₂ : Exp Γ ty_int) : Exp Γ ty_int
+    | exp_neg   (e : Exp Γ ty_int) : Exp Γ ty_int
+    | exp_eq    (e₁ e₂ : Exp Γ ty_int) : Exp Γ ty_bool
+    | exp_le    (e₁ e₂ : Exp Γ ty_int) : Exp Γ ty_bool
+    | exp_lt    (e₁ e₂ : Exp Γ ty_int) : Exp Γ ty_bool
+    | exp_and   (e₁ e₂ : Exp Γ ty_bool) : Exp Γ ty_bool
+    | exp_not   (e : Exp Γ ty_bool) : Exp Γ ty_bool
+    | exp_pair  {σ₁ σ₂ : Ty} (e₁ : Exp Γ σ₁) (e₂ : Exp Γ σ₂) : Exp Γ (ty_prod σ₁ σ₂)
+    | exp_inl   {σ₁ σ₂ : Ty} : Exp Γ σ₁ → Exp Γ (ty_sum σ₁ σ₂)
+    | exp_inr   {σ₁ σ₂ : Ty} : Exp Γ σ₂ → Exp Γ (ty_sum σ₁ σ₂)
+    | exp_list  {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty_list σ)
+    | exp_cons  {σ : Ty} (h : Exp Γ σ) (t : Exp Γ (ty_list σ)) : Exp Γ (ty_list σ)
+    | exp_nil   {σ : Ty} : Exp Γ (ty_list σ).
+
+    Import NameResolution.
+
+    Definition exp_smart_var {Γ : Ctx (𝑿 * Ty)} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
+      Exp Γ (fromSome (ctx_resolve Γ x) p) := @exp_var Γ x (fromSome _ p) (mk_inctx Γ x p).
+
+    Fixpoint eval {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
+      match e in (Exp _ t) return (Lit t) with
+      | @exp_var _ x _ xInΓ => env_lookup δ xInΓ
+      | exp_lit _ _ l       => l
+      | exp_plus e₁ e2    => Z.add (eval e₁ δ) (eval e2 δ)
+      | exp_times e₁ e2   => Z.mul (eval e₁ δ) (eval e2 δ)
+      | exp_minus e₁ e2   => Z.sub (eval e₁ δ) (eval e2 δ)
+      | exp_neg e         => Z.opp (eval e δ)
+      | exp_eq e₁ e2      => Zeq_bool (eval e₁ δ) (eval e2 δ)
+      | exp_le e₁ e2      => Z.leb (eval e₁ δ) (eval e2 δ)
+      | exp_lt e₁ e2      => Z.ltb (eval e₁ δ) (eval e2 δ)
+      | exp_and e₁ e2     => andb (eval e₁ δ) (eval e2 δ)
+      | exp_not e         => negb (eval e δ)
+      | exp_pair e₁ e2    => pair (eval e₁ δ) (eval e2 δ)
+      | exp_inl e         => inl (eval e δ)
+      | exp_inr e         => inr (eval e δ)
+      | exp_list es       => List.map (fun e => eval e δ) es
+      | exp_cons e₁ e2    => cons (eval e₁ δ) (eval e2 δ)
+      | exp_nil _         => nil
+      end.
+
+  End Expressions.
+
+  (* Names of functions. *)
+  Parameter 𝑭  : Set.
+  Parameter pi : 𝑭 → FunTy.
+
+  Section Statements.
+
+    Inductive Stm (Γ : Ctx (𝑿 * Ty)) : Ty → Set :=
+    | stm_lit        {τ : Ty} (l : Lit τ) : Stm Γ τ
+    | stm_exp        {τ : Ty} (e : Exp Γ τ) : Stm Γ τ
+    | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
+    | stm_let'       (x : 𝑿) (τ : Ty) (v : Lit τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
+    | stm_assign     (x : 𝑿) (τ : Ty) {xInΓ : InCtx (x , τ) Γ} (e : Exp Γ τ) : Stm Γ τ
+    | stm_app        (f : 𝑭) (e : Exp Γ (fun_dom (pi f))) : Stm Γ (fun_cod (pi f))
+    | stm_app'       (x : 𝑿) (σ τ : Ty) (v : Lit σ) (s : Stm (ctx_snoc ctx_nil (x , σ)) τ) : Stm Γ τ
+    | stm_if         {τ : Ty} (e : Exp Γ ty_bool) (s₁ s₂ : Stm Γ τ) : Stm Γ τ
+    | stm_seq        {τ : Ty} (e : Stm Γ τ) {σ : Ty} (k : Stm Γ σ) : Stm Γ σ
+    | stm_assert     (e₁ : Exp Γ ty_bool) (e₂ : Exp Γ ty_string) : Stm Γ ty_bool
+    (* | stm_while      (w : 𝑾 Γ) (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) → Stm Γ ty_unit *)
+    | stm_exit       {τ : Ty} (s : Lit ty_string) : Stm Γ τ
+    | stm_match_list {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
+      (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ) : Stm Γ τ
+    | stm_match_sum  {σinl σinr τ : Ty} (e : Exp Γ (ty_sum σinl σinr))
+      (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl , σinl)) τ)
+      (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ) : Stm Γ τ
+    | stm_match_pair {σ₁ σ₂ τ : Ty} (e : Exp Γ (ty_prod σ₁ σ₂))
+      (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ₁)) (xr , σ₂)) τ) : Stm Γ τ.
+
+    Global Arguments stm_lit {_} _ _.
+    Global Arguments stm_exp {_ _} _.
+    Global Arguments stm_let {_} _ _ _ {_} _.
+    Global Arguments stm_let' {_} _ _ _ {_} _.
+    Global Arguments stm_assign {_} _ {_ _} _.
+    Global Arguments stm_app {_} _ _.
+    Global Arguments stm_app' {_} _ _ _ _ _.
+    Global Arguments stm_if {_ _} _ _ _.
+    Global Arguments stm_seq {_ _} _ {_} _.
+    Global Arguments stm_assert {_} _ _.
+    Global Arguments stm_exit {_ _} _.
+    Global Arguments stm_match_list {_ _ _} _ _ _ _ _.
+    Global Arguments stm_match_sum {_ _ _ _} _ _ _ _ _.
+    Global Arguments stm_match_pair {_ _ _ _} _ _ _ _.
+
+    Import NameResolution.
+
+    Definition stm_smart_assign {Γ : Ctx (𝑿 * Ty)} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
+      Exp Γ (fromSome (ctx_resolve Γ x) p) → Stm Γ (fromSome (ctx_resolve Γ x) p) :=
+      @stm_assign Γ x (fromSome _ p) (mk_inctx Γ x p).
+
+  End Statements.
+
+  Record FunDef (fty : FunTy) : Set :=
+    { fun_arg  : 𝑿;
+      fun_body : Stm (ctx_snoc ctx_nil (fun_arg , fun_dom fty)) (fun_cod fty)
+    }.
+
+  Parameter Pi : forall (f : 𝑭), FunDef (pi f).
+
+  Section SmallStep.
+
+    Record State (Γ : Ctx (𝑿 * Ty)) (σ : Ty) : Set :=
+      { state_local_store : LocalStore Γ;
+        state_statement   : Stm Γ σ
+      }.
+
+    Notation "'⟨' δ ',' s '⟩'" := {| state_local_store := δ; state_statement := s |}.
+    Reserved Notation "st₁ ---> st₂" (at level 80).
+
+    Import NameNotation.
+
+    Inductive step {Γ : Ctx (𝑿 * Ty)} : forall {σ : Ty} (st₁ st₂ : State Γ σ), Prop :=
+
+    | step_stm_exp
+        (δ : LocalStore Γ) (σ : Ty) (e : Exp Γ σ) :
+        ⟨ δ , stm_exp e ⟩ ---> ⟨ δ , stm_lit σ (eval e δ) ⟩
+
+    | step_stm_let_step
+        (δ : LocalStore Γ) (δ' : LocalStore Γ) (x : 𝑿) (τ σ : Ty)
+        (s : Stm Γ τ) (s' : Stm Γ τ) (k : Stm (Γ ▻ (x , τ)) σ) :
+        ⟨ δ , s ⟩ ---> ⟨ δ' , s' ⟩ ->
+        ⟨ δ , stm_let x τ s k ⟩ ---> ⟨ δ' , stm_let x τ s' k ⟩
+    | step_stm_let_value
+        (δ : LocalStore Γ) (x : 𝑿) (τ σ : Ty) (v : Lit τ) (k : Stm (Γ ▻ (x , τ)) σ) :
+        ⟨ δ , stm_let x τ (stm_lit τ v) k ⟩ ---> ⟨ δ , stm_let' x τ v k ⟩
+    | step_stm_let'_step
+        (δ δ' : LocalStore Γ) (x : 𝑿) (τ σ : Ty) (v v' : Lit τ) (k k' : Stm (Γ ▻ (x , τ)) σ) :
+        ⟨ δ ► x ∶ τ ↦ v , k ⟩ ---> ⟨ δ' ► x ∶ τ ↦ v' , k' ⟩ →
+        ⟨ δ , stm_let' x τ v k ⟩ ---> ⟨ δ' , stm_let' x τ v' k' ⟩
+    | step_stm_let'_value
+        (δ : LocalStore Γ) (x : 𝑿) (τ σ : Ty) (v : Lit τ) (v' : Lit σ) :
+        ⟨ δ , stm_let' x τ v (stm_lit σ v') ⟩ ---> ⟨ δ , stm_lit σ v' ⟩
+
+    | step_stm_seq_step
+        (δ δ' : LocalStore Γ) (τ σ : Ty) (s s' : Stm Γ τ) (k : Stm Γ σ) :
+        ⟨ δ , s ⟩ ---> ⟨ δ' , s' ⟩ →
+        ⟨ δ , stm_seq s k ⟩ ---> ⟨ δ' , stm_seq s' k ⟩
+    | step_stm_seq_value
+        (δ : LocalStore Γ) (τ σ : Ty) (v : Lit τ) (k : Stm Γ σ) :
+        ⟨ δ , stm_seq (stm_lit τ v) k ⟩ ---> ⟨ δ , k ⟩
+
+    | step_stm_app
+        {δ : LocalStore Γ} {f : 𝑭} (e : Exp Γ (fun_dom (pi f))) :
+        let σ := fun_dom (pi f) in
+        let τ := fun_cod (pi f) in
+        let x := fun_arg (Pi f) in
+        let s := fun_body (Pi f) in
+        ⟨ δ , stm_app f e ⟩ --->
+        ⟨ δ , stm_app' x σ τ (eval e δ) s ⟩
+    | step_stm_app'_step
+        {δ : LocalStore Γ} (x : 𝑿) (σ τ : Ty) (v v' : Lit σ)
+        (s s' : Stm (ε ▻ (x , σ)) τ) :
+        ⟨ env_nil ► x ∶ σ ↦ v , s ⟩ ---> ⟨ env_nil ► x ∶ σ ↦ v' , s' ⟩ →
+        ⟨ δ , stm_app' x σ τ v s ⟩ ---> ⟨ δ , stm_app' x σ τ v' s' ⟩
+    | step_stm_app'_value
+      {δ : LocalStore Γ} (x : 𝑿) (σ τ : Ty) (v : Lit σ) (r : Lit τ) :
+      ⟨ δ , stm_app' x σ τ v (stm_lit τ r) ⟩ ---> ⟨ δ , stm_lit τ r ⟩
+
+    | step_stm_assign
+        (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (e : Exp Γ σ) :
+        ⟨ δ , stm_assign x e ⟩ ---> ⟨ δ [ x ↦ eval e δ ] , stm_lit σ (eval e δ) ⟩
+    | step_stm_if
+        (δ : LocalStore Γ) (e : Exp Γ ty_bool) (σ : Ty) (s₁ s₂ : Stm Γ σ) :
+        ⟨ δ , stm_if e s₁ s₂ ⟩ ---> ⟨ δ , if eval e δ then s₁ else s₂ ⟩
+    | step_stm_assert_true
+        (δ : LocalStore Γ) (e₁ : Exp Γ ty_bool) (e₂ : Exp Γ ty_string) :
+        eval e₁ δ = true →
+        ⟨ δ , stm_assert e₁ e₂ ⟩ ---> ⟨ δ , stm_lit ty_bool true ⟩
+    | step_stm_assert_false
+        (δ : LocalStore Γ) (e₁ : Exp Γ ty_bool) (e₂ : Exp Γ ty_string) :
+        eval e₁ δ = false ->
+        ⟨ δ , stm_assert e₁ e₂ ⟩ ---> ⟨ δ , stm_exit (eval e₂ δ) ⟩
+    (* | step_stm_while : *)
+    (*   (δ : LocalStore Γ) (w : 𝑾 δ) (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) → *)
+    (*   ⟨ δ , stm_while w e s ⟩ ---> *)
+    (*   ⟨ δ , stm_if e (stm_seq s (stm_while w e s)) (stm_lit tt) ⟩ *)
+    | step_stm_match_list_nil
+        (δ : LocalStore Γ) {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
+        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh , σ) ▻ (xt , ty_list σ)) τ) :
+        eval e δ = nil ->
+        ⟨ δ , stm_match_list e alt_nil xh xt alt_cons ⟩ ---> ⟨ δ , alt_nil ⟩
+    | step_stm_match_list_cons
+        (δ : LocalStore Γ) {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
+        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh , σ) ▻ (xt , ty_list σ)) τ)
+        (vh : Lit σ) (vt : Lit (ty_list σ)) :
+        eval e δ = cons vh vt →
+        ⟨ δ , stm_match_list e alt_nil xh xt alt_cons ⟩ --->
+        ⟨ δ , stm_let' xh σ vh (stm_let' xt (ty_list σ) vt alt_cons) ⟩
+    | step_stm_match_sum_inl
+        (δ : LocalStore Γ) {σinl σinr τ : Ty} (e : Exp Γ (ty_sum σinl σinr))
+        (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl , σinl)) τ)
+        (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr , σinr)) τ)
+        (v : Lit σinl) :
+        eval e δ = inl v →
+        ⟨ δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
+        ⟨ δ , stm_let' xinl σinl v alt_inl ⟩
+    | step_stm_match_sum_inr
+        (δ : LocalStore Γ) {σinl σinr τ : Ty} (e : Exp Γ (ty_sum σinl σinr))
+        (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl , σinl)) τ)
+        (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr , σinr)) τ)
+        (v : Lit σinr) :
+        eval e δ = inr v →
+        ⟨ δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
+        ⟨ δ , stm_let' xinr σinr v alt_inr ⟩
+    | step_stm_match_pair
+        (δ : LocalStore Γ) {σ₁ σ₂ τ : Ty} (e : Exp Γ (ty_prod σ₁ σ₂)) (xl xr : 𝑿)
+        (rhs : Stm (Γ ▻ (xl , σ₁) ▻ (xr , σ₂)) τ) (vl : Lit σ₁) (vr : Lit σ₂) :
+        eval e δ = (vl , vr) →
+        ⟨ δ , stm_match_pair e xl xr rhs ⟩ --->
+        ⟨ δ , stm_let' xl σ₁ vl (stm_let' xr σ₂ vr rhs) ⟩
+
+    where "st₁ ---> st₂" := (@step _ _ st₁ st₂).
+
+
+  End SmallStep.
+
+End TypeKit.
