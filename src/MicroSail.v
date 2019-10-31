@@ -49,6 +49,10 @@ Section Environments.
              (E : Env D Γ) (x : X) (τ : T) (d : D τ) : Env D (ctx_snoc Γ (x , τ)).
   Admitted.
 
+  Definition env_cat {X T : Set} {D : T → Set} {Γ Δ : Ctx (X * T)}
+             (EΓ : Env D Γ) (EΔ : Env D Δ) : Env D (ctx_cat Γ Δ).
+  Admitted.
+
   (* Definition env_nil {X T : Set} {D : T → Set} : @Env X T D ctx_nil := *)
   (*   fun y σ yIn => *)
   (*     match yIn in InCtx _ Γx *)
@@ -120,6 +124,7 @@ Module Type TypeKit.
     Notation "Γ₁ ▻▻ Γ₂" := (ctx_cat Γ₁ Γ₂) (at level 55, left associativity).
     Notation "b ∈ Γ" := (InCtx b Γ)  (at level 80).
     Notation "E '►' x '∶' τ '↦' d" := (env_snoc E x τ d) (at level 55, left associativity).
+    Notation "E1 '►►' E2" := (env_cat E1 E2) (at level 55, left associativity).
     Notation "E [ x ↦ v ]" := (@env_update _ _ _ _ E x _ _ v) (at level 55, left associativity).
 
   End NameNotation.
@@ -274,13 +279,18 @@ Module Type TermKit (typeKit : TypeKit).
 
   Section Statements.
 
-    Inductive RecordPat : Ctx (𝑹𝑭 * Ty) -> Ctx (𝑿 * Ty) -> Set :=.
+    Inductive RecordPat : Ctx (𝑹𝑭 * Ty) -> Ctx (𝑿 * Ty) -> Set :=
+    | pat_nil  : RecordPat ctx_nil ctx_nil
+    | pat_cons
+        {rfs : Ctx (𝑹𝑭 * Ty)} {Δ : Ctx (𝑿 * Ty)}
+        (pat : RecordPat rfs Δ) (rf : 𝑹𝑭) {τ : Ty} (x : 𝑿) :
+        RecordPat (ctx_snoc rfs (rf , τ)) (ctx_snoc Δ (x , τ)).
 
     Inductive Stm (Γ : Ctx (𝑿 * Ty)) : Ty → Set :=
     | stm_lit        {τ : Ty} (l : Lit τ) : Stm Γ τ
     | stm_exp        {τ : Ty} (e : Exp Γ τ) : Stm Γ τ
     | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
-    | stm_let'       (x : 𝑿) (τ : Ty) (v : Lit τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
+    | stm_let'       (Δ : Ctx (𝑿 * Ty)) (δ : Env Lit Δ) {σ : Ty} (k : Stm (ctx_cat Γ Δ) σ) : Stm Γ σ
     | stm_assign     (x : 𝑿) (τ : Ty) {xInΓ : InCtx (x , τ) Γ} (e : Exp Γ τ) : Stm Γ τ
     | stm_app        (f : 𝑭) (e : Exp Γ (fun_dom (pi f))) : Stm Γ (fun_cod (pi f))
     | stm_app'       (x : 𝑿) (σ τ : Ty) (v : Lit σ) (s : Stm (ctx_snoc ctx_nil (x , σ)) τ) : Stm Γ τ
@@ -298,13 +308,13 @@ Module Type TermKit (typeKit : TypeKit).
       (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ₁)) (xr , σ₂)) τ) : Stm Γ τ
     | stm_match_union {T : 𝑻} (e : Exp Γ (ty_union T)) {τ : Ty}
       (alts : forall (K : 𝑲 T), { x : 𝑿 & Stm (ctx_snoc Γ (x , 𝑲_Ty K)) τ}) : Stm Γ τ
-    | stm_match_record {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (p : RecordPat (𝑹𝑭_Ty R) Δ)
-      {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ.
+    | stm_match_record {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
+      (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ.
 
     Global Arguments stm_lit {_} _ _.
     Global Arguments stm_exp {_ _} _.
     Global Arguments stm_let {_} _ _ _ {_} _.
-    Global Arguments stm_let' {_} _ _ _ {_} _.
+    Global Arguments stm_let' {_ _} _ {_} _.
     Global Arguments stm_assign {_} _ {_ _} _.
     Global Arguments stm_app {_} _ _.
     Global Arguments stm_app' {_} _ _ _ _ _.
@@ -316,7 +326,7 @@ Module Type TermKit (typeKit : TypeKit).
     Global Arguments stm_match_sum {_ _ _ _} _ _ _ _ _.
     Global Arguments stm_match_pair {_ _ _ _} _ _ _ _.
     Global Arguments stm_match_union {_ _} _ {_} _.
-    Global Arguments stm_match_record {_} _ {_} _ {_} _.
+    Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
 
     Import NameResolution.
 
@@ -341,6 +351,16 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
 
   Section SmallStep.
 
+    Fixpoint pattern_match {rfs : Ctx (𝑹𝑭 * Ty)}  {Δ : Ctx (𝑿 * Ty)}
+             (p : RecordPat rfs Δ) {struct p} : Env TaggedLit rfs -> LocalStore Δ :=
+      match p with
+      | pat_nil => λ _, env_nil
+      | pat_cons p rf x =>
+        λ E, env_snoc
+               (pattern_match p (λ rf τ H, E rf τ (inctx_succ H))) x _
+               (untag (E rf _ inctx_zero))
+      end.
+
     Record State (Γ : Ctx (𝑿 * Ty)) (σ : Ty) : Set :=
       { state_local_store : LocalStore Γ;
         state_statement   : Stm Γ σ
@@ -364,14 +384,14 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         ⟨ δ , stm_let x τ s k ⟩ ---> ⟨ δ' , stm_let x τ s' k ⟩
     | step_stm_let_value
         (δ : LocalStore Γ) (x : 𝑿) (τ σ : Ty) (v : Lit τ) (k : Stm (Γ ▻ (x , τ)) σ) :
-        ⟨ δ , stm_let x τ (stm_lit τ v) k ⟩ ---> ⟨ δ , stm_let' x τ v k ⟩
+        ⟨ δ , stm_let x τ (stm_lit τ v) k ⟩ ---> ⟨ δ , stm_let' (env_nil ► x∶τ ↦ v) k ⟩
     | step_stm_let'_step
-        (δ δ' : LocalStore Γ) (x : 𝑿) (τ σ : Ty) (v v' : Lit τ) (k k' : Stm (Γ ▻ (x , τ)) σ) :
-        ⟨ δ ► x ∶ τ ↦ v , k ⟩ ---> ⟨ δ' ► x ∶ τ ↦ v' , k' ⟩ →
-        ⟨ δ , stm_let' x τ v k ⟩ ---> ⟨ δ' , stm_let' x τ v' k' ⟩
+        (δ δ' : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) (δΔ δΔ' : LocalStore Δ) (σ : Ty) (k k' : Stm (Γ ▻▻ Δ) σ) :
+        ⟨ δ ►► δΔ , k ⟩ ---> ⟨ δ' ►► δΔ' , k' ⟩ →
+        ⟨ δ , stm_let' δΔ k ⟩ ---> ⟨ δ' , stm_let' δΔ' k' ⟩
     | step_stm_let'_value
-        (δ : LocalStore Γ) (x : 𝑿) (τ σ : Ty) (v : Lit τ) (v' : Lit σ) :
-        ⟨ δ , stm_let' x τ v (stm_lit σ v') ⟩ ---> ⟨ δ , stm_lit σ v' ⟩
+        (δ : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (σ : Ty) (v : Lit σ) :
+        ⟨ δ , stm_let' δΔ (stm_lit σ v) ⟩ ---> ⟨ δ , stm_lit σ v ⟩
 
     | step_stm_seq_step
         (δ δ' : LocalStore Γ) (τ σ : Ty) (s s' : Stm Γ τ) (k : Stm Γ σ) :
@@ -427,7 +447,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         (vh : Lit σ) (vt : Lit (ty_list σ)) :
         eval e δ = cons vh vt →
         ⟨ δ , stm_match_list e alt_nil xh xt alt_cons ⟩ --->
-        ⟨ δ , stm_let' xh σ vh (stm_let' xt (ty_list σ) vt alt_cons) ⟩
+        ⟨ δ , stm_let' (env_nil ► xh∶σ ↦ vh ► xt∶ty_list σ ↦ vt) alt_cons ⟩
     | step_stm_match_sum_inl
         (δ : LocalStore Γ) {σinl σinr τ : Ty} (e : Exp Γ (ty_sum σinl σinr))
         (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl , σinl)) τ)
@@ -435,7 +455,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         (v : Lit σinl) :
         eval e δ = inl v →
         ⟨ δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
-        ⟨ δ , stm_let' xinl σinl v alt_inl ⟩
+        ⟨ δ , stm_let' (env_nil ► xinl∶σinl ↦ v) alt_inl ⟩
     | step_stm_match_sum_inr
         (δ : LocalStore Γ) {σinl σinr τ : Ty} (e : Exp Γ (ty_sum σinl σinr))
         (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl , σinl)) τ)
@@ -443,13 +463,26 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         (v : Lit σinr) :
         eval e δ = inr v →
         ⟨ δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
-        ⟨ δ , stm_let' xinr σinr v alt_inr ⟩
+        ⟨ δ , stm_let' (env_nil ► xinr∶σinr ↦ v) alt_inr ⟩
     | step_stm_match_pair
         (δ : LocalStore Γ) {σ₁ σ₂ τ : Ty} (e : Exp Γ (ty_prod σ₁ σ₂)) (xl xr : 𝑿)
         (rhs : Stm (Γ ▻ (xl , σ₁) ▻ (xr , σ₂)) τ) (vl : Lit σ₁) (vr : Lit σ₂) :
         eval e δ = (vl , vr) →
         ⟨ δ , stm_match_pair e xl xr rhs ⟩ --->
-        ⟨ δ , stm_let' xl σ₁ vl (stm_let' xr σ₂ vr rhs) ⟩
+        ⟨ δ , stm_let' (env_nil ► xl∶σ₁ ↦ vl ► xr∶σ₂ ↦ vr) rhs ⟩
+    | step_stm_match_union
+        (δ : LocalStore Γ) {T : 𝑻} (e : Exp Γ (ty_union T)) {τ : Ty}
+        (alts : forall (K : 𝑲 T), { x : 𝑿 & Stm (ctx_snoc Γ (x , 𝑲_Ty K)) τ})
+        (K : 𝑲 T) (v : TaggedLit (𝑲_Ty K)) :
+        eval e δ = existT _ K v ->
+        ⟨ δ , stm_match_union e alts ⟩ --->
+        ⟨ δ , stm_let' (env_nil ► projT1 (alts K)∶𝑲_Ty K ↦ untag v) (projT2 (alts K))  ⟩
+    | step_stm_match_record
+        (δ : LocalStore Γ) {R : 𝑹} {Δ : Ctx (𝑿 * Ty)}
+        (e : Exp Γ (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ)
+        {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) :
+        ⟨ δ , stm_match_record R e p rhs ⟩ --->
+        ⟨ δ , stm_let' (pattern_match p (eval e δ)) rhs ⟩
 
     where "st₁ ---> st₂" := (@step _ _ st₁ st₂).
 
