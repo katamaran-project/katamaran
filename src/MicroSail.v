@@ -39,22 +39,22 @@ End Contexts.
 
 Section Environments.
 
-  Definition Env {X T : Set} (D : T → Set) (Γ : Ctx (X * T)) : Set :=
+  Definition Env {X T : Set} (D : T -> Set) (Γ : Ctx (X * T)) : Set :=
     forall (x : X) (τ : T), InCtx (x,τ) Γ -> D τ.
 
-  Definition env_nil {X T : Set} {D : T → Set} : @Env X T D ctx_nil :=
+  Definition env_nil {X T : Set} {D : T -> Set} : @Env X T D ctx_nil :=
     fun x τ xIn => let (n, e) := xIn in
-    eq_rec None (λ m, match m with | Some _ => D τ | None => unit end) tt (Some (x, τ)) e.
+    eq_rec None (fun m => match m with | Some _ => D τ | None => unit end) tt (Some (x, τ)) e.
 
-  Definition env_snoc {X T : Set} {D : T → Set} {Γ : Ctx (X * T)}
+  Definition env_snoc {X T : Set} {D : T -> Set} {Γ : Ctx (X * T)}
              (E : Env D Γ) (x : X) (τ : T) (d : D τ) : Env D (ctx_snoc Γ (x , τ)).
   Admitted.
 
-  Definition env_cat {X T : Set} {D : T → Set} {Γ Δ : Ctx (X * T)}
+  Definition env_cat {X T : Set} {D : T -> Set} {Γ Δ : Ctx (X * T)}
              (EΓ : Env D Γ) (EΔ : Env D Δ) : Env D (ctx_cat Γ Δ).
   Admitted.
 
-  (* Definition env_nil {X T : Set} {D : T → Set} : @Env X T D ctx_nil := *)
+  (* Definition env_nil {X T : Set} {D : T -> Set} : @Env X T D ctx_nil := *)
   (*   fun y σ yIn => *)
   (*     match yIn in InCtx _ Γx *)
   (*               return match Γx with *)
@@ -66,12 +66,12 @@ Section Environments.
   (*               | inctx_succ i => tt *)
   (*     end. *)
 
-  (* Definition env_snoc {X T : Set} {D : T → Set} {Γ : Ctx (X * T)} *)
+  (* Definition env_snoc {X T : Set} {D : T -> Set} {Γ : Ctx (X * T)} *)
   (*   (E : Env D Γ) (x : X) (τ : T) (d : D τ) : Env D (ctx_snoc Γ (x , τ)) := *)
   (*   fun y σ yIn => match yIn in InCtx _ Γx *)
   (*               return match Γx with *)
   (*                      | ctx_nil => Empty_set *)
-  (*                      | ctx_snoc Γ (_, τ) => Env D Γ → D τ → D σ *)
+  (*                      | ctx_snoc Γ (_, τ) => Env D Γ -> D τ -> D σ *)
   (*                      end *)
   (*               with *)
   (*               | inctx_zero _ => λ _ d, d *)
@@ -80,13 +80,16 @@ Section Environments.
 
   Global Arguments env_snoc {_ _ _ _} _ _ _ _.
 
-  Definition env_drop {X T : Set} {D : T → Set} {Γ : Ctx (X * T)}
+  Definition env_drop {X T : Set} {D : T -> Set} {Γ : Ctx (X * T)}
     (x : X) (τ : T) (E : Env D (ctx_snoc Γ (x , τ))) : Env D Γ :=
     fun y σ yIn => E y σ (inctx_succ yIn).
 
-  Definition env_lookup {X T : Set} {D : T → Set} {Γ : Ctx (X * T)}
+  Definition env_map {X T : Set} {D₁ D₂ : T -> Set} {Γ : Ctx (X * T)}
+    (f : forall τ, D₁ τ -> D₂ τ) (E : Env D₁ Γ) : Env D₂ Γ :=
+    fun y σ yIn => f _ (E y σ yIn).
+  Definition env_lookup {X T : Set} {D : T -> Set} {Γ : Ctx (X * T)}
     (E : Env D Γ) {x : X} {τ : T} (i : InCtx (x , τ) Γ) : D τ := E _ _ i.
-  Definition env_update {X T : Set} {D : T → Set} {Γ : Ctx (X * T)}
+  Definition env_update {X T : Set} {D : T -> Set} {Γ : Ctx (X * T)}
     (E : Env D Γ) {x : X} {τ : T} (i : InCtx (x , τ) Γ) (d : D τ) : Env D Γ.
   Admitted.
 
@@ -139,32 +142,32 @@ Module Type TermKit (typeKit : TypeKit).
   Import typeKit.
 
   (* Names of union data constructors. *)
-  Parameter 𝑲  : 𝑻 → Set.
+  Parameter 𝑲  : 𝑻 -> Set.
   (* Union data constructor field type *)
   Parameter 𝑲_Ty : forall (T : 𝑻), 𝑲 T -> Ty.
   (* Record field names. *)
   Parameter 𝑹𝑭  : Set.
   (* Record field types. *)
-  Parameter 𝑹𝑭_Ty : 𝑹 → Ctx (𝑹𝑭 * Ty).
+  Parameter 𝑹𝑭_Ty : 𝑹 -> Ctx (𝑹𝑭 * Ty).
 
   (* Names of functions. *)
   Parameter 𝑭  : Set.
-  Parameter pi : 𝑭 → FunTy.
+  Parameter pi : 𝑭 -> FunTy.
 
   Section Literals.
 
     Inductive Bit : Set := bitzero | bitone.
 
-    Inductive TaggedLit : Ty → Set :=
-    | taglit_int           : Z → TaggedLit (ty_int)
-    | taglit_bool          : bool → TaggedLit (ty_bool)
-    | taglit_bit           : Bit → TaggedLit (ty_bit)
-    | taglit_string        : string → TaggedLit (ty_string)
-    | taglit_list   σ'     : list (TaggedLit σ') → TaggedLit (ty_list σ')
-    | taglit_prod   σ₁ σ₂  : TaggedLit σ₁ * TaggedLit σ₂ → TaggedLit (ty_prod σ₁ σ₂)
-    | taglit_sum    σ₁ σ₂  : TaggedLit σ₁ + TaggedLit σ₂ → TaggedLit (ty_sum σ₁ σ₂)
+    Inductive TaggedLit : Ty -> Set :=
+    | taglit_int           : Z -> TaggedLit (ty_int)
+    | taglit_bool          : bool -> TaggedLit (ty_bool)
+    | taglit_bit           : Bit -> TaggedLit (ty_bit)
+    | taglit_string        : string -> TaggedLit (ty_string)
+    | taglit_list   σ'     : list (TaggedLit σ') -> TaggedLit (ty_list σ')
+    | taglit_prod   σ₁ σ₂  : TaggedLit σ₁ * TaggedLit σ₂ -> TaggedLit (ty_prod σ₁ σ₂)
+    | taglit_sum    σ₁ σ₂  : TaggedLit σ₁ + TaggedLit σ₂ -> TaggedLit (ty_sum σ₁ σ₂)
     | taglit_unit          : TaggedLit (ty_unit)
-    | taglit_union (T : 𝑻) (K : 𝑲 T) : TaggedLit (𝑲_Ty K) → TaggedLit (ty_union T)
+    | taglit_union (T : 𝑻) (K : 𝑲 T) : TaggedLit (𝑲_Ty K) -> TaggedLit (ty_union T)
     | taglit_record (R : 𝑹) : Env TaggedLit (𝑹𝑭_Ty R) -> TaggedLit (ty_record R).
 
     Fixpoint Lit (σ : Ty) : Set :=
@@ -204,7 +207,7 @@ Module Type TermKit (typeKit : TypeKit).
 
     Inductive Exp (Γ : Ctx (𝑿 * Ty)) : Ty -> Set :=
     | exp_var     (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} : Exp Γ σ
-    | exp_lit     (σ : Ty) : Lit σ → Exp Γ σ
+    | exp_lit     (σ : Ty) : Lit σ -> Exp Γ σ
     | exp_plus    (e₁ e₂ : Exp Γ ty_int) : Exp Γ ty_int
     | exp_times   (e₁ e₂ : Exp Γ ty_int) : Exp Γ ty_int
     | exp_minus   (e₁ e₂ : Exp Γ ty_int) : Exp Γ ty_int
@@ -215,14 +218,14 @@ Module Type TermKit (typeKit : TypeKit).
     | exp_and     (e₁ e₂ : Exp Γ ty_bool) : Exp Γ ty_bool
     | exp_not     (e : Exp Γ ty_bool) : Exp Γ ty_bool
     | exp_pair    {σ₁ σ₂ : Ty} (e₁ : Exp Γ σ₁) (e₂ : Exp Γ σ₂) : Exp Γ (ty_prod σ₁ σ₂)
-    | exp_inl     {σ₁ σ₂ : Ty} : Exp Γ σ₁ → Exp Γ (ty_sum σ₁ σ₂)
-    | exp_inr     {σ₁ σ₂ : Ty} : Exp Γ σ₂ → Exp Γ (ty_sum σ₁ σ₂)
+    | exp_inl     {σ₁ σ₂ : Ty} : Exp Γ σ₁ -> Exp Γ (ty_sum σ₁ σ₂)
+    | exp_inr     {σ₁ σ₂ : Ty} : Exp Γ σ₂ -> Exp Γ (ty_sum σ₁ σ₂)
     | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty_list σ)
     | exp_cons    {σ : Ty} (h : Exp Γ σ) (t : Exp Γ (ty_list σ)) : Exp Γ (ty_list σ)
     | exp_nil     {σ : Ty} : Exp Γ (ty_list σ)
     | exp_union   {T : 𝑻} (K : 𝑲 T) (e : Exp Γ (𝑲_Ty K)) : Exp Γ (ty_union T)
     | exp_record  (R : 𝑹) (es : Env (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R)
-    | exp_builtin {σ τ : Ty} (f : Lit σ → Lit τ) (e : Exp Γ σ) : Exp Γ τ.
+    | exp_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Exp Γ σ) : Exp Γ τ.
 
     Global Arguments exp_union {_ _} _ _.
     Global Arguments exp_record {_} _ _.
@@ -250,7 +253,7 @@ Module Type TermKit (typeKit : TypeKit).
       | exp_cons e₁ e2      => cons (eval e₁ δ) (eval e2 δ)
       | exp_nil _           => nil
       | exp_union K e       => existT _ K (evalTagged e δ)
-      | exp_record R es     => fun rf τ rfIn => evalTagged (es rf τ rfIn) δ
+      | exp_record R es     => env_map (fun τ e => evalTagged e δ) es
       | exp_builtin f e     => f (eval e δ)
       end.
 
@@ -265,7 +268,7 @@ Module Type TermKit (typeKit : TypeKit).
         (pat : RecordPat rfs Δ) (rf : 𝑹𝑭) {τ : Ty} (x : 𝑿) :
         RecordPat (ctx_snoc rfs (rf , τ)) (ctx_snoc Δ (x , τ)).
 
-    Inductive Stm (Γ : Ctx (𝑿 * Ty)) : Ty → Set :=
+    Inductive Stm (Γ : Ctx (𝑿 * Ty)) : Ty -> Set :=
     | stm_lit        {τ : Ty} (l : Lit τ) : Stm Γ τ
     | stm_exp        {τ : Ty} (e : Exp Γ τ) : Stm Γ τ
     | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
@@ -276,7 +279,7 @@ Module Type TermKit (typeKit : TypeKit).
     | stm_if         {τ : Ty} (e : Exp Γ ty_bool) (s₁ s₂ : Stm Γ τ) : Stm Γ τ
     | stm_seq        {τ : Ty} (e : Stm Γ τ) {σ : Ty} (k : Stm Γ σ) : Stm Γ σ
     | stm_assert     (e₁ : Exp Γ ty_bool) (e₂ : Exp Γ ty_string) : Stm Γ ty_bool
-    (* | stm_while      (w : 𝑾 Γ) (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) → Stm Γ ty_unit *)
+    (* | stm_while      (w : 𝑾 Γ) (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) -> Stm Γ ty_unit *)
     | stm_exit       (τ : Ty) (s : Lit ty_string) : Stm Γ τ
     | stm_match_list {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
       (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ) : Stm Γ τ
@@ -329,7 +332,7 @@ Module Type TermKit (typeKit : TypeKit).
       end.
 
     Definition fromSome {D : Set} (m : option D) : IsSome m -> D :=
-      match m return IsSome m → D with
+      match m return IsSome m -> D with
       | Some d => fun _ => d
       | None   => fun p => match p with end
       end.
@@ -337,10 +340,10 @@ Module Type TermKit (typeKit : TypeKit).
     Fixpoint mk_inctx {D : Set} (Γ : Ctx (prod 𝑿 D)) (x : 𝑿) {struct Γ} :
       let m := ctx_resolve Γ x in forall (p : IsSome m), InCtx (x , fromSome m p) Γ :=
       match Γ with
-      | ctx_nil => λ p, match p with end
+      | ctx_nil => fun p => match p with end
       | ctx_snoc Γ (y, d) =>
         match 𝑿_eq_dec x y as s
-        return (∀ p, InCtx (x, fromSome (if s then Some d else ctx_resolve Γ x) p) (ctx_snoc Γ (y, d)))
+        return (forall p, InCtx (x, fromSome (if s then Some d else ctx_resolve Γ x) p) (ctx_snoc Γ (y, d)))
         with
         | left e => fun _ => match e with | eq_refl => inctx_zero end
         | right _ => fun p => inctx_succ (mk_inctx Γ x p)
@@ -351,7 +354,7 @@ Module Type TermKit (typeKit : TypeKit).
       Exp Γ (fromSome (ctx_resolve Γ x) p) := @exp_var Γ x (fromSome _ p) (mk_inctx Γ x p).
 
     Definition stm_smart_assign {Γ : Ctx (𝑿 * Ty)} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
-      Exp Γ (fromSome (ctx_resolve Γ x) p) → Stm Γ (fromSome (ctx_resolve Γ x) p) :=
+      Exp Γ (fromSome (ctx_resolve Γ x) p) -> Stm Γ (fromSome (ctx_resolve Γ x) p) :=
       @stm_assign Γ x (fromSome _ p) (mk_inctx Γ x p).
 
   End NameResolution.
@@ -369,10 +372,10 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
     Fixpoint pattern_match {rfs : Ctx (𝑹𝑭 * Ty)}  {Δ : Ctx (𝑿 * Ty)}
              (p : RecordPat rfs Δ) {struct p} : Env TaggedLit rfs -> LocalStore Δ :=
       match p with
-      | pat_nil => λ _, env_nil
+      | pat_nil => fun _ => env_nil
       | pat_cons p rf x =>
-        λ E, env_snoc
-               (pattern_match p (λ rf τ H, E rf τ (inctx_succ H))) x _
+        fun E => env_snoc
+               (pattern_match p (fun rf τ H => E rf τ (inctx_succ H))) x _
                (untag (E rf _ inctx_zero))
       end.
 
@@ -405,7 +408,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         ⟨ δ , stm_let x τ (stm_exit τ s) k ⟩ ---> ⟨ δ , stm_exit σ s ⟩
     | step_stm_let'_step
         (δ δ' : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) (δΔ δΔ' : LocalStore Δ) (σ : Ty) (k k' : Stm (Γ ▻▻ Δ) σ) :
-        ⟨ δ ►► δΔ , k ⟩ ---> ⟨ δ' ►► δΔ' , k' ⟩ →
+        ⟨ δ ►► δΔ , k ⟩ ---> ⟨ δ' ►► δΔ' , k' ⟩ ->
         ⟨ δ , stm_let' δΔ k ⟩ ---> ⟨ δ' , stm_let' δΔ' k' ⟩
     | step_stm_let'_value
         (δ : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (σ : Ty) (v : Lit σ) :
@@ -416,7 +419,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
 
     | step_stm_seq_step
         (δ δ' : LocalStore Γ) (τ σ : Ty) (s s' : Stm Γ τ) (k : Stm Γ σ) :
-        ⟨ δ , s ⟩ ---> ⟨ δ' , s' ⟩ →
+        ⟨ δ , s ⟩ ---> ⟨ δ' , s' ⟩ ->
         ⟨ δ , stm_seq s k ⟩ ---> ⟨ δ' , stm_seq s' k ⟩
     | step_stm_seq_value
         (δ : LocalStore Γ) (τ σ : Ty) (v : Lit τ) (k : Stm Γ σ) :
@@ -436,7 +439,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
     | step_stm_app'_step
         {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ δΔ' : LocalStore Δ} (τ : Ty)
         (s s' : Stm Δ τ) :
-        ⟨ δΔ , s ⟩ ---> ⟨ δΔ' , s' ⟩ →
+        ⟨ δΔ , s ⟩ ---> ⟨ δΔ' , s' ⟩ ->
         ⟨ δ , stm_app' Δ δΔ τ s ⟩ ---> ⟨ δ , stm_app' Δ δΔ' τ s' ⟩
     | step_stm_app'_value
         {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (τ : Ty) (v : Lit τ) :
@@ -456,7 +459,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         ⟨ δ , stm_assert e₁ e₂ ⟩ --->
         ⟨ δ , if eval e₁ δ then stm_lit ty_bool true else stm_exit ty_bool (eval e₂ δ) ⟩
     (* | step_stm_while : *)
-    (*   (δ : LocalStore Γ) (w : 𝑾 δ) (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) → *)
+    (*   (δ : LocalStore Γ) (w : 𝑾 δ) (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) -> *)
     (*   ⟨ δ , stm_while w e s ⟩ ---> *)
     (*   ⟨ δ , stm_if e (stm_seq s (stm_while w e s)) (stm_lit tt) ⟩ *)
     | step_stm_match_list
@@ -525,7 +528,8 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
       (* | [ H: LocalStore (ctx_snoc _ _) |- _ ] => pose proof (can_form_store_snoc H) *)
       (* | [ H: LocalStore ctx_nil |- _ ] => pose proof (can_form_store_nil H) *)
       | [ H: LocalStore (ctx_cat _ _) |- _ ] => pose proof (can_form_store_cat _ _ H)
-      end; destruct_conjs; subst.
+      | [ H: Final ?s |- _ ] => destruct s; cbn in H
+      end; destruct_conjs; subst; try contradiction.
 
     Local Ltac progress_simpl :=
       repeat
@@ -535,8 +539,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
              | [ |- True \/ _] => left; constructor
              | [ |- False \/ _] => right
              | [ |- forall _, _ ] => intro
-             | [ H: True |- _ ] => clear H
-             | [ H: Final ?s |- _ ] => destruct s; cbn in H; try contradiction
+             | [ H : True |- _ ] => clear H
              | [ H : _ \/ _ |- _ ] => destruct H
              end).
 
@@ -555,12 +558,12 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
     Local Ltac progress_tac :=
       progress_simpl;
       try solve
-          [ progress_inst progress_tac
-          | repeat eexists; constructor; eauto
+          [ repeat eexists; constructor; eauto
+          | progress_inst progress_tac
           ].
 
     Lemma progress {Γ σ} (s : Stm Γ σ) :
-      Final s ∨ forall δ, exists δ' s', ⟨ δ , s ⟩ ---> ⟨ δ' , s' ⟩.
+      Final s \/ forall δ, exists δ' s', ⟨ δ , s ⟩ ---> ⟨ δ' , s' ⟩.
     Proof. induction s; intros; progress_tac. Qed.
 
   End SmallStep.
