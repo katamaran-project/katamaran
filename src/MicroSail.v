@@ -99,6 +99,8 @@ Module Type TypeKit.
   Parameter 𝑻   : Set. (* input: \MIT *)
   (* Names of record type constructors. *)
   Parameter 𝑹  : Set.
+  (* Names of expression variables. *)
+  Parameter 𝑿 : Set. (* input: \MIX *)
 
   Inductive Ty : Set :=
   | ty_int
@@ -114,7 +116,7 @@ Module Type TypeKit.
   .
 
   Record FunTy : Set :=
-    { fun_dom : Ty;
+    { fun_dom : Ctx (𝑿 * Ty);
       fun_cod : Ty
     }.
 
@@ -145,8 +147,6 @@ Module Type TermKit (typeKit : TypeKit).
   (* Record field types. *)
   Parameter 𝑹𝑭_Ty : 𝑹 → Ctx (𝑹𝑭 * Ty).
 
-  (* Names of expression variables. *)
-  Parameter 𝑿 : Set. (* input: \MIX *)
   (* Names of functions. *)
   Parameter 𝑭  : Set.
   Parameter pi : 𝑭 → FunTy.
@@ -271,8 +271,8 @@ Module Type TermKit (typeKit : TypeKit).
     | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
     | stm_let'       (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) {σ : Ty} (k : Stm (ctx_cat Γ Δ) σ) : Stm Γ σ
     | stm_assign     (x : 𝑿) (τ : Ty) {xInΓ : InCtx (x , τ) Γ} (e : Exp Γ τ) : Stm Γ τ
-    | stm_app        (f : 𝑭) (e : Exp Γ (fun_dom (pi f))) : Stm Γ (fun_cod (pi f))
-    | stm_app'       (x : 𝑿) (σ τ : Ty) (v : Lit σ) (s : Stm (ctx_snoc ctx_nil (x , σ)) τ) : Stm Γ τ
+    | stm_app        (f : 𝑭) (es : Env (Exp Γ) (fun_dom (pi f))) : Stm Γ (fun_cod (pi f))
+    | stm_app'       (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ) : Stm Γ τ
     | stm_if         {τ : Ty} (e : Exp Γ ty_bool) (s₁ s₂ : Stm Γ τ) : Stm Γ τ
     | stm_seq        {τ : Ty} (e : Stm Γ τ) {σ : Ty} (k : Stm Γ σ) : Stm Γ σ
     | stm_assert     (e₁ : Exp Γ ty_bool) (e₂ : Exp Γ ty_string) : Stm Γ ty_bool
@@ -296,7 +296,7 @@ Module Type TermKit (typeKit : TypeKit).
     Global Arguments stm_let' {_ _} _ {_} _.
     Global Arguments stm_assign {_} _ {_ _} _.
     Global Arguments stm_app {_} _ _.
-    Global Arguments stm_app' {_} _ _ _ _ _.
+    Global Arguments stm_app' {_} _ _ _ _.
     Global Arguments stm_if {_ _} _ _ _.
     Global Arguments stm_seq {_ _} _ {_} _.
     Global Arguments stm_assert {_} _ _.
@@ -310,9 +310,7 @@ Module Type TermKit (typeKit : TypeKit).
   End Statements.
 
   Record FunDef (fty : FunTy) : Set :=
-    { fun_arg  : 𝑿;
-      fun_body : Stm (ctx_snoc ctx_nil (fun_arg , fun_dom fty)) (fun_cod fty)
-    }.
+    { fun_body : Stm (fun_dom fty)(fun_cod fty) }.
 
   Module NameResolution.
 
@@ -428,25 +426,24 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         ⟨ δ , stm_seq (stm_exit τ s) k ⟩ ---> ⟨ δ , stm_exit σ s ⟩
 
     | step_stm_app
-        {δ : LocalStore Γ} {f : 𝑭} (e : Exp Γ (fun_dom (pi f))) :
-        let σ := fun_dom (pi f) in
+        {δ : LocalStore Γ} {f : 𝑭} :
+        let Δ := fun_dom (pi f) in
         let τ := fun_cod (pi f) in
-        let x := fun_arg (Pi f) in
         let s := fun_body (Pi f) in
-        ⟨ δ , stm_app f e ⟩ --->
-        ⟨ δ , stm_app' x σ τ (eval e δ) s ⟩
+        forall (es : Env (Exp Γ) Δ),
+        ⟨ δ , stm_app f es ⟩ --->
+        ⟨ δ , stm_app' Δ (fun x σ xInΔ => eval (es x σ xInΔ) δ) τ s ⟩
     | step_stm_app'_step
-        {δ : LocalStore Γ} (x : 𝑿) (σ τ : Ty) (v v' : Lit σ)
-        (s s' : Stm (ε ▻ (x , σ)) τ) :
-        ⟨ env_nil ► x ∶ σ ↦ v , s ⟩ ---> ⟨ env_nil ► x ∶ σ ↦ v' , s' ⟩ →
-        ⟨ δ , stm_app' x σ τ v s ⟩ ---> ⟨ δ , stm_app' x σ τ v' s' ⟩
+        {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ δΔ' : LocalStore Δ} (τ : Ty)
+        (s s' : Stm Δ τ) :
+        ⟨ δΔ , s ⟩ ---> ⟨ δΔ' , s' ⟩ →
+        ⟨ δ , stm_app' Δ δΔ τ s ⟩ ---> ⟨ δ , stm_app' Δ δΔ' τ s' ⟩
     | step_stm_app'_value
-      {δ : LocalStore Γ} (x : 𝑿) (σ τ : Ty) (v : Lit σ) (r : Lit τ) :
-      ⟨ δ , stm_app' x σ τ v (stm_lit τ r) ⟩ ---> ⟨ δ , stm_lit τ r ⟩
+        {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (τ : Ty) (v : Lit τ) :
+        ⟨ δ , stm_app' Δ δΔ τ (stm_lit τ v) ⟩ ---> ⟨ δ , stm_lit τ v ⟩
     | step_stm_app'_exit
-      {δ : LocalStore Γ} (x : 𝑿) (σ τ : Ty) (v : Lit σ) (s : string) :
-      ⟨ δ , stm_app' x σ τ v (stm_exit τ s) ⟩ ---> ⟨ δ , stm_exit τ s ⟩
-
+        {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (τ : Ty) (s : string) :
+        ⟨ δ , stm_app' Δ δΔ τ (stm_exit τ s) ⟩ ---> ⟨ δ , stm_exit τ s ⟩
     | step_stm_assign
         (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (e : Exp Γ σ) :
         let v := eval e δ in
@@ -515,18 +512,18 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
       exists (δ₁ : LocalStore Γ) (δ₂ : LocalStore Δ), δ = env_cat δ₁ δ₂.
     Admitted.
 
-    Lemma can_form_store_snoc (Γ : Ctx (𝑿 * Ty)) (x : 𝑿) (σ : Ty) (δ : LocalStore (Γ ▻ (x , σ))) :
-      exists (δ' : LocalStore Γ) (v : Lit σ), δ = env_snoc δ' x σ v.
-    Admitted.
+    (* Lemma can_form_store_snoc (Γ : Ctx (𝑿 * Ty)) (x : 𝑿) (σ : Ty) (δ : LocalStore (Γ ▻ (x , σ))) : *)
+    (*   exists (δ' : LocalStore Γ) (v : Lit σ), δ = env_snoc δ' x σ v. *)
+    (* Admitted. *)
 
-    Lemma can_form_store_nil (δ : LocalStore ε) :
-      δ = env_nil.
-    Admitted.
+    (* Lemma can_form_store_nil (δ : LocalStore ε) : *)
+    (*   δ = env_nil. *)
+    (* Admitted. *)
 
     Local Ltac progress_can_form :=
       match goal with
-      | [ H: LocalStore (ctx_snoc _ _) |- _ ] => pose proof (can_form_store_snoc H)
-      | [ H: LocalStore ctx_nil |- _ ] => pose proof (can_form_store_nil H)
+      (* | [ H: LocalStore (ctx_snoc _ _) |- _ ] => pose proof (can_form_store_snoc H) *)
+      (* | [ H: LocalStore ctx_nil |- _ ] => pose proof (can_form_store_nil H) *)
       | [ H: LocalStore (ctx_cat _ _) |- _ ] => pose proof (can_form_store_cat _ _ H)
       end; destruct_conjs; subst.
 
@@ -548,9 +545,9 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
       | [ IH: (forall (δ : LocalStore (ctx_cat ?Γ ?Δ)), _),
           δ1: LocalStore ?Γ, δ2: LocalStore ?Δ |- _
         ] => specialize (IH (env_cat δ1 δ2)); T
-      | [ IH: (forall (δ : LocalStore (ctx_snoc ctx_nil (?x , ?σ))), _),
-          v: Lit ?σ |- _
-        ] => specialize (IH (env_snoc env_nil x σ v)); T
+      (* | [ IH: (forall (δ : LocalStore (ctx_snoc ctx_nil (?x , ?σ))), _), *)
+      (*     v: Lit ?σ |- _ *)
+      (*   ] => specialize (IH (env_snoc env_nil x σ v)); T *)
       | [ IH: (forall (δ : LocalStore ?Γ), _), δ: LocalStore ?Γ |- _
         ] => solve [ specialize (IH δ); T | clear IH; T ]
       end.
