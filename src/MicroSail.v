@@ -42,8 +42,8 @@ Section Contexts.
      SK: I wanted to play with a sigma type here instead of using some unary
      representation. There might be some headaches in proofs ahead which require
      eta for sig which is AFAIK not given definitionally only propositionally.
-     For instance proving that lookup and tabulation are inverses requires eta.
-     this. *)
+     For instance proving that lookup and tabulation are inverses requires
+     eta. *)
   Class InCtx {B : Set} (b : B) (Γ : Ctx B) : Set :=
     inCtx : { n : nat | ctx_nth_is Γ n b }.
 
