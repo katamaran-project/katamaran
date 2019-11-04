@@ -750,7 +750,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
     Definition pops {Γ} Δ : DST (ctx_cat Γ Δ) Γ unit :=
       modify (fun δΓΔ => env_drop Δ δΓΔ).
 
-    Notation "ma *>= f"  := (bind ma f) (at level 90, left associativity).
+    Notation "ma >>= f" := (bind ma f) (at level 90, left associativity).
     Notation "ma *> mb" := (bindright ma mb) (at level 90, left associativity).
     Notation "ma <* mb" := (bindleft ma mb) (at level 90, left associativity).
 
@@ -772,11 +772,11 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
     Fixpoint WLP {Γ τ} (s : Stm Γ τ) : DST Γ Γ (Lit τ) :=
       match s in (Stm _ τ) return (DST Γ Γ (Lit τ)) with
       | stm_lit _ l => pure l
-      | stm_assign x e => meval e *>= fun v => modify (fun δ => δ [ x ↦ v ]) *> pure v
-      | stm_let x σ s k => WLP s *>= push *> WLP k <* pop
+      | stm_assign x e => meval e >>= fun v => modify (fun δ => δ [ x ↦ v ]) *> pure v
+      | stm_let x σ s k => WLP s >>= push *> WLP k <* pop
       | stm_exp e => meval e
-      | stm_assert e1 e2  => meval e1 *>= assert
-      | stm_if e s1 s2 => meval e *>= fun b => if b then WLP s1 else WLP s2
+      | stm_assert e1 e2  => meval e1 >>= assert
+      | stm_if e s1 s2 => meval e >>= fun b => if b then WLP s1 else WLP s2
       | stm_exit _ _  => abort
       | stm_seq s1 s2 => WLP s1 *> WLP s2
       | stm_app' Δ δ τ s => lift (evalDST (WLP s) δ)
@@ -789,28 +789,28 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
                         end
       | stm_let' δ k => pushs δ *> WLP k <* pops _
       | stm_match_list e alt_nil xh xt alt_cons =>
-        meval e *>= fun v =>
+        meval e >>= fun v =>
         match v with
         | nil => WLP alt_nil
         | cons vh vt => push vh *> @push _ _ (ty_list _) vt *> WLP alt_cons <* pop <* pop
         end
       | stm_match_sum e xinl altinl xinr altinr =>
-        meval e *>= fun v =>
+        meval e >>= fun v =>
         match v with
         | inl v => push v *> WLP altinl <* pop
         | inr v => push v *> WLP altinr <* pop
         end
       | stm_match_pair e xl xr rhs =>
-        meval e *>= fun v =>
+        meval e >>= fun v =>
         let (vl , vr) := v in
         push vl *> push vr *> WLP rhs <* pop <* pop
       | stm_match_union e rhs =>
-        meval e *>= fun v =>
+        meval e >>= fun v =>
         let (K , tv) := v in
         let (x , alt) := rhs K in
         push (untag tv) *> WLP alt <* pop
       | stm_match_record R e p rhs =>
-        meval e *>= fun v =>
+        meval e >>= fun v =>
         pushs (pattern_match p v) *> WLP rhs <* pops _
       end.
 
