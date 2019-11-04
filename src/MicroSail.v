@@ -474,6 +474,16 @@ Module Type TermKit (typeKit : TypeKit).
 
   End NameResolution.
 
+  Definition Pred (A : Set) : Type := A -> Prop.
+
+  Record Contract (fty : FunTy) : Type :=
+    { contract_pre_condition  : Pred (Env' Lit (fun_dom fty));
+      contract_post_condition : Pred (Env' Lit (fun_dom fty) * Lit (fun_cod fty))
+    }.
+
+  Definition ContractEnv : Type :=
+    forall (f : 𝑭), option (Contract (pi f)).
+
 End TermKit.
 
 Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
@@ -686,5 +696,119 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
     Proof. induction s; intros; try progress_tac. Qed.
 
   End SmallStep.
+
+  Section Predicates.
+
+    Variable CEnv : ContractEnv.
+
+    Definition Cont (R A : Type) : Type := (A -> R) -> R.
+
+    Definition DST (Γ₁ Γ₂ : Ctx (𝑿 * Ty)) (A : Type) : Type :=
+      (A -> Pred (LocalStore Γ₂)) -> Pred (LocalStore Γ₁).
+
+    Definition evalDST {Γ₁ Γ₂ A} (m : DST Γ₁ Γ₂ A) :
+      LocalStore Γ₁ -> Cont Prop A :=
+      fun δ₁ k => m (fun a δ₂ => k a) δ₁.
+
+    Definition lift {Γ A} (m : Cont Prop A) : DST Γ Γ A :=
+      fun k δ => m (fun a => k a δ).
+
+    Definition pure {Γ A} (a : A) : DST Γ Γ A :=
+      fun k => k a.
+    Definition ap {Γ₁ Γ₂ Γ₃ A B} (mf : DST Γ₁ Γ₂ (A -> B))
+               (ma : DST Γ₂ Γ₃ A) : DST Γ₁ Γ₃ B :=
+      fun k => mf (fun f => ma (fun a => k (f a))).
+    Definition abort {Γ₁ Γ₂ A} : DST Γ₁ Γ₂ A :=
+      fun k δ => False.
+    Definition assert {Γ} (b : bool) : DST Γ Γ bool :=
+      fun k δ => Bool.Is_true b /\ k b δ.
+    Definition bind {Γ₁ Γ₂ Γ₃ A B} (ma : DST Γ₁ Γ₂ A) (f : A -> DST Γ₂ Γ₃ B) : DST Γ₁ Γ₃ B :=
+      fun k => ma (fun a => f a k).
+    Definition bindright {Γ₁ Γ₂ Γ₃ A B} (ma : DST Γ₁ Γ₂ A) (mb : DST Γ₂ Γ₃ B) : DST Γ₁ Γ₃ B :=
+      bind ma (fun _ => mb).
+    Definition bindleft {Γ₁ Γ₂ Γ₃ A B} (ma : DST Γ₁ Γ₂ A) (mb : DST Γ₂ Γ₃ B) : DST Γ₁ Γ₃ A :=
+      bind ma (fun a => bind mb (fun _ => pure a)).
+    Definition get {Γ} : DST Γ Γ (LocalStore Γ) :=
+      fun k δ => k δ δ.
+    Definition put {Γ Γ'} (δ' : LocalStore Γ') : DST Γ Γ' unit :=
+      fun k _ => k tt δ'.
+    Definition modify {Γ Γ'} (f : LocalStore Γ -> LocalStore Γ') : DST Γ Γ' unit :=
+      bind get (fun δ => put (f δ)).
+    Definition meval {Γ σ} (e : Exp Γ σ) : DST Γ Γ (Lit σ) :=
+      bind get (fun δ => pure (eval e δ)).
+    Definition push {Γ x σ} (v : Lit σ) : DST Γ (ctx_snoc Γ (x , σ)) unit :=
+      modify (fun δ => env_snoc δ (x,σ) v).
+    Definition pop {Γ x σ} : DST (ctx_snoc Γ (x , σ)) Γ unit :=
+      modify (fun δ => env_tail δ).
+    Definition pushs {Γ Δ} (δΔ : LocalStore Δ) : DST Γ (ctx_cat Γ Δ) unit :=
+      modify (fun δΓ => env_cat δΓ δΔ).
+    Definition pops {Γ} Δ : DST (ctx_cat Γ Δ) Γ unit :=
+      modify (fun δΓΔ => env_drop Δ δΓΔ).
+
+    Notation "ma *>= f"  := (bind ma f) (at level 90, left associativity).
+    Notation "ma *> mb" := (bindright ma mb) (at level 90, left associativity).
+    Notation "ma <* mb" := (bindleft ma mb) (at level 90, left associativity).
+
+    Import NameNotation.
+
+    (* Version that computes *)
+    Definition IsLit {Γ σ} (δ : LocalStore Γ) (s : Stm Γ σ) :
+      forall (POST : Lit σ -> Pred (LocalStore Γ)), Prop :=
+      match s with
+      | stm_lit _ v => fun POST => POST v δ
+      | _ => fun _ => False
+      end.
+
+    Lemma IsLit_inversion {Γ σ} (δ : LocalStore Γ) (s : Stm Γ σ)
+          (POST : Lit σ -> Pred (LocalStore Γ)) :
+      IsLit δ s POST -> exists v, s = stm_lit _ v /\ POST v δ.
+    Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
+
+    Fixpoint WLP {Γ τ} (s : Stm Γ τ) : DST Γ Γ (Lit τ) :=
+      match s in (Stm _ τ) return (DST Γ Γ (Lit τ)) with
+      | stm_lit _ l => pure l
+      | stm_assign x e => meval e *>= fun v => modify (fun δ => δ [ x ↦ v ]) *> pure v
+      | stm_let x σ s k => WLP s *>= push *> WLP k <* pop
+      | stm_exp e => meval e
+      | stm_assert e1 e2  => meval e1 *>= assert
+      | stm_if e s1 s2 => meval e *>= fun b => if b then WLP s1 else WLP s2
+      | stm_exit _ _  => abort
+      | stm_seq s1 s2 => WLP s1 *> WLP s2
+      | stm_app' Δ δ τ s => lift (evalDST (WLP s) δ)
+
+      | stm_app f es => match CEnv f with
+                        | None => abort (* NOT IMPLEMENTED *)
+                        | Some c => fun POST δ =>
+                                      contract_pre_condition c (evals es δ)
+                                      /\ (forall v, contract_post_condition c (evals es δ, v) -> POST v δ)
+                        end
+      | stm_let' δ k => pushs δ *> WLP k <* pops _
+      | stm_match_list e alt_nil xh xt alt_cons =>
+        meval e *>= fun v =>
+        match v with
+        | nil => WLP alt_nil
+        | cons vh vt => push vh *> @push _ _ (ty_list _) vt *> WLP alt_cons <* pop <* pop
+        end
+      | stm_match_sum e xinl altinl xinr altinr =>
+        meval e *>= fun v =>
+        match v with
+        | inl v => push v *> WLP altinl <* pop
+        | inr v => push v *> WLP altinr <* pop
+        end
+      | stm_match_pair e xl xr rhs =>
+        meval e *>= fun v =>
+        let (vl , vr) := v in
+        push vl *> push vr *> WLP rhs <* pop <* pop
+      | stm_match_union e rhs =>
+        meval e *>= fun v =>
+        let (K , tv) := v in
+        let (x , alt) := rhs K in
+        push (untag tv) *> WLP alt <* pop
+      | stm_match_record R e p rhs =>
+        meval e *>= fun v =>
+        pushs (pattern_match p v) *> WLP rhs <* pops _
+      end.
+
+  End Predicates.
 
 End ProgramKit.
