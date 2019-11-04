@@ -633,6 +633,11 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
     (* where "st1 '--->' st2" := (@Step _ _ st1 st2). *)
     where "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2).
 
+    Inductive Steps {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : LocalStore Γ -> Stm Γ σ -> Prop :=
+    | step_refl : Steps δ1 s1 δ1 s1
+    | step_trans (δ2 δ3 : LocalStore Γ) (s2 s3 : Stm Γ σ) :
+        Step δ1 δ2 s1 s2 -> Steps δ2 s2 δ3 s3 -> Steps δ1 s1 δ3 s3.
+
     Definition Final {Γ σ} (s : Stm Γ σ) : Prop :=
       match s with
       | stm_lit _ _  => True
@@ -808,6 +813,259 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         meval e *>= fun v =>
         pushs (pattern_match p v) *> WLP rhs <* pops _
       end.
+
+    (* Notation "'⟨' δ ',' s '⟩'" := {| state_local_store := δ; state_statement := s |}. *)
+    Notation "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2) (at level 80).
+
+    (* Notation "t₁ --> t₂" := (@Step _ _ t₁ t₂) (at level 80). *)
+    Notation "'⟨' δ1 ',' s1 '⟩' --->* '⟨' δ2 ',' s2 '⟩'" := (@Steps _ _ δ1 s1 δ2 s2) (at level 80).
+
+    Section Soundness.
+
+      Ltac steps_inversion_basic :=
+        repeat
+          match goal with
+          | [ H: ⟨ _, stm_app' _ _ _ (stm_lit _ _) ⟩ --->* ⟨ _, _ ⟩ |- _ ] => inversion H; subst; clear H
+          | [ H: ⟨ _, stm_app' _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>              inversion H; subst; clear H
+          | [ H: ⟨ _, stm_assert _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                inversion H; subst; clear H
+          | [ H: ⟨ _, stm_assert _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>               inversion H; subst; clear H
+          | [ H: ⟨ _, stm_assign _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                dependent destruction H
+          | [ H: ⟨ _, stm_assign _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>               dependent destruction H
+          | [ H: ⟨ _, stm_exit _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                  inversion H; subst; clear H
+          | [ H: ⟨ _, stm_exit _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>                 inversion H; subst; clear H
+          | [ H: ⟨ _, stm_exp _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                     inversion H; subst; clear H
+          | [ H: ⟨ _, stm_exp _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>                    inversion H; subst; clear H
+          | [ H: ⟨ _, stm_if _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                  inversion H; subst; clear H
+          | [ H: ⟨ _, stm_if _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>                 inversion H; subst; clear H
+          | [ H: ⟨ _, stm_let _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>               inversion H; subst; clear H
+          | [ H: ⟨ _, stm_let _ _ (stm_lit _ _) _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
+          | [ H: ⟨ _, stm_let' _ (stm_lit _ _) ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>     inversion H; subst; clear H
+          | [ H: ⟨ _, stm_let' _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                  inversion H; subst; clear H
+          | [ H: ⟨ _, stm_lit _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                   inversion H; subst; clear H
+          | [ H: ⟨ _, stm_lit _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>                  inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>      inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>     inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>        inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>       inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>      inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>     inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>       inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>      inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_union _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>           inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_union _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>          inversion H; subst; clear H
+          | [ H: ⟨ _, stm_seq (stm_lit _ _) _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>      inversion H; subst; clear H
+          | [ H: ⟨ _, stm_seq _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                   inversion H; subst; clear H
+          end.
+
+      Local Ltac steps_inversion_simpl :=
+        repeat
+          (cbn in *; destruct_conjs; subst;
+           try steps_inversion_basic;
+           try match goal with
+               | [ H: existT _ _ _ = existT _ _ _ |- _ ] =>
+                 dependent destruction H
+               | [ |- forall _, _ ] => intro
+               | [ H : True |- _ ] => clear H
+               | [ H : False |- _ ] => destruct H
+               | [ H : True -> _ |- _ ] => specialize (H I)
+               | [ H : _ \/ _ |- _ ] => destruct H
+               end).
+
+      Local Ltac step_inversion_inst T :=
+        match goal with
+        | [ H : ?P ?X -> _, H' : ?P ?X |- _ ] =>
+          solve [ specialize (H H'); T ]
+        | [ H : forall _, _ = _ -> _ |- _ ] =>
+          solve [ specialize (H _ eq_refl); T ]
+        | [ H : ?P ?X -> _, H' : ?P ?X |- _ ] =>
+          solve [ specialize (H H'); T ]
+        end.
+
+      Local Ltac steps_inversion_solve :=
+        steps_inversion_simpl;
+        try solve
+            [ repeat eexists; constructor; eauto
+            | repeat eexists; eauto; econstructor; eauto
+            | repeat eexists; repeat constructor;
+              econstructor; repeat constructor; auto
+            | step_inversion_inst steps_inversion_solve
+            ].
+
+      Lemma steps_inversion_let {Γ x τ σ} (δ1 δ3 : LocalStore Γ)
+        (s1 : Stm Γ τ) (s2 : Stm (ctx_snoc Γ (x, τ)) σ) (t : Stm Γ σ) (final : Final t)
+        (steps : ⟨ δ1, stm_let x τ s1 s2 ⟩ --->* ⟨ δ3, t ⟩) :
+        exists δ2 s1',
+          ⟨ δ1, s1 ⟩ --->* ⟨ δ2, s1' ⟩ /\ Final s1' /\
+          ⟨ δ2, stm_let x τ s1' s2 ⟩ --->* ⟨ δ3, t ⟩.
+      Proof.
+        remember (stm_let x τ s1 s2) as s. revert s1 s2 Heqs.
+        induction steps; steps_inversion_solve.
+      Qed.
+
+      Lemma steps_inversion_let' {Γ Δ σ} (δ1 δ3 : LocalStore Γ)
+        (δΔ : LocalStore Δ) (k : Stm (ctx_cat Γ Δ) σ) (t : Stm Γ σ) (final : Final t)
+        (steps : ⟨ δ1, stm_let' δΔ k ⟩ --->* ⟨ δ3, t ⟩) :
+        exists δ2 δΔ' k',
+          ⟨ env_cat δ1 δΔ , k ⟩ --->* ⟨ env_cat δ2 δΔ' , k' ⟩ /\ Final k' /\
+          ⟨ δ2, stm_let' δΔ' k' ⟩ --->* ⟨ δ3, t ⟩.
+      Proof.
+        remember (stm_let' δΔ k) as s. revert δΔ k Heqs.
+        induction steps; steps_inversion_solve.
+      Qed.
+
+      Lemma steps_plus_inversion_let' {Γ Δ σ} (δ1 δ3 : LocalStore Γ)
+        (δΔ : LocalStore Δ) (k : Stm (ctx_cat Γ Δ) σ) (t : Stm Γ σ) (final : Final t)
+        (steps : ⟨ δ1, stm_let' δΔ k ⟩ --->* ⟨ δ3, t ⟩) :
+        exists δ2 δΔ' k' s',
+          ⟨ env_cat δ1 δΔ , k ⟩ --->* ⟨ env_cat δ2 δΔ' , k' ⟩ /\ Final k' /\
+          ⟨ δ2, stm_let' δΔ' k' ⟩ ---> ⟨ δ3, s' ⟩ /\
+          ⟨ δ2, s' ⟩ --->* ⟨ δ2, t ⟩.
+      Proof.
+        apply steps_inversion_let' in steps; auto.
+        destruct steps as (δ2 & δΔ' & k' & steps); destruct_conjs.
+        exists δ2, δΔ', k'.
+        dependent destruction H1; cbn in *; try contradiction.
+        steps_inversion_solve.
+        dependent destruction H7; cbn in *; try contradiction.
+      Qed.
+
+      Lemma steps_inversion_seq {Γ τ σ} (δ1 δ3 : LocalStore Γ)
+        (s1 : Stm Γ τ) (s2 : Stm Γ σ) (t : Stm Γ σ)
+        (steps : ⟨ δ1, stm_seq s1 s2 ⟩ --->* ⟨ δ3, t ⟩) : Final t ->
+        exists δ2 s1',
+          ⟨ δ1, s1 ⟩ --->* ⟨ δ2, s1' ⟩ /\ Final s1' /\
+          ⟨ δ2, stm_seq s1' s2 ⟩ --->* ⟨ δ3, t ⟩.
+      Proof.
+        remember (stm_seq s1 s2) as s. revert s1 s2 Heqs.
+        induction steps; steps_inversion_solve.
+      Qed.
+
+      Lemma steps_inversion_app' {Γ Δ σ} (δ1 δ3 : LocalStore Γ)
+        (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (ft : Final t)
+        (steps : ⟨ δ1, stm_app' Δ δΔ σ k ⟩ --->* ⟨ δ3, t ⟩) :
+        exists δΔ' k',
+          ⟨ δΔ , k ⟩ --->* ⟨ δΔ' , k' ⟩ /\ Final k' /\
+          ⟨ δ1, stm_app' Δ δΔ' σ k' ⟩ --->* ⟨ δ3, t ⟩.
+      Proof.
+        remember (stm_app' Δ δΔ σ k) as s. revert δΔ k Heqs.
+        induction steps; steps_inversion_solve.
+      Qed.
+
+      Definition Triple {Γ τ}
+        (PRE : Pred (LocalStore Γ)) (s : Stm Γ τ)
+        (POST : Lit τ -> Pred (LocalStore Γ)) : Prop :=
+        forall (δ δ' : LocalStore Γ) (v : Lit τ),
+          ⟨ δ , s ⟩ --->* ⟨ δ' , stm_lit τ v ⟩ ->
+          PRE δ ->
+          POST v δ'.
+
+      Ltac wlp_sound_inst :=
+        match goal with
+        | [ IH: forall _ _ _, ⟨ _ , ?s ⟩ --->* ⟨ _ , _ ⟩ -> _,
+            HS: ⟨ _ , ?s ⟩ --->* ⟨ _ , ?t ⟩,
+            HF: Final ?t,
+            WP: WLP ?s _ _
+            |- _
+          ] => specialize (IH _ _ _ HS _ WP HF); clear HS WP
+        end.
+
+      Ltac wlp_sound_simpl :=
+        try wlp_sound_inst;
+        repeat
+          (steps_inversion_simpl;
+           unfold Triple, assert, pure, lift, push, pop, meval, bind, bindleft, bindright, get, put, modify, pushs, abort, evalDST, pops in *;
+           cbn in *;
+           destruct_conjs; subst;
+           try match goal with
+               | [ H: existT _ _ _ = existT _ _ _ |- _ ] =>
+                 dependent destruction H
+               (* | [ H: ⟨ _ , _ ⟩ = ⟨ _ , _ ⟩ |- _ ] => *)
+               (*   dependent destruction H *)
+               | [ H: _ \/ _ |- _ ] => destruct H
+               | [ H: True |- _ ] => clear H
+               | [ H: False |- _ ] => destruct H
+               | [ H: Env _ (ctx_snoc _ _) |- _ ] =>
+                 dependent destruction H
+               | [ H: Env _ ctx_nil |- _ ] =>
+                 dependent destruction H
+               end).
+
+      Ltac wlp_sound_islit_inversion :=
+          match goal with
+          | [ H: IsLit _ _ _ |- _ ] => apply IsLit_inversion in H
+          end; wlp_sound_simpl.
+
+      Lemma WLP_sound {Γ σ} (s : Stm Γ σ) :
+        forall (δ δ' : LocalStore Γ) (s' : Stm Γ σ), ⟨ δ, s ⟩ --->* ⟨ δ', s' ⟩ ->
+          forall (POST : Lit σ -> Pred (LocalStore Γ)), WLP s POST δ -> Final s' -> IsLit δ' s' POST.
+      Proof with wlp_sound_simpl; eauto.
+        induction s; intros.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
+          apply steps_inversion_let in H...
+          wlp_sound_inst.
+          wlp_sound_islit_inversion.
+          apply steps_inversion_let' in H2...
+          wlp_sound_inst...
+          wlp_sound_islit_inversion; auto.
+        - wlp_sound_simpl; auto.
+          apply steps_inversion_let' in H...
+          specialize (IHs _ _ _ H4 _ H0).
+          intuition.
+          wlp_sound_islit_inversion; auto.
+          now rewrite env_drop_cat in H9.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl.
+          destruct (CEnv f); destruct_conjs; try contradiction.
+          admit.
+        - wlp_sound_simpl.
+          apply steps_inversion_app' in H...
+          specialize (IHs _ _ _ H3 _ H0 H4).
+          wlp_sound_islit_inversion; auto.
+        - wlp_sound_simpl.
+          destruct (eval e δ2).
+          + apply (IHs1 _ _ _ H3); auto.
+          + apply (IHs2 _ _ _ H3); auto.
+        - wlp_sound_simpl.
+          apply steps_inversion_seq in H...
+          specialize (IHs1 _ _ _ H3 _ H0 H4).
+          wlp_sound_islit_inversion; auto.
+          specialize (IHs2 _ _ _ H6); auto.
+        - wlp_sound_simpl.
+          destruct (eval e₁ δ2); wlp_sound_simpl; auto.
+        - wlp_sound_simpl.
+        - wlp_sound_simpl.
+          destruct (eval e δ2).
+          + now apply (IHs1 _ _ _ H3 _ H0 H1).
+          + apply steps_inversion_let' in H3...
+            specialize (IHs2 _ _ _ H4 _ H0 H5).
+            wlp_sound_islit_inversion; auto.
+        - wlp_sound_simpl.
+          destruct (eval e δ2).
+          + apply steps_inversion_let' in H3...
+            specialize (IHs1 _ _ _ H4 _ H0 H5).
+            wlp_sound_islit_inversion; auto.
+          + apply steps_inversion_let' in H3...
+            specialize (IHs2 _ _ _ H4 _ H0 H5).
+            wlp_sound_islit_inversion; auto.
+        - wlp_sound_simpl.
+          destruct (eval e δ2).
+          apply steps_inversion_let' in H3...
+          specialize (IHs _ _ _ H4 _ H0 H5).
+          wlp_sound_islit_inversion; auto.
+        - wlp_sound_simpl.
+          destruct (eval e δ2).
+          apply steps_inversion_let' in H3...
+          admit. (* #$@&%* *)
+        - wlp_sound_simpl.
+          apply steps_inversion_let' in H3...
+          specialize (IHs _ _ _ H4 _ H0 H5).
+          wlp_sound_islit_inversion; auto.
+          now rewrite env_drop_cat in H8.
+      Admitted.
+
+    End Soundness.
 
   End Predicates.
 
