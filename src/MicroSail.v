@@ -964,6 +964,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
           | [ H: ⟨ _, stm_let _ _ _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] =>  apply (steps_inversion_let HF) in H
           | [ H: ⟨ _, stm_let' _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] =>     apply (steps_inversion_let' HF) in H
           | [ H: ⟨ _, stm_seq _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] =>      apply (steps_inversion_seq HF) in H
+          | [ H: IsLit _ _ _ |- _ ] => apply IsLit_inversion in H
           end.
 
       Ltac wlp_sound_inst :=
@@ -977,10 +978,8 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         end.
 
       Ltac wlp_sound_simpl :=
-        try wlp_sound_inst;
         repeat
-          (steps_inversion_simpl;
-           wlp_sound_steps_inversion;
+          (wlp_sound_steps_inversion;
            unfold Triple, assert, pure, lift, push, pop, meval, bind, bindleft, bindright, get, put, modify, pushs, abort, evalDST, pops in *;
            cbn in *;
            destruct_conjs; subst;
@@ -996,70 +995,38 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
                  dependent destruction H
                | [ H: Env _ ctx_nil |- _ ] =>
                  dependent destruction H
-               end).
-
-      Ltac wlp_sound_islit_inversion :=
-          match goal with
-          | [ H: IsLit _ _ _ |- _ ] => apply IsLit_inversion in H
-          end; wlp_sound_simpl.
+               | [ _: context[eval ?e ?δ] |- _ ] =>
+                 destruct (eval e δ)
+               end;
+           try wlp_sound_inst).
 
       Lemma WLP_sound {Γ σ} (s : Stm Γ σ) :
         forall (δ δ' : LocalStore Γ) (s' : Stm Γ σ), ⟨ δ, s ⟩ --->* ⟨ δ', s' ⟩ ->
           forall (POST : Lit σ -> Pred (LocalStore Γ)), WLP s POST δ -> Final s' -> IsLit δ' s' POST.
-      Proof with wlp_sound_simpl; eauto.
+      Proof.
         induction s; intros.
         - wlp_sound_simpl; auto.
         - wlp_sound_simpl; auto.
         - wlp_sound_simpl; auto.
-          wlp_sound_inst.
-          wlp_sound_islit_inversion.
-          wlp_sound_inst...
-          wlp_sound_islit_inversion; auto.
         - wlp_sound_simpl; auto.
-          wlp_sound_inst.
-          wlp_sound_islit_inversion; auto.
           now rewrite env_drop_cat in H4.
         - wlp_sound_simpl; auto.
         - wlp_sound_simpl.
           destruct (CEnv f); destruct_conjs; try contradiction.
           admit.
-        - wlp_sound_simpl.
-          wlp_sound_inst.
-          wlp_sound_islit_inversion; auto.
-        - wlp_sound_simpl.
-          destruct (eval e δ2).
-          + wlp_sound_inst...
-          + wlp_sound_inst...
-        - wlp_sound_simpl.
-          wlp_sound_inst...
-          wlp_sound_islit_inversion; auto.
-          wlp_sound_inst...
-        - wlp_sound_simpl.
-          destruct (eval e₁ δ2); wlp_sound_simpl; auto.
-        - wlp_sound_simpl.
-        - wlp_sound_simpl.
-          destruct (eval e δ2).
-          + wlp_sound_inst...
-          + wlp_sound_simpl.
-            wlp_sound_inst.
-            wlp_sound_islit_inversion...
-        - wlp_sound_simpl.
-          destruct (eval e δ2); wlp_sound_simpl.
-          + wlp_sound_inst.
-            wlp_sound_islit_inversion; auto.
-          + wlp_sound_inst.
-            wlp_sound_islit_inversion; auto.
-        - wlp_sound_simpl.
-          destruct (eval e δ2); wlp_sound_simpl.
-          wlp_sound_inst.
-          wlp_sound_islit_inversion; auto.
-        - wlp_sound_simpl.
-          destruct (eval e δ2); wlp_sound_simpl.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
           admit. (* #$@&%* *)
-        - wlp_sound_simpl.
-          wlp_sound_inst.
-          wlp_sound_islit_inversion; auto.
-          now rewrite env_drop_cat in H4.
+        - wlp_sound_simpl; auto.
+          + now rewrite env_drop_cat in H4.
+          + now rewrite env_drop_cat in H4.
       Admitted.
 
     End Soundness.
