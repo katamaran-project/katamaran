@@ -10,21 +10,21 @@ defaults: &defaults
 
 jobs:
   # Debian Stretch (9.0) and Ubuntu Bionic (18.04) have 8.6
-  coq-8.6:  {<<: *defaults, docker: {image: "coqorg/coq:8.6"}}
-  coq-8.7:  {<<: *defaults, docker: {image: "coqorg/coq:8.7"}}
-  coq-8.8:  {<<: *defaults, docker: {image: "coqorg/coq:8.8"}}
+  coq-8-6:  {<<: *defaults, docker: [{image: "coqorg/coq:8.6"}]}
+  coq-8-7:  {<<: *defaults, docker: [{image: "coqorg/coq:8.7"}]}
+  coq-8-8:  {<<: *defaults, docker: [{image: "coqorg/coq:8.8"}]}
   # Debian Buster (10.0) and Ubuntu Eoan (19.10) have 8.9
-  coq-8.9:  {<<: *defaults, docker: {image: "coqorg/coq:8.9"}}
-  coq-8.10: {<<: *defaults, docker: {image: "coqorg/coq:8.10"}}
-  coq-dev:  {<<: *defaults, docker: {image: "coqorg/coq:dev"}}
+  coq-8-9:  {<<: *defaults, docker: [{image: "coqorg/coq:8.9"}]}
+  coq-8-10: {<<: *defaults, docker: [{image: "coqorg/coq:8.10"}]}
+  coq-dev:  {<<: *defaults, docker: [{image: "coqorg/coq:dev"}]}
 
 workflows:
   version: 2
   build:
     jobs:
-      - coq-8.6
-      - coq-8.7
-      - coq-8.8
-      - coq-8.9
-      - coq-8.10
-      - coq-dev
+      - "coq-8-6"
+      - "coq-8-7"
+      - "coq-8-8"
+      - "coq-8-9"
+      - "coq-8-10"
+      - "coq-dev"
