@@ -36,21 +36,27 @@ Section Contexts.
     | _            , _   => False
     end.
 
-  (* InCtx represents context containment proofs. This is essentially a
-     well-typed de Bruijn index, i.e. a de Bruijn index with a proof that it
-     resolves to the binding b.
-     SK: I wanted to play with a sigma type here instead of using some unary
-     representation. There might be some headaches in proofs ahead which require
-     eta for sig which is AFAIK not given definitionally only propositionally.
-     For instance proving that lookup and tabulation are inverses requires
-     eta. *)
-  Class InCtx {B : Set} (b : B) (Γ : Ctx B) : Set :=
-    inCtx : { n : nat | ctx_nth_is Γ n b }.
+  Section InCtx.
+    (* Set locally only for the definition of InCtx. This is *)
+    Local Set Primitive Projections.
+
+     (* InCtx represents context containment proofs. This is essentially a
+        well-typed de Bruijn index, i.e. a de Bruijn index with a proof that it
+        resolves to the binding b. This record type is defined using primitive
+        projections to get eta-conversion definitionally. This should also enjoy
+        some performance advantages over a sig type. *)
+    Class InCtx {B : Set} (b : B) (Γ : Ctx B) : Set :=
+      { inctx_at: nat;
+        inctx_valid: ctx_nth_is Γ inctx_at b
+      }.
+
+  End InCtx.
 
   Definition inctx_zero {B : Set} {b : B} {Γ : Ctx B} : InCtx b (ctx_snoc Γ b) :=
-    exist _ 0 eq_refl.
+    Build_InCtx b (ctx_snoc Γ b) 0 eq_refl.
   Definition inctx_succ {B : Set} {b : B} {Γ : Ctx B} {b' : B} (bIn : InCtx b Γ) :
-    InCtx b (ctx_snoc Γ b') := exist _ (S (proj1_sig bIn)) (proj2_sig bIn).
+    InCtx b (ctx_snoc Γ b') :=
+    Build_InCtx b (ctx_snoc Γ b') (S inctx_at) inctx_valid.
 
   (* Custom pattern matching in cases where the context was already refined
      by a different match, i.e. on environments. *)
@@ -61,7 +67,7 @@ Section Contexts.
     let (n, e) := yIn in
     match n return (ctx_nth_is (ctx_snoc Γ x) n y -> D y) with
     | 0 =>   eq_rec x D dx y
-    | S n => fun e => dΓ y (exist _ n e)
+    | S n => fun e => dΓ y (Build_InCtx _ _ n e)
     end e.
 
   Definition inctx_case_snoc_dep (X : Set) (Γ : Ctx X) (x : X)
@@ -71,10 +77,10 @@ Section Contexts.
     forall (y: X) (yIn: InCtx y (ctx_snoc Γ x)), D y yIn :=
     fun y yIn =>
       match yIn with
-        exist _ n e =>
-        match n return (forall e, D y (exist _ n e)) with
-        | 0 => fun e => eq_indd X x (fun z e => D z (exist _ 0 e)) dx y e
-        | S n => fun e => dΓ y (exist (fun n => ctx_nth_is Γ n y) n e)
+        Build_InCtx _ _ n e =>
+        match n return (forall e, D y (Build_InCtx _ _ n e)) with
+        | 0 => fun e => eq_indd X x (fun z e => D z (Build_InCtx _ (ctx_snoc _ _) 0 e)) dx y e
+        | S n => fun e => dΓ y (Build_InCtx _ _ n e)
         end e
       end.
 
