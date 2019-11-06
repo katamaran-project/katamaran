@@ -112,6 +112,21 @@ Section Contexts.
         end e
       end.
 
+  Lemma InCtx_ind (B : Set) (b : B)
+    (P : forall Γ : Ctx B, InCtx b Γ -> Prop)
+    (fzero : forall Γ : Ctx B, P (ctx_snoc Γ b) (inctx_zero))
+    (fsucc : forall (Γ : Ctx B) (b' : B) (bIn : InCtx b Γ),
+        P Γ bIn -> P (ctx_snoc Γ b') (inctx_succ bIn)) :
+    forall (Γ : Ctx B) (i : InCtx b Γ), P Γ i.
+  Proof.
+    induction Γ; cbn.
+    - intro i; exact (inctx_case_nil i).
+    - intros [[|n] e]; cbn in *.
+      + subst; apply fzero.
+      + pose (Build_InCtx _ _ n e) as bIn.
+        exact (fsucc Γ b0 bIn (IHΓ bIn)).
+  Qed.
+
 End Contexts.
 
 Section Environments.
