@@ -37,6 +37,8 @@ Set Implicit Arguments.
 
 Section Contexts.
 
+  (* Type of contexts. This is a list of bindings of type B. This type and
+     subsequent types use the common notation of snoc lists. *)
   Inductive Ctx (B : Set) : Set :=
   | ctx_nil
   | ctx_snoc (Γ : Ctx B) (b : B).
@@ -44,19 +46,15 @@ Section Contexts.
   Global Arguments ctx_nil {_}.
   Global Arguments ctx_snoc {_} _ _.
 
+  (* Concatenation of two contexts. *)
   Fixpoint ctx_cat {B : Set} (Γ₁ Γ₂ : Ctx B) {struct Γ₂} : Ctx B :=
     match Γ₂ with
     | ctx_nil       => Γ₁
     | ctx_snoc Γ₂ τ => ctx_snoc (ctx_cat Γ₁ Γ₂) τ
     end.
 
-  (* Fixpoint ctx_nth {B : Set} (Γ : Ctx B) (n : nat) {struct Γ} : option B := *)
-  (*   match Γ , n with *)
-  (*   | ctx_snoc _ x , O   => Some x *)
-  (*   | ctx_snoc Γ _ , S n => ctx_nth Γ n *)
-  (*   | _            , _   => None *)
-  (*   end. *)
-
+  (* This is a predicate that that encodes that the de Bruijn index n points
+     to the binding b in Γ. *)
   Fixpoint ctx_nth_is {B : Set} (Γ : Ctx B) (n : nat) (b : B) {struct Γ} : Prop :=
     match Γ , n with
     | ctx_snoc _ x , O   => x = b
@@ -65,7 +63,7 @@ Section Contexts.
     end.
 
   Section InCtx.
-    (* Set locally only for the definition of InCtx. This is *)
+    (* Set locally only for the definition of InCtx. *)
     Local Set Primitive Projections.
 
      (* InCtx represents context containment proofs. This is essentially a
@@ -80,6 +78,7 @@ Section Contexts.
 
   End InCtx.
 
+  (* These are *constructors* for InCtx. *)
   Definition inctx_zero {B : Set} {b : B} {Γ : Ctx B} : InCtx b (ctx_snoc Γ b) :=
     Build_InCtx b (ctx_snoc Γ b) 0 eq_refl.
   Definition inctx_succ {B : Set} {b : B} {Γ : Ctx B} {b' : B} (bIn : InCtx b Γ) :
@@ -319,6 +318,35 @@ Module Type TermKit (typeKit : TypeKit).
 
     Inductive Bit : Set := bitzero | bitone.
 
+    (* Ideally we want object language literals to coincide with meta-language
+       values to get sexy looking predicates. See the definition of Lit below.
+       Unfortunately our setup of union and record types essentially is a giant
+       mutually recursive family of types and hence Lit below would not
+       terminate if it were directly extended to unions/records. TaggedLit is an
+       inductive and therefore terminating definition of the recursive family of
+       types and our current solution to the problem.
+
+       Because Sail does not allow recursive types the records and unions in the
+       generated output will form a strict DAG. Enforcing a topological sorting
+       is more work than simply allowing recursive definitions. Another option
+       is to encode the DAG as a well-founded relation between type constructor
+       names an defining Lit by well-founded recursion. This would need some
+       investigation.
+
+       The ideal way to add recursive types would be to only introduce tags at
+       recursive positions. For instance writing Lit as a recursive definition
+       of a functor and using that in the definition of tagged:
+
+         Fixpoint Lit (tl : Ty -> Set) (σ : Ty) {struct σ} : Set := match σ with
+           ... end.
+
+         Inductive TaggedLit (σ : Ty) : Set := | tagged : Lit TaggedLit σ ->
+         TaggedLit σ.
+
+       But currently Coq's strict-positivity checker is not smart enough to deem
+       it safe. (Agda excepts this definition). So TaggedLit adds tags
+       everywhere.
+     *)
     Inductive TaggedLit : Ty -> Set :=
     | taglit_int           : Z -> TaggedLit (ty_int)
     | taglit_bool          : bool -> TaggedLit (ty_bool)
