@@ -422,12 +422,17 @@ Module Type TermKit (typeKit : TypeKit).
     | exp_nil     {σ : Ty} : Exp Γ (ty_list σ)
     (* Experimental features *)
     | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty_tuple σs)
+    | exp_projtup {σs : Ctx Ty} (e : Exp Γ (ty_tuple σs)) (n : nat) {σ : Ty}
+                  {p : ctx_nth_is σs n σ} : Exp Γ σ
     | exp_union   {T : 𝑻} (K : 𝑲 T) (e : Exp Γ (𝑲_Ty K)) : Exp Γ (ty_union T)
     | exp_record  (R : 𝑹) (es : Env' (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R)
+    | exp_projrec (R : 𝑹) (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
+                  {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Exp Γ σ
     | exp_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Exp Γ σ) : Exp Γ τ.
 
     Global Arguments exp_union {_ _} _ _.
     Global Arguments exp_record {_} _ _.
+    Global Arguments exp_projrec {_} _ _ _ {_ _}.
 
     Fixpoint evalTagged {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : TaggedLit σ.
     Admitted.
@@ -452,8 +457,10 @@ Module Type TermKit (typeKit : TypeKit).
       | exp_cons e₁ e2      => cons (eval e₁ δ) (eval e2 δ)
       | exp_nil _           => nil
       | exp_tuple es        => env_map (fun τ e => evalTagged e δ) es
+      | @exp_projtup _ σs e n σ p => untag (env_lookup (eval e δ) (Build_InCtx _ _ n p))
       | exp_union K e       => existT _ K (evalTagged e δ)
       | exp_record R es     => env_map (fun τ e => evalTagged e δ) es
+      | @exp_projrec _ R e rf _ rfInR  => untag (env_lookup (eval e δ) rfInR)
       | exp_builtin f e     => f (eval e δ)
       end.
 
