@@ -363,6 +363,10 @@ Module Type TermKit (typeKit : TypeKit).
     | taglit_union (T : 𝑻) (K : 𝑲 T) : TaggedLit (𝑲_Ty K) -> TaggedLit (ty_union T)
     | taglit_record (R : 𝑹) : Env' TaggedLit (𝑹𝑭_Ty R) -> TaggedLit (ty_record R).
 
+    Global Arguments taglit_tuple {_} _.
+    Global Arguments taglit_union {_} _ _.
+    Global Arguments taglit_record : clear implicits.
+
     Fixpoint Lit (σ : Ty) : Set :=
       match σ with
       | ty_int => Z
@@ -392,9 +396,34 @@ Module Type TermKit (typeKit : TypeKit).
       | taglit_unit         => tt
       (* Experimental features *)
       | taglit_tuple ls     => ls
-      | taglit_union l      => existT _ _ l
-      | taglit_record t     => t
+      | taglit_union K l    => existT _ K l
+      | taglit_record R t   => t
       end.
+
+    Fixpoint tag (σ : Ty) {struct σ} : Lit σ -> TaggedLit σ :=
+      match σ with
+      | ty_int => fun (l : Lit ty_int) => taglit_int l
+      | ty_bool => taglit_bool
+      | ty_bit => taglit_bit
+      | ty_string => taglit_string
+      | ty_list σ =>
+        fun l => taglit_list (List.map (tag σ) l)
+      | ty_prod σ1 σ2 =>
+        fun l => let (l1, l2) := l in
+                 taglit_prod (tag σ1 l1, tag σ2 l2)
+      | ty_sum σ1 σ2 =>
+        fun l : Lit (ty_sum σ1 σ2) =>
+          match l with
+          | inl l => taglit_sum (inl (tag σ1 l))
+          | inr l => taglit_sum (inr (tag σ2 l))
+          end
+      | ty_unit => fun _ => taglit_unit
+      | ty_tuple σs => taglit_tuple
+      | ty_union T => fun Ktl => let (K, tl) := Ktl in taglit_union K tl
+      | ty_record R => taglit_record R
+      end.
+
+    Arguments tag [_] _.
 
   End Literals.
 
@@ -436,18 +465,58 @@ Module Type TermKit (typeKit : TypeKit).
                   {p : ctx_nth_is σs n σ} : Exp Γ σ
     | exp_union   {T : 𝑻} (K : 𝑲 T) (e : Exp Γ (𝑲_Ty K)) : Exp Γ (ty_union T)
     | exp_record  (R : 𝑹) (es : Env' (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R)
-    | exp_projrec (R : 𝑹) (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
+    | exp_projrec {R : 𝑹} (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
                   {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Exp Γ σ
     | exp_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Exp Γ σ) : Exp Γ τ.
 
     Global Arguments exp_union {_ _} _ _.
     Global Arguments exp_record {_} _ _.
-    Global Arguments exp_projrec {_} _ _ _ {_ _}.
+    Global Arguments exp_projrec {_ _} _ _ {_ _}.
 
     Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Set := Env' Lit Γ.
 
-    Fixpoint evalTagged {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : TaggedLit σ.
-    Admitted.
+    Fixpoint evalTagged {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : TaggedLit σ :=
+      match e in (Exp _ t) return (TaggedLit t) with
+      | @exp_var _ x σ0 xInΓ => tag σ0 (env_lookup δ xInΓ)
+      | exp_lit _ σ0 l => tag σ0 l
+      | exp_plus e1 e2 => taglit_int (untag (evalTagged e1 δ) + untag (evalTagged e2 δ))
+      | exp_times e1 e2 => taglit_int (untag (evalTagged e1 δ) * untag (evalTagged e2 δ))
+      | exp_minus e1 e2 => taglit_int (untag (evalTagged e1 δ) - untag (evalTagged e2 δ))
+      | exp_neg e0 => taglit_int (- untag (evalTagged e0 δ))
+      | exp_eq e1 e2 => taglit_bool (Zeq_bool (untag (evalTagged e1 δ)) (untag (evalTagged e2 δ)))
+      | exp_le e1 e2 => taglit_bool (untag (evalTagged e1 δ) <=? untag (evalTagged e2 δ))%Z
+      | exp_lt e1 e2 => taglit_bool (untag (evalTagged e1 δ) <? untag (evalTagged e2 δ))%Z
+      | exp_and e1 e2 => taglit_bool (untag (evalTagged e1 δ) && untag (evalTagged e2 δ))
+      | exp_not e0 => taglit_bool (negb (untag (evalTagged e0 δ)))
+      | @exp_pair _ σ₁ σ₂ e1 e2 => taglit_prod (evalTagged e1 δ, evalTagged e2 δ)
+      | @exp_inl _ σ₁ σ₂ e0 => taglit_sum (inl (evalTagged e0 δ))
+      | @exp_inr _ σ₁ σ₂ e0 => taglit_sum (inr (evalTagged e0 δ))
+      | @exp_list _ σ0 es => taglit_list (List.map (fun e0 : Exp Γ σ0 => evalTagged e0 δ) es)
+      | @exp_cons _ σ0 e1 e2 =>
+        (* This is less efficient than it could be. It's untagging the head and
+           the whole list while it would only need to destruct (evalTagged e2
+           δ). *)
+        tag (ty_list σ0) (cons (untag (evalTagged e1 δ)) (untag (evalTagged e2 δ)))
+      | @exp_nil _ σ0 => taglit_list nil
+      | @exp_tuple _ σs es =>
+        let evalsTagged := fix evalsTagged {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Env TaggedLit σs :=
+                             match es with
+                             | env_nil => env_nil
+                             | env_snoc es σ e => env_snoc (evalsTagged es) σ (evalTagged e δ)
+                             end
+        in taglit_tuple (evalsTagged es)
+      | @exp_projtup _ σs e0 n σ0 p => env_lookup (untag (evalTagged e0 δ)) (Build_InCtx _ _ n p)
+      | @exp_union _ T K e0 => taglit_union K (evalTagged e0 δ)
+      | exp_record R es =>
+        let evalsTagged := fix evalsTagged {rfs : Ctx (𝑹𝑭 * Ty)} (es : Env' (Exp Γ) rfs) : Env' TaggedLit rfs :=
+                             match es with
+                             | env_nil => env_nil
+                             | env_snoc es σ e => env_snoc (evalsTagged es) σ (evalTagged e δ)
+                             end
+        in taglit_record R (evalsTagged es)
+      | @exp_projrec _ R e0 rf σ0 rfInR => env_lookup (untag (evalTagged e0 δ)) rfInR
+      | @exp_builtin _ σ0 τ f e0 => tag τ (f (untag (evalTagged e0 δ)))
+      end.
 
     Fixpoint eval {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
       match e in (Exp _ t) return (Lit t) with
