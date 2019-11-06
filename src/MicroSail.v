@@ -396,12 +396,22 @@ Module Type TermKit (typeKit : TypeKit).
       | taglit_record t     => t
       end.
 
-    Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Set := Env' Lit Γ.
-
   End Literals.
 
   Section Expressions.
 
+    (* Intrinsically well-typed expressions. The context Γ of mutable variables
+       contains names 𝑿 and types Ty, but the names are not computationally
+       relevant. The underlying representation is still a de Bruijn index based
+       one. The names are meant for human consumption and we also provide name
+       resolution infrastructure in the NameResolution module to fill in de
+       Bruijn indices automatically.
+
+       The de Bruijn indices are wrapped together with a resolution proof in the
+       InCtx type class, which currently does not have any global instances. We
+       do have local implicit instances like for example in the exp_var
+       constructor below and use the type class mechanism to copy these
+       locally. *)
     Inductive Exp (Γ : Ctx (𝑿 * Ty)) : Ty -> Set :=
     | exp_var     (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} : Exp Γ σ
     | exp_lit     (σ : Ty) : Lit σ -> Exp Γ σ
@@ -433,6 +443,8 @@ Module Type TermKit (typeKit : TypeKit).
     Global Arguments exp_union {_ _} _ _.
     Global Arguments exp_record {_} _ _.
     Global Arguments exp_projrec {_} _ _ _ {_ _}.
+
+    Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Set := Env' Lit Γ.
 
     Fixpoint evalTagged {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : TaggedLit σ.
     Admitted.
@@ -537,6 +549,11 @@ Module Type TermKit (typeKit : TypeKit).
 
   Module NameResolution.
 
+    (* For name resolution we rely on decidable equality of expression
+       variables. The functions in this module resolve to the closest binding
+       of an equal name and fill in the de Bruijn index automatically from
+       a successful resolution.
+    *)
     Parameter 𝑿_eq_dec : forall x y : 𝑿, {x=y}+{~x=y}.
 
     Fixpoint ctx_resolve {D : Set} (Γ : Ctx (𝑿 * D)) (x : 𝑿) {struct Γ} : option D :=
