@@ -274,6 +274,8 @@ Module Type TypeKit.
   | ty_prod (σ τ : Ty)
   | ty_sum  (σ τ : Ty)
   | ty_unit
+  (* Experimental features. These are still in flux. *)
+  | ty_tuple (σs : Ctx Ty)
   | ty_union (T : 𝑻)
   | ty_record (R : 𝑹)
   .
@@ -356,6 +358,8 @@ Module Type TermKit (typeKit : TypeKit).
     | taglit_prod   σ₁ σ₂  : TaggedLit σ₁ * TaggedLit σ₂ -> TaggedLit (ty_prod σ₁ σ₂)
     | taglit_sum    σ₁ σ₂  : TaggedLit σ₁ + TaggedLit σ₂ -> TaggedLit (ty_sum σ₁ σ₂)
     | taglit_unit          : TaggedLit (ty_unit)
+    (* Experimental features *)
+    | taglit_tuple σs      : Env TaggedLit σs -> TaggedLit (ty_tuple σs)
     | taglit_union (T : 𝑻) (K : 𝑲 T) : TaggedLit (𝑲_Ty K) -> TaggedLit (ty_union T)
     | taglit_record (R : 𝑹) : Env' TaggedLit (𝑹𝑭_Ty R) -> TaggedLit (ty_record R).
 
@@ -369,6 +373,8 @@ Module Type TermKit (typeKit : TypeKit).
       | ty_prod σ₁ σ₂ => Lit σ₁ * Lit σ₂
       | ty_sum σ₁ σ₂ => Lit σ₁ + Lit σ₂
       | ty_unit => unit
+      (* Experimental features *)
+      | ty_tuple σs => Env TaggedLit σs
       | ty_union T => { K : 𝑲 T & TaggedLit (𝑲_Ty K) }
       | ty_record R => Env' TaggedLit (𝑹𝑭_Ty R)
       end%type.
@@ -384,6 +390,8 @@ Module Type TermKit (typeKit : TypeKit).
       | taglit_sum (inl v)  => inl (untag v)
       | taglit_sum (inr v)  => inr (untag v)
       | taglit_unit         => tt
+      (* Experimental features *)
+      | taglit_tuple ls     => ls
       | taglit_union l      => existT _ _ l
       | taglit_record t     => t
       end.
@@ -412,6 +420,8 @@ Module Type TermKit (typeKit : TypeKit).
     | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty_list σ)
     | exp_cons    {σ : Ty} (h : Exp Γ σ) (t : Exp Γ (ty_list σ)) : Exp Γ (ty_list σ)
     | exp_nil     {σ : Ty} : Exp Γ (ty_list σ)
+    (* Experimental features *)
+    | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty_tuple σs)
     | exp_union   {T : 𝑻} (K : 𝑲 T) (e : Exp Γ (𝑲_Ty K)) : Exp Γ (ty_union T)
     | exp_record  (R : 𝑹) (es : Env' (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R)
     | exp_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Exp Γ σ) : Exp Γ τ.
@@ -441,6 +451,7 @@ Module Type TermKit (typeKit : TypeKit).
       | exp_list es         => List.map (fun e => eval e δ) es
       | exp_cons e₁ e2      => cons (eval e₁ δ) (eval e2 δ)
       | exp_nil _           => nil
+      | exp_tuple es        => env_map (fun τ e => evalTagged e δ) es
       | exp_union K e       => existT _ K (evalTagged e δ)
       | exp_record R es     => env_map (fun τ e => evalTagged e δ) es
       | exp_builtin f e     => f (eval e δ)
@@ -453,9 +464,16 @@ Module Type TermKit (typeKit : TypeKit).
 
   Section Statements.
 
+    Inductive TuplePat : Ctx Ty -> Ctx (𝑿 * Ty) -> Set :=
+    | tuplepat_nil  : TuplePat ctx_nil ctx_nil
+    | tuplepat_snoc
+        {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)}
+        (pat : TuplePat σs Δ) {σ : Ty} (x : 𝑿) :
+        TuplePat (ctx_snoc σs σ) (ctx_snoc Δ (x , σ)).
+
     Inductive RecordPat : Ctx (𝑹𝑭 * Ty) -> Ctx (𝑿 * Ty) -> Set :=
-    | pat_nil  : RecordPat ctx_nil ctx_nil
-    | pat_cons
+    | recordpat_nil  : RecordPat ctx_nil ctx_nil
+    | recordpat_snoc
         {rfs : Ctx (𝑹𝑭 * Ty)} {Δ : Ctx (𝑿 * Ty)}
         (pat : RecordPat rfs Δ) (rf : 𝑹𝑭) {τ : Ty} (x : 𝑿) :
         RecordPat (ctx_snoc rfs (rf , τ)) (ctx_snoc Δ (x , τ)).
@@ -480,6 +498,8 @@ Module Type TermKit (typeKit : TypeKit).
       (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ) : Stm Γ τ
     | stm_match_pair {σ₁ σ₂ τ : Ty} (e : Exp Γ (ty_prod σ₁ σ₂))
       (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ₁)) (xr , σ₂)) τ) : Stm Γ τ
+    | stm_match_tuple {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
+      (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
     | stm_match_union {T : 𝑻} (e : Exp Γ (ty_union T)) {τ : Ty}
       (alts : forall (K : 𝑲 T), { x : 𝑿 & Stm (ctx_snoc Γ (x , 𝑲_Ty K)) τ}) : Stm Γ τ
     | stm_match_record {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
@@ -499,6 +519,7 @@ Module Type TermKit (typeKit : TypeKit).
     Global Arguments stm_match_list {_ _ _} _ _ _ _ _.
     Global Arguments stm_match_sum {_ _ _ _} _ _ _ _ _.
     Global Arguments stm_match_pair {_ _ _ _} _ _ _ _.
+    Global Arguments stm_match_tuple {_ _ _} _ _ {_} _.
     Global Arguments stm_match_union {_ _} _ {_} _.
     Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
 
@@ -571,14 +592,25 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
 
   Section SmallStep.
 
-    Fixpoint pattern_match {rfs : Ctx (𝑹𝑭 * Ty)}  {Δ : Ctx (𝑿 * Ty)}
-             (p : RecordPat rfs Δ) {struct p} : Env' TaggedLit rfs -> LocalStore Δ :=
+    Fixpoint tuple_pattern_match {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)}
+             (p : TuplePat σs Δ) {struct p} : Env TaggedLit σs -> LocalStore Δ :=
       match p with
-      | pat_nil => fun _ => env_nil
-      | pat_cons p rf x =>
+      | tuplepat_nil => fun _ => env_nil
+      | tuplepat_snoc p x =>
         fun E =>
           env_snoc
-            (pattern_match p (env_tail E)) (x, _)
+            (tuple_pattern_match p (env_tail E)) (x, _)
+            (untag (env_lookup E inctx_zero))
+      end.
+
+    Fixpoint record_pattern_match {rfs : Ctx (𝑹𝑭 * Ty)}  {Δ : Ctx (𝑿 * Ty)}
+             (p : RecordPat rfs Δ) {struct p} : Env' TaggedLit rfs -> LocalStore Δ :=
+      match p with
+      | recordpat_nil => fun _ => env_nil
+      | recordpat_snoc p rf x =>
+        fun E =>
+          env_snoc
+            (record_pattern_match p (env_tail E)) (x, _)
             (untag (env_lookup E inctx_zero))
       end.
 
@@ -693,6 +725,14 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         ⟨ δ , let (vl , vr) := eval e δ in
               stm_let' (env_snoc (env_snoc env_nil (xl,σ₁) vl) (xr,σ₂) vr) rhs
         ⟩
+
+    | step_stm_match_tuple
+        (δ : LocalStore Γ) {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)}
+        (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ)
+        {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) :
+        ⟨ δ , stm_match_tuple e p rhs ⟩ --->
+        ⟨ δ , stm_let' (tuple_pattern_match p (eval e δ)) rhs ⟩
+
     | step_stm_match_union
         (δ : LocalStore Γ) {T : 𝑻} (e : Exp Γ (ty_union T)) {τ : Ty}
         (alts : forall (K : 𝑲 T), { x : 𝑿 & Stm (ctx_snoc Γ (x , 𝑲_Ty K)) τ}) :
@@ -705,7 +745,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         (e : Exp Γ (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ)
         {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) :
         ⟨ δ , stm_match_record R e p rhs ⟩ --->
-        ⟨ δ , stm_let' (pattern_match p (eval e δ)) rhs ⟩
+        ⟨ δ , stm_let' (record_pattern_match p (eval e δ)) rhs ⟩
 
     (* where "st1 '--->' st2" := (@Step _ _ st1 st2). *)
     where "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2).
@@ -881,6 +921,9 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         meval e >>= fun v =>
         let (vl , vr) := v in
         push vl *> push vr *> WLP rhs <* pop <* pop
+      | stm_match_tuple e p rhs =>
+        meval e >>= fun v =>
+        pushs (tuple_pattern_match p v) *> WLP rhs <* pops _
       | stm_match_union e rhs =>
         meval e >>= fun v =>
         let (K , tv) := v in
@@ -888,7 +931,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         push (untag tv) *> WLP alt <* pop
       | stm_match_record R e p rhs =>
         meval e >>= fun v =>
-        pushs (pattern_match p v) *> WLP rhs <* pops _
+        pushs (record_pattern_match p v) *> WLP rhs <* pops _
       end.
 
     (* Notation "'⟨' δ ',' s '⟩'" := {| state_local_store := δ; state_statement := s |}. *)
@@ -1021,16 +1064,18 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
           | [ H: ⟨ _, stm_if _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>             inversion H; subst; clear H
           | [ H: ⟨ _, stm_lit _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>               inversion H; subst; clear H
           | [ H: ⟨ _, stm_lit _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>              inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>   inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
           | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
           | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => inversion H; subst; clear H
           | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>    inversion H; subst; clear H
           | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>   inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>   inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>    inversion H; subst; clear H
           | [ H: ⟨ _, stm_match_union _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>       inversion H; subst; clear H
           | [ H: ⟨ _, stm_match_union _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>      inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
+          | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => inversion H; subst; clear H
 
           | [ H: ⟨ _, stm_app' _ _ _ (stm_lit _ _) ⟩ ---> ⟨ _, _ ⟩ |- _ ] => inversion H; subst; clear H
           | [ H: ⟨ _, stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
@@ -1099,6 +1144,9 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         - wlp_sound_simpl; auto.
         - wlp_sound_simpl; auto.
         - wlp_sound_simpl; auto.
+        - wlp_sound_simpl; auto.
+          + now rewrite env_drop_cat in H4.
+          + now rewrite env_drop_cat in H4.
         - wlp_sound_simpl; auto.
           admit. (* #$@&%* *)
         - wlp_sound_simpl; auto.
