@@ -839,6 +839,8 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
            | [ |- True ] => constructor
            | [ |- ⟨ _ , stm_lit _ _ ⟩ --->* ⟨ _, _ ⟩ ] => constructor 1
            | [ |- ⟨ _ , stm_exit _ _ ⟩ --->* ⟨ _, _ ⟩ ] => constructor 1
+           | [ |- ⟨ _ , stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_let_value
+           | [ |- ⟨ _ , stm_let _ _ (stm_exit _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_let_exit
            end; cbn); eauto.
 
       Local Ltac steps_inversion_induction :=
@@ -970,7 +972,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
                  dependent destruction H
                | [ H: context[env_drop _ (_ ►► _)]|- _] =>
                  rewrite env_drop_cat in H
-               | [ _: context[eval ?e ?δ] |- _ ] =>
+               | [ _: context[match eval ?e ?δ with _ => _ end] |- _ ] =>
                  destruct (eval e δ)
                end).
 
