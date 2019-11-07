@@ -11,6 +11,9 @@ stages:
       - "src/*.glob"
       - "src/*.vo"
       - "src/.*.aux"
+      - "src/MicroSail/*.glob"
+      - "src/MicroSail/*.vo"
+      - "src/MicroSail/.*.aux"
 
 # Debian Stretch (9.0) and Ubuntu Bionic (18.04) have 8.6
 coq-8.6:  {<<: *build, image: "coqorg/coq:8.6", allow_failure: true}
