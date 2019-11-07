@@ -280,10 +280,10 @@ Module Type TypeKit.
   | ty_record (R : 𝑹)
   .
 
-  Record FunTy : Set :=
-    { fun_dom : Ctx (𝑿 * Ty);
-      fun_cod : Ty
-    }.
+  (* Record FunTy : Set := *)
+  (*   { fun_dom : Ctx (𝑿 * Ty); *)
+  (*     fun_cod : Ty *)
+  (*   }. *)
 
   Module NameNotation.
 
@@ -313,8 +313,7 @@ Module Type TermKit (typeKit : TypeKit).
   Parameter 𝑹𝑭_Ty : 𝑹 -> Ctx (𝑹𝑭 * Ty).
 
   (* Names of functions. *)
-  Parameter 𝑭  : Set.
-  Parameter pi : 𝑭 -> FunTy.
+  Parameter 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set.
 
   Section Literals.
 
@@ -572,7 +571,7 @@ Module Type TermKit (typeKit : TypeKit).
     | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
     | stm_let'       (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) {σ : Ty} (k : Stm (ctx_cat Γ Δ) σ) : Stm Γ σ
     | stm_assign     (x : 𝑿) (τ : Ty) {xInΓ : InCtx (x , τ) Γ} (e : Exp Γ τ) : Stm Γ τ
-    | stm_app        (f : 𝑭) (es : Env' (Exp Γ) (fun_dom (pi f))) : Stm Γ (fun_cod (pi f))
+    | stm_app        {σs σ} (f : 𝑭 σs σ) (es : Env' (Exp Γ) σs) : Stm Γ σ
     | stm_app'       (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ) : Stm Γ τ
     | stm_if         {τ : Ty} (e : Exp Γ ty_bool) (s₁ s₂ : Stm Γ τ) : Stm Γ τ
     | stm_seq        {τ : Ty} (e : Stm Γ τ) {σ : Ty} (k : Stm Γ σ) : Stm Γ σ
@@ -598,7 +597,7 @@ Module Type TermKit (typeKit : TypeKit).
     Global Arguments stm_let {_} _ _ _ {_} _.
     Global Arguments stm_let' {_ _} _ {_} _.
     Global Arguments stm_assign {_} _ {_ _} _.
-    Global Arguments stm_app {_} _ _.
+    Global Arguments stm_app {_ _ _} _ _.
     Global Arguments stm_app' {_} _ _ _ _.
     Global Arguments stm_if {_ _} _ _ _.
     Global Arguments stm_seq {_ _} _ {_} _.
@@ -613,8 +612,8 @@ Module Type TermKit (typeKit : TypeKit).
 
   End Statements.
 
-  Record FunDef (fty : FunTy) : Set :=
-    { fun_body : Stm (fun_dom fty)(fun_cod fty) }.
+  Record FunDef (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Set :=
+    { fun_body : Stm Δ τ }.
 
   Module NameResolution.
 
@@ -667,13 +666,13 @@ Module Type TermKit (typeKit : TypeKit).
 
   Definition Pred (A : Set) : Type := A -> Prop.
 
-  Record Contract (fty : FunTy) : Type :=
-    { contract_pre_condition  : Pred (Env' Lit (fun_dom fty));
-      contract_post_condition : Pred (Env' Lit (fun_dom fty) * Lit (fun_cod fty))
+  Record Contract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+    { contract_pre_condition  : Pred (Env' Lit Δ);
+      contract_post_condition : Lit τ -> Pred (Env' Lit Δ)
     }.
 
   Definition ContractEnv : Type :=
-    forall (f : 𝑭), option (Contract (pi f)).
+    forall Δ τ (f : 𝑭 Δ τ), option (Contract Δ τ).
 
 End TermKit.
 
@@ -681,7 +680,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
   Import typeKit.
   Import termKit.
 
-  Parameter Pi : forall (f : 𝑭), FunDef (pi f).
+  Parameter Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ.
 
   Section SmallStep.
 
@@ -759,13 +758,9 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         ⟨ δ , stm_seq (stm_exit τ s) k ⟩ ---> ⟨ δ , stm_exit σ s ⟩
 
     | step_stm_app
-        {δ : LocalStore Γ} {f : 𝑭} :
-        let Δ := fun_dom (pi f) in
-        let τ := fun_cod (pi f) in
-        let s := fun_body (Pi f) in
-        forall (es : Env' (Exp Γ) Δ),
+        {δ : LocalStore Γ} {σs σ} {f : 𝑭 σs σ} (es : Env' (Exp Γ) σs) :
         ⟨ δ , stm_app f es ⟩ --->
-        ⟨ δ , stm_app' Δ (evals es δ) τ s ⟩
+        ⟨ δ , stm_app' σs (evals es δ) σ (fun_body (Pi f)) ⟩
     | step_stm_app'_step
         {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ δΔ' : LocalStore Δ} (τ : Ty)
         (s s' : Stm Δ τ) :
@@ -951,6 +946,8 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
       bind get (fun δ => put (f δ)).
     Definition meval {Γ σ} (e : Exp Γ σ) : DST Γ Γ (Lit σ) :=
       bind get (fun δ => pure (eval e δ)).
+    Definition mevals {Γ Δ} (es : Env' (Exp Γ) Δ) : DST Γ Γ (Env' Lit Δ) :=
+      bind get (fun δ => pure (evals es δ)).
     Definition push {Γ x σ} (v : Lit σ) : DST Γ (ctx_snoc Γ (x , σ)) unit :=
       modify (fun δ => env_snoc δ (x,σ) v).
     Definition pop {Γ x σ} : DST (ctx_snoc Γ (x , σ)) Γ unit :=
@@ -991,12 +988,14 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
       | stm_seq s1 s2 => WLP s1 *> WLP s2
       | stm_app' Δ δ τ s => lift (evalDST (WLP s) δ)
 
-      | stm_app f es => match CEnv f with
-                        | None => abort (* NOT IMPLEMENTED *)
-                        | Some c => fun POST δ =>
-                                      contract_pre_condition c (evals es δ)
-                                      /\ (forall v, contract_post_condition c (evals es δ, v) -> POST v δ)
-                        end
+      | stm_app f es =>
+        mevals es >>= fun δf_in =>
+        match CEnv f with
+        | None => abort (* NOT IMPLEMENTED *)
+        | Some c => fun POST δ =>
+                      contract_pre_condition c δf_in
+                      /\ (forall v, contract_post_condition c v δf_in -> POST v δ)
+        end
       | stm_let' δ k => pushs δ *> WLP k <* pops _
       | stm_match_list e alt_nil xh xt alt_cons =>
         meval e >>= fun v =>
