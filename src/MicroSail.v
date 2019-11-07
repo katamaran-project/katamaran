@@ -35,15 +35,12 @@ From Coq Require Import
 
 From MicroSail Require Import
      Context
-     Environment.
+     Environment
+     Notation.
 
 Set Implicit Arguments.
 
-(* Section Types. *)
 Module Type TypeKit.
-
-  Definition Env' {X T : Set} (D : T -> Set) (Γ : Ctx (X * T)) : Set :=
-    Env (fun xt => D (snd xt)) Γ.
 
   (* Names of union type constructors. *)
   Parameter 𝑻   : Set. (* input: \MIT *)
@@ -67,25 +64,7 @@ Module Type TypeKit.
   | ty_record (R : 𝑹)
   .
 
-  (* Record FunTy : Set := *)
-  (*   { fun_dom : Ctx (𝑿 * Ty); *)
-  (*     fun_cod : Ty *)
-  (*   }. *)
-
-  Module NameNotation.
-
-    Notation "'ε'"   := (ctx_nil).
-    Notation "Γ ▻ b" := (ctx_snoc Γ b) (at level 55, left associativity).
-    Notation "Γ₁ ▻▻ Γ₂" := (ctx_cat Γ₁ Γ₂) (at level 55, left associativity).
-    Notation "b ∈ Γ" := (InCtx b Γ)  (at level 80).
-    Notation "E '►' x '∶' τ '↦' d" := (E , ((x , τ) , d)) (at level 55, left associativity).
-    Notation "E1 '►►' E2" := (env_cat E1 E2) (at level 55, left associativity).
-    Notation "E [ x ↦ v ]" := (@env_update _ _ _ E (x , _) _ v) (at level 55, left associativity).
-
-  End NameNotation.
-
 End TypeKit.
-(* End Types. *)
 
 Module Type TermKit (typeKit : TypeKit).
   Import typeKit.
@@ -209,8 +188,6 @@ Module Type TermKit (typeKit : TypeKit).
       | ty_record R => taglit_record R
       end.
 
-    Arguments tag [_] _.
-
   End Literals.
 
   Section Expressions.
@@ -255,15 +232,18 @@ Module Type TermKit (typeKit : TypeKit).
                   {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Exp Γ σ
     | exp_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Exp Γ σ) : Exp Γ τ.
 
+    Global Arguments exp_var {_} _ {_ _}.
     Global Arguments exp_union {_ _} _ _.
     Global Arguments exp_record {_} _ _.
     Global Arguments exp_projrec {_ _} _ _ {_ _}.
+
+    Import EnvNotations.
 
     Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Set := Env' Lit Γ.
 
     Fixpoint evalTagged {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : TaggedLit σ :=
       match e in (Exp _ t) return (TaggedLit t) with
-      | @exp_var _ x σ0 xInΓ => tag σ0 (env_lookup δ xInΓ)
+      | exp_var x => tag _ (δ ! x)
       | exp_lit _ σ0 l => tag σ0 l
       | exp_plus e1 e2 => taglit_int (untag (evalTagged e1 δ) + untag (evalTagged e2 δ))
       | exp_times e1 e2 => taglit_int (untag (evalTagged e1 δ) * untag (evalTagged e2 δ))
@@ -306,7 +286,7 @@ Module Type TermKit (typeKit : TypeKit).
 
     Fixpoint eval {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
       match e in (Exp _ t) return (Lit t) with
-      | @exp_var _ x _ xInΓ => env_lookup δ xInΓ
+      | exp_var x           => δ ! x
       | exp_lit _ _ l       => l
       | exp_plus e₁ e2      => Z.add (eval e₁ δ) (eval e2 δ)
       | exp_times e₁ e2     => Z.mul (eval e₁ δ) (eval e2 δ)
@@ -327,7 +307,7 @@ Module Type TermKit (typeKit : TypeKit).
       | @exp_projtup _ σs e n σ p => untag (env_lookup (eval e δ) (Build_InCtx _ _ n p))
       | exp_union K e       => existT _ K (evalTagged e δ)
       | exp_record R es     => env_map (fun τ e => evalTagged e δ) es
-      | @exp_projrec _ R e rf _ rfInR  => untag (env_lookup (eval e δ) rfInR)
+      | exp_projrec e rf    => untag (eval e δ ! rf)
       | exp_builtin f e     => f (eval e δ)
       end.
 
@@ -480,6 +460,9 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
 
   Parameter Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ.
 
+  Import CtxNotations.
+  Import EnvNotations.
+
   Section SmallStep.
 
     Fixpoint tuple_pattern_match {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)}
@@ -504,18 +487,6 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
             (untag (env_lookup E inctx_zero))
       end.
 
-    (* Record State (Γ : Ctx (𝑿 * Ty)) (σ : Ty) : Set := *)
-    (*   { state_local_store : LocalStore Γ; *)
-    (*     state_statement   : Stm Γ σ *)
-    (*   }. *)
-
-    (* Notation "'⟨' δ ',' s '⟩'" := {| state_local_store := δ; state_statement := s |}. *)
-    (* Reserved Notation "st1 '--->' st2" (at level 80). *)
-    Reserved Notation "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" (at level 80).
-
-    Import NameNotation.
-
-    (* Inductive Step {Γ : Ctx (𝑿 * Ty)} : forall {σ : Ty} (st₁ st₂ : State Γ σ), Prop := *)
     Inductive Step {Γ : Ctx (𝑿 * Ty)} : forall {σ : Ty} (δ₁ δ₂ : LocalStore Γ) (s₁ s₂ : Stm Γ σ), Prop :=
 
     | step_stm_exp
@@ -573,7 +544,7 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
     | step_stm_assign
         (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (e : Exp Γ σ) :
         let v := eval e δ in
-        ⟨ δ , stm_assign x e ⟩ ---> ⟨ env_update δ xInΓ v , stm_lit σ v ⟩
+        ⟨ δ , stm_assign x e ⟩ ---> ⟨ δ [ x ↦ v ] , stm_lit σ v ⟩
     | step_stm_if
         (δ : LocalStore Γ) (e : Exp Γ ty_bool) (σ : Ty) (s₁ s₂ : Stm Γ σ) :
         ⟨ δ , stm_if e s₁ s₂ ⟩ ---> ⟨ δ , if eval e δ then s₁ else s₂ ⟩
@@ -634,7 +605,6 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         ⟨ δ , stm_match_record R e p rhs ⟩ --->
         ⟨ δ , stm_let' (record_pattern_match p (eval e δ)) rhs ⟩
 
-    (* where "st1 '--->' st2" := (@Step _ _ st1 st2). *)
     where "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2).
 
     Inductive Steps {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : LocalStore Γ -> Stm Γ σ -> Prop :=
@@ -760,8 +730,6 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
     Notation "ma *> mb" := (bindright ma mb) (at level 90, left associativity).
     Notation "ma <* mb" := (bindleft ma mb) (at level 90, left associativity).
 
-    Import NameNotation.
-
     (* Version that computes *)
     Definition IsLit {Γ σ} (δ : LocalStore Γ) (s : Stm Γ σ) :
       forall (POST : Lit σ -> Pred (LocalStore Γ)), Prop :=
@@ -824,11 +792,8 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         pushs (record_pattern_match p v) *> WLP rhs <* pops _
       end.
 
-    (* Notation "'⟨' δ ',' s '⟩'" := {| state_local_store := δ; state_statement := s |}. *)
-    Notation "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2) (at level 80).
-
-    (* Notation "t₁ --> t₂" := (@Step _ _ t₁ t₂) (at level 80). *)
-    Notation "'⟨' δ1 ',' s1 '⟩' --->* '⟨' δ2 ',' s2 '⟩'" := (@Steps _ _ δ1 s1 δ2 s2) (at level 80).
+    Notation "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2).
+    Notation "'⟨' δ1 ',' s1 '⟩' --->* '⟨' δ2 ',' s2 '⟩'" := (@Steps _ _ δ1 s1 δ2 s2).
 
     Section Soundness.
 

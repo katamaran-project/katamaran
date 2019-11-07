@@ -1,5 +1,6 @@
 Require Import Coq.Program.Equality.
 Require Import MicroSail.Context.
+Require Import MicroSail.Notation.
 
 Set Implicit Arguments.
 
@@ -12,6 +13,7 @@ Section WithBinding.
       Env D (ctx_snoc Γ b).
 
   Global Arguments env_nil {_}.
+  Bind Scope env_scope with Env.
 
   Fixpoint env_cat {D : B -> Set} {Γ Δ : Ctx B}
     (EΓ : Env D Γ) (EΔ : Env D Δ) : Env D (ctx_cat Γ Δ) :=
@@ -125,3 +127,16 @@ Section WithBinding.
   Proof. induction δΔ; cbn; auto. Qed.
 
 End WithBinding.
+
+Definition Env' {X T : Set} (D : T -> Set) (Γ : Ctx (X * T)) : Set :=
+  Env (fun xt => D (snd xt)) Γ.
+Bind Scope env_scope with Env'.
+
+Module EnvNotations.
+
+  Notation "δ '►' b '↦' d" := (env_snoc δ b d).
+  Notation "δ1 '►►' δ2" := (env_cat δ1 δ2).
+  Notation "δ [ x ↦ v ]" := (@env_update _ _ _ δ (x , _) _ v).
+  Notation "δ ! x" := (@env_lookup _ _ _ δ (x , _) _).
+
+End EnvNotations.

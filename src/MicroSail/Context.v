@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 Require Import Coq.Logic.EqdepFacts.
+Require Import MicroSail.Notation.
 
 Set Implicit Arguments.
 
@@ -38,6 +39,7 @@ Inductive Ctx (B : Set) : Set :=
 
 Arguments ctx_nil {_}.
 Arguments ctx_snoc {_} _ _.
+Bind Scope ctx_scope with Ctx.
 
 Section WithBinding.
   Context {B : Set}.
@@ -121,3 +123,10 @@ Section WithBinding.
   Qed.
 
 End WithBinding.
+
+Module CtxNotations.
+  Notation "'ε'" := ctx_nil : ctx_scope.
+  Infix "▻" := ctx_snoc : ctx_scope.
+  Notation "Γ1 ▻▻ Γ2" := (ctx_cat Γ1 Γ2) : ctx_scope.
+  Notation "b ∈ Γ" := (InCtx b Γ) : type_scope.
+End CtxNotations.
