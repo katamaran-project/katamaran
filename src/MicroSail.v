@@ -588,7 +588,18 @@ Module Type TermKit (typeKit : TypeKit).
     | stm_match_tuple {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
       (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
     | stm_match_union {T : 𝑻} (e : Exp Γ (ty_union T)) {τ : Ty}
-      (alts : forall (K : 𝑲 T), { x : 𝑿 & Stm (ctx_snoc Γ (x , 𝑲_Ty K)) τ}) : Stm Γ τ
+      (* An earlier definition of stm_match_union used a "list of pairs"
+          (alts : forall (K : 𝑲 T), { x : 𝑿 & Stm (ctx_snoc Γ (x , 𝑲_Ty K)) τ})
+         to define alternatives, which packs the variable name x for the field
+         of the union neatly together with the right hand side. Unfortunately,
+         due toe the sigma type constructor the derived induction principle is
+         not strong enough. It's possible to write a better induction principle
+         by hand, but since the AST is still in flux this is too much of a
+         burden to keep updated. Instead we use two "lists", one for the
+         variable names and one for the RHSs, which separates them lexically,
+         but gives a better induction principle. *)
+      (altx : forall (K : 𝑲 T), 𝑿)
+      (alts : forall (K : 𝑲 T), Stm (ctx_snoc Γ (altx K , 𝑲_Ty K)) τ) : Stm Γ τ
     | stm_match_record {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
       (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ.
 
@@ -607,7 +618,7 @@ Module Type TermKit (typeKit : TypeKit).
     Global Arguments stm_match_sum {_ _ _ _} _ _ _ _ _.
     Global Arguments stm_match_pair {_ _ _ _} _ _ _ _.
     Global Arguments stm_match_tuple {_ _ _} _ _ {_} _.
-    Global Arguments stm_match_union {_ _} _ {_} _.
+    Global Arguments stm_match_union {_ _} _ {_} _ _.
     Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
 
   End Statements.
@@ -823,10 +834,11 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
 
     | step_stm_match_union
         (δ : LocalStore Γ) {T : 𝑻} (e : Exp Γ (ty_union T)) {τ : Ty}
-        (alts : forall (K : 𝑲 T), { x : 𝑿 & Stm (ctx_snoc Γ (x , 𝑲_Ty K)) τ}) :
-        ⟨ δ , stm_match_union e alts ⟩ --->
+        (altx : forall (K : 𝑲 T), 𝑿)
+        (alts : forall (K : 𝑲 T), Stm (ctx_snoc Γ (altx K , 𝑲_Ty K)) τ) :
+        ⟨ δ , stm_match_union e altx alts ⟩ --->
         ⟨ δ , let (K , v) := eval e δ in
-              stm_let' (env_snoc env_nil (projT1 (alts K),𝑲_Ty K) (untag v)) (projT2 (alts K))
+              stm_let' (env_snoc env_nil (altx K,𝑲_Ty K) (untag v)) (alts K)
         ⟩
     | step_stm_match_record
         (δ : LocalStore Γ) {R : 𝑹} {Δ : Ctx (𝑿 * Ty)}
@@ -1016,11 +1028,10 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
       | stm_match_tuple e p rhs =>
         meval e >>= fun v =>
         pushs (tuple_pattern_match p v) *> WLP rhs <* pops _
-      | stm_match_union e rhs =>
+      | stm_match_union e xs rhs =>
         meval e >>= fun v =>
         let (K , tv) := v in
-        let (x , alt) := rhs K in
-        push (untag tv) *> WLP alt <* pop
+        push (untag tv) *> WLP (rhs K) <* pop
       | stm_match_record R e p rhs =>
         meval e >>= fun v =>
         pushs (record_pattern_match p v) *> WLP rhs <* pops _
@@ -1166,8 +1177,8 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
           | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>   dependent destruction H
           | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
           | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>    dependent destruction H
-          | [ H: ⟨ _, stm_match_union _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>       dependent destruction H
-          | [ H: ⟨ _, stm_match_union _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>      dependent destruction H
+          | [ H: ⟨ _, stm_match_union _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>       dependent destruction H
+          | [ H: ⟨ _, stm_match_union _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>      dependent destruction H
           | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
           | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => dependent destruction H
 
@@ -1188,6 +1199,9 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         | [ IH: forall _ _ _, ⟨ _ , ?s ⟩ --->* ⟨ _ , _ ⟩ -> _,
             HS: ⟨ _ , ?s ⟩ --->* ⟨ _ , ?t ⟩, HF: Final ?t |- _ ] =>
           specialize (IH _ _ _ HS HF); clear HS HF
+        | [ IH: forall _ _ _ _, ⟨ _ , _ ⟩ --->* ⟨ _ , _ ⟩ -> _,
+            HS: ⟨ _ , _ ⟩ --->* ⟨ _ , ?t ⟩, HF: Final ?t |- _ ] =>
+          specialize (IH _ _ _ _ HS HF); clear HS HF
         | [ IH: forall POST, WLP ?s POST ?δ -> _, WP: WLP ?s _ ?δ |- _ ] =>
           specialize (IH _ WP); clear WP
         end.
@@ -1255,9 +1269,8 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
         - wlp_sound_solve.
         - wlp_sound_solve.
         - wlp_sound_solve.
-          admit. (* #$@&%* *)
-        - wlp_sound_solve; auto.
-      Admitted.
+        - wlp_sound_solve.
+      Qed.
 
     End Soundness.
 
