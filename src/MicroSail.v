@@ -33,100 +33,10 @@ From Coq Require Import
      Strings.String
      ZArith.ZArith.
 
+From MicroSail Require Import
+  Context.
+
 Set Implicit Arguments.
-
-Section Contexts.
-
-  (* Type of contexts. This is a list of bindings of type B. This type and
-     subsequent types use the common notation of snoc lists. *)
-  Inductive Ctx (B : Set) : Set :=
-  | ctx_nil
-  | ctx_snoc (Γ : Ctx B) (b : B).
-
-  Global Arguments ctx_nil {_}.
-  Global Arguments ctx_snoc {_} _ _.
-
-  (* Concatenation of two contexts. *)
-  Fixpoint ctx_cat {B : Set} (Γ₁ Γ₂ : Ctx B) {struct Γ₂} : Ctx B :=
-    match Γ₂ with
-    | ctx_nil       => Γ₁
-    | ctx_snoc Γ₂ τ => ctx_snoc (ctx_cat Γ₁ Γ₂) τ
-    end.
-
-  (* This is a predicate that that encodes that the de Bruijn index n points
-     to the binding b in Γ. *)
-  Fixpoint ctx_nth_is {B : Set} (Γ : Ctx B) (n : nat) (b : B) {struct Γ} : Prop :=
-    match Γ , n with
-    | ctx_snoc _ x , O   => x = b
-    | ctx_snoc Γ _ , S n => ctx_nth_is Γ n b
-    | _            , _   => False
-    end.
-
-  Section InCtx.
-    (* Set locally only for the definition of InCtx. *)
-    Local Set Primitive Projections.
-
-     (* InCtx represents context containment proofs. This is essentially a
-        well-typed de Bruijn index, i.e. a de Bruijn index with a proof that it
-        resolves to the binding b. This record type is defined using primitive
-        projections to get eta-conversion definitionally. This should also enjoy
-        some performance advantages over a sig type. *)
-    Class InCtx {B : Set} (b : B) (Γ : Ctx B) : Set :=
-      { inctx_at: nat;
-        inctx_valid: ctx_nth_is Γ inctx_at b
-      }.
-
-  End InCtx.
-
-  (* These are *constructors* for InCtx. *)
-  Definition inctx_zero {B : Set} {b : B} {Γ : Ctx B} : InCtx b (ctx_snoc Γ b) :=
-    Build_InCtx b (ctx_snoc Γ b) 0 eq_refl.
-  Definition inctx_succ {B : Set} {b : B} {Γ : Ctx B} {b' : B} (bIn : InCtx b Γ) :
-    InCtx b (ctx_snoc Γ b') :=
-    Build_InCtx b (ctx_snoc Γ b') (S inctx_at) inctx_valid.
-
-  (* Custom pattern matching in cases where the context was already refined
-     by a different match, i.e. on environments. *)
-  Definition inctx_case_nil {A B : Set} {x : B} (xIn : InCtx x ctx_nil) : A :=
-    let (n, e) := xIn in match e with end.
-  Definition inctx_case_snoc (X : Set) (D : X -> Set) (Γ : Ctx X) (x : X) (dx : D x)
-    (dΓ: forall z, InCtx z Γ -> D z) (y: X) (yIn: InCtx y (ctx_snoc Γ x)) : D y :=
-    let (n, e) := yIn in
-    match n return (ctx_nth_is (ctx_snoc Γ x) n y -> D y) with
-    | 0 =>   eq_rec x D dx y
-    | S n => fun e => dΓ y (Build_InCtx _ _ n e)
-    end e.
-
-  Definition inctx_case_snoc_dep (X : Set) (Γ : Ctx X) (x : X)
-    (D : forall z, InCtx z (ctx_snoc Γ x) -> Prop)
-    (dx : D x inctx_zero)
-    (dΓ: forall z (zIn: InCtx z Γ), D z (inctx_succ zIn)) :
-    forall (y: X) (yIn: InCtx y (ctx_snoc Γ x)), D y yIn :=
-    fun y yIn =>
-      match yIn with
-        Build_InCtx _ _ n e =>
-        match n return (forall e, D y (Build_InCtx _ _ n e)) with
-        | 0 => fun e => eq_indd X x (fun z e => D z (Build_InCtx _ (ctx_snoc _ _) 0 e)) dx y e
-        | S n => fun e => dΓ y (Build_InCtx _ _ n e)
-        end e
-      end.
-
-  Lemma InCtx_ind (B : Set) (b : B)
-    (P : forall Γ : Ctx B, InCtx b Γ -> Prop)
-    (fzero : forall Γ : Ctx B, P (ctx_snoc Γ b) (inctx_zero))
-    (fsucc : forall (Γ : Ctx B) (b' : B) (bIn : InCtx b Γ),
-        P Γ bIn -> P (ctx_snoc Γ b') (inctx_succ bIn)) :
-    forall (Γ : Ctx B) (i : InCtx b Γ), P Γ i.
-  Proof.
-    induction Γ; cbn.
-    - intro i; exact (inctx_case_nil i).
-    - intros [[|n] e]; cbn in *.
-      + subst; apply fzero.
-      + pose (Build_InCtx _ _ n e) as bIn.
-        exact (fsucc Γ b0 bIn (IHΓ bIn)).
-  Qed.
-
-End Contexts.
 
 Section Environments.
 

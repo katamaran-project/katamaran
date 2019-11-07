@@ -1,2 +1,3 @@
--arg "-w all" -R src Top
+-arg "-w all" -R src/MicroSail MicroSail
 src/MicroSail.v
+src/MicroSail/Context.v
