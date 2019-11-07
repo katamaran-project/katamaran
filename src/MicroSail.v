@@ -1144,35 +1144,37 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
       Ltac wlp_sound_steps_inversion :=
         repeat
           match goal with
-          | [ H: ⟨ _, stm_assert _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>            inversion H; subst; clear H
-          | [ H: ⟨ _, stm_assert _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>           inversion H; subst; clear H
+          | [ H: ⟨ _, stm_app _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>               dependent destruction H
+          | [ H: ⟨ _, stm_app _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>              dependent destruction H
+          | [ H: ⟨ _, stm_assert _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>            dependent destruction H
+          | [ H: ⟨ _, stm_assert _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>           dependent destruction H
           | [ H: ⟨ _, stm_assign _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>            dependent destruction H
           | [ H: ⟨ _, stm_assign _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>           dependent destruction H
-          | [ H: ⟨ _, stm_exit _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>              inversion H; subst; clear H
-          | [ H: ⟨ _, stm_exit _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>             inversion H; subst; clear H
-          | [ H: ⟨ _, stm_exp _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                 inversion H; subst; clear H
-          | [ H: ⟨ _, stm_exp _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>                inversion H; subst; clear H
-          | [ H: ⟨ _, stm_if _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>              inversion H; subst; clear H
-          | [ H: ⟨ _, stm_if _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>             inversion H; subst; clear H
-          | [ H: ⟨ _, stm_lit _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>               inversion H; subst; clear H
-          | [ H: ⟨ _, stm_lit _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>              inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>   inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>    inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>   inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>    inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_union _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>       inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_union _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>      inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
-          | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => inversion H; subst; clear H
+          | [ H: ⟨ _, stm_exit _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>              dependent destruction H
+          | [ H: ⟨ _, stm_exit _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>             dependent destruction H
+          | [ H: ⟨ _, stm_exp _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                 dependent destruction H
+          | [ H: ⟨ _, stm_exp _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>                dependent destruction H
+          | [ H: ⟨ _, stm_if _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>              dependent destruction H
+          | [ H: ⟨ _, stm_if _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>             dependent destruction H
+          | [ H: ⟨ _, stm_lit _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>               dependent destruction H
+          | [ H: ⟨ _, stm_lit _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>              dependent destruction H
+          | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>   dependent destruction H
+          | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
+          | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
+          | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => dependent destruction H
+          | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>    dependent destruction H
+          | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>   dependent destruction H
+          | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
+          | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>    dependent destruction H
+          | [ H: ⟨ _, stm_match_union _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>       dependent destruction H
+          | [ H: ⟨ _, stm_match_union _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>      dependent destruction H
+          | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
+          | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => dependent destruction H
 
-          | [ H: ⟨ _, stm_app' _ _ _ (stm_lit _ _) ⟩ ---> ⟨ _, _ ⟩ |- _ ] => inversion H; subst; clear H
-          | [ H: ⟨ _, stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  inversion H; subst; clear H
-          | [ H: ⟨ _, stm_let' _ (stm_lit _ _) ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     inversion H; subst; clear H
-          | [ H: ⟨ _, stm_seq (stm_lit _ _) _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>      inversion H; subst; clear H
+          | [ H: ⟨ _, stm_app' _ _ _ (stm_lit _ _) ⟩ ---> ⟨ _, _ ⟩ |- _ ] => dependent destruction H
+          | [ H: ⟨ _, stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
+          | [ H: ⟨ _, stm_let' _ (stm_lit _ _) ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
+          | [ H: ⟨ _, stm_seq (stm_lit _ _) _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>      dependent destruction H
 
           | [ H: ⟨ _, stm_app' _ _ _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_app' HF) in H
           | [ H: ⟨ _, stm_let _ _ _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] =>  apply (steps_inversion_let HF) in H
@@ -1184,66 +1186,77 @@ Module Type ProgramKit (typeKit : TypeKit) (termKit : TermKit typeKit).
       Ltac wlp_sound_inst :=
         match goal with
         | [ IH: forall _ _ _, ⟨ _ , ?s ⟩ --->* ⟨ _ , _ ⟩ -> _,
-            HS: ⟨ _ , ?s ⟩ --->* ⟨ _ , ?t ⟩,
-            HF: Final ?t,
-            WP: WLP ?s _ _
-            |- _
-          ] => specialize (IH _ _ _ HS _ WP HF); clear HS WP
+            HS: ⟨ _ , ?s ⟩ --->* ⟨ _ , ?t ⟩, HF: Final ?t |- _ ] =>
+          specialize (IH _ _ _ HS HF); clear HS HF
+        | [ IH: forall POST, WLP ?s POST ?δ -> _, WP: WLP ?s _ ?δ |- _ ] =>
+          specialize (IH _ WP); clear WP
         end.
 
       Ltac wlp_sound_simpl :=
         repeat
-          (wlp_sound_steps_inversion;
-           unfold Triple, assert, pure, lift, push, pop, meval, bind, bindleft, bindright, get, put, modify, pushs, abort, evalDST, pops in *;
-           cbn in *;
-           destruct_conjs; subst;
+          (cbn in *; destruct_conjs; subst;
            try match goal with
-               | [ H: existT _ _ _ = existT _ _ _ |- _ ] =>
-                 dependent destruction H
-               (* | [ H: ⟨ _ , _ ⟩ = ⟨ _ , _ ⟩ |- _ ] => *)
-               (*   dependent destruction H *)
-               | [ H: _ \/ _ |- _ ] => destruct H
                | [ H: True |- _ ] => clear H
                | [ H: False |- _ ] => destruct H
                | [ H: Env _ (ctx_snoc _ _) |- _ ] =>
                  dependent destruction H
                | [ H: Env _ ctx_nil |- _ ] =>
                  dependent destruction H
+               | [ H: context[env_drop _ (_ ►► _)]|- _] =>
+                 rewrite env_drop_cat in H
                | [ _: context[eval ?e ?δ] |- _ ] =>
                  destruct (eval e δ)
-               end;
-           try wlp_sound_inst).
+               end).
+
+      Ltac wlp_sound_solve :=
+        repeat
+          (wlp_sound_steps_inversion;
+           wlp_sound_simpl;
+           try wlp_sound_inst); auto.
+
+      Definition ValidContractEnv (cenv : ContractEnv) : Prop :=
+        forall σs σ (f : 𝑭 σs σ),
+          match cenv σs σ f with
+          | Some c=>
+            forall (δ δ' : LocalStore σs) (s' : Stm σs σ),
+              ⟨ δ, fun_body (Pi f) ⟩ --->* ⟨ δ', s' ⟩ ->
+              Final s' ->
+              contract_pre_condition c δ ->
+              IsLit δ s' (contract_post_condition c)
+          | None => True
+          end.
+
+      Variable validCEnv : ValidContractEnv CEnv.
 
       Lemma WLP_sound {Γ σ} (s : Stm Γ σ) :
-        forall (δ δ' : LocalStore Γ) (s' : Stm Γ σ), ⟨ δ, s ⟩ --->* ⟨ δ', s' ⟩ ->
-          forall (POST : Lit σ -> Pred (LocalStore Γ)), WLP s POST δ -> Final s' -> IsLit δ' s' POST.
+        forall (δ δ' : LocalStore Γ) (s' : Stm Γ σ), ⟨ δ, s ⟩ --->* ⟨ δ', s' ⟩ -> Final s' ->
+          forall (POST : Lit σ -> Pred (LocalStore Γ)), WLP s POST δ -> IsLit δ' s' POST.
       Proof.
-        induction s; intros.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-          now rewrite env_drop_cat in H4.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl.
-          destruct (CEnv f); destruct_conjs; try contradiction.
-          admit.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-        - wlp_sound_simpl; auto.
-          + now rewrite env_drop_cat in H4.
-          + now rewrite env_drop_cat in H4.
-        - wlp_sound_simpl; auto.
+        induction s; cbn; repeat unfold
+          Triple, abort, assert, bind, bindleft, bindright, evalDST, get,
+          lift, meval, mevals, modify, pop, pops, pure, push, pushs, put;
+        intros.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - pose proof (validCEnv f).
+          destruct (CEnv f); wlp_sound_solve.
+          intuition.
+          wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
+        - wlp_sound_solve.
           admit. (* #$@&%* *)
-        - wlp_sound_simpl; auto.
-          + now rewrite env_drop_cat in H4.
-          + now rewrite env_drop_cat in H4.
+        - wlp_sound_solve; auto.
       Admitted.
 
     End Soundness.
