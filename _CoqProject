@@ -3,3 +3,4 @@ src/MicroSail.v
 src/MicroSail/Context.v
 src/MicroSail/Environment.v
 src/MicroSail/Notation.v
+src/MicroSail/Syntax.v
