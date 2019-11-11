@@ -95,9 +95,10 @@ Module WLP
   Definition pops {Γ} Δ : DST (ctx_cat Γ Δ) Γ unit :=
     modify (fun δΓΔ => env_drop Δ δΓΔ).
 
-  Notation "ma >>= f" := (bind ma f) (at level 90, left associativity).
-  Notation "ma *> mb" := (bindright ma mb) (at level 90, left associativity).
-  Notation "ma <* mb" := (bindleft ma mb) (at level 90, left associativity).
+
+  Notation "ma >>= f" := (bind ma f) (at level 50, left associativity).
+  Notation "ma *> mb" := (bindright ma mb) (at level 50, left associativity).
+  Notation "ma <* mb" := (bindleft ma mb) (at level 50, left associativity).
 
   Fixpoint WLP {Γ τ} (s : Stm Γ τ) : DST Γ Γ (Lit τ) :=
     match s in (Stm _ τ) return (DST Γ Γ (Lit τ)) with
