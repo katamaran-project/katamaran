@@ -135,7 +135,7 @@ Module Soundness
       match cenv σs σ f with
       | Some c=>
         forall (δ δ' : LocalStore σs) (s' : Stm σs σ),
-          ⟨ δ, fun_body (Pi f) ⟩ --->* ⟨ δ', s' ⟩ ->
+          ⟨ δ, Pi f ⟩ --->* ⟨ δ', s' ⟩ ->
           Final s' ->
           contract_pre_condition c δ ->
           IsLit δ s' (contract_post_condition c)

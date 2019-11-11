@@ -453,8 +453,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   End PatternMatching.
 
-  Record FunDef (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Set :=
-    { fun_body : Stm Δ τ }.
+  (* Record FunDef (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Set := *)
+  (*   { fun_body : Stm Δ τ }. *)
 
   Module NameResolution.
 
@@ -563,7 +563,8 @@ Module Type ProgramKit
   Module TM := Terms typekit termkit.
   Export TM.
 
-  Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ.
+  (* Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ. *)
+  Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.
 
 End ProgramKit.
 

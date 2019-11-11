@@ -83,7 +83,7 @@ Module SmallStep
   | step_stm_app
       {δ : LocalStore Γ} {σs σ} {f : 𝑭 σs σ} (es : Env' (Exp Γ) σs) :
       ⟨ δ , stm_app f es ⟩ --->
-      ⟨ δ , stm_app' σs (evals es δ) σ (fun_body (Pi f)) ⟩
+      ⟨ δ , stm_app' σs (evals es δ) σ (Pi f) ⟩
   | step_stm_app'_step
       {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ δΔ' : LocalStore Δ} (τ : Ty)
       (s s' : Stm Δ τ) :
