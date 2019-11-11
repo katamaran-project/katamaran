@@ -532,3 +532,12 @@ Module Type ProgramKit
   Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ.
 
 End ProgramKit.
+
+Module Type ContractKit
+       (Import typekit : TypeKit)
+       (Import termkit : TermKit typekit)
+       (Import progkit : ProgramKit typekit termkit).
+
+  Parameter Inline CEnv : ContractEnv.
+
+End ContractKit.
