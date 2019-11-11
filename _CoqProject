@@ -3,4 +3,7 @@ src/MicroSail.v
 src/MicroSail/Context.v
 src/MicroSail/Environment.v
 src/MicroSail/Notation.v
+src/MicroSail/SmallStep/Step.v
+src/MicroSail/SmallStep/Inversion.v
+src/MicroSail/SmallStep/Progress.v
 src/MicroSail/Syntax.v
