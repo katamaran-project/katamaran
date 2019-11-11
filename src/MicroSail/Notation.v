@@ -35,15 +35,18 @@
  *)
 
 (* after 8.10: Declare Scope ctx_scope. *)
+(* after 8.10: Declare Scope env_scope. *)
+(* after 8.10: Declare Scope pat_scope. *)
+(* after 8.10: Declare Scope exp_scope. *)
 Delimit Scope ctx_scope with ctx.
+Delimit Scope env_scope with env.
+Delimit Scope pat_scope with pat.
+Delimit Scope exp_scope with exp.
 
 Reserved Notation "'ε'"            (at level 0).
 Reserved Infix "▻"                 (at level 55, left associativity).
 Reserved Infix "▻▻"                (at level 55, left associativity).
 Reserved Notation "b ∈ Γ"          (at level 75, Γ at next level, no associativity).
-
-(* after 8.10: Declare Scope env_scope. *)
-Delimit Scope env_scope with env.
 
 Reserved Notation "δ ► x ↦ v"      (at level 55, x at level 99, left associativity).
 Reserved Notation "δ1 ►► δ2"       (at level 55, left associativity).
@@ -52,3 +55,5 @@ Reserved Notation "δ ! x"          (at level 56, no associativity).
 
 Reserved Notation "⟨ δ1 , s1 ⟩ ---> ⟨ δ2 , s2 ⟩" (at level 75, no associativity).
 Reserved Notation "⟨ δ1 , s1 ⟩ --->* ⟨ δ2 , s2 ⟩" (at level 75, no associativity).
+(* Notation "( x , y , .. , z )" := *)
+(*   (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z) : pat_scope. *)

@@ -250,6 +250,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | exp_projrec {R : 𝑹} (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
                   {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Exp Γ σ
     | exp_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Exp Γ σ) : Exp Γ τ.
+    Bind Scope exp_scope with Exp.
 
     Global Arguments exp_var {_} _ {_ _}.
     Global Arguments exp_union {_ _} _ _.
@@ -345,6 +346,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)}
         (pat : TuplePat σs Δ) {σ : Ty} (x : 𝑿) :
         TuplePat (ctx_snoc σs σ) (ctx_snoc Δ (x , σ)).
+    Bind Scope pat_scope with TuplePat.
 
     Inductive RecordPat : Ctx (𝑹𝑭 * Ty) -> Ctx (𝑿 * Ty) -> Set :=
     | recordpat_nil  : RecordPat ctx_nil ctx_nil
@@ -352,6 +354,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         {rfs : Ctx (𝑹𝑭 * Ty)} {Δ : Ctx (𝑿 * Ty)}
         (pat : RecordPat rfs Δ) (rf : 𝑹𝑭) {τ : Ty} (x : 𝑿) :
         RecordPat (ctx_snoc rfs (rf , τ)) (ctx_snoc Δ (x , τ)).
+    Bind Scope pat_scope with RecordPat.
 
     Inductive Stm (Γ : Ctx (𝑿 * Ty)) : Ty -> Set :=
     | stm_lit        {τ : Ty} (l : Lit τ) : Stm Γ τ

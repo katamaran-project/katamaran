@@ -130,6 +130,7 @@ End WithBinding.
 
 Definition Env' {X T : Set} (D : T -> Set) (Γ : Ctx (X * T)) : Set :=
   Env (fun xt => D (snd xt)) Γ.
+Bind Scope env_scope with Env.
 Bind Scope env_scope with Env'.
 
 Module EnvNotations.
