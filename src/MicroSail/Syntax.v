@@ -469,19 +469,40 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ctx_nil => fun p => match p with end
       | ctx_snoc Γ (y, d) =>
         match 𝑿_eq_dec x y as s
-        return (forall p, InCtx (x, fromSome (if s then Some d else ctx_resolve Γ x) p) (ctx_snoc Γ (y, d)))
+        return (forall p, InCtx (x, fromSome (if s then Some d else ctx_resolve Γ x) p)
+                                (ctx_snoc Γ (y, d)))
         with
         | left e => fun _ => match e with | eq_refl => inctx_zero end
         | right _ => fun p => inctx_succ (mk_inctx Γ x p)
         end
       end.
 
+    (* Ideally the following smart constructors would perform name resolution
+       and fill in the de Bruijn index and the type of a variable. Unfortunately,
+       they critically rely on the order that type-checking is performed. For
+       instance in context Γ := (ε ▻ ("x", ty_int)) the expression
+       (@exp_smart_var Γ "x" tt) type-checks while the (@exp_smart_var _ "x" tt)
+       fails to type-check with error message
+
+         The term "tt" has type "unit" while it is expected
+         to have type "IsSome (ctx_resolve ?Γ0 "x")".
+
+       So the variable ?Γ0 has not been unified and blocks the evaluation of
+       ctx_resolve. Unfortunately, Coq decides to fail immediately.
+     *)
     Definition exp_smart_var {Γ : Ctx (𝑿 * Ty)} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
-      Exp Γ (fromSome (ctx_resolve Γ x) p) := @exp_var Γ x (fromSome _ p) (mk_inctx Γ x p).
+      Exp Γ (fromSome (ctx_resolve Γ x) p) :=
+      @exp_var Γ x (fromSome (ctx_resolve Γ x) p) (mk_inctx Γ x p).
 
     Definition stm_smart_assign {Γ : Ctx (𝑿 * Ty)} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
       Exp Γ (fromSome (ctx_resolve Γ x) p) -> Stm Γ (fromSome (ctx_resolve Γ x) p) :=
       @stm_assign Γ x (fromSome _ p) (mk_inctx Γ x p).
+
+    (* Instead we hook mk_inctx directly into the typeclass resolution mechanism.
+       Apparently, the unification of Γ is performed before the resolution so
+       evaluation of ctx_resolve and mk_inctx is not blocked.
+     *)
+    Hint Extern 10 (InCtx (?x , _) ?Γ) => exact (mk_inctx Γ x tt) : typeclass_instances.
 
   End NameResolution.
 
