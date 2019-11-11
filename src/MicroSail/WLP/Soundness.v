@@ -77,8 +77,8 @@ Module Soundness
       | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>   dependent destruction H
       | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
       | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>    dependent destruction H
-      | [ H: ⟨ _, stm_match_union _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
-      | [ H: ⟨ _, stm_match_union _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>    dependent destruction H
+      | [ H: ⟨ _, stm_match_union _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>   dependent destruction H
+      | [ H: ⟨ _, stm_match_union _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
       | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
       | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => dependent destruction H
 

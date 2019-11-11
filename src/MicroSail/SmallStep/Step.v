@@ -148,7 +148,7 @@ Module SmallStep
       (δ : LocalStore Γ) {T : 𝑻} (e : Exp Γ (ty_union T)) {τ : Ty}
       (altx : forall (K : 𝑲 T), 𝑿)
       (alts : forall (K : 𝑲 T), Stm (ctx_snoc Γ (altx K , 𝑲_Ty K)) τ) :
-      ⟨ δ , stm_match_union e altx alts ⟩ --->
+      ⟨ δ , stm_match_union T e altx alts ⟩ --->
       ⟨ δ , let (K , v) := eval e δ in
             stm_let' (env_snoc env_nil (altx K,𝑲_Ty K) (untag v)) (alts K)
       ⟩

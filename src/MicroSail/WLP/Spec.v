@@ -139,7 +139,7 @@ Module WLP
     | stm_match_tuple e p rhs =>
       meval e >>= fun v =>
       pushs (tuple_pattern_match p v) *> WLP rhs <* pops _
-    | stm_match_union e xs rhs =>
+    | stm_match_union T e xs rhs =>
       meval e >>= fun v =>
       let (K , tv) := v in
       push (untag tv) *> WLP (rhs K) <* pop
