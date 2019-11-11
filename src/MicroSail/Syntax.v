@@ -42,10 +42,12 @@ Set Implicit Arguments.
 
 Module Type TypeKit.
 
+  (* Names of enum type constructors. *)
+  Parameter Inline 𝑬 : Set. (* input: \MIE *)
   (* Names of union type constructors. *)
   Parameter Inline 𝑻   : Set. (* input: \MIT *)
   (* Names of record type constructors. *)
-  Parameter Inline 𝑹  : Set.
+  Parameter Inline 𝑹  : Set. (* input: \MIR *)
   (* Names of expression variables. *)
   Parameter Inline 𝑿 : Set. (* input: \MIX *)
   (* For name resolution we rely on decidable equality of expression
@@ -68,6 +70,7 @@ Module Types (Export typekit : TypeKit).
   | ty_prod (σ τ : Ty)
   | ty_sum  (σ τ : Ty)
   | ty_unit
+  | ty_enum (E : 𝑬)
   (* Experimental features. These are still in flux. *)
   | ty_tuple (σs : Ctx Ty)
   | ty_union (T : 𝑻)
@@ -82,6 +85,8 @@ Module Type TermKit (typekit : TypeKit).
   Module TY := Types typekit.
   Export TY.
 
+  (* Names of enum data constructors. *)
+  Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
   (* Names of union data constructors. *)
   Parameter Inline 𝑲  : 𝑻 -> Set.
   (* Union data constructor field type *)
@@ -141,11 +146,13 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | taglit_prod   σ1 σ2  : TaggedLit σ1 * TaggedLit σ2 -> TaggedLit (ty_prod σ1 σ2)
     | taglit_sum    σ1 σ2  : TaggedLit σ1 + TaggedLit σ2 -> TaggedLit (ty_sum σ1 σ2)
     | taglit_unit          : TaggedLit (ty_unit)
+    | taglit_enum (E : 𝑬) (K : 𝑬𝑲 E) : TaggedLit (ty_enum E)
     (* Experimental features *)
     | taglit_tuple σs      : Env TaggedLit σs -> TaggedLit (ty_tuple σs)
     | taglit_union (T : 𝑻) (K : 𝑲 T) : TaggedLit (𝑲_Ty K) -> TaggedLit (ty_union T)
     | taglit_record (R : 𝑹) : Env' TaggedLit (𝑹𝑭_Ty R) -> TaggedLit (ty_record R).
 
+    Global Arguments taglit_enum : clear implicits.
     Global Arguments taglit_tuple {_} _.
     Global Arguments taglit_union {_} _ _.
     Global Arguments taglit_record : clear implicits.
@@ -160,6 +167,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ty_prod σ1 σ2 => Lit σ1 * Lit σ2
       | ty_sum σ1 σ2 => Lit σ1 + Lit σ2
       | ty_unit => unit
+      | ty_enum E => 𝑬𝑲 E
       (* Experimental features *)
       | ty_tuple σs => Env TaggedLit σs
       | ty_union T => { K : 𝑲 T & TaggedLit (𝑲_Ty K) }
@@ -177,6 +185,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | taglit_sum (inl v)  => inl (untag v)
       | taglit_sum (inr v)  => inr (untag v)
       | taglit_unit         => tt
+      | taglit_enum E K     => K
       (* Experimental features *)
       | taglit_tuple ls     => ls
       | taglit_union K l    => existT _ K l
@@ -201,6 +210,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
           | inr l => taglit_sum (inr (tag σ2 l))
           end
       | ty_unit => fun _ => taglit_unit
+      | ty_enum E => taglit_enum E
       | ty_tuple σs => taglit_tuple
       | ty_union T => fun Ktl => let (K, tl) := Ktl in taglit_union K tl
       | ty_record R => taglit_record R
@@ -376,6 +386,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ) : Stm Γ τ
     | stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
       (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ) : Stm Γ τ
+    | stm_match_enum {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
+      (alts : forall (K : 𝑬𝑲 E), Stm Γ τ) : Stm Γ τ
     | stm_match_tuple {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
       (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
     | stm_match_union {T : 𝑻} (e : Exp Γ (ty_union T)) {τ : Ty}
@@ -399,7 +411,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_let {_} _ _ _ {_} _.
     Global Arguments stm_let' {_ _} _ {_} _.
     Global Arguments stm_assign {_} _ {_ _} _.
-    Global Arguments stm_app {_ _ _} _ _.
+    Global Arguments stm_app {_%ctx _%ctx _} _ _%exp.
     Global Arguments stm_app' {_} _ _ _ _.
     Global Arguments stm_if {_ _} _ _ _.
     Global Arguments stm_seq {_ _} _ {_} _.
@@ -409,6 +421,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_match_sum {_ _ _ _} _ _ _ _ _.
     Global Arguments stm_match_pair {_ _ _ _} _ _ _ _.
     Global Arguments stm_match_tuple {_ _ _} _ _ {_} _.
+    Global Arguments stm_match_enum {_} _ _ {_} _.
     Global Arguments stm_match_union {_} _ _ {_} _ _.
     Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
 

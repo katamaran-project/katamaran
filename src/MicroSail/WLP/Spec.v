@@ -136,6 +136,8 @@ Module WLP
       meval e >>= fun v =>
       let (vl , vr) := v in
       push vl *> push vr *> WLP rhs <* pop <* pop
+    | stm_match_enum E e alts =>
+      meval e >>= fun v => WLP (alts v)
     | stm_match_tuple e p rhs =>
       meval e >>= fun v =>
       pushs (tuple_pattern_match p v) *> WLP rhs <* pops _

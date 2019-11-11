@@ -75,6 +75,8 @@ Module Soundness
       | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => dependent destruction H
       | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>    dependent destruction H
       | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>   dependent destruction H
+      | [ H: ⟨ _, stm_match_enum _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>      dependent destruction H
+      | [ H: ⟨ _, stm_match_enum _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
       | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
       | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>    dependent destruction H
       | [ H: ⟨ _, stm_match_union _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>   dependent destruction H
@@ -140,9 +142,7 @@ Module Soundness
       | None => True
       end.
 
-  Variable validCEnv : ValidContractEnv CEnv.
-
-  Lemma WLP_sound {Γ σ} (s : Stm Γ σ) :
+  Lemma WLP_sound (validCEnv : ValidContractEnv CEnv) {Γ σ} (s : Stm Γ σ) :
     forall (δ δ' : LocalStore Γ) (s' : Stm Γ σ), ⟨ δ, s ⟩ --->* ⟨ δ', s' ⟩ -> Final s' ->
       forall (POST : Lit σ -> Pred (LocalStore Γ)), WLP s POST δ -> IsLit δ' s' POST.
   Proof.
@@ -155,10 +155,11 @@ Module Soundness
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
-    - pose proof (validCEnv f).
+    - pose proof (validCEnv _ _ f).
       destruct (CEnv f); wlp_sound_solve.
       intuition.
       wlp_sound_solve.
+    - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.

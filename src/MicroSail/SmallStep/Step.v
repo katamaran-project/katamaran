@@ -136,7 +136,10 @@ Module SmallStep
       ⟨ δ , let (vl , vr) := eval e δ in
             stm_let' (env_snoc (env_snoc env_nil (xl,σ1) vl) (xr,σ2) vr) rhs
       ⟩
-
+  | step_stm_match_enum
+      (δ : LocalStore Γ) {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
+      (alts : forall (K : 𝑬𝑲 E), Stm Γ τ) :
+      ⟨ δ , stm_match_enum E e alts ⟩ ---> ⟨ δ , alts (eval e δ) ⟩
   | step_stm_match_tuple
       (δ : LocalStore Γ) {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)}
       (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ)
