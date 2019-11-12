@@ -95,6 +95,7 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
                    (ty_tuple [ ty_int, ty_string, ty_bool ])
   | abs : Fun [ "x" ∶ ty_int ] ty_int
   | gcd : Fun [ "p" ∶ ty_int, "q" ∶ ty_int ] ty_int
+  | gcdpos : Fun [ "p" ∶ ty_int, "q" ∶ ty_int ] ty_int
   | gcdcompare : Fun [ "p" ∶ ty_int, "q" ∶ ty_int ] ty_int
   | compare : Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] (ty_enum ordering)
   .
@@ -151,6 +152,10 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
               | GT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q"))
               end))
     | gcd =>
+      stm_let "p'" ty_int (stm_app abs [exp_var "p"])
+      (stm_let "q'" ty_int (stm_app abs [exp_var "q"])
+        (stm_app gcdpos [exp_var "p'", exp_var "q'"]))
+    | gcdpos =>
       stm_if
         (exp_var "p" = exp_var "q")
         (exp_var "p")
@@ -179,13 +184,35 @@ Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleP
   Definition CEnv : ContractEnv :=
     fun σs τ f =>
       match f with
-      | compare =>  Some {| contract_pre_condition := fun _ => True;
-                            contract_post_condition := fun (K : Lit (ty_enum ordering))
-                                                           (δ : Env' Lit [ "x" ∶ ty_int , "y" ∶ ty_int ]) =>
-                                                         K = LT /\ δ ! "x" <= δ ! "y" \/
-                                                         K = EQ /\ δ ! "x"  = δ ! "y" \/
-                                                         K = GT /\ δ ! "x" >= δ ! "y"
-                         |}
+      | abs =>
+        Some {| contract_pre_condition := fun _ => True;
+                contract_post_condition := fun (v : Lit ty_int)
+                                               (δ : Env' Lit [ "x" ∶ ty_int ]) =>
+                                             v = Z.abs (δ ! "x")
+             |}
+      | compare =>
+        Some {| contract_pre_condition := fun _ => True;
+                contract_post_condition := fun (K : Lit (ty_enum ordering))
+                                               (δ : Env' Lit [ "x" ∶ ty_int , "y" ∶ ty_int ]) =>
+                                             match K with
+                                             | LT => δ ! "x" <= δ ! "y"
+                                             | EQ => δ ! "x"  = δ ! "y"
+                                             | GT => δ ! "x" >= δ ! "y"
+                                             end
+             |}
+      | gcdpos =>
+        Some {| contract_pre_condition := fun (δ : Env' Lit [ "p" ∶ ty_int , "q" ∶ ty_int ]) =>
+                                            (δ ! "p") >= 0 /\ (δ ! "q" >= 0);
+                contract_post_condition := fun (r : Lit ty_int)
+                                               (δ : Env' Lit [ "p" ∶ ty_int , "q" ∶ ty_int ]) =>
+                                             r = Z.gcd (δ ! "p") (δ ! "q")
+             |}
+      | gcd =>
+        Some {| contract_pre_condition := fun (δ : Env' Lit [ "p" ∶ ty_int , "q" ∶ ty_int ]) => True;
+                contract_post_condition := fun (r : Lit ty_int)
+                                               (δ : Env' Lit [ "p" ∶ ty_int , "q" ∶ ty_int ]) =>
+                                             r = Z.gcd (δ ! "p") (δ ! "q")
+             |}
       | _ => Some {| contract_pre_condition := fun _ => True;
                      contract_post_condition := fun _ _ => True
                   |}
@@ -207,23 +234,42 @@ Definition ValidContractEnv (cenv : ContractEnv) : Prop :=
     | None => True
     end.
 
+Lemma gcd_sub_diag_l (n m : Z) : Z.gcd (n - m) m = Z.gcd n m.
+Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.
+
+Ltac validate_destr :=
+  match goal with
+  | [ |- _ -> _ ]  => intro
+  | [ |- True ]  => constructor
+  | [ H: True |- _ ] => clear H
+  | [ H: False |- _ ] => destruct H
+  | [ H: Env _ (ctx_snoc _ _) |- _ ] => dependent destruction H
+  | [ H: Env _ ctx_nil |- _ ] => dependent destruction H
+  | [ H: Env' _ (ctx_snoc _ _) |- _ ] => dependent destruction H
+  | [ H: Env' _ ctx_nil |- _ ] => dependent destruction H
+  end.
+
+Ltac validate_simpl :=
+  repeat
+    (cbn in *; repeat validate_destr; destruct_conjs; subst;
+     rewrite ?Z.eqb_eq, ?Z.eqb_neq, ?Z.leb_gt, ?Z.ltb_ge, ?Z.ltb_lt, ?Z.leb_le, ?Z.gtb_ltb,
+       ?Z.gcd_diag, ?Z.gcd_abs_l, ?Z.gcd_abs_r, ?Z.gcd_sub_diag_r, ?gcd_sub_diag_l in *).
+
+Ltac validate_case :=
+  match goal with
+  | [ |- match ?e with _ => _ end _ _ ] =>
+    case_eq e
+  | [ |- WLP match ?e with _ => _ end _ _ ] =>
+    case_eq e
+  end.
+
+Ltac validate_solve :=
+  repeat
+    (validate_simpl; intuition;
+     try lia;
+     try validate_case).
+
 Lemma validCEnv : ValidContractEnv CEnv.
-Proof.
-  intros σs τ [] δ pre; cbn in *;
-    repeat
-      (destruct_conjs; subst; intuition;
-       try match goal with
-           | [ H: Env _ (ctx_snoc _ _) |- _ ] => dependent destruction H
-           | [ H: Env _ ctx_nil |- _ ] => dependent destruction H
-           | [ H: Env' _ (ctx_snoc _ _) |- _ ] => dependent destruction H
-           | [ H: Env' _ ctx_nil |- _ ] => dependent destruction H
-           | [ H: Z.ltb _ _ = true |- _ ] => apply Z.ltb_lt in H
-           | [ H: Z.ltb _ _ = false |- _ ] => apply Z.ltb_ge in H
-           | [ H: context[Z.gtb _ _] |- _ ] => rewrite Z.gtb_ltb in H
-           | [ H: Zeq_bool _ _ = false |- _ ] => apply Zeq_bool_neq in H
-           | [ H: Zeq_bool _ _ = true |- _ ] => apply Zeq_bool_eq in H
-           | [ |- match ?e with _ => _ end _ _ ] =>
-             case_eq (e); cbn in *; intros
-           end;
-       cbn in *).
-Qed.
+Proof. intros σs τ [] δ; validate_solve. Qed.
+
+(* Print Assumptions validCEnv. *)
