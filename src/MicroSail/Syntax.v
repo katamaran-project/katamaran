@@ -280,7 +280,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | exp_times e1 e2 => taglit_int (untag (evalTagged e1 δ) * untag (evalTagged e2 δ))
       | exp_minus e1 e2 => taglit_int (untag (evalTagged e1 δ) - untag (evalTagged e2 δ))
       | exp_neg e0 => taglit_int (- untag (evalTagged e0 δ))
-      | exp_eq e1 e2 => taglit_bool (Zeq_bool (untag (evalTagged e1 δ)) (untag (evalTagged e2 δ)))
+      | exp_eq e1 e2 => taglit_bool (untag (evalTagged e1 δ) =? untag (evalTagged e2 δ))%Z
       | exp_le e1 e2 => taglit_bool (untag (evalTagged e1 δ) <=? untag (evalTagged e2 δ))%Z
       | exp_lt e1 e2 => taglit_bool (untag (evalTagged e1 δ) <? untag (evalTagged e2 δ))%Z
       | exp_gt e1 e2 => taglit_bool (untag (evalTagged e1 δ) >? untag (evalTagged e2 δ))%Z
@@ -324,7 +324,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | exp_times e1 e2     => Z.mul (eval e1 δ) (eval e2 δ)
       | exp_minus e1 e2     => Z.sub (eval e1 δ) (eval e2 δ)
       | exp_neg e           => Z.opp (eval e δ)
-      | exp_eq e1 e2        => Zeq_bool (eval e1 δ) (eval e2 δ)
+      | exp_eq e1 e2        => Z.eqb (eval e1 δ) (eval e2 δ)
       | exp_le e1 e2        => Z.leb (eval e1 δ) (eval e2 δ)
       | exp_lt e1 e2        => Z.ltb (eval e1 δ) (eval e2 δ)
       | exp_gt e1 e2        => Z.gtb (eval e1 δ) (eval e2 δ)
@@ -374,7 +374,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
     | stm_let'       (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) {σ : Ty} (k : Stm (ctx_cat Γ Δ) σ) : Stm Γ σ
     | stm_assign     (x : 𝑿) (τ : Ty) {xInΓ : InCtx (x , τ) Γ} (e : Exp Γ τ) : Stm Γ τ
-    | stm_app        {σs σ} (f : 𝑭 σs σ) (es : Env' (Exp Γ) σs) : Stm Γ σ
+    | stm_app        {Δ σ} (f : 𝑭 Δ σ) (es : Env' (Exp Γ) Δ) : Stm Γ σ
     | stm_app'       (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ) : Stm Γ τ
     | stm_if         {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) : Stm Γ τ
     | stm_seq        {τ : Ty} (e : Stm Γ τ) {σ : Ty} (k : Stm Γ σ) : Stm Γ σ
