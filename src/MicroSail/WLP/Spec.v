@@ -95,6 +95,23 @@ Module WLP
   Definition pops {Γ} Δ : DST (ctx_cat Γ Δ) Γ unit :=
     modify (fun δΓΔ => env_drop Δ δΓΔ).
 
+  Arguments abort {_ _ _} / _ _.
+  Arguments assert {_} _ / _ _.
+  Arguments bind {_ _ _ _ _} _ _ / _ _.
+  Arguments bindleft {_ _ _ _ _} _ _ / _ _.
+  Arguments bindright {_ _ _ _ _} _ _ / _ _.
+  Arguments evalDST {_ _ _} _ / _ _.
+  Arguments get {_} / _ _.
+  Arguments lift {_ _} _ / _ _.
+  Arguments meval {_ _} _ / _ _.
+  Arguments mevals {_ _} _ / _ _.
+  Arguments modify {_ _} _ / _ _.
+  Arguments pop {_ _ _} / _ _.
+  Arguments pops {_} _ / _ _.
+  Arguments pure {_ _} _ / _ _.
+  Arguments push {_ _ _} _ / _ _.
+  Arguments pushs {_ _} _ / _ _.
+  Arguments put {_} _ / _ _.
 
   Notation "ma >>= f" := (bind ma f) (at level 50, left associativity).
   Notation "ma *> mb" := (bindright ma mb) (at level 50, left associativity).

@@ -146,10 +146,7 @@ Module Soundness
     forall (δ δ' : LocalStore Γ) (s' : Stm Γ σ), ⟨ δ, s ⟩ --->* ⟨ δ', s' ⟩ -> Final s' ->
       forall (POST : Lit σ -> Pred (LocalStore Γ)), WLP s POST δ -> IsLit δ' s' POST.
   Proof.
-    induction s; cbn; repeat unfold
-      abort, assert, bind, bindleft, bindright, evalDST, get,
-      lift, meval, mevals, modify, pop, pops, pure, push, pushs, put;
-    intros.
+    induction s; cbn; intros.
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
