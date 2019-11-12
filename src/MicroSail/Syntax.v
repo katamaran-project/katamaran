@@ -263,6 +263,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Bind Scope exp_scope with Exp.
 
     Global Arguments exp_var {_} _ {_ _}.
+    Global Arguments exp_tuple {_ _} _%exp.
     Global Arguments exp_union {_} _ _.
     Global Arguments exp_record {_} _ _.
     Global Arguments exp_projrec {_ _} _ _ {_ _}.
@@ -347,6 +348,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       env_map (fun xτ e => eval e δ) es.
 
   End Expressions.
+  Bind Scope exp_scope with Exp.
 
   Section Statements.
 
@@ -420,8 +422,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_match_list {_ _ _} _ _ _ _ _.
     Global Arguments stm_match_sum {_ _ _ _} _ _ _ _ _.
     Global Arguments stm_match_pair {_ _ _ _} _ _ _ _.
-    Global Arguments stm_match_tuple {_ _ _} _ _ {_} _.
     Global Arguments stm_match_enum {_} _ _ {_} _.
+    Global Arguments stm_match_tuple {_ _ _} _ _%pat {_} _.
     Global Arguments stm_match_union {_} _ _ {_} _ _.
     Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
 
