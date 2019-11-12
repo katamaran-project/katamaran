@@ -27,7 +27,6 @@
 (******************************************************************************)
 
 From Coq Require Import
-(*      Logic.EqdepFacts *)
      Program.Equality
      Program.Tactics
      Strings.String
@@ -39,7 +38,11 @@ From MicroSail Require Import
      Syntax.
 
 Set Implicit Arguments.
+Import CtxNotations.
+Import EnvNotations.
 Open Scope string_scope.
+Open Scope Z_scope.
+Open Scope ctx_scope.
 
 Inductive Enums : Set :=
 | ordering.
@@ -63,7 +66,7 @@ Import ExampleTypes.
 
 Notation "x ∶ τ" := (pair x τ) (at level 90, no associativity) : ctx_scope.
 Notation "[ x ]" := (ctx_snoc ctx_nil x) : ctx_scope.
-Notation "[ x , y , .. , z ]" := (ctx_snoc .. (ctx_snoc (ctx_snoc ctx_nil x) y) .. z) : ctx_scope.
+Notation "[ x , .. , z ]" := (ctx_snoc .. (ctx_snoc ctx_nil x) .. z) : ctx_scope.
 
 Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Module TY := ExampleTypes.
@@ -80,7 +83,6 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) := match R with end.
 
   (* Names of functions. *)
-  Local Open Scope ctx_scope.
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
   | swappair   : Fun
                    [ "x" ∶ ty_prod ty_bool ty_int ]
@@ -170,12 +172,24 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
 End ExampleProgramKit.
 Import ExampleProgramKit.
 
+(******************************************************************************)
+
 Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleProgramKit).
 
-  Definition CEnv : ContractEnv := fun σs τ f =>
-    Some {| contract_pre_condition := fun _ => True;
-            contract_post_condition := fun _ _ => True;
-         |}.
+  Definition CEnv : ContractEnv :=
+    fun σs τ f =>
+      match f with
+      | compare =>  Some {| contract_pre_condition := fun _ => True;
+                            contract_post_condition := fun (K : Lit (ty_enum ordering))
+                                                           (δ : Env' Lit [ "x" ∶ ty_int , "y" ∶ ty_int ]) =>
+                                                         K = LT /\ δ ! "x" <= δ ! "y" \/
+                                                         K = EQ /\ δ ! "x"  = δ ! "y" \/
+                                                         K = GT /\ δ ! "x" >= δ ! "y"
+                         |}
+      | _ => Some {| contract_pre_condition := fun _ => True;
+                     contract_post_condition := fun _ _ => True
+                  |}
+      end.
 
 End ExampleContractKit.
 Import ExampleContractKit.
@@ -195,21 +209,21 @@ Definition ValidContractEnv (cenv : ContractEnv) : Prop :=
 
 Lemma validCEnv : ValidContractEnv CEnv.
 Proof.
-  intros σs τ [] δ pre;
+  intros σs τ [] δ pre; cbn in *;
     repeat
-      (cbn in *;
-       unfold bind, bindleft, bindright, meval, mevals, get, pure, push, modify, put, pop, abort in *;
-       destruct_conjs;
+      (destruct_conjs; subst; intuition;
        try match goal with
            | [ H: Env _ (ctx_snoc _ _) |- _ ] => dependent destruction H
            | [ H: Env _ ctx_nil |- _ ] => dependent destruction H
            | [ H: Env' _ (ctx_snoc _ _) |- _ ] => dependent destruction H
            | [ H: Env' _ ctx_nil |- _ ] => dependent destruction H
-           | [ |- context[match ?e with _ => _ end] ] =>
-             case_eq (e); cbn in *; intros
+           | [ H: Z.ltb _ _ = true |- _ ] => apply Z.ltb_lt in H
            | [ H: Z.ltb _ _ = false |- _ ] => apply Z.ltb_ge in H
            | [ H: context[Z.gtb _ _] |- _ ] => rewrite Z.gtb_ltb in H
            | [ H: Zeq_bool _ _ = false |- _ ] => apply Zeq_bool_neq in H
+           | [ H: Zeq_bool _ _ = true |- _ ] => apply Zeq_bool_eq in H
+           | [ |- match ?e with _ => _ end _ _ ] =>
+             case_eq (e); cbn in *; intros
            end;
-       intuition).
+       cbn in *).
 Qed.
