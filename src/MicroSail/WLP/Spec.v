@@ -94,6 +94,8 @@ Module WLP
     modify (fun δΓ => env_cat δΓ δΔ).
   Definition pops {Γ} Δ : DST (ctx_cat Γ Δ) Γ unit :=
     modify (fun δΓΔ => env_drop Δ δΓΔ).
+  Definition ifthenelse {Γ1 Γ2 A} (b : bool) (t e : DST Γ1 Γ2 A) : DST Γ1 Γ2 A :=
+    fun k δ => (b = true -> t k δ) /\ (b = false -> e k δ).
 
   Arguments abort {_ _ _} / _ _.
   Arguments assert {_} _ / _ _.
@@ -112,6 +114,7 @@ Module WLP
   Arguments push {_ _ _} _ / _ _.
   Arguments pushs {_ _} _ / _ _.
   Arguments put {_} _ / _ _.
+  Arguments ifthenelse {_ _ _} _ _ _ / _ _.
 
   Notation "ma >>= f" := (bind ma f) (at level 50, left associativity).
   Notation "ma *> mb" := (bindright ma mb) (at level 50, left associativity).
@@ -124,7 +127,7 @@ Module WLP
     | stm_let x σ s k => WLP s >>= push *> WLP k <* pop
     | stm_exp e => meval e
     | stm_assert e1 e2  => meval e1 >>= assert
-    | stm_if e s1 s2 => meval e >>= fun b => if b then WLP s1 else WLP s2
+    | stm_if e s1 s2 => meval e >>= fun b => ifthenelse b (WLP s1) (WLP s2)
     | stm_exit _ _  => abort
     | stm_seq s1 s2 => WLP s1 *> WLP s2
     | stm_app' Δ δ τ s => lift (evalDST (WLP s) δ)
