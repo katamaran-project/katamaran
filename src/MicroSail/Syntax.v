@@ -137,7 +137,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
        it safe. (Agda excepts this definition). So TaggedLit adds tags
        everywhere.
      *)
-    Inductive TaggedLit : Ty -> Set :=
+    Inductive TaggedLit : Ty -> Type :=
     | taglit_int           : Z -> TaggedLit (ty_int)
     | taglit_bool          : bool -> TaggedLit (ty_bool)
     | taglit_bit           : Bit -> TaggedLit (ty_bit)
@@ -157,7 +157,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments taglit_union {_} _ _.
     Global Arguments taglit_record : clear implicits.
 
-    Fixpoint Lit (σ : Ty) : Set :=
+    Fixpoint Lit (σ : Ty) : Type :=
       match σ with
       | ty_int => Z
       | ty_bool => bool
@@ -232,7 +232,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
        do have local implicit instances like for example in the exp_var
        constructor below and use the type class mechanism to copy these
        locally. *)
-    Inductive Exp (Γ : Ctx (𝑿 * Ty)) : Ty -> Set :=
+    Inductive Exp (Γ : Ctx (𝑿 * Ty)) : Ty -> Type :=
     | exp_var     (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} : Exp Γ σ
     | exp_lit     (σ : Ty) : Lit σ -> Exp Γ σ
     | exp_plus    (e1 e2 : Exp Γ ty_int) : Exp Γ ty_int
@@ -270,7 +270,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     Import EnvNotations.
 
-    Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Set := Env' Lit Γ.
+    Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Type := Env' Lit Γ.
 
     Fixpoint evalTagged {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : TaggedLit σ :=
       match e in (Exp _ t) return (TaggedLit t) with
@@ -368,7 +368,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         RecordPat (ctx_snoc rfs (rf , τ)) (ctx_snoc Δ (x , τ)).
     Bind Scope pat_scope with RecordPat.
 
-    Inductive Stm (Γ : Ctx (𝑿 * Ty)) : Ty -> Set :=
+    Inductive Stm (Γ : Ctx (𝑿 * Ty)) : Ty -> Type :=
     | stm_lit        {τ : Ty} (l : Lit τ) : Stm Γ τ
     | stm_exp        {τ : Ty} (e : Exp Γ τ) : Stm Γ τ
     | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
@@ -524,7 +524,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   Section Contracts.
 
-    Definition Pred (A : Set) : Type := A -> Prop.
+    Definition Pred (A : Type) : Type := A -> Prop.
 
     Definition Final {Γ σ} (s : Stm Γ σ) : Prop :=
       match s with
