@@ -130,7 +130,13 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f in Fun Δ τ return Stm Δ τ with
-    | swappair => stm_match_pair (exp_var "x") "l" "r" (exp_pair (exp_var "r") (exp_var "l"))
+    | swappair =>
+      stm_bind
+        (exp_var "x")
+        (fun x : Lit (ty_prod ty_bool ty_int) =>
+           let (l , r) := x in exp_lit _ (ty_prod ty_int ty_bool) (r , l)
+        )
+      (* stm_match_pair (exp_var "x") "l" "r" (exp_pair (exp_var "r") (exp_var "l")) *)
     | swaptuple => stm_match_tuple (exp_var "x") ["l", "r"] (exp_tuple [exp_var "r", exp_var "l"])
     | cycletuple => stm_match_tuple
                       (exp_var "x")
@@ -142,15 +148,23 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
         (exp_var "x")
         (exp_neg (exp_var "x"))
     | gcdcompare =>
-      stm_let "ord" (ty_enum ordering)
+      stm_bind
         (stm_app compare [exp_var "p", exp_var "q"])
-        (stm_match_enum ordering (exp_var "ord")
-           (fun K =>
-              match K with
-              | LT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p"))
-              | EQ => stm_exp (exp_var "p")
-              | GT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q"))
-              end))
+        (fun K =>
+           match K with
+           | LT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p"))
+           | EQ => stm_exp (exp_var "p")
+           | GT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q"))
+           end)
+      (* stm_let "ord" (ty_enum ordering) *)
+      (*   (stm_app compare [exp_var "p", exp_var "q"]) *)
+      (*   (stm_match_enum ordering (exp_var "ord") *)
+      (*      (fun K => *)
+      (*         match K with *)
+      (*         | LT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p")) *)
+      (*         | EQ => stm_exp (exp_var "p") *)
+      (*         | GT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q")) *)
+      (*         end)) *)
     | gcd =>
       stm_let "p'" ty_int (stm_app abs [exp_var "p"])
       (stm_let "q'" ty_int (stm_app abs [exp_var "q"])

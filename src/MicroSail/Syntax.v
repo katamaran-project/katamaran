@@ -406,7 +406,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       (altx : forall (K : 𝑲 T), 𝑿)
       (alts : forall (K : 𝑲 T), Stm (ctx_snoc Γ (altx K , 𝑲_Ty K)) τ) : Stm Γ τ
     | stm_match_record {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
-      (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ.
+      (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
+    | stm_bind   {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ) : Stm Γ τ.
 
     Global Arguments stm_lit {_} _ _.
     Global Arguments stm_exp {_ _} _.

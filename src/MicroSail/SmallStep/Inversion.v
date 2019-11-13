@@ -145,4 +145,16 @@ Module Inversion
     steps_inversion_induction.
   Qed.
 
+  Lemma steps_inversion_bind {Γ τ σ} (δ1 δ3 : LocalStore Γ)
+    (s1 : Stm Γ τ) (k : Lit τ -> Stm Γ σ) (t : Stm Γ σ) (final : Final t)
+    (steps : ⟨ δ1, stm_bind s1 k ⟩ --->* ⟨ δ3, t ⟩) :
+    exists δ2 s1',
+      ⟨ δ1, s1 ⟩ --->* ⟨ δ2, s1' ⟩ /\ Final s1' /\
+      exists (s0 : Stm Γ σ),
+        (⟨ δ2, stm_bind s1' k ⟩ ---> ⟨ δ2 , s0 ⟩) /\ (⟨ δ2 , s0 ⟩ --->* ⟨ δ3, t ⟩).
+  Proof.
+    remember (stm_bind s1 k) as s. revert steps s1 k Heqs.
+    steps_inversion_induction.
+  Qed.
+
 End Inversion.

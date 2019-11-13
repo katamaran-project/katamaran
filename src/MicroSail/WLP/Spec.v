@@ -169,6 +169,8 @@ Module WLP
     | stm_match_record R e p rhs =>
       meval e >>= fun v =>
       pushs (record_pattern_match p v) *> WLP rhs <* pops _
+    | stm_bind s k =>
+      WLP s >>= fun v => WLP (k v)
     end.
 
 End WLP.

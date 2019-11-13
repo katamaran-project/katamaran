@@ -162,6 +162,17 @@ Module SmallStep
       ⟨ δ , stm_match_record R e p rhs ⟩ --->
       ⟨ δ , stm_let' (record_pattern_match p (eval e δ)) rhs ⟩
 
+  | step_stm_bind_step
+      (δ δ' : LocalStore Γ) (σ τ : Ty) (s s' : Stm Γ σ) (k : Lit σ -> Stm Γ τ) :
+      ⟨ δ , s ⟩ ---> ⟨ δ' , s' ⟩ ->
+      ⟨ δ , stm_bind s k ⟩ ---> ⟨ δ' , stm_bind s' k ⟩
+  | step_stm_bind_value
+      (δ : LocalStore Γ) (σ τ : Ty) (v : Lit σ) (k : Lit σ -> Stm Γ τ) :
+      ⟨ δ , stm_bind (stm_lit σ v) k ⟩ ---> ⟨ δ , k v ⟩
+  | step_stm_bind_exit
+      (δ : LocalStore Γ) (σ τ : Ty) (s : string) (k : Lit σ -> Stm Γ τ) :
+      ⟨ δ , stm_bind (stm_exit σ s) k ⟩ ---> ⟨ δ , stm_exit τ s ⟩
+
   where "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2).
 
   Inductive Steps {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : LocalStore Γ -> Stm Γ σ -> Prop :=
