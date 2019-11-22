@@ -40,6 +40,31 @@ From MicroSail Require Export
 
 Set Implicit Arguments.
 
+Class Blastable (A : Set) : Type :=
+  { blast : A -> (A -> Prop) -> Prop;
+    blast_sound:
+      forall (a : A) (k : A -> Prop),
+        blast a k <-> k a
+  } .
+
+Program Instance blastable_bool : Blastable bool :=
+  {| blast := fun b k => (b = true -> k true) /\ (b = false -> k false) |}.
+Solve All Obligations with destruct a; intuition.
+
+Program Instance blastable_int : Blastable Z :=
+  { blast := fun z k => k z }.
+Solve All Obligations with intuition.
+
+Program Instance blastable_prod {A B : Set} : Blastable (A * B) :=
+  { blast := fun ab k => k (fst ab , snd ab) }.
+Solve All Obligations with intuition.
+
+Program Instance blastable_sum {A B : Set} : Blastable (A + B) :=
+  { blast := fun ab k =>
+               (forall (a : A), ab = inl a -> k (inl a)) /\
+               (forall (b : B), ab = inr b -> k (inr b)) }.
+Solve All Obligations with destruct a; intuition; congruence.
+
 Module Type TypeKit.
 
   (* Names of enum type constructors. *)
