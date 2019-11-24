@@ -168,3 +168,12 @@ Definition uncurry' {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f
 
 Definition curry' {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : Env' D Δ -> r) : abstract' D Δ r :=
   curry f.
+
+Fixpoint Forall {B D} (Δ : Ctx B) {struct Δ} : (Env D Δ -> Prop) -> Prop :=
+  match Δ return (Env D Δ -> Prop) -> Prop with
+  | ctx_nil      => fun P => P env_nil
+  | ctx_snoc Δ b => fun P => Forall (fun δ => forall v, P (env_snoc δ _ v))
+  end.
+
+Fixpoint Forall' {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) {struct Δ} : (Env' D Δ -> Prop) -> Prop :=
+  @Forall (X * T) (fun xt => D (snd xt)) Δ.
