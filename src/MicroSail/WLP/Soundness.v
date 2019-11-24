@@ -130,7 +130,7 @@ Module Soundness
     repeat
       (wlp_sound_steps_inversion;
        wlp_sound_simpl;
-       try wlp_sound_inst); auto.
+       try wlp_sound_inst); intuition.
 
   Definition ValidContractEnv (cenv : ContractEnv) : Prop :=
     forall σs σ (f : 𝑭 σs σ),

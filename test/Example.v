@@ -130,7 +130,8 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Local Notation "'x'"   := (@exp_var _ "x" _ _).
   Local Notation "'y'"   := (@exp_var _ "y" _ _).
 
-  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ.
+    let pi := eval compute in
     match f in Fun Δ τ return Stm Δ τ with
     | abs => if: lit_int 0 <= x then x else - x
     | cmp => if: x < y then `LT else
@@ -147,7 +148,8 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
              | EQ => p
              | GT => stm_call gcdloop [p - q, q]
              end
-    end.
+    end in exact pi.
+  Defined.
 
 End ExampleProgramKit.
 Import ExampleProgramKit.
@@ -197,39 +199,22 @@ Import ExampleWLP.
 Lemma gcd_sub_diag_l (n m : Z) : Z.gcd (n - m) m = Z.gcd n m.
 Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.
 
-Ltac validate_destr :=
-  match goal with
-  | [ |- _ -> _ ]  => intro
-  | [ |- True ]  => constructor
-  | [ H: True |- _ ] => clear H
-  | [ H: False |- _ ] => destruct H
-  | [ H: Env _ (ctx_snoc _ _) |- _ ] => dependent destruction H
-  | [ H: Env _ ctx_nil |- _ ] => dependent destruction H
-  | [ H: Env' _ (ctx_snoc _ _) |- _ ] => dependent destruction H
-  | [ H: Env' _ ctx_nil |- _ ] => dependent destruction H
-  end.
-
-Ltac validate_simpl :=
-  repeat
-    (cbn in *; repeat validate_destr; destruct_conjs; subst;
-     rewrite ?Z.eqb_eq, ?Z.eqb_neq, ?Z.leb_gt, ?Z.ltb_ge, ?Z.ltb_lt, ?Z.leb_le, ?Z.gtb_ltb,
-       ?Z.gcd_diag, ?Z.gcd_abs_l, ?Z.gcd_abs_r, ?Z.gcd_sub_diag_r, ?gcd_sub_diag_l in *).
-
-Ltac validate_case :=
-  match goal with
-  | [ |- match ?e with _ => _ end _ _ ] =>
-    case_eq e
-  | [ |- WLP match ?e with _ => _ end _ _ ] =>
-    case_eq e
-  end.
+Ltac wlp_cbv :=
+  cbv [Blastable_𝑬𝑲 CEnv Forall Forall' Lit ValidContract WLP abstract blast
+       blastable_lit env_lookup env_map env_update eq_rect eval evals
+       inctx_case_snoc snd uncurry
+      ].
 
 Ltac validate_solve :=
   repeat
-    (validate_simpl; intuition;
-     try lia;
-     try validate_case).
+    (intros; destruct_conjs; subst;
+     rewrite ?Z.eqb_eq, ?Z.eqb_neq, ?Z.leb_gt, ?Z.ltb_ge, ?Z.ltb_lt, ?Z.leb_le,
+       ?Z.gtb_ltb, ?Z.gcd_diag, ?Z.gcd_abs_l, ?Z.gcd_abs_r, ?Z.gcd_sub_diag_r,
+       ?gcd_sub_diag_l in *;
+     intuition (try discriminate; try lia)
+    ).
 
 Lemma validCEnv : ValidContractEnv CEnv.
-Proof. intros σs τ [] δ; validate_solve. Qed.
+Proof. intros σs τ []; wlp_cbv; validate_solve. Qed.
 
 (* Print Assumptions validCEnv. *)

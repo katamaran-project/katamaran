@@ -609,7 +609,9 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
        Apparently, the unification of Γ is performed before the resolution so
        evaluation of ctx_resolve and mk_inctx is not blocked.
      *)
-    Hint Extern 10 (InCtx (?x , _) ?Γ) => exact (mk_inctx Γ x tt) : typeclass_instances.
+    Hint Extern 10 (InCtx (?x , _) ?Γ) =>
+      let xInΓ := eval vm_compute in (mk_inctx Γ x tt) in
+        exact xInΓ : typeclass_instances.
 
   End NameResolution.
 
