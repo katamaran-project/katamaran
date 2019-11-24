@@ -461,13 +461,13 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
     | stm_let'       (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) {σ : Ty} (k : Stm (ctx_cat Γ Δ) σ) : Stm Γ σ
     | stm_assign     (x : 𝑿) (τ : Ty) {xInΓ : InCtx (x , τ) Γ} (e : Stm Γ τ) : Stm Γ τ
-    | stm_app        {Δ σ} (f : 𝑭 Δ σ) (es : Env' (Exp Γ) Δ) : Stm Γ σ
-    | stm_app'       (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ) : Stm Γ τ
+    | stm_call       {Δ σ} (f : 𝑭 Δ σ) (es : Env' (Exp Γ) Δ) : Stm Γ σ
+    | stm_call'      (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ) : Stm Γ τ
     | stm_if         {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) : Stm Γ τ
     | stm_seq        {τ : Ty} (e : Stm Γ τ) {σ : Ty} (k : Stm Γ σ) : Stm Γ σ
     | stm_assert     (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) : Stm Γ ty_bool
     (* | stm_while      (w : 𝑾 Γ) (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) -> Stm Γ ty_unit *)
-    | stm_exit       (τ : Ty) (s : Lit ty_string) : Stm Γ τ
+    | stm_fail      (τ : Ty) (s : Lit ty_string) : Stm Γ τ
     | stm_match_list {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
       (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ) : Stm Γ τ
     | stm_match_sum  {σinl σinr τ : Ty} (e : Exp Γ (ty_sum σinl σinr))
@@ -501,12 +501,12 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_let {_} _ _ _ {_} _.
     Global Arguments stm_let' {_ _} _ {_} _.
     Global Arguments stm_assign {_} _ {_ _} _.
-    Global Arguments stm_app {_%ctx _%ctx _} _ _%exp.
-    Global Arguments stm_app' {_} _ _ _ _.
+    Global Arguments stm_call {_%ctx _%ctx _} _ _%exp.
+    Global Arguments stm_call' {_} _ _ _ _.
     Global Arguments stm_if {_ _} _ _ _.
     Global Arguments stm_seq {_ _} _ {_} _.
     Global Arguments stm_assert {_} _ _.
-    Global Arguments stm_exit {_} _ _.
+    Global Arguments stm_fail {_} _ _.
     Global Arguments stm_match_list {_ _ _} _ _ _ _ _.
     Global Arguments stm_match_sum {_ _ _ _} _ _ _ _ _.
     Global Arguments stm_match_pair {_ _ _ _} _ _ _ _.
@@ -615,8 +615,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     Definition Final {Γ σ} (s : Stm Γ σ) : Prop :=
       match s with
-      | stm_lit _ _  => True
-      | stm_exit _ _ => True
+      | stm_lit _ _   => True
+      | stm_fail _ _ => True
       | _ => False
       end.
 

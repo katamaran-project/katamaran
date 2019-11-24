@@ -85,11 +85,11 @@ Module Inversion
        | [ |- _ /\ _ ] => constructor
        | [ |- True ] => constructor
        | [ |- ⟨ _ , stm_lit _ _ ⟩ --->* ⟨ _, _ ⟩ ] => constructor 1
-       | [ |- ⟨ _ , stm_exit _ _ ⟩ --->* ⟨ _, _ ⟩ ] => constructor 1
+       | [ |- ⟨ _ , stm_fail _ _ ⟩ --->* ⟨ _, _ ⟩ ] => constructor 1
        | [ |- ⟨ _ , stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_let_value
-       | [ |- ⟨ _ , stm_let _ _ (stm_exit _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_let_exit
+       | [ |- ⟨ _ , stm_let _ _ (stm_fail _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_let_fail
        | [ |- ⟨ _ , stm_assign _ (stm_lit _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_assign_value
-       | [ |- ⟨ _ , stm_assign _ (stm_exit _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_assign_exit
+       | [ |- ⟨ _ , stm_assign _ (stm_fail _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_assign_fail
        end; cbn); try eassumption.
 
   Local Ltac steps_inversion_induction :=
@@ -135,15 +135,15 @@ Module Inversion
     steps_inversion_induction.
   Qed.
 
-  Lemma steps_inversion_app' {Γ Δ σ} (δ1 δ3 : LocalStore Γ)
+  Lemma steps_inversion_call' {Γ Δ σ} (δ1 δ3 : LocalStore Γ)
     (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final t)
-    (steps : ⟨ δ1, stm_app' Δ δΔ σ k ⟩ --->* ⟨ δ3, t ⟩) :
+    (steps : ⟨ δ1, stm_call' Δ δΔ σ k ⟩ --->* ⟨ δ3, t ⟩) :
     exists δΔ' k',
       ⟨ δΔ , k ⟩ --->* ⟨ δΔ' , k' ⟩ /\ Final k' /\
       exists s0,
-      (⟨ δ1, stm_app' Δ δΔ' σ k' ⟩ ---> ⟨ δ1, s0 ⟩) /\ (⟨ δ1, s0⟩ --->* ⟨ δ3, t ⟩).
+      (⟨ δ1, stm_call' Δ δΔ' σ k' ⟩ ---> ⟨ δ1, s0 ⟩) /\ (⟨ δ1, s0⟩ --->* ⟨ δ3, t ⟩).
   Proof.
-    remember (stm_app' Δ δΔ σ k) as s. revert steps δΔ k Heqs.
+    remember (stm_call' Δ δΔ σ k) as s. revert steps δΔ k Heqs.
     steps_inversion_induction.
   Qed.
 

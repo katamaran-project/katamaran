@@ -163,34 +163,34 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
         (exp_neg (exp_var "x"))
     | gcdcompare =>
       stm_bind
-        (stm_app compare [exp_var "p", exp_var "q"])
+        (stm_call compare [exp_var "p", exp_var "q"])
         (fun K =>
            match K with
-           | LT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p"))
+           | LT => stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p"))
            | EQ => stm_exp (exp_var "p")
-           | GT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q"))
+           | GT => stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q"))
            end)
       (* stm_let "ord" (ty_enum ordering) *)
-      (*   (stm_app compare [exp_var "p", exp_var "q"]) *)
+      (*   (stm_call compare [exp_var "p", exp_var "q"]) *)
       (*   (stm_match_enum ordering (exp_var "ord") *)
       (*      (fun K => *)
       (*         match K with *)
-      (*         | LT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p")) *)
+      (*         | LT => stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p")) *)
       (*         | EQ => stm_exp (exp_var "p") *)
-      (*         | GT => stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q")) *)
+      (*         | GT => stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q")) *)
       (*         end)) *)
     | gcd =>
-      stm_let "p'" ty_int (stm_app abs [exp_var "p"])
-      (stm_let "q'" ty_int (stm_app abs [exp_var "q"])
-        (stm_app gcdpos [exp_var "p'", exp_var "q'"]))
+      stm_let "p'" ty_int (stm_call abs [exp_var "p"])
+      (stm_let "q'" ty_int (stm_call abs [exp_var "q"])
+        (stm_call gcdpos [exp_var "p'", exp_var "q'"]))
     | gcdpos =>
       stm_if
         (exp_var "p" = exp_var "q")
         (exp_var "p")
         (stm_if
            (exp_var "p" < exp_var "q")
-           (stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p")))
-           (stm_app gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q")))
+           (stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p")))
+           (stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q")))
         )
     | compare =>
       stm_if (exp_var "x" < exp_var "y")
@@ -199,7 +199,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
         (stm_lit (ty_enum ordering) EQ)
       (stm_if (exp_var "x" > exp_var "y")
         (stm_lit (ty_enum ordering) GT)
-        (stm_exit (ty_enum ordering) "compare")))
+        (stm_fail (ty_enum ordering) "compare")))
     end.
 
 End ExampleProgramKit.

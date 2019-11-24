@@ -133,11 +133,11 @@ Module WLP
     | stm_exp e => meval e
     | stm_assert e1 e2  => meval e1 >>= assert
     | stm_if e s1 s2 => meval e >>= fun b => ifthenelse b (WLP s1) (WLP s2)
-    | stm_exit _ _  => abort
+    | stm_fail _ _ => abort
     | stm_seq s1 s2 => WLP s1 *> WLP s2
-    | stm_app' Δ δ τ s => lift (evalDST (WLP s) δ)
+    | stm_call' Δ δ τ s => lift (evalDST (WLP s) δ)
 
-    | stm_app f es =>
+    | stm_call f es =>
       mevals es >>= fun δf_in =>
       match CEnv f with
       | None => abort (* NOT IMPLEMENTED *)

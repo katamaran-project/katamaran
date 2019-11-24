@@ -50,9 +50,9 @@ Module SmallStep
   | step_stm_let_value
       (δ : LocalStore Γ) (x : 𝑿) (τ σ : Ty) (v : Lit τ) (k : Stm (Γ ▻ (x , τ)) σ) :
       ⟨ δ , stm_let x τ (stm_lit τ v) k ⟩ ---> ⟨ δ , stm_let' (env_snoc env_nil (x,τ) v) k ⟩
-  | step_stm_let_exit
+  | step_stm_let_fail
       (δ : LocalStore Γ) (x : 𝑿) (τ σ : Ty) (s : string) (k : Stm (Γ ▻ (x , τ)) σ) :
-      ⟨ δ , stm_let x τ (stm_exit τ s) k ⟩ ---> ⟨ δ , stm_exit σ s ⟩
+      ⟨ δ , stm_let x τ (stm_fail τ s) k ⟩ ---> ⟨ δ , stm_fail σ s ⟩
   | step_stm_let_step
       (δ : LocalStore Γ) (δ' : LocalStore Γ) (x : 𝑿) (τ σ : Ty)
       (s : Stm Γ τ) (s' : Stm Γ τ) (k : Stm (Γ ▻ (x , τ)) σ) :
@@ -61,9 +61,9 @@ Module SmallStep
   | step_stm_let'_value
       (δ : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (σ : Ty) (v : Lit σ) :
       ⟨ δ , stm_let' δΔ (stm_lit σ v) ⟩ ---> ⟨ δ , stm_lit σ v ⟩
-  | step_stm_let'_exit
+  | step_stm_let'_fail
       (δ : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (σ : Ty) (s : string) :
-      ⟨ δ , stm_let' δΔ (stm_exit σ s) ⟩ ---> ⟨ δ , stm_exit σ s ⟩
+      ⟨ δ , stm_let' δΔ (stm_fail σ s) ⟩ ---> ⟨ δ , stm_fail σ s ⟩
   | step_stm_let'_step
       (δ δ' : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) (δΔ δΔ' : LocalStore Δ) (σ : Ty) (k k' : Stm (Γ ▻▻ Δ) σ) :
       ⟨ δ ►► δΔ , k ⟩ ---> ⟨ δ' ►► δΔ' , k' ⟩ ->
@@ -76,32 +76,32 @@ Module SmallStep
   | step_stm_seq_value
       (δ : LocalStore Γ) (τ σ : Ty) (v : Lit τ) (k : Stm Γ σ) :
       ⟨ δ , stm_seq (stm_lit τ v) k ⟩ ---> ⟨ δ , k ⟩
-  | step_stm_seq_exit
+  | step_stm_seq_fail
       (δ : LocalStore Γ) (τ σ : Ty) (s : string) (k : Stm Γ σ) :
-      ⟨ δ , stm_seq (stm_exit τ s) k ⟩ ---> ⟨ δ , stm_exit σ s ⟩
+      ⟨ δ , stm_seq (stm_fail τ s) k ⟩ ---> ⟨ δ , stm_fail σ s ⟩
 
-  | step_stm_app
+  | step_stm_call
       {δ : LocalStore Γ} {σs σ} {f : 𝑭 σs σ} (es : Env' (Exp Γ) σs) :
-      ⟨ δ , stm_app f es ⟩ --->
-      ⟨ δ , stm_app' σs (evals es δ) σ (Pi f) ⟩
-  | step_stm_app'_step
+      ⟨ δ , stm_call f es ⟩ --->
+      ⟨ δ , stm_call' σs (evals es δ) σ (Pi f) ⟩
+  | step_stm_call'_step
       {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ δΔ' : LocalStore Δ} (τ : Ty)
       (s s' : Stm Δ τ) :
       ⟨ δΔ , s ⟩ ---> ⟨ δΔ' , s' ⟩ ->
-      ⟨ δ , stm_app' Δ δΔ τ s ⟩ ---> ⟨ δ , stm_app' Δ δΔ' τ s' ⟩
-  | step_stm_app'_value
+      ⟨ δ , stm_call' Δ δΔ τ s ⟩ ---> ⟨ δ , stm_call' Δ δΔ' τ s' ⟩
+  | step_stm_call'_value
       {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (τ : Ty) (v : Lit τ) :
-      ⟨ δ , stm_app' Δ δΔ τ (stm_lit τ v) ⟩ ---> ⟨ δ , stm_lit τ v ⟩
-  | step_stm_app'_exit
+      ⟨ δ , stm_call' Δ δΔ τ (stm_lit τ v) ⟩ ---> ⟨ δ , stm_lit τ v ⟩
+  | step_stm_call'_fail
       {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (τ : Ty) (s : string) :
-      ⟨ δ , stm_app' Δ δΔ τ (stm_exit τ s) ⟩ ---> ⟨ δ , stm_exit τ s ⟩
+      ⟨ δ , stm_call' Δ δΔ τ (stm_fail τ s) ⟩ ---> ⟨ δ , stm_fail τ s ⟩
 
   | step_stm_assign_value
       (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (v : Lit σ) :
       ⟨ δ , stm_assign x (stm_lit σ v) ⟩ ---> ⟨ δ [ x ↦ v ] , stm_lit σ v ⟩
-  | step_stm_assign_exit
+  | step_stm_assign_fail
       (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (s : string) :
-      ⟨ δ , stm_assign x (stm_exit σ s) ⟩ ---> ⟨ δ , stm_exit σ s ⟩
+      ⟨ δ , stm_assign x (stm_fail σ s) ⟩ ---> ⟨ δ , stm_fail σ s ⟩
   | step_stm_assign_step
       (δ δ' : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (s s' : Stm Γ σ) :
       ⟨ δ , s ⟩ ---> ⟨ δ' , s' ⟩ ->
@@ -113,7 +113,7 @@ Module SmallStep
   | step_stm_assert
       (δ : LocalStore Γ) (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) :
       ⟨ δ , stm_assert e1 e2 ⟩ --->
-      ⟨ δ , if eval e1 δ then stm_lit ty_bool true else stm_exit ty_bool (eval e2 δ) ⟩
+      ⟨ δ , if eval e1 δ then stm_lit ty_bool true else stm_fail ty_bool (eval e2 δ) ⟩
   (* | step_stm_while : *)
   (*   (δ : LocalStore Γ) (w : 𝑾 δ) (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) -> *)
   (*   ⟨ δ , stm_while w e s ⟩ ---> *)
@@ -177,9 +177,9 @@ Module SmallStep
   | step_stm_bind_value
       (δ : LocalStore Γ) (σ τ : Ty) (v : Lit σ) (k : Lit σ -> Stm Γ τ) :
       ⟨ δ , stm_bind (stm_lit σ v) k ⟩ ---> ⟨ δ , k v ⟩
-  | step_stm_bind_exit
+  | step_stm_bind_fail
       (δ : LocalStore Γ) (σ τ : Ty) (s : string) (k : Lit σ -> Stm Γ τ) :
-      ⟨ δ , stm_bind (stm_exit σ s) k ⟩ ---> ⟨ δ , stm_exit τ s ⟩
+      ⟨ δ , stm_bind (stm_fail σ s) k ⟩ ---> ⟨ δ , stm_fail τ s ⟩
 
   where "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2).
 
