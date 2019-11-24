@@ -10,3 +10,5 @@ Makefile.coq
 Makefile.coq.conf
 .DS_Store
 \#*#
+.lia.cache
+.nia.cache
