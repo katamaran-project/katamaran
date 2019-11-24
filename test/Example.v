@@ -76,9 +76,23 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     match E with
     | ordering => Ordering
     end.
+  Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
+    match E with
+    | ordering => {| blast ord k :=
+                       (ord = LT -> k LT) /\
+                       (ord = EQ -> k EQ) /\
+                       (ord = GT -> k GT)
+                  |}
+    end.
+  Solve All Obligations with destruct a; intuition congruence.
 
   Definition 𝑲 (T : 𝑻) : Set := match T with end.
   Definition 𝑲_Ty (T : 𝑻) : 𝑲 T -> Ty := match T with end.
+  Program Instance Blastable_𝑲 T : Blastable (𝑲 T) :=
+    match T with
+    end.
+  Solve All Obligations with destruct a; intuition congruence.
+
   Definition 𝑹𝑭  : Set := Empty_set.
   Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) := match R with end.
 

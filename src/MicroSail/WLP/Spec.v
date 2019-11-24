@@ -76,6 +76,9 @@ Module WLP
     bind ma (fun _ => mb).
   Definition bindleft {Γ1 Γ2 Γ3 A B} (ma : DST Γ1 Γ2 A) (mb : DST Γ2 Γ3 B) : DST Γ1 Γ3 A :=
     bind ma (fun a => bind mb (fun _ => pure a)).
+  Definition bindblast {Γ1 Γ2 Γ3 A B} {blastA : Blastable A}
+    (ma : DST Γ1 Γ2 A) (f : A -> DST Γ2 Γ3 B) : DST Γ1 Γ3 B :=
+    fun k => ma (fun a δ2 => blast a (fun a' => f a' k δ2)).
   Definition get {Γ} : DST Γ Γ (LocalStore Γ) :=
     fun k δ => k δ δ.
   Definition put {Γ Γ'} (δ' : LocalStore Γ') : DST Γ Γ' unit :=
@@ -100,6 +103,7 @@ Module WLP
   Arguments abort {_ _ _} / _ _.
   Arguments assert {_} _ / _ _.
   Arguments bind {_ _ _ _ _} _ _ / _ _.
+  Arguments bindblast {_ _ _ _ _ _} _ _ / _ _.
   Arguments bindleft {_ _ _ _ _} _ _ / _ _.
   Arguments bindright {_ _ _ _ _} _ _ / _ _.
   Arguments evalDST {_ _ _} _ / _ _.
@@ -117,6 +121,7 @@ Module WLP
   Arguments ifthenelse {_ _ _} _ _ _ / _ _.
 
   Notation "ma >>= f" := (bind ma f) (at level 50, left associativity).
+  Notation "ma !>>= f" := (bindblast ma f) (at level 50, left associativity).
   Notation "ma *> mb" := (bindright ma mb) (at level 50, left associativity).
   Notation "ma <* mb" := (bindleft ma mb) (at level 50, left associativity).
 
@@ -142,28 +147,29 @@ Module WLP
       end
     | stm_let' δ k => pushs δ *> WLP k <* pops _
     | stm_match_list e alt_nil xh xt alt_cons =>
-      meval e >>= fun v =>
+      meval e !>>= fun v =>
       match v with
       | nil => WLP alt_nil
       | cons vh vt => push vh *> @push _ _ (ty_list _) vt *> WLP alt_cons <* pop <* pop
       end
     | stm_match_sum e xinl altinl xinr altinr =>
-      meval e >>= fun v =>
+      meval e !>>= fun v =>
       match v with
       | inl v => push v *> WLP altinl <* pop
       | inr v => push v *> WLP altinr <* pop
       end
     | stm_match_pair e xl xr rhs =>
-      meval e >>= fun v =>
+      meval e !>>= fun v =>
       let (vl , vr) := v in
       push vl *> push vr *> WLP rhs <* pop <* pop
     | stm_match_enum E e alts =>
-      meval e >>= fun v => WLP (alts v)
+      meval e !>>= fun v =>
+      WLP (alts v)
     | stm_match_tuple e p rhs =>
       meval e >>= fun v =>
       pushs (tuple_pattern_match p v) *> WLP rhs <* pops _
     | stm_match_union T e xs rhs =>
-      meval e >>= fun v =>
+      meval e !>>= fun v =>
       let (K , tv) := v in
       push (untag tv) *> WLP (rhs K) <* pop
     | stm_match_record R e p rhs =>

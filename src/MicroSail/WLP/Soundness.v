@@ -164,9 +164,16 @@ Module Soundness
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
+      specialize (H _ _ eq_refl).
+      wlp_sound_solve.
     - wlp_sound_solve.
+      + specialize (H _ eq_refl).
+        wlp_sound_solve.
+      + specialize (H2 _ eq_refl).
+        wlp_sound_solve.
     - wlp_sound_solve.
-    - wlp_sound_solve.
+    - rewrite blast_sound in H2.
+      wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.

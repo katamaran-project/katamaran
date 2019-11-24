@@ -40,7 +40,11 @@ From MicroSail Require Export
 
 Set Implicit Arguments.
 
-Class Blastable (A : Set) : Type :=
+Inductive Bit : Set := bitzero | bitone.
+
+(******************************************************************************)
+
+Class Blastable (A : Type) : Type :=
   { blast : A -> (A -> Prop) -> Prop;
     blast_sound:
       forall (a : A) (k : A -> Prop),
@@ -48,22 +52,62 @@ Class Blastable (A : Set) : Type :=
   } .
 
 Program Instance blastable_bool : Blastable bool :=
-  {| blast := fun b k => (b = true -> k true) /\ (b = false -> k false) |}.
-Solve All Obligations with destruct a; intuition.
+  {| blast b k := (b = true -> k true) /\ (b = false -> k false) |}.
+Solve All Obligations with destruct a; intuition; congruence.
 
 Program Instance blastable_int : Blastable Z :=
-  { blast := fun z k => k z }.
+  {| blast z k := k z |}.
 Solve All Obligations with intuition.
 
-Program Instance blastable_prod {A B : Set} : Blastable (A * B) :=
-  { blast := fun ab k => k (fst ab , snd ab) }.
+Program Instance blastable_string : Blastable string :=
+  {| blast s k := k s |}.
 Solve All Obligations with intuition.
 
-Program Instance blastable_sum {A B : Set} : Blastable (A + B) :=
-  { blast := fun ab k =>
-               (forall (a : A), ab = inl a -> k (inl a)) /\
-               (forall (b : B), ab = inr b -> k (inr b)) }.
+Program Instance blastable_unit : Blastable unit :=
+  {| blast u k := k tt |}.
 Solve All Obligations with destruct a; intuition; congruence.
+
+Program Instance blastable_list {A : Type} : Blastable (list A) :=
+  {| blast xs k :=
+       (forall (y : A) (ys : list A), xs = cons y ys -> k (cons y ys)) /\
+       (xs = nil -> k nil)
+  |}.
+Solve All Obligations with destruct a; intuition; congruence.
+
+Program Instance blastable_prod {A B : Type} : Blastable (A * B) :=
+  { blast ab k := k (fst ab , snd ab) }.
+Solve All Obligations with intuition.
+
+Program Instance blastable_sigt {A} {B : A -> Type} : Blastable (sigT B) :=
+  {| blast ab k := k (existT B (projT1 ab) (projT2 ab)) |}.
+Solve All Obligations with destruct a; intuition; congruence.
+
+Program Instance blastable_sum {A B : Type} : Blastable (A + B) :=
+  {| blast ab k :=
+       (forall (a : A), ab = inl a -> k (inl a)) /\
+       (forall (b : B), ab = inr b -> k (inr b))
+  |}.
+Solve All Obligations with destruct a; intuition; congruence.
+
+Program Instance blastable_bit : Blastable Bit :=
+  {| blast b k := (b = bitzero -> k bitzero) /\ (b = bitone -> k bitone) |}.
+Solve All Obligations with destruct a; intuition; congruence.
+
+Program Instance blastable_env {B D} {Γ : Ctx B} : Blastable (Env D Γ) :=
+  {| blast :=
+       (fix blast {Δ : Ctx B} (E : Env D Δ) {struct E} : (Env D Δ -> Prop) -> Prop :=
+       match E in Env _ Δ return (Env D Δ -> Prop) -> Prop with
+       | env_nil => fun k => k env_nil
+       | env_snoc E b db => fun k => blast E (fun E' => k (env_snoc E' b db))
+       end) Γ
+  |}.
+Next Obligation.
+  induction a; cbn.
+  - reflexivity.
+  - exact (IHa (fun E' : Env D Γ => k (env_snoc E' b db))).
+Defined.
+Instance blastable_env' {X T : Set} {D} {Δ : Ctx (X * T)} : Blastable (Env' D Δ) :=
+  blastable_env.
 
 Module Type TypeKit.
 
@@ -112,10 +156,14 @@ Module Type TermKit (typekit : TypeKit).
 
   (* Names of enum data constructors. *)
   Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
+  Declare Instance Blastable_𝑬𝑲 : forall E, Blastable (𝑬𝑲 E).
+
   (* Names of union data constructors. *)
   Parameter Inline 𝑲  : 𝑻 -> Set.
   (* Union data constructor field type *)
   Parameter Inline 𝑲_Ty : forall (T : 𝑻), 𝑲 T -> Ty.
+  Declare Instance Blastable_𝑲 : forall T, Blastable (𝑲 T).
+
   (* Record field names. *)
   Parameter Inline 𝑹𝑭  : Set.
   (* Record field types. *)
@@ -130,8 +178,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   Export termkit.
 
   Section Literals.
-
-    Inductive Bit : Set := bitzero | bitone.
 
     (* Ideally we want object language literals to coincide with meta-language
        values to get sexy looking predicates. See the definition of Lit below.
@@ -198,6 +244,22 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ty_union T => { K : 𝑲 T & TaggedLit (𝑲_Ty K) }
       | ty_record R => Env' TaggedLit (𝑹𝑭_Ty R)
       end%type.
+
+    Global Instance blastable_lit {σ} : Blastable (Lit σ) :=
+      match σ with
+      | ty_int => blastable_int
+      | ty_bool => blastable_bool
+      | ty_bit => blastable_bit
+      | ty_string => blastable_string
+      | ty_list σ0 => blastable_list
+      | ty_prod σ1 σ2 => blastable_prod
+      | ty_sum σ1 σ2 => blastable_sum
+      | ty_unit => blastable_unit
+      | ty_enum E => Blastable_𝑬𝑲 E
+      | ty_tuple σs => blastable_env
+      | ty_union T => blastable_sigt
+      | ty_record R => blastable_env'
+      end.
 
     Fixpoint untag {σ : Ty} (v : TaggedLit σ) : Lit σ :=
       match v with
