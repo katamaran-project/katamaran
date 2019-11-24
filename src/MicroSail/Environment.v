@@ -141,3 +141,30 @@ Module EnvNotations.
   Notation "δ ! x" := (@env_lookup _ _ _ δ (x , _) _).
 
 End EnvNotations.
+
+Fixpoint abstract {B} (D : B -> Type) (Δ : Ctx B) (r : Type) {struct Δ} : Type :=
+  match Δ with
+  | ctx_nil => r
+  | ctx_snoc Δ σ => abstract D Δ (D σ -> r)
+  end.
+
+Fixpoint uncurry {B} (D : B -> Type) {Δ : Ctx B} {r : Type} (f : abstract D Δ r) (δ : Env D Δ) {struct δ} : r :=
+   match δ in Env _ Δ return forall r : Type, abstract D Δ r -> r with
+   | env_nil => fun _ v => v
+   | env_snoc δ b db => fun r (f : abstract D _ (D b -> r)) => uncurry f δ db
+   end r f.
+
+Fixpoint curry {B} (D : B -> Type) {Δ : Ctx B} {r : Type} (f : Env D Δ -> r) {struct Δ} : abstract D Δ r :=
+   match Δ return forall r : Type, (Env D Δ -> r) -> abstract D Δ r with
+   | ctx_nil => fun r f => f env_nil
+   | ctx_snoc Δ σ => fun r f => @curry B D Δ (D σ -> r) (fun E dσ => f (env_snoc E σ dσ))
+   end r f.
+
+Definition abstract' {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) (r : Type) : Type :=
+  abstract (fun xt => D (snd xt)) Δ r.
+
+Definition uncurry' {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : abstract' D Δ r) (δ : Env' D Δ) : r :=
+  uncurry f δ.
+
+Definition curry' {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : Env' D Δ -> r) : abstract' D Δ r :=
+  curry f.
