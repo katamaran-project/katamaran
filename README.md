@@ -8,7 +8,8 @@ executable emulators and theorem provers. All theorem prover back ends output a
 shallow embedding of desugared Sail.
 
 This repository contains the development of MicroSail, a deep embedding of Sail
-in Coq which we hope to develop into a full Sail backend.
+in Coq which we hope to develop into a full Sail backend. It requires Coq 8.8 or
+later.
 
 Motivation
 ----------

@@ -18,9 +18,9 @@ stages:
       - "src/*/*/*.vo"
       - "src/*/*/*/.*.aux"
 
-# Debian Stretch (9.0) and Ubuntu Bionic (18.04) have 8.6
-coq-8.6:  {<<: *build, image: "coqorg/coq:8.6", allow_failure: true}
-coq-8.7:  {<<: *build, image: "coqorg/coq:8.7", allow_failure: true}
+# # Debian Stretch (9.0) and Ubuntu Bionic (18.04) have 8.6
+# coq-8.6:  {<<: *build, image: "coqorg/coq:8.6", allow_failure: true}
+# coq-8.7:  {<<: *build, image: "coqorg/coq:8.7", allow_failure: true}
 coq-8.8:  {<<: *build, image: "coqorg/coq:8.8", allow_failure: true}
 # Debian Buster (10.0) and Ubuntu Eoan (19.10) have 8.9
 coq-8.9:  {<<: *build, image: "coqorg/coq:8.9"}
