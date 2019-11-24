@@ -140,10 +140,11 @@ Module WLP
     | stm_call f es =>
       mevals es >>= fun δf_in =>
       match CEnv f with
-      | None => abort (* NOT IMPLEMENTED *)
-      | Some c => fun POST δ =>
-                    contract_pre_condition c δf_in
-                    /\ (forall v, contract_post_condition c v δf_in -> POST v δ)
+      | ContractNoFail _ _ pre post =>
+        fun POST δ => uncurry' pre δf_in /\ forall v, uncurry' post δf_in v -> POST v δ
+      | ContractTerminateNoFail _ _ pre post => abort (* NOT IMPLEMENTED *)
+      | ContractTerminate _ _ pre post => abort (* NOT IMPLEMENTED *)
+      | ContractNone _ _ => abort (* NOT IMPLEMENTED *)
       end
     | stm_let' δ k => pushs δ *> WLP k <* pops _
     | stm_match_list e alt_nil xh xt alt_cons =>
@@ -178,5 +179,19 @@ Module WLP
     | stm_bind s k =>
       WLP s >>= fun v => WLP (k v)
     end.
+
+  Definition ValidContract {Γ τ} (c : Contract Γ τ) (s : Stm Γ τ) : Prop :=
+    match c with
+    | ContractNoFail _ _ pre post =>
+      @Forall' _ Ty Lit Γ
+               (fun δin => uncurry pre δin ->
+                           WLP s (fun vout δout => uncurry post δin vout) δin)
+    | ContractTerminateNoFail _ _ _ _ => False
+    | ContractTerminate _ _ _ _ => False
+    | ContractNone _ _ => False
+    end.
+
+  Definition ValidContractEnv (cenv : ContractEnv) : Prop :=
+    forall σs σ (f : 𝑭 σs σ), ValidContract (cenv σs σ f) (Pi f).
 
 End WLP.

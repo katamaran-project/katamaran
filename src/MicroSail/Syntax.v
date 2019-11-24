@@ -633,13 +633,14 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       IsLit δ s POST -> exists v, s = stm_lit _ v /\ POST v δ.
     Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
 
-    Record Contract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
-      { contract_pre_condition  : Pred (Env' Lit Δ);
-        contract_post_condition : Lit τ -> Pred (Env' Lit Δ)
-      }.
+    Inductive Contract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+    | ContractNoFail          (pre : abstract' Lit Δ Prop) (post: abstract' Lit Δ (Pred (Lit τ)))
+    | ContractTerminateNoFail (pre : abstract' Lit Δ Prop) (post: abstract' Lit Δ (Pred (Lit τ)))
+    | ContractTerminate       (pre : abstract' Lit Δ Prop) (post: abstract' Lit Δ (Pred (Lit τ)))
+    | ContractNone.
 
     Definition ContractEnv : Type :=
-      forall Δ τ (f : 𝑭 Δ τ), option (Contract Δ τ).
+      forall Δ τ (f : 𝑭 Δ τ), Contract Δ τ.
 
   End Contracts.
 

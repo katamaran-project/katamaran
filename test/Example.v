@@ -98,20 +98,10 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
 
   (* Names of functions. *)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
-  | swappair   : Fun
-                   [ "x" ∶ ty_prod ty_bool ty_int ]
-                   (ty_prod ty_int ty_bool)
-  | swaptuple  : Fun
-                   [ "x" ∶ ty_tuple [ ty_bool, ty_int ] ]
-                   (ty_tuple [ ty_int , ty_bool ])
-  | cycletuple : Fun
-                   [ "x" ∶ ty_tuple [ ty_bool, ty_int, ty_string ]]
-                   (ty_tuple [ ty_int, ty_string, ty_bool ])
-  | abs : Fun [ "x" ∶ ty_int ] ty_int
-  | gcd : Fun [ "p" ∶ ty_int, "q" ∶ ty_int ] ty_int
-  | gcdpos : Fun [ "p" ∶ ty_int, "q" ∶ ty_int ] ty_int
-  | gcdcompare : Fun [ "p" ∶ ty_int, "q" ∶ ty_int ] ty_int
-  | compare : Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] (ty_enum ordering)
+  | abs :     Fun [ "x" ∶ ty_int               ] ty_int
+  | cmp :     Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] (ty_enum ordering)
+  | gcd :     Fun [ "p" ∶ ty_int, "q" ∶ ty_int ] ty_int
+  | gcdloop : Fun [ "p" ∶ ty_int, "q" ∶ ty_int ] ty_int
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -144,55 +134,12 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f in Fun Δ τ return Stm Δ τ with
-    | swappair =>
-      stm_bind
-        (exp_var "x")
-        (fun x : Lit (ty_prod ty_bool ty_int) =>
-           let (l , r) := x in exp_lit _ (ty_prod ty_int ty_bool) (r , l)
-        )
-      (* stm_match_pair (exp_var "x") "l" "r" (exp_pair (exp_var "r") (exp_var "l")) *)
-    | swaptuple => stm_match_tuple (exp_var "x") ["l", "r"] (exp_tuple [exp_var "r", exp_var "l"])
-    | cycletuple => stm_match_tuple
-                      (exp_var "x")
-                      ["u", "v", "w"]
-                      (exp_tuple [exp_var "v", exp_var "w", exp_var "u"])
     | abs =>
       stm_if
         (lit_int (0%Z) <= exp_var "x")
         (exp_var "x")
         (exp_neg (exp_var "x"))
-    | gcdcompare =>
-      stm_bind
-        (stm_call compare [exp_var "p", exp_var "q"])
-        (fun K =>
-           match K with
-           | LT => stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p"))
-           | EQ => stm_exp (exp_var "p")
-           | GT => stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q"))
-           end)
-      (* stm_let "ord" (ty_enum ordering) *)
-      (*   (stm_call compare [exp_var "p", exp_var "q"]) *)
-      (*   (stm_match_enum ordering (exp_var "ord") *)
-      (*      (fun K => *)
-      (*         match K with *)
-      (*         | LT => stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p")) *)
-      (*         | EQ => stm_exp (exp_var "p") *)
-      (*         | GT => stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q")) *)
-      (*         end)) *)
-    | gcd =>
-      stm_let "p'" ty_int (stm_call abs [exp_var "p"])
-      (stm_let "q'" ty_int (stm_call abs [exp_var "q"])
-        (stm_call gcdpos [exp_var "p'", exp_var "q'"]))
-    | gcdpos =>
-      stm_if
-        (exp_var "p" = exp_var "q")
-        (exp_var "p")
-        (stm_if
-           (exp_var "p" < exp_var "q")
-           (stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p")))
-           (stm_call gcd (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q")))
-        )
-    | compare =>
+    | cmp =>
       stm_if (exp_var "x" < exp_var "y")
         (stm_lit (ty_enum ordering) LT)
       (stm_if (exp_var "x" = exp_var "y")
@@ -200,50 +147,59 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
       (stm_if (exp_var "x" > exp_var "y")
         (stm_lit (ty_enum ordering) GT)
         (stm_fail (ty_enum ordering) "compare")))
+    | gcd =>
+      stm_let "p'" ty_int (stm_call abs [exp_var "p"])
+      (stm_let "q'" ty_int (stm_call abs [exp_var "q"])
+        (stm_call gcdloop [exp_var "p'", exp_var "q'"]))
+    | gcdloop =>
+      stm_let "ord" (ty_enum ordering)
+        (stm_call cmp [exp_var "p", exp_var "q"])
+        (stm_match_enum ordering (exp_var "ord")
+           (fun K =>
+              match K with
+              | LT => stm_call gcdloop (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p"))
+              | EQ => stm_exp (exp_var "p")
+              | GT => stm_call gcdloop (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q"))
+              end))
     end.
 
 End ExampleProgramKit.
 Import ExampleProgramKit.
 
+(* ⇑ GENERATED                                                                *)
 (******************************************************************************)
+(* ⇓ NOT GENERATED                                                            *)
 
 Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleProgramKit).
 
   Definition CEnv : ContractEnv :=
     fun σs τ f =>
       match f with
-      | abs =>
-        Some {| contract_pre_condition := fun _ => True;
-                contract_post_condition := fun (v : Lit ty_int)
-                                               (δ : Env' Lit [ "x" ∶ ty_int ]) =>
-                                             v = Z.abs (δ ! "x")
-             |}
-      | compare =>
-        Some {| contract_pre_condition := fun _ => True;
-                contract_post_condition := fun (K : Lit (ty_enum ordering))
-                                               (δ : Env' Lit [ "x" ∶ ty_int , "y" ∶ ty_int ]) =>
-                                             match K with
-                                             | LT => δ ! "x" <= δ ! "y"
-                                             | EQ => δ ! "x"  = δ ! "y"
-                                             | GT => δ ! "x" >= δ ! "y"
-                                             end
-             |}
-      | gcdpos =>
-        Some {| contract_pre_condition := fun (δ : Env' Lit [ "p" ∶ ty_int , "q" ∶ ty_int ]) =>
-                                            (δ ! "p") >= 0 /\ (δ ! "q" >= 0);
-                contract_post_condition := fun (r : Lit ty_int)
-                                               (δ : Env' Lit [ "p" ∶ ty_int , "q" ∶ ty_int ]) =>
-                                             r = Z.gcd (δ ! "p") (δ ! "q")
-             |}
-      | gcd =>
-        Some {| contract_pre_condition := fun (δ : Env' Lit [ "p" ∶ ty_int , "q" ∶ ty_int ]) => True;
-                contract_post_condition := fun (r : Lit ty_int)
-                                               (δ : Env' Lit [ "p" ∶ ty_int , "q" ∶ ty_int ]) =>
-                                             r = Z.gcd (δ ! "p") (δ ! "q")
-             |}
-      | _ => Some {| contract_pre_condition := fun _ => True;
-                     contract_post_condition := fun _ _ => True
-                  |}
+      | abs        => ContractNoFail
+                        ["x" ∶ ty_int] ty_int
+                        (fun x => True)
+                        (fun x r => r = Z.abs x)
+      | cmp        => ContractNoFail
+                        ["x" ∶ ty_int, "y" ∶ ty_int] (ty_enum ordering)
+                        (fun x y => True)
+                        (fun x y r =>
+                           match r with
+                           | LT => x < y
+                           | EQ => x = y
+                           | GT => x > y
+                           end
+                           (* (x < y <-> r = LT) /\ *)
+                           (* (x = y <-> r = EQ) /\ *)
+                           (* (x > y <-> r = GT) *)
+                        )
+      | gcd        => ContractNoFail
+                        ["p" ∶ ty_int, "q" ∶ ty_int] ty_int
+                        (fun p q => True)
+                        (fun p q r => r = Z.gcd p q)
+      | gcdloop    => ContractNoFail
+                        ["p" ∶ ty_int, "q" ∶ ty_int] ty_int
+                        (fun p q => p >= 0 /\ q >= 0)
+                        (fun p q r => r = Z.gcd p q)
       end.
 
 End ExampleContractKit.
@@ -251,16 +207,6 @@ Import ExampleContractKit.
 
 Module ExampleWLP := WLP ExampleTypeKit ExampleTermKit ExampleProgramKit ExampleContractKit.
 Import ExampleWLP.
-
-Definition ValidContract {Γ τ} (c : Contract Γ τ) (s : Stm Γ τ) : Prop :=
-  forall δ, contract_pre_condition c δ -> WLP s (contract_post_condition c) δ.
-
-Definition ValidContractEnv (cenv : ContractEnv) : Prop :=
-  forall σs σ (f : 𝑭 σs σ),
-    match cenv σs σ f with
-    | Some c => ValidContract c (Pi f)
-    | None => True
-    end.
 
 Lemma gcd_sub_diag_l (n m : Z) : Z.gcd (n - m) m = Z.gcd n m.
 Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.

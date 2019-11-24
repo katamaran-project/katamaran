@@ -135,13 +135,15 @@ Module Soundness
   Definition ValidContractEnv (cenv : ContractEnv) : Prop :=
     forall σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
-      | Some c=>
+      | ContractNoFail _ _ pre post =>
         forall (δ δ' : LocalStore σs) (s' : Stm σs σ),
           ⟨ δ, Pi f ⟩ --->* ⟨ δ', s' ⟩ ->
           Final s' ->
-          contract_pre_condition c δ ->
-          IsLit δ s' (contract_post_condition c)
-      | None => True
+          uncurry pre δ ->
+          IsLit δ s' (fun v δ => uncurry post δ v)
+      | ContractTerminateNoFail _ _ _ _ => False
+      | ContractTerminate _ _ _ _ => False
+      | ContractNone _ _ => False
       end.
 
   Lemma WLP_sound (validCEnv : ValidContractEnv CEnv) {Γ σ} (s : Stm Γ σ) :
