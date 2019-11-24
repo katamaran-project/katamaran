@@ -88,6 +88,8 @@ Module Inversion
        | [ |- ⟨ _ , stm_exit _ _ ⟩ --->* ⟨ _, _ ⟩ ] => constructor 1
        | [ |- ⟨ _ , stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_let_value
        | [ |- ⟨ _ , stm_let _ _ (stm_exit _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_let_exit
+       | [ |- ⟨ _ , stm_assign _ (stm_lit _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_assign_value
+       | [ |- ⟨ _ , stm_assign _ (stm_exit _ _) _ ⟩ ---> ⟨ _ , _ ⟩ ] => apply step_stm_assign_exit
        end; cbn); try eassumption.
 
   Local Ltac steps_inversion_induction :=
@@ -142,6 +144,18 @@ Module Inversion
       (⟨ δ1, stm_app' Δ δΔ' σ k' ⟩ ---> ⟨ δ1, s0 ⟩) /\ (⟨ δ1, s0⟩ --->* ⟨ δ3, t ⟩).
   Proof.
     remember (stm_app' Δ δΔ σ k) as s. revert steps δΔ k Heqs.
+    steps_inversion_induction.
+  Qed.
+
+  Lemma steps_inversion_assign {Γ σ} (δ1 δ3 : LocalStore Γ)
+    (x : 𝑿) (xInΓ : InCtx (x,σ) Γ) (s1 t : Stm Γ σ) (final : Final t)
+    (steps : ⟨ δ1, stm_assign x s1 ⟩ --->* ⟨ δ3, t ⟩) :
+    exists δ2 δ2' s1',
+      ⟨ δ1, s1 ⟩ --->* ⟨ δ2, s1' ⟩ /\ Final s1' /\
+      exists (s0 : Stm Γ σ),
+        (⟨ δ2, stm_assign x s1' ⟩ ---> ⟨ δ2' , s0 ⟩) /\ (⟨ δ2' , s0 ⟩ --->* ⟨ δ3, t ⟩).
+  Proof.
+    remember (stm_assign x s1) as s. revert steps x xInΓ s1 Heqs.
     steps_inversion_induction.
   Qed.
 

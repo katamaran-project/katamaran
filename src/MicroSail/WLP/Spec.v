@@ -128,7 +128,7 @@ Module WLP
   Fixpoint WLP {Γ τ} (s : Stm Γ τ) : DST Γ Γ (Lit τ) :=
     match s in (Stm _ τ) return (DST Γ Γ (Lit τ)) with
     | stm_lit _ l => pure l
-    | stm_assign x e => meval e >>= fun v => modify (fun δ => δ [ x ↦ v ]) *> pure v
+    | stm_assign x s => WLP s >>= fun v => modify (fun δ => δ [ x ↦ v ]) *> pure v
     | stm_let x σ s k => WLP s >>= push *> WLP k <* pop
     | stm_exp e => meval e
     | stm_assert e1 e2  => meval e1 >>= assert

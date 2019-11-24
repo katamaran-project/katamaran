@@ -95,10 +95,18 @@ Module SmallStep
   | step_stm_app'_exit
       {δ : LocalStore Γ} (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (τ : Ty) (s : string) :
       ⟨ δ , stm_app' Δ δΔ τ (stm_exit τ s) ⟩ ---> ⟨ δ , stm_exit τ s ⟩
-  | step_stm_assign
-      (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (e : Exp Γ σ) :
-      let v := eval e δ in
-      ⟨ δ , stm_assign x e ⟩ ---> ⟨ δ [ x ↦ v ] , stm_lit σ v ⟩
+
+  | step_stm_assign_value
+      (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (v : Lit σ) :
+      ⟨ δ , stm_assign x (stm_lit σ v) ⟩ ---> ⟨ δ [ x ↦ v ] , stm_lit σ v ⟩
+  | step_stm_assign_exit
+      (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (s : string) :
+      ⟨ δ , stm_assign x (stm_exit σ s) ⟩ ---> ⟨ δ , stm_exit σ s ⟩
+  | step_stm_assign_step
+      (δ δ' : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (s s' : Stm Γ σ) :
+      ⟨ δ , s ⟩ ---> ⟨ δ' , s' ⟩ ->
+      ⟨ δ , stm_assign x s ⟩ ---> ⟨ δ' , stm_assign x s' ⟩
+
   | step_stm_if
       (δ : LocalStore Γ) (e : Exp Γ ty_bool) (σ : Ty) (s1 s2 : Stm Γ σ) :
       ⟨ δ , stm_if e s1 s2 ⟩ ---> ⟨ δ , if eval e δ then s1 else s2 ⟩
