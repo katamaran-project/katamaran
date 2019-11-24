@@ -98,7 +98,7 @@ Module SmallStep
 
   | step_stm_assign_value
       (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (v : Lit σ) :
-      ⟨ δ , stm_assign x (stm_lit σ v) ⟩ ---> ⟨ δ [ x ↦ v ] , stm_lit σ v ⟩
+      ⟨ δ , stm_assign x (stm_lit σ v) ⟩ ---> ⟨ δ ⟪ x ↦ v ⟫ , stm_lit σ v ⟩
   | step_stm_assign_fail
       (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (s : string) :
       ⟨ δ , stm_assign x (stm_fail σ s) ⟩ ---> ⟨ δ , stm_fail σ s ⟩
@@ -181,14 +181,14 @@ Module SmallStep
       (δ : LocalStore Γ) (σ τ : Ty) (s : string) (k : Lit σ -> Stm Γ τ) :
       ⟨ δ , stm_bind (stm_fail σ s) k ⟩ ---> ⟨ δ , stm_fail τ s ⟩
 
-  where "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2).
+  where "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1%env δ2%env s1%stm s2%stm).
 
   Inductive Steps {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : LocalStore Γ -> Stm Γ σ -> Prop :=
   | step_refl : Steps δ1 s1 δ1 s1
   | step_trans {δ2 δ3 : LocalStore Γ} {s2 s3 : Stm Γ σ} :
       Step δ1 δ2 s1 s2 -> Steps δ2 s2 δ3 s3 -> Steps δ1 s1 δ3 s3.
 
-  Notation "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2).
+  (* Notation "'⟨' δ1 ',' s1 '⟩' '--->' '⟨' δ2 ',' s2 '⟩'" := (@Step _ _ δ1 δ2 s1 s2). *)
   Notation "'⟨' δ1 ',' s1 '⟩' --->* '⟨' δ2 ',' s2 '⟩'" := (@Steps _ _ δ1 s1 δ2 s2).
 
 End SmallStep.

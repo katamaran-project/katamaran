@@ -38,19 +38,25 @@
 (* after 8.10: Declare Scope env_scope. *)
 (* after 8.10: Declare Scope pat_scope. *)
 (* after 8.10: Declare Scope exp_scope. *)
+Delimit Scope lit_scope with lit.
 Delimit Scope ctx_scope with ctx.
 Delimit Scope env_scope with env.
 Delimit Scope pat_scope with pat.
 Delimit Scope exp_scope with exp.
+Delimit Scope stm_scope with stm.
+Delimit Scope arg_scope with arg.
 
 Reserved Notation "'ε'"            (at level 0).
 Reserved Infix "▻"                 (at level 50, left associativity).
 Reserved Infix "▻▻"                (at level 50, left associativity).
 Reserved Notation "b ∈ Γ"          (at level 75, Γ at next level, no associativity).
+Reserved Notation "x ∶ τ"          (at level 80).
+Reserved Notation "[ x ]"          (at level 0).
+Reserved Notation "[ x , .. , z ]" (at level 0).
 
 Reserved Notation "δ ► x ↦ v"      (at level 50, x at level 99, left associativity).
 Reserved Notation "δ1 ►► δ2"       (at level 50, left associativity).
-Reserved Notation "δ [ x ↦ v ]"    (at level 50, x at level 99, v at level 99, left associativity).
+Reserved Notation "δ ⟪ x ↦ v ⟫"    (at level 90, x at level 0, v at level 0, left associativity).
 Reserved Notation "δ ! x"          (at level 56, no associativity).
 
 Reserved Notation "⟨ δ1 , s1 ⟩ ---> ⟨ δ2 , s2 ⟩" (at level 75, no associativity).

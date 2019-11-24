@@ -304,6 +304,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       end.
 
   End Literals.
+  Bind Scope lit_scope with TaggedLit.
+  Bind Scope lit_scope with Lit.
 
   Section Expressions.
 
@@ -358,6 +360,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Import EnvNotations.
 
     Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Type := Env' Lit Γ.
+    Bind Scope env_scope with LocalStore.
 
     Fixpoint evalTagged {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : TaggedLit σ :=
       match e in (Exp _ t) return (TaggedLit t) with
@@ -495,13 +498,14 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | stm_match_record {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
       (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
     | stm_bind   {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ) : Stm Γ τ.
+    Bind Scope stm_scope with Stm.
 
     Global Arguments stm_lit {_} _ _.
     Global Arguments stm_exp {_ _} _.
     Global Arguments stm_let {_} _ _ _ {_} _.
     Global Arguments stm_let' {_ _} _ {_} _.
     Global Arguments stm_assign {_} _ {_ _} _.
-    Global Arguments stm_call {_%ctx _%ctx _} _ _%exp.
+    Global Arguments stm_call {_%ctx _%ctx _} _ _%arg.
     Global Arguments stm_call' {_} _ _ _ _.
     Global Arguments stm_if {_ _} _ _ _.
     Global Arguments stm_seq {_ _} _ {_} _.
@@ -643,6 +647,59 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       forall Δ τ (f : 𝑭 Δ τ), Contract Δ τ.
 
   End Contracts.
+
+  Notation "e1 && e2" := (exp_and e1 e2) : exp_scope.
+  Notation "e1 * e2" := (exp_times e1 e2) : exp_scope.
+  Notation "e1 - e2" := (exp_minus e1 e2) : exp_scope.
+  Notation "e1 < e2" := (exp_lt e1 e2) : exp_scope.
+  Notation "e1 > e2" := (exp_gt e1 e2) : exp_scope.
+  Notation "e1 <= e2" := (exp_le e1 e2) : exp_scope.
+  Notation "e1 = e2" := (exp_eq e1 e2) : exp_scope.
+  Notation "- e" := (exp_neg e) : exp_scope.
+  Notation "'lit_int' l" := (exp_lit _ ty_int l) (at level 1, no associativity) : exp_scope.
+
+  Notation "[ x , .. , z ]" :=
+    (tuplepat_snoc .. (tuplepat_snoc tuplepat_nil x) .. z) (at level 0) : pat_scope.
+  Notation "[ x , .. , z ]" :=
+    (env_snoc .. (env_snoc env_nil (_,_) x) .. (_,_) z) (at level 0) : arg_scope.
+
+  Notation "'if:' e 'then' s1 'else' s2" := (stm_if e%exp s1%stm s2%stm)
+    (at level 99, right associativity, format
+     "'[hv' 'if:'  e  '/' '[' 'then'  s1  ']' '/' '[' 'else'  s2 ']' ']'").
+
+  Notation "'let:' x := s1 'in' s2" := (stm_let x _ s1%stm s2%stm)
+    (at level 100, right associativity, s1 at next level, format
+     "'let:'  x  :=  s1  'in'  '/' s2"
+    ).
+  Notation "'let:' x ∶ τ := s1 'in' s2" := (stm_let x τ s1%stm s2%stm)
+    (at level 100, right associativity, s1 at next level, format
+     "'let:'  x  ∶  τ  :=  s1  'in'  '/' s2"
+    ).
+  Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 'end'" :=
+    (stm_match_enum τ e (fun K => match K with
+                                  | alt1%exp => rhs1%stm
+                                  | alt2%exp => rhs2%stm
+                                  end))
+    (at level 100, alt1 pattern, alt2 pattern, format
+     "'[hv' 'match:'  e  'in'  τ  'with' '/' |  alt1  =>  rhs1 '/' |  alt2  =>  rhs2 '/' 'end' ']'"
+    ).
+  Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 'end'" :=
+    (stm_match_enum τ e (fun K => match K with
+                                  | alt1%exp => rhs1%stm
+                                  | alt2%exp => rhs2%stm
+                                  | alt3%exp => rhs3%stm
+                                  end))
+    (at level 100, alt1 pattern, alt2 pattern, alt3 pattern, format
+     "'[hv' 'match:'  e  'in'  τ  'with' '/' |  alt1  =>  rhs1 '/' |  alt2  =>  rhs2 '/' |  alt3  =>  rhs3 '/' 'end' ']'"
+    ).
+
+  Notation "s1 ;; s2" := (stm_seq s1 s2)
+    (at level 100, right associativity,
+     format "'[' '[hv' '[' s1 ']' ;;  ']' '/' s2 ']'") : stm_scope.
+  Notation "x <- s" := (stm_assign x s)
+    (at level 80, s at next level) : stm_scope.
+  Notation "'fail' s" := (stm_fail _ s)
+    (at level 1, no associativity) : stm_scope.
 
 End Terms.
 

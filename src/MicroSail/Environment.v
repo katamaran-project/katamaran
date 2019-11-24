@@ -135,10 +135,10 @@ Bind Scope env_scope with Env'.
 
 Module EnvNotations.
 
-  Notation "δ '►' b '↦' d" := (env_snoc δ b d).
-  Notation "δ1 '►►' δ2" := (env_cat δ1 δ2).
-  Notation "δ [ x ↦ v ]" := (@env_update _ _ _ δ (x , _) _ v).
-  Notation "δ ! x" := (@env_lookup _ _ _ δ (x , _) _).
+  Notation "δ '►' b '↦' d" := (env_snoc δ b d) : env_scope.
+  Notation "δ1 '►►' δ2" := (env_cat δ1 δ2) : env_scope.
+  Notation "δ ⟪ x ↦ v ⟫" := (@env_update _ _ _ δ (x , _) _ v) : env_scope.
+  Notation "δ ! x" := (@env_lookup _ _ _ δ (x , _) _) : lit_scope.
 
 End EnvNotations.
 

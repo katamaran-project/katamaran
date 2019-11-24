@@ -44,6 +44,8 @@ Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope ctx_scope.
 
+(*** TYPES ***)
+
 Inductive Enums : Set :=
 | ordering.
 
@@ -64,14 +66,12 @@ End ExampleTypeKit.
 Module ExampleTypes := Types ExampleTypeKit.
 Import ExampleTypes.
 
-Notation "x ∶ τ" := (pair x τ) (at level 90, no associativity) : ctx_scope.
-Notation "[ x ]" := (ctx_snoc ctx_nil x) : ctx_scope.
-Notation "[ x , .. , z ]" := (ctx_snoc .. (ctx_snoc ctx_nil x) .. z) : ctx_scope.
+(*** TERMS ***)
 
 Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Module TY := ExampleTypes.
 
-  (* Names of union data constructors. *)
+  (** ENUMS **)
   Definition 𝑬𝑲 (E : 𝑬) : Set :=
     match E with
     | ordering => Ordering
@@ -86,6 +86,7 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     end.
   Solve All Obligations with destruct a; intuition congruence.
 
+  (** UNIONS **)
   Definition 𝑲 (T : 𝑻) : Set := match T with end.
   Definition 𝑲_Ty (T : 𝑻) : 𝑲 T -> Ty := match T with end.
   Program Instance Blastable_𝑲 T : Blastable (𝑲 T) :=
@@ -93,10 +94,11 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     end.
   Solve All Obligations with destruct a; intuition congruence.
 
+  (** RECORDS **)
   Definition 𝑹𝑭  : Set := Empty_set.
   Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) := match R with end.
 
-  (* Names of functions. *)
+  (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
   | abs :     Fun [ "x" ∶ ty_int               ] ty_int
   | cmp :     Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] (ty_enum ordering)
@@ -111,56 +113,40 @@ Module ExampleTerms := Terms ExampleTypeKit ExampleTermKit.
 Import ExampleTerms.
 Import NameResolution.
 
-Notation "[ x , .. , z ]" :=
-  (tuplepat_snoc .. (tuplepat_snoc tuplepat_nil x) .. z) : pat_scope.
-Notation "[ x , .. , z ]" :=
-  (env_snoc .. (env_snoc env_nil _ x) .. _ z) : exp_scope.
-
-Notation "e1 * e2" := (exp_times e1 e2) : exp_scope.
-Notation "e1 - e2" := (exp_minus e1 e2) : exp_scope.
-Notation "e1 < e2" := (exp_lt e1 e2) : exp_scope.
-Notation "e1 > e2" := (exp_gt e1 e2) : exp_scope.
-Notation "e1 <= e2" := (exp_le e1 e2) : exp_scope.
-Notation "e1 = e2" := (exp_eq e1 e2) : exp_scope.
-Notation "'lit_int' l" := (exp_lit _ ty_int l) (at level 1, no associativity) : exp_scope.
-Notation "'lit_unit'" := (exp_lit _ ty_unit tt) (at level 1, no associativity) : exp_scope.
-
-Local Coercion stmexp := @stm_exp.
+(*** PROGRAM ***)
 
 Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Module TM := ExampleTerms.
 
+  Local Coercion stm_exp : Exp >-> Stm.
   Local Open Scope exp_scope.
+  Local Open Scope stm_scope.
+
+  Local Notation "'`LT'" := (exp_lit _ (ty_enum ordering) LT).
+  Local Notation "'`GT'" := (exp_lit _ (ty_enum ordering) GT).
+  Local Notation "'`EQ'" := (exp_lit _ (ty_enum ordering) EQ).
+  Local Notation "'p'"   := (@exp_var _ "p" _ _).
+  Local Notation "'q'"   := (@exp_var _ "q" _ _).
+  Local Notation "'x'"   := (@exp_var _ "x" _ _).
+  Local Notation "'y'"   := (@exp_var _ "y" _ _).
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f in Fun Δ τ return Stm Δ τ with
-    | abs =>
-      stm_if
-        (lit_int (0%Z) <= exp_var "x")
-        (exp_var "x")
-        (exp_neg (exp_var "x"))
-    | cmp =>
-      stm_if (exp_var "x" < exp_var "y")
-        (stm_lit (ty_enum ordering) LT)
-      (stm_if (exp_var "x" = exp_var "y")
-        (stm_lit (ty_enum ordering) EQ)
-      (stm_if (exp_var "x" > exp_var "y")
-        (stm_lit (ty_enum ordering) GT)
-        (stm_fail (ty_enum ordering) "compare")))
-    | gcd =>
-      stm_let "p'" ty_int (stm_call abs [exp_var "p"])
-      (stm_let "q'" ty_int (stm_call abs [exp_var "q"])
-        (stm_call gcdloop [exp_var "p'", exp_var "q'"]))
+    | abs => if: lit_int 0 <= x then x else - x
+    | cmp => if: x < y then `LT else
+             if: x = y then `EQ else
+             if: x > y then `GT else
+             fail "cmp failed"
+    | gcd => "p" <- stm_call abs [p] ;;
+             "q" <- stm_call abs [q] ;;
+             stm_call gcdloop [p, q]
     | gcdloop =>
-      stm_let "ord" (ty_enum ordering)
-        (stm_call cmp [exp_var "p", exp_var "q"])
-        (stm_match_enum ordering (exp_var "ord")
-           (fun K =>
-              match K with
-              | LT => stm_call gcdloop (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p")) ("q" , ty_int) (exp_var "q" - exp_var "p"))
-              | EQ => stm_exp (exp_var "p")
-              | GT => stm_call gcdloop (env_snoc (env_snoc env_nil ("p" , ty_int) (exp_var "p" - exp_var "q")) ("q" , ty_int) (exp_var "q"))
-              end))
+             let: "ord" := stm_call cmp [p, q] in
+             match: exp_var "ord" in ordering with
+             | LT => stm_call gcdloop [p, q - p]
+             | EQ => p
+             | GT => stm_call gcdloop [p - q, q]
+             end
     end.
 
 End ExampleProgramKit.
