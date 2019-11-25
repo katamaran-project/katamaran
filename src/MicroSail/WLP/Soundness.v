@@ -28,7 +28,8 @@
 
 From Coq Require Import
      Program.Equality
-     Program.Tactics.
+     Program.Tactics
+     ZArith.ZArith.
 
 From MicroSail Require Import
      SmallStep.Inversion
@@ -146,6 +147,39 @@ Module Soundness
       | ContractNone _ _ => False
       end.
 
+  Lemma eval_prop_true_sound {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) :
+    forall k, eval_prop_true e δ k <-> (eval e δ = true -> k)
+  with eval_prop_false_sound {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) :
+    forall k, eval_prop_false e δ k <-> (eval e δ = false -> k).
+  Proof.
+    - dependent induction e; cbn; intros;
+        repeat rewrite ?Z.eqb_eq, ?Z.eqb_neq, ?Z.leb_gt, ?Z.ltb_ge, ?Z.ltb_lt, ?Z.leb_le,
+        ?Z.gtb_ltb in *; try (intuition; fail).
+      + specialize (IHe1 e1 eq_refl JMeq_refl δ).
+        specialize (IHe2 e2 eq_refl JMeq_refl δ).
+        rewrite IHe1, IHe2, Bool.andb_true_iff.
+        intuition.
+      + specialize (IHe1 e1 eq_refl JMeq_refl δ).
+        specialize (IHe2 e2 eq_refl JMeq_refl δ).
+        rewrite IHe1, IHe2, Bool.orb_true_iff.
+        intuition.
+      + specialize (IHe e eq_refl JMeq_refl δ).
+        now rewrite Bool.negb_true_iff.
+    - dependent induction e; cbn; intros;
+        repeat rewrite ?Z.eqb_eq, ?Z.eqb_neq, ?Z.leb_gt, ?Z.ltb_ge, ?Z.ltb_lt, ?Z.leb_le,
+        ?Z.gtb_ltb in *; try (intuition; fail).
+      + specialize (IHe1 e1 eq_refl JMeq_refl δ).
+        specialize (IHe2 e2 eq_refl JMeq_refl δ).
+        rewrite IHe1, IHe2, Bool.andb_false_iff.
+        intuition.
+      + specialize (IHe1 e1 eq_refl JMeq_refl δ).
+        specialize (IHe2 e2 eq_refl JMeq_refl δ).
+        rewrite IHe1, IHe2, Bool.orb_false_iff.
+        intuition.
+      + specialize (IHe e eq_refl JMeq_refl δ).
+        now rewrite Bool.negb_false_iff.
+  Qed.
+
   Lemma WLP_sound (validCEnv : ValidContractEnv CEnv) {Γ σ} (s : Stm Γ σ) :
     forall (δ δ' : LocalStore Γ) (s' : Stm Γ σ), ⟨ δ, s ⟩ --->* ⟨ δ', s' ⟩ -> Final s' ->
       forall (POST : Lit σ -> Pred (LocalStore Γ)), WLP s POST δ -> IsLit δ' s' POST.
@@ -161,7 +195,9 @@ Module Soundness
       intuition.
       wlp_sound_solve.
     - wlp_sound_solve.
-    - wlp_sound_solve.
+    - destruct_conjs. case_eq (eval e δ); intros.
+      + apply eval_prop_true_sound in H1; wlp_sound_solve.
+      + apply eval_prop_false_sound in H2; wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.

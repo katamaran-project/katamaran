@@ -333,6 +333,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | exp_lt      (e1 e2 : Exp Γ ty_int) : Exp Γ ty_bool
     | exp_gt      (e1 e2 : Exp Γ ty_int) : Exp Γ ty_bool
     | exp_and     (e1 e2 : Exp Γ ty_bool) : Exp Γ ty_bool
+    | exp_or      (e1 e2 : Exp Γ ty_bool) : Exp Γ ty_bool
     | exp_not     (e : Exp Γ ty_bool) : Exp Γ ty_bool
     | exp_pair    {σ1 σ2 : Ty} (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ (ty_prod σ1 σ2)
     | exp_inl     {σ1 σ2 : Ty} : Exp Γ σ1 -> Exp Γ (ty_sum σ1 σ2)
@@ -375,6 +376,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | exp_lt e1 e2 => taglit_bool (untag (evalTagged e1 δ) <? untag (evalTagged e2 δ))%Z
       | exp_gt e1 e2 => taglit_bool (untag (evalTagged e1 δ) >? untag (evalTagged e2 δ))%Z
       | exp_and e1 e2 => taglit_bool (untag (evalTagged e1 δ) && untag (evalTagged e2 δ))
+      | exp_or e1 e2 => taglit_bool (untag (evalTagged e1 δ) || untag (evalTagged e2 δ))
       | exp_not e0 => taglit_bool (negb (untag (evalTagged e0 δ)))
       | @exp_pair _ σ1 σ2 e1 e2 => taglit_prod (evalTagged e1 δ, evalTagged e2 δ)
       | @exp_inl _ σ1 σ2 e0 => taglit_sum (inl (evalTagged e0 δ))
@@ -419,6 +421,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | exp_lt e1 e2        => Z.ltb (eval e1 δ) (eval e2 δ)
       | exp_gt e1 e2        => Z.gtb (eval e1 δ) (eval e2 δ)
       | exp_and e1 e2       => andb (eval e1 δ) (eval e2 δ)
+      | exp_or e1 e2        => orb (eval e1 δ) (eval e2 δ)
       | exp_not e           => negb (eval e δ)
       | exp_pair e1 e2      => pair (eval e1 δ) (eval e2 δ)
       | exp_inl e           => inl (eval e δ)

@@ -40,6 +40,7 @@ Set Implicit Arguments.
 
 Import CtxNotations.
 Import EnvNotations.
+Local Open Scope Z_scope.
 Local Open Scope env_scope.
 
 Module WLP
@@ -47,6 +48,29 @@ Module WLP
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit)
        (Import contkit : ContractKit typekit termkit progkit).
+
+  Fixpoint eval_prop_true {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) {struct e} : Prop -> Prop :=
+    match e return Prop -> Prop -> Prop with
+    | exp_eq e1 e2 => fun _ k => eval e1 δ = eval e2 δ -> k
+    | exp_le e1 e2 => fun _ k => eval e1 δ <= eval e2 δ -> k
+    | exp_lt e1 e2 => fun _ k => eval e1 δ < eval e2 δ -> k
+    | exp_gt e1 e2 => fun _ k => eval e1 δ > eval e2 δ -> k
+    | exp_and e1 e2 => fun _ k => eval_prop_true e1 δ (eval_prop_true e2 δ k)
+    | exp_or e1 e2 => fun _ k => eval_prop_true e1 δ k /\ eval_prop_true e2 δ k
+    | exp_not e => fun _ k => eval_prop_false e δ k
+    | _ => fun e k => e -> k
+    end (eval e δ = true)
+  with eval_prop_false {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) {struct e} : Prop -> Prop :=
+    match e return Prop -> Prop -> Prop with
+    | exp_eq e1 e2 => fun _ k => eval e1 δ <> eval e2 δ -> k
+    | exp_le e1 e2 => fun _ k => eval e1 δ > eval e2 δ -> k
+    | exp_lt e1 e2 => fun _ k => eval e1 δ >= eval e2 δ -> k
+    | exp_gt e1 e2 => fun _ k => eval e1 δ <= eval e2 δ -> k
+    | exp_and e1 e2 => fun _ k => eval_prop_false e1 δ k /\ eval_prop_false e2 δ k
+    | exp_or e1 e2 => fun _ k => eval_prop_false e1 δ (eval_prop_false e2 δ k)
+    | exp_not e => fun _ k => eval_prop_true e δ k
+    | _ => fun e k => e -> k
+    end (eval e δ = false).
 
   Definition Cont (R A : Type) : Type := (A -> R) -> R.
 
@@ -96,8 +120,8 @@ Module WLP
     modify (fun δΓ => env_cat δΓ δΔ).
   Definition pops {Γ} Δ : DST (ctx_cat Γ Δ) Γ unit :=
     modify (fun δΓΔ => env_drop Δ δΓΔ).
-  Definition ifthenelse {Γ1 Γ2 A} (b : bool) (t e : DST Γ1 Γ2 A) : DST Γ1 Γ2 A :=
-    fun k δ => (b = true -> t k δ) /\ (b = false -> e k δ).
+  (* Definition ifthenelse {Γ1 Γ2 A} (b : bool) (t e : DST Γ1 Γ2 A) : DST Γ1 Γ2 A := *)
+  (*   fun k δ => (b = true -> t k δ) /\ (b = false -> e k δ). *)
 
   Arguments abort {_ _ _} / _ _.
   Arguments assert {_} _ / _ _.
@@ -117,7 +141,7 @@ Module WLP
   Arguments push {_ _ _} _ / _ _.
   Arguments pushs {_ _} _ / _ _.
   Arguments put {_} _ / _ _.
-  Arguments ifthenelse {_ _ _} _ _ _ / _ _.
+  (* Arguments ifthenelse {_ _ _} _ _ _ / _ _. *)
 
   Local Arguments uncurry' /.
 
@@ -128,14 +152,16 @@ Module WLP
 
   Fixpoint WLP Γ τ (s : Stm Γ τ) : DST Γ Γ (Lit τ).
     let body := eval cbn [bind bindblast bindleft bindright get put assert abort modify
-                               push pops pure pop meval pushs mevals lift evalDST ifthenelse Lit uncurry'] in
+                               push pops pure pop meval pushs mevals lift evalDST Lit uncurry'] in
     (match s in (Stm _ τ) return (DST Γ Γ (Lit τ)) with
     | stm_lit _ l => pure l
     | stm_assign x s => WLP _ _ s >>= fun v => modify (fun δ => δ ⟪ x ↦ v ⟫) *> pure v
     | stm_let x σ s k => WLP _ _ s >>= push *> WLP _ _ k <* pop
     | stm_exp e => meval e
     | stm_assert e1 e2  => meval e1 >>= assert
-    | stm_if e s1 s2 => meval e >>= fun b => ifthenelse b (WLP _ _ s1) (WLP _ _ s2)
+    | stm_if e s1 s2 => fun POST δ =>
+                          eval_prop_true e δ (WLP _ _ s1 POST δ) /\
+                          eval_prop_false e δ (WLP _ _ s2 POST δ)
     | stm_fail _ _ => abort
     | stm_seq s1 s2 => WLP _ _ s1 *> WLP _ _ s2
     | stm_call' Δ δ τ s => lift (evalDST (WLP _ _ s) δ)
@@ -187,9 +213,8 @@ Module WLP
   Definition ValidContract {Γ τ} (c : Contract Γ τ) (s : Stm Γ τ) : Prop :=
     match c with
     | ContractNoFail _ _ pre post =>
-      @Forall' _ Ty Lit Γ
-               (fun δin => uncurry pre δin ->
-                           WLP s (fun vout δout => uncurry post δin vout) δin)
+      Forall (fun δin => uncurry pre δin ->
+                         WLP s (fun vout δout => uncurry post δin vout) δin)
     | ContractTerminateNoFail _ _ _ _ => False
     | ContractTerminate _ _ _ _ => False
     | ContractNone _ _ => False

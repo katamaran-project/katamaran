@@ -89,7 +89,7 @@ Section WithBinding.
     (dΓ: forall b, InCtx b Γ -> D b) (b : B) (bIn: InCtx b (ctx_snoc Γ b0)) : D b :=
     let (n, e) := bIn in
     match n return ctx_nth_is (ctx_snoc Γ b0) n b -> D b with
-    | 0 =>   eq_rect b0 D db0 b
+    | 0 => fun e => match e with eq_refl => db0 end
     | S n => fun e => dΓ b (Build_InCtx _ _ n e)
     end e.
 

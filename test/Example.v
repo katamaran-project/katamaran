@@ -200,18 +200,17 @@ Lemma gcd_sub_diag_l (n m : Z) : Z.gcd (n - m) m = Z.gcd n m.
 Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.
 
 Ltac wlp_cbv :=
-  cbv [Blastable_𝑬𝑲 CEnv Forall Forall' Lit ValidContract WLP abstract blast
-       blastable_lit env_lookup env_map env_update eq_rect eval evals
-       inctx_case_snoc snd uncurry
+  cbv [Blastable_𝑬𝑲 CEnv Forall Lit ValidContract WLP abstract blast
+       blastable_lit env_lookup env_map env_update eval evals inctx_case_snoc
+       snd uncurry eval_prop_true eval_prop_false
       ].
 
 Ltac validate_solve :=
   repeat
-    (intros; destruct_conjs; subst;
-     rewrite ?Z.eqb_eq, ?Z.eqb_neq, ?Z.leb_gt, ?Z.ltb_ge, ?Z.ltb_lt, ?Z.leb_le,
-       ?Z.gtb_ltb, ?Z.gcd_diag, ?Z.gcd_abs_l, ?Z.gcd_abs_r, ?Z.gcd_sub_diag_r,
-       ?gcd_sub_diag_l in *;
-     intuition (try discriminate; try lia)
+    (intros; subst;
+     rewrite ?Z.gcd_diag, ?Z.gcd_abs_l, ?Z.gcd_abs_r, ?Z.gcd_sub_diag_r,
+       ?gcd_sub_diag_l;
+     intuition (try lia)
     ).
 
 Lemma validCEnv : ValidContractEnv CEnv.
