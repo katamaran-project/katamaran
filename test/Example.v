@@ -78,10 +78,10 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     end.
   Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
     match E with
-    | ordering => {| blast ord k :=
-                       (ord = LT -> k LT) /\
-                       (ord = EQ -> k EQ) /\
-                       (ord = GT -> k GT)
+    | ordering => {| blast ord POST :=
+                       (ord = LT -> POST LT) /\
+                       (ord = EQ -> POST EQ) /\
+                       (ord = GT -> POST GT)
                   |}
     end.
   Solve All Obligations with destruct a; intuition congruence.
@@ -102,8 +102,8 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
   | abs :     Fun [ "x" ∶ ty_int               ] ty_int
   | cmp :     Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] (ty_enum ordering)
-  | gcd :     Fun [ "p" ∶ ty_int, "q" ∶ ty_int ] ty_int
-  | gcdloop : Fun [ "p" ∶ ty_int, "q" ∶ ty_int ] ty_int
+  | gcd :     Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int
+  | gcdloop : Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -125,8 +125,6 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Local Notation "'`LT'" := (exp_lit _ (ty_enum ordering) LT).
   Local Notation "'`GT'" := (exp_lit _ (ty_enum ordering) GT).
   Local Notation "'`EQ'" := (exp_lit _ (ty_enum ordering) EQ).
-  Local Notation "'p'"   := (@exp_var _ "p" _ _).
-  Local Notation "'q'"   := (@exp_var _ "q" _ _).
   Local Notation "'x'"   := (@exp_var _ "x" _ _).
   Local Notation "'y'"   := (@exp_var _ "y" _ _).
 
@@ -138,15 +136,15 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
              if: x = y then `EQ else
              if: x > y then `GT else
              fail "cmp failed"
-    | gcd => "p" <- stm_call abs [p] ;;
-             "q" <- stm_call abs [q] ;;
-             stm_call gcdloop [p, q]
+    | gcd => "x" <- stm_call abs [x] ;;
+             "y" <- stm_call abs [y] ;;
+             stm_call gcdloop [x, y]
     | gcdloop =>
-             let: "ord" := stm_call cmp [p, q] in
+             let: "ord" := stm_call cmp [x, y] in
              match: exp_var "ord" in ordering with
-             | LT => stm_call gcdloop [p, q - p]
-             | EQ => p
-             | GT => stm_call gcdloop [p - q, q]
+             | LT => stm_call gcdloop [x, y - x]
+             | EQ => x
+             | GT => stm_call gcdloop [x - y, y]
              end
     end in exact pi.
   Defined.
@@ -181,13 +179,13 @@ Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleP
                            (* (x > y <-> r = GT) *)
                         )
       | gcd        => ContractNoFail
-                        ["p" ∶ ty_int, "q" ∶ ty_int] ty_int
-                        (fun p q => True)
-                        (fun p q r => r = Z.gcd p q)
+                        ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
+                        (fun x y => True)
+                        (fun x y r => r = Z.gcd x y)
       | gcdloop    => ContractNoFail
-                        ["p" ∶ ty_int, "q" ∶ ty_int] ty_int
-                        (fun p q => p >= 0 /\ q >= 0)
-                        (fun p q r => r = Z.gcd p q)
+                        ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
+                        (fun x y => x >= 0 /\ y >= 0)
+                        (fun x y r => r = Z.gcd x y)
       end.
 
 End ExampleContractKit.
