@@ -57,7 +57,7 @@ Inductive Ordering : Set :=
 Module ExampleTypeKit <: TypeKit.
 
   Definition 𝑬 : Set := Enums.
-  Definition 𝑻 : Set := Empty_set.
+  Definition 𝑼 : Set := Empty_set.
   Definition 𝑹 : Set := Empty_set.
   Definition 𝑿 : Set := string.
   Definition 𝑿_eq_dec := string_dec.
@@ -87,10 +87,10 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Solve All Obligations with destruct a; intuition congruence.
 
   (** UNIONS **)
-  Definition 𝑲 (T : 𝑻) : Set := match T with end.
-  Definition 𝑲_Ty (T : 𝑻) : 𝑲 T -> Ty := match T with end.
-  Program Instance Blastable_𝑲 T : Blastable (𝑲 T) :=
-    match T with
+  Definition 𝑼𝑲 (U : 𝑼) : Set := match U with end.
+  Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty := match U with end.
+  Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
+    match U with
     end.
   Solve All Obligations with destruct a; intuition congruence.
 

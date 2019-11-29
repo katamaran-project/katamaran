@@ -152,12 +152,12 @@ Module SmallStep
       ⟨ γ , δ , stm_let' (tuple_pattern_match p (eval e δ)) rhs ⟩
 
   | step_stm_match_union
-      (γ : RegStore) (δ : LocalStore Γ) {T : 𝑻} (e : Exp Γ (ty_union T)) {τ : Ty}
-      (altx : forall (K : 𝑲 T), 𝑿)
-      (alts : forall (K : 𝑲 T), Stm (ctx_snoc Γ (altx K , 𝑲_Ty K)) τ) :
-      ⟨ γ , δ , stm_match_union T e altx alts ⟩ --->
+      (γ : RegStore) (δ : LocalStore Γ) {U : 𝑼} (e : Exp Γ (ty_union U)) {τ : Ty}
+      (altx : forall (K : 𝑼𝑲 U), 𝑿)
+      (alts : forall (K : 𝑼𝑲 U), Stm (ctx_snoc Γ (altx K , 𝑼𝑲_Ty K)) τ) :
+      ⟨ γ , δ , stm_match_union U e altx alts ⟩ --->
       ⟨ γ , δ , let (K , v) := eval e δ in
-                stm_let' (env_snoc env_nil (altx K,𝑲_Ty K) (untag v)) (alts K)
+                stm_let' (env_snoc env_nil (altx K, 𝑼𝑲_Ty K) (untag v)) (alts K)
       ⟩
   | step_stm_match_record
       (γ : RegStore) (δ : LocalStore Γ) {R : 𝑹} {Δ : Ctx (𝑿 * Ty)}

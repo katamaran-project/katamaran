@@ -116,7 +116,7 @@ Module Type TypeKit.
   (* Names of enum type constructors. *)
   Parameter Inline 𝑬 : Set. (* input: \MIE *)
   (* Names of union type constructors. *)
-  Parameter Inline 𝑻   : Set. (* input: \MIT *)
+  Parameter Inline 𝑼   : Set. (* input: \MIT *)
   (* Names of record type constructors. *)
   Parameter Inline 𝑹  : Set. (* input: \MIR *)
   (* Names of expression variables. *)
@@ -144,7 +144,7 @@ Module Types (Export typekit : TypeKit).
   | ty_enum (E : 𝑬)
   (* Experimental features. These are still in flux. *)
   | ty_tuple (σs : Ctx Ty)
-  | ty_union (T : 𝑻)
+  | ty_union (U : 𝑼)
   | ty_record (R : 𝑹)
   .
 
@@ -161,10 +161,10 @@ Module Type TermKit (typekit : TypeKit).
   Declare Instance Blastable_𝑬𝑲 : forall E, Blastable (𝑬𝑲 E).
 
   (* Names of union data constructors. *)
-  Parameter Inline 𝑲  : 𝑻 -> Set.
+  Parameter Inline 𝑼𝑲  : 𝑼 -> Set.
   (* Union data constructor field type *)
-  Parameter Inline 𝑲_Ty : forall (T : 𝑻), 𝑲 T -> Ty.
-  Declare Instance Blastable_𝑲 : forall T, Blastable (𝑲 T).
+  Parameter Inline 𝑼𝑲_Ty : forall (U : 𝑼), 𝑼𝑲 U -> Ty.
+  Declare Instance Blastable_𝑼𝑲 : forall U, Blastable (𝑼𝑲 U).
 
   (* Record field names. *)
   Parameter Inline 𝑹𝑭  : Set.
@@ -225,7 +225,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | taglit_enum (E : 𝑬) (K : 𝑬𝑲 E) : TaggedLit (ty_enum E)
     (* Experimental features *)
     | taglit_tuple σs      : Env TaggedLit σs -> TaggedLit (ty_tuple σs)
-    | taglit_union (T : 𝑻) (K : 𝑲 T) : TaggedLit (𝑲_Ty K) -> TaggedLit (ty_union T)
+    | taglit_union (U : 𝑼) (K : 𝑼𝑲 U) : TaggedLit (𝑼𝑲_Ty K) -> TaggedLit (ty_union U)
     | taglit_record (R : 𝑹) : Env' TaggedLit (𝑹𝑭_Ty R) -> TaggedLit (ty_record R).
 
     Global Arguments taglit_enum : clear implicits.
@@ -246,7 +246,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ty_enum E => 𝑬𝑲 E
       (* Experimental features *)
       | ty_tuple σs => Env TaggedLit σs
-      | ty_union T => { K : 𝑲 T & TaggedLit (𝑲_Ty K) }
+      | ty_union U => { K : 𝑼𝑲 U & TaggedLit (𝑼𝑲_Ty K) }
       | ty_record R => Env' TaggedLit (𝑹𝑭_Ty R)
       end%type.
 
@@ -359,7 +359,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty_tuple σs)
     | exp_projtup {σs : Ctx Ty} (e : Exp Γ (ty_tuple σs)) (n : nat) {σ : Ty}
                   {p : ctx_nth_is σs n σ} : Exp Γ σ
-    | exp_union   {T : 𝑻} (K : 𝑲 T) (e : Exp Γ (𝑲_Ty K)) : Exp Γ (ty_union T)
+    | exp_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)) : Exp Γ (ty_union U)
     | exp_record  (R : 𝑹) (es : Env' (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R)
     | exp_projrec {R : 𝑹} (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
                   {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Exp Γ σ
@@ -496,7 +496,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       (alts : forall (K : 𝑬𝑲 E), Stm Γ τ) : Stm Γ τ
     | stm_match_tuple {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
       (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
-    | stm_match_union {T : 𝑻} (e : Exp Γ (ty_union T)) {τ : Ty}
+    | stm_match_union {U : 𝑼} (e : Exp Γ (ty_union U)) {τ : Ty}
       (* An earlier definition of stm_match_union used a "list of pairs"
           (alts : forall (K : 𝑲 T), { x : 𝑿 & Stm (ctx_snoc Γ (x , 𝑲_Ty K)) τ})
          to define alternatives, which packs the variable name x for the field
@@ -507,8 +507,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
          burden to keep updated. Instead we use two "lists", one for the
          variable names and one for the RHSs, which separates them lexically,
          but gives a better induction principle. *)
-      (altx : forall (K : 𝑲 T), 𝑿)
-      (alts : forall (K : 𝑲 T), Stm (ctx_snoc Γ (altx K , 𝑲_Ty K)) τ) : Stm Γ τ
+      (altx : forall (K : 𝑼𝑲 U), 𝑿)
+      (alts : forall (K : 𝑼𝑲 U), Stm (ctx_snoc Γ (altx K , 𝑼𝑲_Ty K)) τ) : Stm Γ τ
     | stm_match_record {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
       (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
     | stm_read_register {τ} (reg : 𝑹𝑬𝑮 τ) : Stm Γ τ
