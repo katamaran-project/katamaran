@@ -163,7 +163,7 @@ Module WLP
                   WLP s (fun vout δout => uncurry post δin vout) δin γin)
     | ContractTerminateNoFail _ _ _ _ => False
     | ContractTerminate _ _ _ _ => False
-    | ContractNone _ _ => False
+    | ContractNone _ _ => True
     end.
 
   Definition ValidContractEnv (cenv : ContractEnv) : Prop :=

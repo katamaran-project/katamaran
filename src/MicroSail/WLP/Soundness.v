@@ -144,7 +144,7 @@ Module Soundness
           ResultNoFail s' (fun v => uncurry post δ v γ')
       | ContractTerminateNoFail _ _ _ _ => False
       | ContractTerminate _ _ _ _ => False
-      | ContractNone _ _ => False
+      | ContractNone _ _ => True
       end.
 
   Lemma eval_prop_true_sound {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) :

@@ -785,7 +785,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                                   | alt2%exp => rhs2%stm
                                   end))
     (at level 100, alt1 pattern, alt2 pattern, format
-     "'[hv' 'match:'  e  'in'  τ  'with' '/' |  alt1  =>  rhs1 '/' |  alt2  =>  rhs2 '/' 'end' ']'"
+     "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' 'end' ']'"
     ).
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 'end'" :=
     (stm_match_enum τ e (fun K => match K with
@@ -794,8 +794,27 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                                   | alt3%exp => rhs3%stm
                                   end))
     (at level 100, alt1 pattern, alt2 pattern, alt3 pattern, format
-     "'[hv' 'match:'  e  'in'  τ  'with' '/' |  alt1  =>  rhs1 '/' |  alt2  =>  rhs2 '/' |  alt3  =>  rhs3 '/' 'end' ']'"
+     "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' 'end' ']'"
     ).
+
+  Notation "'match:' e 'in' U 'with' | alt1 x1 => rhs1 | alt2 x2 => rhs2 'end'" :=
+    (@stm_match_union _ U e _
+      (fun K => match K with
+                | alt1%exp => x1
+                | alt2%exp => x2
+                end)
+      (fun K => match K return Stm _ _ with
+                | alt1%exp => rhs1%stm
+                | alt2%exp => rhs2%stm
+                end)
+    )
+    (at level 100, alt1 pattern, alt2 pattern, format
+     "'[hv' 'match:'  e  'in'  U  'with'  '/' |  alt1  x1  =>  rhs1  '/' |  alt2  x2  =>  rhs2  '/' 'end' ']'"
+      ).
+
+  Notation "'call' f a1 .. an" :=
+    (stm_call f (env_snoc .. (env_snoc env_nil (_,_) a1) .. (_,_) an))
+    (at level 10, f global, a1, an at level 9).
 
   Notation "s1 ;; s2" := (stm_seq s1 s2) : stm_scope.
   Notation "x <- s" := (stm_assign x s)

@@ -61,7 +61,12 @@ Inductive Ordering : Set :=
 
 (** Unions **)
 Inductive Unions : Set :=
+| either
 .
+
+Inductive Either : Set :=
+| Left
+| Right.
 
 Lemma Unions_eq_dec : forall x y: Unions, {x = y} + {x <> y}.
   decide equality.
@@ -112,10 +117,23 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Solve All Obligations with destruct a; intuition congruence.
 
   (** UNIONS **)
-  Definition 𝑼𝑲 (U : 𝑼) : Set := match U with end.
-  Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty := match U with end.
+  Definition 𝑼𝑲 (U : 𝑼) : Set :=
+    match U with
+    | either => Either
+    end.
+  Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
+    match U with
+    | either => fun K => match K with
+                         | Left => ty_string
+                         | Right => ty_int
+                         end
+    end.
   Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
     match U with
+    | either => {| blast v POST :=
+                     (v = Left  -> POST Left) /\
+                     (v = Right -> POST Right)
+                |}
     end.
   Solve All Obligations with destruct a; intuition congruence.
 
@@ -129,6 +147,7 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   | cmp :     Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] (ty_enum ordering)
   | gcd :     Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int
   | gcdloop : Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int
+  | msum :    Fun [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -152,11 +171,11 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Local Notation "'`LT'" := (exp_lit _ (ty_enum ordering) LT).
   Local Notation "'`GT'" := (exp_lit _ (ty_enum ordering) GT).
   Local Notation "'`EQ'" := (exp_lit _ (ty_enum ordering) EQ).
+  Local Notation "'`Left' e" := (exp_union either Left e) (at level 10, e at level 9).
+  Local Notation "'`Right' e" := (exp_union either Right e) (at level 10, e at level 9).
   Local Notation "'x'"   := (@exp_var _ "x" _ _).
   Local Notation "'y'"   := (@exp_var _ "y" _ _).
-  Notation "'call' f a1 .. an" :=
-    (stm_call f (env_snoc .. (env_snoc env_nil (_,_) a1) .. (_,_) an))
-    (at level 10, f global, a1, an at level 9).
+  Local Notation "'z'"   := (@exp_var _ "z" _ _).
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ.
     let pi := eval compute in
@@ -170,11 +189,16 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
              "y" <- call abs y ;;
              call gcdloop x y
     | gcdloop =>
-             let: "ord" := call cmp x y in
-             match: exp_var "ord" in ordering with
+             let: "z" := call cmp x y in
+             match: z in ordering with
              | LT => call gcdloop x (y - x)
              | EQ => x
              | GT => call gcdloop (x - y) y
+             end
+    | msum =>
+             match: x in either with
+             | Left  "z" => `Left z
+             | Right "z" => y
              end
     end in exact pi.
   Defined.
@@ -216,6 +240,8 @@ Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleP
                         ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
                         (fun x y γ => x >= 0 /\ y >= 0)
                         (fun x y r γ => r = Z.gcd x y)
+      | msum       => ContractNone
+                        [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
       end.
 
 End ExampleContractKit.
