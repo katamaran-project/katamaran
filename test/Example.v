@@ -46,20 +46,45 @@ Open Scope ctx_scope.
 
 (*** TYPES ***)
 
+(** Enums **)
 Inductive Enums : Set :=
 | ordering.
+
+Lemma Enums_eq_dec : forall x y: Enums, {x = y} + {x <> y}.
+  decide equality.
+Qed.
 
 Inductive Ordering : Set :=
 | LT
 | EQ
 | GT.
 
+(** Unions **)
+Inductive Unions : Set :=
+.
+
+Lemma Unions_eq_dec : forall x y: Unions, {x = y} + {x <> y}.
+  decide equality.
+Qed.
+
+(** Records **)
+Inductive Records : Set :=
+.
+
+Lemma Records_eq_dec : forall x y: Records, {x = y} + {x <> y}.
+  decide equality.
+Qed.
+
 Module ExampleTypeKit <: TypeKit.
 
-  Definition 𝑬 : Set := Enums.
-  Definition 𝑼 : Set := Empty_set.
-  Definition 𝑹 : Set := Empty_set.
-  Definition 𝑿 : Set := string.
+  Definition 𝑬        := Enums.
+  Definition 𝑼        := Unions.
+  Definition 𝑹        := Records.
+  Definition 𝑿        := string.
+
+  Definition 𝑬_eq_dec := Enums_eq_dec.
+  Definition 𝑼_eq_dec := Unions_eq_dec.
+  Definition 𝑹_eq_dec := Records_eq_dec.
   Definition 𝑿_eq_dec := string_dec.
 
 End ExampleTypeKit.

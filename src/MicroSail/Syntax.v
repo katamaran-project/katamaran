@@ -115,10 +115,13 @@ Module Type TypeKit.
 
   (* Names of enum type constructors. *)
   Parameter Inline 𝑬 : Set. (* input: \MIE *)
+  Parameter Inline 𝑬_eq_dec : forall x y : 𝑬, {x=y}+{~x=y}.
   (* Names of union type constructors. *)
   Parameter Inline 𝑼   : Set. (* input: \MIT *)
+  Parameter Inline 𝑼_eq_dec : forall x y : 𝑼, {x=y}+{~x=y}.
   (* Names of record type constructors. *)
   Parameter Inline 𝑹  : Set. (* input: \MIR *)
+  Parameter Inline 𝑹_eq_dec : forall x y : 𝑹, {x=y}+{~x=y}.
   (* Names of expression variables. *)
   Parameter Inline 𝑿 : Set. (* input: \MIX *)
   (* For name resolution we rely on decidable equality of expression
@@ -131,6 +134,8 @@ Module Type TypeKit.
 End TypeKit.
 
 Module Types (Export typekit : TypeKit).
+
+  Local Unset Elimination Schemes.
 
   Inductive Ty : Set :=
   | ty_int
@@ -147,6 +152,83 @@ Module Types (Export typekit : TypeKit).
   | ty_union (U : 𝑼)
   | ty_record (R : 𝑹)
   .
+
+  Section ty_rect.
+    Variable P  : Ty -> Type.
+    Variable PS : Ctx Ty -> Type.
+
+    Hypothesis (P_int    : P ty_int).
+    Hypothesis (P_bool   : P ty_bool).
+    Hypothesis (P_bit    : P ty_bit).
+    Hypothesis (P_string : P ty_string).
+    Hypothesis (P_list   : forall σ, P σ -> P (ty_list σ)).
+    Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (ty_prod σ τ)).
+    Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)).
+    Hypothesis (P_unit   : P ty_unit).
+    Hypothesis (P_enum   : forall E, P (ty_enum E)).
+    Hypothesis (P_tuple  : forall σs, PS σs -> P (ty_tuple σs)).
+    Hypothesis (P_union  : forall U, P (ty_union U)).
+    Hypothesis (P_record : forall R, P (ty_record R)).
+    Hypothesis (PS_nil   : PS ctx_nil).
+    Hypothesis (PS_snoc  : forall σs σ, PS σs -> P σ -> PS (ctx_snoc σs σ)).
+
+    Fixpoint ty_rect (σ : Ty) : P σ :=
+      match σ as t return (P t) with
+      | ty_int => P_int
+      | ty_bool => P_bool
+      | ty_bit => P_bit
+      | ty_string => P_string
+      | ty_list σ0 => P_list (ty_rect σ0)
+      | ty_prod σ1 σ2 => P_prod (ty_rect σ1) (ty_rect σ2)
+      | ty_sum σ1 σ2 => P_sum (ty_rect σ1) (ty_rect σ2)
+      | ty_unit => P_unit
+      | ty_enum E => P_enum E
+      | ty_tuple σs => P_tuple (Ctx_rect PS PS_nil (fun σs PS_σs σ => PS_snoc PS_σs (ty_rect σ)) σs)
+      | ty_union U => P_union U
+      | ty_record R => P_record R
+      end.
+
+  End ty_rect.
+
+  Section Ty_rect.
+    Variable P  : Ty -> Type.
+
+    Hypothesis (P_int    : P ty_int).
+    Hypothesis (P_bool   : P ty_bool).
+    Hypothesis (P_bit    : P ty_bit).
+    Hypothesis (P_string : P ty_string).
+    Hypothesis (P_list   : forall σ, P σ -> P (ty_list σ)).
+    Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (ty_prod σ τ)).
+    Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)).
+    Hypothesis (P_unit   : P ty_unit).
+    Hypothesis (P_enum   : forall E, P (ty_enum E)).
+    Hypothesis (P_tuple  : forall σs, (forall σ, InCtx σ σs -> P σ) -> P (ty_tuple σs)).
+    Hypothesis (P_union  : forall U, P (ty_union U)).
+    Hypothesis (P_record : forall R, P (ty_record R)).
+
+    Lemma Ty_rect : forall σ, P σ.
+      apply (ty_rect P (fun σs => forall σ, InCtx σ σs -> P σ)); try assumption.
+      - intros. apply (inctx_case_nil H).
+      - intros. now apply (inctx_case_snoc P) in H.
+    Defined.
+
+  End Ty_rect.
+
+  Definition Ty_rec (P : Ty -> Set) := Ty_rect P.
+  Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
+
+  Lemma Ty_eq_dec : forall x y : Ty, {x=y}+{~x=y}.
+  Proof.
+    decide equality; auto using 𝑬_eq_dec, 𝑼_eq_dec, 𝑹_eq_dec.
+    revert σs H. rename σs0 into τs.
+    induction τs; intros; destruct σs.
+    - left. reflexivity.
+    - right. discriminate.
+    - right. discriminate.
+    - specialize (IHτs σs (fun σ σInσs => H σ (inctx_succ σInσs))).
+      specialize (H b0 inctx_zero b).
+      intuition congruence.
+  Qed.
 
 End Types.
 
