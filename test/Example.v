@@ -129,6 +129,9 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Local Notation "'`EQ'" := (exp_lit _ (ty_enum ordering) EQ).
   Local Notation "'x'"   := (@exp_var _ "x" _ _).
   Local Notation "'y'"   := (@exp_var _ "y" _ _).
+  Notation "'call' f a1 .. an" :=
+    (stm_call f (env_snoc .. (env_snoc env_nil (_,_) a1) .. (_,_) an))
+    (at level 10, f global, a1, an at level 9).
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ.
     let pi := eval compute in
@@ -138,15 +141,15 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
              if: x = y then `EQ else
              if: x > y then `GT else
              fail "cmp failed"
-    | gcd => "x" <- stm_call abs [x] ;;
-             "y" <- stm_call abs [y] ;;
-             stm_call gcdloop [x, y]
+    | gcd => "x" <- call abs x ;;
+             "y" <- call abs y ;;
+             call gcdloop x y
     | gcdloop =>
-             let: "ord" := stm_call cmp [x, y] in
+             let: "ord" := call cmp x y in
              match: exp_var "ord" in ordering with
-             | LT => stm_call gcdloop [x, y - x]
+             | LT => call gcdloop x (y - x)
              | EQ => x
-             | GT => stm_call gcdloop [x - y, y]
+             | GT => call gcdloop (x - y) y
              end
     end in exact pi.
   Defined.
