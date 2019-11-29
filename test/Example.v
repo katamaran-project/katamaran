@@ -108,6 +108,8 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
 
+  Definition 𝑹𝑬𝑮 : Ty -> Set := fun _ => Empty_set.
+
 End ExampleTermKit.
 Module ExampleTerms := Terms ExampleTypeKit ExampleTermKit.
 Import ExampleTerms.
@@ -163,12 +165,12 @@ Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleP
       match f with
       | abs        => ContractNoFail
                         ["x" ∶ ty_int] ty_int
-                        (fun x => True)
-                        (fun x r => r = Z.abs x)
+                        (fun x γ => True)
+                        (fun x r γ => r = Z.abs x)
       | cmp        => ContractNoFail
                         ["x" ∶ ty_int, "y" ∶ ty_int] (ty_enum ordering)
-                        (fun x y => True)
-                        (fun x y r =>
+                        (fun x y γ => True)
+                        (fun x y r γ =>
                            match r with
                            | LT => x < y
                            | EQ => x = y
@@ -180,12 +182,12 @@ Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleP
                         )
       | gcd        => ContractNoFail
                         ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
-                        (fun x y => True)
-                        (fun x y r => r = Z.gcd x y)
+                        (fun x y γ => True)
+                        (fun x y r γ => r = Z.gcd x y)
       | gcdloop    => ContractNoFail
                         ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
-                        (fun x y => x >= 0 /\ y >= 0)
-                        (fun x y r => r = Z.gcd x y)
+                        (fun x y γ => x >= 0 /\ y >= 0)
+                        (fun x y r γ => r = Z.gcd x y)
       end.
 
 End ExampleContractKit.

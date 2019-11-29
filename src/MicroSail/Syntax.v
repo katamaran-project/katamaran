@@ -38,7 +38,9 @@ From MicroSail Require Export
      Environment
      Notation.
 
-Set Implicit Arguments.
+Local Set Implicit Arguments.
+Local Unset Transparent Obligations.
+Obligation Tactic := idtac.
 
 Inductive Bit : Set := bitzero | bitone.
 
@@ -53,7 +55,7 @@ Class Blastable (A : Type) : Type :=
 
 Program Instance blastable_bool : Blastable bool :=
   {| blast b k := (b = true -> k true) /\ (b = false -> k false) |}.
-Solve All Obligations with destruct a; intuition; congruence.
+Solve All Obligations with intros []; intuition; congruence.
 
 Program Instance blastable_int : Blastable Z :=
   {| blast z k := k z |}.
@@ -65,14 +67,14 @@ Solve All Obligations with intuition.
 
 Program Instance blastable_unit : Blastable unit :=
   {| blast u k := k tt |}.
-Solve All Obligations with destruct a; intuition; congruence.
+Solve All Obligations with intros []; intuition; congruence.
 
 Program Instance blastable_list {A : Type} : Blastable (list A) :=
   {| blast xs k :=
        (forall (y : A) (ys : list A), xs = cons y ys -> k (cons y ys)) /\
        (xs = nil -> k nil)
   |}.
-Solve All Obligations with destruct a; intuition; congruence.
+Solve All Obligations with intros ? []; intuition; congruence.
 
 Program Instance blastable_prod {A B : Type} : Blastable (A * B) :=
   { blast ab k := k (fst ab , snd ab) }.
@@ -80,18 +82,18 @@ Solve All Obligations with intuition.
 
 Program Instance blastable_sigt {A} {B : A -> Type} : Blastable (sigT B) :=
   {| blast ab k := k (existT B (projT1 ab) (projT2 ab)) |}.
-Solve All Obligations with destruct a; intuition; congruence.
+Solve All Obligations with intros ? ? []; intuition; congruence.
 
 Program Instance blastable_sum {A B : Type} : Blastable (A + B) :=
   {| blast ab k :=
        (forall (a : A), ab = inl a -> k (inl a)) /\
        (forall (b : B), ab = inr b -> k (inr b))
   |}.
-Solve All Obligations with destruct a; intuition; congruence.
+Solve All Obligations with intros ? ? []; intuition; congruence.
 
 Program Instance blastable_bit : Blastable Bit :=
   {| blast b k := (b = bitzero -> k bitzero) /\ (b = bitone -> k bitone) |}.
-Solve All Obligations with destruct a; intuition; congruence.
+Solve All Obligations with intros []; intuition; congruence.
 
 Program Instance blastable_env {B D} {Γ : Ctx B} : Blastable (Env D Γ) :=
   {| blast :=
@@ -102,9 +104,9 @@ Program Instance blastable_env {B D} {Γ : Ctx B} : Blastable (Env D Γ) :=
        end) Γ
   |}.
 Next Obligation.
-  induction a; cbn.
+  intros ? ? ? E; induction E; cbn.
   - reflexivity.
-  - exact (IHa (fun E' : Env D Γ => k (env_snoc E' b db))).
+  - intro k; exact (IHE (fun E' : Env D Γ => k (env_snoc E' b db))).
 Defined.
 Instance blastable_env' {X T : Set} {D} {Δ : Ctx (X * T)} : Blastable (Env' D Δ) :=
   blastable_env.
@@ -171,6 +173,9 @@ Module Type TermKit (typekit : TypeKit).
 
   (* Names of functions. *)
   Parameter Inline 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set.
+
+  (* Names of registers. *)
+  Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
 
 End TermKit.
 
@@ -307,6 +312,15 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   Bind Scope lit_scope with TaggedLit.
   Bind Scope lit_scope with Lit.
 
+  Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Type := Env' Lit Γ.
+  Bind Scope env_scope with LocalStore.
+
+  Definition RegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Lit σ.
+  Bind Scope env_scope with RegStore.
+
+  Definition write_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) : RegStore.
+  Admitted.
+
   Section Expressions.
 
     (* Intrinsically well-typed expressions. The context Γ of mutable variables
@@ -359,9 +373,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments exp_projrec {_ _} _ _ {_ _}.
 
     Import EnvNotations.
-
-    Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Type := Env' Lit Γ.
-    Bind Scope env_scope with LocalStore.
 
     Fixpoint evalTagged {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : TaggedLit σ :=
       match e in (Exp _ t) return (TaggedLit t) with
@@ -500,6 +511,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       (alts : forall (K : 𝑲 T), Stm (ctx_snoc Γ (altx K , 𝑲_Ty K)) τ) : Stm Γ τ
     | stm_match_record {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
       (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
+    | stm_read_register {τ} (reg : 𝑹𝑬𝑮 τ) : Stm Γ τ
+    | stm_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) : Stm Γ τ
     | stm_bind   {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ) : Stm Γ τ.
     Bind Scope stm_scope with Stm.
 
@@ -521,6 +534,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_match_tuple {_ _ _} _ _%pat {_} _.
     Global Arguments stm_match_union {_} _ _ {_} _ _.
     Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
+    Global Arguments stm_read_register {_ _} _.
+    Global Arguments stm_write_register {_ _} _ _.
 
   End Statements.
 
@@ -629,23 +644,25 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | _ => False
       end.
 
-    (* Version that computes *)
-    Definition IsLit {Γ σ} (δ : LocalStore Γ) (s : Stm Γ σ) :
-      forall (POST : Lit σ -> Pred (LocalStore Γ)), Prop :=
+    (* This predicate encodes that the statement s is a finished computation and
+       that the result is not a failure. This is a computational version that is
+       better suited for the goal and the inversion below is better suited for
+       a hypothesis. *)
+    Definition ResultNoFail {Γ σ} (s : Stm Γ σ) :
+      forall (POST : Lit σ -> Prop), Prop :=
       match s with
-      | stm_lit _ v => fun POST => POST v δ
+      | stm_lit _ v => fun POST => POST v
       | _ => fun _ => False
       end.
 
-    Lemma IsLit_inversion {Γ σ} (δ : LocalStore Γ) (s : Stm Γ σ)
-          (POST : Lit σ -> Pred (LocalStore Γ)) :
-      IsLit δ s POST -> exists v, s = stm_lit _ v /\ POST v δ.
+    Lemma result_no_fail_inversion {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> Prop) :
+      ResultNoFail s POST -> exists v, s = stm_lit _ v /\ POST v.
     Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
 
     Inductive Contract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
-    | ContractNoFail          (pre : abstract' Lit Δ Prop) (post: abstract' Lit Δ (Pred (Lit τ)))
-    | ContractTerminateNoFail (pre : abstract' Lit Δ Prop) (post: abstract' Lit Δ (Pred (Lit τ)))
-    | ContractTerminate       (pre : abstract' Lit Δ Prop) (post: abstract' Lit Δ (Pred (Lit τ)))
+    | ContractNoFail          (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
+    | ContractTerminateNoFail (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
+    | ContractTerminate       (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
     | ContractNone.
 
     Definition ContractEnv : Type :=
@@ -698,9 +715,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
      "'[hv' 'match:'  e  'in'  τ  'with' '/' |  alt1  =>  rhs1 '/' |  alt2  =>  rhs2 '/' |  alt3  =>  rhs3 '/' 'end' ']'"
     ).
 
-  Notation "s1 ;; s2" := (stm_seq s1 s2)
-    (at level 100, right associativity,
-     format "'[' '[hv' '[' s1 ']' ;;  ']' '/' s2 ']'") : stm_scope.
+  Notation "s1 ;; s2" := (stm_seq s1 s2) : stm_scope.
   Notation "x <- s" := (stm_assign x s)
     (at level 80, s at next level) : stm_scope.
   Notation "'fail' s" := (stm_fail _ s)

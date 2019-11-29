@@ -56,58 +56,58 @@ Module Soundness
   Ltac wlp_sound_steps_inversion :=
     repeat
       match goal with
-      | [ H: ⟨ _, stm_call _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>              dependent destruction H
-      | [ H: ⟨ _, stm_call _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>             dependent destruction H
-      | [ H: ⟨ _, stm_assert _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>            dependent destruction H
-      | [ H: ⟨ _, stm_assert _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>           dependent destruction H
-      | [ H: ⟨ _, stm_fail _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>             dependent destruction H
-      | [ H: ⟨ _, stm_fail _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>            dependent destruction H
-      | [ H: ⟨ _, stm_exp _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>                 dependent destruction H
-      | [ H: ⟨ _, stm_exp _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>                dependent destruction H
-      | [ H: ⟨ _, stm_if _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>              dependent destruction H
-      | [ H: ⟨ _, stm_if _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>             dependent destruction H
-      | [ H: ⟨ _, stm_lit _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>               dependent destruction H
-      | [ H: ⟨ _, stm_lit _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>              dependent destruction H
-      | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>   dependent destruction H
-      | [ H: ⟨ _, stm_match_sum _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
-      | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
-      | [ H: ⟨ _, stm_match_list _ _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>    dependent destruction H
-      | [ H: ⟨ _, stm_match_pair _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>   dependent destruction H
-      | [ H: ⟨ _, stm_match_enum _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>      dependent destruction H
-      | [ H: ⟨ _, stm_match_enum _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
-      | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
-      | [ H: ⟨ _, stm_match_tuple _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>    dependent destruction H
-      | [ H: ⟨ _, stm_match_union _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>   dependent destruction H
-      | [ H: ⟨ _, stm_match_union _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
-      | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
-      | [ H: ⟨ _, stm_match_record _ _ _ _ ⟩ --->* ⟨ _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_call _ _ ⟩             --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_call _ _ ⟩             --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_assert _ _ ⟩           --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_assert _ _ ⟩           --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_fail _ _ ⟩             --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_fail _ _ ⟩             --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_exp _ ⟩                --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_exp _ ⟩                --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_if _ _ _ ⟩             --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_if _ _ _ ⟩             --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_lit _ _ ⟩              --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_lit _ _ ⟩              --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_sum _ _ _ _ _ ⟩  --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_sum _ _ _ _ _ ⟩  --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_list _ _ _ _ _ ⟩ --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_list _ _ _ _ _ ⟩ --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_pair _ _ _ _ ⟩   --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_pair _ _ _ _ ⟩   --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_enum _ _ _ ⟩     --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_enum _ _ _ ⟩     --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_tuple _ _ _ ⟩    --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_tuple _ _ _ ⟩    --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_union _ _ _ _ ⟩  --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_union _ _ _ _ ⟩  --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_record _ _ _ _ ⟩ --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_match_record _ _ _ _ ⟩ --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
 
-      | [ H: ⟨ _, stm_call' _ _ _ (stm_lit _ _) ⟩ ---> ⟨ _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>  dependent destruction H
-      | [ H: ⟨ _, stm_let' _ (stm_lit _ _) ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
-      | [ H: ⟨ _, stm_seq (stm_lit _ _) _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>      dependent destruction H
-      | [ H: ⟨ _, stm_assign _ (stm_lit _ _) ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>            dependent destruction H
-      | [ H: ⟨ _, stm_bind (stm_lit _ _) _ ⟩ ---> ⟨ _, _ ⟩ |- _ ] =>     dependent destruction H
+      | [ H: ⟨ _, _, stm_call' _ _ _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_let _ _ (stm_lit _ _) _ ⟩   ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_let' _ (stm_lit _ _) ⟩      ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_seq (stm_lit _ _) _ ⟩       ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_assign _ (stm_lit _ _) ⟩    ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ⟨ _, _, stm_bind (stm_lit _ _) _ ⟩      ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
 
-      | [ H: ⟨ _, stm_call' _ _ _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_call' HF) in H; destruct_conjs
-      | [ H: ⟨ _, stm_let _ _ _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] =>  apply (steps_inversion_let HF) in H; destruct_conjs
-      | [ H: ⟨ _, stm_let' _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] =>     apply (steps_inversion_let' HF) in H; destruct_conjs
-      | [ H: ⟨ _, stm_seq _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] =>      apply (steps_inversion_seq HF) in H; destruct_conjs
-      | [ H: ⟨ _, stm_assign _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] =>   apply (steps_inversion_assign HF) in H; destruct_conjs
-      | [ H: ⟨ _, stm_bind _ _ ⟩ --->* ⟨ _, ?s1 ⟩, HF: Final ?s1 |- _ ] =>     apply (steps_inversion_bind HF) in H; destruct_conjs
-      | [ H: IsLit _ _ _ |- _ ] => apply IsLit_inversion in H; destruct_conjs; subst
+      | [ H: ⟨ _, _, stm_call' _ _ _ _ ⟩ --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_call'  HF) in H; destruct_conjs
+      | [ H: ⟨ _, _, stm_let _ _ _ _ ⟩   --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_let    HF) in H; destruct_conjs
+      | [ H: ⟨ _, _, stm_let' _ _ ⟩      --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_let'   HF) in H; destruct_conjs
+      | [ H: ⟨ _, _, stm_seq _ _ ⟩       --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_seq    HF) in H; destruct_conjs
+      | [ H: ⟨ _, _, stm_assign _ _ ⟩    --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_assign HF) in H; destruct_conjs
+      | [ H: ⟨ _, _, stm_bind _ _ ⟩      --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_bind   HF) in H; destruct_conjs
+      | [ H: ResultNoFail _ _ |- _ ] => apply result_no_fail_inversion in H; destruct_conjs; subst
       end; cbn in *.
 
   Ltac wlp_sound_inst :=
     match goal with
-    | [ IH: forall _ _ _, ⟨ _ , ?s ⟩ --->* ⟨ _ , _ ⟩ -> _,
-        HS: ⟨ _ , ?s ⟩ --->* ⟨ _ , ?t ⟩, HF: Final ?t |- _ ] =>
-      specialize (IH _ _ _ HS HF); clear HS HF
-    | [ IH: forall _ _ _ _, ⟨ _ , _ ⟩ --->* ⟨ _ , _ ⟩ -> _,
-        HS: ⟨ _ , _ ⟩ --->* ⟨ _ , ?t ⟩, HF: Final ?t |- _ ] =>
-      specialize (IH _ _ _ _ HS HF); clear HS HF
-    | [ IH: forall POST, WLP ?s POST ?δ -> _, WP: WLP ?s _ ?δ |- _ ] =>
+    | [ IH: forall _ _ _ _ _, ⟨ _, _ , ?s ⟩ --->* ⟨ _, _ , _ ⟩ -> _,
+        HS: ⟨ _, _ , ?s ⟩ --->* ⟨ _, _ , ?t ⟩, HF: Final ?t |- _ ] =>
+      specialize (IH _ _ _ _ _ HS HF); clear HS HF
+    | [ IH: forall _ _ _ _ _ _, ⟨ _, _ , _ ⟩ --->* ⟨ _, _ , _ ⟩ -> _,
+        HS: ⟨ _, _ , _ ⟩ --->* ⟨ _, _ , ?t ⟩, HF: Final ?t |- _ ] =>
+      specialize (IH _ _ _ _ _ _ HS HF); clear HS HF
+    | [ IH: forall POST, WLP ?s POST ?δ ?γ -> _, WP: WLP ?s _ ?δ ?γ |- _ ] =>
       specialize (IH _ WP); clear WP
     end.
 
@@ -137,11 +137,11 @@ Module Soundness
     forall σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
       | ContractNoFail _ _ pre post =>
-        forall (δ δ' : LocalStore σs) (s' : Stm σs σ),
-          ⟨ δ, Pi f ⟩ --->* ⟨ δ', s' ⟩ ->
+        forall (γ γ' : RegStore) (δ δ' : LocalStore σs) (s' : Stm σs σ),
+          ⟨ γ, δ, Pi f ⟩ --->* ⟨ γ', δ', s' ⟩ ->
           Final s' ->
-          uncurry pre δ ->
-          IsLit δ s' (fun v δ => uncurry post δ v)
+          uncurry pre δ γ ->
+          ResultNoFail s' (fun v => uncurry post δ v γ')
       | ContractTerminateNoFail _ _ _ _ => False
       | ContractTerminate _ _ _ _ => False
       | ContractNone _ _ => False
@@ -181,8 +181,10 @@ Module Soundness
   Qed.
 
   Lemma WLP_sound (validCEnv : ValidContractEnv CEnv) {Γ σ} (s : Stm Γ σ) :
-    forall (δ δ' : LocalStore Γ) (s' : Stm Γ σ), ⟨ δ, s ⟩ --->* ⟨ δ', s' ⟩ -> Final s' ->
-      forall (POST : Lit σ -> Pred (LocalStore Γ)), WLP s POST δ -> IsLit δ' s' POST.
+    forall (γ γ' : RegStore) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),
+      ⟨ γ, δ, s ⟩ --->* ⟨ γ', δ', s' ⟩ -> Final s' ->
+      forall (POST : Lit σ -> LocalStore Γ -> RegStore -> Prop),
+        WLP s POST δ γ -> ResultNoFail s' (fun v => POST v δ' γ').
   Proof.
     induction s; cbn; intros.
     - wlp_sound_solve.
@@ -212,6 +214,8 @@ Module Soundness
     - wlp_sound_solve.
     - rewrite blast_sound in H2.
       wlp_sound_solve.
+    - wlp_sound_solve.
+    - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.

@@ -59,7 +59,10 @@ Reserved Notation "δ1 ►► δ2"       (at level 50, left associativity).
 Reserved Notation "δ ⟪ x ↦ v ⟫"    (at level 90, x at level 0, v at level 0, left associativity).
 Reserved Notation "δ ! x"          (at level 56, no associativity).
 
-Reserved Notation "⟨ δ1 , s1 ⟩ ---> ⟨ δ2 , s2 ⟩" (at level 75, no associativity).
-Reserved Notation "⟨ δ1 , s1 ⟩ --->* ⟨ δ2 , s2 ⟩" (at level 75, no associativity).
+Reserved Notation "⟨ γ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , δ2 , s2 ⟩" (at level 75, no associativity).
+Reserved Notation "⟨ γ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , δ2 , s2 ⟩" (at level 75, no associativity).
 (* Notation "( x , y , .. , z )" := *)
 (*   (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z) : pat_scope. *)
+
+Reserved Notation "s1 ;; s2" (at level 100, s2 at level 200, right associativity,
+  format "'[' '[hv' '[' s1 ']' ;;  ']' '/' s2 ']'").

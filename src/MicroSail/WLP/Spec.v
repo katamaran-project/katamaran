@@ -34,6 +34,7 @@ From Coq Require Import
      ZArith.ZArith.
 
 From MicroSail Require Import
+     Dijkstra
      Syntax.
 
 Set Implicit Arguments.
@@ -72,105 +73,47 @@ Module WLP
     | _ => fun e k => e -> k
     end (eval e δ = false).
 
-  Definition Cont (R A : Type) : Type := (A -> R) -> R.
+  Definition bindblast {G I : Type} {L : I -> Type} {Γ1 Γ2 Γ3 A B} {blastA : Blastable A}
+    (ma : DST G L Γ1 Γ2 A) (f : A -> DST G L Γ2 Γ3 B) : DST G L Γ1 Γ3 B :=
+    fun k => ma (fun a δ2 s2 => blast a (fun a' => f a' k δ2 s2)).
+  Definition meval {G Γ σ} (e : Exp Γ σ) : DST G LocalStore Γ Γ (Lit σ) :=
+    bind get_local (fun δ => pure (eval e δ)).
+  Definition mevals {G Γ Δ} (es : Env' (Exp Γ) Δ) : DST G LocalStore Γ Γ (Env' Lit Δ) :=
+    bind get_local (fun δ => pure (evals es δ)).
 
-  Definition DST (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Type) : Type :=
-    (A -> Pred (LocalStore Γ2)) -> Pred (LocalStore Γ1).
-
-  Definition evalDST {Γ1 Γ2 A} (m : DST Γ1 Γ2 A) :
-    LocalStore Γ1 -> Cont Prop A :=
-    fun δ1 k => m (fun a δ2 => k a) δ1.
-
-  Definition lift {Γ A} (m : Cont Prop A) : DST Γ Γ A :=
-    fun k δ => m (fun a => k a δ).
-
-  Definition pure {Γ A} (a : A) : DST Γ Γ A :=
-    fun k => k a.
-  Definition ap {Γ1 Γ2 Γ3 A B} (mf : DST Γ1 Γ2 (A -> B))
-             (ma : DST Γ2 Γ3 A) : DST Γ1 Γ3 B :=
-    fun k => mf (fun f => ma (fun a => k (f a))).
-  Definition abort {Γ1 Γ2 A} : DST Γ1 Γ2 A :=
-    fun k δ => False.
-  Definition assert {Γ} (b : bool) : DST Γ Γ bool :=
-    fun k δ => b = true /\ k b δ.
-  Definition bind {Γ1 Γ2 Γ3 A B} (ma : DST Γ1 Γ2 A) (f : A -> DST Γ2 Γ3 B) : DST Γ1 Γ3 B :=
-    fun k => ma (fun a => f a k).
-  Definition bindright {Γ1 Γ2 Γ3 A B} (ma : DST Γ1 Γ2 A) (mb : DST Γ2 Γ3 B) : DST Γ1 Γ3 B :=
-    bind ma (fun _ => mb).
-  Definition bindleft {Γ1 Γ2 Γ3 A B} (ma : DST Γ1 Γ2 A) (mb : DST Γ2 Γ3 B) : DST Γ1 Γ3 A :=
-    bind ma (fun a => bind mb (fun _ => pure a)).
-  Definition bindblast {Γ1 Γ2 Γ3 A B} {blastA : Blastable A}
-    (ma : DST Γ1 Γ2 A) (f : A -> DST Γ2 Γ3 B) : DST Γ1 Γ3 B :=
-    fun k => ma (fun a δ2 => blast a (fun a' => f a' k δ2)).
-  Definition get {Γ} : DST Γ Γ (LocalStore Γ) :=
-    fun k δ => k δ δ.
-  Definition put {Γ Γ'} (δ' : LocalStore Γ') : DST Γ Γ' unit :=
-    fun k _ => k tt δ'.
-  Definition modify {Γ Γ'} (f : LocalStore Γ -> LocalStore Γ') : DST Γ Γ' unit :=
-    bind get (fun δ => put (f δ)).
-  Definition meval {Γ σ} (e : Exp Γ σ) : DST Γ Γ (Lit σ) :=
-    bind get (fun δ => pure (eval e δ)).
-  Definition mevals {Γ Δ} (es : Env' (Exp Γ) Δ) : DST Γ Γ (Env' Lit Δ) :=
-    bind get (fun δ => pure (evals es δ)).
-  Definition push {Γ x σ} (v : Lit σ) : DST Γ (ctx_snoc Γ (x , σ)) unit :=
-    modify (fun δ => env_snoc δ (x,σ) v).
-  Definition pop {Γ x σ} : DST (ctx_snoc Γ (x , σ)) Γ unit :=
-    modify (fun δ => env_tail δ).
-  Definition pushs {Γ Δ} (δΔ : LocalStore Δ) : DST Γ (ctx_cat Γ Δ) unit :=
-    modify (fun δΓ => env_cat δΓ δΔ).
-  Definition pops {Γ} Δ : DST (ctx_cat Γ Δ) Γ unit :=
-    modify (fun δΓΔ => env_drop Δ δΓΔ).
-  (* Definition ifthenelse {Γ1 Γ2 A} (b : bool) (t e : DST Γ1 Γ2 A) : DST Γ1 Γ2 A := *)
-  (*   fun k δ => (b = true -> t k δ) /\ (b = false -> e k δ). *)
-
-  Arguments abort {_ _ _} / _ _.
-  Arguments assert {_} _ / _ _.
-  Arguments bind {_ _ _ _ _} _ _ / _ _.
-  Arguments bindblast {_ _ _ _ _ _} _ _ / _ _.
-  Arguments bindleft {_ _ _ _ _} _ _ / _ _.
-  Arguments bindright {_ _ _ _ _} _ _ / _ _.
-  Arguments evalDST {_ _ _} _ / _ _.
-  Arguments get {_} / _ _.
-  Arguments lift {_ _} _ / _ _.
-  Arguments meval {_ _} _ / _ _.
-  Arguments mevals {_ _} _ / _ _.
-  Arguments modify {_ _} _ / _ _.
-  Arguments pop {_ _ _} / _ _.
-  Arguments pops {_} _ / _ _.
-  Arguments pure {_ _} _ / _ _.
-  Arguments push {_ _ _} _ / _ _.
-  Arguments pushs {_ _} _ / _ _.
-  Arguments put {_} _ / _ _.
-  (* Arguments ifthenelse {_ _ _} _ _ _ / _ _. *)
+  Arguments bindblast {_ _ _ _ _ _ _ _ _} _ _ / _ _ _.
+  Arguments meval {_ _ _} _ / _ _ _.
+  Arguments mevals {_ _ _} _ / _ _ _.
 
   Local Arguments uncurry' /.
 
-  Notation "ma >>= f" := (bind ma f) (at level 50, left associativity).
+  (* Notation "ma >>= f" := (bind ma f) (at level 50, left associativity). *)
   Notation "ma !>>= f" := (bindblast ma f) (at level 50, left associativity).
-  Notation "ma *> mb" := (bindright ma mb) (at level 50, left associativity).
-  Notation "ma <* mb" := (bindleft ma mb) (at level 50, left associativity).
+  (* Notation "ma *> mb" := (bindright ma mb) (at level 50, left associativity). *)
+  (* Notation "ma <* mb" := (bindleft ma mb) (at level 50, left associativity). *)
 
-  Fixpoint WLP Γ τ (s : Stm Γ τ) : DST Γ Γ (Lit τ).
-    let body := eval cbn [bind bindblast bindleft bindright get put assert abort modify
-                               push pops pure pop meval pushs mevals lift evalDST Lit uncurry'] in
-    (match s in (Stm _ τ) return (DST Γ Γ (Lit τ)) with
+  Local Open Scope monad_scope.
+  Fixpoint WLP Γ τ (s : Stm Γ τ) : DST RegStore LocalStore Γ Γ (Lit τ).
+    let body := eval cbn [bind bindblast bindleft bindright get_local put_local assert abort modify_local
+                               push pops pure pop meval pushs mevals lift_cont evalDST Lit uncurry' lift_cont_global] in
+    (match s in (Stm _ τ) return (DST RegStore LocalStore Γ Γ (Lit τ)) with
     | stm_lit _ l => pure l
-    | stm_assign x s => WLP _ _ s >>= fun v => modify (fun δ => δ ⟪ x ↦ v ⟫) *> pure v
-    | stm_let x σ s k => WLP _ _ s >>= push *> WLP _ _ k <* pop
+    | stm_assign x s => WLP _ _ s >>= fun v => modify_local (fun δ => δ ⟪ x ↦ v ⟫) *> pure v
+    | stm_let x σ s k => WLP _ _ s >>= fun v => push σ v *> WLP _ _ k <* pop
     | stm_exp e => meval e
     | stm_assert e1 e2  => meval e1 >>= assert
-    | stm_if e s1 s2 => fun POST δ =>
-                          eval_prop_true e δ (WLP _ _ s1 POST δ) /\
-                          eval_prop_false e δ (WLP _ _ s2 POST δ)
+    | stm_if e s1 s2 => fun POST δ γ =>
+                          eval_prop_true e δ (WLP _ _ s1 POST δ γ) /\
+                          eval_prop_false e δ (WLP _ _ s2 POST δ γ)
     | stm_fail _ _ => abort
     | stm_seq s1 s2 => WLP _ _ s1 *> WLP _ _ s2
-    | stm_call' Δ δ τ s => lift (evalDST (WLP _ _ s) δ)
-
+    | stm_call' Δ δ τ s => lift_cont_global (evalDST (WLP _ _ s) δ)
     | stm_call f es =>
       mevals es >>= fun δf_in =>
       match CEnv f with
       | ContractNoFail _ _ pre post =>
-        fun POST δ => uncurry' pre δf_in /\ forall v, uncurry' post δf_in v -> POST v δ
+        fun POST δin γin => uncurry' pre δf_in γin /\
+                            forall v γout, uncurry' post δf_in v γout -> POST v δin γout
       | ContractTerminateNoFail _ _ pre post => abort (* NOT IMPLEMENTED *)
       | ContractTerminate _ _ pre post => abort (* NOT IMPLEMENTED *)
       | ContractNone _ _ => abort (* NOT IMPLEMENTED *)
@@ -180,18 +123,18 @@ Module WLP
       meval e !>>= fun v =>
       match v with
       | nil => WLP _ _ alt_nil
-      | cons vh vt => push vh *> @push _ _ (ty_list _) vt *> WLP _ _ alt_cons <* pop <* pop
+      | cons vh vt => push _ vh *> push (ty_list _) vt *> WLP _ _ alt_cons <* pop <* pop
       end
     | stm_match_sum e xinl altinl xinr altinr =>
       meval e !>>= fun v =>
       match v with
-      | inl v => push v *> WLP _ _ altinl <* pop
-      | inr v => push v *> WLP _ _ altinr <* pop
+      | inl v => push _ v *> WLP _ _ altinl <* pop
+      | inr v => push _ v *> WLP _ _ altinr <* pop
       end
     | stm_match_pair e xl xr rhs =>
       meval e !>>= fun v =>
       let (vl , vr) := v in
-      push vl *> push vr *> WLP _ _ rhs <* pop <* pop
+      push _ vl *> push _ vr *> WLP _ _ rhs <* pop <* pop
     | stm_match_enum E e alts =>
       meval e !>>= fun v =>
       WLP _ _ (alts v)
@@ -201,10 +144,12 @@ Module WLP
     | stm_match_union T e xs rhs =>
       meval e !>>= fun v =>
       let (K , tv) := v in
-      push (untag tv) *> WLP _ _ (rhs K) <* pop
+      push _ (untag tv) *> WLP _ _ (rhs K) <* pop
     | stm_match_record R e p rhs =>
       meval e >>= fun v =>
       pushs (record_pattern_match p v) *> WLP _ _ rhs <* pops _
+    | stm_read_register r => abort
+    | stm_write_register r e => abort
     | stm_bind s k =>
       WLP _ _ s >>= fun v => WLP _ _ (k v)
     end) in exact body.
@@ -213,8 +158,9 @@ Module WLP
   Definition ValidContract {Γ τ} (c : Contract Γ τ) (s : Stm Γ τ) : Prop :=
     match c with
     | ContractNoFail _ _ pre post =>
-      Forall (fun δin => uncurry pre δin ->
-                         WLP s (fun vout δout => uncurry post δin vout) δin)
+      Forall (fun δin => forall γin,
+                  uncurry pre δin γin ->
+                  WLP s (fun vout δout => uncurry post δin vout) δin γin)
     | ContractTerminateNoFail _ _ _ _ => False
     | ContractTerminate _ _ _ _ => False
     | ContractNone _ _ => False

@@ -1,6 +1,7 @@
 -arg "-w all" -R src/MicroSail MicroSail
 src/MicroSail.v
 src/MicroSail/Context.v
+src/MicroSail/WLP/Dijkstra.v
 src/MicroSail/Environment.v
 src/MicroSail/Notation.v
 src/MicroSail/SmallStep/Step.v
