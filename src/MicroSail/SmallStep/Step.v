@@ -27,9 +27,11 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Program.Equality
      Strings.String.
 From MicroSail Require Import
-     Syntax.
+     Syntax
+     Tactics.
 
 Set Implicit Arguments.
 
@@ -193,5 +195,61 @@ Module SmallStep
       Step γ1 γ2 δ1 δ2 s1 s2 -> Steps γ2 δ2 s2 γ3 δ3 s3 -> Steps γ1 δ1 s1 γ3 δ3 s3.
 
   Notation "⟨ γ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , δ2 , s2 ⟩" := (@Steps _ _ γ1 δ1 s1 γ2 δ2 s2).
+
+  (* Tests if a statement is a final one, i.e. a finished computation. *)
+  Ltac microsail_stm_is_final s :=
+    lazymatch s with
+    | stm_lit _ _  => idtac
+    | stm_fail _ _ => idtac
+    end.
+
+  (* Tests if a statement has a primitive step, i.e. it can be reduced
+     by an axiom rule of the step relation instead of a congruence rule. *)
+  Ltac microsail_stm_primitive_step s :=
+    first
+      [ lazymatch s with
+        | stm_call' _ _ _ ?s' => microsail_stm_is_final s'
+        | stm_let _ _ ?s' _   => microsail_stm_is_final s'
+        | stm_let' _ ?s'      => microsail_stm_is_final s'
+        | stm_seq ?s' _       => microsail_stm_is_final s'
+        | stm_assign _ ?s'    => microsail_stm_is_final s'
+        | stm_bind ?s' _      => microsail_stm_is_final s'
+        end
+      | lazymatch head s with
+        | @stm_call           => idtac
+        | @stm_assert         => idtac
+        | @stm_fail           => idtac
+        | @stm_exp            => idtac
+        | @stm_if             => idtac
+        | @stm_lit            => idtac
+        | @stm_match_sum      => idtac
+        | @stm_match_list     => idtac
+        | @stm_match_pair     => idtac
+        | @stm_match_enum     => idtac
+        | @stm_match_tuple    => idtac
+        | @stm_match_union    => idtac
+        | @stm_match_record   => idtac
+        | @stm_read_register  => idtac
+        | @stm_write_register => idtac
+        end
+      ].
+
+  (* This 'Lemma' simply exists for testing that the above predicate on
+     statements is complete with respect to the step relation. *)
+  Lemma microsail_stm_primitive_step__complete {Γ σ γ1 γ2 δ1 δ2} {s1 s2 : Stm Γ σ} :
+    ⟨ γ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , δ2 , s2 ⟩ -> True.
+    intro step. remember s1 as s1'.
+    dependent destruction step;
+      match goal with
+      | [ H: ⟨ _,_,_ ⟩ ---> ⟨ _,_,_ ⟩ |- _ ] =>
+        (* If there is a step hypothesis then this case represents a congruence
+           rule, not an axiom rule. *)
+        constructor
+      | [ H: ?s1' = s1 |- _ ] =>
+        (* Otherwise, it's an axiom rule and the microsail_stm_primitive_step
+           tactic should recognize it. *)
+        microsail_stm_primitive_step s1'; constructor
+      end; fail.
+  Abort.
 
 End SmallStep.

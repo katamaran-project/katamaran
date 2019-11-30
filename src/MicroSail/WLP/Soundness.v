@@ -35,6 +35,7 @@ From MicroSail Require Import
      SmallStep.Inversion
      SmallStep.Step
      Syntax
+     Tactics
      WLP.Spec.
 
 Set Implicit Arguments.
@@ -53,53 +54,47 @@ Module Soundness
   Import SSI.
   Import SS.
 
-  Ltac wlp_sound_steps_inversion :=
+  Lemma eval_prop_true_sound {Γ δ} (e : Exp Γ ty_bool) :
+    forall k, eval_prop_true e δ k <-> (eval e δ = true -> k)
+  with eval_prop_false_sound {Γ δ} (e : Exp Γ ty_bool) :
+    forall k, eval_prop_false e δ k <-> (eval e δ = false -> k).
+  Proof.
+    all: dependent induction e; cbn; intros;
+      repeat
+        match goal with
+        | [ IH: forall e, ?t = ?t -> ?e1 ~= e -> _ |- _ ] =>
+          specialize (IH _ eq_refl JMeq_refl)
+        end;
+      repeat rewrite ?Z.eqb_eq, ?Z.eqb_neq, ?Z.leb_gt, ?Z.ltb_ge, ?Z.ltb_lt,
+      ?Z.leb_le, ?Z.gtb_ltb, ?Bool.andb_true_iff, ?Bool.andb_false_iff,
+      ?Bool.orb_true_iff, ?Bool.orb_false_iff, ?Bool.negb_true_iff,
+      ?Bool.negb_false_iff, ?IHe1, ?IHe2 in *;
+      try (intuition; fail); auto.
+  Qed.
+
+  Local Ltac wlp_sound_steps_inversion :=
     repeat
       match goal with
-      | [ H: ⟨ _, _, stm_call _ _ ⟩             --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_call _ _ ⟩             --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_assert _ _ ⟩           --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_assert _ _ ⟩           --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_fail _ _ ⟩             --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_fail _ _ ⟩             --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_exp _ ⟩                --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_exp _ ⟩                --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_if _ _ _ ⟩             --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_if _ _ _ ⟩             --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_lit _ _ ⟩              --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_lit _ _ ⟩              --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_sum _ _ _ _ _ ⟩  --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_sum _ _ _ _ _ ⟩  --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_list _ _ _ _ _ ⟩ --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_list _ _ _ _ _ ⟩ --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_pair _ _ _ _ ⟩   --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_pair _ _ _ _ ⟩   --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_enum _ _ _ ⟩     --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_enum _ _ _ ⟩     --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_tuple _ _ _ ⟩    --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_tuple _ _ _ ⟩    --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_union _ _ _ _ ⟩  --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_union _ _ _ _ ⟩  --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_record _ _ _ _ ⟩ --->  ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_match_record _ _ _ _ ⟩ --->* ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
+      | [ H: ResultNoFail _ _ |- _ ] =>
+        apply result_no_fail_inversion in H; destruct_conjs; subst
+      | [ H: ⟨ _, _, ?s ⟩ ---> ⟨ _, _, _ ⟩ |- _ ] =>
+        microsail_stm_primitive_step s; dependent destruction H
+      | [ H: ⟨ _, _, ?s ⟩ --->* ⟨ _, _, ?t ⟩, HF: Final ?t |- _ ] =>
+        first
+          [ microsail_stm_primitive_step s; dependent destruction H; cbn in HF
+          | match head s with
+            | @stm_call'   => apply (steps_inversion_call'  HF) in H
+            | @stm_let     => apply (steps_inversion_let    HF) in H
+            | @stm_let'    => apply (steps_inversion_let'   HF) in H
+            | @stm_seq     => apply (steps_inversion_seq    HF) in H
+            | @stm_assign  => apply (steps_inversion_assign HF) in H
+            | @stm_bind    => apply (steps_inversion_bind   HF) in H
+            end; destruct_conjs
+          ]
+      | _ => progress (cbn in *)
+      end.
 
-      | [ H: ⟨ _, _, stm_call' _ _ _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_let _ _ (stm_lit _ _) _ ⟩   ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_let' _ (stm_lit _ _) ⟩      ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_seq (stm_lit _ _) _ ⟩       ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_assign _ (stm_lit _ _) ⟩    ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-      | [ H: ⟨ _, _, stm_bind (stm_lit _ _) _ ⟩      ---> ⟨ _, _, _ ⟩ |- _ ] => dependent destruction H
-
-      | [ H: ⟨ _, _, stm_call' _ _ _ _ ⟩ --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_call'  HF) in H; destruct_conjs
-      | [ H: ⟨ _, _, stm_let _ _ _ _ ⟩   --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_let    HF) in H; destruct_conjs
-      | [ H: ⟨ _, _, stm_let' _ _ ⟩      --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_let'   HF) in H; destruct_conjs
-      | [ H: ⟨ _, _, stm_seq _ _ ⟩       --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_seq    HF) in H; destruct_conjs
-      | [ H: ⟨ _, _, stm_assign _ _ ⟩    --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_assign HF) in H; destruct_conjs
-      | [ H: ⟨ _, _, stm_bind _ _ ⟩      --->* ⟨ _, _, ?s1 ⟩, HF: Final ?s1 |- _ ] => apply (steps_inversion_bind   HF) in H; destruct_conjs
-      | [ H: ResultNoFail _ _ |- _ ] => apply result_no_fail_inversion in H; destruct_conjs; subst
-      end; cbn in *.
-
-  Ltac wlp_sound_inst :=
+  Local Ltac wlp_sound_inst :=
     match goal with
     | [ IH: forall _ _ _ _ _, ⟨ _, _ , ?s ⟩ --->* ⟨ _, _ , _ ⟩ -> _,
         HS: ⟨ _, _ , ?s ⟩ --->* ⟨ _, _ , ?t ⟩, HF: Final ?t |- _ ] =>
@@ -111,23 +106,23 @@ Module Soundness
       specialize (IH _ WP); clear WP
     end.
 
-  Ltac wlp_sound_simpl :=
+  Local Ltac wlp_sound_simpl :=
     repeat
-      (cbn in *; destruct_conjs; subst;
-       try match goal with
-           | [ H: True |- _ ] => clear H
-           | [ H: False |- _ ] => destruct H
-           | [ H: Env _ (ctx_snoc _ _) |- _ ] =>
-             dependent destruction H
-           | [ H: Env _ ctx_nil |- _ ] =>
-             dependent destruction H
-           | [ H: context[env_drop _ (_ ►► _)]|- _] =>
-             rewrite env_drop_cat in H
-           | [ _: context[match eval ?e ?δ with _ => _ end] |- _ ] =>
-             destruct (eval e δ)
-           end).
+      match goal with
+      | [ H: True |- _ ] => clear H
+      | [ H: False |- _ ] => destruct H
+      | [ H: Env _ (ctx_snoc _ _) |- _ ] =>
+        dependent destruction H
+      | [ H: Env _ ctx_nil |- _ ] =>
+        dependent destruction H
+      | [ H: context[env_drop _ (_ ►► _)]|- _] =>
+        rewrite env_drop_cat in H
+      | [ _: context[match eval ?e ?δ with _ => _ end] |- _ ] =>
+        destruct (eval e δ)
+      | _ => progress (cbn in *; destruct_conjs; subst)
+      end.
 
-  Ltac wlp_sound_solve :=
+  Local Ltac wlp_sound_solve :=
     repeat
       (wlp_sound_steps_inversion;
        wlp_sound_simpl;
@@ -146,39 +141,6 @@ Module Soundness
       | ContractTerminate _ _ _ _ => False
       | ContractNone _ _ => True
       end.
-
-  Lemma eval_prop_true_sound {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) :
-    forall k, eval_prop_true e δ k <-> (eval e δ = true -> k)
-  with eval_prop_false_sound {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) :
-    forall k, eval_prop_false e δ k <-> (eval e δ = false -> k).
-  Proof.
-    - dependent induction e; cbn; intros;
-        repeat rewrite ?Z.eqb_eq, ?Z.eqb_neq, ?Z.leb_gt, ?Z.ltb_ge, ?Z.ltb_lt, ?Z.leb_le,
-        ?Z.gtb_ltb in *; try (intuition; fail).
-      + specialize (IHe1 e1 eq_refl JMeq_refl δ).
-        specialize (IHe2 e2 eq_refl JMeq_refl δ).
-        rewrite IHe1, IHe2, Bool.andb_true_iff.
-        intuition.
-      + specialize (IHe1 e1 eq_refl JMeq_refl δ).
-        specialize (IHe2 e2 eq_refl JMeq_refl δ).
-        rewrite IHe1, IHe2, Bool.orb_true_iff.
-        intuition.
-      + specialize (IHe e eq_refl JMeq_refl δ).
-        now rewrite Bool.negb_true_iff.
-    - dependent induction e; cbn; intros;
-        repeat rewrite ?Z.eqb_eq, ?Z.eqb_neq, ?Z.leb_gt, ?Z.ltb_ge, ?Z.ltb_lt, ?Z.leb_le,
-        ?Z.gtb_ltb in *; try (intuition; fail).
-      + specialize (IHe1 e1 eq_refl JMeq_refl δ).
-        specialize (IHe2 e2 eq_refl JMeq_refl δ).
-        rewrite IHe1, IHe2, Bool.andb_false_iff.
-        intuition.
-      + specialize (IHe1 e1 eq_refl JMeq_refl δ).
-        specialize (IHe2 e2 eq_refl JMeq_refl δ).
-        rewrite IHe1, IHe2, Bool.orb_false_iff.
-        intuition.
-      + specialize (IHe e eq_refl JMeq_refl δ).
-        now rewrite Bool.negb_false_iff.
-  Qed.
 
   Lemma WLP_sound (validCEnv : ValidContractEnv CEnv) {Γ σ} (s : Stm Γ σ) :
     forall (γ γ' : RegStore) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),

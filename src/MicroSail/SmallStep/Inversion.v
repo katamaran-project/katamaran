@@ -27,7 +27,8 @@
 (******************************************************************************)
 
 From Coq Require Import
-     Program.Equality.
+     Program.Equality
+     Program.Tactics.
 From MicroSail Require Import
      SmallStep.Step
      Syntax.
@@ -46,51 +47,45 @@ Module Inversion
 
   Local Ltac steps_inversion_simpl :=
     repeat
-      (try match goal with
-           | [ H: exists t, _ |- _ ] => destruct H
-           | [ H: _ /\ _ |- _ ] => destruct H
-           | [ H: existT _ _ _ = existT _ _ _ |- _ ] => dependent destruction H
-           | [ H : False |- _ ] => destruct H
-           end;
-       cbn in *).
-
-  Local Ltac extend p :=
-    let P := type of p in
-    match goal with
-    | [ _ : P |- _ ] => fail 1
-    | _ => pose proof p
-    end.
+      match goal with
+      | [ H: exists t, _ |- _ ] => destruct H
+      | [ H: _ /\ _ |- _ ] => destruct H
+      | [ H: existT _ _ _ = existT _ _ _ |- _ ] => dependent destruction H
+      | [ H : False |- _ ] => destruct H
+      | _ => progress (cbn in *; subst)
+      end.
 
   Local Ltac steps_inversion_inster :=
     repeat
-      (try match goal with
-           | [ H : forall _, _ = _ -> _ |- _ ]
-             => specialize (H _ eq_refl)
-           | [ H : forall _ _, _ = _ -> _ |- _ ]
-             => specialize (H _ _ eq_refl)
-           | [ H : forall _ _ _, _ = _ -> _ |- _ ]
-             => specialize (H _ _ _ eq_refl)
-           | [ H : Final ?s -> _, H' : Final ?s |- _ ]
-             => specialize (H H')
-           | [ H1 : ⟨ _, _, _ ⟩ ---> ⟨ ?γ2, ?δ2, ?s2 ⟩,
-               H2 : ⟨ ?γ2, ?δ2, ?s2 ⟩ --->* ⟨ _, _, _ ⟩ |- _ ]
-             => extend (step_trans H1 H2)
-           end;
-       steps_inversion_simpl).
+      match goal with
+      | [ H : forall _, _ = _ -> _ |- _ ]
+        => specialize (H _ eq_refl)
+      | [ H : forall _ _, _ = _ -> _ |- _ ]
+        => specialize (H _ _ eq_refl)
+      | [ H : forall _ _ _, _ = _ -> _ |- _ ]
+        => specialize (H _ _ _ eq_refl)
+      | [ H : Final ?s -> _, H' : Final ?s |- _ ]
+        => specialize (H H')
+      | [ H1 : ⟨ _, _, _ ⟩ ---> ⟨ ?γ2, ?δ2, ?s2 ⟩,
+          H2 : ⟨ ?γ2, ?δ2, ?s2 ⟩ --->* ⟨ _, _, _ ⟩ |- _ ]
+        => let H:=fresh in add_hypothesis H (step_trans H1 H2)
+      | _ => progress steps_inversion_simpl
+      end.
 
   Local Ltac steps_inversion_solve :=
     repeat
-      (match goal with
-       | [ |- exists t, _ ] => eexists
-       | [ |- _ /\ _ ] => constructor
-       | [ |- True ] => constructor
-       | [ |- ⟨ _, _, stm_lit _ _ ⟩ --->* ⟨ _, _, _ ⟩ ] => constructor 1
-       | [ |- ⟨ _, _, stm_fail _ _ ⟩ --->* ⟨ _, _, _ ⟩ ] => constructor 1
-       | [ |- ⟨ _, _, stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _ ⟩ ] => apply step_stm_let_value
-       | [ |- ⟨ _, _, stm_let _ _ (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _ ⟩ ] => apply step_stm_let_fail
-       | [ |- ⟨ _, _, stm_assign _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _ ⟩ ] => apply step_stm_assign_value
-       | [ |- ⟨ _, _, stm_assign _ (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _ ⟩ ] => apply step_stm_assign_fail
-       end; cbn); try eassumption.
+      match goal with
+      | [ |- exists t, _ ] => eexists
+      | [ |- _ /\ _ ] => constructor
+      | [ |- True ] => constructor
+      | [ |- ⟨ _, _, stm_lit _ _ ⟩ --->* ⟨ _, _, _ ⟩ ] => constructor 1
+      | [ |- ⟨ _, _, stm_fail _ _ ⟩ --->* ⟨ _, _, _ ⟩ ] => constructor 1
+      | [ |- ⟨ _, _, stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _ ⟩ ] => apply step_stm_let_value
+      | [ |- ⟨ _, _, stm_let _ _ (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _ ⟩ ] => apply step_stm_let_fail
+      | [ |- ⟨ _, _, stm_assign _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _ ⟩ ] => apply step_stm_assign_value
+      | [ |- ⟨ _, _, stm_assign _ (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _ ⟩ ] => apply step_stm_assign_fail
+      | _ => progress cbn
+      end; try eassumption.
 
   Local Ltac steps_inversion_induction :=
     let step := fresh in

@@ -8,6 +8,7 @@ src/MicroSail/SmallStep/Step.v
 src/MicroSail/SmallStep/Inversion.v
 src/MicroSail/SmallStep/Progress.v
 src/MicroSail/Syntax.v
+src/MicroSail/Tactics.v
 src/MicroSail/WLP/Soundness.v
 src/MicroSail/WLP/Spec.v
 test/Example.v
