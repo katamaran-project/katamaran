@@ -161,7 +161,7 @@ Module Symbolic
     | sexc_exp {τ : Ty} (e : Exp Γ τ) : sexec pc δ ĥ (stm_exp e) (single (pc , δ , ĥ) (seval e δ))
     | sexc_if  {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) o1 o2 :
         sexec (pc ▻ seval e δ)            δ ĥ s1 o1 ->
-        sexec (pc ▻ term_not (seval e δ)) δ ĥ s1 o2 ->
+        sexec (pc ▻ term_not (seval e δ)) δ ĥ s2 o2 ->
         sexec pc                          δ ĥ (stm_if e s1 s2) (demonic (fun b : bool => if b then o1 else o2)).
   (*   | sexc_seq {ĥ : SymbolicHeap Σ} {τ σ : Ty} (s1 : Stm Γ τ) (s2 : Stm Γ σ) o1 o2 : *)
   (*       sexec pc ĥ s1 o1 -> *)
