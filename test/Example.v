@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Logic.FinFun
      Program.Equality
      Program.Tactics
      Strings.String
@@ -50,8 +51,8 @@ Open Scope ctx_scope.
 Inductive Enums : Set :=
 | ordering.
 
-Lemma Enums_eq_dec : forall x y: Enums, {x = y} + {x <> y}.
-  decide equality.
+Lemma Enums_eq_dec : EqDec Enums.
+  unfold EqDec; decide equality.
 Qed.
 
 Inductive Ordering : Set :=
@@ -68,16 +69,16 @@ Inductive Either : Set :=
 | Left
 | Right.
 
-Lemma Unions_eq_dec : forall x y: Unions, {x = y} + {x <> y}.
-  decide equality.
+Lemma Unions_eq_dec : EqDec Unions.
+  unfold EqDec; decide equality.
 Qed.
 
 (** Records **)
 Inductive Records : Set :=
 .
 
-Lemma Records_eq_dec : forall x y: Records, {x = y} + {x <> y}.
-  decide equality.
+Lemma Records_eq_dec : EqDec Records.
+  unfold EqDec; decide equality.
 Qed.
 
 Module ExampleTypeKit <: TypeKit.
