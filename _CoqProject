@@ -4,6 +4,7 @@ src/MicroSail/Context.v
 src/MicroSail/WLP/Dijkstra.v
 src/MicroSail/Environment.v
 src/MicroSail/Notation.v
+src/MicroSail/Sep/Spec.v
 src/MicroSail/SmallStep/Step.v
 src/MicroSail/SmallStep/Inversion.v
 src/MicroSail/SmallStep/Progress.v

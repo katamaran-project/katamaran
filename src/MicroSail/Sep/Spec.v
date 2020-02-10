@@ -38,28 +38,34 @@ From MicroSail Require Import
 
 Set Implicit Arguments.
 
-Delimit Scope out_scope with out.
-Delimit Scope mut_scope with mut.
+Delimit Scope outcome_scope with out.
+Delimit Scope mutator_scope with mut.
 
-Section Outcomes.
+Section Outcome.
 
   Inductive Outcome (A: Type) : Type :=
   | single (a: A)
   | demonic {I : Set} (os: I -> Outcome A)
-  | angelic {I : Set} (os: I -> Outcome A).
+  | angelic {I : Set} (os: I -> Outcome A)
+  | undef.
 
-  Fixpoint map_outcome {A B : Type} (f : A -> B) (o : Outcome A) : Outcome B :=
+  Definition outcome_fail {A : Type} : Outcome A :=
+    angelic (fun i : Empty_set => match i with end).
+
+  Fixpoint outcome_map {A B : Type} (f : A -> B) (o : Outcome A) : Outcome B :=
     match o with
     | single a => single (f a)
-    | demonic os => demonic (fun i => map_outcome f (os i))
-    | angelic os => angelic (fun i => map_outcome f (os i))
+    | demonic os => demonic (fun i => outcome_map f (os i))
+    | angelic os => angelic (fun i => outcome_map f (os i))
+    | undef _    => undef _
     end.
 
-  Fixpoint bind_outcome {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcome B :=
+  Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcome B :=
     match o with
     | single a => f a
-    | demonic os => demonic (fun i => bind_outcome (os i) f)
-    | angelic os => angelic (fun i => bind_outcome (os i) f)
+    | demonic os => demonic (fun i => outcome_bind (os i) f)
+    | angelic os => angelic (fun i => outcome_bind (os i) f)
+    | undef _    => undef _
     end.
 
   Definition outcome_demonic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
@@ -67,15 +73,52 @@ Section Outcomes.
   Definition outcome_angelic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
     angelic (fun b : bool => if b then o1 else o2).
 
-End Outcomes.
+  Fixpoint outcome_satisfy {A : Type} (P : A -> Prop) (o : Outcome A) : Prop :=
+    match o with
+    | single a   => P a
+    | demonic os => forall i, outcome_satisfy P (os i)
+    | angelic os => exists i, outcome_satisfy P (os i)
+    | undef _    => True
+    end.
 
-Bind Scope out_scope with Outcome.
+  Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
+    outcome_satisfy (fun a => True) o.
 
-Notation "'⨂' i : I => F" := (demonic (fun i : I => F)) (at level 80, i at next level, I at next level) : out_scope.
-Notation "'⨁' i : I => F" := (angelic (fun i : I => F)) (at level 80, i at next level, I at next level) : out_scope.
+  Inductive outcome_satisfy_ind {A : Type} (P : A -> Prop) : Outcome A -> Prop :=
+  | outcome_satisfy_single  a    :
+      P a ->
+      outcome_satisfy_ind P (single a)
+  | outcome_satisfy_demonic {I os} :
+      (forall i, outcome_satisfy_ind P (os i)) ->
+      outcome_satisfy_ind P (@demonic _ I os)
+  | outcome_satisfy_angelic {I i os} :
+      outcome_satisfy_ind P (os i) ->
+      outcome_satisfy_ind P (@angelic _ I os).
 
-Infix "⊗" := outcome_demonic_binary (at level 40, left associativity) : out_scope.
-Infix "⊕" := outcome_angelic_binary (at level 50, left associativity) : out_scope.
+  Inductive outcome_in {A : Type} (a : A) : Outcome A -> Prop :=
+  | outcome_in_single :
+      outcome_in a (single a)
+  | outcome_in_demonic {I os i} :
+      outcome_in a (os i) ->
+      outcome_in a (@demonic _ I os)
+  | outcome_in_angelic {I os i} :
+      outcome_in a (os i) ->
+      outcome_in a (@angelic _ I os).
+
+End Outcome.
+Bind Scope outcome_scope with Outcome.
+
+Module OutcomeNotations.
+
+  Notation "'⨂' i : I => F" := (demonic (fun i : I => F)) (at level 80, i at next level, I at next level) : outcome_scope.
+  Notation "'⨁' i : I => F" := (angelic (fun i : I => F)) (at level 80, i at next level, I at next level) : outcome_scope.
+
+  Infix "⊗" := outcome_demonic_binary (at level 40, left associativity) : outcome_scope.
+  Infix "⊕" := outcome_angelic_binary (at level 50, left associativity) : outcome_scope.
+
+  Notation "ma >>= f" := (outcome_bind ma f) (at level 50, left associativity) : outcome_scope.
+
+End OutcomeNotations.
 
 Module Symbolic
   (Import typekit : TypeKit)
@@ -83,6 +126,7 @@ Module Symbolic
   (Import progKit : ProgramKit typekit termkit).
 
   Parameter Inline 𝑺 : Set. (* input: \MIS *)
+  Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
 
   (* Predicate names. *)
   Parameter Inline 𝑷  : Set.
@@ -133,51 +177,64 @@ Module Symbolic
   Bind Scope env_scope with SymbolicLocalStore.
   Definition SymbolicRegStore (Σ : Ctx (𝑺 * Ty))  : Type := forall σ, 𝑹𝑬𝑮 σ -> Term Σ σ.
 
-  Fixpoint seval {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : SymbolicLocalStore Σ Γ) : Term Σ σ :=
+  Fixpoint symbolic_eval_exp {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : SymbolicLocalStore Σ Γ) : Term Σ σ :=
     match e in (Exp _ t) return (Term Σ t) with
     | exp_var ς                       => (δ ! ς)%lit
     | exp_lit _ σ0 l                  => term_lit _ σ0 l
-    | exp_plus e1 e2                  => term_plus (seval e1 δ) (seval e2 δ)
-    | exp_times e1 e2                 => term_times (seval e1 δ) (seval e2 δ)
-    | exp_minus e1 e2                 => term_minus (seval e1 δ) (seval e2 δ)
-    | exp_neg e0                      => term_neg (seval e0 δ)
-    | exp_eq e1 e2                    => term_eq (seval e1 δ) (seval e2 δ)
-    | exp_le e1 e2                    => term_le (seval e1 δ) (seval e2 δ)
-    | exp_lt e1 e2                    => term_lt (seval e1 δ) (seval e2 δ)
-    | exp_gt e1 e2                    => term_gt (seval e1 δ) (seval e2 δ)
-    | exp_and e1 e2                   => term_and (seval e1 δ) (seval e2 δ)
-    | exp_or e1 e2                    => term_or (seval e1 δ) (seval e2 δ)
-    | exp_not e0                      => term_not (seval e0 δ)
-    | exp_pair e1 e2                  => term_pair (seval e1 δ) (seval e2 δ)
-    | @exp_inl _ σ1 σ2 e0             => @term_inl _ σ1 σ2 (seval e0 δ)
-    | @exp_inr _ σ1 σ2 e0             => @term_inr _ σ1 σ2 (seval e0 δ)
-    | @exp_list _ σ0 es               => term_list (List.map (fun e : Exp Γ σ0 => seval e δ) es)
-    | exp_cons e1 e2                  => term_cons (seval e1 δ) (seval e2 δ)
+    | exp_plus e1 e2                  => term_plus (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | exp_times e1 e2                 => term_times (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | exp_minus e1 e2                 => term_minus (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | exp_neg e0                      => term_neg (symbolic_eval_exp  e0 δ)
+    | exp_eq e1 e2                    => term_eq (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | exp_le e1 e2                    => term_le (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | exp_lt e1 e2                    => term_lt (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | exp_gt e1 e2                    => term_gt (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | exp_and e1 e2                   => term_and (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | exp_or e1 e2                    => term_or (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | exp_not e0                      => term_not (symbolic_eval_exp  e0 δ)
+    | exp_pair e1 e2                  => term_pair (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | @exp_inl _ σ1 σ2 e0             => @term_inl _ σ1 σ2 (symbolic_eval_exp  e0 δ)
+    | @exp_inr _ σ1 σ2 e0             => @term_inr _ σ1 σ2 (symbolic_eval_exp  e0 δ)
+    | @exp_list _ σ0 es               => term_list (List.map (fun e : Exp Γ σ0 => symbolic_eval_exp  e δ) es)
+    | exp_cons e1 e2                  => term_cons (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
     | @exp_nil _ σ0                   => term_nil _
     | @exp_tuple _ σs es              =>
-      let sevals := fix sevals {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Env (Term Σ) σs :=
+      let symbolic_eval_exps := fix symbolic_eval_exps {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Env (Term Σ) σs :=
                       match es with
                       | env_nil => env_nil
-                      | env_snoc es σ e => env_snoc (sevals es) σ (seval e δ)
+                      | env_snoc es σ e => env_snoc (symbolic_eval_exps es) σ (symbolic_eval_exp e δ)
                       end
-      in @term_tuple _ σs (sevals es)
-    | @exp_projtup _ σs e0 n σ0 p     => @term_projtup _ σs (seval e0 δ) n σ0 p
-    | @exp_union _ T K e0             => @term_union _ T K (seval e0 δ)
+      in @term_tuple _ σs (symbolic_eval_exps es)
+    | @exp_projtup _ σs e0 n σ0 p     => @term_projtup _ σs (symbolic_eval_exp e0 δ) n σ0 p
+    | @exp_union _ T K e0             => @term_union _ T K (symbolic_eval_exp e0 δ)
     | exp_record R es                 =>
-      let sevals := fix sevals {rfs : Ctx (𝑹𝑭 * Ty)} (es : Env' (Exp Γ) rfs) : Env' (Term Σ) rfs :=
+      let symbolic_eval_exps := fix symbolic_eval_exps {rfs : Ctx (𝑹𝑭 * Ty)} (es : Env' (Exp Γ) rfs) : Env' (Term Σ) rfs :=
                       match es with
                       | env_nil => env_nil
-                      | env_snoc es σ e => env_snoc (sevals es) σ (seval e δ)
+                      | env_snoc es σ e => env_snoc (symbolic_eval_exps es) σ (symbolic_eval_exp e δ)
                       end
-      in term_record R (sevals es)
-    | @exp_projrec _ R e0 rf σ0 rfInR => @term_projrec _ R (seval e0 δ) rf σ0 rfInR
-    | @exp_builtin _ σ0 τ f e0        => @term_builtin _ σ0 τ f (seval e0 δ)
+      in term_record R (symbolic_eval_exps es)
+    | @exp_projrec _ R e0 rf σ0 rfInR => @term_projrec _ R (symbolic_eval_exp e0 δ) rf σ0 rfInR
+    | @exp_builtin _ σ0 τ f e0        => @term_builtin _ σ0 τ f (symbolic_eval_exp e0 δ)
     end.
 
   Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
   | formula_bool (t : Term Σ ty_bool)
   | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
   | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
+
+  Inductive Assertion (Σ : Ctx (𝑺 * Ty)) : Type :=
+  | asn_bool (b : Term Σ ty_bool)
+  | asn_pred (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
+  | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
+  | asn_sep  (a1 a2 : Assertion Σ).
+
+  Inductive SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+  | sep_contract {Σ} (δ : SymbolicLocalStore Σ Δ) (req : Assertion Σ) (ens : Assertion Σ).
+
+  Definition SepContractEnv : Type :=
+    forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.
+  Parameter Inline CEnv : SepContractEnv.
 
   Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
     Ctx (Formula Σ).
@@ -186,18 +243,64 @@ Module Symbolic
     Ctx { p : 𝑷 & Env (Term Σ) (𝑷_Ty p) }.
   Bind Scope ctx_scope with SymbolicHeap.
 
-  Record SymbolicState (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type :=
-    MkSymbolicState
-      { symbolicstate_pathcondition : PathCondition Σ;
-        symbolicstate_localstore    : SymbolicLocalStore Σ Γ;
-        symbolicstate_heap          : SymbolicHeap Σ
-      }.
+  Section SymbolicState.
 
-  Section MutatorSem.
+    Record SymbolicState (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type :=
+      MkSymbolicState
+        { symbolicstate_pathcondition : PathCondition Σ;
+          symbolicstate_localstore    : SymbolicLocalStore Σ Γ;
+          symbolicstate_heap          : SymbolicHeap Σ
+        }.
 
+    Definition symbolic_assume_formula {Σ Γ} (fml : Formula Σ) : SymbolicState Σ Γ -> SymbolicState Σ Γ :=
+      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (Φ ▻ fml) ŝ ĥ.
+    Definition symbolic_assume_exp {Σ Γ} (e : Exp Γ ty_bool) : SymbolicState Σ Γ -> SymbolicState Σ Γ :=
+      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (Φ ▻ formula_bool (symbolic_eval_exp e ŝ)) ŝ ĥ.
+    Definition symbolic_push_local {Σ Γ x} σ (v : Term Σ σ) : SymbolicState Σ Γ -> SymbolicState Σ (Γ ▻ (x , σ)) :=
+      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState Φ (env_snoc ŝ (x , σ) v) ĥ.
+    Definition symbolic_pop_local {Σ Γ x σ} : SymbolicState Σ (Γ ▻ (x , σ)) -> SymbolicState Σ Γ :=
+      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState Φ (env_tail ŝ) ĥ.
+
+  End SymbolicState.
+
+  Section SymbolicExecution.
+
+    Context {Σ : Ctx (𝑺 * Ty)}.
+
+    Import OutcomeNotations.
+
+    Inductive sexec {Γ : Ctx (𝑿 * Ty)} : forall (σ : Ty), Stm Γ σ -> SymbolicState Σ Γ -> Outcome (Term Σ σ * SymbolicState Σ Γ) -> Prop :=
+    | sexc_lit {σ : Ty} (v : Lit σ)   st : sexec (stm_lit σ v) st (single (term_lit _ σ v, st))
+    | sexc_exp {τ : Ty} (e : Exp Γ τ) st : sexec (stm_exp e)   st (single (symbolic_eval_exp e (symbolicstate_localstore st), st))
+    | sexc_if  {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) st (o1 o2 : Outcome (Term Σ τ * SymbolicState Σ Γ)) :
+        sexec s1               (symbolic_assume_exp e           st) o1 ->
+        sexec s2               (symbolic_assume_exp (exp_not e) st) o2 ->
+        sexec (stm_if e s1 s2) st                                   (o1 ⊗ o2)%out
+    | sexc_seq st {τ σ : Ty}
+        (s1 : Stm Γ τ) (o1 : Outcome (Term Σ τ * SymbolicState Σ Γ))
+        (s2 : Stm Γ σ) (o2 : SymbolicState Σ Γ -> Outcome (Term Σ σ * SymbolicState Σ Γ)) :
+        sexec s1 st o1 ->
+        (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) sexec s2 st' (o2 st')) ->
+        (* outcome_satisfy (fun '(t1 , st') => sexec s2 st' (o2 st')) o1 -> *)
+        sexec (stm_seq s1 s2) st (o1 >>= fun '(_ , st') => o2 st')
+    | sexc_let st {x : 𝑿} {τ σ : Ty}
+        (s : Stm Γ τ)             (o1 : Outcome _)
+        (k : Stm (Γ ▻ (x , τ)) σ) (o2 : SymbolicState Σ (Γ ▻ _) -> Outcome (Term Σ σ * SymbolicState Σ (Γ ▻ _))) :
+        sexec s st o1 ->
+        (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) @sexec (Γ ▻ _) _ k st' (o2 st')) ->
+        sexec (stm_let x τ s k) st
+              (o1 >>= fun '(t1 , st1) =>
+               o2 (symbolic_push_local t1 st1) >>= fun '(t2 , st2) =>
+               single (t2 , symbolic_pop_local st2))%out.
+
+  End SymbolicExecution.
+
+  Section Mutator.
+
+    Import OutcomeNotations.
     Definition Mutator (Σ : Ctx (𝑺 * Ty)) (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Type) : Type :=
       SymbolicState Σ Γ1 -> Outcome (A * SymbolicState Σ Γ2).
-    Bind Scope mut_scope with Mutator.
+    Bind Scope mutator_scope with Mutator.
 
     Definition mutator_demonic {Σ : Ctx (𝑺 * Ty)} {Γ1 Γ2 : Ctx (𝑿 * Ty)} {I : Set} {A : Type} (ms : I -> Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
       fun (s : SymbolicState Σ Γ1) => (⨂ i : I => ms i s)%out.
@@ -208,71 +311,59 @@ Module Symbolic
     Definition mutator_angelic_binary {Σ Γ1 Γ2 A} (m1 m2 : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
       mutator_angelic (fun b : bool => if b then m1 else m2).
 
-    Notation "'⨂' i : I => F" := (mutator_demonic (fun i : I => F)) (at level 80, i at next level, I at next level) : mut_scope.
-    Notation "'⨁' i : I => F" := (mutator_angelic (fun i : I => F)) (at level 80, i at next level, I at next level) : mut_scope.
-
-    Infix "⊗" := mutator_demonic_binary (at level 40, left associativity) : mut_scope.
-    Infix "⊕" := mutator_angelic_binary (at level 50, left associativity) : mut_scope.
-
-    Definition pure {Σ Γ A} (a : A) : Mutator Σ Γ Γ A :=
+    Definition mutator_pure {Σ Γ A} (a : A) : Mutator Σ Γ Γ A :=
       fun s => single (a , s).
-    Definition bind {Σ Γ1 Γ2 Γ3 A B} (ma : Mutator Σ Γ1 Γ2 A) (f : A -> Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
-      fun s1 => bind_outcome (ma s1) (fun '(a , s2) => f a s2).
-    Definition bindright {Σ Γ1 Γ2 Γ3 A B} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
-      bind ma (fun _ => mb).
-    Definition bindleft {Σ Γ1 Γ2 Γ3 A B} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 A :=
-      bind ma (fun a => bind mb (fun _ => pure a)).
+    Definition mutator_bind {Σ Γ1 Γ2 Γ3 A B} (ma : Mutator Σ Γ1 Γ2 A) (f : A -> Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
+      fun s1 => outcome_bind (ma s1) (fun '(a , s2) => f a s2).
+    Definition mutator_bind_right {Σ Γ1 Γ2 Γ3 A B} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
+      mutator_bind ma (fun _ => mb).
+    Definition mutator_bind_left {Σ Γ1 Γ2 Γ3 A B} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 A :=
+      mutator_bind ma (fun a => mutator_bind mb (fun _ => mutator_pure a)).
 
-    Definition get_local {Σ Γ} : Mutator Σ Γ Γ (SymbolicLocalStore Σ Γ) :=
+    Definition mutator_get {Σ Γ} : Mutator Σ Γ Γ (SymbolicState Σ Γ) :=
+      fun s => single (s , s).
+    Definition mutator_put {Σ Γ Γ'} (s : SymbolicState Σ Γ') : Mutator Σ Γ Γ' unit :=
+      fun _ => single (tt , s).
+    Definition mutator_modify {Σ Γ Γ'} (f : SymbolicState Σ Γ -> SymbolicState Σ Γ') : Mutator Σ Γ Γ' unit :=
+      mutator_bind mutator_get (fun δ => mutator_put (f δ)).
+    Definition mutator_get_local {Σ Γ} : Mutator Σ Γ Γ (SymbolicLocalStore Σ Γ) :=
       fun s => single (symbolicstate_localstore s , s).
-    Definition put_local {Σ Γ Γ'} (δ' : SymbolicLocalStore Σ Γ') : Mutator Σ Γ Γ' unit :=
+    Definition mutator_put_local {Σ Γ Γ'} (δ' : SymbolicLocalStore Σ Γ') : Mutator Σ Γ Γ' unit :=
       fun '(MkSymbolicState Φ _ ĥ) => single (tt , MkSymbolicState Φ δ' ĥ).
-    Definition modify_local {Σ Γ Γ'} (f : SymbolicLocalStore Σ Γ -> SymbolicLocalStore Σ Γ') : Mutator Σ Γ Γ' unit :=
-      bind get_local (fun δ => put_local (f δ)).
-    Definition meval {Σ Γ σ} (e : Exp Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
-      bind get_local (fun δ => pure (seval e δ)).
+    Definition mutator_modify_local {Σ Γ Γ'} (f : SymbolicLocalStore Σ Γ -> SymbolicLocalStore Σ Γ') : Mutator Σ Γ Γ' unit :=
+      mutator_bind mutator_get_local (fun δ => mutator_put_local (f δ)).
+    Definition mutator_eval_exp {Σ Γ σ} (e : Exp Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
+      mutator_bind mutator_get_local (fun δ => mutator_pure (symbolic_eval_exp e δ)).
 
-    Definition pop {Σ Γ x σ} : Mutator Σ (Γ ▻ (x , σ)) Γ unit :=
-      modify_local (fun δ => env_tail δ).
-    Definition pops {Σ Γ} Δ : Mutator Σ (Γ ▻▻ Δ) Γ unit :=
-      modify_local (fun δΓΔ => env_drop Δ δΓΔ).
-    Definition push {Σ Γ x} σ (v : Term Σ σ) : Mutator Σ Γ (Γ ▻ (x , σ)) unit :=
-      modify_local (fun δ => env_snoc δ (x , σ) v).
+    Definition mutator_pop_local {Σ Γ x σ} : Mutator Σ (Γ ▻ (x , σ)) Γ unit :=
+      mutator_modify_local (fun δ => env_tail δ).
+    Definition mutator_pops_local {Σ Γ} Δ : Mutator Σ (Γ ▻▻ Δ) Γ unit :=
+      mutator_modify_local (fun δΓΔ => env_drop Δ δΓΔ).
+    Definition mutator_push_local {Σ Γ x} σ (v : Term Σ σ) : Mutator Σ Γ (Γ ▻ (x , σ)) unit :=
+      mutator_modify_local (fun δ => env_snoc δ (x , σ) v).
     (* Definition pushs {Σ Γ Δ} (δΔ : @Env' X T D Δ) : DST G (@Env' X T D) Γ (ctx_cat Γ Δ) unit := *)
-    (*   modify_local (fun δΓ => env_cat δΓ δΔ). *)
+    (*   mutator_modify_local (fun δΓ => env_cat δΓ δΔ). *)
 
-    Definition sassume_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit :=
-      fun '(MkSymbolicState Φ ŝ ĥ) => single (tt , MkSymbolicState (Φ ▻ fml) ŝ ĥ).
-    Definition sassume_exp {Σ Γ} (e : Exp Γ ty_bool) : Mutator Σ Γ Γ unit :=
-      bind (meval e) (fun t => sassume_formula (formula_bool t)).
+    Definition mutator_assume_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit :=
+      mutator_modify (symbolic_assume_formula fml).
+    Definition mutator_assume_exp {Σ Γ} (e : Exp Γ ty_bool) : Mutator Σ Γ Γ unit :=
+      mutator_bind (mutator_eval_exp e) (fun t => mutator_assume_formula (formula_bool t)).
 
-    Notation "ma >>= f" := (bind ma f) (at level 50, left associativity) : mut_scope.
-    Notation "m1 ;; m2" := (bind m1 (fun _ => m2)) : mut_scope.
-    Notation "ma *> mb" := (bindright ma mb) (at level 50, left associativity) : mut_scope.
-    Notation "ma <* mb" := (bindleft ma mb) (at level 50, left associativity) : mut_scope.
+  End Mutator.
 
-    Section SymbolicExecution.
+  Module MutatorNotations.
 
-      Context {Σ : Ctx (𝑺 * Ty)}.
+    Notation "'⨂' i : I => F" := (mutator_demonic (fun i : I => F)) (at level 80, i at next level, I at next level) : mutator_scope.
+    Notation "'⨁' i : I => F" := (mutator_angelic (fun i : I => F)) (at level 80, i at next level, I at next level) : mutator_scope.
 
-      Inductive sexec {Γ : Ctx (𝑿 * Ty)} : forall (σ : Ty), Stm Γ σ -> Mutator Σ Γ Γ (Term Σ σ) -> Prop :=
-      | sexc_lit {σ : Ty} (v : Lit σ)   : sexec (stm_lit σ v) (pure (term_lit _ σ v))
-      | sexc_exp {τ : Ty} (e : Exp Γ τ) : sexec (stm_exp e)   (meval e)
-      | sexc_if  {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) (m1 m2 : Mutator Σ Γ Γ (Term Σ τ)) :
-          sexec s1 m1 ->
-          sexec s2 m2 ->
-          sexec (stm_if e s1 s2) ((sassume_exp e ;; m1) ⊗ (sassume_exp (exp_not e) ;; m2))%mut
-      | sexc_seq {τ σ : Ty} (s1 : Stm Γ τ) (s2 : Stm Γ σ) m1 m2 :
-          sexec s1 m1 ->
-          sexec s2 m2 ->
-          sexec (stm_seq s1 s2) (m1 ;; m2)
-      | sexc_let (x : 𝑿) (τ : Ty) (s : Stm Γ τ) ms {σ : Ty} (k : Stm (Γ ▻ (x , τ)) σ) mk :
-          sexec s ms ->
-          @sexec _ _ k mk ->
-          sexec (stm_let x τ s k) (ms >>= fun t => push t *> mk <* pop)%mut.
+    Infix "⊗" := mutator_demonic_binary (at level 40, left associativity) : mutator_scope.
+    Infix "⊕" := mutator_angelic_binary (at level 50, left associativity) : mutator_scope.
 
-    End SymbolicExecution.
+    Notation "ma >>= f" := (mutator_bind ma f) (at level 50, left associativity) : mutator_scope.
+    Notation "m1 ;; m2" := (mutator_bind m1 (fun _ => m2)) : mutator_scope.
+    Notation "ma *> mb" := (mutator_bind_right ma mb) (at level 50, left associativity) : mutator_scope.
+    Notation "ma <* mb" := (mutator_bind_left ma mb) (at level 50, left associativity) : mutator_scope.
 
-  End MutatorSem.
+  End MutatorNotations.
 
 End Symbolic.
