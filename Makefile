@@ -1,17 +1,17 @@
 # Comment out the below line if you want to be quiet by default.
-V=1
+VERBOSE ?= 1
 
 # Specify a concrete number of jobs if necessary
-JOBS=-j2
+JOBS ?= $(shell nproc)
 
 ifeq ($(V),1)
 E=@true
 Q=
-MFLAGS=$(JOBS)
+MFLAGS=-j$(JOBS)
 else
 E=@echo
 Q=@
-MFLAGS=$(JOBS) -s
+MFLAGS=-j$(JOBS) -s
 endif
 
 SRCS := $(shell egrep "^.*\.v$$" _CoqProject)
