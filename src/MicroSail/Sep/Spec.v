@@ -46,18 +46,18 @@ Section Outcome.
   Inductive Outcome (A: Type) : Type :=
   | single (a: A)
   | demonic {I : Set} (os: I -> Outcome A)
-  | angelic {I : Set} (os: I -> Outcome A)
-  | undef.
+  | angelic {I : Set} (os: I -> Outcome A).
 
   Definition outcome_fail {A : Type} : Outcome A :=
     angelic (fun i : Empty_set => match i with end).
+  Definition outcome_block {A : Type} : Outcome A :=
+    demonic (fun i : Empty_set => match i with end).
 
   Fixpoint outcome_map {A B : Type} (f : A -> B) (o : Outcome A) : Outcome B :=
     match o with
     | single a => single (f a)
     | demonic os => demonic (fun i => outcome_map f (os i))
     | angelic os => angelic (fun i => outcome_map f (os i))
-    | undef _    => undef _
     end.
 
   Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcome B :=
@@ -65,7 +65,6 @@ Section Outcome.
     | single a => f a
     | demonic os => demonic (fun i => outcome_bind (os i) f)
     | angelic os => angelic (fun i => outcome_bind (os i) f)
-    | undef _    => undef _
     end.
 
   Definition outcome_demonic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
@@ -78,7 +77,6 @@ Section Outcome.
     | single a   => P a
     | demonic os => forall i, outcome_satisfy P (os i)
     | angelic os => exists i, outcome_satisfy P (os i)
-    | undef _    => True
     end.
 
   Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
@@ -173,6 +171,62 @@ Module Symbolic
   Global Arguments term_record {_} _ _.
   Global Arguments term_projrec {_ _} _ _ {_ _}.
 
+  Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Type :=
+    forall {ς σ}, InCtx (ς , σ) Σ1 -> Term Σ2 σ.
+  (* Hint Unfold Sub. *)
+
+  Section WithSub.
+    Context {Σ1 Σ2 : Ctx (𝑺 * Ty)}.
+    Variable (ζ : Sub Σ1 Σ2).
+
+    Fixpoint sub_term {σ} (t : Term Σ1 σ) {struct t} : Term Σ2 σ :=
+      match t in (Term _ t0) return (Term Σ2 t0) with
+      | @term_var _ ς σ0 ςInΣ     => ζ ςInΣ
+      | term_lit _ σ0 l           => term_lit Σ2 σ0 l
+      | term_plus t1 t2           => term_plus (sub_term t1) (sub_term t2)
+      | term_times t1 t2          => term_times (sub_term t1) (sub_term t2)
+      | term_minus t1 t2          => term_minus (sub_term t1) (sub_term t2)
+      | term_neg t0               => term_neg (sub_term t0)
+      | term_eq t1 t2             => term_eq (sub_term t1) (sub_term t2)
+      | term_le t1 t2             => term_le (sub_term t1) (sub_term t2)
+      | term_lt t1 t2             => term_lt (sub_term t1) (sub_term t2)
+      | term_gt t1 t2             => term_gt (sub_term t1) (sub_term t2)
+      | term_and t1 t2            => term_and (sub_term t1) (sub_term t2)
+      | term_or t1 t2             => term_or (sub_term t1) (sub_term t2)
+      | term_not t0               => term_not (sub_term t0)
+      | @term_pair _ σ1 σ2 t1 t2  => term_pair (sub_term t1) (sub_term t2)
+      | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0)
+      | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
+      | @term_list _ σ es         => term_list
+                                       ((fix sub_terms (ts : list (Term Σ1 σ)) : list (Term Σ2 σ) :=
+                                           match ts with
+                                           | nil       => nil
+                                           | cons t ts => cons (sub_term t) (sub_terms ts)
+                                           end) es)
+      | term_cons t1 t2           => term_cons (sub_term t1) (sub_term t2)
+      | term_nil _                => term_nil Σ2
+      | term_tuple es             => term_tuple
+                                       ((fix sub_terms {σs} (ts : Env (Term Σ1) σs) : Env (Term Σ2) σs :=
+                                           match ts with
+                                           | env_nil           => env_nil
+                                           | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
+                                           end
+                                        ) _ es)
+      | @term_projtup _ _ t _ n p => @term_projtup _ _ (sub_term t) _ n p
+      | term_union U K t0         => term_union U K (sub_term t0)
+      | term_record R es          => term_record R
+                                       ((fix sub_terms {σs} (ts : Env' (Term Σ1) σs) : Env' (Term Σ2) σs :=
+                                           match ts with
+                                           | env_nil           => env_nil
+                                           | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
+                                           end
+                                        ) _ es)
+      | term_projrec t rf         => term_projrec (sub_term t) rf
+      | term_builtin f t          => term_builtin f (sub_term t)
+      end.
+
+  End WithSub.
+
   Definition SymbolicLocalStore (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type := Env' (Term Σ) Γ.
   Bind Scope env_scope with SymbolicLocalStore.
   Definition SymbolicRegStore (Σ : Ctx (𝑺 * Ty))  : Type := forall σ, 𝑹𝑬𝑮 σ -> Term Σ σ.
@@ -230,7 +284,7 @@ Module Symbolic
   | asn_sep  (a1 a2 : Assertion Σ).
 
   Inductive SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
-  | sep_contract {Σ} (δ : SymbolicLocalStore Σ Δ) (req : Assertion Σ) (ens : Assertion Σ).
+  | sep_contract Σ (δ : SymbolicLocalStore Σ Δ) (req : Assertion Σ) (ens : Assertion Σ).
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.
@@ -265,33 +319,34 @@ Module Symbolic
 
   Section SymbolicExecution.
 
-    Context {Σ : Ctx (𝑺 * Ty)}.
-
     Import OutcomeNotations.
 
-    Inductive sexec {Γ : Ctx (𝑿 * Ty)} : forall (σ : Ty), Stm Γ σ -> SymbolicState Σ Γ -> Outcome (Term Σ σ * SymbolicState Σ Γ) -> Prop :=
-    | sexc_lit {σ : Ty} (v : Lit σ)   st : sexec (stm_lit σ v) st (single (term_lit _ σ v, st))
-    | sexc_exp {τ : Ty} (e : Exp Γ τ) st : sexec (stm_exp e)   st (single (symbolic_eval_exp e (symbolicstate_localstore st), st))
-    | sexc_if  {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) st (o1 o2 : Outcome (Term Σ τ * SymbolicState Σ Γ)) :
-        sexec s1               (symbolic_assume_exp e           st) o1 ->
-        sexec s2               (symbolic_assume_exp (exp_not e) st) o2 ->
-        sexec (stm_if e s1 s2) st                                   (o1 ⊗ o2)%out
-    | sexc_seq st {τ σ : Ty}
+    Inductive sexec {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} (st : SymbolicState Σ Γ) : forall (σ : Ty), Stm Γ σ -> Outcome (Term Σ σ * SymbolicState Σ Γ) -> Prop :=
+    | sexc_lit {σ : Ty} (v : Lit σ)   : sexec st (stm_lit σ v) (single (term_lit _ σ v, st))
+    | sexc_exp {τ : Ty} (e : Exp Γ τ) : sexec st (stm_exp e)   (single (symbolic_eval_exp e (symbolicstate_localstore st), st))
+    | sexc_if  {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) (o1 o2 : Outcome (Term Σ τ * SymbolicState Σ Γ)) :
+        sexec (symbolic_assume_exp e           st) s1               o1 ->
+        sexec (symbolic_assume_exp (exp_not e) st) s2               o2 ->
+        sexec st                                   (stm_if e s1 s2) (o1 ⊗ o2)%out
+    | sexc_seq {τ σ : Ty}
         (s1 : Stm Γ τ) (o1 : Outcome (Term Σ τ * SymbolicState Σ Γ))
         (s2 : Stm Γ σ) (o2 : SymbolicState Σ Γ -> Outcome (Term Σ σ * SymbolicState Σ Γ)) :
-        sexec s1 st o1 ->
-        (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) sexec s2 st' (o2 st')) ->
+        sexec st s1 o1 ->
+        (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) sexec st' s2 (o2 st')) ->
         (* outcome_satisfy (fun '(t1 , st') => sexec s2 st' (o2 st')) o1 -> *)
-        sexec (stm_seq s1 s2) st (o1 >>= fun '(_ , st') => o2 st')
-    | sexc_let st {x : 𝑿} {τ σ : Ty}
+        sexec st (stm_seq s1 s2) (o1 >>= fun '(_ , st') => o2 st')
+    | sexc_let {x : 𝑿} {τ σ : Ty}
         (s : Stm Γ τ)             (o1 : Outcome _)
         (k : Stm (Γ ▻ (x , τ)) σ) (o2 : SymbolicState Σ (Γ ▻ _) -> Outcome (Term Σ σ * SymbolicState Σ (Γ ▻ _))) :
-        sexec s st o1 ->
-        (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) @sexec (Γ ▻ _) _ k st' (o2 st')) ->
-        sexec (stm_let x τ s k) st
+        sexec st s o1 ->
+        (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) @sexec _ (Γ ▻ _) st' _ k (o2 st')) ->
+        sexec st (stm_let x τ s k)
               (o1 >>= fun '(t1 , st1) =>
                o2 (symbolic_push_local t1 st1) >>= fun '(t2 , st2) =>
-               single (t2 , symbolic_pop_local st2))%out.
+                                                     single (t2 , symbolic_pop_local st2))%out
+    | sexc_call {Δ σ} (f : 𝑭 Δ σ) (es : Env' (Exp Γ) Δ) {Σ' δ req ens} :
+        CEnv f = @sep_contract _ _ Σ' δ req ens ->
+        sexec st (stm_call f es) (outcome_fail).
 
   End SymbolicExecution.
 
