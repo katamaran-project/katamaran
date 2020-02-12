@@ -827,6 +827,15 @@ Module Type ProgramKit
   Parameter read_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ), Lit σ.
   Parameter write_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ), RegStore.
 
+  Parameter read_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : Lit σ),
+            read_register (write_register γ r v) r = v.
+
+  Parameter write_read : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ),
+            (write_register γ r (read_register γ r)) = γ.
+
+  Parameter write_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ),
+            write_register (write_register γ r v1) r v2 = write_register γ r v2.
+
   (* Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ. *)
   Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.
 

@@ -4,7 +4,8 @@ From Coq Require Import
      Program.Tactics
      Strings.String
      ZArith.ZArith
-     micromega.Lia.
+     micromega.Lia
+     Logic.FunctionalExtensionality.
 
 From Equations Require Import
      Equations.
@@ -156,6 +157,38 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
     write_register γ R2 v R2 := v;
     write_register γ R3 v R3 := v;
     write_register γ r1 v r2 := γ _ r2.
+
+  Lemma read_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : Lit σ),
+      read_register (write_register γ r v) r = v.
+  Proof.
+    intros γ σ r v. now destruct r.
+  Qed.
+
+  Lemma write_read_pw : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ),
+      (write_register γ r (read_register γ r)) σ r = γ σ r.
+  Proof.
+    intros γ σ r.
+    now destruct r.
+  Qed.
+
+  Lemma write_read : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ),
+      (write_register γ r (read_register γ r)) = γ.
+  Proof.
+    intros γ σ r.
+    unfold read_register.
+    extensionality σ'.
+    extensionality r'.
+    destruct r';
+    destruct r;
+    destruct γ; now simp write_register.
+  Qed.
+
+  Lemma write_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ),
+            write_register (write_register γ r v1) r v2 = write_register γ r v2.
+  Proof.
+    intros γ σ r v1 v2;
+    destruct r; destruct v2; trivial.
+  Qed.
 
   Local Coercion stm_exp : Exp >-> Stm.
   Local Open Scope exp_scope.
