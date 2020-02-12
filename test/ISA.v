@@ -21,12 +21,10 @@ Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope ctx_scope.
 
-Inductive Unions := instruction.
+Inductive Unions : Set := instruction.
 
 Lemma Unions_eq_dec : EqDec Unions.
   unfold EqDec.
-  intros x y.
-  destruct x. destruct y.
   decide equality.
 Qed.
 
@@ -158,13 +156,6 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
     intros γ σ r v. now destruct r.
   Qed.
 
-  Lemma write_read_pw : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ),
-      (write_register γ r (read_register γ r)) σ r = γ σ r.
-  Proof.
-    intros γ σ r.
-    now destruct r.
-  Qed.
-
   Lemma write_read : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ),
       (write_register γ r (read_register γ r)) = γ.
   Proof.
@@ -174,14 +165,14 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
     extensionality r'.
     destruct r';
     destruct r;
-    destruct γ; now simp write_register.
+    now simp write_register.
   Qed.
 
   Lemma write_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ),
             write_register (write_register γ r v1) r v2 = write_register γ r v2.
   Proof.
-    intros γ σ r v1 v2;
-    destruct r; destruct v2; trivial.
+    intros γ σ r v1 v2.
+    now destruct r.
   Qed.
 
   Local Coercion stm_exp : Exp >-> Stm.
