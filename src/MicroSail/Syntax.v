@@ -258,7 +258,7 @@ Module Type TermKit (typekit : TypeKit).
 
   (* Names of registers. *)
   Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
-  Parameter Inline 𝑹𝑬𝑮_eq_dec : forall σ (r1 r2 : 𝑹𝑬𝑮 σ), {r1 = r2} + {r1 <> r2}.
+  (* Parameter Inline 𝑹𝑬𝑮_eq_dec : forall σ (r1 r2 : 𝑹𝑬𝑮 σ), {r1 = r2} + {r1 <> r2}. *)
 
 End TermKit.
 

@@ -128,13 +128,7 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     | R3 : Reg ty_int
     .
   Definition 𝑹𝑬𝑮 := Reg.
-  Definition 𝑹𝑬𝑮_eq_dec : forall σ, EqDec (𝑹𝑬𝑮 σ).
-  Proof.
-    unfold EqDec.
-    dependent destruction x;
-    dependent destruction y;
-    (now right) || (now left).
-  Defined.
+
 End ExampleTermKit.
 Module ExampleTerms := Terms ExampleTypeKit ExampleTermKit.
 Import ExampleTerms.
