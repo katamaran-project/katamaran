@@ -170,7 +170,7 @@ Module SmallStep
 
   | step_stm_reg_register
       (γ : RegStore) (δ : LocalStore Γ) {σ : Ty} (r : 𝑹𝑬𝑮 σ) :
-      ⟨ γ, δ, stm_read_register r ⟩ ---> ⟨ γ, δ, stm_lit σ (γ σ r) ⟩
+      ⟨ γ, δ, stm_read_register r ⟩ ---> ⟨ γ, δ, stm_lit σ (read_register γ r) ⟩
   | step_stm_write_register
       (γ : RegStore) (δ : LocalStore Γ) {σ : Ty} (r : 𝑹𝑬𝑮 σ) (e : Exp Γ σ) :
       let v := eval e δ in

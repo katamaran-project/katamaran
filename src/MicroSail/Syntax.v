@@ -258,6 +258,7 @@ Module Type TermKit (typekit : TypeKit).
 
   (* Names of registers. *)
   Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
+  Parameter Inline 𝑹𝑬𝑮_eq_dec : forall σ (r1 r2 : 𝑹𝑬𝑮 σ), {r1 = r2} + {r1 <> r2}.
 
 End TermKit.
 
@@ -396,12 +397,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Type := Env' Lit Γ.
   Bind Scope env_scope with LocalStore.
-
-  Definition RegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Lit σ.
-  Bind Scope env_scope with RegStore.
-
-  Definition write_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) : RegStore.
-  Admitted.
 
   Section Expressions.
 
@@ -822,6 +817,15 @@ Module Type ProgramKit
        (Import termkit : TermKit typekit).
   Module TM := Terms typekit termkit.
   Export TM.
+
+  (* We choose to make [RegStore] a parameter so the users of the module would be able to
+     instantiate it with their own data structure and [read_regsiter]/[write_register]
+     functions *)
+  Parameter RegStore : Type.
+  (* Definition RegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Lit σ. *)
+  Bind Scope env_scope with RegStore.
+  Parameter read_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ), Lit σ.
+  Parameter write_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ), RegStore.
 
   (* Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ. *)
   Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.
