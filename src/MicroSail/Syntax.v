@@ -741,15 +741,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       ResultNoFail s POST -> exists v, s = stm_lit _ v /\ POST v.
     Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
 
-    Inductive Contract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
-    | ContractNoFail          (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
-    | ContractTerminateNoFail (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
-    | ContractTerminate       (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
-    | ContractNone.
-
-    Definition ContractEnv : Type :=
-      forall Δ τ (f : 𝑭 Δ τ), Contract Δ τ.
-
   End Contracts.
 
   Notation "e1 && e2" := (exp_and e1 e2) : exp_scope.
@@ -837,10 +828,30 @@ Module Type ProgramKit
 
 End ProgramKit.
 
+Module Programs
+       (typekit : TypeKit)
+       (termkit : TermKit typekit)
+       (progkit : ProgramKit typekit termkit).
+  Export progkit.
+
+  Inductive Contract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+  | ContractNoFail          (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
+  | ContractTerminateNoFail (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
+  | ContractTerminate       (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
+  | ContractNone.
+
+  Definition ContractEnv : Type :=
+    forall Δ τ (f : 𝑭 Δ τ), Contract Δ τ.
+
+End Programs.
+
 Module Type ContractKit
        (Import typekit : TypeKit)
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit).
+
+  Module PM := Programs typekit termkit progkit.
+  Export PM.
 
   Parameter Inline CEnv : ContractEnv.
 

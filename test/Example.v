@@ -205,6 +205,9 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Defined.
 
 End ExampleProgramKit.
+Module ExamplePrograms :=
+  Programs ExampleTypeKit ExampleTermKit ExampleProgramKit.
+Import ExamplePrograms.
 Import ExampleProgramKit.
 
 (* ⇑ GENERATED                                                                *)
@@ -212,6 +215,7 @@ Import ExampleProgramKit.
 (* ⇓ NOT GENERATED                                                            *)
 
 Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleProgramKit).
+  Module PM := ExamplePrograms.
 
   Definition CEnv : ContractEnv :=
     fun σs τ f =>
