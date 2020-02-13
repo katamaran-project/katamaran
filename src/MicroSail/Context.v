@@ -130,6 +130,8 @@ Module CtxNotations.
   Notation "Γ1 ▻▻ Γ2" := (ctx_cat Γ1 Γ2) : ctx_scope.
   Notation "b ∈ Γ" := (InCtx b Γ) : type_scope.
 
+  (* NB: ∶ ≠ :
+     To typeset the next notation, use \: *)
   Notation "x ∶ τ" := (pair x τ) : ctx_scope.
   Notation "[ x ]" := (ctx_snoc ctx_nil x)  : ctx_scope.
   Notation "[ x , .. , z ]" := (ctx_snoc .. (ctx_snoc ctx_nil x) .. z) : ctx_scope.
