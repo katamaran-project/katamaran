@@ -798,6 +798,12 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
      "'[hv' 'match:'  e  'in'  U  'with'  '/' |  alt1  x1  =>  rhs1  '/' |  alt2  x2  =>  rhs2  '/' 'end' ']'"
       ).
 
+  Notation "'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' | '(' fst ',' snd ')' => rhs 'end'" :=
+    (@stm_match_pair _ σ1 σ2 _ e fst snd rhs)
+    (at level 100, fst pattern, snd pattern, format
+     "'[hv' 'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' '/' | '(' fst ',' snd ')' => rhs '/' 'end' ']'"
+    ).
+
   Notation "'call' f a1 .. an" :=
     (stm_call f (env_snoc .. (env_snoc env_nil (_,_) a1) .. (_,_) an))
     (at level 10, f global, a1, an at level 9).
