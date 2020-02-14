@@ -258,7 +258,9 @@ Module Type TermKit (typekit : TypeKit).
 
   (* Names of registers. *)
   Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
-  (* Parameter Inline 𝑹𝑬𝑮_eq_dec : forall σ (r1 r2 : 𝑹𝑬𝑮 σ), {r1 = r2} + {r1 <> r2}. *)
+
+  (* Memory addresses. *)
+  Parameter Inline 𝑨𝑫𝑫𝑹 : Set.
 
 End TermKit.
 
@@ -590,6 +592,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
     | stm_read_register {τ} (reg : 𝑹𝑬𝑮 τ) : Stm Γ τ
     | stm_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) : Stm Γ τ
+    | stm_read_memory (addr : 𝑨𝑫𝑫𝑹) : Stm Γ ty_int
+    | stm_write_memory (addr : 𝑨𝑫𝑫𝑹) (e : Exp Γ ty_int) : Stm Γ ty_int
     | stm_bind   {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ) : Stm Γ τ.
     Bind Scope stm_scope with Stm.
 
@@ -613,6 +617,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
     Global Arguments stm_read_register {_ _} _.
     Global Arguments stm_write_register {_ _} _ _.
+    Global Arguments stm_read_memory {_} _.
+    Global Arguments stm_write_memory {_} _ _.
 
   End Statements.
 
@@ -841,6 +847,12 @@ Module Type ProgramKit
 
   Parameter write_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ),
             write_register (write_register γ r v1) r v2 = write_register γ r v2.
+
+  (* Memory model *)
+  Parameter Memory : Type.
+  Bind Scope env_scope with Memory.
+  Parameter read_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹), Lit ty_int.
+  Parameter write_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int), Memory.
 
   (* Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ. *)
   Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.
