@@ -11,7 +11,9 @@ From Equations Require Import
      Equations.
 
 From MicroSail Require Import
-     WLP.Spec
+     (* WLP.Spec *)
+     Notation
+     SmallStep.Step
      Syntax.
 
 Set Implicit Arguments.
@@ -97,23 +99,27 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) := match R with end.
 
   (** FUNCTIONS **)
-  (* Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set := *)
-  (* | abs :     Fun [ "x" ∶ ty_int               ] ty_int *)
-  (* | cmp :     Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int *)
-  (* | gcd :     Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int *)
-  (* | gcdloop : Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int *)
-  (* | msum :    Fun [ "x" ∶ ty_int , "y" ∶ ty_int ] ty_int *)
-  (* . *)
-
+  (* Names are inspired by sail-riscv naming convention *)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
+  (* read registers *)
+  | rX  : Fun ["reg_code" ∶ ty_int] ty_int
+  (* write register *)
+  | wX : Fun ["reg_code" ∶ ty_int, "reg_value" ∶ ty_int] ty_int
+  (* read flag *)
+  | rF      : Fun ["flag_code" ∶ ty_int] ty_bool
+  (* write flag *)
+  | wF     : Fun ["flag_code" ∶ ty_int, "flag_value" ∶ ty_bool] ty_bool
+  (* read memory *)
+  | rM    : Fun ["address" ∶ ty_int] ty_int
+  (* write memory *)
+  | wM   : Fun ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_int
+  (* check memory bounds *)
+  | in_bounds : Fun ["address" ∶ ty_int] ty_bool
+  (* semantics of a single instruction *)
   | semantics : Fun [ "x" ∶ ty_union instruction] ty_unit
-  | ihalt : Fun ε ty_unit
-  | iload : Fun [ "dest_reg" ∶ ty_int , "src_addr" ∶ ty_int ] ty_unit
-  | iadd  : Fun [ "dest_reg" ∶ ty_int , "src_addr" ∶ ty_int ] ty_unit
-  | ijump : Fun [ "offset" ∶ ty_int ] ty_unit
   .
 
-  Definition 𝑭 := Fun.
+  Definition 𝑭 : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
 
   Inductive Reg : Ty -> Set :=
       Halted      : Reg ty_bool
@@ -127,6 +133,17 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     .
   Definition 𝑹𝑬𝑮 := Reg.
 
+  Inductive Address : Set :=
+    A0 | A1 | A2 | A3.
+
+  Definition Address_eq_dec : EqDec Address.
+  Proof.
+    unfold EqDec.
+    decide equality.
+  Defined.
+
+  Definition 𝑨𝑫𝑫𝑹 : Set := Address.
+
 End ExampleTermKit.
 Module ExampleTerms := Terms ExampleTypeKit ExampleTermKit.
 Import ExampleTerms.
@@ -135,6 +152,12 @@ Import NameResolution.
 Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Module TM := ExampleTerms.
 
+  Local Definition lit_true {Γ}  : Exp Γ ty_bool := exp_lit _ _ (untag (taglit_bool true)).
+  Local Definition lit_false {Γ} : Exp Γ ty_bool := exp_lit _ _ (untag (taglit_bool false)).
+  Local Definition int_lit {Γ} (literal : Z) : Exp Γ ty_int :=
+    exp_lit _ _ (untag (taglit_int literal)).
+
+  (* REGISTER STORE *)
   Definition RegStore := forall σ, 𝑹𝑬𝑮 σ -> Lit σ.
 
   Definition read_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) : Lit σ :=
@@ -175,6 +198,22 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
     now destruct r.
   Qed.
 
+  (* MEMORY *)
+  Definition Memory := 𝑨𝑫𝑫𝑹 -> Lit ty_int.
+
+  (* Address space bounds *)
+  Definition Memory_lb {Γ} : Exp Γ ty_int := int_lit 0.
+  Definition Memory_hb {Γ} : Exp Γ ty_int := int_lit 3.
+
+  Definition read_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹 ) : Lit ty_int :=
+    μ addr.
+
+  Definition write_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int) : Memory :=
+    fun addr' => match (Address_eq_dec addr addr') with
+              | left eq_refl => v
+              | right _ => μ addr'
+              end.
+
   Local Coercion stm_exp : Exp >-> Stm.
   Local Open Scope exp_scope.
   Local Open Scope stm_scope.
@@ -182,14 +221,45 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Local Notation "'x'"   := (@exp_var _ "x" _ _).
   Local Notation "'y'"   := (@exp_var _ "y" _ _).
   Local Notation "'z'"   := (@exp_var _ "z" _ _).
-
-  Local Notation "'load_args'"   := (exp_pair _ _).
-  Local Notation "'y'"   := (@exp_var _ "y" _ _).
-  Local Notation "'z'"   := (@exp_var _ "z" _ _).
+  Local Notation "'reg_code'" := (@exp_var _ "reg_code" ty_int _).
+  Local Notation "'reg_value'" := (@exp_var _ "reg_value" ty_int _).
+  Local Notation "'flag_code'" := (@exp_var _ "flag_code" ty_int _).
+  Local Notation "'flag_value'" := (@exp_var _ "flag_value" ty_bool _).
+  Local Notation "'address'" := (@exp_var _ "address" ty_int _).
+  Local Notation "'mem_value'" := (@exp_var _ "mem_value" ty_int _).
+  Local Definition nop {Γ} : Stm Γ ty_unit := stm_lit _ (untag taglit_unit).
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ.
     let pi := eval compute in
     match f in Fun Δ τ return Stm Δ τ with
+    | rX =>
+      if:      reg_code = int_lit 0 then stm_read_register R0
+      else if: reg_code = int_lit 1 then stm_read_register R1
+      else if: reg_code = int_lit 2 then stm_read_register R2
+      else if: reg_code = int_lit 3 then stm_read_register R3
+      else     stm_fail _ "read_register: invalid register"
+    | wX =>
+      if:      reg_code = int_lit 0 then stm_write_register R0 reg_value
+      else if: reg_code = int_lit 1 then stm_write_register R1 reg_value
+      else if: reg_code = int_lit 2 then stm_write_register R2 reg_value
+      else if: reg_code = int_lit 3 then stm_write_register R3 reg_value
+      else     stm_fail _ "write_register: invalid register"
+    | rF =>
+      if:      flag_code = int_lit 5 then stm_read_register Halted
+      else if: flag_code = int_lit 6 then stm_read_register Overflow
+      else if: flag_code = int_lit 7 then stm_read_register OutOfMemory
+      else     stm_fail _ "read_register: invalid register"
+    | wF =>
+      if:      flag_code = int_lit 5 then stm_write_register Halted flag_value
+      else if: flag_code = int_lit 6 then stm_write_register Overflow flag_value
+      else if: flag_code = int_lit 7 then stm_write_register OutOfMemory flag_value
+      else     stm_fail _ "write_register: invalid register"
+    | rM =>
+      stm_fail _ "read_memory: not implemented"
+    | wM =>
+      stm_fail _ "write_memory: invalid register"
+    | in_bounds => exp_and (exp_or (address = Memory_lb) (address > Memory_lb))
+                          (address < Memory_hb)
     | semantics => (@stm_match_union _ instruction x _
         (fun K => match K with
                | Halt => ""
@@ -198,19 +268,45 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
                | Jump => "jump_args"
                end)
         (fun K => match K return Stm _ _ with
-               | Halt => stm_fail _ "not implemented"
-               | Load => stm_match_pair (exp_var "load_args") "dest" "source"
-                                       (stm_fail _ "not implemented")
+               | Halt =>
+                 stm_write_register Halted lit_true ;; nop
+               | Load =>
+                 match: (exp_var "load_args") in (ty_int , ty_int) with
+                 | ("dest", "source") =>
+                      let: "x" := call rM (exp_var "source")
+                   in let: "safe" := call in_bounds (exp_var "source")
+                   in if: (exp_var "safe")
+                      then (call wX (exp_var "dest") (exp_var "x");;nop)
+                      else (stm_write_register OutOfMemory lit_true;; nop)
+                  end
                | Add => stm_fail _ "not implemented"
                | Jump => stm_fail _ "not implemented"
-               (* | alt2%exp => rhs2%stm *)
                end))
-    | ihalt => stm_fail _ "not implemented"
-    | iload => stm_fail _ "not implemented"
-    | iadd => stm_fail _ "not implemented"
-    | ijump => stm_fail _ "not implemented"
     end in exact pi.
   Defined.
 
 End ExampleProgramKit.
 Import ExampleProgramKit.
+
+Module ISASmappStep := SmallStep ExampleTypeKit ExampleTermKit ExampleProgramKit.
+Import ISASmappStep.
+Import CtxNotations.
+Lemma t :
+  forall
+    (* (x : ty_union instruction) *)
+    (* (Γ : ["x" ∶ ty_union instruction]) *)
+    (γ : RegStore) (μ : Memory) (δ : LocalStore _),
+    ⟨ γ , μ , δ , @Pi ["x" ∶ ty_union instruction] ty_unit semantics ⟩ --->
+    ⟨ γ , μ , δ , stm_fail _ "not implemented" ⟩.
+Proof.
+  intros.
+  destruct (Pi semantics);
+  (* Focus 19. *)
+  match goal with
+  | [ γ : RegStore |- ⟨ ?γ , ?μ , ?δ , (stm_read_register _ ) ⟩ ---> ⟨ ?γ , ?μ , ?δ , _ ⟩ ] => idtac
+  end.
+  match goal with
+  | [ |- ⟨ γ , μ , δ , (stm_match_union _ _ _ _) ⟩ ---> ⟨ γ , μ , δ , _ ⟩ ] => idtac
+  end.
+
+Check (Pi semantics).
