@@ -75,15 +75,15 @@ Module Progress
 
   Local Ltac progress_inst T :=
     match goal with
-    | [ IH: (forall (γ : RegStore) (δ : LocalStore (ctx_cat ?Γ ?Δ)), _),
-        γ : RegStore, δ1: LocalStore ?Γ, δ2: LocalStore ?Δ |- _
-      ] => specialize (IH γ (env_cat δ1 δ2)); T
+    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : LocalStore (ctx_cat ?Γ ?Δ)), _),
+        γ : RegStore, μ : Memory, δ1: LocalStore ?Γ, δ2: LocalStore ?Δ |- _
+      ] => specialize (IH γ μ (env_cat δ1 δ2)); T
     (* | [ IH: (forall (δ : LocalStore (ctx_snoc ctx_nil (?x , ?σ))), _), *)
     (*     v: Lit ?σ |- _ *)
     (*   ] => specialize (IH (env_snoc env_nil x σ v)); T *)
-    | [ IH: (forall (γ : RegStore) (δ : LocalStore ?Γ), _),
+    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : LocalStore ?Γ), _),
         γ : RegStore, δ: LocalStore ?Γ |- _
-      ] => solve [ specialize (IH γ δ); T | clear IH; T ]
+      ] => solve [ specialize (IH γ μ δ); T | clear IH; T ]
     end.
 
   Local Ltac progress_tac :=
@@ -94,7 +94,7 @@ Module Progress
       ].
 
   Lemma progress {Γ σ} (s : Stm Γ σ) :
-    Final s \/ forall γ δ, exists γ' δ' s', ⟨ γ , δ , s ⟩ ---> ⟨ γ' , δ' , s' ⟩.
+    Final s \/ forall γ μ δ, exists γ' μ' δ' s', ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩.
   Proof. induction s; intros; try progress_tac. Qed.
 
 End Progress.

@@ -202,7 +202,7 @@ Module SmallStep
   | step_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : LocalStore Γ} {s2 s3 : Stm Γ σ} :
       Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 -> Steps γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 -> Steps γ1 μ1 δ1 s1 γ3 μ3 δ3 s3.
 
-  Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Steps _ _ γ1 δ1 s1 γ2 δ2 s2).
+  Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Steps _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2).
 
   (* Tests if a statement is a final one, i.e. a finished computation. *)
   Ltac microsail_stm_is_final s :=
