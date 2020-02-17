@@ -58,6 +58,7 @@ Import ExampleTypes.
 
 Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Module TY := ExampleTypes.
+  Import TyNotations.
   Open Scope lit_scope.
   (** ENUMS **)
 
@@ -125,7 +126,17 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     | R2 : Reg ty_int
     | R3 : Reg ty_int
     .
-  Definition 𝑹𝑬𝑮 := Reg.
+
+  Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
+  Definition 𝑹𝑬𝑮_eq_dec {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ) : {x ≡ y}+{ ~ x ≡ y}.
+  Proof.
+    destruct x; destruct y; cbn;
+      first
+        [ left; now apply tyeq_refl with eq_refl
+        | right; intros [eqt eqr];
+          try rewrite <- (Eqdep_dec.eq_rect_eq_dec Ty_eq_dec) in eqr; discriminate
+        ].
+  Defined.
 
 End ExampleTermKit.
 Module ExampleTerms := Terms ExampleTypeKit ExampleTermKit.
