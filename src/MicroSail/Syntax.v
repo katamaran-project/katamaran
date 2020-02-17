@@ -28,6 +28,7 @@
 
 From Coq Require Import
      Logic.EqdepFacts
+     Logic.FunctionalExtensionality
      Program.Equality
      Program.Tactics
      Strings.String
@@ -230,6 +231,19 @@ Module Types (Export typekit : TypeKit).
       intuition congruence.
   Qed.
 
+  (* Simple telescopic equality for a family indexed by types. *)
+  Inductive tyeq {F : Ty -> Type} {σ τ} (fσ : F σ) (fτ : F τ) : Prop :=
+  | tyeq_refl (eqt : σ = τ) (eqf : eq_rect _ _ fσ _ eqt = fτ) : tyeq fσ fτ.
+  (* (* Alternative definition. *) *)
+  (* Definition tyeq {F : Ty -> Type} {σ τ} (fσ : F σ) (fτ : F τ) : Prop := *)
+  (*   sigT (fun eqt => eq_rect _ _ fσ _ eqt = fτ). *)
+
+  Module TyNotations.
+
+    Infix "≡" := tyeq (at level 70, no associativity).
+
+  End TyNotations.
+
 End Types.
 
 (******************************************************************************)
@@ -237,6 +251,7 @@ End Types.
 Module Type TermKit (typekit : TypeKit).
   Module TY := Types typekit.
   Export TY.
+  Import TyNotations.
 
   (* Names of enum data constructors. *)
   Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
@@ -261,6 +276,9 @@ Module Type TermKit (typekit : TypeKit).
 
   (* Memory addresses. *)
   Parameter Inline 𝑨𝑫𝑫𝑹 : Set.
+
+  Parameter Inline 𝑹𝑬𝑮_eq_dec :
+    forall {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ), {x ≡ y}+{ ~ x ≡ y}.
 
 End TermKit.
 
@@ -743,6 +761,51 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
 
   End Contracts.
+
+  Section GenericRegStore.
+
+    Import TyNotations.
+
+    Definition GenericRegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Lit σ.
+
+    Definition generic_write_register (γ : GenericRegStore) {σ} (r : 𝑹𝑬𝑮 σ)
+      (v : Lit σ) : GenericRegStore :=
+      fun τ r' =>
+        match 𝑹𝑬𝑮_eq_dec r r' with
+        | left (tyeq_refl _ eqt _) => eq_rect σ Lit v τ eqt
+        | right _ => γ τ r'
+        end.
+
+    Definition generic_read_register (γ : GenericRegStore) {σ} (r : 𝑹𝑬𝑮 σ) :
+      Lit σ := γ _ r.
+
+    Lemma generic_read_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+      generic_read_register (generic_write_register γ r v) r = v.
+    Proof.
+      unfold generic_read_register, generic_write_register.
+      destruct (𝑹𝑬𝑮_eq_dec r r) as [[eqσ eqr]|].
+      - symmetry. apply Eqdep_dec.eq_rect_eq_dec, Ty_eq_dec.
+      - contradict n. now apply tyeq_refl with eq_refl.
+    Qed.
+
+    Lemma generic_write_read γ {σ} (r : 𝑹𝑬𝑮 σ) :
+      generic_write_register γ r (generic_read_register γ r) = γ.
+    Proof.
+      extensionality τ. extensionality r'.
+      unfold generic_write_register, generic_read_register.
+      destruct (𝑹𝑬𝑮_eq_dec r r') as [[eqt eqr]|]; now subst.
+    Qed.
+
+    Lemma generic_write_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ) :
+      generic_write_register (generic_write_register γ r v1) r v2 =
+      generic_write_register γ r v2.
+    Proof.
+      extensionality τ. extensionality r'.
+      unfold generic_write_register, generic_read_register.
+      destruct (𝑹𝑬𝑮_eq_dec r r') as [[eqσ eqr]|]; now cbn.
+    Qed.
+
+  End GenericRegStore.
 
   Notation "e1 && e2" := (exp_and e1 e2) : exp_scope.
   Notation "e1 * e2" := (exp_times e1 e2) : exp_scope.

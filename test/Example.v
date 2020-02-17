@@ -101,6 +101,7 @@ Import ExampleTypes.
 
 Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Module TY := ExampleTypes.
+  Import TyNotations.
 
   (** ENUMS **)
   Definition 𝑬𝑲 (E : 𝑬) : Set :=
@@ -154,6 +155,15 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
 
   Definition 𝑹𝑬𝑮 : Ty -> Set := fun _ => Empty_set.
+  Definition 𝑹𝑬𝑮_eq_dec {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ) : {x ≡ y}+{~ x ≡ y}.
+  Proof.
+    destruct x; destruct y; cbn;
+      first
+        [ left; now apply tyeq_refl with eq_refl
+        | right; intros [eqt eqr];
+          rewrite <- (Eqdep_dec.eq_rect_eq_dec Ty_eq_dec) in eqr; discriminate
+        ].
+  Defined.
 
   Definition 𝑨𝑫𝑫𝑹 : Set := Empty_set.
 
@@ -231,6 +241,13 @@ Definition read_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) : Lit ty_int :=
 
 Definition write_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int) : Memory :=
   match addr with end.
+
+  (* Definition RegStore := GenericRegStore. *)
+  (* Definition read_register := generic_read_register. *)
+  (* Definition write_register := generic_write_register. *)
+  (* Definition read_write := generic_read_write. *)
+  (* Definition write_read := generic_write_read. *)
+  (* Definition write_write := generic_write_write. *)
 
 End ExampleProgramKit.
 
