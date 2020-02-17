@@ -143,8 +143,8 @@ Module Soundness
       end.
 
   Lemma WLP_sound (validCEnv : ValidContractEnv CEnv) {Γ σ} (s : Stm Γ σ) :
-    forall (γ γ' : RegStore) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),
-      ⟨ γ, δ, s ⟩ --->* ⟨ γ', δ', s' ⟩ -> Final s' ->
+    forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),
+      ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
       forall (POST : Lit σ -> LocalStore Γ -> RegStore -> Prop),
         WLP s POST δ γ -> ResultNoFail s' (fun v => POST v δ' γ').
   Proof.
