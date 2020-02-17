@@ -11,9 +11,9 @@ From Equations Require Import
      Equations.
 
 From MicroSail Require Import
-     (* WLP.Spec *)
      Notation
      SmallStep.Step
+     SmallStep.Progress
      Syntax.
 
 Set Implicit Arguments.
@@ -76,7 +76,7 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     match U with
     | instruction => fun K => match K with
                           | Halt => ty_unit
-                          (* Load has two fields: register label and memory address *)
+                          (* Load has two fields: a register label and a memory address, *)
                           (* represented as ints *)
                           | Load => ty_prod ty_int ty_int
                           | Add => ty_prod ty_int ty_int
@@ -116,11 +116,14 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   (* check memory bounds *)
   | in_bounds : Fun ["address" ∶ ty_int] ty_bool
   (* semantics of a single instruction *)
-  | semantics : Fun [ "x" ∶ ty_union instruction] ty_unit
+  | semantics : Fun [ "instr" ∶ ty_union instruction] ty_unit
   .
 
   Definition 𝑭 : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
 
+  (* Flags are represented as boolean-valued registers;
+     additionally, there are four general-purpose int-value registers
+   *)
   Inductive Reg : Ty -> Set :=
       Halted      : Reg ty_bool
     | Overflow    : Reg ty_bool
@@ -133,6 +136,7 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     .
   Definition 𝑹𝑬𝑮 := Reg.
 
+  (* A silly address space of four addresses *)
   Inductive Address : Set :=
     A0 | A1 | A2 | A3.
 
@@ -221,6 +225,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Local Notation "'x'"   := (@exp_var _ "x" _ _).
   Local Notation "'y'"   := (@exp_var _ "y" _ _).
   Local Notation "'z'"   := (@exp_var _ "z" _ _).
+  Local Notation "'instr'" := (@exp_var _ "instr" _ _).
   Local Notation "'reg_code'" := (@exp_var _ "reg_code" ty_int _).
   Local Notation "'reg_value'" := (@exp_var _ "reg_value" ty_int _).
   Local Notation "'flag_code'" := (@exp_var _ "flag_code" ty_int _).
@@ -258,9 +263,10 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
       stm_fail _ "read_memory: not implemented"
     | wM =>
       stm_fail _ "write_memory: invalid register"
+    (* an [int] represents a valid address if it is >= [Memory_lb] and < [Memory_hb] *)
     | in_bounds => exp_and (exp_or (address = Memory_lb) (address > Memory_lb))
                           (address < Memory_hb)
-    | semantics => (@stm_match_union _ instruction x _
+    | semantics => (@stm_match_union _ instruction instr _
         (fun K => match K with
                | Halt => ""
                | Load => "load_args"
@@ -290,23 +296,35 @@ Import ExampleProgramKit.
 
 Module ISASmappStep := SmallStep ExampleTypeKit ExampleTermKit ExampleProgramKit.
 Import ISASmappStep.
+
+Module ISAProgress := Progress ExampleTypeKit ExampleTermKit ExampleProgramKit.
+Import ISAProgress.
 Import CtxNotations.
-Lemma t :
-  forall
-    (* (x : ty_union instruction) *)
-    (* (Γ : ["x" ∶ ty_union instruction]) *)
-    (γ : RegStore) (μ : Memory) (δ : LocalStore _),
-    ⟨ γ , μ , δ , @Pi ["x" ∶ ty_union instruction] ty_unit semantics ⟩ --->
-    ⟨ γ , μ , δ , stm_fail _ "not implemented" ⟩.
+
+Lemma example_halt :
+  forall (Γ : Ctx (𝑿 * Ty))
+    (γ : RegStore) (μ : Memory),
+    ⟨ γ , μ
+    , env_nil ► ("instr" ∶ ty_union instruction) ↦
+          (untag ((@taglit_union instruction Halt) taglit_unit))
+      , Pi semantics ⟩
+    --->*
+    ⟨ write_register γ Halted (untag (taglit_bool true)) , μ
+    , env_nil ► ("instr" ∶ ty_union instruction) ↦
+          (untag ((@taglit_union instruction Halt) taglit_unit))
+    , @stm_lit ["instr" ∶ ty_union instruction] ty_unit (untag taglit_unit) ⟩.
 Proof.
   intros.
-  destruct (Pi semantics);
-  (* Focus 19. *)
-  match goal with
-  | [ γ : RegStore |- ⟨ ?γ , ?μ , ?δ , (stm_read_register _ ) ⟩ ---> ⟨ ?γ , ?μ , ?δ , _ ⟩ ] => idtac
-  end.
-  match goal with
-  | [ |- ⟨ γ , μ , δ , (stm_match_union _ _ _ _) ⟩ ---> ⟨ γ , μ , δ , _ ⟩ ] => idtac
-  end.
-
-Check (Pi semantics).
+  cbn [Pi untag].
+  econstructor 2.
+  constructor.
+  cbn.
+  econstructor 2.
+  constructor. constructor. constructor.
+  cbn.
+  econstructor 2.
+  constructor. apply step_stm_seq_value.
+  econstructor 2.
+  constructor.
+  constructor 1.
+Qed.
