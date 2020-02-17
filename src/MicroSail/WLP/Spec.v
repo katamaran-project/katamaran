@@ -148,8 +148,11 @@ Module WLP
     | stm_match_record R e p rhs =>
       meval e >>= fun v =>
       pushs (record_pattern_match p v) *> WLP _ _ rhs <* pops _
-    | stm_read_register r => abort
-    | stm_write_register r e => abort
+    | stm_read_register r => get_global >>= (fun γ => pure (read_register γ r))
+    | stm_write_register r e => meval e >>=
+        (fun v => modify_global (fun γ => write_register γ r v) *> pure v)
+    | stm_read_memory r => abort
+    | stm_write_memory r e => abort
     | stm_bind s k =>
       WLP _ _ s >>= fun v => WLP _ _ (k v)
     end) in exact body.

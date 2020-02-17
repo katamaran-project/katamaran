@@ -77,9 +77,9 @@ Module Soundness
       match goal with
       | [ H: ResultNoFail _ _ |- _ ] =>
         apply result_no_fail_inversion in H; destruct_conjs; subst
-      | [ H: ⟨ _, _, ?s ⟩ ---> ⟨ _, _, _ ⟩ |- _ ] =>
+      | [ H: ⟨ _, _, _, ?s ⟩ ---> ⟨ _, _, _, _ ⟩ |- _ ] =>
         microsail_stm_primitive_step s; dependent destruction H
-      | [ H: ⟨ _, _, ?s ⟩ --->* ⟨ _, _, ?t ⟩, HF: Final ?t |- _ ] =>
+      | [ H: ⟨ _, _, _, ?s ⟩ --->* ⟨ _, _, _, ?t ⟩, HF: Final ?t |- _ ] =>
         first
           [ microsail_stm_primitive_step s; dependent destruction H; cbn in HF
           | match head s with
@@ -96,12 +96,12 @@ Module Soundness
 
   Local Ltac wlp_sound_inst :=
     match goal with
-    | [ IH: forall _ _ _ _ _, ⟨ _, _ , ?s ⟩ --->* ⟨ _, _ , _ ⟩ -> _,
-        HS: ⟨ _, _ , ?s ⟩ --->* ⟨ _, _ , ?t ⟩, HF: Final ?t |- _ ] =>
-      specialize (IH _ _ _ _ _ HS HF); clear HS HF
-    | [ IH: forall _ _ _ _ _ _, ⟨ _, _ , _ ⟩ --->* ⟨ _, _ , _ ⟩ -> _,
-        HS: ⟨ _, _ , _ ⟩ --->* ⟨ _, _ , ?t ⟩, HF: Final ?t |- _ ] =>
-      specialize (IH _ _ _ _ _ _ HS HF); clear HS HF
+    | [ IH: forall _ _ _ _ _ _ _, ⟨ _, _, _ , ?s ⟩ --->* ⟨ _, _, _ , _ ⟩ -> _,
+        HS: ⟨ _, _, _ , ?s ⟩ --->* ⟨ _, _, _ , ?t ⟩, HF: Final ?t |- _ ] =>
+      specialize (IH _ _ _ _ _ _ _ HS HF); clear HS HF
+    | [ IH: forall _ _ _ _ _ _ _ _, ⟨ _, _, _ , _ ⟩ --->* ⟨ _, _, _ , _ ⟩ -> _,
+        HS: ⟨ _, _, _ , _ ⟩ --->* ⟨ _, _, _ , ?t ⟩, HF: Final ?t |- _ ] =>
+      specialize (IH _ _ _ _ _ _ _ _ HS HF); clear HS HF
     | [ IH: forall POST, WLP ?s POST ?δ ?γ -> _, WP: WLP ?s _ ?δ ?γ |- _ ] =>
       specialize (IH _ WP); clear WP
     end.
@@ -132,8 +132,8 @@ Module Soundness
     forall σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
       | ContractNoFail _ _ pre post =>
-        forall (γ γ' : RegStore) (δ δ' : LocalStore σs) (s' : Stm σs σ),
-          ⟨ γ, δ, Pi f ⟩ --->* ⟨ γ', δ', s' ⟩ ->
+        forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore σs) (s' : Stm σs σ),
+          ⟨ γ, μ, δ, Pi f ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
           Final s' ->
           uncurry pre δ γ ->
           ResultNoFail s' (fun v => uncurry post δ v γ')
@@ -181,7 +181,14 @@ Module Soundness
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
+      change (eval e δ) with v in H2.
+      revert H2. generalize v. clear v. revert δ γ.
+      revert POST. clear.
+      admit.
     - wlp_sound_solve.
-  Qed.
+    - wlp_sound_solve.
+    - wlp_sound_solve.
+  Abort.
+  (* Qed. *)
 
 End Soundness.

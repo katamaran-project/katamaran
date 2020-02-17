@@ -89,6 +89,12 @@ Section WithGIL.
     fun k _ => k tt δ'.
   Definition modify_local {Γ Γ'} (f : L Γ -> L Γ') : DST G L Γ Γ' unit :=
     bind get_local (fun δ => put_local (f δ)).
+  Definition get_global {Γ} : DST G L Γ Γ G :=
+    fun k δ γ => k γ δ γ.
+  Definition put_global {Γ} (γ' : G) : DST G L Γ Γ unit :=
+    fun k δ γ' => k tt δ γ'.
+  Definition modify_global {Γ} (f : G -> G) : DST G L Γ Γ unit :=
+    bind get_global (fun γ => put_global (f γ)).
   Definition ifthenelse {Γ1 Γ2 A} (b : bool) (t e : DST G L Γ1 Γ2 A) : DST G L Γ1 Γ2 A :=
     fun k δ γ => (b = true -> t k δ γ) /\ (b = false -> e k δ γ).
 
@@ -98,11 +104,14 @@ Section WithGIL.
   Global Arguments bindleft {_ _ _ _ _} _ _ / _ _ _.
   Global Arguments bindright {_ _ _ _ _} _ _ / _ _ _.
   Global Arguments evalDST {_ _ _} _ / _ _ _.
+  Global Arguments get_global {_} / _ _ _.
   Global Arguments get_local {_} / _ _ _.
   Global Arguments lift_cont {_ _} _ / _ _ _.
   Global Arguments lift_cont_global {_ _} _ / _ _ _.
+  Global Arguments modify_global {_} _ / _ _ _.
   Global Arguments modify_local {_ _} _ / _ _ _.
   Global Arguments pure {_ _} _ / _ _ _.
+  Global Arguments put_global {_} _ / _ _ _.
   Global Arguments put_local {_ _} _ / _ _ _.
   Global Arguments ifthenelse {_ _ _} _ _ _ / _ _ _.
 
