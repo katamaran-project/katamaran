@@ -165,6 +165,8 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
         ].
   Defined.
 
+  Definition 𝑨𝑫𝑫𝑹 : Set := Empty_set.
+
 End ExampleTermKit.
 Module ExampleTerms := Terms ExampleTypeKit ExampleTermKit.
 Import ExampleTerms.
@@ -214,14 +216,41 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
     end in exact pi.
   Defined.
 
-  Definition RegStore := GenericRegStore.
-  Definition read_register := generic_read_register.
-  Definition write_register := generic_write_register.
-  Definition read_write := generic_read_write.
-  Definition write_read := generic_write_read.
-  Definition write_write := generic_write_write.
+Definition RegStore : Set := Empty_set.
+
+Definition read_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) : Lit σ :=
+  match r with end.
+
+Definition write_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) : RegStore :=
+  match r with end.
+
+Definition read_write (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+    read_register (write_register γ r v) r = v := match r with end.
+
+Definition write_read (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) :
+    (write_register γ r (read_register γ r)) = γ := match r with end.
+
+Definition write_write (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ) :
+    write_register (write_register γ r v1) r v2 = write_register γ r v2 :=
+  match r with end.
+
+Definition Memory : Set := Empty_set.
+
+Definition read_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) : Lit ty_int :=
+  match addr with end.
+
+Definition write_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int) : Memory :=
+  match addr with end.
+
+  (* Definition RegStore := GenericRegStore. *)
+  (* Definition read_register := generic_read_register. *)
+  (* Definition write_register := generic_write_register. *)
+  (* Definition read_write := generic_read_write. *)
+  (* Definition write_read := generic_write_read. *)
+  (* Definition write_write := generic_write_write. *)
 
 End ExampleProgramKit.
+
 Module ExamplePrograms :=
   Programs ExampleTypeKit ExampleTermKit ExampleProgramKit.
 Import ExamplePrograms.
