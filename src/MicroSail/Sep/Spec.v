@@ -157,7 +157,7 @@ Module Symbolic
   (* Experimental features *)
   | term_tuple   {σs : Ctx Ty} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs)
   | term_projtup {σs : Ctx Ty} (e : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
-                {p : ctx_nth_is σs n σ} : Term Σ σ
+                 {p : ctx_nth_is σs n σ} : Term Σ σ
   | term_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)) : Term Σ (ty_union U)
   | term_record  (R : 𝑹) (es : Env' (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R)
   | term_projrec {R : 𝑹} (e : Term Σ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
@@ -170,62 +170,6 @@ Module Symbolic
   Global Arguments term_union {_} _ _.
   Global Arguments term_record {_} _ _.
   Global Arguments term_projrec {_ _} _ _ {_ _}.
-
-  Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Type :=
-    forall {ς σ}, InCtx (ς , σ) Σ1 -> Term Σ2 σ.
-  (* Hint Unfold Sub. *)
-
-  Section WithSub.
-    Context {Σ1 Σ2 : Ctx (𝑺 * Ty)}.
-    Variable (ζ : Sub Σ1 Σ2).
-
-    Fixpoint sub_term {σ} (t : Term Σ1 σ) {struct t} : Term Σ2 σ :=
-      match t in (Term _ t0) return (Term Σ2 t0) with
-      | @term_var _ ς σ0 ςInΣ     => ζ ςInΣ
-      | term_lit _ σ0 l           => term_lit Σ2 σ0 l
-      | term_plus t1 t2           => term_plus (sub_term t1) (sub_term t2)
-      | term_times t1 t2          => term_times (sub_term t1) (sub_term t2)
-      | term_minus t1 t2          => term_minus (sub_term t1) (sub_term t2)
-      | term_neg t0               => term_neg (sub_term t0)
-      | term_eq t1 t2             => term_eq (sub_term t1) (sub_term t2)
-      | term_le t1 t2             => term_le (sub_term t1) (sub_term t2)
-      | term_lt t1 t2             => term_lt (sub_term t1) (sub_term t2)
-      | term_gt t1 t2             => term_gt (sub_term t1) (sub_term t2)
-      | term_and t1 t2            => term_and (sub_term t1) (sub_term t2)
-      | term_or t1 t2             => term_or (sub_term t1) (sub_term t2)
-      | term_not t0               => term_not (sub_term t0)
-      | @term_pair _ σ1 σ2 t1 t2  => term_pair (sub_term t1) (sub_term t2)
-      | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0)
-      | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
-      | @term_list _ σ es         => term_list
-                                       ((fix sub_terms (ts : list (Term Σ1 σ)) : list (Term Σ2 σ) :=
-                                           match ts with
-                                           | nil       => nil
-                                           | cons t ts => cons (sub_term t) (sub_terms ts)
-                                           end) es)
-      | term_cons t1 t2           => term_cons (sub_term t1) (sub_term t2)
-      | term_nil _                => term_nil Σ2
-      | term_tuple es             => term_tuple
-                                       ((fix sub_terms {σs} (ts : Env (Term Σ1) σs) : Env (Term Σ2) σs :=
-                                           match ts with
-                                           | env_nil           => env_nil
-                                           | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
-                                           end
-                                        ) _ es)
-      | @term_projtup _ _ t _ n p => @term_projtup _ _ (sub_term t) _ n p
-      | term_union U K t0         => term_union U K (sub_term t0)
-      | term_record R es          => term_record R
-                                       ((fix sub_terms {σs} (ts : Env' (Term Σ1) σs) : Env' (Term Σ2) σs :=
-                                           match ts with
-                                           | env_nil           => env_nil
-                                           | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
-                                           end
-                                        ) _ es)
-      | term_projrec t rf         => term_projrec (sub_term t) rf
-      | term_builtin f t          => term_builtin f (sub_term t)
-      end.
-
-  End WithSub.
 
   Definition SymbolicLocalStore (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type := Env' (Term Σ) Γ.
   Bind Scope env_scope with SymbolicLocalStore.
@@ -281,7 +225,10 @@ Module Symbolic
   | asn_bool (b : Term Σ ty_bool)
   | asn_pred (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
-  | asn_sep  (a1 a2 : Assertion Σ).
+  | asn_sep  (a1 a2 : Assertion Σ)
+  | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς , τ))).
+  Arguments asn_pred [_] _ _.
+  Arguments asn_exist [_] _ _ _.
 
   Inductive SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
   | sep_contract Σ (δ : SymbolicLocalStore Σ Δ) (req : Assertion Σ) (ens : Assertion Σ).
@@ -296,6 +243,89 @@ Module Symbolic
   Definition SymbolicHeap (Σ : Ctx (𝑺 * Ty)) : Type :=
     Ctx { p : 𝑷 & Env (Term Σ) (𝑷_Ty p) }.
   Bind Scope ctx_scope with SymbolicHeap.
+
+  Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Type :=
+    forall b, InCtx b Σ1 -> Term Σ2 (snd b).
+  (* Hint Unfold Sub. *)
+
+  Section WithSub.
+    Context {Σ1 Σ2 : Ctx (𝑺 * Ty)}.
+    Variable (ζ : Sub Σ1 Σ2).
+
+    Fixpoint sub_term {σ} (t : Term Σ1 σ) {struct t} : Term Σ2 σ :=
+      match t in (Term _ t0) return (Term Σ2 t0) with
+      | @term_var _ ς σ0 ςInΣ     => ζ ςInΣ
+      | term_lit _ σ0 l           => term_lit Σ2 σ0 l
+      | term_plus t1 t2           => term_plus (sub_term t1) (sub_term t2)
+      | term_times t1 t2          => term_times (sub_term t1) (sub_term t2)
+      | term_minus t1 t2          => term_minus (sub_term t1) (sub_term t2)
+      | term_neg t0               => term_neg (sub_term t0)
+      | term_eq t1 t2             => term_eq (sub_term t1) (sub_term t2)
+      | term_le t1 t2             => term_le (sub_term t1) (sub_term t2)
+      | term_lt t1 t2             => term_lt (sub_term t1) (sub_term t2)
+      | term_gt t1 t2             => term_gt (sub_term t1) (sub_term t2)
+      | term_and t1 t2            => term_and (sub_term t1) (sub_term t2)
+      | term_or t1 t2             => term_or (sub_term t1) (sub_term t2)
+      | term_not t0               => term_not (sub_term t0)
+      | @term_pair _ σ1 σ2 t1 t2  => term_pair (sub_term t1) (sub_term t2)
+      | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0)
+      | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
+      | @term_list _ σ es         => term_list
+                                       ((fix sub_terms (ts : list (Term Σ1 σ)) : list (Term Σ2 σ) :=
+                                           match ts with
+                                           | nil       => nil
+                                           | cons t ts => cons (sub_term t) (sub_terms ts)
+                                           end) es)
+      | term_cons t1 t2           => term_cons (sub_term t1) (sub_term t2)
+      | term_nil _                => term_nil Σ2
+      | term_tuple es             => term_tuple
+                                       ((fix sub_terms {σs} (ts : Env (Term Σ1) σs) : Env (Term Σ2) σs :=
+                                           match ts with
+                                           | env_nil           => env_nil
+                                           | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
+                                           end
+                                        ) _ es)
+      | @term_projtup _ _ t _ n p => @term_projtup _ _ (sub_term t) _ n p
+      | term_union U K t0         => term_union U K (sub_term t0)
+      | term_record R es          => term_record R
+                                       ((fix sub_terms {σs} (ts : Env' (Term Σ1) σs) : Env' (Term Σ2) σs :=
+                                           match ts with
+                                           | env_nil           => env_nil
+                                           | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
+                                           end
+                                        ) _ es)
+      | term_projrec t rf         => term_projrec (sub_term t) rf
+      | term_builtin f t          => term_builtin f (sub_term t)
+      end.
+
+    Definition sub_formula (fml : Formula Σ1) : Formula Σ2 :=
+      match fml with
+      | formula_bool t    => formula_bool (sub_term t)
+      | formula_eq t1 t2  => formula_eq (sub_term t1) (sub_term t2)
+      | formula_neq t1 t2 => formula_neq (sub_term t1) (sub_term t2)
+      end.
+
+  End WithSub.
+
+  Definition wk1_term {Σ σ b} (t : Term Σ σ) : Term (Σ ▻ b) σ :=
+    sub_term (fun '(ς, τ) ςIn => @term_var (Σ ▻ b) ς τ (inctx_succ ςIn)) t.
+
+  Definition up_sub {Σ1 Σ2} (ζ : Sub Σ1 Σ2) :
+    forall {b : 𝑺 * Ty}, Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
+    fun '(ς, τ) =>
+      @inctx_case_snoc
+        (𝑺 * Ty) (fun b' => Term (Σ2 ▻ (ς , τ)) (snd b')) Σ1 (ς , τ)
+        (@term_var (Σ2 ▻ (ς , τ)) ς τ inctx_zero)
+        (fun b' b'In => wk1_term (ζ b' b'In)).
+
+  Fixpoint sub_assertion {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (a : Assertion Σ1) {struct a} : Assertion Σ2 :=
+    match a with
+    | asn_bool b => asn_bool (sub_term ζ b)
+    | asn_pred p ts => asn_pred p (env_map (fun _ => sub_term ζ) ts)
+    | asn_if b a1 a2 => asn_if (sub_term ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2)
+    | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2)
+    | asn_exist ς τ a => asn_exist ς τ (sub_assertion (up_sub ζ) a)
+    end.
 
   Section SymbolicState.
 
