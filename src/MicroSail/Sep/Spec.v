@@ -240,11 +240,9 @@ Module Symbolic
   Parameter Inline CEnv : SepContractEnv.
 
   Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
-    Ctx (Formula Σ).
-  Bind Scope ctx_scope with PathCondition.
+    list (Formula Σ).
   Definition SymbolicHeap (Σ : Ctx (𝑺 * Ty)) : Type :=
-    Ctx { p : 𝑷 & Env (Term Σ) (𝑷_Ty p) }.
-  Bind Scope ctx_scope with SymbolicHeap.
+    list { p : 𝑷 & Env (Term Σ) (𝑷_Ty p) }.
 
   Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Type :=
     forall b, InCtx b Σ1 -> Term Σ2 (snd b).
@@ -342,9 +340,9 @@ Module Symbolic
     Global Arguments symbolicstate_heap {_ _} _.
 
     Definition symbolic_assume_formula {Σ Γ} (fml : Formula Σ) : SymbolicState Σ Γ -> SymbolicState Σ Γ :=
-      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (Φ ▻ fml) ŝ ĥ.
+      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (fml :: Φ) ŝ ĥ.
     Definition symbolic_assume_exp {Σ Γ} (e : Exp Γ ty_bool) : SymbolicState Σ Γ -> SymbolicState Σ Γ :=
-      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (Φ ▻ formula_bool (symbolic_eval_exp e ŝ)) ŝ ĥ.
+      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (formula_bool (symbolic_eval_exp e ŝ) :: Φ) ŝ ĥ.
     Definition symbolic_push_local {Σ Γ x} σ (v : Term Σ σ) : SymbolicState Σ Γ -> SymbolicState Σ (Γ ▻ (x , σ)) :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState Φ (env_snoc ŝ (x , σ) v) ĥ.
     Definition symbolic_pop_local {Σ Γ x σ} : SymbolicState Σ (Γ ▻ (x , σ)) -> SymbolicState Σ Γ :=
@@ -454,7 +452,7 @@ Module Symbolic
       mutator_eval_exp e >>= mutator_assert_term.
 
     Definition mutator_produce_chunk {Σ Γ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) : Mutator Σ Γ Γ unit :=
-      mutator_modify_heap (fun h => h ▻ existT _ p ts)%ctx.
+      mutator_modify_heap (fun h => existT _ p ts :: h).
     Arguments mutator_produce_chunk {_ _} _ _.
 
     (* Axiom consume_chunk : forall {Σ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) (h : SymbolicHeap Σ), option (SymbolicHeap Σ). *)
