@@ -101,7 +101,6 @@ Import ExampleTypes.
 
 Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Module TY := ExampleTypes.
-  Import TyNotations.
 
   (** ENUMS **)
   Definition 𝑬𝑲 (E : 𝑬) : Set :=

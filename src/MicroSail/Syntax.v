@@ -231,18 +231,10 @@ Module Types (Export typekit : TypeKit).
       intuition congruence.
   Qed.
 
-  (* Simple telescopic equality for a family indexed by types. *)
-  Inductive tyeq {F : Ty -> Type} {σ τ} (fσ : F σ) (fτ : F τ) : Prop :=
-  | tyeq_refl (eqt : σ = τ) (eqf : eq_rect _ _ fσ _ eqt = fτ) : tyeq fσ fτ.
-  (* (* Alternative definition. *) *)
-  (* Definition tyeq {F : Ty -> Type} {σ τ} (fσ : F σ) (fτ : F τ) : Prop := *)
-  (*   sigT (fun eqt => eq_rect _ _ fσ _ eqt = fτ). *)
-
-  Module TyNotations.
-
-    Infix "≡" := tyeq (at level 70, no associativity).
-
-  End TyNotations.
+  (* Simple telescopic equality for a family with one index. *)
+  Inductive teq {I} {F : I -> Type} {i j} (fi : F i) (fj : F j) : Prop :=
+  | teq_refl (eqi : i = j) (eqf : eq_rect _ _ fi _ eqi = fj) : teq fi fj.
+  Infix "≡" := teq (at level 70, no associativity).
 
 End Types.
 
@@ -251,7 +243,6 @@ End Types.
 Module Type TermKit (typekit : TypeKit).
   Module TY := Types typekit.
   Export TY.
-  Import TyNotations.
 
   (* Names of enum data constructors. *)
   Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
@@ -764,15 +755,13 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   Section GenericRegStore.
 
-    Import TyNotations.
-
     Definition GenericRegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Lit σ.
 
     Definition generic_write_register (γ : GenericRegStore) {σ} (r : 𝑹𝑬𝑮 σ)
       (v : Lit σ) : GenericRegStore :=
       fun τ r' =>
         match 𝑹𝑬𝑮_eq_dec r r' with
-        | left (tyeq_refl _ eqt _) => eq_rect σ Lit v τ eqt
+        | left (teq_refl _ eqt _) => eq_rect σ Lit v τ eqt
         | right _ => γ τ r'
         end.
 
@@ -785,7 +774,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       unfold generic_read_register, generic_write_register.
       destruct (𝑹𝑬𝑮_eq_dec r r) as [[eqσ eqr]|].
       - symmetry. apply Eqdep_dec.eq_rect_eq_dec, Ty_eq_dec.
-      - contradict n. now apply tyeq_refl with eq_refl.
+      - contradict n. now apply teq_refl with eq_refl.
     Qed.
 
     Lemma generic_write_read γ {σ} (r : 𝑹𝑬𝑮 σ) :

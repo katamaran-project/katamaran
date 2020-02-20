@@ -60,7 +60,7 @@ Import ExampleTypes.
 
 Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Module TY := ExampleTypes.
-  Import TyNotations.
+
   Open Scope lit_scope.
   (** ENUMS **)
 
@@ -141,7 +141,7 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Proof.
     destruct x; destruct y; cbn;
       first
-        [ left; now apply tyeq_refl with eq_refl
+        [ left; now apply teq_refl with eq_refl
         | right; intros [eqt eqr];
           try rewrite <- (Eqdep_dec.eq_rect_eq_dec Ty_eq_dec) in eqr; discriminate
         ].
