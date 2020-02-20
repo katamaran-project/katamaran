@@ -307,10 +307,20 @@ Module Symbolic
 
   End WithSub.
 
-  Definition wk1_term {Σ σ b} (t : Term Σ σ) : Term (Σ ▻ b) σ :=
-    sub_term (fun '(ς, τ) ςIn => @term_var (Σ ▻ b) ς τ (inctx_succ ςIn)) t.
+  Definition sub_id Σ : Sub Σ Σ :=
+    fun '(ς, τ) ςIn => term_var ς.
+  Arguments sub_id : clear implicits.
 
-  Definition up_sub {Σ1 Σ2} (ζ : Sub Σ1 Σ2) :
+  Definition sub_wk1 {Σ b} : Sub Σ (Σ ▻ b) :=
+    (fun '(ς, τ) ςIn => @term_var (Σ ▻ b) ς τ (inctx_succ ςIn)).
+
+  Definition sub_comp {Σ1 Σ2 Σ3} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) : Sub Σ1 Σ3 :=
+    fun b bIn => sub_term ζ2 (ζ1 b bIn).
+
+  Definition wk1_term {Σ σ b} (t : Term Σ σ) : Term (Σ ▻ b) σ :=
+    sub_term sub_wk1 t.
+
+  Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) :
     forall {b : 𝑺 * Ty}, Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
     fun '(ς, τ) =>
       @inctx_case_snoc
@@ -324,8 +334,15 @@ Module Symbolic
     | asn_pred p ts => asn_pred p (env_map (fun _ => sub_term ζ) ts)
     | asn_if b a1 a2 => asn_if (sub_term ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2)
     | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2)
-    | asn_exist ς τ a => asn_exist ς τ (sub_assertion (up_sub ζ) a)
+    | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a)
     end.
+
+  Definition sub_pathcondition {Σ1 Σ2} (ζ : Sub Σ1 Σ2) : PathCondition Σ1 -> PathCondition Σ2 :=
+    map (sub_formula ζ).
+  Definition sub_localstore {Σ1 Σ2 Γ} (ζ : Sub Σ1 Σ2) : SymbolicLocalStore Σ1 Γ -> SymbolicLocalStore Σ2 Γ :=
+    env_map (fun _ => sub_term ζ).
+  Definition sub_heap {Σ1 Σ2} (ζ : Sub Σ1 Σ2) : SymbolicHeap Σ1 -> SymbolicHeap Σ2 :=
+    map (fun '(existT _ p ts) => existT _ p (env_map (fun _ => sub_term ζ) ts)).
 
   Section SymbolicState.
 
@@ -347,6 +364,11 @@ Module Symbolic
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState Φ (env_snoc ŝ (x , σ) v) ĥ.
     Definition symbolic_pop_local {Σ Γ x σ} : SymbolicState Σ (Γ ▻ (x , σ)) -> SymbolicState Σ Γ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState Φ (env_tail ŝ) ĥ.
+
+    Program Definition sub_symbolicstate {Σ1 Σ2 Γ} (ζ : Sub Σ1 Σ2) : SymbolicState Σ1 Γ -> SymbolicState Σ2 Γ :=
+      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (sub_pathcondition ζ Φ) (sub_localstore ζ ŝ) (sub_heap ζ ĥ).
+    Definition wk1_symbolicstate {Σ Γ b} : SymbolicState Σ Γ -> SymbolicState (Σ ▻ b) Γ :=
+      sub_symbolicstate sub_wk1.
 
   End SymbolicState.
 
