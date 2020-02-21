@@ -35,89 +35,13 @@ From Coq Require Import
      ZArith.ZArith.
 
 From MicroSail Require Import
+     Sep.Outcome
      Syntax.
 
 Set Implicit Arguments.
 
-Delimit Scope outcome_scope with out.
 Delimit Scope mutator_scope with mut.
 
-Section Outcome.
-
-  Inductive Outcome (A: Type) : Type :=
-  | outcome_pure (a: A)
-  | outcome_demonic {I : Type} (os: I -> Outcome A)
-  | outcome_angelic {I : Type} (os: I -> Outcome A).
-
-  Definition outcome_fail {A : Type} : Outcome A :=
-    outcome_angelic (fun i : Empty_set => match i with end).
-  Definition outcome_block {A : Type} : Outcome A :=
-    outcome_demonic (fun i : Empty_set => match i with end).
-
-  Fixpoint outcome_map {A B : Type} (f : A -> B) (o : Outcome A) : Outcome B :=
-    match o with
-    | outcome_pure a     => outcome_pure (f a)
-    | outcome_demonic os => outcome_demonic (fun i => outcome_map f (os i))
-    | outcome_angelic os => outcome_angelic (fun i => outcome_map f (os i))
-    end.
-
-  Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcome B :=
-    match o with
-    | outcome_pure a     => f a
-    | outcome_demonic os => outcome_demonic (fun i => outcome_bind (os i) f)
-    | outcome_angelic os => outcome_angelic (fun i => outcome_bind (os i) f)
-    end.
-
-  Definition outcome_demonic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
-    outcome_demonic (fun b : bool => if b then o1 else o2).
-  Definition outcome_angelic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
-    outcome_angelic (fun b : bool => if b then o1 else o2).
-
-  Fixpoint outcome_satisfy {A : Type} (P : A -> Prop) (o : Outcome A) : Prop :=
-    match o with
-    | outcome_pure a   => P a
-    | outcome_demonic os => forall i, outcome_satisfy P (os i)
-    | outcome_angelic os => exists i, outcome_satisfy P (os i)
-    end.
-
-  Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
-    outcome_satisfy (fun a => True) o.
-
-  Inductive outcome_satisfy_ind {A : Type} (P : A -> Prop) : Outcome A -> Prop :=
-  | outcome_satisfy_pure  a    :
-      P a ->
-      outcome_satisfy_ind P (outcome_pure a)
-  | outcome_satisfy_demonic {I os} :
-      (forall i, outcome_satisfy_ind P (os i)) ->
-      outcome_satisfy_ind P (@outcome_demonic _ I os)
-  | outcome_satisfy_angelic {I i os} :
-      outcome_satisfy_ind P (os i) ->
-      outcome_satisfy_ind P (@outcome_angelic _ I os).
-
-  Inductive outcome_in {A : Type} (a : A) : Outcome A -> Prop :=
-  | outcome_in_pure :
-      outcome_in a (outcome_pure a)
-  | outcome_in_demonic {I os i} :
-      outcome_in a (os i) ->
-      outcome_in a (@outcome_demonic _ I os)
-  | outcome_in_angelic {I os i} :
-      outcome_in a (os i) ->
-      outcome_in a (@outcome_angelic _ I os).
-
-End Outcome.
-Bind Scope outcome_scope with Outcome.
-
-Module OutcomeNotations.
-
-  Notation "'⨂' i : I => F" := (outcome_demonic (fun i : I => F)) (at level 80, i at next level, I at next level) : outcome_scope.
-  Notation "'⨁' i : I => F" := (outcome_angelic (fun i : I => F)) (at level 80, i at next level, I at next level) : outcome_scope.
-
-  Infix "⊗" := outcome_demonic_binary (at level 40, left associativity) : outcome_scope.
-  Infix "⊕" := outcome_angelic_binary (at level 50, left associativity) : outcome_scope.
-
-  Notation "ma >>= f" := (outcome_bind ma f) (at level 50, left associativity) : outcome_scope.
-
-End OutcomeNotations.
 
 Module Symbolic
   (Import typekit : TypeKit)
@@ -135,6 +59,8 @@ Module Symbolic
 
   Import CtxNotations.
   Import EnvNotations.
+  Import OutcomeNotations.
+  Import ListNotations.
 
   Inductive Term (Σ : Ctx (𝑺 * Ty)) : Ty -> Type :=
   | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : InCtx (ς , σ) Σ} : Term Σ σ
@@ -373,9 +299,6 @@ Module Symbolic
   End SymbolicState.
 
   Section Mutator.
-
-    Import OutcomeNotations.
-    Import ListNotations.
 
     Definition Obligation : Type := { Σ & Formula Σ }.
     Definition Mutator (Σ : Ctx (𝑺 * Ty)) (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Type) : Type :=
