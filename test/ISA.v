@@ -134,7 +134,7 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
       𝑼_fold U (𝑼_unfold U Kv) = Kv.
   Proof. now intros [] []. Qed.
-  Lemma 𝑼_undfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) }),
+  Lemma 𝑼_unfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) }),
       𝑼_unfold U (𝑼_fold U Kv) = Kv.
   Proof. intros [] [[] l]; cbn in *; destruct_conjs;
          repeat match goal with
@@ -147,6 +147,12 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) := match R with end.
   Definition 𝑹_fold (R : 𝑹) : Env' Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
   Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> Env' Lit (𝑹𝑭_Ty R) := match R with end.
+  Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
+      𝑹_fold R (𝑹_unfold R Kv) = Kv.
+  Proof. intros []. Qed.
+  Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: Env' Lit (𝑹𝑭_Ty R)),
+      𝑹_unfold R (𝑹_fold R Kv) = Kv.
+  Proof. intros []. Qed.
 
   (** FUNCTIONS **)
   (* Names are inspired by sail-riscv naming convention *)

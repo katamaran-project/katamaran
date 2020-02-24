@@ -185,7 +185,7 @@ Module Soundness
       assert (eval e δ = 𝑼_fold (existT (fun K : 𝑼𝑲 U => Lit (𝑼𝑲_Ty K)) K v)).
       { rewrite <- (𝑼_fold_unfold (eval e δ)); now f_equal. }
       intuition.
-      rewrite 𝑼_undfold_fold in H4.
+      rewrite 𝑼_unfold_fold in H4.
       wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.

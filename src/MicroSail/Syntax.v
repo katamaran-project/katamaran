@@ -286,7 +286,7 @@ Module Type TermKit (typekit : TypeKit).
   Parameter Inline 𝑼_fold_unfold :
     forall (U : 𝑼) (Kv: 𝑼𝑻 U),
       𝑼_fold (𝑼_unfold Kv) = Kv.
-  Parameter Inline 𝑼_undfold_fold :
+  Parameter Inline 𝑼_unfold_fold :
     forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K) }),
       𝑼_unfold (𝑼_fold Kv) = Kv.
 
@@ -296,6 +296,12 @@ Module Type TermKit (typekit : TypeKit).
   Parameter Inline 𝑹𝑭_Ty : 𝑹 -> Ctx (𝑹𝑭 * Ty).
   Parameter Inline 𝑹_fold   : forall (R : 𝑹), Env' Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R.
   Parameter Inline 𝑹_unfold : forall (R : 𝑹), 𝑹𝑻 R -> Env' Lit (𝑹𝑭_Ty R).
+  Parameter Inline 𝑹_fold_unfold :
+    forall (R : 𝑹) (Kv: 𝑹𝑻 R),
+      𝑹_fold (𝑹_unfold Kv) = Kv.
+  Parameter Inline 𝑹_unfold_fold :
+    forall (R : 𝑹) (Kv: Env' Lit (𝑹𝑭_Ty R)),
+      𝑹_unfold (𝑹_fold Kv) = Kv.
 
   (* Names of functions. *)
   Parameter Inline 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set.
@@ -322,15 +328,27 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                         v = 𝑼_fold (existT _ K p) ->
                         k (𝑼_fold (existT _ K p)))
     |}.
-  Admit Obligations of blastable_union.
+  Next Obligation.
+    intros; cbn; constructor; intro hyp.
+    - rewrite <- (@𝑼_fold_unfold U a) in *.
+      destruct (𝑼_unfold a) as [K v] eqn:eq_a.
+      specialize (hyp K).
+      rewrite blast_sound in hyp.
+      now apply hyp.
+    - intros K.
+      rewrite blast_sound.
+      now intros; subst.
+  Qed.
 
   Program Instance blastable_record (R : 𝑹) : Blastable (𝑹𝑻 R) :=
     {| blast v k := k (𝑹_fold (𝑹_unfold v)) |}.
-  Admit Obligations of blastable_record.
+  Next Obligation.
+    cbn; intros; now rewrite 𝑹_fold_unfold.
+  Qed.
 
   Section Literals.
 
-    Global Program Instance blastable_lit {σ} : Blastable (Lit σ) :=
+    Global Instance blastable_lit {σ} : Blastable (Lit σ) :=
       match σ with
       | ty_int => blastable_int
       | ty_bool => blastable_bool
@@ -422,7 +440,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                          end
       end.
 
-    Program Fixpoint eval {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
+    Fixpoint eval {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
       match e in (Exp _ t) return (Lit t) with
       | exp_var x           => δ ! x
       | exp_lit _ _ l       => l
@@ -450,11 +468,13 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                                  es
       | @exp_projtup _ σs e n σ p => tuple_proj σs n σ (eval e δ) p
       | exp_union U K e     => 𝑼_fold (existT _ K (eval e δ))
-      | exp_record R es     => _
-      | exp_projrec e rf    => _
+      | exp_record R es     => 𝑹_fold (Env_rect
+                                         (fun σs _ => Env' Lit σs)
+                                         env_nil
+                                         (fun σs _ vs _ e => env_snoc vs _ (eval e δ)) es)
+      | exp_projrec e rf    => 𝑹_unfold (eval e δ) ! rf
       | exp_builtin f e     => f (eval e δ)
       end.
-    Admit Obligations of eval.
 
     Definition evals {Γ Δ} (es : Env' (Exp Γ) Δ) (δ : LocalStore Γ) : LocalStore Δ :=
       env_map (fun xτ e => eval e δ) es.
