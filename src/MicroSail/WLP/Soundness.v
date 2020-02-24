@@ -178,6 +178,15 @@ Module Soundness
       wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
+      destruct (𝑼_unfold (eval e δ)) as [K v] eqn:eq_eval.
+      specialize (H3 K).
+      rewrite blast_sound in H3.
+      specialize (H3 v).
+      assert (eval e δ = 𝑼_fold (existT (fun K : 𝑼𝑲 U => Lit (𝑼𝑲_Ty K)) K v)).
+      { rewrite <- (𝑼_fold_unfold (eval e δ)); now f_equal. }
+      intuition.
+      rewrite 𝑼_undfold_fold in H4.
+      wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.

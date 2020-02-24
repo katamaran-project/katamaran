@@ -45,6 +45,11 @@ Obligation Tactic := idtac.
 
 Inductive Bit : Set := bitzero | bitone.
 
+(* Simple telescopic equality for a family with one index. *)
+Inductive teq {I} {F : I -> Type} {i j} (fi : F i) (fj : F j) : Prop :=
+| teq_refl (eqi : i = j) (eqf : eq_rect _ _ fi _ eqi = fj) : teq fi fj.
+Infix "≡" := teq (at level 70, no associativity).
+
 (******************************************************************************)
 
 Class Blastable (A : Type) : Type :=
@@ -117,12 +122,24 @@ Module Type TypeKit.
   (* Names of enum type constructors. *)
   Parameter Inline 𝑬 : Set. (* input: \MIE *)
   Parameter Inline 𝑬_eq_dec : forall x y : 𝑬, {x=y}+{~x=y}.
+  (* Names of enum data constructors. *)
+  Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
+  Declare Instance Blastable_𝑬𝑲 : forall E, Blastable (𝑬𝑲 E).
+
   (* Names of union type constructors. *)
   Parameter Inline 𝑼   : Set. (* input: \MIT *)
   Parameter Inline 𝑼_eq_dec : forall x y : 𝑼, {x=y}+{~x=y}.
+  (* Union types. *)
+  Parameter Inline 𝑼𝑻  : 𝑼 -> Set.
+  (* Names of union data constructors. *)
+  Parameter Inline 𝑼𝑲  : 𝑼 -> Set.
+  Declare Instance Blastable_𝑼𝑲 : forall U, Blastable (𝑼𝑲 U).
+
   (* Names of record type constructors. *)
   Parameter Inline 𝑹  : Set. (* input: \MIR *)
   Parameter Inline 𝑹_eq_dec : forall x y : 𝑹, {x=y}+{~x=y}.
+  (* Record types. *)
+  Parameter Inline 𝑹𝑻  : 𝑹 -> Set.
   (* Names of expression variables. *)
   Parameter Inline 𝑿 : Set. (* input: \MIX *)
   (* For name resolution we rely on decidable equality of expression
@@ -231,10 +248,28 @@ Module Types (Export typekit : TypeKit).
       intuition congruence.
   Qed.
 
-  (* Simple telescopic equality for a family with one index. *)
-  Inductive teq {I} {F : I -> Type} {i j} (fi : F i) (fj : F j) : Prop :=
-  | teq_refl (eqi : i = j) (eqf : eq_rect _ _ fi _ eqi = fj) : teq fi fj.
-  Infix "≡" := teq (at level 70, no associativity).
+  Fixpoint Lit (σ : Ty) : Type :=
+    match σ with
+    | ty_int => Z
+    | ty_bool => bool
+    | ty_bit => Bit
+    | ty_string => string
+    | ty_list σ' => list (Lit σ')
+    | ty_prod σ1 σ2 => Lit σ1 * Lit σ2
+    | ty_sum σ1 σ2 => Lit σ1 + Lit σ2
+    | ty_unit => unit
+    | ty_enum E => 𝑬𝑲 E
+    (* Experimental features *)
+    | ty_tuple σs =>
+      Ctx_rect (fun _ => Type) unit (fun _ Litσs σ => Litσs * Lit σ) σs
+    (* (fix Lits (σs : Ctx Ty) : Type := *)
+    (*    match σs with *)
+    (*    | ctx_nil => unit *)
+    (*    | ctx_snoc σs σ => Lits σs * Lit σ *)
+    (*    end) σs *)
+    | ty_union U => 𝑼𝑻 U
+    | ty_record R => 𝑹𝑻 R
+    end%type.
 
 End Types.
 
@@ -244,20 +279,23 @@ Module Type TermKit (typekit : TypeKit).
   Module TY := Types typekit.
   Export TY.
 
-  (* Names of enum data constructors. *)
-  Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
-  Declare Instance Blastable_𝑬𝑲 : forall E, Blastable (𝑬𝑲 E).
-
-  (* Names of union data constructors. *)
-  Parameter Inline 𝑼𝑲  : 𝑼 -> Set.
   (* Union data constructor field type *)
   Parameter Inline 𝑼𝑲_Ty : forall (U : 𝑼), 𝑼𝑲 U -> Ty.
-  Declare Instance Blastable_𝑼𝑲 : forall U, Blastable (𝑼𝑲 U).
+  Parameter Inline 𝑼_fold   : forall (U : 𝑼), { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K) } -> 𝑼𝑻 U.
+  Parameter Inline 𝑼_unfold : forall (U : 𝑼), 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K) }.
+  Parameter Inline 𝑼_fold_unfold :
+    forall (U : 𝑼) (Kv: 𝑼𝑻 U),
+      𝑼_fold (𝑼_unfold Kv) = Kv.
+  Parameter Inline 𝑼_undfold_fold :
+    forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K) }),
+      𝑼_unfold (𝑼_fold Kv) = Kv.
 
   (* Record field names. *)
   Parameter Inline 𝑹𝑭  : Set.
   (* Record field types. *)
   Parameter Inline 𝑹𝑭_Ty : 𝑹 -> Ctx (𝑹𝑭 * Ty).
+  Parameter Inline 𝑹_fold   : forall (R : 𝑹), Env' Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R.
+  Parameter Inline 𝑹_unfold : forall (R : 𝑹), 𝑹𝑻 R -> Env' Lit (𝑹𝑭_Ty R).
 
   (* Names of functions. *)
   Parameter Inline 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set.
@@ -276,75 +314,23 @@ End TermKit.
 Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   Export termkit.
 
+  Program Instance blastable_union (U : 𝑼) : Blastable (𝑼𝑻 U) :=
+    {| blast v k :=
+         forall (K : 𝑼𝑲 U),
+           blast K (fun K =>
+                      forall p,
+                        v = 𝑼_fold (existT _ K p) ->
+                        k (𝑼_fold (existT _ K p)))
+    |}.
+  Admit Obligations of blastable_union.
+
+  Program Instance blastable_record (R : 𝑹) : Blastable (𝑹𝑻 R) :=
+    {| blast v k := k (𝑹_fold (𝑹_unfold v)) |}.
+  Admit Obligations of blastable_record.
+
   Section Literals.
 
-    (* Ideally we want object language literals to coincide with meta-language
-       values to get sexy looking predicates. See the definition of Lit below.
-       Unfortunately our setup of union and record types essentially is a giant
-       mutually recursive family of types and hence Lit below would not
-       terminate if it were directly extended to unions/records. TaggedLit is an
-       inductive and therefore terminating definition of the recursive family of
-       types and our current solution to the problem.
-
-       Because Sail does not allow recursive types the records and unions in the
-       generated output will form a strict DAG. Enforcing a topological sorting
-       is more work than simply allowing recursive definitions. Another option
-       is to encode the DAG as a well-founded relation between type constructor
-       names an defining Lit by well-founded recursion. This would need some
-       investigation.
-
-       The ideal way to add recursive types would be to only introduce tags at
-       recursive positions. For instance writing Lit as a recursive definition
-       of a functor and using that in the definition of tagged:
-
-         Fixpoint Lit (tl : Ty -> Set) (σ : Ty) {struct σ} : Set := match σ with
-           ... end.
-
-         Inductive TaggedLit (σ : Ty) : Set := | tagged : Lit TaggedLit σ ->
-         TaggedLit σ.
-
-       But currently Coq's strict-positivity checker is not smart enough to deem
-       it safe. (Agda excepts this definition). So TaggedLit adds tags
-       everywhere.
-     *)
-    Inductive TaggedLit : Ty -> Type :=
-    | taglit_int           : Z -> TaggedLit (ty_int)
-    | taglit_bool          : bool -> TaggedLit (ty_bool)
-    | taglit_bit           : Bit -> TaggedLit (ty_bit)
-    | taglit_string        : string -> TaggedLit (ty_string)
-    | taglit_list   σ'     : list (TaggedLit σ') -> TaggedLit (ty_list σ')
-    | taglit_prod   σ1 σ2  : TaggedLit σ1 * TaggedLit σ2 -> TaggedLit (ty_prod σ1 σ2)
-    | taglit_sum    σ1 σ2  : TaggedLit σ1 + TaggedLit σ2 -> TaggedLit (ty_sum σ1 σ2)
-    | taglit_unit          : TaggedLit (ty_unit)
-    | taglit_enum (E : 𝑬) (K : 𝑬𝑲 E) : TaggedLit (ty_enum E)
-    (* Experimental features *)
-    | taglit_tuple σs      : Env TaggedLit σs -> TaggedLit (ty_tuple σs)
-    | taglit_union (U : 𝑼) (K : 𝑼𝑲 U) : TaggedLit (𝑼𝑲_Ty K) -> TaggedLit (ty_union U)
-    | taglit_record (R : 𝑹) : Env' TaggedLit (𝑹𝑭_Ty R) -> TaggedLit (ty_record R).
-
-    Global Arguments taglit_enum : clear implicits.
-    Global Arguments taglit_tuple {_} _.
-    Global Arguments taglit_union {_} _ _.
-    Global Arguments taglit_record : clear implicits.
-
-    Fixpoint Lit (σ : Ty) : Type :=
-      match σ with
-      | ty_int => Z
-      | ty_bool => bool
-      | ty_bit => Bit
-      | ty_string => string
-      | ty_list σ' => list (Lit σ')
-      | ty_prod σ1 σ2 => Lit σ1 * Lit σ2
-      | ty_sum σ1 σ2 => Lit σ1 + Lit σ2
-      | ty_unit => unit
-      | ty_enum E => 𝑬𝑲 E
-      (* Experimental features *)
-      | ty_tuple σs => Env TaggedLit σs
-      | ty_union U => { K : 𝑼𝑲 U & TaggedLit (𝑼𝑲_Ty K) }
-      | ty_record R => Env' TaggedLit (𝑹𝑭_Ty R)
-      end%type.
-
-    Global Instance blastable_lit {σ} : Blastable (Lit σ) :=
+    Global Program Instance blastable_lit {σ} : Blastable (Lit σ) :=
       match σ with
       | ty_int => blastable_int
       | ty_bool => blastable_bool
@@ -355,55 +341,16 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ty_sum σ1 σ2 => blastable_sum
       | ty_unit => blastable_unit
       | ty_enum E => Blastable_𝑬𝑲 E
-      | ty_tuple σs => blastable_env
-      | ty_union T => blastable_sigt
-      | ty_record R => blastable_env'
-      end.
-
-    Fixpoint untag {σ : Ty} (v : TaggedLit σ) : Lit σ :=
-      match v with
-      | taglit_int z        => z
-      | taglit_bool b       => b
-      | taglit_bit b        => b
-      | taglit_string s     => s
-      | taglit_list ls      => List.map untag ls
-      | taglit_prod (l , r) => (untag l , untag r)
-      | taglit_sum (inl v)  => inl (untag v)
-      | taglit_sum (inr v)  => inr (untag v)
-      | taglit_unit         => tt
-      | taglit_enum E K     => K
-      (* Experimental features *)
-      | taglit_tuple ls     => ls
-      | taglit_union K l    => existT _ K l
-      | taglit_record R t   => t
-      end.
-
-    Fixpoint tag (σ : Ty) {struct σ} : Lit σ -> TaggedLit σ :=
-      match σ with
-      | ty_int => fun (l : Lit ty_int) => taglit_int l
-      | ty_bool => taglit_bool
-      | ty_bit => taglit_bit
-      | ty_string => taglit_string
-      | ty_list σ =>
-        fun l => taglit_list (List.map (tag σ) l)
-      | ty_prod σ1 σ2 =>
-        fun l => let (l1, l2) := l in
-                 taglit_prod (tag σ1 l1, tag σ2 l2)
-      | ty_sum σ1 σ2 =>
-        fun l : Lit (ty_sum σ1 σ2) =>
-          match l with
-          | inl l => taglit_sum (inl (tag σ1 l))
-          | inr l => taglit_sum (inr (tag σ2 l))
-          end
-      | ty_unit => fun _ => taglit_unit
-      | ty_enum E => taglit_enum E
-      | ty_tuple σs => taglit_tuple
-      | ty_union T => fun Ktl => let (K, tl) := Ktl in taglit_union K tl
-      | ty_record R => taglit_record R
-      end.
+      | ty_tuple σs => Ctx_rect
+                         (fun σs => Blastable (Lit (ty_tuple σs)))
+                         blastable_unit
+                         (fun σs blast_σs σ => blastable_prod)
+                         σs
+      | ty_union U => blastable_union U
+      | ty_record R => blastable_record R
+      end%type.
 
   End Literals.
-  Bind Scope lit_scope with TaggedLit.
   Bind Scope lit_scope with Lit.
 
   Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Type := Env' Lit Γ.
@@ -462,52 +409,20 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     Import EnvNotations.
 
-    Fixpoint evalTagged {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : TaggedLit σ :=
-      match e in (Exp _ t) return (TaggedLit t) with
-      | exp_var x => tag _ (δ ! x)
-      | exp_lit _ σ0 l => tag σ0 l
-      | exp_plus e1 e2 => taglit_int (untag (evalTagged e1 δ) + untag (evalTagged e2 δ))
-      | exp_times e1 e2 => taglit_int (untag (evalTagged e1 δ) * untag (evalTagged e2 δ))
-      | exp_minus e1 e2 => taglit_int (untag (evalTagged e1 δ) - untag (evalTagged e2 δ))
-      | exp_neg e0 => taglit_int (- untag (evalTagged e0 δ))
-      | exp_eq e1 e2 => taglit_bool (untag (evalTagged e1 δ) =? untag (evalTagged e2 δ))%Z
-      | exp_le e1 e2 => taglit_bool (untag (evalTagged e1 δ) <=? untag (evalTagged e2 δ))%Z
-      | exp_lt e1 e2 => taglit_bool (untag (evalTagged e1 δ) <? untag (evalTagged e2 δ))%Z
-      | exp_gt e1 e2 => taglit_bool (untag (evalTagged e1 δ) >? untag (evalTagged e2 δ))%Z
-      | exp_and e1 e2 => taglit_bool (untag (evalTagged e1 δ) && untag (evalTagged e2 δ))
-      | exp_or e1 e2 => taglit_bool (untag (evalTagged e1 δ) || untag (evalTagged e2 δ))
-      | exp_not e0 => taglit_bool (negb (untag (evalTagged e0 δ)))
-      | @exp_pair _ σ1 σ2 e1 e2 => taglit_prod (evalTagged e1 δ, evalTagged e2 δ)
-      | @exp_inl _ σ1 σ2 e0 => taglit_sum (inl (evalTagged e0 δ))
-      | @exp_inr _ σ1 σ2 e0 => taglit_sum (inr (evalTagged e0 δ))
-      | @exp_list _ σ0 es => taglit_list (List.map (fun e0 : Exp Γ σ0 => evalTagged e0 δ) es)
-      | @exp_cons _ σ0 e1 e2 =>
-        (* This is less efficient than it could be. It's untagging the head and
-           the whole list while it would only need to destruct (evalTagged e2
-           δ). *)
-        tag (ty_list σ0) (cons (untag (evalTagged e1 δ)) (untag (evalTagged e2 δ)))
-      | @exp_nil _ σ0 => taglit_list nil
-      | @exp_tuple _ σs es =>
-        let evalsTagged := fix evalsTagged {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Env TaggedLit σs :=
-                             match es with
-                             | env_nil => env_nil
-                             | env_snoc es σ e => env_snoc (evalsTagged es) σ (evalTagged e δ)
-                             end
-        in taglit_tuple (evalsTagged es)
-      | @exp_projtup _ σs e0 n σ0 p => env_lookup (untag (evalTagged e0 δ)) (Build_InCtx _ _ n p)
-      | @exp_union _ T K e0 => taglit_union K (evalTagged e0 δ)
-      | exp_record R es =>
-        let evalsTagged := fix evalsTagged {rfs : Ctx (𝑹𝑭 * Ty)} (es : Env' (Exp Γ) rfs) : Env' TaggedLit rfs :=
-                             match es with
-                             | env_nil => env_nil
-                             | env_snoc es σ e => env_snoc (evalsTagged es) σ (evalTagged e δ)
-                             end
-        in taglit_record R (evalsTagged es)
-      | @exp_projrec _ R e0 rf σ0 rfInR => env_lookup (untag (evalTagged e0 δ)) rfInR
-      | @exp_builtin _ σ0 τ f e0 => tag τ (f (untag (evalTagged e0 δ)))
+    Fixpoint tuple_proj (σs : Ctx Ty) (n : nat) (σ : Ty) :
+      Lit (ty_tuple σs) -> ctx_nth_is σs n σ -> Lit σ :=
+      match σs with
+      | ctx_nil       => fun l (p : ctx_nth_is ctx_nil _ _) =>
+                           match p with end
+      | ctx_snoc τs τ => match n with
+                         | 0   => fun (l : Lit (ty_tuple (ctx_snoc _ _)))
+                                      (p : ctx_nth_is _ 0 _) =>
+                                    @eq_rect Ty τ Lit (snd l) σ p
+                         | S m => fun l p => tuple_proj τs m σ (fst l) p
+                         end
       end.
 
-    Fixpoint eval {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
+    Program Fixpoint eval {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
       match e in (Exp _ t) return (Lit t) with
       | exp_var x           => δ ! x
       | exp_lit _ _ l       => l
@@ -528,13 +443,18 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | exp_list es         => List.map (fun e => eval e δ) es
       | exp_cons e1 e2      => cons (eval e1 δ) (eval e2 δ)
       | exp_nil _           => nil
-      | exp_tuple es        => env_map (fun τ e => evalTagged e δ) es
-      | @exp_projtup _ σs e n σ p => untag (env_lookup (eval e δ) (Build_InCtx _ _ n p))
-      | exp_union T K e     => existT _ K (evalTagged e δ)
-      | exp_record R es     => env_map (fun τ e => evalTagged e δ) es
-      | exp_projrec e rf    => untag (eval e δ ! rf)
+      | exp_tuple es        => Env_rect
+                                 (fun σs _ => Lit (ty_tuple σs))
+                                 tt
+                                 (fun σs _ (vs : Lit (ty_tuple σs)) σ e => (vs, eval e δ))
+                                 es
+      | @exp_projtup _ σs e n σ p => tuple_proj σs n σ (eval e δ) p
+      | exp_union U K e     => 𝑼_fold (existT _ K (eval e δ))
+      | exp_record R es     => _
+      | exp_projrec e rf    => _
       | exp_builtin f e     => f (eval e δ)
       end.
+    Admit Obligations of eval.
 
     Definition evals {Γ Δ} (es : Env' (Exp Γ) Δ) (δ : LocalStore Γ) : LocalStore Δ :=
       env_map (fun xτ e => eval e δ) es.
@@ -634,25 +554,25 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   Section PatternMatching.
 
     Fixpoint tuple_pattern_match {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)}
-             (p : TuplePat σs Δ) {struct p} : Env TaggedLit σs -> LocalStore Δ :=
+             (p : TuplePat σs Δ) {struct p} : Lit (ty_tuple σs) -> LocalStore Δ :=
       match p with
       | tuplepat_nil => fun _ => env_nil
       | tuplepat_snoc p x =>
-        fun E =>
+        fun lit =>
           env_snoc
-            (tuple_pattern_match p (env_tail E)) (x, _)
-            (untag (env_lookup E inctx_zero))
+            (tuple_pattern_match p (fst lit)) (x, _)
+            (snd lit)
       end.
 
     Fixpoint record_pattern_match {rfs : Ctx (𝑹𝑭 * Ty)}  {Δ : Ctx (𝑿 * Ty)}
-             (p : RecordPat rfs Δ) {struct p} : Env' TaggedLit rfs -> LocalStore Δ :=
+             (p : RecordPat rfs Δ) {struct p} : Env' Lit rfs -> LocalStore Δ :=
       match p with
       | recordpat_nil => fun _ => env_nil
       | recordpat_snoc p rf x =>
         fun E =>
           env_snoc
             (record_pattern_match p (env_tail E)) (x, _)
-            (untag (env_lookup E inctx_zero))
+            (env_lookup E inctx_zero)
       end.
 
   End PatternMatching.

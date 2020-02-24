@@ -158,15 +158,15 @@ Module SmallStep
       (altx : forall (K : 𝑼𝑲 U), 𝑿)
       (alts : forall (K : 𝑼𝑲 U), Stm (ctx_snoc Γ (altx K , 𝑼𝑲_Ty K)) τ) :
       ⟨ γ , μ , δ , stm_match_union U e altx alts ⟩ --->
-      ⟨ γ , μ , δ , let (K , v) := eval e δ in
-                stm_let' (env_snoc env_nil (altx K, 𝑼𝑲_Ty K) (untag v)) (alts K)
+      ⟨ γ , μ , δ , let (K , v) := 𝑼_unfold (eval e δ) in
+                stm_let' (env_snoc env_nil (altx K, 𝑼𝑲_Ty K) v) (alts K)
       ⟩
   | step_stm_match_record
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {R : 𝑹} {Δ : Ctx (𝑿 * Ty)}
       (e : Exp Γ (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ)
       {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_record R e p rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_let' (record_pattern_match p (eval e δ)) rhs ⟩
+      ⟨ γ , μ , δ , stm_let' (record_pattern_match p (𝑹_unfold (eval e δ))) rhs ⟩
 
   | step_stm_read_register
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {σ : Ty} (r : 𝑹𝑬𝑮 σ) :

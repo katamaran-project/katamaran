@@ -65,7 +65,8 @@ Inductive Unions : Set :=
 | either
 .
 
-Inductive Either : Set :=
+
+Inductive EitherConstructor : Set :=
 | Left
 | Right.
 
@@ -83,9 +84,45 @@ Qed.
 
 Module ExampleTypeKit <: TypeKit.
 
+  (** ENUMS **)
   Definition 𝑬        := Enums.
+  Definition 𝑬𝑲 (E : 𝑬) : Set :=
+    match E with
+    | ordering => Ordering
+    end.
+  Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
+    match E with
+    | ordering => {| blast ord POST :=
+                       (ord = LT -> POST LT) /\
+                       (ord = EQ -> POST EQ) /\
+                       (ord = GT -> POST GT)
+                  |}
+    end.
+  Solve All Obligations with destruct a; intuition congruence.
+
   Definition 𝑼        := Unions.
+  Definition 𝑼𝑻 (U : 𝑼) : Set :=
+    match U with
+    | either => (string + Z)%type
+    end.
+  Definition 𝑼𝑲 (U : 𝑼) : Set :=
+    match U with
+    | either => EitherConstructor
+    end.
+  Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
+    match U with
+    | either => {| blast v POST :=
+                     (v = Left  -> POST Left) /\
+                     (v = Right -> POST Right)
+                |}
+    end.
+  Solve All Obligations with destruct a; intuition congruence.
+
   Definition 𝑹        := Records.
+  Definition 𝑹𝑻 (R : 𝑹) : Set :=
+    match R with
+    end.
+
   Definition 𝑿        := string.
 
   Definition 𝑬_eq_dec := Enums_eq_dec.
@@ -102,26 +139,7 @@ Import ExampleTypes.
 Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Module TY := ExampleTypes.
 
-  (** ENUMS **)
-  Definition 𝑬𝑲 (E : 𝑬) : Set :=
-    match E with
-    | ordering => Ordering
-    end.
-  Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
-    match E with
-    | ordering => {| blast ord POST :=
-                       (ord = LT -> POST LT) /\
-                       (ord = EQ -> POST EQ) /\
-                       (ord = GT -> POST GT)
-                  |}
-    end.
-  Solve All Obligations with destruct a; intuition congruence.
-
   (** UNIONS **)
-  Definition 𝑼𝑲 (U : 𝑼) : Set :=
-    match U with
-    | either => Either
-    end.
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
     match U with
     | either => fun K => match K with
@@ -129,18 +147,34 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
                          | Right => ty_int
                          end
     end.
-  Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
+  Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
     match U with
-    | either => {| blast v POST :=
-                     (v = Left  -> POST Left) /\
-                     (v = Right -> POST Right)
-                |}
+    | either => fun Kv =>
+                  match Kv with
+                  | existT _ Left v  => inl v
+                  | existT _ Right v => inr v
+                  end
     end.
-  Solve All Obligations with destruct a; intuition congruence.
+  Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
+    match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Lit (𝑼𝑲_Ty u K)}) with
+    | either => fun Kv =>
+                  match Kv with
+                  | inl v => existT _ Left v
+                  | inr v => existT _ Right v
+                  end
+    end.
+  Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
+      𝑼_fold U (𝑼_unfold U Kv) = Kv.
+  Proof. now intros [] []. Qed.
+  Lemma 𝑼_undfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) }),
+      𝑼_unfold U (𝑼_fold U Kv) = Kv.
+  Proof. now intros [] [[]]. Qed.
 
   (** RECORDS **)
   Definition 𝑹𝑭  : Set := Empty_set.
   Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) := match R with end.
+  Definition 𝑹_fold (R : 𝑹) : Env' Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
+  Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> Env' Lit (𝑹𝑭_Ty R) := match R with end.
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
