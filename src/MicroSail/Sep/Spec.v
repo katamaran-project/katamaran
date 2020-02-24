@@ -159,7 +159,8 @@ Module Symbolic
   Arguments asn_exist [_] _ _ _.
 
   Inductive SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
-  | sep_contract Σ (δ : SymbolicLocalStore Σ Δ) (req : Assertion Σ) (ens : Assertion Σ).
+  | sep_contract_unit   {Σ} (δ : SymbolicLocalStore Σ Δ) (req : Assertion Σ) (ens : Assertion Σ) (e : τ = ty_unit)
+  | sep_contract_result {Σ} (δ : SymbolicLocalStore Σ Δ) (result : 𝑺) (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ))).
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.
@@ -404,12 +405,12 @@ Module Symbolic
     Axiom outcome_consume_chunk : forall {Σ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) (h : SymbolicHeap Σ), Outcome (SymbolicHeap Σ).
     Arguments outcome_consume_chunk {_} _ _ _.
 
-    Program Definition mutator_consume_chunk {Σ Γ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) : Mutator Σ Γ Γ unit :=
+    Definition mutator_consume_chunk {Σ Γ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) : Mutator Σ Γ Γ unit :=
       fun '(MkSymbolicState Φ δ h) =>
         outcome_bind
           (outcome_consume_chunk p ts h)
           (fun h' => outcome_pure (tt , MkSymbolicState Φ δ h' , nil)).
-    Arguments mutator_consume_chunk {_ _} _ _.
+    Global Arguments mutator_consume_chunk {_ _} _ _.
 
     Fixpoint mutator_produce {Σ Γ} (asn : Assertion Σ) : Mutator Σ Γ Γ unit :=
       match asn with
@@ -447,7 +448,15 @@ Module Symbolic
       | stm_assign x e => mutator_exec e >>= fun v =>
         mutator_modify_local (fun δ => δ ⟪ x ↦ v ⟫)%env *>
         mutator_pure v
-      | stm_call f es => _
+      | stm_call f es =>
+        match CEnv f with
+        | @sep_contract_unit _ _ Σ' _ req ens e =>
+          ⨁ ζ : Sub Σ' Σ =>
+            mutator_consume (sub_assertion ζ req) *>
+            mutator_produce (sub_assertion ζ ens) *>
+            mutator_pure (term_lit Σ _ (@eq_rect_r Ty ty_unit Lit tt _ e))
+        | @sep_contract_result _ _ Σ' δ result req ens => _
+        end
       | stm_call' Δ δ' τ s =>
         mutator_get_local                                      >>= fun δ =>
         mutator_put_local (env_map (fun _ => term_lit _ _) δ') >>= fun _ =>
@@ -485,49 +494,41 @@ Module Symbolic
       | stm_read_memory _ => _
       | stm_write_memory _ _ => _
       end.
-    Next Obligation.
-      intros Σ Γ _ _ Δ σ f es _ _.
-      destruct (CEnv f) as [Σ'].
-      apply (mutator_angelic (I := Sub Σ' Σ)).
-      intros ζ.
-      refine (mutator_consume (sub_assertion ζ req) *> _).
-      refine (mutator_produce (sub_assertion ζ ens) *> _).
-    Abort.
     Admit Obligations of mutator_exec.
 
   End MutatorOperations.
 
-  Section SymbolicExecution.
+  (* Section SymbolicExecution. *)
 
-    Import OutcomeNotations.
+  (*   Import OutcomeNotations. *)
 
-    Inductive sexec {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} (st : SymbolicState Σ Γ) : forall (σ : Ty), Stm Γ σ -> Outcome (Term Σ σ * SymbolicState Σ Γ) -> Prop :=
-    | sexc_lit {σ : Ty} (v : Lit σ)   : sexec st (stm_lit σ v) (outcome_pure (term_lit _ σ v, st))
-    | sexc_exp {τ : Ty} (e : Exp Γ τ) : sexec st (stm_exp e)   (outcome_pure (symbolic_eval_exp e (symbolicstate_localstore st), st))
-    | sexc_if  {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) (o1 o2 : Outcome (Term Σ τ * SymbolicState Σ Γ)) :
-        sexec (symbolic_assume_exp e           st) s1               o1 ->
-        sexec (symbolic_assume_exp (exp_not e) st) s2               o2 ->
-        sexec st                                   (stm_if e s1 s2) (o1 ⊗ o2)%out
-    | sexc_seq {τ σ : Ty}
-        (s1 : Stm Γ τ) (o1 : Outcome (Term Σ τ * SymbolicState Σ Γ))
-        (s2 : Stm Γ σ) (o2 : SymbolicState Σ Γ -> Outcome (Term Σ σ * SymbolicState Σ Γ)) :
-        sexec st s1 o1 ->
-        (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) sexec st' s2 (o2 st')) ->
-        (* outcome_satisfy (fun '(t1 , st') => sexec s2 st' (o2 st')) o1 -> *)
-        sexec st (stm_seq s1 s2) (o1 >>= fun '(_ , st') => o2 st')
-    | sexc_let {x : 𝑿} {τ σ : Ty}
-        (s : Stm Γ τ)             (o1 : Outcome _)
-        (k : Stm (Γ ▻ (x , τ)) σ) (o2 : SymbolicState Σ (Γ ▻ _) -> Outcome (Term Σ σ * SymbolicState Σ (Γ ▻ _))) :
-        sexec st s o1 ->
-        (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) @sexec _ (Γ ▻ _) st' _ k (o2 st')) ->
-        sexec st (stm_let x τ s k)
-              (o1 >>= fun '(t1 , st1) =>
-               o2 (symbolic_push_local t1 st1) >>= fun '(t2 , st2) =>
-                                                     outcome_pure (t2 , symbolic_pop_local st2))%out
-    | sexc_call {Δ σ} (f : 𝑭 Δ σ) (es : Env' (Exp Γ) Δ) {Σ' δ req ens} :
-        CEnv f = @sep_contract _ _ Σ' δ req ens ->
-        sexec st (stm_call f es) (outcome_fail).
+  (*   Inductive sexec {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} (st : SymbolicState Σ Γ) : forall (σ : Ty), Stm Γ σ -> Outcome (Term Σ σ * SymbolicState Σ Γ) -> Prop := *)
+  (*   | sexc_lit {σ : Ty} (v : Lit σ)   : sexec st (stm_lit σ v) (outcome_pure (term_lit _ σ v, st)) *)
+  (*   | sexc_exp {τ : Ty} (e : Exp Γ τ) : sexec st (stm_exp e)   (outcome_pure (symbolic_eval_exp e (symbolicstate_localstore st), st)) *)
+  (*   | sexc_if  {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) (o1 o2 : Outcome (Term Σ τ * SymbolicState Σ Γ)) : *)
+  (*       sexec (symbolic_assume_exp e           st) s1               o1 -> *)
+  (*       sexec (symbolic_assume_exp (exp_not e) st) s2               o2 -> *)
+  (*       sexec st                                   (stm_if e s1 s2) (o1 ⊗ o2)%out *)
+  (*   | sexc_seq {τ σ : Ty} *)
+  (*       (s1 : Stm Γ τ) (o1 : Outcome (Term Σ τ * SymbolicState Σ Γ)) *)
+  (*       (s2 : Stm Γ σ) (o2 : SymbolicState Σ Γ -> Outcome (Term Σ σ * SymbolicState Σ Γ)) : *)
+  (*       sexec st s1 o1 -> *)
+  (*       (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) sexec st' s2 (o2 st')) -> *)
+  (*       (* outcome_satisfy (fun '(t1 , st') => sexec s2 st' (o2 st')) o1 -> *) *)
+  (*       sexec st (stm_seq s1 s2) (o1 >>= fun '(_ , st') => o2 st') *)
+  (*   | sexc_let {x : 𝑿} {τ σ : Ty} *)
+  (*       (s : Stm Γ τ)             (o1 : Outcome _) *)
+  (*       (k : Stm (Γ ▻ (x , τ)) σ) (o2 : SymbolicState Σ (Γ ▻ _) -> Outcome (Term Σ σ * SymbolicState Σ (Γ ▻ _))) : *)
+  (*       sexec st s o1 -> *)
+  (*       (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) @sexec _ (Γ ▻ _) st' _ k (o2 st')) -> *)
+  (*       sexec st (stm_let x τ s k) *)
+  (*             (o1 >>= fun '(t1 , st1) => *)
+  (*              o2 (symbolic_push_local t1 st1) >>= fun '(t2 , st2) => *)
+  (*                                                    outcome_pure (t2 , symbolic_pop_local st2))%out *)
+  (*   | sexc_call {Δ σ} (f : 𝑭 Δ σ) (es : Env' (Exp Γ) Δ) {Σ' δ req ens} : *)
+  (*       CEnv f = @sep_contract _ _ Σ' δ req ens -> *)
+  (*       sexec st (stm_call f es) (outcome_fail). *)
 
-  End SymbolicExecution.
+  (* End SymbolicExecution. *)
 
 End Symbolic.
