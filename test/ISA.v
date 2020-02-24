@@ -31,11 +31,18 @@ Lemma Unions_eq_dec : EqDec Unions.
 Qed.
 
 Inductive Instruction :=
-    Halt
-  | Load
-  | Add
-  | Jump
-  .
+| Halt
+| Load (dst src : Z)
+| Add  (dst src : Z)
+| Jump (dst : Z)
+.
+
+Inductive InstructionConstructor :=
+| KHalt
+| KLoad
+| KAdd
+| KJump
+.
 
 (** Describe a part of REDFIN ISA
     Property to verify:
@@ -44,9 +51,38 @@ Inductive Instruction :=
       access has been attempted. *)
 Module ExampleTypeKit <: TypeKit.
 
+  (** ENUMS **)
   Definition 𝑬        := Empty_set.
+  Definition 𝑬𝑲 (E : 𝑬) : Set := Empty_set.
+  Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
+    match E with end.
+
+  (** UNIONS **)
   Definition 𝑼        := Unions.
+  Definition 𝑼𝑻 (U : 𝑼) : Set :=
+    match U with
+    | instruction => Instruction
+    end.
+  Definition 𝑼𝑲 (U : 𝑼) : Set :=
+    match U with
+    | instruction => InstructionConstructor
+    end.
+  Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
+    match U with
+    | instruction => {| blast v POST :=
+                     (v = KHalt  -> POST KHalt) /\
+                     (v = KLoad -> POST KLoad)  /\
+                     (v = KAdd -> POST KAdd)    /\
+                     (v = KJump -> POST KJump)
+                |}
+    end.
+  Solve All Obligations with destruct a; intuition congruence.
+
   Definition 𝑹        := Empty_set.
+  Definition 𝑹𝑻 (R : 𝑹) : Set :=
+    match R with
+    end.
+
   Definition 𝑿        := string.
 
   Definition 𝑬_eq_dec : EqDec 𝑬 := ltac:(unfold EqDec; decide equality).
@@ -62,42 +98,55 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Module TY := ExampleTypes.
 
   Open Scope lit_scope.
-  (** ENUMS **)
 
-  Definition 𝑬𝑲 (E : 𝑬) : Set := Empty_set.
-  Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
-    match E with end.
-
-  (** UNIONS **)
-  Definition 𝑼𝑲 (U : 𝑼) : Set :=
-    match U with
-    | instruction => Instruction
-    end.
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
     match U with
     | instruction => fun K => match K with
-                          | Halt => ty_unit
+                          | KHalt => ty_unit
                           (* Load has two fields: a register label and a memory address, *)
                           (* represented as ints *)
-                          | Load => ty_prod ty_int ty_int
-                          | Add => ty_prod ty_int ty_int
-                          | Jump => ty_int
+                          | KLoad => ty_prod ty_int ty_int
+                          | KAdd => ty_prod ty_int ty_int
+                          | KJump => ty_int
                           end
     end.
-  Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
+  Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
     match U with
-    | instruction => {| blast v POST :=
-                     (v = Halt  -> POST Halt) /\
-                     (v = Load -> POST Load)  /\
-                     (v = Add -> POST Add)    /\
-                     (v = Jump -> POST Jump)
-                |}
+    | instruction => fun Kv =>
+                       match Kv with
+                       | existT _ KHalt tt        => Halt
+                       | existT _ KLoad (dst,src) => Load dst src
+                       | existT _ KAdd (dst,src)  => Add dst src
+                       | existT _ KJump dst       => Jump dst
+                       end
     end.
-  Solve All Obligations with destruct a; intuition congruence.
+
+  Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
+    match U with
+    | instruction => fun Kv =>
+                       match Kv with
+                       | Halt         => existT _ KHalt tt
+                       | Load dst src => existT _ KLoad (dst,src)
+                       | Add dst src  => existT _ KAdd (dst,src)
+                       | Jump dst     => existT _ KJump dst
+                       end
+    end.
+  Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
+      𝑼_fold U (𝑼_unfold U Kv) = Kv.
+  Proof. now intros [] []. Qed.
+  Lemma 𝑼_undfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) }),
+      𝑼_unfold U (𝑼_fold U Kv) = Kv.
+  Proof. intros [] [[] l]; cbn in *; destruct_conjs;
+         repeat match goal with
+                | [l : unit |- _] => destruct l
+                end; reflexivity.
+  Qed.
 
   (** RECORDS **)
   Definition 𝑹𝑭  : Set := Empty_set.
   Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) := match R with end.
+  Definition 𝑹_fold (R : 𝑹) : Env' Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
+  Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> Env' Lit (𝑹𝑭_Ty R) := match R with end.
 
   (** FUNCTIONS **)
   (* Names are inspired by sail-riscv naming convention *)
@@ -167,10 +216,10 @@ Import NameResolution.
 Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Module TM := ExampleTerms.
 
-  Local Definition lit_true {Γ}  : Exp Γ ty_bool := exp_lit _ _ (untag (taglit_bool true)).
-  Local Definition lit_false {Γ} : Exp Γ ty_bool := exp_lit _ _ (untag (taglit_bool false)).
+  Local Definition lit_true {Γ}  : Exp Γ ty_bool := exp_lit _ ty_bool true.
+  Local Definition lit_false {Γ} : Exp Γ ty_bool := exp_lit _ ty_bool false.
   Local Definition int_lit {Γ} (literal : Z) : Exp Γ ty_int :=
-    exp_lit _ _ (untag (taglit_int literal)).
+    exp_lit _ ty_int literal.
 
   (* REGISTER STORE *)
   Definition RegStore := forall σ, 𝑹𝑬𝑮 σ -> Lit σ.
@@ -243,7 +292,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Local Notation "'flag_value'" := (@exp_var _ "flag_value" ty_bool _).
   Local Notation "'address'" := (@exp_var _ "address" ty_int _).
   Local Notation "'mem_value'" := (@exp_var _ "mem_value" ty_int _).
-  Local Definition nop {Γ} : Stm Γ ty_unit := stm_lit _ (untag taglit_unit).
+  Local Definition nop {Γ} : Stm Γ ty_unit := stm_lit ty_unit tt.
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ.
     let pi := eval compute in
@@ -279,15 +328,15 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
                           (address < Memory_hb)
     | semantics => (@stm_match_union _ instruction instr _
         (fun K => match K with
-               | Halt => ""
-               | Load => "load_args"
-               | Add => "add_args"
-               | Jump => "jump_args"
+               | KHalt => ""
+               | KLoad => "load_args"
+               | KAdd => "add_args"
+               | KJump => "jump_args"
                end)
         (fun K => match K return Stm _ _ with
-               | Halt =>
+               | KHalt =>
                  stm_write_register Halted lit_true ;; nop
-               | Load =>
+               | KLoad =>
                  match: (exp_var "load_args") in (ty_int , ty_int) with
                  | ("dest", "source") =>
                       let: "x" := call rM (exp_var "source")
@@ -296,8 +345,8 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
                       then (call wX (exp_var "dest") (exp_var "x");;nop)
                       else (stm_write_register OutOfMemory lit_true;; nop)
                   end
-               | Add => stm_fail _ "not implemented"
-               | Jump => stm_fail _ "not implemented"
+               | KAdd => stm_fail _ "not implemented"
+               | KJump => stm_fail _ "not implemented"
                end))
     end in exact pi.
   Defined.
@@ -316,26 +365,28 @@ Lemma example_halt :
   forall (Γ : Ctx (𝑿 * Ty))
     (γ : RegStore) (μ : Memory),
     ⟨ γ , μ
-    , env_nil ► ("instr" ∶ ty_union instruction) ↦
-          (untag ((@taglit_union instruction Halt) taglit_unit))
-      , Pi semantics ⟩
+    , env_nil ► ("instr" ∶ ty_union instruction) ↦ Halt
+    , Pi semantics ⟩
     --->*
-    ⟨ write_register γ Halted (untag (taglit_bool true)) , μ
-    , env_nil ► ("instr" ∶ ty_union instruction) ↦
-          (untag ((@taglit_union instruction Halt) taglit_unit))
-    , @stm_lit ["instr" ∶ ty_union instruction] ty_unit (untag taglit_unit) ⟩.
+    ⟨ write_register γ Halted true , μ
+    , env_nil ► ("instr" ∶ ty_union instruction) ↦ Halt
+    , stm_lit ty_unit tt ⟩.
 Proof.
-  intros.
-  cbn [Pi untag].
+  intros; cbn [Pi].
+  (* Step 1 *)
   econstructor 2.
-  constructor.
+  { constructor. }
   cbn.
+  (* Step 2 *)
   econstructor 2.
-  constructor. constructor. constructor.
+  { constructor. constructor. constructor. }
   cbn.
+  (* Step 3 *)
   econstructor 2.
-  constructor. apply step_stm_seq_value.
+  { constructor. apply step_stm_seq_value. }
+  (* Step 4 *)
   econstructor 2.
-  constructor.
+  { constructor. }
+  (* End *)
   constructor 1.
 Qed.
