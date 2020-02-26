@@ -68,10 +68,11 @@ Module Symbolic
   Import OutcomeNotations.
   Import ListNotations.
 
+  Local Unset Elimination Schemes.
   Inductive Term (Σ : Ctx (𝑺 * Ty)) : Ty -> Type :=
   | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : InCtx (ς , σ) Σ} : Term Σ σ
   | term_lit     (σ : Ty) : Lit σ -> Term Σ σ
-  (* | term_plus    (e1 e2 : Term Σ ty_int) : Term Σ ty_int *)
+  | term_plus    (e1 e2 : Term Σ ty_int) : Term Σ ty_int
   (* | term_times   (e1 e2 : Term Σ ty_int) : Term Σ ty_int *)
   (* | term_minus   (e1 e2 : Term Σ ty_int) : Term Σ ty_int *)
   (* | term_neg     (e : Term Σ ty_int) : Term Σ ty_int *)
@@ -98,8 +99,89 @@ Module Symbolic
                 {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Term Σ σ.
   (* | term_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Term Σ σ) : Term Σ τ. *)
   Bind Scope exp_scope with Term.
+  Derive Signature for Term.
+  Local Set Elimination Schemes.
 
   Arguments term_var {_} _ _ {_}.
+
+  Section Term_rect.
+
+    Variable (Σ : Ctx (𝑺 * Ty)).
+    Variable (P  : forall t : Ty, Term Σ t -> Type).
+    Arguments P _ _ : clear implicits.
+
+    Fixpoint PL (σ : Ty) (ts : list (Term Σ σ)) : Type :=
+      match ts with
+      | [] => unit
+      | t :: ts => P σ t * PL ts
+      end.
+    Fixpoint PE (σs : Ctx Ty) (ts : Env (Term Σ) σs) : Type :=
+      match ts with
+      | env_nil => unit
+      | env_snoc ts _ t => PE ts * P _ t
+      end.
+    Fixpoint PE' (σs : Ctx (𝑹𝑭 * Ty)) (ts : Env' (Term Σ) σs) : Type :=
+      match ts with
+      | env_nil => unit
+      | env_snoc ts b t => PE' ts * P (snd b) t
+      end.
+
+    Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : (ς ∶ σ)%ctx ∈ Σ), P σ (term_var ς σ)).
+    Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit Σ σ l)).
+    Hypothesis (P_plus       : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_plus e1 e2)).
+    Hypothesis (P_times      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_times e1 e2)).
+    Hypothesis (P_minus      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_minus e1 e2)).
+    Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)).
+    Hypothesis (P_eq         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_eq e1 e2)).
+    Hypothesis (P_le         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_le e1 e2)).
+    Hypothesis (P_lt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_lt e1 e2)).
+    Hypothesis (P_gt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_gt e1 e2)).
+    Hypothesis (P_and        : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_and e1 e2)).
+    Hypothesis (P_or         : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_or e1 e2)).
+    Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)).
+    Hypothesis (P_pair       : forall (σ1 σ2 : Ty) (e1 : Term Σ σ1), P σ1 e1 -> forall e2 : Term Σ σ2, P σ2 e2 -> P (ty_prod σ1 σ2) (term_pair e1 e2)).
+    Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
+    Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
+    Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
+    Hypothesis (P_cons       : forall (σ : Ty) (h : Term Σ σ), P σ h -> forall t : Term Σ (ty_list σ), P (ty_list σ) t -> P (ty_list σ) (term_cons h t)).
+    Hypothesis (P_nil        : forall σ : Ty, P (ty_list σ) (term_nil Σ)).
+    Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
+    Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
+    Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union e)).
+    Hypothesis (P_record     : forall (R : 𝑹) (es : Env' (Term Σ) (𝑹𝑭_Ty R)), PE' es -> P (ty_record R) (term_record es)).
+    Hypothesis (P_projrec    : forall (R : 𝑹) (e : Term Σ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (term_projrec e)).
+
+    Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) : P σ t :=
+      match t with
+      | @term_var _ ς σ ςInΣ           => ltac:(eapply P_var; eauto)
+      | @term_lit _ σ x                => ltac:(eapply P_lit; eauto)
+      | @term_plus _ e1 e2             => ltac:(eapply P_plus; eauto)
+      | @term_times _ e1 e2            => ltac:(eapply P_times; eauto)
+      | @term_minus _ e1 e2            => ltac:(eapply P_minus; eauto)
+      | @term_neg _ e                  => ltac:(eapply P_neg; eauto)
+      | @term_eq _ e1 e2               => ltac:(eapply P_eq; eauto)
+      | @term_le _ e1 e2               => ltac:(eapply P_le; eauto)
+      | @term_lt _ e1 e2               => ltac:(eapply P_lt; eauto)
+      | @term_gt _ e1 e2               => ltac:(eapply P_gt; eauto)
+      | @term_and _ e1 e2              => ltac:(eapply P_and; eauto)
+      | @term_or _ e1 e2               => ltac:(eapply P_or; eauto)
+      | @term_not _ e                  => ltac:(eapply P_not; eauto)
+      | @term_pair _ σ1 σ2 e1 e2       => ltac:(eapply P_pair; eauto)
+      | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
+      | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
+      | @term_list _ σ es              => ltac:(eapply P_list; induction es; cbn; eauto using unit)
+      | @term_cons _ σ h t             => ltac:(eapply P_cons; eauto)
+      | @term_nil _ σ                  => ltac:(eapply P_nil; eauto)
+      | @term_tuple _ σs es            => ltac:(eapply P_tuple; induction es; cbn; eauto using unit)
+      | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
+      | @term_union _ U K e            => ltac:(eapply P_union; eauto)
+      | @term_record _ R es            => ltac:(eapply P_record; induction es; cbn; eauto using unit)
+      | @term_projrec _ R e rf σ rfInR => ltac:(eapply P_projrec; eauto)
+      end.
+
+  End Term_rect.
+
+  Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := Term_rect P.
 
   (* Two proofs of context containment are equal of the deBruijn indices are equal *)
   Definition InCtx_eqb {Σ} {ς1 ς2 : 𝑺} {σ : Ty}
@@ -111,13 +193,15 @@ Module Symbolic
     Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
       InCtx_eqb ς1inΣ ς2inΣ;
     Term_eqb (term_lit _ l1) (term_lit _ l2) := Lit_eqb _ l1 l2;
-    (* Term_eqb (term_plus x1 y1) (term_plus x2 y2) := Term_eqb x1 x2 && *)
-    (*                                                 Term_eqb y1 y2; *)
+    Term_eqb (term_plus x1 y1) (term_plus x2 y2) := Term_eqb x1 x2 &&
+                                                    Term_eqb y1 y2;
     (* Term_eqb (term_times x1 y1) (term_times x2 y2) := Term_eqb x1 x2 && *)
     (*                                                   Term_eqb y1 y2; *)
     (* Term_eqb (term_minus x1 y1) (term_minus x2 y2) := Term_eqb x1 x2 && *)
     (*                                                   Term_eqb y1 y2; *)
     (* Term_eqb (term_neg x) (term_neg y) := Term_eqb x y; *)
+    (* Term_eqb (term_eq x1 y1) (term_eq x2 y2) := Term_eqb x1 x2 && *)
+    (*                                             Term_eqb y1 y2; *)
     (* Term_eqb (term_le x1 y1) (term_le x2 y2) := Term_eqb x1 x2 && *)
     (*                                             Term_eqb y1 y2; *)
     (* Term_eqb (term_lt x1 y1) (term_lt x2 y2) := Term_eqb x1 x2 && *)
@@ -162,23 +246,19 @@ Module Symbolic
 
     Term_eqb _ _ := false.
 
-  Search Term_eqb.
-  Print Term_eqb_graph.
-
   Lemma Term_eqb_spec :
     forall Σ (σ : Ty) (t1 t2 : Term Σ σ),
       reflect (t1 = t2) (Term_eqb t1 t2).
   Proof.
     intros.
-    funelim (@Term_eqb Σ σ t1 t2); simp Term_eqb;
-    cbn in *;
-    repeat
-      match goal with
-      | |- reflect _ false => constructor; try congruence
-      | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
-      | |- reflect _ true => constructor; congruence
-      | |- (?x <> ?y) => let H := fresh in intro H; dependent destruction H
-      end; try congruence.
+    induction t1 using Term_rect; dependent destruction t2; simp Term_eqb; cbn in *;
+      repeat
+        match goal with
+        | |- reflect _ false => constructor
+        | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
+        | |- reflect _ true => constructor
+        | |- (?x <> ?y) => let H := fresh in intro H; dependent destruction H
+        end; try congruence.
     - unfold InCtx_eqb.
       repeat match goal with
              | |- context[?m =? ?n] => destruct (Nat.eqb_spec m n)
