@@ -326,9 +326,17 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
       else if: flag_code = int_lit 7 then stm_write_register OutOfMemory flag_value
       else     stm_fail _ "write_register: invalid register"
     | rM =>
-      stm_fail _ "read_memory: not implemented"
+      if:      address = int_lit 0 then stm_read_memory A0
+      else if: address = int_lit 1 then stm_read_memory A1
+      else if: address = int_lit 2 then stm_read_memory A2
+      else if: address = int_lit 3 then stm_read_memory A3
+      else     stm_fail _ "read_register: invalid register"
     | wM =>
-      stm_fail _ "write_memory: invalid register"
+      if:      address = int_lit 0 then stm_write_memory A0 mem_value
+      else if: address = int_lit 1 then stm_write_memory A1 mem_value
+      else if: address = int_lit 2 then stm_write_memory A2 mem_value
+      else if: address = int_lit 3 then stm_write_memory A3 mem_value
+      else     stm_fail _ "read_register: invalid register"
     (* an [int] represents a valid address if it is >= [Memory_lb] and < [Memory_hb] *)
     | in_bounds => exp_and (exp_or (address = Memory_lb) (address > Memory_lb))
                           (address < Memory_hb)

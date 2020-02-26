@@ -1,4 +1,5 @@
 Require Import Coq.Program.Equality.
+Require Import Equations.Equations.
 Require Import MicroSail.Context.
 Require Import MicroSail.Notation.
 
@@ -11,6 +12,7 @@ Section WithBinding.
   | env_nil : Env D ctx_nil
   | env_snoc {Γ} (E : Env D Γ) (b : B) (db : D b) :
       Env D (ctx_snoc Γ b).
+  Derive Signature for Env.
 
   Global Arguments env_nil {_}.
   Bind Scope env_scope with Env.
@@ -126,9 +128,36 @@ Section WithBinding.
       env_drop Δ (env_cat δΓ δΔ) = δΓ.
   Proof. induction δΔ; cbn; auto. Qed.
 
+  Section WithD.
+    Variable D : B -> Type.
+
+    Fixpoint EnvRec (σs : Ctx B) {struct σs} : Type :=
+      match σs with
+      | ctx_nil => unit
+      | ctx_snoc σs σ => EnvRec σs * D σ
+      end.
+
+  End WithD.
+
+  Section WithEqD.
+    Context {D : B -> Type}.
+    Variable eqd : forall b, D b -> D b -> bool.
+
+    Equations env_beq {Γ : Ctx B} (δ1 δ2 : Env D Γ) : bool :=
+    env_beq env_nil               env_nil              := true;
+    env_beq (env_snoc δ1 _ db1) (env_snoc δ2 _ db2) := env_beq δ1 δ2 && eqd db1 db2.
+
+    Fixpoint envrec_beq {Γ : Ctx B} : forall (δ1 δ2 : EnvRec D Γ), bool :=
+      match Γ with
+      | ctx_nil      => fun _ _ => true
+      | ctx_snoc Γ b => fun '(δ1 , d1) '(δ2 , d2) => envrec_beq δ1 δ2 && eqd d1 d2
+      end%bool.
+
+  End WithEqD.
+
 End WithBinding.
 
-Definition Env' {X T : Set} (D : T -> Type) (Γ : Ctx (X * T)) : Type :=
+Definition Env' {X T : Type} (D : T -> Type) (Γ : Ctx (X * T)) : Type :=
   Env (fun xt => D (snd xt)) Γ.
 Bind Scope env_scope with Env.
 Bind Scope env_scope with Env'.
@@ -138,7 +167,7 @@ Module EnvNotations.
   Notation "δ '►' b '↦' d" := (env_snoc δ b d) : env_scope.
   Notation "δ1 '►►' δ2" := (env_cat δ1 δ2) : env_scope.
   Notation "δ ⟪ x ↦ v ⟫" := (@env_update _ _ _ δ (x , _) _ v) : env_scope.
-  Notation "δ ! x" := (@env_lookup _ _ _ δ (x , _) _) : lit_scope.
+  Notation "δ ‼ x" := (@env_lookup _ _ _ δ (x , _) _) : lit_scope.
 
 End EnvNotations.
 
@@ -160,7 +189,7 @@ Fixpoint curry {B} (D : B -> Type) {Δ : Ctx B} {r : Type} (f : Env D Δ -> r) {
    | ctx_snoc Δ σ => fun r f => @curry B D Δ (D σ -> r) (fun E dσ => f (env_snoc E σ dσ))
    end r f.
 
-Definition abstract' {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) (r : Type) : Type :=
+Definition abstract' {X T : Type} (D : T -> Type) (Δ : Ctx (X * T)) (r : Type) : Type :=
   abstract (fun xt => D (snd xt)) Δ r.
 
 Definition uncurry' {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : abstract' D Δ r) (δ : Env' D Δ) : r :=
