@@ -210,6 +210,11 @@ Module Types (Export typekit : TypeKit).
 
   Section Ty_rect.
     Variable P  : Ty -> Type.
+    Fixpoint PS (σs : Ctx Ty) : Type :=
+      match σs with
+      | ctx_nil => unit
+      | ctx_snoc σs σ => P σ * PS σs
+      end.
 
     Hypothesis (P_int    : P ty_int).
     Hypothesis (P_bool   : P ty_bool).
@@ -220,31 +225,57 @@ Module Types (Export typekit : TypeKit).
     Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)).
     Hypothesis (P_unit   : P ty_unit).
     Hypothesis (P_enum   : forall E, P (ty_enum E)).
-    Hypothesis (P_tuple  : forall σs, (forall σ, InCtx σ σs -> P σ) -> P (ty_tuple σs)).
+    Hypothesis (P_tuple  : forall σs, PS σs -> P (ty_tuple σs)).
     Hypothesis (P_union  : forall U, P (ty_union U)).
     Hypothesis (P_record : forall R, P (ty_record R)).
 
     Lemma Ty_rect : forall σ, P σ.
-      apply (ty_rect P (fun σs => forall σ, InCtx σ σs -> P σ)); try assumption.
-      - intros. apply (inctx_case_nil H).
-      - intros. now apply (inctx_case_snoc P) in H.
-    Defined.
+      apply (ty_rect P PS); try assumption.
+      - now cbn.
+      - intros. cbn. auto.
+    Qed.
 
   End Ty_rect.
 
-  Definition Ty_rec (P : Ty -> Set) := Ty_rect P.
+  (* Section Ty_rect. *)
+  (*   Variable P  : Ty -> Type. *)
+
+  (*   Hypothesis (P_int    : P ty_int). *)
+  (*   Hypothesis (P_bool   : P ty_bool). *)
+  (*   Hypothesis (P_bit    : P ty_bit). *)
+  (*   Hypothesis (P_string : P ty_string). *)
+  (*   Hypothesis (P_list   : forall σ, P σ -> P (ty_list σ)). *)
+  (*   Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (ty_prod σ τ)). *)
+  (*   Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)). *)
+  (*   Hypothesis (P_unit   : P ty_unit). *)
+  (*   Hypothesis (P_enum   : forall E, P (ty_enum E)). *)
+  (*   Hypothesis (P_tuple  : forall σs, (forall σ, InCtx σ σs -> P σ) -> P (ty_tuple σs)). *)
+  (*   Hypothesis (P_union  : forall U, P (ty_union U)). *)
+  (*   Hypothesis (P_record : forall R, P (ty_record R)). *)
+
+  (*   Lemma Ty_rect : forall σ, P σ. *)
+  (*     apply (ty_rect P (fun σs => forall σ, InCtx σ σs -> P σ)); try assumption. *)
+  (*     - intros. apply (inctx_case_nil H). *)
+  (*     - intros. now apply (inctx_case_snoc P) in H. *)
+  (*   Defined. *)
+
+  (* End Ty_rect. *)
+
+  Definition Ty_rec (P : Ty -> Type) := Ty_rect P.
   Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
 
   Lemma Ty_eq_dec : forall x y : Ty, {x=y}+{~x=y}.
   Proof.
     decide equality; auto using 𝑬_eq_dec, 𝑼_eq_dec, 𝑹_eq_dec.
-    revert σs H. rename σs0 into τs.
+    revert σs X. rename σs0 into τs.
     induction τs; intros; destruct σs.
     - left. reflexivity.
     - right. discriminate.
     - right. discriminate.
-    - specialize (IHτs σs (fun σ σInσs => H σ (inctx_succ σInσs))).
-      specialize (H b0 inctx_zero b).
+    - cbn in X.
+      destruct_conjs.
+      specialize (IHτs σs p).
+      specialize (s b).
       intuition congruence.
   Qed.
 
@@ -260,13 +291,7 @@ Module Types (Export typekit : TypeKit).
     | ty_unit => unit
     | ty_enum E => 𝑬𝑲 E
     (* Experimental features *)
-    | ty_tuple σs =>
-      Ctx_rect (fun _ => Type) unit (fun _ Litσs σ => Litσs * Lit σ) σs
-    (* (fix Lits (σs : Ctx Ty) : Type := *)
-    (*    match σs with *)
-    (*    | ctx_nil => unit *)
-    (*    | ctx_snoc σs σ => Lits σs * Lit σ *)
-    (*    end) σs *)
+    | ty_tuple σs => EnvRec Lit σs
     | ty_union U => 𝑼𝑻 U
     | ty_record R => 𝑹𝑻 R
     end%type.
