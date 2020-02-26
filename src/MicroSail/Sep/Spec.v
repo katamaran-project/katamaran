@@ -129,22 +129,22 @@ Module Symbolic
     Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : (ς ∶ σ)%ctx ∈ Σ), P σ (term_var ς σ)).
     Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit Σ σ l)).
     Hypothesis (P_plus       : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_plus e1 e2)).
-    Hypothesis (P_times      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_times e1 e2)).
-    Hypothesis (P_minus      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_minus e1 e2)).
-    Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)).
-    Hypothesis (P_eq         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_eq e1 e2)).
-    Hypothesis (P_le         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_le e1 e2)).
-    Hypothesis (P_lt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_lt e1 e2)).
-    Hypothesis (P_gt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_gt e1 e2)).
-    Hypothesis (P_and        : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_and e1 e2)).
-    Hypothesis (P_or         : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_or e1 e2)).
-    Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)).
-    Hypothesis (P_pair       : forall (σ1 σ2 : Ty) (e1 : Term Σ σ1), P σ1 e1 -> forall e2 : Term Σ σ2, P σ2 e2 -> P (ty_prod σ1 σ2) (term_pair e1 e2)).
-    Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
-    Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
+    (* Hypothesis (P_times      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_times e1 e2)). *)
+    (* Hypothesis (P_minus      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_minus e1 e2)). *)
+    (* Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)). *)
+    (* Hypothesis (P_eq         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_eq e1 e2)). *)
+    (* Hypothesis (P_le         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_le e1 e2)). *)
+    (* Hypothesis (P_lt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_lt e1 e2)). *)
+    (* Hypothesis (P_gt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_gt e1 e2)). *)
+    (* Hypothesis (P_and        : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_and e1 e2)). *)
+    (* Hypothesis (P_or         : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_or e1 e2)). *)
+    (* Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)). *)
+    (* Hypothesis (P_pair       : forall (σ1 σ2 : Ty) (e1 : Term Σ σ1), P σ1 e1 -> forall e2 : Term Σ σ2, P σ2 e2 -> P (ty_prod σ1 σ2) (term_pair e1 e2)). *)
+    (* Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)). *)
+    (* Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)). *)
     Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
-    Hypothesis (P_cons       : forall (σ : Ty) (h : Term Σ σ), P σ h -> forall t : Term Σ (ty_list σ), P (ty_list σ) t -> P (ty_list σ) (term_cons h t)).
-    Hypothesis (P_nil        : forall σ : Ty, P (ty_list σ) (term_nil Σ)).
+    (* Hypothesis (P_cons       : forall (σ : Ty) (h : Term Σ σ), P σ h -> forall t : Term Σ (ty_list σ), P (ty_list σ) t -> P (ty_list σ) (term_cons h t)). *)
+    (* Hypothesis (P_nil        : forall σ : Ty, P (ty_list σ) (term_nil Σ)). *)
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
     Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
     Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union e)).
@@ -156,22 +156,22 @@ Module Symbolic
       | @term_var _ ς σ ςInΣ           => ltac:(eapply P_var; eauto)
       | @term_lit _ σ x                => ltac:(eapply P_lit; eauto)
       | @term_plus _ e1 e2             => ltac:(eapply P_plus; eauto)
-      | @term_times _ e1 e2            => ltac:(eapply P_times; eauto)
-      | @term_minus _ e1 e2            => ltac:(eapply P_minus; eauto)
-      | @term_neg _ e                  => ltac:(eapply P_neg; eauto)
-      | @term_eq _ e1 e2               => ltac:(eapply P_eq; eauto)
-      | @term_le _ e1 e2               => ltac:(eapply P_le; eauto)
-      | @term_lt _ e1 e2               => ltac:(eapply P_lt; eauto)
-      | @term_gt _ e1 e2               => ltac:(eapply P_gt; eauto)
-      | @term_and _ e1 e2              => ltac:(eapply P_and; eauto)
-      | @term_or _ e1 e2               => ltac:(eapply P_or; eauto)
-      | @term_not _ e                  => ltac:(eapply P_not; eauto)
-      | @term_pair _ σ1 σ2 e1 e2       => ltac:(eapply P_pair; eauto)
-      | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
-      | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
+      (* | @term_times _ e1 e2            => ltac:(eapply P_times; eauto) *)
+      (* | @term_minus _ e1 e2            => ltac:(eapply P_minus; eauto) *)
+      (* | @term_neg _ e                  => ltac:(eapply P_neg; eauto) *)
+      (* | @term_eq _ e1 e2               => ltac:(eapply P_eq; eauto) *)
+      (* | @term_le _ e1 e2               => ltac:(eapply P_le; eauto) *)
+      (* | @term_lt _ e1 e2               => ltac:(eapply P_lt; eauto) *)
+      (* | @term_gt _ e1 e2               => ltac:(eapply P_gt; eauto) *)
+      (* | @term_and _ e1 e2              => ltac:(eapply P_and; eauto) *)
+      (* | @term_or _ e1 e2               => ltac:(eapply P_or; eauto) *)
+      (* | @term_not _ e                  => ltac:(eapply P_not; eauto) *)
+      (* | @term_pair _ σ1 σ2 e1 e2       => ltac:(eapply P_pair; eauto) *)
+      (* | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto) *)
+      (* | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto) *)
       | @term_list _ σ es              => ltac:(eapply P_list; induction es; cbn; eauto using unit)
-      | @term_cons _ σ h t             => ltac:(eapply P_cons; eauto)
-      | @term_nil _ σ                  => ltac:(eapply P_nil; eauto)
+      (* | @term_cons _ σ h t             => ltac:(eapply P_cons; eauto) *)
+      (* | @term_nil _ σ                  => ltac:(eapply P_nil; eauto) *)
       | @term_tuple _ σs es            => ltac:(eapply P_tuple; induction es; cbn; eauto using unit)
       | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
       | @term_union _ U K e            => ltac:(eapply P_union; eauto)
