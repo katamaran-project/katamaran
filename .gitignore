@@ -1,5 +1,7 @@
 .coqdeps.d
 *.vo
+*.vok
+*.vos
 *.vio
 *.glob
 *.v.d
@@ -8,6 +10,7 @@
 
 Makefile.coq
 Makefile.coq.conf
+.Makefile.coq.d
 .DS_Store
 \#*#
 .lia.cache
