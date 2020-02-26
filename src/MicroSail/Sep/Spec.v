@@ -286,66 +286,24 @@ Module Symbolic
         pose proof 𝑺_eq_dec; pose proof Ty_eq_dec.
         unfold EqDec. decide equality.
       + inversion 1. congruence.
-    - match goal with
-      | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2)
-      end.
-      * constructor. congruence.
-      * constructor.
-        intros ?.
-        dependent destruction H. congruence.
-    -
-      destruct (list_beq_spec es es0 Term_eqb _).
-      +
-      destruct (Lit_eqb σ0 l l0).
-      * constructor. f_equal. decide equality.
-constructor. destruct t2; try congruence. constructor.
-
-    - destruct X; destruct X0; constructor; congruence.
-    - destruct X; destruct X0; constructor; congruence.
-  Admitted.
-
-  Lemma Term_eqb_sound :
-    forall Σ (σ : Ty) (t1 t2 : Term Σ σ),
-      Term_eqb t1 t2 = true <-> t1 = t2.
-  Proof.
-    intros.
-    split.
-    - funelim (@Term_eqb Σ σ t1 t2); try (simp Term_eqb; discriminate).
-      + intros.
-        simp Term_eqb in H.
-        unfold InCtx_eqb in H.
-        specialize ((proj1 (Nat.eqb_eq inctx_at inctx_at)) H) as inctx_n_eq.
-        destruct (@inctx_at_exact _ Σ _ _ ςInΣ0 ςInΣ inctx_n_eq) as [var_eq prf_eq].
-        inversion var_eq.
-        destruct ςInΣ0 as [n1 e1]. destruct ςInΣ as [n2 e2].
-        cbn in inctx_n_eq.
-        subst n2. subst ς0. clear H.
-        f_equal. f_equal.
-        apply proof_irrelevance.
-   - intros terms_eq.
-     subst.
-     induction t2; simp Term_eqb.
-     + unfold InCtx_eqb.
-       now apply (proj2 (Nat.eqb_eq _ _ )).
-Admitted.
-
-(* - define boolean fuunction to test equlity using Equations *)
-(* prove eqb x y = true <-> teq x y *)
-
-  (* Definition Term_eq_dec {Σ} : forall (σ1 σ2 : Ty) (t1 : Term Σ σ1) (t2 : Term Σ σ2), *)
-  (*     {t1 ~= t2} + {~ t1 ~= t2}. *)
-  Definition Term_eq_dec {Σ} : forall (σ1 σ2 : Ty) (t1 : Term Σ σ1) (t2 : Term Σ σ2),
-      {t1 ≡ t2} + {~ t1 ≡ t2}.
-  Proof.
-    intros σ1 σ2 t1 t2.
-    destruct (Ty_eq_dec σ1 σ2).
-    - destruct t1; destruct t2.
-      + left. apply (@teq_refl Ty _ σ σ0 _ _ e).
-        unfold eq_rect. destruct e.
-        destruct (𝑺_eq_dec ς ς0).
-        * subst ς0. admit.
-        *
-
+    -  destruct (IHt1_1 t2_1);
+       destruct (IHt1_2 t2_2); constructor; congruence.
+    - revert es0.
+      induction es as [|x xs]; intros [|y ys]; cbn in *; try (constructor; congruence).
+      + constructor. intros ?. dependent destruction H.
+      + constructor. intros ?. dependent destruction H.
+      + destruct X as [x1 x2].
+        specialize (IHxs x2 ys).
+        specialize (x1 y).
+        Term_eqb_spec_solve.
+    - admit.
+    - admit.
+    - destruct (𝑼𝑲_eq_dec K K0); cbn.
+      + destruct e. specialize (IHt1 t2). Term_eqb_spec_solve.
+      + Term_eqb_spec_solve.
+    - admit.
+    - destruct (𝑹_eq_dec R R0). cbn.
+      admit. admit.
   Admitted.
 
   Definition Ctx_eq_dec {A : Type} (A_eq_dec : forall (x y : A), {x=y}+{~x=y}) :
