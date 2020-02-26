@@ -420,7 +420,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Scheme Equality for list.
     Lemma list_beq_spec :
       forall (A : Type) (xs ys : list A)
-        (A_eqb : A -> A -> bool) (A_eqb_spec : forall x y, reflect (x = y) (A_eqb x y)) ,
+        (A_eqb : A -> A -> bool)
+        (A_eqb_spec : forall x y, reflect (x = y) (A_eqb x y)) ,
         reflect (xs = ys) (list_beq A_eqb xs ys).
     Proof with cbn; try (constructor; congruence).
       intros.

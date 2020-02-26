@@ -246,19 +246,24 @@ Module Symbolic
 
     Term_eqb _ _ := false.
 
+  Local Ltac Term_eqb_spec_solve :=
+    repeat
+      match goal with
+      | |- reflect _ false => constructor
+      | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
+      | |- reflect _ true => constructor
+      | |- (?x <> ?y) => let H := fresh in intro H; dependent destruction H
+      | [ H : reflect _ ?b |- context[?b] ] =>
+        let H1 := fresh in destruct H as [H1 |]; [dependent destruction H1 | idtac]; cbn
+      end; try congruence.
+
   Lemma Term_eqb_spec :
     forall Σ (σ : Ty) (t1 t2 : Term Σ σ),
       reflect (t1 = t2) (Term_eqb t1 t2).
   Proof.
     intros.
     induction t1 using Term_rect; dependent destruction t2; simp Term_eqb; cbn in *;
-      repeat
-        match goal with
-        | |- reflect _ false => constructor
-        | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
-        | |- reflect _ true => constructor
-        | |- (?x <> ?y) => let H := fresh in intro H; dependent destruction H
-        end; try congruence.
+    Term_eqb_spec_solve.
     - unfold InCtx_eqb.
       repeat match goal with
              | |- context[?m =? ?n] => destruct (Nat.eqb_spec m n)
