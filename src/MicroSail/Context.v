@@ -34,13 +34,13 @@ Set Implicit Arguments.
 
 (* Type of contexts. This is a list of bindings of type B. This type and
    subsequent types use the common notation of snoc lists. *)
-Inductive Ctx (B : Type) : Type :=
+Inductive Ctx (B : Set) : Set :=
 | ctx_nil
 | ctx_snoc (Γ : Ctx B) (b : B).
 Derive NoConfusion for Ctx.
 
 (* Scheme Equality for Ctx. *)
-Definition Ctx_eq_dec (B : Type) (B_eq_dec : forall x y : B, {x=y}+{~x=y}) :
+Definition Ctx_eq_dec (B : Set) (B_eq_dec : forall x y : B, {x=y}+{~x=y}) :
            forall σs τs : Ctx B, {σs=τs}+{~σs=τs}.
 Proof. decide equality. Qed.
 
@@ -49,7 +49,7 @@ Arguments ctx_snoc {_} _ _.
 Bind Scope ctx_scope with Ctx.
 
 Section WithBinding.
-  Context {B : Type}.
+  Context {B : Set}.
 
   (* Concatenation of two contexts. *)
   Fixpoint ctx_cat (Γ1 Γ2 : Ctx B) {struct Γ2} : Ctx B :=

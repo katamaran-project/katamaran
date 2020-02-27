@@ -306,10 +306,6 @@ Module Symbolic
       admit. admit.
   Admitted.
 
-  Definition Ctx_eq_dec {A : Type} (A_eq_dec : forall (x y : A), {x=y}+{~x=y}) :
-    forall (ctx1 ctx2 : Ctx A), {ctx1 = ctx2} + {~ ctx1 = ctx2}.
-  Proof. decide equality. Qed.
-
   Global Arguments term_var {_} _ {_ _}.
   Global Arguments term_tuple {_ _} _%exp.
   Global Arguments term_union {_} _ _.

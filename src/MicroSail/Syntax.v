@@ -176,7 +176,7 @@ Module Types (Export typekit : TypeKit).
   Local Set Transparent Obligations.
   Local Unset Elimination Schemes.
 
-  Inductive Ty : Type :=
+  Inductive Ty : Set :=
   | ty_int
   | ty_bool
   | ty_bit
@@ -721,25 +721,25 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   Module NameResolution.
 
-    Fixpoint ctx_resolve {D : Type} (Γ : Ctx (𝑿 * D)) (x : 𝑿) {struct Γ} : option D :=
+    Fixpoint ctx_resolve {D : Set} (Γ : Ctx (𝑿 * D)) (x : 𝑿) {struct Γ} : option D :=
       match Γ with
       | ctx_nil           => None
       | ctx_snoc Γ (y, d) => if 𝑿_eq_dec x y then Some d else ctx_resolve Γ x
       end.
 
-    Definition IsSome {D : Type} (m : option D) : Type :=
+    Definition IsSome {D : Set} (m : option D) : Type :=
       match m with
         | Some _ => unit
         | None => Empty_set
       end.
 
-    Definition fromSome {D : Type} (m : option D) : IsSome m -> D :=
+    Definition fromSome {D : Set} (m : option D) : IsSome m -> D :=
       match m return IsSome m -> D with
       | Some d => fun _ => d
       | None   => fun p => match p with end
       end.
 
-    Fixpoint mk_inctx {D : Type} (Γ : Ctx (prod 𝑿 D)) (x : 𝑿) {struct Γ} :
+    Fixpoint mk_inctx {D : Set} (Γ : Ctx (prod 𝑿 D)) (x : 𝑿) {struct Γ} :
       let m := ctx_resolve Γ x in forall (p : IsSome m), InCtx (x , fromSome m p) Γ :=
       match Γ with
       | ctx_nil => fun p => match p with end
