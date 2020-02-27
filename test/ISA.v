@@ -183,6 +183,7 @@ Module ISATermKit <: (TermKit ISATypeKit).
   | in_bounds : Fun ["address" ∶ ty_int] ty_bool
   (* semantics of a single instruction *)
   | semantics : Fun [ "instr" ∶ ty_union instruction] ty_unit
+  | swapreg : Fun ["r1" ∶ ty_int, "r2" ∶ ty_int] ty_unit
   .
 
   Definition 𝑭 : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -372,6 +373,12 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
                | KAdd => stm_fail _ "not implemented"
                | KJump => stm_fail _ "not implemented"
                end))
+    | swapreg =>
+      let: "v1" := call rX (exp_var "r1") in
+      let: "v2" := call rX (exp_var "r2") in
+      call wX (exp_var "r1") (exp_var "v2") ;;
+      call wX (exp_var "r2") (exp_var "v1") ;;
+      nop
     end in exact pi.
   Defined.
 

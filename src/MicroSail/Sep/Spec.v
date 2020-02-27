@@ -360,6 +360,10 @@ Admitted.
     (* | @exp_builtin _ σ0 τ f e0        => @term_builtin _ σ0 τ f (symbolic_eval_exp e0 δ) *)
     end.
 
+  Inductive Chunk (Σ : Ctx (𝑺 * Ty)) : Type :=
+  | chunk_pred   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
+  | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
+
   Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
   | formula_bool (t : Term Σ ty_bool)
   | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
@@ -367,11 +371,11 @@ Admitted.
 
   Inductive Assertion (Σ : Ctx (𝑺 * Ty)) : Type :=
   | asn_bool (b : Term Σ ty_bool)
-  | asn_pred (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
+  | asn_chunk (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
   | asn_sep  (a1 a2 : Assertion Σ)
   | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς , τ))).
-  Arguments asn_pred [_] _ _.
+
   Arguments asn_exist [_] _ _ _.
 
   Inductive SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
@@ -385,7 +389,7 @@ Admitted.
   Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
     list (Formula Σ).
   Definition SymbolicHeap (Σ : Ctx (𝑺 * Ty)) : Type :=
-    list { p : 𝑷 & Env (Term Σ) (𝑷_Ty p) }.
+    list (Chunk Σ).
 
   Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Type :=
     forall b, InCtx b Σ1 -> Term Σ2 (snd b).
@@ -471,10 +475,18 @@ Admitted.
         (@term_var (Σ2 ▻ (ς , τ)) ς τ inctx_zero)
         (fun b' b'In => wk1_term (ζ b' b'In)).
 
+  Arguments chunk_pred [_] _ _.
+
+  Definition sub_chunk {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (c : Chunk Σ1) : Chunk Σ2 :=
+    match c with
+    | chunk_pred p ts => chunk_pred p (env_map (fun _ => sub_term ζ) ts)
+    | chunk_ptsreg r t => chunk_ptsreg r (sub_term ζ t)
+    end.
+
   Fixpoint sub_assertion {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (a : Assertion Σ1) {struct a} : Assertion Σ2 :=
     match a with
     | asn_bool b => asn_bool (sub_term ζ b)
-    | asn_pred p ts => asn_pred p (env_map (fun _ => sub_term ζ) ts)
+    | asn_chunk c => asn_chunk (sub_chunk ζ c)
     | asn_if b a1 a2 => asn_if (sub_term ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2)
     | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2)
     | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a)
@@ -485,7 +497,7 @@ Admitted.
   Definition sub_localstore {Σ1 Σ2 Γ} (ζ : Sub Σ1 Σ2) : SymbolicLocalStore Σ1 Γ -> SymbolicLocalStore Σ2 Γ :=
     env_map (fun _ => sub_term ζ).
   Definition sub_heap {Σ1 Σ2} (ζ : Sub Σ1 Σ2) : SymbolicHeap Σ1 -> SymbolicHeap Σ2 :=
-    map (fun '(existT _ p ts) => existT _ p (env_map (fun _ => sub_term ζ) ts)).
+    map (sub_chunk ζ).
 
   Section SymbolicState.
 
@@ -613,11 +625,9 @@ Admitted.
     Definition mutator_assert_exp {Σ Γ} (e : Exp Γ ty_bool) : Mutator Σ Γ Γ unit :=
       mutator_eval_exp e >>= mutator_assert_term.
 
-    Definition mutator_produce_chunk {Σ Γ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) : Mutator Σ Γ Γ unit :=
-      mutator_modify_heap (fun h => existT _ p ts :: h).
-    Arguments mutator_produce_chunk {_ _} _ _.
+    Definition mutator_produce_chunk {Σ Γ} (c : Chunk Σ) : Mutator Σ Γ Γ unit :=
+      mutator_modify_heap (fun h => c :: h).
 
-    Derive NoConfusion for Ctx.
     Equations chunk_eqb {Σ} {ctx : Ctx Ty}
              (c1 : Env (Term Σ) ctx) (c2 : Env (Term Σ) ctx) : bool :=
         chunk_eqb env_nil env_nil  := true;
@@ -631,28 +641,32 @@ Admitted.
           | nil => outcome_pure unconsumed
           | cons x xs =>
             match x with
-            | existT _ p' chunk =>
+            | chunk_pred p' ts' =>
               match (𝑷_eq_dec p p') with
-              | left e => let c := ltac:(rewrite e in *; exact (chunk_eqb ts chunk))
+              | left e => let c := ltac:(rewrite e in *; exact (chunk_eqb ts ts'))
                          in if c then go xs unconsumed else go xs (x :: unconsumed)
               | right _ => go xs (x :: unconsumed)
               end
+            | chunk_ptsreg r t =>
+              go xs (x :: unconsumed)
             end
           end
       in go h nil.
     Arguments outcome_consume_chunk {_} _ _ _.
 
-    Definition mutator_consume_chunk {Σ Γ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) : Mutator Σ Γ Γ unit :=
-      fun '(MkSymbolicState Φ δ h) =>
-        outcome_bind
-          (outcome_consume_chunk p ts h)
-          (fun h' => outcome_pure (tt , MkSymbolicState Φ δ h' , nil)).
-    Global Arguments mutator_consume_chunk {_ _} _ _.
+    Definition mutator_consume_chunk {Σ Γ} (c : Chunk Σ) : Mutator Σ Γ Γ unit :=
+      match c with
+      | chunk_pred p ts => fun '(MkSymbolicState Φ δ h) =>
+                             outcome_bind
+                               (outcome_consume_chunk p ts h)
+                               (fun h' => outcome_pure (tt , MkSymbolicState Φ δ h' , nil))
+      | chunk_ptsreg r t => mutator_fail
+      end.
 
     Fixpoint mutator_produce {Σ Γ} (asn : Assertion Σ) : Mutator Σ Γ Γ unit :=
       match asn with
       | asn_bool b      => mutator_assume_term b
-      | asn_pred p ts   => mutator_produce_chunk p ts
+      | asn_chunk c     => mutator_produce_chunk c
       | asn_if b a1 a2  => (mutator_assume_term b ;; mutator_produce a1) ⊗
                            (mutator_assume_term (term_not b) ;; mutator_produce a2)
       | asn_sep a1 a2   => mutator_produce a1 *> mutator_produce a2
@@ -662,7 +676,7 @@ Admitted.
     Fixpoint mutator_consume {Σ Γ} (asn : Assertion Σ) : Mutator Σ Γ Γ unit :=
       match asn with
       | asn_bool b      => mutator_assert_term b
-      | asn_pred p ts   => mutator_consume_chunk p ts
+      | asn_chunk c     => mutator_consume_chunk c
       | asn_if b a1 a2  => (mutator_assume_term b ;; mutator_consume a1) ⊗
                            (mutator_assume_term (term_not b) ;; mutator_consume a2)
       | asn_sep a1 a2   => mutator_consume a1 *> mutator_consume a2
