@@ -739,8 +739,15 @@ Admitted.
       | stm_match_tuple e p rhs => _
       | stm_match_union U e altx alts => _
       | stm_match_record R e p rhs => _
-      | stm_read_register reg => _
-      | stm_write_register reg e => _
+      | @stm_read_register _ τ reg => ⨁ t : Term Σ τ =>
+        mutator_consume (asn_chunk (chunk_ptsreg reg t)) *>
+        mutator_produce (asn_chunk (chunk_ptsreg reg t))  *>
+        mutator_pure t
+      | @stm_write_register _ τ reg e => mutator_eval_exp e >>=
+        fun v => ⨁ t : Term Σ τ =>
+        mutator_consume (asn_chunk (chunk_ptsreg reg t)) *>
+        mutator_produce (asn_chunk (chunk_ptsreg reg v)) *>
+        mutator_pure v
       | stm_bind s k => _
       | stm_read_memory _ => _
       | stm_write_memory _ _ => _
