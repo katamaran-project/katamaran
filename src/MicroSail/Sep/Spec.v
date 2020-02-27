@@ -27,12 +27,16 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Lists.List
      Logic.EqdepFacts
      Program.Equality
      Program.Tactics
      Strings.String
+     Arith.PeanoNat
      ZArith.ZArith.
+
+From Equations Require Import Equations.
 
 From MicroSail Require Import
      Sep.Outcome
@@ -42,13 +46,13 @@ Set Implicit Arguments.
 
 Delimit Scope mutator_scope with mut.
 
-
 Module Symbolic
   (Import typekit : TypeKit)
   (Import termkit : TermKit typekit)
   (Import progKit : ProgramKit typekit termkit).
 
   Parameter Inline 𝑺 : Set. (* input: \MIS *)
+  Parameter Inline 𝑺_eq_dec : forall (s1 s2 : 𝑺), {s1=s2}+{~s1=s2}.
   Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
 
   (* Predicate names. *)
@@ -62,6 +66,7 @@ Module Symbolic
   Import OutcomeNotations.
   Import ListNotations.
 
+  Local Unset Elimination Schemes.
   Inductive Term (Σ : Ctx (𝑺 * Ty)) : Ty -> Type :=
   | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : InCtx (ς , σ) Σ} : Term Σ σ
   | term_lit     (σ : Ty) : Lit σ -> Term Σ σ
@@ -89,9 +94,220 @@ Module Symbolic
   | term_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)) : Term Σ (ty_union U)
   | term_record  (R : 𝑹) (es : Env' (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R)
   | term_projrec {R : 𝑹} (e : Term Σ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
-                {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Term Σ σ
-  | term_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Term Σ σ) : Term Σ τ.
+                {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Term Σ σ.
+  (* | term_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Term Σ σ) : Term Σ τ. *)
   Bind Scope exp_scope with Term.
+  Derive Signature for Term.
+  Local Set Elimination Schemes.
+
+  Arguments term_var {_} _ _ {_}.
+
+  Section Term_rect.
+
+    Variable (Σ : Ctx (𝑺 * Ty)).
+    Variable (P  : forall t : Ty, Term Σ t -> Type).
+    Arguments P _ _ : clear implicits.
+
+    Fixpoint PL (σ : Ty) (ts : list (Term Σ σ)) : Type :=
+      match ts with
+      | [] => unit
+      | t :: ts => P σ t * PL ts
+      end.
+    Fixpoint PE (σs : Ctx Ty) (ts : Env (Term Σ) σs) : Type :=
+      match ts with
+      | env_nil => unit
+      | env_snoc ts _ t => PE ts * P _ t
+      end.
+    Fixpoint PE' (σs : Ctx (𝑹𝑭 * Ty)) (ts : Env' (Term Σ) σs) : Type :=
+      match ts with
+      | env_nil => unit
+      | env_snoc ts b t => PE' ts * P (snd b) t
+      end.
+
+    Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : (ς ∶ σ)%ctx ∈ Σ), P σ (term_var ς σ)).
+    Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit Σ σ l)).
+    Hypothesis (P_plus       : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_plus e1 e2)).
+    Hypothesis (P_times      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_times e1 e2)).
+    Hypothesis (P_minus      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_minus e1 e2)).
+    Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)).
+    Hypothesis (P_eq         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_eq e1 e2)).
+    Hypothesis (P_le         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_le e1 e2)).
+    Hypothesis (P_lt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_lt e1 e2)).
+    Hypothesis (P_gt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_gt e1 e2)).
+    Hypothesis (P_and        : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_and e1 e2)).
+    Hypothesis (P_or         : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_or e1 e2)).
+    Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)).
+    Hypothesis (P_pair       : forall (σ1 σ2 : Ty) (e1 : Term Σ σ1), P σ1 e1 -> forall e2 : Term Σ σ2, P σ2 e2 -> P (ty_prod σ1 σ2) (term_pair e1 e2)).
+    Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
+    Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
+    Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
+    Hypothesis (P_cons       : forall (σ : Ty) (h : Term Σ σ), P σ h -> forall t : Term Σ (ty_list σ), P (ty_list σ) t -> P (ty_list σ) (term_cons h t)).
+    Hypothesis (P_nil        : forall σ : Ty, P (ty_list σ) (term_nil Σ)).
+    Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
+    Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
+    Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union e)).
+    Hypothesis (P_record     : forall (R : 𝑹) (es : Env' (Term Σ) (𝑹𝑭_Ty R)), PE' es -> P (ty_record R) (term_record es)).
+    Hypothesis (P_projrec    : forall (R : 𝑹) (e : Term Σ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (term_projrec e)).
+
+    Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) : P σ t :=
+      match t with
+      | @term_var _ ς σ ςInΣ           => ltac:(eapply P_var; eauto)
+      | @term_lit _ σ x                => ltac:(eapply P_lit; eauto)
+      | @term_plus _ e1 e2             => ltac:(eapply P_plus; eauto)
+      | @term_times _ e1 e2            => ltac:(eapply P_times; eauto)
+      | @term_minus _ e1 e2            => ltac:(eapply P_minus; eauto)
+      | @term_neg _ e                  => ltac:(eapply P_neg; eauto)
+      | @term_eq _ e1 e2               => ltac:(eapply P_eq; eauto)
+      | @term_le _ e1 e2               => ltac:(eapply P_le; eauto)
+      | @term_lt _ e1 e2               => ltac:(eapply P_lt; eauto)
+      | @term_gt _ e1 e2               => ltac:(eapply P_gt; eauto)
+      | @term_and _ e1 e2              => ltac:(eapply P_and; eauto)
+      | @term_or _ e1 e2               => ltac:(eapply P_or; eauto)
+      | @term_not _ e                  => ltac:(eapply P_not; eauto)
+      | @term_pair _ σ1 σ2 e1 e2       => ltac:(eapply P_pair; eauto)
+      | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
+      | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
+      | @term_list _ σ es              => ltac:(eapply P_list; induction es; cbn; eauto using unit)
+      | @term_cons _ σ h t             => ltac:(eapply P_cons; eauto)
+      | @term_nil _ σ                  => ltac:(eapply P_nil; eauto)
+      | @term_tuple _ σs es            => ltac:(eapply P_tuple; induction es; cbn; eauto using unit)
+      | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
+      | @term_union _ U K e            => ltac:(eapply P_union; eauto)
+      | @term_record _ R es            => ltac:(eapply P_record; induction es; cbn; eauto using unit)
+      | @term_projrec _ R e rf σ rfInR => ltac:(eapply P_projrec; eauto)
+      end.
+
+  End Term_rect.
+
+  Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := Term_rect P.
+
+  (* Two proofs of context containment are equal of the deBruijn indices are equal *)
+  Definition InCtx_eqb {Σ} {ς1 ς2 : 𝑺} {σ : Ty}
+             (ς1inΣ : InCtx (ς1, σ) Σ)
+             (ς2inΣ : InCtx (ς2, σ) Σ) : bool :=
+    Nat.eqb (@inctx_at _ _ _ ς1inΣ) (@inctx_at _ _ _ ς2inΣ).
+
+  Equations Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
+    Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
+      InCtx_eqb ς1inΣ ς2inΣ;
+    Term_eqb (term_lit _ l1) (term_lit _ l2) := Lit_eqb _ l1 l2;
+    Term_eqb (term_plus x1 y1) (term_plus x2 y2) := Term_eqb x1 x2 &&
+                                                    Term_eqb y1 y2;
+    Term_eqb (term_times x1 y1) (term_times x2 y2) := Term_eqb x1 x2 &&
+                                                      Term_eqb y1 y2;
+    Term_eqb (term_minus x1 y1) (term_minus x2 y2) := Term_eqb x1 x2 &&
+                                                      Term_eqb y1 y2;
+    Term_eqb (term_neg x) (term_neg y) := Term_eqb x y;
+    Term_eqb (term_eq x1 y1) (term_eq x2 y2) := Term_eqb x1 x2 &&
+                                                Term_eqb y1 y2;
+    Term_eqb (term_le x1 y1) (term_le x2 y2) := Term_eqb x1 x2 &&
+                                                Term_eqb y1 y2;
+    Term_eqb (term_lt x1 y1) (term_lt x2 y2) := Term_eqb x1 x2 &&
+                                                Term_eqb y1 y2;
+    Term_eqb (term_gt x1 y1) (term_gt x2 y2) := Term_eqb x1 x2 &&
+                                                Term_eqb y1 y2;
+    Term_eqb (term_and x1 y1) (term_and x2 y2) := Term_eqb x1 x2 &&
+                                                  Term_eqb y1 y2;
+    Term_eqb (term_or x1 y1) (term_or x2 y2) := Term_eqb x1 x2 &&
+                                                Term_eqb y1 y2;
+    Term_eqb (term_not x) (term_not y) := Term_eqb x y;
+    Term_eqb (term_pair x1 y1) (term_pair x2 y2) := Term_eqb x1 x2 &&
+                                                    Term_eqb y1 y2;
+    Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
+    Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
+    Term_eqb (term_list xs) (term_list ys) := list_beq Term_eqb xs ys;
+    Term_eqb (term_cons x xs) (term_cons y ys) := Term_eqb x y && Term_eqb xs ys;
+    Term_eqb (@term_nil _) (@term_nil _) := true;
+    Term_eqb (term_tuple x) (term_tuple y) :=
+       @env_beq _ (Term Σ) (@Term_eqb _) _ x y;
+    Term_eqb (@term_projtup σs x n _ p) (@term_projtup τs y m _ q)
+      with Ctx_eq_dec Ty_eq_dec σs τs => {
+      Term_eqb (@term_projtup σs x n _ p) (@term_projtup ?(σs) y m _ q) (left eq_refl) :=
+        (n =? m) && Term_eqb x y;
+      Term_eqb (@term_projtup _ x n _ p) (@term_projtup _ y m _ q) (right _) := false
+      };
+    Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
+      with 𝑼𝑲_eq_dec k1 k2 => {
+      Term_eqb (term_union e1) (term_union e2) (left eq_refl) :=
+        Term_eqb e1 e2;
+      Term_eqb _ _ (right _) := false
+    };
+    Term_eqb (@term_record ?(r) xs) (@term_record r ys) :=
+       @env_beq _ (fun b => Term Σ (snd b)) (fun b => @Term_eqb _ (snd b)) _ xs ys;
+    Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
+             with (𝑹_eq_dec r1 r2) => {
+    Term_eqb (@term_projrec r e1 _ _ prf1) (@term_projrec ?(r) e2 _ _ prf2)
+      (left eq_refl) := (@inctx_at _ _ _ prf1 =? @inctx_at _ _ _ prf2) && Term_eqb e1 e2;
+    Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
+      (right _) := false };
+
+    Term_eqb _ _ := false.
+
+  Local Ltac Term_eqb_spec_solve :=
+    repeat
+      match goal with
+      | |- reflect _ false => constructor
+      | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
+      | |- reflect _ true => constructor
+      | |- (?x <> ?y) => let H := fresh in intro H; dependent destruction H
+      | [ H : reflect _ ?b |- context[?b] ] =>
+        let H1 := fresh in destruct H as [H1 |]; [dependent destruction H1 | idtac]; cbn
+      | H : forall t2, reflect (?t1 = t2) (Term_eqb ?t1 t2) |-
+                  context[Term_eqb ?t1 ?t2] =>
+        destruct (H t2)
+      end; try constructor; try congruence.
+
+  Lemma Term_eqb_spec :
+    forall Σ (σ : Ty) (t1 t2 : Term Σ σ),
+      reflect (t1 = t2) (Term_eqb t1 t2).
+  Proof.
+    intros.
+    induction t1 using Term_rect; dependent destruction t2; simp Term_eqb; cbn in *;
+    Term_eqb_spec_solve.
+    - unfold InCtx_eqb.
+      repeat match goal with
+             | |- context[?m =? ?n] => destruct (Nat.eqb_spec m n)
+             | H: InCtx _ _ |- _ =>
+               let n := fresh "n" in
+               let p := fresh "p" in
+               destruct H as [n p]
+             end; cbn in *; constructor.
+      + subst n0.
+        match goal with
+        | H1: ctx_nth_is ?Σ ?n ?b1, H2: ctx_nth_is ?Σ ?n ?b2 |- _ =>
+          let H := fresh in
+          pose proof (ctx_nth_is_right_exact _ _ _ H1 H2) as H; inversion H; clear H
+        end.
+        subst ς0.
+        f_equal.
+        f_equal.
+        apply ctx_nth_is_proof_irrelevance.
+        apply EqDec.eqdec_uip.
+        pose proof 𝑺_eq_dec; pose proof Ty_eq_dec.
+        unfold EqDec. decide equality.
+      + inversion 1. congruence.
+    - Term_eqb_spec_solve.
+    - Term_eqb_spec_solve.
+    - Term_eqb_spec_solve.
+    - revert es0.
+      induction es as [|x xs]; intros [|y ys]; cbn in *; try (constructor; congruence).
+      + constructor. intros ?. dependent destruction H.
+      + constructor. intros ?. dependent destruction H.
+      + destruct X as [x1 x2].
+        specialize (IHxs x2 ys).
+        specialize (x1 y).
+        Term_eqb_spec_solve.
+    - Term_eqb_spec_solve.
+    - Term_eqb_spec_solve.
+    - Term_eqb_spec_solve.
+    - admit.
+    - admit.
+    - destruct (𝑼𝑲_eq_dec K K0); cbn.
+      + destruct e. specialize (IHt1 t2). Term_eqb_spec_solve.
+      + Term_eqb_spec_solve.
+    - admit.
+    - admit.
+Admitted.
 
   Global Arguments term_var {_} _ {_ _}.
   Global Arguments term_tuple {_ _} _%exp.
@@ -105,7 +321,7 @@ Module Symbolic
 
   Fixpoint symbolic_eval_exp {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : SymbolicLocalStore Σ Γ) : Term Σ σ :=
     match e in (Exp _ t) return (Term Σ t) with
-    | exp_var ς                       => (δ ! ς)%lit
+    | exp_var ς                       => (δ ‼ ς)%lit
     | exp_lit _ σ0 l                  => term_lit _ σ0 l
     | exp_plus e1 e2                  => term_plus (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
     | exp_times e1 e2                 => term_times (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
@@ -141,7 +357,7 @@ Module Symbolic
                       end
       in term_record R (symbolic_eval_exps es)
     | @exp_projrec _ R e0 rf σ0 rfInR => @term_projrec _ R (symbolic_eval_exp e0 δ) rf σ0 rfInR
-    | @exp_builtin _ σ0 τ f e0        => @term_builtin _ σ0 τ f (symbolic_eval_exp e0 δ)
+    (* | @exp_builtin _ σ0 τ f e0        => @term_builtin _ σ0 τ f (symbolic_eval_exp e0 δ) *)
     end.
 
   Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
@@ -222,7 +438,7 @@ Module Symbolic
                                            end
                                         ) _ es)
       | term_projrec t rf         => term_projrec (sub_term t) rf
-      | term_builtin f t          => term_builtin f (sub_term t)
+      (* | term_builtin f t          => term_builtin f (sub_term t) *)
       end.
 
     Definition sub_formula (fml : Formula Σ1) : Formula Σ2 :=
@@ -401,8 +617,29 @@ Module Symbolic
       mutator_modify_heap (fun h => existT _ p ts :: h).
     Arguments mutator_produce_chunk {_ _} _ _.
 
-    (* Axiom consume_chunk : forall {Σ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) (h : SymbolicHeap Σ), option (SymbolicHeap Σ). *)
-    Axiom outcome_consume_chunk : forall {Σ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) (h : SymbolicHeap Σ), Outcome (SymbolicHeap Σ).
+    Derive NoConfusion for Ctx.
+    Equations chunk_eqb {Σ} {ctx : Ctx Ty}
+             (c1 : Env (Term Σ) ctx) (c2 : Env (Term Σ) ctx) : bool :=
+        chunk_eqb env_nil env_nil  := true;
+        chunk_eqb (env_snoc xs ?(σ) x) (env_snoc ys σ y) :=
+          Term_eqb x y && chunk_eqb xs ys.
+
+    Program Fixpoint outcome_consume_chunk {Σ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
+        (h : SymbolicHeap Σ) : Outcome (SymbolicHeap Σ) :=
+      let fix go h unconsumed {struct h} : Outcome (SymbolicHeap Σ) :=
+          match h return Outcome (SymbolicHeap Σ) with
+          | nil => outcome_pure unconsumed
+          | cons x xs =>
+            match x with
+            | existT _ p' chunk =>
+              match (𝑷_eq_dec p p') with
+              | left e => let c := ltac:(rewrite e in *; exact (chunk_eqb ts chunk))
+                         in if c then go xs unconsumed else go xs (x :: unconsumed)
+              | right _ => go xs (x :: unconsumed)
+              end
+            end
+          end
+      in go h nil.
     Arguments outcome_consume_chunk {_} _ _ _.
 
     Definition mutator_consume_chunk {Σ Γ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) : Mutator Σ Γ Γ unit :=

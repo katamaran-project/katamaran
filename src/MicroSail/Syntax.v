@@ -27,12 +27,16 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Logic.EqdepFacts
      Logic.FunctionalExtensionality
      Program.Equality
      Program.Tactics
      Strings.String
      ZArith.ZArith.
+
+From Equations Require Import
+     Equations Signature.
 
 From MicroSail Require Export
      Context
@@ -49,6 +53,18 @@ Inductive Bit : Set := bitzero | bitone.
 Inductive teq {I} {F : I -> Type} {i j} (fi : F i) (fj : F j) : Prop :=
 | teq_refl (eqi : i = j) (eqf : eq_rect _ _ fi _ eqi = fj) : teq fi fj.
 Infix "≡" := teq (at level 70, no associativity).
+
+Definition Bit_eqb (b1 : Bit) (b2 : Bit) : bool :=
+  match b1, b2 with
+  | bitzero, bitzero => true
+  | bitone , bitone  => true
+  | _      , _       => false
+  end.
+
+Lemma Bit_eqb_spec (b1 b2 : Bit) : reflect (b1 = b2) (Bit_eqb b1 b2).
+Proof.
+  destruct b1; destruct b2; cbn; constructor; congruence.
+Qed.
 
 (******************************************************************************)
 
@@ -124,6 +140,7 @@ Module Type TypeKit.
   Parameter Inline 𝑬_eq_dec : forall x y : 𝑬, {x=y}+{~x=y}.
   (* Names of enum data constructors. *)
   Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
+  Parameter Inline 𝑬𝑲_eq_dec : forall (e : 𝑬) (x y : 𝑬𝑲 e), {x=y}+{~x=y}.
   Declare Instance Blastable_𝑬𝑲 : forall E, Blastable (𝑬𝑲 E).
 
   (* Names of union type constructors. *)
@@ -131,8 +148,10 @@ Module Type TypeKit.
   Parameter Inline 𝑼_eq_dec : forall x y : 𝑼, {x=y}+{~x=y}.
   (* Union types. *)
   Parameter Inline 𝑼𝑻  : 𝑼 -> Set.
+  Parameter Inline 𝑼𝑻_eq_dec : forall (u : 𝑼) (x y : 𝑼𝑻 u), {x=y}+{~x=y}.
   (* Names of union data constructors. *)
   Parameter Inline 𝑼𝑲  : 𝑼 -> Set.
+  Parameter Inline 𝑼𝑲_eq_dec : forall (u : 𝑼) (x y : 𝑼𝑲 u), {x=y}+{~x=y}.
   Declare Instance Blastable_𝑼𝑲 : forall U, Blastable (𝑼𝑲 U).
 
   (* Names of record type constructors. *)
@@ -140,6 +159,7 @@ Module Type TypeKit.
   Parameter Inline 𝑹_eq_dec : forall x y : 𝑹, {x=y}+{~x=y}.
   (* Record types. *)
   Parameter Inline 𝑹𝑻  : 𝑹 -> Set.
+  Parameter Inline 𝑹𝑻_eq_dec : forall (r : 𝑹) (x y : 𝑹𝑻 r), {x=y}+{~x=y}.
   (* Names of expression variables. *)
   Parameter Inline 𝑿 : Set. (* input: \MIX *)
   (* For name resolution we rely on decidable equality of expression
@@ -153,6 +173,7 @@ End TypeKit.
 
 Module Types (Export typekit : TypeKit).
 
+  Local Set Transparent Obligations.
   Local Unset Elimination Schemes.
 
   Inductive Ty : Set :=
@@ -170,6 +191,8 @@ Module Types (Export typekit : TypeKit).
   | ty_union (U : 𝑼)
   | ty_record (R : 𝑹)
   .
+
+  Derive NoConfusion for Ty.
 
   Section ty_rect.
     Variable P  : Ty -> Type.
@@ -210,6 +233,11 @@ Module Types (Export typekit : TypeKit).
 
   Section Ty_rect.
     Variable P  : Ty -> Type.
+    Fixpoint PS (σs : Ctx Ty) : Type :=
+      match σs with
+      | ctx_nil => unit
+      | ctx_snoc σs σ => P σ * PS σs
+      end.
 
     Hypothesis (P_int    : P ty_int).
     Hypothesis (P_bool   : P ty_bool).
@@ -220,31 +248,57 @@ Module Types (Export typekit : TypeKit).
     Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)).
     Hypothesis (P_unit   : P ty_unit).
     Hypothesis (P_enum   : forall E, P (ty_enum E)).
-    Hypothesis (P_tuple  : forall σs, (forall σ, InCtx σ σs -> P σ) -> P (ty_tuple σs)).
+    Hypothesis (P_tuple  : forall σs, PS σs -> P (ty_tuple σs)).
     Hypothesis (P_union  : forall U, P (ty_union U)).
     Hypothesis (P_record : forall R, P (ty_record R)).
 
     Lemma Ty_rect : forall σ, P σ.
-      apply (ty_rect P (fun σs => forall σ, InCtx σ σs -> P σ)); try assumption.
-      - intros. apply (inctx_case_nil H).
-      - intros. now apply (inctx_case_snoc P) in H.
-    Defined.
+      apply (ty_rect P PS); try assumption.
+      - now cbn.
+      - intros. cbn. auto.
+    Qed.
 
   End Ty_rect.
 
-  Definition Ty_rec (P : Ty -> Set) := Ty_rect P.
+  (* Section Ty_rect. *)
+  (*   Variable P  : Ty -> Type. *)
+
+  (*   Hypothesis (P_int    : P ty_int). *)
+  (*   Hypothesis (P_bool   : P ty_bool). *)
+  (*   Hypothesis (P_bit    : P ty_bit). *)
+  (*   Hypothesis (P_string : P ty_string). *)
+  (*   Hypothesis (P_list   : forall σ, P σ -> P (ty_list σ)). *)
+  (*   Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (ty_prod σ τ)). *)
+  (*   Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)). *)
+  (*   Hypothesis (P_unit   : P ty_unit). *)
+  (*   Hypothesis (P_enum   : forall E, P (ty_enum E)). *)
+  (*   Hypothesis (P_tuple  : forall σs, (forall σ, InCtx σ σs -> P σ) -> P (ty_tuple σs)). *)
+  (*   Hypothesis (P_union  : forall U, P (ty_union U)). *)
+  (*   Hypothesis (P_record : forall R, P (ty_record R)). *)
+
+  (*   Lemma Ty_rect : forall σ, P σ. *)
+  (*     apply (ty_rect P (fun σs => forall σ, InCtx σ σs -> P σ)); try assumption. *)
+  (*     - intros. apply (inctx_case_nil H). *)
+  (*     - intros. now apply (inctx_case_snoc P) in H. *)
+  (*   Defined. *)
+
+  (* End Ty_rect. *)
+
+  Definition Ty_rec (P : Ty -> Type) := Ty_rect P.
   Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
 
   Lemma Ty_eq_dec : forall x y : Ty, {x=y}+{~x=y}.
   Proof.
     decide equality; auto using 𝑬_eq_dec, 𝑼_eq_dec, 𝑹_eq_dec.
-    revert σs H. rename σs0 into τs.
+    revert σs X. rename σs0 into τs.
     induction τs; intros; destruct σs.
     - left. reflexivity.
     - right. discriminate.
     - right. discriminate.
-    - specialize (IHτs σs (fun σ σInσs => H σ (inctx_succ σInσs))).
-      specialize (H b0 inctx_zero b).
+    - cbn in X.
+      destruct_conjs.
+      specialize (IHτs σs p).
+      specialize (s b).
       intuition congruence.
   Qed.
 
@@ -260,13 +314,7 @@ Module Types (Export typekit : TypeKit).
     | ty_unit => unit
     | ty_enum E => 𝑬𝑲 E
     (* Experimental features *)
-    | ty_tuple σs =>
-      Ctx_rect (fun _ => Type) unit (fun _ Litσs σ => Litσs * Lit σ) σs
-    (* (fix Lits (σs : Ctx Ty) : Type := *)
-    (*    match σs with *)
-    (*    | ctx_nil => unit *)
-    (*    | ctx_snoc σs σ => Lits σs * Lit σ *)
-    (*    end) σs *)
+    | ty_tuple σs => EnvRec Lit σs
     | ty_union U => 𝑼𝑻 U
     | ty_record R => 𝑹𝑻 R
     end%type.
@@ -368,6 +416,77 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ty_record R => blastable_record R
       end%type.
 
+    (* Ask Coq to generate boolean and decidable equality for list *)
+    Scheme Equality for list.
+    Lemma list_beq_spec :
+      forall (A : Type) (xs ys : list A)
+        (A_eqb : A -> A -> bool)
+        (A_eqb_spec : forall x y, reflect (x = y) (A_eqb x y)) ,
+        reflect (xs = ys) (list_beq A_eqb xs ys).
+    Proof with cbn; try (constructor; congruence).
+      intros.
+      revert ys.
+      induction xs as [|x xs]; intros [|y ys]...
+      - destruct (A_eqb_spec x y); destruct (IHxs ys)...
+    Qed.
+    Scheme Equality for prod.
+    Scheme Equality for sum.
+
+    Equations Lit_eqb σ (l1 l2 : Lit σ) : bool :=
+      Lit_eqb ty_int l1 l2 := Z.eqb l1 l2;
+      Lit_eqb ty_bool  l1 l2 := Bool.eqb l1 l2;
+      Lit_eqb ty_bit  l1 l2 := Bit_eqb l1 l2;
+      Lit_eqb ty_string l1 l2 := String.eqb l1 l2;
+      Lit_eqb (ty_list τ) l1 l2 := list_beq (Lit_eqb τ) l1 l2;
+      Lit_eqb (ty_prod τ1 τ2) l1 l2 := prod_beq (Lit_eqb τ1) (Lit_eqb τ2) l1 l2;
+      Lit_eqb (ty_sum τ1 τ2) l1 l2 := sum_beq (Lit_eqb τ1) (Lit_eqb τ2) l1 l2;
+      Lit_eqb ty_unit _ _ := true;
+      Lit_eqb (ty_enum e) l1 l2 :=
+        match 𝑬𝑲_eq_dec l1 l2 with
+        | left eq_refl => true
+        | right _ => false
+        end;
+      Lit_eqb (ty_tuple σs) l1 l2 := envrec_beq Lit_eqb l1 l2;
+      Lit_eqb (ty_union U) l1 l2 :=
+        match @𝑼𝑻_eq_dec U l1 l2 with
+        | left eq_refl => true
+        | right _ => false
+        end;
+      Lit_eqb (ty_record R) l1 l2 :=
+        match @𝑹𝑻_eq_dec R l1 l2 with
+        | left eq_refl => true
+        | right _ => false
+        end.
+
+    Lemma Lit_eqb_spec (σ : Ty) (x y : Lit σ) : reflect (x = y) (Lit_eqb σ x y).
+    Proof with cbn; try (constructor; congruence).
+      induction σ; simp Lit_eqb; cbn.
+      - apply Z.eqb_spec.
+      - apply Bool.eqb_spec.
+      - apply Bit_eqb_spec.
+      - apply String.eqb_spec.
+      - revert y.
+        induction x as [|x xs]; intros [|y ys]...
+        destruct (IHσ x y); destruct (IHxs ys)...
+      - destruct x as [x1 x2]; destruct y as [y1 y2]; cbn.
+        destruct (IHσ1 x1 y1); destruct (IHσ2 x2 y2)...
+      - destruct x as [x1| x2]; destruct y as [y1|y2]; cbn.
+        + destruct (IHσ1 x1 y1)...
+        + constructor; congruence.
+        + constructor; congruence.
+        + destruct (IHσ2 x2 y2)...
+      - destruct x. destruct y...
+      - destruct (𝑬𝑲_eq_dec x y) as [e | bot ]; try (destruct e)...
+      - induction σs; intros.
+        + destruct x; destruct y...
+        + cbn in *.
+          destruct x as [xs x]; destruct y as [ys y]; destruct X as [pb pσs]; cbn in *.
+          specialize (IHσs pσs).
+          destruct (IHσs xs ys); destruct (pb x y)...
+      - destruct (𝑼𝑻_eq_dec x y) as [e | bot]; try destruct e...
+      - destruct (𝑹𝑻_eq_dec x y) as [e | bot]; try destruct e...
+    Qed.
+
   End Literals.
   Bind Scope lit_scope with Lit.
 
@@ -415,8 +534,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | exp_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)) : Exp Γ (ty_union U)
     | exp_record  (R : 𝑹) (es : Env' (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R)
     | exp_projrec {R : 𝑹} (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
-                  {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Exp Γ σ
-    | exp_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Exp Γ σ) : Exp Γ τ.
+                  {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Exp Γ σ.
+    (* | exp_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Exp Γ σ) : Exp Γ τ. *)
     Bind Scope exp_scope with Exp.
 
     Global Arguments exp_var {_} _ {_ _}.
@@ -442,7 +561,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     Fixpoint eval {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
       match e in (Exp _ t) return (Lit t) with
-      | exp_var x           => δ ! x
+      | exp_var x           => δ ‼ x
       | exp_lit _ _ l       => l
       | exp_plus e1 e2      => Z.add (eval e1 δ) (eval e2 δ)
       | exp_times e1 e2     => Z.mul (eval e1 δ) (eval e2 δ)
@@ -472,8 +591,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                                          (fun σs _ => Env' Lit σs)
                                          env_nil
                                          (fun σs _ vs _ e => env_snoc vs _ (eval e δ)) es)
-      | exp_projrec e rf    => 𝑹_unfold (eval e δ) ! rf
-      | exp_builtin f e     => f (eval e δ)
+      | exp_projrec e rf    => 𝑹_unfold (eval e δ) ‼ rf
+      (* | exp_builtin f e     => f (eval e δ) *)
       end.
 
     Definition evals {Γ Δ} (es : Env' (Exp Γ) Δ) (δ : LocalStore Γ) : LocalStore Δ :=

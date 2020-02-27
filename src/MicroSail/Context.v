@@ -27,22 +27,29 @@
 (******************************************************************************)
 
 Require Import Coq.Logic.EqdepFacts.
+Require Import Equations.Equations.
 Require Import MicroSail.Notation.
 
 Set Implicit Arguments.
 
 (* Type of contexts. This is a list of bindings of type B. This type and
    subsequent types use the common notation of snoc lists. *)
-Inductive Ctx (B : Type) : Type :=
+Inductive Ctx (B : Set) : Set :=
 | ctx_nil
 | ctx_snoc (Γ : Ctx B) (b : B).
+Derive NoConfusion for Ctx.
+
+(* Scheme Equality for Ctx. *)
+Definition Ctx_eq_dec (B : Set) (B_eq_dec : forall x y : B, {x=y}+{~x=y}) :
+           forall σs τs : Ctx B, {σs=τs}+{~σs=τs}.
+Proof. decide equality. Qed.
 
 Arguments ctx_nil {_}.
 Arguments ctx_snoc {_} _ _.
 Bind Scope ctx_scope with Ctx.
 
 Section WithBinding.
-  Context {B : Type}.
+  Context {B : Set}.
 
   (* Concatenation of two contexts. *)
   Fixpoint ctx_cat (Γ1 Γ2 : Ctx B) {struct Γ2} : Ctx B :=
@@ -71,6 +78,22 @@ Section WithBinding.
       + congruence.
       + apply IHΓ.
   Qed.
+
+  Section WithUIP.
+
+    Variable UIP_B : UIP B.
+
+    Lemma ctx_nth_is_proof_irrelevance {Γ : Ctx B} (n : nat) (b : B) :
+      forall (p q : ctx_nth_is Γ n b), p = q.
+    Proof.
+      revert Γ b; induction n; intros [|Γ b] b0; cbn.
+      - intros [].
+      - apply UIP_B.
+      - intros [].
+      - apply IHn.
+    Qed.
+
+  End WithUIP.
 
   Section InCtx.
     (* Set locally only for the definition of InCtx. *)
@@ -134,15 +157,24 @@ Section WithBinding.
         exact (fsucc Γ _ bIn (IHΓ bIn)).
   Qed.
 
+  (* Boolean equality of [nat]-fields in [InCtx] implies equality of
+     the other field and the binding-index of [InCtx] *)
   Lemma inctx_at_exact {Γ : Ctx B} (b1 b2 : B)
-    (b1In : InCtx b1 Γ) (b2In : InCtx b2 Γ) :
+        (b1In : InCtx b1 Γ) (b2In : InCtx b2 Γ) :
     @inctx_at _ _ b1In = @inctx_at _ _ b2In ->
-    b1 = b2.
+    b1 = b2 /\
+    (ctx_nth_is Γ (@inctx_at _ _ b1In) b1 = ctx_nth_is Γ (@inctx_at _ _ b2In) b2).
   Proof.
-    generalize dependent b2.
-    induction b1In using InCtx_ind; destruct b2In as [[|n] e]; intros; cbn in *; try congruence.
-    apply IHb1In with (Build_InCtx _ _ n e).
-    cbn; congruence.
+    intros.
+    assert (b1 = b2) as bindings_eq.
+    { generalize dependent b2.
+      induction b1In using InCtx_ind; destruct b2In as [[|n] e];
+      intros; cbn in *; try congruence.
+      apply IHb1In with (Build_InCtx _ _ n e).
+      cbn; congruence. }
+    split.
+    - exact bindings_eq.
+    - subst. f_equal. assumption.
   Qed.
 
   Fixpoint ctx_remove (Γ : Ctx B) {b : B} : InCtx b Γ -> Ctx B :=

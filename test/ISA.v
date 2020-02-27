@@ -49,7 +49,7 @@ Inductive InstructionConstructor :=
       Every instruction is memory safe, i.e. it checks memory
       access and sets the 'OutOfMemory' flag if out of memory
       access has been attempted. *)
-Module ExampleTypeKit <: TypeKit.
+Module ISATypeKit <: TypeKit.
 
   (** ENUMS **)
   Definition 𝑬        := Empty_set.
@@ -86,16 +86,26 @@ Module ExampleTypeKit <: TypeKit.
   Definition 𝑿        := string.
 
   Definition 𝑬_eq_dec : EqDec 𝑬 := ltac:(unfold EqDec; decide equality).
+  Definition 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e) := ltac:(unfold EqDec; decide equality).
   Definition 𝑼_eq_dec : EqDec 𝑼 := Unions_eq_dec.
+  Definition 𝑼𝑻_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑻 u).
+  Proof.
+    unfold EqDec. intros.
+    destruct u. unfold 𝑼𝑻. pose string_dec. pose Z.eq_dec. decide equality.
+  Qed.
+  Definition 𝑼𝑲_eq_dec : forall (u : 𝑼), EqDec(𝑼𝑲 u).
+  Proof. unfold EqDec. destruct u. decide equality. Qed.
   Definition 𝑹_eq_dec : EqDec 𝑹 := ltac:(unfold EqDec; decide equality).
+  Definition 𝑹𝑻_eq_dec : forall (r : 𝑹), EqDec (𝑹𝑻 r).
+  Proof. unfold EqDec. destruct r. Qed.
   Definition 𝑿_eq_dec : EqDec 𝑿 := string_dec.
 
-End ExampleTypeKit.
-Module ExampleTypes := Types ExampleTypeKit.
-Import ExampleTypes.
+End ISATypeKit.
+Module ISATypes := Types ISATypeKit.
+Import ISATypes.
 
-Module ExampleTermKit <: (TermKit ExampleTypeKit).
-  Module TY := ExampleTypes.
+Module ISATermKit <: (TermKit ISATypeKit).
+  Module TY := ISATypes.
 
   Open Scope lit_scope.
 
@@ -214,13 +224,13 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
 
   Definition 𝑨𝑫𝑫𝑹 : Set := Address.
 
-End ExampleTermKit.
-Module ExampleTerms := Terms ExampleTypeKit ExampleTermKit.
-Import ExampleTerms.
+End ISATermKit.
+Module ISATerms := Terms ISATypeKit ISATermKit.
+Import ISATerms.
 Import NameResolution.
 
-Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
-  Module TM := ExampleTerms.
+Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
+  Module TM := ISATerms.
 
   Local Definition lit_true {Γ}  : Exp Γ ty_bool := exp_lit _ ty_bool true.
   Local Definition lit_false {Γ} : Exp Γ ty_bool := exp_lit _ ty_bool false.
@@ -326,9 +336,17 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
       else if: flag_code = int_lit 7 then stm_write_register OutOfMemory flag_value
       else     stm_fail _ "write_register: invalid register"
     | rM =>
-      stm_fail _ "read_memory: not implemented"
+      if:      address = int_lit 0 then stm_read_memory A0
+      else if: address = int_lit 1 then stm_read_memory A1
+      else if: address = int_lit 2 then stm_read_memory A2
+      else if: address = int_lit 3 then stm_read_memory A3
+      else     stm_fail _ "read_register: invalid register"
     | wM =>
-      stm_fail _ "write_memory: invalid register"
+      if:      address = int_lit 0 then stm_write_memory A0 mem_value
+      else if: address = int_lit 1 then stm_write_memory A1 mem_value
+      else if: address = int_lit 2 then stm_write_memory A2 mem_value
+      else if: address = int_lit 3 then stm_write_memory A3 mem_value
+      else     stm_fail _ "read_register: invalid register"
     (* an [int] represents a valid address if it is >= [Memory_lb] and < [Memory_hb] *)
     | in_bounds => exp_and (exp_or (address = Memory_lb) (address > Memory_lb))
                           (address < Memory_hb)
@@ -357,13 +375,13 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
     end in exact pi.
   Defined.
 
-End ExampleProgramKit.
-Import ExampleProgramKit.
+End ISAProgramKit.
+Import ISAProgramKit.
 
-Module ISASmappStep := SmallStep ExampleTypeKit ExampleTermKit ExampleProgramKit.
+Module ISASmappStep := SmallStep ISATypeKit ISATermKit ISAProgramKit.
 Import ISASmappStep.
 
-Module ISAProgress := Progress ExampleTypeKit ExampleTermKit ExampleProgramKit.
+Module ISAProgress := Progress ISATypeKit ISATermKit ISAProgramKit.
 Import ISAProgress.
 Import CtxNotations.
 

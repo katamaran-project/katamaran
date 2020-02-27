@@ -1,16 +1,18 @@
 Require Import Coq.Program.Equality.
+Require Import Equations.Equations.
 Require Import MicroSail.Context.
 Require Import MicroSail.Notation.
 
 Set Implicit Arguments.
 
 Section WithBinding.
-  Context {B : Type}.
+  Context {B : Set}.
 
   Inductive Env (D : B -> Type) : Ctx B -> Type :=
   | env_nil : Env D ctx_nil
   | env_snoc {Γ} (E : Env D Γ) (b : B) (db : D b) :
       Env D (ctx_snoc Γ b).
+  Derive Signature for Env.
 
   Global Arguments env_nil {_}.
   Bind Scope env_scope with Env.
@@ -126,6 +128,33 @@ Section WithBinding.
       env_drop Δ (env_cat δΓ δΔ) = δΓ.
   Proof. induction δΔ; cbn; auto. Qed.
 
+  Section WithD.
+    Variable D : B -> Type.
+
+    Fixpoint EnvRec (σs : Ctx B) {struct σs} : Type :=
+      match σs with
+      | ctx_nil => unit
+      | ctx_snoc σs σ => EnvRec σs * D σ
+      end.
+
+  End WithD.
+
+  Section WithEqD.
+    Context {D : B -> Type}.
+    Variable eqd : forall b, D b -> D b -> bool.
+
+    Equations env_beq {Γ : Ctx B} (δ1 δ2 : Env D Γ) : bool :=
+    env_beq env_nil               env_nil              := true;
+    env_beq (env_snoc δ1 _ db1) (env_snoc δ2 _ db2) := env_beq δ1 δ2 && eqd db1 db2.
+
+    Fixpoint envrec_beq {Γ : Ctx B} : forall (δ1 δ2 : EnvRec D Γ), bool :=
+      match Γ with
+      | ctx_nil      => fun _ _ => true
+      | ctx_snoc Γ b => fun '(δ1 , d1) '(δ2 , d2) => envrec_beq δ1 δ2 && eqd d1 d2
+      end%bool.
+
+  End WithEqD.
+
 End WithBinding.
 
 Definition Env' {X T : Set} (D : T -> Type) (Γ : Ctx (X * T)) : Type :=
@@ -138,27 +167,40 @@ Module EnvNotations.
   Notation "δ '►' b '↦' d" := (env_snoc δ b d) : env_scope.
   Notation "δ1 '►►' δ2" := (env_cat δ1 δ2) : env_scope.
   Notation "δ ⟪ x ↦ v ⟫" := (@env_update _ _ _ δ (x , _) _ v) : env_scope.
-  Notation "δ ! x" := (@env_lookup _ _ _ δ (x , _) _) : lit_scope.
+  Notation "δ ‼ x" := (@env_lookup _ _ _ δ (x , _) _) : lit_scope.
 
 End EnvNotations.
 
-Fixpoint abstract {B} (D : B -> Type) (Δ : Ctx B) (r : Type) {struct Δ} : Type :=
-  match Δ with
-  | ctx_nil => r
-  | ctx_snoc Δ σ => abstract D Δ (D σ -> r)
-  end.
+Section WithB.
 
-Fixpoint uncurry {B} (D : B -> Type) {Δ : Ctx B} {r : Type} (f : abstract D Δ r) (δ : Env D Δ) {struct δ} : r :=
-   match δ in Env _ Δ return forall r : Type, abstract D Δ r -> r with
-   | env_nil => fun _ v => v
-   | env_snoc δ b db => fun r (f : abstract D _ (D b -> r)) => uncurry f δ db
-   end r f.
+  Context {B : Set}.
+  Variable (D : B -> Type).
 
-Fixpoint curry {B} (D : B -> Type) {Δ : Ctx B} {r : Type} (f : Env D Δ -> r) {struct Δ} : abstract D Δ r :=
-   match Δ return forall r : Type, (Env D Δ -> r) -> abstract D Δ r with
-   | ctx_nil => fun r f => f env_nil
-   | ctx_snoc Δ σ => fun r f => @curry B D Δ (D σ -> r) (fun E dσ => f (env_snoc E σ dσ))
-   end r f.
+  Fixpoint abstract (Δ : Ctx B) (r : Type) {struct Δ} : Type :=
+    match Δ with
+    | ctx_nil => r
+    | ctx_snoc Δ σ => abstract Δ (D σ -> r)
+    end.
+
+  Fixpoint uncurry {Δ : Ctx B} {r : Type} (f : abstract Δ r) (δ : Env D Δ) {struct δ} : r :=
+    match δ in Env _ Δ return forall r : Type, abstract Δ r -> r with
+    | env_nil => fun _ v => v
+    | env_snoc δ b db => fun r (f : abstract _ (D b -> r)) => uncurry f δ db
+    end r f.
+
+  Fixpoint curry {Δ : Ctx B} {r : Type} (f : Env D Δ -> r) {struct Δ} : abstract Δ r :=
+    match Δ return forall r : Type, (Env D Δ -> r) -> abstract Δ r with
+    | ctx_nil => fun r f => f env_nil
+    | ctx_snoc Δ σ => fun r f => @curry Δ (D σ -> r) (fun E dσ => f (env_snoc E σ dσ))
+    end r f.
+
+  Fixpoint Forall (Δ : Ctx B) {struct Δ} : (Env D Δ -> Prop) -> Prop :=
+    match Δ return (Env D Δ -> Prop) -> Prop with
+    | ctx_nil      => fun P => P env_nil
+    | ctx_snoc Δ b => fun P => Forall (fun δ => forall v, P (env_snoc δ _ v))
+    end.
+
+End WithB.
 
 Definition abstract' {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) (r : Type) : Type :=
   abstract (fun xt => D (snd xt)) Δ r.
@@ -168,12 +210,6 @@ Definition uncurry' {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f
 
 Definition curry' {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : Env' D Δ -> r) : abstract' D Δ r :=
   curry f.
-
-Fixpoint Forall {B D} (Δ : Ctx B) {struct Δ} : (Env D Δ -> Prop) -> Prop :=
-  match Δ return (Env D Δ -> Prop) -> Prop with
-  | ctx_nil      => fun P => P env_nil
-  | ctx_snoc Δ b => fun P => Forall (fun δ => forall v, P (env_snoc δ _ v))
-  end.
 
 Fixpoint Forall' {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) {struct Δ} : (Env' D Δ -> Prop) -> Prop :=
   @Forall (X * T) (fun xt => D (snd xt)) Δ.

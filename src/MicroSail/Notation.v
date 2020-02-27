@@ -57,7 +57,7 @@ Reserved Notation "[ x , .. , z ]" (at level 0).
 Reserved Notation "δ ► x ↦ v"      (at level 50, x at level 99, left associativity).
 Reserved Notation "δ1 ►► δ2"       (at level 50, left associativity).
 Reserved Notation "δ ⟪ x ↦ v ⟫"    (at level 90, x at level 0, v at level 0, left associativity).
-Reserved Notation "δ ! x"          (at level 56, no associativity).
+Reserved Notation "δ ‼ x"          (at level 56, no associativity).
 
 Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" (at level 75, no associativity).
 Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" (at level 75, no associativity).
