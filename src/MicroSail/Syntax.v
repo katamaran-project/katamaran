@@ -603,7 +603,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   Section Statements.
 
-    Inductive TuplePat : Ctx Ty -> Ctx (𝑿 * Ty) -> Type :=
+    Inductive TuplePat : Ctx Ty -> Ctx (𝑿 * Ty) -> Set :=
     | tuplepat_nil  : TuplePat ctx_nil ctx_nil
     | tuplepat_snoc
         {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)}
@@ -611,7 +611,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         TuplePat (ctx_snoc σs σ) (ctx_snoc Δ (x , σ)).
     Bind Scope pat_scope with TuplePat.
 
-    Inductive RecordPat : Ctx (𝑹𝑭 * Ty) -> Ctx (𝑿 * Ty) -> Type :=
+    Inductive RecordPat : Ctx (𝑹𝑭 * Ty) -> Ctx (𝑿 * Ty) -> Set :=
     | recordpat_nil  : RecordPat ctx_nil ctx_nil
     | recordpat_snoc
         {rfs : Ctx (𝑹𝑭 * Ty)} {Δ : Ctx (𝑿 * Ty)}
@@ -727,7 +727,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ctx_snoc Γ (y, d) => if 𝑿_eq_dec x y then Some d else ctx_resolve Γ x
       end.
 
-    Definition IsSome {D : Set} (m : option D) : Type :=
+    Definition IsSome {D : Set} (m : option D) : Set :=
       match m with
         | Some _ => unit
         | None => Empty_set

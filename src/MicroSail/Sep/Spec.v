@@ -30,7 +30,6 @@ From Coq Require Import
      Bool.Bool
      Lists.List
      Logic.EqdepFacts
-     Logic.PropExtensionality
      Program.Equality
      Program.Tactics
      Strings.String
