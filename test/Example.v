@@ -126,8 +126,22 @@ Module ExampleTypeKit <: TypeKit.
   Definition 𝑿        := string.
 
   Definition 𝑬_eq_dec := Enums_eq_dec.
+  Definition 𝑬𝑲_eq_dec : forall (e : 𝑬) (x y : 𝑬𝑲 e), {x=y}+{~x=y}.
+  Proof. unfold 𝑬𝑲 in *. intros. destruct e. decide equality. Qed.
   Definition 𝑼_eq_dec := Unions_eq_dec.
+  Definition 𝑼𝑻_eq_dec : forall (u : 𝑼) (x y : 𝑼𝑻 u), {x=y}+{~x=y}.
+  Proof.
+    unfold 𝑼𝑻 in *.
+    intros. destruct u.
+    pose string_dec.
+    pose Z.eq_dec.
+    decide equality.
+  Qed.
+  Definition 𝑼𝑲_eq_dec : forall (u : 𝑼) (x y : 𝑼𝑲 u), {x=y}+{~x=y}.
+  Proof. intros. destruct u. decide equality. Qed.
   Definition 𝑹_eq_dec := Records_eq_dec.
+  Definition 𝑹𝑻_eq_dec : forall (r : 𝑹) (x y : 𝑹𝑻 r), {x=y}+{~x=y}.
+  Proof. intros. destruct r. Qed.
   Definition 𝑿_eq_dec := string_dec.
 
 End ExampleTypeKit.
@@ -359,5 +373,3 @@ Ltac validate_solve :=
 
 Lemma validCEnv : ValidContractEnv CEnv.
 Proof. intros σs τ []; wlp_cbv; validate_solve. Qed.
-
-(* Print Assumptions validCEnv. *)

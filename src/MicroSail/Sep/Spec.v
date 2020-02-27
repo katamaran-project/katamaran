@@ -47,7 +47,6 @@ Set Implicit Arguments.
 
 Delimit Scope mutator_scope with mut.
 
-
 Module Symbolic
   (Import typekit : TypeKit)
   (Import termkit : TermKit typekit)
@@ -73,22 +72,22 @@ Module Symbolic
   | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : InCtx (ς , σ) Σ} : Term Σ σ
   | term_lit     (σ : Ty) : Lit σ -> Term Σ σ
   | term_plus    (e1 e2 : Term Σ ty_int) : Term Σ ty_int
-  (* | term_times   (e1 e2 : Term Σ ty_int) : Term Σ ty_int *)
-  (* | term_minus   (e1 e2 : Term Σ ty_int) : Term Σ ty_int *)
-  (* | term_neg     (e : Term Σ ty_int) : Term Σ ty_int *)
-  (* | term_eq      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool *)
-  (* | term_le      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool *)
-  (* | term_lt      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool *)
-  (* | term_gt      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool *)
-  (* | term_and     (e1 e2 : Term Σ ty_bool) : Term Σ ty_bool *)
-  (* | term_or      (e1 e2 : Term Σ ty_bool) : Term Σ ty_bool *)
-  (* | term_not     (e : Term Σ ty_bool) : Term Σ ty_bool *)
-  (* | term_pair    {σ1 σ2 : Ty} (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ (ty_prod σ1 σ2) *)
-  (* | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty_sum σ1 σ2) *)
-  (* | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2) *)
+  | term_times   (e1 e2 : Term Σ ty_int) : Term Σ ty_int
+  | term_minus   (e1 e2 : Term Σ ty_int) : Term Σ ty_int
+  | term_neg     (e : Term Σ ty_int) : Term Σ ty_int
+  | term_eq      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool
+  | term_le      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool
+  | term_lt      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool
+  | term_gt      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool
+  | term_and     (e1 e2 : Term Σ ty_bool) : Term Σ ty_bool
+  | term_or      (e1 e2 : Term Σ ty_bool) : Term Σ ty_bool
+  | term_not     (e : Term Σ ty_bool) : Term Σ ty_bool
+  | term_pair    {σ1 σ2 : Ty} (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ (ty_prod σ1 σ2)
+  | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty_sum σ1 σ2)
+  | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2)
   | term_list    {σ : Ty} (es : list (Term Σ σ)) : Term Σ (ty_list σ)
-  (* | term_cons    {σ : Ty} (h : Term Σ σ) (t : Term Σ (ty_list σ)) : Term Σ (ty_list σ) *)
-  (* | term_nil     {σ : Ty} : Term Σ (ty_list σ) *)
+  | term_cons    {σ : Ty} (h : Term Σ σ) (t : Term Σ (ty_list σ)) : Term Σ (ty_list σ)
+  | term_nil     {σ : Ty} : Term Σ (ty_list σ)
   (* Experimental features *)
   | term_tuple   {σs : Ctx Ty} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs)
   | term_projtup {σs : Ctx Ty} (e : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
@@ -129,22 +128,22 @@ Module Symbolic
     Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : (ς ∶ σ)%ctx ∈ Σ), P σ (term_var ς σ)).
     Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit Σ σ l)).
     Hypothesis (P_plus       : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_plus e1 e2)).
-    (* Hypothesis (P_times      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_times e1 e2)). *)
-    (* Hypothesis (P_minus      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_minus e1 e2)). *)
-    (* Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)). *)
-    (* Hypothesis (P_eq         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_eq e1 e2)). *)
-    (* Hypothesis (P_le         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_le e1 e2)). *)
-    (* Hypothesis (P_lt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_lt e1 e2)). *)
-    (* Hypothesis (P_gt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_gt e1 e2)). *)
-    (* Hypothesis (P_and        : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_and e1 e2)). *)
-    (* Hypothesis (P_or         : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_or e1 e2)). *)
-    (* Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)). *)
-    (* Hypothesis (P_pair       : forall (σ1 σ2 : Ty) (e1 : Term Σ σ1), P σ1 e1 -> forall e2 : Term Σ σ2, P σ2 e2 -> P (ty_prod σ1 σ2) (term_pair e1 e2)). *)
-    (* Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)). *)
-    (* Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)). *)
+    Hypothesis (P_times      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_times e1 e2)).
+    Hypothesis (P_minus      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_minus e1 e2)).
+    Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)).
+    Hypothesis (P_eq         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_eq e1 e2)).
+    Hypothesis (P_le         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_le e1 e2)).
+    Hypothesis (P_lt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_lt e1 e2)).
+    Hypothesis (P_gt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_gt e1 e2)).
+    Hypothesis (P_and        : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_and e1 e2)).
+    Hypothesis (P_or         : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_or e1 e2)).
+    Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)).
+    Hypothesis (P_pair       : forall (σ1 σ2 : Ty) (e1 : Term Σ σ1), P σ1 e1 -> forall e2 : Term Σ σ2, P σ2 e2 -> P (ty_prod σ1 σ2) (term_pair e1 e2)).
+    Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
+    Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
     Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
-    (* Hypothesis (P_cons       : forall (σ : Ty) (h : Term Σ σ), P σ h -> forall t : Term Σ (ty_list σ), P (ty_list σ) t -> P (ty_list σ) (term_cons h t)). *)
-    (* Hypothesis (P_nil        : forall σ : Ty, P (ty_list σ) (term_nil Σ)). *)
+    Hypothesis (P_cons       : forall (σ : Ty) (h : Term Σ σ), P σ h -> forall t : Term Σ (ty_list σ), P (ty_list σ) t -> P (ty_list σ) (term_cons h t)).
+    Hypothesis (P_nil        : forall σ : Ty, P (ty_list σ) (term_nil Σ)).
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
     Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
     Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union e)).
@@ -156,22 +155,22 @@ Module Symbolic
       | @term_var _ ς σ ςInΣ           => ltac:(eapply P_var; eauto)
       | @term_lit _ σ x                => ltac:(eapply P_lit; eauto)
       | @term_plus _ e1 e2             => ltac:(eapply P_plus; eauto)
-      (* | @term_times _ e1 e2            => ltac:(eapply P_times; eauto) *)
-      (* | @term_minus _ e1 e2            => ltac:(eapply P_minus; eauto) *)
-      (* | @term_neg _ e                  => ltac:(eapply P_neg; eauto) *)
-      (* | @term_eq _ e1 e2               => ltac:(eapply P_eq; eauto) *)
-      (* | @term_le _ e1 e2               => ltac:(eapply P_le; eauto) *)
-      (* | @term_lt _ e1 e2               => ltac:(eapply P_lt; eauto) *)
-      (* | @term_gt _ e1 e2               => ltac:(eapply P_gt; eauto) *)
-      (* | @term_and _ e1 e2              => ltac:(eapply P_and; eauto) *)
-      (* | @term_or _ e1 e2               => ltac:(eapply P_or; eauto) *)
-      (* | @term_not _ e                  => ltac:(eapply P_not; eauto) *)
-      (* | @term_pair _ σ1 σ2 e1 e2       => ltac:(eapply P_pair; eauto) *)
-      (* | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto) *)
-      (* | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto) *)
+      | @term_times _ e1 e2            => ltac:(eapply P_times; eauto)
+      | @term_minus _ e1 e2            => ltac:(eapply P_minus; eauto)
+      | @term_neg _ e                  => ltac:(eapply P_neg; eauto)
+      | @term_eq _ e1 e2               => ltac:(eapply P_eq; eauto)
+      | @term_le _ e1 e2               => ltac:(eapply P_le; eauto)
+      | @term_lt _ e1 e2               => ltac:(eapply P_lt; eauto)
+      | @term_gt _ e1 e2               => ltac:(eapply P_gt; eauto)
+      | @term_and _ e1 e2              => ltac:(eapply P_and; eauto)
+      | @term_or _ e1 e2               => ltac:(eapply P_or; eauto)
+      | @term_not _ e                  => ltac:(eapply P_not; eauto)
+      | @term_pair _ σ1 σ2 e1 e2       => ltac:(eapply P_pair; eauto)
+      | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
+      | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
       | @term_list _ σ es              => ltac:(eapply P_list; induction es; cbn; eauto using unit)
-      (* | @term_cons _ σ h t             => ltac:(eapply P_cons; eauto) *)
-      (* | @term_nil _ σ                  => ltac:(eapply P_nil; eauto) *)
+      | @term_cons _ σ h t             => ltac:(eapply P_cons; eauto)
+      | @term_nil _ σ                  => ltac:(eapply P_nil; eauto)
       | @term_tuple _ σs es            => ltac:(eapply P_tuple; induction es; cbn; eauto using unit)
       | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
       | @term_union _ U K e            => ltac:(eapply P_union; eauto)
@@ -195,34 +194,33 @@ Module Symbolic
     Term_eqb (term_lit _ l1) (term_lit _ l2) := Lit_eqb _ l1 l2;
     Term_eqb (term_plus x1 y1) (term_plus x2 y2) := Term_eqb x1 x2 &&
                                                     Term_eqb y1 y2;
-    (* Term_eqb (term_times x1 y1) (term_times x2 y2) := Term_eqb x1 x2 && *)
-    (*                                                   Term_eqb y1 y2; *)
-    (* Term_eqb (term_minus x1 y1) (term_minus x2 y2) := Term_eqb x1 x2 && *)
-    (*                                                   Term_eqb y1 y2; *)
-    (* Term_eqb (term_neg x) (term_neg y) := Term_eqb x y; *)
-    (* Term_eqb (term_eq x1 y1) (term_eq x2 y2) := Term_eqb x1 x2 && *)
-    (*                                             Term_eqb y1 y2; *)
-    (* Term_eqb (term_le x1 y1) (term_le x2 y2) := Term_eqb x1 x2 && *)
-    (*                                             Term_eqb y1 y2; *)
-    (* Term_eqb (term_lt x1 y1) (term_lt x2 y2) := Term_eqb x1 x2 && *)
-    (*                                             Term_eqb y1 y2; *)
-    (* Term_eqb (term_gt x1 y1) (term_gt x2 y2) := Term_eqb x1 x2 && *)
-    (*                                             Term_eqb y1 y2; *)
-    (* Term_eqb (term_and x1 y1) (term_and x2 y2) := Term_eqb x1 x2 && *)
-    (*                                               Term_eqb y1 y2; *)
-    (* Term_eqb (term_or x1 y1) (term_or x2 y2) := Term_eqb x1 x2 && *)
-    (*                                             Term_eqb y1 y2; *)
-    (* Term_eqb (term_not x) (term_not y) := Term_eqb x y; *)
-    (* Term_eqb (term_pair x1 y1) (term_pair x2 y2) := Term_eqb x1 x2 && *)
-    (*                                                 Term_eqb y1 y2; *)
-    (* Term_eqb (term_inl x) (term_inl y) := Term_eqb x y; *)
-    (* Term_eqb (term_inr x) (term_inr y) := Term_eqb x y; *)
+    Term_eqb (term_times x1 y1) (term_times x2 y2) := Term_eqb x1 x2 &&
+                                                      Term_eqb y1 y2;
+    Term_eqb (term_minus x1 y1) (term_minus x2 y2) := Term_eqb x1 x2 &&
+                                                      Term_eqb y1 y2;
+    Term_eqb (term_neg x) (term_neg y) := Term_eqb x y;
+    Term_eqb (term_eq x1 y1) (term_eq x2 y2) := Term_eqb x1 x2 &&
+                                                Term_eqb y1 y2;
+    Term_eqb (term_le x1 y1) (term_le x2 y2) := Term_eqb x1 x2 &&
+                                                Term_eqb y1 y2;
+    Term_eqb (term_lt x1 y1) (term_lt x2 y2) := Term_eqb x1 x2 &&
+                                                Term_eqb y1 y2;
+    Term_eqb (term_gt x1 y1) (term_gt x2 y2) := Term_eqb x1 x2 &&
+                                                Term_eqb y1 y2;
+    Term_eqb (term_and x1 y1) (term_and x2 y2) := Term_eqb x1 x2 &&
+                                                  Term_eqb y1 y2;
+    Term_eqb (term_or x1 y1) (term_or x2 y2) := Term_eqb x1 x2 &&
+                                                Term_eqb y1 y2;
+    Term_eqb (term_not x) (term_not y) := Term_eqb x y;
+    Term_eqb (term_pair x1 y1) (term_pair x2 y2) := Term_eqb x1 x2 &&
+                                                    Term_eqb y1 y2;
+    Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
+    Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
     Term_eqb (term_list xs) (term_list ys) := list_beq Term_eqb xs ys;
-    (* Term_eqb (term_cons x xs) (term_cons y ys) := Term_eqb x y && Term_eqb xs ys; *)
-    (* Term_eqb (@term_nil _) (@term_nil _) := true; *)
+    Term_eqb (term_cons x xs) (term_cons y ys) := Term_eqb x y && Term_eqb xs ys;
+    Term_eqb (@term_nil _) (@term_nil _) := true;
     Term_eqb (term_tuple x) (term_tuple y) :=
        @env_beq _ (Term Σ) (@Term_eqb _) _ x y;
-    (* tuple projections are equal if the contexts and indices are equal *)
     Term_eqb (@term_projtup σs x n _ p) (@term_projtup τs y m _ q)
       with Ctx_eq_dec Ty_eq_dec σs τs => {
       Term_eqb (@term_projtup σs x n _ p) (@term_projtup ?(σs) y m _ q) (left eq_refl) :=
@@ -255,7 +253,10 @@ Module Symbolic
       | |- (?x <> ?y) => let H := fresh in intro H; dependent destruction H
       | [ H : reflect _ ?b |- context[?b] ] =>
         let H1 := fresh in destruct H as [H1 |]; [dependent destruction H1 | idtac]; cbn
-      end; try congruence.
+      | H : forall t2, reflect (?t1 = t2) (Term_eqb ?t1 t2) |-
+                  context[Term_eqb ?t1 ?t2] =>
+        destruct (H t2)
+      end; try constructor; try congruence.
 
   Lemma Term_eqb_spec :
     forall Σ (σ : Ty) (t1 t2 : Term Σ σ),
@@ -286,8 +287,9 @@ Module Symbolic
         pose proof 𝑺_eq_dec; pose proof Ty_eq_dec.
         unfold EqDec. decide equality.
       + inversion 1. congruence.
-    -  destruct (IHt1_1 t2_1);
-       destruct (IHt1_2 t2_2); constructor; congruence.
+    - Term_eqb_spec_solve.
+    - Term_eqb_spec_solve.
+    - Term_eqb_spec_solve.
     - revert es0.
       induction es as [|x xs]; intros [|y ys]; cbn in *; try (constructor; congruence).
       + constructor. intros ?. dependent destruction H.
@@ -296,15 +298,17 @@ Module Symbolic
         specialize (IHxs x2 ys).
         specialize (x1 y).
         Term_eqb_spec_solve.
+    - Term_eqb_spec_solve.
+    - Term_eqb_spec_solve.
+    - Term_eqb_spec_solve.
     - admit.
     - admit.
     - destruct (𝑼𝑲_eq_dec K K0); cbn.
       + destruct e. specialize (IHt1 t2). Term_eqb_spec_solve.
       + Term_eqb_spec_solve.
     - admit.
-    - destruct (𝑹_eq_dec R R0). cbn.
-      admit. admit.
-  Admitted.
+    - admit.
+Admitted.
 
   Global Arguments term_var {_} _ {_ _}.
   Global Arguments term_tuple {_ _} _%exp.
@@ -354,7 +358,7 @@ Module Symbolic
                       end
       in term_record R (symbolic_eval_exps es)
     | @exp_projrec _ R e0 rf σ0 rfInR => @term_projrec _ R (symbolic_eval_exp e0 δ) rf σ0 rfInR
-    | @exp_builtin _ σ0 τ f e0        => @term_builtin _ σ0 τ f (symbolic_eval_exp e0 δ)
+    (* | @exp_builtin _ σ0 τ f e0        => @term_builtin _ σ0 τ f (symbolic_eval_exp e0 δ) *)
     end.
 
   Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
@@ -435,7 +439,7 @@ Module Symbolic
                                            end
                                         ) _ es)
       | term_projrec t rf         => term_projrec (sub_term t) rf
-      | term_builtin f t          => term_builtin f (sub_term t)
+      (* | term_builtin f t          => term_builtin f (sub_term t) *)
       end.
 
     Definition sub_formula (fml : Formula Σ1) : Formula Σ2 :=
