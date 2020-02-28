@@ -48,8 +48,10 @@ Delimit Scope mutator_scope with mut.
 
 Module Type SymbolicTermKit
        (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit).
+       (Import termkit : TermKit typekit).
+  Module TM := Terms typekit termkit.
+  Export TM.
+       (* (Import progkit : ProgramKit typekit termkit). *)
 
   Parameter Inline 𝑺 : Set. (* input: \MIS *)
   Parameter Inline 𝑺_eq_dec : forall (s1 s2 : 𝑺), {s1=s2}+{~s1=s2}.
@@ -60,9 +62,18 @@ Module Type SymbolicTermKit
   (* Predicate field types. *)
   Parameter Inline 𝑷_Ty : 𝑷 -> Ctx Ty.
   Parameter Inline 𝑷_eq_dec : forall (p : 𝑷) (q : 𝑷), {p = q}+{~ p = q}.
+End SymbolicTermKit.
+
+Module SymbolicTerms
+       (typekit : TypeKit)
+       (termkit : TermKit typekit)
+       (symtermkit : SymbolicTermKit typekit termkit).
+
+  Export symtermkit.
 
   Import CtxNotations.
   Import EnvNotations.
+  Import ListNotations.
 
   Local Unset Elimination Schemes.
   Inductive Term (Σ : Ctx (𝑺 * Ty)) : Ty -> Type :=
@@ -241,72 +252,6 @@ Module Type SymbolicTermKit
 
     Term_eqb _ _ := false.
 
-  Local Ltac Term_eqb_spec_solve :=
-    repeat
-      match goal with
-      | |- reflect _ false => constructor
-      | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
-      | |- reflect _ true => constructor
-      | |- (?x <> ?y) => let H := fresh in intro H; dependent destruction H
-      | [ H : reflect _ ?b |- context[?b] ] =>
-        let H1 := fresh in destruct H as [H1 |]; [dependent destruction H1 | idtac]; cbn
-      | H : forall t2, reflect (?t1 = t2) (Term_eqb ?t1 t2) |-
-                  context[Term_eqb ?t1 ?t2] =>
-        destruct (H t2)
-      end; try constructor; try congruence.
-
-(*   Lemma Term_eqb_spec : *)
-(*     forall Σ (σ : Ty) (t1 t2 : Term Σ σ), *)
-(*       reflect (t1 = t2) (Term_eqb t1 t2). *)
-(*   Proof. *)
-(*     intros. *)
-(*     induction t1 using Term_rect; dependent destruction t2; simp Term_eqb; cbn in *; *)
-(*     Term_eqb_spec_solve. *)
-(*     - unfold InCtx_eqb. *)
-(*       repeat match goal with *)
-(*              | |- context[?m =? ?n] => destruct (Nat.eqb_spec m n) *)
-(*              | H: InCtx _ _ |- _ => *)
-(*                let n := fresh "n" in *)
-(*                let p := fresh "p" in *)
-(*                destruct H as [n p] *)
-(*              end; cbn in *; constructor. *)
-(*       + subst n0. *)
-(*         match goal with *)
-(*         | H1: ctx_nth_is ?Σ ?n ?b1, H2: ctx_nth_is ?Σ ?n ?b2 |- _ => *)
-(*           let H := fresh in *)
-(*           pose proof (ctx_nth_is_right_exact _ _ _ H1 H2) as H; inversion H; clear H *)
-(*         end. *)
-(*         subst ς0. *)
-(*         f_equal. *)
-(*         f_equal. *)
-(*         apply ctx_nth_is_proof_irrelevance. *)
-(*         apply EqDec.eqdec_uip. *)
-(*         pose proof 𝑺_eq_dec; pose proof Ty_eq_dec. *)
-(*         unfold EqDec. decide equality. *)
-(*       + inversion 1. congruence. *)
-(*     - Term_eqb_spec_solve. *)
-(*     - Term_eqb_spec_solve. *)
-(*     - Term_eqb_spec_solve. *)
-(*     - revert es0. *)
-(*       induction es as [|x xs]; intros [|y ys]; cbn in *; try (constructor; congruence). *)
-(*       + constructor. intros ?. dependent destruction H. *)
-(*       + constructor. intros ?. dependent destruction H. *)
-(*       + destruct X as [x1 x2]. *)
-(*         specialize (IHxs x2 ys). *)
-(*         specialize (x1 y). *)
-(*         Term_eqb_spec_solve. *)
-(*     - Term_eqb_spec_solve. *)
-(*     - Term_eqb_spec_solve. *)
-(*     - Term_eqb_spec_solve. *)
-(*     - admit. *)
-(*     - admit. *)
-(*     - destruct (𝑼𝑲_eq_dec K K0); cbn. *)
-(*       + destruct e. specialize (IHt1 t2). Term_eqb_spec_solve. *)
-(*       + Term_eqb_spec_solve. *)
-(*     - admit. *)
-(*     - admit. *)
-(* Admitted. *)
-
   Global Arguments term_var {_} _ {_ _}.
   Global Arguments term_tuple {_ _} _%exp.
   Global Arguments term_union {_} _ _.
@@ -390,13 +335,16 @@ Module Type SymbolicTermKit
         (@term_var (Σ2 ▻ (ς , τ)) ς τ inctx_zero)
         (fun b' b'In => wk1_term (ζ b' b'In)).
 
-End SymbolicTermKit.
+End SymbolicTerms.
 
-Module Type SymbolicProgramKit
+Module SymbolicPrograms
        (Import typekit : TypeKit)
        (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import symtermkit : SymbolicTermKit typekit termkit progkit).
+       (Import symtermkit : SymbolicTermKit typekit termkit).
+
+  Module STs := SymbolicTerms typekit termkit symtermkit.
+  Export STs.
+
   Import CtxNotations.
   Import EnvNotations.
   Import OutcomeNotations.
@@ -537,19 +485,17 @@ Module Type SymbolicProgramKit
       sub_symbolicstate sub_wk1.
 
   End SymbolicState.
-End SymbolicProgramKit.
+End SymbolicPrograms.
 
 Module SymbolicSemantics_Mutator
     (typekit : TypeKit)
     (termkit : TermKit typekit)
-    (progkit : ProgramKit typekit termkit)
-    (symtermkit : SymbolicTermKit typekit termkit progkit)
-    (symprogkit : SymbolicProgramKit typekit termkit progkit symtermkit).
+    (symtermkit : SymbolicTermKit typekit termkit).
   Import typekit.
   Import termkit.
-  Import progkit.
-  Export symtermkit.
-  Export symprogkit.
+
+  Module SP := SymbolicPrograms typekit termkit symtermkit.
+  Export SP.
 
   Import CtxNotations.
   Import EnvNotations.
