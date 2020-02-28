@@ -18,6 +18,6 @@ stages:
       - "src/*/*/*.vo"
       - "src/*/*/*/.*.aux"
 
-coq-8.8:  {<<: *build, image: "skeuchel/coq:8.8"}
+# coq-8.8:  {<<: *build, image: "skeuchel/coq:8.8"}
 coq-8.9:  {<<: *build, image: "skeuchel/coq:8.9"}
 coq-8.10: {<<: *build, image: "skeuchel/coq:8.10"}
