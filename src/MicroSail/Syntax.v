@@ -130,7 +130,7 @@ Next Obligation.
   - reflexivity.
   - intro k; exact (IHE (fun E' : Env D Γ => k (env_snoc E' b db))).
 Defined.
-Instance blastable_env' {X T : Set} {D} {Δ : Ctx (X * T)} : Blastable (Env' D Δ) :=
+Instance blastable_env' {X T : Set} {D} {Δ : Ctx (X * T)} : Blastable (NamedEnv D Δ) :=
   blastable_env.
 
 Module Type TypeKit.
@@ -342,13 +342,13 @@ Module Type TermKit (typekit : TypeKit).
   Parameter Inline 𝑹𝑭  : Set.
   (* Record field types. *)
   Parameter Inline 𝑹𝑭_Ty : 𝑹 -> Ctx (𝑹𝑭 * Ty).
-  Parameter Inline 𝑹_fold   : forall (R : 𝑹), Env' Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R.
-  Parameter Inline 𝑹_unfold : forall (R : 𝑹), 𝑹𝑻 R -> Env' Lit (𝑹𝑭_Ty R).
+  Parameter Inline 𝑹_fold   : forall (R : 𝑹), NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R.
+  Parameter Inline 𝑹_unfold : forall (R : 𝑹), 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R).
   Parameter Inline 𝑹_fold_unfold :
     forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold (𝑹_unfold Kv) = Kv.
   Parameter Inline 𝑹_unfold_fold :
-    forall (R : 𝑹) (Kv: Env' Lit (𝑹𝑭_Ty R)),
+    forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
       𝑹_unfold (𝑹_fold Kv) = Kv.
 
   (* Names of functions. *)
@@ -490,7 +490,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   End Literals.
   Bind Scope lit_scope with Lit.
 
-  Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Type := Env' Lit Γ.
+  Definition LocalStore (Γ : Ctx (𝑿 * Ty)) : Type := NamedEnv Lit Γ.
   Bind Scope env_scope with LocalStore.
 
   Section Expressions.
@@ -532,7 +532,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | exp_projtup {σs : Ctx Ty} (e : Exp Γ (ty_tuple σs)) (n : nat) {σ : Ty}
                   {p : ctx_nth_is σs n σ} : Exp Γ σ
     | exp_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)) : Exp Γ (ty_union U)
-    | exp_record  (R : 𝑹) (es : Env' (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R)
+    | exp_record  (R : 𝑹) (es : NamedEnv (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R)
     | exp_projrec {R : 𝑹} (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
                   {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Exp Γ σ.
     (* | exp_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Exp Γ σ) : Exp Γ τ. *)
@@ -588,14 +588,14 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | @exp_projtup _ σs e n σ p => tuple_proj σs n σ (eval e δ) p
       | exp_union U K e     => 𝑼_fold (existT _ K (eval e δ))
       | exp_record R es     => 𝑹_fold (Env_rect
-                                         (fun σs _ => Env' Lit σs)
+                                         (fun σs _ => NamedEnv Lit σs)
                                          env_nil
                                          (fun σs _ vs _ e => env_snoc vs _ (eval e δ)) es)
       | exp_projrec e rf    => 𝑹_unfold (eval e δ) ‼ rf
       (* | exp_builtin f e     => f (eval e δ) *)
       end.
 
-    Definition evals {Γ Δ} (es : Env' (Exp Γ) Δ) (δ : LocalStore Γ) : LocalStore Δ :=
+    Definition evals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : LocalStore Γ) : LocalStore Δ :=
       env_map (fun xτ e => eval e δ) es.
 
   End Expressions.
@@ -625,7 +625,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
     | stm_let'       (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) {σ : Ty} (k : Stm (ctx_cat Γ Δ) σ) : Stm Γ σ
     | stm_assign     (x : 𝑿) (τ : Ty) {xInΓ : InCtx (x , τ) Γ} (e : Stm Γ τ) : Stm Γ τ
-    | stm_call       {Δ σ} (f : 𝑭 Δ σ) (es : Env' (Exp Γ) Δ) : Stm Γ σ
+    | stm_call       {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ σ
     | stm_call'      (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ) : Stm Γ τ
     | stm_if         {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) : Stm Γ τ
     | stm_seq        {τ : Ty} (e : Stm Γ τ) {σ : Ty} (k : Stm Γ σ) : Stm Γ σ
@@ -704,7 +704,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       end.
 
     Fixpoint record_pattern_match {rfs : Ctx (𝑹𝑭 * Ty)}  {Δ : Ctx (𝑿 * Ty)}
-             (p : RecordPat rfs Δ) {struct p} : Env' Lit rfs -> LocalStore Δ :=
+             (p : RecordPat rfs Δ) {struct p} : NamedEnv Lit rfs -> LocalStore Δ :=
       match p with
       | recordpat_nil => fun _ => env_nil
       | recordpat_snoc p rf x =>
@@ -977,9 +977,15 @@ Module Programs
   Export progkit.
 
   Inductive Contract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
-  | ContractNoFail          (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
-  | ContractTerminateNoFail (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
-  | ContractTerminate       (pre : abstract' Lit Δ (RegStore -> Prop)) (post: abstract' Lit Δ (Lit τ -> RegStore -> Prop))
+  | ContractNoFail
+      (pre : abstract_named Lit Δ (RegStore -> Prop))
+      (post: abstract_named Lit Δ (Lit τ -> RegStore -> Prop))
+  | ContractTerminateNoFail
+      (pre : abstract_named Lit Δ (RegStore -> Prop))
+      (post: abstract_named Lit Δ (Lit τ -> RegStore -> Prop))
+  | ContractTerminate
+      (pre : abstract_named Lit Δ (RegStore -> Prop))
+      (post: abstract_named Lit Δ (Lit τ -> RegStore -> Prop))
   | ContractNone.
 
   Definition ContractEnv : Type :=

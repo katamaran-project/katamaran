@@ -78,14 +78,14 @@ Module WLP
     fun k => ma (fun a δ2 s2 => blast a (fun a' => f a' k δ2 s2)).
   Definition meval {G Γ σ} (e : Exp Γ σ) : DST G LocalStore Γ Γ (Lit σ) :=
     bind get_local (fun δ => pure (eval e δ)).
-  Definition mevals {G Γ Δ} (es : Env' (Exp Γ) Δ) : DST G LocalStore Γ Γ (Env' Lit Δ) :=
+  Definition mevals {G Γ Δ} (es : NamedEnv (Exp Γ) Δ) : DST G LocalStore Γ Γ (NamedEnv Lit Δ) :=
     bind get_local (fun δ => pure (evals es δ)).
 
   Arguments bindblast {_ _ _ _ _ _ _ _ _} _ _ / _ _ _.
   Arguments meval {_ _ _} _ / _ _ _.
   Arguments mevals {_ _ _} _ / _ _ _.
 
-  Local Arguments uncurry' /.
+  Local Arguments uncurry_named /.
 
   (* Notation "ma >>= f" := (bind ma f) (at level 50, left associativity). *)
   Notation "ma !>>= f" := (bindblast ma f) (at level 50, left associativity).
@@ -95,7 +95,7 @@ Module WLP
   Local Open Scope monad_scope.
   Fixpoint WLP Γ τ (s : Stm Γ τ) : DST RegStore LocalStore Γ Γ (Lit τ).
     let body := eval cbn [bind bindblast bindleft bindright get_local put_local assert abort modify_local
-                               push pops pure pop meval pushs mevals lift_cont evalDST Lit uncurry' lift_cont_global] in
+                               push pops pure pop meval pushs mevals lift_cont evalDST Lit uncurry_named lift_cont_global] in
     (match s in (Stm _ τ) return (DST RegStore LocalStore Γ Γ (Lit τ)) with
     | stm_lit _ l => pure l
     | stm_assign x s => WLP _ _ s >>= fun v => modify_local (fun δ => δ ⟪ x ↦ v ⟫) *> pure v
@@ -112,8 +112,8 @@ Module WLP
       mevals es >>= fun δf_in =>
       match CEnv f with
       | ContractNoFail _ _ pre post =>
-        fun POST δin γin => uncurry' pre δf_in γin /\
-                            forall v γout, uncurry' post δf_in v γout -> POST v δin γout
+        fun POST δin γin => uncurry_named pre δf_in γin /\
+                            forall v γout, uncurry_named post δf_in v γout -> POST v δin γout
       | ContractTerminateNoFail _ _ pre post => abort (* NOT IMPLEMENTED *)
       | ContractTerminate _ _ pre post => abort (* NOT IMPLEMENTED *)
       | ContractNone _ _ => abort (* NOT IMPLEMENTED *)

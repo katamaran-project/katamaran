@@ -83,7 +83,7 @@ Module SmallStep
       ⟨ γ , μ , δ , stm_seq (stm_fail τ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail σ s ⟩
 
   | step_stm_call
-      (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {σs σ} {f : 𝑭 σs σ} (es : Env' (Exp Γ) σs) :
+      (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {σs σ} {f : 𝑭 σs σ} (es : NamedEnv (Exp Γ) σs) :
       ⟨ γ , μ , δ , stm_call f es ⟩ --->
       ⟨ γ , μ , δ , stm_call' σs (evals es δ) σ (Pi f) ⟩
   | step_stm_call'_step

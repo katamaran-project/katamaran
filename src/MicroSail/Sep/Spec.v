@@ -101,7 +101,7 @@ Module SymbolicTerms
   | term_projtup {σs : Ctx Ty} (e : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
                  {p : ctx_nth_is σs n σ} : Term Σ σ
   | term_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)) : Term Σ (ty_union U)
-  | term_record  (R : 𝑹) (es : Env' (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R)
+  | term_record  (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R)
   | term_projrec {R : 𝑹} (e : Term Σ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
                 {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Term Σ σ.
   (* | term_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Term Σ σ) : Term Σ τ. *)
@@ -127,7 +127,7 @@ Module SymbolicTerms
       | env_nil => unit
       | env_snoc ts _ t => PE ts * P _ t
       end.
-    Fixpoint PE' (σs : Ctx (𝑹𝑭 * Ty)) (ts : Env' (Term Σ) σs) : Type :=
+    Fixpoint PE' (σs : Ctx (𝑹𝑭 * Ty)) (ts : NamedEnv (Term Σ) σs) : Type :=
       match ts with
       | env_nil => unit
       | env_snoc ts b t => PE' ts * P (snd b) t
@@ -155,7 +155,7 @@ Module SymbolicTerms
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
     Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
     Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union e)).
-    Hypothesis (P_record     : forall (R : 𝑹) (es : Env' (Term Σ) (𝑹𝑭_Ty R)), PE' es -> P (ty_record R) (term_record es)).
+    Hypothesis (P_record     : forall (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)), PE' es -> P (ty_record R) (term_record es)).
     Hypothesis (P_projrec    : forall (R : 𝑹) (e : Term Σ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (term_projrec e)).
 
     Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) : P σ t :=
@@ -302,7 +302,7 @@ Module SymbolicTerms
       | @term_projtup _ _ t _ n p => @term_projtup _ _ (sub_term t) _ n p
       | term_union U K t0         => term_union U K (sub_term t0)
       | term_record R es          => term_record R
-                                                ((fix sub_terms {σs} (ts : Env' (Term Σ1) σs) : Env' (Term Σ2) σs :=
+                                                ((fix sub_terms {σs} (ts : NamedEnv (Term Σ1) σs) : NamedEnv (Term Σ2) σs :=
                                                     match ts with
                                                     | env_nil           => env_nil
                                                     | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
@@ -350,7 +350,7 @@ Module SymbolicPrograms
   Import OutcomeNotations.
   Import ListNotations.
 
-  Definition SymbolicLocalStore (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type := Env' (Term Σ) Γ.
+  Definition SymbolicLocalStore (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type := NamedEnv (Term Σ) Γ.
   Bind Scope env_scope with SymbolicLocalStore.
   Definition SymbolicRegStore (Σ : Ctx (𝑺 * Ty))  : Type := forall σ, 𝑹𝑬𝑮 σ -> Term Σ σ.
 
@@ -386,7 +386,7 @@ Module SymbolicPrograms
     | @exp_projtup _ σs e0 n σ0 p     => @term_projtup _ σs (symbolic_eval_exp e0 δ) n σ0 p
     | @exp_union _ T K e0             => @term_union _ T K (symbolic_eval_exp e0 δ)
     | exp_record R es                 =>
-      let symbolic_eval_exps := fix symbolic_eval_exps {rfs : Ctx (𝑹𝑭 * Ty)} (es : Env' (Exp Γ) rfs) : Env' (Term Σ) rfs :=
+      let symbolic_eval_exps := fix symbolic_eval_exps {rfs : Ctx (𝑹𝑭 * Ty)} (es : NamedEnv (Exp Γ) rfs) : NamedEnv (Term Σ) rfs :=
                       match es with
                       | env_nil => env_nil
                       | env_snoc es σ e => env_snoc (symbolic_eval_exps es) σ (symbolic_eval_exp e δ)
@@ -572,7 +572,7 @@ Module SymbolicSemantics_Mutator
       mutator_modify_local (fun δΓΔ => env_drop Δ δΓΔ).
     Definition mutator_push_local {Σ Γ x} σ (v : Term Σ σ) : Mutator Σ Γ (Γ ▻ (x , σ)) unit :=
       mutator_modify_local (fun δ => env_snoc δ (x , σ) v).
-    Definition mutator_pushs_local {Σ Γ Δ} (δΔ : Env' (Term Σ) Δ) : Mutator Σ Γ (Γ ▻▻ Δ) unit :=
+    Definition mutator_pushs_local {Σ Γ Δ} (δΔ : NamedEnv (Term Σ) Δ) : Mutator Σ Γ (Γ ▻▻ Δ) unit :=
       mutator_modify_local (fun δΓ => env_cat δΓ δΔ).
 
     Definition mutator_get_heap {Σ Γ} : Mutator Σ Γ Γ (SymbolicHeap Σ) :=
@@ -730,35 +730,3 @@ Module SymbolicSemantics_Mutator
 
   End MutatorOperations.
 End SymbolicSemantics_Mutator.
-  (* Section SymbolicExecution. *)
-
-  (*   Import OutcomeNotations. *)
-
-  (*   Inductive sexec {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} (st : SymbolicState Σ Γ) : forall (σ : Ty), Stm Γ σ -> Outcome (Term Σ σ * SymbolicState Σ Γ) -> Prop := *)
-  (*   | sexc_lit {σ : Ty} (v : Lit σ)   : sexec st (stm_lit σ v) (outcome_pure (term_lit _ σ v, st)) *)
-  (*   | sexc_exp {τ : Ty} (e : Exp Γ τ) : sexec st (stm_exp e)   (outcome_pure (symbolic_eval_exp e (symbolicstate_localstore st), st)) *)
-  (*   | sexc_if  {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) (o1 o2 : Outcome (Term Σ τ * SymbolicState Σ Γ)) : *)
-  (*       sexec (symbolic_assume_exp e           st) s1               o1 -> *)
-  (*       sexec (symbolic_assume_exp (exp_not e) st) s2               o2 -> *)
-  (*       sexec st                                   (stm_if e s1 s2) (o1 ⊗ o2)%out *)
-  (*   | sexc_seq {τ σ : Ty} *)
-  (*       (s1 : Stm Γ τ) (o1 : Outcome (Term Σ τ * SymbolicState Σ Γ)) *)
-  (*       (s2 : Stm Γ σ) (o2 : SymbolicState Σ Γ -> Outcome (Term Σ σ * SymbolicState Σ Γ)) : *)
-  (*       sexec st s1 o1 -> *)
-  (*       (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) sexec st' s2 (o2 st')) -> *)
-  (*       (* outcome_satisfy (fun '(t1 , st') => sexec s2 st' (o2 st')) o1 -> *) *)
-  (*       sexec st (stm_seq s1 s2) (o1 >>= fun '(_ , st') => o2 st') *)
-  (*   | sexc_let {x : 𝑿} {τ σ : Ty} *)
-  (*       (s : Stm Γ τ)             (o1 : Outcome _) *)
-  (*       (k : Stm (Γ ▻ (x , τ)) σ) (o2 : SymbolicState Σ (Γ ▻ _) -> Outcome (Term Σ σ * SymbolicState Σ (Γ ▻ _))) : *)
-  (*       sexec st s o1 -> *)
-  (*       (forall (* t1 *) st', (* outcome_in (t1 , st') o1 ->  *) @sexec _ (Γ ▻ _) st' _ k (o2 st')) -> *)
-  (*       sexec st (stm_let x τ s k) *)
-  (*             (o1 >>= fun '(t1 , st1) => *)
-  (*              o2 (symbolic_push_local t1 st1) >>= fun '(t2 , st2) => *)
-  (*                                                    outcome_pure (t2 , symbolic_pop_local st2))%out *)
-  (*   | sexc_call {Δ σ} (f : 𝑭 Δ σ) (es : Env' (Exp Γ) Δ) {Σ' δ req ens} : *)
-  (*       CEnv f = @sep_contract _ _ Σ' δ req ens -> *)
-  (*       sexec st (stm_call f es) (outcome_fail). *)
-
-  (* End SymbolicExecution. *)

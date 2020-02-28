@@ -157,10 +157,10 @@ Section WithBinding.
 
 End WithBinding.
 
-Definition Env' {X T : Set} (D : T -> Type) (Γ : Ctx (X * T)) : Type :=
+Definition NamedEnv {X T : Set} (D : T -> Type) (Γ : Ctx (X * T)) : Type :=
   Env (fun xt => D (snd xt)) Γ.
 Bind Scope env_scope with Env.
-Bind Scope env_scope with Env'.
+Bind Scope env_scope with NamedEnv.
 
 Module EnvNotations.
 
@@ -202,14 +202,14 @@ Section WithB.
 
 End WithB.
 
-Definition abstract' {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) (r : Type) : Type :=
+Definition abstract_named {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) (r : Type) : Type :=
   abstract (fun xt => D (snd xt)) Δ r.
 
-Definition uncurry' {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : abstract' D Δ r) (δ : Env' D Δ) : r :=
+Definition uncurry_named {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : abstract_named D Δ r) (δ : NamedEnv D Δ) : r :=
   uncurry f δ.
 
-Definition curry' {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : Env' D Δ -> r) : abstract' D Δ r :=
+Definition curry_named {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : NamedEnv D Δ -> r) : abstract_named D Δ r :=
   curry f.
 
-Fixpoint Forall' {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) {struct Δ} : (Env' D Δ -> Prop) -> Prop :=
+Fixpoint ForallNamed {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) {struct Δ} : (NamedEnv D Δ -> Prop) -> Prop :=
   @Forall (X * T) (fun xt => D (snd xt)) Δ.

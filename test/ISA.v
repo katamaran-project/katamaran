@@ -155,12 +155,12 @@ Module ISATermKit <: (TermKit ISATypeKit).
   (** RECORDS **)
   Definition 𝑹𝑭  : Set := Empty_set.
   Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) := match R with end.
-  Definition 𝑹_fold (R : 𝑹) : Env' Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
-  Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> Env' Lit (𝑹𝑭_Ty R) := match R with end.
+  Definition 𝑹_fold (R : 𝑹) : NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
+  Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) := match R with end.
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold R (𝑹_unfold R Kv) = Kv.
   Proof. intros []. Qed.
-  Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: Env' Lit (𝑹𝑭_Ty R)),
+  Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
       𝑹_unfold R (𝑹_fold R Kv) = Kv.
   Proof. intros []. Qed.
 
