@@ -349,8 +349,7 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
       else if: address = int_lit 3 then stm_write_memory A3 mem_value
       else     stm_fail _ "read_register: invalid register"
     (* an [int] represents a valid address if it is >= [Memory_lb] and < [Memory_hb] *)
-    | in_bounds => exp_and (exp_or (address = Memory_lb) (address > Memory_lb))
-                          (address < Memory_hb)
+    | in_bounds => ((address = Memory_lb) || (address > Memory_lb)) && (address < Memory_hb)
     | semantics => (@stm_match_union _ instruction instr _
         (fun K => match K with
                | KHalt => ""

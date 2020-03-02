@@ -76,13 +76,12 @@ Module TermEqbSoundness
         destruct (H t2)
       end; try constructor; try congruence.
 
-  Lemma Term_eqb_spec :
-    forall Σ (σ : Ty) (t1 t2 : Term Σ σ),
-      reflect (t1 = t2) (Term_eqb t1 t2).
+  Local Transparent Term_eqb.
+  Lemma Term_eqb_spec Σ (σ : Ty) (t1 t2 : Term Σ σ) :
+    reflect (t1 = t2) (Term_eqb t1 t2).
   Proof.
-    intros.
-    induction t1 using Term_rect; dependent destruction t2; simp Term_eqb; cbn in *;
-    Term_eqb_spec_solve.
+    induction t1 using Term_rect; cbn [Term_eqb]; dependent destruction t2;
+      cbn in *; Term_eqb_spec_solve.
     - unfold InCtx_eqb.
       repeat match goal with
              | |- context[?m =? ?n] => destruct (Nat.eqb_spec m n)
@@ -105,9 +104,11 @@ Module TermEqbSoundness
         pose proof 𝑺_eq_dec; pose proof Ty_eq_dec.
         unfold EqDec. decide equality.
       + inversion 1. congruence.
-    - Term_eqb_spec_solve.
-    - Term_eqb_spec_solve.
-    - Term_eqb_spec_solve.
+    - destruct (binop_eq_dec op op0) as [e|ne]; cbn.
+      + dependent destruction e; cbn.
+        repeat Term_eqb_spec_solve.
+      + Term_eqb_spec_solve.
+        apply ne. Term_eqb_spec_solve.
     - revert es0.
       induction es as [|x xs]; intros [|y ys]; cbn in *; try (constructor; congruence).
       + constructor. intros ?. dependent destruction H.
@@ -116,9 +117,6 @@ Module TermEqbSoundness
         specialize (IHxs x2 ys).
         specialize (x1 y).
         Term_eqb_spec_solve.
-    - Term_eqb_spec_solve.
-    - Term_eqb_spec_solve.
-    - Term_eqb_spec_solve.
     - admit.
     - admit.
     - destruct (𝑼𝑲_eq_dec K K0); cbn.

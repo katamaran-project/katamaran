@@ -63,7 +63,8 @@ Module Soundness
       repeat
         match goal with
         | [ IH: forall e, ?t = ?t -> ?e1 ~= e -> _ |- _ ] =>
-          specialize (IH _ eq_refl JMeq_refl)
+          specialize (IH _ eq_refl JMeq_refl); cbn in *
+        | [ |- context[match ?e with _ => _ end]] => dependent destruction e
         end;
       repeat rewrite ?Z.eqb_eq, ?Z.eqb_neq, ?Z.leb_gt, ?Z.ltb_ge, ?Z.ltb_lt,
       ?Z.leb_le, ?Z.gtb_ltb, ?Bool.andb_true_iff, ?Bool.andb_false_iff,

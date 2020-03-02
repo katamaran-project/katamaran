@@ -360,7 +360,7 @@ Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.
 Ltac wlp_cbv :=
   cbv [Blastable_𝑬𝑲 CEnv Forall Lit ValidContract WLP abstract blast
        blastable_lit env_lookup env_map env_update eval evals inctx_case_snoc
-       snd uncurry eval_prop_true eval_prop_false
+       snd uncurry eval_prop_true eval_prop_false eval_binop
       ].
 
 Ltac validate_solve :=

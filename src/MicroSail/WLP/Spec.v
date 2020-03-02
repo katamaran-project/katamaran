@@ -52,23 +52,23 @@ Module WLP
 
   Fixpoint eval_prop_true {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) {struct e} : Prop -> Prop :=
     match e return Prop -> Prop -> Prop with
-    | exp_eq e1 e2 => fun _ k => eval e1 δ = eval e2 δ -> k
-    | exp_le e1 e2 => fun _ k => eval e1 δ <= eval e2 δ -> k
-    | exp_lt e1 e2 => fun _ k => eval e1 δ < eval e2 δ -> k
-    | exp_gt e1 e2 => fun _ k => eval e1 δ > eval e2 δ -> k
-    | exp_and e1 e2 => fun _ k => eval_prop_true e1 δ (eval_prop_true e2 δ k)
-    | exp_or e1 e2 => fun _ k => eval_prop_true e1 δ k /\ eval_prop_true e2 δ k
+    | exp_binop binop_eq e1 e2 => fun _ k => eval e1 δ = eval e2 δ -> k
+    | exp_binop binop_le e1 e2 => fun _ k => eval e1 δ <= eval e2 δ -> k
+    | exp_binop binop_lt e1 e2 => fun _ k => eval e1 δ < eval e2 δ -> k
+    | exp_binop binop_gt e1 e2 => fun _ k => eval e1 δ > eval e2 δ -> k
+    | exp_binop binop_and e1 e2 => fun _ k => eval_prop_true e1 δ (eval_prop_true e2 δ k)
+    | exp_binop binop_or e1 e2 => fun _ k => eval_prop_true e1 δ k /\ eval_prop_true e2 δ k
     | exp_not e => fun _ k => eval_prop_false e δ k
     | _ => fun e k => e -> k
     end (eval e δ = true)
   with eval_prop_false {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) {struct e} : Prop -> Prop :=
     match e return Prop -> Prop -> Prop with
-    | exp_eq e1 e2 => fun _ k => eval e1 δ <> eval e2 δ -> k
-    | exp_le e1 e2 => fun _ k => eval e1 δ > eval e2 δ -> k
-    | exp_lt e1 e2 => fun _ k => eval e1 δ >= eval e2 δ -> k
-    | exp_gt e1 e2 => fun _ k => eval e1 δ <= eval e2 δ -> k
-    | exp_and e1 e2 => fun _ k => eval_prop_false e1 δ k /\ eval_prop_false e2 δ k
-    | exp_or e1 e2 => fun _ k => eval_prop_false e1 δ (eval_prop_false e2 δ k)
+    | exp_binop binop_eq e1 e2 => fun _ k => eval e1 δ <> eval e2 δ -> k
+    | exp_binop binop_le e1 e2 => fun _ k => eval e1 δ > eval e2 δ -> k
+    | exp_binop binop_lt e1 e2 => fun _ k => eval e1 δ >= eval e2 δ -> k
+    | exp_binop binop_gt e1 e2 => fun _ k => eval e1 δ <= eval e2 δ -> k
+    | exp_binop binop_and e1 e2 => fun _ k => eval_prop_false e1 δ k /\ eval_prop_false e2 δ k
+    | exp_binop binop_or e1 e2 => fun _ k => eval_prop_false e1 δ (eval_prop_false e2 δ k)
     | exp_not e => fun _ k => eval_prop_true e δ k
     | _ => fun e k => e -> k
     end (eval e δ = false).
