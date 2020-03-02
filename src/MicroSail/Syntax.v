@@ -245,6 +245,9 @@ Module Types (Export typekit : TypeKit).
       intuition congruence.
   Qed.
 
+  Lemma Ty_K (σ : Ty) (p : σ = σ) : p = eq_refl.
+  Proof. apply (@uip Ty (EqDec.eqdec_uip Ty_eq_dec)). Qed.
+
   Fixpoint Lit (σ : Ty) : Type :=
     match σ with
     | ty_int => Z
@@ -438,6 +441,19 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   Section Expressions.
 
+    Inductive BinOp : Ty -> Ty -> Ty -> Set :=
+    | binop_plus              : BinOp ty_int ty_int ty_int
+    | binop_times             : BinOp ty_int ty_int ty_int
+    | binop_minus             : BinOp ty_int ty_int ty_int
+    | binop_eq                : BinOp ty_int ty_int ty_bool
+    | binop_le                : BinOp ty_int ty_int ty_bool
+    | binop_lt                : BinOp ty_int ty_int ty_bool
+    | binop_gt                : BinOp ty_int ty_int ty_bool
+    | binop_and               : BinOp ty_bool ty_bool ty_bool
+    | binop_or                : BinOp ty_bool ty_bool ty_bool
+    | binop_pair {σ1 σ2 : Ty} : BinOp σ1 σ2 (ty_prod σ1 σ2)
+    | binop_cons {σ : Ty}     : BinOp σ (ty_list σ) (ty_list σ).
+
     (* Intrinsically well-typed expressions. The context Γ of mutable variables
        contains names 𝑿 and types Ty, but the names are not computationally
        relevant. The underlying representation is still a de Bruijn index based
@@ -453,22 +469,12 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Inductive Exp (Γ : Ctx (𝑿 * Ty)) : Ty -> Type :=
     | exp_var     (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} : Exp Γ σ
     | exp_lit     (σ : Ty) : Lit σ -> Exp Γ σ
-    | exp_plus    (e1 e2 : Exp Γ ty_int) : Exp Γ ty_int
-    | exp_times   (e1 e2 : Exp Γ ty_int) : Exp Γ ty_int
-    | exp_minus   (e1 e2 : Exp Γ ty_int) : Exp Γ ty_int
+    | exp_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ σ3
     | exp_neg     (e : Exp Γ ty_int) : Exp Γ ty_int
-    | exp_eq      (e1 e2 : Exp Γ ty_int) : Exp Γ ty_bool
-    | exp_le      (e1 e2 : Exp Γ ty_int) : Exp Γ ty_bool
-    | exp_lt      (e1 e2 : Exp Γ ty_int) : Exp Γ ty_bool
-    | exp_gt      (e1 e2 : Exp Γ ty_int) : Exp Γ ty_bool
-    | exp_and     (e1 e2 : Exp Γ ty_bool) : Exp Γ ty_bool
-    | exp_or      (e1 e2 : Exp Γ ty_bool) : Exp Γ ty_bool
     | exp_not     (e : Exp Γ ty_bool) : Exp Γ ty_bool
-    | exp_pair    {σ1 σ2 : Ty} (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ (ty_prod σ1 σ2)
     | exp_inl     {σ1 σ2 : Ty} : Exp Γ σ1 -> Exp Γ (ty_sum σ1 σ2)
     | exp_inr     {σ1 σ2 : Ty} : Exp Γ σ2 -> Exp Γ (ty_sum σ1 σ2)
     | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty_list σ)
-    | exp_cons    {σ : Ty} (h : Exp Γ σ) (t : Exp Γ (ty_list σ)) : Exp Γ (ty_list σ)
     | exp_nil     {σ : Ty} : Exp Γ (ty_list σ)
     (* Experimental features *)
     | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty_tuple σs)
@@ -502,26 +508,31 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                          end
       end.
 
+    Definition eval_binop {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Lit σ1 -> Lit σ2 -> Lit σ3 :=
+      match op with
+      | binop_plus  => Z.add
+      | binop_times => Z.mul
+      | binop_minus => Z.sub
+      | binop_eq    => Z.eqb
+      | binop_le    => Z.leb
+      | binop_lt    => Z.ltb
+      | binop_gt    => Z.gtb
+      | binop_and   => andb
+      | binop_or    => fun v1 v2 => orb v1 v2
+      | binop_pair  => pair
+      | binop_cons  => cons
+      end.
+
     Fixpoint eval {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
       match e in (Exp _ t) return (Lit t) with
       | exp_var x           => δ ‼ x
       | exp_lit _ _ l       => l
-      | exp_plus e1 e2      => Z.add (eval e1 δ) (eval e2 δ)
-      | exp_times e1 e2     => Z.mul (eval e1 δ) (eval e2 δ)
-      | exp_minus e1 e2     => Z.sub (eval e1 δ) (eval e2 δ)
+      | exp_binop op e1 e2  => eval_binop op (eval e1 δ) (eval e2 δ)
       | exp_neg e           => Z.opp (eval e δ)
-      | exp_eq e1 e2        => Z.eqb (eval e1 δ) (eval e2 δ)
-      | exp_le e1 e2        => Z.leb (eval e1 δ) (eval e2 δ)
-      | exp_lt e1 e2        => Z.ltb (eval e1 δ) (eval e2 δ)
-      | exp_gt e1 e2        => Z.gtb (eval e1 δ) (eval e2 δ)
-      | exp_and e1 e2       => andb (eval e1 δ) (eval e2 δ)
-      | exp_or e1 e2        => orb (eval e1 δ) (eval e2 δ)
       | exp_not e           => negb (eval e δ)
-      | exp_pair e1 e2      => pair (eval e1 δ) (eval e2 δ)
       | exp_inl e           => inl (eval e δ)
       | exp_inr e           => inr (eval e δ)
       | exp_list es         => List.map (fun e => eval e δ) es
-      | exp_cons e1 e2      => cons (eval e1 δ) (eval e2 δ)
       | exp_nil _           => nil
       | exp_tuple es        => Env_rect
                                  (fun σs _ => Lit (ty_tuple σs))
@@ -798,13 +809,14 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   End GenericRegStore.
 
-  Notation "e1 && e2" := (exp_and e1 e2) : exp_scope.
-  Notation "e1 * e2" := (exp_times e1 e2) : exp_scope.
-  Notation "e1 - e2" := (exp_minus e1 e2) : exp_scope.
-  Notation "e1 < e2" := (exp_lt e1 e2) : exp_scope.
-  Notation "e1 > e2" := (exp_gt e1 e2) : exp_scope.
-  Notation "e1 <= e2" := (exp_le e1 e2) : exp_scope.
-  Notation "e1 = e2" := (exp_eq e1 e2) : exp_scope.
+  Notation "e1 && e2" := (exp_binop binop_and e1 e2) : exp_scope.
+  Notation "e1 || e2" := (exp_binop binop_or e1 e2) : exp_scope.
+  Notation "e1 * e2" := (exp_binop binop_times e1 e2) : exp_scope.
+  Notation "e1 - e2" := (exp_binop binop_minus e1 e2) : exp_scope.
+  Notation "e1 < e2" := (exp_binop binop_lt e1 e2) : exp_scope.
+  Notation "e1 > e2" := (exp_binop binop_gt e1 e2) : exp_scope.
+  Notation "e1 <= e2" := (exp_binop binop_le e1 e2) : exp_scope.
+  Notation "e1 = e2" := (exp_binop binop_eq e1 e2) : exp_scope.
   Notation "- e" := (exp_neg e) : exp_scope.
   Notation "'lit_int' l" := (exp_lit _ ty_int l) (at level 1, no associativity) : exp_scope.
 

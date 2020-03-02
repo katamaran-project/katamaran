@@ -79,22 +79,12 @@ Module SymbolicTerms
   Inductive Term (Σ : Ctx (𝑺 * Ty)) : Ty -> Type :=
   | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : InCtx (ς , σ) Σ} : Term Σ σ
   | term_lit     (σ : Ty) : Lit σ -> Term Σ σ
-  | term_plus    (e1 e2 : Term Σ ty_int) : Term Σ ty_int
-  | term_times   (e1 e2 : Term Σ ty_int) : Term Σ ty_int
-  | term_minus   (e1 e2 : Term Σ ty_int) : Term Σ ty_int
+  | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
   | term_neg     (e : Term Σ ty_int) : Term Σ ty_int
-  | term_eq      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool
-  | term_le      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool
-  | term_lt      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool
-  | term_gt      (e1 e2 : Term Σ ty_int) : Term Σ ty_bool
-  | term_and     (e1 e2 : Term Σ ty_bool) : Term Σ ty_bool
-  | term_or      (e1 e2 : Term Σ ty_bool) : Term Σ ty_bool
   | term_not     (e : Term Σ ty_bool) : Term Σ ty_bool
-  | term_pair    {σ1 σ2 : Ty} (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ (ty_prod σ1 σ2)
   | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty_sum σ1 σ2)
   | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2)
   | term_list    {σ : Ty} (es : list (Term Σ σ)) : Term Σ (ty_list σ)
-  | term_cons    {σ : Ty} (h : Term Σ σ) (t : Term Σ (ty_list σ)) : Term Σ (ty_list σ)
   | term_nil     {σ : Ty} : Term Σ (ty_list σ)
   (* Experimental features *)
   | term_tuple   {σs : Ctx Ty} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs)
@@ -135,22 +125,12 @@ Module SymbolicTerms
 
     Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : (ς ∶ σ)%ctx ∈ Σ), P σ (term_var ς σ)).
     Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit Σ σ l)).
-    Hypothesis (P_plus       : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_plus e1 e2)).
-    Hypothesis (P_times      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_times e1 e2)).
-    Hypothesis (P_minus      : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_int (term_minus e1 e2)).
+    Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
     Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)).
-    Hypothesis (P_eq         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_eq e1 e2)).
-    Hypothesis (P_le         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_le e1 e2)).
-    Hypothesis (P_lt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_lt e1 e2)).
-    Hypothesis (P_gt         : forall e1 : Term Σ ty_int, P ty_int e1 -> forall e2 : Term Σ ty_int, P ty_int e2 -> P ty_bool (term_gt e1 e2)).
-    Hypothesis (P_and        : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_and e1 e2)).
-    Hypothesis (P_or         : forall e1 : Term Σ ty_bool, P ty_bool e1 -> forall e2 : Term Σ ty_bool, P ty_bool e2 -> P ty_bool (term_or e1 e2)).
     Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)).
-    Hypothesis (P_pair       : forall (σ1 σ2 : Ty) (e1 : Term Σ σ1), P σ1 e1 -> forall e2 : Term Σ σ2, P σ2 e2 -> P (ty_prod σ1 σ2) (term_pair e1 e2)).
     Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
     Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
     Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
-    Hypothesis (P_cons       : forall (σ : Ty) (h : Term Σ σ), P σ h -> forall t : Term Σ (ty_list σ), P (ty_list σ) t -> P (ty_list σ) (term_cons h t)).
     Hypothesis (P_nil        : forall σ : Ty, P (ty_list σ) (term_nil Σ)).
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
     Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
@@ -162,22 +142,12 @@ Module SymbolicTerms
       match t with
       | @term_var _ ς σ ςInΣ           => ltac:(eapply P_var; eauto)
       | @term_lit _ σ x                => ltac:(eapply P_lit; eauto)
-      | @term_plus _ e1 e2             => ltac:(eapply P_plus; eauto)
-      | @term_times _ e1 e2            => ltac:(eapply P_times; eauto)
-      | @term_minus _ e1 e2            => ltac:(eapply P_minus; eauto)
+      | term_binop op e1 e2            => ltac:(eapply P_binop; eauto)
       | @term_neg _ e                  => ltac:(eapply P_neg; eauto)
-      | @term_eq _ e1 e2               => ltac:(eapply P_eq; eauto)
-      | @term_le _ e1 e2               => ltac:(eapply P_le; eauto)
-      | @term_lt _ e1 e2               => ltac:(eapply P_lt; eauto)
-      | @term_gt _ e1 e2               => ltac:(eapply P_gt; eauto)
-      | @term_and _ e1 e2              => ltac:(eapply P_and; eauto)
-      | @term_or _ e1 e2               => ltac:(eapply P_or; eauto)
       | @term_not _ e                  => ltac:(eapply P_not; eauto)
-      | @term_pair _ σ1 σ2 e1 e2       => ltac:(eapply P_pair; eauto)
       | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
       | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
       | @term_list _ σ es              => ltac:(eapply P_list; induction es; cbn; eauto using unit)
-      | @term_cons _ σ h t             => ltac:(eapply P_cons; eauto)
       | @term_nil _ σ                  => ltac:(eapply P_nil; eauto)
       | @term_tuple _ σs es            => ltac:(eapply P_tuple; induction es; cbn; eauto using unit)
       | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
@@ -196,36 +166,70 @@ Module SymbolicTerms
              (ς2inΣ : InCtx (ς2, σ) Σ) : bool :=
     Nat.eqb (@inctx_at _ _ _ ς1inΣ) (@inctx_at _ _ _ ς2inΣ).
 
-  Equations Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
+  Definition binop_eqb {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) : bool :=
+    match op1 , op2 with
+    | binop_plus  , binop_plus   => true
+    | binop_times , binop_times  => true
+    | binop_minus , binop_minus  => true
+    | binop_eq    , binop_eq     => true
+    | binop_le    , binop_le     => true
+    | binop_lt    , binop_lt     => true
+    | binop_gt    , binop_gt     => true
+    | binop_and   , binop_and    => true
+    | binop_or    , binop_or     => true
+    | binop_pair  , binop_pair   => if Ty_eq_dec σ3 τ3 then true else false
+    | binop_cons  , binop_cons   => if Ty_eq_dec σ3 τ3 then true else false
+    | _           , _            => false
+    end.
+
+  Inductive OpEq {σ1 σ2 σ3} (op1 : BinOp σ1 σ2 σ3) : forall τ1 τ2 τ3, BinOp τ1 τ2 τ3 -> Prop :=
+  | opeq_refl : OpEq op1 op1.
+  Derive Signature for OpEq.
+
+  Arguments opeq_refl {_ _ _ _}.
+
+  Lemma binop_eqb_spec {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
+    reflect (OpEq op1 op2) (binop_eqb op1 op2).
+  Proof.
+    destruct op1, op2; cbn;
+      try (destruct Ty_eq_dec);
+      try match goal with
+          | H: ty_prod _ _ = ty_prod _ _ |- _ => inversion H; subst; clear H
+          | H: ty_list _   = ty_list _   |- _ => inversion H; subst; clear H
+          end;
+      first
+        [ constructor; constructor
+        | constructor;
+          let H := fresh in
+          intro H;
+          dependent destruction H;
+          congruence
+        ].
+  Defined.
+
+  Lemma binop_eq_dec {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
+    {OpEq op1 op2} + {~ OpEq op1 op2}.
+  Proof.
+    destruct (binop_eqb_spec op1 op2).
+    - left; auto.
+    - right; auto.
+  Defined.
+
+  Equations(noeqns) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
     Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
       InCtx_eqb ς1inΣ ς2inΣ;
     Term_eqb (term_lit _ l1) (term_lit _ l2) := Lit_eqb _ l1 l2;
-    Term_eqb (term_plus x1 y1) (term_plus x2 y2) := Term_eqb x1 x2 &&
-                                                    Term_eqb y1 y2;
-    Term_eqb (term_times x1 y1) (term_times x2 y2) := Term_eqb x1 x2 &&
-                                                      Term_eqb y1 y2;
-    Term_eqb (term_minus x1 y1) (term_minus x2 y2) := Term_eqb x1 x2 &&
-                                                      Term_eqb y1 y2;
+    Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
+      with binop_eq_dec op1 op2 => {
+      Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (left opeq_refl) :=
+        Term_eqb x1 x2 && Term_eqb y1 y2;
+      Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (right _) := false
+    };
     Term_eqb (term_neg x) (term_neg y) := Term_eqb x y;
-    Term_eqb (term_eq x1 y1) (term_eq x2 y2) := Term_eqb x1 x2 &&
-                                                Term_eqb y1 y2;
-    Term_eqb (term_le x1 y1) (term_le x2 y2) := Term_eqb x1 x2 &&
-                                                Term_eqb y1 y2;
-    Term_eqb (term_lt x1 y1) (term_lt x2 y2) := Term_eqb x1 x2 &&
-                                                Term_eqb y1 y2;
-    Term_eqb (term_gt x1 y1) (term_gt x2 y2) := Term_eqb x1 x2 &&
-                                                Term_eqb y1 y2;
-    Term_eqb (term_and x1 y1) (term_and x2 y2) := Term_eqb x1 x2 &&
-                                                  Term_eqb y1 y2;
-    Term_eqb (term_or x1 y1) (term_or x2 y2) := Term_eqb x1 x2 &&
-                                                Term_eqb y1 y2;
     Term_eqb (term_not x) (term_not y) := Term_eqb x y;
-    Term_eqb (term_pair x1 y1) (term_pair x2 y2) := Term_eqb x1 x2 &&
-                                                    Term_eqb y1 y2;
     Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
     Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
     Term_eqb (term_list xs) (term_list ys) := list_beq Term_eqb xs ys;
-    Term_eqb (term_cons x xs) (term_cons y ys) := Term_eqb x y && Term_eqb xs ys;
     Term_eqb (@term_nil _) (@term_nil _) := true;
     Term_eqb (term_tuple x) (term_tuple y) :=
        @env_beq _ (Term Σ) (@Term_eqb _) _ x y;
@@ -270,18 +274,9 @@ Module SymbolicTerms
       match t in (Term _ t0) return (Term Σ2 t0) with
       | @term_var _ ς σ0 ςInΣ     => ζ ςInΣ
       | term_lit _ σ0 l           => term_lit Σ2 σ0 l
-      | term_plus t1 t2           => term_plus (sub_term t1) (sub_term t2)
-      | term_times t1 t2          => term_times (sub_term t1) (sub_term t2)
-      | term_minus t1 t2          => term_minus (sub_term t1) (sub_term t2)
+      | term_binop op t1 t2       => term_binop op (sub_term t1) (sub_term t2)
       | term_neg t0               => term_neg (sub_term t0)
-      | term_eq t1 t2             => term_eq (sub_term t1) (sub_term t2)
-      | term_le t1 t2             => term_le (sub_term t1) (sub_term t2)
-      | term_lt t1 t2             => term_lt (sub_term t1) (sub_term t2)
-      | term_gt t1 t2             => term_gt (sub_term t1) (sub_term t2)
-      | term_and t1 t2            => term_and (sub_term t1) (sub_term t2)
-      | term_or t1 t2             => term_or (sub_term t1) (sub_term t2)
       | term_not t0               => term_not (sub_term t0)
-      | @term_pair _ σ1 σ2 t1 t2  => term_pair (sub_term t1) (sub_term t2)
       | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0)
       | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
       | @term_list _ σ es         => term_list
@@ -290,7 +285,6 @@ Module SymbolicTerms
                                           | nil       => nil
                                           | cons t ts => cons (sub_term t) (sub_terms ts)
                                           end) es)
-      | term_cons t1 t2           => term_cons (sub_term t1) (sub_term t2)
       | term_nil _                => term_nil Σ2
       | term_tuple es             => term_tuple
                                       ((fix sub_terms {σs} (ts : Env (Term Σ1) σs) : Env (Term Σ2) σs :=
@@ -359,22 +353,12 @@ Module SymbolicPrograms
     match e in (Exp _ t) return (Term Σ t) with
     | exp_var ς                       => (δ ‼ ς)%lit
     | exp_lit _ σ0 l                  => term_lit _ σ0 l
-    | exp_plus e1 e2                  => term_plus (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
-    | exp_times e1 e2                 => term_times (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
-    | exp_minus e1 e2                 => term_minus (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
-    | exp_neg e0                      => term_neg (symbolic_eval_exp  e0 δ)
-    | exp_eq e1 e2                    => term_eq (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
-    | exp_le e1 e2                    => term_le (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
-    | exp_lt e1 e2                    => term_lt (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
-    | exp_gt e1 e2                    => term_gt (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
-    | exp_and e1 e2                   => term_and (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
-    | exp_or e1 e2                    => term_or (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
-    | exp_not e0                      => term_not (symbolic_eval_exp  e0 δ)
-    | exp_pair e1 e2                  => term_pair (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
-    | @exp_inl _ σ1 σ2 e0             => @term_inl _ σ1 σ2 (symbolic_eval_exp  e0 δ)
-    | @exp_inr _ σ1 σ2 e0             => @term_inr _ σ1 σ2 (symbolic_eval_exp  e0 δ)
-    | @exp_list _ σ0 es               => term_list (List.map (fun e : Exp Γ σ0 => symbolic_eval_exp  e δ) es)
-    | exp_cons e1 e2                  => term_cons (symbolic_eval_exp  e1 δ) (symbolic_eval_exp  e2 δ)
+    | exp_binop op e1 e2              => term_binop op (symbolic_eval_exp e1 δ) (symbolic_eval_exp e2 δ)
+    | exp_neg e0                      => term_neg (symbolic_eval_exp e0 δ)
+    | exp_not e0                      => term_not (symbolic_eval_exp e0 δ)
+    | @exp_inl _ σ1 σ2 e0             => @term_inl _ σ1 σ2 (symbolic_eval_exp e0 δ)
+    | @exp_inr _ σ1 σ2 e0             => @term_inr _ σ1 σ2 (symbolic_eval_exp e0 δ)
+    | @exp_list _ σ0 es               => term_list (List.map (fun e : Exp Γ σ0 => symbolic_eval_exp e δ) es)
     | @exp_nil _ σ0                   => term_nil _
     | @exp_tuple _ σs es              =>
       let symbolic_eval_exps := fix symbolic_eval_exps {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Env (Term Σ) σs :=
