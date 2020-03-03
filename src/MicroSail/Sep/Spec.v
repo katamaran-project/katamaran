@@ -48,10 +48,10 @@ Delimit Scope mutator_scope with mut.
 
 Module Type SymbolicTermKit
        (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit).
-  Module TM := Terms typekit termkit.
-  Export TM.
-       (* (Import progkit : ProgramKit typekit termkit). *)
+       (Import termkit : TermKit typekit)
+       (Import progkit : ProgramKit typekit termkit).
+  Module PM := Programs typekit termkit progkit.
+  Export PM.
 
   Parameter Inline 𝑺 : Set. (* input: \MIS *)
   Parameter Inline 𝑺_eq_dec : forall (s1 s2 : 𝑺), {s1=s2}+{~s1=s2}.
@@ -67,8 +67,8 @@ End SymbolicTermKit.
 Module SymbolicTerms
        (typekit : TypeKit)
        (termkit : TermKit typekit)
-       (symtermkit : SymbolicTermKit typekit termkit).
-
+       (progkit : ProgramKit typekit termkit)
+       (symtermkit : SymbolicTermKit typekit termkit progkit).
   Export symtermkit.
 
   Import CtxNotations.
@@ -215,7 +215,7 @@ Module SymbolicTerms
     - right; auto.
   Defined.
 
-  Equations(noeqns) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
+  Equations(noind) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
     Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
       InCtx_eqb ς1inΣ ς2inΣ;
     Term_eqb (term_lit _ l1) (term_lit _ l2) := Lit_eqb _ l1 l2;
@@ -334,9 +334,10 @@ End SymbolicTerms.
 Module SymbolicPrograms
        (Import typekit : TypeKit)
        (Import termkit : TermKit typekit)
-       (Import symtermkit : SymbolicTermKit typekit termkit).
+       (Import progkit : ProgramKit typekit termkit)
+       (Import symtermkit : SymbolicTermKit typekit termkit progkit).
 
-  Module STs := SymbolicTerms typekit termkit symtermkit.
+  Module STs := SymbolicTerms typekit termkit progkit symtermkit.
   Export STs.
 
   Import CtxNotations.
@@ -400,7 +401,8 @@ Module SymbolicPrograms
 
   Inductive SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
   | sep_contract_unit   {Σ} (δ : SymbolicLocalStore Σ Δ) (req : Assertion Σ) (ens : Assertion Σ) (e : τ = ty_unit)
-  | sep_contract_result {Σ} (δ : SymbolicLocalStore Σ Δ) (result : 𝑺) (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ))).
+  | sep_contract_result {Σ} (δ : SymbolicLocalStore Σ Δ) (result : 𝑺) (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ)))
+  | sep_contract_none.
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.
@@ -474,11 +476,11 @@ End SymbolicPrograms.
 Module SymbolicSemantics_Mutator
     (typekit : TypeKit)
     (termkit : TermKit typekit)
-    (symtermkit : SymbolicTermKit typekit termkit).
-  Import typekit.
-  Import termkit.
+    (progkit : ProgramKit typekit termkit)
+    (symtermkit : SymbolicTermKit typekit termkit progkit).
+  Import progkit.
 
-  Module SP := SymbolicPrograms typekit termkit symtermkit.
+  Module SP := SymbolicPrograms typekit termkit progkit symtermkit.
   Export SP.
 
   Import CtxNotations.
@@ -586,40 +588,32 @@ Module SymbolicSemantics_Mutator
     Definition mutator_produce_chunk {Σ Γ} (c : Chunk Σ) : Mutator Σ Γ Γ unit :=
       mutator_modify_heap (fun h => c :: h).
 
-    Equations chunk_eqb {Σ} {ctx : Ctx Ty}
-             (c1 : Env (Term Σ) ctx) (c2 : Env (Term Σ) ctx) : bool :=
-        chunk_eqb env_nil env_nil  := true;
-        chunk_eqb (env_snoc xs ?(σ) x) (env_snoc ys σ y) :=
-          Term_eqb x y && chunk_eqb xs ys.
+    Equations chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
+      chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2)
+      with 𝑷_eq_dec p1 p2 => {
+        chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) :=
+          env_beq (@Term_eqb _) ts1 ts2;
+        chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (right _) := false
+      };
+      chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
+      with 𝑹𝑬𝑮_eq_dec r1 r2 => {
+        chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left (@teq_refl eq_refl eq_refl)) := Term_eqb t1 t2;
+        chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := false
+      };
+      chunk_eqb _ _ := false.
 
-    Program Fixpoint outcome_consume_chunk {Σ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
-        (h : SymbolicHeap Σ) : Outcome (SymbolicHeap Σ) :=
-      let fix go h unconsumed {struct h} : Outcome (SymbolicHeap Σ) :=
-          match h return Outcome (SymbolicHeap Σ) with
-          | nil => outcome_pure unconsumed
-          | cons x xs =>
-            match x with
-            | chunk_pred p' ts' =>
-              match (𝑷_eq_dec p p') with
-              | left e => let c := ltac:(rewrite e in *; exact (chunk_eqb ts ts'))
-                         in if c then go xs unconsumed else go xs (x :: unconsumed)
-              | right _ => go xs (x :: unconsumed)
-              end
-            | chunk_ptsreg r t =>
-              go xs (x :: unconsumed)
-            end
-          end
-      in go h nil.
-    Arguments outcome_consume_chunk {_} _ _ _.
+    Fixpoint outcome_consume_chunk {Σ} (c : Chunk Σ) (h : SymbolicHeap Σ) : Outcome (SymbolicHeap Σ) :=
+      match h with
+      | nil      => outcome_fail
+      | c' :: h' => if chunk_eqb c c'
+                    then outcome_pure h'
+                    else outcome_map (cons c') (outcome_consume_chunk c h')
+      end.
 
     Definition mutator_consume_chunk {Σ Γ} (c : Chunk Σ) : Mutator Σ Γ Γ unit :=
-      match c with
-      | chunk_pred p ts => fun '(MkSymbolicState Φ δ h) =>
-                             outcome_bind
-                               (outcome_consume_chunk p ts h)
-                               (fun h' => outcome_pure (tt , MkSymbolicState Φ δ h' , nil))
-      | chunk_ptsreg r t => mutator_fail
-      end.
+      fun '(MkSymbolicState Φ δ h) =>
+        (outcome_consume_chunk c h >>= fun h' =>
+         outcome_pure (tt , MkSymbolicState Φ δ h' , nil))%out.
 
     Fixpoint mutator_produce {Σ Γ} (asn : Assertion Σ) : Mutator Σ Γ Γ unit :=
       match asn with
@@ -665,6 +659,7 @@ Module SymbolicSemantics_Mutator
             mutator_produce (sub_assertion ζ ens) *>
             mutator_pure (term_lit Σ _ (@eq_rect_r Ty ty_unit Lit tt _ e))
         | @sep_contract_result _ _ Σ' δ result req ens => _
+        | sep_contract_none _ _ => _
         end
       | stm_call' Δ δ' τ s =>
         mutator_get_local                                      >>= fun δ =>
@@ -713,4 +708,24 @@ Module SymbolicSemantics_Mutator
     Admit Obligations of mutator_exec.
 
   End MutatorOperations.
+
+  Definition ValidContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (body : Stm Δ τ) (c : SepContract Δ τ) : Prop :=
+    match c with
+    | @sep_contract_unit _ _ Σ δ req ens e =>
+      let s0 := {| symbolicstate_pathcondition := nil; symbolicstate_localstore := δ; symbolicstate_heap := nil |} in
+      outcome_satisfy
+        (fun '(_ , MkSymbolicState _ _ h , w) =>
+            match h , w with
+            | nil , nil => True
+            | _   , _ => False
+            end)
+        ((mutator_produce req;; mutator_exec body;; mutator_consume ens)%mut s0)
+    | sep_contract_result _ _ _ => False
+    | sep_contract_none _ _ => True
+    end.
+
+  Definition ValidContractEnv (cenv : SepContractEnv) : Prop :=
+    forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),
+      ValidContract (Pi f) (cenv Δ τ f).
+
 End SymbolicSemantics_Mutator.

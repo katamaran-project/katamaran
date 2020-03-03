@@ -14,7 +14,8 @@ From MicroSail Require Import
      Notation
      SmallStep.Step
      SmallStep.Progress
-     Syntax.
+     Syntax
+     Sep.Spec.
 
 Set Implicit Arguments.
 Import CtxNotations.
@@ -184,6 +185,7 @@ Module ISATermKit <: (TermKit ISATypeKit).
   (* semantics of a single instruction *)
   | semantics : Fun [ "instr" ∶ ty_union instruction] ty_unit
   | swapreg : Fun ["r1" ∶ ty_int, "r2" ∶ ty_int] ty_unit
+  | swapreg12 : Fun ctx_nil ty_unit
   .
 
   Definition 𝑭 : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -378,6 +380,12 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
       call wX (exp_var "r1") (exp_var "v2") ;;
       call wX (exp_var "r2") (exp_var "v1") ;;
       nop
+    | swapreg12 =>
+      let: "x" := stm_read_register R1 in
+      let: "y" := stm_read_register R2 in
+      stm_write_register R1 y ;;
+      stm_write_register R2 x ;;
+      nop
     end in exact pi.
   Defined.
 
@@ -419,4 +427,61 @@ Proof.
   { constructor. }
   (* End *)
   constructor 1.
+Qed.
+
+Module ISASymbolicTermKit <: (SymbolicTermKit ISATypeKit ISATermKit ISAProgramKit).
+  Module PM := Programs ISATypeKit ISATermKit ISAProgramKit.
+  Definition 𝑺 := string.
+  Definition 𝑺_eq_dec := string_dec.
+  Definition 𝑿to𝑺 := fun (x : string) => x.
+
+  Definition 𝑷 := Empty_set.
+  Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
+  Definition 𝑷_eq_dec :  forall (p : 𝑷) (q : 𝑷), {p = q}+{~ p = q} := fun p => match p with end.
+End ISASymbolicTermKit.
+
+Module ISASymbolicSemantics := SymbolicSemantics_Mutator
+                                 ISATypeKit
+                                 ISATermKit
+                                 ISAProgramKit
+                                 ISASymbolicTermKit.
+Import ISASymbolicSemantics.
+
+Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
+Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
+
+Definition contract_env : SepContractEnv :=
+  fun Δ τ f =>
+    match f with
+    | rX => sep_contract_none _ _
+    | wX => sep_contract_none _ _
+    | rF => sep_contract_none _ _
+    | wF => sep_contract_none _ _
+    | rM => sep_contract_none _ _
+    | wM => sep_contract_none _ _
+    | in_bounds => sep_contract_none _ _
+    | semantics => sep_contract_none _ _
+    | swapreg => sep_contract_none _ _
+    | swapreg12 =>
+      @sep_contract_unit
+        ε
+        ty_unit
+        ["u" ∶ ty_int, "v" ∶ ty_int]
+        env_nil
+        (R1 ↦ term_var "u" ✱ R2 ↦ term_var "v")
+        (R1 ↦ term_var "v" ✱ R2 ↦ term_var "u")
+        eq_refl
+    end.
+
+Local Transparent chunk_eqb.
+Local Transparent Term_eqb.
+
+Lemma valid_contracts : ValidContractEnv contract_env.
+Proof.
+  intros Δ τ []; cbn; auto.
+  exists (term_var "u"); cbn.
+  exists (term_var "v"); cbn.
+  exists (term_var "u"); cbn.
+  exists (term_var "v"); cbn.
+  auto.
 Qed.
