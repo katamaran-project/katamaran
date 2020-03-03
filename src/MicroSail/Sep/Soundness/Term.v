@@ -50,12 +50,13 @@ Delimit Scope mutator_scope with mut.
 Module TermEqbSoundness
        (typekit : TypeKit)
        (termkit : TermKit typekit)
-       (symtermkit : SymbolicTermKit typekit termkit).
+       (progkit : ProgramKit typekit termkit)
+       (symtermkit : SymbolicTermKit typekit termkit progkit).
 
   Import typekit.
   Import termkit.
   Import symtermkit.
-  Module SP := SymbolicPrograms typekit termkit symtermkit.
+  Module SP := SymbolicPrograms typekit termkit progkit symtermkit.
   Import SP.
 
   Import CtxNotations.
