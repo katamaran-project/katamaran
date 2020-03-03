@@ -24,12 +24,18 @@ Section WithBinding.
     | env_snoc E b db => env_snoc (env_cat EΓ E) b db
     end.
 
-  Fixpoint env_map {D1 D2 : B -> Type} {Γ : Ctx B}
-    (f : forall b, D1 b -> D2 b) (E : Env D1 Γ) : Env D2 Γ :=
-    match E with
-    | env_nil => env_nil
-    | env_snoc E b db => env_snoc (env_map f E) b (f b db)
-    end.
+  Section WithD12.
+
+    Context {D1 D2 : B -> Type}.
+    Variable f : forall b, D1 b -> D2 b.
+
+    Fixpoint env_map {Γ : Ctx B} (E : Env D1 Γ) : Env D2 Γ :=
+      match E with
+      | env_nil => env_nil
+      | env_snoc E b db => env_snoc (env_map E) b (f db)
+      end.
+
+  End WithD12.
 
   Fixpoint env_lookup {D : B -> Type} {Γ : Ctx B}
     (E : Env D Γ) : forall (b : B) (bIn : InCtx b Γ), D b :=

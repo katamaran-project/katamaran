@@ -349,7 +349,6 @@ Module SymbolicPrograms
   Bind Scope env_scope with SymbolicLocalStore.
   Definition SymbolicRegStore (Σ : Ctx (𝑺 * Ty))  : Type := forall σ, 𝑹𝑬𝑮 σ -> Term Σ σ.
 
-
   Fixpoint symbolic_eval_exp {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : SymbolicLocalStore Σ Γ) : Term Σ σ :=
     match e in (Exp _ t) return (Term Σ t) with
     | exp_var ς                       => (δ ‼ ς)%lit
@@ -359,26 +358,13 @@ Module SymbolicPrograms
     | exp_not e0                      => term_not (symbolic_eval_exp e0 δ)
     | @exp_inl _ σ1 σ2 e0             => @term_inl _ σ1 σ2 (symbolic_eval_exp e0 δ)
     | @exp_inr _ σ1 σ2 e0             => @term_inr _ σ1 σ2 (symbolic_eval_exp e0 δ)
-    | @exp_list _ σ0 es               => term_list (List.map (fun e : Exp Γ σ0 => symbolic_eval_exp e δ) es)
+    | @exp_list _ σ0 es               => term_list (List.map (fun e => symbolic_eval_exp e δ) es)
     | @exp_nil _ σ0                   => term_nil _
-    | @exp_tuple _ σs es              =>
-      let symbolic_eval_exps := fix symbolic_eval_exps {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Env (Term Σ) σs :=
-                      match es with
-                      | env_nil => env_nil
-                      | env_snoc es σ e => env_snoc (symbolic_eval_exps es) σ (symbolic_eval_exp e δ)
-                      end
-      in @term_tuple _ σs (symbolic_eval_exps es)
+    | @exp_tuple _ σs es              => @term_tuple _ σs (env_map (fun _ e => symbolic_eval_exp e δ) es)
     | @exp_projtup _ σs e0 n σ0 p     => @term_projtup _ σs (symbolic_eval_exp e0 δ) n σ0 p
     | @exp_union _ T K e0             => @term_union _ T K (symbolic_eval_exp e0 δ)
-    | exp_record R es                 =>
-      let symbolic_eval_exps := fix symbolic_eval_exps {rfs : Ctx (𝑹𝑭 * Ty)} (es : NamedEnv (Exp Γ) rfs) : NamedEnv (Term Σ) rfs :=
-                      match es with
-                      | env_nil => env_nil
-                      | env_snoc es σ e => env_snoc (symbolic_eval_exps es) σ (symbolic_eval_exp e δ)
-                      end
-      in term_record R (symbolic_eval_exps es)
+    | exp_record R es                 => term_record R (env_map (fun _ e => symbolic_eval_exp e δ) es)
     | @exp_projrec _ R e0 rf σ0 rfInR => @term_projrec _ R (symbolic_eval_exp e0 δ) rf σ0 rfInR
-    (* | @exp_builtin _ σ0 τ f e0        => @term_builtin _ σ0 τ f (symbolic_eval_exp e0 δ) *)
     end.
 
   Inductive Chunk (Σ : Ctx (𝑺 * Ty)) : Type :=
