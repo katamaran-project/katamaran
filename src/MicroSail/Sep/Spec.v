@@ -405,10 +405,18 @@ Module SymbolicPrograms
 
   Arguments asn_exist [_] _ _ _.
 
-  Inductive SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
-  | sep_contract_unit   {Σ} (δ : SymbolicLocalStore Σ Δ) (req : Assertion Σ) (ens : Assertion Σ) (e : τ = ty_unit)
-  | sep_contract_result {Σ} (δ : SymbolicLocalStore Σ Δ) (result : 𝑺) (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ)))
-  | sep_contract_none.
+  Inductive SepContract (Δ : Ctx (𝑿 * Ty)) : Ty -> Type :=
+  | sep_contract_unit   {Σ}
+    (δ : SymbolicLocalStore Σ Δ)
+    (req : Assertion Σ) (ens : Assertion Σ) : SepContract Δ ty_unit
+  | sep_contract_result_pure {Σ τ}
+    (δ : SymbolicLocalStore Σ Δ)
+    (result : Term Σ τ)
+    (req : Assertion Σ) (ens : Assertion Σ) : SepContract Δ τ
+  | sep_contract_result {Σ τ}
+    (δ : SymbolicLocalStore Σ Δ) (result : 𝑺)
+    (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ))) : SepContract Δ τ
+  | sep_contract_none : SepContract Δ ty_unit.
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.
@@ -679,13 +687,18 @@ Module SymbolicSemantics_Mutator
         mutator_pure v
       | stm_call f es =>
         match CEnv f with
-        | @sep_contract_unit _ _ Σ' _ req ens e =>
+        | @sep_contract_unit _ Σ' _ req ens =>
           ⨁ ζ : Sub Σ' Σ =>
             mutator_consume (sub_assertion ζ req) *>
             mutator_produce (sub_assertion ζ ens) *>
-            mutator_pure (term_lit Σ _ (@eq_rect_r Ty ty_unit Lit tt _ e))
+            mutator_pure (term_lit Σ ty_unit tt)
+        | @sep_contract_result_pure _ Σ' τ δ result req ens =>
+          ⨁ ζ : Sub Σ' Σ =>
+            mutator_consume (sub_assertion ζ req)            *>
+            mutator_produce (sub_assertion ζ ens)            *>
+            mutator_pure (sub_term ζ result)
         | @sep_contract_result _ _ Σ' δ result req ens => _
-        | sep_contract_none _ _ => _
+        | sep_contract_none _ => _
         end
       | stm_call' Δ δ' τ s =>
         mutator_get_local                                      >>= fun δ =>
