@@ -14,7 +14,8 @@ From MicroSail Require Import
      Notation
      SmallStep.Step
      SmallStep.Progress
-     Syntax.
+     Syntax
+     Sep.Spec.
 
 Set Implicit Arguments.
 Import CtxNotations.
@@ -420,3 +421,29 @@ Proof.
   (* End *)
   constructor 1.
 Qed.
+
+Module ISASymbolicTermKit <: (SymbolicTermKit ISATypeKit ISATermKit).
+  Module TM := Terms ISATypeKit ISATermKit.
+  Definition 𝑺 := string.
+  Definition 𝑺_eq_dec := string_dec.
+  Definition 𝑿to𝑺 := fun (x : string) => x.
+
+  Definition 𝑷 := Empty_set.
+  Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
+  Definition 𝑷_eq_dec :  forall (p : 𝑷) (q : 𝑷), {p = q}+{~ p = q} := fun p => match p with end.
+End ISASymbolicTermKit.
+
+(* Module ISASymbolicTerms := Symbolic Terms ISATypeKit ISATermKit ISASymbolicTermKit. *)
+(* Import ISASymbolicTerms. *)
+
+Module ISASymbolicPrograms :=
+  SymbolicPrograms ISATypeKit ISATermKit ISASymbolicTermKit.
+Import ISASymbolicPrograms.
+
+Section Swap_constants.
+
+  Notation "r '↦' v" := (asn_chunk (chunk_ptsreg r (term_lit _ ty_int v))) (at level 100).
+  Notation "p '✱' q" := (asn_sep p q) (at level 150).
+
+  Definition pre : Assertion ε := R0 ↦ 0 ✱ R1 ↦ 1.
+  Definition post : Assertion ε := R0 ↦ 1 ✱ R1 ↦ 0.
