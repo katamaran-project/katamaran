@@ -60,15 +60,15 @@ Definition outcome_demonic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
 Definition outcome_angelic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
   outcome_angelic (fun b : bool => if b then o1 else o2).
 
-Fixpoint outcome_satisfy {A : Type} (P : A -> Prop) (o : Outcome A) : Prop :=
+Fixpoint outcome_satisfy {A : Type} (o : Outcome A) (P : A -> Prop) : Prop :=
   match o with
   | outcome_pure a     => P a
-  | outcome_demonic os => forall i, outcome_satisfy P (os i)
-  | outcome_angelic os => exists i, outcome_satisfy P (os i)
+  | outcome_demonic os => forall i, outcome_satisfy (os i) P
+  | outcome_angelic os => exists i, outcome_satisfy (os i) P
   end.
 
 Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
-  outcome_satisfy (fun a => True) o.
+  outcome_satisfy o (fun a => True).
 
 Inductive outcome_satisfy_ind {A : Type} (P : A -> Prop) : Outcome A -> Prop :=
 | outcome_satisfy_pure  a    :
