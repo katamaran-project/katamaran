@@ -416,7 +416,7 @@ Module SymbolicPrograms
   | sep_contract_result {Σ τ}
     (δ : SymbolicLocalStore Σ Δ) (result : 𝑺)
     (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ))) : SepContract Δ τ
-  | sep_contract_none : SepContract Δ ty_unit.
+  | sep_contract_none {τ} : SepContract Δ τ.
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.
@@ -758,21 +758,29 @@ Module SymbolicSemantics_Mutator
   Definition initial_state {Γ Σ} (δ : SymbolicLocalStore Γ Σ) : SymbolicState Γ Σ :=
     MkSymbolicState nil δ nil.
 
-  Definition ValidContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (body : Stm Δ τ) (c : SepContract Δ τ) : Prop :=
+  Definition ValidContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
+             (c : SepContract Δ τ) (body : Stm Δ τ): Prop :=
     match c with
-    | @sep_contract_unit _ _ Σ δ req ens e =>
+    | @sep_contract_unit _ Σ δ req ens => fun body =>
       outcome_satisfy
         ((mutator_produce req ;;
           mutator_exec body   ;;
           mutator_consume ens ;;
           mutator_leakcheck)%mut (initial_state δ))
         (fun '(_ , _ , w) => valid_obligations w)
-    | sep_contract_result _ _ _ => False
-    | sep_contract_none _ _ => True
-    end.
+    | sep_contract_result _ _ _ => fun _ => False
+    | @sep_contract_result_pure _ Σ _ δ result' req ens => fun body =>
+      outcome_satisfy ((mutator_produce req ;;
+                        mutator_exec body >>= fun result =>
+                        mutator_consume ens;;
+                        mutator_assert_formula (formula_eq result result') ;;
+                        mutator_leakcheck)%mut (initial_state δ))
+                     (fun '(_ , _ , w) =>  valid_obligations w)
+    | sep_contract_none _ => fun _ => True
+    end body.
 
   Definition ValidContractEnv (cenv : SepContractEnv) : Prop :=
     forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),
-      ValidContract (Pi f) (cenv Δ τ f).
+      ValidContract (cenv Δ τ f) (Pi f).
 
 End SymbolicSemantics_Mutator.

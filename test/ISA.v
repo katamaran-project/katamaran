@@ -453,24 +453,22 @@ Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 Definition contract_env : SepContractEnv :=
   fun Δ τ f =>
     match f with
-    | rX => sep_contract_none _ _
-    | wX => sep_contract_none _ _
-    | rF => sep_contract_none _ _
-    | wF => sep_contract_none _ _
-    | rM => sep_contract_none _ _
-    | wM => sep_contract_none _ _
-    | in_bounds => sep_contract_none _ _
-    | semantics => sep_contract_none _ _
-    | swapreg => sep_contract_none _ _
+    | rX => sep_contract_none _
+    | wX => sep_contract_none _
+    | rF => sep_contract_none _
+    | wF => sep_contract_none _
+    | rM => sep_contract_none _
+    | wM => sep_contract_none _
+    | in_bounds => sep_contract_none _
+    | semantics => sep_contract_none _
+    | swapreg => sep_contract_none _
     | swapreg12 =>
       @sep_contract_unit
         ε
-        ty_unit
         ["u" ∶ ty_int, "v" ∶ ty_int]
         env_nil
         (R1 ↦ term_var "u" ✱ R2 ↦ term_var "v")
         (R1 ↦ term_var "v" ✱ R2 ↦ term_var "u")
-        eq_refl
     end.
 
 Local Transparent chunk_eqb.
