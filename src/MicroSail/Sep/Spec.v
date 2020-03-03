@@ -160,6 +160,31 @@ Module SymbolicTerms
 
   Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := Term_rect P.
 
+  Fixpoint eval_term {Σ : Ctx (𝑺 * Ty)} {σ : Ty} (t : Term Σ σ) (δ : NamedEnv Lit Σ) {struct t} : Lit σ :=
+    match t in Term _ σ return Lit σ with
+    | @term_var _ x _           => δ ‼ x
+    | term_lit _ _ l       => l
+    | term_binop op e1 e2  => eval_binop op (eval_term e1 δ) (eval_term e2 δ)
+    | term_neg e           => Z.opp (eval_term e δ)
+    | term_not e           => negb (eval_term e δ)
+    | term_inl e           => inl (eval_term e δ)
+    | term_inr e           => inr (eval_term e δ)
+    | term_list es         => List.map (fun e => eval_term e δ) es
+    | term_nil _           => nil
+    | term_tuple es        => Env_rect
+                               (fun σs _ => Lit (ty_tuple σs))
+                               tt
+                               (fun σs _ (vs : Lit (ty_tuple σs)) σ e => (vs, eval_term e δ))
+                               es
+    | @term_projtup _ σs e n σ p => tuple_proj σs n σ (eval_term e δ) p
+    | @term_union _ U K e     => 𝑼_fold (existT _ K (eval_term e δ))
+    | @term_record _ R es     => 𝑹_fold (Env_rect
+                                       (fun σs _ => NamedEnv Lit σs)
+                                       env_nil
+                                       (fun σs _ vs _ e => env_snoc vs _ (eval_term e δ)) es)
+    | @term_projrec _ _ e rf    => 𝑹_unfold (eval_term e δ) ‼ rf
+    end.
+
   (* Two proofs of context containment are equal of the deBruijn indices are equal *)
   Definition InCtx_eqb {Σ} {ς1 ς2 : 𝑺} {σ : Ty}
              (ς1inΣ : InCtx (ς1, σ) Σ)
@@ -349,7 +374,6 @@ Module SymbolicPrograms
   Bind Scope env_scope with SymbolicLocalStore.
   Definition SymbolicRegStore (Σ : Ctx (𝑺 * Ty))  : Type := forall σ, 𝑹𝑬𝑮 σ -> Term Σ σ.
 
-
   Fixpoint symbolic_eval_exp {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : SymbolicLocalStore Σ Γ) : Term Σ σ :=
     match e in (Exp _ t) return (Term Σ t) with
     | exp_var ς                       => (δ ‼ ς)%lit
@@ -359,36 +383,18 @@ Module SymbolicPrograms
     | exp_not e0                      => term_not (symbolic_eval_exp e0 δ)
     | @exp_inl _ σ1 σ2 e0             => @term_inl _ σ1 σ2 (symbolic_eval_exp e0 δ)
     | @exp_inr _ σ1 σ2 e0             => @term_inr _ σ1 σ2 (symbolic_eval_exp e0 δ)
-    | @exp_list _ σ0 es               => term_list (List.map (fun e : Exp Γ σ0 => symbolic_eval_exp e δ) es)
+    | @exp_list _ σ0 es               => term_list (List.map (fun e => symbolic_eval_exp e δ) es)
     | @exp_nil _ σ0                   => term_nil _
-    | @exp_tuple _ σs es              =>
-      let symbolic_eval_exps := fix symbolic_eval_exps {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Env (Term Σ) σs :=
-                      match es with
-                      | env_nil => env_nil
-                      | env_snoc es σ e => env_snoc (symbolic_eval_exps es) σ (symbolic_eval_exp e δ)
-                      end
-      in @term_tuple _ σs (symbolic_eval_exps es)
+    | @exp_tuple _ σs es              => @term_tuple _ σs (env_map (fun _ e => symbolic_eval_exp e δ) es)
     | @exp_projtup _ σs e0 n σ0 p     => @term_projtup _ σs (symbolic_eval_exp e0 δ) n σ0 p
     | @exp_union _ T K e0             => @term_union _ T K (symbolic_eval_exp e0 δ)
-    | exp_record R es                 =>
-      let symbolic_eval_exps := fix symbolic_eval_exps {rfs : Ctx (𝑹𝑭 * Ty)} (es : NamedEnv (Exp Γ) rfs) : NamedEnv (Term Σ) rfs :=
-                      match es with
-                      | env_nil => env_nil
-                      | env_snoc es σ e => env_snoc (symbolic_eval_exps es) σ (symbolic_eval_exp e δ)
-                      end
-      in term_record R (symbolic_eval_exps es)
+    | exp_record R es                 => term_record R (env_map (fun _ e => symbolic_eval_exp e δ) es)
     | @exp_projrec _ R e0 rf σ0 rfInR => @term_projrec _ R (symbolic_eval_exp e0 δ) rf σ0 rfInR
-    (* | @exp_builtin _ σ0 τ f e0        => @term_builtin _ σ0 τ f (symbolic_eval_exp e0 δ) *)
     end.
 
   Inductive Chunk (Σ : Ctx (𝑺 * Ty)) : Type :=
   | chunk_pred   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
-
-  Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
-  | formula_bool (t : Term Σ ty_bool)
-  | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
-  | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
 
   Inductive Assertion (Σ : Ctx (𝑺 * Ty)) : Type :=
   | asn_bool (b : Term Σ ty_bool)
@@ -407,6 +413,27 @@ Module SymbolicPrograms
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.
   Parameter Inline CEnv : SepContractEnv.
+
+  Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
+  | formula_bool (t : Term Σ ty_bool)
+  | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
+  | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
+
+  Definition valid_formula {Σ} (fml : Formula Σ) : Prop :=
+    match fml with
+    | formula_bool t    => forall δ, is_true (eval_term t δ)
+    | formula_eq t1 t2  => forall δ, eval_term t1 δ =  eval_term t2 δ
+    | formula_neq t1 t2 => forall δ, eval_term t1 δ <> eval_term t2 δ
+    end.
+
+  Definition Obligation : Type := { Σ & Formula Σ }.
+
+  Definition valid_obligation (o : Obligation) : Prop :=
+    valid_formula (projT2 o).
+  Definition valid_obligations (os : list Obligation) : Prop :=
+    List.Forall valid_obligation os.
+  Hint Unfold valid_obligation.
+  Hint Unfold valid_obligations.
 
   Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
     list (Formula Σ).
@@ -489,7 +516,6 @@ Module SymbolicSemantics_Mutator
 
   Section Mutator.
 
-    Definition Obligation : Type := { Σ & Formula Σ }.
     Definition Mutator (Σ : Ctx (𝑺 * Ty)) (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Type) : Type :=
       SymbolicState Σ Γ1 -> Outcome (A * SymbolicState Σ Γ2 * list Obligation).
     Bind Scope mutator_scope with Mutator.
@@ -707,19 +733,27 @@ Module SymbolicSemantics_Mutator
       end.
     Admit Obligations of mutator_exec.
 
+    Definition mutator_leakcheck {Σ Γ} : Mutator Σ Γ Γ unit :=
+      mutator_get_heap >>= fun h =>
+      match h with
+      | nil => mutator_pure tt
+      | _   => mutator_fail
+      end.
+
   End MutatorOperations.
+
+  Definition initial_state {Γ Σ} (δ : SymbolicLocalStore Γ Σ) : SymbolicState Γ Σ :=
+    MkSymbolicState nil δ nil.
 
   Definition ValidContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (body : Stm Δ τ) (c : SepContract Δ τ) : Prop :=
     match c with
     | @sep_contract_unit _ _ Σ δ req ens e =>
-      let s0 := {| symbolicstate_pathcondition := nil; symbolicstate_localstore := δ; symbolicstate_heap := nil |} in
       outcome_satisfy
-        (fun '(_ , MkSymbolicState _ _ h , w) =>
-            match h , w with
-            | nil , nil => True
-            | _   , _ => False
-            end)
-        ((mutator_produce req;; mutator_exec body;; mutator_consume ens)%mut s0)
+        ((mutator_produce req ;;
+          mutator_exec body   ;;
+          mutator_consume ens ;;
+          mutator_leakcheck)%mut (initial_state δ))
+        (fun '(_ , _ , w) => valid_obligations w)
     | sep_contract_result _ _ _ => False
     | sep_contract_none _ _ => True
     end.

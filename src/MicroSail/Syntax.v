@@ -484,7 +484,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | exp_record  (R : 𝑹) (es : NamedEnv (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R)
     | exp_projrec {R : 𝑹} (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
                   {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Exp Γ σ.
-    (* | exp_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Exp Γ σ) : Exp Γ τ. *)
     Bind Scope exp_scope with Exp.
 
     Global Arguments exp_var {_} _ {_ _}.
@@ -546,7 +545,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                                          env_nil
                                          (fun σs _ vs _ e => env_snoc vs _ (eval e δ)) es)
       | exp_projrec e rf    => 𝑹_unfold (eval e δ) ‼ rf
-      (* | exp_builtin f e     => f (eval e δ) *)
       end.
 
     Definition evals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : LocalStore Γ) : LocalStore Δ :=
