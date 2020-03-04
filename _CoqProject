@@ -1,4 +1,4 @@
--arg "-w all" -R src/MicroSail MicroSail
+-arg "-w all -w -undeclared-scope" -R src/MicroSail MicroSail
 src/MicroSail.v
 src/MicroSail/Context.v
 src/MicroSail/WLP/Dijkstra.v
