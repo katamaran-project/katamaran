@@ -510,6 +510,34 @@ Module SymbolicContracts
   Import OutcomeNotations.
   Import ListNotations.
 
+  Equations(noeqns) try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
+    try_solve_formula (formula_bool (term_lit _ b)) := Some b;
+    try_solve_formula (formula_bool _)              := None;
+    try_solve_formula (formula_eq t1 t2)            := if Term_eqb t1 t2
+                                                       then Some true
+                                                       else None;
+    try_solve_formula (formula_neq t1 t2)           := None.
+
+  Section SolverSoundness.
+
+    Hypothesis Term_eqb_spec :
+      forall Σ (σ : Ty) (t1 t2 : Term Σ σ),
+        reflect (t1 = t2) (Term_eqb t1 t2).
+
+    Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) (b : bool) :
+      try_solve_formula fml = Some b ->
+      forall δ, reflect (interpret_formula δ fml) b.
+    Proof.
+      destruct fml; cbn.
+      - dependent destruction t; cbn; inversion 1.
+        destruct b; constructor; congruence.
+      - destruct (Term_eqb_spec t1 t2); cbn; inversion 1.
+        constructor; congruence.
+      - discriminate.
+    Qed.
+
+  End SolverSoundness.
+
   Section Mutator.
 
     Definition Mutator (Σ : Ctx (𝑺 * Ty)) (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Type) : Type :=
@@ -562,6 +590,8 @@ Module SymbolicContracts
 
     Definition mutator_fail {Σ Γ} {A : Type} : Mutator Σ Γ Γ A :=
       fun s => outcome_fail.
+    Definition mutator_block {Σ Γ} {A : Type} : Mutator Σ Γ Γ A :=
+      fun s => outcome_block.
     Definition mutator_get {Σ Γ} : Mutator Σ Γ Γ (SymbolicState Σ Γ) :=
       fun s => outcome_pure (s , s , nil).
     Definition mutator_put {Σ Γ Γ'} (s : SymbolicState Σ Γ') : Mutator Σ Γ Γ' unit :=
@@ -594,14 +624,26 @@ Module SymbolicContracts
       mutator_get_local >>= fun δ => mutator_pure (symbolic_eval_exp e δ).
 
     Definition mutator_assume_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit :=
-      mutator_modify (symbolic_assume_formula fml).
+      match try_solve_formula fml with
+      | Some true  => mutator_pure tt
+      | Some false => mutator_block
+      | None       => mutator_modify (symbolic_assume_formula fml)
+      end.
+    (* Definition mutator_assume_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit := *)
+    (*   mutator_modify (symbolic_assume_formula fml). *)
     Definition mutator_assume_term {Σ Γ} (t : Term Σ ty_bool) : Mutator Σ Γ Γ unit :=
       mutator_assume_formula (formula_bool t).
     Definition mutator_assume_exp {Σ Γ} (e : Exp Γ ty_bool) : Mutator Σ Γ Γ unit :=
       mutator_eval_exp e >>= mutator_assume_term.
 
     Definition mutator_assert_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit :=
-      fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil).
+      match try_solve_formula fml with
+      | Some true  => mutator_pure tt
+      | Some false => mutator_fail
+      | None       => fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil)
+      end.
+    (* Definition mutator_assert_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit := *)
+    (*   fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil). *)
 
     Definition mutator_assert_term {Σ Γ} (t : Term Σ ty_bool) : Mutator Σ Γ Γ unit :=
       mutator_assert_formula (formula_bool t).
