@@ -713,6 +713,18 @@ Module SymbolicContracts
       | asn_exist ς τ a => mutator_fail
       end.
 
+    Section WithCont.
+      Context {Σ Γ E R} (cont : forall K : 𝑬𝑲 E, Mutator Σ Γ Γ R).
+
+      Equations(noeqns) mutator_exec_match_enum (t : Term Σ (ty_enum E)) : Mutator Σ Γ Γ R :=
+        mutator_exec_match_enum (term_lit _ l) := cont l;
+        mutator_exec_match_enum t :=
+          ⨂ K : 𝑬𝑲 E =>
+            mutator_assume_formula (formula_eq t (term_lit (ty_enum E) K)) *>
+            cont K.
+
+    End WithCont.
+
     Program Fixpoint mutator_exec {Σ Γ σ} (s : Stm Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
       match s with
       | stm_lit τ l => mutator_pure (term_lit τ l)
@@ -774,7 +786,9 @@ Module SymbolicContracts
         (*                   pop) *)
       | stm_match_sum e xinl alt_inl xinr alt_inr => _
       | stm_match_pair e xl xr rhs => _
-      | stm_match_enum E e alts => _
+      | stm_match_enum E e alts =>
+        mutator_eval_exp e >>=
+        mutator_exec_match_enum (fun K => mutator_exec (alts K))
       | stm_match_tuple e p rhs => _
       | stm_match_union U e altx alts => _
       | stm_match_record R e p rhs => _
