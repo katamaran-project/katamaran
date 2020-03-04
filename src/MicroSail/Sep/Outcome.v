@@ -26,6 +26,8 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Coq Require Import String.
+
 Set Implicit Arguments.
 
 Delimit Scope outcome_scope with out.
@@ -33,11 +35,15 @@ Delimit Scope outcome_scope with out.
 Inductive Outcome (A: Type) : Type :=
 | outcome_pure (a: A)
 | outcome_demonic {I : Type} (os: I -> Outcome A)
-| outcome_angelic {I : Type} (os: I -> Outcome A).
+| outcome_angelic {I : Type} (os: I -> Outcome A)
+| outcome_fail (msg: string)
+.
+Arguments outcome_fail {_} _.
+
 Bind Scope outcome_scope with Outcome.
 
-Definition outcome_fail {A : Type} : Outcome A :=
-  outcome_angelic (fun i : Empty_set => match i with end).
+(* Definition outcome_fail {A : Type} : Outcome A := *)
+(*   outcome_angelic (fun i : Empty_set => match i with end). *)
 Definition outcome_block {A : Type} : Outcome A :=
   outcome_demonic (fun i : Empty_set => match i with end).
 
@@ -46,6 +52,7 @@ Fixpoint outcome_map {A B : Type} (f : A -> B) (o : Outcome A) : Outcome B :=
   | outcome_pure a     => outcome_pure (f a)
   | outcome_demonic os => outcome_demonic (fun i => outcome_map f (os i))
   | outcome_angelic os => outcome_angelic (fun i => outcome_map f (os i))
+  | outcome_fail s => outcome_fail s
   end.
 
 Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcome B :=
@@ -53,6 +60,7 @@ Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcom
   | outcome_pure a     => f a
   | outcome_demonic os => outcome_demonic (fun i => outcome_bind (os i) f)
   | outcome_angelic os => outcome_angelic (fun i => outcome_bind (os i) f)
+  | outcome_fail s => outcome_fail s
   end.
 
 Definition outcome_demonic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
@@ -65,6 +73,7 @@ Fixpoint outcome_satisfy {A : Type} (o : Outcome A) (P : A -> Prop) : Prop :=
   | outcome_pure a     => P a
   | outcome_demonic os => forall i, outcome_satisfy (os i) P
   | outcome_angelic os => exists i, outcome_satisfy (os i) P
+  | outcome_fail s => False
   end.
 
 Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
