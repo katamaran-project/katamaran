@@ -56,8 +56,8 @@ Module TermEqbSoundness
   Import typekit.
   Import termkit.
   Import symtermkit.
-  Module SP := SymbolicPrograms typekit termkit progkit symtermkit.
-  Import SP.
+  Module STs := SymbolicTerms typekit termkit progkit symtermkit.
+  Import STs.
 
   Import CtxNotations.
   Import EnvNotations.

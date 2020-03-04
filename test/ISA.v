@@ -186,6 +186,8 @@ Module ISATermKit <: (TermKit ISATypeKit).
   | semantics : Fun [ "instr" ∶ ty_union instruction] ty_unit
   | swapreg : Fun ["r1" ∶ ty_int, "r2" ∶ ty_int] ty_unit
   | swapreg12 : Fun ctx_nil ty_unit
+  | add : Fun [ "x" ∶ ty_int , "y" ∶ ty_int ] ty_int
+  | add3 : Fun [ "x" ∶ ty_int , "y" ∶ ty_int , "z" ∶ ty_int ] ty_int
   .
 
   Definition 𝑭 : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -386,48 +388,55 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
       stm_write_register R1 y ;;
       stm_write_register R2 x ;;
       nop
+    | add => x + y
+    | add3 => let: "xy" := call add x y in
+              call add (exp_var "xy") z
     end in exact pi.
   Defined.
 
 End ISAProgramKit.
 Import ISAProgramKit.
 
-Module ISASmappStep := SmallStep ISATypeKit ISATermKit ISAProgramKit.
-Import ISASmappStep.
+Module ExampleStepping.
 
-Module ISAProgress := Progress ISATypeKit ISATermKit ISAProgramKit.
-Import ISAProgress.
-Import CtxNotations.
+  Module ISASmappStep := SmallStep ISATypeKit ISATermKit ISAProgramKit.
+  Import ISASmappStep.
 
-Lemma example_halt :
-  forall (Γ : Ctx (𝑿 * Ty))
-    (γ : RegStore) (μ : Memory),
-    ⟨ γ , μ
-    , env_nil ► ("instr" ∶ ty_union instruction) ↦ Halt
-    , Pi semantics ⟩
-    --->*
-    ⟨ write_register γ Halted true , μ
-    , env_nil ► ("instr" ∶ ty_union instruction) ↦ Halt
-    , stm_lit ty_unit tt ⟩.
-Proof.
-  intros; cbn [Pi].
-  (* Step 1 *)
-  econstructor 2.
-  { constructor. }
-  cbn.
-  (* Step 2 *)
-  econstructor 2.
-  { constructor. constructor. constructor. }
-  cbn.
-  (* Step 3 *)
-  econstructor 2.
-  { constructor. apply step_stm_seq_value. }
-  (* Step 4 *)
-  econstructor 2.
-  { constructor. }
-  (* End *)
-  constructor 1.
-Qed.
+  Module ISAProgress := Progress ISATypeKit ISATermKit ISAProgramKit.
+  Import ISAProgress.
+  Import CtxNotations.
+
+  Lemma example_halt :
+    forall (Γ : Ctx (𝑿 * Ty))
+           (γ : RegStore) (μ : Memory),
+      ⟨ γ , μ
+        , env_nil ► ("instr" ∶ ty_union instruction) ↦ Halt
+        , Pi semantics ⟩
+        --->*
+        ⟨ write_register γ Halted true , μ
+          , env_nil ► ("instr" ∶ ty_union instruction) ↦ Halt
+          , stm_lit ty_unit tt ⟩.
+  Proof.
+    intros; cbn [Pi].
+    (* Step 1 *)
+    econstructor 2.
+    { constructor. }
+    cbn.
+    (* Step 2 *)
+    econstructor 2.
+    { constructor. constructor. constructor. }
+    cbn.
+    (* Step 3 *)
+    econstructor 2.
+    { constructor. apply step_stm_seq_value. }
+    (* Step 4 *)
+    econstructor 2.
+    { constructor. }
+    (* End *)
+    constructor 1.
+  Qed.
+
+End ExampleStepping.
 
 Module ISASymbolicTermKit <: (SymbolicTermKit ISATypeKit ISATermKit ISAProgramKit).
   Module PM := Programs ISATypeKit ISATermKit ISAProgramKit.
@@ -440,46 +449,88 @@ Module ISASymbolicTermKit <: (SymbolicTermKit ISATypeKit ISATermKit ISAProgramKi
   Definition 𝑷_eq_dec :  forall (p : 𝑷) (q : 𝑷), {p = q}+{~ p = q} := fun p => match p with end.
 End ISASymbolicTermKit.
 
-Module ISASymbolicSemantics := SymbolicSemantics_Mutator
-                                 ISATypeKit
-                                 ISATermKit
-                                 ISAProgramKit
-                                 ISASymbolicTermKit.
-Import ISASymbolicSemantics.
+Module ISASymbolicTerms := SymbolicTerms
+                             ISATypeKit
+                             ISATermKit
+                             ISAProgramKit
+                             ISASymbolicTermKit.
+Import ISASymbolicTerms.
 
 Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
 Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 
-Definition contract_env : SepContractEnv :=
-  fun Δ τ f =>
-    match f with
-    | rX => sep_contract_none _
-    | wX => sep_contract_none _
-    | rF => sep_contract_none _
-    | wF => sep_contract_none _
-    | rM => sep_contract_none _
-    | wM => sep_contract_none _
-    | in_bounds => sep_contract_none _
-    | semantics => sep_contract_none _
-    | swapreg => sep_contract_none _
-    | swapreg12 =>
-      @sep_contract_unit
-        ε
-        ["u" ∶ ty_int, "v" ∶ ty_int]
-        env_nil
-        (R1 ↦ term_var "u" ✱ R2 ↦ term_var "v")
-        (R1 ↦ term_var "v" ✱ R2 ↦ term_var "u")
-    end.
+Module ISASymbolicContractKit <:
+  (SymbolicContractKit
+     ISATypeKit
+     ISATermKit
+     ISAProgramKit
+     ISASymbolicTermKit
+  ).
+  Module STs := ISASymbolicTerms.
+
+  Definition CEnv : SepContractEnv :=
+    fun Δ τ f =>
+      match f with
+      | rX => sep_contract_none _
+      | wX => sep_contract_none _
+      | rF => sep_contract_none _
+      | wF => sep_contract_none _
+      | rM => sep_contract_none _
+      | wM => sep_contract_none _
+      | in_bounds => sep_contract_none _
+      | semantics => sep_contract_none _
+      | swapreg => sep_contract_none _
+      | swapreg12 =>
+        @sep_contract_unit
+          ε
+          ["u" ∶ ty_int, "v" ∶ ty_int]
+          env_nil
+          (R1 ↦ term_var "u" ✱ R2 ↦ term_var "v")
+          (R1 ↦ term_var "v" ✱ R2 ↦ term_var "u")
+      | add =>
+        @sep_contract_result_pure
+          ["x" ∶ ty_int, "y" ∶ ty_int]
+          ["x" ∶ ty_int, "y" ∶ ty_int]
+          ty_int
+          [term_var "x", term_var "y"]%arg
+          (term_binop binop_plus (term_var "x") (term_var "y"))
+          (asn_bool (term_lit _ ty_bool true))
+          (asn_bool (term_lit _ ty_bool true))
+      | add3 =>
+        @sep_contract_result_pure
+          ["x" ∶ ty_int, "y" ∶ ty_int, "z" ∶ ty_int]
+          ["x" ∶ ty_int, "y" ∶ ty_int, "z" ∶ ty_int]
+          ty_int
+          [term_var "x", term_var "y", term_var "z"]%arg
+          (term_binop binop_plus (term_binop binop_plus (term_var "x") (term_var "y")) (term_var "z"))
+          (asn_bool (term_lit _ ty_bool true))
+          (asn_bool (term_lit _ ty_bool true))
+      end.
+
+End ISASymbolicContractKit.
+Module ISASymbolicContracts :=
+  SymbolicContracts
+    ISATypeKit
+    ISATermKit
+    ISAProgramKit
+    ISASymbolicTermKit
+    ISASymbolicContractKit.
+Import ISASymbolicContracts.
 
 Local Transparent chunk_eqb.
 Local Transparent Term_eqb.
 
-Lemma valid_contracts : ValidContractEnv contract_env.
+Lemma valid_contracts : ValidContractEnv CEnv.
 Proof.
   intros Δ τ []; cbn; auto.
-  exists (term_var "u"); cbn.
-  exists (term_var "v"); cbn.
-  exists (term_var "u"); cbn.
-  exists (term_var "v"); cbn.
-  auto.
-Qed.
+  - exists (term_var "u"); cbn.
+    exists (term_var "v"); cbn.
+    exists (term_var "u"); cbn.
+    exists (term_var "v"); cbn.
+    auto.
+  - unfold valid_obligations; cbn.
+    constructor; cbn.
+    intros δ. reflexivity.
+    constructor.
+  - admit.
+Admitted.

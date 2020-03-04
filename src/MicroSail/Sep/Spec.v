@@ -354,22 +354,6 @@ Module SymbolicTerms
         (@term_var (Σ2 ▻ (ς , τ)) ς τ inctx_zero)
         (fun b' b'In => wk1_term (ζ b' b'In)).
 
-End SymbolicTerms.
-
-Module SymbolicPrograms
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import symtermkit : SymbolicTermKit typekit termkit progkit).
-
-  Module STs := SymbolicTerms typekit termkit progkit symtermkit.
-  Export STs.
-
-  Import CtxNotations.
-  Import EnvNotations.
-  Import OutcomeNotations.
-  Import ListNotations.
-
   Definition SymbolicLocalStore (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type := NamedEnv (Term Σ) Γ.
   Bind Scope env_scope with SymbolicLocalStore.
   Definition SymbolicRegStore (Σ : Ctx (𝑺 * Ty))  : Type := forall σ, 𝑹𝑬𝑮 σ -> Term Σ σ.
@@ -420,7 +404,6 @@ Module SymbolicPrograms
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.
-  Parameter Inline CEnv : SepContractEnv.
 
   Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
   | formula_bool (t : Term Σ ty_bool)
@@ -491,6 +474,9 @@ Module SymbolicPrograms
     Global Arguments symbolicstate_localstore {_ _} _.
     Global Arguments symbolicstate_heap {_ _} _.
 
+    Definition symbolicstate_initial {Γ Σ} (δ : SymbolicLocalStore Γ Σ) : SymbolicState Γ Σ :=
+      MkSymbolicState nil δ nil.
+
     Definition symbolic_assume_formula {Σ Γ} (fml : Formula Σ) : SymbolicState Σ Γ -> SymbolicState Σ Γ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (fml :: Φ) ŝ ĥ.
     Definition symbolic_assume_exp {Σ Γ} (e : Exp Γ ty_bool) : SymbolicState Σ Γ -> SymbolicState Σ Γ :=
@@ -506,21 +492,35 @@ Module SymbolicPrograms
       sub_symbolicstate sub_wk1.
 
   End SymbolicState.
-End SymbolicPrograms.
 
-Module SymbolicSemantics_Mutator
-    (typekit : TypeKit)
-    (termkit : TermKit typekit)
-    (progkit : ProgramKit typekit termkit)
-    (symtermkit : SymbolicTermKit typekit termkit progkit).
-  Import progkit.
+End SymbolicTerms.
 
-  Module SP := SymbolicPrograms typekit termkit progkit symtermkit.
-  Export SP.
+Module Type SymbolicContractKit
+       (Import typekit : TypeKit)
+       (Import termkit : TermKit typekit)
+       (Import progkit : ProgramKit typekit termkit)
+       (Import symtermkit : SymbolicTermKit typekit termkit progkit).
+
+  Module STs := SymbolicTerms typekit termkit progkit symtermkit.
+  Export STs.
+
+  Parameter Inline CEnv : SepContractEnv.
+
+End SymbolicContractKit.
+
+Module SymbolicContracts
+       (typekit : TypeKit)
+       (termkit : TermKit typekit)
+       (progkit : ProgramKit typekit termkit)
+       (symtermkit : SymbolicTermKit typekit termkit progkit)
+       (symcontractkit : SymbolicContractKit typekit termkit progkit symtermkit).
+
+  Export symcontractkit.
 
   Import CtxNotations.
   Import EnvNotations.
   Import OutcomeNotations.
+  Import ListNotations.
 
   Section Mutator.
 
@@ -755,9 +755,6 @@ Module SymbolicSemantics_Mutator
 
   End MutatorOperations.
 
-  Definition initial_state {Γ Σ} (δ : SymbolicLocalStore Γ Σ) : SymbolicState Γ Σ :=
-    MkSymbolicState nil δ nil.
-
   Definition ValidContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
              (c : SepContract Δ τ) (body : Stm Δ τ): Prop :=
     match c with
@@ -766,7 +763,7 @@ Module SymbolicSemantics_Mutator
         ((mutator_produce req ;;
           mutator_exec body   ;;
           mutator_consume ens ;;
-          mutator_leakcheck)%mut (initial_state δ))
+          mutator_leakcheck)%mut (symbolicstate_initial δ))
         (fun '(_ , _ , w) => valid_obligations w)
     | sep_contract_result _ _ _ => fun _ => False
     | @sep_contract_result_pure _ Σ _ δ result' req ens => fun body =>
@@ -774,7 +771,7 @@ Module SymbolicSemantics_Mutator
                         mutator_exec body >>= fun result =>
                         mutator_consume ens;;
                         mutator_assert_formula (formula_eq result result') ;;
-                        mutator_leakcheck)%mut (initial_state δ))
+                        mutator_leakcheck)%mut (symbolicstate_initial δ))
                      (fun '(_ , _ , w) =>  valid_obligations w)
     | sep_contract_none _ => fun _ => True
     end body.
@@ -783,4 +780,4 @@ Module SymbolicSemantics_Mutator
     forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),
       ValidContract (cenv Δ τ f) (Pi f).
 
-End SymbolicSemantics_Mutator.
+End SymbolicContracts.
