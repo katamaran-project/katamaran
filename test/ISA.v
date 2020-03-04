@@ -597,13 +597,18 @@ Lemma Forall_singleton {A : Type} :
     - destruct H.
   Qed.
 
+  Lemma Forall_nil {A : Type} :
+  forall (P : A -> Prop), Forall P nil.
+Proof. trivial. Qed.
+
 Lemma valid_contracts : ValidContractEnv CEnv.
 Proof.
   intros Δ τ [].
   - intros i; destruct i; cbn; intros j; cbn; destruct j; cbn.
-    + exists (term_var "v").
+    + exists (term_var "v"); cbn.
       intros k; destruct k; cbn.
-      * now apply Forall_singleton.
+      * now apply Forall_nil.
+        (* now apply Forall_singleton. *)
       * admit.
       * admit.
       * admit.
@@ -614,7 +619,7 @@ Proof.
    + exists (term_var "v").
      intros k; destruct k; cbn.
       * admit.
-      * now apply Forall_singleton.
+      * now apply Forall_nil.
       * admit.
       * admit.
    + admit.
@@ -625,7 +630,7 @@ Proof.
      intros k; destruct k; cbn.
       * admit.
       * admit.
-      * now apply Forall_singleton.
+      * now apply Forall_nil.
       * admit.
    + admit.
    + admit.
@@ -636,7 +641,7 @@ Proof.
       * admit.
       * admit.
       * admit.
-      * now apply Forall_singleton.
+      * now apply Forall_nil.
   - admit.
   - admit.
   - admit.
@@ -668,4 +673,5 @@ Admitted.
 (*   - exists [term_var "x", term_var "y"]%arg; cbn; auto. *)
 (*     exists [term_binop binop_plus (term_var "x") (term_var "y"), term_var "z"]%arg; cbn. *)
 (*     repeat constructor. *)
-(* Qed. *)
+(* Qed. *
+)

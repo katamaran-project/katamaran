@@ -609,6 +609,8 @@ Module SymbolicContracts
 
     Definition mutator_fail {Σ Γ} {A : Type} (msg : string) : Mutator Σ Γ Γ A :=
       fun s => outcome_fail msg.
+    Definition mutator_block {Σ Γ} {A : Type} : Mutator Σ Γ Γ A :=
+      fun s => outcome_block.
     Definition mutator_get {Σ Γ} : Mutator Σ Γ Γ (SymbolicState Σ Γ) :=
       fun s => outcome_pure (s , s , nil).
     Definition mutator_put {Σ Γ Γ'} (s : SymbolicState Σ Γ') : Mutator Σ Γ Γ' unit :=
@@ -656,7 +658,7 @@ Module SymbolicContracts
     Definition mutator_assert_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit :=
       match try_solve_formula fml with
       | Some true  => mutator_pure tt
-      | Some false => mutator_fail
+      | Some false => mutator_fail "Err [mutator_assert_formula]: unsatisfiable"
       | None       => fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil)
       end.
     (* Definition mutator_assert_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit := *)
