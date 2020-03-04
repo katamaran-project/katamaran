@@ -25,6 +25,13 @@ Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope ctx_scope.
 
+Inductive Enums : Set := register_tag.
+
+Definition Enums_eq_dec : EqDec Enums := ltac:(unfold EqDec; decide equality).
+
+Inductive RegisterTag :=
+  RegTag0 | RegTag1 | RegTag2 | RegTag3.
+
 Inductive Unions : Set := instruction.
 
 Lemma Unions_eq_dec : EqDec Unions.
@@ -54,10 +61,21 @@ Inductive InstructionConstructor :=
 Module ISATypeKit <: TypeKit.
 
   (** ENUMS **)
-  Definition 𝑬        := Empty_set.
-  Definition 𝑬𝑲 (E : 𝑬) : Set := Empty_set.
+  Definition 𝑬        := Enums.
+  Definition 𝑬𝑲 (E : 𝑬) : Set :=
+    match E with
+    | register_tag => RegisterTag
+    end.
   Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
-    match E with end.
+    match E with
+    | register_tag => {| blast v POST :=
+                     (v = RegTag0  -> POST RegTag0) /\
+                     (v = RegTag1 -> POST RegTag1)  /\
+                     (v = RegTag2 -> POST RegTag2)    /\
+                     (v = RegTag3 -> POST RegTag3)
+                |}
+    end.
+  Solve All Obligations with destruct a; intuition congruence.
 
   (** UNIONS **)
   Definition 𝑼        := Unions.
@@ -88,7 +106,11 @@ Module ISATypeKit <: TypeKit.
   Definition 𝑿        := string.
 
   Definition 𝑬_eq_dec : EqDec 𝑬 := ltac:(unfold EqDec; decide equality).
-  Definition 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e) := ltac:(unfold EqDec; decide equality).
+  Definition 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e).
+  Proof.
+    intros. unfold EqDec.
+    intros x y. destruct e. decide equality.
+  Qed.
   Definition 𝑼_eq_dec : EqDec 𝑼 := Unions_eq_dec.
   Definition 𝑼𝑻_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑻 u).
   Proof.
@@ -170,7 +192,7 @@ Module ISATermKit <: (TermKit ISATypeKit).
   (* Names are inspired by sail-riscv naming convention *)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
   (* read registers *)
-  | rX  : Fun ["reg_code" ∶ ty_int] ty_int
+  | rX  : Fun ["reg_tag" ∶ ty_enum register_tag ] ty_int
   (* write register *)
   | wX : Fun ["reg_code" ∶ ty_int, "reg_value" ∶ ty_int] ty_int
   (* read flag *)
@@ -239,9 +261,9 @@ Import NameResolution.
 Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Module TM := ISATerms.
 
-  Local Definition lit_true {Γ}  : Exp Γ ty_bool := exp_lit _ ty_bool true.
-  Local Definition lit_false {Γ} : Exp Γ ty_bool := exp_lit _ ty_bool false.
-  Local Definition int_lit {Γ} (literal : Z) : Exp Γ ty_int :=
+  Definition lit_true {Γ}  : Exp Γ ty_bool := exp_lit _ ty_bool true.
+  Definition lit_false {Γ} : Exp Γ ty_bool := exp_lit _ ty_bool false.
+  Definition int_lit {Γ} (literal : Z) : Exp Γ ty_int :=
     exp_lit _ ty_int literal.
 
   (* REGISTER STORE *)
@@ -310,6 +332,7 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Local Notation "'z'"   := (@exp_var _ "z" _ _).
   Local Notation "'instr'" := (@exp_var _ "instr" _ _).
   Local Notation "'reg_code'" := (@exp_var _ "reg_code" ty_int _).
+  Local Notation "'reg_tag'" := (@exp_var _ "reg_tag" (ty_enum register_tag) _).
   Local Notation "'reg_value'" := (@exp_var _ "reg_value" ty_int _).
   Local Notation "'flag_code'" := (@exp_var _ "flag_code" ty_int _).
   Local Notation "'flag_value'" := (@exp_var _ "flag_value" ty_bool _).
@@ -321,11 +344,14 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     let pi := eval compute in
     match f in Fun Δ τ return Stm Δ τ with
     | rX =>
-      if:      reg_code = int_lit 0 then stm_read_register R0
-      else if: reg_code = int_lit 1 then stm_read_register R1
-      else if: reg_code = int_lit 2 then stm_read_register R2
-      else if: reg_code = int_lit 3 then stm_read_register R3
-      else     stm_fail _ "read_register: invalid register"
+      stm_match_enum register_tag reg_tag
+      (fun tag =>
+         match tag with
+         | RegTag0 => stm_read_register R0
+         | RegTag1 => stm_read_register R1
+         | RegTag2 => stm_read_register R2
+         | RegTag3 => stm_read_register R3
+         end)
     | wX =>
       if:      reg_code = int_lit 0 then stm_write_register R0 reg_value
       else if: reg_code = int_lit 1 then stm_write_register R1 reg_value
