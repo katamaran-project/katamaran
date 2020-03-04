@@ -46,6 +46,20 @@ Section WithBinding.
 
   Global Arguments env_lookup {_ _} _ [_] _.
 
+  Fixpoint env_tabulate {D : B -> Type} {Γ : Ctx B} :
+    (forall (x : B) , InCtx x Γ -> D x) -> Env D Γ :=
+    match Γ with
+    | ctx_nil      => fun _   => env_nil
+    | ctx_snoc Γ b =>
+      fun EΓb =>
+        env_snoc
+          (env_tabulate (fun y yIn => EΓb y (inctx_succ yIn)))
+          b
+          (EΓb _ inctx_zero)
+    end.
+
+  Global Arguments env_tabulate {_ _} _.
+
   Fixpoint env_update {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) {struct E} :
     forall {b0 : B} (bIn0 : InCtx b0 Γ) (new : D b0), Env D Γ :=
     match E with

@@ -100,6 +100,7 @@ Module SymbolicTerms
   Local Set Elimination Schemes.
 
   Arguments term_var {_} _ _ {_}.
+  Arguments term_lit {_} _ _.
 
   Section Term_rect.
 
@@ -124,7 +125,7 @@ Module SymbolicTerms
       end.
 
     Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : (ς ∶ σ)%ctx ∈ Σ), P σ (term_var ς σ)).
-    Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit Σ σ l)).
+    Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit σ l)).
     Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
     Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)).
     Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)).
@@ -163,7 +164,7 @@ Module SymbolicTerms
   Fixpoint eval_term {Σ : Ctx (𝑺 * Ty)} {σ : Ty} (t : Term Σ σ) (δ : NamedEnv Lit Σ) {struct t} : Lit σ :=
     match t in Term _ σ return Lit σ with
     | @term_var _ x _           => δ ‼ x
-    | term_lit _ _ l       => l
+    | term_lit _ l         => l
     | term_binop op e1 e2  => eval_binop op (eval_term e1 δ) (eval_term e2 δ)
     | term_neg e           => Z.opp (eval_term e δ)
     | term_not e           => negb (eval_term e δ)
@@ -288,7 +289,7 @@ Module SymbolicTerms
   Global Arguments term_projrec {_ _} _ _ {_ _}.
 
   Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Type :=
-    forall b, InCtx b Σ1 -> Term Σ2 (snd b).
+    Env (fun b => Term Σ2 (snd b)) Σ1.
   (* Hint Unfold Sub. *)
 
   Section WithSub.
@@ -296,63 +297,44 @@ Module SymbolicTerms
     Variable (ζ : Sub Σ1 Σ2).
 
     Fixpoint sub_term {σ} (t : Term Σ1 σ) {struct t} : Term Σ2 σ :=
-      match t in (Term _ t0) return (Term Σ2 t0) with
-      | @term_var _ ς σ0 ςInΣ     => ζ ςInΣ
-      | term_lit _ σ0 l           => term_lit Σ2 σ0 l
+      match t with
+      | @term_var _ ς σ0 ςInΣ     => (ζ ‼ ς)%lit
+      | term_lit σ l              => term_lit σ l
       | term_binop op t1 t2       => term_binop op (sub_term t1) (sub_term t2)
       | term_neg t0               => term_neg (sub_term t0)
       | term_not t0               => term_not (sub_term t0)
       | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0)
       | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
-      | @term_list _ σ es         => term_list
-                                      ((fix sub_terms (ts : list (Term Σ1 σ)) : list (Term Σ2 σ) :=
-                                          match ts with
-                                          | nil       => nil
-                                          | cons t ts => cons (sub_term t) (sub_terms ts)
-                                          end) es)
+      | @term_list _ σ es         => term_list (List.map sub_term es)
       | term_nil _                => term_nil Σ2
-      | term_tuple es             => term_tuple
-                                      ((fix sub_terms {σs} (ts : Env (Term Σ1) σs) : Env (Term Σ2) σs :=
-                                          match ts with
-                                          | env_nil           => env_nil
-                                          | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
-                                          end
-                                       ) _ es)
-      | @term_projtup _ _ t _ n p => @term_projtup _ _ (sub_term t) _ n p
+      | term_tuple es             => term_tuple (env_map (@sub_term) es)
+      | @term_projtup _ _ t n σ p => term_projtup (sub_term t) n (p := p)
       | term_union U K t0         => term_union U K (sub_term t0)
-      | term_record R es          => term_record R
-                                                ((fix sub_terms {σs} (ts : NamedEnv (Term Σ1) σs) : NamedEnv (Term Σ2) σs :=
-                                                    match ts with
-                                                    | env_nil           => env_nil
-                                                    | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
-                                                    end
-                                                 ) _ es)
+      | term_record R es          => term_record R (env_map (fun _ => sub_term) es)
       | term_projrec t rf         => term_projrec (sub_term t) rf
-                                                 (* | term_builtin f t          => term_builtin f (sub_term t) *)
       end.
 
   End WithSub.
 
   Definition sub_id Σ : Sub Σ Σ :=
-    fun '(ς, τ) ςIn => term_var ς.
+    @env_tabulate _ (fun b => Term _ (snd b)) _
+      (fun '(ς , σ) ςIn => @term_var Σ ς σ ςIn).
   Arguments sub_id : clear implicits.
 
   Definition sub_wk1 {Σ b} : Sub Σ (Σ ▻ b) :=
-    (fun '(ς, τ) ςIn => @term_var (Σ ▻ b) ς τ (inctx_succ ςIn)).
+    @env_tabulate _ (fun b => Term _ (snd b)) _
+      (fun '(ς , σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
 
   Definition sub_comp {Σ1 Σ2 Σ3} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) : Sub Σ1 Σ3 :=
-    fun b bIn => sub_term ζ2 (ζ1 b bIn).
+    env_map (fun _ => sub_term ζ2) ζ1.
 
   Definition wk1_term {Σ σ b} (t : Term Σ σ) : Term (Σ ▻ b) σ :=
     sub_term sub_wk1 t.
 
   Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) :
     forall {b : 𝑺 * Ty}, Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
-    fun '(ς, τ) =>
-      @inctx_case_snoc
-        (𝑺 * Ty) (fun b' => Term (Σ2 ▻ (ς , τ)) (snd b')) Σ1 (ς , τ)
-        (@term_var (Σ2 ▻ (ς , τ)) ς τ inctx_zero)
-        (fun b' b'In => wk1_term (ζ b' b'In)).
+    fun '(ς, σ) =>
+      env_snoc (env_map (fun _ => wk1_term) ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
 
   Definition SymbolicLocalStore (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type := NamedEnv (Term Σ) Γ.
   Bind Scope env_scope with SymbolicLocalStore.
@@ -361,7 +343,7 @@ Module SymbolicTerms
   Fixpoint symbolic_eval_exp {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : SymbolicLocalStore Σ Γ) : Term Σ σ :=
     match e in (Exp _ t) return (Term Σ t) with
     | exp_var ς                       => (δ ‼ ς)%lit
-    | exp_lit _ σ0 l                  => term_lit _ σ0 l
+    | exp_lit _ σ l                   => term_lit σ l
     | exp_binop op e1 e2              => term_binop op (symbolic_eval_exp e1 δ) (symbolic_eval_exp e2 δ)
     | exp_neg e0                      => term_neg (symbolic_eval_exp e0 δ)
     | exp_not e0                      => term_not (symbolic_eval_exp e0 δ)
@@ -379,6 +361,7 @@ Module SymbolicTerms
   Inductive Chunk (Σ : Ctx (𝑺 * Ty)) : Type :=
   | chunk_pred   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
+  Arguments chunk_pred [_] _ _.
 
   Inductive Assertion (Σ : Ctx (𝑺 * Ty)) : Type :=
   | asn_bool (b : Term Σ ty_bool)
@@ -386,6 +369,11 @@ Module SymbolicTerms
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
   | asn_sep  (a1 a2 : Assertion Σ)
   | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς , τ))).
+
+  Definition asn_true {Σ} : Assertion Σ :=
+    asn_bool (term_lit ty_bool true).
+  Definition asn_false {Σ} : Assertion Σ :=
+    asn_bool (term_lit ty_bool false).
 
   Arguments asn_exist [_] _ _ _.
 
@@ -431,7 +419,6 @@ Module SymbolicTerms
   Definition SymbolicHeap (Σ : Ctx (𝑺 * Ty)) : Type :=
     list (Chunk Σ).
 
-  Arguments chunk_pred [_] _ _.
 
   Definition sub_chunk {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (c : Chunk Σ1) : Chunk Σ2 :=
     match c with
@@ -486,7 +473,7 @@ Module SymbolicTerms
     Definition symbolic_pop_local {Σ Γ x σ} : SymbolicState Σ (Γ ▻ (x , σ)) -> SymbolicState Σ Γ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState Φ (env_tail ŝ) ĥ.
 
-    Program Definition sub_symbolicstate {Σ1 Σ2 Γ} (ζ : Sub Σ1 Σ2) : SymbolicState Σ1 Γ -> SymbolicState Σ2 Γ :=
+    Definition sub_symbolicstate {Σ1 Σ2 Γ} (ζ : Sub Σ1 Σ2) : SymbolicState Σ1 Γ -> SymbolicState Σ2 Γ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (sub_pathcondition ζ Φ) (sub_localstore ζ ŝ) (sub_heap ζ ĥ).
     Definition wk1_symbolicstate {Σ Γ b} : SymbolicState Σ Γ -> SymbolicState (Σ ▻ b) Γ :=
       sub_symbolicstate sub_wk1.
@@ -671,7 +658,7 @@ Module SymbolicContracts
 
     Program Fixpoint mutator_exec {Σ Γ σ} (s : Stm Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
       match s with
-      | stm_lit τ l => mutator_pure (term_lit _ τ l)
+      | stm_lit τ l => mutator_pure (term_lit τ l)
       | stm_exp e => mutator_eval_exp e
       | stm_let x τ s k =>
         mutator_exec s >>= fun v =>
@@ -679,7 +666,7 @@ Module SymbolicContracts
         mutator_exec k              <*
         mutator_pop_local
       | stm_let' δ k =>
-        mutator_pushs_local (env_map (fun _ => term_lit Σ _) δ) *>
+        mutator_pushs_local (env_map (fun _ => term_lit _) δ) *>
         mutator_exec k <*
         mutator_pops_local _
       | stm_assign x e => mutator_exec e >>= fun v =>
@@ -691,7 +678,7 @@ Module SymbolicContracts
           ⨁ ζ : Sub Σ' Σ =>
             mutator_consume (sub_assertion ζ req) *>
             mutator_produce (sub_assertion ζ ens) *>
-            mutator_pure (term_lit Σ ty_unit tt)
+            mutator_pure (term_lit ty_unit tt)
         | @sep_contract_result_pure _ Σ' τ δ result req ens =>
           ⨁ ζ : Sub Σ' Σ =>
             mutator_consume (sub_assertion ζ req)            *>
@@ -702,7 +689,7 @@ Module SymbolicContracts
         end
       | stm_call' Δ δ' τ s =>
         mutator_get_local                                      >>= fun δ =>
-        mutator_put_local (env_map (fun _ => term_lit _ _) δ') >>= fun _ =>
+        mutator_put_local (env_map (fun _ => term_lit _) δ') >>= fun _ =>
         mutator_exec s                                                >>= fun t =>
         mutator_put_local δ                                    >>= fun _ =>
         mutator_pure t

@@ -494,8 +494,8 @@ Module ISASymbolicContractKit <:
           ty_int
           [term_var "x", term_var "y"]%arg
           (term_binop binop_plus (term_var "x") (term_var "y"))
-          (asn_bool (term_lit _ ty_bool true))
-          (asn_bool (term_lit _ ty_bool true))
+          asn_true
+          asn_true
       | add3 =>
         @sep_contract_result_pure
           ["x" ∶ ty_int, "y" ∶ ty_int, "z" ∶ ty_int]
@@ -503,8 +503,8 @@ Module ISASymbolicContractKit <:
           ty_int
           [term_var "x", term_var "y", term_var "z"]%arg
           (term_binop binop_plus (term_binop binop_plus (term_var "x") (term_var "y")) (term_var "z"))
-          (asn_bool (term_lit _ ty_bool true))
-          (asn_bool (term_lit _ ty_bool true))
+          asn_true
+          asn_true
       end.
 
 End ISASymbolicContractKit.
