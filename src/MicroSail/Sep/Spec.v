@@ -398,6 +398,12 @@ Module SymbolicTerms
   | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
   | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
 
+  Equations(noeqns) formula_eqs {Δ : Ctx (𝑿 * Ty)} {Σ : Ctx (𝑺 * Ty)}
+    (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
+    formula_eqs env_nil          env_nil            := nil;
+    formula_eqs (env_snoc δ _ t) (env_snoc δ' _ t') :=
+      formula_eq t t' :: formula_eqs δ δ'.
+
   Definition interpret_formula {Σ} (δ : NamedEnv Lit Σ) (fml : Formula Σ) : Prop :=
     match fml with
     | formula_bool t    => is_true (eval_term t δ)
@@ -622,6 +628,8 @@ Module SymbolicContracts
 
     Definition mutator_eval_exp {Σ Γ σ} (e : Exp Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
       mutator_get_local >>= fun δ => mutator_pure (symbolic_eval_exp e δ).
+    Definition mutator_eval_exps {Σ Γ} {σs : Ctx (𝑿 * Ty)} (es : NamedEnv (Exp Γ) σs) : Mutator Σ Γ Γ (NamedEnv (Term Σ) σs) :=
+      mutator_get_local >>= fun δ => mutator_pure (env_map (fun _ e => symbolic_eval_exp e δ) es).
 
     Definition mutator_assume_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit :=
       match try_solve_formula fml with
@@ -642,6 +650,11 @@ Module SymbolicContracts
       | Some false => mutator_fail
       | None       => fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil)
       end.
+    Definition mutator_assert_formulas {Σ Γ} (fmls : list (Formula Σ)) : Mutator Σ Γ Γ unit :=
+      fold_right
+        (fun fml m => mutator_assert_formula fml ;; m)
+        (mutator_pure tt)
+        fmls.
     (* Definition mutator_assert_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit := *)
     (*   fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil). *)
 
@@ -717,14 +730,17 @@ Module SymbolicContracts
         mutator_modify_local (fun δ => δ ⟪ x ↦ v ⟫)%env *>
         mutator_pure v
       | stm_call f es =>
+        mutator_eval_exps es >>= fun ts : NamedEnv (Term Σ) _ =>
         match CEnv f with
-        | @sep_contract_unit _ Σ' _ req ens =>
+        | @sep_contract_unit _ Σ' δ req ens =>
           ⨁ ζ : Sub Σ' Σ =>
+            mutator_assert_formulas (formula_eqs ts (env_map (fun _ => sub_term ζ) δ)) *>
             mutator_consume (sub_assertion ζ req) *>
             mutator_produce (sub_assertion ζ ens) *>
             mutator_pure (term_lit ty_unit tt)
         | @sep_contract_result_pure _ Σ' τ δ result req ens =>
           ⨁ ζ : Sub Σ' Σ =>
+            mutator_assert_formulas (formula_eqs ts (env_map (fun _ => sub_term ζ) δ)) *>
             mutator_consume (sub_assertion ζ req)            *>
             mutator_produce (sub_assertion ζ ens)            *>
             mutator_pure (sub_term ζ result)
