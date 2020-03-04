@@ -93,14 +93,17 @@ Module SymbolicTerms
   | term_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)) : Term Σ (ty_union U)
   | term_record  (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R)
   | term_projrec {R : 𝑹} (e : Term Σ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
-                {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Term Σ σ.
-  (* | term_builtin {σ τ : Ty} (f : Lit σ -> Lit τ) (e : Term Σ σ) : Term Σ τ. *)
+                 {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Term Σ σ.
   Bind Scope exp_scope with Term.
   Derive Signature for Term.
   Local Set Elimination Schemes.
 
   Arguments term_var {_} _ _ {_}.
   Arguments term_lit {_} _ _.
+
+  Definition term_enum {Σ} (E : 𝑬) (k : 𝑬𝑲 E) : Term Σ (ty_enum E) :=
+    term_lit (ty_enum E) k.
+  Arguments term_enum {_} _ _.
 
   Section Term_rect.
 
@@ -307,8 +310,14 @@ Module SymbolicTerms
       | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
       | @term_list _ σ es         => term_list (List.map sub_term es)
       | term_nil _                => term_nil Σ2
-      | term_tuple es             => term_tuple (env_map (@sub_term) es)
-      | @term_projtup _ _ t n σ p => term_projtup (sub_term t) n (p := p)
+      | term_tuple es             => term_tuple
+                                      ((fix sub_terms {σs} (ts : Env (Term Σ1) σs) : Env (Term Σ2) σs :=
+                                          match ts with
+                                          | env_nil           => env_nil
+                                          | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
+                                          end
+                                       ) _ es)
+      | @term_projtup _ _ t _ n p => @term_projtup _ _ (sub_term t) _ n p
       | term_union U K t0         => term_union U K (sub_term t0)
       | term_record R es          => term_record R (env_map (fun _ => sub_term) es)
       | term_projrec t rf         => term_projrec (sub_term t) rf
@@ -331,10 +340,9 @@ Module SymbolicTerms
   Definition wk1_term {Σ σ b} (t : Term Σ σ) : Term (Σ ▻ b) σ :=
     sub_term sub_wk1 t.
 
-  Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) :
-    forall {b : 𝑺 * Ty}, Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
-    fun '(ς, σ) =>
-      env_snoc (env_map (fun _ => wk1_term) ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
+  Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b : 𝑺 * Ty} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
+    let '(ς , σ) := b in
+    env_snoc (env_map (fun _ => wk1_term) ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
 
   Definition SymbolicLocalStore (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type := NamedEnv (Term Σ) Γ.
   Bind Scope env_scope with SymbolicLocalStore.
@@ -367,6 +375,7 @@ Module SymbolicTerms
   | asn_bool (b : Term Σ ty_bool)
   | asn_chunk (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
+  | asn_match_enum {E : 𝑬} (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
   | asn_sep  (a1 a2 : Assertion Σ)
   | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς , τ))).
 
@@ -424,8 +433,8 @@ Module SymbolicTerms
       ForallNamed (fun δ => List.Forall (interpret_formula δ) pc -> interpret_formula δ fml).
   Definition valid_obligations (os : list Obligation) : Prop :=
     List.Forall valid_obligation os.
-  Hint Unfold valid_obligation.
-  Hint Unfold valid_obligations.
+  Hint Unfold valid_obligation : core.
+  Hint Unfold valid_obligations : core.
 
   Definition sub_chunk {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (c : Chunk Σ1) : Chunk Σ2 :=
     match c with
@@ -445,6 +454,8 @@ Module SymbolicTerms
     | asn_bool b => asn_bool (sub_term ζ b)
     | asn_chunk c => asn_chunk (sub_chunk ζ c)
     | asn_if b a1 a2 => asn_if (sub_term ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2)
+    | asn_match_enum k alts =>
+      asn_match_enum (sub_term ζ k) (fun z => sub_assertion ζ (alts z))
     | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2)
     | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a)
     end.
@@ -570,6 +581,9 @@ Module SymbolicContracts
     Definition mutator_map {Σ Γ1 Γ2 A B} (f : A -> B) (ma : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 B :=
       mutator_bind ma (fun a => mutator_pure (f a)).
 
+    Arguments mutator_bind {_ _ _ _ _ _} _ _ /.
+    Arguments mutator_bind_right {_ _ _ _ _ _} _ _ /.
+
   End Mutator.
   Bind Scope mutator_scope with Mutator.
 
@@ -594,8 +608,11 @@ Module SymbolicContracts
 
     Local Open Scope mutator_scope.
 
-    Definition mutator_fail {Σ Γ} {A : Type} : Mutator Σ Γ Γ A :=
-      fun s => outcome_fail.
+    Definition mutator_fail {Σ Γ} {A : Type} (msg : string) : Mutator Σ Γ Γ A :=
+      fun s =>
+        (⨂ δ : NamedEnv Lit Σ =>
+         ⨂ _ : List.Forall (interpret_formula δ) (symbolicstate_pathcondition s) =>
+         outcome_fail msg)%out.
     Definition mutator_block {Σ Γ} {A : Type} : Mutator Σ Γ Γ A :=
       fun s => outcome_block.
     Definition mutator_get {Σ Γ} : Mutator Σ Γ Γ (SymbolicState Σ Γ) :=
@@ -647,7 +664,7 @@ Module SymbolicContracts
     Definition mutator_assert_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit :=
       match try_solve_formula fml with
       | Some true  => mutator_pure tt
-      | Some false => mutator_fail
+      | Some false => mutator_fail "Err [mutator_assert_formula]: unsatisfiable"
       | None       => fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil)
       end.
     Definition mutator_assert_formulas {Σ Γ} (fmls : list (Formula Σ)) : Mutator Σ Γ Γ unit :=
@@ -680,27 +697,32 @@ Module SymbolicContracts
       };
       chunk_eqb _ _ := false.
 
-    Fixpoint outcome_consume_chunk {Σ} (c : Chunk Σ) (h : SymbolicHeap Σ) : Outcome (SymbolicHeap Σ) :=
+    Fixpoint option_consume_chunk {Σ} (c : Chunk Σ) (h : SymbolicHeap Σ) : option (SymbolicHeap Σ) :=
       match h with
-      | nil      => outcome_fail
+      | nil      => None
       | c' :: h' => if chunk_eqb c c'
-                    then outcome_pure h'
-                    else outcome_map (cons c') (outcome_consume_chunk c h')
+                    then Some h'
+                    else option_map (cons c') (option_consume_chunk c h')
       end.
 
     Definition mutator_consume_chunk {Σ Γ} (c : Chunk Σ) : Mutator Σ Γ Γ unit :=
-      fun '(MkSymbolicState Φ δ h) =>
-        (outcome_consume_chunk c h >>= fun h' =>
-         outcome_pure (tt , MkSymbolicState Φ δ h' , nil))%out.
-
+      mutator_get_heap >>= fun h =>
+      match option_consume_chunk c h with
+      | Some h' => mutator_put_heap h'
+      | None    => mutator_fail "Err [mutator_consume_chunk]: empty heap"
+      end.
     Fixpoint mutator_produce {Σ Γ} (asn : Assertion Σ) : Mutator Σ Γ Γ unit :=
       match asn with
       | asn_bool b      => mutator_assume_term b
       | asn_chunk c     => mutator_produce_chunk c
       | asn_if b a1 a2  => (mutator_assume_term b ;; mutator_produce a1) ⊗
                            (mutator_assume_term (term_not b) ;; mutator_produce a2)
+      | @asn_match_enum _ E k1 alts =>
+        ⨂ k2 : 𝑬𝑲 E => (mutator_assume_formula (formula_eq k1 (term_enum _ k2)) ;;
+                        mutator_produce (alts k2))
       | asn_sep a1 a2   => mutator_produce a1 *> mutator_produce a2
       | asn_exist ς τ a => mutator_fail
+                            "Err [mutator_produce]: case [asn_exist] not impemented"
       end.
 
     Fixpoint mutator_consume {Σ Γ} (asn : Assertion Σ) : Mutator Σ Γ Γ unit :=
@@ -709,8 +731,12 @@ Module SymbolicContracts
       | asn_chunk c     => mutator_consume_chunk c
       | asn_if b a1 a2  => (mutator_assume_term b ;; mutator_consume a1) ⊗
                            (mutator_assume_term (term_not b) ;; mutator_consume a2)
+      | @asn_match_enum _ E k1 alts =>
+        ⨁ k2 : 𝑬𝑲 E => (mutator_assert_formula (formula_eq k1 (term_enum _ k2)) ;;
+                        mutator_consume (alts k2))
       | asn_sep a1 a2   => mutator_consume a1 *> mutator_consume a2
       | asn_exist ς τ a => mutator_fail
+                            "Err [mutator_consume]: case [asn_exist] not impemented"
       end.
 
     Section WithCont.
@@ -772,7 +798,7 @@ Module SymbolicContracts
       | stm_assert e1 _ => mutator_eval_exp e1 >>= fun t =>
                            mutator_assert_term t ;;
                            mutator_pure t
-      | stm_fail τ s =>    mutator_fail
+      | stm_fail τ s => mutator_fail                         "Err [mutator_exec]: [stm_fail] reached"
       | stm_match_list e alt_nil xh xt alt_cons =>
         mutator_eval_exp e >>= fun t =>
                                  (* (formula_term_eq t nil) *)
@@ -811,7 +837,7 @@ Module SymbolicContracts
       mutator_get_heap >>= fun h =>
       match h with
       | nil => mutator_pure tt
-      | _   => mutator_fail
+      | _   => mutator_fail "Err [mutator_leakcheck]: heap leak"
       end.
 
   End MutatorOperations.
