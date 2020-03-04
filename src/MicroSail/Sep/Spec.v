@@ -758,7 +758,11 @@ Module SymbolicContracts
         (*                   pop) *)
       | stm_match_sum e xinl alt_inl xinr alt_inr => _
       | stm_match_pair e xl xr rhs => _
-      | stm_match_enum E e alts => _
+      | stm_match_enum E e alts =>
+        mutator_eval_exp e >>= fun t =>
+          ⨂ k : 𝑬𝑲 E =>
+            (mutator_assume_formula (formula_eq (term_lit _ (ty_enum E) k) t) ;;
+             mutator_exec (alts k))
       | stm_match_tuple e p rhs => _
       | stm_match_union U e altx alts => _
       | stm_match_record R e p rhs => _
