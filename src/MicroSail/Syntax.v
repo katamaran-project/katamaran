@@ -809,6 +809,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   Notation "e1 && e2" := (exp_binop binop_and e1 e2) : exp_scope.
   Notation "e1 || e2" := (exp_binop binop_or e1 e2) : exp_scope.
+  Notation "e1 + e2" := (exp_binop binop_plus e1 e2) : exp_scope.
   Notation "e1 * e2" := (exp_binop binop_times e1 e2) : exp_scope.
   Notation "e1 - e2" := (exp_binop binop_minus e1 e2) : exp_scope.
   Notation "e1 < e2" := (exp_binop binop_lt e1 e2) : exp_scope.
