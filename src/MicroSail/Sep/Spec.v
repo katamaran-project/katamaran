@@ -398,27 +398,28 @@ Module SymbolicTerms
   | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
   | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
 
-  Definition valid_formula {Σ} (fml : Formula Σ) : Prop :=
+  Definition interpret_formula {Σ} (δ : NamedEnv Lit Σ) (fml : Formula Σ) : Prop :=
     match fml with
-    | formula_bool t    => forall δ, is_true (eval_term t δ)
-    | formula_eq t1 t2  => forall δ, eval_term t1 δ =  eval_term t2 δ
-    | formula_neq t1 t2 => forall δ, eval_term t1 δ <> eval_term t2 δ
+    | formula_bool t    => is_true (eval_term t δ)
+    | formula_eq t1 t2  => eval_term t1 δ =  eval_term t2 δ
+    | formula_neq t1 t2 => eval_term t1 δ <> eval_term t2 δ
     end.
-
-  Definition Obligation : Type := { Σ & Formula Σ }.
-
-  Definition valid_obligation (o : Obligation) : Prop :=
-    valid_formula (projT2 o).
-  Definition valid_obligations (os : list Obligation) : Prop :=
-    List.Forall valid_obligation os.
-  Hint Unfold valid_obligation.
-  Hint Unfold valid_obligations.
 
   Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
     list (Formula Σ).
   Definition SymbolicHeap (Σ : Ctx (𝑺 * Ty)) : Type :=
     list (Chunk Σ).
 
+  Inductive Obligation : Type :=
+  | obligation {Σ} (pc : PathCondition Σ) (fml : Formula Σ).
+
+  Definition valid_obligation : Obligation -> Prop :=
+    fun '(obligation pc fml) =>
+      ForallNamed (fun δ => List.Forall (interpret_formula δ) pc -> interpret_formula δ fml).
+  Definition valid_obligations (os : list Obligation) : Prop :=
+    List.Forall valid_obligation os.
+  Hint Unfold valid_obligation.
+  Hint Unfold valid_obligations.
 
   Definition sub_chunk {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (c : Chunk Σ1) : Chunk Σ2 :=
     match c with
@@ -600,9 +601,10 @@ Module SymbolicContracts
       mutator_eval_exp e >>= mutator_assume_term.
 
     Definition mutator_assert_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit :=
-      fun δ => outcome_pure (tt , δ , existT Formula Σ fml :: nil).
+      fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil).
+
     Definition mutator_assert_term {Σ Γ} (t : Term Σ ty_bool) : Mutator Σ Γ Γ unit :=
-      mutator_assume_formula (formula_bool t).
+      mutator_assert_formula (formula_bool t).
     Definition mutator_assert_exp {Σ Γ} (e : Exp Γ ty_bool) : Mutator Σ Γ Γ unit :=
       mutator_eval_exp e >>= mutator_assert_term.
 
@@ -759,7 +761,7 @@ Module SymbolicContracts
                         mutator_consume ens;;
                         mutator_assert_formula (formula_eq result result') ;;
                         mutator_leakcheck)%mut (symbolicstate_initial δ))
-                     (fun '(_ , _ , w) =>  valid_obligations w)
+                     (fun '(_ , _ , w) => valid_obligations w)
     | sep_contract_none _ => fun _ => True
     end body.
 

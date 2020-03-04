@@ -15,6 +15,7 @@ From MicroSail Require Import
      SmallStep.Step
      SmallStep.Progress
      Syntax
+     Sep.Outcome
      Sep.Spec.
 
 Set Implicit Arguments.
@@ -187,6 +188,7 @@ Module ISATermKit <: (TermKit ISATypeKit).
   | swapreg : Fun ["r1" ∶ ty_int, "r2" ∶ ty_int] ty_unit
   | swapreg12 : Fun ctx_nil ty_unit
   | add : Fun [ "x" ∶ ty_int , "y" ∶ ty_int ] ty_int
+  | double : Fun [ "z" ∶ ty_int ] ty_int
   | add3 : Fun [ "x" ∶ ty_int , "y" ∶ ty_int , "z" ∶ ty_int ] ty_int
   .
 
@@ -388,6 +390,7 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
       stm_write_register R1 y ;;
       stm_write_register R2 x ;;
       nop
+    | double => call add z z
     | add => x + y
     | add3 => let: "xy" := call add x y in
               call add (exp_var "xy") z
@@ -496,6 +499,15 @@ Module ISASymbolicContractKit <:
           (term_binop binop_plus (term_var "x") (term_var "y"))
           asn_true
           asn_true
+      | double =>
+        @sep_contract_result_pure
+          ["z" ∶ ty_int]
+          ["z" ∶ ty_int]
+          ty_int
+          [term_var "z"]%arg
+          (term_binop binop_plus (term_var "z") (term_var "z"))
+          asn_true
+          asn_true
       | add3 =>
         @sep_contract_result_pure
           ["x" ∶ ty_int, "y" ∶ ty_int, "z" ∶ ty_int]
@@ -522,15 +534,16 @@ Local Transparent Term_eqb.
 
 Lemma valid_contracts : ValidContractEnv CEnv.
 Proof.
-  intros Δ τ []; cbn; auto.
-  - exists (term_var "u"); cbn.
-    exists (term_var "v"); cbn.
-    exists (term_var "u"); cbn.
-    exists (term_var "v"); cbn.
-    auto.
-  - unfold valid_obligations; cbn.
-    constructor; cbn.
-    intros δ. reflexivity.
-    constructor.
-  - admit.
-Admitted.
+  intros Δ τ []; hnf; try match goal with |- True => auto end.
+  - exists (term_var "u").
+    exists (term_var "v").
+    exists (term_var "u").
+    exists (term_var "v").
+    repeat constructor.
+  - repeat constructor.
+  - exists [term_var "z", term_var "z"]%arg; cbn.
+    repeat constructor.
+  - exists [term_var "x", term_var "y"]%arg; cbn; auto.
+    exists [term_binop binop_plus (term_var "x") (term_var "y"), term_var "z"]%arg; cbn.
+    repeat constructor.
+Qed.
