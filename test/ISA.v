@@ -404,12 +404,12 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
                | KAdd => stm_fail _ "not implemented"
                | KJump => stm_fail _ "not implemented"
                end))
-    | swapreg =>
-      let: "v1" := call rX (exp_var "r1") in
-      let: "v2" := call rX (exp_var "r2") in
-      call wX (exp_var "r1") (exp_var "v2") ;;
-      call wX (exp_var "r2") (exp_var "v1") ;;
-      nop
+    | swapreg => stm_fail _ "not_implemented"
+      (* let: "v1" := call rX (exp_var "r1") in *)
+      (* let: "v2" := call rX (exp_var "r2") in *)
+      (* call wX (exp_var "r1") (exp_var "v2") ;; *)
+      (* call wX (exp_var "r2") (exp_var "v1") ;; *)
+      (* nop *)
     | swapreg12 =>
       let: "x" := stm_read_register R1 in
       let: "y" := stm_read_register R2 in
@@ -497,10 +497,36 @@ Module ISASymbolicContractKit <:
   ).
   Module STs := ISASymbolicTerms.
 
-  Definition CEnv : SepContractEnv :=
+  Open Scope env_scope.
+
+  Program Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
-      | rX => sep_contract_none _
+      | rX =>
+        let Σ' := ["reg_tag" ∶ ty_enum register_tag,  "v" ∶ ty_int] in
+        let δ' := (@env_snoc (string * Ty)
+                             (fun xt => Term Σ' (snd xt)) _ env_nil
+                    ("reg_tag" ∶ ty_enum register_tag)
+                    (* (@term_enum _ register_tag RegTag0) *)
+                    (term_var "reg_tag")
+                  ) in
+        sep_contract_result_pure
+          δ'
+          (@term_var Σ' "v" _ _)
+        (@asn_match_enum _ register_tag (term_var "reg_tag")
+                        (fun k => match k with
+                               | RegTag0 => R0 ↦ term_var "v"
+                               | RegTag1 => R1 ↦ term_var "v"
+                               | RegTag2 => R2 ↦ term_var "v"
+                               | RegTag3 => R3 ↦ term_var "v"
+                               end))
+        (@asn_match_enum _ register_tag (term_var "reg_tag")
+                        (fun k => match k with
+                               | RegTag0 => R0 ↦ term_var "v"
+                               | RegTag1 => R1 ↦ term_var "v"
+                               | RegTag2 => R2 ↦ term_var "v"
+                               | RegTag3 => R3 ↦ term_var "v"
+                               end))
       | wX => sep_contract_none _
       | rF => sep_contract_none _
       | wF => sep_contract_none _
@@ -558,18 +584,88 @@ Import ISASymbolicContracts.
 Local Transparent chunk_eqb.
 Local Transparent Term_eqb.
 
+Import List.
+
+Lemma Forall_singleton {A : Type} :
+  forall (x : A) (P : A -> Prop) (prf : P x), Forall P (x :: nil).
+  Proof.
+    intros.
+    apply Forall_forall.
+    intros y yInX.
+    destruct yInX.
+    - rewrite <- H. exact prf .
+    - destruct H.
+  Qed.
+
 Lemma valid_contracts : ValidContractEnv CEnv.
 Proof.
-  intros Δ τ []; hnf; try match goal with |- True => auto end.
-  - exists (term_var "u").
-    exists (term_var "v").
-    exists (term_var "u").
-    exists (term_var "v").
-    repeat constructor.
-  - repeat constructor.
-  - exists [term_var "z", term_var "z"]%arg; cbn.
-    repeat constructor.
-  - exists [term_var "x", term_var "y"]%arg; cbn; auto.
-    exists [term_binop binop_plus (term_var "x") (term_var "y"), term_var "z"]%arg; cbn.
-    repeat constructor.
-Qed.
+  intros Δ τ [].
+  - intros i; destruct i; cbn; intros j; cbn; destruct j; cbn.
+    + exists (term_var "v").
+      intros k; destruct k; cbn.
+      * now apply Forall_singleton.
+      * admit.
+      * admit.
+      * admit.
+   + admit.
+   + admit.
+   + admit.
+   + admit.
+   + exists (term_var "v").
+     intros k; destruct k; cbn.
+      * admit.
+      * now apply Forall_singleton.
+      * admit.
+      * admit.
+   + admit.
+   + admit.
+   + admit.
+   + admit.
+   + exists (term_var "v").
+     intros k; destruct k; cbn.
+      * admit.
+      * admit.
+      * now apply Forall_singleton.
+      * admit.
+   + admit.
+   + admit.
+   + admit.
+   + admit.
+   + exists (term_var "v").
+     intros k; destruct k; cbn.
+      * admit.
+      * admit.
+      * admit.
+      * now apply Forall_singleton.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  (* - exists (term_var "u"); cbn. *)
+  (*   exists (term_var "v"); cbn. *)
+  (*   exists (term_var "u"); cbn. *)
+  (*   exists (term_var "v"); cbn. *)
+  (*   auto. *)
+  (* - unfold valid_obligations; cbn. *)
+  (*   constructor; cbn. *)
+  (*   intros δ. reflexivity. *)
+  (*   constructor. *)
+  (* - admit. *)
+Admitted.
+(*   intros Δ τ []; hnf; try match goal with |- True => auto end. *)
+(*   - exists (term_var "u"). *)
+(*     exists (term_var "v"). *)
+(*     exists (term_var "u"). *)
+(*     exists (term_var "v"). *)
+(*     repeat constructor. *)
+(*   - repeat constructor. *)
+(*   - exists [term_var "z", term_var "z"]%arg; cbn. *)
+(*     repeat constructor. *)
+(*   - exists [term_var "x", term_var "y"]%arg; cbn; auto. *)
+(*     exists [term_binop binop_plus (term_var "x") (term_var "y"), term_var "z"]%arg; cbn. *)
+(*     repeat constructor. *)
+(* Qed. *)

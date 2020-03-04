@@ -86,6 +86,7 @@ Module SymbolicTerms
   | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2)
   | term_list    {σ : Ty} (es : list (Term Σ σ)) : Term Σ (ty_list σ)
   | term_nil     {σ : Ty} : Term Σ (ty_list σ)
+  | term_enum    {E : 𝑬} (k : 𝑬𝑲 E) : Term Σ (ty_enum E)
   (* Experimental features *)
   | term_tuple   {σs : Ctx Ty} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs)
   | term_projtup {σs : Ctx Ty} (e : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
@@ -133,6 +134,7 @@ Module SymbolicTerms
     Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
     Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
     Hypothesis (P_nil        : forall σ : Ty, P (ty_list σ) (term_nil Σ)).
+    Hypothesis (P_enum      : forall (E : 𝑬) (K : 𝑬𝑲 E), P (ty_enum E) (term_enum Σ K)).
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
     Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
     Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union e)).
@@ -150,6 +152,7 @@ Module SymbolicTerms
       | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
       | @term_list _ σ es              => ltac:(eapply P_list; induction es; cbn; eauto using unit)
       | @term_nil _ σ                  => ltac:(eapply P_nil; eauto)
+      | @term_enum _ E K                  => ltac:(eapply P_enum; eauto)
       | @term_tuple _ σs es            => ltac:(eapply P_tuple; induction es; cbn; eauto using unit)
       | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
       | @term_union _ U K e            => ltac:(eapply P_union; eauto)
@@ -172,6 +175,7 @@ Module SymbolicTerms
     | term_inr e           => inr (eval_term e δ)
     | term_list es         => List.map (fun e => eval_term e δ) es
     | term_nil _           => nil
+    | term_enum _ K        => K
     | term_tuple es        => Env_rect
                                (fun σs _ => Lit (ty_tuple σs))
                                tt
@@ -257,6 +261,11 @@ Module SymbolicTerms
     Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
     Term_eqb (term_list xs) (term_list ys) := list_beq Term_eqb xs ys;
     Term_eqb (@term_nil _) (@term_nil _) := true;
+    Term_eqb (@term_enum _ k1) (@term_enum _ k2)
+      with 𝑬𝑲_eq_dec k1 k2 => {
+        Term_eqb (@term_enum _ k) (@term_enum _ ?(k)) (left eq_refl) := true;
+        Term_eqb _ _ (right _) := false
+      };
     Term_eqb (term_tuple x) (term_tuple y) :=
        @env_beq _ (Term Σ) (@Term_eqb _) _ x y;
     Term_eqb (@term_projtup σs x n _ p) (@term_projtup τs y m _ q)
@@ -307,8 +316,15 @@ Module SymbolicTerms
       | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
       | @term_list _ σ es         => term_list (List.map sub_term es)
       | term_nil _                => term_nil Σ2
-      | term_tuple es             => term_tuple (env_map (@sub_term) es)
-      | @term_projtup _ _ t n σ p => term_projtup (sub_term t) n (p := p)
+      | term_enum _ k             => term_enum Σ2 k
+      | term_tuple es             => term_tuple
+                                      ((fix sub_terms {σs} (ts : Env (Term Σ1) σs) : Env (Term Σ2) σs :=
+                                          match ts with
+                                          | env_nil           => env_nil
+                                          | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
+                                          end
+                                       ) _ es)
+      | @term_projtup _ _ t _ n p => @term_projtup _ _ (sub_term t) _ n p
       | term_union U K t0         => term_union U K (sub_term t0)
       | term_record R es          => term_record R (env_map (fun _ => sub_term) es)
       | term_projrec t rf         => term_projrec (sub_term t) rf
@@ -367,6 +383,7 @@ Module SymbolicTerms
   | asn_bool (b : Term Σ ty_bool)
   | asn_chunk (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
+  | asn_match_enum {E : 𝑬} (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
   | asn_sep  (a1 a2 : Assertion Σ)
   | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς , τ))).
 
@@ -439,6 +456,8 @@ Module SymbolicTerms
     | asn_bool b => asn_bool (sub_term ζ b)
     | asn_chunk c => asn_chunk (sub_chunk ζ c)
     | asn_if b a1 a2 => asn_if (sub_term ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2)
+    | asn_match_enum k alts =>
+      asn_match_enum (sub_term ζ k) (fun z => sub_assertion ζ (alts z))
     | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2)
     | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a)
     end.
@@ -588,10 +607,8 @@ Module SymbolicContracts
 
     Local Open Scope mutator_scope.
 
-    Definition mutator_fail {Σ Γ} {A : Type} : Mutator Σ Γ Γ A :=
-      fun s => outcome_fail.
-    Definition mutator_block {Σ Γ} {A : Type} : Mutator Σ Γ Γ A :=
-      fun s => outcome_block.
+    Definition mutator_fail {Σ Γ} {A : Type} (msg : string) : Mutator Σ Γ Γ A :=
+      fun s => outcome_fail msg.
     Definition mutator_get {Σ Γ} : Mutator Σ Γ Γ (SymbolicState Σ Γ) :=
       fun s => outcome_pure (s , s , nil).
     Definition mutator_put {Σ Γ Γ'} (s : SymbolicState Σ Γ') : Mutator Σ Γ Γ' unit :=
@@ -669,7 +686,7 @@ Module SymbolicContracts
 
     Fixpoint outcome_consume_chunk {Σ} (c : Chunk Σ) (h : SymbolicHeap Σ) : Outcome (SymbolicHeap Σ) :=
       match h with
-      | nil      => outcome_fail
+      | nil      => outcome_fail "Err [outcome_consume_chunk]: empty heap"
       | c' :: h' => if chunk_eqb c c'
                     then outcome_pure h'
                     else outcome_map (cons c') (outcome_consume_chunk c h')
@@ -679,15 +696,18 @@ Module SymbolicContracts
       fun '(MkSymbolicState Φ δ h) =>
         (outcome_consume_chunk c h >>= fun h' =>
          outcome_pure (tt , MkSymbolicState Φ δ h' , nil))%out.
-
     Fixpoint mutator_produce {Σ Γ} (asn : Assertion Σ) : Mutator Σ Γ Γ unit :=
       match asn with
       | asn_bool b      => mutator_assume_term b
       | asn_chunk c     => mutator_produce_chunk c
       | asn_if b a1 a2  => (mutator_assume_term b ;; mutator_produce a1) ⊗
                            (mutator_assume_term (term_not b) ;; mutator_produce a2)
+      | @asn_match_enum _ E k1 alts =>
+        ⨂ k2 : 𝑬𝑲 E => (mutator_assume_formula (formula_eq k1 (term_enum _ k2)) ;;
+                        mutator_produce (alts k2))
       | asn_sep a1 a2   => mutator_produce a1 *> mutator_produce a2
       | asn_exist ς τ a => mutator_fail
+                            "Err [mutator_produce]: case [asn_exist] not impemented"
       end.
 
     Fixpoint mutator_consume {Σ Γ} (asn : Assertion Σ) : Mutator Σ Γ Γ unit :=
@@ -696,8 +716,12 @@ Module SymbolicContracts
       | asn_chunk c     => mutator_consume_chunk c
       | asn_if b a1 a2  => (mutator_assume_term b ;; mutator_consume a1) ⊗
                            (mutator_assume_term (term_not b) ;; mutator_consume a2)
+      | @asn_match_enum _ E k1 alts =>
+        ⨂ k2 : 𝑬𝑲 E => (mutator_assume_formula (formula_eq k1 (term_enum _ k2)) ;;
+                        mutator_consume (alts k2))
       | asn_sep a1 a2   => mutator_consume a1 *> mutator_consume a2
       | asn_exist ς τ a => mutator_fail
+                            "Err [mutator_consume]: case [asn_exist] not impemented"
       end.
 
     Program Fixpoint mutator_exec {Σ Γ σ} (s : Stm Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
@@ -744,7 +768,7 @@ Module SymbolicContracts
       | stm_assert e1 _ => mutator_eval_exp e1 >>= fun t =>
                            mutator_assert_term t ;;
                            mutator_pure t
-      | stm_fail τ s =>    mutator_fail
+      | stm_fail τ s => mutator_fail                         "Err [mutator_exec]: [stm_fail] reached"
       | stm_match_list e alt_nil xh xt alt_cons =>
         mutator_eval_exp e >>= fun t =>
                                  (* (formula_term_eq t nil) *)
@@ -761,7 +785,7 @@ Module SymbolicContracts
       | stm_match_enum E e alts =>
         mutator_eval_exp e >>= fun t =>
           ⨂ k : 𝑬𝑲 E =>
-            (mutator_assume_formula (formula_eq (term_lit _ (ty_enum E) k) t) ;;
+            (mutator_assume_formula (formula_eq (term_enum _ k) t) ;;
              mutator_exec (alts k))
       | stm_match_tuple e p rhs => _
       | stm_match_union U e altx alts => _
@@ -785,7 +809,7 @@ Module SymbolicContracts
       mutator_get_heap >>= fun h =>
       match h with
       | nil => mutator_pure tt
-      | _   => mutator_fail
+      | _   => mutator_fail "Err [mutator_leakcheck]: heap leak"
       end.
 
   End MutatorOperations.
