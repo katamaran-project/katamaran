@@ -310,14 +310,8 @@ Module SymbolicTerms
       | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
       | @term_list _ σ es         => term_list (List.map sub_term es)
       | term_nil _                => term_nil Σ2
-      | term_tuple es             => term_tuple
-                                      ((fix sub_terms {σs} (ts : Env (Term Σ1) σs) : Env (Term Σ2) σs :=
-                                          match ts with
-                                          | env_nil           => env_nil
-                                          | env_snoc ts' _ t' => env_snoc (sub_terms ts') _ (sub_term t')
-                                          end
-                                       ) _ es)
-      | @term_projtup _ _ t _ n p => @term_projtup _ _ (sub_term t) _ n p
+      | term_tuple es             => term_tuple (env_map (@sub_term) es)
+      | @term_projtup _ _ t n σ p => term_projtup (sub_term t) n (p := p)
       | term_union U K t0         => term_union U K (sub_term t0)
       | term_record R es          => term_record R (env_map (fun _ => sub_term) es)
       | term_projrec t rf         => term_projrec (sub_term t) rf
