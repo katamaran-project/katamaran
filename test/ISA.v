@@ -25,6 +25,13 @@ Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope ctx_scope.
 
+Inductive Enums : Set := register_tag.
+
+Definition Enums_eq_dec : EqDec Enums := ltac:(unfold EqDec; decide equality).
+
+Inductive RegisterTag :=
+  RegTag0 | RegTag1 | RegTag2 | RegTag3.
+
 Inductive Unions : Set := instruction.
 
 Lemma Unions_eq_dec : EqDec Unions.
@@ -54,10 +61,21 @@ Inductive InstructionConstructor :=
 Module ISATypeKit <: TypeKit.
 
   (** ENUMS **)
-  Definition 𝑬        := Empty_set.
-  Definition 𝑬𝑲 (E : 𝑬) : Set := Empty_set.
+  Definition 𝑬        := Enums.
+  Definition 𝑬𝑲 (E : 𝑬) : Set :=
+    match E with
+    | register_tag => RegisterTag
+    end.
   Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
-    match E with end.
+    match E with
+    | register_tag => {| blast v POST :=
+                     (v = RegTag0  -> POST RegTag0) /\
+                     (v = RegTag1 -> POST RegTag1)  /\
+                     (v = RegTag2 -> POST RegTag2)    /\
+                     (v = RegTag3 -> POST RegTag3)
+                |}
+    end.
+  Solve All Obligations with destruct a; intuition congruence.
 
   (** UNIONS **)
   Definition 𝑼        := Unions.
@@ -88,7 +106,11 @@ Module ISATypeKit <: TypeKit.
   Definition 𝑿        := string.
 
   Definition 𝑬_eq_dec : EqDec 𝑬 := ltac:(unfold EqDec; decide equality).
-  Definition 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e) := ltac:(unfold EqDec; decide equality).
+  Definition 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e).
+  Proof.
+    intros. unfold EqDec.
+    intros x y. destruct e. decide equality.
+  Qed.
   Definition 𝑼_eq_dec : EqDec 𝑼 := Unions_eq_dec.
   Definition 𝑼𝑻_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑻 u).
   Proof.
@@ -170,7 +192,7 @@ Module ISATermKit <: (TermKit ISATypeKit).
   (* Names are inspired by sail-riscv naming convention *)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
   (* read registers *)
-  | rX  : Fun ["reg_code" ∶ ty_int] ty_int
+  | rX  : Fun ["reg_tag" ∶ ty_enum register_tag ] ty_int
   (* write register *)
   | wX : Fun ["reg_code" ∶ ty_int, "reg_value" ∶ ty_int] ty_int
   (* read flag *)
@@ -239,9 +261,9 @@ Import NameResolution.
 Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Module TM := ISATerms.
 
-  Local Definition lit_true {Γ}  : Exp Γ ty_bool := exp_lit _ ty_bool true.
-  Local Definition lit_false {Γ} : Exp Γ ty_bool := exp_lit _ ty_bool false.
-  Local Definition int_lit {Γ} (literal : Z) : Exp Γ ty_int :=
+  Definition lit_true {Γ}  : Exp Γ ty_bool := exp_lit _ ty_bool true.
+  Definition lit_false {Γ} : Exp Γ ty_bool := exp_lit _ ty_bool false.
+  Definition int_lit {Γ} (literal : Z) : Exp Γ ty_int :=
     exp_lit _ ty_int literal.
 
   (* REGISTER STORE *)
@@ -310,6 +332,7 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Local Notation "'z'"   := (@exp_var _ "z" _ _).
   Local Notation "'instr'" := (@exp_var _ "instr" _ _).
   Local Notation "'reg_code'" := (@exp_var _ "reg_code" ty_int _).
+  Local Notation "'reg_tag'" := (@exp_var _ "reg_tag" (ty_enum register_tag) _).
   Local Notation "'reg_value'" := (@exp_var _ "reg_value" ty_int _).
   Local Notation "'flag_code'" := (@exp_var _ "flag_code" ty_int _).
   Local Notation "'flag_value'" := (@exp_var _ "flag_value" ty_bool _).
@@ -321,11 +344,14 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     let pi := eval compute in
     match f in Fun Δ τ return Stm Δ τ with
     | rX =>
-      if:      reg_code = int_lit 0 then stm_read_register R0
-      else if: reg_code = int_lit 1 then stm_read_register R1
-      else if: reg_code = int_lit 2 then stm_read_register R2
-      else if: reg_code = int_lit 3 then stm_read_register R3
-      else     stm_fail _ "read_register: invalid register"
+      stm_match_enum register_tag reg_tag
+      (fun tag =>
+         match tag with
+         | RegTag0 => stm_read_register R0
+         | RegTag1 => stm_read_register R1
+         | RegTag2 => stm_read_register R2
+         | RegTag3 => stm_read_register R3
+         end)
     | wX =>
       if:      reg_code = int_lit 0 then stm_write_register R0 reg_value
       else if: reg_code = int_lit 1 then stm_write_register R1 reg_value
@@ -378,12 +404,12 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
                | KAdd => stm_fail _ "not implemented"
                | KJump => stm_fail _ "not implemented"
                end))
-    | swapreg =>
-      let: "v1" := call rX (exp_var "r1") in
-      let: "v2" := call rX (exp_var "r2") in
-      call wX (exp_var "r1") (exp_var "v2") ;;
-      call wX (exp_var "r2") (exp_var "v1") ;;
-      nop
+    | swapreg => stm_fail _ "not_implemented"
+      (* let: "v1" := call rX (exp_var "r1") in *)
+      (* let: "v2" := call rX (exp_var "r2") in *)
+      (* call wX (exp_var "r1") (exp_var "v2") ;; *)
+      (* call wX (exp_var "r2") (exp_var "v1") ;; *)
+      (* nop *)
     | swapreg12 =>
       let: "x" := stm_read_register R1 in
       let: "y" := stm_read_register R2 in
@@ -471,10 +497,36 @@ Module ISASymbolicContractKit <:
   ).
   Module STs := ISASymbolicTerms.
 
+  Open Scope env_scope.
+
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
-      | rX => sep_contract_none _
+      | rX =>
+        let Σ' := ["reg_tag" ∶ ty_enum register_tag,  "v" ∶ ty_int] in
+        let δ' := (@env_snoc (string * Ty)
+                             (fun xt => Term Σ' (snd xt)) _ env_nil
+                    ("reg_tag" ∶ ty_enum register_tag)
+                    (* (@term_enum _ register_tag RegTag0) *)
+                    (term_var "reg_tag")
+                  ) in
+        sep_contract_result_pure
+          δ'
+          (@term_var Σ' "v" _ _)
+        (@asn_match_enum _ register_tag (term_var "reg_tag")
+                        (fun k => match k with
+                               | RegTag0 => R0 ↦ term_var "v"
+                               | RegTag1 => R1 ↦ term_var "v"
+                               | RegTag2 => R2 ↦ term_var "v"
+                               | RegTag3 => R3 ↦ term_var "v"
+                               end))
+        (@asn_match_enum _ register_tag (term_var "reg_tag")
+                        (fun k => match k with
+                               | RegTag0 => R0 ↦ term_var "v"
+                               | RegTag1 => R1 ↦ term_var "v"
+                               | RegTag2 => R2 ↦ term_var "v"
+                               | RegTag3 => R3 ↦ term_var "v"
+                               end))
       | wX => sep_contract_none _
       | rF => sep_contract_none _
       | wF => sep_contract_none _
@@ -532,9 +584,62 @@ Import ISASymbolicContracts.
 Local Transparent chunk_eqb.
 Local Transparent Term_eqb.
 
+Import List.
+
+Lemma Forall_singleton {A : Type} :
+  forall (x : A) (P : A -> Prop) (prf : P x), Forall P (x :: nil).
+  Proof.
+    intros.
+    apply Forall_forall.
+    intros y yInX.
+    destruct yInX.
+    - rewrite <- H. exact prf .
+    - destruct H.
+  Qed.
+
+  Lemma Forall_nil {A : Type} :
+  forall (P : A -> Prop), Forall P nil.
+Proof. trivial. Qed.
+
+Local Ltac solve :=
+  unfold valid_obligations, valid_obligation;
+  repeat
+    (cbn in *; intros;
+     try
+       match goal with
+       | |- Forall _ _ => constructor
+       | H: Forall _ _ |- _ => dependent destruction H
+       end;
+     try congruence; auto).
+
 Lemma valid_contracts : ValidContractEnv CEnv.
 Proof.
   intros Δ τ []; hnf; try match goal with |- True => auto end.
+  - intros i; destruct i; cbn.
+    + intros j; destruct j; solve.
+      * exists (term_var "v"); solve.
+        exists RegTag0; solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+    + intros j; destruct j; solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+        exists RegTag1; solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+    + intros j; destruct j; solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+        exists RegTag2; solve.
+      * exists (term_var "v"); solve.
+    + intros j; destruct j; solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+        exists RegTag3; solve.
   - exists (term_var "u").
     exists (term_var "v").
     exists (term_var "u").
