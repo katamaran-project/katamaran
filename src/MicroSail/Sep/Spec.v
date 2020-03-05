@@ -798,7 +798,7 @@ Module SymbolicContracts
       | stm_assert e1 _ => mutator_eval_exp e1 >>= fun t =>
                            mutator_assert_term t ;;
                            mutator_pure t
-      | stm_fail τ s => mutator_fail                         "Err [mutator_exec]: [stm_fail] reached"
+      | stm_fail τ s => mutator_fail "Err [mutator_exec]: [stm_fail] reached"
       | stm_match_list e alt_nil xh xt alt_cons =>
         mutator_eval_exp e >>= fun t =>
                                  (* (formula_term_eq t nil) *)
