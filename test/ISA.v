@@ -499,7 +499,7 @@ Module ISASymbolicContractKit <:
 
   Open Scope env_scope.
 
-  Program Definition CEnv : SepContractEnv :=
+  Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
       | rX =>
@@ -601,11 +601,29 @@ Lemma Forall_singleton {A : Type} :
   forall (P : A -> Prop), Forall P nil.
 Proof. trivial. Qed.
 
+Local Ltac solve :=
+  unfold valid_obligations, valid_obligation;
+  repeat
+    match goal with
+    | |- Forall _ _ => constructor; cbn in *; intros
+    | H: Forall _ _ |- _ => dependent destruction H; cbn in *; intros
+    end; try congruence.
+
 Lemma valid_contracts : ValidContractEnv CEnv.
 Proof.
   intros Δ τ [].
-  - intros i; destruct i; cbn; intros j; cbn; destruct j; cbn.
-    + exists (term_var "v"); cbn.
+  - intros i; destruct i; cbn.
+    + intros j; destruct j; cbn.
+      * exists (term_var "v"); cbn.
+        exists RegTag0; cbn; solve; auto.
+      * intros.
+        exists (term_lit ty_int 0).
+        assert (NamedEnv TY.Lit ["reg_tag" ∶ ty_enum register_tag, "v" ∶ ty_int]).
+        { constructor; cbn. constructor; cbn. constructor.
+          constructor 1.
+          exact 0.
+        }
+        exists X; solve.
       intros k; destruct k; cbn.
       * now apply Forall_nil.
         (* now apply Forall_singleton. *)

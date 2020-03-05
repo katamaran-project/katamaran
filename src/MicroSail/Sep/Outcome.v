@@ -68,12 +68,15 @@ Definition outcome_demonic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
 Definition outcome_angelic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
   outcome_angelic (fun b : bool => if b then o1 else o2).
 
+Definition Error (s : string) : Prop := False.
+Opaque Error.
+
 Fixpoint outcome_satisfy {A : Type} (o : Outcome A) (P : A -> Prop) : Prop :=
   match o with
   | outcome_pure a     => P a
   | outcome_demonic os => forall i, outcome_satisfy (os i) P
   | outcome_angelic os => exists i, outcome_satisfy (os i) P
-  | outcome_fail s => False
+  | outcome_fail s => Error s
   end.
 
 Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
