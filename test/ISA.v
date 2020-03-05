@@ -604,92 +604,51 @@ Proof. trivial. Qed.
 Local Ltac solve :=
   unfold valid_obligations, valid_obligation;
   repeat
-    match goal with
-    | |- Forall _ _ => constructor; cbn in *; intros
-    | H: Forall _ _ |- _ => dependent destruction H; cbn in *; intros
-    end; try congruence.
+    (cbn in *; intros;
+     try
+       match goal with
+       | |- Forall _ _ => constructor
+       | H: Forall _ _ |- _ => dependent destruction H
+       end;
+     try congruence; auto).
 
 Lemma valid_contracts : ValidContractEnv CEnv.
 Proof.
-  intros Δ τ [].
+  intros Δ τ []; hnf; try match goal with |- True => auto end.
   - intros i; destruct i; cbn.
-    + intros j; destruct j; cbn.
-      * exists (term_var "v"); cbn.
-        exists RegTag0; cbn; solve; auto.
-      * intros.
-        exists (term_lit ty_int 0).
-        assert (NamedEnv TY.Lit ["reg_tag" ∶ ty_enum register_tag, "v" ∶ ty_int]).
-        { constructor; cbn. constructor; cbn. constructor.
-          constructor 1.
-          exact 0.
-        }
-        exists X; solve.
-      intros k; destruct k; cbn.
-      * now apply Forall_nil.
-        (* now apply Forall_singleton. *)
-      * admit.
-      * admit.
-      * admit.
-   + admit.
-   + admit.
-   + admit.
-   + admit.
-   + exists (term_var "v").
-     intros k; destruct k; cbn.
-      * admit.
-      * now apply Forall_nil.
-      * admit.
-      * admit.
-   + admit.
-   + admit.
-   + admit.
-   + admit.
-   + exists (term_var "v").
-     intros k; destruct k; cbn.
-      * admit.
-      * admit.
-      * now apply Forall_nil.
-      * admit.
-   + admit.
-   + admit.
-   + admit.
-   + admit.
-   + exists (term_var "v").
-     intros k; destruct k; cbn.
-      * admit.
-      * admit.
-      * admit.
-      * now apply Forall_nil.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  (* - exists (term_var "u"); cbn. *)
-  (*   exists (term_var "v"); cbn. *)
-  (*   exists (term_var "u"); cbn. *)
-  (*   exists (term_var "v"); cbn. *)
-  (*   auto. *)
-  (* - unfold valid_obligations; cbn. *)
-  (*   constructor; cbn. *)
-  (*   intros δ. reflexivity. *)
-  (*   constructor. *)
-  (* - admit. *)
-Admitted.
-(*   intros Δ τ []; hnf; try match goal with |- True => auto end. *)
-(*   - exists (term_var "u"). *)
-(*     exists (term_var "v"). *)
-(*     exists (term_var "u"). *)
-(*     exists (term_var "v"). *)
-(*     repeat constructor. *)
-(*   - repeat constructor. *)
-(*   - exists [term_var "z", term_var "z"]%arg; cbn. *)
-(*     repeat constructor. *)
-(*   - exists [term_var "x", term_var "y"]%arg; cbn; auto. *)
-(*     exists [term_binop binop_plus (term_var "x") (term_var "y"), term_var "z"]%arg; cbn. *)
-(*     repeat constructor. *)
-(* Qed. *
-)
+    + intros j; destruct j; solve.
+      * exists (term_var "v"); solve.
+        exists RegTag0; solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+    + intros j; destruct j; solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+        exists RegTag1; solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+    + intros j; destruct j; solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+        exists RegTag2; solve.
+      * exists (term_var "v"); solve.
+    + intros j; destruct j; solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+      * exists (term_var "v"); solve.
+        exists RegTag3; solve.
+  - exists (term_var "u").
+    exists (term_var "v").
+    exists (term_var "u").
+    exists (term_var "v").
+    repeat constructor.
+  - repeat constructor.
+  - exists [term_var "z", term_var "z"]%arg; cbn.
+    repeat constructor.
+  - exists [term_var "x", term_var "y"]%arg; cbn; auto.
+    exists [term_binop binop_plus (term_var "x") (term_var "y"), term_var "z"]%arg; cbn.
+    repeat constructor.
+Qed.

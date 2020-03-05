@@ -604,7 +604,7 @@ Module SymbolicContracts
 
     Definition mutator_fail {Σ Γ} {A : Type} (msg : string) : Mutator Σ Γ Γ A :=
       fun s =>
-        (⨁ δ : NamedEnv Lit Σ =>
+        (⨂ δ : NamedEnv Lit Σ =>
          ⨂ _ : List.Forall (interpret_formula δ) (symbolicstate_pathcondition s) =>
          outcome_fail msg)%out.
     Definition mutator_block {Σ Γ} {A : Type} : Mutator Σ Γ Γ A :=
