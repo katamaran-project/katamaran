@@ -1,17 +1,18 @@
 -arg "-w all -w -undeclared-scope" -R src/MicroSail MicroSail
 src/MicroSail.v
 src/MicroSail/Context.v
-src/MicroSail/WLP/Dijkstra.v
 src/MicroSail/Environment.v
 src/MicroSail/Notation.v
+src/MicroSail/Prelude.v
 src/MicroSail/Sep/Outcome.v
-src/MicroSail/Sep/Spec.v
 src/MicroSail/Sep/Soundness/Term.v
-src/MicroSail/SmallStep/Step.v
+src/MicroSail/Sep/Spec.v
 src/MicroSail/SmallStep/Inversion.v
 src/MicroSail/SmallStep/Progress.v
+src/MicroSail/SmallStep/Step.v
 src/MicroSail/Syntax.v
 src/MicroSail/Tactics.v
+src/MicroSail/WLP/Dijkstra.v
 src/MicroSail/WLP/Soundness.v
 src/MicroSail/WLP/Spec.v
 test/Example.v

@@ -41,7 +41,8 @@ From Equations Require Import
 From MicroSail Require Export
      Context
      Environment
-     Notation.
+     Notation
+     Prelude.
 
 Local Set Implicit Arguments.
 Local Unset Transparent Obligations.
@@ -362,58 +363,30 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ty_record R => blastable_record R
       end%type.
 
-    (* Ask Coq to generate boolean and decidable equality for list *)
-    Scheme Equality for list.
-    Lemma list_beq_spec :
-      forall (A : Type) (xs ys : list A)
-        (A_eqb : A -> A -> bool)
-        (A_eqb_spec : forall x y, reflect (x = y) (A_eqb x y)) ,
-        reflect (xs = ys) (list_beq A_eqb xs ys).
-    Proof with cbn; try (constructor; congruence).
-      intros.
-      revert ys.
-      induction xs as [|x xs]; intros [|y ys]...
-      - destruct (A_eqb_spec x y); destruct (IHxs ys)...
-    Qed.
-    Scheme Equality for prod.
-    Scheme Equality for sum.
-
-    Equations Lit_eqb σ (l1 l2 : Lit σ) : bool :=
-      Lit_eqb ty_int l1 l2 := Z.eqb l1 l2;
-      Lit_eqb ty_bool  l1 l2 := Bool.eqb l1 l2;
-      Lit_eqb ty_bit  l1 l2 := Bit_eqb l1 l2;
-      Lit_eqb ty_string l1 l2 := String.eqb l1 l2;
-      Lit_eqb (ty_list τ) l1 l2 := list_beq (Lit_eqb τ) l1 l2;
-      Lit_eqb (ty_prod τ1 τ2) l1 l2 := prod_beq (Lit_eqb τ1) (Lit_eqb τ2) l1 l2;
-      Lit_eqb (ty_sum τ1 τ2) l1 l2 := sum_beq (Lit_eqb τ1) (Lit_eqb τ2) l1 l2;
-      Lit_eqb ty_unit _ _ := true;
-      Lit_eqb (ty_enum e) l1 l2 :=
-        match 𝑬𝑲_eq_dec l1 l2 with
-        | left eq_refl => true
-        | right _ => false
-        end;
-      Lit_eqb (ty_tuple σs) l1 l2 := envrec_beq Lit_eqb l1 l2;
-      Lit_eqb (ty_union U) l1 l2 :=
-        match @𝑼𝑻_eq_dec U l1 l2 with
-        | left eq_refl => true
-        | right _ => false
-        end;
-      Lit_eqb (ty_record R) l1 l2 :=
-        match @𝑹𝑻_eq_dec R l1 l2 with
-        | left eq_refl => true
-        | right _ => false
-        end.
+    Fixpoint Lit_eqb (σ : Ty) : forall (l1 l2 : Lit σ), bool :=
+      match σ with
+      | ty_int      => Z.eqb
+      | ty_bool     => Bool.eqb
+      | ty_bit      => Bit_eqb
+      | ty_string   => String.eqb
+      | ty_list σ   => list_beq (Lit_eqb σ)
+      | ty_prod σ τ => prod_beq (Lit_eqb σ) (Lit_eqb τ)
+      | ty_sum σ τ  => sum_beq (Lit_eqb σ) (Lit_eqb τ)
+      | ty_unit     => fun _ _ => true
+      | ty_enum E   => fun l1 l2 => if 𝑬𝑲_eq_dec l1 l2 then true else false
+      | ty_tuple σs => envrec_beq Lit_eqb
+      | ty_union U  => fun l1 l2 => if 𝑼𝑻_eq_dec l1 l2 then true else false
+      | ty_record R => fun l1 l2 => if 𝑹𝑻_eq_dec l1 l2 then true else false
+      end.
 
     Lemma Lit_eqb_spec (σ : Ty) (x y : Lit σ) : reflect (x = y) (Lit_eqb σ x y).
     Proof with cbn; try (constructor; congruence).
-      induction σ; simp Lit_eqb; cbn.
+      induction σ; cbn.
       - apply Z.eqb_spec.
       - apply Bool.eqb_spec.
       - apply Bit_eqb_spec.
       - apply String.eqb_spec.
-      - revert y.
-        induction x as [|x xs]; intros [|y ys]...
-        destruct (IHσ x y); destruct (IHxs ys)...
+      - apply list_beq_spec; auto.
       - destruct x as [x1 x2]; destruct y as [y1 y2]; cbn.
         destruct (IHσ1 x1 y1); destruct (IHσ2 x2 y2)...
       - destruct x as [x1| x2]; destruct y as [y1|y2]; cbn.
