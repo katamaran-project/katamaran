@@ -195,54 +195,6 @@ Module SymbolicTerms
              (ς2inΣ : InCtx (ς2, σ) Σ) : bool :=
     Nat.eqb (@inctx_at _ _ _ ς1inΣ) (@inctx_at _ _ _ ς2inΣ).
 
-  Definition binop_eqb {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) : bool :=
-    match op1 , op2 with
-    | binop_plus  , binop_plus   => true
-    | binop_times , binop_times  => true
-    | binop_minus , binop_minus  => true
-    | binop_eq    , binop_eq     => true
-    | binop_le    , binop_le     => true
-    | binop_lt    , binop_lt     => true
-    | binop_gt    , binop_gt     => true
-    | binop_and   , binop_and    => true
-    | binop_or    , binop_or     => true
-    | binop_pair  , binop_pair   => if Ty_eq_dec σ3 τ3 then true else false
-    | binop_cons  , binop_cons   => if Ty_eq_dec σ3 τ3 then true else false
-    | _           , _            => false
-    end.
-
-  Inductive OpEq {σ1 σ2 σ3} (op1 : BinOp σ1 σ2 σ3) : forall τ1 τ2 τ3, BinOp τ1 τ2 τ3 -> Prop :=
-  | opeq_refl : OpEq op1 op1.
-  Derive Signature for OpEq.
-
-  Arguments opeq_refl {_ _ _ _}.
-
-  Lemma binop_eqb_spec {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
-    reflect (OpEq op1 op2) (binop_eqb op1 op2).
-  Proof.
-    destruct op1, op2; cbn;
-      try (destruct Ty_eq_dec);
-      try match goal with
-          | H: ty_prod _ _ = ty_prod _ _ |- _ => inversion H; subst; clear H
-          | H: ty_list _   = ty_list _   |- _ => inversion H; subst; clear H
-          end;
-      first
-        [ constructor; constructor
-        | constructor;
-          let H := fresh in
-          intro H;
-          dependent destruction H;
-          congruence
-        ].
-  Defined.
-
-  Lemma binop_eq_dec {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
-    {OpEq op1 op2} + {~ OpEq op1 op2}.
-  Proof.
-    destruct (binop_eqb_spec op1 op2).
-    - left; auto.
-    - right; auto.
-  Defined.
 
   Equations(noind) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
     Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
