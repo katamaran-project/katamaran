@@ -5,7 +5,6 @@ src/MicroSail/Environment.v
 src/MicroSail/Notation.v
 src/MicroSail/Prelude.v
 src/MicroSail/Sep/Outcome.v
-src/MicroSail/Sep/Soundness/Term.v
 src/MicroSail/Sep/Spec.v
 src/MicroSail/SmallStep/Inversion.v
 src/MicroSail/SmallStep/Progress.v

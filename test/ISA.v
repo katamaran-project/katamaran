@@ -471,32 +471,25 @@ Module ExampleStepping.
 
 End ExampleStepping.
 
-Module ISASymbolicTermKit <: (SymbolicTermKit ISATypeKit ISATermKit ISAProgramKit).
+Module ISAAssertionKit <: (AssertionKit ISATypeKit ISATermKit ISAProgramKit).
   Module PM := Programs ISATypeKit ISATermKit ISAProgramKit.
 
   Definition 𝑷 := Empty_set.
   Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
-  Definition 𝑷_eq_dec :  forall (p : 𝑷) (q : 𝑷), {p = q}+{~ p = q} := fun p => match p with end.
-End ISASymbolicTermKit.
+  Definition 𝑷_eq_dec : forall (p : 𝑷) (q : 𝑷), {p = q}+{~ p = q} :=
+    fun p => match p with end.
+End ISAAssertionKit.
 
-Module ISASymbolicTerms := SymbolicTerms
-                             ISATypeKit
-                             ISATermKit
-                             ISAProgramKit
-                             ISASymbolicTermKit.
-Import ISASymbolicTerms.
+Module ISAAssertions :=
+  Assertions ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit.
+Import ISAAssertions.
 
 Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
 Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 
 Module ISASymbolicContractKit <:
-  (SymbolicContractKit
-     ISATypeKit
-     ISATermKit
-     ISAProgramKit
-     ISASymbolicTermKit
-  ).
-  Module STs := ISASymbolicTerms.
+  SymbolicContractKit ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit.
+  Module ASS := ISAAssertions.
 
   Open Scope env_scope.
 
@@ -578,7 +571,7 @@ Module ISASymbolicContracts :=
     ISATypeKit
     ISATermKit
     ISAProgramKit
-    ISASymbolicTermKit
+    ISAAssertionKit
     ISASymbolicContractKit.
 Import ISASymbolicContracts.
 
