@@ -104,17 +104,28 @@ Section WithBinding.
         resolves to the binding b. This record type is defined using primitive
         projections to get eta-conversion definitionally. *)
     Class InCtx (b : B) (Γ : Ctx B) : Set :=
-      { inctx_at: nat;
-        inctx_valid: ctx_nth_is Γ inctx_at b
-      }.
+      MkInCtx
+        { inctx_at: nat;
+          inctx_valid: ctx_nth_is Γ inctx_at b
+        }.
+    Global Arguments MkInCtx [_] _ _ _.
+    Global Arguments inctx_at [_ _] _.
+    Global Arguments inctx_at [_ _] _.
+
   End InCtx.
+
+  (* Two proofs of context containment are equal of the deBruijn indices are equal *)
+  Definition InCtx_eqb {Γ} {b1 b2 : B}
+             (b1inΓ : InCtx b1 Γ)
+             (b2inΓ : InCtx b2 Γ) : bool :=
+    Nat.eqb (inctx_at b1inΓ) (inctx_at b2inΓ).
 
   (* These are *constructors* for InCtx. *)
   Definition inctx_zero {b : B} {Γ : Ctx B} : InCtx b (ctx_snoc Γ b) :=
-    Build_InCtx b (ctx_snoc Γ b) 0 eq_refl.
+    MkInCtx (ctx_snoc Γ b) 0 eq_refl.
   Definition inctx_succ {b : B} {Γ : Ctx B} {b' : B} (bIn : InCtx b Γ) :
     InCtx b (ctx_snoc Γ b') :=
-    Build_InCtx b (ctx_snoc Γ b') (S inctx_at) inctx_valid.
+    MkInCtx (ctx_snoc Γ b') (S (inctx_at bIn)) inctx_valid.
 
   (* Custom pattern matching in cases where the context was already refined
      by a different match, i.e. on environments. *)
@@ -125,7 +136,7 @@ Section WithBinding.
     let (n, e) := bIn in
     match n return ctx_nth_is (ctx_snoc Γ b0) n b -> D b with
     | 0 => fun e => match e with eq_refl => db0 end
-    | S n => fun e => dΓ b (Build_InCtx _ _ n e)
+    | S n => fun e => dΓ b (MkInCtx _ n e)
     end e.
 
   Definition inctx_case_snoc_dep (Γ : Ctx B) (b0 : B)
@@ -133,14 +144,11 @@ Section WithBinding.
     (db0 : D b0 inctx_zero)
     (dΓ: forall b (bIn: InCtx b Γ), D b (inctx_succ bIn)) :
     forall (y: B) (yIn: InCtx y (ctx_snoc Γ b0)), D y yIn :=
-    fun b bIn =>
-      match bIn with
-        Build_InCtx _ _ n e =>
-        match n return forall e, D b (Build_InCtx _ _ n e) with
-        | 0 => eq_indd B b0 (fun z e => D z (Build_InCtx _ (ctx_snoc _ _) 0 e)) db0 b
-        | S n => fun e => dΓ b (Build_InCtx _ _ n e)
-        end e
-      end.
+    fun b '(MkInCtx _ n e) =>
+      match n return forall e, D b (MkInCtx _ n e) with
+      | 0 => eq_indd B b0 (fun z e => D z (MkInCtx (ctx_snoc _ _) 0 e)) db0 b
+      | S n => fun e => dΓ b (MkInCtx _ n e)
+      end e.
 
   Lemma InCtx_ind (b : B)
     (P : forall (Γ : Ctx B), InCtx b Γ -> Prop)
@@ -153,7 +161,7 @@ Section WithBinding.
     - intro bIn; exact (inctx_case_nil bIn).
     - intros [[|n] e]; cbn in *.
       + subst; apply fzero.
-      + pose (Build_InCtx _ _ n e) as bIn.
+      + pose (MkInCtx _ n e) as bIn.
         exact (fsucc Γ _ bIn (IHΓ bIn)).
   Qed.
 
@@ -170,7 +178,7 @@ Section WithBinding.
     { generalize dependent b2.
       induction b1In using InCtx_ind; destruct b2In as [[|n] e];
       intros; cbn in *; try congruence.
-      apply IHb1In with (Build_InCtx _ _ n e).
+      apply IHb1In with (MkInCtx _ n e).
       cbn; congruence. }
     split.
     - exact bindings_eq.
@@ -180,14 +188,14 @@ Section WithBinding.
   Fixpoint ctx_remove (Γ : Ctx B) {b : B} : InCtx b Γ -> Ctx B :=
     match Γ with
     | ctx_nil =>
-      fun '(Build_InCtx _ _ n e) =>
+      fun '(MkInCtx _ n e) =>
         match e with end
     | ctx_snoc Γ b' =>
-      fun '(Build_InCtx _ _ n e) =>
+      fun '(MkInCtx _ n e) =>
         match n return (ctx_nth_is (ctx_snoc Γ b') n b -> Ctx B)
         with
         | 0   => fun _ => Γ
-        | S n => fun e  => ctx_snoc (@ctx_remove Γ b (Build_InCtx _ _ n e)) b'
+        | S n => fun e  => ctx_snoc (@ctx_remove Γ b (MkInCtx _ n e)) b'
         end e
     end.
   Arguments ctx_remove _ [_] _.

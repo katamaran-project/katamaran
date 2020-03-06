@@ -189,12 +189,6 @@ Module SymbolicTerms
     | @term_projrec _ _ e rf    => 𝑹_unfold (eval_term e δ) ‼ rf
     end.
 
-  (* Two proofs of context containment are equal of the deBruijn indices are equal *)
-  Definition InCtx_eqb {Σ} {ς1 ς2 : 𝑺} {σ : Ty}
-             (ς1inΣ : InCtx (ς1, σ) Σ)
-             (ς2inΣ : InCtx (ς2, σ) Σ) : bool :=
-    Nat.eqb (@inctx_at _ _ _ ς1inΣ) (@inctx_at _ _ _ ς2inΣ).
-
 
   Equations(noind) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
     Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
