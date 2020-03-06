@@ -44,6 +44,9 @@ From MicroSail Require Export
      Notation
      Prelude.
 
+Import CtxNotations.
+Import EnvNotations.
+
 Local Set Implicit Arguments.
 Local Unset Transparent Obligations.
 Obligation Tactic := idtac.
@@ -161,7 +164,9 @@ Module Type TypeKit.
   (* Record types. *)
   Parameter Inline 𝑹𝑻  : 𝑹 -> Set.
   Parameter Inline 𝑹𝑻_eq_dec : forall (r : 𝑹) (x y : 𝑹𝑻 r), {x=y}+{~x=y}.
-  (* Names of expression variables. *)
+
+  (* Names of expression variables. These represent mutable variables appearing
+     in programs. *)
   Parameter Inline 𝑿 : Set. (* input: \MIX *)
   (* For name resolution we rely on decidable equality of expression
      variables. The functions in this module resolve to the closest binding
@@ -169,6 +174,13 @@ Module Type TypeKit.
      a successful resolution.
   *)
   Parameter Inline 𝑿_eq_dec : forall x y : 𝑿, {x=y}+{~x=y}.
+
+  (* Names of logical variables. These represent immutable variables
+     standing for concrete literals in assertions. *)
+  Parameter Inline 𝑺 : Set. (* input: \MIS *)
+  Parameter Inline 𝑺_eq_dec : forall (s1 s2 : 𝑺), {s1=s2}+{~s1=s2}.
+  (* Punning of program variables with logical variables. *)
+  Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
 
 End TypeKit.
 
@@ -760,6 +772,220 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         exact xInΓ : typeclass_instances.
 
   End NameResolution.
+
+  Section SymbolicTerms.
+
+    Local Unset Elimination Schemes.
+
+    Inductive Term (Σ : Ctx (𝑺 * Ty)) : Ty -> Type :=
+    | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : InCtx (ς , σ) Σ} : Term Σ σ
+    | term_lit     (σ : Ty) : Lit σ -> Term Σ σ
+    | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
+    | term_neg     (e : Term Σ ty_int) : Term Σ ty_int
+    | term_not     (e : Term Σ ty_bool) : Term Σ ty_bool
+    | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty_sum σ1 σ2)
+    | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2)
+    | term_list    {σ : Ty} (es : list (Term Σ σ)) : Term Σ (ty_list σ)
+    | term_nil     {σ : Ty} : Term Σ (ty_list σ)
+    (* Experimental features *)
+    | term_tuple   {σs : Ctx Ty} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs)
+    | term_projtup {σs : Ctx Ty} (e : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
+                   {p : ctx_nth_is σs n σ} : Term Σ σ
+    | term_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)) : Term Σ (ty_union U)
+    | term_record  (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R)
+    | term_projrec {R : 𝑹} (e : Term Σ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
+                   {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Term Σ σ.
+    Derive Signature for Term.
+
+    Global Arguments term_var {_} _ {_ _}.
+    Global Arguments term_lit {_} _ _.
+    Global Arguments term_tuple {_ _} _%exp.
+    Global Arguments term_union {_} _ _.
+    Global Arguments term_record {_} _ _.
+    Global Arguments term_projrec {_ _} _ _ {_ _}.
+
+    Definition term_enum {Σ} (E : 𝑬) (k : 𝑬𝑲 E) : Term Σ (ty_enum E) :=
+      term_lit (ty_enum E) k.
+    Global Arguments term_enum {_} _ _.
+
+    Section Term_rect.
+
+      Variable (Σ : Ctx (𝑺 * Ty)).
+      Variable (P  : forall t : Ty, Term Σ t -> Type).
+      Arguments P _ _ : clear implicits.
+
+      Fixpoint PL (σ : Ty) (ts : list (Term Σ σ)) : Type :=
+        match ts with
+        | nil => unit
+        | cons t ts => P σ t * PL ts
+        end.
+      Fixpoint PE (σs : Ctx Ty) (ts : Env (Term Σ) σs) : Type :=
+        match ts with
+        | env_nil => unit
+        | env_snoc ts _ t => PE ts * P _ t
+        end.
+      Fixpoint PE' (σs : Ctx (𝑹𝑭 * Ty)) (ts : NamedEnv (Term Σ) σs) : Type :=
+        match ts with
+        | env_nil => unit
+        | env_snoc ts b t => PE' ts * P (snd b) t
+        end.
+
+      Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : (ς , σ) ∈ Σ), P σ (term_var ς)).
+      Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit σ l)).
+      Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
+      Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)).
+      Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)).
+      Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
+      Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
+      Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
+      Hypothesis (P_nil        : forall σ : Ty, P (ty_list σ) (term_nil Σ)).
+      Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
+      Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
+      Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union U K e)).
+      Hypothesis (P_record     : forall (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)), PE' es -> P (ty_record R) (term_record R es)).
+      Hypothesis (P_projrec    : forall (R : 𝑹) (e : Term Σ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (term_projrec e rf)).
+
+      Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) : P σ t :=
+        match t with
+        | @term_var _ ς σ ςInΣ           => ltac:(eapply P_var; eauto)
+        | @term_lit _ σ x                => ltac:(eapply P_lit; eauto)
+        | term_binop op e1 e2            => ltac:(eapply P_binop; eauto)
+        | @term_neg _ e                  => ltac:(eapply P_neg; eauto)
+        | @term_not _ e                  => ltac:(eapply P_not; eauto)
+        | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
+        | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
+        | @term_list _ σ es              => ltac:(eapply P_list; induction es; cbn; eauto using unit)
+        | @term_nil _ σ                  => ltac:(eapply P_nil; eauto)
+        | @term_tuple _ σs es            => ltac:(eapply P_tuple; induction es; cbn; eauto using unit)
+        | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
+        | @term_union _ U K e            => ltac:(eapply P_union; eauto)
+        | @term_record _ R es            => ltac:(eapply P_record; induction es; cbn; eauto using unit)
+        | @term_projrec _ R e rf σ rfInR => ltac:(eapply P_projrec; eauto)
+        end.
+
+    End Term_rect.
+
+    Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := Term_rect P.
+
+    Fixpoint eval_term {Σ : Ctx (𝑺 * Ty)} {σ : Ty} (t : Term Σ σ) (δ : NamedEnv Lit Σ) {struct t} : Lit σ :=
+      match t in Term _ σ return Lit σ with
+      | @term_var _ x _      => (δ ‼ x)%lit
+      | term_lit _ l         => l
+      | term_binop op e1 e2  => eval_binop op (eval_term e1 δ) (eval_term e2 δ)
+      | term_neg e           => Z.opp (eval_term e δ)
+      | term_not e           => negb (eval_term e δ)
+      | term_inl e           => inl (eval_term e δ)
+      | term_inr e           => inr (eval_term e δ)
+      | term_list es         => List.map (fun e => eval_term e δ) es
+      | term_nil _           => nil
+      | term_tuple es        => Env_rect
+                                  (fun σs _ => Lit (ty_tuple σs))
+                                  tt
+                                  (fun σs _ (vs : Lit (ty_tuple σs)) σ e => (vs, eval_term e δ))
+                                  es
+      | @term_projtup _ σs e n σ p => tuple_proj σs n σ (eval_term e δ) p
+      | @term_union _ U K e     => 𝑼_fold (existT _ K (eval_term e δ))
+      | @term_record _ R es     => 𝑹_fold (Env_rect
+                                             (fun σs _ => NamedEnv Lit σs)
+                                             env_nil
+                                             (fun σs _ vs _ e => env_snoc vs _ (eval_term e δ)) es)
+      | @term_projrec _ _ e rf    => 𝑹_unfold (eval_term e δ) ‼ rf
+      end.
+
+    Equations(noind) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
+      Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
+        InCtx_eqb ς1inΣ ς2inΣ;
+      Term_eqb (term_lit _ l1) (term_lit _ l2) := Lit_eqb _ l1 l2;
+      Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
+        with binop_eq_dec op1 op2 => {
+        Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (left opeq_refl) :=
+          Term_eqb x1 x2 && Term_eqb y1 y2;
+        Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (right _) := false
+      };
+      Term_eqb (term_neg x) (term_neg y) := Term_eqb x y;
+      Term_eqb (term_not x) (term_not y) := Term_eqb x y;
+      Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
+      Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
+      Term_eqb (term_list xs) (term_list ys) := list_beq Term_eqb xs ys;
+      Term_eqb (@term_nil _) (@term_nil _) := true;
+      Term_eqb (term_tuple x) (term_tuple y) :=
+         @env_beq _ (Term Σ) (@Term_eqb _) _ x y;
+      Term_eqb (@term_projtup σs x n _ p) (@term_projtup τs y m _ q)
+        with Ctx_eq_dec Ty_eq_dec σs τs => {
+        Term_eqb (@term_projtup σs x n _ p) (@term_projtup ?(σs) y m _ q) (left eq_refl) :=
+          (n =? m) && Term_eqb x y;
+        Term_eqb (@term_projtup _ x n _ p) (@term_projtup _ y m _ q) (right _) := false
+        };
+      Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
+        with 𝑼𝑲_eq_dec k1 k2 => {
+        Term_eqb (term_union k1 e1) (term_union k2 e2) (left eq_refl) :=
+          Term_eqb e1 e2;
+        Term_eqb _ _ (right _) := false
+      };
+      Term_eqb (@term_record ?(r) xs) (@term_record r ys) :=
+         @env_beq _ (fun b => Term Σ (snd b)) (fun b => @Term_eqb _ (snd b)) _ xs ys;
+      Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
+               with (𝑹_eq_dec r1 r2) => {
+      Term_eqb (@term_projrec r e1 _ _ prf1) (@term_projrec ?(r) e2 _ _ prf2)
+        (left eq_refl) := (@inctx_at _ _ _ prf1 =? @inctx_at _ _ _ prf2) && Term_eqb e1 e2;
+      Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
+        (right _) := false };
+
+      Term_eqb _ _ := false.
+
+  End SymbolicTerms.
+  Bind Scope exp_scope with Term.
+
+  Section SymbolicSubstitutions.
+
+    Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Type :=
+      Env (fun b => Term Σ2 (snd b)) Σ1.
+    (* Hint Unfold Sub. *)
+
+    Section WithSub.
+      Context {Σ1 Σ2 : Ctx (𝑺 * Ty)}.
+      Variable (ζ : Sub Σ1 Σ2).
+
+      Fixpoint sub_term {σ} (t : Term Σ1 σ) {struct t} : Term Σ2 σ :=
+        match t with
+        | term_var ς                => (ζ ‼ ς)%lit
+        | term_lit σ l              => term_lit σ l
+        | term_binop op t1 t2       => term_binop op (sub_term t1) (sub_term t2)
+        | term_neg t0               => term_neg (sub_term t0)
+        | term_not t0               => term_not (sub_term t0)
+        | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0)
+        | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
+        | @term_list _ σ es         => term_list (List.map sub_term es)
+        | term_nil _                => term_nil Σ2
+        | term_tuple es             => term_tuple (env_map (@sub_term) es)
+        | @term_projtup _ _ t n σ p => term_projtup (sub_term t) n (p := p)
+        | term_union U K t0         => term_union U K (sub_term t0)
+        | term_record R es          => term_record R (env_map (fun _ => sub_term) es)
+        | term_projrec t rf         => term_projrec (sub_term t) rf
+        end.
+
+    End WithSub.
+
+    Definition sub_id Σ : Sub Σ Σ :=
+      @env_tabulate _ (fun b => Term _ (snd b)) _
+                    (fun '(ς , σ) ςIn => @term_var Σ ς σ ςIn).
+    Arguments sub_id : clear implicits.
+
+    Definition sub_wk1 {Σ b} : Sub Σ (Σ ▻ b) :=
+      @env_tabulate _ (fun b => Term _ (snd b)) _
+                    (fun '(ς , σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
+
+    Definition sub_comp {Σ1 Σ2 Σ3} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) : Sub Σ1 Σ3 :=
+      env_map (fun _ => sub_term ζ2) ζ1.
+
+    Definition wk1_term {Σ σ b} (t : Term Σ σ) : Term (Σ ▻ b) σ :=
+      sub_term sub_wk1 t.
+
+    Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b : 𝑺 * Ty} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
+      let '(ς , σ) := b in
+      env_snoc (env_map (fun _ => wk1_term) ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
+
+  End SymbolicSubstitutions.
 
   Section Contracts.
 

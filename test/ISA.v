@@ -124,6 +124,10 @@ Module ISATypeKit <: TypeKit.
   Proof. unfold EqDec. destruct r. Qed.
   Definition 𝑿_eq_dec : EqDec 𝑿 := string_dec.
 
+  Definition 𝑺        := string.
+  Definition 𝑺_eq_dec := string_dec.
+  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
+
 End ISATypeKit.
 Module ISATypes := Types ISATypeKit.
 Import ISATypes.
@@ -469,9 +473,6 @@ End ExampleStepping.
 
 Module ISASymbolicTermKit <: (SymbolicTermKit ISATypeKit ISATermKit ISAProgramKit).
   Module PM := Programs ISATypeKit ISATermKit ISAProgramKit.
-  Definition 𝑺 := string.
-  Definition 𝑺_eq_dec := string_dec.
-  Definition 𝑿to𝑺 := fun (x : string) => x.
 
   Definition 𝑷 := Empty_set.
   Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.

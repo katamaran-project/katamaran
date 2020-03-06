@@ -144,6 +144,10 @@ Module ExampleTypeKit <: TypeKit.
   Proof. intros. destruct r. Qed.
   Definition 𝑿_eq_dec := string_dec.
 
+  Definition 𝑺        := string.
+  Definition 𝑺_eq_dec := string_dec.
+  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
+
 End ExampleTypeKit.
 Module ExampleTypes := Types ExampleTypeKit.
 Import ExampleTypes.
