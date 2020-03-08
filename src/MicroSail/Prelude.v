@@ -31,6 +31,9 @@ From Coq Require Import
      Lists.List
      ssr.ssrbool.
 
+From Equations Require Import
+     Equations.
+
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -77,3 +80,26 @@ Section WithA.
   End WithEq.
 
 End WithA.
+
+Section Equality.
+
+  Definition f_equal_dec {A B : Type} (f : A -> B) {x y : A} (inj : f x = f y -> x = y)
+             (hyp : decidable (x = y)) : decidable (f x = f y) :=
+    match hyp with
+    | left p => left (f_equal f p)
+    | right p => right (fun e : f x = f y => p (inj e))
+    end.
+
+  Definition f_equal2_dec {A1 A2 B : Type} (f : A1 -> A2 -> B) {x1 y1 : A1} {x2 y2 : A2}
+             (inj : f x1 x2 = f y1 y2 -> @sigmaI _ _ x1 x2 = @sigmaI _ _ y1 y2)
+             (hyp1 : decidable (x1 = y1)) (hyp2 : decidable (x2 = y2)) :
+    decidable (f x1 x2 = f y1 y2) :=
+    match hyp1 , hyp2 with
+    | left  p , left q  => left (f_equal2 f p q)
+    | left  p , right q =>
+      right (fun e => q (f_equal (@pr2 _ (fun _ => _)) (inj e)))
+    | right p , _       =>
+      right (fun e => p (f_equal (@pr1 _ (fun _ => _)) (inj e)))
+    end.
+
+End Equality.

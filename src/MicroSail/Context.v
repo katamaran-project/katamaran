@@ -27,8 +27,10 @@
 (******************************************************************************)
 
 Require Import Coq.Logic.EqdepFacts.
+Require Import Coq.ssr.ssrbool.
 Require Import Equations.Equations.
 Require Import MicroSail.Notation.
+Require Import MicroSail.Prelude.
 
 Set Implicit Arguments.
 
@@ -50,6 +52,22 @@ Bind Scope ctx_scope with Ctx.
 
 Section WithBinding.
   Context {B : Set}.
+
+  Global Instance ctx_eqdec {eqB : EqDec B} : EqDec (Ctx B) :=
+    fix ctx_eqdec (Γ Δ : Ctx B) {struct Γ} : decidable (Γ = Δ) :=
+      match Γ , Δ with
+      | ctx_nil      , ctx_nil      => left eq_refl
+      | ctx_snoc Γ b , ctx_snoc Δ c => f_equal2_dec ctx_snoc noConfusion_inv
+                                                    (ctx_eqdec Γ Δ) (eq_dec b c)
+      | _            , _            => right noConfusion_inv
+      end.
+
+  Fixpoint ctx_lookup (Γ : Ctx B) (n : nat) : option B :=
+    match Γ , n with
+    | ctx_snoc _ b , O   => Some b
+    | ctx_snoc Γ _ , S n => ctx_lookup Γ n
+    | _            , _   => None
+    end.
 
   (* Concatenation of two contexts. *)
   Fixpoint ctx_cat (Γ1 Γ2 : Ctx B) {struct Γ2} : Ctx B :=
@@ -81,14 +99,14 @@ Section WithBinding.
 
   Section WithUIP.
 
-    Variable UIP_B : UIP B.
+    Context {UIP_B : UIP B}.
 
     Lemma ctx_nth_is_proof_irrelevance {Γ : Ctx B} (n : nat) (b : B) :
       forall (p q : ctx_nth_is Γ n b), p = q.
     Proof.
       revert Γ b; induction n; intros [|Γ b] b0; cbn.
       - intros [].
-      - apply UIP_B.
+      - apply uip.
       - intros [].
       - apply IHn.
     Qed.

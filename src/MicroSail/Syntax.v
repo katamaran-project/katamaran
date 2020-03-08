@@ -33,7 +33,8 @@ From Coq Require Import
      Program.Equality
      Program.Tactics
      Strings.String
-     ZArith.ZArith.
+     ZArith.ZArith
+     ssr.ssrbool.
 
 From Equations Require Import
      Equations Signature.
@@ -141,29 +142,29 @@ Module Type TypeKit.
 
   (* Names of enum type constructors. *)
   Parameter Inline 𝑬 : Set. (* input: \MIE *)
-  Parameter Inline 𝑬_eq_dec : forall x y : 𝑬, {x=y}+{~x=y}.
+  Declare Instance 𝑬_eq_dec : EqDec 𝑬.
   (* Names of enum data constructors. *)
   Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
-  Parameter Inline 𝑬𝑲_eq_dec : forall (e : 𝑬) (x y : 𝑬𝑲 e), {x=y}+{~x=y}.
+  Declare Instance 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e).
   Declare Instance Blastable_𝑬𝑲 : forall E, Blastable (𝑬𝑲 E).
 
   (* Names of union type constructors. *)
   Parameter Inline 𝑼   : Set. (* input: \MIT *)
-  Parameter Inline 𝑼_eq_dec : forall x y : 𝑼, {x=y}+{~x=y}.
+  Declare Instance 𝑼_eq_dec : EqDec 𝑼.
   (* Union types. *)
   Parameter Inline 𝑼𝑻  : 𝑼 -> Set.
   Parameter Inline 𝑼𝑻_eq_dec : forall (u : 𝑼) (x y : 𝑼𝑻 u), {x=y}+{~x=y}.
   (* Names of union data constructors. *)
   Parameter Inline 𝑼𝑲  : 𝑼 -> Set.
-  Parameter Inline 𝑼𝑲_eq_dec : forall (u : 𝑼) (x y : 𝑼𝑲 u), {x=y}+{~x=y}.
+  Declare Instance 𝑼𝑲_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑲 u).
   Declare Instance Blastable_𝑼𝑲 : forall U, Blastable (𝑼𝑲 U).
 
   (* Names of record type constructors. *)
   Parameter Inline 𝑹  : Set. (* input: \MIR *)
-  Parameter Inline 𝑹_eq_dec : forall x y : 𝑹, {x=y}+{~x=y}.
+  Declare Instance 𝑹_eq_dec : EqDec 𝑹.
   (* Record types. *)
   Parameter Inline 𝑹𝑻  : 𝑹 -> Set.
-  Parameter Inline 𝑹𝑻_eq_dec : forall (r : 𝑹) (x y : 𝑹𝑻 r), {x=y}+{~x=y}.
+  Declare Instance 𝑹𝑻_eq_dec : forall (r : 𝑹), EqDec (𝑹𝑻 r).
 
   (* Names of expression variables. These represent mutable variables appearing
      in programs. *)
@@ -178,7 +179,7 @@ Module Type TypeKit.
   (* Names of logical variables. These represent immutable variables
      standing for concrete literals in assertions. *)
   Parameter Inline 𝑺 : Set. (* input: \MIS *)
-  Parameter Inline 𝑺_eq_dec : forall (s1 s2 : 𝑺), {s1=s2}+{~s1=s2}.
+  Declare Instance 𝑺_eq_dec : EqDec 𝑺.
   (* Punning of program variables with logical variables. *)
   Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
 
@@ -244,22 +245,26 @@ Module Types (Export typekit : TypeKit).
   Definition Ty_rec (P : Ty -> Set) := Ty_rect P.
   Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
 
-  Lemma Ty_eq_dec : forall x y : Ty, {x=y}+{~x=y}.
-  Proof.
-    decide equality; auto using 𝑬_eq_dec, 𝑼_eq_dec, 𝑹_eq_dec.
-    revert σs X. rename σs0 into τs.
-    induction τs; intros; destruct σs.
-    - left. reflexivity.
-    - right. discriminate.
-    - right. discriminate.
-    - destruct X as [ps p].
-      specialize (IHτs σs ps).
-      specialize (p b).
-      intuition congruence.
-  Qed.
+  Global Instance Ty_eq_dec : EqDec Ty :=
+    fix ty_eqdec (σ τ : Ty) {struct σ} : decidable (σ = τ) :=
+      match σ , τ with
+      | ty_int        , ty_int        => left eq_refl
+      | ty_bool       , ty_bool       => left eq_refl
+      | ty_bit        , ty_bit        => left eq_refl
+      | ty_string     , ty_string     => left eq_refl
+      | ty_list σ     , ty_list τ     => f_equal_dec ty_list noConfusion_inv (ty_eqdec σ τ)
+      | ty_prod σ1 σ2 , ty_prod τ1 τ2 => f_equal2_dec ty_prod noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
+      | ty_sum σ1 σ2  , ty_sum τ1 τ2  => f_equal2_dec ty_sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
+      | ty_unit       , ty_unit       => left eq_refl
+      | ty_enum E1    , ty_enum E2    => f_equal_dec ty_enum noConfusion_inv (eq_dec E1 E2)
+      | ty_tuple σs   , ty_tuple τs   => f_equal_dec ty_tuple noConfusion_inv (@ctx_eqdec Ty ty_eqdec σs τs)
+      | ty_union U1   , ty_union U2   => f_equal_dec ty_union noConfusion_inv (eq_dec U1 U2)
+      | ty_record R1  , ty_record R2  => f_equal_dec ty_record noConfusion_inv (eq_dec R1 R2)
+      | _             , _             => right noConfusion_inv
+      end.
 
   Lemma Ty_K (σ : Ty) (p : σ = σ) : p = eq_refl.
-  Proof. apply (@uip Ty (EqDec.eqdec_uip Ty_eq_dec)). Qed.
+  Proof. apply uip. Qed.
 
   Fixpoint Lit (σ : Ty) : Type :=
     match σ with
@@ -464,7 +469,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     reflect (OpEq op1 op2) (binop_eqb op1 op2).
   Proof.
     destruct op1, op2; cbn;
-      try (destruct Ty_eq_dec);
+      repeat (destruct Ty_eq_dec; cbn); subst;
       try match goal with
           | H: ty_prod _ _ = ty_prod _ _ |- _ => inversion H; subst; clear H
           | H: ty_list _   = ty_list _   |- _ => inversion H; subst; clear H
@@ -911,7 +916,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Term_eqb (term_tuple x) (term_tuple y) :=
          @env_beq _ (Term Σ) (@Term_eqb _) _ x y;
       Term_eqb (@term_projtup σs x n _ p) (@term_projtup τs y m _ q)
-        with Ctx_eq_dec Ty_eq_dec σs τs => {
+        with eq_dec σs τs => {
         Term_eqb (@term_projtup σs x n _ p) (@term_projtup ?(σs) y m _ q) (left eq_refl) :=
           (n =? m) && Term_eqb x y;
         Term_eqb (@term_projtup _ x n _ p) (@term_projtup _ y m _ q) (right _) := false
@@ -971,9 +976,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
           f_equal.
           f_equal.
           apply ctx_nth_is_proof_irrelevance.
-          apply EqDec.eqdec_uip.
-          pose proof 𝑺_eq_dec; pose proof Ty_eq_dec.
-          unfold EqDec. decide equality.
         + inversion 1. congruence.
       - destruct (binop_eq_dec op op0) as [e|ne]; cbn.
         + dependent destruction e; cbn.
