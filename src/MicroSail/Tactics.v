@@ -26,6 +26,9 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+Require Import Coq.Bool.Bool.
+Require Import Equations.Equations.
+
 (* Extract the head of a term.
    from http://poleiro.info/posts/2018-10-15-checking-for-constructors.html
  *)
@@ -34,3 +37,28 @@ Ltac head t :=
   | ?t' _ => head t'
   | _ => t
   end.
+
+Ltac microsail_solve_eqb_spec :=
+  repeat
+    (intros; cbn in *;
+     match goal with
+     | H: ?x <> ?x |- _ => congruence
+     | |- ?x = ?x => reflexivity
+     | |- reflect _ true => constructor
+     | |- reflect _ false => constructor
+     | H: ?x = ?y |- _ =>
+       let hx := head x in
+       let hy := head y in
+       is_constructor hx; is_constructor hy;
+       dependent elimination H
+     | |- context[eq_dec ?x ?y] => destruct (eq_dec x y)
+     | |- _ <> _ => intro H; dependent elimination H
+     | H : forall y, reflect _ (?eq ?x y) |- context[?eq ?x ?y] =>
+       destruct (H y)
+     | H : forall x y, reflect _ (?eq x y) |- context[?eq ?x ?y] =>
+       destruct (H x y)
+     | [ H : reflect _ ?b |- context[?b] ] =>
+       let H1 := fresh in destruct H as [H1 |]; [dependent elimination H1 | idtac]
+     end);
+  cbn in *;
+  try congruence.

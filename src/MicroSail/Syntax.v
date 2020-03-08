@@ -43,7 +43,8 @@ From MicroSail Require Export
      Context
      Environment
      Notation
-     Prelude.
+     Prelude
+     Tactics.
 
 Import CtxNotations.
 Import EnvNotations.
@@ -397,30 +398,25 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       end.
 
     Lemma Lit_eqb_spec (σ : Ty) (x y : Lit σ) : reflect (x = y) (Lit_eqb σ x y).
-    Proof with cbn; try (constructor; congruence).
+    Proof with microsail_solve_eqb_spec.
       induction σ; cbn.
       - apply Z.eqb_spec.
       - apply Bool.eqb_spec.
       - apply Bit_eqb_spec.
       - apply String.eqb_spec.
       - apply list_beq_spec; auto.
-      - destruct x as [x1 x2]; destruct y as [y1 y2]; cbn.
-        destruct (IHσ1 x1 y1); destruct (IHσ2 x2 y2)...
-      - destruct x as [x1| x2]; destruct y as [y1|y2]; cbn.
-        + destruct (IHσ1 x1 y1)...
-        + constructor; congruence.
-        + constructor; congruence.
-        + destruct (IHσ2 x2 y2)...
+      - destruct x as [x1 x2]; destruct y as [y1 y2]...
+      - destruct x as [x1|x2]; destruct y as [y1|y2]...
       - destruct x. destruct y...
-      - destruct (𝑬𝑲_eq_dec x y) as [e | bot ]; try (destruct e)...
+      - destruct (𝑬𝑲_eq_dec x y)...
       - induction σs; intros.
         + destruct x; destruct y...
         + cbn in *.
           destruct x as [xs x]; destruct y as [ys y]; destruct X as [pσs pb]; cbn in *.
           specialize (IHσs pσs).
           destruct (IHσs xs ys); destruct (pb x y)...
-      - destruct (𝑼𝑻_eq_dec x y) as [e | bot]; try destruct e...
-      - destruct (𝑹𝑻_eq_dec x y) as [e | bot]; try destruct e...
+      - destruct (𝑼𝑻_eq_dec x y)...
+      - destruct (𝑹𝑻_eq_dec x y)...
     Qed.
 
   End Literals.
@@ -443,54 +439,61 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | binop_or                : BinOp ty_bool ty_bool ty_bool
     | binop_pair {σ1 σ2 : Ty} : BinOp σ1 σ2 (ty_prod σ1 σ2)
     | binop_cons {σ : Ty}     : BinOp σ (ty_list σ) (ty_list σ).
+    Local Set Transparent Obligations.
+    Derive Signature NoConfusion for BinOp.
+    Local Unset Transparent Obligations.
 
-  Definition binop_eqb {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) : bool :=
-    match op1 , op2 with
-    | binop_plus  , binop_plus   => true
-    | binop_times , binop_times  => true
-    | binop_minus , binop_minus  => true
-    | binop_eq    , binop_eq     => true
-    | binop_le    , binop_le     => true
-    | binop_lt    , binop_lt     => true
-    | binop_gt    , binop_gt     => true
-    | binop_and   , binop_and    => true
-    | binop_or    , binop_or     => true
-    | binop_pair  , binop_pair   => if Ty_eq_dec σ3 τ3 then true else false
-    | binop_cons  , binop_cons   => if Ty_eq_dec σ3 τ3 then true else false
-    | _           , _            => false
-    end.
+    Import Sigma_Notations.
 
-  Inductive OpEq {σ1 σ2 σ3} (op1 : BinOp σ1 σ2 σ3) : forall τ1 τ2 τ3, BinOp τ1 τ2 τ3 -> Prop :=
-  | opeq_refl : OpEq op1 op1.
-  Derive Signature for OpEq.
-  Global Arguments opeq_refl {_ _ _ _}.
+    Definition BinOpTel : Set :=
+      Σ i : (Σ σ1 σ2 : Ty, Ty), BinOp i.1 (i.2).1 (i.2).2.
 
-  Lemma binop_eqb_spec {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
-    reflect (OpEq op1 op2) (binop_eqb op1 op2).
-  Proof.
-    destruct op1, op2; cbn;
-      repeat (destruct Ty_eq_dec; cbn); subst;
-      try match goal with
-          | H: ty_prod _ _ = ty_prod _ _ |- _ => inversion H; subst; clear H
-          | H: ty_list _   = ty_list _   |- _ => inversion H; subst; clear H
-          end;
-      first
-        [ constructor; constructor
-        | constructor;
-          let H := fresh in
-          intro H;
-          dependent destruction H;
-          congruence
-        ].
-  Defined.
+    Definition binoptel_pair (σ1 σ2 : Ty) : BinOpTel :=
+      ((σ1, σ2, ty_prod σ1 σ2), binop_pair).
+    Definition binoptel_cons (σ : Ty) : BinOpTel :=
+      ((σ, ty_list σ, ty_list σ), binop_cons).
 
-  Lemma binop_eq_dec {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
-    {OpEq op1 op2} + {~ OpEq op1 op2}.
-  Proof.
-    destruct (binop_eqb_spec op1 op2).
-    - left; auto.
-    - right; auto.
-  Defined.
+    Definition binoptel_eq_dec {σ1 σ2 σ3 τ1 τ2 τ3}
+      (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
+      decidable (((σ1,σ2,σ3), op1) = ((τ1,τ2,τ3),op2) :> BinOpTel) :=
+      match op1 , op2 with
+      | binop_plus  , binop_plus   => left eq_refl
+      | binop_times , binop_times  => left eq_refl
+      | binop_minus , binop_minus  => left eq_refl
+      | binop_eq    , binop_eq     => left eq_refl
+      | binop_le    , binop_le     => left eq_refl
+      | binop_lt    , binop_lt     => left eq_refl
+      | binop_gt    , binop_gt     => left eq_refl
+      | binop_and   , binop_and    => left eq_refl
+      | binop_or    , binop_or     => left eq_refl
+      | @binop_pair σ1 σ2 , @binop_pair τ1 τ2   =>
+        f_equal2_dec binoptel_pair noConfusion_inv (eq_dec σ1 τ1) (eq_dec σ2 τ2)
+      | @binop_cons σ  , @binop_cons τ   =>
+        f_equal_dec binoptel_cons noConfusion_inv (eq_dec σ τ)
+      | _           , _            => right noConfusion_inv
+      end.
+
+    Inductive OpEq {σ1 σ2 σ3} (op1 : BinOp σ1 σ2 σ3) : forall τ1 τ2 τ3, BinOp τ1 τ2 τ3 -> Prop :=
+    | opeq_refl : OpEq op1 op1.
+    Derive Signature for OpEq.
+    Global Arguments opeq_refl {_ _ _ _}.
+
+    Lemma binop_eqdep_dec {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
+      {OpEq op1 op2} + {~ OpEq op1 op2}.
+    Proof.
+      destruct (binoptel_eq_dec op1 op2).
+      - left. dependent elimination e. constructor.
+      - right. intro e. apply n. dependent elimination e. reflexivity.
+    Defined.
+
+    Local Set Equations With UIP.
+    Global Instance binop_eq_dec {σ1 σ2 σ3} : EqDec (BinOp σ1 σ2 σ3).
+    Proof.
+      intros x y.
+      destruct (binoptel_eq_dec x y) as [p|p].
+      - left. dependent elimination p. reflexivity.
+      - right. congruence.
+    Defined.
 
   End BinaryOperations.
 
@@ -800,7 +803,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | term_record  (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R)
     | term_projrec {R : 𝑹} (e : Term Σ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
                    {rfInR : InCtx (rf , σ) (𝑹𝑭_Ty R)} : Term Σ σ.
-    Derive Signature for Term.
+    Local Set Transparent Obligations.
+    Derive NoConfusion Signature for Term.
 
     Global Arguments term_var {_} _ {_ _}.
     Global Arguments term_lit {_} _ _.
@@ -902,7 +906,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         InCtx_eqb ς1inΣ ς2inΣ;
       Term_eqb (term_lit _ l1) (term_lit _ l2) := Lit_eqb _ l1 l2;
       Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
-        with binop_eq_dec op1 op2 => {
+        with binop_eqdep_dec op1 op2 => {
         Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (left opeq_refl) :=
           Term_eqb x1 x2 && Term_eqb y1 y2;
         Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (right _) := false
@@ -938,26 +942,13 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
       Term_eqb _ _ := false.
 
-    Local Ltac Term_eqb_spec_solve :=
-      repeat
-        match goal with
-        | |- reflect _ false => constructor
-        | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
-        | |- reflect _ true => constructor
-        | |- (?x <> ?y) => let H := fresh in intro H; dependent destruction H
-        | [ H : reflect _ ?b |- context[?b] ] =>
-          let H1 := fresh in destruct H as [H1 |]; [dependent destruction H1 | idtac]; cbn
-        | H : forall t2, reflect (?t1 = t2) (Term_eqb ?t1 t2) |-
-                         context[Term_eqb ?t1 ?t2] =>
-          destruct (H t2)
-        end; try constructor; try congruence.
-
     Local Transparent Term_eqb.
+    Set Equations With UIP.
     Lemma Term_eqb_spec Σ (σ : Ty) (t1 t2 : Term Σ σ) :
       reflect (t1 = t2) (Term_eqb t1 t2).
     Proof.
-      induction t1 using Term_rect; cbn [Term_eqb]; dependent destruction t2;
-        cbn in *; Term_eqb_spec_solve.
+      induction t1 using Term_rect; cbn [Term_eqb]; dependent elimination t2;
+        microsail_solve_eqb_spec.
       - unfold InCtx_eqb.
         repeat match goal with
                | |- context[?m =? ?n] => destruct (Nat.eqb_spec m n)
@@ -977,24 +968,31 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
           f_equal.
           apply ctx_nth_is_proof_irrelevance.
         + inversion 1. congruence.
-      - destruct (binop_eq_dec op op0) as [e|ne]; cbn.
-        + dependent destruction e; cbn.
-          repeat Term_eqb_spec_solve.
-        + Term_eqb_spec_solve.
-          apply ne. Term_eqb_spec_solve.
+      - match goal with
+        | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
+        end; microsail_solve_eqb_spec.
+      - destruct (binop_eqdep_dec op op0) as [e|ne]; cbn.
+        + dependent elimination e; cbn.
+          microsail_solve_eqb_spec.
+        + constructor; intro e.
+          dependent elimination e.
+          apply ne; constructor.
       - revert es0.
         induction es as [|x xs]; intros [|y ys]; cbn in *; try (constructor; congruence).
-        + constructor. intros ?. dependent destruction H.
-        + constructor. intros ?. dependent destruction H.
+        + constructor. intros ?. dependent elimination H.
+        + constructor. intros ?. dependent elimination H.
         + destruct X as [x1 x2].
           specialize (IHxs x2 ys).
           specialize (x1 y).
-          Term_eqb_spec_solve.
+          microsail_solve_eqb_spec.
+          intro H. apply n. inversion H.
+          dependent elimination H1.
+          constructor.
       - admit.
       - admit.
       - destruct (𝑼𝑲_eq_dec K K0); cbn.
-        + destruct e. specialize (IHt1 t2). Term_eqb_spec_solve.
-        + Term_eqb_spec_solve.
+        + destruct e. specialize (IHt1 e4). microsail_solve_eqb_spec.
+        + microsail_solve_eqb_spec.
       - admit.
       - admit.
     Admitted.
