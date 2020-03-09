@@ -8,6 +8,7 @@ From Coq Require Import
      Logic.FunctionalExtensionality.
 
 From Equations Require Import
+     EqDecInstances
      Equations.
 
 From MicroSail Require Import
@@ -25,33 +26,33 @@ Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope ctx_scope.
 
-Inductive Enums : Set := register_tag.
+Instance Z_eqdec : EqDec Z := Z.eq_dec.
+Derive EqDec for Empty_set.
 
-Definition Enums_eq_dec : EqDec Enums := ltac:(unfold EqDec; decide equality).
+Inductive Enums : Set := register_tag.
+Derive NoConfusion EqDec for Enums.
 
 Inductive RegisterTag :=
   RegTag0 | RegTag1 | RegTag2 | RegTag3.
+Derive NoConfusion EqDec for RegisterTag.
 
 Inductive Unions : Set := instruction.
-
-Lemma Unions_eq_dec : EqDec Unions.
-  unfold EqDec.
-  decide equality.
-Qed.
+Derive NoConfusion EqDec for Unions.
 
 Inductive Instruction :=
 | Halt
-| Load (dst src : Z)
-| Add  (dst src : Z)
-| Jump (dst : Z)
-.
+| Load (dst src : RegisterTag)
+| Add  (dst src : RegisterTag)
+| Jump (dst : Z).
+Derive NoConfusion EqDec for Instruction.
 
 Inductive InstructionConstructor :=
 | KHalt
 | KLoad
 | KAdd
-| KJump
-.
+| KJump.
+Derive NoConfusion EqDec for InstructionConstructor.
+
 
 (** Describe a part of REDFIN ISA
     Property to verify:
@@ -105,23 +106,17 @@ Module ISATypeKit <: TypeKit.
 
   Definition 𝑿        := string.
 
-  Definition 𝑬_eq_dec : EqDec 𝑬 := ltac:(unfold EqDec; decide equality).
+  Definition 𝑬_eq_dec : EqDec 𝑬 := Enums_eqdec.
   Definition 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e).
-  Proof.
-    intros. unfold EqDec.
-    intros x y. destruct e. decide equality.
-  Qed.
-  Definition 𝑼_eq_dec : EqDec 𝑼 := Unions_eq_dec.
+  Proof. intros []; cbn; auto with typeclass_instances. Defined.
+  Definition 𝑼_eq_dec : EqDec 𝑼 := Unions_eqdec.
   Definition 𝑼𝑻_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑻 u).
-  Proof.
-    unfold EqDec. intros.
-    destruct u. unfold 𝑼𝑻. pose string_dec. pose Z.eq_dec. decide equality.
-  Qed.
-  Definition 𝑼𝑲_eq_dec : forall (u : 𝑼), EqDec(𝑼𝑲 u).
-  Proof. unfold EqDec. destruct u. decide equality. Qed.
-  Definition 𝑹_eq_dec : EqDec 𝑹 := ltac:(unfold EqDec; decide equality).
+  Proof. intros []; cbn; auto with typeclass_instances. Defined.
+  Definition 𝑼𝑲_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑲 u).
+  Proof. intros []; cbn; auto with typeclass_instances. Defined.
+  Definition 𝑹_eq_dec : EqDec 𝑹 := Empty_set_eqdec.
   Definition 𝑹𝑻_eq_dec : forall (r : 𝑹), EqDec (𝑹𝑻 r).
-  Proof. unfold EqDec. destruct r. Qed.
+  Proof. intros []; cbn; auto with typeclass_instances. Defined.
   Definition 𝑿_eq_dec : EqDec 𝑿 := string_dec.
 
   Definition 𝑺        := string.
@@ -139,35 +134,39 @@ Module ISATermKit <: (TermKit ISATypeKit).
 
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
     match U with
-    | instruction => fun K => match K with
-                          | KHalt => ty_unit
-                          (* Load has two fields: a register label and a memory address, *)
-                          (* represented as ints *)
-                          | KLoad => ty_prod ty_int ty_int
-                          | KAdd => ty_prod ty_int ty_int
-                          | KJump => ty_int
-                          end
+    | instruction =>
+      fun K =>
+        match K with
+        | KHalt => ty_unit
+        (* Load has two fields: a register label and a memory address, *)
+        (* represented as ints *)
+        | KLoad => ty_prod (ty_enum register_tag) (ty_enum register_tag)
+        | KAdd => ty_prod (ty_enum register_tag) (ty_enum register_tag)
+        | KJump => ty_int
+        end
     end.
   Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
     match U with
-    | instruction => fun Kv =>
-                       match Kv with
-                       | existT _ KHalt tt        => Halt
-                       | existT _ KLoad (dst,src) => Load dst src
-                       | existT _ KAdd (dst,src)  => Add dst src
-                       | existT _ KJump dst       => Jump dst
-                       end
+    | instruction =>
+      fun Kv =>
+        match Kv with
+        | existT _ KHalt tt        => Halt
+        | existT _ KLoad (dst,src) => Load dst src
+        | existT _ KAdd (dst,src)  => Add dst src
+        | existT _ KJump dst       => Jump dst
+        end
     end.
 
   Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
     match U with
-    | instruction => fun Kv =>
-                       match Kv with
-                       | Halt         => existT _ KHalt tt
-                       | Load dst src => existT _ KLoad (dst,src)
-                       | Add dst src  => existT _ KAdd (dst,src)
-                       | Jump dst     => existT _ KJump dst
-                       end
+    | instruction =>
+      fun Kv =>
+        match Kv with
+        | Halt         => existT _ KHalt tt
+        | Load dst src => existT _ KLoad (dst,src)
+        | Add dst src  => existT _ KAdd (dst,src)
+        | Jump dst     => existT _ KJump dst
+        end
     end.
   Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
       𝑼_fold U (𝑼_unfold U Kv) = Kv.
@@ -198,7 +197,7 @@ Module ISATermKit <: (TermKit ISATypeKit).
   (* read registers *)
   | rX  : Fun ["reg_tag" ∶ ty_enum register_tag ] ty_int
   (* write register *)
-  | wX : Fun ["reg_code" ∶ ty_int, "reg_value" ∶ ty_int] ty_int
+  | wX : Fun ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_int
   (* read flag *)
   | rF      : Fun ["flag_code" ∶ ty_int] ty_bool
   (* write flag *)
@@ -211,6 +210,7 @@ Module ISATermKit <: (TermKit ISATypeKit).
   | in_bounds : Fun ["address" ∶ ty_int] ty_bool
   (* semantics of a single instruction *)
   | semantics : Fun [ "instr" ∶ ty_union instruction] ty_unit
+  | execute_load : Fun [ "dst" ∶ ty_enum register_tag, "src" ∶ ty_enum register_tag ] ty_unit
   | swapreg : Fun ["r1" ∶ ty_int, "r2" ∶ ty_int] ty_unit
   | swapreg12 : Fun ctx_nil ty_unit
   | add : Fun [ "x" ∶ ty_int , "y" ∶ ty_int ] ty_int
@@ -248,12 +248,7 @@ Module ISATermKit <: (TermKit ISATypeKit).
   (* A silly address space of four addresses *)
   Inductive Address : Set :=
     A0 | A1 | A2 | A3.
-
-  Definition Address_eq_dec : EqDec Address.
-  Proof.
-    unfold EqDec.
-    decide equality.
-  Defined.
+  Derive NoConfusion EqDec for Address.
 
   Definition 𝑨𝑫𝑫𝑹 : Set := Address.
 
@@ -322,7 +317,7 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     μ addr.
 
   Definition write_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int) : Memory :=
-    fun addr' => match (Address_eq_dec addr addr') with
+    fun addr' => match (Address_eqdec addr addr') with
               | left eq_refl => v
               | right _ => μ addr'
               end.
@@ -344,24 +339,63 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Local Notation "'mem_value'" := (@exp_var _ "mem_value" ty_int _).
   Local Definition nop {Γ} : Stm Γ ty_unit := stm_lit ty_unit tt.
 
-  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ.
-    let pi := eval compute in
-    match f in Fun Δ τ return Stm Δ τ with
-    | rX =>
-      stm_match_enum register_tag reg_tag
+  Definition fun_rX : Stm ["reg_tag" ∶ ty_enum register_tag] ty_int :=
+    stm_match_enum
+      register_tag reg_tag
       (fun tag =>
          match tag with
          | RegTag0 => stm_read_register R0
          | RegTag1 => stm_read_register R1
          | RegTag2 => stm_read_register R2
          | RegTag3 => stm_read_register R3
-         end)
-    | wX =>
-      if:      reg_code = int_lit 0 then stm_write_register R0 reg_value
-      else if: reg_code = int_lit 1 then stm_write_register R1 reg_value
-      else if: reg_code = int_lit 2 then stm_write_register R2 reg_value
-      else if: reg_code = int_lit 3 then stm_write_register R3 reg_value
-      else     stm_fail _ "write_register: invalid register"
+         end).
+
+  Definition fun_wX : Stm ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_int :=
+    stm_match_enum
+      register_tag reg_tag
+      (fun tag =>
+         match tag with
+         | RegTag0 => stm_write_register R0 reg_value
+         | RegTag1 => stm_write_register R1 reg_value
+         | RegTag2 => stm_write_register R2 reg_value
+         | RegTag3 => stm_write_register R3 reg_value
+         end).
+
+  Definition fun_semantics : Stm ["instr" ∶ ty_union instruction] ty_unit :=
+    @stm_match_union
+      _ instruction instr _
+      (fun K => match K with
+                | KHalt => ""
+                | KLoad => "load_args"
+                | KAdd => "add_args"
+                | KJump => "jump_args"
+                end)
+      (fun K => match K return Stm _ _ with
+                | KHalt =>
+                  stm_write_register Halted lit_true ;; nop
+                | KLoad =>
+                  match: (exp_var "load_args") in (ty_enum register_tag , ty_enum register_tag) with
+                  | ("dest", "source") => call execute_load (exp_var "dest") (exp_var "source")
+                  end
+                | KAdd => stm_fail _ "not implemented"
+                | KJump => stm_fail _ "not implemented"
+                end).
+
+  Definition fun_execute_load : Stm ["dst" ∶ ty_enum register_tag, "src" ∶ ty_enum register_tag] ty_unit :=
+    (* TODO: Update PC *)
+    let: "addr" := call rX (exp_var "src") in
+    let: "safe" := call in_bounds (exp_var "addr") in
+    if: exp_var "safe"
+    then (let: "v" := call rM (exp_var "addr") in
+          call wX (exp_var "dst") (exp_var "v") ;;
+          nop)
+    else (stm_write_register OutOfMemory lit_true ;; nop).
+
+  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ.
+  refine (
+    match f in Fun Δ τ return Stm Δ τ with
+    | rX => fun_rX
+    | wX => fun_wX
     | rF =>
       if:      flag_code = int_lit 5 then stm_read_register Halted
       else if: flag_code = int_lit 6 then stm_read_register Overflow
@@ -386,28 +420,8 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
       else     stm_fail _ "read_register: invalid register"
     (* an [int] represents a valid address if it is >= [Memory_lb] and < [Memory_hb] *)
     | in_bounds => ((address = Memory_lb) || (address > Memory_lb)) && (address < Memory_hb)
-    | semantics => (@stm_match_union _ instruction instr _
-        (fun K => match K with
-               | KHalt => ""
-               | KLoad => "load_args"
-               | KAdd => "add_args"
-               | KJump => "jump_args"
-               end)
-        (fun K => match K return Stm _ _ with
-               | KHalt =>
-                 stm_write_register Halted lit_true ;; nop
-               | KLoad =>
-                 match: (exp_var "load_args") in (ty_int , ty_int) with
-                 | ("dest", "source") =>
-                      let: "x" := call rM (exp_var "source")
-                   in let: "safe" := call in_bounds (exp_var "source")
-                   in if: (exp_var "safe")
-                      then (call wX (exp_var "dest") (exp_var "x");;nop)
-                      else (stm_write_register OutOfMemory lit_true;; nop)
-                  end
-               | KAdd => stm_fail _ "not implemented"
-               | KJump => stm_fail _ "not implemented"
-               end))
+    | semantics => fun_semantics
+    | execute_load => fun_execute_load
     | swapreg => stm_fail _ "not_implemented"
       (* let: "v1" := call rX (exp_var "r1") in *)
       (* let: "v2" := call rX (exp_var "r2") in *)
@@ -424,7 +438,7 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     | add => x + y
     | add3 => let: "xy" := call add x y in
               call add (exp_var "xy") z
-    end in exact pi.
+    end).
   Defined.
 
 End ISAProgramKit.
@@ -528,6 +542,18 @@ Module ISASymbolicContractKit <:
       | wM => sep_contract_none _
       | in_bounds => sep_contract_none _
       | semantics => sep_contract_none _
+      | execute_load =>
+        @sep_contract_unit
+          [ "dst" ∶ ty_enum register_tag,
+            "src" ∶ ty_enum register_tag ]
+          [ "dst" ∶ ty_enum register_tag,
+            "src" ∶ ty_enum register_tag,
+            "a"   ∶ ty_int,
+            "v"   ∶ ty_int
+          ]
+          [term_var "dst", term_var "src"]%arg
+          asn_true
+          asn_true
       | swapreg => sep_contract_none _
       | swapreg12 =>
         @sep_contract_unit
@@ -580,21 +606,6 @@ Local Transparent Term_eqb.
 
 Import List.
 
-Lemma Forall_singleton {A : Type} :
-  forall (x : A) (P : A -> Prop) (prf : P x), Forall P (x :: nil).
-  Proof.
-    intros.
-    apply Forall_forall.
-    intros y yInX.
-    destruct yInX.
-    - rewrite <- H. exact prf .
-    - destruct H.
-  Qed.
-
-  Lemma Forall_nil {A : Type} :
-  forall (P : A -> Prop), Forall P nil.
-Proof. trivial. Qed.
-
 Arguments inctx_zero {_ _ _} /.
 Arguments inctx_succ {_ _ _ _} !_ /.
 
@@ -609,34 +620,51 @@ Local Ltac solve :=
        end;
      try congruence; auto).
 
+Lemma valid_contract_rX : ValidContract (CEnv rX) fun_rX.
+Proof.
+  intros i; destruct i; cbn.
+  - intros j; destruct j; solve.
+    + exists (term_var "v"); solve.
+      exists RegTag0; solve.
+    + exists (term_var "v"); solve.
+    + exists (term_var "v"); solve.
+    + exists (term_var "v"); solve.
+  - intros j; destruct j; solve.
+    + exists (term_var "v"); solve.
+    + exists (term_var "v"); solve.
+      exists RegTag1; solve.
+    + exists (term_var "v"); solve.
+    + exists (term_var "v"); solve.
+  - intros j; destruct j; solve.
+    + exists (term_var "v"); solve.
+    + exists (term_var "v"); solve.
+    + exists (term_var "v"); solve.
+      exists RegTag2; solve.
+    + exists (term_var "v"); solve.
+  - intros j; destruct j; solve.
+    + exists (term_var "v"); solve.
+    + exists (term_var "v"); solve.
+    + exists (term_var "v"); solve.
+    + exists (term_var "v"); solve.
+      exists RegTag3; solve.
+Qed.
+Hint Resolve valid_contract_rX : contracts.
+
+Lemma valid_contract_wX : ValidContract (CEnv wX) fun_wX.
+Proof. cbn; auto. Qed.
+Hint Resolve valid_contract_wX : contracts.
+
+Arguments asn_true {_} /.
+
+Lemma valid_contract_execute_load : ValidContract (CEnv execute_load) fun_execute_load.
+Proof.
+  exists [term_var "src", term_var "a"]%arg.
+Admitted.
+Hint Resolve valid_contract_execute_load : contracts.
+
 Lemma valid_contracts : ValidContractEnv CEnv.
 Proof.
-  intros Δ τ []; hnf; try match goal with |- True => auto end.
-  - intros i; destruct i; cbn.
-    + intros j; destruct j; solve.
-      * exists (term_var "v"); solve.
-        exists RegTag0; solve.
-      * exists (term_var "v"); solve.
-      * exists (term_var "v"); solve.
-      * exists (term_var "v"); solve.
-    + intros j; destruct j; solve.
-      * exists (term_var "v"); solve.
-      * exists (term_var "v"); solve.
-        exists RegTag1; solve.
-      * exists (term_var "v"); solve.
-      * exists (term_var "v"); solve.
-    + intros j; destruct j; solve.
-      * exists (term_var "v"); solve.
-      * exists (term_var "v"); solve.
-      * exists (term_var "v"); solve.
-        exists RegTag2; solve.
-      * exists (term_var "v"); solve.
-    + intros j; destruct j; solve.
-      * exists (term_var "v"); solve.
-      * exists (term_var "v"); solve.
-      * exists (term_var "v"); solve.
-      * exists (term_var "v"); solve.
-        exists RegTag3; solve.
+  intros Δ τ []; auto with contracts.
   - exists (term_var "u").
     exists (term_var "v").
     exists (term_var "u").
