@@ -595,6 +595,9 @@ Lemma Forall_singleton {A : Type} :
   forall (P : A -> Prop), Forall P nil.
 Proof. trivial. Qed.
 
+Arguments inctx_zero {_ _ _} /.
+Arguments inctx_succ {_ _ _ _} !_ /.
+
 Local Ltac solve :=
   unfold valid_obligations, valid_obligation;
   repeat

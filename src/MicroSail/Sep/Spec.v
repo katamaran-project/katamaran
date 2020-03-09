@@ -80,6 +80,7 @@ Module Assertions
 
   Inductive Assertion (Σ : Ctx (𝑺 * Ty)) : Type :=
   | asn_bool (b : Term Σ ty_bool)
+  | asn_prop (P : NamedEnv Lit Σ -> Prop)
   | asn_chunk (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
   | asn_match_enum {E : 𝑬} (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
@@ -99,16 +100,16 @@ Module Assertions
     | chunk_ptsreg r t => chunk_ptsreg r (sub_term ζ t)
     end.
 
-  Fixpoint sub_assertion {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (a : Assertion Σ1) {struct a} : Assertion Σ2 :=
-    match a with
-    | asn_bool b => asn_bool (sub_term ζ b)
-    | asn_chunk c => asn_chunk (sub_chunk ζ c)
-    | asn_if b a1 a2 => asn_if (sub_term ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2)
-    | asn_match_enum k alts =>
-      asn_match_enum (sub_term ζ k) (fun z => sub_assertion ζ (alts z))
-    | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2)
-    | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a)
-    end.
+  (* Fixpoint sub_assertion {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (a : Assertion Σ1) {struct a} : Assertion Σ2 := *)
+  (*   match a with *)
+  (*   | asn_bool b => asn_bool (sub_term ζ b) *)
+  (*   | asn_chunk c => asn_chunk (sub_chunk ζ c) *)
+  (*   | asn_if b a1 a2 => asn_if (sub_term ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2) *)
+  (*   | asn_match_enum k alts => *)
+  (*     asn_match_enum (sub_term ζ k) (fun z => sub_assertion ζ (alts z)) *)
+  (*   | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2) *)
+  (*   | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a) *)
+  (*   end. *)
 
   Definition SymbolicLocalStore (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type := NamedEnv (Term Σ) Γ.
   Bind Scope env_scope with SymbolicLocalStore.
@@ -174,6 +175,7 @@ Module SymbolicContracts
 
   Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
   | formula_bool (t : Term Σ ty_bool)
+  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : NamedEnv Lit Σ' -> Prop)
   | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
   | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
 
@@ -186,6 +188,7 @@ Module SymbolicContracts
   Definition interpret_formula {Σ} (δ : NamedEnv Lit Σ) (fml : Formula Σ) : Prop :=
     match fml with
     | formula_bool t    => is_true (eval_term t δ)
+    | formula_prop ζ P  => P (env_map (fun _ t => eval_term t δ) ζ)
     | formula_eq t1 t2  => eval_term t1 δ =  eval_term t2 δ
     | formula_neq t1 t2 => eval_term t1 δ <> eval_term t2 δ
     end.
@@ -210,6 +213,7 @@ Module SymbolicContracts
   Definition sub_formula {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (fml : Formula Σ1) : Formula Σ2 :=
     match fml with
     | formula_bool t    => formula_bool (sub_term ζ t)
+    | formula_prop ζ' P => formula_prop (sub_comp ζ' ζ) P
     | formula_eq t1 t2  => formula_eq (sub_term ζ t1) (sub_term ζ t2)
     | formula_neq t1 t2 => formula_neq (sub_term ζ t1) (sub_term ζ t2)
     end.
@@ -255,6 +259,7 @@ Module SymbolicContracts
   Equations(noeqns) try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
     try_solve_formula (formula_bool (term_lit _ b)) := Some b;
     try_solve_formula (formula_bool _)              := None;
+    try_solve_formula (formula_prop _ _)            := None;
     try_solve_formula (formula_eq t1 t2)            := if Term_eqb t1 t2
                                                        then Some true
                                                        else None;
@@ -273,6 +278,7 @@ Module SymbolicContracts
       destruct fml; cbn.
       - dependent destruction t; cbn; inversion 1.
         destruct b; constructor; congruence.
+      - discriminate.
       - destruct (Term_eqb_spec t1 t2); cbn; inversion 1.
         constructor; congruence.
       - discriminate.
@@ -439,32 +445,36 @@ Module SymbolicContracts
       | Some h' => mutator_put_heap h'
       | None    => mutator_fail "Err [mutator_consume_chunk]: empty heap"
       end.
-    Fixpoint mutator_produce {Σ Γ} (asn : Assertion Σ) : Mutator Σ Γ Γ unit :=
+
+    Fixpoint mutator_produce {Σ Σ' Γ} (ζ : Sub Σ Σ') (asn : Assertion Σ) : Mutator Σ' Γ Γ unit :=
       match asn with
-      | asn_bool b      => mutator_assume_term b
-      | asn_chunk c     => mutator_produce_chunk c
-      | asn_if b a1 a2  => (mutator_assume_term b ;; mutator_produce a1) ⊗
-                           (mutator_assume_term (term_not b) ;; mutator_produce a2)
+      | asn_bool b      => mutator_assume_term (sub_term ζ b)
+      | asn_prop P      => mutator_assume_formula (formula_prop ζ P)
+      | asn_chunk c     => mutator_produce_chunk (sub_chunk ζ c)
+      | asn_if b a1 a2  => (mutator_assume_term (sub_term ζ b)            *> mutator_produce ζ a1) ⊗
+                           (mutator_assume_term (sub_term ζ (term_not b)) *> mutator_produce ζ a2)
       | @asn_match_enum _ E k1 alts =>
-        ⨂ k2 : 𝑬𝑲 E => (mutator_assume_formula (formula_eq k1 (term_enum _ k2)) ;;
-                        mutator_produce (alts k2))
-      | asn_sep a1 a2   => mutator_produce a1 *> mutator_produce a2
+        ⨂ k2 : 𝑬𝑲 E => mutator_assume_formula
+                         (formula_eq (sub_term ζ k1) (term_enum E k2)) ;;
+                       mutator_produce ζ (alts k2)
+      | asn_sep a1 a2   => mutator_produce ζ a1 *> mutator_produce ζ a2
       | asn_exist ς τ a => mutator_fail
-                            "Err [mutator_produce]: case [asn_exist] not impemented"
+                             "Err [mutator_produce]: case [asn_exist] not impemented"
       end.
 
-    Fixpoint mutator_consume {Σ Γ} (asn : Assertion Σ) : Mutator Σ Γ Γ unit :=
+    Fixpoint mutator_consume {Σ Σ' Γ} (ζ : Sub Σ Σ') (asn : Assertion Σ) : Mutator Σ' Γ Γ unit :=
       match asn with
-      | asn_bool b      => mutator_assert_term b
-      | asn_chunk c     => mutator_consume_chunk c
-      | asn_if b a1 a2  => (mutator_assume_term b ;; mutator_consume a1) ⊗
-                           (mutator_assume_term (term_not b) ;; mutator_consume a2)
+      | asn_bool b      => mutator_assert_term (sub_term ζ b)
+      | asn_prop P      => mutator_assert_formula (formula_prop ζ P)
+      | asn_chunk c     => mutator_consume_chunk (sub_chunk ζ c)
+      | asn_if b a1 a2  => (mutator_assume_term (sub_term ζ b)            *> mutator_consume ζ a1) ⊗
+                           (mutator_assume_term (sub_term ζ (term_not b)) *> mutator_consume ζ a2)
       | @asn_match_enum _ E k1 alts =>
-        ⨁ k2 : 𝑬𝑲 E => (mutator_assert_formula (formula_eq k1 (term_enum _ k2)) ;;
-                        mutator_consume (alts k2))
-      | asn_sep a1 a2   => mutator_consume a1 *> mutator_consume a2
-      | asn_exist ς τ a => mutator_fail
-                            "Err [mutator_consume]: case [asn_exist] not impemented"
+        ⨁ k2 : 𝑬𝑲 E => mutator_assert_formula
+                         (formula_eq (sub_term ζ k1) (term_enum E k2)) ;;
+                       mutator_consume ζ (alts k2)
+      | asn_sep a1 a2   => mutator_consume ζ a1 *> mutator_consume ζ a2
+      | asn_exist ς τ a => ⨁ t : Term Σ' τ => mutator_consume (sub_snoc ζ (ς , τ) t) a
       end.
 
     Section WithCont.
@@ -501,14 +511,14 @@ Module SymbolicContracts
         | @sep_contract_unit _ Σ' δ req ens =>
           ⨁ ζ : Sub Σ' Σ =>
             mutator_assert_formulas (formula_eqs ts (env_map (fun _ => sub_term ζ) δ)) *>
-            mutator_consume (sub_assertion ζ req) *>
-            mutator_produce (sub_assertion ζ ens) *>
+            mutator_consume ζ req *>
+            mutator_produce ζ ens *>
             mutator_pure (term_lit ty_unit tt)
         | @sep_contract_result_pure _ Σ' τ δ result req ens =>
           ⨁ ζ : Sub Σ' Σ =>
             mutator_assert_formulas (formula_eqs ts (env_map (fun _ => sub_term ζ) δ)) *>
-            mutator_consume (sub_assertion ζ req)            *>
-            mutator_produce (sub_assertion ζ ens)            *>
+            mutator_consume ζ req *>
+            mutator_produce ζ ens *>
             mutator_pure (sub_term ζ result)
         | @sep_contract_result _ _ Σ' δ result req ens => _
         | sep_contract_none _ => _
@@ -547,13 +557,13 @@ Module SymbolicContracts
       | stm_match_union U e altx alts => _
       | stm_match_record R e p rhs => _
       | @stm_read_register _ τ reg => ⨁ t : Term Σ τ =>
-        mutator_consume (asn_chunk (chunk_ptsreg reg t)) *>
-        mutator_produce (asn_chunk (chunk_ptsreg reg t))  *>
+        mutator_consume_chunk (chunk_ptsreg reg t) *>
+        mutator_produce_chunk (chunk_ptsreg reg t) *>
         mutator_pure t
       | @stm_write_register _ τ reg e => mutator_eval_exp e >>=
         fun v => ⨁ t : Term Σ τ =>
-        mutator_consume (asn_chunk (chunk_ptsreg reg t)) *>
-        mutator_produce (asn_chunk (chunk_ptsreg reg v)) *>
+        mutator_consume_chunk (chunk_ptsreg reg t) *>
+        mutator_produce_chunk (chunk_ptsreg reg v) *>
         mutator_pure v
       | stm_bind s k => _
       | stm_read_memory _ => _
@@ -575,16 +585,16 @@ Module SymbolicContracts
     match c with
     | @sep_contract_unit _ Σ δ req ens => fun body =>
       outcome_satisfy
-        ((mutator_produce req ;;
-          mutator_exec body   ;;
-          mutator_consume ens ;;
+        ((mutator_produce (sub_id Σ) req ;;
+          mutator_exec body              ;;
+          mutator_consume (sub_id Σ) ens ;;
           mutator_leakcheck)%mut (symbolicstate_initial δ))
         (fun '(_ , _ , w) => valid_obligations w)
     | sep_contract_result _ _ _ => fun _ => False
     | @sep_contract_result_pure _ Σ _ δ result' req ens => fun body =>
-      outcome_satisfy ((mutator_produce req ;;
+      outcome_satisfy ((mutator_produce (sub_id Σ) req ;;
                         mutator_exec body >>= fun result =>
-                        mutator_consume ens;;
+                        mutator_consume (sub_id Σ) ens;;
                         mutator_assert_formula (formula_eq result result') ;;
                         mutator_leakcheck)%mut (symbolicstate_initial δ))
                      (fun '(_ , _ , w) => valid_obligations w)

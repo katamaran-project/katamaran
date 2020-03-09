@@ -1033,7 +1033,12 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Definition sub_id Σ : Sub Σ Σ :=
       @env_tabulate _ (fun b => Term _ (snd b)) _
                     (fun '(ς , σ) ςIn => @term_var Σ ς σ ςIn).
-    Arguments sub_id : clear implicits.
+    Global Arguments sub_id : clear implicits.
+
+    Definition sub_snoc {Σ1 Σ2 : Ctx (𝑺 * Ty)} (ζ : Sub Σ1 Σ2)
+      (b : 𝑺 * Ty) (t : Term Σ2 (snd b)) : Sub (Σ1 ▻ b) Σ2 :=
+      env_snoc ζ b t.
+    Global Arguments sub_snoc {_ _} _ _ _.
 
     Definition sub_wk1 {Σ b} : Sub Σ (Σ ▻ b) :=
       @env_tabulate _ (fun b => Term _ (snd b)) _
