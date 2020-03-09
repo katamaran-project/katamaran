@@ -1173,6 +1173,16 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     (at level 100, alt1 pattern, alt2 pattern, alt3 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' 'end' ']'"
     ).
+  Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 'end'" :=
+    (stm_match_enum τ e (fun K => match K with
+                                  | alt1%exp => rhs1%stm
+                                  | alt2%exp => rhs2%stm
+                                  | alt3%exp => rhs3%stm
+                                  | alt4%exp => rhs4%stm
+                                  end))
+    (at level 100, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, format
+     "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' 'end' ']'"
+    ).
 
   Notation "'match:' e 'in' U 'with' | alt1 x1 => rhs1 | alt2 x2 => rhs2 'end'" :=
     (@stm_match_union _ U e _

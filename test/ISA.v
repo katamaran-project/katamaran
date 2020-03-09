@@ -340,26 +340,20 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Local Definition nop {Γ} : Stm Γ ty_unit := stm_lit ty_unit tt.
 
   Definition fun_rX : Stm ["reg_tag" ∶ ty_enum register_tag] ty_int :=
-    stm_match_enum
-      register_tag reg_tag
-      (fun tag =>
-         match tag with
-         | RegTag0 => stm_read_register R0
-         | RegTag1 => stm_read_register R1
-         | RegTag2 => stm_read_register R2
-         | RegTag3 => stm_read_register R3
-         end).
+    match: reg_tag in register_tag with
+    | RegTag0 => stm_read_register R0
+    | RegTag1 => stm_read_register R1
+    | RegTag2 => stm_read_register R2
+    | RegTag3 => stm_read_register R3
+    end.
 
   Definition fun_wX : Stm ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_int :=
-    stm_match_enum
-      register_tag reg_tag
-      (fun tag =>
-         match tag with
-         | RegTag0 => stm_write_register R0 reg_value
-         | RegTag1 => stm_write_register R1 reg_value
-         | RegTag2 => stm_write_register R2 reg_value
-         | RegTag3 => stm_write_register R3 reg_value
-         end).
+    match: reg_tag in register_tag with
+    | RegTag0 => stm_write_register R0 reg_value
+    | RegTag1 => stm_write_register R1 reg_value
+    | RegTag2 => stm_write_register R2 reg_value
+    | RegTag3 => stm_write_register R3 reg_value
+    end.
 
   Definition fun_semantics : Stm ["instr" ∶ ty_union instruction] ty_unit :=
     @stm_match_union
