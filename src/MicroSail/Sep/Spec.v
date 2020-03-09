@@ -314,8 +314,11 @@ Module SymbolicContracts
 
   Module MutatorNotations.
 
-    Notation "'⨂' i : I => F" := (mutator_demonic (fun i : I => F)) (at level 80, i at next level, I at next level) : mutator_scope.
-    Notation "'⨁' i : I => F" := (mutator_angelic (fun i : I => F)) (at level 80, i at next level, I at next level) : mutator_scope.
+    Notation "'⨂' x .. y => F" :=
+      (mutator_demonic (fun x => .. (mutator_demonic (fun y => F)) .. )) : mutator_scope.
+
+    Notation "'⨁' x .. y => F" :=
+      (mutator_angelic (fun x => .. (mutator_angelic (fun y => F)) .. )) : mutator_scope.
 
     Infix "⊗" := mutator_demonic_binary (at level 40, left associativity) : mutator_scope.
     Infix "⊕" := mutator_angelic_binary (at level 50, left associativity) : mutator_scope.

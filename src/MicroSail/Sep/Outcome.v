@@ -105,8 +105,12 @@ Inductive outcome_in {A : Type} (a : A) : Outcome A -> Prop :=
 
 Module OutcomeNotations.
 
-  Notation "'⨂' i : I => F" := (outcome_demonic (fun i : I => F)) (at level 80, i at next level, I at next level) : outcome_scope.
-  Notation "'⨁' i : I => F" := (outcome_angelic (fun i : I => F)) (at level 80, i at next level, I at next level) : outcome_scope.
+  Notation "'⨂' x .. y => F" :=
+    (outcome_demonic (fun x => .. (outcome_demonic (fun y => F)) .. ))
+    (at level 200, x binder, y binder, right associativity) : outcome_scope.
+  Notation "'⨁' x .. y => F" :=
+    (outcome_angelic (fun x => .. (outcome_angelic (fun y => F)) .. ))
+    (at level 200, x binder, y binder, right associativity) : outcome_scope.
 
   Infix "⊗" := outcome_demonic_binary (at level 40, left associativity) : outcome_scope.
   Infix "⊕" := outcome_angelic_binary (at level 50, left associativity) : outcome_scope.
