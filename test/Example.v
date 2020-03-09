@@ -34,7 +34,11 @@ From Coq Require Import
      ZArith.ZArith
      micromega.Lia.
 
+From Equations Require Import
+     Equations.
+
 From MicroSail Require Import
+     Sep.Spec
      WLP.Spec
      Syntax.
 
@@ -51,9 +55,9 @@ Open Scope ctx_scope.
 Inductive Enums : Set :=
 | ordering.
 
-Lemma Enums_eq_dec : EqDec Enums.
+Instance Enums_eq_dec : EqDec Enums.
   unfold EqDec; decide equality.
-Qed.
+Defined.
 
 Inductive Ordering : Set :=
 | LT
@@ -70,17 +74,17 @@ Inductive EitherConstructor : Set :=
 | Left
 | Right.
 
-Lemma Unions_eq_dec : EqDec Unions.
+Instance Unions_eq_dec : EqDec Unions.
   unfold EqDec; decide equality.
-Qed.
+Defined.
 
 (** Records **)
 Inductive Records : Set :=
 .
 
-Lemma Records_eq_dec : EqDec Records.
+Instance Records_eq_dec : EqDec Records.
   unfold EqDec; decide equality.
-Qed.
+Defined.
 
 Module ExampleTypeKit <: TypeKit.
 
@@ -317,63 +321,166 @@ Import ExampleProgramKit.
 (******************************************************************************)
 (* ⇓ NOT GENERATED                                                            *)
 
-Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleProgramKit).
-  Module PM := ExamplePrograms.
+Module SepContracts.
 
-  Definition CEnv : ContractEnv :=
-    fun σs τ f =>
-      match f with
-      | abs        => ContractNoFail
-                        ["x" ∶ ty_int] ty_int
-                        (fun x γ => True)
-                        (fun x r γ => r = Z.abs x)
-      | cmp        => ContractNoFail
-                        ["x" ∶ ty_int, "y" ∶ ty_int] (ty_enum ordering)
-                        (fun x y γ => True)
-                        (fun x y r γ =>
-                           match r with
-                           | LT => x < y
-                           | EQ => x = y
-                           | GT => x > y
-                           end
-                           (* (x < y <-> r = LT) /\ *)
-                           (* (x = y <-> r = EQ) /\ *)
-                           (* (x > y <-> r = GT) *)
-                        )
-      | gcd        => ContractNoFail
-                        ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
-                        (fun x y γ => True)
-                        (fun x y r γ => r = Z.gcd x y)
-      | gcdloop    => ContractNoFail
-                        ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
-                        (fun x y γ => x >= 0 /\ y >= 0)
-                        (fun x y r γ => r = Z.gcd x y)
-      | msum       => ContractNone
-                        [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
-      end.
+  Module ExampleAssertionKit <:
+    (AssertionKit ExampleTypeKit ExampleTermKit ExampleProgramKit).
+    Module PM := Programs ExampleTypeKit ExampleTermKit ExampleProgramKit.
 
-End ExampleContractKit.
-Import ExampleContractKit.
+    Definition 𝑷 := Empty_set.
+    Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
+    Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
+  End ExampleAssertionKit.
 
-Module ExampleWLP := WLP ExampleTypeKit ExampleTermKit ExampleProgramKit ExampleContractKit.
-Import ExampleWLP.
+  Module ExampleAssertions :=
+    Assertions ExampleTypeKit ExampleTermKit ExampleProgramKit ExampleAssertionKit.
+  Import ExampleAssertions.
 
-Lemma gcd_sub_diag_l (n m : Z) : Z.gcd (n - m) m = Z.gcd n m.
-Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.
+  Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
+  Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 
-Ltac wlp_cbv :=
-  cbv [Blastable_𝑬𝑲 CEnv Forall Lit ValidContract WLP abstract blast
-       blastable_lit env_lookup env_map env_update eval evals inctx_case_snoc
-       snd uncurry eval_prop_true eval_prop_false eval_binop
-      ].
+  Module ExampleSymbolicContractKit <:
+    SymbolicContractKit ExampleTypeKit ExampleTermKit ExampleProgramKit ExampleAssertionKit.
+    Module ASS := ExampleAssertions.
 
-Ltac validate_solve :=
-  repeat
-    (intros; subst;
-     rewrite ?Z.gcd_diag, ?Z.gcd_abs_l, ?Z.gcd_abs_r, ?Z.gcd_sub_diag_r,
+    Open Scope env_scope.
+
+    (* Arguments asn_prop [_] & _. *)
+
+    Definition CEnv : SepContractEnv :=
+      fun Δ τ f =>
+        match f with
+        | abs =>
+          @sep_contract_result
+            ["x" ∶ ty_int]
+            ["x" ∶ ty_int]
+            ty_int
+            [term_var "x"]%arg
+            "result"
+            asn_true
+            (@asn_prop
+               ["x" ∶ ty_int, "result" ∶ ty_int]
+               (fun x result => result = Z.abs x))
+            (* (asn_if *)
+            (*    (term_binop binop_lt (term_var "x") (term_lit ty_int 0)) *)
+            (*    (asn_bool (term_binop binop_eq (term_var "result") (term_neg (term_var "x")))) *)
+            (*    (asn_bool (term_binop binop_eq (term_var "result") (term_var "x")))) *)
+        | cmp =>
+          @sep_contract_result
+            ["x" ∶ ty_int, "y" ∶ ty_int]
+            ["x" ∶ ty_int, "y" ∶ ty_int]
+            (ty_enum ordering)
+            [term_var "x", term_var "x"]%arg
+            "result"
+            asn_true
+            (asn_match_enum
+               ordering (term_var "result")
+               (fun result =>
+                  match result with
+                  | LT => asn_bool (term_binop binop_lt (term_var "x") (term_var "y"))
+                  | EQ => asn_bool (term_binop binop_eq (term_var "x") (term_var "y"))
+                  | GT => asn_bool (term_binop binop_gt (term_var "x") (term_var "y"))
+                  end))
+        | gcd =>
+          @sep_contract_result
+            ["x" ∶ ty_int, "y" ∶ ty_int]
+            ["x" ∶ ty_int, "y" ∶ ty_int]
+            ty_int
+            [term_var "x", term_var "x"]%arg
+            "result"
+            asn_true
+            (@asn_prop
+               ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
+               (fun x y result => result = Z.gcd x y))
+        | gcdloop =>
+          @sep_contract_result
+            ["x" ∶ ty_int, "y" ∶ ty_int]
+            ["x" ∶ ty_int, "y" ∶ ty_int]
+            ty_int
+            [term_var "x", term_var "x"]%arg
+            "result"
+            (asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "x")) ✱
+             asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "y")))
+            (@asn_prop
+               ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
+               (fun x y result => result = Z.gcd x y))
+        | msum => sep_contract_none _
+        end.
+
+  End ExampleSymbolicContractKit.
+
+  Module ExampleSymbolicContracts :=
+    SymbolicContracts
+      ExampleTypeKit
+      ExampleTermKit
+      ExampleProgramKit
+      ExampleAssertionKit
+      ExampleSymbolicContractKit.
+  Import ExampleSymbolicContracts.
+
+End SepContracts.
+
+Module WLPContracts.
+
+  Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleProgramKit).
+    Module PM := ExamplePrograms.
+
+    Definition CEnv : ContractEnv :=
+      fun σs τ f =>
+        match f with
+        | abs        => ContractNoFail
+                          ["x" ∶ ty_int] ty_int
+                          (fun x γ => True)
+                          (fun x r γ => r = Z.abs x)
+        | cmp        => ContractNoFail
+                          ["x" ∶ ty_int, "y" ∶ ty_int] (ty_enum ordering)
+                          (fun x y γ => True)
+                          (fun x y r γ =>
+                             match r with
+                             | LT => x < y
+                             | EQ => x = y
+                             | GT => x > y
+                             end
+                          (* (x < y <-> r = LT) /\ *)
+                          (* (x = y <-> r = EQ) /\ *)
+                          (* (x > y <-> r = GT) *)
+                          )
+        | gcd        => ContractNoFail
+                          ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
+                          (fun x y γ => True)
+                          (fun x y r γ => r = Z.gcd x y)
+        | gcdloop    => ContractNoFail
+                          ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
+                          (fun x y γ => x >= 0 /\ y >= 0)
+                          (fun x y r γ => r = Z.gcd x y)
+        | msum       => ContractNone
+                          [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
+        end.
+
+  End ExampleContractKit.
+  Import ExampleContractKit.
+
+  Module ExampleWLP := WLP ExampleTypeKit ExampleTermKit ExampleProgramKit ExampleContractKit.
+  Import ExampleWLP.
+
+  Lemma gcd_sub_diag_l (n m : Z) : Z.gcd (n - m) m = Z.gcd n m.
+  Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.
+
+  Ltac wlp_cbv :=
+    cbv [Blastable_𝑬𝑲 CEnv Forall Lit ValidContract WLP abstract blast
+                      blastable_lit env_lookup env_map env_update eval evals inctx_case_snoc
+                      snd uncurry eval_prop_true eval_prop_false eval_binop
+        ].
+
+  Ltac validate_solve :=
+    repeat
+      (intros; subst;
+       rewrite ?Z.gcd_diag, ?Z.gcd_abs_l, ?Z.gcd_abs_r, ?Z.gcd_sub_diag_r,
        ?gcd_sub_diag_l;
-     intuition (try lia)
-    ).
+       intuition (try lia)
+      ).
 
-Lemma validCEnv : ValidContractEnv CEnv.
-Proof. intros σs τ []; wlp_cbv; validate_solve. Qed.
+  Lemma validCEnv : ValidContractEnv CEnv.
+  Proof. intros σs τ []; wlp_cbv; validate_solve. Qed.
+
+End WLPContracts.

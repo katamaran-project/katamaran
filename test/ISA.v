@@ -476,8 +476,8 @@ Module ISAAssertionKit <: (AssertionKit ISATypeKit ISATermKit ISAProgramKit).
 
   Definition 𝑷 := Empty_set.
   Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
-  Definition 𝑷_eq_dec : forall (p : 𝑷) (q : 𝑷), {p = q}+{~ p = q} :=
-    fun p => match p with end.
+  Definition 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
+
 End ISAAssertionKit.
 
 Module ISAAssertions :=
@@ -507,20 +507,20 @@ Module ISASymbolicContractKit <:
         sep_contract_result_pure
           δ'
           (@term_var Σ' "v" _ _)
-        (@asn_match_enum _ register_tag (term_var "reg_tag")
-                        (fun k => match k with
-                               | RegTag0 => R0 ↦ term_var "v"
-                               | RegTag1 => R1 ↦ term_var "v"
-                               | RegTag2 => R2 ↦ term_var "v"
-                               | RegTag3 => R3 ↦ term_var "v"
-                               end))
-        (@asn_match_enum _ register_tag (term_var "reg_tag")
-                        (fun k => match k with
-                               | RegTag0 => R0 ↦ term_var "v"
-                               | RegTag1 => R1 ↦ term_var "v"
-                               | RegTag2 => R2 ↦ term_var "v"
-                               | RegTag3 => R3 ↦ term_var "v"
-                               end))
+          (asn_match_enum register_tag (term_var "reg_tag")
+                          (fun k => match k with
+                                    | RegTag0 => R0 ↦ term_var "v"
+                                    | RegTag1 => R1 ↦ term_var "v"
+                                    | RegTag2 => R2 ↦ term_var "v"
+                                    | RegTag3 => R3 ↦ term_var "v"
+                                    end))
+          (asn_match_enum register_tag (term_var "reg_tag")
+                          (fun k => match k with
+                                    | RegTag0 => R0 ↦ term_var "v"
+                                    | RegTag1 => R1 ↦ term_var "v"
+                                    | RegTag2 => R2 ↦ term_var "v"
+                                    | RegTag3 => R3 ↦ term_var "v"
+                                    end))
       | wX => sep_contract_none _
       | rF => sep_contract_none _
       | wF => sep_contract_none _

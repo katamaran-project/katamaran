@@ -80,7 +80,7 @@ Module Assertions
 
   Inductive Assertion (Σ : Ctx (𝑺 * Ty)) : Type :=
   | asn_bool (b : Term Σ ty_bool)
-  | asn_prop (P : NamedEnv Lit Σ -> Prop)
+  | asn_prop (P : abstract_named Lit Σ Prop)
   | asn_chunk (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
   | asn_match_enum {E : 𝑬} (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
@@ -92,6 +92,8 @@ Module Assertions
   Definition asn_false {Σ} : Assertion Σ :=
     asn_bool (term_lit ty_bool false).
 
+  Arguments asn_prop {_} _.
+  Arguments asn_match_enum [_] _ _ _.
   Arguments asn_exist [_] _ _ _.
 
   Definition sub_chunk {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (c : Chunk Σ1) : Chunk Σ2 :=
@@ -175,7 +177,7 @@ Module SymbolicContracts
 
   Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
   | formula_bool (t : Term Σ ty_bool)
-  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : NamedEnv Lit Σ' -> Prop)
+  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Lit Σ' Prop)
   | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
   | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
 
@@ -188,7 +190,7 @@ Module SymbolicContracts
   Definition interpret_formula {Σ} (δ : NamedEnv Lit Σ) (fml : Formula Σ) : Prop :=
     match fml with
     | formula_bool t    => is_true (eval_term t δ)
-    | formula_prop ζ P  => P (env_map (fun _ t => eval_term t δ) ζ)
+    | formula_prop ζ P  => uncurry_named P (env_map (fun _ t => eval_term t δ) ζ)
     | formula_eq t1 t2  => eval_term t1 δ =  eval_term t2 δ
     | formula_neq t1 t2 => eval_term t1 δ <> eval_term t2 δ
     end.
