@@ -556,7 +556,7 @@ Module SymbolicContracts
         mutator_eval_exp e >>=
         mutator_exec_match_enum (fun K => mutator_exec (alts K))
       | stm_match_tuple e p rhs => _
-      | stm_match_union U e altx alts => _
+      | stm_match_union U e alts => _
       | stm_match_record R e p rhs => _
       | @stm_read_register _ τ reg => ⨁ t : Term Σ τ =>
         mutator_consume_chunk (chunk_ptsreg reg t) *>

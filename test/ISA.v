@@ -356,23 +356,12 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     end.
 
   Definition fun_semantics : Stm ["instr" ∶ ty_union instruction] ty_unit :=
-    @stm_match_union
-      _ instruction instr _
+    stm_match_union instruction instr
       (fun K => match K with
-                | KHalt => ""
-                | KLoad => "load_args"
-                | KAdd => "add_args"
-                | KJump => "jump_args"
-                end)
-      (fun K => match K return Stm _ _ with
-                | KHalt =>
-                  stm_write_register Halted lit_true ;; nop
-                | KLoad =>
-                  match: (exp_var "load_args") in (ty_enum register_tag , ty_enum register_tag) with
-                  | ("dest", "source") => call execute_load (exp_var "dest") (exp_var "source")
-                  end
-                | KAdd => stm_fail _ "not implemented"
-                | KJump => stm_fail _ "not implemented"
+                | KHalt => alt _ (pat_unit)                 (stm_write_register Halted lit_true ;; nop)
+                | KLoad => alt _ (pat_pair "dest" "source") (call execute_load (exp_var "dest") (exp_var "source"))
+                | KAdd  => alt _ (pat_var "jump_args")      (stm_fail _ "not implemented")
+                | KJump => alt _ (pat_var "add_args")       (stm_fail _ "not implemented")
                 end).
 
   Definition fun_execute_load : Stm ["dst" ∶ ty_enum register_tag, "src" ∶ ty_enum register_tag] ty_unit :=
