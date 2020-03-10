@@ -616,6 +616,12 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         RecordPat (ctx_snoc rfs (rf , τ)) (ctx_snoc Δ (x , τ)).
     Bind Scope pat_scope with RecordPat.
 
+    Inductive Pattern : Ctx (𝑿 * Ty) -> Ty -> Set :=
+    | pat_var (x : 𝑿) {σ : Ty} : Pattern [ x ∶ σ ]%ctx σ
+    | pat_unit : Pattern ctx_nil ty_unit
+    | pat_pair (x y : 𝑿) {σ τ : Ty} : Pattern [ x ∶ σ , y ∶ τ ]%ctx (ty_prod σ τ)
+    | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty_tuple σs).
+
     Inductive Stm (Γ : Ctx (𝑿 * Ty)) : Ty -> Type :=
     | stm_lit        {τ : Ty} (l : Lit τ) : Stm Γ τ
     | stm_exp        {τ : Ty} (e : Exp Γ τ) : Stm Γ τ
@@ -660,7 +666,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | stm_read_memory (addr : 𝑨𝑫𝑫𝑹) : Stm Γ ty_int
     | stm_write_memory (addr : 𝑨𝑫𝑫𝑹) (e : Exp Γ ty_int) : Stm Γ ty_int
     | stm_bind   {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ) : Stm Γ τ.
-    Bind Scope stm_scope with Stm.
 
     Global Arguments stm_lit {_} _ _.
     Global Arguments stm_exp {_ _} _.
@@ -687,6 +692,11 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   End Statements.
 
+  Bind Scope stm_scope with Stm.
+  Bind Scope par_scope with Pattern.
+  Bind Scope par_scope with TuplePat.
+  Bind Scope par_scope with RecordPat.
+
   Section PatternMatching.
 
     Fixpoint tuple_pattern_match {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)}
@@ -709,6 +719,15 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
           env_snoc
             (record_pattern_match p (env_tail E)) (x, _)
             (env_lookup E inctx_zero)
+      end.
+
+    Definition pattern_match {σ : Ty} {Δ : Ctx (𝑿 * Ty)} (p : Pattern Δ σ) :
+      Lit σ -> LocalStore Δ :=
+      match p with
+      | pat_var x => env_snoc env_nil (x,_)
+      | pat_unit => fun _ => env_nil
+      | pat_pair x y => fun '(u , v) => (env_nil ► (x ∶ _)%ctx ↦ u ► (y ∶ _)%ctx ↦ v)%env
+      | pat_tuple p => tuple_pattern_match p
       end.
 
   End PatternMatching.
