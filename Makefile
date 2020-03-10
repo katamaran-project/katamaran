@@ -4,6 +4,8 @@ VERBOSE ?= 1
 # Specify a concrete number of jobs if necessary
 JOBS ?= $(shell nproc)
 
+COQTAGS := $(shell command -v coqtags)
+
 ifeq ($(V),1)
 E=@true
 Q=
@@ -26,6 +28,10 @@ coq: Makefile.coq
 Makefile.coq: _CoqProject Makefile $(SRCS)
 	$(E) "  COQ_MAKEFILE Makefile.coq"
 	$(Q)coq_makefile -f _CoqProject -o Makefile.coq
+
+emacstags:
+	$(E) "  coqtags"
+	-@coqtags $(SRCS)
 
 clean: Makefile.coq
 	$(Q)$(MAKE) $(MFLAGS) -f Makefile.coq clean
