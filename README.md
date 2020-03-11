@@ -1,3 +1,5 @@
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fskeuchel%2Fmicrosail-coq.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fskeuchel%2Fmicrosail-coq?ref=badge_shield)
+
 Deeply embedded MicroSail in Coq
 ================================
 
@@ -102,3 +104,7 @@ notable differences:
 License
 -------
 The MicroSail implementation is distributed under the 2-clause BSD license.
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fskeuchel%2Fmicrosail-coq.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fskeuchel%2Fmicrosail-coq?ref=badge_large)
