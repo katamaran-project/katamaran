@@ -83,6 +83,18 @@ Section WithBinding.
       | env_snoc E _ _ => E
     end.
 
+  Definition env_unsnoc {D : B -> Type} {Γ : Ctx B}
+    {b : B} (E : Env D (ctx_snoc Γ b)) : Env D Γ * D b:=
+    match E in Env _ Γb
+    return match Γb with
+           | ctx_nil => unit
+           | ctx_snoc Γ b => Env D Γ * D b
+           end
+    with
+      | env_nil => tt
+      | env_snoc E _ db => (E , db)
+    end.
+
   Global Arguments env_tail {_ _ _} / _.
 
   Fixpoint env_drop {D : B -> Type} {Γ : Ctx B} Δ {struct Δ} :

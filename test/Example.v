@@ -173,16 +173,16 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     match U with
     | either => fun Kv =>
                   match Kv with
-                  | existT _ Left v  => inl v
-                  | existT _ Right v => inr v
+                  | existT Left v  => inl v
+                  | existT Right v => inr v
                   end
     end.
   Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
     match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Lit (𝑼𝑲_Ty u K)}) with
     | either => fun Kv =>
                   match Kv with
-                  | inl v => existT _ Left v
-                  | inr v => existT _ Right v
+                  | inl v => existT Left v
+                  | inr v => existT Right v
                   end
     end.
   Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),

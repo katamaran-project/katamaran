@@ -49,7 +49,7 @@ Delimit Scope arg_scope with arg.
 Reserved Notation "'ε'"            (at level 0).
 Reserved Infix "▻"                 (at level 50, left associativity).
 Reserved Infix "▻▻"                (at level 50, left associativity).
-Reserved Notation "b ∈ Γ"          (at level 75, Γ at next level, no associativity).
+Reserved Infix "∈"                 (at level 70).
 Reserved Notation "x ∶ τ"          (at level 80).
 Reserved Notation "[ x ]"          (at level 0).
 Reserved Notation "[ x , .. , z ]" (at level 0).

@@ -42,10 +42,14 @@ From MicroSail Require Import
      Sep.Outcome
      Syntax.
 
+From stdpp Require Import base option.
+
 Import CtxNotations.
 Import EnvNotations.
 Import OutcomeNotations.
 Import ListNotations.
+
+Local Open Scope ctx_scope.
 
 Set Implicit Arguments.
 
@@ -127,7 +131,6 @@ Module Assertions
     | @exp_inl _ σ1 σ2 e0             => @term_inl _ σ1 σ2 (symbolic_eval_exp e0 δ)
     | @exp_inr _ σ1 σ2 e0             => @term_inr _ σ1 σ2 (symbolic_eval_exp e0 δ)
     | @exp_list _ σ0 es               => term_list (List.map (fun e => symbolic_eval_exp e δ) es)
-    | @exp_nil _ σ0                   => term_nil _
     | @exp_tuple _ σs es              => @term_tuple _ σs (env_map (fun _ e => symbolic_eval_exp e δ) es)
     | @exp_projtup _ σs e0 n σ0 p     => @term_projtup _ σs (symbolic_eval_exp e0 δ) n σ0 p
     | @exp_union _ T K e0             => @term_union _ T K (symbolic_eval_exp e0 δ)
@@ -288,6 +291,159 @@ Module SymbolicContracts
 
   End SolverSoundness.
 
+  Definition GhostEnv (Σe Σr : Ctx (𝑺 * Ty)) : Type := Env (fun b => option (Term Σr (snd b))) Σe.
+
+  Definition create_ghost_env (Σe Σr : Ctx (𝑺 * Ty)) : GhostEnv Σe Σr :=
+    env_tabulate (fun _ _ => None).
+
+  Let comp {S : Type} (f : S -> option S) (g : S -> option S) : S -> option S :=
+    fun s => ssrfun.Option.bind g (f s).
+  Infix ">=>" := comp (at level 80, right associativity).
+
+  Section TraverseList.
+
+    Context `{MRet M, MBind M} {A B : Type} (f : A -> M B).
+
+    Fixpoint traverse_list (xs : list A) : M (list B) :=
+      match xs with
+      | nil       => mret nil
+      | cons x xs => b ← f x ; bs ← traverse_list xs ; mret (cons b bs)
+      end.
+
+  End TraverseList.
+
+  Section TraverseEnv.
+
+    Context `{MRet M, MBind M} {I : Set} {A B : I -> Type} (f : forall i : I, A i -> M (B i)).
+
+    Fixpoint traverse_env {Γ : Ctx I} (xs : Env A Γ) : M (Env B Γ) :=
+      match xs with
+      | env_nil => mret (env_nil)
+      | env_snoc Ea i a => Eb ← traverse_env Ea ; b ← f a ; mret (env_snoc Eb i b)
+      end.
+
+  End TraverseEnv.
+
+  Section WithGhostScope.
+    Context {Σe Σr} (δ : GhostEnv Σe Σr).
+
+    Fixpoint eval_term_ghost {σ : Ty} (t : Term Σe σ) {struct t} : option (Term Σr σ) :=
+      match t in Term _ σ return option (Term Σr σ) with
+      | @term_var _ x _      => (δ ‼ x)%lit
+      | term_lit _ l         => Some (term_lit _ l)
+      | term_binop op t1 t2  => t1 ← eval_term_ghost t1 ;
+                                t2 ← eval_term_ghost t2 ;
+                                Some (term_binop op t1 t2)
+      | term_neg t           => term_neg <$> eval_term_ghost t
+      | term_not t           => term_not <$> eval_term_ghost t
+      | term_inl t           => term_inl <$> eval_term_ghost t
+      | term_inr t           => term_inr <$> eval_term_ghost t
+      | term_list ts         => term_list <$> traverse_list eval_term_ghost ts
+      | term_tuple ts        => term_tuple <$> traverse_env (@eval_term_ghost) ts
+      | @term_projtup _ _ t n _ p     => (fun t => term_projtup t n (p:=p)) <$> eval_term_ghost t
+      | term_union U K t     => term_union U K <$> eval_term_ghost t
+      | term_record R ts     => term_record R <$> traverse_env (fun b => @eval_term_ghost (snd b)) ts
+      | term_projrec t rf    => (fun t => term_projrec t rf) <$> eval_term_ghost t
+      end.
+
+    Section WithMatchTerm.
+
+      Variable match_term : forall {σ}, Term Σe σ -> Term Σr σ -> GhostEnv Σe Σr -> option (GhostEnv Σe Σr).
+
+      Equations(noeqns) match_env'  {σs} (te : Env (Term Σe) σs) (tr : Env (Term Σr) σs) :
+        GhostEnv Σe Σr -> option (GhostEnv Σe Σr) :=
+        match_env' env_nil env_nil := Some;
+        match_env' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_env' E1 E2 >=> match_term t1 t2.
+
+    End WithMatchTerm.
+
+    (* The match_term function tries to match the term te from the callee
+       contract against a term tr from the caller environment. NOTE(!): This
+       function tries not to do anything intelligent with constructs that have
+       non-trivial equalities (like plus, projections, ..). It is therefore
+       necessarily incomplete. Potentially it can later be replaced by something
+       that simply assumes the equality and checks if this is still consistent
+       with the path condition.
+     *)
+    Equations(noeqns) match_term {σ} (te : Term Σe σ) (tr : Term Σr σ) :
+      GhostEnv Σe Σr -> option (GhostEnv Σe Σr) :=
+      match_term (@term_var ς σ ςInΣe) tr :=
+        fun L =>
+          match (L ‼ ς)%lit with
+          (* There's already a binding for ς in the ghost environment. Make sure
+             it corresponds to the term tr. *)
+          | Some tr' => if Term_eqb tr' tr then Some L else None
+          (* There's no binding for ς in the ghost environment. Create a new one by
+             inserting tr. *)
+          | None     => Some (L ⟪ ς ↦ Some tr ⟫)%env
+          end;
+      match_term (term_lit ?(σ) l1) (term_lit σ l2) :=
+        if Lit_eqb σ l1 l2 then Some else fun _ => None;
+      match_term (term_inl t1) (term_inl t2) := match_term t1 t2;
+      match_term (term_inl t1) (term_lit (inl l2)) := match_term t1 (term_lit _ l2);
+      match_term (term_tuple ts1) (term_tuple ts2) := match_env' (@match_term) ts1 ts2;
+      (* Obviously more matchings can be added here. *)
+      match_term _ _ := fun _ => None.
+
+    Definition match_env := @match_env' (@match_term).
+
+    Equations(noeqns) match_chunk (ce : Chunk Σe) (cr : Chunk Σr) :
+      GhostEnv Σe Σr -> option (GhostEnv Σe Σr) :=
+      match_chunk (chunk_pred p1 ts1) (chunk_pred p2 ts2)
+      with 𝑷_eq_dec p1 p2 => {
+        match_chunk (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) := match_env ts1 ts2;
+        match_chunk (chunk_pred p1 ts1) (chunk_pred p2 ts2) (right _) := fun _ => None
+      };
+      match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
+      with 𝑹𝑬𝑮_eq_dec r1 r2 => {
+        match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left (@teq_refl eq_refl eq_refl)) := match_term t1 t2;
+        match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := fun _ => None
+      };
+      match_chunk _ _  := fun _ => None.
+
+    Fixpoint extract_chunk (ce : Chunk Σe) (h : SymbolicHeap Σr) (L : GhostEnv Σe Σr) :
+      list (GhostEnv Σe Σr * SymbolicHeap Σr) :=
+      match h with
+      | nil      => nil
+      | cr :: h' => let rec := List.map
+                                 (prod_curry (fun L' h'' => (L' , cons cr h'')))
+                                 (extract_chunk ce h' L) in
+                    match match_chunk ce cr L with
+                    | Some L' => cons (L' , h') rec
+                    | None    => rec
+                    end
+      end.
+
+  End WithGhostScope.
+
+  Definition ghost_env_to_option_sub {Σe Σr} (δ : GhostEnv Σe Σr) : option (Sub Σe Σr) :=
+    traverse_env (fun b mt => mt) δ.
+
+  Lemma eval_term_ghost_refines_sub_term {Σe Σr} (δ : GhostEnv Σe Σr) (ζ : Sub Σe Σr) :
+    ghost_env_to_option_sub δ = Some ζ ->
+    forall σ (t : Term _ σ), eval_term_ghost δ t = Some (sub_term ζ t).
+  Proof.
+    intros hyp.
+    induction t; cbn in *.
+    - admit.
+    - reflexivity.
+    - rewrite IHt1, IHt2; reflexivity.
+    - rewrite IHt; reflexivity.
+    - rewrite IHt; reflexivity.
+    - rewrite IHt; reflexivity.
+    - rewrite IHt; reflexivity.
+    - apply fmap_Some_2.
+      induction es as [|t ts]; cbn in *.
+      + reflexivity.
+      + destruct X as [Xt Xts].
+        rewrite Xt, (IHts Xts); reflexivity.
+    - admit.
+    - rewrite IHt; reflexivity.
+    - rewrite IHt; reflexivity.
+    - admit.
+    - rewrite IHt; reflexivity.
+  Admitted.
+
   Section Mutator.
 
     Definition Mutator (Σ : Ctx (𝑺 * Ty)) (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Type) : Type :=
@@ -298,10 +454,18 @@ Module SymbolicContracts
       fun (s : SymbolicState Σ Γ1) => (⨂ i : I => ms i s)%out.
     Definition mutator_angelic {Σ : Ctx (𝑺 * Ty)} {Γ1 Γ2 : Ctx (𝑿 * Ty)} {I : Type} {A : Type} (ms : I -> Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
       fun (s : SymbolicState Σ Γ1) => (⨁ i : I => ms i s)%out.
+    Definition mutator_fail {Σ Γ1 Γ2} {A : Type} (msg : string) : Mutator Σ Γ1 Γ2 A :=
+      fun s =>
+        (⨂ δ : NamedEnv Lit Σ =>
+         ⨂ _ : List.Forall (interpret_formula δ) (symbolicstate_pathcondition s) =>
+         outcome_fail msg)%out.
+    Definition mutator_block {Σ Γ1 Γ2} {A : Type} : Mutator Σ Γ1 Γ2 A :=
+      fun s => outcome_block.
+
     Definition mutator_demonic_binary {Σ Γ1 Γ2 A} (m1 m2 : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
       mutator_demonic (fun b : bool => if b then m1 else m2).
     Definition mutator_angelic_binary {Σ Γ1 Γ2 A} (m1 m2 : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
-      mutator_angelic (fun b : bool => if b then m1 else m2).
+      fun s => outcome_angelic_binary (m1 s) (m2 s).
 
     Definition mutator_pure {Σ Γ A} (a : A) : Mutator Σ Γ Γ A :=
       fun s => outcome_pure (a, s, nil).
@@ -314,8 +478,21 @@ Module SymbolicContracts
     Definition mutator_map {Σ Γ1 Γ2 A B} (f : A -> B) (ma : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 B :=
       mutator_bind ma (fun a => mutator_pure (f a)).
 
-    Arguments mutator_bind {_ _ _ _ _ _} _ _ /.
-    Arguments mutator_bind_right {_ _ _ _ _ _} _ _ /.
+    Section AngelicList.
+      Context {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} {A : Type}.
+      Variable (msg : string).
+
+      Fixpoint mutator_angelic_list (xs : list A)  {struct xs} : Mutator Σ Γ Γ A :=
+        match xs with
+        | []      => mutator_fail msg
+        | x :: [] => mutator_pure x
+        | x :: xs => mutator_angelic_binary (mutator_pure x) (mutator_angelic_list xs)
+        end.
+
+    End AngelicList.
+
+    Global Arguments mutator_bind {_ _ _ _ _ _} _ _ /.
+    Global Arguments mutator_bind_right {_ _ _ _ _ _} _ _ /.
 
   End Mutator.
   Bind Scope mutator_scope with Mutator.
@@ -344,13 +521,6 @@ Module SymbolicContracts
 
     Local Open Scope mutator_scope.
 
-    Definition mutator_fail {Σ Γ} {A : Type} (msg : string) : Mutator Σ Γ Γ A :=
-      fun s =>
-        (⨂ δ : NamedEnv Lit Σ =>
-         ⨂ _ : List.Forall (interpret_formula δ) (symbolicstate_pathcondition s) =>
-         outcome_fail msg)%out.
-    Definition mutator_block {Σ Γ} {A : Type} : Mutator Σ Γ Γ A :=
-      fun s => outcome_block.
     Definition mutator_get {Σ Γ} : Mutator Σ Γ Γ (SymbolicState Σ Γ) :=
       fun s => outcome_pure (s , s , nil).
     Definition mutator_put {Σ Γ Γ'} (s : SymbolicState Σ Γ') : Mutator Σ Γ Γ' unit :=
@@ -419,7 +589,7 @@ Module SymbolicContracts
     Definition mutator_produce_chunk {Σ Γ} (c : Chunk Σ) : Mutator Σ Γ Γ unit :=
       mutator_modify_heap (fun h => c :: h).
 
-    Equations chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
+    Equations(noeqns) chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
       chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2)
       with 𝑷_eq_dec p1 p2 => {
         chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) :=
@@ -464,6 +634,53 @@ Module SymbolicContracts
                              "Err [mutator_produce]: case [asn_exist] not impemented"
       end.
 
+    Section MutatorConsumeGhost.
+      Context {Σr : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)}.
+
+      Definition mutator_consume_chunk_ghost {Σe} (c : Chunk Σe) (L : GhostEnv Σe Σr) : Mutator Σr Γ Γ (GhostEnv Σe Σr) :=
+        mutator_get_heap >>= fun h =>
+        mutator_angelic_list
+          "Err [mutator_consume_chunk_ghost]: empty extraction"
+          (extract_chunk c h L) >>= fun '(L' , h') =>
+        mutator_put_heap h' *> mutator_pure L'.
+
+      Fixpoint mutator_consume_ghost {Σe} (asn : Assertion Σe) (L : GhostEnv Σe Σr) : Mutator Σr Γ Γ (GhostEnv Σe Σr) :=
+        match asn with
+        | asn_bool tb =>
+          match eval_term_ghost L tb with
+          | Some tb' => mutator_assert_term tb' *> mutator_pure L
+          | None     => mutator_fail "Err [mutator_consume_ghost]: uninstantiated variables when consuming bool assertion"
+          end
+        | asn_prop P =>
+          match ghost_env_to_option_sub L with
+          | Some ζ => mutator_assert_formula (formula_prop ζ P) *> mutator_pure L
+          | None   => mutator_fail "Err [mutator_consume_ghost]: uninstantiated variables when consuming prop assertion"
+          end
+        | asn_chunk c => mutator_consume_chunk_ghost c L
+        | asn_if tb a1 a2 =>
+          match eval_term_ghost L tb with
+          | Some tb' => (mutator_assume_term tb'            *> mutator_consume_ghost a1 L) ⊗
+                        (mutator_assume_term (term_not tb') *> mutator_consume_ghost a2 L)
+          | None     => mutator_fail "Err [mutator_consume_ghost]: uninstantiated variables when consuming if assertion"
+          end
+        | @asn_match_enum _ E k1 alts =>
+          match eval_term_ghost L k1 with
+          | Some k1' => ⨁ k2 : 𝑬𝑲 E =>
+            mutator_assert_formula (formula_eq k1' (term_enum E k2)) ;;
+            mutator_consume_ghost (alts k2) L
+          | None => mutator_fail "Err [mutator_consume_ghost]: uninstantiated variables when consuming match enum assertion"
+          end
+        | asn_sep a1 a2 => mutator_consume_ghost a1 L >>= mutator_consume_ghost a2
+        | asn_exist ς τ a =>
+          mutator_consume_ghost a (env_snoc L _ None) >>= fun La' =>
+          match env_unsnoc La' with
+          | (L', Some a) => mutator_pure L'
+          | _            => mutator_fail "Err [mutator_consume_ghost]: uninstantiated existential variable"
+          end
+        end.
+
+    End MutatorConsumeGhost.
+
     Fixpoint mutator_consume {Σ Σ' Γ} (ζ : Sub Σ Σ') (asn : Assertion Σ) : Mutator Σ' Γ Γ unit :=
       match asn with
       | asn_bool b      => mutator_assert_term (sub_term ζ b)
@@ -491,7 +708,11 @@ Module SymbolicContracts
 
     End WithCont.
 
-    Program Fixpoint mutator_exec {Σ Γ σ} (s : Stm Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
+    Context {Σr : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)}.
+
+    (* TODO: The code should be rewritten so this variable can be removed. *)
+    Parameter dummy : 𝑺.
+    Fixpoint mutator_exec {Σ Γ σ} (s : Stm Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
       match s with
       | stm_lit τ l => mutator_pure (term_lit τ l)
       | stm_exp e => mutator_eval_exp e
@@ -510,20 +731,28 @@ Module SymbolicContracts
       | stm_call f es =>
         mutator_eval_exps es >>= fun ts : NamedEnv (Term Σ) _ =>
         match CEnv f with
-        | @sep_contract_unit _ Σ' δ req ens =>
-          ⨁ ζ : Sub Σ' Σ =>
-            mutator_assert_formulas (formula_eqs ts (env_map (fun _ => sub_term ζ) δ)) *>
-            mutator_consume ζ req *>
-            mutator_produce ζ ens *>
-            mutator_pure (term_lit ty_unit tt)
-        | @sep_contract_result_pure _ Σ' τ δ result req ens =>
-          ⨁ ζ : Sub Σ' Σ =>
-            mutator_assert_formulas (formula_eqs ts (env_map (fun _ => sub_term ζ) δ)) *>
-            mutator_consume ζ req *>
-            mutator_produce ζ ens *>
-            mutator_pure (sub_term ζ result)
-        | @sep_contract_result _ _ Σ' δ result req ens => _
-        | sep_contract_none _ => _
+        | @sep_contract_unit _ Σe δ req ens =>
+          mutator_bind
+            (mutator_consume_ghost req (create_ghost_env Σe Σ))
+            (fun L' =>
+               match ghost_env_to_option_sub L' with
+               | Some ζ => mutator_assert_formulas (formula_eqs ts (env_map (fun _ => sub_term ζ) δ)) *>
+                           mutator_produce ζ ens *>
+                           mutator_pure (term_lit ty_unit tt)
+               | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition"
+               end)
+        | @sep_contract_result_pure _ Σe τ δ result req ens =>
+          mutator_bind
+            (mutator_consume_ghost req (create_ghost_env Σe Σ))
+            (fun L' =>
+               match ghost_env_to_option_sub L' with
+               | Some ζ => mutator_assert_formulas (formula_eqs ts (env_map (fun _ => sub_term ζ) δ)) *>
+                           mutator_produce ζ ens *>
+                           mutator_pure (sub_term ζ result)
+               | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition"
+               end)
+        | @sep_contract_result _ _ Σ' δ result req ens => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none_result function not implemented"
+        | sep_contract_none _ => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none function"
         end
       | stm_call' Δ δ' τ s =>
         mutator_get_local                                      >>= fun δ =>
@@ -538,40 +767,43 @@ Module SymbolicContracts
       | stm_assert e1 _ => mutator_eval_exp e1 >>= fun t =>
                            mutator_assert_term t ;;
                            mutator_pure t
-      | stm_fail τ s => mutator_fail                         "Err [mutator_exec]: [stm_fail] reached"
-      | stm_match_list e alt_nil xh xt alt_cons =>
-        mutator_eval_exp e >>= fun t =>
-                                 (* (formula_term_eq t nil) *)
-        (mutator_assume_formula _ ;; mutator_exec alt_nil) ⊗ _
-        (* mutator_exists (fun ςh ςt => *)
-        (*                   mutator_assume_formula (weaken t (ςh , ςt) = cons ςh ςt) ;; *)
-        (*                   xh  ↦ ςh ;; *)
-        (*                   xt  ↦ ςt ;; *)
-        (*                   mutator_exec alt_cons ;; *)
-        (*                   pop ;; *)
-        (*                   pop) *)
-      | stm_match_sum e xinl alt_inl xinr alt_inr => _
-      | stm_match_pair e xl xr rhs => _
+      | stm_fail τ s => mutator_fail "Err [mutator_exec]: [stm_fail] reached"
+      | stm_match_list e alt_nil xh xt alt_cons => mutator_fail "Err [mutator_exec]: stm_match_list not implemented"
+        (* mutator_eval_exp e >>= fun t => *)
+        (*                          (* (formula_term_eq t nil) *) *)
+        (* (mutator_assume_formula _ ;; mutator_exec alt_nil) ⊗ _ *)
+        (* (* mutator_exists (fun ςh ςt => *) *)
+        (* (*                   mutator_assume_formula (weaken t (ςh , ςt) = cons ςh ςt) ;; *) *)
+        (* (*                   xh  ↦ ςh ;; *) *)
+        (* (*                   xt  ↦ ςt ;; *) *)
+        (* (*                   mutator_exec alt_cons ;; *) *)
+        (* (*                   pop ;; *) *)
+        (* (*                   pop) *) *)
+      | stm_match_sum e xinl alt_inl xinr alt_inr => mutator_fail "Err [mutator_exec]: stm_match_sum not implemented"
+      | stm_match_pair e xl xr rhs => mutator_fail "Err [mutator_exec]: stm_match_pair not implemented"
       | stm_match_enum E e alts =>
         mutator_eval_exp e >>=
         mutator_exec_match_enum (fun K => mutator_exec (alts K))
-      | stm_match_tuple e p rhs => _
-      | stm_match_union U e alts => _
-      | stm_match_record R e p rhs => _
-      | @stm_read_register _ τ reg => ⨁ t : Term Σ τ =>
-        mutator_consume_chunk (chunk_ptsreg reg t) *>
-        mutator_produce_chunk (chunk_ptsreg reg t) *>
-        mutator_pure t
-      | @stm_write_register _ τ reg e => mutator_eval_exp e >>=
-        fun v => ⨁ t : Term Σ τ =>
-        mutator_consume_chunk (chunk_ptsreg reg t) *>
+      | stm_match_tuple e p rhs => mutator_fail "Err [mutator_exec]: stm_match_tuple not implemented"
+      | stm_match_union U e alts => mutator_fail "Err [mutator_exec]: stm_match_union not implemented"
+      | stm_match_record R e p rhs => mutator_fail "Err [mutator_exec]: stm_match_record not implemented"
+      | @stm_read_register _ τ reg =>
+        mutator_consume_chunk_ghost (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [dummy ∶ τ] 0 eq_refl))) [None]%arg >>= fun L =>
+        match env_unsnoc L with
+        | (_ , Some t) => mutator_produce_chunk (chunk_ptsreg reg t) *>
+                          mutator_pure t
+        (* Extracting the points to chunk should never fail here. Because there is exactly one binding
+           in the ghost environment and the chunk matching will always instantiate it. *)
+        | _            => mutator_fail "Err [mutator_exec]: You have found a unicorn."
+        end
+      | @stm_write_register _ τ reg e => mutator_eval_exp e >>= fun v =>
+        mutator_consume_chunk_ghost (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [dummy ∶ τ] 0 eq_refl))) [None]%arg ;;
         mutator_produce_chunk (chunk_ptsreg reg v) *>
         mutator_pure v
-      | stm_bind s k => _
-      | stm_read_memory _ => _
-      | stm_write_memory _ _ => _
+      | stm_bind s k => mutator_fail "Err [mutator_exec]: stm_bind not implemented"
+      | stm_read_memory _ => mutator_fail "Err [mutator_exec]: stm_read_memory not implemented"
+      | stm_write_memory _ _ => mutator_fail "Err [mutator_exec]: stm_write_memory not implemented"
       end.
-    Admit Obligations of mutator_exec.
 
     Definition mutator_leakcheck {Σ Γ} : Mutator Σ Γ Γ unit :=
       mutator_get_heap >>= fun h =>

@@ -66,7 +66,11 @@ Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcom
 Definition outcome_demonic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
   outcome_demonic (fun b : bool => if b then o1 else o2).
 Definition outcome_angelic_binary {A : Type} (o1 o2 : Outcome A) : Outcome A :=
-  outcome_angelic (fun b : bool => if b then o1 else o2).
+  match o1 , o2 with
+  | outcome_fail _ , _              => o2
+  | _              , outcome_fail _ => o1
+  | _              , _              => outcome_angelic (fun b : bool => if b then o1 else o2)
+  end.
 
 Definition Error (s : string) : Prop := False.
 Opaque Error.

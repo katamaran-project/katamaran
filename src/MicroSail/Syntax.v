@@ -520,7 +520,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | exp_inl     {σ1 σ2 : Ty} : Exp Γ σ1 -> Exp Γ (ty_sum σ1 σ2)
     | exp_inr     {σ1 σ2 : Ty} : Exp Γ σ2 -> Exp Γ (ty_sum σ1 σ2)
     | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty_list σ)
-    | exp_nil     {σ : Ty} : Exp Γ (ty_list σ)
     (* Experimental features *)
     | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty_tuple σs)
     | exp_projtup {σs : Ctx Ty} (e : Exp Γ (ty_tuple σs)) (n : nat) {σ : Ty}
@@ -577,7 +576,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | exp_inl e           => inl (eval e δ)
       | exp_inr e           => inr (eval e δ)
       | exp_list es         => List.map (fun e => eval e δ) es
-      | exp_nil _           => nil
       | exp_tuple es        => Env_rect
                                  (fun σs _ => Lit (ty_tuple σs))
                                  tt
@@ -886,7 +884,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty_sum σ1 σ2)
     | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2)
     | term_list    {σ : Ty} (es : list (Term Σ σ)) : Term Σ (ty_list σ)
-    | term_nil     {σ : Ty} : Term Σ (ty_list σ)
     (* Experimental features *)
     | term_tuple   {σs : Ctx Ty} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs)
     | term_projtup {σs : Ctx Ty} (e : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
@@ -900,7 +897,13 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     Global Arguments term_var {_} _ {_ _}.
     Global Arguments term_lit {_} _ _.
+    Global Arguments term_neg {_} _.
+    Global Arguments term_not {_} _.
+    Global Arguments term_inl {_ _ _} _.
+    Global Arguments term_inr {_ _ _} _.
+    Global Arguments term_list {_ _} _.
     Global Arguments term_tuple {_ _} _%exp.
+    Global Arguments term_projtup {_ _} _%exp _ {_ _}.
     Global Arguments term_union {_} _ _.
     Global Arguments term_record {_} _ _.
     Global Arguments term_projrec {_ _} _ _ {_ _}.
@@ -939,7 +942,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
       Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
       Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
-      Hypothesis (P_nil        : forall σ : Ty, P (ty_list σ) (term_nil Σ)).
       Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
       Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
       Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union U K e)).
@@ -956,7 +958,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
         | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
         | @term_list _ σ es              => ltac:(eapply P_list; induction es; cbn; eauto using unit)
-        | @term_nil _ σ                  => ltac:(eapply P_nil; eauto)
         | @term_tuple _ σs es            => ltac:(eapply P_tuple; induction es; cbn; eauto using unit)
         | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
         | @term_union _ U K e            => ltac:(eapply P_union; eauto)
@@ -978,7 +979,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | term_inl e           => inl (eval_term e δ)
       | term_inr e           => inr (eval_term e δ)
       | term_list es         => List.map (fun e => eval_term e δ) es
-      | term_nil _           => nil
       | term_tuple es        => Env_rect
                                   (fun σs _ => Lit (ty_tuple σs))
                                   tt
@@ -1008,7 +1008,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
       Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
       Term_eqb (term_list xs) (term_list ys) := list_beq Term_eqb xs ys;
-      Term_eqb (@term_nil _) (@term_nil _) := true;
       Term_eqb (term_tuple x) (term_tuple y) :=
          @env_beq _ (Term Σ) (@Term_eqb _) _ x y;
       Term_eqb (@term_projtup σs x n _ p) (@term_projtup τs y m _ q)
@@ -1112,7 +1111,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0)
         | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
         | @term_list _ σ es         => term_list (List.map sub_term es)
-        | term_nil _                => term_nil Σ2
         | term_tuple es             => term_tuple (env_map (@sub_term) es)
         | @term_projtup _ _ t n σ p => term_projtup (sub_term t) n (p := p)
         | term_union U K t0         => term_union U K (sub_term t0)
