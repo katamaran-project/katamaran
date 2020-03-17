@@ -679,6 +679,21 @@ Module SymbolicContracts
           end
         end.
 
+      Definition mutator_assert_term_eq_ghost {Σe σ} (te : Term Σe σ) (tr : Term Σr σ) (L : GhostEnv Σe Σr) : Mutator Σr Γ Γ (GhostEnv Σe Σr) :=
+        match match_term te tr L with
+        | Some L' => mutator_pure L'
+        | None    => match eval_term_ghost L te with
+                     | Some te' => mutator_assert_formula (formula_eq te' tr) *> mutator_pure L
+                     | None     => mutator_fail "Err [mutator_consume_ghost]: uninstantiated existential variable"
+                     end
+        end.
+
+      Equations(noeqns) mutator_assert_namedenv_eq_ghost {X Σe σs} (te : NamedEnv (X:=X) (Term Σe) σs) (tr : NamedEnv (Term Σr) σs) :
+        GhostEnv Σe Σr -> Mutator Σr Γ Γ (GhostEnv Σe Σr) :=
+        mutator_assert_namedenv_eq_ghost env_nil env_nil := mutator_pure;
+        mutator_assert_namedenv_eq_ghost (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) :=
+          fun L => mutator_assert_namedenv_eq_ghost E1 E2 L >>= mutator_assert_term_eq_ghost t1 t2.
+
     End MutatorConsumeGhost.
 
     Fixpoint mutator_consume {Σ Σ' Γ} (ζ : Sub Σ Σ') (asn : Assertion Σ) : Mutator Σ' Γ Γ unit :=
@@ -732,25 +747,21 @@ Module SymbolicContracts
         mutator_eval_exps es >>= fun ts : NamedEnv (Term Σ) _ =>
         match CEnv f with
         | @sep_contract_unit _ Σe δ req ens =>
-          mutator_bind
-            (mutator_consume_ghost req (create_ghost_env Σe Σ))
-            (fun L' =>
-               match ghost_env_to_option_sub L' with
-               | Some ζ => mutator_assert_formulas (formula_eqs ts (env_map (fun _ => sub_term ζ) δ)) *>
-                           mutator_produce ζ ens *>
-                           mutator_pure (term_lit ty_unit tt)
-               | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition"
-               end)
+          mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 =>
+          mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 =>
+          match ghost_env_to_option_sub L2 with
+          | Some ζ => mutator_produce ζ ens *>
+                      mutator_pure (term_lit ty_unit tt)
+          | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition"
+          end
         | @sep_contract_result_pure _ Σe τ δ result req ens =>
-          mutator_bind
-            (mutator_consume_ghost req (create_ghost_env Σe Σ))
-            (fun L' =>
-               match ghost_env_to_option_sub L' with
-               | Some ζ => mutator_assert_formulas (formula_eqs ts (env_map (fun _ => sub_term ζ) δ)) *>
-                           mutator_produce ζ ens *>
-                           mutator_pure (sub_term ζ result)
-               | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition"
-               end)
+          mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 =>
+          mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 =>
+          match ghost_env_to_option_sub L2 with
+          | Some ζ => mutator_produce ζ ens *>
+                      mutator_pure (sub_term ζ result)
+          | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition"
+          end
         | @sep_contract_result _ _ Σ' δ result req ens => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none_result function not implemented"
         | sep_contract_none _ => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none function"
         end

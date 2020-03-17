@@ -643,6 +643,6 @@ Proof.
   intros Δ τ []; auto with contracts.
   - constructor.
   - constructor.
-  - admit.
-  - admit.
-Admitted.
+  - constructor.
+  - constructor.
+Qed.
