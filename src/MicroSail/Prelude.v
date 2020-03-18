@@ -29,6 +29,7 @@
 From Coq Require Import
      Bool.Bool
      Lists.List
+     ZArith.ZArith
      ssr.ssrbool.
 
 From Equations Require Import
@@ -64,7 +65,7 @@ Section WithA.
     Lemma list_beq_prespec (xs : list A) (eqb_xs : all_list eqbA_spec xs) :
       forall ys, reflect (xs = ys) (list_beq eqbA xs ys).
     Proof.
-      induction xs as [|x xs]; destruct eqb_xs as [eqb_x eqb_xs];
+      induction xs as [|x xs]; [ idtac | destruct eqb_xs as [eqb_x eqb_xs] ];
         intros [|y ys]; cbn; try (constructor; congruence).
       destruct (eqb_x y); cbn.
       - apply (iffP (IHxs eqb_xs ys)); congruence.
@@ -111,3 +112,9 @@ Section Equality.
     end.
 
 End Equality.
+
+Instance Z_eqdec : EqDec Z := Z.eq_dec.
+Derive EqDec for Empty_set.
+
+Instance option_eqdec {A} `(EqDec A) : EqDec (option A).
+Proof. eqdec_proof. Defined.
