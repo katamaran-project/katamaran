@@ -41,6 +41,7 @@ Set Implicit Arguments.
 Scheme Equality for list.
 Scheme Equality for prod.
 Scheme Equality for sum.
+Scheme Equality for option.
 
 Section WithA.
   Context {A : Type}.
@@ -75,6 +76,13 @@ Section WithA.
     Proof.
       intros xs ?; apply list_beq_prespec.
       induction xs; cbn; auto using unit.
+    Qed.
+
+    Lemma option_beq_spec (hyp : forall x : A, eqbA_spec x) :
+      forall xs ys : option A, reflect (xs = ys) (option_beq eqbA xs ys).
+    Proof.
+      intros [x|] [y|]; cbn in *; try constructor; try congruence.
+      apply (iffP (hyp x y)); congruence.
     Qed.
 
   End WithEq.

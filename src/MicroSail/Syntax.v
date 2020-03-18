@@ -104,6 +104,13 @@ Program Instance blastable_list {A : Type} : Blastable (list A) :=
   |}.
 Solve All Obligations with intros ? []; intuition; congruence.
 
+Program Instance blastable_option {A : Type} : Blastable (option A) :=
+  {| blast x k :=
+       (forall (y : A), x = Some y -> k (Some y)) /\
+       (x = None -> k None)
+  |}.
+Solve All Obligations with intros ? []; intuition; congruence.
+
 Program Instance blastable_prod {A B : Type} : Blastable (A * B) :=
   { blast ab k := k (fst ab , snd ab) }.
 Solve All Obligations with intuition.
@@ -201,6 +208,7 @@ Module Types (Export typekit : TypeKit).
   | ty_sum  (σ τ : Ty)
   | ty_unit
   | ty_enum (E : 𝑬)
+  | ty_option (σ : Ty)
   (* Experimental features. These are still in flux. *)
   | ty_tuple (σs : Ctx Ty)
   | ty_union (U : 𝑼)
@@ -221,6 +229,7 @@ Module Types (Export typekit : TypeKit).
     Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)).
     Hypothesis (P_unit   : P ty_unit).
     Hypothesis (P_enum   : forall E, P (ty_enum E)).
+    Hypothesis (P_option : forall σ, P σ -> P (ty_option σ)).
     Hypothesis (P_tuple  : forall σs, EnvRec P σs -> P (ty_tuple σs)).
     Hypothesis (P_union  : forall U, P (ty_union U)).
     Hypothesis (P_record : forall R, P (ty_record R)).
@@ -236,6 +245,7 @@ Module Types (Export typekit : TypeKit).
       | ty_sum σ τ  => ltac:(apply P_sum; auto)
       | ty_unit     => ltac:(apply P_unit; auto)
       | ty_enum E   => ltac:(apply P_enum; auto)
+      | ty_option σ => ltac:(apply P_option; auto)
       | ty_tuple σs => ltac:(apply P_tuple; induction σs; cbn; auto using unit)
       | ty_union U  => ltac:(apply P_union; auto)
       | ty_record R => ltac:(apply P_record; auto)
@@ -258,6 +268,7 @@ Module Types (Export typekit : TypeKit).
       | ty_sum σ1 σ2  , ty_sum τ1 τ2  => f_equal2_dec ty_sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
       | ty_unit       , ty_unit       => left eq_refl
       | ty_enum E1    , ty_enum E2    => f_equal_dec ty_enum noConfusion_inv (eq_dec E1 E2)
+      | ty_option σ   , ty_option τ   => f_equal_dec ty_option noConfusion_inv (ty_eqdec σ τ)
       | ty_tuple σs   , ty_tuple τs   => f_equal_dec ty_tuple noConfusion_inv (@ctx_eqdec Ty ty_eqdec σs τs)
       | ty_union U1   , ty_union U2   => f_equal_dec ty_union noConfusion_inv (eq_dec U1 U2)
       | ty_record R1  , ty_record R2  => f_equal_dec ty_record noConfusion_inv (eq_dec R1 R2)
@@ -278,6 +289,7 @@ Module Types (Export typekit : TypeKit).
     | ty_sum σ1 σ2 => Lit σ1 + Lit σ2
     | ty_unit => unit
     | ty_enum E => 𝑬𝑲 E
+    | ty_option σ' => option (Lit σ')
     (* Experimental features *)
     | ty_tuple σs => EnvRec Lit σs
     | ty_union U => 𝑼𝑻 U
@@ -372,6 +384,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ty_sum σ1 σ2 => blastable_sum
       | ty_unit => blastable_unit
       | ty_enum E => Blastable_𝑬𝑲 E
+      | ty_option σ0 => blastable_option
       | ty_tuple σs => Ctx_rect
                          (fun σs => Blastable (Lit (ty_tuple σs)))
                          blastable_unit
@@ -392,6 +405,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ty_sum σ τ  => sum_beq (Lit_eqb σ) (Lit_eqb τ)
       | ty_unit     => fun _ _ => true
       | ty_enum E   => fun l1 l2 => if 𝑬𝑲_eq_dec l1 l2 then true else false
+      | ty_option σ => option_beq (Lit_eqb σ)
       | ty_tuple σs => envrec_beq Lit_eqb
       | ty_union U  => fun l1 l2 => if 𝑼𝑻_eq_dec l1 l2 then true else false
       | ty_record R => fun l1 l2 => if 𝑹𝑻_eq_dec l1 l2 then true else false
@@ -409,6 +423,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       - destruct x as [x1|x2]; destruct y as [y1|y2]...
       - destruct x. destruct y...
       - destruct (𝑬𝑲_eq_dec x y)...
+      - apply option_beq_spec; auto.
       - induction σs; intros.
         + destruct x; destruct y...
         + cbn in *.
