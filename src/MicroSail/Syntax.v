@@ -182,7 +182,7 @@ Module Type TypeKit.
      of an equal name and fill in the de Bruijn index automatically from
      a successful resolution.
   *)
-  Parameter Inline 𝑿_eq_dec : forall x y : 𝑿, {x=y}+{~x=y}.
+  Declare Instance 𝑿_eq_dec : EqDec 𝑿.
 
   (* Names of logical variables. These represent immutable variables
      standing for concrete literals in assertions. *)
@@ -820,39 +820,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   (* Record FunDef (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Set := *)
   (*   { fun_body : Stm Δ τ }. *)
 
-  Module NameResolution.
-
-    Fixpoint ctx_resolve {D : Set} (Γ : Ctx (𝑿 * D)) (x : 𝑿) {struct Γ} : option D :=
-      match Γ with
-      | ctx_nil           => None
-      | ctx_snoc Γ (y, d) => if 𝑿_eq_dec x y then Some d else ctx_resolve Γ x
-      end.
-
-    Definition IsSome {D : Set} (m : option D) : Set :=
-      match m with
-        | Some _ => unit
-        | None => Empty_set
-      end.
-
-    Definition fromSome {D : Set} (m : option D) : IsSome m -> D :=
-      match m return IsSome m -> D with
-      | Some d => fun _ => d
-      | None   => fun p => match p with end
-      end.
-
-    Fixpoint mk_inctx {D : Set} (Γ : Ctx (prod 𝑿 D)) (x : 𝑿) {struct Γ} :
-      let m := ctx_resolve Γ x in forall (p : IsSome m), InCtx (x , fromSome m p) Γ :=
-      match Γ with
-      | ctx_nil => fun p => match p with end
-      | ctx_snoc Γ (y, d) =>
-        match 𝑿_eq_dec x y as s
-        return (forall p, InCtx (x, fromSome (if s then Some d else ctx_resolve Γ x) p)
-                                (ctx_snoc Γ (y, d)))
-        with
-        | left e => fun _ => match e with | eq_refl => inctx_zero end
-        | right _ => fun p => inctx_succ (mk_inctx Γ x p)
-        end
-      end.
+  Section NameResolution.
 
     (* Ideally the following smart constructors would perform name resolution
        and fill in the de Bruijn index and the type of a variable. Unfortunately,
@@ -877,12 +845,9 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     (* Instead we hook mk_inctx directly into the typeclass resolution mechanism.
        Apparently, the unification of Γ is performed before the resolution so
-       evaluation of ctx_resolve and mk_inctx is not blocked.
+       evaluation of ctx_resolve and mk_inctx is not blocked. This hook is more
+       generally defined in MicroSail.Context.
      *)
-    Hint Extern 10 (InCtx (?x , _) ?Γ) =>
-      let Γ' := eval compute in Γ in
-      let xInΓ := eval compute in (mk_inctx Γ' x tt) in
-        exact xInΓ : typeclass_instances.
 
   End NameResolution.
 

@@ -233,3 +233,39 @@ Module CtxNotations.
   Notation "[ x , .. , z ]" := (ctx_snoc .. (ctx_snoc ctx_nil x) .. z) : ctx_scope.
 
 End CtxNotations.
+
+Section Resolution.
+
+  Context {Name : Set} {Name_eqdec : EqDec Name} {D : Set}.
+
+  Fixpoint ctx_resolve (Γ : Ctx (Name * D)) (x : Name) {struct Γ} : option D :=
+    match Γ with
+    | ctx_nil           => None
+    | ctx_snoc Γ (y, d) => if Name_eqdec x y then Some d else ctx_resolve Γ x
+    end.
+
+  Fixpoint mk_inctx (Γ : Ctx (Name * D)) (x : Name) {struct Γ} :
+    let m := ctx_resolve Γ x in forall (p : IsSome m), InCtx (x , fromSome m p) Γ :=
+    match Γ with
+    | ctx_nil => fun p => match p with end
+    | ctx_snoc Γ (y, d) =>
+      match Name_eqdec x y as s
+            return (forall p, InCtx (x, fromSome (if s then Some d else ctx_resolve Γ x) p)
+                                    (ctx_snoc Γ (y, d)))
+      with
+      | left e => fun _ => match e with eq_refl => inctx_zero end
+      | right _ => fun p => inctx_succ (mk_inctx Γ x p)
+      end
+    end.
+
+End Resolution.
+
+Module NameResolution.
+
+  (* Hook the reflective procedure for name resolution into the typeclass
+     resolution mechanism. *)
+  Hint Extern 10 (InCtx (?x , _) ?Γ) =>
+    let xInΓ := eval compute in (mk_inctx Γ x tt) in
+      exact xInΓ : typeclass_instances.
+
+End NameResolution.

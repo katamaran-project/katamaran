@@ -29,6 +29,7 @@
 From Coq Require Import
      Bool.Bool
      Lists.List
+     Strings.String
      ZArith.ZArith
      ssr.ssrbool.
 
@@ -114,7 +115,20 @@ Section Equality.
 End Equality.
 
 Instance Z_eqdec : EqDec Z := Z.eq_dec.
+Instance string_eqdec : EqDec string := string_dec.
 Derive EqDec for Empty_set.
 
 Instance option_eqdec {A} `(EqDec A) : EqDec (option A).
 Proof. eqdec_proof. Defined.
+
+Definition IsSome {A : Type} (m : option A) : Type :=
+  match m with
+  | Some _ => unit
+  | None   => Empty_set
+  end.
+
+Definition fromSome {A : Type} (m : option A) : IsSome m -> A :=
+  match m return IsSome m -> A with
+  | Some a => fun _ => a
+  | None   => fun p => match p with end
+  end.
