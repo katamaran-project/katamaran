@@ -100,10 +100,7 @@ Inductive InstructionConstructor : Set :=
 Section Records.
   Local Set Primitive Projections.
 
-  Record Addr : Set :=
-    MkAddr
-      { addr_int : Z;
-      }.
+  Definition Addr : Set := Z.
 
   Record Capability : Set :=
     MkCap
@@ -126,13 +123,11 @@ Inductive Unions : Set :=
 
 (** Records **)
 Inductive Records : Set :=
-| addr
 | capability.
 
 Section TransparentObligations.
   Local Set Transparent Obligations.
 
-  Derive NoConfusion for Addr.
   Derive NoConfusion for Capability.
   Derive NoConfusion for Permission.
   Derive NoConfusion for RegName.
@@ -144,7 +139,6 @@ Section TransparentObligations.
 
 End TransparentObligations.
 
-Derive EqDec for Addr.
 Derive EqDec for Permission.
 Derive EqDec for Capability.
 Derive EqDec for RegName.
@@ -186,7 +180,6 @@ Module CapTypeKit <: TypeKit.
   Definition 𝑹        := Records.
   Definition 𝑹𝑻 (R : 𝑹) : Set :=
     match R with
-    | addr       => Addr
     | capability => Capability
     end.
 
@@ -216,6 +209,7 @@ Import CapTypes.
 Definition ty_hv : Ty := ty_enum regname.
 Definition ty_lv : Ty := ty_enum regname.
 Definition ty_rv : Ty := (ty_sum (ty_enum regname) ty_int).
+Definition ty_addr : Ty := ty_int.
 
 (*** TERMS ***)
 
@@ -311,22 +305,18 @@ Module CapTermKit <: (TermKit CapTypeKit).
 
   (** RECORDS **)
   Definition 𝑹𝑭  : Set := string.
-  Print Capability.
+
   Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) :=
     match R with
-    | addr       => [ "addr_int"       ∶ ty_int ]
     | capability => [ "cap_permission" ∶ ty_enum permission,
-                      "cap_begin"      ∶ ty_record addr,
-                      "cap_end"        ∶ ty_option (ty_record addr),
-                      "cap_cursor"     ∶ ty_record addr
+                      "cap_begin"      ∶ ty_addr,
+                      "cap_end"        ∶ ty_option ty_addr,
+                      "cap_cursor"     ∶ ty_addr
                     ]
     end.
 
   Definition 𝑹_fold (R : 𝑹) : NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R :=
     match R with
-    | addr       =>
-      fun fields =>
-        MkAddr (fields ‼ "addr_int")
     | capability =>
       fun fields =>
         MkCap
@@ -338,17 +328,13 @@ Module CapTermKit <: (TermKit CapTypeKit).
 
   Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) :=
     match R  with
-    | addr       =>
-      fun a =>
-        env_nil
-          ► "addr_int" ∶ ty_int ↦ addr_int a
     | capability =>
       fun c=>
         env_nil
-          ► "cap_permission" ∶ ty_enum permission         ↦ cap_permission c
-          ► "cap_begin"      ∶ ty_record addr             ↦ cap_begin c
-          ► "cap_end"        ∶ ty_option (ty_record addr) ↦ cap_end c
-          ► "cap_cursor"     ∶ ty_record addr             ↦ cap_cursor c
+          ► "cap_permission" ∶ ty_enum permission ↦ cap_permission c
+          ► "cap_begin"      ∶ ty_addr            ↦ cap_begin c
+          ► "cap_end"        ∶ ty_option ty_addr  ↦ cap_end c
+          ► "cap_cursor"     ∶ ty_addr            ↦ cap_cursor c
     end%env.
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold R (𝑹_unfold R Kv) = Kv.
@@ -359,16 +345,37 @@ Module CapTermKit <: (TermKit CapTypeKit).
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
+  | read_reg       : Fun ["reg" ∶ ty_enum regname ] (ty_sum ty_int (ty_record capability))
+  | read_reg_cap   : Fun ["reg" ∶ ty_enum regname ] (ty_record capability)
+  | write_reg      : Fun ["reg" ∶ ty_enum regname,
+                          "rv"  ∶ ty_rv
+                         ] ty_unit
+  | update_pc      : Fun ctx_nil ty_unit
+  | read_mem       : Fun ["a"   ∶ ty_addr ] ty_hv
+  | write_mem      : Fun ["a"   ∶ ty_addr,
+                          "v"   ∶ ty_int
+                         ] ty_unit
+  | read_allowed   : Fun ["p"   ∶ ty_enum permission ] ty_bool
+  | write_allowed  : Fun ["p"   ∶ ty_enum permission ] ty_bool
+  | exec_allowed   : Fun ["p"   ∶ ty_enum permission ] ty_bool
+  | sub_perm       : Fun ["p1"  ∶ ty_enum permission,
+                          "p2"  ∶ ty_enum permission
+                         ] ty_bool
+  | upper_bound    : Fun ["a"   ∶ ty_addr,
+                          "e"   ∶ ty_option ty_addr
+                         ] ty_bool
+  | within_bounds  : Fun ["c"   ∶ ty_record capability ] ty_bool
+  | exec_store     : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_unit
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
 
   Inductive Reg : Ty -> Set :=
-    | pc   : Reg ty_int
-    | reg0 : Reg ty_int
-    | reg1 : Reg ty_int
-    | reg2 : Reg ty_int
-    | reg3 : Reg ty_int.
+    | pc   : Reg (ty_sum ty_int (ty_record capability))
+    | reg0 : Reg (ty_sum ty_int (ty_record capability))
+    | reg1 : Reg (ty_sum ty_int (ty_record capability))
+    | reg2 : Reg (ty_sum ty_int (ty_record capability))
+    | reg3 : Reg (ty_sum ty_int (ty_record capability)).
 
   Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
   Definition 𝑹𝑬𝑮_eq_dec {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ) : {x ≡ y}+{~ x ≡ y}.
@@ -381,9 +388,176 @@ Module CapTermKit <: (TermKit CapTypeKit).
         ].
   Defined.
 
-  Definition 𝑨𝑫𝑫𝑹 : Set := Addr.
+  Definition 𝑨𝑫𝑫𝑹 : Set := Empty_set.
 
 End CapTermKit.
 Module CapTerms := Terms CapTypeKit CapTermKit.
 Import CapTerms.
-Import NameResolution.
+
+(*** PROGRAM ***)
+
+Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
+  Module TM := CapTerms.
+
+  Local Coercion stm_exp : Exp >-> Stm.
+  Local Open Scope exp_scope.
+  Local Open Scope stm_scope.
+
+  Local Notation "'x'"   := (@exp_var _ "x" _ _) : exp_scope.
+  Local Notation "'y'"   := (@exp_var _ "y" _ _) : exp_scope.
+  Local Notation "'z'"   := (@exp_var _ "z" _ _) : exp_scope.
+
+  Definition fun_read_reg : Stm ["reg" ∶ ty_enum regname ]
+                                (ty_sum ty_int (ty_record capability)) :=
+    match: exp_var "reg" in regname with
+    | R0 => stm_read_register reg0
+    | R1 => stm_read_register reg1
+    | R2 => stm_read_register reg2
+    | R3 => stm_read_register reg3
+    end.
+
+  Definition fun_read_reg_cap : Stm ["reg" ∶ ty_enum regname ] (ty_record capability) :=
+    let: "wc" := call read_reg (exp_var "reg") in
+    stm_match_sum (exp_var "wc")
+      "w" (fail "Err [read_reg_cap]: expect register to hold a capability")
+      "c" (stm_exp (exp_var "c")).
+
+  Definition fun_write_reg : Stm ["reg" ∶ ty_enum regname,
+                                  "wc"  ∶ ty_sum ty_int (ty_record capability)
+                                 ] ty_unit :=
+    match: exp_var "reg" in regname with
+    | R0 => stm_write_register reg0 (exp_var "wc")
+    | R1 => stm_write_register reg1 (exp_var "wc")
+    | R2 => stm_write_register reg2 (exp_var "wc")
+    | R3 => stm_write_register reg3 (exp_var "wc")
+    end ;; stm_lit ty_unit tt.
+
+  Definition fun_update_pc : Stm ctx_nil ty_unit :=
+    let: "pc" := stm_read_register pc in
+    stm_match_sum (exp_var "pc")
+      "w" (fail "PC is not a capability")
+      "c" (stm_match_record capability (exp_var "c")
+             (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+                "cap_permission" "p") "cap_begin" "b") "cap_end" "e") "cap_cursor" "a")
+             (stm_write_register pc
+                (exp_inr
+                   (exp_record capability
+                      [ exp_var "p",
+                        exp_var "b",
+                        exp_var "e",
+                        exp_var "a" + lit_int 1
+                      ]%arg)) ;;
+              stm_lit ty_unit tt)).
+
+  Definition fun_read_allowed : Stm ["p" ∶ ty_enum permission ] ty_bool :=
+    stm_match_enum permission
+      (exp_var "p")
+      (fun p : Permission =>
+         stm_lit ty_bool
+                 match p with
+                 | R | RX | RW | RWX => true
+                 | _                 => false
+                 end).
+
+  Definition fun_write_allowed : Stm ["p" ∶ ty_enum permission ] ty_bool :=
+    stm_match_enum permission
+      (exp_var "p")
+      (fun p : Permission =>
+         stm_lit ty_bool
+                 match p with
+                 | RW | RWX => true
+                 | _        => false
+                 end).
+
+  Definition fun_exec_allowed : Stm ["p" ∶ ty_enum permission ] ty_bool :=
+    stm_match_enum permission
+      (exp_var "p")
+      (fun p : Permission =>
+         stm_lit ty_bool
+                 match p with
+                 | E | RX | RWX => true
+                 | _            => false
+                 end).
+
+  Definition fun_sub_perm : Stm ["p1"  ∶ ty_enum permission,
+                                 "p2"  ∶ ty_enum permission
+                                ] ty_bool :=
+    stm_match_enum permission
+      (exp_var "p1")
+      (fun p1 : Permission =>
+         match p1 with
+         | O   => stm_lit ty_bool true
+         | E   => call exec_allowed (exp_var "p2")
+         | R   => call read_allowed (exp_var "p2")
+         | RX  => let: "r" := call read_allowed (exp_var "p2") in
+                  let: "x" := call exec_allowed (exp_var "p2") in
+                  stm_exp (exp_var "r" && exp_var "x")
+         | RW  => let: "r" := call read_allowed (exp_var "p2") in
+                  let: "w" := call write_allowed (exp_var "p2") in
+                  stm_exp (exp_var "r" && exp_var "w")
+         | RWX => let: "r" := call read_allowed (exp_var "p2") in
+                  let: "w" := call write_allowed (exp_var "p2") in
+                  let: "x" := call exec_allowed (exp_var "p2") in
+                  stm_exp (exp_var "r" && exp_var "w" && exp_var "x")
+         end).
+
+  Definition fun_within_bounds : Stm ["c" ∶ ty_record capability ] ty_bool :=
+    stm_match_record capability (exp_var "c")
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+      "cap_permission" "p")
+      "cap_begin" "b")
+      "cap_end" "e")
+      "cap_cursor" "a")
+      (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
+       stm_exp (exp_var "u" && (exp_var "b" <= exp_var "a"))).
+
+  Definition fun_exec_store : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_unit :=
+    let: "c"  := call read_reg_cap (exp_var "lv") in
+    let: "wa" := call write_allowed (exp_projrec (exp_var "c") "cap_permission") in
+    let: "wb" := call within_bounds (exp_var "c") in
+    stm_assert
+      (exp_var "wa" && exp_var "wb")
+      (exp_lit _ ty_string "Err: [exec_store] assert failed") ;;
+    let: "wc2" := call read_reg (exp_var "hv") in
+    stm_match_sum (exp_var "wc2")
+      "w"  (call write_mem (exp_projrec (exp_var "c") "cap_cursor") (exp_var "w"))
+      "c2" (fail "Err: [exec_store] Can't write caps to mem") ;;
+    call update_pc.
+
+  Program Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+    match f in (Fun c t) return (Stm c t) with
+    | read_reg      => fun_read_reg
+    | read_reg_cap  => fun_read_reg_cap
+    | write_reg     => fun_write_reg
+    | update_pc     => fun_update_pc
+    | read_mem      => _
+    | write_mem     => _
+    | read_allowed  => fun_read_allowed
+    | write_allowed => fun_write_allowed
+    | exec_allowed  => fun_exec_allowed
+    | sub_perm      => fun_sub_perm
+    | upper_bound   => _
+    | within_bounds => fun_within_bounds
+    | exec_store    => fun_exec_store
+    end.
+  Admit Obligations of Pi.
+
+  Definition RegStore := GenericRegStore.
+  Definition read_register := generic_read_register.
+  Definition write_register := generic_write_register.
+  Definition read_write := generic_read_write.
+  Definition write_read := generic_write_read.
+  Definition write_write := generic_write_write.
+
+  Definition Memory : Set := Empty_set.
+  Definition read_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) : Lit ty_int :=
+    match addr with end.
+  Definition write_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int) : Memory :=
+    match addr with end.
+
+End CapProgramKit.
+
+Module CapPrograms :=
+  Programs CapTypeKit CapTermKit CapProgramKit.
+Import CapPrograms.
+Import CapProgramKit.
