@@ -232,6 +232,15 @@ Section WithB.
     | ctx_snoc Δ b => fun P => Forall (fun δ => forall v, P (env_snoc δ _ v))
     end.
 
+  Lemma Forall_forall (Δ : Ctx B) (P : Env D Δ -> Prop) (hyp: Forall P) :
+    (forall E : Env D Δ, P E).
+  Proof.
+    induction Δ; intros E; depelim E.
+    - apply hyp.
+    - apply (IHΔ (fun E => forall v, P (env_snoc E _ v))).
+      apply hyp.
+  Qed.
+
 End WithB.
 
 Definition abstract_named {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) (r : Type) : Type :=
