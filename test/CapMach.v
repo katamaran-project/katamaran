@@ -209,7 +209,9 @@ Import CapTypes.
 Definition ty_hv : Ty := ty_enum regname.
 Definition ty_lv : Ty := ty_enum regname.
 Definition ty_rv : Ty := (ty_sum (ty_enum regname) ty_int).
+Definition ty_word : Ty := ty_sum ty_int (ty_record capability).
 Definition ty_addr : Ty := ty_int.
+Definition ty_perm : Ty := ty_enum permission.
 
 (*** TERMS ***)
 
@@ -308,7 +310,7 @@ Module CapTermKit <: (TermKit CapTypeKit).
 
   Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) :=
     match R with
-    | capability => [ "cap_permission" ∶ ty_enum permission,
+    | capability => [ "cap_permission" ∶ ty_perm,
                       "cap_begin"      ∶ ty_addr,
                       "cap_end"        ∶ ty_option ty_addr,
                       "cap_cursor"     ∶ ty_addr
@@ -331,7 +333,7 @@ Module CapTermKit <: (TermKit CapTypeKit).
     | capability =>
       fun c=>
         env_nil
-          ► "cap_permission" ∶ ty_enum permission ↦ cap_permission c
+          ► "cap_permission" ∶ ty_perm ↦ cap_permission c
           ► "cap_begin"      ∶ ty_addr            ↦ cap_begin c
           ► "cap_end"        ∶ ty_option ty_addr  ↦ cap_end c
           ► "cap_cursor"     ∶ ty_addr            ↦ cap_cursor c
@@ -345,7 +347,7 @@ Module CapTermKit <: (TermKit CapTypeKit).
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
-  | read_reg       : Fun ["reg" ∶ ty_enum regname ] (ty_sum ty_int (ty_record capability))
+  | read_reg       : Fun ["reg" ∶ ty_enum regname ] ty_word
   | read_reg_cap   : Fun ["reg" ∶ ty_enum regname ] (ty_record capability)
   | write_reg      : Fun ["reg" ∶ ty_enum regname,
                           "rv"  ∶ ty_rv
@@ -353,13 +355,13 @@ Module CapTermKit <: (TermKit CapTypeKit).
   | update_pc      : Fun ctx_nil ty_unit
   | read_mem       : Fun ["a"   ∶ ty_addr ] ty_hv
   | write_mem      : Fun ["a"   ∶ ty_addr,
-                          "v"   ∶ ty_int
+                          "v"   ∶ ty_word
                          ] ty_unit
-  | read_allowed   : Fun ["p"   ∶ ty_enum permission ] ty_bool
-  | write_allowed  : Fun ["p"   ∶ ty_enum permission ] ty_bool
-  | exec_allowed   : Fun ["p"   ∶ ty_enum permission ] ty_bool
-  | sub_perm       : Fun ["p1"  ∶ ty_enum permission,
-                          "p2"  ∶ ty_enum permission
+  | read_allowed   : Fun ["p"   ∶ ty_perm ] ty_bool
+  | write_allowed  : Fun ["p"   ∶ ty_perm ] ty_bool
+  | exec_allowed   : Fun ["p"   ∶ ty_perm ] ty_bool
+  | sub_perm       : Fun ["p1"  ∶ ty_perm,
+                          "p2"  ∶ ty_perm
                          ] ty_bool
   | upper_bound    : Fun ["a"   ∶ ty_addr,
                           "e"   ∶ ty_option ty_addr
@@ -371,11 +373,11 @@ Module CapTermKit <: (TermKit CapTypeKit).
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
 
   Inductive Reg : Ty -> Set :=
-    | pc   : Reg (ty_sum ty_int (ty_record capability))
-    | reg0 : Reg (ty_sum ty_int (ty_record capability))
-    | reg1 : Reg (ty_sum ty_int (ty_record capability))
-    | reg2 : Reg (ty_sum ty_int (ty_record capability))
-    | reg3 : Reg (ty_sum ty_int (ty_record capability)).
+    | pc   : Reg (ty_record capability)
+    | reg0 : Reg ty_word
+    | reg1 : Reg ty_word
+    | reg2 : Reg ty_word
+    | reg3 : Reg ty_word.
 
   Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
   Definition 𝑹𝑬𝑮_eq_dec {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ) : {x ≡ y}+{~ x ≡ y}.
@@ -399,16 +401,25 @@ Import CapTerms.
 Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
   Module TM := CapTerms.
 
-  Local Coercion stm_exp : Exp >-> Stm.
-  Local Open Scope exp_scope.
-  Local Open Scope stm_scope.
+  Local Notation "'c'"  := (@exp_var _ "c" _ _) : exp_scope.
+  Local Notation "'hv'" := (@exp_var _ "hv" _ _) : exp_scope.
+  Local Notation "'i'"  := (@exp_var _ "i" _ _) : exp_scope.
+  Local Notation "'lv'" := (@exp_var _ "lv" _ _) : exp_scope.
+  Local Notation "'p'"  := (@exp_var _ "p" _ _) : exp_scope.
+  Local Notation "'q'"  := (@exp_var _ "q" _ _) : exp_scope.
+  Local Notation "'r'"  := (@exp_var _ "r" _ _) : exp_scope.
+  Local Notation "'w'"  := (@exp_var _ "w" _ _) : exp_scope.
 
-  Local Notation "'x'"   := (@exp_var _ "x" _ _) : exp_scope.
-  Local Notation "'y'"   := (@exp_var _ "y" _ _) : exp_scope.
-  Local Notation "'z'"   := (@exp_var _ "z" _ _) : exp_scope.
+  Local Notation "'c'"  := "c" : string_scope.
+  Local Notation "'hv'" := "hv" : string_scope.
+  Local Notation "'i'"  := "i" : string_scope.
+  Local Notation "'lv'" := "lv" : string_scope.
+  Local Notation "'p'"  := "p" : string_scope.
+  Local Notation "'q'"  := "q" : string_scope.
+  Local Notation "'r'"  := "r" : string_scope.
+  Local Notation "'w'"  := "w" : string_scope.
 
-  Definition fun_read_reg : Stm ["reg" ∶ ty_enum regname ]
-                                (ty_sum ty_int (ty_record capability)) :=
+  Definition fun_read_reg : Stm ["reg" ∶ ty_enum regname ] ty_word :=
     match: exp_var "reg" in regname with
     | R0 => stm_read_register reg0
     | R1 => stm_read_register reg1
@@ -417,89 +428,73 @@ Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
     end.
 
   Definition fun_read_reg_cap : Stm ["reg" ∶ ty_enum regname ] (ty_record capability) :=
-    let: "wc" := call read_reg (exp_var "reg") in
-    stm_match_sum (exp_var "wc")
-      "w" (fail "Err [read_reg_cap]: expect register to hold a capability")
-      "c" (stm_exp (exp_var "c")).
+    let: w := call read_reg (exp_var "reg") in
+    match: w with
+    | inl i => fail "Err [read_reg_cap]: expect register to hold a capability"
+    | inr c => stm_exp c
+    end.
 
-  Definition fun_write_reg : Stm ["reg" ∶ ty_enum regname,
-                                  "wc"  ∶ ty_sum ty_int (ty_record capability)
+  Definition fun_write_reg : Stm ["r" ∶ ty_enum regname,
+                                  "w" ∶ ty_word
                                  ] ty_unit :=
-    match: exp_var "reg" in regname with
-    | R0 => stm_write_register reg0 (exp_var "wc")
-    | R1 => stm_write_register reg1 (exp_var "wc")
-    | R2 => stm_write_register reg2 (exp_var "wc")
-    | R3 => stm_write_register reg3 (exp_var "wc")
+    match: exp_var "r" in regname with
+    | R0 => stm_write_register reg0 (exp_var "w")
+    | R1 => stm_write_register reg1 (exp_var "w")
+    | R2 => stm_write_register reg2 (exp_var "w")
+    | R3 => stm_write_register reg3 (exp_var "w")
     end ;; stm_lit ty_unit tt.
 
   Definition fun_update_pc : Stm ctx_nil ty_unit :=
-    let: "pc" := stm_read_register pc in
-    stm_match_sum (exp_var "pc")
-      "w" (fail "PC is not a capability")
-      "c" (stm_match_record capability (exp_var "c")
-             (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-                "cap_permission" "p") "cap_begin" "b") "cap_end" "e") "cap_cursor" "a")
-             (stm_write_register pc
-                (exp_inr
-                   (exp_record capability
-                      [ exp_var "p",
-                        exp_var "b",
-                        exp_var "e",
-                        exp_var "a" + lit_int 1
-                      ]%arg)) ;;
-              stm_lit ty_unit tt)).
+    let: "c" := stm_read_register pc in
+    stm_write_register pc
+      (exp_record capability
+                      [ ((exp_var "c")․"cap_permission"),
+                        ((exp_var "c")․"cap_begin"),
+                        ((exp_var "c")․"cap_end"),
+                        ((exp_var "c")․"cap_cursor") + lit_int 1
+                      ]%exp%arg) ;;
+    stm_lit ty_unit tt.
 
-  Definition fun_read_allowed : Stm ["p" ∶ ty_enum permission ] ty_bool :=
-    stm_match_enum permission
-      (exp_var "p")
-      (fun p : Permission =>
-         stm_lit ty_bool
-                 match p with
-                 | R | RX | RW | RWX => true
-                 | _                 => false
-                 end).
+  Definition fun_read_allowed : Stm ["p" ∶ ty_perm] ty_bool :=
+    match: p in permission with
+    | R   => stm_lit ty_bool true
+    | RX  => stm_lit ty_bool true
+    | RW  => stm_lit ty_bool true
+    | RWX => stm_lit ty_bool true
+    | _   => stm_lit ty_bool false
+    end.
 
-  Definition fun_write_allowed : Stm ["p" ∶ ty_enum permission ] ty_bool :=
-    stm_match_enum permission
-      (exp_var "p")
-      (fun p : Permission =>
-         stm_lit ty_bool
-                 match p with
-                 | RW | RWX => true
-                 | _        => false
-                 end).
+  Definition fun_write_allowed : Stm ["p" ∶ ty_perm] ty_bool :=
+    match: p in permission with
+    | RW  => stm_lit ty_bool true
+    | RWX => stm_lit ty_bool true
+    | _   => stm_lit ty_bool false
+    end.
 
-  Definition fun_exec_allowed : Stm ["p" ∶ ty_enum permission ] ty_bool :=
-    stm_match_enum permission
-      (exp_var "p")
-      (fun p : Permission =>
-         stm_lit ty_bool
-                 match p with
-                 | E | RX | RWX => true
-                 | _            => false
-                 end).
+  Definition fun_exec_allowed : Stm ["p" ∶ ty_perm] ty_bool :=
+    match: p in permission with
+    | E   => stm_lit ty_bool true
+    | RX  => stm_lit ty_bool true
+    | RWX => stm_lit ty_bool true
+    | _   => stm_lit ty_bool false
+    end.
 
-  Definition fun_sub_perm : Stm ["p1"  ∶ ty_enum permission,
-                                 "p2"  ∶ ty_enum permission
-                                ] ty_bool :=
-    stm_match_enum permission
-      (exp_var "p1")
-      (fun p1 : Permission =>
-         match p1 with
-         | O   => stm_lit ty_bool true
-         | E   => call exec_allowed (exp_var "p2")
-         | R   => call read_allowed (exp_var "p2")
-         | RX  => let: "r" := call read_allowed (exp_var "p2") in
-                  let: "x" := call exec_allowed (exp_var "p2") in
-                  stm_exp (exp_var "r" && exp_var "x")
-         | RW  => let: "r" := call read_allowed (exp_var "p2") in
-                  let: "w" := call write_allowed (exp_var "p2") in
-                  stm_exp (exp_var "r" && exp_var "w")
-         | RWX => let: "r" := call read_allowed (exp_var "p2") in
-                  let: "w" := call write_allowed (exp_var "p2") in
-                  let: "x" := call exec_allowed (exp_var "p2") in
-                  stm_exp (exp_var "r" && exp_var "w" && exp_var "x")
-         end).
+  Definition fun_sub_perm : Stm ["p" ∶ ty_perm, "q" ∶ ty_perm] ty_bool :=
+    match: p in permission with
+    | O   => stm_lit ty_bool true
+    | E   => call exec_allowed q
+    | R   => call read_allowed q
+    | RX  => let: "r" := call read_allowed q in
+             let: "x" := call exec_allowed q in
+             stm_exp (exp_var "r" && exp_var "x")
+    | RW  => let: "r" := call read_allowed q in
+             let: "w" := call write_allowed q in
+             stm_exp (exp_var "r" && exp_var "w")
+    | RWX => let: "r" := call read_allowed q in
+             let: "w" := call write_allowed q in
+             let: "x" := call exec_allowed q in
+             stm_exp (exp_var "r" && exp_var "w" && exp_var "x")
+    end.
 
   Definition fun_within_bounds : Stm ["c" ∶ ty_record capability ] ty_bool :=
     stm_match_record capability (exp_var "c")
@@ -511,21 +506,29 @@ Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
       (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
        stm_exp (exp_var "u" && (exp_var "b" <= exp_var "a"))).
 
-  Definition fun_exec_store : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_unit :=
-    let: "c"  := call read_reg_cap (exp_var "lv") in
-    let: "wa" := call write_allowed (exp_projrec (exp_var "c") "cap_permission") in
-    let: "wb" := call within_bounds (exp_var "c") in
-    stm_assert
-      (exp_var "wa" && exp_var "wb")
-      (exp_lit _ ty_string "Err: [exec_store] assert failed") ;;
-    let: "wc2" := call read_reg (exp_var "hv") in
-    stm_match_sum (exp_var "wc2")
-      "w"  (call write_mem (exp_projrec (exp_var "c") "cap_cursor") (exp_var "w"))
-      "c2" (fail "Err: [exec_store] Can't write caps to mem") ;;
-    call update_pc.
+  Section ExecStore.
+
+    Local Notation "'perm'"   := "cap_permission" : string_scope.
+    Local Notation "'cursor'" := "cap_cursor" : string_scope.
+
+    Let cap : Ty := ty_record capability.
+    Let bool : Ty := ty_bool.
+    Let word : Ty := ty_word.
+
+    Definition fun_exec_store : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_unit :=
+      let: c ∶ cap  := call read_reg_cap lv in
+      let: p ∶ bool := call write_allowed c․perm in
+      let: q ∶ bool := call within_bounds c in
+      stm_assert (p && q)
+        (exp_lit _ ty_string "Err: [exec_store] assert failed") ;;
+      let: w ∶ word := call read_reg hv in
+      call write_mem c․cursor w ;;
+      call update_pc.
+
+  End ExecStore.
 
   Program Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
-    match f in (Fun c t) return (Stm c t) with
+    match f with
     | read_reg      => fun_read_reg
     | read_reg_cap  => fun_read_reg_cap
     | write_reg     => fun_write_reg

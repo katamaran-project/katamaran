@@ -766,7 +766,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_match_list {_ _ _} _ _ _ _ _.
     Global Arguments stm_match_sum {_ _ _ _} _ _ _ _ _.
     Global Arguments stm_match_pair {_ _ _ _} _ _ _ _.
-    Global Arguments stm_match_enum {_} _ _ {_} _.
+    Global Arguments stm_match_enum {_%ctx} _ _%exp {_} _%stm.
     Global Arguments stm_match_tuple {_ _ _} _ _%pat {_} _.
     Global Arguments stm_match_union {_} _ _ {_} _.
     Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
@@ -1197,6 +1197,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   End GenericRegStore.
 
+  Notation "'lit_int' l" := (exp_lit _ ty_int l) (at level 1, no associativity) : exp_scope.
+  Notation "'lit_string' s" := (exp_lit _ ty_string s%string) (at level 1, no associativity) : exp_scope.
   Notation "e1 && e2" := (exp_binop binop_and e1 e2) : exp_scope.
   Notation "e1 || e2" := (exp_binop binop_or e1 e2) : exp_scope.
   Notation "e1 + e2" := (exp_binop binop_plus e1 e2) : exp_scope.
@@ -1207,7 +1209,10 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   Notation "e1 <= e2" := (exp_binop binop_le e1 e2) : exp_scope.
   Notation "e1 = e2" := (exp_binop binop_eq e1 e2) : exp_scope.
   Notation "- e" := (exp_neg e) : exp_scope.
-  Notation "'lit_int' l" := (exp_lit _ ty_int l) (at level 1, no associativity) : exp_scope.
+  Notation "e ․ f" := (* Using Unicode Character “․” (U+2024) *)
+      (@exp_projrec _ _ e f%string _ _)
+        (at level 9, no associativity, format
+         "e ․ f") : exp_scope.
 
   Notation "[ x , .. , z ]" :=
     (tuplepat_snoc .. (tuplepat_snoc tuplepat_nil x) .. z) (at level 0) : pat_scope.
@@ -1220,11 +1225,11 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     ) : stm_scope.
 
   Notation "'let:' x := s1 'in' s2" := (stm_let x _ s1%stm s2%stm)
-    (at level 100, right associativity, s1 at next level, format
+    (at level 100, right associativity, x at level 75, s1 at next level, format
      "'let:'  x  :=  s1  'in'  '/' s2"
     ) : stm_scope.
-  Notation "'let:' x ∶ τ := s1 'in' s2" := (stm_let x τ s1%stm s2%stm)
-    (at level 100, right associativity, s1 at next level, format
+  Notation "'let:' x ∶ τ := s1 'in' s2" := (stm_let x%string τ s1%stm s2%stm)
+    (at level 100, right associativity, x at level 75, τ at next level, s1 at next level, format
      "'let:'  x  ∶  τ  :=  s1  'in'  '/' s2"
     ) : stm_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 'end'" :=
@@ -1237,22 +1242,45 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     ) : stm_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 'end'" :=
     (stm_match_enum τ e (fun K => match K with
-                                  | alt1%exp => rhs1%stm
-                                  | alt2%exp => rhs2%stm
-                                  | alt3%exp => rhs3%stm
+                                  | alt1 => rhs1%stm
+                                  | alt2 => rhs2%stm
+                                  | alt3 => rhs3%stm
                                   end))
     (at level 100, alt1 pattern, alt2 pattern, alt3 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' 'end' ']'"
     ) : stm_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 'end'" :=
     (stm_match_enum τ e (fun K => match K with
-                                  | alt1%exp => rhs1%stm
-                                  | alt2%exp => rhs2%stm
-                                  | alt3%exp => rhs3%stm
-                                  | alt4%exp => rhs4%stm
+                                  | alt1 => rhs1%stm
+                                  | alt2 => rhs2%stm
+                                  | alt3 => rhs3%stm
+                                  | alt4 => rhs4%stm
                                   end))
     (at level 100, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' 'end' ']'"
+    ) : stm_scope.
+  Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 'end'" :=
+    (stm_match_enum τ e (fun K => match K with
+                                  | alt1 => rhs1%stm
+                                  | alt2 => rhs2%stm
+                                  | alt3 => rhs3%stm
+                                  | alt4 => rhs4%stm
+                                  | alt5 => rhs5%stm
+                                  end))
+    (at level 100, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, format
+     "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' 'end' ']'"
+    ) : stm_scope.
+  Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 | alt6 => rhs6 'end'" :=
+    (stm_match_enum τ e (fun K => match K with
+                                  | alt1 => rhs1%stm
+                                  | alt2 => rhs2%stm
+                                  | alt3 => rhs3%stm
+                                  | alt4 => rhs4%stm
+                                  | alt5 => rhs5%stm
+                                  | alt6 => rhs6%stm
+                                  end))
+    (at level 100, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, format
+     "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' 'end' ']'"
     ) : stm_scope.
 
   (* Notation "'match:' e 'in' U 'with' | alt1 x1 => rhs1 | alt2 x2 => rhs2 'end'" := *)
@@ -1270,6 +1298,9 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   (*    "'[hv' 'match:'  e  'in'  U  'with'  '/' |  alt1  x1  =>  rhs1  '/' |  alt2  x2  =>  rhs2  '/' 'end' ']'" *)
   (*     ) : stm_scope. *)
 
+  Notation "'match:' e 'with' | 'inl' p1 => rhs1 | 'inr' p2 => rhs2 'end'" :=
+    (stm_match_sum e p1 rhs1 p2 rhs2) (at level 100, only parsing) : stm_scope.
+
   Notation "'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' | '(' fst ',' snd ')' => rhs 'end'" :=
     (@stm_match_pair _ σ1 σ2 _ e fst snd rhs)
     (at level 100, fst pattern, snd pattern, format
@@ -1277,7 +1308,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     ) : stm_scope.
 
   Notation "'call' f a1 .. an" :=
-    (stm_call f (env_snoc .. (env_snoc env_nil (_,_) a1) .. (_,_) an))
+    (stm_call f (env_snoc .. (env_snoc env_nil (_,_) a1%exp) .. (_,_) an%exp))
     (at level 10, f global, a1, an at level 9) : stm_scope.
 
   Notation "'call' f" :=
@@ -1288,7 +1319,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   Notation "x <- s" := (stm_assign x s)
     (at level 80, s at next level) : stm_scope.
   Notation "'fail' s" := (stm_fail _ s)
-    (at level 1, no associativity) : stm_scope.
+    (at level 10, no associativity) : stm_scope.
 
 End Terms.
 
