@@ -4,9 +4,10 @@ src/MicroSail/Context.v
 src/MicroSail/Environment.v
 src/MicroSail/Notation.v
 src/MicroSail/Prelude.v
+src/MicroSail/Sep/Hoare.v
+src/MicroSail/Sep/Logic.v
 src/MicroSail/Sep/Outcome.v
 src/MicroSail/Sep/Spec.v
-src/MicroSail/Sep/Logic.v
 src/MicroSail/SmallStep/Inversion.v
 src/MicroSail/SmallStep/Progress.v
 src/MicroSail/SmallStep/Step.v
