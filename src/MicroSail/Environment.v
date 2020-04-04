@@ -71,6 +71,18 @@ Section WithBinding.
         (fun b0' bIn0' new => env_snoc (env_update E bIn0' new) b bold)
     end.
 
+  Definition env_head {D : B -> Type} {Γ : Ctx B}
+    {b : B} (E : Env D (ctx_snoc Γ b)) : D b:=
+    match E in Env _ Γb
+    return match Γb with
+           | ctx_nil => unit
+           | ctx_snoc Γ b => D b
+           end
+    with
+      | env_nil => tt
+      | env_snoc E _ db => db
+    end.
+
   Definition env_tail {D : B -> Type} {Γ : Ctx B}
     {b : B} (E : Env D (ctx_snoc Γ b)) : Env D Γ :=
     match E in Env _ Γb

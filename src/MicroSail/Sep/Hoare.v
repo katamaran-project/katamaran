@@ -38,7 +38,7 @@ Module ProgramLogic
   (* Admit Obligations. *)
 
 
-  Reserved Notation "⦃ P ⦄ s ⦃ Q ⦄" (at level 75, no associativity).
+  Reserved Notation "Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" (at level 75, no associativity).
 
   Definition is_inl {A B} (x : A + B) :=
     match x with
@@ -63,23 +63,23 @@ Module ProgramLogic
   Section HoareTriples.
     Context {A : Type} {ND : NatDedAxioms A} {SL : SepLogAxioms A}.
 
-    Inductive Triple {Γ : Ctx (𝑿 * Ty)} :
+    Inductive Triple (Γ : Ctx (𝑿 * Ty)) :
       forall {τ : Ty}
              (pre : LocalStore Γ -> A) (s : Stm Γ τ)
              (post :  LocalStore Γ -> Lit τ -> A), Prop :=
     | rule_stm_lit (τ : Ty) (l : Lit τ) :
-        ⦃ fun _ => TT ⦄ stm_lit τ l ⦃ fun _ x => !!(l = x) ⦄
+        Γ ⊢ ⦃ fun _ => TT ⦄ stm_lit τ l ⦃ fun _ x => !!(l = x) ⦄
     | rule_stm_exp_forwards (τ : Ty) (e : Exp Γ τ) (P : LocalStore Γ -> A) :
-        ⦃ P ⦄ stm_exp e ⦃ fun δ v => P δ ∧ !!(eval e δ = v) ⦄
+        Γ ⊢ ⦃ P ⦄ stm_exp e ⦃ fun δ v => P δ ∧ !!(eval e δ = v) ⦄
     | rule_stm_exp_backwards (τ : Ty) (e : Exp Γ τ) (Q : LocalStore Γ -> Lit τ -> A) :
-        ⦃ fun δ => Q δ (eval e δ) ⦄ stm_exp e ⦃ Q ⦄
+        Γ ⊢ ⦃ fun δ => Q δ (eval e δ) ⦄ stm_exp e ⦃ Q ⦄
     | rule_stm_let
         (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
         (P : LocalStore Γ -> A) (Q : LocalStore Γ -> Lit σ -> A)
         (R : LocalStore Γ -> Lit τ -> A) :
-        ⦃ P ⦄ s ⦃ Q ⦄ ->
-        (@Triple _ _ (fun δ : LocalStore (Γ ▻ (x,σ)) => Q (env_tail δ) (env_lookup δ inctx_zero)) k (fun δ => R (env_tail δ))) ->
-        ⦃ P ⦄ let: x := s in k ⦃ R ⦄
+        Γ         ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
+        Γ ▻ (x,σ) ⊢ ⦃ fun δ => Q (env_tail δ) (env_head δ) ⦄ k ⦃ fun δ => R (env_tail δ) ⦄ ->
+        Γ         ⊢ ⦃ P ⦄ let: x := s in k ⦃ R ⦄
     (* | rule_stm_if (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) : *)
     (*     forall (P : LocalStore Γ -> A) *)
     (*       (Q : LocalStore Γ -> Lit τ -> A), *)
@@ -112,7 +112,7 @@ Module ProgramLogic
     (*       (* ⦃ fun δ => P δ ∧ !!(is_inl (eval e δ))⦄ alt_inl ⦃ Q ⦄ -> *) *)
     (*       (* ⦃ fun δ => P δ ∧ !!(is_inr (eval e δ))⦄ alt_inr ⦃ Q ⦄ -> *) *)
     (*       ⦃ P ⦄ stm_match_sum e xinl alt_inl xinr alt_inr ⦃ Q ⦄ *)
-    where "⦃ P ⦄ s ⦃ Q ⦄" := (Triple P s Q).
+    where "Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" := (Triple Γ P s Q).
 
   End HoareTriples.
 
