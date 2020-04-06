@@ -2,6 +2,7 @@ Require Import Coq.Program.Tactics.
 Require Import FunctionalExtensionality.
 
 Require Import MicroSail.Syntax.
+Require Import MicroSail.Environment.
 Require Import MicroSail.Sep.Logic.
 Require Import MicroSail.Sep.Spec.
 
@@ -80,19 +81,19 @@ Module ProgramLogic
         Γ         ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
         Γ ▻ (x,σ) ⊢ ⦃ fun δ => Q (env_tail δ) (env_head δ) ⦄ k ⦃ fun δ => R (env_tail δ) ⦄ ->
         Γ         ⊢ ⦃ P ⦄ let: x := s in k ⦃ R ⦄
-    (* | rule_stm_if (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) : *)
-    (*     forall (P : LocalStore Γ -> A) *)
-    (*       (Q : LocalStore Γ -> Lit τ -> A), *)
-    (*       ⦃ fun δ => P δ ∧ !!(eval e δ = true) ⦄ s1 ⦃ Q ⦄ -> *)
-    (*       ⦃ fun δ => P δ ∧ !!(eval e δ = false) ⦄ s2 ⦃ Q ⦄ -> *)
-    (*       ⦃ P ⦄ stm_if e s1 s2 ⦃ Q ⦄ *)
-    (* | rule_stm_seq (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ) : *)
-    (*     forall (P : LocalStore Γ -> A) *)
-    (*       (Q : LocalStore Γ -> A) *)
-    (*       (R : LocalStore Γ -> Lit σ -> A), *)
-    (*       ⦃ P ⦄ s1 ⦃ fun δ _ => Q δ ⦄ -> *)
-    (*       ⦃ Q ⦄ s2 ⦃ R ⦄ -> *)
-    (*       ⦃ P ⦄ s1 ;; s2 ⦃ R ⦄ *)
+    | rule_stm_if (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
+          (P : LocalStore Γ -> A)
+          (Q : LocalStore Γ -> Lit τ -> A) :
+          Γ ⊢ ⦃ fun δ => P δ ∧ !!(eval e δ = true) ⦄ s1 ⦃ Q ⦄ ->
+          Γ ⊢ ⦃ fun δ => P δ ∧ !!(eval e δ = false) ⦄ s2 ⦃ Q ⦄ ->
+          Γ ⊢ ⦃ P ⦄ stm_if e s1 s2 ⦃ Q ⦄
+    | rule_stm_seq (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
+          (P : LocalStore Γ -> A)
+          (Q : LocalStore Γ -> A)
+          (R : LocalStore Γ -> Lit σ -> A) :
+          Γ ⊢ ⦃ P ⦄ s1 ⦃ fun δ _ => Q δ ⦄ ->
+          Γ ⊢ ⦃ Q ⦄ s2 ⦃ R ⦄ ->
+          Γ ⊢ ⦃ P ⦄ s1 ;; s2 ⦃ R ⦄
     (* | rule_stm_assert (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) : *)
     (* (* Just a side note: don't we need the assertion string to a literal, *)
     (*    rather than an expression? *) *)
@@ -104,14 +105,16 @@ Module ProgramLogic
     (*     ⦃ fun _ => FF ⦄ stm_fail τ s ⦃ Q ⦄ *)
     (* (* | rule_stm_match_list {σ τ : Ty} (e : Exp Γ (ty_list σ) (alt_nil : Stm Γ τ) *) *)
     (* (*   (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ) : *) *)
-    (* | rule_stm_match_sum {σinl σinr τ : Ty} (e : Exp Γ (ty_sum σinl σinr)) *)
+    (* | rule_stm_match_sum (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr)) *)
     (*   (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl , σinl)) τ) *)
-    (*   (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ) : *)
-    (*     forall (P : LocalStore Γ -> A) *)
-    (*       (Q : LocalStore Γ -> Lit τ -> A), *)
-    (*       (* ⦃ fun δ => P δ ∧ !!(is_inl (eval e δ))⦄ alt_inl ⦃ Q ⦄ -> *) *)
-    (*       (* ⦃ fun δ => P δ ∧ !!(is_inr (eval e δ))⦄ alt_inr ⦃ Q ⦄ -> *) *)
-    (*       ⦃ P ⦄ stm_match_sum e xinl alt_inl xinr alt_inr ⦃ Q ⦄ *)
+    (*   (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ) *)
+    (*       (P : LocalStore Γ -> A) *)
+    (*       (Q : LocalStore Γ -> Lit τ -> A) : *)
+    (*       Γ ▻ (xinl, σinl) ⊢ ⦃ fun δ => P (env_tail δ) ∧ !!(is_inl (@eval  Γ _ e δ)) *)
+    (*                           ⦄ alt_inl *)
+    (*                           ⦃ fun δ => Q (env_tail δ) ⦄ -> *)
+          (* Γ ▻ (xinr, σinr) ⊢ ⦃ fun δ => P δ ∧ !!(is_inr (eval e δ))⦄ alt_inr ⦃ Q ⦄ -> *)
+          (* Γ ⊢ ⦃ P ⦄ stm_match_sum e xinl alt_inl xinr alt_inr ⦃ Q ⦄ *)
     where "Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" := (Triple Γ P s Q).
 
   End HoareTriples.

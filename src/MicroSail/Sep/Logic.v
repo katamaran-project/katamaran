@@ -37,8 +37,8 @@ Notation "'!!' e" := (prop e) (at level 25) : logic.
 Class NatDedAxioms (A : Type) := {
   isNatDed :> NatDed A;
 
-  pred_ext : forall P Q, P ⊢ Q -> Q ⊢ P ->
-                    P = Q;
+  (* pred_ext : forall P Q, P ⊢ Q -> Q ⊢ P -> *)
+  (*                   P = Q; *)
   derives_refl : forall P, P ⊢ P;
   derives_trans : forall P Q R, P ⊢ Q -> Q ⊢ R ->
                            P ⊢ R;
@@ -79,25 +79,25 @@ Instance LiftNatDed (A B : Set) {ND: NatDed B} : NatDed (A -> B) :=
     derives := (fun P Q => forall x, derives (P x) (Q x))
   }.
 
-Program Instance LiftNatDedAxioms (A B : Set) {ND : NatDedAxioms B} : NatDedAxioms (A -> B).
-Next Obligation.
-  extensionality x.
-  apply pred_ext; auto.
-Qed.
-Admit Obligations.
+(* Program Instance LiftNatDedAxioms (A B : Set) {ND : NatDedAxioms B} : NatDedAxioms (A -> B). *)
+(* Next Obligation. *)
+(*   extensionality x. *)
+(*   apply pred_ext; auto. *)
+(* Qed. *)
+(* Admit Obligations. *)
 
 Class SepLog (A : Type) {ND: NatDed A} := mkSepLog {
   emp : A;
   sepcon : A -> A -> A;
   wand : A -> A -> A;
-  (* Existential magic wand *)
-  ewand : A -> A -> A;
+  (* (* Existential magic wand *) *)
+  (* ewand : A -> A -> A; *)
 }.
 
 Notation "P '✱' Q" := (sepcon P Q) (at level 45, left associativity) : logic.
 Notation "P '-✱' Q" := (wand P Q) (at level 60, right associativity) : logic.
-Notation "P '-◯' Q" := (ewand P Q) (* Typeset with -\ci5 *)
-  (at level 60, right associativity) : logic.
+(* Notation "P '-◯' Q" := (ewand P Q) (* Typeset with -\ci5 *) *)
+  (* (at level 60, right associativity) : logic. *)
 
 Class SepLogAxioms (A : Type) {ND : NatDedAxioms A} := {
   is_SepLog :> SepLog A;
@@ -106,8 +106,8 @@ Class SepLogAxioms (A : Type) {ND : NatDedAxioms A} := {
   wand_sepcon_adjoint: forall (P Q R : A), (P ✱ Q ⊢ R) <-> (P ⊢ Q -✱ R);
   sepcon_andp_prop: forall (P R : A) (Q : Prop), P ✱ (!!Q ∧ R) = !!Q ∧ (P ✱ R);
   sepcon_derives: forall P P' Q Q' : A, P ⊢ P' -> Q ⊢ Q' -> P ✱ Q ⊢ P' ✱ Q';
-  ewand_sepcon: forall (P Q R : A),  (P ✱ Q) -◯ R = P -◯ (Q ✱ R);
-  ewand_TT_sepcon: forall (P Q R: A), (P ✱ Q) ∧ (R -◯ TT) ⊢ (P ∧ (R -◯ TT)) ✱ (Q ∧ (R -◯ TT));
-  exclude_elsewhere: forall (P Q : A), P ✱ Q ⊢ (P ∧ (Q -◯ TT)) ✱ Q;
-  ewand_conflict: forall (P Q R : A), P ✱ Q ⊢ FF -> P ∧ (Q -◯ R) ⊢ FF
+  (* ewand_sepcon: forall (P Q R : A),  (P ✱ Q) -◯ R = P -◯ (Q ✱ R); *)
+  (* ewand_TT_sepcon: forall (P Q R: A), (P ✱ Q) ∧ (R -◯ TT) ⊢ (P ∧ (R -◯ TT)) ✱ (Q ∧ (R -◯ TT)); *)
+  (* exclude_elsewhere: forall (P Q : A), P ✱ Q ⊢ (P ∧ (Q -◯ TT)) ✱ Q; *)
+  (* ewand_conflict: forall (P Q R : A), P ✱ Q ⊢ FF -> P ∧ (Q -◯ R) ⊢ FF *)
 }.
