@@ -278,7 +278,7 @@ Module Types (Export typekit : TypeKit).
   Lemma Ty_K (σ : Ty) (p : σ = σ) : p = eq_refl.
   Proof. apply uip. Qed.
 
-  Fixpoint Lit (σ : Ty) : Type :=
+  Fixpoint Lit (σ : Ty) : Set :=
     match σ with
     | ty_int => Z
     | ty_bool => bool

@@ -172,6 +172,23 @@ Section WithBinding.
       env_drop Δ (env_cat δΓ δΔ) = δΓ.
   Proof. induction δΔ; cbn; auto. Qed.
 
+  Section WithEqD.
+    Context {D : B -> Type}.
+    Variable eqd : forall b, D b -> D b -> bool.
+
+    Equations env_beq {Γ : Ctx B} (δ1 δ2 : Env D Γ) : bool :=
+    env_beq env_nil               env_nil              := true;
+    env_beq (env_snoc δ1 _ db1) (env_snoc δ2 _ db2) := env_beq δ1 δ2 && eqd db1 db2.
+
+  End WithEqD.
+
+End WithBinding.
+
+Section EnvRec.
+
+  Local Set Universe Polymorphism.
+  Context {B : Set}.
+
   Section WithD.
     Variable D : B -> Type.
 
@@ -187,10 +204,6 @@ Section WithBinding.
     Context {D : B -> Type}.
     Variable eqd : forall b, D b -> D b -> bool.
 
-    Equations env_beq {Γ : Ctx B} (δ1 δ2 : Env D Γ) : bool :=
-    env_beq env_nil               env_nil              := true;
-    env_beq (env_snoc δ1 _ db1) (env_snoc δ2 _ db2) := env_beq δ1 δ2 && eqd db1 db2.
-
     Fixpoint envrec_beq {Γ : Ctx B} : forall (δ1 δ2 : EnvRec D Γ), bool :=
       match Γ with
       | ctx_nil      => fun _ _ => true
@@ -199,7 +212,7 @@ Section WithBinding.
 
   End WithEqD.
 
-End WithBinding.
+End EnvRec.
 
 Definition NamedEnv {X T : Set} (D : T -> Type) (Γ : Ctx (X * T)) : Type :=
   Env (fun xt => D (snd xt)) Γ.
