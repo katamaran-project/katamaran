@@ -454,7 +454,19 @@ Module SymbolicContracts
       fun (s : SymbolicState Σ Γ1) => (⨂ i : I => ms i s)%out.
     Definition mutator_angelic {Σ : Ctx (𝑺 * Ty)} {Γ1 Γ2 : Ctx (𝑿 * Ty)} {I : Type} {A : Type} (ms : I -> Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
       fun (s : SymbolicState Σ Γ1) => (⨁ i : I => ms i s)%out.
+    (* There are two kinds of failures of the symbolic execution. mutator_fail
+       is an unconditional fail: the current branch of choices is deemed invalid
+       and the executor should backtrack. mutator_contradiction is more liberal.
+       Instead of completely failing, it allows the current choices but requires
+       the path condition to be inconsistent. Essentially, this is should be a
+       mutator_block, but the execution engine could not derive the
+       inconsistency automatically. If in doubt, be more conservative and use
+       mutator_fail, because it allows for pruning of branches. Change to
+       mutator_contradiction if you're convinced that you require it for a
+       completeness issue. *)
     Definition mutator_fail {Σ Γ1 Γ2} {A : Type} (msg : string) : Mutator Σ Γ1 Γ2 A :=
+      fun s => outcome_fail msg.
+    Definition mutator_contradiction {Σ Γ1 Γ2} {A : Type} (msg : string) : Mutator Σ Γ1 Γ2 A :=
       fun s =>
         (⨂ δ : NamedEnv Lit Σ =>
          ⨂ _ : List.Forall (interpret_formula δ) (symbolicstate_pathcondition s) =>
@@ -484,7 +496,7 @@ Module SymbolicContracts
 
       Fixpoint mutator_angelic_list (xs : list A)  {struct xs} : Mutator Σ Γ Γ A :=
         match xs with
-        | []      => mutator_fail msg
+        | []      => mutator_contradiction msg
         | x :: [] => mutator_pure x
         | x :: xs => mutator_angelic_binary (mutator_pure x) (mutator_angelic_list xs)
         end.
@@ -611,12 +623,36 @@ Module SymbolicContracts
                     else option_map (cons c') (option_consume_chunk c h')
       end.
 
+    Fixpoint heap_extractions {Σ} (h : SymbolicHeap Σ) : list (Chunk Σ * SymbolicHeap Σ) :=
+      match h with
+      | []     => []
+      | c :: h => (c , h) :: map (fun '(c', h') => (c' , c :: h')) (heap_extractions h)
+      end.
+
+    Equations(noeqns) mutator_chunk_eqb {Σ Γ} (c1 c2 : Chunk Σ) : Mutator Σ Γ Γ unit :=
+      mutator_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2)
+      with 𝑷_eq_dec p1 p2 => {
+        mutator_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) :=
+          mutator_assert_formula (formula_eq (term_tuple ts1) (term_tuple ts2));
+        mutator_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (right _) :=
+          mutator_fail "Err [mutator_chunk_eqb]: No matching"
+      };
+      mutator_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
+      with 𝑹𝑬𝑮_eq_dec r1 r2 => {
+        mutator_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left (@teq_refl eq_refl eq_refl)) :=
+          mutator_assert_formula (formula_eq t1 t2);
+        mutator_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _) :=
+          mutator_fail "Err [mutator_chunk_eqb]: No matching"
+      };
+      mutator_chunk_eqb _ _ := mutator_fail "Err [mutator_chunk_eqb]: No matching".
+
     Definition mutator_consume_chunk {Σ Γ} (c : Chunk Σ) : Mutator Σ Γ Γ unit :=
       mutator_get_heap >>= fun h =>
-      match option_consume_chunk c h with
-      | Some h' => mutator_put_heap h'
-      | None    => mutator_fail "Err [mutator_consume_chunk]: empty heap"
-      end.
+      mutator_angelic_list
+        "Err [mutator_consume_chunk]: empty extraction"
+        (heap_extractions h) >>= fun '(c' , h') =>
+        mutator_chunk_eqb c c' *>
+        mutator_put_heap h'.
 
     Fixpoint mutator_produce {Σ Σ' Γ} (ζ : Sub Σ Σ') (asn : Assertion Σ) : Mutator Σ' Γ Γ unit :=
       match asn with
@@ -631,7 +667,7 @@ Module SymbolicContracts
                        mutator_produce ζ (alts k2)
       | asn_sep a1 a2   => mutator_produce ζ a1 *> mutator_produce ζ a2
       | asn_exist ς τ a => mutator_fail
-                             "Err [mutator_produce]: case [asn_exist] not impemented"
+                             "Err [mutator_produce]: case [asn_exist] not implemented"
       end.
 
     Section MutatorConsumeGhost.
@@ -760,7 +796,7 @@ Module SymbolicContracts
           match ghost_env_to_option_sub L2 with
           | Some ζ => mutator_produce ζ ens *>
                       mutator_pure (sub_term ζ result)
-          | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition"
+          | None   => mutator_contradiction "Err [mutator_exec]: uninstantiated variables after consuming precondition"
           end
         | @sep_contract_result _ _ Σ' δ result req ens => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none_result function not implemented"
         | sep_contract_none _ => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none function"
@@ -825,26 +861,35 @@ Module SymbolicContracts
 
   End MutatorOperations.
 
-  Definition ValidContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
-             (c : SepContract Δ τ) (body : Stm Δ τ): Prop :=
+  Definition outcome_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
+    Stm Δ τ -> Outcome ({ Σ & SymbolicState Σ Δ } * list Obligation) :=
     match c with
-    | @sep_contract_unit _ Σ δ req ens => fun body =>
-      outcome_satisfy
-        ((mutator_produce (sub_id Σ) req ;;
-          mutator_exec body              ;;
-          mutator_consume (sub_id Σ) ens ;;
-          mutator_leakcheck)%mut (symbolicstate_initial δ))
-        (fun '(_ , _ , w) => valid_obligations w)
-    | sep_contract_result _ _ _ => fun _ => False
-    | @sep_contract_result_pure _ Σ _ δ result' req ens => fun body =>
-      outcome_satisfy ((mutator_produce (sub_id Σ) req ;;
-                        mutator_exec body >>= fun result =>
-                        mutator_consume (sub_id Σ) ens;;
-                        mutator_assert_formula (formula_eq result result') ;;
-                        mutator_leakcheck)%mut (symbolicstate_initial δ))
-                     (fun '(_ , _ , w) => valid_obligations w)
-    | sep_contract_none _ => fun _ => True
-    end body.
+    | @sep_contract_unit _ Σ δ req ens =>
+      fun s =>
+        let mut := (mutator_produce (sub_id Σ) req ;;
+                    mutator_exec s                 ;;
+                    mutator_consume (sub_id Σ) ens ;;
+                    mutator_leakcheck)%mut in
+        let out := mut (symbolicstate_initial δ) in
+        outcome_map (fun '((tt , s) , w) => (existT Σ s,w)) out
+    | @sep_contract_result _ Σ _ _ _ _ _ =>
+      fun s => outcome_block
+    | @sep_contract_result_pure _ Σ _ δ result' req ens =>
+      fun s =>
+        let mut := (mutator_produce (sub_id Σ) req ;;
+                    mutator_exec s >>= fun result =>
+                    mutator_consume (sub_id Σ) ens;;
+                    mutator_assert_formula (formula_eq result result') ;;
+                    mutator_leakcheck)%mut in
+        let out := mut (symbolicstate_initial δ) in
+        outcome_map (fun '((tt , s) , w) => (existT Σ s,w)) out
+    | @sep_contract_none _ _ =>
+      fun s => outcome_block
+    end.
+
+  Definition ValidContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
+             (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    outcome_satisfy (outcome_contract c body) (fun '(_,w) => valid_obligations w).
 
   Definition ValidContractEnv (cenv : SepContractEnv) : Prop :=
     forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),

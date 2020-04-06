@@ -212,7 +212,7 @@ Module ISATermKit <: (TermKit ISATypeKit).
   (* read registers *)
   | rX  : Fun ["reg_tag" ∶ ty_enum register_tag ] ty_int
   (* write register *)
-  | wX : Fun ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_int
+  | wX : Fun ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_unit
   (* read flag *)
   | rF      : Fun ["flag_code" ∶ ty_int] ty_bool
   (* write flag *)
@@ -226,11 +226,16 @@ Module ISATermKit <: (TermKit ISATypeKit).
   (* semantics of a single instruction *)
   | semantics : Fun [ "instr" ∶ ty_union instruction] ty_unit
   | execute_load : Fun [ "dst" ∶ ty_enum register_tag, "src" ∶ ty_enum register_tag ] ty_unit
-  | swapreg : Fun ["r1" ∶ ty_int, "r2" ∶ ty_int] ty_unit
+  | swapreg : Fun ["r1" ∶ ty_enum register_tag, "r2" ∶ ty_enum register_tag] ty_unit
   | swapreg12 : Fun ctx_nil ty_unit
   | add : Fun [ "x" ∶ ty_int , "y" ∶ ty_int ] ty_int
   | double : Fun [ "z" ∶ ty_int ] ty_int
   | add3 : Fun [ "x" ∶ ty_int , "y" ∶ ty_int , "z" ∶ ty_int ] ty_int
+  | ghost_open_ptstoreg : Fun ctx_nil ty_unit
+  | ghost_close_ptstoreg0 : Fun ctx_nil ty_unit
+  | ghost_close_ptstoreg1 : Fun ctx_nil ty_unit
+  | ghost_close_ptstoreg2 : Fun ctx_nil ty_unit
+  | ghost_close_ptstoreg3 : Fun ctx_nil ty_unit
   .
 
   Definition 𝑭 : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -350,19 +355,21 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Local Definition nop {Γ} : Stm Γ ty_unit := stm_lit ty_unit tt.
 
   Definition fun_rX : Stm ["reg_tag" ∶ ty_enum register_tag] ty_int :=
+    call ghost_open_ptstoreg ;;
     match: reg_tag in register_tag with
-    | RegTag0 => stm_read_register R0
-    | RegTag1 => stm_read_register R1
-    | RegTag2 => stm_read_register R2
-    | RegTag3 => stm_read_register R3
+    | RegTag0 => let: "x" := stm_read_register R0 in call ghost_close_ptstoreg0 ;; stm_exp x
+    | RegTag1 => let: "x" := stm_read_register R1 in call ghost_close_ptstoreg1 ;; stm_exp x
+    | RegTag2 => let: "x" := stm_read_register R2 in call ghost_close_ptstoreg2 ;; stm_exp x
+    | RegTag3 => let: "x" := stm_read_register R3 in call ghost_close_ptstoreg3 ;; stm_exp x
     end.
 
-  Definition fun_wX : Stm ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_int :=
+  Definition fun_wX : Stm ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_unit :=
+    call ghost_open_ptstoreg ;;
     match: reg_tag in register_tag with
-    | RegTag0 => stm_write_register R0 reg_value
-    | RegTag1 => stm_write_register R1 reg_value
-    | RegTag2 => stm_write_register R2 reg_value
-    | RegTag3 => stm_write_register R3 reg_value
+    | RegTag0 => stm_write_register R0 reg_value ;; call ghost_close_ptstoreg0
+    | RegTag1 => stm_write_register R1 reg_value ;; call ghost_close_ptstoreg1
+    | RegTag2 => stm_write_register R2 reg_value ;; call ghost_close_ptstoreg2
+    | RegTag3 => stm_write_register R3 reg_value ;; call ghost_close_ptstoreg3
     end.
 
   Definition fun_semantics : Stm ["instr" ∶ ty_union instruction] ty_unit :=
@@ -384,8 +391,8 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
           nop)
     else (stm_write_register OutOfMemory lit_true ;; nop).
 
-  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ.
-  refine (
+  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+    Eval compute in
     match f in Fun Δ τ return Stm Δ τ with
     | rX => fun_rX
     | wX => fun_wX
@@ -415,12 +422,12 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     | in_bounds => ((address = Memory_lb) || (address > Memory_lb)) && (address < Memory_hb)
     | semantics => fun_semantics
     | execute_load => fun_execute_load
-    | swapreg => stm_fail _ "not_implemented"
-      (* let: "v1" := call rX (exp_var "r1") in *)
-      (* let: "v2" := call rX (exp_var "r2") in *)
-      (* call wX (exp_var "r1") (exp_var "v2") ;; *)
-      (* call wX (exp_var "r2") (exp_var "v1") ;; *)
-      (* nop *)
+    | swapreg =>
+      let: "v1" := call rX (exp_var "r1") in
+      let: "v2" := call rX (exp_var "r2") in
+      call wX (exp_var "r1") (exp_var "v2") ;;
+      call wX (exp_var "r2") (exp_var "v1") ;;
+      nop
     | swapreg12 =>
       let: "x" := stm_read_register R1 in
       let: "y" := stm_read_register R2 in
@@ -431,8 +438,9 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     | add => x + y
     | add3 => let: "xy" := call add x y in
               call add (exp_var "xy") z
-    end).
-  Defined.
+    | ghost_open_ptstoreg => stm_lit ty_unit tt
+    | ghost_close_ptstoreg => stm_lit ty_unit tt
+    end.
 
 End ISAProgramKit.
 Import ISAProgramKit.
@@ -478,12 +486,26 @@ Module ExampleStepping.
 
 End ExampleStepping.
 
+Inductive Predicate : Set := ptstoreg.
+
+Section TransparentObligations.
+  Local Set Transparent Obligations.
+
+  Derive NoConfusion for Predicate.
+
+End TransparentObligations.
+
+Derive EqDec for Predicate.
+
 Module ISAAssertionKit <: (AssertionKit ISATypeKit ISATermKit ISAProgramKit).
   Module PM := Programs ISATypeKit ISATermKit ISAProgramKit.
 
-  Definition 𝑷 := Empty_set.
-  Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
-  Definition 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
+  Definition 𝑷 := Predicate.
+  Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
+    match p with
+    | ptstoreg => [ty_enum register_tag, ty_int]
+    end.
+  Definition 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
 
 End ISAAssertionKit.
 
@@ -514,21 +536,30 @@ Module ISASymbolicContractKit <:
         sep_contract_result_pure
           δ'
           (@term_var Σ' "v" _ _)
-          (asn_match_enum register_tag (term_var "reg_tag")
-                          (fun k => match k with
-                                    | RegTag0 => R0 ↦ term_var "v"
-                                    | RegTag1 => R1 ↦ term_var "v"
-                                    | RegTag2 => R2 ↦ term_var "v"
-                                    | RegTag3 => R3 ↦ term_var "v"
-                                    end))
-          (asn_match_enum register_tag (term_var "reg_tag")
-                          (fun k => match k with
-                                    | RegTag0 => R0 ↦ term_var "v"
-                                    | RegTag1 => R1 ↦ term_var "v"
-                                    | RegTag2 => R2 ↦ term_var "v"
-                                    | RegTag3 => R3 ↦ term_var "v"
-                                    end))
-      | wX => sep_contract_none _
+          (asn_chunk
+             (chunk_pred
+                ptstoreg
+                (env_nil ► ty_enum register_tag ↦ term_var "reg_tag" ► ty_int ↦ term_var "v")))
+          (asn_chunk
+             (chunk_pred
+                ptstoreg
+                (env_nil ► ty_enum register_tag ↦ term_var "reg_tag" ► ty_int ↦ term_var "v")))
+      | wX => 
+        @sep_contract_unit
+          [ "reg_tag" ∶ ty_enum register_tag,
+            "reg_value" ∶ ty_int ]
+          [ "r" ∶ ty_enum register_tag,
+            "v_old" ∶ ty_int,
+            "v_new" ∶ ty_int ]
+          [term_var "r", term_var "v_new"]%arg
+          (asn_chunk
+             (chunk_pred
+                ptstoreg
+                (env_nil ► ty_enum register_tag ↦ term_var "r" ► ty_int ↦ term_var "v_old")))
+          (asn_chunk
+             (chunk_pred
+                ptstoreg
+                (env_nil ► ty_enum register_tag ↦ term_var "r" ► ty_int ↦ term_var "v_new")))
       | rF => sep_contract_none _
       | wF => sep_contract_none _
       | rM => sep_contract_none _
@@ -582,6 +613,64 @@ Module ISASymbolicContractKit <:
           (term_binop binop_plus (term_binop binop_plus (term_var "x") (term_var "y")) (term_var "z"))
           asn_true
           asn_true
+      | ghost_open_ptstoreg =>
+        @sep_contract_unit
+          ctx_nil
+          [ "r" ∶ ty_enum register_tag,
+            "v" ∶ ty_int
+          ]
+          env_nil
+          (asn_chunk
+             (chunk_pred
+                ptstoreg
+                (env_nil ► ty_enum register_tag ↦ term_var "r" ► ty_int ↦ term_var "v")))
+          (asn_match_enum register_tag (term_var "r")
+                          (fun k => match k with
+                                    | RegTag0 => R0 ↦ term_var "v"
+                                    | RegTag1 => R1 ↦ term_var "v"
+                                    | RegTag2 => R2 ↦ term_var "v"
+                                    | RegTag3 => R3 ↦ term_var "v"
+                                    end))
+      | ghost_close_ptstoreg0 =>
+        @sep_contract_unit
+          ctx_nil
+          [ "v" ∶ ty_int ]
+          env_nil
+          (R0 ↦ term_var "v")
+          (asn_chunk
+             (chunk_pred
+                ptstoreg
+                (env_nil ► ty_enum register_tag ↦ term_enum register_tag RegTag0 ► ty_int ↦ term_var "v")))
+      | ghost_close_ptstoreg1 =>
+        @sep_contract_unit
+          ctx_nil
+          [ "v" ∶ ty_int ]
+          env_nil
+          (R1 ↦ term_var "v")
+          (asn_chunk
+             (chunk_pred
+                ptstoreg
+                (env_nil ► ty_enum register_tag ↦ term_enum register_tag RegTag1 ► ty_int ↦ term_var "v")))
+      | ghost_close_ptstoreg2 =>
+        @sep_contract_unit
+          ctx_nil
+          [ "v" ∶ ty_int ]
+          env_nil
+          (R2 ↦ term_var "v")
+          (asn_chunk
+             (chunk_pred
+                ptstoreg
+                (env_nil ► ty_enum register_tag ↦ term_enum register_tag RegTag2 ► ty_int ↦ term_var "v")))
+      | ghost_close_ptstoreg3 =>
+        @sep_contract_unit
+          ctx_nil
+          [ "v" ∶ ty_int ]
+          env_nil
+          (R3 ↦ term_var "v")
+          (asn_chunk
+             (chunk_pred
+                ptstoreg
+                (env_nil ► ty_enum register_tag ↦ term_enum register_tag RegTag3 ► ty_int ↦ term_var "v")))
       end.
 
 End ISASymbolicContractKit.
@@ -594,8 +683,7 @@ Module ISASymbolicContracts :=
     ISASymbolicContractKit.
 Import ISASymbolicContracts.
 
-Local Transparent chunk_eqb.
-Local Transparent Term_eqb.
+Local Transparent Term_eqb chunk_eqb env_beq.
 
 Import List.
 
@@ -614,24 +702,14 @@ Local Ltac solve :=
      try congruence; auto).
 
 Lemma valid_contract_rX : ValidContract (CEnv rX) fun_rX.
-Proof.
-  intros i; destruct i; cbn.
-  - intros j; destruct j; solve.
-    exists RegTag0; solve.
-  - intros j; destruct j; solve.
-    exists RegTag1; solve.
-  - intros j; destruct j; solve.
-    exists RegTag2; solve.
-  - intros j; destruct j; solve.
-    exists RegTag3; solve.
-Qed.
+Proof. intros [] []; solve. Qed.
 Hint Resolve valid_contract_rX : contracts.
 
 Lemma valid_contract_wX : ValidContract (CEnv wX) fun_wX.
-Proof. cbn; auto. Qed.
+Proof. intros [] []; solve. Qed.
 Hint Resolve valid_contract_wX : contracts.
 
-Arguments asn_true {_} /.
+(* Arguments asn_true {_} /. *)
 
 Lemma valid_contract_execute_load : ValidContract (CEnv execute_load) fun_execute_load.
 Proof.
@@ -641,8 +719,21 @@ Hint Resolve valid_contract_execute_load : contracts.
 Lemma valid_contracts : ValidContractEnv CEnv.
 Proof.
   intros Δ τ []; auto with contracts.
+  - intros [].
+  - intros [].
+  - intros [].
+  - intros [].
+  - intros [].
+  - intros [].
+  - intros [].
+  - (* TODO: Debug why it doesn't automagically choose false. *)
+    exists false; constructor.
   - constructor.
   - constructor.
   - constructor.
-  - constructor.
-Qed.
+  - admit. (* TODO: Move to external / lemma. *)
+  - admit. (* TODO: Move to external / lemma. *)
+  - admit. (* TODO: Move to external / lemma. *)
+  - admit. (* TODO: Move to external / lemma. *)
+  - admit. (* TODO: Move to external / lemma. *)
+Admitted.
