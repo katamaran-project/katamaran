@@ -1,8 +1,11 @@
 Require Import Coq.Program.Tactics.
 Require Import FunctionalExtensionality.
 
+Require Import MicroSail.Syntax.
+Require Import MicroSail.Sep.Spec.
+
 (* Adopted from VST: https://github.com/PrincetonUniversity/VST/blob/master/msl/seplog.v *)
-Class NatDed (A: Type) := mkNatDed {
+Class NatDed (A: Type) := {
   andp : A -> A -> A;
   orp : A -> A -> A;
   (* existential quantification *)
@@ -67,7 +70,7 @@ Class NatDedAxioms (A : Type) {ND : NatDed A} := {
 (* not_prop_right: forall (P: A) (Q: Prop), (Q -> derives P FF) -> derives P (prop (not Q)) *)
 }.
 
-Class SepLog (A : Type) := mkSepLog {
+Class SepLog (A : Type) := {
   is_NatDed :> NatDed A;
   emp : A;
   sepcon : A -> A -> A;
@@ -93,3 +96,19 @@ Class SepLogAxioms (A : Type) {SL : SepLog A} := {
   (* exclude_elsewhere: forall (P Q : A), P ✱ Q ⊢ (P ∧ (Q -◯ TT)) ✱ Q; *)
   (* ewand_conflict: forall (P Q R : A), P ✱ Q ⊢ FF -> P ∧ (Q -◯ R) ⊢ FF *)
 }.
+
+Module Type HeapKit
+       (Import typekit : TypeKit)
+       (Import termkit : TermKit typekit)
+       (Import progkit : ProgramKit typekit termkit)
+       (Import assertkit : AssertionKit typekit termkit progkit).
+
+  Class Heaplet (A : Type) := {
+    is_SepLog :> SepLog A;
+    pred : forall (p : 𝑷) (ts : Env Lit (𝑷_Ty p)), A;
+    ptsreg : forall {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ),  A
+  }.
+
+Notation "r '↦' t" := (ptsreg r t) (at level 30).
+
+End HeapKit.
