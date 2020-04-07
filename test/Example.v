@@ -214,6 +214,7 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
+  Definition 𝑭𝑿 : Ctx (𝑿 * Ty) -> Ty -> Set := fun _ _ => Empty_set.
 
   Definition 𝑹𝑬𝑮 : Ty -> Set := fun _ => Empty_set.
   Definition 𝑹𝑬𝑮_eq_dec {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ) : {x ≡ y}+{~ x ≡ y}.
@@ -225,8 +226,6 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
           rewrite <- (Eqdep_dec.eq_rect_eq_dec Ty_eq_dec) in eqr; discriminate
         ].
   Defined.
-
-  Definition 𝑨𝑫𝑫𝑹 : Set := Empty_set.
 
 End ExampleTermKit.
 Module ExampleTerms := Terms ExampleTypeKit ExampleTermKit.
@@ -281,38 +280,19 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
     end in exact pi.
   Defined.
 
-Definition RegStore : Set := Empty_set.
+  Definition RegStore := GenericRegStore.
+  Definition read_register := generic_read_register.
+  Definition write_register := generic_write_register.
+  Definition read_write := generic_read_write.
+  Definition write_read := generic_write_read.
+  Definition write_write := generic_write_write.
 
-Definition read_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) : Lit σ :=
-  match r with end.
-
-Definition write_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) : RegStore :=
-  match r with end.
-
-Definition read_write (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
-    read_register (write_register γ r v) r = v := match r with end.
-
-Definition write_read (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) :
-    (write_register γ r (read_register γ r)) = γ := match r with end.
-
-Definition write_write (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ) :
-    write_register (write_register γ r v1) r v2 = write_register γ r v2 :=
-  match r with end.
-
-Definition Memory : Set := Empty_set.
-
-Definition read_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) : Lit ty_int :=
-  match addr with end.
-
-Definition write_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int) : Memory :=
-  match addr with end.
-
-  (* Definition RegStore := GenericRegStore. *)
-  (* Definition read_register := generic_read_register. *)
-  (* Definition write_register := generic_write_register. *)
-  (* Definition read_write := generic_read_write. *)
-  (* Definition write_read := generic_write_read. *)
-  (* Definition write_write := generic_write_write. *)
+  Definition Memory : Set := unit.
+  Definition ExternalCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs)
+    (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop := False.
+  Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+  Proof. destruct f. Qed.
 
 End ExampleProgramKit.
 
@@ -411,6 +391,10 @@ Module SepContracts.
         | msum => sep_contract_none _
         end.
 
+    Definition CEnvEx : SepContractEnvEx :=
+      fun Δ τ f =>
+        match f with end.
+
   End ExampleSymbolicContractKit.
 
   Module ExampleSymbolicContracts :=
@@ -461,6 +445,9 @@ Module WLPContracts.
                           [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
         end.
 
+    Definition CEnvEx : ContractEnvEx :=
+      fun σs τ f => match f with end.
+
   End ExampleContractKit.
   Import ExampleContractKit.
 
@@ -471,7 +458,7 @@ Module WLPContracts.
   Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.
 
   Ltac wlp_cbv :=
-    cbv [Blastable_𝑬𝑲 CEnv Forall Lit ValidContract WLP abstract blast
+    cbv [Blastable_𝑬𝑲 CEnv Forall Lit ValidContract WLPCall WLP abstract blast
                       blastable_lit env_lookup env_map env_update eval evals inctx_case_snoc
                       snd uncurry eval_prop_true eval_prop_false eval_binop
         ].
@@ -486,5 +473,8 @@ Module WLPContracts.
 
   Lemma validCEnv : ValidContractEnv CEnv.
   Proof. intros σs τ []; wlp_cbv; validate_solve. Qed.
+
+  Lemma validCEnvEx : ValidContractEnvEx CEnvEx.
+  Proof. intros σs τ []. Qed.
 
 End WLPContracts.

@@ -329,16 +329,13 @@ Module Type TermKit (typekit : TypeKit).
       𝑹_unfold (𝑹_fold Kv) = Kv.
 
   (* Names of functions. *)
-  Parameter Inline 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set.
+  Parameter Inline 𝑭 : Ctx (𝑿 * Ty) -> Ty -> Set.
+  Parameter Inline 𝑭𝑿 : Ctx (𝑿 * Ty) -> Ty -> Set.
 
   (* Names of registers. *)
   Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
-
-  (* Memory addresses. *)
-  Parameter Inline 𝑨𝑫𝑫𝑹 : Set.
-
   Parameter Inline 𝑹𝑬𝑮_eq_dec :
-    forall {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ), {x ≡ y}+{ ~ x ≡ y}.
+    forall {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ), {x ≡ y}+{~ x ≡ y}.
 
 End TermKit.
 
@@ -645,6 +642,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | stm_assign     (x : 𝑿) (τ : Ty) {xInΓ : InCtx (x , τ) Γ} (e : Stm Γ τ) : Stm Γ τ
     | stm_call       {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ σ
     | stm_call'      (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ) : Stm Γ τ
+    | stm_callex     {Δ σ} (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ σ
     | stm_if         {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) : Stm Γ τ
     | stm_seq        {τ : Ty} (e : Stm Γ τ) {σ : Ty} (k : Stm Γ σ) : Stm Γ σ
     | stm_assert     (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) : Stm Γ ty_bool
@@ -667,8 +665,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
     | stm_read_register {τ} (reg : 𝑹𝑬𝑮 τ) : Stm Γ τ
     | stm_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) : Stm Γ τ
-    | stm_read_memory (addr : 𝑨𝑫𝑫𝑹) : Stm Γ ty_int
-    | stm_write_memory (addr : 𝑨𝑫𝑫𝑹) (e : Exp Γ ty_int) : Stm Γ ty_int
     | stm_bind   {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ) : Stm Γ τ
     with Alternative (Γ : Ctx (𝑿 * Ty)) : Ty -> Ty -> Type :=
     | alt {σ τ} {Δ : Ctx (𝑿 * Ty)} (p : Pattern Δ σ) (rhs : Stm (ctx_cat Γ Δ) τ) : Alternative Γ σ τ.
@@ -691,6 +687,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Hypothesis (P_assign : forall (Γ : Ctx (𝑿 * Ty)) (x : 𝑿) (τ : Ty) (xInΓ : (x ∶ τ)%ctx ∈ Γ) (e : Stm Γ τ), P e -> P (stm_assign e)).
       Hypothesis (P_call  : forall (Γ Δ : Ctx (𝑿 * Ty)) (σ : Ty) (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call f es)).
       Hypothesis (P_call'  : forall (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call' Γ δ s)).
+      Hypothesis (P_callex  : forall (Γ Δ : Ctx (𝑿 * Ty)) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_callex f es)).
       Hypothesis (P_if  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Exp Γ ty_bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)).
       Hypothesis (P_seq  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Stm Γ τ) (σ : Ty) (k : Stm Γ σ), P e -> P k -> P (stm_seq e k)).
       Hypothesis (P_assert  : forall (Γ : Ctx (𝑿 * Ty)) (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string), P (stm_assert e1 e2)).
@@ -713,10 +710,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
             P (stm_read_register Γ reg)).
       Hypothesis (P_write_register : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ),
             P (stm_write_register reg e)).
-      Hypothesis (P_read_memory : forall (Γ : Ctx (𝑿 * Ty)) (addr : 𝑨𝑫𝑫𝑹),
-            P (stm_read_memory Γ addr)).
-      Hypothesis (P_write_memory : forall (Γ : Ctx (𝑿 * Ty)) (addr : 𝑨𝑫𝑫𝑹) (e : Exp Γ ty_int),
-            P (stm_write_memory addr e)).
       Hypothesis (P_bind : forall (Γ : Ctx (𝑿 * Ty)) (σ τ : Ty) (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ),
             P s -> (forall l : Lit σ, P (k l)) -> P (stm_bind s k)).
 
@@ -729,6 +722,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         | stm_assign _           => ltac:(apply P_assign; auto)
         | stm_call _ _           => ltac:(apply P_call; auto)
         | stm_call' _ _ _        => ltac:(apply P_call'; auto)
+        | stm_callex _ _         => ltac:(apply P_callex; auto)
         | stm_if _ _ _           => ltac:(apply P_if; auto)
         | stm_seq _ _            => ltac:(apply P_seq; auto)
         | stm_assert _ _         => ltac:(apply P_assert; auto)
@@ -742,8 +736,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         | stm_match_record _ _ _ => ltac:(apply P_match_record; auto)
         | stm_read_register _ _  => ltac:(apply P_read_register; auto)
         | stm_write_register _ _ => ltac:(apply P_write_register; auto)
-        | stm_read_memory _ _    => ltac:(apply P_read_memory; auto)
-        | stm_write_memory _ _   => ltac:(apply P_write_memory; auto)
         | stm_bind _ _           => ltac:(apply P_bind; auto)
         end.
 
@@ -759,6 +751,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_assign {_} _ {_ _} _.
     Global Arguments stm_call {_%ctx _%ctx _} _ _%arg.
     Global Arguments stm_call' {_} _ _ _ _.
+    Global Arguments stm_callex {_%ctx _%ctx _} _ _%arg.
     Global Arguments stm_if {_ _} _ _ _.
     Global Arguments stm_seq {_ _} _ {_} _.
     Global Arguments stm_assert {_} _ _.
@@ -772,8 +765,6 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
     Global Arguments stm_read_register {_ _} _.
     Global Arguments stm_write_register {_ _} _ _.
-    Global Arguments stm_read_memory {_} _.
-    Global Arguments stm_write_memory {_} _ _.
 
   End Statements.
 
@@ -1310,9 +1301,15 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   Notation "'call' f a1 .. an" :=
     (stm_call f (env_snoc .. (env_snoc env_nil (_,_) a1%exp) .. (_,_) an%exp))
     (at level 10, f global, a1, an at level 9) : stm_scope.
+  Notation "'callex' f a1 .. an" :=
+    (stm_callex f (env_snoc .. (env_snoc env_nil (_,_) a1%exp) .. (_,_) an%exp))
+    (at level 10, f global, a1, an at level 9) : stm_scope.
 
   Notation "'call' f" :=
     (stm_call f env_nil)
+    (at level 10, f global) : stm_scope.
+  Notation "'callex' f" :=
+    (stm_callex f env_nil)
     (at level 10, f global) : stm_scope.
 
   Notation "s1 ;; s2" := (stm_seq s1 s2) : stm_scope.
@@ -1351,9 +1348,25 @@ Module Type ProgramKit
 
   (* Memory model *)
   Parameter Memory : Type.
-  Bind Scope env_scope with Memory.
-  Parameter read_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹), Lit ty_int.
-  Parameter write_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int), Memory.
+  (* Step relation for calling an external function. The complete function call
+     is done in one step. The result of an external call is either a failure
+     with an error message msg (res = inl msg) or a successful computation with
+     a result value v (res = inr v).
+   *)
+  Parameter ExternalCall :
+    forall
+      {σs σ} (f : 𝑭𝑿 σs σ)
+      (args : NamedEnv Lit σs)
+      (res  : string + Lit σ)
+      (γ γ' : RegStore)
+      (μ μ' : Memory), Prop.
+  Parameter ExternalProgress :
+    forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ,
+    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+
+  (* Bind Scope env_scope with Memory. *)
+  (* Parameter read_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹), Lit ty_int. *)
+  (* Parameter write_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int), Memory. *)
 
   (* Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ. *)
   Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.
@@ -1380,6 +1393,8 @@ Module Programs
 
   Definition ContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), Contract Δ τ.
+  Definition ContractEnvEx : Type :=
+    forall Δ τ (f : 𝑭𝑿 Δ τ), Contract Δ τ.
 
 End Programs.
 
@@ -1391,6 +1406,7 @@ Module Type ContractKit
   Module PM := Programs typekit termkit progkit.
   Export PM.
 
-  Parameter Inline CEnv : ContractEnv.
+  Parameter Inline CEnv   : ContractEnv.
+  Parameter Inline CEnvEx : ContractEnvEx.
 
 End ContractKit.

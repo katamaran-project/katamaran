@@ -97,6 +97,14 @@ Module SmallStep
   | step_stm_call'_fail
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (τ : Ty) (s : string) :
       ⟨ γ , μ , δ , stm_call' Δ δΔ τ (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
+  | step_stm_callex
+      (γ γ' : RegStore) (μ μ' : Memory) (δ : LocalStore Γ) {σs σ} {f : 𝑭𝑿 σs σ} (es : NamedEnv (Exp Γ) σs) (res : string + Lit σ) :
+      ExternalCall f (evals es δ) res γ γ' μ μ' ->
+      ⟨ γ  , μ  , δ , stm_callex f es ⟩ --->
+      ⟨ γ' , μ' , δ , match res with
+                      | inl msg => stm_fail σ msg
+                      | inr v__σ  => stm_lit σ v__σ
+                      end ⟩
 
   | step_stm_assign_value
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} (v : Lit σ) :
@@ -175,13 +183,6 @@ Module SmallStep
       let v := eval e δ in
       ⟨ γ , μ , δ, stm_write_register r e ⟩ ---> ⟨ write_register γ r v , μ , δ , stm_lit σ v ⟩
 
-  | step_stm_read_memory
-      (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) (addr : 𝑨𝑫𝑫𝑹) :
-      ⟨ γ, μ , δ, stm_read_memory addr ⟩ ---> ⟨ γ, μ , δ, stm_lit ty_int (read_memory μ addr) ⟩
-  | step_stm_write_memory
-      (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) (addr : 𝑨𝑫𝑫𝑹) (e : Exp Γ ty_int) :
-      let v := eval e δ in
-      ⟨ γ , μ , δ, stm_write_memory addr e ⟩ ---> ⟨ γ , write_memory μ addr v, δ , stm_lit ty_int v ⟩
 
   | step_stm_bind_step
       (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (σ τ : Ty) (s s' : Stm Γ σ) (k : Lit σ -> Stm Γ τ) :
@@ -224,6 +225,7 @@ Module SmallStep
         end
       | lazymatch head s with
         | @stm_call           => idtac
+        | @stm_callex         => idtac
         | @stm_assert         => idtac
         | @stm_fail           => idtac
         | @stm_exp            => idtac
@@ -238,8 +240,6 @@ Module SmallStep
         | @stm_match_record   => idtac
         | @stm_read_register  => idtac
         | @stm_write_register => idtac
-        | @stm_read_memory    => idtac
-        | @stm_write_memory   => idtac
         end
       ].
 
@@ -259,6 +259,6 @@ Module SmallStep
            tactic should recognize it. *)
         microsail_stm_primitive_step s1'; constructor
       end; fail.
-  Abort.
+  Qed.
 
 End SmallStep.

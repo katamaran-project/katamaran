@@ -86,7 +86,18 @@ Module Progress
       ] => solve [ specialize (IH γ μ δ); T | clear IH; T ]
     end.
 
+  Lemma progress_callex
+    {Γ Δ : Ctx (𝑿 * Ty)} {σ : Ty} (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ)
+    (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) :
+    exists (γ' : RegStore) (μ' : Memory) (δ' : LocalStore Γ) (s' : Stm Γ σ),
+      ⟨ γ, μ, δ, stm_callex f es ⟩ ---> ⟨ γ', μ', δ', s' ⟩.
+  Proof.
+    destruct (ExternalProgress f (evals es δ) γ μ) as (γ' & μ' & res & p).
+    exists γ', μ', δ. eexists; constructor; eauto.
+  Qed.
+
   Local Ltac progress_tac :=
+    auto using progress_callex;
     progress_simpl;
     solve
       [ repeat eexists; constructor; eauto

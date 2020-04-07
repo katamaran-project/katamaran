@@ -370,7 +370,15 @@ Module CapTermKit <: (TermKit CapTypeKit).
   | exec_store     : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_unit
   .
 
+  Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
+  (* read memory *)
+  | rM    : FunX ["address" ∶ ty_int] ty_int
+  (* write memory *)
+  | wM    : FunX ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_unit
+  .
+
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
+  Definition 𝑭𝑿  : Ctx (𝑿 * Ty) -> Ty -> Set := FunX.
 
   Inductive Reg : Ty -> Set :=
     | pc   : Reg (ty_record capability)
@@ -552,11 +560,34 @@ Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
   Definition write_read := generic_write_read.
   Definition write_write := generic_write_write.
 
-  Definition Memory : Set := Empty_set.
-  Definition read_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) : Lit ty_int :=
-    match addr with end.
-  Definition write_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int) : Memory :=
-    match addr with end.
+  (* MEMORY *)
+  Definition Memory := Z -> option Z.
+
+  Definition fun_rM (μ : Memory) (addr : Lit ty_int) : string + Lit ty_int :=
+    match μ addr with
+    | Some v => inr v
+    | None   => inl "Err [fun_rM]: invalid address"
+    end.
+
+  Definition fun_wM (μ : Memory) (addr val : Lit ty_int) : Memory :=
+    fun addr' => if Z.eqb addr addr' then Some val else μ addr'.
+
+  Inductive CallEx : forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
+  | callex_rM {addr : Z} {γ : RegStore} {μ : Memory} :
+      CallEx rM (env_snoc env_nil (_ , ty_int) addr)
+             (fun_rM μ addr)
+             γ γ μ μ
+  | callex_wM {addr val : Z} {γ : RegStore} {μ : Memory} :
+      CallEx wM (env_snoc (env_snoc env_nil (_ , ty_int) addr) (_ , ty_int) val)
+             (inr tt)
+             γ γ μ (fun_wM μ addr val)
+  .
+
+  Definition ExternalCall := @CallEx.
+
+  Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+  Proof. destruct f; cbn; repeat depelim args; repeat eexists; constructor. Qed.
 
 End CapProgramKit.
 

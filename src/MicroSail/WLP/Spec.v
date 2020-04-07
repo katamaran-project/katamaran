@@ -93,70 +93,72 @@ Module WLP
   (* Notation "ma <* mb" := (bindleft ma mb) (at level 50, left associativity). *)
 
   Local Open Scope monad_scope.
-  Fixpoint WLP Γ τ (s : Stm Γ τ) : DST RegStore LocalStore Γ Γ (Lit τ).
-    let body := eval cbn [bind bindblast bindleft bindright get_local put_local assert abort modify_local
-                               push pops pure pop meval pushs mevals lift_cont evalDST Lit uncurry_named lift_cont_global] in
-    (match s in (Stm _ τ) return (DST RegStore LocalStore Γ Γ (Lit τ)) with
+
+  Definition WLPCall {Δ σ} (c : Contract Δ σ) δf_in : Cont (RegStore -> Prop) (Lit σ) :=
+    Eval cbn [uncurry_named] in
+    match c with
+    | ContractNoFail _ _ pre post =>
+      fun POST γin => uncurry_named pre δf_in γin /\
+                      forall v γout, uncurry_named post δf_in v γout -> POST v γout
+    | ContractTerminateNoFail _ _ pre post => fun _ _ => False (* NOT IMPLEMENTED *)
+    | ContractTerminate _ _ pre post => fun _ _ => False (* NOT IMPLEMENTED *)
+    | ContractNone _ _ => fun _ _ => False (* NOT IMPLEMENTED *)
+    end.
+
+  Definition WLP : forall {Γ τ} (s : Stm Γ τ), DST RegStore LocalStore Γ Γ (Lit τ) :=
+    Eval cbn [Lit WLPCall abort assert bind bindblast bindleft bindright evalDST
+              get_local lift_cont lift_cont_global meval mevals modify_local pop
+              pops pure push pushs put_local uncurry_named ] in
+    fix WLP {Γ τ} (s : Stm Γ τ) : DST RegStore LocalStore Γ Γ (Lit τ) :=
+    match s in (Stm _ τ) return (DST RegStore LocalStore Γ Γ (Lit τ)) with
     | stm_lit _ l => pure l
-    | stm_assign x s => WLP _ _ s >>= fun v => modify_local (fun δ => δ ⟪ x ↦ v ⟫) *> pure v
-    | stm_let x σ s k => WLP _ _ s >>= fun v => push σ v *> WLP _ _ k <* pop
+    | stm_assign x s => WLP s >>= fun v => modify_local (fun δ => δ ⟪ x ↦ v ⟫) *> pure v
+    | stm_let x σ s k => WLP s >>= fun v => push σ v *> WLP k <* pop
     | stm_exp e => meval e
     | stm_assert e1 e2  => meval e1 >>= assert
     | stm_if e s1 s2 => fun POST δ γ =>
-                          eval_prop_true e δ (WLP _ _ s1 POST δ γ) /\
-                          eval_prop_false e δ (WLP _ _ s2 POST δ γ)
+                          eval_prop_true e δ (WLP s1 POST δ γ) /\
+                          eval_prop_false e δ (WLP s2 POST δ γ)
     | stm_fail _ _ => abort
-    | stm_seq s1 s2 => WLP _ _ s1 *> WLP _ _ s2
-    | stm_call' Δ δ τ s => lift_cont_global (evalDST (WLP _ _ s) δ)
-    | stm_call f es =>
-      mevals es >>= fun δf_in =>
-      match CEnv f with
-      | ContractNoFail _ _ pre post =>
-        fun POST δin γin => uncurry_named pre δf_in γin /\
-                            forall v γout, uncurry_named post δf_in v γout -> POST v δin γout
-      | ContractTerminateNoFail _ _ pre post => abort (* NOT IMPLEMENTED *)
-      | ContractTerminate _ _ pre post => abort (* NOT IMPLEMENTED *)
-      | ContractNone _ _ => abort (* NOT IMPLEMENTED *)
-      end
-    | stm_let' δ k => pushs δ *> WLP _ _ k <* pops _
+    | stm_seq s1 s2 => WLP s1 *> WLP s2
+    | stm_call' Δ δ τ s => lift_cont_global (evalDST (WLP s) δ)
+    | stm_call f es => mevals es >>= fun δf_in => lift_cont_global (WLPCall (CEnv f) δf_in)
+    | stm_callex f es => mevals es >>= fun δf_in => lift_cont_global (WLPCall (CEnvEx f) δf_in)
+    | stm_let' δ k => pushs δ *> WLP k <* pops _
     | stm_match_list e alt_nil xh xt alt_cons =>
       meval e !>>= fun v =>
       match v with
-      | nil => WLP _ _ alt_nil
-      | cons vh vt => push _ vh *> push (ty_list _) vt *> WLP _ _ alt_cons <* pop <* pop
+      | nil => WLP alt_nil
+      | cons vh vt => push _ vh *> push (ty_list _) vt *> WLP alt_cons <* pop <* pop
       end
     | stm_match_sum e xinl altinl xinr altinr =>
       meval e !>>= fun v =>
       match v with
-      | inl v => push _ v *> WLP _ _ altinl <* pop
-      | inr v => push _ v *> WLP _ _ altinr <* pop
+      | inl v => push _ v *> WLP altinl <* pop
+      | inr v => push _ v *> WLP altinr <* pop
       end
     | stm_match_pair e xl xr rhs =>
       meval e !>>= fun v =>
       let (vl , vr) := v in
-      push _ vl *> push _ vr *> WLP _ _ rhs <* pop <* pop
+      push _ vl *> push _ vr *> WLP rhs <* pop <* pop
     | stm_match_enum E e alts =>
       meval e !>>= fun v =>
-      WLP _ _ (alts v)
+      WLP (alts v)
     | stm_match_tuple e p rhs =>
       meval e >>= fun v =>
-      pushs (tuple_pattern_match p v) *> WLP _ _ rhs <* pops _
+      pushs (tuple_pattern_match p v) *> WLP rhs <* pops _
     | stm_match_union T e alts =>
       meval e !>>= fun v =>
       let (K , tv) := 𝑼_unfold v in
-      pushs (pattern_match (proj_alt_pat (alts K)) tv) *> WLP _ _ (proj_alt_rhs (alts K)) <* pops _
+      pushs (pattern_match (proj_alt_pat (alts K)) tv) *> WLP (proj_alt_rhs (alts K)) <* pops _
     | stm_match_record R e p rhs =>
       meval e >>= fun v =>
-      pushs (record_pattern_match p (𝑹_unfold v)) *> WLP _ _ rhs <* pops _
+      pushs (record_pattern_match p (𝑹_unfold v)) *> WLP rhs <* pops _
     | stm_read_register r => get_global >>= (fun γ => pure (read_register γ r))
     | stm_write_register r e => meval e >>=
         (fun v => modify_global (fun γ => write_register γ r v) *> pure v)
-    | stm_read_memory r => abort
-    | stm_write_memory r e => abort
-    | stm_bind s k =>
-      WLP _ _ s >>= fun v => WLP _ _ (k v)
-    end) in exact body.
-  Defined.
+    | stm_bind s k => WLP s >>= fun v => WLP (k v)
+    end.
 
   Definition ValidContract {Γ τ} (c : Contract Γ τ) (s : Stm Γ τ) : Prop :=
     match c with
@@ -170,6 +172,22 @@ Module WLP
     end.
 
   Definition ValidContractEnv (cenv : ContractEnv) : Prop :=
-    forall σs σ (f : 𝑭 σs σ), ValidContract (cenv σs σ f) (Pi f).
+    forall Δ σ (f : 𝑭 Δ σ), ValidContract (cenv Δ σ f) (Pi f).
+
+  Definition ValidContractEnvEx (cenv : ContractEnvEx) : Prop :=
+    forall Δ σ (f : 𝑭𝑿 Δ σ),
+      match cenv Δ σ f with
+      | ContractNoFail _ _ pre post =>
+        forall (δ : LocalStore Δ) (γ γ' : RegStore) (μ μ' : Memory) (res : string + Lit σ),
+          ExternalCall f δ res γ γ' μ μ' ->
+          uncurry pre δ γ ->
+          match res with
+          | inl _ => False
+          | inr v => uncurry post δ v γ'
+          end
+      | ContractTerminateNoFail _ _ _ _ => False
+      | ContractTerminate _ _ _ _ => False
+      | ContractNone _ _ => True
+      end.
 
 End WLP.

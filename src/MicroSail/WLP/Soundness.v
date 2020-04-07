@@ -29,7 +29,8 @@
 From Coq Require Import
      Program.Equality
      Program.Tactics
-     ZArith.ZArith.
+     ZArith.ZArith
+     Strings.String.
 
 From MicroSail Require Import
      SmallStep.Inversion
@@ -129,7 +130,7 @@ Module Soundness
        wlp_sound_simpl;
        try wlp_sound_inst); intuition.
 
-  Definition ValidContractEnv (cenv : ContractEnv) : Prop :=
+  Definition ValidContractEnv' (cenv : ContractEnv) : Prop :=
     forall σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
       | ContractNoFail _ _ pre post =>
@@ -143,57 +144,66 @@ Module Soundness
       | ContractNone _ _ => True
       end.
 
-  Lemma WLP_sound (validCEnv : ValidContractEnv CEnv) {Γ σ} (s : Stm Γ σ) :
+  Section Soundness.
+
+    Variable validCEnv : ValidContractEnv' CEnv.
+    Variable validCEnvEx : ValidContractEnvEx CEnvEx.
+
+    Lemma WLP_sound {Γ σ} (s : Stm Γ σ) :
     forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),
       ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
       forall (POST : Lit σ -> LocalStore Γ -> RegStore -> Prop),
         WLP s POST δ γ -> ResultNoFail s' (fun v => POST v δ' γ').
-  Proof.
-    induction s; cbn; intros.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-    - pose proof (validCEnv _ _ f).
-      destruct (CEnv f); wlp_sound_solve.
-      intuition.
-      wlp_sound_solve.
-    - wlp_sound_solve.
-    - destruct_conjs. case_eq (eval e δ); intros.
-      + apply eval_prop_true_sound in H1; wlp_sound_solve.
-      + apply eval_prop_false_sound in H2; wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-      specialize (H _ _ eq_refl).
-      wlp_sound_solve.
-    - wlp_sound_solve.
-      + specialize (H _ eq_refl).
+    Proof.
+      induction s; cbn; intros.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+      - pose proof (validCEnv f).
+        destruct (CEnv f); wlp_sound_solve.
+        intuition.
         wlp_sound_solve.
-      + specialize (H2 _ eq_refl).
+      - wlp_sound_solve.
+      - pose proof (validCEnvEx f).
+        destruct (CEnvEx f); wlp_sound_solve.
+        specialize (H3 _ _ _ _ _ _ H H2).
+        destruct res; wlp_sound_solve.
+      - destruct_conjs. case_eq (eval e δ); intros.
+        + apply eval_prop_true_sound in H1; wlp_sound_solve.
+        + apply eval_prop_false_sound in H2; wlp_sound_solve.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+        specialize (H _ _ eq_refl).
         wlp_sound_solve.
-    - wlp_sound_solve.
-    - rewrite blast_sound in H2.
-      wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-      destruct (𝑼_unfold (eval e δ)) as [K v] eqn:eq_eval.
-      specialize (H3 K).
-      rewrite blast_sound in H3.
-      specialize (H3 v).
-      assert (eval e δ = 𝑼_fold (existT (fun K : 𝑼𝑲 U => Lit (𝑼𝑲_Ty K)) K v)).
-      { rewrite <- (𝑼_fold_unfold (eval e δ)); now f_equal. }
-      intuition.
-      rewrite 𝑼_unfold_fold in H4.
-      wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-    - wlp_sound_solve.
-  Qed.
+      - wlp_sound_solve.
+        + specialize (H _ eq_refl).
+          wlp_sound_solve.
+        + specialize (H2 _ eq_refl).
+          wlp_sound_solve.
+      - wlp_sound_solve.
+      - rewrite blast_sound in H2.
+        wlp_sound_solve.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+        destruct (𝑼_unfold (eval e δ)) as [K v] eqn:eq_eval.
+        specialize (H3 K).
+        rewrite blast_sound in H3.
+        specialize (H3 v).
+        assert (eval e δ = 𝑼_fold (existT (fun K : 𝑼𝑲 U => Lit (𝑼𝑲_Ty K)) K v)).
+        { rewrite <- (𝑼_fold_unfold (eval e δ)); now f_equal. }
+        intuition.
+        rewrite 𝑼_unfold_fold in H4.
+        wlp_sound_solve.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+      - wlp_sound_solve.
+    Qed.
+
+  End Soundness.
 
 End Soundness.

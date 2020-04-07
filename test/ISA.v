@@ -217,10 +217,6 @@ Module ISATermKit <: (TermKit ISATypeKit).
   | rF      : Fun ["flag_code" ∶ ty_int] ty_bool
   (* write flag *)
   | wF     : Fun ["flag_code" ∶ ty_int, "flag_value" ∶ ty_bool] ty_bool
-  (* read memory *)
-  | rM    : Fun ["address" ∶ ty_int] ty_int
-  (* write memory *)
-  | wM   : Fun ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_int
   (* check memory bounds *)
   | in_bounds : Fun ["address" ∶ ty_int] ty_bool
   (* semantics of a single instruction *)
@@ -231,14 +227,26 @@ Module ISATermKit <: (TermKit ISATypeKit).
   | add : Fun [ "x" ∶ ty_int , "y" ∶ ty_int ] ty_int
   | double : Fun [ "z" ∶ ty_int ] ty_int
   | add3 : Fun [ "x" ∶ ty_int , "y" ∶ ty_int , "z" ∶ ty_int ] ty_int
-  | ghost_open_ptstoreg : Fun ctx_nil ty_unit
-  | ghost_close_ptstoreg0 : Fun ctx_nil ty_unit
-  | ghost_close_ptstoreg1 : Fun ctx_nil ty_unit
-  | ghost_close_ptstoreg2 : Fun ctx_nil ty_unit
-  | ghost_close_ptstoreg3 : Fun ctx_nil ty_unit
+  .
+
+  Inductive FunGhost : Set :=
+  | open_ptstoreg
+  | close_ptstoreg0
+  | close_ptstoreg1
+  | close_ptstoreg2
+  | close_ptstoreg3
+  .
+
+  Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
+  (* read memory *)
+  | rM    : FunX ["address" ∶ ty_int] ty_int
+  (* write memory *)
+  | wM                   : FunX ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_unit
+  | ghost (f : FunGhost) : FunX ctx_nil ty_unit
   .
 
   Definition 𝑭 : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
+  Definition 𝑭𝑿 : Ctx (𝑿 * Ty) -> Ty -> Set := FunX.
 
   (* Flags are represented as boolean-valued registers;
      additionally, there are four general-purpose int-value registers
@@ -264,8 +272,6 @@ Module ISATermKit <: (TermKit ISATypeKit).
           try rewrite <- (Eqdep_dec.eq_rect_eq_dec Ty_eq_dec) in eqr; discriminate
         ].
   Defined.
-
-  Definition 𝑨𝑫𝑫𝑹 : Set := Address.
 
 End ISATermKit.
 Module ISATerms := Terms ISATypeKit ISATermKit.
@@ -321,25 +327,13 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     now destruct r.
   Qed.
 
-  (* MEMORY *)
-  Definition Memory := 𝑨𝑫𝑫𝑹 -> Lit ty_int.
-
-  (* Address space bounds *)
-  Definition Memory_lb {Γ} : Exp Γ ty_int := int_lit 0.
-  Definition Memory_hb {Γ} : Exp Γ ty_int := int_lit 3.
-
-  Definition read_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹 ) : Lit ty_int :=
-    μ addr.
-
-  Definition write_memory (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int) : Memory :=
-    fun addr' => match (Address_eqdec addr addr') with
-              | left eq_refl => v
-              | right _ => μ addr'
-              end.
-
   Local Coercion stm_exp : Exp >-> Stm.
   Local Open Scope exp_scope.
   Local Open Scope stm_scope.
+
+  Notation "'callghost' f" :=
+    (stm_callex (ghost f) env_nil)
+    (at level 10, f global) : stm_scope.
 
   Local Notation "'x'"   := (@exp_var _ "x" _ _).
   Local Notation "'y'"   := (@exp_var _ "y" _ _).
@@ -354,22 +348,26 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Local Notation "'mem_value'" := (@exp_var _ "mem_value" ty_int _).
   Local Definition nop {Γ} : Stm Γ ty_unit := stm_lit ty_unit tt.
 
+  (* Address space bounds *)
+  Definition Memory_lb {Γ} : Exp Γ ty_int := int_lit 0.
+  Definition Memory_hb {Γ} : Exp Γ ty_int := int_lit 3.
+
   Definition fun_rX : Stm ["reg_tag" ∶ ty_enum register_tag] ty_int :=
-    call ghost_open_ptstoreg ;;
+    callghost open_ptstoreg ;;
     match: reg_tag in register_tag with
-    | RegTag0 => let: "x" := stm_read_register R0 in call ghost_close_ptstoreg0 ;; stm_exp x
-    | RegTag1 => let: "x" := stm_read_register R1 in call ghost_close_ptstoreg1 ;; stm_exp x
-    | RegTag2 => let: "x" := stm_read_register R2 in call ghost_close_ptstoreg2 ;; stm_exp x
-    | RegTag3 => let: "x" := stm_read_register R3 in call ghost_close_ptstoreg3 ;; stm_exp x
+    | RegTag0 => let: "x" := stm_read_register R0 in callghost close_ptstoreg0 ;; stm_exp x
+    | RegTag1 => let: "x" := stm_read_register R1 in callghost close_ptstoreg1 ;; stm_exp x
+    | RegTag2 => let: "x" := stm_read_register R2 in callghost close_ptstoreg2 ;; stm_exp x
+    | RegTag3 => let: "x" := stm_read_register R3 in callghost close_ptstoreg3 ;; stm_exp x
     end.
 
   Definition fun_wX : Stm ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_unit :=
-    call ghost_open_ptstoreg ;;
+    callghost open_ptstoreg ;;
     match: reg_tag in register_tag with
-    | RegTag0 => stm_write_register R0 reg_value ;; call ghost_close_ptstoreg0
-    | RegTag1 => stm_write_register R1 reg_value ;; call ghost_close_ptstoreg1
-    | RegTag2 => stm_write_register R2 reg_value ;; call ghost_close_ptstoreg2
-    | RegTag3 => stm_write_register R3 reg_value ;; call ghost_close_ptstoreg3
+    | RegTag0 => stm_write_register R0 reg_value ;; callghost close_ptstoreg0
+    | RegTag1 => stm_write_register R1 reg_value ;; callghost close_ptstoreg1
+    | RegTag2 => stm_write_register R2 reg_value ;; callghost close_ptstoreg2
+    | RegTag3 => stm_write_register R3 reg_value ;; callghost close_ptstoreg3
     end.
 
   Definition fun_semantics : Stm ["instr" ∶ ty_union instruction] ty_unit :=
@@ -386,7 +384,7 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     let: "addr" := call rX (exp_var "src") in
     let: "safe" := call in_bounds (exp_var "addr") in
     if: exp_var "safe"
-    then (let: "v" := call rM (exp_var "addr") in
+    then (let: "v" := callex rM (exp_var "addr") in
           call wX (exp_var "dst") (exp_var "v") ;;
           nop)
     else (stm_write_register OutOfMemory lit_true ;; nop).
@@ -406,18 +404,6 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
       else if: flag_code = int_lit 6 then stm_write_register Overflow flag_value
       else if: flag_code = int_lit 7 then stm_write_register OutOfMemory flag_value
       else     stm_fail _ "write_register: invalid register"
-    | rM =>
-      if:      address = int_lit 0 then stm_read_memory A0
-      else if: address = int_lit 1 then stm_read_memory A1
-      else if: address = int_lit 2 then stm_read_memory A2
-      else if: address = int_lit 3 then stm_read_memory A3
-      else     stm_fail _ "read_register: invalid register"
-    | wM =>
-      if:      address = int_lit 0 then stm_write_memory A0 mem_value
-      else if: address = int_lit 1 then stm_write_memory A1 mem_value
-      else if: address = int_lit 2 then stm_write_memory A2 mem_value
-      else if: address = int_lit 3 then stm_write_memory A3 mem_value
-      else     stm_fail _ "read_register: invalid register"
     (* an [int] represents a valid address if it is >= [Memory_lb] and < [Memory_hb] *)
     | in_bounds => ((address = Memory_lb) || (address > Memory_lb)) && (address < Memory_hb)
     | semantics => fun_semantics
@@ -438,9 +424,37 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     | add => x + y
     | add3 => let: "xy" := call add x y in
               call add (exp_var "xy") z
-    | ghost_open_ptstoreg => stm_lit ty_unit tt
-    | ghost_close_ptstoreg => stm_lit ty_unit tt
     end.
+
+  (* MEMORY *)
+  Definition Memory := Z -> option Z.
+
+  Definition fun_rM (μ : Memory) (addr : Lit ty_int) : string + Lit ty_int :=
+    match μ addr with
+    | Some v => inr v
+    | None   => inl "Err [fun_rM]: invalid address"
+    end.
+
+  Definition fun_wM (μ : Memory) (addr val : Lit ty_int) : Memory :=
+    fun addr' => if Z.eqb addr addr' then Some val else μ addr'.
+
+  Inductive CallEx : forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
+  | callex_rM {addr : Z} {γ : RegStore} {μ : Memory} :
+      CallEx rM (env_snoc env_nil (_ , ty_int) addr)
+             (fun_rM μ addr)
+             γ γ μ μ
+  | callex_wM {addr val : Z} {γ : RegStore} {μ : Memory} :
+      CallEx wM (env_snoc (env_snoc env_nil (_ , ty_int) addr) (_ , ty_int) val)
+             (inr tt)
+             γ γ μ (fun_wM μ addr val)
+  | callex_ghost {f γ μ} : CallEx (ghost f) env_nil (inr tt) γ γ μ μ
+  .
+
+  Definition ExternalCall := @CallEx.
+
+  Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+  Proof. destruct f; cbn; repeat depelim args; repeat eexists; constructor. Qed.
 
 End ISAProgramKit.
 Import ISAProgramKit.
@@ -562,8 +576,6 @@ Module ISASymbolicContractKit <:
                 (env_nil ► ty_enum register_tag ↦ term_var "r" ► ty_int ↦ term_var "v_new")))
       | rF => sep_contract_none _
       | wF => sep_contract_none _
-      | rM => sep_contract_none _
-      | wM => sep_contract_none _
       | in_bounds => sep_contract_none _
       | semantics => sep_contract_none _
       | execute_load =>
@@ -613,7 +625,14 @@ Module ISASymbolicContractKit <:
           (term_binop binop_plus (term_binop binop_plus (term_var "x") (term_var "y")) (term_var "z"))
           asn_true
           asn_true
-      | ghost_open_ptstoreg =>
+      end.
+
+  Definition CEnvEx : SepContractEnvEx :=
+    fun Δ τ f =>
+      match f with
+      | rM => sep_contract_none _
+      | wM => sep_contract_none _
+      | ghost open_ptstoreg =>
         @sep_contract_unit
           ctx_nil
           [ "r" ∶ ty_enum register_tag,
@@ -631,7 +650,7 @@ Module ISASymbolicContractKit <:
                                     | RegTag2 => R2 ↦ term_var "v"
                                     | RegTag3 => R3 ↦ term_var "v"
                                     end))
-      | ghost_close_ptstoreg0 =>
+      | ghost close_ptstoreg0 =>
         @sep_contract_unit
           ctx_nil
           [ "v" ∶ ty_int ]
@@ -641,7 +660,7 @@ Module ISASymbolicContractKit <:
              (chunk_pred
                 ptstoreg
                 (env_nil ► ty_enum register_tag ↦ term_enum register_tag RegTag0 ► ty_int ↦ term_var "v")))
-      | ghost_close_ptstoreg1 =>
+      | ghost close_ptstoreg1 =>
         @sep_contract_unit
           ctx_nil
           [ "v" ∶ ty_int ]
@@ -651,7 +670,7 @@ Module ISASymbolicContractKit <:
              (chunk_pred
                 ptstoreg
                 (env_nil ► ty_enum register_tag ↦ term_enum register_tag RegTag1 ► ty_int ↦ term_var "v")))
-      | ghost_close_ptstoreg2 =>
+      | ghost close_ptstoreg2 =>
         @sep_contract_unit
           ctx_nil
           [ "v" ∶ ty_int ]
@@ -661,7 +680,7 @@ Module ISASymbolicContractKit <:
              (chunk_pred
                 ptstoreg
                 (env_nil ► ty_enum register_tag ↦ term_enum register_tag RegTag2 ► ty_int ↦ term_var "v")))
-      | ghost_close_ptstoreg3 =>
+      | ghost close_ptstoreg3 =>
         @sep_contract_unit
           ctx_nil
           [ "v" ∶ ty_int ]
@@ -724,16 +743,9 @@ Proof.
   - intros [].
   - intros [].
   - intros [].
-  - intros [].
-  - intros [].
   - (* TODO: Debug why it doesn't automagically choose false. *)
     exists false; constructor.
   - constructor.
   - constructor.
   - constructor.
-  - admit. (* TODO: Move to external / lemma. *)
-  - admit. (* TODO: Move to external / lemma. *)
-  - admit. (* TODO: Move to external / lemma. *)
-  - admit. (* TODO: Move to external / lemma. *)
-  - admit. (* TODO: Move to external / lemma. *)
-Admitted.
+Qed.

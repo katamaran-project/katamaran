@@ -153,6 +153,8 @@ Module Assertions
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.
+  Definition SepContractEnvEx : Type :=
+    forall Δ τ (f : 𝑭𝑿 Δ τ), SepContract Δ τ.
 
 End Assertions.
 
@@ -165,7 +167,8 @@ Module Type SymbolicContractKit
   Module ASS := Assertions typekit termkit progkit assertkit.
   Export ASS.
 
-  Parameter Inline CEnv : SepContractEnv.
+  Parameter Inline CEnv   : SepContractEnv.
+  Parameter Inline CEnvEx : SepContractEnvEx.
 
 End SymbolicContractKit.
 
@@ -763,6 +766,29 @@ Module SymbolicContracts
 
     (* TODO: The code should be rewritten so this variable can be removed. *)
     Parameter dummy : 𝑺.
+
+    Definition mutator_call {Σ Γ Δ τ} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) : Mutator Σ Γ Γ (Term Σ τ) :=
+      match contract with
+      | @sep_contract_unit _ Σe δ req ens =>
+        mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 =>
+        mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 =>
+        match ghost_env_to_option_sub L2 with
+        | Some ζ => mutator_produce ζ ens *>
+                    mutator_pure (term_lit ty_unit tt)
+        | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition"
+        end
+      | @sep_contract_result_pure _ Σe τ δ result req ens =>
+        mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 =>
+        mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 =>
+        match ghost_env_to_option_sub L2 with
+        | Some ζ => mutator_produce ζ ens *>
+                    mutator_pure (sub_term ζ result)
+        | None   => mutator_contradiction "Err [mutator_exec]: uninstantiated variables after consuming precondition"
+        end
+      | @sep_contract_result _ _ Σ' δ result req ens => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none_result function not implemented"
+      | sep_contract_none _ => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none function"
+      end.
+
     Fixpoint mutator_exec {Σ Γ σ} (s : Stm Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
       match s with
       | stm_lit τ l => mutator_pure (term_lit τ l)
@@ -779,28 +805,8 @@ Module SymbolicContracts
       | stm_assign x e => mutator_exec e >>= fun v =>
         mutator_modify_local (fun δ => δ ⟪ x ↦ v ⟫)%env *>
         mutator_pure v
-      | stm_call f es =>
-        mutator_eval_exps es >>= fun ts : NamedEnv (Term Σ) _ =>
-        match CEnv f with
-        | @sep_contract_unit _ Σe δ req ens =>
-          mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 =>
-          mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 =>
-          match ghost_env_to_option_sub L2 with
-          | Some ζ => mutator_produce ζ ens *>
-                      mutator_pure (term_lit ty_unit tt)
-          | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition"
-          end
-        | @sep_contract_result_pure _ Σe τ δ result req ens =>
-          mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 =>
-          mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 =>
-          match ghost_env_to_option_sub L2 with
-          | Some ζ => mutator_produce ζ ens *>
-                      mutator_pure (sub_term ζ result)
-          | None   => mutator_contradiction "Err [mutator_exec]: uninstantiated variables after consuming precondition"
-          end
-        | @sep_contract_result _ _ Σ' δ result req ens => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none_result function not implemented"
-        | sep_contract_none _ => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none function"
-        end
+      | stm_call f es => mutator_eval_exps es >>= mutator_call (CEnv f)
+      | stm_callex f es => mutator_eval_exps es >>= mutator_call (CEnvEx f)
       | stm_call' Δ δ' τ s =>
         mutator_get_local                                      >>= fun δ =>
         mutator_put_local (env_map (fun _ => term_lit _) δ') >>= fun _ =>
@@ -848,8 +854,6 @@ Module SymbolicContracts
         mutator_produce_chunk (chunk_ptsreg reg v) *>
         mutator_pure v
       | stm_bind s k => mutator_fail "Err [mutator_exec]: stm_bind not implemented"
-      | stm_read_memory _ => mutator_fail "Err [mutator_exec]: stm_read_memory not implemented"
-      | stm_write_memory _ _ => mutator_fail "Err [mutator_exec]: stm_write_memory not implemented"
       end.
 
     Definition mutator_leakcheck {Σ Γ} : Mutator Σ Γ Γ unit :=
