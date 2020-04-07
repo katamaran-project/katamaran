@@ -6,9 +6,9 @@ Class NatDed (A: Type) := mkNatDed {
   andp : A -> A -> A;
   orp : A -> A -> A;
   (* existential quantification *)
-  exp : forall {T : Set}, (T -> A) -> A;
+  exp : forall {T : Type}, (T -> A) -> A;
   (* universal quantification *)
-  allp : forall {T : Set}, (T -> A) -> A;
+  allp : forall {T : Type}, (T -> A) -> A;
   imp : A -> A -> A;
 
   (* Prop embedding *)
