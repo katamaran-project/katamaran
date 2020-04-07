@@ -191,14 +191,9 @@ Module Soundness
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
-      change (eval e δ) with v in H2.
-      revert H2. generalize v. clear v. revert δ γ.
-      revert POST. clear.
-      admit.
     - wlp_sound_solve.
     - wlp_sound_solve.
     - wlp_sound_solve.
-  Abort.
-  (* Qed. *)
+  Qed.
 
 End Soundness.

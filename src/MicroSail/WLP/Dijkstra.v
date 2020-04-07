@@ -91,8 +91,8 @@ Section WithGIL.
     bind get_local (fun δ => put_local (f δ)).
   Definition get_global {Γ} : DST G L Γ Γ G :=
     fun k δ γ => k γ δ γ.
-  Definition put_global {Γ} (γ' : G) : DST G L Γ Γ unit :=
-    fun k δ γ' => k tt δ γ'.
+  Definition put_global {Γ} (γ : G) : DST G L Γ Γ unit :=
+    fun k δ _ => k tt δ γ.
   Definition modify_global {Γ} (f : G -> G) : DST G L Γ Γ unit :=
     bind get_global (fun γ => put_global (f γ)).
   Definition ifthenelse {Γ1 Γ2 A} (b : bool) (t e : DST G L Γ1 Γ2 A) : DST G L Γ1 Γ2 A :=
