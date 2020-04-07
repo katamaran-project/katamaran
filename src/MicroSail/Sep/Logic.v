@@ -34,9 +34,7 @@ Notation "P '-->' Q" := (imp P Q) (at level 55, right associativity) : logic.
 Notation "P '<-->' Q" := (andp (imp P Q) (imp Q P)) (at level 57, no associativity) : logic.
 Notation "'!!' e" := (prop e) (at level 25) : logic.
 
-Class NatDedAxioms (A : Type) := {
-  isNatDed :> NatDed A;
-
+Class NatDedAxioms (A : Type) {ND : NatDed A} := {
   (* pred_ext : forall P Q, P ⊢ Q -> Q ⊢ P -> *)
   (*                   P = Q; *)
   derives_refl : forall P, P ⊢ P;
@@ -69,24 +67,8 @@ Class NatDedAxioms (A : Type) := {
 (* not_prop_right: forall (P: A) (Q: Prop), (Q -> derives P FF) -> derives P (prop (not Q)) *)
 }.
 
-Instance LiftNatDed (A B : Set) {ND: NatDed B} : NatDed (A -> B) :=
-  { andp := (fun P Q x => andp (P x) (Q x));
-    orp := (fun P Q x => orp (P x) (Q x));
-    exp := (fun {T} (F: T -> A -> B) (a: A) => exp (fun x => F x a));
-    allp := (fun {T} (F: T -> A -> B) (a: A) => allp (fun x => F x a));
-    imp := (fun P Q x => imp (P x) (Q x));
-    prop := (fun P x => prop P);
-    derives := (fun P Q => forall x, derives (P x) (Q x))
-  }.
-
-(* Program Instance LiftNatDedAxioms (A B : Set) {ND : NatDedAxioms B} : NatDedAxioms (A -> B). *)
-(* Next Obligation. *)
-(*   extensionality x. *)
-(*   apply pred_ext; auto. *)
-(* Qed. *)
-(* Admit Obligations. *)
-
-Class SepLog (A : Type) {ND: NatDed A} := mkSepLog {
+Class SepLog (A : Type) := mkSepLog {
+  is_NatDed :> NatDed A;
   emp : A;
   sepcon : A -> A -> A;
   wand : A -> A -> A;
@@ -99,8 +81,8 @@ Notation "P '-✱' Q" := (wand P Q) (at level 60, right associativity) : logic.
 (* Notation "P '-◯' Q" := (ewand P Q) (* Typeset with -\ci5 *) *)
   (* (at level 60, right associativity) : logic. *)
 
-Class SepLogAxioms (A : Type) {ND : NatDedAxioms A} := {
-  is_SepLog :> SepLog A;
+Class SepLogAxioms (A : Type) {SL : SepLog A} := {
+  is_NatDedAxioms :> NatDedAxioms A;
   sepcon_assoc: forall (P Q R : A), (P ✱ Q) ✱ R = P ✱ (Q ✱ R);
   sepcon_comm:  forall (P Q : A), P ✱ Q = Q ✱ P;
   wand_sepcon_adjoint: forall (P Q R : A), (P ✱ Q ⊢ R) <-> (P ⊢ Q -✱ R);
