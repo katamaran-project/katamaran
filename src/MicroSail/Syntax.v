@@ -669,6 +669,14 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     with Alternative (Γ : Ctx (𝑿 * Ty)) : Ty -> Ty -> Type :=
     | alt {σ τ} {Δ : Ctx (𝑿 * Ty)} (p : Pattern Δ σ) (rhs : Stm (ctx_cat Γ Δ) τ) : Alternative Γ σ τ.
 
+    Section TransparentObligations.
+
+      Local Set Transparent Obligations.
+      Derive Signature for Stm.
+      Derive NoConfusionHom for Stm.
+
+    End TransparentObligations.
+
     Definition proj_alt_ext {Γ σ τ} (a : Alternative Γ σ τ) : Ctx (𝑿 * Ty) :=
       match a with @alt _ _ _ Δ _ _ => Δ end.
     Definition proj_alt_pat {Γ σ τ} (a : Alternative Γ σ τ) : Pattern (proj_alt_ext a) σ :=

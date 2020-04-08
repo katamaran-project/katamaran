@@ -155,7 +155,7 @@ Section WithBinding.
   Proof.
     induction Δ; intros; cbn in *.
     - reflexivity.
-    - dependent destruction EΓΔ.
+    - dependent elimination EΓΔ as [env_snoc EΓΔ b db].
       specialize (IHΔ EΓΔ); cbn in *.
       destruct (env_split Δ EΓΔ); now subst.
   Qed.

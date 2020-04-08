@@ -29,6 +29,8 @@
 From Coq Require Import
      Program.Equality
      Strings.String.
+From Equations Require Import
+     Equations.
 From MicroSail Require Import
      Syntax
      Tactics.
@@ -248,7 +250,7 @@ Module SmallStep
   Lemma microsail_stm_primitive_step__complete {Γ σ γ1 γ2 μ1 μ2 δ1 δ2} {s1 s2 : Stm Γ σ} :
     ⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩ -> True.
     intro step. remember s1 as s1'.
-    dependent destruction step;
+    dependent elimination step;
       match goal with
       | [ H: ⟨ _,_,_,_ ⟩ ---> ⟨ _,_,_,_ ⟩ |- _ ] =>
         (* If there is a step hypothesis then this case represents a congruence

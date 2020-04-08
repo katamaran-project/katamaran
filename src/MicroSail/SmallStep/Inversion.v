@@ -29,6 +29,8 @@
 From Coq Require Import
      Program.Equality
      Program.Tactics.
+From Equations Require Import
+     Equations.
 From MicroSail Require Import
      SmallStep.Step
      Syntax.
@@ -50,7 +52,6 @@ Module Inversion
       match goal with
       | [ H: exists t, _ |- _ ] => destruct H
       | [ H: _ /\ _ |- _ ] => destruct H
-      | [ H: existT _ _ _ = existT _ _ _ |- _ ] => dependent destruction H
       | [ H : False |- _ ] => destruct H
       | _ => progress (cbn in *; subst)
       end.
@@ -82,8 +83,16 @@ Module Inversion
       | [ |- ⟨ _, _, _, stm_fail _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ ] => constructor 1
       | [ |- ⟨ _, _, _, stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_let_value
       | [ |- ⟨ _, _, _, stm_let _ _ (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_let_fail
-      | [ |- ⟨ _, _, _, stm_assign _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_value
-      | [ |- ⟨ _, _, _, stm_assign _ (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_fail
+      | [ |- ⟨ _, _, _, stm_let' _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_let'_value
+      | [ |- ⟨ _, _, _, stm_let' _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_let'_fail
+      | [ |- ⟨ _, _, _, stm_seq (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_seq_value
+      | [ |- ⟨ _, _, _, stm_seq (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_seq_fail
+      | [ |- ⟨ _, _, _, stm_call' _ _ _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call'_value
+      | [ |- ⟨ _, _, _, stm_call' _ _ _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call'_fail
+      | [ |- ⟨ _, _, _, stm_assign _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_value
+      | [ |- ⟨ _, _, _, stm_assign _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_fail
+      | [ |- ⟨ _, _, _, stm_bind (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_bind_value
+      | [ |- ⟨ _, _, _, stm_bind (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_bind_fail
       | _ => progress cbn
       end; try eassumption.
 
@@ -91,7 +100,7 @@ Module Inversion
     let step := fresh in
     induction 1 as [|? ? ? ? ? ? ? ? ? ? ? ? step]; intros; subst;
       [ cbn in *; contradiction
-      | inversion step; steps_inversion_inster; steps_inversion_solve
+      | dependent elimination step; steps_inversion_inster; steps_inversion_solve
       ].
 
   Lemma steps_inversion_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
