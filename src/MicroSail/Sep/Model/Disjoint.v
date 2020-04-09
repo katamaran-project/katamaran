@@ -27,6 +27,8 @@ Module Disjoint
 
   Definition Heap : Type := forall σ, 𝑹𝑬𝑮 σ -> option (Lit σ).
 
+  Definition emp : Heap := fun _ _ => None.
+
   Definition HProp (Γ : Ctx (𝑿 * Ty)) := LocalStore Γ -> Heap -> Prop.
 
   Program Instance HProp_NatDed (Γ : Ctx (𝑿 * Ty)) : NatDed (HProp Γ) :=
@@ -62,20 +64,46 @@ Module Disjoint
     wand P Q := fun δ γ => forall γl γr, split γ γl γr -> P δ γl -> Q δ γr
   }.
 
+  (* Solve a heap partitioning goal of form 'split γ γl γr' *)
+  Local Ltac heap_solve_split :=
+      repeat match goal with
+      | [ |- split _ _ _ ] => unfold split in *
+      | [ H : split _ _ _ |- _ ] => unfold split in *
+      | [ |- forall x, _] => intro
+      | [ H : ?P -> _, H' : ?P |- _ ] => specialize (H H')
+      | [ γ : Heap , σ : Ty , r : 𝑹𝑬𝑮 _ |- _ ] => destruct (γ σ r); clear γ
+      | [ H : _ /\ _ |- _ ] => destruct H
+      | [ H : _ \/ _ |- _ ] => destruct H
+      | [ H : Some ?l1 = Some ?l2 |- _ ] => rewrite H
+      | [ |- _ /\ _ ] => split
+      | [ |- _ \/ _ ] => auto
+      end; cbn in *; try congruence.
+
   Lemma split_comm {Γ : Ctx (𝑿 * Ty)} : forall γ γ1 γ2, split γ γ1 γ2 -> split γ γ2 γ1.
+  Proof. heap_solve_split. Qed.
+
+  Lemma split_emp {Γ : Ctx (𝑿 * Ty)} : forall γ γ1, split γ emp γ1 <-> γ = γ1.
   Proof.
-    intros γ γ1 γ2.
-    intros H.
-    unfold split.
-    intros σ r.
-    destruct (H σ r) as [H1 H2].
+    intros γ γ1.
     split.
-    + rewrite or_comm.
-      apply H1.
-    + rewrite H2.
-      destruct (γ1 σ r); destruct (γ2 σ r);
-        destruct H1; congruence.
+    - intros H.
+      extensionality σ. extensionality r.
+      heap_solve_split.
+    - heap_solve_split.
   Qed.
+
+  Lemma split_assoc : forall γ γl γr γll γlr,
+    split γ γl γr -> split γl γll γlr ->
+    exists f, split γ γll f /\ split f γlr γr.
+  Proof.
+    intros γ γl γr γll γlr H_split_1 H_split_2.
+    exists (fun σ r => match γr σ r with
+               | None => γlr σ r
+               | Some x => Some x
+               end).
+    split; heap_solve_split.
+  Qed.
+
 
   (* This lemma is wrong, but I want something like this. Am I trying to reinvent the
      frame rule?.. *)
@@ -98,23 +126,20 @@ Module Disjoint
   Qed.
 
   Lemma sepcon_assoc_forward {Γ : Ctx (𝑿 * Ty)} : forall (P Q R : HProp Γ),
-    forall δ γ, ((P ✱ Q ✱ R) --> P ✱ (Q ✱ R)) δ γ.
+    forall δ γ, ((P ✱ Q ✱ R) --> (P ✱ (Q ✱ R))) δ γ.
   Proof.
     intros P Q R δ γ.
     cbn.
     intros H.
     destruct H as [γl [γr [H_split_1 [H HR]]]].
-    inversion H as [γl' [γr' [H_split_2 [HP HQ]]]].
-    exists γl'. exists γr'.
+    destruct H as [γl' [γr' [H_split_2 [HP HQ]]]].
+    specialize (split_assoc γ γl γr γl' γr' H_split_1 H_split_2) as H_split_3.
+    inversion H_split_3 as [γcomp H_split_comp].
+    exists γl'. exists γcomp.
     split.
-    - unfold split.
-      (* unfold split in H_split_2. *)
-      intros σ r.
-      specialize (H_split_2 σ r).
-      destruct (γl' σ r); destruct (γr' σ r); destruct (γ σ r); destruct (γl σ r);
-      repeat match goal with
-      | [ H : _ /\ _ |- _ ] => destruct H
-      | [ H : _ \/ _ |- _ ] => destruct H
-      | [ H : Some _ = None |- _ ] => discriminate
-      end.
-  Abort.
+    - apply H_split_comp.
+    - split.
+      + apply HP.
+      + exists γr'. exists γr.
+        intuition.
+  Qed.
