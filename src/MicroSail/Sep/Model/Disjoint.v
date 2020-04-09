@@ -104,13 +104,6 @@ Module Disjoint
     split; heap_solve_split.
   Qed.
 
-
-  (* This lemma is wrong, but I want something like this. Am I trying to reinvent the
-     frame rule?.. *)
-  Lemma split_weaken {Γ : Ctx (𝑿 * Ty)} : forall γ γl γr γll γlr,
-      split γ γl γr -> split γl γll γlr -> split γ γll γlr.
-  Abort.
-
   Lemma sepcon_comm_forward (Γ : Ctx (𝑿 * Ty)) : forall (P Q : HProp Γ),
       forall δ γ, (P ✱ Q --> Q ✱ P) δ γ.
   Proof.
