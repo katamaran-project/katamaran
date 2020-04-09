@@ -206,11 +206,12 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
-  | abs :     Fun [ "x" ∶ ty_int               ] ty_int
-  | cmp :     Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] (ty_enum ordering)
-  | gcd :     Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int
-  | gcdloop : Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int
-  | msum :    Fun [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
+  | abs :        Fun [ "x" ∶ ty_int               ] ty_int
+  | cmp :        Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] (ty_enum ordering)
+  | gcd :        Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int
+  | gcdloop :    Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int
+  | msum :       Fun [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
+  | length {σ} : Fun [ "xs" ∶ ty_list σ           ] ty_int
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -258,8 +259,8 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
         | Right => alt _ (pat_var "z") y
         end).
 
-  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ.
-    let pi := eval compute in
+  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+    Eval compute in
     match f in Fun Δ τ return Stm Δ τ with
     | abs => if: lit_int 0 <= x then x else - x
     | cmp => if: x < y then `LT else
@@ -277,8 +278,11 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
              | GT => call gcdloop (x - y) y
              end
     | msum => fun_msum
-    end in exact pi.
-  Defined.
+    | length => stm_match_list
+                  (exp_var "xs")
+                  (stm_lit ty_int 0)
+                  "y" "ys" (let: "n" := call length (exp_var "ys") in stm_exp (exp_lit _ ty_int 1 + exp_var "n"))
+    end.
 
   Definition RegStore := GenericRegStore.
   Definition read_register := generic_read_register.
@@ -389,6 +393,17 @@ Module SepContracts.
                ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
                (fun x y result => result = Z.gcd x y))
         | msum => sep_contract_none _
+        | @length σ =>
+          @sep_contract_result
+            ["xs" ∶ ty_list σ ]
+            ["xs" ∶ ty_list σ ]
+            ty_int
+            [term_var "xs"]%arg
+            "result"
+            asn_true
+            (@asn_prop
+               ["xs" ∶ ty_list σ, "result" ∶ ty_int]
+               (fun xs result => result = Z.of_nat (Datatypes.length xs)))
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
@@ -443,6 +458,10 @@ Module WLPContracts.
                           (fun x y r γ => r = Z.gcd x y)
         | msum       => ContractNone
                           [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
+        | @length σ  => ContractNoFail
+                          ["xs" ∶ ty_list σ ] ty_int
+                          (fun xs γ => True)
+                          (fun xs r γ => r = Z.of_nat (Datatypes.length xs))
         end.
 
     Definition CEnvEx : ContractEnvEx :=
@@ -459,8 +478,8 @@ Module WLPContracts.
 
   Ltac wlp_cbv :=
     cbv [Blastable_𝑬𝑲 CEnv Forall Lit ValidContract WLPCall WLP abstract blast
-                      blastable_lit env_lookup env_map env_update eval evals inctx_case_snoc
-                      snd uncurry eval_prop_true eval_prop_false eval_binop
+                      blastable_lit blastable_list env_lookup env_map env_update eval evals inctx_case_snoc
+                      snd uncurry eval_prop_true eval_prop_false eval_binop Datatypes.length
         ].
 
   Ltac validate_solve :=
