@@ -5,7 +5,7 @@ defaults: &defaults
     - checkout
     - run:
         name: Build project
-        command: eval $(opam env) && make
+        command: eval $(opam env) && make JOBS=2
         no_output_timeout: 1200
 
 jobs:
