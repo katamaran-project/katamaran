@@ -22,7 +22,6 @@ Class ILogic (L : Type) :=
   lall : forall {T : Type}, (T -> L) -> L
  }.
 
-
 Delimit Scope logic with logic.
 Local Open Scope logic.
 Notation "P '⊢' Q" := (lentails P Q) (at level 80, no associativity) : logic_entails.
@@ -38,6 +37,8 @@ Notation "P '<-->' Q" := (land (limpl P Q) (limpl Q P))
   (at level 57, no associativity) : logic.
 Notation "P ⊣⊢ Q" := ((P ⊢ Q) /\ (Q ⊢ P)) (at level 50, no associativity) : logic.
 Notation "'!!' e" := (lprop e) (at level 25) : logic.
+Notation "⊥" := lfalse.
+Notation "⊤" := ltrue.
 
 Class ILogicLaws (L : Type) (LL : ILogic L) :=
 { entails_refl  : forall P, P ⊢ P;
@@ -73,6 +74,8 @@ Class ISepLogicLaws (L : Type) (SL : ISepLogic L) := {
   sepcon_andp_prop: forall (P R : L) (Q : Prop), P ✱ (!!Q ∧ R) ⊣⊢ !!Q ∧ (P ✱ R);
   sepcon_entails: forall P P' Q Q' : L, P ⊢ P' -> Q ⊢ Q' -> P ✱ Q ⊢ P' ✱ Q';
 }.
+
+
 
 Module Type HeapKit
        (Import typekit : TypeKit)
