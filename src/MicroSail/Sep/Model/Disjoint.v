@@ -112,42 +112,55 @@ Module Disjoint
   Qed.
   Hint Resolve split_assoc : seplogic.
 
-  Lemma sepcon_comm : forall (P Q : HProp), P ✱ Q ≅ Q ✱ P.
+  Lemma sepcon_comm : forall (P Q : HProp), P ✱ Q ⊢ Q ✱ P.
   Proof.
-    intros P Q.
-    cbn.
+    intros P Q γ H.
+    destruct H as [γl [γr H]].
+    exists γr. exists γl.
+    destruct H as [H1 [H2 H3]].
     split.
-    - intros.
-      destruct H as [γl [γr H]].
-      exists γr. exists γl.
-      destruct H as [H1 [H2 H3]].
-      split.
-      + apply (@split_comm _ _ _ H1).
-      + firstorder.
-   - admit.
-  Abort.
+    + apply (@split_comm _ _ _ H1).
+    + firstorder.
+  Qed.
+  Hint Resolve sepcon_comm : seplogic.
 
-  Lemma sepcon_assoc_forward : forall (P Q R : HProp), P ✱ Q ✱ R ≅ P ✱ (Q ✱ R).
+  Lemma sepcon_assoc_forward : forall (P Q R : HProp), P ✱ Q ✱ R ⊢ P ✱ (Q ✱ R).
   Proof.
     cbn.
-    intros P Q R.
+    intros P Q R γ H.
+    destruct H as [γl [γr [H_split_1 [H HR]]]].
+    destruct H as [γl' [γr' [H_split_2 [HP HQ]]]].
+    specialize (split_assoc γ γl γr γl' γr' H_split_1 H_split_2) as H_split_3.
+    inversion H_split_3 as [γcomp H_split_comp].
+    exists γl'. exists γcomp.
     split.
-    - intros γ.
-      cbn.
-      intros H.
-      destruct H as [γl [γr [H_split_1 [H HR]]]].
-      destruct H as [γl' [γr' [H_split_2 [HP HQ]]]].
-      specialize (split_assoc γ γl γr γl' γr' H_split_1 H_split_2) as H_split_3.
-      inversion H_split_3 as [γcomp H_split_comp].
-      exists γl'. exists γcomp.
-      split.
-      * apply H_split_comp.
-      * split.
-        + apply HP.
-        + exists γr'. exists γr.
-          intuition.
-    - admit.
-  Abort.
+    * apply H_split_comp.
+    * split.
+    + apply HP.
+    + exists γr'. exists γr.
+      intuition.
+  Qed.
+  Hint Resolve sepcon_assoc_forward : seplogic.
+
+  Lemma sepcon_assoc_backward : forall (P Q R : HProp), P ✱ (Q ✱ R) ⊢ P ✱ Q ✱ R.
+  Proof.
+    intros P Q R γ H.
+    cbn in *.
+    destruct H as [γl [γr [H_split_1 [HP H]]]].
+    destruct H as [γrl [γrr [H_split_2 [HQ HR]]]].
+    specialize (split_comm _ _ _ H_split_1) as H_split_1'.
+    specialize (split_comm _ _ _ H_split_2) as H_split_2'.
+    specialize (split_assoc γ γr γl γrr γrl H_split_1' H_split_2') as H_split_3.
+    destruct H_split_3 as [γcomp H_split_comp].
+    exists γcomp, γrr.
+    split.
+    - intuition.
+    - split.
+      + exists γl, γrl.
+        intuition.
+      + intuition.
+  Qed.
+  Hint Resolve sepcon_assoc_backward : seplogic.
 
   Lemma wand_sepcon_adjoint : forall (P Q R : HProp),
       (P ✱ Q ⊢ R) <-> (P ⊢ Q -✱ R).
@@ -164,11 +177,54 @@ Module Disjoint
     - intros H.
       cbn in *.
       intros γl H1.
-      (* specialize (H δ γl). *)
       destruct H1 as [γll [γlr [H_split [HP HQ]]]].
       exact (H γll HP γl γlr H_split HQ).
   Qed.
+  Hint Resolve wand_sepcon_adjoint : seplogic.
 
-Lemma sepcon_andp_prop : forall (P R : HProp) (Q : Prop),
-      (P ✱ (!!Q ∧ R)) ≅ (!!Q ∧ (P ✱ R)).
-Abort.
+  Lemma sepcon_andp_prop_forward : forall (P R : HProp) (Q : Prop),
+      (P ✱ (!!Q ∧ R)) ⊢ (!!Q ∧ (P ✱ R)).
+  Proof.
+    intros P R Q γ H.
+    destruct H as [γl [γr [H_split [HP [HQ HR]]]]].
+    split.
+    - intuition.
+    - cbn.
+      exists γl. exists γr.
+      intuition.
+  Qed.
+  Hint Resolve sepcon_andp_prop_forward : seplogic.
+
+  Lemma sepcon_andp_prop_backward : forall (P R : HProp) (Q : Prop),
+      (!!Q ∧ (P ✱ R)) ⊢ (P ✱ (!!Q ∧ R)).
+  Proof.
+    intros P R Q γ H.
+    cbn in *.
+    destruct H as [HQ [γl [γr [H_split [HP HR]]]]].
+    exists γl, γr.
+    split; intuition.
+  Qed.
+  Hint Resolve sepcon_andp_prop_backward : seplogic.
+
+  Lemma sepcon_entails: forall (P P' Q Q' : HProp),
+      P ⊢ P' -> Q ⊢ Q' -> P ✱ Q ⊢ P' ✱ Q'.
+  Proof.
+    intros P P' Q Q' H1 H2 γ H3.
+    cbn in *.
+    destruct H3 as [γl [γr [H_split [HP HQ]]]].
+    exists γl, γr.
+    intuition.
+  Qed.
+  Hint Resolve sepcon_entails : seplogic.
+
+  Program Instance HProp_ISepLogicLaws : ISepLogicLaws HProp (HProp_ISepLogic).
+  Solve Obligations with eauto with seplogic.
+
+  Instance HProp_Heaplet : IHeaplet HProp :=
+  { (* We don't have any predicates in this model yet;
+       thus we map the predicate to False *)
+    pred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) := fun γ => False;
+    ptsreg (σ : Ty) (r : 𝑹𝑬𝑮 σ) (t : Lit σ) := fun γ => γ σ r = Some t
+  }.
+
+End Disjoint.

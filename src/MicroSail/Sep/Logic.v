@@ -36,7 +36,7 @@ Infix "∧" := land (at level 40, left associativity) : logic.
 Notation "P '-->' Q" := (limpl P Q) (at level 55, right associativity) : logic.
 Notation "P '<-->' Q" := (land (limpl P Q) (limpl Q P))
   (at level 57, no associativity) : logic.
-Notation "P ≅ Q" := ((P ⊢ Q) /\ (Q ⊢ P)) (at level 50, no associativity) : logic.
+Notation "P ⊣⊢ Q" := ((P ⊢ Q) /\ (Q ⊢ P)) (at level 50, no associativity) : logic.
 Notation "'!!' e" := (lprop e) (at level 25) : logic.
 
 Class ILogicLaws (L : Type) (LL : ILogic L) :=
@@ -67,10 +67,10 @@ Notation "P '-✱' Q" := (wand P Q) (at level 60, right associativity) : logic.
 
 Class ISepLogicLaws (L : Type) (SL : ISepLogic L) := {
   is_ILogicLaws :> ILogicLaws L is_ILogic;
-  sepcon_assoc: forall (P Q R : L), ((P ✱ Q) ✱ R) ≅ (P ✱ (Q ✱ R));
-  sepcon_comm:  forall (P Q : L), P ✱ Q ≅ Q ✱ P;
+  sepcon_assoc: forall (P Q R : L), ((P ✱ Q) ✱ R) ⊣⊢ (P ✱ (Q ✱ R));
+  sepcon_comm:  forall (P Q : L), P ✱ Q ⊣⊢ Q ✱ P;
   wand_sepcon_adjoint: forall (P Q R : L), (P ✱ Q ⊢ R) <-> (P ⊢ Q -✱ R);
-  sepcon_andp_prop: forall (P R : L) (Q : Prop), P ✱ (!!Q ∧ R) ≅ !!Q ∧ (P ✱ R);
+  sepcon_andp_prop: forall (P R : L) (Q : Prop), P ✱ (!!Q ∧ R) ⊣⊢ !!Q ∧ (P ✱ R);
   sepcon_entails: forall P P' Q Q' : L, P ⊢ P' -> Q ⊢ Q' -> P ✱ Q ⊢ P' ✱ Q';
 }.
 
@@ -80,10 +80,10 @@ Module Type HeapKit
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit).
 
-  Class Heaplet (L : Type) := {
+  Class IHeaplet (L : Type) := {
     is_ISepLogic :> ISepLogic L;
-    pred : forall (p : 𝑷) (ts : Env Lit (𝑷_Ty p)), L;
-    ptsreg : forall {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ), L
+    pred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L;
+    ptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L
   }.
 
 Notation "r '↦' t" := (ptsreg r t) (at level 30).
