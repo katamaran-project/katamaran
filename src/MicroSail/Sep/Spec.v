@@ -98,37 +98,40 @@ Module Assertions
   (*   | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a) *)
   (*   end. *)
 
-  Definition SymbolicLocalStore (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type := NamedEnv (Term Σ) Γ.
+  Definition SymbolicLocalStore (Γ : Ctx (𝑿 * Ty)) (Σ : Ctx (𝑺 * Ty)) : Type :=
+    NamedEnv (Term Σ) Γ.
   Bind Scope env_scope with SymbolicLocalStore.
   (* Definition SymbolicRegStore (Σ : Ctx (𝑺 * Ty))  : Type := forall σ, 𝑹𝑬𝑮 σ -> Term Σ σ. *)
 
-  Fixpoint symbolic_eval_exp {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : SymbolicLocalStore Σ Γ) : Term Σ σ :=
-    match e in (Exp _ t) return (Term Σ t) with
-    | exp_var ς                       => (δ ‼ ς)%lit
-    | exp_lit _ σ l                   => term_lit σ l
-    | exp_binop op e1 e2              => term_binop op (symbolic_eval_exp e1 δ) (symbolic_eval_exp e2 δ)
-    | exp_neg e0                      => term_neg (symbolic_eval_exp e0 δ)
-    | exp_not e0                      => term_not (symbolic_eval_exp e0 δ)
-    | @exp_inl _ σ1 σ2 e0             => @term_inl _ σ1 σ2 (symbolic_eval_exp e0 δ)
-    | @exp_inr _ σ1 σ2 e0             => @term_inr _ σ1 σ2 (symbolic_eval_exp e0 δ)
-    | @exp_list _ σ0 es               => term_list (List.map (fun e => symbolic_eval_exp e δ) es)
-    | @exp_tuple _ σs es              => @term_tuple _ σs (env_map (fun _ e => symbolic_eval_exp e δ) es)
-    | @exp_projtup _ σs e0 n σ0 p     => @term_projtup _ σs (symbolic_eval_exp e0 δ) n σ0 p
-    | @exp_union _ T K e0             => @term_union _ T K (symbolic_eval_exp e0 δ)
-    | exp_record R es                 => term_record R (env_map (fun _ e => symbolic_eval_exp e δ) es)
-    | @exp_projrec _ R e0 rf σ0 rfInR => @term_projrec _ R (symbolic_eval_exp e0 δ) rf σ0 rfInR
-    end.
+  Definition symbolic_eval_exp {Γ Σ} (δ : SymbolicLocalStore Γ Σ) :
+    forall {σ} (e : Exp Γ σ), Term Σ σ :=
+    fix symbolic_eval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
+      match e with
+      | exp_var ς                => (δ ‼ ς)%lit
+      | exp_lit _ σ l            => term_lit σ l
+      | exp_binop op e1 e2       => term_binop op (symbolic_eval_exp e1) (symbolic_eval_exp e2)
+      | exp_neg e                => term_neg (symbolic_eval_exp e)
+      | exp_not e                => term_not (symbolic_eval_exp e)
+      | exp_inl e                => term_inl (symbolic_eval_exp e)
+      | exp_inr e                => term_inr (symbolic_eval_exp e)
+      | exp_list es              => term_list (List.map symbolic_eval_exp es)
+      | exp_tuple es             => term_tuple (env_map (@symbolic_eval_exp) es)
+      | @exp_projtup _ _ e n _ p => term_projtup (symbolic_eval_exp e) n (p := p)
+      | exp_union E K e          => term_union E K (symbolic_eval_exp e)
+      | exp_record R es          => term_record R (env_map (fun _ => symbolic_eval_exp) es)
+      | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf
+      end.
 
   Inductive SepContract (Δ : Ctx (𝑿 * Ty)) : Ty -> Type :=
   | sep_contract_unit   {Σ}
-    (δ : SymbolicLocalStore Σ Δ)
+    (δ : SymbolicLocalStore Δ Σ)
     (req : Assertion Σ) (ens : Assertion Σ) : SepContract Δ ty_unit
   | sep_contract_result_pure {Σ τ}
-    (δ : SymbolicLocalStore Σ Δ)
+    (δ : SymbolicLocalStore Δ Σ)
     (result : Term Σ τ)
     (req : Assertion Σ) (ens : Assertion Σ) : SepContract Δ τ
   | sep_contract_result {Σ τ}
-    (δ : SymbolicLocalStore Σ Δ) (result : 𝑺)
+    (δ : SymbolicLocalStore Δ Σ) (result : 𝑺)
     (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ))) : SepContract Δ τ
   | sep_contract_none {τ} : SepContract Δ τ.
 

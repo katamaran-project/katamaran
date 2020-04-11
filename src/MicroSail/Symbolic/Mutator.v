@@ -108,15 +108,15 @@ Module Mutators
       | formula_neq t1 t2 => formula_neq (sub_term ζ t1) (sub_term ζ t2)
       end.
 
-  Global Instance sub_localstore {Γ} : Subst (fun Σ => SymbolicLocalStore Σ Γ) :=
+  Global Instance sub_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
     fun Σ1 Σ2 ζ => env_map (fun _ => sub_term ζ).
 
   Section SymbolicState.
 
-    Record SymbolicState (Σ : Ctx (𝑺 * Ty)) (Γ : Ctx (𝑿 * Ty)) : Type :=
+    Record SymbolicState (Γ : Ctx (𝑿 * Ty)) (Σ : Ctx (𝑺 * Ty)) : Type :=
       MkSymbolicState
         { symbolicstate_pathcondition : PathCondition Σ;
-          symbolicstate_localstore    : SymbolicLocalStore Σ Γ;
+          symbolicstate_localstore    : SymbolicLocalStore Γ Σ;
           symbolicstate_heap          : SymbolicHeap Σ
         }.
     Global Arguments symbolicstate_pathcondition {_ _} _.
@@ -126,19 +126,19 @@ Module Mutators
     Definition symbolicstate_initial {Γ Σ} (δ : SymbolicLocalStore Γ Σ) : SymbolicState Γ Σ :=
       MkSymbolicState nil δ nil.
 
-    Global Instance sub_symbolicstate {Γ} : Subst (fun Σ => SymbolicState Σ Γ) :=
+    Global Instance sub_symbolicstate {Γ} : Subst (SymbolicState Γ) :=
       fun Σ1 Σ2 ζ '(MkSymbolicState Φ ŝ ĥ) =>
         MkSymbolicState (subst ζ Φ) (subst ζ ŝ) (subst ζ ĥ).
 
-    Definition symbolic_assume_formula {Σ Γ} (fml : Formula Σ) : SymbolicState Σ Γ -> SymbolicState Σ Γ :=
+    Definition symbolic_assume_formula {Γ Σ} (fml : Formula Σ) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (fml :: Φ) ŝ ĥ.
-    Definition symbolic_assume_exp {Σ Γ} (e : Exp Γ ty_bool) : SymbolicState Σ Γ -> SymbolicState Σ Γ :=
-      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (formula_bool (symbolic_eval_exp e ŝ) :: Φ) ŝ ĥ.
-    Definition symbolic_push_local {Σ Γ x} σ (v : Term Σ σ) : SymbolicState Σ Γ -> SymbolicState Σ (Γ ▻ (x , σ)) :=
+    Definition symbolic_assume_exp {Γ Σ} (e : Exp Γ ty_bool) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
+      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (formula_bool (symbolic_eval_exp ŝ e) :: Φ) ŝ ĥ.
+    Definition symbolic_push_local {Γ x σ Σ} (v : Term Σ σ) : SymbolicState Γ Σ -> SymbolicState (Γ ▻ (x , σ)) Σ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState Φ (env_snoc ŝ (x , σ) v) ĥ.
-    Definition symbolic_pop_local {Σ Γ x σ} : SymbolicState Σ (Γ ▻ (x , σ)) -> SymbolicState Σ Γ :=
+    Definition symbolic_pop_local {Γ x σ Σ} : SymbolicState (Γ ▻ (x , σ)) Σ -> SymbolicState Γ Σ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState Φ (env_tail ŝ) ĥ.
-    Definition wk1_symbolicstate {Σ Γ b} : SymbolicState Σ Γ -> SymbolicState (Σ ▻ b) Γ :=
+    Definition wk1_symbolicstate {Γ b Σ} : SymbolicState Γ Σ -> SymbolicState Γ (Σ ▻ b) :=
       subst sub_wk1.
 
   End SymbolicState.
@@ -329,13 +329,13 @@ Module Mutators
   Section Mutator.
 
     Definition Mutator (Σ : Ctx (𝑺 * Ty)) (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Type) : Type :=
-      SymbolicState Σ Γ1 -> Outcome (A * SymbolicState Σ Γ2 * list Obligation).
+      SymbolicState Γ1 Σ -> Outcome (A * SymbolicState Γ2 Σ * list Obligation).
     Bind Scope mutator_scope with Mutator.
 
-    Definition mutator_demonic {Σ : Ctx (𝑺 * Ty)} {Γ1 Γ2 : Ctx (𝑿 * Ty)} {I : Type} {A : Type} (ms : I -> Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
-      fun (s : SymbolicState Σ Γ1) => (⨂ i : I => ms i s)%out.
-    Definition mutator_angelic {Σ : Ctx (𝑺 * Ty)} {Γ1 Γ2 : Ctx (𝑿 * Ty)} {I : Type} {A : Type} (ms : I -> Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
-      fun (s : SymbolicState Σ Γ1) => (⨁ i : I => ms i s)%out.
+    Definition mutator_demonic {Γ1 Γ2 I A Σ} (ms : I -> Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
+      fun (s : SymbolicState Γ1 Σ) => (⨂ i : I => ms i s)%out.
+    Definition mutator_angelic {Γ1 Γ2 I A Σ} (ms : I -> Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
+      fun (s : SymbolicState Γ1 Σ) => (⨁ i : I => ms i s)%out.
     (* There are two kinds of failures of the symbolic execution. mutator_fail
        is an unconditional fail: the current branch of choices is deemed invalid
        and the executor should backtrack. mutator_contradiction is more liberal.
@@ -346,44 +346,39 @@ Module Mutators
        mutator_fail, because it allows for pruning of branches. Change to
        mutator_contradiction if you're convinced that you require it for a
        completeness issue. *)
-    Definition mutator_fail {Σ Γ1 Γ2} {A : Type} (msg : string) : Mutator Σ Γ1 Γ2 A :=
+    Definition mutator_fail {Γ1 Γ2 A Σ} (msg : string) : Mutator Σ Γ1 Γ2 A :=
       fun s => outcome_fail msg.
-    Definition mutator_contradiction {Σ Γ1 Γ2} {A : Type} (msg : string) : Mutator Σ Γ1 Γ2 A :=
+    Definition mutator_contradiction {Γ1 Γ2 A Σ} (msg : string) : Mutator Σ Γ1 Γ2 A :=
       fun s =>
         (⨂ δ : NamedEnv Lit Σ =>
          ⨂ _ : List.Forall (interpret_formula δ) (symbolicstate_pathcondition s) =>
          outcome_fail msg)%out.
-    Definition mutator_block {Σ Γ1 Γ2} {A : Type} : Mutator Σ Γ1 Γ2 A :=
+    Definition mutator_block {Γ1 Γ2 A Σ} : Mutator Σ Γ1 Γ2 A :=
       fun s => outcome_block.
 
-    Definition mutator_demonic_binary {Σ Γ1 Γ2 A} (m1 m2 : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
+    Definition mutator_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
       mutator_demonic (fun b : bool => if b then m1 else m2).
-    Definition mutator_angelic_binary {Σ Γ1 Γ2 A} (m1 m2 : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
+    Definition mutator_angelic_binary {Γ1 Γ2 A Σ} (m1 m2 : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
       fun s => outcome_angelic_binary (m1 s) (m2 s).
 
-    Definition mutator_pure {Σ Γ A} (a : A) : Mutator Σ Γ Γ A :=
+    Definition mutator_pure {Γ A Σ} (a : A) : Mutator Σ Γ Γ A :=
       fun s => outcome_pure (a, s, nil).
-    Definition mutator_bind {Σ Γ1 Γ2 Γ3 A B} (ma : Mutator Σ Γ1 Γ2 A) (f : A -> Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
+    Definition mutator_bind {Γ1 Γ2 Γ3 A B Σ} (ma : Mutator Σ Γ1 Γ2 A) (f : A -> Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
       fun s0 => outcome_bind (ma s0) (fun '(a , s1 , w1) => outcome_bind (f a s1) (fun '(b , s2 , w2) => outcome_pure (b , s2 , w1 ++ w2))).
-    Definition mutator_bind_right {Σ Γ1 Γ2 Γ3 A B} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
+    Definition mutator_bind_right {Γ1 Γ2 Γ3 A B Σ} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
       mutator_bind ma (fun _ => mb).
-    Definition mutator_bind_left {Σ Γ1 Γ2 Γ3 A B} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 A :=
+    Definition mutator_bind_left {Γ1 Γ2 Γ3 A B Σ} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 A :=
       mutator_bind ma (fun a => mutator_bind mb (fun _ => mutator_pure a)).
-    Definition mutator_map {Σ Γ1 Γ2 A B} (f : A -> B) (ma : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 B :=
+    Definition mutator_map {Γ1 Γ2 A B Σ} (f : A -> B) (ma : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 B :=
       mutator_bind ma (fun a => mutator_pure (f a)).
-
-    Section AngelicList.
-      Context {Σ : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)} {A : Type}.
-      Variable (msg : string).
-
-      Fixpoint mutator_angelic_list (xs : list A)  {struct xs} : Mutator Σ Γ Γ A :=
+    Definition mutator_angelic_list {Γ A Σ} (msg : string) :
+      list A -> Mutator Σ Γ Γ A :=
+      fix mutator_angelic_list (xs : list A) :=
         match xs with
         | []      => mutator_contradiction msg
         | x :: [] => mutator_pure x
         | x :: xs => mutator_angelic_binary (mutator_pure x) (mutator_angelic_list xs)
         end.
-
-    End AngelicList.
 
     Global Arguments mutator_bind {_ _ _ _ _ _} _ _ /.
     Global Arguments mutator_bind_right {_ _ _ _ _ _} _ _ /.
@@ -417,38 +412,38 @@ Module Mutators
 
     Local Open Scope mutator_scope.
 
-    Definition mutator_get {Σ Γ} : Mutator Σ Γ Γ (SymbolicState Σ Γ) :=
+    Definition mutator_get {Γ Σ} : Mutator Σ Γ Γ (SymbolicState Γ Σ) :=
       fun s => outcome_pure (s , s , nil).
-    Definition mutator_put {Σ Γ Γ'} (s : SymbolicState Σ Γ') : Mutator Σ Γ Γ' unit :=
+    Definition mutator_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : Mutator Σ Γ Γ' unit :=
       fun _ => outcome_pure (tt , s, nil).
-    Definition mutator_modify {Σ Γ Γ'} (f : SymbolicState Σ Γ -> SymbolicState Σ Γ') : Mutator Σ Γ Γ' unit :=
+    Definition mutator_modify {Γ Γ' Σ} (f : SymbolicState Γ Σ -> SymbolicState Γ' Σ) : Mutator Σ Γ Γ' unit :=
       mutator_get >>= fun δ => mutator_put (f δ).
-    Definition mutator_get_local {Σ Γ} : Mutator Σ Γ Γ (SymbolicLocalStore Σ Γ) :=
+    Definition mutator_get_local {Γ Σ} : Mutator Σ Γ Γ (SymbolicLocalStore Γ Σ) :=
       fun s => outcome_pure (symbolicstate_localstore s , s , nil).
-    Definition mutator_put_local {Σ Γ Γ'} (δ' : SymbolicLocalStore Σ Γ') : Mutator Σ Γ Γ' unit :=
+    Definition mutator_put_local {Γ Γ' Σ} (δ' : SymbolicLocalStore Γ' Σ) : Mutator Σ Γ Γ' unit :=
       fun '(MkSymbolicState Φ _ ĥ) => outcome_pure (tt , MkSymbolicState Φ δ' ĥ , nil).
-    Definition mutator_modify_local {Σ Γ Γ'} (f : SymbolicLocalStore Σ Γ -> SymbolicLocalStore Σ Γ') : Mutator Σ Γ Γ' unit :=
+    Definition mutator_modify_local {Γ Γ' Σ} (f : SymbolicLocalStore Γ Σ -> SymbolicLocalStore Γ' Σ) : Mutator Σ Γ Γ' unit :=
       mutator_get_local >>= fun δ => mutator_put_local (f δ).
-    Definition mutator_pop_local {Σ Γ x σ} : Mutator Σ (Γ ▻ (x , σ)) Γ unit :=
+    Definition mutator_pop_local {Γ x σ Σ} : Mutator Σ (Γ ▻ (x , σ)) Γ unit :=
       mutator_modify_local (fun δ => env_tail δ).
-    Definition mutator_pops_local {Σ Γ} Δ : Mutator Σ (Γ ▻▻ Δ) Γ unit :=
+    Definition mutator_pops_local {Γ Σ} Δ : Mutator Σ (Γ ▻▻ Δ) Γ unit :=
       mutator_modify_local (fun δΓΔ => env_drop Δ δΓΔ).
     Definition mutator_push_local {Γ x σ Σ} (t : Term Σ σ) : Mutator Σ Γ (Γ ▻ (x , σ)) unit :=
       mutator_modify_local (fun δ => env_snoc δ (x , σ) t).
-    Definition mutator_pushs_local {Σ Γ Δ} (δΔ : NamedEnv (Term Σ) Δ) : Mutator Σ Γ (Γ ▻▻ Δ) unit :=
+    Definition mutator_pushs_local {Γ Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) : Mutator Σ Γ (Γ ▻▻ Δ) unit :=
       mutator_modify_local (fun δΓ => env_cat δΓ δΔ).
 
-    Definition mutator_get_heap {Σ Γ} : Mutator Σ Γ Γ (SymbolicHeap Σ) :=
+    Definition mutator_get_heap {Γ Σ} : Mutator Σ Γ Γ (SymbolicHeap Σ) :=
       mutator_map symbolicstate_heap mutator_get.
-    Definition mutator_put_heap {Σ Γ} (h : SymbolicHeap Σ) : Mutator Σ Γ Γ unit :=
+    Definition mutator_put_heap {Γ Σ} (h : SymbolicHeap Σ) : Mutator Σ Γ Γ unit :=
       fun '(MkSymbolicState Φ δ _) => outcome_pure (tt , MkSymbolicState Φ δ h , nil).
-    Definition mutator_modify_heap {Σ Γ} (f : SymbolicHeap Σ -> SymbolicHeap Σ) : Mutator Σ Γ Γ unit :=
+    Definition mutator_modify_heap {Γ Σ} (f : SymbolicHeap Σ -> SymbolicHeap Σ) : Mutator Σ Γ Γ unit :=
       mutator_modify (fun '(MkSymbolicState Φ δ h) => MkSymbolicState Φ δ (f h)).
 
-    Definition mutator_eval_exp {Σ Γ σ} (e : Exp Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
-      mutator_get_local >>= fun δ => mutator_pure (symbolic_eval_exp e δ).
-    Definition mutator_eval_exps {Σ Γ} {σs : Ctx (𝑿 * Ty)} (es : NamedEnv (Exp Γ) σs) : Mutator Σ Γ Γ (NamedEnv (Term Σ) σs) :=
-      mutator_get_local >>= fun δ => mutator_pure (env_map (fun _ e => symbolic_eval_exp e δ) es).
+    Definition mutator_eval_exp {Γ σ Σ} (e : Exp Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
+      mutator_get_local >>= fun δ => mutator_pure (symbolic_eval_exp δ e).
+    Definition mutator_eval_exps {Γ Σ} {σs : Ctx (𝑿 * Ty)} (es : NamedEnv (Exp Γ) σs) : Mutator Σ Γ Γ (NamedEnv (Term Σ) σs) :=
+      mutator_get_local >>= fun δ => mutator_pure (env_map (fun _ => symbolic_eval_exp δ) es).
 
     Definition mutator_assume_formula {Γ Σ} (fml : Formula Σ) : Mutator Σ Γ Γ unit :=
       match try_solve_formula fml with
@@ -456,7 +451,7 @@ Module Mutators
       | Some false => mutator_block
       | None       => mutator_modify (symbolic_assume_formula fml)
       end.
-    (* Definition mutator_assume_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit := *)
+    (* Definition mutator_assume_formula {Γ Σ} (fml : Formula Σ) : Mutator Σ Γ Γ unit := *)
     (*   mutator_modify (symbolic_assume_formula fml). *)
     Definition mutator_assume_term {Γ Σ} (t : Term Σ ty_bool) : Mutator Σ Γ Γ unit :=
       mutator_assume_formula (formula_bool t).
@@ -474,12 +469,12 @@ Module Mutators
         (fun fml m => mutator_assert_formula fml ;; m)
         (mutator_pure tt)
         fmls.
-    (* Definition mutator_assert_formula {Σ Γ} (fml : Formula Σ) : Mutator Σ Γ Γ unit := *)
+    (* Definition mutator_assert_formula {Γ Σ} (fml : Formula Σ) : Mutator Σ Γ Γ unit := *)
     (*   fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil). *)
 
-    Definition mutator_assert_term {Σ Γ} (t : Term Σ ty_bool) : Mutator Σ Γ Γ unit :=
+    Definition mutator_assert_term {Γ Σ} (t : Term Σ ty_bool) : Mutator Σ Γ Γ unit :=
       mutator_assert_formula (formula_bool t).
-    Definition mutator_assert_exp {Σ Γ} (e : Exp Γ ty_bool) : Mutator Σ Γ Γ unit :=
+    Definition mutator_assert_exp {Γ Σ} (e : Exp Γ ty_bool) : Mutator Σ Γ Γ unit :=
       mutator_eval_exp e >>= mutator_assert_term.
 
     Definition mutator_produce_chunk {Γ Σ} (c : Chunk Σ) : Mutator Σ Γ Γ unit :=
@@ -513,7 +508,7 @@ Module Mutators
       | c :: h => (c , h) :: map (fun '(c', h') => (c' , c :: h')) (heap_extractions h)
       end.
 
-    Equations(noeqns) mutator_chunk_eqb {Σ Γ} (c1 c2 : Chunk Σ) : Mutator Σ Γ Γ unit :=
+    Equations(noeqns) mutator_chunk_eqb {Γ Σ} (c1 c2 : Chunk Σ) : Mutator Σ Γ Γ unit :=
       mutator_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2)
       with 𝑷_eq_dec p1 p2 => {
         mutator_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) :=
@@ -546,7 +541,7 @@ Module Mutators
     Global Arguments mutator_produce_chunk {Γ} [Σ] _.
     Global Arguments mutator_consume_chunk {Γ} [Σ] _.
 
-    Fixpoint mutator_produce {Σ Σ' Γ} (ζ : Sub Σ Σ') (asn : Assertion Σ) : Mutator Σ' Γ Γ unit :=
+    Fixpoint mutator_produce {Γ Σ Σ'} (ζ : Sub Σ Σ') (asn : Assertion Σ) : Mutator Σ' Γ Γ unit :=
       match asn with
       | asn_bool b      => mutator_assume_term (sub_term ζ b)
       | asn_prop P      => mutator_assume_formula (formula_prop ζ P)
@@ -624,7 +619,7 @@ Module Mutators
 
     End MutatorConsumeGhost.
 
-    Fixpoint mutator_consume {Σ Σ' Γ} (ζ : Sub Σ Σ') (asn : Assertion Σ) : Mutator Σ' Γ Γ unit :=
+    Fixpoint mutator_consume {Γ Σ Σ'} (ζ : Sub Σ Σ') (asn : Assertion Σ) : Mutator Σ' Γ Γ unit :=
       match asn with
       | asn_bool b      => mutator_assert_term (sub_term ζ b)
       | asn_prop P      => mutator_assert_formula (formula_prop ζ P)
@@ -640,7 +635,7 @@ Module Mutators
       end.
 
     Section WithCont.
-      Context {Σ Γ E R} (cont : forall K : 𝑬𝑲 E, Mutator Σ Γ Γ R).
+      Context {Γ Σ E R} (cont : forall K : 𝑬𝑲 E, Mutator Σ Γ Γ R).
 
       Equations(noeqns) mutator_exec_match_enum (t : Term Σ (ty_enum E)) : Mutator Σ Γ Γ R :=
         mutator_exec_match_enum (term_lit _ l) := cont l;
@@ -650,8 +645,6 @@ Module Mutators
             cont K.
 
     End WithCont.
-
-    Context {Σr : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)}.
 
     (* TODO: The code should be rewritten so this variable can be removed. *)
     Parameter dummy : 𝑺.
@@ -745,7 +738,7 @@ Module Mutators
       | stm_bind s k => mutator_fail "Err [mutator_exec]: stm_bind not implemented"
       end.
 
-    Definition mutator_leakcheck {Σ Γ} : Mutator Σ Γ Γ unit :=
+    Definition mutator_leakcheck {Γ Σ} : Mutator Σ Γ Γ unit :=
       mutator_get_heap >>= fun h =>
       match h with
       | nil => mutator_pure tt
@@ -755,7 +748,7 @@ Module Mutators
   End MutatorOperations.
 
   Definition outcome_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
-    Stm Δ τ -> Outcome ({ Σ & SymbolicState Σ Δ } * list Obligation) :=
+    Stm Δ τ -> Outcome ({ Σ & SymbolicState Δ Σ } * list Obligation) :=
     match c with
     | @sep_contract_unit _ Σ δ req ens =>
       fun s =>
@@ -795,7 +788,7 @@ Module Mutators
       fun _ _ _ _ => tt.
 
     Definition DynamicMutator (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Ctx (𝑺 * Ty) -> Type) (Σ : Ctx (𝑺 * Ty)) : Type :=
-      forall Σ', Sub Σ Σ' -> SymbolicState Σ' Γ1 -> Outcome { Σ'' & Sub Σ' Σ'' * A Σ'' * SymbolicState Σ'' Γ2 * list Obligation }%type.
+      forall Σ', Sub Σ Σ' -> SymbolicState Γ1 Σ' -> Outcome { Σ'' & Sub Σ' Σ'' * A Σ'' * SymbolicState Γ2 Σ'' * list Obligation }%type.
     Bind Scope dmut_scope with DynamicMutator.
 
     Definition dmut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : DynamicMutator Γ Γ A Σ :=
@@ -886,17 +879,17 @@ Module Mutators
   Import DynamicMutatorNotations.
   Local Open Scope dmut_scope.
 
-  Definition dmut_get {Γ Σ} : DynamicMutator Γ Γ (fun Σ => SymbolicState Σ Γ) Σ :=
+  Definition dmut_get {Γ Σ} : DynamicMutator Γ Γ (SymbolicState Γ) Σ :=
     dmut_lift (fun _ _ => mutator_get).
-  Definition dmut_put {Γ Γ' Σ} (s : SymbolicState Σ Γ') : DynamicMutator Γ Γ' Unit Σ :=
+  Definition dmut_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
     dmut_lift (fun _ ζ => mutator_put (subst ζ s)).
-  Definition dmut_modify {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Σ' Γ -> SymbolicState Σ' Γ') : DynamicMutator Γ Γ' Unit Σ :=
+  Definition dmut_modify {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> SymbolicState Γ' Σ') : DynamicMutator Γ Γ' Unit Σ :=
     dmut_lift (fun _ ζ => mutator_modify (f _ ζ)).
-  Definition dmut_get_local {Γ Σ} : DynamicMutator Γ Γ (fun Σ => SymbolicLocalStore Σ Γ) Σ :=
+  Definition dmut_get_local {Γ Σ} : DynamicMutator Γ Γ (fun Σ => SymbolicLocalStore Γ Σ) Σ :=
     dmut_lift (fun _ _ => mutator_get_local).
-  Definition dmut_put_local {Γ Γ' Σ} (δ' : SymbolicLocalStore Σ Γ') : DynamicMutator Γ Γ' Unit Σ :=
+  Definition dmut_put_local {Γ Γ' Σ} (δ' : SymbolicLocalStore Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
     dmut_lift (fun _ ζ => mutator_put_local (subst ζ δ')).
-  Definition dmut_modify_local {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Σ' Γ -> SymbolicLocalStore Σ' Γ') : DynamicMutator Γ Γ' Unit Σ :=
+  Definition dmut_modify_local {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Γ Σ' -> SymbolicLocalStore Γ' Σ') : DynamicMutator Γ Γ' Unit Σ :=
     dmut_lift (fun _ ζ => mutator_modify_local (f _ ζ)).
   Definition dmut_pop_local {Γ x σ Σ} : DynamicMutator (Γ ▻ (x , σ)) Γ Unit Σ :=
     dmut_lift (fun _ _ => mutator_pop_local).
@@ -997,7 +990,8 @@ Module Mutators
       dmut_fail "Err [dmut_call]: sep_contract_none not implemented"
     end.
 
-  Fixpoint dmut_exec {Γ σ} {Σ} (s : Stm Γ σ) {struct s} : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
+  Fixpoint dmut_exec {Γ σ Σ} (s : Stm Γ σ) {struct s} :
+    DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
     match s with
     | stm_lit τ l => dmut_pure (term_lit τ l)
     | stm_exp e => dmut_eval_exp e
