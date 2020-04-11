@@ -196,7 +196,7 @@ Module Soundness
         specialize (H3 K).
         rewrite blast_sound in H3.
         specialize (H3 v).
-        assert (eval e δ = 𝑼_fold (existT (fun K : 𝑼𝑲 U => Lit (𝑼𝑲_Ty K)) K v)).
+        assert (eval e δ = 𝑼_fold (existT K v)).
         { rewrite <- (𝑼_fold_unfold (eval e δ)); now f_equal. }
         intuition.
         rewrite 𝑼_unfold_fold in H4.

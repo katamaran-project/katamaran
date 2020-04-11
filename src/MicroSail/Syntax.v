@@ -116,7 +116,7 @@ Program Instance blastable_prod {A B : Type} : Blastable (A * B) :=
 Solve All Obligations with intuition.
 
 Program Instance blastable_sigt {A} {B : A -> Type} : Blastable (sigT B) :=
-  {| blast ab k := k (existT B (projT1 ab) (projT2 ab)) |}.
+  {| blast ab k := k (existT (projT1 ab) (projT2 ab)) |}.
 Solve All Obligations with intros ? ? []; intuition; congruence.
 
 Program Instance blastable_sum {A B : Type} : Blastable (A + B) :=
@@ -347,8 +347,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
          forall (K : 𝑼𝑲 U),
            blast K (fun K =>
                       forall p,
-                        v = 𝑼_fold (existT _ K p) ->
-                        k (𝑼_fold (existT _ K p)))
+                        v = 𝑼_fold (existT K p) ->
+                        k (𝑼_fold (existT K p)))
     |}.
   Next Obligation.
     intros; cbn; constructor; intro hyp.
@@ -594,7 +594,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                                  (fun σs _ (vs : Lit (ty_tuple σs)) σ e => (vs, eval e δ))
                                  es
       | @exp_projtup _ σs e n σ p => tuple_proj σs n σ (eval e δ) p
-      | exp_union U K e     => 𝑼_fold (existT _ K (eval e δ))
+      | exp_union U K e     => 𝑼_fold (existT K (eval e δ))
       | exp_record R es     => 𝑹_fold (Env_rect
                                          (fun σs _ => NamedEnv Lit σs)
                                          env_nil
@@ -964,7 +964,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                                   (fun σs _ (vs : Lit (ty_tuple σs)) σ e => (vs, eval_term e δ))
                                   es
       | @term_projtup _ σs e n σ p => tuple_proj σs n σ (eval_term e δ) p
-      | @term_union _ U K e     => 𝑼_fold (existT _ K (eval_term e δ))
+      | @term_union _ U K e     => 𝑼_fold (existT K (eval_term e δ))
       | @term_record _ R es     => 𝑹_fold (Env_rect
                                              (fun σs _ => NamedEnv Lit σs)
                                              env_nil

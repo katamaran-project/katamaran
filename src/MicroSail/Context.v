@@ -39,7 +39,11 @@ Set Implicit Arguments.
 Inductive Ctx (B : Set) : Set :=
 | ctx_nil
 | ctx_snoc (Γ : Ctx B) (b : B).
-Derive NoConfusion for Ctx.
+
+Section TransparentObligations.
+  Local Set Transparent Obligations.
+  Derive NoConfusion for Ctx.
+End TransparentObligations.
 
 (* Scheme Equality for Ctx. *)
 Definition Ctx_eq_dec (B : Set) (B_eq_dec : forall x y : B, {x=y}+{~x=y}) :

@@ -36,6 +36,11 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 
+(* stdpp changes a lot of flags and changes implicit arguments of standard
+   library functions and constructors. Import the module here, so that the
+   changes are consistently applied over our code base. *)
+From stdpp Require base.
+
 Import ListNotations.
 
 Set Implicit Arguments.
