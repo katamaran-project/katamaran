@@ -50,8 +50,8 @@ Module ProgramLogic
       }.
 
     Program Instance δ_ISepLogicLaws (L : Type) (LL : ISepLogic L)
-                                     (LL : ISepLogicLaws L LL) :
-      ISepLogicLaws (LocalStore Γ -> L) (δ_ISepLogic L LLl).
+                                     (LLL : ISepLogicLaws L LL) :
+      ISepLogicLaws (LocalStore Γ -> L) (δ_ISepLogic L LL).
     Admit Obligations.
 
     Program Instance δ_IHeaplet (L : Type) (SL : IHeaplet L) :

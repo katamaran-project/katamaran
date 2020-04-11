@@ -14,10 +14,9 @@ From Equations Require Import
 From MicroSail Require Import
      Notation
      SmallStep.Step
-     SmallStep.Progress
      Syntax
-     Sep.Outcome
-     Sep.Spec.
+     Sep.Spec
+     Symbolic.Mutator.
 
 Set Implicit Arguments.
 Import CtxNotations.
@@ -464,10 +463,6 @@ Module ExampleStepping.
   Module ISASmappStep := SmallStep ISATypeKit ISATermKit ISAProgramKit.
   Import ISASmappStep.
 
-  Module ISAProgress := Progress ISATypeKit ISATermKit ISAProgramKit.
-  Import ISAProgress.
-  Import CtxNotations.
-
   Lemma example_halt :
     forall (Γ : Ctx (𝑿 * Ty))
            (γ : RegStore) (μ : Memory),
@@ -693,14 +688,14 @@ Module ISASymbolicContractKit <:
       end.
 
 End ISASymbolicContractKit.
-Module ISASymbolicContracts :=
-  SymbolicContracts
+Module ISAMutators :=
+  Mutators
     ISATypeKit
     ISATermKit
     ISAProgramKit
     ISAAssertionKit
     ISASymbolicContractKit.
-Import ISASymbolicContracts.
+Import ISAMutators.
 
 Local Transparent Term_eqb chunk_eqb env_beq.
 

@@ -7,7 +7,8 @@ src/MicroSail/Prelude.v
 src/MicroSail/Sep/Hoare.v
 src/MicroSail/Sep/Logic.v
 src/MicroSail/Sep/Model/Disjoint.v
-src/MicroSail/Sep/Outcome.v
+src/MicroSail/Symbolic/Mutator.v
+src/MicroSail/Symbolic/Outcome.v
 src/MicroSail/Sep/Spec.v
 src/MicroSail/SmallStep/Inversion.v
 src/MicroSail/SmallStep/Progress.v

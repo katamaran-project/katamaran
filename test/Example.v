@@ -38,6 +38,7 @@ From Equations Require Import
      Equations.
 
 From MicroSail Require Import
+     Symbolic.Mutator
      Sep.Spec
      WLP.Spec
      Syntax.
@@ -412,14 +413,14 @@ Module SepContracts.
 
   End ExampleSymbolicContractKit.
 
-  Module ExampleSymbolicContracts :=
-    SymbolicContracts
+  Module ExampleMutators :=
+    Mutators
       ExampleTypeKit
       ExampleTermKit
       ExampleProgramKit
       ExampleAssertionKit
       ExampleSymbolicContractKit.
-  Import ExampleSymbolicContracts.
+  Import ExampleMutators.
 
 End SepContracts.
 
