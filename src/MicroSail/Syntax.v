@@ -1099,6 +1099,17 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     End WithSub.
 
+    Class Subst (T : Ctx (𝑺 * Ty) -> Type) : Type :=
+      subst : forall {Σ1 Σ2 : Ctx (𝑺 * Ty)}, Sub Σ1 Σ2 -> T Σ1 -> T Σ2.
+    Global Arguments subst {T _ _ _} _ _.
+
+    Global Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=
+      fun Σ1 Σ2 ζ => sub_term ζ.
+    Global Instance SubstPair {A B} `{Subst A, Subst B} : Subst (fun Σ => A Σ * B Σ)%type :=
+      fun Σ1 Σ2 ζ '(a,b) => (subst ζ a, subst ζ b).
+    Global Instance SubstList {A} `{Subst A} : Subst (fun Σ => list (A Σ))%type :=
+      fun Σ1 Σ2 ζ => List.map (subst ζ).
+
     Definition sub_id Σ : Sub Σ Σ :=
       @env_tabulate _ (fun b => Term _ (snd b)) _
                     (fun '(ς , σ) ςIn => @term_var Σ ς σ ςIn).
