@@ -729,25 +729,9 @@ Module Mutators
                            mutator_assert_term t ;;
                            mutator_pure t
       | stm_fail τ s => mutator_contradiction "Err [mutator_exec]: [stm_fail] reached"
-      | stm_match_list e alt_nil xh xt alt_cons => mutator_fail "Err [mutator_exec]: stm_match_list not implemented"
-        (* mutator_eval_exp e >>= fun t => *)
-        (*                          (* (formula_term_eq t nil) *) *)
-        (* (mutator_assume_formula _ ;; mutator_exec alt_nil) ⊗ _ *)
-        (* (* mutator_exists (fun ςh ςt => *) *)
-        (* (*                   mutator_assume_formula (weaken t (ςh , ςt) = cons ςh ςt) ;; *) *)
-        (* (*                   xh  ↦ ςh ;; *) *)
-        (* (*                   xt  ↦ ςt ;; *) *)
-        (* (*                   mutator_exec alt_cons ;; *) *)
-        (* (*                   pop ;; *) *)
-        (* (*                   pop) *) *)
-      | stm_match_sum e xinl alt_inl xinr alt_inr => mutator_fail "Err [mutator_exec]: stm_match_sum not implemented"
-      | stm_match_pair e xl xr rhs => mutator_fail "Err [mutator_exec]: stm_match_pair not implemented"
       | stm_match_enum E e alts =>
         mutator_eval_exp e >>=
         mutator_exec_match_enum (fun K => mutator_exec (alts K))
-      | stm_match_tuple e p rhs => mutator_fail "Err [mutator_exec]: stm_match_tuple not implemented"
-      | stm_match_union U e alts => mutator_fail "Err [mutator_exec]: stm_match_union not implemented"
-      | stm_match_record R e p rhs => mutator_fail "Err [mutator_exec]: stm_match_record not implemented"
       | @stm_read_register _ τ reg =>
         mutator_consume_chunk_ghost (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg >>= fun L =>
         match env_unsnoc L with
@@ -761,7 +745,19 @@ Module Mutators
         mutator_consume_chunk_ghost (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg ;;
         mutator_produce_chunk (chunk_ptsreg reg v) *>
         mutator_pure v
-      | stm_bind s k => mutator_fail "Err [mutator_exec]: stm_bind not implemented"
+      | stm_match_list e alt_nil xh xt alt_cons =>
+        mutator_fail "Err [mutator_exec]: stm_match_list not supported. use dynamic mutators"
+      | stm_match_sum e xinl alt_inl xinr alt_inr =>
+        mutator_fail "Err [mutator_exec]: stm_match_sum not supported. use dynamic mutators"
+      | stm_match_pair e xl xr rhs =>
+        mutator_fail "Err [mutator_exec]: stm_match_pair not supported. use dynamic mutators"
+      | stm_match_tuple e p rhs =>
+        mutator_fail "Err [mutator_exec]: stm_match_tuple not supported. use dynamic mutators"
+      | stm_match_union U e alts =>
+        mutator_fail "Err [mutator_exec]: stm_match_union not supported. use dynamic mutators"
+      | stm_match_record R e p rhs =>
+        mutator_fail "Err [mutator_exec]: stm_match_record not supported. use dynamic mutators"
+      | stm_bind s k => mutator_fail "Err [mutator_exec]: stm_bind not supported"
       end.
 
     Definition mutator_leakcheck {Γ Σ} : Mutator Σ Γ Γ unit :=
