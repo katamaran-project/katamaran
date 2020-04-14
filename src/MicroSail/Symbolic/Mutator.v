@@ -43,7 +43,7 @@ From MicroSail Require Import
      Symbolic.Outcome
      Syntax.
 
-From stdpp Require Import base option.
+From stdpp Require Import base list option.
 
 Import CtxNotations.
 Import EnvNotations.
@@ -174,14 +174,67 @@ Module Mutators
 
   End SolverSoundness.
 
-  Definition GhostEnv (Σe Σr : Ctx (𝑺 * Ty)) : Type := Env (fun b => option (Term Σr (snd b))) Σe.
-
-  Definition create_ghost_env (Σe Σr : Ctx (𝑺 * Ty)) : GhostEnv Σe Σr :=
-    env_tabulate (fun _ _ => None).
-
   Let comp {S : Type} (f : S -> option S) (g : S -> option S) : S -> option S :=
     fun s => ssrfun.Option.bind g (f s).
   Infix ">=>" := comp (at level 80, right associativity).
+
+  Section ChunkExtraction.
+    Context {Σ : Ctx (𝑺 * Ty)}.
+
+    Fixpoint heap_extractions (h : SymbolicHeap Σ) : list (Chunk Σ * SymbolicHeap Σ) :=
+      match h with
+      | []     => []
+      | c :: h => (c , h) :: map (fun '(c', h') => (c' , c :: h')) (heap_extractions h)
+      end.
+
+    Section WithMatchTerm.
+
+      Variable match_term_eqb : forall {σ}, Term Σ σ -> Term Σ σ -> PathCondition Σ -> option (PathCondition Σ).
+
+      Equations(noeqns) match_env_eqb' {σs} (te : Env (Term Σ) σs) (tr : Env (Term Σ) σs) :
+        PathCondition Σ -> option (PathCondition Σ) :=
+        match_env_eqb' env_nil env_nil := Some;
+        match_env_eqb' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_env_eqb' E1 E2 >=> match_term_eqb t1 t2.
+
+    End WithMatchTerm.
+
+    Equations(noeqns) match_term_eqb {σ} (te : Term Σ σ) (tr : Term Σ σ) :
+      PathCondition Σ -> option (PathCondition Σ) :=
+      match_term_eqb (term_lit ?(σ) l1) (term_lit σ l2) :=
+        if Lit_eqb σ l1 l2 then Some else fun _ => None;
+      match_term_eqb (term_inl t1) (term_inl t2) := match_term_eqb t1 t2;
+      match_term_eqb (term_inl t1) (term_lit (inl l2)) := match_term_eqb t1 (term_lit _ l2);
+      match_term_eqb (term_inr t1) (term_inr t2) := match_term_eqb t1 t2;
+      match_term_eqb (term_inr t1) (term_lit (inr l2)) := match_term_eqb t1 (term_lit _ l2);
+      match_term_eqb (term_tuple ts1) (term_tuple ts2) := match_env_eqb' (@match_term_eqb) ts1 ts2;
+      match_term_eqb te tr :=
+        if Term_eqb te tr
+        then Some
+        else fun pc => Some(formula_eq te tr :: pc).
+
+    Definition match_env_eqb := @match_env_eqb' (@match_term_eqb).
+
+    Equations(noeqns) match_chunk_eqb (ce : Chunk Σ) (cr : Chunk Σ) :
+      PathCondition Σ -> option (PathCondition Σ) :=
+      match_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2)
+      with 𝑷_eq_dec p1 p2 => {
+        match_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) := match_env_eqb ts1 ts2;
+        match_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (right _) := fun _ => None
+      };
+      match_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
+      with 𝑹𝑬𝑮_eq_dec r1 r2 => {
+        match_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left (@teq_refl eq_refl eq_refl)) := match_term_eqb t1 t2;
+        match_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := fun _ => None
+      };
+      match_chunk_eqb _ _  := fun _ => None.
+
+    Definition extract_chunk_eqb (ce : Chunk Σ) (h : SymbolicHeap Σ) (pc : PathCondition Σ) :
+      list (PathCondition Σ * SymbolicHeap Σ) :=
+      omap
+        (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk_eqb ce cr pc))
+        (heap_extractions h).
+
+  End ChunkExtraction.
 
   Section TraverseList.
 
@@ -206,6 +259,11 @@ Module Mutators
       end.
 
   End TraverseEnv.
+
+  Definition GhostEnv (Σe Σr : Ctx (𝑺 * Ty)) : Type := Env (fun b => option (Term Σr (snd b))) Σe.
+
+  Definition create_ghost_env (Σe Σr : Ctx (𝑺 * Ty)) : GhostEnv Σe Σr :=
+    env_tabulate (fun _ _ => None).
 
   Section WithGhostScope.
     Context {Σe Σr} (δ : GhostEnv Σe Σr).
@@ -284,23 +342,16 @@ Module Mutators
       };
       match_chunk _ _  := fun _ => None.
 
-    Fixpoint extract_chunk (ce : Chunk Σe) (h : SymbolicHeap Σr) (L : GhostEnv Σe Σr) :
+    Definition extract_chunk (ce : Chunk Σe) (h : SymbolicHeap Σr) (L : GhostEnv Σe Σr) :
       list (GhostEnv Σe Σr * SymbolicHeap Σr) :=
-      match h with
-      | nil      => nil
-      | cr :: h' => let rec := List.map
-                                 (prod_curry (fun L' h'' => (L' , cons cr h'')))
-                                 (extract_chunk ce h' L) in
-                    match match_chunk ce cr L with
-                    | Some L' => cons (L' , h') rec
-                    | None    => rec
-                    end
-      end.
+      omap
+        (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk ce cr L))
+        (heap_extractions h).
 
   End WithGhostScope.
 
   Definition ghost_env_to_option_sub {Σe Σr} (δ : GhostEnv Σe Σr) : option (Sub Σe Σr) :=
-    traverse_env (fun b mt => mt) δ.
+    traverse_env (M := option) (fun b mt => mt) δ.
 
   Lemma eval_term_ghost_refines_sub_term {Σe Σr} (δ : GhostEnv Σe Σr) (ζ : Sub Σe Σr) :
     ghost_env_to_option_sub δ = Some ζ ->
@@ -413,18 +464,25 @@ Module Mutators
 
     Local Open Scope mutator_scope.
 
-    Definition mutator_get {Γ Σ} : Mutator Σ Γ Γ (SymbolicState Γ Σ) :=
-      fun s => outcome_pure (s , s , nil).
-    Definition mutator_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : Mutator Σ Γ Γ' unit :=
-      fun _ => outcome_pure (tt , s, nil).
+    Definition mutator_state {Γ Γ' Σ A} (f : SymbolicState Γ Σ -> (SymbolicState Γ' Σ * A)) : Mutator Σ Γ Γ' A :=
+      fun s => outcome_pure ((let (s1,a) := f s in (a,s1)),[]).
     Definition mutator_modify {Γ Γ' Σ} (f : SymbolicState Γ Σ -> SymbolicState Γ' Σ) : Mutator Σ Γ Γ' unit :=
-      mutator_get >>= fun δ => mutator_put (f δ).
-    Definition mutator_get_local {Γ Σ} : Mutator Σ Γ Γ (SymbolicLocalStore Γ Σ) :=
-      fun s => outcome_pure (symbolicstate_localstore s , s , nil).
-    Definition mutator_put_local {Γ Γ' Σ} (δ' : SymbolicLocalStore Γ' Σ) : Mutator Σ Γ Γ' unit :=
-      fun '(MkSymbolicState Φ _ ĥ) => outcome_pure (tt , MkSymbolicState Φ δ' ĥ , nil).
+      mutator_state (fun s => (f s,tt)).
+    Definition mutator_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : Mutator Σ Γ Γ' unit :=
+      mutator_state (fun _ => (s,tt)).
+    Definition mutator_get {Γ Σ} : Mutator Σ Γ Γ (SymbolicState Γ Σ) :=
+      mutator_state (fun s => (s,s)).
+
+    Definition mutator_state_local {Γ Γ' Σ A} (f : SymbolicLocalStore Γ Σ -> (SymbolicLocalStore Γ' Σ * A)) : Mutator Σ Γ Γ' A :=
+      mutator_state (fun '(MkSymbolicState Φ δ ĥ) => let (δ',a) := f δ in (MkSymbolicState Φ δ' ĥ,a)).
     Definition mutator_modify_local {Γ Γ' Σ} (f : SymbolicLocalStore Γ Σ -> SymbolicLocalStore Γ' Σ) : Mutator Σ Γ Γ' unit :=
-      mutator_get_local >>= fun δ => mutator_put_local (f δ).
+      mutator_state_local (fun δ => (f δ,tt)).
+    Definition mutator_put_local {Γ Γ' Σ} (δ : SymbolicLocalStore Γ' Σ) : Mutator Σ Γ Γ' unit :=
+      mutator_state_local (fun _ => (δ,tt)).
+    Definition mutator_get_local {Γ Σ} : Mutator Σ Γ Γ (SymbolicLocalStore Γ Σ) :=
+      mutator_state_local (fun δ => (δ,δ)).
+    Definition mutator_gets_local {Γ Σ A} (f : SymbolicLocalStore Γ Σ -> A) : Mutator Σ Γ Γ A :=
+      mutator_state_local (fun δ => (δ,f δ)).
     Definition mutator_pop_local {Γ x σ Σ} : Mutator Σ (Γ ▻ (x , σ)) Γ unit :=
       mutator_modify_local (fun δ => env_tail δ).
     Definition mutator_pops_local {Γ Σ} Δ : Mutator Σ (Γ ▻▻ Δ) Γ unit :=
@@ -434,17 +492,28 @@ Module Mutators
     Definition mutator_pushs_local {Γ Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) : Mutator Σ Γ (Γ ▻▻ Δ) unit :=
       mutator_modify_local (fun δΓ => env_cat δΓ δΔ).
 
-    Definition mutator_get_heap {Γ Σ} : Mutator Σ Γ Γ (SymbolicHeap Σ) :=
-      mutator_map symbolicstate_heap mutator_get.
-    Definition mutator_put_heap {Γ Σ} (h : SymbolicHeap Σ) : Mutator Σ Γ Γ unit :=
-      fun '(MkSymbolicState Φ δ _) => outcome_pure (tt , MkSymbolicState Φ δ h , nil).
+    Definition mutator_state_heap {Γ Σ A} (f : SymbolicHeap Σ -> (SymbolicHeap Σ * A)) : Mutator Σ Γ Γ A :=
+      mutator_state (fun '(MkSymbolicState Φ δ h) => let (h',a) := f h in (MkSymbolicState Φ δ h',a)).
     Definition mutator_modify_heap {Γ Σ} (f : SymbolicHeap Σ -> SymbolicHeap Σ) : Mutator Σ Γ Γ unit :=
-      mutator_modify (fun '(MkSymbolicState Φ δ h) => MkSymbolicState Φ δ (f h)).
+      mutator_state_heap (fun h => (f h,tt)).
+    Definition mutator_get_heap {Γ Σ} : Mutator Σ Γ Γ (SymbolicHeap Σ) :=
+      mutator_state_heap (fun h => (h,h)).
+    Definition mutator_put_heap {Γ Σ} (h : SymbolicHeap Σ) : Mutator Σ Γ Γ unit :=
+      mutator_state_heap (fun _ => (h,tt)).
+
+    Definition mutator_state_pathcondition {Γ Σ A} (f : PathCondition Σ -> (PathCondition Σ * A)) : Mutator Σ Γ Γ A :=
+      mutator_state (fun '(MkSymbolicState Φ δ h) => let (Φ',a) := f Φ in (MkSymbolicState Φ' δ h,a)).
+    Definition mutator_modify_pathcondition {Γ Σ} (f : PathCondition Σ -> PathCondition Σ) : Mutator Σ Γ Γ unit :=
+      mutator_state_pathcondition (fun Φ => (f Φ,tt)).
+    Definition mutator_get_pathcondition {Γ Σ} : Mutator Σ Γ Γ (PathCondition Σ) :=
+      mutator_state_pathcondition (fun Φ => (Φ,Φ)).
+    Definition mutator_put_pathcondition {Γ Σ} (Φ : PathCondition Σ) : Mutator Σ Γ Γ unit :=
+      mutator_state_pathcondition (fun _ => (Φ,tt)).
 
     Definition mutator_eval_exp {Γ σ Σ} (e : Exp Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
-      mutator_get_local >>= fun δ => mutator_pure (symbolic_eval_exp δ e).
+      mutator_gets_local (fun δ => symbolic_eval_exp δ e).
     Definition mutator_eval_exps {Γ Σ} {σs : Ctx (𝑿 * Ty)} (es : NamedEnv (Exp Γ) σs) : Mutator Σ Γ Γ (NamedEnv (Term Σ) σs) :=
-      mutator_get_local >>= fun δ => mutator_pure (env_map (fun _ => symbolic_eval_exp δ) es).
+      mutator_gets_local (fun δ => env_map (fun _ => symbolic_eval_exp δ) es).
 
     Definition mutator_assume_formula {Γ Σ} (fml : Formula Σ) : Mutator Σ Γ Γ unit :=
       match try_solve_formula fml with
@@ -481,58 +550,14 @@ Module Mutators
     Definition mutator_produce_chunk {Γ Σ} (c : Chunk Σ) : Mutator Σ Γ Γ unit :=
       mutator_modify_heap (fun h => c :: h).
 
-    Equations(noeqns) chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
-      chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2)
-      with 𝑷_eq_dec p1 p2 => {
-        chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) :=
-          env_beq (@Term_eqb _) ts1 ts2;
-        chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (right _) := false
-      };
-      chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
-      with 𝑹𝑬𝑮_eq_dec r1 r2 => {
-        chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left (@teq_refl eq_refl eq_refl)) := Term_eqb t1 t2;
-        chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := false
-      };
-      chunk_eqb _ _ := false.
-
-    Fixpoint option_consume_chunk {Σ} (c : Chunk Σ) (h : SymbolicHeap Σ) : option (SymbolicHeap Σ) :=
-      match h with
-      | nil      => None
-      | c' :: h' => if chunk_eqb c c'
-                    then Some h'
-                    else option_map (cons c') (option_consume_chunk c h')
-      end.
-
-    Fixpoint heap_extractions {Σ} (h : SymbolicHeap Σ) : list (Chunk Σ * SymbolicHeap Σ) :=
-      match h with
-      | []     => []
-      | c :: h => (c , h) :: map (fun '(c', h') => (c' , c :: h')) (heap_extractions h)
-      end.
-
-    Equations(noeqns) mutator_chunk_eqb {Γ Σ} (c1 c2 : Chunk Σ) : Mutator Σ Γ Γ unit :=
-      mutator_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2)
-      with 𝑷_eq_dec p1 p2 => {
-        mutator_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) :=
-          mutator_assert_formula (formula_eq (term_tuple ts1) (term_tuple ts2));
-        mutator_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (right _) :=
-          mutator_fail "Err [mutator_chunk_eqb]: No matching"
-      };
-      mutator_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
-      with 𝑹𝑬𝑮_eq_dec r1 r2 => {
-        mutator_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left (@teq_refl eq_refl eq_refl)) :=
-          mutator_assert_formula (formula_eq t1 t2);
-        mutator_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _) :=
-          mutator_fail "Err [mutator_chunk_eqb]: No matching"
-      };
-      mutator_chunk_eqb _ _ := mutator_fail "Err [mutator_chunk_eqb]: No matching".
-
     Definition mutator_consume_chunk {Γ Σ} (c : Chunk Σ) : Mutator Σ Γ Γ unit :=
       mutator_get_heap >>= fun h =>
+      mutator_get_pathcondition >>= fun pc =>
       mutator_angelic_list
         "Err [mutator_consume_chunk]: empty extraction"
-        (heap_extractions h) >>= fun '(c' , h') =>
-        mutator_chunk_eqb c c' *>
-        mutator_put_heap h'.
+        (extract_chunk_eqb c h pc) >>= fun '(pc' , h') =>
+        mutator_put_heap h' ;;
+        mutator_put_pathcondition pc'.
 
     Global Arguments mutator_push_local {Γ _ _} [Σ] _.
     Global Arguments mutator_assume_formula {Γ} [Σ] _.
@@ -880,12 +905,12 @@ Module Mutators
   Import DynamicMutatorNotations.
   Local Open Scope dmut_scope.
 
-  Definition dmut_get {Γ Σ} : DynamicMutator Γ Γ (SymbolicState Γ) Σ :=
-    dmut_lift (fun _ _ => mutator_get).
-  Definition dmut_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
-    dmut_lift (fun _ ζ => mutator_put (subst ζ s)).
-  Definition dmut_modify {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> SymbolicState Γ' Σ') : DynamicMutator Γ Γ' Unit Σ :=
-    dmut_lift (fun _ ζ => mutator_modify (f _ ζ)).
+  (* Definition dmut_get {Γ Σ} : DynamicMutator Γ Γ (SymbolicState Γ) Σ := *)
+  (*   dmut_lift (fun _ _ => mutator_get). *)
+  (* Definition dmut_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : DynamicMutator Γ Γ' Unit Σ := *)
+  (*   dmut_lift (fun _ ζ => mutator_put (subst ζ s)). *)
+  (* Definition dmut_modify {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> SymbolicState Γ' Σ') : DynamicMutator Γ Γ' Unit Σ := *)
+  (*   dmut_lift (fun _ ζ => mutator_modify (f _ ζ)). *)
   Definition dmut_get_local {Γ Σ} : DynamicMutator Γ Γ (fun Σ => SymbolicLocalStore Γ Σ) Σ :=
     dmut_lift (fun _ _ => mutator_get_local).
   Definition dmut_put_local {Γ Γ' Σ} (δ' : SymbolicLocalStore Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
@@ -902,14 +927,15 @@ Module Mutators
     dmut_lift (fun _ ζ => mutator_pushs_local (env_map (fun _ => sub_term ζ) δΔ)).
   Definition dmut_get_heap {Γ Σ} : DynamicMutator Γ Γ SymbolicHeap Σ :=
     dmut_lift (fun _ _ => mutator_get_heap).
-  Definition dmut_modify_heap {Γ Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicHeap Σ' -> SymbolicHeap Σ') : DynamicMutator Γ Γ Unit Σ :=
-    dmut_lift (fun _ ζ => mutator_modify_heap (f _ ζ)).
-  Definition dmut_put_heap {Γ Σ} (h : SymbolicHeap Σ) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_lift (fun _ ζ => mutator_put_heap (subst ζ h)).
+  (* Definition dmut_modify_heap {Γ Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicHeap Σ' -> SymbolicHeap Σ') : DynamicMutator Γ Γ Unit Σ := *)
+  (*   dmut_lift (fun _ ζ => mutator_modify_heap (f _ ζ)). *)
+  (* Definition dmut_put_heap {Γ Σ} (h : SymbolicHeap Σ) : DynamicMutator Γ Γ Unit Σ := *)
+  (*   dmut_lift (fun _ ζ => mutator_put_heap (subst ζ h)). *)
   Definition dmut_eval_exp {Γ σ} (e : Exp Γ σ) {Σ} : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
     dmut_lift (fun _ _ => mutator_eval_exp e).
   Definition dmut_eval_exps {Γ Σ} {σs : Ctx (𝑿 * Ty)} (es : NamedEnv (Exp Γ) σs) : DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs) Σ :=
     dmut_lift (fun _ _ => mutator_eval_exps es).
+
   Definition dmut_assume_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
     dmut_lift_kleisli mutator_assume_formula fml.
   Definition dmut_assume_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
@@ -928,6 +954,7 @@ Module Mutators
     dmut_lift_kleisli mutator_produce_chunk c.
   Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
     dmut_lift_kleisli mutator_consume_chunk c.
+
   Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
     match asn with
     | asn_bool b      => dmut_assume_term b

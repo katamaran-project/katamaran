@@ -16,7 +16,8 @@ From MicroSail Require Import
      SmallStep.Step
      Syntax
      Sep.Spec
-     Symbolic.Mutator.
+     Symbolic.Mutator
+     Symbolic.Outcome.
 
 Set Implicit Arguments.
 Import CtxNotations.
@@ -697,7 +698,7 @@ Module ISAMutators :=
     ISASymbolicContractKit.
 Import ISAMutators.
 
-Local Transparent Term_eqb chunk_eqb env_beq.
+Local Transparent Term_eqb env_beq.
 
 Import List.
 
@@ -719,6 +720,32 @@ Lemma valid_contract_rX : ValidContract (CEnv rX) fun_rX.
 Proof. intros [] []; solve. Qed.
 Hint Resolve valid_contract_rX : contracts.
 
+(* Lemma valid_contract_rX : ValidContractDynMut (CEnv rX) fun_rX. *)
+(* Proof. *)
+(*   exists [term_var "reg_tag", term_var "v"]%arg. *)
+(*   intros [] []; exists (term_var "v"). *)
+(*   - exists (env_snoc env_nil (_,_) (term_var "v")). *)
+(*     repeat constructor. *)
+(*   - solve. *)
+(*   - solve. *)
+(*   - solve. *)
+(*   - solve. *)
+(*   - exists (env_snoc env_nil (_,_) (term_var "v")). *)
+(*     repeat constructor. *)
+(*   - solve. *)
+(*   - solve. *)
+(*   - solve. *)
+(*   - solve. *)
+(*   - exists (env_snoc env_nil (_,_) (term_var "v")). *)
+(*     repeat constructor. *)
+(*   - solve. *)
+(*   - solve. *)
+(*   - solve. *)
+(*   - solve. *)
+(*   - exists (env_snoc env_nil (_,_) (term_var "v")). *)
+(*     repeat constructor. *)
+(* Qed. *)
+
 Lemma valid_contract_wX : ValidContract (CEnv wX) fun_wX.
 Proof. intros [] []; solve. Qed.
 Hint Resolve valid_contract_wX : contracts.
@@ -738,8 +765,7 @@ Proof.
   - intros [].
   - intros [].
   - intros [].
-  - (* TODO: Debug why it doesn't automagically choose false. *)
-    exists false; constructor.
+  - constructor.
   - constructor.
   - constructor.
   - constructor.
