@@ -53,6 +53,7 @@ Import OutcomeNotations.
 Set Implicit Arguments.
 
 Delimit Scope mutator_scope with mut.
+Delimit Scope dmut_scope with dmut.
 
 Module Mutators
        (typekit : TypeKit)
@@ -748,7 +749,7 @@ Module Mutators
   End MutatorOperations.
 
   Definition outcome_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
-    Stm Δ τ -> Outcome ({ Σ & SymbolicState Δ Σ } * list Obligation) :=
+    Stm Δ τ -> Outcome (list Obligation) :=
     match c with
     | @sep_contract_unit _ Σ δ req ens =>
       fun s =>
@@ -757,7 +758,7 @@ Module Mutators
                     mutator_consume (sub_id Σ) ens ;;
                     mutator_leakcheck)%mut in
         let out := mut (symbolicstate_initial δ) in
-        outcome_map (fun '((tt , s) , w) => (existT Σ s,w)) out
+        outcome_map snd out
     | @sep_contract_result _ Σ _ _ _ _ _ =>
       fun s => outcome_block
     | @sep_contract_result_pure _ Σ _ δ result' req ens =>
@@ -768,14 +769,14 @@ Module Mutators
                     mutator_assert_formula (formula_eq result result') ;;
                     mutator_leakcheck)%mut in
         let out := mut (symbolicstate_initial δ) in
-        outcome_map (fun '((tt , s) , w) => (existT Σ s,w)) out
+        outcome_map snd out
     | @sep_contract_none _ _ =>
       fun s => outcome_block
     end.
 
   Definition ValidContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
              (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    outcome_satisfy (outcome_contract c body) (fun '(_,w) => valid_obligations w).
+    outcome_satisfy (outcome_contract c body) valid_obligations.
 
   Definition ValidContractEnv (cenv : SepContractEnv) : Prop :=
     forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),
@@ -1098,5 +1099,46 @@ Module Mutators
     | stm_bind _ _ =>
       dmut_fail "Err [dmut_exec]: [stm_bind] not supported"
     end.
+
+  Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
+    dmut_get_heap >>= fun _ _ h =>
+    match h with
+    | nil => dmut_pure tt
+    | _   => dmut_fail "Err [dmut_leakcheck]: heap leak"
+    end.
+
+  Definition dmut_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
+    Stm Δ τ -> Outcome (list Obligation) :=
+    match c with
+    | @sep_contract_unit _ Σ δ req ens =>
+      fun s =>
+        let mut := (dmut_produce req ;;
+                    dmut_exec s      ;;
+                    dmut_consume ens ;;
+                    dmut_leakcheck)%dmut in
+        let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
+        outcome_map (fun '(existT _ (_ , w)) => w) out
+    | @sep_contract_result _ Σ _ _ _ _ _ =>
+      fun s => outcome_block
+    | @sep_contract_result_pure _ Σ τ δ result' req ens =>
+      fun s =>
+        let mut := (dmut_produce req ;;
+                    dmut_exec s      >>= fun Σ1 ζ1 result =>
+                    dmut_sub ζ1 (dmut_consume ens) ;;
+                    dmut_assert_formula (formula_eq result (sub_term ζ1 result')) ;;
+                    dmut_leakcheck)%dmut in
+        let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
+        outcome_map (fun '(existT _ (_ , w)) => w) out
+    | @sep_contract_none _ _ =>
+      fun s => outcome_block
+    end.
+
+  Definition ValidContractDynMut (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
+             (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    outcome_satisfy (dmut_contract c body) valid_obligations.
+
+  Definition ValidContractEnvDynMut (cenv : SepContractEnv) : Prop :=
+    forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),
+      ValidContractDynMut (cenv Δ τ f) (Pi f).
 
 End Mutators.
