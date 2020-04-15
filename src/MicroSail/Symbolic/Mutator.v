@@ -873,10 +873,10 @@ Module Mutators
 
     Definition dmut_fresh {Γ A Σ} b (ma : DynamicMutator Γ Γ A (Σ ▻ b)) : DynamicMutator Γ Γ A Σ :=
       fun Σ1 ζ1 s1 =>
-        outcome_bind
-          (ma _ (sub_up1 ζ1) (wk1_symbolicstate s1))
+        outcome_map
           (fun '(existT Σ' (ζ , a , s' , w)) =>
-             outcome_pure (existT Σ' (sub_comp sub_wk1 ζ , a , s' , w))).
+             existT Σ' (sub_comp sub_wk1 ζ , a , s' , w))
+          (ma _ (sub_up1 ζ1) (wk1_symbolicstate s1)).
     Global Arguments dmut_fresh {_ _ _} _ _.
 
   End DynamicMutator.
@@ -938,6 +938,9 @@ Module Mutators
     dmut_lift_kleisli mutator_assume_term t.
   Definition dmut_assume_exp {Γ Σ} (e : Exp Γ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
     dmut_lift (fun _ _ => mutator_assume_exp e).
+  Definition dmut_assume_prop {Γ Σ} (P : abstract_named Lit Σ Prop) : DynamicMutator Γ Γ Unit Σ :=
+    dmut_lift (fun _ ζ => mutator_assume_formula (formula_prop ζ P)).
+
   Definition dmut_assert_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
     dmut_lift_kleisli mutator_assert_formula fml.
   Definition dmut_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
@@ -954,7 +957,7 @@ Module Mutators
   Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
     match asn with
     | asn_bool b      => dmut_assume_term b
-    | asn_prop P      => dmut_assume_formula (formula_prop (sub_id _) P)
+    | asn_prop P      => dmut_assume_prop P
     | asn_chunk c     => dmut_produce_chunk c
     | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
                          (dmut_assume_term (term_not b) ;; dmut_produce a2)
