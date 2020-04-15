@@ -1144,14 +1144,20 @@ Module Mutators
                     dmut_leakcheck)%dmut in
         let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
         outcome_map (fun '(existT _ (_ , w)) => w) out
-    | @sep_contract_result _ Σ _ _ _ _ _ =>
-      fun s => outcome_block
+    | @sep_contract_result _ Σ τ δ result req ens =>
+      fun s =>
+        let mut := (dmut_produce req ;;
+                    dmut_exec s      >>= fun Σ1 ζ1 t =>
+                    dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens) ;;
+                    dmut_leakcheck)%dmut in
+        let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
+        outcome_map (fun '(existT _ (_ , w)) => w) out
     | @sep_contract_result_pure _ Σ τ δ result' req ens =>
       fun s =>
         let mut := (dmut_produce req ;;
-                    dmut_exec s      >>= fun Σ1 ζ1 result =>
+                    dmut_exec s      >>= fun Σ1 ζ1 t =>
+                    dmut_assert_formula (formula_eq t (sub_term ζ1 result')) ;;
                     dmut_sub ζ1 (dmut_consume ens) ;;
-                    dmut_assert_formula (formula_eq result (sub_term ζ1 result')) ;;
                     dmut_leakcheck)%dmut in
         let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
         outcome_map (fun '(existT _ (_ , w)) => w) out

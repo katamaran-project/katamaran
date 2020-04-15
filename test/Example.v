@@ -132,7 +132,7 @@ Module ExampleTypeKit <: TypeKit.
 
   Definition 𝑬_eq_dec := Enums_eq_dec.
   Definition 𝑬𝑲_eq_dec : forall (e : 𝑬) (x y : 𝑬𝑲 e), {x=y}+{~x=y}.
-  Proof. unfold 𝑬𝑲 in *. intros. destruct e. decide equality. Qed.
+  Proof. unfold 𝑬𝑲 in *. intros. destruct e. decide equality. Defined.
   Definition 𝑼_eq_dec := Unions_eq_dec.
   Definition 𝑼𝑻_eq_dec : forall (u : 𝑼) (x y : 𝑼𝑻 u), {x=y}+{~x=y}.
   Proof.
@@ -359,7 +359,7 @@ Module SepContracts.
             ["x" ∶ ty_int, "y" ∶ ty_int]
             ["x" ∶ ty_int, "y" ∶ ty_int]
             (ty_enum ordering)
-            [term_var "x", term_var "x"]%arg
+            [term_var "x", term_var "y"]%arg
             "result"
             asn_true
             (asn_match_enum
@@ -421,6 +421,51 @@ Module SepContracts.
       ExampleAssertionKit
       ExampleSymbolicContractKit.
   Import ExampleMutators.
+
+  Local Ltac solve :=
+    repeat
+      (repeat intro;
+       repeat
+         match goal with
+         | H: NamedEnv _ _ |- _ => unfold NamedEnv in H
+         | H: Env _ ctx_nil |- _ => dependent destruction H
+         | H: Env _ (ctx_snoc _ _) |- _ => dependent destruction H
+         | H: _ /\ _ |- _ => destruct H
+         | |- _ /\ _ => constructor
+         end;
+       compute
+       - [Pos.of_succ_nat List.length Pos.succ Z.pos_sub Z.succ Z.of_nat Z.add
+          Z.gtb Z.eqb Z.ltb Lit
+         ] in *;
+       cbn [List.length];
+       subst; try congruence; try lia;
+       auto
+      ).
+
+  Lemma valid_contract_length {σ} : ValidContractDynMut (CEnv (@length σ)) (Pi length).
+  Proof.
+    intros [].
+    - solve.
+    - exists [term_var "ys"]%arg; solve.
+  Qed.
+  Hint Resolve valid_contract_length : contracts.
+
+  Lemma valid_contract_cmp : ValidContractDynMut (CEnv cmp) (Pi cmp).
+  Proof.
+    intros [].
+    { exists LT; solve. }
+    intros [].
+    { exists EQ; solve. }
+    intros [].
+    { exists GT; solve. }
+    { solve.
+      destruct (Z.gtb_spec db db0); try discriminate.
+      destruct (Z.eqb_spec db db0); try discriminate.
+      destruct (Z.ltb_spec db db0); try discriminate.
+      lia.
+    }
+  Qed.
+  Hint Resolve valid_contract_cmp : contracts.
 
 End SepContracts.
 
