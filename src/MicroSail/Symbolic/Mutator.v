@@ -94,9 +94,9 @@ Module Mutators
 
   Definition valid_obligation : Obligation -> Prop :=
     fun '(obligation pc fml) =>
-      ForallNamed (fun δ => List.Forall (interpret_formula δ) pc -> interpret_formula δ fml).
+      ForallNamed (fun δ => all_list (interpret_formula δ) pc -> interpret_formula δ fml).
   Definition valid_obligations (os : list Obligation) : Prop :=
-    List.Forall valid_obligation os.
+    all_list valid_obligation os.
   Hint Unfold valid_obligation : core.
   Hint Unfold valid_obligations : core.
 
@@ -403,7 +403,7 @@ Module Mutators
     Definition mutator_contradiction {Γ1 Γ2 A Σ} (msg : string) : Mutator Σ Γ1 Γ2 A :=
       fun s =>
         (⨂ δ : NamedEnv Lit Σ =>
-         ⨂ _ : List.Forall (interpret_formula δ) (symbolicstate_pathcondition s) =>
+         ⨂ _ : all_list (interpret_formula δ) (symbolicstate_pathcondition s) =>
          outcome_fail msg)%out.
     Definition mutator_block {Γ1 Γ2 A Σ} : Mutator Σ Γ1 Γ2 A :=
       fun s => outcome_block.

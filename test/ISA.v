@@ -706,15 +706,21 @@ Arguments inctx_zero {_ _ _} /.
 Arguments inctx_succ {_ _ _ _} !_ /.
 
 Local Ltac solve :=
-  unfold valid_obligations, valid_obligation;
   repeat
-    (cbn in *; intros;
-     try
+    (repeat intro;
+     repeat
        match goal with
-       | |- Forall _ _ => constructor
-       | H: Forall _ _ |- _ => dependent destruction H
+       | H: Env _ ctx_nil |- _ => dependent destruction H
+       | H: Env _ (ctx_snoc _ _) |- _ => dependent destruction H
+       | H: _ /\ _ |- _ => destruct H
+       | |- _ /\ _ => constructor
+       | |- forall _, _ => intro
        end;
-     try congruence; auto).
+     compute - [Lit] in *;
+     cbn [Lit] in *;
+     subst; try congruence;
+     auto
+    ).
 
 Lemma valid_contract_rX : ValidContract (CEnv rX) fun_rX.
 Proof. intros [] []; solve. Qed.

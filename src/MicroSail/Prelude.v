@@ -53,36 +53,24 @@ Scheme Equality for option.
 Section WithA.
   Context {A : Type}.
 
-  Section WithProp.
-    Variable P : A -> Type.
-
-    Fixpoint all_list (xs : list A) : Type :=
+  Definition all_list (P : A -> Prop) : list A -> Prop :=
+    fix all_list (xs : list A) : Prop :=
       match xs with
-      | nil       => unit
-      | cons x xs => P x * all_list xs
+      | nil       => True
+      | cons x xs => P x /\ all_list xs
       end.
-
-  End WithProp.
 
   Section WithEq.
     Variable eqbA : A -> A -> bool.
     Let eqbA_spec := fun x => forall y, reflect (x = y) (eqbA x y).
 
-    Lemma list_beq_prespec (xs : list A) (eqb_xs : all_list eqbA_spec xs) :
-      forall ys, reflect (xs = ys) (list_beq eqbA xs ys).
-    Proof.
-      induction xs as [|x xs]; [ idtac | destruct eqb_xs as [eqb_x eqb_xs] ];
-        intros [|y ys]; cbn; try (constructor; congruence).
-      destruct (eqb_x y); cbn.
-      - apply (iffP (IHxs eqb_xs ys)); congruence.
-      - constructor; congruence.
-    Qed.
-
     Lemma list_beq_spec (hyp : forall x : A, eqbA_spec x) :
       forall xs ys : list A, reflect (xs = ys) (list_beq eqbA xs ys).
     Proof.
-      intros xs ?; apply list_beq_prespec.
-      induction xs; cbn; auto using unit.
+      induction xs as [|x xs]; intros [|y ys]; cbn; try (constructor; congruence).
+      destruct (hyp x y).
+      - apply (iffP (IHxs ys)); congruence.
+      - constructor; congruence.
     Qed.
 
     Lemma option_beq_spec (hyp : forall x : A, eqbA_spec x) :
