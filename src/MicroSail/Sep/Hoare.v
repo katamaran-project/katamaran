@@ -17,8 +17,6 @@ Module ProgramLogic
   Import CtxNotations.
   Import EnvNotations.
 
-  Open Scope logic.
-
   (* Some simple instance that make writing program logic rules more natural by
    avoiding the need to mention the local variable store δ in the pre and post
    conditions that don't affect it *)
@@ -59,98 +57,97 @@ Module ProgramLogic
       { pred p ts := fun δ => pred p ts;
         ptsreg σ r v := fun δ => ptsreg r v
       }.
+
   End WithΓ.
+
+  Open Scope logic.
 
   Reserved Notation "Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" (at level 75, no associativity).
 
-  Section HoareTriples.
-    Context {L : Type} {Logic : IHeaplet L}.
+  Existing Instance δ_IHeaplet.
 
-    Existing Instance δ_IHeaplet.
-
-    Inductive Triple (Γ : Ctx (𝑿 * Ty)) :
-      forall {τ : Ty}
-             (pre : LocalStore Γ -> L) (s : Stm Γ τ)
-             (post :  Lit τ -> LocalStore Γ -> L), Prop :=
-    | rule_stm_lit (τ : Ty) (l : Lit τ) :
-        Γ ⊢ ⦃ ⊤ ⦄ stm_lit τ l ⦃ fun x => !!(l = x) ⦄
-    | rule_stm_exp_forwards (τ : Ty) (e : Exp Γ τ) (P : LocalStore Γ -> L) :
-        Γ ⊢ ⦃ P ⦄ stm_exp e ⦃ fun v δ => P δ ∧ !!(eval e δ = v) ⦄
-    | rule_stm_exp_backwards (τ : Ty) (e : Exp Γ τ) (Q : Lit τ -> LocalStore Γ -> L) :
-        Γ ⊢ ⦃ fun δ => Q (eval e δ) δ ⦄ stm_exp e ⦃ Q ⦄
-    | rule_stm_let
-        (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
-        (P : LocalStore Γ -> L) (Q : Lit σ -> LocalStore Γ -> L)
-        (R : Lit τ -> LocalStore Γ -> L) :
-        Γ         ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
-        Γ ▻ (x,σ) ⊢ ⦃ fun δ => Q (env_head δ) (env_tail δ) ⦄ k ⦃ fun v δ => R v (env_tail δ) ⦄ ->
-        Γ         ⊢ ⦃ P ⦄ let: x := s in k ⦃ R ⦄
-    | rule_stm_if (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
-          (P : LocalStore Γ -> L)
-          (Q : Lit τ -> LocalStore Γ -> L) :
-          Γ ⊢ ⦃ fun δ => P δ ∧ !!(eval e δ = true) ⦄ s1 ⦃ Q ⦄ ->
-          Γ ⊢ ⦃ fun δ => P δ ∧ !!(eval e δ = false) ⦄ s2 ⦃ Q ⦄ ->
-          Γ ⊢ ⦃ P ⦄ stm_if e s1 s2 ⦃ Q ⦄
-    | rule_stm_if_backwards (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
-          (P1 : LocalStore Γ -> L)
-          (P2 : LocalStore Γ -> L)
-          (Q : Lit τ -> LocalStore Γ -> L) :
-          Γ ⊢ ⦃ P1 ⦄ s1 ⦃ Q ⦄ ->
-          Γ ⊢ ⦃ P2 ⦄ s2 ⦃ Q ⦄ ->
-          Γ ⊢ ⦃ fun δ => (!!(eval e δ = true) --> P1 δ)
-                    ∧ (!!(eval e δ = false) --> P2 δ)
-               ⦄ stm_if e s1 s2 ⦃ Q ⦄
-    | rule_stm_seq (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
-          (P : LocalStore Γ -> L)
-          (Q : LocalStore Γ -> L)
-          (R : Lit σ -> LocalStore Γ -> L) :
-          Γ ⊢ ⦃ P ⦄ s1 ⦃ fun _ δ => Q δ ⦄ ->
-          Γ ⊢ ⦃ Q ⦄ s2 ⦃ R ⦄ ->
-          Γ ⊢ ⦃ P ⦄ s1 ;; s2 ⦃ R ⦄
-    | rule_stm_assert (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string)
-          (P : LocalStore Γ -> L)
-          (Q : Lit ty_bool -> LocalStore Γ -> L) :
-          Γ ⊢ ⦃ fun δ => P δ ∧ !!(eval e1 δ = true) ⦄ stm_assert e1 e2 ⦃ Q ⦄
-    | rule_stm_fail (τ : Ty) (s : Lit ty_string) :
-        forall (Q : Lit τ -> LocalStore Γ -> L),
+  Inductive Triple {L : Type} {Logic : IHeaplet L} (Γ : Ctx (𝑿 * Ty)) :
+    forall {τ : Ty}
+      (pre : LocalStore Γ -> L) (s : Stm Γ τ)
+      (post :  Lit τ -> LocalStore Γ -> L), Prop :=
+  | rule_stm_lit (τ : Ty) (l : Lit τ) :
+      Γ ⊢ ⦃ ⊤ ⦄ stm_lit τ l ⦃ fun x => !!(l = x) ⦄
+  | rule_stm_exp_forwards (τ : Ty) (e : Exp Γ τ) (P : LocalStore Γ -> L) :
+      Γ ⊢ ⦃ P ⦄ stm_exp e ⦃ fun v δ => P δ ∧ !!(eval e δ = v) ⦄
+  | rule_stm_exp_backwards (τ : Ty) (e : Exp Γ τ) (Q : Lit τ -> LocalStore Γ -> L) :
+      Γ ⊢ ⦃ fun δ => Q (eval e δ) δ ⦄ stm_exp e ⦃ Q ⦄
+  | rule_stm_let
+      (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
+      (P : LocalStore Γ -> L) (Q : Lit σ -> LocalStore Γ -> L)
+      (R : Lit τ -> LocalStore Γ -> L) :
+      Γ         ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
+      Γ ▻ (x,σ) ⊢ ⦃ fun δ => Q (env_head δ) (env_tail δ) ⦄ k ⦃ fun v δ => R v (env_tail δ) ⦄ ->
+      Γ         ⊢ ⦃ P ⦄ let: x := s in k ⦃ R ⦄
+  | rule_stm_if (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
+                (P : LocalStore Γ -> L)
+                (Q : Lit τ -> LocalStore Γ -> L) :
+      Γ ⊢ ⦃ fun δ => P δ ∧ !!(eval e δ = true) ⦄ s1 ⦃ Q ⦄ ->
+      Γ ⊢ ⦃ fun δ => P δ ∧ !!(eval e δ = false) ⦄ s2 ⦃ Q ⦄ ->
+      Γ ⊢ ⦃ P ⦄ stm_if e s1 s2 ⦃ Q ⦄
+  | rule_stm_if_backwards (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
+                          (P1 : LocalStore Γ -> L)
+                          (P2 : LocalStore Γ -> L)
+                          (Q : Lit τ -> LocalStore Γ -> L) :
+      Γ ⊢ ⦃ P1 ⦄ s1 ⦃ Q ⦄ ->
+      Γ ⊢ ⦃ P2 ⦄ s2 ⦃ Q ⦄ ->
+      Γ ⊢ ⦃ fun δ => (!!(eval e δ = true) --> P1 δ)
+                  ∧ (!!(eval e δ = false) --> P2 δ)
+          ⦄ stm_if e s1 s2 ⦃ Q ⦄
+  | rule_stm_seq (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
+                 (P : LocalStore Γ -> L)
+                 (Q : LocalStore Γ -> L)
+                 (R : Lit σ -> LocalStore Γ -> L) :
+      Γ ⊢ ⦃ P ⦄ s1 ⦃ fun _ δ => Q δ ⦄ ->
+      Γ ⊢ ⦃ Q ⦄ s2 ⦃ R ⦄ ->
+      Γ ⊢ ⦃ P ⦄ s1 ;; s2 ⦃ R ⦄
+  | rule_stm_assert (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string)
+                    (P : LocalStore Γ -> L)
+                    (Q : Lit ty_bool -> LocalStore Γ -> L) :
+      Γ ⊢ ⦃ fun δ => P δ ∧ !!(eval e1 δ = true) ⦄ stm_assert e1 e2 ⦃ Q ⦄
+  | rule_stm_fail (τ : Ty) (s : Lit ty_string) :
+      forall (Q : Lit τ -> LocalStore Γ -> L),
         Γ ⊢ ⦃ fun _ => ⊥ ⦄ stm_fail τ s ⦃ Q ⦄
-    | rule_stm_match_sum_backwards (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr))
-      (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl , σinl)) τ)
-      (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ)
-      (Pinl : LocalStore Γ -> L)
-      (Pinr : LocalStore Γ -> L)
-      (Q : Lit τ -> LocalStore Γ -> L) :
+  | rule_stm_match_sum_backwards (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr))
+                                 (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl , σinl)) τ)
+                                 (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ)
+                                 (Pinl : LocalStore Γ -> L)
+                                 (Pinr : LocalStore Γ -> L)
+                                 (Q : Lit τ -> LocalStore Γ -> L) :
       Γ ▻ (xinl, σinl) ⊢ ⦃ fun δ => Pinl (env_tail δ)
-                               (* ∧ !!(eval e (env_tail δ) = inl (env_head δ)) *)
-                          ⦄ alt_inl ⦃ fun v δ => Q v (env_tail δ) ⦄ ->
+                                      (* ∧ !!(eval e (env_tail δ) = inl (env_head δ)) *)
+                         ⦄ alt_inl ⦃ fun v δ => Q v (env_tail δ) ⦄ ->
       Γ ▻ (xinr, σinr) ⊢ ⦃ fun δ => Pinr (env_tail δ)
-                               (* ∧ !!(eval e (env_tail δ) = inr (env_head δ)) *)
-                          ⦄ alt_inr ⦃ fun v δ => Q v (env_tail δ) ⦄ ->
+                                      (* ∧ !!(eval e (env_tail δ) = inr (env_head δ)) *)
+                         ⦄ alt_inr ⦃ fun v δ => Q v (env_tail δ) ⦄ ->
       Γ ⊢ ⦃ fun δ => (∀ x, !!(eval e δ = inl x) --> Pinl δ)
-                ∧ (∀ x, !!(eval e δ = inr x) --> Pinr δ)
-           ⦄ stm_match_sum e xinl alt_inl xinr alt_inr ⦃ Q ⦄
-    | rule_stm_read_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ)
-      (Q : Lit σ -> LocalStore Γ -> L) :
+                  ∧ (∀ x, !!(eval e δ = inr x) --> Pinr δ)
+          ⦄ stm_match_sum e xinl alt_inl xinr alt_inr ⦃ Q ⦄
+  | rule_stm_read_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ)
+                                     (Q : Lit σ -> LocalStore Γ -> L) :
       Γ ⊢ ⦃ ∀ v, r ↦ v ✱ (r ↦ v -✱ Q v) ⦄ stm_read_register r ⦃ Q ⦄
-    | rule_stm_write_register_backwards
+  | rule_stm_write_register_backwards
       {σ : Ty} (r : 𝑹𝑬𝑮 σ) (e : Exp Γ σ) (Q : Lit σ -> LocalStore Γ -> L) :
       Γ ⊢ ⦃ fun δ => ∀ v, r ↦ v ✱ ((r ↦ eval e δ) -✱ Q (eval e δ) δ) ⦄
-          stm_write_register r e
-          ⦃ Q ⦄
-    (* (* | rule_stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2)) *) *)
-    (*   (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ) *)
-    (*   (P : LocalStore Γ -> A) *)
-    (*   (Q : LocalStore Γ -> Lit τ -> A) : *)
-    (*   Γ ▻ (xl, σ1) ▻ (xr, σ2) ⊢ ⦃ P ⦄ rhs ⦃ Q ⦄ -> *)
-    (*   Γ ⊢ ⦃ fun δ => P ⦄ stm_match_pair e xl xr rhs ⦃ Q ⦄ *)
-    where "Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" := (Triple Γ P s Q).
-
-  End HoareTriples.
+        stm_write_register r e
+        ⦃ Q ⦄
   | rule_consequence {σ : Ty}
       (P P' : LocalStore Γ -> L) (Q Q' : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
       (P ⊢ P') -> (forall v, Q v ⊢ Q' v) -> Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> Γ ⊢ ⦃ P' ⦄ s ⦃ Q' ⦄
   | rule_frame {σ : Ty}
       (P : LocalStore Γ -> L) (Q : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
       forall (R : LocalStore Γ -> L), Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> Γ ⊢ ⦃ R ✱ P ⦄ s ⦃ fun v => R ✱ Q v ⦄
+  (* (* | rule_stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2)) *) *)
+  (*   (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ) *)
+  (*   (P : LocalStore Γ -> A) *)
+  (*   (Q : LocalStore Γ -> Lit τ -> A) : *)
+  (*   Γ ▻ (xl, σ1) ▻ (xr, σ2) ⊢ ⦃ P ⦄ rhs ⦃ Q ⦄ -> *)
+  (*   Γ ⊢ ⦃ fun δ => P ⦄ stm_match_pair e xl xr rhs ⦃ Q ⦄ *)
+  where "Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" := (Triple Γ P s Q).
+
 
 End ProgramLogic.
