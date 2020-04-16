@@ -141,6 +141,18 @@ Module ProgramLogic
   | rule_frame {σ : Ty}
       (P : LocalStore Γ -> L) (Q : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
       forall (R : LocalStore Γ -> L), Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> Γ ⊢ ⦃ R ✱ P ⦄ s ⦃ fun v => R ✱ Q v ⦄
+  | rule_stm_assign_backwards
+      (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
+      (P : LocalStore Γ -> L)
+      (R : Lit σ -> LocalStore Γ -> L) :
+      Γ ⊢ ⦃ P ⦄ s ⦃ R ⦄ ->
+      Γ ⊢ ⦃ fun δ => lall (fun v__old => P (δ ⟪ x ↦ v__old ⟫)%env) ⦄ stm_assign x s ⦃ R ⦄
+  | rule_stm_assign_forwards
+      (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
+      (P : LocalStore Γ -> L)
+      (R : Lit σ -> LocalStore Γ -> L) :
+      Γ ⊢ ⦃ P ⦄ s ⦃ R ⦄ ->
+      Γ ⊢ ⦃ P ⦄ stm_assign x s ⦃ fun v__new δ => lex (fun v__old => R v__new (δ ⟪ x ↦ v__old ⟫)%env) ⦄
   (* (* | rule_stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2)) *) *)
   (*   (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ) *)
   (*   (P : LocalStore Γ -> A) *)
