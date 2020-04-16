@@ -70,6 +70,12 @@ Module ProgramLogic
     forall {τ : Ty}
       (pre : LocalStore Γ -> L) (s : Stm Γ τ)
       (post :  Lit τ -> LocalStore Γ -> L), Prop :=
+  | rule_consequence {σ : Ty}
+      (P P' : LocalStore Γ -> L) (Q Q' : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
+      (P ⊢ P') -> (forall v, Q' v ⊢ Q v) -> Γ ⊢ ⦃ P' ⦄ s ⦃ Q' ⦄ -> Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄
+  | rule_frame {σ : Ty}
+      (P : LocalStore Γ -> L) (Q : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
+      forall (R : LocalStore Γ -> L), Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> Γ ⊢ ⦃ R ✱ P ⦄ s ⦃ fun v => R ✱ Q v ⦄
   | rule_stm_lit (τ : Ty) (l : Lit τ) :
       Γ ⊢ ⦃ ⊤ ⦄ stm_lit τ l ⦃ fun x => !!(l = x) ⦄
   | rule_stm_exp_forwards (τ : Ty) (e : Exp Γ τ) (P : LocalStore Γ -> L) :
@@ -135,12 +141,6 @@ Module ProgramLogic
       Γ ⊢ ⦃ fun δ => ∀ v, r ↦ v ✱ ((r ↦ eval e δ) -✱ Q (eval e δ) δ) ⦄
         stm_write_register r e
         ⦃ Q ⦄
-  | rule_consequence {σ : Ty}
-      (P P' : LocalStore Γ -> L) (Q Q' : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
-      (P ⊢ P') -> (forall v, Q v ⊢ Q' v) -> Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> Γ ⊢ ⦃ P' ⦄ s ⦃ Q' ⦄
-  | rule_frame {σ : Ty}
-      (P : LocalStore Γ -> L) (Q : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
-      forall (R : LocalStore Γ -> L), Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> Γ ⊢ ⦃ R ✱ P ⦄ s ⦃ fun v => R ✱ Q v ⦄
   | rule_stm_assign_backwards
       (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
       (P : LocalStore Γ -> L)
