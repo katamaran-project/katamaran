@@ -83,12 +83,40 @@ Module Type HeapKit
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit).
 
+  Module AS := Assertions typekit termkit progkit assertkit.
+  Import AS.
+
+  Import CtxNotations.
+  Import EnvNotations.
+
   Class IHeaplet (L : Type) := {
     is_ISepLogic :> ISepLogic L;
     pred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L;
     ptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L
   }.
 
-Notation "r '↦' t" := (ptsreg r t) (at level 30).
+  Section InterpretAssertion.
+    Context (L : Type) (Logic : IHeaplet L).
+
+    Fixpoint interpret (Σ : Ctx (𝑺 * Ty)) (δ : NamedEnv Lit Σ) (a : Assertion Σ) : L :=
+      match a with
+      | asn_bool b => if eval_term b δ then ltrue else lfalse
+      | asn_prop p => lfalse (* Don't really now what to put here *)
+      | asn_chunk c =>
+        match c with
+        | chunk_pred p ts => pred p (env_map (fun _ t => eval_term t δ) ts)
+        | chunk_ptsreg r t => ptsreg r (eval_term t δ)
+        end
+      | asn_if b a1 a2 => if eval_term b δ then interpret Σ δ a1 else interpret Σ δ a2
+      | asn_match_enum E k alts => interpret Σ δ (alts (eval_term k δ))
+      | asn_sep a1 a2 => interpret Σ δ a1 ✱ interpret Σ δ a2
+      | asn_exist ς τ a => ∃ v, interpret (Σ ▻ (ς , τ)) (δ ► (ς , τ) ↦ v) a
+    end.
+
+  End InterpretAssertion.
+
+  Arguments interpret {_ _ _} _ _.
+
+  Notation "r '↦' t" := (ptsreg r t) (at level 30).
 
 End HeapKit.
