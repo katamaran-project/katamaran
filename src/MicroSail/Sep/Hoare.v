@@ -146,5 +146,11 @@ Module ProgramLogic
     where "Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" := (Triple Γ P s Q).
 
   End HoareTriples.
+  | rule_consequence {σ : Ty}
+      (P P' : LocalStore Γ -> L) (Q Q' : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
+      (P ⊢ P') -> (forall v, Q v ⊢ Q' v) -> Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> Γ ⊢ ⦃ P' ⦄ s ⦃ Q' ⦄
+  | rule_frame {σ : Ty}
+      (P : LocalStore Γ -> L) (Q : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
+      forall (R : LocalStore Γ -> L), Γ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> Γ ⊢ ⦃ R ✱ P ⦄ s ⦃ fun v => R ✱ Q v ⦄
 
 End ProgramLogic.
