@@ -882,6 +882,66 @@ Module Mutators
   End DynamicMutator.
   Bind Scope dmut_scope with DynamicMutator.
 
+  Module Proper.
+
+    Definition Mor (Σ : Ctx (𝑺 * Ty)) (A B : Ctx (𝑺 * Ty) -> Type) : Type :=
+      forall Σ', Sub Σ Σ' -> A Σ' -> B Σ'.
+
+    Definition DynamicMutator (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Ctx (𝑺 * Ty) -> Type) (Σ : Ctx (𝑺 * Ty)) : Type :=
+      SymbolicState Γ1 Σ -> Outcome { Σ' & Sub Σ Σ' * A Σ' * SymbolicState Γ2 Σ' * list Obligation }%type.
+
+    Definition dmut_pure {Γ A} {Σ} : Mor Σ A (DynamicMutator Γ Γ A) :=
+      fun Σ' ζ' a s =>
+        outcome_pure (existT Σ' (sub_id Σ' , a , s , nil)).
+    Definition dmut_map {Γ1 Γ2 A B Σ} (f : Mor Σ A B) : Mor Σ (DynamicMutator Γ1 Γ2 A) (DynamicMutator Γ1 Γ2 B) :=
+      fun Σ1 ζ1 ma s1 =>
+        outcome_map (fun '(existT Σ2 (ζ2 , a , s2 , w)) => existT Σ2 (ζ2 , f _ (sub_comp ζ1 ζ2) a, s2, w)) (ma s1).
+    Definition dmut_bind {Γ1 Γ2 Γ3 A B Σ} (f : Mor Σ A (DynamicMutator Γ2 Γ3 B)) :
+      Mor Σ (DynamicMutator Γ1 Γ2 A) (DynamicMutator Γ1 Γ3 B) :=
+      fun Σ0 ζ0 m0 s0 =>
+        outcome_bind (m0 s0) (fun '(existT Σ1 (ζ1 , a , s1 , w1)) =>
+        outcome_bind (f Σ1 (sub_comp ζ0 ζ1) a s1) (fun '(existT Σ2 (ζ2 , b , s2 , w2)) =>
+        outcome_pure (existT Σ2 (sub_comp ζ1 ζ2 , b , s2 , w1 ++ w2)))).
+    Definition dmut_join {Γ1 Γ2 Γ3 A Σ} :
+      Mor Σ (DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A)) (DynamicMutator Γ1 Γ3 A) :=
+      fun Σ1 ζ1 => dmut_bind (fun _ _ m => m) ζ1.
+
+    Definition dmut_sub {A B Σ1 Σ2} (ζ2 : Sub Σ1 Σ2) : Mor Σ1 A B -> Mor Σ2 A B :=
+      fun m Σ3 ζ3 => m Σ3 (sub_comp ζ2 ζ3).
+    Global Arguments dmut_sub {_ _ _ _} ζ2 m.
+
+    Definition dmut_lift {Γ1 Γ2 A} {Σ} (m : Mutator Σ Γ1 Γ2 (A Σ)) : DynamicMutator Γ1 Γ2 A Σ :=
+      fun s => outcome_map (fun '(a , s1 , w) => existT Σ (sub_id _,a,s1,w)) (m s).
+    Definition dmut_lift_kleisli {Γ1 Γ2 A B Σ} (m : A Σ -> Mutator Σ Γ1 Γ2 (B Σ)) :
+      A Σ -> DynamicMutator Γ1 Γ2 B Σ :=
+      fun a => dmut_lift (m a).
+    Definition dmut_fail {Γ1 Γ2 A Σ} (msg : string) : DynamicMutator Γ1 Γ2 A Σ :=
+      dmut_lift (mutator_fail msg).
+    Definition dmut_contradiction {Γ1 Γ2 A Σ} (msg : string) : DynamicMutator Γ1 Γ2 A Σ :=
+      dmut_lift (mutator_contradiction msg).
+    Definition dmut_block {Γ1 Γ2 A Σ} : DynamicMutator Γ1 Γ2 A Σ :=
+      dmut_lift (mutator_block).
+
+    Definition dmut_angelic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+      fun s1 => outcome_angelic (fun i => ms i s1).
+    Definition dmut_demonic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+      fun s1 => outcome_demonic (fun i => ms i s1).
+    Definition dmut_angelic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+      dmut_angelic (fun b : bool => if b then m1 else m2).
+    Definition dmut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+      dmut_demonic (fun b : bool => if b then m1 else m2).
+
+    Definition dmut_fresh {Γ A Σ} b (m : Mor (Σ ▻ b) Unit (DynamicMutator Γ Γ A)) :
+      Mor Σ Unit (DynamicMutator Γ Γ A) :=
+      fun Σ1 ζ1 _ s1 =>
+        outcome_map
+          (fun '(existT Σ' (ζ , a , s' , w)) =>
+             existT Σ' (sub_comp sub_wk1 ζ , a , s' , w))
+          (m _ (sub_up1 ζ1) tt (wk1_symbolicstate s1)).
+    Global Arguments dmut_fresh {_ _ _} _ _.
+
+  End Proper.
+
   Module DynamicMutatorNotations.
 
     Notation "'⨂' x .. y => F" :=
