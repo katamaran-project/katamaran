@@ -101,7 +101,7 @@ Module Type HeapKit
     Fixpoint interpret (Σ : Ctx (𝑺 * Ty)) (δ : NamedEnv Lit Σ) (a : Assertion Σ) : L :=
       match a with
       | asn_bool b => if eval_term b δ then ltrue else lfalse
-      | asn_prop p => lfalse (* Don't really now what to put here *)
+      | asn_prop p => !!(uncurry_named p δ) ∧ emp
       | asn_chunk c =>
         match c with
         | chunk_pred p ts => pred p (env_map (fun _ t => eval_term t δ) ts)
