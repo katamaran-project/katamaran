@@ -409,7 +409,7 @@ Module Mutators
       fun s => outcome_block.
 
     Definition mutator_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
-      mutator_demonic (fun b : bool => if b then m1 else m2).
+      fun s => outcome_demonic_binary (m1 s) (m2 s).
     Definition mutator_angelic_binary {Γ1 Γ2 A Σ} (m1 m2 : Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
       fun s => outcome_angelic_binary (m1 s) (m2 s).
 
@@ -851,9 +851,9 @@ Module Mutators
     Definition dmut_demonic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 s1 => outcome_demonic (fun i => ms i Σ1 ζ1 s1).
     Definition dmut_angelic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      dmut_angelic (fun b : bool => if b then m1 else m2).
+      fun Σ1 ζ1 s1 => outcome_angelic_binary (m1 Σ1 ζ1 s1) (m2 Σ1 ζ1 s1).
     Definition dmut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      dmut_demonic (fun b : bool => if b then m1 else m2).
+      fun Σ1 ζ1 s1 => outcome_demonic_binary (m1 Σ1 ζ1 s1) (m2 Σ1 ζ1 s1).
     Definition dmut_angelic_list {Γ A} `{Subst A} {Σ} (msg : string) :
       list (A Σ) -> DynamicMutator Γ Γ A Σ :=
       fix dmut_angelic_list (xs : list (A Σ)) :=
@@ -1108,10 +1108,8 @@ Module Mutators
       ts <- dmut_eval_exps es ;;
       dmut_call (CEnvEx f) ts
     | stm_if e s1 s2 =>
-      ⨂ b : bool =>
-      if b
-        then dmut_assume_exp e ;; dmut_exec s1
-        else dmut_assume_exp (exp_not e) ;; dmut_exec s2
+        (dmut_assume_exp e ;; dmut_exec s1) ⊗
+        (dmut_assume_exp (exp_not e) ;; dmut_exec s2)
     | stm_seq s1 s2 => dmut_exec s1 ;; dmut_exec s2
     | stm_assert e1 _ =>
       t <- dmut_eval_exp e1 ;;

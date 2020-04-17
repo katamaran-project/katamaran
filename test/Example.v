@@ -444,7 +444,7 @@ Module SepContracts.
 
   Lemma valid_contract_length {σ} : ValidContractDynMut (CEnv (@length σ)) (Pi length).
   Proof.
-    intros [].
+    constructor.
     - solve.
     - exists [term_var "ys"]%arg; solve.
   Qed.
@@ -452,11 +452,11 @@ Module SepContracts.
 
   Lemma valid_contract_cmp : ValidContractDynMut (CEnv cmp) (Pi cmp).
   Proof.
-    intros [].
+    constructor.
     { exists LT; solve. }
-    intros [].
+    constructor.
     { exists EQ; solve. }
-    intros [].
+    constructor.
     { exists GT; solve. }
     { solve.
       destruct (Z.gtb_spec db db0); try discriminate.
