@@ -21,7 +21,8 @@ Module Disjoint
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import heapkit : HeapKit typekit termkit progkit assertkit).
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
+       (Import heapkit : HeapKit typekit termkit progkit assertkit contractkit).
 
   Open Scope logic.
 
