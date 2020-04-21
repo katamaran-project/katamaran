@@ -113,11 +113,16 @@ Module Type HeapKit
 
     Definition ValidContract {Γ τ} (c : SepContract Γ τ) : L :=
       match c with
-      | sep_contract_unit _ req ens => ∀ δ, interpret δ req --> interpret δ ens
-      | sep_contract_result_pure _ result req ens => ∀ δ, interpret δ req --> interpret δ ens
-      | @sep_contract_result _ Σ σ _ result req ens =>
-        ∀ δ v, interpret δ req -->
-               @interpret (Σ ▻ (result , σ)) (δ ► (result , σ) ↦ v) ens
+      | sep_contract_unit δ0 req ens =>
+        ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) -->
+                  interpret δΣ req ∧ interpret δΣ ens
+      | sep_contract_result_pure δ0 result req ens =>
+        ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) -->
+                  interpret δΣ req ∧ interpret δΣ ens
+      | @sep_contract_result _ Σ σ δ0 result req ens =>
+        ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) -->
+                  interpret δΣ req
+                ∧ (∀ v, @interpret (Σ ▻ (result , σ)) (δΣ ► (result , σ) ↦ v) ens)
       | sep_contract_none _ => ⊤
       end.
 
