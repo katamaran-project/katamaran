@@ -95,10 +95,10 @@ Module Type HeapKit
     ptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L
   }.
 
-  Section InterpretAssertion.
+  Section Contracts.
     Context (L : Type) (Logic : IHeaplet L).
 
-    Fixpoint interpret (Σ : Ctx (𝑺 * Ty)) (δ : NamedEnv Lit Σ) (a : Assertion Σ) : L :=
+    Fixpoint interpret {Σ : Ctx (𝑺 * Ty)} (δ : NamedEnv Lit Σ) (a : Assertion Σ) : L :=
       match a with
       | asn_bool b => if eval_term b δ then ltrue else lfalse
       | asn_prop p => !!(uncurry_named p δ) ∧ emp
@@ -107,13 +107,23 @@ Module Type HeapKit
         | chunk_pred p ts => pred p (env_map (fun _ t => eval_term t δ) ts)
         | chunk_ptsreg r t => ptsreg r (eval_term t δ)
         end
-      | asn_if b a1 a2 => if eval_term b δ then interpret Σ δ a1 else interpret Σ δ a2
-      | asn_match_enum E k alts => interpret Σ δ (alts (eval_term k δ))
-      | asn_sep a1 a2 => interpret Σ δ a1 ✱ interpret Σ δ a2
-      | asn_exist ς τ a => ∃ v, interpret (Σ ▻ (ς , τ)) (δ ► (ς , τ) ↦ v) a
+      | asn_if b a1 a2 => if eval_term b δ then interpret δ a1 else interpret δ a2
+      | asn_match_enum E k alts => interpret δ (alts (eval_term k δ))
+      | asn_sep a1 a2 => interpret δ a1 ✱ interpret δ a2
+      | asn_exist ς τ a => ∃ v, @interpret (Σ ▻ (ς , τ)) (δ ► (ς , τ) ↦ v) a
     end.
 
-  End InterpretAssertion.
+    Definition ValidContract {Γ τ} (c : SepContract Γ τ) : L :=
+      match c with
+      | sep_contract_unit _ req ens => ∀ δ, interpret δ req --> interpret δ ens
+      | sep_contract_result_pure _ result req ens => ∀ δ, interpret δ req --> interpret δ ens
+      | @sep_contract_result _ Σ σ _ result req ens =>
+        ∀ δ v, interpret δ req -->
+               @interpret (Σ ▻ (result , σ)) (δ ► (result , σ) ↦ v) ens
+      | sep_contract_none _ => ⊤
+      end.
+
+  End Contracts.
 
   Arguments interpret {_ _ _} _ _.
 
