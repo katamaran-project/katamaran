@@ -67,6 +67,59 @@ Module ProgramLogic
 
   Existing Instance δ_IHeaplet.
 
+  (* Pun program variables as logical variables *)
+  Definition asΣ (Γ : Ctx (𝑿 * Ty)) : Ctx (𝑺 * Ty).
+    induction Γ.
+    - exact ctx_nil.
+    - exact (ctx_snoc IHΓ ((𝑿to𝑺 (fst b) , (snd b)))).
+    Show Proof.
+  Defined.
+
+  (* Pun program variables in local store as symbolic variables to
+     use them in assertion interpretation *)
+  Definition asδΣ {Γ} (δΓ : LocalStore Γ) : @NamedEnv 𝑺 Ty Lit (asΣ Γ).
+    unfold LocalStore in *.
+    unfold NamedEnv in *.
+    induction δΓ.
+    - exact env_nil.
+    - refine (env_snoc IHδΓ _ _).
+      now exact db.
+  Defined.
+
+  Definition asSymbolicLocalStore {Γ} (δΓ : LocalStore Γ) : SymbolicLocalStore Γ (asΣ Γ) :=
+    env_map (fun xt v => term_lit (snd xt) v) δΓ.
+
+  (* Hoare triples for SepContract *)
+  Inductive CTriple {L : Type} {Logic : IHeaplet L} (Γ : Ctx (𝑿 * Ty)) :
+    forall {τ : Ty}
+      (pre : LocalStore Γ -> L) (post : Lit τ -> LocalStore Γ -> L)
+      (c : SepContract Γ τ)
+    , Prop :=
+  | rule_sep_contract_unit
+      (δ : SymbolicLocalStore Γ (asΣ Γ))
+      (req : Assertion (asΣ Γ)) (ens : Assertion (asΣ Γ)) :
+      CTriple (τ:=ty_unit) Γ (fun δΓ => interpret (asδΣ δΓ) req)
+                             (fun _ δΓ => interpret (asδΣ δΓ) ens)
+                             (sep_contract_unit δ req ens)
+  | rule_sep_contract_result_pure
+      (σ : Ty)
+      (δ : SymbolicLocalStore Γ (asΣ Γ))
+      (result : Term (asΣ Γ) σ)
+      (req : Assertion (asΣ Γ)) (ens : Assertion (asΣ Γ)) :
+      CTriple Γ (fun δΓ => interpret (asδΣ δΓ) req)
+                (fun _ δΓ => interpret (asδΣ δΓ) ens)
+                (sep_contract_result_pure δ result req ens)
+  | rule_sep_contract_result
+      (σ : Ty)
+      (δ : SymbolicLocalStore Γ (asΣ Γ))
+      (result : 𝑺)
+      (req : Assertion (asΣ Γ)) (ens : Assertion (asΣ Γ ▻ (result , σ))) :
+      CTriple Γ (fun δΓ => interpret (asδΣ δΓ) req)
+                (fun v δΓ =>  (interpret (env_snoc (asδΣ δΓ) (result , σ) v) ens))
+                (@sep_contract_result _ _ _ δ result req ens)
+  | rule_sep_contract_none {σ} : CTriple Γ (fun _ => ⊤) (fun _ _ => ⊤) (@sep_contract_none Γ σ)
+  .
+
   Inductive Triple {L : Type} {Logic : IHeaplet L} (Γ : Ctx (𝑿 * Ty)) :
     forall {τ : Ty}
       (pre : LocalStore Γ -> L) (s : Stm Γ τ)
@@ -154,12 +207,12 @@ Module ProgramLogic
       (R : Lit σ -> LocalStore Γ -> L) :
       Γ ⊢ ⦃ P ⦄ s ⦃ R ⦄ ->
       Γ ⊢ ⦃ P ⦄ stm_assign x s ⦃ fun v__new δ => lex (fun v__old => R v__new (δ ⟪ x ↦ v__old ⟫)%env) ⦄
-  | rule_stm_call
-      {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
-      (P : LocalStore Γ -> L)
-      (Q : Lit σ -> LocalStore Γ -> L)
-      (c : SepContract Δ σ) :
-      Γ ⊢ ⦃ P ⦄ stm_call f es ⦃ fun δ v => Q δ v ∧ ValidContract c ⦄
+  (* | rule_stm_call *)
+  (*     {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) *)
+  (*     (P : LocalStore Γ -> L) *)
+  (*     (Q : Lit σ -> LocalStore Γ -> L) *)
+  (*     (c : SepContract Δ σ) : *)
+  (*     CEnv Γ σ f -> Γ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q⦄ *)
   (* (* | rule_stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2)) *) *)
   (*   (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ) *)
   (*   (P : LocalStore Γ -> A) *)

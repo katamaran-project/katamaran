@@ -111,24 +111,24 @@ Module Type HeapKit
       | asn_exist ς τ a => ∃ v, @interpret (Σ ▻ (ς , τ)) (δ ► (ς , τ) ↦ v) a
     end.
 
-    Definition ValidContract {Γ τ} (c : SepContract Γ τ) : L :=
-      match c with
-      | sep_contract_unit δ0 req ens =>
-        ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) -->
-                  interpret δΣ req ∧ interpret δΣ ens
-      | sep_contract_result_pure δ0 result req ens =>
-        ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) -->
-                  interpret δΣ req ∧ interpret δΣ ens
-      | @sep_contract_result _ Σ σ δ0 result req ens =>
-        ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) -->
-                  interpret δΣ req
-                ∧ (∀ v, @interpret (Σ ▻ (result , σ)) (δΣ ► (result , σ) ↦ v) ens)
-      | sep_contract_none _ => ⊤
-      end.
+    (* Definition ValidContract {Γ τ} (c : SepContract Γ τ) : L := *)
+    (*   match c with *)
+    (*   | sep_contract_unit δ0 req ens => *)
+    (*     ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) --> *)
+    (*               interpret δΣ req ∧ interpret δΣ ens *)
+    (*   | sep_contract_result_pure δ0 result req ens => *)
+    (*     ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) --> *)
+    (*               interpret δΣ req ∧ interpret δΣ ens *)
+    (*   | @sep_contract_result _ Σ σ δ0 result req ens => *)
+    (*     ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) --> *)
+    (*               interpret δΣ req *)
+    (*             ∧ (∀ v, @interpret (Σ ▻ (result , σ)) (δΣ ► (result , σ) ↦ v) ens) *)
+    (*   | sep_contract_none _ => ⊤ *)
+    (*   end. *)
 
   End Contracts.
 
-  Arguments interpret {_ _ _ _} _.
+  Arguments interpret {_ _ _} _ _.
   Arguments ValidContract {_ _ _ _} _.
 
   Notation "r '↦' t" := (ptsreg r t) (at level 30).

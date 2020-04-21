@@ -103,6 +103,10 @@ Module Assertions
   Bind Scope env_scope with SymbolicLocalStore.
   (* Definition SymbolicRegStore (Σ : Ctx (𝑺 * Ty))  : Type := forall σ, 𝑹𝑬𝑮 σ -> Term Σ σ. *)
 
+  Definition eval_symLocalStore {Γ Σ}
+    (δ : SymbolicLocalStore Γ Σ) (δΣ : NamedEnv Lit Σ) : LocalStore Γ :=
+    env_map (fun _ t => eval_term t δΣ) δ.
+
   Definition symbolic_eval_exp {Γ Σ} (δ : SymbolicLocalStore Γ Σ) :
     forall {σ} (e : Exp Γ σ), Term Σ σ :=
     fix symbolic_eval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
