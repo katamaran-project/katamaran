@@ -81,10 +81,8 @@ Module Type HeapKit
        (Import typekit : TypeKit)
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit).
-
-  Module AS := Assertions typekit termkit progkit assertkit.
-  Import AS.
+       (Import assertkit : AssertionKit typekit termkit progkit)
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
 
   Import CtxNotations.
   Import EnvNotations.
