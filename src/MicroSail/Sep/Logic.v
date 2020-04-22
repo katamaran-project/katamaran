@@ -129,7 +129,7 @@ Module Type HeapKit
   End Contracts.
 
   Arguments interpret {_ _ _} _ _.
-  Arguments ValidContract {_ _ _ _} _.
+  (* Arguments ValidContract {_ _ _ _} _. *)
 
   Notation "r '↦' t" := (ptsreg r t) (at level 30).
 

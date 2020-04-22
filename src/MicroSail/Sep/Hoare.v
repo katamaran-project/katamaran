@@ -72,7 +72,6 @@ Module ProgramLogic
     induction Γ.
     - exact ctx_nil.
     - exact (ctx_snoc IHΓ ((𝑿to𝑺 (fst b) , (snd b)))).
-    Show Proof.
   Defined.
 
   (* Pun program variables in local store as symbolic variables to
