@@ -106,7 +106,7 @@ Module ProgramLogic
       (result : Term (asΣ Γ) σ)
       (req : Assertion (asΣ Γ)) (ens : Assertion (asΣ Γ)) :
       CTriple Γ (fun δΓ => interpret (asδΣ δΓ) req)
-                (fun _ δΓ => interpret (asδΣ δΓ) ens)
+                (fun v δΓ => (interpret (asδΣ δΓ) ens ∧ !!(v = eval_term result (asδΣ δΓ))))
                 (sep_contract_result_pure δ result req ens)
   | rule_sep_contract_result
       (σ : Ty)
