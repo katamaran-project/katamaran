@@ -89,34 +89,39 @@ Module ProgramLogic
     env_map (fun xt v => term_lit (snd xt) v) δΓ.
 
   (* Hoare triples for SepContract *)
-  Inductive CTriple {L : Type} {Logic : IHeaplet L} (Γ : Ctx (𝑿 * Ty)) :
-    forall {τ : Ty}
-      (pre : LocalStore Γ -> L) (post : Lit τ -> LocalStore Γ -> L)
-      (c : SepContract Γ τ)
+  Inductive SepContractWLP {L : Type} {Logic : IHeaplet L} (Δ : Ctx (𝑿 * Ty)) :
+    forall {σ : Ty}
+      (wlp : (Lit σ -> L) -> L)
+      (c : SepContract Δ σ)
     , Prop :=
   | rule_sep_contract_unit
-      (δ : SymbolicLocalStore Γ (asΣ Γ))
-      (req : Assertion (asΣ Γ)) (ens : Assertion (asΣ Γ)) :
-      CTriple (τ:=ty_unit) Γ (fun δΓ => interpret (asδΣ δΓ) req)
-                             (fun _ δΓ => interpret (asδΣ δΓ) ens)
-                             (sep_contract_unit δ req ens)
+      (Σ : Ctx (𝑺 * Ty))
+      (δ : SymbolicLocalStore Δ Σ)
+      (req : Assertion Σ) (ens : Assertion Σ) :
+      SepContractWLP Δ (fun POST => ∀ δΣ, interpret δΣ req
+                                    ∧ (∀ v, interpret δΣ ens --> POST v))
+                    (sep_contract_unit δ req ens)
   | rule_sep_contract_result_pure
-      (σ : Ty)
-      (δ : SymbolicLocalStore Γ (asΣ Γ))
-      (result : Term (asΣ Γ) σ)
-      (req : Assertion (asΣ Γ)) (ens : Assertion (asΣ Γ)) :
-      CTriple Γ (fun δΓ => interpret (asδΣ δΓ) req)
-                (fun v δΓ => (interpret (asδΣ δΓ) ens ∧ !!(v = eval_term result (asδΣ δΓ))))
-                (sep_contract_result_pure δ result req ens)
+      (Σ : Ctx (𝑺 * Ty))
+      (τ : Ty)
+      (δ : SymbolicLocalStore Δ Σ)
+      (result : Term Σ τ)
+      (req : Assertion Σ) (ens : Assertion Σ) :
+      SepContractWLP Δ (fun POST => ∀ δΣ, interpret δΣ req
+                                    ∧ (∀ v, interpret δΣ ens
+                                            ∧ !!(v = eval_term result δΣ) --> POST v))
+                    (sep_contract_result_pure δ result req ens)
   | rule_sep_contract_result
-      (σ : Ty)
-      (δ : SymbolicLocalStore Γ (asΣ Γ))
+      (Σ : Ctx (𝑺 * Ty))
+      (τ : Ty)
+      (δ : SymbolicLocalStore Δ Σ)
       (result : 𝑺)
-      (req : Assertion (asΣ Γ)) (ens : Assertion (asΣ Γ ▻ (result , σ))) :
-      CTriple Γ (fun δΓ => interpret (asδΣ δΓ) req)
-                (fun v δΓ =>  (interpret (env_snoc (asδΣ δΓ) (result , σ) v) ens))
-                (@sep_contract_result _ _ _ δ result req ens)
-  | rule_sep_contract_none {σ} : CTriple Γ (fun _ => ⊤) (fun _ _ => ⊤) (@sep_contract_none Γ σ)
+      (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ))) :
+      SepContractWLP Δ (fun POST => ∀ δΣ,
+                         interpret δΣ req
+                         ∧ (∀ v, interpret (env_snoc δΣ (result , τ) v) ens --> POST v))
+                    (@sep_contract_result _ _ _ δ result req ens)
+  | rule_sep_contract_none {σ} : SepContractWLP Δ (fun _ => ⊤) (@sep_contract_none Δ σ)
   .
 
   Inductive Triple {L : Type} {Logic : IHeaplet L} (Γ : Ctx (𝑿 * Ty)) :
@@ -199,19 +204,20 @@ Module ProgramLogic
       (P : LocalStore Γ -> L)
       (R : Lit σ -> LocalStore Γ -> L) :
       Γ ⊢ ⦃ P ⦄ s ⦃ R ⦄ ->
-      Γ ⊢ ⦃ fun δ => lall (fun v__old => P (δ ⟪ x ↦ v__old ⟫)%env) ⦄ stm_assign x s ⦃ R ⦄
+      Γ ⊢ ⦃ fun δ => (∀ v__old, P (δ ⟪ x ↦ v__old ⟫)%env) ⦄ stm_assign x s ⦃ R ⦄
   | rule_stm_assign_forwards
       (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
       (P : LocalStore Γ -> L)
       (R : Lit σ -> LocalStore Γ -> L) :
       Γ ⊢ ⦃ P ⦄ s ⦃ R ⦄ ->
-      Γ ⊢ ⦃ P ⦄ stm_assign x s ⦃ fun v__new δ => lex (fun v__old => R v__new (δ ⟪ x ↦ v__old ⟫)%env) ⦄
-  (* | rule_stm_call *)
-  (*     {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) *)
-  (*     (P : LocalStore Γ -> L) *)
-  (*     (Q : Lit σ -> LocalStore Γ -> L) *)
-  (*     (c : SepContract Δ σ) : *)
-  (*     CEnv Γ σ f -> Γ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q⦄ *)
+      Γ ⊢ ⦃ P ⦄ stm_assign x s ⦃ fun v__new δ => ∃ v__old, R v__new (δ ⟪ x ↦ v__old ⟫)%env ⦄
+  | rule_stm_call
+      {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
+      (P : LocalStore Γ -> L)
+      (Q : Lit σ -> LocalStore Γ -> L) :
+      SepContractWLP Δ (fun POST => ∀ (δ : LocalStore Γ),
+                            P δ ∧ (∀ (v : Lit σ), Q v δ --> POST v)) (CEnv f) ->
+      Γ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q ⦄
   (* (* | rule_stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2)) *) *)
   (*   (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ) *)
   (*   (P : LocalStore Γ -> A) *)
