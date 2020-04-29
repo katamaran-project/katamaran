@@ -88,40 +88,52 @@ Module ProgramLogic
   Definition asSymbolicLocalStore {Γ} (δΓ : LocalStore Γ) : SymbolicLocalStore Γ (asΣ Γ) :=
     env_map (fun xt v => term_lit (snd xt) v) δΓ.
 
-  (* Hoare triples for SepContract *)
-  Inductive SepContractWLP {L : Type} {Logic : IHeaplet L} (Δ : Ctx (𝑿 * Ty)) :
+  (* Relation specification of weakest liberal preconditions for function contracts *)
+  Inductive SepContractWLP
+            {L : Type} {Logic : IHeaplet L}
+            (Δ : Ctx (𝑿 * Ty))
+            (δΔ : LocalStore Δ)
+            (POST : forall t, Lit t -> L) :
     forall {σ : Ty}
-      (wlp : (Lit σ -> L) -> L)
+      (wlp : L)
       (c : SepContract Δ σ)
     , Prop :=
   | rule_sep_contract_unit
       (Σ : Ctx (𝑺 * Ty))
       (δ : SymbolicLocalStore Δ Σ)
       (req : Assertion Σ) (ens : Assertion Σ) :
-      SepContractWLP Δ (fun POST => ∀ δΣ, interpret δΣ req
-                                    ∧ (∀ v, interpret δΣ ens --> POST v))
-                    (sep_contract_unit δ req ens)
+      SepContractWLP Δ δΔ POST
+        (∀ (δΣ : NamedEnv Lit Σ),
+            !!(δΔ = env_map (fun _ t => eval_term t δΣ) δ)
+            ∧ interpret δΣ req
+            ∧ (interpret δΣ ens --> POST ty_unit tt))
+        (sep_contract_unit δ req ens)
   | rule_sep_contract_result_pure
       (Σ : Ctx (𝑺 * Ty))
       (τ : Ty)
       (δ : SymbolicLocalStore Δ Σ)
       (result : Term Σ τ)
       (req : Assertion Σ) (ens : Assertion Σ) :
-      SepContractWLP Δ (fun POST => ∀ δΣ, interpret δΣ req
-                                    ∧ (∀ v, interpret δΣ ens
-                                            ∧ !!(v = eval_term result δΣ) --> POST v))
-                    (sep_contract_result_pure δ result req ens)
+      SepContractWLP Δ δΔ POST
+        (∀ (δΣ : NamedEnv Lit Σ),
+            !!(δΔ = env_map (fun _ t => eval_term t δΣ) δ)
+            ∧ interpret δΣ req
+            ∧ (∀ v, interpret δΣ ens
+                    ∧ !!(v = eval_term result δΣ) --> POST τ v))
+        (sep_contract_result_pure δ result req ens)
   | rule_sep_contract_result
       (Σ : Ctx (𝑺 * Ty))
       (τ : Ty)
       (δ : SymbolicLocalStore Δ Σ)
       (result : 𝑺)
       (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ))) :
-      SepContractWLP Δ (fun POST => ∀ δΣ,
-                         interpret δΣ req
-                         ∧ (∀ v, interpret (env_snoc δΣ (result , τ) v) ens --> POST v))
-                    (@sep_contract_result _ _ _ δ result req ens)
-  | rule_sep_contract_none {σ} : SepContractWLP Δ (fun _ => ⊤) (@sep_contract_none Δ σ)
+      SepContractWLP Δ δΔ POST
+        (∀ (δΣ : NamedEnv Lit Σ),
+            !!(δΔ = env_map (fun _ t => eval_term t δΣ) δ)
+            ∧ interpret δΣ req
+            ∧ (∀ v, interpret (env_snoc δΣ (result , τ) v) ens --> POST τ v))
+        (@sep_contract_result _ _ _ δ result req ens)
+  | rule_sep_contract_none {σ} : SepContractWLP Δ δΔ POST ⊤ (@sep_contract_none Δ σ)
   .
 
   Inductive Triple {L : Type} {Logic : IHeaplet L} (Γ : Ctx (𝑿 * Ty)) :
