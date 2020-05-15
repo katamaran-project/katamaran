@@ -62,6 +62,15 @@ Module Disjoint
                                      | Some x => Some x
                                      end.
 
+  Definition disjoint (γl γr : Heap) : Prop :=
+    forall σ (r : 𝑹𝑬𝑮 σ), γl σ r <> None -> γr σ r <> None -> False.
+
+  Definition join (γl γr : Heap) (_ : disjoint γl γr) : Heap :=
+    fun σ r => match γl σ r with
+            | None => γr σ r
+            | Some v => Some v
+            end.
+
   Program Instance HProp_ISepLogic : ISepLogic HProp :=
   { emp := fun γ => forall σ r, γ σ r = None;
     sepcon P Q := fun γ => exists γl γr, split γ γl γr /\ P γl /\ Q γr;
@@ -69,7 +78,7 @@ Module Disjoint
   }.
 
   (* Solve a heap partitioning goal of form 'split γ γl γr' *)
-  Local Ltac heap_solve_split :=
+  Ltac heap_solve_split :=
       repeat match goal with
       | [ |- split _ _ _ ] => unfold split in *
       | [ H : split _ _ _ |- _ ] => unfold split in *
@@ -84,6 +93,14 @@ Module Disjoint
       end; cbn in *; try congruence; try eauto with seplogic.
 
   Create HintDb seplogic.
+
+  Lemma split_eq : forall γ1 γ2 γl γr, split γ1 γl γr -> split γ2 γl γr -> γ1 = γ2.
+  Proof.
+    intros γ1 γ2 γl γr H1 H2.
+    extensionality σ.
+    extensionality r.
+    heap_solve_split.
+  Qed.
 
   Lemma split_comm : forall γ γ1 γ2, split γ γ1 γ2 -> split γ γ2 γ1.
   Proof. heap_solve_split. Qed.
@@ -100,7 +117,7 @@ Module Disjoint
   Qed.
   Hint Resolve split_emp : seplogic.
 
-  Lemma split_assoc : forall γ γl γr γll γlr,
+  Lemma split_assoc_l : forall γ γl γr γll γlr,
     split γ γl γr -> split γl γll γlr ->
     exists f, split γ γll f /\ split f γlr γr.
   Proof.
@@ -111,7 +128,20 @@ Module Disjoint
                end).
     split; heap_solve_split.
   Qed.
-  Hint Resolve split_assoc : seplogic.
+  Hint Resolve split_assoc_l : seplogic.
+
+  Lemma split_assoc_r : forall γ γl γr γrl γrr,
+    split γ γl γr -> split γr γrl γrr ->
+    exists f, split γ f γrr /\ split f γl γrl.
+  Proof.
+    intros γ γl γr γrl γrr H_split_1 H_split_2.
+    exists (fun σ r => match γl σ r with
+               | None => γrl σ r
+               | Some x => Some x
+               end).
+    split; heap_solve_split.
+  Qed.
+  Hint Resolve split_assoc_r : seplogic.
 
   Lemma sepcon_comm : forall (P Q : HProp), P ✱ Q ⊢ Q ✱ P.
   Proof.
@@ -131,7 +161,7 @@ Module Disjoint
     intros P Q R γ H.
     destruct H as [γl [γr [H_split_1 [H HR]]]].
     destruct H as [γl' [γr' [H_split_2 [HP HQ]]]].
-    specialize (split_assoc γ γl γr γl' γr' H_split_1 H_split_2) as H_split_3.
+    specialize (split_assoc_l γ γl γr γl' γr' H_split_1 H_split_2) as H_split_3.
     inversion H_split_3 as [γcomp H_split_comp].
     exists γl'. exists γcomp.
     split.
@@ -151,7 +181,7 @@ Module Disjoint
     destruct H as [γrl [γrr [H_split_2 [HQ HR]]]].
     specialize (split_comm _ _ _ H_split_1) as H_split_1'.
     specialize (split_comm _ _ _ H_split_2) as H_split_2'.
-    specialize (split_assoc γ γr γl γrr γrl H_split_1' H_split_2') as H_split_3.
+    specialize (split_assoc_l γ γr γl γrr γrl H_split_1' H_split_2') as H_split_3.
     destruct H_split_3 as [γcomp H_split_comp].
     exists γcomp, γrr.
     split.

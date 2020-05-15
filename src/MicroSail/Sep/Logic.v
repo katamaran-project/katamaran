@@ -84,8 +84,8 @@ Module Type HeapKit
        (Import assertkit : AssertionKit typekit termkit progkit)
        (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
 
-  (* Definition CEnv := SepContractEnv. *)
-  (* Definition CEnvEx := SepContractEnvEx. *)
+  (* Definition CEnv : SepContractEnv. *)
+  (* Definition CEnvEx : SepContractEnvEx. *)
 
   Import CtxNotations.
   Import EnvNotations.

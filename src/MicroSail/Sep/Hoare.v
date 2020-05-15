@@ -124,7 +124,8 @@ Module ProgramLogic
       (P : L) (Q : Lit σ -> LocalStore Γ -> L)
       (R : Lit τ -> LocalStore Γ -> L) :
       δ         ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
-      (forall v δ', env_snoc δ' (x,σ) v ⊢ ⦃ Q v δ' ⦄ k ⦃ fun v δ'' => R v (env_tail δ'') ⦄ ) ->
+      (forall (v : Lit σ) (δ' : LocalStore Γ),
+          env_snoc δ' (x,σ) v ⊢ ⦃ Q v δ' ⦄ k ⦃ fun v δ'' => R v (env_tail δ'') ⦄ ) ->
       δ         ⊢ ⦃ P ⦄ let: x := s in k ⦃ R ⦄
   | rule_stm_if
       (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
