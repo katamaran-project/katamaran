@@ -101,99 +101,7 @@ Module HoareSound
     (*       (exists (γfocus' : Heap), *)
     (*         ResultNoFail s' (fun v => POST v δ' γfocus')). *)
     (* Proof. *)
-    (*   intros. *)
-    (*   generalize dependent γfocus. *)
-    (*   generalize dependent γframe. *)
-    (*   generalize dependent γ. *)
-    (*   induction s; intros. *)
-    (*   3:{ cbn in *. *)
-    (*       sound_steps_inversion. *)
-
-  (*   Lemma sound_stm_seq {Γ σ} (s : Stm Γ σ) *)
-  (*         (s_eq : exists τ s1 s2 *)
-  (* (IHs1 : forall (s' : Stm Γ τ) (γ γ' : RegStore) (μ μ' : Memory) *)
-  (*          (δ δ' : LocalStore Γ) (PRE : HProp) (POST : Lit τ -> LocalStore Γ -> HProp), *)
-  (*        δ ⊢ ⦃ PRE ⦄ s1 ⦃ POST ⦄ -> *)
-  (*        Final s' -> *)
-  (*        ⟨ γ, μ, δ, s1 ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> *)
-  (*        forall γfocus : Heap, *)
-  (*        PRE γfocus -> *)
-  (*        forall γframe : Heap, *)
-  (*        split (heap γ) γframe γfocus -> *)
-  (*        exists γframe' γfocus' : Heap, *)
-  (*          split (heap γ') γframe' γfocus' /\ *)
-  (*          ResultNoFail s' (fun v : Lit τ => POST v δ' γfocus')) *)
-  (* (IHs2 : forall (s' : Stm Γ σ) (γ γ' : RegStore) (μ μ' : Memory) *)
-  (*          (δ δ' : LocalStore Γ) (PRE : HProp) (POST : Lit σ -> LocalStore Γ -> HProp), *)
-  (*        δ ⊢ ⦃ PRE ⦄ s2 ⦃ POST ⦄ -> *)
-  (*        Final s' -> *)
-  (*        ⟨ γ, μ, δ, s2 ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> *)
-  (*        forall γfocus : Heap, *)
-  (*        PRE γfocus -> *)
-  (*        forall γframe : Heap, *)
-  (*        split (heap γ) γframe γfocus -> *)
-  (*        exists γframe' γfocus' : Heap, *)
-  (*          split (heap γ') γframe' γfocus' /\ *)
-  (*          ResultNoFail s' (fun v : Lit σ => POST v δ' γfocus')), *)
-  (*             s = @stm_seq Γ τ s1 σ s2)  : *)
-  (*     forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (s' : Stm Γ σ), *)
-  (*     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' -> *)
-  (*     forall (PRE : HProp) (POST : Lit σ -> LocalStore Γ -> HProp) *)
-  (*       (triple : δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄) *)
-  (*       (γframe γfocus : Heap), *)
-  (*         split (heap γ) γframe γfocus -> *)
-  (*         PRE γfocus -> *)
-  (*         exists (γframe' γfocus' : Heap), *)
-  (*           split (heap γ') γframe' γfocus' /\ *)
-  (*           ResultNoFail s' (fun v => POST v δ' γfocus'). *)
-  (*     Proof. *)
-  (*       intros γ γ' μ μ' δ δ' s' Hsteps Hfinal PRE POST triple γframe γfocus Hsplit_γ Hpre. *)
-  (*       inversion s_eq as [τ [s1 [s2 [IHs1 [ IHs2 eq]]]]]. subst. clear s_eq. *)
-  (*       sound_steps_inversion. *)
-  (*       sound_simpl. *)
-  (*       rename Hsteps into γ0. *)
-  (*       induction triple. *)
-  (*       (* consequence *) *)
-  (*       - destruct (IHtriple s1 s2 δ' s' H0 H1 H2 H3 H4 H5 H6 Hfinal *)
-  (*                   (H7 γfocus Hpre) IHs1 IHs2) as [γframe' [γfocus' [IHsplit IHresult]]]. *)
-  (*            exists γframe', γfocus'. *)
-  (*            split. *)
-  (*            ** apply IHsplit. *)
-  (*            ** destruct s'; cbn in *; try congruence. *)
-  (*               apply (H8 _ _ _ IHresult). *)
-  (*       (* frame *) *)
-  (*       - admit. *)
-  (*       - dependent destruction H1; *)
-  (*         cbn in *; *)
-  (*         sound_steps_inversion; *)
-  (*         sound_simpl. *)
-  (*         + exists γframe, γfocus. *)
-  (*           Abort. *)
-(*           + (* specialize (step_trans H5 H6) as H7. *) *)
-(*             specialize (IHs1 (stm_lit τ l) γ γ0 μ μ0 δ δ0 P6 (fun _ => Q5) t7 *)
-(*                              (ltac:(now cbn)) H2 γfocus HPRE γframe Hsplit_γ). *)
-(*             inversion IHs1 as [γframe' [γfocus' [Hsplit_γ' HQ]]]. clear IHs1. *)
-(*             cbn in HQ. *)
-(*             specialize (IHs2 s' γ0 γ' μ0 μ' δ0 δ' (Q5 δ0) R1 (t8 δ0) HFinal_s' *)
-(*                              H6 γfocus' HQ γframe' Hsplit_γ'). *)
-(*             apply IHs2. *)
-
-
-(* dependent destruction H1; *)
-(*           cbn in *; *)
-(*           sound_steps_inversion; *)
-(*           sound_simpl. *)
-(*           + *)
-(* Abort. *)
-    (*         specialize (IHs1 (stm_lit τ l) γ γ0 μ μ0 δ δ0 P6 (fun _ => Q5) t7 *)
-    (*                          (ltac:(now cbn)) H2 γfocus HPRE γframe Hsplit_γ). *)
-    (*         inversion IHs1 as [γframe' [γfocus' [Hsplit_γ' HQ]]]. clear IHs1. *)
-    (*         cbn in HQ. *)
-    (*         specialize (IHs2 s' γ0 γ' μ0 μ' δ0 δ' (Q5 δ0) R1 (t8 δ0) HFinal_s' *)
-    (*                          H6 γfocus' HQ γframe' Hsplit_γ'). *)
-    (*         apply IHs2. *)
-    (*     intros. *)
-
+    (* Abort. *)
 
     Lemma sound {Γ σ} (s : Stm Γ σ) :
       forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),
@@ -248,186 +156,92 @@ Module HoareSound
           ++ apply Hsplit_γ.
           ++ now cbn in *.
      (* stm_exp *)
-     *
+     Abort.
 
 
 
 
-        exists γframe, γfocus.
-        split.
-        ** apply Hsplit_γ.
-        **
-           +
-
-               triple Hfinal
-                  γfocus HPRE γframe Hsplit_γ.
-      10:{
-        intros s' γ γ' μ μ' δ δ' PRE POST triple Hfinal Hsteps
-                  γfocus HPRE γframe Hsplit_γ.
-        sound_steps_inversion.
-        sound_simpl.
-        rename Hsteps into γ0.
-        dependent elimination triple.
-        3:{
-        dependent induction triple.
-        3:{ simplify_IH_hyps.
-            simpl_JMeq.
-            simpl_depind.
-
-      10:{ intros γ γ' μ μ' δ δ' s' Hsteps Hfinal PRE POST triple
-                  γframe γfocus Hsplit_γ HPRE.
-           sound_steps_inversion.
-           sound_simpl.
-           rename Hsteps into γ0.
-           induction triple.
-           (* dependent elimination triple. *)
-           * specialize (IHtriple s1 s2 IHs1 IHs2 δ' s' H0 H1 H2 H3 H4 H5 H6 Hfinal
-                       (H7 γfocus HPRE)) as [γframe' [γfocus' [IHsplit IHresult]]].
-             exists γframe', γfocus'.
-             split.
-             ** apply IHsplit.
-             ** destruct s'; cbn in *; try congruence.
-                apply (H8 _ _ _ IHresult).
-           * admit.
-           * dependent destruction H1;
-             cbn in *;
-             sound_steps_inversion;
-             sound_simpl.
-             specialize (IHs2 γ0 γ' μ0 μ' δ0 δ' s' H6 Hfinal).
-
-             (Q5 δ0) R1 (t8 δ0) HFinal_s'
-                            H6 γfocus' HQ γframe' Hsplit_γ').
-
-             sound_steps_inversion.
-             sound_simpl.
-
-             +
-               (* specialize (step_trans H5 H6) as H7. *)
-                 specialize (IHs1 (stm_lit τ l0) γ γ0 μ μ0 δ δ0
-                                  ⊤ (fun v δ' => !!(l0 = v /\ δ = δ'))
-                                  ). P6 (fun _ => Q5) t7
-                            (ltac:(now cbn)) H2 γfocus HPRE γframe Hsplit_γ).
-                 inversion IHs1 as [γframe' [γfocus' [Hsplit_γ' HQ]]]. clear IHs1.
-                 cbn in HQ.
-                 specialize (IHs2 s' γ0 γ' μ0 μ' δ0 δ' (Q5 δ0) R1 (t8 δ0) HFinal_s'
-                            H6 γfocus' HQ γframe' Hsplit_γ').
-                 apply IHs2.
-  (* specialize (IHs1 (stm_lit τ l) γ γ0 μ μ0 δ δ0 P6 (fun _ => Q5) t7 *)
-  (*                           (ltac:(now cbn)) H2 γfocus HPRE γframe Hsplit_γ). *)
-  (*                inversion IHs1 as [γframe' [γfocus' [Hsplit_γ' HQ]]]. clear IHs1. *)
-  (*                cbn in HQ. *)
-  (*                specialize (IHs2 s' γ0 γ' μ0 μ' δ0 δ' (Q5 δ0) R1 (t8 δ0) HFinal_s' *)
-  (*                           H6 γfocus' HQ γframe' Hsplit_γ'). *)
-  (*                apply IHs2. *)
-               + admit. }
-
-
-                 sound_steps_inversion.
-                 sound_simpl.
-
-               + cbn in *.
-                 sound_steps_inversion.
-                 sound_simpl.
-
-                 dependent destruction t7.
-
-
-
-
-
-
-
-
-      induction .
-      9:{
-        intros HFinal_s' Hsteps γfocus HP γframe Hsplit_γ.
-        sound_steps_inversion.
-        sound_simpl.
-        rename Hsteps into γ0.
-
-
-
+    Lemma sound {Γ σ} (s : Stm Γ σ) :
+      forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),
+      ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
+      forall (PRE : HProp) (POST : Lit σ -> LocalStore Γ -> HProp)
+        (triple : δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄)
+        (γframe γfocus : Heap),
+          split (heap γ) γframe γfocus ->
+          PRE γfocus ->
+          exists (γframe' γfocus' : Heap),
+            split (heap γ') γframe' γfocus' /\
+            ResultNoFail s' (fun v => POST v δ' γfocus').
+    Proof.
+      intros γ γ' μ μ' δ δ' s' Hsteps Hfinal PRE POST triple γframe γfocus Hsplit_γ Hpre.
+      revert Hpre Hsplit_γ.
+      generalize dependent γfocus.
+      generalize dependent γframe.
+      revert Hfinal Hsteps.
+      generalize dependent s'.
+      revert γ γ' μ μ' δ'.
+      induction triple; intros.
       (* consequence *)
-      - intros γfocus HP γframe Hsplit_γ.
-        destruct (IHtriple δ' s' H H0 γfocus (H1 γfocus HP) γframe Hsplit_γ)
-          as [γfocus' IH].
-        exists γfocus'.
-        destruct (result_no_fail_inversion _ _ IH) as [v [s'eq HQ']].
-        subst.
-        unfold ResultNoFail.
-        apply (H2 _ _ γfocus' HQ').
+      - destruct (IHtriple γ γ' μ μ' δ' s' Hfinal Hsteps
+                  γframe γfocus (H γfocus Hpre) Hsplit_γ)
+          as [γframe' [γfocus' [Hsplit_γ' IH]]].
+        exists γframe', γfocus'.
+        split.
+        + apply Hsplit_γ'.
+        + destruct (result_no_fail_inversion _ _ IH) as [v [s'eq HQ']].
+          subst.
+          unfold ResultNoFail.
+          apply (H0 _ _ γfocus' HQ').
       (* frame *)
-      - intros γfocus HRP γframe Hsplit_γ.
-        inversion HRP as [γl [γr [Hsplit_γfocus [HR HP]]]].
+      - inversion Hpre as [γl [γr [Hsplit_γfocus [HR HP]]]].
         destruct (split_assoc_r (heap γ) γframe γfocus γl γr Hsplit_γ Hsplit_γfocus)
           as [γ0 [Hsplit_γ0r Hsplit_γframer]].
-        destruct (IHtriple δ' s' H H0 γr HP γ0 Hsplit_γ0r) as [γfocus' IH].
-        (* stuck: do we need some sort of connection between γfocus and γfocus'? *)
-        admit.
+        destruct (IHtriple γ γ' μ μ' δ' s' Hfinal Hsteps γ0 γr HP Hsplit_γ0r)
+          as [γframe' [γfocus' [Hsplit_γ' IH]]].
+        exists γframe', γfocus'.
+        split.
+        * apply Hsplit_γ'.
+        * dependent elimination s';
+          sound_steps_inversion;
+          sound_simpl.
+          ** exists γl, γr.
+             (* stuck: something is wrong with the connection between γfocus and γfocus'.
+                Should R, the frame predicate, hold on γframe instead of a part of γfocus?*)
+             admit.
+          ** discriminate.
       (* rule_stm_lit *)
-      - intros. cbn in *.
-        sound_steps_inversion.
-        now exists γfocus.
+      - sound_steps_inversion.
+        exists γframe, γfocus.
+        intuition.
       (* rule_stm_exp_forwards *)
-      - intros.
-        sound_steps_inversion; try contradiction.
-        exists γfocus. intuition.
+      - sound_steps_inversion; try contradiction.
+        exists γframe, γfocus. intuition.
       (* rule_stm_exp_backwards *)
       - admit.
       (* rule_stm_let *)
-      - intros.
-      (*    sound_steps_inversion. *)
-      (*    sound_simpl. *)
-      (*    cbn in *. *)
-      (*    dependent destruction s'. *)
-      (*    + cbn in *. *)
-      (*      dependent destruction H7. *)
-      (*      ++ cbn in *. *)
-      (*         specialize (H2 l0). *)
-      (*         specialize (step_trans H11 H12) as H13. *)
-      (*         specialize (H1 l0 δ) as Z. *)
-      (*         destruct Z. subst. *)
-      (*         cbn in *. *)
-      (*         specialize (H14 l (env_snoc δ' (x, τ0) l0)). *)
-      (*         cbn in *. *)
-      (*         exists γfocus. *)
-      (*         apply (H14 γfocus). *)
-
-      (*         sound_steps_inversion. *)
-      (*         sound_simpl. *)
-
-      (*    dependent destruction H7. *)
-      (*    + cbn in *. *)
-      (*      specialize (H1 l δ). *)
-      (*      dependent destruction H1. *)
-      (*      cbn in *. *)
-      (*      specialize (H2 l (env_snoc δ (x, τ0) l)). *)
-      (*      specialize (H2 l H6 (env_snoc δ' (x, τ0) l) ). *)
-         admit.
+      - admit.
       (* rule_stm_if *)
-      - intros γfocus HP γframe Hsplit_γ.
-         sound_steps_inversion.
-         sound_simpl.
-         destruct (eval e δ); cbn in *.
-         * apply (IHtriple1 δ3 s4 H0 H1 γfocus (conj HP eq_refl) γframe Hsplit_γ).
-         * apply (IHtriple2 δ3 s4 H0 H1 γfocus (conj HP eq_refl) γframe Hsplit_γ).
-      (* rule_stm_if_backwards *)
-      - intros γfocus eqs γframe Hsplit_γ.
-        sound_steps_inversion.
+      - sound_steps_inversion.
         sound_simpl.
-        destruct eqs as [HP1 HP2].
         destruct (eval e δ); cbn in *.
-        + apply (IHtriple1 δ3 s4 H0 H1 γfocus (HP1 eq_refl) γframe Hsplit_γ).
-        + apply (IHtriple2 δ3 s4 H0 H1 γfocus (HP2 eq_refl) γframe Hsplit_γ).
+        * apply (IHtriple1 γ γ3 μ μ3 δ3 s4 Hfinal Hsteps γframe γfocus
+                           (conj Hpre eq_refl) Hsplit_γ).
+        * apply (IHtriple2 γ γ3 μ μ3 δ3 s4 Hfinal Hsteps γframe γfocus
+                           (conj Hpre eq_refl) Hsplit_γ).
+      (* rule_stm_if_backwards *)
+      - admit.
       (* rule_stm_seq *)
-      - intros γfocus HP γframe Hsplit_γ.
-         sound_steps_inversion.
-         sound_simpl.
-         destruct H5.
-         + sound_steps_inversion.
-           sound_simpl.
-           specialize (H2 δ0 δ' s' H10).
-         admit.
+      - sound_steps_inversion.
+        sound_simpl.
+        destruct H3.
+        + sound_steps_inversion.
+          sound_simpl.
+          destruct (IHtriple γ γ0 μ μ0 δ0 (stm_lit τ l)
+                              ltac:(easy) H4 γframe γfocus Hpre Hsplit_γ) as
+              [γframe0 [γfocus0 [Hsplit_γ0 HQ]]].
+          cbn in HQ.
+          specialize (H0 δ0 γ0 γ' μ0 μ' δ' s' Hfinal H8 γframe0 γfocus0 HQ Hsplit_γ0).
+          apply H0.
       (* rule_stm_assert *)
       - intros γfocus HP γframe Hsplit_γ.
         sound_steps_inversion; try contradiction.
