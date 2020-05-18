@@ -127,8 +127,16 @@ Module HoareSound
           as [γ0 [Hsplit_γ0r Hsplit_γframer]].
         destruct (IHtriple γ γ' μ μ' δ' s' Hfinal Hsteps γ0 γr HP Hsplit_γ0r)
           as [γr' [Hsplit_γ' IH]].
-        (* use another splti assoc lemma to merge γl and γr' into γfocus' *)
-        admit.
+        destruct (split_assoc_l (heap γ') γ0 γr' γframe γl Hsplit_γ' Hsplit_γframer) as
+            [γfocus' [Hsplit_γ'' Hsplit_γfocus']].
+        exists γfocus'.
+        split.
+        + apply Hsplit_γ''.
+        + destruct s';
+          sound_steps_inversion;
+          sound_simpl.
+          * exists γl, γr'. dependent elimination H. intuition.
+          * discriminate.
       (* rule_stm_lit *)
       - sound_steps_inversion.
         exists γfocus.
