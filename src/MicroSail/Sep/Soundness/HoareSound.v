@@ -147,7 +147,24 @@ Module HoareSound
       (* rule_stm_exp_backwards *)
       - admit.
       (* rule_stm_let *)
-      - admit.
+      - sound_steps_inversion.
+        sound_simpl.
+        dependent elimination H3;
+        sound_steps_inversion;
+        sound_simpl.
+        + destruct (IHtriple γ γ0 μ μ0 δ0 (stm_lit τ0 l)
+                             ltac:(easy) H4 γframe γfocus Hpre Hsplit_γ) as
+              [γfocus' [Hsplit_γ0 HQ]]; cbn in HQ.
+          destruct (H0 l δ0 γ0 H8 μ0 H1 (env_snoc H2 (x, τ0) db) H6 H9 H7
+                     γframe γfocus' HQ Hsplit_γ0) as
+              [γfocus'' [Hsplit_H8 HR]].
+          specialize (step_trans H11 H12) as H13.
+          sound_steps_inversion;
+          sound_simpl.
+          exists γfocus''. firstorder.
+       + specialize (IHtriple γ γ0 μ μ0 δ0 (stm_fail _ s4)
+                               ltac:(easy) H4 γframe γfocus Hpre Hsplit_γ).
+         apply IHtriple.
       (* rule_stm_if *)
       - sound_steps_inversion.
         sound_simpl.
@@ -170,12 +187,17 @@ Module HoareSound
           cbn in HQ.
           specialize (H0 δ0 γ0 γ' μ0 μ' δ' s' Hfinal H8 γframe γfocus0 HQ Hsplit_γ0).
           apply H0.
-        + admit.
+        + specialize (IHtriple γ γ0 μ μ0 δ0 (stm_fail _ s)
+                               ltac:(easy) H4 γframe γfocus Hpre Hsplit_γ).
+          cbn in *. apply IHtriple.
       (* rule_stm_assert *)
-      - sound_steps_inversion; try contradiction.
-        admit.
+      - admit.
+        (* sound_steps_inversion; sound_simpl; try discriminate. *)
+        (* dependent elimination s'; sound_steps_inversion; sound_simpl. *)
+        (* exists γfocus. dependent elimination x. firstorder. *)
       (* rule_stm_fail *)
-      - admit.
+      - destruct Hpre.
       (* rule_stm_match_sum *)
-      - admit.
+      - sound_steps_inversion.
+        sound_simpl.
       Abort.
