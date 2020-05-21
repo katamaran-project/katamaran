@@ -1147,6 +1147,19 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | _ => False
       end.
 
+    Definition ResultOrFail {Γ σ} (s : Stm Γ σ) :
+      forall (POST : Lit σ -> Prop), Prop :=
+      match s with
+      | stm_lit _ v => fun POST => POST v
+      | stm_fail _ _ => fun _ => True
+      | _ => fun _ => False
+      end.
+
+    Lemma result_or_fail_inversion {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> Prop) :
+      ResultOrFail s POST -> (exists msg, s = stm_fail _ msg)
+                          \/ (exists v, s = stm_lit _ v /\ POST v).
+    Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
+
     (* This predicate encodes that the statement s is a finished computation and
        that the result is not a failure. This is a computational version that is
        better suited for the goal and the inversion below is better suited for
