@@ -257,4 +257,15 @@ Module HoareSound
          sound_use_IH H2 H8 γframe γfocus (H4 _ eq_refl);
          sound_destruct_final H8;
          dependent elimination H13; sound_steps_inversion; firstorder.
+
+     (* rule_stm_read_register_backwards *)
+     - sound_steps_inversion.
+       + destruct Hfinal.
+       + destruct (Hpre (read_register γ r))
+           as [γl [γr [Hsplit_γfocus [γl_has_r H]]]].
+         exists γfocus.
+         split.
+         ++ apply Hsplit_γ.
+         ++ specialize (split_comm γfocus γl γr Hsplit_γfocus) as Hsplit_γfocus_comm.
+            apply (H γfocus γl Hsplit_γfocus_comm γl_has_r).
 Abort.
