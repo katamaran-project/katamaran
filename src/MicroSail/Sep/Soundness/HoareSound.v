@@ -268,4 +268,16 @@ Module HoareSound
          ++ apply Hsplit_γ.
          ++ specialize (split_comm γfocus γl γr Hsplit_γfocus) as Hsplit_γfocus_comm.
             apply (H γfocus γl Hsplit_γfocus_comm γl_has_r).
-Abort.
+     (* rule_stm_write_register *)
+     - sound_steps_inversion.
+       sound_simpl.
+       destruct (Hpre v) as [γl [γr [Hsplit_γfocus [γl_has_r H]]]].
+       destruct (Lit_eqb_spec _ (eval w δ) v).
+       + subst v.
+         specialize (H γfocus γl (split_comm γfocus γl γr Hsplit_γfocus) γl_has_r).
+         exists γfocus.
+         split.
+         +++ admit.
+         +++ firstorder.
+       + admit.
+  Abort.
