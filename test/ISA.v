@@ -308,6 +308,12 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     intros γ σ r v. now destruct r.
   Qed.
 
+  Lemma read_write_distinct :
+    forall (γ : RegStore) σ τ
+      (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (prf : ~ r ≡ k) (v : Lit σ),
+      read_register (write_register γ r v) k = read_register γ k.
+  Admitted.
+
   Lemma write_read : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ),
       (write_register γ r (read_register γ r)) = γ.
   Proof.
@@ -554,7 +560,7 @@ Module ISASymbolicContractKit <:
              (chunk_pred
                 ptstoreg
                 (env_nil ► ty_enum register_tag ↦ term_var "reg_tag" ► ty_int ↦ term_var "v")))
-      | wX => 
+      | wX =>
         @sep_contract_unit
           [ "reg_tag" ∶ ty_enum register_tag,
             "reg_value" ∶ ty_int ]

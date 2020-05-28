@@ -289,6 +289,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Definition read_register := generic_read_register.
   Definition write_register := generic_write_register.
   Definition read_write := generic_read_write.
+  Definition read_write_distinct := generic_read_write_distinct.
   Definition write_read := generic_write_read.
   Definition write_write := generic_write_write.
 
