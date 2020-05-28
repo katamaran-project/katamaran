@@ -164,9 +164,12 @@ Module ProgramLogic
       δ ⊢ ⦃ (∀ x, !!(eval e δ = inl x) --> Pinl)
           ∧ (∀ x, !!(eval e δ = inr x) --> Pinr)
           ⦄ stm_match_sum e xinl alt_inl xinr alt_inr ⦃ Q ⦄
+  | rule_stm_read_register {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+      δ ⊢ ⦃ r ↦ v ⦄ stm_read_register r ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = v) ∧ r ↦ v ⦄
   | rule_stm_read_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ)
-                                     (Q : Lit σ -> LocalStore Γ -> L) :
-      δ ⊢ ⦃ ∀ v, r ↦ v ✱ (r ↦ v -✱ Q v δ) ⦄ stm_read_register r ⦃ Q ⦄
+                                     (Q : Lit σ -> LocalStore Γ -> L)
+                                     (v : Lit σ) :
+      δ ⊢ ⦃ r ↦ v ✱ (r ↦ v -✱ Q v δ) ⦄ stm_read_register r ⦃ Q ⦄
   | rule_stm_write_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
                                       (Q : Lit σ -> LocalStore Γ -> L) :
       δ ⊢ ⦃ ∀ v, r ↦ v ✱ (r ↦ eval w δ -✱ Q (eval w δ) δ) ⦄ stm_write_register r w ⦃ Q ⦄
