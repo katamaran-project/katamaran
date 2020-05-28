@@ -178,11 +178,11 @@ Module HoareSound
         firstorder.
 
       (* rule_stm_exp_forwards *)
-      - sound_steps_inversion; try contradiction.
+      - sound_steps_inversion; sound_simpl.
         exists γfocus. firstorder.
-
       (* rule_stm_exp_backwards *)
-      - admit.
+      - sound_steps_inversion; sound_simpl.
+        exists γfocus. firstorder.
 
       (* rule_stm_let *)
       - sound_steps_inversion.
@@ -233,8 +233,9 @@ Module HoareSound
       (* rule_stm_match_sum *)
       - sound_steps_inversion.
         sound_simpl.
-        remember (eval e δ) as ident.
-        dependent elimination ident;
+        remember (eval e δ) as ident. cbn in ident.
+        destruct ident;
+        (* dependent elimination ident; *)
         sound_steps_inversion; sound_simpl.
         (* now the proof should be smthng like two proofs of rule_stm_let *)
         + sound_destruct_final s3;
