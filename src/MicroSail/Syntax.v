@@ -1179,6 +1179,27 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   Section GenericRegStore.
 
+    Lemma 𝑹𝑬𝑮_eq_dec_refl {σ} : forall (r : 𝑹𝑬𝑮 σ),
+      𝑹𝑬𝑮_eq_dec r r = left (@teq_refl Ty _ σ σ r r eq_refl eq_refl).
+    Proof.
+      intros r.
+      destruct (𝑹𝑬𝑮_eq_dec r r).
+      + dependent destruction t.
+        dependent destruction eqi.
+        now dependent destruction eqf.
+      + destruct (n (@teq_refl Ty 𝑹𝑬𝑮 σ σ r r eq_refl ltac:(auto))).
+    Qed.
+
+    Lemma 𝑹𝑬𝑮_eq_dec_distinct {σ τ} : forall (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ),
+        ~ r ≡ k -> exists (prf : ~ r ≡ k), 𝑹𝑬𝑮_eq_dec r k = right prf.
+    Proof.
+      intros.
+      destruct (𝑹𝑬𝑮_eq_dec r k).
+      + destruct (H t).
+      + f_equal.
+        now exists n.
+    Qed.
+
     Definition GenericRegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Lit σ.
 
     Definition generic_write_register (γ : GenericRegStore) {σ} (r : 𝑹𝑬𝑮 σ)
@@ -1199,6 +1220,15 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       destruct (𝑹𝑬𝑮_eq_dec r r) as [[eqσ eqr]|].
       - symmetry. apply Eqdep_dec.eq_rect_eq_dec, Ty_eq_dec.
       - contradict n. now apply teq_refl with eq_refl.
+    Qed.
+
+    Lemma generic_read_write_distinct γ {σ τ} (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ)
+          (prf : ~ r ≡ k) (v : Lit σ) :
+      generic_read_register (generic_write_register γ r v) k = generic_read_register γ k.
+    Proof.
+      unfold generic_read_register, generic_write_register.
+      destruct (𝑹𝑬𝑮_eq_dec_distinct prf) as [prf' H].
+      now rewrite H.
     Qed.
 
     Lemma generic_write_read γ {σ} (r : 𝑹𝑬𝑮 σ) :
@@ -1371,6 +1401,10 @@ Module Type ProgramKit
 
   Parameter read_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : Lit σ),
             read_register (write_register γ r v) r = v.
+
+  Parameter read_write_distinct : forall (γ : RegStore) σ τ (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ)
+                                    (prf : ~ r ≡ k) (v : Lit σ),
+            read_register (write_register γ r v) k = read_register γ k.
 
   Parameter write_read : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ),
             (write_register γ r (read_register γ r)) = γ.
