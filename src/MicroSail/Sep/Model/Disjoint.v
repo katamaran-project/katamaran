@@ -1,4 +1,6 @@
 Require Import FunctionalExtensionality.
+Require Import Coq.Program.Equality.
+Require Import Coq.Program.Tactics.
 
 Require Import MicroSail.Syntax.
 Require Import MicroSail.Environment.
@@ -28,7 +30,15 @@ Module Disjoint
 
   Definition Heap : Type := forall σ, 𝑹𝑬𝑮 σ -> option (Lit σ).
 
+  (* convert a register store into a heap *)
+  Definition heap (rs : RegStore) : Heap :=
+    fun _ r => Some (read_register rs r).
+
   Definition emp : Heap := fun _ _ => None.
+
+  (* A heap is total if every register points to a Some *)
+  Definition Total (h : Heap) : Prop :=
+    forall σ r, exists v, h σ r = Some v.
 
   Definition HProp : Type := Heap -> Prop.
 
@@ -257,5 +267,96 @@ Module Disjoint
     pred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) := fun γ => False;
     ptsreg (σ : Ty) (r : 𝑹𝑬𝑮 σ) (t : Lit σ) := fun γ => γ σ r = Some t
   }.
+
+  Definition write_heap (γ : Heap) {σ} (r : 𝑹𝑬𝑮 σ)
+    (v : Lit σ) : Heap :=
+    fun τ r' =>
+      match 𝑹𝑬𝑮_eq_dec r r' with
+      | left (teq_refl _ eqt _) => Some (eq_rect σ Lit v τ eqt)
+      | right _ => γ τ r'
+      end.
+
+  (* writing into a heap creates a ptsreg heap chunk *)
+  Lemma write_heap_ptsreg (γ : Heap) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+    (write_heap γ r v) σ r = Some v.
+  Proof.
+    unfold write_heap.
+    rewrite (𝑹𝑬𝑮_eq_dec_refl r).
+    f_equal.
+  Qed.
+
+
+  (* writing into a heap preserves the unaffected chunks *)
+  Lemma write_heap_distinct (γfocus : Heap) {σ τ}
+        (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (prf : ~ r ≡ k )
+        (v0 : option (Lit τ)) (v : Lit σ) :
+    γfocus τ k = v0 -> (write_heap γfocus r v) τ k = v0.
+  Proof.
+    intros H.
+    rewrite <- H.
+    unfold write_heap.
+    remember ((𝑹𝑬𝑮_eq_dec r k)) as z.
+    dependent destruction z.
+    + dependent destruction t.
+      dependent destruction eqf.
+      dependent destruction eqi.
+      cbn in *.
+      destruct (prf (@teq_refl Ty 𝑹𝑬𝑮 σ σ r r eq_refl ltac:(auto))).
+    + reflexivity.
+  Qed.
+
+  (* writing into a heap preserves totality *)
+  Lemma write_heap_preservers_total {σ} :
+    forall (γ : Heap), Total γ -> forall (r : 𝑹𝑬𝑮 σ) (v : Lit σ), Total (write_heap γ r v).
+  Proof.
+    intros γ Htotal_γ r v.
+    unfold Total in *.
+    intros τ k.
+    destruct (Htotal_γ τ k) as [v0 Hpre].
+    destruct (𝑹𝑬𝑮_eq_dec r k).
+    + dependent destruction t.
+      dependent destruction eqi.
+      cbn in *.
+      rewrite <- eqf in *.
+      exists v. apply (write_heap_ptsreg γ r v).
+    + exists v0. apply (write_heap_distinct γ r k n (Some v0) v Hpre).
+  Qed.
+
+
+  (* If a value is present in one of the two disjoint subheaps, then
+     it must be absent in the other *)
+  Lemma split_in_r_then_not_in_l {σ}
+        (γ γl γr : Heap) (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+        split γ γl γr -> γr σ r = Some v -> γl σ r = None.
+  Proof.
+    intros Hsplit_γ H.
+    unfold split in Hsplit_γ.
+    specialize (Hsplit_γ σ r).
+    destruct_conjs.
+    firstorder. rewrite H in H0. discriminate.
+  Qed.
+
+  (* If a value is the heap is total and a value is absent in
+     one if the disjoint subheaps then in must be present in the other *)
+  Lemma split_not_in_r_then_in_l {σ}
+        (γ γl γr : Heap) (r : 𝑹𝑬𝑮 σ) :
+        Total γ -> split γ γl γr -> γr σ r = None -> (exists v, γl σ r = Some v).
+  Proof.
+    intros Htotal_γ Hsplit_γ H.
+    unfold split in Hsplit_γ.
+    unfold Total in *.
+    specialize (Hsplit_γ σ r).
+    destruct_conjs.
+    destruct H0.
+    + rewrite H0 in H1.
+      specialize (Htotal_γ σ r).
+      destruct_conjs. congruence.
+    + rewrite H0 in H1.
+      destruct (γl σ r).
+      ++ now exists l.
+      ++ specialize (Htotal_γ σ r).
+         destruct_conjs.
+         congruence.
+  Qed.
 
 End Disjoint.

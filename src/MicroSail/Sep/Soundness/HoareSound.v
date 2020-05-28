@@ -37,12 +37,6 @@ Module HoareSound
     (*   forall (POST : Lit σ -> LocalStore Γ -> RegStore -> Prop), *)
     (*     WLP s POST δ γ -> ResultNoFail s' (fun v => POST v δ' γ'). *)
 
-    Definition Total (h : Heap) : Prop :=
-      forall σ r, exists v, h σ r = Some v.
-
-    Definition heap (rs : RegStore) : Heap :=
-      fun _ r => Some (read_register rs r).
-
     Lemma RegStoreIsTotal (rs : RegStore) : Total (heap rs).
     Proof.
       intros σ r.
