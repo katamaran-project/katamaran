@@ -170,9 +170,15 @@ Module ProgramLogic
                                      (Q : Lit σ -> LocalStore Γ -> L)
                                      (v : Lit σ) :
       δ ⊢ ⦃ r ↦ v ✱ (r ↦ v -✱ Q v δ) ⦄ stm_read_register r ⦃ Q ⦄
+  | rule_stm_write_register {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
+                            (Q : Lit σ -> LocalStore Γ -> L)
+                            (v : Lit σ) :
+      δ ⊢ ⦃ r ↦ v ⦄ stm_write_register r w ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ)
+                                                       ∧ r ↦ v' ⦄
   | rule_stm_write_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
-                                      (Q : Lit σ -> LocalStore Γ -> L) :
-      δ ⊢ ⦃ ∀ v, r ↦ v ✱ (r ↦ eval w δ -✱ Q (eval w δ) δ) ⦄ stm_write_register r w ⦃ Q ⦄
+                                      (Q : Lit σ -> LocalStore Γ -> L)
+                                      (v : Lit σ) :
+      δ ⊢ ⦃ r ↦ v ✱ (r ↦ eval w δ -✱ Q (eval w δ) δ) ⦄ stm_write_register r w ⦃ Q ⦄
   | rule_stm_assign_backwards
       (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
       (P : L) (R : Lit σ -> LocalStore Γ -> L) :

@@ -4,9 +4,10 @@ src/MicroSail/Context.v
 src/MicroSail/Environment.v
 src/MicroSail/Notation.v
 src/MicroSail/Prelude.v
-src/MicroSail/Sep/Hoare.v
 src/MicroSail/Sep/Logic.v
 src/MicroSail/Sep/Model/Disjoint.v
+src/MicroSail/Sep/Hoare.v
+src/MicroSail/Sep/Soundness/HoareSound.v
 src/MicroSail/Symbolic/Mutator.v
 src/MicroSail/Symbolic/Outcome.v
 src/MicroSail/Sep/Spec.v

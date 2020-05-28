@@ -269,13 +269,74 @@ Module HoareSound
      (* rule_stm_write_register *)
      - sound_steps_inversion.
        sound_simpl.
-       destruct (Hpre v) as [γl [γr [Hsplit_γfocus [γl_has_r H]]]].
-       destruct (Lit_eqb_spec _ (eval w δ) v).
-       + subst v.
-         specialize (H γfocus γl (split_comm γfocus γl γr Hsplit_γfocus) γl_has_r).
-         exists γfocus.
+       specialize (write_heap_ptsreg γfocus r v0) as Hpost.
+       remember (write_heap γfocus r v0) as γfocus'.
+       remember (write_register γ r v0) as γ'.
+       exists γfocus'.
+       split.
+       + unfold split.
+         intros τ k.
          split.
-         +++ admit.
-         +++ firstorder.
-       + admit.
-  Abort.
+         ++ unfold split in Hsplit_γ.
+            specialize (Hsplit_γ τ k) as H10.
+            destruct_conjs.
+            remember (𝑹𝑬𝑮_eq_dec r k) as reg_eq.
+            dependent destruction reg_eq.
+            * dependent destruction t.
+              dependent destruction eqi.
+              cbn in *.
+              rewrite <- eqf in *.
+              firstorder. rewrite H in Hpre. discriminate.
+            * destruct H.
+              ** left. apply H.
+              ** compute in n.
+                 rewrite H in H0.
+                 specialize (write_heap_distinct γfocus r k n None v0 H) as Hγfocus'_None.
+                 rewrite <- Heqγfocus' in Hγfocus'_None.
+                 right. apply Hγfocus'_None.
+         ++ unfold split in Hsplit_γ.
+            specialize (Hsplit_γ τ k) as H10.
+            destruct_conjs.
+            remember (𝑹𝑬𝑮_eq_dec r k) as reg_eq.
+            dependent destruction reg_eq.
+            * dependent destruction t.
+              dependent destruction eqi.
+              cbn in *.
+              rewrite <- eqf in *.
+              firstorder.
+              ** rewrite H.
+                 subst γ'.
+                 rewrite Hpost.
+                 unfold heap. f_equal.
+                 now rewrite read_write.
+              ** congruence.
+            * specialize (split_in_r_then_not_in_l
+                            (heap γ) γframe γfocus r v ltac:(auto) Hpre) as Hγframe_r_None.
+              firstorder.
+              ** rewrite H.
+                 subst γfocus'.
+                 unfold write_heap.
+                 rewrite <- Heqreg_eq.
+                 rewrite H in H0.
+                 rewrite <- H0.
+                 unfold heap.
+                 subst γ'.
+                 remember (read_register γ k) as w0.
+                 rewrite (read_write_distinct γ n v0).
+                 now subst.
+              ** specialize (write_heap_distinct γfocus r k n None v0 H) as Hγfocus'_None.
+                 rewrite <- Heqγfocus' in Hγfocus'_None.
+                 rewrite Hγfocus'_None.
+                 destruct (split_not_in_r_then_in_l
+                            (heap γ) γframe γfocus k (RegStoreIsTotal γ)
+                            Hsplit_γ H).
+                 rewrite H1 in *.
+                 subst γ'.
+                 unfold heap.
+                 now rewrite (read_write_distinct γ n v0).
+       + firstorder.
+       Abort.
+
+  End Soundness.
+
+End HoareSound.
