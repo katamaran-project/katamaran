@@ -47,9 +47,9 @@ Module HoareSound
     Local Ltac sound_steps_inversion :=
       repeat
         match goal with
-        (* | [ H: ResultOrFail _ _ |- _ ] => *)
-        (*   destruct (result_or_fail_inversion _ _ H); destruct_conjs; subst *)
-          (* apply result_or_fail_inversion in H; destruct_conjs; subst *)
+        | [ H: ResultOrFail _ _ |- _ ] =>
+          apply result_or_fail_inversion in H;
+          dependent destruction H; destruct_conjs; subst
         | [ H: ⟨ _, _, _, ?s ⟩ ---> ⟨ _, _, _, _ ⟩ |- _ ] =>
           microsail_stm_primitive_step s; dependent destruction H
         | [ H: ⟨ _, _, _, ?s ⟩ --->* ⟨ _, _, _, ?t ⟩, HF: Final ?t |- _ ] =>
@@ -82,6 +82,10 @@ Module HoareSound
         rewrite env_drop_cat in H
       | [ _: context[match eval ?e ?δ with _ => _ end] |- _ ] =>
         destruct (eval e δ)
+      | [ Hsplit : split (heap ?γ) ?γframe ?γfocus
+        |- exists (_ : Heap), split (heap ?γ) ?γframe _ /\ _
+        ] => econstructor; intuition
+        (* exists ?γfocus *)
       | _ => progress (cbn in *; destruct_conjs; subst)
       end.
 
@@ -126,6 +130,47 @@ Module HoareSound
       exists γfocus
     end.
 
+  Local Ltac hoare_sound_inst :=
+    match goal with
+    | [
+      IH: forall _ _ _ _ _ _, Final _ -> _
+      , Hsplit_γ : split (heap ?γ) ?γframe ?γfocus
+      , HS: ⟨ _, _, _ , _ ⟩ --->* ⟨ _, _, _ , ?t ⟩
+      , HF: Final ?t
+      , Hpre : ?P ?γfocus
+      |- _
+      ] => idtac "foo";
+          let ident := fresh
+          in specialize (IH _ _ _ _ _ _ HF HS γframe γfocus Hpre Hsplit_γ) as ident;
+          clear HS HF;
+          destruct_conjs
+    (* | [ IH: forall _ _ _ _ _ _ _ _, ⟨ _, _, _ , _ ⟩ --->* ⟨ _, _, _ , _ ⟩ -> _, *)
+    (*     HS: ⟨ _, _, _ , _ ⟩ --->* ⟨ _, _, _ , ?t ⟩, HF: Final ?t |- _ ] => *)
+    (*   specialize (IH _ _ _ _ _ _ _ _ HS HF); clear HS HF *)
+    (* | [ IH: forall POST, WLP ?s POST ?δ ?γ -> _, WP: WLP ?s _ ?δ ?γ |- _ ] => *)
+    (*   specialize (IH _ WP); clear WP *)
+    end.
+
+  Local Ltac steps_inversion_inster :=
+    repeat
+      match goal with
+      | [ H : forall _, _ = _ -> _ |- _ ]
+        => specialize (H _ eq_refl)
+      | [ H : forall _ _, _ = _ -> _ |- _ ]
+        => specialize (H _ _ eq_refl)
+      | [ H : forall _ _ _, _ = _ -> _ |- _ ]
+        => specialize (H _ _ _ eq_refl)
+      | [ H : Final ?s -> _, H' : Final ?s |- _ ]
+        => specialize (H H')
+      end.
+
+  Local Ltac hoare_sound_solve :=
+    repeat
+      (sound_steps_inversion;
+       sound_simpl;
+       try steps_inversion_inster;
+       try hoare_sound_inst); intuition.
+
   Lemma sound {Γ σ} (s : Stm Γ σ) :
     forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),
       ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
@@ -147,14 +192,8 @@ Module HoareSound
       revert γ γ' μ μ' δ'.
       induction triple; intros.
       (* consequence *)
-      - destruct (IHtriple γ γ' μ μ' δ' s' Hfinal Hsteps
-                  γframe γfocus (H γfocus Hpre) Hsplit_γ)
-          as [γfocus' [Hsplit_γ' IH]].
-        exists γfocus'.
-        split.
-        + apply Hsplit_γ'.
-        + sound_destruct_result_or_fail IH; firstorder.
-
+      - specialize (H γfocus Hpre).
+        hoare_sound_solve.
       (* frame *)
       - inversion Hpre as [γl [γr [Hsplit_γfocus [HR HP]]]].
         destruct (split_assoc_r (heap γ) γframe γfocus γl γr Hsplit_γ Hsplit_γfocus)
@@ -169,31 +208,26 @@ Module HoareSound
         + destruct s';
           sound_steps_inversion;
           sound_simpl.
-          exists γl, γr'.
-          firstorder. trivial.
-
+          ++ exists γl, γr'.
+             discriminate.
+          ++ exists γl, γr'. dependent elimination H0. intuition.
+          ++ intuition.
+          ++ intuition.
       (* rule_stm_lit *)
-      - sound_steps_inversion.
-        exists γfocus.
-        firstorder.
-
+      - hoare_sound_solve.
       (* rule_stm_exp_forwards *)
-      - sound_steps_inversion; sound_simpl.
-        exists γfocus. firstorder.
+      - hoare_sound_solve.
       (* rule_stm_exp_backwards *)
-      - sound_steps_inversion; sound_simpl.
-        exists γfocus. firstorder.
-
+      - hoare_sound_solve.
       (* rule_stm_let *)
-      - sound_steps_inversion.
+      - sound_steps_inversion; sound_simpl.
         sound_destruct_final H3.
         + destruct (IHtriple γ γ0 μ μ0 δ0 (stm_lit _ l)
                              ltac:(easy) H4 γframe γfocus Hpre Hsplit_γ) as
               [γfocus' [Hsplit_γ0 HQ]]; cbn in HQ.
           specialize (step_trans H11 H12) as H13.
           sound_use_IH H0 H6 γframe γfocus' HQ.
-          sound_destruct_result_or_fail H14;
-          firstorder.
+          hoare_sound_solve.
        + specialize (IHtriple γ γ0 μ μ0 δ0 (stm_fail _ _)
                                ltac:(easy) H4 γframe γfocus Hpre Hsplit_γ).
          apply IHtriple.
@@ -202,11 +236,10 @@ Module HoareSound
       - sound_steps_inversion.
         sound_simpl.
         destruct (eval e δ); cbn in *.
-        * apply (IHtriple1 γ γ3 μ μ3 δ3 s4 Hfinal Hsteps γframe γfocus
-                           (conj Hpre eq_refl) Hsplit_γ).
-        * apply (IHtriple2 γ γ3 μ μ3 δ3 s4 Hfinal Hsteps γframe γfocus
-                           (conj Hpre eq_refl) Hsplit_γ).
-
+        * eapply (IHtriple1 γ γ3 μ μ3 δ3 s4 Hfinal Hsteps γframe γfocus
+                           _ Hsplit_γ).
+        * eapply (IHtriple2 γ γ3 μ μ3 δ3 s4 Hfinal Hsteps γframe γfocus
+                           _ Hsplit_γ).
       (* rule_stm_if_backwards *)
       - admit.
 
@@ -237,21 +270,23 @@ Module HoareSound
         destruct ident;
         (* dependent elimination ident; *)
         sound_steps_inversion; sound_simpl.
-        (* now the proof should be smthng like two proofs of rule_stm_let *)
-        + sound_destruct_final s3;
-          specialize (step_trans H12 H13) as H14;
-          sound_steps_inversion;
-          sound_simpl;
-          sound_use_IH H0 H8 γframe γfocus (H3 _ eq_refl);
-          sound_destruct_final H8;
-          dependent elimination H13; sound_steps_inversion; firstorder.
-       + sound_destruct_final s3;
-         specialize (step_trans H12 H13) as H14;
-         sound_steps_inversion;
-         sound_simpl;
-         sound_use_IH H2 H8 γframe γfocus (H4 _ eq_refl);
-         sound_destruct_final H8;
-         dependent elimination H13; sound_steps_inversion; firstorder.
+        + admit.
+        + admit.
+       (*  (* now the proof should be smthng like two proofs of rule_stm_let *) *)
+       (*  + sound_destruct_final s3; *)
+       (*    specialize (step_trans H12 H13) as H14; *)
+       (*    sound_steps_inversion; *)
+       (*    sound_simpl; *)
+       (*    sound_use_IH H0 H8 γframe γfocus (H3 _ eq_refl); *)
+       (*    sound_destruct_final H8; *)
+       (*    dependent elimination H13; sound_steps_inversion; firstorder. *)
+       (* + sound_destruct_final s3; *)
+       (*   specialize (step_trans H12 H13) as H14; *)
+       (*   sound_steps_inversion; *)
+       (*   sound_simpl; *)
+       (*   sound_use_IH H2 H8 γframe γfocus (H4 _ eq_refl); *)
+       (*   sound_destruct_final H8; *)
+       (*   dependent elimination H13; sound_steps_inversion; firstorder. *)
 
      (* rule_stm_read_register *)
      - sound_steps_inversion. sound_simpl.
@@ -262,10 +297,8 @@ Module HoareSound
        specialize (Hsplit_γ σ r).
        destruct_conjs.
        destruct H; destruct (γframe σ r); congruence.
-
      (* rule_stm_read_register_backwards *)
      - admit.
-
      (* rule_stm_write_register *)
      - sound_steps_inversion.
        sound_simpl.
@@ -335,7 +368,15 @@ Module HoareSound
                  unfold heap.
                  now rewrite (read_write_distinct γ n v0).
        + firstorder.
-       Abort.
+     - admit.
+     (* rule_stm_assign_backwards *)
+     - hoare_sound_solve.
+     (* rule_stm_assign_forwards *)
+     - hoare_sound_solve.
+       admit.
+     - admit.
+     - admit.
+    Abort.
 
   End Soundness.
 
