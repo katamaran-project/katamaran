@@ -86,8 +86,8 @@ Module HoareSound
         |- exists (_ : Heap), split (heap ?γ) ?γframe _ /\ _
         ] => econstructor; intuition
         (* exists ?γfocus *)
-      | [ H: ⟨ _, _, _, ?s ⟩ --->* ⟨ _, _, _, ?t ⟩, HF: Final ?t |- _ ] =>
-        dependent destruction t
+      (* | [ H: ⟨ _, _, _, ?s ⟩ --->* ⟨ _, _, _, ?t ⟩, HF: Final ?t |- _ ] => *)
+      (*   dependent destruction t *)
       | _ => progress (cbn in *; destruct_conjs; subst)
       end.
 
@@ -200,14 +200,9 @@ Module HoareSound
         exists γfocus'.
         split.
         + hoare_sound_solve.
-        + destruct s';
-          sound_steps_inversion;
-          sound_simpl.
-          ++ exists γl, γr'.
-             discriminate.
-          ++ exists γl, γr'. dependent elimination H0. intuition.
-          ++ intuition.
-          ++ intuition.
+        + hoare_sound_solve.
+          exists γl, γr'.
+          hoare_sound_solve.
       (* rule_stm_lit *)
       - hoare_sound_solve.
       (* rule_stm_exp_forwards *)
@@ -217,11 +212,11 @@ Module HoareSound
       (* rule_stm_let *)
       - sound_steps_inversion; sound_simpl.
         sound_destruct_final H3.
-        + destruct (IHtriple γ γ0 μ μ0 δ0 (stm_lit _ l)
-                             ltac:(easy) H4 γframe γfocus Hpre Hsplit_γ) as
-              [γfocus' [Hsplit_γ0 HQ]]; cbn in HQ.
-          specialize (step_trans H11 H12) as H13.
-          sound_use_IH H0 H6 γframe γfocus' HQ.
+        + remember (stm_lit τ0 l) as s0.
+          assert (Final s0) by now subst.
+          hoare_sound_inst.
+          rewrite Heqs0 in H4. cbn in H4.
+          sound_use_IH H0 H6 γframe H5 H4.
           hoare_sound_solve.
        + remember (stm_fail _ _) as s_fail.
          assert (Final s_fail) by now subst.
@@ -276,6 +271,7 @@ Module HoareSound
        destruct H; destruct (γframe σ r); congruence.
      (* rule_stm_read_register_backwards *)
      - admit.
+
      (* rule_stm_write_register *)
      - sound_steps_inversion.
        sound_simpl.
@@ -286,72 +282,98 @@ Module HoareSound
        split.
        + unfold split.
          intros τ k.
-         split.
-         ++ unfold split in Hsplit_γ.
-            specialize (Hsplit_γ τ k) as H10.
-            destruct_conjs.
-            remember (𝑹𝑬𝑮_eq_dec r k) as reg_eq.
-            dependent destruction reg_eq.
-            * dependent destruction t.
-              dependent destruction eqi.
-              cbn in *.
-              rewrite <- eqf in *.
-              firstorder. rewrite H in Hpre. discriminate.
-            * destruct H.
-              ** left. apply H.
-              ** compute in n.
-                 rewrite H in H0.
-                 specialize (write_heap_distinct γfocus r k n None v0 H) as Hγfocus'_None.
-                 rewrite <- Heqγfocus' in Hγfocus'_None.
-                 right. apply Hγfocus'_None.
-         ++ unfold split in Hsplit_γ.
-            specialize (Hsplit_γ τ k) as H10.
-            destruct_conjs.
-            remember (𝑹𝑬𝑮_eq_dec r k) as reg_eq.
-            dependent destruction reg_eq.
-            * dependent destruction t.
-              dependent destruction eqi.
-              cbn in *.
-              rewrite <- eqf in *.
-              firstorder.
-              ** rewrite H.
-                 subst γ'.
-                 rewrite Hpost.
-                 unfold heap. f_equal.
-                 now rewrite read_write.
-              ** congruence.
-            * specialize (split_in_r_then_not_in_l
-                            (heap γ) γframe γfocus r v ltac:(auto) Hpre) as Hγframe_r_None.
-              firstorder.
-              ** rewrite H.
-                 subst γfocus'.
-                 unfold write_heap.
-                 rewrite <- Heqreg_eq.
-                 rewrite H in H0.
-                 rewrite <- H0.
-                 unfold heap.
-                 subst γ'.
-                 remember (read_register γ k) as w0.
-                 rewrite (read_write_distinct γ n v0).
-                 now subst.
-              ** specialize (write_heap_distinct γfocus r k n None v0 H) as Hγfocus'_None.
-                 rewrite <- Heqγfocus' in Hγfocus'_None.
-                 rewrite Hγfocus'_None.
-                 destruct (split_not_in_r_then_in_l
-                            (heap γ) γframe γfocus k (RegStoreIsTotal γ)
-                            Hsplit_γ H).
-                 rewrite H1 in *.
-                 subst γ'.
-                 unfold heap.
-                 now rewrite (read_write_distinct γ n v0).
+         unfold split in Hsplit_γ.
+         specialize (Hsplit_γ τ k) as H10.
+         destruct_conjs.
+         remember (𝑹𝑬𝑮_eq_dec r k) as reg_eq.
+         dependent destruction reg_eq.
+         * dependent destruction t.
+           dependent destruction eqi.
+           cbn in *.
+           rewrite <- eqf in *.
+           firstorder.
+           ** rewrite H in Hpre. discriminate.
+           ** subst. rewrite H.
+              rewrite Hpost.
+              unfold heap. f_equal.
+              now rewrite read_write.
+           ** rewrite H in Hpre. discriminate.
+         ++ firstorder.
+            ** subst.
+               right. apply (write_heap_distinct γfocus r k n None v0 H).
+            ** destruct (split_not_in_r_then_in_l (heap γ) γfocus γframe k
+                           (RegStoreIsTotal γ) (split_comm _ _ _ Hsplit_γ) ltac:(auto)).
+               rewrite H in *.
+               subst.
+               rewrite (write_heap_distinct γfocus r k n (Some x) ltac:(auto)
+                           ltac:(auto)).
+               unfold heap in *.
+               rewrite (read_write_distinct γ n ).
+               rewrite H1 in H0.
+               assumption.
+            ** specialize (split_not_in_r_then_in_l
+                           (heap γ) γframe γfocus k (RegStoreIsTotal γ)
+                           Hsplit_γ H) as [v1 H1].
+               rewrite H1 in *.
+               unfold heap in *. subst γ'.
+               rewrite (read_write_distinct γ n).
+               assumption.
        + firstorder.
+     (* rule_stm_write_register_backwards *)
      - admit.
      (* rule_stm_assign_backwards *)
      - hoare_sound_solve.
      (* rule_stm_assign_forwards *)
      - hoare_sound_solve.
        admit.
-     - admit.
+     - remember (CEnv f) as cenv.
+       dependent destruction cenv.
+       + sound_steps_inversion; sound_simpl.
+         sound_destruct_final H2.
+         ++ remember (Pi f) as t.
+            dependent elimination t; sound_steps_inversion; sound_simpl.
+            +++ dependent elimination H3.
+                ++++ exists γfocus.
+                     firstorder.
+                     dependent induction H.
+                     * admit.
+                     *
+                     dependent destruction H.
+                     *
+         ++ induction H3.
+            +++ exists γfocus. firstorder.
+            +++
+         ++ dependent induction H.
+            +++ rewrite <- x in H3.
+                sound_steps_inversion; sound_simpl.
+
+                inversion H3.
+                cbn in *.
+         induction (evals es δ).
+         ++
+         dependent induction H.
+         ++ cbn in *.
+         split
+       + cbn in *.
+         sound_steps_inversion; sound_simpl.
+         dependent destruction H.
+         ++
+         dependent elimination H.
+       destruct (Pi f).
+       + sound_steps_inversion; sound_simpl.
+
+       induction H.
+       + sound_steps_inversion; sound_simpl.
+
+
+       dependent destruction H.
+       + sound_steps_inversion; sound_simpl.
+       sound_steps_inversion; sound_simpl.
+       specialize (step_trans H6 H7) as H8.
+       sound_steps_inversion.
+       destruct (Pi f); sound_steps_inversion; sound_simpl.
+
+admit.
      - admit.
     Abort.
 
