@@ -147,12 +147,11 @@ Module ProgramLogic
       (forall δ', δ' ⊢ ⦃ Q δ' ⦄ s2 ⦃ R ⦄) ->
       δ ⊢ ⦃ P ⦄ s1 ;; s2 ⦃ R ⦄
   | rule_stm_assert (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string)
-                    (P : L)
-                    (Q : Lit ty_bool -> LocalStore Γ -> L) :
-      δ ⊢ ⦃ P ∧ !!(eval e1 δ = true) ⦄ stm_assert e1 e2 ⦃ Q ⦄
+                    (P : L) :
+      δ ⊢ ⦃ P ⦄ stm_assert e1 e2 ⦃ fun v δ' => P ∧ !!(δ = δ' /\ eval e1 δ' = v /\ v = true) ⦄
   | rule_stm_fail (τ : Ty) (s : Lit ty_string) :
       forall (Q : Lit τ -> LocalStore Γ -> L),
-        δ ⊢ ⦃ ⊥ ⦄ stm_fail τ s ⦃ Q ⦄
+        δ ⊢ ⦃ ⊤ ⦄ stm_fail τ s ⦃ Q ⦄
   | rule_stm_match_sum (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr))
                        (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl , σinl)) τ)
                        (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ)
@@ -195,11 +194,11 @@ Module ProgramLogic
       (Q : Lit σ -> L) :
       CTriple Δ (evals es δ) P Q (CEnv f) ->
       δ ⊢ ⦃ P ⦄ stm_call f es ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
-  | rule_stm_call_backwards
-      {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
-      (P : L) (Q : Lit σ -> LocalStore Γ -> L) :
-      CTriple Δ (evals es δ) P (fun v => Q v δ) (CEnv f) ->
-      δ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q ⦄
+  (* | rule_stm_call_backwards *)
+  (*     {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) *)
+  (*     (P : L) (Q : Lit σ -> LocalStore Γ -> L) : *)
+  (*     CTriple Δ (evals es δ) P (fun v => Q v δ) (CEnv f) -> *)
+  (*     δ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q ⦄ *)
   | rule_stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
     (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ)
     (P : L)
