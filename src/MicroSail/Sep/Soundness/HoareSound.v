@@ -100,6 +100,16 @@ Module HoareSound
     sound_simpl.
   Qed.
 
+  Lemma steps_lit_lit {Γ γ1 γ2 μ1 μ2 δ1 δ2 σ l s} :
+    ⟨ γ1, μ1, δ1, @stm_lit Γ σ l ⟩ --->* ⟨ γ2, μ2, δ2, s ⟩ -> s = stm_lit σ l.
+  Proof.
+    intros H.
+    remember (stm_lit σ l) as s0.
+    induction H.
+    + reflexivity.
+    + subst; sound_steps_inversion; sound_simpl.
+  Qed.
+
   Local Ltac sound_destruct_result_or_fail H :=
     destruct (result_or_fail_inversion _ _ H); destruct_conjs; subst;
     sound_steps_inversion; sound_simpl.
@@ -167,7 +177,27 @@ Module HoareSound
        try steps_inversion_inster;
        try hoare_sound_inst); intuition.
 
+  Definition ValidContractEnv' (cenv : SepContractEnv) : Prop :=
+    forall σs σ (f : 𝑭 σs σ),
+      match cenv σs σ f with
+      | @sep_contract_unit _ Σ θΔ pre post =>
+        forall (δΣ : NamedEnv Lit Σ)
+          (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore σs) (s' : Stm σs σ),
+          ⟨ γ, μ, δ, Pi f ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
+          forall (γframe γfocus : Heap),
+            split (heap γ) γframe γfocus ->
+            (interpret (L:=HProp) δΣ pre) γfocus ->
+            exists (γfocus' : Heap),
+              split (heap γ') γframe γfocus' /\
+              ResultOrFail s' (fun v => (interpret δΣ post) γfocus')
+      | _ => False
+      (* | ContractTerminateNoFail _ _ _ _ => False *)
+      (* | ContractTerminate _ _ _ _ => False *)
+      (* | ContractNone _ _ => True *)
+      end.
+
   Lemma sound {Γ σ} (s : Stm Γ σ) :
+    forall (validCEnv : ValidContractEnv' CEnv),
     forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),
       ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
       forall (PRE : HProp) (POST : Lit σ -> LocalStore Γ -> HProp)
@@ -179,7 +209,8 @@ Module HoareSound
           split (heap γ') γframe γfocus' /\
           ResultOrFail s' (fun v => POST v δ' γfocus').
     Proof.
-      intros γ γ' μ μ' δ δ' s' Hsteps Hfinal PRE POST triple γframe γfocus Hsplit_γ Hpre.
+      intros validCEnv γ γ' μ μ' δ δ' s' Hsteps Hfinal
+             PRE POST triple γframe γfocus Hsplit_γ Hpre.
       revert Hpre Hsplit_γ.
       generalize dependent γfocus.
       generalize dependent γframe.
@@ -187,6 +218,34 @@ Module HoareSound
       generalize dependent s'.
       revert γ γ' μ μ' δ'.
       induction triple; intros.
+      19:{
+        (* sound_steps_inversion; sound_simpl. *)
+        pose proof (validCEnv _ _ f).
+        destruct (CEnv f).
+        - dependent elimination Hsteps.
+          + dependent elimination Hfinal.
+          + dependent elimination s.
+            sound_steps_inversion.
+            dependent destruction H7.
+            ++ admit.
+            ++ sound_steps_inversion. sound_simpl.
+               dependent destruction H.
+               +++ specialize (H0 δΣ _ _ _ _ (evals es0 δ) H2 (stm_lit ty_unit v) H4
+                                  I γframe γfocus Hsplit_γ Hpre).
+                   destruct_conjs.
+                   cbn in H1.
+                   exists H0.
+                   firstorder.
+               +++ admit. (* stupid case due to existence of sep_contract_unit *)
+            ++ sound_steps_inversion. sound_simpl.
+               dependent destruction H.
+               +++ specialize (H0 δΣ _ _ _ _ (evals es0 δ) H2 (stm_fail _ _) H4
+                                  I γframe γfocus Hsplit_γ Hpre).
+                   cbn in H0. assumption.
+               +++ admit.
+          - admit.
+          - admit.
+          - admit. }
       (* consequence *)
       - hoare_sound_solve.
       (* frame *)
@@ -298,7 +357,7 @@ Module HoareSound
               unfold heap. f_equal.
               now rewrite read_write.
            ** rewrite H in Hpre. discriminate.
-         ++ firstorder.
+         * firstorder.
             ** subst.
                right. apply (write_heap_distinct γfocus r k n None v0 H).
             ** destruct (split_not_in_r_then_in_l (heap γ) γfocus γframe k
@@ -329,6 +388,24 @@ Module HoareSound
      - remember (CEnv f) as cenv.
        dependent destruction cenv.
        + sound_steps_inversion; sound_simpl.
+         sound_destruct_final H2.
+         ++ dependent destruction H.
+            admit.
+         ++
+         hoare_sound_solve.
+
+
+         remember (Pi f) as t.
+         dependent destruction t.
+         specialize (steps_lit_lit H3) as H8.
+         subst H2.
+         hoare_sound_solve.
+         dependent induction H.
+         ++
+
+         ++ hoare_sound_solve.
+            dependent destruction H.
+
          sound_destruct_final H2.
          ++ remember (Pi f) as t.
             dependent elimination t; sound_steps_inversion; sound_simpl.
