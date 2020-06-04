@@ -561,13 +561,15 @@ Module ISASymbolicContractKit <:
                 ptstoreg
                 (env_nil ► ty_enum register_tag ↦ term_var "reg_tag" ► ty_int ↦ term_var "v")))
       | wX =>
-        @sep_contract_unit
+        @sep_contract_result_pure
           [ "reg_tag" ∶ ty_enum register_tag,
             "reg_value" ∶ ty_int ]
+          ty_unit
           [ "r" ∶ ty_enum register_tag,
             "v_old" ∶ ty_int,
             "v_new" ∶ ty_int ]
           [term_var "r", term_var "v_new"]%arg
+          (term_lit ty_unit tt)
           (asn_chunk
              (chunk_pred
                 ptstoreg
@@ -576,35 +578,39 @@ Module ISASymbolicContractKit <:
              (chunk_pred
                 ptstoreg
                 (env_nil ► ty_enum register_tag ↦ term_var "r" ► ty_int ↦ term_var "v_new")))
-      | rF => sep_contract_none _
-      | wF => sep_contract_none _
-      | in_bounds => sep_contract_none _
-      | semantics => sep_contract_none _
+      | rF => sep_contract_none _ _
+      | wF => sep_contract_none _ _
+      | in_bounds => sep_contract_none _ _
+      | semantics => sep_contract_none _ _
       | execute_load =>
-        @sep_contract_unit
+        @sep_contract_result_pure
           [ "dst" ∶ ty_enum register_tag,
             "src" ∶ ty_enum register_tag ]
+          ty_unit
           [ "dst" ∶ ty_enum register_tag,
             "src" ∶ ty_enum register_tag,
             "a"   ∶ ty_int,
             "v"   ∶ ty_int
           ]
           [term_var "dst", term_var "src"]%arg
+          (term_lit ty_unit tt)
           asn_true
           asn_true
-      | swapreg => sep_contract_none _
+      | swapreg => sep_contract_none _ _
       | swapreg12 =>
-        @sep_contract_unit
+        @sep_contract_result_pure
           ε
+          ty_unit
           ["u" ∶ ty_int, "v" ∶ ty_int]
           env_nil
+          (term_lit ty_unit tt)
           (R1 ↦ term_var "u" ✱ R2 ↦ term_var "v")
           (R1 ↦ term_var "v" ✱ R2 ↦ term_var "u")
       | add =>
         @sep_contract_result_pure
           ["x" ∶ ty_int, "y" ∶ ty_int]
-          ["x" ∶ ty_int, "y" ∶ ty_int]
           ty_int
+          ["x" ∶ ty_int, "y" ∶ ty_int]
           [term_var "x", term_var "y"]%arg
           (term_binop binop_plus (term_var "x") (term_var "y"))
           asn_true
@@ -612,8 +618,8 @@ Module ISASymbolicContractKit <:
       | double =>
         @sep_contract_result_pure
           ["z" ∶ ty_int]
-          ["z" ∶ ty_int]
           ty_int
+          ["z" ∶ ty_int]
           [term_var "z"]%arg
           (term_binop binop_plus (term_var "z") (term_var "z"))
           asn_true
@@ -621,8 +627,8 @@ Module ISASymbolicContractKit <:
       | add3 =>
         @sep_contract_result_pure
           ["x" ∶ ty_int, "y" ∶ ty_int, "z" ∶ ty_int]
-          ["x" ∶ ty_int, "y" ∶ ty_int, "z" ∶ ty_int]
           ty_int
+          ["x" ∶ ty_int, "y" ∶ ty_int, "z" ∶ ty_int]
           [term_var "x", term_var "y", term_var "z"]%arg
           (term_binop binop_plus (term_binop binop_plus (term_var "x") (term_var "y")) (term_var "z"))
           asn_true
@@ -632,15 +638,17 @@ Module ISASymbolicContractKit <:
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
-      | rM => sep_contract_none _
-      | wM => sep_contract_none _
+      | rM => sep_contract_none _ _
+      | wM => sep_contract_none _ _
       | ghost open_ptstoreg =>
-        @sep_contract_unit
+        @sep_contract_result_pure
           ctx_nil
+          ty_unit
           [ "r" ∶ ty_enum register_tag,
             "v" ∶ ty_int
           ]
           env_nil
+          (term_lit ty_unit tt)
           (asn_chunk
              (chunk_pred
                 ptstoreg
@@ -653,40 +661,48 @@ Module ISASymbolicContractKit <:
                                     | RegTag3 => R3 ↦ term_var "v"
                                     end))
       | ghost close_ptstoreg0 =>
-        @sep_contract_unit
+        @sep_contract_result_pure
           ctx_nil
+          ty_unit
           [ "v" ∶ ty_int ]
           env_nil
+          (term_lit ty_unit tt)
           (R0 ↦ term_var "v")
           (asn_chunk
              (chunk_pred
                 ptstoreg
                 (env_nil ► ty_enum register_tag ↦ term_enum register_tag RegTag0 ► ty_int ↦ term_var "v")))
       | ghost close_ptstoreg1 =>
-        @sep_contract_unit
+        @sep_contract_result_pure
           ctx_nil
+          ty_unit
           [ "v" ∶ ty_int ]
           env_nil
+          (term_lit ty_unit tt)
           (R1 ↦ term_var "v")
           (asn_chunk
              (chunk_pred
                 ptstoreg
                 (env_nil ► ty_enum register_tag ↦ term_enum register_tag RegTag1 ► ty_int ↦ term_var "v")))
       | ghost close_ptstoreg2 =>
-        @sep_contract_unit
+        @sep_contract_result_pure
           ctx_nil
+          ty_unit
           [ "v" ∶ ty_int ]
           env_nil
+          (term_lit ty_unit tt)
           (R2 ↦ term_var "v")
           (asn_chunk
              (chunk_pred
                 ptstoreg
                 (env_nil ► ty_enum register_tag ↦ term_enum register_tag RegTag2 ► ty_int ↦ term_var "v")))
       | ghost close_ptstoreg3 =>
-        @sep_contract_unit
+        @sep_contract_result_pure
           ctx_nil
+          ty_unit
           [ "v" ∶ ty_int ]
           env_nil
+          (term_lit ty_unit tt)
           (R3 ↦ term_var "v")
           (asn_chunk
              (chunk_pred

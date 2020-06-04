@@ -343,8 +343,8 @@ Module SepContracts.
         | abs =>
           @sep_contract_result
             ["x" ∶ ty_int]
-            ["x" ∶ ty_int]
             ty_int
+            ["x" ∶ ty_int]
             [term_var "x"]%arg
             "result"
             asn_true
@@ -358,8 +358,8 @@ Module SepContracts.
         | cmp =>
           @sep_contract_result
             ["x" ∶ ty_int, "y" ∶ ty_int]
-            ["x" ∶ ty_int, "y" ∶ ty_int]
             (ty_enum ordering)
+            ["x" ∶ ty_int, "y" ∶ ty_int]
             [term_var "x", term_var "y"]%arg
             "result"
             asn_true
@@ -374,8 +374,8 @@ Module SepContracts.
         | gcd =>
           @sep_contract_result
             ["x" ∶ ty_int, "y" ∶ ty_int]
-            ["x" ∶ ty_int, "y" ∶ ty_int]
             ty_int
+            ["x" ∶ ty_int, "y" ∶ ty_int]
             [term_var "x", term_var "x"]%arg
             "result"
             asn_true
@@ -385,8 +385,8 @@ Module SepContracts.
         | gcdloop =>
           @sep_contract_result
             ["x" ∶ ty_int, "y" ∶ ty_int]
-            ["x" ∶ ty_int, "y" ∶ ty_int]
             ty_int
+            ["x" ∶ ty_int, "y" ∶ ty_int]
             [term_var "x", term_var "x"]%arg
             "result"
             (asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "x")) ✱
@@ -394,12 +394,12 @@ Module SepContracts.
             (@asn_prop
                ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
                (fun x y result => result = Z.gcd x y))
-        | msum => sep_contract_none _
+        | msum => sep_contract_none _ _
         | @length σ =>
           @sep_contract_result
             ["xs" ∶ ty_list σ ]
-            ["xs" ∶ ty_list σ ]
             ty_int
+            ["xs" ∶ ty_list σ ]
             [term_var "xs"]%arg
             "result"
             asn_true

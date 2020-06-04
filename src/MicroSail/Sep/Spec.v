@@ -126,18 +126,18 @@ Module Assertions
       | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf
       end.
 
-  Inductive SepContract (Δ : Ctx (𝑿 * Ty)) : Ty -> Type :=
-  | sep_contract_unit   {Σ}
-    (δ : SymbolicLocalStore Δ Σ)
-    (req : Assertion Σ) (ens : Assertion Σ) : SepContract Δ ty_unit
-  | sep_contract_result_pure {Σ τ}
+  Inductive SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+  (* | sep_contract_unit   {Σ} *)
+  (*   (δ : SymbolicLocalStore Δ Σ) *)
+  (*   (req : Assertion Σ) (ens : Assertion Σ) : SepContract Δ ty_unit *)
+  | sep_contract_result_pure {Σ}
     (δ : SymbolicLocalStore Δ Σ)
     (result : Term Σ τ)
     (req : Assertion Σ) (ens : Assertion Σ) : SepContract Δ τ
-  | sep_contract_result {Σ τ}
+  | sep_contract_result {Σ}
     (δ : SymbolicLocalStore Δ Σ) (result : 𝑺)
     (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ))) : SepContract Δ τ
-  | sep_contract_none {τ} : SepContract Δ τ.
+  | sep_contract_none : SepContract Δ τ.
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.

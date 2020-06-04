@@ -69,18 +69,18 @@ Module ProgramLogic
 
   (* Hoare triples for SepContract *)
 
-  Inductive CTriple {L : Type} {Logic : IHeaplet L} (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) :
-    forall {τ : Ty} (pre : L) (post : Lit τ -> L) (c : SepContract Δ τ), Prop :=
-  | rule_sep_contract_unit
-      (Σ  : Ctx (𝑺 * Ty)) (θΔ : SymbolicLocalStore Δ Σ) (δΣ : NamedEnv Lit Σ)
-      (req : Assertion Σ) (ens : Assertion Σ) :
-      δΔ = env_map (fun _ t => eval_term t δΣ) θΔ ->
-      CTriple (τ:=ty_unit) Δ δΔ
-        (interpret δΣ req)
-        (fun _ => interpret δΣ ens)
-        (sep_contract_unit θΔ req ens)
+  Inductive CTriple {L : Type} {Logic : IHeaplet L} (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ)
+            {σ : Ty} :
+    forall (pre : L) (post : Lit σ -> L) (c : SepContract Δ σ), Prop :=
+  (* | rule_sep_contract_unit *)
+  (*     (Σ  : Ctx (𝑺 * Ty)) (θΔ : SymbolicLocalStore Δ Σ) (δΣ : NamedEnv Lit Σ) *)
+  (*     (req : Assertion Σ) (ens : Assertion Σ) : *)
+  (*     δΔ = env_map (fun _ t => eval_term t δΣ) θΔ -> *)
+  (*     CTriple (τ:=ty_unit) Δ δΔ *)
+  (*       (interpret δΣ req) *)
+  (*       (fun _ => interpret δΣ ens) *)
+  (*       (sep_contract_unit θΔ req ens) *)
   | rule_sep_contract_result_pure
-      (σ : Ty)
       (Σ  : Ctx (𝑺 * Ty)) (θΔ : SymbolicLocalStore Δ Σ) (δΣ : NamedEnv Lit Σ)
       (req : Assertion Σ) (ens : Assertion Σ) (result : Term Σ σ) :
       δΔ = env_map (fun _ t => eval_term t δΣ) θΔ ->
@@ -89,7 +89,7 @@ Module ProgramLogic
         (fun v => interpret δΣ ens ∧ !!(v = eval_term result δΣ))
         (sep_contract_result_pure θΔ result req ens)
   | rule_sep_contract_result
-      (σ : Ty) (result : 𝑺)
+      (result : 𝑺)
       (Σ  : Ctx (𝑺 * Ty)) (θΔ : SymbolicLocalStore Δ Σ) (δΣ : NamedEnv Lit Σ)
       (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , σ))) :
       δΔ = env_map (fun _ t => eval_term t δΣ) θΔ ->

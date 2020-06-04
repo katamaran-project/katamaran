@@ -180,7 +180,7 @@ Module HoareSound
   Definition ValidContractEnv' (cenv : SepContractEnv) : Prop :=
     forall σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
-      | @sep_contract_unit _ Σ θΔ pre post =>
+      | @sep_contract_result _ Σ τ θΔ result pre post =>
         forall (δΣ : NamedEnv Lit Σ)
           (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore σs) (s' : Stm σs σ),
           ⟨ γ, μ, δ, Pi f ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
@@ -189,7 +189,17 @@ Module HoareSound
             (interpret (L:=HProp) δΣ pre) γfocus ->
             exists (γfocus' : Heap),
               split (heap γ') γframe γfocus' /\
-              ResultOrFail s' (fun v => (interpret δΣ post) γfocus')
+              ResultOrFail s' (fun v => interpret (env_snoc δΣ (result , σ) v) post γfocus')
+      (* | @sep_contract_unit _ Σ θΔ pre post => *)
+      (*   forall (δΣ : NamedEnv Lit Σ) *)
+      (*     (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore σs) (s' : Stm σs σ), *)
+      (*     ⟨ γ, μ, δ, Pi f ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' -> *)
+      (*     forall (γframe γfocus : Heap), *)
+      (*       split (heap γ) γframe γfocus -> *)
+      (*       (interpret (L:=HProp) δΣ pre) γfocus -> *)
+      (*       exists (γfocus' : Heap), *)
+      (*         split (heap γ') γframe γfocus' /\ *)
+      (*         ResultOrFail s' (fun v => (interpret δΣ post) γfocus') *)
       | _ => False
       (* | ContractTerminateNoFail _ _ _ _ => False *)
       (* | ContractTerminate _ _ _ _ => False *)
