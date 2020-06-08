@@ -165,19 +165,19 @@ Module ProgramLogic
           ⦄ stm_match_sum e xinl alt_inl xinr alt_inr ⦃ Q ⦄
   | rule_stm_read_register {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
       δ ⊢ ⦃ r ↦ v ⦄ stm_read_register r ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = v) ∧ r ↦ v ⦄
-  | rule_stm_read_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ)
-                                     (Q : Lit σ -> LocalStore Γ -> L)
-                                     (v : Lit σ) :
-      δ ⊢ ⦃ r ↦ v ✱ (r ↦ v -✱ Q v δ) ⦄ stm_read_register r ⦃ Q ⦄
+  (* | rule_stm_read_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ) *)
+  (*                                    (Q : Lit σ -> LocalStore Γ -> L) *)
+  (*                                    (v : Lit σ) : *)
+  (*     δ ⊢ ⦃ r ↦ v ✱ (r ↦ v -✱ Q v δ) ⦄ stm_read_register r ⦃ Q ⦄ *)
   | rule_stm_write_register {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
                             (Q : Lit σ -> LocalStore Γ -> L)
                             (v : Lit σ) :
       δ ⊢ ⦃ r ↦ v ⦄ stm_write_register r w ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ)
                                                        ∧ r ↦ v' ⦄
-  | rule_stm_write_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
-                                      (Q : Lit σ -> LocalStore Γ -> L)
-                                      (v : Lit σ) :
-      δ ⊢ ⦃ r ↦ v ✱ (r ↦ eval w δ -✱ Q (eval w δ) δ) ⦄ stm_write_register r w ⦃ Q ⦄
+  (* | rule_stm_write_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ) *)
+  (*                                     (Q : Lit σ -> LocalStore Γ -> L) *)
+  (*                                     (v : Lit σ) : *)
+  (*     δ ⊢ ⦃ r ↦ v ✱ (r ↦ eval w δ -✱ Q (eval w δ) δ) ⦄ stm_write_register r w ⦃ Q ⦄ *)
   | rule_stm_assign_backwards
       (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
       (P : L) (R : Lit σ -> LocalStore Γ -> L) :
@@ -199,13 +199,13 @@ Module ProgramLogic
   (*     (P : L) (Q : Lit σ -> LocalStore Γ -> L) : *)
   (*     CTriple Δ (evals es δ) P (fun v => Q v δ) (CEnv f) -> *)
   (*     δ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q ⦄ *)
-  | rule_stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
-    (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ)
-    (P : L)
-    (Q : Lit τ -> LocalStore Γ -> L) :
-    (forall vl vr, env_snoc (env_snoc δ (xl, σ1) vl) (xr, σ2) vr ⊢
-              ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_tail (env_tail δ')) ⦄) ->
-    δ ⊢ ⦃ P ⦄ stm_match_pair e xl xr rhs ⦃ Q ⦄
+  (* | rule_stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2)) *)
+  (*   (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ) *)
+  (*   (P : L) *)
+  (*   (Q : Lit τ -> LocalStore Γ -> L) : *)
+  (*   (forall vl vr, env_snoc (env_snoc δ (xl, σ1) vl) (xr, σ2) vr ⊢ *)
+  (*             ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_tail (env_tail δ')) ⦄) -> *)
+  (*   δ ⊢ ⦃ P ⦄ stm_match_pair e xl xr rhs ⦃ Q ⦄ *)
   where "δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" := (Triple _ δ P s Q).
 
 End ProgramLogic.
