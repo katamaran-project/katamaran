@@ -205,6 +205,11 @@ Module ProgramLogic
   (*     (P : L) (Q : Lit σ -> LocalStore Γ -> L) : *)
   (*     CTriple Δ (evals es δ) P (fun v => Q v δ) (CEnv f) -> *)
   (*     δ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q ⦄ *)
+  | rule_stm_call_frame
+      (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
+      (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+      δΔ ⊢ ⦃ P ⦄ s ⦃ fun v _ => Q v δ ⦄ ->
+      δ ⊢ ⦃ P ⦄ stm_call_frame Δ δΔ τ s ⦃ Q ⦄
   (* | rule_stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2)) *)
   (*   (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ) *)
   (*   (P : L) *)

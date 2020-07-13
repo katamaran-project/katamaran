@@ -355,7 +355,7 @@ Module HoareSound
         hoare_sound_inst; auto.
         exists (H ‼ x)%lit.
         now rewrite env_update_update, env_update_lookup.
-     (* rule_stm_call_forwards *)
+      (* rule_stm_call_forwards *)
       - pose proof (validCEnv _ _ f).
         destruct H; try contradiction.
         sound_steps_inversion; try contradiction.
@@ -366,6 +366,15 @@ Module HoareSound
         }
         insterU ltac:(cbn; auto; eassumption) H1.
         microsail_destruct_propositional H1; cbn in *.
+        hoare_sound_inst; auto; split; auto.
+      (* rule_stm_call_frame *)
+      - sound_steps_inversion; try contradiction.
+        { insterU ltac:(cbn; auto; eassumption) IHtriple.
+          microsail_destruct_propositional IHtriple.
+          hoare_sound_inst; auto.
+        }
+        insterU ltac:(cbn; auto; eassumption) IHtriple.
+        microsail_destruct_propositional IHtriple; cbn in *.
         hoare_sound_inst; auto; split; auto.
     Qed.
 
