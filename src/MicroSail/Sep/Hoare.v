@@ -158,6 +158,16 @@ Module ProgramLogic
   | rule_stm_fail (τ : Ty) (s : Lit ty_string) :
       forall (Q : Lit τ -> LocalStore Γ -> L),
         δ ⊢ ⦃ ⊤ ⦄ stm_fail τ s ⦃ Q ⦄
+  | rule_stm_match_list
+      {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
+      (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ)
+      (Pnil : L) (Pcons : L) (Q : Lit τ -> LocalStore Γ -> L) :
+      δ ⊢ ⦃ Pnil ⦄ alt_nil ⦃ fun v' δ' => Q v' δ' ⦄ ->
+      (forall v vs, env_snoc (env_snoc δ (xh,σ) v) (xt,ty_list σ) vs ⊢
+                      ⦃ Pcons ⦄ alt_cons ⦃ fun v' δ' => Q v' (env_tail (env_tail δ')) ⦄) ->
+      δ ⊢ ⦃ (!!(eval e δ = nil) --> Pnil)
+          ∧ (∀ v vs, !!(eval e δ = cons v vs) --> Pcons)
+          ⦄ stm_match_list e alt_nil xh xt alt_cons ⦃ Q ⦄
   | rule_stm_match_sum (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr))
                        (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl , σinl)) τ)
                        (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ)
@@ -169,6 +179,34 @@ Module ProgramLogic
       δ ⊢ ⦃ (∀ x, !!(eval e δ = inl x) --> Pinl)
           ∧ (∀ x, !!(eval e δ = inr x) --> Pinr)
           ⦄ stm_match_sum e xinl alt_inl xinr alt_inr ⦃ Q ⦄
+  | rule_stm_match_pair
+      {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
+      (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ)
+      (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+      (forall vl vr,
+          env_snoc (env_snoc δ (xl, σ1) vl) (xr, σ2) vr ⊢
+            ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_tail (env_tail δ')) ⦄) ->
+      δ ⊢ ⦃ P ⦄ stm_match_pair e xl xr rhs ⦃ Q ⦄
+  | rule_stm_match_enum
+      {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
+      (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
+      (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+      (forall K, δ ⊢ ⦃ P ⦄ alts K ⦃ Q ⦄) ->
+      δ ⊢ ⦃ P ⦄ stm_match_enum E e alts ⦃ Q ⦄
+  | rule_stm_match_tuple
+      {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
+      (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
+      (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+      (forall (δΔ : LocalStore Δ),
+          env_cat δ δΔ ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄) ->
+      δ ⊢ ⦃ P ⦄ stm_match_tuple e p rhs ⦃ Q ⦄
+  | rule_stm_match_record
+      {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
+      (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
+      (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+      (forall (δΔ : LocalStore Δ),
+          env_cat δ δΔ ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄) ->
+      δ ⊢ ⦃ P ⦄ stm_match_record R e p rhs ⦃ Q ⦄
   | rule_stm_read_register {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
       δ ⊢ ⦃ r ↦ v ⦄ stm_read_register r ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = v) ∧ r ↦ v ⦄
   (* | rule_stm_read_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ) *)
@@ -210,13 +248,6 @@ Module ProgramLogic
       (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
       δΔ ⊢ ⦃ P ⦄ s ⦃ fun v _ => Q v δ ⦄ ->
       δ ⊢ ⦃ P ⦄ stm_call_frame Δ δΔ τ s ⦃ Q ⦄
-  (* | rule_stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2)) *)
-  (*   (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ) *)
-  (*   (P : L) *)
-  (*   (Q : Lit τ -> LocalStore Γ -> L) : *)
-  (*   (forall vl vr, env_snoc (env_snoc δ (xl, σ1) vl) (xr, σ2) vr ⊢ *)
-  (*             ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_tail (env_tail δ')) ⦄) -> *)
-  (*   δ ⊢ ⦃ P ⦄ stm_match_pair e xl xr rhs ⦃ Q ⦄ *)
   | rule_stm_bind
       {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
       (P : L) (Q : Lit σ -> LocalStore Γ -> L)

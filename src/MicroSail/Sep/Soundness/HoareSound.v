@@ -278,6 +278,23 @@ Module HoareSound
       (* rule_stm_fail *)
       - sound_steps_inversion; cbn in *.
         hoare_sound_inst; auto.
+      (* rule_stm_match_list *)
+      - destruct Hpre.
+        sound_steps_inversion; sound_simpl.
+        dependent elimination H1; sound_simpl.
+        + insterU ltac:(reflexivity) H2; clear H3.
+          insterU ltac:(eassumption) IHtriple; cbn in IHtriple.
+          microsail_destruct_propositional IHtriple.
+          hoare_sound_inst; auto.
+        + insterU ltac:(reflexivity) H3; clear H2.
+          sound_steps_inversion; sound_simpl; cbn in *.
+          { insterU ltac:(eassumption) H0; cbn in H0.
+            microsail_destruct_propositional H0.
+            hoare_sound_inst; auto.
+          }
+          insterU ltac:(eassumption) H0; cbn in H0.
+          microsail_destruct_propositional H0.
+          hoare_sound_inst; auto.
       (* rule_stm_match_sum *)
       - destruct Hpre.
         sound_steps_inversion; sound_simpl.
@@ -298,6 +315,47 @@ Module HoareSound
           * insterU ltac:(eassumption) H2; cbn in H2.
             microsail_destruct_propositional H2.
             hoare_sound_inst; auto.
+      (* rule_stm_match_pair *)
+      - sound_steps_inversion; sound_simpl.
+        sound_steps_inversion; sound_simpl.
+        sound_steps_inversion; sound_simpl; cbn in H3.
+        { insterU ltac:(eassumption) H0; cbn in H0.
+          microsail_destruct_propositional H0.
+          hoare_sound_inst; auto.
+        }
+        insterU ltac:(eassumption) H0; cbn in H0.
+        microsail_destruct_propositional H0.
+        hoare_sound_inst; auto.
+      (* rule_stm_match_enum *)
+      - sound_steps_inversion; sound_simpl.
+        dependent elimination H1; sound_simpl.
+        insterU ltac:(eassumption) H0.
+        microsail_destruct_propositional H0.
+        hoare_sound_inst; auto.
+      (* rule_stm_match_tuple *)
+      - sound_steps_inversion; sound_simpl.
+        dependent elimination H1; sound_simpl.
+        sound_steps_inversion.
+        { insterU ltac:(eassumption) H0; cbn in H0.
+          microsail_destruct_propositional H0.
+          hoare_sound_inst; auto.
+        }
+        insterU ltac:(eassumption) H0; cbn in H0.
+        microsail_destruct_propositional H0.
+        rewrite @env_drop_cat in * |-.
+        hoare_sound_inst; auto.
+      (* rule_stm_match_record *)
+      - sound_steps_inversion; sound_simpl.
+        dependent elimination H1; sound_simpl.
+        sound_steps_inversion.
+        { insterU ltac:(eassumption) H0; cbn in H0.
+          microsail_destruct_propositional H0.
+          hoare_sound_inst; auto.
+        }
+        insterU ltac:(eassumption) H0; cbn in H0.
+        microsail_destruct_propositional H0.
+        rewrite @env_drop_cat in * |-.
+        hoare_sound_inst; auto.
       (* rule_stm_read_register *)
       - sound_steps_inversion.
         { contradiction. }
