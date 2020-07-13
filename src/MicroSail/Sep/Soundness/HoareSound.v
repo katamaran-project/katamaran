@@ -63,7 +63,7 @@ Module HoareSound
             | @stm_block      => apply (steps_inversion_ex_block      HF) in H
             | @stm_seq        => apply (steps_inversion_ex_seq        HF) in H
             | @stm_assign     => apply (steps_inversion_ex_assign     HF) in H
-            | @stm_bind       => apply (steps_inversion_bind          HF) in H
+            | @stm_bind       => apply (steps_inversion_ex_bind       HF) in H
             end;
             microsail_destruct_propositional H; subst
           | microsail_stm_primitive_step s; dependent destruction H; cbn in HF
@@ -376,6 +376,16 @@ Module HoareSound
         insterU ltac:(cbn; auto; eassumption) IHtriple.
         microsail_destruct_propositional IHtriple; cbn in *.
         hoare_sound_inst; auto; split; auto.
+      (* rule_stm_bind *)
+      - sound_steps_inversion; try contradiction.
+        + insterU ltac:(cbn; auto; eassumption) IHtriple.
+          microsail_destruct_propositional IHtriple; cbn in *.
+          hoare_sound_inst; auto.
+        + insterU ltac:(cbn; auto; eassumption) IHtriple.
+          microsail_destruct_propositional IHtriple; cbn in *.
+          insterU ltac:(cbn; auto; eassumption) H0.
+          microsail_destruct_propositional H0; cbn in *.
+          hoare_sound_inst; auto.
     Qed.
 
   End Soundness.

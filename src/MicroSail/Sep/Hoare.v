@@ -217,6 +217,14 @@ Module ProgramLogic
   (*   (forall vl vr, env_snoc (env_snoc δ (xl, σ1) vl) (xr, σ2) vr ⊢ *)
   (*             ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_tail (env_tail δ')) ⦄) -> *)
   (*   δ ⊢ ⦃ P ⦄ stm_match_pair e xl xr rhs ⦃ Q ⦄ *)
+  | rule_stm_bind
+      {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
+      (P : L) (Q : Lit σ -> LocalStore Γ -> L)
+      (R : Lit τ -> LocalStore Γ -> L) :
+      δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
+      (forall (v__σ : Lit σ) (δ' : LocalStore Γ),
+          δ' ⊢ ⦃ Q v__σ δ' ⦄ k v__σ ⦃ R ⦄) ->
+      δ ⊢ ⦃ P ⦄ stm_bind s k ⦃ R ⦄
   where "δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" := (Triple _ δ P s Q).
 
 End ProgramLogic.
