@@ -62,3 +62,21 @@ Ltac microsail_solve_eqb_spec :=
      end);
   cbn in *;
   try congruence.
+
+Ltac microsail_destruct_propositional H :=
+  lazymatch type of H with
+  | _ /\ _ =>
+    let H1 := fresh "H1" in
+    let H2 := fresh "H2" in
+    destruct H as [H1 H2];
+    microsail_destruct_propositional H1;
+    microsail_destruct_propositional H2
+  | _ \/ _ =>
+    destruct H as [H|H];
+    microsail_destruct_propositional H
+  | exists _, _ =>
+    let x := fresh in
+    destruct H as [x H];
+    microsail_destruct_propositional H
+  | _ => idtac
+  end.
