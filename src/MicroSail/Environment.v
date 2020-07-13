@@ -172,6 +172,25 @@ Section WithBinding.
       env_drop Δ (env_cat δΓ δΔ) = δΓ.
   Proof. induction δΔ; cbn; auto. Qed.
 
+  Lemma env_update_update {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) :
+    forall {b : B} (bInΓ : InCtx b Γ) (d1 d2 : D b),
+      env_update (env_update E bInΓ d1) bInΓ d2 =
+      env_update E bInΓ d2.
+  Proof.
+    induction E; intros ? [n e]; [ contradiction e | destruct n ].
+    - destruct e; reflexivity.
+    - cbn. intros. f_equal. auto.
+  Qed.
+
+  Lemma env_update_lookup {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) :
+    forall {b : B} (bInΓ : InCtx b Γ),
+      env_update E bInΓ (env_lookup E bInΓ) = E.
+  Proof.
+    induction E; intros ? [n e]; [ contradiction e | destruct n ].
+    - destruct e; reflexivity.
+    - cbn. intros. f_equal. auto.
+  Qed.
+
   Section WithEqD.
     Context {D : B -> Type}.
     Variable eqd : forall b, D b -> D b -> bool.
