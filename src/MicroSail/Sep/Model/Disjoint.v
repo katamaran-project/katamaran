@@ -359,4 +359,17 @@ Module Disjoint
          congruence.
   Qed.
 
+  Lemma write_register_write_heap (rs : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+    heap (write_register rs r v) = write_heap (heap rs) r v.
+  Proof.
+    extensionality τ.
+    extensionality k.
+    unfold heap, write_heap; cbn.
+    destruct (𝑹𝑬𝑮_eq_dec r k) eqn:?.
+    - destruct t.
+      dependent destruction eqi; cbn in *; subst.
+      now rewrite read_write.
+    - now rewrite read_write_distinct.
+  Qed.
+
 End Disjoint.
