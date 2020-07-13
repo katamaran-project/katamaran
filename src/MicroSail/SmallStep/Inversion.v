@@ -55,7 +55,7 @@ Module Inversion
           (step : ⟨ γ1, μ1, δ1, stm_let x τ s k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\
       ((exists msg, s = stm_fail _ msg /\ t = stm_fail _ msg) \/
-       (exists v,   s = stm_lit τ v    /\ t = stm_let' (env_snoc env_nil (x,τ) v) k)
+       (exists v,   s = stm_lit τ v    /\ t = stm_block (env_snoc env_nil (x,τ) v) k)
       ).
     Proof.
       dependent elimination step.
@@ -64,10 +64,10 @@ Module Inversion
       - dependent elimination s2; contradiction.
     Qed.
 
-    Lemma step_inversion_let' {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
+    Lemma step_inversion_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
           {δ1 δ3 : LocalStore Γ}
           {δ : LocalStore Δ} {k : Stm (Γ ▻▻ Δ) σ} {t : Stm Γ σ} (final : Final k)
-          (step : ⟨ γ1, μ1, δ1, stm_let' δ k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
+          (step : ⟨ γ1, μ1, δ1, stm_block δ k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\
       ((exists msg, k = stm_fail _ msg /\ t = stm_fail _ msg) \/
        (exists v,   k = stm_lit σ v    /\ t = stm_lit σ v)
@@ -94,9 +94,9 @@ Module Inversion
       - intuition. left. eexists. intuition.
     Qed.
 
-    Lemma step_inversion_call' {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+    Lemma step_inversion_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
           (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final k)
-          (step : ⟨ γ1, μ1, δ1, stm_call' Δ δΔ σ k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
+          (step : ⟨ γ1, μ1, δ1, stm_call_frame Δ δΔ σ k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ3 = μ1 /\ δ3 = δ1 /\
       ((exists msg, k = stm_fail _ msg /\ t = stm_fail _ msg) \/
        (exists v,   k = stm_lit σ v    /\ t = stm_lit σ v)
@@ -201,12 +201,12 @@ Module Inversion
       | [ |- ⟨ _, _, _, stm_fail _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ ] => constructor 1
       | [ |- ⟨ _, _, _, stm_let _ _ (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_let_value
       | [ |- ⟨ _, _, _, stm_let _ _ (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_let_fail
-      | [ |- ⟨ _, _, _, stm_let' _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_let'_value
-      | [ |- ⟨ _, _, _, stm_let' _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_let'_fail
+      | [ |- ⟨ _, _, _, stm_block _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_block_value
+      | [ |- ⟨ _, _, _, stm_block _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_block_fail
       | [ |- ⟨ _, _, _, stm_seq (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_seq_value
       | [ |- ⟨ _, _, _, stm_seq (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_seq_fail
-      | [ |- ⟨ _, _, _, stm_call' _ _ _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call'_value
-      | [ |- ⟨ _, _, _, stm_call' _ _ _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call'_fail
+      | [ |- ⟨ _, _, _, stm_call_frame _ _ _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call_frame_value
+      | [ |- ⟨ _, _, _, stm_call_frame _ _ _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call_frame_fail
       | [ |- ⟨ _, _, _, stm_assign _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_value
       | [ |- ⟨ _, _, _, stm_assign _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_fail
       | [ |- ⟨ _, _, _, stm_bind (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_bind_value
@@ -235,14 +235,14 @@ Module Inversion
     steps_inversion_induction.
   Qed.
 
-  Lemma steps_inversion_let' {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+  Lemma steps_inversion_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
     {δΔ : LocalStore Δ} {k : Stm (ctx_cat Γ Δ) σ} {t : Stm Γ σ} (final : Final t)
-    (steps : ⟨ γ1, μ1, δ1, stm_let' δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
+    (steps : ⟨ γ1, μ1, δ1, stm_block δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists δΔ' k',
       ⟨ γ1, μ1, env_cat δ1 δΔ , k ⟩ --->* ⟨ γ3, μ3, env_cat δ3 δΔ' , k' ⟩ /\ Final k' /\
-      ⟨ γ3, μ3, δ3, stm_let' δΔ' k' ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩.
+      ⟨ γ3, μ3, δ3, stm_block δΔ' k' ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩.
   Proof.
-    remember (stm_let' δΔ k) as s. revert steps δΔ k Heqs.
+    remember (stm_block δΔ k) as s. revert steps δΔ k Heqs.
     steps_inversion_induction.
   Qed.
 
@@ -259,16 +259,16 @@ Module Inversion
     steps_inversion_induction.
   Qed.
 
-  Lemma steps_inversion_call' {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+  Lemma steps_inversion_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
     (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final t)
-    (steps : ⟨ γ1, μ1, δ1, stm_call' Δ δΔ σ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
+    (steps : ⟨ γ1, μ1, δ1, stm_call_frame Δ δΔ σ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists μ2 γ2 δΔ' k',
       ⟨ γ1, μ1, δΔ , k ⟩ --->* ⟨ γ2, μ2, δΔ' , k' ⟩ /\ Final k' /\
       exists s0,
-        ⟨ γ2, μ2, δ1, stm_call' Δ δΔ' σ k' ⟩ ---> ⟨ γ2, μ2, δ1, s0 ⟩ /\
+        ⟨ γ2, μ2, δ1, stm_call_frame Δ δΔ' σ k' ⟩ ---> ⟨ γ2, μ2, δ1, s0 ⟩ /\
         ⟨ γ2, μ2, δ1, s0⟩ --->* ⟨ γ3, μ3, δ3, t ⟩.
   Proof.
-    remember (stm_call' Δ δΔ σ k) as s. revert steps δΔ k Heqs.
+    remember (stm_call_frame Δ δΔ σ k) as s. revert steps δΔ k Heqs.
     steps_inversion_induction.
   Qed.
 
@@ -307,7 +307,7 @@ Module Inversion
         t = stm_fail _ msg) \/
     (exists γ2 μ2 δ2 v,
         ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_lit _ v ⟩ /\
-        ⟨ γ2, μ2, δ2, stm_let' (env_snoc env_nil (x,τ) v) s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
+        ⟨ γ2, μ2, δ2, stm_block (env_snoc env_nil (x,τ) v) s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
   Proof.
     apply (steps_inversion_let final) in steps.
     microsail_destruct_propositional steps; subst.
@@ -318,9 +318,9 @@ Module Inversion
     - right. steps_inversion_solve.
   Qed.
 
-  Lemma steps_inversion_ex_let' {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+  Lemma steps_inversion_ex_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
     {δΔ : LocalStore Δ} {k : Stm (ctx_cat Γ Δ) σ} {t : Stm Γ σ} (final : Final t)
-    (steps : ⟨ γ1, μ1, δ1, stm_let' δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
+    (steps : ⟨ γ1, μ1, δ1, stm_block δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists δΔ' msg,
         ⟨ γ1, μ1, env_cat δ1 δΔ , k ⟩ --->* ⟨ γ3, μ3, env_cat δ3 δΔ' , stm_fail _ msg ⟩ /\
         t = stm_fail _ msg) \/
@@ -328,9 +328,9 @@ Module Inversion
         ⟨ γ1, μ1, env_cat δ1 δΔ, k ⟩ --->* ⟨ γ3, μ3, env_cat δ3 δΔ', stm_lit _ v ⟩ /\
         t = stm_lit _ v).
   Proof.
-    apply (steps_inversion_let' final) in steps.
+    apply (steps_inversion_block final) in steps.
     microsail_destruct_propositional steps; subst.
-    apply (step_inversion_let' H3) in H4.
+    apply (step_inversion_block H3) in H4.
     microsail_destruct_propositional H4; subst.
     - left. steps_inversion_solve. auto.
     - right. steps_inversion_solve. auto.
@@ -355,9 +355,9 @@ Module Inversion
     - right. steps_inversion_solve.
   Qed.
 
-  Lemma steps_inversion_ex_call' {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+  Lemma steps_inversion_ex_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
     (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final t)
-    (steps : ⟨ γ1, μ1, δ1, stm_call' Δ δΔ σ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
+    (steps : ⟨ γ1, μ1, δ1, stm_call_frame Δ δΔ σ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists δΔ' msg,
         ⟨ γ1, μ1, δΔ, k ⟩ --->* ⟨ γ3, μ3, δΔ', stm_fail _ msg ⟩ /\
         t = stm_fail _ msg /\ δ3 = δ1) \/
@@ -365,9 +365,9 @@ Module Inversion
         ⟨ γ1, μ1, δΔ, k ⟩ --->* ⟨ γ3, μ3, δΔ', stm_lit _ v ⟩ /\
         t = stm_lit _ v /\ δ3 = δ1).
   Proof.
-    apply (steps_inversion_call' final) in steps.
+    apply (steps_inversion_call_frame final) in steps.
     microsail_destruct_propositional steps; subst.
-    apply (step_inversion_call' H5) in H7.
+    apply (step_inversion_call_frame H5) in H7.
     microsail_destruct_propositional H7; subst.
     - apply steps_inversion_fail in H8; destruct_conjs; subst.
       left. steps_inversion_solve. auto.
@@ -399,7 +399,7 @@ Module Inversion
     {δ1 δ3 : LocalStore Γ}
     {v : Lit τ} {k : Stm (ctx_snoc Γ (x, τ)) σ} {t : Stm Γ σ}
     (steps : ⟨ γ1, μ1, δ1, stm_let x τ (stm_lit τ v) k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
-    γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_let' (env_snoc env_nil (x,τ) v) k.
+    γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_block (env_snoc env_nil (x,τ) v) k.
   Proof.
     dependent elimination steps.
     - intuition.

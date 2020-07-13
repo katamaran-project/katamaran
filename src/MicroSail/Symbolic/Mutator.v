@@ -706,7 +706,7 @@ Module Mutators
         mutator_push_local v *>
         mutator_exec k              <*
         mutator_pop_local
-      | stm_let' δ k =>
+      | stm_block δ k =>
         mutator_pushs_local (env_map (fun _ => term_lit _) δ) *>
         mutator_exec k <*
         mutator_pops_local _
@@ -714,8 +714,8 @@ Module Mutators
         mutator_modify_local (fun δ => δ ⟪ x ↦ v ⟫)%env *>
         mutator_pure v
       | stm_call f es => mutator_eval_exps es >>= mutator_call (CEnv f)
-      | stm_callex f es => mutator_eval_exps es >>= mutator_call (CEnvEx f)
-      | stm_call' Δ δ' τ s =>
+      | stm_call_external f es => mutator_eval_exps es >>= mutator_call (CEnvEx f)
+      | stm_call_frame Δ δ' τ s =>
         mutator_get_local                                      >>= fun δ =>
         mutator_put_local (env_map (fun _ => term_lit _) δ') >>= fun _ =>
         mutator_exec s                                                >>= fun t =>
@@ -1089,7 +1089,7 @@ Module Mutators
       t2 <- dmut_exec s2 ;;
       dmut_pop_local ;;
       dmut_pure t2
-    | stm_let' δ s =>
+    | stm_block δ s =>
       dmut_pushs_local (env_map (fun _ => term_lit _) δ);;
       t <- dmut_exec s ;;
       dmut_pops_local _ ;;
@@ -1101,11 +1101,11 @@ Module Mutators
     | stm_call f es =>
       ts <- dmut_eval_exps es ;;
       dmut_call (CEnv f) ts
-    | stm_call' Δ δ τ s =>
+    | stm_call_frame Δ δ τ s =>
       δr <- dmut_get_local ;;
       dmut_put_local (env_map (fun _ => term_lit _) δ) ;;
       dmut_bind_left (dmut_exec s) (dmut_put_local δr)
-    | stm_callex f es =>
+    | stm_call_external f es =>
       ts <- dmut_eval_exps es ;;
       dmut_call (CEnvEx f) ts
     | stm_if e s1 s2 =>

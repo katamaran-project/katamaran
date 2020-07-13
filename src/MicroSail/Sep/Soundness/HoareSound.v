@@ -57,13 +57,13 @@ Module HoareSound
       | [ H: ⟨ _, _, _, ?s ⟩ --->* ⟨ _, _, _, ?t ⟩, HF: Final ?t |- _ ] =>
         first
           [ lazymatch head s with
-            | @stm_exp     => apply (steps_inversion_exp       HF) in H
-            | @stm_call'   => apply (steps_inversion_ex_call'  HF) in H
-            | @stm_let     => apply (steps_inversion_ex_let    HF) in H
-            | @stm_let'    => apply (steps_inversion_ex_let'   HF) in H
-            | @stm_seq     => apply (steps_inversion_ex_seq    HF) in H
-            | @stm_assign  => apply (steps_inversion_ex_assign HF) in H
-            | @stm_bind    => apply (steps_inversion_bind      HF) in H
+            | @stm_exp        => apply (steps_inversion_exp           HF) in H
+            | @stm_call_frame => apply (steps_inversion_ex_call_frame HF) in H
+            | @stm_let        => apply (steps_inversion_ex_let        HF) in H
+            | @stm_block      => apply (steps_inversion_ex_block      HF) in H
+            | @stm_seq        => apply (steps_inversion_ex_seq        HF) in H
+            | @stm_assign     => apply (steps_inversion_ex_assign     HF) in H
+            | @stm_bind       => apply (steps_inversion_bind          HF) in H
             end;
             microsail_destruct_propositional H; subst
           | microsail_stm_primitive_step s; dependent destruction H; cbn in HF

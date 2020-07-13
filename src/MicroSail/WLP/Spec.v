@@ -121,10 +121,10 @@ Module WLP
                           eval_prop_false e δ (WLP s2 POST δ γ)
     | stm_fail _ _ => abort
     | stm_seq s1 s2 => WLP s1 *> WLP s2
-    | stm_call' Δ δ τ s => lift_cont_global (evalDST (WLP s) δ)
+    | stm_call_frame Δ δ τ s => lift_cont_global (evalDST (WLP s) δ)
     | stm_call f es => mevals es >>= fun δf_in => lift_cont_global (WLPCall (CEnv f) δf_in)
-    | stm_callex f es => mevals es >>= fun δf_in => lift_cont_global (WLPCall (CEnvEx f) δf_in)
-    | stm_let' δ k => pushs δ *> WLP k <* pops _
+    | stm_call_external f es => mevals es >>= fun δf_in => lift_cont_global (WLPCall (CEnvEx f) δf_in)
+    | stm_block δ k => pushs δ *> WLP k <* pops _
     | stm_match_list e alt_nil xh xt alt_cons =>
       meval e !>>= fun v =>
       match v with

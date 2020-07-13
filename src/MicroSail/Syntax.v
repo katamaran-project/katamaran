@@ -638,11 +638,11 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | stm_lit        {τ : Ty} (l : Lit τ) : Stm Γ τ
     | stm_exp        {τ : Ty} (e : Exp Γ τ) : Stm Γ τ
     | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
-    | stm_let'       (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) {σ : Ty} (k : Stm (ctx_cat Γ Δ) σ) : Stm Γ σ
+    | stm_block      (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) {σ : Ty} (k : Stm (ctx_cat Γ Δ) σ) : Stm Γ σ
     | stm_assign     (x : 𝑿) (τ : Ty) {xInΓ : InCtx (x , τ) Γ} (e : Stm Γ τ) : Stm Γ τ
     | stm_call       {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ σ
-    | stm_call'      (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ) : Stm Γ τ
-    | stm_callex     {Δ σ} (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ σ
+    | stm_call_frame (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ) : Stm Γ τ
+    | stm_call_external {Δ σ} (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ σ
     | stm_if         {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) : Stm Γ τ
     | stm_seq        {τ : Ty} (e : Stm Γ τ) {σ : Ty} (k : Stm Γ σ) : Stm Γ σ
     | stm_assert     (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) : Stm Γ ty_bool
@@ -691,11 +691,11 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Hypothesis (P_lit   : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (l : Lit τ), P (stm_lit Γ l)).
       Hypothesis (P_exp  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Exp Γ τ), P (stm_exp e)).
       Hypothesis (P_let  : forall (Γ : Ctx (𝑿 * Ty)) (x : 𝑿) (τ : Ty) (s : Stm Γ τ) (σ : Ty) (k : Stm (Γ ▻ (x ∶ τ)%ctx) σ), P s -> P k -> P (stm_let s k)).
-      Hypothesis (P_let'  : forall (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (σ : Ty) (k : Stm (Γ ▻▻ Δ) σ), P k -> P (stm_let' Γ δ k)).
+      Hypothesis (P_block : forall (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (σ : Ty) (k : Stm (Γ ▻▻ Δ) σ), P k -> P (stm_block Γ δ k)).
       Hypothesis (P_assign : forall (Γ : Ctx (𝑿 * Ty)) (x : 𝑿) (τ : Ty) (xInΓ : (x ∶ τ)%ctx ∈ Γ) (e : Stm Γ τ), P e -> P (stm_assign e)).
       Hypothesis (P_call  : forall (Γ Δ : Ctx (𝑿 * Ty)) (σ : Ty) (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call f es)).
-      Hypothesis (P_call'  : forall (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call' Γ δ s)).
-      Hypothesis (P_callex  : forall (Γ Δ : Ctx (𝑿 * Ty)) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_callex f es)).
+      Hypothesis (P_call_frame  : forall (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call_frame Γ δ s)).
+      Hypothesis (P_call_external  : forall (Γ Δ : Ctx (𝑿 * Ty)) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call_external f es)).
       Hypothesis (P_if  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Exp Γ ty_bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)).
       Hypothesis (P_seq  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Stm Γ τ) (σ : Ty) (k : Stm Γ σ), P e -> P k -> P (stm_seq e k)).
       Hypothesis (P_assert  : forall (Γ : Ctx (𝑿 * Ty)) (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string), P (stm_assert e1 e2)).
@@ -726,11 +726,11 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         | stm_lit _ _            => ltac:(apply P_lit; auto)
         | stm_exp _              => ltac:(apply P_exp; auto)
         | stm_let _ _            => ltac:(apply P_let; auto)
-        | stm_let' _ _ _         => ltac:(apply P_let'; auto)
+        | stm_block _ _ _        => ltac:(apply P_block; auto)
         | stm_assign _           => ltac:(apply P_assign; auto)
         | stm_call _ _           => ltac:(apply P_call; auto)
-        | stm_call' _ _ _        => ltac:(apply P_call'; auto)
-        | stm_callex _ _         => ltac:(apply P_callex; auto)
+        | stm_call_frame _ _ _   => ltac:(apply P_call_frame; auto)
+        | stm_call_external _ _  => ltac:(apply P_call_external; auto)
         | stm_if _ _ _           => ltac:(apply P_if; auto)
         | stm_seq _ _            => ltac:(apply P_seq; auto)
         | stm_assert _ _         => ltac:(apply P_assert; auto)
@@ -755,11 +755,11 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_lit {_} _ _.
     Global Arguments stm_exp {_ _} _.
     Global Arguments stm_let {_} _ _ _ {_} _.
-    Global Arguments stm_let' {_ _} _ {_} _.
+    Global Arguments stm_block {_ _} _ {_} _.
     Global Arguments stm_assign {_} _ {_ _} _.
     Global Arguments stm_call {_%ctx _%ctx _} _ _%arg.
-    Global Arguments stm_call' {_} _ _ _ _.
-    Global Arguments stm_callex {_%ctx _%ctx _} _ _%arg.
+    Global Arguments stm_call_frame {_} _ _ _ _.
+    Global Arguments stm_call_external {_%ctx _%ctx _} _ _%arg.
     Global Arguments stm_if {_ _} _ _ _.
     Global Arguments stm_seq {_ _} _ {_} _.
     Global Arguments stm_assert {_} _ _.
@@ -1364,14 +1364,14 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     (stm_call f (env_snoc .. (env_snoc env_nil (_,_) a1%exp) .. (_,_) an%exp))
     (at level 10, f global, a1, an at level 9) : stm_scope.
   Notation "'callex' f a1 .. an" :=
-    (stm_callex f (env_snoc .. (env_snoc env_nil (_,_) a1%exp) .. (_,_) an%exp))
+    (stm_call_external f (env_snoc .. (env_snoc env_nil (_,_) a1%exp) .. (_,_) an%exp))
     (at level 10, f global, a1, an at level 9) : stm_scope.
 
   Notation "'call' f" :=
     (stm_call f env_nil)
     (at level 10, f global) : stm_scope.
   Notation "'callex' f" :=
-    (stm_callex f env_nil)
+    (stm_call_external f env_nil)
     (at level 10, f global) : stm_scope.
 
   Notation "s1 ;; s2" := (stm_seq s1 s2) : stm_scope.

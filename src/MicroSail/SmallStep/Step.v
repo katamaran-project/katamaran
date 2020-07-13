@@ -53,7 +53,7 @@ Module SmallStep
 
   | step_stm_let_value
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) (x : 𝑿) (τ σ : Ty) (v : Lit τ) (k : Stm (Γ ▻ (x , τ)) σ) :
-      ⟨ γ , μ , δ , stm_let x τ (stm_lit τ v) k ⟩ ---> ⟨ γ , μ , δ , stm_let' (env_snoc env_nil (x,τ) v) k ⟩
+      ⟨ γ , μ , δ , stm_let x τ (stm_lit τ v) k ⟩ ---> ⟨ γ , μ , δ , stm_block (env_snoc env_nil (x,τ) v) k ⟩
   | step_stm_let_fail
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) (x : 𝑿) (τ σ : Ty) (s : string) (k : Stm (Γ ▻ (x , τ)) σ) :
       ⟨ γ , μ , δ, stm_let x τ (stm_fail τ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail σ s ⟩
@@ -62,16 +62,16 @@ Module SmallStep
       (s : Stm Γ τ) (s' : Stm Γ τ) (k : Stm (Γ ▻ (x , τ)) σ) :
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_let x τ s k ⟩ ---> ⟨ γ', μ' , δ' , stm_let x τ s' k ⟩
-  | step_stm_let'_value
+  | step_stm_block_value
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (σ : Ty) (v : Lit σ) :
-      ⟨ γ , μ , δ , stm_let' δΔ (stm_lit σ v) ⟩ ---> ⟨ γ , μ , δ , stm_lit σ v ⟩
-  | step_stm_let'_fail
+      ⟨ γ , μ , δ , stm_block δΔ (stm_lit σ v) ⟩ ---> ⟨ γ , μ , δ , stm_lit σ v ⟩
+  | step_stm_block_fail
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (σ : Ty) (s : string) :
-      ⟨ γ , μ , δ , stm_let' δΔ (stm_fail σ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail σ s ⟩
-  | step_stm_let'_step
+      ⟨ γ , μ , δ , stm_block δΔ (stm_fail σ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail σ s ⟩
+  | step_stm_block_step
       (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) (δΔ δΔ' : LocalStore Δ) (σ : Ty) (k k' : Stm (Γ ▻▻ Δ) σ) :
       ⟨ γ , μ , δ ►► δΔ , k ⟩ ---> ⟨ γ', μ' , δ' ►► δΔ' , k' ⟩ ->
-      ⟨ γ , μ , δ , stm_let' δΔ k ⟩ ---> ⟨ γ' , μ' , δ' , stm_let' δΔ' k' ⟩
+      ⟨ γ , μ , δ , stm_block δΔ k ⟩ ---> ⟨ γ' , μ' , δ' , stm_block δΔ' k' ⟩
 
   | step_stm_seq_step
       (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (τ σ : Ty) (s s' : Stm Γ τ) (k : Stm Γ σ) :
@@ -87,22 +87,22 @@ Module SmallStep
   | step_stm_call
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {σs σ} {f : 𝑭 σs σ} (es : NamedEnv (Exp Γ) σs) :
       ⟨ γ , μ , δ , stm_call f es ⟩ --->
-      ⟨ γ , μ , δ , stm_call' σs (evals es δ) σ (Pi f) ⟩
-  | step_stm_call'_step
+      ⟨ γ , μ , δ , stm_call_frame σs (evals es δ) σ (Pi f) ⟩
+  | step_stm_call_frame_step
       (γ γ' : RegStore) (μ μ' : Memory) (δ : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) {δΔ δΔ' : LocalStore Δ} (τ : Ty)
       (s s' : Stm Δ τ) :
       ⟨ γ , μ , δΔ , s ⟩ ---> ⟨ γ' , μ' , δΔ' , s' ⟩ ->
-      ⟨ γ , μ , δ , stm_call' Δ δΔ τ s ⟩ ---> ⟨ γ' , μ' , δ , stm_call' Δ δΔ' τ s' ⟩
-  | step_stm_call'_value
+      ⟨ γ , μ , δ , stm_call_frame Δ δΔ τ s ⟩ ---> ⟨ γ' , μ' , δ , stm_call_frame Δ δΔ' τ s' ⟩
+  | step_stm_call_frame_value
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (τ : Ty) (v : Lit τ) :
-      ⟨ γ , μ , δ , stm_call' Δ δΔ τ (stm_lit τ v) ⟩ ---> ⟨ γ , μ , δ , stm_lit τ v ⟩
-  | step_stm_call'_fail
+      ⟨ γ , μ , δ , stm_call_frame Δ δΔ τ (stm_lit τ v) ⟩ ---> ⟨ γ , μ , δ , stm_lit τ v ⟩
+  | step_stm_call_frame_fail
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (τ : Ty) (s : string) :
-      ⟨ γ , μ , δ , stm_call' Δ δΔ τ (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
-  | step_stm_callex
+      ⟨ γ , μ , δ , stm_call_frame Δ δΔ τ (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
+  | step_stm_call_external
       (γ γ' : RegStore) (μ μ' : Memory) (δ : LocalStore Γ) {σs σ} {f : 𝑭𝑿 σs σ} (es : NamedEnv (Exp Γ) σs) (res : string + Lit σ) :
       ExternalCall f (evals es δ) res γ γ' μ μ' ->
-      ⟨ γ  , μ  , δ , stm_callex f es ⟩ --->
+      ⟨ γ  , μ  , δ , stm_call_external f es ⟩ --->
       ⟨ γ' , μ' , δ , match res with
                       | inl msg => stm_fail σ msg
                       | inr v__σ  => stm_lit σ v__σ
@@ -132,7 +132,7 @@ Module SmallStep
       ⟨ γ , μ , δ , stm_match_list e alt_nil xh xt alt_cons ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
                 | nil => alt_nil
-                | cons vh vt => stm_let' (env_snoc (env_snoc env_nil (xh,σ) vh) (xt,ty_list σ) vt) alt_cons
+                | cons vh vt => stm_block (env_snoc (env_snoc env_nil (xh,σ) vh) (xt,ty_list σ) vt) alt_cons
                 end
       ⟩
   | step_stm_match_sum
@@ -141,8 +141,8 @@ Module SmallStep
       (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr , σinr)) τ) :
       ⟨ γ , μ , δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
-                | inl v => stm_let' (env_snoc env_nil (xinl,σinl) v) alt_inl
-                | inr v => stm_let' (env_snoc env_nil (xinr,σinr) v) alt_inr
+                | inl v => stm_block (env_snoc env_nil (xinl,σinl) v) alt_inl
+                | inr v => stm_block (env_snoc env_nil (xinr,σinr) v) alt_inr
                 end
       ⟩
   | step_stm_match_pair
@@ -150,7 +150,7 @@ Module SmallStep
       (rhs : Stm (Γ ▻ (xl , σ1) ▻ (xr , σ2)) τ) :
       ⟨ γ , μ , δ , stm_match_pair e xl xr rhs ⟩ --->
       ⟨ γ , μ , δ , let (vl , vr) := eval e δ in
-                stm_let' (env_snoc (env_snoc env_nil (xl,σ1) vl) (xr,σ2) vr) rhs
+                stm_block (env_snoc (env_snoc env_nil (xl,σ1) vl) (xr,σ2) vr) rhs
       ⟩
   | step_stm_match_enum
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
@@ -161,21 +161,21 @@ Module SmallStep
       (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ)
       {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_tuple e p rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_let' (tuple_pattern_match p (eval e δ)) rhs ⟩
+      ⟨ γ , μ , δ , stm_block (tuple_pattern_match p (eval e δ)) rhs ⟩
 
   | step_stm_match_union
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {U : 𝑼} (e : Exp Γ (ty_union U)) {τ : Ty}
       (alts : forall (K : 𝑼𝑲 U), Alternative Γ (𝑼𝑲_Ty K) τ) :
       ⟨ γ , μ , δ , stm_match_union U e alts ⟩ --->
       ⟨ γ , μ , δ , let (K , v) := 𝑼_unfold (eval e δ) in
-                stm_let' (pattern_match (proj_alt_pat (alts K)) v) (proj_alt_rhs (alts K))
+                stm_block (pattern_match (proj_alt_pat (alts K)) v) (proj_alt_rhs (alts K))
       ⟩
   | step_stm_match_record
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {R : 𝑹} {Δ : Ctx (𝑿 * Ty)}
       (e : Exp Γ (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ)
       {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_record R e p rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_let' (record_pattern_match p (𝑹_unfold (eval e δ))) rhs ⟩
+      ⟨ γ , μ , δ , stm_block (record_pattern_match p (𝑹_unfold (eval e δ))) rhs ⟩
 
   | step_stm_read_register
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {σ : Ty} (r : 𝑹𝑬𝑮 σ) :
@@ -218,16 +218,16 @@ Module SmallStep
   Ltac microsail_stm_primitive_step s :=
     first
       [ lazymatch s with
-        | stm_call' _ _ _ ?s' => microsail_stm_is_final s'
-        | stm_let _ _ ?s' _   => microsail_stm_is_final s'
-        | stm_let' _ ?s'      => microsail_stm_is_final s'
-        | stm_seq ?s' _       => microsail_stm_is_final s'
-        | stm_assign _ ?s'    => microsail_stm_is_final s'
-        | stm_bind ?s' _      => microsail_stm_is_final s'
+        | stm_call_frame _ _ _ ?s' => microsail_stm_is_final s'
+        | stm_let _ _ ?s' _        => microsail_stm_is_final s'
+        | stm_block _ ?s'          => microsail_stm_is_final s'
+        | stm_seq ?s' _            => microsail_stm_is_final s'
+        | stm_assign _ ?s'         => microsail_stm_is_final s'
+        | stm_bind ?s' _           => microsail_stm_is_final s'
         end
       | lazymatch head s with
         | @stm_call           => idtac
-        | @stm_callex         => idtac
+        | @stm_call_external  => idtac
         | @stm_assert         => idtac
         | @stm_fail           => idtac
         | @stm_exp            => idtac

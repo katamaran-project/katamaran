@@ -88,12 +88,12 @@ Module Soundness
         first
           [ microsail_stm_primitive_step s; dependent destruction H; cbn in HF
           | match head s with
-            | @stm_call'   => apply (steps_inversion_call'  HF) in H
-            | @stm_let     => apply (steps_inversion_let    HF) in H
-            | @stm_let'    => apply (steps_inversion_let'   HF) in H
-            | @stm_seq     => apply (steps_inversion_seq    HF) in H
-            | @stm_assign  => apply (steps_inversion_assign HF) in H
-            | @stm_bind    => apply (steps_inversion_bind   HF) in H
+            | @stm_call_frame => apply (steps_inversion_call_frame HF) in H
+            | @stm_let        => apply (steps_inversion_let        HF) in H
+            | @stm_block      => apply (steps_inversion_block      HF) in H
+            | @stm_seq        => apply (steps_inversion_seq        HF) in H
+            | @stm_assign     => apply (steps_inversion_assign     HF) in H
+            | @stm_bind       => apply (steps_inversion_bind       HF) in H
             end; destruct_conjs
           ]
       | _ => progress (cbn in *)

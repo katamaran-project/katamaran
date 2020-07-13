@@ -338,7 +338,7 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Local Open Scope stm_scope.
 
   Notation "'callghost' f" :=
-    (stm_callex (ghost f) env_nil)
+    (stm_call_external (ghost f) env_nil)
     (at level 10, f global) : stm_scope.
 
   Local Notation "'x'"   := (@exp_var _ "x" _ _).
