@@ -127,6 +127,12 @@ Module ProgramLogic
       (forall (v : Lit σ) (δ' : LocalStore Γ),
           env_snoc δ' (x,σ) v ⊢ ⦃ Q v δ' ⦄ k ⦃ fun v δ'' => R v (env_tail δ'') ⦄ ) ->
       δ         ⊢ ⦃ P ⦄ let: x := s in k ⦃ R ⦄
+  | rule_stm_block
+      (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ)
+      (τ : Ty) (k : Stm (ctx_cat Γ Δ) τ)
+      (P : L) (R : Lit τ -> LocalStore Γ -> L) :
+      (δ ►► δΔ ⊢ ⦃ P ⦄ k ⦃ fun v δ'' => R v (env_drop Δ δ'') ⦄) ->
+      δ         ⊢ ⦃ P ⦄ stm_block δΔ k ⦃ R ⦄
   | rule_stm_if
       (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
       (P : L) (Q : Lit τ -> LocalStore Γ -> L) :

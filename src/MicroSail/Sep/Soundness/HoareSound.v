@@ -234,6 +234,16 @@ Module HoareSound
         insterU ltac:(cbn; auto; eassumption) H0.
         microsail_destruct_propositional H0; subst; cbn in *.
         hoare_sound_inst; auto.
+      (* rule_stm_block *)
+      - sound_steps_inversion; cbn in *.
+        { insterU ltac:(eassumption) IHtriple.
+          microsail_destruct_propositional IHtriple.
+          hoare_sound_inst; auto.
+        }
+        insterU ltac:(eassumption) IHtriple.
+        microsail_destruct_propositional IHtriple; cbn in *.
+        rewrite @env_drop_cat in * |-.
+        hoare_sound_inst; auto.
       (* rule_stm_if *)
       - sound_steps_inversion; cbn in *.
         + contradiction.
