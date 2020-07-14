@@ -80,3 +80,33 @@ Ltac microsail_destruct_propositional H :=
     microsail_destruct_propositional H
   | _ => idtac
   end.
+
+(* Adopted from
+   https://softwarefoundations.cis.upenn.edu/plf-current/LibTactics.html
+ *)
+Ltac microsail_check_noevar M :=
+  first [ has_evar M; fail 1 | idtac ].
+Ltac microsail_check_noevar_hyp H :=
+  let T := type of H in microsail_check_noevar T.
+
+(* This tactic instantiates a hypothesis with fresh unification variables,
+   possibly solving some on the fly.
+   Adopted from CPDT: http://adam.chlipala.net/cpdt/html/Match.html
+ *)
+Tactic Notation "microsail_insterU" tactic(tac) constr(H) :=
+  repeat
+    match type of H with
+    | forall x : ?T, _ =>
+      match type of T with
+      | Prop =>
+        (let H' := fresh "H'" in
+         assert (H' : T) by solve [ tac ];
+         specialize (H H'); clear H')
+        || fail 1
+      | _ =>
+        let x := fresh "x" in
+        evar (x : T);
+        let x' := eval unfold x in x in
+            clear x; specialize (H x')
+             end
+    end.

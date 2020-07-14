@@ -127,6 +127,14 @@ Module ProgramLogic
       (forall (v : Lit σ) (δ' : LocalStore Γ),
           env_snoc δ' (x,σ) v ⊢ ⦃ Q v δ' ⦄ k ⦃ fun v δ'' => R v (env_tail δ'') ⦄ ) ->
       δ         ⊢ ⦃ P ⦄ let: x := s in k ⦃ R ⦄
+  | rule_stm_let_forwards
+      (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
+      (P : L) (Q : Lit σ -> LocalStore Γ -> L)
+      (R : Lit τ -> LocalStore (Γ ▻ (x,σ)) -> L) :
+      δ         ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
+      (forall (v : Lit σ) (δ' : LocalStore Γ),
+          env_snoc δ' (x,σ) v ⊢ ⦃ Q v δ' ⦄ k ⦃ R ⦄ ) ->
+      δ         ⊢ ⦃ P ⦄ let: x := s in k ⦃ fun v δ' => ∃ v__let, R v (env_snoc δ' (x,σ) v__let)⦄
   | rule_stm_block
       (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ)
       (τ : Ty) (k : Stm (ctx_cat Γ Δ) τ)
@@ -200,6 +208,18 @@ Module ProgramLogic
       (forall (δΔ : LocalStore Δ),
           env_cat δ δΔ ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄) ->
       δ ⊢ ⦃ P ⦄ stm_match_tuple e p rhs ⦃ Q ⦄
+  | rule_stm_match_union
+      {U : 𝑼} (e : Exp Γ (ty_union U)) {σ τ : Ty}
+      (alt__Δ : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
+      (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
+      (alt__r : forall (K : 𝑼𝑲 U), Stm (ctx_cat Γ (alt__Δ K)) τ)
+      (P : forall (K : 𝑼𝑲 U), L) (Q : Lit τ -> LocalStore Γ -> L) :
+      (forall (K : 𝑼𝑲 U) (δΔ : LocalStore (alt__Δ K)),
+          env_cat δ δΔ ⊢ ⦃ P K ⦄ alt__r K ⦃ fun v δ' => Q v (env_drop (alt__Δ K) δ') ⦄) ->
+      δ ⊢
+        ⦃ ∀ (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)), !!(eval e δ = 𝑼_fold (existT K v)) --> P K ⦄
+        stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K))
+        ⦃ Q ⦄
   | rule_stm_match_record
       {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
       (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
