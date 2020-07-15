@@ -61,6 +61,7 @@ Reserved Notation "δ ‼ x"          (at level 56, no associativity).
 
 Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" (at level 75, no associativity).
 Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" (at level 75, no associativity).
+Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> n ⟨ γ2 , μ2 , δ2 , s2 ⟩" (at level 75, no associativity).
 (* Notation "( x , y , .. , z )" := *)
 (*   (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z) : pat_scope. *)
 

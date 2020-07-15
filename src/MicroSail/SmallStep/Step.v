@@ -28,6 +28,7 @@
 
 From Coq Require Import
      Program.Equality
+     Program.Tactics
      Strings.String.
 From Equations Require Import
      Equations.
@@ -205,6 +206,21 @@ Module SmallStep
       Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 -> Steps γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 -> Steps γ1 μ1 δ1 s1 γ3 μ3 δ3 s3.
 
   Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Steps _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2).
+
+  Inductive StepsN {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : nat -> RegStore -> Memory -> LocalStore Γ -> Stm Γ σ -> Prop :=
+  | stepsn_refl : StepsN γ1 μ1 δ1 s1 O γ1 μ1 δ1 s1
+  | stepsn_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : LocalStore Γ} {s2 s3 : Stm Γ σ} {n} :
+      Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 -> StepsN γ2 μ2 δ2 s2 n γ3 μ3 δ3 s3 -> StepsN γ1 μ1 δ1 s1 (S n) γ3 μ3 δ3 s3.
+
+  Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> n ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@StepsN _ _ γ1 μ1 δ1 s1 n γ2 μ2 δ2 s2).
+
+  Lemma steps_stepsn {Γ σ γ1 μ1 δ1 s1 γ3 μ3 δ3 s3} :
+    @Steps Γ σ γ1 μ1 δ1 s1 γ3 μ3 δ3 s3 <-> exists n, StepsN γ1 μ1 δ1 s1 n γ3 μ3 δ3 s3.
+  Proof.
+    split.
+    - induction 1; destruct_conjs; eexists; econstructor; eauto.
+    - intros [? steps]; induction steps; econstructor; eauto.
+  Qed.
 
   (* Tests if a statement is a final one, i.e. a finished computation. *)
   Ltac microsail_stm_is_final s :=
