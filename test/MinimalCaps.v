@@ -371,6 +371,8 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   | within_bounds  : Fun ["c"   ∶ ty_record capability ] ty_bool
   | compute_rv     : Fun ["rv" ∶ ty_rv] ty_word
   | compute_rv_num : Fun ["rv" ∶ ty_rv] ty_int
+  | exec_jmp       : Fun ["lv" ∶ ty_lv] ty_unit
+  | exec_jnz       : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv] ty_unit
   | exec_move      : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv ] ty_unit
   | exec_load      : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_unit
   | exec_store     : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv ] ty_unit
@@ -560,11 +562,22 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       call write_reg lv (exp_var w) ;;
       call update_pc.
 
+    Definition fun_exec_jmp : Stm [lv ∶ ty_lv] ty_unit :=
+      let: "c" ∶ ty_record capability := call read_reg_cap lv in
+      stm_write_register pc c ;;
+      stm_lit ty_unit tt.
+
+    Definition fun_exec_jnz : Stm [lv ∶ ty_lv, rv ∶ ty_rv ] ty_unit :=
+      let: "c" ∶ ty_int := call compute_rv_num (exp_var rv) in
+      stm_if (exp_binop binop_eq c (exp_lit _ ty_int 0))
+             (call update_pc)
+             (call exec_jmp lv).
+
     Definition fun_exec_instr : Stm [i ∶ ty_instr] ty_unit :=
       stm_match_union instruction (exp_var i)
                       (fun K => match K with
-                            | kjmp => alt _ (pat_var lv) (stm_exp (exp_lit _ ty_unit tt))
-                            | kjnz => alt _ (pat_pair lv rv) (stm_exp (exp_lit _ ty_unit tt))
+                            | kjmp => alt _ (pat_var lv) (call exec_jmp lv)
+                            | kjnz => alt _ (pat_pair lv rv) (call exec_jnz lv rv)
                             | kmove => alt _ (pat_pair lv rv) (call exec_move lv rv)
                             | kload => alt _ (pat_pair lv hv) (call exec_load (exp_var lv) (exp_var hv))
                             | kstore => alt _ (pat_pair lv rv) (call exec_store (exp_var lv) (exp_var rv))
@@ -588,6 +601,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | sub_perm       => fun_sub_perm
     | upper_bound    => _
     | within_bounds  => fun_within_bounds
+    | exec_jmp       => fun_exec_jmp
+    | exec_jnz       => fun_exec_jnz
     | exec_move      => fun_exec_move
     | exec_load      => fun_exec_load
     | exec_store     => fun_exec_store
@@ -760,11 +775,11 @@ Module MinCapsContracts.
           | write_reg =>
              @sep_contract_result
                ["reg" ∶ ty_enum regname,
-                "rv" ∶ ty_rv
+                "w" ∶ ty_word
                ]
                ty_unit
                ["reg" ∶ ty_enum regname,
-                "rv" ∶ ty_rv
+                "w" ∶ ty_word
                ]
                [term_var "reg", term_var "rv"]%arg
                "result"
@@ -782,7 +797,7 @@ Module MinCapsContracts.
           | read_mem =>
              @sep_contract_result
                ["a" ∶ ty_addr]
-               ty_hv
+               ty_memval
                ["a" ∶ ty_addr]
                [term_var "a"]%arg
                "result"
