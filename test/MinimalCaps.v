@@ -371,11 +371,14 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   | within_bounds  : Fun ["c"   ∶ ty_record capability ] ty_bool
   | compute_rv     : Fun ["rv" ∶ ty_rv] ty_word
   | compute_rv_num : Fun ["rv" ∶ ty_rv] ty_int
-  | exec_jmp       : Fun ["lv" ∶ ty_lv] ty_unit
-  | exec_jnz       : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv] ty_unit
-  | exec_move      : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv ] ty_unit
-  | exec_load      : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_unit
-  | exec_store     : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv ] ty_unit
+  | exec_jmp       : Fun ["lv" ∶ ty_lv] ty_bool
+  | exec_jnz       : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv] ty_bool
+  | exec_move      : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv ] ty_bool
+  | exec_load      : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_bool
+  | exec_store     : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv ] ty_bool
+  | exec_halt      : Fun ε ty_bool
+  | exec_instr     : Fun ["i" ∶ ty_instr] ty_bool
+  | exec           : Fun ε ty_bool
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -383,6 +386,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   | rM    : FunX ["address" ∶ ty_int] ty_int
   (* write memory *)
   | wM    : FunX ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_unit
+  | dI    : FunX ["code" ∶ ty_int] ty_instr
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -426,6 +430,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Local Notation "'lv'" := (@exp_var _ "lv" _ _) : exp_scope.
   Local Notation "'n'"  := (@exp_var _ "n" _ _) : exn_scope.
   Local Notation "'p'"  := (@exp_var _ "p" _ _) : exp_scope.
+  Local Notation "'p1'" := (@exp_var _ "p1" _ _) : exp_scope.
+  Local Notation "'p2'" := (@exp_var _ "p2" _ _) : exp_scope.
   Local Notation "'q'"  := (@exp_var _ "q" _ _) : exp_scope.
   Local Notation "'r'"  := (@exp_var _ "r" _ _) : exp_scope.
   Local Notation "'w'"  := (@exp_var _ "w" _ _) : exp_scope.
@@ -464,10 +470,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | inr c => fail "Err [read_reg_num]: expect register to hold a number"
     end.
 
-  Definition fun_write_reg : Stm ["r" ∶ ty_enum regname,
+  Definition fun_write_reg : Stm ["reg" ∶ ty_enum regname,
                                   "w" ∶ ty_word
                                  ] ty_unit :=
-    match: exp_var "r" in regname with
+    match: exp_var "reg" in regname with
     | R0 => stm_write_register reg0 (exp_var "w")
     | R1 => stm_write_register reg1 (exp_var "w")
     | R2 => stm_write_register reg2 (exp_var "w")
@@ -498,12 +504,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | _   => stm_lit ty_bool false
     end.
 
-  Definition fun_sub_perm : Stm ["p" ∶ ty_perm, "q" ∶ ty_perm] ty_bool :=
-    match: p in permission with
+  Definition fun_sub_perm : Stm ["p1" ∶ ty_perm, "p2" ∶ ty_perm] ty_bool :=
+    match: p1 in permission with
     | O   => stm_lit ty_bool true
-    | R   => call read_allowed q
-    | RW  => let: "r" := call read_allowed q in
-             let: "w" := call write_allowed q in
+    | R   => call read_allowed p2
+    | RW  => let: "r" := call read_allowed p2 in
+             let: "w" := call write_allowed p2 in
              stm_exp (exp_var "r" && exp_var "w")
     end.
 
@@ -532,7 +538,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     Let int : Ty := ty_int.
     Let word : Ty := ty_word.
 
-    Definition fun_exec_store : Stm [lv ∶ ty_lv, rv ∶ ty_rv] ty_unit :=
+    Definition fun_exec_store : Stm [lv ∶ ty_lv, rv ∶ ty_rv] ty_bool :=
       let: c ∶ cap  := call read_reg_cap lv in
       let: p ∶ bool := call write_allowed c․perm in
       stm_assert p (exp_lit _ ty_string "Err: [exec_store] no write permission") ;;
@@ -540,9 +546,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       stm_assert q (exp_lit _ ty_string "Err: [exec_store] out of bounds") ;;
       let: w ∶ int := call compute_rv_num rv in
       call write_mem c․cursor w ;;
-      call update_pc.
+      call update_pc ;;
+      stm_lit ty_bool true.
 
-    Definition fun_exec_load : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_unit :=
+    Definition fun_exec_load : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_bool :=
       let: c ∶ cap  := call read_reg_cap hv in
       let: p ∶ bool := call read_allowed c․perm in
       stm_assert p (exp_lit _ ty_string "Err: [exec_load] no read permission") ;;
@@ -550,7 +557,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       stm_assert q (exp_lit _ ty_string "Err: [exec_load] out of bounds") ;;
       let: n ∶ ty_memval := call read_mem c․cursor in
       call write_reg lv (exp_inl (exp_var n)) ;;
-      call update_pc.
+      call update_pc ;;
+      stm_lit ty_bool true.
 
     Definition fun_compute_rv : Stm [rv ∶ ty_rv] ty_word :=
       stm_match_sum rv
@@ -564,24 +572,27 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       | inr c => fail "Err [read_reg_num]: expect register to hold a number"
       end.
 
+    Definition fun_exec_halt : Stm ε ty_bool :=
+      stm_exp (exp_lit _ ty_bool true).
 
-    Definition fun_exec_move : Stm [lv ∶ ty_lv, rv ∶ ty_rv] ty_unit :=
+    Definition fun_exec_move : Stm [lv ∶ ty_lv, rv ∶ ty_rv] ty_bool :=
       let: w ∶ word := call compute_rv (exp_var rv) in
       call write_reg lv (exp_var w) ;;
-      call update_pc.
+      call update_pc ;;
+      stm_lit ty_bool true.
 
-    Definition fun_exec_jmp : Stm [lv ∶ ty_lv] ty_unit :=
+    Definition fun_exec_jmp : Stm [lv ∶ ty_lv] ty_bool :=
       let: "c" ∶ ty_record capability := call read_reg_cap lv in
       stm_write_register pc c ;;
-      stm_lit ty_unit tt.
+      stm_lit ty_bool true.
 
-    Definition fun_exec_jnz : Stm [lv ∶ ty_lv, rv ∶ ty_rv ] ty_unit :=
+    Definition fun_exec_jnz : Stm [lv ∶ ty_lv, rv ∶ ty_rv ] ty_bool :=
       let: "c" ∶ ty_int := call compute_rv_num (exp_var rv) in
       stm_if (exp_binop binop_eq c (exp_lit _ ty_int 0))
-             (call update_pc)
+             (call update_pc ;; stm_lit ty_bool true)
              (call exec_jmp lv).
 
-    Definition fun_exec_instr : Stm [i ∶ ty_instr] ty_unit :=
+    Definition fun_exec_instr : Stm [i ∶ ty_instr] ty_bool :=
       stm_match_union instruction (exp_var i)
                       (fun K => match K with
                             | kjmp => alt _ (pat_var lv) (call exec_jmp lv)
@@ -589,8 +600,24 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
                             | kmove => alt _ (pat_pair lv rv) (call exec_move lv rv)
                             | kload => alt _ (pat_pair lv hv) (call exec_load (exp_var lv) (exp_var hv))
                             | kstore => alt _ (pat_pair lv rv) (call exec_store (exp_var lv) (exp_var rv))
-                            | khalt => alt _ pat_unit (stm_exp (exp_lit _ ty_unit tt))
+                            | khalt => alt _ pat_unit (call exec_halt)
                             end).
+
+    Definition fun_read_mem : Stm ["a"   ∶ ty_addr ] ty_memval :=
+      callex rM a.
+
+    Definition fun_write_mem : Stm ["a"   ∶ ty_addr, "v" ∶ ty_memval ] ty_unit :=
+      callex wM a (exp_var "v").
+
+    Definition fun_exec : Stm ε ty_bool :=
+      let: "c" := stm_read_register pc in
+      let: p ∶ bool := call read_allowed c․perm in
+      stm_assert p (exp_lit _ ty_string "Err: [exec_load] no read permission") ;;
+      let: q ∶ bool := call within_bounds c in
+      stm_assert q (exp_lit _ ty_string "Err: [exec_load] out of bounds") ;;
+      let: n ∶ ty_memval := call read_mem c․cursor in
+      let: i ∶ ty_instr := callex dI (exp_var n) in
+      call exec_instr i.
 
   End ExecStore.
 
@@ -601,8 +628,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | read_reg_num   => fun_read_reg_num
     | write_reg      => fun_write_reg
     | update_pc      => fun_update_pc
-    | read_mem       => _
-    | write_mem      => _
+    | read_mem       => fun_read_mem
+    | write_mem      => fun_write_mem
     | read_allowed   => fun_read_allowed
     | write_allowed  => fun_write_allowed
     | sub_perm       => fun_sub_perm
@@ -613,10 +640,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | exec_move      => fun_exec_move
     | exec_load      => fun_exec_load
     | exec_store     => fun_exec_store
+    | exec_halt      => fun_exec_halt
+    | exec_instr     => fun_exec_instr
     | compute_rv     => fun_compute_rv
     | compute_rv_num => fun_compute_rv_num
+    | exec           => fun_exec
     end.
-  Admit Obligations of Pi.
 
   Definition RegStore := GenericRegStore.
   Definition read_register := generic_read_register.
@@ -638,6 +667,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Definition fun_wM (μ : Memory) (addr val : Lit ty_int) : Memory :=
     fun addr' => if Z.eqb addr addr' then Some val else μ addr'.
 
+  Definition fun_dI (code : Lit ty_int) : string + Lit ty_instr :=
+    inr halt.
+
   Inductive CallEx : forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
   | callex_rM {addr : Z} {γ : RegStore} {μ : Memory} :
       CallEx rM (env_snoc env_nil (_ , ty_int) addr)
@@ -647,6 +679,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       CallEx wM (env_snoc (env_snoc env_nil (_ , ty_int) addr) (_ , ty_int) val)
              (inr tt)
              γ γ μ (fun_wM μ addr val)
+  | callex_dI {code : Z} {γ : RegStore} {μ : Memory} :
+      CallEx dI (env_snoc env_nil (_ , ty_int) code)
+             (fun_dI code)
+             γ γ μ μ
   .
 
   Definition ExternalCall := @CallEx.
