@@ -810,9 +810,44 @@ Module MinCapsContracts.
       @post ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ result = (a >= b && (e = none ∨ e = inl e' ∧ e' >= a));
       bool within_bounds(c : capability);
 
-      @pre ?;
-      @post ?;
-      unit exec_store(lv : lv, hv : memval)
+      regInv(r) = ∃ w : word. r ↦ w * safe(w)
+      machInv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * ∃ c : cap. pc ↦ c * safe(c)
+
+      @pre machInv;
+      @post machInv;
+      bool exec_store(lv : lv, hv : memval)
+
+      @pre machInv;
+      @post machInv;
+      bool exec_load(lv : lv, hv : memval)
+
+      @pre machInv;
+      @post machInv;
+      bool exec_jmp(lv : lv)
+
+      @pre machInv;
+      @post machInv;
+      bool exec_jnz(lv : lv, rv : ty_rv)
+
+      @pre machInv;
+      @post machInv;
+      bool exec_move(lv : lv, rv : ty_rv)
+
+      @pre machInv;
+      @post machInv;
+      bool exec_halt
+
+      @pre machInv;
+      @post machInv;
+      bool exec_instr(i : instr)
+
+      @pre machInv;
+      @post machInv;
+      bool exec
+
+      @pre machInv;
+      @post machInv;
+      unit loop
     *)
 
     Definition CEnv : SepContractEnv :=
