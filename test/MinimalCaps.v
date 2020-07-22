@@ -362,9 +362,9 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
                          ] ty_unit
   | read_allowed   : Fun ["p"   ∶ ty_perm ] ty_bool
   | write_allowed  : Fun ["p"   ∶ ty_perm ] ty_bool
-  | sub_perm       : Fun ["p1"  ∶ ty_perm,
-                          "p2"  ∶ ty_perm
-                         ] ty_bool
+  (* | sub_perm       : Fun ["p1"  ∶ ty_perm, *)
+  (*                         "p2"  ∶ ty_perm *)
+  (*                        ] ty_bool *)
   | upper_bound    : Fun ["a"   ∶ ty_addr,
                           "e"   ∶ ty_option ty_addr
                          ] ty_bool
@@ -379,6 +379,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   | exec_halt      : Fun ε ty_bool
   | exec_instr     : Fun ["i" ∶ ty_instr] ty_bool
   | exec           : Fun ε ty_bool
+  | loop           : Fun ε ty_unit
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -504,14 +505,14 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | _   => stm_lit ty_bool false
     end.
 
-  Definition fun_sub_perm : Stm ["p1" ∶ ty_perm, "p2" ∶ ty_perm] ty_bool :=
-    match: p1 in permission with
-    | O   => stm_lit ty_bool true
-    | R   => call read_allowed p2
-    | RW  => let: "r" := call read_allowed p2 in
-             let: "w" := call write_allowed p2 in
-             stm_exp (exp_var "r" && exp_var "w")
-    end.
+  (* Definition fun_sub_perm : Stm ["p1" ∶ ty_perm, "p2" ∶ ty_perm] ty_bool := *)
+  (*   match: p1 in permission with *)
+  (*   | O   => stm_lit ty_bool true *)
+  (*   | R   => call read_allowed p2 *)
+  (*   | RW  => let: "r" := call read_allowed p2 in *)
+  (*            let: "w" := call write_allowed p2 in *)
+  (*            stm_exp (exp_var "r" && exp_var "w") *)
+  (*   end. *)
 
   Definition fun_within_bounds : Stm ["c" ∶ ty_record capability ] ty_bool :=
     stm_match_record capability (exp_var "c")
@@ -573,7 +574,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       end.
 
     Definition fun_exec_halt : Stm ε ty_bool :=
-      stm_exp (exp_lit _ ty_bool true).
+      stm_exp (exp_lit _ ty_bool false).
 
     Definition fun_exec_move : Stm [lv ∶ ty_lv, rv ∶ ty_rv] ty_bool :=
       let: w ∶ word := call compute_rv (exp_var rv) in
@@ -619,6 +620,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       let: i ∶ ty_instr := callex dI (exp_var n) in
       call exec_instr i.
 
+    Definition fun_loop : Stm ε ty_unit :=
+      let: "r" := call exec in
+      if: exp_var "r"
+      then call loop
+      else stm_lit ty_unit tt.
+
   End ExecStore.
 
   Program Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
@@ -632,7 +639,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | write_mem      => fun_write_mem
     | read_allowed   => fun_read_allowed
     | write_allowed  => fun_write_allowed
-    | sub_perm       => fun_sub_perm
+    (* | sub_perm       => fun_sub_perm *)
     | upper_bound    => fun_upper_bound
     | within_bounds  => fun_within_bounds
     | exec_jmp       => fun_exec_jmp
@@ -645,6 +652,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | compute_rv     => fun_compute_rv
     | compute_rv_num => fun_compute_rv_num
     | exec           => fun_exec
+    | loop           => fun_loop
     end.
 
   Definition RegStore := GenericRegStore.
@@ -668,6 +676,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     fun addr' => if Z.eqb addr addr' then Some val else μ addr'.
 
   Definition fun_dI (code : Lit ty_int) : string + Lit ty_instr :=
+    (* TODO: actually decode to non-trivial instructions? *)
     inr halt.
 
   Inductive CallEx : forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
@@ -700,21 +709,41 @@ Import MinCapsProgramKit.
 
 (*** CONTRACTS ***)
 
+Inductive Predicate : Set :=
+  ptsreg
+| ptsto
+| safe.
+
+Section TransparentObligations.
+  Local Set Transparent Obligations.
+
+  Derive NoConfusion for Predicate.
+
+End TransparentObligations.
+
+Derive EqDec for Predicate.
+
 Module MinCapsContracts.
   Module MinCapsAssertionKit <:
     (AssertionKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit).
     Module PM := Programs MinCapsTypeKit MinCapsTermKit MinCapsProgramKit.
 
-    Definition 𝑷 := Empty_set.
-    Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
-    Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
+    Definition 𝑷 := Predicate.
+    Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
+      match p with
+      | ptsreg => [ty_enum regname, ty_word]
+      | ptsto => [ty_addr, ty_word]
+      | safe => [ty_word]
+      end.
+    Instance 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
   End MinCapsAssertionKit.
 
   Module MinCapsAssertions :=
     Assertions MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
   Import MinCapsAssertions.
 
-  Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
+  Local Notation "r '↦r' t" := (asn_chunk (ptsreg r t)) (at level 100).
+  Local Notation "a '↦' t" := (asn_chunk (ptsto a t)) (at level 100).
   Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 
   Module MinCapsSymbolicContractKit <:
@@ -731,14 +760,14 @@ Module MinCapsContracts.
       @post reg ↦ v * result = v;
       word read_reg(reg : regname);
 
-      c : capability
-      @pre reg ↦ (inr c);
-      @post reg ↦ (inr c) * result = c;
+      w : word
+      @pre reg ↦ w;
+      @post ∃ c. w = inr c * reg ↦ w * result = c;
       cap read_reg_cap(reg: regname);
 
-      n : int
-      @pre reg ↦ (inl n);
-      @post reg ↦ (inl n) * result = n;
+      w : word
+      @pre reg ↦ w;
+      @post ∃ n. w = inl n * reg ↦ w * result = n;
       int read_reg_num(reg: regname);
 
       w : word
@@ -746,6 +775,7 @@ Module MinCapsContracts.
       @post reg ↦ rv;
       unit write_reg(reg : regname, rv : rv);
 
+      b,e,a,p
       @pre pc ↦ mkcap(b,e,a,p);
       @post pc ↦ mkcap(b,e,suc a,p);
       unit update_pc();
@@ -757,27 +787,27 @@ Module MinCapsContracts.
 
       hv : memval
       @pre a ↦m hv;
-      @post  a ↦m v;
+      @post  a ↦m v * result = tt;
       unit write_mem(a : addr, v : memval);
 
       @pre true;
-      @post result == (p == r ∨ p == rw);
+      @post result = (p = r ∨ p = rw);
       bool read_allowed(p : perm);
 
       @pre true;
-      @post result == (p == rw);
+      @post result = (p = rw);
       bool write_allowed(p : perm);
 
-      @pre true;
-      @post ?;
-      bool sub_perm(p1 : perm, p2 : perm);
+      (* @pre true; *)
+      (* @post result = ; *)
+      (* bool sub_perm(p1 : perm, p2 : perm); *)
 
-      @pre ?;
-      @post ?;
+      @pre true;
+      @post result = (e = none ∨ ∃ e'. e = inl e' ∧ e' >= a);
       bool upper_bound(a : addr, e : option addr);
 
-      @pre ?;
-      @post ?;
+      @pre true;
+      @post ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ result = (a >= b && (e = none ∨ e = inl e' ∧ e' >= a));
       bool within_bounds(c : capability);
 
       @pre ?;
@@ -873,15 +903,15 @@ Module MinCapsContracts.
                "result"
                asn_true
                asn_true
-          | sub_perm =>
-             @sep_contract_result
-               ["p1" ∶ ty_perm, "p2" ∶ ty_perm]
-               ty_bool
-               ["p1" ∶ ty_perm, "p2" ∶ ty_perm]
-               [term_var "p1", term_var "p2"]%arg
-               "result"
-               asn_true
-               asn_true
+          (* | sub_perm => *)
+          (*    @sep_contract_result *)
+          (*      ["p1" ∶ ty_perm, "p2" ∶ ty_perm] *)
+          (*      ty_bool *)
+          (*      ["p1" ∶ ty_perm, "p2" ∶ ty_perm] *)
+          (*      [term_var "p1", term_var "p2"]%arg *)
+          (*      "result" *)
+          (*      asn_true *)
+          (*      asn_true *)
           | upper_bound =>
              @sep_contract_result
                ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr]
