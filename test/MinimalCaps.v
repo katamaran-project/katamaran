@@ -74,7 +74,7 @@ Inductive Instruction : Set :=
 (* | getb     (lv lv' : LV) *)
 (* | gete     (lv lv' : LV) *)
 (* | geta     (lv lv' : LV) *)
-| fail
+(* | fail *)
 | halt.
 
 Inductive InstructionConstructor : Set :=
@@ -94,7 +94,7 @@ Inductive InstructionConstructor : Set :=
 (* | kgetb *)
 (* | kgete *)
 (* | kgeta *)
-| kfail
+(* | kfail *)
 | khalt.
 
 Section Records.
@@ -241,7 +241,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       (* | kgetb     => ty_prod ty_lv ty_lv *)
       (* | kgete     => ty_prod ty_lv ty_lv *)
       (* | kgeta     => ty_prod ty_lv ty_lv *)
-      | kfail     => ty_unit
+      (* | kfail     => ty_unit *)
       | khalt     => ty_unit
       end
     end.
@@ -266,7 +266,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       (* | existT kgetb     (lv , lv')         => getb lv lv' *)
       (* | existT kgete     (lv , lv')         => gete lv lv' *)
       (* | existT kgeta     (lv , lv')         => geta lv lv' *)
-      | existT kfail     tt                 => fail
+      (* | existT kfail     tt                 => fail *)
       | existT khalt     tt                 => halt
       end
     end.
@@ -290,7 +290,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       (* | getb lv lv'       => existT kgetb     (lv , lv') *)
       (* | gete lv lv'       => existT kgete     (lv , lv') *)
       (* | geta lv lv'       => existT kgeta     (lv , lv') *)
-      | fail              => existT kfail     tt
+      (* | fail              => existT kfail     tt *)
       | halt              => existT khalt     tt
       end
     end.
@@ -589,7 +589,6 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
                             | kmove => alt _ (pat_pair lv rv) (call exec_move lv rv)
                             | kload => alt _ (pat_pair lv hv) (call exec_load (exp_var lv) (exp_var hv))
                             | kstore => alt _ (pat_pair lv rv) (call exec_store (exp_var lv) (exp_var rv))
-                            | kfail => alt _ pat_unit (stm_exp (exp_lit _ ty_unit tt))
                             | khalt => alt _ pat_unit (stm_exp (exp_lit _ ty_unit tt))
                             end).
 
