@@ -417,7 +417,9 @@ Import MinCapsTerms.
 Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Module TM := MinCapsTerms.
 
+  Local Notation "'a'"  := (@exp_var _ "a" _ _) : exp_scope.
   Local Notation "'c'"  := (@exp_var _ "c" _ _) : exp_scope.
+  Local Notation "'e'"  := (@exp_var _ "e" _ _) : exp_scope.
   Local Notation "'hv'" := (@exp_var _ "hv" _ _) : exp_scope.
   Local Notation "'rv'" := (@exp_var _ "rv" _ _) : exp_scope.
   Local Notation "'i'"  := (@exp_var _ "i" _ _) : exp_scope.
@@ -429,6 +431,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Local Notation "'w'"  := (@exp_var _ "w" _ _) : exp_scope.
 
   Local Notation "'c'"  := "c" : string_scope.
+  Local Notation "'e'"  := "e" : string_scope.
   Local Notation "'hv'" := "hv" : string_scope.
   Local Notation "'rv'" := "rv" : string_scope.
   Local Notation "'i'"  := "i" : string_scope.
@@ -514,6 +517,11 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
        stm_exp (exp_var "u" && (exp_var "b" <= exp_var "a"))).
 
+  Definition fun_upper_bound : Stm ["a"   ∶ ty_addr, "e"   ∶ ty_option ty_addr] ty_bool :=
+    match: e with
+    | inl e => stm_exp (a <= e)
+    | inr "_" => stm_exp (lit_bool true)
+    end.
   Section ExecStore.
 
     Local Notation "'perm'"   := "cap_permission" : string_scope.
@@ -599,7 +607,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | read_allowed   => fun_read_allowed
     | write_allowed  => fun_write_allowed
     | sub_perm       => fun_sub_perm
-    | upper_bound    => _
+    | upper_bound    => fun_upper_bound
     | within_bounds  => fun_within_bounds
     | exec_jmp       => fun_exec_jmp
     | exec_jnz       => fun_exec_jnz

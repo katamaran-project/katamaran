@@ -1239,6 +1239,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
   End GenericRegStore.
 
   Notation "'lit_int' l" := (exp_lit _ ty_int l) (at level 1, no associativity) : exp_scope.
+  Notation "'lit_bool' l" := (exp_lit _ ty_bool l) (at level 1, no associativity) : exp_scope.
   Notation "'lit_string' s" := (exp_lit _ ty_string s%string) (at level 1, no associativity) : exp_scope.
   Notation "e1 && e2" := (exp_binop binop_and e1 e2) : exp_scope.
   Notation "e1 || e2" := (exp_binop binop_or e1 e2) : exp_scope.
