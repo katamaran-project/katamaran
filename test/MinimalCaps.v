@@ -1104,12 +1104,20 @@ Module MinCapsContracts.
          | H: Env _ ctx_nil |- _ => dependent elimination H
          | H: Env _ (ctx_snoc _ _) |- _ => dependent elimination H
          | H: _ /\ _ |- _ => destruct H
+         | H: Empty_set |- _ => destruct H
          | |- _ /\ _ => constructor
          end;
        cbn [List.length];
        subst; try congruence; try omega;
        auto
       ).
+
+  Lemma valid_contract_read_reg_wp : ValidContract (CEnv read_reg) (Pi read_reg).
+  Proof.
+    solve.
+  Qed.
+  Hint Resolve valid_contract_read_reg_wp : contracts.
+
 
   Lemma valid_contract_read_reg : ValidContractDynMut (CEnv read_reg) (Pi read_reg).
   Proof.
