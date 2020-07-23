@@ -208,8 +208,9 @@ Import MinCapsTypes.
 
 Definition ty_hv : Ty := ty_enum regname.
 Definition ty_lv : Ty := ty_enum regname.
-Definition ty_rv : Ty := (ty_sum (ty_enum regname) ty_int).
-Definition ty_word : Ty := ty_sum ty_int (ty_record capability).
+Definition ty_rv : Ty := ty_sum (ty_enum regname) ty_int.
+Definition ty_cap : Ty := ty_record capability.
+Definition ty_word : Ty := ty_sum ty_int ty_cap.
 Definition ty_memval : Ty := ty_int.
 Definition ty_addr : Ty := ty_int.
 Definition ty_perm : Ty := ty_enum permission.
@@ -350,7 +351,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
   | read_reg       : Fun ["reg" ∶ ty_enum regname ] ty_word
-  | read_reg_cap   : Fun ["reg" ∶ ty_enum regname ] (ty_record capability)
+  | read_reg_cap   : Fun ["reg" ∶ ty_enum regname ] ty_cap
   | read_reg_num   : Fun ["reg" ∶ ty_enum regname ] ty_int
   | write_reg      : Fun ["reg" ∶ ty_enum regname,
                           "w"  ∶ ty_word
@@ -368,7 +369,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   | upper_bound    : Fun ["a"   ∶ ty_addr,
                           "e"   ∶ ty_option ty_addr
                          ] ty_bool
-  | within_bounds  : Fun ["c"   ∶ ty_record capability ] ty_bool
+  | within_bounds  : Fun ["c"   ∶ ty_cap ] ty_bool
   | compute_rv     : Fun ["rv" ∶ ty_rv] ty_word
   | compute_rv_num : Fun ["rv" ∶ ty_rv] ty_int
   | exec_jmp       : Fun ["lv" ∶ ty_lv] ty_bool
@@ -394,7 +395,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   Definition 𝑭𝑿  : Ctx (𝑿 * Ty) -> Ty -> Set := FunX.
 
   Inductive Reg : Ty -> Set :=
-    | pc   : Reg (ty_record capability)
+    | pc   : Reg ty_cap
     | reg0 : Reg ty_word
     | reg1 : Reg ty_word
     | reg2 : Reg ty_word
@@ -457,7 +458,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | R3 => stm_read_register reg3
     end.
 
-  Definition fun_read_reg_cap : Stm ["reg" ∶ ty_enum regname ] (ty_record capability) :=
+  Definition fun_read_reg_cap : Stm ["reg" ∶ ty_enum regname ] ty_cap :=
     let: w := call read_reg (exp_var "reg") in
     match: w with
     | inl i => fail "Err [read_reg_cap]: expect register to hold a capability"
@@ -514,7 +515,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   (*            stm_exp (exp_var "r" && exp_var "w") *)
   (*   end. *)
 
-  Definition fun_within_bounds : Stm ["c" ∶ ty_record capability ] ty_bool :=
+  Definition fun_within_bounds : Stm ["c" ∶ ty_cap ] ty_bool :=
     stm_match_record capability (exp_var "c")
       (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
       "cap_permission" "p")
@@ -534,7 +535,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     Local Notation "'perm'"   := "cap_permission" : string_scope.
     Local Notation "'cursor'" := "cap_cursor" : string_scope.
 
-    Let cap : Ty := ty_record capability.
+    Let cap : Ty := ty_cap.
     Let bool : Ty := ty_bool.
     Let int : Ty := ty_int.
     Let word : Ty := ty_word.
@@ -583,7 +584,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       stm_lit ty_bool true.
 
     Definition fun_exec_jmp : Stm [lv ∶ ty_lv] ty_bool :=
-      let: "c" ∶ ty_record capability := call read_reg_cap lv in
+      let: "c" ∶ ty_cap := call read_reg_cap lv in
       stm_write_register pc c ;;
       stm_lit ty_bool true.
 
@@ -755,29 +756,24 @@ Module MinCapsContracts.
     (* Arguments asn_prop [_] & _. *)
 
     (*
-      v : word
-      @pre reg ↦ v;
-      @post reg ↦ v * result = v;
-      word read_reg(reg : regname);
-
       w : word
-      @pre reg ↦ w;
-      @post ∃ c. w = inr c * reg ↦ w * result = c;
+      @pre reg ↦r w;
+      @post ∃ c. w = inr c * reg ↦r w * result = c;
       cap read_reg_cap(reg: regname);
 
       w : word
-      @pre reg ↦ w;
-      @post ∃ n. w = inl n * reg ↦ w * result = n;
+      @pre reg ↦r w;
+      @post ∃ n. w = inl n * reg ↦r w * result = n;
       int read_reg_num(reg: regname);
 
       w : word
-      @pre reg ↦ w;
-      @post reg ↦ rv;
+      @pre reg ↦r w;
+      @post reg ↦r rv;
       unit write_reg(reg : regname, rv : rv);
 
       b,e,a,p
-      @pre pc ↦ mkcap(b,e,a,p);
-      @post pc ↦ mkcap(b,e,suc a,p);
+      @pre pc↦r mkcap(b,e,a,p);
+      @post pc↦r mkcap(b,e,suc a,p);
       unit update_pc();
 
       hv : memval
@@ -797,10 +793,6 @@ Module MinCapsContracts.
       @pre true;
       @post result = (p = rw);
       bool write_allowed(p : perm);
-
-      (* @pre true; *)
-      (* @post result = ; *)
-      (* bool sub_perm(p1 : perm, p2 : perm); *)
 
       @pre true;
       @post result = (e = none ∨ ∃ e'. e = inl e' ∧ e' >= a);
@@ -850,127 +842,177 @@ Module MinCapsContracts.
       unit loop
     *)
 
+
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
           | read_reg =>
-             @sep_contract_result
-             ["reg" ∶ ty_enum regname]
-             ty_word
-             ["reg" ∶ ty_enum regname]
+             sep_contract_result
+             ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
              [term_var "reg"]%arg
              "result"
-             asn_true
-             asn_true
+             (asn_chunk (chunk_pred ptsreg
+                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
+             (* domi: strange that I have to manually specify Σ here *)
+             (asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_word]) (fun reg w result => result = w) ✱
+              asn_chunk (chunk_pred ptsreg
+                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
           | read_reg_cap =>
-             @sep_contract_result
-             ["reg" ∶ ty_enum regname]
-             (ty_record capability)
-             ["reg" ∶ ty_enum regname]
+             sep_contract_result
+             ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
              [term_var "reg"]%arg
              "result"
-             asn_true
-             asn_true
+             (asn_chunk (chunk_pred ptsreg
+                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
+             (asn_exist "c" ty_cap (
+                          asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => result = c) ✱
+                          asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => w = inr c)
+                        ) ✱
+              asn_chunk (chunk_pred ptsreg
+                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
           | read_reg_num =>
-             @sep_contract_result
-             ["reg" ∶ ty_enum regname]
-             ty_int
-             ["reg" ∶ ty_enum regname]
+             sep_contract_result
+             ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
              [term_var "reg"]%arg
              "result"
-             asn_true
-             asn_true
+             (asn_chunk (chunk_pred ptsreg
+                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
+             (asn_exist "n" ty_int (
+                          asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => result = n) ✱
+                          asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => w = inl n)
+                        ) ✱
+              asn_chunk (chunk_pred ptsreg
+                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
           | write_reg =>
-             @sep_contract_result
-               ["reg" ∶ ty_enum regname,
-                "w" ∶ ty_word
-               ]
-               ty_unit
-               ["reg" ∶ ty_enum regname,
-                "w" ∶ ty_word
-               ]
-               [term_var "reg", term_var "rv"]%arg
+             sep_contract_result
+               ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
+               [term_var "reg", term_var "w"]%arg
                "result"
                asn_true
                asn_true
           | update_pc =>
-             @sep_contract_result
-               ε
-               ty_unit
+             sep_contract_result
                ε
                env_nil%arg
                "result"
                asn_true
                asn_true
           | read_mem =>
-             @sep_contract_result
-               ["a" ∶ ty_addr]
-               ty_memval
+             sep_contract_result
                ["a" ∶ ty_addr]
                [term_var "a"]%arg
                "result"
                asn_true
                asn_true
           | write_mem =>
-             @sep_contract_result
-               ["a" ∶ ty_addr, "v" ∶ ty_memval]
-               ty_unit
+             sep_contract_result
                ["a" ∶ ty_addr, "v" ∶ ty_memval]
                [term_var "a", term_var "v"]%arg
                "result"
                asn_true
                asn_true
           | read_allowed =>
-             @sep_contract_result
-               ["p" ∶ ty_perm]
-               ty_bool
+             sep_contract_result
                ["p" ∶ ty_perm]
                [term_var "p"]%arg
                "result"
                asn_true
                asn_true
           | write_allowed =>
-             @sep_contract_result
-               ["p" ∶ ty_perm]
-               ty_bool
+             sep_contract_result
                ["p" ∶ ty_perm]
                [term_var "p"]%arg
                "result"
                asn_true
                asn_true
-          (* | sub_perm => *)
-          (*    @sep_contract_result *)
-          (*      ["p1" ∶ ty_perm, "p2" ∶ ty_perm] *)
-          (*      ty_bool *)
-          (*      ["p1" ∶ ty_perm, "p2" ∶ ty_perm] *)
-          (*      [term_var "p1", term_var "p2"]%arg *)
-          (*      "result" *)
-          (*      asn_true *)
-          (*      asn_true *)
           | upper_bound =>
-             @sep_contract_result
-               ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr]
-               ty_bool
+             sep_contract_result
                ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr]
                [term_var "a", term_var "e"]%arg
                "result"
                asn_true
                asn_true
           | within_bounds =>
-             @sep_contract_result
-               ["c" ∶ ty_record capability]
-               ty_bool
-               ["c" ∶ ty_record capability]
+             sep_contract_result
+               ["c" ∶ ty_cap]
                [term_var "c"]%arg
                "result"
                asn_true
                asn_true
-          | exec_store =>
-             @sep_contract_result
-               ["lv" ∶ ty_lv, "hv" ∶ ty_memval]
-               ty_unit
-               ["lv" ∶ ty_lv, "hv" ∶ ty_memval]
+          | compute_rv =>
+             sep_contract_result
+               ["rv" ∶ ty_rv]
+               [term_var "rv"]%arg
+               "result"
+               asn_true
+               asn_true
+          | compute_rv_num =>
+             sep_contract_result
+               ["rv" ∶ ty_rv]
+               [term_var "rv"]%arg
+               "result"
+               asn_true
+               asn_true
+          | exec_jmp =>
+             sep_contract_result
+               ["lv" ∶ ty_lv]
+               [term_var "lv"]%arg
+               "result"
+               asn_true
+               asn_true
+          | exec_jnz =>
+             sep_contract_result
+               ["lv" ∶ ty_lv, "rv" ∶ ty_rv]
+               [term_var "lv", term_var "rv"]%arg
+               "result"
+               asn_true
+               asn_true
+          | exec_move =>
+             sep_contract_result
+               ["lv" ∶ ty_lv, "rv" ∶ ty_rv]
+               [term_var "lv", term_var "rv"]%arg
+               "result"
+               asn_true
+               asn_true
+          | exec_load =>
+             sep_contract_result
+               ["lv" ∶ ty_lv, "hv" ∶ ty_hv ]
                [term_var "lv", term_var "hv"]%arg
+               "result"
+               asn_true
+               asn_true
+          | exec_store =>
+             sep_contract_result
+               ["lv" ∶ ty_lv, "rv" ∶ ty_rv]
+               [term_var "lv", term_var "rv"]%arg
+               "result"
+               asn_true
+               asn_true
+          | exec_halt =>
+             sep_contract_result
+               ε
+               env_nil%arg
+               "result"
+               asn_true
+               asn_true
+          | exec_instr =>
+             sep_contract_result
+               ["i" ∶ ty_instr]
+               [term_var "i"]%arg
+               "result"
+               asn_true
+               asn_true
+          | exec =>
+             sep_contract_result
+               ε
+               env_nil%arg
+               "result"
+               asn_true
+               asn_true
+          | loop =>
+             sep_contract_result
+               ε
+               env_nil%arg
                "result"
                asn_true
                asn_true

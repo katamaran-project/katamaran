@@ -139,6 +139,8 @@ Module Assertions
     (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , τ))) : SepContract Δ τ
   | sep_contract_none : SepContract Δ τ.
 
+  Arguments sep_contract_result [_] [_].
+
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), SepContract Δ τ.
   Definition SepContractEnvEx : Type :=
