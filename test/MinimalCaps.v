@@ -36,7 +36,9 @@ From Equations Require Import
 
 From MicroSail Require Import
      Sep.Spec
-     Syntax.
+     Syntax
+     Symbolic.Mutator
+     Symbolic.Outcome.
 
 Set Implicit Arguments.
 Import CtxNotations.
@@ -383,12 +385,21 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   | loop           : Fun ε ty_unit
   .
 
+  Inductive FunGhost : Set :=
+  | open_ptsreg
+  | close_ptsreg0
+  | close_ptsreg1
+  | close_ptsreg2
+  | close_ptsreg3
+  .
+
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
   (* read memory *)
   | rM    : FunX ["address" ∶ ty_int] ty_int
   (* write memory *)
   | wM    : FunX ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_unit
   | dI    : FunX ["code" ∶ ty_int] ty_instr
+  | ghost (f : FunGhost) : FunX ctx_nil ty_unit
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -437,6 +448,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Local Notation "'q'"  := (@exp_var _ "q" _ _) : exp_scope.
   Local Notation "'r'"  := (@exp_var _ "r" _ _) : exp_scope.
   Local Notation "'w'"  := (@exp_var _ "w" _ _) : exp_scope.
+  Local Notation "'x'"  := (@exp_var _ "x" _ _) : exp_scope.
 
   Local Notation "'c'"  := "c" : string_scope.
   Local Notation "'e'"  := "e" : string_scope.
@@ -450,12 +462,17 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Local Notation "'r'"  := "r" : string_scope.
   Local Notation "'w'"  := "w" : string_scope.
 
+  Notation "'callghost' f" :=
+    (stm_call_external (ghost f) env_nil)
+    (at level 10, f global) : stm_scope.
+
   Definition fun_read_reg : Stm ["reg" ∶ ty_enum regname ] ty_word :=
+    callghost open_ptsreg ;;
     match: exp_var "reg" in regname with
-    | R0 => stm_read_register reg0
-    | R1 => stm_read_register reg1
-    | R2 => stm_read_register reg2
-    | R3 => stm_read_register reg3
+    | R0 => let: "x" := stm_read_register reg0 in callghost close_ptsreg0 ;; stm_exp x
+    | R1 => let: "x" := stm_read_register reg1 in callghost close_ptsreg0 ;; stm_exp x
+    | R2 => let: "x" := stm_read_register reg2 in callghost close_ptsreg0 ;; stm_exp x
+    | R3 => let: "x" := stm_read_register reg3 in callghost close_ptsreg0 ;; stm_exp x
     end.
 
   Definition fun_read_reg_cap : Stm ["reg" ∶ ty_enum regname ] ty_cap :=
@@ -693,6 +710,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       CallEx dI (env_snoc env_nil (_ , ty_int) code)
              (fun_dI code)
              γ γ μ μ
+  | callex_ghost {fg : FunGhost} {γ : RegStore} {μ : Memory} :
+      CallEx (ghost fg) env_nil (inr tt) γ γ μ μ
   .
 
   Definition ExternalCall := @CallEx.
@@ -743,8 +762,7 @@ Module MinCapsContracts.
     Assertions MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
   Import MinCapsAssertions.
 
-  Local Notation "r '↦r' t" := (asn_chunk (ptsreg r t)) (at level 100).
-  Local Notation "a '↦' t" := (asn_chunk (ptsto a t)) (at level 100).
+  Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
   Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 
   Module MinCapsSymbolicContractKit <:
@@ -753,24 +771,11 @@ Module MinCapsContracts.
 
     Open Scope env_scope.
 
+    Local Notation "r '↦r' t" := (asn_chunk (chunk_pred ptsreg (env_nil ► ty_enum regname ↦ r ► ty_word ↦ t))) (at level 100).
+    Local Notation "a '↦m' t" := (asn_chunk (ptsto a t)) (at level 100).
     (* Arguments asn_prop [_] & _. *)
 
     (*
-      w : word
-      @pre reg ↦r w;
-      @post ∃ c. w = inr c * reg ↦r w * result = c;
-      cap read_reg_cap(reg: regname);
-
-      w : word
-      @pre reg ↦r w;
-      @post ∃ n. w = inl n * reg ↦r w * result = n;
-      int read_reg_num(reg: regname);
-
-      w : word
-      @pre reg ↦r w;
-      @post reg ↦r rv;
-      unit write_reg(reg : regname, rv : rv);
-
       b,e,a,p
       @pre pc↦r mkcap(b,e,a,p);
       @post pc↦r mkcap(b,e,suc a,p);
@@ -851,45 +856,39 @@ Module MinCapsContracts.
              ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
              [term_var "reg"]%arg
              "result"
-             (asn_chunk (chunk_pred ptsreg
-                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
+             (term_var "reg" ↦r term_var "w")
              (* domi: strange that I have to manually specify Σ here *)
              (asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_word]) (fun reg w result => result = w) ✱
-              asn_chunk (chunk_pred ptsreg
-                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
+              term_var "reg" ↦r term_var "w")
           | read_reg_cap =>
              sep_contract_result
              ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
              [term_var "reg"]%arg
              "result"
-             (asn_chunk (chunk_pred ptsreg
-                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
+             (term_var "reg" ↦r term_var "w")
              (asn_exist "c" ty_cap (
                           asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => result = c) ✱
                           asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => w = inr c)
                         ) ✱
-              asn_chunk (chunk_pred ptsreg
-                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
+              term_var "reg" ↦r term_var "w")
           | read_reg_num =>
              sep_contract_result
              ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
              [term_var "reg"]%arg
              "result"
-             (asn_chunk (chunk_pred ptsreg
-                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
+             (term_var "reg" ↦r term_var "w")
              (asn_exist "n" ty_int (
                           asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => result = n) ✱
                           asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => w = inl n)
                         ) ✱
-              asn_chunk (chunk_pred ptsreg
-                                    (env_nil ► ty_enum regname ↦ term_var "reg" ► ty_word ↦ term_var "w")))
+              term_var "reg" ↦r term_var "w")
           | write_reg =>
              sep_contract_result
-               ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
+               ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "wo" ∶ ty_word]
                [term_var "reg", term_var "w"]%arg
                "result"
-               asn_true
-               asn_true
+               (term_var "reg" ↦r term_var "wo")
+               (term_var "reg" ↦r term_var "w")
           | update_pc =>
              sep_contract_result
                ε
@@ -1016,77 +1015,74 @@ Module MinCapsContracts.
                "result"
                asn_true
                asn_true
-        (* | abs => *)
-        (*   @sep_contract_result *)
-        (*     ["x" ∶ ty_int] *)
-        (*     ty_int *)
-        (*     ["x" ∶ ty_int] *)
-        (*     [term_var "x"]%arg *)
-        (*     "result" *)
-        (*     asn_true *)
-        (*     (@asn_prop *)
-        (*        ["x" ∶ ty_int, "result" ∶ ty_int] *)
-        (*        (fun x result => result = Z.abs x)) *)
-        (*     (* (asn_if *) *)
-        (*     (*    (term_binop binop_lt (term_var "x") (term_lit ty_int 0)) *) *)
-        (*     (*    (asn_bool (term_binop binop_eq (term_var "result") (term_neg (term_var "x")))) *) *)
-        (*     (*    (asn_bool (term_binop binop_eq (term_var "result") (term_var "x")))) *) *)
-        (* | cmp => *)
-        (*   @sep_contract_result *)
-        (*     ["x" ∶ ty_int, "y" ∶ ty_int] *)
-        (*     (ty_enum ordering) *)
-        (*     ["x" ∶ ty_int, "y" ∶ ty_int] *)
-        (*     [term_var "x", term_var "y"]%arg *)
-        (*     "result" *)
-        (*     asn_true *)
-        (*     (asn_match_enum *)
-        (*        ordering (term_var "result") *)
-        (*        (fun result => *)
-        (*           match result with *)
-        (*           | LT => asn_bool (term_binop binop_lt (term_var "x") (term_var "y")) *)
-        (*           | EQ => asn_bool (term_binop binop_eq (term_var "x") (term_var "y")) *)
-        (*           | GT => asn_bool (term_binop binop_gt (term_var "x") (term_var "y")) *)
-        (*           end)) *)
-        (* | gcd => *)
-        (*   @sep_contract_result *)
-        (*     ["x" ∶ ty_int, "y" ∶ ty_int] *)
-        (*     ty_int *)
-        (*     ["x" ∶ ty_int, "y" ∶ ty_int] *)
-        (*     [term_var "x", term_var "x"]%arg *)
-        (*     "result" *)
-        (*     asn_true *)
-        (*     (@asn_prop *)
-        (*        ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int] *)
-        (*        (fun x y result => result = Z.gcd x y)) *)
-        (* | gcdloop => *)
-        (*   @sep_contract_result *)
-        (*     ["x" ∶ ty_int, "y" ∶ ty_int] *)
-        (*     ty_int *)
-        (*     ["x" ∶ ty_int, "y" ∶ ty_int] *)
-        (*     [term_var "x", term_var "x"]%arg *)
-        (*     "result" *)
-        (*     (asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "x")) ✱ *)
-        (*      asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "y"))) *)
-        (*     (@asn_prop *)
-        (*        ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int] *)
-        (*        (fun x y result => result = Z.gcd x y)) *)
-        (* | msum => sep_contract_none _ _ *)
-        (* | @length σ => *)
-        (*   @sep_contract_result *)
-        (*     ["xs" ∶ ty_list σ ] *)
-        (*     ty_int *)
-        (*     ["xs" ∶ ty_list σ ] *)
-        (*     [term_var "xs"]%arg *)
-        (*     "result" *)
-        (*     asn_true *)
-        (*     (@asn_prop *)
-        (*        ["xs" ∶ ty_list σ, "result" ∶ ty_int] *)
-        (*        (fun xs result => result = Z.of_nat (Datatypes.length xs))) *)
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
       fun Δ τ f =>
-        match f with end.
+        match f with
+        | rM =>
+          sep_contract_result
+            ["address" ∶ ty_int]
+            [term_var "address"]%arg
+            "result"
+            asn_true
+            asn_true
+          | wM =>
+             sep_contract_result
+               ["address" ∶ ty_int, "mem_value" ∶ ty_int]
+               [term_var "address", term_var "mem_value"]%arg
+               "result"
+               asn_true
+               asn_true
+          | dI =>
+             sep_contract_result
+               ["code" ∶ ty_int]
+               [term_var "code"]%arg
+               "result"
+               asn_true
+               asn_true
+          | ghost open_ptsreg =>
+            sep_contract_result
+              [ "r" ∶ ty_enum regname, "w" ∶ ty_word]
+              env_nil
+              "result"
+              (term_var "r" ↦r term_var "w")
+              (asn_match_enum regname (term_var "r")
+                              (fun k => match k with
+                                     | R0 => reg0 ↦ term_var "w"
+                                     | R1 => reg1 ↦ term_var "w"
+                                     | R2 => reg2 ↦ term_var "w"
+                                     | R3 => reg3 ↦ term_var "w"
+                                     end))
+          | ghost close_ptsreg0 =>
+            sep_contract_result
+              [ "w" ∶ ty_word]
+              env_nil
+              "result"
+              (reg0 ↦ term_var "w")
+              (term_enum regname R0 ↦r term_var "w")
+          | ghost close_ptsreg1 =>
+            sep_contract_result
+              [ "w" ∶ ty_word]
+              env_nil
+              "result"
+              (reg1 ↦ term_var "w")
+              (term_enum regname R1 ↦r term_var "w")
+          | ghost close_ptsreg2 =>
+            sep_contract_result
+              [ "w" ∶ ty_word]
+              env_nil
+              "result"
+              (reg2 ↦ term_var "w")
+              (term_enum regname R2 ↦r term_var "w")
+          | ghost close_ptsreg3 =>
+            sep_contract_result
+              [ "w" ∶ ty_word]
+              env_nil
+              "result"
+              (reg3 ↦ term_var "w")
+              (term_enum regname R3 ↦r term_var "w")
+        end.
 
   End MinCapsSymbolicContractKit.
 
@@ -1105,25 +1101,20 @@ Module MinCapsContracts.
        repeat
          match goal with
          | H: NamedEnv _ _ |- _ => unfold NamedEnv in H
-         | H: Env _ ctx_nil |- _ => dependent destruction H
-         | H: Env _ (ctx_snoc _ _) |- _ => dependent destruction H
+         | H: Env _ ctx_nil |- _ => dependent elimination H
+         | H: Env _ (ctx_snoc _ _) |- _ => dependent elimination H
          | H: _ /\ _ |- _ => destruct H
          | |- _ /\ _ => constructor
          end;
-       compute
-       - [Pos.of_succ_nat List.length Pos.succ Z.pos_sub Z.succ Z.of_nat Z.add
-          Z.gtb Z.eqb Z.ltb Lit
-         ] in *;
        cbn [List.length];
-       subst; try congruence; try lia;
+       subst; try congruence; try omega;
        auto
       ).
 
-  Lemma valid_contract_length {σ} : ValidContractDynMut (CEnv (@length σ)) (Pi length).
+  Lemma valid_contract_read_reg : ValidContractDynMut (CEnv read_reg) (Pi read_reg).
   Proof.
-    constructor.
-    - solve.
-    - exists [term_var "ys"]%arg; solve.
+    solve.
+
   Qed.
   Hint Resolve valid_contract_length : contracts.
 
