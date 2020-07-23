@@ -9,6 +9,7 @@ Require Import Coq.Program.Equality.
 
 From iris.program_logic Require Export language ectx_language ectxi_language.
 From iris.program_logic Require Export weakestpre.
+From iris.proofmode Require Import tactics.
 
 Set Implicit Arguments.
 
@@ -78,10 +79,28 @@ Module IrisInstance
   Canonical Structure valO := leibnizO Val.
   Canonical Structure exprO := leibnizO Tm.
 
-  Context `{invG Σ}.
-
   Canonical Structure lang : language := Language lang_mixin.
 
-  Definition test : iProp Σ := WP (MkTm env_nil (stm_lit ty_bool true)) {{ v, True }}%I.
+  Instance intoVal_lit {Γ} : IntoVal (MkTm (Γ := Γ) δ (stm_lit _ l)) (MkVal l).
+  intros; by eapply of_to_val.
+  Qed.
 
+  Class sailG Σ := SailG { (* resources for the implementation side *)
+                       sailG_invG : invG Σ; (* for fancy updates, invariants... *)
+                     }.
+
+  Instance sailG_irisG `{sailG Σ} : irisG lang Σ := {
+    iris_invG := sailG_invG;
+    state_interp σ κs _ := True%I; (* TODO we need a meaningful state interp...*)
+    fork_post _ := True%I;
+                                                   }.
+  Global Opaque iris_invG.
+
+  Context `{sailG Σ}.
+
+    Definition test : iProp Σ := WP (MkTm env_nil (stm_lit ty_bool true)) {{ v, True }}%I.
+
+  Lemma testHolds : ⊢ test.
+    iApply wp_value; try done.
+  Qed.
 End IrisInstance.
