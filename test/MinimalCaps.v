@@ -752,7 +752,7 @@ Module MinCapsContracts.
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
       match p with
       | ptsreg => [ty_enum regname, ty_word]
-      | ptsto => [ty_addr, ty_word]
+      | ptsto => [ty_addr, ty_int]
       | safe => [ty_word]
       end.
     Instance 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
@@ -772,25 +772,10 @@ Module MinCapsContracts.
     Open Scope env_scope.
 
     Local Notation "r '↦r' t" := (asn_chunk (chunk_pred ptsreg (env_nil ► ty_enum regname ↦ r ► ty_word ↦ t))) (at level 100).
-    Local Notation "a '↦m' t" := (asn_chunk (ptsto a t)) (at level 100).
+    Local Notation "a '↦m' t" := (asn_chunk (chunk_pred ptsto (env_nil ► ty_addr ↦ a ► ty_int ↦ t))) (at level 100).
     (* Arguments asn_prop [_] & _. *)
 
     (*
-      b,e,a,p
-      @pre pc↦r mkcap(b,e,a,p);
-      @post pc↦r mkcap(b,e,suc a,p);
-      unit update_pc();
-
-      hv : memval
-      @pre a ↦m hv;
-      @post a ↦m hv * result = hv;
-      hv read_mem(a : addr);
-
-      hv : memval
-      @pre a ↦m hv;
-      @post  a ↦m v * result = tt;
-      unit write_mem(a : addr, v : memval);
-
       @pre true;
       @post result = (p = r ∨ p = rw);
       bool read_allowed(p : perm);
@@ -891,25 +876,26 @@ Module MinCapsContracts.
                (term_var "reg" ↦r term_var "w")
           | update_pc =>
              sep_contract_result
-               ε
+               ["opc" ∶ ty_cap]
                env_nil%arg
                "result"
-               asn_true
-               asn_true
+               (pc ↦ term_var "opc")
+               (asn_exist "npc" ty_cap (pc ↦ term_var "npc"))
           | read_mem =>
              sep_contract_result
-               ["a" ∶ ty_addr]
+               ["a" ∶ ty_addr, "n" ∶ ty_int]
                [term_var "a"]%arg
                "result"
-               asn_true
-               asn_true
+               (term_var "a" ↦m term_var "n")
+               (term_var "a" ↦m term_var "n" ✱
+                asn_prop (Σ := ["a" ∶ ty_addr, "n" ∶ ty_int, "result" ∶ ty_int]) (fun _ n res => res = n))
           | write_mem =>
              sep_contract_result
-               ["a" ∶ ty_addr, "v" ∶ ty_memval]
+               ["a" ∶ ty_addr, "v" ∶ ty_memval, "ov" ∶ ty_memval]
                [term_var "a", term_var "v"]%arg
                "result"
-               asn_true
-               asn_true
+               (term_var "a" ↦m term_var "ov")
+               (term_var "a" ↦m term_var "v")
           | read_allowed =>
              sep_contract_result
                ["p" ∶ ty_perm]
@@ -1122,25 +1108,7 @@ Module MinCapsContracts.
   Lemma valid_contract_read_reg : ValidContractDynMut (CEnv read_reg) (Pi read_reg).
   Proof.
     solve.
-
+    admit.
   Qed.
-  Hint Resolve valid_contract_length : contracts.
-
-  Lemma valid_contract_cmp : ValidContractDynMut (CEnv cmp) (Pi cmp).
-  Proof.
-    constructor.
-    { exists LT; solve. }
-    constructor.
-    { exists EQ; solve. }
-    constructor.
-    { exists GT; solve. }
-    { solve.
-      destruct (Z.gtb_spec db db0); try discriminate.
-      destruct (Z.eqb_spec db db0); try discriminate.
-      destruct (Z.ltb_spec db db0); try discriminate.
-      lia.
-    }
-  Qed.
-  Hint Resolve valid_contract_cmp : contracts.
 
 End MinimalCapsContracts.
