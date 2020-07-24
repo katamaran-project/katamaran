@@ -14,6 +14,11 @@ Section WithBinding.
       Env D (ctx_snoc Γ b).
   Derive Signature for Env.
 
+  Section TransparentObligations.
+    Local Set Transparent Obligations.
+    Derive NoConfusion NoConfusionHom for Env.
+  End TransparentObligations.
+
   Global Arguments env_nil {_}.
   Bind Scope env_scope with Env.
 
