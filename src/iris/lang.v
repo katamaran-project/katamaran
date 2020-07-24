@@ -13,6 +13,54 @@ From iris.proofmode Require Import tactics.
 
 Set Implicit Arguments.
 
+Module ValsAndTerms
+       (Import typekit : TypeKit)
+       (Import termkit : TermKit typekit)
+       (Import progkit : ProgramKit typekit termkit).
+
+
+  Inductive Tm σ : Type :=
+  | MkTm {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) (s : Stm Γ σ) : Tm σ.
+
+  Inductive Val σ : Type :=
+    (* we only keep the store around for technical reasons, essentially to be able to prove of_to_val. *)
+  | MkVal {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) (v : Lit σ) : Val σ.
+
+  Definition of_val {σ} (v : Val σ) : Tm σ :=
+    match v with
+      MkVal _ δ v => MkTm δ (stm_lit _ v)
+    end.
+
+  Definition to_val {σ} (t : Tm σ) : option (Val σ) :=
+    (* easier way to do the dependent pattern match here? *)
+    match t with
+    | MkTm δ s => match s with
+                   stm_lit τ l => Some (MkVal _ δ l)
+                 | _ => None
+                 end
+    end.
+
+  Lemma to_of_val {σ} (v : Val σ) : to_val (of_val v) = Some v.
+  Proof.
+    by induction v.
+  Qed.
+
+  Lemma of_to_val {σ} (e : Tm σ) v : to_val e = Some v → of_val v = e.
+  Proof.
+    induction e.
+    induction s; try done.
+    by intros [= <-].
+  Qed.
+
+  Module SS := SmallStep typekit termkit progkit.
+  Import SS.
+
+  Lemma val_head_stuck_step {σ} {Γ : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) δ2 (s1 : Stm Γ σ) s2 :
+    Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 -> to_val (MkTm δ1 s1) = None.
+    by induction 1.
+  Qed.
+End ValsAndTerms.
+
 Module IrisInstance
        (Import typekit : TypeKit)
        (Import termkit : TermKit typekit)
@@ -26,16 +74,10 @@ Module IrisInstance
   Module SS := SmallStep typekit termkit progkit.
   Import SS.
 
-  Inductive Tm : Type :=
-  | MkTm {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) (s : Stm Γ σt) : Tm.
+  Module VT := ValsAndTerms typekit termkit progkit.
 
-  Inductive Val : Type :=
-  | MkVal (v : Lit σt) : Val.
-
-  Definition of_val (v : Val) : Tm :=
-    match v with
-      MkVal v => MkTm env_nil (stm_lit _ v)
-    end.
+  Definition Val := VT.Val σt.
+  Definition Tm := VT.Tm σt.
 
   Definition observation := Empty_set.
 
@@ -43,36 +85,19 @@ Module IrisInstance
 
   Inductive prim_step : Tm -> State -> Tm -> State -> Prop :=
   | mk_prim_step {Γ  Γ : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) (δ2 : LocalStore Γ) s1 s2 :
-      Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 ->
-      prim_step (MkTm δ1 s1) (γ1 , μ1) (MkTm δ2 s2) (γ2 , μ2)
+      VT.SS.Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 ->
+      prim_step (VT.MkTm δ1 s1) (γ1 , μ1) (VT.MkTm δ2 s2) (γ2 , μ2)
   .
 
-  Definition to_val (t : Tm) : option Val :=
-    (* easier way to do the dependent pattern match here? *)
-    match t with
-    | MkTm δ s => (match s in Stm _ σ return σ = σt -> option Val with
-                   stm_lit τ l => fun eq => Some (MkVal (eq_rect _ Lit l _ eq))
-                 | _ => fun _ => None
-                 end) eq_refl
-    end.
-
-  Lemma to_of_val v : to_val (of_val v) = Some v.
+  Lemma val_head_stuck e1 s1 e2 s2 : prim_step e1 s1 e2 s2 → VT.to_val e1 = None.
   Proof.
-    by induction v.
+    induction 1.
+    by eapply VT.val_head_stuck_step.
   Qed.
 
-  Lemma of_to_val e v : to_val e = Some v → of_val v = e.
+  Lemma lang_mixin : @LanguageMixin _ _ State Empty_set VT.of_val VT.to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2).
   Proof.
-    (* sigh... no dependent pattern matching *)
-  Admitted.
-
-  Lemma val_head_stuck e1 s1 e2 s2 : prim_step e1 s1 e2 s2 → to_val e1 = None.
-  Proof.
-  Admitted.
-
-  Lemma lang_mixin : @LanguageMixin _ _ State Empty_set of_val to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2).
-  Proof.
-    split; apply _ || eauto using to_of_val, of_to_val, val_head_stuck.
+    split; apply _ || eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
   Qed.
 
   Canonical Structure stateO := leibnizO State.
@@ -81,8 +106,8 @@ Module IrisInstance
 
   Canonical Structure lang : language := Language lang_mixin.
 
-  Instance intoVal_lit {Γ} : IntoVal (MkTm (Γ := Γ) δ (stm_lit _ l)) (MkVal l).
-  intros; by eapply of_to_val.
+  Instance intoVal_lit {Γ} : IntoVal (VT.MkTm (Γ := Γ) δ (stm_lit _ l)) (VT.MkVal _ δ l).
+  intros; eapply VT.of_to_val; by cbn.
   Qed.
 
   Class sailG Σ := SailG { (* resources for the implementation side *)
@@ -98,7 +123,7 @@ Module IrisInstance
 
   Context `{sailG Σ}.
 
-    Definition test : iProp Σ := WP (MkTm env_nil (stm_lit ty_bool true)) {{ v, True }}%I.
+    Definition test : iProp Σ := WP (VT.MkTm env_nil (stm_lit ty_bool true)) {{ v, True }}%I.
 
   Lemma testHolds : ⊢ test.
     iApply wp_value; try done.
