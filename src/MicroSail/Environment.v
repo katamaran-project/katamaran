@@ -140,6 +140,18 @@ Section WithBinding.
         end (env_split Δ)
     end.
 
+  Section WithD123.
+
+    Context {D1 D2 D3 : B -> Type}.
+    Variable f : forall b, D1 b -> D2 b.
+    Variable g : forall b, D2 b -> D3 b.
+
+    Lemma env_map_map {Γ : Ctx B} (E : Env D1 Γ) :
+      env_map g (env_map f E) = env_map (fun b d => g (f d)) E.
+    Proof. induction E; cbn; f_equal; assumption. Qed.
+
+  End WithD123.
+
   Lemma env_lookup_update {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) :
     forall {b : B} (bInΓ : InCtx b Γ) (db : D b),
       env_lookup (env_update E bInΓ db) bInΓ = db.
