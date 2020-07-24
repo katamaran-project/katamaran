@@ -499,6 +499,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   Section Expressions.
 
+    Local Unset Elimination Schemes.
+
     (* Intrinsically well-typed expressions. The context Γ of mutable variables
        contains names 𝑿 and types Ty, but the names are not computationally
        relevant. The underlying representation is still a de Bruijn index based
@@ -535,6 +537,55 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments exp_union {_} _ _.
     Global Arguments exp_record {_} _ _.
     Global Arguments exp_projrec {_ _} _ _ {_ _}.
+
+    Section ExpElimination.
+
+      Variable (Γ : Ctx (𝑿 * Ty)).
+      Variable (P : forall t, Exp Γ t -> Type).
+      Arguments P _ _ : clear implicits.
+
+      Let PL (σ : Ty) : list (Exp Γ σ) -> Type :=
+        list_rect (fun _ => Type) unit (fun e es IHes => P _ e * IHes)%type.
+      Let PE : forall σs, Env (Exp Γ) σs -> Type :=
+        Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
+      Let PNE : forall (σs : Ctx (𝑹𝑭 * Ty)), NamedEnv (Exp Γ) σs -> Type :=
+        Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
+
+      Hypothesis (P_var     : forall (x : 𝑿) (σ : Ty) (xInΓ : (x ∶ σ)%ctx ∈ Γ), P σ (exp_var x)).
+      Hypothesis (P_lit     : forall (σ : Ty) (l : Lit σ), P σ (exp_lit Γ σ l)).
+      Hypothesis (P_binop   : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1), P σ1 e1 -> forall e2 : Exp Γ σ2, P σ2 e2 -> P σ3 (exp_binop op e1 e2)).
+      Hypothesis (P_neg     : forall e : Exp Γ ty_int, P ty_int e -> P ty_int (exp_neg e)).
+      Hypothesis (P_not     : forall e : Exp Γ ty_bool, P ty_bool e -> P ty_bool (exp_not e)).
+      Hypothesis (P_inl     : forall (σ1 σ2 : Ty) (e : Exp Γ σ1), P σ1 e -> P (ty_sum σ1 σ2) (exp_inl e)).
+      Hypothesis (P_inr     : forall (σ1 σ2 : Ty) (e : Exp Γ σ2), P σ2 e -> P (ty_sum σ1 σ2) (exp_inr e)).
+      Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty_list σ) (exp_list es)).
+      Hypothesis (P_tuple   : forall (σs : Ctx Ty) (es : Env (Exp Γ) σs), PE es -> P (ty_tuple σs) (exp_tuple es)).
+      Hypothesis (P_projtup : forall (σs : Ctx Ty) (e : Exp Γ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@exp_projtup _ _ e n _ p)).
+      Hypothesis (P_union   : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (exp_union U K e)).
+      Hypothesis (P_record  : forall (R : 𝑹) (es : NamedEnv (Exp Γ) (𝑹𝑭_Ty R)), PNE es -> P (ty_record R) (exp_record R es)).
+      Hypothesis (P_projrec : forall (R : 𝑹) (e : Exp Γ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (exp_projrec e rf)).
+
+      Fixpoint Exp_rect {τ : Ty} (e : Exp Γ τ) {struct e} : P τ e :=
+        match e with
+        | exp_var x                 => ltac:(apply P_var; auto)
+        | exp_lit _ _ l             => ltac:(apply P_lit; auto)
+        | exp_binop op e1 e2        => ltac:(apply P_binop; auto)
+        | exp_neg e                 => ltac:(apply P_neg; auto)
+        | exp_not e                 => ltac:(apply P_not; auto)
+        | exp_inl e                 => ltac:(apply P_inl; auto)
+        | exp_inr e                 => ltac:(apply P_inr; auto)
+        | exp_list es               => ltac:(apply P_list; induction es; cbn; auto using unit)
+        | exp_tuple es              => ltac:(apply P_tuple; induction es; cbn; auto using unit)
+        | @exp_projtup _ σs e n σ p => ltac:(apply P_projtup; auto)
+        | exp_union U K e           => ltac:(apply P_union; auto)
+        | exp_record R es           => ltac:(apply P_record; induction es; cbn; auto using unit)
+        | exp_projrec e rf          => ltac:(apply P_projrec; auto)
+        end.
+
+    End ExpElimination.
+
+    Definition Exp_rec {Γ} (P : forall σ, Exp Γ σ -> Set) := Exp_rect P.
+    Definition Exp_ind {Γ} (P : forall σ, Exp Γ σ -> Prop) := Exp_rect P.
 
     Import EnvNotations.
 
@@ -885,21 +936,12 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Variable (P  : forall t : Ty, Term Σ t -> Type).
       Arguments P _ _ : clear implicits.
 
-      Fixpoint PL (σ : Ty) (ts : list (Term Σ σ)) : Type :=
-        match ts with
-        | nil => unit
-        | cons t ts => P σ t * PL ts
-        end.
-      Fixpoint PE (σs : Ctx Ty) (ts : Env (Term Σ) σs) : Type :=
-        match ts with
-        | env_nil => unit
-        | env_snoc ts _ t => PE ts * P _ t
-        end.
-      Fixpoint PE' (σs : Ctx (𝑹𝑭 * Ty)) (ts : NamedEnv (Term Σ) σs) : Type :=
-        match ts with
-        | env_nil => unit
-        | env_snoc ts b t => PE' ts * P (snd b) t
-        end.
+      Let PL (σ : Ty) : list (Term Σ σ) -> Type :=
+        list_rect (fun _ => Type) unit (fun t ts IHts => P _ t * IHts)%type.
+      Let PE : forall σs, Env (Term Σ) σs -> Type :=
+        Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type.
+      Let PNE : forall (σs : Ctx (𝑹𝑭 * Ty)), NamedEnv (Term Σ) σs -> Type :=
+        Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type.
 
       Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : (ς , σ) ∈ Σ), P σ (term_var ς)).
       Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit σ l)).
@@ -912,7 +954,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
       Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
       Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union U K e)).
-      Hypothesis (P_record     : forall (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)), PE' es -> P (ty_record R) (term_record R es)).
+      Hypothesis (P_record     : forall (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)), PNE es -> P (ty_record R) (term_record R es)).
       Hypothesis (P_projrec    : forall (R : 𝑹) (e : Term Σ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (term_projrec e rf)).
 
       Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) : P σ t :=
