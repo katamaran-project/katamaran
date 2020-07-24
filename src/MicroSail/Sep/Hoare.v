@@ -113,6 +113,11 @@ Module ProgramLogic
   | rule_frame {σ : Ty}
       (R P : L) (Q : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
       δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> δ ⊢ ⦃ R ✱ P ⦄ s ⦃ fun v δ' => R ✱ Q v δ' ⦄
+  | rule_pull
+      {σ : Ty} (s : Stm Γ σ)
+      (P : L) (Q : Prop) (R : Lit σ -> LocalStore Γ -> L) :
+      (Q -> δ ⊢ ⦃ P ⦄ s ⦃ R ⦄) ->
+      δ ⊢ ⦃ P ∧ !!Q ⦄ s ⦃ R ⦄
   | rule_stm_lit
       {τ : Ty} {l : Lit τ}
       {P : L} {Q : Lit τ -> LocalStore Γ -> L} :

@@ -171,6 +171,8 @@ Module HoareSound
           as (γfocus' & Hsplit_γ'' & Hsplit_γfocus').
         repeat sound_inster.
         intros. exists γl, γr'. auto.
+      (* pull *)
+      - sound_solve.
       (* rule_stm_lit *)
       - sound_solve.
       (* rule_stm_exp *)
