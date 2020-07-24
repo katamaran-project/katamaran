@@ -26,7 +26,10 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import String.
+From Coq Require Import
+     Morphisms
+     Program.Tactics
+     String.
 
 Set Implicit Arguments.
 
@@ -84,6 +87,22 @@ Fixpoint outcome_satisfy {A : Type} (o : Outcome A) (P : A -> Prop) : Prop :=
 
 Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
   outcome_satisfy o (fun a => True).
+
+Lemma outcome_satisfy_map {A B : Type} (o : Outcome A) (f : A -> B) (P : B -> Prop) :
+  outcome_satisfy (outcome_map f o) P <-> outcome_satisfy o (fun a => P (f a)).
+Proof. induction o; firstorder. Qed.
+
+Lemma outcome_satisfy_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) (P : B -> Prop) :
+  outcome_satisfy (outcome_bind o f) P <-> outcome_satisfy o (fun a => outcome_satisfy (f a) P).
+Proof. induction o; firstorder. Qed.
+
+Lemma outcome_satisfy_monotonic {A : Type} {P Q : A -> Prop} (o : Outcome A) (hyp : forall a, P a -> Q a) :
+  outcome_satisfy o P -> outcome_satisfy o Q.
+Proof. induction o; firstorder. Qed.
+
+Instance outcome_satisfy_iff_morphism {A eqA} `{Equivalence A eqA} (o : Outcome A) :
+  Proper ((eqA ==> iff) ==> iff) (@outcome_satisfy A o).
+Proof. split; apply outcome_satisfy_monotonic; firstorder. Qed.
 
 (* Inductive outcome_satisfy_ind {A : Type} (P : A -> Prop) : Outcome A -> Prop := *)
 (* | outcome_satisfy_pure  a    : *)
