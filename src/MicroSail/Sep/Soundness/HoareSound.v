@@ -173,9 +173,7 @@ Module HoareSound
         intros. exists γl, γr'. auto.
       (* rule_stm_lit *)
       - sound_solve.
-      (* rule_stm_exp_forwards *)
-      - sound_solve.
-      (* rule_stm_exp_backwards *)
+      (* rule_stm_exp *)
       - sound_solve.
       (* rule_stm_let *)
       - sound_solve.

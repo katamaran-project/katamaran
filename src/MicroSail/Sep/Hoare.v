@@ -113,12 +113,16 @@ Module ProgramLogic
   | rule_frame {σ : Ty}
       (R P : L) (Q : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
       δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> δ ⊢ ⦃ R ✱ P ⦄ s ⦃ fun v δ' => R ✱ Q v δ' ⦄
-  | rule_stm_lit (τ : Ty) (l : Lit τ) :
-      δ ⊢ ⦃ ⊤ ⦄ stm_lit τ l ⦃ fun v δ' => !!(l = v /\ δ = δ') ⦄
-  | rule_stm_exp_forwards (τ : Ty) (e : Exp Γ τ) (P : L) :
-      δ ⊢ ⦃ P ⦄ stm_exp e ⦃ fun v δ' => P ∧ !!(eval e δ = v /\ δ = δ') ⦄
-  | rule_stm_exp_backwards (τ : Ty) (e : Exp Γ τ) (Q : Lit τ -> LocalStore Γ -> L) :
-      δ ⊢ ⦃ Q (eval e δ) δ ⦄ stm_exp e ⦃ Q ⦄
+  | rule_stm_lit
+      {τ : Ty} {l : Lit τ}
+      {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
+      P ⊢ Q l δ ->
+      δ ⊢ ⦃ P ⦄ stm_lit τ l ⦃ Q ⦄
+  | rule_stm_exp
+      {τ : Ty} {e : Exp Γ τ}
+      {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
+      P ⊢ Q (eval e δ) δ ->
+      δ ⊢ ⦃ P ⦄ stm_exp e ⦃ Q ⦄
   | rule_stm_let
       (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
       (P : L) (Q : Lit σ -> LocalStore Γ -> L)
