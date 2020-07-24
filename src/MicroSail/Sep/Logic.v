@@ -66,7 +66,7 @@ Class ISepLogic (L : Type) := {
 Notation "P '✱' Q" := (sepcon P Q) (at level 45, left associativity) : logic.
 Notation "P '-✱' Q" := (wand P Q) (at level 60, right associativity) : logic.
 
-Class ISepLogicLaws (L : Type) (SL : ISepLogic L) := {
+Class ISepLogicLaws (L : Type) {SL : ISepLogic L} := {
   is_ILogicLaws :> ILogicLaws L is_ILogic;
   sepcon_assoc: forall (P Q R : L), ((P ✱ Q) ✱ R) ⊣⊢ (P ✱ (Q ✱ R));
   sepcon_comm:  forall (P Q : L), P ✱ Q ⊣⊢ Q ✱ P;
@@ -97,17 +97,19 @@ Module Type HeapKit
   }.
 
   Section Contracts.
-    Context (L : Type) (Logic : IHeaplet L).
+    Context `{Logic : IHeaplet L}.
 
-    Fixpoint interpret {Σ : Ctx (𝑺 * Ty)} (δ : NamedEnv Lit Σ) (a : Assertion Σ) : L :=
+    Definition interpret_chunk {Σ} (δ : NamedEnv Lit Σ) (c : Chunk Σ) : L :=
+      match c with
+      | chunk_pred p ts => pred p (env_map (fun _ t => eval_term t δ) ts)
+      | chunk_ptsreg r t => ptsreg r (eval_term t δ)
+      end.
+
+    Fixpoint interpret {Σ} (δ : NamedEnv Lit Σ) (a : Assertion Σ) : L :=
       match a with
       | asn_bool b => if eval_term b δ then ltrue else lfalse
       | asn_prop p => !!(uncurry_named p δ) ∧ emp
-      | asn_chunk c =>
-        match c with
-        | chunk_pred p ts => pred p (env_map (fun _ t => eval_term t δ) ts)
-        | chunk_ptsreg r t => ptsreg r (eval_term t δ)
-        end
+      | asn_chunk c => interpret_chunk δ c
       | asn_if b a1 a2 => if eval_term b δ then interpret δ a1 else interpret δ a2
       | asn_match_enum E k alts => interpret δ (alts (eval_term k δ))
       | asn_sep a1 a2 => interpret δ a1 ✱ interpret δ a2

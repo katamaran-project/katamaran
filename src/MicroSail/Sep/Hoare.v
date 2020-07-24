@@ -48,9 +48,8 @@ Module ProgramLogic
         wand P Q := fun δ => wand (P δ) (Q δ)
       }.
 
-    Program Instance δ_ISepLogicLaws (L : Type) (LL : ISepLogic L)
-                                     (LLL : ISepLogicLaws L LL) :
-      ISepLogicLaws (LocalStore Γ -> L) (δ_ISepLogic L LL).
+    Program Instance δ_ISepLogicLaws (L : Type) (LL : ISepLogic L) (LLL : ISepLogicLaws L) :
+      ISepLogicLaws (LocalStore Γ -> L).
     Admit Obligations.
 
     Program Instance δ_IHeaplet (L : Type) (SL : IHeaplet L) :
@@ -108,7 +107,7 @@ Module ProgramLogic
       (pre : L) (s : Stm Γ τ)
       (post :  Lit τ -> LocalStore Γ -> L), Prop :=
   | rule_consequence {σ : Ty}
-      (P P' : L) (Q Q' : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
+      {P P' : L} {Q Q' : Lit σ -> LocalStore Γ -> L} {s : Stm Γ σ} :
       (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') -> δ ⊢ ⦃ P' ⦄ s ⦃ Q' ⦄ -> δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄
   | rule_frame {σ : Ty}
       (R P : L) (Q : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :

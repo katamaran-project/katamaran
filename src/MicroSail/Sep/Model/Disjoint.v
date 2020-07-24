@@ -258,7 +258,7 @@ Module Disjoint
   Qed.
   Hint Resolve sepcon_entails : seplogic.
 
-  Program Instance HProp_ISepLogicLaws : ISepLogicLaws HProp (HProp_ISepLogic).
+  Program Instance HProp_ISepLogicLaws : ISepLogicLaws HProp.
   Solve Obligations with eauto with seplogic.
 
   Instance HProp_Heaplet : IHeaplet HProp :=
