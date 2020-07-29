@@ -112,6 +112,11 @@ Module Mutators
   Global Instance sub_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
     fun Σ1 Σ2 ζ => env_map (fun _ => sub_term ζ).
 
+  Definition lift_localstore {Γ Σ} : LocalStore Γ -> SymbolicLocalStore Γ Σ :=
+    env_map (fun _ => term_lit _).
+  Definition inst_localstore {Γ Σ} (δi : NamedEnv Lit Σ) : SymbolicLocalStore Γ Σ -> LocalStore Γ :=
+    env_map (fun b t => eval_term t δi).
+
   Section SymbolicState.
 
     Record SymbolicState (Γ : Ctx (𝑿 * Ty)) (Σ : Ctx (𝑺 * Ty)) : Type :=
@@ -707,7 +712,7 @@ Module Mutators
         mutator_exec k              <*
         mutator_pop_local
       | stm_block δ k =>
-        mutator_pushs_local (env_map (fun _ => term_lit _) δ) *>
+        mutator_pushs_local (lift_localstore δ) *>
         mutator_exec k <*
         mutator_pops_local _
       | stm_assign x e => mutator_exec e >>= fun v =>
@@ -717,7 +722,7 @@ Module Mutators
       | stm_call_external f es => mutator_eval_exps es >>= mutator_call (CEnvEx f)
       | stm_call_frame Δ δ' τ s =>
         mutator_get_local                                      >>= fun δ =>
-        mutator_put_local (env_map (fun _ => term_lit _) δ') >>= fun _ =>
+        mutator_put_local (lift_localstore δ') >>= fun _ =>
         mutator_exec s                                                >>= fun t =>
         mutator_put_local δ                                    >>= fun _ =>
         mutator_pure t
@@ -1090,7 +1095,7 @@ Module Mutators
       dmut_pop_local ;;
       dmut_pure t2
     | stm_block δ s =>
-      dmut_pushs_local (env_map (fun _ => term_lit _) δ);;
+      dmut_pushs_local (lift_localstore δ) ;;
       t <- dmut_exec s ;;
       dmut_pops_local _ ;;
       dmut_pure t
@@ -1103,7 +1108,7 @@ Module Mutators
       dmut_call (CEnv f) ts
     | stm_call_frame Δ δ τ s =>
       δr <- dmut_get_local ;;
-      dmut_put_local (env_map (fun _ => term_lit _) δ) ;;
+      dmut_put_local (lift_localstore δ) ;;
       dmut_bind_left (dmut_exec s) (dmut_put_local δr)
     | stm_call_external f es =>
       ts <- dmut_eval_exps es ;;
