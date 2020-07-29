@@ -152,6 +152,42 @@ Section WithBinding.
 
   End WithD123.
 
+  Lemma env_map_id_eq {D : B -> Type} {Γ : Ctx B} (f : forall b, D b -> D b) (E : Env D Γ) (hyp_f : forall b d, f b d = d) :
+    env_map f E = E.
+  Proof. induction E; cbn; congruence. Qed.
+
+  Lemma env_map_id {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) :
+    env_map (fun _ d => d) E = E.
+  Proof. now apply env_map_id_eq. Qed.
+
+  Lemma env_map_cat {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ1 Γ2} (E1 : Env D1 Γ1) (E2 : Env D1 Γ2) :
+    env_map f (env_cat E1 E2) = env_cat (env_map f E1) (env_map f E2).
+  Proof. induction E2; cbn; congruence. Qed.
+
+  Lemma env_map_drop {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ Δ} (EΓΔ : Env D1 (ctx_cat Γ Δ)) :
+    env_map f (env_drop Δ EΓΔ) = env_drop Δ (env_map f EΓΔ).
+  Proof.
+    induction Δ; intros; cbn in *.
+    - reflexivity.
+    - dependent elimination EΓΔ; apply IHΔ.
+  Qed.
+
+  Lemma env_map_update {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ} (E : Env D1 Γ) :
+    forall {b : B} (bInΓ : InCtx b Γ) (db : D1 b),
+      env_map f (env_update E bInΓ db) = env_update (env_map f E) bInΓ (f b db).
+  Proof.
+    induction E; intros ? [n e]; try destruct e.
+    destruct n; cbn in *; subst; cbn; congruence.
+  Qed.
+
+  Lemma env_lookup_map {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ} (E : Env D1 Γ) :
+    forall {b} (bInΓ : InCtx b Γ),
+      env_lookup (env_map f E) bInΓ = f _ (env_lookup E bInΓ).
+  Proof.
+    induction E; intros ? [n e]; try destruct e;
+      destruct n; cbn in *; subst; auto.
+  Qed.
+
   Lemma env_lookup_update {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) :
     forall {b : B} (bInΓ : InCtx b Γ) (db : D b),
       env_lookup (env_update E bInΓ db) bInΓ = db.
