@@ -54,6 +54,8 @@ Class ILogicLaws (L : Type) (LL : ILogic L) :=
   lall_left  : forall {B : Type} (P: B -> L) x Q, (P x) ⊢ Q -> (lall P) ⊢ Q;
   lall_right : forall {B : Type} (P: L) (Q: B -> L),  (forall v, P ⊢ (Q v)) -> P ⊢ (lall Q);
   limpl_and_adjoint : forall P Q R, P ∧ Q ⊢ R <-> P ⊢ (Q --> R);
+  lprop_left: forall (P: Prop) Q, (P -> ltrue ⊢ Q) -> lprop P ⊢ Q;
+  lprop_right: forall (P: Prop) Q, P -> Q ⊢ lprop P;
 }.
 
 Class ISepLogic (L : Type) := {
