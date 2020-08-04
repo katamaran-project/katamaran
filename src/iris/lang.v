@@ -7,6 +7,8 @@ From MicroSail Require Import
 
 Require Import Coq.Program.Equality.
 
+From iris.algebra Require Export gmap excl auth.
+From iris.base_logic Require Export gen_heap.
 From iris.program_logic Require Export language ectx_language ectxi_language.
 From iris.program_logic Require Export weakestpre.
 From iris.proofmode Require Import tactics.
@@ -17,7 +19,6 @@ Module ValsAndTerms
        (Import typekit : TypeKit)
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit).
-
 
   Inductive Tm σ : Type :=
   | MkTm {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) (s : Stm Γ σ) : Tm σ.
@@ -110,14 +111,44 @@ Module IrisInstance
   intros; eapply VT.of_to_val; by cbn.
   Qed.
 
+  Inductive SomeReg : Type :=
+  | mkSomeReg {τ} : 𝑹𝑬𝑮 τ -> SomeReg
+  .
+  (* Lemma SomeReg_eq_dec (x y : SomeReg) : {x = y} + {~ x = y}. *)
+  (* Admitted. *)
+  Instance eqDec_SomeReg : EqDecision SomeReg.
+  Admitted.
+
+  Instance countable_SomeReg : Countable SomeReg.
+  Admitted.
+
+  Inductive SomeLit : Type :=
+  | mkSomeLit {τ} : Lit τ -> SomeLit
+  .
+  Instance eqDec_SomeLit : EqDecision SomeLit.
+  Admitted.
+
+  Parameter RegStore_to_gmap : RegStore -> gmap SomeReg SomeLit.
+
+  Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeLit))).
+
+  Definition regs_to_gmap (regs : RegStore) : gmap SomeReg (exclR (leibnizO SomeLit)) :=
+    fmap (fun v => Excl (v : leibnizO SomeLit)) (RegStore_to_gmap regs).
+
   Class sailG Σ := SailG { (* resources for the implementation side *)
                        sailG_invG : invG Σ; (* for fancy updates, invariants... *)
+
+                       reg_inG : inG Σ regUR;
+                       reg_gv_name : gname
                      }.
+
+  Definition reg_pointsTo `{sailG Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) : iProp Σ :=
+    own (i := reg_inG) reg_gv_name (◯ {[ mkSomeReg r := Excl (mkSomeLit v) ]}).
 
   Instance sailG_irisG `{sailG Σ} : irisG lang Σ := {
     iris_invG := sailG_invG;
-    state_interp σ κs _ := True%I; (* TODO we need a meaningful state interp...*)
-    fork_post _ := True%I;
+    state_interp σ κs n := own (i := reg_inG) reg_gv_name (● regs_to_gmap σ.1);
+    fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
                                                    }.
   Global Opaque iris_invG.
 
