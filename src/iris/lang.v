@@ -7,6 +7,9 @@ From MicroSail Require Import
 
 Require Import Coq.Program.Equality.
 
+From Equations Require Import Equations Signature.
+
+From iris.bi Require Export interface.
 From iris.algebra Require Export gmap excl auth.
 From iris.base_logic Require Export gen_heap.
 From iris.program_logic Require Export language ectx_language ectxi_language.
@@ -26,6 +29,8 @@ Module ValsAndTerms
   Inductive Val σ : Type :=
     (* we only keep the store around for technical reasons, essentially to be able to prove of_to_val. *)
   | MkVal {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) (v : Lit σ) : Val σ.
+
+  Definition val_to_lit {σ} : Val σ -> Lit σ := fun v => match v with | MkVal _ _ v' => v' end.
 
   Definition of_val {σ} (v : Val σ) : Tm σ :=
     match v with
@@ -96,7 +101,7 @@ Module IrisInstance
     by eapply VT.val_head_stuck_step.
   Qed.
 
-  Lemma lang_mixin : @LanguageMixin _ _ State Empty_set VT.of_val VT.to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2).
+  Lemma microsail_lang_mixin : @LanguageMixin (VT.Tm σt) (VT.Val σt) State Empty_set VT.of_val VT.to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2).
   Proof.
     split; apply _ || eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
   Qed.
@@ -105,7 +110,7 @@ Module IrisInstance
   Canonical Structure valO := leibnizO Val.
   Canonical Structure exprO := leibnizO Tm.
 
-  Canonical Structure lang : language := Language lang_mixin.
+  Canonical Structure microsail_lang : language := Language microsail_lang_mixin.
 
   Instance intoVal_lit {Γ} : IntoVal (VT.MkTm (Γ := Γ) δ (stm_lit _ l)) (VT.MkVal _ δ l).
   intros; eapply VT.of_to_val; by cbn.
@@ -114,6 +119,9 @@ Module IrisInstance
   Inductive SomeReg : Type :=
   | mkSomeReg {τ} : 𝑹𝑬𝑮 τ -> SomeReg
   .
+
+  Derive NoConfusion for SomeReg.
+
   (* Lemma SomeReg_eq_dec (x y : SomeReg) : {x = y} + {~ x = y}. *)
   (* Admitted. *)
   Instance eqDec_SomeReg : EqDecision SomeReg.
@@ -125,38 +133,105 @@ Module IrisInstance
   Inductive SomeLit : Type :=
   | mkSomeLit {τ} : Lit τ -> SomeLit
   .
+  Derive NoConfusion for SomeLit.
+  Derive NoConfusion for excl.
   Instance eqDec_SomeLit : EqDecision SomeLit.
   Admitted.
 
-  Parameter RegStore_to_gmap : RegStore -> gmap SomeReg SomeLit.
-
   Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeLit))).
-
-  Definition regs_to_gmap (regs : RegStore) : gmap SomeReg (exclR (leibnizO SomeLit)) :=
-    fmap (fun v => Excl (v : leibnizO SomeLit)) (RegStore_to_gmap regs).
 
   Class sailG Σ := SailG { (* resources for the implementation side *)
                        sailG_invG : invG Σ; (* for fancy updates, invariants... *)
 
+                       (* ghost variable for tracking state of registers *)
                        reg_inG : inG Σ regUR;
-                       reg_gv_name : gname
+                       reg_gv_name : gname;
+
+                       (* ghost variable for tracking state of memory cells *)
+                       mem_inG : inG Σ regUR;
+                       mem_gv_name : gname
                      }.
 
   Definition reg_pointsTo `{sailG Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) : iProp Σ :=
     own (i := reg_inG) reg_gv_name (◯ {[ mkSomeReg r := Excl (mkSomeLit v) ]}).
 
-  Instance sailG_irisG `{sailG Σ} : irisG lang Σ := {
+  Definition regs_inv `{sailG Σ} (regstore : RegStore) : iProp Σ :=
+    (∃ regsmap,
+        own (i := reg_inG) reg_gv_name (● regsmap) ∗
+        bi_pure (map_Forall (fun reg v => match reg with | mkSomeReg reg => Excl (mkSomeLit (read_register regstore reg)) = v end ) regsmap)
+        (* sigh why can't I use ⌈ ... ⌉ notation? *)
+    )%I.
+
+  Instance sailG_irisG `{sailG Σ} : irisG microsail_lang Σ := {
     iris_invG := sailG_invG;
-    state_interp σ κs n := own (i := reg_inG) reg_gv_name (● regs_to_gmap σ.1);
+    state_interp σ κs _ := regs_inv σ.1;
     fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
                                                    }.
   Global Opaque iris_invG.
 
   Context `{sailG Σ}.
 
-    Definition test : iProp Σ := WP (VT.MkTm env_nil (stm_lit ty_bool true)) {{ v, True }}%I.
+  (* Definition test : iProp Σ := WP (VT.MkTm env_nil (stm_lit ty_bool true)) {{ v, True }}%I. *)
 
-  Lemma testHolds : ⊢ test.
-    iApply wp_value; try done.
-  Qed.
+  (* Lemma testHolds : ⊢ test. *)
+  (*   by iApply wp_value. *)
+  (* Qed. *)
+  Set Equations With UIP.
+
+  Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) :
+    ⊢ (regs_inv regstore -∗ reg_pointsTo r v -∗ ⌜read_register regstore r = v⌝)%I.
+  Proof.
+    iDestruct 1 as (regsmap) "[Hregs %]".
+    iIntros "Hreg".
+    rewrite /reg_pointsTo.
+    iDestruct (own_valid_2 with "Hregs Hreg")
+      as %[Hl regsv]%auth_both_valid; auto.
+    iPureIntro.
+    specialize (H0 (mkSomeReg r) (Excl (mkSomeLit v))).
+    rewrite (singleton_included_l regsmap (mkSomeReg r) _) in Hl *.
+    destruct 1 as [y [eq1 eq2]].
+    apply equiv_Some_inv_r' in eq1 as [y' [eq1 eq3]].
+    specialize (regsv (mkSomeReg r)).
+    rewrite eq1 in regsv.
+    unfold valid, cmra_valid in regsv.
+    cbn in regsv.
+    destruct y.
+    - rewrite Excl_included in eq2 *.
+      intro eq4.
+      unfold equiv, ofe_equiv, equivL in eq4.
+      rewrite <-eq4 in eq3; clear eq4 o.
+      destruct y'; try inversion regsv.
+      apply (inj Excl) in eq3.
+      unfold equiv, ofe_equiv, equivL in eq3.
+      rewrite <- eq3 in eq1; clear eq3 regsv o.
+      specialize (H0 eq1).
+      cbn in H0.
+      (* dependent elimination H0. *)
+      admit.
+    - destruct y'.
+      (* dependent elimination eq3 ?*)
+      admit.
+      unfold valid, cmra_valid in regsv; by cbn in regsv.
+  Admitted.
+
+  Lemma rule_stm_read_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) :
+    ⊢ (reg_pointsTo r v -∗
+                    WP (VT.MkTm env_nil (stm_read_register r)) {{ w, reg_pointsTo r v ∗ bi_pure (VT.val_to_lit w = v) }}
+      )%I.
+    iIntros "Hreg".
+    rewrite wp_unfold.
+    iIntros (σ κ1 κ2 n) "Hregs".
+    unfold state_interp; cbn.
+    iDestruct (@reg_valid with "Hregs Hreg") as %?.
+    Unset Printing Notations.
+    iModIntro. HUH fancy update is not a modality?
+    iIntros "%".
+  Admitted.
+
+  Lemma rule_stm_write_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) :
+    ⊢ (reg_pointsTo r v -∗
+                  WP (VT.MkTm env_nil (stm_write_register r (exp_lit ctx_nil σt v)) : expr microsail_lang) {{ w, reg_pointsTo r v ∗ bi_pure (v = VT.val_to_lit w) }}
+    )%I.
+    iIntros "var".
+  Admitted.
 End IrisInstance.
