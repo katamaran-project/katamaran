@@ -3,6 +3,7 @@ From MicroSail Require Import
      Syntax
      Context
      SmallStep.Step
+     SmallStep.Inversion
      .
 
 Require Import Coq.Program.Equality.
@@ -11,7 +12,7 @@ From Equations Require Import Equations Signature.
 
 From iris.bi Require Export interface.
 From iris.algebra Require Export gmap excl auth.
-From iris.base_logic Require Export gen_heap.
+From iris.base_logic Require Export gen_heap lib.fancy_updates lib.fancy_updates_from_vs lib.invariants.
 From iris.program_logic Require Export language ectx_language ectxi_language.
 From iris.program_logic Require Export weakestpre.
 From iris.proofmode Require Import tactics.
@@ -25,6 +26,9 @@ Module ValsAndTerms
 
   Inductive Tm σ : Type :=
   | MkTm {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) (s : Stm Γ σ) : Tm σ.
+
+  (* remainng obligations? *)
+  (* Derive NoConfusion for Tm. *)
 
   Inductive Val σ : Type :=
     (* we only keep the store around for technical reasons, essentially to be able to prove of_to_val. *)
@@ -77,7 +81,8 @@ Module IrisInstance
 
   Definition σt : Ty := ty_bool.
 
-  Module SS := SmallStep typekit termkit progkit.
+  Module Inv := Inversion typekit termkit progkit.
+  Import Inv.
   Import SS.
 
   Module VT := ValsAndTerms typekit termkit progkit.
@@ -90,7 +95,7 @@ Module IrisInstance
   Definition State := prod RegStore Memory.
 
   Inductive prim_step : Tm -> State -> Tm -> State -> Prop :=
-  | mk_prim_step {Γ  Γ : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) (δ2 : LocalStore Γ) s1 s2 :
+  | mk_prim_step {Γ  : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) (δ2 : LocalStore Γ) s1 s2 :
       VT.SS.Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 ->
       prim_step (VT.MkTm δ1 s1) (γ1 , μ1) (VT.MkTm δ2 s2) (γ2 , μ2)
   .
@@ -208,10 +213,9 @@ Module IrisInstance
       cbn in H0.
       (* dependent elimination H0. *)
       admit.
-    - destruct y'.
-      (* dependent elimination eq3 ?*)
+    - destruct y'; [|done].
+      (* dependent elimination H3 ?*)
       admit.
-      unfold valid, cmra_valid in regsv; by cbn in regsv.
   Admitted.
 
   Lemma rule_stm_read_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) :
@@ -219,13 +223,32 @@ Module IrisInstance
                     WP (VT.MkTm env_nil (stm_read_register r)) {{ w, reg_pointsTo r v ∗ bi_pure (VT.val_to_lit w = v) }}
       )%I.
     iIntros "Hreg".
-    rewrite wp_unfold.
-    iIntros (σ κ1 κ2 n) "Hregs".
-    unfold state_interp; cbn.
+    iApply (wp_mask_mono _ empty); auto.
+    rewrite wp_unfold ; cbn.
+    iIntros (σ _ _ n) "Hregs".
     iDestruct (@reg_valid with "Hregs Hreg") as %?.
-    Unset Printing Notations.
-    iModIntro. HUH fancy update is not a modality?
-    iIntros "%".
+    iModIntro.
+    iSplit.
+    - iPureIntro.
+      destruct σ as [regs heap].
+      exists nil. eexists _. exists (regs , heap). exists nil.
+      repeat eexists.
+      (* progress lemma missing for read_register? *)
+      apply VT.SS.step_stm_read_register.
+    - iIntros (e2 σ2 efs) "%".
+      remember (VT.MkTm env_nil (stm_read_register r)) as t.
+      destruct a as [Γ γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
+      (* sigh how to invert Heqt? dependent elimination or something *)
+      dependent elimination Heqt.
+      inversion Heqt.
+      destruct (steps_inversion_read_register step).
+      iModIntro.
+      iModIntro.
+      iModIntro.
+      (* inversion lemma needed for read_register *)
+      iSplitL "Hregs".
+      + admit.
+      + admit.
   Admitted.
 
   Lemma rule_stm_write_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) :

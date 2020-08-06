@@ -171,6 +171,15 @@ Module Inversion
       intuition.
   Qed.
 
+  Lemma steps_inversion_read_register {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
+    {δ1 δ3 : LocalStore Γ}
+    {r} {t : Stm Γ σ}
+    (step : ⟨ γ1, μ1, δ1, stm_read_register r ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
+    γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_lit σ (read_register γ1 r).
+  Proof.
+    dependent elimination step; intuition.
+  Qed.
+
   Local Ltac steps_inversion_simpl :=
     repeat
       match goal with
