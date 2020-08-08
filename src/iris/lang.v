@@ -62,8 +62,9 @@ Module ValsAndTerms
     by intros [= <-].
   Qed.
 
-  Module SS := SmallStep typekit termkit progkit.
-  Import SS.
+  Module Inv := Inversion typekit termkit progkit.
+  Export Inv.
+  Export SS.
 
   Lemma val_head_stuck_step {σ} {Γ : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) δ2 (s1 : Stm Γ σ) s2 :
     Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 -> to_val (MkTm δ1 s1) = None.
@@ -81,11 +82,8 @@ Module IrisInstance
 
   Definition σt : Ty := ty_bool.
 
-  Module Inv := Inversion typekit termkit progkit.
-  Import Inv.
-  Import SS.
-
   Module VT := ValsAndTerms typekit termkit progkit.
+  Import VT.
 
   Definition Val := VT.Val σt.
   Definition Tm := VT.Tm σt.
@@ -94,21 +92,25 @@ Module IrisInstance
 
   Definition State := prod RegStore Memory.
 
-  Inductive prim_step : Tm -> State -> Tm -> State -> Prop :=
+  Inductive prim_step : Tm -> State -> Tm -> State -> list (VT.Tm σt) -> Prop :=
   | mk_prim_step {Γ  : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) (δ2 : LocalStore Γ) s1 s2 :
-      VT.SS.Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 ->
-      prim_step (VT.MkTm δ1 s1) (γ1 , μ1) (VT.MkTm δ2 s2) (γ2 , μ2)
+      SS.Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 ->
+      prim_step (VT.MkTm δ1 s1) (γ1 , μ1) (VT.MkTm δ2 s2) (γ2 , μ2) nil
   .
 
-  Lemma val_head_stuck e1 s1 e2 s2 : prim_step e1 s1 e2 s2 → VT.to_val e1 = None.
+  Lemma val_head_stuck e1 s1 e2 s2 (ks : list (VT.Tm σt)) : prim_step e1 s1 e2 s2 ks → VT.to_val e1 = None.
   Proof.
     induction 1.
     by eapply VT.val_head_stuck_step.
   Qed.
 
-  Lemma microsail_lang_mixin : @LanguageMixin (VT.Tm σt) (VT.Val σt) State Empty_set VT.of_val VT.to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2).
+  Lemma microsail_lang_mixin : @LanguageMixin (VT.Tm σt) (VT.Val σt) State Empty_set VT.of_val VT.to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2 ks).
   Proof.
-    split; apply _ || eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
+    split.
+    - eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
+    - eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
+    - eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
+
   Qed.
 
   Canonical Structure stateO := leibnizO State.
@@ -218,43 +220,36 @@ Module IrisInstance
       admit.
   Admitted.
 
-  Lemma rule_stm_read_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) :
+  Lemma rule_stm_read_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) {Γ} {δ : LocalStore Γ} :
     ⊢ (reg_pointsTo r v -∗
-                    WP (VT.MkTm env_nil (stm_read_register r)) {{ w, reg_pointsTo r v ∗ bi_pure (VT.val_to_lit w = v) }}
+                    WP (VT.MkTm δ (stm_read_register r)) {{ w, reg_pointsTo r v ∗ bi_pure (VT.val_to_lit w = v) }}
       )%I.
     iIntros "Hreg".
     iApply (wp_mask_mono _ empty); auto.
-    rewrite wp_unfold ; cbn.
+    rewrite wp_unfold; cbn.
     iIntros (σ _ _ n) "Hregs".
-    iDestruct (@reg_valid with "Hregs Hreg") as %?.
+    iDestruct (@reg_valid with "Hregs Hreg") as %<-.
     iModIntro.
     iSplit.
     - iPureIntro.
       destruct σ as [regs heap].
-      exists nil. eexists _. exists (regs , heap). exists nil.
-      repeat eexists.
-      (* progress lemma missing for read_register? *)
-      apply VT.SS.step_stm_read_register.
+      exists nil. repeat eexists.
+      apply step_stm_read_register.
     - iIntros (e2 σ2 efs) "%".
-      remember (VT.MkTm env_nil (stm_read_register r)) as t.
-      destruct a as [Γ γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
-      (* sigh how to invert Heqt? dependent elimination or something *)
-      dependent elimination Heqt.
-      inversion Heqt.
-      destruct (steps_inversion_read_register step).
-      iModIntro.
-      iModIntro.
-      iModIntro.
-      (* inversion lemma needed for read_register *)
-      iSplitL "Hregs".
-      + admit.
-      + admit.
-  Admitted.
+      remember (VT.MkTm δ (stm_read_register r)) as t.
+      destruct a as [Γ2 γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
+      dependent destruction Heqt.
+      destruct (steps_inversion_read_register step) as [<- [<- [<- ->]]].
+      iModIntro. iModIntro. iModIntro.
+      iFrame. iSplitR ""; auto.
+      by iApply wp_value.
+  Qed.
 
   Lemma rule_stm_write_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) :
     ⊢ (reg_pointsTo r v -∗
                   WP (VT.MkTm env_nil (stm_write_register r (exp_lit ctx_nil σt v)) : expr microsail_lang) {{ w, reg_pointsTo r v ∗ bi_pure (v = VT.val_to_lit w) }}
     )%I.
-    iIntros "var".
+  Proof.
+    iIntros "Hreg".
   Admitted.
 End IrisInstance.
