@@ -245,9 +245,9 @@ Module IrisInstance
       by iApply wp_value.
   Qed.
 
-  Lemma rule_stm_write_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) :
-    ⊢ (reg_pointsTo r v -∗
-                  WP (VT.MkTm env_nil (stm_write_register r (exp_lit ctx_nil σt v)) : expr microsail_lang) {{ w, reg_pointsTo r v ∗ bi_pure (v = VT.val_to_lit w) }}
+  Lemma rule_stm_write_register (r : 𝑹𝑬𝑮 σt) (v1 v2 : Lit σt) :
+    ⊢ (reg_pointsTo r v1 -∗
+                  WP (VT.MkTm env_nil (stm_write_register r (exp_lit ctx_nil σt v2)) : expr microsail_lang) {{ w, reg_pointsTo r v2 ∗ bi_pure (v2 = VT.val_to_lit w) }}
     )%I.
   Proof.
     iIntros "Hreg".
