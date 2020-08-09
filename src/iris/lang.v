@@ -127,7 +127,7 @@ Module IrisInstance
   | mkSomeReg {τ} : 𝑹𝑬𝑮 τ -> SomeReg
   .
 
-  Derive NoConfusion for SomeReg.
+  (* Derive NoConfusion for SomeReg. *)
 
   (* Lemma SomeReg_eq_dec (x y : SomeReg) : {x = y} + {~ x = y}. *)
   (* Admitted. *)
@@ -140,8 +140,9 @@ Module IrisInstance
   Inductive SomeLit : Type :=
   | mkSomeLit {τ} : Lit τ -> SomeLit
   .
-  Derive NoConfusion for SomeLit.
-  Derive NoConfusion for excl.
+  (* Derive NoConfusion for SomeLit. *)
+  (* Derive NoConfusion for excl. *)
+
   Instance eqDec_SomeLit : EqDecision SomeLit.
   Admitted.
 
