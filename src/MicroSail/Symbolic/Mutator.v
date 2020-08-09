@@ -383,10 +383,24 @@ Module Mutators
     - rewrite IHt; reflexivity.
   Admitted.
 
+  Section MutatorResult.
+
+    (* Local Set Primitive Projections. *)
+    Local Set Maximal Implicit Insertion.
+
+    Record MutatorResult (Γ : Ctx (𝑿 * Ty)) (Σ : Ctx (𝑺 * Ty)) (A : Type) : Type :=
+      MkMutResult {
+          mutator_result_value : A;
+          mutator_result_state : SymbolicState Γ Σ;
+          mutator_result_obligations : list Obligation;
+        }.
+
+  End MutatorResult.
+
   Section Mutator.
 
     Definition Mutator (Σ : Ctx (𝑺 * Ty)) (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Type) : Type :=
-      SymbolicState Γ1 Σ -> Outcome (A * SymbolicState Γ2 Σ * list Obligation).
+      SymbolicState Γ1 Σ -> Outcome (MutatorResult Γ2 Σ A).
     Bind Scope mutator_scope with Mutator.
 
     Definition mutator_demonic {Γ1 Γ2 I A Σ} (ms : I -> Mutator Σ Γ1 Γ2 A) : Mutator Σ Γ1 Γ2 A :=
@@ -419,9 +433,9 @@ Module Mutators
       fun s => outcome_angelic_binary (m1 s) (m2 s).
 
     Definition mutator_pure {Γ A Σ} (a : A) : Mutator Σ Γ Γ A :=
-      fun s => outcome_pure (a, s, nil).
+      fun s => outcome_pure (MkMutResult a s nil).
     Definition mutator_bind {Γ1 Γ2 Γ3 A B Σ} (ma : Mutator Σ Γ1 Γ2 A) (f : A -> Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
-      fun s0 => outcome_bind (ma s0) (fun '(a , s1 , w1) => outcome_bind (f a s1) (fun '(b , s2 , w2) => outcome_pure (b , s2 , w1 ++ w2))).
+      fun s0 => outcome_bind (ma s0) (fun '(MkMutResult a s1 w1) => outcome_bind (f a s1) (fun '(MkMutResult b s2 w2) => outcome_pure (MkMutResult b s2 (w1 ++ w2)))).
     Definition mutator_bind_right {Γ1 Γ2 Γ3 A B Σ} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
       mutator_bind ma (fun _ => mb).
     Definition mutator_bind_left {Γ1 Γ2 Γ3 A B Σ} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 A :=
@@ -470,7 +484,7 @@ Module Mutators
     Local Open Scope mutator_scope.
 
     Definition mutator_state {Γ Γ' Σ A} (f : SymbolicState Γ Σ -> (SymbolicState Γ' Σ * A)) : Mutator Σ Γ Γ' A :=
-      fun s => outcome_pure ((let (s1,a) := f s in (a,s1)),[]).
+      fun s => outcome_pure (let (s1,a) := f s in MkMutResult a s1 nil).
     Definition mutator_modify {Γ Γ' Σ} (f : SymbolicState Γ Σ -> SymbolicState Γ' Σ) : Mutator Σ Γ Γ' unit :=
       mutator_state (fun s => (f s,tt)).
     Definition mutator_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : Mutator Σ Γ Γ' unit :=
@@ -537,13 +551,10 @@ Module Mutators
       match try_solve_formula fml with
       | Some true  => mutator_pure tt
       | Some false => mutator_fail "Err [mutator_assert_formula]: unsatisfiable"
-      | None       => fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil)
+      | None       => fun δ => outcome_pure (MkMutResult tt δ (obligation (symbolicstate_pathcondition δ) fml :: nil))
       end.
     Definition mutator_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : Mutator Σ Γ Γ unit :=
-      fold_right
-        (fun fml m => mutator_assert_formula fml ;; m)
-        (mutator_pure tt)
-        fmls.
+      mutator_state_pathcondition (fun pc => (fmls ++ pc , tt)).
     (* Definition mutator_assert_formula {Γ Σ} (fml : Formula Σ) : Mutator Σ Γ Γ unit := *)
     (*   fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil). *)
 
@@ -795,7 +806,7 @@ Module Mutators
                     mutator_assert_formula (formula_eq result result') ;;
                     mutator_leakcheck)%mut in
         let out := mut (symbolicstate_initial δ) in
-        outcome_map snd out
+        outcome_map mutator_result_obligations out
     | @sep_contract_none _ _ =>
       fun s => outcome_block
     end.
@@ -808,6 +819,22 @@ Module Mutators
     forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),
       ValidContract (cenv Δ τ f) (Pi f).
 
+  Section DynamicMutatorResult.
+
+    (* Local Set Primitive Projections. *)
+    Local Set Maximal Implicit Insertion.
+
+    Record DynamicMutatorResult (Γ : Ctx (𝑿 * Ty)) (A : Ctx (𝑺 * Ty) -> Type) (Σ : Ctx (𝑺 * Ty)) : Type :=
+      MkDynMutResult {
+          dmutres_context      : Ctx (𝑺 * Ty);
+          dmutres_substitution : Sub Σ dmutres_context;
+          dmutres_result       : MutatorResult Γ dmutres_context (A dmutres_context);
+        }.
+
+    Global Arguments MkDynMutResult {_ _ _ _} _ _.
+
+  End DynamicMutatorResult.
+
   Section DynamicMutator.
 
     Definition Unit : Ctx (𝑺 * Ty) -> Type := fun _ => unit.
@@ -815,19 +842,19 @@ Module Mutators
       fun _ _ _ _ => tt.
 
     Definition DynamicMutator (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Ctx (𝑺 * Ty) -> Type) (Σ : Ctx (𝑺 * Ty)) : Type :=
-      forall Σ', Sub Σ Σ' -> SymbolicState Γ1 Σ' -> Outcome { Σ'' & Sub Σ' Σ'' * A Σ'' * SymbolicState Γ2 Σ'' * list Obligation }%type.
+      forall Σ', Sub Σ Σ' -> SymbolicState Γ1 Σ' -> Outcome (DynamicMutatorResult Γ2 A Σ').
     Bind Scope dmut_scope with DynamicMutator.
 
     Definition dmut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : DynamicMutator Γ Γ A Σ :=
-      fun Σ' ζ s => outcome_pure (existT Σ' (sub_id Σ' , subst ζ a, s , [])).
+      fun Σ' ζ s => outcome_pure (MkDynMutResult (sub_id Σ') (MkMutResult (subst ζ a) s [])).
     Definition dmut_map {Γ1 Γ2 A B} (f : forall {Σ}, A Σ -> B Σ) {Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 B Σ :=
-      fun Σ1 ζ1 s1 => outcome_map (fun '(existT Σ2 (ζ2 , a , s2 , w)) => existT Σ2 (ζ2 , f a, s2, w)) (ma Σ1 ζ1 s1).
+      fun Σ1 ζ1 s1 => outcome_map (fun '(MkDynMutResult ζ2 (MkMutResult a s2 w)) => MkDynMutResult ζ2 (MkMutResult (f a) s2 w)) (ma Σ1 ζ1 s1).
     Definition dmut_bind {Γ1 Γ2 Γ3 A B Σ}
       (ma : DynamicMutator Γ1 Γ2 A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> DynamicMutator Γ2 Γ3 B Σ') : DynamicMutator Γ1 Γ3 B Σ :=
       fun Σ0 ζ0 s0 =>
-        outcome_bind (ma Σ0 ζ0 s0)                               (fun '(existT Σ1 (ζ1 , a , s1 , w1)) =>
-        outcome_bind (f Σ1 (sub_comp ζ0 ζ1) a Σ1 (sub_id Σ1) s1) (fun '(existT Σ2 (ζ2 , b , s2 , w2)) =>
-        outcome_pure (existT Σ2 (sub_comp ζ1 ζ2 , b , s2 , w1 ++ w2)))).
+        outcome_bind (ma Σ0 ζ0 s0)                            (fun '(MkDynMutResult ζ1 (MkMutResult a s1 w1)) =>
+        outcome_bind (f _ (sub_comp ζ0 ζ1) a _ (sub_id _) s1) (fun '(MkDynMutResult ζ2 (MkMutResult b s2 w2)) =>
+        outcome_pure (MkDynMutResult (sub_comp ζ1 ζ2) (MkMutResult b s2 (w1 ++ w2))))).
     Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) :
       DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m).
 
@@ -840,7 +867,7 @@ Module Mutators
       dmut_bind ma (fun _ ζ a => dmut_bind_right (dmut_sub ζ mb) (dmut_pure a)) .
 
     Definition dmut_lift {Γ1 Γ2 A} {Σ} (m : forall Σ', Sub Σ Σ' -> Mutator Σ' Γ1 Γ2 (A Σ')) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 s => outcome_map (fun '(a , s1 , w) => existT Σ1 (sub_id _,a,s1,w)) (m Σ1 ζ1 s).
+      fun Σ1 ζ1 s => outcome_map (MkDynMutResult (sub_id _)) (m Σ1 ζ1 s).
     Definition dmut_lift_kleisli {Γ1 Γ2 A B} `{Subst A} (m : forall Σ, A Σ -> Mutator Σ Γ1 Γ2 (B Σ)) :
       forall Σ, A Σ -> DynamicMutator Γ1 Γ2 B Σ :=
       fun _ a => dmut_lift (fun _ ζ => m _ (subst ζ a)).
@@ -879,8 +906,7 @@ Module Mutators
     Definition dmut_fresh {Γ A Σ} b (ma : DynamicMutator Γ Γ A (Σ ▻ b)) : DynamicMutator Γ Γ A Σ :=
       fun Σ1 ζ1 s1 =>
         outcome_map
-          (fun '(existT Σ' (ζ , a , s' , w)) =>
-             existT Σ' (sub_comp sub_wk1 ζ , a , s' , w))
+          (fun '(MkDynMutResult ζ r) => MkDynMutResult (sub_comp sub_wk1 ζ) r)
           (ma _ (sub_up1 ζ1) (wk1_symbolicstate s1)).
     Global Arguments dmut_fresh {_ _ _} _ _.
 
@@ -893,20 +919,20 @@ Module Mutators
       forall Σ', Sub Σ Σ' -> A Σ' -> B Σ'.
 
     Definition DynamicMutator (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Ctx (𝑺 * Ty) -> Type) (Σ : Ctx (𝑺 * Ty)) : Type :=
-      SymbolicState Γ1 Σ -> Outcome { Σ' & Sub Σ Σ' * A Σ' * SymbolicState Γ2 Σ' * list Obligation }%type.
+      SymbolicState Γ1 Σ -> Outcome (DynamicMutatorResult Γ2 A Σ).
 
     Definition dmut_pure {Γ A} {Σ} : Mor Σ A (DynamicMutator Γ Γ A) :=
       fun Σ' ζ' a s =>
-        outcome_pure (existT Σ' (sub_id Σ' , a , s , nil)).
+        outcome_pure (MkDynMutResult (sub_id Σ') (MkMutResult a s nil)).
     Definition dmut_map {Γ1 Γ2 A B Σ} (f : Mor Σ A B) : Mor Σ (DynamicMutator Γ1 Γ2 A) (DynamicMutator Γ1 Γ2 B) :=
       fun Σ1 ζ1 ma s1 =>
-        outcome_map (fun '(existT Σ2 (ζ2 , a , s2 , w)) => existT Σ2 (ζ2 , f _ (sub_comp ζ1 ζ2) a, s2, w)) (ma s1).
+        outcome_map (fun '(MkDynMutResult ζ2 (MkMutResult a s2 w)) => MkDynMutResult ζ2 (MkMutResult (f _ (sub_comp ζ1 ζ2) a) s2 w)) (ma s1).
     Definition dmut_bind {Γ1 Γ2 Γ3 A B Σ} (f : Mor Σ A (DynamicMutator Γ2 Γ3 B)) :
       Mor Σ (DynamicMutator Γ1 Γ2 A) (DynamicMutator Γ1 Γ3 B) :=
       fun Σ0 ζ0 m0 s0 =>
-        outcome_bind (m0 s0) (fun '(existT Σ1 (ζ1 , a , s1 , w1)) =>
-        outcome_bind (f Σ1 (sub_comp ζ0 ζ1) a s1) (fun '(existT Σ2 (ζ2 , b , s2 , w2)) =>
-        outcome_pure (existT Σ2 (sub_comp ζ1 ζ2 , b , s2 , w1 ++ w2)))).
+        outcome_bind (m0 s0) (fun '(MkDynMutResult ζ1 (MkMutResult a s1 w1)) =>
+        outcome_bind (f _ (sub_comp ζ0 ζ1) a s1) (fun '(MkDynMutResult ζ2 (MkMutResult b s2 w2)) =>
+        outcome_pure (MkDynMutResult (sub_comp ζ1 ζ2) (MkMutResult b s2 (w1 ++ w2))))).
     Definition dmut_join {Γ1 Γ2 Γ3 A Σ} :
       Mor Σ (DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A)) (DynamicMutator Γ1 Γ3 A) :=
       fun Σ1 ζ1 => dmut_bind (fun _ _ m => m) ζ1.
@@ -916,7 +942,7 @@ Module Mutators
     Global Arguments dmut_sub {_ _ _ _} ζ2 m.
 
     Definition dmut_lift {Γ1 Γ2 A} {Σ} (m : Mutator Σ Γ1 Γ2 (A Σ)) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun s => outcome_map (fun '(a , s1 , w) => existT Σ (sub_id _,a,s1,w)) (m s).
+      fun s => outcome_map (MkDynMutResult (sub_id Σ)) (m s).
     Definition dmut_lift_kleisli {Γ1 Γ2 A B Σ} (m : A Σ -> Mutator Σ Γ1 Γ2 (B Σ)) :
       A Σ -> DynamicMutator Γ1 Γ2 B Σ :=
       fun a => dmut_lift (m a).
@@ -940,8 +966,8 @@ Module Mutators
       Mor Σ Unit (DynamicMutator Γ Γ A) :=
       fun Σ1 ζ1 _ s1 =>
         outcome_map
-          (fun '(existT Σ' (ζ , a , s' , w)) =>
-             existT Σ' (sub_comp sub_wk1 ζ , a , s' , w))
+          (fun '(MkDynMutResult ζ r) =>
+             MkDynMutResult (sub_comp sub_wk1 ζ) r)
           (m _ (sub_up1 ζ1) tt (wk1_symbolicstate s1)).
     Global Arguments dmut_fresh {_ _ _} _ _.
 
@@ -1215,7 +1241,7 @@ Module Mutators
                     dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens) ;;
                     dmut_leakcheck)%dmut in
         let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
-        outcome_map (fun '(existT _ (_ , w)) => w) out
+        outcome_map (fun x => mutator_result_obligations (dmutres_result x)) out
     | @sep_contract_result_pure _ _ Σ δ result' req ens =>
       fun s =>
         let mut := (dmut_produce req ;;
@@ -1224,7 +1250,7 @@ Module Mutators
                     dmut_sub ζ1 (dmut_consume ens) ;;
                     dmut_leakcheck)%dmut in
         let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
-        outcome_map (fun '(existT _ (_ , w)) => w) out
+        outcome_map (fun x => mutator_result_obligations (dmutres_result x)) out
     | @sep_contract_none _ _ =>
       fun s => outcome_block
     end.
