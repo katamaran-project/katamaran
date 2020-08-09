@@ -214,11 +214,10 @@ Module IrisInstance
       specialize (H0 eq1).
       cbn in H0.
       (* dependent elimination H0. *)
-      admit.
+      by dependent destruction H0.
     - destruct y'; [|done].
-      (* dependent elimination H3 ?*)
-      admit.
-  Admitted.
+      inversion eq3.
+  Qed.
 
   Lemma rule_stm_read_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) {Γ} {δ : LocalStore Γ} :
     ⊢ (reg_pointsTo r v -∗
