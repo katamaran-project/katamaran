@@ -124,15 +124,15 @@ Module HoareSound
       forall σs σ (f : 𝑭 σs σ),
         match cenv σs σ f with
         | @sep_contract_result _ _ Σ θΔ result pre post =>
-          forall (δΣ : NamedEnv Lit Σ)
+          forall (ι : SymInstance Σ)
                  (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore σs) (s' : Stm σs σ),
             ⟨ γ, μ, δ, Pi f ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
             forall (γframe γfocus : Heap),
               split (heap γ) γframe γfocus ->
-              (interpret (L:=HProp) δΣ pre) γfocus ->
+              (inst_assertion (L:=HProp) ι pre) γfocus ->
               exists (γfocus' : Heap),
                 split (heap γ') γframe γfocus' /\
-                ResultOrFail s' (fun v => interpret (env_snoc δΣ (result , σ) v) post γfocus')
+                ResultOrFail s' (fun v => inst_assertion (env_snoc ι (result , σ) v) post γfocus')
         | _ => False
         end.
 

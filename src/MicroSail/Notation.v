@@ -67,3 +67,5 @@ Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> n ⟨ γ2 , μ2 , δ2 , s2 
 
 Reserved Notation "s1 ;; s2" (at level 100, s2 at level 200, right associativity,
   format "'[' '[hv' '[' s1 ']' ;;  ']' '/' s2 ']'").
+
+Reserved Notation "δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" (at level 75, no associativity).

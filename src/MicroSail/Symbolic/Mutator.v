@@ -76,25 +76,28 @@ Module Mutators
     formula_eqs (env_snoc δ _ t) (env_snoc δ' _ t') :=
       formula_eq t t' :: formula_eqs δ δ'.
 
-  Definition interpret_formula {Σ} (δ : NamedEnv Lit Σ) (fml : Formula Σ) : Prop :=
-    match fml with
-    | formula_bool t    => is_true (eval_term t δ)
-    | formula_prop ζ P  => uncurry_named P (env_map (fun _ t => eval_term t δ) ζ)
-    | formula_eq t1 t2  => eval_term t1 δ =  eval_term t2 δ
-    | formula_neq t1 t2 => eval_term t1 δ <> eval_term t2 δ
-    end.
-
   Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
     list (Formula Σ).
   Definition SymbolicHeap (Σ : Ctx (𝑺 * Ty)) : Type :=
     list (Chunk Σ).
+
+  Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
+    match fml with
+    | formula_bool t    => is_true (inst_term ι t)
+    | formula_prop ζ P  => uncurry_named P (env_map (fun _ => inst_term ι) ζ)
+    | formula_eq t1 t2  => inst_term ι t1 =  inst_term ι t2
+    | formula_neq t1 t2 => inst_term ι t1 <> inst_term ι t2
+    end.
+
+  Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
+    List.fold_right (fun fml pc => inst_formula ι fml /\ pc) True pc.
 
   Inductive Obligation : Type :=
   | obligation {Σ} (pc : PathCondition Σ) (fml : Formula Σ).
 
   Definition valid_obligation : Obligation -> Prop :=
     fun '(obligation pc fml) =>
-      ForallNamed (fun δ => all_list (interpret_formula δ) pc -> interpret_formula δ fml).
+      ForallNamed (fun ι => all_list (inst_formula ι) pc -> inst_formula ι fml).
   Definition valid_obligations (os : list Obligation) : Prop :=
     all_list valid_obligation os.
   Hint Unfold valid_obligation : core.
@@ -112,12 +115,9 @@ Module Mutators
   Global Instance sub_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
     fun Σ1 Σ2 ζ => env_map (fun _ => sub_term ζ).
 
-  Definition lift_localstore {Γ Σ} : LocalStore Γ -> SymbolicLocalStore Γ Σ :=
-    env_map (fun _ => term_lit _).
-  Definition inst_localstore {Γ Σ} (δi : NamedEnv Lit Σ) : SymbolicLocalStore Γ Σ -> LocalStore Γ :=
-    env_map (fun b t => eval_term t δi).
-
   Section SymbolicState.
+
+    (* Local Set Primitive Projections. *)
 
     Record SymbolicState (Γ : Ctx (𝑿 * Ty)) (Σ : Ctx (𝑺 * Ty)) : Type :=
       MkSymbolicState
@@ -166,7 +166,7 @@ Module Mutators
 
     Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) (b : bool) :
       try_solve_formula fml = Some b ->
-      forall δ, reflect (interpret_formula δ fml) b.
+      forall ι, reflect (inst_formula ι fml) b.
     Proof.
       destruct fml; cbn.
       - dependent destruction t; cbn; inversion 1.
@@ -407,8 +407,8 @@ Module Mutators
       fun s => outcome_fail msg.
     Definition mutator_contradiction {Γ1 Γ2 A Σ} (msg : string) : Mutator Σ Γ1 Γ2 A :=
       fun s =>
-        (⨂ δ : NamedEnv Lit Σ =>
-         ⨂ _ : all_list (interpret_formula δ) (symbolicstate_pathcondition s) =>
+        (⨂ ι : SymInstance Σ =>
+         ⨂ _ : all_list (inst_formula ι) (symbolicstate_pathcondition s) =>
          outcome_fail msg)%out.
     Definition mutator_block {Γ1 Γ2 A Σ} : Mutator Σ Γ1 Γ2 A :=
       fun s => outcome_block.

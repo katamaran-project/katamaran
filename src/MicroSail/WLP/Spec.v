@@ -78,7 +78,7 @@ Module WLP
     fun k => ma (fun a δ2 s2 => blast a (fun a' => f a' k δ2 s2)).
   Definition meval {G Γ σ} (e : Exp Γ σ) : DST G LocalStore Γ Γ (Lit σ) :=
     bind get_local (fun δ => pure (eval e δ)).
-  Definition mevals {G Γ Δ} (es : NamedEnv (Exp Γ) Δ) : DST G LocalStore Γ Γ (NamedEnv Lit Δ) :=
+  Definition mevals {G Γ Δ} (es : NamedEnv (Exp Γ) Δ) : DST G LocalStore Γ Γ (LocalStore Δ) :=
     bind get_local (fun δ => pure (evals es δ)).
 
   Arguments bindblast {_ _ _ _ _ _ _ _ _} _ _ / _ _ _.

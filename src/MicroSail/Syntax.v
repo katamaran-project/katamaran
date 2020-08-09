@@ -32,9 +32,13 @@ From Coq Require Import
      Logic.FunctionalExtensionality
      Program.Equality
      Program.Tactics
+     Relations
      Strings.String
      ZArith.ZArith
-     ssr.ssrbool.
+     ssr.ssrbool
+     Classes.Morphisms
+     Classes.Equivalence
+     Classes.RelationClasses.
 
 From Equations Require Import
      Equations Signature.
@@ -545,7 +549,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Arguments P _ _ : clear implicits.
 
       Let PL (σ : Ty) : list (Exp Γ σ) -> Type :=
-        list_rect (fun _ => Type) unit (fun e es IHes => P _ e * IHes)%type.
+        List.fold_right (fun e es => P _ e * es)%type unit.
       Let PE : forall σs, Env (Exp Γ) σs -> Type :=
         Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
       Let PNE : forall (σs : Ctx (𝑹𝑭 * Ty)), NamedEnv (Exp Γ) σs -> Type :=
@@ -889,6 +893,9 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   End NameResolution.
 
+  Definition SymInstance (Σ : Ctx (𝑺 * Ty)) : Type := NamedEnv Lit Σ.
+  Bind Scope env_scope with SymInstance.
+
   Section SymbolicTerms.
 
     Local Unset Elimination Schemes.
@@ -937,7 +944,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Arguments P _ _ : clear implicits.
 
       Let PL (σ : Ty) : list (Term Σ σ) -> Type :=
-        list_rect (fun _ => Type) unit (fun t ts IHts => P _ t * IHts)%type.
+        List.fold_right (fun t ts => P _ t * ts)%type unit.
       Let PE : forall σs, Env (Term Σ) σs -> Type :=
         Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type.
       Let PNE : forall (σs : Ctx (𝑹𝑭 * Ty)), NamedEnv (Term Σ) σs -> Type :=
@@ -978,29 +985,42 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := Term_rect P.
 
-    Fixpoint eval_term {Σ : Ctx (𝑺 * Ty)} {σ : Ty} (t : Term Σ σ) (δ : NamedEnv Lit Σ) {struct t} : Lit σ :=
+    Fixpoint inst_term {Σ : Ctx (𝑺 * Ty)} (ι : SymInstance Σ) {σ : Ty} (t : Term Σ σ) {struct t} : Lit σ :=
       match t in Term _ σ return Lit σ with
-      | @term_var _ x _      => (δ ‼ x)%lit
+      | @term_var _ x _      => (ι ‼ x)%lit
       | term_lit _ l         => l
-      | term_binop op e1 e2  => eval_binop op (eval_term e1 δ) (eval_term e2 δ)
-      | term_neg e           => Z.opp (eval_term e δ)
-      | term_not e           => negb (eval_term e δ)
-      | term_inl e           => inl (eval_term e δ)
-      | term_inr e           => inr (eval_term e δ)
-      | term_list es         => List.map (fun e => eval_term e δ) es
+      | term_binop op e1 e2  => eval_binop op (inst_term ι e1) (inst_term ι e2)
+      | term_neg e           => Z.opp (inst_term ι e)
+      | term_not e           => negb (inst_term ι e)
+      | term_inl e           => inl (inst_term ι e)
+      | term_inr e           => inr (inst_term ι e)
+      | term_list es         => List.map (fun e => inst_term ι e) es
       | term_tuple es        => Env_rect
                                   (fun σs _ => Lit (ty_tuple σs))
                                   tt
-                                  (fun σs _ (vs : Lit (ty_tuple σs)) σ e => (vs, eval_term e δ))
+                                  (fun σs _ (vs : Lit (ty_tuple σs)) σ e => (vs, inst_term ι e))
                                   es
-      | @term_projtup _ σs e n σ p => tuple_proj σs n σ (eval_term e δ) p
-      | @term_union _ U K e     => 𝑼_fold (existT K (eval_term e δ))
+      | @term_projtup _ σs e n σ p => tuple_proj σs n σ (inst_term ι e) p
+      | @term_union _ U K e     => 𝑼_fold (existT K (inst_term ι e))
       | @term_record _ R es     => 𝑹_fold (Env_rect
                                              (fun σs _ => NamedEnv Lit σs)
                                              env_nil
-                                             (fun σs _ vs _ e => env_snoc vs _ (eval_term e δ)) es)
-      | @term_projrec _ _ e rf    => 𝑹_unfold (eval_term e δ) ‼ rf
+                                             (fun σs _ vs _ e => env_snoc vs _ (inst_term ι e)) es)
+      | @term_projrec _ _ e rf    => 𝑹_unfold (inst_term ι e) ‼ rf
       end.
+
+    Section TermEquivalence.
+
+      Context {Σ : Ctx (𝑺 * Ty)} {σ : Ty}.
+
+      Definition TermEqv : relation (Term Σ σ) :=
+        fun t1 t2 => forall (ι : SymInstance Σ),
+          inst_term ι t1 = inst_term ι t2.
+
+      Global Instance TermEqv_Equiv : Equivalence TermEqv.
+      Proof. split; congruence. Qed.
+
+    End TermEquivalence.
 
     Equations(noind) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
       Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
@@ -1106,28 +1126,22 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Env (fun b => Term Σ2 (snd b)) Σ1.
     (* Hint Unfold Sub. *)
 
-    Section WithSub.
-      Context {Σ1 Σ2 : Ctx (𝑺 * Ty)}.
-      Variable (ζ : Sub Σ1 Σ2).
-
-      Fixpoint sub_term {σ} (t : Term Σ1 σ) {struct t} : Term Σ2 σ :=
-        match t with
-        | term_var ς                => (ζ ‼ ς)%lit
-        | term_lit σ l              => term_lit σ l
-        | term_binop op t1 t2       => term_binop op (sub_term t1) (sub_term t2)
-        | term_neg t0               => term_neg (sub_term t0)
-        | term_not t0               => term_not (sub_term t0)
-        | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0)
-        | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0)
-        | @term_list _ σ es         => term_list (List.map sub_term es)
-        | term_tuple es             => term_tuple (env_map (@sub_term) es)
-        | @term_projtup _ _ t n σ p => term_projtup (sub_term t) n (p := p)
-        | term_union U K t0         => term_union U K (sub_term t0)
-        | term_record R es          => term_record R (env_map (fun _ => sub_term) es)
-        | term_projrec t rf         => term_projrec (sub_term t) rf
-        end.
-
-    End WithSub.
+    Fixpoint sub_term {σ} {Σ1 Σ2 : Ctx (𝑺 * Ty)} (ζ : Sub Σ1 Σ2) (t : Term Σ1 σ) {struct t} : Term Σ2 σ :=
+      match t with
+      | term_var ς                => (ζ ‼ ς)%lit
+      | term_lit σ l              => term_lit σ l
+      | term_binop op t1 t2       => term_binop op (sub_term ζ t1) (sub_term ζ t2)
+      | term_neg t0               => term_neg (sub_term ζ t0)
+      | term_not t0               => term_not (sub_term ζ t0)
+      | @term_inl _ σ1 σ2 t0      => term_inl (sub_term ζ t0)
+      | @term_inr _ σ1 σ2 t0      => term_inr (sub_term ζ t0)
+      | @term_list _ σ es         => term_list (List.map (sub_term ζ) es)
+      | term_tuple es             => term_tuple (env_map (fun σ => @sub_term σ _ _ ζ) es)
+      | @term_projtup _ _ t n σ p => term_projtup (sub_term ζ t) n (p := p)
+      | term_union U K t0         => term_union U K (sub_term ζ t0)
+      | term_record R es          => term_record R (env_map (fun _ => sub_term ζ) es)
+      | term_projrec t rf         => term_projrec (sub_term ζ t) rf
+      end.
 
     Class Subst (T : Ctx (𝑺 * Ty) -> Type) : Type :=
       subst : forall {Σ1 Σ2 : Ctx (𝑺 * Ty)}, Sub Σ1 Σ2 -> T Σ1 -> T Σ2.
@@ -1165,6 +1179,28 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       env_snoc (env_map (fun _ => wk1_term) ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
 
   End SymbolicSubstitutions.
+
+  Section SymbolicLocalStore.
+
+    Definition SymbolicLocalStore (Γ : Ctx (𝑿 * Ty)) (Σ : Ctx (𝑺 * Ty)) : Type :=
+      NamedEnv (Term Σ) Γ.
+
+    Definition lift_localstore {Γ Σ} : LocalStore Γ -> SymbolicLocalStore Γ Σ :=
+      env_map (fun _ => term_lit _).
+    Definition inst_localstore {Γ Σ}
+      (ι : SymInstance Σ) (δ : SymbolicLocalStore Γ Σ) : LocalStore Γ :=
+      env_map (fun _ => inst_term ι) δ.
+
+    Lemma inst_lift_localstore {Γ Σ} (ι : SymInstance Σ) (δ : LocalStore Γ) :
+      inst_localstore ι (lift_localstore δ) = δ.
+    Proof.
+      induction δ; cbn.
+      - reflexivity.
+      - f_equal. apply IHδ.
+    Qed.
+
+  End SymbolicLocalStore.
+  Bind Scope env_scope with SymbolicLocalStore.
 
   Section Contracts.
 
@@ -1452,13 +1488,13 @@ Module Type ProgramKit
    *)
   Parameter ExternalCall :
     forall
-      {σs σ} (f : 𝑭𝑿 σs σ)
-      (args : NamedEnv Lit σs)
+      {Δ σ} (f : 𝑭𝑿 Δ σ)
+      (args : LocalStore Δ)
       (res  : string + Lit σ)
       (γ γ' : RegStore)
       (μ μ' : Memory), Prop.
   Parameter ExternalProgress :
-    forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ,
+    forall {Δ σ} (f : 𝑭𝑿 Δ σ) (args : LocalStore Δ) γ μ,
     exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
 
   (* Bind Scope env_scope with Memory. *)

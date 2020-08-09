@@ -101,21 +101,21 @@ Module Type HeapKit
   Section Contracts.
     Context `{Logic : IHeaplet L}.
 
-    Definition interpret_chunk {Σ} (δ : NamedEnv Lit Σ) (c : Chunk Σ) : L :=
+    Definition inst_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
       match c with
-      | chunk_pred p ts => pred p (env_map (fun _ t => eval_term t δ) ts)
-      | chunk_ptsreg r t => ptsreg r (eval_term t δ)
+      | chunk_pred p ts => pred p (env_map (fun _ => inst_term ι) ts)
+      | chunk_ptsreg r t => ptsreg r (inst_term ι t)
       end.
 
-    Fixpoint interpret {Σ} (δ : NamedEnv Lit Σ) (a : Assertion Σ) : L :=
+    Fixpoint inst_assertion {Σ} (ι : SymInstance Σ) (a : Assertion Σ) : L :=
       match a with
-      | asn_bool b => if eval_term b δ then ltrue else lfalse
-      | asn_prop p => !!(uncurry_named p δ) ∧ emp
-      | asn_chunk c => interpret_chunk δ c
-      | asn_if b a1 a2 => if eval_term b δ then interpret δ a1 else interpret δ a2
-      | asn_match_enum E k alts => interpret δ (alts (eval_term k δ))
-      | asn_sep a1 a2 => interpret δ a1 ✱ interpret δ a2
-      | asn_exist ς τ a => ∃ v, @interpret (Σ ▻ (ς , τ)) (δ ► (ς , τ) ↦ v) a
+      | asn_bool b => if inst_term ι b then ltrue else lfalse
+      | asn_prop p => !!(uncurry_named p ι) ∧ emp
+      | asn_chunk c => inst_chunk ι c
+      | asn_if b a1 a2 => if inst_term ι b then inst_assertion ι a1 else inst_assertion ι a2
+      | asn_match_enum E k alts => inst_assertion ι (alts (inst_term ι k))
+      | asn_sep a1 a2 => inst_assertion ι a1 ✱ inst_assertion ι a2
+      | asn_exist ς τ a => ∃ v, @inst_assertion (Σ ▻ (ς , τ)) (ι ► (ς , τ) ↦ v) a
     end.
 
     (* Definition ValidContract {Γ τ} (c : SepContract Γ τ) : L := *)
@@ -135,7 +135,7 @@ Module Type HeapKit
 
   End Contracts.
 
-  Arguments interpret {_ _ _} _ _.
+  Arguments inst_assertion {_ _ _} _ _.
   (* Arguments ValidContract {_ _ _ _} _. *)
 
   Notation "r '↦' t" := (ptsreg r t) (at level 30).
