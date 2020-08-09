@@ -180,6 +180,14 @@ Section WithBinding.
     destruct n; cbn in *; subst; cbn; congruence.
   Qed.
 
+  Lemma env_map_tabulate {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ} (g : forall (b : B) , InCtx b Γ -> D1 b) :
+    env_map f (env_tabulate g) = env_tabulate (fun b bInΓ => f b (g b bInΓ)).
+  Proof.
+    induction Γ; intros; cbn in *.
+    - reflexivity.
+    - f_equal; apply IHΓ.
+  Qed.
+
   Lemma env_lookup_map {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ} (E : Env D1 Γ) :
     forall {b} (bInΓ : InCtx b Γ),
       env_lookup (env_map f E) bInΓ = f _ (env_lookup E bInΓ).
