@@ -31,6 +31,9 @@ From Coq Require Import
      Program.Tactics
      String.
 
+From Equations Require Import
+     Equations.
+
 Set Implicit Arguments.
 
 Delimit Scope outcome_scope with out.
@@ -44,6 +47,8 @@ Inductive Outcome (A: Type) : Type :=
 | outcome_fail (msg: string)
 .
 Arguments outcome_fail {_} _.
+
+Derive NoConfusion for Outcome.
 
 Bind Scope outcome_scope with Outcome.
 
