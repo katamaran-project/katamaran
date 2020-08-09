@@ -103,6 +103,7 @@ Module Disjoint
       end; cbn in *; try congruence; try eauto with seplogic.
 
   Create HintDb seplogic.
+  Hint Unfold bientails.
 
   Lemma split_eq : forall γ1 γ2 γl γr, split γ1 γl γr -> split γ2 γl γr -> γ1 = γ2.
   Proof.

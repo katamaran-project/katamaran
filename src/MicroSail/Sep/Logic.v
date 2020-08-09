@@ -1,5 +1,7 @@
 Require Import Coq.Program.Tactics.
 Require Import FunctionalExtensionality.
+Require Import Relations.
+Require Import Classes.Equivalence.
 
 Require Import MicroSail.Syntax.
 Require Import MicroSail.Sep.Spec.
@@ -35,7 +37,6 @@ Infix "∧" := land (at level 40, left associativity) : logic.
 Notation "P '-->' Q" := (limpl P Q) (at level 55, right associativity) : logic.
 Notation "P '<-->' Q" := (land (limpl P Q) (limpl Q P))
   (at level 57, no associativity) : logic.
-Notation "P ⊣⊢ Q" := ((P ⊢ Q) /\ (Q ⊢ P)) (at level 50, no associativity) : logic.
 Notation "'!!' e" := (lprop e) (at level 25) : logic.
 Notation "⊥" := lfalse.
 Notation "⊤" := ltrue.
@@ -57,6 +58,28 @@ Class ILogicLaws (L : Type) (LL : ILogic L) :=
   lprop_left: forall (P: Prop) Q, (P -> ltrue ⊢ Q) -> lprop P ⊢ Q;
   lprop_right: forall (P: Prop) Q, P -> Q ⊢ lprop P;
 }.
+
+Section Equivalence.
+
+  Context {L : Type} {LL : ILogic L} {LLL : ILogicLaws L LL}.
+
+  Definition bientails : relation L :=
+    fun P Q => (P ⊢ Q) /\ (Q ⊢ P).
+
+  Global Instance bientails_equiv : Equivalence bientails.
+  Proof.
+    split.
+    - intros P.
+      split; apply entails_refl.
+    - intros P Q [pq qp].
+      split; assumption.
+    - intros P Q R [pq qp] [qr rq].
+      split; eapply entails_trans; eauto.
+  Qed.
+
+End Equivalence.
+
+Notation "P ⊣⊢ Q" := (bientails P Q) (at level 50, no associativity) : logic.
 
 Class ISepLogic (L : Type) := {
   is_ILogic :> ILogic L;
