@@ -192,33 +192,64 @@ Module IrisInstance
     iDestruct 1 as (regsmap) "[Hregs %]".
     iIntros "Hreg".
     rewrite /reg_pointsTo.
-    iDestruct (own_valid_2 with "Hregs Hreg")
-      as %[Hl regsv]%auth_both_valid; auto.
+    iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl regsv]%auth_both_valid.
     iPureIntro.
-    specialize (H0 (mkSomeReg r) (Excl (mkSomeLit v))).
     rewrite (singleton_included_l regsmap (mkSomeReg r) _) in Hl *.
-    destruct 1 as [y [eq1 eq2]].
-    apply equiv_Some_inv_r' in eq1 as [y' [eq1 eq3]].
+    destruct 1 as [y [eq1%leibniz_equiv eq2]].
     specialize (regsv (mkSomeReg r)).
     rewrite eq1 in regsv.
-    unfold valid, cmra_valid in regsv.
-    cbn in regsv.
-    destruct y.
-    - rewrite Excl_included in eq2 *.
-      intro eq4.
-      unfold equiv, ofe_equiv, equivL in eq4.
-      rewrite <-eq4 in eq3; clear eq4 o.
-      destruct y'; try inversion regsv.
-      apply (inj Excl) in eq3.
-      unfold equiv, ofe_equiv, equivL in eq3.
-      rewrite <- eq3 in eq1; clear eq3 regsv o.
-      specialize (H0 eq1).
-      cbn in H0.
-      (* dependent elimination H0. *)
-      by dependent destruction H0.
-    - destruct y'; [|done].
-      inversion eq3.
+    destruct y as [y|]; [|inversion regsv].
+    rewrite Excl_included in eq2 *.
+    intros <-%leibniz_equiv.
+    specialize (H0 (mkSomeReg r) (Excl (mkSomeLit v)) eq1); cbn in H0.
+    by dependent destruction H0.
   Qed.
+
+  Lemma regs_inv_update `{inG Σ (authR (gmapUR SomeReg (exclR (leibnizO SomeLit))))} {τ} {r} {v : Lit τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeLit))} {regstore : RegStore} :
+    map_Forall (λ r' v', match r' with
+                         | @mkSomeReg τ r'' => Excl (mkSomeLit (read_register regstore r'')) = v'
+                         end) regsmap ->
+    (own reg_gv_name (● <[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap)) -∗ regs_inv (write_register regstore r v).
+  Proof.
+    iIntros (regseq) "Hownregs".
+    rewrite /regs_inv.
+    iExists (<[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap).
+    iSplitL "Hownregs".
+    - iFrame.
+      (* huh, what's wrong here? *)
+      admit.
+    - iPureIntro.
+      apply (map_Forall_insert_2 ((λ (reg : SomeReg) (v0 : excl SomeLit),
+       match reg with
+       | @mkSomeReg τ0 reg0 => Excl (mkSomeLit (read_register (write_register regstore r v) reg0)) = v0
+       end)) regsmap (mkSomeReg r) (Excl (mkSomeLit v))).
+      + repeat f_equal.
+        eapply read_write.
+      + (* damn map_Forall_insert_2 not suited... *)
+
+  Admitted.
+
+  Lemma gen_heap_update regstore {τ} r (v1 v2 : Lit τ) :
+    regs_inv regstore -∗ reg_pointsTo r v1 ==∗ regs_inv (write_register regstore r v2) ∗ reg_pointsTo r v2.
+  Proof.
+    iDestruct 1 as (regsmap) "[Hregs %]".
+    rewrite /reg_pointsTo.
+    iIntros "Hreg".
+    iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl regsmapv]%auth_both_valid.
+    rewrite (singleton_included_l regsmap (mkSomeReg r) _) in Hl *.
+    destruct 1 as [y [eq1%leibniz_equiv eq2]].
+    specialize (regsmapv (mkSomeReg r)).
+    rewrite eq1 in regsmapv.
+    destruct y as [y|]; inversion regsmapv.
+    iMod (own_update_2 with "Hregs Hreg") as "[Hregs Hreg]".
+    {
+      eapply auth_update.
+      apply (singleton_local_update regsmap (mkSomeReg r) (Excl y) (Excl (mkSomeLit v1)) (Excl (mkSomeLit v2)) (Excl (mkSomeLit v2)) eq1).
+      by eapply exclusive_local_update.
+    }
+    iModIntro.
+    iFrame.
+    
 
   Lemma rule_stm_read_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) {Γ} {δ : LocalStore Γ} :
     ⊢ (reg_pointsTo r v -∗
