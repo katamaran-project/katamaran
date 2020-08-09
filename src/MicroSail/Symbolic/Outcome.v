@@ -105,8 +105,8 @@ Lemma outcome_satisfy_monotonic {A : Type} {P Q : A -> Prop} (o : Outcome A) (hy
   outcome_satisfy o P -> outcome_satisfy o Q.
 Proof. induction o; firstorder. Qed.
 
-Instance outcome_satisfy_iff_morphism {A eqA} `{Equivalence A eqA} (o : Outcome A) :
-  Proper ((eqA ==> iff) ==> iff) (@outcome_satisfy A o).
+Instance outcome_satisfy_iff_morphism {A} (o : Outcome A) :
+  Proper (pointwise_relation A iff ==> iff) (@outcome_satisfy A o).
 Proof. split; apply outcome_satisfy_monotonic; firstorder. Qed.
 
 (* Inductive outcome_satisfy_ind {A : Type} (P : A -> Prop) : Outcome A -> Prop := *)

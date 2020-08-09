@@ -12,6 +12,7 @@ src/MicroSail/Sep/Hoare.v
 src/MicroSail/Sep/Soundness/HoareSound.v
 src/MicroSail/Symbolic/Mutator.v
 src/MicroSail/Symbolic/Outcome.v
+src/MicroSail/Symbolic/Sound.v
 src/MicroSail/Sep/Spec.v
 src/MicroSail/SmallStep/Inversion.v
 src/MicroSail/SmallStep/Progress.v
