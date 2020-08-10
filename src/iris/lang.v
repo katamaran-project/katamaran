@@ -126,25 +126,51 @@ Module IrisInstance
   Inductive SomeReg : Type :=
   | mkSomeReg {τ} : 𝑹𝑬𝑮 τ -> SomeReg
   .
+  Inductive SomeLit : Type :=
+  | mkSomeLit {τ} : Lit τ -> SomeLit
+  .
 
-  (* Derive NoConfusion for SomeReg. *)
+  Section TransparentObligations.
+    Local Set Transparent Obligations.
+    Derive NoConfusion for SomeReg.
+    Derive NoConfusion for SomeLit.
+    Derive NoConfusion for excl.
+  End TransparentObligations.
 
-  (* Lemma SomeReg_eq_dec (x y : SomeReg) : {x = y} + {~ x = y}. *)
-  (* Admitted. *)
   Instance eqDec_SomeReg : EqDecision SomeReg.
-  Admitted.
+  Proof.
+    - intros [σ r1] [τ r2].
+      destruct (𝑹𝑬𝑮_eq_dec r1 r2).
+      + left.
+        dependent elimination t.
+        dependent elimination eqi.
+        now f_equal.
+      + right.
+        intros Heq.
+        dependent elimination Heq.
+        apply n.
+        constructor 1 with eq_refl.
+        reflexivity.
+  Qed.
 
   Instance countable_SomeReg : Countable SomeReg.
   Admitted.
 
-  Inductive SomeLit : Type :=
-  | mkSomeLit {τ} : Lit τ -> SomeLit
-  .
-  (* Derive NoConfusion for SomeLit. *)
-  (* Derive NoConfusion for excl. *)
-
   Instance eqDec_SomeLit : EqDecision SomeLit.
-  Admitted.
+  Proof.
+    intros [σ v1] [τ v2].
+    destruct (Ty_eq_dec σ τ).
+    - subst.
+      destruct (Lit_eqb_spec _ v1 v2).
+      + left. congruence.
+      + right. intros H.
+        Local Set Equations With UIP.
+        dependent elimination H.
+        congruence.
+    - right. intros H.
+      dependent elimination H.
+      congruence.
+  Qed.
 
   Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeLit))).
 
