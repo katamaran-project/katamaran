@@ -120,6 +120,24 @@ Module ProgramLogic
         (P : L) (Q : Prop) (R : Lit σ -> LocalStore Γ -> L) :
         (Q -> δ ⊢ ⦃ P ⦄ s ⦃ R ⦄) ->
         δ ⊢ ⦃ P ∧ !!Q ⦄ s ⦃ R ⦄
+    | rule_exist
+        {A : Type} {σ : Ty} (s : Stm Γ σ)
+        {P : A -> L} (Q :  Lit σ -> LocalStore Γ -> L) :
+        (forall x, δ ⊢ ⦃ P x ⦄ s ⦃ Q ⦄) ->
+        δ ⊢ ⦃ ∃ x, P x ⦄ s ⦃ Q ⦄
+    | rule_disj
+        {σ : Ty} {s : Stm Γ σ} {P Q : L} {R : Lit σ -> LocalStore Γ -> L} :
+        δ ⊢ ⦃ P ⦄ s ⦃ R ⦄ -> δ ⊢ ⦃ Q ⦄ s ⦃ R ⦄ ->
+        δ ⊢ ⦃ P ∨ Q ⦄ s ⦃ R ⦄
+    | rule_conj
+        {σ : Ty} {s : Stm Γ σ}
+        {P : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} :
+        δ ⊢ ⦃ P ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P ⦄ s ⦃ Q2 ⦄ ->
+        δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄
+    | rule_false
+        {σ : Ty} {s : Stm Γ σ}
+        {Q : Lit σ -> LocalStore Γ -> L} :
+        δ ⊢ ⦃ lfalse ⦄ s ⦃ Q ⦄
     | rule_stm_lit
         {τ : Ty} {l : Lit τ}
         {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
@@ -295,6 +313,49 @@ Module ProgramLogic
       δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> (forall v δ, Q v δ ⊢ Q' v δ) -> δ ⊢ ⦃ P ⦄ s ⦃ Q' ⦄.
     Proof.
       intros H hyp. exact (rule_consequence δ (entails_refl P) hyp H).
+    Qed.
+
+    Lemma rule_exist' {Γ : Ctx (𝑿 * Ty)} {δ : LocalStore Γ} {A : Type} {σ : Ty} (s : Stm Γ σ)
+          {P : A -> L} (Q :  A -> Lit σ -> LocalStore Γ -> L) :
+      (forall x, δ ⊢ ⦃ P x ⦄ s ⦃ Q x ⦄) ->
+      δ ⊢ ⦃ ∃ x, P x ⦄ s ⦃ fun v δ' => ∃ x, Q x v δ' ⦄.
+    Proof.
+      intros hyp.
+      apply rule_exist.
+      intros x.
+      eapply rule_consequence_right.
+      apply hyp.
+      intros.
+      apply lex_right with x.
+      apply entails_refl.
+    Qed.
+
+    Lemma rule_disj' {Γ : Ctx (𝑿 * Ty)} {δ : LocalStore Γ} {σ : Ty} {s : Stm Γ σ}
+          {P1 P2 : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} :
+        δ ⊢ ⦃ P1 ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P2 ⦄ s ⦃ Q2 ⦄ ->
+        δ ⊢ ⦃ P1 ∨ P2 ⦄ s ⦃ fun v δ' => Q1 v δ' ∨ Q2 v δ' ⦄.
+    Proof.
+      intros H1 H2.
+      apply rule_disj.
+      - eapply rule_consequence_right. apply H1.
+        intros. apply lor_right1, entails_refl.
+      - eapply rule_consequence_right. apply H2.
+        intros. apply lor_right2, entails_refl.
+    Qed.
+
+    Lemma rule_conj' {Γ : Ctx (𝑿 * Ty)} {δ : LocalStore Γ} {σ : Ty} {s : Stm Γ σ}
+          {P1 P2 : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} :
+        δ ⊢ ⦃ P1 ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P2 ⦄ s ⦃ Q2 ⦄ ->
+        δ ⊢ ⦃ P1 ∧ P2 ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄.
+    Proof.
+      intros H1 H2.
+      apply rule_conj.
+      - eapply rule_consequence.
+        apply land_left1. apply entails_refl.
+        intros. apply entails_refl. apply H1.
+      - eapply rule_consequence.
+        apply land_left2. apply entails_refl.
+        intros. apply entails_refl. apply H2.
     Qed.
 
   End Triples.

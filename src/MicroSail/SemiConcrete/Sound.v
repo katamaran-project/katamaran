@@ -112,11 +112,11 @@ Module Soundness
       intros hyp.
       induction o; cbn in *.
       - apply hyp.
+      - apply rule_exist', H.
       - admit.
-      - admit.
-      - admit.
-      - admit.
-      - admit.
+      - apply rule_disj'; auto.
+      - apply rule_conj'; auto.
+      - apply rule_false.
     Admitted.
 
     Lemma outcome_satisfy_natded_monotonic {A : Type} {o : Outcome A} {P Q : A -> L}
@@ -141,8 +141,8 @@ Module Soundness
           apply IHo1.
         + apply land_left2.
           apply IHo2.
-      - admit.
-    Admitted.
+      - apply entails_refl.
+    Qed.
 
     Opaque env_tail.
     Opaque extract_chunk_eqb.

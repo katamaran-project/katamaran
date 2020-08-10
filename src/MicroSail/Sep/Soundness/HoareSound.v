@@ -173,6 +173,17 @@ Module HoareSound
         intros. exists γl, γr'. auto.
       (* pull *)
       - sound_solve.
+      (* rule_exists *)
+      - sound_solve.
+      (* rule_disj *)
+      - destruct Hpre; sound_solve.
+      (* rule_conj *)
+      - remember (ResultOrFail s') as G.
+        sound_solve; subst.
+        destruct s'; cbn in *; try contradiction; auto.
+        admit.
+      (* rule_false *)
+      - sound_solve.
       (* rule_stm_lit *)
       - sound_solve.
       (* rule_stm_exp *)
@@ -260,7 +271,7 @@ Module HoareSound
       - sound_solve.
       (* rule_stm_bind *)
       - sound_solve.
-    Qed.
+    Admitted.
 
   End Soundness.
 
