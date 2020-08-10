@@ -1109,6 +1109,6 @@ Module MinCapsContracts.
   Proof.
     solve.
     admit.
-  Qed.
+  Admitted.
 
-End MinimalCapsContracts.
+End MinCapsContracts.
