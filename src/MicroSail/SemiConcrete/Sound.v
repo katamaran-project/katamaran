@@ -113,7 +113,7 @@ Module Soundness
       induction o; cbn in *.
       - apply hyp.
       - apply rule_exist', H.
-      - admit.
+      - apply rule_forall'; auto. admit.
       - apply rule_disj'; auto.
       - apply rule_conj'; auto.
       - apply rule_false.
@@ -228,7 +228,13 @@ Module Soundness
         cbn; intros.
         apply outcome_satisfy_natded_monotonic.
         intros [v2 [δ2 h2]].
-        admit.
+        apply land_right.
+        + apply land_left1.
+          apply entails_refl.
+        + apply land_left2.
+          apply lprop_left; intros.
+          apply lprop_right.
+          congruence.
 
       - (* stm_assign *)
         cbn in *; intros.
@@ -241,7 +247,17 @@ Module Soundness
         cbn; intros.
         apply outcome_satisfy_natded_monotonic.
         intros [v2 [δ2 h2]].
-        admit.
+        apply land_right.
+        + apply land_left1.
+          apply entails_refl.
+        + apply limpl_and_adjoint.
+          apply land_left2.
+          apply lprop_left; intros.
+          apply limpl_and_adjoint.
+          apply land_left2.
+          apply lprop_left; intros.
+          apply lprop_right.
+          congruence.
 
       - (* stm_call *)
         admit.
@@ -257,7 +273,11 @@ Module Soundness
         cbn; intros.
         apply outcome_satisfy_natded_monotonic.
         intros [v2 [δ2 h2]].
-        admit.
+        apply land_right.
+        + apply land_left1.
+          apply entails_refl.
+        + apply lprop_right.
+          reflexivity.
 
       - (* stm_call_external *)
         admit.
@@ -281,7 +301,13 @@ Module Soundness
           cbn; intros.
           apply outcome_satisfy_natded_monotonic.
           intros [v2 [δ2 h2]]; cbn.
-          admit.
+          apply land_right.
+          * apply land_left1.
+            apply land_left1.
+            apply entails_refl.
+          * apply land_left2.
+            apply entails_refl.
+
         + clear IHs1; cbn in *; intros.
           unfold scmut_bind.
           eapply rule_consequence_right.
@@ -308,17 +334,16 @@ Module Soundness
         apply limpl_and_adjoint.
         apply land_left2.
         rewrite H1; cbn.
-        admit.
+        repeat apply land_right.
+        + apply entails_refl.
+        + apply lprop_right; reflexivity.
+        + apply lprop_right; reflexivity.
 
       - (* stm_fail *)
         cbn; intros.
-        eapply rule_consequence.
-        3: { apply rule_stm_fail. }
-        admit.
-        cbn.
-        intros.
-        apply lall_right.
-        intros [].
+        eapply rule_consequence_left.
+        apply rule_stm_fail.
+        apply ltrue_right.
 
       - (* stm_match_list *)
         cbn in *; intros.
