@@ -121,23 +121,15 @@ Module ProgramLogic
         (Q -> δ ⊢ ⦃ P ⦄ s ⦃ R ⦄) ->
         δ ⊢ ⦃ P ∧ !!Q ⦄ s ⦃ R ⦄
     | rule_exist
-        {A : Type} {σ : Ty} (s : Stm Γ σ)
-        {P : A -> L} (Q :  Lit σ -> LocalStore Γ -> L) :
+        {σ} (s : Stm Γ σ) {A : Type} {P : A -> L}
+        {Q :  Lit σ -> LocalStore Γ -> L} :
         (forall x, δ ⊢ ⦃ P x ⦄ s ⦃ Q ⦄) ->
         δ ⊢ ⦃ ∃ x, P x ⦄ s ⦃ Q ⦄
-    | rule_disj
-        {σ : Ty} {s : Stm Γ σ} {P Q : L} {R : Lit σ -> LocalStore Γ -> L} :
-        δ ⊢ ⦃ P ⦄ s ⦃ R ⦄ -> δ ⊢ ⦃ Q ⦄ s ⦃ R ⦄ ->
-        δ ⊢ ⦃ P ∨ Q ⦄ s ⦃ R ⦄
-    | rule_conj
-        {σ : Ty} {s : Stm Γ σ}
-        {P : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} :
-        δ ⊢ ⦃ P ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P ⦄ s ⦃ Q2 ⦄ ->
-        δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄
-    | rule_false
-        {σ : Ty} {s : Stm Γ σ}
-        {Q : Lit σ -> LocalStore Γ -> L} :
-        δ ⊢ ⦃ lfalse ⦄ s ⦃ Q ⦄
+    | rule_forall
+        {σ} {s : Stm Γ σ} {A : Type} {P : L}
+        {Q : A -> Lit σ -> LocalStore Γ -> L}
+        (hyp : forall x, δ ⊢ ⦃ P ⦄ s ⦃ Q x ⦄) (x : A) :
+        δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => ∀ x, Q x v δ' ⦄
     | rule_stm_lit
         {τ : Ty} {l : Lit τ}
         {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
@@ -308,8 +300,16 @@ Module ProgramLogic
     where "δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" := (@Triple _ δ _ P s Q).
 
     Context {LLL : ILogicLaws L _}.
-    Lemma rule_consequence_right {Γ : Ctx (𝑿 * Ty)} {δ : LocalStore Γ} {σ : Ty}
-      {P : L} {Q Q' : Lit σ -> LocalStore Γ -> L} {s : Stm Γ σ} :
+    Lemma rule_consequence_left {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
+      (P1 : L) {P2 : L} {Q : Lit σ -> LocalStore Γ -> L} :
+      δ ⊢ ⦃ P1 ⦄ s ⦃ Q ⦄ -> P2 ⊢ P1 -> δ ⊢ ⦃ P2 ⦄ s ⦃ Q ⦄.
+    Proof.
+      intros H hyp. refine (rule_consequence δ hyp _ H).
+      intros; apply entails_refl.
+    Qed.
+
+    Lemma rule_consequence_right {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
+      {P : L} Q {Q'} :
       δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> (forall v δ, Q v δ ⊢ Q' v δ) -> δ ⊢ ⦃ P ⦄ s ⦃ Q' ⦄.
     Proof.
       intros H hyp. exact (rule_consequence δ (entails_refl P) hyp H).
@@ -330,7 +330,22 @@ Module ProgramLogic
       apply entails_refl.
     Qed.
 
-    Lemma rule_disj' {Γ : Ctx (𝑿 * Ty)} {δ : LocalStore Γ} {σ : Ty} {s : Stm Γ σ}
+    Lemma rule_disj {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
+        {P Q : L} {R : Lit σ -> LocalStore Γ -> L} :
+        δ ⊢ ⦃ P ⦄ s ⦃ R ⦄ -> δ ⊢ ⦃ Q ⦄ s ⦃ R ⦄ ->
+        δ ⊢ ⦃ P ∨ Q ⦄ s ⦃ R ⦄.
+    Proof.
+      intros H1 H2.
+      apply (rule_consequence_left (∃ b : bool, if b then P else Q)).
+      - apply rule_exist; intros []; assumption.
+      - apply lor_left.
+        + apply lex_right with true.
+          apply entails_refl.
+        + apply lex_right with false.
+          apply entails_refl.
+    Qed.
+
+    Lemma rule_disj' {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
           {P1 P2 : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} :
         δ ⊢ ⦃ P1 ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P2 ⦄ s ⦃ Q2 ⦄ ->
         δ ⊢ ⦃ P1 ∨ P2 ⦄ s ⦃ fun v δ' => Q1 v δ' ∨ Q2 v δ' ⦄.
@@ -343,10 +358,55 @@ Module ProgramLogic
         intros. apply lor_right2, entails_refl.
     Qed.
 
-    Lemma rule_conj' {Γ : Ctx (𝑿 * Ty)} {δ : LocalStore Γ} {σ : Ty} {s : Stm Γ σ}
-          {P1 P2 : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} :
-        δ ⊢ ⦃ P1 ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P2 ⦄ s ⦃ Q2 ⦄ ->
-        δ ⊢ ⦃ P1 ∧ P2 ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄.
+    Lemma rule_false {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
+      {Q : Lit σ -> LocalStore Γ -> L} :
+      δ ⊢ ⦃ lfalse ⦄ s ⦃ Q ⦄.
+    Proof.
+      apply (rule_consequence_left (∃ (x : Empty_set), ltrue)).
+      - apply rule_exist; intros [].
+      - apply lfalse_left.
+    Qed.
+
+    Lemma rule_forall' {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
+      {A : Type} {P : A -> L} {Q : A -> Lit σ -> LocalStore Γ -> L}
+      (hyp : forall x, δ ⊢ ⦃ P x ⦄ s ⦃ Q x ⦄) (x : A) :
+      δ ⊢ ⦃ ∀ x, P x ⦄ s ⦃ fun v δ' => ∀ x, Q x v δ' ⦄.
+    Proof.
+      apply rule_forall; [ intros | assumption ].
+      apply (rule_consequence_left (P x0 ∧ P x)).
+      - apply (rule_consequence_left (P x0)).
+        + apply hyp.
+        + apply land_left1.
+          apply entails_refl.
+      - apply land_right.
+        + apply lall_left with x0.
+          apply entails_refl.
+        + apply lall_left with x.
+          apply entails_refl.
+    Qed.
+
+    Lemma rule_conj {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
+      {P : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} :
+      δ ⊢ ⦃ P ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P ⦄ s ⦃ Q2 ⦄ ->
+      δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄.
+    Proof.
+      intros H1 H2.
+      apply (rule_consequence_right (fun v δ' => ∀ b : bool, if b then Q1 v δ' else Q2 v δ')).
+      - eapply rule_forall.
+        intros []; auto.
+        apply true.
+      - intros.
+        apply land_right.
+        + apply lall_left with true.
+          apply entails_refl.
+        + apply lall_left with false.
+          apply entails_refl.
+    Qed.
+
+    Lemma rule_conj' {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
+      {P1 P2 : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} :
+      δ ⊢ ⦃ P1 ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P2 ⦄ s ⦃ Q2 ⦄ ->
+      δ ⊢ ⦃ P1 ∧ P2 ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄.
     Proof.
       intros H1 H2.
       apply rule_conj.

@@ -105,9 +105,19 @@ Module Disjoint
   Create HintDb seplogic.
   Hint Unfold bientails.
 
-  Lemma split_eq : forall γ1 γ2 γl γr, split γ1 γl γr -> split γ2 γl γr -> γ1 = γ2.
+  Lemma split_eq {γ1 γ2 γl γr} :
+    split γ1 γl γr -> split γ2 γl γr -> γ1 = γ2.
   Proof.
-    intros γ1 γ2 γl γr H1 H2.
+    intros.
+    extensionality σ.
+    extensionality r.
+    heap_solve_split.
+  Qed.
+
+  Lemma split_eq_right {γ γl γr1 γr2} :
+    split γ γl γr1 -> split γ γl γr2 -> γr1 = γr2.
+  Proof.
+    intros.
     extensionality σ.
     extensionality r.
     heap_solve_split.

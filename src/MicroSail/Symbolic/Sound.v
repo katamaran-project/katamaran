@@ -198,7 +198,7 @@ Module Soundness
           unfold subst at 1.
           unfold inst_localstore, sub_localstore.
           rewrite env_map_map.
-          apply (rule_consequence_right H0); clear H0.
+          apply (rule_consequence_right _ H0); clear H0.
           intros.
           cbn beta.
           dependent elimination δ3.
@@ -228,7 +228,7 @@ Module Soundness
         rewrite !env_map_cat, !env_map_map, !env_map_id in H.
         unfold subst, sub_localstore.
         rewrite ?env_map_map.
-        apply (rule_consequence_right H); clear H.
+        apply (rule_consequence_right _ H); clear H.
         cbn; intros.
         repeat (apply land_right); sauto.
         + apply land_left1.
@@ -259,7 +259,7 @@ Module Soundness
         cbn in *.
         apply rule_stm_assign_backwards.
         specialize (H Σ3 ζ3 ι).
-        apply (rule_consequence_right H); clear H.
+        apply (rule_consequence_right _ H); clear H.
         cbn; intros.
         repeat (apply land_right); sauto.
         + apply land_left1.
@@ -317,7 +317,7 @@ Module Soundness
         unfold lift_localstore in H.
         rewrite !env_map_map in H. cbn in H.
         rewrite env_map_id in H.
-        apply (rule_consequence_right H); clear H.
+        apply (rule_consequence_right _ H); clear H.
         cbn; intros.
         repeat (apply land_right); sauto.
         + apply land_left1.
@@ -604,4 +604,3 @@ Module Soundness
   End Soundness.
 
 End Soundness.
-

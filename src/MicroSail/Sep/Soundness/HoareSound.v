@@ -175,15 +175,17 @@ Module HoareSound
       - sound_solve.
       (* rule_exists *)
       - sound_solve.
-      (* rule_disj *)
-      - destruct Hpre; sound_solve.
-      (* rule_conj *)
-      - remember (ResultOrFail s') as G.
-        sound_solve; subst.
+      (* rule_forall *)
+      - pose proof (H x).
+        microsail_insterU (eauto) H0.
+        destruct_conjs.
+        sound_inster.
         destruct s'; cbn in *; try contradiction; auto.
-        admit.
-      (* rule_false *)
-      - sound_solve.
+        intros.
+        pose proof (H x0).
+        microsail_insterU (eauto) H3.
+        destruct_conjs; cbn in *.
+        pose proof (split_eq_right H1 H4); subst; auto.
       (* rule_stm_lit *)
       - sound_solve.
       (* rule_stm_exp *)
@@ -271,7 +273,7 @@ Module HoareSound
       - sound_solve.
       (* rule_stm_bind *)
       - sound_solve.
-    Admitted.
+    Qed.
 
   End Soundness.
 

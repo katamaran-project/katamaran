@@ -44,6 +44,8 @@ Notation "⊤" := ltrue.
 Class ILogicLaws (L : Type) (LL : ILogic L) :=
 { entails_refl  : forall P, P ⊢ P;
   entails_trans : forall P Q R, P ⊢ Q -> Q ⊢ R -> P ⊢ R;
+  ltrue_right : forall P, P ⊢ ⊤;
+  lfalse_left : forall P, ⊥ ⊢ P;
   land_right :  forall X P Q, X ⊢ P -> X ⊢ Q -> X ⊢ P ∧ Q;
   land_left1 :  forall P Q R, P ⊢ R -> P ∧ Q ⊢ R;
   land_left2 :  forall P Q R, Q ⊢ R -> P ∧ Q ⊢ R;
