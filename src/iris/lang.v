@@ -241,21 +241,35 @@ Module IrisInstance
     rewrite /regs_inv.
     iExists (<[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap).
     iSplitL "Hownregs".
-    - iFrame.
+    - (* iFrame "Hownregs". *)
       (* huh, what's wrong here? *)
       admit.
     - iPureIntro.
-      apply (map_Forall_insert_2 ((λ (reg : SomeReg) (v0 : excl SomeLit),
+      apply (map_Forall_lookup_2 (λ (reg : SomeReg) (v0 : excl SomeLit),
        match reg with
        | @mkSomeReg τ0 reg0 => Excl (mkSomeLit (read_register (write_register regstore r v) reg0)) = v0
-       end)) regsmap (mkSomeReg r) (Excl (mkSomeLit v))).
-      + repeat f_equal.
-        eapply read_write.
-      + (* damn map_Forall_insert_2 not suited... *)
-
+       end)).
+      intros [τ' r'] x eq1.
+      destruct (𝑹𝑬𝑮_eq_dec r r') as [eq2|neq].
+      + dependent destruction eq2.
+        destruct eqi, eqf; cbn in *.
+        rewrite (lookup_insert regsmap (mkSomeReg r) (Excl (mkSomeLit v))) in eq1.
+        apply (inj Some) in eq1.
+        rewrite <- eq1.
+        by rewrite (read_write regstore r v).
+      + assert (mkSomeReg r ≠ mkSomeReg r') as neq2.
+        * intros eq2.
+          dependent destruction eq2.
+          destruct (neq (teq_refl r' eq_refl eq_refl)).
+        * rewrite (lookup_insert_ne regsmap (mkSomeReg r) (mkSomeReg r') (Excl (mkSomeLit v)) neq2) in eq1.
+          rewrite (read_write_distinct regstore neq v).
+          exact (map_Forall_lookup_1 (λ (r' : SomeReg) (v' : excl SomeLit),
+                match r' with
+                | @mkSomeReg τ r'' => Excl (mkSomeLit (read_register regstore r'')) = v'
+                end) regsmap (mkSomeReg r') x regseq eq1).
   Admitted.
 
-  Lemma gen_heap_update regstore {τ} r (v1 v2 : Lit τ) :
+  Lemma reg_update regstore {τ} r (v1 v2 : Lit τ) :
     regs_inv regstore -∗ reg_pointsTo r v1 ==∗ regs_inv (write_register regstore r v2) ∗ reg_pointsTo r v2.
   Proof.
     iDestruct 1 as (regsmap) "[Hregs %]".
@@ -275,12 +289,14 @@ Module IrisInstance
     }
     iModIntro.
     iFrame.
-    
+    iApply (regs_inv_update H0); iFrame.
+  Qed.
 
   Lemma rule_stm_read_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) {Γ} {δ : LocalStore Γ} :
     ⊢ (reg_pointsTo r v -∗
                     WP (VT.MkTm δ (stm_read_register r)) {{ w, reg_pointsTo r v ∗ bi_pure (VT.val_to_lit w = v) }}
       )%I.
+  Proof.
     iIntros "Hreg".
     iApply (wp_mask_mono _ empty); auto.
     rewrite wp_unfold; cbn.
@@ -308,5 +324,21 @@ Module IrisInstance
     )%I.
   Proof.
     iIntros "Hreg".
-  Admitted.
+    iApply (wp_mask_mono _ empty); auto.
+    rewrite wp_unfold; cbn.
+    iIntros (σ _ _ n) "Hregs".
+    iMod (reg_update σ.1 r v1 v2 with "Hregs Hreg") as "[Hregs Hreg]".
+    iModIntro.
+    iSplitR.
+    - iPureIntro.
+      destruct σ as [regs heap].
+      exists nil. repeat eexists.
+      apply step_stm_write_register.
+    - iIntros (e2 σ2 efs) "%".
+      dependent destruction a.
+      destruct (steps_inversion_write_register H0) as [-> [<- [<- ->]]].
+      iModIntro. iModIntro. iModIntro.
+      iFrame. iSplitR ""; auto.
+      by iApply wp_value.
+  Qed.
 End IrisInstance.

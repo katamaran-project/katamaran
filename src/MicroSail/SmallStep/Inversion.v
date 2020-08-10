@@ -180,6 +180,16 @@ Module Inversion
     dependent elimination step; intuition.
   Qed.
 
+  Lemma steps_inversion_write_register {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
+    {δ1 δ3 : LocalStore Γ}
+    {r} {t : Stm Γ σ} {v}
+    (step : ⟨ γ1, μ1, δ1, stm_write_register r (exp_lit Γ σ v) ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
+    γ3 = write_register γ1 r v /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_lit σ v.
+  Proof.
+    dependent elimination step; intuition.
+  Qed.
+
+
   Local Ltac steps_inversion_simpl :=
     repeat
       match goal with
