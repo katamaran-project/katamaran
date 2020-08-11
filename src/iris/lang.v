@@ -231,43 +231,33 @@ Module IrisInstance
     by dependent destruction H0.
   Qed.
 
-  Lemma regs_inv_update `{inG Σ (authR (gmapUR SomeReg (exclR (leibnizO SomeLit))))} {τ} {r} {v : Lit τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeLit))} {regstore : RegStore} :
+  Lemma regs_inv_update {τ} {r} {v : Lit τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeLit))} {regstore : RegStore} :
     map_Forall (λ r' v', match r' with
                          | @mkSomeReg τ r'' => Excl (mkSomeLit (read_register regstore r'')) = v'
                          end) regsmap ->
-    (own reg_gv_name (● <[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap)) -∗ regs_inv (write_register regstore r v).
+    (own (i := reg_inG) reg_gv_name (● <[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap)) -∗ regs_inv (write_register regstore r v).
   Proof.
     iIntros (regseq) "Hownregs".
     rewrite /regs_inv.
     iExists (<[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap).
-    iSplitL "Hownregs".
-    - (* iFrame "Hownregs". *)
-      (* huh, what's wrong here? *)
-      admit.
-    - iPureIntro.
-      apply (map_Forall_lookup_2 (λ (reg : SomeReg) (v0 : excl SomeLit),
-       match reg with
-       | @mkSomeReg τ0 reg0 => Excl (mkSomeLit (read_register (write_register regstore r v) reg0)) = v0
-       end)).
-      intros [τ' r'] x eq1.
-      destruct (𝑹𝑬𝑮_eq_dec r r') as [eq2|neq].
-      + dependent destruction eq2.
-        destruct eqi, eqf; cbn in *.
-        rewrite (lookup_insert regsmap (mkSomeReg r) (Excl (mkSomeLit v))) in eq1.
-        apply (inj Some) in eq1.
-        rewrite <- eq1.
-        by rewrite (read_write regstore r v).
-      + assert (mkSomeReg r ≠ mkSomeReg r') as neq2.
-        * intros eq2.
-          dependent destruction eq2.
-          destruct (neq (teq_refl r' eq_refl eq_refl)).
-        * rewrite (lookup_insert_ne regsmap (mkSomeReg r) (mkSomeReg r') (Excl (mkSomeLit v)) neq2) in eq1.
-          rewrite (read_write_distinct regstore neq v).
-          exact (map_Forall_lookup_1 (λ (r' : SomeReg) (v' : excl SomeLit),
-                match r' with
-                | @mkSomeReg τ r'' => Excl (mkSomeLit (read_register regstore r'')) = v'
-                end) regsmap (mkSomeReg r') x regseq eq1).
-  Admitted.
+    iFrame.
+    iPureIntro.
+    apply (map_Forall_lookup_2 _ (<[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap)).
+    intros [τ' r'] x eq1.
+    destruct (𝑹𝑬𝑮_eq_dec r r') as [eq2|neq].
+    + dependent destruction eq2.
+      destruct eqi, eqf; cbn in *.
+      rewrite (lookup_insert regsmap (mkSomeReg r) (Excl (mkSomeLit v))) in eq1.
+      apply (inj Some) in eq1.
+      by rewrite <- eq1, (read_write regstore r v).
+    + assert (mkSomeReg r ≠ mkSomeReg r') as neq2.
+      * intros eq2.
+        dependent destruction eq2.
+        destruct (neq (teq_refl r' eq_refl eq_refl)).
+      * rewrite (lookup_insert_ne _ _ _ _ neq2) in eq1.
+        rewrite (read_write_distinct _ neq).
+        apply (map_Forall_lookup_1 _ _ _ _ regseq eq1).
+  Qed.
 
   Lemma reg_update regstore {τ} r (v1 v2 : Lit τ) :
     regs_inv regstore -∗ reg_pointsTo r v1 ==∗ regs_inv (write_register regstore r v2) ∗ reg_pointsTo r v2.
