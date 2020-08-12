@@ -1,6 +1,7 @@
 From MicroSail Require Import
      Notation
      Syntax
+     Environment
      Context
      SmallStep.Step
      SmallStep.Inversion
@@ -15,6 +16,11 @@ From iris.algebra Require Export gmap excl auth.
 From iris.base_logic Require Export lib.fancy_updates.
 From iris.program_logic Require Export weakestpre.
 From iris.proofmode Require Import tactics.
+
+Require Import MicroSail.Sep.Spec.
+(* can't import: overlapping notations *)
+Require MicroSail.Sep.Logic.
+Module logic := MicroSail.Sep.Logic.
 
 Set Implicit Arguments.
 
@@ -74,7 +80,11 @@ End ValsAndTerms.
 Module IrisInstance
        (Import typekit : TypeKit)
        (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit).
+       (Import progkit : ProgramKit typekit termkit)
+       (Import assertkit : AssertionKit typekit termkit progkit)
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
+       (Import heapkit : logic.HeapKit typekit termkit progkit assertkit contractkit).
+
 
   Import CtxNotations.
   Import EnvNotations.
@@ -204,12 +214,105 @@ Module IrisInstance
 
   Context `{sailG Σ}.
 
-  (* Definition test : iProp Σ := WP (VT.MkTm env_nil (stm_lit ty_bool true)) {{ v, True }}%I. *)
+  Instance iris_ILogic : logic.ILogic (iProp Σ) :=
+  { land := bi_and;
+    lor  := bi_or;
+    (* existential quantification *)
+    lex := fun _ => bi_exist;
+    (* universal quantification *)
+    lall := fun _ => bi_forall;
+    limpl := bi_impl;
 
-  (* Lemma testHolds : ⊢ test. *)
-  (*   by iApply wp_value. *)
-  (* Qed. *)
-  Set Equations With UIP.
+    (* Prop embedding *)
+    lprop := bi_pure;
+    (* P ⊢ Q *)
+    lentails := bi_entails;
+
+    ltrue := True%I;
+    lfalse := False%I
+  }.
+
+  Program Instance HProp_ILogicLaws : @logic.ILogicLaws (iProp Σ) iris_ILogic.
+  Next Obligation.
+    iIntros; iFrame.
+  Qed.
+  Next Obligation.
+    eapply (PreOrder_Transitive (R := bi_entails)); eauto.
+  Qed.
+  Next Obligation.
+    iIntros. iPureIntro; auto.
+  Qed.
+  Next Obligation.
+    iIntros (P f).
+    destruct f.
+  Qed.
+  Next Obligation.
+    iIntros (X P Q XP XQ).
+    apply bi.and_intro; auto.
+  Qed.
+  Next Obligation.
+    iIntros (P Q R PR) "PQ".
+    iApply PR.
+    iApply bi.and_elim_l.
+    iFrame.
+  Qed.
+  Next Obligation.
+    iIntros (P Q R QR) "PQ".
+    iApply QR.
+    iApply bi.and_elim_r.
+    iFrame.
+  Qed.
+  Next Obligation.
+    iIntros (P Q R PR QR) "PQ".
+    iApply bi.or_elim.
+    - iApply PR.
+    - iApply QR.
+    - iFrame.
+  Qed.
+  Next Obligation.
+    iIntros (P Q R PQ) "P".
+    iApply bi.or_intro_l.
+    iApply PQ; iFrame.
+  Qed.
+  Next Obligation.
+    iIntros (P Q R PR) "P".
+    iApply bi.or_intro_r.
+    iApply PR; iFrame.
+  Qed.
+  Next Obligation.
+    iIntros (B x P Q PQ) "P".
+    iExists x.
+    iApply (PQ with "P").
+  Qed.
+  Next Obligation.
+    iIntros (B P Q M).
+    apply bi.exist_elim.
+    iIntros (a) "Pa".
+    iApply (M a); iFrame.
+  Qed.
+  Next Obligation.
+    iIntros (B P x Q PxQ) "AP".
+    iApply PxQ.
+    iApply bi.forall_elim; iFrame.
+  Qed.
+  Next Obligation.
+    iIntros (B P Q APQ).
+    apply bi.forall_intro; auto.
+  Qed.
+  Next Obligation.
+    intros P Q R.
+    split.
+    - apply bi.impl_intro_r.
+    - apply bi.impl_elim_l'.
+  Qed.
+  Next Obligation.
+    iIntros (P Q PTQ) "%".
+    by iApply PTQ.
+  Qed.
+  Next Obligation.
+    iIntros (P Q p) "Q".
+    by iPureIntro.
+  Qed.
 
   Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) :
     ⊢ (regs_inv regstore -∗ reg_pointsTo r v -∗ ⌜read_register regstore r = v⌝)%I.
