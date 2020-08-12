@@ -352,6 +352,13 @@ Module IrisInstance
     - by iApply QQ.
   Qed.
 
+  Instance iris_IHeapLet : IHeaplet (iProp Σ) :=
+    { is_ISepLogic := iris_ISepLogic;
+      (* TODO: should be user-defined... *)
+      pred p ts := False%I;
+      ptsreg σ r t := reg_pointsTo r t
+    }.
+
   Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) :
     ⊢ (regs_inv regstore -∗ reg_pointsTo r v -∗ ⌜read_register regstore r = v⌝)%I.
   Proof.
@@ -471,4 +478,5 @@ Module IrisInstance
       iFrame. iSplitR; auto.
       by iApply wp_value.
   Qed.
+
 End IrisInstance.
