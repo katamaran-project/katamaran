@@ -232,7 +232,7 @@ Module IrisInstance
     lfalse := False%I
   }.
 
-  Program Instance HProp_ILogicLaws : @logic.ILogicLaws (iProp Σ) iris_ILogic.
+  Program Instance iProp_ILogicLaws : @logic.ILogicLaws (iProp Σ) iris_ILogic.
   Next Obligation.
     iIntros; iFrame.
   Qed.
@@ -312,6 +312,44 @@ Module IrisInstance
   Next Obligation.
     iIntros (P Q p) "Q".
     by iPureIntro.
+  Qed.
+
+  Program Instance iris_ISepLogic : logic.ISepLogic (iProp Σ) :=
+  { logic.emp := emp%I;
+    logic.sepcon P Q := (P ∗ Q)%I;
+    logic.wand P Q := (P -∗ Q)%I
+  }.
+
+  Program Instance iProp_ISepLogicLaws : @logic.ISepLogicLaws (iProp Σ) iris_ISepLogic.
+  Next Obligation.
+    intros P Q R. split.
+    - eapply bi.sep_assoc'.
+    - cbn. rewrite bi.sep_assoc.
+      iIntros "PQR"; iAssumption.
+  Qed.
+  Next Obligation.
+    intros P Q. split; eapply bi.sep_comm'.
+  Qed.
+  Next Obligation.
+    intros P Q R. split.
+    - eapply bi.wand_intro_r.
+    - eapply bi.wand_elim_l'.
+  Qed.
+  Next Obligation.
+    intros P R Q. split.
+    - iIntros "[P [% R]]".
+      iSplit.
+      + by iPureIntro.
+      + iFrame.
+    - iIntros "[% [P R]]".
+      iSplitL "P"; iFrame.
+      by iPureIntro.
+  Qed.
+  Next Obligation.
+    iIntros (P P' Q Q' PP QQ) "[P Q]".
+    iSplitL "P".
+    - by iApply PP.
+    - by iApply QQ.
   Qed.
 
   Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) :
