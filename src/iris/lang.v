@@ -12,8 +12,7 @@ From Equations Require Import Equations Signature.
 
 From iris.bi Require Export interface.
 From iris.algebra Require Export gmap excl auth.
-From iris.base_logic Require Export gen_heap lib.fancy_updates lib.fancy_updates_from_vs lib.invariants.
-From iris.program_logic Require Export language ectx_language ectxi_language.
+From iris.base_logic Require Export lib.fancy_updates.
 From iris.program_logic Require Export weakestpre.
 From iris.proofmode Require Import tactics.
 
@@ -328,7 +327,7 @@ Module IrisInstance
       dependent destruction a.
       destruct (steps_inversion_write_register H0) as [-> [<- [<- ->]]].
       iModIntro. iModIntro. iModIntro.
-      iFrame. iSplitR ""; auto.
+      iFrame. iSplitR; auto.
       by iApply wp_value.
   Qed.
 End IrisInstance.
