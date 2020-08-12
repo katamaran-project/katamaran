@@ -18,6 +18,7 @@ From iris.program_logic Require Export weakestpre.
 From iris.proofmode Require Import tactics.
 
 Require Import MicroSail.Sep.Spec.
+Require Import MicroSail.Sep.Hoare.
 (* can't import: overlapping notations *)
 Require MicroSail.Sep.Logic.
 Module logic := MicroSail.Sep.Logic.
@@ -29,24 +30,24 @@ Module ValsAndTerms
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit).
 
-  Inductive Tm σ : Type :=
-  | MkTm {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) (s : Stm Γ σ) : Tm σ.
+  Inductive Tm (Γ : Ctx (𝑿 * Ty)) τ : Type :=
+  | MkTm (δ : LocalStore Γ) (s : Stm Γ τ) : Tm Γ τ.
 
   (* remainng obligations? *)
   (* Derive NoConfusion for Tm. *)
 
-  Inductive Val σ : Type :=
+  Inductive Val (Γ : Ctx (𝑿 * Ty)) τ : Type :=
     (* we only keep the store around for technical reasons, essentially to be able to prove of_to_val. *)
-  | MkVal {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) (v : Lit σ) : Val σ.
+  | MkVal (δ : LocalStore Γ) (v : Lit τ) : Val Γ τ.
 
-  Definition val_to_lit {σ} : Val σ -> Lit σ := fun v => match v with | MkVal _ _ v' => v' end.
+  Definition val_to_lit {Γ} {τ} : Val Γ τ -> Lit τ := fun v => match v with | MkVal _ _ v' => v' end.
 
-  Definition of_val {σ} (v : Val σ) : Tm σ :=
+  Definition of_val {Γ} {τ} (v : Val Γ τ) : Tm Γ τ :=
     match v with
       MkVal _ δ v => MkTm δ (stm_lit _ v)
     end.
 
-  Definition to_val {σ} (t : Tm σ) : option (Val σ) :=
+  Definition to_val {Γ} {τ} (t : Tm Γ τ) : option (Val Γ τ) :=
     (* easier way to do the dependent pattern match here? *)
     match t with
     | MkTm δ s => match s with
@@ -55,12 +56,12 @@ Module ValsAndTerms
                  end
     end.
 
-  Lemma to_of_val {σ} (v : Val σ) : to_val (of_val v) = Some v.
+  Lemma to_of_val {Γ} {τ} (v : Val Γ τ) : to_val (of_val v) = Some v.
   Proof.
     by induction v.
   Qed.
 
-  Lemma of_to_val {σ} (e : Tm σ) v : to_val e = Some v → of_val v = e.
+  Lemma of_to_val {Γ} {τ} (e : Tm Γ τ) v : to_val e = Some v → of_val v = e.
   Proof.
     induction e.
     induction s; try done.
@@ -71,7 +72,7 @@ Module ValsAndTerms
   Export Inv.
   Export SS.
 
-  Lemma val_head_stuck_step {σ} {Γ : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) δ2 (s1 : Stm Γ σ) s2 :
+  Lemma val_head_stuck_step {τ} {Γ : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) δ2 (s1 : Stm Γ τ) s2 :
     Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 -> to_val (MkTm δ1 s1) = None.
     by induction 1.
   Qed.
@@ -89,48 +90,48 @@ Module IrisInstance
   Import CtxNotations.
   Import EnvNotations.
 
-  Definition σt : Ty := ty_bool.
-
   Module VT := ValsAndTerms typekit termkit progkit.
   Import VT.
 
-  Definition Val := VT.Val σt.
-  Definition Tm := VT.Tm σt.
+  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
+  Import PL.
+
+  Definition Val := VT.Val.
+  Definition Tm := VT.Tm.
 
   Definition observation := Empty_set.
 
   Definition State := prod RegStore Memory.
 
-  Inductive prim_step : Tm -> State -> Tm -> State -> list (VT.Tm σt) -> Prop :=
-  | mk_prim_step {Γ  : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) (δ2 : LocalStore Γ) s1 s2 :
+  Inductive prim_step {Γ τ} : Tm Γ τ -> State -> Tm Γ τ -> State -> list (VT.Tm Γ τ) -> Prop :=
+  | mk_prim_step γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) (δ2 : LocalStore Γ) s1 s2 :
       SS.Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 ->
       prim_step (VT.MkTm δ1 s1) (γ1 , μ1) (VT.MkTm δ2 s2) (γ2 , μ2) nil
   .
 
-  Lemma val_head_stuck e1 s1 e2 s2 (ks : list (VT.Tm σt)) : prim_step e1 s1 e2 s2 ks → VT.to_val e1 = None.
+  Lemma val_head_stuck {Γ τ} (e1 : Tm Γ τ) s1 e2 s2 {ks} : prim_step e1 s1 e2 s2 ks → VT.to_val e1 = None.
   Proof.
     induction 1.
     by eapply VT.val_head_stuck_step.
   Qed.
 
-  Lemma microsail_lang_mixin : @LanguageMixin (VT.Tm σt) (VT.Val σt) State Empty_set VT.of_val VT.to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2 ks).
+  Lemma microsail_lang_mixin Γ τ : @LanguageMixin (VT.Tm Γ τ) (VT.Val Γ τ) State Empty_set VT.of_val VT.to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2 ks).
   Proof.
     split.
     - eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
     - eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
     - eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
-
   Qed.
 
   Canonical Structure stateO := leibnizO State.
-  Canonical Structure valO := leibnizO Val.
-  Canonical Structure exprO := leibnizO Tm.
+  Canonical Structure valO {Γ τ} := leibnizO (Val Γ τ).
+  Canonical Structure exprO {Γ τ} := leibnizO (Tm Γ τ).
 
-  Canonical Structure microsail_lang : language := Language microsail_lang_mixin.
+  Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-  Instance intoVal_lit {Γ} : IntoVal (VT.MkTm (Γ := Γ) δ (stm_lit _ l)) (VT.MkVal _ δ l).
+  Instance intoVal_lit {Γ τ} : IntoVal (VT.MkTm (Γ := Γ) (τ := τ) δ (stm_lit _ l)) (VT.MkVal _ δ l).
   intros; eapply VT.of_to_val; by cbn.
-  Qed.
+  Defined.
 
   Inductive SomeReg : Type :=
   | mkSomeReg {τ} : 𝑹𝑬𝑮 τ -> SomeReg
@@ -148,7 +149,7 @@ Module IrisInstance
 
   Instance eqDec_SomeReg : EqDecision SomeReg.
   Proof.
-    - intros [σ r1] [τ r2].
+    - intros [τ1 r1] [τ2 r2].
       destruct (𝑹𝑬𝑮_eq_dec r1 r2).
       + left.
         dependent elimination t.
@@ -167,8 +168,8 @@ Module IrisInstance
 
   Instance eqDec_SomeLit : EqDecision SomeLit.
   Proof.
-    intros [σ v1] [τ v2].
-    destruct (Ty_eq_dec σ τ).
+    intros [τ1 v1] [τ2 v2].
+    destruct (Ty_eq_dec τ1 τ2).
     - subst.
       destruct (Lit_eqb_spec _ v1 v2).
       + left. congruence.
@@ -205,7 +206,7 @@ Module IrisInstance
         (* sigh why can't I use ⌈ ... ⌉ notation? *)
     )%I.
 
-  Instance sailG_irisG `{sailG Σ} : irisG microsail_lang Σ := {
+  Instance sailG_irisG {Γ τ} `{sailG Σ} : irisG (microsail_lang Γ τ) Σ := {
     iris_invG := sailG_invG;
     state_interp σ κs _ := regs_inv σ.1;
     fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
@@ -429,7 +430,7 @@ Module IrisInstance
     iApply (regs_inv_update H0); iFrame.
   Qed.
 
-  Lemma rule_stm_read_register (r : 𝑹𝑬𝑮 σt) (v : Lit σt) {Γ} {δ : LocalStore Γ} :
+  Lemma rule_stm_read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) {δ : LocalStore Γ} :
     ⊢ (reg_pointsTo r v -∗
                     WP (VT.MkTm δ (stm_read_register r)) {{ w, reg_pointsTo r v ∗ bi_pure (VT.val_to_lit w = v) }}
       )%I.
@@ -447,7 +448,7 @@ Module IrisInstance
       apply step_stm_read_register.
     - iIntros (e2 σ2 efs) "%".
       remember (VT.MkTm δ (stm_read_register r)) as t.
-      destruct a as [Γ2 γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
+      destruct a as [γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
       dependent destruction Heqt.
       destruct (steps_inversion_read_register step) as [<- [<- [<- ->]]].
       iModIntro. iModIntro. iModIntro.
@@ -455,9 +456,9 @@ Module IrisInstance
       by iApply wp_value.
   Qed.
 
-  Lemma rule_stm_write_register (r : 𝑹𝑬𝑮 σt) (v1 v2 : Lit σt) :
+  Lemma rule_stm_write_register {Γ} {τ} (r : 𝑹𝑬𝑮 τ) (δ : LocalStore Γ) (v1 v2 : Lit τ) :
     ⊢ (reg_pointsTo r v1 -∗
-                  WP (VT.MkTm env_nil (stm_write_register r (exp_lit ctx_nil σt v2)) : expr microsail_lang) {{ w, reg_pointsTo r v2 ∗ bi_pure (v2 = VT.val_to_lit w) }}
+                  WP (VT.MkTm δ (stm_write_register r (exp_lit _ _ v2)) : expr (microsail_lang Γ τ)) {{ w, reg_pointsTo r v2 ∗ bi_pure (v2 = VT.val_to_lit w) }}
     )%I.
   Proof.
     iIntros "Hreg".
@@ -478,5 +479,26 @@ Module IrisInstance
       iFrame. iSplitR; auto.
       by iApply wp_value.
   Qed.
+
+  Definition semTriple {Γ τ} (δ : LocalStore Γ)
+             (PRE : iProp Σ) (s : Stm Γ τ) (POST : Lit τ -> LocalStore Γ -> iProp Σ) :=
+    ⊢ PRE -∗ WP (MkTm δ s : expr (microsail_lang Γ τ)) {{ v, match v with MkVal _ δ' v => POST v δ' end }}.
+  (* always modality needed? perhaps not because sail not higher-order? *)
+
+  Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
+    forall (PRE : iProp Σ) (POST : Lit τ -> LocalStore Γ -> iProp Σ)
+      (triple : δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄),
+      semTriple δ PRE s POST.
+  Proof.
+    intros PRE POST triple.
+    induction triple.
+    - iIntros "P".
+      cbn in H0, H1.
+      iApply (wp_mono _ _ _ (fun v => match v with MkVal _ δ' v => Q' v δ' end)).
+      + intros [δ' v]; cbn.
+        apply H1.
+      + iApply IHtriple.
+        iApply H0; iFrame.
+    - 
 
 End IrisInstance.
