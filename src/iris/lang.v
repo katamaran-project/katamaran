@@ -5,6 +5,7 @@ From MicroSail Require Import
      Context
      SmallStep.Step
      SmallStep.Inversion
+     SmallStep.Progress
      .
 
 Require Import Coq.Program.Equality.
@@ -14,7 +15,7 @@ From Equations Require Import Equations Signature.
 From iris.bi Require Export interface.
 From iris.algebra Require Export gmap excl auth.
 From iris.base_logic Require Export lib.fancy_updates.
-From iris.program_logic Require Export weakestpre.
+From iris.program_logic Require Export weakestpre hoare.
 From iris.proofmode Require Import tactics.
 
 Require Import MicroSail.Sep.Spec.
@@ -98,6 +99,8 @@ Module IrisInstance
 
   Definition Val := VT.Val.
   Definition Tm := VT.Tm.
+
+  Module Prog := Progress typekit termkit progkit.
 
   Definition observation := Empty_set.
 
@@ -485,6 +488,304 @@ Module IrisInstance
     ⊢ PRE -∗ WP (MkTm δ s : expr (microsail_lang Γ τ)) {{ v, match v with MkVal _ δ' v => POST v δ' end }}.
   (* always modality needed? perhaps not because sail not higher-order? *)
 
+  Lemma iris_rule_consequence {Γ σ} {δ : LocalStore Γ}
+        {P P'} {Q Q' : Lit σ -> LocalStore Γ -> iProp Σ} {s : Stm Γ σ} :
+        (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') -> semTriple δ P' s Q' -> semTriple δ P s Q.
+  Proof.
+    iIntros (PP QQ trip) "P".
+    iApply (wp_mono _ _ _ (fun v => match v with MkVal _ δ' v => Q' v δ' end)).
+    + intros [δ' v]; cbn.
+      apply QQ.
+    + iApply trip.
+      iApply PP; iFrame.
+  Qed.
+
+  Lemma iris_rule_frame {Γ σ} {δ : LocalStore Γ}
+        (R P : iProp Σ) (Q : Lit σ -> LocalStore Γ -> iProp Σ) (s : Stm Γ σ) :
+        semTriple δ P s Q -> semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ')%I.
+  Proof.
+    iIntros (trip) "[HR HP]".
+    iApply (wp_mono _ _ _ (fun v => R ∗ match v with MkVal _ δ' v => Q v δ' end)%I).
+    - iIntros (v) "[R Q]".
+      destruct v.
+      by iFrame.
+    - iApply (wp_frame_l _ _ (MkTm δ s) (fun v => match v with MkVal _ δ' v => Q v δ' end) R).
+      iFrame.
+      by iApply trip.
+  Qed.
+
+  Lemma iris_rule_pull {σ Γ} (δ : LocalStore Γ) (s : Stm Γ σ)
+        (P : iProp Σ) (Q : Prop) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
+        (Q -> semTriple δ P s R) ->
+        semTriple δ (P ∧ bi_pure Q)%I s R.
+  Proof.
+    iIntros (QP) "[P %]".
+    by iApply QP.
+  Qed.
+
+  Lemma iris_rule_exist {σ Γ} (δ : LocalStore Γ)
+        (s : Stm Γ σ) {A : Type} {P : A -> iProp Σ}
+        {Q :  Lit σ -> LocalStore Γ -> iProp Σ} :
+        (forall x, semTriple δ (P x) s Q) ->
+        semTriple δ (∃ x, P x) s Q.
+  Proof.
+    iIntros (Atrip) "Px".
+    iDestruct "Px" as (x) "Px".
+    by iApply Atrip.
+  Qed.
+
+  (* following rule is dubious, re discussion about conjunction rule *)
+  Lemma iris_rule_forall {σ Γ} (δ : LocalStore Γ)
+        {s : Stm Γ σ} {A : Type} {P : iProp Σ}
+        {Q : A -> Lit σ -> LocalStore Γ -> iProp Σ}
+        (hyp : forall x, semTriple δ P s (Q x)) (x : A) :
+        semTriple δ P s (fun v δ' => ∀ x, Q x v δ')%I.
+  Proof.
+  Admitted.
+
+  Lemma iris_rule_stm_lit {Γ} (δ : LocalStore Γ)
+        {τ : Ty} {l : Lit τ}
+        {P : iProp Σ} {Q : Lit τ -> LocalStore Γ -> iProp Σ} :
+        (P ⊢ Q l δ)%I ->
+        semTriple δ P (stm_lit τ l) Q.
+  Proof.
+    iIntros (PQ) "P".
+    iApply wp_value.
+    by iApply PQ.
+  Qed.
+
+  Lemma iris_rule_stm_exp {Γ} (δ : LocalStore Γ)
+        {τ : Ty} {e : Exp Γ τ}
+        {P : iProp Σ} {Q : Lit τ -> LocalStore Γ -> iProp Σ} :
+        (P ⊢ Q (eval e δ) δ)%I ->
+        semTriple δ P (stm_exp e) Q.
+  Proof.
+    iIntros (PQ) "P".
+    iApply (wp_mask_mono _ empty); auto.
+    rewrite wp_unfold.
+    iIntros ([regs μ] ks1 ks n) "Hregs".
+    iModIntro.
+    iSplitR.
+    - iPureIntro.
+      exists []. eexists. eexists. exists [].
+      eapply mk_prim_step.
+      eapply step_stm_exp.
+    - iIntros (e2 σ2 efs) "%".
+      remember (MkTm δ (stm_exp e)) as t.
+      destruct a.
+      inversion Heqt.
+      dependent destruction H0; inversion H3.
+      iModIntro. iModIntro. iModIntro.
+      rewrite H2.
+      dependent destruction H1.
+      iFrame.
+      iSplitL; trivial.
+      iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ (stm_lit σ (eval e δ)))).
+      by iApply PQ.
+  Qed.
+
+  Lemma iris_rule_stm_let {Γ} (δ : LocalStore Γ)
+        (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
+        (P : iProp Σ) (Q : Lit σ -> LocalStore Γ -> iProp Σ)
+        (R : Lit τ -> LocalStore Γ -> iProp Σ) :
+        semTriple δ P s Q ->
+        (forall (v : Lit σ) (δ' : LocalStore Γ),
+            semTriple (env_snoc δ' (x,σ) v) (Q v δ') k (fun v δ'' => R v (env_tail δ'')) ) ->
+        semTriple δ P (let: x := s in k) R.
+  Proof.
+    iIntros (trips tripk) "P".
+    iApply (wp_mask_mono _ empty); auto.
+    rewrite wp_unfold.
+    iIntros ([regs μ] ks1 ks n) "Hregs".
+    iModIntro.
+    iSplitR.
+    - iPureIntro.
+      exists []. eexists. eexists. exists [].
+      eapply mk_prim_step.
+      destruct (Prog.progress (stm_let x σ s k)) as [[]|step].
+      destruct (step regs μ δ) as [regs' [μ' [δ'0 [s' step']]]].
+      admit.
+      (* exact step'. *)
+    - (* iIntros (e2 σ2 efs) "%". *)
+      (* remember (MkTm δ (stm_exp e)) as t. *)
+      (* destruct a. *)
+      (* inversion Heqt. *)
+      (* dependent destruction H0; inversion H3. *)
+      (* iModIntro. iModIntro. iModIntro. *)
+      (* rewrite H2. *)
+      (* dependent destruction H1. *)
+      (* iFrame. *)
+      (* iSplitL; trivial. *)
+      (* iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ (stm_lit σ (eval e δ)))). *)
+      (* by iApply PQ. *)
+  Admitted.
+
+  Lemma iris_rule_stm_let_forwards {Γ} (δ : LocalStore Γ)
+        (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
+        (P : iProp Σ) (Q : Lit σ -> LocalStore Γ -> iProp Σ)
+        (R : Lit τ -> LocalStore (Γ ▻ (x,σ)) -> iProp Σ) :
+        δ         ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
+        (forall (v : Lit σ) (δ' : LocalStore Γ),
+            semTriple (env_snoc δ' (x,σ) v) (Q v δ') k R ) ->
+        semTriple δ P (let: x := s in k) (fun v δ' => ∃ v__let, R v (env_snoc δ' (x,σ) v__let))%I.
+  Admitted.
+
+  Lemma iris_rule_stm_block {Γ} (δ : LocalStore Γ)
+        (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ)
+        (τ : Ty) (k : Stm (ctx_cat Γ Δ) τ)
+        (P : iProp Σ) (R : Lit τ -> LocalStore Γ -> iProp Σ) :
+        (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env_drop Δ δ''))) ->
+        semTriple δ P (stm_block δΔ k) R.
+  Admitted.
+
+  Lemma iris_rule_stm_if {Γ} (δ : LocalStore Γ)
+        (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
+        (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        semTriple δ (P ∧ bi_pure (eval e δ = true)) s1 Q ->
+        semTriple δ (P ∧ bi_pure (eval e δ = false)) s2 Q ->
+        semTriple δ P (stm_if e s1 s2) Q.
+  Admitted.
+  Lemma iris_rule_stm_if_backwards {Γ} (δ : LocalStore Γ)
+        (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
+        (P1 P2 : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        semTriple δ P1 s1 Q -> semTriple δ P2 s2 Q ->
+        semTriple δ (bi_impl (bi_pure (eval e δ = true)) P1 ∧
+                     bi_impl (bi_pure (eval e δ = false)) P2)%I
+            (stm_if e s1 s2) Q.
+  Admitted.
+  Lemma iris_rule_stm_seq {Γ} (δ : LocalStore Γ)
+        (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
+        (P : iProp Σ) (Q : LocalStore Γ -> iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
+        semTriple δ P s1 (fun _ => Q) ->
+        (forall δ', semTriple δ' (Q δ') s2 R) ->
+        semTriple δ P (s1 ;; s2) R.
+  Admitted.
+  Lemma iris_rule_stm_assert {Γ} (δ : LocalStore Γ)
+        (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string)
+                      (P : iProp Σ) :
+        semTriple δ P (stm_assert e1 e2) (fun v δ' => bi_pure (δ = δ' /\ eval e1 δ' = v /\ v = true) ∧ P)%I.
+  Admitted.
+  Lemma iris_rule_stm_fail {Γ} (δ : LocalStore Γ)
+        (τ : Ty) (s : Lit ty_string) :
+        forall (Q : Lit τ -> LocalStore Γ -> iProp Σ),
+          semTriple δ True%I (stm_fail τ s) Q.
+  Admitted.
+  Lemma iris_rule_stm_match_list {Γ} (δ : LocalStore Γ)
+        {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
+        (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ)
+        (Pnil : iProp Σ) (Pcons : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        semTriple δ Pnil alt_nil (fun v' δ' => Q v' δ') ->
+        (forall v vs, env_snoc (env_snoc δ (xh,σ) v) (xt,ty_list σ) vs ⊢
+                        ⦃ Pcons ⦄ alt_cons ⦃ fun v' δ' => Q v' (env_tail (env_tail δ')) ⦄) ->
+        semTriple δ (bi_impl (bi_pure (eval e δ = nil)) Pnil
+                     ∧ (∀ v vs, bi_impl (bi_pure (eval e δ = cons v vs)) Pcons))%I
+                  (stm_match_list e alt_nil xh xt alt_cons) Q.
+  Admitted.
+  Lemma iris_rule_stm_match_sum {Γ} (δ : LocalStore Γ)
+        (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr))
+                         (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl , σinl)) τ)
+                         (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ)
+                         (Pinl : iProp Σ)
+                         (Pinr : iProp Σ)
+                         (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        (forall v, semTriple (env_snoc δ (xinl,σinl) v) Pinl alt_inl (fun v' δ' => Q v' (env_tail δ'))) ->
+        (forall v, semTriple (env_snoc δ (xinr,σinr) v) Pinr alt_inr (fun v' δ' => Q v' (env_tail δ'))) ->
+        semTriple δ ((∀ x, bi_impl (bi_pure (eval e δ = inl x)) Pinl)
+                     ∧ (∀ x, bi_impl (bi_pure (eval e δ = inr x)) Pinr))%I
+            (stm_match_sum e xinl alt_inl xinr alt_inr) Q.
+  Admitted.
+  Lemma iris_rule_stm_match_pair {Γ} (δ : LocalStore Γ)
+        {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
+        (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ)
+        (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        (forall vl vr,
+            semTriple (env_snoc (env_snoc δ (xl, σ1) vl) (xr, σ2) vr)
+              P rhs (fun v δ' => Q v (env_tail (env_tail δ')))) ->
+        semTriple δ P (stm_match_pair e xl xr rhs) Q.
+  Admitted.
+  Lemma iris_rule_stm_match_enum {Γ} (δ : LocalStore Γ)
+        {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
+        (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
+        (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        (forall K, semTriple δ P (alts K) Q) ->
+        semTriple δ P (stm_match_enum E e alts) Q.
+  Admitted.
+  Lemma iris_rule_stm_match_tuple {Γ} (δ : LocalStore Γ)
+        {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
+        (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
+        (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        (forall (δΔ : LocalStore Δ),
+            semTriple (env_cat δ δΔ) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
+        semTriple δ P (stm_match_tuple e p rhs) Q.
+  Admitted.
+  Lemma iris_rule_stm_match_union {Γ} (δ : LocalStore Γ)
+        {U : 𝑼} (e : Exp Γ (ty_union U)) {σ τ : Ty}
+        (alt__Δ : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
+        (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
+        (alt__r : forall (K : 𝑼𝑲 U), Stm (ctx_cat Γ (alt__Δ K)) τ)
+        (P : forall (K : 𝑼𝑲 U), iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        (forall (K : 𝑼𝑲 U) (δΔ : LocalStore (alt__Δ K)),
+            semTriple (env_cat δ δΔ) (P K) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) ->
+        semTriple δ
+          (∀ (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)), bi_impl (bi_pure (eval e δ = 𝑼_fold (existT K v))) (P K))
+          (stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K)))
+          Q.
+  Admitted.
+  Lemma iris_rule_stm_match_record {Γ} (δ : LocalStore Γ)
+        {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
+        (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
+        (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        (forall (δΔ : LocalStore Δ),
+            semTriple (env_cat δ δΔ) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
+        semTriple δ P (stm_match_record R e p rhs) Q.
+  Admitted.
+  Lemma iris_rule_stm_read_register {Γ} (δ : LocalStore Γ)
+        {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+        semTriple δ (r ↦ v) (stm_read_register r) (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = v) ∧ r ↦ v)%I
+.
+  Admitted.
+  Lemma iris_rule_stm_write_register {Γ} (δ : LocalStore Γ)
+        {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
+                              (Q : Lit σ -> LocalStore Γ -> iProp Σ)
+                              (v : Lit σ) :
+        semTriple δ (r ↦ v) (stm_write_register r w) (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ)
+                                                         ∧ r ↦ v')%I.
+  Admitted.
+  Lemma iris_rule_stm_assign_backwards {Γ} (δ : LocalStore Γ)
+        (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
+        (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
+        semTriple δ P s (fun v δ' => R v (δ' ⟪ x ↦ v ⟫)%env) ->
+        semTriple δ P (stm_assign x s) R.
+  Admitted.
+  Lemma iris_rule_stm_assign_forwards {Γ} (δ : LocalStore Γ)
+        (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
+        (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
+        semTriple δ P s R ->
+        semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (δ' ⟪ x ↦ v__old ⟫)%env).
+  Admitted.
+  Lemma iris_rule_stm_call_forwards {Γ} (δ : LocalStore Γ)
+        {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
+        (P : iProp Σ)
+        (Q : Lit σ -> iProp Σ) :
+        CTriple Δ (evals es δ) P Q (CEnv f) ->
+        semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')).
+  Admitted.
+  Lemma iris_rule_stm_call_frame {Γ} (δ : LocalStore Γ)
+        (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
+        (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        semTriple δΔ P s fun v _ => Q v δ ->
+        semTriple δ P stm_call_frame Δ δΔ τ s Q.
+  Admitted.
+  Lemma iris_rule_stm_bind {Γ} (δ : LocalStore Γ)
+        {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
+        (P : iProp Σ) (Q : Lit σ -> LocalStore Γ -> iProp Σ)
+        (R : Lit τ -> LocalStore Γ -> iProp Σ) :
+        semTriple δ P s Q ->
+        (forall (v__σ : Lit σ) (δ' : LocalStore Γ),
+            semTriple δ' (Q v__σ δ') k v__σ R) ->
+        semTriple δ P (stm_bind s k) R.
+  Admitted.
+
   Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
     forall (PRE : iProp Σ) (POST : Lit τ -> LocalStore Γ -> iProp Σ)
       (triple : δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄),
@@ -500,5 +801,6 @@ Module IrisInstance
       + iApply IHtriple.
         iApply H0; iFrame.
     - 
+  Admitted.
 
 End IrisInstance.
