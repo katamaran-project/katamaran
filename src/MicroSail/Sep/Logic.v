@@ -2,6 +2,7 @@ Require Import Coq.Program.Tactics.
 Require Import FunctionalExtensionality.
 Require Import Relations.
 Require Import Classes.Equivalence.
+Require Import Classes.Morphisms.
 
 Require Import MicroSail.Syntax.
 Require Import MicroSail.Sep.Spec.
@@ -54,7 +55,7 @@ Class ILogicLaws (L : Type) (LL : ILogic L) :=
   lor_right2 : forall P Q R, P ⊢ R -> P ⊢ Q ∨ R;
   lex_right  : forall {B : Type} (x : B) (P: L) (Q: B -> L), P ⊢ (Q x) -> P ⊢ (lex Q);
   lex_left   : forall {B : Type} (P : B -> L) (Q : L), (forall x, (P x) ⊢ Q) -> (lex P) ⊢ Q;
-  lall_left  : forall {B : Type} (P: B -> L) x Q, (P x) ⊢ Q -> (lall P) ⊢ Q;
+  lall_left  : forall {B : Type} (x : B) (P: B -> L) Q, (P x) ⊢ Q -> (lall P) ⊢ Q;
   lall_right : forall {B : Type} (P: L) (Q: B -> L),  (forall v, P ⊢ (Q v)) -> P ⊢ (lall Q);
   limpl_and_adjoint : forall P Q R, P ∧ Q ⊢ R <-> P ⊢ (Q --> R);
   lprop_left: forall (P: Prop) Q, (P -> ltrue ⊢ Q) -> lprop P ⊢ Q;
@@ -65,8 +66,16 @@ Section Equivalence.
 
   Context {L : Type} {LL : ILogic L} {LLL : ILogicLaws L LL}.
 
+  Global Instance entails_preorder : PreOrder lentails.
+  Proof.
+    split.
+    - intros ?. apply entails_refl.
+    - intros ? ? ?. apply entails_trans.
+  Qed.
+
   Definition bientails : relation L :=
     fun P Q => (P ⊢ Q) /\ (Q ⊢ P).
+  Infix "⊣⊢" := bientails : logic.
 
   Global Instance bientails_equiv : Equivalence bientails.
   Proof.
@@ -79,9 +88,135 @@ Section Equivalence.
       split; eapply entails_trans; eauto.
   Qed.
 
+  Global Instance proper_lentails : Proper (bientails ==> bientails ==> iff) lentails.
+  Proof.
+    unfold bientails.
+    intros P Q [pq qp] R S [rs sr].
+    split; eauto using entails_trans.
+  Qed.
+
+  Global Instance proper_land :  Proper (bientails ==> bientails ==> bientails) land.
+  Proof.
+    intros P Q [pq qp] R S [rs sr].
+    split; (apply land_right; [apply land_left1 | apply land_left2]); assumption.
+  Qed.
+
+  Global Instance proper_lor :  Proper (bientails ==> bientails ==> bientails) lor.
+  Proof.
+    intros P Q [pq qp] R S [rs sr].
+    split; (apply lor_left; [ apply lor_right1 | apply lor_right2]); assumption.
+  Qed.
+
+  Global Instance proper_limpl : Proper (bientails ==> bientails ==> bientails) limpl.
+  Proof.
+    intros P Q pq R S rs.
+    split; apply limpl_and_adjoint;
+      [ rewrite <- pq, <- rs
+      | rewrite pq, rs
+      ]; apply limpl_and_adjoint, entails_refl.
+  Qed.
+
+  Global Instance proper_lprop : Proper (iff ==> bientails) lprop.
+  Proof.
+    intros P Q pq. split; apply lprop_left; intro; now apply lprop_right, pq.
+  Qed.
+
+  Global Instance proper_lex {T} : Proper (pointwise_relation T bientails ==> bientails) lex.
+  Proof.
+    intros P Q pq; split; apply lex_left; intro x;
+      apply (lex_right x), (pq x).
+  Qed.
+
+  Global Instance proper_lall {T} : Proper (pointwise_relation T bientails ==> bientails) lall.
+  Proof.
+    intros P Q pq; split; apply lall_right; intro x;
+      apply (lall_left x), (pq x).
+  Qed.
+
+  Lemma land_assoc {P Q R : L} :
+    (P ∧ Q) ∧ R ⊣⊢ P ∧ (Q ∧ R).
+  Proof.
+    split; repeat apply land_right.
+    - apply land_left1, land_left1, entails_refl.
+    - apply land_left1, land_left2, entails_refl.
+    - apply land_left2, entails_refl.
+    - apply land_left1, entails_refl.
+    - apply land_left2, land_left1, entails_refl.
+    - apply land_left2, land_left2, entails_refl.
+  Qed.
+
+  Lemma land_comm {P Q : L} :
+    P ∧ Q ⊣⊢ Q ∧ P.
+  Proof.
+    split; (apply land_right; [ apply land_left2 | apply land_left1 ]);
+      apply entails_refl.
+  Qed.
+
+  Lemma land_idem {P : L} :
+    P ∧ P ⊣⊢ P.
+  Proof.
+    split.
+    - apply land_left1, entails_refl.
+    - apply land_right; apply entails_refl.
+  Qed.
+
+  Lemma land_intro2 {P Q R S} :
+    P ⊢ Q -> R ⊢ S -> P ∧ R ⊢ Q ∧ S.
+  Proof.
+    intros pq rs.
+    apply land_right.
+    apply land_left1, pq.
+    apply land_left2, rs.
+  Qed.
+
+  Lemma lor_assoc {P Q R : L} :
+    ((P ∨ Q) ∨ R) ⊣⊢ (P ∨ (Q ∨ R)).
+  Proof.
+    split; repeat apply lor_left.
+    - apply lor_right1, entails_refl.
+    - apply lor_right2, lor_right1, entails_refl.
+    - apply lor_right2, lor_right2, entails_refl.
+    - apply lor_right1, lor_right1, entails_refl.
+    - apply lor_right1, lor_right2, entails_refl.
+    - apply lor_right2, entails_refl.
+  Qed.
+
+  Lemma lor_comm {P Q : L} :
+    (P ∨ Q) ⊣⊢ (Q ∨ P).
+  Proof.
+    split; (apply lor_left; [ apply lor_right2 | apply lor_right1 ]); apply entails_refl.
+  Qed.
+
+  Lemma lor_idem {P : L} :
+    (P ∨ P) ⊣⊢ P.
+  Proof.
+    split.
+    - apply lor_left; apply entails_refl.
+    - apply lor_right1, entails_refl.
+  Qed.
+
+  Lemma lprop_land_distr {P Q : Prop} :
+    (!! P) ∧ (!! Q) ⊣⊢ !! (P /\ Q).
+  Proof.
+    split.
+    - apply limpl_and_adjoint.
+      apply lprop_left; intros.
+      apply limpl_and_adjoint.
+      apply land_left2.
+      apply lprop_left; intros.
+      apply lprop_right.
+      split; assumption.
+    - apply lprop_left; intros [].
+      apply land_right; apply lprop_right; assumption.
+  Qed.
+
+  Lemma lprop_float {P : L} {Q : Prop} :
+    (P ∧ !! Q) ⊣⊢ (!! Q ∧ P).
+  Proof. apply land_comm. Qed.
+
 End Equivalence.
 
-Notation "P ⊣⊢ Q" := (bientails P Q) (at level 50, no associativity) : logic.
+Infix "⊣⊢" := bientails : logic.
 
 Class ISepLogic (L : Type) := {
   is_ILogic :> ILogic L;

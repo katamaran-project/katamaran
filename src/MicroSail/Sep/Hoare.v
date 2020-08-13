@@ -1,4 +1,5 @@
 Require Import Coq.Program.Tactics.
+Require Import Coq.Classes.Morphisms.
 Require Import FunctionalExtensionality.
 
 Require Import MicroSail.Syntax.
@@ -416,6 +417,13 @@ Module ProgramLogic
       - eapply rule_consequence.
         apply land_left2. apply entails_refl.
         intros. apply entails_refl. apply H2.
+    Qed.
+
+    Global Instance proper_triple {Γ δ τ} :
+      Proper (bientails ==> eq ==> pointwise_relation _ (pointwise_relation _ bientails) ==> iff) (@Triple Γ δ τ).
+    Proof.
+      intros P Q pq s s' eq__s R S rs; subst s'.
+      split; intro H; (eapply rule_consequence; [apply pq | apply rs | exact H ]).
     Qed.
 
   End Triples.

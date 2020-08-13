@@ -181,83 +181,49 @@ Module Soundness
         eapply rule_stm_let.
         + apply IHs1.
         + clear IHs1; cbn in *; intros.
-          unfold scmut_bind.
-          eapply rule_consequence_right.
-          2: { intros.
-               apply outcome_satisfy_natded_bind.
-          }
-          cbn.
+          setoid_rewrite outcome_satisfy_natded_bind.
           apply rule_outcome_satisfy.
           intros [v2 [δ2 h2]]; cbn.
           apply rule_pull; intros; subst.
           apply rule_pull; intros; subst.
-          eapply rule_consequence_right.
-          2: { intros.
-               apply outcome_satisfy_natded_bind.
-          }
+          setoid_rewrite outcome_satisfy_natded_bind.
           cbn.
           eapply rule_consequence_right.
           apply IHs2.
           cbn; intros.
           apply outcome_satisfy_natded_monotonic.
           intros [v3 [δ3 h3]].
-          repeat apply land_right.
-          * apply land_left1.
-            apply land_left1.
-            apply entails_refl.
-          * apply land_left1.
-            apply land_left2.
-            apply entails_refl.
-          * apply limpl_and_adjoint.
-            apply land_left2.
-            apply lprop_left; intros; subst.
-            apply limpl_and_adjoint.
-            apply land_left2.
-            apply lprop_left; intros; subst.
-            apply lprop_right.
-            reflexivity.
+          repeat apply land_intro2; try reflexivity.
+          apply lprop_left; intros.
+          apply lprop_right; now f_equal.
 
       - (* stm_block *)
         cbn in *; intros.
-        eapply rule_consequence_right.
-        2: { intros; apply outcome_satisfy_natded_bind. }
-        cbn.
+        setoid_rewrite outcome_satisfy_natded_bind.
         apply rule_stm_block.
         eapply rule_consequence_right.
         apply IHs.
         cbn; intros.
         apply outcome_satisfy_natded_monotonic.
         intros [v2 [δ2 h2]].
-        apply land_right.
-        + apply land_left1.
-          apply entails_refl.
-        + apply land_left2.
-          apply lprop_left; intros.
-          apply lprop_right.
-          congruence.
+        repeat apply land_intro2; try reflexivity.
+        apply lprop_left; intros.
+        apply lprop_right; now f_equal.
 
       - (* stm_assign *)
         cbn in *; intros.
-        eapply rule_consequence_right.
-        2: { intros; apply outcome_satisfy_natded_bind. }
-        cbn.
+        setoid_rewrite outcome_satisfy_natded_bind.
         apply rule_stm_assign_backwards.
         eapply rule_consequence_right.
         apply IHs.
         cbn; intros.
         apply outcome_satisfy_natded_monotonic.
         intros [v2 [δ2 h2]].
-        apply land_right.
-        + apply land_left1.
-          apply entails_refl.
-        + apply limpl_and_adjoint.
-          apply land_left2.
-          apply lprop_left; intros.
-          apply limpl_and_adjoint.
-          apply land_left2.
-          apply lprop_left; intros.
-          apply lprop_right.
-          congruence.
+        rewrite ?land_assoc.
+        rewrite ?lprop_land_distr.
+        apply land_intro2; try reflexivity.
+        apply lprop_left; intros.
+        apply lprop_right; intuition congruence.
 
       - (* stm_call *)
         admit.
@@ -265,19 +231,14 @@ Module Soundness
       - (* stm_call_frame *)
         cbn in *; intros.
         apply rule_stm_call_frame.
-        eapply rule_consequence_right.
-        2: { intros; apply outcome_satisfy_natded_bind. }
-        cbn.
+        setoid_rewrite outcome_satisfy_natded_bind.
         eapply rule_consequence_right.
         apply IHs.
         cbn; intros.
         apply outcome_satisfy_natded_monotonic.
         intros [v2 [δ2 h2]].
-        apply land_right.
-        + apply land_left1.
-          apply entails_refl.
-        + apply lprop_right.
-          reflexivity.
+        repeat apply land_intro2; try reflexivity.
+        apply lprop_right; reflexivity.
 
       - (* stm_call_external *)
         admit.
@@ -310,9 +271,7 @@ Module Soundness
 
         + clear IHs1; cbn in *; intros.
           unfold scmut_bind.
-          eapply rule_consequence_right.
-          2: { intros; apply outcome_satisfy_natded_bind. }
-          cbn.
+          setoid_rewrite outcome_satisfy_natded_bind.
           apply rule_outcome_satisfy.
           intros [v2 [δ2 h2]]; cbn.
           apply rule_pull; intros; subst.

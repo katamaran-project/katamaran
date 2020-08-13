@@ -69,3 +69,4 @@ Reserved Notation "s1 ;; s2" (at level 100, s2 at level 200, right associativity
   format "'[' '[hv' '[' s1 ']' ;;  ']' '/' s2 ']'").
 
 Reserved Notation "δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" (at level 75, no associativity).
+Reserved Infix "⊣⊢"                (at level 50, no associativity).
