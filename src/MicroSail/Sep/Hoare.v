@@ -203,33 +203,28 @@ Module ProgramLogic
         {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
         (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
-        (forall K, δ ⊢ ⦃ P ⦄ alts K ⦃ Q ⦄) ->
+        δ ⊢ ⦃ P ⦄ alts (eval e δ) ⦃ Q ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_match_enum E e alts ⦃ Q ⦄
     | rule_stm_match_tuple
         {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
         (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
-        (forall (δΔ : LocalStore Δ),
-            env_cat δ δΔ ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄) ->
+        env_cat δ (tuple_pattern_match p (eval e δ)) ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_match_tuple e p rhs ⦃ Q ⦄
     | rule_stm_match_union
         {U : 𝑼} (e : Exp Γ (ty_union U)) {σ τ : Ty}
         (alt__Δ : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
         (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
         (alt__r : forall (K : 𝑼𝑲 U), Stm (ctx_cat Γ (alt__Δ K)) τ)
-        (P : forall (K : 𝑼𝑲 U), L) (Q : Lit τ -> LocalStore Γ -> L) :
-        (forall (K : 𝑼𝑲 U) (δΔ : LocalStore (alt__Δ K)),
-            env_cat δ δΔ ⊢ ⦃ P K ⦄ alt__r K ⦃ fun v δ' => Q v (env_drop (alt__Δ K) δ') ⦄) ->
-        δ ⊢
-          ⦃ ∀ (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)), !!(eval e δ = 𝑼_fold (existT K v)) --> P K ⦄
-          stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K))
-          ⦃ Q ⦄
+        (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+        (forall (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
+            env_cat δ (pattern_match (alt__p K) v) ⊢ ⦃ P ∧ !! (eval e δ = 𝑼_fold (existT K v)) ⦄ alt__r K ⦃ fun v δ' => Q v (env_drop (alt__Δ K) δ') ⦄) ->
+        δ ⊢ ⦃ P ⦄ stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K)) ⦃ Q ⦄
     | rule_stm_match_record
         {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
-        (forall (δΔ : LocalStore Δ),
-            env_cat δ δΔ ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄) ->
+        env_cat δ (record_pattern_match p (𝑹_unfold (eval e δ))) ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_match_record R e p rhs ⦃ Q ⦄
     | rule_stm_read_register {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
         δ ⊢ ⦃ r ↦ v ⦄ stm_read_register r ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = v) ∧ r ↦ v ⦄

@@ -354,11 +354,22 @@ Module Soundness
 
       - (* stm_match_enum *)
         cbn in *; intros.
-        admit.
+        now apply rule_stm_match_enum.
 
       - (* stm_match_tuple *)
         cbn in *; intros.
-        admit.
+        apply rule_stm_match_tuple; cbn; intros.
+        unfold scmut_bind_left, scmut_bind; cbn.
+        setoid_rewrite outcome_satisfy_natded_bind.
+        cbn.
+        eapply rule_consequence_right.
+        apply IHs. cbn. intros.
+        apply outcome_satisfy_natded_monotonic.
+        intros [v2 [δ2 h2]].
+        repeat apply land_intro2; try reflexivity.
+        apply lprop_left. intros.
+        apply lprop_right.
+        congruence.
 
       - (* stm_match_union *)
         cbn in *; intros.
@@ -366,7 +377,18 @@ Module Soundness
 
       - (* stm_match_record *)
         cbn in *; intros.
-        admit.
+        apply rule_stm_match_record; cbn; intros.
+        unfold scmut_bind_left, scmut_bind; cbn.
+        setoid_rewrite outcome_satisfy_natded_bind.
+        cbn.
+        eapply rule_consequence_right.
+        apply IHs. cbn. intros.
+        apply outcome_satisfy_natded_monotonic.
+        intros [v2 [δ2 h2]].
+        repeat apply land_intro2; try reflexivity.
+        apply lprop_left. intros.
+        apply lprop_right.
+        congruence.
 
       - (* stm_read_register *)
         cbn in *; intros.
