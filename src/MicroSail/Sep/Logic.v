@@ -75,7 +75,7 @@ Section Equivalence.
 
   Definition bientails : relation L :=
     fun P Q => (P ⊢ Q) /\ (Q ⊢ P).
-  Infix "⊣⊢" := bientails : logic.
+  Infix "⊣⊢s" := bientails : logic.
 
   Global Instance bientails_equiv : Equivalence bientails.
   Proof.
@@ -134,7 +134,7 @@ Section Equivalence.
   Qed.
 
   Lemma land_assoc {P Q R : L} :
-    (P ∧ Q) ∧ R ⊣⊢ P ∧ (Q ∧ R).
+    (P ∧ Q) ∧ R ⊣⊢s P ∧ (Q ∧ R).
   Proof.
     split; repeat apply land_right.
     - apply land_left1, land_left1, entails_refl.
@@ -146,14 +146,14 @@ Section Equivalence.
   Qed.
 
   Lemma land_comm {P Q : L} :
-    P ∧ Q ⊣⊢ Q ∧ P.
+    P ∧ Q ⊣⊢s Q ∧ P.
   Proof.
     split; (apply land_right; [ apply land_left2 | apply land_left1 ]);
       apply entails_refl.
   Qed.
 
   Lemma land_idem {P : L} :
-    P ∧ P ⊣⊢ P.
+    P ∧ P ⊣⊢s P.
   Proof.
     split.
     - apply land_left1, entails_refl.
@@ -170,7 +170,7 @@ Section Equivalence.
   Qed.
 
   Lemma lor_assoc {P Q R : L} :
-    ((P ∨ Q) ∨ R) ⊣⊢ (P ∨ (Q ∨ R)).
+    ((P ∨ Q) ∨ R) ⊣⊢s (P ∨ (Q ∨ R)).
   Proof.
     split; repeat apply lor_left.
     - apply lor_right1, entails_refl.
@@ -182,13 +182,13 @@ Section Equivalence.
   Qed.
 
   Lemma lor_comm {P Q : L} :
-    (P ∨ Q) ⊣⊢ (Q ∨ P).
+    (P ∨ Q) ⊣⊢s (Q ∨ P).
   Proof.
     split; (apply lor_left; [ apply lor_right2 | apply lor_right1 ]); apply entails_refl.
   Qed.
 
   Lemma lor_idem {P : L} :
-    (P ∨ P) ⊣⊢ P.
+    (P ∨ P) ⊣⊢s P.
   Proof.
     split.
     - apply lor_left; apply entails_refl.
@@ -196,7 +196,7 @@ Section Equivalence.
   Qed.
 
   Lemma lprop_land_distr {P Q : Prop} :
-    (!! P) ∧ (!! Q) ⊣⊢ !! (P /\ Q).
+    (!! P) ∧ (!! Q) ⊣⊢s !! (P /\ Q).
   Proof.
     split.
     - apply limpl_and_adjoint.
@@ -211,12 +211,12 @@ Section Equivalence.
   Qed.
 
   Lemma lprop_float {P : L} {Q : Prop} :
-    (P ∧ !! Q) ⊣⊢ (!! Q ∧ P).
+    (P ∧ !! Q) ⊣⊢s (!! Q ∧ P).
   Proof. apply land_comm. Qed.
 
 End Equivalence.
 
-Infix "⊣⊢" := bientails : logic.
+Infix "⊣⊢s" := bientails : logic.
 
 Class ISepLogic (L : Type) := {
   is_ILogic :> ILogic L;
@@ -230,10 +230,10 @@ Notation "P '-✱' Q" := (wand P Q) (at level 60, right associativity) : logic.
 
 Class ISepLogicLaws (L : Type) {SL : ISepLogic L} := {
   is_ILogicLaws :> ILogicLaws L is_ILogic;
-  sepcon_assoc: forall (P Q R : L), ((P ✱ Q) ✱ R) ⊣⊢ (P ✱ (Q ✱ R));
-  sepcon_comm:  forall (P Q : L), P ✱ Q ⊣⊢ Q ✱ P;
+  sepcon_assoc: forall (P Q R : L), ((P ✱ Q) ✱ R) ⊣⊢s (P ✱ (Q ✱ R));
+  sepcon_comm:  forall (P Q : L), P ✱ Q ⊣⊢s Q ✱ P;
   wand_sepcon_adjoint: forall (P Q R : L), (P ✱ Q ⊢ R) <-> (P ⊢ Q -✱ R);
-  sepcon_andp_prop: forall (P R : L) (Q : Prop), P ✱ (!!Q ∧ R) ⊣⊢ !!Q ∧ (P ✱ R);
+  sepcon_andp_prop: forall (P R : L) (Q : Prop), P ✱ (!!Q ∧ R) ⊣⊢s !!Q ∧ (P ✱ R);
   sepcon_entails: forall P P' Q Q' : L, P ⊢ P' -> Q ⊢ Q' -> P ✱ Q ⊢ P' ✱ Q';
 }.
 

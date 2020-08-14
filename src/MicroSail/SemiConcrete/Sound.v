@@ -96,7 +96,7 @@ Module Soundness
 
     Axiom outcome_satisfy_natded_bind :
       forall {A B : Type} (o : Outcome A) (f : A -> Outcome B) (P : B -> L),
-        outcome_satisfy_natded (outcome_bind o f) P ⊣⊢
+        outcome_satisfy_natded (outcome_bind o f) P ⊣⊢s
         outcome_satisfy_natded o (fun a => outcome_satisfy_natded (f a) P).
 
     Lemma rule_outcome_satisfy {Γ σ} (δ : LocalStore Γ)
