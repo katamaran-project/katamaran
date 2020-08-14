@@ -306,7 +306,21 @@ Module Soundness
 
       - (* stm_match_list *)
         cbn in *; intros.
-        admit.
+        apply rule_stm_match_list; cbn; intros.
+        + apply rule_pull. intros Heval. rewrite Heval.
+          apply IHs1.
+        + apply rule_pull. intros Heval. rewrite Heval.
+          unfold scmut_bind_left, scmut_bind; cbn.
+          repeat setoid_rewrite outcome_satisfy_natded_bind.
+          cbn.
+          eapply rule_consequence_right.
+          apply IHs2. cbn. intros.
+          apply outcome_satisfy_natded_monotonic.
+          intros [v2 [δ2 h2]].
+          repeat apply land_intro2; try reflexivity.
+          apply lprop_left. intros.
+          apply lprop_right.
+          congruence.
 
       - (* stm_match_sum *)
         cbn in *; intros.
@@ -373,7 +387,25 @@ Module Soundness
 
       - (* stm_match_union *)
         cbn in *; intros.
-        admit.
+        apply rule_stm_match_union'.
+        intros K. specialize (H K).
+        remember (alts K) as alt.
+        dependent elimination alt; cbn.
+        intros.
+        apply rule_pull. intro Heval. rewrite Heval.
+        rewrite 𝑼_unfold_fold. cbn.
+        unfold scmut_bind_left, scmut_bind; cbn.
+        setoid_rewrite outcome_satisfy_natded_bind.
+        cbn.
+        eapply rule_consequence_right.
+        apply H. cbn. intros.
+        rewrite <- Heqalt. cbn.
+        apply outcome_satisfy_natded_monotonic.
+        intros [v2 [δ2 h2]].
+        repeat apply land_intro2; try reflexivity.
+        apply lprop_left. intros.
+        apply lprop_right.
+        congruence.
 
       - (* stm_match_record *)
         cbn in *; intros.

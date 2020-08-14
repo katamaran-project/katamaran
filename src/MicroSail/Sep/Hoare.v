@@ -176,13 +176,12 @@ Module ProgramLogic
     | rule_stm_match_list
         {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
         (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ)
-        (Pnil : L) (Pcons : L) (Q : Lit τ -> LocalStore Γ -> L) :
-        δ ⊢ ⦃ Pnil ⦄ alt_nil ⦃ fun v' δ' => Q v' δ' ⦄ ->
-        (forall v vs, env_snoc (env_snoc δ (xh,σ) v) (xt,ty_list σ) vs ⊢
-                        ⦃ Pcons ⦄ alt_cons ⦃ fun v' δ' => Q v' (env_tail (env_tail δ')) ⦄) ->
-        δ ⊢ ⦃ (!!(eval e δ = nil) --> Pnil)
-            ∧ (∀ v vs, !!(eval e δ = cons v vs) --> Pcons)
-            ⦄ stm_match_list e alt_nil xh xt alt_cons ⦃ Q ⦄
+        (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+        δ ⊢ ⦃ P ∧ !! (eval e δ = nil) ⦄ alt_nil ⦃ Q ⦄ ->
+        (forall (v : Lit σ) (vs : Lit (ty_list σ)),
+            env_snoc (env_snoc δ (xh,σ) v) (xt,ty_list σ) vs ⊢
+                     ⦃ P ∧ !! (eval e δ = cons v vs) ⦄ alt_cons ⦃ fun v' δ' => Q v' (env_tail (env_tail δ')) ⦄) ->
+        δ ⊢ ⦃ P ⦄ stm_match_list e alt_nil xh xt alt_cons ⦃ Q ⦄
     | rule_stm_match_sum
         {xl xr : 𝑿} {σl σr τ : Ty} {e : Exp Γ (ty_sum σl σr)}
         {alt_inl : Stm (ctx_snoc Γ (xl , σl)) τ}
@@ -386,6 +385,20 @@ Module ProgramLogic
       - apply (rule_consequence_left _ H1), land_left1, entails_refl.
       - apply (rule_consequence_left _ H2), land_left2, entails_refl.
     Qed.
+
+    Lemma rule_stm_match_union' {Γ δ U} (e : Exp Γ (ty_union U)) {τ : Ty}
+      (alts : forall (K : 𝑼𝑲 U), Alternative Γ (𝑼𝑲_Ty K) τ)
+      (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+      (forall (K : 𝑼𝑲 U),
+          match alts K in Alternative _ σ τ return (Lit σ -> Prop) -> (Lit τ -> LocalStore Γ -> L) -> Prop with
+          | @alt _ σ τ Δp p rhs =>
+            fun R Q =>
+              forall (vσ : Lit σ),
+                env_cat δ (pattern_match p vσ) ⊢ ⦃ P ∧ !! (R vσ) ⦄ rhs ⦃ fun vτ δ' => Q vτ (env_drop Δp δ') ⦄
+          end (fun (v : Lit (𝑼𝑲_Ty K)) => eval e δ = 𝑼_fold (existT K v)) Q) ->
+      δ ⊢ ⦃ P ⦄ stm_match_union U e alts ⦃ Q ⦄.
+    Proof.
+    Admitted.
 
     Global Instance proper_triple {Γ δ τ} :
       Proper (bientails ==> eq ==> pointwise_relation _ (pointwise_relation _ bientails) ==> iff) (@Triple Γ δ τ).
