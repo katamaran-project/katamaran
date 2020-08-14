@@ -310,11 +310,47 @@ Module Soundness
 
       - (* stm_match_sum *)
         cbn in *; intros.
-        admit.
+        apply rule_stm_match_sum; cbn; intros.
+        + apply rule_pull. intros Heval. rewrite Heval.
+          unfold scmut_bind_left, scmut_bind; cbn.
+          setoid_rewrite outcome_satisfy_natded_bind.
+          cbn.
+          eapply rule_consequence_right.
+          apply IHs1. cbn. intros.
+          apply outcome_satisfy_natded_monotonic.
+          intros [v2 [δ2 h2]].
+          repeat apply land_intro2; try reflexivity.
+          apply lprop_left. intros.
+          apply lprop_right.
+          congruence.
+        + apply rule_pull. intros Heval. rewrite Heval.
+          unfold scmut_bind_left, scmut_bind; cbn.
+          setoid_rewrite outcome_satisfy_natded_bind.
+          cbn.
+          eapply rule_consequence_right.
+          apply IHs2. cbn. intros.
+          apply outcome_satisfy_natded_monotonic.
+          intros [v2 [δ2 h2]].
+          repeat apply land_intro2; try reflexivity.
+          apply lprop_left. intros.
+          apply lprop_right.
+          congruence.
 
       - (* stm_match_pair *)
         cbn in *; intros.
-        admit.
+        apply rule_stm_match_pair; cbn; intros.
+        unfold scmut_bind_left, scmut_bind; cbn.
+        repeat setoid_rewrite outcome_satisfy_natded_bind.
+        cbn.
+        apply rule_pull. intros Heval. rewrite !Heval. cbn.
+        eapply rule_consequence_right.
+        apply IHs. cbn. intros.
+        apply outcome_satisfy_natded_monotonic.
+        intros [v2 [δ2 h2]].
+        repeat apply land_intro2; try reflexivity.
+        apply lprop_left. intros.
+        apply lprop_right.
+        congruence.
 
       - (* stm_match_enum *)
         cbn in *; intros.
