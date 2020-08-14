@@ -12,10 +12,10 @@ Require Import Coq.Program.Equality.
 
 From Equations Require Import Equations Signature.
 
-From iris.bi Require Export interface.
-From iris.algebra Require Export gmap excl auth.
-From iris.base_logic Require Export lib.fancy_updates.
-From iris.program_logic Require Export weakestpre hoare.
+From iris.bi Require Import interface.
+From iris.algebra Require Import gmap excl auth.
+From iris.base_logic Require Import lib.fancy_updates.
+From iris.program_logic Require Import weakestpre hoare.
 From iris.proofmode Require Import tactics.
 
 Require Import MicroSail.Sep.Spec.
@@ -741,40 +741,40 @@ Module IrisInstance
   Admitted.
   Lemma iris_rule_stm_read_register {Γ} (δ : LocalStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
-        semTriple δ (r ↦ v) (stm_read_register r) (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = v) ∧ r ↦ v)%I
-.
+        semTriple δ (r ↦ v) (stm_read_register r)
+                  (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = v) ∧ r ↦ v)%I.
   Admitted.
   Lemma iris_rule_stm_write_register {Γ} (δ : LocalStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
                               (Q : Lit σ -> LocalStore Γ -> iProp Σ)
                               (v : Lit σ) :
-        semTriple δ (r ↦ v) (stm_write_register r w) (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ)
-                                                         ∧ r ↦ v')%I.
+        semTriple δ (r ↦ v) (stm_write_register r w)
+                  (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ) ∧ r ↦ v')%I.
   Admitted.
   Lemma iris_rule_stm_assign_backwards {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
         (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ P s (fun v δ' => R v (δ' ⟪ x ↦ v ⟫)%env) ->
+        semTriple δ P s (fun v δ' => R v (@env_update _ _ _ δ' (x , _) _ v)) ->
         semTriple δ P (stm_assign x s) R.
   Admitted.
   Lemma iris_rule_stm_assign_forwards {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
         (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
         semTriple δ P s R ->
-        semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (δ' ⟪ x ↦ v__old ⟫)%env).
+        semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (@env_update _ _ _ δ' (x , _)  _ v__old))%I.
   Admitted.
   Lemma iris_rule_stm_call_forwards {Γ} (δ : LocalStore Γ)
         {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
         (P : iProp Σ)
         (Q : Lit σ -> iProp Σ) :
         CTriple Δ (evals es δ) P Q (CEnv f) ->
-        semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')).
+        semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ'))%I.
   Admitted.
   Lemma iris_rule_stm_call_frame {Γ} (δ : LocalStore Γ)
         (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        semTriple δΔ P s fun v _ => Q v δ ->
-        semTriple δ P stm_call_frame Δ δΔ τ s Q.
+        semTriple δΔ P s (fun v _ => Q v δ) ->
+        semTriple δ P (stm_call_frame Δ δΔ τ s) Q.
   Admitted.
   Lemma iris_rule_stm_bind {Γ} (δ : LocalStore Γ)
         {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
@@ -782,7 +782,7 @@ Module IrisInstance
         (R : Lit τ -> LocalStore Γ -> iProp Σ) :
         semTriple δ P s Q ->
         (forall (v__σ : Lit σ) (δ' : LocalStore Γ),
-            semTriple δ' (Q v__σ δ') k v__σ R) ->
+            semTriple δ' (Q v__σ δ') (k v__σ) R) ->
         semTriple δ P (stm_bind s k) R.
   Admitted.
 
