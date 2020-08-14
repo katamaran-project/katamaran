@@ -192,14 +192,9 @@ Module HoareSound
       - sound_solve.
       (* rule_stm_let *)
       - sound_solve.
-      (* rule_stm_let_forwards *)
-      - sound_solve.
-        eexists. eauto.
       (* rule_stm_block *)
       - sound_solve.
       (* rule_stm_if *)
-      - sound_solve.
-      (* rule_stm_if_backwards *)
       - sound_solve.
       (* rule_stm_seq *)
       - sound_solve.
