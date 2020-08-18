@@ -584,6 +584,81 @@ Module IrisInstance
       by iApply PQ.
   Qed.
 
+  Lemma wp_compat_block {Γ Δ} {τ : Ty} {δ : LocalStore Γ}
+        (δΔ : LocalStore Δ) (k : Stm (Γ ▻▻ Δ) τ) {Q : Val Γ τ -> iProp Σ} :
+    ⊢ (WP (MkTm (δ ►► δΔ) k) {{ v, match v with MkVal _ δ' v => Q (MkVal _ (fst (env_split Δ δ')) v) end }} -∗
+          WP (MkTm δ (stm_block δΔ k)) {{ v, Q v }})%I.
+    Proof.
+      iRevert (δ δΔ k Q).
+      iLöb as "IH".
+      iIntros (δ δΔ k Q) "wpk".
+      rewrite ?wp_unfold.
+      cbn.
+      iIntros (σ ks1 ks n) "Hregs".
+      remember (language.to_val (MkTm (δ ►► δΔ) k)) as kval.
+      destruct kval.
+      - rewrite /wp_pre.
+        rewrite <- Heqkval.
+        destruct v.
+        assert (eqk := of_to_val _ (eq_sym Heqkval)).
+        inversion eqk.
+        rewrite <-?H2 in *; clear H2.
+        iMod "wpk" as "H".
+        iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+        iSplitR.
+        + iPureIntro.
+          destruct σ as [regs μ].
+          exists nil. repeat eexists.
+          eapply step_stm_block_value.
+        + iModIntro.
+          iIntros (e2 σ2 efs) "%".
+          iModIntro. iModIntro.
+          iMod "Hclose" as "e".
+          iDestruct "e" as "_".
+          iModIntro.
+          dependent destruction a.
+          dependent destruction H0.
+          * rewrite env_split_cat.
+            iFrame.
+            iSplitL; [|trivial].
+            by iApply wp_value.
+          * dependent destruction H0.
+      - rewrite /wp_pre.
+        rewrite <-Heqkval.
+        iMod ("wpk" $! σ ks1 ks n with "Hregs") as "[% wpk']".
+        iSplitR.
+        + iPureIntro.
+          dependent destruction H0.
+          destruct H0 as [s' [σ' [efs step']]].
+          remember (MkTm (δ ►► δΔ) k) as s.
+          destruct step' as [γ γ' μ μ' δ' δ'' s s' step'].
+          inversion Heqs.
+          rewrite H2 H1 in step'.
+          assert (eqhelp := env_cat_split' δ'').
+          destruct (env_split Δ δ'') as [δ2 δΔ'].
+          rewrite eqhelp in step'.
+          exists nil. repeat eexists.
+          eapply step_stm_block_step.
+          eexact step'.
+        + iModIntro.
+          iIntros (e2 σ2 efs2) "%".
+          destruct H0 as [κ [e' [σ' [efs' step']]]].
+          dependent destruction a.
+          dependent destruction H0.
+          * remember (MkTm (δ ►► δΔ) (fail s)) as k'.
+            destruct step'; destruct H0; inversion Heqk'.
+          * iMod ("wpk'" $! _ _ _ (mk_prim_step H0)) as "wpk'".
+            iModIntro.
+            iModIntro.
+            iMod "wpk'" as "[Hregs [wpk' _]]".
+            iModIntro.
+            iFrame.
+            iSplitL; auto.
+            iApply "IH".
+            iFrame.
+    Qed.
+
+
   Lemma iris_rule_stm_let {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
         (P : iProp Σ) (Q : Lit σ -> LocalStore Γ -> iProp Σ)
@@ -606,18 +681,16 @@ Module IrisInstance
       destruct (step regs μ δ) as [regs' [μ' [δ'0 [s' step']]]].
       admit.
       (* exact step'. *)
-    - (* iIntros (e2 σ2 efs) "%". *)
-      (* remember (MkTm δ (stm_exp e)) as t. *)
-      (* destruct a. *)
-      (* inversion Heqt. *)
-      (* dependent destruction H0; inversion H3. *)
-      (* iModIntro. iModIntro. iModIntro. *)
-      (* rewrite H2. *)
-      (* dependent destruction H1. *)
-      (* iFrame. *)
-      (* iSplitL; trivial. *)
-      (* iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ (stm_lit σ (eval e δ)))). *)
-      (* by iApply PQ. *)
+    - iIntros (e2 σ2 efs) "%".
+      remember (MkTm δ (let: x ∶ σ := s in k)) as t.
+      destruct a.
+      inversion Heqt.
+      dependent destruction H0; inversion H3.
+      + iModIntro. iModIntro. iModIntro.
+        rewrite H2.
+        dependent destruction H1.
+        iFrame.
+        iSplitL; trivial.
   Admitted.
 
   Lemma iris_rule_stm_let_forwards {Γ} (δ : LocalStore Γ)
