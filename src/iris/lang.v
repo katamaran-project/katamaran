@@ -791,26 +791,20 @@ Module IrisInstance
   Lemma iris_rule_stm_match_list {Γ} (δ : LocalStore Γ)
         {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
         (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ)
-        (Pnil : iProp Σ) (Pcons : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ Pnil alt_nil (fun v' δ' => Q v' δ') ->
-        (forall v vs, env_snoc (env_snoc δ (xh,σ) v) (xt,ty_list σ) vs ⊢
-                        ⦃ Pcons ⦄ alt_cons ⦃ fun v' δ' => Q v' (env_tail (env_tail δ')) ⦄) ->
-        semTriple δ (bi_impl (bi_pure (eval e δ = nil)) Pnil
-                     ∧ (∀ v vs, bi_impl (bi_pure (eval e δ = cons v vs)) Pcons))%I
-                  (stm_match_list e alt_nil xh xt alt_cons) Q.
+        (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        semTriple δ (P ∧ bi_pure (eval e δ = [])) alt_nil (fun v' δ' => Q v' δ') ->
+        (forall v vs, semTriple (env_snoc (env_snoc δ (xh,σ) v) (xt,ty_list σ) vs) (P ∧ bi_pure (eval e δ = cons v vs)) alt_cons (fun v' δ' => Q v' (env_tail (env_tail δ')))) ->
+        semTriple δ P (stm_match_list e alt_nil xh xt alt_cons) Q.
   Admitted.
   Lemma iris_rule_stm_match_sum {Γ} (δ : LocalStore Γ)
         (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr))
                          (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl , σinl)) τ)
                          (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ)
-                         (Pinl : iProp Σ)
-                         (Pinr : iProp Σ)
+                         (P : iProp Σ)
                          (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (forall v, semTriple (env_snoc δ (xinl,σinl) v) Pinl alt_inl (fun v' δ' => Q v' (env_tail δ'))) ->
-        (forall v, semTriple (env_snoc δ (xinr,σinr) v) Pinr alt_inr (fun v' δ' => Q v' (env_tail δ'))) ->
-        semTriple δ ((∀ x, bi_impl (bi_pure (eval e δ = inl x)) Pinl)
-                     ∧ (∀ x, bi_impl (bi_pure (eval e δ = inr x)) Pinr))%I
-            (stm_match_sum e xinl alt_inl xinr alt_inr) Q.
+        (forall v, semTriple (env_snoc δ (xinl,σinl) v) (P ∧ bi_pure (eval e δ = inl v)) alt_inl (fun v' δ' => Q v' (env_tail δ'))) ->
+        (forall v, semTriple (env_snoc δ (xinr,σinr) v) (P ∧ bi_pure (eval e δ = inr v)) alt_inr (fun v' δ' => Q v' (env_tail δ'))) ->
+        semTriple δ P (stm_match_sum e xinl alt_inl xinr alt_inr) Q.
   Admitted.
   Lemma iris_rule_stm_match_pair {Γ} (δ : LocalStore Γ)
         {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
@@ -818,22 +812,21 @@ Module IrisInstance
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
         (forall vl vr,
             semTriple (env_snoc (env_snoc δ (xl, σ1) vl) (xr, σ2) vr)
-              P rhs (fun v δ' => Q v (env_tail (env_tail δ')))) ->
+              (P ∧ bi_pure (eval e δ = (vl,vr))) rhs (fun v δ' => Q v (env_tail (env_tail δ')))) ->
         semTriple δ P (stm_match_pair e xl xr rhs) Q.
   Admitted.
   Lemma iris_rule_stm_match_enum {Γ} (δ : LocalStore Γ)
         {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
         (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (forall K, semTriple δ P (alts K) Q) ->
+        (semTriple δ P (alts (eval e δ)) Q) ->
         semTriple δ P (stm_match_enum E e alts) Q.
   Admitted.
   Lemma iris_rule_stm_match_tuple {Γ} (δ : LocalStore Γ)
         {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
         (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (forall (δΔ : LocalStore Δ),
-            semTriple (env_cat δ δΔ) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
+        (semTriple (env_cat δ (tuple_pattern_match p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
         semTriple δ P (stm_match_tuple e p rhs) Q.
   Admitted.
   Lemma iris_rule_stm_match_union {Γ} (δ : LocalStore Γ)
@@ -841,27 +834,25 @@ Module IrisInstance
         (alt__Δ : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
         (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
         (alt__r : forall (K : 𝑼𝑲 U), Stm (ctx_cat Γ (alt__Δ K)) τ)
-        (P : forall (K : 𝑼𝑲 U), iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (forall (K : 𝑼𝑲 U) (δΔ : LocalStore (alt__Δ K)),
-            semTriple (env_cat δ δΔ) (P K) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) ->
-        semTriple δ
-          (∀ (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)), bi_impl (bi_pure (eval e δ = 𝑼_fold (existT K v))) (P K))
-          (stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K)))
+        (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+        (forall (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
+            semTriple (env_cat δ (pattern_match (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) ->
+        semTriple δ P
+                  (stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K)))
           Q.
   Admitted.
   Lemma iris_rule_stm_match_record {Γ} (δ : LocalStore Γ)
         {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (forall (δΔ : LocalStore Δ),
-            semTriple (env_cat δ δΔ) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
+        (semTriple (env_cat δ (record_pattern_match p (𝑹_unfold (eval e δ)))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
         semTriple δ P (stm_match_record R e p rhs) Q.
   Admitted.
 
   Lemma iris_rule_stm_read_register {Γ} (δ : LocalStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
         semTriple δ (r ↦ v) (stm_read_register r)
-                  (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = v) ∧ r ↦ v)%I.
+                  (fun v' δ' => (bi_pure (δ' = δ) ∧ bi_pure (v' = v)) ∧ r ↦ v)%I.
   Proof.
     iIntros "Hreg".
     iApply wp_mono; [| iApply (rule_stm_read_register with "Hreg") ].
@@ -875,7 +866,7 @@ Module IrisInstance
                               (Q : Lit σ -> LocalStore Γ -> iProp Σ)
                               (v : Lit σ) :
         semTriple δ (r ↦ v) (stm_write_register r w)
-                  (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ) ∧ r ↦ v')%I.
+                  (fun v' δ' => (bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ)) ∧ r ↦ v')%I.
   Proof.
     iIntros "Hreg".
     iApply wp_mono; [|iApply (rule_stm_write_register with "Hreg")].
@@ -884,25 +875,27 @@ Module IrisInstance
     by iFrame.
   Qed.
 
+  Lemma iris_rule_stm_assign_forwards {Γ} (δ : LocalStore Γ)
+        (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
+        (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
+        semTriple δ P s R ->
+        semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (@env_update _ _ _ δ' (x , _)  _ v__old) ∧ bi_pure (env_lookup δ' xIn = v__new))%I.
+  Admitted.
+
   Lemma iris_rule_stm_assign_backwards {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
         (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
         semTriple δ P s (fun v δ' => R v (@env_update _ _ _ δ' (x , _) _ v)) ->
         semTriple δ P (stm_assign x s) R.
-  Admitted.
-  Lemma iris_rule_stm_assign_forwards {Γ} (δ : LocalStore Γ)
-        (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
-        (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ P s R ->
-        semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (@env_update _ _ _ δ' (x , _)  _ v__old))%I.
   Proof.
     intros trips.
-    apply iris_rule_stm_assign_backwards.
     iIntros "P".
-    iPoseProof (trips with "P") as "wps".
-    iApply (wp_mono with "wps").
+    apply (iris_rule_stm_assign_forwards _) in trips.
+    iPoseProof (trips with "P") as "wpas".
+    iApply (wp_mono with "wpas").
     iIntros ([δ' v']) "Rv".
-    iExists (env_lookup δ' xIn).
+    iDestruct "Rv" as (v__old) "[Rv %]".
+    rewrite <-H0.
     by rewrite env_update_update env_update_lookup.
   Qed.
 
@@ -935,15 +928,8 @@ Module IrisInstance
       semTriple δ PRE s POST.
   Proof.
     intros PRE POST triple.
-    induction triple.
-    - iIntros "P".
-      cbn in H0, H1.
-      iApply (wp_mono _ _ _ (fun v => match v with MkVal _ δ' v => Q' v δ' end)).
-      + intros [δ' v]; cbn.
-        apply H1.
-      + iApply IHtriple.
-        iApply H0; iFrame.
-    - 
-  Admitted.
+    induction triple;
+      eauto using iris_rule_consequence, iris_rule_frame, iris_rule_pull, iris_rule_exist, iris_rule_forall, iris_rule_stm_lit, iris_rule_stm_exp, iris_rule_stm_let, iris_rule_stm_let_forwards, iris_rule_stm_block, iris_rule_stm_if, iris_rule_stm_if_backwards, iris_rule_stm_seq, iris_rule_stm_assert, iris_rule_stm_fail, iris_rule_stm_match_list, iris_rule_stm_match_sum, iris_rule_stm_match_pair, iris_rule_stm_match_enum, iris_rule_stm_match_tuple, iris_rule_stm_match_union, iris_rule_stm_match_record, iris_rule_stm_read_register, iris_rule_stm_write_register, iris_rule_stm_assign_forwards, iris_rule_stm_assign_backwards, iris_rule_stm_call_forwards, iris_rule_stm_call_frame, iris_rule_stm_bind.
+    Qed.
 
 End IrisInstance.
