@@ -435,7 +435,7 @@ Module IrisInstance
 
   Lemma rule_stm_read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) {δ : LocalStore Γ} :
     ⊢ (reg_pointsTo r v -∗
-                    WP (VT.MkTm δ (stm_read_register r)) ?{{ w, reg_pointsTo r v ∗ bi_pure (VT.val_to_lit w = v) }}
+                    WP (VT.MkTm δ (stm_read_register r)) ?{{ w, reg_pointsTo r v ∗ bi_pure (w = VT.MkVal _ δ v) }}
       )%I.
   Proof.
     iIntros "Hreg".
@@ -839,17 +839,29 @@ Module IrisInstance
             semTriple (env_cat δ δΔ) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
         semTriple δ P (stm_match_record R e p rhs) Q.
   Admitted.
+
   Lemma iris_rule_stm_read_register {Γ} (δ : LocalStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
         semTriple δ (r ↦ v) (stm_read_register r)
                   (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = v) ∧ r ↦ v)%I.
-  Admitted.
+  Proof.
+    iIntros "Hreg".
+    iApply (wp_mono _ _ _ (fun w => r ↦ v ∗ bi_pure (w = VT.MkVal _ δ v))%I).
+    - iIntros (v0) "[Hreg %]".
+      destruct v0.
+      iFrame.
+      iPureIntro.
+      by inversion H0.
+    - iApply (rule_stm_read_register with "Hreg").
+  Qed.
+
   Lemma iris_rule_stm_write_register {Γ} (δ : LocalStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
                               (Q : Lit σ -> LocalStore Γ -> iProp Σ)
                               (v : Lit σ) :
         semTriple δ (r ↦ v) (stm_write_register r w)
                   (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ) ∧ r ↦ v')%I.
+  Proof.
   Admitted.
   Lemma iris_rule_stm_assign_backwards {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
