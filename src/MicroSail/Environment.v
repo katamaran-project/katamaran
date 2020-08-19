@@ -211,7 +211,7 @@ Section WithBinding.
       destruct n; cbn in *; subst; auto.
   Qed.
 
-  Lemma env_split_takedrop {D : B -> Type} {Γ Δ : Ctx B} (E : Env D (ctx_cat Γ Δ)) :
+  Lemma env_split_takedrop {D : B -> Type} {Γ : Ctx B} Δ (E : Env D (ctx_cat Γ Δ)) :
       env_split Δ E = (env_drop Δ E , env_take Δ E).
   Proof.
     induction Δ; [trivial|].
