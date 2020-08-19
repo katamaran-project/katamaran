@@ -435,7 +435,7 @@ Module IrisInstance
 
   Lemma rule_stm_read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) {δ : LocalStore Γ} :
     ⊢ (reg_pointsTo r v -∗
-                    WP (VT.MkTm δ (stm_read_register r)) {{ w, reg_pointsTo r v ∗ bi_pure (VT.val_to_lit w = v) }}
+                    WP (VT.MkTm δ (stm_read_register r)) ?{{ w, reg_pointsTo r v ∗ bi_pure (VT.val_to_lit w = v) }}
       )%I.
   Proof.
     iIntros "Hreg".
@@ -444,24 +444,20 @@ Module IrisInstance
     iIntros (σ _ _ n) "Hregs".
     iDestruct (@reg_valid with "Hregs Hreg") as %<-.
     iModIntro.
-    iSplit.
-    - iPureIntro.
-      destruct σ as [regs heap].
-      exists nil. repeat eexists.
-      apply step_stm_read_register.
-    - iIntros (e2 σ2 efs) "%".
-      remember (VT.MkTm δ (stm_read_register r)) as t.
-      destruct a as [γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
-      dependent destruction Heqt.
-      destruct (steps_inversion_read_register step) as [<- [<- [<- ->]]].
-      iModIntro. iModIntro. iModIntro.
-      iFrame. iSplitR ""; auto.
-      by iApply wp_value.
+    iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    remember (VT.MkTm δ (stm_read_register r)) as t.
+    destruct a as [γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
+    dependent destruction Heqt.
+    destruct (steps_inversion_read_register step) as [<- [<- [<- ->]]].
+    iModIntro. iModIntro. iModIntro.
+    iFrame. iSplitR ""; auto.
+    by iApply wp_value.
   Qed.
 
   Lemma rule_stm_write_register {Γ} {τ} (r : 𝑹𝑬𝑮 τ) (δ : LocalStore Γ) (v1 v2 : Lit τ) :
     ⊢ (reg_pointsTo r v1 -∗
-                  WP (VT.MkTm δ (stm_write_register r (exp_lit _ _ v2)) : expr (microsail_lang Γ τ)) {{ w, reg_pointsTo r v2 ∗ bi_pure (v2 = VT.val_to_lit w) }}
+                  WP (VT.MkTm δ (stm_write_register r (exp_lit _ _ v2)) : expr (microsail_lang Γ τ)) ?{{ w, reg_pointsTo r v2 ∗ bi_pure (v2 = VT.val_to_lit w) }}
     )%I.
   Proof.
     iIntros "Hreg".
@@ -470,22 +466,18 @@ Module IrisInstance
     iIntros (σ _ _ n) "Hregs".
     iMod (reg_update σ.1 r v1 v2 with "Hregs Hreg") as "[Hregs Hreg]".
     iModIntro.
-    iSplitR.
-    - iPureIntro.
-      destruct σ as [regs heap].
-      exists nil. repeat eexists.
-      apply step_stm_write_register.
-    - iIntros (e2 σ2 efs) "%".
-      dependent destruction a.
-      destruct (steps_inversion_write_register H0) as [-> [<- [<- ->]]].
-      iModIntro. iModIntro. iModIntro.
-      iFrame. iSplitR; auto.
-      by iApply wp_value.
+    iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    dependent destruction a.
+    destruct (steps_inversion_write_register H0) as [-> [<- [<- ->]]].
+    iModIntro. iModIntro. iModIntro.
+    iFrame. iSplitR; auto.
+    by iApply wp_value.
   Qed.
 
   Definition semTriple {Γ τ} (δ : LocalStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Lit τ -> LocalStore Γ -> iProp Σ) :=
-    ⊢ PRE -∗ WP (MkTm δ s : expr (microsail_lang Γ τ)) {{ v, match v with MkVal _ δ' v => POST v δ' end }}.
+    ⊢ PRE -∗ WP (MkTm δ s : expr (microsail_lang Γ τ)) ?{{ v, match v with MkVal _ δ' v => POST v δ' end }}.
   (* always modality needed? perhaps not because sail not higher-order? *)
 
   Lemma iris_rule_consequence {Γ σ} {δ : LocalStore Γ}
@@ -565,99 +557,97 @@ Module IrisInstance
     rewrite wp_unfold.
     iIntros ([regs μ] ks1 ks n) "Hregs".
     iModIntro.
-    iSplitR.
-    - iPureIntro.
-      exists []. eexists. eexists. exists [].
-      eapply mk_prim_step.
-      eapply step_stm_exp.
-    - iIntros (e2 σ2 efs) "%".
-      remember (MkTm δ (stm_exp e)) as t.
-      destruct a.
-      inversion Heqt.
-      dependent destruction H0; inversion H3.
-      iModIntro. iModIntro. iModIntro.
-      rewrite H2.
-      dependent destruction H1.
-      iFrame.
-      iSplitL; trivial.
-      iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ (stm_lit σ (eval e δ)))).
-      by iApply PQ.
+    iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    remember (MkTm δ (stm_exp e)) as t.
+    destruct a.
+    inversion Heqt.
+    dependent destruction H0; inversion H3.
+    iModIntro. iModIntro. iModIntro.
+    rewrite H2.
+    dependent destruction H1.
+    iFrame.
+    iSplitL; trivial.
+    iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ (stm_lit σ (eval e δ)))).
+    by iApply PQ.
   Qed.
 
-  Lemma wp_compat_block {Γ Δ} {τ : Ty} {δ : LocalStore Γ}
-        (δΔ : LocalStore Δ) (k : Stm (Γ ▻▻ Δ) τ) {Q : Val Γ τ -> iProp Σ} :
-    ⊢ (WP (MkTm (δ ►► δΔ) k) {{ v, match v with MkVal _ δ' v => Q (MkVal _ (fst (env_split Δ δ')) v) end }} -∗
-          WP (MkTm δ (stm_block δΔ k)) {{ v, Q v }})%I.
-    Proof.
-      iRevert (δ δΔ k Q).
-      iLöb as "IH".
-      iIntros (δ δΔ k Q) "wpk".
-      rewrite ?wp_unfold.
-      cbn.
-      iIntros (σ ks1 ks n) "Hregs".
-      remember (language.to_val (MkTm (δ ►► δΔ) k)) as kval.
-      destruct kval.
-      - rewrite /wp_pre.
-        rewrite <- Heqkval.
-        destruct v.
-        assert (eqk := of_to_val _ (eq_sym Heqkval)).
-        inversion eqk.
-        rewrite <-?H2 in *; clear H2.
-        iMod "wpk" as "H".
-        iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
-        iSplitR.
-        + iPureIntro.
-          destruct σ as [regs μ].
-          exists nil. repeat eexists.
-          eapply step_stm_block_value.
-        + iModIntro.
-          iIntros (e2 σ2 efs) "%".
-          iModIntro. iModIntro.
-          iMod "Hclose" as "e".
-          iDestruct "e" as "_".
-          iModIntro.
-          dependent destruction a.
-          dependent destruction H0.
-          * rewrite env_split_cat.
-            iFrame.
-            iSplitL; [|trivial].
-            by iApply wp_value.
-          * dependent destruction H0.
-      - rewrite /wp_pre.
-        rewrite <-Heqkval.
-        iMod ("wpk" $! σ ks1 ks n with "Hregs") as "[% wpk']".
-        iSplitR.
-        + iPureIntro.
-          dependent destruction H0.
-          destruct H0 as [s' [σ' [efs step']]].
-          remember (MkTm (δ ►► δΔ) k) as s.
-          destruct step' as [γ γ' μ μ' δ' δ'' s s' step'].
-          inversion Heqs.
-          rewrite H2 H1 in step'.
-          assert (eqhelp := env_cat_split' δ'').
-          destruct (env_split Δ δ'') as [δ2 δΔ'].
-          rewrite eqhelp in step'.
-          exists nil. repeat eexists.
-          eapply step_stm_block_step.
-          eexact step'.
-        + iModIntro.
-          iIntros (e2 σ2 efs2) "%".
-          destruct H0 as [κ [e' [σ' [efs' step']]]].
-          dependent destruction a.
-          dependent destruction H0.
-          * remember (MkTm (δ ►► δΔ) (fail s)) as k'.
-            destruct step'; destruct H0; inversion Heqk'.
-          * iMod ("wpk'" $! _ _ _ (mk_prim_step H0)) as "wpk'".
-            iModIntro.
-            iModIntro.
-            iMod "wpk'" as "[Hregs [wpk' _]]".
-            iModIntro.
-            iFrame.
-            iSplitL; auto.
-            iApply "IH".
-            iFrame.
-    Qed.
+  Lemma wp_compat_fail {Γ τ} {s} {δ} {Q : Val Γ τ -> iProp Σ} :
+    (⊢ WP (MkTm δ (stm_fail _ s)) ?{{ v, Q v }})%I.
+  Proof.
+    rewrite wp_unfold.
+    iIntros (σ ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    remember (MkTm δ (fail s)) as s1.
+    destruct a.
+    inversion Heqs1.
+    destruct H0; inversion H3.
+  Qed.
 
+
+  Lemma wp_compat_block {Γ Δ} {τ : Ty} {δ : LocalStore Γ}
+        (δΔ : LocalStore Δ) (k : Stm (Γ ▻▻ Δ) τ) (Q : Val Γ τ -> iProp Σ) :
+    ⊢ (WP (MkTm (δ ►► δΔ) k) ?{{ v, match v with MkVal _ δ' v => Q (MkVal _ (env_drop Δ δ') v) end }} -∗
+          WP (MkTm δ (stm_block δΔ k)) ?{{ v, Q v }})%I.
+  Proof.
+    iRevert (δ δΔ k Q).
+    iLöb as "IH".
+    iIntros (δ δΔ k Q) "wpk".
+    rewrite ?wp_unfold.
+    cbn.
+    iIntros (σ ks1 ks n) "Hregs".
+    remember (language.to_val (MkTm (δ ►► δΔ) k)) as kval.
+    destruct kval.
+    - rewrite /wp_pre.
+      rewrite <- Heqkval.
+      destruct v.
+      assert (eqk := of_to_val _ (eq_sym Heqkval)).
+      inversion eqk.
+      rewrite <-?H2 in *; clear H2.
+      iMod "wpk" as "H".
+      iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+      iSplitR; [trivial|].
+      iModIntro.
+      iIntros (e2 σ2 efs) "%".
+      iModIntro. iModIntro.
+      iMod "Hclose" as "e".
+      iDestruct "e" as "_".
+      iModIntro.
+      dependent destruction a.
+      dependent destruction H0.
+      + rewrite env_drop_cat.
+        iFrame.
+        iSplitL; [|trivial].
+        by iApply wp_value.
+      + dependent destruction H0.
+    - rewrite /wp_pre.
+      rewrite <-Heqkval.
+      iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; [trivial|].
+      iIntros (e2 σ2 efs2) "%".
+      dependent destruction a.
+      dependent destruction H0.
+      + iModIntro. iModIntro.
+        iMod "Hclose" as "_".
+        iFrame.
+        iModIntro.
+        iSplitL; [|trivial].
+        iApply wp_compat_fail.
+      + iMod "Hclose" as "_".
+        iMod ("wpk" $! (γ , μ) ks1 ks n with "Hregs") as "[% wpk]".
+        iMod ("wpk" $! _ _ _ (mk_prim_step H0)) as "wpk".
+        iModIntro. iModIntro.
+        iMod "wpk" as "[Hregs [wpk' _]]".
+        iModIntro.
+        iFrame.
+        iSplitL; [|trivial].
+        iApply "IH".
+        iFrame.
+  Qed.
 
   Lemma iris_rule_stm_let {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
@@ -669,29 +659,51 @@ Module IrisInstance
         semTriple δ P (let: x := s in k) R.
   Proof.
     iIntros (trips tripk) "P".
-    iApply (wp_mask_mono _ empty); auto.
-    rewrite wp_unfold.
+    iPoseProof (trips with "P") as "wpv". clear trips.
+    iRevert (s δ) "wpv".
+    iLöb as "IH".
+    iIntros (s δ) "wpv".
+    rewrite (wp_unfold _ _ (MkTm _ (stm_let _ _ _ k))).
     iIntros ([regs μ] ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
     iModIntro.
-    iSplitR.
-    - iPureIntro.
-      exists []. eexists. eexists. exists [].
-      eapply mk_prim_step.
-      destruct (Prog.progress (stm_let x σ s k)) as [[]|step].
-      destruct (step regs μ δ) as [regs' [μ' [δ'0 [s' step']]]].
-      admit.
-      (* exact step'. *)
-    - iIntros (e2 σ2 efs) "%".
-      remember (MkTm δ (let: x ∶ σ := s in k)) as t.
-      destruct a.
-      inversion Heqt.
-      dependent destruction H0; inversion H3.
-      + iModIntro. iModIntro. iModIntro.
-        rewrite H2.
-        dependent destruction H1.
-        iFrame.
-        iSplitL; trivial.
-  Admitted.
+    iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    remember (MkTm δ (let: x ∶ σ := s in k)) as t.
+    destruct σ2 as [regs2 μ2].
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    cbn.
+    + iPoseProof (wp_value_inv' _ _ _ (MkVal _ _ v) with "wpv") as "Qv".
+      iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iMod "Qv" as "Qv".
+      iPoseProof (tripk v δ with "Qv") as "wpk".
+      iModIntro.
+      iFrame; iSplitL; auto.
+      by iApply (wp_compat_block (env_snoc env_nil (x , σ) v) k (fun v0 => match v0 with | MkVal _ δ' v1 => R v1 δ' end )).
+    + iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      cbn.
+      iFrame; iSplitL; auto.
+      by iApply wp_compat_fail.
+    + cbn.
+      rewrite wp_unfold.
+      unfold wp_pre.
+      rewrite (val_stuck (MkTm δ s) (γ , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
+      iSpecialize ("wpv" $! (γ , μ) nil nil n with "Hregs").
+      iMod "Hclose".
+      iMod "wpv" as "[_ wpv]".
+      iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
+      iMod "wpv" as "wpv".
+      iModIntro. iModIntro.
+      iMod "wpv" as "[Hregs [wps _]]".
+      iModIntro.
+      cbn.
+      iFrame.
+      by iApply "IH".
+  Qed.
 
   Lemma iris_rule_stm_let_forwards {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
