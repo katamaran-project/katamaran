@@ -895,7 +895,17 @@ Module IrisInstance
         (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
         semTriple δ P s R ->
         semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (@env_update _ _ _ δ' (x , _)  _ v__old))%I.
-  Admitted.
+  Proof.
+    intros trips.
+    apply iris_rule_stm_assign_backwards.
+    iIntros "P".
+    iPoseProof (trips with "P") as "wps".
+    iApply (wp_mono with "wps").
+    iIntros ([δ' v']) "Rv".
+    iExists (env_lookup δ' xIn).
+    by rewrite env_update_update env_update_lookup.
+  Qed.
+
   Lemma iris_rule_stm_call_forwards {Γ} (δ : LocalStore Γ)
         {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
         (P : iProp Σ)
