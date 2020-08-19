@@ -259,7 +259,7 @@ Module HoareSound
       (* rule_stm_assign_forwards *)
       - sound_solve.
         exists (H ‼ x)%lit.
-        now rewrite env_update_update, env_update_lookup.
+        now rewrite env_update_update, env_update_lookup, env_lookup_update.
       (* rule_stm_call_forwards *)
       - pose proof (validCEnv _ _ f).
         destruct H; try contradiction.

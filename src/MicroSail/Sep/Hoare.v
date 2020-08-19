@@ -249,7 +249,7 @@ Module ProgramLogic
         (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
         (P : L) (R : Lit σ -> LocalStore Γ -> L) :
         δ ⊢ ⦃ P ⦄ s ⦃ R ⦄ ->
-        δ ⊢ ⦃ P ⦄ stm_assign x s ⦃ fun v__new δ' => ∃ v__old, R v__new (δ' ⟪ x ↦ v__old ⟫)%env ⦄
+        δ ⊢ ⦃ P ⦄ stm_assign x s ⦃ fun v__new δ' => ∃ v__old, R v__new (δ' ⟪ x ↦ v__old ⟫)%env ∧ !!(env_lookup δ' xIn = v__new) ⦄
     | rule_stm_call_forwards
         {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
         (P : L)
