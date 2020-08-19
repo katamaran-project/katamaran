@@ -455,16 +455,16 @@ Module IrisInstance
     by iApply wp_value.
   Qed.
 
-  Lemma rule_stm_write_register {Γ} {τ} (r : 𝑹𝑬𝑮 τ) (δ : LocalStore Γ) (v1 v2 : Lit τ) :
-    ⊢ (reg_pointsTo r v1 -∗
-                  WP (VT.MkTm δ (stm_write_register r (exp_lit _ _ v2)) : expr (microsail_lang Γ τ)) ?{{ w, reg_pointsTo r v2 ∗ bi_pure (v2 = VT.val_to_lit w) }}
+  Lemma rule_stm_write_register {Γ} {τ} (r : 𝑹𝑬𝑮 τ) (δ : LocalStore Γ) (v : Lit τ) e :
+    ⊢ (reg_pointsTo r v -∗
+                    WP (VT.MkTm δ (stm_write_register r e) : expr (microsail_lang Γ τ)) ?{{ w, reg_pointsTo r (eval e δ) ∗ bi_pure (w = VT.MkVal _ δ (eval e δ)) }}
     )%I.
   Proof.
     iIntros "Hreg".
     iApply (wp_mask_mono _ empty); auto.
     rewrite wp_unfold; cbn.
     iIntros (σ _ _ n) "Hregs".
-    iMod (reg_update σ.1 r v1 v2 with "Hregs Hreg") as "[Hregs Hreg]".
+    iMod (reg_update σ.1 r v (eval e δ) with "Hregs Hreg") as "[Hregs Hreg]".
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
@@ -846,13 +846,10 @@ Module IrisInstance
                   (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = v) ∧ r ↦ v)%I.
   Proof.
     iIntros "Hreg".
-    iApply (wp_mono _ _ _ (fun w => r ↦ v ∗ bi_pure (w = VT.MkVal _ δ v))%I).
-    - iIntros (v0) "[Hreg %]".
-      destruct v0.
-      iFrame.
-      iPureIntro.
-      by inversion H0.
-    - iApply (rule_stm_read_register with "Hreg").
+    iApply wp_mono; [| iApply (rule_stm_read_register with "Hreg") ].
+    iIntros ([δ' v']) "[Hreg %]".
+    inversion H0.
+    by iFrame.
   Qed.
 
   Lemma iris_rule_stm_write_register {Γ} (δ : LocalStore Γ)
@@ -862,7 +859,13 @@ Module IrisInstance
         semTriple δ (r ↦ v) (stm_write_register r w)
                   (fun v' δ' => bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ) ∧ r ↦ v')%I.
   Proof.
-  Admitted.
+    iIntros "Hreg".
+    iApply wp_mono; [|iApply (rule_stm_write_register with "Hreg")].
+    iIntros (v') "[Hreg %]".
+    rewrite H0.
+    by iFrame.
+  Qed.
+
   Lemma iris_rule_stm_assign_backwards {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
         (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
