@@ -752,7 +752,19 @@ Module IrisInstance
         semTriple δ (bi_impl (bi_pure (eval e δ = true)) P1 ∧
                      bi_impl (bi_pure (eval e δ = false)) P2)%I
             (stm_if e s1 s2) Q.
-  Admitted.
+  Proof.
+    (* generalize proof to non-iris models *)
+    iIntros (trips1 trips2).
+    apply (iris_rule_stm_if e
+                            (bi_impl (bi_pure (eval e δ = true)) P1 ∧ bi_impl (bi_pure (eval e δ = false)) P2)).
+    - iIntros "[P' %]".
+      iApply trips1.
+      by iApply (bi.and_elim_l with "P'").
+    - iIntros "[P' %]".
+      iApply trips2.
+      by iApply (bi.and_elim_r with "P'").
+  Qed.
+
   Lemma iris_rule_stm_seq {Γ} (δ : LocalStore Γ)
         (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
         (P : iProp Σ) (Q : LocalStore Γ -> iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
