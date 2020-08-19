@@ -100,6 +100,13 @@ Section WithBinding.
       | env_snoc E _ _ => E
     end.
 
+  Fixpoint env_take {D : B -> Type} {Γ : Ctx B} Δ {struct Δ} :
+    forall (E : Env D (ctx_cat Γ Δ)), Env D Δ :=
+    match Δ with
+    | ctx_nil => fun E => env_nil
+    | ctx_snoc Δ b => fun (E : Env D (ctx_cat Γ (ctx_snoc Δ b))) => env_snoc (env_take Δ (env_tail E)) b (env_head E)
+    end.
+
   Definition env_unsnoc {D : B -> Type} {Γ : Ctx B}
     {b : B} (E : Env D (ctx_snoc Γ b)) : Env D Γ * D b:=
     match E in Env _ Γb
@@ -202,6 +209,16 @@ Section WithBinding.
   Proof.
     induction E; intros ? [n e]; try destruct e;
       destruct n; cbn in *; subst; auto.
+  Qed.
+
+  Lemma env_split_takedrop {D : B -> Type} {Γ Δ : Ctx B} (E : Env D (ctx_cat Γ Δ)) :
+      env_split Δ E = (env_drop Δ E , env_take Δ E).
+  Proof.
+    induction Δ; [trivial|].
+    dependent destruction E.
+    cbn.
+    rewrite (IHΔ E).
+    trivial.
   Qed.
 
   Lemma env_split_cat {D : B -> Type} {Γ Δ : Ctx B} :
