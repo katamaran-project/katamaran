@@ -709,11 +709,22 @@ Module IrisInstance
         (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
         (P : iProp Σ) (Q : Lit σ -> LocalStore Γ -> iProp Σ)
         (R : Lit τ -> LocalStore (Γ ▻ (x,σ)) -> iProp Σ) :
-        δ         ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
+        semTriple δ P s Q ->
         (forall (v : Lit σ) (δ' : LocalStore Γ),
             semTriple (env_snoc δ' (x,σ) v) (Q v δ') k R ) ->
         semTriple δ P (let: x := s in k) (fun v δ' => ∃ v__let, R v (env_snoc δ' (x,σ) v__let))%I.
-  Admitted.
+  Proof.
+    (* proof should be generalizable beyond Iris model? *)
+    iIntros (trips tripk).
+    apply (iris_rule_stm_let (δ := δ) (s := s) (k := k) (P := P) (Q := Q) (fun v δ' => ∃ v__let, R v (env_snoc δ' (x,σ) v__let))%I trips).
+    iIntros (v δ') "Qv".
+    iPoseProof (tripk with "Qv") as "wpk".
+    iApply (wp_mono with "wpk").
+    iIntros (v') "Rv".
+    destruct v'.
+    iExists (env_head δ0).
+    by dependent destruction δ0.
+  Qed.
 
   Lemma iris_rule_stm_block {Γ} (δ : LocalStore Γ)
         (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ)
@@ -721,7 +732,11 @@ Module IrisInstance
         (P : iProp Σ) (R : Lit τ -> LocalStore Γ -> iProp Σ) :
         (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env_drop Δ δ''))) ->
         semTriple δ P (stm_block δΔ k) R.
-  Admitted.
+  Proof.
+    iIntros (tripk) "P".
+    iPoseProof (tripk with "P") as "wpk".
+    by iApply (wp_compat_block δΔ k (fun v => match v with | MkVal _ δ' v' => R v' δ' end) with "wpk").
+  Qed.
 
   Lemma iris_rule_stm_if {Γ} (δ : LocalStore Γ)
         (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
