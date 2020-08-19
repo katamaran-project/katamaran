@@ -772,16 +772,22 @@ Module IrisInstance
         (forall δ', semTriple δ' (Q δ') s2 R) ->
         semTriple δ P (s1 ;; s2) R.
   Admitted.
+
   Lemma iris_rule_stm_assert {Γ} (δ : LocalStore Γ)
         (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string)
                       (P : iProp Σ) :
         semTriple δ P (stm_assert e1 e2) (fun v δ' => bi_pure (δ = δ' /\ eval e1 δ' = v /\ v = true) ∧ P)%I.
   Admitted.
+
   Lemma iris_rule_stm_fail {Γ} (δ : LocalStore Γ)
         (τ : Ty) (s : Lit ty_string) :
         forall (Q : Lit τ -> LocalStore Γ -> iProp Σ),
           semTriple δ True%I (stm_fail τ s) Q.
-  Admitted.
+  Proof.
+    iIntros (Q) "_".
+    iApply wp_compat_fail.
+  Qed.
+
   Lemma iris_rule_stm_match_list {Γ} (δ : LocalStore Γ)
         {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
         (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ)
