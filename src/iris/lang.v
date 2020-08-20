@@ -878,7 +878,54 @@ Module IrisInstance
         (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
         semTriple δ P s R ->
         semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (@env_update _ _ _ δ' (x , _)  _ v__old) ∧ bi_pure (env_lookup δ' xIn = v__new))%I.
-  Admitted.
+  Proof.
+    iIntros (trips) "P".
+    iPoseProof (trips with "P") as "wpv". clear trips.
+    iRevert (s δ) "wpv".
+    iLöb as "IH".
+    iIntros (s δ) "wpv".
+    rewrite (wp_unfold _ _ (MkTm _ (stm_assign _ s))).
+    iIntros ([regs μ] ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; [trivial|].
+    iIntros (e2 [regs2 μ2] efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    cbn.
+    + iPoseProof (wp_value_inv' _ _ _ (MkVal _ _ v) with "wpv") as "Qv".
+      iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iMod "Qv" as "Qv".
+      iModIntro.
+      iFrame.
+      iSplitL; [|trivial].
+      iApply wp_value.
+      cbn.
+      iExists (env_lookup δ xIn).
+      rewrite env_update_update env_update_lookup env_lookup_update.
+      by iFrame.
+    + iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      cbn.
+      iFrame; iSplitL; auto.
+      by iApply wp_compat_fail.
+    + rewrite wp_unfold.
+      unfold wp_pre.
+      rewrite (val_stuck (MkTm δ s) (γ , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
+      iSpecialize ("wpv" $! (γ , μ) nil nil n with "Hregs").
+      iMod "Hclose".
+      iMod "wpv" as "[_ wpv]".
+      iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
+      iMod "wpv" as "wpv".
+      iModIntro. iModIntro.
+      iMod "wpv" as "[Hregs [wps _]]".
+      iModIntro.
+      iFrame.
+      iSplitL; [|trivial].
+      by iApply "IH".
+  Qed.
 
   Lemma iris_rule_stm_assign_backwards {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
