@@ -907,7 +907,34 @@ Module IrisInstance
         (forall v, semTriple (env_snoc δ (xinl,σinl) v) (P ∧ bi_pure (eval e δ = inl v)) alt_inl (fun v' δ' => Q v' (env_tail δ'))) ->
         (forall v, semTriple (env_snoc δ (xinr,σinr) v) (P ∧ bi_pure (eval e δ = inr v)) alt_inr (fun v' δ' => Q v' (env_tail δ'))) ->
         semTriple δ P (stm_match_sum e xinl alt_inl xinr alt_inr) Q.
-  Admitted.
+  Proof.
+    iIntros (tripinl tripinr) "P".
+    rewrite wp_unfold.
+    iIntros (σ1 ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    remember (eval e δ) as scrutinee.
+    destruct scrutinee as [v1|v2].
+    - iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iModIntro. iFrame.
+      iSplitL; [|trivial].
+      iApply (wp_compat_block (env_snoc env_nil (pair xinl σinl) v1)).
+      iApply (tripinl v1).
+      by iFrame.
+    - iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iModIntro. iFrame.
+      iSplitL; [|trivial].
+      iApply (wp_compat_block (env_snoc env_nil (pair xinr σinr) v2)).
+      iApply (tripinr v2).
+      by iFrame.
+  Qed.
+
   Lemma iris_rule_stm_match_pair {Γ} (δ : LocalStore Γ)
         {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
         (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ)
