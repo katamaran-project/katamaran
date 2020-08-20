@@ -668,9 +668,7 @@ Module IrisInstance
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
     iModIntro.
     iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    remember (MkTm δ (let: x ∶ σ := s in k)) as t.
-    destruct σ2 as [regs2 μ2].
+    iIntros (e2 [regs2 μ2] efs) "%".
     unfold language.prim_step in a; cbn in a.
     dependent destruction a.
     dependent destruction H0.
@@ -920,7 +918,48 @@ Module IrisInstance
         (forall (v__σ : Lit σ) (δ' : LocalStore Γ),
             semTriple δ' (Q v__σ δ') (k v__σ) R) ->
         semTriple δ P (stm_bind s k) R.
-  Admitted.
+  Proof.
+    iIntros (trips tripk) "P".
+    iPoseProof (trips with "P") as "wpv". clear trips.
+    iRevert (s δ) "wpv".
+    iLöb as "IH".
+    iIntros (s δ) "wpv".
+    rewrite (wp_unfold _ _ (MkTm _ (stm_bind _ k))).
+    iIntros ([regs μ] ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; [trivial|].
+    iIntros (e2 [regs2 μ2] efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    cbn.
+    + rewrite wp_unfold.
+      unfold wp_pre.
+      rewrite (val_stuck (MkTm δ s) (γ , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
+      iSpecialize ("wpv" $! (γ , μ) nil nil n with "Hregs").
+      iMod "Hclose".
+      iMod "wpv" as "[_ wpv]".
+      iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
+      iMod "wpv" as "wpv".
+      iModIntro. iModIntro.
+      iMod "wpv" as "[Hregs [wps _]]".
+      iModIntro.
+      iFrame.
+      by iApply "IH".
+    + iPoseProof (wp_value_inv' _ _ _ (MkVal _ _ v) with "wpv") as "Qv".
+      iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iMod "Qv" as "Qv".
+      iPoseProof (tripk v δ with "Qv") as "wpk".
+      iModIntro.
+      by iFrame.
+    + iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      cbn.
+      iFrame; iSplitL; auto.
+      by iApply wp_compat_fail.
+  Qed.
 
   Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
     forall (PRE : iProp Σ) (POST : Lit τ -> LocalStore Γ -> iProp Σ)
