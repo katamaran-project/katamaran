@@ -742,7 +742,27 @@ Module IrisInstance
         semTriple δ (P ∧ bi_pure (eval e δ = true)) s1 Q ->
         semTriple δ (P ∧ bi_pure (eval e δ = false)) s2 Q ->
         semTriple δ P (stm_if e s1 s2) Q.
-  Admitted.
+  Proof.
+    iIntros (trips1 trips2) "P".
+    rewrite wp_unfold.
+    iIntros (σ ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro; iFrame.
+    iSplitL; [|trivial].
+    destruct (eval e δ).
+    - iApply trips1.
+      by iFrame.
+    - iApply trips2.
+      by iFrame.
+  Qed.
+
   Lemma iris_rule_stm_if_backwards {Γ} (δ : LocalStore Γ)
         (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
         (P1 P2 : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
