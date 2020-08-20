@@ -943,7 +943,27 @@ Module IrisInstance
             semTriple (env_snoc (env_snoc δ (xl, σ1) vl) (xr, σ2) vr)
               (P ∧ bi_pure (eval e δ = (vl,vr))) rhs (fun v δ' => Q v (env_tail (env_tail δ')))) ->
         semTriple δ P (stm_match_pair e xl xr rhs) Q.
-  Admitted.
+  Proof.
+    iIntros (trippair) "P".
+    rewrite wp_unfold.
+    iIntros (σ ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e2 σ' efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    remember (eval e δ) as scrutinee.
+    destruct scrutinee as [v1 v2].
+    iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro. iFrame.
+    iSplitL; [|trivial].
+    iApply (wp_compat_block (env_snoc (env_snoc env_nil (pair xl σ1) v1) (pair xr σ2) v2)).
+    iApply (trippair v1 v2).
+    by iFrame.
+  Qed.
+
   Lemma iris_rule_stm_match_enum {Γ} (δ : LocalStore Γ)
         {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
         (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
