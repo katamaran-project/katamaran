@@ -993,7 +993,24 @@ Module IrisInstance
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
         (semTriple (env_cat δ (tuple_pattern_match p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
         semTriple δ P (stm_match_tuple e p rhs) Q.
-  Admitted.
+  Proof.
+    iIntros (triptup) "P".
+    rewrite wp_unfold.
+    iIntros (σ ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e2 σ' efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro. iFrame.
+    iSplitL; [|trivial].
+    iApply (wp_compat_block (tuple_pattern_match p (eval e δ))).
+    by iApply triptup.
+  Qed.
+
   Lemma iris_rule_stm_match_union {Γ} (δ : LocalStore Γ)
         {U : 𝑼} (e : Exp Γ (ty_union U)) {σ τ : Ty}
         (alt__Δ : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
