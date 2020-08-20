@@ -1022,7 +1022,30 @@ Module IrisInstance
         semTriple δ P
                   (stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K)))
           Q.
-  Admitted.
+  Proof.
+    iIntros (tripunion) "P".
+    rewrite wp_unfold.
+    iIntros (σ1 ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro. iFrame.
+    iSplitL; [|trivial].
+    remember (𝑼_unfold (eval e δ)) as scrutinee.
+    destruct scrutinee as [K v].
+    iApply (wp_compat_block (pattern_match (proj_alt_pat (alt Γ (alt__p K) (alt__r K))) v)).
+    specialize (tripunion K v).
+    rewrite Heqscrutinee in tripunion.
+    rewrite 𝑼_fold_unfold in tripunion.
+    iApply tripunion.
+    by iFrame.
+  Qed.
+
   Lemma iris_rule_stm_match_record {Γ} (δ : LocalStore Γ)
         {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
