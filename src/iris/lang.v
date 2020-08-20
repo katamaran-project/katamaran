@@ -795,7 +795,26 @@ Module IrisInstance
         (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string)
                       (P : iProp Σ) :
         semTriple δ P (stm_assert e1 e2) (fun v δ' => bi_pure (δ = δ' /\ eval e1 δ' = v /\ v = true) ∧ P)%I.
-  Admitted.
+  Proof.
+    iIntros "P".
+    rewrite wp_unfold.
+    iIntros (σ ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e3 σ2 efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro; iFrame.
+    iSplitL; [|trivial].
+    remember (eval e1 δ) as c.
+    destruct c.
+    - iApply wp_value.
+      by iFrame.
+    - iApply wp_compat_fail.
+  Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : LocalStore Γ)
         (τ : Ty) (s : Lit ty_string) :
