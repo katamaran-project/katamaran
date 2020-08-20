@@ -1052,7 +1052,23 @@ Module IrisInstance
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
         (semTriple (env_cat δ (record_pattern_match p (𝑹_unfold (eval e δ)))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
         semTriple δ P (stm_match_record R e p rhs) Q.
-  Admitted.
+  Proof.
+    iIntros (triprec) "P".
+    rewrite wp_unfold.
+    iIntros (σ1 ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro. iFrame.
+    iSplitL; [|trivial].
+    iApply (wp_compat_block (record_pattern_match p (𝑹_unfold (eval e δ)))).
+    by iApply triprec.
+  Qed.
 
   Lemma iris_rule_stm_read_register {Γ} (δ : LocalStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
