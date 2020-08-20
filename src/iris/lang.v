@@ -789,7 +789,44 @@ Module IrisInstance
         semTriple δ P s1 (fun _ => Q) ->
         (forall δ', semTriple δ' (Q δ') s2 R) ->
         semTriple δ P (s1 ;; s2) R.
-  Admitted.
+  Proof.
+    iIntros (trips1 trips2) "P".
+    iPoseProof (trips1 with "P") as "wps1". clear trips1.
+    iRevert (s1 δ) "wps1".
+    iLöb as "IH".
+    iIntros (s1 δ) "wps1".
+    rewrite (wp_unfold _ _ (MkTm _ (stm_seq _ _))).
+    iIntros ([regs μ] ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0; cbn.
+    + rewrite wp_unfold.
+      unfold wp_pre.
+      rewrite (val_stuck (MkTm δ s1) (γ , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
+      iSpecialize ("wps1" $! (γ , μ) nil nil n with "Hregs").
+      iMod "Hclose" as "_".
+      iMod "wps1" as "[_ wps1]".
+      iMod ("wps1" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0))  as "wps1".
+      iModIntro. iModIntro.
+      iMod "wps1" as "[Hregs [wps' _]]".
+      iFrame.
+      iSplitL; [|trivial].
+      by iApply "IH".
+    + iPoseProof (wp_value_inv' _ _ _ (MkVal _ _ v) with "wps1") as "Qv".
+      iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iMod "Qv" as "Qv".
+      iPoseProof (trips2 δ with "Qv") as "wps2".
+      by iFrame.
+    + iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iFrame; iSplitL; auto.
+      by iApply wp_compat_fail.
+  Qed.
 
   Lemma iris_rule_stm_assert {Γ} (δ : LocalStore Γ)
         (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string)
