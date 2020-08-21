@@ -205,7 +205,7 @@ Module IrisInstance
   Definition regs_inv `{sailG Σ} (regstore : RegStore) : iProp Σ :=
     (∃ regsmap,
         own (i := reg_inG) reg_gv_name (● regsmap) ∗
-        bi_pure (map_Forall (fun reg v => match reg with | mkSomeReg reg => Excl (mkSomeLit (read_register regstore reg)) = v end ) regsmap)
+        ⌜ map_Forall (fun reg v => match reg with | mkSomeReg reg => Excl (mkSomeLit (read_register regstore reg)) = v end ) regsmap ⌝
         (* sigh why can't I use ⌈ ... ⌉ notation? *)
     )%I.
 
@@ -435,7 +435,7 @@ Module IrisInstance
 
   Lemma rule_stm_read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) {δ : LocalStore Γ} :
     ⊢ (reg_pointsTo r v -∗
-                    WP (VT.MkTm δ (stm_read_register r)) ?{{ w, reg_pointsTo r v ∗ bi_pure (w = VT.MkVal _ δ v) }}
+                    WP (VT.MkTm δ (stm_read_register r)) ?{{ w, reg_pointsTo r v ∗ ⌜ w = VT.MkVal _ δ v ⌝ }}
       )%I.
   Proof.
     iIntros "Hreg".
@@ -476,83 +476,80 @@ Module IrisInstance
   Qed.
 
   Definition semTriple {Γ τ} (δ : LocalStore Γ)
-             (PRE : iProp Σ) (s : Stm Γ τ) (POST : Lit τ -> LocalStore Γ -> iProp Σ) :=
-    ⊢ PRE -∗ WP (MkTm δ s : expr (microsail_lang Γ τ)) ?{{ v, match v with MkVal _ δ' v => POST v δ' end }}.
+             (PRE : iProp Σ) (s : Stm Γ τ) (POST : Lit τ -> LocalStore Γ -> iProp Σ) : iProp Σ :=
+    PRE -∗ WP (MkTm δ s : expr (microsail_lang Γ τ)) ?{{ v, match v with MkVal _ δ' v => POST v δ' end }}.
   (* always modality needed? perhaps not because sail not higher-order? *)
 
   Lemma iris_rule_consequence {Γ σ} {δ : LocalStore Γ}
         {P P'} {Q Q' : Lit σ -> LocalStore Γ -> iProp Σ} {s : Stm Γ σ} :
-        (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') -> semTriple δ P' s Q' -> semTriple δ P s Q.
+        (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') ->
+        semTriple δ P' s Q' -∗ semTriple δ P s Q.
   Proof.
-    iIntros (PP QQ trip) "P".
+    iIntros (PP QQ) "trips P".
     iApply (wp_mono _ _ _ (fun v => match v with MkVal _ δ' v => Q' v δ' end)).
     + intros [δ' v]; cbn.
       apply QQ.
-    + iApply trip.
+    + iApply "trips".
       iApply PP; iFrame.
   Qed.
 
   Lemma iris_rule_frame {Γ σ} {δ : LocalStore Γ}
         (R P : iProp Σ) (Q : Lit σ -> LocalStore Γ -> iProp Σ) (s : Stm Γ σ) :
-        semTriple δ P s Q -> semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ')%I.
+        (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
   Proof.
-    iIntros (trip) "[HR HP]".
+    iIntros "trips [HR HP]".
     iApply (wp_mono _ _ _ (fun v => R ∗ match v with MkVal _ δ' v => Q v δ' end)%I).
     - iIntros (v) "[R Q]".
       destruct v.
       by iFrame.
     - iApply (wp_frame_l _ _ (MkTm δ s) (fun v => match v with MkVal _ δ' v => Q v δ' end) R).
       iFrame.
-      by iApply trip.
+      by iApply "trips".
   Qed.
 
   Lemma iris_rule_pull {σ Γ} (δ : LocalStore Γ) (s : Stm Γ σ)
         (P : iProp Σ) (Q : Prop) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
-        (Q -> semTriple δ P s R) ->
-        semTriple δ (P ∧ bi_pure Q)%I s R.
+        (⊢ (⌜ Q ⌝ → semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R)%I.
   Proof.
-    iIntros (QP) "[P %]".
-    by iApply QP.
+    iIntros "QP [P %]".
+    by iApply "QP".
   Qed.
 
   Lemma iris_rule_exist {σ Γ} (δ : LocalStore Γ)
         (s : Stm Γ σ) {A : Type} {P : A -> iProp Σ}
         {Q :  Lit σ -> LocalStore Γ -> iProp Σ} :
-        (forall x, semTriple δ (P x) s Q) ->
-        semTriple δ (∃ x, P x) s Q.
+        ⊢ ((∀ x, semTriple δ (P x) s Q) -∗ semTriple δ (∃ x, P x) s Q)%I.
   Proof.
-    iIntros (Atrip) "Px".
+    iIntros "trips Px".
     iDestruct "Px" as (x) "Px".
-    by iApply Atrip.
+    by iApply "trips".
   Qed.
 
   (* following rule is dubious, re discussion about conjunction rule *)
   Lemma iris_rule_forall {σ Γ} (δ : LocalStore Γ)
         {s : Stm Γ σ} {A : Type} {P : iProp Σ}
         {Q : A -> Lit σ -> LocalStore Γ -> iProp Σ}
-        (hyp : forall x, semTriple δ P s (Q x)) (x : A) :
-        semTriple δ P s (fun v δ' => ∀ x, Q x v δ')%I.
+        (x : A) :
+    ⊢ ((∀ x, semTriple δ P s (Q x)) -∗ semTriple δ P s (fun v δ' => ∀ x, Q x v δ'))%I.
   Proof.
   Admitted.
 
   Lemma iris_rule_stm_lit {Γ} (δ : LocalStore Γ)
         {τ : Ty} {l : Lit τ}
         {P : iProp Σ} {Q : Lit τ -> LocalStore Γ -> iProp Σ} :
-        (P ⊢ Q l δ)%I ->
-        semTriple δ P (stm_lit τ l) Q.
+        ⊢ ((P -∗ Q l δ)%I -∗ semTriple δ P (stm_lit τ l) Q)%I.
   Proof.
-    iIntros (PQ) "P".
+    iIntros "PQ P".
     iApply wp_value.
-    by iApply PQ.
+    by iApply "PQ".
   Qed.
 
   Lemma iris_rule_stm_exp {Γ} (δ : LocalStore Γ)
         {τ : Ty} {e : Exp Γ τ}
         {P : iProp Σ} {Q : Lit τ -> LocalStore Γ -> iProp Σ} :
-        (P ⊢ Q (eval e δ) δ)%I ->
-        semTriple δ P (stm_exp e) Q.
+        ⊢ ((P -∗ Q (eval e δ) δ) -∗ semTriple δ P (stm_exp e) Q)%I.
   Proof.
-    iIntros (PQ) "P".
+    iIntros "PQ P".
     iApply (wp_mask_mono _ empty); auto.
     rewrite wp_unfold.
     iIntros ([regs μ] ks1 ks n) "Hregs".
@@ -569,7 +566,7 @@ Module IrisInstance
     iFrame.
     iSplitL; trivial.
     iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ (stm_lit σ (eval e δ)))).
-    by iApply PQ.
+    by iApply "PQ".
   Qed.
 
   Lemma wp_compat_fail {Γ τ} {s} {δ} {Q : Val Γ τ -> iProp Σ} :
@@ -586,7 +583,6 @@ Module IrisInstance
     inversion Heqs1.
     destruct H0; inversion H3.
   Qed.
-
 
   Lemma wp_compat_block {Γ Δ} {τ : Ty} {δ : LocalStore Γ}
         (δΔ : LocalStore Δ) (k : Stm (Γ ▻▻ Δ) τ) (Q : Val Γ τ -> iProp Σ) :
@@ -653,13 +649,13 @@ Module IrisInstance
         (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
         (P : iProp Σ) (Q : Lit σ -> LocalStore Γ -> iProp Σ)
         (R : Lit τ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ P s Q ->
-        (forall (v : Lit σ) (δ' : LocalStore Γ),
-            semTriple (env_snoc δ' (x,σ) v) (Q v δ') k (fun v δ'' => R v (env_tail δ'')) ) ->
-        semTriple δ P (let: x := s in k) R.
+        ⊢ (semTriple δ P s Q -∗
+                     (∀ (v : Lit σ) (δ' : LocalStore Γ),
+                         semTriple (env_snoc δ' (x,σ) v) (Q v δ') k (fun v δ'' => R v (env_tail δ'')) ) -∗
+                     semTriple δ P (let: x := s in k) R).
   Proof.
-    iIntros (trips tripk) "P".
-    iPoseProof (trips with "P") as "wpv". clear trips.
+    iIntros "trips tripk P".
+    iPoseProof ("trips" with "P") as "wpv".
     iRevert (s δ) "wpv".
     iLöb as "IH".
     iIntros (s δ) "wpv".
@@ -677,7 +673,7 @@ Module IrisInstance
       iModIntro. iModIntro.
       iMod "Hclose" as "_".
       iMod "Qv" as "Qv".
-      iPoseProof (tripk v δ with "Qv") as "wpk".
+      iPoseProof ("tripk" $! v δ with "Qv") as "wpk".
       iModIntro.
       iFrame; iSplitL; auto.
       by iApply (wp_compat_block (env_snoc env_nil (x , σ) v) k (fun v0 => match v0 with | MkVal _ δ' v1 => R v1 δ' end )).
@@ -691,7 +687,7 @@ Module IrisInstance
       unfold wp_pre.
       rewrite (val_stuck (MkTm δ s) (γ , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
       iSpecialize ("wpv" $! (γ , μ) nil nil n with "Hregs").
-      iMod "Hclose".
+      iMod "Hclose" as "_".
       iMod "wpv" as "[_ wpv]".
       iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
       iMod "wpv" as "wpv".
@@ -700,23 +696,24 @@ Module IrisInstance
       iModIntro.
       cbn.
       iFrame.
-      by iApply "IH".
+      iSpecialize ("IH" with "tripk").
+      iSpecialize ("IH" with "wps").
+      iFrame.
   Qed.
 
   Lemma iris_rule_stm_let_forwards {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
         (P : iProp Σ) (Q : Lit σ -> LocalStore Γ -> iProp Σ)
         (R : Lit τ -> LocalStore (Γ ▻ (x,σ)) -> iProp Σ) :
-        semTriple δ P s Q ->
-        (forall (v : Lit σ) (δ' : LocalStore Γ),
-            semTriple (env_snoc δ' (x,σ) v) (Q v δ') k R ) ->
-        semTriple δ P (let: x := s in k) (fun v δ' => ∃ v__let, R v (env_snoc δ' (x,σ) v__let))%I.
+        ⊢ (semTriple δ P s Q -∗
+                     (∀ (v : Lit σ) (δ' : LocalStore Γ), semTriple (env_snoc δ' (x,σ) v) (Q v δ') k R ) -∗
+                     semTriple δ P (let: x := s in k) (fun v δ' => ∃ v__let, R v (env_snoc δ' (x,σ) v__let)))%I.
   Proof.
     (* proof should be generalizable beyond Iris model? *)
-    iIntros (trips tripk).
-    apply (iris_rule_stm_let (δ := δ) (s := s) (k := k) (P := P) (Q := Q) (fun v δ' => ∃ v__let, R v (env_snoc δ' (x,σ) v__let))%I trips).
+    iIntros "trips tripk".
+    iApply (iris_rule_stm_let δ s k P Q (fun v δ' => ∃ v__let, R v (env_snoc δ' (x,σ) v__let))%I with "trips").
     iIntros (v δ') "Qv".
-    iPoseProof (tripk with "Qv") as "wpk".
+    iPoseProof ("tripk" with "Qv") as "wpk".
     iApply (wp_mono with "wpk").
     iIntros (v') "Rv".
     destruct v'.
@@ -728,22 +725,22 @@ Module IrisInstance
         (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ)
         (τ : Ty) (k : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (R : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env_drop Δ δ''))) ->
-        semTriple δ P (stm_block δΔ k) R.
+        ⊢ (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env_drop Δ δ'')) -∗
+                   semTriple δ P (stm_block δΔ k) R)%I.
   Proof.
-    iIntros (tripk) "P".
-    iPoseProof (tripk with "P") as "wpk".
+    iIntros "tripk P".
+    iPoseProof ("tripk" with "P") as "wpk".
     by iApply (wp_compat_block δΔ k (fun v => match v with | MkVal _ δ' v' => R v' δ' end) with "wpk").
   Qed.
 
   Lemma iris_rule_stm_if {Γ} (δ : LocalStore Γ)
         (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ (P ∧ bi_pure (eval e δ = true)) s1 Q ->
-        semTriple δ (P ∧ bi_pure (eval e δ = false)) s2 Q ->
-        semTriple δ P (stm_if e s1 s2) Q.
+        ⊢ (semTriple δ (P ∧ ⌜ eval e δ = true ⌝) s1 Q -∗
+                   semTriple δ (P ∧ ⌜ eval e δ = false ⌝) s2 Q -∗
+                   semTriple δ P (stm_if e s1 s2) Q)%I.
   Proof.
-    iIntros (trips1 trips2) "P".
+    iIntros "trips1 trips2 P".
     rewrite wp_unfold.
     iIntros (σ ks1 ks n) "Hregs".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
@@ -757,41 +754,41 @@ Module IrisInstance
     iModIntro; iFrame.
     iSplitL; [|trivial].
     destruct (eval e δ).
-    - iApply trips1.
+    - iApply "trips1".
       by iFrame.
-    - iApply trips2.
+    - iApply "trips2".
       by iFrame.
   Qed.
 
   Lemma iris_rule_stm_if_backwards {Γ} (δ : LocalStore Γ)
         (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
         (P1 P2 : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ P1 s1 Q -> semTriple δ P2 s2 Q ->
-        semTriple δ (bi_impl (bi_pure (eval e δ = true)) P1 ∧
-                     bi_impl (bi_pure (eval e δ = false)) P2)%I
-            (stm_if e s1 s2) Q.
+        ⊢ (semTriple δ P1 s1 Q -∗ semTriple δ P2 s2 Q -∗
+        semTriple δ (bi_impl (⌜ eval e δ = true ⌝) P1 ∧
+                     bi_impl (⌜ eval e δ = false ⌝) P2)%I
+            (stm_if e s1 s2) Q)%I.
   Proof.
     (* generalize proof to non-iris models *)
-    iIntros (trips1 trips2).
-    apply (iris_rule_stm_if e
-                            (bi_impl (bi_pure (eval e δ = true)) P1 ∧ bi_impl (bi_pure (eval e δ = false)) P2)).
+    iIntros "trips1 trips2".
+    iApply (iris_rule_stm_if δ e s1 s2
+                             ((⌜ eval e δ = true ⌝ → P1) ∧ (⌜ eval e δ = false ⌝ → P2))%I Q with "[trips1]").
     - iIntros "[P' %]".
-      iApply trips1.
+      iApply "trips1".
       by iApply (bi.and_elim_l with "P'").
     - iIntros "[P' %]".
-      iApply trips2.
+      iApply "trips2".
       by iApply (bi.and_elim_r with "P'").
   Qed.
 
   Lemma iris_rule_stm_seq {Γ} (δ : LocalStore Γ)
         (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
         (P : iProp Σ) (Q : LocalStore Γ -> iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ P s1 (fun _ => Q) ->
-        (forall δ', semTriple δ' (Q δ') s2 R) ->
-        semTriple δ P (s1 ;; s2) R.
+    ⊢ (semTriple δ P s1 (fun _ => Q) -∗
+                 (∀ δ', semTriple δ' (Q δ') s2 R) -∗
+                 semTriple δ P (s1 ;; s2) R)%I.
   Proof.
-    iIntros (trips1 trips2) "P".
-    iPoseProof (trips1 with "P") as "wps1". clear trips1.
+    iIntros "trips1 trips2 P".
+    iPoseProof ("trips1" with "P") as "wps1".
     iRevert (s1 δ) "wps1".
     iLöb as "IH".
     iIntros (s1 δ) "wps1".
@@ -815,12 +812,14 @@ Module IrisInstance
       iMod "wps1" as "[Hregs [wps' _]]".
       iFrame.
       iSplitL; [|trivial].
+      iModIntro.
+      iSpecialize ("IH" with "trips2").
       by iApply "IH".
     + iPoseProof (wp_value_inv' _ _ _ (MkVal _ _ v) with "wps1") as "Qv".
       iModIntro. iModIntro.
       iMod "Hclose" as "_".
       iMod "Qv" as "Qv".
-      iPoseProof (trips2 δ with "Qv") as "wps2".
+      iPoseProof ("trips2" $! δ with "Qv") as "wps2".
       by iFrame.
     + iModIntro. iModIntro.
       iMod "Hclose" as "_".
@@ -831,7 +830,7 @@ Module IrisInstance
   Lemma iris_rule_stm_assert {Γ} (δ : LocalStore Γ)
         (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string)
                       (P : iProp Σ) :
-        semTriple δ P (stm_assert e1 e2) (fun v δ' => bi_pure (δ = δ' /\ eval e1 δ' = v /\ v = true) ∧ P)%I.
+        ⊢ (semTriple δ P (stm_assert e1 e2) (fun v δ' => bi_pure (δ = δ' /\ eval e1 δ' = v /\ v = true) ∧ P))%I.
   Proof.
     iIntros "P".
     rewrite wp_unfold.
@@ -856,7 +855,7 @@ Module IrisInstance
   Lemma iris_rule_stm_fail {Γ} (δ : LocalStore Γ)
         (τ : Ty) (s : Lit ty_string) :
         forall (Q : Lit τ -> LocalStore Γ -> iProp Σ),
-          semTriple δ True%I (stm_fail τ s) Q.
+          ⊢ semTriple δ True%I (stm_fail τ s) Q.
   Proof.
     iIntros (Q) "_".
     iApply wp_compat_fail.
@@ -866,11 +865,11 @@ Module IrisInstance
         {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
         (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ (P ∧ bi_pure (eval e δ = [])) alt_nil (fun v' δ' => Q v' δ') ->
-        (forall v vs, semTriple (env_snoc (env_snoc δ (xh,σ) v) (xt,ty_list σ) vs) (P ∧ bi_pure (eval e δ = cons v vs)) alt_cons (fun v' δ' => Q v' (env_tail (env_tail δ')))) ->
-        semTriple δ P (stm_match_list e alt_nil xh xt alt_cons) Q.
+        ⊢ (semTriple δ (P ∧ bi_pure (eval e δ = [])) alt_nil (fun v' δ' => Q v' δ') -∗
+                     (∀ v vs, semTriple (env_snoc (env_snoc δ (xh,σ) v) (xt,ty_list σ) vs) (P ∧ bi_pure (eval e δ = cons v vs)) alt_cons (fun v' δ' => Q v' (env_tail (env_tail δ')))) -∗
+                     semTriple δ P (stm_match_list e alt_nil xh xt alt_cons) Q)%I.
   Proof.
-    iIntros (tripnil tripcons) "P".
+    iIntros "tripnil tripcons P".
     rewrite wp_unfold.
     iIntros (σ1 ks1 ks n) "Hregs".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
@@ -886,7 +885,7 @@ Module IrisInstance
       iMod "Hclose" as "_".
       iModIntro. iFrame.
       iSplitL; [|trivial].
-      iApply tripnil.
+      iApply "tripnil".
       by iFrame.
     - iModIntro. iModIntro.
       iMod "Hclose" as "_".
@@ -894,7 +893,7 @@ Module IrisInstance
       iFrame.
       iSplitL; [|trivial].
       iApply (wp_compat_block (env_snoc (env_snoc env_nil (pair xh σ) l) (pair xt (ty_list σ)) ls)).
-      iApply tripcons.
+      iApply "tripcons".
       by iFrame.
   Qed.
 
@@ -904,11 +903,11 @@ Module IrisInstance
                          (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ)
                          (P : iProp Σ)
                          (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (forall v, semTriple (env_snoc δ (xinl,σinl) v) (P ∧ bi_pure (eval e δ = inl v)) alt_inl (fun v' δ' => Q v' (env_tail δ'))) ->
-        (forall v, semTriple (env_snoc δ (xinr,σinr) v) (P ∧ bi_pure (eval e δ = inr v)) alt_inr (fun v' δ' => Q v' (env_tail δ'))) ->
-        semTriple δ P (stm_match_sum e xinl alt_inl xinr alt_inr) Q.
+        ⊢ ((∀ v, semTriple (env_snoc δ (xinl,σinl) v) (P ∧ ⌜ eval e δ = inl v ⌝) alt_inl (fun v' δ' => Q v' (env_tail δ'))) -∗
+           (∀ v, semTriple (env_snoc δ (xinr,σinr) v) (P ∧ ⌜ eval e δ = inr v ⌝) alt_inr (fun v' δ' => Q v' (env_tail δ'))) -∗
+        semTriple δ P (stm_match_sum e xinl alt_inl xinr alt_inr) Q)%I.
   Proof.
-    iIntros (tripinl tripinr) "P".
+    iIntros "tripinl tripinr P".
     rewrite wp_unfold.
     iIntros (σ1 ks1 ks n) "Hregs".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
@@ -924,14 +923,14 @@ Module IrisInstance
       iModIntro. iFrame.
       iSplitL; [|trivial].
       iApply (wp_compat_block (env_snoc env_nil (pair xinl σinl) v1)).
-      iApply (tripinl v1).
+      iApply ("tripinl" $! v1).
       by iFrame.
     - iModIntro. iModIntro.
       iMod "Hclose" as "_".
       iModIntro. iFrame.
       iSplitL; [|trivial].
       iApply (wp_compat_block (env_snoc env_nil (pair xinr σinr) v2)).
-      iApply (tripinr v2).
+      iApply ("tripinr" $! v2).
       by iFrame.
   Qed.
 
@@ -939,12 +938,12 @@ Module IrisInstance
         {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
         (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (forall vl vr,
+        ⊢ ((∀ vl vr,
             semTriple (env_snoc (env_snoc δ (xl, σ1) vl) (xr, σ2) vr)
-              (P ∧ bi_pure (eval e δ = (vl,vr))) rhs (fun v δ' => Q v (env_tail (env_tail δ')))) ->
-        semTriple δ P (stm_match_pair e xl xr rhs) Q.
+              (P ∧ bi_pure (eval e δ = (vl,vr))) rhs (fun v δ' => Q v (env_tail (env_tail δ')))) -∗
+          semTriple δ P (stm_match_pair e xl xr rhs) Q)%I.
   Proof.
-    iIntros (trippair) "P".
+    iIntros "trippair P".
     rewrite wp_unfold.
     iIntros (σ ks1 ks n) "Hregs".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
@@ -960,7 +959,7 @@ Module IrisInstance
     iModIntro. iFrame.
     iSplitL; [|trivial].
     iApply (wp_compat_block (env_snoc (env_snoc env_nil (pair xl σ1) v1) (pair xr σ2) v2)).
-    iApply (trippair v1 v2).
+    iApply ("trippair" $! v1 v2).
     by iFrame.
   Qed.
 
@@ -968,10 +967,10 @@ Module IrisInstance
         {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
         (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (semTriple δ P (alts (eval e δ)) Q) ->
-        semTriple δ P (stm_match_enum E e alts) Q.
+        ⊢ (semTriple δ P (alts (eval e δ)) Q -∗
+          semTriple δ P (stm_match_enum E e alts) Q)%I.
   Proof.
-    iIntros (tripalt) "P".
+    iIntros "tripalt P".
     rewrite wp_unfold.
     iIntros (σ ks1 ks n) "Hregs".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
@@ -984,17 +983,17 @@ Module IrisInstance
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    by iApply tripalt.
+    by iApply "tripalt".
   Qed.
 
   Lemma iris_rule_stm_match_tuple {Γ} (δ : LocalStore Γ)
         {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
         (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (semTriple (env_cat δ (tuple_pattern_match p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
-        semTriple δ P (stm_match_tuple e p rhs) Q.
+    ⊢ ((semTriple (env_cat δ (tuple_pattern_match p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
+       semTriple δ P (stm_match_tuple e p rhs) Q)%I.
   Proof.
-    iIntros (triptup) "P".
+    iIntros "triptup P".
     rewrite wp_unfold.
     iIntros (σ ks1 ks n) "Hregs".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
@@ -1008,7 +1007,7 @@ Module IrisInstance
     iModIntro. iFrame.
     iSplitL; [|trivial].
     iApply (wp_compat_block (tuple_pattern_match p (eval e δ))).
-    by iApply triptup.
+    by iApply "triptup".
   Qed.
 
   Lemma iris_rule_stm_match_union {Γ} (δ : LocalStore Γ)
@@ -1017,13 +1016,12 @@ Module IrisInstance
         (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
         (alt__r : forall (K : 𝑼𝑲 U), Stm (ctx_cat Γ (alt__Δ K)) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (forall (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
-            semTriple (env_cat δ (pattern_match (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) ->
-        semTriple δ P
-                  (stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K)))
-          Q.
+        ⊢ ((∀ (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
+               semTriple (env_cat δ (pattern_match (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) -∗
+                                                                                                                                                               semTriple δ P (stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K))) Q
+          )%I.
   Proof.
-    iIntros (tripunion) "P".
+    iIntros "tripunion P".
     rewrite wp_unfold.
     iIntros (σ1 ks1 ks n) "Hregs".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
@@ -1039,10 +1037,10 @@ Module IrisInstance
     remember (𝑼_unfold (eval e δ)) as scrutinee.
     destruct scrutinee as [K v].
     iApply (wp_compat_block (pattern_match (proj_alt_pat (alt Γ (alt__p K) (alt__r K))) v)).
-    specialize (tripunion K v).
-    rewrite Heqscrutinee in tripunion.
-    rewrite 𝑼_fold_unfold in tripunion.
-    iApply tripunion.
+    iSpecialize ("tripunion" $! K v).
+    rewrite Heqscrutinee.
+    rewrite 𝑼_fold_unfold.
+    iApply "tripunion".
     by iFrame.
   Qed.
 
@@ -1050,10 +1048,10 @@ Module IrisInstance
         {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        (semTriple (env_cat δ (record_pattern_match p (𝑹_unfold (eval e δ)))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) ->
-        semTriple δ P (stm_match_record R e p rhs) Q.
+        ⊢ ((semTriple (env_cat δ (record_pattern_match p (𝑹_unfold (eval e δ)))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
+        semTriple δ P (stm_match_record R e p rhs) Q)%I.
   Proof.
-    iIntros (triprec) "P".
+    iIntros "triprec P".
     rewrite wp_unfold.
     iIntros (σ1 ks1 ks n) "Hregs".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
@@ -1067,13 +1065,12 @@ Module IrisInstance
     iModIntro. iFrame.
     iSplitL; [|trivial].
     iApply (wp_compat_block (record_pattern_match p (𝑹_unfold (eval e δ)))).
-    by iApply triprec.
+    by iApply "triprec".
   Qed.
 
   Lemma iris_rule_stm_read_register {Γ} (δ : LocalStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
-        semTriple δ (r ↦ v) (stm_read_register r)
-                  (fun v' δ' => (bi_pure (δ' = δ) ∧ bi_pure (v' = v)) ∧ r ↦ v)%I.
+        ⊢ (semTriple δ (r ↦ v) (stm_read_register r) (fun v' δ' => (⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝) ∧ r ↦ v))%I.
   Proof.
     iIntros "Hreg".
     iApply wp_mono; [| iApply (rule_stm_read_register with "Hreg") ].
@@ -1086,7 +1083,7 @@ Module IrisInstance
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
                               (Q : Lit σ -> LocalStore Γ -> iProp Σ)
                               (v : Lit σ) :
-        semTriple δ (r ↦ v) (stm_write_register r w)
+        ⊢ semTriple δ (r ↦ v) (stm_write_register r w)
                   (fun v' δ' => (bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ)) ∧ r ↦ v')%I.
   Proof.
     iIntros "Hreg".
@@ -1099,11 +1096,11 @@ Module IrisInstance
   Lemma iris_rule_stm_assign_forwards {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
         (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ P s R ->
-        semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (@env_update _ _ _ δ' (x , _)  _ v__old) ∧ bi_pure (env_lookup δ' xIn = v__new))%I.
+        ⊢ (semTriple δ P s R -∗
+                     semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (@env_update _ _ _ δ' (x , _)  _ v__old) ∧ bi_pure (env_lookup δ' xIn = v__new)))%I.
   Proof.
-    iIntros (trips) "P".
-    iPoseProof (trips with "P") as "wpv". clear trips.
+    iIntros "trips P".
+    iPoseProof ("trips" with "P") as "wpv".
     iRevert (s δ) "wpv".
     iLöb as "IH".
     iIntros (s δ) "wpv".
@@ -1153,13 +1150,11 @@ Module IrisInstance
   Lemma iris_rule_stm_assign_backwards {Γ} (δ : LocalStore Γ)
         (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
         (P : iProp Σ) (R : Lit σ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ P s (fun v δ' => R v (@env_update _ _ _ δ' (x , _) _ v)) ->
-        semTriple δ P (stm_assign x s) R.
+        ⊢ (semTriple δ P s (fun v δ' => R v (@env_update _ _ _ δ' (x , _) _ v)) -∗
+           semTriple δ P (stm_assign x s) R)%I.
   Proof.
-    intros trips.
-    iIntros "P".
-    apply (iris_rule_stm_assign_forwards _) in trips.
-    iPoseProof (trips with "P") as "wpas".
+    iIntros "trips P".
+    iPoseProof (iris_rule_stm_assign_forwards _ with "trips P") as "wpas".
     iApply (wp_mono with "wpas").
     iIntros ([δ' v']) "Rv".
     iDestruct "Rv" as (v__old) "[Rv %]".
@@ -1167,30 +1162,132 @@ Module IrisInstance
     by rewrite env_update_update env_update_lookup.
   Qed.
 
+
+  Definition ValidContractEnv (cenv : SepContractEnv) : iProp Σ :=
+    (∀ σs σ (f : 𝑭 σs σ),
+      match cenv σs σ f with
+      | sep_contract_result_pure θΔ result pre post =>
+        (∀ (ι : SymInstance _) (δ : LocalStore σs),
+          semTriple δ (inst_assertion (L:=iProp Σ) ι pre) (Pi f)
+                    (fun v δ' => inst_assertion ι post ∧ ⌜ v = inst_term ι result ⌝)%I)
+      | sep_contract_result ctxΣ θΔ result pre post =>
+        ∀ (ι : SymInstance ctxΣ) (δ : LocalStore σs),
+          semTriple δ (inst_assertion (L:=iProp Σ) ι pre) (Pi f)
+                    (fun v δ' => inst_assertion (env_snoc ι (result , σ) v) post)
+      | sep_contract_none _ _ => True
+      end)%I.
+
+  Lemma wp_compat_call_frame {Γ Δ} {τ : Ty} {δ : LocalStore Γ}
+        (δΔ : LocalStore Δ) (s : Stm Δ τ) (Q : Val Γ τ -> iProp Σ) :
+    ⊢ (WP (MkTm δΔ s) ?{{ v, match v with MkVal _ δ' v => Q (MkVal _ δ v) end }} -∗
+          WP (MkTm δ (stm_call_frame Δ δΔ τ s)) ?{{ v, Q v }})%I.
+  Proof.
+    iRevert (δ δΔ s Q).
+    iLöb as "IH".
+    iIntros (δ δΔ s Q) "wpk".
+    rewrite ?wp_unfold.
+    cbn.
+    iIntros (σ ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first trivial.
+    iIntros (e2 σ2 efs) "%".
+    dependent destruction a.
+    dependent destruction H0.
+    - iMod "Hclose" as "_".
+      rewrite {1}/wp_pre.
+      rewrite (val_stuck (MkTm δΔ s) (γ , μ) [] (MkTm δΔ' s') (γ' , μ') [] (mk_prim_step H0)).
+      iMod ("wpk" $! (γ , μ) ks1 ks n with "Hregs") as "[% wpk]".
+      iMod ("wpk" $! _ _ _ (mk_prim_step H0)) as "wpk".
+      iModIntro. iModIntro.
+      iMod "wpk" as "[Hregs [wpk' _]]".
+      iModIntro.
+      iFrame.
+      iSplitL; last trivial.
+      iApply "IH".
+      iFrame.
+    - cbn.
+      iModIntro.
+      iModIntro.
+      iMod "Hclose" as "_".
+      iMod "wpk" as "Qv".
+      iModIntro.
+      iFrame.
+      iSplitL; last trivial.
+      by iApply wp_value.
+    - iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iFrame.
+      iModIntro.
+      iSplitL; [|trivial].
+      iApply wp_compat_fail.
+  Qed.
+
   Lemma iris_rule_stm_call_forwards {Γ} (δ : LocalStore Γ)
         {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
         (P : iProp Σ)
         (Q : Lit σ -> iProp Σ) :
         CTriple Δ (evals es δ) P Q (CEnv f) ->
-        semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ'))%I.
-  Admitted.
+        (⊢ ▷ ValidContractEnv CEnv -∗
+           semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')))%I.
+  Proof.
+    iIntros (ctrip) "cenv P".
+    rewrite wp_unfold.
+    iIntros ([regs μ] ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; [trivial|].
+    iIntros (e2 [regs2 μ2] efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    iModIntro.
+    iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; [|trivial].
+    dependent destruction ctrip.
+    - iSpecialize ("cenv" $! _ _ f).
+      rewrite <- ?x0, <-?x.
+      iSpecialize ("cenv" $! ι (evals es δ) with "P").
+      iApply wp_compat_call_frame.
+      rewrite x0.
+      iApply (wp_mono with "cenv").
+      iIntros ([δ' v]) "ensv".
+      by iFrame.
+    - iSpecialize ("cenv" $! _ _ f).
+      rewrite <- ?x0, <-?x.
+      iSpecialize ("cenv" $! ι (evals es δ) with "P").
+      iApply wp_compat_call_frame.
+      rewrite x0.
+      iApply (wp_mono with "cenv").
+      iIntros ([δ' v]) "ensv".
+      by iFrame.
+  Qed.
+
   Lemma iris_rule_stm_call_frame {Γ} (δ : LocalStore Γ)
         (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        semTriple δΔ P s (fun v _ => Q v δ) ->
-        semTriple δ P (stm_call_frame Δ δΔ τ s) Q.
-  Admitted.
+        ⊢ (semTriple δΔ P s (fun v _ => Q v δ) -∗
+           semTriple δ P (stm_call_frame Δ δΔ τ s) Q)%I.
+  Proof.
+    iIntros "trips P".
+    iSpecialize ("trips" with "P").
+    by iApply wp_compat_call_frame.
+  Qed.
+
   Lemma iris_rule_stm_bind {Γ} (δ : LocalStore Γ)
         {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
         (P : iProp Σ) (Q : Lit σ -> LocalStore Γ -> iProp Σ)
         (R : Lit τ -> LocalStore Γ -> iProp Σ) :
-        semTriple δ P s Q ->
-        (forall (v__σ : Lit σ) (δ' : LocalStore Γ),
-            semTriple δ' (Q v__σ δ') (k v__σ) R) ->
-        semTriple δ P (stm_bind s k) R.
+        ⊢ (semTriple δ P s Q -∗
+           (∀ (v__σ : Lit σ) (δ' : LocalStore Γ),
+               semTriple δ' (Q v__σ δ') (k v__σ) R) -∗
+           semTriple δ P (stm_bind s k) R)%I.
   Proof.
-    iIntros (trips tripk) "P".
-    iPoseProof (trips with "P") as "wpv". clear trips.
+    iIntros "trips tripk P".
+    iPoseProof ("trips" with "P") as "wpv".
     iRevert (s δ) "wpv".
     iLöb as "IH".
     iIntros (s δ) "wpv".
@@ -1216,12 +1313,12 @@ Module IrisInstance
       iMod "wpv" as "[Hregs [wps _]]".
       iModIntro.
       iFrame.
-      by iApply "IH".
+      iApply ("IH" with "tripk wps").
     + iPoseProof (wp_value_inv' _ _ _ (MkVal _ _ v) with "wpv") as "Qv".
       iModIntro. iModIntro.
       iMod "Hclose" as "_".
       iMod "Qv" as "Qv".
-      iPoseProof (tripk v δ with "Qv") as "wpk".
+      iPoseProof ("tripk" $! v δ with "Qv") as "wpk".
       iModIntro.
       by iFrame.
     + iModIntro. iModIntro.
@@ -1231,14 +1328,55 @@ Module IrisInstance
       by iApply wp_compat_fail.
   Qed.
 
-  Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
+  Lemma sound_stm {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
     forall (PRE : iProp Σ) (POST : Lit τ -> LocalStore Γ -> iProp Σ)
       (triple : δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄),
-      semTriple δ PRE s POST.
+      ⊢ (□ ▷ ValidContractEnv CEnv -∗
+          semTriple δ PRE s POST)%I.
   Proof.
-    intros PRE POST triple.
-    induction triple;
-      eauto using iris_rule_consequence, iris_rule_frame, iris_rule_pull, iris_rule_exist, iris_rule_forall, iris_rule_stm_lit, iris_rule_stm_exp, iris_rule_stm_let, iris_rule_stm_let_forwards, iris_rule_stm_block, iris_rule_stm_if, iris_rule_stm_if_backwards, iris_rule_stm_seq, iris_rule_stm_assert, iris_rule_stm_fail, iris_rule_stm_match_list, iris_rule_stm_match_sum, iris_rule_stm_match_pair, iris_rule_stm_match_enum, iris_rule_stm_match_tuple, iris_rule_stm_match_union, iris_rule_stm_match_record, iris_rule_stm_read_register, iris_rule_stm_write_register, iris_rule_stm_assign_forwards, iris_rule_stm_assign_backwards, iris_rule_stm_call_forwards, iris_rule_stm_call_frame, iris_rule_stm_bind.
-    Qed.
+    iIntros (PRE POST triple) "#vcenv".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    - by iApply iris_rule_consequence.
+    - by iApply iris_rule_frame.
+    - by iApply iris_rule_pull.
+    - by iApply iris_rule_exist.
+    - by iApply iris_rule_forall.
+    - iApply iris_rule_stm_lit.
+      by iApply H0.
+    - iApply iris_rule_stm_exp.
+      by iApply H0.
+    - by iApply iris_rule_stm_let.
+    - by iApply iris_rule_stm_block.
+    - by iApply iris_rule_stm_if.
+    - by iApply iris_rule_stm_seq.
+    - by iApply iris_rule_stm_assert.
+    - by iApply iris_rule_stm_fail.
+    - by iApply iris_rule_stm_match_list.
+    - by iApply iris_rule_stm_match_sum.
+    - by iApply iris_rule_stm_match_pair.
+    - by iApply iris_rule_stm_match_enum.
+    - by iApply iris_rule_stm_match_tuple.
+    - by iApply iris_rule_stm_match_union.
+    - by iApply iris_rule_stm_match_record.
+    - by iApply iris_rule_stm_read_register.
+    - by iApply iris_rule_stm_write_register.
+    - by iApply iris_rule_stm_assign_backwards.
+    - by iApply iris_rule_stm_assign_forwards.
+    - by iApply (iris_rule_stm_call_forwards _ _ H0).
+    - by iApply iris_rule_stm_call_frame.
+    - by iApply iris_rule_stm_bind.
+  Qed.
+
+  Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
+      ⊢ ValidContractEnv CEnv.
+  Proof.
+    iLöb as "IH".
+    iIntros (σs σ f).
+    destruct (CEnv f).
+    - iIntros (ι δ1).
+      admit.
+    - iIntros (ι δ1).
+      admit.
+  Admitted.
 
 End IrisInstance.
