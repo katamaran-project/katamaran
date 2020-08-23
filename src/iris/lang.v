@@ -1418,6 +1418,18 @@ Module Adequacy
       ∧ (gmap_valid regsmap)%I.
   Admitted.
 
+  Lemma steps_to_erased {σ Γ γ μ δ} (s : Stm Γ σ) {γ' μ' δ' s'}:
+    ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
+    rtc erased_step (cons (MkTm δ s) nil ∶ (γ ∶ μ))%ctx (cons (MkTm δ' s') nil ∶ (γ' ∶ μ'))%ctx.
+  Proof.
+    induction 1; first done.
+    refine (rtc_l _ _ _ _ _ IHSteps).
+    exists nil.
+    refine (step_atomic _ nil _ _ _ _ _ nil nil nil eq_refl eq_refl _).
+    by eapply mk_prim_step.
+  Qed.
+
+
   Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : LocalStore Γ} {s' : Stm Γ σ} {Q : Lit σ -> Prop} :
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
@@ -1436,7 +1448,7 @@ Module Adequacy
         pose proof (adeq' nil (γ' , μ') (MkVal _ δ' l)) as adeq''.
         cbn.
         apply adeq''.
-        admit.
+        by apply steps_to_erased.
       + by constructor.
     - constructor; last by intros t2 σ2 v2 ns.
       intros t2 σ2 [δ2 v2] eval.
@@ -1456,8 +1468,6 @@ Module Adequacy
       * iPoseProof (trips regΣ (SailG Hinv VT.reg_pre_inG spec_name) $! I) as "trips'".
         iApply (wp_mono with "trips'").
         by iIntros ([δ3 v]).
-  Admitted.
-
-
+  Qed.
 
 End Adequacy.
