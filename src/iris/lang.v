@@ -5,7 +5,6 @@ From MicroSail Require Import
      Context
      SmallStep.Step
      SmallStep.Inversion
-     SmallStep.Progress
      .
 
 Require Import Coq.Program.Equality.
@@ -14,8 +13,8 @@ From Equations Require Import Equations Signature.
 
 From iris.bi Require Import interface.
 From iris.algebra Require Import gmap excl auth.
-From iris.base_logic Require Import lib.fancy_updates.
-From iris.program_logic Require Import weakestpre hoare.
+From iris.base_logic Require Import lib.fancy_updates lib.own.
+From iris.program_logic Require Import weakestpre hoare adequacy.
 From iris.proofmode Require Import tactics.
 
 Require Import MicroSail.Sep.Spec.
@@ -77,53 +76,29 @@ Module ValsAndTerms
     Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 -> to_val (MkTm δ1 s1) = None.
     by induction 1.
   Qed.
-End ValsAndTerms.
-
-Module IrisInstance
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import heapkit : logic.HeapKit typekit termkit progkit assertkit contractkit).
-
-
-  Import CtxNotations.
-  Import EnvNotations.
-
-  Module VT := ValsAndTerms typekit termkit progkit.
-  Import VT.
-
-  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
-  Import PL.
-
-  Definition Val := VT.Val.
-  Definition Tm := VT.Tm.
-
-  Module Prog := Progress typekit termkit progkit.
 
   Definition observation := Empty_set.
 
   Definition State := prod RegStore Memory.
 
-  Inductive prim_step {Γ τ} : Tm Γ τ -> State -> Tm Γ τ -> State -> list (VT.Tm Γ τ) -> Prop :=
+  Inductive prim_step {Γ τ} : Tm Γ τ -> State -> Tm Γ τ -> State -> list (Tm Γ τ) -> Prop :=
   | mk_prim_step γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) (δ2 : LocalStore Γ) s1 s2 :
       SS.Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 ->
-      prim_step (VT.MkTm δ1 s1) (γ1 , μ1) (VT.MkTm δ2 s2) (γ2 , μ2) nil
+      prim_step (MkTm δ1 s1) (γ1 , μ1) (MkTm δ2 s2) (γ2 , μ2) nil
   .
 
-  Lemma val_head_stuck {Γ τ} (e1 : Tm Γ τ) s1 e2 s2 {ks} : prim_step e1 s1 e2 s2 ks → VT.to_val e1 = None.
+  Lemma val_head_stuck {Γ τ} (e1 : Tm Γ τ) s1 e2 s2 {ks} : prim_step e1 s1 e2 s2 ks → to_val e1 = None.
   Proof.
     induction 1.
-    by eapply VT.val_head_stuck_step.
+    by eapply val_head_stuck_step.
   Qed.
 
-  Lemma microsail_lang_mixin Γ τ : @LanguageMixin (VT.Tm Γ τ) (VT.Val Γ τ) State Empty_set VT.of_val VT.to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2 ks).
+  Lemma microsail_lang_mixin Γ τ : @LanguageMixin (Tm Γ τ) (Val Γ τ) State Empty_set of_val to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2 ks).
   Proof.
     split.
-    - eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
-    - eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
-    - eauto using VT.to_of_val, VT.of_to_val, val_head_stuck.
+    - eauto using to_of_val, of_to_val, val_head_stuck.
+    - eauto using to_of_val, of_to_val, val_head_stuck.
+    - eauto using to_of_val, of_to_val, val_head_stuck.
   Qed.
 
   Canonical Structure stateO := leibnizO State.
@@ -132,8 +107,8 @@ Module IrisInstance
 
   Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-  Instance intoVal_lit {Γ τ} : IntoVal (VT.MkTm (Γ := Γ) (τ := τ) δ (stm_lit _ l)) (VT.MkVal _ δ l).
-  intros; eapply VT.of_to_val; by cbn.
+  Instance intoVal_lit {Γ τ} : IntoVal (MkTm (Γ := Γ) (τ := τ) δ (stm_lit _ l)) (MkVal _ δ l).
+  intros; eapply of_to_val; by cbn.
   Defined.
 
   Inductive SomeReg : Type :=
@@ -187,6 +162,16 @@ Module IrisInstance
 
   Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeLit))).
 
+  Class sailPreG Σ := SailPreG { (* resources for the implementation side *)
+                       sailG_invPreG :> invPreG Σ; (* for fancy updates, invariants... *)
+
+                       (* ghost variable for tracking state of registers *)
+                       reg_pre_inG :> inG Σ regUR;
+
+                       (* (* ghost variable for tracking state of memory cells *) *)
+                       (* mem_inG : inG Σ regUR; *)
+                       (* mem_gv_name : gname *)
+                     }.
   Class sailG Σ := SailG { (* resources for the implementation side *)
                        sailG_invG : invG Σ; (* for fancy updates, invariants... *)
 
@@ -194,10 +179,31 @@ Module IrisInstance
                        reg_inG : inG Σ regUR;
                        reg_gv_name : gname;
 
-                       (* ghost variable for tracking state of memory cells *)
-                       mem_inG : inG Σ regUR;
-                       mem_gv_name : gname
+                       (* (* ghost variable for tracking state of memory cells *) *)
+                       (* mem_inG : inG Σ regUR; *)
+                       (* mem_gv_name : gname *)
                      }.
+
+End ValsAndTerms.
+
+Module IrisInstance
+       (Import typekit : TypeKit)
+       (Import termkit : TermKit typekit)
+       (Import progkit : ProgramKit typekit termkit)
+       (Import assertkit : AssertionKit typekit termkit progkit)
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
+       (Import heapkit : logic.HeapKit typekit termkit progkit assertkit contractkit).
+
+  Import CtxNotations.
+  Import EnvNotations.
+
+  Module VT := ValsAndTerms typekit termkit progkit.
+  Export VT.
+
+  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
+  Export PL.
+
+  Section IrisInstance.
 
   Definition reg_pointsTo `{sailG Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) : iProp Σ :=
     own (i := reg_inG) reg_gv_name (◯ {[ mkSomeReg r := Excl (mkSomeLit v) ]}).
@@ -1379,4 +1385,79 @@ Module IrisInstance
       admit.
   Admitted.
 
+
+  End IrisInstance.
 End IrisInstance.
+
+Module Adequacy
+       (Import typekit : TypeKit)
+       (Import termkit : TermKit typekit)
+       (Import progkit : ProgramKit typekit termkit)
+       (Import assertkit : AssertionKit typekit termkit progkit)
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
+       (Import heapkit : logic.HeapKit typekit termkit progkit assertkit contractkit).
+
+  Import CtxNotations.
+  Import EnvNotations.
+
+  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
+  Import PL.
+
+  Module Inst := IrisInstance typekit termkit progkit assertkit contractkit heapkit.
+  Import Inst.
+
+  Definition regΣ : gFunctors := #[ invΣ ; GFunctor regUR ].
+
+  Instance subG_sailPreG : subG regΣ Σ -> sailPreG Σ.
+  Proof. solve_inG. Qed.
+  (* Instance regUR_inG :  *)
+
+  Lemma RegStore_to_map (γ : RegStore) :
+    ∃ (regsmap : gmap SomeReg (exclR (leibnizO SomeLit))),
+      map_Forall (fun reg v => match reg with | mkSomeReg reg => Excl (mkSomeLit (read_register γ reg)) = v end) regsmap
+      ∧ (gmap_valid regsmap)%I.
+  Admitted.
+
+  Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
+        {δ δ' : LocalStore Γ} {s' : Stm Γ σ} {Q : Lit σ -> Prop} :
+    ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
+    (forall `{sailG Σ'}, ⊢ semTriple (Σ := Σ') δ True%I s (fun v δ' => bi_pure (Q v)))%I ->
+    ResultOrFail s' Q.
+  Proof.
+    intros steps fins trips.
+    cut (adequate MaybeStuck (MkTm δ s) (γ ∶ μ)%ctx
+             (λ (v : val (microsail_lang Γ σ)) (_ : state (microsail_lang Γ σ)),
+                (λ v0 : val (microsail_lang Γ σ), match v0 with
+                                                  | MkVal _ _ v' => Q v'
+                                                  end) v)).
+    - destruct s'; cbn in fins; destruct fins.
+      + intros adeq.
+        pose proof (adequate_result MaybeStuck (MkTm δ s) (γ , μ) (fun v _ => match v with | MkVal _ δ' v' => Q v' end) adeq) as adeq'.
+        pose proof (adeq' nil (γ' , μ') (MkVal _ δ' l)) as adeq''.
+        cbn.
+        apply adeq''.
+        admit.
+      + by constructor.
+    - constructor; last by intros t2 σ2 v2 ns.
+      intros t2 σ2 [δ2 v2] eval.
+      destruct (RegStore_to_map γ) as [regsmap [eq regsmapv]].
+      pose proof (wp_adequacy regΣ (microsail_lang Γ σ) MaybeStuck (MkTm δ s) (γ , μ) (fun v => match v with | MkVal _ δ' v' => Q v' end)) as adeq.
+      refine (adequate_result _ _ _ (fun v' _ => match v' with | MkVal _ δ' v' => Q v' end) (adeq _) t2 σ2 (MkVal _ δ2 v2) eval).
+      clear adeq.
+      iIntros (Hinv κs) "".
+      iMod (own_alloc ((● regsmap ⋅ ◯ regsmap ) : regUR)) as (spec_name) "[Hs1 Hs2]";
+        first by apply auth_both_valid.
+      iModIntro.
+      iExists (fun σ _ => regs_inv (H := (SailG Hinv _ spec_name)) (σ.1)).
+      iExists (fun _ => True%I).
+      iSplitR "Hs2".
+      * iExists regsmap.
+        by iFrame.
+      * iPoseProof (trips regΣ (SailG Hinv VT.reg_pre_inG spec_name) $! I) as "trips'".
+        iApply (wp_mono with "trips'").
+        by iIntros ([δ3 v]).
+  Admitted.
+
+
+
+End Adequacy.
