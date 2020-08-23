@@ -33,11 +33,8 @@ Module ValsAndTerms
   Inductive Tm (Γ : Ctx (𝑿 * Ty)) τ : Type :=
   | MkTm (δ : LocalStore Γ) (s : Stm Γ τ) : Tm Γ τ.
 
-  (* remainng obligations? *)
-  (* Derive NoConfusion for Tm. *)
-
   Inductive Val (Γ : Ctx (𝑿 * Ty)) τ : Type :=
-    (* we only keep the store around for technical reasons, essentially to be able to prove of_to_val. *)
+    (* we only keep the store around for technical reasons, essentially to validate of_to_val. *)
   | MkVal (δ : LocalStore Γ) (v : Lit τ) : Val Γ τ.
 
   Definition val_to_lit {Γ} {τ} : Val Γ τ -> Lit τ := fun v => match v with | MkVal _ _ v' => v' end.
@@ -48,7 +45,6 @@ Module ValsAndTerms
     end.
 
   Definition to_val {Γ} {τ} (t : Tm Γ τ) : option (Val Γ τ) :=
-    (* easier way to do the dependent pattern match here? *)
     match t with
     | MkTm δ s => match s with
                    stm_lit τ l => Some (MkVal _ δ l)
@@ -74,6 +70,7 @@ Module ValsAndTerms
 
   Lemma val_head_stuck_step {τ} {Γ : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) δ2 (s1 : Stm Γ τ) s2 :
     Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 -> to_val (MkTm δ1 s1) = None.
+  Proof.
     by induction 1.
   Qed.
 
@@ -95,10 +92,7 @@ Module ValsAndTerms
 
   Lemma microsail_lang_mixin Γ τ : @LanguageMixin (Tm Γ τ) (Val Γ τ) State Empty_set of_val to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2 ks).
   Proof.
-    split.
-    - eauto using to_of_val, of_to_val, val_head_stuck.
-    - eauto using to_of_val, of_to_val, val_head_stuck.
-    - eauto using to_of_val, of_to_val, val_head_stuck.
+    split; eauto using to_of_val, of_to_val, val_head_stuck.
   Qed.
 
   Canonical Structure stateO := leibnizO State.
@@ -137,8 +131,7 @@ Module ValsAndTerms
         intros Heq.
         dependent elimination Heq.
         apply n.
-        constructor 1 with eq_refl.
-        reflexivity.
+        by constructor 1 with eq_refl.
   Qed.
 
   Instance countable_SomeReg : Countable SomeReg.
@@ -153,11 +146,9 @@ Module ValsAndTerms
       + left. congruence.
       + right. intros H.
         Local Set Equations With UIP.
-        dependent elimination H.
-        congruence.
+        by dependent elimination H.
     - right. intros H.
-      dependent elimination H.
-      congruence.
+      by dependent elimination H.
   Qed.
 
   Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeLit))).
@@ -173,10 +164,10 @@ Module ValsAndTerms
                        (* mem_gv_name : gname *)
                      }.
   Class sailG Σ := SailG { (* resources for the implementation side *)
-                       sailG_invG : invG Σ; (* for fancy updates, invariants... *)
+                       sailG_invG :> invG Σ; (* for fancy updates, invariants... *)
 
                        (* ghost variable for tracking state of registers *)
-                       reg_inG : inG Σ regUR;
+                       reg_inG :> inG Σ regUR;
                        reg_gv_name : gname;
 
                        (* (* ghost variable for tracking state of memory cells *) *)
@@ -206,13 +197,12 @@ Module IrisInstance
   Section IrisInstance.
 
   Definition reg_pointsTo `{sailG Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) : iProp Σ :=
-    own (i := reg_inG) reg_gv_name (◯ {[ mkSomeReg r := Excl (mkSomeLit v) ]}).
+    own reg_gv_name (◯ {[ mkSomeReg r := Excl (mkSomeLit v) ]}).
 
   Definition regs_inv `{sailG Σ} (regstore : RegStore) : iProp Σ :=
     (∃ regsmap,
-        own (i := reg_inG) reg_gv_name (● regsmap) ∗
+        own reg_gv_name (● regsmap) ∗
         ⌜ map_Forall (fun reg v => match reg with | mkSomeReg reg => Excl (mkSomeLit (read_register regstore reg)) = v end ) regsmap ⌝
-        (* sigh why can't I use ⌈ ... ⌉ notation? *)
     )%I.
 
   Instance sailG_irisG {Γ τ} `{sailG Σ} : irisG (microsail_lang Γ τ) Σ := {
@@ -334,8 +324,8 @@ Module IrisInstance
   Next Obligation.
     intros P Q R. split.
     - eapply bi.sep_assoc'.
-    - cbn. rewrite bi.sep_assoc.
-      iIntros "PQR"; iAssumption.
+    - iIntros "[P [Q R]]".
+      iFrame.
   Qed.
   Next Obligation.
     intros P Q. split; eapply bi.sep_comm'.
@@ -348,12 +338,9 @@ Module IrisInstance
   Next Obligation.
     intros P R Q. split.
     - iIntros "[P [% R]]".
-      iSplit.
-      + by iPureIntro.
-      + iFrame.
+      by iSplit; iFrame.
     - iIntros "[% [P R]]".
-      iSplitL "P"; iFrame.
-      by iPureIntro.
+      by iFrame.
   Qed.
   Next Obligation.
     iIntros (P P' Q Q' PP QQ) "[P Q]".
@@ -374,7 +361,6 @@ Module IrisInstance
   Proof.
     iDestruct 1 as (regsmap) "[Hregs %]".
     iIntros "Hreg".
-    rewrite /reg_pointsTo.
     iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl regsv]%auth_both_valid.
     iPureIntro.
     rewrite (singleton_included_l regsmap (mkSomeReg r) _) in Hl *.
@@ -395,7 +381,6 @@ Module IrisInstance
     (own (i := reg_inG) reg_gv_name (● <[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap)) -∗ regs_inv (write_register regstore r v).
   Proof.
     iIntros (regseq) "Hownregs".
-    rewrite /regs_inv.
     iExists (<[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap).
     iFrame.
     iPureIntro.
@@ -404,7 +389,7 @@ Module IrisInstance
     destruct (𝑹𝑬𝑮_eq_dec r r') as [eq2|neq].
     + dependent destruction eq2.
       destruct eqi, eqf; cbn in *.
-      rewrite (lookup_insert regsmap (mkSomeReg r) (Excl (mkSomeLit v))) in eq1.
+      rewrite lookup_insert in eq1.
       apply (inj Some) in eq1.
       by rewrite <- eq1, (read_write regstore r v).
     + assert (mkSomeReg r ≠ mkSomeReg r') as neq2.
@@ -1368,7 +1353,7 @@ Module IrisInstance
     - by iApply iris_rule_stm_write_register.
     - by iApply iris_rule_stm_assign_backwards.
     - by iApply iris_rule_stm_assign_forwards.
-    - by iApply (iris_rule_stm_call_forwards _ _ H0).
+    - by iApply iris_rule_stm_call_forwards.
     - by iApply iris_rule_stm_call_frame.
     - by iApply iris_rule_stm_bind.
   Qed.
@@ -1425,7 +1410,7 @@ Module Adequacy
     induction 1; first done.
     refine (rtc_l _ _ _ _ _ IHSteps).
     exists nil.
-    refine (step_atomic _ nil _ _ _ _ _ nil nil nil eq_refl eq_refl _).
+    refine (step_atomic _ _ _ _ _ _ _ _ nil nil eq_refl eq_refl _).
     by eapply mk_prim_step.
   Qed.
 
@@ -1442,26 +1427,21 @@ Module Adequacy
                 (λ v0 : val (microsail_lang Γ σ), match v0 with
                                                   | MkVal _ _ v' => Q v'
                                                   end) v)).
-    - destruct s'; cbn in fins; destruct fins.
-      + intros adeq.
-        pose proof (adequate_result MaybeStuck (MkTm δ s) (γ , μ) (fun v _ => match v with | MkVal _ δ' v' => Q v' end) adeq) as adeq'.
-        pose proof (adeq' nil (γ' , μ') (MkVal _ δ' l)) as adeq''.
-        cbn.
-        apply adeq''.
-        by apply steps_to_erased.
-      + by constructor.
-    - constructor; last by intros t2 σ2 v2 ns.
+    - destruct s'; cbn in fins; destruct fins; last done.
+      intros adeq.
+      apply (adequate_result MaybeStuck (MkTm δ s) (γ , μ) (fun v _ => match v with | MkVal _ δ' v' => Q v' end) adeq nil (γ' , μ') (MkVal _ δ' l)).
+      by apply steps_to_erased.
+    - constructor; last done.
       intros t2 σ2 [δ2 v2] eval.
       destruct (RegStore_to_map γ) as [regsmap [eq regsmapv]].
       pose proof (wp_adequacy regΣ (microsail_lang Γ σ) MaybeStuck (MkTm δ s) (γ , μ) (fun v => match v with | MkVal _ δ' v' => Q v' end)) as adeq.
-      refine (adequate_result _ _ _ (fun v' _ => match v' with | MkVal _ δ' v' => Q v' end) (adeq _) t2 σ2 (MkVal _ δ2 v2) eval).
-      clear adeq.
+      refine (adequate_result _ _ _ _ (adeq _) _ _ _ eval); clear adeq.
       iIntros (Hinv κs) "".
       iMod (own_alloc ((● regsmap ⋅ ◯ regsmap ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
       iModIntro.
       iExists (fun σ _ => regs_inv (H := (SailG Hinv _ spec_name)) (σ.1)).
-      iExists (fun _ => True%I).
+      iExists _.
       iSplitR "Hs2".
       * iExists regsmap.
         by iFrame.
