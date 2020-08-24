@@ -74,10 +74,9 @@ Module Soundness
       | scchunk_ptsreg r v => ptsreg r v
       end.
 
-    Definition inst_scheap (h : SCHeap) : L :=
-      List.fold_right (fun c h => inst_scchunk c ∧ h) ltrue h.
-
-    Local Opaque inst_scheap.
+    Definition inst_scheap : SCHeap -> L :=
+      List.fold_right (fun c h => inst_scchunk c ∧ h) ltrue.
+    Global Arguments inst_scheap !h.
 
     Fixpoint outcome_satisfy_natded {A : Type} (o : Outcome A)
                 (P : A -> L) {struct o} : L :=
@@ -145,7 +144,6 @@ Module Soundness
     Qed.
 
     Opaque env_tail.
-    Opaque extract_chunk_eqb.
 
     Lemma scmut_exec_sound {Γ σ} (s : Stm Γ σ) :
       forall (δ1 : LocalStore Γ) (h1 : SCHeap),
@@ -424,7 +422,17 @@ Module Soundness
 
       - (* stm_read_register *)
         cbn in *; intros.
-        admit.
+        eapply rule_consequence_right.
+        2: {
+          intros v2 δ2.
+          apply lex_right with v2.
+          apply entails_refl.
+        }
+        unfold scmut_put_heap, scmut_state_heap, scmut_state; cbn.
+        repeat setoid_rewrite outcome_satisfy_natded_bind; cbn.
+        destruct h1; cbn.
+        + admit.
+        + admit.
 
       - (* stm_write_register *)
         cbn in *; intros.

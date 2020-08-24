@@ -160,12 +160,7 @@ Module SemiConcrete
       scmut_bind ma (fun a => scmut_pure (f a)).
     Definition scmut_angelic_list {Γ A} (msg : string) :
       list A -> SCMut Γ Γ A :=
-      fix scmut_angelic_list (xs : list A) :=
-        match xs with
-        | []      => scmut_fail msg
-        | x :: [] => scmut_pure x
-        | x :: xs => scmut_angelic_binary (scmut_pure x) (scmut_angelic_list xs)
-        end.
+      fun xs s => outcome_angelic_list msg (List.map (fun a => MkSCMutResult a s) xs).
 
   End SemiConcreteMutator.
   Bind Scope mutator_scope with SCMut.

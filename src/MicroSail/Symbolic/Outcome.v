@@ -57,6 +57,14 @@ Bind Scope outcome_scope with Outcome.
 Definition outcome_block {A : Type} : Outcome A :=
   outcome_demonic (fun i : Empty_set => match i with end).
 
+Definition outcome_angelic_list {A} (msg : string) : list A -> Outcome A :=
+  fix outcome_angelic_list (xs : list A) :=
+    match xs with
+    | nil        => outcome_fail msg
+    | cons x nil => outcome_pure x
+    | cons x xs  => outcome_angelic_binary (outcome_pure x) (outcome_angelic_list xs)
+    end.
+
 Fixpoint outcome_map {A B : Type} (f : A -> B) (o : Outcome A) : Outcome B :=
   match o with
   | outcome_pure a               => outcome_pure (f a)
