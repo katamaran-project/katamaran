@@ -454,6 +454,44 @@ Module Soundness
         apply H.
     Admitted.
 
+    Local Ltac sound_inster :=
+      match goal with
+      | [ IH: outcome_satisfy (scmut_exec ?s _) _ |-
+          outcome_satisfy (scmut_exec ?s _) _ ] =>
+        refine (outcome_satisfy_monotonic _ _ IH); clear IH
+      | [ IH: context[_ -> outcome_satisfy (scmut_exec ?s _) _] |-
+          outcome_satisfy (scmut_exec ?s _) _ ] =>
+        microsail_insterU (fail) IH; refine (outcome_satisfy_monotonic _ _ IH); clear IH
+      end.
+
+    Lemma scmut_exec_sound2 {Γ σ} (s : Stm Γ σ) :
+      forall (δ1 : LocalStore Γ) (h1 : SCHeap) (POST : Lit σ -> LocalStore Γ -> L),
+        outcome_satisfy
+          (scmut_exec s (MkSCState δ1 h1))
+          (fun '(MkSCMutResult v2 (MkSCState δ2 h2)) =>
+             inst_scheap h2 ⊢ POST v2 δ2) ->
+        δ1 ⊢ ⦃ inst_scheap h1 ⦄ s ⦃ POST ⦄.
+    Proof.
+      induction s.
+
+      - (* stm_lit *)
+        cbn; intros.
+        apply rule_stm_lit.
+        assumption.
+
+      - (* stm_exp *)
+        cbn; intros.
+        apply rule_stm_exp.
+        assumption.
+
+      - (* stm_let *)
+        unfold scmut_bind, scmut_bind_left, scmut_bind_right, scmut_push_local,
+          scmut_pop_local, scmut_pure; cbn.
+        repeat setoid_rewrite outcome_satisfy_bind; cbn.
+        intros.
+
+    Admitted.
+
   End Soundness.
 
 End Soundness.
