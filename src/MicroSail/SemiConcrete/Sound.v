@@ -490,6 +490,21 @@ Module Soundness
         repeat setoid_rewrite outcome_satisfy_bind; cbn.
         intros.
 
+        eapply rule_stm_let.
+        + eapply (IHs1 δ1 h1 (fun v1 δ1 => ∃ L, L ∧ !!( env_snoc δ1 (x,τ) v1 ⊢ ⦃ L ⦄ s2 ⦃ fun v2 δ2 => POST v2 (env_tail δ2) ⦄))).
+          refine (outcome_satisfy_monotonic _ _ H).
+          intros [v2 [δ2 h2]] outs2.
+          cbn.
+          cbn in IHs2.
+          eapply (lex_right (inst_scheap h2)).
+          eapply (land_right _ _ _ (entails_refl _)).
+          eapply lprop_right.
+          eapply (IHs2 _ _ _ outs2).
+        + cbn.
+          (* TODO: extra rule needed? *)
+          admit.
+
+      - (* stm_block *)
     Admitted.
 
   End Soundness.
