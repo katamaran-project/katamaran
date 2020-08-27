@@ -501,7 +501,6 @@ Module Soundness
           eapply lprop_right.
           eapply (IHs2 _ _ _ outs2).
         + cbn.
-          (* TODO: extra rule needed? *)
           intros v δ'.
           eapply rule_exist.
           intros Pre.
@@ -509,6 +508,102 @@ Module Soundness
           exact (fun spec => spec).
 
       - (* stm_block *)
+        unfold scmut_pure; cbn.
+        setoid_rewrite outcome_satisfy_bind; cbn.
+        intros.
+
+        eapply rule_stm_block.
+        eapply IHs.
+        exact H.
+
+      - (* stm_assign *)
+        setoid_rewrite outcome_satisfy_bind; cbn.
+        intros.
+
+        eapply rule_stm_assign_backwards.
+        eapply IHs.
+        exact H.
+
+      - (* stm_call *)
+        cbn.
+        unfold scmut_call; cbn.
+        (* err.. need for tying the knot? *)
+        admit.
+
+      - (* stm_call_frame *)
+        cbn.
+        repeat setoid_rewrite outcome_satisfy_bind.
+        cbn.
+
+        intros.
+        eapply rule_stm_call_frame.
+        eapply IHs.
+        exact H.
+
+      - (* stm_call_external *)
+        cbn.
+        (* err.. need for assumptions about external calls? *)
+        admit.
+
+      - (* stm_if *)
+        cbn.
+        intros.
+
+        eapply rule_stm_if.
+        + eapply rule_pull.
+          intros eq.
+          rewrite eq in H.
+          eapply IHs1.
+          exact H.
+        + eapply rule_pull.
+          intros eq.
+          rewrite eq in H.
+          eapply IHs2.
+          exact H.
+
+      - (* stm_seq *)
+        cbn.
+        setoid_rewrite outcome_satisfy_bind.
+        intros.
+
+        eapply (rule_stm_seq _ _ _ _ _ _ (fun δ1 => ∃ L, L ∧ !!( δ1 ⊢ ⦃ L ⦄ s2 ⦃ fun v2 δ2 => POST v2 δ2 ⦄))).
+        + eapply IHs1.
+          refine (outcome_satisfy_monotonic _ _ H).
+          intros [v2 [δ2 h2]] outs2.
+          cbn; cbn in IHs2.
+          eapply (lex_right (inst_scheap h2)).
+          eapply (land_right _ _ _ (entails_refl _)).
+          eapply lprop_right.
+          eapply (IHs2 _ _ _ outs2).
+        + intros δ'.
+          eapply rule_exist.
+          intros Pre.
+          eapply rule_pull.
+          exact (fun spec => spec).
+
+      - (* stm_assert *)
+        cbn.
+        intros.
+        refine (rule_consequence _ (entails_refl _) _ (rule_stm_assert _ _ _ _)).
+        intros.
+        eapply limpl_and_adjoint.
+        eapply lprop_left.
+        intros [eq1 [eq2 eq3]].
+        rewrite <-limpl_and_adjoint.
+        eapply land_left2.
+        subst.
+        rewrite eq3 in *.
+        unfold scmut_pure in H; cbn in H.
+        exact H.
+
+      - (* fail s *)
+        cbn.
+        intros.
+        refine (rule_consequence _ _ (fun _ _ => entails_refl _) (rule_stm_fail _ _ _ _)).
+        eapply ltrue_right.
+
+      - (* stm_match_list *)
+        
     Admitted.
 
   End Soundness.
