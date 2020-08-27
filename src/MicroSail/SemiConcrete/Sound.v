@@ -502,7 +502,11 @@ Module Soundness
           eapply (IHs2 _ _ _ outs2).
         + cbn.
           (* TODO: extra rule needed? *)
-          admit.
+          intros v δ'.
+          eapply rule_exist.
+          intros Pre.
+          eapply rule_pull.
+          exact (fun spec => spec).
 
       - (* stm_block *)
     Admitted.
