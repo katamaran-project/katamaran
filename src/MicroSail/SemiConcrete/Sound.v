@@ -603,6 +603,26 @@ Module Soundness
         eapply ltrue_right.
 
       - (* stm_match_list *)
+        cbn.
+        intros.
+        eapply rule_stm_match_list.
+        + eapply rule_pull.
+          intros eq.
+          rewrite eq in H; cbn in H.
+          eapply IHs1.
+          exact H.
+        + intros.
+          eapply rule_pull.
+          intros eq.
+          eapply IHs2.
+          rewrite eq in H.
+          unfold scmut_pop_local, scmut_modify_local, scmut_state_local, scmut_state, scmut_bind_left, scmut_bind in H.
+          repeat setoid_rewrite outcome_satisfy_bind in H.
+          exact H.
+
+      - (* stm_match_sum *)
+        cbn.
+        intros.
         
     Admitted.
 
