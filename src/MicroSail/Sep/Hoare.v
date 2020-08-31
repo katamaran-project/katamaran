@@ -232,10 +232,6 @@ Module ProgramLogic
                               (v : Lit σ) :
         δ ⊢ ⦃ r ↦ v ⦄ stm_write_register r w ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ)
                                                          ∧ r ↦ v' ⦄
-    (* | rule_stm_write_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ) *)
-    (*                                     (Q : Lit σ -> LocalStore Γ -> L) *)
-    (*                                     (v : Lit σ) : *)
-    (*     δ ⊢ ⦃ r ↦ v ✱ (r ↦ eval w δ -✱ Q (eval w δ) δ) ⦄ stm_write_register r w ⦃ Q ⦄ *)
     | rule_stm_assign_backwards
         (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
         (P : L) (R : Lit σ -> LocalStore Γ -> L) :
@@ -417,6 +413,28 @@ Module ProgramLogic
       rewrite sepcon_comm.
       eapply rule_consequence_right.
       apply rule_frame, rule_stm_read_register.
+      cbn; intros.
+      rewrite sepcon_comm.
+      apply wand_sepcon_adjoint.
+      apply limpl_and_adjoint.
+      rewrite lprop_land_distr.
+      apply lprop_left; intros []; subst.
+      apply limpl_and_adjoint.
+      apply land_left2.
+      apply wand_sepcon_adjoint.
+      rewrite sepcon_comm.
+      apply wand_sepcon_adjoint.
+      apply entails_refl.
+    Qed.
+
+    Lemma rule_stm_write_register_backwards {Γ δ σ r v} {e : Exp Γ σ}
+          (Q : Lit σ -> LocalStore Γ -> L) :
+      δ ⊢ ⦃ r ↦ v ✱ (r ↦ eval e δ -✱ Q (eval e δ) δ) ⦄ stm_write_register r e ⦃ Q ⦄.
+    Proof.
+      rewrite sepcon_comm.
+      eapply rule_consequence_right.
+      apply rule_frame, rule_stm_write_register.
+      apply Q.
       cbn; intros.
       rewrite sepcon_comm.
       apply wand_sepcon_adjoint.

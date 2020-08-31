@@ -257,17 +257,29 @@ Module Soundness
           outcome_satisfy_filter_angelic_list in HYP.
         apply outcome_satisfy_angelic_list in HYP.
         destruct HYP as [[[] h1'] [H1 [HYP Heq]]]; cbn in *; try discriminate.
+        apply (Bool.reflect_iff _ _ (match_chunk_eqb_spec _ _)) in Heq.
+        dependent elimination Heq.
         eapply rule_consequence_left.
         apply (rule_stm_read_register_backwards (v := v)).
         apply in_heap_extractions in H1; rewrite H1; clear H1; cbn.
-        apply (Bool.reflect_iff _ _ (match_chunk_eqb_spec _ _)) in Heq.
-        dependent elimination Heq.
         rewrite sepcon_comm in HYP.
         apply wand_sepcon_adjoint in HYP.
         now apply sepcon_entails.
 
       - (* stm_write_register *)
-        admit.
+        destruct HYP as [v HYP].
+        rewrite !outcome_satisfy_map_angelic_list,
+          outcome_satisfy_filter_angelic_list in HYP.
+        apply outcome_satisfy_angelic_list in HYP.
+        destruct HYP as [[[] h1'] [H1 [HYP Heq]]]; cbn in *; try discriminate.
+        apply (Bool.reflect_iff _ _ (match_chunk_eqb_spec _ _)) in Heq.
+        dependent elimination Heq.
+        eapply rule_consequence_left.
+        apply (rule_stm_write_register_backwards (v := v) (e := e)).
+        apply in_heap_extractions in H1; rewrite H1; clear H1; cbn.
+        rewrite sepcon_comm in HYP.
+        apply wand_sepcon_adjoint in HYP.
+        now apply sepcon_entails.
 
       - (* stm_bind *)
         eapply rule_consequence_left.
