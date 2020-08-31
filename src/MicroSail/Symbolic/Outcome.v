@@ -29,6 +29,7 @@
 From Coq Require Import
      Morphisms
      Program.Tactics
+     List
      String.
 
 From Equations Require Import
@@ -67,9 +68,16 @@ Definition outcome_angelic_list {A} (msg : string) : list A -> Outcome A :=
   fix outcome_angelic_list (xs : list A) :=
     match xs with
     | nil        => outcome_fail msg
-    | cons x nil => outcome_pure x
     | cons x xs  => outcome_angelic_binary (outcome_pure x) (outcome_angelic_list xs)
     end.
+
+(* Definition outcome_angelic_list {A} (msg : string) : list A -> Outcome A := *)
+(*   fix outcome_angelic_list (xs : list A) := *)
+(*     match xs with *)
+(*     | nil        => outcome_fail msg *)
+(*     | cons x nil => outcome_pure x *)
+(*     | cons x xs  => outcome_angelic_binary (outcome_pure x) (outcome_angelic_list xs) *)
+(*     end. *)
 
 Fixpoint outcome_map {A B : Type} (f : A -> B) (o : Outcome A) : Outcome B :=
   match o with
@@ -92,7 +100,7 @@ Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcom
   end.
 
 Definition Error (s : string) : Prop := False.
-Opaque Error.
+Arguments Error s : simpl never.
 
 Fixpoint outcome_satisfy {A : Type} (o : Outcome A) (P : A -> Prop) : Prop :=
   match o with
@@ -118,6 +126,40 @@ Proof. induction o; firstorder. Qed.
 Lemma outcome_satisfy_monotonic {A : Type} {P Q : A -> Prop} (o : Outcome A) (hyp : forall a, P a -> Q a) :
   outcome_satisfy o P -> outcome_satisfy o Q.
 Proof. induction o; firstorder. Qed.
+
+Lemma outcome_satisfy_angelic_list {A msg xs} (P : A -> Prop) :
+  outcome_satisfy (outcome_angelic_list msg xs) P <->
+  exists x, In x xs /\ P x.
+Proof.
+  induction xs; cbn.
+  - firstorder.
+  - rewrite IHxs; firstorder; subst; auto.
+Qed.
+
+Lemma outcome_satisfy_map_angelic_list {A B msg xs} {f : A -> B} (P : B -> Prop) :
+  outcome_satisfy (outcome_angelic_list msg (List.map f xs)) P <->
+  outcome_satisfy (outcome_angelic_list msg xs) (fun x => P (f x)).
+Proof.
+  do 2 rewrite outcome_satisfy_angelic_list.
+  split.
+  - intros [b [H1 H2]].
+    rewrite in_map_iff in H1.
+    destruct H1 as [a [H0 H1]].
+    subst b. now exists a.
+  - intros [a [H1 H2]].
+    exists (f a).
+    auto using in_map.
+Qed.
+
+Lemma outcome_satisfy_filter_angelic_list {A msg xs} {f : A -> bool} (P : A -> Prop) :
+  outcome_satisfy (outcome_angelic_list msg (List.filter f xs)) P <->
+  outcome_satisfy (outcome_angelic_list msg xs) (fun x => P x /\ f x = true).
+Proof.
+  do 2 rewrite outcome_satisfy_angelic_list.
+  split; intros [a [H1 H2]]; exists a.
+  - rewrite filter_In in H1. intuition.
+  - rewrite filter_In. intuition.
+Qed.
 
 Instance outcome_satisfy_iff_morphism {A} (o : Outcome A) :
   Proper (pointwise_relation A iff ==> iff) (@outcome_satisfy A o).

@@ -79,6 +79,7 @@ Module Soundness
     Global Arguments inst_scheap !h.
 
     Opaque env_tail.
+    Opaque match_chunk_eqb.
 
     Local Ltac sound_inster :=
       match goal with
@@ -228,6 +229,11 @@ Module Soundness
         now apply rule_stm_match_record, IHs.
 
       - (* stm_read_register *)
+        destruct HYP as [v HYP].
+        rewrite !outcome_satisfy_map_angelic_list,
+          outcome_satisfy_filter_angelic_list in HYP.
+        apply outcome_satisfy_angelic_list in HYP.
+        destruct HYP as [[[] h1'] [H1 [HYP Heq]]]; cbn in *; try discriminate.
         admit.
 
       - (* stm_write_register *)
