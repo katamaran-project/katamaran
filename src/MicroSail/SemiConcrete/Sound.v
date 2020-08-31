@@ -143,6 +143,13 @@ Module Soundness
       - apply entails_refl.
     Qed.
 
+    Definition WP {Γ τ} (s : Stm Γ τ) (POST :  Lit τ -> LocalStore Γ -> L) : LocalStore Γ -> L :=
+      fun δ => ∃ (P : L), P ∧ !! (δ ⊢ ⦃ P ⦄ s ⦃ POST ⦄).
+
+    Lemma wp_triple {Γ σ} (s : Stm Γ σ) (POST :  Lit σ -> LocalStore Γ -> L) (δ1 : LocalStore Γ) :
+      δ1 ⊢ ⦃ WP s POST δ1 ⦄ s ⦃ POST ⦄.
+    Proof. apply rule_exist; intros P; now apply rule_pull. Qed.
+
     Opaque env_tail.
 
     Lemma scmut_exec_sound {Γ σ} (s : Stm Γ σ) :
@@ -472,57 +479,40 @@ Module Soundness
              inst_scheap h2 ⊢ POST v2 δ2) ->
         δ1 ⊢ ⦃ inst_scheap h1 ⦄ s ⦃ POST ⦄.
     Proof.
-      induction s.
+      induction s;
+        unfold scmut_bind, scmut_bind_left, scmut_bind_right, scmut_push_local,
+          scmut_pop_local, scmut_pure; cbn in *;
+        repeat setoid_rewrite outcome_satisfy_bind; cbn in *; intros ? ? ? HYP.
 
       - (* stm_lit *)
-        cbn; intros.
-        apply rule_stm_lit.
-        assumption.
+        now apply rule_stm_lit.
 
       - (* stm_exp *)
-        cbn; intros.
-        apply rule_stm_exp.
-        assumption.
+        now apply rule_stm_exp.
 
       - (* stm_let *)
-        unfold scmut_bind, scmut_bind_left, scmut_bind_right, scmut_push_local,
-          scmut_pop_local, scmut_pure; cbn.
-        repeat setoid_rewrite outcome_satisfy_bind; cbn.
-        intros.
+        eapply rule_consequence_left.
+        eapply rule_stm_let; intros; apply wp_triple.
 
-        eapply rule_stm_let.
-        + eapply (IHs1 δ1 h1 (fun v1 δ1 => ∃ L, L ∧ !!( env_snoc δ1 (x,τ) v1 ⊢ ⦃ L ⦄ s2 ⦃ fun v2 δ2 => POST v2 (env_tail δ2) ⦄))).
-          refine (outcome_satisfy_monotonic _ _ H).
-          intros [v2 [δ2 h2]] outs2.
-          cbn.
-          cbn in IHs2.
-          eapply (lex_right (inst_scheap h2)).
-          eapply (land_right _ _ _ (entails_refl _)).
-          eapply lprop_right.
-          eapply (IHs2 _ _ _ outs2).
-        + cbn.
-          intros v δ'.
-          eapply rule_exist.
-          intros Pre.
-          eapply rule_pull.
-          exact (fun spec => spec).
+        apply lex_right with (inst_scheap h1).
+        apply land_right.
+        apply entails_refl.
+        apply lprop_right.
+        apply IHs1; clear IHs1.
+        sound_inster.
+        intros [v2 [δ2 h2]] HYP; cbn.
+
+        apply lex_right with (inst_scheap h2).
+        apply land_right.
+        apply entails_refl.
+        apply lprop_right.
+        now apply IHs2.
 
       - (* stm_block *)
-        unfold scmut_pure; cbn.
-        setoid_rewrite outcome_satisfy_bind; cbn.
-        intros.
-
-        eapply rule_stm_block.
-        eapply IHs.
-        exact H.
+        now apply rule_stm_block, IHs.
 
       - (* stm_assign *)
-        setoid_rewrite outcome_satisfy_bind; cbn.
-        intros.
-
-        eapply rule_stm_assign_backwards.
-        eapply IHs.
-        exact H.
+        now apply rule_stm_assign_backwards, IHs.
 
       - (* stm_call *)
         cbn.
@@ -531,14 +521,7 @@ Module Soundness
         admit.
 
       - (* stm_call_frame *)
-        cbn.
-        repeat setoid_rewrite outcome_satisfy_bind.
-        cbn.
-
-        intros.
-        eapply rule_stm_call_frame.
-        eapply IHs.
-        exact H.
+        now apply rule_stm_call_frame, IHs.
 
       - (* stm_call_external *)
         cbn.
@@ -546,84 +529,109 @@ Module Soundness
         admit.
 
       - (* stm_if *)
-        cbn.
-        intros.
-
-        eapply rule_stm_if.
-        + eapply rule_pull.
-          intros eq.
-          rewrite eq in H.
-          eapply IHs1.
-          exact H.
-        + eapply rule_pull.
-          intros eq.
-          rewrite eq in H.
-          eapply IHs2.
-          exact H.
+        apply rule_stm_if; apply rule_pull; intro Heval; rewrite Heval in *; auto.
 
       - (* stm_seq *)
-        cbn.
-        setoid_rewrite outcome_satisfy_bind.
-        intros.
+        eapply rule_consequence_left.
+        eapply rule_stm_seq; intros; apply wp_triple.
 
-        eapply (rule_stm_seq _ _ _ _ _ _ (fun δ1 => ∃ L, L ∧ !!( δ1 ⊢ ⦃ L ⦄ s2 ⦃ fun v2 δ2 => POST v2 δ2 ⦄))).
-        + eapply IHs1.
-          refine (outcome_satisfy_monotonic _ _ H).
-          intros [v2 [δ2 h2]] outs2.
-          cbn; cbn in IHs2.
-          eapply (lex_right (inst_scheap h2)).
-          eapply (land_right _ _ _ (entails_refl _)).
-          eapply lprop_right.
-          eapply (IHs2 _ _ _ outs2).
-        + intros δ'.
-          eapply rule_exist.
-          intros Pre.
-          eapply rule_pull.
-          exact (fun spec => spec).
+        apply lex_right with (inst_scheap h1).
+        apply land_right.
+        apply entails_refl.
+        apply lprop_right.
+        apply IHs1; clear IHs1.
+        sound_inster.
+        intros [v2 [δ2 h2]] HYP; cbn.
+
+        apply lex_right with (inst_scheap h2).
+        apply land_right.
+        apply entails_refl.
+        apply lprop_right.
+        now apply IHs2.
 
       - (* stm_assert *)
-        cbn.
-        intros.
-        refine (rule_consequence _ (entails_refl _) _ (rule_stm_assert _ _ _ _)).
-        intros.
-        eapply limpl_and_adjoint.
-        eapply lprop_left.
-        intros [eq1 [eq2 eq3]].
-        rewrite <-limpl_and_adjoint.
-        eapply land_left2.
-        subst.
-        rewrite eq3 in *.
-        unfold scmut_pure in H; cbn in H.
-        exact H.
+        eapply rule_consequence_right.
+        apply rule_stm_assert.
+        cbn; intros.
+        apply limpl_and_adjoint.
+        apply lprop_left; intros (? & ? & Heval); subst.
+        rewrite Heval in *; cbn in *.
+        now apply limpl_and_adjoint, land_left2.
 
-      - (* fail s *)
-        cbn.
-        intros.
-        refine (rule_consequence _ _ (fun _ _ => entails_refl _) (rule_stm_fail _ _ _ _)).
-        eapply ltrue_right.
+      - (* stm_fail *)
+        eapply rule_consequence_left.
+        apply rule_stm_fail.
+        apply ltrue_right.
 
       - (* stm_match_list *)
-        cbn.
-        intros.
-        eapply rule_stm_match_list.
-        + eapply rule_pull.
-          intros eq.
-          rewrite eq in H; cbn in H.
-          eapply IHs1.
-          exact H.
-        + intros.
-          eapply rule_pull.
-          intros eq.
-          eapply IHs2.
-          rewrite eq in H.
-          unfold scmut_pop_local, scmut_modify_local, scmut_state_local, scmut_state, scmut_bind_left, scmut_bind in H.
-          repeat setoid_rewrite outcome_satisfy_bind in H.
-          exact H.
+        apply rule_stm_match_list; cbn; intros;
+          apply rule_pull; intro Heval; rewrite Heval in HYP.
+        + now apply IHs1.
+        + unfold scmut_bind_left, scmut_bind in HYP; cbn in HYP.
+          repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+          now apply IHs2.
 
       - (* stm_match_sum *)
-        cbn.
+        apply rule_stm_match_sum; cbn; intros;
+          apply rule_pull; intro Heval; rewrite Heval in HYP.
+        + unfold scmut_bind_left, scmut_bind in HYP.
+          repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+          now apply IHs1.
+
+        + unfold scmut_bind_left, scmut_bind in HYP.
+          repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+          now apply IHs2.
+
+      - (* stm_match_pair *)
+        apply rule_stm_match_pair; cbn; intros;
+          apply rule_pull; intro Heval; rewrite Heval in HYP.
+        now apply IHs.
+
+      - (* stm_match_enum *)
+        now apply rule_stm_match_enum, H.
+
+      - (* stm_match_tuple *)
+        now apply rule_stm_match_tuple, IHs.
+
+      - (* stm_match_union *)
+        apply rule_stm_match_union'.
+        intros K. specialize (H K).
+        remember (alts K) as alt.
+        dependent elimination alt; cbn.
         intros.
-        
+        apply rule_pull. intro Heval. rewrite Heval, 𝑼_unfold_fold in HYP.
+        unfold scmut_bind_left, scmut_bind in HYP.
+        repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+        rewrite <- Heqalt in HYP.
+        now apply H.
+
+      - (* stm_match_record *)
+        now apply rule_stm_match_record, IHs.
+
+      - (* stm_read_register *)
+        admit.
+
+      - (* stm_write_register *)
+        admit.
+
+      - (* stm_bind *)
+        eapply rule_consequence_left.
+        eapply rule_stm_bind; intros; apply wp_triple.
+
+        apply lex_right with (inst_scheap h1).
+        apply land_right.
+        apply entails_refl.
+        apply lprop_right.
+        apply IHs; clear IHs.
+        sound_inster.
+        intros [v2 [δ2 h2]] HYP; cbn.
+
+        apply lex_right with (inst_scheap h2).
+        apply land_right.
+        apply entails_refl.
+        apply lprop_right.
+        now apply H.
+
     Admitted.
 
   End Soundness.
