@@ -64,6 +64,8 @@ Module Soundness
   Module LOG := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
   Import LOG.
 
+  Local Open Scope logic.
+
   Section Soundness.
 
     Context `{HL: IHeaplet L} {SLL: ISepLogicLaws L}.
@@ -77,6 +79,27 @@ Module Soundness
     Definition inst_scheap : SCHeap -> L :=
       List.fold_right (fun c h => inst_scchunk c ✱ h) emp.
     Global Arguments inst_scheap !h.
+
+    Lemma in_heap_extractions {h c1 h1} (hyp : List.In (c1 , h1) (heap_extractions h)) :
+      inst_scheap h ⊣⊢s inst_scchunk c1 ✱ inst_scheap h1.
+    Proof.
+      revert c1 h1 hyp.
+      induction h; cbn; intros.
+      - contradict hyp.
+      - destruct hyp as [hyp|hyp].
+        + inversion hyp; subst.
+          split; apply entails_refl.
+        + cbn in *.
+          apply List.in_map_iff in hyp.
+          destruct hyp as [[c2 h2] [H1 H2]].
+          inversion H1; subst; clear H1.
+          apply IHh in H2; rewrite H2; clear IHh H2.
+          rewrite sepcon_comm.
+          rewrite sepcon_assoc.
+          split; apply sepcon_entails; auto using entails_refl.
+          apply sepcon_comm.
+          apply sepcon_comm.
+    Qed.
 
     Opaque env_tail.
     Opaque match_chunk_eqb.
@@ -236,7 +259,12 @@ Module Soundness
         destruct HYP as [[[] h1'] [H1 [HYP Heq]]]; cbn in *; try discriminate.
         eapply rule_consequence_left.
         apply (rule_stm_read_register_backwards (v := v)).
-        admit.
+        apply in_heap_extractions in H1; rewrite H1; clear H1; cbn.
+        apply (Bool.reflect_iff _ _ (match_chunk_eqb_spec _ _)) in Heq.
+        dependent elimination Heq.
+        rewrite sepcon_comm in HYP.
+        apply wand_sepcon_adjoint in HYP.
+        now apply sepcon_entails.
 
       - (* stm_write_register *)
         admit.

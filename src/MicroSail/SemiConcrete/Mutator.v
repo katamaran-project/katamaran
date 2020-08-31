@@ -69,6 +69,11 @@ Module SemiConcrete
   | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ).
   Arguments scchunk_pred _ _ : clear implicits.
 
+  Section TransparentObligations.
+    Local Set Transparent Obligations.
+    Derive NoConfusion for SCChunk.
+  End TransparentObligations.
+
   Definition SCHeap  : Type :=
     list SCChunk.
 
@@ -109,6 +114,11 @@ Module SemiConcrete
         match_chunk_eqb (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (right _)      := false
       };
       match_chunk_eqb _ _  := false.
+
+    Lemma match_chunk_eqb_spec (c1 c2 : SCChunk) :
+      reflect (c1 = c2) (match_chunk_eqb c1 c2).
+    Proof.
+    Admitted.
 
     Definition extract_chunk_eqb (ce : SCChunk) (h : SCHeap) : list SCHeap :=
       List.map snd (List.filter (fun '(cr,_) => match_chunk_eqb ce cr) (heap_extractions h)).
