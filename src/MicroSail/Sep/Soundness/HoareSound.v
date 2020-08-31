@@ -175,17 +175,17 @@ Module HoareSound
       - sound_solve.
       (* rule_exists *)
       - sound_solve.
-      (* rule_forall *)
-      - pose proof (H x).
-        microsail_insterU (eauto) H0.
-        destruct_conjs.
-        sound_inster.
-        destruct s'; cbn in *; try contradiction; auto.
-        intros.
-        pose proof (H x0).
-        microsail_insterU (eauto) H3.
-        destruct_conjs; cbn in *.
-        pose proof (split_eq_right H1 H4); subst; auto.
+      (* (* rule_forall *) *)
+      (* - pose proof (H x). *)
+      (*   microsail_insterU (eauto) H0. *)
+      (*   destruct_conjs. *)
+      (*   sound_inster. *)
+      (*   destruct s'; cbn in *; try contradiction; auto. *)
+      (*   intros. *)
+      (*   pose proof (H x0). *)
+      (*   microsail_insterU (eauto) H3. *)
+      (*   destruct_conjs; cbn in *. *)
+      (*   pose proof (split_eq_right H1 H4); subst; auto. *)
       (* rule_stm_lit *)
       - sound_solve.
       (* rule_stm_exp *)

@@ -126,11 +126,11 @@ Module ProgramLogic
         {Q :  Lit σ -> LocalStore Γ -> L} :
         (forall x, δ ⊢ ⦃ P x ⦄ s ⦃ Q ⦄) ->
         δ ⊢ ⦃ ∃ x, P x ⦄ s ⦃ Q ⦄
-    | rule_forall
-        {σ} {s : Stm Γ σ} {A : Type} {P : L}
-        {Q : A -> Lit σ -> LocalStore Γ -> L}
-        (hyp : forall x, δ ⊢ ⦃ P ⦄ s ⦃ Q x ⦄) (x : A) :
-        δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => ∀ x, Q x v δ' ⦄
+    (* | rule_forall *)
+    (*     {σ} {s : Stm Γ σ} {A : Type} {P : L} *)
+    (*     {Q : A -> Lit σ -> LocalStore Γ -> L} *)
+    (*     (hyp : forall x, δ ⊢ ⦃ P ⦄ s ⦃ Q x ⦄) (x : A) : *)
+    (*     δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => ∀ x, Q x v δ' ⦄ *)
     | rule_stm_lit
         {τ : Ty} {l : Lit τ}
         {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
@@ -341,50 +341,50 @@ Module ProgramLogic
       - apply lfalse_left.
     Qed.
 
-    Lemma rule_forall' {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
-      {A : Type} {P : A -> L} {Q : A -> Lit σ -> LocalStore Γ -> L}
-      (hyp : forall x, δ ⊢ ⦃ P x ⦄ s ⦃ Q x ⦄) (x : A) :
-      δ ⊢ ⦃ ∀ x, P x ⦄ s ⦃ fun v δ' => ∀ x, Q x v δ' ⦄.
-    Proof.
-      apply rule_forall; [ intros | assumption ].
-      apply (rule_consequence_left (P x0 ∧ P x)).
-      - apply (rule_consequence_left (P x0)).
-        + apply hyp.
-        + apply land_left1.
-          apply entails_refl.
-      - apply land_right.
-        + apply lall_left with x0.
-          apply entails_refl.
-        + apply lall_left with x.
-          apply entails_refl.
-    Qed.
+    (* Lemma rule_forall' {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ} *)
+    (*   {A : Type} {P : A -> L} {Q : A -> Lit σ -> LocalStore Γ -> L} *)
+    (*   (hyp : forall x, δ ⊢ ⦃ P x ⦄ s ⦃ Q x ⦄) (x : A) : *)
+    (*   δ ⊢ ⦃ ∀ x, P x ⦄ s ⦃ fun v δ' => ∀ x, Q x v δ' ⦄. *)
+    (* Proof. *)
+    (*   apply rule_forall; [ intros | assumption ]. *)
+    (*   apply (rule_consequence_left (P x0 ∧ P x)). *)
+    (*   - apply (rule_consequence_left (P x0)). *)
+    (*     + apply hyp. *)
+    (*     + apply land_left1. *)
+    (*       apply entails_refl. *)
+    (*   - apply land_right. *)
+    (*     + apply lall_left with x0. *)
+    (*       apply entails_refl. *)
+    (*     + apply lall_left with x. *)
+    (*       apply entails_refl. *)
+    (* Qed. *)
 
-    Lemma rule_conj {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
-      {P : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} :
-      δ ⊢ ⦃ P ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P ⦄ s ⦃ Q2 ⦄ ->
-      δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄.
-    Proof.
-      intros H1 H2.
-      apply (rule_consequence_right (fun v δ' => ∀ b : bool, if b then Q1 v δ' else Q2 v δ')).
-      - apply rule_forall.
-        intros []; auto.
-        apply true.
-      - intros.
-        apply land_right.
-        + apply lall_left with true, entails_refl.
-        + apply lall_left with false, entails_refl.
-    Qed.
+    (* Lemma rule_conj {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ} *)
+    (*   {P : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} : *)
+    (*   δ ⊢ ⦃ P ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P ⦄ s ⦃ Q2 ⦄ -> *)
+    (*   δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄. *)
+    (* Proof. *)
+    (*   intros H1 H2. *)
+    (*   apply (rule_consequence_right (fun v δ' => ∀ b : bool, if b then Q1 v δ' else Q2 v δ')). *)
+    (*   - apply rule_forall. *)
+    (*     intros []; auto. *)
+    (*     apply true. *)
+    (*   - intros. *)
+    (*     apply land_right. *)
+    (*     + apply lall_left with true, entails_refl. *)
+    (*     + apply lall_left with false, entails_refl. *)
+    (* Qed. *)
 
-    Lemma rule_conj' {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
-      {P1 P2 : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} :
-      δ ⊢ ⦃ P1 ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P2 ⦄ s ⦃ Q2 ⦄ ->
-      δ ⊢ ⦃ P1 ∧ P2 ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄.
-    Proof.
-      intros H1 H2.
-      apply rule_conj.
-      - apply (rule_consequence_left _ H1), land_left1, entails_refl.
-      - apply (rule_consequence_left _ H2), land_left2, entails_refl.
-    Qed.
+    (* Lemma rule_conj' {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ} *)
+    (*   {P1 P2 : L} {Q1 Q2 : Lit σ -> LocalStore Γ -> L} : *)
+    (*   δ ⊢ ⦃ P1 ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P2 ⦄ s ⦃ Q2 ⦄ -> *)
+    (*   δ ⊢ ⦃ P1 ∧ P2 ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄. *)
+    (* Proof. *)
+    (*   intros H1 H2. *)
+    (*   apply rule_conj. *)
+    (*   - apply (rule_consequence_left _ H1), land_left1, entails_refl. *)
+    (*   - apply (rule_consequence_left _ H2), land_left2, entails_refl. *)
+    (* Qed. *)
 
     Lemma rule_stm_match_union' {Γ δ U} (e : Exp Γ (ty_union U)) {τ : Ty}
       (alts : forall (K : 𝑼𝑲 U), Alternative Γ (𝑼𝑲_Ty K) τ)
@@ -399,6 +399,13 @@ Module ProgramLogic
       δ ⊢ ⦃ P ⦄ stm_match_union U e alts ⦃ Q ⦄.
     Proof.
     Admitted.
+
+    Definition WP {Γ τ} (s : Stm Γ τ) (POST :  Lit τ -> LocalStore Γ -> L) : LocalStore Γ -> L :=
+      fun δ => ∃ (P : L), P ∧ !! (δ ⊢ ⦃ P ⦄ s ⦃ POST ⦄).
+
+    Lemma rule_wp {Γ σ} (s : Stm Γ σ) (POST :  Lit σ -> LocalStore Γ -> L) (δ1 : LocalStore Γ) :
+      δ1 ⊢ ⦃ WP s POST δ1 ⦄ s ⦃ POST ⦄.
+    Proof. apply rule_exist; intros P; now apply rule_pull. Qed.
 
     Global Instance proper_triple {Γ δ τ} :
       Proper (bientails ==> eq ==> pointwise_relation _ (pointwise_relation _ bientails) ==> iff) (@Triple Γ δ τ).

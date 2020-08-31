@@ -34,6 +34,9 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 
+From MicroSail Require Import
+     Sep.Logic.
+
 Set Implicit Arguments.
 
 Delimit Scope outcome_scope with out.
@@ -48,7 +51,10 @@ Inductive Outcome (A: Type) : Type :=
 .
 Arguments outcome_fail {_} _.
 
-Derive NoConfusion for Outcome.
+Section TransparentObligations.
+  Local Set Transparent Obligations.
+  Derive NoConfusion for Outcome.
+End TransparentObligations.
 
 Bind Scope outcome_scope with Outcome.
 
@@ -153,3 +159,56 @@ Module OutcomeNotations.
   Notation "ma >>= f" := (outcome_bind ma f) (at level 50, left associativity) : outcome_scope.
 
 End OutcomeNotations.
+
+Section Unused.
+
+  Context `{SLL: ISepLogicLaws L}.
+
+  Local Open Scope logic.
+
+  Fixpoint outcome_satisfy_natded {A : Type} (o : Outcome A)
+              (P : A -> L) {struct o} : L :=
+    match o with
+    | outcome_pure a => P a
+    | @outcome_angelic _ I0 os =>
+      ∃ i : I0, outcome_satisfy_natded (os i) P
+    | @outcome_demonic _ IO os =>
+      ∀ i : IO, outcome_satisfy_natded (os i) P
+    | outcome_angelic_binary o1 o2 =>
+      outcome_satisfy_natded o1 P ∨ outcome_satisfy_natded o2 P
+    | outcome_demonic_binary o1 o2 =>
+      outcome_satisfy_natded o1 P ∧ outcome_satisfy_natded o2 P
+    | outcome_fail s => lfalse
+  end.
+
+  Axiom outcome_satisfy_natded_bind :
+    forall {A B : Type} (o : Outcome A) (f : A -> Outcome B) (P : B -> L),
+      outcome_satisfy_natded (outcome_bind o f) P ⊣⊢s
+      outcome_satisfy_natded o (fun a => outcome_satisfy_natded (f a) P).
+
+  Lemma outcome_satisfy_natded_monotonic {A : Type} {o : Outcome A} {P Q : A -> L}
+    (hyp : forall a, P a ⊢ Q a) :
+    outcome_satisfy_natded o P ⊢ outcome_satisfy_natded o Q.
+  Proof.
+    induction o; cbn.
+    - apply hyp.
+    - apply lex_left; intro i.
+      apply lex_right with i.
+      apply H.
+    - apply lall_right; intro i.
+      apply lall_left with i.
+      apply H.
+    - apply lor_left.
+      + apply lor_right1.
+        apply IHo1.
+      + apply lor_right2.
+        apply IHo2.
+    - apply land_right.
+      + apply land_left1.
+        apply IHo1.
+      + apply land_left2.
+        apply IHo2.
+    - apply entails_refl.
+  Qed.
+
+End Unused.
