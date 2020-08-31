@@ -234,6 +234,8 @@ Module Soundness
           outcome_satisfy_filter_angelic_list in HYP.
         apply outcome_satisfy_angelic_list in HYP.
         destruct HYP as [[[] h1'] [H1 [HYP Heq]]]; cbn in *; try discriminate.
+        eapply rule_consequence_left.
+        apply (rule_stm_read_register_backwards (v := v)).
         admit.
 
       - (* stm_write_register *)

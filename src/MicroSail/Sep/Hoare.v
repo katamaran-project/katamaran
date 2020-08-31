@@ -227,10 +227,6 @@ Module ProgramLogic
         δ ⊢ ⦃ P ⦄ stm_match_record R e p rhs ⦃ Q ⦄
     | rule_stm_read_register {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
         δ ⊢ ⦃ r ↦ v ⦄ stm_read_register r ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = v) ∧ r ↦ v ⦄
-    (* | rule_stm_read_register_backwards {σ : Ty} (r : 𝑹𝑬𝑮 σ) *)
-    (*                                    (Q : Lit σ -> LocalStore Γ -> L) *)
-    (*                                    (v : Lit σ) : *)
-    (*     δ ⊢ ⦃ r ↦ v ✱ (r ↦ v -✱ Q v δ) ⦄ stm_read_register r ⦃ Q ⦄ *)
     | rule_stm_write_register {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
                               (Q : Lit σ -> LocalStore Γ -> L)
                               (v : Lit σ) :
@@ -276,7 +272,7 @@ Module ProgramLogic
         δ ⊢ ⦃ P ⦄ stm_bind s k ⦃ R ⦄
     where "δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" := (@Triple _ δ _ P s Q).
 
-    Context {LLL : ILogicLaws L _}.
+    Context {SLL : ISepLogicLaws L}.
     Lemma rule_consequence_left {Γ σ} {δ : LocalStore Γ} {s : Stm Γ σ}
       (P1 : L) {P2 : L} {Q : Lit σ -> LocalStore Γ -> L} :
       δ ⊢ ⦃ P1 ⦄ s ⦃ Q ⦄ -> P2 ⊢ P1 -> δ ⊢ ⦃ P2 ⦄ s ⦃ Q ⦄.
@@ -412,6 +408,27 @@ Module ProgramLogic
     Proof.
       intros P Q pq s s' eq__s R S rs; subst s'.
       split; intro H; (eapply rule_consequence; [apply pq | apply rs | exact H ]).
+    Qed.
+
+    Lemma rule_stm_read_register_backwards {Γ δ σ r v}
+          (Q : Lit σ -> LocalStore Γ -> L) :
+      δ ⊢ ⦃ r ↦ v ✱ (r ↦ v -✱ Q v δ) ⦄ stm_read_register r ⦃ Q ⦄.
+    Proof.
+      rewrite sepcon_comm.
+      eapply rule_consequence_right.
+      apply rule_frame, rule_stm_read_register.
+      cbn; intros.
+      rewrite sepcon_comm.
+      apply wand_sepcon_adjoint.
+      apply limpl_and_adjoint.
+      rewrite lprop_land_distr.
+      apply lprop_left; intros []; subst.
+      apply limpl_and_adjoint.
+      apply land_left2.
+      apply wand_sepcon_adjoint.
+      rewrite sepcon_comm.
+      apply wand_sepcon_adjoint.
+      apply entails_refl.
     Qed.
 
   End Triples.
