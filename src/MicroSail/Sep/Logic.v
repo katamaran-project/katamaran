@@ -237,7 +237,31 @@ Class ISepLogicLaws (L : Type) {SL : ISepLogic L} := {
   sepcon_entails: forall P P' Q Q' : L, P ⊢ P' -> Q ⊢ Q' -> P ✱ Q ⊢ P' ✱ Q';
 }.
 
+Section SepEquivalence.
 
+  Context `{SLL : ISepLogicLaws L}.
+
+  Global Instance proper_sepcon :  Proper (bientails ==> bientails ==> bientails) sepcon.
+  Proof.
+    intros P Q [pq qp] R S [rs sr].
+    split; now apply sepcon_entails.
+  Qed.
+
+  Global Instance proper_wand : Proper (bientails ==> bientails ==> bientails) wand.
+  Proof.
+    intros P Q pq R S rs.
+    split.
+    - apply wand_sepcon_adjoint.
+      rewrite <- pq, <- rs.
+      apply wand_sepcon_adjoint.
+      apply entails_refl.
+    - apply wand_sepcon_adjoint.
+      rewrite pq, rs.
+      apply wand_sepcon_adjoint.
+      apply entails_refl.
+  Qed.
+
+End SepEquivalence.
 
 Module Type HeapKit
        (Import typekit : TypeKit)
