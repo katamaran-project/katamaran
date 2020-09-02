@@ -248,11 +248,6 @@ Module ProgramLogic
         (Q : Lit σ -> L) :
         CTriple Δ (evals es δ) P Q (CEnv f) ->
         δ ⊢ ⦃ P ⦄ stm_call f es ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
-    (* | rule_stm_call_backwards *)
-    (*     {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) *)
-    (*     (P : L) (Q : Lit σ -> LocalStore Γ -> L) : *)
-    (*     CTriple Δ (evals es δ) P (fun v => Q v δ) (CEnv f) -> *)
-    (*     δ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q ⦄ *)
     | rule_stm_call_frame
         (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
@@ -447,6 +442,23 @@ Module ProgramLogic
       rewrite sepcon_comm.
       apply wand_sepcon_adjoint.
       apply entails_refl.
+    Qed.
+
+    Lemma rule_stm_call_backwards {Γ δ Δ σ} {f : 𝑭 Δ σ} {es : NamedEnv (Exp Γ) Δ}
+          (P : L) (Q : Lit σ -> LocalStore Γ -> L) :
+      CTriple Δ (evals es δ) P (fun v => Q v δ) (CEnv f) ->
+      δ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q ⦄.
+    Proof.
+      intros HYP.
+      eapply rule_consequence_right.
+      apply rule_stm_call_forwards.
+      apply HYP.
+      cbn; intros v δ1.
+      rewrite land_comm.
+      apply limpl_and_adjoint.
+      apply lprop_left. intro. subst δ1.
+      apply limpl_and_adjoint.
+      apply land_left2, entails_refl.
     Qed.
 
   End Triples.
