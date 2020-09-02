@@ -311,7 +311,7 @@ Module SemiConcrete
         ⨁ ι : SymInstance Σe =>
         ⨁ H : vs = inst_localstore ι δ =>
         scmut_consume ι req  ;;
-        ⨁ v : Lit τ =>
+        ⨂ v : Lit τ =>
         scmut_produce (env_snoc ι (result,τ) v) ens ;;
         scmut_pure v
       | sep_contract_none _ _ =>

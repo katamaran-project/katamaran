@@ -252,10 +252,82 @@ Module Soundness
         now apply rule_stm_assign_backwards, IHs.
 
       - (* stm_call *)
-        cbn.
-        unfold scmut_call; cbn.
-        (* err.. need for tying the knot? *)
-        admit.
+        destruct (CEnv f) eqn:Heq; cbn in HYP.
+
+        + destruct HYP as [ι [Heqs HYP]].
+          unfold scmut_angelic, scmut_bind, scmut_pure in HYP; cbn in HYP.
+          repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+          assert (inst_scheap h1 ⊢ inst_assertion ι req ✱ (inst_assertion ι ens -✱ POST (inst_term ι result) δ1)).
+          { apply (scmut_consume_sound (fun δ => _ -✱ POST (inst_term ι result) δ)).
+            sound_inster; cbn; intros.
+            now apply wand_sepcon_adjoint, scmut_produce_sound.
+          }
+          clear HYP.
+          eapply rule_consequence_left.
+          2: exact H.
+          rewrite sepcon_comm.
+          eapply rule_consequence_right.
+          apply rule_frame.
+          apply rule_stm_call_forwards.
+          rewrite Heq.
+          constructor.
+          apply Heqs.
+          cbn. intros.
+          rewrite sepcon_comm.
+          apply wand_sepcon_adjoint.
+          rewrite land_comm.
+          apply limpl_and_adjoint.
+          apply lprop_left; intro; subst δ1.
+          apply limpl_and_adjoint.
+          apply land_left2.
+          rewrite land_comm.
+          apply limpl_and_adjoint.
+          apply lprop_left; intro; subst v.
+          apply limpl_and_adjoint.
+          apply land_left2.
+          apply wand_sepcon_adjoint.
+          rewrite sepcon_comm.
+          apply wand_sepcon_adjoint.
+          apply entails_refl.
+
+        + destruct HYP as [ι [Heqs HYP]].
+          unfold scmut_angelic, scmut_bind, scmut_pure in HYP; cbn in HYP.
+          repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+          repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+          assert (inst_scheap h1 ⊢ inst_assertion ι req ✱ (∀ v, inst_assertion (env_snoc ι (result,_) v) ens -✱ POST v δ1)).
+          { apply (scmut_consume_sound (fun δ => ∀ v, inst_assertion (env_snoc ι (result , σ) v) ens -✱ POST v δ)).
+            sound_inster.
+            intros [? [δ2 h2]] HYP; cbn.
+            apply lall_right; intro v.
+            specialize (HYP v).
+            now apply wand_sepcon_adjoint, scmut_produce_sound.
+          }
+          clear HYP.
+          eapply rule_consequence_left.
+          2: exact H.
+          rewrite sepcon_comm.
+          eapply rule_consequence_right.
+          apply rule_frame.
+          apply rule_stm_call_forwards.
+          rewrite Heq.
+          constructor.
+          apply Heqs.
+          cbn. intros.
+          apply wand_sepcon_adjoint.
+          apply lall_left with v.
+          apply wand_sepcon_adjoint.
+          rewrite sepcon_comm.
+          apply wand_sepcon_adjoint.
+          rewrite land_comm.
+          apply limpl_and_adjoint.
+          apply lprop_left; intro; subst δ1.
+          apply limpl_and_adjoint.
+          apply land_left2.
+          apply wand_sepcon_adjoint.
+          rewrite sepcon_comm.
+          apply wand_sepcon_adjoint.
+          apply entails_refl.
+        + contradict HYP.
 
       - (* stm_call_frame *)
         now apply rule_stm_call_frame, IHs.
