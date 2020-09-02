@@ -68,6 +68,9 @@ Module Soundness
 
   Section Soundness.
 
+    Notation "'scmutres_heap' r" := (scstate_heap (scmutres_state r)) (at level 10).
+    Notation "'scmutres_localstore' r" := (scstate_localstore (scmutres_state r)) (at level 10).
+
     Context `{HL: IHeaplet L} {SLL: ISepLogicLaws L}.
 
     Definition inst_scchunk (c : SCChunk) : L :=
@@ -109,10 +112,101 @@ Module Soundness
       | [ IH: outcome_satisfy (scmut_exec ?s _) _ |-
           outcome_satisfy (scmut_exec ?s _) _ ] =>
         refine (outcome_satisfy_monotonic _ _ IH); clear IH
+      | [ IH: outcome_satisfy (scmut_consume _ ?a _) _ |-
+          outcome_satisfy (scmut_consume _ ?a _) _ ] =>
+        refine (outcome_satisfy_monotonic _ _ IH); clear IH
+      | [ IH: outcome_satisfy (scmut_produce _ ?a _) _ |-
+          outcome_satisfy (scmut_produce _ ?a _) _ ] =>
+        refine (outcome_satisfy_monotonic _ _ IH); clear IH
       | [ IH: context[_ -> outcome_satisfy (scmut_exec ?s _) _] |-
           outcome_satisfy (scmut_exec ?s _) _ ] =>
         microsail_insterU (fail) IH; refine (outcome_satisfy_monotonic _ _ IH); clear IH
+      | [ IH: outcome_satisfy ?o _ |-
+          outcome_satisfy ?o _ ] =>
+        refine (outcome_satisfy_monotonic _ _ IH); clear IH
       end.
+
+    Lemma scmut_consume_chunk_sound {Γ} {δ1 : LocalStore Γ} {h1 : SCHeap} (c : SCChunk) (POST : LocalStore Γ -> L) :
+      outcome_satisfy
+        (scmut_consume_chunk c {| scstate_localstore := δ1; scstate_heap := h1 |})
+        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      inst_scheap h1 ⊢ inst_scchunk c ✱ POST δ1.
+    Proof.
+      cbn; intros HYP.
+      rewrite outcome_satisfy_bind, !outcome_satisfy_map_angelic_list,
+        outcome_satisfy_filter_angelic_list in HYP.
+      apply outcome_satisfy_angelic_list in HYP.
+      destruct HYP as [[c' h1'] [H1 [HYP Heq]]]; cbn in *; try discriminate.
+      apply (Bool.reflect_iff _ _ (match_chunk_eqb_spec _ _)) in Heq; subst c'.
+      apply in_heap_extractions in H1; rewrite H1; clear H1; cbn.
+      apply sepcon_entails.
+      apply entails_refl.
+      assumption.
+    Qed.
+
+    Opaque scmut_consume_chunk.
+
+    Lemma scmut_consume_sound {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
+      outcome_satisfy
+        (scmut_consume ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
+        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      inst_scheap h1 ⊢ inst_assertion ι asn ✱ POST δ1.
+    Proof.
+      revert ι δ1 h1 POST. induction asn; cbn; intros ι δ1 h1 POST HYP.
+      - destruct (inst_term ι b); cbn in *.
+        + admit.
+        + contradict HYP.
+      - contradict HYP.
+      - apply scmut_consume_chunk_sound in HYP.
+        now destruct c.
+      - destruct (inst_term ι b); auto.
+      - auto.
+      - unfold scmut_bind_right, scmut_bind in HYP.
+        rewrite outcome_satisfy_bind in HYP.
+        rewrite sepcon_assoc.
+        apply (IHasn1 ι δ1 h1 (fun δ => inst_assertion ι asn2 ✱ POST δ)); clear IHasn1.
+        sound_inster.
+        intros [? [δ2 h2]] HYP; cbn.
+        now apply (IHasn2 ι δ2 h2 POST).
+      - destruct HYP as [v HYP].
+        apply (entails_trans (inst_scheap h1) (inst_assertion (env_snoc ι (ς , τ) v) asn ✱ POST δ1)).
+        + now apply IHasn.
+        + apply sepcon_entails.
+          apply lex_right with v, entails_refl.
+          apply entails_refl.
+    Admitted.
+
+    Lemma scmut_produce_sound {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
+      outcome_satisfy
+        (scmut_produce ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
+        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      inst_scheap h1 ✱ inst_assertion ι asn ⊢ POST δ1.
+    Proof.
+      revert ι δ1 h1 POST. induction asn; cbn; intros ι δ1 h1 POST HYP.
+      - destruct (inst_term ι b); cbn in *.
+        + admit.
+        + admit.
+      - contradict HYP.
+      - rewrite sepcon_comm.
+        now destruct c.
+      - destruct (inst_term ι b); auto.
+      - auto.
+      - unfold scmut_bind_right, scmut_bind in HYP.
+        rewrite outcome_satisfy_bind in HYP.
+        rewrite <- sepcon_assoc.
+        apply wand_sepcon_adjoint.
+        apply (IHasn1 ι δ1 h1 (fun δ => inst_assertion ι asn2 -✱ POST δ)); clear IHasn1.
+        sound_inster.
+        intros [? [δ2 h2]] HYP; cbn.
+        apply wand_sepcon_adjoint.
+        now apply (IHasn2 ι δ2 h2 POST).
+      - rewrite sepcon_comm.
+        apply wand_sepcon_adjoint.
+        apply lex_left. intro v.
+        apply wand_sepcon_adjoint.
+        rewrite sepcon_comm.
+        now apply IHasn.
+    Admitted.
 
     Lemma scmut_exec_sound {Γ σ} (s : Stm Γ σ) :
       forall (δ1 : LocalStore Γ) (h1 : SCHeap) (POST : Lit σ -> LocalStore Γ -> L),
@@ -253,33 +347,19 @@ Module Soundness
 
       - (* stm_read_register *)
         destruct HYP as [v HYP].
-        rewrite !outcome_satisfy_map_angelic_list,
-          outcome_satisfy_filter_angelic_list in HYP.
-        apply outcome_satisfy_angelic_list in HYP.
-        destruct HYP as [[[] h1'] [H1 [HYP Heq]]]; cbn in *; try discriminate.
-        apply (Bool.reflect_iff _ _ (match_chunk_eqb_spec _ _)) in Heq.
-        dependent elimination Heq.
         eapply rule_consequence_left.
         apply (rule_stm_read_register_backwards (v := v)).
-        apply in_heap_extractions in H1; rewrite H1; clear H1; cbn.
-        rewrite sepcon_comm in HYP.
-        apply wand_sepcon_adjoint in HYP.
-        now apply sepcon_entails.
+        setoid_rewrite sepcon_comm in HYP.
+        setoid_rewrite wand_sepcon_adjoint in HYP.
+        now apply (scmut_consume_chunk_sound _ (fun δ => _ -✱ POST _ δ)) in HYP.
 
       - (* stm_write_register *)
         destruct HYP as [v HYP].
-        rewrite !outcome_satisfy_map_angelic_list,
-          outcome_satisfy_filter_angelic_list in HYP.
-        apply outcome_satisfy_angelic_list in HYP.
-        destruct HYP as [[[] h1'] [H1 [HYP Heq]]]; cbn in *; try discriminate.
-        apply (Bool.reflect_iff _ _ (match_chunk_eqb_spec _ _)) in Heq.
-        dependent elimination Heq.
         eapply rule_consequence_left.
-        apply (rule_stm_write_register_backwards (v := v) (e := e)).
-        apply in_heap_extractions in H1; rewrite H1; clear H1; cbn.
-        rewrite sepcon_comm in HYP.
-        apply wand_sepcon_adjoint in HYP.
-        now apply sepcon_entails.
+        apply (rule_stm_write_register_backwards (v := v)).
+        setoid_rewrite sepcon_comm in HYP.
+        setoid_rewrite wand_sepcon_adjoint in HYP.
+        now apply (scmut_consume_chunk_sound _ (fun δ => _ -✱ POST _ δ)) in HYP.
 
       - (* stm_bind *)
         eapply rule_consequence_left.
