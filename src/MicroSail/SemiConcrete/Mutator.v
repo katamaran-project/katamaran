@@ -426,7 +426,7 @@ Module SemiConcrete
 
   Import OutcomeNotations.
 
-  Definition outcome_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
+  Definition semiconcrete_outcome_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
     Outcome unit :=
     match c with
     | @sep_contract_result_pure _ _ Σ δ result' req ens =>
@@ -452,12 +452,11 @@ Module SemiConcrete
       outcome_block
     end.
 
-  Definition ValidContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
-             (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    outcome_satisfy (outcome_contract c body) (fun _ => True).
+  Definition ValidContractSCMut {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    outcome_satisfy (semiconcrete_outcome_contract c body) (fun _ => True).
 
-  Definition ValidContractEnv (cenv : SepContractEnv) : Prop :=
+  Definition ValidContractEnvSCMut (cenv : SepContractEnv) : Prop :=
     forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),
-      ValidContract (cenv Δ τ f) (Pi f).
+      ValidContractSCMut (cenv Δ τ f) (Pi f).
 
 End SemiConcrete.

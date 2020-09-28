@@ -208,6 +208,16 @@ Module Soundness
         now apply IHasn.
     Admitted.
 
+    Lemma scmut_produce_sound' {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
+      outcome_satisfy
+        (scmut_produce ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
+        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      inst_assertion ι asn ⊢ inst_scheap h1 -✱ POST δ1.
+    Proof.
+      intros. apply wand_sepcon_adjoint. rewrite sepcon_comm.
+      now apply (scmut_produce_sound _ H).
+    Qed.
+
     Lemma scmut_exec_sound {Γ σ} (s : Stm Γ σ) :
       forall (δ1 : LocalStore Γ) (h1 : SCHeap) (POST : Lit σ -> LocalStore Γ -> L),
         outcome_satisfy
@@ -451,6 +461,96 @@ Module Soundness
         apply lprop_right.
         now apply H.
 
+    Admitted.
+
+    Lemma scmut_exec_sound' {Γ σ} (s : Stm Γ σ) :
+      forall (δ1 : LocalStore Γ) (h1 : SCHeap) (POST : Lit σ -> LocalStore Γ -> L),
+        outcome_satisfy
+          (scmut_exec s (MkSCState δ1 h1))
+          (fun '(MkSCMutResult v2 (MkSCState δ2 h2)) =>
+             inst_scheap h2 ⊢ POST v2 δ2) ->
+        inst_scheap h1 ⊢ WP s POST δ1.
+    Proof.
+      cbn in *; intros.
+      unfold WP.
+      apply scmut_exec_sound in H.
+      apply lex_right with (inst_scheap h1).
+      apply land_right.
+      reflexivity.
+      now apply lprop_right.
+    Qed.
+
+    Definition ValidContractHoare {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) : Prop :=
+      forall (ι : SymInstance (contract_logical_variables c)),
+        inst_contract_localstore c ι ⊢ ⦃ inst_contract_precondition c ι ⦄ body ⦃ fun v _ => inst_contract_postcondition c ι v ⦄.
+
+    Lemma scmut_contract_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+      ValidContractSCMut c body ->
+      ValidContractHoare c body.
+    Proof.
+      unfold ValidContractSCMut, ValidContractHoare.
+      destruct c; cbn in *; intros HYP ι.
+      - specialize (HYP ι).
+        rename δ into δΣ.
+        remember (inst_localstore ι δΣ) as δ.
+        unfold scmut_leakcheck, scmut_get_heap, scmut_state_heap, scmut_state, scmut_bind, scmut_assert_eq in HYP.
+        rewrite outcome_satisfy_map in HYP.
+        repeat setoid_rewrite outcome_satisfy_bind in HYP.
+        cbn in HYP.
+        eapply rule_consequence_left.
+        apply rule_wp.
+        apply entails_trans with
+            (inst_scheap nil -✱ WP body (fun (v : Lit τ) (_ : LocalStore Δ) => inst_assertion ι ens ∧ !! (v = inst_term ι result)) δ).
+        apply scmut_produce_sound'.
+        2: { admit. }
+        sound_inster.
+        intros [[] [δ2 h2]] HYP; cbn.
+        apply scmut_exec_sound'. cbn.
+        sound_inster.
+        intros [v3 [δ3 h3]] HYP; cbn.
+        enough (inst_scheap h3 ⊢ inst_assertion ι ens ✱ (emp ∧ !! (v3 = inst_term ι result))).
+        admit.
+        change (emp ∧ !! (v3 = inst_term ι result)) with ((fun _ => emp ∧ !! (v3 = inst_term ι result)) δ3).
+        apply (scmut_consume_sound (asn := ens)).
+        sound_inster.
+        intros [[] [δ4 h4]] HYP; cbn in *.
+        destruct (Lit_eqb_spec _ v3 (inst_term ι result)); cbn in HYP.
+        + subst v3.
+          destruct h4; cbn in *.
+          * apply land_right.
+            apply entails_refl.
+            apply lprop_right.
+            reflexivity.
+          * contradict HYP.
+        + contradict HYP.
+      - specialize (HYP ι).
+        rename δ into δΣ.
+        remember (inst_localstore ι δΣ) as δ.
+        unfold scmut_leakcheck, scmut_get_heap, scmut_state_heap, scmut_state, scmut_bind, scmut_assert_eq in HYP.
+        rewrite outcome_satisfy_map in HYP.
+        repeat setoid_rewrite outcome_satisfy_bind in HYP.
+        cbn in HYP.
+        eapply rule_consequence_left.
+        apply rule_wp.
+        apply entails_trans with
+            (inst_scheap nil -✱ WP body (fun (v : Lit τ) (_ : LocalStore Δ) => inst_assertion (env_snoc ι (result,τ) v) ens) δ).
+        apply scmut_produce_sound'.
+        2: { admit. }
+        sound_inster.
+        intros [[] [δ2 h2]] HYP; cbn.
+        apply scmut_exec_sound'. cbn.
+        sound_inster.
+        intros [v3 [δ3 h3]] HYP; cbn.
+        enough (inst_scheap h3 ⊢ inst_assertion (env_snoc ι (result,τ) v3) ens ✱ emp).
+        admit.
+        change emp with ((fun _ => emp) δ3).
+        apply (scmut_consume_sound (asn := ens)).
+        sound_inster.
+        intros [[] [δ4 h4]] HYP; cbn in *.
+        destruct h4; cbn in *.
+        + apply entails_refl.
+        + contradict HYP.
+      - admit.
     Admitted.
 
   End Soundness.
