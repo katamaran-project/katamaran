@@ -227,9 +227,6 @@ Module IrisInstance
     lprop := bi_pure;
     (* P ⊢ Q *)
     lentails := bi_entails;
-
-    ltrue := True%I;
-    lfalse := False%I
   }.
 
   Program Instance iProp_ILogicLaws : @logic.ILogicLaws (iProp Σ) iris_ILogic.
@@ -238,13 +235,6 @@ Module IrisInstance
   Qed.
   Next Obligation.
     eapply (PreOrder_Transitive (R := bi_entails)); eauto.
-  Qed.
-  Next Obligation.
-    iIntros. iPureIntro; auto.
-  Qed.
-  Next Obligation.
-    iIntros (P f).
-    destruct f.
   Qed.
   Next Obligation.
     iIntros (X P Q XP XQ).
@@ -347,6 +337,13 @@ Module IrisInstance
     iSplitL "P".
     - by iApply PP.
     - by iApply QQ.
+  Qed.
+  Next Obligation.
+    intros P. split.
+    - iIntros "[P _]".
+      iFrame.
+    - iIntros "P".
+      by iSplit; iFrame.
   Qed.
 
   Instance iris_IHeapLet : IHeaplet (iProp Σ) :=
@@ -516,14 +513,14 @@ Module IrisInstance
     by iApply "trips".
   Qed.
 
-  (* following rule is dubious, re discussion about conjunction rule *)
-  Lemma iris_rule_forall {σ Γ} (δ : LocalStore Γ)
-        {s : Stm Γ σ} {A : Type} {P : iProp Σ}
-        {Q : A -> Lit σ -> LocalStore Γ -> iProp Σ}
-        (x : A) :
-    ⊢ ((∀ x, semTriple δ P s (Q x)) -∗ semTriple δ P s (fun v δ' => ∀ x, Q x v δ'))%I.
-  Proof.
-  Admitted.
+  (* (* following rule is dubious, re discussion about conjunction rule *) *)
+  (* Lemma iris_rule_forall {σ Γ} (δ : LocalStore Γ) *)
+  (*       {s : Stm Γ σ} {A : Type} {P : iProp Σ} *)
+  (*       {Q : A -> Lit σ -> LocalStore Γ -> iProp Σ} *)
+  (*       (x : A) : *)
+  (*   ⊢ ((∀ x, semTriple δ P s (Q x)) -∗ semTriple δ P s (fun v δ' => ∀ x, Q x v δ'))%I. *)
+  (* Proof. *)
+  (* Admitted. *)
 
   Lemma iris_rule_stm_lit {Γ} (δ : LocalStore Γ)
         {τ : Ty} {l : Lit τ}
@@ -1326,12 +1323,11 @@ Module IrisInstance
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
     - by iApply iris_rule_exist.
-    - by iApply iris_rule_forall.
     - iApply iris_rule_stm_lit.
       by iApply H0.
     - iApply iris_rule_stm_exp.
