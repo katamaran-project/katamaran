@@ -55,9 +55,6 @@ Module Disjoint
     lprop := (fun (p : Prop) => (fun _ => p));
     (* P ⊢ Q *)
     lentails := (fun P Q => forall γ, P γ -> Q γ);
-
-    ltrue := fun _ => True;
-    lfalse := fun _ => False
   }.
 
   Program Instance HProp_ILogicLaws : @ILogicLaws HProp HProp_ILogic.
@@ -103,7 +100,7 @@ Module Disjoint
       end; cbn in *; try congruence; try eauto with seplogic.
 
   Create HintDb seplogic.
-  Hint Unfold bientails.
+  Hint Unfold bientails : seplogic.
 
   Lemma split_eq {γ1 γ2 γl γr} :
     split γ1 γl γr -> split γ2 γl γr -> γ1 = γ2.
@@ -268,6 +265,28 @@ Module Disjoint
     intuition.
   Qed.
   Hint Resolve sepcon_entails : seplogic.
+
+  Lemma sepcon_emp (P : HProp) : P ✱ Logic.emp ⊣⊢s P.
+  Proof.
+    split.
+    - intros γ (γl & γr & H1 & H2 & H3).
+      assert (γr = emp).
+      { extensionality σ.
+        extensionality r.
+        apply H3.
+      }
+      subst γr.
+      apply split_comm, split_emp in H1.
+      now subst γl.
+    - intros γ H1. cbn.
+      exists γ, emp.
+      split.
+      apply split_comm, split_emp; reflexivity.
+      split.
+      assumption.
+      reflexivity.
+  Qed.
+  Hint Resolve sepcon_emp : seplogic.
 
   Program Instance HProp_ISepLogicLaws : ISepLogicLaws HProp.
   Solve Obligations with eauto with seplogic.

@@ -154,7 +154,11 @@ Module Soundness
     Proof.
       revert ι δ1 h1 POST. induction asn; cbn; intros ι δ1 h1 POST HYP.
       - destruct (inst_term ι b); cbn in *.
-        + admit.
+        + rewrite <- sepcon_emp at 1.
+          rewrite sepcon_comm.
+          apply sepcon_entails.
+          apply entails_refl.
+          apply HYP.
         + contradict HYP.
       - contradict HYP.
       - apply scmut_consume_chunk_sound in HYP.
@@ -174,7 +178,7 @@ Module Soundness
         + apply sepcon_entails.
           apply lex_right with v, entails_refl.
           apply entails_refl.
-    Admitted.
+    Qed.
 
     Lemma scmut_produce_sound {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
@@ -184,8 +188,13 @@ Module Soundness
     Proof.
       revert ι δ1 h1 POST. induction asn; cbn; intros ι δ1 h1 POST HYP.
       - destruct (inst_term ι b); cbn in *.
-        + admit.
-        + admit.
+        + rewrite <- (sepcon_emp (POST _)).
+          apply sepcon_entails.
+          apply HYP.
+          apply entails_refl.
+        + rewrite sepcon_comm.
+          apply wand_sepcon_adjoint.
+          apply lfalse_left.
       - contradict HYP.
       - rewrite sepcon_comm.
         now destruct c.
@@ -206,7 +215,9 @@ Module Soundness
         apply wand_sepcon_adjoint.
         rewrite sepcon_comm.
         now apply IHasn.
-    Admitted.
+    Qed.
+
+    Opaque scmut_call.
 
     Lemma scmut_produce_sound' {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
@@ -502,7 +513,11 @@ Module Soundness
         apply entails_trans with
             (inst_scheap nil -✱ WP body (fun (v : Lit τ) (_ : LocalStore Δ) => inst_assertion ι ens ∧ !! (v = inst_term ι result)) δ).
         apply scmut_produce_sound'.
-        2: { admit. }
+        2: {
+          rewrite <- sepcon_emp.
+          apply wand_sepcon_adjoint.
+          apply entails_refl.
+        }
         sound_inster.
         intros [[] [δ2 h2]] HYP; cbn.
         apply scmut_exec_sound'. cbn.
@@ -535,14 +550,18 @@ Module Soundness
         apply entails_trans with
             (inst_scheap nil -✱ WP body (fun (v : Lit τ) (_ : LocalStore Δ) => inst_assertion (env_snoc ι (result,τ) v) ens) δ).
         apply scmut_produce_sound'.
-        2: { admit. }
+        2: {
+          rewrite <- sepcon_emp.
+          apply wand_sepcon_adjoint.
+          apply entails_refl.
+        }
         sound_inster.
         intros [[] [δ2 h2]] HYP; cbn.
         apply scmut_exec_sound'. cbn.
         sound_inster.
         intros [v3 [δ3 h3]] HYP; cbn.
-        enough (inst_scheap h3 ⊢ inst_assertion (env_snoc ι (result,τ) v3) ens ✱ emp).
-        admit.
+        enough (inst_scheap h3 ⊢ inst_assertion (env_snoc ι (result,τ) v3) ens ✱ emp)
+          by now rewrite sepcon_emp in H.
         change emp with ((fun _ => emp) δ3).
         apply (scmut_consume_sound (asn := ens)).
         sound_inster.

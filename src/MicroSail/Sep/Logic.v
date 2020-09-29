@@ -15,15 +15,18 @@ Require Import MicroSail.Sep.Spec.
 
 Class ILogic (L : Type) :=
 { lentails : L -> L -> Prop;
-  ltrue : L;
-  lfalse : L;
   land : L -> L -> L;
   lor : L -> L -> L;
   limpl : L -> L -> L;
   lprop: Prop -> L;
   lex : forall {T : Type}, (T -> L) -> L;
-  lall : forall {T : Type}, (T -> L) -> L
+  lall : forall {T : Type}, (T -> L) -> L;
+  ltrue := lprop True;
+  lfalse := lprop False;
  }.
+
+Arguments ltrue : simpl never.
+Arguments lfalse : simpl never.
 
 Delimit Scope logic with logic.
 Local Open Scope logic.
@@ -45,8 +48,6 @@ Notation "⊤" := ltrue.
 Class ILogicLaws (L : Type) (LL : ILogic L) :=
 { entails_refl  : forall P, P ⊢ P;
   entails_trans : forall P Q R, P ⊢ Q -> Q ⊢ R -> P ⊢ R;
-  ltrue_right : forall P, P ⊢ ⊤;
-  lfalse_left : forall P, ⊥ ⊢ P;
   land_right :  forall X P Q, X ⊢ P -> X ⊢ Q -> X ⊢ P ∧ Q;
   land_left1 :  forall P Q R, P ⊢ R -> P ∧ Q ⊢ R;
   land_left2 :  forall P Q R, Q ⊢ R -> P ∧ Q ⊢ R;
@@ -133,6 +134,18 @@ Section Equivalence.
       apply (lall_left x), (pq x).
   Qed.
 
+  Lemma ltrue_right {P : L} :
+    P ⊢ ⊤.
+  Proof.
+    now apply lprop_right.
+  Qed.
+
+  Lemma lfalse_left {P : L} :
+    ⊥ ⊢ P.
+  Proof.
+    now apply lprop_left.
+  Qed.
+
   Lemma land_assoc {P Q R : L} :
     (P ∧ Q) ∧ R ⊣⊢s P ∧ (Q ∧ R).
   Proof.
@@ -158,6 +171,16 @@ Section Equivalence.
     split.
     - apply land_left1, entails_refl.
     - apply land_right; apply entails_refl.
+  Qed.
+
+  Lemma land_true {P : L} :
+    P ∧ ⊤ ⊣⊢s P.
+  Proof.
+    split.
+    - apply land_left1, entails_refl.
+    - apply land_right.
+      + apply entails_refl.
+      + apply ltrue_right.
   Qed.
 
   Lemma land_intro2 {P Q R S} :
@@ -235,6 +258,7 @@ Class ISepLogicLaws (L : Type) {SL : ISepLogic L} := {
   wand_sepcon_adjoint: forall (P Q R : L), (P ✱ Q ⊢ R) <-> (P ⊢ Q -✱ R);
   sepcon_andp_prop: forall (P R : L) (Q : Prop), P ✱ (!!Q ∧ R) ⊣⊢s !!Q ∧ (P ✱ R);
   sepcon_entails: forall P P' Q Q' : L, P ⊢ P' -> Q ⊢ Q' -> P ✱ Q ⊢ P' ✱ Q';
+  sepcon_emp: forall P, P ✱ emp ⊣⊢s P;
 }.
 
 Section SepEquivalence.
@@ -259,6 +283,15 @@ Section SepEquivalence.
       rewrite pq, rs.
       apply wand_sepcon_adjoint.
       apply entails_refl.
+  Qed.
+
+  Lemma sep_true {P : L} : P ⊢ ⊤ ✱ P.
+  Proof.
+    rewrite <- (sepcon_emp P) at 1.
+    rewrite sepcon_comm.
+    apply sepcon_entails.
+    apply ltrue_right.
+    apply entails_refl.
   Qed.
 
 End SepEquivalence.
@@ -293,7 +326,7 @@ Module Type HeapKit
 
     Fixpoint inst_assertion {Σ} (ι : SymInstance Σ) (a : Assertion Σ) : L :=
       match a with
-      | asn_bool b => if inst_term ι b then ltrue else lfalse
+      | asn_bool b => if inst_term ι b then emp else lfalse
       | asn_prop p => !!(uncurry_named p ι) ∧ emp
       | asn_chunk c => inst_chunk ι c
       | asn_if b a1 a2 => if inst_term ι b then inst_assertion ι a1 else inst_assertion ι a2
