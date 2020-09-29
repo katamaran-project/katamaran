@@ -109,7 +109,7 @@ End Equality.
 
 Instance Z_eqdec : EqDec Z := Z.eq_dec.
 Instance string_eqdec : EqDec string := string_dec.
-Derive EqDec for Empty_set.
+Derive NoConfusion EqDec for Empty_set.
 
 Instance option_eqdec {A} `(EqDec A) : EqDec (option A).
 Proof. eqdec_proof. Defined.
