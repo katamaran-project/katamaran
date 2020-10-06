@@ -265,6 +265,8 @@ Module HoareSound
         rewrite H in HYP.
         destruct H0; try contradiction.
         sound_solve.
+      (* rule_stm_call_inline *)
+      - sound_solve.
       (* rule_stm_call_frame *)
       - sound_solve.
       (* rule_stm_bind *)

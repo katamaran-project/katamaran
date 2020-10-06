@@ -228,6 +228,11 @@ Module ProgramLogic
         CEnv f = Some c ->
         CTriple Δ (evals es δ) P Q c ->
         δ ⊢ ⦃ P ⦄ stm_call f es ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
+    | rule_stm_call_inline
+        {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) (c : SepContract Δ σ)
+        (P : L) (Q : Lit σ -> L) :
+        evals es δ ⊢ ⦃ P ⦄ Pi f ⦃ fun v _ => Q v ⦄ ->
+        δ ⊢ ⦃ P ⦄ stm_call f es ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
     | rule_stm_call_frame
         (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :

@@ -1311,7 +1311,7 @@ Module IrisInstance
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -1338,18 +1338,17 @@ Module IrisInstance
     - by iApply iris_rule_stm_assign_backwards.
     - by iApply iris_rule_stm_assign_forwards.
     - by iApply iris_rule_stm_call_forwards.
+    - admit. (* by iApply iris_rule_stm_call_inline. *)
     - by iApply iris_rule_stm_call_frame.
     - by iApply iris_rule_stm_bind.
-  Qed.
+  Admitted.
 
   Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
       ⊢ ValidContractEnv CEnv.
   Proof.
     iLöb as "IH".
     iIntros (σs σ f).
-    destruct (CEnv f).
-    - iIntros (ι δ1).
-      admit.
+    destruct (CEnv f) as [[]|].
     - iIntros (ι δ1).
       admit.
   Admitted.
