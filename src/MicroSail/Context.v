@@ -149,6 +149,12 @@ Section WithBinding.
     InCtx b (ctx_snoc Γ b') :=
     MkInCtx (ctx_snoc Γ b') (S (inctx_at bIn)) inctx_valid.
 
+  Fixpoint inctx_cat {b : B} {Γ : Ctx B} (bIn : InCtx b Γ) (Δ : Ctx B) : InCtx b (ctx_cat Γ Δ) :=
+    match Δ with
+    | ctx_nil      => bIn
+    | ctx_snoc Δ _ => inctx_succ (inctx_cat bIn Δ)
+    end.
+
   (* Custom pattern matching in cases where the context was already refined
      by a different match, i.e. on environments. *)
   Definition inctx_case_nil {b : B} {A : Type} (bIn : InCtx b ctx_nil) : A :=
@@ -223,6 +229,28 @@ Section WithBinding.
   Arguments ctx_remove _ [_] _.
 
 End WithBinding.
+
+Section WithAB.
+  Context {A B : Set} (f : A -> B).
+
+  Fixpoint ctx_map (Γ : Ctx A) : Ctx B :=
+    match Γ with
+    | ctx_nil      => ctx_nil
+    | ctx_snoc Γ a => ctx_snoc (ctx_map Γ) (f a)
+    end.
+
+  Fixpoint inctx_map {a : A} {Γ : Ctx A} {struct Γ} : InCtx a Γ -> InCtx (f a) (ctx_map Γ) :=
+   match Γ return InCtx a Γ -> InCtx (f a) (ctx_map Γ) with
+   | ctx_nil      => inctx_case_nil
+   | ctx_snoc Γ b =>
+     fun '(MkInCtx _ n p) =>
+        match n return ctx_nth_is (ctx_snoc Γ b) n a -> _ with
+        | 0   => fun p => MkInCtx (ctx_snoc _ _) 0 (f_equal f p)
+        | S n => fun p => inctx_succ (inctx_map (MkInCtx _ n p))
+        end p
+   end.
+
+End WithAB.
 
 Module CtxNotations.
   Notation "'ε'" := ctx_nil : ctx_scope.

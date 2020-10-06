@@ -136,6 +136,47 @@ Module Assertions
   Definition SepContractEnvEx : Type :=
     forall Δ τ (f : 𝑭𝑿 Δ τ), SepContract Δ τ.
 
+  Section Experimental.
+
+    Definition sep_contract_pun_logvars (Δ : Ctx (𝑿 * Ty)) (Σ : Ctx (𝑺 * Ty)) : Ctx (𝑺 * Ty) :=
+      ctx_map (fun '(x,σ) => (𝑿to𝑺 x,σ)) Δ ▻▻ Σ.
+
+    Record SepContractPun (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+      MkSepContractPun
+        { sep_contract_pun_logic_variables   : Ctx (𝑺 * Ty);
+          sep_contract_pun_precondition      : Assertion
+                                                 (sep_contract_pun_logvars
+                                                    Δ sep_contract_pun_logic_variables);
+          sep_contract_pun_result            : 𝑺;
+          sep_contract_pun_postcondition     : Assertion
+                                                 (sep_contract_pun_logvars Δ
+                                                                           sep_contract_pun_logic_variables
+                                                                           ▻ (sep_contract_pun_result , τ))
+        }.
+
+    Global Arguments MkSepContractPun : clear implicits.
+
+    Definition sep_contract_pun_to_sep_contract {Δ τ} :
+      SepContractPun Δ τ -> SepContract Δ τ :=
+      fun c =>
+        match c with
+        | MkSepContractPun _ _ Σ req result ens =>
+          MkSepContract
+            Δ τ
+            (sep_contract_pun_logvars Δ Σ)
+            (env_tabulate (fun '(x,σ) xIn =>
+                             @term_var
+                               (sep_contract_pun_logvars Δ Σ)
+                               (𝑿to𝑺 x)
+                               σ
+                               (inctx_cat (inctx_map (fun '(y,τ) => (𝑿to𝑺 y,τ)) xIn) Σ)))
+            req result ens
+        end.
+
+    Global Coercion sep_contract_pun_to_sep_contract : SepContractPun >-> SepContract.
+
+  End Experimental.
+
 End Assertions.
 
 Module Type SymbolicContractKit
