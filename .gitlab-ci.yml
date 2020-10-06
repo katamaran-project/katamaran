@@ -33,3 +33,4 @@ stages:
 coq-8.9:  {<<: *build, image: "skeuchel/coq:8.9"}
 coq-8.10: {<<: *build, image: "skeuchel/coq:8.10"}
 coq-8.11: {<<: *build, image: "skeuchel/coq:8.11"}
+coq-8.12: {<<: *build, image: "skeuchel/coq:8.12"}
