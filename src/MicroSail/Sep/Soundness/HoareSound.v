@@ -123,7 +123,7 @@ Module HoareSound
     Definition ValidContractEnv' (cenv : SepContractEnv) : Prop :=
       forall σs σ (f : 𝑭 σs σ),
         match cenv σs σ f with
-        | @sep_contract_result _ _ Σ θΔ result pre post =>
+        | Some (MkSepContract _ _ Σ θΔ pre result post) =>
           forall (ι : SymInstance Σ)
                  (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore σs) (s' : Stm σs σ),
             ⟨ γ, μ, δ, Pi f ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
@@ -133,7 +133,7 @@ Module HoareSound
               exists (γfocus' : Heap),
                 split (heap γ') γframe γfocus' /\
                 ResultOrFail s' (fun v => inst_assertion (env_snoc ι (result , σ) v) post γfocus')
-        | _ => False
+        | None => False
         end.
 
     Hypothesis validCEnv : ValidContractEnv' CEnv.
@@ -261,8 +261,9 @@ Module HoareSound
         exists (H ‼ x)%lit.
         now rewrite env_update_update, env_update_lookup, env_lookup_update.
       (* rule_stm_call_forwards *)
-      - pose proof (validCEnv _ _ f).
-        destruct H; try contradiction.
+      - pose proof (validCEnv _ _ f) as HYP.
+        rewrite H in HYP.
+        destruct H0; try contradiction.
         sound_solve.
       (* rule_stm_call_frame *)
       - sound_solve.

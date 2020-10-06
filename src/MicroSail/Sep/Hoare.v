@@ -75,23 +75,7 @@ Module ProgramLogic
 
     Inductive CTriple (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) {σ : Ty} :
       forall (pre : L) (post : Lit σ -> L) (c : SepContract Δ σ), Prop :=
-    (* | rule_sep_contract_unit *)
-    (*     (Σ  : Ctx (𝑺 * Ty)) (θΔ : SymbolicLocalStore Δ Σ) (ι : SymInstance Σ) *)
-    (*     (req : Assertion Σ) (ens : Assertion Σ) : *)
-    (*     δΔ = inst_localstore ι θΔ -> *)
-    (*     CTriple (τ:=ty_unit) Δ δΔ *)
-    (*       (inst_assertion ι req) *)
-    (*       (fun _ => inst_assertion ι ens) *)
-    (*       (sep_contract_unit θΔ req ens) *)
-    | rule_sep_contract_result_pure
-        (Σ  : Ctx (𝑺 * Ty)) (θΔ : SymbolicLocalStore Δ Σ) (ι : SymInstance Σ)
-        (req : Assertion Σ) (ens : Assertion Σ) (result : Term Σ σ) :
-        δΔ = inst_localstore ι θΔ ->
-        CTriple Δ δΔ
-          (inst_assertion ι req)
-          (fun v => inst_assertion ι ens ∧ !!(v = inst_term ι result))
-          (sep_contract_result_pure θΔ result req ens)
-    | rule_sep_contract_result
+    | rule_sep_contract
         (result : 𝑺)
         (Σ  : Ctx (𝑺 * Ty)) (θΔ : SymbolicLocalStore Δ Σ) (ι : SymInstance Σ)
         (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , σ))) :
@@ -100,11 +84,7 @@ Module ProgramLogic
           Δ δΔ
           (inst_assertion ι req)
           (fun v => inst_assertion (env_snoc ι (result , σ) v) ens)
-          (@sep_contract_result _ _ _ θΔ result req ens).
-    (* | rule_sep_contract_none {σ} : *)
-    (*     Pi f *)
-    (*     CTriple Γ (fun _ => ⊤) (fun _ _ => ⊤) (@sep_contract_none Γ σ). *)
-
+          (MkSepContract _ _ _ θΔ req result ens).
 
     Inductive Triple {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) :
       forall {τ : Ty}
@@ -243,10 +223,10 @@ Module ProgramLogic
         δ ⊢ ⦃ P ⦄ s ⦃ R ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_assign x s ⦃ fun v__new δ' => ∃ v__old, R v__new (δ' ⟪ x ↦ v__old ⟫)%env ∧ !!(env_lookup δ' xIn = v__new) ⦄
     | rule_stm_call_forwards
-        {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
-        (P : L)
-        (Q : Lit σ -> L) :
-        CTriple Δ (evals es δ) P Q (CEnv f) ->
+        {Δ σ} {f : 𝑭 Δ σ} {es : NamedEnv (Exp Γ) Δ} {c : SepContract Δ σ}
+        {P : L} {Q : Lit σ -> L} :
+        CEnv f = Some c ->
+        CTriple Δ (evals es δ) P Q c ->
         δ ⊢ ⦃ P ⦄ stm_call f es ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
     | rule_stm_call_frame
         (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
@@ -445,13 +425,15 @@ Module ProgramLogic
     Qed.
 
     Lemma rule_stm_call_backwards {Γ δ Δ σ} {f : 𝑭 Δ σ} {es : NamedEnv (Exp Γ) Δ}
-          (P : L) (Q : Lit σ -> LocalStore Γ -> L) :
-      CTriple Δ (evals es δ) P (fun v => Q v δ) (CEnv f) ->
+      (P : L) (Q : Lit σ -> LocalStore Γ -> L) (c : SepContract Δ σ) :
+      CEnv f = Some c ->
+      CTriple Δ (evals es δ) P (fun v => Q v δ) c ->
       δ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q ⦄.
     Proof.
-      intros HYP.
+      intros Heq HYP.
       eapply rule_consequence_right.
-      apply rule_stm_call_forwards.
+      apply rule_stm_call_forwards with c.
+      assumption.
       apply HYP.
       cbn; intros v δ1.
       rewrite land_comm.
@@ -460,6 +442,18 @@ Module ProgramLogic
       apply limpl_and_adjoint.
       apply land_left2, entails_refl.
     Qed.
+
+    Definition ValidContract {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) : Prop :=
+      forall (ι : SymInstance (sep_contract_logic_variables c)),
+        inst_contract_localstore c ι ⊢
+          ⦃ inst_contract_precondition c ι ⦄
+            body
+          ⦃ fun v _ => inst_contract_postcondition c ι v ⦄.
+
+    Definition ValidContractEnv (cenv : SepContractEnv) : Prop :=
+      forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ) (c : SepContract Δ τ),
+        cenv Δ τ f = Some c ->
+        ValidContract c (Pi f).
 
   End Triples.
 

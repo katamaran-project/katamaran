@@ -301,21 +301,13 @@ Module SemiConcrete
 
     Definition scmut_call {Γ Δ τ} (contract : SepContract Δ τ) (vs : LocalStore Δ) : SCMut Γ Γ (Lit τ) :=
       match contract with
-      | @sep_contract_result_pure _ _ Σe δ result req ens =>
-        ⨁ ι : SymInstance Σe =>
-        ⨁ H : vs = inst_localstore ι δ =>
-        scmut_consume ι req ;;
-        scmut_produce ι ens ;;
-        scmut_pure (inst_term ι result)
-      | @sep_contract_result _ _ Σe δ result req ens =>
+      | MkSepContract _ _ Σe δ req result ens =>
         ⨁ ι : SymInstance Σe =>
         ⨁ H : vs = inst_localstore ι δ =>
         scmut_consume ι req  ;;
         ⨂ v : Lit τ =>
         scmut_produce (env_snoc ι (result,τ) v) ens ;;
         scmut_pure v
-      | sep_contract_none _ _ =>
-        scmut_fail "Err [scmut_exec]: call of sep_contract_none"
       end.
 
     Fixpoint scmut_exec {Γ σ} (s : Stm Γ σ) : SCMut Γ Γ (Lit σ) :=
@@ -335,7 +327,11 @@ Module SemiConcrete
         v <- scmut_exec e ;;
         scmut_modify_local (fun δ => δ ⟪ x ↦ v ⟫)%env *>
         scmut_pure v
-      | stm_call f es => scmut_eval_exps es >>= scmut_call (CEnv f)
+      | stm_call f es =>
+        match CEnv f with
+        | Some c => scmut_eval_exps es >>= scmut_call c
+        | None   => scmut_fail "Err [scmut_exec]: Function call without contract"
+        end
       | stm_call_external f es => scmut_eval_exps es >>= scmut_call (CEnvEx f)
       | stm_call_frame Δ δ' τ s =>
         δ <- scmut_get_local ;;
@@ -429,17 +425,7 @@ Module SemiConcrete
   Definition semiconcrete_outcome_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
     Outcome unit :=
     match c with
-    | @sep_contract_result_pure _ _ Σ δ result' req ens =>
-      ⨂ ι : SymInstance Σ =>
-      let δΔ : LocalStore Δ := inst_localstore ι δ in
-      let mut := (scmut_produce ι req ;;
-                  scmut_exec s >>= fun result =>
-                  scmut_consume ι ens ;;
-                  scmut_assert_eq result (inst_term ι result') ;;
-                  scmut_leakcheck)%mut in
-      let out := mut (scstate_initial δΔ) in
-      outcome_map (fun _ => tt) out
-    | @sep_contract_result _ _ Σ δ result req ens =>
+    | MkSepContract _ _ Σ δ req result  ens =>
       ⨂ ι : SymInstance Σ =>
       let δΔ : LocalStore Δ := inst_localstore ι δ in
       let mut := (scmut_produce ι req ;;
@@ -448,15 +434,9 @@ Module SemiConcrete
                   scmut_leakcheck)%mut in
       let out := mut (scstate_initial δΔ) in
       outcome_map (fun _ => tt) out
-    | @sep_contract_none _ _ =>
-      outcome_block
     end.
 
   Definition ValidContractSCMut {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
     outcome_satisfy (semiconcrete_outcome_contract c body) (fun _ => True).
-
-  Definition ValidContractEnvSCMut (cenv : SepContractEnv) : Prop :=
-    forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),
-      ValidContractSCMut (cenv Δ τ f) (Pi f).
 
 End SemiConcrete.

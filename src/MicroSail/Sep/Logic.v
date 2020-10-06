@@ -350,40 +350,17 @@ Module Type HeapKit
     (*   | sep_contract_none _ => ⊤ *)
     (*   end. *)
 
-    Definition contract_logical_variables {Δ τ} (c : SepContract Δ τ) : Ctx (𝑺 * Ty) :=
-      match c with
-      | @sep_contract_result_pure _ _ Σ _ _ _ _ => Σ
-      | @sep_contract_result _ _ Σ _ _ _ _ => Σ
-      | sep_contract_none _ _ => ctx_nil
-      end.
+    Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
+      (ι : SymInstance (sep_contract_logic_variables c)) : LocalStore Δ :=
+      inst_localstore ι (sep_contract_localstore c).
 
-    Program Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ) :
-      SymInstance (contract_logical_variables c) -> LocalStore Δ :=
-      match c with
-      | @sep_contract_result_pure _ _ Σ δ result req ens => fun ι => inst_localstore ι δ
-      | sep_contract_result Σ δ result req ens => fun ι => inst_localstore ι δ
-      (* TODO: sep_contract_none should be removed and an option use instead. *)
-      | sep_contract_none _ _ => _
-      end.
-    Admit Obligations of inst_contract_localstore.
+    Definition inst_contract_precondition {Δ τ} (c : SepContract Δ τ)
+      (ι : SymInstance (sep_contract_logic_variables c)) : L :=
+      inst_assertion ι (sep_contract_precondition c).
 
-    Definition inst_contract_precondition {Δ τ} (c : SepContract Δ τ) :
-      SymInstance (contract_logical_variables c) -> L :=
-      match c as s return (SymInstance (contract_logical_variables s) -> L) with
-      | sep_contract_result_pure _ _ req _ => fun ι => inst_assertion ι req
-      | sep_contract_result _ _ _ req _    => fun ι => inst_assertion ι req
-      | sep_contract_none _ _              => fun _ => lfalse
-      end.
-
-    Definition inst_contract_postcondition {Δ τ} (c : SepContract Δ τ) :
-      SymInstance (contract_logical_variables c) -> Lit τ -> L :=
-      match c with
-      | @sep_contract_result_pure _ _ Σ δ result req ens =>
-        fun ι v => inst_assertion ι ens ∧ !! (v = inst_term ι result)
-      | sep_contract_result Σ δ result req ens =>
-        fun ι v => inst_assertion (env_snoc ι (result,τ) v) ens
-      | sep_contract_none _ _ => fun _ _ => ltrue
-      end.
+    Definition inst_contract_postcondition {Δ τ} (c : SepContract Δ τ)
+      (ι : SymInstance (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
+        inst_assertion (env_snoc ι (sep_contract_result c,τ) result) (sep_contract_postcondition c).
 
   End Contracts.
 

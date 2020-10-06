@@ -336,76 +336,83 @@ Module SepContracts.
     Open Scope env_scope.
 
     (* Arguments asn_prop [_] & _. *)
+    (* Arguments MkSepContractPun [_ _] & _ _ _ _. *)
+
+    Definition sep_contract_abs : SepContract [ "x" ∶ ty_int ] ty_int :=
+      {| sep_contract_logic_variables := ["x" ∶ ty_int];
+         sep_contract_localstore      := [term_var "x"]%arg;
+         sep_contract_precondition    := asn_true;
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           @asn_prop
+             ["x" ∶ ty_int, "result" ∶ ty_int]
+             (fun x result => result = Z.abs x)
+           (* asn_if *)
+           (*   (term_binop binop_lt (term_var "x") (term_lit ty_int 0)) *)
+           (*   (asn_bool (term_binop binop_eq (term_var "result") (term_neg (term_var "x")))) *)
+           (*   (asn_bool (term_binop binop_eq (term_var "result") (term_var "x"))) *)
+      |}.
+
+    Definition sep_contract_cmp : SepContract ["x" ∶ ty_int, "y" ∶ ty_int] (ty_enum ordering)  :=
+       {| sep_contract_logic_variables := ["x" ∶ ty_int, "y" ∶ ty_int];
+          sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
+          sep_contract_precondition    := asn_true;
+          sep_contract_result          := "result";
+          sep_contract_postcondition   :=
+            asn_match_enum
+              ordering (term_var "result")
+              (fun result =>
+                 match result with
+                 | LT => asn_bool (term_binop binop_lt (term_var "x") (term_var "y"))
+                 | EQ => asn_bool (term_binop binop_eq (term_var "x") (term_var "y"))
+                 | GT => asn_bool (term_binop binop_gt (term_var "x") (term_var "y"))
+                 end)
+       |}.
+
+    Definition sep_contract_gcd : SepContract [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int :=
+      {| sep_contract_logic_variables := ["x" ∶ ty_int, "y" ∶ ty_int];
+         sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
+         sep_contract_precondition    := asn_true;
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           @asn_prop
+             ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
+             (fun x y result => result = Z.gcd x y)
+      |}.
+
+    Definition sep_contract_gcdloop : SepContract [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int :=
+      {| sep_contract_logic_variables := ["x" ∶ ty_int, "y" ∶ ty_int];
+         sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
+         sep_contract_precondition    :=
+           asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "x")) ✱
+                    asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "y"));
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           @asn_prop
+             ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
+             (fun x y result => result = Z.gcd x y)
+      |}.
+
+    Definition sep_contract_length {σ} : SepContract [ "xs" ∶ ty_list σ ] ty_int :=
+      {| sep_contract_logic_variables := ["xs" ∶ ty_list σ ];
+         sep_contract_localstore      := [term_var "xs"]%arg;
+         sep_contract_precondition    := asn_true;
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           @asn_prop
+             ["xs" ∶ ty_list σ, "result" ∶ ty_int]
+             (fun xs result => result = Z.of_nat (Datatypes.length xs))
+      |}.
 
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
-        | abs =>
-          @sep_contract_result
-            ["x" ∶ ty_int]
-            ty_int
-            ["x" ∶ ty_int]
-            [term_var "x"]%arg
-            "result"
-            asn_true
-            (@asn_prop
-               ["x" ∶ ty_int, "result" ∶ ty_int]
-               (fun x result => result = Z.abs x))
-            (* (asn_if *)
-            (*    (term_binop binop_lt (term_var "x") (term_lit ty_int 0)) *)
-            (*    (asn_bool (term_binop binop_eq (term_var "result") (term_neg (term_var "x")))) *)
-            (*    (asn_bool (term_binop binop_eq (term_var "result") (term_var "x")))) *)
-        | cmp =>
-          @sep_contract_result
-            ["x" ∶ ty_int, "y" ∶ ty_int]
-            (ty_enum ordering)
-            ["x" ∶ ty_int, "y" ∶ ty_int]
-            [term_var "x", term_var "y"]%arg
-            "result"
-            asn_true
-            (asn_match_enum
-               ordering (term_var "result")
-               (fun result =>
-                  match result with
-                  | LT => asn_bool (term_binop binop_lt (term_var "x") (term_var "y"))
-                  | EQ => asn_bool (term_binop binop_eq (term_var "x") (term_var "y"))
-                  | GT => asn_bool (term_binop binop_gt (term_var "x") (term_var "y"))
-                  end))
-        | gcd =>
-          @sep_contract_result
-            ["x" ∶ ty_int, "y" ∶ ty_int]
-            ty_int
-            ["x" ∶ ty_int, "y" ∶ ty_int]
-            [term_var "x", term_var "x"]%arg
-            "result"
-            asn_true
-            (@asn_prop
-               ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
-               (fun x y result => result = Z.gcd x y))
-        | gcdloop =>
-          @sep_contract_result
-            ["x" ∶ ty_int, "y" ∶ ty_int]
-            ty_int
-            ["x" ∶ ty_int, "y" ∶ ty_int]
-            [term_var "x", term_var "x"]%arg
-            "result"
-            (asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "x")) ✱
-             asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "y")))
-            (@asn_prop
-               ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
-               (fun x y result => result = Z.gcd x y))
-        | msum => sep_contract_none _ _
-        | @length σ =>
-          @sep_contract_result
-            ["xs" ∶ ty_list σ ]
-            ty_int
-            ["xs" ∶ ty_list σ ]
-            [term_var "xs"]%arg
-            "result"
-            asn_true
-            (@asn_prop
-               ["xs" ∶ ty_list σ, "result" ∶ ty_int]
-               (fun xs result => result = Z.of_nat (Datatypes.length xs)))
+        | abs     => Some sep_contract_abs
+        | cmp     => Some sep_contract_cmp
+        | gcd     => Some sep_contract_gcd
+        | gcdloop => Some sep_contract_gcdloop
+        | msum    => None
+        | length  => Some sep_contract_length
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
@@ -443,7 +450,7 @@ Module SepContracts.
        auto
       ).
 
-  Lemma valid_contract_length {σ} : ValidContractDynMut (CEnv (@length σ)) (Pi length).
+  Lemma valid_contract_length {σ} : ValidContractDynMut (@sep_contract_length σ) (Pi length).
   Proof.
     constructor.
     - solve.
@@ -451,7 +458,7 @@ Module SepContracts.
   Qed.
   Hint Resolve valid_contract_length : contracts.
 
-  Lemma valid_contract_cmp : ValidContractDynMut (CEnv cmp) (Pi cmp).
+  Lemma valid_contract_cmp : ValidContractDynMut sep_contract_cmp (Pi cmp).
   Proof.
     constructor.
     { exists LT; solve. }

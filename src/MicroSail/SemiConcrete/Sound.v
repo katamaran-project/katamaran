@@ -217,8 +217,6 @@ Module Soundness
         now apply IHasn.
     Qed.
 
-    Opaque scmut_call.
-
     Lemma scmut_produce_sound' {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
         (scmut_produce ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
@@ -273,44 +271,8 @@ Module Soundness
         now apply rule_stm_assign_backwards, IHs.
 
       - (* stm_call *)
-        destruct (CEnv f) eqn:Heq; cbn in HYP.
-
-        + destruct HYP as [ι [Heqs HYP]].
-          unfold scmut_angelic, scmut_bind, scmut_pure in HYP; cbn in HYP.
-          repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
-          assert (inst_scheap h1 ⊢ inst_assertion ι req ✱ (inst_assertion ι ens -✱ POST (inst_term ι result) δ1)).
-          { apply (scmut_consume_sound (fun δ => _ -✱ POST (inst_term ι result) δ)).
-            sound_inster; cbn; intros.
-            now apply wand_sepcon_adjoint, scmut_produce_sound.
-          }
-          clear HYP.
-          eapply rule_consequence_left.
-          2: exact H.
-          rewrite sepcon_comm.
-          eapply rule_consequence_right.
-          apply rule_frame.
-          apply rule_stm_call_forwards.
-          rewrite Heq.
-          constructor.
-          apply Heqs.
-          cbn. intros.
-          rewrite sepcon_comm.
-          apply wand_sepcon_adjoint.
-          rewrite land_comm.
-          apply limpl_and_adjoint.
-          apply lprop_left; intro; subst δ1.
-          apply limpl_and_adjoint.
-          apply land_left2.
-          rewrite land_comm.
-          apply limpl_and_adjoint.
-          apply lprop_left; intro; subst v.
-          apply limpl_and_adjoint.
-          apply land_left2.
-          apply wand_sepcon_adjoint.
-          rewrite sepcon_comm.
-          apply wand_sepcon_adjoint.
-          apply entails_refl.
-
+        destruct (CEnv f) as [c|] eqn:Heq; cbn in HYP.
+        destruct c as [Σe δe req result ens] eqn:Heqc.
         + destruct HYP as [ι [Heqs HYP]].
           unfold scmut_angelic, scmut_bind, scmut_pure in HYP; cbn in HYP.
           repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
@@ -329,8 +291,9 @@ Module Soundness
           rewrite sepcon_comm.
           eapply rule_consequence_right.
           apply rule_frame.
-          apply rule_stm_call_forwards.
-          rewrite Heq.
+          apply rule_stm_call_forwards with c.
+          congruence.
+          rewrite Heqc.
           constructor.
           apply Heqs.
           cbn. intros.
@@ -491,55 +454,16 @@ Module Soundness
       now apply lprop_right.
     Qed.
 
-    Definition ValidContractHoare {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) : Prop :=
-      forall (ι : SymInstance (contract_logical_variables c)),
-        inst_contract_localstore c ι ⊢ ⦃ inst_contract_precondition c ι ⦄ body ⦃ fun v _ => inst_contract_postcondition c ι v ⦄.
+    Opaque inst_localstore.
 
     Lemma scmut_contract_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractSCMut c body ->
-      ValidContractHoare c body.
+      ValidContract c body.
     Proof.
-      unfold ValidContractSCMut, ValidContractHoare.
-      destruct c; cbn in *; intros HYP ι.
+      unfold ValidContractSCMut, ValidContract.
+      unfold inst_contract_localstore.
+      destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
       - specialize (HYP ι).
-        rename δ into δΣ.
-        remember (inst_localstore ι δΣ) as δ.
-        unfold scmut_leakcheck, scmut_get_heap, scmut_state_heap, scmut_state, scmut_bind, scmut_assert_eq in HYP.
-        rewrite outcome_satisfy_map in HYP.
-        repeat setoid_rewrite outcome_satisfy_bind in HYP.
-        cbn in HYP.
-        eapply rule_consequence_left.
-        apply rule_wp.
-        apply entails_trans with
-            (inst_scheap nil -✱ WP body (fun (v : Lit τ) (_ : LocalStore Δ) => inst_assertion ι ens ∧ !! (v = inst_term ι result)) δ).
-        apply scmut_produce_sound'.
-        2: {
-          rewrite <- sepcon_emp.
-          apply wand_sepcon_adjoint.
-          apply entails_refl.
-        }
-        sound_inster.
-        intros [[] [δ2 h2]] HYP; cbn.
-        apply scmut_exec_sound'. cbn.
-        sound_inster.
-        intros [v3 [δ3 h3]] HYP; cbn.
-        enough (inst_scheap h3 ⊢ inst_assertion ι ens ✱ (emp ∧ !! (v3 = inst_term ι result))).
-        admit.
-        change (emp ∧ !! (v3 = inst_term ι result)) with ((fun _ => emp ∧ !! (v3 = inst_term ι result)) δ3).
-        apply (scmut_consume_sound (asn := ens)).
-        sound_inster.
-        intros [[] [δ4 h4]] HYP; cbn in *.
-        destruct (Lit_eqb_spec _ v3 (inst_term ι result)); cbn in HYP.
-        + subst v3.
-          destruct h4; cbn in *.
-          * apply land_right.
-            apply entails_refl.
-            apply lprop_right.
-            reflexivity.
-          * contradict HYP.
-        + contradict HYP.
-      - specialize (HYP ι).
-        rename δ into δΣ.
         remember (inst_localstore ι δΣ) as δ.
         unfold scmut_leakcheck, scmut_get_heap, scmut_state_heap, scmut_state, scmut_bind, scmut_assert_eq in HYP.
         rewrite outcome_satisfy_map in HYP.
@@ -569,8 +493,7 @@ Module Soundness
         destruct h4; cbn in *.
         + apply entails_refl.
         + contradict HYP.
-      - admit.
-    Admitted.
+    Qed.
 
   End Soundness.
 

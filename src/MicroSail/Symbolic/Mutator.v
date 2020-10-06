@@ -691,27 +691,27 @@ Module Mutators
     (* TODO: The code should be rewritten so this variable can be removed. *)
     Parameter dummy : 𝑺.
 
-    Definition mutator_call {Σ Γ Δ τ} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) : Mutator Σ Γ Γ (Term Σ τ) :=
-      match contract with
-      (* | @sep_contract_unit _ Σe δ req ens => *)
-      (*   mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 => *)
-      (*   mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 => *)
-      (*   match ghost_env_to_option_sub L2 with *)
-      (*   | Some ζ => mutator_produce ζ ens *> *)
-      (*               mutator_pure (term_lit ty_unit tt) *)
-      (*   | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition" *)
-      (*   end *)
-      | @sep_contract_result_pure _ _ Σe δ result req ens =>
-        mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 =>
-        mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 =>
-        match ghost_env_to_option_sub L2 with
-        | Some ζ => mutator_produce ζ ens *>
-                    mutator_pure (sub_term ζ result)
-        | None   => mutator_contradiction "Err [mutator_exec]: uninstantiated variables after consuming precondition"
-        end
-      | @sep_contract_result _ _ Σ' δ result req ens => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none_result function not implemented"
-      | sep_contract_none _ _ => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none function"
-      end.
+    (* Definition mutator_call {Σ Γ Δ τ} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) : Mutator Σ Γ Γ (Term Σ τ) := *)
+    (*   match contract with *)
+    (*   (* | @sep_contract_unit _ Σe δ req ens => *) *)
+    (*   (*   mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 => *) *)
+    (*   (*   mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 => *) *)
+    (*   (*   match ghost_env_to_option_sub L2 with *) *)
+    (*   (*   | Some ζ => mutator_produce ζ ens *> *) *)
+    (*   (*               mutator_pure (term_lit ty_unit tt) *) *)
+    (*   (*   | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition" *) *)
+    (*   (*   end *) *)
+    (*   | @sep_contract_result_pure _ _ Σe δ result req ens => *)
+    (*     mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 => *)
+    (*     mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 => *)
+    (*     match ghost_env_to_option_sub L2 with *)
+    (*     | Some ζ => mutator_produce ζ ens *> *)
+    (*                 mutator_pure (sub_term ζ result) *)
+    (*     | None   => mutator_contradiction "Err [mutator_exec]: uninstantiated variables after consuming precondition" *)
+    (*     end *)
+    (*   | @sep_contract_result _ _ Σ' δ result req ens => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none_result function not implemented" *)
+    (*   | sep_contract_none _ _ => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none function" *)
+    (*   end. *)
 
     Fixpoint mutator_exec {Σ Γ σ} (s : Stm Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
       match s with
@@ -729,8 +729,8 @@ Module Mutators
       | stm_assign x e => mutator_exec e >>= fun v =>
         mutator_modify_local (fun δ => δ ⟪ x ↦ v ⟫)%env *>
         mutator_pure v
-      | stm_call f es => mutator_eval_exps es >>= mutator_call (CEnv f)
-      | stm_call_external f es => mutator_eval_exps es >>= mutator_call (CEnvEx f)
+      | stm_call f es => mutator_fail "Err [mutator_exec]: stm_call not supported"
+      | stm_call_external f es => mutator_fail "Err [mutator_exec]: stm_call not supported"
       | stm_call_frame Δ δ' τ s =>
         mutator_get_local                                      >>= fun δ =>
         mutator_put_local (lift_localstore δ') >>= fun _ =>
@@ -785,39 +785,22 @@ Module Mutators
 
   End MutatorOperations.
 
-  Definition outcome_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
+  Definition mutator_outcome_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
     Stm Δ τ -> Outcome (list Obligation) :=
     match c with
-    (* | @sep_contract_unit _ Σ δ req ens => *)
-    (*   fun s => *)
-    (*     let mut := (mutator_produce (sub_id Σ) req ;; *)
-    (*                 mutator_exec s                 ;; *)
-    (*                 mutator_consume (sub_id Σ) ens ;; *)
-    (*                 mutator_leakcheck)%mut in *)
-    (*     let out := mut (symbolicstate_initial δ) in *)
-    (*     outcome_map snd out *)
-    | @sep_contract_result _ _ Σ _ _ _ _ =>
-      fun s => outcome_block
-    | @sep_contract_result_pure _ _ Σ δ result' req ens =>
+    | MkSepContract _ _ Σe δ req result ens =>
       fun s =>
-        let mut := (mutator_produce (sub_id Σ) req ;;
-                    mutator_exec s >>= fun result =>
-                    mutator_consume (sub_id Σ) ens;;
-                    mutator_assert_formula (formula_eq result result') ;;
+        let mut := (mutator_produce (sub_id Σe) req ;;
+                    mutator_exec s >>= fun v =>
+                    mutator_consume (env_snoc (sub_id Σe) (result,τ) v) ens;;
                     mutator_leakcheck)%mut in
         let out := mut (symbolicstate_initial δ) in
         outcome_map mutator_result_obligations out
-    | @sep_contract_none _ _ =>
-      fun s => outcome_block
     end.
 
-  Definition ValidContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
+  Definition ValidContractMut (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
              (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    outcome_satisfy (outcome_contract c body) valid_obligations.
-
-  Definition ValidContractEnv (cenv : SepContractEnv) : Prop :=
-    forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),
-      ValidContract (cenv Δ τ f) (Pi f).
+    outcome_satisfy (mutator_outcome_contract c body) valid_obligations.
 
   Section DynamicMutatorResult.
 
@@ -1081,23 +1064,8 @@ Module Mutators
     dmut_lift (fun _ ζ => mutator_consume ζ asn).
 
   Definition dmut_call {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
-    (* match contract in SepContract _ _ return DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr with *)
     match contract with
-    (* | @sep_contract_unit _ Σe δ req ens => *)
-    (*   ⨁ ξ : Sub Σe Σr => *)
-    (*   dmut_assert_formulas (formula_eqs ts (env_map (fun b => sub_term ξ) δ)) ;; *)
-    (*   dmut_sub ξ *)
-    (*     (dmut_consume req ;; *)
-    (*      dmut_produce ens ;; *)
-    (*      dmut_pure (term_lit ty_unit tt)) *)
-    | @sep_contract_result_pure _ _ Σe δ result req ens =>
-      ⨁ ξ : Sub Σe Σr =>
-      dmut_assert_formulas (formula_eqs ts (env_map (fun b => sub_term ξ) δ)) ;;
-      dmut_sub ξ
-        (dmut_consume req ;;
-         dmut_produce ens ;;
-         dmut_pure result)
-    | @sep_contract_result _ _ Σe δ result req ens =>
+    | MkSepContract _ _ Σe δ req result ens =>
       ⨁ ξ : Sub Σe Σr =>
       dmut_assert_formulas (formula_eqs ts (env_map (fun b => sub_term ξ) δ)) ;;
       dmut_sub ξ
@@ -1105,8 +1073,6 @@ Module Mutators
          dmut_fresh (result,τ)
            (dmut_produce ens ;;
             dmut_pure (@term_var _ result _ inctx_zero)))
-    | sep_contract_none _ _ =>
-      dmut_fail "Err [dmut_call]: sep_contract_none not implemented"
     end.
 
   Fixpoint dmut_exec {Γ σ Σ} (s : Stm Γ σ) {struct s} :
@@ -1130,8 +1096,12 @@ Module Mutators
       dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
       dmut_pure t
     | stm_call f es =>
-      ts <- dmut_eval_exps es ;;
-      dmut_call (CEnv f) ts
+      match CEnv f with
+      | Some c =>
+        ts <- dmut_eval_exps es ;;
+        dmut_call c ts
+      | None   => dmut_fail "Err [dmut_exec]: Function call without contract"
+      end
     | stm_call_frame Δ δ τ s =>
       δr <- dmut_get_local ;;
       dmut_put_local (lift_localstore δ) ;;
@@ -1226,15 +1196,7 @@ Module Mutators
   Definition dmut_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
     Stm Δ τ -> Outcome (list Obligation) :=
     match c with
-    (* | @sep_contract_unit _ Σ δ req ens => *)
-    (*   fun s => *)
-    (*     let mut := (dmut_produce req ;; *)
-    (*                 dmut_exec s      ;; *)
-    (*                 dmut_consume ens ;; *)
-    (*                 dmut_leakcheck)%dmut in *)
-    (*     let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in *)
-    (*     outcome_map (fun '(existT _ (_ , w)) => w) out *)
-    | @sep_contract_result _ _ Σ δ result req ens =>
+    | MkSepContract _ _ Σ δ req result ens =>
       fun s =>
         let mut := (dmut_produce req ;;
                     dmut_exec s      >>= fun Σ1 ζ1 t =>
@@ -1242,25 +1204,10 @@ Module Mutators
                     dmut_leakcheck)%dmut in
         let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
         outcome_map (fun x => mutator_result_obligations (dmutres_result x)) out
-    | @sep_contract_result_pure _ _ Σ δ result' req ens =>
-      fun s =>
-        let mut := (dmut_produce req ;;
-                    dmut_exec s      >>= fun Σ1 ζ1 t =>
-                    dmut_assert_formula (formula_eq t (sub_term ζ1 result')) ;;
-                    dmut_sub ζ1 (dmut_consume ens) ;;
-                    dmut_leakcheck)%dmut in
-        let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
-        outcome_map (fun x => mutator_result_obligations (dmutres_result x)) out
-    | @sep_contract_none _ _ =>
-      fun s => outcome_block
     end.
 
   Definition ValidContractDynMut (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
-             (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
     outcome_satisfy (dmut_contract c body) valid_obligations.
-
-  Definition ValidContractEnvDynMut (cenv : SepContractEnv) : Prop :=
-    forall (Δ : Ctx (𝑿 * Ty)) (τ : Ty) (f : 𝑭 Δ τ),
-      ValidContractDynMut (cenv Δ τ f) (Pi f).
 
 End Mutators.

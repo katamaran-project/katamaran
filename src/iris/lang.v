@@ -1154,15 +1154,11 @@ Module IrisInstance
   Definition ValidContractEnv (cenv : SepContractEnv) : iProp Σ :=
     (∀ σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
-      | sep_contract_result_pure θΔ result pre post =>
-        (∀ (ι : SymInstance _) (δ : LocalStore σs),
-          semTriple δ (inst_assertion (L:=iProp Σ) ι pre) (Pi f)
-                    (fun v δ' => inst_assertion ι post ∧ ⌜ v = inst_term ι result ⌝)%I)
-      | sep_contract_result ctxΣ θΔ result pre post =>
+      | Some (MkSepContract _ _ ctxΣ θΔ pre result post) =>
         ∀ (ι : SymInstance ctxΣ) (δ : LocalStore σs),
           semTriple δ (inst_assertion (L:=iProp Σ) ι pre) (Pi f)
                     (fun v δ' => inst_assertion (env_snoc ι (result , σ) v) post)
-      | sep_contract_none _ _ => True
+      | None => True
       end)%I.
 
   Lemma wp_compat_call_frame {Γ Δ} {τ : Ty} {δ : LocalStore Γ}
@@ -1212,14 +1208,15 @@ Module IrisInstance
   Qed.
 
   Lemma iris_rule_stm_call_forwards {Γ} (δ : LocalStore Γ)
-        {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
+        {Δ σ} (f : 𝑭 Δ σ) (c : SepContract Δ σ) (es : NamedEnv (Exp Γ) Δ)
         (P : iProp Σ)
         (Q : Lit σ -> iProp Σ) :
-        CTriple Δ (evals es δ) P Q (CEnv f) ->
+        CEnv f = Some c ->
+        CTriple Δ (evals es δ) P Q c ->
         (⊢ ▷ ValidContractEnv CEnv -∗
            semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')))%I.
   Proof.
-    iIntros (ctrip) "cenv P".
+    iIntros (ceq ctrip) "cenv P".
     rewrite wp_unfold.
     iIntros ([regs μ] ks1 ks n) "Hregs".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
@@ -1237,18 +1234,9 @@ Module IrisInstance
     iSplitL; [|trivial].
     dependent destruction ctrip.
     - iSpecialize ("cenv" $! _ _ f).
-      rewrite <- ?x0, <-?x.
+      rewrite ceq.
       iSpecialize ("cenv" $! ι (evals es δ) with "P").
       iApply wp_compat_call_frame.
-      rewrite x0.
-      iApply (wp_mono with "cenv").
-      iIntros ([δ' v]) "ensv".
-      by iFrame.
-    - iSpecialize ("cenv" $! _ _ f).
-      rewrite <- ?x0, <-?x.
-      iSpecialize ("cenv" $! ι (evals es δ) with "P").
-      iApply wp_compat_call_frame.
-      rewrite x0.
       iApply (wp_mono with "cenv").
       iIntros ([δ' v]) "ensv".
       by iFrame.

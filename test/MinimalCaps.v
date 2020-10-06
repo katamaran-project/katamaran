@@ -385,12 +385,9 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   | loop           : Fun ε ty_unit
   .
 
-  Inductive FunGhost : Set :=
-  | open_ptsreg
-  | close_ptsreg0
-  | close_ptsreg1
-  | close_ptsreg2
-  | close_ptsreg3
+  Inductive FunGhost : Ctx (𝑿 * Ty) -> Set :=
+  | open_ptsreg : FunGhost ["reg" ∶ ty_enum regname]
+  | close_ptsreg (R : RegName) : FunGhost ctx_nil
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -399,7 +396,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   (* write memory *)
   | wM    : FunX ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_unit
   | dI    : FunX ["code" ∶ ty_int] ty_instr
-  | ghost (f : FunGhost) : FunX ctx_nil ty_unit
+  | ghost {Δ} (f : FunGhost Δ): FunX Δ ty_unit
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -464,15 +461,15 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
 
   Notation "'callghost' f" :=
     (stm_call_external (ghost f) env_nil)
-    (at level 10, f global) : stm_scope.
+    (at level 10, f at next level) : stm_scope.
 
   Definition fun_read_reg : Stm ["reg" ∶ ty_enum regname ] ty_word :=
-    callghost open_ptsreg ;;
+    stm_call_external (ghost open_ptsreg) [exp_var "reg"]%arg ;;
     match: exp_var "reg" in regname with
-    | R0 => let: "x" := stm_read_register reg0 in callghost close_ptsreg0 ;; stm_exp x
-    | R1 => let: "x" := stm_read_register reg1 in callghost close_ptsreg0 ;; stm_exp x
-    | R2 => let: "x" := stm_read_register reg2 in callghost close_ptsreg0 ;; stm_exp x
-    | R3 => let: "x" := stm_read_register reg3 in callghost close_ptsreg0 ;; stm_exp x
+    | R0 => let: "x" := stm_read_register reg0 in callghost (close_ptsreg R0) ;; stm_exp x
+    | R1 => let: "x" := stm_read_register reg1 in callghost (close_ptsreg R1) ;; stm_exp x
+    | R2 => let: "x" := stm_read_register reg2 in callghost (close_ptsreg R2) ;; stm_exp x
+    | R3 => let: "x" := stm_read_register reg3 in callghost (close_ptsreg R3) ;; stm_exp x
     end.
 
   Definition fun_read_reg_cap : Stm ["reg" ∶ ty_enum regname ] ty_cap :=
@@ -710,15 +707,21 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       CallEx dI (env_snoc env_nil (_ , ty_int) code)
              (fun_dI code)
              γ γ μ μ
-  | callex_ghost {fg : FunGhost} {γ : RegStore} {μ : Memory} :
-      CallEx (ghost fg) env_nil (inr tt) γ γ μ μ
+  | callex_ghost {Δ} {fg : FunGhost Δ} {δ : NamedEnv Lit Δ} {γ : RegStore} {μ : Memory} :
+      CallEx (ghost fg) δ (inr tt) γ γ μ μ
   .
 
   Definition ExternalCall := @CallEx.
 
   Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
     exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
-  Proof. destruct f; cbn; repeat depelim args; repeat eexists; constructor. Qed.
+  Proof.
+    destruct f; cbn.
+    - repeat depelim args; repeat eexists; constructor.
+    - repeat depelim args; repeat eexists; constructor.
+    - repeat depelim args; repeat eexists; constructor.
+    - repeat eexists; constructor.
+  Qed.
 
 End MinCapsProgramKit.
 
@@ -832,242 +835,154 @@ Module MinCapsContracts.
       unit loop
     *)
 
+    Definition sep_contract_read_reg : SepContract ["reg" ∶ ty_enum regname ] ty_word :=
+      {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word];
+         sep_contract_localstore      := [term_var "reg"]%arg;
+         sep_contract_precondition    := term_var "reg" ↦r term_var "w";
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           (* domi: strange that I have to manually specify Σ here *)
+           (asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_word]) (fun reg w result => result = w) ✱
+                     term_var "reg" ↦r term_var "w")
+      |}.
+
+    Definition sep_contract_read_reg_cap : SepContract ["reg" ∶ ty_enum regname ] ty_cap :=
+      {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word];
+         sep_contract_localstore      := [term_var "reg"]%arg;
+         sep_contract_precondition    := term_var "reg" ↦r term_var "w";
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           (asn_exist "c" ty_cap (
+                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => result = c) ✱
+                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => w = inr c)
+                      ) ✱
+            term_var "reg" ↦r term_var "w")
+      |}.
+
+    Definition sep_contract_read_reg_num : SepContract ["reg" ∶ ty_enum regname ] ty_int :=
+      {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word];
+         sep_contract_localstore      := [term_var "reg"]%arg;
+         sep_contract_precondition    := term_var "reg" ↦r term_var "w";
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           (asn_exist "n" ty_int (
+                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => result = n) ✱
+                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => w = inl n)
+                      ) ✱
+            term_var "reg" ↦r term_var "w")
+      |}.
+
+    Definition sep_contract_write_reg : SepContract ["reg" ∶ ty_enum regname, "w"  ∶ ty_word] ty_unit :=
+      {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "wo" ∶ ty_word];
+         sep_contract_localstore      := [term_var "reg", term_var "w"]%arg;
+         sep_contract_precondition    := term_var "reg" ↦r term_var "wo";
+         sep_contract_result          := "result";
+         sep_contract_postcondition   := term_var "reg" ↦r term_var "w";
+      |}.
+
+    Definition sep_contract_update_pc : SepContract ctx_nil ty_unit :=
+      {| sep_contract_logic_variables := ["opc" ∶ ty_cap ];
+         sep_contract_localstore      := env_nil;
+         sep_contract_precondition    := pc ↦ term_var "opc";
+         sep_contract_result          := "result";
+         sep_contract_postcondition   := asn_exist "npc" ty_cap (pc ↦ term_var "npc")
+      |}.
+
+    Definition sep_contract_read_mem : SepContract ["a" ∶ ty_addr ] ty_memval :=
+      {| sep_contract_logic_variables := ["a" ∶ ty_addr, "n" ∶ ty_int];
+         sep_contract_localstore      := [term_var "a"]%arg;
+         sep_contract_precondition    := term_var "a" ↦m term_var "n";
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           term_var "a" ↦m term_var "n" ✱
+           asn_prop (Σ := ["a" ∶ ty_addr, "n" ∶ ty_int, "result" ∶ ty_int]) (fun _ n res => res = n);
+      |}.
+
+    Definition sep_contract_write_mem : SepContract ["a" ∶ ty_addr, "v" ∶ ty_memval ] ty_unit :=
+      {| sep_contract_logic_variables := ["a" ∶ ty_addr, "v" ∶ ty_memval, "ov" ∶ ty_memval];
+         sep_contract_localstore      := [term_var "a", term_var "v"]%arg;
+         sep_contract_precondition    := term_var "a" ↦m term_var "ov";
+         sep_contract_result          := "result";
+         sep_contract_postcondition   := term_var "a" ↦m term_var "v";
+      |}.
 
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
-          | read_reg =>
-             sep_contract_result
-             ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
-             [term_var "reg"]%arg
-             "result"
-             (term_var "reg" ↦r term_var "w")
-             (* domi: strange that I have to manually specify Σ here *)
-             (asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_word]) (fun reg w result => result = w) ✱
-              term_var "reg" ↦r term_var "w")
-          | read_reg_cap =>
-             sep_contract_result
-             ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
-             [term_var "reg"]%arg
-             "result"
-             (term_var "reg" ↦r term_var "w")
-             (asn_exist "c" ty_cap (
-                          asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => result = c) ✱
-                          asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => w = inr c)
-                        ) ✱
-              term_var "reg" ↦r term_var "w")
-          | read_reg_num =>
-             sep_contract_result
-             ["reg" ∶ ty_enum regname, "w" ∶ ty_word]
-             [term_var "reg"]%arg
-             "result"
-             (term_var "reg" ↦r term_var "w")
-             (asn_exist "n" ty_int (
-                          asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => result = n) ✱
-                          asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => w = inl n)
-                        ) ✱
-              term_var "reg" ↦r term_var "w")
-          | write_reg =>
-             sep_contract_result
-               ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "wo" ∶ ty_word]
-               [term_var "reg", term_var "w"]%arg
-               "result"
-               (term_var "reg" ↦r term_var "wo")
-               (term_var "reg" ↦r term_var "w")
-          | update_pc =>
-             sep_contract_result
-               ["opc" ∶ ty_cap]
-               env_nil%arg
-               "result"
-               (pc ↦ term_var "opc")
-               (asn_exist "npc" ty_cap (pc ↦ term_var "npc"))
-          | read_mem =>
-             sep_contract_result
-               ["a" ∶ ty_addr, "n" ∶ ty_int]
-               [term_var "a"]%arg
-               "result"
-               (term_var "a" ↦m term_var "n")
-               (term_var "a" ↦m term_var "n" ✱
-                asn_prop (Σ := ["a" ∶ ty_addr, "n" ∶ ty_int, "result" ∶ ty_int]) (fun _ n res => res = n))
-          | write_mem =>
-             sep_contract_result
-               ["a" ∶ ty_addr, "v" ∶ ty_memval, "ov" ∶ ty_memval]
-               [term_var "a", term_var "v"]%arg
-               "result"
-               (term_var "a" ↦m term_var "ov")
-               (term_var "a" ↦m term_var "v")
-          | read_allowed =>
-             sep_contract_result
-               ["p" ∶ ty_perm]
-               [term_var "p"]%arg
-               "result"
-               asn_true
-               asn_true
-          | write_allowed =>
-             sep_contract_result
-               ["p" ∶ ty_perm]
-               [term_var "p"]%arg
-               "result"
-               asn_true
-               asn_true
-          | upper_bound =>
-             sep_contract_result
-               ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr]
-               [term_var "a", term_var "e"]%arg
-               "result"
-               asn_true
-               asn_true
-          | within_bounds =>
-             sep_contract_result
-               ["c" ∶ ty_cap]
-               [term_var "c"]%arg
-               "result"
-               asn_true
-               asn_true
-          | compute_rv =>
-             sep_contract_result
-               ["rv" ∶ ty_rv]
-               [term_var "rv"]%arg
-               "result"
-               asn_true
-               asn_true
-          | compute_rv_num =>
-             sep_contract_result
-               ["rv" ∶ ty_rv]
-               [term_var "rv"]%arg
-               "result"
-               asn_true
-               asn_true
-          | exec_jmp =>
-             sep_contract_result
-               ["lv" ∶ ty_lv]
-               [term_var "lv"]%arg
-               "result"
-               asn_true
-               asn_true
-          | exec_jnz =>
-             sep_contract_result
-               ["lv" ∶ ty_lv, "rv" ∶ ty_rv]
-               [term_var "lv", term_var "rv"]%arg
-               "result"
-               asn_true
-               asn_true
-          | exec_move =>
-             sep_contract_result
-               ["lv" ∶ ty_lv, "rv" ∶ ty_rv]
-               [term_var "lv", term_var "rv"]%arg
-               "result"
-               asn_true
-               asn_true
-          | exec_load =>
-             sep_contract_result
-               ["lv" ∶ ty_lv, "hv" ∶ ty_hv ]
-               [term_var "lv", term_var "hv"]%arg
-               "result"
-               asn_true
-               asn_true
-          | exec_store =>
-             sep_contract_result
-               ["lv" ∶ ty_lv, "rv" ∶ ty_rv]
-               [term_var "lv", term_var "rv"]%arg
-               "result"
-               asn_true
-               asn_true
-          | exec_halt =>
-             sep_contract_result
-               ε
-               env_nil%arg
-               "result"
-               asn_true
-               asn_true
-          | exec_instr =>
-             sep_contract_result
-               ["i" ∶ ty_instr]
-               [term_var "i"]%arg
-               "result"
-               asn_true
-               asn_true
-          | exec =>
-             sep_contract_result
-               ε
-               env_nil%arg
-               "result"
-               asn_true
-               asn_true
-          | loop =>
-             sep_contract_result
-               ε
-               env_nil%arg
-               "result"
-               asn_true
-               asn_true
+        | read_reg     => Some sep_contract_read_reg
+        | read_reg_cap => Some sep_contract_read_reg_cap
+        | read_reg_num => Some sep_contract_read_reg_num
+        | write_reg    => Some sep_contract_write_reg
+        | update_pc    => Some sep_contract_update_pc
+        | read_mem     => Some sep_contract_read_mem
+        | write_mem    => Some sep_contract_write_mem
+        | _            => None
         end.
+
+    Definition sep_contract_open_ptsreg : SepContract ["reg" ∶ ty_enum regname] ty_unit :=
+      {| sep_contract_logic_variables := [ "r" ∶ ty_enum regname, "w" ∶ ty_word];
+         sep_contract_localstore      := [term_var "r"]%arg;
+         sep_contract_precondition    := term_var "r" ↦r term_var "w";
+         sep_contract_result          := "_";
+         sep_contract_postcondition   :=
+           asn_match_enum
+             regname (term_var "r")
+             (fun k => match k with
+                       | R0 => reg0 ↦ term_var "w"
+                       | R1 => reg1 ↦ term_var "w"
+                       | R2 => reg2 ↦ term_var "w"
+                       | R3 => reg3 ↦ term_var "w"
+                       end)
+      |}.
+
+    Definition regtag_to_reg (R : RegName) : Reg ty_word :=
+      match R with
+      | R0 => reg0
+      | R1 => reg1
+      | R2 => reg2
+      | R3 => reg3
+      end.
+
+    Definition sep_contract_close_ptsreg (r : RegName) : SepContract ctx_nil ty_unit :=
+      {| sep_contract_logic_variables := ["w" ∶ ty_word];
+         sep_contract_localstore      := env_nil;
+         sep_contract_precondition    := regtag_to_reg r ↦ term_var "w";
+         sep_contract_result          := "_";
+         sep_contract_postcondition   := term_enum regname r ↦r term_var "w"
+      |}.
 
     Definition CEnvEx : SepContractEnvEx :=
       fun Δ τ f =>
         match f with
         | rM =>
-          sep_contract_result
+          MkSepContract
+            _ _
             ["address" ∶ ty_int]
             [term_var "address"]%arg
+            asn_false
             "result"
             asn_true
-            asn_true
           | wM =>
-             sep_contract_result
+            MkSepContract
+              _ _
                ["address" ∶ ty_int, "mem_value" ∶ ty_int]
                [term_var "address", term_var "mem_value"]%arg
+               asn_false
                "result"
-               asn_true
                asn_true
           | dI =>
-             sep_contract_result
+            MkSepContract
+              _ _
                ["code" ∶ ty_int]
                [term_var "code"]%arg
+               asn_false
                "result"
                asn_true
-               asn_true
-          | ghost open_ptsreg =>
-            sep_contract_result
-              [ "r" ∶ ty_enum regname, "w" ∶ ty_word]
-              env_nil
-              "result"
-              (term_var "r" ↦r term_var "w")
-              (asn_match_enum regname (term_var "r")
-                              (fun k => match k with
-                                     | R0 => reg0 ↦ term_var "w"
-                                     | R1 => reg1 ↦ term_var "w"
-                                     | R2 => reg2 ↦ term_var "w"
-                                     | R3 => reg3 ↦ term_var "w"
-                                     end))
-          | ghost close_ptsreg0 =>
-            sep_contract_result
-              [ "w" ∶ ty_word]
-              env_nil
-              "result"
-              (reg0 ↦ term_var "w")
-              (term_enum regname R0 ↦r term_var "w")
-          | ghost close_ptsreg1 =>
-            sep_contract_result
-              [ "w" ∶ ty_word]
-              env_nil
-              "result"
-              (reg1 ↦ term_var "w")
-              (term_enum regname R1 ↦r term_var "w")
-          | ghost close_ptsreg2 =>
-            sep_contract_result
-              [ "w" ∶ ty_word]
-              env_nil
-              "result"
-              (reg2 ↦ term_var "w")
-              (term_enum regname R2 ↦r term_var "w")
-          | ghost close_ptsreg3 =>
-            sep_contract_result
-              [ "w" ∶ ty_word]
-              env_nil
-              "result"
-              (reg3 ↦ term_var "w")
-              (term_enum regname R3 ↦r term_var "w")
+          | @ghost _ f =>
+            match f in FunGhost Δ return SepContract Δ ty_unit with
+            | open_ptsreg    => sep_contract_open_ptsreg
+            | close_ptsreg r => sep_contract_close_ptsreg r
+            end
         end.
 
   End MinCapsSymbolicContractKit.
@@ -1098,17 +1013,9 @@ Module MinCapsContracts.
        auto
       ).
 
-  Lemma valid_contract_read_reg_wp : ValidContract (CEnv read_reg) (Pi read_reg).
+  Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
   Proof.
-    solve.
-  Qed.
-  Hint Resolve valid_contract_read_reg_wp : contracts.
-
-
-  Lemma valid_contract_read_reg : ValidContractDynMut (CEnv read_reg) (Pi read_reg).
-  Proof.
-    solve.
-    admit.
   Admitted.
+  Hint Resolve valid_contract_read_reg : contracts.
 
 End MinCapsContracts.
