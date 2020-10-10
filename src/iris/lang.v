@@ -1304,6 +1304,36 @@ Module IrisInstance
       by iApply wp_compat_fail.
   Qed.
 
+  Lemma iris_rule_stm_call_inline
+    {Γ} (δ : LocalStore Γ)
+    {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) (c : SepContract Δ σ)
+    (P : iProp Σ) (Q : Lit σ -> iProp Σ) :
+    ⊢ semTriple (evals es δ) P (Pi f) (fun v _ => Q v) -∗
+      semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')).
+  Proof.
+    iIntros "tripbody P".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e2 σ'' efs) "%".
+    unfold language.prim_step in a; cbn in a.
+    dependent destruction a.
+    dependent destruction H0.
+    iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro. iFrame.
+    iSplitL; [|trivial].
+    iApply wp_compat_call_frame.
+    iApply (wp_mono _ _ _ (fun v => match v with MkVal _ _ v0 => Q v0 end)).
+    {
+      intros v. destruct v.
+      iIntros "Qv".
+      by iFrame.
+    }
+    iApply ("tripbody" with "P").
+  Qed.
+
   Lemma sound_stm {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
     forall (PRE : iProp Σ) (POST : Lit τ -> LocalStore Γ -> iProp Σ)
       (triple : δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄),
@@ -1338,10 +1368,10 @@ Module IrisInstance
     - by iApply iris_rule_stm_assign_backwards.
     - by iApply iris_rule_stm_assign_forwards.
     - by iApply iris_rule_stm_call_forwards.
-    - admit. (* by iApply iris_rule_stm_call_inline. *)
+    - by iApply iris_rule_stm_call_inline.
     - by iApply iris_rule_stm_call_frame.
     - by iApply iris_rule_stm_bind.
-  Admitted.
+  Qed.
 
   Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
       ⊢ ValidContractEnv CEnv.
