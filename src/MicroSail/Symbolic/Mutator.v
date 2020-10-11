@@ -1028,6 +1028,62 @@ Module Mutators
   Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
     dmut_lift_kleisli mutator_consume_chunk c.
 
+  Section DynamicMutatorConsumeEvar.
+    Context {Σr : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)}.
+
+    Definition dmut_consume_chunk_evar {Σe} (c : Chunk Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr.
+    Proof.
+      apply dmut_lift.
+      intros Σ1 ζ1.
+      apply mutator_consume_chunk_evar.
+      exact c.
+      refine (env_map _ L).
+      intros ?.
+      apply option_map.
+      exact (sub_term ζ1).
+    Defined.
+
+    Definition dmut_consume_evar {Σe} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr.
+    Proof.
+      apply dmut_lift.
+      intros Σ1 ζ1.
+      apply mutator_consume_evar.
+      exact asn.
+      refine (env_map _ L).
+      intros ?.
+      apply option_map.
+      exact (sub_term ζ1).
+    Defined.
+
+    Definition dmut_assert_term_eq_evar {Σe σ} (te : Term Σe σ) (tr : Term Σr σ) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr.
+    Proof.
+      apply dmut_lift.
+      intros Σ1 ζ1.
+      apply (mutator_assert_term_eq_evar te (sub_term ζ1 tr)).
+      refine (env_map _ L).
+      intros ?.
+      apply option_map.
+      exact (sub_term ζ1).
+    Defined.
+
+    Definition dmut_assert_namedenv_eq_evar {X Σe σs} (te : NamedEnv (X:=X) (Term Σe) σs) (tr : NamedEnv (Term Σr) σs) :
+      EvarEnv Σe Σr -> DynamicMutator Γ Γ (EvarEnv Σe) Σr.
+    Proof.
+      intros L.
+      apply dmut_lift.
+      intros Σ1 ζ1.
+      apply (mutator_assert_namedenv_eq_evar te).
+      refine (env_map _ tr).
+      intros ?.
+      exact (sub_term ζ1).
+      refine (env_map _ L).
+      intros ?.
+      apply option_map.
+      exact (sub_term ζ1).
+    Defined.
+
+  End DynamicMutatorConsumeEvar.
+
   Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
     match asn with
     | asn_bool b      => dmut_assume_term b
