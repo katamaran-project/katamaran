@@ -265,39 +265,39 @@ Module Mutators
 
   End TraverseEnv.
 
-  Definition GhostEnv (Σe Σr : Ctx (𝑺 * Ty)) : Type := Env (fun b => option (Term Σr (snd b))) Σe.
+  Definition EvarEnv (Σe Σr : Ctx (𝑺 * Ty)) : Type := Env (fun b => option (Term Σr (snd b))) Σe.
 
-  Definition create_ghost_env (Σe Σr : Ctx (𝑺 * Ty)) : GhostEnv Σe Σr :=
+  Definition create_evarenv (Σe Σr : Ctx (𝑺 * Ty)) : EvarEnv Σe Σr :=
     env_tabulate (fun _ _ => None).
 
-  Section WithGhostScope.
-    Context {Σe Σr} (δ : GhostEnv Σe Σr).
+  Section WithEvarEnv.
+    Context {Σe Σr} (δ : EvarEnv Σe Σr).
 
-    Fixpoint eval_term_ghost {σ : Ty} (t : Term Σe σ) {struct t} : option (Term Σr σ) :=
+    Fixpoint eval_term_evar {σ : Ty} (t : Term Σe σ) {struct t} : option (Term Σr σ) :=
       match t in Term _ σ return option (Term Σr σ) with
       | @term_var _ x _      => (δ ‼ x)%lit
       | term_lit _ l         => Some (term_lit _ l)
-      | term_binop op t1 t2  => t1 ← eval_term_ghost t1 ;
-                                t2 ← eval_term_ghost t2 ;
+      | term_binop op t1 t2  => t1 ← eval_term_evar t1 ;
+                                t2 ← eval_term_evar t2 ;
                                 Some (term_binop op t1 t2)
-      | term_neg t           => term_neg <$> eval_term_ghost t
-      | term_not t           => term_not <$> eval_term_ghost t
-      | term_inl t           => term_inl <$> eval_term_ghost t
-      | term_inr t           => term_inr <$> eval_term_ghost t
-      | term_list ts         => term_list <$> traverse_list eval_term_ghost ts
-      | term_tuple ts        => term_tuple <$> traverse_env (@eval_term_ghost) ts
-      | @term_projtup _ _ t n _ p     => (fun t => term_projtup t n (p:=p)) <$> eval_term_ghost t
-      | term_union U K t     => term_union U K <$> eval_term_ghost t
-      | term_record R ts     => term_record R <$> traverse_env (fun b => @eval_term_ghost (snd b)) ts
-      | term_projrec t rf    => (fun t => term_projrec t rf) <$> eval_term_ghost t
+      | term_neg t           => term_neg <$> eval_term_evar t
+      | term_not t           => term_not <$> eval_term_evar t
+      | term_inl t           => term_inl <$> eval_term_evar t
+      | term_inr t           => term_inr <$> eval_term_evar t
+      | term_list ts         => term_list <$> traverse_list eval_term_evar ts
+      | term_tuple ts        => term_tuple <$> traverse_env (@eval_term_evar) ts
+      | @term_projtup _ _ t n _ p     => (fun t => term_projtup t n (p:=p)) <$> eval_term_evar t
+      | term_union U K t     => term_union U K <$> eval_term_evar t
+      | term_record R ts     => term_record R <$> traverse_env (fun b => @eval_term_evar (snd b)) ts
+      | term_projrec t rf    => (fun t => term_projrec t rf) <$> eval_term_evar t
       end.
 
     Section WithMatchTerm.
 
-      Variable match_term : forall {σ}, Term Σe σ -> Term Σr σ -> GhostEnv Σe Σr -> option (GhostEnv Σe Σr).
+      Variable match_term : forall {σ}, Term Σe σ -> Term Σr σ -> EvarEnv Σe Σr -> option (EvarEnv Σe Σr).
 
       Equations(noeqns) match_env'  {σs} (te : Env (Term Σe) σs) (tr : Env (Term Σr) σs) :
-        GhostEnv Σe Σr -> option (GhostEnv Σe Σr) :=
+        EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
         match_env' env_nil env_nil := Some;
         match_env' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_env' E1 E2 >=> match_term t1 t2.
 
@@ -312,14 +312,14 @@ Module Mutators
        with the path condition.
      *)
     Equations(noeqns) match_term {σ} (te : Term Σe σ) (tr : Term Σr σ) :
-      GhostEnv Σe Σr -> option (GhostEnv Σe Σr) :=
+      EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
       match_term (@term_var ς σ ςInΣe) tr :=
         fun L =>
           match (L ‼ ς)%lit with
-          (* There's already a binding for ς in the ghost environment. Make sure
+          (* There's already a binding for ς in the evar environment. Make sure
              it corresponds to the term tr. *)
           | Some tr' => if Term_eqb tr' tr then Some L else None
-          (* There's no binding for ς in the ghost environment. Create a new one by
+          (* There's no binding for ς in the evar environment. Create a new one by
              inserting tr. *)
           | None     => Some (L ⟪ ς ↦ Some tr ⟫)%env
           end;
@@ -334,7 +334,7 @@ Module Mutators
     Definition match_env := @match_env' (@match_term).
 
     Equations(noeqns) match_chunk (ce : Chunk Σe) (cr : Chunk Σr) :
-      GhostEnv Σe Σr -> option (GhostEnv Σe Σr) :=
+      EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
       match_chunk (chunk_pred p1 ts1) (chunk_pred p2 ts2)
       with 𝑷_eq_dec p1 p2 => {
         match_chunk (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) := match_env ts1 ts2;
@@ -347,20 +347,20 @@ Module Mutators
       };
       match_chunk _ _  := fun _ => None.
 
-    Definition extract_chunk (ce : Chunk Σe) (h : SymbolicHeap Σr) (L : GhostEnv Σe Σr) :
-      list (GhostEnv Σe Σr * SymbolicHeap Σr) :=
+    Definition extract_chunk (ce : Chunk Σe) (h : SymbolicHeap Σr) (L : EvarEnv Σe Σr) :
+      list (EvarEnv Σe Σr * SymbolicHeap Σr) :=
       omap
         (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk ce cr L))
         (heap_extractions h).
 
-  End WithGhostScope.
+  End WithEvarEnv.
 
-  Definition ghost_env_to_option_sub {Σe Σr} (δ : GhostEnv Σe Σr) : option (Sub Σe Σr) :=
+  Definition evarenv_to_option_sub {Σe Σr} (δ : EvarEnv Σe Σr) : option (Sub Σe Σr) :=
     traverse_env (M := option) (fun b mt => mt) δ.
 
-  Lemma eval_term_ghost_refines_sub_term {Σe Σr} (δ : GhostEnv Σe Σr) (ζ : Sub Σe Σr) :
-    ghost_env_to_option_sub δ = Some ζ ->
-    forall σ (t : Term _ σ), eval_term_ghost δ t = Some (sub_term ζ t).
+  Lemma eval_term_evar_refines_sub_term {Σe Σr} (δ : EvarEnv Σe Σr) (ζ : Sub Σe Σr) :
+    evarenv_to_option_sub δ = Some ζ ->
+    forall σ (t : Term _ σ), eval_term_evar δ t = Some (sub_term ζ t).
   Proof.
     intros hyp.
     induction t; cbn in *.
@@ -599,67 +599,67 @@ Module Mutators
                              "Err [mutator_produce]: case [asn_exist] not implemented"
       end.
 
-    Section MutatorConsumeGhost.
+    Section MutatorConsumeEvar.
       Context {Σr : Ctx (𝑺 * Ty)} {Γ : Ctx (𝑿 * Ty)}.
 
-      Definition mutator_consume_chunk_ghost {Σe} (c : Chunk Σe) (L : GhostEnv Σe Σr) : Mutator Σr Γ Γ (GhostEnv Σe Σr) :=
+      Definition mutator_consume_chunk_evar {Σe} (c : Chunk Σe) (L : EvarEnv Σe Σr) : Mutator Σr Γ Γ (EvarEnv Σe Σr) :=
         mutator_get_heap >>= fun h =>
         mutator_angelic_list
-          "Err [mutator_consume_chunk_ghost]: empty extraction"
+          "Err [mutator_consume_chunk_evar]: empty extraction"
           (extract_chunk c h L) >>= fun '(L' , h') =>
         mutator_put_heap h' *> mutator_pure L'.
 
-      Fixpoint mutator_consume_ghost {Σe} (asn : Assertion Σe) (L : GhostEnv Σe Σr) : Mutator Σr Γ Γ (GhostEnv Σe Σr) :=
+      Fixpoint mutator_consume_evar {Σe} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : Mutator Σr Γ Γ (EvarEnv Σe Σr) :=
         match asn with
         | asn_bool tb =>
-          match eval_term_ghost L tb with
+          match eval_term_evar L tb with
           | Some tb' => mutator_assert_term tb' *> mutator_pure L
-          | None     => mutator_fail "Err [mutator_consume_ghost]: uninstantiated variables when consuming bool assertion"
+          | None     => mutator_fail "Err [mutator_consume_evar]: uninstantiated variables when consuming bool assertion"
           end
         | asn_prop P =>
-          match ghost_env_to_option_sub L with
+          match evarenv_to_option_sub L with
           | Some ζ => mutator_assert_formula (formula_prop ζ P) *> mutator_pure L
-          | None   => mutator_fail "Err [mutator_consume_ghost]: uninstantiated variables when consuming prop assertion"
+          | None   => mutator_fail "Err [mutator_consume_evar]: uninstantiated variables when consuming prop assertion"
           end
-        | asn_chunk c => mutator_consume_chunk_ghost c L
+        | asn_chunk c => mutator_consume_chunk_evar c L
         | asn_if tb a1 a2 =>
-          match eval_term_ghost L tb with
-          | Some tb' => (mutator_assume_term tb'            *> mutator_consume_ghost a1 L) ⊗
-                        (mutator_assume_term (term_not tb') *> mutator_consume_ghost a2 L)
-          | None     => mutator_fail "Err [mutator_consume_ghost]: uninstantiated variables when consuming if assertion"
+          match eval_term_evar L tb with
+          | Some tb' => (mutator_assume_term tb'            *> mutator_consume_evar a1 L) ⊗
+                        (mutator_assume_term (term_not tb') *> mutator_consume_evar a2 L)
+          | None     => mutator_fail "Err [mutator_consume_evar]: uninstantiated variables when consuming if assertion"
           end
         | @asn_match_enum _ E k1 alts =>
-          match eval_term_ghost L k1 with
+          match eval_term_evar L k1 with
           | Some k1' => ⨁ k2 : 𝑬𝑲 E =>
             mutator_assert_formula (formula_eq k1' (term_enum E k2)) ;;
-            mutator_consume_ghost (alts k2) L
-          | None => mutator_fail "Err [mutator_consume_ghost]: uninstantiated variables when consuming match enum assertion"
+            mutator_consume_evar (alts k2) L
+          | None => mutator_fail "Err [mutator_consume_evar]: uninstantiated variables when consuming match enum assertion"
           end
-        | asn_sep a1 a2 => mutator_consume_ghost a1 L >>= mutator_consume_ghost a2
+        | asn_sep a1 a2 => mutator_consume_evar a1 L >>= mutator_consume_evar a2
         | asn_exist ς τ a =>
-          mutator_consume_ghost a (env_snoc L _ None) >>= fun La' =>
+          mutator_consume_evar a (env_snoc L _ None) >>= fun La' =>
           match env_unsnoc La' with
           | (L', Some a) => mutator_pure L'
-          | _            => mutator_fail "Err [mutator_consume_ghost]: uninstantiated existential variable"
+          | _            => mutator_fail "Err [mutator_consume_evar]: uninstantiated existential variable"
           end
         end.
 
-      Definition mutator_assert_term_eq_ghost {Σe σ} (te : Term Σe σ) (tr : Term Σr σ) (L : GhostEnv Σe Σr) : Mutator Σr Γ Γ (GhostEnv Σe Σr) :=
+      Definition mutator_assert_term_eq_evar {Σe σ} (te : Term Σe σ) (tr : Term Σr σ) (L : EvarEnv Σe Σr) : Mutator Σr Γ Γ (EvarEnv Σe Σr) :=
         match match_term te tr L with
         | Some L' => mutator_pure L'
-        | None    => match eval_term_ghost L te with
+        | None    => match eval_term_evar L te with
                      | Some te' => mutator_assert_formula (formula_eq te' tr) *> mutator_pure L
-                     | None     => mutator_fail "Err [mutator_consume_ghost]: uninstantiated existential variable"
+                     | None     => mutator_fail "Err [mutator_consume_evar]: uninstantiated existential variable"
                      end
         end.
 
-      Equations(noeqns) mutator_assert_namedenv_eq_ghost {X Σe σs} (te : NamedEnv (X:=X) (Term Σe) σs) (tr : NamedEnv (Term Σr) σs) :
-        GhostEnv Σe Σr -> Mutator Σr Γ Γ (GhostEnv Σe Σr) :=
-        mutator_assert_namedenv_eq_ghost env_nil env_nil := mutator_pure;
-        mutator_assert_namedenv_eq_ghost (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) :=
-          fun L => mutator_assert_namedenv_eq_ghost E1 E2 L >>= mutator_assert_term_eq_ghost t1 t2.
+      Equations(noeqns) mutator_assert_namedenv_eq_evar {X Σe σs} (te : NamedEnv (X:=X) (Term Σe) σs) (tr : NamedEnv (Term Σr) σs) :
+        EvarEnv Σe Σr -> Mutator Σr Γ Γ (EvarEnv Σe Σr) :=
+        mutator_assert_namedenv_eq_evar env_nil env_nil := mutator_pure;
+        mutator_assert_namedenv_eq_evar (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) :=
+          fun L => mutator_assert_namedenv_eq_evar E1 E2 L >>= mutator_assert_term_eq_evar t1 t2.
 
-    End MutatorConsumeGhost.
+    End MutatorConsumeEvar.
 
     Fixpoint mutator_consume {Γ Σ Σ'} (ζ : Sub Σ Σ') (asn : Assertion Σ) : Mutator Σ' Γ Γ unit :=
       match asn with
@@ -694,16 +694,16 @@ Module Mutators
     (* Definition mutator_call {Σ Γ Δ τ} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) : Mutator Σ Γ Γ (Term Σ τ) := *)
     (*   match contract with *)
     (*   (* | @sep_contract_unit _ Σe δ req ens => *) *)
-    (*   (*   mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 => *) *)
-    (*   (*   mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 => *) *)
+    (*   (*   mutator_consume_evar req (create_evarenv Σe Σ) >>= fun L1 => *) *)
+    (*   (*   mutator_assert_namedenv_eq_evar δ ts L1 >>= fun L2 => *) *)
     (*   (*   match ghost_env_to_option_sub L2 with *) *)
     (*   (*   | Some ζ => mutator_produce ζ ens *> *) *)
     (*   (*               mutator_pure (term_lit ty_unit tt) *) *)
     (*   (*   | None   => mutator_fail "Err [mutator_exec]: uninstantiated variables after consuming precondition" *) *)
     (*   (*   end *) *)
     (*   | @sep_contract_result_pure _ _ Σe δ result req ens => *)
-    (*     mutator_consume_ghost req (create_ghost_env Σe Σ) >>= fun L1 => *)
-    (*     mutator_assert_namedenv_eq_ghost δ ts L1 >>= fun L2 => *)
+    (*     mutator_consume_evar req (create_evar_env Σe Σ) >>= fun L1 => *)
+    (*     mutator_assert_namedenv_eq_evar δ ts L1 >>= fun L2 => *)
     (*     match ghost_env_to_option_sub L2 with *)
     (*     | Some ζ => mutator_produce ζ ens *> *)
     (*                 mutator_pure (sub_term ζ result) *)
@@ -749,7 +749,7 @@ Module Mutators
         mutator_eval_exp e >>=
         mutator_exec_match_enum (fun K => mutator_exec (alts K))
       | @stm_read_register _ τ reg =>
-        mutator_consume_chunk_ghost (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg >>= fun L =>
+        mutator_consume_chunk_evar (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg >>= fun L =>
         match env_unsnoc L with
         | (_ , Some t) => mutator_produce_chunk (chunk_ptsreg reg t) *>
                           mutator_pure t
@@ -758,7 +758,7 @@ Module Mutators
         | _            => mutator_fail "Err [mutator_exec]: You have found a unicorn."
         end
       | @stm_write_register _ τ reg e => mutator_eval_exp e >>= fun v =>
-        mutator_consume_chunk_ghost (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg ;;
+        mutator_consume_chunk_evar (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg ;;
         mutator_produce_chunk (chunk_ptsreg reg v) *>
         mutator_pure v
       | stm_match_list e alt_nil xh xt alt_cons =>
