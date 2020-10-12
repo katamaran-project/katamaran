@@ -724,44 +724,16 @@ Local Ltac solve :=
      auto
     ).
 
-Lemma valid_contract_rX : ValidContractDynMut sep_contract_rX fun_rX.
-Admitted.
+Lemma valid_contract_rX : ValidContractDynMutEvar sep_contract_rX fun_rX.
+Proof. Time (intros [] []; compute; solve). Qed.
+Hint Resolve valid_contract_rX : contracts.
 
-(* Lemma valid_contract_rX : ValidContractDynMut sep_contract_rX fun_rX.
-Proof.
-  exists [term_var "reg_tag", term_var "v"]%arg.
-  intros [] []; exists (term_var "v").
-  - exists (env_snoc env_nil (_,_) (term_var "v")).
-    repeat constructor.
-  - solve.
-  - solve.
-  - solve.
-  - solve.
-  - exists (env_snoc env_nil (_,_) (term_var "v")).
-    repeat constructor.
-  - solve.
-  - solve.
-  - solve.
-  - solve.
-  - exists (env_snoc env_nil (_,_) (term_var "v")).
-    repeat constructor.
-  - solve.
-  - solve.
-  - solve.
-  - solve.
-  - exists (env_snoc env_nil (_,_) (term_var "v")). *)
-(*     repeat constructor. *)
-(* Qed. *)
-(* Hint Resolve valid_contract_rX : contracts. *)
-
-Lemma valid_contract_wX : ValidContractDynMut sep_contract_wX fun_wX.
-Proof.
-Admitted.
+Lemma valid_contract_wX : ValidContractDynMutEvar sep_contract_wX fun_wX.
+Proof. Time (intros [] []; compute; solve). Qed.
 Hint Resolve valid_contract_wX : contracts.
 
-Lemma valid_contract_swapreg12 : ValidContractDynMut sep_contract_swapreg12 fun_swapreg12.
-Proof.
-Admitted.
+Lemma valid_contract_swapreg12 : ValidContractDynMutEvar sep_contract_swapreg12 fun_swapreg12.
+Proof. compute; auto. Qed.
 Hint Resolve valid_contract_swapreg12 : contracts.
 
 (* Arguments asn_true {_} /. *)
