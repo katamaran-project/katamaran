@@ -40,6 +40,9 @@ From Coq Require Import
      Classes.Equivalence
      Classes.RelationClasses.
 
+From bbv Require
+     Word.
+
 From Equations Require Import
      Equations Signature.
 
@@ -127,6 +130,10 @@ Program Instance blastable_bit : Blastable Bit :=
   {| blast b k := (b = bitzero -> k bitzero) /\ (b = bitone -> k bitone) |}.
 Solve All Obligations with intros []; intuition; congruence.
 
+Program Instance blastable_word {n} : Blastable (Word.word n) :=
+  {| blast w k := k w |}.
+Solve All Obligations with intuition.
+
 Program Instance blastable_env {B D} {Γ : Ctx B} : Blastable (Env D Γ) :=
   {| blast :=
        (fix blast {Δ : Ctx B} (E : Env D Δ) {struct E} : (Env D Δ -> Prop) -> Prop :=
@@ -205,6 +212,7 @@ Module Types (Export typekit : TypeKit).
   | ty_sum  (σ τ : Ty)
   | ty_unit
   | ty_enum (E : 𝑬)
+  | ty_bvec (n : nat)
   (* Experimental features. These are still in flux. *)
   | ty_tuple (σs : Ctx Ty)
   | ty_union (U : 𝑼)
@@ -228,6 +236,7 @@ Module Types (Export typekit : TypeKit).
     Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)).
     Hypothesis (P_unit   : P ty_unit).
     Hypothesis (P_enum   : forall E, P (ty_enum E)).
+    Hypothesis (P_bvec   : forall n, P (ty_bvec n)).
     Hypothesis (P_tuple  : forall σs, EnvRec P σs -> P (ty_tuple σs)).
     Hypothesis (P_union  : forall U, P (ty_union U)).
     Hypothesis (P_record : forall R, P (ty_record R)).
@@ -243,6 +252,7 @@ Module Types (Export typekit : TypeKit).
       | ty_sum σ τ  => ltac:(apply P_sum; auto)
       | ty_unit     => ltac:(apply P_unit; auto)
       | ty_enum E   => ltac:(apply P_enum; auto)
+      | ty_bvec n   => ltac:(apply P_bvec; auto)
       | ty_tuple σs => ltac:(apply P_tuple; induction σs; cbn; auto using unit)
       | ty_union U  => ltac:(apply P_union; auto)
       | ty_record R => ltac:(apply P_record; auto)
@@ -265,6 +275,7 @@ Module Types (Export typekit : TypeKit).
       | ty_sum σ1 σ2  , ty_sum τ1 τ2  => f_equal2_dec ty_sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
       | ty_unit       , ty_unit       => left eq_refl
       | ty_enum E1    , ty_enum E2    => f_equal_dec ty_enum noConfusion_inv (eq_dec E1 E2)
+      | ty_bvec n1    , ty_bvec n2    => f_equal_dec ty_bvec noConfusion_inv (eq_dec n1 n2)
       | ty_tuple σs   , ty_tuple τs   => f_equal_dec ty_tuple noConfusion_inv (@ctx_eqdec Ty ty_eqdec σs τs)
       | ty_union U1   , ty_union U2   => f_equal_dec ty_union noConfusion_inv (eq_dec U1 U2)
       | ty_record R1  , ty_record R2  => f_equal_dec ty_record noConfusion_inv (eq_dec R1 R2)
@@ -285,6 +296,7 @@ Module Types (Export typekit : TypeKit).
     | ty_sum σ1 σ2 => Lit σ1 + Lit σ2
     | ty_unit => unit
     | ty_enum E => 𝑬𝑲 E
+    | ty_bvec n => Word.word n
     (* Experimental features *)
     | ty_tuple σs => EnvRec Lit σs
     | ty_union U => 𝑼𝑻 U
@@ -376,6 +388,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ty_sum σ1 σ2 => blastable_sum
       | ty_unit => blastable_unit
       | ty_enum E => Blastable_𝑬𝑲 E
+      | ty_bvec n => blastable_word
       | ty_tuple σs => Ctx_rect
                          (fun σs => Blastable (Lit (ty_tuple σs)))
                          blastable_unit
@@ -396,6 +409,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | ty_sum σ τ  => sum_beq (Lit_eqb σ) (Lit_eqb τ)
       | ty_unit     => fun _ _ => true
       | ty_enum E   => fun l1 l2 => if 𝑬𝑲_eq_dec l1 l2 then true else false
+      | ty_bvec n   => @Word.weqb n
       | ty_tuple σs => envrec_beq Lit_eqb
       | ty_union U  => fun l1 l2 => if 𝑼𝑻_eq_dec l1 l2 then true else false
       | ty_record R => fun l1 l2 => if 𝑹𝑻_eq_dec l1 l2 then true else false
@@ -413,6 +427,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       - destruct x as [x1|x2]; destruct y as [y1|y2]...
       - destruct x. destruct y...
       - destruct (𝑬𝑲_eq_dec x y)...
+      - apply iff_reflect. symmetry.
+        apply (Word.weqb_true_iff x y).
       - induction σs; intros.
         + destruct x; destruct y...
         + cbn in *.
