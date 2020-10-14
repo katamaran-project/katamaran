@@ -754,7 +754,7 @@ Module Mutators
       | stm_assert e1 _ => mutator_eval_exp e1 >>= fun t =>
                            mutator_assert_term t ;;
                            mutator_pure t
-      | stm_fail τ s => mutator_contradiction "Err [mutator_exec]: [stm_fail] reached"
+      | stm_fail τ s => mutator_block
       | stm_match_enum E e alts =>
         mutator_eval_exp e >>=
         mutator_exec_match_enum (fun K => mutator_exec (alts K))
@@ -1185,7 +1185,7 @@ Module Mutators
       dmut_assert_term t ;;
       dmut_pure t
     | stm_fail τ _ =>
-      dmut_contradiction "Err [dmut_exec]: [stm_fail] reached"
+      dmut_block
     | stm_match_list e s1 xh xt s2 =>
       t <- dmut_eval_exp e ;;
       (dmut_assume_formula
@@ -1307,7 +1307,7 @@ Module Mutators
       dmut_assert_term t ;;
       dmut_pure t
     | stm_fail τ _ =>
-      dmut_contradiction "Err [dmut_exec_evar]: [stm_fail] reached"
+      dmut_block
     | stm_match_list e s1 xh xt s2 =>
       t <- dmut_eval_exp e ;;
       (dmut_assume_formula
