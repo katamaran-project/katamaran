@@ -303,9 +303,6 @@ Module Type HeapKit
        (Import assertkit : AssertionKit typekit termkit progkit)
        (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
 
-  (* Definition CEnv : SepContractEnv. *)
-  (* Definition CEnvEx : SepContractEnvEx. *)
-
   Import CtxNotations.
   Import EnvNotations.
 
@@ -335,21 +332,6 @@ Module Type HeapKit
       | asn_exist ς τ a => ∃ v, @inst_assertion (Σ ▻ (ς , τ)) (ι ► (ς , τ) ↦ v) a
     end.
 
-    (* Definition ValidContract {Γ τ} (c : SepContract Γ τ) : L := *)
-    (*   match c with *)
-    (*   | sep_contract_unit δ0 req ens => *)
-    (*     ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) --> *)
-    (*               interpret δΣ req ∧ interpret δΣ ens *)
-    (*   | sep_contract_result_pure δ0 result req ens => *)
-    (*     ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) --> *)
-    (*               interpret δΣ req ∧ interpret δΣ ens *)
-    (*   | @sep_contract_result _ Σ σ δ0 result req ens => *)
-    (*     ∀ δ δΣ, !!(δ = env_map (fun _ t => eval_term t δΣ) δ0) --> *)
-    (*               interpret δΣ req *)
-    (*             ∧ (∀ v, @interpret (Σ ▻ (result , σ)) (δΣ ► (result , σ) ↦ v) ens) *)
-    (*   | sep_contract_none _ => ⊤ *)
-    (*   end. *)
-
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) : LocalStore Δ :=
       inst_localstore ι (sep_contract_localstore c).
@@ -365,7 +347,6 @@ Module Type HeapKit
   End Contracts.
 
   Arguments inst_assertion {_ _ _} _ _.
-  (* Arguments ValidContract {_ _ _ _} _. *)
 
   Notation "r '↦' t" := (ptsreg r t) (at level 30).
 
