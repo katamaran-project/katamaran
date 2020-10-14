@@ -35,7 +35,8 @@ From Coq Require Import
      Strings.String
      Arith.PeanoNat
      ZArith.ZArith.
-
+From Coq Require
+     Vector.
 From Equations Require Import Equations.
 
 From MicroSail Require Import
@@ -251,6 +252,13 @@ Module Mutators
       | cons x xs => b ← f x ; bs ← traverse_list xs ; mret (cons b bs)
       end.
 
+    Fixpoint traverse_vector {n} (xs : Vector.t A n) : M (Vector.t B n) :=
+      match xs with
+      | Vector.nil _ => mret (Vector.nil B)
+      | Vector.cons _ x m xs =>
+        b ← f x ; bs ← traverse_vector xs ; mret (Vector.cons B b m bs)
+      end.
+
   End TraverseList.
 
   Section TraverseEnv.
@@ -285,6 +293,7 @@ Module Mutators
       | term_inl t           => term_inl <$> eval_term_evar t
       | term_inr t           => term_inr <$> eval_term_evar t
       | term_list ts         => term_list <$> traverse_list eval_term_evar ts
+      | term_bvec ts         => term_bvec <$> traverse_vector eval_term_evar ts
       | term_tuple ts        => term_tuple <$> traverse_env (@eval_term_evar) ts
       | @term_projtup _ _ t n _ p     => (fun t => term_projtup t n (p:=p)) <$> eval_term_evar t
       | term_union U K t     => term_union U K <$> eval_term_evar t
@@ -376,6 +385,7 @@ Module Mutators
       + reflexivity.
       + destruct X as [Xt Xts].
         rewrite Xt, (IHts Xts); reflexivity.
+    - admit.
     - admit.
     - rewrite IHt; reflexivity.
     - rewrite IHt; reflexivity.

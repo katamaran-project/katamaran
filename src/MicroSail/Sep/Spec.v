@@ -26,6 +26,9 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Coq Require
+     Vector.
+
 From MicroSail Require Import
      Notation
      Syntax.
@@ -113,6 +116,7 @@ Module Assertions
       | exp_inl e                => term_inl (symbolic_eval_exp e)
       | exp_inr e                => term_inr (symbolic_eval_exp e)
       | exp_list es              => term_list (List.map symbolic_eval_exp es)
+      | exp_bvec es              => term_bvec (Vector.map symbolic_eval_exp es)
       | exp_tuple es             => term_tuple (env_map (@symbolic_eval_exp) es)
       | @exp_projtup _ _ e n _ p => term_projtup (symbolic_eval_exp e) n (p := p)
       | exp_union E K e          => term_union E K (symbolic_eval_exp e)

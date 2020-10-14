@@ -39,6 +39,8 @@ From Coq Require Import
      Classes.Morphisms
      Classes.Equivalence
      Classes.RelationClasses.
+From Coq Require
+     Vector.
 
 From bbv Require
      Word.
@@ -458,7 +460,12 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | binop_and               : BinOp ty_bool ty_bool ty_bool
     | binop_or                : BinOp ty_bool ty_bool ty_bool
     | binop_pair {σ1 σ2 : Ty} : BinOp σ1 σ2 (ty_prod σ1 σ2)
-    | binop_cons {σ : Ty}     : BinOp σ (ty_list σ) (ty_list σ).
+    | binop_cons {σ : Ty}     : BinOp σ (ty_list σ) (ty_list σ)
+    | binop_bvplus {n}        : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
+    | binop_bvmult {n}        : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
+    | binop_bvcombine {m n}   : BinOp (ty_bvec m) (ty_bvec n) (ty_bvec (m + n))
+    .
+
     Local Set Transparent Obligations.
     Derive Signature NoConfusion for BinOp.
     Local Unset Transparent Obligations.
@@ -490,6 +497,18 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         f_equal2_dec binoptel_pair noConfusion_inv (eq_dec σ1 τ1) (eq_dec σ2 τ2)
       | @binop_cons σ  , @binop_cons τ   =>
         f_equal_dec binoptel_cons noConfusion_inv (eq_dec σ τ)
+      | @binop_bvplus m , @binop_bvplus n =>
+        f_equal_dec
+          (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvplus))
+          noConfusion_inv (eq_dec m n)
+      | @binop_bvmult m , @binop_bvmult n =>
+        f_equal_dec
+          (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvmult))
+          noConfusion_inv (eq_dec m n)
+      | @binop_bvcombine m1 m2 , @binop_bvcombine n1 n2 =>
+        f_equal2_dec
+          (fun m n => ((ty_bvec m, ty_bvec n, ty_bvec (m+n)), binop_bvcombine))
+          noConfusion_inv (eq_dec m1 n1) (eq_dec m2 n2)
       | _           , _            => right noConfusion_inv
       end.
 
@@ -543,6 +562,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | exp_inr     {σ1 σ2 : Ty} : Exp Γ σ2 -> Exp Γ (ty_sum σ1 σ2)
     | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty_list σ)
     (* Experimental features *)
+    | exp_bvec    {n} (es : Vector.t (Exp Γ ty_bit) n) : Exp Γ (ty_bvec n)
     | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty_tuple σs)
     | exp_projtup {σs : Ctx Ty} (e : Exp Γ (ty_tuple σs)) (n : nat) {σ : Ty}
                   {p : ctx_nth_is σs n σ} : Exp Γ σ
@@ -566,6 +586,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
       Let PL (σ : Ty) : list (Exp Γ σ) -> Type :=
         List.fold_right (fun e es => P _ e * es)%type unit.
+      Let PV (n : nat) (es : Vector.t (Exp Γ ty_bit) n) : Type :=
+        Vector.fold_right (fun e ps => P _ e * ps)%type es unit.
       Let PE : forall σs, Env (Exp Γ) σs -> Type :=
         Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
       Let PNE : forall (σs : Ctx (𝑹𝑭 * Ty)), NamedEnv (Exp Γ) σs -> Type :=
@@ -579,6 +601,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Hypothesis (P_inl     : forall (σ1 σ2 : Ty) (e : Exp Γ σ1), P σ1 e -> P (ty_sum σ1 σ2) (exp_inl e)).
       Hypothesis (P_inr     : forall (σ1 σ2 : Ty) (e : Exp Γ σ2), P σ2 e -> P (ty_sum σ1 σ2) (exp_inr e)).
       Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty_list σ) (exp_list es)).
+      Hypothesis (P_bvec    : forall (n : nat) (es : Vector.t (Exp Γ ty_bit) n), PV es -> P (ty_bvec n) (exp_bvec es)).
       Hypothesis (P_tuple   : forall (σs : Ctx Ty) (es : Env (Exp Γ) σs), PE es -> P (ty_tuple σs) (exp_tuple es)).
       Hypothesis (P_projtup : forall (σs : Ctx Ty) (e : Exp Γ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@exp_projtup _ _ e n _ p)).
       Hypothesis (P_union   : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (exp_union U K e)).
@@ -595,6 +618,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         | exp_inl e                 => ltac:(apply P_inl; auto)
         | exp_inr e                 => ltac:(apply P_inr; auto)
         | exp_list es               => ltac:(apply P_list; induction es; cbn; auto using unit)
+        | exp_bvec es               => ltac:(apply P_bvec; induction es; cbn; auto using unit)
         | exp_tuple es              => ltac:(apply P_tuple; induction es; cbn; auto using unit)
         | @exp_projtup _ σs e n σ p => ltac:(apply P_projtup; auto)
         | exp_union U K e           => ltac:(apply P_union; auto)
@@ -624,17 +648,20 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     Definition eval_binop {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Lit σ1 -> Lit σ2 -> Lit σ3 :=
       match op with
-      | binop_plus  => Z.add
-      | binop_times => Z.mul
-      | binop_minus => Z.sub
-      | binop_eq    => Z.eqb
-      | binop_le    => Z.leb
-      | binop_lt    => Z.ltb
-      | binop_gt    => Z.gtb
-      | binop_and   => andb
-      | binop_or    => fun v1 v2 => orb v1 v2
-      | binop_pair  => pair
-      | binop_cons  => cons
+      | binop_plus      => Z.add
+      | binop_times     => Z.mul
+      | binop_minus     => Z.sub
+      | binop_eq        => Z.eqb
+      | binop_le        => Z.leb
+      | binop_lt        => Z.ltb
+      | binop_gt        => Z.gtb
+      | binop_and       => andb
+      | binop_or        => fun v1 v2 => orb v1 v2
+      | binop_pair      => pair
+      | binop_cons      => cons
+      | binop_bvplus    => fun v1 v2 => Word.wplus v1 v2
+      | binop_bvmult    => fun v1 v2 => Word.wmult v1 v2
+      | binop_bvcombine => fun v1 v2 => Word.combine v1 v2
       end.
 
     Fixpoint eval {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
@@ -647,6 +674,14 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | exp_inl e           => inl (eval e δ)
       | exp_inr e           => inr (eval e δ)
       | exp_list es         => List.map (fun e => eval e δ) es
+      | exp_bvec es         => Vector.t_rect
+                                 _ (fun m (_ : Vector.t (Exp Γ ty_bit) m) => Word.word m)
+                                 Word.WO (fun eb m _ (vs : Word.word m) =>
+                                            match eval eb δ with
+                                            | bitzero => Word.WS false vs
+                                            | bitone => Word.WS true vs
+                                            end)
+                                 _ es
       | exp_tuple es        => Env_rect
                                  (fun σs _ => Lit (ty_tuple σs))
                                  tt
@@ -926,6 +961,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2)
     | term_list    {σ : Ty} (es : list (Term Σ σ)) : Term Σ (ty_list σ)
     (* Experimental features *)
+    | term_bvec    {n} (es : Vector.t (Term Σ ty_bit) n) : Term Σ (ty_bvec n)
     | term_tuple   {σs : Ctx Ty} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs)
     | term_projtup {σs : Ctx Ty} (e : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
                    {p : ctx_nth_is σs n σ} : Term Σ σ
@@ -943,6 +979,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments term_inl {_ _ _} _.
     Global Arguments term_inr {_ _ _} _.
     Global Arguments term_list {_ _} _.
+    Global Arguments term_bvec {_ _} _%exp.
     Global Arguments term_tuple {_ _} _%exp.
     Global Arguments term_projtup {_ _} _%exp _ {_ _}.
     Global Arguments term_union {_} _ _.
@@ -961,6 +998,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
       Let PL (σ : Ty) : list (Term Σ σ) -> Type :=
         List.fold_right (fun t ts => P _ t * ts)%type unit.
+      Let PV (n : nat) (es : Vector.t (Term Σ ty_bit) n) : Type :=
+        Vector.fold_right (fun e ps => P _ e * ps)%type es unit.
       Let PE : forall σs, Env (Term Σ) σs -> Type :=
         Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type.
       Let PNE : forall (σs : Ctx (𝑹𝑭 * Ty)), NamedEnv (Term Σ) σs -> Type :=
@@ -974,6 +1013,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
       Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
       Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
+      Hypothesis (P_bvec       : forall (n : nat) (es : Vector.t (Term Σ ty_bit) n), PV es -> P (ty_bvec n) (term_bvec es)).
       Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
       Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
       Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union U K e)).
@@ -989,6 +1029,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         | @term_not _ e                  => ltac:(eapply P_not; eauto)
         | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
         | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
+        | @term_bvec _ _ es              => ltac:(apply P_bvec; induction es; cbn; auto using unit)
         | @term_list _ σ es              => ltac:(eapply P_list; induction es; cbn; eauto using unit)
         | @term_tuple _ σs es            => ltac:(eapply P_tuple; induction es; cbn; eauto using unit)
         | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
@@ -1011,6 +1052,14 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | term_inl e           => inl (inst_term ι e)
       | term_inr e           => inr (inst_term ι e)
       | term_list es         => List.map (fun e => inst_term ι e) es
+      | term_bvec es         => Vector.t_rect
+                                 _ (fun m (_ : Vector.t (Term Σ ty_bit) m) => Word.word m)
+                                 Word.WO (fun eb m _ (vs : Word.word m) =>
+                                            match inst_term ι eb with
+                                            | bitzero => Word.WS false vs
+                                            | bitone => Word.WS true vs
+                                            end)
+                                 _ es
       | term_tuple es        => Env_rect
                                   (fun σs _ => Lit (ty_tuple σs))
                                   tt
@@ -1053,6 +1102,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
       Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
       Term_eqb (term_list xs) (term_list ys) := list_beq Term_eqb xs ys;
+      Term_eqb (term_bvec xs) (term_bvec ys) := Vector.eqb _ Term_eqb xs ys;
       Term_eqb (term_tuple x) (term_tuple y) :=
          @env_beq _ (Term Σ) (@Term_eqb _) _ x y;
       Term_eqb (@term_projtup σs x n _ p) (@term_projtup τs y m _ q)
@@ -1126,6 +1176,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
           constructor.
       - admit.
       - admit.
+      - admit.
       - destruct (𝑼𝑲_eq_dec K K0); cbn.
         + destruct e. specialize (IHt1 e4). microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
@@ -1152,6 +1203,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | @term_inl _ σ1 σ2 t0      => term_inl (sub_term ζ t0)
       | @term_inr _ σ1 σ2 t0      => term_inr (sub_term ζ t0)
       | @term_list _ σ es         => term_list (List.map (sub_term ζ) es)
+      | term_bvec es              => term_bvec (Vector.map (sub_term ζ) es)
       | term_tuple es             => term_tuple (env_map (fun σ => @sub_term σ _ _ ζ) es)
       | @term_projtup _ _ t n σ p => term_projtup (sub_term ζ t) n (p := p)
       | term_union U K t0         => term_union U K (sub_term ζ t0)
