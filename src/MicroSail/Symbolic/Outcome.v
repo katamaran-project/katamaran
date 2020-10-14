@@ -49,8 +49,10 @@ Inductive Outcome (A: Type) : Type :=
 | outcome_angelic_binary (o1 o2 : Outcome A)
 | outcome_demonic_binary (o1 o2 : Outcome A)
 | outcome_fail (msg: string)
+| outcome_block
 .
 Arguments outcome_fail {_} _.
+Arguments outcome_block {_}.
 
 Section TransparentObligations.
   Local Set Transparent Obligations.
@@ -58,11 +60,6 @@ Section TransparentObligations.
 End TransparentObligations.
 
 Bind Scope outcome_scope with Outcome.
-
-(* Definition outcome_fail {A : Type} : Outcome A := *)
-(*   outcome_angelic (fun i : Empty_set => match i with end). *)
-Definition outcome_block {A : Type} : Outcome A :=
-  outcome_demonic (fun i : Empty_set => match i with end).
 
 Definition outcome_angelic_list {A} (msg : string) : list A -> Outcome A :=
   fix outcome_angelic_list (xs : list A) :=
@@ -87,6 +84,7 @@ Fixpoint outcome_map {A B : Type} (f : A -> B) (o : Outcome A) : Outcome B :=
   | outcome_angelic_binary o1 o2 => outcome_angelic_binary (outcome_map f o1) (outcome_map f o2)
   | outcome_demonic_binary o1 o2 => outcome_demonic_binary (outcome_map f o1) (outcome_map f o2)
   | outcome_fail s               => outcome_fail s
+  | outcome_block                => outcome_block
   end.
 
 Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcome B :=
@@ -97,6 +95,7 @@ Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcom
   | outcome_angelic_binary o1 o2 => outcome_angelic_binary (outcome_bind o1 f) (outcome_bind o2 f)
   | outcome_demonic_binary o1 o2 => outcome_demonic_binary (outcome_bind o1 f) (outcome_bind o2 f)
   | outcome_fail s               => outcome_fail s
+  | outcome_block                => outcome_block
   end.
 
 Definition Error (s : string) : Prop := False.
@@ -110,6 +109,7 @@ Fixpoint outcome_satisfy {A : Type} (o : Outcome A) (P : A -> Prop) : Prop :=
   | outcome_angelic_binary o1 o2 => outcome_satisfy o1 P \/ outcome_satisfy o2 P
   | outcome_demonic_binary o1 o2 => outcome_satisfy o1 P /\ outcome_satisfy o2 P
   | outcome_fail s               => Error s
+  | outcome_block                => True
   end.
 
 Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
@@ -221,6 +221,7 @@ Section Unused.
     | outcome_demonic_binary o1 o2 =>
       outcome_satisfy_natded o1 P ∧ outcome_satisfy_natded o2 P
     | outcome_fail s => lfalse
+    | outcome_block => ltrue
   end.
 
   Axiom outcome_satisfy_natded_bind :
@@ -250,6 +251,7 @@ Section Unused.
         apply IHo1.
       + apply land_left2.
         apply IHo2.
+    - apply entails_refl.
     - apply entails_refl.
   Qed.
 
