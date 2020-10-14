@@ -273,7 +273,7 @@ Section WithBinding.
     Context {D : B -> Type}.
     Variable eqd : forall b, D b -> D b -> bool.
 
-    Equations env_beq {Γ : Ctx B} (δ1 δ2 : Env D Γ) : bool :=
+    Equations(noind) env_beq {Γ : Ctx B} (δ1 δ2 : Env D Γ) : bool :=
     env_beq env_nil               env_nil              := true;
     env_beq (env_snoc δ1 _ db1) (env_snoc δ2 _ db2) := env_beq δ1 δ2 && eqd db1 db2.
 
@@ -374,5 +374,5 @@ Definition uncurry_named {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Typ
 Definition curry_named {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : NamedEnv D Δ -> r) : abstract_named D Δ r :=
   curry f.
 
-Fixpoint ForallNamed {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) {struct Δ} : (NamedEnv D Δ -> Prop) -> Prop :=
+Definition ForallNamed {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) : (NamedEnv D Δ -> Prop) -> Prop :=
   @Forall (X * T) (fun xt => D (snd xt)) Δ.
