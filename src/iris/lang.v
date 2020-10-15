@@ -1317,7 +1317,7 @@ Module IrisInstance
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ'' efs) "%".
-    unfold language.prim_step in a; cbn in a.
+    cbn in a.
     dependent destruction a.
     dependent destruction H0.
     iModIntro. iModIntro.
@@ -1327,8 +1327,7 @@ Module IrisInstance
     iApply wp_compat_call_frame.
     iApply (wp_mono _ _ _ (fun v => match v with MkVal _ _ v0 => Q v0 end)).
     {
-      intros v. destruct v.
-      iIntros "Qv".
+      iIntros ([σ' v]) "Qv".
       by iFrame.
     }
     iApply ("tripbody" with "P").

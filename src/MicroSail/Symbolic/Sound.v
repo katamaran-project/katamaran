@@ -129,6 +129,14 @@ Module Soundness
     Proof.
       induction e; cbn; repeat f_equal; auto.
       { unfold inst_localstore; now rewrite env_lookup_map. }
+      2: {
+        induction es as [|eb n es IHes]; cbn in *.
+        { reflexivity. }
+        { destruct X as [-> Heqs].
+          destruct (inst_term ι (symbolic_eval_exp δΓΣ eb));
+            cbn; f_equal; auto.
+        }
+      }
       all: induction es; cbn in *; destruct_conjs; f_equal; auto.
     Qed.
 

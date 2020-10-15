@@ -29,7 +29,8 @@
 From Coq Require Import
      Program.Tactics
      Strings.String
-     ZArith.ZArith.
+     ZArith.ZArith
+     micromega.Lia.
 
 From Equations Require Import
      Equations.
@@ -500,11 +501,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Definition fun_write_reg : Stm ["reg" ∶ ty_enum regname,
                                   "w" ∶ ty_word
                                  ] ty_unit :=
+    stm_call_external (ghost open_ptsreg) [exp_var "reg"]%arg ;;
     match: exp_var "reg" in regname with
-    | R0 => stm_write_register reg0 (exp_var "w")
-    | R1 => stm_write_register reg1 (exp_var "w")
-    | R2 => stm_write_register reg2 (exp_var "w")
-    | R3 => stm_write_register reg3 (exp_var "w")
+    | R0 => let: "x" := stm_write_register reg0 (exp_var "w") in callghost (close_ptsreg R0) ;; stm_exp x
+    | R1 => let: "x" := stm_write_register reg1 (exp_var "w") in callghost (close_ptsreg R1) ;; stm_exp x
+    | R2 => let: "x" := stm_write_register reg2 (exp_var "w") in callghost (close_ptsreg R2) ;; stm_exp x
+    | R3 => let: "x" := stm_write_register reg3 (exp_var "w") in callghost (close_ptsreg R3) ;; stm_exp x
     end ;; stm_lit ty_unit tt.
 
   Definition fun_update_pc : Stm ctx_nil ty_unit :=
@@ -1058,13 +1060,44 @@ Module MinCapsContracts.
          | |- _ /\ _ => constructor
          end;
        cbn [List.length];
-       subst; try congruence; try omega;
+       subst; try congruence; try lia;
        auto
       ).
 
-  Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
+  Lemma valid_contract_read_reg : ValidContractDynMutEvar sep_contract_read_reg fun_read_reg.
+  Proof. intros [] []; compute; solve. Qed.
+
+  Lemma valid_contract_read_reg_cap : ValidContractDynMutEvar sep_contract_read_reg_cap fun_read_reg_cap.
   Proof.
-  Admitted.
-  Hint Resolve valid_contract_read_reg : contracts.
+    split;
+      [ compute; auto
+      | exists (term_var "result"); compute; firstorder congruence
+      ].
+  Qed.
+
+  Lemma valid_contract_read_reg_num : ValidContractDynMutEvar sep_contract_read_reg_num fun_read_reg_num.
+  Proof.
+    split;
+      [ exists (term_var "result"); compute; firstorder congruence
+      | compute; auto
+      ].
+  Qed.
+
+  Lemma valid_contract_write_reg : ValidContractDynMutEvar sep_contract_write_reg fun_write_reg.
+  Proof. intros [] []; compute; solve. Qed.
+
+  Lemma valid_contract_update_pc : ValidContractDynMutEvar sep_contract_update_pc fun_update_pc.
+  Proof.
+    exists (TM.term_record
+              capability
+              [TM.term_projrec (TM.term_var "opc") "cap_permission",
+               TM.term_projrec (TM.term_var "opc") "cap_begin",
+               TM.term_projrec (TM.term_var "opc") "cap_end",
+               TM.term_binop
+                 binop_plus
+                 (TM.term_projrec (TM.term_var "opc") "cap_cursor")
+                 (TM.term_lit TY.ty_int 1)]%arg).
+    compute; solve.
+  Qed.
 
 End MinCapsContracts.

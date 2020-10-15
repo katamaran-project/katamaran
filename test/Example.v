@@ -467,10 +467,12 @@ Module SepContracts.
     constructor.
     { exists GT; solve. }
     { solve.
-      destruct (Z.gtb_spec db db0); try discriminate.
-      destruct (Z.eqb_spec db db0); try discriminate.
-      destruct (Z.ltb_spec db db0); try discriminate.
-      lia.
+      (* (* If failure were disallowed, we would need to show that this case *)
+      (*    is impossible. *) *)
+      (* destruct (Z.gtb_spec db db0); try discriminate. *)
+      (* destruct (Z.eqb_spec db db0); try discriminate. *)
+      (* destruct (Z.ltb_spec db db0); try discriminate. *)
+      (* lia. *)
     }
   Qed.
   Hint Resolve valid_contract_cmp : contracts.

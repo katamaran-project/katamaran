@@ -226,10 +226,6 @@ Module ISATermKit <: (TermKit ISATypeKit).
   | semantics : Fun [ "instr" ∶ ty_union instruction] ty_unit
   | execute_load : Fun [ "dst" ∶ ty_enum register_tag, "src" ∶ ty_enum register_tag ] ty_unit
   | swapreg : Fun ["r1" ∶ ty_enum register_tag, "r2" ∶ ty_enum register_tag] ty_unit
-  | swapreg12 : Fun ctx_nil ty_unit
-  | add : Fun [ "x" ∶ ty_int , "y" ∶ ty_int ] ty_int
-  | double : Fun [ "z" ∶ ty_int ] ty_int
-  | add3 : Fun [ "x" ∶ ty_int , "y" ∶ ty_int , "z" ∶ ty_int ] ty_int
   .
 
   Inductive FunGhost : Set :=
@@ -402,13 +398,6 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     call wX (exp_var "r2") (exp_var "v1") ;;
     nop.
 
-  Definition fun_swapreg12 : Stm ctx_nil ty_unit :=
-    let: "x" := stm_read_register R1 in
-    let: "y" := stm_read_register R2 in
-    stm_write_register R1 y ;;
-    stm_write_register R2 x ;;
-    nop.
-
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f in Fun Δ τ return Stm Δ τ with
     | rX => fun_rX
@@ -428,11 +417,6 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     | semantics => fun_semantics
     | execute_load => fun_execute_load
     | swapreg => fun_swapreg
-    | swapreg12 => fun_swapreg12
-    | double => call add z z
-    | add => x + y
-    | add3 => let: "xy" := call add x y in
-              call add (exp_var "xy") z
     end.
 
   (* MEMORY *)
@@ -565,51 +549,15 @@ Module ISASymbolicContractKit <:
          asn_chunk (chunk_pred ptstoreg [ term_var "r", term_var "v_new" ]%env)
     |}.
 
-  Definition sep_contract_swapreg12 : SepContract ctx_nil ty_unit :=
-    {| sep_contract_logic_variables := ["u" ∶ ty_int, "v" ∶ ty_int];
-       sep_contract_localstore      := env_nil;
-       sep_contract_precondition    := (R1 ↦ term_var "u" ✱ R2 ↦ term_var "v");
-       sep_contract_result          := "_";
-       sep_contract_postcondition   := (R1 ↦ term_var "v" ✱ R2 ↦ term_var "u");
-    |}.
-
-  Definition sep_contract_add : SepContract [ "x" ∶ ty_int , "y" ∶ ty_int ] ty_int :=
-    {| sep_contract_logic_variables := ["x" ∶ ty_int, "y" ∶ ty_int];
-       sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result";
-       sep_contract_postcondition   := @asn_prop
-                                         ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
-                                         (fun x y res => res = x + y)
-                                       (* asn_eq *)
-                                       (*   (term_var "result") *)
-                                       (*   (term_binop binop_plus (term_var "x") (term_var "y")) *)
-    |}.
-
-  Definition sep_contract_double : SepContract [ "z" ∶ ty_int ] ty_int :=
-    {| sep_contract_logic_variables := ["z" ∶ ty_int];
-       sep_contract_localstore      := [term_var "z"]%arg;
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result";
-       sep_contract_postcondition   := @asn_prop
-                                         ["z" ∶ ty_int, "result" ∶ ty_int]
-                                         (fun z res => res = z + z)
-                                       (* asn_eq *)
-                                       (*   (term_var "result") *)
-                                       (*   (term_binop binop_plus (term_var "z") (term_var "z")) *)
-    |}.
-
-  Definition sep_contract_add3 : SepContract [ "x" ∶ ty_int , "y" ∶ ty_int , "z" ∶ ty_int ] ty_int :=
-    {| sep_contract_logic_variables := ["x" ∶ ty_int, "y" ∶ ty_int, "z" ∶ ty_int];
-       sep_contract_localstore      := [term_var "x", term_var "y", term_var "z"]%arg;
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result";
-       sep_contract_postcondition   := @asn_prop
-                                         ["x" ∶ ty_int, "y" ∶ ty_int, "z" ∶ ty_int, "result" ∶ ty_int]
-                                         (fun x y z res => res = x + y + z)
-                                       (* asn_eq *)
-                                       (*   (term_var "result") *)
-                                       (*   (term_binop binop_plus (term_binop binop_plus (term_var "x") (term_var "y")) (term_var "z")) *)
+  Definition sep_contract_swapreg : SepContract ["r1" ∶ ty_enum register_tag, "r2" ∶ ty_enum register_tag] ty_unit :=
+    {| sep_contract_pun_logic_variables := ["u" ∶ ty_int, "v" ∶ ty_int];
+       sep_contract_pun_precondition :=
+         asn_chunk (chunk_pred ptstoreg [term_var "r1", term_var "u"]) ✱
+         asn_chunk (chunk_pred ptstoreg [term_var "r2", term_var "v"]);
+       sep_contract_pun_result := "_";
+       sep_contract_pun_postcondition :=
+         asn_chunk (chunk_pred ptstoreg [term_var "r1", term_var "v"]) ✱
+         asn_chunk (chunk_pred ptstoreg [term_var "r2", term_var "u"])
     |}.
 
   Definition CEnv : SepContractEnv :=
@@ -617,10 +565,7 @@ Module ISASymbolicContractKit <:
       match f with
       | rX => Some sep_contract_rX
       | wX => Some sep_contract_wX
-      | swapreg12 => Some sep_contract_swapreg12
-      | add => Some sep_contract_add
-      | double => Some sep_contract_double
-      | add3 => Some sep_contract_add3
+      | swapreg => Some sep_contract_swapreg
       | _ => None
       end.
 
@@ -724,45 +669,17 @@ Local Ltac solve :=
      auto
     ).
 
-Lemma valid_contract_rX : ValidContractDynMut sep_contract_rX fun_rX.
-Admitted.
+Lemma valid_contract_rX : ValidContractDynMutEvar sep_contract_rX fun_rX.
+Proof. Time (intros [] []; compute; solve). Qed.
+Hint Resolve valid_contract_rX : contracts.
 
-(* Lemma valid_contract_rX : ValidContractDynMut sep_contract_rX fun_rX.
-Proof.
-  exists [term_var "reg_tag", term_var "v"]%arg.
-  intros [] []; exists (term_var "v").
-  - exists (env_snoc env_nil (_,_) (term_var "v")).
-    repeat constructor.
-  - solve.
-  - solve.
-  - solve.
-  - solve.
-  - exists (env_snoc env_nil (_,_) (term_var "v")).
-    repeat constructor.
-  - solve.
-  - solve.
-  - solve.
-  - solve.
-  - exists (env_snoc env_nil (_,_) (term_var "v")).
-    repeat constructor.
-  - solve.
-  - solve.
-  - solve.
-  - solve.
-  - exists (env_snoc env_nil (_,_) (term_var "v")). *)
-(*     repeat constructor. *)
-(* Qed. *)
-(* Hint Resolve valid_contract_rX : contracts. *)
-
-Lemma valid_contract_wX : ValidContractDynMut sep_contract_wX fun_wX.
-Proof.
-Admitted.
+Lemma valid_contract_wX : ValidContractDynMutEvar sep_contract_wX fun_wX.
+Proof. Time (intros [] []; compute; solve). Qed.
 Hint Resolve valid_contract_wX : contracts.
 
-Lemma valid_contract_swapreg12 : ValidContractDynMut sep_contract_swapreg12 fun_swapreg12.
-Proof.
-Admitted.
-Hint Resolve valid_contract_swapreg12 : contracts.
+Lemma valid_contract_swapreg : ValidContractDynMutEvar sep_contract_swapreg fun_swapreg.
+Proof. Time (compute; now do 5 right). Qed.
+Hint Resolve valid_contract_swapreg : contracts.
 
 (* Arguments asn_true {_} /. *)
 

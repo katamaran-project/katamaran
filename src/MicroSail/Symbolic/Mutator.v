@@ -35,7 +35,8 @@ From Coq Require Import
      Strings.String
      Arith.PeanoNat
      ZArith.ZArith.
-
+From Coq Require
+     Vector.
 From Equations Require Import Equations.
 
 From MicroSail Require Import
@@ -251,6 +252,13 @@ Module Mutators
       | cons x xs => b ← f x ; bs ← traverse_list xs ; mret (cons b bs)
       end.
 
+    Fixpoint traverse_vector {n} (xs : Vector.t A n) : M (Vector.t B n) :=
+      match xs with
+      | Vector.nil _ => mret (Vector.nil B)
+      | Vector.cons _ x m xs =>
+        b ← f x ; bs ← traverse_vector xs ; mret (Vector.cons B b m bs)
+      end.
+
   End TraverseList.
 
   Section TraverseEnv.
@@ -285,6 +293,7 @@ Module Mutators
       | term_inl t           => term_inl <$> eval_term_evar t
       | term_inr t           => term_inr <$> eval_term_evar t
       | term_list ts         => term_list <$> traverse_list eval_term_evar ts
+      | term_bvec ts         => term_bvec <$> traverse_vector eval_term_evar ts
       | term_tuple ts        => term_tuple <$> traverse_env (@eval_term_evar) ts
       | @term_projtup _ _ t n _ p     => (fun t => term_projtup t n (p:=p)) <$> eval_term_evar t
       | term_union U K t     => term_union U K <$> eval_term_evar t
@@ -376,6 +385,7 @@ Module Mutators
       + reflexivity.
       + destruct X as [Xt Xts].
         rewrite Xt, (IHts Xts); reflexivity.
+    - admit.
     - admit.
     - rewrite IHt; reflexivity.
     - rewrite IHt; reflexivity.
@@ -744,7 +754,7 @@ Module Mutators
       | stm_assert e1 _ => mutator_eval_exp e1 >>= fun t =>
                            mutator_assert_term t ;;
                            mutator_pure t
-      | stm_fail τ s => mutator_contradiction "Err [mutator_exec]: [stm_fail] reached"
+      | stm_fail τ s => mutator_block
       | stm_match_enum E e alts =>
         mutator_eval_exp e >>=
         mutator_exec_match_enum (fun K => mutator_exec (alts K))
@@ -757,7 +767,8 @@ Module Mutators
            in the ghost environment and the chunk matching will always instantiate it. *)
         | _            => mutator_fail "Err [mutator_exec]: You have found a unicorn."
         end
-      | @stm_write_register _ τ reg e => mutator_eval_exp e >>= fun v =>
+      | @stm_write_register _ τ reg e =>
+        mutator_eval_exp e >>= fun v =>
         mutator_consume_chunk_evar (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg ;;
         mutator_produce_chunk (chunk_ptsreg reg v) *>
         mutator_pure v
@@ -1174,7 +1185,7 @@ Module Mutators
       dmut_assert_term t ;;
       dmut_pure t
     | stm_fail τ _ =>
-      dmut_contradiction "Err [dmut_exec]: [stm_fail] reached"
+      dmut_block
     | stm_match_list e s1 xh xt s2 =>
       t <- dmut_eval_exp e ;;
       (dmut_assume_formula
@@ -1242,6 +1253,130 @@ Module Mutators
       dmut_fail "Err [dmut_exec]: [stm_bind] not supported"
     end.
 
+  Definition dmut_call_evar {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
+    match contract with
+    | MkSepContract _ _ Σe δ req result ens =>
+       dmut_consume_evar req (create_evarenv Σe Σr) >>= fun Σr1 ζ1 E1 =>
+       dmut_assert_namedenv_eq_evar δ (env_map (λ b : 𝑿 * Ty, sub_term ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
+       match evarenv_to_option_sub E2 with
+       | Some ξ => dmut_sub ξ (dmut_fresh (result,τ) (dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
+       | None => dmut_fail "Err [dmut_call_evar]: uninstantiated variables after consuming precondition"
+       end
+    end.
+
+  Fixpoint dmut_exec_evar {Γ σ Σ} (s : Stm Γ σ) {struct s} :
+    DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
+    match s with
+    | stm_lit τ l => dmut_pure (term_lit τ l)
+    | stm_exp e => dmut_eval_exp e
+    | stm_let x τ s1 s2 =>
+      t1 <- dmut_exec_evar s1 ;;
+      dmut_push_local t1 ;;
+      t2 <- dmut_exec_evar s2 ;;
+      dmut_pop_local ;;
+      dmut_pure t2
+    | stm_block δ s =>
+      dmut_pushs_local (lift_localstore δ) ;;
+      t <- dmut_exec_evar s ;;
+      dmut_pops_local _ ;;
+      dmut_pure t
+    | stm_assign x s =>
+      t <- dmut_exec_evar s ;;
+      dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
+      dmut_pure t
+    | stm_call f es =>
+      match CEnv f with
+      | Some c =>
+        ts <- dmut_eval_exps es ;;
+        dmut_call_evar c ts
+      | None   => dmut_fail "Err [dmut_exec_evar]: Function call without contract"
+      end
+    | stm_call_frame Δ δ τ s =>
+      δr <- dmut_get_local ;;
+      dmut_put_local (lift_localstore δ) ;;
+      dmut_bind_left (dmut_exec_evar s) (dmut_put_local δr)
+    | stm_call_external f es =>
+      ts <- dmut_eval_exps es ;;
+      dmut_call_evar (CEnvEx f) ts
+    | stm_if e s1 s2 =>
+        (dmut_assume_exp e ;; dmut_exec_evar s1) ⊗
+        (dmut_assume_exp (exp_not e) ;; dmut_exec_evar s2)
+    | stm_seq s1 s2 => dmut_exec_evar s1 ;; dmut_exec_evar s2
+    | stm_assert e1 _ =>
+      t <- dmut_eval_exp e1 ;;
+      dmut_assert_term t ;;
+      dmut_pure t
+    | stm_fail τ _ =>
+      dmut_block
+    | stm_match_list e s1 xh xt s2 =>
+      t <- dmut_eval_exp e ;;
+      (dmut_assume_formula
+         (formula_eq t (term_lit (ty_list _) nil));;
+       dmut_exec_evar s1) ⊗
+      (dmut_fresh
+         (𝑿to𝑺 xh,_) (dmut_fresh (𝑿to𝑺 xt,_)
+         (dmut_assume_formula
+            (formula_eq (sub_term (sub_comp sub_wk1 sub_wk1) t)
+                        (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
+          dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
+          dmut_push_local (@term_var _ _ _ inctx_zero);;
+          t2 <- dmut_exec_evar s2 ;;
+          dmut_pop_local ;;
+          dmut_pop_local ;;
+          dmut_pure t2)))
+    | stm_match_sum e xinl s1 xinr s2 =>
+      t <- dmut_eval_exp e ;;
+      dmut_fresh _
+        (dmut_assume_formula
+           (formula_eq (sub_term sub_wk1 t) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
+         dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
+         dmut_bind_left (dmut_exec_evar s1) dmut_pop_local) ⊗
+      dmut_fresh _
+        (dmut_assume_formula
+           (formula_eq (sub_term sub_wk1 t) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
+         dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
+         dmut_bind_left (dmut_exec_evar s2) dmut_pop_local)
+    | stm_match_pair e xl xr s =>
+      t <- dmut_eval_exp e ;;
+      dmut_fresh (𝑿to𝑺 xl,_) (dmut_fresh (𝑿to𝑺 xr,_)
+        (dmut_assume_formula
+           (formula_eq
+              (sub_term (sub_comp sub_wk1 sub_wk1) t)
+              (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
+         dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
+         dmut_push_local (@term_var _ _ _ inctx_zero);;
+         t <- dmut_exec_evar s ;;
+         dmut_pop_local ;;
+         dmut_pop_local ;;
+         dmut_pure t))
+    | @stm_match_enum _ E e τ alts =>
+      t <- dmut_eval_exp e ;;
+      ⨂ K : 𝑬𝑲 E =>
+        dmut_assume_formula (formula_eq t (term_enum E K));;
+        dmut_exec_evar (alts K)
+    | stm_match_tuple e p s =>
+      dmut_fail "Err [dmut_exec_evar]: [stm_match_tuple] not implemented"
+    | @stm_match_union _ _ _ τ _ =>
+      dmut_fail "Err [dmut_exec_evar]: [stm_match_union] not implemented"
+    | @stm_match_record _ _ _ _ _ τ _ =>
+      dmut_fail "Err [dmut_exec_evar]: [stm_match_record] not implemented"
+    | stm_read_register reg =>
+      dmut_consume_chunk_evar (chunk_ptsreg reg (@term_var [(dummy,_)] dummy _ inctx_zero)) [None]%arg >>= fun Σ1 _ E1 =>
+      match snd (env_unsnoc E1) with
+      | Some t => dmut_produce_chunk (chunk_ptsreg reg t) ;; dmut_pure t
+      (* Extracting the points to chunk should never fail here. Because there is exactly one binding
+         in the ghost environment and the chunk matching will always instantiate it. *)
+      | None => dmut_fail "Err [dmut_exec_evar]: You have found a unicorn."
+      end
+    | stm_write_register reg e =>
+      tnew <- dmut_eval_exp e ;;
+      dmut_consume_chunk_evar (chunk_ptsreg reg (@term_var _ dummy _ inctx_zero)) [None]%arg ;;
+      dmut_produce_chunk (chunk_ptsreg reg tnew) ;;
+      dmut_pure tnew
+    | stm_bind _ _ =>
+      dmut_fail "Err [dmut_exec_evar]: [stm_bind] not supported"
+    end.
+
   Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
     dmut_get_heap >>= fun _ _ h =>
     match h with
@@ -1262,8 +1397,25 @@ Module Mutators
         outcome_map (fun x => mutator_result_obligations (dmutres_result x)) out
     end.
 
+  Definition dmut_contract_evar {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
+    Stm Δ τ -> Outcome (list Obligation) :=
+    match c with
+    | MkSepContract _ _ Σ δ req result ens =>
+      fun s =>
+        let mut := (dmut_produce req ;;
+                    dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
+                    dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens) ;;
+                    dmut_leakcheck)%dmut in
+        let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
+        outcome_map (fun x => mutator_result_obligations (dmutres_result x)) out
+    end.
+
   Definition ValidContractDynMut (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
     (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
     outcome_satisfy (dmut_contract c body) valid_obligations.
+
+  Definition ValidContractDynMutEvar (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
+    (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    outcome_satisfy (dmut_contract_evar c body) valid_obligations.
 
 End Mutators.
