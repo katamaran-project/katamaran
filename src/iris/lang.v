@@ -1151,12 +1151,12 @@ Module IrisInstance
   Qed.
 
 
-  Definition ValidContractEnv (cenv : SepContractEnv) : iProp Σ :=
+  Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
     (∀ σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
       | Some (MkSepContract _ _ ctxΣ θΔ pre result post) =>
-        ∀ (ι : SymInstance ctxΣ) (δ : LocalStore σs),
-          semTriple δ (inst_assertion (L:=iProp Σ) ι pre) (Pi f)
+        ∀ (ι : SymInstance ctxΣ),
+          semTriple (inst_localstore ι θΔ) (inst_assertion (L:=iProp Σ) ι pre) (Pi f)
                     (fun v δ' => inst_assertion (env_snoc ι (result , σ) v) post)
       | None => True
       end)%I.
@@ -1213,7 +1213,7 @@ Module IrisInstance
         (Q : Lit σ -> iProp Σ) :
         CEnv f = Some c ->
         CTriple Δ (evals es δ) P Q c ->
-        (⊢ ▷ ValidContractEnv CEnv -∗
+        (⊢ ▷ ValidContractEnvSem CEnv -∗
            semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')))%I.
   Proof.
     iIntros (ceq ctrip) "cenv P".
@@ -1235,8 +1235,9 @@ Module IrisInstance
     dependent destruction ctrip.
     - iSpecialize ("cenv" $! _ _ f).
       rewrite ceq.
-      iSpecialize ("cenv" $! ι (evals es δ) with "P").
+      iSpecialize ("cenv" $! ι with "P").
       iApply wp_compat_call_frame.
+      rewrite H0.
       iApply (wp_mono with "cenv").
       iIntros ([δ' v]) "ensv".
       by iFrame.
@@ -1336,7 +1337,7 @@ Module IrisInstance
   Lemma sound_stm {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
     forall (PRE : iProp Σ) (POST : Lit τ -> LocalStore Γ -> iProp Σ)
       (triple : δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄),
-      ⊢ (□ ▷ ValidContractEnv CEnv -∗
+      ⊢ (□ ▷ ValidContractEnvSem CEnv -∗
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST triple) "#vcenv".
@@ -1373,14 +1374,19 @@ Module IrisInstance
   Qed.
 
   Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
-      ⊢ ValidContractEnv CEnv.
+    ValidContractEnv CEnv ->
+    ⊢ ValidContractEnvSem CEnv.
   Proof.
+    intros vcenv.
     iLöb as "IH".
     iIntros (σs σ f).
-    destruct (CEnv f) as [[]|].
-    - iIntros (ι δ1).
-      admit.
-  Admitted.
+    specialize (vcenv σs σ f).
+    destruct (CEnv f) as [[]|];[|trivial].
+    specialize (vcenv _ eq_refl).
+    iIntros (ι).
+    iApply sound_stm; [|trivial].
+    apply (vcenv ι).
+  Qed.
 
 
   End IrisInstance.
