@@ -60,11 +60,12 @@ Definition HV : Set := RegName.
 Definition RV : Set := LV + Z.
 
 Inductive Instruction : Set :=
-| jmp      (lv : LV)
-| jnz      (lv : LV) (rv : RV)
-| move     (lv : LV) (rv : RV)
-| load     (lv : LV) (hv : HV)
-| store    (hv : HV) (rv : RV)
+| jr       (lv : LV)
+| j        (offset : Z)
+| bnez     (lv : LV) (immediate : Z)
+| mv       (lv : LV) (hv : HV)
+| ld       (lv : LV) (hv : HV) (immediate : Z)
+| sd       (hv : HV) (lv : LV) (immediate : Z)
 (* | lt       (lv : LV) (rv1 rv2 : RV) *)
 (* | plus     (lv : LV) (rv1 rv2 : RV) *)
 (* | minus    (lv : LV) (rv1 rv2 : RV) *)
@@ -77,14 +78,15 @@ Inductive Instruction : Set :=
 (* | gete     (lv lv' : LV) *)
 (* | geta     (lv lv' : LV) *)
 (* | fail *)
-| halt.
+| ret.
 
 Inductive InstructionConstructor : Set :=
-| kjmp
-| kjnz
-| kmove
-| kload
-| kstore
+| kjr
+| kj
+| kbnez
+| kmv
+| kld
+| ksd
 (* | klt *)
 (* | kplus *)
 (* | kminus *)
@@ -97,7 +99,7 @@ Inductive InstructionConstructor : Set :=
 (* | kgete *)
 (* | kgeta *)
 (* | kfail *)
-| khalt.
+| kret.
 
 Section Records.
   Local Set Primitive Projections.
@@ -228,11 +230,12 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
     match U with
     | instruction => fun K =>
       match K with
-      | kjmp      => ty_lv
-      | kjnz      => ty_prod ty_lv ty_rv
-      | kmove     => ty_prod ty_lv ty_rv
-      | kload     => ty_prod ty_lv ty_hv
-      | kstore    => ty_prod ty_lv ty_rv
+      | kjr       => ty_lv
+      | kj        => ty_int
+      | kbnez     => ty_prod ty_lv ty_int
+      | kmv       => ty_prod ty_lv ty_hv
+      | kld       => ty_prod ty_lv (ty_prod ty_hv ty_int)
+      | ksd       => ty_prod ty_hv (ty_prod ty_lv ty_int)
       (* | klt       => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
       (* | kplus     => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
       (* | kminus    => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
@@ -245,7 +248,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       (* | kgete     => ty_prod ty_lv ty_lv *)
       (* | kgeta     => ty_prod ty_lv ty_lv *)
       (* | kfail     => ty_unit *)
-      | khalt     => ty_unit
+      | kret      => ty_unit
       end
     end.
 
@@ -253,11 +256,12 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
     match U with
     | instruction => fun Kv =>
       match Kv with
-      | existT kjmp      lv                 => jmp lv
-      | existT kjnz      (lv , rv)          => jnz lv rv
-      | existT kmove     (lv , rv)          => move lv rv
-      | existT kload     (lv , hv)          => load lv hv
-      | existT kstore    (hv , rv)          => store hv rv
+      | existT kjr       lv                 => jr lv
+      | existT kj        offset             => j offset
+      | existT kbnez     (lv , immediate)   => bnez lv immediate
+      | existT kmv       (lv , hv)          => mv lv hv
+      | existT kld       (lv , (hv , immediate)) => ld lv hv immediate
+      | existT ksd       (hv , (lv , immediate)) => sd hv lv immediate
       (* | existT klt       (lv , (rv1 , rv2)) => lt lv rv1 rv2 *)
       (* | existT kplus     (lv , (rv1 , rv2)) => plus lv rv1 rv2 *)
       (* | existT kminus    (lv , (rv1 , rv2)) => minus lv rv1 rv2 *)
@@ -270,18 +274,19 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       (* | existT kgete     (lv , lv')         => gete lv lv' *)
       (* | existT kgeta     (lv , lv')         => geta lv lv' *)
       (* | existT kfail     tt                 => fail *)
-      | existT khalt     tt                 => halt
+      | existT kret      tt                 => ret
       end
     end.
   Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
     match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Lit (𝑼𝑲_Ty u K)}) with
     | instruction => fun Kv =>
       match Kv with
-      | jmp lv            => existT kjmp      lv
-      | jnz lv rv         => existT kjnz      (lv , rv)
-      | move lv rv        => existT kmove     (lv , rv)
-      | load lv hv        => existT kload     (lv , hv)
-      | store hv rv       => existT kstore    (hv , rv)
+      | jr  lv             => existT kjr   lv
+      | j offset           => existT kj    offset
+      | bnez lv immediate  => existT kbnez (lv , immediate)
+      | mv lv hv           => existT kmv   (lv , hv)
+      | ld lv hv immediate => existT kld   (lv , (hv , immediate))
+      | sd hv lv immediate => existT ksd   (hv , (lv , immediate))
       (* | lt lv rv1 rv2     => existT klt       (lv , (rv1 , rv2)) *)
       (* | plus lv rv1 rv2   => existT kplus     (lv , (rv1 , rv2)) *)
       (* | minus lv rv1 rv2  => existT kminus    (lv , (rv1 , rv2)) *)
@@ -294,7 +299,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       (* | gete lv lv'       => existT kgete     (lv , lv') *)
       (* | geta lv lv'       => existT kgeta     (lv , lv') *)
       (* | fail              => existT kfail     tt *)
-      | halt              => existT khalt     tt
+      | ret                => existT kret  tt
       end
     end.
   Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
@@ -359,6 +364,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
                           "w"  ∶ ty_word
                          ] ty_unit
   | update_pc      : Fun ctx_nil ty_unit
+  | add_pc         : Fun ["offset" ∶ ty_int] ty_unit
   | read_mem       : Fun ["a"   ∶ ty_addr ] ty_memval
   | write_mem      : Fun ["a"   ∶ ty_addr,
                           "v"   ∶ ty_memval
@@ -374,12 +380,13 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   | within_bounds  : Fun ["c"   ∶ ty_cap ] ty_bool
   | compute_rv     : Fun ["rv" ∶ ty_rv] ty_word
   | compute_rv_num : Fun ["rv" ∶ ty_rv] ty_int
-  | exec_jmp       : Fun ["lv" ∶ ty_lv] ty_bool
-  | exec_jnz       : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv] ty_bool
-  | exec_move      : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv ] ty_bool
-  | exec_load      : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_bool
-  | exec_store     : Fun ["lv" ∶ ty_lv, "rv" ∶ ty_rv ] ty_bool
-  | exec_halt      : Fun ε ty_bool
+  | exec_jr        : Fun ["lv" ∶ ty_lv] ty_bool
+  | exec_j         : Fun ["offset" ∶ ty_int] ty_bool
+  | exec_bnez      : Fun ["lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
+  | exec_mv        : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_bool
+  | exec_ld        : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
+  | exec_sd        : Fun ["hv" ∶ ty_hv, "lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
+  | exec_ret       : Fun ε ty_bool
   | exec_instr     : Fun ["i" ∶ ty_instr] ty_bool
   | exec           : Fun ε ty_bool
   | loop           : Fun ε ty_unit
@@ -446,6 +453,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Local Notation "'r'"  := (@exp_var _ "r" _ _) : exp_scope.
   Local Notation "'w'"  := (@exp_var _ "w" _ _) : exp_scope.
   Local Notation "'x'"  := (@exp_var _ "x" _ _) : exp_scope.
+  Local Notation "'immediate'" := (@exp_var _ "immediate" _ _) : exp_scope.
+  Local Notation "'offset'" := (@exp_var _ "offset" _ _) : exp_scope.
 
   Local Notation "'c'"  := "c" : string_scope.
   Local Notation "'e'"  := "e" : string_scope.
@@ -458,6 +467,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Local Notation "'q'"  := "q" : string_scope.
   Local Notation "'r'"  := "r" : string_scope.
   Local Notation "'w'"  := "w" : string_scope.
+  Local Notation "'immediate'" := "immediate" : string_scope.
+  Local Notation "'offset'" := "offset" : string_scope.
 
   Notation "'callghost' f" :=
     (stm_call_external (ghost f) env_nil)
@@ -504,6 +515,17 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
                         ((exp_var "c")․"cap_begin"),
                         ((exp_var "c")․"cap_end"),
                         ((exp_var "c")․"cap_cursor") + lit_int 1
+                      ]%exp%arg) ;;
+    stm_lit ty_unit tt.
+
+  Definition fun_add_pc : Stm ["offset" ∶ ty_int ] ty_unit :=
+    let: "c" := stm_read_register pc in
+    stm_write_register pc
+      (exp_record capability
+                      [ ((exp_var "c")․"cap_permission"),
+                        ((exp_var "c")․"cap_begin"),
+                        ((exp_var "c")․"cap_end"),
+                        ((exp_var "c")․"cap_cursor") + (exp_var "offset")
                       ]%exp%arg) ;;
     stm_lit ty_unit tt.
 
@@ -554,23 +576,35 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     Let int : Ty := ty_int.
     Let word : Ty := ty_word.
 
-    Definition fun_exec_store : Stm [lv ∶ ty_lv, rv ∶ ty_rv] ty_bool :=
-      let: c ∶ cap  := call read_reg_cap lv in
-      let: p ∶ bool := call write_allowed c․perm in
-      stm_assert p (exp_lit _ ty_string "Err: [exec_store] no write permission") ;;
+    Definition fun_exec_sd : Stm [hv ∶ ty_hv, lv ∶ ty_lv, "immediate" ∶ ty_int ] ty_bool :=
+      let: "base_cap" ∶ cap  := call read_reg_cap lv in
+      let: "c" ∶ cap  := stm_exp (exp_record capability
+                      [ ((exp_var "base_cap")․"cap_permission"),
+                        ((exp_var "base_cap")․"cap_begin"),
+                        ((exp_var "base_cap")․"cap_end"),
+                        ((exp_var "base_cap")․"cap_cursor") + (exp_var "immediate")
+                      ]%exp%arg) in
+      let: p ∶ bool := call read_allowed c․perm in
+      stm_assert p (exp_lit _ ty_string "Err: [exec_sd] no write permission") ;;
       let: q ∶ bool := call within_bounds c in
-      stm_assert q (exp_lit _ ty_string "Err: [exec_store] out of bounds") ;;
-      let: w ∶ int := call compute_rv_num rv in
+      stm_assert q (exp_lit _ ty_string "Err: [exec_sd] out of bounds") ;;
+      let: w ∶ int := call read_reg_num hv in
       call write_mem c․cursor w ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
-    Definition fun_exec_load : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_bool :=
-      let: c ∶ cap  := call read_reg_cap hv in
+    Definition fun_exec_ld : Stm [lv ∶ ty_lv, hv ∶ ty_hv, "immediate" ∶ ty_int ] ty_bool :=
+      let: "base_cap" ∶ cap  := call read_reg_cap hv in
+      let: "c" ∶ cap  := stm_exp (exp_record capability
+                      [ ((exp_var "base_cap")․"cap_permission"),
+                        ((exp_var "base_cap")․"cap_begin"),
+                        ((exp_var "base_cap")․"cap_end"),
+                        ((exp_var "base_cap")․"cap_cursor") + (exp_var "immediate")
+                      ]%exp%arg) in
       let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (exp_lit _ ty_string "Err: [exec_load] no read permission") ;;
+      stm_assert p (exp_lit _ ty_string "Err: [exec_ld] no read permission") ;;
       let: q ∶ bool := call within_bounds c in
-      stm_assert q (exp_lit _ ty_string "Err: [exec_load] out of bounds") ;;
+      stm_assert q (exp_lit _ ty_string "Err: [exec_ld] out of bounds") ;;
       let: n ∶ ty_memval := call read_mem c․cursor in
       call write_reg lv (exp_inl (exp_var n)) ;;
       call update_pc ;;
@@ -588,35 +622,48 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       | inr c => fail "Err [read_reg_num]: expect register to hold a number"
       end.
 
-    Definition fun_exec_halt : Stm ε ty_bool :=
+    Definition fun_exec_ret : Stm ε ty_bool :=
       stm_exp (exp_lit _ ty_bool false).
 
-    Definition fun_exec_move : Stm [lv ∶ ty_lv, rv ∶ ty_rv] ty_bool :=
-      let: w ∶ word := call compute_rv (exp_var rv) in
+    Definition fun_exec_mv : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_bool :=
+      let: w ∶ word := call read_reg (exp_var hv) in
       call write_reg lv (exp_var w) ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
-    Definition fun_exec_jmp : Stm [lv ∶ ty_lv] ty_bool :=
+    Definition fun_exec_jr : Stm [lv ∶ ty_lv] ty_bool :=
       let: "c" ∶ ty_cap := call read_reg_cap lv in
       stm_write_register pc c ;;
       stm_lit ty_bool true.
 
-    Definition fun_exec_jnz : Stm [lv ∶ ty_lv, rv ∶ ty_rv ] ty_bool :=
-      let: "c" ∶ ty_int := call compute_rv_num (exp_var rv) in
+    Definition fun_exec_j : Stm [offset ∶ ty_int ] ty_bool :=
+      call update_pc ;;
+      call add_pc (exp_var offset) ;;
+      stm_lit ty_bool true.
+
+    Definition fun_exec_bnez : Stm [lv ∶ ty_lv, immediate ∶ ty_int ] ty_bool :=
+      let: "c" ∶ ty_int := call read_reg_num (exp_var lv) in
       stm_if (exp_binop binop_eq c (exp_lit _ ty_int 0))
              (call update_pc ;; stm_lit ty_bool true)
-             (call exec_jmp lv).
+             (call add_pc (exp_var immediate) ;; stm_lit ty_bool true).
 
     Definition fun_exec_instr : Stm [i ∶ ty_instr] ty_bool :=
       stm_match_union instruction (exp_var i)
                       (fun K => match K with
-                            | kjmp => alt _ (pat_var lv) (call exec_jmp lv)
-                            | kjnz => alt _ (pat_pair lv rv) (call exec_jnz lv rv)
-                            | kmove => alt _ (pat_pair lv rv) (call exec_move lv rv)
-                            | kload => alt _ (pat_pair lv hv) (call exec_load (exp_var lv) (exp_var hv))
-                            | kstore => alt _ (pat_pair lv rv) (call exec_store (exp_var lv) (exp_var rv))
-                            | khalt => alt _ pat_unit (call exec_halt)
+                            | kjr => alt _ (pat_var lv) (call exec_jr lv)
+                            | kj  => alt _ (pat_var offset) (call exec_j offset)
+                            | kbnez => alt _ (pat_pair lv immediate) (call exec_bnez lv immediate)
+                            | kmv => alt _ (pat_pair lv hv) (call exec_mv lv hv)
+                            | kld => alt _ (pat_pair lv "s") (match: (exp_var "s") in ( ty_hv , ty_int ) with
+                                                              | ( hv , immediate ) =>
+                                                                (call exec_ld (exp_var lv) (exp_var hv)
+                                                                      (exp_var immediate))
+                                                              end)
+                            | ksd => alt _ (pat_pair hv "s") (match: (exp_var "s") in ( ty_lv, ty_int ) with
+                                                              | ( lv , immediate ) =>
+                                                                (call exec_sd (exp_var hv) (exp_var lv) (exp_var immediate))
+                                                                  end)
+                            | kret => alt _ pat_unit (call exec_ret)
                             end).
 
     Definition fun_read_mem : Stm ["a"   ∶ ty_addr ] ty_memval :=
@@ -628,9 +675,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     Definition fun_exec : Stm ε ty_bool :=
       let: "c" := stm_read_register pc in
       let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (exp_lit _ ty_string "Err: [exec_load] no read permission") ;;
+      stm_assert p (exp_lit _ ty_string "Err: [exec_ld] no read permission") ;;
       let: q ∶ bool := call within_bounds c in
-      stm_assert q (exp_lit _ ty_string "Err: [exec_load] out of bounds") ;;
+      stm_assert q (exp_lit _ ty_string "Err: [exec_ld] out of bounds") ;;
       let: n ∶ ty_memval := call read_mem c․cursor in
       let: i ∶ ty_instr := callex dI (exp_var n) in
       call exec_instr i.
@@ -650,6 +697,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | read_reg_num   => fun_read_reg_num
     | write_reg      => fun_write_reg
     | update_pc      => fun_update_pc
+    | add_pc         => fun_add_pc
     | read_mem       => fun_read_mem
     | write_mem      => fun_write_mem
     | read_allowed   => fun_read_allowed
@@ -657,12 +705,13 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     (* | sub_perm       => fun_sub_perm *)
     | upper_bound    => fun_upper_bound
     | within_bounds  => fun_within_bounds
-    | exec_jmp       => fun_exec_jmp
-    | exec_jnz       => fun_exec_jnz
-    | exec_move      => fun_exec_move
-    | exec_load      => fun_exec_load
-    | exec_store     => fun_exec_store
-    | exec_halt      => fun_exec_halt
+    | exec_jr        => fun_exec_jr
+    | exec_j         => fun_exec_j
+    | exec_bnez      => fun_exec_bnez
+    | exec_mv        => fun_exec_mv
+    | exec_ld        => fun_exec_ld
+    | exec_sd        => fun_exec_sd
+    | exec_ret       => fun_exec_ret
     | exec_instr     => fun_exec_instr
     | compute_rv     => fun_compute_rv
     | compute_rv_num => fun_compute_rv_num
@@ -692,7 +741,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
 
   Definition fun_dI (code : Lit ty_int) : string + Lit ty_instr :=
     (* TODO: actually decode to non-trivial instructions? *)
-    inr halt.
+    inr ret.
 
   Inductive CallEx : forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
   | callex_rM {addr : Z} {γ : RegStore} {μ : Memory} :
@@ -800,27 +849,27 @@ Module MinCapsContracts.
 
       @pre machInv;
       @post machInv;
-      bool exec_store(lv : lv, hv : memval)
+      bool exec_sd(lv : lv, hv : memval, immediate : Z)
 
       @pre machInv;
       @post machInv;
-      bool exec_load(lv : lv, hv : memval)
+      bool exec_ld(lv : lv, hv : memval, immediate : Z)
 
       @pre machInv;
       @post machInv;
-      bool exec_jmp(lv : lv)
+      bool exec_jr(lv : lv)
 
       @pre machInv;
       @post machInv;
-      bool exec_jnz(lv : lv, rv : ty_rv)
+      bool exec_bnez(lv : lv, immediate : Z)
 
       @pre machInv;
       @post machInv;
-      bool exec_move(lv : lv, rv : ty_rv)
+      bool exec_mv(lv : lv, rv : ty_rv)
 
       @pre machInv;
       @post machInv;
-      bool exec_halt
+      bool exec_ret
 
       @pre machInv;
       @post machInv;
