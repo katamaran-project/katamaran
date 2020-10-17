@@ -29,6 +29,7 @@
 From Coq Require Import
      Bool.Bool
      Lists.List
+     Logic.FinFun
      Strings.String
      ZArith.ZArith
      ssr.ssrbool.
@@ -39,7 +40,8 @@ From Equations Require Import
 (* stdpp changes a lot of flags and changes implicit arguments of standard
    library functions and constructors. Import the module here, so that the
    changes are consistently applied over our code base. *)
-From stdpp Require base.
+From stdpp Require
+     base finite list option vector.
 
 Import ListNotations.
 
@@ -105,14 +107,36 @@ Section Equality.
       right (fun e => p (f_equal (@pr1 _ (fun _ => _)) (inj e)))
     end.
 
+  Local Set Transparent Obligations.
+
+  Global Instance Z_eqdec : EqDec Z := Z.eq_dec.
+  Global Instance string_eqdec : EqDec string := string_dec.
+  Derive NoConfusion EqDec for Empty_set.
+
+  Global Instance option_eqdec `{EqDec A} : EqDec (option A).
+  Proof. eqdec_proof. Defined.
+  Global Instance prod_eqdec `{EqDec A, EqDec B} : EqDec (prod A B).
+  Proof. eqdec_proof. Defined.
+  Global Instance sum_eqdec `{EqDec A, EqDec B} : EqDec (sum A B).
+  Proof. eqdec_proof. Defined.
+
+  Global Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
+    base.EqDecision A | 10 := eqdec.
+
 End Equality.
 
-Instance Z_eqdec : EqDec Z := Z.eq_dec.
-Instance string_eqdec : EqDec string := string_dec.
-Derive NoConfusion EqDec for Empty_set.
+Section Finite.
 
-Instance option_eqdec {A} `(EqDec A) : EqDec (option A).
-Proof. eqdec_proof. Defined.
+  Import stdpp.finite.
+
+  Lemma nodup_fixed `{EqDec A} (l : list A) : nodup eq_dec l = l -> NoDup l.
+  Proof.
+    intros <-.
+    apply NoDup_ListNoDup.
+    apply NoDup_nodup.
+  Qed.
+
+End Finite.
 
 Definition IsSome {A : Type} (m : option A) : Type :=
   match m with

@@ -44,7 +44,8 @@ From MicroSail Require Import
      Symbolic.Outcome
      Syntax.
 
-From stdpp Require Import base list option.
+From stdpp Require
+     base list option.
 
 Import CtxNotations.
 Import EnvNotations.
@@ -236,13 +237,15 @@ Module Mutators
 
     Definition extract_chunk_eqb (ce : Chunk Σ) (h : SymbolicHeap Σ) (pc : PathCondition Σ) :
       list (PathCondition Σ * SymbolicHeap Σ) :=
-      omap
+      stdpp.base.omap
         (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk_eqb ce cr pc))
         (heap_extractions h).
 
   End ChunkExtraction.
 
   Section TraverseList.
+
+    Import stdpp.base.
 
     Context `{MRet M, MBind M} {A B : Type} (f : A -> M B).
 
@@ -254,14 +257,16 @@ Module Mutators
 
     Fixpoint traverse_vector {n} (xs : Vector.t A n) : M (Vector.t B n) :=
       match xs with
-      | Vector.nil _ => mret (Vector.nil B)
-      | Vector.cons _ x m xs =>
-        b ← f x ; bs ← traverse_vector xs ; mret (Vector.cons B b m bs)
+      | Vector.nil => mret Vector.nil
+      | Vector.cons x xs =>
+        b ← f x ; bs ← traverse_vector xs ; mret (Vector.cons b bs)
       end.
 
   End TraverseList.
 
   Section TraverseEnv.
+
+    Import stdpp.base.
 
     Context `{MRet M, MBind M} {I : Set} {A B : I -> Type} (f : forall i : I, A i -> M (B i)).
 
@@ -279,6 +284,9 @@ Module Mutators
     env_tabulate (fun _ _ => None).
 
   Section WithEvarEnv.
+
+    Import stdpp.base stdpp.option.
+
     Context {Σe Σr} (δ : EvarEnv Σe Σr).
 
     Fixpoint eval_term_evar {σ : Ty} (t : Term Σe σ) {struct t} : option (Term Σr σ) :=
@@ -362,36 +370,36 @@ Module Mutators
         (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk ce cr L))
         (heap_extractions h).
 
+    Definition evarenv_to_option_sub : option (Sub Σe Σr) :=
+      traverse_env (M := option) (fun b mt => mt) δ.
+
+    Lemma eval_term_evar_refines_sub_term (ζ : Sub Σe Σr) :
+      evarenv_to_option_sub = Some ζ ->
+      forall σ (t : Term _ σ), eval_term_evar t = Some (sub_term ζ t).
+    Proof.
+      intros hyp.
+      induction t; cbn in *.
+      - admit.
+      - reflexivity.
+      - rewrite IHt1, IHt2; reflexivity.
+      - rewrite IHt; reflexivity.
+      - rewrite IHt; reflexivity.
+      - rewrite IHt; reflexivity.
+      - rewrite IHt; reflexivity.
+      - apply fmap_Some_2.
+        induction es as [|t ts]; cbn in *.
+        + reflexivity.
+        + destruct X as [Xt Xts].
+          rewrite Xt, (IHts Xts); reflexivity.
+      - admit.
+      - admit.
+      - rewrite IHt; reflexivity.
+      - rewrite IHt; reflexivity.
+      - admit.
+      - rewrite IHt; reflexivity.
+    Admitted.
+
   End WithEvarEnv.
-
-  Definition evarenv_to_option_sub {Σe Σr} (δ : EvarEnv Σe Σr) : option (Sub Σe Σr) :=
-    traverse_env (M := option) (fun b mt => mt) δ.
-
-  Lemma eval_term_evar_refines_sub_term {Σe Σr} (δ : EvarEnv Σe Σr) (ζ : Sub Σe Σr) :
-    evarenv_to_option_sub δ = Some ζ ->
-    forall σ (t : Term _ σ), eval_term_evar δ t = Some (sub_term ζ t).
-  Proof.
-    intros hyp.
-    induction t; cbn in *.
-    - admit.
-    - reflexivity.
-    - rewrite IHt1, IHt2; reflexivity.
-    - rewrite IHt; reflexivity.
-    - rewrite IHt; reflexivity.
-    - rewrite IHt; reflexivity.
-    - rewrite IHt; reflexivity.
-    - apply fmap_Some_2.
-      induction es as [|t ts]; cbn in *.
-      + reflexivity.
-      + destruct X as [Xt Xts].
-        rewrite Xt, (IHts Xts); reflexivity.
-    - admit.
-    - admit.
-    - rewrite IHt; reflexivity.
-    - rewrite IHt; reflexivity.
-    - admit.
-    - rewrite IHt; reflexivity.
-  Admitted.
 
   Section MutatorResult.
 
@@ -1257,7 +1265,7 @@ Module Mutators
     match contract with
     | MkSepContract _ _ Σe δ req result ens =>
        dmut_consume_evar req (create_evarenv Σe Σr) >>= fun Σr1 ζ1 E1 =>
-       dmut_assert_namedenv_eq_evar δ (env_map (λ b : 𝑿 * Ty, sub_term ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
+       dmut_assert_namedenv_eq_evar δ (env_map (fun _ => sub_term ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
        match evarenv_to_option_sub E2 with
        | Some ξ => dmut_sub ξ (dmut_fresh (result,τ) (dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
        | None => dmut_fail "Err [dmut_call_evar]: uninstantiated variables after consuming precondition"

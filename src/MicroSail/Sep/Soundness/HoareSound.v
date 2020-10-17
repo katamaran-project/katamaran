@@ -224,10 +224,10 @@ Module HoareSound
       - sound_solve.
         repeat (split; auto).
         specialize (Hsplit_γ σ19 r0); cbn in *.
-        intuition.
-        + rewrite H1, Hpre in H0.
-          unfold heap in H0.
-          injection H0; auto.
+        destruct Hsplit_γ as [[Heq1|Heq1] Heq2].
+        + rewrite Heq1, Hpre in Heq2.
+          unfold heap in Heq2.
+          congruence.
         + congruence.
       (* rule_stm_write_register *)
       - sound_solve.

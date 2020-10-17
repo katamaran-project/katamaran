@@ -361,9 +361,10 @@ Module Disjoint
   Proof.
     intros Hsplit_γ H.
     unfold split in Hsplit_γ.
-    specialize (Hsplit_γ σ r).
-    destruct_conjs.
-    firstorder. rewrite H in H0. discriminate.
+    specialize (Hsplit_γ σ r) as [[Heq1|Heq1] Heq2].
+    - rewrite Heq1 in Heq2.
+      congruence.
+    - congruence.
   Qed.
 
   (* If a value is the heap is total and a value is absent in
