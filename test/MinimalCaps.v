@@ -235,8 +235,8 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       | kj        => ty_int
       | kbnez     => ty_prod ty_lv ty_int
       | kmv       => ty_prod ty_lv ty_hv
-      | kld       => ty_prod ty_lv (ty_prod ty_hv ty_int)
-      | ksd       => ty_prod ty_hv (ty_prod ty_lv ty_int)
+      | kld       => ty_tuple [ty_lv, ty_hv, ty_int]
+      | ksd       => ty_tuple [ty_hv, ty_lv, ty_int]
       (* | klt       => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
       (* | kplus     => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
       (* | kminus    => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
@@ -261,8 +261,8 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       | existT kj        offset             => j offset
       | existT kbnez     (lv , immediate)   => bnez lv immediate
       | existT kmv       (lv , hv)          => mv lv hv
-      | existT kld       (lv , (hv , immediate)) => ld lv hv immediate
-      | existT ksd       (hv , (lv , immediate)) => sd hv lv immediate
+      | existT kld       (tt , lv , hv , immediate) => ld lv hv immediate
+      | existT ksd       (tt , hv , lv , immediate) => sd hv lv immediate
       (* | existT klt       (lv , (rv1 , rv2)) => lt lv rv1 rv2 *)
       (* | existT kplus     (lv , (rv1 , rv2)) => plus lv rv1 rv2 *)
       (* | existT kminus    (lv , (rv1 , rv2)) => minus lv rv1 rv2 *)
@@ -286,8 +286,8 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       | j offset           => existT kj    offset
       | bnez lv immediate  => existT kbnez (lv , immediate)
       | mv lv hv           => existT kmv   (lv , hv)
-      | ld lv hv immediate => existT kld   (lv , (hv , immediate))
-      | sd hv lv immediate => existT ksd   (hv , (lv , immediate))
+      | ld lv hv immediate => existT kld   (tt , lv , hv , immediate)
+      | sd hv lv immediate => existT ksd   (tt , hv , lv , immediate)
       (* | lt lv rv1 rv2     => existT klt       (lv , (rv1 , rv2)) *)
       (* | plus lv rv1 rv2   => existT kplus     (lv , (rv1 , rv2)) *)
       (* | minus lv rv1 rv2  => existT kminus    (lv , (rv1 , rv2)) *)
@@ -656,15 +656,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
                             | kj  => alt _ (pat_var offset) (call exec_j offset)
                             | kbnez => alt _ (pat_pair lv immediate) (call exec_bnez lv immediate)
                             | kmv => alt _ (pat_pair lv hv) (call exec_mv lv hv)
-                            | kld => alt _ (pat_pair lv "s") (match: (exp_var "s") in ( ty_hv , ty_int ) with
-                                                              | ( hv , immediate ) =>
-                                                                (call exec_ld (exp_var lv) (exp_var hv)
-                                                                      (exp_var immediate))
-                                                              end)
-                            | ksd => alt _ (pat_pair hv "s") (match: (exp_var "s") in ( ty_lv, ty_int ) with
-                                                              | ( lv , immediate ) =>
-                                                                (call exec_sd (exp_var hv) (exp_var lv) (exp_var immediate))
-                                                                  end)
+                            | kld => alt _ (pat_tuple [lv , hv , immediate])
+                                         (call exec_ld (exp_var lv) (exp_var hv) (exp_var immediate))
+                            | ksd => alt _ (pat_tuple [hv , lv , immediate])
+                                         (call exec_sd (exp_var hv) (exp_var lv) (exp_var immediate))
                             | kret => alt _ pat_unit (call exec_ret)
                             end).
 
