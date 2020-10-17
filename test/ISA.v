@@ -16,11 +16,12 @@ From MicroSail Require Import
      SmallStep.Step
      Syntax
      Sep.Spec
-     Sep.Logic
-     Sep.Hoare
      Symbolic.Mutator
      Symbolic.Outcome
      Symbolic.Sound.
+
+From stdpp Require
+     finite.
 
 Set Implicit Arguments.
 Import CtxNotations.
@@ -28,9 +29,6 @@ Import EnvNotations.
 Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope ctx_scope.
-
-Instance Z_eqdec : EqDec Z := Z.eq_dec.
-Derive EqDec for Empty_set.
 
 Inductive Enums : Set := register_tag.
 Inductive RegisterTag : Set :=
@@ -72,6 +70,33 @@ Derive EqDec for Instruction.
 Derive EqDec for InstructionConstructor.
 Derive EqDec for Address.
 
+Section Finite.
+
+  Import stdpp.finite.
+  Import ListNotations.
+
+  Global Program Instance RegisterTag_finite : Finite RegisterTag :=
+    {| enum := [RegTag0;RegTag1;RegTag2;RegTag3] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    (* TODO: This is slow. Should be replaced by a reflective proof. *)
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance InstructionConstructor_finite : Finite InstructionConstructor :=
+    {| enum := [KHalt;KLoad;KAdd;KJump] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    (* TODO: This is slow. Should be replaced by a reflective proof. *)
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+End Finite.
+
 (** Describe a part of REDFIN ISA
     Property to verify:
       Every instruction is memory safe, i.e. it checks memory
@@ -79,18 +104,25 @@ Derive EqDec for Address.
       access has been attempted. *)
 Module ISATypeKit <: TypeKit.
 
+  Import stdpp.finite.
+
   (** ENUMS **)
   Definition 𝑬        := Enums.
+  Definition 𝑬_eq_dec := Enums_eqdec.
   Definition 𝑬𝑲 (E : 𝑬) : Set :=
     match E with
     | register_tag => RegisterTag
     end.
+  Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=
+    ltac:(destruct E; auto with typeclass_instances).
+  Instance 𝑬𝑲_finite (E : 𝑬) : Finite (𝑬𝑲 E) :=
+    ltac:(destruct E; auto with typeclass_instances).
   Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
     match E with
     | register_tag => {| blast v POST :=
                      (v = RegTag0  -> POST RegTag0) /\
-                     (v = RegTag1 -> POST RegTag1)  /\
-                     (v = RegTag2 -> POST RegTag2)    /\
+                     (v = RegTag1 -> POST RegTag1) /\
+                     (v = RegTag2 -> POST RegTag2) /\
                      (v = RegTag3 -> POST RegTag3)
                 |}
     end.
@@ -98,14 +130,21 @@ Module ISATypeKit <: TypeKit.
 
   (** UNIONS **)
   Definition 𝑼        := Unions.
+  Definition 𝑼_eq_dec := Unions_eqdec.
   Definition 𝑼𝑻 (U : 𝑼) : Set :=
     match U with
     | instruction => Instruction
     end.
+  Instance 𝑼𝑻_eq_dec U : EqDec (𝑼𝑻 U) :=
+    ltac:(destruct U; auto with typeclass_instances).
   Definition 𝑼𝑲 (U : 𝑼) : Set :=
     match U with
     | instruction => InstructionConstructor
     end.
+  Instance 𝑼𝑲_eq_dec U : EqDec (𝑼𝑲 U) :=
+    ltac:(destruct U; auto with typeclass_instances).
+  Instance 𝑼𝑲_finite U : Finite (𝑼𝑲 U) :=
+    ltac:(destruct U; auto with typeclass_instances).
   Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
     match U with
     | instruction => {| blast v POST :=
@@ -117,26 +156,18 @@ Module ISATypeKit <: TypeKit.
     end.
   Solve All Obligations with destruct a; intuition congruence.
 
+  (** RECORDS **)
   Definition 𝑹        := Empty_set.
+  Definition 𝑹_eq_dec := Empty_set_eqdec.
   Definition 𝑹𝑻 (R : 𝑹) : Set :=
     match R with
     end.
+  Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
+    ltac:(destruct R; auto with typeclass_instances).
 
+  (* VARIABLES *)
   Definition 𝑿        := string.
-
-  Definition 𝑬_eq_dec : EqDec 𝑬 := Enums_eqdec.
-  Definition 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e).
-  Proof. intros []; cbn; auto with typeclass_instances. Defined.
-  Definition 𝑼_eq_dec : EqDec 𝑼 := Unions_eqdec.
-  Definition 𝑼𝑻_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑻 u).
-  Proof. intros []; cbn; auto with typeclass_instances. Defined.
-  Definition 𝑼𝑲_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑲 u).
-  Proof. intros []; cbn; auto with typeclass_instances. Defined.
-  Definition 𝑹_eq_dec : EqDec 𝑹 := Empty_set_eqdec.
-  Definition 𝑹𝑻_eq_dec : forall (r : 𝑹), EqDec (𝑹𝑻 r).
-  Proof. intros []; cbn; auto with typeclass_instances. Defined.
-  Definition 𝑿_eq_dec : EqDec 𝑿 := string_dec.
-
+  Definition 𝑿_eq_dec := string_dec.
   Definition 𝑺        := string.
   Definition 𝑺_eq_dec := string_dec.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
@@ -516,8 +547,8 @@ Module ISAAssertions :=
   Assertions ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit.
 Import ISAAssertions.
 
-Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 40).
-Local Notation "p '✱' q" := (asn_sep p q).
+Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
+Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 
 Module ISASymbolicContractKit <:
   SymbolicContractKit ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit.

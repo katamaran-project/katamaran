@@ -154,55 +154,92 @@ Derive EqDec for Records.
 Derive EqDec for Instruction.
 Derive EqDec for InstructionConstructor.
 
+Section Finite.
+
+  Import stdpp.finite.
+  Import ListNotations.
+
+  Global Program Instance Permission_finite : Finite Permission :=
+    {| enum := [O;R;RW] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    (* TODO: This is slow. Should be replaced by a reflective proof. *)
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance RegName_finite : Finite RegName :=
+    {| enum := [R0;R1;R2;R3] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    (* TODO: This is slow. Should be replaced by a reflective proof. *)
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance InstructionConstructor_finite :
+    Finite InstructionConstructor :=
+    {| enum := [kjr;kj;kbnez;kmv;kld;ksd;kret] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    (* TODO: This is slow. Should be replaced by a reflective proof. *)
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+End Finite.
+
 Module MinCapsTypeKit <: TypeKit.
+
+  Import stdpp.finite.
 
   (** ENUMS **)
   Definition 𝑬        := Enums.
+  Definition 𝑬_eq_dec := Enums_eqdec.
   Definition 𝑬𝑲 (e : 𝑬) : Set :=
     match e with
     | permission => Permission
     | regname    => RegName
     end.
-  Program Instance Blastable_𝑬𝑲 e : Blastable (𝑬𝑲 e) :=
-    {| blast v POST := POST v |}.
-  Solve All Obligations with auto.
+  Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=
+    ltac:(destruct E; auto with typeclass_instances).
+  Instance 𝑬𝑲_finite (E : 𝑬) : Finite (𝑬𝑲 E) :=
+    ltac:(destruct E; auto with typeclass_instances).
 
+  (** UNIONS **)
   Definition 𝑼        := Unions.
+  Definition 𝑼_eq_dec := Unions_eqdec.
   Definition 𝑼𝑻 (U : 𝑼) : Set :=
     match U with
     | instruction => Instruction
     end.
+  Instance 𝑼𝑻_eq_dec U : EqDec (𝑼𝑻 U) :=
+    ltac:(destruct U; cbn; auto with typeclass_instances).
   Definition 𝑼𝑲 (U : 𝑼) : Set :=
     match U with
     | instruction => InstructionConstructor
     end.
-  Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
-    match U with
-    | instruction => {| blast v POST := POST v |}
-    end.
-  Solve All Obligations with destruct a; intuition congruence.
+  Instance 𝑼𝑲_eq_dec U : EqDec (𝑼𝑲 U) :=
+    ltac:(destruct U; auto with typeclass_instances).
+  Instance 𝑼𝑲_finite U : Finite (𝑼𝑲 U) :=
+    ltac:(destruct U; auto with typeclass_instances).
 
+  (** RECORDS **)
   Definition 𝑹        := Records.
+  Definition 𝑹_eq_dec := Records_eqdec.
   Definition 𝑹𝑻 (R : 𝑹) : Set :=
     match R with
     | capability => Capability
     end.
+  Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
+    ltac:(destruct R; auto with typeclass_instances).
 
+  (* VARIABLES *)
   Definition 𝑿        := string.
-
-  Definition 𝑬_eq_dec := Enums_eqdec.
-  Definition 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e).
-  Proof. intros []; cbn; auto with typeclass_instances. Defined.
-  Definition 𝑼_eq_dec := Unions_eqdec.
-  Definition 𝑼𝑻_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑻 u).
-  Proof. intros []; cbn; auto with typeclass_instances. Defined.
-  Definition 𝑼𝑲_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑲 u).
-  Proof. intros []; cbn; auto with typeclass_instances. Defined.
-  Definition 𝑹_eq_dec := Records_eqdec.
-  Definition 𝑹𝑻_eq_dec : forall (r : 𝑹), EqDec (𝑹𝑻 r).
-  Proof. intros []; cbn; auto with typeclass_instances. Defined.
   Definition 𝑿_eq_dec := string_dec.
-
   Definition 𝑺        := string.
   Definition 𝑺_eq_dec := string_dec.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.

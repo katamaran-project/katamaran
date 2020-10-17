@@ -152,6 +152,8 @@ Module Soundness
     Variable validCEnv : ValidContractEnv' CEnv.
     Variable validCEnvEx : ValidContractEnvEx CEnvEx.
 
+    Opaque Blastable_Finite.
+
     Lemma WLP_sound {Γ σ} (s : Stm Γ σ) :
     forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),
       ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->

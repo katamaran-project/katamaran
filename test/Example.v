@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Lists.List
      Logic.FinFun
      Program.Equality
      Program.Tactics
@@ -56,10 +57,6 @@ Open Scope ctx_scope.
 Inductive Enums : Set :=
 | ordering.
 
-Instance Enums_eq_dec : EqDec Enums.
-  unfold EqDec; decide equality.
-Defined.
-
 Inductive Ordering : Set :=
 | LT
 | EQ
@@ -67,88 +64,105 @@ Inductive Ordering : Set :=
 
 (** Unions **)
 Inductive Unions : Set :=
-| either
-.
-
+| either.
 
 Inductive EitherConstructor : Set :=
 | Left
 | Right.
 
-Instance Unions_eq_dec : EqDec Unions.
-  unfold EqDec; decide equality.
-Defined.
-
 (** Records **)
-Inductive Records : Set :=
-.
+Inductive Records : Set :=.
 
-Instance Records_eq_dec : EqDec Records.
-  unfold EqDec; decide equality.
-Defined.
+Section TransparentObligations.
+  Local Set Transparent Obligations.
+
+  Derive NoConfusion for Enums.
+  Derive NoConfusion for Ordering.
+  Derive NoConfusion for Unions.
+  Derive NoConfusion for EitherConstructor.
+  Derive NoConfusion for Records.
+
+End TransparentObligations.
+
+Derive EqDec for Enums.
+Derive EqDec for Ordering.
+Derive EqDec for Unions.
+Derive EqDec for EitherConstructor.
+Derive EqDec for Records.
+
+Section Finite.
+
+  Import stdpp.finite.
+  Import ListNotations.
+
+  Global Program Instance Ordering_finite : Finite Ordering :=
+    {| enum := [LT;EQ;GT] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    (* TODO: This is slow. Should be replaced by a reflective proof. *)
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance EitherConstructor_finite : Finite EitherConstructor :=
+    {| enum := [Left;Right] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    (* TODO: This is slow. Should be replaced by a reflective proof. *)
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+End Finite.
 
 Module ExampleTypeKit <: TypeKit.
 
+  Import stdpp.finite.
+
   (** ENUMS **)
   Definition 𝑬        := Enums.
+  Definition 𝑬_eq_dec := Enums_eqdec.
   Definition 𝑬𝑲 (E : 𝑬) : Set :=
     match E with
     | ordering => Ordering
     end.
-  Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
-    match E with
-    | ordering => {| blast ord POST :=
-                       (ord = LT -> POST LT) /\
-                       (ord = EQ -> POST EQ) /\
-                       (ord = GT -> POST GT)
-                  |}
-    end.
-  Solve All Obligations with destruct a; intuition congruence.
+  Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=
+    ltac:(destruct E; auto with typeclass_instances).
+  Instance 𝑬𝑲_finite (E : 𝑬) : Finite (𝑬𝑲 E) :=
+    ltac:(destruct E; auto with typeclass_instances).
 
+  (** UNIONS **)
   Definition 𝑼        := Unions.
+  Definition 𝑼_eq_dec := Unions_eqdec.
   Definition 𝑼𝑻 (U : 𝑼) : Set :=
     match U with
     | either => (string + Z)%type
     end.
+  Instance 𝑼𝑻_eq_dec U : EqDec (𝑼𝑻 U) :=
+    ltac:(destruct U; cbn; auto with typeclass_instances).
   Definition 𝑼𝑲 (U : 𝑼) : Set :=
     match U with
     | either => EitherConstructor
     end.
-  Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
-    match U with
-    | either => {| blast v POST :=
-                     (v = Left  -> POST Left) /\
-                     (v = Right -> POST Right)
-                |}
-    end.
-  Solve All Obligations with destruct a; intuition congruence.
+  Instance 𝑼𝑲_eq_dec U : EqDec (𝑼𝑲 U) :=
+    ltac:(destruct U; auto with typeclass_instances).
+  Instance 𝑼𝑲_finite U : Finite (𝑼𝑲 U) :=
+    ltac:(destruct U; auto with typeclass_instances).
 
+  (** RECORDS **)
   Definition 𝑹        := Records.
+  Definition 𝑹_eq_dec := Records_eqdec.
   Definition 𝑹𝑻 (R : 𝑹) : Set :=
     match R with
     end.
+  Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
+    ltac:(destruct R; auto with typeclass_instances).
 
+  (* VARIABLES *)
   Definition 𝑿        := string.
-
-  Definition 𝑬_eq_dec := Enums_eq_dec.
-  Definition 𝑬𝑲_eq_dec : forall (e : 𝑬) (x y : 𝑬𝑲 e), {x=y}+{~x=y}.
-  Proof. unfold 𝑬𝑲 in *. intros. destruct e. decide equality. Defined.
-  Definition 𝑼_eq_dec := Unions_eq_dec.
-  Definition 𝑼𝑻_eq_dec : forall (u : 𝑼) (x y : 𝑼𝑻 u), {x=y}+{~x=y}.
-  Proof.
-    unfold 𝑼𝑻 in *.
-    intros. destruct u.
-    pose string_dec.
-    pose Z.eq_dec.
-    decide equality.
-  Qed.
-  Definition 𝑼𝑲_eq_dec : forall (u : 𝑼) (x y : 𝑼𝑲 u), {x=y}+{~x=y}.
-  Proof. intros. destruct u. decide equality. Qed.
-  Definition 𝑹_eq_dec := Records_eq_dec.
-  Definition 𝑹𝑻_eq_dec : forall (r : 𝑹) (x y : 𝑹𝑻 r), {x=y}+{~x=y}.
-  Proof. intros. destruct r. Qed.
   Definition 𝑿_eq_dec := string_dec.
-
   Definition 𝑺        := string.
   Definition 𝑺_eq_dec := string_dec.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
@@ -516,8 +530,8 @@ Module WLPContracts.
                           [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
         | @length σ  => ContractNoFail
                           ["xs" ∶ ty_list σ ] ty_int
-                          (fun xs γ => True)
-                          (fun xs r γ => r = Z.of_nat (Datatypes.length xs))
+                          (fun (xs : list (Lit σ)) γ => True)
+                          (fun (xs : list (Lit σ)) r γ => r = Z.of_nat (Datatypes.length xs))
         end.
 
     Definition CEnvEx : ContractEnvEx :=
@@ -533,10 +547,10 @@ Module WLPContracts.
   Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.
 
   Ltac wlp_cbv :=
-    cbv [Blastable_𝑬𝑲 CEnv Forall Lit ValidContract WLPCall WLP abstract blast
-                      blastable_lit blastable_list env_lookup env_map env_update eval evals inctx_case_snoc
-                      snd uncurry eval_prop_true eval_prop_false eval_binop Datatypes.length
-        ].
+    cbv [Blastable_Finite CEnv Forall ValidContract WLPCall WLP abstract blast
+         blastable_lit blastable_list env_lookup env_map env_update eval evals finite.enum
+         inctx_case_snoc snd uncurry eval_prop_true eval_prop_false eval_binop Datatypes.length
+         EqDecision_from_EqDec 𝑬𝑲_eq_dec 𝑬𝑲_finite Ordering_EqDec Ordering_finite fold_left].
 
   Ltac validate_solve :=
     repeat
