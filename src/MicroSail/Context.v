@@ -263,6 +263,7 @@ Module CtxNotations.
   Notation "x ∶ τ" := (pair x τ) : ctx_scope.
   Notation "[ x ]" := (ctx_snoc ctx_nil x)  : ctx_scope.
   Notation "[ x , .. , z ]" := (ctx_snoc .. (ctx_snoc ctx_nil x) .. z) : ctx_scope.
+  Notation "Γ - x" := (@ctx_remove _ Γ x _) : ctx_scope.
 
 End CtxNotations.
 

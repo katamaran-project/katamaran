@@ -84,6 +84,41 @@ Proof.
   destruct b1; destruct b2; cbn; constructor; congruence.
 Qed.
 
+Section TraverseList.
+
+  Import stdpp.base.
+
+  Context `{MRet M, MBind M} {A B : Type} (f : A -> M B).
+
+  Fixpoint traverse_list (xs : list A) : M (list B) :=
+    match xs with
+    | nil       => mret nil
+    | cons x xs => b ← f x ; bs ← traverse_list xs ; mret (cons b bs)
+  end.
+
+  Fixpoint traverse_vector {n} (xs : Vector.t A n) : M (Vector.t B n) :=
+    match xs with
+    | Vector.nil => mret Vector.nil
+    | Vector.cons x xs =>
+      b ← f x ; bs ← traverse_vector xs ; mret (Vector.cons b bs)
+  end.
+
+End TraverseList.
+
+Section TraverseEnv.
+
+  Import stdpp.base.
+
+  Context `{MRet M, MBind M} {I : Set} {A B : I -> Type} (f : forall i : I, A i -> M (B i)).
+
+  Fixpoint traverse_env {Γ : Ctx I} (xs : Env A Γ) : M (Env B Γ) :=
+    match xs with
+    | env_nil => mret (env_nil)
+    | env_snoc Ea i a => Eb ← traverse_env Ea ; b ← f a ; mret (env_snoc Eb i b)
+  end.
+
+End TraverseEnv.
+
 (******************************************************************************)
 
 Class Blastable (A : Type) : Type :=
@@ -1227,6 +1262,76 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   End SymbolicTerms.
   Bind Scope exp_scope with Term.
+
+  Section OccursCheck.
+
+    Import stdpp.base.
+
+    (* Most explicit type-signatures given below are only necessary for Coq 8.9
+       and can be cleaned up for later versions. *)
+    Fixpoint occurs_check_index {Σ} {x y : 𝑺 * Ty} {struct Σ} :
+      forall (m n : nat) (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
+        option (y ∈ ctx_remove {| inctx_at := m; inctx_valid := p |}) :=
+      match Σ with
+      | ctx_nil => fun m n _ (q : ctx_nth_is ctx_nil n y) => match q with end
+      | ctx_snoc Σ b =>
+        fun (m n : nat) =>
+          match m , n with
+          | 0   , 0   => fun _ _ => None
+          | 0   , S n => fun p (q : ctx_nth_is (ctx_snoc Σ b) (S n) y) =>
+                          Some (@MkInCtx _ _ (ctx_remove (@MkInCtx _ _ (ctx_snoc Σ b) 0 p)) n q)
+          | S m , 0   => fun _ (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
+                          Some (@MkInCtx _ _ (ctx_snoc (Σ - x) b) 0 q)
+          | S m , S n => fun p q => option_map inctx_succ (occurs_check_index m n p q)
+          end
+      end.
+
+    Definition occurs_check_var {Σ} {x y : 𝑺 * Ty} (xIn : x ∈ Σ) (yIn : y ∈ Σ) : option (y ∈ Σ - x) :=
+      occurs_check_index (inctx_at xIn) (inctx_at yIn) inctx_valid inctx_valid.
+
+    Fixpoint occurs_check {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
+      match t with
+      | @term_var _ ς σ0 ςInΣ =>
+        ςInΣ' ← occurs_check_var xIn ςInΣ; mret (@term_var _ _ _ ςInΣ')
+      | term_lit σ0 l => mret (term_lit σ0 l)
+      | term_binop op t1 t2 =>
+        t1' ← occurs_check xIn t1; t2' ← occurs_check xIn t2; mret (term_binop op t1' t2')
+      | term_neg t => t' ← occurs_check xIn t ; mret (term_neg t')
+      | term_not t => t' ← occurs_check xIn t ; mret (term_not t')
+      | term_inl t => t' ← occurs_check xIn t ; mret (term_inl t')
+      | term_inr t => t' ← occurs_check xIn t ; mret (term_inr t')
+      | term_list es => option_map term_list (traverse_list (occurs_check xIn) es)
+      | term_bvec es => option_map term_bvec (traverse_vector (occurs_check xIn) es)
+      | term_tuple es => option_map term_tuple (traverse_env (@occurs_check _ _ xIn) es)
+      | @term_projtup _ σs t n σ p =>
+        t' ← occurs_check xIn t ; mret (@term_projtup _ _ t' n _ p)
+      | term_union U K t => t' ← occurs_check xIn t ; mret (term_union U K t')
+      | term_record R es => option_map (term_record R) (traverse_env (fun _ => occurs_check xIn) es)
+      | term_projrec t rf => t' ← occurs_check xIn t ; mret (term_projrec t' rf)
+      end.
+
+    Fixpoint occurs_check_index_sum {Σ} {x y : 𝑺 * Ty} {struct Σ} :
+      forall (m n : nat) (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
+        (x = y) + (y ∈ ctx_remove {| inctx_at := m; inctx_valid := p |}) :=
+      match Σ with
+      | ctx_nil => fun m n _ (q : ctx_nth_is ctx_nil n y) => match q with end
+      | ctx_snoc Σ b =>
+        fun m n =>
+          match m , n with
+          | 0   , 0   => fun (p : ctx_nth_is (Σ ▻ b) 0 x) q =>
+                          inl (eq_trans (eq_sym p) q)
+          | 0   , S n => fun p (q : ctx_nth_is (ctx_snoc Σ b) (S n) y) =>
+                          inr (@MkInCtx _ _ (ctx_remove (@MkInCtx _ _ (ctx_snoc Σ b) 0 p)) n q)
+          | S m , 0   => fun _ (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
+                          inr (@MkInCtx _ _ (ctx_snoc (Σ - x) b) 0 q)
+          | S m , S n => fun p q => sum_map id inctx_succ (occurs_check_index_sum m n p q)
+          end
+      end.
+
+    Definition occurs_check_var_sum {Σ} {x y : 𝑺 * Ty} (xIn : x ∈ Σ) (yIn : y ∈ Σ) : (x = y) + (y ∈ Σ - x) :=
+      occurs_check_index_sum (inctx_at xIn) (inctx_at yIn) inctx_valid inctx_valid.
+
+  End OccursCheck.
 
   Section SymbolicSubstitutions.
 

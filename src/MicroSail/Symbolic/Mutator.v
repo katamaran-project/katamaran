@@ -194,9 +194,7 @@ Module Mutators
 
   End SolverSoundness.
 
-  Let comp {S : Type} (f : S -> option S) (g : S -> option S) : S -> option S :=
-    fun s => ssrfun.Option.bind g (f s).
-  Infix ">=>" := comp (at level 80, right associativity).
+  Infix ">=>" := ssrfun.pcomp (at level 80, right associativity).
 
   Section ChunkExtraction.
     Context {Σ : Ctx (𝑺 * Ty)}.
@@ -255,41 +253,6 @@ Module Mutators
         (heap_extractions h).
 
   End ChunkExtraction.
-
-  Section TraverseList.
-
-    Import stdpp.base.
-
-    Context `{MRet M, MBind M} {A B : Type} (f : A -> M B).
-
-    Fixpoint traverse_list (xs : list A) : M (list B) :=
-      match xs with
-      | nil       => mret nil
-      | cons x xs => b ← f x ; bs ← traverse_list xs ; mret (cons b bs)
-      end.
-
-    Fixpoint traverse_vector {n} (xs : Vector.t A n) : M (Vector.t B n) :=
-      match xs with
-      | Vector.nil => mret Vector.nil
-      | Vector.cons x xs =>
-        b ← f x ; bs ← traverse_vector xs ; mret (Vector.cons b bs)
-      end.
-
-  End TraverseList.
-
-  Section TraverseEnv.
-
-    Import stdpp.base.
-
-    Context `{MRet M, MBind M} {I : Set} {A B : I -> Type} (f : forall i : I, A i -> M (B i)).
-
-    Fixpoint traverse_env {Γ : Ctx I} (xs : Env A Γ) : M (Env B Γ) :=
-      match xs with
-      | env_nil => mret (env_nil)
-      | env_snoc Ea i a => Eb ← traverse_env Ea ; b ← f a ; mret (env_snoc Eb i b)
-      end.
-
-  End TraverseEnv.
 
   Definition EvarEnv (Σe Σr : Ctx (𝑺 * Ty)) : Type := Env (fun b => option (Term Σr (snd b))) Σe.
 
