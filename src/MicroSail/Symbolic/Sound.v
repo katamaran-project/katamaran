@@ -235,10 +235,11 @@ Module Soundness
                eapply rule_consequence; [ idtac | idtac | apply IHs1 ]; clear IHs1.
                apply land_left1. apply entails_refl.
                intros; apply entails_refl.
-               refine (outcome_satisfy_monotonic _ _ H1); clear H1.
-               intros [Σ2 ζ2 [t2 [pc2 δ2 h2] oblig2]]; cbn; intros.
-               apply H.
-               now rewrite sub_comp_id_left.
+               admit.
+               (* refine (outcome_satisfy_monotonic _ _ H1); clear H1. *)
+               (* intros [Σ2 ζ2 [t2 [pc2 δ2 h2] oblig2]]; cbn; intros. *)
+               (* apply H. *)
+               (* now rewrite sub_comp_id_left. *)
             -- intros H1; clear H1.
                cbn in n.
                unfold is_true in n.
@@ -257,15 +258,16 @@ Module Soundness
                repeat setoid_rewrite subst_sub_id at 1;
                cbn).
             intro.
-            eapply rule_consequence;
-              [ idtac
-              | idtac
-              | apply IHs1; refine (outcome_satisfy_monotonic _ _ H)
-              ]; clear H IHs1.
             admit.
-            intros; apply entails_refl.
-            cbn.
-            intros [Σ2 ζ2 [t2 [pc2 δ2 h2] oblig2]]; cbn; intros.
+            (* eapply rule_consequence; *)
+            (*   [ idtac *)
+            (*   | idtac *)
+            (*   | apply IHs1; refine (outcome_satisfy_monotonic _ _ H1) *)
+            (*   ]; clear H1 IHs1. *)
+            (* admit. *)
+            (* intros; apply entails_refl. *)
+            (* cbn. *)
+            (* intros [Σ2 ζ2 [t2 [pc2 δ2 h2] oblig2]]; cbn; intros. *)
     Admitted.
 
     Lemma dmut_contract_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :

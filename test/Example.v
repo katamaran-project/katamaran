@@ -460,7 +460,7 @@ Module SepContracts.
           Z.gtb Z.eqb Z.ltb Lit
          ] in *;
        cbn [List.length];
-       subst; try congruence; try lia;
+       subst; try congruence;
        auto
       ).
 
@@ -468,7 +468,7 @@ Module SepContracts.
   Proof.
     constructor.
     - solve.
-    - exists [term_var "ys"]%arg; solve.
+    - exists [term_var "ys"]%arg; solve; lia.
   Qed.
   Hint Resolve valid_contract_length : contracts.
 

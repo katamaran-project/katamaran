@@ -562,7 +562,7 @@ Module Mutators
       | None       => fun δ => outcome_pure (MkMutResult tt δ (obligation (symbolicstate_pathcondition δ) fml :: nil))
       end.
     Definition mutator_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : Mutator Σ Γ Γ unit :=
-      mutator_state_pathcondition (fun pc => (fmls ++ pc , tt)).
+      fold_right (fun fml m => mutator_assert_formula fml ;; m) (mutator_pure tt) fmls.
     (* Definition mutator_assert_formula {Γ Σ} (fml : Formula Σ) : Mutator Σ Γ Γ unit := *)
     (*   fun δ => outcome_pure (tt , δ , obligation (symbolicstate_pathcondition δ) fml :: nil). *)
 
@@ -1030,12 +1030,77 @@ Module Mutators
   Definition dmut_eval_exps {Γ Σ} {σs : Ctx (𝑿 * Ty)} (es : NamedEnv (Exp Γ) σs) : DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs) Σ :=
     dmut_lift (fun _ _ => mutator_eval_exps es).
 
+  Definition dmutres_assume_eq {Γ Σ σ} (s : SymbolicState Γ Σ) (t1 t2 : Term Σ σ) :
+    option (DynamicMutatorResult Γ Unit Σ) :=
+    match t1 with
+    | @term_var _ ς σ ςInΣ =>
+      fun t2 : Term Σ σ =>
+        match occurs_check ςInΣ t2 with
+        | Some t =>
+          let ζ := sub_single ςInΣ t in
+          Some
+            {|
+              dmutres_context := Σ - (ς,σ);
+              dmutres_substitution := ζ;
+              dmutres_result :=
+                {| mutator_result_value := tt;
+                   mutator_result_state := subst ζ s;
+                   mutator_result_obligations := []
+                |}
+            |}
+        | None => None
+        end
+    | _ => fun _ => None
+    end t2.
+
+  Definition dmut_try_assume_eq {Γ Σ} (s : SymbolicState Γ Σ) (fml : Formula Σ) :
+    option (DynamicMutatorResult Γ Unit Σ) :=
+    match fml with
+    | formula_eq t1 t2 =>
+      match dmutres_assume_eq s t1 t2 with
+      | Some r => Some r
+      | None => dmutres_assume_eq s t2 t1
+      end
+    | _ => None
+    end.
+
   Definition dmut_assume_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_lift_kleisli mutator_assume_formula fml.
+    fun Σ1 ζ1 s1 =>
+      let fml := sub_formula ζ1 fml in
+      match try_solve_formula fml with
+      | Some true =>
+        outcome_pure
+          {| dmutres_context := Σ1;
+             dmutres_substitution := sub_id Σ1;
+             dmutres_result :=
+               {|
+                 mutator_result_value := tt;
+                 mutator_result_state := s1;
+                 mutator_result_obligations := []
+               |}
+          |}
+      | Some false =>
+        outcome_block
+      | None =>
+        outcome_pure
+          match dmut_try_assume_eq s1 fml with
+          | Some r => r
+          | None =>
+            {| dmutres_context := Σ1;
+               dmutres_substitution := sub_id Σ1;
+               dmutres_result :=
+                 {|
+                   mutator_result_value := tt;
+                   mutator_result_state := symbolic_assume_formula fml s1;
+                   mutator_result_obligations := [] |}
+            |}
+          end
+      end.
+
   Definition dmut_assume_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_lift_kleisli mutator_assume_term t.
+    dmut_assume_formula (formula_bool t).
   Definition dmut_assume_exp {Γ Σ} (e : Exp Γ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_lift (fun _ _ => mutator_assume_exp e).
+    dmut_eval_exp e >>= fun _ _ => dmut_assume_term.
   Definition dmut_assume_prop {Γ Σ} (P : abstract_named Lit Σ Prop) : DynamicMutator Γ Γ Unit Σ :=
     dmut_lift (fun _ ζ => mutator_assume_formula (formula_prop ζ P)).
 

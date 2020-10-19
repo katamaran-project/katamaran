@@ -1392,6 +1392,16 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       let '(ς , σ) := b in
       env_snoc (env_map (fun _ => wk1_term) ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
 
+    Definition sub_single {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) : Sub Σ (Σ - (x,σ)) :=
+      @env_tabulate
+        _ (fun b => Term _ (snd b)) _
+        (fun '(y,τ) =>
+           fun yIn =>
+             match occurs_check_var_sum xIn yIn with
+             | inl e => eq_rect σ (Term (Σ - (x ∶ σ)%ctx)) t τ (f_equal snd e)
+             | inr i => term_var y
+             end).
+
   End SymbolicSubstitutions.
 
   Section SymbolicLocalStore.
