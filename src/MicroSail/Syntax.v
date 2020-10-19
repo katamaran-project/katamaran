@@ -1102,6 +1102,32 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     End TermEquivalence.
 
+    Section TermEqvB.
+
+      Context {Σ : Ctx (𝑺 * Ty)}.
+
+      Fixpoint Term_eqvb {σ τ} (t1 : Term Σ σ) (t2 : Term Σ τ) {struct t1} : option bool :=
+        match t1 , t2 with
+        | @term_var _ _ _ ς1inΣ , @term_var _ _ _ ς2inΣ =>
+          if InCtx_eqb ς1inΣ ς2inΣ
+          then Some true
+          else None
+        | term_lit σ l1 , term_lit τ l2 =>
+          match Ty_eq_dec σ τ with
+          | left  p => Some (Lit_eqb τ (eq_rect σ Lit l1 τ p) l2)
+          | right _ => Some false
+          end
+        | term_neg x   , term_neg y   => Term_eqvb x y
+        | term_not x   , term_not y   => Term_eqvb x y
+        | term_inl x   , term_inl y   => Term_eqvb x y
+        | term_inl _   , term_inr _   => Some false
+        | term_inr _   , term_inl _   => Some false
+        | term_inr x   , term_inr y   => Term_eqvb x y
+        | _            , _            => None
+        end.
+
+    End TermEqvB.
+
     Equations(noind) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
       Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
         InCtx_eqb ς1inΣ ς2inΣ;

@@ -151,14 +151,24 @@ Module Mutators
 
   End SymbolicState.
 
-  Equations(noeqns) try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
-    try_solve_formula (formula_bool (term_lit _ b)) := Some b;
-    try_solve_formula (formula_bool _)              := None;
-    try_solve_formula (formula_prop _ _)            := None;
-    try_solve_formula (formula_eq t1 t2)            := if Term_eqb t1 t2
-                                                       then Some true
-                                                       else None;
-    try_solve_formula (formula_neq t1 t2)           := None.
+  Definition try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
+    match fml with
+    | formula_bool t =>
+      match t in Term _ σ return option (Lit σ)
+      with
+      | term_lit _ b => Some b
+      | _            => None
+      end
+    | formula_prop _ _ => None
+    | formula_eq t1 t2 =>
+      if Term_eqb t1 t2
+      then Some true
+      else Term_eqvb t1 t2
+    | formula_neq t1 t2 =>
+      if Term_eqb t1 t2
+      then Some false
+      else option_map negb (Term_eqvb t1 t2)
+    end.
 
   Section SolverSoundness.
 
@@ -175,9 +185,12 @@ Module Mutators
         destruct b; constructor; congruence.
       - discriminate.
       - destruct (Term_eqb_spec t1 t2); cbn; inversion 1.
-        constructor; congruence.
-      - discriminate.
-    Qed.
+        + constructor; congruence.
+        + admit.
+      - destruct (Term_eqb_spec t1 t2); cbn; inversion 1.
+        + constructor; congruence.
+        + admit.
+    Admitted.
 
   End SolverSoundness.
 
