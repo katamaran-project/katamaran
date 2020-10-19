@@ -45,7 +45,7 @@ From MicroSail Require Import
      Syntax.
 
 From stdpp Require
-     base list option.
+     base finite list option.
 
 Import CtxNotations.
 Import EnvNotations.
@@ -468,9 +468,23 @@ Module Mutators
         | x :: [] => mutator_pure x
         | x :: xs => mutator_angelic_binary (mutator_pure x) (mutator_angelic_list xs)
         end.
+    Definition mutator_demonic_list {Γ A Σ} :
+      list A -> Mutator Σ Γ Γ A :=
+      fix mutator_demonic_list (xs : list A) :=
+        match xs with
+        | []      => mutator_block
+        | x :: [] => mutator_pure x
+        | x :: xs => mutator_demonic_binary (mutator_pure x) (mutator_demonic_list xs)
+        end.
+    Definition mutator_angelic_finite {Γ Σ} (msg : string) A `{finite.Finite A} :
+      Mutator Σ Γ Γ A := mutator_angelic_list msg (finite.enum A).
+    Definition mutator_demonic_finite {Γ Σ} A `{finite.Finite A} :
+      Mutator Σ Γ Γ A := mutator_demonic_list (finite.enum A).
 
     Global Arguments mutator_bind {_ _ _ _ _ _} _ _ /.
     Global Arguments mutator_bind_right {_ _ _ _ _ _} _ _ /.
+    Global Arguments mutator_angelic_finite {_ _} msg%string A {_ _} /.
+    Global Arguments mutator_demonic_finite {_ _} A {_ _} /.
 
   End Mutator.
   Bind Scope mutator_scope with Mutator.
@@ -609,9 +623,10 @@ Module Mutators
       | asn_if b a1 a2  => (mutator_assume_term (sub_term ζ b)            *> mutator_produce ζ a1) ⊗
                            (mutator_assume_term (sub_term ζ (term_not b)) *> mutator_produce ζ a2)
       | @asn_match_enum _ E k1 alts =>
-        ⨂ k2 : 𝑬𝑲 E => mutator_assume_formula
-                         (formula_eq (sub_term ζ k1) (term_enum E k2)) ;;
-                       mutator_produce ζ (alts k2)
+        k2 <- mutator_demonic_finite (𝑬𝑲 E) ;;
+        mutator_assume_formula
+          (formula_eq (sub_term ζ k1) (term_enum E k2)) ;;
+        mutator_produce ζ (alts k2)
       | asn_sep a1 a2   => mutator_produce ζ a1 *> mutator_produce ζ a2
       | asn_exist ς τ a => mutator_fail
                              "Err [mutator_produce]: case [asn_exist] not implemented"
@@ -687,9 +702,12 @@ Module Mutators
       | asn_if b a1 a2  => (mutator_assume_term (sub_term ζ b)            *> mutator_consume ζ a1) ⊗
                            (mutator_assume_term (sub_term ζ (term_not b)) *> mutator_consume ζ a2)
       | @asn_match_enum _ E k1 alts =>
-        ⨁ k2 : 𝑬𝑲 E => mutator_assert_formula
-                         (formula_eq (sub_term ζ k1) (term_enum E k2)) ;;
-                       mutator_consume ζ (alts k2)
+        k2 <- mutator_angelic_finite
+                "Err [mutator_consume]: case asn_match_enum failed"
+                (𝑬𝑲 E) ;;
+        mutator_assert_formula
+          (formula_eq (sub_term ζ k1) (term_enum E k2)) ;;
+        mutator_consume ζ (alts k2)
       | asn_sep a1 a2   => mutator_consume ζ a1 *> mutator_consume ζ a2
       | asn_exist ς τ a => ⨁ t : Term Σ' τ => mutator_consume (sub_snoc ζ (ς , τ) t) a
       end.
@@ -700,9 +718,9 @@ Module Mutators
       Equations(noeqns) mutator_exec_match_enum (t : Term Σ (ty_enum E)) : Mutator Σ Γ Γ R :=
         mutator_exec_match_enum (term_lit _ l) := cont l;
         mutator_exec_match_enum t :=
-          ⨂ K : 𝑬𝑲 E =>
-            mutator_assume_formula (formula_eq t (term_lit (ty_enum E) K)) *>
-            cont K.
+          K <- mutator_demonic_finite (𝑬𝑲 E) ;;
+          mutator_assume_formula (formula_eq t (term_lit (ty_enum E) K)) ;;
+          cont K.
 
     End WithCont.
 
@@ -888,22 +906,33 @@ Module Mutators
       fun Σ1 ζ1 s1 => outcome_angelic_binary (m1 Σ1 ζ1 s1) (m2 Σ1 ζ1 s1).
     Definition dmut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 s1 => outcome_demonic_binary (m1 Σ1 ζ1 s1) (m2 Σ1 ζ1 s1).
-    Definition dmut_angelic_list {Γ A} `{Subst A} {Σ} (msg : string) :
-      list (A Σ) -> DynamicMutator Γ Γ A Σ :=
-      fix dmut_angelic_list (xs : list (A Σ)) :=
+    Definition dmut_angelic_list {Γ1 Γ2 A Σ} (msg : string) :
+      list (DynamicMutator Γ1 Γ2 A Σ) -> DynamicMutator Γ1 Γ2 A Σ :=
+      fix dmut_angelic_list (xs : list (DynamicMutator Γ1 Γ2 A Σ)) :=
         match xs with
         | []      => dmut_contradiction msg
-        | x :: [] => dmut_pure x
-        | x :: xs => dmut_angelic_binary (dmut_pure x) (dmut_angelic_list xs)
+        | x :: [] => x
+        | x :: xs => dmut_angelic_binary x (dmut_angelic_list xs)
         end.
-    Definition dmut_demonic_list {Γ A} `{Subst A} {Σ} :
-      list (A Σ) -> DynamicMutator Γ Γ A Σ :=
-      fix dmut_demonic_list (xs : list (A Σ)) :=
+    Definition dmut_demonic_list {Γ1 Γ2 A Σ} :
+      list (DynamicMutator Γ1 Γ2 A Σ) -> DynamicMutator Γ1 Γ2 A Σ :=
+      fix dmut_demonic_list (xs : list (DynamicMutator Γ1 Γ2 A Σ)) :=
         match xs with
         | []      => dmut_block
-        | x :: [] => dmut_pure x
-        | x :: xs => dmut_demonic_binary (dmut_pure x) (dmut_demonic_list xs)
+        | x :: [] => x
+        | x :: xs => dmut_demonic_binary x (dmut_demonic_list xs)
         end.
+
+    Definition dmut_angelic_finite {Γ A} F `{finite.Finite F, Subst A} {Σ}
+               (cont : F -> DynamicMutator Γ Γ A Σ) :
+      DynamicMutator Γ Γ A Σ :=
+      dmut_angelic_list "Err [dmut_angelic_finite] failed" (map cont (finite.enum F)).
+    Definition dmut_demonic_finite {Γ A} F `{finite.Finite F, Subst A} {Σ}
+               (cont : F -> DynamicMutator Γ Γ A Σ) :
+      DynamicMutator Γ Γ A Σ :=
+      dmut_demonic_list (map cont (finite.enum F)).
+    Global Arguments dmut_angelic_finite {_ _} _ {_ _ _ _} _.
+    Global Arguments dmut_demonic_finite {_ _} _ {_ _ _ _} _.
 
     Definition dmut_fresh {Γ A Σ} b (ma : DynamicMutator Γ Γ A (Σ ▻ b)) : DynamicMutator Γ Γ A Σ :=
       fun Σ1 ζ1 s1 =>
@@ -1111,9 +1140,11 @@ Module Mutators
     | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
                          (dmut_assume_term (term_not b) ;; dmut_produce a2)
     | asn_match_enum E k1 alts =>
-      ⨂ k2 : 𝑬𝑲 E =>
-      dmut_assume_formula (formula_eq k1 (term_enum E k2)) ;;
-      dmut_produce (alts k2)
+      dmut_demonic_finite
+        (𝑬𝑲 E)
+        (fun k2 =>
+           dmut_assume_formula (formula_eq k1 (term_enum E k2)) ;;
+           dmut_produce (alts k2))
     | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
     | asn_exist ς τ a => dmut_fresh (ς,τ) (dmut_produce a)
     end.
@@ -1126,9 +1157,11 @@ Module Mutators
     | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_consume a1) ⊗
                          (dmut_assume_term (term_not b) ;; dmut_consume a2)
     | @asn_match_enum _ E k1 alts =>
-      ⨁ k2 : 𝑬𝑲 E =>
-      dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
-      dmut_consume (alts k2)
+      dmut_angelic_finite
+        (𝑬𝑲 E)
+        (fun k2 =>
+           dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
+           dmut_consume (alts k2))
     | asn_sep a1 a2   => dmut_consume a1 ;; dmut_consume a2
     | asn_exist ς τ a =>
       ⨁ t : Term Σ τ =>
@@ -1359,9 +1392,11 @@ Module Mutators
          dmut_pure t))
     | @stm_match_enum _ E e τ alts =>
       t <- dmut_eval_exp e ;;
-      ⨂ K : 𝑬𝑲 E =>
-        dmut_assume_formula (formula_eq t (term_enum E K));;
-        dmut_exec_evar (alts K)
+      dmut_demonic_finite
+        (𝑬𝑲 E)
+        (fun K =>
+           dmut_assume_formula (formula_eq t (term_enum E K));;
+           dmut_exec_evar (alts K))
     | stm_match_tuple e p s =>
       dmut_fail "Err [dmut_exec_evar]: [stm_match_tuple] not implemented"
     | @stm_match_union _ _ _ τ _ =>

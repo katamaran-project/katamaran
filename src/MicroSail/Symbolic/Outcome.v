@@ -38,6 +38,9 @@ From Equations Require Import
 From MicroSail Require Import
      Sep.Logic.
 
+From stdpp Require
+     finite.
+
 Set Implicit Arguments.
 
 Delimit Scope outcome_scope with out.
@@ -67,6 +70,9 @@ Definition outcome_angelic_list {A} (msg : string) : list A -> Outcome A :=
     | nil        => outcome_fail msg
     | cons x xs  => outcome_angelic_binary (outcome_pure x) (outcome_angelic_list xs)
     end.
+
+Definition outcome_angelic_finite `{finite.Finite A} (msg : string) : Outcome A :=
+  outcome_angelic_list msg (finite.enum A).
 
 (* Definition outcome_angelic_list {A} (msg : string) : list A -> Outcome A := *)
 (*   fix outcome_angelic_list (xs : list A) := *)

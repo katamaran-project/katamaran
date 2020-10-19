@@ -701,11 +701,11 @@ Local Ltac solve :=
     ).
 
 Lemma valid_contract_rX : ValidContractDynMutEvar sep_contract_rX fun_rX.
-Proof. Time (intros [] []; compute; solve). Qed.
+Proof. Time (compute; solve). Qed.
 Hint Resolve valid_contract_rX : contracts.
 
 Lemma valid_contract_wX : ValidContractDynMutEvar sep_contract_wX fun_wX.
-Proof. Time (intros [] []; compute; solve). Qed.
+Proof. Time (compute; solve). Qed.
 Hint Resolve valid_contract_wX : contracts.
 
 Lemma valid_contract_swapreg : ValidContractDynMutEvar sep_contract_swapreg fun_swapreg.

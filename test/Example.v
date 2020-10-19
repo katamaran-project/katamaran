@@ -474,20 +474,21 @@ Module SepContracts.
 
   Lemma valid_contract_cmp : ValidContractDynMut sep_contract_cmp (Pi cmp).
   Proof.
-    constructor.
-    { exists LT; solve. }
-    constructor.
-    { exists EQ; solve. }
-    constructor.
-    { exists GT; solve. }
-    { solve.
-      (* (* If failure were disallowed, we would need to show that this case *)
-      (*    is impossible. *) *)
-      (* destruct (Z.gtb_spec db db0); try discriminate. *)
-      (* destruct (Z.eqb_spec db db0); try discriminate. *)
-      (* destruct (Z.ltb_spec db db0); try discriminate. *)
-      (* lia. *)
-    }
+    cbn; intuition.
+    (* constructor. *)
+    (* { exists LT; solve. } *)
+    (* constructor. *)
+    (* { exists EQ; solve. } *)
+    (* constructor. *)
+    (* { exists GT; solve. } *)
+    (* { solve. *)
+    (*   (* (* If failure were disallowed, we would need to show that this case *) *)
+    (*   (*    is impossible. *) *) *)
+    (*   (* destruct (Z.gtb_spec db db0); try discriminate. *) *)
+    (*   (* destruct (Z.eqb_spec db db0); try discriminate. *) *)
+    (*   (* destruct (Z.ltb_spec db db0); try discriminate. *) *)
+    (*   (* lia. *) *)
+    (* } *)
   Qed.
   Hint Resolve valid_contract_cmp : contracts.
 

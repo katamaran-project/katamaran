@@ -1097,7 +1097,7 @@ Module MinCapsContracts.
       ).
 
   Lemma valid_contract_read_reg : ValidContractDynMutEvar sep_contract_read_reg fun_read_reg.
-  Proof. intros [] []; compute; solve. Qed.
+  Proof. compute; solve. Qed.
 
   Lemma valid_contract_read_reg_cap : ValidContractDynMutEvar sep_contract_read_reg_cap fun_read_reg_cap.
   Proof.
@@ -1116,7 +1116,7 @@ Module MinCapsContracts.
   Qed.
 
   Lemma valid_contract_write_reg : ValidContractDynMutEvar sep_contract_write_reg fun_write_reg.
-  Proof. intros [] []; compute; solve. Qed.
+  Proof. compute; solve. Qed.
 
   Lemma valid_contract_update_pc : ValidContractDynMutEvar sep_contract_update_pc fun_update_pc.
   Proof.
