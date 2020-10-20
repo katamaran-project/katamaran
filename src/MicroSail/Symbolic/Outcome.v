@@ -152,6 +152,12 @@ Fixpoint outcome_prune {A : Type} (o : Outcome A) : Outcome A :=
    | _ => o
    end.
 
+Definition outcome_ok {A : Type} (o : Outcome A) : bool :=
+  match outcome_prune o with
+  | outcome_block  => true
+  | _              => false
+  end.
+
 Lemma outcome_satisfy_map {A B : Type} (o : Outcome A) (f : A -> B) (P : B -> Prop) :
   outcome_satisfy (outcome_map f o) P <-> outcome_satisfy o (fun a => P (f a)).
 Proof. induction o; firstorder. Qed.
@@ -227,6 +233,15 @@ Proof.
     now rewrite IHo1, IHo2.
   - auto.
   - auto.
+Qed.
+
+Lemma outcome_ok_spec {A : Type} (o : Outcome A) (P : A -> Prop) :
+  is_true (outcome_ok o) -> outcome_satisfy o P.
+Proof.
+  unfold outcome_ok.
+  induction o; cbn in *; try (intuition; fail);
+    destruct (outcome_prune o1), (outcome_prune o2);
+    cbn in *; intros; intuition.
 Qed.
 
 Instance outcome_satisfy_iff_morphism {A} (o : Outcome A) :

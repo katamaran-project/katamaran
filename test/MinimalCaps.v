@@ -1149,7 +1149,7 @@ Module MinCapsContracts.
   Qed.
 
   Lemma valid_contract_write_reg : ValidContractDynMutEvar sep_contract_write_reg fun_write_reg.
-  Proof. compute; solve. Qed.
+  Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
   Lemma valid_contract_update_pc : ValidContractDynMutEvar sep_contract_update_pc fun_update_pc.
   Proof.

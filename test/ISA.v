@@ -705,11 +705,11 @@ Proof. Time (compute; solve). Qed.
 Hint Resolve valid_contract_rX : contracts.
 
 Lemma valid_contract_wX : ValidContractDynMutEvar sep_contract_wX fun_wX.
-Proof. Time (compute; solve). Qed.
+Proof. Time (apply dynmutevarreflect_sound; now compute). Qed.
 Hint Resolve valid_contract_wX : contracts.
 
 Lemma valid_contract_swapreg : ValidContractDynMutEvar sep_contract_swapreg fun_swapreg.
-Proof. Time (compute; now do 5 right). Qed.
+Proof. Time (apply dynmutevarreflect_sound; now compute). Qed.
 Hint Resolve valid_contract_swapreg : contracts.
 
 (* Arguments asn_true {_} /. *)

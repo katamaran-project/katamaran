@@ -1532,12 +1532,33 @@ Module Mutators
         outcome_map (fun x => mutator_result_obligations (dmutres_result x)) out
     end.
 
+  Definition outcome_valid_obligations (os : list Obligation) : Outcome Prop :=
+    match os with
+    | nil => outcome_block
+    | _   => outcome_pure (all_list valid_obligation os)
+    end.
+
   Definition ValidContractDynMut (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
     (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
     outcome_satisfy (dmut_contract c body) valid_obligations.
 
   Definition ValidContractDynMutEvar (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
-    (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    outcome_satisfy (dmut_contract_evar c body) valid_obligations.
+             (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    outcome_satisfy
+      (outcome_bind (dmut_contract_evar c body) outcome_valid_obligations)
+      (fun P => P).
+
+  Definition ValidContractDynMutEvarReflect (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
+             (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    is_true
+      (outcome_ok
+         (outcome_bind
+            (dmut_contract_evar c body)
+            outcome_valid_obligations)).
+
+  Lemma dynmutevarreflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+    ValidContractDynMutEvarReflect c body ->
+    ValidContractDynMutEvar c body.
+  Proof. apply outcome_ok_spec. Qed.
 
 End Mutators.
