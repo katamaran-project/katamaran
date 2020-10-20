@@ -35,8 +35,8 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 
-From MicroSail Require Import
-     Sep.Logic.
+(* From MicroSail Require Import. *)
+(*      Sep.Logic. *)
 
 From stdpp Require
      finite.
@@ -121,6 +121,37 @@ Fixpoint outcome_satisfy {A : Type} (o : Outcome A) (P : A -> Prop) : Prop :=
 Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
   outcome_satisfy o (fun a => True).
 
+Fixpoint outcome_angelic_binary_prune {A} (o1 o2 : Outcome A) {struct o1} : Outcome A :=
+  match o1 , o2 with
+  | outcome_block                  , _              => outcome_block
+  | _                              , outcome_block  => outcome_block
+  | outcome_fail s                 , _              => o2
+  | _                              , outcome_fail s => o1
+  | _                              , _              => outcome_angelic_binary o1 o2
+  end.
+
+Fixpoint outcome_demonic_binary_prune {A} (o1 o2 : Outcome A) {struct o1} : Outcome A :=
+  match o1 , o2 with
+  | outcome_block                  , _                => o2
+  | _                              , outcome_block    => o1
+  | outcome_fail s                 , _                => outcome_fail s
+  | _                              , outcome_fail s   => outcome_fail s
+  | _                              , _                => outcome_demonic_binary o1 o2
+  end.
+
+Fixpoint outcome_prune {A : Type} (o : Outcome A) : Outcome A :=
+   match o with
+   | outcome_angelic os =>
+     outcome_angelic (fun i => outcome_prune (os i))
+   | outcome_demonic os =>
+     outcome_demonic (fun i => outcome_prune (os i))
+   | outcome_angelic_binary o1 o2 =>
+     outcome_angelic_binary_prune (outcome_prune o1) (outcome_prune o2)
+   | outcome_demonic_binary o1 o2 =>
+     outcome_demonic_binary_prune (outcome_prune o1) (outcome_prune o2)
+   | _ => o
+   end.
+
 Lemma outcome_satisfy_map {A B : Type} (o : Outcome A) (f : A -> B) (P : B -> Prop) :
   outcome_satisfy (outcome_map f o) P <-> outcome_satisfy o (fun a => P (f a)).
 Proof. induction o; firstorder. Qed.
@@ -167,6 +198,37 @@ Proof.
   - rewrite filter_In. intuition.
 Qed.
 
+Lemma outcome_satisfy_angelic_binary_prune {A} (o1 o2 : Outcome A) (P : A -> Prop) :
+  outcome_satisfy (outcome_angelic_binary_prune o1 o2) P <->
+  outcome_satisfy (outcome_angelic_binary o1 o2) P.
+Proof.
+  revert o2; induction o1; intros [];
+    cbn; unfold Error in *; intuition.
+Qed.
+
+Lemma outcome_satisfy_demonic_binary_prune {A} (o1 o2 : Outcome A) (P : A -> Prop) :
+  outcome_satisfy (outcome_demonic_binary_prune o1 o2) P <->
+  outcome_satisfy (outcome_demonic_binary o1 o2) P.
+Proof.
+  revert o2; induction o1; intros [];
+    cbn; unfold Error in *; intuition.
+Qed.
+
+Lemma outcome_satisfy_prune {A : Type} (o : Outcome A) (P : A -> Prop) :
+  outcome_satisfy (outcome_prune o) P <-> outcome_satisfy o P.
+Proof.
+  induction o; cbn.
+  - auto.
+  - firstorder.
+  - firstorder.
+  - rewrite outcome_satisfy_angelic_binary_prune; cbn.
+    now rewrite IHo1, IHo2.
+  - rewrite outcome_satisfy_demonic_binary_prune; cbn.
+    now rewrite IHo1, IHo2.
+  - auto.
+  - auto.
+Qed.
+
 Instance outcome_satisfy_iff_morphism {A} (o : Outcome A) :
   Proper (pointwise_relation A iff ==> iff) (@outcome_satisfy A o).
 Proof. split; apply outcome_satisfy_monotonic; firstorder. Qed.
@@ -208,57 +270,57 @@ Module OutcomeNotations.
 
 End OutcomeNotations.
 
-Section Unused.
+(* Section Unused. *)
 
-  Context `{SLL: ISepLogicLaws L}.
+(*   Context `{SLL: ISepLogicLaws L}. *)
 
-  Local Open Scope logic.
+(*   Local Open Scope logic. *)
 
-  Fixpoint outcome_satisfy_natded {A : Type} (o : Outcome A)
-              (P : A -> L) {struct o} : L :=
-    match o with
-    | outcome_pure a => P a
-    | @outcome_angelic _ I0 os =>
-      ∃ i : I0, outcome_satisfy_natded (os i) P
-    | @outcome_demonic _ IO os =>
-      ∀ i : IO, outcome_satisfy_natded (os i) P
-    | outcome_angelic_binary o1 o2 =>
-      outcome_satisfy_natded o1 P ∨ outcome_satisfy_natded o2 P
-    | outcome_demonic_binary o1 o2 =>
-      outcome_satisfy_natded o1 P ∧ outcome_satisfy_natded o2 P
-    | outcome_fail s => lfalse
-    | outcome_block => ltrue
-  end.
+(*   Fixpoint outcome_satisfy_natded {A : Type} (o : Outcome A) *)
+(*               (P : A -> L) {struct o} : L := *)
+(*     match o with *)
+(*     | outcome_pure a => P a *)
+(*     | @outcome_angelic _ I0 os => *)
+(*       ∃ i : I0, outcome_satisfy_natded (os i) P *)
+(*     | @outcome_demonic _ IO os => *)
+(*       ∀ i : IO, outcome_satisfy_natded (os i) P *)
+(*     | outcome_angelic_binary o1 o2 => *)
+(*       outcome_satisfy_natded o1 P ∨ outcome_satisfy_natded o2 P *)
+(*     | outcome_demonic_binary o1 o2 => *)
+(*       outcome_satisfy_natded o1 P ∧ outcome_satisfy_natded o2 P *)
+(*     | outcome_fail s => lfalse *)
+(*     | outcome_block => ltrue *)
+(*   end. *)
 
-  Axiom outcome_satisfy_natded_bind :
-    forall {A B : Type} (o : Outcome A) (f : A -> Outcome B) (P : B -> L),
-      outcome_satisfy_natded (outcome_bind o f) P ⊣⊢s
-      outcome_satisfy_natded o (fun a => outcome_satisfy_natded (f a) P).
+(*   Axiom outcome_satisfy_natded_bind : *)
+(*     forall {A B : Type} (o : Outcome A) (f : A -> Outcome B) (P : B -> L), *)
+(*       outcome_satisfy_natded (outcome_bind o f) P ⊣⊢s *)
+(*       outcome_satisfy_natded o (fun a => outcome_satisfy_natded (f a) P). *)
 
-  Lemma outcome_satisfy_natded_monotonic {A : Type} {o : Outcome A} {P Q : A -> L}
-    (hyp : forall a, P a ⊢ Q a) :
-    outcome_satisfy_natded o P ⊢ outcome_satisfy_natded o Q.
-  Proof.
-    induction o; cbn.
-    - apply hyp.
-    - apply lex_left; intro i.
-      apply lex_right with i.
-      apply H.
-    - apply lall_right; intro i.
-      apply lall_left with i.
-      apply H.
-    - apply lor_left.
-      + apply lor_right1.
-        apply IHo1.
-      + apply lor_right2.
-        apply IHo2.
-    - apply land_right.
-      + apply land_left1.
-        apply IHo1.
-      + apply land_left2.
-        apply IHo2.
-    - apply entails_refl.
-    - apply entails_refl.
-  Qed.
+(*   Lemma outcome_satisfy_natded_monotonic {A : Type} {o : Outcome A} {P Q : A -> L} *)
+(*     (hyp : forall a, P a ⊢ Q a) : *)
+(*     outcome_satisfy_natded o P ⊢ outcome_satisfy_natded o Q. *)
+(*   Proof. *)
+(*     induction o; cbn. *)
+(*     - apply hyp. *)
+(*     - apply lex_left; intro i. *)
+(*       apply lex_right with i. *)
+(*       apply H. *)
+(*     - apply lall_right; intro i. *)
+(*       apply lall_left with i. *)
+(*       apply H. *)
+(*     - apply lor_left. *)
+(*       + apply lor_right1. *)
+(*         apply IHo1. *)
+(*       + apply lor_right2. *)
+(*         apply IHo2. *)
+(*     - apply land_right. *)
+(*       + apply land_left1. *)
+(*         apply IHo1. *)
+(*       + apply land_left2. *)
+(*         apply IHo2. *)
+(*     - apply entails_refl. *)
+(*     - apply entails_refl. *)
+(*   Qed. *)
 
-End Unused.
+(* End Unused. *)
