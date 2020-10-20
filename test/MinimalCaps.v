@@ -68,6 +68,7 @@ Inductive Instruction : Set :=
 | ld       (lv : LV) (hv : HV) (immediate : Z)
 | sd       (hv : HV) (lv : LV) (immediate : Z)
 | addi     (lv : LV) (hv : HV) (immediate : Z)
+| add      (lv1 : LV) (lv2 : LV) (lv3 : LV)
 (* | lt       (lv : LV) (rv1 rv2 : RV) *)
 (* | plus     (lv : LV) (rv1 rv2 : RV) *)
 (* | minus    (lv : LV) (rv1 rv2 : RV) *)
@@ -90,6 +91,7 @@ Inductive InstructionConstructor : Set :=
 | kld
 | ksd
 | kaddi
+| kadd
 (* | klt *)
 (* | kplus *)
 (* | kminus *)
@@ -183,7 +185,7 @@ Section Finite.
 
   Global Program Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjr;kj;kbnez;kmv;kld;ksd;kaddi;kret] |}.
+    {| enum := [kjr;kj;kbnez;kmv;kld;ksd;kaddi;kadd;kret] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -277,6 +279,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       | kld       => ty_tuple [ty_lv, ty_hv, ty_int]
       | ksd       => ty_tuple [ty_hv, ty_lv, ty_int]
       | kaddi     => ty_tuple [ty_lv, ty_hv, ty_int]
+      | kadd      => ty_tuple [ty_lv, ty_lv, ty_lv]
       (* | klt       => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
       (* | kplus     => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
       (* | kminus    => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
@@ -304,6 +307,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       | existT kld       (tt , lv , hv , immediate) => ld lv hv immediate
       | existT ksd       (tt , hv , lv , immediate) => sd hv lv immediate
       | existT kaddi     (tt , lv , hv , immediate) => addi lv hv immediate
+      | existT kadd      (tt , lv1 , lv2 , lv3)     => add lv1 lv2 lv3
       (* | existT klt       (lv , (rv1 , rv2)) => lt lv rv1 rv2 *)
       (* | existT kplus     (lv , (rv1 , rv2)) => plus lv rv1 rv2 *)
       (* | existT kminus    (lv , (rv1 , rv2)) => minus lv rv1 rv2 *)
@@ -330,6 +334,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
       | ld lv hv immediate => existT kld   (tt , lv , hv , immediate)
       | sd hv lv immediate => existT ksd   (tt , hv , lv , immediate)
       | addi lv hv immediate => existT kaddi (tt , lv , hv , immediate)
+      | add lv1 lv2 lv3      => existT kadd (tt , lv1 , lv2 , lv3)
       (* | lt lv rv1 rv2     => existT klt       (lv , (rv1 , rv2)) *)
       (* | plus lv rv1 rv2   => existT kplus     (lv , (rv1 , rv2)) *)
       (* | minus lv rv1 rv2  => existT kminus    (lv , (rv1 , rv2)) *)
@@ -430,6 +435,7 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   | exec_ld        : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
   | exec_sd        : Fun ["hv" ∶ ty_hv, "lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
   | exec_addi      : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
+  | exec_add       : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool
   | exec_ret       : Fun ε ty_bool
   | exec_instr     : Fun ["i" ∶ ty_instr] ty_bool
   | exec           : Fun ε ty_bool
@@ -662,6 +668,13 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       call update_pc ;;
       stm_lit ty_bool true.
 
+    Definition fun_exec_add : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv ] ty_bool :=
+      let: "v1" ∶ int := call read_reg_num (exp_var "lv2") in
+      let: "v2" ∶ int := call read_reg_num (exp_var "lv3") in
+      let: "res" ∶ int := stm_exp (exp_var "v1" + exp_var "v2") in
+      call write_reg (exp_var "lv1") (exp_inl (exp_var "res")) ;;
+      call update_pc ;;
+      stm_lit ty_bool true.
 
     Definition fun_compute_rv : Stm [rv ∶ ty_rv] ty_word :=
       stm_match_sum rv
@@ -713,6 +726,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
                                          (call exec_sd (exp_var hv) (exp_var lv) (exp_var immediate))
                             | kaddi => alt _ (pat_tuple [lv , hv , immediate])
                                            (call exec_addi (exp_var lv) (exp_var hv) (exp_var immediate))
+                            | kadd => alt _ (pat_tuple ["lv1" , "lv2" , "lv3"])
+                                           (call exec_add (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
                             | kret => alt _ pat_unit (call exec_ret)
                             end).
 
@@ -762,6 +777,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     | exec_ld        => fun_exec_ld
     | exec_sd        => fun_exec_sd
     | exec_addi      => fun_exec_addi
+    | exec_add       => fun_exec_add
     | exec_ret       => fun_exec_ret
     | exec_instr     => fun_exec_instr
     | compute_rv     => fun_compute_rv
