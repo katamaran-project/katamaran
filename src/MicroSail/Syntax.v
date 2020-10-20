@@ -1092,6 +1092,37 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := Term_rect P.
 
+    Section Utils.
+
+      Definition term_get_lit {Σ σ} (t : Term Σ σ) : option (Lit σ) :=
+        match t with
+        | term_lit _ l => Some l
+        | _            => None
+        end.
+
+      Equations(noeqns) term_get_pair {Σ σ1 σ2} (t : Term Σ (ty_prod σ1 σ2)) :
+        option (Term Σ σ1 * Term Σ σ2) :=
+        term_get_pair (term_lit _ (t1,t2))          := Some (term_lit _ t1, term_lit _ t2);
+        term_get_pair (term_binop binop_pair t1 t2) := Some (t1, t2);
+        term_get_pair _ := None.
+
+      Equations(noeqns) term_get_sum {Σ σ1 σ2} (t : Term Σ (ty_sum σ1 σ2)) :
+        option (Term Σ σ1 + Term Σ σ2) :=
+        term_get_sum (term_lit _ (inl l)) := Some (inl (term_lit _ l));
+        term_get_sum (term_lit _ (inr l)) := Some (inr (term_lit _ l));
+        term_get_sum (term_inl t)         := Some (inl t);
+        term_get_sum (term_inr t)         := Some (inr t);
+        term_get_sum _ := None.
+
+      Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty_union U)) :
+        option { K : 𝑼𝑲 U & Term Σ (𝑼𝑲_Ty K) } :=
+        term_get_union (term_lit _ l)   :=
+          Some (let (K, p) := 𝑼_unfold l in existT K (term_lit _ p));
+        term_get_union (term_union K t) := Some (existT K t);
+        term_get_union _ := None.
+
+    End Utils.
+
     Fixpoint inst_term {Σ : Ctx (𝑺 * Ty)} (ι : SymInstance Σ) {σ : Ty} (t : Term Σ σ) {struct t} : Lit σ :=
       match t in Term _ σ return Lit σ with
       | @term_var _ x _      => (ι ‼ x)%lit

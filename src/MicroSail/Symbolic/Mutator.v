@@ -1381,8 +1381,16 @@ Module Mutators
       ts <- dmut_eval_exps es ;;
       dmut_call_evar (CEnvEx f) ts
     | stm_if e s1 s2 =>
-        (dmut_assume_exp e ;; dmut_exec_evar s1) ⊗
-        (dmut_assume_exp (exp_not e) ;; dmut_exec_evar s2)
+      t__sc <- dmut_eval_exp e ;;
+      match term_get_lit t__sc with
+      | Some b =>
+        if b
+        then dmut_exec_evar s1
+        else dmut_exec_evar s2
+      | None =>
+        (dmut_assume_term t__sc ;; dmut_exec_evar s1) ⊗
+        (dmut_assume_term (term_not t__sc) ;; dmut_exec_evar s2)
+      end
     | stm_seq s1 s2 => dmut_exec_evar s1 ;; dmut_exec_evar s2
     | stm_assert e1 _ =>
       t <- dmut_eval_exp e1 ;;
@@ -1407,41 +1415,71 @@ Module Mutators
           dmut_pop_local ;;
           dmut_pure t2)))
     | stm_match_sum e xinl s1 xinr s2 =>
-      t <- dmut_eval_exp e ;;
-      dmut_fresh _
-        (dmut_assume_formula
-           (formula_eq (sub_term sub_wk1 t) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
-         dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
-         dmut_bind_left (dmut_exec_evar s1) dmut_pop_local) ⊗
-      dmut_fresh _
-        (dmut_assume_formula
-           (formula_eq (sub_term sub_wk1 t) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
-         dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
-         dmut_bind_left (dmut_exec_evar s2) dmut_pop_local)
+      t__sc <- dmut_eval_exp e ;;
+      match term_get_sum t__sc with
+      | Some (inl t) =>
+        dmut_push_local t;;
+        dmut_bind_left (dmut_exec_evar s1) dmut_pop_local
+      | Some (inr t) =>
+        dmut_push_local t;;
+        dmut_bind_left (dmut_exec_evar s2) dmut_pop_local
+      | None =>
+        dmut_fresh _
+          (dmut_assume_formula
+             (formula_eq (sub_term sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
+           dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
+           dmut_bind_left (dmut_exec_evar s1) dmut_pop_local) ⊗
+        dmut_fresh _
+          (dmut_assume_formula
+             (formula_eq (sub_term sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
+           dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
+           dmut_bind_left (dmut_exec_evar s2) dmut_pop_local)
+      end
     | stm_match_pair e xl xr s =>
-      t <- dmut_eval_exp e ;;
-      dmut_fresh (𝑿to𝑺 xl,_) (dmut_fresh (𝑿to𝑺 xr,_)
-        (dmut_assume_formula
-           (formula_eq
-              (sub_term (sub_comp sub_wk1 sub_wk1) t)
-              (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
-         dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
-         dmut_push_local (@term_var _ _ _ inctx_zero);;
-         t <- dmut_exec_evar s ;;
-         dmut_pop_local ;;
-         dmut_pop_local ;;
-         dmut_pure t))
+      t__sc <- dmut_eval_exp e ;;
+      match term_get_pair t__sc with
+      | Some (t1,t2) =>
+        dmut_push_local t1;;
+        dmut_push_local t2;;
+        t <- dmut_exec_evar s ;;
+        dmut_pop_local ;;
+        dmut_pop_local ;;
+        dmut_pure t
+      | None =>
+        dmut_fresh (𝑿to𝑺 xl,_) (dmut_fresh (𝑿to𝑺 xr,_)
+          (dmut_assume_formula
+             (formula_eq
+                (sub_term (sub_comp sub_wk1 sub_wk1) t__sc)
+                (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
+           dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
+           dmut_push_local (@term_var _ _ _ inctx_zero);;
+           t <- dmut_exec_evar s ;;
+           dmut_pop_local ;;
+           dmut_pop_local ;;
+           dmut_pure t))
+      end
     | @stm_match_enum _ E e τ alts =>
-      t <- dmut_eval_exp e ;;
-      dmut_demonic_finite
-        (𝑬𝑲 E)
-        (fun K =>
-           dmut_assume_formula (formula_eq t (term_enum E K));;
-           dmut_exec_evar (alts K))
+      t__sc <- dmut_eval_exp e ;;
+      match term_get_lit t__sc with
+      | Some K => dmut_exec_evar (alts K)
+      | None =>
+        dmut_demonic_finite
+          (𝑬𝑲 E)
+          (fun K =>
+             dmut_assume_formula (formula_eq t__sc (term_enum E K));;
+             dmut_exec_evar (alts K))
+      end
     | stm_match_tuple e p s =>
+      t__sc <- dmut_eval_exp e ;;
       dmut_fail "Err [dmut_exec_evar]: [stm_match_tuple] not implemented"
-    | @stm_match_union _ _ _ τ _ =>
-      dmut_fail "Err [dmut_exec_evar]: [stm_match_union] not implemented"
+    | @stm_match_union _ U e τ alts =>
+      t__sc <- dmut_eval_exp e ;;
+      match term_get_union t__sc with
+      | Some (existT K p) =>
+        dmut_fail "Err [dmut_exec_evar]: [stm_match_union] not implemented"
+      | None =>
+        dmut_fail "Err [dmut_exec_evar]: [stm_match_union] not implemented"
+      end
     | @stm_match_record _ _ _ _ _ τ _ =>
       dmut_fail "Err [dmut_exec_evar]: [stm_match_record] not implemented"
     | stm_read_register reg =>
