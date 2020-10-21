@@ -845,8 +845,6 @@ Module Mutators
 
     Definition dmut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : DynamicMutator Γ Γ A Σ :=
       fun Σ' ζ s => outcome_pure (MkDynMutResult (sub_id Σ') (MkMutResult (subst ζ a) s [])).
-    Definition dmut_map {Γ1 Γ2 A B} (f : forall {Σ}, A Σ -> B Σ) {Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 B Σ :=
-      fun Σ1 ζ1 s1 => outcome_map (fun '(MkDynMutResult ζ2 (MkMutResult a s2 w)) => MkDynMutResult ζ2 (MkMutResult (f a) s2 w)) (ma Σ1 ζ1 s1).
     Definition dmut_bind {Γ1 Γ2 Γ3 A B Σ}
       (ma : DynamicMutator Γ1 Γ2 A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> DynamicMutator Γ2 Γ3 B Σ') : DynamicMutator Γ1 Γ3 B Σ :=
       fun Σ0 ζ0 s0 =>
@@ -856,13 +854,29 @@ Module Mutators
     Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) :
       DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m).
 
-    Global Instance dmut_sub {Γ1 Γ2 A} : Subst (DynamicMutator Γ1 Γ2 A) :=
-      fun _ _ ζ1 p _ ζ2 => p _ (sub_comp ζ1 ζ2).
+    Definition dmut_sub {Γ1 Γ2 A Σ1 Σ2} (ζ1 : Sub Σ1 Σ2) (p : DynamicMutator Γ1 Γ2 A Σ1) :
+      DynamicMutator Γ1 Γ2 A Σ2 := fun Σ3 ζ2 => p _ (sub_comp ζ1 ζ2).
     Global Arguments dmut_sub {_ _ _ _ _} ζ1 p.
     Definition dmut_bind_right {Γ1 Γ2 Γ3 A B Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) : DynamicMutator Γ1 Γ3 B Σ :=
       dmut_bind ma (fun _ ζ _ => dmut_sub ζ mb).
     Definition dmut_bind_left {Γ1 Γ2 Γ3 A B} `{Subst A} {Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) : DynamicMutator Γ1 Γ3 A Σ :=
       dmut_bind ma (fun _ ζ a => dmut_bind_right (dmut_sub ζ mb) (dmut_pure a)) .
+    Definition dmut_fmap {Γ1 Γ2 Σ A B} `{Subst A, Subst B}
+      (ma : DynamicMutator Γ1 Γ2 A Σ)
+      (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ') :
+      DynamicMutator Γ1 Γ2 B Σ :=
+      dmut_bind ma (fun Σ1 ζ1 a => dmut_pure (f Σ1 ζ1 a)).
+    Definition dmut_fmap2 {Γ1 Γ2 Γ3 Σ A B C} `{Subst A, Subst B, Subst C}
+      (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ)
+      (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ' -> C Σ') :
+      DynamicMutator Γ1 Γ3 C Σ :=
+      dmut_bind ma (fun Σ1 ζ1 a =>
+        dmut_bind (dmut_sub ζ1 mb) (fun Σ2 ζ2 b =>
+          dmut_pure (f Σ2 (sub_comp ζ1 ζ2) (subst ζ2 a) b))).
+    Definition dmut_pair {Γ1 Γ2 Γ3 Σ A B} `{Subst A, Subst B}
+      (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) :
+      DynamicMutator Γ1 Γ3 (fun Σ => A Σ * B Σ)%type Σ :=
+      dmut_fmap2 ma mb (fun _ _ => pair).
 
     Definition dmut_lift {Γ1 Γ2 A} {Σ} (m : forall Σ', Sub Σ Σ' -> Mutator Σ' Γ1 Γ2 (A Σ')) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 s => outcome_map (MkDynMutResult (sub_id _)) (m Σ1 ζ1 s).
@@ -918,6 +932,9 @@ Module Mutators
           (fun '(MkDynMutResult ζ r) => MkDynMutResult (sub_comp sub_wk1 ζ) r)
           (ma _ (sub_up1 ζ1) (wk1_symbolicstate s1)).
     Global Arguments dmut_fresh {_ _ _} _ _.
+    Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
+      dmut_fresh (x,σ) (dmut_pure (@term_var _ _ _ inctx_zero)).
+    Global Arguments dmut_freshtermvar {_ _ _} _.
 
   End DynamicMutator.
   Bind Scope dmut_scope with DynamicMutator.
@@ -1031,6 +1048,24 @@ Module Mutators
     dmut_lift (fun _ _ => mutator_eval_exp e).
   Definition dmut_eval_exps {Γ Σ} {σs : Ctx (𝑿 * Ty)} (es : NamedEnv (Exp Γ) σs) : DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs) Σ :=
     dmut_lift (fun _ _ => mutator_eval_exps es).
+
+  Fixpoint dmut_freshen_tuplepat' {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
+    DynamicMutator Γ Γ (fun Σ => Env (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
+    match p with
+    | tuplepat_nil =>
+      dmut_pure (env_nil, env_nil)
+    | tuplepat_snoc p x =>
+      dmut_fmap2
+        (dmut_freshen_tuplepat' p)
+        (dmut_freshtermvar (𝑿to𝑺 x))
+        (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs _ t__x, env_snoc ts__Δ (x,_) t__x))
+    end.
+
+  Definition dmut_freshen_tuplepat {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
+    DynamicMutator Γ Γ (fun Σ => Term Σ (ty_tuple σs) * NamedEnv (Term Σ) Δ)%type Σ :=
+    dmut_fmap
+      (dmut_freshen_tuplepat' p)
+      (fun _ _ '(t__σs, t__Δ) => (term_tuple t__σs, t__Δ)).
 
   Definition dmutres_assume_eq {Γ Σ σ} (s : SymbolicState Γ Σ) (t1 t2 : Term Σ σ) :
     option (DynamicMutatorResult Γ Unit Σ) :=
@@ -1479,8 +1514,13 @@ Module Mutators
              dmut_exec_evar (alts K))
       end
     | stm_match_tuple e p s =>
-      t__sc <- dmut_eval_exp e ;;
-      dmut_fail "Err [dmut_exec_evar]: [stm_match_tuple] not implemented"
+      ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_tuplepat p) ;;
+      let '(t__sc,(t__p,t__Δ)) := ts in
+      dmut_assume_formula (formula_eq t__sc t__p) ;;
+      dmut_pushs_local t__Δ ;;
+      t <- dmut_exec_evar s ;;
+      dmut_pops_local _ ;;
+      dmut_pure t
     | @stm_match_union _ U e τ alts =>
       t__sc <- dmut_eval_exp e ;;
       match term_get_union t__sc with

@@ -1398,6 +1398,9 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       fun Σ1 Σ2 ζ '(a,b) => (subst ζ a, subst ζ b).
     Global Instance SubstList {A} `{Subst A} : Subst (fun Σ => list (A Σ))%type :=
       fun Σ1 Σ2 ζ => List.map (subst ζ).
+    Global Instance SubstEnv {B A} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
+      Subst (fun Σ => Env (A Σ) Δ) :=
+      fun Σ1 Σ2 ζ => env_map (fun b a => subst ζ a).
 
     Definition sub_id Σ : Sub Σ Σ :=
       @env_tabulate _ (fun b => Term _ (snd b)) _
@@ -1414,14 +1417,14 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
                     (fun '(ς , σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
 
     Definition sub_comp {Σ1 Σ2 Σ3} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) : Sub Σ1 Σ3 :=
-      env_map (fun _ => sub_term ζ2) ζ1.
+      subst ζ2 ζ1.
 
     Definition wk1_term {Σ σ b} (t : Term Σ σ) : Term (Σ ▻ b) σ :=
-      sub_term sub_wk1 t.
+      subst sub_wk1 t.
 
     Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b : 𝑺 * Ty} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
       let '(ς , σ) := b in
-      env_snoc (env_map (fun _ => wk1_term) ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
+      env_snoc (subst sub_wk1 ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
 
     Definition sub_single {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) : Sub Σ (Σ - (x,σ)) :=
       @env_tabulate
