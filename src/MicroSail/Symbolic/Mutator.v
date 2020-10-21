@@ -1067,6 +1067,24 @@ Module Mutators
       (dmut_freshen_tuplepat' p)
       (fun _ _ '(t__σs, t__Δ) => (term_tuple t__σs, t__Δ)).
 
+  Fixpoint dmut_freshen_recordpat' {σs Δ} (p : RecordPat σs Δ) {Γ Σ} :
+    DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
+    match p with
+    | recordpat_nil =>
+      dmut_pure (env_nil, env_nil)
+    | recordpat_snoc p rf x =>
+      dmut_fmap2
+        (dmut_freshen_recordpat' p)
+        (dmut_freshtermvar (𝑿to𝑺 x))
+        (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs (rf,_) t__x, env_snoc ts__Δ (x,_) t__x))
+    end.
+
+  Definition dmut_freshen_recordpat {R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
+    DynamicMutator Γ Γ (fun Σ => Term Σ (ty_record R) * NamedEnv (Term Σ) Δ)%type Σ :=
+    dmut_fmap
+      (dmut_freshen_recordpat' p)
+      (fun _ _ '(t__σs, t__Δ) => (term_record R t__σs, t__Δ)).
+
   Definition dmutres_assume_eq {Γ Σ σ} (s : SymbolicState Γ Σ) (t1 t2 : Term Σ σ) :
     option (DynamicMutatorResult Γ Unit Σ) :=
     match t1 with
@@ -1529,8 +1547,14 @@ Module Mutators
       | None =>
         dmut_fail "Err [dmut_exec_evar]: [stm_match_union] not implemented"
       end
-    | @stm_match_record _ _ _ _ _ τ _ =>
-      dmut_fail "Err [dmut_exec_evar]: [stm_match_record] not implemented"
+    | @stm_match_record _ R Δ e p τ s =>
+      ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat p) ;;
+      let '(t__sc,(t__p,t__Δ)) := ts in
+      dmut_assume_formula (formula_eq t__sc t__p) ;;
+      dmut_pushs_local t__Δ ;;
+      t <- dmut_exec_evar s ;;
+      dmut_pops_local _ ;;
+      dmut_pure t
     | stm_read_register reg =>
       dmut_consume_chunk_evar (chunk_ptsreg reg (@term_var [(dummy,_)] dummy _ inctx_zero)) [None]%arg >>= fun Σ1 _ E1 =>
       match snd (env_unsnoc E1) with

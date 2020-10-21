@@ -774,7 +774,8 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | pat_var (x : 𝑿) {σ : Ty} : Pattern [ x ∶ σ ]%ctx σ
     | pat_unit : Pattern ctx_nil ty_unit
     | pat_pair (x y : 𝑿) {σ τ : Ty} : Pattern [ x ∶ σ , y ∶ τ ]%ctx (ty_prod σ τ)
-    | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty_tuple σs).
+    | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty_tuple σs)
+    | pat_record {R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) : Pattern Δ (ty_record R).
 
     Local Unset Elimination Schemes.
 
@@ -956,6 +957,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       | pat_unit => fun _ => env_nil
       | pat_pair x y => fun '(u , v) => (env_nil ► (x ∶ _)%ctx ↦ u ► (y ∶ _)%ctx ↦ v)%env
       | pat_tuple p => tuple_pattern_match p
+      | pat_record p => fun r => record_pattern_match p (𝑹_unfold r)
       end.
 
   End PatternMatching.
