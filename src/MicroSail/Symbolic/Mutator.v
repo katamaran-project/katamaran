@@ -66,33 +66,48 @@ Module Mutators
 
   Export symcontractkit.
 
-  Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
-  | formula_bool (t : Term Σ ty_bool)
-  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Lit Σ' Prop)
-  | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
-  | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
+  (* The path condition expresses a set of constraints on the logic variables
+     that encode the path taken during execution. *)
+  Section PathCondition.
 
-  Equations(noeqns) formula_eqs {Δ : Ctx (𝑿 * Ty)} {Σ : Ctx (𝑺 * Ty)}
-    (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
-    formula_eqs env_nil          env_nil            := nil;
-    formula_eqs (env_snoc δ _ t) (env_snoc δ' _ t') :=
-      formula_eq t t' :: formula_eqs δ δ'.
+    Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
+    | formula_bool (t : Term Σ ty_bool)
+    | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Lit Σ' Prop)
+    | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
+    | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
 
-  Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
-    list (Formula Σ).
+    Equations(noeqns) formula_eqs {Δ : Ctx (𝑿 * Ty)} {Σ : Ctx (𝑺 * Ty)}
+      (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
+      formula_eqs env_nil          env_nil            := nil;
+      formula_eqs (env_snoc δ _ t) (env_snoc δ' _ t') :=
+        formula_eq t t' :: formula_eqs δ δ'.
+
+    Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
+      match fml with
+      | formula_bool t    => is_true (inst_term ι t)
+      | formula_prop ζ P  => uncurry_named P (env_map (fun _ => inst_term ι) ζ)
+      | formula_eq t1 t2  => inst_term ι t1 =  inst_term ι t2
+      | formula_neq t1 t2 => inst_term ι t1 <> inst_term ι t2
+      end.
+
+    Global Instance sub_formula : Subst Formula :=
+      fun Σ1 Σ2 ζ fml =>
+        match fml with
+        | formula_bool t    => formula_bool (sub_term ζ t)
+        | formula_prop ζ' P => formula_prop (sub_comp ζ' ζ) P
+        | formula_eq t1 t2  => formula_eq (sub_term ζ t1) (sub_term ζ t2)
+        | formula_neq t1 t2 => formula_neq (sub_term ζ t1) (sub_term ζ t2)
+        end.
+
+    Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
+      list (Formula Σ).
+    Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
+      List.fold_right (fun fml pc => inst_formula ι fml /\ pc) True pc.
+
+  End PathCondition.
+
   Definition SymbolicHeap (Σ : Ctx (𝑺 * Ty)) : Type :=
     list (Chunk Σ).
-
-  Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
-    match fml with
-    | formula_bool t    => is_true (inst_term ι t)
-    | formula_prop ζ P  => uncurry_named P (env_map (fun _ => inst_term ι) ζ)
-    | formula_eq t1 t2  => inst_term ι t1 =  inst_term ι t2
-    | formula_neq t1 t2 => inst_term ι t1 <> inst_term ι t2
-    end.
-
-  Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
-    List.fold_right (fun fml pc => inst_formula ι fml /\ pc) True pc.
 
   Inductive Obligation : Type :=
   | obligation {Σ} (pc : PathCondition Σ) (fml : Formula Σ).
@@ -104,15 +119,6 @@ Module Mutators
     all_list valid_obligation os.
   Hint Unfold valid_obligation : core.
   Hint Unfold valid_obligations : core.
-
-  Global Instance sub_formula : Subst Formula :=
-    fun Σ1 Σ2 ζ fml =>
-      match fml with
-      | formula_bool t    => formula_bool (sub_term ζ t)
-      | formula_prop ζ' P => formula_prop (sub_comp ζ' ζ) P
-      | formula_eq t1 t2  => formula_eq (sub_term ζ t1) (sub_term ζ t2)
-      | formula_neq t1 t2 => formula_neq (sub_term ζ t1) (sub_term ζ t2)
-      end.
 
   Global Instance sub_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
     fun Σ1 Σ2 ζ => env_map (fun _ => sub_term ζ).
@@ -140,37 +146,33 @@ Module Mutators
 
     Definition symbolic_assume_formula {Γ Σ} (fml : Formula Σ) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (fml :: Φ) ŝ ĥ.
-    Definition symbolic_assume_exp {Γ Σ} (e : Exp Γ ty_bool) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
-      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (formula_bool (symbolic_eval_exp ŝ e) :: Φ) ŝ ĥ.
-    Definition symbolic_push_local {Γ x σ Σ} (v : Term Σ σ) : SymbolicState Γ Σ -> SymbolicState (Γ ▻ (x , σ)) Σ :=
-      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState Φ (env_snoc ŝ (x , σ) v) ĥ.
-    Definition symbolic_pop_local {Γ x σ Σ} : SymbolicState (Γ ▻ (x , σ)) Σ -> SymbolicState Γ Σ :=
-      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState Φ (env_tail ŝ) ĥ.
     Definition wk1_symbolicstate {Γ b Σ} : SymbolicState Γ Σ -> SymbolicState Γ (Σ ▻ b) :=
       subst sub_wk1.
 
   End SymbolicState.
 
-  Definition try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
-    match fml with
-    | formula_bool t =>
-      match t in Term _ σ return option (Lit σ)
-      with
-      | term_lit _ b => Some b
-      | _            => None
-      end
-    | formula_prop _ _ => None
-    | formula_eq t1 t2 =>
-      if Term_eqb t1 t2
-      then Some true
-      else Term_eqvb t1 t2
-    | formula_neq t1 t2 =>
-      if Term_eqb t1 t2
-      then Some false
-      else option_map negb (Term_eqvb t1 t2)
-    end.
+  Section TrySolve.
 
-  Section SolverSoundness.
+    (* Check if the given formula is always true or always false for any
+       assignments of the logic variables. *)
+    Definition try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
+      match fml with
+      | formula_bool t =>
+        match t in Term _ σ return option (Lit σ)
+        with
+        | term_lit _ b => Some b
+        | _            => None
+        end
+      | formula_prop _ _ => None
+      | formula_eq t1 t2 =>
+        if Term_eqb t1 t2
+        then Some true
+        else Term_eqvb t1 t2
+      | formula_neq t1 t2 =>
+        if Term_eqb t1 t2
+        then Some false
+        else option_map negb (Term_eqvb t1 t2)
+      end.
 
     Hypothesis Term_eqb_spec :
       forall Σ (σ : Ty) (t1 t2 : Term Σ σ),
@@ -192,7 +194,7 @@ Module Mutators
         + admit.
     Admitted.
 
-  End SolverSoundness.
+  End TrySolve.
 
   Infix ">=>" := ssrfun.pcomp (at level 80, right associativity).
 
@@ -1064,11 +1066,13 @@ Module Mutators
     | _ => None
     end.
 
+  (* Add the provided formula to the path condition. *)
   Definition dmut_assume_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
     fun Σ1 ζ1 s1 =>
       let fml := sub_formula ζ1 fml in
       match try_solve_formula fml with
       | Some true =>
+        (* The formula is always true. Just skip it. *)
         outcome_pure
           {| dmutres_context := Σ1;
              dmutres_substitution := sub_id Σ1;
@@ -1080,12 +1084,17 @@ Module Mutators
                |}
           |}
       | Some false =>
+        (* The formula is always false, so the path condition with it would become
+           inconsistent. Prune this path. *)
         outcome_block
       | None =>
         outcome_pure
+          (* Check if the formula is an equally that can be propagated. *)
           match dmut_try_assume_eq s1 fml with
           | Some r => r
           | None =>
+            (* If everything fails, we simply add the formula to the path
+               condition verbatim. *)
             {| dmutres_context := Σ1;
                dmutres_substitution := sub_id Σ1;
                dmutres_result :=
