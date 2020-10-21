@@ -1085,6 +1085,26 @@ Module Mutators
       (dmut_freshen_recordpat' p)
       (fun _ _ '(t__σs, t__Δ) => (term_record R t__σs, t__Δ)).
 
+  Definition dmut_freshen_pattern {Γ Σ Δ σ} (p : Pattern Δ σ) :
+    DynamicMutator Γ Γ (fun Σ => Term Σ σ * NamedEnv (Term Σ) Δ)%type Σ :=
+    match p with
+    | pat_var x =>
+      dmut_fmap
+        (dmut_freshtermvar (𝑿to𝑺 x))
+        (fun _ _ t => (t,[t]%arg))
+    | pat_unit =>
+      dmut_pure (term_lit ty_unit tt,env_nil)
+    | pat_pair x y =>
+      dmut_fmap2
+        (dmut_freshtermvar (𝑿to𝑺 x))
+        (dmut_freshtermvar (𝑿to𝑺 y))
+        (fun _ _ t__x t__y => (term_binop binop_pair t__x t__y, [t__x,t__y]%arg))
+    | pat_tuple p =>
+      dmut_freshen_tuplepat p
+    | pat_record p =>
+      dmut_freshen_recordpat p
+    end.
+
   Definition dmutres_assume_eq {Γ Σ σ} (s : SymbolicState Γ Σ) (t1 t2 : Term Σ σ) :
     option (DynamicMutatorResult Γ Unit Σ) :=
     match t1 with
@@ -1542,10 +1562,23 @@ Module Mutators
     | @stm_match_union _ U e τ alts =>
       t__sc <- dmut_eval_exp e ;;
       match term_get_union t__sc with
-      | Some (existT K p) =>
-        dmut_fail "Err [dmut_exec_evar]: [stm_match_union] not implemented"
+      | Some (existT K t__field) =>
+        match alts K in Alternative _ σ__pat σ__rhs
+              return Term _ σ__pat -> DynamicMutator Γ Γ (fun Σ => Term Σ σ__rhs) _
+        with
+        | alt _ p s__rhs =>
+          fun t__field' =>
+            dmut_freshen_pattern p >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
+              dmut_assume_formula (formula_eq t__pat (sub_term ζ2 t__field'));;
+              dmut_pushs_local δ__Δ;;
+              t__rhs <- dmut_sub ζ2 (dmut_exec_evar s__rhs) ;;
+              dmut_pops_local _;;
+              dmut_pure t__rhs)
+        end t__field
       | None =>
-        dmut_fail "Err [dmut_exec_evar]: [stm_match_union] not implemented"
+        dmut_demonic_finite
+          (𝑼𝑲 U)
+          (fun K => dmut_fail "Err [dmut_exec_evar]: [stm_match_union] not implemented")
       end
     | @stm_match_record _ R Δ e p τ s =>
       ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat p) ;;
