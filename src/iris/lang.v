@@ -1006,7 +1006,7 @@ Module IrisInstance
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
         ⊢ ((∀ (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
                semTriple (env_cat δ (pattern_match (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) -∗
-                                                                                                                                                               semTriple δ P (stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K))) Q
+               semTriple δ P (stm_match_union U e alt__p alt__r) Q
           )%I.
   Proof.
     iIntros "tripunion P".
@@ -1024,7 +1024,7 @@ Module IrisInstance
     iSplitL; [|trivial].
     remember (𝑼_unfold (eval e δ)) as scrutinee.
     destruct scrutinee as [K v].
-    iApply (wp_compat_block (pattern_match (proj_alt_pat (alt Γ (alt__p K) (alt__r K))) v)).
+    iApply (wp_compat_block (pattern_match (alt__p K) v)).
     iSpecialize ("tripunion" $! K v).
     rewrite Heqscrutinee.
     rewrite 𝑼_fold_unfold.
