@@ -1572,7 +1572,13 @@ Module Mutators
       | None =>
         dmut_demonic_finite
           (𝑼𝑲 U)
-          (fun K => dmut_fail "Err [dmut_exec_evar]: [stm_match_union] not implemented")
+          (fun K =>
+             dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
+             dmut_assume_formula (formula_eq (sub_term ζ2 t__sc) (term_union U K t__pat));;
+             dmut_pushs_local δ__Δ;;
+             t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
+             dmut_pops_local _;;
+             dmut_pure t__rhs))
       end
     | @stm_match_record _ R Δ e p τ s =>
       ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat p) ;;
