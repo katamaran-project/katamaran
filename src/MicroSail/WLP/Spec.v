@@ -110,18 +110,18 @@ Module WLP
               get_local lift_cont lift_cont_global meval mevals modify_local pop
               pops pure push pushs put_local uncurry_named ] in
     fix WLP {Γ τ} (s : Stm Γ τ) : DST RegStore LocalStore Γ Γ (Lit τ) :=
-    match s in (Stm _ τ) return (DST RegStore LocalStore Γ Γ (Lit τ)) with
+    match s with
     | stm_lit _ l => pure l
     | stm_assign x s => WLP s >>= fun v => modify_local (fun δ => δ ⟪ x ↦ v ⟫) *> pure v
     | stm_let x σ s k => WLP s >>= fun v => push σ v *> WLP k <* pop
     | stm_exp e => meval e
-    | stm_assert e1 e2  => meval e1 >>= assert
+    | stm_assertk e1 e2 k  => meval e1 >>= fun v => assert v *> WLP k
     | stm_if e s1 s2 => fun POST δ γ =>
                           eval_prop_true e δ (WLP s1 POST δ γ) /\
                           eval_prop_false e δ (WLP s2 POST δ γ)
     | stm_fail _ _ => abort
     | stm_seq s1 s2 => WLP s1 *> WLP s2
-    | stm_call_frame Δ δ τ s => lift_cont_global (evalDST (WLP s) δ)
+    | stm_call_frame δ s => lift_cont_global (evalDST (WLP s) δ)
     | stm_call f es => mevals es >>= fun δf_in => lift_cont_global (WLPCall (CEnv f) δf_in)
     | stm_call_external f es => mevals es >>= fun δf_in => lift_cont_global (WLPCall (CEnvEx f) δf_in)
     | stm_block δ k => pushs δ *> WLP k <* pops _

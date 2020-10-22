@@ -96,7 +96,7 @@ Module Inversion
 
     Lemma step_inversion_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
           (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final k)
-          (step : ⟨ γ1, μ1, δ1, stm_call_frame Δ δΔ σ k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
+          (step : ⟨ γ1, μ1, δ1, stm_call_frame δΔ k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ3 = μ1 /\ δ3 = δ1 /\
       ((exists msg, k = stm_fail _ msg /\ t = stm_fail _ msg) \/
        (exists v,   k = stm_lit σ v    /\ t = stm_lit σ v)
@@ -238,8 +238,8 @@ Module Inversion
       | [ |- ⟨ _, _, _, stm_block _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_block_fail
       | [ |- ⟨ _, _, _, stm_seq (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_seq_value
       | [ |- ⟨ _, _, _, stm_seq (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_seq_fail
-      | [ |- ⟨ _, _, _, stm_call_frame _ _ _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call_frame_value
-      | [ |- ⟨ _, _, _, stm_call_frame _ _ _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call_frame_fail
+      | [ |- ⟨ _, _, _, stm_call_frame _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call_frame_value
+      | [ |- ⟨ _, _, _, stm_call_frame _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call_frame_fail
       | [ |- ⟨ _, _, _, stm_assign _ (stm_lit _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_value
       | [ |- ⟨ _, _, _, stm_assign _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_fail
       | [ |- ⟨ _, _, _, stm_bind (stm_lit _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_bind_value
@@ -294,14 +294,14 @@ Module Inversion
 
   Lemma steps_inversion_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
     (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final t)
-    (steps : ⟨ γ1, μ1, δ1, stm_call_frame Δ δΔ σ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
+    (steps : ⟨ γ1, μ1, δ1, stm_call_frame δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists μ2 γ2 δΔ' k',
       ⟨ γ1, μ1, δΔ , k ⟩ --->* ⟨ γ2, μ2, δΔ' , k' ⟩ /\ Final k' /\
       exists s0,
-        ⟨ γ2, μ2, δ1, stm_call_frame Δ δΔ' σ k' ⟩ ---> ⟨ γ2, μ2, δ1, s0 ⟩ /\
+        ⟨ γ2, μ2, δ1, stm_call_frame δΔ' k' ⟩ ---> ⟨ γ2, μ2, δ1, s0 ⟩ /\
         ⟨ γ2, μ2, δ1, s0⟩ --->* ⟨ γ3, μ3, δ3, t ⟩.
   Proof.
-    remember (stm_call_frame Δ δΔ σ k) as s. revert steps δΔ k Heqs.
+    remember (stm_call_frame δΔ k) as s. revert steps δΔ k Heqs.
     steps_inversion_induction.
   Qed.
 
@@ -390,7 +390,7 @@ Module Inversion
 
   Lemma steps_inversion_ex_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
     (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final t)
-    (steps : ⟨ γ1, μ1, δ1, stm_call_frame Δ δΔ σ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
+    (steps : ⟨ γ1, μ1, δ1, stm_call_frame δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists δΔ' msg,
         ⟨ γ1, μ1, δΔ, k ⟩ --->* ⟨ γ3, μ3, δΔ', stm_fail _ msg ⟩ /\
         t = stm_fail _ msg /\ δ3 = δ1) \/

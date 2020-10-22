@@ -310,11 +310,11 @@ Module SemiConcrete
         scmut_pure v
       end.
 
-    Fixpoint scmut_exec {Γ σ} (s : Stm Γ σ) : SCMut Γ Γ (Lit σ) :=
+    Fixpoint scmut_exec {Γ τ} (s : Stm Γ τ) : SCMut Γ Γ (Lit τ) :=
       match s with
-      | stm_lit τ l => scmut_pure l
+      | stm_lit _ l => scmut_pure l
       | stm_exp e => scmut_eval_exp e
-      | stm_let x τ s k =>
+      | stm_let x σ s k =>
         v <- scmut_exec s ;;
         scmut_push_local v *>
         scmut_exec k       <*
@@ -333,7 +333,7 @@ Module SemiConcrete
         | None   => scmut_fail "Err [scmut_exec]: Function call without contract"
         end
       | stm_call_external f es => scmut_eval_exps es >>= scmut_call (CEnvEx f)
-      | stm_call_frame Δ δ' τ s =>
+      | stm_call_frame δ' s =>
         δ <- scmut_get_local ;;
         scmut_put_local δ' ;;
         v <- scmut_exec s ;;
@@ -345,23 +345,24 @@ Module SemiConcrete
         then scmut_exec s1
         else scmut_exec s2
       | stm_seq e k => scmut_exec e ;; scmut_exec k
-      | stm_assert e1 _ =>
+      | stm_assertk e1 _ k =>
         v <- scmut_eval_exp e1 ;;
         if v
-        then scmut_pure v
+        then scmut_exec k
         else scmut_block
-      | stm_fail τ s =>
+      | stm_fail _ s =>
         scmut_block
       | stm_match_enum E e alts =>
         K <- scmut_eval_exp e ;;
         scmut_exec (alts K)
-      | @stm_read_register _ τ reg =>
+      | stm_read_register reg =>
         ⨁ v : Lit τ =>
         let c := scchunk_ptsreg reg v in
         scmut_consume_chunk c ;;
         scmut_produce_chunk c ;;
         scmut_pure v
-      | @stm_write_register _ τ reg e => scmut_eval_exp e >>= fun v__new =>
+      | stm_write_register reg e =>
+        v__new <- scmut_eval_exp e ;;
         ⨁ v__old : Lit τ =>
         scmut_consume_chunk (scchunk_ptsreg reg v__old) ;;
         scmut_produce_chunk (scchunk_ptsreg reg v__new) ;;

@@ -214,8 +214,8 @@ Module HoareSound
       - sound_solve.
       (* rule_stm_match_union *)
       - sound_solve.
-        destruct (𝑼_unfold (eval e10 δ27)) eqn:Heq.
-        assert (𝑼_fold (𝑼_unfold (eval e10 δ27)) = 𝑼_fold (existT x l)) as Heq' by now f_equal.
+        destruct (𝑼_unfold (eval e10 δ)) eqn:Heq.
+        assert (𝑼_fold (𝑼_unfold (eval e10 δ)) = 𝑼_fold (existT x l)) as Heq' by now f_equal.
         rewrite 𝑼_fold_unfold in Heq'.
         sound_solve.
       (* rule_stm_match_record *)
@@ -223,7 +223,7 @@ Module HoareSound
       (* rule_stm_read_register *)
       - sound_solve.
         repeat (split; auto).
-        specialize (Hsplit_γ σ19 r0); cbn in *.
+        specialize (Hsplit_γ _ r0); cbn in *.
         destruct Hsplit_γ as [[Heq1|Heq1] Heq2].
         + rewrite Heq1, Hpre in Heq2.
           unfold heap in Heq2.
@@ -231,7 +231,7 @@ Module HoareSound
         + congruence.
       (* rule_stm_write_register *)
       - sound_solve.
-        rename γ30 into γ__pre, r1 into reg, v into v__pre, v5 into v__post, σ20 into σ, e11 into e, δ3 into δ.
+        rename γ into γ__pre, r1 into reg, v into v__pre, v5 into v__post, τ into σ, e11 into e, δ3 into δ.
         exists (write_heap γfocus reg v__post); cbn.
         specialize (write_heap_ptsreg γfocus reg v__post) as Hpost.
         split; auto.

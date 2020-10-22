@@ -727,9 +727,9 @@ Module Mutators
     (*   | sep_contract_none _ _ => mutator_fail "Err [mutator_exec]: stm_call of sep_contract_none function" *)
     (*   end. *)
 
-    Fixpoint mutator_exec {Σ Γ σ} (s : Stm Γ σ) : Mutator Σ Γ Γ (Term Σ σ) :=
+    Fixpoint mutator_exec {Σ Γ τ} (s : Stm Γ τ) : Mutator Σ Γ Γ (Term Σ τ) :=
       match s with
-      | stm_lit τ l => mutator_pure (term_lit τ l)
+      | stm_lit _ l => mutator_pure (term_lit τ l)
       | stm_exp e => mutator_eval_exp e
       | stm_let x τ s k =>
         mutator_exec s >>= fun v =>
@@ -745,24 +745,25 @@ Module Mutators
         mutator_pure v
       | stm_call f es => mutator_fail "Err [mutator_exec]: stm_call not supported"
       | stm_call_external f es => mutator_fail "Err [mutator_exec]: stm_call not supported"
-      | stm_call_frame Δ δ' τ s =>
-        mutator_get_local                                      >>= fun δ =>
-        mutator_put_local (lift_localstore δ') >>= fun _ =>
-        mutator_exec s                                                >>= fun t =>
-        mutator_put_local δ                                    >>= fun _ =>
+      | stm_call_frame δ' s =>
+        δ <- mutator_get_local ;;
+        mutator_put_local (lift_localstore δ') ;;
+        t <- mutator_exec s ;;
+        mutator_put_local δ ;;
         mutator_pure t
       | stm_if e s1 s2 =>
         (mutator_assume_exp e ;; mutator_exec s1) ⊗
         (mutator_assume_exp (exp_not e) ;; mutator_exec s2)
       | stm_seq e k => mutator_exec e ;; mutator_exec k
-      | stm_assert e1 _ => mutator_eval_exp e1 >>= fun t =>
-                           mutator_assert_term t ;;
-                           mutator_pure t
-      | stm_fail τ s => mutator_block
+      | stm_assertk e1 _ k =>
+        t <- mutator_eval_exp e1 ;;
+        mutator_assert_term t ;;
+        mutator_exec k
+      | stm_fail _ s => mutator_block
       | stm_match_enum E e alts =>
         mutator_eval_exp e >>=
         mutator_exec_match_enum (fun K => mutator_exec (alts K))
-      | @stm_read_register _ τ reg =>
+      | stm_read_register reg =>
         mutator_consume_chunk_evar (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg >>= fun L =>
         match env_unsnoc L with
         | (_ , Some t) => mutator_produce_chunk (chunk_ptsreg reg t) *>
@@ -771,7 +772,7 @@ Module Mutators
            in the ghost environment and the chunk matching will always instantiate it. *)
         | _            => mutator_fail "Err [mutator_exec]: You have found a unicorn."
         end
-      | @stm_write_register _ τ reg e =>
+      | stm_write_register reg e =>
         mutator_eval_exp e >>= fun v =>
         mutator_consume_chunk_evar (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg ;;
         mutator_produce_chunk (chunk_ptsreg reg v) *>
@@ -1306,10 +1307,10 @@ Module Mutators
             dmut_pure (@term_var _ result _ inctx_zero)))
     end.
 
-  Fixpoint dmut_exec {Γ σ Σ} (s : Stm Γ σ) {struct s} :
-    DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
+  Fixpoint dmut_exec {Γ τ Σ} (s : Stm Γ τ) {struct s} :
+    DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σ :=
     match s with
-    | stm_lit τ l => dmut_pure (term_lit τ l)
+    | stm_lit _ l => dmut_pure (term_lit τ l)
     | stm_exp e => dmut_eval_exp e
     | stm_let x τ s1 s2 =>
       t1 <- dmut_exec s1 ;;
@@ -1333,7 +1334,7 @@ Module Mutators
         dmut_call c ts
       | None   => dmut_fail "Err [dmut_exec]: Function call without contract"
       end
-    | stm_call_frame Δ δ τ s =>
+    | stm_call_frame δ s =>
       δr <- dmut_get_local ;;
       dmut_put_local (lift_localstore δ) ;;
       dmut_bind_left (dmut_exec s) (dmut_put_local δr)
@@ -1344,11 +1345,11 @@ Module Mutators
         (dmut_assume_exp e ;; dmut_exec s1) ⊗
         (dmut_assume_exp (exp_not e) ;; dmut_exec s2)
     | stm_seq s1 s2 => dmut_exec s1 ;; dmut_exec s2
-    | stm_assert e1 _ =>
+    | stm_assertk e1 _ k =>
       t <- dmut_eval_exp e1 ;;
       dmut_assert_term t ;;
-      dmut_pure t
-    | stm_fail τ _ =>
+      dmut_exec k
+    | stm_fail _ _ =>
       dmut_block
     | stm_match_list e s1 xh xt s2 =>
       t <- dmut_eval_exp e ;;
@@ -1391,7 +1392,7 @@ Module Mutators
          dmut_pop_local ;;
          dmut_pop_local ;;
          dmut_pure t))
-    | @stm_match_enum _ E e τ alts =>
+    | stm_match_enum E e alts =>
       t <- dmut_eval_exp e ;;
       ⨂ K : 𝑬𝑲 E =>
         dmut_assume_formula (formula_eq t (term_enum E K));;
@@ -1428,10 +1429,10 @@ Module Mutators
        end
     end.
 
-  Fixpoint dmut_exec_evar {Γ σ Σ} (s : Stm Γ σ) {struct s} :
-    DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
+  Fixpoint dmut_exec_evar {Γ τ Σ} (s : Stm Γ τ) {struct s} :
+    DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σ :=
     match s with
-    | stm_lit τ l => dmut_pure (term_lit τ l)
+    | stm_lit _ l => dmut_pure (term_lit τ l)
     | stm_exp e => dmut_eval_exp e
     | stm_let x τ s1 s2 =>
       t1 <- dmut_exec_evar s1 ;;
@@ -1455,7 +1456,7 @@ Module Mutators
         dmut_call_evar c ts
       | None   => dmut_fail "Err [dmut_exec_evar]: Function call without contract"
       end
-    | stm_call_frame Δ δ τ s =>
+    | stm_call_frame δ s =>
       δr <- dmut_get_local ;;
       dmut_put_local (lift_localstore δ) ;;
       dmut_bind_left (dmut_exec_evar s) (dmut_put_local δr)
@@ -1474,11 +1475,11 @@ Module Mutators
         (dmut_assume_term (term_not t__sc) ;; dmut_exec_evar s2)
       end
     | stm_seq s1 s2 => dmut_exec_evar s1 ;; dmut_exec_evar s2
-    | stm_assert e1 _ =>
+    | stm_assertk e1 _ k =>
       t <- dmut_eval_exp e1 ;;
       dmut_assert_term t ;;
-      dmut_pure t
-    | stm_fail τ _ =>
+      dmut_exec_evar k
+    | stm_fail _ _ =>
       dmut_block
     | stm_match_list e s1 xh xt s2 =>
       t <- dmut_eval_exp e ;;
@@ -1540,7 +1541,7 @@ Module Mutators
            dmut_pop_local ;;
            dmut_pure t))
       end
-    | @stm_match_enum _ E e τ alts =>
+    | stm_match_enum E e alts =>
       t__sc <- dmut_eval_exp e ;;
       match term_get_lit t__sc with
       | Some K => dmut_exec_evar (alts K)
@@ -1580,7 +1581,7 @@ Module Mutators
              dmut_pops_local _;;
              dmut_pure t__rhs))
       end
-    | @stm_match_record _ R Δ e p τ s =>
+    | stm_match_record R e p s =>
       ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat p) ;;
       let '(t__sc,(t__p,t__Δ)) := ts in
       dmut_assume_formula (formula_eq t__sc t__p) ;;

@@ -278,7 +278,7 @@ Module Soundness
           repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
           repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
           assert (inst_scheap h1 ⊢ inst_assertion ι req ✱ (∀ v, inst_assertion (env_snoc ι (result,_) v) ens -✱ POST v δ1)).
-          { apply (scmut_consume_sound (fun δ => ∀ v, inst_assertion (env_snoc ι (result , σ) v) ens -✱ POST v δ)).
+          { apply (scmut_consume_sound (fun δ => ∀ v, inst_assertion (env_snoc ι (result,_) v) ens -✱ POST v δ)).
             sound_inster.
             intros [? [δ2 h2]] HYP; cbn.
             apply lall_right; intro v.
@@ -343,13 +343,9 @@ Module Soundness
         now apply IHs2.
 
       - (* stm_assert *)
-        eapply rule_consequence_right.
-        apply rule_stm_assert.
-        cbn; intros.
-        apply limpl_and_adjoint.
-        apply lprop_left; intros (? & ? & Heval); subst.
-        rewrite Heval in *; cbn in *.
-        now apply limpl_and_adjoint, land_left2.
+        apply rule_stm_assert, rule_pull;
+          intro Heval; rewrite Heval in HYP.
+        now apply IHs.
 
       - (* stm_fail *)
         eapply rule_consequence_left.

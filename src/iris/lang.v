@@ -47,7 +47,7 @@ Module ValsAndTerms
   Definition to_val {Γ} {τ} (t : Tm Γ τ) : option (Val Γ τ) :=
     match t with
     | MkTm δ s => match s with
-                   stm_lit τ l => Some (MkVal _ δ l)
+                   stm_lit _ l => Some (MkVal _ δ l)
                  | _ => None
                  end
     end.
@@ -69,7 +69,7 @@ Module ValsAndTerms
   Export SS.
 
   Lemma val_head_stuck_step {τ} {Γ : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) δ2 (s1 : Stm Γ τ) s2 :
-    Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 -> to_val (MkTm δ1 s1) = None.
+    ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> to_val (MkTm δ1 s1) = None.
   Proof.
     by induction 1.
   Qed.
@@ -80,7 +80,7 @@ Module ValsAndTerms
 
   Inductive prim_step {Γ τ} : Tm Γ τ -> State -> Tm Γ τ -> State -> list (Tm Γ τ) -> Prop :=
   | mk_prim_step γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) (δ2 : LocalStore Γ) s1 s2 :
-      SS.Step γ1 γ2 μ1 μ2 δ1 δ2 s1 s2 ->
+      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
       prim_step (MkTm δ1 s1) (γ1 , μ1) (MkTm δ2 s2) (γ2 , μ2) nil
   .
 
@@ -553,7 +553,7 @@ Module IrisInstance
     dependent destruction H1.
     iFrame.
     iSplitL; trivial.
-    iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ (stm_lit σ (eval e δ)))).
+    iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ (stm_lit _ (eval e0 δ)))).
     by iApply "PQ".
   Qed.
 
@@ -622,7 +622,7 @@ Module IrisInstance
         iSplitL; [|trivial].
         iApply wp_compat_fail.
       + iMod "Hclose" as "_".
-        iMod ("wpk" $! (γ , μ) ks1 ks n with "Hregs") as "[% wpk]".
+        iMod ("wpk" $! (γ1 , μ1) ks1 ks n with "Hregs") as "[% wpk]".
         iMod ("wpk" $! _ _ _ (mk_prim_step H0)) as "wpk".
         iModIntro. iModIntro.
         iMod "wpk" as "[Hregs [wpk' _]]".
@@ -673,8 +673,8 @@ Module IrisInstance
     + cbn.
       rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ s) (γ , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
-      iSpecialize ("wpv" $! (γ , μ) nil nil n with "Hregs").
+      rewrite (val_stuck (MkTm δ s) (regs , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
+      iSpecialize ("wpv" $! (regs , μ) nil nil n with "Hregs").
       iMod "Hclose" as "_".
       iMod "wpv" as "[_ wpv]".
       iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
@@ -791,8 +791,8 @@ Module IrisInstance
     dependent destruction H0; cbn.
     + rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ s1) (γ , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
-      iSpecialize ("wps1" $! (γ , μ) nil nil n with "Hregs").
+      rewrite (val_stuck (MkTm δ s1) (regs , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
+      iSpecialize ("wps1" $! (regs , μ) nil nil n with "Hregs").
       iMod "Hclose" as "_".
       iMod "wps1" as "[_ wps1]".
       iMod ("wps1" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0))  as "wps1".
@@ -815,12 +815,13 @@ Module IrisInstance
       by iApply wp_compat_fail.
   Qed.
 
-  Lemma iris_rule_stm_assert {Γ} (δ : LocalStore Γ)
-        (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string)
-                      (P : iProp Σ) :
-        ⊢ (semTriple δ P (stm_assert e1 e2) (fun v δ' => bi_pure (δ = δ' /\ eval e1 δ' = v /\ v = true) ∧ P))%I.
+  Lemma iris_rule_stm_assertk {Γ τ} (δ : LocalStore Γ)
+        (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
+                      (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+    ⊢ (semTriple δ (P ∧ ⌜ eval e1 δ = true ⌝) k Q -∗
+       semTriple δ P (stm_assertk e1 e2 k) Q)%I.
   Proof.
-    iIntros "P".
+    iIntros "tripk P".
     rewrite wp_unfold.
     iIntros (σ ks1 ks n) "Hregs".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
@@ -833,9 +834,8 @@ Module IrisInstance
     iMod "Hclose" as "_".
     iModIntro; iFrame.
     iSplitL; [|trivial].
-    remember (eval e1 δ) as c.
-    destruct c.
-    - iApply wp_value.
+    destruct (eval e1 δ) eqn:Heqc.
+    - iApply "tripk".
       by iFrame.
     - iApply wp_compat_fail.
   Qed.
@@ -1121,8 +1121,8 @@ Module IrisInstance
       by iApply wp_compat_fail.
     + rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ s) (γ , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
-      iSpecialize ("wpv" $! (γ , μ) nil nil n with "Hregs").
+      rewrite (val_stuck (MkTm δ s) (regs , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
+      iSpecialize ("wpv" $! (regs , μ) nil nil n with "Hregs").
       iMod "Hclose".
       iMod "wpv" as "[_ wpv]".
       iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
@@ -1164,7 +1164,7 @@ Module IrisInstance
   Lemma wp_compat_call_frame {Γ Δ} {τ : Ty} {δ : LocalStore Γ}
         (δΔ : LocalStore Δ) (s : Stm Δ τ) (Q : Val Γ τ -> iProp Σ) :
     ⊢ (WP (MkTm δΔ s) ?{{ v, match v with MkVal _ δ' v => Q (MkVal _ δ v) end }} -∗
-          WP (MkTm δ (stm_call_frame Δ δΔ τ s)) ?{{ v, Q v }})%I.
+          WP (MkTm δ (stm_call_frame δΔ s)) ?{{ v, Q v }})%I.
   Proof.
     iRevert (δ δΔ s Q).
     iLöb as "IH".
@@ -1180,8 +1180,8 @@ Module IrisInstance
     dependent destruction H0.
     - iMod "Hclose" as "_".
       rewrite {1}/wp_pre.
-      rewrite (val_stuck (MkTm δΔ s) (γ , μ) [] (MkTm δΔ' s') (γ' , μ') [] (mk_prim_step H0)).
-      iMod ("wpk" $! (γ , μ) ks1 ks n with "Hregs") as "[% wpk]".
+      rewrite (val_stuck (MkTm δΔ s) (γ1 , μ1) [] (MkTm δΔ' s') (γ' , μ') [] (mk_prim_step H0)).
+      iMod ("wpk" $! (γ1 , μ1) ks1 ks n with "Hregs") as "[% wpk]".
       iMod ("wpk" $! _ _ _ (mk_prim_step H0)) as "wpk".
       iModIntro. iModIntro.
       iMod "wpk" as "[Hregs [wpk' _]]".
@@ -1247,7 +1247,7 @@ Module IrisInstance
         (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
         ⊢ (semTriple δΔ P s (fun v _ => Q v δ) -∗
-           semTriple δ P (stm_call_frame Δ δΔ τ s) Q)%I.
+           semTriple δ P (stm_call_frame δΔ s) Q)%I.
   Proof.
     iIntros "trips P".
     iSpecialize ("trips" with "P").
@@ -1280,8 +1280,8 @@ Module IrisInstance
     cbn.
     + rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ s) (γ , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
-      iSpecialize ("wpv" $! (γ , μ) nil nil n with "Hregs").
+      rewrite (val_stuck (MkTm δ s) (regs , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
+      iSpecialize ("wpv" $! (regs , μ) nil nil n with "Hregs").
       iMod "Hclose".
       iMod "wpv" as "[_ wpv]".
       iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
@@ -1354,7 +1354,7 @@ Module IrisInstance
     - by iApply iris_rule_stm_block.
     - by iApply iris_rule_stm_if.
     - by iApply iris_rule_stm_seq.
-    - by iApply iris_rule_stm_assert.
+    - by iApply iris_rule_stm_assertk.
     - by iApply iris_rule_stm_fail.
     - by iApply iris_rule_stm_match_list.
     - by iApply iris_rule_stm_match_sum.

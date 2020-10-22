@@ -779,40 +779,48 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     (* Local Unset Elimination Schemes. *)
 
-    Inductive Stm (Γ : Ctx (𝑿 * Ty)) : Ty -> Type :=
-    | stm_lit        {τ : Ty} (l : Lit τ) : Stm Γ τ
-    | stm_exp        {τ : Ty} (e : Exp Γ τ) : Stm Γ τ
-    | stm_let        (x : 𝑿) (τ : Ty) (s : Stm Γ τ) {σ : Ty} (k : Stm (ctx_snoc Γ (x , τ)) σ) : Stm Γ σ
-    | stm_block      (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) {σ : Ty} (k : Stm (ctx_cat Γ Δ) σ) : Stm Γ σ
-    | stm_assign     (x : 𝑿) (τ : Ty) {xInΓ : InCtx (x , τ) Γ} (e : Stm Γ τ) : Stm Γ τ
-    | stm_call       {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ σ
-    | stm_call_frame (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ) : Stm Γ τ
-    | stm_call_external {Δ σ} (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ σ
-    | stm_if         {τ : Ty} (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) : Stm Γ τ
-    | stm_seq        {τ : Ty} (e : Stm Γ τ) {σ : Ty} (k : Stm Γ σ) : Stm Γ σ
-    | stm_assert     (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) : Stm Γ ty_bool
-    (* | stm_while      (w : 𝑾 Γ) (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) -> Stm Γ ty_unit *)
-    | stm_fail      (τ : Ty) (s : Lit ty_string) : Stm Γ τ
-    | stm_match_list {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
-      (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ) : Stm Γ τ
-    | stm_match_sum  {σinl σinr τ : Ty} (e : Exp Γ (ty_sum σinl σinr))
-      (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl , σinl)) τ)
-      (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ) : Stm Γ τ
-    | stm_match_pair {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
-      (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ) : Stm Γ τ
-    | stm_match_enum {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
-      (alts : forall (K : 𝑬𝑲 E), Stm Γ τ) : Stm Γ τ
-    | stm_match_tuple {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
-      (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
-    | stm_match_union {U : 𝑼} (e : Exp Γ (ty_union U)) {τ : Ty}
-      (alt__ctx : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
-      (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
-      (alt__rhs : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__ctx K) τ) : Stm Γ τ
-    | stm_match_record {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
-      (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
-    | stm_read_register {τ} (reg : 𝑹𝑬𝑮 τ) : Stm Γ τ
-    | stm_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) : Stm Γ τ
-    | stm_bind   {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ) : Stm Γ τ.
+    Inductive Stm (Γ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+    | stm_lit           (l : Lit τ)
+    | stm_exp           (e : Exp Γ τ)
+    | stm_let           (x : 𝑿) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (ctx_snoc Γ (x , σ)) τ)
+    | stm_block         (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (s : Stm (ctx_cat Γ Δ) τ)
+    | stm_assign        (x : 𝑿) {xInΓ : InCtx (x , τ) Γ} (s : Stm Γ τ)
+    | stm_call          {Δ : Ctx (𝑿 * Ty)} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+    | stm_call_frame    (Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (s : Stm Δ τ)
+    | stm_call_external {Δ : Ctx (𝑿 * Ty)} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+    | stm_if            (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
+    | stm_seq           {σ : Ty} (s : Stm Γ σ) (k : Stm Γ τ)
+    | stm_assertk       (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
+    | stm_fail          (s : Lit ty_string)
+    | stm_match_list
+        {σ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿)
+        (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ)
+    | stm_match_sum
+        {σinl σinr : Ty} (e : Exp Γ (ty_sum σinl σinr))
+        (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl , σinl)) τ)
+        (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr , σinr)) τ)
+    | stm_match_pair
+        {σ1 σ2 : Ty} (e : Exp Γ (ty_prod σ1 σ2))
+        (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ)
+    | stm_match_enum
+        {E : 𝑬} (e : Exp Γ (ty_enum E))
+        (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
+    | stm_match_tuple
+        {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
+        (p : TuplePat σs Δ) (rhs : Stm (ctx_cat Γ Δ) τ)
+    | stm_match_union
+        {U : 𝑼} (e : Exp Γ (ty_union U))
+        (alt__ctx : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
+        (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
+        (alt__rhs : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__ctx K) τ)
+    | stm_match_record
+        {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
+        (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (ctx_cat Γ Δ) τ)
+    | stm_read_register (reg : 𝑹𝑬𝑮 τ)
+    | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
+    (* EXPERIMENTAL *)
+    (* | stm_while  (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) : Stm Γ ty_unit *)
+    | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ).
 
     Section TransparentObligations.
 
@@ -891,27 +899,27 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     (* Definition Stm_rec (P : forall Γ σ, Stm Γ σ -> Set) := Stm_rect P. *)
     (* Definition Stm_ind (P : forall Γ σ, Stm Γ σ -> Prop) := Stm_rect P. *)
 
-    Global Arguments stm_lit {_} _ _.
-    Global Arguments stm_exp {_ _} _.
-    Global Arguments stm_let {_} _ _ _ {_} _.
-    Global Arguments stm_block {_ _} _ {_} _.
-    Global Arguments stm_assign {_} _ {_ _} _.
-    Global Arguments stm_call {_%ctx _%ctx _} _ _%arg.
-    Global Arguments stm_call_frame {_} _ _ _ _.
-    Global Arguments stm_call_external {_%ctx _%ctx _} _ _%arg.
-    Global Arguments stm_if {_ _} _ _ _.
-    Global Arguments stm_seq {_ _} _ {_} _.
-    Global Arguments stm_assert {_} _ _.
-    Global Arguments stm_fail {_} _ _.
-    Global Arguments stm_match_list {_ _ _} _ _ _ _ _.
-    Global Arguments stm_match_sum {_ _ _ _} _ _ _ _ _.
-    Global Arguments stm_match_pair {_ _ _ _} _ _ _ _.
-    Global Arguments stm_match_enum {_%ctx} _ _%exp {_} _%stm.
-    Global Arguments stm_match_tuple {_ _ _} _ _%pat {_} _.
-    Global Arguments stm_match_union {_} _ _ {_ _} _ _.
-    Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
-    Global Arguments stm_read_register {_ _} _.
-    Global Arguments stm_write_register {_ _} _ _.
+    Global Arguments stm_lit {Γ} τ l.
+    Global Arguments stm_exp {Γ τ} e%exp.
+    Global Arguments stm_let {Γ τ} x σ s__σ%stm s__τ%stm.
+    Global Arguments stm_block {Γ τ Δ} δ s%stm.
+    Global Arguments stm_assign {Γ τ} x {xInΓ} s%stm.
+    Global Arguments stm_call {Γ τ Δ} f _%arg.
+    Global Arguments stm_call_frame {Γ τ Δ} δ s%stm.
+    Global Arguments stm_call_external {Γ τ Δ} f _%arg.
+    Global Arguments stm_if {Γ τ} e%exp s1%stm s2%stm.
+    Global Arguments stm_seq {Γ τ σ} s%stm k%stm.
+    Global Arguments stm_assertk {Γ τ} e1%exp e2%exp k%stm.
+    Global Arguments stm_fail {Γ} τ s%string.
+    Global Arguments stm_match_list {Γ τ _} _ _ _ _ _.
+    Global Arguments stm_match_sum {Γ τ _ _} _ _ _ _ _.
+    Global Arguments stm_match_pair {Γ τ _ _} _ _ _ _.
+    Global Arguments stm_match_enum {Γ τ} E e%exp alts%stm.
+    Global Arguments stm_match_tuple {Γ τ σs Δ} e%exp p%pat rhs%stm.
+    Global Arguments stm_match_union {Γ τ} U e {alt__ctx} alt__pat alt__rhs.
+    Global Arguments stm_match_record {Γ τ} R {Δ} e%exp p%pat rhs%stm.
+    Global Arguments stm_read_register {Γ τ} reg.
+    Global Arguments stm_write_register {Γ τ} reg e%exp.
 
     Record Alternative (Γ : Ctx (𝑿 * Ty)) (σ τ : Ty) : Type :=
       MkAlt
@@ -926,8 +934,12 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         (fun K => alt_pat (alts K))
         (fun K => alt_rhs (alts K)).
 
+    Definition stm_assert {Γ} (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) : Stm Γ ty_unit :=
+      stm_assertk e1 e2 (stm_lit ty_unit tt).
+
     Global Arguments MkAlt {_ _ _ _} _ _.
     Global Arguments stm_match_union_alt {_ _} _ _ _.
+    Global Arguments stm_assert {Γ} e1%exp e2%exp.
 
   End Statements.
 
@@ -996,7 +1008,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     Definition stm_smart_assign {Γ : Ctx (𝑿 * Ty)} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
       Stm Γ (fromSome (ctx_resolve Γ x) p) -> Stm Γ (fromSome (ctx_resolve Γ x) p) :=
-      @stm_assign Γ x (fromSome _ p) (mk_inctx Γ x p).
+      @stm_assign Γ (fromSome _ p) x (mk_inctx Γ x p).
 
     (* Instead we hook mk_inctx directly into the typeclass resolution mechanism.
        Apparently, the unification of Γ is performed before the resolution so

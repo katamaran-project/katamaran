@@ -86,43 +86,40 @@ Module ProgramLogic
           (fun v => inst_assertion (env_snoc ι (result , σ) v) ens)
           (MkSepContract _ _ _ θΔ req result ens).
 
-    Inductive Triple {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) :
-      forall {τ : Ty}
-        (pre : L) (s : Stm Γ τ)
-        (post :  Lit τ -> LocalStore Γ -> L), Prop :=
-    | rule_consequence {σ : Ty}
-        {P P' : L} {Q Q' : Lit σ -> LocalStore Γ -> L} {s : Stm Γ σ} :
-        (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') -> δ ⊢ ⦃ P' ⦄ s ⦃ Q' ⦄ -> δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄
-    | rule_frame {σ : Ty}
-        (R P : L) (Q : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
-        δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ -> δ ⊢ ⦃ R ✱ P ⦄ s ⦃ fun v δ' => R ✱ Q v δ' ⦄
+    Inductive Triple {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) {τ : Ty} :
+      forall (pre : L) (s : Stm Γ τ) (post :  Lit τ -> LocalStore Γ -> L), Prop :=
+    | rule_consequence
+        {s : Stm Γ τ} {P P' : L} {Q Q' : Lit τ -> LocalStore Γ -> L}
+        (Hleft : P ⊢ P') (Hright : forall v δ', Q' v δ' ⊢ Q v δ') :
+        δ ⊢ ⦃ P' ⦄ s ⦃ Q' ⦄ ->
+        δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄
+    | rule_frame
+        (s : Stm Γ τ) (R P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+        δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
+        δ ⊢ ⦃ R ✱ P ⦄ s ⦃ fun v δ' => R ✱ Q v δ' ⦄
     | rule_pull
-        {σ : Ty} (s : Stm Γ σ)
-        (P : L) (Q : Prop) (R : Lit σ -> LocalStore Γ -> L) :
+        (s : Stm Γ τ) (P : L) (Q : Prop) (R : Lit τ -> LocalStore Γ -> L) :
         (Q -> δ ⊢ ⦃ P ⦄ s ⦃ R ⦄) ->
         δ ⊢ ⦃ P ∧ !!Q ⦄ s ⦃ R ⦄
     | rule_exist
-        {σ} (s : Stm Γ σ) {A : Type} {P : A -> L}
-        {Q :  Lit σ -> LocalStore Γ -> L} :
+        (s : Stm Γ τ) {A : Type} {P : A -> L} {Q : Lit τ -> LocalStore Γ -> L} :
         (forall x, δ ⊢ ⦃ P x ⦄ s ⦃ Q ⦄) ->
         δ ⊢ ⦃ ∃ x, P x ⦄ s ⦃ Q ⦄
     (* | rule_forall *)
-    (*     {σ} {s : Stm Γ σ} {A : Type} {P : L} *)
-    (*     {Q : A -> Lit σ -> LocalStore Γ -> L} *)
+    (*     {s : Stm Γ τ} {A : Type} {P : L} *)
+    (*     {Q : A -> Lit τ -> LocalStore Γ -> L} *)
     (*     (hyp : forall x, δ ⊢ ⦃ P ⦄ s ⦃ Q x ⦄) (x : A) : *)
     (*     δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => ∀ x, Q x v δ' ⦄ *)
     | rule_stm_lit
-        {τ : Ty} {l : Lit τ}
-        {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
+        {l : Lit τ} {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
         P ⊢ Q l δ ->
         δ ⊢ ⦃ P ⦄ stm_lit τ l ⦃ Q ⦄
     | rule_stm_exp
-        {τ : Ty} {e : Exp Γ τ}
-        {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
+        {e : Exp Γ τ} {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
         P ⊢ Q (eval e δ) δ ->
         δ ⊢ ⦃ P ⦄ stm_exp e ⦃ Q ⦄
     | rule_stm_let
-        (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
+        (x : 𝑿) (σ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x , σ)) τ)
         (P : L) (Q : Lit σ -> LocalStore Γ -> L)
         (R : Lit τ -> LocalStore Γ -> L) :
         δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
@@ -131,30 +128,32 @@ Module ProgramLogic
         δ ⊢ ⦃ P ⦄ let: x := s in k ⦃ R ⦄
     | rule_stm_block
         (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ)
-        (τ : Ty) (k : Stm (ctx_cat Γ Δ) τ)
+        (k : Stm (ctx_cat Γ Δ) τ)
         (P : L) (R : Lit τ -> LocalStore Γ -> L) :
         (δ ►► δΔ ⊢ ⦃ P ⦄ k ⦃ fun v δ'' => R v (env_drop Δ δ'') ⦄) ->
-        δ         ⊢ ⦃ P ⦄ stm_block δΔ k ⦃ R ⦄
+        δ        ⊢ ⦃ P ⦄ stm_block δΔ k ⦃ R ⦄
     | rule_stm_if
-        {τ : Ty} {e : Exp Γ ty_bool} {s1 s2 : Stm Γ τ}
+        {e : Exp Γ ty_bool} {s1 s2 : Stm Γ τ}
         {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
         δ ⊢ ⦃ P ∧ !!(eval e δ = true) ⦄ s1 ⦃ Q ⦄ ->
         δ ⊢ ⦃ P ∧ !!(eval e δ = false) ⦄ s2 ⦃ Q ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_if e s1 s2 ⦃ Q ⦄
     | rule_stm_seq
-        (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
-        (P : L) (Q : LocalStore Γ -> L) (R : Lit σ -> LocalStore Γ -> L) :
+        (σ : Ty) (s1 : Stm Γ σ) (s2 : Stm Γ τ)
+        (P : L) (Q : LocalStore Γ -> L) (R : Lit τ -> LocalStore Γ -> L) :
         δ ⊢ ⦃ P ⦄ s1 ⦃ fun _ => Q ⦄ ->
         (forall δ', δ' ⊢ ⦃ Q δ' ⦄ s2 ⦃ R ⦄) ->
         δ ⊢ ⦃ P ⦄ s1 ;; s2 ⦃ R ⦄
-    | rule_stm_assert (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string)
-                      (P : L) :
-        δ ⊢ ⦃ P ⦄ stm_assert e1 e2 ⦃ fun v δ' => !!(δ = δ' /\ eval e1 δ' = v /\ v = true) ∧ P ⦄
-    | rule_stm_fail (τ : Ty) (s : Lit ty_string) :
-        forall (Q : Lit τ -> LocalStore Γ -> L),
-          δ ⊢ ⦃ ⊤ ⦄ stm_fail τ s ⦃ Q ⦄
+    | rule_stm_assert
+        (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
+        (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+        δ ⊢ ⦃ P ∧ !! (eval e1 δ = true) ⦄ k ⦃ Q ⦄ ->
+        δ ⊢ ⦃ P ⦄ stm_assertk e1 e2 k ⦃ Q ⦄
+    | rule_stm_fail
+        (s : Lit ty_string) (Q : Lit τ -> LocalStore Γ -> L) :
+        δ ⊢ ⦃ ⊤ ⦄ stm_fail τ s ⦃ Q ⦄
     | rule_stm_match_list
-        {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
+        {σ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
         (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh , σ)) (xt , ty_list σ)) τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
         δ ⊢ ⦃ P ∧ !! (eval e δ = nil) ⦄ alt_nil ⦃ Q ⦄ ->
@@ -163,7 +162,7 @@ Module ProgramLogic
                      ⦃ P ∧ !! (eval e δ = cons v vs) ⦄ alt_cons ⦃ fun v' δ' => Q v' (env_tail (env_tail δ')) ⦄) ->
         δ ⊢ ⦃ P ⦄ stm_match_list e alt_nil xh xt alt_cons ⦃ Q ⦄
     | rule_stm_match_sum
-        {xl xr : 𝑿} {σl σr τ : Ty} {e : Exp Γ (ty_sum σl σr)}
+        {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty_sum σl σr)}
         {alt_inl : Stm (ctx_snoc Γ (xl , σl)) τ}
         {alt_inr : Stm (ctx_snoc Γ (xr , σr)) τ}
         {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
@@ -171,7 +170,7 @@ Module ProgramLogic
         (forall (v : Lit σr), env_snoc δ (xr,σr) v ⊢ ⦃ P ∧ !! (eval e δ = inr v) ⦄ alt_inr ⦃ fun v' δ' => Q v' (env_tail δ') ⦄) ->
         δ ⊢ ⦃ P ⦄ stm_match_sum e xl alt_inl xr alt_inr ⦃ Q ⦄
     | rule_stm_match_pair
-        {xl xr : 𝑿} {σl σr τ : Ty} {e : Exp Γ (ty_prod σl σr)}
+        {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty_prod σl σr)}
         {rhs : Stm (Γ ▻ (xl,σl) ▻ (xr,σr)) τ}
         {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
         (forall (vl : Lit σl) (vr : Lit σr),
@@ -179,19 +178,19 @@ Module ProgramLogic
               ⦃ P ∧ !! (eval e δ = (vl,vr)) ⦄ rhs ⦃ fun v δ' => Q v (env_tail (env_tail δ')) ⦄) ->
         δ ⊢ ⦃ P ⦄ stm_match_pair e xl xr rhs ⦃ Q ⦄
     | rule_stm_match_enum
-        {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
+        {E : 𝑬} (e : Exp Γ (ty_enum E))
         (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
         δ ⊢ ⦃ P ⦄ alts (eval e δ) ⦃ Q ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_match_enum E e alts ⦃ Q ⦄
     | rule_stm_match_tuple
         {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
-        (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
+        (p : TuplePat σs Δ) (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
         env_cat δ (tuple_pattern_match p (eval e δ)) ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_match_tuple e p rhs ⦃ Q ⦄
     | rule_stm_match_union
-        {U : 𝑼} (e : Exp Γ (ty_union U)) {τ : Ty}
+        {U : 𝑼} (e : Exp Γ (ty_union U))
         (alt__Δ : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
         (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
         (alt__r : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__Δ K) τ)
@@ -201,45 +200,46 @@ Module ProgramLogic
         δ ⊢ ⦃ P ⦄ stm_match_union U e alt__p alt__r ⦃ Q ⦄
     | rule_stm_match_record
         {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
-        (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
+        (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
         env_cat δ (record_pattern_match p (𝑹_unfold (eval e δ))) ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_match_record R e p rhs ⦃ Q ⦄
-    | rule_stm_read_register {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+    | rule_stm_read_register
+        (r : 𝑹𝑬𝑮 τ) (v : Lit τ) :
         δ ⊢ ⦃ r ↦ v ⦄ stm_read_register r ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = v) ∧ r ↦ v ⦄
-    | rule_stm_write_register {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
-                              (Q : Lit σ -> LocalStore Γ -> L)
-                              (v : Lit σ) :
+    | rule_stm_write_register
+        (r : 𝑹𝑬𝑮 τ) (w : Exp Γ τ) (v : Lit τ)
+        (Q : Lit τ -> LocalStore Γ -> L) :
         δ ⊢ ⦃ r ↦ v ⦄ stm_write_register r w ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ)
                                                          ∧ r ↦ v' ⦄
     | rule_stm_assign_backwards
-        (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
-        (P : L) (R : Lit σ -> LocalStore Γ -> L) :
+        (x : 𝑿) (xIn : (x,τ) ∈ Γ) (s : Stm Γ τ)
+        (P : L) (R : Lit τ -> LocalStore Γ -> L) :
         δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => R v (δ' ⟪ x ↦ v ⟫)%env ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_assign x s ⦃ R ⦄
     | rule_stm_assign_forwards
-        (x : 𝑿) (σ : Ty) (xIn : (x,σ) ∈ Γ) (s : Stm Γ σ)
-        (P : L) (R : Lit σ -> LocalStore Γ -> L) :
+        (x : 𝑿) (xIn : (x,τ) ∈ Γ) (s : Stm Γ τ)
+        (P : L) (R : Lit τ -> LocalStore Γ -> L) :
         δ ⊢ ⦃ P ⦄ s ⦃ R ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_assign x s ⦃ fun v__new δ' => ∃ v__old, R v__new (δ' ⟪ x ↦ v__old ⟫)%env ∧ !!(env_lookup δ' xIn = v__new) ⦄
     | rule_stm_call_forwards
-        {Δ σ} {f : 𝑭 Δ σ} {es : NamedEnv (Exp Γ) Δ} {c : SepContract Δ σ}
-        {P : L} {Q : Lit σ -> L} :
+        {Δ} {f : 𝑭 Δ τ} {es : NamedEnv (Exp Γ) Δ} {c : SepContract Δ τ}
+        {P : L} {Q : Lit τ -> L} :
         CEnv f = Some c ->
         CTriple Δ (evals es δ) P Q c ->
         δ ⊢ ⦃ P ⦄ stm_call f es ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
     | rule_stm_call_inline
-        {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) (c : SepContract Δ σ)
-        (P : L) (Q : Lit σ -> L) :
+        {Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ) (c : SepContract Δ τ)
+        (P : L) (Q : Lit τ -> L) :
         evals es δ ⊢ ⦃ P ⦄ Pi f ⦃ fun v _ => Q v ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_call f es ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
     | rule_stm_call_frame
-        (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
+        (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (s : Stm Δ τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
         δΔ ⊢ ⦃ P ⦄ s ⦃ fun v _ => Q v δ ⦄ ->
-        δ ⊢ ⦃ P ⦄ stm_call_frame Δ δΔ τ s ⦃ Q ⦄
+        δ ⊢ ⦃ P ⦄ stm_call_frame δΔ s ⦃ Q ⦄
     | rule_stm_bind
-        {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
+        {σ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
         (P : L) (Q : Lit σ -> LocalStore Γ -> L)
         (R : Lit τ -> LocalStore Γ -> L) :
         δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄ ->
