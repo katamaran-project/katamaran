@@ -267,11 +267,11 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Local Notation "'z'"   := (@exp_var _ "z" _ _) : exp_scope.
 
   Definition fun_msum : Stm ["x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either) :=
-    stm_match_union either x
+    stm_match_union_alt either x
      (fun K =>
         match K with
-        | Left  => alt _ (pat_var "z") (`Left z)
-        | Right => alt _ (pat_var "z") y
+        | Left  => MkAlt (pat_var "z") (`Left z)
+        | Right => MkAlt (pat_var "z") y
         end).
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=

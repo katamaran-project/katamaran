@@ -191,14 +191,14 @@ Module ProgramLogic
         env_cat δ (tuple_pattern_match p (eval e δ)) ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_match_tuple e p rhs ⦃ Q ⦄
     | rule_stm_match_union
-        {U : 𝑼} (e : Exp Γ (ty_union U)) {σ τ : Ty}
+        {U : 𝑼} (e : Exp Γ (ty_union U)) {τ : Ty}
         (alt__Δ : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
         (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
-        (alt__r : forall (K : 𝑼𝑲 U), Stm (ctx_cat Γ (alt__Δ K)) τ)
+        (alt__r : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__Δ K) τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
         (forall (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
             env_cat δ (pattern_match (alt__p K) v) ⊢ ⦃ P ∧ !! (eval e δ = 𝑼_fold (existT K v)) ⦄ alt__r K ⦃ fun v δ' => Q v (env_drop (alt__Δ K) δ') ⦄) ->
-        δ ⊢ ⦃ P ⦄ stm_match_union U e (fun K => @alt Γ (𝑼𝑲_Ty K) τ (alt__Δ K) (alt__p K) (alt__r K)) ⦃ Q ⦄
+        δ ⊢ ⦃ P ⦄ stm_match_union U e alt__p alt__r ⦃ Q ⦄
     | rule_stm_match_record
         {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
@@ -357,20 +357,6 @@ Module ProgramLogic
     (*   - apply (rule_consequence_left _ H1), land_left1, entails_refl. *)
     (*   - apply (rule_consequence_left _ H2), land_left2, entails_refl. *)
     (* Qed. *)
-
-    Lemma rule_stm_match_union' {Γ δ U} (e : Exp Γ (ty_union U)) {τ : Ty}
-      (alts : forall (K : 𝑼𝑲 U), Alternative Γ (𝑼𝑲_Ty K) τ)
-      (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
-      (forall (K : 𝑼𝑲 U),
-          match alts K in Alternative _ σ τ return (Lit σ -> Prop) -> (Lit τ -> LocalStore Γ -> L) -> Prop with
-          | @alt _ σ τ Δp p rhs =>
-            fun R Q =>
-              forall (vσ : Lit σ),
-                env_cat δ (pattern_match p vσ) ⊢ ⦃ P ∧ !! (R vσ) ⦄ rhs ⦃ fun vτ δ' => Q vτ (env_drop Δp δ') ⦄
-          end (fun (v : Lit (𝑼𝑲_Ty K)) => eval e δ = 𝑼_fold (existT K v)) Q) ->
-      δ ⊢ ⦃ P ⦄ stm_match_union U e alts ⦃ Q ⦄.
-    Proof.
-    Admitted.
 
     Definition WP {Γ τ} (s : Stm Γ τ) (POST :  Lit τ -> LocalStore Γ -> L) : LocalStore Γ -> L :=
       fun δ => ∃ (P : L), P ∧ !! (δ ⊢ ⦃ P ⦄ s ⦃ POST ⦄).

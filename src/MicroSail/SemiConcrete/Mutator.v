@@ -395,11 +395,11 @@ Module SemiConcrete
         scmut_pushs_local (tuple_pattern_match p v) ;;
         scmut_exec rhs <*
         scmut_pops_local _
-      | stm_match_union U e alts =>
+      | stm_match_union U e alt__pat alt__rhs =>
         v <- scmut_eval_exp e ;;
         let (K , v) := 𝑼_unfold v in
-        scmut_pushs_local (pattern_match (proj_alt_pat (alts K)) v) ;;
-        scmut_exec (proj_alt_rhs (alts K)) <*
+        scmut_pushs_local (pattern_match (alt__pat K) v) ;;
+        scmut_exec (alt__rhs K) <*
         scmut_pops_local _
       | stm_match_record R e p rhs =>
         v <- scmut_eval_exp e ;;

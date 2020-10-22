@@ -387,15 +387,10 @@ Module Soundness
         now apply rule_stm_match_tuple, IHs.
 
       - (* stm_match_union *)
-        apply rule_stm_match_union'.
-        intros K. specialize (H K).
-        remember (alts K) as alt.
-        dependent elimination alt; cbn.
-        intros.
-        apply rule_pull. intro Heval. rewrite Heval, 𝑼_unfold_fold in HYP.
+        apply rule_stm_match_union; cbn; intros;
+          apply rule_pull; intro Heval; rewrite Heval, 𝑼_unfold_fold in HYP.
         unfold scmut_bind_left, scmut_bind in HYP.
         repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
-        rewrite <- Heqalt in HYP.
         now apply H.
 
       - (* stm_match_record *)

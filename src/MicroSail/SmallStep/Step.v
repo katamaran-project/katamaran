@@ -166,10 +166,12 @@ Module SmallStep
 
   | step_stm_match_union
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {U : 𝑼} (e : Exp Γ (ty_union U)) {τ : Ty}
-      (alts : forall (K : 𝑼𝑲 U), Alternative Γ (𝑼𝑲_Ty K) τ) :
-      ⟨ γ , μ , δ , stm_match_union U e alts ⟩ --->
+      (alt__ctx : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
+      (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
+      (alt__rhs : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__ctx K) τ) :
+      ⟨ γ , μ , δ , stm_match_union U e alt__pat alt__rhs ⟩ --->
       ⟨ γ , μ , δ , let (K , v) := 𝑼_unfold (eval e δ) in
-                stm_block (pattern_match (proj_alt_pat (alts K)) v) (proj_alt_rhs (alts K))
+                stm_block (pattern_match (alt__pat K) v) (alt__rhs K)
       ⟩
   | step_stm_match_record
       (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) {R : 𝑹} {Δ : Ctx (𝑿 * Ty)}

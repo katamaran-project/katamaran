@@ -784,7 +784,7 @@ Module Mutators
         mutator_fail "Err [mutator_exec]: stm_match_pair not supported. use dynamic mutators"
       | stm_match_tuple e p rhs =>
         mutator_fail "Err [mutator_exec]: stm_match_tuple not supported. use dynamic mutators"
-      | stm_match_union U e alts =>
+      | stm_match_union U e alt__pat alt__rhs =>
         mutator_fail "Err [mutator_exec]: stm_match_union not supported. use dynamic mutators"
       | stm_match_record R e p rhs =>
         mutator_fail "Err [mutator_exec]: stm_match_record not supported. use dynamic mutators"
@@ -1398,7 +1398,7 @@ Module Mutators
         dmut_exec (alts K)
     | stm_match_tuple e p s =>
       dmut_fail "Err [dmut_exec]: [stm_match_tuple] not implemented"
-    | @stm_match_union _ _ _ τ _ =>
+    | stm_match_union U e alt__ctx alt__pat =>
       dmut_fail "Err [dmut_exec]: [stm_match_union] not implemented"
     | @stm_match_record _ _ _ _ _ τ _ =>
       dmut_fail "Err [dmut_exec]: [stm_match_record] not implemented"
@@ -1559,22 +1559,16 @@ Module Mutators
       t <- dmut_exec_evar s ;;
       dmut_pops_local _ ;;
       dmut_pure t
-    | @stm_match_union _ U e τ alts =>
+    | stm_match_union U e alt__pat alt__rhs =>
       t__sc <- dmut_eval_exp e ;;
       match term_get_union t__sc with
       | Some (existT K t__field) =>
-        match alts K in Alternative _ σ__pat σ__rhs
-              return Term _ σ__pat -> DynamicMutator Γ Γ (fun Σ => Term Σ σ__rhs) _
-        with
-        | alt _ p s__rhs =>
-          fun t__field' =>
-            dmut_freshen_pattern p >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-              dmut_assume_formula (formula_eq t__pat (sub_term ζ2 t__field'));;
-              dmut_pushs_local δ__Δ;;
-              t__rhs <- dmut_sub ζ2 (dmut_exec_evar s__rhs) ;;
-              dmut_pops_local _;;
-              dmut_pure t__rhs)
-        end t__field
+        dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
+          dmut_assume_formula (formula_eq t__pat (sub_term ζ2 t__field));;
+          dmut_pushs_local δ__Δ;;
+          t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
+          dmut_pops_local _;;
+          dmut_pure t__rhs)
       | None =>
         dmut_demonic_finite
           (𝑼𝑲 U)

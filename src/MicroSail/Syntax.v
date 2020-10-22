@@ -777,7 +777,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty_tuple σs)
     | pat_record {R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) : Pattern Δ (ty_record R).
 
-    Local Unset Elimination Schemes.
+    (* Local Unset Elimination Schemes. *)
 
     Inductive Stm (Γ : Ctx (𝑿 * Ty)) : Ty -> Type :=
     | stm_lit        {τ : Ty} (l : Lit τ) : Stm Γ τ
@@ -805,14 +805,14 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     | stm_match_tuple {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
       (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
     | stm_match_union {U : 𝑼} (e : Exp Γ (ty_union U)) {τ : Ty}
-      (alts : forall (K : 𝑼𝑲 U), Alternative Γ (𝑼𝑲_Ty K) τ) : Stm Γ τ
+      (alt__ctx : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
+      (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
+      (alt__rhs : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__ctx K) τ) : Stm Γ τ
     | stm_match_record {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
       (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ) : Stm Γ τ
     | stm_read_register {τ} (reg : 𝑹𝑬𝑮 τ) : Stm Γ τ
     | stm_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) : Stm Γ τ
-    | stm_bind   {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ) : Stm Γ τ
-    with Alternative (Γ : Ctx (𝑿 * Ty)) : Ty -> Ty -> Type :=
-    | alt {σ τ} {Δ : Ctx (𝑿 * Ty)} (p : Pattern Δ σ) (rhs : Stm (ctx_cat Γ Δ) τ) : Alternative Γ σ τ.
+    | stm_bind   {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ) : Stm Γ τ.
 
     Section TransparentObligations.
 
@@ -822,80 +822,74 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     End TransparentObligations.
 
-    Definition proj_alt_ext {Γ σ τ} (a : Alternative Γ σ τ) : Ctx (𝑿 * Ty) :=
-      match a with @alt _ _ _ Δ _ _ => Δ end.
-    Definition proj_alt_pat {Γ σ τ} (a : Alternative Γ σ τ) : Pattern (proj_alt_ext a) σ :=
-      match a with @alt _ _ _ _ p _ => p end.
-    Definition proj_alt_rhs {Γ σ τ} (a : Alternative Γ σ τ) : Stm (ctx_cat Γ (proj_alt_ext a)) τ :=
-      match a with @alt _ _ _ _ _ s => s end.
+    (* Section StmElimination. *)
 
-    Section StmElimination.
+    (*   Variable (P : forall (Γ : Ctx (𝑿 * Ty)) (t : Ty), Stm Γ t -> Type). *)
 
-      Variable (P : forall (Γ : Ctx (𝑿 * Ty)) (t : Ty), Stm Γ t -> Type).
+    (*   Hypothesis (P_lit   : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (l : Lit τ), P (stm_lit Γ l)). *)
+    (*   Hypothesis (P_exp  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Exp Γ τ), P (stm_exp e)). *)
+    (*   Hypothesis (P_let  : forall (Γ : Ctx (𝑿 * Ty)) (x : 𝑿) (τ : Ty) (s : Stm Γ τ) (σ : Ty) (k : Stm (Γ ▻ (x ∶ τ)%ctx) σ), P s -> P k -> P (stm_let s k)). *)
+    (*   Hypothesis (P_block : forall (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (σ : Ty) (k : Stm (Γ ▻▻ Δ) σ), P k -> P (stm_block Γ δ k)). *)
+    (*   Hypothesis (P_assign : forall (Γ : Ctx (𝑿 * Ty)) (x : 𝑿) (τ : Ty) (xInΓ : (x ∶ τ)%ctx ∈ Γ) (e : Stm Γ τ), P e -> P (stm_assign e)). *)
+    (*   Hypothesis (P_call  : forall (Γ Δ : Ctx (𝑿 * Ty)) (σ : Ty) (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call f es)). *)
+    (*   Hypothesis (P_call_frame  : forall (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call_frame Γ δ s)). *)
+    (*   Hypothesis (P_call_external  : forall (Γ Δ : Ctx (𝑿 * Ty)) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call_external f es)). *)
+    (*   Hypothesis (P_if  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Exp Γ ty_bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)). *)
+    (*   Hypothesis (P_seq  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Stm Γ τ) (σ : Ty) (k : Stm Γ σ), P e -> P k -> P (stm_seq e k)). *)
+    (*   Hypothesis (P_assert  : forall (Γ : Ctx (𝑿 * Ty)) (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string), P (stm_assert e1 e2)). *)
+    (*   Hypothesis (P_fail  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (s : Lit ty_string), P (stm_fail Γ τ s)). *)
+    (*   Hypothesis (P_match_list : forall (Γ : Ctx (𝑿 * Ty)) (σ τ : Ty) (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh ∶ σ)%ctx ▻ (xt ∶ ty_list σ)%ctx) τ), *)
+    (*         P alt_nil -> P alt_cons -> P (stm_match_list e alt_nil alt_cons)). *)
+    (*   Hypothesis (P_match_sum : forall (Γ : Ctx (𝑿 * Ty)) (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr)) (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl ∶ σinl)%ctx) τ) (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr ∶ σinr)%ctx) τ), *)
+    (*         P alt_inl -> P alt_inr -> P (stm_match_sum e alt_inl alt_inr)). *)
+    (*   Hypothesis (P_match_pair : forall (Γ : Ctx (𝑿 * Ty)) (σ1 σ2 τ : Ty) (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿) (rhs : Stm (Γ ▻ (xl ∶ σ1)%ctx ▻ (xr ∶ σ2)%ctx) τ), *)
+    (*         P rhs -> P (stm_match_pair e rhs)). *)
+    (*   Hypothesis (P_match_enum : forall (Γ : Ctx (𝑿 * Ty)) (E : 𝑬) (e : Exp Γ (ty_enum E)) (τ : Ty) (alts : 𝑬𝑲 E -> Stm Γ τ), *)
+    (*         (forall K : 𝑬𝑲 E, P (alts K)) -> P (stm_match_enum e alts)). *)
+    (*   Hypothesis (P_match_tuple : forall (Γ : Ctx (𝑿 * Ty)) (σs : Ctx Ty) (Δ : Ctx (𝑿 * Ty)) (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
+    (*         P rhs -> P (stm_match_tuple e p rhs)). *)
+    (*   Hypothesis (P_match_union : forall (Γ : Ctx (𝑿 * Ty)) (U : 𝑼) (e : Exp Γ (ty_union U)) (τ : Ty) (alt__ctx : 𝑼𝑲 U -> Ctx (𝑿 * Ty)) *)
+    (*         (alt__pat : forall K : 𝑼𝑲 U, Pattern (alt__ctx K) (𝑼𝑲_Ty K)) (alt__rhs : forall K : 𝑼𝑲 U, Stm (Γ ▻▻ alt__ctx K) τ), *)
+    (*         (forall K : 𝑼𝑲 U, P (alt__rhs K)) -> P (stm_match_union e alt__ctx alt__pat alt__rhs)). *)
+    (*   Hypothesis (P_match_record : forall (Γ : Ctx (𝑿 * Ty)) (R : 𝑹) (Δ : Ctx (𝑿 * Ty)) (e : Exp Γ (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
+    (*         P rhs -> P (stm_match_record e p rhs)). *)
+    (*   Hypothesis (P_read_register : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (reg : 𝑹𝑬𝑮 τ), *)
+    (*         P (stm_read_register Γ reg)). *)
+    (*   Hypothesis (P_write_register : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ), *)
+    (*         P (stm_write_register reg e)). *)
+    (*   Hypothesis (P_bind : forall (Γ : Ctx (𝑿 * Ty)) (σ τ : Ty) (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ), *)
+    (*         P s -> (forall l : Lit σ, P (k l)) -> P (stm_bind s k)). *)
 
-      Hypothesis (P_lit   : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (l : Lit τ), P (stm_lit Γ l)).
-      Hypothesis (P_exp  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Exp Γ τ), P (stm_exp e)).
-      Hypothesis (P_let  : forall (Γ : Ctx (𝑿 * Ty)) (x : 𝑿) (τ : Ty) (s : Stm Γ τ) (σ : Ty) (k : Stm (Γ ▻ (x ∶ τ)%ctx) σ), P s -> P k -> P (stm_let s k)).
-      Hypothesis (P_block : forall (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (σ : Ty) (k : Stm (Γ ▻▻ Δ) σ), P k -> P (stm_block Γ δ k)).
-      Hypothesis (P_assign : forall (Γ : Ctx (𝑿 * Ty)) (x : 𝑿) (τ : Ty) (xInΓ : (x ∶ τ)%ctx ∈ Γ) (e : Stm Γ τ), P e -> P (stm_assign e)).
-      Hypothesis (P_call  : forall (Γ Δ : Ctx (𝑿 * Ty)) (σ : Ty) (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call f es)).
-      Hypothesis (P_call_frame  : forall (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call_frame Γ δ s)).
-      Hypothesis (P_call_external  : forall (Γ Δ : Ctx (𝑿 * Ty)) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call_external f es)).
-      Hypothesis (P_if  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Exp Γ ty_bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)).
-      Hypothesis (P_seq  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (e : Stm Γ τ) (σ : Ty) (k : Stm Γ σ), P e -> P k -> P (stm_seq e k)).
-      Hypothesis (P_assert  : forall (Γ : Ctx (𝑿 * Ty)) (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string), P (stm_assert e1 e2)).
-      Hypothesis (P_fail  : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (s : Lit ty_string), P (stm_fail Γ τ s)).
-      Hypothesis (P_match_list : forall (Γ : Ctx (𝑿 * Ty)) (σ τ : Ty) (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh ∶ σ)%ctx ▻ (xt ∶ ty_list σ)%ctx) τ),
-            P alt_nil -> P alt_cons -> P (stm_match_list e alt_nil alt_cons)).
-      Hypothesis (P_match_sum : forall (Γ : Ctx (𝑿 * Ty)) (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr)) (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl ∶ σinl)%ctx) τ) (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr ∶ σinr)%ctx) τ),
-            P alt_inl -> P alt_inr -> P (stm_match_sum e alt_inl alt_inr)).
-      Hypothesis (P_match_pair : forall (Γ : Ctx (𝑿 * Ty)) (σ1 σ2 τ : Ty) (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿) (rhs : Stm (Γ ▻ (xl ∶ σ1)%ctx ▻ (xr ∶ σ2)%ctx) τ),
-            P rhs -> P (stm_match_pair e rhs)).
-      Hypothesis (P_match_enum : forall (Γ : Ctx (𝑿 * Ty)) (E : 𝑬) (e : Exp Γ (ty_enum E)) (τ : Ty) (alts : 𝑬𝑲 E -> Stm Γ τ),
-            (forall K : 𝑬𝑲 E, P (alts K)) -> P (stm_match_enum e alts)).
-      Hypothesis (P_match_tuple : forall (Γ : Ctx (𝑿 * Ty)) (σs : Ctx Ty) (Δ : Ctx (𝑿 * Ty)) (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ),
-            P rhs -> P (stm_match_tuple e p rhs)).
-      Hypothesis (P_match_union : forall (Γ : Ctx (𝑿 * Ty)) (U : 𝑼) (e : Exp Γ (ty_union U)) (τ : Ty) (alts : forall (K : 𝑼𝑲 U), Alternative Γ (𝑼𝑲_Ty K) τ),
-            (forall K : 𝑼𝑲 U, P (proj_alt_rhs (alts K))) -> P (stm_match_union e alts)).
-      Hypothesis (P_match_record : forall (Γ : Ctx (𝑿 * Ty)) (R : 𝑹) (Δ : Ctx (𝑿 * Ty)) (e : Exp Γ (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ),
-            P rhs -> P (stm_match_record e p rhs)).
-      Hypothesis (P_read_register : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (reg : 𝑹𝑬𝑮 τ),
-            P (stm_read_register Γ reg)).
-      Hypothesis (P_write_register : forall (Γ : Ctx (𝑿 * Ty)) (τ : Ty) (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ),
-            P (stm_write_register reg e)).
-      Hypothesis (P_bind : forall (Γ : Ctx (𝑿 * Ty)) (σ τ : Ty) (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ),
-            P s -> (forall l : Lit σ, P (k l)) -> P (stm_bind s k)).
+    (*   Fixpoint Stm_rect {Γ : Ctx (𝑿 * Ty)} {τ : Ty} (s : Stm Γ τ) {struct s} : P s := *)
+    (*     match s with *)
+    (*     | stm_lit _ _             => ltac:(apply P_lit; auto) *)
+    (*     | stm_exp _               => ltac:(apply P_exp; auto) *)
+    (*     | stm_let _ _             => ltac:(apply P_let; auto) *)
+    (*     | stm_block _ _ _         => ltac:(apply P_block; auto) *)
+    (*     | stm_assign _            => ltac:(apply P_assign; auto) *)
+    (*     | stm_call _ _            => ltac:(apply P_call; auto) *)
+    (*     | stm_call_frame _ _ _    => ltac:(apply P_call_frame; auto) *)
+    (*     | stm_call_external _ _   => ltac:(apply P_call_external; auto) *)
+    (*     | stm_if _ _ _            => ltac:(apply P_if; auto) *)
+    (*     | stm_seq _ _             => ltac:(apply P_seq; auto) *)
+    (*     | stm_assert _ _          => ltac:(apply P_assert; auto) *)
+    (*     | stm_fail _ _ _          => ltac:(apply P_fail; auto) *)
+    (*     | stm_match_list _ _ _    => ltac:(apply P_match_list; auto) *)
+    (*     | stm_match_sum _ _ _     => ltac:(apply P_match_sum; auto) *)
+    (*     | stm_match_pair _ _      => ltac:(apply P_match_pair; auto) *)
+    (*     | stm_match_enum _ _      => ltac:(apply P_match_enum; auto) *)
+    (*     | stm_match_tuple _ _ _   => ltac:(apply P_match_tuple; auto) *)
+    (*     | stm_match_union _ _ _ _ => ltac:(apply P_match_union; auto) *)
+    (*     | stm_match_record _ _ _  => ltac:(apply P_match_record; auto) *)
+    (*     | stm_read_register _ _   => ltac:(apply P_read_register; auto) *)
+    (*     | stm_write_register _ _  => ltac:(apply P_write_register; auto) *)
+    (*     | stm_bind _ _            => ltac:(apply P_bind; auto) *)
+    (*     end. *)
 
-      Fixpoint Stm_rect {Γ : Ctx (𝑿 * Ty)} {τ : Ty} (s : Stm Γ τ) {struct s} : P s :=
-        match s with
-        | stm_lit _ _            => ltac:(apply P_lit; auto)
-        | stm_exp _              => ltac:(apply P_exp; auto)
-        | stm_let _ _            => ltac:(apply P_let; auto)
-        | stm_block _ _ _        => ltac:(apply P_block; auto)
-        | stm_assign _           => ltac:(apply P_assign; auto)
-        | stm_call _ _           => ltac:(apply P_call; auto)
-        | stm_call_frame _ _ _   => ltac:(apply P_call_frame; auto)
-        | stm_call_external _ _  => ltac:(apply P_call_external; auto)
-        | stm_if _ _ _           => ltac:(apply P_if; auto)
-        | stm_seq _ _            => ltac:(apply P_seq; auto)
-        | stm_assert _ _         => ltac:(apply P_assert; auto)
-        | stm_fail _ _ _         => ltac:(apply P_fail; auto)
-        | stm_match_list _ _ _   => ltac:(apply P_match_list; auto)
-        | stm_match_sum _ _ _    => ltac:(apply P_match_sum; auto)
-        | stm_match_pair _ _     => ltac:(apply P_match_pair; auto)
-        | stm_match_enum _ _     => ltac:(apply P_match_enum; auto)
-        | stm_match_tuple _ _ _  => ltac:(apply P_match_tuple; auto)
-        | stm_match_union _ _    => ltac:(apply P_match_union; auto)
-        | stm_match_record _ _ _ => ltac:(apply P_match_record; auto)
-        | stm_read_register _ _  => ltac:(apply P_read_register; auto)
-        | stm_write_register _ _ => ltac:(apply P_write_register; auto)
-        | stm_bind _ _           => ltac:(apply P_bind; auto)
-        end.
+    (* End StmElimination. *)
 
-    End StmElimination.
-
-    Definition Stm_rec (P : forall Γ σ, Stm Γ σ -> Set) := Stm_rect P.
-    Definition Stm_ind (P : forall Γ σ, Stm Γ σ -> Prop) := Stm_rect P.
+    (* Definition Stm_rec (P : forall Γ σ, Stm Γ σ -> Set) := Stm_rect P. *)
+    (* Definition Stm_ind (P : forall Γ σ, Stm Γ σ -> Prop) := Stm_rect P. *)
 
     Global Arguments stm_lit {_} _ _.
     Global Arguments stm_exp {_ _} _.
@@ -914,10 +908,26 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Global Arguments stm_match_pair {_ _ _ _} _ _ _ _.
     Global Arguments stm_match_enum {_%ctx} _ _%exp {_} _%stm.
     Global Arguments stm_match_tuple {_ _ _} _ _%pat {_} _.
-    Global Arguments stm_match_union {_} _ _ {_} _.
+    Global Arguments stm_match_union {_} _ _ {_ _} _ _.
     Global Arguments stm_match_record {_} _ {_} _ _ {_} _.
     Global Arguments stm_read_register {_ _} _.
     Global Arguments stm_write_register {_ _} _ _.
+
+    Record Alternative (Γ : Ctx (𝑿 * Ty)) (σ τ : Ty) : Type :=
+      MkAlt
+        { alt_ctx : Ctx (𝑿 * Ty);
+          alt_pat : Pattern alt_ctx σ;
+          alt_rhs : Stm (Γ ▻▻ alt_ctx) τ;
+        }.
+
+    Definition stm_match_union_alt {Γ τ} U (e : Exp Γ (ty_union U))
+      (alts : forall (K : 𝑼𝑲 U), Alternative Γ (𝑼𝑲_Ty K) τ) : Stm Γ τ :=
+      stm_match_union U e
+        (fun K => alt_pat (alts K))
+        (fun K => alt_rhs (alts K)).
+
+    Global Arguments MkAlt {_ _ _ _} _ _.
+    Global Arguments stm_match_union_alt {_ _} _ _ _.
 
   End Statements.
 

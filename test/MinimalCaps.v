@@ -714,22 +714,24 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
              (call add_pc (exp_var immediate) ;; stm_lit ty_bool true).
 
     Definition fun_exec_instr : Stm [i ∶ ty_instr] ty_bool :=
-      stm_match_union instruction (exp_var i)
-                      (fun K => match K with
-                            | kjr => alt _ (pat_var lv) (call exec_jr lv)
-                            | kj  => alt _ (pat_var offset) (call exec_j offset)
-                            | kbnez => alt _ (pat_pair lv immediate) (call exec_bnez lv immediate)
-                            | kmv => alt _ (pat_pair lv hv) (call exec_mv lv hv)
-                            | kld => alt _ (pat_tuple [lv , hv , immediate])
-                                         (call exec_ld (exp_var lv) (exp_var hv) (exp_var immediate))
-                            | ksd => alt _ (pat_tuple [hv , lv , immediate])
-                                         (call exec_sd (exp_var hv) (exp_var lv) (exp_var immediate))
-                            | kaddi => alt _ (pat_tuple [lv , hv , immediate])
-                                           (call exec_addi (exp_var lv) (exp_var hv) (exp_var immediate))
-                            | kadd => alt _ (pat_tuple ["lv1" , "lv2" , "lv3"])
-                                           (call exec_add (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
-                            | kret => alt _ pat_unit (call exec_ret)
-                            end).
+      stm_match_union_alt
+        instruction (exp_var i)
+        (fun K =>
+           match K with
+           | kjr   => MkAlt (pat_var lv) (call exec_jr lv)
+           | kj    => MkAlt (pat_var offset) (call exec_j offset)
+           | kbnez => MkAlt (pat_pair lv immediate) (call exec_bnez lv immediate)
+           | kmv   => MkAlt (pat_pair lv hv) (call exec_mv lv hv)
+           | kld   => MkAlt (pat_tuple [lv , hv , immediate])
+                            (call exec_ld (exp_var lv) (exp_var hv) (exp_var immediate))
+           | ksd   => MkAlt (pat_tuple [hv , lv , immediate])
+                            (call exec_sd (exp_var hv) (exp_var lv) (exp_var immediate))
+           | kaddi => MkAlt (pat_tuple [lv , hv , immediate])
+                            (call exec_addi (exp_var lv) (exp_var hv) (exp_var immediate))
+           | kadd  => MkAlt (pat_tuple ["lv1" , "lv2" , "lv3"])
+                            (call exec_add (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
+           | kret  => MkAlt pat_unit (call exec_ret)
+           end).
 
     Definition fun_read_mem : Stm ["a"   ∶ ty_addr ] ty_memval :=
       callex rM a.
