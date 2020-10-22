@@ -1212,7 +1212,7 @@ Module IrisInstance
         (P : iProp Σ)
         (Q : Lit σ -> iProp Σ) :
         CEnv f = Some c ->
-        CTriple Δ (evals es δ) P Q c ->
+        CTriple (evals es δ) P Q c ->
         (⊢ ▷ ValidContractEnvSem CEnv -∗
            semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')))%I.
   Proof.
@@ -1232,14 +1232,22 @@ Module IrisInstance
     iModIntro.
     iFrame.
     iSplitL; [|trivial].
-    dependent destruction ctrip.
+    destruct ctrip.
+    iPoseProof (H1 with "P") as "[fr req]".
+    iApply wp_compat_call_frame.
+    rewrite H0.
+    iApply (wp_mono _ _ _ (fun v => frame ∗ match v with
+                                            | MkVal _ _ v => inst_assertion (env_snoc ι (result,σ) v) ens
+                                            end)%I).
+    - intros [δ' v]; cbn.
+      iIntros "[fr ens]".
+      iSplitL; [|trivial].
+      iApply (H2 v).
+      by iFrame.
     - iSpecialize ("cenv" $! _ _ f).
       rewrite ceq.
-      iSpecialize ("cenv" $! ι with "P").
-      iApply wp_compat_call_frame.
-      rewrite H0.
-      iApply (wp_mono with "cenv").
-      iIntros ([δ' v]) "ensv".
+      iSpecialize ("cenv" $! ι with "req").
+      iApply wp_frame_l.
       by iFrame.
   Qed.
 
@@ -1341,7 +1349,7 @@ Module IrisInstance
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -1370,8 +1378,9 @@ Module IrisInstance
     - by iApply iris_rule_stm_call_forwards.
     - by iApply iris_rule_stm_call_inline.
     - by iApply iris_rule_stm_call_frame.
+    - admit. (* by iApply iris_rule_stm_call_external_backwards. *)
     - by iApply iris_rule_stm_bind.
-  Qed.
+  Admitted.
 
   Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
     ValidContractEnv CEnv ->

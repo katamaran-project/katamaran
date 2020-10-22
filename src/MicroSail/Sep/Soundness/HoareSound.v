@@ -261,17 +261,16 @@ Module HoareSound
         exists (H ‼ x)%lit.
         now rewrite env_update_update, env_update_lookup, env_lookup_update.
       (* rule_stm_call_forwards *)
-      - pose proof (validCEnv _ _ f) as HYP.
-        rewrite H in HYP.
-        destruct H0; try contradiction.
-        sound_solve.
+      - admit.
       (* rule_stm_call_inline *)
       - sound_solve.
       (* rule_stm_call_frame *)
       - sound_solve.
+      (* rule_stm_call_external_backwards *)
+      - admit.
       (* rule_stm_bind *)
       - sound_solve.
-    Qed.
+    Admitted.
 
   End Soundness.
 

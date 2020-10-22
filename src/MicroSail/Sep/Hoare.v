@@ -73,18 +73,17 @@ Module ProgramLogic
 
     (* Hoare triples for SepContract *)
 
-    Inductive CTriple (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) {σ : Ty} :
-      forall (pre : L) (post : Lit σ -> L) (c : SepContract Δ σ), Prop :=
+    Inductive CTriple {Δ σ} (δΔ : LocalStore Δ) (pre : L) (post : Lit σ -> L) :
+      SepContract Δ σ -> Prop :=
     | rule_sep_contract
         (result : 𝑺)
         (Σ  : Ctx (𝑺 * Ty)) (θΔ : SymbolicLocalStore Δ Σ) (ι : SymInstance Σ)
-        (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , σ))) :
+        (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , σ)))
+        (frame : L) :
         δΔ = inst_localstore ι θΔ ->
-        CTriple
-          Δ δΔ
-          (inst_assertion ι req)
-          (fun v => inst_assertion (env_snoc ι (result , σ) v) ens)
-          (MkSepContract _ _ _ θΔ req result ens).
+        pre ⊢ frame ✱ inst_assertion ι req ->
+        (forall v, frame ✱ inst_assertion (env_snoc ι (result , σ) v) ens ⊢ post v) ->
+        CTriple δΔ pre post (MkSepContract _ _ _ θΔ req result ens).
 
     Inductive Triple {Γ : Ctx (𝑿 * Ty)} (δ : LocalStore Γ) {τ : Ty} :
       forall (pre : L) (s : Stm Γ τ) (post :  Lit τ -> LocalStore Γ -> L), Prop :=
@@ -226,7 +225,7 @@ Module ProgramLogic
         {Δ} {f : 𝑭 Δ τ} {es : NamedEnv (Exp Γ) Δ} {c : SepContract Δ τ}
         {P : L} {Q : Lit τ -> L} :
         CEnv f = Some c ->
-        CTriple Δ (evals es δ) P Q c ->
+        CTriple (evals es δ) P Q c ->
         δ ⊢ ⦃ P ⦄ stm_call f es ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
     | rule_stm_call_inline
         {Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ) (c : SepContract Δ τ)
@@ -238,6 +237,11 @@ Module ProgramLogic
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
         δΔ ⊢ ⦃ P ⦄ s ⦃ fun v _ => Q v δ ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_call_frame δΔ s ⦃ Q ⦄
+    | rule_stm_call_external_backwards
+        {Δ} {f : 𝑭𝑿 Δ τ} (es : NamedEnv (Exp Γ) Δ)
+        (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+        CTriple (evals es δ) P (fun v => Q v δ) (CEnvEx f) ->
+        δ ⊢ ⦃ P ⦄ stm_call_external f es ⦃ Q ⦄
     | rule_stm_bind
         {σ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
         (P : L) (Q : Lit σ -> LocalStore Γ -> L)
@@ -418,7 +422,7 @@ Module ProgramLogic
     Lemma rule_stm_call_backwards {Γ δ Δ σ} {f : 𝑭 Δ σ} {es : NamedEnv (Exp Γ) Δ}
       (P : L) (Q : Lit σ -> LocalStore Γ -> L) (c : SepContract Δ σ) :
       CEnv f = Some c ->
-      CTriple Δ (evals es δ) P (fun v => Q v δ) c ->
+      CTriple (evals es δ) P (fun v => Q v δ) c ->
       δ ⊢ ⦃ P ⦄ stm_call f es ⦃ Q ⦄.
     Proof.
       intros Heq HYP.

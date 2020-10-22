@@ -227,6 +227,37 @@ Module Soundness
       now apply (scmut_produce_sound _ H).
     Qed.
 
+    Lemma scmut_call_sound {Γ Δ τ} (δΓ : LocalStore Γ) (δΔ : LocalStore Δ)
+          (h : SCHeap) (POST : Lit τ -> LocalStore Γ -> L)
+          (c : SepContract Δ τ) :
+      outcome_satisfy
+        (scmut_call c δΔ {| scstate_localstore := δΓ; scstate_heap := h |})
+        (fun r =>
+           inst_scheap (scmutres_heap r) ⊢ POST (scmutres_value r) (scmutres_localstore r)) ->
+      CTriple δΔ (inst_scheap h) (fun v => POST v δΓ) c.
+    Proof.
+      destruct c as [Σe δe req result ens] eqn:Heqc.
+      intros [ι [Heqs HYP]].
+      unfold scmut_angelic, scmut_bind, scmut_pure in HYP; cbn in HYP.
+      repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+      repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+      pose (fun δ => ∀ v, inst_assertion (env_snoc ι (result,_) v) ens -✱ POST v δ) as frame.
+      assert (inst_scheap h ⊢ frame δΓ ✱ inst_assertion ι req ).
+      { rewrite sepcon_comm.
+        apply (scmut_consume_sound frame).
+        sound_inster.
+        intros [? [δ2 h2]] HYP; cbn.
+        apply lall_right; intro v.
+        specialize (HYP v).
+        now apply wand_sepcon_adjoint, scmut_produce_sound.
+      }
+      constructor 1 with ι (frame δΓ); auto.
+      intro v.
+      apply wand_sepcon_adjoint.
+      apply lall_left with v.
+      apply entails_refl.
+    Qed.
+
     Lemma scmut_exec_sound {Γ σ} (s : Stm Γ σ) :
       forall (δ1 : LocalStore Γ) (h1 : SCHeap) (POST : Lit σ -> LocalStore Γ -> L),
         outcome_satisfy
@@ -272,54 +303,17 @@ Module Soundness
 
       - (* stm_call *)
         destruct (CEnv f) as [c|] eqn:Heq; cbn in HYP.
-        destruct c as [Σe δe req result ens] eqn:Heqc.
-        + destruct HYP as [ι [Heqs HYP]].
-          unfold scmut_angelic, scmut_bind, scmut_pure in HYP; cbn in HYP.
-          repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
-          repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
-          assert (inst_scheap h1 ⊢ inst_assertion ι req ✱ (∀ v, inst_assertion (env_snoc ι (result,_) v) ens -✱ POST v δ1)).
-          { apply (scmut_consume_sound (fun δ => ∀ v, inst_assertion (env_snoc ι (result,_) v) ens -✱ POST v δ)).
-            sound_inster.
-            intros [? [δ2 h2]] HYP; cbn.
-            apply lall_right; intro v.
-            specialize (HYP v).
-            now apply wand_sepcon_adjoint, scmut_produce_sound.
-          }
-          clear HYP.
-          eapply rule_consequence_left.
-          2: exact H.
-          rewrite sepcon_comm.
-          eapply rule_consequence_right.
-          apply rule_frame.
-          apply rule_stm_call_forwards with c.
-          congruence.
-          rewrite Heqc.
-          constructor.
-          apply Heqs.
-          cbn. intros.
-          apply wand_sepcon_adjoint.
-          apply lall_left with v.
-          apply wand_sepcon_adjoint.
-          rewrite sepcon_comm.
-          apply wand_sepcon_adjoint.
-          rewrite land_comm.
-          apply limpl_and_adjoint.
-          apply lprop_left; intro; subst δ1.
-          apply limpl_and_adjoint.
-          apply land_left2.
-          apply wand_sepcon_adjoint.
-          rewrite sepcon_comm.
-          apply wand_sepcon_adjoint.
-          apply entails_refl.
+        + apply rule_stm_call_backwards with c.
+          assumption.
+          now apply scmut_call_sound.
         + contradict HYP.
 
       - (* stm_call_frame *)
         now apply rule_stm_call_frame, IHs.
 
       - (* stm_call_external *)
-        cbn.
-        (* err.. need for assumptions about external calls? *)
-        admit.
+        apply rule_stm_call_external_backwards.
+        now apply scmut_call_sound.
 
       - (* stm_if *)
         apply rule_stm_if; apply rule_pull; intro Heval; rewrite Heval in *; auto.
@@ -426,7 +420,7 @@ Module Soundness
         apply lprop_right.
         now apply H.
 
-    Admitted.
+    Qed.
 
     Lemma scmut_exec_sound' {Γ σ} (s : Stm Γ σ) :
       forall (δ1 : LocalStore Γ) (h1 : SCHeap) (POST : Lit σ -> LocalStore Γ -> L),
