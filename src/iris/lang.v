@@ -13,7 +13,7 @@ From Equations Require Import Equations Signature.
 
 From iris.bi Require Import interface.
 From iris.algebra Require Import gmap excl auth.
-From iris.base_logic Require Import lib.fancy_updates lib.own.
+From iris.base_logic Require Import lib.fancy_updates lib.own lib.gen_heap.
 From iris.program_logic Require Import weakestpre hoare adequacy.
 From iris.proofmode Require Import tactics.
 
@@ -153,15 +153,64 @@ Module ValsAndTerms
 
   Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeLit))).
 
+End ValsAndTerms.
+
+Module Type IrisHeapKit
+       (Import typekit : TypeKit)
+       (Import termkit : TermKit typekit)
+       (Import progkit : ProgramKit typekit termkit)
+       .
+
+  Import CtxNotations.
+  Import EnvNotations.
+
+  Parameter Inline memPreG : gFunctors -> Set.
+  Parameter Inline memG : gFunctors -> Set.
+  Parameter Inline memΣ : gFunctors.
+
+  Parameter Inline memΣ_PreG : forall {Σ}, subG memΣ Σ -> memPreG Σ.
+
+  Parameter Inline mem_inv : forall {Σ}, memG Σ -> Memory -> iProp Σ.
+  Parameter Inline mem_res : forall {Σ}, memG Σ -> Memory -> iProp Σ.
+
+  (* Definition mem_inv `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
+  (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
+  (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
+  (*   )%I. *)
+
+  Parameter Inline mem_inv_init : forall Σ (μ : Memory), ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
+
+End IrisHeapKit.
+
+Module IrisInstance
+       (Import typekit : TypeKit)
+       (Import termkit : TermKit typekit)
+       (Import progkit : ProgramKit typekit termkit)
+       (Import assertkit : AssertionKit typekit termkit progkit)
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
+       (Import heapkit : logic.HeapKit typekit termkit progkit assertkit contractkit)
+       (Import irisheapkit : IrisHeapKit typekit termkit progkit).
+
+  Import CtxNotations.
+  Import EnvNotations.
+
+  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
+  Export PL.
+
+  Module VT := ValsAndTerms typekit termkit progkit.
+  Export VT.
+
+
+  Section IrisInstance.
+
   Class sailPreG Σ := SailPreG { (* resources for the implementation side *)
                        sailG_invPreG :> invPreG Σ; (* for fancy updates, invariants... *)
 
                        (* ghost variable for tracking state of registers *)
                        reg_pre_inG :> inG Σ regUR;
 
-                       (* (* ghost variable for tracking state of memory cells *) *)
-                       (* mem_inG : inG Σ regUR; *)
-                       (* mem_gv_name : gname *)
+                       (* ghost variable for tracking state of memory cells *)
+                       sailPreG_gen_memPreG :> memPreG Σ
                      }.
   Class sailG Σ := SailG { (* resources for the implementation side *)
                        sailG_invG :> invG Σ; (* for fancy updates, invariants... *)
@@ -170,31 +219,9 @@ Module ValsAndTerms
                        reg_inG :> inG Σ regUR;
                        reg_gv_name : gname;
 
-                       (* (* ghost variable for tracking state of memory cells *) *)
-                       (* mem_inG : inG Σ regUR; *)
-                       (* mem_gv_name : gname *)
+                       (* ghost variable for tracking state of memory cells *)
+                       sailG_memG :> memG Σ
                      }.
-
-End ValsAndTerms.
-
-Module IrisInstance
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import heapkit : logic.HeapKit typekit termkit progkit assertkit contractkit).
-
-  Import CtxNotations.
-  Import EnvNotations.
-
-  Module VT := ValsAndTerms typekit termkit progkit.
-  Export VT.
-
-  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
-  Export PL.
-
-  Section IrisInstance.
 
   Definition reg_pointsTo `{sailG Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) : iProp Σ :=
     own reg_gv_name (◯ {[ mkSomeReg r := Excl (mkSomeLit v) ]}).
@@ -207,9 +234,9 @@ Module IrisInstance
 
   Instance sailG_irisG {Γ τ} `{sailG Σ} : irisG (microsail_lang Γ τ) Σ := {
     iris_invG := sailG_invG;
-    state_interp σ κs _ := regs_inv σ.1;
+    state_interp σ κs _ := (regs_inv σ.1 ∗ mem_inv sailG_memG σ.2)%I;
     fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
-                                                   }.
+                                                                         }.
   Global Opaque iris_invG.
 
   Context `{sailG Σ}.
@@ -429,7 +456,7 @@ Module IrisInstance
     iIntros "Hreg".
     iApply (wp_mask_mono _ empty); auto.
     rewrite wp_unfold; cbn.
-    iIntros (σ _ _ n) "Hregs".
+    iIntros (σ _ _ n) "[Hregs Hmem]".
     iDestruct (@reg_valid with "Hregs Hreg") as %<-.
     iModIntro.
     iSplitR; [trivial|].
@@ -451,7 +478,7 @@ Module IrisInstance
     iIntros "Hreg".
     iApply (wp_mask_mono _ empty); auto.
     rewrite wp_unfold; cbn.
-    iIntros (σ _ _ n) "Hregs".
+    iIntros (σ _ _ n) "[Hregs Hmem]".
     iMod (reg_update σ.1 r v (eval e δ) with "Hregs Hreg") as "[Hregs Hreg]".
     iModIntro.
     iSplitR; [trivial|].
@@ -540,7 +567,7 @@ Module IrisInstance
     iIntros "PQ P".
     iApply (wp_mask_mono _ empty); auto.
     rewrite wp_unfold.
-    iIntros ([regs μ] ks1 ks n) "Hregs".
+    iIntros ([regs μ] ks1 ks n) "[Hregs Hmem]".
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
@@ -582,7 +609,7 @@ Module IrisInstance
     iIntros (δ δΔ k Q) "wpk".
     rewrite ?wp_unfold.
     cbn.
-    iIntros (σ ks1 ks n) "Hregs".
+    iIntros (σ ks1 ks n) "state_inv".
     remember (language.to_val (MkTm (δ ►► δΔ) k)) as kval.
     destruct kval.
     - rewrite /wp_pre.
@@ -622,7 +649,8 @@ Module IrisInstance
         iSplitL; [|trivial].
         iApply wp_compat_fail.
       + iMod "Hclose" as "_".
-        iMod ("wpk" $! (γ1 , μ1) ks1 ks n with "Hregs") as "[% wpk]".
+        cbn.
+        iMod ("wpk" $! (γ1 , μ1) ks1 ks n with "state_inv") as "[% wpk]".
         iMod ("wpk" $! _ _ _ (mk_prim_step H0)) as "wpk".
         iModIntro. iModIntro.
         iMod "wpk" as "[Hregs [wpk' _]]".
@@ -648,7 +676,7 @@ Module IrisInstance
     iLöb as "IH".
     iIntros (s δ) "wpv".
     rewrite (wp_unfold _ _ (MkTm _ (stm_let _ _ _ k))).
-    iIntros ([regs μ] ks1 ks n) "Hregs".
+    iIntros ([regs μ] ks1 ks n) "state_inv".
     iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
     iModIntro.
     iSplitR; [trivial|].
@@ -674,7 +702,7 @@ Module IrisInstance
       rewrite wp_unfold.
       unfold wp_pre.
       rewrite (val_stuck (MkTm δ s) (regs , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
-      iSpecialize ("wpv" $! (regs , μ) nil nil n with "Hregs").
+      iSpecialize ("wpv" $! (regs , μ) nil nil n with "state_inv").
       iMod "Hclose" as "_".
       iMod "wpv" as "[_ wpv]".
       iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
@@ -682,7 +710,6 @@ Module IrisInstance
       iModIntro. iModIntro.
       iMod "wpv" as "[Hregs [wps _]]".
       iModIntro.
-      cbn.
       iFrame.
       iSpecialize ("IH" with "tripk").
       iSpecialize ("IH" with "wps").
@@ -1407,7 +1434,8 @@ Module Adequacy
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
        (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import heapkit : logic.HeapKit typekit termkit progkit assertkit contractkit).
+       (Import heapkit : logic.HeapKit typekit termkit progkit assertkit contractkit)
+       (Import irisheapkit : IrisHeapKit typekit termkit progkit).
 
   Import CtxNotations.
   Import EnvNotations.
@@ -1415,14 +1443,23 @@ Module Adequacy
   Module PL := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
   Import PL.
 
-  Module Inst := IrisInstance typekit termkit progkit assertkit contractkit heapkit.
+  Module Inst := IrisInstance typekit termkit progkit assertkit contractkit heapkit irisheapkit.
   Import Inst.
 
-  Definition regΣ : gFunctors := #[ invΣ ; GFunctor regUR ].
+  Definition sailΣ : gFunctors := #[ memΣ ; invΣ ; GFunctor regUR].
 
-  Instance subG_sailPreG : subG regΣ Σ -> sailPreG Σ.
-  Proof. solve_inG. Qed.
-  (* Instance regUR_inG :  *)
+  Instance subG_sailPreG : subG sailΣ Σ -> sailPreG Σ.
+  Proof.
+    intros.
+    lazymatch goal with
+    | H:subG ?xΣ _ |- _ => try unfold xΣ in H
+    end.
+    repeat match goal with
+           | H:subG (gFunctors.app _ _) _ |- _ => apply subG_inv in H; destruct H
+           end.
+    split; eauto using memΣ_PreG, subG_invΣ.
+    solve_inG.
+ Qed.
 
   Lemma RegStore_to_map (γ : RegStore) :
     ∃ (regsmap : gmap SomeReg (exclR (leibnizO SomeLit))),
@@ -1445,7 +1482,11 @@ Module Adequacy
   Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : LocalStore Γ} {s' : Stm Γ σ} {Q : Lit σ -> Prop} :
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
-    (forall `{sailG Σ'}, ⊢ semTriple (Σ := Σ') δ True%I s (fun v δ' => bi_pure (Q v)))%I ->
+    (forall `{sailG Σ'},
+        ⊢ semTriple (Σ := Σ') δ
+          (mem_res sailG_memG μ ∗
+                   (* TODO: all registers... *) True
+          )%I s (fun v δ' => bi_pure (Q v)))%I ->
     ResultOrFail s' Q.
   Proof.
     intros steps fins trips.
@@ -1461,18 +1502,21 @@ Module Adequacy
     - constructor; last done.
       intros t2 σ2 [δ2 v2] eval.
       destruct (RegStore_to_map γ) as [regsmap [eq regsmapv]].
-      pose proof (wp_adequacy regΣ (microsail_lang Γ σ) MaybeStuck (MkTm δ s) (γ , μ) (fun v => match v with | MkVal _ δ' v' => Q v' end)) as adeq.
+      pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) MaybeStuck (MkTm δ s) (γ , μ) (fun v => match v with | MkVal _ δ' v' => Q v' end)) as adeq.
       refine (adequate_result _ _ _ _ (adeq _) _ _ _ eval); clear adeq.
       iIntros (Hinv κs) "".
       iMod (own_alloc ((● regsmap ⋅ ◯ regsmap ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
+      iMod (mem_inv_init sailΣ μ) as (memG) "[Hmem Rmem]".
       iModIntro.
-      iExists (fun σ _ => regs_inv (H := (SailG Hinv _ spec_name)) (σ.1)).
+      iExists (fun σ _ => regs_inv (H := (SailG Hinv _ spec_name memG)) (σ.1) ∗ mem_inv memG (σ.2))%I.
       iExists _.
-      iSplitR "Hs2".
-      * iExists regsmap.
-        by iFrame.
-      * iPoseProof (trips regΣ (SailG Hinv VT.reg_pre_inG spec_name) $! I) as "trips'".
+      iSplitR "Hs2 Rmem".
+      * iSplitL "Hs1".
+        + iExists regsmap.
+          by iFrame.
+        + iFrame.
+      * iPoseProof (trips sailΣ (SailG Hinv reg_pre_inG spec_name memG) with "[Rmem]") as "trips'"; [iFrame|].
         iApply (wp_mono with "trips'").
         by iIntros ([δ3 v]).
   Qed.
