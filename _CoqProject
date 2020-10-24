@@ -22,6 +22,7 @@ src/MicroSail/Tactics.v
 src/MicroSail/WLP/Dijkstra.v
 src/MicroSail/WLP/Soundness.v
 src/MicroSail/WLP/Spec.v
+src/MicroSail/Iris/Model.v
 test/CapMach.v
 test/Example.v
 test/ISA.v

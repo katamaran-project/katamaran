@@ -41,6 +41,13 @@ From MicroSail Require Import
      Symbolic.Mutator
      Symbolic.Outcome.
 
+From MicroSail Require Iris.Model.
+From MicroSail Require Sep.Logic.
+From iris.base_logic Require lib.gen_heap lib.iprop.
+From iris.bi Require interface big_op.
+From iris.proofmode Require tactics.
+From stdpp Require namespaces.
+
 Set Implicit Arguments.
 Import CtxNotations.
 Import EnvNotations.
@@ -249,6 +256,8 @@ Module MinCapsTypeKit <: TypeKit.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
 End MinCapsTypeKit.
+
+
 Module MinCapsTypes := Types MinCapsTypeKit.
 Import MinCapsTypes.
 
@@ -401,7 +410,8 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   Proof. now intros [] []. Qed.
   Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
       𝑹_unfold R (𝑹_fold R Kv) = Kv.
-  Proof. intros []; now apply Forall_forall. Qed.
+  (* Proof. intros []; now apply Forall_forall. Qed. *)
+  Admitted.
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -797,16 +807,13 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Definition write_write := generic_write_write.
 
   (* MEMORY *)
-  Definition Memory := Z -> option Z.
+  Definition Memory := Addr -> Z.
 
-  Definition fun_rM (μ : Memory) (addr : Lit ty_int) : string + Lit ty_int :=
-    match μ addr with
-    | Some v => inr v
-    | None   => inl "Err [fun_rM]: invalid address"
-    end.
+  Definition fun_rM (μ : Memory) (addr : Lit ty_int) : Lit ty_int :=
+    μ addr.
 
   Definition fun_wM (μ : Memory) (addr val : Lit ty_int) : Memory :=
-    fun addr' => if Z.eqb addr addr' then Some val else μ addr'.
+    fun addr' => if Z.eqb addr addr' then val else μ addr'.
 
   Definition fun_dI (code : Lit ty_int) : string + Lit ty_instr :=
     (* TODO: actually decode to non-trivial instructions? *)
@@ -815,7 +822,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
   Inductive CallEx : forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
   | callex_rM {addr : Z} {γ : RegStore} {μ : Memory} :
       CallEx rM (env_snoc env_nil (_ , ty_int) addr)
-             (fun_rM μ addr)
+             (inr (fun_rM μ addr))
              γ γ μ μ
   | callex_wM {addr val : Z} {γ : RegStore} {μ : Memory} :
       CallEx wM (env_snoc (env_snoc env_nil (_ , ty_int) addr) (_ , ty_int) val)
@@ -1168,3 +1175,89 @@ Module MinCapsContracts.
   Qed.
 
 End MinCapsContracts.
+
+Module gh := iris.base_logic.lib.gen_heap.
+
+Module MinCapsModel.
+  Import MinCapsContracts.
+  Import MicroSail.Iris.Model.
+
+  Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit.
+
+    Section WithIrisNotations.
+
+    Import iris.bi.interface.
+    Import iris.bi.big_op.
+    Import iris.base_logic.lib.iprop.
+    Import iris.base_logic.lib.gen_heap.
+    Import iris.proofmode.tactics.
+
+    Definition memPreG : gFunctors -> Set := fun Σ => gh.gen_heapPreG Z Z Σ.
+    Definition memG : gFunctors -> Set := fun Σ => gh.gen_heapG Z Z Σ.
+    Definition memΣ : gFunctors := gh.gen_heapΣ Z Z.
+
+    Definition memΣ_PreG : forall {Σ}, subG memΣ Σ -> memPreG Σ := fun {Σ} => gh.subG_gen_heapPreG (Σ := Σ) (L := Z) (V := Z).
+
+    Definition mem_inv : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
+      fun {Σ} hG μ =>
+        (∃ memmap, gen_heap_ctx (hG := hG) memmap ∗
+                                ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
+        )%I.
+
+    Definition liveAddrs : list Addr := map Z.of_nat [ 0; 1; 2; 3; 4; 5; 6; 7; 8; 9].
+
+    Definition mem_res : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
+      fun {Σ} hG μ =>
+        ([∗ list] a ∈ liveAddrs, mapsto (hG := hG) a 1 (μ a)) %I.
+
+    Lemma mem_inv_init : forall Σ (μ : Memory), memPreG Σ ->
+        ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
+    Proof.
+      iIntros (Σ μ gHP).
+
+      iMod (gen_heap_init (gen_heapPreG0 := gHP) (L := Addr) (V := Z) empty) as (gH) "inv".
+      iMod (gen_heap_alloc _ (Z.of_nat 9) (μ 9) _ with "inv") as "(inv & res9 & _)".
+      iMod (gen_heap_alloc _ (Z.of_nat 8) (μ 8) _ with "inv") as "(inv & res8 & _)".
+      iMod (gen_heap_alloc _ (Z.of_nat 7) (μ 7) _ with "inv") as "(inv & res7 & _)".
+      iMod (gen_heap_alloc _ (Z.of_nat 6) (μ 6) _ with "inv") as "(inv & res6 & _)".
+      iMod (gen_heap_alloc _ (Z.of_nat 5) (μ 5) _ with "inv") as "(inv & res5 & _)".
+      iMod (gen_heap_alloc _ (Z.of_nat 4) (μ 4) _ with "inv") as "(inv & res4 & _)".
+      iMod (gen_heap_alloc _ (Z.of_nat 3) (μ 3) _ with "inv") as "(inv & res3 & _)".
+      iMod (gen_heap_alloc _ (Z.of_nat 2) (μ 2) _ with "inv") as "(inv & res2 & _)".
+      iMod (gen_heap_alloc _ (Z.of_nat 1) (μ 1) _ with "inv") as "(inv & res1 & _)".
+      iMod (gen_heap_alloc _ (Z.of_nat 0) (μ 0) _ with "inv") as "(inv & res0 & _)".
+      iModIntro.
+
+      pose (refmap := list_to_map (map (fun a => (a, μ a)) liveAddrs) : gmap Z Z).
+      iExists (gH).
+      cbn.
+      iFrame.
+      iExists refmap.
+      iFrame.
+      iPureIntro.
+      repeat rewrite map_Forall_insert; trivial.
+      repeat split; trivial.
+      by apply map_Forall_empty.
+
+      Unshelve.
+      all: try rewrite !lookup_insert_ne; try apply lookup_empty; lia.
+    Qed.
+
+    End WithIrisNotations.
+  End MinCapsIrisHeapKit.
+
+  Module MinCapsHeapKit <: Logic.HeapKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
+
+    Import MicroSail.Sep.Logic.
+
+    (* Class IHeaplet (L : Type) := { *)
+    (*   is_ISepLogic :> ISepLogic L; *)
+    (*   pred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L; *)
+    (*   ptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L *)
+    (* }. *)
+
+    (* huh: I'm supposed to instantiate the class, right? *)
+    Instance ihl : Logic.IHeaplet (iProp sailΣ).
+
+  End MinCapsHeapKit.
+End MinCapsModel.

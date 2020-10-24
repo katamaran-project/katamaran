@@ -178,7 +178,7 @@ Module Type IrisHeapKit
   (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
   (*   )%I. *)
 
-  Parameter Inline mem_inv_init : forall Σ (μ : Memory), ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
+  Parameter Inline mem_inv_init : forall Σ (μ : Memory), memPreG Σ -> ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
 
 End IrisHeapKit.
 
@@ -1507,7 +1507,8 @@ Module Adequacy
       iIntros (Hinv κs) "".
       iMod (own_alloc ((● regsmap ⋅ ◯ regsmap ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
-      iMod (mem_inv_init sailΣ μ) as (memG) "[Hmem Rmem]".
+      pose proof (memΣ_PreG (Σ := sailΣ) _) as mPG.
+      iMod (mem_inv_init μ mPG) as (memG) "[Hmem Rmem]".
       iModIntro.
       iExists (fun σ _ => regs_inv (H := (SailG Hinv _ spec_name memG)) (σ.1) ∗ mem_inv memG (σ.2))%I.
       iExists _.
