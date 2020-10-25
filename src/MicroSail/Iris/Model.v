@@ -159,6 +159,7 @@ Module Type IrisHeapKit
        (Import typekit : TypeKit)
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit)
+       (Import assertkit : AssertionKit typekit termkit progkit)
        .
 
   Import CtxNotations.
@@ -180,6 +181,7 @@ Module Type IrisHeapKit
 
   Parameter Inline mem_inv_init : forall Σ (μ : Memory), memPreG Σ -> ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
 
+  Parameter lpred_inst : forall {Σ} (p : 𝑷) (ts : Env Lit (𝑷_Ty p)), memG Σ -> iProp Σ.
 End IrisHeapKit.
 
 Module IrisInstance
@@ -188,7 +190,7 @@ Module IrisInstance
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
        (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import irisheapkit : IrisHeapKit typekit termkit progkit).
+       (Import irisheapkit : IrisHeapKit typekit termkit progkit assertkit).
 
   Import CtxNotations.
   Import EnvNotations.
@@ -375,7 +377,7 @@ Module IrisInstance
   Instance iris_IHeapLet : IHeaplet (iProp Σ) :=
     { is_ISepLogic := iris_ISepLogic;
       (* TODO: should be user-defined... *)
-      lpred p ts := False%I;
+      lpred p ts := lpred_inst ts sailG_memG;
       lptsreg σ r t := reg_pointsTo r t
     }.
 
@@ -1433,7 +1435,7 @@ Module Adequacy
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
        (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import irisheapkit : IrisHeapKit typekit termkit progkit).
+       (Import irisheapkit : IrisHeapKit typekit termkit progkit assertkit).
 
   Import CtxNotations.
   Import EnvNotations.

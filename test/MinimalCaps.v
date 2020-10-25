@@ -41,6 +41,7 @@ From MicroSail Require Import
      Symbolic.Mutator
      Symbolic.Outcome.
 
+From MicroSail Require Environment.
 From MicroSail Require Iris.Model.
 From MicroSail Require Sep.Logic.
 From iris.base_logic Require lib.gen_heap lib.iprop.
@@ -1182,7 +1183,7 @@ Module MinCapsModel.
   Import MinCapsContracts.
   Import MicroSail.Iris.Model.
 
-  Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit.
+  Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
 
     Section WithIrisNotations.
 
@@ -1245,11 +1246,15 @@ Module MinCapsModel.
 
     Import MinCapsAssertions.
     (* huh: I'm supposed to instantiate the class, right? *)
-    Instance ihl : IHeaplet (iProp sailΣ).
-    Admitted.
+
+    Definition lpred_inst {Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
+      (match p return Env Lit (MinCapsAssertionKit.𝑷_Ty p) -> iProp Σ with
+      | ptsreg => fun _ => False%I
+      | ptsto => fun ts' => mapsto (hG := mG) (env_head ts') 1 (env_head (env_tail ts'))%Z
+      | safe => fun _ => False%I
+      end) ts.
 
     End WithIrisNotations.
-
   End MinCapsIrisHeapKit.
 
 End MinCapsModel.
