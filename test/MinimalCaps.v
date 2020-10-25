@@ -1185,6 +1185,9 @@ Module MinCapsModel.
 
   Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
 
+    Module IrisRegs := IrisRegisters MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
+    Import IrisRegs.
+
     Section WithIrisNotations.
 
     Import iris.bi.interface.
@@ -1245,12 +1248,19 @@ Module MinCapsModel.
     Qed.
 
     Import MinCapsAssertions.
-    (* huh: I'm supposed to instantiate the class, right? *)
 
-    Definition lpred_inst {Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
+    Definition MinCaps_ptsreg `{sailRegG Σ} (reg : RegName) (v : Z + Capability) : iProp Σ :=
+      match reg with
+      | R0 => reg_pointsTo reg0 v
+      | R1 => reg_pointsTo reg1 v
+      | R2 => reg_pointsTo reg2 v
+      | R3 => reg_pointsTo reg3 v
+      end.
+
+    Definition lpred_inst `{sailRegG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
       (match p return Env Lit (MinCapsAssertionKit.𝑷_Ty p) -> iProp Σ with
-      | ptsreg => fun _ => False%I
-      | ptsto => fun ts' => mapsto (hG := mG) (env_head ts') 1 (env_head (env_tail ts'))%Z
+      | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
+      | ptsto => fun ts => mapsto (hG := mG) (env_head ts) 1 (env_head (env_tail ts))%Z
       | safe => fun _ => False%I
       end) ts.
 

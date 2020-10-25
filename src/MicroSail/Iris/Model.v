@@ -155,15 +155,54 @@ Module ValsAndTerms
 
 End ValsAndTerms.
 
+Module IrisRegisters
+       (Import typekit : TypeKit)
+       (Import termkit : TermKit typekit)
+       (Import progkit : ProgramKit typekit termkit)
+       (Import assertkit : AssertionKit typekit termkit progkit)
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
+       .
+
+  Import CtxNotations.
+  Import EnvNotations.
+
+  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit.
+  Export PL.
+
+  Module VT := ValsAndTerms typekit termkit progkit.
+  Export VT.
+
+
+  Class sailRegG Σ := SailRegG {
+                          (* ghost variable for tracking state of registers *)
+                          reg_inG :> inG Σ regUR;
+                          reg_gv_name : gname;
+                        }.
+
+  Definition reg_pointsTo `{sailRegG Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) : iProp Σ :=
+    own reg_gv_name (◯ {[ mkSomeReg r := Excl (mkSomeLit v) ]}).
+
+  Definition regs_inv `{sailRegG Σ} (regstore : RegStore) : iProp Σ :=
+    (∃ regsmap,
+        own reg_gv_name (● regsmap) ∗
+        ⌜ map_Forall (fun reg v => match reg with | mkSomeReg reg => Excl (mkSomeLit (read_register regstore reg)) = v end ) regsmap ⌝
+    )%I.
+
+End IrisRegisters.
+
 Module Type IrisHeapKit
        (Import typekit : TypeKit)
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
        .
 
   Import CtxNotations.
   Import EnvNotations.
+
+  Module IrisRegs := IrisRegisters typekit termkit progkit assertkit contractkit.
+  Export IrisRegs.
 
   Parameter Inline memPreG : gFunctors -> Set.
   Parameter Inline memG : gFunctors -> Set.
@@ -181,7 +220,7 @@ Module Type IrisHeapKit
 
   Parameter Inline mem_inv_init : forall Σ (μ : Memory), memPreG Σ -> ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
 
-  Parameter lpred_inst : forall {Σ} (p : 𝑷) (ts : Env Lit (𝑷_Ty p)), memG Σ -> iProp Σ.
+  Parameter lpred_inst : forall `{sRG : sailRegG Σ} (p : 𝑷) (ts : Env Lit (𝑷_Ty p)), memG Σ -> iProp Σ.
 End IrisHeapKit.
 
 Module IrisInstance
@@ -190,17 +229,10 @@ Module IrisInstance
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
        (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import irisheapkit : IrisHeapKit typekit termkit progkit assertkit).
+       (Import irisheapkit : IrisHeapKit typekit termkit progkit assertkit contractkit).
 
   Import CtxNotations.
   Import EnvNotations.
-
-  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit.
-  Export PL.
-
-  Module VT := ValsAndTerms typekit termkit progkit.
-  Export VT.
-
 
   Section IrisInstance.
 
@@ -215,23 +247,11 @@ Module IrisInstance
                      }.
   Class sailG Σ := SailG { (* resources for the implementation side *)
                        sailG_invG :> invG Σ; (* for fancy updates, invariants... *)
-
-                       (* ghost variable for tracking state of registers *)
-                       reg_inG :> inG Σ regUR;
-                       reg_gv_name : gname;
+                       sailG_sailRegG :> sailRegG Σ;
 
                        (* ghost variable for tracking state of memory cells *)
                        sailG_memG :> memG Σ
                      }.
-
-  Definition reg_pointsTo `{sailG Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) : iProp Σ :=
-    own reg_gv_name (◯ {[ mkSomeReg r := Excl (mkSomeLit v) ]}).
-
-  Definition regs_inv `{sailG Σ} (regstore : RegStore) : iProp Σ :=
-    (∃ regsmap,
-        own reg_gv_name (● regsmap) ∗
-        ⌜ map_Forall (fun reg v => match reg with | mkSomeReg reg => Excl (mkSomeLit (read_register regstore reg)) = v end ) regsmap ⌝
-    )%I.
 
   Instance sailG_irisG {Γ τ} `{sailG Σ} : irisG (microsail_lang Γ τ) Σ := {
     iris_invG := sailG_invG;
@@ -1435,13 +1455,16 @@ Module Adequacy
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
        (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import irisheapkit : IrisHeapKit typekit termkit progkit assertkit).
+       (Import irisheapkit : IrisHeapKit typekit termkit progkit assertkit contractkit).
 
   Import CtxNotations.
   Import EnvNotations.
 
   Module PL := ProgramLogic typekit termkit progkit assertkit contractkit.
   Import PL.
+
+  (* Module IrisRegs := IrisRegisters typekit termkit progkit assertkit contractkit. *)
+  (* Import IrisRegs. *)
 
   Module Inst := IrisInstance typekit termkit progkit assertkit contractkit irisheapkit.
   Import Inst.
@@ -1510,14 +1533,14 @@ Module Adequacy
       pose proof (memΣ_PreG (Σ := sailΣ) _) as mPG.
       iMod (mem_inv_init μ mPG) as (memG) "[Hmem Rmem]".
       iModIntro.
-      iExists (fun σ _ => regs_inv (H := (SailG Hinv _ spec_name memG)) (σ.1) ∗ mem_inv memG (σ.2))%I.
+      iExists (fun σ _ => regs_inv (H := (SailRegG _ spec_name)) (σ.1) ∗ mem_inv memG (σ.2))%I.
       iExists _.
       iSplitR "Hs2 Rmem".
       * iSplitL "Hs1".
         + iExists regsmap.
           by iFrame.
         + iFrame.
-      * iPoseProof (trips sailΣ (SailG Hinv reg_pre_inG spec_name memG) with "[Rmem]") as "trips'"; [iFrame|].
+      * iPoseProof (trips sailΣ (SailG Hinv (SailRegG reg_pre_inG spec_name) memG) with "[Rmem]") as "trips'"; [iFrame|].
         iApply (wp_mono with "trips'").
         by iIntros ([δ3 v]).
   Qed.
