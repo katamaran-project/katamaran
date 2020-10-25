@@ -4,6 +4,7 @@ stages:
 .build: &build
   stage: build
   script:
+    - opam list | grep coq
     - make
   cache:
     key: "$CI_JOB_NAME"
