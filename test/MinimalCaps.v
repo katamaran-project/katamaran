@@ -1204,7 +1204,7 @@ Module MinCapsModel.
                                 ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
-    Definition liveAddrs : list Addr := map Z.of_nat [ 0; 1; 2; 3; 4; 5; 6; 7; 8; 9].
+    Definition liveAddrs : list Addr := [ 0; 1; 2; 3; 4; 5; 6; 7; 8; 9]%Z.
 
     Definition mem_res : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
@@ -1216,16 +1216,16 @@ Module MinCapsModel.
       iIntros (Σ μ gHP).
 
       iMod (gen_heap_init (gen_heapPreG0 := gHP) (L := Addr) (V := Z) empty) as (gH) "inv".
-      iMod (gen_heap_alloc _ (Z.of_nat 9) (μ 9) _ with "inv") as "(inv & res9 & _)".
-      iMod (gen_heap_alloc _ (Z.of_nat 8) (μ 8) _ with "inv") as "(inv & res8 & _)".
-      iMod (gen_heap_alloc _ (Z.of_nat 7) (μ 7) _ with "inv") as "(inv & res7 & _)".
-      iMod (gen_heap_alloc _ (Z.of_nat 6) (μ 6) _ with "inv") as "(inv & res6 & _)".
-      iMod (gen_heap_alloc _ (Z.of_nat 5) (μ 5) _ with "inv") as "(inv & res5 & _)".
-      iMod (gen_heap_alloc _ (Z.of_nat 4) (μ 4) _ with "inv") as "(inv & res4 & _)".
-      iMod (gen_heap_alloc _ (Z.of_nat 3) (μ 3) _ with "inv") as "(inv & res3 & _)".
-      iMod (gen_heap_alloc _ (Z.of_nat 2) (μ 2) _ with "inv") as "(inv & res2 & _)".
-      iMod (gen_heap_alloc _ (Z.of_nat 1) (μ 1) _ with "inv") as "(inv & res1 & _)".
-      iMod (gen_heap_alloc _ (Z.of_nat 0) (μ 0) _ with "inv") as "(inv & res0 & _)".
+      iMod (gen_heap_alloc _ 9%Z (μ 9) _ with "inv") as "(inv & res9 & _)".
+      iMod (gen_heap_alloc _ 8%Z (μ 8) _ with "inv") as "(inv & res8 & _)".
+      iMod (gen_heap_alloc _ 7%Z (μ 7) _ with "inv") as "(inv & res7 & _)".
+      iMod (gen_heap_alloc _ 6%Z (μ 6) _ with "inv") as "(inv & res6 & _)".
+      iMod (gen_heap_alloc _ 5%Z (μ 5) _ with "inv") as "(inv & res5 & _)".
+      iMod (gen_heap_alloc _ 4%Z (μ 4) _ with "inv") as "(inv & res4 & _)".
+      iMod (gen_heap_alloc _ 3%Z (μ 3) _ with "inv") as "(inv & res3 & _)".
+      iMod (gen_heap_alloc _ 2%Z (μ 2) _ with "inv") as "(inv & res2 & _)".
+      iMod (gen_heap_alloc _ 1%Z (μ 1) _ with "inv") as "(inv & res1 & _)".
+      iMod (gen_heap_alloc _ 0%Z (μ 0) _ with "inv") as "(inv & res0 & _)".
       iModIntro.
 
       pose (refmap := list_to_map (map (fun a => (a, μ a)) liveAddrs) : gmap Z Z).
@@ -1243,21 +1243,13 @@ Module MinCapsModel.
       all: try rewrite !lookup_insert_ne; try apply lookup_empty; lia.
     Qed.
 
+    Import MinCapsAssertions.
+    (* huh: I'm supposed to instantiate the class, right? *)
+    Instance ihl : IHeaplet (iProp sailΣ).
+    Admitted.
+
     End WithIrisNotations.
+
   End MinCapsIrisHeapKit.
 
-  Module MinCapsHeapKit <: Logic.HeapKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
-
-    Import MicroSail.Sep.Logic.
-
-    (* Class IHeaplet (L : Type) := { *)
-    (*   is_ISepLogic :> ISepLogic L; *)
-    (*   pred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L; *)
-    (*   ptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L *)
-    (* }. *)
-
-    (* huh: I'm supposed to instantiate the class, right? *)
-    Instance ihl : Logic.IHeaplet (iProp sailΣ).
-
-  End MinCapsHeapKit.
 End MinCapsModel.

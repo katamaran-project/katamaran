@@ -13,8 +13,7 @@ Module ProgramLogic
   (Import termkit : TermKit typekit)
   (Import progkit : ProgramKit typekit termkit)
   (Import assertkit : AssertionKit typekit termkit progkit)
-  (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-  (Import heapkit : HeapKit typekit termkit progkit assertkit contractkit).
+  (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
 
   Import CtxNotations.
   Import EnvNotations.
@@ -205,12 +204,12 @@ Module ProgramLogic
         δ ⊢ ⦃ P ⦄ stm_match_record R e p rhs ⦃ Q ⦄
     | rule_stm_read_register
         (r : 𝑹𝑬𝑮 τ) (v : Lit τ) :
-        δ ⊢ ⦃ r ↦ v ⦄ stm_read_register r ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = v) ∧ r ↦ v ⦄
+        δ ⊢ ⦃ lptsreg r v ⦄ stm_read_register r ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = v) ∧ lptsreg r v ⦄
     | rule_stm_write_register
         (r : 𝑹𝑬𝑮 τ) (w : Exp Γ τ) (v : Lit τ)
         (Q : Lit τ -> LocalStore Γ -> L) :
-        δ ⊢ ⦃ r ↦ v ⦄ stm_write_register r w ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ)
-                                                         ∧ r ↦ v' ⦄
+        δ ⊢ ⦃ lptsreg r v ⦄ stm_write_register r w ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ)
+                                                         ∧ lptsreg r v' ⦄
     | rule_stm_assign_backwards
         (x : 𝑿) (xIn : (x,τ) ∈ Γ) (s : Stm Γ τ)
         (P : L) (R : Lit τ -> LocalStore Γ -> L) :
@@ -378,7 +377,7 @@ Module ProgramLogic
 
     Lemma rule_stm_read_register_backwards {Γ δ σ r v}
           (Q : Lit σ -> LocalStore Γ -> L) :
-      δ ⊢ ⦃ r ↦ v ✱ (r ↦ v -✱ Q v δ) ⦄ stm_read_register r ⦃ Q ⦄.
+      δ ⊢ ⦃ lptsreg r v ✱ (lptsreg r v -✱ Q v δ) ⦄ stm_read_register r ⦃ Q ⦄.
     Proof.
       rewrite sepcon_comm.
       eapply rule_consequence_right.
@@ -399,7 +398,7 @@ Module ProgramLogic
 
     Lemma rule_stm_write_register_backwards {Γ δ σ r v} {e : Exp Γ σ}
           (Q : Lit σ -> LocalStore Γ -> L) :
-      δ ⊢ ⦃ r ↦ v ✱ (r ↦ eval e δ -✱ Q (eval e δ) δ) ⦄ stm_write_register r e ⦃ Q ⦄.
+      δ ⊢ ⦃ lptsreg r v ✱ (lptsreg r (eval e δ) -✱ Q (eval e δ) δ) ⦄ stm_write_register r e ⦃ Q ⦄.
     Proof.
       rewrite sepcon_comm.
       eapply rule_consequence_right.

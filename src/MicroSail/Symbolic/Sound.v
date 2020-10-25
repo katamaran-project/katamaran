@@ -57,11 +57,10 @@ Module Soundness
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import heapkit : HeapKit typekit termkit progkit assertkit contractkit).
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
   Module MUT := Mutators typekit termkit progkit assertkit contractkit.
   Import MUT.
-  Module LOG := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
+  Module LOG := ProgramLogic typekit termkit progkit assertkit contractkit.
   Import LOG.
 
   Program Instance proper_sub_comp {Σ1 Σ2 Σ3} : Proper (eq ==> eq ==> eq) (@sub_comp Σ1 Σ2 Σ3).

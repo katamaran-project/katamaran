@@ -17,16 +17,16 @@ Module HoareSound
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import heapkit : HeapKit typekit termkit progkit assertkit contractkit).
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
+
   Module SSI := Inversion typekit termkit progkit.
   Import SSI.
   Import SS.
 
-  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
+  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit.
   Import PL.
 
-  Module Model := Disjoint typekit termkit progkit assertkit contractkit heapkit.
+  Module Model := Disjoint typekit termkit progkit assertkit contractkit.
   Import Model.
 
   Section Soundness.

@@ -57,11 +57,11 @@ Module Soundness
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import heapkit : HeapKit typekit termkit progkit assertkit contractkit).
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
+
   Module MUT := SemiConcrete typekit termkit progkit assertkit contractkit.
   Import MUT.
-  Module LOG := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
+  Module LOG := ProgramLogic typekit termkit progkit assertkit contractkit.
   Import LOG.
 
   Local Open Scope logic.
@@ -75,8 +75,8 @@ Module Soundness
 
     Definition inst_scchunk (c : SCChunk) : L :=
       match c with
-      | scchunk_pred p vs => pred p vs
-      | scchunk_ptsreg r v => ptsreg r v
+      | scchunk_pred p vs => lpred p vs
+      | scchunk_ptsreg r v => lptsreg r v
       end.
 
     Definition inst_scheap : SCHeap -> L :=

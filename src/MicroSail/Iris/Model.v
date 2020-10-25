@@ -188,13 +188,12 @@ Module IrisInstance
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
        (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import heapkit : logic.HeapKit typekit termkit progkit assertkit contractkit)
        (Import irisheapkit : IrisHeapKit typekit termkit progkit).
 
   Import CtxNotations.
   Import EnvNotations.
 
-  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
+  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit.
   Export PL.
 
   Module VT := ValsAndTerms typekit termkit progkit.
@@ -376,8 +375,8 @@ Module IrisInstance
   Instance iris_IHeapLet : IHeaplet (iProp Σ) :=
     { is_ISepLogic := iris_ISepLogic;
       (* TODO: should be user-defined... *)
-      pred p ts := False%I;
-      ptsreg σ r t := reg_pointsTo r t
+      lpred p ts := False%I;
+      lptsreg σ r t := reg_pointsTo r t
     }.
 
   Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) :
@@ -1085,7 +1084,7 @@ Module IrisInstance
 
   Lemma iris_rule_stm_read_register {Γ} (δ : LocalStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
-        ⊢ (semTriple δ (r ↦ v) (stm_read_register r) (fun v' δ' => (⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝) ∧ r ↦ v))%I.
+        ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => (⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝) ∧ lptsreg r v))%I.
   Proof.
     iIntros "Hreg".
     iApply wp_mono; [| iApply (rule_stm_read_register with "Hreg") ].
@@ -1098,8 +1097,8 @@ Module IrisInstance
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
                               (Q : Lit σ -> LocalStore Γ -> iProp Σ)
                               (v : Lit σ) :
-        ⊢ semTriple δ (r ↦ v) (stm_write_register r w)
-                  (fun v' δ' => (bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ)) ∧ r ↦ v')%I.
+        ⊢ semTriple δ (lptsreg r v) (stm_write_register r w)
+                  (fun v' δ' => (bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ)) ∧ lptsreg r v')%I.
   Proof.
     iIntros "Hreg".
     iApply wp_mono; [|iApply (rule_stm_write_register with "Hreg")].
@@ -1434,16 +1433,15 @@ Module Adequacy
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
        (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import heapkit : logic.HeapKit typekit termkit progkit assertkit contractkit)
        (Import irisheapkit : IrisHeapKit typekit termkit progkit).
 
   Import CtxNotations.
   Import EnvNotations.
 
-  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit heapkit.
+  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit.
   Import PL.
 
-  Module Inst := IrisInstance typekit termkit progkit assertkit contractkit heapkit irisheapkit.
+  Module Inst := IrisInstance typekit termkit progkit assertkit contractkit irisheapkit.
   Import Inst.
 
   Definition sailΣ : gFunctors := #[ memΣ ; invΣ ; GFunctor regUR].

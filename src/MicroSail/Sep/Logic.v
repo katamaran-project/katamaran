@@ -5,7 +5,6 @@ Require Import Classes.Equivalence.
 Require Import Classes.Morphisms.
 
 Require Import MicroSail.Syntax.
-Require Import MicroSail.Sep.Spec.
 
 (* Abstract logic interface, implemented as a Coq typeclasses
 
@@ -295,59 +294,3 @@ Section SepEquivalence.
   Qed.
 
 End SepEquivalence.
-
-Module Type HeapKit
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
-
-  Import CtxNotations.
-  Import EnvNotations.
-
-  Class IHeaplet (L : Type) := {
-    is_ISepLogic :> ISepLogic L;
-    pred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L;
-    ptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L
-  }.
-
-  Section Contracts.
-    Context `{Logic : IHeaplet L}.
-
-    Definition inst_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
-      match c with
-      | chunk_pred p ts => pred p (env_map (fun _ => inst_term ι) ts)
-      | chunk_ptsreg r t => ptsreg r (inst_term ι t)
-      end.
-
-    Fixpoint inst_assertion {Σ} (ι : SymInstance Σ) (a : Assertion Σ) : L :=
-      match a with
-      | asn_bool b => if inst_term ι b then emp else lfalse
-      | asn_prop p => !!(uncurry_named p ι) ∧ emp
-      | asn_chunk c => inst_chunk ι c
-      | asn_if b a1 a2 => if inst_term ι b then inst_assertion ι a1 else inst_assertion ι a2
-      | asn_match_enum E k alts => inst_assertion ι (alts (inst_term ι k))
-      | asn_sep a1 a2 => inst_assertion ι a1 ✱ inst_assertion ι a2
-      | asn_exist ς τ a => ∃ v, @inst_assertion (Σ ▻ (ς , τ)) (ι ► (ς , τ) ↦ v) a
-    end.
-
-    Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
-      (ι : SymInstance (sep_contract_logic_variables c)) : LocalStore Δ :=
-      inst_localstore ι (sep_contract_localstore c).
-
-    Definition inst_contract_precondition {Δ τ} (c : SepContract Δ τ)
-      (ι : SymInstance (sep_contract_logic_variables c)) : L :=
-      inst_assertion ι (sep_contract_precondition c).
-
-    Definition inst_contract_postcondition {Δ τ} (c : SepContract Δ τ)
-      (ι : SymInstance (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
-        inst_assertion (env_snoc ι (sep_contract_result c,τ) result) (sep_contract_postcondition c).
-
-  End Contracts.
-
-  Arguments inst_assertion {_ _ _} _ _.
-
-  Notation "r '↦' t" := (ptsreg r t) (at level 30).
-
-End HeapKit.

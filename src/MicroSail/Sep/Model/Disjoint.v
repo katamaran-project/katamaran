@@ -23,8 +23,7 @@ Module Disjoint
        (Import termkit : TermKit typekit)
        (Import progkit : ProgramKit typekit termkit)
        (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import heapkit : HeapKit typekit termkit progkit assertkit contractkit).
+       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
 
   Open Scope logic.
 
@@ -294,8 +293,8 @@ Module Disjoint
   Instance HProp_Heaplet : IHeaplet HProp :=
   { (* We don't have any predicates in this model yet;
        thus we map the predicate to False *)
-    pred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) := fun γ => False;
-    ptsreg (σ : Ty) (r : 𝑹𝑬𝑮 σ) (t : Lit σ) := fun γ => γ σ r = Some t
+    lpred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) := fun γ => False;
+    lptsreg (σ : Ty) (r : 𝑹𝑬𝑮 σ) (t : Lit σ) := fun γ => γ σ r = Some t
   }.
 
   Definition write_heap (γ : Heap) {σ} (r : 𝑹𝑬𝑮 σ)
