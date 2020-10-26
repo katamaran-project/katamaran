@@ -2,6 +2,9 @@ Require Import FunctionalExtensionality.
 Require Import Coq.Program.Equality.
 Require Import Coq.Program.Tactics.
 
+From Equations Require Import Equations.
+Require Import Equations.Prop.EqDec.
+
 Require Import MicroSail.Syntax.
 Require Import MicroSail.Environment.
 Require Import MicroSail.Sep.Logic.
@@ -300,8 +303,8 @@ Module Disjoint
   Definition write_heap (γ : Heap) {σ} (r : 𝑹𝑬𝑮 σ)
     (v : Lit σ) : Heap :=
     fun τ r' =>
-      match 𝑹𝑬𝑮_eq_dec r r' with
-      | left (teq_refl _ eqt _) => Some (eq_rect σ Lit v τ eqt)
+      match eq_dec_het r r' with
+      | left e => Some (eq_rect σ Lit v τ (f_equal projT1 e))
       | right _ => γ τ r'
       end.
 
@@ -309,28 +312,21 @@ Module Disjoint
   Lemma write_heap_ptsreg (γ : Heap) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
     (write_heap γ r v) σ r = Some v.
   Proof.
-    unfold write_heap.
-    rewrite (𝑹𝑬𝑮_eq_dec_refl r).
-    f_equal.
+    unfold write_heap, eq_dec_het.
+    now rewrite eq_dec_refl.
   Qed.
-
 
   (* writing into a heap preserves the unaffected chunks *)
   Lemma write_heap_distinct (γfocus : Heap) {σ τ}
-        (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (prf : ~ r ≡ k )
+        (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (prf : existT _ r <> existT _ k)
         (v0 : option (Lit τ)) (v : Lit σ) :
     γfocus τ k = v0 -> (write_heap γfocus r v) τ k = v0.
   Proof.
     intros H.
     rewrite <- H.
     unfold write_heap.
-    remember ((𝑹𝑬𝑮_eq_dec r k)) as z.
-    dependent destruction z.
-    + dependent destruction t.
-      dependent destruction eqf.
-      dependent destruction eqi.
-      cbn in *.
-      destruct (prf (@teq_refl Ty 𝑹𝑬𝑮 σ σ r r eq_refl ltac:(auto))).
+    destruct (eq_dec_het r k).
+    + contradiction.
     + reflexivity.
   Qed.
 
@@ -338,19 +334,13 @@ Module Disjoint
   Lemma write_heap_preservers_total {σ} :
     forall (γ : Heap), Total γ -> forall (r : 𝑹𝑬𝑮 σ) (v : Lit σ), Total (write_heap γ r v).
   Proof.
-    intros γ Htotal_γ r v.
-    unfold Total in *.
-    intros τ k.
-    destruct (Htotal_γ τ k) as [v0 Hpre].
-    destruct (𝑹𝑬𝑮_eq_dec r k).
-    + dependent destruction t.
-      dependent destruction eqi.
-      cbn in *.
-      rewrite <- eqf in *.
-      exists v. apply (write_heap_ptsreg γ r v).
-    + exists v0. apply (write_heap_distinct γ r k n (Some v0) v Hpre).
+    intros γ Htotal_γ r v τ k.
+    specialize (Htotal_γ τ k); destruct Htotal_γ as [v0 Hpre].
+    unfold write_heap.
+    destruct (eq_dec_het r k).
+    + eexists. reflexivity.
+    + exists v0. apply Hpre.
   Qed.
-
 
   (* If a value is present in one of the two disjoint subheaps, then
      it must be absent in the other *)
@@ -395,9 +385,9 @@ Module Disjoint
     extensionality τ.
     extensionality k.
     unfold heap, write_heap; cbn.
-    destruct (𝑹𝑬𝑮_eq_dec r k) eqn:?.
-    - destruct t.
-      dependent destruction eqi; cbn in *; subst.
+    destruct (eq_dec_het r k).
+    - f_equal.
+      dependent elimination e; cbn.
       now rewrite read_write.
     - now rewrite read_write_distinct.
   Qed.

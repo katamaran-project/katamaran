@@ -289,14 +289,18 @@ Module ISATermKit <: (TermKit ISATypeKit).
     | R3 : Reg ty_int
     .
 
+  Section TransparentObligations.
+    Local Set Transparent Obligations.
+    Derive Signature NoConfusion for Reg.
+  End TransparentObligations.
+
   Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
-  Definition 𝑹𝑬𝑮_eq_dec {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ) : {x ≡ y}+{ ~ x ≡ y}.
+  Definition 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮).
   Proof.
-    destruct x; destruct y; cbn;
+    intros [? []] [? []]; cbn;
       first
-        [ left; now apply teq_refl with eq_refl
-        | right; intros [eqt eqr];
-          try rewrite <- (Eqdep_dec.eq_rect_eq_dec Ty_eq_dec) in eqr; discriminate
+        [ left; now apply eq_refl
+        | right; intros e; dependent elimination e
         ].
   Defined.
 
@@ -314,51 +318,13 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     exp_lit _ ty_int literal.
 
   (* REGISTER STORE *)
-  Definition RegStore := forall σ, 𝑹𝑬𝑮 σ -> Lit σ.
-
-  Definition read_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) : Lit σ :=
-    γ σ r.
-
-  Equations write_register (γ : RegStore) {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) : RegStore :=
-    write_register γ Halted      v Halted      := v;
-    write_register γ OutOfMemory v OutOfMemory := v;
-    write_register γ Overflow    v Overflow    := v;
-    write_register γ R0 v R0 := v;
-    write_register γ R1 v R1 := v;
-    write_register γ R2 v R2 := v;
-    write_register γ R3 v R3 := v;
-    write_register γ r1 v r2 := γ _ r2.
-
-  Lemma read_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : Lit σ),
-      read_register (write_register γ r v) r = v.
-  Proof.
-    intros γ σ r v. now destruct r.
-  Qed.
-
-  Lemma read_write_distinct :
-    forall (γ : RegStore) σ τ
-      (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (prf : ~ r ≡ k) (v : Lit σ),
-      read_register (write_register γ r v) k = read_register γ k.
-  Admitted.
-
-  Lemma write_read : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ),
-      (write_register γ r (read_register γ r)) = γ.
-  Proof.
-    intros γ σ r.
-    unfold read_register.
-    extensionality σ'.
-    extensionality r'.
-    destruct r';
-    destruct r;
-    now simp write_register.
-  Qed.
-
-  Lemma write_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ),
-            write_register (write_register γ r v1) r v2 = write_register γ r v2.
-  Proof.
-    intros γ σ r v1 v2.
-    now destruct r.
-  Qed.
+  Definition RegStore := GenericRegStore.
+  Definition read_register := generic_read_register.
+  Definition write_register := generic_write_register.
+  Definition read_write := generic_read_write.
+  Definition read_write_distinct := generic_read_write_distinct.
+  Definition write_read := generic_write_read.
+  Definition write_write := generic_write_write.
 
   Local Coercion stm_exp : Exp >-> Stm.
   Local Open Scope exp_scope.

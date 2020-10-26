@@ -34,6 +34,9 @@ From MicroSail Require Import
      Sep.Logic
      Syntax.
 
+From Equations Require Import
+     Equations.
+
 Import CtxNotations.
 Import EnvNotations.
 
@@ -50,7 +53,7 @@ Module Type AssertionKit
   Parameter Inline 𝑷  : Set.
   (* Predicate field types. *)
   Parameter Inline 𝑷_Ty : 𝑷 -> Ctx Ty.
-  Parameter Inline 𝑷_eq_dec : forall (p : 𝑷) (q : 𝑷), {p = q}+{~ p = q}.
+  Declare Instance 𝑷_eq_dec : EqDec 𝑷.
 
 End AssertionKit.
 

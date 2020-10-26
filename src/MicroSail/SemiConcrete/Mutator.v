@@ -104,13 +104,13 @@ Module SemiConcrete
 
     Equations(noeqns) match_chunk_eqb (ce : SCChunk) (cr : SCChunk) : bool :=
       match_chunk_eqb (scchunk_pred p1 vs1) (scchunk_pred p2 vs2)
-      with 𝑷_eq_dec p1 p2 => {
+      with eq_dec p1 p2 => {
         match_chunk_eqb (scchunk_pred p1 vs1) (scchunk_pred p2 vs2) (left eq_refl) := env_beq Lit_eqb vs1 vs2;
         match_chunk_eqb (scchunk_pred p1 vs1) (scchunk_pred p2 vs2) (right _) := false
       };
       match_chunk_eqb (scchunk_ptsreg r1 t1) (scchunk_ptsreg r2 t2)
-      with 𝑹𝑬𝑮_eq_dec r1 r2 => {
-        match_chunk_eqb (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (left (@teq_refl eq_refl eq_refl)) := Lit_eqb _ v1 v2;
+      with eq_dec_het r1 r2 => {
+        match_chunk_eqb (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (left eq_refl) := Lit_eqb _ v1 v2;
         match_chunk_eqb (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (right _)      := false
       };
       match_chunk_eqb _ _  := false.

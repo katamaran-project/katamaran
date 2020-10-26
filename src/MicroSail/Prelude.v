@@ -121,19 +121,17 @@ Section Equality.
 
   Global Instance option_eqdec `{EqDec A} : EqDec (option A).
   Proof. eqdec_proof. Defined.
-  Global Instance prod_eqdec `{EqDec A, EqDec B} : EqDec (prod A B).
-  Proof. eqdec_proof. Defined.
-  Global Instance sum_eqdec `{EqDec A, EqDec B} : EqDec (sum A B).
-  Proof. eqdec_proof. Defined.
   Global Instance vector_eqdec `{EqDec A} {n} : EqDec (Vector.t A n).
   Proof. eqdec_proof. Defined.
+
+  Definition eq_dec_het {I} {A : I -> Type} `{eqdec : EqDec (sigT A)}
+    {i1 i2} (x1 : A i1) (x2 : A i2) : dec_eq (existT i1 x1) (existT i2 x2) :=
+    eq_dec (existT i1 x1) (existT i2 x2).
 
   Import stdpp.base.
 
   Global Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
     EqDecision A | 10 := eqdec.
-  Global Instance EqDecision_sigma `{EqDecA : EqDecision A, EqDecB : forall (a:A), EqDecision (B a)} :
-    EqDecision (sigma B) := eqdec_sig EqDecA EqDecB.
 
 End Equality.
 
@@ -166,14 +164,14 @@ Section Countable.
 
   Import stdpp.countable.
 
-  Program Instance Countable_sigma {A B} {EqDecA : EqDecision A} {CountA: Countable A}
+  Global Program Instance Countable_sigT {A B} {EqDecA : EqDecision A} {CountA: Countable A}
     {EqDecB : forall (a:A), EqDecision (B a)} {CountB: forall a, Countable (B a)} :
-    Countable (sigma B) :=
-    {| encode x := prod_encode (encode (pr1 x)) (encode (pr2 x));
+    @Countable (sigT B) (sigma_eqdec EqDecA EqDecB)  :=
+    {| encode x := prod_encode (encode (projT1 x)) (encode (projT2 x));
        decode p :=
          a ← (prod_decode_fst p ≫= decode);
          b ← (prod_decode_snd p ≫= decode);
-         mret {| pr1 := a; pr2 := b|}
+         mret (existT a b)
     |}.
   Next Obligation.
     intros ? ? ? ? ? ? [a b].
@@ -182,7 +180,7 @@ Section Countable.
     rewrite prod_decode_encode_snd; cbn.
     rewrite decode_encode; cbn.
     reflexivity.
-  Qed.
+  Defined.
 
 End Countable.
 

@@ -50,6 +50,7 @@ From stdpp Require
      finite.
 From Equations Require Import
      Equations Signature.
+Require Import Equations.Prop.EqDec.
 
 From MicroSail Require Export
      Context
@@ -181,7 +182,7 @@ Module Type TypeKit.
   Declare Instance 𝑼_eq_dec : EqDec 𝑼.
   (* Union types. *)
   Parameter Inline 𝑼𝑻  : 𝑼 -> Set.
-  Parameter Inline 𝑼𝑻_eq_dec : forall (u : 𝑼) (x y : 𝑼𝑻 u), {x=y}+{~x=y}.
+  Declare Instance 𝑼𝑻_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑻 u).
   (* Names of union data constructors. *)
   Parameter Inline 𝑼𝑲  : 𝑼 -> Set.
   Declare Instance 𝑼𝑲_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑲 u).
@@ -280,7 +281,7 @@ Module Types (Export typekit : TypeKit).
   Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
 
   Global Instance Ty_eq_dec : EqDec Ty :=
-    fix ty_eqdec (σ τ : Ty) {struct σ} : ssrbool.decidable (σ = τ) :=
+    fix ty_eqdec (σ τ : Ty) {struct σ} : dec_eq σ τ :=
       match σ , τ with
       | ty_int        , ty_int        => left eq_refl
       | ty_bool       , ty_bool       => left eq_refl
@@ -357,8 +358,7 @@ Module Type TermKit (typekit : TypeKit).
 
   (* Names of registers. *)
   Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
-  Parameter Inline 𝑹𝑬𝑮_eq_dec :
-    forall {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ), {x ≡ y}+{~ x ≡ y}.
+  Declare Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮).
 
 End TermKit.
 
@@ -1492,34 +1492,13 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
   Section GenericRegStore.
 
-    Lemma 𝑹𝑬𝑮_eq_dec_refl {σ} : forall (r : 𝑹𝑬𝑮 σ),
-      𝑹𝑬𝑮_eq_dec r r = left (@teq_refl Ty _ σ σ r r eq_refl eq_refl).
-    Proof.
-      intros r.
-      destruct (𝑹𝑬𝑮_eq_dec r r).
-      + dependent destruction t.
-        dependent destruction eqi.
-        now dependent destruction eqf.
-      + destruct (n (@teq_refl Ty 𝑹𝑬𝑮 σ σ r r eq_refl ltac:(auto))).
-    Qed.
-
-    Lemma 𝑹𝑬𝑮_eq_dec_distinct {σ τ} : forall (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ),
-        ~ r ≡ k -> exists (prf : ~ r ≡ k), 𝑹𝑬𝑮_eq_dec r k = right prf.
-    Proof.
-      intros.
-      destruct (𝑹𝑬𝑮_eq_dec r k).
-      + destruct (H t).
-      + f_equal.
-        now exists n.
-    Qed.
-
     Definition GenericRegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Lit σ.
 
     Definition generic_write_register (γ : GenericRegStore) {σ} (r : 𝑹𝑬𝑮 σ)
       (v : Lit σ) : GenericRegStore :=
       fun τ r' =>
-        match 𝑹𝑬𝑮_eq_dec r r' with
-        | left (teq_refl _ eqt _) => eq_rect σ Lit v τ eqt
+        match eq_dec_het r r' with
+        | left eqt => eq_rect σ Lit v τ (f_equal projT1 eqt)
         | right _ => γ τ r'
         end.
 
@@ -1530,35 +1509,38 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       generic_read_register (generic_write_register γ r v) r = v.
     Proof.
       unfold generic_read_register, generic_write_register.
-      destruct (𝑹𝑬𝑮_eq_dec r r) as [[eqσ eqr]|].
-      - symmetry. apply Eqdep_dec.eq_rect_eq_dec, Ty_eq_dec.
-      - contradict n. now apply teq_refl with eq_refl.
+      unfold eq_dec_het. now rewrite eq_dec_refl.
     Qed.
 
-    Lemma generic_read_write_distinct γ {σ τ} (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ)
-          (prf : ~ r ≡ k) (v : Lit σ) :
+    Lemma generic_read_write_distinct γ {σ τ} (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (v : Lit σ):
+      existT _ r <> existT _ k ->
       generic_read_register (generic_write_register γ r v) k = generic_read_register γ k.
     Proof.
-      unfold generic_read_register, generic_write_register.
-      destruct (𝑹𝑬𝑮_eq_dec_distinct prf) as [prf' H].
-      now rewrite H.
+      intros ?; unfold generic_read_register, generic_write_register.
+      destruct (eq_dec_het r k).
+      - congruence.
+      - reflexivity.
     Qed.
 
     Lemma generic_write_read γ {σ} (r : 𝑹𝑬𝑮 σ) :
-      generic_write_register γ r (generic_read_register γ r) = γ.
+      forall τ (r' : 𝑹𝑬𝑮 τ),
+        generic_write_register γ r (generic_read_register γ r) r' = γ τ r'.
     Proof.
-      extensionality τ. extensionality r'.
+      intros ? ?.
       unfold generic_write_register, generic_read_register.
-      destruct (𝑹𝑬𝑮_eq_dec r r') as [[eqt eqr]|]; now subst.
+      destruct (eq_dec_het r r') as [e|].
+      - now dependent elimination e.
+      - reflexivity.
     Qed.
 
     Lemma generic_write_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ) :
-      generic_write_register (generic_write_register γ r v1) r v2 =
-      generic_write_register γ r v2.
+      forall τ (r' : 𝑹𝑬𝑮 τ),
+        generic_write_register (generic_write_register γ r v1) r v2 r' =
+        generic_write_register γ r v2 r'.
     Proof.
-      extensionality τ. extensionality r'.
+      intros ? ?.
       unfold generic_write_register, generic_read_register.
-      destruct (𝑹𝑬𝑮_eq_dec r r') as [[eqσ eqr]|]; now cbn.
+      destruct (eq_dec_het r r'); reflexivity.
     Qed.
 
   End GenericRegStore.
@@ -1709,22 +1691,24 @@ Module Type ProgramKit
      functions *)
   Parameter RegStore : Type.
   (* Definition RegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Lit σ. *)
-  Bind Scope env_scope with RegStore.
   Parameter read_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ), Lit σ.
   Parameter write_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ), RegStore.
 
   Parameter read_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : Lit σ),
             read_register (write_register γ r v) r = v.
 
-  Parameter read_write_distinct : forall (γ : RegStore) σ τ (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ)
-                                    (prf : ~ r ≡ k) (v : Lit σ),
-            read_register (write_register γ r v) k = read_register γ k.
+  Parameter read_write_distinct :
+    forall (γ : RegStore) {σ τ} (r__σ : 𝑹𝑬𝑮 σ) (r__τ : 𝑹𝑬𝑮 τ) (v__σ : Lit σ),
+      existT _ r__σ <> existT _ r__τ ->
+      read_register (write_register γ r__σ v__σ) r__τ = read_register γ r__τ.
 
-  Parameter write_read : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ),
-            (write_register γ r (read_register γ r)) = γ.
+  (* Parameter write_read : *)
+  (*   forall (γ : RegStore) {σ τ} (r__σ : 𝑹𝑬𝑮 σ) (r__τ : 𝑹𝑬𝑮 τ), *)
+  (*     read_register (write_register γ r (read_register γ r)) r__τ = *)
+  (*     read_register γ r__τ. *)
 
-  Parameter write_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ),
-            write_register (write_register γ r v1) r v2 = write_register γ r v2.
+  (* Parameter write_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ), *)
+  (*     write_register (write_register γ r v1) r v2 = write_register γ r v2. *)
 
   (* Memory model *)
   Parameter Memory : Type.

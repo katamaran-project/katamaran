@@ -10,6 +10,7 @@ From MicroSail Require Import
 Require Import Coq.Program.Equality.
 
 From Equations Require Import Equations Signature.
+Require Import Equations.Prop.EqDec.
 
 From iris.bi Require Import interface.
 From iris.algebra Require Import gmap excl auth.
@@ -32,6 +33,11 @@ Module ValsAndTerms
 
   Inductive Tm (Γ : Ctx (𝑿 * Ty)) τ : Type :=
   | MkTm (δ : LocalStore Γ) (s : Stm Γ τ) : Tm Γ τ.
+
+  Section TransparentObligations.
+    Local Set Transparent Obligations.
+    Derive NoConfusion for Tm.
+  End TransparentObligations.
 
   Inductive Val (Γ : Ctx (𝑿 * Ty)) τ : Type :=
     (* we only keep the store around for technical reasons, essentially to validate of_to_val. *)
@@ -119,20 +125,13 @@ Module ValsAndTerms
     Derive NoConfusion for excl.
   End TransparentObligations.
 
-  Instance eqDec_SomeReg : EqDecision SomeReg.
+  Instance eqDec_SomeReg : EqDec SomeReg.
   Proof.
-    - intros [τ1 r1] [τ2 r2].
-      destruct (𝑹𝑬𝑮_eq_dec r1 r2).
-      + left.
-        dependent elimination t.
-        dependent elimination eqi.
-        now f_equal.
-      + right.
-        intros Heq.
-        dependent elimination Heq.
-        apply n.
-        by constructor 1 with eq_refl.
-  Qed.
+    intros [? r1] [? r2].
+    destruct (eq_dec_het r1 r2).
+    - left. now dependent elimination e.
+    - right. intros e; now dependent elimination e.
+  Defined.
 
   Instance countable_SomeReg : Countable SomeReg.
   Admitted.
@@ -431,18 +430,17 @@ Module IrisInstance
     iPureIntro.
     apply (map_Forall_lookup_2 _ (<[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap)).
     intros [τ' r'] x eq1.
-    destruct (𝑹𝑬𝑮_eq_dec r r') as [eq2|neq].
-    + dependent destruction eq2.
-      destruct eqi, eqf; cbn in *.
+    destruct (eq_dec_het r r') as [eq2|neq].
+    + dependent elimination eq2.
       rewrite lookup_insert in eq1.
       apply (inj Some) in eq1.
       by rewrite <- eq1, (read_write regstore r v).
     + assert (mkSomeReg r ≠ mkSomeReg r') as neq2.
       * intros eq2.
-        dependent destruction eq2.
-        destruct (neq (teq_refl r' eq_refl eq_refl)).
+        dependent elimination eq2.
+        now apply neq.
       * rewrite (lookup_insert_ne _ _ _ _ neq2) in eq1.
-        rewrite (read_write_distinct _ neq).
+        rewrite (read_write_distinct _ _ neq).
         apply (map_Forall_lookup_1 _ _ _ _ regseq eq1).
   Qed.
 

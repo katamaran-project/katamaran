@@ -62,7 +62,7 @@ Module HoareSound
             end;
             microsail_destruct_propositional H; subst; cbn in *
           | microsail_stm_primitive_step s;
-            dependent destruction H;
+            dependent elimination H;
             [ contradiction HF | idtac ]
           ]
       end.
@@ -73,9 +73,9 @@ Module HoareSound
       | [ H: True |- _ ] => clear H
       | [ H: False |- _ ] => destruct H
       | [ H: Env _ (ctx_snoc _ _) |- _ ] =>
-        dependent destruction H
+        dependent elimination H
       | [ H: Env _ ctx_nil |- _ ] =>
-        dependent destruction H
+        dependent elimination H
       | [ H: context[env_drop _ (_ ►► _)]|- _] =>
         rewrite env_drop_cat in H
       | [ _: context[match eval ?e ?δ with _ => _ end] |- _ ] =>
@@ -239,9 +239,8 @@ Module HoareSound
         intros τ k.
         specialize (Hsplit_γ τ k) as H__k.
         destruct_conjs.
-        destruct (𝑹𝑬𝑮_eq_dec reg k).
-        + dependent destruction t.
-          dependent destruction eqi; cbn in *; subst.
+        destruct (eq_dec_het reg k).
+        + dependent elimination e0.
           destruct H; [ idtac | congruence ].
           rewrite H in *.
           split; auto.

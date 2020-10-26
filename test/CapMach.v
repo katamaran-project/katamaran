@@ -428,24 +428,26 @@ Module CapTermKit <: (TermKit CapTypeKit).
   Definition 𝑭𝑿  : Ctx (𝑿 * Ty) -> Ty -> Set := FunX.
 
   Inductive Reg : Ty -> Set :=
-    | pc   : Reg (ty_record capability)
-    | reg0 : Reg ty_word
-    | reg1 : Reg ty_word
-    | reg2 : Reg ty_word
-    | reg3 : Reg ty_word.
+  | pc   : Reg (ty_record capability)
+  | reg0 : Reg ty_word
+  | reg1 : Reg ty_word
+  | reg2 : Reg ty_word
+  | reg3 : Reg ty_word.
+
+  Section TransparentObligations.
+    Local Set Transparent Obligations.
+    Derive Signature NoConfusion for Reg.
+  End TransparentObligations.
 
   Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
-  Definition 𝑹𝑬𝑮_eq_dec {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ) : {x ≡ y}+{~ x ≡ y}.
+  Definition 𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg).
   Proof.
-    destruct x; destruct y; cbn;
+    intros [? []] [? []]; cbn;
       first
-        [ left; now apply teq_refl with eq_refl
-        | right; intros [eqt eqr];
-          try rewrite <- (Eqdep_dec.eq_rect_eq_dec Ty_eq_dec) in eqr; discriminate
+        [ left; now apply eq_refl
+        | right; intros e; dependent elimination e
         ].
   Defined.
-
-  Definition 𝑨𝑫𝑫𝑹 : Set := Empty_set.
 
 End CapTermKit.
 Module CapTerms := Terms CapTypeKit CapTermKit.

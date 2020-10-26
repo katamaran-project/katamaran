@@ -233,15 +233,8 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
   Definition 𝑭𝑿 : Ctx (𝑿 * Ty) -> Ty -> Set := fun _ _ => Empty_set.
 
   Definition 𝑹𝑬𝑮 : Ty -> Set := fun _ => Empty_set.
-  Definition 𝑹𝑬𝑮_eq_dec {σ τ} (x : 𝑹𝑬𝑮 σ) (y : 𝑹𝑬𝑮 τ) : {x ≡ y}+{~ x ≡ y}.
-  Proof.
-    destruct x; destruct y; cbn;
-      first
-        [ left; now apply tyeq_refl with eq_refl
-        | right; intros [eqt eqr];
-          rewrite <- (Eqdep_dec.eq_rect_eq_dec Ty_eq_dec) in eqr; discriminate
-        ].
-  Defined.
+  Definition 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮) :=
+    fun '(existT _ x) => match x with end.
 
 End ExampleTermKit.
 Module ExampleTerms := Terms ExampleTypeKit ExampleTermKit.
