@@ -1183,7 +1183,7 @@ Module MinCapsModel.
   Import MinCapsContracts.
   Import MicroSail.Iris.Model.
 
-  Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
+  Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
 
     Module IrisRegs := IrisRegisters MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
     Import IrisRegs.
