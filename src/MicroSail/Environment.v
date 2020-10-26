@@ -376,3 +376,17 @@ Definition curry_named {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type}
 
 Definition ForallNamed {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) : (NamedEnv D Δ -> Prop) -> Prop :=
   @Forall (X * T) (fun xt => D (snd xt)) Δ.
+
+Section TraverseEnv.
+
+  Import stdpp.base.
+
+  Context `{MRet M, MBind M} {I : Set} {A B : I -> Type} (f : forall i : I, A i -> M (B i)).
+
+  Fixpoint traverse_env {Γ : Ctx I} (xs : Env A Γ) : M (Env B Γ) :=
+    match xs with
+    | env_nil => mret (env_nil)
+    | env_snoc Ea i a => Eb ← traverse_env Ea ; b ← f a ; mret (env_snoc Eb i b)
+    end.
+
+End TraverseEnv.

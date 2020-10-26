@@ -31,7 +31,10 @@ From Coq Require Import
      Lists.List
      Logic.FinFun
      Strings.String
-     ZArith.ZArith
+     ZArith.ZArith.
+
+From Coq Require
+     Vector
      ssr.ssrbool.
 
 From Equations Require Import
@@ -41,7 +44,7 @@ From Equations Require Import
    library functions and constructors. Import the module here, so that the
    changes are consistently applied over our code base. *)
 From stdpp Require
-     base finite list option vector.
+     base countable finite list option vector.
 
 Import ListNotations.
 
@@ -71,7 +74,7 @@ Section WithA.
     Proof.
       induction xs as [|x xs]; intros [|y ys]; cbn; try (constructor; congruence).
       destruct (hyp x y).
-      - apply (iffP (IHxs ys)); congruence.
+      - apply (ssrbool.iffP (IHxs ys)); congruence.
       - constructor; congruence.
     Qed.
 
@@ -79,7 +82,7 @@ Section WithA.
       forall xs ys : option A, reflect (xs = ys) (option_beq eqbA xs ys).
     Proof.
       intros [x|] [y|]; cbn in *; try constructor; try congruence.
-      apply (iffP (hyp x y)); congruence.
+      apply (ssrbool.iffP (hyp x y)); congruence.
     Qed.
 
   End WithEq.
@@ -89,7 +92,7 @@ End WithA.
 Section Equality.
 
   Definition f_equal_dec {A B : Type} (f : A -> B) {x y : A} (inj : f x = f y -> x = y)
-             (hyp : decidable (x = y)) : decidable (f x = f y) :=
+             (hyp : dec_eq x y) : dec_eq (f x) (f y) :=
     match hyp with
     | left p => left (f_equal f p)
     | right p => right (fun e : f x = f y => p (inj e))
@@ -97,10 +100,12 @@ Section Equality.
 
   Definition f_equal2_dec {A1 A2 B : Type} (f : A1 -> A2 -> B) {x1 y1 : A1} {x2 y2 : A2}
              (inj : f x1 x2 = f y1 y2 -> @sigmaI _ _ x1 x2 = @sigmaI _ _ y1 y2)
-             (hyp1 : decidable (x1 = y1)) (hyp2 : decidable (x2 = y2)) :
-    decidable (f x1 x2 = f y1 y2) :=
+             (hyp1 : dec_eq x1 y1) (hyp2 : dec_eq x2 y2) :
+    dec_eq (f x1 x2) (f y1 y2) :=
     match hyp1 , hyp2 with
-    | left  p , left q  => left (f_equal2 f p q)
+    | left  p , left q  => left (eq_trans
+                                   (f_equal (f x1) q)
+                                   (f_equal (fun x => f x y2) p))
     | left  p , right q =>
       right (fun e => q (f_equal (@pr2 _ (fun _ => _)) (inj e)))
     | right p , _       =>
@@ -112,6 +117,7 @@ Section Equality.
   Global Instance Z_eqdec : EqDec Z := Z.eq_dec.
   Global Instance string_eqdec : EqDec string := string_dec.
   Derive NoConfusion EqDec for Empty_set.
+  Derive Signature NoConfusion NoConfusionHom for Vector.t.
 
   Global Instance option_eqdec `{EqDec A} : EqDec (option A).
   Proof. eqdec_proof. Defined.
@@ -119,9 +125,15 @@ Section Equality.
   Proof. eqdec_proof. Defined.
   Global Instance sum_eqdec `{EqDec A, EqDec B} : EqDec (sum A B).
   Proof. eqdec_proof. Defined.
+  Global Instance vector_eqdec `{EqDec A} {n} : EqDec (Vector.t A n).
+  Proof. eqdec_proof. Defined.
+
+  Import stdpp.base.
 
   Global Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
-    base.EqDecision A | 10 := eqdec.
+    EqDecision A | 10 := eqdec.
+  Global Instance EqDecision_sigma `{EqDecA : EqDecision A, EqDecB : forall (a:A), EqDecision (B a)} :
+    EqDecision (sigma B) := eqdec_sig EqDecA EqDecB.
 
 End Equality.
 
@@ -149,3 +161,49 @@ Definition fromSome {A : Type} (m : option A) : IsSome m -> A :=
   | Some a => fun _ => a
   | None   => fun p => match p with end
   end.
+
+Section Countable.
+
+  Import stdpp.countable.
+
+  Program Instance Countable_sigma {A B} {EqDecA : EqDecision A} {CountA: Countable A}
+    {EqDecB : forall (a:A), EqDecision (B a)} {CountB: forall a, Countable (B a)} :
+    Countable (sigma B) :=
+    {| encode x := prod_encode (encode (pr1 x)) (encode (pr2 x));
+       decode p :=
+         a ← (prod_decode_fst p ≫= decode);
+         b ← (prod_decode_snd p ≫= decode);
+         mret {| pr1 := a; pr2 := b|}
+    |}.
+  Next Obligation.
+    intros ? ? ? ? ? ? [a b].
+    rewrite prod_decode_encode_fst; cbn.
+    rewrite decode_encode; cbn.
+    rewrite prod_decode_encode_snd; cbn.
+    rewrite decode_encode; cbn.
+    reflexivity.
+  Qed.
+
+End Countable.
+
+Section Traverse.
+
+  Local Set Universe Polymorphism.
+  Import stdpp.base.
+
+  Context `{MRet M, MBind M} {A B : Type} (f : A -> M B).
+
+  Fixpoint traverse_list (xs : list A) : M (list B) :=
+    match xs with
+    | nil       => mret nil
+    | cons x xs => b ← f x ; bs ← traverse_list xs ; mret (cons b bs)
+    end.
+
+  Fixpoint traverse_vector {n} (xs : Vector.t A n) : M (Vector.t B n) :=
+    match xs with
+    | Vector.nil => mret Vector.nil
+    | Vector.cons x xs =>
+      b ← f x ; bs ← traverse_vector xs ; mret (Vector.cons b bs)
+    end.
+
+End Traverse.

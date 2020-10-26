@@ -27,7 +27,6 @@
 (******************************************************************************)
 
 Require Import Coq.Logic.EqdepFacts.
-Require Import Coq.ssr.ssrbool.
 Require Import Equations.Equations.
 Require Import MicroSail.Notation.
 Require Import MicroSail.Prelude.
@@ -45,11 +44,6 @@ Section TransparentObligations.
   Derive NoConfusion for Ctx.
 End TransparentObligations.
 
-(* Scheme Equality for Ctx. *)
-Definition Ctx_eq_dec (B : Set) (B_eq_dec : forall x y : B, {x=y}+{~x=y}) :
-           forall σs τs : Ctx B, {σs=τs}+{~σs=τs}.
-Proof. decide equality. Qed.
-
 Arguments ctx_nil {_}.
 Arguments ctx_snoc {_} _ _.
 Bind Scope ctx_scope with Ctx.
@@ -58,7 +52,7 @@ Section WithBinding.
   Context {B : Set}.
 
   Global Instance ctx_eqdec {eqB : EqDec B} : EqDec (Ctx B) :=
-    fix ctx_eqdec (Γ Δ : Ctx B) {struct Γ} : decidable (Γ = Δ) :=
+    fix ctx_eqdec (Γ Δ : Ctx B) {struct Γ} : dec_eq Γ Δ :=
       match Γ , Δ with
       | ctx_nil      , ctx_nil      => left eq_refl
       | ctx_snoc Γ b , ctx_snoc Δ c => f_equal2_dec ctx_snoc noConfusion_inv
