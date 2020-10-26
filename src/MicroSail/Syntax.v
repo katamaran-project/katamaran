@@ -1200,7 +1200,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       Term_eqb (term_list xs) (term_list ys) := list_beq Term_eqb xs ys;
       Term_eqb (term_bvec xs) (term_bvec ys) := Vector.eqb _ Term_eqb xs ys;
       Term_eqb (term_tuple x) (term_tuple y) :=
-         @env_beq _ (Term Σ) (@Term_eqb _) _ x y;
+         @env_eqb_hom _ (Term Σ) (@Term_eqb _) _ x y;
       Term_eqb (@term_projtup σs x n _ p) (@term_projtup τs y m _ q)
         with eq_dec σs τs => {
         Term_eqb (@term_projtup σs x n _ p) (@term_projtup ?(σs) y m _ q) (left eq_refl) :=
@@ -1214,7 +1214,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         Term_eqb _ _ (right _) := false
       };
       Term_eqb (@term_record ?(r) xs) (@term_record r ys) :=
-         @env_beq _ (fun b => Term Σ (snd b)) (fun b => @Term_eqb _ (snd b)) _ xs ys;
+         @env_eqb_hom _ (fun b => Term Σ (snd b)) (fun b => @Term_eqb _ (snd b)) _ xs ys;
       Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
                with (𝑹_eq_dec r1 r2) => {
       Term_eqb (@term_projrec r e1 _ _ prf1) (@term_projrec ?(r) e2 _ _ prf2)

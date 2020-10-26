@@ -642,8 +642,6 @@ Import ISAMutators.
 (*     ISASymbolicContractKit. *)
 (* Import ISASoundness. *)
 
-Local Transparent Term_eqb env_beq.
-
 Import List.
 
 Arguments inctx_zero {_ _ _} /.

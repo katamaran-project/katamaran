@@ -269,15 +269,67 @@ Section WithBinding.
     - cbn. intros. f_equal. auto.
   Qed.
 
-  Section WithEqD.
+  Section HomEquality.
+
     Context {D : B -> Type}.
-    Variable eqd : forall b, D b -> D b -> bool.
+    Variable eqb : forall b, D b -> D b -> bool.
 
-    Equations(noind) env_beq {Γ : Ctx B} (δ1 δ2 : Env D Γ) : bool :=
-    env_beq env_nil               env_nil              := true;
-    env_beq (env_snoc δ1 _ db1) (env_snoc δ2 _ db2) := env_beq δ1 δ2 && eqd db1 db2.
+    Equations(noeqns) env_eqb_hom {Γ} (δ1 δ2 : Env D Γ) : bool :=
+      env_eqb_hom env_nil             env_nil           := true;
+      env_eqb_hom (env_snoc δ1 _ db1) (env_snoc δ2 _ db2) :=
+        if eqb db1 db2 then env_eqb_hom δ1 δ2 else false.
 
-  End WithEqD.
+    Variable eqb_spec : forall b (x y : D b),
+        Bool.reflect (x = y) (eqb x y).
+
+    Lemma env_eqb_hom_spec {Γ} (δ1 δ2 : Env D Γ) :
+      Bool.reflect (δ1 = δ2) (env_eqb_hom δ1 δ2).
+    Proof.
+      induction δ1; dependent elimination δ2; cbn.
+      - constructor.
+        reflexivity.
+      - destruct (eqb_spec db db0); cbn in *.
+        + eapply (ssrbool.iffP (IHδ1 _)); intros Heq;
+            dependent elimination Heq; congruence.
+        + constructor; intros e; dependent elimination e; congruence.
+    Qed.
+
+  End HomEquality.
+
+  Section HetEquality.
+
+    Context {D : B -> Type}.
+    Variable eqb : forall b1 b2, D b1 -> D b2 -> bool.
+
+    Fixpoint env_eqb_het {Γ1 Γ2} (δ1 : Env D Γ1) (δ2 : Env D Γ2) {struct δ1} : bool :=
+      match δ1 , δ2 with
+      | env_nil           , env_nil         => true
+      | env_snoc δ1 _ db1 , env_snoc δ2 _ db2 =>
+        if eqb db1 db2 then env_eqb_het δ1 δ2 else false
+      | _                 , _               => false
+      end.
+
+    Variable eqb_spec : forall b1 b2 (x : D b1) (y : D b2),
+        Bool.reflect (existT _ x = existT _ y) (eqb x y).
+
+    Lemma env_eqb_het_spec {Γ1 Γ2} (δ1 : Env D Γ1) (δ2 : Env D Γ2) :
+      Bool.reflect (existT _ δ1 = existT _ δ2) (env_eqb_het δ1 δ2).
+    Proof.
+      revert Γ2 δ2; induction δ1; intros ? []; cbn.
+      - constructor.
+        reflexivity.
+      - constructor.
+        intro e; dependent elimination e.
+      - constructor.
+        intro e; dependent elimination e.
+      - destruct (eqb_spec db db0); cbn in *.
+        + apply (ssrbool.iffP (IHδ1 _ E)); intros Heq; dependent elimination Heq.
+          * dependent elimination e; reflexivity.
+          * reflexivity.
+        + constructor; intros e; dependent elimination e; congruence.
+    Qed.
+
+  End HetEquality.
 
 End WithBinding.
 

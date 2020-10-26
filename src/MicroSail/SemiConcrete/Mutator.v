@@ -105,7 +105,7 @@ Module SemiConcrete
     Equations(noeqns) match_chunk_eqb (ce : SCChunk) (cr : SCChunk) : bool :=
       match_chunk_eqb (scchunk_pred p1 vs1) (scchunk_pred p2 vs2)
       with eq_dec p1 p2 => {
-        match_chunk_eqb (scchunk_pred p1 vs1) (scchunk_pred p2 vs2) (left eq_refl) := env_beq Lit_eqb vs1 vs2;
+        match_chunk_eqb (scchunk_pred p1 vs1) (scchunk_pred p2 vs2) (left eq_refl) := env_eqb_hom Lit_eqb vs1 vs2;
         match_chunk_eqb (scchunk_pred p1 vs1) (scchunk_pred p2 vs2) (right _) := false
       };
       match_chunk_eqb (scchunk_ptsreg r1 t1) (scchunk_ptsreg r2 t2)
@@ -115,10 +115,27 @@ Module SemiConcrete
       };
       match_chunk_eqb _ _  := false.
 
+    Local Set Equations With UIP.
     Lemma match_chunk_eqb_spec (c1 c2 : SCChunk) :
       reflect (c1 = c2) (match_chunk_eqb c1 c2).
     Proof.
-    Admitted.
+      destruct c1 as [p1 vs1|r1], c2 as [p2 vs2|r2]; cbn.
+      - destruct (eq_dec p1 p2); cbn.
+        + dependent elimination e; cbn.
+          destruct (env_eqb_hom_spec _ Lit_eqb_spec vs1 vs2); constructor.
+          * congruence.
+          * intros e. now dependent elimination e.
+        + constructor; intro e.
+          now dependent elimination e.
+      - constructor. discriminate.
+      - constructor. discriminate.
+      - destruct (eq_dec_het r r0); cbn.
+        + dependent elimination e; cbn.
+          apply (ssrbool.iffP (Lit_eqb_spec _ _ _));
+            intro e; now dependent elimination e.
+        + constructor.
+          intro e; now dependent elimination e.
+    Qed.
 
     Definition extract_chunk_eqb (ce : SCChunk) (h : SCHeap) : list SCHeap :=
       List.map snd (List.filter (fun '(cr,_) => match_chunk_eqb ce cr) (heap_extractions h)).
