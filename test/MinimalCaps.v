@@ -1123,6 +1123,7 @@ Module MinCapsContracts.
       MinCapsAssertionKit
       MinCapsSymbolicContractKit.
   Import MinCapsMutators.
+  Import DynMutV2.
 
   Local Ltac solve :=
     repeat
@@ -1141,10 +1142,10 @@ Module MinCapsContracts.
        auto
       ).
 
-  Lemma valid_contract_read_reg : ValidContractDynMutEvar sep_contract_read_reg fun_read_reg.
+  Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
   Proof. compute; solve. Qed.
 
-  Lemma valid_contract_read_reg_cap : ValidContractDynMutEvar sep_contract_read_reg_cap fun_read_reg_cap.
+  Lemma valid_contract_read_reg_cap : ValidContractDynMut sep_contract_read_reg_cap fun_read_reg_cap.
   Proof.
     split;
       [ compute; auto
@@ -1152,7 +1153,7 @@ Module MinCapsContracts.
       ].
   Qed.
 
-  Lemma valid_contract_read_reg_num : ValidContractDynMutEvar sep_contract_read_reg_num fun_read_reg_num.
+  Lemma valid_contract_read_reg_num : ValidContractDynMut sep_contract_read_reg_num fun_read_reg_num.
   Proof.
     split;
       [ exists (term_var "result"); compute; firstorder congruence
@@ -1160,10 +1161,10 @@ Module MinCapsContracts.
       ].
   Qed.
 
-  Lemma valid_contract_write_reg : ValidContractDynMutEvar sep_contract_write_reg fun_write_reg.
+  Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_write_reg.
   Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
-  Lemma valid_contract_update_pc : ValidContractDynMutEvar sep_contract_update_pc fun_update_pc.
+  Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
   Proof.
     exists (TM.term_record
               capability

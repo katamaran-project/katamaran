@@ -436,6 +436,7 @@ Module SepContracts.
       ExampleAssertionKit
       ExampleSymbolicContractKit.
   Import ExampleMutators.
+  Import DynMutV2.
 
   Local Ltac solve :=
     repeat
@@ -458,31 +459,11 @@ Module SepContracts.
       ).
 
   Lemma valid_contract_length {σ} : ValidContractDynMut (@sep_contract_length σ) (Pi length).
-  Proof.
-    constructor.
-    - solve.
-    - exists [term_var "ys"]%arg; solve; lia.
-  Qed.
+  Proof. solve; lia. Qed.
   Hint Resolve valid_contract_length : contracts.
 
   Lemma valid_contract_cmp : ValidContractDynMut sep_contract_cmp (Pi cmp).
-  Proof.
-    cbn; intuition.
-    (* constructor. *)
-    (* { exists LT; solve. } *)
-    (* constructor. *)
-    (* { exists EQ; solve. } *)
-    (* constructor. *)
-    (* { exists GT; solve. } *)
-    (* { solve. *)
-    (*   (* (* If failure were disallowed, we would need to show that this case *) *)
-    (*   (*    is impossible. *) *) *)
-    (*   (* destruct (Z.gtb_spec db db0); try discriminate. *) *)
-    (*   (* destruct (Z.eqb_spec db db0); try discriminate. *) *)
-    (*   (* destruct (Z.ltb_spec db db0); try discriminate. *) *)
-    (*   (* lia. *) *)
-    (* } *)
-  Qed.
+  Proof. solve; firstorder lia. Qed.
   Hint Resolve valid_contract_cmp : contracts.
 
 End SepContracts.

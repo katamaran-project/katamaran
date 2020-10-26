@@ -622,6 +622,7 @@ Module ISAMutators :=
     ISAAssertionKit
     ISASymbolicContractKit.
 Import ISAMutators.
+Import DynMutV2.
 
 (* Module ISAHeapKit <: (HeapKit ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit ISASymbolicContractKit). *)
 
@@ -664,15 +665,15 @@ Local Ltac solve :=
      auto
     ).
 
-Lemma valid_contract_rX : ValidContractDynMutEvar sep_contract_rX fun_rX.
+Lemma valid_contract_rX : ValidContractDynMut sep_contract_rX fun_rX.
 Proof. Time (compute; solve). Qed.
 Hint Resolve valid_contract_rX : contracts.
 
-Lemma valid_contract_wX : ValidContractDynMutEvar sep_contract_wX fun_wX.
+Lemma valid_contract_wX : ValidContractDynMut sep_contract_wX fun_wX.
 Proof. Time (apply dynmutevarreflect_sound; now compute). Qed.
 Hint Resolve valid_contract_wX : contracts.
 
-Lemma valid_contract_swapreg : ValidContractDynMutEvar sep_contract_swapreg fun_swapreg.
+Lemma valid_contract_swapreg : ValidContractDynMut sep_contract_swapreg fun_swapreg.
 Proof. Time (apply dynmutevarreflect_sound; now compute). Qed.
 Hint Resolve valid_contract_swapreg : contracts.
 
