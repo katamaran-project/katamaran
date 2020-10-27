@@ -289,11 +289,12 @@ Module SemiConcrete
       | chunk_ptsreg r t => scchunk_ptsreg r (inst_term ι t)
       end.
 
+    Definition scmut_assume_term {Γ Σ} (ι : SymInstance Σ) (b : Term Σ ty_bool) : SCMut Γ Γ unit :=
+      if inst_term ι b then scmut_pure tt else scmut_block.
+
     Fixpoint scmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
       match asn with
-      | asn_bool b      => if inst_term ι b
-                           then scmut_pure tt
-                           else scmut_block
+      | asn_bool b      => scmut_assume_term ι b
       | asn_prop P      => scmut_fail "scmut_produce"
       | asn_chunk c     => scmut_produce_chunk (inst_chunk ι c)
       | asn_if b a1 a2  => if inst_term ι b

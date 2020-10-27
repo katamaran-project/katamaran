@@ -187,7 +187,8 @@ Module Soundness
       inst_scheap h1 ✱ inst_assertion ι asn ⊢ POST δ1.
     Proof.
       revert ι δ1 h1 POST. induction asn; cbn; intros ι δ1 h1 POST HYP.
-      - destruct (inst_term ι b); cbn in *.
+      - unfold scmut_assume_term in HYP.
+        destruct (inst_term ι b); cbn in *.
         + rewrite <- (sepcon_emp (POST _)).
           apply sepcon_entails.
           apply HYP.

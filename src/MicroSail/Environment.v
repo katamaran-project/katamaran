@@ -269,6 +269,19 @@ Section WithBinding.
     - cbn. intros. f_equal. auto.
   Qed.
 
+  Lemma env_lookup_extensional {D : B -> Type} {Γ} (E1 E2 : Env D Γ) :
+    (forall {b} (bInΓ : InCtx b Γ),
+        env_lookup E1 bInΓ = env_lookup E2 bInΓ) ->
+    E1 = E2.
+  Proof.
+  Admitted.
+
+  Lemma env_lookup_tabulate {D : B -> Type} {Γ} (g : forall (b : B) , InCtx b Γ -> D b) :
+    forall {b} (bInΓ : InCtx b Γ),
+      env_lookup (env_tabulate g) bInΓ = g b bInΓ.
+  Proof.
+  Admitted.
+
   Section HomEquality.
 
     Context {D : B -> Type}.
