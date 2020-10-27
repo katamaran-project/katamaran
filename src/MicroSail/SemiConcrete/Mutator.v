@@ -189,6 +189,11 @@ Module SemiConcrete
       list A -> SCMut Γ Γ A :=
       fun xs s => outcome_angelic_list msg (List.map (fun a => MkSCMutResult a s) xs).
 
+    Definition scmut_cover {Γ1 Γ2 A} : relation (SCMut Γ1 Γ2 A) :=
+      fun m1 m2 => forall s, outcome_cover (m1 s) (m2 s).
+    Instance scmut_cover_preorder {Γ1 Γ2 A} : PreOrder (@scmut_cover Γ1 Γ2 A).
+    Proof. split; firstorder. Qed.
+
   End SemiConcreteMutator.
   Bind Scope mutator_scope with SCMut.
 

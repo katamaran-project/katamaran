@@ -248,6 +248,18 @@ Instance outcome_satisfy_iff_morphism {A} (o : Outcome A) :
   Proper (pointwise_relation A iff ==> iff) (@outcome_satisfy A o).
 Proof. split; apply outcome_satisfy_monotonic; firstorder. Qed.
 
+From Coq Require Import
+     Classes.Equivalence
+     Classes.Morphisms
+     Classes.RelationClasses
+     Relations.
+
+Definition outcome_cover {A} : relation (Outcome A) :=
+  fun o1 o2 => forall P, outcome_satisfy o1 P -> outcome_satisfy o2 P.
+
+Instance outcome_cover_preorder {A} : PreOrder (@outcome_cover A).
+Proof. split; firstorder. Qed.
+
 (* Inductive outcome_satisfy_ind {A : Type} (P : A -> Prop) : Outcome A -> Prop := *)
 (* | outcome_satisfy_pure  a    : *)
 (*     P a -> *)
