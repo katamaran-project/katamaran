@@ -2,349 +2,354 @@ Require Import Coq.Program.Equality.
 Require Import Equations.Equations.
 Require Import MicroSail.Context.
 Require Import MicroSail.Notation.
+Require Import MicroSail.Tactics.
 
-Set Implicit Arguments.
+Local Set Implicit Arguments.
 
 Section WithBinding.
   Context {B : Set}.
 
-  Inductive Env (D : B -> Type) : Ctx B -> Type :=
-  | env_nil : Env D ctx_nil
-  | env_snoc {Γ} (E : Env D Γ) (b : B) (db : D b) :
-      Env D (ctx_snoc Γ b).
-  Derive Signature for Env.
+  Section WithDom.
+    Context {D : B -> Set}.
 
-  Section TransparentObligations.
-    Local Set Transparent Obligations.
-    Derive NoConfusion NoConfusionHom for Env.
-  End TransparentObligations.
+    Inductive Env : Ctx B -> Set :=
+    | env_nil : Env ctx_nil
+    | env_snoc {Γ} (E : Env Γ) (b : B) (db : D b) :
+        Env (ctx_snoc Γ b).
 
-  Global Arguments env_nil {_}.
-  Bind Scope env_scope with Env.
+    Section TransparentObligations.
+      Local Set Transparent Obligations.
+      Derive Signature NoConfusion NoConfusionHom for Env.
 
-  Fixpoint env_cat {D : B -> Type} {Γ Δ : Ctx B}
-    (EΓ : Env D Γ) (EΔ : Env D Δ) : Env D (ctx_cat Γ Δ) :=
-    match EΔ with
-    | env_nil => EΓ
-    | env_snoc E b db => env_snoc (env_cat EΓ E) b db
-    end.
+      Context {eqdec_b : EqDec B}.
+      Context {eqdec_d : forall b, EqDec (D b) }.
 
-  Section WithD12.
+      Global Instance Env_eqdec {Γ} : EqDec (Env Γ).
+      Proof. eqdec_proof. Defined.
 
-    Context {D1 D2 : B -> Type}.
-    Variable f : forall b, D1 b -> D2 b.
+    End TransparentObligations.
 
-    Fixpoint env_map {Γ : Ctx B} (E : Env D1 Γ) : Env D2 Γ :=
-      match E with
-      | env_nil => env_nil
-      | env_snoc E b db => env_snoc (env_map E) b (f db)
+    Section HomEquality.
+
+      Variable eqb : forall b, D b -> D b -> bool.
+
+      Equations(noeqns) env_eqb_hom {Γ} (δ1 δ2 : Env Γ) : bool :=
+        env_eqb_hom env_nil           env_nil           := true;
+        env_eqb_hom (env_snoc δ1 db1) (env_snoc δ2 db2) :=
+          if eqb db1 db2 then env_eqb_hom δ1 δ2 else false.
+
+      Variable eqb_spec : forall b (x y : D b),
+          Bool.reflect (x = y) (eqb x y).
+
+      Lemma env_eqb_hom_spec {Γ} (δ1 δ2 : Env Γ) :
+        Bool.reflect (δ1 = δ2) (env_eqb_hom δ1 δ2).
+      Proof.
+        induction δ1; dependent elimination δ2; cbn.
+        - constructor.
+          reflexivity.
+        - destruct (eqb_spec db db0); cbn in *.
+          + eapply (ssrbool.iffP (IHδ1 _)); intros Heq;
+              dependent elimination Heq; congruence.
+          + constructor; intros e; dependent elimination e; congruence.
+      Qed.
+
+    End HomEquality.
+
+    Section HetEquality.
+
+      Variable eqb : forall b1 b2, D b1 -> D b2 -> bool.
+
+      Fixpoint env_eqb_het {Γ1 Γ2} (δ1 : Env Γ1) (δ2 : Env Γ2) {struct δ1} : bool :=
+        match δ1 , δ2 with
+        | env_nil         , env_nil         => true
+        | env_snoc δ1 db1 , env_snoc δ2 db2 =>
+          if eqb db1 db2 then env_eqb_het δ1 δ2 else false
+        | _               , _               => false
+        end.
+
+      Variable eqb_spec : forall b1 b2 (x : D b1) (y : D b2),
+          Bool.reflect ({| pr2 := x |} = {| pr2 := y |}) (eqb x y).
+
+      Lemma env_eqb_het_spec {Γ1 Γ2} (δ1 : Env Γ1) (δ2 : Env Γ2) :
+        Bool.reflect ({| pr2 := δ1 |} = {| pr2 := δ2 |}) (env_eqb_het δ1 δ2).
+      Proof.
+        revert Γ2 δ2; induction δ1; intros ? []; cbn.
+        - constructor.
+          reflexivity.
+        - constructor.
+          intro e; dependent elimination e.
+        - constructor.
+          intro e; dependent elimination e.
+        - destruct (eqb_spec db db0); cbn in *.
+          + apply (ssrbool.iffP (IHδ1 _ E)); intros Heq; dependent elimination Heq.
+            * dependent elimination e; reflexivity.
+            * reflexivity.
+          + constructor; intros e; dependent elimination e; congruence.
+      Qed.
+
+    End HetEquality.
+
+    Fixpoint env_cat {Γ Δ} (EΓ : Env Γ) (EΔ : Env Δ) : Env (ctx_cat Γ Δ) :=
+      match EΔ with
+      | env_nil => EΓ
+      | env_snoc E db => env_snoc (env_cat EΓ E) db
       end.
 
-  End WithD12.
+    Fixpoint env_lookup {Γ} (E : Env Γ) : forall b, InCtx b Γ -> D b :=
+      match E with
+      | env_nil => fun _ => inctx_case_nil
+      | env_snoc E db => inctx_case_snoc D db (env_lookup E)
+      end.
 
-  Fixpoint env_lookup {D : B -> Type} {Γ : Ctx B}
-    (E : Env D Γ) : forall (b : B) (bIn : InCtx b Γ), D b :=
-    match E with
-    | env_nil => fun _ => inctx_case_nil
-    | env_snoc E b db => inctx_case_snoc D db (env_lookup E)
-    end.
+    Fixpoint env_tabulate {Γ} : (forall b, InCtx b Γ -> D b) -> Env Γ :=
+      match Γ with
+      | ctx_nil      => fun _ => env_nil
+      | ctx_snoc Γ b =>
+        fun EΓb =>
+          env_snoc
+            (env_tabulate (fun y yIn => EΓb y (inctx_succ yIn)))
+            (EΓb _ inctx_zero)
+      end.
 
-  Global Arguments env_lookup {_ _} _ [_] _.
+    Fixpoint env_update {Γ} (E : Env Γ) {struct E} :
+      forall {b} (bIn : InCtx b Γ) (new : D b), Env Γ :=
+      match E with
+      | env_nil => fun _ => inctx_case_nil
+      | env_snoc E bold =>
+        inctx_case_snoc
+          (fun z => D z -> Env _)
+          (fun new => env_snoc E new)
+          (fun b0' bIn0' new => env_snoc (env_update E bIn0' new) bold)
+      end.
 
-  Fixpoint env_tabulate {D : B -> Type} {Γ : Ctx B} :
-    (forall (x : B) , InCtx x Γ -> D x) -> Env D Γ :=
-    match Γ with
-    | ctx_nil      => fun _   => env_nil
-    | ctx_snoc Γ b =>
-      fun EΓb =>
-        env_snoc
-          (env_tabulate (fun y yIn => EΓb y (inctx_succ yIn)))
-          b
-          (EΓb _ inctx_zero)
-    end.
+    Definition env_head {Γ b} (E : Env (ctx_snoc Γ b)) : D b :=
+      match E in Env Γb
+      return match Γb with
+             | ctx_nil => unit
+             | ctx_snoc Γ b => D b
+             end
+      with
+        | env_nil => tt
+        | env_snoc E db => db
+      end.
 
-  Global Arguments env_tabulate {_ _} _.
+    Definition env_tail {Γ b} (E : Env (ctx_snoc Γ b)) : Env Γ :=
+      match E in Env Γb
+      return match Γb with
+             | ctx_nil => unit
+             | ctx_snoc Γ _ => Env Γ
+             end
+      with
+        | env_nil => tt
+        | env_snoc E _ => E
+      end.
 
-  Fixpoint env_update {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) {struct E} :
-    forall {b0 : B} (bIn0 : InCtx b0 Γ) (new : D b0), Env D Γ :=
-    match E with
-    | env_nil => fun _ => inctx_case_nil
-    | @env_snoc _ Γ E b bold =>
-      inctx_case_snoc
-        (fun z => D z -> Env D (ctx_snoc Γ b))
-        (fun new => env_snoc E b new)
-        (fun b0' bIn0' new => env_snoc (env_update E bIn0' new) b bold)
-    end.
+    Fixpoint env_take {Γ} Δ (E : Env (ctx_cat Γ Δ)) : Env Δ :=
+      match Δ , E with
+      | ctx_nil      , E => env_nil
+      | ctx_snoc Δ b , E => env_snoc (env_take Δ (env_tail E)) (env_head E)
+      end.
 
-  Definition env_head {D : B -> Type} {Γ : Ctx B}
-    {b : B} (E : Env D (ctx_snoc Γ b)) : D b:=
-    match E in Env _ Γb
-    return match Γb with
-           | ctx_nil => unit
-           | ctx_snoc Γ b => D b
-           end
-    with
-      | env_nil => tt
-      | env_snoc E _ db => db
-    end.
+    Definition env_unsnoc {Γ b} (E : Env (ctx_snoc Γ b)) : Env Γ * D b:=
+      match E in Env Γb
+      return match Γb with
+             | ctx_nil => unit
+             | ctx_snoc Γ b => Env Γ * D b
+             end
+      with
+        | env_nil => tt
+        | env_snoc E db => (E , db)
+      end.
 
-  Definition env_tail {D : B -> Type} {Γ : Ctx B}
-    {b : B} (E : Env D (ctx_snoc Γ b)) : Env D Γ :=
-    match E in Env _ Γb
-    return match Γb with
-           | ctx_nil => unit
-           | ctx_snoc Γ _ => Env D Γ
-           end
-    with
-      | env_nil => tt
-      | env_snoc E _ _ => E
-    end.
+    Fixpoint env_drop {Γ} Δ (E : Env (ctx_cat Γ Δ)) : Env Γ :=
+      match Δ , E with
+      | ctx_nil      , E => E
+      | ctx_snoc Δ _ , E => env_drop Δ (env_tail E)
+      end.
 
-  Fixpoint env_take {D : B -> Type} {Γ : Ctx B} Δ {struct Δ} :
-    forall (E : Env D (ctx_cat Γ Δ)), Env D Δ :=
-    match Δ with
-    | ctx_nil => fun E => env_nil
-    | ctx_snoc Δ b => fun (E : Env D (ctx_cat Γ (ctx_snoc Δ b))) => env_snoc (env_take Δ (env_tail E)) b (env_head E)
-    end.
-
-  Definition env_unsnoc {D : B -> Type} {Γ : Ctx B}
-    {b : B} (E : Env D (ctx_snoc Γ b)) : Env D Γ * D b:=
-    match E in Env _ Γb
-    return match Γb with
-           | ctx_nil => unit
-           | ctx_snoc Γ b => Env D Γ * D b
-           end
-    with
-      | env_nil => tt
-      | env_snoc E _ db => (E , db)
-    end.
-
-  Global Arguments env_tail {_ _ _} / _.
-
-  Fixpoint env_drop {D : B -> Type} {Γ : Ctx B} Δ {struct Δ} :
-    forall (E : Env D (ctx_cat Γ Δ)), Env D Γ :=
-    match Δ with
-    | ctx_nil => fun E => E
-    | ctx_snoc Δ _ => fun E => env_drop Δ (env_tail E)
-    end.
-
-  Fixpoint env_split {D : B -> Type} {Γ : Ctx B} Δ {struct Δ} :
-    forall (E : Env D (ctx_cat Γ Δ)), Env D Γ * Env D Δ :=
-    match Δ with
-    | ctx_nil => fun E => (E , env_nil)
-    | ctx_snoc Δ b =>
-      fun E =>
-        match E in (Env _ ΓΔb)
+    Fixpoint env_split {Γ} Δ (E : Env (ctx_cat Γ Δ)) : Env Γ * Env Δ :=
+      match Δ , E with
+      | ctx_nil      , E => (E , env_nil)
+      | ctx_snoc Δ b , E =>
+        match E in Env ΓΔb
         return match ΓΔb with
                | ctx_nil => unit
-               | ctx_snoc ΓΔ b => (Env D ΓΔ -> Env D Γ * Env D Δ) ->
-                                  Env D Γ * Env D (ctx_snoc Δ b)
+               | ctx_snoc ΓΔ b => (Env ΓΔ -> Env Γ * Env Δ) ->
+                                  Env Γ * Env (ctx_snoc Δ b)
                end
         with
         | env_nil => tt
-        | env_snoc EΓΔ b db =>
-          fun split => let (EΓ, EΔ) := split EΓΔ in (EΓ, env_snoc EΔ b db)
+        | env_snoc EΓΔ db =>
+          fun split => let (EΓ, EΔ) := split EΓΔ in (EΓ, env_snoc EΔ db)
         end (env_split Δ)
-    end.
+      end.
+
+    Lemma env_lookup_update {Γ} (E : Env Γ) :
+      forall {b} (bInΓ : InCtx b Γ) (db : D b),
+        env_lookup (env_update E bInΓ db) bInΓ = db.
+    Proof.
+      induction E; intros ? [n e]; try destruct e;
+        destruct n; cbn in *; subst; auto.
+    Qed.
+
+    Lemma env_split_takedrop {Γ} Δ (E : Env (ctx_cat Γ Δ)) :
+      env_split Δ E = (env_drop Δ E , env_take Δ E).
+    Proof.
+      induction Δ; [trivial|].
+      dependent elimination E; cbn.
+      now rewrite (IHΔ E).
+    Qed.
+
+    Lemma env_split_cat {Γ Δ} (EΓ : Env Γ) (EΔ : Env Δ) :
+      env_split Δ (env_cat EΓ EΔ) = (EΓ , EΔ).
+    Proof. induction EΔ using Env_ind; cbn; now try rewrite IHEΔ. Qed.
+
+    Lemma env_cat_split' {Γ Δ} (EΓΔ : Env (ctx_cat Γ Δ)) :
+      let (EΓ,EΔ) := env_split _ EΓΔ in
+      EΓΔ = env_cat EΓ EΔ.
+    Proof.
+      induction Δ; intros; cbn in *.
+      - reflexivity.
+      - dependent elimination EΓΔ as [env_snoc EΓΔ db].
+        specialize (IHΔ EΓΔ); cbn in *.
+        destruct (env_split Δ EΓΔ); now subst.
+    Qed.
+
+    Lemma env_cat_split {Γ Δ} (EΓΔ : Env (ctx_cat Γ Δ)) :
+      EΓΔ = env_cat (fst (env_split _ EΓΔ)) (snd (env_split _ EΓΔ)).
+    Proof.
+      generalize (env_cat_split' EΓΔ).
+      now destruct (env_split Δ EΓΔ).
+    Qed.
+
+    Lemma env_drop_cat {Γ Δ} (δΔ : Env Δ) (δΓ : Env Γ) :
+      env_drop Δ (env_cat δΓ δΔ) = δΓ.
+    Proof. induction δΔ; cbn; auto. Qed.
+
+    Lemma env_update_update {Γ} (E : Env Γ) :
+      forall {b} (bInΓ : InCtx b Γ) (d1 d2 : D b),
+        env_update (env_update E bInΓ d1) bInΓ d2 =
+        env_update E bInΓ d2.
+    Proof.
+      induction E; intros ? [n e]; [ contradiction e | destruct n ].
+      - destruct e; reflexivity.
+      - cbn. intros. f_equal. auto.
+    Qed.
+
+    Lemma env_update_lookup {Γ} (E : Env Γ) :
+      forall {b} (bInΓ : InCtx b Γ),
+        env_update E bInΓ (env_lookup E bInΓ) = E.
+    Proof.
+      induction E; intros ? [n e]; [ contradiction e | destruct n ].
+      - destruct e; reflexivity.
+      - cbn. intros. f_equal. auto.
+    Qed.
+
+    Lemma env_lookup_extensional {Γ} (E1 E2 : Env Γ) :
+      (forall {b} (bInΓ : InCtx b Γ),
+          env_lookup E1 bInΓ = env_lookup E2 bInΓ) ->
+      E1 = E2.
+    Proof.
+    Admitted.
+
+    Lemma env_lookup_tabulate {Γ} (g : forall (b : B) , InCtx b Γ -> D b) :
+      forall {b} (bInΓ : InCtx b Γ),
+        env_lookup (env_tabulate g) bInΓ = g b bInΓ.
+    Proof.
+    Admitted.
+
+  End WithDom.
+
+  Arguments Env : clear implicits.
+
+  Section Map.
+
+    Context {D1 D2 : B -> Set}.
+    Variable f : forall b, D1 b -> D2 b.
+
+    Fixpoint env_map {Γ} (E : Env D1 Γ) : Env D2 Γ :=
+      match E with
+      | env_nil       => env_nil
+      | env_snoc E db => env_snoc (env_map E) (f db)
+      end.
+
+    Lemma env_map_cat {Γ1 Γ2} (E1 : Env D1 Γ1) (E2 : Env D1 Γ2) :
+      env_map (env_cat E1 E2) = env_cat (env_map E1) (env_map E2).
+    Proof. induction E2; cbn; congruence. Qed.
+
+    Lemma env_map_drop {Γ Δ} (EΓΔ : Env D1 (ctx_cat Γ Δ)) :
+      env_map (env_drop Δ EΓΔ) = env_drop Δ (env_map EΓΔ).
+    Proof.
+      induction Δ; intros; cbn in *.
+      - reflexivity.
+      - dependent elimination EΓΔ; apply IHΔ.
+    Qed.
+
+    Lemma env_map_update {Γ} (E : Env D1 Γ) :
+      forall {b} (bInΓ : InCtx b Γ) (db : D1 b),
+        env_map (env_update E bInΓ db) = env_update (env_map E) bInΓ (f db).
+    Proof.
+      induction E; intros ? [n e]; try destruct e.
+      destruct n; cbn in *; subst; cbn; congruence.
+    Qed.
+
+    Lemma env_map_tabulate {Γ} (g : forall (b : B) , InCtx b Γ -> D1 b) :
+      env_map (env_tabulate g) = env_tabulate (fun b bInΓ => f (g b bInΓ)).
+    Proof.
+      induction Γ; intros; cbn in *.
+      - reflexivity.
+      - f_equal; apply IHΓ.
+    Qed.
+
+    Lemma env_lookup_map {Γ} (E : Env D1 Γ) :
+      forall {b} (bInΓ : InCtx b Γ),
+        env_lookup (env_map E) bInΓ = f (env_lookup E bInΓ).
+    Proof.
+      induction E; intros ? [n e]; try destruct e;
+        destruct n; cbn in *; subst; auto.
+    Qed.
+
+  End Map.
 
   Section WithD123.
 
-    Context {D1 D2 D3 : B -> Type}.
+    Context {D1 D2 D3 : B -> Set}.
     Variable f : forall b, D1 b -> D2 b.
     Variable g : forall b, D2 b -> D3 b.
 
-    Lemma env_map_map {Γ : Ctx B} (E : Env D1 Γ) :
+    Lemma env_map_map {Γ} (E : Env D1 Γ) :
       env_map g (env_map f E) = env_map (fun b d => g (f d)) E.
     Proof. induction E; cbn; f_equal; assumption. Qed.
 
   End WithD123.
 
-  Lemma env_map_id_eq {D : B -> Type} {Γ : Ctx B} (f : forall b, D b -> D b) (E : Env D Γ) (hyp_f : forall b d, f b d = d) :
+  Lemma env_map_id_eq {D : B -> Set} {Γ : Ctx B} (f : forall b, D b -> D b) (E : Env D Γ) (hyp_f : forall b d, f b d = d) :
     env_map f E = E.
   Proof. induction E; cbn; congruence. Qed.
 
-  Lemma env_map_id {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) :
+  Lemma env_map_id {D : B -> Set} {Γ : Ctx B} (E : Env D Γ) :
     env_map (fun _ d => d) E = E.
   Proof. now apply env_map_id_eq. Qed.
 
-  Lemma env_map_cat {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ1 Γ2} (E1 : Env D1 Γ1) (E2 : Env D1 Γ2) :
-    env_map f (env_cat E1 E2) = env_cat (env_map f E1) (env_map f E2).
-  Proof. induction E2; cbn; congruence. Qed.
-
-  Lemma env_map_drop {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ Δ} (EΓΔ : Env D1 (ctx_cat Γ Δ)) :
-    env_map f (env_drop Δ EΓΔ) = env_drop Δ (env_map f EΓΔ).
+  Lemma env_map_ext {D1 D2 : B -> Set} (f1 f2 : forall b, D1 b -> D2 b) {Γ} (E : Env D1 Γ) :
+    (forall b d, f1 b d = f2 b d) -> env_map f1 E = env_map f2 E.
   Proof.
-    induction Δ; intros; cbn in *.
-    - reflexivity.
-    - dependent elimination EΓΔ; apply IHΔ.
+    intros HYP.
+    apply env_lookup_extensional.
+    intros.
+    now rewrite ?env_lookup_map.
   Qed.
-
-  Lemma env_map_update {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ} (E : Env D1 Γ) :
-    forall {b : B} (bInΓ : InCtx b Γ) (db : D1 b),
-      env_map f (env_update E bInΓ db) = env_update (env_map f E) bInΓ (f b db).
-  Proof.
-    induction E; intros ? [n e]; try destruct e.
-    destruct n; cbn in *; subst; cbn; congruence.
-  Qed.
-
-  Lemma env_map_tabulate {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ} (g : forall (b : B) , InCtx b Γ -> D1 b) :
-    env_map f (env_tabulate g) = env_tabulate (fun b bInΓ => f b (g b bInΓ)).
-  Proof.
-    induction Γ; intros; cbn in *.
-    - reflexivity.
-    - f_equal; apply IHΓ.
-  Qed.
-
-  Lemma env_lookup_map {D1 D2 : B -> Type} (f : forall b, D1 b -> D2 b) {Γ} (E : Env D1 Γ) :
-    forall {b} (bInΓ : InCtx b Γ),
-      env_lookup (env_map f E) bInΓ = f _ (env_lookup E bInΓ).
-  Proof.
-    induction E; intros ? [n e]; try destruct e;
-      destruct n; cbn in *; subst; auto.
-  Qed.
-
-  Lemma env_lookup_update {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) :
-    forall {b : B} (bInΓ : InCtx b Γ) (db : D b),
-      env_lookup (env_update E bInΓ db) bInΓ = db.
-  Proof.
-    induction E; intros ? [n e]; try destruct e;
-      destruct n; cbn in *; subst; auto.
-  Qed.
-
-  Lemma env_split_takedrop {D : B -> Type} {Γ : Ctx B} Δ (E : Env D (ctx_cat Γ Δ)) :
-      env_split Δ E = (env_drop Δ E , env_take Δ E).
-  Proof.
-    induction Δ; [trivial|].
-    dependent destruction E.
-    cbn.
-    rewrite (IHΔ E).
-    trivial.
-  Qed.
-
-  Lemma env_split_cat {D : B -> Type} {Γ Δ : Ctx B} :
-    forall (EΓ : Env D Γ) (EΔ : Env D Δ),
-      env_split Δ (env_cat EΓ EΔ) = (EΓ , EΔ).
-  Proof. induction EΔ using Env_ind; cbn; now try rewrite IHEΔ. Qed.
-
-  Lemma env_cat_split' {D : B -> Type} {Γ Δ : Ctx B} :
-    forall (EΓΔ : Env D (ctx_cat Γ Δ)),
-      let (EΓ,EΔ) := env_split _ EΓΔ in
-      EΓΔ = env_cat EΓ EΔ.
-  Proof.
-    induction Δ; intros; cbn in *.
-    - reflexivity.
-    - dependent elimination EΓΔ as [env_snoc EΓΔ b db].
-      specialize (IHΔ EΓΔ); cbn in *.
-      destruct (env_split Δ EΓΔ); now subst.
-  Qed.
-
-  Lemma env_cat_split {D : B -> Type} {Γ Δ : Ctx B} (EΓΔ : Env D (ctx_cat Γ Δ)) :
-    EΓΔ = env_cat (fst (env_split _ EΓΔ)) (snd (env_split _ EΓΔ)).
-  Proof.
-    generalize (env_cat_split' EΓΔ).
-    now destruct (env_split Δ EΓΔ).
-  Qed.
-
-  Lemma env_drop_cat {D : B -> Type} {Γ Δ : Ctx B} :
-    forall (δΔ : Env D Δ) (δΓ : Env D Γ),
-      env_drop Δ (env_cat δΓ δΔ) = δΓ.
-  Proof. induction δΔ; cbn; auto. Qed.
-
-  Lemma env_update_update {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) :
-    forall {b : B} (bInΓ : InCtx b Γ) (d1 d2 : D b),
-      env_update (env_update E bInΓ d1) bInΓ d2 =
-      env_update E bInΓ d2.
-  Proof.
-    induction E; intros ? [n e]; [ contradiction e | destruct n ].
-    - destruct e; reflexivity.
-    - cbn. intros. f_equal. auto.
-  Qed.
-
-  Lemma env_update_lookup {D : B -> Type} {Γ : Ctx B} (E : Env D Γ) :
-    forall {b : B} (bInΓ : InCtx b Γ),
-      env_update E bInΓ (env_lookup E bInΓ) = E.
-  Proof.
-    induction E; intros ? [n e]; [ contradiction e | destruct n ].
-    - destruct e; reflexivity.
-    - cbn. intros. f_equal. auto.
-  Qed.
-
-  Lemma env_lookup_extensional {D : B -> Type} {Γ} (E1 E2 : Env D Γ) :
-    (forall {b} (bInΓ : InCtx b Γ),
-        env_lookup E1 bInΓ = env_lookup E2 bInΓ) ->
-    E1 = E2.
-  Proof.
-  Admitted.
-
-  Lemma env_lookup_tabulate {D : B -> Type} {Γ} (g : forall (b : B) , InCtx b Γ -> D b) :
-    forall {b} (bInΓ : InCtx b Γ),
-      env_lookup (env_tabulate g) bInΓ = g b bInΓ.
-  Proof.
-  Admitted.
-
-  Section HomEquality.
-
-    Context {D : B -> Type}.
-    Variable eqb : forall b, D b -> D b -> bool.
-
-    Equations(noeqns) env_eqb_hom {Γ} (δ1 δ2 : Env D Γ) : bool :=
-      env_eqb_hom env_nil             env_nil           := true;
-      env_eqb_hom (env_snoc δ1 _ db1) (env_snoc δ2 _ db2) :=
-        if eqb db1 db2 then env_eqb_hom δ1 δ2 else false.
-
-    Variable eqb_spec : forall b (x y : D b),
-        Bool.reflect (x = y) (eqb x y).
-
-    Lemma env_eqb_hom_spec {Γ} (δ1 δ2 : Env D Γ) :
-      Bool.reflect (δ1 = δ2) (env_eqb_hom δ1 δ2).
-    Proof.
-      induction δ1; dependent elimination δ2; cbn.
-      - constructor.
-        reflexivity.
-      - destruct (eqb_spec db db0); cbn in *.
-        + eapply (ssrbool.iffP (IHδ1 _)); intros Heq;
-            dependent elimination Heq; congruence.
-        + constructor; intros e; dependent elimination e; congruence.
-    Qed.
-
-  End HomEquality.
-
-  Section HetEquality.
-
-    Context {D : B -> Type}.
-    Variable eqb : forall b1 b2, D b1 -> D b2 -> bool.
-
-    Fixpoint env_eqb_het {Γ1 Γ2} (δ1 : Env D Γ1) (δ2 : Env D Γ2) {struct δ1} : bool :=
-      match δ1 , δ2 with
-      | env_nil           , env_nil         => true
-      | env_snoc δ1 _ db1 , env_snoc δ2 _ db2 =>
-        if eqb db1 db2 then env_eqb_het δ1 δ2 else false
-      | _                 , _               => false
-      end.
-
-    Variable eqb_spec : forall b1 b2 (x : D b1) (y : D b2),
-        Bool.reflect (existT _ x = existT _ y) (eqb x y).
-
-    Lemma env_eqb_het_spec {Γ1 Γ2} (δ1 : Env D Γ1) (δ2 : Env D Γ2) :
-      Bool.reflect (existT _ δ1 = existT _ δ2) (env_eqb_het δ1 δ2).
-    Proof.
-      revert Γ2 δ2; induction δ1; intros ? []; cbn.
-      - constructor.
-        reflexivity.
-      - constructor.
-        intro e; dependent elimination e.
-      - constructor.
-        intro e; dependent elimination e.
-      - destruct (eqb_spec db db0); cbn in *.
-        + apply (ssrbool.iffP (IHδ1 _ E)); intros Heq; dependent elimination Heq.
-          * dependent elimination e; reflexivity.
-          * reflexivity.
-        + constructor; intros e; dependent elimination e; congruence.
-    Qed.
-
-  End HetEquality.
 
 End WithBinding.
+
+Arguments Env {B} D Γ.
+Arguments env_nil {B D}.
+Arguments env_snoc {B D Γ} E b db.
+Arguments env_lookup {B D Γ} E [_] x.
+(* Arguments env_tabulate {_ _} _. *)
+(* Arguments env_tail {_ _ _} / _. *)
+
+  (* End WithEqb. *)
 
 Section EnvRec.
 
@@ -376,7 +381,7 @@ Section EnvRec.
 
 End EnvRec.
 
-Definition NamedEnv {X T : Set} (D : T -> Type) (Γ : Ctx (X * T)) : Type :=
+Definition NamedEnv {X T : Set} (D : T -> Set) (Γ : Ctx (X * T)) : Set :=
   Env (fun xt => D (snd xt)) Γ.
 Bind Scope env_scope with Env.
 Bind Scope env_scope with NamedEnv.
@@ -387,13 +392,16 @@ Module EnvNotations.
   Notation "δ1 '►►' δ2" := (env_cat δ1 δ2) : env_scope.
   Notation "δ ⟪ x ↦ v ⟫" := (@env_update _ _ _ δ (x , _) _ v) : env_scope.
   Notation "δ ‼ x" := (@env_lookup _ _ _ δ (x , _) _) : lit_scope.
+  Notation "[ x ]" := (env_snoc env_nil (_,_) x) : env_scope.
+  Notation "[ x , .. , z ]" :=
+    (env_snoc .. (env_snoc env_nil (_,_) x) .. (_,_) z) : env_scope.
 
 End EnvNotations.
 
 Section WithB.
 
   Context {B : Set}.
-  Variable (D : B -> Type).
+  Variable (D : B -> Set).
 
   Fixpoint abstract (Δ : Ctx B) (r : Type) {struct Δ} : Type :=
     match Δ with
@@ -430,23 +438,23 @@ Section WithB.
 
 End WithB.
 
-Definition abstract_named {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) (r : Type) : Type :=
+Definition abstract_named {X T : Set} (D : T -> Set) (Δ : Ctx (X * T)) (r : Type) : Type :=
   abstract (fun xt => D (snd xt)) Δ r.
 
-Definition uncurry_named {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : abstract_named D Δ r) (δ : NamedEnv D Δ) : r :=
+Definition uncurry_named {X T : Set} (D : T -> Set) {Δ : Ctx (X * T)} {r : Type} (f : abstract_named D Δ r) (δ : NamedEnv D Δ) : r :=
   uncurry f δ.
 
-Definition curry_named {X T : Set} (D : T -> Type) {Δ : Ctx (X * T)} {r : Type} (f : NamedEnv D Δ -> r) : abstract_named D Δ r :=
+Definition curry_named {X T : Set} (D : T -> Set) {Δ : Ctx (X * T)} {r : Type} (f : NamedEnv D Δ -> r) : abstract_named D Δ r :=
   curry f.
 
-Definition ForallNamed {X T : Set} (D : T -> Type) (Δ : Ctx (X * T)) : (NamedEnv D Δ -> Prop) -> Prop :=
+Definition ForallNamed {X T : Set} (D : T -> Set) (Δ : Ctx (X * T)) : (NamedEnv D Δ -> Prop) -> Prop :=
   @Forall (X * T) (fun xt => D (snd xt)) Δ.
 
 Section TraverseEnv.
 
   Import stdpp.base.
 
-  Context `{MRet M, MBind M} {I : Set} {A B : I -> Type} (f : forall i : I, A i -> M (B i)).
+  Context `{MRet M, MBind M} {I : Set} {A B : I -> Set} (f : forall i : I, A i -> M (B i)).
 
   Fixpoint traverse_env {Γ : Ctx I} (xs : Env A Γ) : M (Env B Γ) :=
     match xs with

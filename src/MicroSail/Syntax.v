@@ -567,7 +567,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
        do have local implicit instances like for example in the exp_var
        constructor below and use the type class mechanism to copy these
        locally. *)
-    Inductive Exp (Γ : Ctx (𝑿 * Ty)) : Ty -> Type :=
+    Inductive Exp (Γ : Ctx (𝑿 * Ty)) : Ty -> Set :=
     | exp_var     (x : 𝑿) (σ : Ty) {xInΓ : InCtx (x , σ) Γ} : Exp Γ σ
     | exp_lit     (σ : Ty) : Lit σ -> Exp Γ σ
     | exp_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ σ3
@@ -940,9 +940,9 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
     Definition pattern_match {σ : Ty} {Δ : Ctx (𝑿 * Ty)} (p : Pattern Δ σ) :
       Lit σ -> LocalStore Δ :=
       match p with
-      | pat_var x => env_snoc env_nil (x,_)
+      | pat_var x => fun v => [ v ]%env
       | pat_unit => fun _ => env_nil
-      | pat_pair x y => fun '(u , v) => (env_nil ► (x ∶ _)%ctx ↦ u ► (y ∶ _)%ctx ↦ v)%env
+      | pat_pair x y => fun '(u , v) => [ u , v ]%env
       | pat_tuple p => tuple_pattern_match p
       | pat_record p => fun r => record_pattern_match p (𝑹_unfold r)
       end.
@@ -990,7 +990,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     Local Unset Elimination Schemes.
 
-    Inductive Term (Σ : Ctx (𝑺 * Ty)) : Ty -> Type :=
+    Inductive Term (Σ : Ctx (𝑺 * Ty)) : Ty -> Set :=
     | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : InCtx (ς , σ) Σ} : Term Σ σ
     | term_lit     (σ : Ty) : Lit σ -> Term Σ σ
     | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
@@ -1460,7 +1460,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
       fun Σ1 Σ2 ζ '(a,b) => (subst ζ a, subst ζ b).
     Global Instance SubstList {A} `{Subst A} : Subst (fun Σ => list (A Σ))%type :=
       fun Σ1 Σ2 ζ => List.map (subst ζ).
-    Global Instance SubstEnv {B A} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
+    Global Instance SubstEnv {B : Set} {A : Ctx _ -> B -> Set} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
       Subst (fun Σ => Env (A Σ) Δ) :=
       fun Σ1 Σ2 ζ => env_map (fun b a => subst ζ a).
 

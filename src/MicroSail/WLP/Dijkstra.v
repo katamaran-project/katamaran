@@ -120,7 +120,7 @@ End WithGIL.
 Section WithGBD.
   Context {G : Type}.
   Context {X T : Set}.
-  Context {D : T -> Type}.
+  Context {D : T -> Set}.
 
   Definition pop {Γ x σ} : DST G (@NamedEnv X T D) (ctx_snoc Γ (x , σ)) Γ unit :=
     modify_local (fun δ => env_tail δ).
