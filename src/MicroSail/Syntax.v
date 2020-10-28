@@ -1079,6 +1079,7 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
     End Term_rect.
 
+    Definition Term_rec Σ (P : forall σ, Term Σ σ -> Set) := Term_rect P.
     Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := Term_rect P.
 
     Section Utils.
@@ -1148,11 +1149,10 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
 
       Context {Σ : Ctx (𝑺 * Ty)} {σ : Ty}.
 
-      Definition TermEqv : relation (Term Σ σ) :=
-        fun t1 t2 => forall (ι : SymInstance Σ),
-          inst_term ι t1 = inst_term ι t2.
+      Definition TermEqv (ι : SymInstance Σ) : relation (Term Σ σ) :=
+        fun t1 t2 => inst_term ι t1 = inst_term ι t2.
 
-      Global Instance TermEqv_Equiv : Equivalence TermEqv.
+      Global Instance TermEqv_Equiv {ι} : Equivalence (TermEqv ι).
       Proof. split; congruence. Qed.
 
     End TermEquivalence.
@@ -1180,6 +1180,51 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         | term_inr x   , term_inr y   => Term_eqvb x y
         | _            , _            => None
         end.
+
+      Lemma Term_eqvb_spec {ι σ} (t1 t2 : Term Σ σ) :
+        forall b, Term_eqvb t1 t2 = Some b -> reflect (TermEqv ι t1 t2) b.
+      Proof.
+        induction t1; dependent elimination t2; cbn; intros b Heq; try discriminate.
+        - destruct (InCtx_eqb ςInΣ ςInΣ0) eqn:?; try discriminate.
+          apply noConfusion_inv in Heq; cbn in Heq. subst b.
+          constructor. unfold TermEqv. cbn.
+          admit.
+        - destruct (Ty_eq_dec σ1 σ1).
+          + rewrite (Ty_K e) in Heq. cbn in Heq.
+            apply noConfusion_inv in Heq; cbn in Heq. subst b.
+            destruct (Lit_eqb_spec σ1 l l0).
+            * constructor; congruence.
+            * constructor. unfold TermEqv. cbn. assumption.
+          + congruence.
+        - eapply ssrbool.iffP.
+          apply IHt1, Heq.
+          + unfold TermEqv; cbn.
+            congruence.
+          + unfold TermEqv; cbn.
+            admit.
+        - eapply ssrbool.iffP.
+          apply IHt1, Heq.
+          + unfold TermEqv; cbn.
+            congruence.
+          + unfold TermEqv; cbn.
+            admit.
+        - eapply ssrbool.iffP.
+          apply IHt1, Heq.
+          + unfold TermEqv; cbn.
+            congruence.
+          + unfold TermEqv; cbn.
+            congruence.
+        - apply noConfusion_inv in Heq; cbn in Heq. subst b.
+          constructor. unfold TermEqv. cbn. congruence.
+        - apply noConfusion_inv in Heq; cbn in Heq. subst b.
+          constructor. unfold TermEqv. cbn. congruence.
+        - eapply ssrbool.iffP.
+          apply IHt1, Heq.
+          + unfold TermEqv; cbn.
+            congruence.
+          + unfold TermEqv; cbn.
+            congruence.
+      Admitted.
 
     End TermEqvB.
 
@@ -1259,24 +1304,52 @@ Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
         + constructor; intro e.
           dependent elimination e.
           apply ne; constructor.
-      - revert es0.
-        induction es as [|x xs]; intros [|y ys]; cbn in *; try (constructor; congruence).
-        + constructor. intros ?. dependent elimination H.
-        + constructor. intros ?. dependent elimination H.
-        + destruct X as [x1 x2].
+      - apply (@ssrbool.iffP (es = es0)).
+        + revert es0.
+          induction es as [|x xs]; intros [|y ys]; cbn in *; try (constructor; congruence).
+          destruct X as [x1 x2].
           specialize (IHxs x2 ys).
           specialize (x1 y).
           microsail_solve_eqb_spec.
-          intro H. apply n. inversion H.
-          dependent elimination H1.
-          constructor.
-      - admit.
-      - admit.
-      - admit.
+        + microsail_solve_eqb_spec.
+        + microsail_solve_eqb_spec.
+      - apply (@ssrbool.iffP (es = es1)).
+        + revert es1.
+          induction es; intros es1; dependent elimination es1; microsail_solve_eqb_spec.
+          destruct X as [x1 x2].
+          specialize (IHes x2 t).
+          specialize (x1 h0).
+          microsail_solve_eqb_spec.
+        + microsail_solve_eqb_spec.
+        + microsail_solve_eqb_spec.
+      - apply (@ssrbool.iffP (es = es2)).
+        + revert es2.
+          induction es; intros es2; dependent elimination es2; microsail_solve_eqb_spec.
+          destruct X as [x1 x2].
+          specialize (IHes x1 E).
+          specialize (x2 db0).
+          microsail_solve_eqb_spec.
+        + microsail_solve_eqb_spec.
+        + microsail_solve_eqb_spec.
+      - destruct e.
+        destruct (Nat.eqb_spec n n1); cbn.
+        + subst n1.
+          microsail_solve_eqb_spec.
+          f_equal; auto.
+          apply ctx_nth_is_proof_irrelevance.
+        + microsail_solve_eqb_spec.
       - destruct (𝑼𝑲_eq_dec K K0); cbn.
         + destruct e. specialize (IHt1 e4). microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
-      - admit.
+      - apply (@ssrbool.iffP (es = es3)).
+        + revert es3.
+          induction es; intros es3; dependent elimination es3; microsail_solve_eqb_spec.
+          destruct X as [x1 x2].
+          specialize (IHes x1 E).
+          specialize (x2 db0).
+          microsail_solve_eqb_spec.
+        + microsail_solve_eqb_spec.
+        + microsail_solve_eqb_spec.
       - admit.
     Admitted.
 

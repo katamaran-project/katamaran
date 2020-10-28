@@ -180,10 +180,6 @@ Module Mutators
         else option_map negb (Term_eqvb t1 t2)
       end.
 
-    Hypothesis Term_eqb_spec :
-      forall Σ (σ : Ty) (t1 t2 : Term Σ σ),
-        reflect (t1 = t2) (Term_eqb t1 t2).
-
     Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) (b : bool) :
       try_solve_formula fml = Some b ->
       forall ι, reflect (inst_formula ι fml) b.
@@ -192,13 +188,16 @@ Module Mutators
       - dependent elimination t; cbn; inversion 1.
         destruct b; constructor; congruence.
       - discriminate.
-      - destruct (Term_eqb_spec t1 t2); cbn; inversion 1.
-        + constructor; congruence.
-        + admit.
-      - destruct (Term_eqb_spec t1 t2); cbn; inversion 1.
-        + constructor; congruence.
-        + admit.
-    Admitted.
+      - destruct (Term_eqb_spec t1 t2); cbn; intros H ι.
+        + inversion H; subst. constructor; congruence.
+        + now apply Term_eqvb_spec.
+      - destruct (Term_eqb_spec t1 t2); cbn; intros H ι.
+        + inversion H; subst. constructor; congruence.
+        + destruct (Term_eqvb t1 t2) eqn:?; cbn in *; try discriminate.
+          inversion H; subst b. clear H.
+          apply (@Term_eqvb_spec _ ι σ) in Heqo.
+          inversion Heqo; subst; cbn; constructor; intuition.
+    Qed.
 
   End TrySolve.
 

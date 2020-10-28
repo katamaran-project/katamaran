@@ -81,7 +81,7 @@ Module Soundness
       Axiom sub_comp_id_right : forall {Σ0 Σ1} (ζ : Sub Σ0 Σ1), sub_comp ζ (sub_id Σ1) = ζ.
       Axiom subst_sub_id : forall `{Subst T} Σ (t : T Σ), subst (sub_id _) t = t.
       Axiom subst_sub_comp : forall `{Subst T} Σ0 Σ1 Σ2 (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) t, subst (sub_comp ζ1 ζ2) t = subst ζ2 (subst ζ1 t).
-      Axiom sub_comp_comm : forall {Σ0 Σ1 Σ2 Σ3} (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) (ζ3 : Sub Σ2 Σ3), sub_comp (sub_comp ζ1 ζ2) ζ3 = sub_comp ζ1 (sub_comp ζ2 ζ3).
+      Axiom sub_comp_assoc : forall {Σ0 Σ1 Σ2 Σ3} (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) (ζ3 : Sub Σ2 Σ3), sub_comp (sub_comp ζ1 ζ2) ζ3 = sub_comp ζ1 (sub_comp ζ2 ζ3).
 
       Definition concretize_heap {Σ} (ι : SymInstance Σ) (h : SymbolicHeap Σ) : SCHeap :=
         List.map (inst_chunk ι) h.
@@ -266,28 +266,26 @@ Module Soundness
         change (sub_formula (sub_id Σ) (formula_bool b))
           with (subst (sub_id Σ) (formula_bool b)) in H.
         rewrite ?subst_sub_id in H.
-        destruct (try_solve_formula (formula_bool b)) as [[]|] eqn:?.
-        + unfold scmut_assume_term.
-          assert (inst_term ι b = true) as -> by admit.
-          cbn in H. destruct H as [H _].
-          cbn. apply (H ι).
-          * rewrite sub_comp_id_left.
+        unfold scmut_assume_term.
+        destruct (try_solve_formula (formula_bool b)) eqn:?.
+        - destruct (try_solve_formula_spec _ Heqo ι); clear Heqo.
+          + cbn in *. destruct H as [H _].
+            rewrite i. cbn. apply (H ι).
+            rewrite sub_comp_id_left.
             apply syminstance_leq_refl.
-          * assumption.
-        + unfold scmut_assume_term.
-          assert (inst_term ι b = false) as -> by admit.
-          trivial.
-        + cbn in H. destruct H as [H _].
-          unfold scmut_assume_term.
+            assumption.
+          + cbn in n. destruct (inst_term ι b); intuition.
+        - clear Heqo.
           destruct (inst_term ι b) eqn:?; cbn.
-          * apply (H ι).
+          * cbn in *. destruct H as [H _].
+            apply (H ι).
             rewrite sub_comp_id_left.
             apply syminstance_leq_refl.
             revert H__state Heql. clear.
             unfold represents; destruct s__sym;
               cbn; intuition.
           * trivial.
-      Admitted.
+      Qed.
 
       Opaque dmut_assume_term.
 
