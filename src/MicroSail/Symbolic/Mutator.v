@@ -274,7 +274,7 @@ Module Mutators
 
     Fixpoint eval_term_evar {σ : Ty} (t : Term Σe σ) {struct t} : option (Term Σr σ) :=
       match t in Term _ σ return option (Term Σr σ) with
-      | @term_var _ x _      => (δ ‼ x)%lit
+      | @term_var _ x _      => δ ‼ x
       | term_lit _ l         => Some (term_lit _ l)
       | term_binop op t1 t2  => t1 ← eval_term_evar t1 ;
                                 t2 ← eval_term_evar t2 ;
@@ -290,7 +290,7 @@ Module Mutators
       | term_union U K t     => term_union U K <$> eval_term_evar t
       | term_record R ts     => term_record R <$> traverse_env (fun b => @eval_term_evar (snd b)) ts
       | term_projrec t rf    => (fun t => term_projrec t rf) <$> eval_term_evar t
-      end.
+      end%exp.
 
     Section WithMatchTerm.
 
@@ -315,7 +315,7 @@ Module Mutators
       EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
       match_term (@term_var ς σ ςInΣe) tr :=
         fun L =>
-          match (L ‼ ς)%lit with
+          match (L ‼ ς)%exp with
           (* There's already a binding for ς in the evar environment. Make sure
              it corresponds to the term tr. *)
           | Some tr' => if Term_eqb tr' tr then Some L else None
@@ -769,7 +769,7 @@ Module Mutators
         mutator_eval_exp e >>=
         mutator_exec_match_enum (fun K => mutator_exec (alts K))
       | stm_read_register reg =>
-        mutator_consume_chunk_evar (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg >>= fun L =>
+        mutator_consume_chunk_evar (chunk_ptsreg reg (@term_var _ dummy τ inctx_zero)) [None]%arg >>= fun L =>
         match env_unsnoc L with
         | (_ , Some t) => mutator_produce_chunk (chunk_ptsreg reg t) *>
                           mutator_pure t
@@ -779,7 +779,7 @@ Module Mutators
         end
       | stm_write_register reg e =>
         mutator_eval_exp e >>= fun v =>
-        mutator_consume_chunk_evar (chunk_ptsreg reg (@term_var _ dummy τ (MkInCtx [(dummy,τ)] 0 eq_refl))) [None]%arg ;;
+        mutator_consume_chunk_evar (chunk_ptsreg reg (@term_var _ dummy τ inctx_zero)) [None]%arg ;;
         mutator_produce_chunk (chunk_ptsreg reg v) *>
         mutator_pure v
       | stm_match_list e alt_nil xh xt alt_cons =>

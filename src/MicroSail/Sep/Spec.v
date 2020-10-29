@@ -112,8 +112,8 @@ Module Assertions
     forall {σ} (e : Exp Γ σ), Term Σ σ :=
     fix symbolic_eval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
       match e with
-      | exp_var ς                => (δ ‼ ς)%lit
-      | exp_lit _ σ l            => term_lit σ l
+      | exp_var ς                => δ ‼ ς
+      | exp_lit σ l              => term_lit σ l
       | exp_binop op e1 e2       => term_binop op (symbolic_eval_exp e1) (symbolic_eval_exp e2)
       | exp_neg e                => term_neg (symbolic_eval_exp e)
       | exp_not e                => term_not (symbolic_eval_exp e)
@@ -126,7 +126,7 @@ Module Assertions
       | exp_union E K e          => term_union E K (symbolic_eval_exp e)
       | exp_record R es          => term_record R (env_map (fun _ => symbolic_eval_exp) es)
       | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf
-      end.
+      end%exp.
 
   Record SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
     MkSepContract
@@ -210,7 +210,7 @@ Module Assertions
       | asn_if b a1 a2 => if inst_term ι b then inst_assertion ι a1 else inst_assertion ι a2
       | asn_match_enum E k alts => inst_assertion ι (alts (inst_term ι k))
       | asn_sep a1 a2 => inst_assertion ι a1 ✱ inst_assertion ι a2
-      | asn_exist ς τ a => ∃ v, @inst_assertion (Σ ▻ (ς , τ)) (ι ► (ς , τ) ↦ v) a
+      | asn_exist ς τ a => ∃ (v : Lit τ), inst_assertion (ι ► (ς∶τ ↦ v)) a
     end%logic.
 
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)

@@ -124,9 +124,10 @@ Section WithBinding.
         { inctx_at: nat;
           inctx_valid: ctx_nth_is Γ inctx_at b
         }.
-    Global Arguments MkInCtx [_] _ _ _.
+
+    Global Arguments MkInCtx [_ _] _ _.
     Global Arguments inctx_at [_ _] _.
-    Global Arguments inctx_at [_ _] _.
+    Global Arguments inctx_valid [_ _] _.
 
   End InCtx.
 
@@ -138,10 +139,10 @@ Section WithBinding.
 
   (* These are *constructors* for InCtx. *)
   Definition inctx_zero {b : B} {Γ : Ctx B} : InCtx b (ctx_snoc Γ b) :=
-    MkInCtx (ctx_snoc Γ b) 0 eq_refl.
+    @MkInCtx _ (ctx_snoc Γ b) 0 eq_refl.
   Definition inctx_succ {b : B} {Γ : Ctx B} {b' : B} (bIn : InCtx b Γ) :
     InCtx b (ctx_snoc Γ b') :=
-    MkInCtx (ctx_snoc Γ b') (S (inctx_at bIn)) inctx_valid.
+    @MkInCtx _ (ctx_snoc Γ b') (S (inctx_at bIn)) (inctx_valid bIn).
 
   Fixpoint inctx_cat {b : B} {Γ : Ctx B} (bIn : InCtx b Γ) (Δ : Ctx B) : InCtx b (ctx_cat Γ Δ) :=
     match Δ with
@@ -158,7 +159,7 @@ Section WithBinding.
     let (n, e) := bIn in
     match n return ctx_nth_is (ctx_snoc Γ b0) n b -> D b with
     | 0 => fun e => match e with eq_refl => db0 end
-    | S n => fun e => dΓ b (MkInCtx _ n e)
+    | S n => fun e => dΓ b (MkInCtx n e)
     end e.
 
   Definition inctx_case_snoc_dep (Γ : Ctx B) (b0 : B)
@@ -166,10 +167,10 @@ Section WithBinding.
     (db0 : D b0 inctx_zero)
     (dΓ: forall b (bIn: InCtx b Γ), D b (inctx_succ bIn)) :
     forall (y: B) (yIn: InCtx y (ctx_snoc Γ b0)), D y yIn :=
-    fun b '(MkInCtx _ n e) =>
-      match n return forall e, D b (MkInCtx _ n e) with
-      | 0 => eq_indd B b0 (fun z e => D z (MkInCtx (ctx_snoc _ _) 0 e)) db0 b
-      | S n => fun e => dΓ b (MkInCtx _ n e)
+    fun b '(MkInCtx n e) =>
+      match n return forall e, D b (MkInCtx n e) with
+      | 0 => eq_indd B b0 (fun z e => D z (@MkInCtx _ (ctx_snoc _ _) 0 e)) db0 b
+      | S n => fun e => dΓ b (MkInCtx n e)
       end e.
 
   Lemma InCtx_ind (b : B)
@@ -183,7 +184,7 @@ Section WithBinding.
     - intro bIn; exact (inctx_case_nil bIn).
     - intros [[|n] e]; cbn in *.
       + subst; apply fzero.
-      + pose (MkInCtx _ n e) as bIn.
+      + pose (MkInCtx n e) as bIn.
         exact (fsucc Γ _ bIn (IHΓ bIn)).
   Qed.
 
@@ -200,7 +201,7 @@ Section WithBinding.
     { generalize dependent b2.
       induction b1In using InCtx_ind; destruct b2In as [[|n] e];
       intros; cbn in *; try congruence.
-      apply IHb1In with (MkInCtx _ n e).
+      apply IHb1In with (MkInCtx n e).
       cbn; congruence. }
     split.
     - exact bindings_eq.
@@ -210,14 +211,14 @@ Section WithBinding.
   Fixpoint ctx_remove (Γ : Ctx B) {b : B} : InCtx b Γ -> Ctx B :=
     match Γ with
     | ctx_nil =>
-      fun '(MkInCtx _ n e) =>
+      fun '(MkInCtx n e) =>
         match e with end
     | ctx_snoc Γ b' =>
-      fun '(MkInCtx _ n e) =>
+      fun '(MkInCtx n e) =>
         match n return (ctx_nth_is (ctx_snoc Γ b') n b -> Ctx B)
         with
         | 0   => fun _ => Γ
-        | S n => fun e  => ctx_snoc (@ctx_remove Γ b (MkInCtx _ n e)) b'
+        | S n => fun e  => ctx_snoc (@ctx_remove Γ b (MkInCtx n e)) b'
         end e
     end.
   Arguments ctx_remove _ [_] _.
@@ -235,50 +236,55 @@ Section WithAB.
 
   Fixpoint inctx_map {a : A} {Γ : Ctx A} {struct Γ} : InCtx a Γ -> InCtx (f a) (ctx_map Γ) :=
    match Γ return InCtx a Γ -> InCtx (f a) (ctx_map Γ) with
-   | ctx_nil      => inctx_case_nil
+   | ctx_nil => inctx_case_nil
    | ctx_snoc Γ b =>
-     fun '(MkInCtx _ n p) =>
-        match n return ctx_nth_is (ctx_snoc Γ b) n a -> _ with
-        | 0   => fun p => MkInCtx (ctx_snoc _ _) 0 (f_equal f p)
-        | S n => fun p => inctx_succ (inctx_map (MkInCtx _ n p))
-        end p
+     fun aInΓb  =>
+       match inctx_at aInΓb as n return ctx_nth_is (ctx_snoc Γ b) n a -> _ with
+       | 0   => fun p => @MkInCtx _ _ (ctx_snoc _ _) 0 (f_equal f p)
+       | S n => fun p => inctx_succ (inctx_map {| inctx_at := n; inctx_valid := p |})
+       end (inctx_valid aInΓb)
    end.
 
 End WithAB.
 
 Module CtxNotations.
+
+  Notation NCtx Name Data := (Ctx (Name * Data)).
+  Notation "x ∶ τ" := (x,τ) : ctx_scope.
+
   Notation "'ε'" := ctx_nil : ctx_scope.
   Infix "▻" := ctx_snoc : ctx_scope.
-  Notation "Γ1 ▻▻ Γ2" := (ctx_cat Γ1 Γ2) : ctx_scope.
-  Notation "b ∈ Γ" := (InCtx b Γ) : type_scope.
+  Notation "Γ1 ▻▻ Γ2" := (ctx_cat Γ1%ctx Γ2%ctx) : ctx_scope.
+  Notation "b ∈ Γ" := (InCtx b%ctx Γ%ctx) : type_scope.
 
   (* NB: ∶ ≠ :
      To typeset the next notation, use \: *)
-  Notation "x ∶ τ" := (pair x τ) : ctx_scope.
   Notation "[ x ]" := (ctx_snoc ctx_nil x)  : ctx_scope.
   Notation "[ x , .. , z ]" := (ctx_snoc .. (ctx_snoc ctx_nil x) .. z) : ctx_scope.
   Notation "Γ - x" := (@ctx_remove _ Γ x _) : ctx_scope.
 
 End CtxNotations.
 
+Open Scope ctx_scope.
+Import CtxNotations.
+
 Section Resolution.
 
   Context {Name : Set} {Name_eqdec : EqDec Name} {D : Set}.
 
-  Fixpoint ctx_resolve (Γ : Ctx (Name * D)) (x : Name) {struct Γ} : option D :=
+  Fixpoint ctx_resolve (Γ : NCtx Name D) (x : Name) {struct Γ} : option D :=
     match Γ with
-    | ctx_nil           => None
-    | ctx_snoc Γ (y, d) => if Name_eqdec x y then Some d else ctx_resolve Γ x
+    | ε       => None
+    | Γ ▻ y∶d => if Name_eqdec x y then Some d else ctx_resolve Γ x
     end.
 
-  Fixpoint mk_inctx (Γ : Ctx (Name * D)) (x : Name) {struct Γ} :
-    let m := ctx_resolve Γ x in forall (p : IsSome m), InCtx (x , fromSome m p) Γ :=
+  Fixpoint mk_inctx (Γ : NCtx Name D) (x : Name) {struct Γ} :
+    let m := ctx_resolve Γ x in forall (p : IsSome m), (x∶fromSome m p) ∈ Γ :=
     match Γ with
-    | ctx_nil => fun p => match p with end
-    | ctx_snoc Γ (y, d) =>
-      match Name_eqdec x y as s
-            return (forall p, InCtx (x, fromSome (if s then Some d else ctx_resolve Γ x) p)
-                                    (ctx_snoc Γ (y, d)))
+    | ε => fun p => match p with end
+    | Γ ▻ y∶d =>
+      match Name_eqdec x y as s return
+        (forall p, (x∶fromSome (if s then Some d else ctx_resolve Γ x) p) ∈ (Γ ▻ y∶d))
       with
       | left e => fun _ => match e with eq_refl => inctx_zero end
       | right _ => fun p => inctx_succ (mk_inctx Γ x p)

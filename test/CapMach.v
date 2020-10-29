@@ -373,18 +373,18 @@ Module CapTermKit <: (TermKit CapTypeKit).
           (fields ‼ "cap_begin")
           (fields ‼ "cap_end")
           (fields ‼ "cap_cursor")
-    end%lit.
+    end%exp.
 
   Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) :=
     match R  with
     | capability =>
-      fun c=>
+      fun c =>
         env_nil
-          ► "cap_permission" ∶ ty_perm ↦ cap_permission c
-          ► "cap_begin"      ∶ ty_addr            ↦ cap_begin c
-          ► "cap_end"        ∶ ty_option ty_addr  ↦ cap_end c
-          ► "cap_cursor"     ∶ ty_addr            ↦ cap_cursor c
-    end%env.
+          ► ("cap_permission" ∶ ty_perm           ↦ cap_permission c)
+          ► ("cap_begin"      ∶ ty_addr           ↦ cap_begin c)
+          ► ("cap_end"        ∶ ty_option ty_addr ↦ cap_end c)
+          ► ("cap_cursor"     ∶ ty_addr           ↦ cap_cursor c)
+    end.
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold R (𝑹_unfold R Kv) = Kv.
   Proof. now intros [] []. Qed.
@@ -577,7 +577,7 @@ Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
       let: p ∶ bool := call write_allowed c․perm in
       let: q ∶ bool := call within_bounds c in
       stm_assert (p && q)
-        (exp_lit _ ty_string "Err: [exec_store] assert failed") ;;
+        (lit_string "Err: [exec_store] assert failed") ;;
       let: w ∶ word := call read_reg hv in
       call write_mem c․cursor w ;;
       call update_pc.

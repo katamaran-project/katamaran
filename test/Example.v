@@ -247,12 +247,10 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
   Module TM := ExampleTerms.
 
   Local Coercion stm_exp : Exp >-> Stm.
-  Local Open Scope exp_scope.
-  Local Open Scope stm_scope.
 
-  Local Notation "'`LT'" := (exp_lit _ (ty_enum ordering) LT).
-  Local Notation "'`GT'" := (exp_lit _ (ty_enum ordering) GT).
-  Local Notation "'`EQ'" := (exp_lit _ (ty_enum ordering) EQ).
+  Local Notation "'`LT'" := (@exp_lit _ (ty_enum ordering) LT).
+  Local Notation "'`GT'" := (@exp_lit _ (ty_enum ordering) GT).
+  Local Notation "'`EQ'" := (@exp_lit _ (ty_enum ordering) EQ).
   Local Notation "'`Left' e" := (exp_union either Left e) (at level 10, e at level 9).
   Local Notation "'`Right' e" := (exp_union either Right e) (at level 10, e at level 9).
   Local Notation "'x'"   := (@exp_var _ "x" _ _) : exp_scope.
@@ -289,7 +287,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
     | length => stm_match_list
                   (exp_var "xs")
                   (stm_lit ty_int 0)
-                  "y" "ys" (let: "n" := call length (exp_var "ys") in stm_exp (exp_lit _ ty_int 1 + exp_var "n"))
+                  "y" "ys" (let: "n" := call length (exp_var "ys") in lit_int 1 + exp_var "n")
     end.
 
   Definition RegStore := GenericRegStore.

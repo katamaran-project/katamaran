@@ -394,17 +394,17 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
           (fields ‼ "cap_begin")
           (fields ‼ "cap_end")
           (fields ‼ "cap_cursor")
-    end%lit.
+    end%exp.
 
   Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) :=
     match R  with
     | capability =>
       fun c=>
         env_nil
-          ► "cap_permission" ∶ ty_perm ↦ cap_permission c
-          ► "cap_begin"      ∶ ty_addr            ↦ cap_begin c
-          ► "cap_end"        ∶ ty_option ty_addr  ↦ cap_end c
-          ► "cap_cursor"     ∶ ty_addr            ↦ cap_cursor c
+          ► ("cap_permission" ∶ ty_perm            ↦ cap_permission c)
+          ► ("cap_begin"      ∶ ty_addr            ↦ cap_begin c)
+          ► ("cap_end"        ∶ ty_option ty_addr  ↦ cap_end c)
+          ► ("cap_cursor"     ∶ ty_addr            ↦ cap_cursor c)
     end%env.
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold R (𝑹_unfold R Kv) = Kv.
@@ -535,7 +535,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
 
   Notation "'callghost' f" :=
     (stm_call_external (ghost f) env_nil)
-    (at level 10, f at next level) : stm_scope.
+    (at level 10, f at next level) : exp_scope.
 
   Definition fun_read_reg : Stm ["reg" ∶ ty_enum regname ] ty_word :=
     stm_call_external (ghost open_ptsreg) [exp_var "reg"]%arg ;;
@@ -649,9 +649,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
                         ((exp_var "base_cap")․"cap_cursor") + (exp_var "immediate")
                       ]%exp%arg) in
       let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (exp_lit _ ty_string "Err: [exec_sd] no write permission") ;;
+      stm_assert p (lit_string "Err: [exec_sd] no write permission") ;;
       let: q ∶ bool := call within_bounds c in
-      stm_assert q (exp_lit _ ty_string "Err: [exec_sd] out of bounds") ;;
+      stm_assert q (lit_string "Err: [exec_sd] out of bounds") ;;
       let: w ∶ int := call read_reg_num hv in
       call write_mem c․cursor w ;;
       call update_pc ;;
@@ -666,9 +666,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
                         ((exp_var "base_cap")․"cap_cursor") + (exp_var "immediate")
                       ]%exp%arg) in
       let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (exp_lit _ ty_string "Err: [exec_ld] no read permission") ;;
+      stm_assert p (lit_string "Err: [exec_ld] no read permission") ;;
       let: q ∶ bool := call within_bounds c in
-      stm_assert q (exp_lit _ ty_string "Err: [exec_ld] out of bounds") ;;
+      stm_assert q (lit_string "Err: [exec_ld] out of bounds") ;;
       let: n ∶ ty_memval := call read_mem c․cursor in
       call write_reg lv (exp_inl (exp_var n)) ;;
       call update_pc ;;
@@ -702,7 +702,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       end.
 
     Definition fun_exec_ret : Stm ε ty_bool :=
-      stm_exp (exp_lit _ ty_bool false).
+      stm_exp lit_false.
 
     Definition fun_exec_mv : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_bool :=
       let: w ∶ word := call read_reg (exp_var hv) in
@@ -722,7 +722,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
 
     Definition fun_exec_bnez : Stm [lv ∶ ty_lv, immediate ∶ ty_int ] ty_bool :=
       let: "c" ∶ ty_int := call read_reg_num (exp_var lv) in
-      stm_if (exp_binop binop_eq c (exp_lit _ ty_int 0))
+      stm_if (exp_binop binop_eq c (lit_int 0))
              (call update_pc ;; stm_lit ty_bool true)
              (call add_pc (exp_var immediate) ;; stm_lit ty_bool true).
 
@@ -755,9 +755,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     Definition fun_exec : Stm ε ty_bool :=
       let: "c" := stm_read_register pc in
       let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (exp_lit _ ty_string "Err: [exec_ld] no read permission") ;;
+      stm_assert p (lit_string "Err: [exec_ld] no read permission") ;;
       let: q ∶ bool := call within_bounds c in
-      stm_assert q (exp_lit _ ty_string "Err: [exec_ld] out of bounds") ;;
+      stm_assert q (lit_string "Err: [exec_ld] out of bounds") ;;
       let: n ∶ ty_memval := call read_mem c․cursor in
       let: i ∶ ty_instr := callex dI (exp_var n) in
       call exec_instr i.
@@ -902,8 +902,8 @@ Module MinCapsContracts.
 
     Open Scope env_scope.
 
-    Local Notation "r '↦r' t" := (asn_chunk (chunk_pred ptsreg (env_nil ► ty_enum regname ↦ r ► ty_word ↦ t))) (at level 100).
-    Local Notation "a '↦m' t" := (asn_chunk (chunk_pred ptsto (env_nil ► ty_addr ↦ a ► ty_int ↦ t))) (at level 100).
+    Local Notation "r '↦r' t" := (asn_chunk (chunk_pred ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t)))) (at level 100).
+    Local Notation "a '↦m' t" := (asn_chunk (chunk_pred ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t)))) (at level 100).
     (* Arguments asn_prop [_] & _. *)
 
     (*

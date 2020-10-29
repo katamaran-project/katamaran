@@ -257,7 +257,7 @@ Module HoareSound
       - sound_solve.
       (* rule_stm_assign_forwards *)
       - sound_solve.
-        exists (H ‼ x)%lit.
+        exists (H ‼ x)%exp.
         now rewrite env_update_update, env_update_lookup, env_lookup_update.
       (* rule_stm_call_forwards *)
       - admit.
