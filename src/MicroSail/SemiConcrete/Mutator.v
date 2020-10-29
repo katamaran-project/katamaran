@@ -296,6 +296,7 @@ Module SemiConcrete
       match asn with
       | asn_bool b      => scmut_assume_term ι b
       | asn_prop P      => scmut_fail "scmut_produce"
+      | asn_eq t1 t2    => if Term_eqb t1 t2 then scmut_pure tt else scmut_block
       | asn_chunk c     => scmut_produce_chunk (inst_chunk ι c)
       | asn_if b a1 a2  => if inst_term ι b
                            then scmut_produce ι a1
@@ -312,6 +313,7 @@ Module SemiConcrete
                            then scmut_pure tt
                            else scmut_fail "scmut_consume"
       | asn_prop P      => scmut_fail "scmut_consume"
+      | asn_eq t1 t2    => if Term_eqb t1 t2 then scmut_pure tt else scmut_block
       | asn_chunk c     => scmut_consume_chunk (inst_chunk ι c)
       | asn_if b a1 a2  => if inst_term ι b
                            then scmut_consume ι a1
