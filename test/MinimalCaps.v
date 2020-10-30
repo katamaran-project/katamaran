@@ -716,8 +716,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       stm_lit ty_bool true.
 
     Definition fun_exec_j : Stm [offset ∶ ty_int ] ty_bool :=
-      call update_pc ;;
-      call add_pc (exp_var offset) ;;
+      call add_pc (exp_binop binop_times (exp_var offset) (lit_int 2)) ;;
       stm_lit ty_bool true.
 
     Definition fun_exec_bnez : Stm [lv ∶ ty_lv, immediate ∶ ty_int ] ty_bool :=
