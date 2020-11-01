@@ -219,7 +219,7 @@ Module Type IrisHeapKit
 
   Parameter Inline mem_inv_init : forall Σ (μ : Memory), memPreG Σ -> ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
 
-  Parameter lpred_inst : forall `{sRG : sailRegG Σ} (p : 𝑷) (ts : Env Lit (𝑷_Ty p)), memG Σ -> iProp Σ.
+  Parameter lpred_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (p : 𝑷) (ts : Env Lit (𝑷_Ty p)), memG Σ -> iProp Σ.
 End IrisHeapKit.
 
 Module IrisInstance

@@ -45,6 +45,7 @@ From MicroSail Require Environment.
 From MicroSail Require Iris.Model.
 From MicroSail Require Sep.Logic.
 From iris.base_logic Require lib.gen_heap lib.iprop.
+From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
 From iris.proofmode Require tactics.
 From stdpp Require namespaces.
@@ -1198,15 +1199,21 @@ Module MinCapsModel.
     Import iris.base_logic.lib.gen_heap.
     Import iris.proofmode.tactics.
 
+    Class mcMemG Σ := McMemG {
+                          (* ghost variable for tracking state of registers *)
+                          mc_ghG :> gh.gen_heapG Z Z Σ;
+                          mc_invNs : namespace
+                        }.
+
     Definition memPreG : gFunctors -> Set := fun Σ => gh.gen_heapPreG Z Z Σ.
-    Definition memG : gFunctors -> Set := fun Σ => gh.gen_heapG Z Z Σ.
+    Definition memG : gFunctors -> Set := mcMemG.
     Definition memΣ : gFunctors := gh.gen_heapΣ Z Z.
 
     Definition memΣ_PreG : forall {Σ}, subG memΣ Σ -> memPreG Σ := fun {Σ} => gh.subG_gen_heapPreG (Σ := Σ) (L := Z) (V := Z).
 
     Definition mem_inv : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        (∃ memmap, gen_heap_ctx (hG := hG) memmap ∗
+        (∃ memmap, gen_heap_ctx (hG := mc_ghG (mcMemG := hG)) memmap ∗
                                 ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
@@ -1214,7 +1221,7 @@ Module MinCapsModel.
 
     Definition mem_res : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        ([∗ list] a ∈ liveAddrs, mapsto (hG := hG) a 1 (μ a)) %I.
+        ([∗ list] a ∈ liveAddrs, mapsto (hG := mc_ghG (mcMemG := hG)) a 1 (μ a)) %I.
 
     Lemma mem_inv_init : forall Σ (μ : Memory), memPreG Σ ->
         ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
@@ -1235,7 +1242,7 @@ Module MinCapsModel.
       iModIntro.
 
       pose (refmap := list_to_map (map (fun a => (a, μ a)) liveAddrs) : gmap Z Z).
-      iExists (gH).
+      iExists (McMemG gH (nroot .@ "addr_inv")).
       cbn.
       iFrame.
       iExists refmap.
@@ -1259,11 +1266,27 @@ Module MinCapsModel.
       | R3 => reg_pointsTo reg3 v
       end.
 
-    Definition lpred_inst `{sailRegG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
+    Definition region_addrs (b : Addr) (e : Addr + unit): list Addr :=
+      match e with
+      | inl e => filter (fun a => and (b ≤ a)%Z (a ≤ e)%Z) liveAddrs
+      | inr _ => filter (fun a => (b ≤ a)%Z) liveAddrs
+      end.
+
+    Definition MinCaps_safe `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Z + Capability) : iProp Σ :=
+      match v with
+      | inl z => True%I
+      | inr (MkCap O b e a) => True%I
+      | inr (MkCap R b e a) =>
+                ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a 1 v))%I
+      | inr (MkCap RW b e a) =>
+                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a 1 v)
+      end.
+
+    Definition lpred_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
       (match p return Env Lit (MinCapsAssertionKit.𝑷_Ty p) -> iProp Σ with
       | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
-      | ptsto => fun ts => mapsto (hG := mG) (env_head ts) 1 (env_head (env_tail ts))%Z
-      | safe => fun _ => False%I
+      | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head ts) 1 (env_head (env_tail ts))%Z
+      | safe => fun ts => MinCaps_safe (mG := mG) (env_head ts)
       end) ts.
 
     End WithIrisNotations.
