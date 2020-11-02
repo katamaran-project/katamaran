@@ -259,24 +259,21 @@ Module MinCapsTypeKit <: TypeKit.
 
 End MinCapsTypeKit.
 
-
-Module MinCapsTypes := Types MinCapsTypeKit.
-Import MinCapsTypes.
-
-Definition ty_hv : Ty := ty_enum regname.
-Definition ty_lv : Ty := ty_enum regname.
-Definition ty_rv : Ty := ty_sum (ty_enum regname) ty_int.
-Definition ty_cap : Ty := ty_record capability.
-Definition ty_word : Ty := ty_sum ty_int ty_cap.
-Definition ty_memval : Ty := ty_int.
-Definition ty_addr : Ty := ty_int.
-Definition ty_perm : Ty := ty_enum permission.
-Definition ty_instr : Ty := ty_union instruction.
-
 (*** TERMS ***)
 
-Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
-  Module TY := MinCapsTypes.
+Module MinCapsTermKit <: TermKit.
+  Module typekit := MinCapsTypeKit.
+  Module Export TY := Types typekit.
+
+  Definition ty_hv : Ty := ty_enum regname.
+  Definition ty_lv : Ty := ty_enum regname.
+  Definition ty_rv : Ty := ty_sum (ty_enum regname) ty_int.
+  Definition ty_cap : Ty := ty_record capability.
+  Definition ty_word : Ty := ty_sum ty_int ty_cap.
+  Definition ty_memval : Ty := ty_int.
+  Definition ty_addr : Ty := ty_int.
+  Definition ty_perm : Ty := ty_enum permission.
+  Definition ty_instr : Ty := ty_union instruction.
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -494,13 +491,11 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   Defined.
 
 End MinCapsTermKit.
-Module MinCapsTerms := Terms MinCapsTypeKit MinCapsTermKit.
-Import MinCapsTerms.
 
 (*** PROGRAM ***)
 
-Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
-  Module TM := MinCapsTerms.
+Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
+  Module Export TM := Terms MinCapsTermKit.
 
   Local Notation "'a'"  := (@exp_var _ "a" _ _) : exp_scope.
   Local Notation "'c'"  := (@exp_var _ "c" _ _) : exp_scope.
@@ -853,11 +848,6 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
 
 End MinCapsProgramKit.
 
-Module MinCapsPrograms :=
-  Programs MinCapsTypeKit MinCapsTermKit MinCapsProgramKit.
-Import MinCapsPrograms.
-Import MinCapsProgramKit.
-
 (*** CONTRACTS ***)
 
 Inductive Predicate : Set :=
@@ -875,9 +865,10 @@ End TransparentObligations.
 Derive EqDec for Predicate.
 
 Module MinCapsContracts.
-  Module MinCapsAssertionKit <:
-    (AssertionKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit).
-    Module PM := Programs MinCapsTypeKit MinCapsTermKit MinCapsProgramKit.
+  Module Export MinCapsAssertionKit <:
+    (AssertionKit MinCapsTermKit MinCapsProgramKit).
+
+    Export MinCapsProgramKit.
 
     Definition 𝑷 := Predicate.
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
@@ -889,16 +880,12 @@ Module MinCapsContracts.
     Instance 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
   End MinCapsAssertionKit.
 
-  Module MinCapsAssertions :=
-    Assertions MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
-  Import MinCapsAssertions.
-
-  Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
-  Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
-
   Module MinCapsSymbolicContractKit <:
-    SymbolicContractKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
-    Module ASS := MinCapsAssertions.
+    SymbolicContractKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
+    Module Export ASS := Assertions MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
+
+    Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
+    Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 
     Open Scope env_scope.
 
@@ -1117,7 +1104,6 @@ Module MinCapsContracts.
 
   Module MinCapsMutators :=
     Mutators
-      MinCapsTypeKit
       MinCapsTermKit
       MinCapsProgramKit
       MinCapsAssertionKit
@@ -1186,9 +1172,9 @@ Module MinCapsModel.
   Import MinCapsContracts.
   Import MicroSail.Iris.Model.
 
-  Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
+  Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
 
-    Module IrisRegs := IrisRegisters MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
+    Module IrisRegs := IrisRegisters MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
     Import IrisRegs.
 
     Section WithIrisNotations.
@@ -1255,8 +1241,6 @@ Module MinCapsModel.
       Unshelve.
       all: try rewrite !lookup_insert_ne; try apply lookup_empty; lia.
     Qed.
-
-    Import MinCapsAssertions.
 
     Definition MinCaps_ptsreg `{sailRegG Σ} (reg : RegName) (v : Z + Capability) : iProp Σ :=
       match reg with

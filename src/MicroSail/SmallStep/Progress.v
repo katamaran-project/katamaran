@@ -35,11 +35,9 @@ From MicroSail Require Import
 Set Implicit Arguments.
 
 Module Progress
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit).
-  Module SS := SmallStep typekit termkit progkit.
-  Import SS.
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit).
+  Module Import SS := SmallStep termkit progkit.
 
   Lemma can_form_store_cat (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore (ctx_cat Γ Δ)) :
     exists (δ1 : LocalStore Γ) (δ2 : LocalStore Δ), δ = env_cat δ1 δ2.

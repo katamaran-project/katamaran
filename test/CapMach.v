@@ -250,20 +250,19 @@ Module CapTypeKit <: TypeKit.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
 End CapTypeKit.
-Module CapTypes := Types CapTypeKit.
-Import CapTypes.
-
-Definition ty_hv : Ty := ty_enum regname.
-Definition ty_lv : Ty := ty_enum regname.
-Definition ty_rv : Ty := (ty_sum (ty_enum regname) ty_int).
-Definition ty_word : Ty := ty_sum ty_int (ty_record capability).
-Definition ty_addr : Ty := ty_int.
-Definition ty_perm : Ty := ty_enum permission.
 
 (*** TERMS ***)
 
-Module CapTermKit <: (TermKit CapTypeKit).
-  Module TY := CapTypes.
+Module CapTermKit <: TermKit .
+  Module typekit := CapTypeKit.
+  Module Export TY := Types typekit.
+
+  Definition ty_hv : Ty := ty_enum regname.
+  Definition ty_lv : Ty := ty_enum regname.
+  Definition ty_rv : Ty := (ty_sum (ty_enum regname) ty_int).
+  Definition ty_word : Ty := ty_sum ty_int (ty_record capability).
+  Definition ty_addr : Ty := ty_int.
+  Definition ty_perm : Ty := ty_enum permission.
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -450,13 +449,11 @@ Module CapTermKit <: (TermKit CapTypeKit).
   Defined.
 
 End CapTermKit.
-Module CapTerms := Terms CapTypeKit CapTermKit.
-Import CapTerms.
 
 (*** PROGRAM ***)
 
-Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
-  Module TM := CapTerms.
+Module CapProgramKit <: (ProgramKit CapTermKit).
+  Module Export TM := Terms CapTermKit.
 
   Local Notation "'c'"  := (@exp_var _ "c" _ _) : exp_scope.
   Local Notation "'hv'" := (@exp_var _ "hv" _ _) : exp_scope.
@@ -640,8 +637,3 @@ Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
   Proof. destruct f; cbn; repeat depelim args; repeat eexists; constructor. Qed.
 
 End CapProgramKit.
-
-Module CapPrograms :=
-  Programs CapTypeKit CapTermKit CapProgramKit.
-Import CapPrograms.
-Import CapProgramKit.

@@ -56,16 +56,15 @@ Import CtxNotations.
 Import EnvNotations.
 
 Module Soundness
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
-  Module MUT := Mutators typekit termkit progkit assertkit contractkit.
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit)
+       (Import contractkit : SymbolicContractKit termkit progkit assertkit).
+  Module MUT := Mutators termkit progkit assertkit contractkit.
   Import MUT.
-  Module LOG := ProgramLogic typekit termkit progkit assertkit contractkit.
+  Module LOG := ProgramLogic termkit progkit assertkit contractkit.
   Import LOG.
-  Module SCMUT := SemiConcrete.Sound.Soundness typekit termkit progkit assertkit contractkit.
+  Module SCMUT := SemiConcrete.Sound.Soundness termkit progkit assertkit contractkit.
   Import SCMUT.MUT.
 
   Program Instance proper_sub_comp {Σ1 Σ2 Σ3} : Proper (eq ==> eq ==> eq) (@sub_comp Σ1 Σ2 Σ3).

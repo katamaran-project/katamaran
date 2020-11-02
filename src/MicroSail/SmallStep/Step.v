@@ -39,9 +39,8 @@ From MicroSail Require Import
 Set Implicit Arguments.
 
 Module SmallStep
-  (Import typekit : TypeKit)
-  (Import termkit : TermKit typekit)
-  (Import progKit : ProgramKit typekit termkit).
+  (Import termkit : TermKit)
+  (Import progKit : ProgramKit termkit).
 
   Import CtxNotations.
   Import EnvNotations.

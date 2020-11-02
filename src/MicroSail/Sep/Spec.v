@@ -43,11 +43,8 @@ Import EnvNotations.
 Set Implicit Arguments.
 
 Module Type AssertionKit
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit).
-  Module PM := Programs typekit termkit progkit.
-  Export PM.
+       (termkit : TermKit)
+       (Export progkit : ProgramKit termkit).
 
   (* Predicate names. *)
   Parameter Inline 𝑷  : Set.
@@ -58,11 +55,9 @@ Module Type AssertionKit
 End AssertionKit.
 
 Module Assertions
-       (typekit : TypeKit)
-       (termkit : TermKit typekit)
-       (progkit : ProgramKit typekit termkit)
-       (assertkit : AssertionKit typekit termkit progkit).
-  Export assertkit.
+       (termkit : TermKit)
+       (progkit : ProgramKit termkit)
+       (Export assertkit : AssertionKit termkit progkit).
 
   Inductive Chunk (Σ : Ctx (𝑺 * Ty)) : Type :=
   | chunk_pred   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
@@ -232,13 +227,11 @@ Module Assertions
 End Assertions.
 
 Module Type SymbolicContractKit
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit).
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit).
 
-  Module ASS := Assertions typekit termkit progkit assertkit.
-  Export ASS.
+  Module Export ASS := Assertions termkit progkit assertkit.
 
   Parameter Inline CEnv   : SepContractEnv.
   Parameter Inline CEnvEx : SepContractEnvEx.

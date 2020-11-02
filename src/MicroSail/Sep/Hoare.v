@@ -8,12 +8,10 @@ Require Import MicroSail.Sep.Logic.
 Require Import MicroSail.Sep.Spec.
 
 Module ProgramLogic
-
-  (Import typekit : TypeKit)
-  (Import termkit : TermKit typekit)
-  (Import progkit : ProgramKit typekit termkit)
-  (Import assertkit : AssertionKit typekit termkit progkit)
-  (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
+  (Import termkit : TermKit)
+  (Import progkit : ProgramKit termkit)
+  (Import assertkit : AssertionKit termkit progkit)
+  (Import contractkit : SymbolicContractKit termkit progkit assertkit).
 
   Import CtxNotations.
   Import EnvNotations.

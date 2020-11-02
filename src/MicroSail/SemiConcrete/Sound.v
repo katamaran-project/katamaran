@@ -53,15 +53,14 @@ Import CtxNotations.
 Import EnvNotations.
 
 Module Soundness
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit)
+       (Import contractkit : SymbolicContractKit termkit progkit assertkit).
 
-  Module MUT := SemiConcrete typekit termkit progkit assertkit contractkit.
+  Module MUT := SemiConcrete termkit progkit assertkit contractkit.
   Import MUT.
-  Module LOG := ProgramLogic typekit termkit progkit assertkit contractkit.
+  Module LOG := ProgramLogic termkit progkit assertkit contractkit.
   Import LOG.
 
   Local Open Scope logic.

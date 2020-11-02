@@ -324,9 +324,10 @@ End Types.
 
 (******************************************************************************)
 
-Module Type TermKit (typekit : TypeKit).
-  Module TY := Types typekit.
-  Export TY.
+Module Type TermKit.
+
+  Declare Module typekit : TypeKit.
+  Module Export TY := Types typekit.
 
   (* Union data constructor field type *)
   Parameter Inline 𝑼𝑲_Ty : forall (U : 𝑼), 𝑼𝑲 U -> Ty.
@@ -362,8 +363,7 @@ Module Type TermKit (typekit : TypeKit).
 
 End TermKit.
 
-Module Terms (typekit : TypeKit) (termkit : TermKit typekit).
-  Export termkit.
+Module Terms (Export termkit : TermKit).
 
   Program Instance blastable_union (U : 𝑼) : Blastable (𝑼𝑻 U) :=
     {| blast v k :=
@@ -1756,11 +1756,9 @@ End Terms.
 
 (******************************************************************************)
 
-Module Type ProgramKit
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit).
-  Module TM := Terms typekit termkit.
-  Export TM.
+Module Type ProgramKit (termkit : TermKit).
+
+  Module Export TM := Terms termkit.
 
   (* We choose to make [RegStore] a parameter so the users of the module would be able to
      instantiate it with their own data structure and [read_regsiter]/[write_register]
@@ -1812,41 +1810,3 @@ Module Type ProgramKit
   Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.
 
 End ProgramKit.
-
-Module Programs
-       (typekit : TypeKit)
-       (termkit : TermKit typekit)
-       (progkit : ProgramKit typekit termkit).
-  Export progkit.
-
-  Inductive Contract (Δ : NCtx 𝑿 Ty) (τ : Ty) : Type :=
-  | ContractNoFail
-      (pre : abstract_named Lit Δ (RegStore -> Prop))
-      (post: abstract_named Lit Δ (Lit τ -> RegStore -> Prop))
-  | ContractTerminateNoFail
-      (pre : abstract_named Lit Δ (RegStore -> Prop))
-      (post: abstract_named Lit Δ (Lit τ -> RegStore -> Prop))
-  | ContractTerminate
-      (pre : abstract_named Lit Δ (RegStore -> Prop))
-      (post: abstract_named Lit Δ (Lit τ -> RegStore -> Prop))
-  | ContractNone.
-
-  Definition ContractEnv : Type :=
-    forall Δ τ (f : 𝑭 Δ τ), Contract Δ τ.
-  Definition ContractEnvEx : Type :=
-    forall Δ τ (f : 𝑭𝑿 Δ τ), Contract Δ τ.
-
-End Programs.
-
-Module Type ContractKit
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit).
-
-  Module PM := Programs typekit termkit progkit.
-  Export PM.
-
-  Parameter Inline CEnv   : ContractEnv.
-  Parameter Inline CEnvEx : ContractEnvEx.
-
-End ContractKit.

@@ -173,11 +173,10 @@ Module ISATypeKit <: TypeKit.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
 End ISATypeKit.
-Module ISATypes := Types ISATypeKit.
-Import ISATypes.
 
-Module ISATermKit <: (TermKit ISATypeKit).
-  Module TY := ISATypes.
+Module ISATermKit <: TermKit.
+  Module typekit := ISATypeKit.
+  Module Export TY := Types typekit.
 
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
     match U with
@@ -303,12 +302,9 @@ Module ISATermKit <: (TermKit ISATypeKit).
   Defined.
 
 End ISATermKit.
-Module ISATerms := Terms ISATypeKit ISATermKit.
-Import ISATerms.
-Import NameResolution.
 
-Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
-  Module TM := ISATerms.
+Module ISAProgramKit <: (ProgramKit ISATermKit).
+  Module Export TM := Terms ISATermKit.
 
   (* REGISTER STORE *)
   Definition RegStore := GenericRegStore.
@@ -438,11 +434,11 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Proof. destruct f; cbn; repeat depelim args; repeat eexists; constructor. Qed.
 
 End ISAProgramKit.
-Import ISAProgramKit.
 
 Module ExampleStepping.
 
-  Module ISASmappStep := SmallStep ISATypeKit ISATermKit ISAProgramKit.
+  Module ISASmappStep := SmallStep ISATermKit ISAProgramKit.
+  Import ISAProgramKit.
   Import ISASmappStep.
 
   Lemma example_halt :
@@ -488,8 +484,8 @@ End TransparentObligations.
 
 Derive EqDec for Predicate.
 
-Module ISAAssertionKit <: (AssertionKit ISATypeKit ISATermKit ISAProgramKit).
-  Module PM := Programs ISATypeKit ISATermKit ISAProgramKit.
+Module ISAAssertionKit <: (AssertionKit ISATermKit ISAProgramKit).
+  Export ISAProgramKit.
 
   Definition 𝑷 := Predicate.
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
@@ -500,18 +496,13 @@ Module ISAAssertionKit <: (AssertionKit ISATypeKit ISATermKit ISAProgramKit).
 
 End ISAAssertionKit.
 
-Module ISAAssertions :=
-  Assertions ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit.
-Import ISAAssertions.
-
-Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
-Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
-
 Module ISASymbolicContractKit <:
-  SymbolicContractKit ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit.
-  Module ASS := ISAAssertions.
+  SymbolicContractKit ISATermKit ISAProgramKit ISAAssertionKit.
+  Module Export ASS := Assertions ISATermKit ISAProgramKit ISAAssertionKit.
 
-  Notation "[ x , .. , z ]" :=
+  Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
+  Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
+  Local Notation "[ x , .. , z ]" :=
     (env_snoc .. (env_snoc env_nil _ x) .. _ z) (at level 0) : env_scope.
 
   Definition sep_contract_rX : SepContract ["reg_tag" ∶ ty_enum register_tag ] ty_int :=
@@ -607,34 +598,12 @@ Module ISASymbolicContractKit <:
 End ISASymbolicContractKit.
 Module ISAMutators :=
   Mutators
-    ISATypeKit
     ISATermKit
     ISAProgramKit
     ISAAssertionKit
     ISASymbolicContractKit.
 Import ISAMutators.
 Import DynMutV2.
-
-(* Module ISAHeapKit <: (HeapKit ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit ISASymbolicContractKit). *)
-
-(*   Class IHeaplet (L : Type) := { *)
-(*     is_ISepLogic :> ISepLogic L; *)
-(*     pred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L; *)
-(*     ptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L *)
-(*   }. *)
-
-(* End ISAHeapKit. *)
-
-(* Module ISASoundness := *)
-(*   Soundness *)
-(*     ISATypeKit *)
-(*     ISATermKit *)
-(*     ISAProgramKit *)
-(*     ISAAssertionKit *)
-(*     ISASymbolicContractKit. *)
-(* Import ISASoundness. *)
-
-Import List.
 
 Arguments inctx_zero {_ _ _} /.
 Arguments inctx_succ {_ _ _ _} !_ /.

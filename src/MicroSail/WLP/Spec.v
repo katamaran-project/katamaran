@@ -44,11 +44,41 @@ Import EnvNotations.
 Local Open Scope Z_scope.
 Local Open Scope env_scope.
 
+Module WLPPrograms (termkit : TermKit) (Export progkit : ProgramKit termkit).
+
+  Inductive Contract (Δ : NCtx 𝑿 Ty) (τ : Ty) : Type :=
+  | ContractNoFail
+      (pre : abstract_named Lit Δ (RegStore -> Prop))
+      (post: abstract_named Lit Δ (Lit τ -> RegStore -> Prop))
+  | ContractTerminateNoFail
+      (pre : abstract_named Lit Δ (RegStore -> Prop))
+      (post: abstract_named Lit Δ (Lit τ -> RegStore -> Prop))
+  | ContractTerminate
+      (pre : abstract_named Lit Δ (RegStore -> Prop))
+      (post: abstract_named Lit Δ (Lit τ -> RegStore -> Prop))
+  | ContractNone.
+
+  Definition ContractEnv : Type :=
+    forall Δ τ (f : 𝑭 Δ τ), Contract Δ τ.
+  Definition ContractEnvEx : Type :=
+    forall Δ τ (f : 𝑭𝑿 Δ τ), Contract Δ τ.
+
+End WLPPrograms.
+
+Module Type WLPContractKit (termkit : TermKit) (Export progkit : ProgramKit termkit).
+
+  Module WLPPM := WLPPrograms termkit progkit.
+  Export WLPPM.
+
+  Parameter Inline CEnv   : ContractEnv.
+  Parameter Inline CEnvEx : ContractEnvEx.
+
+End WLPContractKit.
+
 Module WLP
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import contkit : ContractKit typekit termkit progkit).
+       (termkit : TermKit)
+       (progkit : ProgramKit termkit)
+       (Export contkit : WLPContractKit termkit progkit).
 
   Fixpoint eval_prop_true {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) {struct e} : Prop -> Prop :=
     match e return Prop -> Prop -> Prop with

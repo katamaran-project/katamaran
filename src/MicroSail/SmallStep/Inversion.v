@@ -41,11 +41,10 @@ Import CtxNotations.
 Import EnvNotations.
 
 Module Inversion
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit).
-  Module SS := SmallStep typekit termkit progkit.
-  Import SS.
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit).
+
+  Module Import SS := SmallStep termkit progkit.
 
   Section StepInversionFinal.
 
