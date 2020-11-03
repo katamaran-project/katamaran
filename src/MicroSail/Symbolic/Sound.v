@@ -218,6 +218,38 @@ Module Soundness
         now rewrite ?subst_sub_id, H__h.
       Qed.
 
+      (* Note: not that general, [d|sc]mut tt... but serves its purposes for now *)
+      Lemma dmut_pure_sound {Γ Σ} (ι : SymInstance Σ) :
+        approximates
+          (Γ1 := Γ) (Γ2 := Γ) ι
+          (dmut_pure tt)
+          (scmut_pure tt).
+      Proof.
+        intros ? ? ? H__state H.
+        unfold dmut_wp, dmut_assume_term, dmut_assume_formula in H.
+        specialize (H Σ (sub_id Σ)).
+        rewrite ?subst_sub_id in H.
+        cbn in *.
+        destruct H.
+        apply (H ι).
+        + rewrite sub_comp_id_left.
+          apply syminstance_rel_refl.
+        + assumption.
+      Qed.
+
+      Lemma dmut_fail_sound {Γ Σ} (ι : SymInstance Σ) (msg1 msg2 : string) :
+        approximates
+          (Γ1 := Γ) (Γ2 := Γ) ι
+          (dmut_fail msg1)
+          (scmut_fail msg2).
+      Proof.
+        intros ? ? ? H__state H.
+        unfold dmut_wp in H.
+        cbn in H.
+        apply (H Σ).
+        apply sub_id.
+      Qed.
+
       Lemma dmut_assume_term_sound {Γ Σ} (ι : SymInstance Σ) (b : Term Σ ty_bool) :
         approximates
           (Γ1 := Γ) (Γ2 := Γ) ι
@@ -510,6 +542,9 @@ Module Soundness
         induction asn; cbn.
         - apply dmut_assume_term_sound.
         - admit. (* Not implemented in SC. OOPS *)
+        - destruct (Term_eqb t1 t2).
+          + apply dmut_pure_sound.
+          + apply dmut_fail_sound.
         - apply dmut_produce_chunk_sound.
         - enough
             (approximates  (Γ1 := Γ) (Γ2 := Γ) ι
