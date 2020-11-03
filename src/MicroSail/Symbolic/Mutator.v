@@ -602,7 +602,7 @@ Module Mutators
       match asn with
       | asn_bool b      => mutator_assume_term (sub_term ζ b)
       | asn_prop P      => mutator_assume_formula (formula_prop ζ P)
-      | asn_eq t1 t2    => mutator_assume_term (sub_term ζ (term_lit ty_bool (Term_eqb t1 t2))) ⊗ mutator_assume_term (sub_term ζ (term_not (term_lit ty_bool (Term_eqb t1 t2))))
+      | asn_eq t1 t2    => mutator_assume_term (sub_term ζ (term_lit ty_bool (Term_eqb t1 t2))) 
       | asn_chunk c     => mutator_produce_chunk (sub_chunk ζ c)
       | asn_if b a1 a2  => (mutator_assume_term (sub_term ζ b)            *> mutator_produce ζ a1) ⊗
                            (mutator_assume_term (sub_term ζ (term_not b)) *> mutator_produce ζ a2)
