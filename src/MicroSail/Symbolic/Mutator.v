@@ -602,7 +602,7 @@ Module Mutators
       | asn_bool b      => mutator_assume_term (sub_term ζ b)
       | asn_prop P      => mutator_assume_formula (formula_prop ζ P)
       | asn_eq t1 t2    => if Term_eqb t1 t2 then
-                             mutator_assume_term (term_lit ty_bool true)
+                             mutator_pure tt
                            else 
                              mutator_fail "Err [mutator_produce]: case [asn_eq] terms are not equal"
       | asn_chunk c     => mutator_produce_chunk (sub_chunk ζ c)
