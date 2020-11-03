@@ -250,20 +250,19 @@ Module CapTypeKit <: TypeKit.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
 End CapTypeKit.
-Module CapTypes := Types CapTypeKit.
-Import CapTypes.
-
-Definition ty_hv : Ty := ty_enum regname.
-Definition ty_lv : Ty := ty_enum regname.
-Definition ty_rv : Ty := (ty_sum (ty_enum regname) ty_int).
-Definition ty_word : Ty := ty_sum ty_int (ty_record capability).
-Definition ty_addr : Ty := ty_int.
-Definition ty_perm : Ty := ty_enum permission.
 
 (*** TERMS ***)
 
-Module CapTermKit <: (TermKit CapTypeKit).
-  Module TY := CapTypes.
+Module CapTermKit <: TermKit .
+  Module typekit := CapTypeKit.
+  Module Export TY := Types typekit.
+
+  Definition ty_hv : Ty := ty_enum regname.
+  Definition ty_lv : Ty := ty_enum regname.
+  Definition ty_rv : Ty := (ty_sum (ty_enum regname) ty_int).
+  Definition ty_word : Ty := ty_sum ty_int (ty_record capability).
+  Definition ty_addr : Ty := ty_int.
+  Definition ty_perm : Ty := ty_enum permission.
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -373,18 +372,18 @@ Module CapTermKit <: (TermKit CapTypeKit).
           (fields ‼ "cap_begin")
           (fields ‼ "cap_end")
           (fields ‼ "cap_cursor")
-    end%lit.
+    end%exp.
 
   Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) :=
     match R  with
     | capability =>
-      fun c=>
+      fun c =>
         env_nil
-          ► "cap_permission" ∶ ty_perm ↦ cap_permission c
-          ► "cap_begin"      ∶ ty_addr            ↦ cap_begin c
-          ► "cap_end"        ∶ ty_option ty_addr  ↦ cap_end c
-          ► "cap_cursor"     ∶ ty_addr            ↦ cap_cursor c
-    end%env.
+          ► ("cap_permission" ∶ ty_perm           ↦ cap_permission c)
+          ► ("cap_begin"      ∶ ty_addr           ↦ cap_begin c)
+          ► ("cap_end"        ∶ ty_option ty_addr ↦ cap_end c)
+          ► ("cap_cursor"     ∶ ty_addr           ↦ cap_cursor c)
+    end.
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold R (𝑹_unfold R Kv) = Kv.
   Proof. now intros [] []. Qed.
@@ -450,13 +449,11 @@ Module CapTermKit <: (TermKit CapTypeKit).
   Defined.
 
 End CapTermKit.
-Module CapTerms := Terms CapTypeKit CapTermKit.
-Import CapTerms.
 
 (*** PROGRAM ***)
 
-Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
-  Module TM := CapTerms.
+Module CapProgramKit <: (ProgramKit CapTermKit).
+  Module Export TM := Terms CapTermKit.
 
   Local Notation "'c'"  := (@exp_var _ "c" _ _) : exp_scope.
   Local Notation "'hv'" := (@exp_var _ "hv" _ _) : exp_scope.
@@ -577,7 +574,7 @@ Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
       let: p ∶ bool := call write_allowed c․perm in
       let: q ∶ bool := call within_bounds c in
       stm_assert (p && q)
-        (exp_lit _ ty_string "Err: [exec_store] assert failed") ;;
+        (lit_string "Err: [exec_store] assert failed") ;;
       let: w ∶ word := call read_reg hv in
       call write_mem c․cursor w ;;
       call update_pc.
@@ -640,8 +637,3 @@ Module CapProgramKit <: (ProgramKit CapTypeKit CapTermKit).
   Proof. destruct f; cbn; repeat depelim args; repeat eexists; constructor. Qed.
 
 End CapProgramKit.
-
-Module CapPrograms :=
-  Programs CapTypeKit CapTermKit CapProgramKit.
-Import CapPrograms.
-Import CapProgramKit.

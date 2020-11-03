@@ -6,6 +6,8 @@ Require Import MicroSail.Tactics.
 
 Local Set Implicit Arguments.
 
+Import CtxNotations.
+
 Section WithBinding.
   Context {B : Set}.
 
@@ -344,7 +346,7 @@ End WithBinding.
 
 Arguments Env {B} D Γ.
 Arguments env_nil {B D}.
-Arguments env_snoc {B D Γ} E b db.
+Arguments env_snoc {B%type D%function Γ%ctx} E%env b%ctx db.
 Arguments env_lookup {B D Γ} E [_] x.
 (* Arguments env_tabulate {_ _} _. *)
 (* Arguments env_tail {_ _ _} / _. *)
@@ -381,22 +383,25 @@ Section EnvRec.
 
 End EnvRec.
 
-Definition NamedEnv {X T : Set} (D : T -> Set) (Γ : Ctx (X * T)) : Set :=
+Definition NamedEnv {X T : Set} (D : T -> Set) (Γ : NCtx X T) : Set :=
   Env (fun xt => D (snd xt)) Γ.
 Bind Scope env_scope with Env.
 Bind Scope env_scope with NamedEnv.
 
 Module EnvNotations.
 
-  Notation "δ '►' b '↦' d" := (env_snoc δ b d) : env_scope.
+  Notation "δ ► ( x ↦ u )" := (env_snoc δ x u) : env_scope.
   Notation "δ1 '►►' δ2" := (env_cat δ1 δ2) : env_scope.
-  Notation "δ ⟪ x ↦ v ⟫" := (@env_update _ _ _ δ (x , _) _ v) : env_scope.
-  Notation "δ ‼ x" := (@env_lookup _ _ _ δ (x , _) _) : lit_scope.
-  Notation "[ x ]" := (env_snoc env_nil (_,_) x) : env_scope.
+  Notation "δ ⟪ x ↦ v ⟫" := (@env_update _ _ _ δ (x∶_)%ctx _ v) : env_scope.
+  Notation "δ ‼ x" := (@env_lookup _ _ _ δ (x∶_)%ctx _) : exp_scope.
+  Notation "[ x ]" := (env_snoc env_nil (_∶_)%ctx x) : env_scope.
   Notation "[ x , .. , z ]" :=
-    (env_snoc .. (env_snoc env_nil (_,_) x) .. (_,_) z) : env_scope.
+    (env_snoc .. (env_snoc env_nil (_∶_) x) .. (_∶_) z) : env_scope.
 
 End EnvNotations.
+
+Open Scope env_scope.
+Import EnvNotations.
 
 Section WithB.
 
@@ -438,17 +443,17 @@ Section WithB.
 
 End WithB.
 
-Definition abstract_named {X T : Set} (D : T -> Set) (Δ : Ctx (X * T)) (r : Type) : Type :=
+Definition abstract_named {X T : Set} (D : T -> Set) (Δ : NCtx X T) (r : Type) : Type :=
   abstract (fun xt => D (snd xt)) Δ r.
 
-Definition uncurry_named {X T : Set} (D : T -> Set) {Δ : Ctx (X * T)} {r : Type} (f : abstract_named D Δ r) (δ : NamedEnv D Δ) : r :=
+Definition uncurry_named {X T : Set} (D : T -> Set) {Δ : NCtx X T} {r : Type} (f : abstract_named D Δ r) (δ : NamedEnv D Δ) : r :=
   uncurry f δ.
 
-Definition curry_named {X T : Set} (D : T -> Set) {Δ : Ctx (X * T)} {r : Type} (f : NamedEnv D Δ -> r) : abstract_named D Δ r :=
+Definition curry_named {X T : Set} (D : T -> Set) {Δ : NCtx X T} {r : Type} (f : NamedEnv D Δ -> r) : abstract_named D Δ r :=
   curry f.
 
-Definition ForallNamed {X T : Set} (D : T -> Set) (Δ : Ctx (X * T)) : (NamedEnv D Δ -> Prop) -> Prop :=
-  @Forall (X * T) (fun xt => D (snd xt)) Δ.
+Definition ForallNamed {X T : Set} (D : T -> Set) (Δ : NCtx X T) : (NamedEnv D Δ -> Prop) -> Prop :=
+  @Forall (X*T) (fun xt => D (snd xt)) Δ.
 
 Section TraverseEnv.
 

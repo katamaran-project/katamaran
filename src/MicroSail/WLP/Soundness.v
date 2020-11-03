@@ -48,14 +48,11 @@ Import CtxNotations.
 Import EnvNotations.
 
 Module Soundness
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import contkit : ContractKit typekit termkit progkit).
-  Module WLP := WLP typekit termkit progkit contkit.
-  Import WLP.
-  Module SSI := Inversion typekit termkit progkit.
-  Import SSI.
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import contkit : WLPContractKit termkit progkit).
+  Module Import WLP := WLP termkit progkit contkit.
+  Module Import SSI := Inversion termkit progkit.
   Import SS.
 
   Lemma eval_prop_true_sound {Γ δ} (e : Exp Γ ty_bool) :

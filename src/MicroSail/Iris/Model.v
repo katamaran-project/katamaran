@@ -27,9 +27,8 @@ Module logic := MicroSail.Sep.Logic.
 Set Implicit Arguments.
 
 Module ValsAndTerms
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit).
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit).
 
   Inductive Tm (Γ : Ctx (𝑿 * Ty)) τ : Type :=
   | MkTm (δ : LocalStore Γ) (s : Stm Γ τ) : Tm Γ τ.
@@ -70,7 +69,7 @@ Module ValsAndTerms
     by intros [= <-].
   Qed.
 
-  Module Inv := Inversion typekit termkit progkit.
+  Module Inv := Inversion termkit progkit.
   Export Inv.
   Export SS.
 
@@ -155,20 +154,19 @@ Module ValsAndTerms
 End ValsAndTerms.
 
 Module IrisRegisters
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit)
+       (Import contractkit : SymbolicContractKit termkit progkit assertkit)
        .
 
   Import CtxNotations.
   Import EnvNotations.
 
-  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit.
+  Module PL := ProgramLogic termkit progkit assertkit contractkit.
   Export PL.
 
-  Module VT := ValsAndTerms typekit termkit progkit.
+  Module VT := ValsAndTerms termkit progkit.
   Export VT.
 
 
@@ -190,17 +188,16 @@ Module IrisRegisters
 End IrisRegisters.
 
 Module Type IrisHeapKit
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit)
+       (Import contractkit : SymbolicContractKit termkit progkit assertkit)
        .
 
   Import CtxNotations.
   Import EnvNotations.
 
-  Module IrisRegs := IrisRegisters typekit termkit progkit assertkit contractkit.
+  Module IrisRegs := IrisRegisters termkit progkit assertkit contractkit.
   Export IrisRegs.
 
   Parameter Inline memPreG : gFunctors -> Set.
@@ -219,16 +216,15 @@ Module Type IrisHeapKit
 
   Parameter Inline mem_inv_init : forall Σ (μ : Memory), memPreG Σ -> ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
 
-  Parameter lpred_inst : forall `{sRG : sailRegG Σ} (p : 𝑷) (ts : Env Lit (𝑷_Ty p)), memG Σ -> iProp Σ.
+  Parameter lpred_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (p : 𝑷) (ts : Env Lit (𝑷_Ty p)), memG Σ -> iProp Σ.
 End IrisHeapKit.
 
 Module IrisInstance
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import irisheapkit : IrisHeapKit typekit termkit progkit assertkit contractkit).
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit)
+       (Import contractkit : SymbolicContractKit termkit progkit assertkit)
+       (Import irisheapkit : IrisHeapKit termkit progkit assertkit contractkit).
 
   Import CtxNotations.
   Import EnvNotations.
@@ -1448,23 +1444,22 @@ Module IrisInstance
 End IrisInstance.
 
 Module Adequacy
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit)
-       (Import irisheapkit : IrisHeapKit typekit termkit progkit assertkit contractkit).
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit)
+       (Import contractkit : SymbolicContractKit termkit progkit assertkit)
+       (Import irisheapkit : IrisHeapKit termkit progkit assertkit contractkit).
 
   Import CtxNotations.
   Import EnvNotations.
 
-  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit.
+  Module PL := ProgramLogic termkit progkit assertkit contractkit.
   Import PL.
 
   (* Module IrisRegs := IrisRegisters typekit termkit progkit assertkit contractkit. *)
   (* Import IrisRegs. *)
 
-  Module Inst := IrisInstance typekit termkit progkit assertkit contractkit irisheapkit.
+  Module Inst := IrisInstance termkit progkit assertkit contractkit irisheapkit.
   Import Inst.
 
   Definition sailΣ : gFunctors := #[ memΣ ; invΣ ; GFunctor regUR].

@@ -43,11 +43,8 @@ Import EnvNotations.
 Set Implicit Arguments.
 
 Module Type AssertionKit
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit).
-  Module PM := Programs typekit termkit progkit.
-  Export PM.
+       (termkit : TermKit)
+       (Export progkit : ProgramKit termkit).
 
   (* Predicate names. *)
   Parameter Inline 𝑷  : Set.
@@ -58,11 +55,9 @@ Module Type AssertionKit
 End AssertionKit.
 
 Module Assertions
-       (typekit : TypeKit)
-       (termkit : TermKit typekit)
-       (progkit : ProgramKit typekit termkit)
-       (assertkit : AssertionKit typekit termkit progkit).
-  Export assertkit.
+       (termkit : TermKit)
+       (progkit : ProgramKit termkit)
+       (Export assertkit : AssertionKit termkit progkit).
 
   Inductive Chunk (Σ : Ctx (𝑺 * Ty)) : Type :=
   | chunk_pred   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
@@ -113,8 +108,8 @@ Module Assertions
     forall {σ} (e : Exp Γ σ), Term Σ σ :=
     fix symbolic_eval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
       match e with
-      | exp_var ς                => (δ ‼ ς)%lit
-      | exp_lit _ σ l            => term_lit σ l
+      | exp_var ς                => δ ‼ ς
+      | exp_lit σ l              => term_lit σ l
       | exp_binop op e1 e2       => term_binop op (symbolic_eval_exp e1) (symbolic_eval_exp e2)
       | exp_neg e                => term_neg (symbolic_eval_exp e)
       | exp_not e                => term_not (symbolic_eval_exp e)
@@ -127,7 +122,7 @@ Module Assertions
       | exp_union E K e          => term_union E K (symbolic_eval_exp e)
       | exp_record R es          => term_record R (env_map (fun _ => symbolic_eval_exp) es)
       | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf
-      end.
+      end%exp.
 
   Record SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
     MkSepContract
@@ -212,7 +207,7 @@ Module Assertions
       | asn_if b a1 a2 => if inst_term ι b then inst_assertion ι a1 else inst_assertion ι a2
       | asn_match_enum E k alts => inst_assertion ι (alts (inst_term ι k))
       | asn_sep a1 a2 => inst_assertion ι a1 ✱ inst_assertion ι a2
-      | asn_exist ς τ a => ∃ v, @inst_assertion (Σ ▻ (ς , τ)) (ι ► (ς , τ) ↦ v) a
+      | asn_exist ς τ a => ∃ (v : Lit τ), inst_assertion (ι ► (ς∶τ ↦ v)) a
     end%logic.
 
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
@@ -234,13 +229,11 @@ Module Assertions
 End Assertions.
 
 Module Type SymbolicContractKit
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit).
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit).
 
-  Module ASS := Assertions typekit termkit progkit assertkit.
-  Export ASS.
+  Module Export ASS := Assertions termkit progkit assertkit.
 
   Parameter Inline CEnv   : SepContractEnv.
   Parameter Inline CEnvEx : SepContractEnvEx.

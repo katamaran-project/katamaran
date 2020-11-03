@@ -56,16 +56,15 @@ Import CtxNotations.
 Import EnvNotations.
 
 Module Soundness
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
-  Module MUT := Mutators typekit termkit progkit assertkit contractkit.
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit)
+       (Import contractkit : SymbolicContractKit termkit progkit assertkit).
+  Module MUT := Mutators termkit progkit assertkit contractkit.
   Import MUT.
-  Module LOG := ProgramLogic typekit termkit progkit assertkit contractkit.
+  Module LOG := ProgramLogic termkit progkit assertkit contractkit.
   Import LOG.
-  Module SCMUT := SemiConcrete.Sound.Soundness typekit termkit progkit assertkit contractkit.
+  Module SCMUT := SemiConcrete.Sound.Soundness termkit progkit assertkit contractkit.
   Import SCMUT.MUT.
 
   Program Instance proper_sub_comp {Σ1 Σ2 Σ3} : Proper (eq ==> eq ==> eq) (@sub_comp Σ1 Σ2 Σ3).
@@ -336,7 +335,7 @@ Module Soundness
           eapply (@wfd _ Σ1 _ (env_snoc (sub_id _) (_,τ) v)) in HYP. clear wfd.
           unfold wk1_symbolicstate in *.
           rewrite <- subst_sub_comp in *.
-          rewrite <- (subst_sub_comp ζ1 (sub_comp sub_wk1 (sub_id Σ1 ► (x ∶ τ)%ctx ↦ v)%env) s) in HYP.
+          rewrite <- (subst_sub_comp ζ1 (sub_comp sub_wk1 (sub_id Σ1 ► (x ∶ τ ↦ v)))%env s) in HYP.
           rewrite sub_comp_wk1. cbn.
           rewrite sub_comp_wk1 in HYP.
           match goal with
@@ -388,7 +387,7 @@ Module Soundness
           rewrite !sub_comp_assoc in H0.
           exact H0.
         - rewrite outcome_satisfy_map.
-          specialize (HYP (Σ1 ▻ (x,τ))%ctx (subst sub_wk1 ζ1 ► (x ∶ τ)%ctx ↦ @term_var _ x τ inctx_zero)%env).
+          specialize (HYP (Σ1 ▻ (x,τ)) (subst sub_wk1 ζ1 ► (x ∶ τ ↦ @term_var _ x τ inctx_zero))).
           unfold wk1_symbolicstate in *.
           rewrite <- subst_sub_comp in *.
           rewrite sub_comp_wk1 in HYP.
@@ -597,7 +596,7 @@ Module Soundness
         end.
 
       Lemma subst_lookup {Γ Σ Σ' x σ} (xInΓ : (x ∶ σ)%ctx ∈ Γ) (ζ : Sub Σ Σ') (δ : SymbolicLocalStore Γ Σ) :
-        (subst ζ (δ ‼ x) = (subst ζ δ ‼ x))%lit.
+        (subst ζ (δ ‼ x)%exp = (subst ζ δ ‼ x)%exp).
       Proof.
         unfold subst at 2, sub_localstore.
         now rewrite env_lookup_map.

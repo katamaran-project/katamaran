@@ -173,13 +173,10 @@ Module ISATypeKit <: TypeKit.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
 End ISATypeKit.
-Module ISATypes := Types ISATypeKit.
-Import ISATypes.
 
-Module ISATermKit <: (TermKit ISATypeKit).
-  Module TY := ISATypes.
-
-  Open Scope lit_scope.
+Module ISATermKit <: TermKit.
+  Module typekit := ISATypeKit.
+  Module Export TY := Types typekit.
 
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
     match U with
@@ -305,17 +302,9 @@ Module ISATermKit <: (TermKit ISATypeKit).
   Defined.
 
 End ISATermKit.
-Module ISATerms := Terms ISATypeKit ISATermKit.
-Import ISATerms.
-Import NameResolution.
 
-Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
-  Module TM := ISATerms.
-
-  Definition lit_true {Γ}  : Exp Γ ty_bool := exp_lit _ ty_bool true.
-  Definition lit_false {Γ} : Exp Γ ty_bool := exp_lit _ ty_bool false.
-  Definition int_lit {Γ} (literal : Z) : Exp Γ ty_int :=
-    exp_lit _ ty_int literal.
+Module ISAProgramKit <: (ProgramKit ISATermKit).
+  Module Export TM := Terms ISATermKit.
 
   (* REGISTER STORE *)
   Definition RegStore := GenericRegStore.
@@ -327,29 +316,27 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Definition write_write := generic_write_write.
 
   Local Coercion stm_exp : Exp >-> Stm.
-  Local Open Scope exp_scope.
-  Local Open Scope stm_scope.
 
   Notation "'callghost' f" :=
     (stm_call_external (ghost f) env_nil)
-    (at level 10, f at next level) : stm_scope.
+    (at level 10, f at next level) : exp_scope.
 
-  Local Notation "'x'"   := (@exp_var _ "x" _ _).
-  Local Notation "'y'"   := (@exp_var _ "y" _ _).
-  Local Notation "'z'"   := (@exp_var _ "z" _ _).
-  Local Notation "'instr'" := (@exp_var _ "instr" _ _).
-  Local Notation "'reg_code'" := (@exp_var _ "reg_code" ty_int _).
-  Local Notation "'reg_tag'" := (@exp_var _ "reg_tag" (ty_enum register_tag) _).
-  Local Notation "'reg_value'" := (@exp_var _ "reg_value" ty_int _).
-  Local Notation "'flag_code'" := (@exp_var _ "flag_code" ty_int _).
-  Local Notation "'flag_value'" := (@exp_var _ "flag_value" ty_bool _).
-  Local Notation "'address'" := (@exp_var _ "address" ty_int _).
-  Local Notation "'mem_value'" := (@exp_var _ "mem_value" ty_int _).
+  Local Notation "'x'"   := (@exp_var _ "x" _ _) : exp_scope.
+  Local Notation "'y'"   := (@exp_var _ "y" _ _) : exp_scope.
+  Local Notation "'z'"   := (@exp_var _ "z" _ _) : exp_scope.
+  Local Notation "'instr'" := (@exp_var _ "instr" _ _) : exp_scope.
+  Local Notation "'reg_code'" := (@exp_var _ "reg_code" ty_int _) : exp_scope.
+  Local Notation "'reg_tag'" := (@exp_var _ "reg_tag" (ty_enum register_tag) _) : exp_scope.
+  Local Notation "'reg_value'" := (@exp_var _ "reg_value" ty_int _) : exp_scope.
+  Local Notation "'flag_code'" := (@exp_var _ "flag_code" ty_int _) : exp_scope.
+  Local Notation "'flag_value'" := (@exp_var _ "flag_value" ty_bool _) : exp_scope.
+  Local Notation "'address'" := (@exp_var _ "address" ty_int _) : exp_scope.
+  Local Notation "'mem_value'" := (@exp_var _ "mem_value" ty_int _) : exp_scope.
   Local Definition nop {Γ} : Stm Γ ty_unit := stm_lit ty_unit tt.
 
   (* Address space bounds *)
-  Definition Memory_lb {Γ} : Exp Γ ty_int := int_lit 0.
-  Definition Memory_hb {Γ} : Exp Γ ty_int := int_lit 3.
+  Definition Memory_lb {Γ} : Exp Γ ty_int := lit_int 0.
+  Definition Memory_hb {Γ} : Exp Γ ty_int := lit_int 3.
 
   Definition fun_rX : Stm ["reg_tag" ∶ ty_enum register_tag] ty_int :=
     callghost open_ptstoreg ;;
@@ -400,14 +387,14 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
     | rX => fun_rX
     | wX => fun_wX
     | rF =>
-      if:      flag_code = int_lit 5 then stm_read_register Halted
-      else if: flag_code = int_lit 6 then stm_read_register Overflow
-      else if: flag_code = int_lit 7 then stm_read_register OutOfMemory
+      if:      flag_code = lit_int 5 then stm_read_register Halted
+      else if: flag_code = lit_int 6 then stm_read_register Overflow
+      else if: flag_code = lit_int 7 then stm_read_register OutOfMemory
       else     stm_fail _ "read_register: invalid register"
     | wF =>
-      if:      flag_code = int_lit 5 then stm_write_register Halted flag_value
-      else if: flag_code = int_lit 6 then stm_write_register Overflow flag_value
-      else if: flag_code = int_lit 7 then stm_write_register OutOfMemory flag_value
+      if:      flag_code = lit_int 5 then stm_write_register Halted flag_value
+      else if: flag_code = lit_int 6 then stm_write_register Overflow flag_value
+      else if: flag_code = lit_int 7 then stm_write_register OutOfMemory flag_value
       else     stm_fail _ "write_register: invalid register"
     (* an [int] represents a valid address if it is >= [Memory_lb] and < [Memory_hb] *)
     | in_bounds => ((address = Memory_lb) || (address > Memory_lb)) && (address < Memory_hb)
@@ -447,22 +434,22 @@ Module ISAProgramKit <: (ProgramKit ISATypeKit ISATermKit).
   Proof. destruct f; cbn; repeat depelim args; repeat eexists; constructor. Qed.
 
 End ISAProgramKit.
-Import ISAProgramKit.
 
 Module ExampleStepping.
 
-  Module ISASmappStep := SmallStep ISATypeKit ISATermKit ISAProgramKit.
+  Module ISASmappStep := SmallStep ISATermKit ISAProgramKit.
+  Import ISAProgramKit.
   Import ISASmappStep.
 
   Lemma example_halt :
     forall (Γ : Ctx (𝑿 * Ty))
            (γ : RegStore) (μ : Memory),
       ⟨ γ , μ
-        , env_nil ► ("instr" ∶ ty_union instruction) ↦ Halt
+        , env_nil ► ("instr" ∶ ty_union instruction ↦ Halt)
         , Pi semantics ⟩
         --->*
         ⟨ write_register γ Halted true , μ
-          , env_nil ► ("instr" ∶ ty_union instruction) ↦ Halt
+          , env_nil ► ("instr" ∶ ty_union instruction ↦ Halt)
           , stm_lit ty_unit tt ⟩.
   Proof.
     intros; cbn [Pi].
@@ -497,8 +484,8 @@ End TransparentObligations.
 
 Derive EqDec for Predicate.
 
-Module ISAAssertionKit <: (AssertionKit ISATypeKit ISATermKit ISAProgramKit).
-  Module PM := Programs ISATypeKit ISATermKit ISAProgramKit.
+Module ISAAssertionKit <: (AssertionKit ISATermKit ISAProgramKit).
+  Export ISAProgramKit.
 
   Definition 𝑷 := Predicate.
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
@@ -509,18 +496,13 @@ Module ISAAssertionKit <: (AssertionKit ISATypeKit ISATermKit ISAProgramKit).
 
 End ISAAssertionKit.
 
-Module ISAAssertions :=
-  Assertions ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit.
-Import ISAAssertions.
-
-Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
-Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
-
 Module ISASymbolicContractKit <:
-  SymbolicContractKit ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit.
-  Module ASS := ISAAssertions.
+  SymbolicContractKit ISATermKit ISAProgramKit ISAAssertionKit.
+  Module Export ASS := Assertions ISATermKit ISAProgramKit ISAAssertionKit.
 
-  Notation "[ x , .. , z ]" :=
+  Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
+  Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
+  Local Notation "[ x , .. , z ]" :=
     (env_snoc .. (env_snoc env_nil _ x) .. _ z) (at level 0) : env_scope.
 
   Definition sep_contract_rX : SepContract ["reg_tag" ∶ ty_enum register_tag ] ty_int :=
@@ -533,7 +515,7 @@ Module ISASymbolicContractKit <:
          asn_chunk (chunk_pred ptstoreg [ term_var "reg_tag", term_var "v" ]%env) ✱
          @asn_prop
            ["reg_tag" ∶ ty_enum register_tag,  "v" ∶ ty_int, "result" ∶ ty_int]
-           (fun _ v res => v = res);
+           (fun _ v res => v = res)%type;
     |}.
 
   Definition sep_contract_wX : SepContract ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_unit :=
@@ -616,34 +598,12 @@ Module ISASymbolicContractKit <:
 End ISASymbolicContractKit.
 Module ISAMutators :=
   Mutators
-    ISATypeKit
     ISATermKit
     ISAProgramKit
     ISAAssertionKit
     ISASymbolicContractKit.
 Import ISAMutators.
 Import DynMutV2.
-
-(* Module ISAHeapKit <: (HeapKit ISATypeKit ISATermKit ISAProgramKit ISAAssertionKit ISASymbolicContractKit). *)
-
-(*   Class IHeaplet (L : Type) := { *)
-(*     is_ISepLogic :> ISepLogic L; *)
-(*     pred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L; *)
-(*     ptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L *)
-(*   }. *)
-
-(* End ISAHeapKit. *)
-
-(* Module ISASoundness := *)
-(*   Soundness *)
-(*     ISATypeKit *)
-(*     ISATermKit *)
-(*     ISAProgramKit *)
-(*     ISAAssertionKit *)
-(*     ISASymbolicContractKit. *)
-(* Import ISASoundness. *)
-
-Import List.
 
 Arguments inctx_zero {_ _ _} /.
 Arguments inctx_succ {_ _ _ _} !_ /.

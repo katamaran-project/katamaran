@@ -45,6 +45,7 @@ From MicroSail Require Environment.
 From MicroSail Require Iris.Model.
 From MicroSail Require Sep.Logic.
 From iris.base_logic Require lib.gen_heap lib.iprop.
+From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
 From iris.proofmode Require tactics.
 From stdpp Require namespaces.
@@ -258,24 +259,21 @@ Module MinCapsTypeKit <: TypeKit.
 
 End MinCapsTypeKit.
 
-
-Module MinCapsTypes := Types MinCapsTypeKit.
-Import MinCapsTypes.
-
-Definition ty_hv : Ty := ty_enum regname.
-Definition ty_lv : Ty := ty_enum regname.
-Definition ty_rv : Ty := ty_sum (ty_enum regname) ty_int.
-Definition ty_cap : Ty := ty_record capability.
-Definition ty_word : Ty := ty_sum ty_int ty_cap.
-Definition ty_memval : Ty := ty_int.
-Definition ty_addr : Ty := ty_int.
-Definition ty_perm : Ty := ty_enum permission.
-Definition ty_instr : Ty := ty_union instruction.
-
 (*** TERMS ***)
 
-Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
-  Module TY := MinCapsTypes.
+Module MinCapsTermKit <: TermKit.
+  Module typekit := MinCapsTypeKit.
+  Module Export TY := Types typekit.
+
+  Definition ty_hv : Ty := ty_enum regname.
+  Definition ty_lv : Ty := ty_enum regname.
+  Definition ty_rv : Ty := ty_sum (ty_enum regname) ty_int.
+  Definition ty_cap : Ty := ty_record capability.
+  Definition ty_word : Ty := ty_sum ty_int ty_cap.
+  Definition ty_memval : Ty := ty_int.
+  Definition ty_addr : Ty := ty_int.
+  Definition ty_perm : Ty := ty_enum permission.
+  Definition ty_instr : Ty := ty_union instruction.
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -394,17 +392,17 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
           (fields ‼ "cap_begin")
           (fields ‼ "cap_end")
           (fields ‼ "cap_cursor")
-    end%lit.
+    end%exp.
 
   Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) :=
     match R  with
     | capability =>
       fun c=>
         env_nil
-          ► "cap_permission" ∶ ty_perm ↦ cap_permission c
-          ► "cap_begin"      ∶ ty_addr            ↦ cap_begin c
-          ► "cap_end"        ∶ ty_option ty_addr  ↦ cap_end c
-          ► "cap_cursor"     ∶ ty_addr            ↦ cap_cursor c
+          ► ("cap_permission" ∶ ty_perm            ↦ cap_permission c)
+          ► ("cap_begin"      ∶ ty_addr            ↦ cap_begin c)
+          ► ("cap_end"        ∶ ty_option ty_addr  ↦ cap_end c)
+          ► ("cap_cursor"     ∶ ty_addr            ↦ cap_cursor c)
     end%env.
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold R (𝑹_unfold R Kv) = Kv.
@@ -493,13 +491,11 @@ Module MinCapsTermKit <: (TermKit MinCapsTypeKit).
   Defined.
 
 End MinCapsTermKit.
-Module MinCapsTerms := Terms MinCapsTypeKit MinCapsTermKit.
-Import MinCapsTerms.
 
 (*** PROGRAM ***)
 
-Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
-  Module TM := MinCapsTerms.
+Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
+  Module Export TM := Terms MinCapsTermKit.
 
   Local Notation "'a'"  := (@exp_var _ "a" _ _) : exp_scope.
   Local Notation "'c'"  := (@exp_var _ "c" _ _) : exp_scope.
@@ -535,7 +531,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
 
   Notation "'callghost' f" :=
     (stm_call_external (ghost f) env_nil)
-    (at level 10, f at next level) : stm_scope.
+    (at level 10, f at next level) : exp_scope.
 
   Definition fun_read_reg : Stm ["reg" ∶ ty_enum regname ] ty_word :=
     stm_call_external (ghost open_ptsreg) [exp_var "reg"]%arg ;;
@@ -649,9 +645,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
                         ((exp_var "base_cap")․"cap_cursor") + (exp_var "immediate")
                       ]%exp%arg) in
       let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (exp_lit _ ty_string "Err: [exec_sd] no write permission") ;;
+      stm_assert p (lit_string "Err: [exec_sd] no write permission") ;;
       let: q ∶ bool := call within_bounds c in
-      stm_assert q (exp_lit _ ty_string "Err: [exec_sd] out of bounds") ;;
+      stm_assert q (lit_string "Err: [exec_sd] out of bounds") ;;
       let: w ∶ int := call read_reg_num hv in
       call write_mem c․cursor w ;;
       call update_pc ;;
@@ -666,9 +662,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
                         ((exp_var "base_cap")․"cap_cursor") + (exp_var "immediate")
                       ]%exp%arg) in
       let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (exp_lit _ ty_string "Err: [exec_ld] no read permission") ;;
+      stm_assert p (lit_string "Err: [exec_ld] no read permission") ;;
       let: q ∶ bool := call within_bounds c in
-      stm_assert q (exp_lit _ ty_string "Err: [exec_ld] out of bounds") ;;
+      stm_assert q (lit_string "Err: [exec_ld] out of bounds") ;;
       let: n ∶ ty_memval := call read_mem c․cursor in
       call write_reg lv (exp_inl (exp_var n)) ;;
       call update_pc ;;
@@ -702,7 +698,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       end.
 
     Definition fun_exec_ret : Stm ε ty_bool :=
-      stm_exp (exp_lit _ ty_bool false).
+      stm_exp lit_false.
 
     Definition fun_exec_mv : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_bool :=
       let: w ∶ word := call read_reg (exp_var hv) in
@@ -716,13 +712,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
       stm_lit ty_bool true.
 
     Definition fun_exec_j : Stm [offset ∶ ty_int ] ty_bool :=
-      call update_pc ;;
-      call add_pc (exp_var offset) ;;
+      call add_pc (exp_binop binop_times (exp_var offset) (lit_int 2)) ;;
       stm_lit ty_bool true.
 
     Definition fun_exec_bnez : Stm [lv ∶ ty_lv, immediate ∶ ty_int ] ty_bool :=
       let: "c" ∶ ty_int := call read_reg_num (exp_var lv) in
-      stm_if (exp_binop binop_eq c (exp_lit _ ty_int 0))
+      stm_if (exp_binop binop_eq c (lit_int 0))
              (call update_pc ;; stm_lit ty_bool true)
              (call add_pc (exp_var immediate) ;; stm_lit ty_bool true).
 
@@ -755,9 +750,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
     Definition fun_exec : Stm ε ty_bool :=
       let: "c" := stm_read_register pc in
       let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (exp_lit _ ty_string "Err: [exec_ld] no read permission") ;;
+      stm_assert p (lit_string "Err: [exec_ld] no read permission") ;;
       let: q ∶ bool := call within_bounds c in
-      stm_assert q (exp_lit _ ty_string "Err: [exec_ld] out of bounds") ;;
+      stm_assert q (lit_string "Err: [exec_ld] out of bounds") ;;
       let: n ∶ ty_memval := call read_mem c․cursor in
       let: i ∶ ty_instr := callex dI (exp_var n) in
       call exec_instr i.
@@ -853,11 +848,6 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTypeKit MinCapsTermKit).
 
 End MinCapsProgramKit.
 
-Module MinCapsPrograms :=
-  Programs MinCapsTypeKit MinCapsTermKit MinCapsProgramKit.
-Import MinCapsPrograms.
-Import MinCapsProgramKit.
-
 (*** CONTRACTS ***)
 
 Inductive Predicate : Set :=
@@ -875,9 +865,10 @@ End TransparentObligations.
 Derive EqDec for Predicate.
 
 Module MinCapsContracts.
-  Module MinCapsAssertionKit <:
-    (AssertionKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit).
-    Module PM := Programs MinCapsTypeKit MinCapsTermKit MinCapsProgramKit.
+  Module Export MinCapsAssertionKit <:
+    (AssertionKit MinCapsTermKit MinCapsProgramKit).
+
+    Export MinCapsProgramKit.
 
     Definition 𝑷 := Predicate.
     Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
@@ -889,21 +880,17 @@ Module MinCapsContracts.
     Instance 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
   End MinCapsAssertionKit.
 
-  Module MinCapsAssertions :=
-    Assertions MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
-  Import MinCapsAssertions.
-
-  Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
-  Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
-
   Module MinCapsSymbolicContractKit <:
-    SymbolicContractKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
-    Module ASS := MinCapsAssertions.
+    SymbolicContractKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
+    Module Export ASS := Assertions MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit.
+
+    Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
+    Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 
     Open Scope env_scope.
 
-    Local Notation "r '↦r' t" := (asn_chunk (chunk_pred ptsreg (env_nil ► ty_enum regname ↦ r ► ty_word ↦ t))) (at level 100).
-    Local Notation "a '↦m' t" := (asn_chunk (chunk_pred ptsto (env_nil ► ty_addr ↦ a ► ty_int ↦ t))) (at level 100).
+    Local Notation "r '↦r' t" := (asn_chunk (chunk_pred ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t)))) (at level 100).
+    Local Notation "a '↦m' t" := (asn_chunk (chunk_pred ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t)))) (at level 100).
     (* Arguments asn_prop [_] & _. *)
 
     (*
@@ -1117,7 +1104,6 @@ Module MinCapsContracts.
 
   Module MinCapsMutators :=
     Mutators
-      MinCapsTypeKit
       MinCapsTermKit
       MinCapsProgramKit
       MinCapsAssertionKit
@@ -1186,9 +1172,9 @@ Module MinCapsModel.
   Import MinCapsContracts.
   Import MicroSail.Iris.Model.
 
-  Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
+  Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
 
-    Module IrisRegs := IrisRegisters MinCapsTypeKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
+    Module IrisRegs := IrisRegisters MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
     Import IrisRegs.
 
     Section WithIrisNotations.
@@ -1199,15 +1185,21 @@ Module MinCapsModel.
     Import iris.base_logic.lib.gen_heap.
     Import iris.proofmode.tactics.
 
+    Class mcMemG Σ := McMemG {
+                          (* ghost variable for tracking state of registers *)
+                          mc_ghG :> gh.gen_heapG Z Z Σ;
+                          mc_invNs : namespace
+                        }.
+
     Definition memPreG : gFunctors -> Set := fun Σ => gh.gen_heapPreG Z Z Σ.
-    Definition memG : gFunctors -> Set := fun Σ => gh.gen_heapG Z Z Σ.
+    Definition memG : gFunctors -> Set := mcMemG.
     Definition memΣ : gFunctors := gh.gen_heapΣ Z Z.
 
     Definition memΣ_PreG : forall {Σ}, subG memΣ Σ -> memPreG Σ := fun {Σ} => gh.subG_gen_heapPreG (Σ := Σ) (L := Z) (V := Z).
 
     Definition mem_inv : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        (∃ memmap, gen_heap_ctx (hG := hG) memmap ∗
+        (∃ memmap, gen_heap_ctx (hG := mc_ghG (mcMemG := hG)) memmap ∗
                                 ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
@@ -1215,7 +1207,7 @@ Module MinCapsModel.
 
     Definition mem_res : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        ([∗ list] a ∈ liveAddrs, mapsto (hG := hG) a 1 (μ a)) %I.
+        ([∗ list] a ∈ liveAddrs, mapsto (hG := mc_ghG (mcMemG := hG)) a 1 (μ a)) %I.
 
     Lemma mem_inv_init : forall Σ (μ : Memory), memPreG Σ ->
         ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
@@ -1236,7 +1228,7 @@ Module MinCapsModel.
       iModIntro.
 
       pose (refmap := list_to_map (map (fun a => (a, μ a)) liveAddrs) : gmap Z Z).
-      iExists (gH).
+      iExists (McMemG gH (nroot .@ "addr_inv")).
       cbn.
       iFrame.
       iExists refmap.
@@ -1250,8 +1242,6 @@ Module MinCapsModel.
       all: try rewrite !lookup_insert_ne; try apply lookup_empty; lia.
     Qed.
 
-    Import MinCapsAssertions.
-
     Definition MinCaps_ptsreg `{sailRegG Σ} (reg : RegName) (v : Z + Capability) : iProp Σ :=
       match reg with
       | R0 => reg_pointsTo reg0 v
@@ -1260,11 +1250,27 @@ Module MinCapsModel.
       | R3 => reg_pointsTo reg3 v
       end.
 
-    Definition lpred_inst `{sailRegG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
+    Definition region_addrs (b : Addr) (e : Addr + unit): list Addr :=
+      match e with
+      | inl e => filter (fun a => and (b ≤ a)%Z (a ≤ e)%Z) liveAddrs
+      | inr _ => filter (fun a => (b ≤ a)%Z) liveAddrs
+      end.
+
+    Definition MinCaps_safe `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Z + Capability) : iProp Σ :=
+      match v with
+      | inl z => True%I
+      | inr (MkCap O b e a) => True%I
+      | inr (MkCap R b e a) =>
+                ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a 1 v))%I
+      | inr (MkCap RW b e a) =>
+                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a 1 v)
+      end.
+
+    Definition lpred_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
       (match p return Env Lit (MinCapsAssertionKit.𝑷_Ty p) -> iProp Σ with
       | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
-      | ptsto => fun ts => mapsto (hG := mG) (env_head ts) 1 (env_head (env_tail ts))%Z
-      | safe => fun _ => False%I
+      | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head ts) 1 (env_head (env_tail ts))%Z
+      | safe => fun ts => MinCaps_safe (mG := mG) (env_head ts)
       end) ts.
 
     End WithIrisNotations.

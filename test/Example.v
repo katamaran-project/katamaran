@@ -168,13 +168,12 @@ Module ExampleTypeKit <: TypeKit.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
 End ExampleTypeKit.
-Module ExampleTypes := Types ExampleTypeKit.
-Import ExampleTypes.
 
 (*** TERMS ***)
 
-Module ExampleTermKit <: (TermKit ExampleTypeKit).
-  Module TY := ExampleTypes.
+Module ExampleTermKit <: TermKit.
+  Module typekit := ExampleTypeKit.
+  Module Export TY := Types typekit.
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -237,22 +236,17 @@ Module ExampleTermKit <: (TermKit ExampleTypeKit).
     fun '(existT _ x) => match x with end.
 
 End ExampleTermKit.
-Module ExampleTerms := Terms ExampleTypeKit ExampleTermKit.
-Import ExampleTerms.
-Import NameResolution.
 
 (*** PROGRAM ***)
 
-Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
-  Module TM := ExampleTerms.
+Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
+  Module Export TM := Terms ExampleTermKit.
 
   Local Coercion stm_exp : Exp >-> Stm.
-  Local Open Scope exp_scope.
-  Local Open Scope stm_scope.
 
-  Local Notation "'`LT'" := (exp_lit _ (ty_enum ordering) LT).
-  Local Notation "'`GT'" := (exp_lit _ (ty_enum ordering) GT).
-  Local Notation "'`EQ'" := (exp_lit _ (ty_enum ordering) EQ).
+  Local Notation "'`LT'" := (@exp_lit _ (ty_enum ordering) LT).
+  Local Notation "'`GT'" := (@exp_lit _ (ty_enum ordering) GT).
+  Local Notation "'`EQ'" := (@exp_lit _ (ty_enum ordering) EQ).
   Local Notation "'`Left' e" := (exp_union either Left e) (at level 10, e at level 9).
   Local Notation "'`Right' e" := (exp_union either Right e) (at level 10, e at level 9).
   Local Notation "'x'"   := (@exp_var _ "x" _ _) : exp_scope.
@@ -289,7 +283,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
     | length => stm_match_list
                   (exp_var "xs")
                   (stm_lit ty_int 0)
-                  "y" "ys" (let: "n" := call length (exp_var "ys") in stm_exp (exp_lit _ ty_int 1 + exp_var "n"))
+                  "y" "ys" (let: "n" := call length (exp_var "ys") in lit_int 1 + exp_var "n")
     end.
 
   Definition RegStore := GenericRegStore.
@@ -309,11 +303,6 @@ Module ExampleProgramKit <: (ProgramKit ExampleTypeKit ExampleTermKit).
 
 End ExampleProgramKit.
 
-Module ExamplePrograms :=
-  Programs ExampleTypeKit ExampleTermKit ExampleProgramKit.
-Import ExamplePrograms.
-Import ExampleProgramKit.
-
 (* ⇑ GENERATED                                                                *)
 (******************************************************************************)
 (* ⇓ NOT GENERATED                                                            *)
@@ -321,26 +310,20 @@ Import ExampleProgramKit.
 Module SepContracts.
 
   Module ExampleAssertionKit <:
-    (AssertionKit ExampleTypeKit ExampleTermKit ExampleProgramKit).
-    Module PM := Programs ExampleTypeKit ExampleTermKit ExampleProgramKit.
+    (AssertionKit ExampleTermKit ExampleProgramKit).
+    Export ExampleProgramKit.
 
     Definition 𝑷 := Empty_set.
     Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
     Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
   End ExampleAssertionKit.
 
-  Module ExampleAssertions :=
-    Assertions ExampleTypeKit ExampleTermKit ExampleProgramKit ExampleAssertionKit.
-  Import ExampleAssertions.
-
-  Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
-  Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
-
   Module ExampleSymbolicContractKit <:
-    SymbolicContractKit ExampleTypeKit ExampleTermKit ExampleProgramKit ExampleAssertionKit.
-    Module ASS := ExampleAssertions.
+    SymbolicContractKit ExampleTermKit ExampleProgramKit ExampleAssertionKit.
+    Module Export ASS := Assertions ExampleTermKit ExampleProgramKit ExampleAssertionKit.
 
-    Open Scope env_scope.
+    Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
+    Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 
     (* Arguments asn_prop [_] & _. *)
     (* Arguments MkSepContractPun [_ _] & _ _ _ _. *)
@@ -430,7 +413,6 @@ Module SepContracts.
 
   Module ExampleMutators :=
     Mutators
-      ExampleTypeKit
       ExampleTermKit
       ExampleProgramKit
       ExampleAssertionKit
@@ -470,8 +452,8 @@ End SepContracts.
 
 Module WLPContracts.
 
-  Module ExampleContractKit <: (ContractKit ExampleTypeKit ExampleTermKit ExampleProgramKit).
-    Module PM := ExamplePrograms.
+  Module ExampleWLPContractKit <: (WLPContractKit ExampleTermKit ExampleProgramKit).
+    Module Export WLPPM := WLPPrograms ExampleTermKit ExampleProgramKit.
 
     Definition CEnv : ContractEnv :=
       fun σs τ f =>
@@ -512,10 +494,9 @@ Module WLPContracts.
     Definition CEnvEx : ContractEnvEx :=
       fun σs τ f => match f with end.
 
-  End ExampleContractKit.
-  Import ExampleContractKit.
+  End ExampleWLPContractKit.
 
-  Module ExampleWLP := WLP ExampleTypeKit ExampleTermKit ExampleProgramKit ExampleContractKit.
+  Module ExampleWLP := WLP ExampleTermKit ExampleProgramKit ExampleWLPContractKit.
   Import ExampleWLP.
 
   Lemma gcd_sub_diag_l (n m : Z) : Z.gcd (n - m) m = Z.gcd n m.

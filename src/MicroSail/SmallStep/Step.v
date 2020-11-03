@@ -39,9 +39,8 @@ From MicroSail Require Import
 Set Implicit Arguments.
 
 Module SmallStep
-  (Import typekit : TypeKit)
-  (Import termkit : TermKit typekit)
-  (Import progKit : ProgramKit typekit termkit).
+  (Import termkit : TermKit)
+  (Import progKit : ProgramKit termkit).
 
   Import CtxNotations.
   Import EnvNotations.
@@ -203,7 +202,7 @@ Module SmallStep
       (σ : Ty) (s : string) (k : Lit σ -> Stm Γ τ) :
       ⟨ γ , μ , δ , stm_bind (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
 
-  where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%stm s2%stm).
+  where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
 
   Inductive Steps {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> LocalStore Γ -> Stm Γ σ -> Prop :=
   | step_refl : Steps γ1 μ1 δ1 s1 γ1 μ1 δ1 s1

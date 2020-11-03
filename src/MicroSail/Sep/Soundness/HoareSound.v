@@ -13,20 +13,19 @@ Require Import MicroSail.Sep.Hoare.
 Require Import MicroSail.Sep.Model.Disjoint.
 
 Module HoareSound
-       (Import typekit : TypeKit)
-       (Import termkit : TermKit typekit)
-       (Import progkit : ProgramKit typekit termkit)
-       (Import assertkit : AssertionKit typekit termkit progkit)
-       (Import contractkit : SymbolicContractKit typekit termkit progkit assertkit).
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit)
+       (Import contractkit : SymbolicContractKit termkit progkit assertkit).
 
-  Module SSI := Inversion typekit termkit progkit.
+  Module SSI := Inversion termkit progkit.
   Import SSI.
   Import SS.
 
-  Module PL := ProgramLogic typekit termkit progkit assertkit contractkit.
+  Module PL := ProgramLogic termkit progkit assertkit contractkit.
   Import PL.
 
-  Module Model := Disjoint typekit termkit progkit assertkit contractkit.
+  Module Model := Disjoint termkit progkit assertkit contractkit.
   Import Model.
 
   Section Soundness.
@@ -257,7 +256,7 @@ Module HoareSound
       - sound_solve.
       (* rule_stm_assign_forwards *)
       - sound_solve.
-        exists (H ‼ x)%lit.
+        exists (H ‼ x)%exp.
         now rewrite env_update_update, env_update_lookup, env_lookup_update.
       (* rule_stm_call_forwards *)
       - admit.

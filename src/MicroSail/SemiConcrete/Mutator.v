@@ -56,11 +56,10 @@ Delimit Scope mutator_scope with mut.
 Delimit Scope dmut_scope with dmut.
 
 Module SemiConcrete
-       (typekit : TypeKit)
-       (termkit : TermKit typekit)
-       (progkit : ProgramKit typekit termkit)
-       (assertkit : AssertionKit typekit termkit progkit)
-       (symcontractkit : SymbolicContractKit typekit termkit progkit assertkit).
+       (termkit : TermKit)
+       (progkit : ProgramKit termkit)
+       (assertkit : AssertionKit termkit progkit)
+       (symcontractkit : SymbolicContractKit termkit progkit assertkit).
 
   Export symcontractkit.
 
