@@ -83,7 +83,7 @@ Module Soundness
         microsail_stm_primitive_step s; dependent destruction H
       | [ H: ⟨ _, _, _, ?s ⟩ --->* ⟨ _, _, _, ?t ⟩, HF: Final ?t |- _ ] =>
         first
-          [ microsail_stm_primitive_step s; dependent destruction H; cbn in HF
+          [ microsail_stm_primitive_step s; dependent elimination H; cbn in HF
           | match head s with
             | @stm_call_frame => apply (steps_inversion_call_frame HF) in H
             | @stm_let        => apply (steps_inversion_let        HF) in H
@@ -114,9 +114,9 @@ Module Soundness
       | [ H: True |- _ ] => clear H
       | [ H: False |- _ ] => destruct H
       | [ H: Env _ (ctx_snoc _ _) |- _ ] =>
-        dependent destruction H
+        dependent elimination H
       | [ H: Env _ ctx_nil |- _ ] =>
-        dependent destruction H
+        dependent elimination H
       | [ H: context[env_drop _ (_ ►► _)]|- _] =>
         rewrite env_drop_cat in H
       | [ _: context[match eval ?e ?δ with _ => _ end] |- _ ] =>
@@ -170,7 +170,7 @@ Module Soundness
       - wlp_sound_solve.
       - pose proof (validCEnvEx f).
         destruct (CEnvEx f); wlp_sound_solve.
-        specialize (H3 _ _ _ _ _ _ H H2).
+        specialize (H2 _ _ _ _ _ _ H H1).
         destruct res; wlp_sound_solve.
       - destruct_conjs. case_eq (eval e δ); intros.
         + apply eval_prop_true_sound in H1; wlp_sound_solve.
@@ -184,7 +184,7 @@ Module Soundness
       - wlp_sound_solve.
         + specialize (H _ eq_refl).
           wlp_sound_solve.
-        + specialize (H2 _ eq_refl).
+        + specialize (H1 _ eq_refl).
           wlp_sound_solve.
       - wlp_sound_solve.
       - rewrite blast_sound in H2.
@@ -192,13 +192,13 @@ Module Soundness
       - wlp_sound_solve.
       - wlp_sound_solve.
         destruct (𝑼_unfold (eval e δ)) as [K v] eqn:eq_eval.
-        specialize (H3 K).
-        rewrite blast_sound in H3.
-        specialize (H3 v).
+        specialize (H2 K).
+        rewrite blast_sound in H2.
+        specialize (H2 v).
         assert (eval e δ = 𝑼_fold (existT K v)).
         { rewrite <- (𝑼_fold_unfold (eval e δ)); now f_equal. }
         intuition.
-        rewrite 𝑼_unfold_fold in H4.
+        rewrite 𝑼_unfold_fold in H3.
         wlp_sound_solve.
       - wlp_sound_solve.
       - wlp_sound_solve.

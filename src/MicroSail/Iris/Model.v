@@ -411,7 +411,8 @@ Module IrisInstance
     rewrite Excl_included in eq2 *.
     intros <-%leibniz_equiv.
     specialize (H0 (mkSomeReg r) (Excl (mkSomeLit v)) eq1); cbn in H0.
-    by dependent destruction H0.
+    Local Set Equations With UIP.
+    by dependent elimination H0.
   Qed.
 
   Lemma regs_inv_update {τ} {r} {v : Lit τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeLit))} {regstore : RegStore} :
@@ -478,7 +479,7 @@ Module IrisInstance
     iIntros (e2 σ2 efs) "%".
     remember (VT.MkTm δ (stm_read_register r)) as t.
     destruct a as [γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
-    dependent destruction Heqt.
+    dependent elimination Heqt.
     destruct (steps_inversion_read_register step) as [<- [<- [<- ->]]].
     iModIntro. iModIntro. iModIntro.
     iFrame. iSplitR ""; auto.
@@ -498,8 +499,8 @@ Module IrisInstance
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
-    dependent destruction a.
-    destruct (steps_inversion_write_register H0) as [-> [<- [<- ->]]].
+    dependent elimination a.
+    destruct (steps_inversion_write_register s) as [-> [<- [<- ->]]].
     iModIntro. iModIntro. iModIntro.
     iFrame. iSplitR; auto.
     by iApply wp_value.
@@ -588,14 +589,12 @@ Module IrisInstance
     iIntros (e2 σ2 efs) "%".
     remember (MkTm δ (stm_exp e)) as t.
     destruct a.
-    inversion Heqt.
-    dependent destruction H0; inversion H3.
+    dependent elimination Heqt.
+    dependent elimination H0.
     iModIntro. iModIntro. iModIntro.
-    rewrite H2.
-    dependent destruction H1.
     iFrame.
     iSplitL; trivial.
-    iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ (stm_lit _ (eval e0 δ)))).
+    iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ1 (stm_lit _ (eval e0 δ1)))).
     by iApply "PQ".
   Qed.
 
