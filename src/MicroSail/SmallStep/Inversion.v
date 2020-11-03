@@ -27,7 +27,6 @@
 (******************************************************************************)
 
 From Coq Require Import
-     Program.Equality
      Program.Tactics.
 From Equations Require Import
      Equations.
@@ -75,7 +74,9 @@ Module Inversion
       dependent elimination step.
       - intuition. right. eexists. intuition.
       - intuition. left. eexists. intuition.
-      - dependent destruction s3; cbn in *; try contradiction.
+      - remember (δ1 ►► δΔ1)%env as δΓΔ1.
+        remember (δ'0 ►► δΔ')%env as δΓΔ2.
+        dependent elimination s3; cbn in *; try contradiction.
     Qed.
 
     Lemma step_inversion_seq {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
@@ -88,7 +89,7 @@ Module Inversion
       ).
     Proof.
       dependent elimination step.
-      - dependent destruction s7; cbn in *; try contradiction.
+      - dependent elimination s7; cbn in *; try contradiction.
       - intuition. right. eexists. intuition.
       - intuition. left. eexists. intuition.
     Qed.
@@ -102,7 +103,7 @@ Module Inversion
       ).
     Proof.
       dependent elimination step.
-      - dependent destruction s8; cbn in *; contradiction.
+      - dependent elimination s8; cbn in *; contradiction.
       - intuition. right. eexists. intuition.
       - intuition. left. eexists. intuition.
     Qed.
@@ -118,7 +119,7 @@ Module Inversion
       dependent elimination step.
       - intuition. right. eexists. intuition.
       - intuition. left. eexists. intuition.
-      - dependent destruction s13; cbn in *; try contradiction.
+      - dependent elimination s13; cbn in *; try contradiction.
     Qed.
 
     Lemma step_inversion_bind {Γ σ τ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
@@ -130,7 +131,7 @@ Module Inversion
       ).
     Proof.
       dependent elimination step.
-      - dependent destruction s17; cbn in *; try contradiction.
+      - dependent elimination s17; cbn in *; try contradiction.
       - intuition. right. eexists. intuition.
       - intuition. left. eexists. intuition.
     Qed.

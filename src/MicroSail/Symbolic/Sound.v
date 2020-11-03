@@ -76,24 +76,6 @@ Module Soundness
 
     Section WithSemantics.
 
-      Axiom sub_comp_id_left : forall {Σ0 Σ1} (ζ : Sub Σ0 Σ1), sub_comp (sub_id Σ0) ζ = ζ.
-      Axiom sub_comp_id_right : forall {Σ0 Σ1} (ζ : Sub Σ0 Σ1), sub_comp ζ (sub_id Σ1) = ζ.
-      Axiom subst_sub_id : forall `{Subst T} Σ (t : T Σ), subst (sub_id _) t = t.
-      Axiom subst_sub_comp : forall `{Subst T} Σ0 Σ1 Σ2 (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) t, subst (sub_comp ζ1 ζ2) t = subst ζ2 (subst ζ1 t).
-      Axiom sub_comp_assoc : forall {Σ0 Σ1 Σ2 Σ3} (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) (ζ3 : Sub Σ2 Σ3), sub_comp (sub_comp ζ1 ζ2) ζ3 = sub_comp ζ1 (sub_comp ζ2 ζ3).
-
-      Lemma sub_comp_wk1 {Σ0 Σ1 x τ} (ζ : Sub (Σ0 ▻ (x,τ)) Σ1) :
-        sub_comp sub_wk1 ζ = env_tail ζ.
-      Proof.
-        apply env_lookup_extensional.
-        intros [] ?.
-        unfold sub_comp, subst, SubstEnv, sub_wk1.
-        rewrite env_map_tabulate.
-        rewrite env_lookup_tabulate.
-        dependent elimination ζ.
-        now cbn.
-      Qed.
-
       Definition semiconcretize_heap {Σ} (ι : SymInstance Σ) (h : SymbolicHeap Σ) : SCHeap :=
         List.map (inst_chunk ι) h.
 
@@ -313,11 +295,11 @@ Module Soundness
           outcome_satisfy (d Σ1 ζ1 s1) POST ->
           outcome_satisfy (d Σ2 (subst ζ2 ζ1) (subst ζ2 s1)) (substpred ζ2 POST).
 
-      Lemma dmut_wf_pure {Γ A Σ} `{Subst A} (a : A Σ) :
+      Lemma dmut_wf_pure {Γ A Σ} {subA: Subst A} {sublA: SubstLaws A} (a : A Σ) :
         dmut_wf (dmut_pure (Γ := Γ) a).
       Proof.
         unfold dmut_wf, substpred; cbn; intros.
-        revert H0.
+        revert H.
         apply POST_mon.
         unfold dmutres_geq.
         exists ζ2; cbn.
@@ -506,8 +488,10 @@ Module Soundness
             intros.
             admit.
           + rewrite <- H0. clear.
-            unfold subst, sub_localstore.
+            unfold subst, subst_localstore, SubstEnv.
             rewrite env_map_map.
+            apply env_map_ext.
+            intros [] ?; cbn in *.
             admit.
           + revert H1; clear.
             unfold subst, SubstList.
@@ -633,7 +617,7 @@ Module Soundness
       Lemma subst_lookup {Γ Σ Σ' x σ} (xInΓ : (x ∶ σ)%ctx ∈ Γ) (ζ : Sub Σ Σ') (δ : SymbolicLocalStore Γ Σ) :
         (subst ζ (δ ‼ x)%exp = (subst ζ δ ‼ x)%exp).
       Proof.
-        unfold subst at 2, sub_localstore.
+        unfold subst at 2, subst_localstore, SubstEnv.
         now rewrite env_lookup_map.
       Qed.
 
