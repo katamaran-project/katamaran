@@ -82,12 +82,19 @@ Module Assertions
   Arguments asn_match_enum [_] _ _ _.
   Arguments asn_exist [_] _ _ _.
 
-  Global Instance sub_chunk : Subst Chunk :=
+  Instance sub_chunk : Subst Chunk :=
     fun Σ1 Σ2 ζ c =>
       match c with
-      | chunk_pred p ts => chunk_pred p (env_map (fun _ => sub_term ζ) ts)
-      | chunk_ptsreg r t => chunk_ptsreg r (sub_term ζ t)
+      | chunk_pred p ts => chunk_pred p (subst ζ ts)
+      | chunk_ptsreg r t => chunk_ptsreg r (subst ζ t)
       end.
+
+  Instance substlaws_chunk : SubstLaws Chunk.
+  Proof.
+    constructor.
+    { intros ? []; cbn; f_equal; apply subst_sub_id. }
+    { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
+  Qed.
 
   (* Fixpoint sub_assertion {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (a : Assertion Σ1) {struct a} : Assertion Σ2 := *)
   (*   match a with *)

@@ -92,11 +92,18 @@ Module Mutators
     Global Instance sub_formula : Subst Formula :=
       fun Σ1 Σ2 ζ fml =>
         match fml with
-        | formula_bool t    => formula_bool (sub_term ζ t)
-        | formula_prop ζ' P => formula_prop (sub_comp ζ' ζ) P
-        | formula_eq t1 t2  => formula_eq (sub_term ζ t1) (sub_term ζ t2)
-        | formula_neq t1 t2 => formula_neq (sub_term ζ t1) (sub_term ζ t2)
+        | formula_bool t    => formula_bool (subst ζ t)
+        | formula_prop ζ' P => formula_prop (subst ζ ζ') P
+        | formula_eq t1 t2  => formula_eq (subst ζ t1) (subst ζ t2)
+        | formula_neq t1 t2 => formula_neq (subst ζ t1) (subst ζ t2)
         end.
+
+    Global Instance substlaws_formula : SubstLaws Formula.
+    Proof.
+      constructor.
+      { intros ? []; cbn; f_equal; apply subst_sub_id. }
+      { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
+    Qed.
 
     Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
       list (Formula Σ).
@@ -125,8 +132,10 @@ Module Mutators
     | _   => outcome_pure (all_list valid_obligation os)
     end.
 
-  Global Instance sub_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
-    fun Σ1 Σ2 ζ => env_map (fun _ => sub_term ζ).
+  Instance subst_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
+    SubstEnv.
+  Instance substlaws_localstore {Γ} : SubstLaws (SymbolicLocalStore Γ) :=
+    SubstLawsEnv.
 
   Section SymbolicState.
 
@@ -145,9 +154,15 @@ Module Mutators
     Definition symbolicstate_initial {Γ Σ} (δ : SymbolicLocalStore Γ Σ) : SymbolicState Γ Σ :=
       MkSymbolicState nil δ nil.
 
-    Global Instance sub_symbolicstate {Γ} : Subst (SymbolicState Γ) :=
+    Global Instance subst_symbolicstate {Γ} : Subst (SymbolicState Γ) :=
       fun Σ1 Σ2 ζ '(MkSymbolicState Φ ŝ ĥ) =>
         MkSymbolicState (subst ζ Φ) (subst ζ ŝ) (subst ζ ĥ).
+    Global Instance substlaws_symbolicstate {Γ} : SubstLaws (SymbolicState Γ).
+    Proof.
+      constructor.
+      { intros ? []; cbn; f_equal; now rewrite subst_sub_id. }
+      { intros ? ? ? ? ? []; cbn; f_equal; now rewrite subst_sub_comp. }
+    Qed.
 
     Definition symbolic_assume_formula {Γ Σ} (fml : Formula Σ) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (fml :: Φ) ŝ ĥ.

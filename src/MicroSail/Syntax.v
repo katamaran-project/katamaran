@@ -1499,6 +1499,148 @@ Module Terms (Export termkit : TermKit).
              | inr i => term_var y
              end).
 
+    Class SubstLaws (T : NCtx 𝑺 Ty -> Type) `{Subst T} : Type :=
+      { subst_sub_id Σ (t : T Σ) :
+          subst (sub_id _) t = t;
+        subst_sub_comp Σ0 Σ1 Σ2 (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) t :
+          subst (sub_comp ζ1 ζ2) t = subst ζ2 (subst ζ1 t);
+      }.
+
+    Global Arguments SubstLaws T {_}.
+
+    Global Instance SubstLawsTerm {σ} : SubstLaws (fun Σ => Term Σ σ).
+    Proof.
+      constructor.
+      { intros ? t.
+        induction t; cbn; f_equal; try assumption.
+        - unfold sub_id.
+          now rewrite env_lookup_tabulate.
+        - induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply X.
+            * apply IHes, X.
+        - induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply X.
+            * apply IHes, X.
+        - induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply IHes, X.
+            * apply X.
+        - induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply IHes, X.
+            * apply X.
+      }
+      { intros ? ? ? ? ? t.
+        induction t; cbn; f_equal; try assumption.
+        - unfold sub_comp, subst at 1, SubstEnv.
+          now rewrite env_lookup_map.
+        - induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply X.
+            * apply IHes, X.
+        - induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply X.
+            * apply IHes, X.
+        - induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply IHes, X.
+            * apply X.
+        - induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply IHes, X.
+            * apply X.
+      }
+    Qed.
+
+    Global Instance SubstLawsPair {A B} `{SubstLaws A, SubstLaws B} : SubstLaws (fun Σ => A Σ * B Σ)%type.
+    Proof.
+      constructor.
+      { intros ? [t1 t2]; cbn.
+        f_equal; apply subst_sub_id.
+      }
+      { intros ? ? ? ? ? [t1 t2]; cbn.
+        f_equal; apply subst_sub_comp.
+      }
+    Qed.
+
+    Global Instance SubstLawsList {A} `{SubstLaws A} : SubstLaws (fun Σ => list (A Σ))%type.
+    Proof.
+      constructor.
+      { intros ? t.
+        induction t; cbn; f_equal; auto using subst_sub_id.
+      }
+      { intros ? ? ? ? ? t.
+        induction t; cbn; f_equal; auto using subst_sub_comp.
+      }
+    Qed.
+
+    Global Instance SubstLawsEnv {B : Set} {A : Ctx _ -> B -> Set}
+      `{forall b, Subst (fun Σ => A Σ b), forall b, SubstLaws (fun Σ => A Σ b)}
+      {Δ : Ctx B} :
+      SubstLaws (fun Σ => Env (A Σ) Δ).
+    Proof.
+      constructor.
+      { intros ? t.
+        induction t; cbn.
+        - reflexivity.
+        - f_equal.
+          + apply IHt.
+          + apply subst_sub_id.
+      }
+      { intros ? ? ? ? ? t.
+        induction t; cbn.
+        - reflexivity.
+        - f_equal.
+          + apply IHt.
+          + apply subst_sub_comp.
+      }
+    Qed.
+
+    Lemma sub_comp_id_left {Σ0 Σ1} (ζ : Sub Σ0 Σ1) :
+      sub_comp (sub_id Σ0) ζ = ζ.
+    Proof.
+      unfold sub_comp, subst, SubstEnv, sub_id.
+      apply env_lookup_extensional; cbn.
+      intros [] ?.
+      now rewrite env_lookup_map, env_lookup_tabulate.
+    Qed.
+
+    Lemma sub_comp_id_right {Σ0 Σ1} (ζ : Sub Σ0 Σ1) :
+      sub_comp ζ (sub_id Σ1) = ζ.
+    Proof.
+      apply subst_sub_id.
+    Qed.
+
+    Lemma sub_comp_assoc {Σ0 Σ1 Σ2 Σ3} (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) (ζ3 : Sub Σ2 Σ3) :
+      sub_comp (sub_comp ζ1 ζ2) ζ3 = sub_comp ζ1 (sub_comp ζ2 ζ3).
+    Proof.
+      unfold sub_comp at 1, sub_comp at 2.
+      rewrite subst_sub_comp. reflexivity.
+    Qed.
+
+    Lemma sub_comp_wk1 {Σ0 Σ1 x τ} (ζ : Sub (Σ0 ▻ (x,τ)) Σ1) :
+      sub_comp sub_wk1 ζ = env_tail ζ.
+    Proof.
+      apply env_lookup_extensional.
+      intros [] ?.
+      unfold sub_comp, subst, SubstEnv, sub_wk1.
+      rewrite env_map_tabulate.
+      rewrite env_lookup_tabulate.
+      dependent elimination ζ.
+      now cbn.
+    Qed.
+
   End SymbolicSubstitutions.
 
   Section SymbolicLocalStore.
