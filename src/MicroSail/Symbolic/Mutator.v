@@ -601,7 +601,10 @@ Module Mutators
       match asn with
       | asn_bool b      => mutator_assume_term (sub_term ζ b)
       | asn_prop P      => mutator_assume_formula (formula_prop ζ P)
-      | asn_eq t1 t2    => mutator_assume_term (sub_term ζ (term_lit ty_bool (Term_eqb t1 t2))) 
+      | asn_eq t1 t2    => if Term_eqb t1 t2 then
+                             mutator_assume_term (term_lit ty_bool true)
+                           else 
+                             mutator_fail "Err [mutator_produce]: case [asn_eq] terms are not equal"
       | asn_chunk c     => mutator_produce_chunk (sub_chunk ζ c)
       | asn_if b a1 a2  => (mutator_assume_term (sub_term ζ b)            *> mutator_produce ζ a1) ⊗
                            (mutator_assume_term (sub_term ζ (term_not b)) *> mutator_produce ζ a2)
@@ -687,7 +690,7 @@ Module Mutators
       match asn with
       | asn_bool b      => mutator_assert_term (sub_term ζ b)
       | asn_prop P      => mutator_assert_formula (formula_prop ζ P)
-      | asn_eq t1 t2    => mutator_assert_term (sub_term ζ (term_lit ty_bool (Term_eqb t1 t2))) 
+      | asn_eq t1 t2    => mutator_assert_term (term_lit ty_bool (Term_eqb t1 t2))
       | asn_chunk c     => mutator_consume_chunk (sub_chunk ζ c)
       | asn_if b a1 a2  => (mutator_assume_term (sub_term ζ b)            *> mutator_consume ζ a1) ⊗
                            (mutator_assume_term (sub_term ζ (term_not b)) *> mutator_consume ζ a2)
@@ -1225,7 +1228,10 @@ Module Mutators
       match asn with
       | asn_bool b      => dmut_assume_term b
       | asn_prop P      => dmut_assume_prop P
-      | asn_eq t1 t2    => dmut_assume_term (term_lit ty_bool (Term_eqb t1 t2))
+      | asn_eq t1 t2    => if Term_eqb t1 t2 then
+                             dmut_pure tt
+                           else 
+                             dmut_fail "Err [dmut_produce]: case [asn_eq] terms are not equal"
       | asn_chunk c     => dmut_produce_chunk c
       | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
                            (dmut_assume_term (term_not b) ;; dmut_produce a2)
