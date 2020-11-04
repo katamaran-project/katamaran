@@ -67,45 +67,58 @@ Module Soundness
   Module SCMUT := SemiConcrete.Sound.Soundness termkit progkit assertkit contractkit.
   Import SCMUT.MUT.
 
-  Program Instance proper_sub_comp {Σ1 Σ2 Σ3} : Proper (eq ==> eq ==> eq) (@sub_comp Σ1 Σ2 Σ3).
-  Admit Obligations.
-
   Module DynMutV1Soundness.
 
     Import DynMutV1.
 
     Section WithSemantics.
 
-      Definition semiconcretize_heap {Σ} (ι : SymInstance Σ) (h : SymbolicHeap Σ) : SCHeap :=
-        List.map (inst_chunk ι) h.
+      Global Instance inst_heap : Inst SymbolicHeap SCHeap :=
+        instantiate_list.
+      Global Instance instlaws_heap : InstLaws SymbolicHeap SCHeap.
+      Proof. apply instantiatelaws_list. Qed.
 
       Definition represents {Γ Σ} (ι : SymInstance Σ) (s__sym : SymbolicState Γ Σ) (s__sc : SCState Γ) : Prop :=
-        semiconcretize_heap ι (symbolicstate_heap s__sym)       = scstate_heap s__sc /\
+        inst                ι (symbolicstate_heap s__sym)       = scstate_heap s__sc /\
         inst                ι (symbolicstate_localstore s__sym) = scstate_localstore s__sc /\
         inst_pathcondition  ι (symbolicstate_pathcondition s__sym).
 
       Definition syminstance_rel {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (ι1 : SymInstance Σ1) (ι2 : SymInstance Σ2) : Prop :=
-        ι1 = inst ι2 ζ.
+        inst ι2 ζ = ι1.
 
       Lemma syminstance_rel_refl {Σ} (ι : SymInstance Σ) :
         syminstance_rel (sub_id Σ) ι ι.
-      Proof.
-        unfold SymInstance, NamedEnv, syminstance_rel, sub_id in *; cbn.
-        apply env_lookup_extensional.
-        intros [x τ] ?.
-        now rewrite env_map_tabulate, env_lookup_tabulate.
-      Qed.
+      Proof. apply inst_sub_id. Qed.
 
       Lemma syminstance_rel_snoc {Σ1 Σ2 x τ} (ζ : Sub Σ1 Σ2) (ι1 : SymInstance Σ1) ι2 :
         forall v,
           syminstance_rel ζ ι1 ι2 <->
           syminstance_rel (env_snoc ζ (x,τ) (term_lit τ v)) (env_snoc ι1 (x,τ) v) ι2.
       Proof.
-        unfold SymInstance, Sub, NamedEnv, syminstance_rel in *. intros. split.
+        unfold syminstance_rel. intros. split.
         - cbn; intros; subst; now cbn.
         - cbn; intros.
           now dependent elimination H.
       Qed.
+
+      Local Opaque instantiate_env.
+      Local Opaque instantiate_list.
+      Local Opaque inst.
+
+      Lemma inst_subst_formula {Σ1 Σ2} (ι : SymInstance Σ2) (ζ : Sub Σ1 Σ2) (fml : Formula Σ1) :
+        inst_formula (inst ι ζ) fml <-> inst_formula ι (subst ζ fml).
+      Proof. destruct fml; cbn; now rewrite !inst_subst. Qed.
+
+      Lemma inst_subst_pathcondition {Σ1 Σ2} (ι : SymInstance Σ2) (ζ : Sub Σ1 Σ2) (pc : PathCondition Σ1) :
+        inst_pathcondition (inst ι ζ) pc <-> inst_pathcondition ι (subst ζ pc).
+      Proof.
+        induction pc; cbn.
+        - reflexivity.
+        - rewrite inst_subst_formula.
+          apply and_iff_compat_l, IHpc.
+      Qed.
+
+      Local Opaque inst_pathcondition.
 
       Lemma represents_rel {Γ Σ} (ι : SymInstance Σ) (s__sym : SymbolicState Γ Σ) (s__sc : SCState Γ) :
         forall Σ1 (ζ : Sub Σ Σ1) (ι2 : SymInstance Σ1),
@@ -113,7 +126,11 @@ Module Soundness
           represents ι s__sym s__sc ->
           represents ι2 (subst ζ s__sym) s__sc.
       Proof.
-      Admitted.
+        unfold syminstance_rel, represents.
+        destruct s__sym as [pc δ__sym h__sym], s__sc as [δ__sc h__sc]; cbn.
+        intros ? ? ? <-.
+        now rewrite !inst_subst, inst_subst_pathcondition.
+      Qed.
 
       Definition scmut_wp {Γ1 Γ2 A}
         (m : SCMut Γ1 Γ2 A)
@@ -188,7 +205,7 @@ Module Soundness
         approximates
           (Γ1 := Γ) (Γ2 := Γ) ι
           (dmut_produce_chunk c)
-          (scmut_produce_chunk (inst_chunk ι c)).
+          (scmut_produce_chunk (inst ι c)).
       Proof.
         intros [pc δ__sym h__sym] [δ__sc h__sc] ? (H__h & H__δ & H__pc); cbn in *.
         intros; destruct_conjs.
@@ -197,8 +214,10 @@ Module Soundness
         rewrite sub_comp_id_left.
         apply syminstance_rel_refl.
         unfold represents; cbn.
-        now rewrite ?subst_sub_id, H__h.
+        subst; now rewrite ?subst_sub_id.
       Qed.
+
+      Local Transparent inst_pathcondition.
 
       Lemma dmut_assume_term_sound {Γ Σ} (ι : SymInstance Σ) (b : Term Σ ty_bool) :
         approximates
@@ -220,14 +239,14 @@ Module Soundness
             rewrite sub_comp_id_left.
             apply syminstance_rel_refl.
             assumption.
-          + cbn in n. destruct (inst_term ι b); intuition.
+          + cbn in n. destruct (inst ι b); intuition.
         - clear Heqo.
-          destruct (inst_term ι b) eqn:?; cbn.
+          destruct (inst ι b) eqn:?; cbn.
           * cbn in *. destruct H as [H _].
             apply (H ι).
             rewrite sub_comp_id_left.
             apply syminstance_rel_refl.
-            revert H__state Heql. clear.
+            revert H__state Heqy. clear.
             unfold represents; destruct s__sym;
               cbn; intuition.
           * trivial.
@@ -430,6 +449,7 @@ Module Soundness
       (*     rewrite outcome_satisfy_map in HYP. *)
       (* Admitted. *)
 
+      Local Opaque inst_pathcondition.
 
       Lemma dmut_fresh_sound {Γ Σ ς τ} (ι : SymInstance Σ)
             (dm : DynamicMutator Γ Γ Unit (Σ ▻ (ς,τ))) (wfdm : dmut_wf dm)
@@ -447,26 +467,9 @@ Module Soundness
         - revert H__state. clear.
           destruct s__sym, s__sc; unfold represents; cbn.
           intros; destruct_conjs; repeat split.
-          + rewrite <- H. clear.
-            unfold subst, SubstList.
-            rewrite List.map_map.
-            apply List.map_ext.
-            intros.
-            admit.
-          + rewrite <- H0. clear.
-            unfold subst, subst_localstore, SubstEnv.
-            rewrite env_map_map.
-            apply env_map_ext.
-            intros [] ?; cbn in *.
-            admit.
-          + revert H1; clear.
-            unfold subst, SubstList.
-            match goal with
-            | |- context[List.map ?f ?l] =>
-              change (List.map f l) with (base.fmap f l)
-            end.
-            rewrite list.foldr_fmap.
-            admit.
+          + now rewrite inst_subst, inst_sub_wk1.
+          + now rewrite inst_subst, inst_sub_wk1.
+          + now rewrite <- inst_subst_pathcondition, inst_sub_wk1.
         - (* unfold dmut_wp, dmut_fresh in *. *)
           (* intros ? ?. *)
           (* dependent elimination ζ1 as [@env_snoc Σ ζ1 _ v]. cbn in v. *)
@@ -516,7 +519,7 @@ Module Soundness
 
       Context `{HL: IHeaplet L} {SLL: ISepLogicLaws L}.
 
-      Definition inst_heap {Σ} (ι : SymInstance Σ) (h : SymbolicHeap Σ) : L :=
+      Definition interpret_heap {Σ} (ι : SymInstance Σ) (h : SymbolicHeap Σ) : L :=
         List.fold_right (fun c h => ASS.inst_chunk ι c ∧ h) ltrue h.
 
       (*   Definition rhoI {Γ Σ0} (ι0 : SymInstance Σ0) (s__sym : SymbolicState Γ Σ0) : *)
@@ -592,11 +595,14 @@ Module Soundness
         all: induction es; cbn in *; destruct_conjs; f_equal; auto.
       Qed.
 
+      Transparent inst.
+      Transparent instantiate_env.
+
       Lemma eval_exp_inst {Γ Σ τ} (ι : SymInstance Σ) (δΓΣ : SymbolicLocalStore Γ Σ) (e : Exp Γ τ) :
         eval e (inst ι δΓΣ) = inst ι (symbolic_eval_exp δΓΣ e).
       Proof.
         induction e; cbn; repeat f_equal; auto.
-        { unfold inst_localstore; now rewrite env_lookup_map. }
+        { now rewrite env_lookup_map. }
         2: {
           induction es as [|eb n es IHes]; cbn in *.
           { reflexivity. }
@@ -620,18 +626,18 @@ Module Soundness
         forall Σ0 Σ1  (ι : SymInstance Σ1) (ζ1 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SymbolicLocalStore Γ Σ1) (h1 : SymbolicHeap Σ1),
           let δ       := inst ι δ1 in
           let pre__pc   := inst_pathcondition ι pc1 in
-          let pre__heap := inst_heap ι h1 in
+          let pre__heap := interpret_heap ι h1 in
           outcome_satisfy
             (dmut_exec s ζ1 (MkSymbolicState pc1 δ1 h1))
             (fun '(@MkDynMutResult _ _ _ Σ2 ζ2 (MkMutResult t (MkSymbolicState pc2 δ2 h2) x)) =>
                forall (ι' : SymInstance Σ2),
                  ι = env_map (fun _ => inst_term ι') ζ2 ->
                  let post__pc   := inst_pathcondition ι' pc2 in
-                 let post__heap := inst_heap ι' h2 in
+                 let post__heap := interpret_heap ι' h2 in
                  !! post__pc ∧ post__heap ⊢ POST (inst ι' t) (inst ι' δ2)) ->
           pre__pc ->
           outcome_satisfy
-            (scmut_exec s (MkSCState δ (semiconcretize_heap ι h1)))
+            (scmut_exec s (MkSCState δ (inst ι h1)))
             (fun '(MkSCMutResult v2 (MkSCState δ2 h2)) =>
                SCMUT.inst_scheap h2 ⊢ POST v2 δ2).
       Proof.

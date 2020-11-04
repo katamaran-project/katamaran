@@ -179,6 +179,8 @@ Module Soundness
           apply entails_refl.
     Qed.
 
+    Local Opaque instantiate_term.
+
     Lemma scmut_produce_sound {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
         (scmut_produce ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
@@ -187,7 +189,7 @@ Module Soundness
     Proof.
       revert ι δ1 h1 POST. induction asn; cbn; intros ι δ1 h1 POST HYP.
       - unfold scmut_assume_term in HYP.
-        destruct (inst_term ι b); cbn in *.
+        destruct (inst ι b); cbn in *.
         + rewrite <- (sepcon_emp (POST _)).
           apply sepcon_entails.
           apply HYP.
@@ -197,8 +199,8 @@ Module Soundness
           apply lfalse_left.
       - contradict HYP.
       - rewrite sepcon_comm.
-        now destruct c.
-      - destruct (inst_term ι b); auto.
+        destruct c; now cbn in *.
+      - destruct (inst ι b); auto.
       - auto.
       - unfold scmut_bind_right, scmut_bind in HYP.
         rewrite outcome_satisfy_bind in HYP.

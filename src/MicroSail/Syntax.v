@@ -1127,10 +1127,11 @@ Module Terms (Export termkit : TermKit).
       | term_bvec es         => Vector.t_rect
                                  _ (fun m (_ : Vector.t (Term Σ ty_bit) m) => Word.word m)
                                  Word.WO (fun eb m _ (vs : Word.word m) =>
-                                            match inst_term ι eb with
-                                            | bitzero => Word.WS false vs
-                                            | bitone => Word.WS true vs
-                                            end)
+                                            Word.WS
+                                              (match inst_term ι eb with
+                                               | bitzero => false
+                                               | bitone => true
+                                               end) vs)
                                  _ es
       | term_tuple es        => Env_rect
                                   (fun σs _ => Lit (ty_tuple σs))
@@ -1658,10 +1659,23 @@ Module Terms (Export termkit : TermKit).
       {| inst Σ ι t := inst_term ι t;
          lift Σ l   := term_lit σ l;
       |}.
-    Global Instance instantiate_sub {Σ} : Inst (Sub Σ) (SymInstance Σ) :=
-      {| inst Σ ι ζ := env_map (fun (b : 𝑺 * Ty) (t : Term _ (snd b)) => inst ι t) ζ;
-         lift Σ ι   := env_map (fun (b : 𝑺 * Ty) (l : Lit (snd b))    => lift l) ι;
+
+    Global Instance instantiate_list {T : NCtx 𝑺 Ty -> Set} {A : Set} `{Inst T A} :
+      Inst (fun Σ => list (T Σ)) (list A) :=
+      {| inst Σ ι := List.map (inst ι);
+         lift Σ   := List.map lift;
       |}.
+
+    Global Instance instantiate_env {T : Set} {S : NCtx 𝑺 Ty -> T -> Set}
+           {A : T -> Set} {_ : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)}
+           {Γ : Ctx T} :
+      Inst (fun Σ => Env (S Σ) Γ) (Env A Γ) :=
+      {| inst Σ ι := env_map (fun (b : T) (s : S Σ b) => inst ι s);
+         lift Σ   := env_map (fun (b : T) (a : A b) => lift a)
+      |}.
+
+    Global Instance instantiate_sub {Σ} : Inst (Sub Σ) (SymInstance Σ) :=
+      instantiate_env.
 
     Class InstLaws (T : NCtx 𝑺 Ty -> Type) (A : Type) `{SubstLaws T, Inst T A} : Prop :=
       { inst_lift {Σ} (ι : SymInstance Σ) (a : A) :
@@ -1683,7 +1697,12 @@ Module Terms (Export termkit : TermKit).
           + f_equal.
             * apply X.
             * apply IHes, X.
-        - admit.
+        - induction es; cbn in *.
+          + reflexivity.
+          + change (sub_term ζ h) with (subst ζ h).
+            f_equal.
+            * now destruct X as [->].
+            * apply IHes, X.
         - induction es; cbn in *.
           + reflexivity.
           + f_equal.
@@ -1701,23 +1720,64 @@ Module Terms (Export termkit : TermKit).
         - f_equal.
           f_equal.
           apply IHt.
-    Admitted.
+      }
+    Qed.
 
-    Global Instance instantiatelaws_sub {Σ} : InstLaws (Sub Σ) (SymInstance Σ).
+    Global Instance instantiatelaws_list {T : NCtx 𝑺 Ty -> Set} {A : Set} `{InstLaws T A} :
+      InstLaws (fun Σ => list (T Σ)) (list A).
+    Proof.
+      constructor.
+      { intros; cbn.
+        rewrite List.map_map, <- List.map_id.
+        apply List.map_ext, inst_lift.
+      }
+      { intros ? ? ζ ι xs; cbn.
+        unfold subst, SubstList.
+        rewrite List.map_map.
+        apply List.map_ext, inst_subst.
+      }
+    Qed.
+
+    Global Instance instantiatelaws_env {T : Set} {S : NCtx 𝑺 Ty -> T -> Set} {A : T -> Set}
+           {_ : forall τ : T, Subst (fun Σ => S Σ τ)}
+           {_ : forall τ : T, SubstLaws (fun Σ => S Σ τ)}
+           {_ : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)}
+           {_ : forall τ : T, InstLaws (fun Σ => S Σ τ) (A τ)}
+           {Γ : Ctx T} :
+      InstLaws (fun Σ => Env (S Σ) Γ) (Env A Γ).
     Proof.
       constructor.
       { intros; cbn.
         rewrite env_map_map.
-        apply env_map_id.
+        apply env_map_id_eq.
+        intros; apply inst_lift.
       }
-      { intros ? ? ζ' ι ζ; cbn.
+      { intros ? ? ζ ι E; cbn.
         unfold subst, SubstEnv.
         rewrite env_map_map.
         apply env_map_ext.
-        intros [𝑺 σ] t.
-        change (inst_term ι (subst ζ' t)) with (inst ι (subst ζ' t)).
+        intros b s.
         now rewrite inst_subst.
       }
+    Qed.
+
+    Global Instance instantiatelaws_sub {Σ} : InstLaws (Sub Σ) (SymInstance Σ).
+    Proof. apply instantiatelaws_env. Qed.
+
+    Lemma inst_sub_wk1 {Σ ς τ v} (ι : SymInstance Σ) :
+      inst (ι ► (ς∶τ ↦ v)) sub_wk1 = ι.
+    Proof.
+      apply env_lookup_extensional.
+      intros [x σ] ?; unfold sub_wk1; cbn.
+      now rewrite env_map_tabulate, env_lookup_tabulate.
+    Qed.
+    
+    Lemma inst_sub_id {Σ} (ι : SymInstance Σ) :
+      inst ι (sub_id Σ) = ι.
+    Proof.
+      apply env_lookup_extensional.
+      intros [x τ] ?; unfold sub_id; cbn.
+      now rewrite env_map_tabulate, env_lookup_tabulate.
     Qed.
 
   End Instantiation.
@@ -1728,23 +1788,10 @@ Module Terms (Export termkit : TermKit).
       NamedEnv (Term Σ) Γ.
 
     Global Program Instance inst_localstore {Γ} : Inst (SymbolicLocalStore Γ) (LocalStore Γ) :=
-      {| inst Σ ι δΣ := env_map (fun (b : 𝑿 * Ty) (t : Term Σ (snd b)) => inst ι t) δΣ;
-         lift Σ δ    := env_map (fun (b : 𝑿 * Ty) (l : Lit (snd b)) => lift l) δ;
-      |}.
+      instantiate_env.
 
     Global Instance instlaws_localstore {Γ} : InstLaws (SymbolicLocalStore Γ) (LocalStore Γ).
-    Proof.
-      constructor.
-      { intros; cbn; rewrite env_map_map; apply env_map_id. }
-      { intros ? ? ζ ι δ; cbn.
-        unfold subst, SubstEnv.
-        rewrite env_map_map.
-        apply env_map_ext.
-        intros [𝑺 σ] t.
-        change (inst_term ι (subst ζ t)) with (inst ι (subst ζ t)).
-        now rewrite inst_subst.
-      }
-    Qed.
+    Proof. apply instantiatelaws_env. Qed.
 
   End SymbolicLocalStore.
   Bind Scope env_scope with SymbolicLocalStore.

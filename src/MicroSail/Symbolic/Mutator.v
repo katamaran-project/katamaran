@@ -83,10 +83,10 @@ Module Mutators
 
     Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
       match fml with
-      | formula_bool t    => is_true (inst_term ι t)
-      | formula_prop ζ P  => uncurry_named P (env_map (fun _ => inst_term ι) ζ)
-      | formula_eq t1 t2  => inst_term ι t1 =  inst_term ι t2
-      | formula_neq t1 t2 => inst_term ι t1 <> inst_term ι t2
+      | formula_bool t    => is_true (inst (A := Lit ty_bool) ι t)
+      | formula_prop ζ P  => uncurry_named P (inst ι ζ)
+      | formula_eq t1 t2  => inst ι t1 =  inst ι t2
+      | formula_neq t1 t2 => inst ι t1 <> inst ι t2
       end.
 
     Global Instance sub_formula : Subst Formula :=
