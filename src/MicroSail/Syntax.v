@@ -1482,12 +1482,12 @@ Module Terms (Export termkit : TermKit).
     Definition sub_comp {Σ1 Σ2 Σ3} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) : Sub Σ1 Σ3 :=
       subst ζ2 ζ1.
 
-    Definition wk1_term {Σ σ b} (t : Term Σ σ) : Term (Σ ▻ b) σ :=
+    Definition wk1 {Σ b} `{Subst T} (t : T Σ) : T (Σ ▻ b) :=
       subst sub_wk1 t.
 
     Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b : 𝑺 * Ty} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
       let '(ς , σ) := b in
-      env_snoc (subst sub_wk1 ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
+      env_snoc (wk1 ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
 
     Definition sub_single {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) : Sub Σ (Σ - (x,σ)) :=
       @env_tabulate
@@ -1643,23 +1643,107 @@ Module Terms (Export termkit : TermKit).
 
   End SymbolicSubstitutions.
 
+  Section Instantiation.
+
+    (* This type class connects a symbolic representation of a type with its
+       concrete / semi-concrete counterpart. The method 'inst' will instantiate
+       all logic variables in a symbolic value to obtain the concrete value and
+       'lift' injects the concrete type into the symbolic one. *)
+    Class Inst (T : NCtx 𝑺 Ty -> Type) (A : Type) : Type :=
+      { inst {Σ} (ι : SymInstance Σ) (t : T Σ) : A;
+        lift {Σ} (a : A) : T Σ;
+      }.
+
+    Global Instance instantiate_term {σ} : Inst (fun Σ => Term Σ σ) (Lit σ) :=
+      {| inst Σ ι t := inst_term ι t;
+         lift Σ l   := term_lit σ l;
+      |}.
+    Global Instance instantiate_sub {Σ} : Inst (Sub Σ) (SymInstance Σ) :=
+      {| inst Σ ι ζ := env_map (fun (b : 𝑺 * Ty) (t : Term _ (snd b)) => inst ι t) ζ;
+         lift Σ ι   := env_map (fun (b : 𝑺 * Ty) (l : Lit (snd b))    => lift l) ι;
+      |}.
+
+    Class InstLaws (T : NCtx 𝑺 Ty -> Type) (A : Type) `{SubstLaws T, Inst T A} : Prop :=
+      { inst_lift {Σ} (ι : SymInstance Σ) (a : A) :
+          inst ι (lift a) = a;
+        inst_subst {Σ Σ'} (ζ : Sub Σ Σ') (ι : SymInstance Σ') (t : T Σ) :
+          inst ι (subst ζ t) = inst (inst ι ζ) t
+      }.
+
+    Global Arguments InstLaws T A {_ _ _}.
+
+    Global Instance instantiatelaws_term {σ} : InstLaws (fun Σ => Term Σ σ) (Lit σ).
+    Proof.
+      constructor.
+      { reflexivity. }
+      { induction t; cbn; try (f_equal; auto; fail).
+        - now rewrite env_lookup_map.
+        - induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply X.
+            * apply IHes, X.
+        - admit.
+        - induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply IHes, X.
+            * apply X.
+        - f_equal.
+          f_equal.
+          apply IHt.
+        - f_equal.
+          induction es; cbn in *.
+          + reflexivity.
+          + f_equal.
+            * apply IHes, X.
+            * apply X.
+        - f_equal.
+          f_equal.
+          apply IHt.
+    Admitted.
+
+    Global Instance instantiatelaws_sub {Σ} : InstLaws (Sub Σ) (SymInstance Σ).
+    Proof.
+      constructor.
+      { intros; cbn.
+        rewrite env_map_map.
+        apply env_map_id.
+      }
+      { intros ? ? ζ' ι ζ; cbn.
+        unfold subst, SubstEnv.
+        rewrite env_map_map.
+        apply env_map_ext.
+        intros [𝑺 σ] t.
+        change (inst_term ι (subst ζ' t)) with (inst ι (subst ζ' t)).
+        now rewrite inst_subst.
+      }
+    Qed.
+
+  End Instantiation.
+
   Section SymbolicLocalStore.
 
     Definition SymbolicLocalStore (Γ : NCtx 𝑿 Ty) (Σ : Ctx (𝑺 * Ty)) : Type :=
       NamedEnv (Term Σ) Γ.
 
-    Definition lift_localstore {Γ Σ} : LocalStore Γ -> SymbolicLocalStore Γ Σ :=
-      env_map (fun _ => term_lit _).
-    Definition inst_localstore {Γ Σ}
-      (ι : SymInstance Σ) (δ : SymbolicLocalStore Γ Σ) : LocalStore Γ :=
-      env_map (fun _ => inst_term ι) δ.
+    Global Program Instance inst_localstore {Γ} : Inst (SymbolicLocalStore Γ) (LocalStore Γ) :=
+      {| inst Σ ι δΣ := env_map (fun (b : 𝑿 * Ty) (t : Term Σ (snd b)) => inst ι t) δΣ;
+         lift Σ δ    := env_map (fun (b : 𝑿 * Ty) (l : Lit (snd b)) => lift l) δ;
+      |}.
 
-    Lemma inst_lift_localstore {Γ Σ} (ι : SymInstance Σ) (δ : LocalStore Γ) :
-      inst_localstore ι (lift_localstore δ) = δ.
+    Global Instance instlaws_localstore {Γ} : InstLaws (SymbolicLocalStore Γ) (LocalStore Γ).
     Proof.
-      induction δ; cbn.
-      - reflexivity.
-      - f_equal. apply IHδ.
+      constructor.
+      { intros; cbn; rewrite env_map_map; apply env_map_id. }
+      { intros ? ? ζ ι δ; cbn.
+        unfold subst, SubstEnv.
+        rewrite env_map_map.
+        apply env_map_ext.
+        intros [𝑺 σ] t.
+        change (inst_term ι (subst ζ t)) with (inst ι (subst ζ t)).
+        now rewrite inst_subst.
+      }
     Qed.
 
   End SymbolicLocalStore.

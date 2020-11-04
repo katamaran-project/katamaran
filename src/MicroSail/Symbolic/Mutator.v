@@ -756,7 +756,7 @@ Module Mutators
         mutator_exec k              <*
         mutator_pop_local
       | stm_block δ k =>
-        mutator_pushs_local (lift_localstore δ) *>
+        mutator_pushs_local (lift δ) *>
         mutator_exec k <*
         mutator_pops_local _
       | stm_assign x e => mutator_exec e >>= fun v =>
@@ -766,7 +766,7 @@ Module Mutators
       | stm_call_external f es => mutator_fail "Err [mutator_exec]: stm_call not supported"
       | stm_call_frame δ' s =>
         δ <- mutator_get_local ;;
-        mutator_put_local (lift_localstore δ') ;;
+        mutator_put_local (lift δ') ;;
         t <- mutator_exec s ;;
         mutator_put_local δ ;;
         mutator_pure t
@@ -1291,7 +1291,7 @@ Module Mutators
         dmut_pop_local ;;
         dmut_pure t2
       | stm_block δ s =>
-        dmut_pushs_local (lift_localstore δ) ;;
+        dmut_pushs_local (lift δ) ;;
         t <- dmut_exec s ;;
         dmut_pops_local _ ;;
         dmut_pure t
@@ -1308,7 +1308,7 @@ Module Mutators
         end
       | stm_call_frame δ s =>
         δr <- dmut_get_local ;;
-        dmut_put_local (lift_localstore δ) ;;
+        dmut_put_local (lift δ) ;;
         dmut_bind_left (dmut_exec s) (dmut_put_local δr)
       | stm_call_external f es =>
         ts <- dmut_eval_exps es ;;
@@ -1491,7 +1491,7 @@ Module Mutators
         dmut_pop_local ;;
         dmut_pure t2
       | stm_block δ s =>
-        dmut_pushs_local (lift_localstore δ) ;;
+        dmut_pushs_local (lift δ) ;;
         t <- dmut_exec_evar s ;;
         dmut_pops_local _ ;;
         dmut_pure t
@@ -1508,7 +1508,7 @@ Module Mutators
         end
       | stm_call_frame δ s =>
         δr <- dmut_get_local ;;
-        dmut_put_local (lift_localstore δ) ;;
+        dmut_put_local (lift δ) ;;
         dmut_bind_left (dmut_exec_evar s) (dmut_put_local δr)
       | stm_call_external f es =>
         ts <- dmut_eval_exps es ;;

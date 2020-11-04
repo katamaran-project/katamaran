@@ -77,7 +77,7 @@ Module ProgramLogic
         (Σ  : Ctx (𝑺 * Ty)) (θΔ : SymbolicLocalStore Δ Σ) (ι : SymInstance Σ)
         (req : Assertion Σ) (ens : Assertion (Σ ▻ (result , σ)))
         (frame : L) :
-        δΔ = inst_localstore ι θΔ ->
+        δΔ = inst ι θΔ ->
         pre ⊢ frame ✱ inst_assertion ι req ->
         (forall v, frame ✱ inst_assertion (env_snoc ι (result , σ) v) ens ⊢ post v) ->
         CTriple δΔ pre post (MkSepContract _ _ _ θΔ req result ens).

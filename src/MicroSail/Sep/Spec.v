@@ -217,7 +217,7 @@ Module Assertions
 
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) : LocalStore Δ :=
-      inst_localstore ι (sep_contract_localstore c).
+      inst ι (sep_contract_localstore c).
 
     Definition inst_contract_precondition {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) : L :=

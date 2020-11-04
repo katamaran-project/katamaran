@@ -81,16 +81,16 @@ Module Soundness
 
       Definition represents {Γ Σ} (ι : SymInstance Σ) (s__sym : SymbolicState Γ Σ) (s__sc : SCState Γ) : Prop :=
         semiconcretize_heap ι (symbolicstate_heap s__sym)       = scstate_heap s__sc /\
-        inst_localstore     ι (symbolicstate_localstore s__sym) = scstate_localstore s__sc /\
+        inst                ι (symbolicstate_localstore s__sym) = scstate_localstore s__sc /\
         inst_pathcondition  ι (symbolicstate_pathcondition s__sym).
 
       Definition syminstance_rel {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (ι1 : SymInstance Σ1) (ι2 : SymInstance Σ2) : Prop :=
-        ι1 = env_map (fun _ => inst_term ι2) ζ.
+        ι1 = inst ι2 ζ.
 
       Lemma syminstance_rel_refl {Σ} (ι : SymInstance Σ) :
         syminstance_rel (sub_id Σ) ι ι.
       Proof.
-        unfold SymInstance, NamedEnv, syminstance_rel, sub_id in *.
+        unfold SymInstance, NamedEnv, syminstance_rel, sub_id in *; cbn.
         apply env_lookup_extensional.
         intros [x τ] ?.
         now rewrite env_map_tabulate, env_lookup_tabulate.
@@ -327,15 +327,13 @@ Module Soundness
           2: {
             cbn.
             f_equal.
-            unfold subst at 2.
-            unfold SubstEnv.
-            rewrite env_map_map.
-            symmetry.
-            apply env_map_id_eq.
-            intros [] ?.
+            change (Env (fun b : 𝑺 * Ty => Term Σ1 (snd b)) Σ0) with (Sub Σ0 Σ1) in ζ1.
+            change
+              (env_map (fun (b : 𝑺 * Ty) (a : Term (Σ1 ▻ x∶τ) (snd b)) => subst (Subst := SubstTerm) (sub_id Σ1 ► (x∶τ ↦ v)) a) (wk1 ζ1)) with
+                (subst (sub_id Σ1 ► (x∶τ ↦ v)) (wk1 ζ1)).
+            unfold wk1.
             rewrite <- subst_sub_comp.
-            rewrite sub_comp_wk1.
-            cbn.
+            rewrite sub_comp_wk1. cbn.
             now rewrite subst_sub_id.
           }
           match goal with
@@ -595,7 +593,7 @@ Module Soundness
       Qed.
 
       Lemma eval_exp_inst {Γ Σ τ} (ι : SymInstance Σ) (δΓΣ : SymbolicLocalStore Γ Σ) (e : Exp Γ τ) :
-        eval e (inst_localstore ι δΓΣ) = inst_term ι (symbolic_eval_exp δΓΣ e).
+        eval e (inst ι δΓΣ) = inst ι (symbolic_eval_exp δΓΣ e).
       Proof.
         induction e; cbn; repeat f_equal; auto.
         { unfold inst_localstore; now rewrite env_lookup_map. }
@@ -620,7 +618,7 @@ Module Soundness
 
       Lemma dmut_exec_sound {Γ σ} (POST : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
         forall Σ0 Σ1  (ι : SymInstance Σ1) (ζ1 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SymbolicLocalStore Γ Σ1) (h1 : SymbolicHeap Σ1),
-          let δ       := inst_localstore ι δ1 in
+          let δ       := inst ι δ1 in
           let pre__pc   := inst_pathcondition ι pc1 in
           let pre__heap := inst_heap ι h1 in
           outcome_satisfy
@@ -630,7 +628,7 @@ Module Soundness
                  ι = env_map (fun _ => inst_term ι') ζ2 ->
                  let post__pc   := inst_pathcondition ι' pc2 in
                  let post__heap := inst_heap ι' h2 in
-                 !! post__pc ∧ post__heap ⊢ POST (inst_term ι' t) (inst_localstore ι' δ2)) ->
+                 !! post__pc ∧ post__heap ⊢ POST (inst ι' t) (inst ι' δ2)) ->
           pre__pc ->
           outcome_satisfy
             (scmut_exec s (MkSCState δ (semiconcretize_heap ι h1)))
@@ -652,6 +650,8 @@ Module Soundness
         - cbn. intros.
           assert (ι = env_map (fun b : 𝑺 * Ty => inst_term ι) (sub_id Σ1)) as Heqι by admit.
           specialize (H ι Heqι); clear Heqι.
+          change (env_map (fun (b : 𝑿 * Ty) (t : Term Σ1 (snd b)) => inst_term ι t) δ1) with
+              (inst ι δ1).
           rewrite eval_exp_inst.
           refine (entails_trans _ _ _ _ H).
           apply land_right.

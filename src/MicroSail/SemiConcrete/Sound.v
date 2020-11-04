@@ -449,7 +449,7 @@ Module Soundness
       unfold inst_contract_localstore.
       destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
       - specialize (HYP ι).
-        remember (inst_localstore ι δΣ) as δ.
+        remember (inst ι δΣ) as δ.
         unfold scmut_leakcheck, scmut_get_heap, scmut_state_heap, scmut_state, scmut_bind, scmut_assert_eq in HYP.
         rewrite outcome_satisfy_map in HYP.
         repeat setoid_rewrite outcome_satisfy_bind in HYP.

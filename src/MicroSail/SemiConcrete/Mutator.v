@@ -325,7 +325,7 @@ Module SemiConcrete
       match contract with
       | MkSepContract _ _ Σe δ req result ens =>
         ⨁ ι : SymInstance Σe =>
-        ⨁ H : vs = inst_localstore ι δ =>
+        ⨁ H : vs = inst ι δ =>
         scmut_consume ι req  ;;
         ⨂ v : Lit τ =>
         scmut_produce (env_snoc ι (result,τ) v) ens ;;
@@ -450,7 +450,7 @@ Module SemiConcrete
     match c with
     | MkSepContract _ _ Σ δ req result  ens =>
       ⨂ ι : SymInstance Σ =>
-      let δΔ : LocalStore Δ := inst_localstore ι δ in
+      let δΔ : LocalStore Δ := inst ι δ in
       let mut := (scmut_produce ι req ;;
                   scmut_exec s >>= fun v =>
                   scmut_consume (env_snoc ι (result,τ) v) ens ;;
