@@ -166,8 +166,6 @@ Module Mutators
 
     Definition symbolic_assume_formula {Γ Σ} (fml : Formula Σ) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (fml :: Φ) ŝ ĥ.
-    Definition wk1_symbolicstate {Γ b Σ} : SymbolicState Γ Σ -> SymbolicState Γ (Σ ▻ b) :=
-      subst sub_wk1.
 
   End SymbolicState.
 
@@ -950,7 +948,7 @@ Module Mutators
       fun Σ1 ζ1 s1 =>
         outcome_map
           (fun '(MkDynMutResult ζ r) => MkDynMutResult (sub_comp sub_wk1 ζ) r)
-          (ma _ (sub_up1 ζ1) (wk1_symbolicstate s1)).
+          (ma _ (sub_up1 ζ1) (wk1 s1)).
     Global Arguments dmut_fresh {_ _ _} _ _.
     Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
       dmut_fresh (x,σ) (dmut_pure (@term_var _ _ _ inctx_zero)).
@@ -1014,7 +1012,7 @@ Module Mutators
         outcome_map
           (fun '(MkDynMutResult ζ r) =>
              MkDynMutResult (sub_comp sub_wk1 ζ) r)
-          (m _ (sub_up1 ζ1) tt (wk1_symbolicstate s1)).
+          (m _ (sub_up1 ζ1) tt (wk1 s1)).
     Global Arguments dmut_fresh {_ _ _} _ _.
 
   End Proper.

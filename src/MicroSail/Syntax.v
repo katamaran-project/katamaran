@@ -1630,7 +1630,7 @@ Module Terms (Export termkit : TermKit).
       rewrite subst_sub_comp. reflexivity.
     Qed.
 
-    Lemma sub_comp_wk1 {Σ0 Σ1 x τ} (ζ : Sub (Σ0 ▻ (x,τ)) Σ1) :
+    Lemma sub_comp_wk1_tail {Σ0 Σ1 x τ} (ζ : Sub (Σ0 ▻ (x,τ)) Σ1) :
       sub_comp sub_wk1 ζ = env_tail ζ.
     Proof.
       apply env_lookup_extensional.
@@ -1640,6 +1640,20 @@ Module Terms (Export termkit : TermKit).
       rewrite env_lookup_tabulate.
       dependent elimination ζ.
       now cbn.
+    Qed.
+
+    Lemma sub_comp_wk1_comm {Σ0 Σ1 x τ} (ζ : Sub Σ0 Σ1) :
+      sub_comp sub_wk1 (sub_up1 ζ) = sub_comp ζ (sub_wk1 (b:=(x,τ))).
+    Proof. now rewrite sub_comp_wk1_tail. Qed.
+
+    Lemma sub_snoc_comp {Σ1 Σ2 Σ3 x τ v} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) :
+      sub_comp ζ1 ζ2 ► (x∶τ ↦ v) =
+      sub_comp (sub_up1 ζ1) (ζ2 ► (x∶τ ↦ v)).
+    Proof.
+      unfold sub_up1, wk1, sub_comp, subst, SubstEnv; cbn.
+      rewrite env_map_map. f_equal.
+      apply env_map_ext. intros.
+      now rewrite <- subst_sub_comp, sub_comp_wk1_tail.
     Qed.
 
   End SymbolicSubstitutions.
