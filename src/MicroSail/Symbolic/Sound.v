@@ -526,9 +526,9 @@ Module Soundness
         induction asn; cbn.
         - apply dmut_assume_term_sound.
         - admit. (* Not implemented in SC. OOPS *)
-        - destruct (Term_eqb t1 t2).
+        - admit. (* destruct (Term_eqb t1 t2).
           + apply dmut_pure_sound.
-          + apply dmut_fail_sound.
+          + apply dmut_fail_sound. *)
         - apply dmut_produce_chunk_sound.
         - enough
             (approximates  (Γ1 := Γ) (Γ2 := Γ) ι
