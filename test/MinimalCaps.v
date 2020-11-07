@@ -956,8 +956,7 @@ Module MinCapsContracts.
          sep_contract_precondition    := term_var "reg" ↦r term_var "w";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           (* domi: strange that I have to manually specify Σ here *)
-           (asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_word]) (fun reg w result => result = w) ✱
+           (asn_eq (term_var "result") (term_var "result") ✱
                      term_var "reg" ↦r term_var "w")
       |}.
 
@@ -968,9 +967,9 @@ Module MinCapsContracts.
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            (asn_exist "c" ty_cap (
-                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => result = c) ✱
-                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => w = inr c)
-                      ) ✱
+                        asn_eq (term_var "result") (term_var "c") ✱
+                        asn_eq (term_var "w") (term_inr (term_var "c"))
+                      ) ✱ 
             term_var "reg" ↦r term_var "w")
       |}.
 
