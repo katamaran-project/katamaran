@@ -653,16 +653,11 @@ Module Mutators
           | None   => mutator_fail "Err [mutator_consume_evar]: uninstantiated variables when consuming prop assertion"
           end
         | asn_eq t1 t2 =>
-          match eval_term_evar L t1, eval_term_evar L t2, evarenv_to_option_sub L with
-          | Some t1', Some t2', Some ζ =>
-            mutator_assert_formula (formula_eq (sub_term ζ t1) (sub_term ζ t2)) *> mutator_pure L
-          | _, _, _ => mutator_fail "Err [mutator_consume_evar]: uninstantiated variables when consuming equality assertion"
+          match eval_term_evar L t1, eval_term_evar L t2 with
+          | Some t1', Some t2' =>
+            mutator_assert_formula (formula_eq t1' t2') *> mutator_pure L
+          | _, _ => mutator_fail "Err [mutator_consume_evar]: uninstantiated variables when consuming equality assertion"
                               end
-          (*match eval_term_evar L t1, eval_term_evar L t2, evarenv_to_option_sub L with
-          | Some t1', Some t2', Some ζ =>
-            mutator_assert_term (sub_term ζ (term_lit ty_bool (Term_eqb t1' t2'))) *> mutator_pure L
-          | _, _, _ => mutator_fail "Err [mutator_consume_evar]: uninstantiated variables when consuming equality assertion"
-          end*)
         | asn_chunk c => mutator_consume_chunk_evar c L
         | asn_if tb a1 a2 =>
           match eval_term_evar L tb with

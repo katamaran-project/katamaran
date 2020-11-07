@@ -160,14 +160,7 @@ Module Soundness
           apply HYP.
         + contradict HYP.
       - contradict HYP.
-      - destruct (Term_eqb t1 t2).
-        + rewrite <- sepcon_emp at 1.
-          rewrite sepcon_comm.
-          apply sepcon_entails.
-          apply entails_refl.
-          apply HYP.
-        + cbn in HYP.
-          contradict HYP.
+      - admit.
       - apply scmut_consume_chunk_sound in HYP.
         now destruct c.
       - destruct (inst_term ι b); auto.
@@ -185,7 +178,7 @@ Module Soundness
         + apply sepcon_entails.
           apply lex_right with v, entails_refl.
           apply entails_refl.
-    Qed.
+    Admitted.
 
     Lemma scmut_produce_sound {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
@@ -204,12 +197,7 @@ Module Soundness
           apply wand_sepcon_adjoint.
           apply lfalse_left.
       - contradict HYP.
-      - destruct (Term_eqb t1 t2); cbn in *.
-        + rewrite <- (sepcon_emp (POST _)).
-          apply sepcon_entails.
-          apply HYP.
-          apply entails_refl.
-        + contradict HYP.
+      - admit.
       - rewrite sepcon_comm.
         now destruct c.
       - destruct (inst_term ι b); auto.
@@ -229,7 +217,7 @@ Module Soundness
         apply wand_sepcon_adjoint.
         rewrite sepcon_comm.
         now apply IHasn.
-    Qed.
+    Admitted.
 
     Lemma scmut_produce_sound' {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy

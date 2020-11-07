@@ -209,7 +209,7 @@ Module Assertions
       match a with
       | asn_bool b => if inst_term ι b then emp else lfalse
       | asn_prop p => !!(uncurry_named p ι) ∧ emp
-      | asn_eq t1 t2 => if Term_eqb t1 t2 then emp else lfalse
+      | asn_eq t1 t2 => !!(inst_term ι t1 = inst_term ι t2)
       | asn_chunk c => inst_chunk ι c
       | asn_if b a1 a2 => if inst_term ι b then inst_assertion ι a1 else inst_assertion ι a2
       | asn_match_enum E k alts => inst_assertion ι (alts (inst_term ι k))
