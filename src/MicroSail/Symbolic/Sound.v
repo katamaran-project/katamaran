@@ -150,9 +150,7 @@ Module Soundness
                  Σ2
                  (sub_comp ζ1 ζ2)
                  (mutator_result_value r)
-                 (mutator_result_state r) /\
-               valid_obligations
-                 (mutator_result_obligations r)).
+                 (mutator_result_state r)).
 
       Lemma dmut_wp_monotonic {Γ1 Γ2 Σ0 A} (m : DynamicMutator Γ1 Γ2 A Σ0)
             (POST1 POST2 : forall Σ1, Sub Σ0 Σ1 -> A Σ1 -> SymbolicState Γ2 Σ1 -> Prop)
@@ -163,7 +161,7 @@ Module Soundness
         unfold dmut_wp; cbn; intros H Σ1 ζ1.
         specialize (H Σ1 ζ1). revert H.
         apply outcome_satisfy_monotonic.
-        intros [Σ2 ζ2 [a2 s2 w]]; cbn.
+        intros [Σ2 ζ2 [a2 s2]]; cbn.
         intuition.
       Qed.
 
@@ -223,7 +221,7 @@ Module Soundness
         intros [pc δ__sym h__sym] [δ__sc h__sc] ? (H__h & H__δ & H__pc); cbn in *.
         intros; destruct_conjs.
         specialize (H Σ (sub_id Σ)). cbn in H.
-        destruct H as [H _]. apply (H ι); clear H.
+        apply (H ι); clear H.
         rewrite sub_comp_id_left.
         apply syminstance_rel_refl.
         unfold represents; cbn.
@@ -247,7 +245,7 @@ Module Soundness
         unfold scmut_assume_term.
         destruct (try_solve_formula (formula_bool b)) eqn:?.
         - destruct (try_solve_formula_spec _ Heqo ι); clear Heqo.
-          + cbn in *. destruct H as [H _].
+          + cbn in *.
             rewrite i. cbn. apply (H ι).
             rewrite sub_comp_id_left.
             apply syminstance_rel_refl.
@@ -255,7 +253,7 @@ Module Soundness
           + cbn in n. destruct (inst ι b); intuition.
         - clear Heqo.
           destruct (inst ι b) eqn:?; cbn.
-          * cbn in *. destruct H as [H _].
+          * cbn in *.
             apply (H ι).
             rewrite sub_comp_id_left.
             apply syminstance_rel_refl.
@@ -269,8 +267,8 @@ Module Soundness
 
       Definition dmutres_geq {Γ A Σ} `{Subst A} (r1 r2 : DynamicMutatorResult Γ A Σ) : Prop :=
         match r1 , r2 with
-        | MkDynMutResult ζ1 (MkMutResult a1 s1 w1), MkDynMutResult ζ2 (MkMutResult a2 s2 w2) =>
-          exists ζ12, (ζ2 = sub_comp ζ1 ζ12 /\ a2 = subst ζ12 a1 /\ s2 = subst ζ12 s1 /\ w1 = w2)
+        | MkDynMutResult ζ1 (MkMutResult a1 s1), MkDynMutResult ζ2 (MkMutResult a2 s2) =>
+          exists ζ12, (ζ2 = sub_comp ζ1 ζ12 /\ a2 = subst ζ12 a1 /\ s2 = subst ζ12 s1)
         end.
 
       Definition dmutres_pred_monotonic {Γ A Σ} `{Subst A} (p : DynamicMutatorResult Γ A Σ -> Prop) : Prop :=
@@ -324,8 +322,6 @@ Module Soundness
         dmut_wf' (dmut_pure (Γ := Γ) a).
       Proof.
         unfold dmut_wf', dmut_wp, dmut_sub, dmut_pure; cbn; intros.
-        split; auto.
-        destruct (H0 Σ0 (sub_comp ζ ζ1)).
         now rewrite <- sub_comp_assoc, <- subst_sub_comp.
       Qed.
 
@@ -356,15 +352,14 @@ Module Soundness
             intros [Σ2 ζ2 r2]. cbn. clear.
             intuition.
             rewrite <- sub_comp_assoc, sub_comp_wk1_tail; cbn.
-            rewrite <- (sub_comp_assoc sub_wk1), sub_comp_wk1_tail in H0; cbn in H0.
-            now rewrite sub_comp_id_left in H0.
+            rewrite <- (sub_comp_assoc sub_wk1), sub_comp_wk1_tail in H; cbn in H.
+            now rewrite sub_comp_id_left in H.
           + revert POST_mon; clear.
             unfold dmutres_pred_monotonic.
-            intros ? [Σ2 ζ2 [a2 s2 w2]] [Σ3 ζ3 [a3 s3 w3]]; cbn.
+            intros ? [Σ2 ζ2 [a2 s2]] [Σ3 ζ3 [a3 s3]]; cbn.
             intros [ζ12]; intuition. subst.
-            apply (POST_mon _ _ _ ζ12) in H0.
-            rewrite !sub_comp_assoc in H0.
-            exact H0.
+            apply (POST_mon _ _ _ ζ12) in H1.
+            now rewrite !sub_comp_assoc in H1.
         - rewrite outcome_satisfy_map.
           specialize (HYP (Σ1 ▻ (x,τ)) (sub_up1 ζ1)).
           rewrite <- subst_sub_comp, sub_comp_wk1_comm in HYP.
@@ -606,7 +601,7 @@ Module Soundness
           let pre__heap := interpret_heap ι h1 in
           outcome_satisfy
             (dmut_exec s ζ1 (MkSymbolicState pc1 δ1 h1))
-            (fun '(@MkDynMutResult _ _ _ Σ2 ζ2 (MkMutResult t (MkSymbolicState pc2 δ2 h2) x)) =>
+            (fun '(@MkDynMutResult _ _ _ Σ2 ζ2 (MkMutResult t (MkSymbolicState pc2 δ2 h2))) =>
                forall (ι' : SymInstance Σ2),
                  ι = env_map (fun _ => inst_term ι') ζ2 ->
                  let post__pc   := inst_pathcondition ι' pc2 in
