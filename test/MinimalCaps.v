@@ -956,8 +956,8 @@ Module MinCapsContracts.
          sep_contract_precondition    := term_var "reg" ↦r term_var "w";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           (asn_eq (term_var "result") (term_var "result") ✱
-                     term_var "reg" ↦r term_var "w")
+           (asn_eq (term_var "w") (term_var "result") ✱
+                   term_var "reg" ↦r term_var "w")
       |}.
 
     Definition sep_contract_read_reg_cap : SepContract ["reg" ∶ ty_enum regname ] ty_cap :=
@@ -980,8 +980,8 @@ Module MinCapsContracts.
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            (asn_exist "n" ty_int (
-                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => result = n) ✱
-                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => w = inl n)
+                        asn_eq (term_var "result") (term_var "n") ✱
+                        asn_eq (term_var "w") (term_inl (term_var "n"))
                       ) ✱
             term_var "reg" ↦r term_var "w")
       |}.
@@ -1009,7 +1009,7 @@ Module MinCapsContracts.
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            term_var "a" ↦m term_var "n" ✱
-           asn_prop (Σ := ["a" ∶ ty_addr, "n" ∶ ty_int, "result" ∶ ty_int]) (fun _ n res => res = n);
+           asn_eq (term_var "result") (term_var "n");
       |}.
 
     Definition sep_contract_write_mem : SepContract ["a" ∶ ty_addr, "v" ∶ ty_memval ] ty_unit :=
