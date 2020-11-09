@@ -83,10 +83,10 @@ Module Mutators
 
     Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
       match fml with
-      | formula_bool t    => is_true (inst_term ι t)
-      | formula_prop ζ P  => uncurry_named P (env_map (fun _ => inst_term ι) ζ)
-      | formula_eq t1 t2  => inst_term ι t1 =  inst_term ι t2
-      | formula_neq t1 t2 => inst_term ι t1 <> inst_term ι t2
+      | formula_bool t    => is_true (inst (A := Lit ty_bool) ι t)
+      | formula_prop ζ P  => uncurry_named P (inst ι ζ)
+      | formula_eq t1 t2  => inst ι t1 =  inst ι t2
+      | formula_neq t1 t2 => inst ι t1 <> inst ι t2
       end.
 
     Global Instance sub_formula : Subst Formula :=
@@ -121,16 +121,7 @@ Module Mutators
   Definition valid_obligation : Obligation -> Prop :=
     fun '(obligation pc fml) =>
       ForallNamed (fun ι => all_list (inst_formula ι) pc -> inst_formula ι fml).
-  Definition valid_obligations (os : list Obligation) : Prop :=
-    all_list valid_obligation os.
   Hint Unfold valid_obligation : core.
-  Hint Unfold valid_obligations : core.
-
-  Definition outcome_valid_obligations (os : list Obligation) : Outcome Prop :=
-    match os with
-    | nil => outcome_block
-    | _   => outcome_pure (all_list valid_obligation os)
-    end.
 
   Instance subst_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
     SubstEnv.
@@ -166,8 +157,6 @@ Module Mutators
 
     Definition symbolic_assume_formula {Γ Σ} (fml : Formula Σ) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
       fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (fml :: Φ) ŝ ĥ.
-    Definition wk1_symbolicstate {Γ b Σ} : SymbolicState Γ Σ -> SymbolicState Γ (Σ ▻ b) :=
-      subst sub_wk1.
 
   End SymbolicState.
 
@@ -407,7 +396,6 @@ Module Mutators
       MkMutResult {
           mutator_result_value : A;
           mutator_result_state : SymbolicState Γ Σ;
-          mutator_result_obligations : list Obligation;
         }.
 
   End MutatorResult.
@@ -448,9 +436,9 @@ Module Mutators
       fun s => outcome_angelic_binary (m1 s) (m2 s).
 
     Definition mutator_pure {Γ A Σ} (a : A) : Mutator Σ Γ Γ A :=
-      fun s => outcome_pure (MkMutResult a s nil).
+      fun s => outcome_pure (MkMutResult a s).
     Definition mutator_bind {Γ1 Γ2 Γ3 A B Σ} (ma : Mutator Σ Γ1 Γ2 A) (f : A -> Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
-      fun s0 => outcome_bind (ma s0) (fun '(MkMutResult a s1 w1) => outcome_bind (f a s1) (fun '(MkMutResult b s2 w2) => outcome_pure (MkMutResult b s2 (w1 ++ w2)))).
+      fun s0 => outcome_bind (ma s0) (fun '(MkMutResult a s1) => outcome_bind (f a s1) (fun '(MkMutResult b s2) => outcome_pure (MkMutResult b s2))).
     Definition mutator_bind_right {Γ1 Γ2 Γ3 A B Σ} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 B :=
       mutator_bind ma (fun _ => mb).
     Definition mutator_bind_left {Γ1 Γ2 Γ3 A B Σ} (ma : Mutator Σ Γ1 Γ2 A) (mb : Mutator Σ Γ2 Γ3 B) : Mutator Σ Γ1 Γ3 A :=
@@ -513,7 +501,7 @@ Module Mutators
     Local Open Scope mutator_scope.
 
     Definition mutator_state {Γ Γ' Σ A} (f : SymbolicState Γ Σ -> (SymbolicState Γ' Σ * A)) : Mutator Σ Γ Γ' A :=
-      fun s => outcome_pure (let (s1,a) := f s in MkMutResult a s1 nil).
+      fun s => outcome_pure (let (s1,a) := f s in MkMutResult a s1).
     Definition mutator_modify {Γ Γ' Σ} (f : SymbolicState Γ Σ -> SymbolicState Γ' Σ) : Mutator Σ Γ Γ' unit :=
       mutator_state (fun s => (f s,tt)).
     Definition mutator_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : Mutator Σ Γ Γ' unit :=
@@ -580,7 +568,10 @@ Module Mutators
       match try_solve_formula fml with
       | Some true  => mutator_pure tt
       | Some false => mutator_fail "Err [mutator_assert_formula]: unsatisfiable"
-      | None       => fun δ => outcome_pure (MkMutResult tt δ (obligation (symbolicstate_pathcondition δ) fml :: nil))
+      | None       => fun δ =>
+                        outcome_assertk
+                          (valid_obligation (obligation (symbolicstate_pathcondition δ) fml))
+                          (outcome_pure (MkMutResult tt δ))
       end.
     Definition mutator_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : Mutator Σ Γ Γ unit :=
       fold_right (fun fml m => mutator_assert_formula fml ;; m) (mutator_pure tt) fmls.
@@ -764,7 +755,7 @@ Module Mutators
         mutator_exec k              <*
         mutator_pop_local
       | stm_block δ k =>
-        mutator_pushs_local (lift_localstore δ) *>
+        mutator_pushs_local (lift δ) *>
         mutator_exec k <*
         mutator_pops_local _
       | stm_assign x e => mutator_exec e >>= fun v =>
@@ -774,7 +765,7 @@ Module Mutators
       | stm_call_external f es => mutator_fail "Err [mutator_exec]: stm_call not supported"
       | stm_call_frame δ' s =>
         δ <- mutator_get_local ;;
-        mutator_put_local (lift_localstore δ') ;;
+        mutator_put_local (lift δ') ;;
         t <- mutator_exec s ;;
         mutator_put_local δ ;;
         mutator_pure t
@@ -829,7 +820,7 @@ Module Mutators
   End MutatorOperations.
 
   Definition mutator_outcome_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
-    Stm Δ τ -> Outcome (list Obligation) :=
+    Stm Δ τ -> Outcome unit :=
     match c with
     | MkSepContract _ _ Σe δ req result ens =>
       fun s =>
@@ -838,12 +829,12 @@ Module Mutators
                     mutator_consume (env_snoc (sub_id Σe) (result,τ) v) ens;;
                     mutator_leakcheck)%mut in
         let out := mut (symbolicstate_initial δ) in
-        outcome_map mutator_result_obligations out
+        outcome_map (fun _ => tt) out
     end.
 
   Definition ValidContractMut (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
              (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    outcome_satisfy (mutator_outcome_contract c body) valid_obligations.
+    outcome_safe (mutator_outcome_contract c body).
 
   Section DynamicMutatorResult.
 
@@ -872,13 +863,13 @@ Module Mutators
     Bind Scope dmut_scope with DynamicMutator.
 
     Definition dmut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : DynamicMutator Γ Γ A Σ :=
-      fun Σ' ζ s => outcome_pure (MkDynMutResult (sub_id Σ') (MkMutResult (subst ζ a) s [])).
+      fun Σ' ζ s => outcome_pure (MkDynMutResult (sub_id Σ') (MkMutResult (subst ζ a) s)).
     Definition dmut_bind {Γ1 Γ2 Γ3 A B Σ}
       (ma : DynamicMutator Γ1 Γ2 A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> DynamicMutator Γ2 Γ3 B Σ') : DynamicMutator Γ1 Γ3 B Σ :=
       fun Σ0 ζ0 s0 =>
-        outcome_bind (ma Σ0 ζ0 s0)                            (fun '(MkDynMutResult ζ1 (MkMutResult a s1 w1)) =>
-        outcome_bind (f _ (sub_comp ζ0 ζ1) a _ (sub_id _) s1) (fun '(MkDynMutResult ζ2 (MkMutResult b s2 w2)) =>
-        outcome_pure (MkDynMutResult (sub_comp ζ1 ζ2) (MkMutResult b s2 (w1 ++ w2))))).
+        outcome_bind (ma Σ0 ζ0 s0)                            (fun '(MkDynMutResult ζ1 (MkMutResult a s1)) =>
+        outcome_bind (f _ (sub_comp ζ0 ζ1) a _ (sub_id _) s1) (fun '(MkDynMutResult ζ2 (MkMutResult b s2)) =>
+        outcome_pure (MkDynMutResult (sub_comp ζ1 ζ2) (MkMutResult b s2)))).
     Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) :
       DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m).
 
@@ -958,7 +949,7 @@ Module Mutators
       fun Σ1 ζ1 s1 =>
         outcome_map
           (fun '(MkDynMutResult ζ r) => MkDynMutResult (sub_comp sub_wk1 ζ) r)
-          (ma _ (sub_up1 ζ1) (wk1_symbolicstate s1)).
+          (ma _ (sub_up1 ζ1) (wk1 s1)).
     Global Arguments dmut_fresh {_ _ _} _ _.
     Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
       dmut_fresh (x,σ) (dmut_pure (@term_var _ _ _ inctx_zero)).
@@ -977,16 +968,16 @@ Module Mutators
 
     Definition dmut_pure {Γ A} {Σ} : Mor Σ A (DynamicMutator Γ Γ A) :=
       fun Σ' ζ' a s =>
-        outcome_pure (MkDynMutResult (sub_id Σ') (MkMutResult a s nil)).
+        outcome_pure (MkDynMutResult (sub_id Σ') (MkMutResult a s)).
     Definition dmut_map {Γ1 Γ2 A B Σ} (f : Mor Σ A B) : Mor Σ (DynamicMutator Γ1 Γ2 A) (DynamicMutator Γ1 Γ2 B) :=
       fun Σ1 ζ1 ma s1 =>
-        outcome_map (fun '(MkDynMutResult ζ2 (MkMutResult a s2 w)) => MkDynMutResult ζ2 (MkMutResult (f _ (sub_comp ζ1 ζ2) a) s2 w)) (ma s1).
+        outcome_map (fun '(MkDynMutResult ζ2 (MkMutResult a s2)) => MkDynMutResult ζ2 (MkMutResult (f _ (sub_comp ζ1 ζ2) a) s2)) (ma s1).
     Definition dmut_bind {Γ1 Γ2 Γ3 A B Σ} (f : Mor Σ A (DynamicMutator Γ2 Γ3 B)) :
       Mor Σ (DynamicMutator Γ1 Γ2 A) (DynamicMutator Γ1 Γ3 B) :=
       fun Σ0 ζ0 m0 s0 =>
-        outcome_bind (m0 s0) (fun '(MkDynMutResult ζ1 (MkMutResult a s1 w1)) =>
-        outcome_bind (f _ (sub_comp ζ0 ζ1) a s1) (fun '(MkDynMutResult ζ2 (MkMutResult b s2 w2)) =>
-        outcome_pure (MkDynMutResult (sub_comp ζ1 ζ2) (MkMutResult b s2 (w1 ++ w2))))).
+        outcome_bind (m0 s0) (fun '(MkDynMutResult ζ1 (MkMutResult a s1)) =>
+        outcome_bind (f _ (sub_comp ζ0 ζ1) a s1) (fun '(MkDynMutResult ζ2 (MkMutResult b s2)) =>
+        outcome_pure (MkDynMutResult (sub_comp ζ1 ζ2) (MkMutResult b s2)))).
     Definition dmut_join {Γ1 Γ2 Γ3 A Σ} :
       Mor Σ (DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A)) (DynamicMutator Γ1 Γ3 A) :=
       fun Σ1 ζ1 => dmut_bind (fun _ _ m => m) ζ1.
@@ -1022,7 +1013,7 @@ Module Mutators
         outcome_map
           (fun '(MkDynMutResult ζ r) =>
              MkDynMutResult (sub_comp sub_wk1 ζ) r)
-          (m _ (sub_up1 ζ1) tt (wk1_symbolicstate s1)).
+          (m _ (sub_up1 ζ1) tt (wk1 s1)).
     Global Arguments dmut_fresh {_ _ _} _ _.
 
   End Proper.
@@ -1148,7 +1139,6 @@ Module Mutators
               dmutres_result :=
                 {| mutator_result_value := tt;
                    mutator_result_state := subst ζ s;
-                   mutator_result_obligations := []
                 |}
             |}
         | None => None
@@ -1181,7 +1171,6 @@ Module Mutators
                {|
                  mutator_result_value := tt;
                  mutator_result_state := s1;
-                 mutator_result_obligations := []
                |}
           |}
       | Some false =>
@@ -1199,10 +1188,9 @@ Module Mutators
             {| dmutres_context := Σ1;
                dmutres_substitution := sub_id Σ1;
                dmutres_result :=
-                 {|
-                   mutator_result_value := tt;
-                   mutator_result_state := symbolic_assume_formula fml s1;
-                   mutator_result_obligations := [] |}
+                 {| mutator_result_value := tt;
+                    mutator_result_state := symbolic_assume_formula fml s1;
+                 |}
             |}
           end
       end.
@@ -1301,7 +1289,7 @@ Module Mutators
         dmut_pop_local ;;
         dmut_pure t2
       | stm_block δ s =>
-        dmut_pushs_local (lift_localstore δ) ;;
+        dmut_pushs_local (lift δ) ;;
         t <- dmut_exec s ;;
         dmut_pops_local _ ;;
         dmut_pure t
@@ -1318,7 +1306,7 @@ Module Mutators
         end
       | stm_call_frame δ s =>
         δr <- dmut_get_local ;;
-        dmut_put_local (lift_localstore δ) ;;
+        dmut_put_local (lift δ) ;;
         dmut_bind_left (dmut_exec s) (dmut_put_local δr)
       | stm_call_external f es =>
         ts <- dmut_eval_exps es ;;
@@ -1401,7 +1389,7 @@ Module Mutators
       end.
 
     Definition dmut_contract {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
-      Stm Δ τ -> Outcome (list Obligation) :=
+      Stm Δ τ -> Outcome unit :=
       match c with
       | MkSepContract _ _ Σ δ req result ens =>
         fun s =>
@@ -1410,12 +1398,12 @@ Module Mutators
                       dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens) ;;
                       dmut_leakcheck)%dmut in
           let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
-          outcome_map (fun x => mutator_result_obligations (dmutres_result x)) out
+          outcome_map (fun _ => tt) out
       end.
 
     Definition ValidContractDynMut (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
       (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      outcome_satisfy (dmut_contract c body) valid_obligations.
+      outcome_safe (dmut_contract c body).
 
   End DynMutV1.
 
@@ -1501,7 +1489,7 @@ Module Mutators
         dmut_pop_local ;;
         dmut_pure t2
       | stm_block δ s =>
-        dmut_pushs_local (lift_localstore δ) ;;
+        dmut_pushs_local (lift δ) ;;
         t <- dmut_exec_evar s ;;
         dmut_pops_local _ ;;
         dmut_pure t
@@ -1518,7 +1506,7 @@ Module Mutators
         end
       | stm_call_frame δ s =>
         δr <- dmut_get_local ;;
-        dmut_put_local (lift_localstore δ) ;;
+        dmut_put_local (lift δ) ;;
         dmut_bind_left (dmut_exec_evar s) (dmut_put_local δr)
       | stm_call_external f es =>
         ts <- dmut_eval_exps es ;;
@@ -1667,7 +1655,7 @@ Module Mutators
       end.
 
     Definition dmut_contract_evar {Δ : Ctx (𝑿 * Ty)} {τ : Ty} (c : SepContract Δ τ) :
-      Stm Δ τ -> Outcome (list Obligation) :=
+      Stm Δ τ -> Outcome unit :=
       match c with
       | MkSepContract _ _ Σ δ req result ens =>
         fun s =>
@@ -1676,27 +1664,29 @@ Module Mutators
                       dmut_sub (sub_snoc ζ1 (result,τ) t) (DynMutV1.dmut_consume ens) ;;
                       dmut_leakcheck)%dmut in
           let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
-          outcome_map (fun x => mutator_result_obligations (dmutres_result x)) out
+          outcome_map (fun _ => tt) out
       end.
 
     Definition ValidContractDynMut (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
                (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      outcome_satisfy
-        (outcome_bind (dmut_contract_evar c body) outcome_valid_obligations)
-        (fun P => P).
+      outcome_safe (dmut_contract_evar c body).
 
     Definition ValidContractDynMutReflect (Δ : Ctx (𝑿 * Ty)) (τ : Ty)
                (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       is_true
-        (outcome_ok
+        (outcome_ok (A := unit)
            (outcome_bind
               (dmut_contract_evar c body)
-              outcome_valid_obligations)).
+              (fun _ => outcome_block))).
 
     Lemma dynmutevarreflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractDynMutReflect c body ->
       ValidContractDynMut c body.
-    Proof. apply outcome_ok_spec. Qed.
+    Proof.
+      intros H.
+      apply (outcome_ok_spec _ (fun _ => True)) in H.
+      now rewrite outcome_satisfy_bind in H.
+    Qed.
 
   End DynMutV2.
 

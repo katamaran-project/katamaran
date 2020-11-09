@@ -27,9 +27,12 @@
 (******************************************************************************)
 
 From Coq Require Import
-     Morphisms
+     Classes.Equivalence
+     Classes.Morphisms
+     Classes.RelationClasses
      Program.Tactics
      List
+     Relations
      String.
 
 From Equations Require Import
@@ -53,6 +56,8 @@ Inductive Outcome (A: Type) : Type :=
 | outcome_demonic_binary (o1 o2 : Outcome A)
 | outcome_fail (msg: string)
 | outcome_block
+| outcome_assertk (P : Prop) (k : Outcome A)
+| outcome_assumek (P : Prop) (k : Outcome A)
 .
 Arguments outcome_fail {_} _.
 Arguments outcome_block {_}.
@@ -91,6 +96,8 @@ Fixpoint outcome_map {A B : Type} (f : A -> B) (o : Outcome A) : Outcome B :=
   | outcome_demonic_binary o1 o2 => outcome_demonic_binary (outcome_map f o1) (outcome_map f o2)
   | outcome_fail s               => outcome_fail s
   | outcome_block                => outcome_block
+  | outcome_assertk P k          => outcome_assertk P (outcome_map f k)
+  | outcome_assumek P k          => outcome_assumek P (outcome_map f k)
   end.
 
 Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcome B :=
@@ -102,6 +109,8 @@ Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcom
   | outcome_demonic_binary o1 o2 => outcome_demonic_binary (outcome_bind o1 f) (outcome_bind o2 f)
   | outcome_fail s               => outcome_fail s
   | outcome_block                => outcome_block
+  | outcome_assertk P k          => outcome_assertk P (outcome_bind k f)
+  | outcome_assumek P k          => outcome_assumek P (outcome_bind k f)
   end.
 
 Definition Error (s : string) : Prop := False.
@@ -116,12 +125,14 @@ Fixpoint outcome_satisfy {A : Type} (o : Outcome A) (P : A -> Prop) : Prop :=
   | outcome_demonic_binary o1 o2 => outcome_satisfy o1 P /\ outcome_satisfy o2 P
   | outcome_fail s               => Error s
   | outcome_block                => True
+  | outcome_assertk Q k          => Q /\ outcome_satisfy k P
+  | outcome_assumek Q k          => Q -> outcome_satisfy k P
   end.
 
 Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
   outcome_satisfy o (fun a => True).
 
-Fixpoint outcome_angelic_binary_prune {A} (o1 o2 : Outcome A) {struct o1} : Outcome A :=
+Definition outcome_angelic_binary_prune {A} (o1 o2 : Outcome A) : Outcome A :=
   match o1 , o2 with
   | outcome_block                  , _              => outcome_block
   | _                              , outcome_block  => outcome_block
@@ -130,13 +141,25 @@ Fixpoint outcome_angelic_binary_prune {A} (o1 o2 : Outcome A) {struct o1} : Outc
   | _                              , _              => outcome_angelic_binary o1 o2
   end.
 
-Fixpoint outcome_demonic_binary_prune {A} (o1 o2 : Outcome A) {struct o1} : Outcome A :=
+Definition outcome_demonic_binary_prune {A} (o1 o2 : Outcome A) : Outcome A :=
   match o1 , o2 with
   | outcome_block                  , _                => o2
   | _                              , outcome_block    => o1
   | outcome_fail s                 , _                => outcome_fail s
   | _                              , outcome_fail s   => outcome_fail s
   | _                              , _                => outcome_demonic_binary o1 o2
+  end.
+
+Definition outcome_assertk_prune {A} (P : Prop) (o : Outcome A) : Outcome A :=
+  match o with
+  | outcome_fail s => outcome_fail s
+  | _              => outcome_assertk P o
+  end.
+
+Definition outcome_assumek_prune {A} (P : Prop) (o : Outcome A) : Outcome A :=
+  match o with
+  | outcome_block => outcome_block
+  | _             => outcome_assumek P o
   end.
 
 Fixpoint outcome_prune {A : Type} (o : Outcome A) : Outcome A :=
@@ -149,6 +172,10 @@ Fixpoint outcome_prune {A : Type} (o : Outcome A) : Outcome A :=
      outcome_angelic_binary_prune (outcome_prune o1) (outcome_prune o2)
    | outcome_demonic_binary o1 o2 =>
      outcome_demonic_binary_prune (outcome_prune o1) (outcome_prune o2)
+   | outcome_assertk P o =>
+     outcome_assertk_prune P (outcome_prune o)
+   | outcome_assumek P o =>
+     outcome_assumek_prune P (outcome_prune o)
    | _ => o
    end.
 
@@ -208,16 +235,28 @@ Lemma outcome_satisfy_angelic_binary_prune {A} (o1 o2 : Outcome A) (P : A -> Pro
   outcome_satisfy (outcome_angelic_binary_prune o1 o2) P <->
   outcome_satisfy (outcome_angelic_binary o1 o2) P.
 Proof.
-  revert o2; induction o1; intros [];
-    cbn; unfold Error in *; intuition.
+  destruct o1, o2; cbn; unfold Error; intuition.
 Qed.
 
 Lemma outcome_satisfy_demonic_binary_prune {A} (o1 o2 : Outcome A) (P : A -> Prop) :
   outcome_satisfy (outcome_demonic_binary_prune o1 o2) P <->
   outcome_satisfy (outcome_demonic_binary o1 o2) P.
 Proof.
-  revert o2; induction o1; intros [];
-    cbn; unfold Error in *; intuition.
+  destruct o1, o2; cbn; unfold Error; intuition.
+Qed.
+
+Lemma outcome_satisfy_assertk_prune {A} (Q : Prop) (o : Outcome A) (P : A -> Prop) :
+  outcome_satisfy (outcome_assertk_prune Q o) P <->
+  outcome_satisfy (outcome_assertk Q o) P.
+Proof.
+  destruct o; cbn; unfold Error; intuition.
+Qed.
+
+Lemma outcome_satisfy_assumek_prune {A} (Q : Prop) (o : Outcome A) (P : A -> Prop) :
+  outcome_satisfy (outcome_assumek_prune Q o) P <->
+  outcome_satisfy (outcome_assumek Q o) P.
+Proof.
+  destruct o; cbn; unfold Error; intuition.
 Qed.
 
 Lemma outcome_satisfy_prune {A : Type} (o : Outcome A) (P : A -> Prop) :
@@ -233,26 +272,24 @@ Proof.
     now rewrite IHo1, IHo2.
   - auto.
   - auto.
+  - rewrite outcome_satisfy_assertk_prune; cbn.
+    now rewrite IHo.
+  - rewrite outcome_satisfy_assumek_prune; cbn.
+    now rewrite IHo.
 Qed.
 
 Lemma outcome_ok_spec {A : Type} (o : Outcome A) (P : A -> Prop) :
   is_true (outcome_ok o) -> outcome_satisfy o P.
 Proof.
-  unfold outcome_ok.
-  induction o; cbn in *; try (intuition; fail);
-    destruct (outcome_prune o1), (outcome_prune o2);
-    cbn in *; intros; intuition.
+  unfold outcome_ok. intros.
+  apply outcome_satisfy_prune.
+  destruct (outcome_prune o); now try discriminate.
 Qed.
 
 Instance outcome_satisfy_iff_morphism {A} (o : Outcome A) :
   Proper (pointwise_relation A iff ==> iff) (@outcome_satisfy A o).
 Proof. split; apply outcome_satisfy_monotonic; firstorder. Qed.
 
-From Coq Require Import
-     Classes.Equivalence
-     Classes.Morphisms
-     Classes.RelationClasses
-     Relations.
 
 Definition outcome_cover {A} : relation (Outcome A) :=
   fun o1 o2 => forall P, outcome_satisfy o1 P -> outcome_satisfy o2 P.

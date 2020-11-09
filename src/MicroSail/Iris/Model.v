@@ -1197,7 +1197,7 @@ Module IrisInstance
       match cenv σs σ f with
       | Some (MkSepContract _ _ ctxΣ θΔ pre result post) =>
         ∀ (ι : SymInstance ctxΣ),
-          semTriple (inst_localstore ι θΔ) (inst_assertion (L:=iProp Σ) ι pre) (Pi f)
+          semTriple (inst ι θΔ) (inst_assertion (L:=iProp Σ) ι pre) (Pi f)
                     (fun v δ' => inst_assertion (env_snoc ι (result , σ) v) post)
       | None => True
       end)%I.

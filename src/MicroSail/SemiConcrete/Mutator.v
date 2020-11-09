@@ -282,14 +282,29 @@ Module SemiConcrete
     Global Arguments scmut_produce_chunk {Γ} _.
     Global Arguments scmut_consume_chunk {Γ} _.
 
-    Definition inst_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : SCChunk :=
-      match c with
-      | chunk_pred p ts  => scchunk_pred p (env_map (fun _ => inst_term ι) ts)
-      | chunk_ptsreg r t => scchunk_ptsreg r (inst_term ι t)
-      end.
+    Global Instance inst_chunk : Inst Chunk SCChunk :=
+      {| inst Σ ι c := match c with
+                       | chunk_pred p ts => scchunk_pred p (inst ι ts)
+                       | chunk_ptsreg r t => scchunk_ptsreg r (inst ι t)
+                       end;
+         lift Σ c   := match c with
+                       | scchunk_pred p vs => chunk_pred p (lift vs)
+                       | scchunk_ptsreg r v => chunk_ptsreg r (lift v)
+                       end
+      |}.
+
+    Local Opaque instantiate_env.
+    Local Opaque instantiate_term.
+
+    Global Instance instlaws_chunk : InstLaws Chunk SCChunk.
+    Proof.
+      constructor.
+      - intros ? ? []; cbn; f_equal; apply inst_lift.
+      - intros ? ? ζ ι []; cbn; f_equal; apply inst_subst.
+    Qed.
 
     Definition scmut_assume_term {Γ Σ} (ι : SymInstance Σ) (b : Term Σ ty_bool) : SCMut Γ Γ unit :=
-      if inst_term ι b then scmut_pure tt else scmut_block.
+      if inst (A := Lit ty_bool) ι b then scmut_pure tt else scmut_block.
 
     Fixpoint scmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
       match asn with
@@ -298,29 +313,29 @@ Module SemiConcrete
       | asn_eq t1 t2    => if Lit_eqb _ (inst_term ι t1) (inst_term ι t2)
                            then scmut_pure tt
                            else scmut_block 
-      | asn_chunk c     => scmut_produce_chunk (inst_chunk ι c)
-      | asn_if b a1 a2  => if inst_term ι b
+      | asn_chunk c     => scmut_produce_chunk (inst ι c)
+      | asn_if b a1 a2  => if inst (A := Lit ty_bool) ι b
                            then scmut_produce ι a1
                            else scmut_produce ι a2
       | @asn_match_enum _ E k alts =>
-        scmut_produce ι (alts (inst_term ι k))
+        scmut_produce ι (alts (inst (T := fun Σ => Term Σ _) ι k))
       | asn_sep a1 a2   => scmut_produce ι a1 *> scmut_produce ι a2
       | asn_exist ς τ a => ⨂ v : Lit τ => scmut_produce (env_snoc ι (ς , τ) v) a
       end.
 
     Fixpoint scmut_consume {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
       match asn with
-      | asn_bool b      => if inst_term ι b
+      | asn_bool b      => if inst (A := Lit ty_bool)  ι b
                            then scmut_pure tt
                            else scmut_fail "scmut_consume"
       | asn_prop P      => scmut_fail "scmut_consume"
       | asn_eq t1 t2    => scmut_assert_eq (inst_term ι t1) (inst_term ι t2)
-      | asn_chunk c     => scmut_consume_chunk (inst_chunk ι c)
-      | asn_if b a1 a2  => if inst_term ι b
+      | asn_chunk c     => scmut_consume_chunk (inst ι c)
+      | asn_if b a1 a2  => if inst (A := Lit ty_bool) ι b
                            then scmut_consume ι a1
                            else scmut_consume ι a2
       | @asn_match_enum _ E k alts =>
-        scmut_consume ι (alts (inst_term ι k))
+        scmut_consume ι (alts (inst (T := fun Σ => Term Σ _) ι k))
       | asn_sep a1 a2   => scmut_consume ι a1 *> scmut_consume ι a2
       | asn_exist ς τ a => ⨁ v : Lit τ => scmut_consume (env_snoc ι (ς , τ) v) a
       end.
@@ -329,7 +344,7 @@ Module SemiConcrete
       match contract with
       | MkSepContract _ _ Σe δ req result ens =>
         ⨁ ι : SymInstance Σe =>
-        ⨁ H : vs = inst_localstore ι δ =>
+        ⨁ H : vs = inst ι δ =>
         scmut_consume ι req  ;;
         ⨂ v : Lit τ =>
         scmut_produce (env_snoc ι (result,τ) v) ens ;;
@@ -454,7 +469,7 @@ Module SemiConcrete
     match c with
     | MkSepContract _ _ Σ δ req result  ens =>
       ⨂ ι : SymInstance Σ =>
-      let δΔ : LocalStore Δ := inst_localstore ι δ in
+      let δΔ : LocalStore Δ := inst ι δ in
       let mut := (scmut_produce ι req ;;
                   scmut_exec s >>= fun v =>
                   scmut_consume (env_snoc ι (result,τ) v) ens ;;

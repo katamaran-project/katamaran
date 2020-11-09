@@ -201,25 +201,25 @@ Module Assertions
 
     Definition inst_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
       match c with
-      | chunk_pred p ts => lpred p (env_map (fun _ => inst_term ι) ts)
-      | chunk_ptsreg r t => lptsreg r (inst_term ι t)
+      | chunk_pred p ts => lpred p (inst ι ts)
+      | chunk_ptsreg r t => lptsreg r (inst ι t)
       end.
 
     Fixpoint inst_assertion {Σ} (ι : SymInstance Σ) (a : Assertion Σ) : L :=
       match a with
-      | asn_bool b => if inst_term ι b then emp else lfalse
+      | asn_bool b => if inst (A := Lit ty_bool) ι b then emp else lfalse
       | asn_prop p => !!(uncurry_named p ι) ∧ emp
       | asn_eq t1 t2 => !!(inst_term ι t1 = inst_term ι t2)
       | asn_chunk c => inst_chunk ι c
-      | asn_if b a1 a2 => if inst_term ι b then inst_assertion ι a1 else inst_assertion ι a2
-      | asn_match_enum E k alts => inst_assertion ι (alts (inst_term ι k))
+      | asn_if b a1 a2 => if inst (A := Lit ty_bool) ι b then inst_assertion ι a1 else inst_assertion ι a2
+      | asn_match_enum E k alts => inst_assertion ι (alts (inst (T := fun Σ => Term Σ _) ι k))
       | asn_sep a1 a2 => inst_assertion ι a1 ✱ inst_assertion ι a2
       | asn_exist ς τ a => ∃ (v : Lit τ), inst_assertion (ι ► (ς∶τ ↦ v)) a
     end%logic.
 
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) : LocalStore Δ :=
-      inst_localstore ι (sep_contract_localstore c).
+      inst ι (sep_contract_localstore c).
 
     Definition inst_contract_precondition {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) : L :=

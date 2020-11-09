@@ -180,6 +180,8 @@ Module Soundness
           apply entails_refl.
     Admitted.
 
+    Local Opaque instantiate_term.
+
     Lemma scmut_produce_sound {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
         (scmut_produce ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
@@ -188,7 +190,7 @@ Module Soundness
     Proof.
       revert ι δ1 h1 POST. induction asn; cbn; intros ι δ1 h1 POST HYP.
       - unfold scmut_assume_term in HYP.
-        destruct (inst_term ι b); cbn in *.
+        destruct (inst ι b); cbn in *.
         + rewrite <- (sepcon_emp (POST _)).
           apply sepcon_entails.
           apply HYP.
@@ -199,8 +201,8 @@ Module Soundness
       - contradict HYP.
       - admit.
       - rewrite sepcon_comm.
-        now destruct c.
-      - destruct (inst_term ι b); auto.
+        destruct c; now cbn in *.
+      - destruct (inst ι b); auto.
       - auto.
       - unfold scmut_bind_right, scmut_bind in HYP.
         rewrite outcome_satisfy_bind in HYP.
@@ -451,7 +453,7 @@ Module Soundness
       unfold inst_contract_localstore.
       destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
       - specialize (HYP ι).
-        remember (inst_localstore ι δΣ) as δ.
+        remember (inst ι δΣ) as δ.
         unfold scmut_leakcheck, scmut_get_heap, scmut_state_heap, scmut_state, scmut_bind, scmut_assert_eq in HYP.
         rewrite outcome_satisfy_map in HYP.
         repeat setoid_rewrite outcome_satisfy_bind in HYP.
