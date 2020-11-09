@@ -67,6 +67,7 @@ Module Assertions
   Inductive Assertion (Σ : Ctx (𝑺 * Ty)) : Type :=
   | asn_bool (b : Term Σ ty_bool)
   | asn_prop (P : abstract_named Lit Σ Prop)
+  | asn_eq {T : Ty} (t1 t2 : Term Σ T)
   | asn_chunk (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
   | asn_match_enum {E : 𝑬} (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
@@ -208,6 +209,7 @@ Module Assertions
       match a with
       | asn_bool b => if inst (A := Lit ty_bool) ι b then emp else lfalse
       | asn_prop p => !!(uncurry_named p ι) ∧ emp
+      | asn_eq t1 t2 => !!(inst_term ι t1 = inst_term ι t2) ∧ emp
       | asn_chunk c => inst_chunk ι c
       | asn_if b a1 a2 => if inst (A := Lit ty_bool) ι b then inst_assertion ι a1 else inst_assertion ι a2
       | asn_match_enum E k alts => inst_assertion ι (alts (inst (T := fun Σ => Term Σ _) ι k))

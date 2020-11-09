@@ -607,6 +607,7 @@ Module Mutators
       match asn with
       | asn_bool b      => mutator_assume_term (sub_term ζ b)
       | asn_prop P      => mutator_assume_formula (formula_prop ζ P)
+      | asn_eq t1 t2    => mutator_assume_formula (formula_eq (sub_term ζ t1) (sub_term ζ t2))
       | asn_chunk c     => mutator_produce_chunk (sub_chunk ζ c)
       | asn_if b a1 a2  => (mutator_assume_term (sub_term ζ b)            *> mutator_produce ζ a1) ⊗
                            (mutator_assume_term (sub_term ζ (term_not b)) *> mutator_produce ζ a2)
@@ -642,6 +643,12 @@ Module Mutators
           | Some ζ => mutator_assert_formula (formula_prop ζ P) *> mutator_pure L
           | None   => mutator_fail "Err [mutator_consume_evar]: uninstantiated variables when consuming prop assertion"
           end
+        | asn_eq t1 t2 =>
+          match eval_term_evar L t1, eval_term_evar L t2 with
+          | Some t1', Some t2' =>
+            mutator_assert_formula (formula_eq t1' t2') *> mutator_pure L
+          | _, _ => mutator_fail "Err [mutator_consume_evar]: uninstantiated variables when consuming equality assertion"
+                              end
         | asn_chunk c => mutator_consume_chunk_evar c L
         | asn_if tb a1 a2 =>
           match eval_term_evar L tb with
@@ -686,6 +693,7 @@ Module Mutators
       match asn with
       | asn_bool b      => mutator_assert_term (sub_term ζ b)
       | asn_prop P      => mutator_assert_formula (formula_prop ζ P)
+      | asn_eq t1 t2    => mutator_assert_formula (formula_eq (sub_term ζ t1) (sub_term ζ t2))
       | asn_chunk c     => mutator_consume_chunk (sub_chunk ζ c)
       | asn_if b a1 a2  => (mutator_assume_term (sub_term ζ b)            *> mutator_consume ζ a1) ⊗
                            (mutator_assume_term (sub_term ζ (term_not b)) *> mutator_consume ζ a2)
@@ -1220,6 +1228,7 @@ Module Mutators
       match asn with
       | asn_bool b      => dmut_assume_term b
       | asn_prop P      => dmut_assume_prop P
+      | asn_eq t1 t2    => dmut_assume_formula (formula_eq t1 t2)
       | asn_chunk c     => dmut_produce_chunk c
       | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
                            (dmut_assume_term (term_not b) ;; dmut_produce a2)
@@ -1237,6 +1246,7 @@ Module Mutators
       match asn with
       | asn_bool b      => dmut_assert_term b
       | asn_prop P      => dmut_assert_formula (formula_prop (sub_id _) P)
+      | asn_eq t1 t2    => dmut_assert_formula (formula_eq t1 t2)
       | asn_chunk c     => dmut_consume_chunk c
       | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_consume a1) ⊗
                            (dmut_assume_term (term_not b) ;; dmut_consume a2)

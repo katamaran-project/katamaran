@@ -160,6 +160,7 @@ Module Soundness
           apply HYP.
         + contradict HYP.
       - contradict HYP.
+      - admit.
       - apply scmut_consume_chunk_sound in HYP.
         now destruct c.
       - destruct (inst_term ι b); auto.
@@ -177,7 +178,7 @@ Module Soundness
         + apply sepcon_entails.
           apply lex_right with v, entails_refl.
           apply entails_refl.
-    Qed.
+    Admitted.
 
     Local Opaque instantiate_term.
 
@@ -198,6 +199,7 @@ Module Soundness
           apply wand_sepcon_adjoint.
           apply lfalse_left.
       - contradict HYP.
+      - admit.
       - rewrite sepcon_comm.
         destruct c; now cbn in *.
       - destruct (inst ι b); auto.
@@ -217,7 +219,7 @@ Module Soundness
         apply wand_sepcon_adjoint.
         rewrite sepcon_comm.
         now apply IHasn.
-    Qed.
+    Admitted.
 
     Lemma scmut_produce_sound' {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
