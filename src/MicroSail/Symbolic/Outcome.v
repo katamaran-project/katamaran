@@ -54,12 +54,12 @@ Inductive Outcome (A: Type) : Type :=
 | outcome_demonic {I : Type} (os: I -> Outcome A)
 | outcome_angelic_binary (o1 o2 : Outcome A)
 | outcome_demonic_binary (o1 o2 : Outcome A)
-| outcome_fail (msg: string)
+| outcome_fail {E} (msg : E)
 | outcome_block
 | outcome_assertk (P : Prop) (k : Outcome A)
 | outcome_assumek (P : Prop) (k : Outcome A)
 .
-Arguments outcome_fail {_} _.
+Arguments outcome_fail {_ _} _.
 Arguments outcome_block {_}.
 
 Section TransparentObligations.
@@ -69,14 +69,14 @@ End TransparentObligations.
 
 Bind Scope outcome_scope with Outcome.
 
-Definition outcome_angelic_list {A} (msg : string) : list A -> Outcome A :=
+Definition outcome_angelic_list {E A} (msg : E) : list A -> Outcome A :=
   fix outcome_angelic_list (xs : list A) :=
     match xs with
     | nil        => outcome_fail msg
     | cons x xs  => outcome_angelic_binary (outcome_pure x) (outcome_angelic_list xs)
     end.
 
-Definition outcome_angelic_finite `{finite.Finite A} (msg : string) : Outcome A :=
+Definition outcome_angelic_finite {E A} `{finite.Finite A} (msg : E) : Outcome A :=
   outcome_angelic_list msg (finite.enum A).
 
 (* Definition outcome_angelic_list {A} (msg : string) : list A -> Outcome A := *)
@@ -113,8 +113,8 @@ Fixpoint outcome_bind {A B : Type} (o : Outcome A) (f : A -> Outcome B) : Outcom
   | outcome_assumek P k          => outcome_assumek P (outcome_bind k f)
   end.
 
-Definition Error (s : string) : Prop := False.
-Arguments Error s : simpl never.
+Definition Error {E} (msg : E) : Prop := False.
+Arguments Error {E} msg : simpl never.
 
 Fixpoint outcome_satisfy {A : Type} (o : Outcome A) (P : A -> Prop) : Prop :=
   match o with
@@ -123,7 +123,7 @@ Fixpoint outcome_satisfy {A : Type} (o : Outcome A) (P : A -> Prop) : Prop :=
   | outcome_demonic os           => forall i, outcome_satisfy (os i) P
   | outcome_angelic_binary o1 o2 => outcome_satisfy o1 P \/ outcome_satisfy o2 P
   | outcome_demonic_binary o1 o2 => outcome_satisfy o1 P /\ outcome_satisfy o2 P
-  | outcome_fail s               => Error s
+  | outcome_fail msg             => Error msg
   | outcome_block                => True
   | outcome_assertk Q k          => Q /\ outcome_satisfy k P
   | outcome_assumek Q k          => Q -> outcome_satisfy k P
@@ -134,20 +134,20 @@ Definition outcome_safe {A : Type} (o : Outcome A) : Prop :=
 
 Definition outcome_angelic_binary_prune {A} (o1 o2 : Outcome A) : Outcome A :=
   match o1 , o2 with
-  | outcome_block                  , _              => outcome_block
-  | _                              , outcome_block  => outcome_block
-  | outcome_fail s                 , _              => o2
-  | _                              , outcome_fail s => o1
-  | _                              , _              => outcome_angelic_binary o1 o2
+  | outcome_block  , _              => outcome_block
+  | _              , outcome_block  => outcome_block
+  | outcome_fail _ , _              => o2
+  | _              , outcome_fail _ => o1
+  | _              , _              => outcome_angelic_binary o1 o2
   end.
 
 Definition outcome_demonic_binary_prune {A} (o1 o2 : Outcome A) : Outcome A :=
   match o1 , o2 with
-  | outcome_block                  , _                => o2
-  | _                              , outcome_block    => o1
-  | outcome_fail s                 , _                => outcome_fail s
-  | _                              , outcome_fail s   => outcome_fail s
-  | _                              , _                => outcome_demonic_binary o1 o2
+  | outcome_block  , _              => o2
+  | _              , outcome_block  => o1
+  | outcome_fail s , _              => outcome_fail s
+  | _              , outcome_fail s => outcome_fail s
+  | _              , _              => outcome_demonic_binary o1 o2
   end.
 
 Definition outcome_assertk_prune {A} (P : Prop) (o : Outcome A) : Outcome A :=
@@ -197,7 +197,7 @@ Lemma outcome_satisfy_monotonic {A : Type} {P Q : A -> Prop} (o : Outcome A) (hy
   outcome_satisfy o P -> outcome_satisfy o Q.
 Proof. induction o; firstorder. Qed.
 
-Lemma outcome_satisfy_angelic_list {A msg xs} (P : A -> Prop) :
+Lemma outcome_satisfy_angelic_list {S A xs} {msg : S} (P : A -> Prop) :
   outcome_satisfy (outcome_angelic_list msg xs) P <->
   exists x, In x xs /\ P x.
 Proof.
@@ -206,7 +206,7 @@ Proof.
   - rewrite IHxs; firstorder; subst; auto.
 Qed.
 
-Lemma outcome_satisfy_map_angelic_list {A B msg xs} {f : A -> B} (P : B -> Prop) :
+Lemma outcome_satisfy_map_angelic_list {E A B xs} {msg : E} {f : A -> B} (P : B -> Prop) :
   outcome_satisfy (outcome_angelic_list msg (List.map f xs)) P <->
   outcome_satisfy (outcome_angelic_list msg xs) (fun x => P (f x)).
 Proof.
@@ -221,7 +221,7 @@ Proof.
     auto using in_map.
 Qed.
 
-Lemma outcome_satisfy_filter_angelic_list {A msg xs} {f : A -> bool} (P : A -> Prop) :
+Lemma outcome_satisfy_filter_angelic_list {E A xs} {msg : E} {f : A -> bool} (P : A -> Prop) :
   outcome_satisfy (outcome_angelic_list msg (List.filter f xs)) P <->
   outcome_satisfy (outcome_angelic_list msg xs) (fun x => P x /\ f x = true).
 Proof.

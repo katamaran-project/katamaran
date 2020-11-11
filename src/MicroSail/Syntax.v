@@ -1929,7 +1929,7 @@ Module Terms (Export termkit : TermKit).
   Notation "[ x , .. , z ]" :=
     (tuplepat_snoc .. (tuplepat_snoc tuplepat_nil x) .. z) (at level 0) : pat_scope.
   Notation "[ x , .. , z ]" :=
-    (env_snoc .. (env_snoc env_nil (_,_) x) .. (_,_) z) (at level 0) : arg_scope.
+    (env_snoc .. (env_snoc env_nil (_,_) x) .. (_,_) z) (at level 0, only parsing) : arg_scope.
 
   Notation "'if:' e 'then' s1 'else' s2" := (stm_if e%exp s1%exp s2%exp)
     (at level 99, right associativity, format
