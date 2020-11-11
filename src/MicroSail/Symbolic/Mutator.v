@@ -1013,6 +1013,43 @@ Module Mutators
              (fun '(L', h') => dmut_put_heap h';; dmut_pure L')
              (extract_chunk c h (subst ζ1 L))).
 
+      (* This function tries to assert the equality between the terms `te` from
+         a callee context and `tr` from the caller context. The callee context
+         variables are all evars and if possible, it will fill in evars that are
+         strictly necessary for the assertion to be true. *)
+      Definition dmut_assert_term_eq_evar {Σe Σr σ} (te : Term Σe σ) (tr : Term Σr σ) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+        (* Make sure we get the up to date substitution. *)
+        dmut_pure tt >>= fun Σr1 ζ1 _ =>
+        let tr1 := sub_term ζ1 tr in
+        let L1  := subst ζ1 L in
+        (* Try to fully match te against tr1, potentially filling in some evars. *)
+        match match_term te tr1 L1 with
+        | Some e => dmut_pure e
+        | None =>
+          (* The match failed. See if all evars in te are already known.*)
+          match eval_term_evar L1 te with
+          | Some te1 =>
+            (* All evars are known. So assert the equality between the terms in
+               the caller context. *)
+            dmut_assert_formula (formula_eq te1 tr1);; dmut_pure L1
+          | None =>
+            (* Give up. This is currently missing some corner cases where a
+               sub-term of te would already constrain all appearing evars, but
+               which can't be fully unified with tr. match_term could be
+               augmented to also handle this kind of case. *)
+            dmut_fail
+              "dmut_assert_term_eq_evar"
+              "Uninstantiated evars variable" (L,te,tr)
+          end
+        end.
+
+      Equations(noeqns) dmut_assert_namedenv_eq_evar {X Σe Σr σs} (te : NamedEnv (X:=X) (Term Σe) σs) (tr : NamedEnv (Term Σr) σs) :
+        EvarEnv Σe Σr -> DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+        dmut_assert_namedenv_eq_evar env_nil env_nil := dmut_pure;
+        dmut_assert_namedenv_eq_evar (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) :=
+          fun L => dmut_assert_namedenv_eq_evar E1 E2 L >>= fun _ ζ =>
+                   dmut_assert_term_eq_evar t1 (sub_term ζ t2).
+
       Fixpoint dmut_consume_evar {Σe Σr} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
         match asn with
         | asn_bool b =>
@@ -1028,6 +1065,8 @@ Module Mutators
         | @asn_eq _ T t1 t2 =>
           match eval_term_evar L t1, eval_term_evar L t2 with
           | Some t1', Some t2' => dmut_assert_formula (formula_eq t1' t2') ;; dmut_pure L
+          | Some t1', None     => dmut_assert_term_eq_evar t2 t1' L
+          | None    , Some t2' => dmut_assert_term_eq_evar t1 t2' L
           | _       , _        => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion" (asn,L)
           end
         | asn_chunk c => dmut_consume_chunk_evar c L
@@ -1068,26 +1107,6 @@ Module Mutators
               (asn,L)
           end
         end.
-
-      Definition dmut_assert_term_eq_evar {Σe Σr σ} (te : Term Σe σ) (tr : Term Σr σ) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        (* Make sure we get the up to date substitution. *)
-        dmut_pure tt >>= fun Σr1 ζ1 _ =>
-        let tr1 := sub_term ζ1 tr in
-        let L1  := subst ζ1 L in
-        match match_term te tr1 L1 with
-        | Some e => dmut_pure e
-        | None => match eval_term_evar L1 te with
-                  | Some te1 => dmut_assert_formula (formula_eq te1 tr1);; dmut_pure L1
-                  | None => dmut_fail "dmut_assert_term_eq_evar" "Uninstantiated evars" (L,te,tr)
-                  end
-        end.
-
-      Equations(noeqns) dmut_assert_namedenv_eq_evar {X Σe Σr σs} (te : NamedEnv (X:=X) (Term Σe) σs) (tr : NamedEnv (Term Σr) σs) :
-        EvarEnv Σe Σr -> DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        dmut_assert_namedenv_eq_evar env_nil env_nil := dmut_pure;
-        dmut_assert_namedenv_eq_evar (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) :=
-          fun L => dmut_assert_namedenv_eq_evar E1 E2 L >>= fun _ ζ =>
-                   dmut_assert_term_eq_evar t1 (sub_term ζ t2).
 
     End CallerContext.
 
