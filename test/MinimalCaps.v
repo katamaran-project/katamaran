@@ -1131,37 +1131,16 @@ Module MinCapsContracts.
   Proof. compute; solve. Qed.
 
   Lemma valid_contract_read_reg_cap : ValidContractDynMut sep_contract_read_reg_cap fun_read_reg_cap.
-  Proof.
-    split;
-      [ compute; auto
-      | exists (term_var "result"); compute; firstorder congruence
-      ].
-  Qed.
+  Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
   Lemma valid_contract_read_reg_num : ValidContractDynMut sep_contract_read_reg_num fun_read_reg_num.
-  Proof.
-    split;
-      [ exists (term_var "result"); compute; firstorder congruence
-      | compute; auto
-      ].
-  Qed.
+  Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
   Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_write_reg.
   Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
   Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
-  Proof.
-    exists (TM.term_record
-              capability
-              [TM.term_projrec (TM.term_var "opc") "cap_permission",
-               TM.term_projrec (TM.term_var "opc") "cap_begin",
-               TM.term_projrec (TM.term_var "opc") "cap_end",
-               TM.term_binop
-                 binop_plus
-                 (TM.term_projrec (TM.term_var "opc") "cap_cursor")
-                 (TM.term_lit TY.ty_int 1)]%arg).
-    compute; solve.
-  Qed.
+  Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
 End MinCapsContracts.
 

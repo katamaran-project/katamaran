@@ -513,9 +513,7 @@ Module ISASymbolicContractKit <:
        sep_contract_result          := "result";
        sep_contract_postcondition   :=
          asn_chunk (chunk_pred ptstoreg [ term_var "reg_tag", term_var "v" ]%env) ✱
-         @asn_prop
-           ["reg_tag" ∶ ty_enum register_tag,  "v" ∶ ty_int, "result" ∶ ty_int]
-           (fun _ v res => v = res)%type;
+         asn_eq (term_var "result") (term_var "v");
     |}.
 
   Definition sep_contract_wX : SepContract ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_unit :=

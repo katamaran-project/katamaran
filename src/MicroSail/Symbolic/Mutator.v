@@ -271,6 +271,8 @@ Module Mutators
 
   Definition create_evarenv (Σe Σr : Ctx (𝑺 * Ty)) : EvarEnv Σe Σr :=
     env_tabulate (fun _ _ => None).
+  Definition create_evarenv_id (Σ : Ctx (𝑺 * Ty)) : EvarEnv Σ Σ :=
+    env_tabulate (fun '(x,σ) xIn => Some (term_var x)).
 
   Section WithEvarEnv.
 
@@ -333,6 +335,8 @@ Module Mutators
         if Lit_eqb σ l1 l2 then Some else fun _ => None;
       match_term (term_inl t1) (term_inl t2) := match_term t1 t2;
       match_term (term_inl t1) (term_lit (inl l2)) := match_term t1 (term_lit _ l2);
+      match_term (term_inr t1) (term_inr t2) := match_term t1 t2;
+      match_term (term_inr t1) (term_lit (inr l2)) := match_term t1 (term_lit _ l2);
       match_term (term_tuple ts1) (term_tuple ts2) := match_env' (@match_term) ts1 ts2;
       (* Obviously more matchings can be added here. *)
       match_term _ _ := fun _ => None.
@@ -1307,7 +1311,7 @@ Module Mutators
         fun s =>
           let mut := (DynMutV1.dmut_produce req ;;
                       dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
-                      dmut_sub (sub_snoc ζ1 (result,τ) t) (DynMutV1.dmut_consume ens) ;;
+                      dmut_consume_evar ens (subst (sub_snoc ζ1 (result,τ) t) (create_evarenv_id _)) ;;
                       dmut_leakcheck)%dmut in
           let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
           outcome_map (fun _ => tt) out
