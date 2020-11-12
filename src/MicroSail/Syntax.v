@@ -1360,28 +1360,34 @@ Module Terms (Export termkit : TermKit).
 
   Section OccursCheck.
 
+    Class OccursCheck (T : Ctx (𝑺 * Ty) -> Type) : Type :=
+      occurs_check : forall {Σ x} (xIn : x ∈ Σ) (t : T Σ), option (T (Σ - x)%ctx).
+
     Import stdpp.base.
 
-    Fixpoint occurs_check {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
+    Fixpoint occurs_check_term {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
       match t with
       | @term_var _ ς σ0 ςInΣ =>
-        ςInΣ' ← occurs_check_var xIn ςInΣ; mret (@term_var _ _ _ ςInΣ')
-      | term_lit σ0 l => mret (term_lit σ0 l)
+        ςInΣ' ← occurs_check_var xIn ςInΣ; Some (@term_var _ _ _ ςInΣ')
+      | term_lit σ0 l => Some (term_lit σ0 l)
       | term_binop op t1 t2 =>
-        t1' ← occurs_check xIn t1; t2' ← occurs_check xIn t2; mret (term_binop op t1' t2')
-      | term_neg t => t' ← occurs_check xIn t ; mret (term_neg t')
-      | term_not t => t' ← occurs_check xIn t ; mret (term_not t')
-      | term_inl t => t' ← occurs_check xIn t ; mret (term_inl t')
-      | term_inr t => t' ← occurs_check xIn t ; mret (term_inr t')
-      | term_list es => option_map term_list (traverse_list (occurs_check xIn) es)
-      | term_bvec es => option_map term_bvec (traverse_vector (occurs_check xIn) es)
-      | term_tuple es => option_map term_tuple (traverse_env (@occurs_check _ _ xIn) es)
+        t1' ← occurs_check_term xIn t1; t2' ← occurs_check_term xIn t2; Some (term_binop op t1' t2')
+      | term_neg t => option_map term_neg (occurs_check_term xIn t)
+      | term_not t => option_map term_not (occurs_check_term xIn t)
+      | term_inl t => option_map term_inl (occurs_check_term xIn t)
+      | term_inr t => option_map term_inr (occurs_check_term xIn t)
+      | term_list es => option_map term_list (traverse_list (occurs_check_term xIn) es)
+      | term_bvec es => option_map term_bvec (traverse_vector (occurs_check_term xIn) es)
+      | term_tuple es => option_map term_tuple (traverse_env (@occurs_check_term _ _ xIn) es)
       | @term_projtup _ σs t n σ p =>
-        t' ← occurs_check xIn t ; mret (@term_projtup _ _ t' n _ p)
-      | term_union U K t => t' ← occurs_check xIn t ; mret (term_union U K t')
-      | term_record R es => option_map (term_record R) (traverse_env (fun _ => occurs_check xIn) es)
-      | term_projrec t rf => t' ← occurs_check xIn t ; mret (term_projrec t' rf)
+        option_map (fun t' => @term_projtup _ _ t' n _ p) (occurs_check_term xIn t)
+      | term_union U K t => option_map (term_union U K) (occurs_check_term xIn t)
+      | term_record R es => option_map (term_record R) (traverse_env (fun _ => occurs_check_term xIn) es)
+      | term_projrec t rf => option_map (fun t' => term_projrec t' rf) (occurs_check_term xIn t)
       end.
+
+    Global Instance OccursCheckTerm {σ} : OccursCheck (fun Σ => Term Σ σ) :=
+      fun _ _ xIn => occurs_check_term xIn.
 
   End OccursCheck.
 
