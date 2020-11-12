@@ -68,11 +68,6 @@ Obligation Tactic := idtac.
 
 Inductive Bit : Set := bitzero | bitone.
 
-(* Simple telescopic equality for a family with one index. *)
-Inductive teq {I} {F : I -> Type} {i j} (fi : F i) (fj : F j) : Prop :=
-| teq_refl (eqi : i = j) (eqf : eq_rect _ _ fi _ eqi = fj) : teq fi fj.
-Infix "≡" := teq (at level 70, no associativity).
-
 Definition Bit_eqb (b1 : Bit) (b2 : Bit) : bool :=
   match b1, b2 with
   | bitzero, bitzero => true
@@ -459,7 +454,7 @@ Module Terms (Export termkit : TermKit).
   End Literals.
   Bind Scope exp_scope with Lit.
 
-  Definition LocalStore (Γ : NCtx 𝑿 Ty) : Type := NamedEnv Lit Γ.
+  Definition LocalStore (Γ : NCtx 𝑿 Ty) : Set := NamedEnv Lit Γ.
   Bind Scope env_scope with LocalStore.
 
   Section BinaryOperations.
@@ -887,7 +882,7 @@ Module Terms (Export termkit : TermKit).
     Global Arguments stm_read_register {Γ τ} reg.
     Global Arguments stm_write_register {Γ τ} reg e%exp.
 
-    Record Alternative (Γ : NCtx 𝑿 Ty) (σ τ : Ty) : Type :=
+    Record Alternative (Γ : NCtx 𝑿 Ty) (σ τ : Ty) : Set :=
       MkAlt
         { alt_ctx : NCtx 𝑿 Ty;
           alt_pat : Pattern alt_ctx σ;
@@ -984,7 +979,7 @@ Module Terms (Export termkit : TermKit).
 
   End NameResolution.
 
-  Definition SymInstance (Σ : NCtx 𝑺 Ty) : Type := NamedEnv Lit Σ.
+  Definition SymInstance (Σ : NCtx 𝑺 Ty) : Set := NamedEnv Lit Σ.
   Bind Scope env_scope with SymInstance.
 
   Section SymbolicTerms.
@@ -1360,7 +1355,7 @@ Module Terms (Export termkit : TermKit).
 
   Section SymbolicSubstitutions.
 
-    Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Type :=
+    Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Set :=
       Env (fun b => Term Σ2 (snd b)) Σ1.
     (* Hint Unfold Sub. *)
 
