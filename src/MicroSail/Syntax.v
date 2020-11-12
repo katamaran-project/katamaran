@@ -1358,39 +1358,6 @@ Module Terms (Export termkit : TermKit).
   End SymbolicTerms.
   Bind Scope exp_scope with Term.
 
-  Section OccursCheck.
-
-    Class OccursCheck (T : Ctx (𝑺 * Ty) -> Type) : Type :=
-      occurs_check : forall {Σ x} (xIn : x ∈ Σ) (t : T Σ), option (T (Σ - x)%ctx).
-
-    Import stdpp.base.
-
-    Fixpoint occurs_check_term {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
-      match t with
-      | @term_var _ ς σ0 ςInΣ =>
-        ςInΣ' ← occurs_check_var xIn ςInΣ; Some (@term_var _ _ _ ςInΣ')
-      | term_lit σ0 l => Some (term_lit σ0 l)
-      | term_binop op t1 t2 =>
-        t1' ← occurs_check_term xIn t1; t2' ← occurs_check_term xIn t2; Some (term_binop op t1' t2')
-      | term_neg t => option_map term_neg (occurs_check_term xIn t)
-      | term_not t => option_map term_not (occurs_check_term xIn t)
-      | term_inl t => option_map term_inl (occurs_check_term xIn t)
-      | term_inr t => option_map term_inr (occurs_check_term xIn t)
-      | term_list es => option_map term_list (traverse_list (occurs_check_term xIn) es)
-      | term_bvec es => option_map term_bvec (traverse_vector (occurs_check_term xIn) es)
-      | term_tuple es => option_map term_tuple (traverse_env (@occurs_check_term _ _ xIn) es)
-      | @term_projtup _ σs t n σ p =>
-        option_map (fun t' => @term_projtup _ _ t' n _ p) (occurs_check_term xIn t)
-      | term_union U K t => option_map (term_union U K) (occurs_check_term xIn t)
-      | term_record R es => option_map (term_record R) (traverse_env (fun _ => occurs_check_term xIn) es)
-      | term_projrec t rf => option_map (fun t' => term_projrec t' rf) (occurs_check_term xIn t)
-      end.
-
-    Global Instance OccursCheckTerm {σ} : OccursCheck (fun Σ => Term Σ σ) :=
-      fun _ _ xIn => occurs_check_term xIn.
-
-  End OccursCheck.
-
   Section SymbolicSubstitutions.
 
     Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Type :=
@@ -1626,6 +1593,130 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
   End SymbolicSubstitutions.
+
+  Section OccursCheck.
+
+    Class OccursCheck (T : Ctx (𝑺 * Ty) -> Type) : Type :=
+      occurs_check : forall {Σ x} (xIn : x ∈ Σ) (t : T Σ), option (T (Σ - x)%ctx).
+
+    Import stdpp.base.
+
+    Fixpoint occurs_check_term {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
+      match t with
+      | @term_var _ ς σ0 ςInΣ =>
+        ςInΣ' ← occurs_check_var xIn ςInΣ; Some (@term_var _ _ _ ςInΣ')
+      | term_lit σ0 l => Some (term_lit σ0 l)
+      | term_binop op t1 t2 =>
+        t1' ← occurs_check_term xIn t1; t2' ← occurs_check_term xIn t2; Some (term_binop op t1' t2')
+      | term_neg t => option_map term_neg (occurs_check_term xIn t)
+      | term_not t => option_map term_not (occurs_check_term xIn t)
+      | term_inl t => option_map term_inl (occurs_check_term xIn t)
+      | term_inr t => option_map term_inr (occurs_check_term xIn t)
+      | term_list es => option_map term_list (traverse_list (occurs_check_term xIn) es)
+      | term_bvec es => option_map term_bvec (traverse_vector (occurs_check_term xIn) es)
+      | term_tuple es => option_map term_tuple (traverse_env (@occurs_check_term _ _ xIn) es)
+      | @term_projtup _ σs t n σ p =>
+        option_map (fun t' => @term_projtup _ _ t' n _ p) (occurs_check_term xIn t)
+      | term_union U K t => option_map (term_union U K) (occurs_check_term xIn t)
+      | term_record R es => option_map (term_record R) (traverse_env (fun _ => occurs_check_term xIn) es)
+      | term_projrec t rf => option_map (fun t' => term_projrec t' rf) (occurs_check_term xIn t)
+      end.
+
+    Global Instance OccursCheckTerm {σ} : OccursCheck (fun Σ => Term Σ σ) :=
+      fun _ _ xIn => occurs_check_term xIn.
+
+    Global Instance OccursCheckList {T : NCtx 𝑺 Ty -> Type} `{OccursCheck T} :
+      OccursCheck (fun Σ => list (T Σ)) :=
+      fun _ _ xIn => traverse_list (occurs_check xIn).
+
+    Global Instance OccursCheckEnv {I : Set} {T : NCtx 𝑺 Ty -> I -> Set}
+           {_ : forall i : I, OccursCheck (fun Σ => T Σ i)}
+           {Γ : Ctx I} :
+      OccursCheck (fun Σ => Env (T Σ) Γ) :=
+      fun _ _ xIn => traverse_env (fun i => occurs_check (T := fun Σ => T Σ i) xIn).
+
+    Global Instance OccursCheckSub {Σ} : OccursCheck (Sub Σ) :=
+      OccursCheckEnv.
+
+  End OccursCheck.
+
+  Section OccursCheckLaws.
+
+    Class OccursCheckLaws (T : NCtx 𝑺 Ty -> Type) `{Subst T, OccursCheck T} : Prop :=
+      { occurs_check_shift {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : T (Σ - (x,σ))%ctx) :
+          occurs_check xIn (subst (sub_shift xIn) t) = Some t;
+      }.
+
+    Global Arguments OccursCheckLaws T {_ _}.
+
+    Lemma option_map_eq_some {A B} (f : A -> B) (o : option A) (a : A) :
+      o = Some a ->
+      option_map f o = Some (f a).
+    Proof. now intros ->. Qed.
+
+    Global Instance OccursCheckLawsTerm {τ} : OccursCheckLaws (fun Σ => Term Σ τ).
+    Proof.
+      constructor; intros; unfold occurs_check, OccursCheckTerm, subst, SubstTerm.
+      induction t; cbn.
+      - unfold sub_shift. rewrite env_lookup_tabulate.
+        cbv [occurs_check_term base.mbind option.option_bind].
+        now rewrite occurs_check_shift_var.
+      - reflexivity.
+      - now rewrite IHt1, IHt2.
+      - now rewrite IHt.
+      - now rewrite IHt.
+      - now rewrite IHt.
+      - now rewrite IHt.
+      - apply option_map_eq_some.
+        induction es; destruct X; cbn; cbv [base.mret base.mbind option.option_ret option.option_bind] in *.
+        + reflexivity.
+        + now rewrite e, IHes.
+      - apply option_map_eq_some.
+        induction es; destruct X; cbn; cbv [base.mret base.mbind option.option_ret option.option_bind] in *.
+        + reflexivity.
+        + now rewrite e, IHes.
+      - apply option_map_eq_some.
+        induction es; destruct X; cbn; cbv [base.mret base.mbind option.option_ret option.option_bind] in *.
+        + reflexivity.
+        + now rewrite IHes, e0.
+      - now apply (option_map_eq_some (fun t' : Term (Σ - x∶σ) (ty_tuple σs) => term_projtup t' n)).
+      - now rewrite IHt.
+      - apply option_map_eq_some.
+        induction es; destruct X; cbn; cbv [base.mret base.mbind option.option_ret option.option_bind] in *.
+        + reflexivity.
+        + now rewrite IHes, e0.
+      - now apply (option_map_eq_some (fun t' : Term (Σ - x∶σ) (ty_record R) => term_projrec t' rf)).
+    Qed.
+
+    Global Instance OccursCheckLawsList {T : NCtx 𝑺 Ty -> Type} `{OccursCheckLaws T} :
+      OccursCheckLaws (fun Σ => list (T Σ)).
+    Proof.
+      constructor.
+      - intros. induction t; cbn.
+        + reflexivity.
+        + cbv [base.mbind option.option_bind].
+          now rewrite occurs_check_shift, IHt.
+    Qed.
+
+    Global Instance OccursCheckLawsEnv {I : Set} {T : NCtx 𝑺 Ty -> I -> Set}
+           {_ : forall i : I, Subst (fun Σ => T Σ i)}
+           {_ : forall i : I, OccursCheck (fun Σ => T Σ i)}
+           {_ : forall i : I, OccursCheckLaws (fun Σ => T Σ i)}
+           {Γ : Ctx I} :
+      OccursCheckLaws (fun Σ => Env (T Σ) Γ).
+    Proof.
+      constructor.
+      - intros. induction t.
+        + reflexivity.
+        + unfold occurs_check, OccursCheckEnv, subst, SubstEnv in IHt.
+          cbn. cbv [base.mbind option.option_ret option.option_bind] in *.
+          now rewrite IHt, occurs_check_shift.
+    Qed.
+
+    Global Instance OccursCheckLawsSub {Σ} : OccursCheckLaws (Sub Σ) :=
+      OccursCheckLawsEnv.
+
+  End OccursCheckLaws.
 
   Section Instantiation.
 
