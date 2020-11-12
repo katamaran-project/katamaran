@@ -1362,28 +1362,6 @@ Module Terms (Export termkit : TermKit).
 
     Import stdpp.base.
 
-    (* Most explicit type-signatures given below are only necessary for Coq 8.9
-       and can be cleaned up for later versions. *)
-    Fixpoint occurs_check_index {Σ} {x y : 𝑺 * Ty} {struct Σ} :
-      forall (m n : nat) (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
-        option (y ∈ ctx_remove {| inctx_at := m; inctx_valid := p |}) :=
-      match Σ with
-      | ctx_nil => fun m n _ (q : ctx_nth_is ctx_nil n y) => match q with end
-      | ctx_snoc Σ b =>
-        fun (m n : nat) =>
-          match m , n with
-          | 0   , 0   => fun _ _ => None
-          | 0   , S n => fun p (q : ctx_nth_is (ctx_snoc Σ b) (S n) y) =>
-                          Some (@MkInCtx _ _ (ctx_remove (@MkInCtx _ _ (ctx_snoc Σ b) 0 p)) n q)
-          | S m , 0   => fun _ (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
-                          Some (@MkInCtx _ _ (ctx_snoc (Σ - x) b) 0 q)
-          | S m , S n => fun p q => option_map inctx_succ (occurs_check_index m n p q)
-          end
-      end.
-
-    Definition occurs_check_var {Σ} {x y : 𝑺 * Ty} (xIn : x ∈ Σ) (yIn : y ∈ Σ) : option (y ∈ Σ - x) :=
-      occurs_check_index (inctx_at xIn) (inctx_at yIn) (inctx_valid xIn) (inctx_valid yIn).
-
     Fixpoint occurs_check {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
       match t with
       | @term_var _ ς σ0 ςInΣ =>
@@ -1404,27 +1382,6 @@ Module Terms (Export termkit : TermKit).
       | term_record R es => option_map (term_record R) (traverse_env (fun _ => occurs_check xIn) es)
       | term_projrec t rf => t' ← occurs_check xIn t ; mret (term_projrec t' rf)
       end.
-
-    Fixpoint occurs_check_index_sum {Σ} {x y : 𝑺 * Ty} {struct Σ} :
-      forall (m n : nat) (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
-        (x = y) + (y ∈ ctx_remove {| inctx_at := m; inctx_valid := p |}) :=
-      match Σ with
-      | ctx_nil => fun m n _ (q : ctx_nth_is ctx_nil n y) => match q with end
-      | ctx_snoc Σ b =>
-        fun m n =>
-          match m , n with
-          | 0   , 0   => fun (p : ctx_nth_is (Σ ▻ b) 0 x) q =>
-                          inl (eq_trans (eq_sym p) q)
-          | 0   , S n => fun p (q : ctx_nth_is (ctx_snoc Σ b) (S n) y) =>
-                          inr (@MkInCtx _ _ (ctx_remove (@MkInCtx _ _ (ctx_snoc Σ b) 0 p)) n q)
-          | S m , 0   => fun _ (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
-                          inr (@MkInCtx _ _ (ctx_snoc (Σ - x) b) 0 q)
-          | S m , S n => fun p q => sum_map id inctx_succ (occurs_check_index_sum m n p q)
-          end
-      end.
-
-    Definition occurs_check_var_sum {Σ} {x y : 𝑺 * Ty} (xIn : x ∈ Σ) (yIn : y ∈ Σ) : (x = y) + (y ∈ Σ - x) :=
-      occurs_check_index_sum (inctx_at xIn) (inctx_at yIn) (inctx_valid xIn) (inctx_valid yIn).
 
   End OccursCheck.
 
@@ -1476,9 +1433,15 @@ Module Terms (Export termkit : TermKit).
       env_snoc ζ b t.
     Global Arguments sub_snoc {_ _} _ _ _.
 
+    Definition sub_shift {Σ b} (bIn : b ∈ Σ) : Sub (Σ - b) Σ :=
+      env_tabulate
+        (D := fun b => Term Σ (snd b))
+        (fun '(x, τ) xIn => @term_var Σ x τ (shift_var bIn xIn)).
+
     Definition sub_wk1 {Σ b} : Sub Σ (Σ ▻ b) :=
-      @env_tabulate _ (fun b => Term _ (snd b)) _
-                    (fun '(ς , σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
+      env_tabulate
+        (D := fun b => Term _ (snd b))
+        (fun '(ς , σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
 
     Definition sub_comp {Σ1 Σ2 Σ3} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) : Sub Σ1 Σ3 :=
       subst ζ2 ζ1.

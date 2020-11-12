@@ -28,6 +28,8 @@
 
 Require Import Coq.Logic.EqdepFacts.
 Require Import Equations.Equations.
+From stdpp Require
+     base.
 Require Import MicroSail.Notation.
 Require Import MicroSail.Prelude.
 
@@ -222,6 +224,82 @@ Section WithBinding.
         end e
     end.
   Arguments ctx_remove _ [_] _.
+
+  Fixpoint shift_index {b x} {Σ : Ctx B} {struct Σ} :
+    forall
+      (bn xn : nat) (bp : ctx_nth_is Σ bn b)
+      (xp : ctx_nth_is (ctx_remove Σ {| inctx_valid := bp |}) xn x),
+      InCtx x Σ :=
+    match Σ with
+    | ctx_nil => fun _ _ (bp : ctx_nth_is ctx_nil _ _) => match bp with end
+    | ctx_snoc Σ b =>
+      fun bn xn =>
+        match bn , xn with
+        | O    , xn   => fun bp xp => inctx_succ (MkInCtx xn xp)
+        | S bn , O    => fun bp xp => MkInCtx (Γ := ctx_snoc Σ b) O xp
+        | S bn , S xn => fun bp xp => inctx_succ (shift_index bn xn bp xp)
+        end
+    end.
+
+  Definition shift_var {b x} {Σ : Ctx B} (bIn : InCtx b Σ) (xIn : InCtx x (ctx_remove Σ bIn)) : InCtx x Σ :=
+    shift_index (inctx_at bIn) (inctx_at xIn) (inctx_valid bIn) (inctx_valid xIn).
+
+  (* Most explicit type-signatures given below are only necessary for Coq 8.9
+     and can be cleaned up for later versions. *)
+  Fixpoint occurs_check_index {Σ} {x y : B} {struct Σ} :
+    forall (m n : nat) (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
+      option (InCtx y (ctx_remove _ {| inctx_at := m; inctx_valid := p |})) :=
+    match Σ with
+    | ctx_nil => fun m n _ (q : ctx_nth_is ctx_nil n y) => match q with end
+    | ctx_snoc Σ b =>
+      fun (m n : nat) =>
+        match m , n with
+        | 0   , 0   => fun _ _ => None
+        | 0   , S n => fun p (q : ctx_nth_is (ctx_snoc Σ b) (S n) y) =>
+                        Some (@MkInCtx _ (ctx_remove _ (@MkInCtx _ (ctx_snoc Σ b) 0 p)) n q)
+        | S m , 0   => fun _ (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
+                        Some (@MkInCtx _ (ctx_snoc (ctx_remove Σ _) b) 0 q)
+        | S m , S n => fun p q => option_map inctx_succ (occurs_check_index m n p q)
+        end
+    end.
+
+  Definition occurs_check_var {Σ} {x y : B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) : option (InCtx y (ctx_remove Σ xIn)) :=
+    occurs_check_index (inctx_at xIn) (inctx_at yIn) (inctx_valid xIn) (inctx_valid yIn).
+
+  Lemma occurs_check_shift_var {x y} {Σ : Ctx B} (xIn : InCtx x Σ) (yIn : InCtx y (ctx_remove Σ xIn)) :
+    occurs_check_var xIn (shift_var xIn yIn) = Some yIn.
+  Proof.
+    unfold occurs_check_var, shift_var. destruct yIn as [m p]. cbn.
+    revert m p.
+    induction xIn using InCtx_ind.
+    - cbn in *.
+      reflexivity.
+    - intros [|m]; cbn.
+      + reflexivity.
+      + intros p.
+        now rewrite (IHxIn m p).
+  Qed.
+
+  Fixpoint occurs_check_index_sum {Σ} {x y : B} {struct Σ} :
+    forall (m n : nat) (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
+      (x = y) + (InCtx y (ctx_remove _ {| inctx_at := m; inctx_valid := p |})) :=
+    match Σ with
+    | ctx_nil => fun m n _ (q : ctx_nth_is ctx_nil n y) => match q with end
+    | ctx_snoc Σ b =>
+      fun m n =>
+        match m , n with
+        | 0   , 0   => fun (p : ctx_nth_is (ctx_snoc Σ b) 0 x) q =>
+                        inl (eq_trans (eq_sym p) q)
+        | 0   , S n => fun p (q : ctx_nth_is (ctx_snoc Σ b) (S n) y) =>
+                        inr (@MkInCtx _ (ctx_remove _ (@MkInCtx _ (ctx_snoc Σ b) 0 p)) n q)
+        | S m , 0   => fun _ (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
+                        inr (@MkInCtx _ (ctx_snoc (ctx_remove Σ _) b) 0 q)
+        | S m , S n => fun p q => base.sum_map id inctx_succ (occurs_check_index_sum m n p q)
+        end
+    end.
+
+  Definition occurs_check_var_sum {Σ} {x y : B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) : (x = y) + (InCtx y (ctx_remove Σ xIn)) :=
+    occurs_check_index_sum (inctx_at xIn) (inctx_at yIn) (inctx_valid xIn) (inctx_valid yIn).
 
 End WithBinding.
 
