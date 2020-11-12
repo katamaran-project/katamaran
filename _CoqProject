@@ -5,13 +5,13 @@ src/MicroSail/Environment.v
 src/MicroSail/Notation.v
 src/MicroSail/Prelude.v
 src/MicroSail/SemiConcrete/Mutator.v
+src/MicroSail/SemiConcrete/Outcome.v
 src/MicroSail/SemiConcrete/Sound.v
 src/MicroSail/Sep/Logic.v
 src/MicroSail/Sep/Model/Disjoint.v
 src/MicroSail/Sep/Hoare.v
 src/MicroSail/Sep/Soundness/HoareSound.v
 src/MicroSail/Symbolic/Mutator.v
-src/MicroSail/Symbolic/Outcome.v
 src/MicroSail/Symbolic/Sound.v
 src/MicroSail/Sep/Spec.v
 src/MicroSail/SmallStep/Inversion.v

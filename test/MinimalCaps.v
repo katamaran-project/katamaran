@@ -36,10 +36,10 @@ From Equations Require Import
      Equations.
 
 From MicroSail Require Import
+     SemiConcrete.Outcome
      Sep.Spec
-     Syntax
      Symbolic.Mutator
-     Symbolic.Outcome.
+     Syntax.
 
 From MicroSail Require Environment.
 From MicroSail Require Iris.Model.

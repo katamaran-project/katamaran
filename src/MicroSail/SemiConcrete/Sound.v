@@ -45,7 +45,7 @@ From MicroSail Require Import
      Syntax
      Tactics
      SemiConcrete.Mutator
-     Symbolic.Outcome.
+     SemiConcrete.Outcome.
 
 Set Implicit Arguments.
 

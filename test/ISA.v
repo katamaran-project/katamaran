@@ -13,12 +13,12 @@ From Equations Require Import
 
 From MicroSail Require Import
      Notation
-     SmallStep.Step
-     Syntax
+     SemiConcrete.Outcome
      Sep.Spec
+     SmallStep.Step
      Symbolic.Mutator
-     Symbolic.Outcome
-     Symbolic.Sound.
+     Symbolic.Sound
+     Syntax.
 
 From stdpp Require
      finite.

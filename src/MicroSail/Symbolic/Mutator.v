@@ -41,7 +41,7 @@ From Equations Require Import Equations.
 
 From MicroSail Require Import
      Sep.Spec
-     Symbolic.Outcome
+     SemiConcrete.Outcome
      Syntax.
 
 From stdpp Require
