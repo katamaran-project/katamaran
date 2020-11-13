@@ -1589,6 +1589,24 @@ Module Terms (Export termkit : TermKit).
 
   End SymbolicSubstitutions.
 
+  Section MultiSubs.
+
+    Inductive MultiSub : forall (Σ1 Σ2 : Ctx (𝑺 * Ty)), Set :=
+    | multisub_id {Σ}       : MultiSub Σ Σ
+    | multisub_cons {Σ Σ' x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ)
+                    (ζ : MultiSub (Σ - (x,σ)) Σ')
+                    : MultiSub Σ Σ'.
+
+    Global Arguments multisub_cons {_ _} x {_ _} t ζ.
+
+    Fixpoint sub_multi {Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : Sub Σ1 Σ2 :=
+      match ζ in (MultiSub Σ3 Σ4) return (Sub Σ3 Σ4) with
+      | multisub_id         => sub_id _
+      | multisub_cons x t ζ => sub_comp (sub_single _ t) (sub_multi ζ)
+      end.
+
+  End MultiSubs.
+
   Section OccursCheck.
 
     Class OccursCheck (T : Ctx (𝑺 * Ty) -> Type) : Type :=
