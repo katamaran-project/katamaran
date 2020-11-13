@@ -186,6 +186,30 @@ Section WithBinding.
         end (env_split Δ)
       end.
 
+
+    Fixpoint env_remove {Γ b} (E : Env Γ) : forall (bIn : b ∈ Γ), Env (Γ - b)%ctx :=
+      match E with
+      | env_nil => fun '(MkInCtx n e) => match e with end
+      | @env_snoc Γ0 E0 b0 db =>
+        fun '(MkInCtx n e) =>
+          match n return forall e, Env (ctx_remove (@MkInCtx B b (@ctx_snoc B Γ0 b0) n e))
+          with
+          | O   => fun _ => E0
+          | S n => fun e => env_snoc (env_remove E0 (@MkInCtx B b Γ0 n e)) db
+          end e
+      end.
+    Global Arguments env_remove {_} b E.
+
+    Definition env_remove' {Γ b} (E : Env Γ) : forall (bIn : b ∈ Γ), Env (Γ - b)%ctx.
+    Proof.
+      intros bIn.
+      apply env_tabulate.
+      intros x xIn.
+      apply (@env_lookup _ E x).
+      apply (shift_var bIn xIn).
+    Defined.
+    Global Arguments env_remove' {_} b E.
+
     Lemma env_lookup_update {Γ} (E : Env Γ) :
       forall {b} (bInΓ : InCtx b Γ) (db : D b),
         env_lookup (env_update E bInΓ db) bInΓ = db.

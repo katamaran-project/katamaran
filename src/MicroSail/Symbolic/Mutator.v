@@ -1340,4 +1340,342 @@ Module Mutators
 
   End DynMutV2.
 
+  Section SymbolicOutcomes.
+
+    Inductive SymOutcome (A: Ctx (𝑺 * Ty) -> Type) (Σ : NCtx 𝑺 Ty) : Type :=
+    | sout_pure (a: A Σ)
+    | sout_angelic {I : Type} (os: I -> SymOutcome A Σ)
+    (* | sout_demonic {I : Type} (os: I -> SymOutcome A Σ) *)
+    | sout_angelic_binary (o1 o2 : SymOutcome A Σ)
+    | sout_demonic_binary (o1 o2 : SymOutcome A Σ)
+    | sout_fail {E} (msg : E)
+    | sout_block
+    | sout_assertk {E} (P : Formula Σ) (msg : E) (k : SymOutcome A Σ)
+    | sout_assumek (P : Formula Σ) (k : SymOutcome A Σ)
+    | sout_demonicv b (k : SymOutcome A (Σ ▻ b))
+    (* | sout_subst {Σ'} (ζ : Sub Σ Σ') (k : SymOutcome A Σ'). *)
+    | sout_subst x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (k : SymOutcome A (Σ - (x,σ))).
+
+    Global Arguments sout_pure {_ _} _.
+    Global Arguments sout_fail {_ _ _} _.
+    Global Arguments sout_block {_ _}.
+    Global Arguments sout_demonicv {_ _} _ _.
+    Global Arguments sout_subst {_ _} x {_ _} t k.
+
+    Fixpoint subst_symoutcome {A} `{Subst A} {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (o : SymOutcome A Σ1) : SymOutcome A Σ2 :=
+      match o with
+      | sout_pure a => sout_pure (subst ζ a)
+      | sout_angelic os => sout_angelic (fun i => subst_symoutcome ζ (os i))
+      (* | sout_demonic os => sout_demonic (fun i => subst_symoutcome ζ (os i)) *)
+      | sout_angelic_binary o1 o2 => sout_angelic_binary (subst_symoutcome ζ o1) (subst_symoutcome ζ o2)
+      | sout_demonic_binary o1 o2 => sout_demonic_binary (subst_symoutcome ζ o1) (subst_symoutcome ζ o2)
+      | sout_fail msg => sout_fail msg
+      | sout_block => sout_block
+      | sout_assertk P msg o => sout_assertk (subst ζ P) msg (subst_symoutcome ζ o)
+      | sout_assumek P o => sout_assumek (subst ζ P) (subst_symoutcome ζ o)
+      | sout_demonicv b k => sout_demonicv b (subst_symoutcome (sub_up1 ζ) k)
+      (* | sout_subst ζ2 k => _ *)
+      | @sout_subst _ _ x σ xIn t k =>
+        let ζ' := sub_comp (sub_shift _) ζ in
+        sout_assumek
+          (formula_eq (env_lookup ζ xIn) (sub_term ζ' t))
+          (subst_symoutcome ζ' k)
+      end.
+
+    Instance SubstSymOutcome {A} `{Subst A} : Subst (SymOutcome A) :=
+      fun Σ1 Σ2 ζ o => subst_symoutcome ζ o.
+
+    Definition sout_bind {A B Σ} (ma : SymOutcome A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> SymOutcome B Σ') : SymOutcome B Σ.
+    Proof.
+      revert f.
+      induction ma; cbn; intros.
+      - apply (f _ (sub_id _) a).
+      - refine (sout_angelic (fun i : I => _)).
+        apply (X i f).
+      (* - refine (sout_demonic (fun i : I => _)). *)
+      (*   apply (X i f). *)
+      - refine (sout_angelic_binary _ _).
+        apply (IHma1 f).
+        apply (IHma2 f).
+      - refine (sout_demonic_binary _ _).
+        apply (IHma1 f).
+        apply (IHma2 f).
+      - apply (sout_fail msg).
+      - apply sout_block.
+      - eapply sout_assertk.
+        apply P.
+        apply msg.
+        apply (IHma f).
+      - apply sout_assumek.
+        apply P.
+        apply (IHma f).
+      - apply (@sout_demonicv _ _ b).
+        apply IHma.
+        intros Σ' ζ a.
+        apply (f Σ' (env_tail ζ) a).
+      (* - refine (sout_subst ζ _). *)
+      (*   apply IHma. *)
+      (*   intros Σ2 ζ2 a2. *)
+      (*   apply (f _ (sub_comp ζ ζ2) a2). *)
+      - eapply (@sout_subst _ _ x σ).
+        apply t.
+        apply IHma.
+        intros Σ' ζ a.
+        apply f.
+        refine (sub_comp _ ζ).
+        apply sub_single.
+        apply t.
+        exact a.
+    Defined.
+
+    Fixpoint sout_run {T A} `{Inst T A} {Σ} (ι : SymInstance Σ) (o : SymOutcome T Σ) : Outcome A :=
+      match o with
+      | sout_pure a => outcome_pure (inst ι a)
+      | sout_angelic os => outcome_angelic (fun i => sout_run ι (os i))
+      (* | sout_demonic os => outcome_demonic (fun i => sout_run ι (os i)) *)
+      | sout_angelic_binary o1 o2 => outcome_angelic_binary (sout_run ι o1) (sout_run ι o2)
+      | sout_demonic_binary o1 o2 => outcome_demonic_binary (sout_run ι o1) (sout_run ι o2)
+      | sout_fail msg => outcome_fail msg
+      | sout_block => outcome_block
+      | sout_assertk P msg o => outcome_assertk (inst_formula ι P) (sout_run ι o)
+      | sout_assumek P o => outcome_assumek (inst_formula ι P) (sout_run ι o)
+      | sout_demonicv b k => outcome_demonic (fun v => sout_run (env_snoc ι _ v) k)
+      (* | sout_subst ζ k => outcome_demonic (fun ι' => outcome_assumek (syminstance_rel ζ ι ι') (sout_run ι' k)) *)
+      | @sout_subst _ _ x σ xIn t k =>
+        let ι' := env_remove' (x,σ) ι xIn in
+        outcome_assumek
+          (env_lookup ι xIn = inst ι' t)
+          (sout_run ι' k)
+      end.
+
+    (* Definition wp_sout {T A Σ} `{Inst T A} (ι : SymInstance Σ) (o : SymOutcome T Σ) (POST : A -> Prop) : Prop := *)
+    (*   outcome_satisfy (sout_run ι o) POST. *)
+
+    (* Fixpoint wp_sout {T Σ0} (ι0 : SymInstance Σ0) (o : SymOutcome T Σ0) *)
+    (*          (POST : forall Σ1 (ζ1 : Sub Σ0 Σ1) (ι1 : SymInstance Σ1), *)
+    (*              syminstance_rel ζ1 ι0 ι1 -> T Σ1 -> Prop) {struct o} : Prop. *)
+    (* refine ( *)
+    (*   match o with *)
+    (*   | sout_pure a => @POST _ (sub_id _) ι0 (syminstance_rel_refl ι0) a *)
+    (*   | @sout_angelic _ _ X os => exists (x : X), wp_sout _ _ ι0 (os x) POST *)
+    (*   | sout_angelic_binary o1 o2 => *)
+    (*     wp_sout _ _ ι0 o1 POST \/ wp_sout _ _ ι0 o2 POST *)
+    (*   | sout_demonic_binary o1 o2 => *)
+    (*     wp_sout _ _ ι0 o1 POST /\ wp_sout _ _ ι0 o2 POST *)
+    (*   | sout_fail msg => False *)
+    (*   | sout_block => True *)
+    (*   | sout_assertk P o => *)
+    (*     inst_formula ι0 P /\ wp_sout _ _ ι0 o POST *)
+    (*   | sout_assumek P o => *)
+    (*     inst_formula ι0 P -> wp_sout _ _ ι0 o POST *)
+    (*   | sout_demonicv k => *)
+    (*     forall v, wp_sout _ _ (env_snoc ι0 _ v) k _ *)
+    (*   | @sout_subst _ _ x σ xIn t k => *)
+    (*     let ι1 := env_remove' (x,σ) ι0 xIn in *)
+    (*     forall (p : env_lookup ι0 xIn = inst ι1 t), *)
+    (*     wp_sout _ _ ι1 k _ *)
+    (*     (* wp_sout ι' k POST *) *)
+    (*   end). *)
+    (* - destruct p as [x σ]. *)
+    (*   intros. *)
+    (*   dependent elimination ζ1. *)
+    (*   apply syminstance_rel_snoc in H. destruct H. *)
+    (*   revert X. *)
+    (*   eapply POST. *)
+    (*   apply H. *)
+    (* - intros Σ2 ζ2 ι2 rel2. *)
+    (*   apply (POST Σ2 (sub_comp (sub_single xIn t) ζ2) ι2). *)
+    (*   subst ι1. revert p rel2. clear. *)
+    (*   unfold syminstance_rel. intros. *)
+    (*   unfold sub_comp, subst, SubstEnv, sub_single. *)
+    (*   cbn - [instantiate_term]. *)
+    (*   rewrite env_map_map, env_map_tabulate. *)
+    (*   apply env_lookup_extensional. intros [y τ] yIn. *)
+    (*   rewrite env_lookup_tabulate. *)
+    (*   destruct (occurs_check_sum_var xIn yIn). *)
+    (*   + dependent elimination e; cbn - [instantiate_term]. *)
+    (*     rewrite inst_subst. rewrite rel2. symmetry. cbn in *. *)
+    (*     admit. *)
+    (*   + rewrite inst_subst. cbn. *)
+    (*     rewrite env_lookup_map. *)
+    (*     apply (f_equal (fun E => env_lookup E _)) in rel2. *)
+    (*     revert rel2. cbn. *)
+    (*     unfold env_remove'. *)
+    (*     rewrite env_lookup_tabulate. *)
+    (*     rewrite env_lookup_map. *)
+    (*     Set Printing Implicit. *)
+    (*     intros. cbn in *. admit. *)
+    (* Admitted.  *)
+
+    Fixpoint wp_sout {T A Σ} `{Inst T A} (ι : SymInstance Σ) (o : SymOutcome T Σ) (POST : A -> Prop) {struct o} : Prop :=
+      match o with
+      | sout_pure a => POST (inst ι a)
+      | sout_angelic os => exists i, wp_sout ι (os i) POST
+      (* | sout_demonic os => forall i, wp_sout ι (os i) POST *)
+      | sout_angelic_binary o1 o2 => wp_sout ι o1 POST \/ wp_sout ι o2 POST
+      | sout_demonic_binary o1 o2 => wp_sout ι o1 POST /\ wp_sout ι o2 POST
+      | sout_fail msg => False
+      | sout_block => True
+      | sout_assertk P msg o => inst_formula ι P /\ wp_sout ι o POST
+      | sout_assumek P o => inst_formula ι P -> wp_sout ι o POST
+      | sout_demonicv b k => forall v, wp_sout (env_snoc ι b v) k POST
+      (* | sout_subst ζ k => *)
+      (*   forall ι', *)
+      (*     syminstance_rel ζ ι ι' -> *)
+      (*     wp_sout ι' k POST *)
+      | @sout_subst _ _ x σ xIn t k =>
+        let ι' := env_remove' (x,σ) ι xIn in
+        env_lookup ι xIn = inst ι' t ->
+        wp_sout ι' k POST
+      end.
+
+    Fixpoint sout_safe {T A Σ} `{Inst T A} (ι : SymInstance Σ) (o : SymOutcome T Σ) {struct o} : Prop :=
+      match o with
+      | sout_pure a => True
+      | sout_angelic os => exists i, sout_safe ι (os i)
+      (* | sout_demonic os => forall i, sout_safe ι (os i) POST *)
+      | sout_angelic_binary o1 o2 => sout_safe ι o1 \/ sout_safe ι o2
+      | sout_demonic_binary o1 o2 => sout_safe ι o1 /\ sout_safe ι o2
+      | sout_fail msg => False
+      | sout_block => True
+      | sout_assertk P msg o => inst_formula ι P /\ sout_safe ι o
+      | sout_assumek P o => inst_formula ι P -> sout_safe ι o
+      | sout_demonicv b k => forall v, sout_safe (env_snoc ι b v) k
+      | @sout_subst _ _ x σ xIn t k =>
+        let ι' := env_remove' (x,σ) ι xIn in
+        env_lookup ι xIn = inst ι' t ->
+        sout_safe ι' k
+      end.
+
+    Global Arguments sout_safe {_ _} Σ {_} ι o.
+
+    Lemma wp_sout_bind {T A S B} `{InstLaws T A, InstLaws S B} {Σ} (ma : SymOutcome T Σ)
+          (f : forall Σ', Sub Σ Σ' -> T Σ' -> SymOutcome S Σ') POST :
+      forall ι,
+        wp_sout ι (sout_bind ma f) POST <->
+        wp_sout ι ma (fun a => wp_sout ι (f Σ (sub_id _) (lift a)) POST).
+    Proof.
+    Admitted.
+
+    Lemma wp_sout_assumek_subst {T A} `{InstLaws T A} {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ)
+          (k : SymOutcome T Σ) :
+      forall ι POST,
+        wp_sout ι (sout_assumek (formula_eq (term_var x) (sub_term (sub_shift xIn) t)) k) POST <->
+        wp_sout ι (sout_subst x t (subst (sub_single xIn t) k)) POST.
+    Proof.
+      induction k.
+      - intros. cbn.
+        change (inst_term ι (sub_term (sub_shift xIn) t)) with
+            (inst ι (subst (sub_shift xIn) t)).
+        rewrite ?inst_subst.
+        split; intros.
+        + enough ((inst (env_remove' (x∶σ) ι xIn) (sub_single xIn t)) = ι).
+          { rewrite H5. apply H3.
+            rewrite H4.
+            cbn.
+            f_equal.
+            unfold env_remove', sub_shift.
+            rewrite env_map_tabulate.
+            apply env_lookup_extensional.
+            intros [y τ] yIn.
+            now rewrite ?env_lookup_tabulate; cbn.
+          }
+          clear H3.
+          cbn.
+          unfold sub_single.
+          rewrite env_map_tabulate.
+          apply env_lookup_extensional.
+          intros [y τ] yIn.
+          rewrite env_lookup_tabulate; cbn.
+          destruct (occurs_check_sum_var xIn yIn) eqn:?.
+          * dependent elimination e. cbn.
+            symmetry. revert H4. clear. intros.
+            admit.
+          * cbn.
+            unfold env_remove'.
+            rewrite env_lookup_tabulate.
+            clear.
+            admit.
+        + rewrite H4 in H3.
+    Admitted.
+
+    Definition sout_angelic_binary_prune {A Σ} (o1 o2 : SymOutcome A Σ) : SymOutcome A Σ :=
+      match o1 , o2 with
+      | sout_block  , _           => sout_block
+      | _           , sout_block  => sout_block
+      | sout_fail _ , _           => o2
+      | _           , sout_fail _ => o1
+      | _           , _           => sout_angelic_binary o1 o2
+      end.
+
+    Definition sout_demonic_binary_prune {A Σ} (o1 o2 : SymOutcome A Σ) : SymOutcome A Σ :=
+      match o1 , o2 with
+      | sout_block  , _           => o2
+      | _           , sout_block  => o1
+      | sout_fail s , _           => sout_fail s
+      | _           , sout_fail s => sout_fail s
+      | _           , _           => sout_demonic_binary o1 o2
+      end.
+
+    Definition sout_assertk_prune {A Σ E} (fml : Formula Σ) (msg : E) (o : SymOutcome A Σ) : SymOutcome A Σ :=
+      match o with
+      | sout_fail s => sout_fail s
+      | _           => sout_assertk fml msg o
+      end.
+
+    Definition sout_assumek_prune {A Σ} (fml : Formula Σ) (o : SymOutcome A Σ) : SymOutcome A Σ :=
+      match o with
+      | sout_block => sout_block
+      | _          => sout_assumek fml o
+      end.
+
+    Definition sout_demonicv_prune {A Σ} b (o : SymOutcome A (Σ ▻ b)) : SymOutcome A Σ :=
+      match o with
+      | sout_block => sout_block
+      | @sout_subst _ _ x σ (MkInCtx n p) t k =>
+        match n return
+              forall (p : ctx_nth_is (ctx_snoc Σ b) n (pair x σ)),
+                SymOutcome A (ctx_remove (MkInCtx n p)) -> SymOutcome A Σ
+        with
+        | O   => fun p k => k
+        | S n => fun _ _ => sout_demonicv b o
+        end p k
+      | _ => sout_demonicv b o
+      end.
+
+    Definition sout_subst_prune {A Σ x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ) (k : SymOutcome A (Σ - (x,σ))) : SymOutcome A Σ :=
+      match k with
+      | sout_block => sout_block
+      | _          => sout_subst x t k
+      end.
+
+    Fixpoint sout_prune {A Σ} (o : SymOutcome A Σ) : SymOutcome A Σ :=
+      match o with
+      | sout_pure a => sout_pure a
+      | sout_fail msg => sout_fail msg
+      | sout_block => sout_block
+      | sout_angelic os =>
+        sout_angelic (fun i => sout_prune (os i))
+      | sout_angelic_binary o1 o2 =>
+        sout_angelic_binary_prune (sout_prune o1) (sout_prune o2)
+      | sout_demonic_binary o1 o2 =>
+        sout_demonic_binary_prune (sout_prune o1) (sout_prune o2)
+      | sout_assertk P msg o =>
+        sout_assertk_prune P msg (sout_prune o)
+      | sout_assumek P o =>
+        sout_assumek_prune P (sout_prune o)
+      | sout_demonicv b o =>
+        sout_demonicv_prune (sout_prune o)
+      | sout_subst x t k =>
+        sout_subst_prune t (sout_prune k)
+      end.
+
+    Definition sout_ok {A Σ} (o : SymOutcome A Σ) : bool :=
+      match sout_prune o with
+      | sout_block  => true
+      | _           => false
+      end.
+
+  End SymbolicOutcomes.
+
 End Mutators.

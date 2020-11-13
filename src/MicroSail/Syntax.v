@@ -1426,7 +1426,7 @@ Module Terms (Export termkit : TermKit).
         _ (fun b => Term _ (snd b)) _
         (fun '(y,τ) =>
            fun yIn =>
-             match occurs_check_var_sum xIn yIn with
+             match occurs_check_sum_var xIn yIn with
              | inl e => eq_rect σ (Term (Σ - (x ∶ σ)%ctx)) t τ (f_equal snd e)
              | inr i => term_var y
              end).

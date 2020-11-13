@@ -280,7 +280,7 @@ Section WithBinding.
         now rewrite (IHxIn m p).
   Qed.
 
-  Fixpoint occurs_check_index_sum {Σ} {x y : B} {struct Σ} :
+  Fixpoint occurs_check_sum_index {Σ} {x y : B} {struct Σ} :
     forall (m n : nat) (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
       (x = y) + (InCtx y (ctx_remove _ {| inctx_at := m; inctx_valid := p |})) :=
     match Σ with
@@ -294,12 +294,35 @@ Section WithBinding.
                         inr (@MkInCtx _ (ctx_remove _ (@MkInCtx _ (ctx_snoc Σ b) 0 p)) n q)
         | S m , 0   => fun _ (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
                         inr (@MkInCtx _ (ctx_snoc (ctx_remove Σ _) b) 0 q)
-        | S m , S n => fun p q => base.sum_map id inctx_succ (occurs_check_index_sum m n p q)
+        | S m , S n => fun p q => base.sum_map id inctx_succ (occurs_check_sum_index m n p q)
         end
     end.
 
-  Definition occurs_check_var_sum {Σ} {x y : B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) : (x = y) + (InCtx y (ctx_remove Σ xIn)) :=
-    occurs_check_index_sum (inctx_at xIn) (inctx_at yIn) (inctx_valid xIn) (inctx_valid yIn).
+  Definition occurs_check_sum_var {Σ} {x y : B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) : (x = y) + (InCtx y (ctx_remove Σ xIn)) :=
+    occurs_check_sum_index (inctx_at xIn) (inctx_at yIn) (inctx_valid xIn) (inctx_valid yIn).
+
+  Lemma occurs_check_sum_refl {Σ x} (xIn : InCtx x Σ) :
+    occurs_check_sum_var xIn xIn = inl eq_refl.
+  Proof.
+    unfold occurs_check_sum_var.
+    induction xIn using InCtx_ind.
+    - reflexivity.
+    - cbn; now rewrite IHxIn.
+  Qed.
+
+  Lemma occurs_check_sum_shift_var {x y} {Σ : Ctx B} (xIn : InCtx x Σ) (yIn : InCtx y (ctx_remove Σ xIn)) :
+    occurs_check_sum_var xIn (shift_var xIn yIn) = inr yIn.
+  Proof.
+    unfold occurs_check_sum_var, shift_var. destruct yIn as [m p]. cbn.
+    revert m p.
+    induction xIn using InCtx_ind.
+    - cbn in *.
+      reflexivity.
+    - intros [|m]; cbn.
+      + reflexivity.
+      + intros p.
+        now rewrite (IHxIn m p).
+  Qed.
 
 End WithBinding.
 
@@ -328,7 +351,7 @@ End WithAB.
 Module CtxNotations.
 
   Notation NCtx Name Data := (Ctx (Name * Data)).
-  Notation "x ∶ τ" := (x,τ) : ctx_scope.
+  Notation "x ∶ τ" := (x,τ) (only parsing) : ctx_scope.
 
   Notation "'ε'" := ctx_nil : ctx_scope.
   Infix "▻" := ctx_snoc : ctx_scope.
