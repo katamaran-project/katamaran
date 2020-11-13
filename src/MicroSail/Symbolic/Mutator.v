@@ -394,6 +394,20 @@ Module Mutators
 
   End WithEvarEnv.
 
+  Section SymbolicUnit.
+
+    Definition Unit : Ctx (𝑺 * Ty) -> Type := fun _ => unit.
+    Global Instance SubstUnit : Subst Unit :=
+      fun _ _ _ t => t.
+    Global Instance SubstLawsUnit : SubstLaws Unit.
+    Proof. constructor; reflexivity. Qed.
+    Global Instance InstUnit : Inst Unit unit :=
+      @Build_Inst Unit unit (fun _ _ x => x) (fun _ x  => x).
+    Global Instance InstLawsUnit : InstLaws Unit unit.
+    Proof. constructor; reflexivity. Qed.
+
+  End SymbolicUnit.
+
   Section DynamicMutatorResult.
 
     (* Local Set Primitive Projections. *)
@@ -430,10 +444,6 @@ Module Mutators
   End DynamicMutatorResult.
 
   Section DynamicMutator.
-
-    Definition Unit : Ctx (𝑺 * Ty) -> Type := fun _ => unit.
-    Global Instance SubstUnit : Subst Unit :=
-      fun _ _ _ _ => tt.
 
     Definition DynamicMutator (Γ1 Γ2 : Ctx (𝑿 * Ty)) (A : Ctx (𝑺 * Ty) -> Type) (Σ : Ctx (𝑺 * Ty)) : Type :=
       forall Σ', Sub Σ Σ' -> SymbolicState Γ1 Σ' -> Outcome (DynamicMutatorResult Γ2 A Σ').
