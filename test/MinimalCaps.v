@@ -265,15 +265,15 @@ Module MinCapsTermKit <: TermKit.
   Module typekit := MinCapsTypeKit.
   Module Export TY := Types typekit.
 
-  Definition ty_hv : Ty := ty_enum regname.
-  Definition ty_lv : Ty := ty_enum regname.
-  Definition ty_rv : Ty := ty_sum (ty_enum regname) ty_int.
-  Definition ty_cap : Ty := ty_record capability.
-  Definition ty_word : Ty := ty_sum ty_int ty_cap.
-  Definition ty_memval : Ty := ty_int.
-  Definition ty_addr : Ty := ty_int.
-  Definition ty_perm : Ty := ty_enum permission.
-  Definition ty_instr : Ty := ty_union instruction.
+  Notation ty_hv := (ty_enum regname).
+  Notation ty_lv := (ty_enum regname).
+  Notation ty_rv := (ty_sum (ty_enum regname) ty_int).
+  Notation ty_cap := (ty_record capability).
+  Notation ty_word := (ty_sum ty_int ty_cap).
+  Notation ty_memval := (ty_int).
+  Notation ty_addr := (ty_int).
+  Notation ty_perm := (ty_enum permission).
+  Notation ty_instr := (ty_union instruction).
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
