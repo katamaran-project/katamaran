@@ -430,16 +430,14 @@ Module Mutators
           dmuterr_message         : string;
           dmuterr_data_type       : Type;
           dmuterr_data            : dmuterr_data_type;
+          dmuterr_logic_context   : Ctx (𝑺 * Ty);
           dmuterr_program_context : Ctx (𝑿 * Ty);
-          dmuterr_global_context  : Ctx (𝑺 * Ty);
-          (* The local context will often be equal to what is recorded as the
-             global context when the substitution is applied eagerly. *)
-          dmuterr_local_context   : Ctx (𝑺 * Ty);
-          dmuterr_substitution    : Sub dmuterr_global_context dmuterr_local_context;
-          dmuterr_state           : SymbolicState dmuterr_program_context dmuterr_local_context;
+          dmuterr_localstore      : SymbolicLocalStore dmuterr_program_context dmuterr_logic_context;
+          dmuterr_pathcondition   : PathCondition dmuterr_logic_context;
+          dmuterr_heap            : SymbolicHeap dmuterr_logic_context;
         }.
 
-    Global Arguments MkDynMutError _ {_} _ _ _ _ _ _.
+    Global Arguments MkDynMutError _ _ {_} _ _ _ _ _ _.
 
   End DynamicMutatorResult.
 
@@ -501,10 +499,10 @@ Module Mutators
              dmuterr_message         := msg;
              dmuterr_data            := data;
              dmuterr_program_context := Γ1;
-             dmuterr_global_context  := Σ;
-             dmuterr_local_context   := Σ1;
-             dmuterr_substitution    := ζ1;
-             dmuterr_state           := s1;
+             dmuterr_logic_context   := Σ1;
+             dmuterr_pathcondition   := symbolicstate_pathcondition s1;
+             dmuterr_localstore      := symbolicstate_localstore s1;
+             dmuterr_heap            := symbolicstate_heap s1;
           |}.
     Definition dmut_contradiction {Γ1 Γ2 A Σ} (func : string) (msg : string) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 s1 =>
@@ -515,10 +513,10 @@ Module Mutators
               dmuterr_message         := msg;
               dmuterr_data            := tt;
               dmuterr_program_context := Γ1;
-              dmuterr_global_context  := Σ;
-              dmuterr_local_context   := Σ1;
-              dmuterr_substitution    := ζ1;
-              dmuterr_state           := s1;
+              dmuterr_logic_context   := Σ1;
+              dmuterr_pathcondition   := symbolicstate_pathcondition s1;
+              dmuterr_localstore      := symbolicstate_localstore s1;
+              dmuterr_heap            := symbolicstate_heap s1;
            |}
         )%out.
     Definition dmut_block {Γ1 Γ2 A Σ} : DynamicMutator Γ1 Γ2 A Σ :=
@@ -785,10 +783,10 @@ Module Mutators
                dmuterr_message         := "Formula is always false";
                dmuterr_data            := fml1;
                dmuterr_program_context := Γ;
-               dmuterr_global_context  := Σ;
-               dmuterr_local_context   := Σ1;
-               dmuterr_substitution    := ζ1;
-               dmuterr_state           := s1;
+               dmuterr_logic_context   := Σ1;
+               dmuterr_pathcondition   := symbolicstate_pathcondition s1;
+               dmuterr_localstore      := symbolicstate_localstore s1;
+               dmuterr_heap            := symbolicstate_heap s1;
             |}
 
         | None =>
