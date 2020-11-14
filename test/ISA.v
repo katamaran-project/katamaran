@@ -13,12 +13,12 @@ From Equations Require Import
 
 From MicroSail Require Import
      Notation
-     SmallStep.Step
-     Syntax
+     SemiConcrete.Outcome
      Sep.Spec
+     SmallStep.Step
      Symbolic.Mutator
-     Symbolic.Outcome
-     Symbolic.Sound.
+     Symbolic.Sound
+     Syntax.
 
 From stdpp Require
      finite.
@@ -510,12 +510,10 @@ Module ISASymbolicContractKit <:
        sep_contract_localstore      := [term_var "reg_tag"]%arg;
        sep_contract_precondition    :=
          asn_chunk (chunk_pred ptstoreg [ term_var "reg_tag", term_var "v" ]%env);
-       sep_contract_result          := "result";
+       sep_contract_result          := "result_rX";
        sep_contract_postcondition   :=
-         asn_chunk (chunk_pred ptstoreg [ term_var "reg_tag", term_var "v" ]%env) ✱
-         @asn_prop
-           ["reg_tag" ∶ ty_enum register_tag,  "v" ∶ ty_int, "result" ∶ ty_int]
-           (fun _ v res => v = res)%type;
+         asn_eq (term_var "result_rX") (term_var "v") ✱
+         asn_chunk (chunk_pred ptstoreg [ term_var "reg_tag", term_var "v" ]%env) ;
     |}.
 
   Definition sep_contract_wX : SepContract ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_unit :=
@@ -523,8 +521,9 @@ Module ISASymbolicContractKit <:
        sep_contract_localstore      := [term_var "r", term_var "v_new"]%arg;
        sep_contract_precondition    :=
          asn_chunk (chunk_pred ptstoreg [ term_var "r", term_var "v_old" ]%env);
-       sep_contract_result          := "_";
+       sep_contract_result          := "result_wX";
        sep_contract_postcondition   :=
+         asn_eq (term_var "result_wX") (term_lit ty_unit tt) ✱
          asn_chunk (chunk_pred ptstoreg [ term_var "r", term_var "v_new" ]%env)
     |}.
 
@@ -533,8 +532,9 @@ Module ISASymbolicContractKit <:
        sep_contract_pun_precondition :=
          asn_chunk (chunk_pred ptstoreg [term_var "r1", term_var "u"]) ✱
          asn_chunk (chunk_pred ptstoreg [term_var "r2", term_var "v"]);
-       sep_contract_pun_result := "_";
+       sep_contract_pun_result := "result_swapreg";
        sep_contract_pun_postcondition :=
+         asn_eq (term_var "result_swapreg") (term_lit ty_unit tt) ✱
          asn_chunk (chunk_pred ptstoreg [term_var "r1", term_var "v"]) ✱
          asn_chunk (chunk_pred ptstoreg [term_var "r2", term_var "u"])
     |}.
@@ -553,8 +553,9 @@ Module ISASymbolicContractKit <:
        sep_contract_localstore      := env_nil;
        sep_contract_precondition    :=
          asn_chunk (chunk_pred ptstoreg [term_var "r", term_var "v"]%env);
-       sep_contract_result          := "_";
+       sep_contract_result          := "result_open_ptsreg";
        sep_contract_postcondition   :=
+         asn_eq (term_var "result_open_ptsreg") (term_lit ty_unit tt) ✱
          asn_match_enum
            register_tag (term_var "r")
            (fun k => match k with
@@ -577,12 +578,13 @@ Module ISASymbolicContractKit <:
     {| sep_contract_logic_variables := ["v" ∶ ty_int];
        sep_contract_localstore      := env_nil;
        sep_contract_precondition    := (regtag_to_reg R ↦ term_var "v");
-       sep_contract_result          := "_";
+       sep_contract_result          := "result_close_ptsreg";
        sep_contract_postcondition   :=
-         (asn_chunk
+         asn_eq (term_var "result_close_ptsreg") (term_lit ty_unit tt) ✱
+         asn_chunk
             (chunk_pred
                ptstoreg
-               [term_enum register_tag R, term_var "v"]%env))
+               [term_enum register_tag R, term_var "v"]%env)
     |}.
 
   Program Definition CEnvEx : SepContractEnvEx :=
@@ -605,36 +607,16 @@ Module ISAMutators :=
 Import ISAMutators.
 Import DynMutV2.
 
-Arguments inctx_zero {_ _ _} /.
-Arguments inctx_succ {_ _ _ _} !_ /.
-
-Local Ltac solve :=
-  repeat
-    (repeat intro;
-     repeat
-       match goal with
-       | H: Env _ ctx_nil |- _ => dependent destruction H
-       | H: Env _ (ctx_snoc _ _) |- _ => dependent destruction H
-       | H: _ /\ _ |- _ => destruct H
-       | |- _ /\ _ => constructor
-       | |- forall _, _ => intro
-       end;
-     compute - [Lit] in *;
-     cbn [Lit] in *;
-     subst; try congruence;
-     auto
-    ).
-
-Lemma valid_contract_rX : ValidContractDynMut sep_contract_rX fun_rX.
-Proof. Time (compute; solve). Qed.
+Lemma valid_contract_rX : ValidContractDynMutReflect sep_contract_rX fun_rX.
+Proof. Time (now compute). Qed.
 Hint Resolve valid_contract_rX : contracts.
 
-Lemma valid_contract_wX : ValidContractDynMut sep_contract_wX fun_wX.
-Proof. Time (apply dynmutevarreflect_sound; now compute). Qed.
+Lemma valid_contract_wX : ValidContractDynMutReflect sep_contract_wX fun_wX.
+Proof. Time (now compute). Qed.
 Hint Resolve valid_contract_wX : contracts.
 
-Lemma valid_contract_swapreg : ValidContractDynMut sep_contract_swapreg fun_swapreg.
-Proof. Time (apply dynmutevarreflect_sound; now compute). Qed.
+Lemma valid_contract_swapreg : ValidContractDynMutReflect sep_contract_swapreg fun_swapreg.
+Proof. Time (now compute). Qed.
 Hint Resolve valid_contract_swapreg : contracts.
 
 (* Arguments asn_true {_} /. *)

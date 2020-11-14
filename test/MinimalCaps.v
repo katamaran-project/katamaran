@@ -36,10 +36,10 @@ From Equations Require Import
      Equations.
 
 From MicroSail Require Import
+     SemiConcrete.Outcome
      Sep.Spec
-     Syntax
      Symbolic.Mutator
-     Symbolic.Outcome.
+     Syntax.
 
 From MicroSail Require Environment.
 From MicroSail Require Iris.Model.
@@ -269,15 +269,15 @@ Module MinCapsTermKit <: TermKit.
   Module typekit := MinCapsTypeKit.
   Module Export TY := Types typekit.
 
-  Definition ty_hv : Ty := ty_enum regname.
-  Definition ty_lv : Ty := ty_enum regname.
-  Definition ty_rv : Ty := ty_sum (ty_enum regname) ty_int.
-  Definition ty_cap : Ty := ty_record capability.
-  Definition ty_word : Ty := ty_sum ty_int ty_cap.
-  Definition ty_memval : Ty := ty_int.
-  Definition ty_addr : Ty := ty_int.
-  Definition ty_perm : Ty := ty_enum permission.
-  Definition ty_instr : Ty := ty_union instruction.
+  Notation ty_hv := (ty_enum regname).
+  Notation ty_lv := (ty_enum regname).
+  Notation ty_rv := (ty_sum (ty_enum regname) ty_int).
+  Notation ty_cap := (ty_record capability).
+  Notation ty_word := (ty_sum ty_int ty_cap).
+  Notation ty_memval := (ty_int).
+  Notation ty_addr := (ty_int).
+  Notation ty_perm := (ty_enum permission).
+  Notation ty_instr := (ty_union instruction).
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -987,9 +987,8 @@ Module MinCapsContracts.
          sep_contract_precondition    := term_var "reg" ↦r term_var "w";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           (* domi: strange that I have to manually specify Σ here *)
-           (asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_word]) (fun reg w result => result = w) ✱
-                     term_var "reg" ↦r term_var "w")
+           (asn_eq (term_var "w") (term_var "result") ✱
+                   term_var "reg" ↦r term_var "w")
       |}.
 
     Definition sep_contract_read_reg_cap : SepContract ["reg" ∶ ty_enum regname ] ty_cap :=
@@ -999,9 +998,9 @@ Module MinCapsContracts.
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            (asn_exist "c" ty_cap (
-                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => result = c) ✱
-                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_cap, "c" ∶ ty_cap]) (fun reg w result c => w = inr c)
-                      ) ✱
+                        asn_eq (term_var "result") (term_var "c") ✱
+                        asn_eq (term_var "w") (term_inr (term_var "c"))
+                      ) ✱ 
             term_var "reg" ↦r term_var "w")
       |}.
 
@@ -1012,8 +1011,8 @@ Module MinCapsContracts.
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            (asn_exist "n" ty_int (
-                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => result = n) ✱
-                        asn_prop (Σ := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "result" ∶ ty_int, "n" ∶ ty_int]) (fun reg w result n => w = inl n)
+                        asn_eq (term_var "result") (term_var "n") ✱
+                        asn_eq (term_var "w") (term_inl (term_var "n"))
                       ) ✱
             term_var "reg" ↦r term_var "w")
       |}.
@@ -1049,7 +1048,7 @@ Module MinCapsContracts.
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            term_var "a" ↦m term_var "n" ✱
-           asn_prop (Σ := ["a" ∶ ty_addr, "n" ∶ ty_int, "result" ∶ ty_int]) (fun _ n res => res = n);
+           asn_eq (term_var "result") (term_var "n");
       |}.
 
     Definition sep_contract_write_mem : SepContract ["a" ∶ ty_addr, "v" ∶ ty_memval ] ty_unit :=
@@ -1172,41 +1171,21 @@ Module MinCapsContracts.
   Proof. compute; solve. Qed.
 
   Lemma valid_contract_read_reg_cap : ValidContractDynMut sep_contract_read_reg_cap fun_read_reg_cap.
-  Proof.
-    split;
-      [ compute; auto
-      | exists (term_var "result"); compute; firstorder congruence
-      ].
-  Qed.
+  Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
   Lemma valid_contract_read_reg_num : ValidContractDynMut sep_contract_read_reg_num fun_read_reg_num.
-  Proof.
-    split;
-      [ exists (term_var "result"); compute; firstorder congruence
-      | compute; auto
-      ].
-  Qed.
+  Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
   Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_write_reg.
   Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
   Lemma valid_contract_next_pc : ValidContractDynMut sep_contract_next_pc fun_next_pc.
-  Proof.
+  Proof. 
+    apply dynmutevarreflect_sound.
   Admitted.
 
   Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
-  Proof.
-    (* exists (TM.term_record
-              capability
-              [TM.term_projrec (TM.term_var "opc") "cap_permission",
-               TM.term_projrec (TM.term_var "opc") "cap_begin",
-               TM.term_projrec (TM.term_var "opc") "cap_end",
-               TM.term_binop
-                 binop_plus
-                 (TM.term_projrec (TM.term_var "opc") "cap_cursor")
-                 (TM.term_lit TY.ty_int 1)]%arg).
-    compute; solve.
-  Qed. *)
+  Proof. (* apply dynmutevarreflect_sound; now compute. Qed. *)
   Admitted.
 
 End MinCapsContracts.

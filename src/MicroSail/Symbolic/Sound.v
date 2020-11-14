@@ -44,10 +44,10 @@ From MicroSail Require Import
      Sep.Hoare
      Syntax
      Tactics
-     Symbolic.Mutator
-     Symbolic.Outcome.
+     Symbolic.Mutator.
 From MicroSail Require
      SemiConcrete.Mutator
+     SemiConcrete.Outcome
      SemiConcrete.Sound.
 
 Set Implicit Arguments.
@@ -136,21 +136,17 @@ Module Soundness
         (m : SCMut Γ1 Γ2 A)
         (POST : A -> SCState Γ2 -> Prop)
         (s1 : SCState Γ1) : Prop :=
-        outcome_satisfy (m s1) (fun r => POST (scmutres_value r) (scmutres_state r)).
+        SemiConcrete.Outcome.outcome_satisfy (m s1) (fun r => POST (scmutres_value r) (scmutres_state r)).
 
       Definition dmut_wp {Γ1 Γ2 Σ0 A}
         (m : DynamicMutator Γ1 Γ2 A Σ0)
         (POST : forall Σ1, Sub Σ0 Σ1 -> A Σ1 -> SymbolicState Γ2 Σ1 -> Prop)
         (s1 : SymbolicState Γ1 Σ0) : Prop :=
         forall Σ1 (ζ1 : Sub Σ0 Σ1),
-          outcome_satisfy
+          SemiConcrete.Outcome.outcome_satisfy
             (m Σ1 ζ1 (subst ζ1 s1))
-            (fun '(@MkDynMutResult _ _ _ Σ2 ζ2 r) =>
-               POST
-                 Σ2
-                 (sub_comp ζ1 ζ2)
-                 (mutator_result_value r)
-                 (mutator_result_state r)).
+            (fun '(@MkDynMutResult _ _ _ Σ2 ζ2 a2 s2) =>
+               POST Σ2 (sub_comp ζ1 ζ2) a2 s2).
 
       Lemma dmut_wp_monotonic {Γ1 Γ2 Σ0 A} (m : DynamicMutator Γ1 Γ2 A Σ0)
             (POST1 POST2 : forall Σ1, Sub Σ0 Σ1 -> A Σ1 -> SymbolicState Γ2 Σ1 -> Prop)
@@ -160,8 +156,8 @@ Module Soundness
       Proof.
         unfold dmut_wp; cbn; intros H Σ1 ζ1.
         specialize (H Σ1 ζ1). revert H.
-        apply outcome_satisfy_monotonic.
-        intros [Σ2 ζ2 [a2 s2]]; cbn.
+        apply SemiConcrete.Outcome.outcome_satisfy_monotonic.
+        intros [Σ2 ζ2 a2 s2]; cbn.
         intuition.
       Qed.
 
@@ -267,7 +263,7 @@ Module Soundness
 
       Definition dmutres_geq {Γ A Σ} `{Subst A} (r1 r2 : DynamicMutatorResult Γ A Σ) : Prop :=
         match r1 , r2 with
-        | MkDynMutResult ζ1 (MkMutResult a1 s1), MkDynMutResult ζ2 (MkMutResult a2 s2) =>
+        | MkDynMutResult ζ1 a1 s1, MkDynMutResult ζ2 a2 s2 =>
           exists ζ12, (ζ2 = sub_comp ζ1 ζ12 /\ a2 = subst ζ12 a1 /\ s2 = subst ζ12 s1)
         end.
 
@@ -278,8 +274,8 @@ Module Soundness
       Definition dmutres_sub {Γ A Σ1 Σ2} (ζ : Sub Σ1 Σ2) (r : DynamicMutatorResult Γ A Σ2) :
         DynamicMutatorResult Γ A Σ1 :=
         match r with
-        | @MkDynMutResult _ _ _ Σ3 ζ3 r =>
-          @MkDynMutResult _ _ _ Σ3 (sub_comp ζ ζ3) r
+        | @MkDynMutResult _ _ _ Σ3 ζ3 a3 s3 =>
+          @MkDynMutResult _ _ _ Σ3 (sub_comp ζ ζ3) a3 s3
         end.
 
       Definition substpred {Γ A Σ1 Σ2} (ζ : Sub Σ1 Σ2) :
@@ -290,8 +286,8 @@ Module Soundness
       Definition dmut_wf {Γ1 Γ2 A Σ0} `{Subst A} (d : DynamicMutator Γ1 Γ2 A Σ0) : Prop :=
         forall Σ1 Σ2 (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) (s1 : SymbolicState Γ1 Σ1)
                (POST : DynamicMutatorResult Γ2 A Σ1 -> Prop) (POST_mon : dmutres_pred_monotonic POST),
-          outcome_satisfy (d Σ1 ζ1 s1) POST ->
-          outcome_satisfy (d Σ2 (sub_comp ζ1 ζ2) (subst ζ2 s1)) (substpred ζ2 POST).
+          SemiConcrete.Outcome.outcome_satisfy (d Σ1 ζ1 s1) POST ->
+          SemiConcrete.Outcome.outcome_satisfy (d Σ2 (sub_comp ζ1 ζ2) (subst ζ2 s1)) (substpred ζ2 POST).
 
       Lemma dmut_wf_pure {Γ A Σ} {subA: Subst A} {sublA: SubstLaws A} (a : A Σ) :
         dmut_wf (dmut_pure (Γ := Γ) a).
@@ -343,12 +339,12 @@ Module Soundness
         - dependent elimination ζ1 as [@env_snoc Σ0 ζ1 _ v]; cbn in v.
           rewrite <- subst_sub_comp, sub_comp_wk1_tail; cbn.
           specialize (HYP Σ1 ζ1).
-          rewrite outcome_satisfy_map in HYP; cbn in *.
+          rewrite SemiConcrete.Outcome.outcome_satisfy_map in HYP; cbn in *.
           eapply (@wfd _ Σ1 _ (env_snoc (sub_id _) (_,τ) v)) in HYP; clear wfd.
           + change (wk1 (subst ζ1 s)) with (subst (sub_wk1 (b:=(x,τ))) (subst ζ1 s)) in HYP.
             rewrite <- subst_sub_comp, <- sub_snoc_comp, sub_comp_id_right, sub_comp_wk1_tail in HYP.
             cbn in HYP. rewrite subst_sub_id in HYP.
-            refine (outcome_satisfy_monotonic _ _ HYP).
+            refine (SemiConcrete.Outcome.outcome_satisfy_monotonic _ _ HYP).
             intros [Σ2 ζ2 r2]. cbn. clear.
             intuition.
             rewrite <- sub_comp_assoc, sub_comp_wk1_tail; cbn.
@@ -356,16 +352,16 @@ Module Soundness
             now rewrite sub_comp_id_left in H.
           + revert POST_mon; clear.
             unfold dmutres_pred_monotonic.
-            intros ? [Σ2 ζ2 [a2 s2]] [Σ3 ζ3 [a3 s3]]; cbn.
+            intros ? [Σ2 ζ2 a2 s2] [Σ3 ζ3 a3 s3]; cbn.
             intros [ζ12]; intuition. subst.
             apply (POST_mon _ _ _ ζ12) in H1.
             now rewrite !sub_comp_assoc in H1.
-        - rewrite outcome_satisfy_map.
+        - rewrite SemiConcrete.Outcome.outcome_satisfy_map.
           specialize (HYP (Σ1 ▻ (x,τ)) (sub_up1 ζ1)).
           rewrite <- subst_sub_comp, sub_comp_wk1_comm in HYP.
           change (wk1 (b := (x,τ)) (subst ζ1 s)) with (subst (sub_wk1 (b := (x,τ))) (subst ζ1 s)).
           rewrite <- subst_sub_comp.
-          refine (outcome_satisfy_monotonic _ _ HYP).
+          refine (SemiConcrete.Outcome.outcome_satisfy_monotonic _ _ HYP).
           intros [Σ2 ζ2 r2]. clear.
           dependent elimination ζ2 as [@env_snoc Σ1 ζ2 _ t].
           now rewrite <- ?sub_comp_assoc, <- sub_comp_wk1_comm.
@@ -466,6 +462,9 @@ Module Soundness
         induction asn; cbn.
         - apply dmut_assume_term_sound.
         - admit. (* Not implemented in SC. OOPS *)
+        - admit. (* destruct (Term_eqb t1 t2).
+          + apply dmut_pure_sound.
+          + apply dmut_fail_sound. *)
         - apply dmut_produce_chunk_sound.
         - enough
             (approximates  (Γ1 := Γ) (Γ2 := Γ) ι
@@ -543,12 +542,12 @@ Module Soundness
 
       Local Ltac sound_inster :=
         match goal with
-        | [ IH: outcome_satisfy (dmut_exec ?s _ _) |-
-            outcome_satisfy (dmut_exec ?s _ _) _ ] =>
-          refine (outcome_satisfy_monotonic _ _ IH); clear IH
-        | [ IH: context[_ -> outcome_satisfy (dmut_exec ?s _ _) _] |-
-            outcome_satisfy (dmut_exec ?s _ _) _ ] =>
-          microsail_insterU (fail) IH; refine (outcome_satisfy_monotonic _ _ IH); clear IH
+        | [ IH: SemiConcrete.Outcome.outcome_satisfy (dmut_exec ?s _ _) |-
+            SemiConcrete.Outcome.outcome_satisfy (dmut_exec ?s _ _) _ ] =>
+          refine (SemiConcrete.Outcome.outcome_satisfy_monotonic _ _ IH); clear IH
+        | [ IH: context[_ -> SemiConcrete.Outcome.outcome_satisfy (dmut_exec ?s _ _) _] |-
+            SemiConcrete.Outcome.outcome_satisfy (dmut_exec ?s _ _) _ ] =>
+          microsail_insterU (fail) IH; refine (SemiConcrete.Outcome.outcome_satisfy_monotonic _ _ IH); clear IH
         end.
 
       Transparent SubstEnv.
@@ -590,25 +589,25 @@ Module Soundness
 
       Opaque env_tail.
 
-      Notation "'dmutres_pathcondition' res" := (symbolicstate_pathcondition (mutator_result_state (dmutres_result res))) (at level 10).
-      Notation "'dmutres_heap' res" := (symbolicstate_heap (mutator_result_state (dmutres_result res))) (at level 10).
-      Notation "'dmutres_localstore' res" := (symbolicstate_localstore (mutator_result_state (dmutres_result res))) (at level 10).
+      Notation "'dmutres_pathcondition' res" := (symbolicstate_pathcondition (dmutres_result_state res)) (at level 10).
+      Notation "'dmutres_heap' res" := (symbolicstate_heap (dmutres_result_state res)) (at level 10).
+      Notation "'dmutres_localstore' res" := (symbolicstate_localstore (dmutres_result_state res)) (at level 10).
 
       Lemma dmut_exec_sound {Γ σ} (POST : Lit σ -> LocalStore Γ -> L) (s : Stm Γ σ) :
         forall Σ0 Σ1  (ι : SymInstance Σ1) (ζ1 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SymbolicLocalStore Γ Σ1) (h1 : SymbolicHeap Σ1),
           let δ       := inst ι δ1 in
           let pre__pc   := inst_pathcondition ι pc1 in
           let pre__heap := interpret_heap ι h1 in
-          outcome_satisfy
+          SemiConcrete.Outcome.outcome_satisfy
             (dmut_exec s ζ1 (MkSymbolicState pc1 δ1 h1))
-            (fun '(@MkDynMutResult _ _ _ Σ2 ζ2 (MkMutResult t (MkSymbolicState pc2 δ2 h2))) =>
+            (fun '(@MkDynMutResult _ _ _ Σ2 ζ2 t (MkSymbolicState pc2 δ2 h2)) =>
                forall (ι' : SymInstance Σ2),
                  ι = env_map (fun _ => inst_term ι') ζ2 ->
                  let post__pc   := inst_pathcondition ι' pc2 in
                  let post__heap := interpret_heap ι' h2 in
                  !! post__pc ∧ post__heap ⊢ POST (inst ι' t) (inst ι' δ2)) ->
           pre__pc ->
-          outcome_satisfy
+          SemiConcrete.Outcome.outcome_satisfy
             (scmut_exec s (MkSCState δ (inst ι h1)))
             (fun '(MkSCMutResult v2 (MkSCState δ2 h2)) =>
                SCMUT.inst_scheap h2 ⊢ POST v2 δ2).
