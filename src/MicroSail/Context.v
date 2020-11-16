@@ -101,15 +101,22 @@ Section WithBinding.
 
     Context {UIP_B : UIP B}.
 
-    Lemma ctx_nth_is_proof_irrelevance {Γ : Ctx B} (n : nat) (b : B) :
+    Fixpoint ctx_nth_is_proof_irrelevance {Γ : Ctx B} (n : nat) (b : B) {struct Γ} :
       forall (p q : ctx_nth_is Γ n b), p = q.
     Proof.
-      revert Γ b; induction n; intros [|Γ b] b0; cbn.
-      - intros [].
-      - apply uip.
-      - intros [].
-      - apply IHn.
-    Qed.
+      destruct Γ; intros p q.
+      - destruct q.
+      - destruct n; cbn in *.
+        + apply uip.
+        + apply (ctx_nth_is_proof_irrelevance _ n _ p q).
+    Defined.
+
+    Global Instance eqdec_ctx_nth {Γ n b} : EqDec (ctx_nth_is Γ n b).
+    Proof. intros p q. left. apply ctx_nth_is_proof_irrelevance. Defined.
+
+    Lemma ctx_nth_is_proof_irrelevance_refl {Γ : Ctx B} (n : nat) (b : B) (p : ctx_nth_is Γ n b) :
+      ctx_nth_is_proof_irrelevance n b p p = eq_refl.
+    Proof. apply uip. Qed.
 
   End WithUIP.
 
@@ -130,6 +137,37 @@ Section WithBinding.
     Global Arguments MkInCtx [_ _] _ _.
     Global Arguments inctx_at [_ _] _.
     Global Arguments inctx_valid [_ _] _.
+
+    Global Program Instance NoConfusionPackage_InCtx {uip_B : UIP B} {b Γ} : NoConfusionPackage (InCtx b Γ) :=
+       {| NoConfusion xIn yIn := NoConfusion (inctx_at xIn) (inctx_at yIn);
+          noConfusion xIn yIn (e : NoConfusion (inctx_at xIn) (inctx_at yIn)) :=
+            match noConfusion e in _ = y
+              return forall q, xIn = {| inctx_at := y; inctx_valid := q |}
+            with
+            | eq_refl => fun q => f_equal (MkInCtx _) (ctx_nth_is_proof_irrelevance _ _ (inctx_valid xIn) q)
+            end (inctx_valid yIn);
+          noConfusion_inv (xIn yIn : InCtx b Γ) (e : xIn = yIn) :=
+            noConfusion_inv (f_equal (@inctx_at b Γ) e);
+       |}.
+    Next Obligation.
+      intros ? ? ? [m p] [n q] e. cbn [inctx_at] in *.
+      change (NoConfusion _ _) with (NoConfusion m n) in e.
+      destruct (noConfusion e) eqn:?. cbn.
+      destruct (ctx_nth_is_proof_irrelevance m b p q). cbn.
+      destruct m.
+      - destruct e. reflexivity.
+      - apply uip.
+    Qed.
+    Next Obligation.
+      intros ? ? ? [m p] [n q] e; intros.
+      destruct e.
+      destruct Γ; cbn in *. contradiction.
+      destruct m, n.
+      - destruct p. cbn. now rewrite EqDec.uip_refl_refl.
+      - destruct p. cbn. now rewrite EqDec.uip_refl_refl.
+      - cbn. rewrite ctx_nth_is_proof_irrelevance_refl. reflexivity.
+      - cbn. rewrite ctx_nth_is_proof_irrelevance_refl. reflexivity.
+    Qed.
 
   End InCtx.
 
