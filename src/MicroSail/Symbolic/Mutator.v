@@ -127,6 +127,19 @@ Module Mutators
       constructor.
       - intros ? ? ? ? []; cbn; unfold mbind, option.option_bind;
           now rewrite ?occurs_check_shift.
+      - intros ? ? ? [] fml' Heq; cbn in *.
+        + apply option_map_eq_some' in Heq; destruct_conjs; subst; cbn.
+          f_equal. now apply (occurs_check_sound (T := fun Σ => Term Σ _)).
+        + apply option_map_eq_some' in Heq; destruct_conjs; subst; cbn.
+          f_equal. now apply occurs_check_sound.
+        + apply option_bind_eq_some in Heq; destruct Heq as (a & Heq1 & Heq2).
+          apply option_bind_eq_some in Heq2; destruct Heq2 as (b & Heq2 & Heq3).
+          apply noConfusion_inv in Heq3; cbn in Heq3; subst fml'; cbn.
+          f_equal; now apply (occurs_check_sound (T := fun Σ => Term Σ _)).
+        + apply option_bind_eq_some in Heq; destruct Heq as (a & Heq1 & Heq2).
+          apply option_bind_eq_some in Heq2; destruct Heq2 as (b & Heq2 & Heq3).
+          apply noConfusion_inv in Heq3; cbn in Heq3; subst fml'; cbn.
+          f_equal; now apply (occurs_check_sound (T := fun Σ => Term Σ _)).
     Qed.
 
     Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
