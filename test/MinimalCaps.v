@@ -1030,7 +1030,14 @@ Module MinCapsContracts.
          sep_contract_localstore      := env_nil;
          sep_contract_precondition    := pc ↦ term_var "opc";
          sep_contract_result          := "result";
-         sep_contract_postcondition   := asn_exist "c" ty_cap (asn_eq (term_var "result") (term_var "c"));
+         sep_contract_postcondition   :=
+           pc ↦ term_var "opc" ✱
+           asn_eq (term_var "result")
+           (term_record capability
+                        [ (term_projrec (term_var "opc") "cap_permission"),
+                          (term_projrec (term_var "opc") "cap_begin"),
+                          (term_projrec (term_var "opc") "cap_end"),
+                          (term_binop binop_plus (term_projrec (term_var "opc") "cap_cursor") (term_lit ty_int 1))]);
       |}.
 
     Definition sep_contract_update_pc : SepContract ctx_nil ty_unit :=
@@ -1180,13 +1187,11 @@ Module MinCapsContracts.
   Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
   Lemma valid_contract_next_pc : ValidContractDynMut sep_contract_next_pc fun_next_pc.
-  Proof. 
-    apply dynmutevarreflect_sound.
-  Admitted.
+  Proof. apply dynmutevarreflect_sound; now compute.
+  Qed.
 
   Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
-  Proof. (* apply dynmutevarreflect_sound; now compute. Qed. *)
-  Admitted.
+  Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
 End MinCapsContracts.
 
