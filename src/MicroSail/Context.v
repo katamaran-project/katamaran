@@ -284,78 +284,61 @@ Section WithBinding.
 
   (* Most explicit type-signatures given below are only necessary for Coq 8.9
      and can be cleaned up for later versions. *)
-  Fixpoint occurs_check_index {Σ} {x y : B} {struct Σ} :
-    forall (m n : nat) (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
-      option (InCtx y (ctx_remove _ {| inctx_at := m; inctx_valid := p |})) :=
-    match Σ with
-    | ctx_nil => fun m n _ (q : ctx_nth_is ctx_nil n y) => match q with end
-    | ctx_snoc Σ b =>
-      fun (m n : nat) =>
-        match m , n with
-        | 0   , 0   => fun _ _ => None
-        | 0   , S n => fun p (q : ctx_nth_is (ctx_snoc Σ b) (S n) y) =>
-                        Some (@MkInCtx _ (ctx_remove _ (@MkInCtx _ (ctx_snoc Σ b) 0 p)) n q)
-        | S m , 0   => fun _ (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
-                        Some (@MkInCtx _ (ctx_snoc (ctx_remove Σ _) b) 0 q)
-        | S m , S n => fun p q => option_map inctx_succ (occurs_check_index m n p q)
-        end
-    end.
-
-  Definition occurs_check_var {Σ} {x y : B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) : option (InCtx y (ctx_remove Σ xIn)) :=
-    occurs_check_index (inctx_at xIn) (inctx_at yIn) (inctx_valid xIn) (inctx_valid yIn).
-
-  Lemma occurs_check_shift_var {x y} {Σ : Ctx B} (xIn : InCtx x Σ) (yIn : InCtx y (ctx_remove Σ xIn)) :
-    occurs_check_var xIn (shift_var xIn yIn) = Some yIn.
-  Proof.
-    unfold occurs_check_var, shift_var. destruct yIn as [m p]. cbn.
-    revert m p.
-    induction xIn using InCtx_ind.
-    - cbn in *.
-      reflexivity.
-    - intros [|m]; cbn.
-      + reflexivity.
-      + intros p.
-        now rewrite (IHxIn m p).
-  Qed.
-
-  Fixpoint occurs_check_sum_index {Σ} {x y : B} {struct Σ} :
-    forall (m n : nat) (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
+  Fixpoint occurs_check_index {Σ} {x y : B} (m n : nat) {struct Σ} :
+    forall (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
       (x = y) + (InCtx y (ctx_remove _ {| inctx_at := m; inctx_valid := p |})) :=
     match Σ with
-    | ctx_nil => fun m n _ (q : ctx_nth_is ctx_nil n y) => match q with end
+    | ctx_nil => fun _ (q : ctx_nth_is ctx_nil n y) => match q with end
     | ctx_snoc Σ b =>
-      fun m n =>
-        match m , n with
-        | 0   , 0   => fun (p : ctx_nth_is (ctx_snoc Σ b) 0 x) q =>
-                        inl (eq_trans (eq_sym p) q)
-        | 0   , S n => fun p (q : ctx_nth_is (ctx_snoc Σ b) (S n) y) =>
-                        inr (@MkInCtx _ (ctx_remove _ (@MkInCtx _ (ctx_snoc Σ b) 0 p)) n q)
-        | S m , 0   => fun _ (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
-                        inr (@MkInCtx _ (ctx_snoc (ctx_remove Σ _) b) 0 q)
-        | S m , S n => fun p q => base.sum_map id inctx_succ (occurs_check_sum_index m n p q)
-        end
+      match m , n with
+      | 0   , 0   => fun (p : ctx_nth_is (ctx_snoc Σ b) 0 x) q =>
+                       inl (eq_trans (eq_sym p) q)
+      | 0   , S n => fun p (q : ctx_nth_is (ctx_snoc Σ b) (S n) y) =>
+                       inr (@MkInCtx _ (ctx_remove _ (@MkInCtx _ (ctx_snoc Σ b) 0 p)) n q)
+      | S m , 0   => fun _ (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
+                       inr (@MkInCtx _ (ctx_snoc (ctx_remove Σ _) b) 0 q)
+      | S m , S n => fun p q => base.sum_map id inctx_succ (occurs_check_index m n p q)
+      end
     end.
 
-  Definition occurs_check_sum_var {Σ} {x y : B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) : (x = y) + (InCtx y (ctx_remove Σ xIn)) :=
-    occurs_check_sum_index (inctx_at xIn) (inctx_at yIn) (inctx_valid xIn) (inctx_valid yIn).
+  Definition occurs_check_var {Σ} {x y : B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) : (x = y) + (InCtx y (ctx_remove Σ xIn)) :=
+    occurs_check_index (inctx_at xIn) (inctx_at yIn) (inctx_valid xIn) (inctx_valid yIn).
 
-  Lemma occurs_check_sum_refl {Σ x} (xIn : InCtx x Σ) :
-    occurs_check_sum_var xIn xIn = inl eq_refl.
+  Lemma occurs_check_var_spec {Σ} {x y : B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) :
+    match occurs_check_var xIn yIn with
+    | inl e    => eq_rect x (fun z => InCtx z Σ) xIn y e = yIn
+    | inr yIn' => yIn = shift_var xIn yIn' /\ inctx_at xIn <> inctx_at yIn
+    end%type.
   Proof.
-    unfold occurs_check_sum_var.
+    unfold occurs_check_var, shift_var; destruct yIn as [n q]; revert n q.
+    induction xIn using InCtx_ind; intros n q.
+    - destruct n.
+      + now destruct q.
+      + split. reflexivity. cbn. intuition.
+    - destruct n; cbn.
+      + split. reflexivity. intuition.
+      + specialize (IHxIn n q); revert IHxIn; cbn.
+        destruct (occurs_check_index (inctx_at xIn) n (inctx_valid xIn) q).
+        * destruct e; cbn. now intros ->.
+        * destruct xIn as [m p]; cbn. intros [<- ?]. intuition.
+  Qed.
+
+  Lemma occurs_check_var_refl {Σ x} (xIn : InCtx x Σ) :
+    occurs_check_var xIn xIn = inl eq_refl.
+  Proof.
+    unfold occurs_check_var.
     induction xIn using InCtx_ind.
     - reflexivity.
     - cbn; now rewrite IHxIn.
   Qed.
 
-  Lemma occurs_check_sum_shift_var {x y} {Σ : Ctx B} (xIn : InCtx x Σ) (yIn : InCtx y (ctx_remove Σ xIn)) :
-    occurs_check_sum_var xIn (shift_var xIn yIn) = inr yIn.
+  Lemma occurs_check_shift_var {x y} {Σ : Ctx B} (xIn : InCtx x Σ) (yIn : InCtx y (ctx_remove Σ xIn)) :
+    occurs_check_var xIn (shift_var xIn yIn) = inr yIn.
   Proof.
-    unfold occurs_check_sum_var, shift_var. destruct yIn as [m p]. cbn.
+    unfold occurs_check_var, shift_var. destruct yIn as [m p]. cbn.
     revert m p.
     induction xIn using InCtx_ind.
-    - cbn in *.
-      reflexivity.
+    - reflexivity.
     - intros [|m]; cbn.
       + reflexivity.
       + intros p.

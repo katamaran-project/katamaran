@@ -1426,7 +1426,7 @@ Module Terms (Export termkit : TermKit).
         _ (fun b => Term _ (snd b)) _
         (fun '(y,τ) =>
            fun yIn =>
-             match occurs_check_sum_var xIn yIn with
+             match occurs_check_var xIn yIn with
              | inl e => eq_rect σ (Term (Σ - (x ∶ σ)%ctx)) t τ (f_equal snd e)
              | inr i => term_var y
              end).
@@ -1617,7 +1617,10 @@ Module Terms (Export termkit : TermKit).
     Fixpoint occurs_check_term {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
       match t with
       | @term_var _ ς σ0 ςInΣ =>
-        ςInΣ' ← occurs_check_var xIn ςInΣ; Some (@term_var _ _ _ ςInΣ')
+        match occurs_check_var xIn ςInΣ with
+        | inl e     => None
+        | inr ςInΣ' => Some (@term_var _ _ _ ςInΣ')
+        end
       | term_lit σ0 l => Some (term_lit σ0 l)
       | term_binop op t1 t2 =>
         t1' ← occurs_check_term xIn t1; t2' ← occurs_check_term xIn t2; Some (term_binop op t1' t2')

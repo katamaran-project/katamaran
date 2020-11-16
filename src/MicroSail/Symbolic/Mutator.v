@@ -1619,15 +1619,14 @@ Module Mutators
           apply env_lookup_extensional.
           intros [y τ] yIn.
           rewrite env_lookup_tabulate; cbn.
-          destruct (occurs_check_sum_var xIn yIn) eqn:?.
-          * dependent elimination e. cbn.
-            symmetry. revert H4. clear. intros.
-            admit.
-          * cbn.
+          pose proof (occurs_check_var_spec xIn yIn).
+          destruct (occurs_check_var xIn yIn) eqn:?.
+          * dependent elimination e. cbn in *. subst yIn.
+            symmetry. apply H4.
+          * destruct H3. cbn.
             unfold env_remove'.
             rewrite env_lookup_tabulate.
-            clear.
-            admit.
+            subst yIn. reflexivity.
         + rewrite H4 in H3.
     Admitted.
 
