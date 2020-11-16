@@ -75,6 +75,8 @@ Module Mutators
     | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
     | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
 
+    Global Arguments formula_bool {_} t.
+
     Equations(noeqns) formula_eqs {Δ : Ctx (𝑿 * Ty)} {Σ : Ctx (𝑺 * Ty)}
       (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
       formula_eqs env_nil          env_nil            := nil;
@@ -103,6 +105,28 @@ Module Mutators
       constructor.
       { intros ? []; cbn; f_equal; apply subst_sub_id. }
       { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
+    Qed.
+
+    Import stdpp.base.
+
+    Global Instance OccursCheckFormula : OccursCheck Formula :=
+      fun Σ x xIn fml =>
+            match fml with
+            | formula_bool t    => option_map formula_bool (occurs_check xIn t)
+            | formula_prop ζ P  => option_map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
+            | formula_eq t1 t2  => t1' ← occurs_check xIn t1;
+                                   t2' ← occurs_check xIn t2;
+                                   Some (formula_eq t1' t2')
+            | formula_neq t1 t2 => t1' ← occurs_check xIn t1;
+                                   t2' ← occurs_check xIn t2;
+                                   Some (formula_neq t1' t2')
+              end.
+
+    Global Instance OccursCheckLawsFormula : OccursCheckLaws Formula.
+    Proof.
+      constructor.
+      - intros ? ? ? ? []; cbn; unfold mbind, option.option_bind;
+          now rewrite ?occurs_check_shift.
     Qed.
 
     Definition PathCondition (Σ : Ctx (𝑺 * Ty)) : Type :=
