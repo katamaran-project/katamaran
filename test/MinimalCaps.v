@@ -1187,8 +1187,7 @@ Module MinCapsContracts.
   Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
   Lemma valid_contract_next_pc : ValidContractDynMut sep_contract_next_pc fun_next_pc.
-  Proof. apply dynmutevarreflect_sound; now compute.
-  Qed.
+  Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
   Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
   Proof. apply dynmutevarreflect_sound; now compute. Qed.
