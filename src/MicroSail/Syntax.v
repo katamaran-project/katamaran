@@ -1426,7 +1426,7 @@ Module Terms (Export termkit : TermKit).
         _ (fun b => Term _ (snd b)) _
         (fun '(y,τ) =>
            fun yIn =>
-             match occurs_check_sum_var xIn yIn with
+             match occurs_check_var xIn yIn with
              | inl e => eq_rect σ (Term (Σ - (x ∶ σ)%ctx)) t τ (f_equal snd e)
              | inr i => term_var y
              end).
@@ -1617,7 +1617,10 @@ Module Terms (Export termkit : TermKit).
     Fixpoint occurs_check_term {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
       match t with
       | @term_var _ ς σ0 ςInΣ =>
-        ςInΣ' ← occurs_check_var xIn ςInΣ; Some (@term_var _ _ _ ςInΣ')
+        match occurs_check_var xIn ςInΣ with
+        | inl e     => None
+        | inr ςInΣ' => Some (@term_var _ _ _ ςInΣ')
+        end
       | term_lit σ0 l => Some (term_lit σ0 l)
       | term_binop op t1 t2 =>
         t1' ← occurs_check_term xIn t1; t2' ← occurs_check_term xIn t2; Some (term_binop op t1' t2')
@@ -1658,6 +1661,8 @@ Module Terms (Export termkit : TermKit).
     Class OccursCheckLaws (T : NCtx 𝑺 Ty -> Type) `{Subst T, OccursCheck T} : Prop :=
       { occurs_check_shift {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : T (Σ - (x,σ))%ctx) :
           occurs_check xIn (subst (sub_shift xIn) t) = Some t;
+        occurs_check_sound {Σ x} (xIn : x ∈ Σ) (t : T Σ) (t' : T (Σ - x)) :
+          occurs_check xIn t = Some t' -> t = subst (sub_shift xIn) t'
       }.
 
     Global Arguments OccursCheckLaws T {_ _}.
@@ -1667,39 +1672,106 @@ Module Terms (Export termkit : TermKit).
       option_map f o = Some (f a).
     Proof. now intros ->. Qed.
 
+    Lemma option_map_eq_some' {A B} (f : A -> B) (o : option A) (b : B) :
+      option_map f o = Some b <->
+      exists a, o = Some a /\ f a = b.
+    Proof.
+      split.
+      - destruct o as [a|].
+        + intros H. apply noConfusion_inv in H. cbn in H.
+          exists a. split; congruence.
+        + discriminate.
+      - now intros (a & -> & <-).
+    Qed.
+
+    Lemma option_bind_eq_some {A B} (f : A -> option B) (o : option A) (b : B) :
+      (exists a, o = Some a /\ f a = Some b) <->
+      option.option_bind A B f o = Some b.
+    Proof.
+      split.
+      - now intros (a & -> & <-).
+      - destruct o as [a|]; [ now exists a | discriminate ].
+    Qed.
+
+    Local Ltac solve :=
+      repeat
+        match goal with
+        | H: Some _ = Some _ |- _ =>
+          apply noConfusion_inv in H; cbn in H; subst
+        | H: base.mbind _ _ = Some _ |- _ =>
+          apply option_bind_eq_some in H; cbn in H; destruct_conjs; subst
+        | H: option_map _ _ = Some _ |- _ =>
+          apply option_map_eq_some' in H; cbn in H; destruct_conjs; subst
+
+        | |- match occurs_check_term ?xIn ?t with _ => _ end = _ =>
+          destruct (occurs_check_term xIn t); try discriminate
+        | |- match occurs_check ?xIn ?t with _ => _ end = _ =>
+          destruct (occurs_check xIn t); try discriminate
+        | |- base.mbind _ _ = Some _ =>
+          apply option_bind_eq_some; eexists; split; [ eassumption; fail | idtac ]
+        | |- option_map ?f _ = Some (?f _) =>
+          apply option_map_eq_some
+        | |- option_map _ _ = Some _ =>
+          apply option_map_eq_some'; eexists; split; [ eassumption; fail | idtac ]
+        | |- _ =>
+          unfold base.mret, option.option_ret in *; cbn in *; try congruence
+        end.
+
     Global Instance OccursCheckLawsTerm {τ} : OccursCheckLaws (fun Σ => Term Σ τ).
     Proof.
-      constructor; intros; unfold occurs_check, OccursCheckTerm, subst, SubstTerm.
-      induction t; cbn.
-      - unfold sub_shift. rewrite env_lookup_tabulate.
-        cbv [occurs_check_term base.mbind option.option_bind].
-        now rewrite occurs_check_shift_var.
-      - reflexivity.
-      - now rewrite IHt1, IHt2.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - now rewrite IHt.
-      - apply option_map_eq_some.
-        induction es; destruct X; cbn; cbv [base.mret base.mbind option.option_ret option.option_bind] in *.
-        + reflexivity.
-        + now rewrite e, IHes.
-      - apply option_map_eq_some.
-        induction es; destruct X; cbn; cbv [base.mret base.mbind option.option_ret option.option_bind] in *.
-        + reflexivity.
-        + now rewrite e, IHes.
-      - apply option_map_eq_some.
-        induction es; destruct X; cbn; cbv [base.mret base.mbind option.option_ret option.option_bind] in *.
-        + reflexivity.
-        + now rewrite IHes, e0.
-      - now apply (option_map_eq_some (fun t' : Term (Σ - x∶σ) (ty_tuple σs) => term_projtup t' n)).
-      - now rewrite IHt.
-      - apply option_map_eq_some.
-        induction es; destruct X; cbn; cbv [base.mret base.mbind option.option_ret option.option_bind] in *.
-        + reflexivity.
-        + now rewrite IHes, e0.
-      - now apply (option_map_eq_some (fun t' : Term (Σ - x∶σ) (ty_record R) => term_projrec t' rf)).
-    Qed.
+      constructor.
+      - intros; unfold occurs_check, OccursCheckTerm, subst, SubstTerm.
+        induction t; cbn.
+        + unfold sub_shift. rewrite env_lookup_tabulate.
+          cbv [occurs_check_term base.mbind option.option_bind].
+          now rewrite occurs_check_shift_var.
+        + solve.
+        + solve.
+        + solve.
+        + solve.
+        + solve.
+        + solve.
+        + solve.
+          induction es; destruct X; cbn.
+          * reflexivity.
+          * now rewrite e, IHes.
+        + solve.
+          induction es; destruct X; cbn.
+          * reflexivity.
+          * now rewrite e, IHes.
+        + solve.
+          induction es; destruct X; cbn.
+          * reflexivity.
+          * now rewrite IHes, e0.
+        + solve.
+        + solve.
+        + solve.
+          induction es; destruct X; cbn.
+          * reflexivity.
+          * now rewrite IHes, e0.
+        + solve.
+      - unfold occurs_check, OccursCheckTerm, subst, SubstTerm.
+        intros ? ? ? t t' H1.
+        induction t; cbn in H1.
+        + pose proof (occurs_check_var_spec xIn ςInΣ) as H2.
+          destruct (occurs_check_var xIn ςInΣ); apply noConfusion_inv in H1;
+            cbn in H1; try contradiction; subst; cbn.
+          destruct H2 as [H2 H3]. subst. unfold sub_shift.
+          now rewrite env_lookup_tabulate.
+        + solve.
+        + solve. f_equal; auto.
+        + solve. f_equal; auto.
+        + solve. f_equal; auto.
+        + solve. f_equal; auto.
+        + solve. f_equal; auto.
+        + solve. f_equal. admit.
+        + solve. f_equal. admit.
+        + solve. f_equal. admit.
+        + solve. f_equal. auto.
+        + solve. f_equal. auto.
+        + solve. f_equal. admit.
+        + solve. f_equal. auto.
+    Admitted.
 
     Global Instance OccursCheckLawsList {T : NCtx 𝑺 Ty -> Type} `{OccursCheckLaws T} :
       OccursCheckLaws (fun Σ => list (T Σ)).
@@ -1709,6 +1781,10 @@ Module Terms (Export termkit : TermKit).
         + reflexivity.
         + cbv [base.mbind option.option_bind].
           now rewrite occurs_check_shift, IHt.
+      - intros ? ? ? t. induction t; cbn; intros t' Heq.
+        + solve.
+        + solve. apply occurs_check_sound in H2.
+          f_equal; auto.
     Qed.
 
     Global Instance OccursCheckLawsEnv {I : Set} {T : NCtx 𝑺 Ty -> I -> Set}
@@ -1724,6 +1800,12 @@ Module Terms (Export termkit : TermKit).
         + unfold occurs_check, OccursCheckEnv, subst, SubstEnv in IHt.
           cbn. cbv [base.mbind option.option_ret option.option_bind] in *.
           now rewrite IHt, occurs_check_shift.
+      - intros ? ? ? E. induction E; cbn; intros E' Heq.
+        + solve. reflexivity.
+        + solve. apply (occurs_check_sound (T := fun Σ => T Σ _)) in H2.
+          f_equal.
+          * now apply IHE.
+          * auto.
     Qed.
 
     Global Instance OccursCheckLawsSub {Σ} : OccursCheckLaws (Sub Σ) :=
