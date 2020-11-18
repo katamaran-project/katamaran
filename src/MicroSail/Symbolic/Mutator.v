@@ -192,8 +192,11 @@ Module Mutators
       { intros ? ? ? ? ? []; cbn; f_equal; now rewrite subst_sub_comp. }
     Qed.
 
-    Definition symbolic_assume_formula {Γ Σ} (fml : Formula Σ) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
-      fun '(MkSymbolicState Φ ŝ ĥ) => MkSymbolicState (fml :: Φ) ŝ ĥ.
+    Definition symbolicstate_assume_formula {Γ Σ} (fml : Formula Σ) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
+      fun '(MkSymbolicState Φ δ h) => MkSymbolicState (fml :: Φ) δ h.
+
+    Definition symbolicstate_produce_chunk {Γ Σ} (c : Chunk Σ) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
+      fun '(MkSymbolicState Φ δ h) => MkSymbolicState Φ δ (cons c h).
 
   End SymbolicState.
 
@@ -459,6 +462,13 @@ Module Mutators
         }.
 
     Global Arguments MkDynMutResult {_ _ _ _} _ _ _.
+
+    (* Contravariant substitution for results. *)
+    Definition cosubst_dmutres {Γ A Σ0 Σ1} (ζ1 : Sub Σ0 Σ1) (r : DynamicMutatorResult Γ A Σ1) :
+      DynamicMutatorResult Γ A Σ0 :=
+      match r with
+      MkDynMutResult ζ2 a2 s2 => MkDynMutResult (sub_comp ζ1 ζ2) a2 s2
+      end.
 
     (* A record to collect information when the symbolic execution signals a failure. *)
     Record DynamicMutatorError : Type :=
@@ -792,7 +802,7 @@ Module Mutators
             {| dmutres_context := Σ1;
                dmutres_substitution := sub_id Σ1;
                dmutres_result_value := tt;
-               dmutres_result_state := symbolic_assume_formula fml s1;
+               dmutres_result_state := symbolicstate_assume_formula fml s1;
             |}
           end
       end.
@@ -841,7 +851,7 @@ Module Mutators
                     condition. *)
                  {| dmutres_substitution := sub_id Σ1;
                     dmutres_result_value := tt;
-                    dmutres_result_state := symbolic_assume_formula fml1 s1;
+                    dmutres_result_state := symbolicstate_assume_formula fml1 s1;
                  |}
                end)
         end%out.
@@ -853,7 +863,7 @@ Module Mutators
   Definition dmut_assert_exp {Γ Σ} (e : Exp Γ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
     dmut_eval_exp e >>= fun _ _ t => dmut_assert_term t.
   Definition dmut_produce_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_modify_heap (fun _ ζ => cons (subst ζ c)).
+    dmut_modify (fun _ ζ => symbolicstate_produce_chunk (subst ζ c)).
   Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
     dmut_get >>= fun Σ1 ζ1 '(MkSymbolicState pc1 δ1 h1) =>
     dmut_angelic_list "dmut_consume_chunk" "Empty extraction"
@@ -2058,7 +2068,7 @@ Module Mutators
               sout_assumek fml
                 (sout_pure
                    {| dmutres_result_value := tt;
-                      dmutres_result_state := symbolic_assume_formula fml s1;
+                      dmutres_result_state := symbolicstate_assume_formula fml s1;
                    |})
             end
         end.
@@ -2119,7 +2129,7 @@ Module Mutators
               sout_assumek fml1
                 (sout_pure
                    {| dmutres_result_value := tt;
-                      dmutres_result_state := symbolic_assume_formula fml1 s1;
+                      dmutres_result_state := symbolicstate_assume_formula fml1 s1;
                    |})
             end
         end.

@@ -91,6 +91,9 @@ Module SemiConcrete
     Definition scstate_initial {Γ} (δ : LocalStore Γ) : SCState Γ :=
       MkSCState δ nil.
 
+    Definition scstate_produce_chunk {Γ} (c : SCChunk) : SCState Γ -> SCState Γ :=
+      fun '(MkSCState δ h) => MkSCState δ (cons c h).
+
   End SemiConcreteState.
 
   Section ChunkExtraction.
@@ -270,7 +273,7 @@ Module SemiConcrete
       else scmut_fail "Err [smut_assert_eq]: unsatisfiable".
 
     Definition scmut_produce_chunk {Γ} (c : SCChunk) : SCMut Γ Γ unit :=
-      scmut_modify_heap (fun h => c :: h).
+      scmut_modify (scstate_produce_chunk c).
     Definition scmut_consume_chunk {Γ} (c : SCChunk) : SCMut Γ Γ unit :=
       scmut_get_heap >>= fun h =>
       scmut_angelic_list
