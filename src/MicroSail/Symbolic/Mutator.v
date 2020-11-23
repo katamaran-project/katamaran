@@ -314,6 +314,11 @@ Module Mutators
   Definition create_evarenv_id (Σ : Ctx (𝑺 * Ty)) : EvarEnv Σ Σ :=
     env_tabulate (fun '(x,σ) xIn => Some (term_var x)).
 
+  Record EvarError (Σe Σr : Ctx (𝑺 * Ty)) (D : Type) : Type :=
+    { evarerror_env  : EvarEnv Σe Σr;
+      evarerror_data : D;
+    }.
+
   Section WithEvarEnv.
 
     Import stdpp.base stdpp.option.
@@ -551,14 +556,14 @@ Module Mutators
              dmuterr_localstore      := symbolicstate_localstore s1;
              dmuterr_heap            := symbolicstate_heap s1;
           |}.
-    Definition dmut_contradiction {Γ1 Γ2 A Σ} (func : string) (msg : string) : DynamicMutator Γ1 Γ2 A Σ :=
+    Definition dmut_contradiction {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 s1 =>
         (⨂ (ι : SymInstance Σ1)
             (_ : all_list (inst_formula ι) (symbolicstate_pathcondition s1)) =>
          outcome_fail
            {| dmuterr_function        := func;
               dmuterr_message         := msg;
-              dmuterr_data            := tt;
+              dmuterr_data            := data;
               dmuterr_program_context := Γ1;
               dmuterr_logic_context   := Σ1;
               dmuterr_pathcondition   := symbolicstate_pathcondition s1;
@@ -577,11 +582,11 @@ Module Mutators
       fun Σ1 ζ1 s1 => outcome_angelic_binary (m1 Σ1 ζ1 s1) (m2 Σ1 ζ1 s1).
     Definition dmut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 s1 => outcome_demonic_binary (m1 Σ1 ζ1 s1) (m2 Σ1 ζ1 s1).
-    Definition dmut_angelic_list {Γ1 Γ2 A Σ} (func : string) (msg : string) :
+    Definition dmut_angelic_list {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) :
       list (DynamicMutator Γ1 Γ2 A Σ) -> DynamicMutator Γ1 Γ2 A Σ :=
       fix dmut_angelic_list (xs : list (DynamicMutator Γ1 Γ2 A Σ)) :=
         match xs with
-        | []      => dmut_contradiction func msg
+        | []      => dmut_contradiction func msg data
         | x :: [] => x
         | x :: xs => dmut_angelic_binary x (dmut_angelic_list xs)
         end.
@@ -597,7 +602,7 @@ Module Mutators
     Definition dmut_angelic_finite {Γ A} F `{finite.Finite F, Subst A} {Σ}
                (cont : F -> DynamicMutator Γ Γ A Σ) :
       DynamicMutator Γ Γ A Σ :=
-      dmut_angelic_list "dmut_angelic_finite" "All branches failed" (map cont (finite.enum F)).
+      dmut_angelic_list "dmut_angelic_finite" "All branches failed" tt (map cont (finite.enum F)).
     Definition dmut_demonic_finite {Γ A} F `{finite.Finite F, Subst A} {Σ}
                (cont : F -> DynamicMutator Γ Γ A Σ) :
       DynamicMutator Γ Γ A Σ :=
@@ -866,7 +871,7 @@ Module Mutators
     dmut_modify (fun _ ζ => symbolicstate_produce_chunk (subst ζ c)).
   Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
     dmut_get >>= fun Σ1 ζ1 '(MkSymbolicState pc1 δ1 h1) =>
-    dmut_angelic_list "dmut_consume_chunk" "Empty extraction"
+    dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c
       (List.map
          (fun '(pc2 , h2) => (dmut_put {| symbolicstate_pathcondition := pc2; symbolicstate_localstore := δ1; symbolicstate_heap := h2 |}))
          (extract_chunk_eqb (subst ζ1 c) h1 pc1)).
@@ -1067,10 +1072,16 @@ Module Mutators
 
       Definition dmut_consume_chunk_evar {Σe Σr} (c : Chunk Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
         dmut_get_heap >>= fun _ ζ1 h =>
-        dmut_angelic_list "dmut_consume_chunk_evar" "Empty extraction"
+        let L1 := subst ζ1 L in
+        dmut_angelic_list
+          "dmut_consume_chunk_evar"
+          "Empty extraction"
+          {| evarerror_env := L1;
+             evarerror_data := c;
+          |}
           (List.map
              (fun '(L', h') => dmut_put_heap h';; dmut_pure L')
-             (extract_chunk c h (subst ζ1 L))).
+             (extract_chunk c h L1)).
 
       (* This function tries to assert the equality between the terms `te` from
          a callee context and `tr` from the caller context. The callee context
@@ -1098,7 +1109,10 @@ Module Mutators
                augmented to also handle this kind of case. *)
             dmut_fail
               "dmut_assert_term_eq_evar"
-              "Uninstantiated evars variable" (L,te,tr)
+              "Uninstantiated evars variable"
+              {| evarerror_env := L;
+                 evarerror_data := (te,tr)
+              |}
           end
         end.
 
@@ -1114,19 +1128,34 @@ Module Mutators
         | asn_bool b =>
           match eval_term_evar L b with
           | Some b' => dmut_assert_term b';; dmut_pure L
-          | None    => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion" (asn,L)
+          | None    => dmut_fail
+                         "dmut_consume_evar"
+                         "Uninstantiated evars when consuming assertion"
+                         {| evarerror_env := L;
+                            evarerror_data := asn
+                         |}
           end
         | asn_prop P =>
           match evarenv_to_option_sub L with
           | Some ζ => dmut_assert_formula (formula_prop ζ P);; dmut_pure L
-          | None   => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion"  (asn,L)
+          | None   => dmut_fail
+                        "dmut_consume_evar"
+                        "Uninstantiated evars when consuming assertion"
+                         {| evarerror_env := L;
+                            evarerror_data := asn
+                         |}
           end
         | @asn_eq _ T t1 t2 =>
           match eval_term_evar L t1, eval_term_evar L t2 with
           | Some t1', Some t2' => dmut_assert_formula (formula_eq t1' t2') ;; dmut_pure L
           | Some t1', None     => dmut_assert_term_eq_evar t2 t1' L
           | None    , Some t2' => dmut_assert_term_eq_evar t1 t2' L
-          | _       , _        => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion" (asn,L)
+          | _       , _        => dmut_fail
+                                    "dmut_consume_evar"
+                                    "Uninstantiated evars when consuming assertion"
+                                    {| evarerror_env := L;
+                                       evarerror_data := asn
+                                    |}
           end
         | asn_chunk c => dmut_consume_chunk_evar c L
         | asn_if b a1 a2 =>
@@ -1134,7 +1163,12 @@ Module Mutators
           | Some b' => (dmut_assume_term b';; dmut_consume_evar a1 L)
                          ⊗
                        (dmut_assume_term (term_not b');; dmut_consume_evar a2 L)
-          | None    => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion" (asn,L)
+          | None    => dmut_fail
+                         "dmut_consume_evar"
+                         "Uninstantiated evars when consuming assertion"
+                         {| evarerror_env := L;
+                            evarerror_data := asn
+                         |}
           end
         | asn_match_enum E k alts =>
           match eval_term_evar L k with
@@ -1144,7 +1178,12 @@ Module Mutators
               (fun k2 =>
                  dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
                  dmut_consume_evar (alts k2) L)
-          | None => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion" (asn,L)
+          | None => dmut_fail
+                      "dmut_consume_evar"
+                      "Uninstantiated evars when consuming assertion"
+                      {| evarerror_env := L;
+                         evarerror_data := asn
+                      |}
           end
         | asn_sep a1 a2 =>
           dmut_consume_evar a1 L >>= fun _ _ => dmut_consume_evar a2
@@ -1163,7 +1202,9 @@ Module Mutators
             dmut_fail
               "dmut_consume_evar"
               "Uninstantiated evars when consuming assertion"
-              (asn,L)
+              {| evarerror_env := L;
+                 evarerror_data := asn
+              |}
           end
         end.
 
@@ -1176,7 +1217,12 @@ Module Mutators
          dmut_assert_namedenv_eq_evar δ (env_map (fun _ => sub_term ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
          match evarenv_to_option_sub E2 with
          | Some ξ => dmut_sub ξ (dmut_fresh (result,τ) (DynMutV1.dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
-         | None => dmut_fail "dmut_call_evar" "Uninstantiated evars after consuming precondition" (contract,ts)
+         | None => dmut_fail
+                     "dmut_call_evar"
+                     "Uninstantiated evars after consuming precondition"
+                     {| evarerror_env := E2;
+                        evarerror_data := (contract,ts)
+                     |}
          end
       end.
 
@@ -1732,7 +1778,7 @@ Module Mutators
 
   End SymbolicOutcomes.
 
-  Module NG.
+  Module TwoPointO.
 
     Section DynamicMutatorResult.
 
@@ -2180,10 +2226,16 @@ Module Mutators
 
       Definition dmut_consume_chunk_evar {Σe Σr} (c : Chunk Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
         dmut_get_heap >>= fun _ ζ1 h =>
-        dmut_angelic_list "dmut_consume_chunk_evar" "Empty extraction" (L,c)
+        let L1 := subst ζ1 L in
+        dmut_angelic_list
+          "dmut_consume_chunk_evar"
+          "Empty extraction"
+          {| evarerror_env := L1;
+             evarerror_data := c;
+          |}
           (List.map
              (fun '(L', h') => dmut_put_heap h';; dmut_pure L')
-             (extract_chunk c h (subst ζ1 L))).
+             (extract_chunk c h L1)).
 
       (* This function tries to assert the equality between the terms `te` from
          a callee context and `tr` from the caller context. The callee context
@@ -2211,7 +2263,10 @@ Module Mutators
                augmented to also handle this kind of case. *)
             dmut_fail
               "dmut_assert_term_eq_evar"
-              "Uninstantiated evars variable" (L,te,tr)
+              "Uninstantiated evars variable"
+              {| evarerror_env := L;
+                 evarerror_data := (te,tr)
+              |}
           end
         end.
 
@@ -2227,19 +2282,34 @@ Module Mutators
         | asn_bool b =>
           match eval_term_evar L b with
           | Some b' => dmut_assert_term b';; dmut_pure L
-          | None    => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion" (asn,L)
+          | None    => dmut_fail
+                         "dmut_consume_evar"
+                         "Uninstantiated evars when consuming assertion"
+                         {| evarerror_env := L;
+                            evarerror_data := asn
+                         |}
           end
         | asn_prop P =>
           match evarenv_to_option_sub L with
           | Some ζ => dmut_assert_formula (formula_prop ζ P);; dmut_pure L
-          | None   => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion"  (asn,L)
+          | None   => dmut_fail
+                        "dmut_consume_evar"
+                        "Uninstantiated evars when consuming assertion"
+                        {| evarerror_env := L;
+                           evarerror_data := asn
+                        |}
           end
         | @asn_eq _ T t1 t2 =>
           match eval_term_evar L t1, eval_term_evar L t2 with
           | Some t1', Some t2' => dmut_assert_formula (formula_eq t1' t2') ;; dmut_pure L
           | Some t1', None     => dmut_assert_term_eq_evar t2 t1' L
           | None    , Some t2' => dmut_assert_term_eq_evar t1 t2' L
-          | _       , _        => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion" (asn,L)
+          | _       , _        => dmut_fail
+                                    "dmut_consume_evar"
+                                    "Uninstantiated evars when consuming assertion"
+                                    {| evarerror_env := L;
+                                       evarerror_data := asn
+                                    |}
           end
         | asn_chunk c => dmut_consume_chunk_evar c L
         | asn_if b a1 a2 =>
@@ -2247,7 +2317,12 @@ Module Mutators
           | Some b' => (dmut_assume_term b';; dmut_consume_evar a1 L)
                          ⊗
                        (dmut_assume_term (term_not b');; dmut_consume_evar a2 L)
-          | None    => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion" (asn,L)
+          | None    => dmut_fail
+                         "dmut_consume_evar"
+                         "Uninstantiated evars when consuming assertion"
+                         {| evarerror_env := L;
+                            evarerror_data := asn
+                         |}
           end
         | asn_match_enum E k alts =>
           match eval_term_evar L k with
@@ -2257,7 +2332,12 @@ Module Mutators
               (fun k2 =>
                  dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
                  dmut_consume_evar (alts k2) L)
-          | None => dmut_fail "dmut_consume_evar" "Uninstantiated evars when consuming assertion" (asn,L)
+          | None => dmut_fail
+                      "dmut_consume_evar"
+                      "Uninstantiated evars when consuming assertion"
+                      {| evarerror_env := L;
+                         evarerror_data := asn
+                      |}
           end
         | asn_sep a1 a2 =>
           dmut_consume_evar a1 L >>= fun _ _ => dmut_consume_evar a2
@@ -2276,7 +2356,9 @@ Module Mutators
             dmut_fail
               "dmut_consume_evar"
               "Uninstantiated evars when consuming assertion"
-              (asn,L)
+              {| evarerror_env := L;
+                 evarerror_data := asn
+              |}
           end
         end.
 
@@ -2289,7 +2371,12 @@ Module Mutators
          dmut_assert_namedenv_eq_evar δ (env_map (fun _ => sub_term ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
          match evarenv_to_option_sub E2 with
          | Some ξ => dmut_sub ξ (dmut_fresh (result,τ) (dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
-         | None => dmut_fail "dmut_call_evar" "Uninstantiated evars after consuming precondition" (contract,ts)
+         | None => dmut_fail
+                     "dmut_call_evar"
+                     "Uninstantiated evars after consuming precondition"
+                     {| evarerror_env := E2;
+                        evarerror_data := (contract,ts)
+                     |}
          end
       end.
 
@@ -2513,6 +2600,6 @@ Module Mutators
     (*   now rewrite outcome_satisfy_bind in H. *)
     (* Qed. *)
 
-  End NG.
+  End TwoPointO.
 
 End Mutators.
