@@ -31,4 +31,3 @@ src/MicroSail/Iris/Model.v
 test/CapMach.v
 test/Example.v
 test/ISA.v
-test/MinimalCaps.v
