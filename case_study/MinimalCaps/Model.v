@@ -53,6 +53,8 @@ From iris.bi Require interface big_op.
 From iris.proofmode Require tactics.
 From stdpp Require namespaces.
 
+Set Implicit Arguments.
+
 Module gh := iris.base_logic.lib.gen_heap.
 
 Module MinCapsModel.
@@ -115,7 +117,7 @@ Module MinCapsModel.
       iModIntro.
 
       pose (refmap := list_to_map (map (fun a => (a, μ a)) liveAddrs) : gmap Z Z).
-      (* iExists (McMemG gH (nroot .@ "addr_inv")).
+      iExists (McMemG gH (nroot .@ "addr_inv")).
       cbn.
       iFrame.
       iExists refmap.
@@ -127,8 +129,7 @@ Module MinCapsModel.
 
       Unshelve.
       all: try rewrite !lookup_insert_ne; try apply lookup_empty; lia.
-    Qed. *)
-    Admitted.
+    Qed.
 
     Definition MinCaps_ptsreg `{sailRegG Σ} (reg : RegName) (v : Z + Capability) : iProp Σ :=
       match reg with
