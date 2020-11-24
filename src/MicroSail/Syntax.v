@@ -38,7 +38,8 @@ From Coq Require Import
      Program.Tactics
      Relations
      Strings.String
-     ZArith.ZArith.
+     ZArith.ZArith
+     micromega.Lia.
 From Coq Require
      Vector
      ssr.ssrbool.
@@ -1165,7 +1166,7 @@ Module Terms (Export termkit : TermKit).
           then Some true
           else None
         | term_lit σ l1 , term_lit τ l2 =>
-          match Ty_eq_dec σ τ with
+          match eq_dec σ τ with
           | left  p => Some (Lit_eqb τ (eq_rect σ Lit l1 τ p) l2)
           | right _ => Some false
           end
@@ -1178,50 +1179,34 @@ Module Terms (Export termkit : TermKit).
         | _            , _            => None
         end.
 
+      Local Set Equations With UIP.
       Lemma Term_eqvb_spec {ι σ} (t1 t2 : Term Σ σ) :
-        forall b, Term_eqvb t1 t2 = Some b -> reflect (TermEqv ι t1 t2) b.
+        OptionSpec
+          (fun b : bool => TermEqv ι t1 t2 <-> is_true b)
+          True
+          (Term_eqvb t1 t2).
       Proof.
-        induction t1; dependent elimination t2; cbn; intros b Heq; try discriminate.
-        - destruct (InCtx_eqb ςInΣ ςInΣ0) eqn:?; try discriminate.
-          apply noConfusion_inv in Heq; cbn in Heq. subst b.
-          constructor. unfold TermEqv. cbn.
-          admit.
-        - destruct (Ty_eq_dec σ1 σ1).
-          + rewrite (Ty_K e) in Heq. cbn in Heq.
-            apply noConfusion_inv in Heq; cbn in Heq. subst b.
-            destruct (Lit_eqb_spec σ1 l l0).
-            * constructor; congruence.
-            * constructor. unfold TermEqv. cbn. assumption.
+        induction t1; dependent elimination t2; cbn; intros; try (solve [ constructor; auto ]).
+        - destruct (InCtx_eqb_spec ςInΣ ςInΣ0); constructor; auto.
+          dependent elimination e. apply reflect_iff. constructor. reflexivity.
+        - rewrite eq_dec_refl. cbn. constructor. apply reflect_iff, Lit_eqb_spec.
+        - specialize (IHt1 e). revert IHt1.
+          apply optionspec_monotonic; [ intros ? <- | auto ].
+          unfold TermEqv; cbn; lia.
+        - specialize (IHt1 e0). revert IHt1.
+          apply optionspec_monotonic; [ intros ? <- | auto ].
+          unfold TermEqv; cbn. split.
+          + now intros ?%ssrbool.negb_inj.
           + congruence.
-        - eapply ssrbool.iffP.
-          apply IHt1, Heq.
-          + unfold TermEqv; cbn.
-            congruence.
-          + unfold TermEqv; cbn.
-            admit.
-        - eapply ssrbool.iffP.
-          apply IHt1, Heq.
-          + unfold TermEqv; cbn.
-            congruence.
-          + unfold TermEqv; cbn.
-            admit.
-        - eapply ssrbool.iffP.
-          apply IHt1, Heq.
-          + unfold TermEqv; cbn.
-            congruence.
-          + unfold TermEqv; cbn.
-            congruence.
-        - apply noConfusion_inv in Heq; cbn in Heq. subst b.
-          constructor. unfold TermEqv. cbn. congruence.
-        - apply noConfusion_inv in Heq; cbn in Heq. subst b.
-          constructor. unfold TermEqv. cbn. congruence.
-        - eapply ssrbool.iffP.
-          apply IHt1, Heq.
-          + unfold TermEqv; cbn.
-            congruence.
-          + unfold TermEqv; cbn.
-            congruence.
-      Admitted.
+        - specialize (IHt1 t). revert IHt1.
+          apply optionspec_monotonic; [ intros ? <- | auto ].
+          unfold TermEqv; cbn. split; congruence.
+        - constructor. apply reflect_iff. constructor. discriminate.
+        - constructor. apply reflect_iff. constructor. discriminate.
+        - specialize (IHt1 t0). revert IHt1.
+          apply optionspec_monotonic; [ intros ? <- | auto ].
+          unfold TermEqv; cbn. split; congruence.
+      Qed.
 
     End TermEqvB.
 
@@ -1260,38 +1245,23 @@ Module Terms (Export termkit : TermKit).
       Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
                with (𝑹_eq_dec r1 r2) => {
       Term_eqb (@term_projrec r e1 _ _ prf1) (@term_projrec ?(r) e2 _ _ prf2)
-        (left eq_refl) := (@inctx_at _ _ _ prf1 =? @inctx_at _ _ _ prf2) && Term_eqb e1 e2;
+        (left eq_refl) := InCtx_eqb prf1 prf2 && Term_eqb e1 e2;
       Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
         (right _) := false };
 
       Term_eqb _ _ := false.
 
     Local Transparent Term_eqb.
-    Set Equations With UIP.
+    Local Set Equations With UIP.
     Lemma Term_eqb_spec Σ (σ : Ty) (t1 t2 : Term Σ σ) :
       reflect (t1 = t2) (Term_eqb t1 t2).
     Proof.
       induction t1 using Term_rect; cbn [Term_eqb]; dependent elimination t2;
         microsail_solve_eqb_spec.
-      - unfold InCtx_eqb.
-        repeat match goal with
-               | |- context[?m =? ?n] => destruct (Nat.eqb_spec m n)
-               | H: InCtx _ _ |- _ =>
-                 let n := fresh "n" in
-                 let p := fresh "p" in
-                 destruct H as [n p]
-               end; cbn in *; constructor.
-        + subst n0.
-          match goal with
-          | H1: ctx_nth_is ?Σ ?n ?b1, H2: ctx_nth_is ?Σ ?n ?b2 |- _ =>
-            let H := fresh in
-            pose proof (ctx_nth_is_right_exact _ _ _ H1 H2) as H; inversion H; clear H
-          end.
-          subst ς0.
-          f_equal.
-          f_equal.
-          apply ctx_nth_is_proof_irrelevance.
-        + inversion 1. congruence.
+      - destruct (InCtx_eqb_spec ςInΣ ςInΣ0); constructor.
+        + dependent elimination e. reflexivity.
+        + intros e. apply n.
+          dependent elimination e. reflexivity.
       - match goal with
         | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
         end; microsail_solve_eqb_spec.
@@ -1347,7 +1317,17 @@ Module Terms (Export termkit : TermKit).
           microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
-      - admit.
+      - destruct (𝑹_eq_dec R R1); cbn.
+        + destruct e. specialize (IHt1 e5). apply reflect_iff in IHt1.
+          assert (EqDec_𝑹𝑭 : EqDec 𝑹𝑭) by admit.
+          destruct (InCtx_eqb_spec rfInR rfInR0); cbn.
+          * apply iff_reflect. rewrite <- IHt1.
+            split.
+            intros e2. now dependent elimination e2.
+            intros e2. subst. now dependent elimination e.
+          * constructor. intros e. apply n.
+            now dependent elimination e.
+        + constructor. congruence.
     Admitted.
 
   End SymbolicTerms.

@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-Require Import Coq.Logic.EqdepFacts.
+Require Import Coq.Logic.EqdepFacts Coq.Bool.Bool.
 Require Import Equations.Equations.
 From stdpp Require
      base.
@@ -176,6 +176,18 @@ Section WithBinding.
              (b1inΓ : InCtx b1 Γ)
              (b2inΓ : InCtx b2 Γ) : bool :=
     Nat.eqb (inctx_at b1inΓ) (inctx_at b2inΓ).
+
+  Lemma InCtx_eqb_spec `{UIP B} {Γ} {b1 b2 : B} (b1inΓ : InCtx b1 Γ) (b2inΓ : InCtx b2 Γ) :
+    reflect
+      (existT _ b1inΓ = existT _ b2inΓ :> sigT (fun b => InCtx b Γ))
+      (InCtx_eqb b1inΓ b2inΓ).
+  Proof.
+    destruct b1inΓ as [m p], b2inΓ as [n q]; cbn.
+    destruct (NPeano.Nat.eqb_spec m n); constructor.
+    - subst. pose proof (ctx_nth_is_right_exact _ _ _ p q). subst.
+      f_equal. f_equal. apply ctx_nth_is_proof_irrelevance.
+    - intros e. depelim e. destruct n, m; cbn in H0; congruence.
+  Qed.
 
   (* These are *constructors* for InCtx. *)
   Definition inctx_zero {b : B} {Γ : Ctx B} : InCtx b (ctx_snoc Γ b) :=
@@ -346,6 +358,7 @@ Section WithBinding.
   Qed.
 
 End WithBinding.
+Arguments InCtx_ind [B b] _ _ _ [_].
 
 Section WithAB.
   Context {A B : Set} (f : A -> B).

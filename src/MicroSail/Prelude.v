@@ -205,3 +205,41 @@ Section Traverse.
     end.
 
 End Traverse.
+
+Inductive OptionSpec {A} (S : A -> Prop) (N : Prop) : option A -> Prop :=
+| OptionSpecSome {a : A} : S a -> OptionSpec S N (Some a)
+| OptionSpecNone  : N -> OptionSpec S N None.
+
+Derive Signature for OptionSpec.
+
+Definition option_ap {A B : Type} (f : option (A -> B)) (a : option A) : option B :=
+  match f with
+  | Some f => option_map f a
+  | None => None
+  end.
+
+Lemma optionspec_map {A B : Type} (S : B -> Prop) (N : Prop)
+      (f : A -> B) (o : option A) :
+  OptionSpec S N (option_map f o) <->
+  OptionSpec (fun a => S (f a)) N o.
+Proof. split; intro H; destruct o; depelim H; now constructor. Qed.
+
+Lemma optionspec_ap {A B : Type} (S : B -> Prop) (N : Prop)
+      (f : option (A -> B)) (o : option A) :
+  OptionSpec S N (option_ap f o) <->
+  OptionSpec (fun f => OptionSpec (fun a => S (f a)) N o) N f.
+Proof.
+  split.
+  - intro H. destruct f; cbn in *.
+    + constructor. revert H. apply optionspec_map.
+    + constructor. now depelim H.
+  - intro H. destruct f; cbn in *.
+    + depelim H. revert H. apply optionspec_map.
+    + constructor. now depelim H.
+Qed.
+
+Lemma optionspec_monotonic {A : Type} (S1 S2 : A -> Prop) (N1 N2 : Prop)
+      (fS : forall a, S1 a -> S2 a) (fN: N1 -> N2) :
+  forall (o : option A),
+    OptionSpec S1 N1 o -> OptionSpec S2 N2 o.
+Proof. intros ? []; constructor; auto. Qed.
