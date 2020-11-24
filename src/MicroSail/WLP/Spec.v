@@ -80,6 +80,132 @@ Module WLP
        (progkit : ProgramKit termkit)
        (Export contkit : WLPContractKit termkit progkit).
 
+  Class Blastable (A : Type) : Type :=
+    { blast : A -> (A -> Prop) -> Prop;
+      blast_sound:
+        forall (a : A) (k : A -> Prop),
+          blast a k <-> k a
+    } .
+
+  Program Instance blastable_bool : Blastable bool :=
+    {| blast b k := (b = true -> k true) /\ (b = false -> k false) |}.
+  Solve All Obligations with intros []; intuition; congruence.
+
+  Program Instance blastable_int : Blastable Z :=
+    {| blast z k := k z |}.
+  Solve All Obligations with intuition.
+
+  Program Instance blastable_string : Blastable string :=
+    {| blast s k := k s |}.
+  Solve All Obligations with intuition.
+
+  Program Instance blastable_unit : Blastable unit :=
+    {| blast u k := k tt |}.
+  Solve All Obligations with intros []; intuition; congruence.
+
+  Program Instance blastable_list {A : Type} : Blastable (list A) :=
+    {| blast xs k :=
+         (forall (y : A) (ys : list A), xs = cons y ys -> k (cons y ys)) /\
+         (xs = nil -> k nil)
+    |}.
+  Solve All Obligations with intros ? []; intuition; congruence.
+
+  Program Instance blastable_prod {A B : Type} : Blastable (A * B) :=
+    { blast ab k := k (fst ab , snd ab) }.
+  Solve All Obligations with intuition.
+
+  Program Instance blastable_sigt {A} {B : A -> Type} : Blastable (sigT B) :=
+    {| blast ab k := k (existT (projT1 ab) (projT2 ab)) |}.
+  Solve All Obligations with intros ? ? []; intuition; congruence.
+
+  Program Instance blastable_sum {A B : Type} : Blastable (A + B) :=
+    {| blast ab k :=
+         (forall (a : A), ab = inl a -> k (inl a)) /\
+         (forall (b : B), ab = inr b -> k (inr b))
+    |}.
+  Solve All Obligations with intros ? ? []; intuition; congruence.
+
+  Program Instance blastable_bit : Blastable Bit :=
+    {| blast b k := (b = bitzero -> k bitzero) /\ (b = bitone -> k bitone) |}.
+  Solve All Obligations with intros []; intuition; congruence.
+
+  Program Instance blastable_word {n} : Blastable (Word.word n) :=
+    {| blast w k := k w |}.
+  Solve All Obligations with intuition.
+
+  Program Instance blastable_env {B D} {Γ : Ctx B} : Blastable (Env D Γ) :=
+    {| blast :=
+         (fix blast {Δ : Ctx B} (E : Env D Δ) {struct E} : (Env D Δ -> Prop) -> Prop :=
+         match E in Env _ Δ return (Env D Δ -> Prop) -> Prop with
+         | env_nil => fun k => k env_nil
+         | env_snoc E b db => fun k => blast E (fun E' => k (env_snoc E' b db))
+         end) Γ
+    |}.
+  Next Obligation.
+    intros ? ? ? E; induction E; cbn.
+    - reflexivity.
+    - intro k; exact (IHE (fun E' : Env D Γ => k (env_snoc E' b db))).
+  Defined.
+  Instance blastable_env' {X T : Set} {D} {Δ : NCtx X T} : Blastable (NamedEnv D Δ) :=
+    blastable_env.
+
+  Program Instance Blastable_Finite `{finite.Finite A} : Blastable A :=
+    {| blast a POST :=
+         match finite.enum A with
+         | nil       => True
+         | cons x xs => List.fold_left (fun P y => P /\ (a = y -> POST y)) xs (a = x -> POST x)
+         end
+    |}.
+  Admit Obligations.
+
+  Program Instance blastable_union (U : 𝑼) : Blastable (𝑼𝑻 U) :=
+    {| blast v k :=
+         forall (K : 𝑼𝑲 U),
+           blast K (fun K =>
+                      forall p,
+                        v = 𝑼_fold (existT K p) ->
+                        k (𝑼_fold (existT K p)))
+    |}.
+  Admit Obligations.
+  (* Next Obligation. *)
+  (*   intros; cbn; constructor; intro hyp. *)
+  (*   - rewrite <- (@𝑼_fold_unfold U a) in *. *)
+  (*     destruct (𝑼_unfold a) as [K v] eqn:eq_a. *)
+  (*     specialize (hyp K). *)
+  (*     rewrite blast_sound in hyp. *)
+  (*     now apply hyp. *)
+  (*   - intros K. *)
+  (*     rewrite blast_sound. *)
+  (*     now intros; subst. *)
+  (* Qed. *)
+
+  Program Instance blastable_record (R : 𝑹) : Blastable (𝑹𝑻 R) :=
+    {| blast v k := k (𝑹_fold (𝑹_unfold v)) |}.
+  Next Obligation.
+    cbn; intros; now rewrite 𝑹_fold_unfold.
+  Qed.
+
+  Instance blastable_lit {σ} : Blastable (Lit σ) :=
+    match σ with
+    | ty_int => blastable_int
+    | ty_bool => blastable_bool
+    | ty_bit => blastable_bit
+    | ty_string => blastable_string
+    | ty_list σ0 => @blastable_list (Lit σ0)
+    | ty_prod σ1 σ2 => @blastable_prod (Lit σ1) (Lit σ2)
+    | ty_sum σ1 σ2 => @blastable_sum (Lit σ1) (Lit σ2)
+    | ty_unit => blastable_unit
+    | ty_enum E => Blastable_Finite
+    | ty_bvec n => blastable_word
+    | ty_tuple σs => Ctx_rect
+                       (fun σs => Blastable (Lit (ty_tuple σs)))
+                       blastable_unit
+                       (fun σs blast_σs σ => @blastable_prod (EnvRec Lit σs) (Lit σ))
+                       σs
+    | ty_union U => blastable_union U
+    | ty_record R => blastable_record R
+    end%type.
+
   Fixpoint eval_prop_true {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) {struct e} : Prop -> Prop :=
     match e return Prop -> Prop -> Prop with
     | exp_binop binop_eq e1 e2 => fun _ k => eval e1 δ = eval e2 δ -> k

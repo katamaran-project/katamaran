@@ -117,16 +117,6 @@ Module ISATypeKit <: TypeKit.
     ltac:(destruct E; auto with typeclass_instances).
   Instance 𝑬𝑲_finite (E : 𝑬) : Finite (𝑬𝑲 E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Program Instance Blastable_𝑬𝑲 E : Blastable (𝑬𝑲 E) :=
-    match E with
-    | register_tag => {| blast v POST :=
-                     (v = RegTag0  -> POST RegTag0) /\
-                     (v = RegTag1 -> POST RegTag1) /\
-                     (v = RegTag2 -> POST RegTag2) /\
-                     (v = RegTag3 -> POST RegTag3)
-                |}
-    end.
-  Solve All Obligations with destruct a; intuition congruence.
 
   (** UNIONS **)
   Definition 𝑼        := Unions.
@@ -145,16 +135,6 @@ Module ISATypeKit <: TypeKit.
     ltac:(destruct U; auto with typeclass_instances).
   Instance 𝑼𝑲_finite U : Finite (𝑼𝑲 U) :=
     ltac:(destruct U; auto with typeclass_instances).
-  Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
-    match U with
-    | instruction => {| blast v POST :=
-                     (v = KHalt  -> POST KHalt) /\
-                     (v = KLoad -> POST KLoad)  /\
-                     (v = KAdd -> POST KAdd)    /\
-                     (v = KJump -> POST KJump)
-                |}
-    end.
-  Solve All Obligations with destruct a; intuition congruence.
 
   (** RECORDS **)
   Definition 𝑹        := Empty_set.

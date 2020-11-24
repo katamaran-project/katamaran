@@ -205,9 +205,6 @@ Module CapTypeKit <: TypeKit.
     ltac:(destruct E; auto with typeclass_instances).
   Instance 𝑬𝑲_finite (E : 𝑬) : Finite (𝑬𝑲 E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Program Instance Blastable_𝑬𝑲 e : Blastable (𝑬𝑲 e) :=
-    {| blast v POST := POST v |}.
-  Solve All Obligations with auto.
 
   (** UNIONS **)
   Definition 𝑼        := Unions.
@@ -226,10 +223,6 @@ Module CapTypeKit <: TypeKit.
     ltac:(destruct U; auto with typeclass_instances).
   Instance 𝑼𝑲_finite U : Finite (𝑼𝑲 U) :=
     ltac:(destruct U; auto with typeclass_instances).
-  Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
-    match U with
-    | instruction => {| blast v POST := POST v |}
-    end.
   Solve All Obligations with destruct a; intuition congruence.
 
   (** RECORDS **)
