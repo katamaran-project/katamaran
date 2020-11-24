@@ -189,6 +189,16 @@ Module Soundness
       (s1 : SCState Γ1) : Prop :=
       outcome_satisfy (m s1) (fun r => POST (scmutres_value r) (scmutres_state r)).
 
+    Lemma scmut_wp_bind {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (f : A -> SCMut Γ2 Γ3 B)
+          (POST : B -> SCState Γ3 -> Prop) :
+      forall s1 : SCState Γ1,
+        scmut_wp (scmut_bind ma f) POST s1 <->
+        scmut_wp ma (fun a => scmut_wp (f a) POST) s1.
+    Proof.
+      unfold SCMut, scmut_bind, scmut_wp in *; cbn; intros.
+      now rewrite outcome_satisfy_bind.
+    Qed.
+
     Definition ResultProperty Γ A Σ :=
       DynamicMutatorResult Γ A Σ -> Prop.
 
@@ -427,6 +437,19 @@ Module Soundness
       now rewrite <- sub_comp_assoc, <- subst_sub_comp.
     Qed.
 
+    Definition dmut_wf'' {Γ1 Γ2 A Σ0} `{Subst A} (d : DynamicMutator Γ1 Γ2 A Σ0) : Prop :=
+      forall (POST : StateProperty Γ2 A Σ0) (POST_dcl : stateprop_downwards_closed POST),
+        stateprop_downwards_closed
+          (fun Σ1 ζ1 _ => dmut_wp (dmut_sub ζ1 d) (stateprop_specialize ζ1 POST)).
+
+    Lemma dmut_wf''_pure {Γ A Σ} `{SubstLaws A} (a : A Σ) :
+      dmut_wf'' (dmut_pure (Γ := Γ) a).
+    Proof.
+      unfold dmut_wf'', dmut_wp, dmut_sub, dmut_pure, stateprop_downwards_closed, stateprop_specialize; cbn; intros.
+      generalize (H1 _ (sub_comp ζ2 ζ0)).
+      now rewrite !sub_comp_id_right, !subst_sub_comp, !sub_comp_assoc.
+    Qed.
+
     Lemma dmut_wf_equiv {Γ1 Γ2 A Σ0} `{Subst A} (d : DynamicMutator Γ1 Γ2 A Σ0) :
       dmut_wf d <-> dmut_wf' d.
     Proof.
@@ -444,6 +467,39 @@ Module Soundness
     Opaque sub_snoc.
     Opaque wk1.
     Opaque SubstEnv.
+
+    Lemma dmut_wp_bind {Γ1 Γ2 Γ3 A B Σ0} {subB : Subst B} (ma : DynamicMutator Γ1 Γ2 A Σ0)
+          (f : forall Σ', Sub Σ0 Σ' -> A Σ' -> DynamicMutator Γ2 Γ3 B Σ')
+          (f_wf : forall Σ' ζ a, dmut_wf (f Σ' ζ a))
+          (POST : StateProperty Γ3 B Σ0) (POST_dcl : stateprop_downwards_closed POST) :
+      forall s0 : SymbolicState Γ1 Σ0,
+        dmut_wp (dmut_bind ma f) POST s0 <->
+        dmut_wp ma (fun Σ1 ζ1 a1 => dmut_wp (f Σ1 ζ1 a1) (stateprop_specialize ζ1 POST)) s0.
+    Proof.
+      unfold DynamicMutator, dmut_bind, dmut_wp, dmut_wf in *; cbn; intros s0.
+      split; intros H Σ1 ζ1; specialize (H Σ1 ζ1). revert H.
+      - rewrite outcome_satisfy_bind. apply outcome_satisfy_monotonic.
+        intros [Σ2 ζ2 a2 s2] H Σ3 ζ3.
+        rewrite outcome_satisfy_bind in H.
+        apply (f_wf Σ2 (sub_comp ζ1 ζ2) a2 Σ2 Σ3 (sub_id Σ2) ζ3) in H.
+        + revert H. rewrite sub_comp_id_left.
+          apply outcome_satisfy_monotonic.
+          intros [Σ4 ζ4 b4 s4]. cbn.
+          now rewrite <- sub_comp_assoc.
+        + clear f_wf H.
+          unfold resultprop_downwards_closed.
+          intros [] [] []; destruct_conjs; subst. cbn.
+          rewrite <- ?sub_comp_assoc.
+          apply POST_dcl.
+      - rewrite outcome_satisfy_bind. revert H.
+        apply outcome_satisfy_monotonic.
+        intros [Σ2 ζ2 a2 s2] H. specialize (H Σ2 (sub_id _)).
+        revert H. rewrite outcome_satisfy_bind, subst_sub_id.
+        apply outcome_satisfy_monotonic.
+        intros [Σ3 ζ3 b3 s3]. cbn.
+        unfold stateprop_specialize.
+        now rewrite sub_comp_id_left, sub_comp_assoc.
+    Qed.
 
     Lemma dmut_wp_fresh {Γ Σ0 A x τ} `{Subst A}
           (d : DynamicMutator Γ Γ A (Σ0 ▻ (x,τ))%ctx)
