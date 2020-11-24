@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Bool.Bool
      Program.Equality
      Program.Tactics
      ZArith.ZArith
@@ -173,7 +174,6 @@ Module Soundness
 
     (* These should be kept abstract in the rest of the proof. If you need some
        property, add a lemma above. *)
-    Local Opaque inst.
     Local Opaque inst_chunk.
     Local Opaque inst_heap.
     Local Opaque inst_pathcondition.
@@ -352,28 +352,49 @@ Module Soundness
       specialize (H Σ (sub_id Σ)).
       change (sub_formula (sub_id Σ) (formula_bool b))
         with (subst (sub_id Σ) (formula_bool b)) in H.
-      rewrite ?subst_sub_id in H.
-      unfold scmut_assume_term.
-      destruct (try_solve_formula (formula_bool b)) eqn:?.
-      - destruct (try_solve_formula_spec _ Heqo ι); clear Heqo.
-        + cbn in *.
-          rewrite i. cbn. apply (H ι).
-          rewrite sub_comp_id_left.
+      rewrite ?subst_sub_id in H. unfold scmut_assume_term.
+      destruct (try_solve_formula_spec (ι := ι) (formula_bool b)) as [? H1|_].
+      - unfold inst_formula, is_true in H1.
+        apply iff_reflect in H1. destruct H1 as [H1|H1].
+        + rewrite H1. cbn in *.
+          rewrite sub_comp_id_left in H.
+          unfold stateprop_lift in H.
+          refine (H _ _ _ H__state).
           apply syminstance_rel_refl.
-          assumption.
-        + cbn in n. destruct (inst ι b); intuition.
-      - clear Heqo.
-        destruct (inst ι b) eqn:?; cbn.
-        * cbn in *.
-          apply (H ι).
-          rewrite sub_comp_id_left.
-          apply syminstance_rel_refl.
+        + destruct (inst ι b); cbn; now try congruence.
+      - cbn in H. rewrite sub_comp_id_left in H. unfold stateprop_lift in H.
+        destruct (inst ι b) eqn:?; cbn; auto.
+        + eapply H. apply syminstance_rel_refl.
           apply represents_assume_formula.
-          intuition.
-        * trivial.
+          cbn [inst_formula]. now rewrite Heqy.
+    Qed.
+
+    Lemma dmut_assume_prop_sound {Γ Σ} (ι : SymInstance Σ) (P : _) :
+      approximates
+        (Γ1 := Γ) (Γ2 := Γ) ι
+        (dmut_assume_prop P)
+        (scmut_assume_prop ι P).
+    Proof.
+      intros ? ? ? H__state H.
+      unfold dmut_wp, dmut_assume_prop, dmut_assume_formula in H.
+      specialize (H Σ (sub_id Σ)).
+      rewrite subst_sub_id in H.
+      destruct (try_solve_formula_spec (ι := ι) (formula_prop (sub_id Σ) P)) as [? H1|_].
+      - cbn. intros.
+        unfold inst_formula, is_true in H1. rewrite inst_sub_id in H1.
+        apply H1 in H0. subst a. cbn in H.
+        rewrite subst_sub_id, sub_comp_id_left in H.
+        refine (H _ _ _ H__state).
+        apply syminstance_rel_refl.
+      - cbn. intros.
+        cbn in H. rewrite subst_sub_id, sub_comp_id_left in H.
+        apply (H _ _ (syminstance_rel_refl ι)).
+        apply represents_assume_formula; cbn.
+        now rewrite inst_sub_id.
     Qed.
 
     Opaque dmut_assume_term.
+    Opaque dmut_assume_prop.
 
     Definition dmut_wf {Γ1 Γ2 A Σ0} `{Subst A} (d : DynamicMutator Γ1 Γ2 A Σ0) : Prop :=
       forall Σ1 Σ2 (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) (s1 : SymbolicState Γ1 Σ1)
@@ -504,7 +525,7 @@ Module Soundness
     Proof.
       induction asn; cbn.
       - apply dmut_assume_term_sound.
-      - admit. (* Not implemented in SC. OOPS *)
+      - apply dmut_assume_prop_sound.
       - admit. (* destruct (Term_eqb t1 t2).
         + apply dmut_pure_sound.
         + apply dmut_fail_sound. *)

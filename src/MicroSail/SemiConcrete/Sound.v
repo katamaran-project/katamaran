@@ -198,7 +198,15 @@ Module Soundness
         + rewrite sepcon_comm.
           apply wand_sepcon_adjoint.
           apply lfalse_left.
-      - contradict HYP.
+      - rewrite sepcon_comm.
+        apply wand_sepcon_adjoint.
+        apply limpl_and_adjoint.
+        apply lprop_left; intros H.
+        apply limpl_and_adjoint.
+        apply land_left2.
+        apply wand_sepcon_adjoint.
+        rewrite sepcon_comm, sepcon_emp.
+        now apply HYP.
       - admit.
       - rewrite sepcon_comm.
         destruct c; now cbn in *.

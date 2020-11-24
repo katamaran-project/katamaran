@@ -308,11 +308,16 @@ Module SemiConcrete
 
     Definition scmut_assume_term {Γ Σ} (ι : SymInstance Σ) (b : Term Σ ty_bool) : SCMut Γ Γ unit :=
       if inst (A := Lit ty_bool) ι b then scmut_pure tt else scmut_block.
+    Definition scmut_assume_prop {Γ Σ} (ι : SymInstance Σ) (P : abstract_named Lit Σ Prop) : SCMut Γ Γ unit :=
+      fun s =>
+        outcome_assumek
+          (uncurry_named P ι)
+          (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
 
     Fixpoint scmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
       match asn with
       | asn_bool b      => scmut_assume_term ι b
-      | asn_prop P      => scmut_fail "scmut_produce"
+      | asn_prop P      => scmut_assume_prop ι P
       | asn_eq t1 t2    => if Lit_eqb _ (inst_term ι t1) (inst_term ι t2)
                            then scmut_pure tt
                            else scmut_block 

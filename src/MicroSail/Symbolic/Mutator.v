@@ -223,23 +223,25 @@ Module Mutators
         else option_map negb (Term_eqvb t1 t2)
       end.
 
-    Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) (b : bool) :
-      try_solve_formula fml = Some b ->
-      forall ι, reflect (inst_formula ι fml) b.
+    Lemma try_solve_formula_spec {Σ ι} (fml : Formula Σ) :
+      OptionSpec
+        (fun b => inst_formula ι fml <-> is_true b)
+        True
+        (try_solve_formula fml).
     Proof.
       destruct fml; cbn.
-      - dependent elimination t; cbn; inversion 1.
-        destruct b; constructor; congruence.
-      - discriminate.
-      - destruct (Term_eqb_spec t1 t2); cbn; intros H ι.
-        + inversion H; subst. constructor; congruence.
-        + now apply Term_eqvb_spec.
-      - destruct (Term_eqb_spec t1 t2); cbn; intros H ι.
-        + inversion H; subst. constructor; congruence.
-        + destruct (Term_eqvb t1 t2) eqn:?; cbn in *; try discriminate.
-          inversion H; subst b. clear H.
-          apply (@Term_eqvb_spec _ ι σ) in Heqo.
-          inversion Heqo; subst; cbn; constructor; intuition.
+      - dependent elimination t; constructor; auto.
+      - constructor; auto.
+      - destruct (Term_eqb_spec t1 t2); cbn.
+        { constructor. apply reflect_iff. constructor. now subst. }
+        apply (Term_eqvb_spec t1 t2).
+      - destruct (Term_eqb_spec t1 t2); cbn.
+        { constructor. apply reflect_iff. constructor. congruence. }
+        apply optionspec_map.
+        destruct (Term_eqvb_spec (ι := ι) t1 t2); constructor; auto.
+        apply iff_reflect in H. apply reflect_iff. destruct H; constructor.
+        congruence.
+        congruence.
     Qed.
 
   End TrySolve.
