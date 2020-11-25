@@ -235,27 +235,18 @@ Module CapTypeKit <: TypeKit.
   Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
-  (* VARIABLES *)
-  Definition 𝑿        := string.
-  Definition 𝑿_eq_dec := string_dec.
-  Definition 𝑺        := string.
-  Definition 𝑺_eq_dec := string_dec.
-  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-
 End CapTypeKit.
 
-(*** TERMS ***)
-
-Module CapTermKit <: TermKit .
+Module CapValueKit <: ValueKit .
   Module typekit := CapTypeKit.
   Module Export TY := Types typekit.
 
-  Definition ty_hv : Ty := ty_enum regname.
-  Definition ty_lv : Ty := ty_enum regname.
-  Definition ty_rv : Ty := (ty_sum (ty_enum regname) ty_int).
-  Definition ty_word : Ty := ty_sum ty_int (ty_record capability).
-  Definition ty_addr : Ty := ty_int.
-  Definition ty_perm : Ty := ty_enum permission.
+  Notation ty_hv   := (ty_enum regname).
+  Notation ty_lv   := (ty_enum regname).
+  Notation ty_rv   := (ty_sum (ty_enum regname) ty_int).
+  Notation ty_word := (ty_sum ty_int (ty_record capability)).
+  Notation ty_addr := (ty_int).
+  Notation ty_perm := (ty_enum permission).
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -383,6 +374,21 @@ Module CapTermKit <: TermKit .
   Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
       𝑹_unfold R (𝑹_fold R Kv) = Kv.
   Proof. intros []; now apply Forall_forall. Qed.
+
+End CapValueKit.
+
+(*** TERMS ***)
+
+Module CapTermKit <: TermKit .
+  Module valuekit := CapValueKit.
+  Module Export VAL := Values valuekit.
+
+  (* VARIABLES *)
+  Definition 𝑿        := string.
+  Definition 𝑿_eq_dec := string_dec.
+  Definition 𝑺        := string.
+  Definition 𝑺_eq_dec := string_dec.
+  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=

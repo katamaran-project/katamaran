@@ -253,18 +253,10 @@ Module MinCapsTypeKit <: TypeKit.
   Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
-  (* VARIABLES *)
-  Definition 𝑿        := string.
-  Definition 𝑿_eq_dec := string_dec.
-  Definition 𝑺        := string.
-  Definition 𝑺_eq_dec := string_dec.
-  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-
 End MinCapsTypeKit.
 
-(*** TERMS ***)
+Module MinCapsValueKit <: ValueKit.
 
-Module MinCapsTermKit <: TermKit.
   Module typekit := MinCapsTypeKit.
   Module Export TY := Types typekit.
 
@@ -420,6 +412,22 @@ Module MinCapsTermKit <: TermKit.
       𝑹_unfold R (𝑹_fold R Kv) = Kv.
   (* Proof. intros []; now apply Forall_forall. Qed. *)
   Admitted.
+
+End MinCapsValueKit.
+
+
+(*** TERMS ***)
+
+Module MinCapsTermKit <: TermKit.
+  Module valuekit := MinCapsValueKit.
+  Module Export VAL := Values valuekit.
+
+  (* VARIABLES *)
+  Definition 𝑿        := string.
+  Definition 𝑿_eq_dec := string_dec.
+  Definition 𝑺        := string.
+  Definition 𝑺_eq_dec := string_dec.
+  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=

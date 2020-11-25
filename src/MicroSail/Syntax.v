@@ -29,20 +29,13 @@
 From Coq Require Import
      Bool.Bool
      Classes.Equivalence
-     Classes.Morphisms
-     Classes.RelationClasses
-     Logic.EqdepFacts
-     Logic.FinFun
-     Logic.FunctionalExtensionality
-     Program.Equality
      Program.Tactics
      Relations
      Strings.String
      ZArith.ZArith
      micromega.Lia.
 From Coq Require
-     Vector
-     ssr.ssrbool.
+     Vector.
 
 From bbv Require
      Word.
@@ -112,23 +105,6 @@ Module Type TypeKit.
   (* Record types. *)
   Parameter Inline 𝑹𝑻  : 𝑹 -> Set.
   Declare Instance 𝑹𝑻_eq_dec : forall (r : 𝑹), EqDec (𝑹𝑻 r).
-
-  (* Names of expression variables. These represent mutable variables appearing
-     in programs. *)
-  Parameter Inline 𝑿 : Set. (* input: \MIX *)
-  (* For name resolution we rely on decidable equality of expression
-     variables. The functions in this module resolve to the closest binding
-     of an equal name and fill in the de Bruijn index automatically from
-     a successful resolution.
-  *)
-  Declare Instance 𝑿_eq_dec : EqDec 𝑿.
-
-  (* Names of logical variables. These represent immutable variables
-     standing for concrete literals in assertions. *)
-  Parameter Inline 𝑺 : Set. (* input: \MIS *)
-  Declare Instance 𝑺_eq_dec : EqDec 𝑺.
-  (* Punning of program variables with logical variables. *)
-  Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
 
 End TypeKit.
 
@@ -237,12 +213,13 @@ Module Types (Export typekit : TypeKit).
     | ty_union U => 𝑼𝑻 U
     | ty_record R => 𝑹𝑻 R
     end%type.
+  Bind Scope exp_scope with Lit.
 
 End Types.
 
 (******************************************************************************)
 
-Module Type TermKit.
+Module Type ValueKit.
 
   Declare Module typekit : TypeKit.
   Module Export TY := Types typekit.
@@ -271,6 +248,75 @@ Module Type TermKit.
     forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
       𝑹_unfold (𝑹_fold Kv) = Kv.
 
+End ValueKit.
+
+Module Values (Export valuekit : ValueKit).
+
+  Fixpoint Lit_eqb (σ : Ty) : forall (l1 l2 : Lit σ), bool :=
+    match σ with
+    | ty_int      => Z.eqb
+    | ty_bool     => Bool.eqb
+    | ty_bit      => Bit_eqb
+    | ty_string   => String.eqb
+    | ty_list σ   => list_beq (Lit_eqb σ)
+    | ty_prod σ τ => prod_beq (Lit_eqb σ) (Lit_eqb τ)
+    | ty_sum σ τ  => sum_beq (Lit_eqb σ) (Lit_eqb τ)
+    | ty_unit     => fun _ _ => true
+    | ty_enum E   => fun l1 l2 => if 𝑬𝑲_eq_dec l1 l2 then true else false
+    | ty_bvec n   => @Word.weqb n
+    | ty_tuple σs => envrec_beq Lit_eqb
+    | ty_union U  => fun l1 l2 => if 𝑼𝑻_eq_dec l1 l2 then true else false
+    | ty_record R => fun l1 l2 => if 𝑹𝑻_eq_dec l1 l2 then true else false
+    end.
+
+  Lemma Lit_eqb_spec (σ : Ty) (x y : Lit σ) : reflect (x = y) (Lit_eqb σ x y).
+  Proof with microsail_solve_eqb_spec.
+    induction σ; cbn.
+    - apply Z.eqb_spec.
+    - apply Bool.eqb_spec.
+    - apply Bit_eqb_spec.
+    - apply String.eqb_spec.
+    - apply list_beq_spec; auto.
+    - destruct x as [x1 x2]; destruct y as [y1 y2]...
+    - destruct x as [x1|x2]; destruct y as [y1|y2]...
+    - destruct x. destruct y...
+    - destruct (𝑬𝑲_eq_dec x y)...
+    - apply iff_reflect. symmetry.
+      apply (Word.weqb_true_iff x y).
+    - induction σs; intros.
+      + destruct x; destruct y...
+      + cbn in *.
+        destruct x as [xs x]; destruct y as [ys y]; destruct X as [pσs pb]; cbn in *.
+        specialize (IHσs pσs).
+        destruct (IHσs xs ys); destruct (pb x y)...
+    - destruct (𝑼𝑻_eq_dec x y)...
+    - destruct (𝑹𝑻_eq_dec x y)...
+  Qed.
+
+End Values.
+
+Module Type TermKit.
+
+  Declare Module valuekit : ValueKit.
+  Module Export VAL := Values valuekit.
+
+  (* Names of expression variables. These represent mutable variables appearing
+     in programs. *)
+  Parameter Inline 𝑿 : Set. (* input: \MIX *)
+  (* For name resolution we rely on decidable equality of expression
+     variables. The functions in this module resolve to the closest binding
+     of an equal name and fill in the de Bruijn index automatically from
+     a successful resolution.
+  *)
+  Declare Instance 𝑿_eq_dec : EqDec 𝑿.
+
+  (* Names of logical variables. These represent immutable variables
+     standing for concrete literals in assertions. *)
+  Parameter Inline 𝑺 : Set. (* input: \MIS *)
+  Declare Instance 𝑺_eq_dec : EqDec 𝑺.
+  (* Punning of program variables with logical variables. *)
+  Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
+
   (* Names of functions. *)
   Parameter Inline 𝑭 : NCtx 𝑿 Ty -> Ty -> Set.
   Parameter Inline 𝑭𝑿 : NCtx 𝑿 Ty -> Ty -> Set.
@@ -282,52 +328,6 @@ Module Type TermKit.
 End TermKit.
 
 Module Terms (Export termkit : TermKit).
-
-  Section Literals.
-
-    Fixpoint Lit_eqb (σ : Ty) : forall (l1 l2 : Lit σ), bool :=
-      match σ with
-      | ty_int      => Z.eqb
-      | ty_bool     => Bool.eqb
-      | ty_bit      => Bit_eqb
-      | ty_string   => String.eqb
-      | ty_list σ   => list_beq (Lit_eqb σ)
-      | ty_prod σ τ => prod_beq (Lit_eqb σ) (Lit_eqb τ)
-      | ty_sum σ τ  => sum_beq (Lit_eqb σ) (Lit_eqb τ)
-      | ty_unit     => fun _ _ => true
-      | ty_enum E   => fun l1 l2 => if 𝑬𝑲_eq_dec l1 l2 then true else false
-      | ty_bvec n   => @Word.weqb n
-      | ty_tuple σs => envrec_beq Lit_eqb
-      | ty_union U  => fun l1 l2 => if 𝑼𝑻_eq_dec l1 l2 then true else false
-      | ty_record R => fun l1 l2 => if 𝑹𝑻_eq_dec l1 l2 then true else false
-      end.
-
-    Lemma Lit_eqb_spec (σ : Ty) (x y : Lit σ) : reflect (x = y) (Lit_eqb σ x y).
-    Proof with microsail_solve_eqb_spec.
-      induction σ; cbn.
-      - apply Z.eqb_spec.
-      - apply Bool.eqb_spec.
-      - apply Bit_eqb_spec.
-      - apply String.eqb_spec.
-      - apply list_beq_spec; auto.
-      - destruct x as [x1 x2]; destruct y as [y1 y2]...
-      - destruct x as [x1|x2]; destruct y as [y1|y2]...
-      - destruct x. destruct y...
-      - destruct (𝑬𝑲_eq_dec x y)...
-      - apply iff_reflect. symmetry.
-        apply (Word.weqb_true_iff x y).
-      - induction σs; intros.
-        + destruct x; destruct y...
-        + cbn in *.
-          destruct x as [xs x]; destruct y as [ys y]; destruct X as [pσs pb]; cbn in *.
-          specialize (IHσs pσs).
-          destruct (IHσs xs ys); destruct (pb x y)...
-      - destruct (𝑼𝑻_eq_dec x y)...
-      - destruct (𝑹𝑻_eq_dec x y)...
-    Qed.
-
-  End Literals.
-  Bind Scope exp_scope with Lit.
 
   Definition LocalStore (Γ : NCtx 𝑿 Ty) : Set := NamedEnv Lit Γ.
   Bind Scope env_scope with LocalStore.
@@ -367,7 +367,7 @@ Module Terms (Export termkit : TermKit).
 
     Definition binoptel_eq_dec {σ1 σ2 σ3 τ1 τ2 τ3}
       (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
-      ssrbool.decidable (((σ1,σ2,σ3), op1) = ((τ1,τ2,τ3),op2) :> BinOpTel) :=
+      dec_eq (A := BinOpTel) ((σ1,σ2,σ3),op1) ((τ1,τ2,τ3),op2) :=
       match op1 , op2 with
       | binop_plus  , binop_plus   => left eq_refl
       | binop_times , binop_times  => left eq_refl

@@ -160,18 +160,11 @@ Module ExampleTypeKit <: TypeKit.
   Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
-  (* VARIABLES *)
-  Definition 𝑿        := string.
-  Definition 𝑿_eq_dec := string_dec.
-  Definition 𝑺        := string.
-  Definition 𝑺_eq_dec := string_dec.
-  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-
 End ExampleTypeKit.
 
-(*** TERMS ***)
+(*** VALUES ***)
 
-Module ExampleTermKit <: TermKit.
+Module ExampleValueKit <: ValueKit.
   Module typekit := ExampleTypeKit.
   Module Export TY := Types typekit.
 
@@ -217,6 +210,21 @@ Module ExampleTermKit <: TermKit.
   Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
       𝑹_unfold R (𝑹_fold R Kv) = Kv.
   Proof. intros []. Qed.
+
+End ExampleValueKit.
+
+(*** TERMS ***)
+
+Module ExampleTermKit <: TermKit.
+  Module valuekit := ExampleValueKit.
+  Module Export VAL := Values valuekit.
+
+  (* VARIABLES *)
+  Definition 𝑿        := string.
+  Definition 𝑿_eq_dec := string_dec.
+  Definition 𝑺        := string.
+  Definition 𝑺_eq_dec := string_dec.
+  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=

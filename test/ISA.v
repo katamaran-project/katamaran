@@ -145,16 +145,9 @@ Module ISATypeKit <: TypeKit.
   Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
-  (* VARIABLES *)
-  Definition 𝑿        := string.
-  Definition 𝑿_eq_dec := string_dec.
-  Definition 𝑺        := string.
-  Definition 𝑺_eq_dec := string_dec.
-  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-
 End ISATypeKit.
 
-Module ISATermKit <: TermKit.
+Module ISAValueKit <: ValueKit.
   Module typekit := ISATypeKit.
   Module Export TY := Types typekit.
 
@@ -216,6 +209,19 @@ Module ISATermKit <: TermKit.
   Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
       𝑹_unfold R (𝑹_fold R Kv) = Kv.
   Proof. intros []. Qed.
+
+End ISAValueKit.
+
+Module ISATermKit <: TermKit.
+  Module valuekit := ISAValueKit.
+  Module Export VAL := Values valuekit.
+
+  (* VARIABLES *)
+  Definition 𝑿        := string.
+  Definition 𝑿_eq_dec := string_dec.
+  Definition 𝑺        := string.
+  Definition 𝑺_eq_dec := string_dec.
+  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
   (** FUNCTIONS **)
   (* Names are inspired by sail-riscv naming convention *)
