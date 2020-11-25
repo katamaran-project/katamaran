@@ -1679,7 +1679,7 @@ Module Terms (Export termkit : TermKit).
 
   End GenericRegStore.
 
-  Notation lit_int l := (@exp_lit _ ty_int l).
+  Notation lit_int l := (@exp_lit _ ty_int l%Z).
   Notation lit_bool l := (@exp_lit _ ty_bool l).
   Notation lit_true   := (@exp_lit _ ty_bool true).
   Notation lit_false  := (@exp_lit _ ty_bool false).
