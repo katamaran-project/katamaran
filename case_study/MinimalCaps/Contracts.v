@@ -102,10 +102,6 @@ Module MinCapsSymbolicContractKit <:
 
   (*
       @pre true;
-      @post result = (p = r ∨ p = rw);
-      bool read_allowed(p : perm);
-
-      @pre true;
       @post result = (p = rw);
       bool write_allowed(p : perm);
 
@@ -242,9 +238,24 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_postcondition   := term_var "a" ↦m term_var "v";
     |}.
 
+  Definition sep_contract_read_allowed : SepContract ["p" ∶ ty_perm ] ty_bool :=
+    {| sep_contract_logic_variables := ["p" ∶ ty_perm];
+       sep_contract_localstore      := [term_var "p"]%arg;
+       sep_contract_precondition    := asn_bool (term_lit ty_bool true);
+       sep_contract_result          := "result";
+       sep_contract_postcondition   :=
+         asn_match_enum permission (term_var "p")
+                        (fun p => match p with
+                                 | R  => asn_eq (term_var "result") (term_lit ty_bool true)
+                                 | RW => asn_eq (term_var "result") (term_lit ty_bool true)
+                                 | _  => asn_eq (term_var "result") (term_lit ty_bool false)
+                               end);
+    |}.
+
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
+      | read_allowed => Some sep_contract_read_allowed
       | read_reg     => Some sep_contract_read_reg
       | read_reg_cap => Some sep_contract_read_reg_cap
       | read_reg_num => Some sep_contract_read_reg_num
@@ -368,3 +379,5 @@ Proof. apply dynmutevarreflect_sound; now compute. Qed.
 Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
 Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
+Lemma valid_contract_read_allowed : ValidContractDynMut sep_contract_read_allowed fun_read_allowed.
+Proof. compute; solve. Qed.
