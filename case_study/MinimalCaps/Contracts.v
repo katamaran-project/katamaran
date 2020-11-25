@@ -102,10 +102,6 @@ Module MinCapsSymbolicContractKit <:
 
   (*
       @pre true;
-      @post result = (p = rw);
-      bool write_allowed(p : perm);
-
-      @pre true;
       @post result = (e = none ∨ ∃ e'. e = inl e' ∧ e' >= a);
       bool upper_bound(a : addr, e : option addr);
 
@@ -252,19 +248,33 @@ Module MinCapsSymbolicContractKit <:
                                end);
     |}.
 
+  Definition sep_contract_write_allowed : SepContract ["p" ∶ ty_perm ] ty_bool :=
+    {| sep_contract_logic_variables := ["p" ∶ ty_perm];
+       sep_contract_localstore      := [term_var "p"]%arg;
+       sep_contract_precondition    := asn_bool (term_lit ty_bool true);
+       sep_contract_result          := "result";
+       sep_contract_postcondition   :=
+         asn_match_enum permission (term_var "p")
+                        (fun p => match p with
+                                 | RW => asn_eq (term_var "result") (term_lit ty_bool true)
+                                 | _  => asn_eq (term_var "result") (term_lit ty_bool false)
+                               end);
+    |}.
+
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
-      | read_allowed => Some sep_contract_read_allowed
-      | read_reg     => Some sep_contract_read_reg
-      | read_reg_cap => Some sep_contract_read_reg_cap
-      | read_reg_num => Some sep_contract_read_reg_num
-      | write_reg    => Some sep_contract_write_reg
-      | next_pc      => Some sep_contract_next_pc
-      | update_pc    => Some sep_contract_update_pc
-      | read_mem     => Some sep_contract_read_mem
-      | write_mem    => Some sep_contract_write_mem
-      | _            => None
+      | read_allowed  => Some sep_contract_read_allowed
+      | write_allowed => Some sep_contract_write_allowed
+      | read_reg      => Some sep_contract_read_reg
+      | read_reg_cap  => Some sep_contract_read_reg_cap
+      | read_reg_num  => Some sep_contract_read_reg_num
+      | write_reg     => Some sep_contract_write_reg
+      | next_pc       => Some sep_contract_next_pc
+      | update_pc     => Some sep_contract_update_pc
+      | read_mem      => Some sep_contract_read_mem
+      | write_mem     => Some sep_contract_write_mem
+      | _             => None
       end.
 
   Definition sep_contract_open_ptsreg : SepContract ["reg" ∶ ty_enum regname] ty_unit :=
@@ -380,4 +390,7 @@ Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_
 Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
 Lemma valid_contract_read_allowed : ValidContractDynMut sep_contract_read_allowed fun_read_allowed.
+Proof. compute; solve. Qed.
+
+Lemma valid_contract_write_allowed : ValidContractDynMut sep_contract_write_allowed fun_write_allowed.
 Proof. compute; solve. Qed.
