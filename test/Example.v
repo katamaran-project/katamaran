@@ -342,7 +342,7 @@ Module SepContracts.
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           @asn_prop
+           asn_prop
              ["x" ∶ ty_int, "result" ∶ ty_int]
              (fun x result => result = Z.abs x)
            (* asn_if *)

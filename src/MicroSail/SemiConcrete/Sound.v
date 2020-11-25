@@ -143,6 +143,31 @@ Module Soundness
       assumption.
     Qed.
 
+    Lemma scmut_assert_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
+      {δ1 : LocalStore Γ} {h1 : SCHeap} (POST : LocalStore Γ -> L) :
+      outcome_satisfy (scmut_assert_formula ι fml {| scstate_localstore := δ1; scstate_heap := h1 |})
+        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      inst_scheap h1 ⊢ !! inst_formula ι fml ∧ emp ✱ POST δ1.
+    Proof.
+      cbn. intros [H1 H2].
+      rewrite <- sepcon_emp at 1.
+      rewrite sepcon_comm.
+      apply sepcon_entails.
+      apply land_right.
+      apply lprop_right; assumption.
+      apply entails_refl.
+      assumption.
+    Qed.
+
+    Lemma scmut_assume_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
+      {δ1 : LocalStore Γ} {h1 : SCHeap} (POST : LocalStore Γ -> L) :
+      outcome_satisfy (scmut_assume_formula ι fml {| scstate_localstore := δ1; scstate_heap := h1 |})
+        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      inst_scheap h1 ✱ !! inst_formula ι fml ∧ emp ⊢ POST δ1.
+    Proof.
+    Admitted.
+
+    Opaque scmut_assert_formula.
     Opaque scmut_consume_chunk.
 
     Lemma scmut_consume_sound {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
@@ -152,15 +177,7 @@ Module Soundness
       inst_scheap h1 ⊢ inst_assertion ι asn ✱ POST δ1.
     Proof.
       revert ι δ1 h1 POST. induction asn; cbn; intros ι δ1 h1 POST HYP.
-      - destruct (inst_term ι b); cbn in *.
-        + rewrite <- sepcon_emp at 1.
-          rewrite sepcon_comm.
-          apply sepcon_entails.
-          apply entails_refl.
-          apply HYP.
-        + contradict HYP.
-      - contradict HYP.
-      - admit.
+      - now apply scmut_assert_formula_sound.
       - apply scmut_consume_chunk_sound in HYP.
         now destruct c.
       - destruct (inst_term ι b); auto.
@@ -178,9 +195,7 @@ Module Soundness
         + apply sepcon_entails.
           apply lex_right with v, entails_refl.
           apply entails_refl.
-    Admitted.
-
-    Local Opaque instantiate_term.
+    Qed.
 
     Lemma scmut_produce_sound {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
@@ -188,29 +203,12 @@ Module Soundness
         (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
       inst_scheap h1 ✱ inst_assertion ι asn ⊢ POST δ1.
     Proof.
-      revert ι δ1 h1 POST. induction asn; cbn; intros ι δ1 h1 POST HYP.
-      - unfold scmut_assume_term in HYP.
-        destruct (inst ι b); cbn in *.
-        + rewrite <- (sepcon_emp (POST _)).
-          apply sepcon_entails.
-          apply HYP.
-          apply entails_refl.
-        + rewrite sepcon_comm.
-          apply wand_sepcon_adjoint.
-          apply lfalse_left.
-      - rewrite sepcon_comm.
-        apply wand_sepcon_adjoint.
-        apply limpl_and_adjoint.
-        apply lprop_left; intros H.
-        apply limpl_and_adjoint.
-        apply land_left2.
-        apply wand_sepcon_adjoint.
-        rewrite sepcon_comm, sepcon_emp.
-        now apply HYP.
-      - admit.
+      revert ι δ1 h1 POST. induction asn; cbn - [scmut_assume_formula]; intros ι δ1 h1 POST HYP.
+      - now apply scmut_assume_formula_sound.
       - rewrite sepcon_comm.
         destruct c; now cbn in *.
-      - destruct (inst ι b); auto.
+      - unfold scmut_bind, scmut_assume_term in HYP. cbn in HYP.
+        destruct HYP as [H1 H2]. destruct (inst_term ι b) eqn:?; auto.
       - auto.
       - unfold scmut_bind_right, scmut_bind in HYP.
         rewrite outcome_satisfy_bind in HYP.
@@ -227,7 +225,7 @@ Module Soundness
         apply wand_sepcon_adjoint.
         rewrite sepcon_comm.
         now apply IHasn.
-    Admitted.
+    Qed.
 
     Lemma scmut_produce_sound' {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
@@ -462,7 +460,7 @@ Module Soundness
       destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
       - specialize (HYP ι).
         remember (inst ι δΣ) as δ.
-        unfold scmut_leakcheck, scmut_get_heap, scmut_state_heap, scmut_state, scmut_bind, scmut_assert_eq in HYP.
+        unfold scmut_leakcheck, scmut_get_heap, scmut_state_heap, scmut_state, scmut_bind in HYP.
         rewrite outcome_satisfy_map in HYP.
         repeat setoid_rewrite outcome_satisfy_bind in HYP.
         cbn in HYP.

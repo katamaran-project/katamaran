@@ -69,44 +69,6 @@ Module Mutators
      that encode the path taken during execution. *)
   Section PathCondition.
 
-    Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
-    | formula_bool (t : Term Σ ty_bool)
-    | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Lit Σ' Prop)
-    | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
-    | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
-
-    Global Arguments formula_bool {_} t.
-
-    Equations(noeqns) formula_eqs {Δ : Ctx (𝑿 * Ty)} {Σ : Ctx (𝑺 * Ty)}
-      (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
-      formula_eqs env_nil          env_nil            := nil;
-      formula_eqs (env_snoc δ _ t) (env_snoc δ' _ t') :=
-        formula_eq t t' :: formula_eqs δ δ'.
-
-    Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
-      match fml with
-      | formula_bool t    => is_true (inst (A := Lit ty_bool) ι t)
-      | formula_prop ζ P  => uncurry_named P (inst ι ζ)
-      | formula_eq t1 t2  => inst ι t1 =  inst ι t2
-      | formula_neq t1 t2 => inst ι t1 <> inst ι t2
-      end.
-
-    Global Instance sub_formula : Subst Formula :=
-      fun Σ1 Σ2 ζ fml =>
-        match fml with
-        | formula_bool t    => formula_bool (subst ζ t)
-        | formula_prop ζ' P => formula_prop (subst ζ ζ') P
-        | formula_eq t1 t2  => formula_eq (subst ζ t1) (subst ζ t2)
-        | formula_neq t1 t2 => formula_neq (subst ζ t1) (subst ζ t2)
-        end.
-
-    Global Instance substlaws_formula : SubstLaws Formula.
-    Proof.
-      constructor.
-      { intros ? []; cbn; f_equal; apply subst_sub_id. }
-      { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
-    Qed.
-
     Import stdpp.base.
 
     Global Instance OccursCheckFormula : OccursCheck Formula :=
@@ -889,9 +851,7 @@ Module Mutators
 
     Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
       match asn with
-      | asn_bool b      => dmut_assume_term b
-      | asn_prop P      => dmut_assume_prop P
-      | asn_eq t1 t2    => dmut_assume_formula (formula_eq t1 t2)
+      | asn_formula fml => dmut_assume_formula fml
       | asn_chunk c     => dmut_produce_chunk c
       | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
                            (dmut_assume_term (term_not b) ;; dmut_produce a2)
@@ -907,9 +867,7 @@ Module Mutators
 
     Fixpoint dmut_consume {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
       match asn with
-      | asn_bool b      => dmut_assert_term b
-      | asn_prop P      => dmut_assert_formula (formula_prop (sub_id _) P)
-      | asn_eq t1 t2    => dmut_assert_formula (formula_eq t1 t2)
+      | asn_formula fml => dmut_assert_formula fml
       | asn_chunk c     => dmut_consume_chunk c
       | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_consume a1) ⊗
                            (dmut_assume_term (term_not b) ;; dmut_consume a2)
@@ -1125,40 +1083,57 @@ Module Mutators
           fun L => dmut_assert_namedenv_eq_evar E1 E2 L >>= fun _ ζ =>
                    dmut_assert_term_eq_evar t1 (sub_term ζ t2).
 
-      Fixpoint dmut_consume_evar {Σe Σr} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        match asn with
-        | asn_bool b =>
+      Definition dmut_consume_formula_evar {Σe Σr} (fml : Formula Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+        match fml with
+        | formula_bool b =>
           match eval_term_evar L b with
           | Some b' => dmut_assert_term b';; dmut_pure L
           | None    => dmut_fail
-                         "dmut_consume_evar"
-                         "Uninstantiated evars when consuming assertion"
+                         "dmut_consume_formula_evar"
+                         "Uninstantiated evars when consuming formula"
                          {| evarerror_env := L;
-                            evarerror_data := asn
+                            evarerror_data := fml
                          |}
           end
-        | asn_prop P =>
+        | formula_prop ζ P =>
           match evarenv_to_option_sub L with
-          | Some ζ => dmut_assert_formula (formula_prop ζ P);; dmut_pure L
+          | Some ζ' => dmut_assert_formula (formula_prop (sub_comp ζ ζ') P);; dmut_pure L
           | None   => dmut_fail
-                        "dmut_consume_evar"
-                        "Uninstantiated evars when consuming assertion"
-                         {| evarerror_env := L;
-                            evarerror_data := asn
-                         |}
+                        "dmut_consume_formula_evar"
+                        "Uninstantiated evars when consuming formula"
+                        {| evarerror_env := L;
+                           evarerror_data := fml
+                        |}
           end
-        | @asn_eq _ T t1 t2 =>
+        | formula_eq t1 t2 =>
           match eval_term_evar L t1, eval_term_evar L t2 with
           | Some t1', Some t2' => dmut_assert_formula (formula_eq t1' t2') ;; dmut_pure L
           | Some t1', None     => dmut_assert_term_eq_evar t2 t1' L
           | None    , Some t2' => dmut_assert_term_eq_evar t1 t2' L
           | _       , _        => dmut_fail
-                                    "dmut_consume_evar"
-                                    "Uninstantiated evars when consuming assertion"
+                                    "dmut_consume_formula_evar"
+                                    "Uninstantiated evars when consuming formula"
                                     {| evarerror_env := L;
-                                       evarerror_data := asn
+                                       evarerror_data := fml
                                     |}
           end
+        | formula_neq t1 t2 =>
+          match eval_term_evar L t1, eval_term_evar L t2 with
+          | Some t1', Some t2' => dmut_assert_formula (formula_neq t1' t2') ;; dmut_pure L
+          (* | Some t1', None     => dmut_assert_term_neq_evar t2 t1' L *)
+          (* | None    , Some t2' => dmut_assert_term_neq_evar t1 t2' L *)
+          | _       , _        => dmut_fail
+                                    "dmut_consume_formula_evar"
+                                    "Uninstantiated evars when consuming formula"
+                                    {| evarerror_env := L;
+                                       evarerror_data := fml
+                                    |}
+          end
+        end.
+
+      Fixpoint dmut_consume_evar {Σe Σr} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+        match asn with
+        | asn_formula fml => dmut_consume_formula_evar fml L
         | asn_chunk c => dmut_consume_chunk_evar c L
         | asn_if b a1 a2 =>
           match eval_term_evar L b with
@@ -2206,12 +2181,10 @@ Module Mutators
 
     Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
       match asn with
-      | asn_bool b      => dmut_assume_term b
-      | asn_prop P      => dmut_assume_prop P
-      | asn_eq t1 t2    => dmut_assume_formula (formula_eq t1 t2)
+      | asn_formula fml => dmut_assume_formula fml
       | asn_chunk c     => dmut_produce_chunk c
       | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
-                                                                   (dmut_assume_term (term_not b) ;; dmut_produce a2)
+                           (dmut_assume_term (term_not b) ;; dmut_produce a2)
       | asn_match_enum E k1 alts =>
         dmut_demonic_finite
           (𝑬𝑲 E)
@@ -2279,40 +2252,57 @@ Module Mutators
           fun L => dmut_assert_namedenv_eq_evar E1 E2 L >>= fun _ ζ =>
                    dmut_assert_term_eq_evar t1 (sub_term ζ t2).
 
-      Fixpoint dmut_consume_evar {Σe Σr} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        match asn with
-        | asn_bool b =>
+      Definition dmut_consume_formula_evar {Σe Σr} (fml : Formula Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+        match fml with
+        | formula_bool b =>
           match eval_term_evar L b with
           | Some b' => dmut_assert_term b';; dmut_pure L
           | None    => dmut_fail
-                         "dmut_consume_evar"
-                         "Uninstantiated evars when consuming assertion"
+                         "dmut_consume_formula_evar"
+                         "Uninstantiated evars when consuming formula"
                          {| evarerror_env := L;
-                            evarerror_data := asn
+                            evarerror_data := fml
                          |}
           end
-        | asn_prop P =>
+        | formula_prop ζ P =>
           match evarenv_to_option_sub L with
-          | Some ζ => dmut_assert_formula (formula_prop ζ P);; dmut_pure L
+          | Some ζ' => dmut_assert_formula (formula_prop (sub_comp ζ ζ') P);; dmut_pure L
           | None   => dmut_fail
-                        "dmut_consume_evar"
-                        "Uninstantiated evars when consuming assertion"
+                        "dmut_consume_formula_evar"
+                        "Uninstantiated evars when consuming formula"
                         {| evarerror_env := L;
-                           evarerror_data := asn
+                           evarerror_data := fml
                         |}
           end
-        | @asn_eq _ T t1 t2 =>
+        | formula_eq t1 t2 =>
           match eval_term_evar L t1, eval_term_evar L t2 with
           | Some t1', Some t2' => dmut_assert_formula (formula_eq t1' t2') ;; dmut_pure L
           | Some t1', None     => dmut_assert_term_eq_evar t2 t1' L
           | None    , Some t2' => dmut_assert_term_eq_evar t1 t2' L
           | _       , _        => dmut_fail
-                                    "dmut_consume_evar"
-                                    "Uninstantiated evars when consuming assertion"
+                                    "dmut_consume_formula_evar"
+                                    "Uninstantiated evars when consuming formula"
                                     {| evarerror_env := L;
-                                       evarerror_data := asn
+                                       evarerror_data := fml
                                     |}
           end
+        | formula_neq t1 t2 =>
+          match eval_term_evar L t1, eval_term_evar L t2 with
+          | Some t1', Some t2' => dmut_assert_formula (formula_neq t1' t2') ;; dmut_pure L
+          (* | Some t1', None     => dmut_assert_term_neq_evar t2 t1' L *)
+          (* | None    , Some t2' => dmut_assert_term_neq_evar t1 t2' L *)
+          | _       , _        => dmut_fail
+                                    "dmut_consume_formula_evar"
+                                    "Uninstantiated evars when consuming formula"
+                                    {| evarerror_env := L;
+                                       evarerror_data := fml
+                                    |}
+          end
+        end.
+
+      Fixpoint dmut_consume_evar {Σe Σr} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+        match asn with
+        | asn_formula fml => dmut_consume_formula_evar fml L
         | asn_chunk c => dmut_consume_chunk_evar c L
         | asn_if b a1 a2 =>
           match eval_term_evar L b with

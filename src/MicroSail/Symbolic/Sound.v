@@ -351,60 +351,35 @@ Module Soundness
       now apply represents_produce_chunk.
     Qed.
 
-    Lemma dmut_assume_term_sound {Γ Σ} (ι : SymInstance Σ) (b : Term Σ ty_bool) :
+    Lemma dmut_assume_formula_sound {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) :
       approximates
         (Γ1 := Γ) (Γ2 := Γ) ι
-        (dmut_assume_term b)
-        (scmut_assume_term ι b).
+        (dmut_assume_formula fml)
+        (scmut_assume_formula ι fml).
     Proof.
       intros ? ? ? H__state H.
-      unfold dmut_wp, dmut_assume_term, dmut_assume_formula in H.
-      specialize (H Σ (sub_id Σ)).
-      change (sub_formula (sub_id Σ) (formula_bool b))
-        with (subst (sub_id Σ) (formula_bool b)) in H.
-      rewrite ?subst_sub_id in H. unfold scmut_assume_term.
-      destruct (try_solve_formula_spec (ι := ι) (formula_bool b)) as [? H1|_].
-      - unfold inst_formula, is_true in H1.
-        apply iff_reflect in H1. destruct H1 as [H1|H1].
-        + rewrite H1. cbn in *.
-          rewrite sub_comp_id_left in H.
-          unfold stateprop_lift in H.
-          refine (H _ _ _ H__state).
-          apply syminstance_rel_refl.
-        + destruct (inst ι b); cbn; now try congruence.
-      - cbn in H. rewrite sub_comp_id_left in H. unfold stateprop_lift in H.
-        destruct (inst ι b) eqn:?; cbn; auto.
-        + eapply H. apply syminstance_rel_refl.
-          apply represents_assume_formula.
-          cbn [inst_formula]. now rewrite Heqy.
-    Qed.
-
-    Lemma dmut_assume_prop_sound {Γ Σ} (ι : SymInstance Σ) (P : _) :
-      approximates
-        (Γ1 := Γ) (Γ2 := Γ) ι
-        (dmut_assume_prop P)
-        (scmut_assume_prop ι P).
-    Proof.
-      intros ? ? ? H__state H.
-      unfold dmut_wp, dmut_assume_prop, dmut_assume_formula in H.
+      unfold dmut_wp, dmut_assume_formula in H.
       specialize (H Σ (sub_id Σ)).
       rewrite subst_sub_id in H.
-      destruct (try_solve_formula_spec (ι := ι) (formula_prop (sub_id Σ) P)) as [? H1|_].
-      - cbn. intros.
-        unfold inst_formula, is_true in H1. rewrite inst_sub_id in H1.
-        apply H1 in H0. subst a. cbn in H.
+      destruct (try_solve_formula_spec (ι := ι) fml) as [? H1|_].
+      - intros ->%H1. clear H1. cbn in *.
         rewrite subst_sub_id, sub_comp_id_left in H.
         refine (H _ _ _ H__state).
         apply syminstance_rel_refl.
-      - cbn. intros.
-        cbn in H. rewrite subst_sub_id, sub_comp_id_left in H.
-        apply (H _ _ (syminstance_rel_refl ι)).
-        apply represents_assume_formula; cbn.
-        now rewrite inst_sub_id.
-    Qed.
+      - destruct fml; cbn in *; intros;
+          rewrite ?subst_sub_id, ?sub_comp_id_left in H.
+        + apply (H _ _ (syminstance_rel_refl ι)).
+          now apply represents_assume_formula.
+        + apply (H _ _ (syminstance_rel_refl ι)).
+          now apply represents_assume_formula.
+        + admit.
+        + apply (H _ _ (syminstance_rel_refl ι)).
+          now apply represents_assume_formula.
+    Admitted.
 
     Opaque dmut_assume_term.
     Opaque dmut_assume_prop.
+    Opaque dmut_assume_formula.
 
     Definition dmut_wf {Γ1 Γ2 A Σ0} `{Subst A} (d : DynamicMutator Γ1 Γ2 A Σ0) : Prop :=
       forall Σ1 Σ2 (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) (s1 : SymbolicState Γ1 Σ1)
@@ -580,21 +555,9 @@ Module Soundness
         (scmut_produce ι asn).
     Proof.
       induction asn; cbn.
-      - apply dmut_assume_term_sound.
-      - apply dmut_assume_prop_sound.
-      - admit. (* destruct (Term_eqb t1 t2).
-        + apply dmut_pure_sound.
-        + apply dmut_fail_sound. *)
+      - apply dmut_assume_formula_sound.
       - apply dmut_produce_chunk_sound.
-      - enough
-          (approximates  (Γ1 := Γ) (Γ2 := Γ) ι
-             (dmut_demonic_binary
-                (dmut_bind_right (dmut_assume_term b)            (dmut_produce asn1))
-                (dmut_bind_right (dmut_assume_term (term_not b)) (dmut_produce asn2)))
-             (scmut_demonic_binary
-                (scmut_bind_right (scmut_assume_term ι b)            (scmut_produce ι asn1))
-                (scmut_bind_right (scmut_assume_term ι (term_not b)) (scmut_produce ι asn2)))) by admit.
-        apply approximates_demonic_binary.
+      - apply approximates_demonic_binary.
         + admit.
         + admit.
       - admit.

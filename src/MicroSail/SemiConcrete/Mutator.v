@@ -267,11 +267,6 @@ Module SemiConcrete
     Definition scmut_eval_exps {Γ} {σs : Ctx (𝑿 * Ty)} (es : NamedEnv (Exp Γ) σs) : SCMut Γ Γ (LocalStore σs) :=
       scmut_gets_local (fun δ => env_map (fun _ e => eval e δ) es).
 
-    Definition scmut_assert_eq {Γ σ} (v1 v2 : Lit σ) : SCMut Γ Γ unit :=
-      if Lit_eqb σ v1 v2
-      then scmut_pure tt
-      else scmut_fail "Err [smut_assert_eq]: unsatisfiable".
-
     Definition scmut_produce_chunk {Γ} (c : SCChunk) : SCMut Γ Γ unit :=
       scmut_modify (scstate_produce_chunk c).
     Definition scmut_consume_chunk {Γ} (c : SCChunk) : SCMut Γ Γ unit :=
@@ -306,25 +301,23 @@ Module SemiConcrete
       - intros ? ? ζ ι []; cbn; f_equal; apply inst_subst.
     Qed.
 
-    Definition scmut_assume_term {Γ Σ} (ι : SymInstance Σ) (b : Term Σ ty_bool) : SCMut Γ Γ unit :=
-      if inst (A := Lit ty_bool) ι b then scmut_pure tt else scmut_block.
-    Definition scmut_assume_prop {Γ Σ} (ι : SymInstance Σ) (P : abstract_named Lit Σ Prop) : SCMut Γ Γ unit :=
-      fun s =>
-        outcome_assumek
-          (uncurry_named P ι)
-          (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
+    Definition scmut_assume_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : SCMut Γ Γ unit :=
+      fun s => outcome_assumek
+                 (inst_formula ι fml)
+                 (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
+    Definition scmut_assume_term {Γ Σ} (ι : SymInstance Σ) (t : Term Σ ty_bool) : SCMut Γ Γ unit :=
+      scmut_assume_formula ι (formula_bool t).
+    Definition scmut_assert_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : SCMut Γ Γ unit :=
+      fun s => outcome_assertk
+                 (inst_formula ι fml)
+                 (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
 
     Fixpoint scmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
       match asn with
-      | asn_bool b      => scmut_assume_term ι b
-      | asn_prop P      => scmut_assume_prop ι P
-      | asn_eq t1 t2    => if Lit_eqb _ (inst_term ι t1) (inst_term ι t2)
-                           then scmut_pure tt
-                           else scmut_block 
+      | asn_formula fml => scmut_assume_formula ι fml
       | asn_chunk c     => scmut_produce_chunk (inst ι c)
-      | asn_if b a1 a2  => if inst (A := Lit ty_bool) ι b
-                           then scmut_produce ι a1
-                           else scmut_produce ι a2
+      | asn_if b a1 a2  => (scmut_assume_term ι b ;; scmut_produce ι a1) ⊗
+                           (scmut_assume_term ι (term_not b) ;; scmut_produce ι a2)
       | @asn_match_enum _ E k alts =>
         scmut_produce ι (alts (inst (T := fun Σ => Term Σ _) ι k))
       | asn_sep a1 a2   => scmut_produce ι a1 *> scmut_produce ι a2
@@ -333,11 +326,7 @@ Module SemiConcrete
 
     Fixpoint scmut_consume {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
       match asn with
-      | asn_bool b      => if inst (A := Lit ty_bool)  ι b
-                           then scmut_pure tt
-                           else scmut_fail "scmut_consume"
-      | asn_prop P      => scmut_fail "scmut_consume"
-      | asn_eq t1 t2    => scmut_assert_eq (inst_term ι t1) (inst_term ι t2)
+      | asn_formula fml => scmut_assert_formula ι fml
       | asn_chunk c     => scmut_consume_chunk (inst ι c)
       | asn_if b a1 a2  => if inst (A := Lit ty_bool) ι b
                            then scmut_consume ι a1
