@@ -105,6 +105,12 @@ Module Soundness
       syminstance_rel ζ1 ι0 (inst ι2 ζ2).
     Proof. unfold syminstance_rel. now rewrite <- inst_subst. Qed.
 
+    Lemma syminstance_rel_trans {Σ0 Σ1 Σ2} {ζ1 : Sub Σ0 Σ1} {ζ2 : Sub Σ1 Σ2}
+          {ι0 : SymInstance Σ0} {ι1 : SymInstance Σ1} {ι2 : SymInstance Σ2} :
+      syminstance_rel ζ1 ι0 ι1 -> syminstance_rel ζ2 ι1 ι2 ->
+      syminstance_rel (sub_comp ζ1 ζ2) ι0 ι2.
+    Proof. intros. apply syminstance_rel_comp. congruence. Qed.
+
     Lemma syminstance_rel_wk1 {Σ : NCtx 𝑺 Ty} {x τ} (ι : SymInstance Σ) (v : Lit τ) :
       syminstance_rel sub_wk1 ι (ι ► ((x, τ) ↦ v)).
     Proof. apply inst_sub_wk1. Qed.
@@ -516,6 +522,31 @@ Module Soundness
         dependent elimination ζ2 as [@env_snoc Σ1 ζ2 _ t].
         unfold stateprop_specialize.
         now rewrite <- ?sub_comp_assoc, <- sub_comp_wk1_comm.
+    Qed.
+
+    Lemma dmut_bind_sound {Γ1 Γ2 Γ3 Σ0 AT A BT B}
+      `{Subst AT, Inst AT A, InstLaws BT B} (ι0 : SymInstance Σ0)
+      (dma : DynamicMutator Γ1 Γ2 AT Σ0) (wfdm : dmut_wf dma)
+      (sma : SCMut Γ1 Γ2 A)
+      (dmf : forall Σ1, Sub Σ0 Σ1 -> AT Σ1 -> DynamicMutator Γ2 Γ3 BT Σ1)
+      (dmf_wf : forall Σ1 ζ a, dmut_wf (dmf Σ1 ζ a))
+      (smf : A -> SCMut Γ2 Γ3 B) :
+      approximates ι0 dma sma ->
+      (forall Σ1 (ζ1 : Sub Σ0 Σ1) (a1 : AT Σ1) (ι1 : SymInstance Σ1),
+          syminstance_rel ζ1 ι0 ι1 ->
+          approximates ι1 (dmf Σ1 ζ1 a1) (smf (inst ι1 a1))) ->
+      approximates ι0 (dmut_bind dma dmf) (scmut_bind sma smf).
+    Proof.
+      intros H__a H__f s__sym0 s__sc0 POST H__rep H__wp.
+      apply scmut_wp_bind.
+      apply dmut_wp_bind in H__wp; auto using stateprop_lift_dcl.
+      apply H__a with s__sym0. assumption.
+      revert H__wp. apply dmut_wp_monotonic.
+      intros Σ1 ζ1 a1 s__sym1 H__wp ι1 s__sc1 ι__rel1 s__rep1.
+      apply (H__f Σ1 ζ1 a1 ι1 ι__rel1 s__sym1). assumption.
+      revert H__wp. apply dmut_wp_monotonic.
+      intros Σ2 ζ2 b2 s__sym2 H__post ι2 s__sc2 ι__rel2 s__rep2.
+      apply H__post. apply (syminstance_rel_trans ι__rel1 ι__rel2). assumption.
     Qed.
 
     Lemma dmut_fresh_sound {Γ Σ ς τ} (ι : SymInstance Σ)
