@@ -178,33 +178,6 @@ Module Soundness
       now rewrite !inst_subst, inst_subst_pathcondition.
     Qed.
 
-    (* These should be kept abstract in the rest of the proof. If you need some
-       property, add a lemma above. *)
-    Local Opaque inst_chunk.
-    Local Opaque inst_heap.
-    Local Opaque inst_pathcondition.
-    Local Opaque instantiate_env.
-    Local Opaque instantiate_list.
-    Local Opaque represents.
-    Local Opaque symbolicstate_assume_formula.
-    Local Opaque symbolicstate_produce_chunk.
-
-    Definition scmut_wp {Γ1 Γ2 A}
-      (m : SCMut Γ1 Γ2 A)
-      (POST : A -> SCState Γ2 -> Prop)
-      (s1 : SCState Γ1) : Prop :=
-      outcome_satisfy (m s1) (fun r => POST (scmutres_value r) (scmutres_state r)).
-
-    Lemma scmut_wp_bind {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (f : A -> SCMut Γ2 Γ3 B)
-          (POST : B -> SCState Γ3 -> Prop) :
-      forall s1 : SCState Γ1,
-        scmut_wp (scmut_bind ma f) POST s1 <->
-        scmut_wp ma (fun a => scmut_wp (f a) POST) s1.
-    Proof.
-      unfold SCMut, scmut_bind, scmut_wp in *; cbn; intros.
-      now rewrite outcome_satisfy_bind.
-    Qed.
-
     Definition ResultProperty Γ A Σ :=
       DynamicMutatorResult Γ A Σ -> Prop.
 
@@ -246,6 +219,51 @@ Module Soundness
       forall Σ1 Σ2 (ζ1 : Sub Σ Σ1) (ζ2 : Sub Σ1 Σ2) (a1 : A Σ1) (s1 : SymbolicState Γ Σ1),
         p Σ1 ζ1 a1 s1 ->
         p Σ2 (sub_comp ζ1 ζ2) (subst ζ2 a1) (subst ζ2 s1).
+
+    Lemma dmutres_assume_eq_spec {Γ Σ σ} (s__sym : SymbolicState Γ Σ) (t1 t2 : Term Σ σ)
+      (POST : ResultProperty Γ Unit Σ) (POST_dcl : resultprop_downwards_closed POST) :
+      OptionSpec
+        (fun r => POST r ->
+                  POST (MkDynMutResult
+                          (sub_id Σ)
+                          tt
+                          (symbolicstate_assume_formula (formula_eq t1 t2) s__sym)))
+        True
+        (dmutres_assume_eq s__sym t1 t2).
+    Proof.
+      destruct t1; cbn; try (constructor; auto; fail).
+      destruct (occurs_check ςInΣ t2) eqn:?; constructor; auto.
+      apply POST_dcl.
+      exists (sub_shift ςInΣ). repeat split.
+    Admitted.
+
+    (* These should be kept abstract in the rest of the proof. If you need some
+       property, add a lemma above. *)
+    Local Opaque inst_chunk.
+    Local Opaque inst_heap.
+    Local Opaque inst_pathcondition.
+    Local Opaque instantiate_env.
+    Local Opaque instantiate_list.
+    Local Opaque represents.
+    Local Opaque symbolicstate_assume_formula.
+    Local Opaque symbolicstate_produce_chunk.
+
+    Definition scmut_wp {Γ1 Γ2 A}
+      (m : SCMut Γ1 Γ2 A)
+      (POST : A -> SCState Γ2 -> Prop)
+      (s1 : SCState Γ1) : Prop :=
+      outcome_satisfy (m s1) (fun r => POST (scmutres_value r) (scmutres_state r)).
+
+    Lemma scmut_wp_bind {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (f : A -> SCMut Γ2 Γ3 B)
+          (POST : B -> SCState Γ3 -> Prop) :
+      forall s1 : SCState Γ1,
+        scmut_wp (scmut_bind ma f) POST s1 <->
+        scmut_wp ma (fun a => scmut_wp (f a) POST) s1.
+    Proof.
+      unfold SCMut, scmut_bind, scmut_wp in *; cbn; intros.
+      now rewrite outcome_satisfy_bind.
+    Qed.
+
 
     Definition dmut_wp {Γ1 Γ2 Σ0 A}
       (m : DynamicMutator Γ1 Γ2 A Σ0)
@@ -378,13 +396,12 @@ Module Soundness
           now apply represents_assume_formula.
         + apply (H _ _ (syminstance_rel_refl ι)).
           now apply represents_assume_formula.
-        + admit.
+        + destruct s__sc as [δ__sc h__sc].
+          admit.
         + apply (H _ _ (syminstance_rel_refl ι)).
           now apply represents_assume_formula.
     Admitted.
 
-    Opaque dmut_assume_term.
-    Opaque dmut_assume_prop.
     Opaque dmut_assume_formula.
 
     Definition dmut_wf {Γ1 Γ2 A Σ0} `{Subst A} (d : DynamicMutator Γ1 Γ2 A Σ0) : Prop :=
@@ -589,10 +606,18 @@ Module Soundness
       - apply dmut_assume_formula_sound.
       - apply dmut_produce_chunk_sound.
       - apply approximates_demonic_binary.
-        + admit.
+        + unfold dmut_bind_right.
+          eapply dmut_bind_sound. admit. admit.
+          apply dmut_assume_formula_sound.
+          intros.
+          admit.
         + admit.
       - admit.
-      - admit.
+      - intros. apply dmut_bind_sound. admit. admit.
+        apply IHasn1. intros.
+        (*  NOOOOOOOOOOOOO 😢😢  *)
+        intros ? ? ? ? ?. eapply IHasn2. admit.
+        admit.
       - apply dmut_fresh_sound.
         + admit.
         + intros. apply IHasn.
