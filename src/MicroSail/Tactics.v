@@ -63,50 +63,59 @@ Ltac microsail_solve_eqb_spec :=
   cbn in *;
   try congruence.
 
-Ltac microsail_destruct_propositional H :=
+Ltac destruct_propositional H :=
   lazymatch type of H with
   | _ /\ _ =>
     let H1 := fresh "H1" in
     let H2 := fresh "H2" in
     destruct H as [H1 H2];
-    microsail_destruct_propositional H1;
-    microsail_destruct_propositional H2
+    destruct_propositional H1;
+    destruct_propositional H2
   | _ \/ _ =>
     destruct H as [H|H];
-    microsail_destruct_propositional H
+    destruct_propositional H
   | exists _, _ =>
     let x := fresh in
     destruct H as [x H];
-    microsail_destruct_propositional H
+    destruct_propositional H
   | _ => idtac
   end.
 
 (* Adopted from
    https://softwarefoundations.cis.upenn.edu/plf-current/LibTactics.html
  *)
-Ltac microsail_check_noevar M :=
+Ltac check_noevar M :=
   first [ has_evar M; fail 1 | idtac ].
-Ltac microsail_check_noevar_hyp H :=
-  let T := type of H in microsail_check_noevar T.
+Ltac check_noevar_hyp H :=
+  let T := type of H in check_noevar T.
 
 (* This tactic instantiates a hypothesis with fresh unification variables,
    possibly solving some on the fly.
    Adopted from CPDT: http://adam.chlipala.net/cpdt/html/Match.html
  *)
-Tactic Notation "microsail_insterU" tactic(tac) constr(H) :=
+Ltac inster_gen H tac :=
+  match type of H with
+  | forall x : ?T, _ =>
+    match type of T with
+    | Prop =>
+      (let H' := fresh "H'" in
+       assert (H' : T) by solve [ tac ];
+       specialize (H H'); clear H';
+       first [ check_noevar_hyp H | inster_gen H tac ])
+      || fail 1
+    | _ =>
+      let x := fresh "x" in
+      evar (x : T);
+      let x' := eval unfold x in x in
+          clear x; specialize (H x');
+      first [ check_noevar_hyp H | inster_gen H tac ]
+    end
+  end.
+
+Ltac inster_loop H tac :=
   repeat
-    match type of H with
-    | forall x : ?T, _ =>
-      match type of T with
-      | Prop =>
-        (let H' := fresh "H'" in
-         assert (H' : T) by solve [ tac ];
-         specialize (H H'); clear H')
-        || fail 1
-      | _ =>
-        let x := fresh "x" in
-        evar (x : T);
-        let x' := eval unfold x in x in
-            clear x; specialize (H x')
-             end
-    end.
+    (inster_gen H tac;
+     check_noevar_hyp H).
+
+Tactic Notation "inster" constr(H) "by" tactic(tac) :=
+  inster_loop H tac.

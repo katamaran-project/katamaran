@@ -117,9 +117,6 @@ Module Soundness
       | [ IH: outcome_satisfy (scmut_produce _ ?a _) _ |-
           outcome_satisfy (scmut_produce _ ?a _) _ ] =>
         refine (outcome_satisfy_monotonic _ _ IH); clear IH
-      | [ IH: context[_ -> outcome_satisfy (scmut_exec ?s _) _] |-
-          outcome_satisfy (scmut_exec ?s _) _ ] =>
-        microsail_insterU (fail) IH; refine (outcome_satisfy_monotonic _ _ IH); clear IH
       | [ IH: outcome_satisfy ?o _ |-
           outcome_satisfy ?o _ ] =>
         refine (outcome_satisfy_monotonic _ _ IH); clear IH

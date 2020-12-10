@@ -198,11 +198,11 @@ Module Inversion
       | [ H : False |- _ ] => destruct H
       | [ H : ⟨ _, _, _, stm_lit _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ |- _ ] =>
         apply steps_inversion_lit in H;
-        microsail_destruct_propositional H;
+        destruct_propositional H;
         subst
       | [ H : ⟨ _, _, _, stm_fail _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ |- _ ] =>
         apply steps_inversion_fail in H;
-        microsail_destruct_propositional H;
+        destruct_propositional H;
         subst
       | _ => progress (cbn in *; subst)
       end.
@@ -343,9 +343,9 @@ Module Inversion
         ⟨ γ2, μ2, δ2, stm_block (env_snoc env_nil (x,τ) v) s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
   Proof.
     apply (steps_inversion_let final) in steps.
-    microsail_destruct_propositional steps; subst.
+    destruct_propositional steps; subst.
     apply (step_inversion_let H5) in H7.
-    microsail_destruct_propositional H7; subst.
+    destruct_propositional H7; subst.
     - apply steps_inversion_fail in H8; destruct_conjs; subst.
       left. steps_inversion_solve. auto.
     - right. steps_inversion_solve.
@@ -362,9 +362,9 @@ Module Inversion
         t = stm_lit _ v).
   Proof.
     apply (steps_inversion_block final) in steps.
-    microsail_destruct_propositional steps; subst.
+    destruct_propositional steps; subst.
     apply (step_inversion_block H3) in H4.
-    microsail_destruct_propositional H4; subst.
+    destruct_propositional H4; subst.
     - left. steps_inversion_solve. auto.
     - right. steps_inversion_solve. auto.
   Qed.
@@ -380,9 +380,9 @@ Module Inversion
         ⟨ γ2, μ2, δ2, s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
   Proof.
     apply (steps_inversion_seq final) in steps.
-    microsail_destruct_propositional steps; subst.
+    destruct_propositional steps; subst.
     apply (step_inversion_seq H5) in H7.
-    microsail_destruct_propositional H7; subst.
+    destruct_propositional H7; subst.
     - apply steps_inversion_fail in H8; destruct_conjs; subst.
       left. steps_inversion_solve. auto.
     - right. steps_inversion_solve.
@@ -399,9 +399,9 @@ Module Inversion
         t = stm_lit _ v /\ δ3 = δ1).
   Proof.
     apply (steps_inversion_call_frame final) in steps.
-    microsail_destruct_propositional steps; subst.
+    destruct_propositional steps; subst.
     apply (step_inversion_call_frame H5) in H7.
-    microsail_destruct_propositional H7; subst.
+    destruct_propositional H7; subst.
     - apply steps_inversion_fail in H8; destruct_conjs; subst.
       left. steps_inversion_solve. auto.
     - apply steps_inversion_lit in H8; destruct_conjs; subst.
@@ -419,9 +419,9 @@ Module Inversion
         t = stm_lit _ v /\ δ3 = (δ2 ⟪ x ↦ v ⟫)%env).
   Proof.
     apply (steps_inversion_assign final) in steps.
-    microsail_destruct_propositional steps; subst.
+    destruct_propositional steps; subst.
     eapply (step_inversion_assign H6) in H8.
-    microsail_destruct_propositional H8; subst.
+    destruct_propositional H8; subst.
     - apply steps_inversion_fail in H9; destruct_conjs; subst.
       left. steps_inversion_solve. auto.
     - apply steps_inversion_lit in H9; destruct_conjs; subst.
@@ -439,9 +439,9 @@ Module Inversion
         ⟨ γ2, μ2, δ2, k v ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
   Proof.
     apply (steps_inversion_bind final) in steps.
-    microsail_destruct_propositional steps; subst.
+    destruct_propositional steps; subst.
     eapply (step_inversion_bind H5) in H7.
-    microsail_destruct_propositional H7; subst.
+    destruct_propositional H7; subst.
     - apply steps_inversion_fail in H8; destruct_conjs; subst.
       left. steps_inversion_solve. auto.
     - right. steps_inversion_solve; auto.
