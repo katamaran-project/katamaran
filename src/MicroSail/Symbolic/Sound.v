@@ -685,7 +685,6 @@ Module Soundness
       (*     * assumption. *)
       (*   + apply stateprop_lift_dcl. *)
       (*   + assumption. *)
-    Qed.
     Admitted.
 
     Lemma dmut_produce_sound {Γ Σ} (asn : Assertion Σ) (ι : SymInstance Σ) :
