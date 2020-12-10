@@ -115,6 +115,13 @@ Module Soundness
       syminstance_rel sub_wk1 ι (ι ► ((x, τ) ↦ v)).
     Proof. apply inst_sub_wk1. Qed.
 
+    Lemma syminstance_rel_up {Σ1 Σ2 x τ} (ζ : Sub Σ1 Σ2) (ι1 : SymInstance Σ1) ι2 :
+      forall v,
+        syminstance_rel (sub_up1 ζ) (env_snoc ι1 (x,τ) v) (env_snoc ι2 (x,τ) v) <->
+        syminstance_rel ζ ι1 ι2.
+    Proof.
+    Admitted.
+
     (* A relation that links semi-concrete states with symbolic states. This
        simply requires that when instantiating the symbolic state you get the
        semi-concrete one (and the path-condition is true). Note that the
@@ -657,28 +664,28 @@ Module Soundness
       box approximates ι
         (dmut_fresh (ς,τ) dm)
         (scmut_demonic sm).
-    (* Proof. *)
-    (*   intros HYP. *)
-    (*   unfold approximates; cbn. *)
-    (*   intros ? ? ? H__state H. *)
-    (*   apply scmut_wp_demonic. intros v. *)
-    (*   apply (HYP v (subst sub_wk1 s__sym) s__sc POST). *)
-    (*   - revert H__state. clear. *)
-    (*     apply represents_rel. *)
-    (*     apply syminstance_rel_wk1. *)
-    (*   - apply (@dmut_wp_fresh Γ Σ Unit ς τ SubstUnit) in H. *)
-    (*     + revert H; clear. *)
-    (*       apply dmut_wp_monotonic; cbn; intros ? ? []; intros. *)
-    (*       dependent elimination ζ as [@env_snoc Σ0 ζ _ t]. *)
-    (*       unfold stateprop_specialize in H. *)
-    (*       rewrite sub_comp_wk1_tail in H; cbn in *. *)
-    (*       intros ι1 s1 H0 H1. *)
-    (*       apply H. *)
-    (*       * now apply syminstance_rel_snoc in H0. *)
-    (*       * assumption. *)
-    (*     + apply stateprop_lift_dcl. *)
-    (*     + assumption. *)
-    (* Qed. *)
+    Proof.
+      intros HYP. unfold box, approximates.
+      intros ? ? ? ? ? ? H__state POST H.
+      apply scmut_wp_demonic. intros v.
+      specialize (HYP v (Σ1 ▻ (ς,τ)) (sub_up1 ζ1) (env_snoc ι1 (ς,τ) v)).
+      inster HYP by apply syminstance_rel_up; auto.
+      unfold approximates in HYP.
+      apply (HYP (subst (sub_wk1) s__sym)). clear HYP.
+      - revert H__state. apply represents_rel, syminstance_rel_wk1.
+      (* - apply (@dmut_wp_fresh Γ Σ Unit ς τ SubstUnit) in H. *)
+      (*   + revert H; clear. *)
+      (*     apply dmut_wp_monotonic; cbn; intros ? ? []; intros. *)
+      (*     dependent elimination ζ as [@env_snoc Σ0 ζ _ t]. *)
+      (*     unfold stateprop_specialize in H. *)
+      (*     rewrite sub_comp_wk1_tail in H; cbn in *. *)
+      (*     intros ι1 s1 H0 H1. *)
+      (*     apply H. *)
+      (*     * now apply syminstance_rel_snoc in H0. *)
+      (*     * assumption. *)
+      (*   + apply stateprop_lift_dcl. *)
+      (*   + assumption. *)
+    Qed.
     Admitted.
 
     Lemma dmut_produce_sound {Γ Σ} (asn : Assertion Σ) (ι : SymInstance Σ) :
