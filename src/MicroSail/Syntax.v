@@ -44,6 +44,7 @@ From stdpp Require
      finite.
 From Equations Require Import
      Equations Signature.
+Require Equations.Prop.DepElim.
 Require Import Equations.Prop.EqDec.
 
 From MicroSail Require Export
@@ -1037,7 +1038,7 @@ Module Terms (Export termkit : TermKit).
 
     Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b : 𝑺 * Ty} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
       let '(ς , σ) := b in
-      env_snoc (wk1 ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
+      env_snoc (sub_comp ζ sub_wk1) (ς , σ) (@term_var _ ς σ inctx_zero).
 
     Definition sub_single {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) : Sub Σ (Σ - (x,σ)) :=
       @env_tabulate
@@ -1199,10 +1200,17 @@ Module Terms (Export termkit : TermKit).
       sub_comp ζ1 ζ2 ► (x∶τ ↦ v) =
       sub_comp (sub_up1 ζ1) (ζ2 ► (x∶τ ↦ v)).
     Proof.
-      unfold sub_up1, wk1, sub_comp, subst, SubstEnv; cbn.
+      unfold sub_up1, sub_comp, subst, SubstEnv; cbn.
       rewrite env_map_map. f_equal.
       apply env_map_ext. intros.
       now rewrite <- subst_sub_comp, sub_comp_wk1_tail.
+    Qed.
+
+    Lemma sub_up_comp {Σ0 Σ1 Σ2} (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) b :
+      sub_up1 (b:=b) (sub_comp ζ1 ζ2) = sub_comp (sub_up1 ζ1) (sub_up1 ζ2).
+    Proof.
+      destruct b. DepElim.hnf_eq. f_equal.
+      now rewrite ?sub_comp_assoc, sub_comp_wk1_comm.
     Qed.
 
   End SymbolicSubstitutions.
