@@ -202,10 +202,39 @@ Section WithBinding.
     | ctx_snoc Δ _ => inctx_succ (inctx_cat bIn Δ)
     end.
 
+  Inductive NilView {b : B} (i : InCtx b ctx_nil) : Set :=.
+
+  Definition nilView {b : B} (i : InCtx b ctx_nil) : NilView i :=
+    match inctx_valid i with end.
+
+  Inductive SnocView (Γ : Ctx B) {b' : B} : forall b, InCtx b (ctx_snoc Γ b') -> Set :=
+  | snocViewZero                     : SnocView inctx_zero
+  | snocViewSucc {b} (i : InCtx b Γ) : SnocView (inctx_succ i).
+  Global Arguments snocViewZero {_ _}.
+
+  Definition snocView {Γ} {b b' : B} (i : InCtx b (ctx_snoc Γ b')) :
+    @SnocView Γ b' b i :=
+    match inctx_at i as n return forall p, SnocView (MkInCtx n p)
+    with
+    | O   => fun p => match p with eq_refl => snocViewZero end
+    | S n => fun p => snocViewSucc (MkInCtx n p)
+    end (inctx_valid i).
+
+  Inductive InCtxView {b : B} : forall Γ, InCtx b Γ -> Set :=
+  | inctxViewZero {Γ}                    : @InCtxView b (ctx_snoc Γ b) inctx_zero
+  | inctxViewSucc {Γ b'} (i : InCtx b Γ) : @InCtxView b (ctx_snoc Γ b') (inctx_succ i).
+
+  Definition inctxView {b Γ} (bIn : InCtx b Γ) : InCtxView bIn.
+  Proof.
+    destruct Γ.
+    - destruct (nilView bIn).
+    - destruct (snocView bIn); constructor.
+  Defined.
+
   (* Custom pattern matching in cases where the context was already refined
      by a different match, i.e. on environments. *)
   Definition inctx_case_nil {b : B} {A : Type} (bIn : InCtx b ctx_nil) : A :=
-    let (n, e) := bIn in match e with end.
+    match nilView bIn with end.
   Definition inctx_case_snoc (D : B -> Type) (Γ : Ctx B) (b0 : B) (db0 : D b0)
     (dΓ: forall b, InCtx b Γ -> D b) (b : B) (bIn: InCtx b (ctx_snoc Γ b0)) : D b :=
     let (n, e) := bIn in
@@ -213,17 +242,6 @@ Section WithBinding.
     | 0 => fun e => match e with eq_refl => db0 end
     | S n => fun e => dΓ b (MkInCtx n e)
     end e.
-
-  Definition inctx_case_snoc_dep (Γ : Ctx B) (b0 : B)
-    (D : forall b, InCtx b (ctx_snoc Γ b0) -> Prop)
-    (db0 : D b0 inctx_zero)
-    (dΓ: forall b (bIn: InCtx b Γ), D b (inctx_succ bIn)) :
-    forall (y: B) (yIn: InCtx y (ctx_snoc Γ b0)), D y yIn :=
-    fun b '(MkInCtx n e) =>
-      match n return forall e, D b (MkInCtx n e) with
-      | 0 => eq_indd B b0 (fun z e => D z (@MkInCtx _ (ctx_snoc _ _) 0 e)) db0 b
-      | S n => fun e => dΓ b (MkInCtx n e)
-      end e.
 
   Lemma InCtx_ind (b : B)
     (P : forall (Γ : Ctx B), InCtx b Γ -> Prop)
@@ -233,11 +251,10 @@ Section WithBinding.
     forall (Γ : Ctx B) (bIn : InCtx b Γ), P Γ bIn.
   Proof.
     induction Γ; cbn.
-    - intro bIn; exact (inctx_case_nil bIn).
-    - intros [[|n] e]; cbn in *.
-      + subst; apply fzero.
-      + pose (MkInCtx n e) as bIn.
-        exact (fsucc Γ _ bIn (IHΓ bIn)).
+    - intro bIn. destruct (nilView bIn).
+    - intros bIn. destruct (snocView bIn).
+      + apply fzero.
+      + now apply fsucc.
   Qed.
 
   (* Boolean equality of [nat]-fields in [InCtx] implies equality of
