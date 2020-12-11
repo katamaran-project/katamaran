@@ -49,11 +49,11 @@ Module Inversion
 
     Lemma step_inversion_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
           {δ1 δ3 : LocalStore Γ}
-          {s : Stm Γ τ} {k : Stm (ctx_snoc Γ (x, τ)) σ} {t : Stm Γ σ} (final : Final s)
+          {s : Stm Γ τ} {k : Stm (ctx_snoc Γ (x :: τ)) σ} {t : Stm Γ σ} (final : Final s)
           (step : ⟨ γ1, μ1, δ1, stm_let x τ s k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\
       ((exists msg, s = stm_fail _ msg /\ t = stm_fail _ msg) \/
-       (exists v,   s = stm_lit τ v    /\ t = stm_block (env_snoc env_nil (x,τ) v) k)
+       (exists v,   s = stm_lit τ v    /\ t = stm_block (env_snoc env_nil (x::τ) v) k)
       ).
     Proof.
       dependent elimination step.
@@ -74,9 +74,8 @@ Module Inversion
       dependent elimination step.
       - intuition. right. eexists. intuition.
       - intuition. left. eexists. intuition.
-      - remember (δ1 ►► δΔ1)%env as δΓΔ1.
-        remember (δ'0 ►► δΔ')%env as δΓΔ2.
-        dependent elimination s3; cbn in *; try contradiction.
+      - revert s3. generalize (δ1 ►► δΔ1)%env (δ'0 ►► δΔ')%env. clear δΔ1.
+        intros ? ? s. dependent elimination s; contradiction.
     Qed.
 
     Lemma step_inversion_seq {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
@@ -109,7 +108,7 @@ Module Inversion
     Qed.
 
     Lemma step_inversion_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
-          {x : 𝑿} {xInΓ : InCtx (x,σ) Γ} {s1 t : Stm Γ σ} (final : Final s1)
+          {x : 𝑿} {xInΓ : x :: σ ∈ Γ} {s1 t : Stm Γ σ} (final : Final s1)
           (step : ⟨ γ1, μ1, δ1, stm_assign x s1 ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ3 = μ1 /\
       ((exists msg, s1 = stm_fail _ msg /\ t = stm_fail _ msg /\ δ3 = δ1) \/
@@ -256,7 +255,7 @@ Module Inversion
 
   Lemma steps_inversion_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
     {δ1 δ3 : LocalStore Γ}
-    {s1 : Stm Γ τ} {s2 : Stm (ctx_snoc Γ (x, τ)) σ} {t : Stm Γ σ} (final : Final t)
+    {s1 : Stm Γ τ} {s2 : Stm (ctx_snoc Γ (x::τ)) σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_let x τ s1 s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists (γ2 : RegStore) (μ2 : Memory) (δ2 : LocalStore Γ) (s1' : Stm Γ τ),
       ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s1' ⟩ /\ Final s1' /\
@@ -306,7 +305,7 @@ Module Inversion
   Qed.
 
   Lemma steps_inversion_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
-    (x : 𝑿) (xInΓ : InCtx (x,σ) Γ) (s1 t : Stm Γ σ) (final : Final t)
+    (x : 𝑿) (xInΓ : InCtx (x::σ) Γ) (s1 t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_assign x s1 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists γ2 μ2 δ2 δ2' s1',
       ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s1' ⟩ /\ Final s1' /\
@@ -333,14 +332,14 @@ Module Inversion
 
   Lemma steps_inversion_ex_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
     {δ1 δ3 : LocalStore Γ}
-    {s1 : Stm Γ τ} {s2 : Stm (ctx_snoc Γ (x, τ)) σ} {t : Stm Γ σ} (final : Final t)
+    {s1 : Stm Γ τ} {s2 : Stm (ctx_snoc Γ (x:: τ)) σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_let x τ s1 s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists msg,
         ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ3, μ3, δ3, stm_fail _ msg ⟩ /\
         t = stm_fail _ msg) \/
     (exists γ2 μ2 δ2 v,
         ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_lit _ v ⟩ /\
-        ⟨ γ2, μ2, δ2, stm_block (env_snoc env_nil (x,τ) v) s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
+        ⟨ γ2, μ2, δ2, stm_block (env_snoc env_nil (x::τ) v) s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
   Proof.
     apply (steps_inversion_let final) in steps.
     destruct_propositional steps; subst.
@@ -409,7 +408,7 @@ Module Inversion
   Qed.
 
   Lemma steps_inversion_ex_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
-    (x : 𝑿) (xInΓ : InCtx (x,σ) Γ) (s1 t : Stm Γ σ) (final : Final t)
+    (x : 𝑿) (xInΓ : InCtx (x::σ) Γ) (s1 t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_assign x s1 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists msg,
         ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ3, μ3, δ3, stm_fail _ msg ⟩ /\
@@ -449,9 +448,9 @@ Module Inversion
 
   Lemma step_inversion_let_lit {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
     {δ1 δ3 : LocalStore Γ}
-    {v : Lit τ} {k : Stm (ctx_snoc Γ (x, τ)) σ} {t : Stm Γ σ}
+    {v : Lit τ} {k : Stm (ctx_snoc Γ (x::τ)) σ} {t : Stm Γ σ}
     (steps : ⟨ γ1, μ1, δ1, stm_let x τ (stm_lit τ v) k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
-    γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_block (env_snoc env_nil (x,τ) v) k.
+    γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_block (env_snoc env_nil (x::τ) v) k.
   Proof.
     dependent elimination steps.
     - intuition.

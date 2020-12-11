@@ -31,6 +31,7 @@ Module HoareSound
   Section Soundness.
 
     Open Scope logic.
+    Import CtxNotations.
     Import EnvNotations.
 
     Local Ltac sound_inversion :=
@@ -133,7 +134,7 @@ Module HoareSound
               (inst_assertion (L:=HProp) ι pre) γfocus ->
               exists (γfocus' : Heap),
                 split (heap γ') γframe γfocus' /\
-                ResultOrFail s' (fun v => inst_assertion (env_snoc ι (result , σ) v) post γfocus')
+                ResultOrFail s' (fun v => inst_assertion (env_snoc ι (result :: σ) v) post γfocus')
         | None => False
         end.
 

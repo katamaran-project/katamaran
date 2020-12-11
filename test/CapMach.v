@@ -338,7 +338,7 @@ Module CapValueKit <: ValueKit .
   (** RECORDS **)
   Definition 𝑹𝑭  : Set := string.
 
-  Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) :=
+  Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty :=
     match R with
     | capability => [ "cap_permission" ∶ ty_perm,
                       "cap_begin"      ∶ ty_addr,
@@ -390,8 +390,11 @@ Module CapTermKit <: TermKit .
   Definition 𝑺_eq_dec := string_dec.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
+  Notation PCtx := (NCtx 𝑿 Ty).
+  Notation LCtx := (NCtx 𝑺 Ty).
+
   (** FUNCTIONS **)
-  Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
+  Inductive Fun : PCtx -> Ty -> Set :=
   | read_reg       : Fun ["reg" ∶ ty_enum regname ] ty_word
   | read_reg_cap   : Fun ["reg" ∶ ty_enum regname ] (ty_record capability)
   | write_reg      : Fun ["reg" ∶ ty_enum regname,
@@ -415,15 +418,15 @@ Module CapTermKit <: TermKit .
   | exec_store     : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_unit
   .
 
-  Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
+  Inductive FunX : PCtx -> Ty -> Set :=
   (* read memory *)
   | rM    : FunX ["address" ∶ ty_int] ty_int
   (* write memory *)
   | wM    : FunX ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_unit
   .
 
-  Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
-  Definition 𝑭𝑿  : Ctx (𝑿 * Ty) -> Ty -> Set := FunX.
+  Definition 𝑭  : PCtx -> Ty -> Set := Fun.
+  Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
 
   Inductive Reg : Ty -> Set :=
   | pc   : Reg (ty_record capability)
@@ -620,11 +623,11 @@ Module CapProgramKit <: (ProgramKit CapTermKit).
 
   Inductive CallEx : forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
   | callex_rM {addr : Z} {γ : RegStore} {μ : Memory} :
-      CallEx rM (env_snoc env_nil (_ , ty_int) addr)
+      CallEx rM (env_snoc env_nil (_ :: ty_int) addr)
              (fun_rM μ addr)
              γ γ μ μ
   | callex_wM {addr val : Z} {γ : RegStore} {μ : Memory} :
-      CallEx wM (env_snoc (env_snoc env_nil (_ , ty_int) addr) (_ , ty_int) val)
+      CallEx wM (env_snoc (env_snoc env_nil (_ :: ty_int) addr) (_ :: ty_int) val)
              (inr tt)
              γ γ μ (fun_wM μ addr val)
   .

@@ -160,7 +160,7 @@ Module MinCapsValueKit <: ValueKit.
   (** RECORDS **)
   Definition 𝑹𝑭  : Set := string.
 
-  Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) :=
+  Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty :=
     match R with
     | capability => [ "cap_permission" ∶ ty_perm,
                       "cap_begin"      ∶ ty_addr,

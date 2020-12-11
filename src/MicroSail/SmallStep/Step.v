@@ -45,7 +45,7 @@ Module SmallStep
   Import CtxNotations.
   Import EnvNotations.
 
-  Inductive Step {Γ : Ctx (𝑿 * Ty)} {τ : Ty} (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) :
+  Inductive Step {Γ : PCtx} {τ : Ty} (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) :
     forall (γ2 : RegStore) (μ2 : Memory) (δ2 : LocalStore Γ) (s1 s2 : Stm Γ τ), Prop :=
 
   | step_stm_exp
@@ -53,24 +53,24 @@ Module SmallStep
       ⟨ γ , μ , δ , (stm_exp e) ⟩ ---> ⟨ γ , μ , δ , stm_lit τ (eval e δ) ⟩
 
   | step_stm_let_value
-      (x : 𝑿) (σ : Ty) (v : Lit σ) (k : Stm (Γ ▻ (x,σ)) τ) :
-      ⟨ γ , μ , δ , stm_let x σ (stm_lit σ v) k ⟩ ---> ⟨ γ , μ , δ , stm_block (env_snoc env_nil (x,σ) v) k ⟩
+      (x : 𝑿) (σ : Ty) (v : Lit σ) (k : Stm (Γ ▻ (x::σ)) τ) :
+      ⟨ γ , μ , δ , stm_let x σ (stm_lit σ v) k ⟩ ---> ⟨ γ , μ , δ , stm_block (env_snoc env_nil (x::σ) v) k ⟩
   | step_stm_let_fail
-      (x : 𝑿) (σ : Ty) (s : string) (k : Stm (Γ ▻ (x,σ)) τ) :
+      (x : 𝑿) (σ : Ty) (s : string) (k : Stm (Γ ▻ (x::σ)) τ) :
       ⟨ γ , μ , δ, stm_let x σ (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | step_stm_let_step
-      (x : 𝑿) (σ : Ty) (s s' : Stm Γ σ) (k : Stm (Γ ▻ (x,σ)) τ)
+      (x : 𝑿) (σ : Ty) (s s' : Stm Γ σ) (k : Stm (Γ ▻ (x::σ)) τ)
       (γ' : RegStore) (μ' : Memory) (δ' : LocalStore Γ) :
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_let x σ s k ⟩ ---> ⟨ γ', μ' , δ' , stm_let x σ s' k ⟩
   | step_stm_block_value
-      (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (v : Lit τ) :
+      (Δ : PCtx) (δΔ : LocalStore Δ) (v : Lit τ) :
       ⟨ γ , μ , δ , stm_block δΔ (stm_lit τ v) ⟩ ---> ⟨ γ , μ , δ , stm_lit τ v ⟩
   | step_stm_block_fail
-      (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (s : string) :
+      (Δ : PCtx) (δΔ : LocalStore Δ) (s : string) :
       ⟨ γ , μ , δ , stm_block δΔ (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | step_stm_block_step
-      (Δ : Ctx (𝑿 * Ty)) (δΔ δΔ' : LocalStore Δ) (k k' : Stm (Γ ▻▻ Δ) τ)
+      (Δ : PCtx) (δΔ δΔ' : LocalStore Δ) (k k' : Stm (Γ ▻▻ Δ) τ)
       (γ' : RegStore) (μ' : Memory) (δ' : LocalStore Γ) :
       ⟨ γ , μ , δ ►► δΔ , k ⟩ ---> ⟨ γ', μ' , δ' ►► δΔ' , k' ⟩ ->
       ⟨ γ , μ , δ , stm_block δΔ k ⟩ ---> ⟨ γ' , μ' , δ' , stm_block δΔ' k' ⟩
@@ -92,15 +92,15 @@ Module SmallStep
       ⟨ γ , μ , δ , stm_call f es ⟩ --->
       ⟨ γ , μ , δ , stm_call_frame (evals es δ) (Pi f) ⟩
   | step_stm_call_frame_step
-      (Δ : Ctx (𝑿 * Ty)) {δΔ δΔ' : LocalStore Δ} (s s' : Stm Δ τ)
+      (Δ : PCtx) {δΔ δΔ' : LocalStore Δ} (s s' : Stm Δ τ)
       (γ' : RegStore) (μ' : Memory) :
       ⟨ γ , μ , δΔ , s ⟩ ---> ⟨ γ' , μ' , δΔ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_call_frame δΔ s ⟩ ---> ⟨ γ' , μ' , δ , stm_call_frame δΔ' s' ⟩
   | step_stm_call_frame_value
-      (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (v : Lit τ) :
+      (Δ : PCtx) {δΔ : LocalStore Δ} (v : Lit τ) :
       ⟨ γ , μ , δ , stm_call_frame δΔ (stm_lit τ v) ⟩ ---> ⟨ γ , μ , δ , stm_lit τ v ⟩
   | step_stm_call_frame_fail
-      (Δ : Ctx (𝑿 * Ty)) {δΔ : LocalStore Δ} (s : string) :
+      (Δ : PCtx) {δΔ : LocalStore Δ} (s : string) :
       ⟨ γ , μ , δ , stm_call_frame δΔ (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | step_stm_call_external
       {Δ} {f : 𝑭𝑿 Δ τ} (es : NamedEnv (Exp Γ) Δ) (res : string + Lit τ)
@@ -113,13 +113,13 @@ Module SmallStep
                       end ⟩
 
   | step_stm_assign_value
-      (x : 𝑿) {xInΓ : InCtx (x,τ) Γ} (v : Lit τ) :
+      (x : 𝑿) {xInΓ : InCtx (x::τ) Γ} (v : Lit τ) :
       ⟨ γ , μ , δ , stm_assign x (stm_lit τ v) ⟩ ---> ⟨ γ , μ , δ ⟪ x ↦ v ⟫ , stm_lit τ v ⟩
   | step_stm_assign_fail
-      (x : 𝑿) {xInΓ : InCtx (x,τ) Γ} (s : string) :
+      (x : 𝑿) {xInΓ : InCtx (x::τ) Γ} (s : string) :
       ⟨ γ , μ , δ , stm_assign x (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | step_stm_assign_step
-      (x : 𝑿) {xInΓ : InCtx (x,τ) Γ} (s s' : Stm Γ τ)
+      (x : 𝑿) {xInΓ : InCtx (x::τ) Γ} (s s' : Stm Γ τ)
       (γ' : RegStore) (μ' : Memory) (δ' : LocalStore Γ) :
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_assign x s ⟩ ---> ⟨ γ' , μ' , δ' , stm_assign x s' ⟩
@@ -134,29 +134,29 @@ Module SmallStep
 
   | step_stm_match_list
       {σ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
-      (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh , σ) ▻ (xt , ty_list σ)) τ) :
+      (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh :: σ) ▻ (xt :: ty_list σ)) τ) :
       ⟨ γ , μ , δ , stm_match_list e alt_nil xh xt alt_cons ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
                 | nil => alt_nil
-                | cons vh vt => stm_block (env_snoc (env_snoc env_nil (xh,σ) vh) (xt,ty_list σ) vt) alt_cons
+                | cons vh vt => stm_block (env_snoc (env_snoc env_nil (xh::σ) vh) (xt::ty_list σ) vt) alt_cons
                 end
       ⟩
   | step_stm_match_sum
       {σinl σinr : Ty} (e : Exp Γ (ty_sum σinl σinr))
-      (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl , σinl)) τ)
-      (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr , σinr)) τ) :
+      (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl :: σinl)) τ)
+      (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr :: σinr)) τ) :
       ⟨ γ , μ , δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
-                | inl v => stm_block (env_snoc env_nil (xinl,σinl) v) alt_inl
-                | inr v => stm_block (env_snoc env_nil (xinr,σinr) v) alt_inr
+                | inl v => stm_block (env_snoc env_nil (xinl::σinl) v) alt_inl
+                | inr v => stm_block (env_snoc env_nil (xinr::σinr) v) alt_inr
                 end
       ⟩
   | step_stm_match_pair
       {σ1 σ2 : Ty} (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿)
-      (rhs : Stm (Γ ▻ (xl , σ1) ▻ (xr , σ2)) τ) :
+      (rhs : Stm (Γ ▻ (xl :: σ1) ▻ (xr :: σ2)) τ) :
       ⟨ γ , μ , δ , stm_match_pair e xl xr rhs ⟩ --->
       ⟨ γ , μ , δ , let (vl , vr) := eval e δ in
-                stm_block (env_snoc (env_snoc env_nil (xl,σ1) vl) (xr,σ2) vr) rhs
+                stm_block (env_snoc (env_snoc env_nil (xl::σ1) vl) (xr::σ2) vr) rhs
       ⟩
   | step_stm_match_enum
       {E : 𝑬} (e : Exp Γ (ty_enum E))
@@ -169,7 +169,7 @@ Module SmallStep
 
   | step_stm_match_union
       {U : 𝑼} (e : Exp Γ (ty_union U))
-      (alt__ctx : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
+      (alt__ctx : forall (K : 𝑼𝑲 U), PCtx)
       (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
       (alt__rhs : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__ctx K) τ) :
       ⟨ γ , μ , δ , stm_match_union U e alt__pat alt__rhs ⟩ --->
@@ -177,7 +177,7 @@ Module SmallStep
                 stm_block (pattern_match (alt__pat K) v) (alt__rhs K)
       ⟩
   | step_stm_match_record
-      {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
+      {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
       (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (ctx_cat Γ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_record R e p rhs ⟩ --->
       ⟨ γ , μ , δ , stm_block (record_pattern_match p (𝑹_unfold (eval e δ))) rhs ⟩
@@ -204,14 +204,14 @@ Module SmallStep
 
   where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
 
-  Inductive Steps {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> LocalStore Γ -> Stm Γ σ -> Prop :=
+  Inductive Steps {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> LocalStore Γ -> Stm Γ σ -> Prop :=
   | step_refl : Steps γ1 μ1 δ1 s1 γ1 μ1 δ1 s1
   | step_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : LocalStore Γ} {s2 s3 : Stm Γ σ} :
       Step γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 -> Steps γ2 μ2 δ2 s2 γ3 μ3 δ3 s3 -> Steps γ1 μ1 δ1 s1 γ3 μ3 δ3 s3.
 
   Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Steps _ _ γ1 μ1 δ1 s1 γ2 μ2 δ2 s2).
 
-  Inductive StepsN {Γ : Ctx (𝑿 * Ty)} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : nat -> RegStore -> Memory -> LocalStore Γ -> Stm Γ σ -> Prop :=
+  Inductive StepsN {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : nat -> RegStore -> Memory -> LocalStore Γ -> Stm Γ σ -> Prop :=
   | stepsn_refl : StepsN γ1 μ1 δ1 s1 O γ1 μ1 δ1 s1
   | stepsn_trans {γ2 γ3 : RegStore} {μ2 μ3 : Memory} {δ2 δ3 : LocalStore Γ} {s2 s3 : Stm Γ σ} {n} :
       Step γ1 μ1 δ1 γ2 μ2 δ2 s1 s2 -> StepsN γ2 μ2 δ2 s2 n γ3 μ3 δ3 s3 -> StepsN γ1 μ1 δ1 s1 (S n) γ3 μ3 δ3 s3.

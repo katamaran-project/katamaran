@@ -54,6 +54,9 @@ Module MinCapsTermKit <: TermKit.
   Definition 𝑺_eq_dec := string_dec.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
 
+  Notation PCtx := (NCtx 𝑿 Ty).
+  Notation LCtx := (NCtx 𝑺 Ty).
+
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
   | read_reg       : Fun ["reg" ∶ ty_enum regname ] ty_word

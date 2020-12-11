@@ -47,7 +47,7 @@ Section TransparentObligations.
 End TransparentObligations.
 
 Arguments ctx_nil {_}.
-Arguments ctx_snoc {_} _ _.
+Arguments ctx_snoc {_} _%ctx _%ctx.
 Bind Scope ctx_scope with Ctx.
 
 Section WithBinding.
@@ -399,10 +399,30 @@ Section WithAB.
 
 End WithAB.
 
+(* Section Binding. *)
+
+(*   Local Set Primitive Projections. *)
+(*   Local Set Transparent Obligations. *)
+
+(*   Context (N T : Set) {eqN : EqDec N} {eqT : EqDec T}. *)
+
+(*   Record Binding : Set := *)
+(*     MkBinding *)
+(*       { name :> N; *)
+(*         type :> T; *)
+(*       }. *)
+(*   Derive NoConfusion EqDec for Binding. *)
+
+(* End Binding. *)
+(* Arguments MkBinding {N T} name type. *)
+(* Arguments name {N T} b. *)
+(* Arguments type {N T} b. *)
+
 Module CtxNotations.
 
   Notation NCtx Name Data := (Ctx (Name * Data)).
   Notation "x ∶ τ" := (x,τ) (only parsing) : ctx_scope.
+  Notation "x :: τ" := (x , τ) : ctx_scope.
 
   Notation "'ε'" := ctx_nil : ctx_scope.
   Infix "▻" := ctx_snoc : ctx_scope.
@@ -449,7 +469,7 @@ Module NameResolution.
 
   (* Hook the reflective procedure for name resolution into the typeclass
      resolution mechanism. *)
-  Hint Extern 10 (InCtx (?x , _) ?Γ) =>
+  Hint Extern 10 (InCtx (?x :: _) ?Γ) =>
     let xInΓ := eval compute in (mk_inctx Γ x tt) in
       exact xInΓ : typeclass_instances.
 

@@ -59,14 +59,14 @@ Module Assertions
        (progkit : ProgramKit termkit)
        (Export assertkit : AssertionKit termkit progkit).
 
-  Inductive Formula (Σ : Ctx (𝑺 * Ty)) : Type :=
+  Inductive Formula (Σ : LCtx) : Type :=
   | formula_bool (t : Term Σ ty_bool)
   | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Lit Σ' Prop)
   | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
   | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
   Arguments formula_bool {_} t.
 
-  Equations(noeqns) formula_eqs {Δ : Ctx (𝑿 * Ty)} {Σ : Ctx (𝑺 * Ty)}
+  Equations(noeqns) formula_eqs {Δ : PCtx} {Σ : LCtx}
     (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
     formula_eqs env_nil          env_nil            := nil;
     formula_eqs (env_snoc δ _ t) (env_snoc δ' _ t') :=
@@ -88,18 +88,18 @@ Module Assertions
     { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
   Qed.
 
-  Inductive Chunk (Σ : Ctx (𝑺 * Ty)) : Type :=
+  Inductive Chunk (Σ : LCtx) : Type :=
   | chunk_pred   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
   Arguments chunk_pred [_] _ _.
 
-  Inductive Assertion (Σ : Ctx (𝑺 * Ty)) : Type :=
+  Inductive Assertion (Σ : LCtx) : Type :=
   | asn_formula (fml : Formula Σ)
   | asn_chunk (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
   | asn_match_enum (E : 𝑬) (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
   | asn_sep  (a1 a2 : Assertion Σ)
-  | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς , τ))).
+  | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς :: τ))).
   Arguments asn_match_enum [_] E _ _.
   Arguments asn_exist [_] _ _ _.
 
@@ -155,13 +155,13 @@ Module Assertions
       | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf
       end%exp.
 
-  Record SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+  Record SepContract (Δ : PCtx) (τ : Ty) : Type :=
     MkSepContract
-      { sep_contract_logic_variables  : Ctx (𝑺 * Ty);
+      { sep_contract_logic_variables  : LCtx;
         sep_contract_localstore       : SymbolicLocalStore Δ sep_contract_logic_variables;
         sep_contract_precondition     : Assertion sep_contract_logic_variables;
         sep_contract_result           : 𝑺;
-        sep_contract_postcondition    : Assertion (sep_contract_logic_variables ▻ (sep_contract_result , τ));
+        sep_contract_postcondition    : Assertion (sep_contract_logic_variables ▻ (sep_contract_result :: τ));
       }.
 
   Arguments MkSepContract : clear implicits.
@@ -173,12 +173,12 @@ Module Assertions
 
   Section Experimental.
 
-    Definition sep_contract_pun_logvars (Δ : Ctx (𝑿 * Ty)) (Σ : Ctx (𝑺 * Ty)) : Ctx (𝑺 * Ty) :=
-      ctx_map (fun '(x,σ) => (𝑿to𝑺 x,σ)) Δ ▻▻ Σ.
+    Definition sep_contract_pun_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
+      ctx_map (fun '(x::σ) => (𝑿to𝑺 x::σ)) Δ ▻▻ Σ.
 
-    Record SepContractPun (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+    Record SepContractPun (Δ : PCtx) (τ : Ty) : Type :=
       MkSepContractPun
-        { sep_contract_pun_logic_variables   : Ctx (𝑺 * Ty);
+        { sep_contract_pun_logic_variables   : LCtx;
           sep_contract_pun_precondition      : Assertion
                                                  (sep_contract_pun_logvars
                                                     Δ sep_contract_pun_logic_variables);
@@ -186,7 +186,7 @@ Module Assertions
           sep_contract_pun_postcondition     : Assertion
                                                  (sep_contract_pun_logvars Δ
                                                                            sep_contract_pun_logic_variables
-                                                                           ▻ (sep_contract_pun_result , τ))
+                                                                           ▻ (sep_contract_pun_result :: τ))
         }.
 
     Global Arguments MkSepContractPun : clear implicits.
@@ -199,12 +199,12 @@ Module Assertions
           MkSepContract
             Δ τ
             (sep_contract_pun_logvars Δ Σ)
-            (env_tabulate (fun '(x,σ) xIn =>
+            (env_tabulate (fun '(x::σ) xIn =>
                              @term_var
                                (sep_contract_pun_logvars Δ Σ)
                                (𝑿to𝑺 x)
                                σ
-                               (inctx_cat (inctx_map (fun '(y,τ) => (𝑿to𝑺 y,τ)) xIn) Σ)))
+                               (inctx_cat (inctx_map (fun '(y::τ) => (𝑿to𝑺 y::τ)) xIn) Σ)))
             req result ens
         end.
 
@@ -257,7 +257,7 @@ Module Assertions
 
     Definition inst_contract_postcondition {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
-        inst_assertion (env_snoc ι (sep_contract_result c,τ) result) (sep_contract_postcondition c).
+        inst_assertion (env_snoc ι (sep_contract_result c::τ) result) (sep_contract_postcondition c).
 
   End Contracts.
 

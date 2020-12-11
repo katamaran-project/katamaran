@@ -206,7 +206,7 @@ Module WLP
     | ty_record R => blastable_record R
     end%type.
 
-  Fixpoint eval_prop_true {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) {struct e} : Prop -> Prop :=
+  Fixpoint eval_prop_true {Γ : PCtx} (e : Exp Γ ty_bool) (δ : LocalStore Γ) {struct e} : Prop -> Prop :=
     match e return Prop -> Prop -> Prop with
     | exp_binop binop_eq e1 e2 => fun _ k => eval e1 δ = eval e2 δ -> k
     | exp_binop binop_le e1 e2 => fun _ k => eval e1 δ <= eval e2 δ -> k
@@ -217,7 +217,7 @@ Module WLP
     | exp_not e => fun _ k => eval_prop_false e δ k
     | _ => fun e k => e -> k
     end (eval e δ = true)
-  with eval_prop_false {Γ : Ctx (𝑿 * Ty)} (e : Exp Γ ty_bool) (δ : LocalStore Γ) {struct e} : Prop -> Prop :=
+  with eval_prop_false {Γ : PCtx} (e : Exp Γ ty_bool) (δ : LocalStore Γ) {struct e} : Prop -> Prop :=
     match e return Prop -> Prop -> Prop with
     | exp_binop binop_eq e1 e2 => fun _ k => eval e1 δ <> eval e2 δ -> k
     | exp_binop binop_le e1 e2 => fun _ k => eval e1 δ > eval e2 δ -> k
