@@ -120,7 +120,14 @@ Module Soundness
         syminstance_rel (sub_up1 ζ) (env_snoc ι1 (x,τ) v) (env_snoc ι2 (x,τ) v) <->
         syminstance_rel ζ ι1 ι2.
     Proof.
-    Admitted.
+      unfold syminstance_rel. intros v.
+      change (inst (ι2 ► (x :: τ ↦ v)) (sub_comp ζ sub_wk1) ► (x :: τ ↦ v) =
+              ι1 ► (x :: τ ↦ v) <-> inst ι2 ζ = ι1).
+      unfold sub_comp. rewrite inst_subst, inst_sub_wk1.
+      split; intros H.
+      - now dependent elimination H.
+      - now f_equal.
+    Qed.
 
     (* A relation that links semi-concrete states with symbolic states. This
        simply requires that when instantiating the symbolic state you get the
