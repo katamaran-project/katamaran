@@ -110,6 +110,7 @@ Module Assertions
   Notation asn_eq t1 t2 := (asn_formula (formula_eq t1 t2)).
   Notation asn_true := (asn_bool (term_lit ty_bool true)).
   Notation asn_false := (asn_bool (term_lit ty_bool false)).
+  Notation asn_match_option T xl alt_inl := (asn_match_sum T ty_unit xl alt_inl _ asn_true).
 
   Instance sub_chunk : Subst Chunk :=
     fun Σ1 Σ2 ζ c =>
