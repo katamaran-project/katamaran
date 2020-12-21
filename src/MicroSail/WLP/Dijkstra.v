@@ -122,13 +122,15 @@ Section WithGBD.
   Context {X T : Set}.
   Context {D : T -> Set}.
 
-  Definition pop {Γ x σ} : DST G (@NamedEnv X T D) (ctx_snoc Γ (x , σ)) Γ unit :=
+  Import CtxNotations.
+
+  Definition pop {Γ x σ} : DST G (@NamedEnv X T D) (Γ ▻ (x :: σ)) Γ unit :=
     modify_local (fun δ => env_tail δ).
-  Definition pops {Γ} Δ : DST G (@NamedEnv X T D) (ctx_cat Γ Δ) Γ unit :=
+  Definition pops {Γ} Δ : DST G (@NamedEnv X T D) (Γ ▻▻ Δ) Γ unit :=
     modify_local (fun δΓΔ => env_drop Δ δΓΔ).
-  Definition push {Γ x} σ (v : D σ) : DST G (@NamedEnv X T D) Γ (ctx_snoc Γ (x , σ)) unit :=
-    modify_local (fun δ => env_snoc δ (x , σ) v).
-  Definition pushs {Γ Δ} (δΔ : @NamedEnv X T D Δ) : DST G (@NamedEnv X T D) Γ (ctx_cat Γ Δ) unit :=
+  Definition push {Γ x} σ (v : D σ) : DST G (@NamedEnv X T D) Γ (Γ ▻ (x :: σ)) unit :=
+    modify_local (fun δ => env_snoc δ (x :: σ) v).
+  Definition pushs {Γ Δ} (δΔ : @NamedEnv X T D Δ) : DST G (@NamedEnv X T D) Γ (Γ ▻▻ Δ) unit :=
     modify_local (fun δΓ => env_cat δΓ δΔ).
 
   Global Arguments pop {_ _ _} / _ _ _.

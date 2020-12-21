@@ -1,8 +1,10 @@
 -arg "-w all -w -undeclared-scope -w -disj-pattern-notation"
 -Q case_study/MinimalCaps MinimalCaps
-case_study/MinimalCaps/Machine.v
 case_study/MinimalCaps/Contracts.v
+case_study/MinimalCaps/Machine.v
 case_study/MinimalCaps/Model.v
+case_study/MinimalCaps/Types.v
+case_study/MinimalCaps/Values.v
 -R src/MicroSail MicroSail
 src/MicroSail.v
 src/MicroSail/Context.v
@@ -23,6 +25,8 @@ src/MicroSail/SmallStep/Inversion.v
 src/MicroSail/SmallStep/Progress.v
 src/MicroSail/SmallStep/Step.v
 src/MicroSail/Syntax.v
+src/MicroSail/Syntax/Types.v
+src/MicroSail/Syntax/Values.v
 src/MicroSail/Tactics.v
 src/MicroSail/WLP/Dijkstra.v
 src/MicroSail/WLP/Soundness.v

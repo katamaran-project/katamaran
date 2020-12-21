@@ -205,9 +205,6 @@ Module CapTypeKit <: TypeKit.
     ltac:(destruct E; auto with typeclass_instances).
   Instance 𝑬𝑲_finite (E : 𝑬) : Finite (𝑬𝑲 E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Program Instance Blastable_𝑬𝑲 e : Blastable (𝑬𝑲 e) :=
-    {| blast v POST := POST v |}.
-  Solve All Obligations with auto.
 
   (** UNIONS **)
   Definition 𝑼        := Unions.
@@ -226,10 +223,6 @@ Module CapTypeKit <: TypeKit.
     ltac:(destruct U; auto with typeclass_instances).
   Instance 𝑼𝑲_finite U : Finite (𝑼𝑲 U) :=
     ltac:(destruct U; auto with typeclass_instances).
-  Program Instance Blastable_𝑼𝑲 U : Blastable (𝑼𝑲 U) :=
-    match U with
-    | instruction => {| blast v POST := POST v |}
-    end.
   Solve All Obligations with destruct a; intuition congruence.
 
   (** RECORDS **)
@@ -242,27 +235,18 @@ Module CapTypeKit <: TypeKit.
   Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
-  (* VARIABLES *)
-  Definition 𝑿        := string.
-  Definition 𝑿_eq_dec := string_dec.
-  Definition 𝑺        := string.
-  Definition 𝑺_eq_dec := string_dec.
-  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-
 End CapTypeKit.
 
-(*** TERMS ***)
-
-Module CapTermKit <: TermKit .
+Module CapValueKit <: ValueKit .
   Module typekit := CapTypeKit.
   Module Export TY := Types typekit.
 
-  Definition ty_hv : Ty := ty_enum regname.
-  Definition ty_lv : Ty := ty_enum regname.
-  Definition ty_rv : Ty := (ty_sum (ty_enum regname) ty_int).
-  Definition ty_word : Ty := ty_sum ty_int (ty_record capability).
-  Definition ty_addr : Ty := ty_int.
-  Definition ty_perm : Ty := ty_enum permission.
+  Notation ty_hv   := (ty_enum regname).
+  Notation ty_lv   := (ty_enum regname).
+  Notation ty_rv   := (ty_sum (ty_enum regname) ty_int).
+  Notation ty_word := (ty_sum ty_int (ty_record capability)).
+  Notation ty_addr := (ty_int).
+  Notation ty_perm := (ty_enum permission).
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -354,7 +338,7 @@ Module CapTermKit <: TermKit .
   (** RECORDS **)
   Definition 𝑹𝑭  : Set := string.
 
-  Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) :=
+  Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty :=
     match R with
     | capability => [ "cap_permission" ∶ ty_perm,
                       "cap_begin"      ∶ ty_addr,
@@ -391,8 +375,26 @@ Module CapTermKit <: TermKit .
       𝑹_unfold R (𝑹_fold R Kv) = Kv.
   Proof. intros []; now apply Forall_forall. Qed.
 
+End CapValueKit.
+
+(*** TERMS ***)
+
+Module CapTermKit <: TermKit .
+  Module valuekit := CapValueKit.
+  Module Export VAL := Values valuekit.
+
+  (* VARIABLES *)
+  Definition 𝑿        := string.
+  Definition 𝑿_eq_dec := string_dec.
+  Definition 𝑺        := string.
+  Definition 𝑺_eq_dec := string_dec.
+  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
+
+  Notation PCtx := (NCtx 𝑿 Ty).
+  Notation LCtx := (NCtx 𝑺 Ty).
+
   (** FUNCTIONS **)
-  Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
+  Inductive Fun : PCtx -> Ty -> Set :=
   | read_reg       : Fun ["reg" ∶ ty_enum regname ] ty_word
   | read_reg_cap   : Fun ["reg" ∶ ty_enum regname ] (ty_record capability)
   | write_reg      : Fun ["reg" ∶ ty_enum regname,
@@ -416,15 +418,15 @@ Module CapTermKit <: TermKit .
   | exec_store     : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_unit
   .
 
-  Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
+  Inductive FunX : PCtx -> Ty -> Set :=
   (* read memory *)
   | rM    : FunX ["address" ∶ ty_int] ty_int
   (* write memory *)
   | wM    : FunX ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_unit
   .
 
-  Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
-  Definition 𝑭𝑿  : Ctx (𝑿 * Ty) -> Ty -> Set := FunX.
+  Definition 𝑭  : PCtx -> Ty -> Set := Fun.
+  Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
 
   Inductive Reg : Ty -> Set :=
   | pc   : Reg (ty_record capability)
@@ -621,11 +623,11 @@ Module CapProgramKit <: (ProgramKit CapTermKit).
 
   Inductive CallEx : forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
   | callex_rM {addr : Z} {γ : RegStore} {μ : Memory} :
-      CallEx rM (env_snoc env_nil (_ , ty_int) addr)
+      CallEx rM (env_snoc env_nil (_ :: ty_int) addr)
              (fun_rM μ addr)
              γ γ μ μ
   | callex_wM {addr val : Z} {γ : RegStore} {μ : Memory} :
-      CallEx wM (env_snoc (env_snoc env_nil (_ , ty_int) addr) (_ , ty_int) val)
+      CallEx wM (env_snoc (env_snoc env_nil (_ :: ty_int) addr) (_ :: ty_int) val)
              (inr tt)
              γ γ μ (fun_wM μ addr val)
   .

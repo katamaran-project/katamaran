@@ -31,23 +31,24 @@ Module HoareSound
   Section Soundness.
 
     Open Scope logic.
+    Import CtxNotations.
     Import EnvNotations.
 
     Local Ltac sound_inversion :=
       lazymatch goal with
       | [ H: ⟨ _, _, _, stm_let _ _ ?s ?k ⟩ ---> ⟨ _, _, _, _ ⟩, HF: Final ?s |- _ ] =>
         is_var s; apply (step_inversion_let HF) in H;
-        microsail_destruct_propositional H; subst; cbn in *
+        destruct_propositional H; subst; cbn in *
       | [ H: ⟨ _, _, _, ?s ⟩ ---> ⟨ _, _, _, _ ⟩ |- _ ] =>
         microsail_stm_primitive_step s;
         dependent elimination H
 
       | [ H: ⟨ _, _, _, stm_lit _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ |- _ ] =>
         apply steps_inversion_lit in H;
-        microsail_destruct_propositional H; subst; cbn in *
+        destruct_propositional H; subst; cbn in *
       | [ H: ⟨ _, _, _, stm_fail _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ |- _ ] =>
         apply steps_inversion_fail in H;
-        microsail_destruct_propositional H; subst; cbn in *
+        destruct_propositional H; subst; cbn in *
       | [ H: ⟨ _, _, _, ?s ⟩ --->* ⟨ _, _, _, ?t ⟩, HF: Final ?t |- _ ] =>
         first
           [ lazymatch head s with
@@ -59,7 +60,7 @@ Module HoareSound
             | @stm_assign     => apply (steps_inversion_ex_assign     HF) in H
             | @stm_bind       => apply (steps_inversion_ex_bind       HF) in H
             end;
-            microsail_destruct_propositional H; subst; cbn in *
+            destruct_propositional H; subst; cbn in *
           | microsail_stm_primitive_step s;
             dependent elimination H;
             [ contradiction HF | idtac ]
@@ -92,16 +93,18 @@ Module HoareSound
         ] => exists γfocus; split; [ exact Hsplit | idtac]
       | [ IH: context[⟨ _, _, _ , ?s ⟩ --->* ⟨ _, _, _ , _ ⟩ -> _],
           HS: ⟨ _, _, _ , ?s ⟩ --->* ⟨ _, _, _ , _ ⟩ |- _ ] =>
-        microsail_insterU (cbn; eauto) IH;
-        microsail_check_noevar_hyp IH; cbn in IH;
-        microsail_destruct_propositional IH
+        inster IH by (cbn in *; eauto); cbn in IH;
+        destruct_propositional IH
       | [ IH: context[⟨ _, _, _ , ?alt _ ⟩ --->* ⟨ _, _, _ , _ ⟩ -> _],
           HS: ⟨ _, _, _ , ?alt _ ⟩ --->* ⟨ _, _, _ , _ ⟩ |- _ ] =>
-        microsail_insterU (cbn; eauto) IH;
-        microsail_check_noevar_hyp IH; cbn in IH;
-        microsail_destruct_propositional IH
+        inster IH by (cbn in *; eauto); cbn in IH;
+        destruct_propositional IH
       | [H: ResultOrFail ?s _ |- ResultOrFail ?s _] =>
         refine (resultorfail_monotonicity _ H)
+      | [ IH: context[split ?H _ _ -> _],
+          HS: split ?H _ _ |- _ ] =>
+        inster IH by (cbn in *; eauto); cbn in IH;
+        destruct_propositional IH
       end.
 
     Local Ltac sound_solve :=
@@ -131,7 +134,7 @@ Module HoareSound
               (inst_assertion (L:=HProp) ι pre) γfocus ->
               exists (γfocus' : Heap),
                 split (heap γ') γframe γfocus' /\
-                ResultOrFail s' (fun v => inst_assertion (env_snoc ι (result , σ) v) post γfocus')
+                ResultOrFail s' (fun v => inst_assertion (env_snoc ι (result :: σ) v) post γfocus')
         | None => False
         end.
 
@@ -164,7 +167,7 @@ Module HoareSound
       - destruct Hpre as (γl & γr & Hsplit_γfocus & HR & HP).
         destruct (split_assoc_r (heap γ) γframe γfocus γl γr Hsplit_γ Hsplit_γfocus)
           as (γ0 & Hsplit_γ0r & Hsplit_γframer).
-        microsail_insterU (eauto) IHtriple.
+        inster IHtriple by eauto.
         destruct IHtriple as (γr' & Hsplit_γ' & IH).
         destruct (split_assoc_l (heap γ') γ0 γr' γframe γl Hsplit_γ' Hsplit_γframer)
           as (γfocus' & Hsplit_γ'' & Hsplit_γfocus').

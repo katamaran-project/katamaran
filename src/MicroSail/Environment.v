@@ -19,6 +19,18 @@ Section WithBinding.
     | env_snoc {Γ} (E : Env Γ) (b : B) (db : D b) :
         Env (ctx_snoc Γ b).
 
+    Inductive NilView : Env ctx_nil -> Set :=
+    | isNil : NilView env_nil.
+
+    Equations(noeqns) nilView (E : Env ctx_nil) : NilView E :=
+      nilView env_nil := isNil.
+
+    Inductive SnocView {Γ b} : Env (ctx_snoc Γ b) -> Set :=
+    | isSnoc (E : Env Γ) (v : D b) : SnocView (env_snoc E v).
+
+    Equations(noeqns) snocView {Γ b} (E : Env (ctx_snoc Γ b)) : SnocView E :=
+      snocView (env_snoc E v) := isSnoc E v.
+
     Section TransparentObligations.
       Local Set Transparent Obligations.
       Derive Signature NoConfusion NoConfusionHom for Env.
@@ -368,10 +380,12 @@ Section WithBinding.
 
 End WithBinding.
 
+Bind Scope env_scope with Env.
 Arguments Env {B} D Γ.
 Arguments env_nil {B D}.
 Arguments env_snoc {B%type D%function Γ%ctx} E%env b%ctx db.
 Arguments env_lookup {B D Γ} E [_] x.
+Arguments env_update {B}%type {D}%function {Γ}%ctx E%env {b}%ctx.
 (* Arguments env_tabulate {_ _} _. *)
 (* Arguments env_tail {_ _ _} / _. *)
 
@@ -409,7 +423,6 @@ End EnvRec.
 
 Definition NamedEnv {X T : Set} (D : T -> Set) (Γ : NCtx X T) : Set :=
   Env (fun xt => D (snd xt)) Γ.
-Bind Scope env_scope with Env.
 Bind Scope env_scope with NamedEnv.
 
 Module EnvNotations.
@@ -477,7 +490,7 @@ Definition curry_named {X T : Set} (D : T -> Set) {Δ : NCtx X T} {r : Type} (f 
   curry f.
 
 Definition ForallNamed {X T : Set} (D : T -> Set) (Δ : NCtx X T) : (NamedEnv D Δ -> Prop) -> Prop :=
-  @Forall (X*T) (fun xt => D (snd xt)) Δ.
+  @Forall (X * T) (fun xt => D (snd xt)) Δ.
 
 Section TraverseEnv.
 

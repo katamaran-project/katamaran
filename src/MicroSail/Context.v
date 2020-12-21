@@ -26,7 +26,7 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-Require Import Coq.Logic.EqdepFacts.
+Require Import Coq.Logic.EqdepFacts Coq.Bool.Bool.
 Require Import Equations.Equations.
 From stdpp Require
      base.
@@ -47,7 +47,7 @@ Section TransparentObligations.
 End TransparentObligations.
 
 Arguments ctx_nil {_}.
-Arguments ctx_snoc {_} _ _.
+Arguments ctx_snoc {_} _%ctx _%ctx.
 Bind Scope ctx_scope with Ctx.
 
 Section WithBinding.
@@ -177,6 +177,18 @@ Section WithBinding.
              (b2inΓ : InCtx b2 Γ) : bool :=
     Nat.eqb (inctx_at b1inΓ) (inctx_at b2inΓ).
 
+  Lemma InCtx_eqb_spec `{UIP B} {Γ} {b1 b2 : B} (b1inΓ : InCtx b1 Γ) (b2inΓ : InCtx b2 Γ) :
+    reflect
+      (existT _ b1inΓ = existT _ b2inΓ :> sigT (fun b => InCtx b Γ))
+      (InCtx_eqb b1inΓ b2inΓ).
+  Proof.
+    destruct b1inΓ as [m p], b2inΓ as [n q]; cbn.
+    destruct (NPeano.Nat.eqb_spec m n); constructor.
+    - subst. pose proof (ctx_nth_is_right_exact _ _ _ p q). subst.
+      f_equal. f_equal. apply ctx_nth_is_proof_irrelevance.
+    - intros e. depelim e. destruct n, m; cbn in H0; congruence.
+  Qed.
+
   (* These are *constructors* for InCtx. *)
   Definition inctx_zero {b : B} {Γ : Ctx B} : InCtx b (ctx_snoc Γ b) :=
     @MkInCtx _ (ctx_snoc Γ b) 0 eq_refl.
@@ -190,10 +202,39 @@ Section WithBinding.
     | ctx_snoc Δ _ => inctx_succ (inctx_cat bIn Δ)
     end.
 
+  Inductive NilView {b : B} (i : InCtx b ctx_nil) : Set :=.
+
+  Definition nilView {b : B} (i : InCtx b ctx_nil) : NilView i :=
+    match inctx_valid i with end.
+
+  Inductive SnocView (Γ : Ctx B) {b' : B} : forall b, InCtx b (ctx_snoc Γ b') -> Set :=
+  | snocViewZero                     : SnocView inctx_zero
+  | snocViewSucc {b} (i : InCtx b Γ) : SnocView (inctx_succ i).
+  Global Arguments snocViewZero {_ _}.
+
+  Definition snocView {Γ} {b b' : B} (i : InCtx b (ctx_snoc Γ b')) :
+    @SnocView Γ b' b i :=
+    match inctx_at i as n return forall p, SnocView (MkInCtx n p)
+    with
+    | O   => fun p => match p with eq_refl => snocViewZero end
+    | S n => fun p => snocViewSucc (MkInCtx n p)
+    end (inctx_valid i).
+
+  Inductive InCtxView {b : B} : forall Γ, InCtx b Γ -> Set :=
+  | inctxViewZero {Γ}                    : @InCtxView b (ctx_snoc Γ b) inctx_zero
+  | inctxViewSucc {Γ b'} (i : InCtx b Γ) : @InCtxView b (ctx_snoc Γ b') (inctx_succ i).
+
+  Definition inctxView {b Γ} (bIn : InCtx b Γ) : InCtxView bIn.
+  Proof.
+    destruct Γ.
+    - destruct (nilView bIn).
+    - destruct (snocView bIn); constructor.
+  Defined.
+
   (* Custom pattern matching in cases where the context was already refined
      by a different match, i.e. on environments. *)
   Definition inctx_case_nil {b : B} {A : Type} (bIn : InCtx b ctx_nil) : A :=
-    let (n, e) := bIn in match e with end.
+    match nilView bIn with end.
   Definition inctx_case_snoc (D : B -> Type) (Γ : Ctx B) (b0 : B) (db0 : D b0)
     (dΓ: forall b, InCtx b Γ -> D b) (b : B) (bIn: InCtx b (ctx_snoc Γ b0)) : D b :=
     let (n, e) := bIn in
@@ -201,17 +242,6 @@ Section WithBinding.
     | 0 => fun e => match e with eq_refl => db0 end
     | S n => fun e => dΓ b (MkInCtx n e)
     end e.
-
-  Definition inctx_case_snoc_dep (Γ : Ctx B) (b0 : B)
-    (D : forall b, InCtx b (ctx_snoc Γ b0) -> Prop)
-    (db0 : D b0 inctx_zero)
-    (dΓ: forall b (bIn: InCtx b Γ), D b (inctx_succ bIn)) :
-    forall (y: B) (yIn: InCtx y (ctx_snoc Γ b0)), D y yIn :=
-    fun b '(MkInCtx n e) =>
-      match n return forall e, D b (MkInCtx n e) with
-      | 0 => eq_indd B b0 (fun z e => D z (@MkInCtx _ (ctx_snoc _ _) 0 e)) db0 b
-      | S n => fun e => dΓ b (MkInCtx n e)
-      end e.
 
   Lemma InCtx_ind (b : B)
     (P : forall (Γ : Ctx B), InCtx b Γ -> Prop)
@@ -221,11 +251,10 @@ Section WithBinding.
     forall (Γ : Ctx B) (bIn : InCtx b Γ), P Γ bIn.
   Proof.
     induction Γ; cbn.
-    - intro bIn; exact (inctx_case_nil bIn).
-    - intros [[|n] e]; cbn in *.
-      + subst; apply fzero.
-      + pose (MkInCtx n e) as bIn.
-        exact (fsucc Γ _ bIn (IHΓ bIn)).
+    - intro bIn. destruct (nilView bIn).
+    - intros bIn. destruct (snocView bIn).
+      + apply fzero.
+      + now apply fsucc.
   Qed.
 
   (* Boolean equality of [nat]-fields in [InCtx] implies equality of
@@ -346,6 +375,7 @@ Section WithBinding.
   Qed.
 
 End WithBinding.
+Arguments InCtx_ind [B b] _ _ _ [_].
 
 Section WithAB.
   Context {A B : Set} (f : A -> B).
@@ -369,10 +399,30 @@ Section WithAB.
 
 End WithAB.
 
+(* Section Binding. *)
+
+(*   Local Set Primitive Projections. *)
+(*   Local Set Transparent Obligations. *)
+
+(*   Context (N T : Set) {eqN : EqDec N} {eqT : EqDec T}. *)
+
+(*   Record Binding : Set := *)
+(*     MkBinding *)
+(*       { name :> N; *)
+(*         type :> T; *)
+(*       }. *)
+(*   Derive NoConfusion EqDec for Binding. *)
+
+(* End Binding. *)
+(* Arguments MkBinding {N T} name type. *)
+(* Arguments name {N T} b. *)
+(* Arguments type {N T} b. *)
+
 Module CtxNotations.
 
   Notation NCtx Name Data := (Ctx (Name * Data)).
   Notation "x ∶ τ" := (x,τ) (only parsing) : ctx_scope.
+  Notation "x :: τ" := (x , τ) : ctx_scope.
 
   Notation "'ε'" := ctx_nil : ctx_scope.
   Infix "▻" := ctx_snoc : ctx_scope.
@@ -419,7 +469,7 @@ Module NameResolution.
 
   (* Hook the reflective procedure for name resolution into the typeclass
      resolution mechanism. *)
-  Hint Extern 10 (InCtx (?x , _) ?Γ) =>
+  Hint Extern 10 (InCtx (?x :: _) ?Γ) =>
     let xInΓ := eval compute in (mk_inctx Γ x tt) in
       exact xInΓ : typeclass_instances.
 

@@ -39,11 +39,11 @@ Module Progress
        (Import progkit : ProgramKit termkit).
   Module Import SS := SmallStep termkit progkit.
 
-  Lemma can_form_store_cat (Γ Δ : Ctx (𝑿 * Ty)) (δ : LocalStore (ctx_cat Γ Δ)) :
+  Lemma can_form_store_cat (Γ Δ : PCtx) (δ : LocalStore (ctx_cat Γ Δ)) :
     exists (δ1 : LocalStore Γ) (δ2 : LocalStore Δ), δ = env_cat δ1 δ2.
   Proof. pose (env_cat_split δ); eauto. Qed.
 
-  (* Lemma can_form_store_snoc (Γ : Ctx (𝑿 * Ty)) (x : 𝑿) (σ : Ty) (δ : LocalStore (Γ ▻ (x , σ))) : *)
+  (* Lemma can_form_store_snoc (Γ : PCtx) (x : 𝑿) (σ : Ty) (δ : LocalStore (Γ ▻ (x , σ))) : *)
   (*   exists (δ' : LocalStore Γ) (v : Lit σ), δ = env_snoc δ' x σ v. *)
   (* Admitted. *)
 
@@ -85,7 +85,7 @@ Module Progress
     end.
 
   Lemma progress_call_external
-    {Γ Δ : Ctx (𝑿 * Ty)} {σ : Ty} (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ)
+    {Γ Δ : PCtx} {σ : Ty} (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ)
     (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) :
     exists (γ' : RegStore) (μ' : Memory) (δ' : LocalStore Γ) (s' : Stm Γ σ),
       ⟨ γ, μ, δ, stm_call_external f es ⟩ ---> ⟨ γ', μ', δ', s' ⟩.

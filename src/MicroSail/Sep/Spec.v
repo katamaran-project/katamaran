@@ -59,29 +59,55 @@ Module Assertions
        (progkit : ProgramKit termkit)
        (Export assertkit : AssertionKit termkit progkit).
 
-  Inductive Chunk (Σ : Ctx (𝑺 * Ty)) : Type :=
+  Inductive Formula (Σ : LCtx) : Type :=
+  | formula_bool (t : Term Σ ty_bool)
+  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Lit Σ' Prop)
+  | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
+  | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
+  Arguments formula_bool {_} t.
+
+  Equations(noeqns) formula_eqs {Δ : PCtx} {Σ : LCtx}
+    (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
+    formula_eqs env_nil          env_nil            := nil;
+    formula_eqs (env_snoc δ _ t) (env_snoc δ' _ t') :=
+      formula_eq t t' :: formula_eqs δ δ'.
+
+  Instance sub_formula : Subst Formula :=
+    fun Σ1 Σ2 ζ fml =>
+      match fml with
+      | formula_bool t    => formula_bool (subst ζ t)
+      | formula_prop ζ' P => formula_prop (subst ζ ζ') P
+      | formula_eq t1 t2  => formula_eq (subst ζ t1) (subst ζ t2)
+      | formula_neq t1 t2 => formula_neq (subst ζ t1) (subst ζ t2)
+      end.
+
+  Instance substlaws_formula : SubstLaws Formula.
+  Proof.
+    constructor.
+    { intros ? []; cbn; f_equal; apply subst_sub_id. }
+    { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
+  Qed.
+
+  Inductive Chunk (Σ : LCtx) : Type :=
   | chunk_pred   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
   Arguments chunk_pred [_] _ _.
 
-  Inductive Assertion (Σ : Ctx (𝑺 * Ty)) : Type :=
-  | asn_bool (b : Term Σ ty_bool)
-  | asn_prop (P : abstract_named Lit Σ Prop)
-  | asn_eq {T : Ty} (t1 t2 : Term Σ T)
+  Inductive Assertion (Σ : LCtx) : Type :=
+  | asn_formula (fml : Formula Σ)
   | asn_chunk (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
-  | asn_match_enum {E : 𝑬} (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
+  | asn_match_enum (E : 𝑬) (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
   | asn_sep  (a1 a2 : Assertion Σ)
-  | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς , τ))).
-
-  Definition asn_true {Σ} : Assertion Σ :=
-    asn_bool (term_lit ty_bool true).
-  Definition asn_false {Σ} : Assertion Σ :=
-    asn_bool (term_lit ty_bool false).
-
-  Arguments asn_prop {_} _.
-  Arguments asn_match_enum [_] _ _ _.
+  | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς :: τ))).
+  Arguments asn_match_enum [_] E _ _.
   Arguments asn_exist [_] _ _ _.
+
+  Notation asn_bool b := (asn_formula (formula_bool b)).
+  Notation asn_prop Σ P := (asn_formula (@formula_prop Σ Σ (sub_id Σ) P)).
+  Notation asn_eq t1 t2 := (asn_formula (formula_eq t1 t2)).
+  Notation asn_true := (asn_bool (term_lit ty_bool true)).
+  Notation asn_false := (asn_bool (term_lit ty_bool false)).
 
   Instance sub_chunk : Subst Chunk :=
     fun Σ1 Σ2 ζ c =>
@@ -97,19 +123,17 @@ Module Assertions
     { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
   Qed.
 
-  (* Fixpoint sub_assertion {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (a : Assertion Σ1) {struct a} : Assertion Σ2 := *)
-  (*   match a with *)
-  (*   | asn_bool b => asn_bool (sub_term ζ b) *)
-  (*   | asn_chunk c => asn_chunk (sub_chunk ζ c) *)
-  (*   | asn_if b a1 a2 => asn_if (sub_term ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2) *)
-  (*   | asn_match_enum k alts => *)
-  (*     asn_match_enum (sub_term ζ k) (fun z => sub_assertion ζ (alts z)) *)
-  (*   | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2) *)
-  (*   | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a) *)
-  (*   end. *)
-
-  (* Definition SymbolicRegStore (Σ : Ctx (𝑺 * Ty))  : Type := forall σ, 𝑹𝑬𝑮 σ -> Term Σ σ. *)
-
+  (* Instance sub_assertion : Subst Assertion := *)
+  (*   fix sub_assertion {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (a : Assertion Σ1) {struct a} : Assertion Σ2 := *)
+  (*     match a with *)
+  (*     | asn_formula fml => asn_formula (subst ζ fml) *)
+  (*     | asn_chunk c => asn_chunk (subst ζ c) *)
+  (*     | asn_if b a1 a2 => asn_if (subst ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2) *)
+  (*     | asn_match_enum E k alts => *)
+  (*       asn_match_enum E (subst ζ k) (fun z => sub_assertion ζ (alts z)) *)
+  (*     | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2) *)
+  (*     | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a) *)
+  (*     end. *)
 
   Definition symbolic_eval_exp {Γ Σ} (δ : SymbolicLocalStore Γ Σ) :
     forall {σ} (e : Exp Γ σ), Term Σ σ :=
@@ -131,13 +155,13 @@ Module Assertions
       | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf
       end%exp.
 
-  Record SepContract (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+  Record SepContract (Δ : PCtx) (τ : Ty) : Type :=
     MkSepContract
-      { sep_contract_logic_variables  : Ctx (𝑺 * Ty);
+      { sep_contract_logic_variables  : LCtx;
         sep_contract_localstore       : SymbolicLocalStore Δ sep_contract_logic_variables;
         sep_contract_precondition     : Assertion sep_contract_logic_variables;
         sep_contract_result           : 𝑺;
-        sep_contract_postcondition    : Assertion (sep_contract_logic_variables ▻ (sep_contract_result , τ));
+        sep_contract_postcondition    : Assertion (sep_contract_logic_variables ▻ (sep_contract_result :: τ));
       }.
 
   Arguments MkSepContract : clear implicits.
@@ -149,12 +173,12 @@ Module Assertions
 
   Section Experimental.
 
-    Definition sep_contract_pun_logvars (Δ : Ctx (𝑿 * Ty)) (Σ : Ctx (𝑺 * Ty)) : Ctx (𝑺 * Ty) :=
-      ctx_map (fun '(x,σ) => (𝑿to𝑺 x,σ)) Δ ▻▻ Σ.
+    Definition sep_contract_pun_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
+      ctx_map (fun '(x::σ) => (𝑿to𝑺 x::σ)) Δ ▻▻ Σ.
 
-    Record SepContractPun (Δ : Ctx (𝑿 * Ty)) (τ : Ty) : Type :=
+    Record SepContractPun (Δ : PCtx) (τ : Ty) : Type :=
       MkSepContractPun
-        { sep_contract_pun_logic_variables   : Ctx (𝑺 * Ty);
+        { sep_contract_pun_logic_variables   : LCtx;
           sep_contract_pun_precondition      : Assertion
                                                  (sep_contract_pun_logvars
                                                     Δ sep_contract_pun_logic_variables);
@@ -162,7 +186,7 @@ Module Assertions
           sep_contract_pun_postcondition     : Assertion
                                                  (sep_contract_pun_logvars Δ
                                                                            sep_contract_pun_logic_variables
-                                                                           ▻ (sep_contract_pun_result , τ))
+                                                                           ▻ (sep_contract_pun_result :: τ))
         }.
 
     Global Arguments MkSepContractPun : clear implicits.
@@ -175,12 +199,12 @@ Module Assertions
           MkSepContract
             Δ τ
             (sep_contract_pun_logvars Δ Σ)
-            (env_tabulate (fun '(x,σ) xIn =>
+            (env_tabulate (fun '(x::σ) xIn =>
                              @term_var
                                (sep_contract_pun_logvars Δ Σ)
                                (𝑿to𝑺 x)
                                σ
-                               (inctx_cat (inctx_map (fun '(y,τ) => (𝑿to𝑺 y,τ)) xIn) Σ)))
+                               (inctx_cat (inctx_map (fun '(y::τ) => (𝑿to𝑺 y::τ)) xIn) Σ)))
             req result ens
         end.
 
@@ -199,6 +223,14 @@ Module Assertions
   Section Contracts.
     Context `{Logic : IHeaplet L}.
 
+    Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
+      match fml with
+      | formula_bool t    => is_true (inst (A := Lit ty_bool) ι t)
+      | formula_prop ζ P  => uncurry_named P (inst ι ζ)
+      | formula_eq t1 t2  => inst ι t1 =  inst ι t2
+      | formula_neq t1 t2 => inst ι t1 <> inst ι t2
+      end.
+
     Definition inst_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
       match c with
       | chunk_pred p ts => lpred p (inst ι ts)
@@ -207,9 +239,7 @@ Module Assertions
 
     Fixpoint inst_assertion {Σ} (ι : SymInstance Σ) (a : Assertion Σ) : L :=
       match a with
-      | asn_bool b => if inst (A := Lit ty_bool) ι b then emp else lfalse
-      | asn_prop p => !!(uncurry_named p ι) ∧ emp
-      | asn_eq t1 t2 => !!(inst_term ι t1 = inst_term ι t2) ∧ emp
+      | asn_formula fml => !!(inst_formula ι fml) ∧ emp
       | asn_chunk c => inst_chunk ι c
       | asn_if b a1 a2 => if inst (A := Lit ty_bool) ι b then inst_assertion ι a1 else inst_assertion ι a2
       | asn_match_enum E k alts => inst_assertion ι (alts (inst (T := fun Σ => Term Σ _) ι k))
@@ -227,7 +257,7 @@ Module Assertions
 
     Definition inst_contract_postcondition {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
-        inst_assertion (env_snoc ι (sep_contract_result c,τ) result) (sep_contract_postcondition c).
+        inst_assertion (env_snoc ι (sep_contract_result c::τ) result) (sep_contract_postcondition c).
 
   End Contracts.
 

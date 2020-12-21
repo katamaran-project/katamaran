@@ -30,6 +30,8 @@ From MinimalCaps Require Import
      Machine.
 
 From Coq Require Import
+     Init.Nat
+     ZArith.Znat
      Program.Tactics
      Strings.String
      ZArith.ZArith
@@ -51,7 +53,7 @@ From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
 From iris.proofmode Require tactics.
-From stdpp Require namespaces.
+From stdpp Require namespaces fin_maps.
 
 Set Implicit Arguments.
 
@@ -62,6 +64,8 @@ Module MinCapsModel.
   Import MicroSail.Iris.Model.
 
   Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
+
+    Variable maxAddr : nat.
 
     Module IrisRegs := IrisRegisters MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
     Import IrisRegs.
@@ -92,11 +96,32 @@ Module MinCapsModel.
                                 ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
-    Definition liveAddrs : list Addr := [ 0; 1; 2; 3; 4; 5; 6; 7; 8; 9]%Z.
+    Fixpoint natsTo (n : nat) : list nat :=
+      match n with
+      | 0 => []
+      | S n => n :: natsTo n
+      end.
+
+    Definition liveAddrs : list Addr := map Z.of_nat (natsTo maxAddr).
+    Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr Z ).
+
+    Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : Z), μ a = v) (initMemMap μ).
+    Proof.
+      unfold initMemMap.
+      rewrite map_Forall_to_list.
+      rewrite Forall_forall.
+      intros (a , v).
+      rewrite elem_of_map_to_list.
+      intros el.
+      apply elem_of_list_to_map_2 in el.
+      apply elem_of_list_In in el.
+      apply in_map_iff in el.
+      by destruct el as (a' & <- & _).
+    Qed.
 
     Definition mem_res : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        ([∗ list] a ∈ liveAddrs, mapsto (hG := mc_ghG (mcMemG := hG)) a 1 (μ a)) %I.
+        ([∗ map] l↦v ∈ initMemMap μ, mapsto (hG := mc_ghG (mcMemG := hG)) l 1 v) %I.
 
     Lemma mem_inv_init : forall Σ (μ : Memory), memPreG Σ ->
         ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
@@ -104,31 +129,18 @@ Module MinCapsModel.
       iIntros (Σ μ gHP).
 
       iMod (gen_heap_init (gen_heapPreG0 := gHP) (L := Addr) (V := Z) empty) as (gH) "inv".
-      iMod (gen_heap_alloc _ 9%Z (μ 9) _ with "inv") as "(inv & res9 & _)".
-      iMod (gen_heap_alloc _ 8%Z (μ 8) _ with "inv") as "(inv & res8 & _)".
-      iMod (gen_heap_alloc _ 7%Z (μ 7) _ with "inv") as "(inv & res7 & _)".
-      iMod (gen_heap_alloc _ 6%Z (μ 6) _ with "inv") as "(inv & res6 & _)".
-      iMod (gen_heap_alloc _ 5%Z (μ 5) _ with "inv") as "(inv & res5 & _)".
-      iMod (gen_heap_alloc _ 4%Z (μ 4) _ with "inv") as "(inv & res4 & _)".
-      iMod (gen_heap_alloc _ 3%Z (μ 3) _ with "inv") as "(inv & res3 & _)".
-      iMod (gen_heap_alloc _ 2%Z (μ 2) _ with "inv") as "(inv & res2 & _)".
-      iMod (gen_heap_alloc _ 1%Z (μ 1) _ with "inv") as "(inv & res1 & _)".
-      iMod (gen_heap_alloc _ 0%Z (μ 0) _ with "inv") as "(inv & res0 & _)".
+      pose (memmap := initMemMap μ).
+      iMod (gen_heap_alloc_gen empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
       iModIntro.
 
-      pose (refmap := list_to_map (map (fun a => (a, μ a)) liveAddrs) : gmap Z Z).
+      rewrite (right_id empty union memmap).
+
       iExists (McMemG gH (nroot .@ "addr_inv")).
-      cbn.
       iFrame.
-      iExists refmap.
+      iExists memmap.
       iFrame.
       iPureIntro.
-      repeat rewrite map_Forall_insert; trivial.
-      repeat split; trivial.
-      by apply map_Forall_empty.
-
-      Unshelve.
-      all: try rewrite !lookup_insert_ne; try apply lookup_empty; lia.
+      apply initMemMap_works.
     Qed.
 
     Definition MinCaps_ptsreg `{sailRegG Σ} (reg : RegName) (v : Z + Capability) : iProp Σ :=

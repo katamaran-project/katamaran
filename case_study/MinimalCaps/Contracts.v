@@ -293,8 +293,9 @@ Module MinCapsSymbolicContractKit <:
     {| sep_contract_logic_variables := [ "r" ∶ ty_enum regname, "w" ∶ ty_word];
        sep_contract_localstore      := [term_var "r"]%arg;
        sep_contract_precondition    := term_var "r" ↦r term_var "w";
-       sep_contract_result          := "_";
+       sep_contract_result          := "result_open_ptsreg";
        sep_contract_postcondition   :=
+         asn_eq (term_var "result_open_ptsreg") (term_lit ty_unit tt) ✱
          asn_match_enum
            regname (term_var "r")
            (fun k => match k with
@@ -382,6 +383,10 @@ Local Ltac solve :=
      subst; try congruence; try lia;
      auto
     ).
+
+Local Notation "r '↦' t" := (chunk_ptsreg r t) (at level 100, only printing).
+Local Notation "r '↦r' t" := (chunk_pred ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t))) (at level 100, only printing).
+Local Notation "a '↦m' t" := (chunk_pred ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t))) (at level 100, only printing).
 
 Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
 Proof. compute; solve. Qed.

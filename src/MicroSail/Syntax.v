@@ -29,19 +29,13 @@
 From Coq Require Import
      Bool.Bool
      Classes.Equivalence
-     Classes.Morphisms
-     Classes.RelationClasses
-     Logic.EqdepFacts
-     Logic.FinFun
-     Logic.FunctionalExtensionality
-     Program.Equality
      Program.Tactics
      Relations
      Strings.String
-     ZArith.ZArith.
+     ZArith.ZArith
+     micromega.Lia.
 From Coq Require
-     Vector
-     ssr.ssrbool.
+     Vector.
 
 From bbv Require
      Word.
@@ -50,14 +44,14 @@ From stdpp Require
      finite.
 From Equations Require Import
      Equations Signature.
+Require Equations.Prop.DepElim.
 Require Import Equations.Prop.EqDec.
 
 From MicroSail Require Export
      Context
-     Environment
      Notation
-     Prelude
-     Tactics.
+     Syntax.Types
+     Syntax.Values.
 
 Import CtxNotations.
 Import EnvNotations.
@@ -66,129 +60,10 @@ Local Set Implicit Arguments.
 Local Unset Transparent Obligations.
 Obligation Tactic := idtac.
 
-Inductive Bit : Set := bitzero | bitone.
+Module Type TermKit.
 
-Definition Bit_eqb (b1 : Bit) (b2 : Bit) : bool :=
-  match b1, b2 with
-  | bitzero, bitzero => true
-  | bitone , bitone  => true
-  | _      , _       => false
-  end.
-
-Lemma Bit_eqb_spec (b1 b2 : Bit) : reflect (b1 = b2) (Bit_eqb b1 b2).
-Proof.
-  destruct b1; destruct b2; cbn; constructor; congruence.
-Qed.
-
-(******************************************************************************)
-
-Class Blastable (A : Type) : Type :=
-  { blast : A -> (A -> Prop) -> Prop;
-    blast_sound:
-      forall (a : A) (k : A -> Prop),
-        blast a k <-> k a
-  } .
-
-Program Instance blastable_bool : Blastable bool :=
-  {| blast b k := (b = true -> k true) /\ (b = false -> k false) |}.
-Solve All Obligations with intros []; intuition; congruence.
-
-Program Instance blastable_int : Blastable Z :=
-  {| blast z k := k z |}.
-Solve All Obligations with intuition.
-
-Program Instance blastable_string : Blastable string :=
-  {| blast s k := k s |}.
-Solve All Obligations with intuition.
-
-Program Instance blastable_unit : Blastable unit :=
-  {| blast u k := k tt |}.
-Solve All Obligations with intros []; intuition; congruence.
-
-Program Instance blastable_list {A : Type} : Blastable (list A) :=
-  {| blast xs k :=
-       (forall (y : A) (ys : list A), xs = cons y ys -> k (cons y ys)) /\
-       (xs = nil -> k nil)
-  |}.
-Solve All Obligations with intros ? []; intuition; congruence.
-
-Program Instance blastable_prod {A B : Type} : Blastable (A * B) :=
-  { blast ab k := k (fst ab , snd ab) }.
-Solve All Obligations with intuition.
-
-Program Instance blastable_sigt {A} {B : A -> Type} : Blastable (sigT B) :=
-  {| blast ab k := k (existT (projT1 ab) (projT2 ab)) |}.
-Solve All Obligations with intros ? ? []; intuition; congruence.
-
-Program Instance blastable_sum {A B : Type} : Blastable (A + B) :=
-  {| blast ab k :=
-       (forall (a : A), ab = inl a -> k (inl a)) /\
-       (forall (b : B), ab = inr b -> k (inr b))
-  |}.
-Solve All Obligations with intros ? ? []; intuition; congruence.
-
-Program Instance blastable_bit : Blastable Bit :=
-  {| blast b k := (b = bitzero -> k bitzero) /\ (b = bitone -> k bitone) |}.
-Solve All Obligations with intros []; intuition; congruence.
-
-Program Instance blastable_word {n} : Blastable (Word.word n) :=
-  {| blast w k := k w |}.
-Solve All Obligations with intuition.
-
-Program Instance blastable_env {B D} {Γ : Ctx B} : Blastable (Env D Γ) :=
-  {| blast :=
-       (fix blast {Δ : Ctx B} (E : Env D Δ) {struct E} : (Env D Δ -> Prop) -> Prop :=
-       match E in Env _ Δ return (Env D Δ -> Prop) -> Prop with
-       | env_nil => fun k => k env_nil
-       | env_snoc E b db => fun k => blast E (fun E' => k (env_snoc E' b db))
-       end) Γ
-  |}.
-Next Obligation.
-  intros ? ? ? E; induction E; cbn.
-  - reflexivity.
-  - intro k; exact (IHE (fun E' : Env D Γ => k (env_snoc E' b db))).
-Defined.
-Instance blastable_env' {X T : Set} {D} {Δ : NCtx X T} : Blastable (NamedEnv D Δ) :=
-  blastable_env.
-
-Program Instance Blastable_Finite `{finite.Finite A} : Blastable A :=
-  {| blast a POST :=
-       match finite.enum A with
-       | nil       => True
-       | cons x xs => List.fold_left (fun P y => P /\ (a = y -> POST y)) xs (a = x -> POST x)
-       end
-  |}.
-Admit Obligations.
-
-Module Type TypeKit.
-
-  Import stdpp.finite.
-
-  (* Names of enum type constructors. *)
-  Parameter Inline 𝑬 : Set. (* input: \MIE *)
-  Declare Instance 𝑬_eq_dec : EqDec 𝑬.
-  (* Names of enum data constructors. *)
-  Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
-  Declare Instance 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e).
-  Declare Instance 𝑬𝑲_finite : forall E, Finite (𝑬𝑲 E).
-
-  (* Names of union type constructors. *)
-  Parameter Inline 𝑼   : Set. (* input: \MIT *)
-  Declare Instance 𝑼_eq_dec : EqDec 𝑼.
-  (* Union types. *)
-  Parameter Inline 𝑼𝑻  : 𝑼 -> Set.
-  Declare Instance 𝑼𝑻_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑻 u).
-  (* Names of union data constructors. *)
-  Parameter Inline 𝑼𝑲  : 𝑼 -> Set.
-  Declare Instance 𝑼𝑲_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑲 u).
-  Declare Instance 𝑼𝑲_finite : forall U, Finite (𝑼𝑲 U).
-
-  (* Names of record type constructors. *)
-  Parameter Inline 𝑹  : Set. (* input: \MIR *)
-  Declare Instance 𝑹_eq_dec : EqDec 𝑹.
-  (* Record types. *)
-  Parameter Inline 𝑹𝑻  : 𝑹 -> Set.
-  Declare Instance 𝑹𝑻_eq_dec : forall (r : 𝑹), EqDec (𝑹𝑻 r).
+  Declare Module valuekit : ValueKit.
+  Module Export VAL := Values valuekit.
 
   (* Names of expression variables. These represent mutable variables appearing
      in programs. *)
@@ -207,150 +82,12 @@ Module Type TypeKit.
   (* Punning of program variables with logical variables. *)
   Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
 
-End TypeKit.
-
-Module Types (Export typekit : TypeKit).
-
-  Local Set Transparent Obligations.
-  Local Unset Elimination Schemes.
-
-  Inductive Ty : Set :=
-  | ty_int
-  | ty_bool
-  | ty_bit
-  | ty_string
-  | ty_list (σ : Ty)
-  | ty_prod (σ τ : Ty)
-  | ty_sum  (σ τ : Ty)
-  | ty_unit
-  | ty_enum (E : 𝑬)
-  | ty_bvec (n : nat)
-  (* Experimental features. These are still in flux. *)
-  | ty_tuple (σs : Ctx Ty)
-  | ty_union (U : 𝑼)
-  | ty_record (R : 𝑹)
-  .
-
-  (* convenience definition. *)
-  Definition ty_option : Ty -> Ty := fun T => ty_sum T ty_unit.
-
-  Derive NoConfusion for Ty.
-
-  Section Ty_rect.
-    Variable P  : Ty -> Type.
-
-    Hypothesis (P_int    : P ty_int).
-    Hypothesis (P_bool   : P ty_bool).
-    Hypothesis (P_bit    : P ty_bit).
-    Hypothesis (P_string : P ty_string).
-    Hypothesis (P_list   : forall σ, P σ -> P (ty_list σ)).
-    Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (ty_prod σ τ)).
-    Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)).
-    Hypothesis (P_unit   : P ty_unit).
-    Hypothesis (P_enum   : forall E, P (ty_enum E)).
-    Hypothesis (P_bvec   : forall n, P (ty_bvec n)).
-    Hypothesis (P_tuple  : forall σs, EnvRec P σs -> P (ty_tuple σs)).
-    Hypothesis (P_union  : forall U, P (ty_union U)).
-    Hypothesis (P_record : forall R, P (ty_record R)).
-
-    Fixpoint Ty_rect (σ : Ty) : P σ :=
-      match σ with
-      | ty_int      => ltac:(apply P_int)
-      | ty_bool     => ltac:(apply P_bool)
-      | ty_bit      => ltac:(apply P_bit)
-      | ty_string   => ltac:(apply P_string)
-      | ty_list σ   => ltac:(apply P_list; auto)
-      | ty_prod σ τ => ltac:(apply P_prod; auto)
-      | ty_sum σ τ  => ltac:(apply P_sum; auto)
-      | ty_unit     => ltac:(apply P_unit; auto)
-      | ty_enum E   => ltac:(apply P_enum; auto)
-      | ty_bvec n   => ltac:(apply P_bvec; auto)
-      | ty_tuple σs => ltac:(apply P_tuple; induction σs; cbn; auto using unit)
-      | ty_union U  => ltac:(apply P_union; auto)
-      | ty_record R => ltac:(apply P_record; auto)
-      end.
-
-  End Ty_rect.
-
-  Definition Ty_rec (P : Ty -> Set) := Ty_rect P.
-  Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
-
-  Global Instance Ty_eq_dec : EqDec Ty :=
-    fix ty_eqdec (σ τ : Ty) {struct σ} : dec_eq σ τ :=
-      match σ , τ with
-      | ty_int        , ty_int        => left eq_refl
-      | ty_bool       , ty_bool       => left eq_refl
-      | ty_bit        , ty_bit        => left eq_refl
-      | ty_string     , ty_string     => left eq_refl
-      | ty_list σ     , ty_list τ     => f_equal_dec ty_list noConfusion_inv (ty_eqdec σ τ)
-      | ty_prod σ1 σ2 , ty_prod τ1 τ2 => f_equal2_dec ty_prod noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
-      | ty_sum σ1 σ2  , ty_sum τ1 τ2  => f_equal2_dec ty_sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
-      | ty_unit       , ty_unit       => left eq_refl
-      | ty_enum E1    , ty_enum E2    => f_equal_dec ty_enum noConfusion_inv (eq_dec E1 E2)
-      | ty_bvec n1    , ty_bvec n2    => f_equal_dec ty_bvec noConfusion_inv (eq_dec n1 n2)
-      | ty_tuple σs   , ty_tuple τs   => f_equal_dec ty_tuple noConfusion_inv (@ctx_eqdec Ty ty_eqdec σs τs)
-      | ty_union U1   , ty_union U2   => f_equal_dec ty_union noConfusion_inv (eq_dec U1 U2)
-      | ty_record R1  , ty_record R2  => f_equal_dec ty_record noConfusion_inv (eq_dec R1 R2)
-      | _             , _             => right noConfusion_inv
-      end.
-
-  Lemma Ty_K (σ : Ty) (p : σ = σ) : p = eq_refl.
-  Proof. apply uip. Qed.
-
-  Fixpoint Lit (σ : Ty) : Set :=
-    match σ with
-    | ty_int => Z
-    | ty_bool => bool
-    | ty_bit => Bit
-    | ty_string => string
-    | ty_list σ' => list (Lit σ')
-    | ty_prod σ1 σ2 => Lit σ1 * Lit σ2
-    | ty_sum σ1 σ2 => Lit σ1 + Lit σ2
-    | ty_unit => unit
-    | ty_enum E => 𝑬𝑲 E
-    | ty_bvec n => Word.word n
-    (* Experimental features *)
-    | ty_tuple σs => EnvRec Lit σs
-    | ty_union U => 𝑼𝑻 U
-    | ty_record R => 𝑹𝑻 R
-    end%type.
-
-End Types.
-
-(******************************************************************************)
-
-Module Type TermKit.
-
-  Declare Module typekit : TypeKit.
-  Module Export TY := Types typekit.
-
-  (* Union data constructor field type *)
-  Parameter Inline 𝑼𝑲_Ty : forall (U : 𝑼), 𝑼𝑲 U -> Ty.
-  Parameter Inline 𝑼_fold   : forall (U : 𝑼), { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K) } -> 𝑼𝑻 U.
-  Parameter Inline 𝑼_unfold : forall (U : 𝑼), 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K) }.
-  Parameter Inline 𝑼_fold_unfold :
-    forall (U : 𝑼) (Kv: 𝑼𝑻 U),
-      𝑼_fold (𝑼_unfold Kv) = Kv.
-  Parameter Inline 𝑼_unfold_fold :
-    forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K) }),
-      𝑼_unfold (𝑼_fold Kv) = Kv.
-
-  (* Record field names. *)
-  Parameter Inline 𝑹𝑭  : Set.
-  (* Record field types. *)
-  Parameter Inline 𝑹𝑭_Ty : 𝑹 -> NCtx 𝑹𝑭 Ty.
-  Parameter Inline 𝑹_fold   : forall (R : 𝑹), NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R.
-  Parameter Inline 𝑹_unfold : forall (R : 𝑹), 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R).
-  Parameter Inline 𝑹_fold_unfold :
-    forall (R : 𝑹) (Kv: 𝑹𝑻 R),
-      𝑹_fold (𝑹_unfold Kv) = Kv.
-  Parameter Inline 𝑹_unfold_fold :
-    forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
-      𝑹_unfold (𝑹_fold Kv) = Kv.
+  Notation PCtx := (NCtx 𝑿 Ty).
+  Notation LCtx := (NCtx 𝑺 Ty).
 
   (* Names of functions. *)
-  Parameter Inline 𝑭 : NCtx 𝑿 Ty -> Ty -> Set.
-  Parameter Inline 𝑭𝑿 : NCtx 𝑿 Ty -> Ty -> Set.
+  Parameter Inline 𝑭 : PCtx -> Ty -> Set.
+  Parameter Inline 𝑭𝑿 : PCtx -> Ty -> Set.
 
   (* Names of registers. *)
   Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
@@ -360,101 +97,7 @@ End TermKit.
 
 Module Terms (Export termkit : TermKit).
 
-  Program Instance blastable_union (U : 𝑼) : Blastable (𝑼𝑻 U) :=
-    {| blast v k :=
-         forall (K : 𝑼𝑲 U),
-           blast K (fun K =>
-                      forall p,
-                        v = 𝑼_fold (existT K p) ->
-                        k (𝑼_fold (existT K p)))
-    |}.
-  Admit Obligations.
-  (* Next Obligation. *)
-  (*   intros; cbn; constructor; intro hyp. *)
-  (*   - rewrite <- (@𝑼_fold_unfold U a) in *. *)
-  (*     destruct (𝑼_unfold a) as [K v] eqn:eq_a. *)
-  (*     specialize (hyp K). *)
-  (*     rewrite blast_sound in hyp. *)
-  (*     now apply hyp. *)
-  (*   - intros K. *)
-  (*     rewrite blast_sound. *)
-  (*     now intros; subst. *)
-  (* Qed. *)
-
-  Program Instance blastable_record (R : 𝑹) : Blastable (𝑹𝑻 R) :=
-    {| blast v k := k (𝑹_fold (𝑹_unfold v)) |}.
-  Next Obligation.
-    cbn; intros; now rewrite 𝑹_fold_unfold.
-  Qed.
-
-  Section Literals.
-
-    Global Instance blastable_lit {σ} : Blastable (Lit σ) :=
-      match σ with
-      | ty_int => blastable_int
-      | ty_bool => blastable_bool
-      | ty_bit => blastable_bit
-      | ty_string => blastable_string
-      | ty_list σ0 => @blastable_list (Lit σ0)
-      | ty_prod σ1 σ2 => @blastable_prod (Lit σ1) (Lit σ2)
-      | ty_sum σ1 σ2 => @blastable_sum (Lit σ1) (Lit σ2)
-      | ty_unit => blastable_unit
-      | ty_enum E => Blastable_Finite
-      | ty_bvec n => blastable_word
-      | ty_tuple σs => Ctx_rect
-                         (fun σs => Blastable (Lit (ty_tuple σs)))
-                         blastable_unit
-                         (fun σs blast_σs σ => @blastable_prod (EnvRec Lit σs) (Lit σ))
-                         σs
-      | ty_union U => blastable_union U
-      | ty_record R => blastable_record R
-      end%type.
-
-    Fixpoint Lit_eqb (σ : Ty) : forall (l1 l2 : Lit σ), bool :=
-      match σ with
-      | ty_int      => Z.eqb
-      | ty_bool     => Bool.eqb
-      | ty_bit      => Bit_eqb
-      | ty_string   => String.eqb
-      | ty_list σ   => list_beq (Lit_eqb σ)
-      | ty_prod σ τ => prod_beq (Lit_eqb σ) (Lit_eqb τ)
-      | ty_sum σ τ  => sum_beq (Lit_eqb σ) (Lit_eqb τ)
-      | ty_unit     => fun _ _ => true
-      | ty_enum E   => fun l1 l2 => if 𝑬𝑲_eq_dec l1 l2 then true else false
-      | ty_bvec n   => @Word.weqb n
-      | ty_tuple σs => envrec_beq Lit_eqb
-      | ty_union U  => fun l1 l2 => if 𝑼𝑻_eq_dec l1 l2 then true else false
-      | ty_record R => fun l1 l2 => if 𝑹𝑻_eq_dec l1 l2 then true else false
-      end.
-
-    Lemma Lit_eqb_spec (σ : Ty) (x y : Lit σ) : reflect (x = y) (Lit_eqb σ x y).
-    Proof with microsail_solve_eqb_spec.
-      induction σ; cbn.
-      - apply Z.eqb_spec.
-      - apply Bool.eqb_spec.
-      - apply Bit_eqb_spec.
-      - apply String.eqb_spec.
-      - apply list_beq_spec; auto.
-      - destruct x as [x1 x2]; destruct y as [y1 y2]...
-      - destruct x as [x1|x2]; destruct y as [y1|y2]...
-      - destruct x. destruct y...
-      - destruct (𝑬𝑲_eq_dec x y)...
-      - apply iff_reflect. symmetry.
-        apply (Word.weqb_true_iff x y).
-      - induction σs; intros.
-        + destruct x; destruct y...
-        + cbn in *.
-          destruct x as [xs x]; destruct y as [ys y]; destruct X as [pσs pb]; cbn in *.
-          specialize (IHσs pσs).
-          destruct (IHσs xs ys); destruct (pb x y)...
-      - destruct (𝑼𝑻_eq_dec x y)...
-      - destruct (𝑹𝑻_eq_dec x y)...
-    Qed.
-
-  End Literals.
-  Bind Scope exp_scope with Lit.
-
-  Definition LocalStore (Γ : NCtx 𝑿 Ty) : Set := NamedEnv Lit Γ.
+  Definition LocalStore (Γ : PCtx) : Set := NamedEnv Lit Γ.
   Bind Scope env_scope with LocalStore.
 
   Section BinaryOperations.
@@ -492,7 +135,7 @@ Module Terms (Export termkit : TermKit).
 
     Definition binoptel_eq_dec {σ1 σ2 σ3 τ1 τ2 τ3}
       (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
-      ssrbool.decidable (((σ1,σ2,σ3), op1) = ((τ1,τ2,τ3),op2) :> BinOpTel) :=
+      dec_eq (A := BinOpTel) ((σ1,σ2,σ3),op1) ((τ1,τ2,τ3),op2) :=
       match op1 , op2 with
       | binop_plus  , binop_plus   => left eq_refl
       | binop_times , binop_times  => left eq_refl
@@ -562,7 +205,7 @@ Module Terms (Export termkit : TermKit).
        do have local implicit instances like for example in the exp_var
        constructor below and use the type class mechanism to copy these
        locally. *)
-    Inductive Exp (Γ : NCtx 𝑿 Ty) : Ty -> Set :=
+    Inductive Exp (Γ : PCtx) : Ty -> Set :=
     | exp_var     (x : 𝑿) (σ : Ty) {xInΓ : x∶σ ∈ Γ} : Exp Γ σ
     | exp_lit     (σ : Ty) : Lit σ -> Exp Γ σ
     | exp_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ σ3
@@ -591,7 +234,7 @@ Module Terms (Export termkit : TermKit).
 
     Section ExpElimination.
 
-      Variable (Γ : NCtx 𝑿 Ty).
+      Variable (Γ : PCtx).
       Variable (P : forall t, Exp Γ t -> Type).
       Arguments P _ _ : clear implicits.
 
@@ -675,7 +318,7 @@ Module Terms (Export termkit : TermKit).
       | binop_bvcombine => fun v1 v2 => Word.combine v1 v2
       end.
 
-    Fixpoint eval {Γ : NCtx 𝑿 Ty} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
+    Fixpoint eval {Γ : PCtx} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
       match e in (Exp _ t) return (Lit t) with
       | exp_var x           => δ ‼ x
       | exp_lit _ l         => l
@@ -715,7 +358,7 @@ Module Terms (Export termkit : TermKit).
 
   Section Statements.
 
-    Inductive TuplePat : Ctx Ty -> NCtx 𝑿 Ty -> Set :=
+    Inductive TuplePat : Ctx Ty -> PCtx -> Set :=
     | tuplepat_nil  : TuplePat ctx_nil ctx_nil
     | tuplepat_snoc
         {σs : Ctx Ty} {Δ : NCtx 𝑿 Ty}
@@ -723,7 +366,7 @@ Module Terms (Export termkit : TermKit).
         TuplePat (ctx_snoc σs σ) (ctx_snoc Δ (x∶σ)).
     Bind Scope pat_scope with TuplePat.
 
-    Inductive RecordPat : NCtx 𝑹𝑭 Ty -> NCtx 𝑿 Ty -> Set :=
+    Inductive RecordPat : NCtx 𝑹𝑭 Ty -> PCtx -> Set :=
     | recordpat_nil  : RecordPat ctx_nil ctx_nil
     | recordpat_snoc
         {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx 𝑿 Ty}
@@ -731,7 +374,7 @@ Module Terms (Export termkit : TermKit).
         RecordPat (ctx_snoc rfs (rf∶τ)) (ctx_snoc Δ (x∶τ)).
     Bind Scope pat_scope with RecordPat.
 
-    Inductive Pattern : NCtx 𝑿 Ty -> Ty -> Set :=
+    Inductive Pattern : PCtx -> Ty -> Set :=
     | pat_var (x : 𝑿) {σ : Ty} : Pattern [ x ∶ σ ]%ctx σ
     | pat_unit : Pattern ctx_nil ty_unit
     | pat_pair (x y : 𝑿) {σ τ : Ty} : Pattern [ x ∶ σ , y ∶ τ ]%ctx (ty_prod σ τ)
@@ -740,15 +383,15 @@ Module Terms (Export termkit : TermKit).
 
     (* Local Unset Elimination Schemes. *)
 
-    Inductive Stm (Γ : NCtx 𝑿 Ty) (τ : Ty) : Type :=
+    Inductive Stm (Γ : PCtx) (τ : Ty) : Type :=
     | stm_lit           (l : Lit τ)
     | stm_exp           (e : Exp Γ τ)
     | stm_let           (x : 𝑿) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (Γ ▻ x∶σ) τ)
-    | stm_block         (Δ : NCtx 𝑿 Ty) (δ : LocalStore Δ) (s : Stm (Γ ▻▻ Δ) τ)
+    | stm_block         (Δ : PCtx) (δ : LocalStore Δ) (s : Stm (Γ ▻▻ Δ) τ)
     | stm_assign        (x : 𝑿) {xInΓ : x∶τ ∈ Γ} (s : Stm Γ τ)
-    | stm_call          {Δ : NCtx 𝑿 Ty} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
-    | stm_call_frame    (Δ : NCtx 𝑿 Ty) (δ : LocalStore Δ) (s : Stm Δ τ)
-    | stm_call_external {Δ : NCtx 𝑿 Ty} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+    | stm_call          {Δ : PCtx} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+    | stm_call_frame    (Δ : PCtx) (δ : LocalStore Δ) (s : Stm Δ τ)
+    | stm_call_external {Δ : PCtx} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
     | stm_if            (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
     | stm_seq           {σ : Ty} (s : Stm Γ σ) (k : Stm Γ τ)
     | stm_assertk       (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
@@ -767,15 +410,15 @@ Module Terms (Export termkit : TermKit).
         {E : 𝑬} (e : Exp Γ (ty_enum E))
         (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
     | stm_match_tuple
-        {σs : Ctx Ty} {Δ : NCtx 𝑿 Ty} (e : Exp Γ (ty_tuple σs))
+        {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
         (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
     | stm_match_union
         {U : 𝑼} (e : Exp Γ (ty_union U))
-        (alt__ctx : forall (K : 𝑼𝑲 U), NCtx 𝑿 Ty)
+        (alt__ctx : forall (K : 𝑼𝑲 U), PCtx)
         (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
         (alt__rhs : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__ctx K) τ)
     | stm_match_record
-        {R : 𝑹} {Δ : NCtx 𝑿 Ty} (e : Exp Γ (ty_record R))
+        {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
     | stm_read_register (reg : 𝑹𝑬𝑮 τ)
     | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
@@ -793,43 +436,43 @@ Module Terms (Export termkit : TermKit).
 
     (* Section StmElimination. *)
 
-    (*   Variable (P : forall (Γ : NCtx 𝑿 Ty) (t : Ty), Stm Γ t -> Type). *)
+    (*   Variable (P : forall (Γ : PCtx) (t : Ty), Stm Γ t -> Type). *)
 
-    (*   Hypothesis (P_lit   : forall (Γ : NCtx 𝑿 Ty) (τ : Ty) (l : Lit τ), P (stm_lit Γ l)). *)
-    (*   Hypothesis (P_exp  : forall (Γ : NCtx 𝑿 Ty) (τ : Ty) (e : Exp Γ τ), P (stm_exp e)). *)
-    (*   Hypothesis (P_let  : forall (Γ : NCtx 𝑿 Ty) (x : 𝑿) (τ : Ty) (s : Stm Γ τ) (σ : Ty) (k : Stm (Γ ▻ (x ∶ τ)%ctx) σ), P s -> P k -> P (stm_let s k)). *)
-    (*   Hypothesis (P_block : forall (Γ Δ : NCtx 𝑿 Ty) (δ : LocalStore Δ) (σ : Ty) (k : Stm (Γ ▻▻ Δ) σ), P k -> P (stm_block Γ δ k)). *)
-    (*   Hypothesis (P_assign : forall (Γ : NCtx 𝑿 Ty) (x : 𝑿) (τ : Ty) (xInΓ : (x ∶ τ)%ctx ∈ Γ) (e : Stm Γ τ), P e -> P (stm_assign e)). *)
-    (*   Hypothesis (P_call  : forall (Γ Δ : NCtx 𝑿 Ty) (σ : Ty) (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call f es)). *)
-    (*   Hypothesis (P_call_frame  : forall (Γ Δ : NCtx 𝑿 Ty) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call_frame Γ δ s)). *)
-    (*   Hypothesis (P_call_external  : forall (Γ Δ : NCtx 𝑿 Ty) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call_external f es)). *)
-    (*   Hypothesis (P_if  : forall (Γ : NCtx 𝑿 Ty) (τ : Ty) (e : Exp Γ ty_bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)). *)
-    (*   Hypothesis (P_seq  : forall (Γ : NCtx 𝑿 Ty) (τ : Ty) (e : Stm Γ τ) (σ : Ty) (k : Stm Γ σ), P e -> P k -> P (stm_seq e k)). *)
-    (*   Hypothesis (P_assert  : forall (Γ : NCtx 𝑿 Ty) (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string), P (stm_assert e1 e2)). *)
-    (*   Hypothesis (P_fail  : forall (Γ : NCtx 𝑿 Ty) (τ : Ty) (s : Lit ty_string), P (stm_fail Γ τ s)). *)
-    (*   Hypothesis (P_match_list : forall (Γ : NCtx 𝑿 Ty) (σ τ : Ty) (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh ∶ σ)%ctx ▻ (xt ∶ ty_list σ)%ctx) τ), *)
+    (*   Hypothesis (P_lit   : forall (Γ : PCtx) (τ : Ty) (l : Lit τ), P (stm_lit Γ l)). *)
+    (*   Hypothesis (P_exp  : forall (Γ : PCtx) (τ : Ty) (e : Exp Γ τ), P (stm_exp e)). *)
+    (*   Hypothesis (P_let  : forall (Γ : PCtx) (x : 𝑿) (τ : Ty) (s : Stm Γ τ) (σ : Ty) (k : Stm (Γ ▻ (x ∶ τ)%ctx) σ), P s -> P k -> P (stm_let s k)). *)
+    (*   Hypothesis (P_block : forall (Γ Δ : PCtx) (δ : LocalStore Δ) (σ : Ty) (k : Stm (Γ ▻▻ Δ) σ), P k -> P (stm_block Γ δ k)). *)
+    (*   Hypothesis (P_assign : forall (Γ : PCtx) (x : 𝑿) (τ : Ty) (xInΓ : (x ∶ τ)%ctx ∈ Γ) (e : Stm Γ τ), P e -> P (stm_assign e)). *)
+    (*   Hypothesis (P_call  : forall (Γ Δ : PCtx) (σ : Ty) (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call f es)). *)
+    (*   Hypothesis (P_call_frame  : forall (Γ Δ : PCtx) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call_frame Γ δ s)). *)
+    (*   Hypothesis (P_call_external  : forall (Γ Δ : PCtx) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call_external f es)). *)
+    (*   Hypothesis (P_if  : forall (Γ : PCtx) (τ : Ty) (e : Exp Γ ty_bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)). *)
+    (*   Hypothesis (P_seq  : forall (Γ : PCtx) (τ : Ty) (e : Stm Γ τ) (σ : Ty) (k : Stm Γ σ), P e -> P k -> P (stm_seq e k)). *)
+    (*   Hypothesis (P_assert  : forall (Γ : PCtx) (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string), P (stm_assert e1 e2)). *)
+    (*   Hypothesis (P_fail  : forall (Γ : PCtx) (τ : Ty) (s : Lit ty_string), P (stm_fail Γ τ s)). *)
+    (*   Hypothesis (P_match_list : forall (Γ : PCtx) (σ τ : Ty) (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh ∶ σ)%ctx ▻ (xt ∶ ty_list σ)%ctx) τ), *)
     (*         P alt_nil -> P alt_cons -> P (stm_match_list e alt_nil alt_cons)). *)
-    (*   Hypothesis (P_match_sum : forall (Γ : NCtx 𝑿 Ty) (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr)) (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl ∶ σinl)%ctx) τ) (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr ∶ σinr)%ctx) τ), *)
+    (*   Hypothesis (P_match_sum : forall (Γ : PCtx) (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr)) (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl ∶ σinl)%ctx) τ) (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr ∶ σinr)%ctx) τ), *)
     (*         P alt_inl -> P alt_inr -> P (stm_match_sum e alt_inl alt_inr)). *)
-    (*   Hypothesis (P_match_pair : forall (Γ : NCtx 𝑿 Ty) (σ1 σ2 τ : Ty) (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿) (rhs : Stm (Γ ▻ (xl ∶ σ1)%ctx ▻ (xr ∶ σ2)%ctx) τ), *)
+    (*   Hypothesis (P_match_pair : forall (Γ : PCtx) (σ1 σ2 τ : Ty) (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿) (rhs : Stm (Γ ▻ (xl ∶ σ1)%ctx ▻ (xr ∶ σ2)%ctx) τ), *)
     (*         P rhs -> P (stm_match_pair e rhs)). *)
-    (*   Hypothesis (P_match_enum : forall (Γ : NCtx 𝑿 Ty) (E : 𝑬) (e : Exp Γ (ty_enum E)) (τ : Ty) (alts : 𝑬𝑲 E -> Stm Γ τ), *)
+    (*   Hypothesis (P_match_enum : forall (Γ : PCtx) (E : 𝑬) (e : Exp Γ (ty_enum E)) (τ : Ty) (alts : 𝑬𝑲 E -> Stm Γ τ), *)
     (*         (forall K : 𝑬𝑲 E, P (alts K)) -> P (stm_match_enum e alts)). *)
-    (*   Hypothesis (P_match_tuple : forall (Γ : NCtx 𝑿 Ty) (σs : Ctx Ty) (Δ : NCtx 𝑿 Ty) (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
+    (*   Hypothesis (P_match_tuple : forall (Γ : PCtx) (σs : Ctx Ty) (Δ : PCtx) (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
     (*         P rhs -> P (stm_match_tuple e p rhs)). *)
-    (*   Hypothesis (P_match_union : forall (Γ : NCtx 𝑿 Ty) (U : 𝑼) (e : Exp Γ (ty_union U)) (τ : Ty) (alt__ctx : 𝑼𝑲 U -> NCtx 𝑿 Ty) *)
+    (*   Hypothesis (P_match_union : forall (Γ : PCtx) (U : 𝑼) (e : Exp Γ (ty_union U)) (τ : Ty) (alt__ctx : 𝑼𝑲 U -> PCtx) *)
     (*         (alt__pat : forall K : 𝑼𝑲 U, Pattern (alt__ctx K) (𝑼𝑲_Ty K)) (alt__rhs : forall K : 𝑼𝑲 U, Stm (Γ ▻▻ alt__ctx K) τ), *)
     (*         (forall K : 𝑼𝑲 U, P (alt__rhs K)) -> P (stm_match_union e alt__ctx alt__pat alt__rhs)). *)
-    (*   Hypothesis (P_match_record : forall (Γ : NCtx 𝑿 Ty) (R : 𝑹) (Δ : NCtx 𝑿 Ty) (e : Exp Γ (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
+    (*   Hypothesis (P_match_record : forall (Γ : PCtx) (R : 𝑹) (Δ : PCtx) (e : Exp Γ (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
     (*         P rhs -> P (stm_match_record e p rhs)). *)
-    (*   Hypothesis (P_read_register : forall (Γ : NCtx 𝑿 Ty) (τ : Ty) (reg : 𝑹𝑬𝑮 τ), *)
+    (*   Hypothesis (P_read_register : forall (Γ : PCtx) (τ : Ty) (reg : 𝑹𝑬𝑮 τ), *)
     (*         P (stm_read_register Γ reg)). *)
-    (*   Hypothesis (P_write_register : forall (Γ : NCtx 𝑿 Ty) (τ : Ty) (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ), *)
+    (*   Hypothesis (P_write_register : forall (Γ : PCtx) (τ : Ty) (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ), *)
     (*         P (stm_write_register reg e)). *)
-    (*   Hypothesis (P_bind : forall (Γ : NCtx 𝑿 Ty) (σ τ : Ty) (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ), *)
+    (*   Hypothesis (P_bind : forall (Γ : PCtx) (σ τ : Ty) (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ), *)
     (*         P s -> (forall l : Lit σ, P (k l)) -> P (stm_bind s k)). *)
 
-    (*   Fixpoint Stm_rect {Γ : NCtx 𝑿 Ty} {τ : Ty} (s : Stm Γ τ) {struct s} : P s := *)
+    (*   Fixpoint Stm_rect {Γ : PCtx} {τ : Ty} (s : Stm Γ τ) {struct s} : P s := *)
     (*     match s with *)
     (*     | stm_lit _ _             => ltac:(apply P_lit; auto) *)
     (*     | stm_exp _               => ltac:(apply P_exp; auto) *)
@@ -882,9 +525,9 @@ Module Terms (Export termkit : TermKit).
     Global Arguments stm_read_register {Γ τ} reg.
     Global Arguments stm_write_register {Γ τ} reg e%exp.
 
-    Record Alternative (Γ : NCtx 𝑿 Ty) (σ τ : Ty) : Set :=
+    Record Alternative (Γ : PCtx) (σ τ : Ty) : Set :=
       MkAlt
-        { alt_ctx : NCtx 𝑿 Ty;
+        { alt_ctx : PCtx;
           alt_pat : Pattern alt_ctx σ;
           alt_rhs : Stm (Γ ▻▻ alt_ctx) τ;
         }.
@@ -911,7 +554,7 @@ Module Terms (Export termkit : TermKit).
 
   Section PatternMatching.
 
-    Fixpoint tuple_pattern_match {σs : Ctx Ty} {Δ : NCtx 𝑿 Ty}
+    Fixpoint tuple_pattern_match {σs : Ctx Ty} {Δ : PCtx}
              (p : TuplePat σs Δ) {struct p} : Lit (ty_tuple σs) -> LocalStore Δ :=
       match p with
       | tuplepat_nil => fun _ => env_nil
@@ -922,7 +565,7 @@ Module Terms (Export termkit : TermKit).
             (snd lit)
       end.
 
-    Fixpoint record_pattern_match {rfs : NCtx 𝑹𝑭 Ty}  {Δ : NCtx 𝑿 Ty}
+    Fixpoint record_pattern_match {rfs : NCtx 𝑹𝑭 Ty}  {Δ : PCtx}
              (p : RecordPat rfs Δ) {struct p} : NamedEnv Lit rfs -> LocalStore Δ :=
       match p with
       | recordpat_nil => fun _ => env_nil
@@ -933,7 +576,7 @@ Module Terms (Export termkit : TermKit).
             (env_lookup E inctx_zero)
       end.
 
-    Definition pattern_match {σ : Ty} {Δ : NCtx 𝑿 Ty} (p : Pattern Δ σ) :
+    Definition pattern_match {σ : Ty} {Δ : PCtx} (p : Pattern Δ σ) :
       Lit σ -> LocalStore Δ :=
       match p with
       | pat_var x => fun v => env_snoc env_nil (x∶_) v
@@ -945,7 +588,7 @@ Module Terms (Export termkit : TermKit).
 
   End PatternMatching.
 
-  (* Record FunDef (Δ : NCtx 𝑿 Ty) (τ : Ty) : Set := *)
+  (* Record FunDef (Δ : PCtx) (τ : Ty) : Set := *)
   (*   { fun_body : Stm Δ τ }. *)
 
   Section NameResolution.
@@ -963,11 +606,11 @@ Module Terms (Export termkit : TermKit).
        So the variable ?Γ0 has not been unified and blocks the evaluation of
        ctx_resolve. Unfortunately, Coq decides to fail immediately.
      *)
-    Definition exp_smart_var {Γ : NCtx 𝑿 Ty} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
+    Definition exp_smart_var {Γ : PCtx} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
       Exp Γ (fromSome (ctx_resolve Γ x) p) :=
       @exp_var Γ x (fromSome (ctx_resolve Γ x) p) (mk_inctx Γ x p).
 
-    Definition stm_smart_assign {Γ : NCtx 𝑿 Ty} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
+    Definition stm_smart_assign {Γ : PCtx} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
       Stm Γ (fromSome (ctx_resolve Γ x) p) -> Stm Γ (fromSome (ctx_resolve Γ x) p) :=
       @stm_assign Γ (fromSome _ p) x (mk_inctx Γ x p).
 
@@ -979,14 +622,14 @@ Module Terms (Export termkit : TermKit).
 
   End NameResolution.
 
-  Definition SymInstance (Σ : NCtx 𝑺 Ty) : Set := NamedEnv Lit Σ.
+  Definition SymInstance (Σ : LCtx) : Set := NamedEnv Lit Σ.
   Bind Scope env_scope with SymInstance.
 
   Section SymbolicTerms.
 
     Local Unset Elimination Schemes.
 
-    Inductive Term (Σ : NCtx 𝑺 Ty) : Ty -> Set :=
+    Inductive Term (Σ : LCtx) : Ty -> Set :=
     | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : InCtx (ς ∶ σ) Σ} : Term Σ σ
     | term_lit     (σ : Ty) : Lit σ -> Term Σ σ
     | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
@@ -1027,7 +670,7 @@ Module Terms (Export termkit : TermKit).
 
     Section Term_rect.
 
-      Variable (Σ : NCtx 𝑺 Ty).
+      Variable (Σ : LCtx).
       Variable (P  : forall t : Ty, Term Σ t -> Type).
       Arguments P _ _ : clear implicits.
 
@@ -1109,7 +752,7 @@ Module Terms (Export termkit : TermKit).
 
     End Utils.
 
-    Fixpoint inst_term {Σ : NCtx 𝑺 Ty} (ι : SymInstance Σ) {σ : Ty} (t : Term Σ σ) {struct t} : Lit σ :=
+    Fixpoint inst_term {Σ : LCtx} (ι : SymInstance Σ) {σ : Ty} (t : Term Σ σ) {struct t} : Lit σ :=
       match t in Term _ σ return Lit σ with
       | @term_var _ x _      => ι ‼ x
       | term_lit _ l         => l
@@ -1144,7 +787,7 @@ Module Terms (Export termkit : TermKit).
 
     Section TermEquivalence.
 
-      Context {Σ : NCtx 𝑺 Ty} {σ : Ty}.
+      Context {Σ : LCtx} {σ : Ty}.
 
       Definition TermEqv (ι : SymInstance Σ) : relation (Term Σ σ) :=
         fun t1 t2 => inst_term ι t1 = inst_term ι t2.
@@ -1156,7 +799,7 @@ Module Terms (Export termkit : TermKit).
 
     Section TermEqvB.
 
-      Context {Σ : NCtx 𝑺 Ty}.
+      Context {Σ : LCtx}.
 
       Fixpoint Term_eqvb {σ τ} (t1 : Term Σ σ) (t2 : Term Σ τ) {struct t1} : option bool :=
         match t1 , t2 with
@@ -1165,7 +808,7 @@ Module Terms (Export termkit : TermKit).
           then Some true
           else None
         | term_lit σ l1 , term_lit τ l2 =>
-          match Ty_eq_dec σ τ with
+          match eq_dec σ τ with
           | left  p => Some (Lit_eqb τ (eq_rect σ Lit l1 τ p) l2)
           | right _ => Some false
           end
@@ -1178,50 +821,34 @@ Module Terms (Export termkit : TermKit).
         | _            , _            => None
         end.
 
+      Local Set Equations With UIP.
       Lemma Term_eqvb_spec {ι σ} (t1 t2 : Term Σ σ) :
-        forall b, Term_eqvb t1 t2 = Some b -> reflect (TermEqv ι t1 t2) b.
+        OptionSpec
+          (fun b : bool => TermEqv ι t1 t2 <-> is_true b)
+          True
+          (Term_eqvb t1 t2).
       Proof.
-        induction t1; dependent elimination t2; cbn; intros b Heq; try discriminate.
-        - destruct (InCtx_eqb ςInΣ ςInΣ0) eqn:?; try discriminate.
-          apply noConfusion_inv in Heq; cbn in Heq. subst b.
-          constructor. unfold TermEqv. cbn.
-          admit.
-        - destruct (Ty_eq_dec σ1 σ1).
-          + rewrite (Ty_K e) in Heq. cbn in Heq.
-            apply noConfusion_inv in Heq; cbn in Heq. subst b.
-            destruct (Lit_eqb_spec σ1 l l0).
-            * constructor; congruence.
-            * constructor. unfold TermEqv. cbn. assumption.
+        induction t1; dependent elimination t2; cbn; intros; try (solve [ constructor; auto ]).
+        - destruct (InCtx_eqb_spec ςInΣ ςInΣ0); constructor; auto.
+          dependent elimination e. apply reflect_iff. constructor. reflexivity.
+        - rewrite eq_dec_refl. cbn. constructor. apply reflect_iff, Lit_eqb_spec.
+        - specialize (IHt1 e). revert IHt1.
+          apply optionspec_monotonic; [ intros ? <- | auto ].
+          unfold TermEqv; cbn; lia.
+        - specialize (IHt1 e0). revert IHt1.
+          apply optionspec_monotonic; [ intros ? <- | auto ].
+          unfold TermEqv; cbn. split.
+          + now intros ?%ssrbool.negb_inj.
           + congruence.
-        - eapply ssrbool.iffP.
-          apply IHt1, Heq.
-          + unfold TermEqv; cbn.
-            congruence.
-          + unfold TermEqv; cbn.
-            admit.
-        - eapply ssrbool.iffP.
-          apply IHt1, Heq.
-          + unfold TermEqv; cbn.
-            congruence.
-          + unfold TermEqv; cbn.
-            admit.
-        - eapply ssrbool.iffP.
-          apply IHt1, Heq.
-          + unfold TermEqv; cbn.
-            congruence.
-          + unfold TermEqv; cbn.
-            congruence.
-        - apply noConfusion_inv in Heq; cbn in Heq. subst b.
-          constructor. unfold TermEqv. cbn. congruence.
-        - apply noConfusion_inv in Heq; cbn in Heq. subst b.
-          constructor. unfold TermEqv. cbn. congruence.
-        - eapply ssrbool.iffP.
-          apply IHt1, Heq.
-          + unfold TermEqv; cbn.
-            congruence.
-          + unfold TermEqv; cbn.
-            congruence.
-      Admitted.
+        - specialize (IHt1 t). revert IHt1.
+          apply optionspec_monotonic; [ intros ? <- | auto ].
+          unfold TermEqv; cbn. split; congruence.
+        - constructor. apply reflect_iff. constructor. discriminate.
+        - constructor. apply reflect_iff. constructor. discriminate.
+        - specialize (IHt1 t0). revert IHt1.
+          apply optionspec_monotonic; [ intros ? <- | auto ].
+          unfold TermEqv; cbn. split; congruence.
+      Qed.
 
     End TermEqvB.
 
@@ -1260,38 +887,23 @@ Module Terms (Export termkit : TermKit).
       Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
                with (𝑹_eq_dec r1 r2) => {
       Term_eqb (@term_projrec r e1 _ _ prf1) (@term_projrec ?(r) e2 _ _ prf2)
-        (left eq_refl) := (@inctx_at _ _ _ prf1 =? @inctx_at _ _ _ prf2) && Term_eqb e1 e2;
+        (left eq_refl) := InCtx_eqb prf1 prf2 && Term_eqb e1 e2;
       Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
         (right _) := false };
 
       Term_eqb _ _ := false.
 
     Local Transparent Term_eqb.
-    Set Equations With UIP.
+    Local Set Equations With UIP.
     Lemma Term_eqb_spec Σ (σ : Ty) (t1 t2 : Term Σ σ) :
       reflect (t1 = t2) (Term_eqb t1 t2).
     Proof.
       induction t1 using Term_rect; cbn [Term_eqb]; dependent elimination t2;
         microsail_solve_eqb_spec.
-      - unfold InCtx_eqb.
-        repeat match goal with
-               | |- context[?m =? ?n] => destruct (Nat.eqb_spec m n)
-               | H: InCtx _ _ |- _ =>
-                 let n := fresh "n" in
-                 let p := fresh "p" in
-                 destruct H as [n p]
-               end; cbn in *; constructor.
-        + subst n0.
-          match goal with
-          | H1: ctx_nth_is ?Σ ?n ?b1, H2: ctx_nth_is ?Σ ?n ?b2 |- _ =>
-            let H := fresh in
-            pose proof (ctx_nth_is_right_exact _ _ _ H1 H2) as H; inversion H; clear H
-          end.
-          subst ς0.
-          f_equal.
-          f_equal.
-          apply ctx_nth_is_proof_irrelevance.
-        + inversion 1. congruence.
+      - destruct (InCtx_eqb_spec ςInΣ ςInΣ0); constructor.
+        + dependent elimination e. reflexivity.
+        + intros e. apply n.
+          dependent elimination e. reflexivity.
       - match goal with
         | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
         end; microsail_solve_eqb_spec.
@@ -1347,7 +959,17 @@ Module Terms (Export termkit : TermKit).
           microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
-      - admit.
+      - destruct (𝑹_eq_dec R R1); cbn.
+        + destruct e. specialize (IHt1 e5). apply reflect_iff in IHt1.
+          assert (EqDec_𝑹𝑭 : EqDec 𝑹𝑭) by admit.
+          destruct (InCtx_eqb_spec rfInR rfInR0); cbn.
+          * apply iff_reflect. rewrite <- IHt1.
+            split.
+            intros e2. now dependent elimination e2.
+            intros e2. subst. now dependent elimination e.
+          * constructor. intros e. apply n.
+            now dependent elimination e.
+        + constructor. congruence.
     Admitted.
 
   End SymbolicTerms.
@@ -1355,11 +977,11 @@ Module Terms (Export termkit : TermKit).
 
   Section SymbolicSubstitutions.
 
-    Definition Sub (Σ1 Σ2 : Ctx (𝑺 * Ty)) : Set :=
+    Definition Sub (Σ1 Σ2 : LCtx) : Set :=
       Env (fun b => Term Σ2 (snd b)) Σ1.
     (* Hint Unfold Sub. *)
 
-    Fixpoint sub_term {σ} {Σ1 Σ2 : Ctx (𝑺 * Ty)} (ζ : Sub Σ1 Σ2) (t : Term Σ1 σ) {struct t} : Term Σ2 σ :=
+    Fixpoint sub_term {σ} {Σ1 Σ2 : LCtx} (ζ : Sub Σ1 Σ2) (t : Term Σ1 σ) {struct t} : Term Σ2 σ :=
       match t with
       | term_var ς                => ζ ‼ ς
       | term_lit σ l              => term_lit σ l
@@ -1377,8 +999,8 @@ Module Terms (Export termkit : TermKit).
       | term_projrec t rf         => term_projrec (sub_term ζ t) rf
       end.
 
-    Class Subst (T : Ctx (𝑺 * Ty) -> Type) : Type :=
-      subst : forall {Σ1 Σ2 : Ctx (𝑺 * Ty)}, Sub Σ1 Σ2 -> T Σ1 -> T Σ2.
+    Class Subst (T : LCtx -> Type) : Type :=
+      subst : forall {Σ1 Σ2 : LCtx}, Sub Σ1 Σ2 -> T Σ1 -> T Σ2.
     Global Arguments subst {T _ _ _} _ _.
 
     Global Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=
@@ -1393,23 +1015,22 @@ Module Terms (Export termkit : TermKit).
 
     Definition sub_id Σ : Sub Σ Σ :=
       @env_tabulate _ (fun b => Term _ (snd b)) _
-                    (fun '(ς , σ) ςIn => @term_var Σ ς σ ςIn).
+                    (fun '(ς :: σ) ςIn => @term_var Σ ς σ ςIn).
     Global Arguments sub_id : clear implicits.
 
-    Definition sub_snoc {Σ1 Σ2 : Ctx (𝑺 * Ty)} (ζ : Sub Σ1 Σ2)
-      (b : 𝑺 * Ty) (t : Term Σ2 (snd b)) : Sub (Σ1 ▻ b) Σ2 :=
-      env_snoc ζ b t.
+    Definition sub_snoc {Σ1 Σ2 : LCtx} (ζ : Sub Σ1 Σ2) b (t : Term Σ2 (snd b)) :
+      Sub (Σ1 ▻ b) Σ2 := env_snoc ζ b t.
     Global Arguments sub_snoc {_ _} _ _ _.
 
     Definition sub_shift {Σ b} (bIn : b ∈ Σ) : Sub (Σ - b) Σ :=
       env_tabulate
         (D := fun b => Term Σ (snd b))
-        (fun '(x, τ) xIn => @term_var Σ x τ (shift_var bIn xIn)).
+        (fun '(x :: τ) xIn => @term_var Σ x τ (shift_var bIn xIn)).
 
     Definition sub_wk1 {Σ b} : Sub Σ (Σ ▻ b) :=
       env_tabulate
         (D := fun b => Term _ (snd b))
-        (fun '(ς , σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
+        (fun '(ς :: σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
 
     Definition sub_comp {Σ1 Σ2 Σ3} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) : Sub Σ1 Σ3 :=
       subst ζ2 ζ1.
@@ -1417,21 +1038,21 @@ Module Terms (Export termkit : TermKit).
     Definition wk1 {Σ b} `{Subst T} (t : T Σ) : T (Σ ▻ b) :=
       subst sub_wk1 t.
 
-    Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b : 𝑺 * Ty} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
-      let '(ς , σ) := b in
-      env_snoc (wk1 ζ) (ς , σ) (@term_var _ ς σ inctx_zero).
+    Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
+      let '(ς :: σ) := b in
+      env_snoc (sub_comp ζ sub_wk1) (ς :: σ) (@term_var _ ς σ inctx_zero).
 
-    Definition sub_single {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) : Sub Σ (Σ - (x,σ)) :=
+    Definition sub_single {Σ x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) : Sub Σ (Σ - (x :: σ)) :=
       @env_tabulate
         _ (fun b => Term _ (snd b)) _
-        (fun '(y,τ) =>
+        (fun '(y :: τ) =>
            fun yIn =>
              match occurs_check_var xIn yIn with
-             | inl e => eq_rect σ (Term (Σ - (x ∶ σ)%ctx)) t τ (f_equal snd e)
+             | inl e => eq_rect σ (Term (Σ - (x :: σ))) t τ (f_equal snd e)
              | inr i => term_var y
              end).
 
-    Class SubstLaws (T : NCtx 𝑺 Ty -> Type) `{Subst T} : Type :=
+    Class SubstLaws (T : LCtx -> Type) `{Subst T} : Type :=
       { subst_sub_id Σ (t : T Σ) :
           subst (sub_id _) t = t;
         subst_sub_comp Σ0 Σ1 Σ2 (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) t :
@@ -1561,7 +1182,7 @@ Module Terms (Export termkit : TermKit).
       rewrite subst_sub_comp. reflexivity.
     Qed.
 
-    Lemma sub_comp_wk1_tail {Σ0 Σ1 x τ} (ζ : Sub (Σ0 ▻ (x,τ)) Σ1) :
+    Lemma sub_comp_wk1_tail {Σ0 Σ1 x τ} (ζ : Sub (Σ0 ▻ (x :: τ)) Σ1) :
       sub_comp sub_wk1 ζ = env_tail ζ.
     Proof.
       apply env_lookup_extensional.
@@ -1574,27 +1195,34 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma sub_comp_wk1_comm {Σ0 Σ1 x τ} (ζ : Sub Σ0 Σ1) :
-      sub_comp sub_wk1 (sub_up1 ζ) = sub_comp ζ (sub_wk1 (b:=(x,τ))).
+      sub_comp sub_wk1 (sub_up1 ζ) = sub_comp ζ (sub_wk1 (b:=(x::τ))).
     Proof. now rewrite sub_comp_wk1_tail. Qed.
 
     Lemma sub_snoc_comp {Σ1 Σ2 Σ3 x τ v} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) :
       sub_comp ζ1 ζ2 ► (x∶τ ↦ v) =
       sub_comp (sub_up1 ζ1) (ζ2 ► (x∶τ ↦ v)).
     Proof.
-      unfold sub_up1, wk1, sub_comp, subst, SubstEnv; cbn.
+      unfold sub_up1, sub_comp, subst, SubstEnv; cbn.
       rewrite env_map_map. f_equal.
       apply env_map_ext. intros.
       now rewrite <- subst_sub_comp, sub_comp_wk1_tail.
+    Qed.
+
+    Lemma sub_up_comp {Σ0 Σ1 Σ2} (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) b :
+      sub_up1 (b:=b) (sub_comp ζ1 ζ2) = sub_comp (sub_up1 ζ1) (sub_up1 ζ2).
+    Proof.
+      destruct b. DepElim.hnf_eq. f_equal.
+      now rewrite ?sub_comp_assoc, sub_comp_wk1_comm.
     Qed.
 
   End SymbolicSubstitutions.
 
   Section MultiSubs.
 
-    Inductive MultiSub : forall (Σ1 Σ2 : Ctx (𝑺 * Ty)), Set :=
+    Inductive MultiSub : forall (Σ1 Σ2 : LCtx), Set :=
     | multisub_id {Σ}       : MultiSub Σ Σ
-    | multisub_cons {Σ Σ' x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ)
-                    (ζ : MultiSub (Σ - (x,σ)) Σ')
+    | multisub_cons {Σ Σ' x σ} (xIn : (x::σ) ∈ Σ) (t : Term (Σ - (x::σ)) σ)
+                    (ζ : MultiSub (Σ - (x::σ)) Σ')
                     : MultiSub Σ Σ'.
 
     Global Arguments multisub_cons {_ _} x {_ _} t ζ.
@@ -1609,7 +1237,7 @@ Module Terms (Export termkit : TermKit).
 
   Section OccursCheck.
 
-    Class OccursCheck (T : Ctx (𝑺 * Ty) -> Type) : Type :=
+    Class OccursCheck (T : LCtx -> Type) : Type :=
       occurs_check : forall {Σ x} (xIn : x ∈ Σ) (t : T Σ), option (T (Σ - x)%ctx).
 
     Import stdpp.base.
@@ -1641,11 +1269,11 @@ Module Terms (Export termkit : TermKit).
     Global Instance OccursCheckTerm {σ} : OccursCheck (fun Σ => Term Σ σ) :=
       fun _ _ xIn => occurs_check_term xIn.
 
-    Global Instance OccursCheckList {T : NCtx 𝑺 Ty -> Type} `{OccursCheck T} :
+    Global Instance OccursCheckList {T : LCtx -> Type} `{OccursCheck T} :
       OccursCheck (fun Σ => list (T Σ)) :=
       fun _ _ xIn => traverse_list (occurs_check xIn).
 
-    Global Instance OccursCheckEnv {I : Set} {T : NCtx 𝑺 Ty -> I -> Set}
+    Global Instance OccursCheckEnv {I : Set} {T : LCtx -> I -> Set}
            {_ : forall i : I, OccursCheck (fun Σ => T Σ i)}
            {Γ : Ctx I} :
       OccursCheck (fun Σ => Env (T Σ) Γ) :=
@@ -1658,8 +1286,8 @@ Module Terms (Export termkit : TermKit).
 
   Section OccursCheckLaws.
 
-    Class OccursCheckLaws (T : NCtx 𝑺 Ty -> Type) `{Subst T, OccursCheck T} : Prop :=
-      { occurs_check_shift {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : T (Σ - (x,σ))%ctx) :
+    Class OccursCheckLaws (T : LCtx -> Type) `{Subst T, OccursCheck T} : Prop :=
+      { occurs_check_shift {Σ x σ} (xIn : (x::σ) ∈ Σ) (t : T (Σ - (x::σ))%ctx) :
           occurs_check xIn (subst (sub_shift xIn) t) = Some t;
         occurs_check_sound {Σ x} (xIn : x ∈ Σ) (t : T Σ) (t' : T (Σ - x)) :
           occurs_check xIn t = Some t' -> t = subst (sub_shift xIn) t'
@@ -1773,7 +1401,7 @@ Module Terms (Export termkit : TermKit).
         + solve. f_equal. auto.
     Admitted.
 
-    Global Instance OccursCheckLawsList {T : NCtx 𝑺 Ty -> Type} `{OccursCheckLaws T} :
+    Global Instance OccursCheckLawsList {T : LCtx -> Type} `{OccursCheckLaws T} :
       OccursCheckLaws (fun Σ => list (T Σ)).
     Proof.
       constructor.
@@ -1787,7 +1415,7 @@ Module Terms (Export termkit : TermKit).
           f_equal; auto.
     Qed.
 
-    Global Instance OccursCheckLawsEnv {I : Set} {T : NCtx 𝑺 Ty -> I -> Set}
+    Global Instance OccursCheckLawsEnv {I : Set} {T : LCtx -> I -> Set}
            {_ : forall i : I, Subst (fun Σ => T Σ i)}
            {_ : forall i : I, OccursCheck (fun Σ => T Σ i)}
            {_ : forall i : I, OccursCheckLaws (fun Σ => T Σ i)}
@@ -1819,7 +1447,7 @@ Module Terms (Export termkit : TermKit).
        concrete / semi-concrete counterpart. The method 'inst' will instantiate
        all logic variables in a symbolic value to obtain the concrete value and
        'lift' injects the concrete type into the symbolic one. *)
-    Class Inst (T : NCtx 𝑺 Ty -> Type) (A : Type) : Type :=
+    Class Inst (T : LCtx -> Type) (A : Type) : Type :=
       { inst {Σ} (ι : SymInstance Σ) (t : T Σ) : A;
         lift {Σ} (a : A) : T Σ;
       }.
@@ -1829,13 +1457,13 @@ Module Terms (Export termkit : TermKit).
          lift Σ l   := term_lit σ l;
       |}.
 
-    Global Instance instantiate_list {T : NCtx 𝑺 Ty -> Set} {A : Set} `{Inst T A} :
+    Global Instance instantiate_list {T : LCtx -> Set} {A : Set} `{Inst T A} :
       Inst (fun Σ => list (T Σ)) (list A) :=
       {| inst Σ ι := List.map (inst ι);
          lift Σ   := List.map lift;
       |}.
 
-    Global Instance instantiate_env {T : Set} {S : NCtx 𝑺 Ty -> T -> Set}
+    Global Instance instantiate_env {T : Set} {S : LCtx -> T -> Set}
            {A : T -> Set} {_ : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)}
            {Γ : Ctx T} :
       Inst (fun Σ => Env (S Σ) Γ) (Env A Γ) :=
@@ -1846,7 +1474,7 @@ Module Terms (Export termkit : TermKit).
     Global Instance instantiate_sub {Σ} : Inst (Sub Σ) (SymInstance Σ) :=
       instantiate_env.
 
-    Class InstLaws (T : NCtx 𝑺 Ty -> Type) (A : Type) `{SubstLaws T, Inst T A} : Prop :=
+    Class InstLaws (T : LCtx -> Type) (A : Type) `{SubstLaws T, Inst T A} : Prop :=
       { inst_lift {Σ} (ι : SymInstance Σ) (a : A) :
           inst ι (lift a) = a;
         inst_subst {Σ Σ'} (ζ : Sub Σ Σ') (ι : SymInstance Σ') (t : T Σ) :
@@ -1892,7 +1520,7 @@ Module Terms (Export termkit : TermKit).
       }
     Qed.
 
-    Global Instance instantiatelaws_list {T : NCtx 𝑺 Ty -> Set} {A : Set} `{InstLaws T A} :
+    Global Instance instantiatelaws_list {T : LCtx -> Set} {A : Set} `{InstLaws T A} :
       InstLaws (fun Σ => list (T Σ)) (list A).
     Proof.
       constructor.
@@ -1907,7 +1535,7 @@ Module Terms (Export termkit : TermKit).
       }
     Qed.
 
-    Global Instance instantiatelaws_env {T : Set} {S : NCtx 𝑺 Ty -> T -> Set} {A : T -> Set}
+    Global Instance instantiatelaws_env {T : Set} {S : LCtx -> T -> Set} {A : T -> Set}
            {_ : forall τ : T, Subst (fun Σ => S Σ τ)}
            {_ : forall τ : T, SubstLaws (fun Σ => S Σ τ)}
            {_ : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)}
@@ -1953,7 +1581,7 @@ Module Terms (Export termkit : TermKit).
 
   Section SymbolicLocalStore.
 
-    Definition SymbolicLocalStore (Γ : NCtx 𝑿 Ty) (Σ : Ctx (𝑺 * Ty)) : Type :=
+    Definition SymbolicLocalStore (Γ : PCtx) (Σ : LCtx) : Type :=
       NamedEnv (Term Σ) Γ.
 
     Global Program Instance inst_localstore {Γ} : Inst (SymbolicLocalStore Γ) (LocalStore Γ) :=
@@ -2061,7 +1689,7 @@ Module Terms (Export termkit : TermKit).
 
   End GenericRegStore.
 
-  Notation lit_int l := (@exp_lit _ ty_int l).
+  Notation lit_int l := (@exp_lit _ ty_int l%Z).
   Notation lit_bool l := (@exp_lit _ ty_bool l).
   Notation lit_true   := (@exp_lit _ ty_bool true).
   Notation lit_false  := (@exp_lit _ ty_bool false).
@@ -2084,7 +1712,7 @@ Module Terms (Export termkit : TermKit).
   Notation "[ x , .. , z ]" :=
     (tuplepat_snoc .. (tuplepat_snoc tuplepat_nil x) .. z) (at level 0) : pat_scope.
   Notation "[ x , .. , z ]" :=
-    (env_snoc .. (env_snoc env_nil (_,_) x) .. (_,_) z) (at level 0, only parsing) : arg_scope.
+    (env_snoc .. (env_snoc env_nil (_ :: _) x) .. (_ :: _) z) (at level 0, only parsing) : arg_scope.
 
   Notation "'if:' e 'then' s1 'else' s2" := (stm_if e%exp s1%exp s2%exp)
     (at level 99, right associativity, format
@@ -2175,10 +1803,10 @@ Module Terms (Export termkit : TermKit).
     ) : exp_scope.
 
   Notation "'call' f a1 .. an" :=
-    (stm_call f (env_snoc .. (env_snoc env_nil (_,_) a1%exp) .. (_,_) an%exp))
+    (stm_call f (env_snoc .. (env_snoc env_nil (_ :: _) a1%exp) .. (_ :: _) an%exp))
     (at level 10, f global, a1, an at level 9) : exp_scope.
   Notation "'callex' f a1 .. an" :=
-    (stm_call_external f (env_snoc .. (env_snoc env_nil (_,_) a1%exp) .. (_,_) an%exp))
+    (stm_call_external f (env_snoc .. (env_snoc env_nil (_ :: _) a1%exp) .. (_ :: _) an%exp))
     (at level 10, f global, a1, an at level 9) : exp_scope.
 
   Notation "'call' f" :=

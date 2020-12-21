@@ -30,7 +30,7 @@ Module ValsAndTerms
        (Import termkit : TermKit)
        (Import progkit : ProgramKit termkit).
 
-  Inductive Tm (Γ : Ctx (𝑿 * Ty)) τ : Type :=
+  Inductive Tm (Γ : PCtx) τ : Type :=
   | MkTm (δ : LocalStore Γ) (s : Stm Γ τ) : Tm Γ τ.
 
   Section TransparentObligations.
@@ -38,7 +38,7 @@ Module ValsAndTerms
     Derive NoConfusion for Tm.
   End TransparentObligations.
 
-  Inductive Val (Γ : Ctx (𝑿 * Ty)) τ : Type :=
+  Inductive Val (Γ : PCtx) τ : Type :=
     (* we only keep the store around for technical reasons, essentially to validate of_to_val. *)
   | MkVal (δ : LocalStore Γ) (v : Lit τ) : Val Γ τ.
 
@@ -73,7 +73,7 @@ Module ValsAndTerms
   Export Inv.
   Export SS.
 
-  Lemma val_head_stuck_step {τ} {Γ : Ctx (𝑿 * Ty)} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) δ2 (s1 : Stm Γ τ) s2 :
+  Lemma val_head_stuck_step {τ} {Γ : PCtx} γ1 γ2 μ1 μ2 (δ1 : LocalStore Γ) δ2 (s1 : Stm Γ τ) s2 :
     ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> to_val (MkTm δ1 s1) = None.
   Proof.
     by induction 1.
@@ -751,7 +751,7 @@ Module IrisInstance
   Qed.
 
   Lemma iris_rule_stm_block {Γ} (δ : LocalStore Γ)
-        (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ)
+        (Δ : PCtx) (δΔ : LocalStore Δ)
         (τ : Ty) (k : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (R : Lit τ -> LocalStore Γ -> iProp Σ) :
         ⊢ (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env_drop Δ δ'')) -∗
@@ -1016,7 +1016,7 @@ Module IrisInstance
   Qed.
 
   Lemma iris_rule_stm_match_tuple {Γ} (δ : LocalStore Γ)
-        {σs : Ctx Ty} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_tuple σs))
+        {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
         (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
     ⊢ ((semTriple (env_cat δ (tuple_pattern_match p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
@@ -1041,7 +1041,7 @@ Module IrisInstance
 
   Lemma iris_rule_stm_match_union {Γ} (δ : LocalStore Γ)
         {U : 𝑼} (e : Exp Γ (ty_union U)) {σ τ : Ty}
-        (alt__Δ : forall (K : 𝑼𝑲 U), Ctx (𝑿 * Ty))
+        (alt__Δ : forall (K : 𝑼𝑲 U), PCtx)
         (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
         (alt__r : forall (K : 𝑼𝑲 U), Stm (ctx_cat Γ (alt__Δ K)) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
@@ -1074,7 +1074,7 @@ Module IrisInstance
   Qed.
 
   Lemma iris_rule_stm_match_record {Γ} (δ : LocalStore Γ)
-        {R : 𝑹} {Δ : Ctx (𝑿 * Ty)} (e : Exp Γ (ty_record R))
+        {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
         ⊢ ((semTriple (env_cat δ (record_pattern_match p (𝑹_unfold (eval e δ)))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
@@ -1293,7 +1293,7 @@ Module IrisInstance
   Qed.
 
   Lemma iris_rule_stm_call_frame {Γ} (δ : LocalStore Γ)
-        (Δ : Ctx (𝑿 * Ty)) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
+        (Δ : PCtx) (δΔ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
         ⊢ (semTriple δΔ P s (fun v _ => Q v δ) -∗
            semTriple δ P (stm_call_frame δΔ s) Q)%I.
