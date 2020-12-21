@@ -98,9 +98,11 @@ Module Assertions
   | asn_chunk (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
   | asn_match_enum (E : 𝑬) (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
+  | asn_match_sum (σ τ : Ty) (s : Term Σ (ty_sum σ τ)) (xl : 𝑺) (alt_inl : Assertion (Σ ▻ (xl :: σ))) (xr : 𝑺) (alt_inr : Assertion (Σ ▻ (xr :: τ)))
   | asn_sep  (a1 a2 : Assertion Σ)
   | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς :: τ))).
   Arguments asn_match_enum [_] E _ _.
+  Arguments asn_match_sum [_] σ τ _ _ _.
   Arguments asn_exist [_] _ _ _.
 
   Notation asn_bool b := (asn_formula (formula_bool b)).
@@ -243,6 +245,11 @@ Module Assertions
       | asn_chunk c => inst_chunk ι c
       | asn_if b a1 a2 => if inst (A := Lit ty_bool) ι b then inst_assertion ι a1 else inst_assertion ι a2
       | asn_match_enum E k alts => inst_assertion ι (alts (inst (T := fun Σ => Term Σ _) ι k))
+      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+        match inst (T := fun Σ => Term Σ _) ι s with
+        | inl v => inst_assertion (env_snoc ι (xl :: σ) v) alt_inl
+        | inr v => inst_assertion (env_snoc ι (xr :: τ) v) alt_inr
+        end
       | asn_sep a1 a2 => inst_assertion ι a1 ✱ inst_assertion ι a2
       | asn_exist ς τ a => ∃ (v : Lit τ), inst_assertion (ι ► (ς∶τ ↦ v)) a
     end%logic.

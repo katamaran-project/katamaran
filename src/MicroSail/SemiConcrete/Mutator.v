@@ -320,6 +320,11 @@ Module SemiConcrete
                            (scmut_assume_term ι (term_not b) ;; scmut_produce ι a2)
       | @asn_match_enum _ E k alts =>
         scmut_produce ι (alts (inst (T := fun Σ => Term Σ _) ι k))
+      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+        match inst (T := fun Σ => Term Σ _) ι s with
+        | inl v => scmut_produce (env_snoc ι (xl :: σ) v) alt_inl
+        | inr v => scmut_produce (env_snoc ι (xr :: τ) v) alt_inr
+        end
       | asn_sep a1 a2   => scmut_produce ι a1 *> scmut_produce ι a2
       | asn_exist ς τ a => ⨂ v : Lit τ => scmut_produce (env_snoc ι (ς :: τ) v) a
       end.
@@ -333,6 +338,11 @@ Module SemiConcrete
                            else scmut_consume ι a2
       | @asn_match_enum _ E k alts =>
         scmut_consume ι (alts (inst (T := fun Σ => Term Σ _) ι k))
+      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+        match inst (T := fun Σ => Term Σ _) ι s with
+        | inl v => scmut_consume (env_snoc ι (xl :: σ) v) alt_inl
+        | inr v => scmut_consume (env_snoc ι (xr :: τ) v) alt_inr
+        end
       | asn_sep a1 a2   => scmut_consume ι a1 *> scmut_consume ι a2
       | asn_exist ς τ a => ⨁ v : Lit τ => scmut_consume (env_snoc ι (ς :: τ) v) a
       end.
