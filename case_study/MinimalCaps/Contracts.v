@@ -261,11 +261,23 @@ Module MinCapsSymbolicContractKit <:
                                end);
     |}.
 
+  (*  @pre true;
+      @post result = (e = none ∨ ∃ e'. e = inl e' ∧ e' >= a);
+      bool upper_bound(a : addr, e : option addr); *)
+  Definition sep_contract_upper_bound : SepContract ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr ] ty_bool :=
+    {| sep_contract_logic_variables := ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr ];
+       sep_contract_localstore      := [term_var "a", term_var "e"]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := asn_true;
+    |}.
+
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
       | read_allowed  => Some sep_contract_read_allowed
       | write_allowed => Some sep_contract_write_allowed
+      | upper_bound   => Some sep_contract_upper_bound
       | read_reg      => Some sep_contract_read_reg
       | read_reg_cap  => Some sep_contract_read_reg_cap
       | read_reg_num  => Some sep_contract_read_reg_num
