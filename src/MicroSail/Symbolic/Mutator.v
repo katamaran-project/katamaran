@@ -866,8 +866,14 @@ Module Mutators
              dmut_produce (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match term_get_sum s with
-        | Some (inl v) => dmut_fresh (xl , σ) (dmut_produce alt_inl)
-        | Some (inr v) => dmut_fresh (xr , τ) (dmut_produce alt_inr)
+        | Some e =>
+          dmut_demonic_binary
+            (dmut_fresh (xl , σ)
+                        (* TODO: e = term_inl "xl" *)
+                         (dmut_produce alt_inl))
+            (dmut_fresh (xr , τ)
+                        (* TODO: e = term_inr "xr" *)
+                         (dmut_produce alt_inr))
         | None => dmut_fail "dmut_produce" "pattern match asn_match_sum, s is not an instance of a sum type" s
         end
       | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
@@ -887,7 +893,8 @@ Module Mutators
              dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
              dmut_consume (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        match term_get_sum s with
+        (* TODO: fix this! angelic + assert *)
+        match term_get_sum s with 
         | Some (inl v) => dmut_fresh (xl , σ) (dmut_consume alt_inl)
         | Some (inr v) => dmut_fresh (xr , τ) (dmut_consume alt_inr)
         | None => dmut_fail "dmut_consume" "pattern match asn_match_sum, s is not an instance of a sum type" s
@@ -1179,34 +1186,29 @@ Module Mutators
           end
         | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
           match eval_term_evar L s with
-          | Some (term_inl v) =>
-            let Lxl := L ► (xl∶σ ↦ None) in
-            dmut_consume_evar alt_inl Lxl >>= fun _ _ Lxl' =>
-                                                match env_unsnoc Lxl' with
-                                                | (L' , Some _) =>
-                                                  dmut_pure L'
-                                                | (_ , None) =>
-                                                  dmut_fail
-                                                    "dmut_consume_evar"
-                                                    "Uninstantiated evars when consuming assertion"
-                                                    {| evarerror_env := L;
-                                                       evarerror_data := asn
-                                                    |}
-                                                end
-          | Some (term_inr v) => 
-            let Lxr := L ► (xr∶τ ↦ None) in
-            dmut_consume_evar alt_inr Lxr >>= fun _ _ Lxr' =>
-                                                match env_unsnoc Lxr' with
-                                                | (L' , Some _) =>
-                                                  dmut_pure L'
-                                                | (_ , None) =>
-                                                  dmut_fail
-                                                    "dmut_consume_evar"
-                                                    "Uninstantiated evars when consuming assertion"
-                                                    {| evarerror_env := L;
-                                                       evarerror_data := asn
-                                                    |}
-                                                end
+          | Some e =>
+            dmut_angelic_binary
+              (let Lxl := L ► (xl∶σ ↦ None) in
+                          (* TODO: eq eval_term_evar Lxl s *)
+               (dmut_assert_formula (formula_eq (wk1 e) (term_inl (@term_var _ _ _ inctx_zero))) ;;
+                dmut_consume_evar alt_inl Lxl >>= fun _ _ Lxl' =>
+                                                    match env_unsnoc Lxl' with
+                                                    | (L' , Some _) =>
+                                                      dmut_pure L'
+                                                    | (_ , None) =>
+                                                      dmut_fail
+                                                        "dmut_consume_evar"
+                                                        "Uninstantiated evars when consuming assertion"
+                                                        {| evarerror_env := Lxl;
+                                                           evarerror_data := alt_inl
+                                                        |}
+                                                    end))
+              (dmut_fail
+                 "dmut_consume_evar"
+                 "sum inr case not implemented yet"
+                 {| evarerror_env := L;
+                    evarerror_data := asn
+                 |})
           | _ => dmut_fail
                      "dmut_consume_evar"
                      "Uninstantiated evars when consuming assertion"
