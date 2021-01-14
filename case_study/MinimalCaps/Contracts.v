@@ -98,13 +98,10 @@ Module MinCapsSymbolicContractKit <:
 
   Local Notation "r '↦r' t" := (asn_chunk (chunk_pred ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t)))) (at level 100).
   Local Notation "a '↦m' t" := (asn_chunk (chunk_pred ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t)))) (at level 100).
+  Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   (* Arguments asn_prop [_] & _. *)
 
   (*
-      @pre true;
-      @post result = (e = none ∨ ∃ e'. e = inl e' ∧ e' >= a);
-      bool upper_bound(a : addr, e : option addr);
-
       @pre true;
       @post ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ result = (a >= b && (e = none ∨ e = inl e' ∧ e' >= a));
       bool within_bounds(c : capability);
@@ -261,15 +258,17 @@ Module MinCapsSymbolicContractKit <:
                                end);
     |}.
 
-  (*  @pre true;
-      @post result = (e = none ∨ ∃ e'. e = inl e' ∧ e' >= a);
-      bool upper_bound(a : addr, e : option addr); *)
   Definition sep_contract_upper_bound : SepContract ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr ] ty_bool :=
     {| sep_contract_logic_variables := ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr ];
        sep_contract_localstore      := [term_var "a", term_var "e"]%arg;
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result";
-       sep_contract_postcondition   := asn_true;
+       sep_contract_postcondition   := 
+          asn_match_option ty_addr (term_var "e") "e'"
+                          (asn_if (term_binop binop_le (term_var "a") (term_var "e'"))
+                                  (asn_eq (term_var "result") (term_lit ty_bool true))
+                                  (asn_eq (term_var "result") (term_lit ty_bool false)))
+                          (asn_eq (term_var "result") (term_lit ty_bool true)); 
     |}.
 
   Definition CEnv : SepContractEnv :=
@@ -411,3 +410,9 @@ Proof. compute; solve. Qed.
 
 Lemma valid_contract_write_allowed : ValidContractDynMut sep_contract_write_allowed fun_write_allowed.
 Proof. compute; solve. Qed.
+
+Lemma valid_contract_upper_bound : ValidContractDynMut sep_contract_upper_bound fun_upper_bound.
+Proof.
+  compute - [NamedEnv Lit Error valid_obligation].
+  (* compute; solve. Qed. *)
+Admitted.
