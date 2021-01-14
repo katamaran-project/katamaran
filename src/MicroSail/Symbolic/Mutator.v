@@ -857,7 +857,7 @@ Module Mutators
       | asn_formula fml => dmut_assume_formula fml
       | asn_chunk c     => dmut_produce_chunk c
       | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
-                           (dmut_assume_term (term_not b) ;; dmut_produce a2)
+                                                                  (dmut_assume_term (term_not b) ;; dmut_produce a2)
       | asn_match_enum E k1 alts =>
         dmut_demonic_finite
           (𝑬𝑲 E)
@@ -866,15 +866,22 @@ Module Mutators
              dmut_produce (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match term_get_sum s with
-        | Some e =>
+        | Some (inl v) =>
+          dmut_fresh (xl , σ)
+                     (dmut_assume_formula (formula_eq (sub_term sub_wk1 v) (@term_var _ _ _ inctx_zero)) ;;
+                      dmut_produce alt_inl)
+        | Some (inr v) =>
+          dmut_fresh (xr , τ)
+                     (dmut_assume_formula (formula_eq (sub_term sub_wk1 v) (@term_var _ _ _ inctx_zero)) ;;
+                      dmut_produce alt_inr)
+        | None => 
           dmut_demonic_binary
             (dmut_fresh (xl , σ)
-                        (* TODO: e = term_inl "xl" *)
-                         (dmut_produce alt_inl))
+                        (dmut_assume_formula (formula_eq (sub_term sub_wk1 s) (term_inl (@term_var _ _ _ inctx_zero))) ;;
+                         dmut_produce alt_inl))
             (dmut_fresh (xr , τ)
-                        (* TODO: e = term_inr "xr" *)
-                         (dmut_produce alt_inr))
-        | None => dmut_fail "dmut_produce" "pattern match asn_match_sum, s is not an instance of a sum type" s
+                        (dmut_assume_formula (formula_eq (sub_term sub_wk1 s) (term_inr (@term_var _ _ _ inctx_zero))) ;;
+                         dmut_produce alt_inr))
         end
       | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
       | asn_exist ς τ a => dmut_fresh (ς,τ) (dmut_produce a)
@@ -893,11 +900,19 @@ Module Mutators
              dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
              dmut_consume (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        (* TODO: fix this! angelic + assert *)
         match term_get_sum s with 
-        | Some (inl v) => dmut_fresh (xl , σ) (dmut_consume alt_inl)
-        | Some (inr v) => dmut_fresh (xr , τ) (dmut_consume alt_inr)
-        | None => dmut_fail "dmut_consume" "pattern match asn_match_sum, s is not an instance of a sum type" s
+        | Some (inl v) =>
+          dmut_sub (sub_snoc (sub_id _) (xl , σ) v) (dmut_consume alt_inl)
+        | Some (inr v) => 
+          dmut_sub (sub_snoc (sub_id _) (xr , τ) v) (dmut_consume alt_inr)
+        | None =>
+          dmut_angelic_binary
+            (⨁ t : Term Σ σ =>
+             dmut_assert_formula (formula_eq s (term_inl t)) ;;
+             dmut_sub (sub_snoc (sub_id _) (xl , σ) t) (dmut_consume alt_inl))
+            (⨁ t : Term Σ τ =>
+             dmut_assert_formula (formula_eq s (term_inr t)) ;;
+             dmut_sub (sub_snoc (sub_id _) (xr , τ) t) (dmut_consume alt_inr))
         end
       | asn_sep a1 a2   => dmut_consume a1 ;; dmut_consume a2
       | asn_exist ς τ a =>
@@ -1189,12 +1204,11 @@ Module Mutators
           | Some e =>
             dmut_angelic_binary
               (let Lxl := L ► (xl∶σ ↦ None) in
-                          (* TODO: eq eval_term_evar Lxl s *)
-               (dmut_assert_formula (formula_eq (wk1 e) (term_inl (@term_var _ _ _ inctx_zero))) ;;
-                dmut_consume_evar alt_inl Lxl >>= fun _ _ Lxl' =>
+                dmut_consume_evar alt_inl Lxl >>= fun _ ζ Lxl' =>
                                                     match env_unsnoc Lxl' with
-                                                    | (L' , Some _) =>
-                                                      dmut_pure L'
+                                                    | (L' , Some t) =>
+                                                      (dmut_assert_formula (formula_eq (sub_term ζ e) (term_inl t)) ;;
+                                                      dmut_pure L')
                                                     | (_ , None) =>
                                                       dmut_fail
                                                         "dmut_consume_evar"
@@ -1202,13 +1216,21 @@ Module Mutators
                                                         {| evarerror_env := Lxl;
                                                            evarerror_data := alt_inl
                                                         |}
-                                                    end))
-              (dmut_fail
-                 "dmut_consume_evar"
-                 "sum inr case not implemented yet"
-                 {| evarerror_env := L;
-                    evarerror_data := asn
-                 |})
+                                                    end)
+              (let Lxr := L ► (xr∶τ ↦ None) in
+                dmut_consume_evar alt_inr Lxr >>= fun _ ζ Lxr' =>
+                                                    match env_unsnoc Lxr' with
+                                                    | (L' , Some t) =>
+                                                      (dmut_assert_formula (formula_eq (sub_term ζ e) (term_inr t)) ;;
+                                                      dmut_pure L')
+                                                    | (_ , None) =>
+                                                      dmut_fail
+                                                        "dmut_consume_evar"
+                                                        "Uninstantiated evars when consuming assertion"
+                                                        {| evarerror_env := Lxr;
+                                                           evarerror_data := alt_inr
+                                                        |}
+                                                    end)
           | _ => dmut_fail
                      "dmut_consume_evar"
                      "Uninstantiated evars when consuming assertion"
@@ -2247,9 +2269,22 @@ Module Mutators
              dmut_produce (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match term_get_sum s with
-        | Some (inl v) => dmut_fresh (xl , σ) (dmut_produce alt_inl)
-        | Some (inr v) => dmut_fresh (xr , τ) (dmut_produce alt_inr)
-        | None => dmut_fail "dmut_produce" "pattern match asn_match_sum, s is not an instance of a sum type" s
+        | Some (inl v) =>
+          dmut_fresh (xl , σ)
+                     (dmut_assume_formula (formula_eq (sub_term sub_wk1 v) (@term_var _ _ _ inctx_zero)) ;;
+                      dmut_produce alt_inl)
+        | Some (inr v) =>
+          dmut_fresh (xr , τ) 
+                     (dmut_assume_formula (formula_eq (sub_term sub_wk1 v) (@term_var _ _ _ inctx_zero)) ;;
+                      dmut_produce alt_inr)
+        | None => 
+          dmut_demonic_binary
+            (dmut_fresh (xl , σ)
+                        (dmut_assume_formula (formula_eq (sub_term sub_wk1 s) (term_inl (@term_var _ _ _ inctx_zero))) ;;
+                         dmut_produce alt_inl))
+            (dmut_fresh (xr , τ)
+                        (dmut_assume_formula (formula_eq (sub_term sub_wk1 s) (term_inr (@term_var _ _ _ inctx_zero))) ;;
+                         dmut_produce alt_inr))
         end
       | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
       | asn_exist ς τ a => dmut_fresh (ς,τ) (dmut_produce a)
