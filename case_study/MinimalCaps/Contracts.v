@@ -263,7 +263,7 @@ Module MinCapsSymbolicContractKit <:
           asn_match_option ty_addr (term_var "e") "e'"
                            (asn_eq (term_var "result")
                                    (term_binop binop_le (term_var "a") (term_var "e'")))
-                          (asn_eq (term_var "result") (term_lit ty_bool true)); 
+                           (asn_eq (term_var "result") (term_lit ty_bool true)); 
     |}.
 
   (* 
