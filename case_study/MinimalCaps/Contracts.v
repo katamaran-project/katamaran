@@ -102,10 +102,6 @@ Module MinCapsSymbolicContractKit <:
   (* Arguments asn_prop [_] & _. *)
 
   (*
-      @pre true;
-      @post ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ result = (a >= b && (e = none ∨ e = inl e' ∧ e' >= a));
-      bool within_bounds(c : capability);
-
       regInv(r) = ∃ w : word. r ↦ w * safe(w)
       machInv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * ∃ c : cap. pc ↦ c * safe(c)
 
@@ -265,11 +261,39 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_result          := "result";
        sep_contract_postcondition   := 
           asn_match_option ty_addr (term_var "e") "e'"
-                          (asn_if (term_binop binop_le (term_var "a") (term_var "e'"))
-                                  (asn_eq (term_var "result") (term_lit ty_bool true))
-                                  (asn_eq (term_var "result") (term_lit ty_bool false)))
+                           (asn_eq (term_var "result")
+                                   (term_binop binop_le (term_var "a") (term_var "e'")))
                           (asn_eq (term_var "result") (term_lit ty_bool true)); 
     |}.
+
+  (* 
+      @pre true;
+      @post ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ result = (a >= b && (e = none ∨ e = inl e' ∧ e' >= a));
+      bool within_bounds(c : capability);
+   *)
+  Definition sep_contract_within_bounds : SepContract ["c" ∶ ty_cap] ty_bool := 
+    {| sep_contract_logic_variables := ["c" ∶ ty_cap];
+       sep_contract_localstore      := [term_var "c"]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   :=
+         asn_exist
+           "b" ty_addr
+           (asn_exist
+              "e" (ty_option ty_addr)
+              (asn_exist
+                 "a" ty_addr
+                 (asn_eq (term_var "b") (term_projrec (term_var "c") "cap_begin") ✱
+                         asn_eq (term_var "e") (term_projrec (term_var "c") "cap_end") ✱
+                         asn_eq (term_var "a") (term_projrec (term_var "c") "cap_cursor") ✱
+                         asn_match_option ty_addr (term_var "e") "e'"
+                         (asn_eq (term_var "result")
+                                 (term_binop binop_and
+                                             (term_binop binop_le (term_var "b") (term_var "a"))
+                                             (term_binop binop_le (term_var "a") (term_var "e'"))))
+                         (asn_eq (term_var "result") 
+                                 (term_binop binop_le (term_var "b") (term_var "a"))))))
+                     |}.
 
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
@@ -277,6 +301,7 @@ Module MinCapsSymbolicContractKit <:
       | read_allowed  => Some sep_contract_read_allowed
       | write_allowed => Some sep_contract_write_allowed
       | upper_bound   => Some sep_contract_upper_bound
+      | within_bounds => Some sep_contract_within_bounds
       | read_reg      => Some sep_contract_read_reg
       | read_reg_cap  => Some sep_contract_read_reg_cap
       | read_reg_num  => Some sep_contract_read_reg_num
@@ -413,6 +438,14 @@ Proof. compute; solve. Qed.
 
 Lemma valid_contract_upper_bound : ValidContractDynMut sep_contract_upper_bound fun_upper_bound.
 Proof.
+  (* apply dynmutevarreflect_sound. *)
+  compute - [NamedEnv Lit Error valid_obligation].
+  (* compute; solve. Qed. *)
+Admitted.
+
+Lemma valid_contract_within_bounds : ValidContractDynMut sep_contract_within_bounds fun_within_bounds.
+Proof.
+  (* apply dynmutevarreflect_sound. *)
   compute - [NamedEnv Lit Error valid_obligation].
   (* compute; solve. Qed. *)
 Admitted.
