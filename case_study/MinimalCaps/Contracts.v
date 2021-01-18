@@ -61,7 +61,8 @@ Open Scope ctx_scope.
 Inductive Predicate : Set :=
   ptsreg
 | ptsto
-| safe.
+| safe
+| csafe.
 
 Section TransparentObligations.
   Local Set Transparent Obligations.
@@ -83,6 +84,7 @@ Module Export MinCapsAssertionKit <:
     | ptsreg => [ty_enum regname, ty_word]
     | ptsto => [ty_addr, ty_int]
     | safe => [ty_word]
+    | csafe => [ty_cap]
     end.
   Instance 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
 End MinCapsAssertionKit.
@@ -101,10 +103,23 @@ Module MinCapsSymbolicContractKit <:
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   (* Arguments asn_prop [_] & _. *)
 
-  (*
-      regInv(r) = ∃ w : word. r ↦ w * safe(w)
-      machInv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * ∃ c : cap. pc ↦ c * safe(c)
+  (* regInv(r) = ∃ w : word. r ↦ w * safe(w) *)
+  Definition regInv {Σ} (r : Reg ty_word) : Assertion Σ :=
+    asn_exist "w" ty_word
+              (r ↦ (term_var "w") ✱
+                asn_chunk (chunk_pred safe (env_nil ► (ty_word ↦ (term_var "w"))))).
 
+  (* regInv(r) = ∃ c : cap. r ↦ c * csafe(c) *)
+  Definition regInvCap {Σ} (r : Reg ty_cap) : Assertion Σ :=
+    asn_exist "c" ty_cap
+              (r ↦ (term_var "c") ✱
+                asn_chunk (chunk_pred csafe (env_nil ► (ty_cap ↦ (term_var "c"))))).
+
+  (* machInv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * regInvCap(pc) *)
+  Definition machInv {Σ} : Assertion Σ :=
+    regInv(reg0) ✱ regInv(reg1) ✱ regInv(reg2) ✱ regInv(reg3) ✱ regInvCap(pc).
+
+  (*
       @pre machInv;
       @post machInv;
       bool exec_sd(lv : lv, hv : memval, immediate : Z)
