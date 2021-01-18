@@ -172,6 +172,7 @@ Module MinCapsModel.
       | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
       | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head ts) 1 (env_head (env_tail ts))%Z
       | safe => fun ts => MinCaps_safe (mG := mG) (env_head ts)
+      | csafe => fun ts => MinCaps_safe (mG := mG) (inr (env_head ts))
       end) ts.
 
     End WithIrisNotations.
