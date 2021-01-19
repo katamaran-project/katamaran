@@ -69,23 +69,25 @@ End TransparentObligations.
 
 Bind Scope outcome_scope with Outcome.
 
-Definition outcome_angelic_list {E A} (msg : E) : list A -> Outcome A :=
-  fix outcome_angelic_list (xs : list A) :=
+Definition outcome_angelick_list {A B E} (msg : E) (xs : list A) (k : A -> Outcome B) : Outcome B :=
+  (fix outcome_angelic_list (xs : list A) :=
     match xs with
     | nil        => outcome_fail msg
-    | cons x xs  => outcome_angelic_binary (outcome_pure x) (outcome_angelic_list xs)
-    end.
+    | cons x xs  => outcome_angelic_binary (k x) (outcome_angelic_list xs)
+    end) xs.
+
+Definition outcome_demonick_list {A B} (xs : list A) (k : A -> Outcome B) : Outcome B :=
+  (fix outcome_demonic_list (xs : list A) :=
+    match xs with
+    | nil        => outcome_block
+    | cons x xs  => outcome_demonic_binary (k x) (outcome_demonic_list xs)
+    end) xs.
 
 Definition outcome_angelic_finite {E A} `{finite.Finite A} (msg : E) : Outcome A :=
-  outcome_angelic_list msg (finite.enum A).
+  outcome_angelick_list msg (finite.enum A) (@outcome_pure A).
 
-(* Definition outcome_angelic_list {A} (msg : string) : list A -> Outcome A := *)
-(*   fix outcome_angelic_list (xs : list A) := *)
-(*     match xs with *)
-(*     | nil        => outcome_fail msg *)
-(*     | cons x nil => outcome_pure x *)
-(*     | cons x xs  => outcome_angelic_binary (outcome_pure x) (outcome_angelic_list xs) *)
-(*     end. *)
+Definition outcome_demonic_finite {A} `{finite.Finite A} : Outcome A :=
+  outcome_demonick_list (finite.enum A) (@outcome_pure A).
 
 Fixpoint outcome_map {A B : Type} (f : A -> B) (o : Outcome A) : Outcome B :=
   match o with
@@ -197,38 +199,26 @@ Lemma outcome_satisfy_monotonic {A : Type} {P Q : A -> Prop} (o : Outcome A) (hy
   outcome_satisfy o P -> outcome_satisfy o Q.
 Proof. induction o; firstorder. Qed.
 
-Lemma outcome_satisfy_angelic_list {S A xs} {msg : S} (P : A -> Prop) :
-  outcome_satisfy (outcome_angelic_list msg xs) P <->
-  exists x, In x xs /\ P x.
+Lemma outcome_satisfy_angelick_list {E A B} (msg : E) (xs : list A) (k : A -> Outcome B) (P : B -> Prop) :
+  outcome_satisfy (outcome_angelick_list msg xs k) P <->
+  exists x, In x xs /\ outcome_satisfy (k x) P.
 Proof.
+  unfold outcome_angelick_list.
   induction xs; cbn.
   - firstorder.
-  - rewrite IHxs; firstorder; subst; auto.
+  - rewrite IHxs. firstorder; subst; auto.
 Qed.
 
-Lemma outcome_satisfy_map_angelic_list {E A B xs} {msg : E} {f : A -> B} (P : B -> Prop) :
-  outcome_satisfy (outcome_angelic_list msg (List.map f xs)) P <->
-  outcome_satisfy (outcome_angelic_list msg xs) (fun x => P (f x)).
+Lemma outcome_satisfy_angelic_finite {E A} `{finite.Finite A} (msg : E) (P : A -> Prop) :
+  outcome_satisfy (outcome_angelic_finite (A := A) msg) P <-> (exists a : A, P a).
 Proof.
-  do 2 rewrite outcome_satisfy_angelic_list.
-  split.
-  - intros [b [H1 H2]].
-    rewrite in_map_iff in H1.
-    destruct H1 as [a [H0 H1]].
-    subst b. now exists a.
-  - intros [a [H1 H2]].
-    exists (f a).
-    auto using in_map.
-Qed.
-
-Lemma outcome_satisfy_filter_angelic_list {E A xs} {msg : E} {f : A -> bool} (P : A -> Prop) :
-  outcome_satisfy (outcome_angelic_list msg (List.filter f xs)) P <->
-  outcome_satisfy (outcome_angelic_list msg xs) (fun x => P x /\ f x = true).
-Proof.
-  do 2 rewrite outcome_satisfy_angelic_list.
-  split; intros [a [H1 H2]]; exists a.
-  - rewrite filter_In in H1. intuition.
-  - rewrite filter_In. intuition.
+  unfold outcome_angelic_finite.
+  rewrite outcome_satisfy_angelick_list.
+  cbn. split; intros [a ?]; exists a.
+  - apply H0.
+  - split; auto.
+    apply base.elem_of_list_In.
+    apply finite.elem_of_enum.
 Qed.
 
 Lemma outcome_satisfy_angelic_binary_prune {A} (o1 o2 : Outcome A) (P : A -> Prop) :
