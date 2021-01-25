@@ -119,44 +119,6 @@ Module MinCapsSymbolicContractKit <:
   Definition machInv {Σ} : Assertion Σ :=
     regInv(reg0) ✱ regInv(reg1) ✱ regInv(reg2) ✱ regInv(reg3) ✱ regInvCap(pc).
 
-  (*
-      @pre machInv;
-      @post machInv;
-      bool exec_sd(lv : lv, hv : memval, immediate : Z)
-
-      @pre machInv;
-      @post machInv;
-      bool exec_ld(lv : lv, hv : memval, immediate : Z)
-
-      @pre machInv;
-      @post machInv;
-      bool exec_jr(lv : lv)
-
-      @pre machInv;
-      @post machInv;
-      bool exec_bnez(lv : lv, immediate : Z)
-
-      @pre machInv;
-      @post machInv;
-      bool exec_mv(lv : lv, rv : ty_rv)
-
-      @pre machInv;
-      @post machInv;
-      bool exec_ret
-
-      @pre machInv;
-      @post machInv;
-      bool exec_instr(i : instr)
-
-      @pre machInv;
-      @post machInv;
-      bool exec
-
-      @pre machInv;
-      @post machInv;
-      unit loop
-   *)
-
   Definition sep_contract_read_reg : SepContract ["reg" ∶ ty_enum regname ] ty_word :=
     {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word];
        sep_contract_localstore      := [term_var "reg"]%arg;
@@ -310,6 +272,173 @@ Module MinCapsSymbolicContractKit <:
                                  (term_binop binop_le (term_var "b") (term_var "a"))))))
                      |}.
 
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_jr(lv : lv) *)
+  Definition sep_contract_exec_jr : SepContract ["lv" ∶ ty_lv] ty_bool :=
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv];
+       sep_contract_localstore      := [term_var "lv"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_jalr(lv1 : lv, lv2 : lv) *)
+  Definition sep_contract_exec_jalr : SepContract ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+    {| sep_contract_logic_variables := ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv];
+       sep_contract_localstore      := [term_var "lv1", term_var "lv2"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_j(offset : Z) *)
+  Definition sep_contract_exec_j : SepContract ["offset" ∶ ty_int] ty_bool :=
+    {| sep_contract_logic_variables := ["offset" ∶ ty_int];
+       sep_contract_localstore      := [term_var "offset"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_jal(lv : lv, offset : Z) *)
+  Definition sep_contract_exec_jal : SepContract ["lv" ∶ ty_lv, "offset" ∶ ty_int] ty_bool :=
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "offset" ∶ ty_int];
+       sep_contract_localstore      := [term_var "lv", term_var "offset"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_bnez(lv : lv, immediate : Z) *)
+  Definition sep_contract_exec_bnez : SepContract ["lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool :=
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "immediate" ∶ ty_int];
+       sep_contract_localstore      := [term_var "lv", term_var "immediate"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_mv(lv : lv, hv : ty_hv) *)
+  Definition sep_contract_exec_mv : SepContract ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool :=
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "hv" ∶ ty_hv];
+       sep_contract_localstore      := [term_var "lv", term_var "hv"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_ld(lv : lv, hv : memval, immediate : Z) *)
+  Definition sep_contract_exec_ld : SepContract ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool :=
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int];
+       sep_contract_localstore      := [term_var "lv", term_var "hv", term_var "immediate"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_sd(hv : memval, lv : lv, immediate : Z) *)
+  Definition sep_contract_exec_sd : SepContract ["hv" ∶ ty_hv, "lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool :=
+    {| sep_contract_logic_variables := ["hv" ∶ ty_hv, "lv" ∶ ty_lv, "immediate" ∶ ty_int];
+       sep_contract_localstore      := [term_var "hv", term_var "lv", term_var "immediate"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_addi(lv : lv, hv : hv, immediate : Z) *)
+  Definition sep_contract_exec_addi : SepContract ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool :=
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int];
+       sep_contract_localstore      := [term_var "lv", term_var "hv", term_var "immediate"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_add(lv1 : lv, lv2 : lv, lv3 : lv) *)
+  Definition sep_contract_exec_add : SepContract ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool :=
+    {| sep_contract_logic_variables := ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv];
+       sep_contract_localstore      := [term_var "lv1", term_var "lv2", term_var "lv3"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (* @pre machInv;
+     @post machInv;
+     bool exec_ret *)
+  Definition sep_contract_exec_ret : SepContract ε ty_bool :=
+    {| sep_contract_logic_variables := ctx_nil;
+       sep_contract_localstore      := env_nil;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_instr(i : instr) *)
+  Definition sep_contract_exec_instr : SepContract ["i" ∶ ty_instr] ty_bool :=
+    {| sep_contract_logic_variables := ["i" ∶ ty_instr];
+       sep_contract_localstore      := [term_var "i"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec *)
+  Definition sep_contract_exec : SepContract ε ty_bool :=
+    {| sep_contract_logic_variables := ctx_nil;
+       sep_contract_localstore      := env_nil;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      unit loop *)
+  Definition sep_contract_loop : SepContract ε ty_unit :=
+    {| sep_contract_logic_variables := ctx_nil;
+       sep_contract_localstore      := env_nil;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
@@ -325,6 +454,20 @@ Module MinCapsSymbolicContractKit <:
       | update_pc     => Some sep_contract_update_pc
       | read_mem      => Some sep_contract_read_mem
       | write_mem     => Some sep_contract_write_mem
+      | exec_jr       => Some sep_contract_exec_jr
+      | exec_jalr     => Some sep_contract_exec_jalr
+      | exec_j        => Some sep_contract_exec_j
+      | exec_jal      => Some sep_contract_exec_jal
+      | exec_bnez     => Some sep_contract_exec_bnez
+      | exec_mv       => Some sep_contract_exec_mv
+      | exec_ld       => Some sep_contract_exec_ld
+      | exec_sd       => Some sep_contract_exec_sd
+      | exec_addi     => Some sep_contract_exec_addi
+      | exec_add      => Some sep_contract_exec_add
+      | exec_ret      => Some sep_contract_exec_ret
+      | exec_instr    => Some sep_contract_exec_instr
+      | exec          => Some sep_contract_exec
+      | loop          => Some sep_contract_loop
       | _             => None
       end.
 
@@ -464,3 +607,45 @@ Proof.
   compute - [NamedEnv Lit Error valid_obligation].
   (* compute; solve. Qed. *)
 Admitted.
+
+Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_exec_jalr : ValidContractDynMut sep_contract_exec_jalr fun_exec_jalr.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_exec_j : ValidContractDynMut sep_contract_exec_j fun_exec_j.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_exec_jal : ValidContractDynMut sep_contract_exec_jal fun_exec_jal.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_exec_bnez : ValidContractDynMut sep_contract_exec_bnez fun_exec_bnez.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_exec_ld : ValidContractDynMut sep_contract_exec_ld fun_exec_ld.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_exec_sd : ValidContractDynMut sep_contract_exec_sd fun_exec_sd.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_exec_addi : ValidContractDynMut sep_contract_exec_addi fun_exec_addi.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_exec_add : ValidContractDynMut sep_contract_exec_add fun_exec_add.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_exec_ret : ValidContractDynMut sep_contract_exec_ret fun_exec_ret.
+Proof. compute; solve. Qed.
+
+Lemma valid_contract_exec_instr : ValidContractDynMut sep_contract_exec_instr fun_exec_instr.
+Proof. compute; solve. Qed.
+
+Lemma valid_contract_exec : ValidContractDynMut sep_contract_exec fun_exec.
+Proof. compute; solve. Admitted.
+
+Lemma valid_contract_loop : ValidContractDynMut sep_contract_loop fun_loop.
+Proof. compute; solve. Qed.
