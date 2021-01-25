@@ -191,14 +191,7 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_localstore      := [term_var "offset"]%arg;
        sep_contract_precondition    := pc ↦ term_var "opc";
        sep_contract_result          := "_";
-       sep_contract_postcondition   :=
-         asn_exist "npc" ty_cap (pc ↦ term_var "npc");
-         (* pc ↦
-            (term_record capability
-                         [ (term_projrec (term_var "opc") "cap_permission"),
-                           (term_projrec (term_var "opc") "cap_begin"),
-                           (term_projrec (term_var "opc") "cap_end"),
-                           (term_binop binop_plus (term_projrec (term_var "opc") "cap_cursor") (term_var "offset"))]); *)
+       sep_contract_postcondition   := asn_exist "npc" ty_cap (pc ↦ term_var "npc");
     |}.
 
   Definition sep_contract_read_mem : SepContract ["a" ∶ ty_addr ] ty_memval :=
