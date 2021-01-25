@@ -495,34 +495,34 @@ Module ISASymbolicContractKit <:
     {| sep_contract_logic_variables := ["reg_tag" ∶ ty_enum register_tag,  "v" ∶ ty_int];
        sep_contract_localstore      := [term_var "reg_tag"]%arg;
        sep_contract_precondition    :=
-         asn_chunk (chunk_pred ptstoreg [ term_var "reg_tag", term_var "v" ]%env);
+         asn_chunk (chunk_user ptstoreg [ term_var "reg_tag", term_var "v" ]%env);
        sep_contract_result          := "result_rX";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_rX") (term_var "v") ✱
-         asn_chunk (chunk_pred ptstoreg [ term_var "reg_tag", term_var "v" ]%env) ;
+         asn_chunk (chunk_user ptstoreg [ term_var "reg_tag", term_var "v" ]%env) ;
     |}.
 
   Definition sep_contract_wX : SepContract ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_unit :=
     {| sep_contract_logic_variables := ["r" ∶ ty_enum register_tag, "v_old" ∶ ty_int, "v_new" ∶ ty_int];
        sep_contract_localstore      := [term_var "r", term_var "v_new"]%arg;
        sep_contract_precondition    :=
-         asn_chunk (chunk_pred ptstoreg [ term_var "r", term_var "v_old" ]%env);
+         asn_chunk (chunk_user ptstoreg [ term_var "r", term_var "v_old" ]%env);
        sep_contract_result          := "result_wX";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_wX") (term_lit ty_unit tt) ✱
-         asn_chunk (chunk_pred ptstoreg [ term_var "r", term_var "v_new" ]%env)
+         asn_chunk (chunk_user ptstoreg [ term_var "r", term_var "v_new" ]%env)
     |}.
 
   Definition sep_contract_swapreg : SepContract ["r1" ∶ ty_enum register_tag, "r2" ∶ ty_enum register_tag] ty_unit :=
     {| sep_contract_pun_logic_variables := ["u" ∶ ty_int, "v" ∶ ty_int];
        sep_contract_pun_precondition :=
-         asn_chunk (chunk_pred ptstoreg [term_var "r1", term_var "u"]) ✱
-         asn_chunk (chunk_pred ptstoreg [term_var "r2", term_var "v"]);
+         asn_chunk (chunk_user ptstoreg [term_var "r1", term_var "u"]) ✱
+         asn_chunk (chunk_user ptstoreg [term_var "r2", term_var "v"]);
        sep_contract_pun_result := "result_swapreg";
        sep_contract_pun_postcondition :=
          asn_eq (term_var "result_swapreg") (term_lit ty_unit tt) ✱
-         asn_chunk (chunk_pred ptstoreg [term_var "r1", term_var "v"]) ✱
-         asn_chunk (chunk_pred ptstoreg [term_var "r2", term_var "u"])
+         asn_chunk (chunk_user ptstoreg [term_var "r1", term_var "v"]) ✱
+         asn_chunk (chunk_user ptstoreg [term_var "r2", term_var "u"])
     |}.
 
   Definition CEnv : SepContractEnv :=
@@ -538,7 +538,7 @@ Module ISASymbolicContractKit <:
     {| sep_contract_logic_variables := ["r" ∶ ty_enum register_tag, "v" ∶ ty_int];
        sep_contract_localstore      := env_nil;
        sep_contract_precondition    :=
-         asn_chunk (chunk_pred ptstoreg [term_var "r", term_var "v"]%env);
+         asn_chunk (chunk_user ptstoreg [term_var "r", term_var "v"]%env);
        sep_contract_result          := "result_open_ptsreg";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_open_ptsreg") (term_lit ty_unit tt) ✱
@@ -568,7 +568,7 @@ Module ISASymbolicContractKit <:
        sep_contract_postcondition   :=
          asn_eq (term_var "result_close_ptsreg") (term_lit ty_unit tt) ✱
          asn_chunk
-            (chunk_pred
+            (chunk_user
                ptstoreg
                [term_enum register_tag R, term_var "v"]%env)
     |}.

@@ -74,7 +74,7 @@ Module Soundness
 
     Definition inst_scchunk (c : SCChunk) : L :=
       match c with
-      | scchunk_pred p vs => lpred p vs
+      | scchunk_user p vs => luser p vs
       | scchunk_ptsreg r v => lptsreg r v
       end.
 

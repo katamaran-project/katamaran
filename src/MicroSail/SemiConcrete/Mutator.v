@@ -64,9 +64,9 @@ Module SemiConcrete
   Export symcontractkit.
 
   Inductive SCChunk : Type :=
-  | scchunk_pred   (p : 𝑷) (vs : Env Lit (𝑷_Ty p))
+  | scchunk_user   (p : 𝑷) (vs : Env Lit (𝑷_Ty p))
   | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ).
-  Arguments scchunk_pred _ _ : clear implicits.
+  Arguments scchunk_user _ _ : clear implicits.
 
   Section TransparentObligations.
     Local Set Transparent Obligations.
@@ -105,10 +105,10 @@ Module SemiConcrete
       end.
 
     Equations(noeqns) match_chunk_eqb (ce : SCChunk) (cr : SCChunk) : bool :=
-      match_chunk_eqb (scchunk_pred p1 vs1) (scchunk_pred p2 vs2)
+      match_chunk_eqb (scchunk_user p1 vs1) (scchunk_user p2 vs2)
       with eq_dec p1 p2 => {
-        match_chunk_eqb (scchunk_pred p1 vs1) (scchunk_pred p2 vs2) (left eq_refl) := env_eqb_hom Lit_eqb vs1 vs2;
-        match_chunk_eqb (scchunk_pred p1 vs1) (scchunk_pred p2 vs2) (right _) := false
+        match_chunk_eqb (scchunk_user p1 vs1) (scchunk_user p2 vs2) (left eq_refl) := env_eqb_hom Lit_eqb vs1 vs2;
+        match_chunk_eqb (scchunk_user p1 vs1) (scchunk_user p2 vs2) (right _) := false
       };
       match_chunk_eqb (scchunk_ptsreg r1 t1) (scchunk_ptsreg r2 t2)
       with eq_dec_het r1 r2 => {
@@ -279,11 +279,11 @@ Module SemiConcrete
 
     Global Instance inst_chunk : Inst Chunk SCChunk :=
       {| inst Σ ι c := match c with
-                       | chunk_pred p ts => scchunk_pred p (inst ι ts)
+                       | chunk_user p ts => scchunk_user p (inst ι ts)
                        | chunk_ptsreg r t => scchunk_ptsreg r (inst ι t)
                        end;
          lift Σ c   := match c with
-                       | scchunk_pred p vs => chunk_pred p (lift vs)
+                       | scchunk_user p vs => chunk_user p (lift vs)
                        | scchunk_ptsreg r v => chunk_ptsreg r (lift v)
                        end
       |}.

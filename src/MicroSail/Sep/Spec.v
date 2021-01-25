@@ -89,9 +89,9 @@ Module Assertions
   Qed.
 
   Inductive Chunk (Σ : LCtx) : Type :=
-  | chunk_pred   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
+  | chunk_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
-  Arguments chunk_pred [_] _ _.
+  Arguments chunk_user [_] _ _.
 
   Inductive Assertion (Σ : LCtx) : Type :=
   | asn_formula (fml : Formula Σ)
@@ -136,7 +136,7 @@ Module Assertions
   Instance sub_chunk : Subst Chunk :=
     fun Σ1 Σ2 ζ c =>
       match c with
-      | chunk_pred p ts => chunk_pred p (subst ζ ts)
+      | chunk_user p ts => chunk_user p (subst ζ ts)
       | chunk_ptsreg r t => chunk_ptsreg r (subst ζ t)
       end.
 
@@ -238,11 +238,11 @@ Module Assertions
 
   Class IHeaplet (L : Type) := {
     is_ISepLogic :> ISepLogic L;
-    lpred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L;
+    luser (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L;
     lptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L
   }.
 
-  Arguments lpred {L _} p ts.
+  Arguments luser {L _} p ts.
 
   Section Contracts.
     Context `{Logic : IHeaplet L}.
@@ -257,7 +257,7 @@ Module Assertions
 
     Definition inst_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
       match c with
-      | chunk_pred p ts => lpred p (inst ι ts)
+      | chunk_user p ts => luser p (inst ι ts)
       | chunk_ptsreg r t => lptsreg r (inst ι t)
       end.
 

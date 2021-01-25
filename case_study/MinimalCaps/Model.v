@@ -173,7 +173,7 @@ Module MinCapsModel.
       | inr c => MinCaps_csafe (mG := mG) c
       end.
 
-    Definition lpred_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
+    Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
       (match p return Env Lit (MinCapsAssertionKit.𝑷_Ty p) -> iProp Σ with
       | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
       | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head ts) 1 (env_head (env_tail ts))%Z

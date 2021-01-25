@@ -98,8 +98,8 @@ Module MinCapsSymbolicContractKit <:
 
   Open Scope env_scope.
 
-  Local Notation "r '↦r' t" := (asn_chunk (chunk_pred ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t)))) (at level 100).
-  Local Notation "a '↦m' t" := (asn_chunk (chunk_pred ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t)))) (at level 100).
+  Local Notation "r '↦r' t" := (asn_chunk (chunk_user ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t)))) (at level 100).
+  Local Notation "a '↦m' t" := (asn_chunk (chunk_user ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t)))) (at level 100).
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   (* Arguments asn_prop [_] & _. *)
 
@@ -107,13 +107,13 @@ Module MinCapsSymbolicContractKit <:
   Definition regInv {Σ} (r : RegName) : Assertion Σ :=
     asn_exist "w" ty_word
               (term_lit (ty_enum regname) r ↦r (term_var "w") ✱
-                asn_chunk (chunk_pred safe (env_nil ► (ty_word ↦ (term_var "w"))))).
+                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_var "w"))))).
 
   (* regInv(r) = ∃ c : cap. r ↦ c * csafe(c) *)
   Definition regInvCap {Σ} (r : Reg ty_cap) : Assertion Σ :=
     asn_exist "c" ty_cap
               (r ↦ term_var "c" ✱
-                 asn_chunk (chunk_pred csafe (env_nil ► (ty_cap ↦ (term_var "c"))))).
+                 asn_chunk (chunk_user csafe (env_nil ► (ty_cap ↦ (term_var "c"))))).
 
   (* machInv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * regInvCap(pc) *)
   Definition machInv {Σ} : Assertion Σ :=
@@ -576,8 +576,8 @@ Local Ltac solve :=
     ).
 
 Local Notation "r '↦' t" := (chunk_ptsreg r t) (at level 100, only printing).
-Local Notation "r '↦r' t" := (chunk_pred ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t))) (at level 100, only printing).
-Local Notation "a '↦m' t" := (chunk_pred ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t))) (at level 100, only printing).
+Local Notation "r '↦r' t" := (chunk_user ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t))) (at level 100, only printing).
+Local Notation "a '↦m' t" := (chunk_user ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t))) (at level 100, only printing).
 
 Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
 Proof. compute; solve. Qed.

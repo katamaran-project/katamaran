@@ -248,10 +248,10 @@ Module Mutators
 
     Equations(noeqns) match_chunk_eqb (ce : Chunk Σ) (cr : Chunk Σ) :
       PathCondition Σ -> option (PathCondition Σ) :=
-      match_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2)
+      match_chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2)
       with eq_dec p1 p2 => {
-        match_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) := match_env_eqb ts1 ts2;
-        match_chunk_eqb (chunk_pred p1 ts1) (chunk_pred p2 ts2) (right _)      := fun _ => None
+        match_chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := match_env_eqb ts1 ts2;
+        match_chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := fun _ => None
       };
       match_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
       with eq_dec_het r1 r2 => {
@@ -354,10 +354,10 @@ Module Mutators
 
     Equations(noeqns) match_chunk (ce : Chunk Σe) (cr : Chunk Σr) :
       EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
-      match_chunk (chunk_pred p1 ts1) (chunk_pred p2 ts2)
+      match_chunk (chunk_user p1 ts1) (chunk_user p2 ts2)
       with eq_dec p1 p2 => {
-        match_chunk (chunk_pred p1 ts1) (chunk_pred p2 ts2) (left eq_refl) := match_env ts1 ts2;
-        match_chunk (chunk_pred p1 ts1) (chunk_pred p2 ts2) (right _)      := fun _ => None
+        match_chunk (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := match_env ts1 ts2;
+        match_chunk (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := fun _ => None
       };
       match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
       with eq_dec_het r1 r2 => {

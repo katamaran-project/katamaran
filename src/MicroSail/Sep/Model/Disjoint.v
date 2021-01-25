@@ -295,7 +295,7 @@ Module Disjoint
   Instance HProp_Heaplet : IHeaplet HProp :=
   { (* We don't have any predicates in this model yet;
        thus we map the predicate to False *)
-    lpred (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) := fun γ => False;
+    luser (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) := fun γ => False;
     lptsreg (σ : Ty) (r : 𝑹𝑬𝑮 σ) (t : Lit σ) := fun γ => γ σ r = Some t
   }.
 
