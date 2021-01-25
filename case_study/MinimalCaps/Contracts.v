@@ -186,6 +186,20 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_postcondition   := asn_exist "npc" ty_cap (pc ↦ term_var "npc")
     |}.
 
+  Definition sep_contract_add_pc : SepContract ["offset" ∶ ty_int] ty_unit :=
+    {| sep_contract_logic_variables := ["opc" ∶ ty_cap, "offset" ∶ ty_int];
+       sep_contract_localstore      := [term_var "offset"]%arg;
+       sep_contract_precondition    := pc ↦ term_var "opc";
+       sep_contract_result          := "_";
+       sep_contract_postcondition   :=
+         pc ↦
+            (term_record capability
+                         [ (term_projrec (term_var "opc") "cap_permission"),
+                           (term_projrec (term_var "opc") "cap_begin"),
+                           (term_projrec (term_var "opc") "cap_end"),
+                           (term_binop binop_plus (term_projrec (term_var "opc") "cap_cursor") (term_var "offset"))]);
+    |}.
+
   Definition sep_contract_read_mem : SepContract ["a" ∶ ty_addr ] ty_memval :=
     {| sep_contract_logic_variables := ["a" ∶ ty_addr, "n" ∶ ty_int];
        sep_contract_localstore      := [term_var "a"]%arg;
@@ -451,6 +465,7 @@ Module MinCapsSymbolicContractKit <:
       | read_reg_num  => Some sep_contract_read_reg_num
       | write_reg     => Some sep_contract_write_reg
       | next_pc       => Some sep_contract_next_pc
+      | add_pc        => Some sep_contract_add_pc
       | update_pc     => Some sep_contract_update_pc
       | read_mem      => Some sep_contract_read_mem
       | write_mem     => Some sep_contract_write_mem
@@ -584,6 +599,9 @@ Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
 Lemma valid_contract_next_pc : ValidContractDynMut sep_contract_next_pc fun_next_pc.
 Proof. apply dynmutevarreflect_sound; now compute. Qed.
+
+Lemma valid_contract_add_pc : ValidContractDynMut sep_contract_add_pc fun_add_pc.
+Proof. compute; solve. Admitted.
 
 Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
 Proof. apply dynmutevarreflect_sound; now compute. Qed.
