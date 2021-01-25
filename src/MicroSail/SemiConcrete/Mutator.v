@@ -187,10 +187,8 @@ Module SemiConcrete
       scmut_bind ma (fun a => scmut_bind mb (fun _ => scmut_pure a)).
     Definition scmut_map {Γ1 Γ2 A B} (f : A -> B) (ma : SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 B :=
       scmut_bind ma (fun a => scmut_pure (f a)).
-    Definition scmut_angelic_list {Γ A} (msg : string) :
-      list A -> SCMut Γ Γ A :=
-      fun xs s => outcome_angelic_list msg (List.map (fun a => MkSCMutResult a s) xs).
-
+    Definition scmut_angelick_list {Γ1 Γ2 A B} (msg : string) (xs : list A) (k : A -> SCMut Γ1 Γ2 B) : SCMut Γ1 Γ2 B :=
+      fun s => outcome_angelick_list msg xs (fun a => k a s).
     Definition scmut_cover {Γ1 Γ2 A} : relation (SCMut Γ1 Γ2 A) :=
       fun m1 m2 => forall s, outcome_cover (m1 s) (m2 s).
     Instance scmut_cover_preorder {Γ1 Γ2 A} : PreOrder (@scmut_cover Γ1 Γ2 A).
@@ -271,11 +269,10 @@ Module SemiConcrete
       scmut_modify (scstate_produce_chunk c).
     Definition scmut_consume_chunk {Γ} (c : SCChunk) : SCMut Γ Γ unit :=
       scmut_get_heap >>= fun h =>
-      scmut_angelic_list
+        scmut_angelick_list
         "Err [scmut_consume_chunk]: empty extraction"
-        (extract_chunk_eqb c h) >>= fun h' =>
-        scmut_put_heap h'.
-
+        (extract_chunk_eqb c h)
+        scmut_put_heap.
     Global Arguments scmut_push_local {Γ _ _} _.
     Global Arguments scmut_produce_chunk {Γ} _.
     Global Arguments scmut_consume_chunk {Γ} _.

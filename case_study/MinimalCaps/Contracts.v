@@ -589,17 +589,13 @@ Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_
 Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
 Lemma valid_contract_read_allowed : ValidContractDynMut sep_contract_read_allowed fun_read_allowed.
-Proof. compute; solve. Qed.
+Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
 Lemma valid_contract_write_allowed : ValidContractDynMut sep_contract_write_allowed fun_write_allowed.
-Proof. compute; solve. Qed.
+Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
 Lemma valid_contract_upper_bound : ValidContractDynMut sep_contract_upper_bound fun_upper_bound.
-Proof.
-  (* apply dynmutevarreflect_sound. *)
-  compute - [NamedEnv Lit Error valid_obligation].
-  (* compute; solve. Qed. *)
-Admitted.
+Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
 Lemma valid_contract_within_bounds : ValidContractDynMut sep_contract_within_bounds fun_within_bounds.
 Proof.

@@ -128,13 +128,14 @@ Module Soundness
         (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
       inst_scheap h1 ⊢ inst_scchunk c ✱ POST δ1.
     Proof.
-      cbn; intros HYP.
-      rewrite outcome_satisfy_bind, !outcome_satisfy_map_angelic_list,
-        outcome_satisfy_filter_angelic_list in HYP.
-      apply outcome_satisfy_angelic_list in HYP.
-      destruct HYP as [[c' h1'] [H1 [HYP Heq]]]; cbn in *; try discriminate.
-      apply (Bool.reflect_iff _ _ (match_chunk_eqb_spec _ _)) in Heq; subst c'.
-      apply in_heap_extractions in H1; rewrite H1; clear H1; cbn.
+      unfold scmut_consume_chunk, scmut_angelick_list, scmut_bind.
+      cbn - [outcome_angelick_list]. rewrite outcome_satisfy_angelick_list.
+      cbn. intros [h' [H1 H2]].
+      rewrite List.in_map_iff in H1. destruct H1 as [[c' h1'] [Heq H1]].
+      rewrite List.filter_In in H1. destruct H1 as [HIn Hmatch].
+      apply (Bool.reflect_iff _ _ (match_chunk_eqb_spec _ _)) in Hmatch.
+      cbn in Heq. subst.
+      apply in_heap_extractions in HIn; rewrite HIn; clear HIn.
       apply sepcon_entails.
       apply entails_refl.
       assumption.
