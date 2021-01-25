@@ -413,9 +413,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     Definition fun_exec : Stm ε ty_bool :=
       let: "c" := stm_read_register pc in
       let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (lit_string "Err: [exec_ld] no read permission") ;;
+      stm_assert p (lit_string "Err: [exec] no read permission") ;;
       let: q ∶ bool := call within_bounds c in
-      stm_assert q (lit_string "Err: [exec_ld] out of bounds") ;;
+      stm_assert q (lit_string "Err: [exec] out of bounds") ;;
       let: n ∶ ty_memval := call read_mem c․cursor in
       let: i ∶ ty_instr := callex dI (exp_var n) in
       call exec_instr i.
