@@ -157,14 +157,20 @@ Module MinCapsModel.
       | inr _ => filter (fun a => (b ≤ a)%Z) liveAddrs
       end.
 
+    Definition MinCaps_csafe `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Capability) : iProp Σ :=
+      match v with
+      | MkCap O b e a => True%I
+      | MkCap R b e a =>
+                ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a 1 v))%I
+      | MkCap RW b e a =>
+                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a 1 v)
+      end.
+
+
     Definition MinCaps_safe `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Z + Capability) : iProp Σ :=
       match v with
       | inl z => True%I
-      | inr (MkCap O b e a) => True%I
-      | inr (MkCap R b e a) =>
-                ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a 1 v))%I
-      | inr (MkCap RW b e a) =>
-                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a 1 v)
+      | inr c => MinCaps_csafe (mG := mG) c
       end.
 
     Definition lpred_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
@@ -172,7 +178,7 @@ Module MinCapsModel.
       | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
       | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head ts) 1 (env_head (env_tail ts))%Z
       | safe => fun ts => MinCaps_safe (mG := mG) (env_head ts)
-      | csafe => fun ts => MinCaps_safe (mG := mG) (inr (env_head ts))
+      | csafe => fun ts => MinCaps_csafe (mG := mG) (env_head ts)
       end) ts.
 
     End WithIrisNotations.
