@@ -358,26 +358,26 @@ Module Terms (Export termkit : TermKit).
 
   Section Statements.
 
-    Inductive TuplePat : Ctx Ty -> PCtx -> Set :=
+    Inductive TuplePat {N : Set} : Ctx Ty -> (NCtx N Ty) -> Set :=
     | tuplepat_nil  : TuplePat ctx_nil ctx_nil
     | tuplepat_snoc
-        {σs : Ctx Ty} {Δ : NCtx 𝑿 Ty}
-        (pat : TuplePat σs Δ) {σ : Ty} (x : 𝑿) :
+        {σs : Ctx Ty} {Δ : NCtx N Ty}
+        (pat : TuplePat σs Δ) {σ : Ty} (x : N) :
         TuplePat (ctx_snoc σs σ) (ctx_snoc Δ (x∶σ)).
     Bind Scope pat_scope with TuplePat.
 
-    Inductive RecordPat : NCtx 𝑹𝑭 Ty -> PCtx -> Set :=
+    Inductive RecordPat {N : Set} : NCtx 𝑹𝑭 Ty -> NCtx N Ty -> Set :=
     | recordpat_nil  : RecordPat ctx_nil ctx_nil
     | recordpat_snoc
-        {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx 𝑿 Ty}
-        (pat : RecordPat rfs Δ) (rf : 𝑹𝑭) {τ : Ty} (x : 𝑿) :
+        {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+        (pat : RecordPat rfs Δ) (rf : 𝑹𝑭) {τ : Ty} (x : N) :
         RecordPat (ctx_snoc rfs (rf∶τ)) (ctx_snoc Δ (x∶τ)).
     Bind Scope pat_scope with RecordPat.
 
-    Inductive Pattern : PCtx -> Ty -> Set :=
-    | pat_var (x : 𝑿) {σ : Ty} : Pattern [ x ∶ σ ]%ctx σ
+    Inductive Pattern {N : Set} : NCtx N Ty -> Ty -> Set :=
+    | pat_var (x : N) {σ : Ty} : Pattern [ x ∶ σ ]%ctx σ
     | pat_unit : Pattern ctx_nil ty_unit
-    | pat_pair (x y : 𝑿) {σ τ : Ty} : Pattern [ x ∶ σ , y ∶ τ ]%ctx (ty_prod σ τ)
+    | pat_pair (x y : N) {σ τ : Ty} : Pattern [ x ∶ σ , y ∶ τ ]%ctx (ty_prod σ τ)
     | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty_tuple σs)
     | pat_record {R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) : Pattern Δ (ty_record R).
 
@@ -554,8 +554,8 @@ Module Terms (Export termkit : TermKit).
 
   Section PatternMatching.
 
-    Fixpoint tuple_pattern_match {σs : Ctx Ty} {Δ : PCtx}
-             (p : TuplePat σs Δ) {struct p} : Lit (ty_tuple σs) -> LocalStore Δ :=
+    Fixpoint tuple_pattern_match {N : Set} {σs : Ctx Ty} {Δ : NCtx N Ty}
+             (p : TuplePat σs Δ) {struct p} : Lit (ty_tuple σs) -> NamedEnv Lit Δ :=
       match p with
       | tuplepat_nil => fun _ => env_nil
       | tuplepat_snoc p x =>
@@ -565,8 +565,8 @@ Module Terms (Export termkit : TermKit).
             (snd lit)
       end.
 
-    Fixpoint record_pattern_match {rfs : NCtx 𝑹𝑭 Ty}  {Δ : PCtx}
-             (p : RecordPat rfs Δ) {struct p} : NamedEnv Lit rfs -> LocalStore Δ :=
+    Fixpoint record_pattern_match {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+             (p : RecordPat rfs Δ) {struct p} : NamedEnv V rfs -> NamedEnv V Δ :=
       match p with
       | recordpat_nil => fun _ => env_nil
       | recordpat_snoc p rf x =>
@@ -576,8 +576,8 @@ Module Terms (Export termkit : TermKit).
             (env_lookup E inctx_zero)
       end.
 
-    Definition pattern_match {σ : Ty} {Δ : PCtx} (p : Pattern Δ σ) :
-      Lit σ -> LocalStore Δ :=
+    Definition pattern_match {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
+      Lit σ -> NamedEnv Lit Δ :=
       match p with
       | pat_var x => fun v => env_snoc env_nil (x∶_) v
       | pat_unit => fun _ => env_nil
@@ -749,6 +749,18 @@ Module Terms (Export termkit : TermKit).
           Some (let (K, p) := 𝑼_unfold l in existT K (term_lit _ p));
         term_get_union (term_union K t) := Some (existT K t);
         term_get_union _ := None.
+
+      Equations(noeqns) term_get_record {R Σ} (t : Term Σ (ty_record R)) :
+        option (NamedEnv (Term Σ) (𝑹𝑭_Ty R)) :=
+        term_get_record (term_lit _ v)        := Some (env_map (fun _ => term_lit _) (𝑹_unfold v));
+        term_get_record (@term_record _ R ts) := Some ts;
+        term_get_record _ := None.
+
+      (* Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty_tuple σs)) : *)
+      (*   option (Env (Term Σ) σs) := *)
+      (*   term_get_tuple (term_lit _ v)       := Some _; *)
+      (*   term_get_tuple (@term_tuple _ _ ts) := Some ts; *)
+      (*   term_get_tuple _ := None. *)
 
     End Utils.
 

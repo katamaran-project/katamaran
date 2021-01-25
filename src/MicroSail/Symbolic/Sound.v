@@ -798,6 +798,11 @@ Module Soundness
           eapply approximates_sub; eauto.
       - admit.
       - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
       - intros. apply dmut_bind_sound. admit. admit.
         apply IHasn1. intros.
         eapply approximates_sub; eauto.
