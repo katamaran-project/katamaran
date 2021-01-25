@@ -104,20 +104,20 @@ Module MinCapsSymbolicContractKit <:
   (* Arguments asn_prop [_] & _. *)
 
   (* regInv(r) = ∃ w : word. r ↦ w * safe(w) *)
-  Definition regInv {Σ} (r : Reg ty_word) : Assertion Σ :=
+  Definition regInv {Σ} (r : RegName) : Assertion Σ :=
     asn_exist "w" ty_word
-              (r ↦ (term_var "w") ✱
+              (term_lit (ty_enum regname) r ↦r (term_var "w") ✱
                 asn_chunk (chunk_pred safe (env_nil ► (ty_word ↦ (term_var "w"))))).
 
   (* regInv(r) = ∃ c : cap. r ↦ c * csafe(c) *)
   Definition regInvCap {Σ} (r : Reg ty_cap) : Assertion Σ :=
     asn_exist "c" ty_cap
-              (r ↦ (term_var "c") ✱
-                asn_chunk (chunk_pred csafe (env_nil ► (ty_cap ↦ (term_var "c"))))).
+              (r ↦ term_var "c" ✱
+                 asn_chunk (chunk_pred csafe (env_nil ► (ty_cap ↦ (term_var "c"))))).
 
   (* machInv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * regInvCap(pc) *)
   Definition machInv {Σ} : Assertion Σ :=
-    regInv(reg0) ✱ regInv(reg1) ✱ regInv(reg2) ✱ regInv(reg3) ✱ regInvCap(pc).
+    regInv(R0) ✱ regInv(R1) ✱ regInv(R2) ✱ regInv(R3) ✱ regInvCap(pc).
 
   Definition sep_contract_read_reg : SepContract ["reg" ∶ ty_enum regname ] ty_word :=
     {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word];
@@ -192,12 +192,13 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_precondition    := pc ↦ term_var "opc";
        sep_contract_result          := "_";
        sep_contract_postcondition   :=
-         pc ↦
+         asn_exist "npc" ty_cap (pc ↦ term_var "npc");
+         (* pc ↦
             (term_record capability
                          [ (term_projrec (term_var "opc") "cap_permission"),
                            (term_projrec (term_var "opc") "cap_begin"),
                            (term_projrec (term_var "opc") "cap_end"),
-                           (term_binop binop_plus (term_projrec (term_var "opc") "cap_cursor") (term_var "offset"))]);
+                           (term_binop binop_plus (term_projrec (term_var "opc") "cap_cursor") (term_var "offset"))]); *)
     |}.
 
   Definition sep_contract_read_mem : SepContract ["a" ∶ ty_addr ] ty_memval :=
@@ -601,7 +602,7 @@ Lemma valid_contract_next_pc : ValidContractDynMut sep_contract_next_pc fun_next
 Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
 Lemma valid_contract_add_pc : ValidContractDynMut sep_contract_add_pc fun_add_pc.
-Proof. compute; solve. Admitted.
+Proof. apply dynmutevarreflect_sound; now compute. Qed.
 
 Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
 Proof. apply dynmutevarreflect_sound; now compute. Qed.

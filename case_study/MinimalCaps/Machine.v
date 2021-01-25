@@ -358,6 +358,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_lit ty_bool true.
 
     Definition fun_exec_jr : Stm [lv ∶ ty_lv] ty_bool :=
+      stm_call_external (ghost open_ptsreg) [exp_var "lv"]%arg ;;
       let: "c" ∶ ty_cap := call read_reg_cap lv in
       stm_write_register pc c ;;
       stm_lit ty_bool true.
