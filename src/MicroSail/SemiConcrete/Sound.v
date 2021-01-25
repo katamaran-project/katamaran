@@ -181,6 +181,11 @@ Module Soundness
       - destruct (inst_term ι b); auto.
       - auto.
       - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
       - unfold scmut_bind_right, scmut_bind in HYP.
         rewrite outcome_satisfy_bind in HYP.
         rewrite sepcon_assoc.
@@ -209,6 +214,11 @@ Module Soundness
       - unfold scmut_bind, scmut_assume_term in HYP. cbn in HYP.
         destruct HYP as [H1 H2]. destruct (inst_term ι b) eqn:?; auto.
       - auto.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
       - admit.
       - unfold scmut_bind_right, scmut_bind in HYP.
         rewrite outcome_satisfy_bind in HYP.

@@ -678,22 +678,22 @@ Module Mutators
       (dmut_freshen_tuplepat' p)
       (fun _ _ '(t__σs, t__Δ) => (term_tuple t__σs, t__Δ)).
 
-  Fixpoint dmut_freshen_recordpat' {σs Δ} (p : RecordPat σs Δ) {Γ Σ} :
+  Fixpoint dmut_freshen_recordpat' {N : Set} (inj__N : N -> 𝑺) {σs} {Δ : NCtx N Ty} (p : RecordPat σs Δ) {Γ Σ} :
     DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
     match p with
     | recordpat_nil =>
       dmut_pure (env_nil, env_nil)
     | recordpat_snoc p rf x =>
       dmut_fmap2
-        (dmut_freshen_recordpat' p)
-        (dmut_freshtermvar (𝑿to𝑺 x))
+        (dmut_freshen_recordpat' inj__N p)
+        (dmut_freshtermvar (inj__N x))
         (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs (rf::_) t__x, env_snoc ts__Δ (x::_) t__x))
     end.
 
-  Definition dmut_freshen_recordpat {R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
+  Definition dmut_freshen_recordpat {N : Set} (inj__N : N -> 𝑺) {R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
     DynamicMutator Γ Γ (fun Σ => Term Σ (ty_record R) * NamedEnv (Term Σ) Δ)%type Σ :=
     dmut_fmap
-      (dmut_freshen_recordpat' p)
+      (dmut_freshen_recordpat' inj__N p)
       (fun _ _ '(t__σs, t__Δ) => (term_record R t__σs, t__Δ)).
 
   Definition dmut_freshen_pattern {Γ Σ Δ σ} (p : Pattern Δ σ) :
@@ -713,7 +713,7 @@ Module Mutators
     | pat_tuple p =>
       dmut_freshen_tuplepat p
     | pat_record p =>
-      dmut_freshen_recordpat p
+      dmut_freshen_recordpat 𝑿to𝑺 p
     end.
 
   Definition dmutres_assume_eq {Γ Σ σ} (s : SymbolicState Γ Σ) (t1 t2 : Term Σ σ) :
@@ -866,22 +866,45 @@ Module Mutators
              dmut_produce (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match term_get_sum s with
-        | Some (inl v) =>
-          dmut_fresh (xl , σ)
-                     (dmut_assume_formula (formula_eq (sub_term sub_wk1 v) (@term_var _ _ _ inctx_zero)) ;;
-                      dmut_produce alt_inl)
-        | Some (inr v) =>
-          dmut_fresh (xr , τ)
-                     (dmut_assume_formula (formula_eq (sub_term sub_wk1 v) (@term_var _ _ _ inctx_zero)) ;;
-                      dmut_produce alt_inr)
-        | None => 
+        | Some (inl v) => dmut_sub (sub_id _ ► (xl::σ ↦ v)) (dmut_produce alt_inl)
+        | Some (inr v) => dmut_sub (sub_id _ ► (xr::τ ↦ v)) (dmut_produce alt_inr)
+        | None =>
           dmut_demonic_binary
-            (dmut_fresh (xl , σ)
-                        (dmut_assume_formula (formula_eq (sub_term sub_wk1 s) (term_inl (@term_var _ _ _ inctx_zero))) ;;
-                         dmut_produce alt_inl))
-            (dmut_fresh (xr , τ)
-                        (dmut_assume_formula (formula_eq (sub_term sub_wk1 s) (term_inr (@term_var _ _ _ inctx_zero))) ;;
-                         dmut_produce alt_inr))
+            (dmut_freshtermvar xl >>= fun _ ζ vl =>
+             dmut_assume_formula (formula_eq (sub_term ζ s) (term_inl vl)) ;;
+             dmut_sub (ζ ► (xl::_ ↦ vl)) (dmut_produce alt_inl))
+            (dmut_freshtermvar xr >>= fun _ ζ vr =>
+             dmut_assume_formula (formula_eq (sub_term ζ s) (term_inr vr)) ;;
+             dmut_sub (ζ ► (xr::_ ↦ vr)) (dmut_produce alt_inr))
+        end
+      | asn_match_list s alt_nil xh xt alt_cons =>
+        dmut_fail "dmut_produce" "Not implemented" asn
+      | asn_match_pair s xl xr rhs =>
+        match term_get_pair s with
+        | Some (vl, vr) => dmut_sub (sub_id _ ► (xl::_ ↦ vl) ► (xr::_ ↦ vr)) (dmut_produce rhs)
+        | None =>
+          dmut_pair (dmut_freshtermvar xl) (dmut_freshtermvar xr) >>= fun _ ζ '(vl,vr) =>
+          dmut_assume_formula (formula_eq (sub_term ζ s) (term_binop binop_pair vl vr)) ;;
+          dmut_sub (ζ ► (xl::_ ↦ vl) ► (xr::_ ↦ vr)) (dmut_produce rhs)
+        end
+      | asn_match_tuple s p rhs =>
+        dmut_fail "dmut_produce" "Not implemented" asn
+      | asn_match_record R s p rhs =>
+        match term_get_record s with
+        | Some ts =>
+          let ζ__R := record_pattern_match p ts in
+          dmut_sub (sub_id _ ►► ζ__R) (dmut_produce rhs)
+        | None =>
+          dmut_freshen_recordpat id p >>= fun _ ζ '(t__p,ζ__R) =>
+          dmut_assume_formula (formula_eq (sub_term ζ s) t__p) ;;
+          dmut_sub (ζ ►► ζ__R) (dmut_produce rhs)
+        end
+      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+        match term_get_union s with
+        | Some (existT K ts) =>
+          dmut_fail "dmut_produce" "Not implemented" asn
+        | None =>
+          dmut_fail "dmut_produce" "Not implemented" asn
         end
       | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
       | asn_exist ς τ a => dmut_fresh (ς,τ) (dmut_produce a)
@@ -901,10 +924,8 @@ Module Mutators
              dmut_consume (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match term_get_sum s with 
-        | Some (inl v) =>
-          dmut_sub (sub_snoc (sub_id _) (xl , σ) v) (dmut_consume alt_inl)
-        | Some (inr v) => 
-          dmut_sub (sub_snoc (sub_id _) (xr , τ) v) (dmut_consume alt_inr)
+        | Some (inl t) => dmut_sub (sub_id _ ► (xl::σ ↦ t)) (dmut_consume alt_inl)
+        | Some (inr t) => dmut_sub (sub_id _ ► (xr::τ ↦ t)) (dmut_consume alt_inr)
         | None =>
           dmut_angelic_binary
             (⨁ t : Term Σ σ =>
@@ -914,6 +935,31 @@ Module Mutators
              dmut_assert_formula (formula_eq s (term_inr t)) ;;
              dmut_sub (sub_snoc (sub_id _) (xr , τ) t) (dmut_consume alt_inr))
         end
+      | asn_match_list s alt_nil xh xt alt_cons =>
+        dmut_fail "dmut_consume" "Not implemented" asn
+      | asn_match_pair s xl xr rhs =>
+        match term_get_pair s with
+        | Some (tl, tr) => dmut_sub (sub_id _ ► (xl::_ ↦ tl) ► (xr::_ ↦ tr)) (dmut_consume rhs)
+        | None =>
+          ⨁ (tl : Term Σ _) (tr : Term Σ _) =>
+          dmut_assert_formula (formula_eq s (term_binop binop_pair tl tr)) ;;
+          dmut_sub (sub_id _ ► (xl::_ ↦ tl) ► (xr::_ ↦ tr)) (dmut_consume rhs)
+        end
+      | asn_match_tuple s p rhs =>
+        dmut_fail "dmut_consume" "Not implemented" asn
+      | asn_match_record R s p rhs =>
+        match term_get_record s with
+        | Some ts =>
+          let ζ__R := record_pattern_match p ts in
+          dmut_sub (sub_id _ ►► ζ__R) (dmut_consume rhs)
+        | None =>
+          ⨁ ts =>
+          dmut_assert_formula (formula_eq s (term_record R ts)) ;;
+          let ζ__R := record_pattern_match p ts in
+          dmut_sub (sub_id _ ►► ζ__R) (dmut_consume rhs)
+        end
+      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+        dmut_fail  "dmut_consume" "Not implemented" asn
       | asn_sep a1 a2   => dmut_consume a1 ;; dmut_consume a2
       | asn_exist ς τ a =>
         ⨁ t : Term Σ τ =>
@@ -1246,13 +1292,56 @@ Module Mutators
                         |}
                     end)
             end
-          | _ => dmut_fail
-                   "dmut_consume_evar"
-                   "Uninstantiated evars when consuming assertion"
-                   {| evarerror_env := L;
-                      evarerror_data := asn
-                   |}
+          | None => dmut_fail
+                      "dmut_consume_evar"
+                      "Uninstantiated evars when consuming assertion"
+                      {| evarerror_env := L;
+                         evarerror_data := asn
+                      |}
           end
+        | asn_match_list s alt_nil xh xt alt_cons =>
+          dmut_fail "dmut_consume_evar" "Not implemented" asn
+        | asn_match_pair scr xl xr rhs =>
+          match eval_term_evar L scr with
+          | Some s =>
+            match term_get_pair s with
+            | Some (tl, tr) =>
+              let Lrhs := L ► (xl∶_ ↦ Some tl) ► (xr∶_ ↦ Some tr) in
+              Lrhs' <- dmut_consume_evar rhs Lrhs ;;
+              dmut_pure (env_tail (env_tail Lrhs'))
+            | None =>
+              dmut_fail "dmut_consume_evar" "Not implemented" asn
+            end
+          | None => dmut_fail
+                      "dmut_consume_evar"
+                      "Uninstantiated evars when consuming assertion"
+                      {| evarerror_env := L;
+                         evarerror_data := asn
+                      |}
+          end
+        | asn_match_tuple s p rhs =>
+          dmut_fail "dmut_consume_evar" "Not implemented" asn
+        | asn_match_record R scr p rhs =>
+          match eval_term_evar L scr with
+          | Some s =>
+            match term_get_record s with
+            | Some ts  =>
+              let ζ__R := record_pattern_match p ts in
+              let LR := L ►► env_map (fun _ t => Some t) ζ__R in
+              LR' <- dmut_consume_evar rhs LR ;;
+              dmut_pure (env_drop _ LR')
+            | None =>
+              dmut_fail "dmut_consume_evar" "Not implemented" asn
+            end
+          | None => dmut_fail
+                      "dmut_consume_evar"
+                      "Uninstantiated evars when consuming assertion"
+                      {| evarerror_env := L;
+                         evarerror_data := asn
+                      |}
+          end
+        | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+          dmut_fail  "dmut_consume_evar" "Not implemented" asn
         | asn_sep a1 a2 =>
           dmut_consume_evar a1 L >>= fun _ _ => dmut_consume_evar a2
         | asn_exist ς τ a =>
@@ -1449,7 +1538,7 @@ Module Mutators
                dmut_pure t__rhs))
         end
       | stm_match_record R e p s =>
-        ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat p) ;;
+        ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat 𝑿to𝑺 p) ;;
         let '(t__sc,(t__p,t__Δ)) := ts in
         dmut_assume_formula (formula_eq t__sc t__p) ;;
         dmut_pushs_local t__Δ ;;
@@ -2079,22 +2168,22 @@ Module Mutators
         (dmut_freshen_tuplepat' p)
         (fun _ _ '(t__σs, t__Δ) => (term_tuple t__σs, t__Δ)).
 
-    Fixpoint dmut_freshen_recordpat' {σs Δ} (p : RecordPat σs Δ) {Γ Σ} :
+    Fixpoint dmut_freshen_recordpat' {N : Set} (inj__N : N -> 𝑺) {σs} {Δ : NCtx N Ty} (p : RecordPat σs Δ) {Γ Σ} :
       DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
       match p with
       | recordpat_nil =>
         dmut_pure (env_nil, env_nil)
       | recordpat_snoc p rf x =>
         dmut_fmap2
-          (dmut_freshen_recordpat' p)
-          (dmut_freshtermvar (𝑿to𝑺 x))
-          (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs (rf,_) t__x, env_snoc ts__Δ (x,_) t__x))
+          (dmut_freshen_recordpat' inj__N p)
+          (dmut_freshtermvar (inj__N x))
+          (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs (rf::_) t__x, env_snoc ts__Δ (x::_) t__x))
       end.
 
-    Definition dmut_freshen_recordpat {R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
+    Definition dmut_freshen_recordpat {N : Set} (inj__N : N -> 𝑺) {R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
       DynamicMutator Γ Γ (fun Σ => Term Σ (ty_record R) * NamedEnv (Term Σ) Δ)%type Σ :=
       dmut_fmap
-        (dmut_freshen_recordpat' p)
+        (dmut_freshen_recordpat' inj__N p)
         (fun _ _ '(t__σs, t__Δ) => (term_record R t__σs, t__Δ)).
 
     Definition dmut_freshen_pattern {Γ Σ Δ σ} (p : Pattern Δ σ) :
@@ -2114,7 +2203,7 @@ Module Mutators
       | pat_tuple p =>
         dmut_freshen_tuplepat p
       | pat_record p =>
-        dmut_freshen_recordpat p
+        dmut_freshen_recordpat 𝑿to𝑺 p
       end.
 
     (* Poor man's unification *)
@@ -2300,6 +2389,34 @@ Module Mutators
             (dmut_fresh (xr , τ)
                         (dmut_assume_formula (formula_eq (sub_term sub_wk1 s) (term_inr (@term_var _ _ _ inctx_zero))) ;;
                          dmut_produce alt_inr))
+        end
+      | asn_match_list s alt_nil xh xt alt_cons => dmut_fail "dmut_produce" "Not implemented" asn
+      | asn_match_pair s xl xr rhs =>
+        match term_get_pair s with
+        | Some (vl, vr) => dmut_sub (sub_id _ ► (xl::_ ↦ vl) ► (xr::_ ↦ vr)) (dmut_produce rhs)
+        | None =>
+          dmut_pair (dmut_freshtermvar xl) (dmut_freshtermvar xr) >>= fun _ ζ '(vl,vr) =>
+          dmut_assume_formula (formula_eq (sub_term ζ s) (term_binop binop_pair vl vr)) ;;
+          dmut_sub (ζ ► (xl::_ ↦ vl) ► (xr::_ ↦ vr)) (dmut_produce rhs)
+        end
+      | asn_match_tuple s p rhs =>
+        dmut_fail "dmut_produce" "Not implemented" asn
+      | asn_match_record R s p rhs =>
+        match term_get_record s with
+        | Some ts =>
+          let ζ__R := record_pattern_match p ts in
+          dmut_sub (sub_id _ ►► ζ__R) (dmut_produce rhs)
+        | None =>
+          dmut_freshen_recordpat id p >>= fun _ ζ '(t__p,ζ__R) =>
+          dmut_assume_formula (formula_eq (sub_term ζ s) t__p) ;;
+          dmut_sub (ζ ►► ζ__R) (dmut_produce rhs)
+        end
+      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+        match term_get_union s with
+        | Some (existT K ts) =>
+          dmut_fail "dmut_produce" "Not implemented" asn
+        | None =>
+          dmut_fail "dmut_produce" "Not implemented" asn
         end
       | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
       | asn_exist ς τ a => dmut_fresh (ς,τ) (dmut_produce a)
@@ -2495,6 +2612,49 @@ Module Mutators
                       evarerror_data := asn
                    |}
           end
+        | asn_match_list s alt_nil xh xt alt_cons =>
+          dmut_fail "dmut_consume_evar" "Not implemented" asn
+        | asn_match_pair scr xl xr rhs =>
+          match eval_term_evar L scr with
+          | Some s =>
+            match term_get_pair s with
+            | Some (tl, tr) =>
+              let Lrhs := L ► (xl∶_ ↦ Some tl) ► (xr∶_ ↦ Some tr) in
+              Lrhs' <- dmut_consume_evar rhs Lrhs ;;
+              dmut_pure (env_tail (env_tail Lrhs'))
+            | None =>
+              dmut_fail "dmut_consume_evar" "Not implemented" asn
+            end
+          | None => dmut_fail
+                      "dmut_consume_evar"
+                      "Uninstantiated evars when consuming assertion"
+                      {| evarerror_env := L;
+                         evarerror_data := asn
+                      |}
+          end
+        | asn_match_tuple s p rhs =>
+          dmut_fail "dmut_consume_evar" "Not implemented" asn
+        | asn_match_record R scr p rhs =>
+          match eval_term_evar L scr with
+          | Some s =>
+            match term_get_record s with
+            | Some ts  =>
+              let ζ__R := record_pattern_match p ts in
+              let LR := L ►► env_map (fun _ t => Some t) ζ__R in
+              LR' <- dmut_consume_evar rhs LR ;;
+              dmut_pure (env_drop _ LR')
+            | None =>
+              dmut_fail "dmut_consume_evar" "Not implemented" asn
+            end
+          | None => dmut_fail
+                      "dmut_consume_evar"
+                      "Uninstantiated evars when consuming assertion"
+                      {| evarerror_env := L;
+                         evarerror_data := asn
+                      |}
+          end
+        | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+          dmut_fail  "dmut_consume_evar" "Not implemented" asn
         | asn_sep a1 a2 =>
           dmut_consume_evar a1 L >>= fun _ _ => dmut_consume_evar a2
         | asn_exist ς τ a =>
@@ -2691,7 +2851,7 @@ Module Mutators
                dmut_pure t__rhs))
         end
       | stm_match_record R e p s =>
-        ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat p) ;;
+        ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat 𝑿to𝑺 p) ;;
         let '(t__sc,(t__p,t__Δ)) := ts in
         dmut_assume_formula (formula_eq t__sc t__p) ;;
         dmut_pushs_local t__Δ ;;

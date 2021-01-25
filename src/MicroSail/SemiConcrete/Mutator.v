@@ -322,6 +322,28 @@ Module SemiConcrete
         | inl v => scmut_produce (env_snoc ι (xl :: σ) v) alt_inl
         | inr v => scmut_produce (env_snoc ι (xr :: τ) v) alt_inr
         end
+      | asn_match_list s alt_nil xh xt alt_cons =>
+        match inst (T := fun Σ => Term Σ _) ι s with
+        | nil        => scmut_produce ι alt_nil
+        | cons vh vt => scmut_produce (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
+        end
+      | asn_match_pair s xl xr rhs =>
+        match inst (T := fun Σ => Term Σ _) ι s with
+        | (vl,vr)    => scmut_produce (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs
+        end
+      | asn_match_tuple s p rhs =>
+        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let ι' := tuple_pattern_match p t in
+        scmut_produce (ι ►► ι') rhs
+      | asn_match_record R s p rhs =>
+        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let ι' := record_pattern_match p (𝑹_unfold t) in
+        scmut_produce (ι ►► ι') rhs
+      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let (K , v) := 𝑼_unfold t in
+        let ι' := pattern_match (alt__pat K) v in
+        scmut_produce (ι ►► ι') (alt__rhs K)
       | asn_sep a1 a2   => scmut_produce ι a1 *> scmut_produce ι a2
       | asn_exist ς τ a => ⨂ v : Lit τ => scmut_produce (env_snoc ι (ς :: τ) v) a
       end.
@@ -340,6 +362,28 @@ Module SemiConcrete
         | inl v => scmut_consume (env_snoc ι (xl :: σ) v) alt_inl
         | inr v => scmut_consume (env_snoc ι (xr :: τ) v) alt_inr
         end
+      | asn_match_list s alt_nil xh xt alt_cons =>
+        match inst (T := fun Σ => Term Σ _) ι s with
+        | nil        => scmut_consume ι alt_nil
+        | cons vh vt => scmut_consume (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
+        end
+      | asn_match_pair s xl xr rhs =>
+        match inst (T := fun Σ => Term Σ _) ι s with
+        | (vl,vr)    => scmut_consume (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs
+        end
+      | asn_match_tuple s p rhs =>
+        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let ι' := tuple_pattern_match p t in
+        scmut_consume (ι ►► ι') rhs
+      | asn_match_record R s p rhs =>
+        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let ι' := record_pattern_match p (𝑹_unfold t) in
+        scmut_consume (ι ►► ι') rhs
+      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let (K , v) := 𝑼_unfold t in
+        let ι' := pattern_match (alt__pat K) v in
+        scmut_consume (ι ►► ι') (alt__rhs K)
       | asn_sep a1 a2   => scmut_consume ι a1 *> scmut_consume ι a2
       | asn_exist ς τ a => ⨁ v : Lit τ => scmut_consume (env_snoc ι (ς :: τ) v) a
       end.

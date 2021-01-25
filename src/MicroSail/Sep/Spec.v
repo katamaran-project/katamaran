@@ -99,10 +99,32 @@ Module Assertions
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
   | asn_match_enum (E : 𝑬) (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
   | asn_match_sum (σ τ : Ty) (s : Term Σ (ty_sum σ τ)) (xl : 𝑺) (alt_inl : Assertion (Σ ▻ (xl :: σ))) (xr : 𝑺) (alt_inr : Assertion (Σ ▻ (xr :: τ)))
+  | asn_match_list
+      {σ : Ty} (s : Term Σ (ty_list σ)) (alt_nil : Assertion Σ) (xh xt : 𝑺)
+      (alt_cons : Assertion (Σ ▻ xh∶σ ▻ xt∶ty_list σ))
+  | asn_match_pair
+      {σ1 σ2 : Ty} (s : Term Σ (ty_prod σ1 σ2))
+      (xl xr : 𝑺) (rhs : Assertion (Σ ▻ xl∶σ1 ▻ xr∶σ2))
+  | asn_match_tuple
+      {σs : Ctx Ty} {Δ : LCtx} (s : Term Σ (ty_tuple σs))
+      (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ))
+  | asn_match_record
+      {R : 𝑹} {Δ : LCtx} (s : Term Σ (ty_record R))
+      (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ))
+  | asn_match_union
+      {U : 𝑼} (s : Term Σ (ty_union U))
+      (alt__ctx : forall (K : 𝑼𝑲 U), LCtx)
+      (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
+      (alt__rhs : forall (K : 𝑼𝑲 U), Assertion (Σ ▻▻ alt__ctx K))
   | asn_sep  (a1 a2 : Assertion Σ)
   | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς :: τ))).
   Arguments asn_match_enum [_] E _ _.
   Arguments asn_match_sum [_] σ τ _ _ _.
+  Arguments asn_match_list [_] {σ} s alt_nil xh xt alt_cons.
+  Arguments asn_match_pair [_] {σ1 σ2} s xl xr rhs.
+  Arguments asn_match_tuple [_] {σs Δ} s p rhs.
+  Arguments asn_match_record [_] R {Δ} s p rhs.
+  Arguments asn_match_union [_] U s alt__ctx alt__pat alt__rhs.
   Arguments asn_exist [_] _ _ _.
 
   Notation asn_bool b := (asn_formula (formula_bool b)).
@@ -247,9 +269,31 @@ Module Assertions
       | asn_match_enum E k alts => inst_assertion ι (alts (inst (T := fun Σ => Term Σ _) ι k))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match inst (T := fun Σ => Term Σ _) ι s with
-        | inl v => inst_assertion (env_snoc ι (xl :: σ) v) alt_inl
-        | inr v => inst_assertion (env_snoc ι (xr :: τ) v) alt_inr
+        | inl v => inst_assertion (ι ► (xl :: σ ↦ v)) alt_inl
+        | inr v => inst_assertion (ι ► (xr :: τ ↦ v)) alt_inr
         end
+      | asn_match_list s alt_nil xh xt alt_cons =>
+        match inst (T := fun Σ => Term Σ _) ι s with
+        | nil        => inst_assertion ι alt_nil
+        | cons vh vt => inst_assertion (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
+        end
+      | asn_match_pair s xl xr rhs =>
+        match inst (T := fun Σ => Term Σ _) ι s with
+        | (vl,vr)    => inst_assertion (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs
+        end
+      | asn_match_tuple s p rhs =>
+        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let ι' := tuple_pattern_match p t in
+        inst_assertion (ι ►► ι') rhs
+      | asn_match_record R s p rhs =>
+        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let ι' := record_pattern_match p (𝑹_unfold t) in
+        inst_assertion (ι ►► ι') rhs
+      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let (K , v) := 𝑼_unfold t in
+        let ι' := pattern_match (alt__pat K) v in
+        inst_assertion (ι ►► ι') (alt__rhs K)
       | asn_sep a1 a2 => inst_assertion ι a1 ✱ inst_assertion ι a2
       | asn_exist ς τ a => ∃ (v : Lit τ), inst_assertion (ι ► (ς∶τ ↦ v)) a
     end%logic.
