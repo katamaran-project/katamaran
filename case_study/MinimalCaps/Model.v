@@ -52,7 +52,8 @@ From MicroSail Require Sep.Logic.
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
-From iris.proofmode Require tactics.
+From iris.program_logic Require Import weakestpre hoare adequacy.
+From iris.proofmode Require Import tactics.
 From stdpp Require namespaces fin_maps.
 
 Set Implicit Arguments.
@@ -68,7 +69,7 @@ Module MinCapsModel.
     Variable maxAddr : nat.
 
     Module IrisRegs := IrisRegisters MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
-    Import IrisRegs.
+    Export IrisRegs.
 
     Section WithIrisNotations.
 
@@ -76,7 +77,6 @@ Module MinCapsModel.
     Import iris.bi.big_op.
     Import iris.base_logic.lib.iprop.
     Import iris.base_logic.lib.gen_heap.
-    Import iris.proofmode.tactics.
 
     Class mcMemG Σ := McMemG {
                           (* ghost variable for tracking state of registers *)
@@ -184,4 +184,11 @@ Module MinCapsModel.
     End WithIrisNotations.
   End MinCapsIrisHeapKit.
 
+  Module Soundness := IrisSoundness MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit MinCapsIrisHeapKit.
+  Export Soundness.
+
+  Lemma extSem `{sg : sailG Σ} : ExtSem (Σ := Σ).
+  Admitted.
+
 End MinCapsModel.
+
