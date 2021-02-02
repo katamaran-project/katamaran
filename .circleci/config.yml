@@ -10,7 +10,7 @@ defaults: &defaults
 
 jobs:
   coq-8-10: {<<: *defaults, docker: [{image: "skeuchel/coq:8.10"}]}
-  coq-8-11: {<<: *defaults, docker: [{image: "skeuchel/coq:8.11"}]}
+  # coq-8-11: {<<: *defaults, docker: [{image: "skeuchel/coq:8.11"}]}
   coq-8-12: {<<: *defaults, docker: [{image: "skeuchel/coq:8.12"}]}
 
 workflows:
@@ -18,5 +18,5 @@ workflows:
   build:
     jobs:
       - "coq-8-10"
-      - "coq-8-11"
+      # - "coq-8-11"
       - "coq-8-12"
