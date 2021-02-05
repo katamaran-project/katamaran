@@ -104,22 +104,10 @@ Module MinCapsSymbolicContractKit <:
   (* Arguments asn_prop [_] & _. *)
 
   (* regInv(r) = ∃ w : word. r ↦ w * safe(w) *)
-  Definition regInv0 {Σ} (r : RegName) : Assertion Σ :=
-    asn_exist "w0" ty_word
-              (term_lit (ty_enum regname) r ↦r (term_var "w0") ✱
-                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_var "w0"))))).
-  Definition regInv1 {Σ} (r : RegName) : Assertion Σ :=
-    asn_exist "w1" ty_word
-              (term_lit (ty_enum regname) r ↦r (term_var "w1") ✱
-                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_var "w1"))))).
-  Definition regInv2 {Σ} (r : RegName) : Assertion Σ :=
-    asn_exist "w2" ty_word
-              (term_lit (ty_enum regname) r ↦r (term_var "w2") ✱
-                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_var "w2"))))).
-  Definition regInv3 {Σ} (r : RegName) : Assertion Σ :=
-    asn_exist "w3" ty_word
-              (term_lit (ty_enum regname) r ↦r (term_var "w3") ✱
-                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_var "w3"))))).
+  Definition regInv {Σ} (r : RegName) (w : string) : Assertion Σ :=
+    asn_exist w ty_word
+              (term_lit (ty_enum regname) r ↦r (@term_var _ _ _ inctx_zero) ✱
+                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (@term_var _ _ _ inctx_zero))))).
 
   (* regInv(r) = ∃ c : cap. r ↦ c * csafe(c) *)
   Definition regInvCap {Σ} (r : Reg ty_cap) : Assertion Σ :=
@@ -129,7 +117,7 @@ Module MinCapsSymbolicContractKit <:
 
   (* machInv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * regInvCap(pc) *)
   Definition machInv {Σ} : Assertion Σ :=
-    regInv0(R0) ✱ regInv1(R1) ✱ regInv2(R2) ✱ regInv3(R3) ✱ regInvCap(pc).
+    (regInv R0 "w0") ✱ (regInv R1 "w1") ✱ (regInv R2 "w2") ✱ (regInv R3  "w3") ✱ (regInvCap pc).
 
   Definition sep_contract_read_reg : SepContract ["rreg" ∶ ty_enum regname ] ty_word :=
     {| sep_contract_logic_variables := ["rreg" ∶ ty_enum regname];
