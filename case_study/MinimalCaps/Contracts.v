@@ -104,10 +104,22 @@ Module MinCapsSymbolicContractKit <:
   (* Arguments asn_prop [_] & _. *)
 
   (* regInv(r) = ∃ w : word. r ↦ w * safe(w) *)
-  Definition regInv {Σ} (r : RegName) : Assertion Σ :=
-    asn_exist "w" ty_word
-              (term_lit (ty_enum regname) r ↦r (term_var "w") ✱
-                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_var "w"))))).
+  Definition regInv0 {Σ} (r : RegName) : Assertion Σ :=
+    asn_exist "w0" ty_word
+              (term_lit (ty_enum regname) r ↦r (term_var "w0") ✱
+                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_var "w0"))))).
+  Definition regInv1 {Σ} (r : RegName) : Assertion Σ :=
+    asn_exist "w1" ty_word
+              (term_lit (ty_enum regname) r ↦r (term_var "w1") ✱
+                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_var "w1"))))).
+  Definition regInv2 {Σ} (r : RegName) : Assertion Σ :=
+    asn_exist "w2" ty_word
+              (term_lit (ty_enum regname) r ↦r (term_var "w2") ✱
+                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_var "w2"))))).
+  Definition regInv3 {Σ} (r : RegName) : Assertion Σ :=
+    asn_exist "w3" ty_word
+              (term_lit (ty_enum regname) r ↦r (term_var "w3") ✱
+                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_var "w3"))))).
 
   (* regInv(r) = ∃ c : cap. r ↦ c * csafe(c) *)
   Definition regInvCap {Σ} (r : Reg ty_cap) : Assertion Σ :=
@@ -117,50 +129,39 @@ Module MinCapsSymbolicContractKit <:
 
   (* machInv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * regInvCap(pc) *)
   Definition machInv {Σ} : Assertion Σ :=
-    regInv(R0) ✱ regInv(R1) ✱ regInv(R2) ✱ regInv(R3) ✱ regInvCap(pc).
+    regInv0(R0) ✱ regInv1(R1) ✱ regInv2(R2) ✱ regInv3(R3) ✱ regInvCap(pc).
 
-  Definition sep_contract_read_reg : SepContract ["reg" ∶ ty_enum regname ] ty_word :=
-    {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word];
-       sep_contract_localstore      := [term_var "reg"]%arg;
-       sep_contract_precondition    := term_var "reg" ↦r term_var "w";
+  Definition sep_contract_read_reg : SepContract ["rreg" ∶ ty_enum regname ] ty_word :=
+    {| sep_contract_logic_variables := ["rreg" ∶ ty_enum regname];
+       sep_contract_localstore      := [term_var "rreg"]%arg;
+       sep_contract_precondition    := machInv;
        sep_contract_result          := "result";
-       sep_contract_postcondition   :=
-         (asn_eq (term_var "w") (term_var "result") ✱
-                 term_var "reg" ↦r term_var "w")
+       sep_contract_postcondition   := machInv;
     |}.
 
-  Definition sep_contract_read_reg_cap : SepContract ["reg" ∶ ty_enum regname ] ty_cap :=
-    {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word];
-       sep_contract_localstore      := [term_var "reg"]%arg;
-       sep_contract_precondition    := term_var "reg" ↦r term_var "w";
+  Definition sep_contract_read_reg_cap : SepContract ["creg" ∶ ty_enum regname ] ty_cap :=
+    {| sep_contract_logic_variables := ["creg" ∶ ty_enum regname];
+       sep_contract_localstore      := [term_var "creg"]%arg;
+       sep_contract_precondition    := machInv;
        sep_contract_result          := "result";
-       sep_contract_postcondition   :=
-         (asn_exist "c" ty_cap (
-                      asn_eq (term_var "result") (term_var "c") ✱
-                             asn_eq (term_var "w") (term_inr (term_var "c"))
-                    ) ✱ 
-                    term_var "reg" ↦r term_var "w")
+       sep_contract_postcondition   := machInv;
     |}.
 
-  Definition sep_contract_read_reg_num : SepContract ["reg" ∶ ty_enum regname ] ty_int :=
-    {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word];
-       sep_contract_localstore      := [term_var "reg"]%arg;
-       sep_contract_precondition    := term_var "reg" ↦r term_var "w";
+  Definition sep_contract_read_reg_num : SepContract ["nreg" ∶ ty_enum regname ] ty_int :=
+    {| sep_contract_logic_variables := ["nreg" ∶ ty_enum regname];
+       sep_contract_localstore      := [term_var "nreg"]%arg;
+       sep_contract_precondition    := machInv;
        sep_contract_result          := "result";
-       sep_contract_postcondition   :=
-         (asn_exist "n" ty_int (
-                      asn_eq (term_var "result") (term_var "n") ✱
-                             asn_eq (term_var "w") (term_inl (term_var "n"))
-                    ) ✱
-                    term_var "reg" ↦r term_var "w")
+       sep_contract_postcondition   := machInv;
     |}.
 
-  Definition sep_contract_write_reg : SepContract ["reg" ∶ ty_enum regname, "w"  ∶ ty_word] ty_unit :=
-    {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word, "wo" ∶ ty_word];
-       sep_contract_localstore      := [term_var "reg", term_var "w"]%arg;
-       sep_contract_precondition    := term_var "reg" ↦r term_var "wo";
+  Definition sep_contract_write_reg : SepContract ["wreg" ∶ ty_enum regname, "w"  ∶ ty_word] ty_unit :=
+    {| sep_contract_logic_variables := ["wreg" ∶ ty_enum regname, "w" ∶ ty_word];
+       sep_contract_localstore      := [term_var "wreg", term_var "w"]%arg;
+       sep_contract_precondition    := machInv ✱ asn_chunk (chunk_user safe
+                                                                       (env_nil ► (ty_word ↦ (term_var "w"))));
        sep_contract_result          := "result";
-       sep_contract_postcondition   := term_var "reg" ↦r term_var "w";
+       sep_contract_postcondition   := machInv;
     |}.
 
   Definition sep_contract_next_pc : SepContract ctx_nil ty_cap :=
@@ -285,7 +286,7 @@ Module MinCapsSymbolicContractKit <:
       @post machInv;
       bool exec_jr(lv : lv) *)
   Definition sep_contract_exec_jr : SepContract ["lv" ∶ ty_lv] ty_bool :=
-    {| sep_contract_logic_variables := ["lv" ∶ ty_lv];
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "c" ∶ ty_cap];
        sep_contract_localstore      := [term_var "lv"]%arg;
        sep_contract_precondition    := machInv;
        sep_contract_result          := "result";
@@ -583,13 +584,13 @@ Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_re
 Proof. compute; solve. Qed.
 
 Lemma valid_contract_read_reg_cap : ValidContractDynMut sep_contract_read_reg_cap fun_read_reg_cap.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. compute; solve. Qed.
 
 Lemma valid_contract_read_reg_num : ValidContractDynMut sep_contract_read_reg_num fun_read_reg_num.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. compute; solve. Qed.
 
 Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_write_reg.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. compute; solve. Qed.
 
 Lemma valid_contract_next_pc : ValidContractDynMut sep_contract_next_pc fun_next_pc.
 Proof. apply dynmutevarreflect_sound; now compute. Qed.
@@ -615,7 +616,7 @@ Proof.
   compute - [NamedEnv Lit Error valid_obligation].
   (* compute; solve. Qed. *)
 Admitted.
-
+(*
 Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
 Proof. compute; solve. Admitted.
 
@@ -630,9 +631,11 @@ Proof. compute; solve. Admitted.
 
 Lemma valid_contract_exec_bnez : ValidContractDynMut sep_contract_exec_bnez fun_exec_bnez.
 Proof. compute; solve. Admitted.
-
-Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
-Proof. compute; solve. Admitted.
+*)
+Lemma valid_contract_exec_mv : TwoPointO.ValidContractDynMutDebug sep_contract_exec_mv fun_exec_mv.
+Proof.
+  compute.
+  compute; solve. Admitted.
 
 Lemma valid_contract_exec_ld : ValidContractDynMut sep_contract_exec_ld fun_exec_ld.
 Proof. compute; solve. Admitted.
@@ -640,10 +643,17 @@ Proof. compute; solve. Admitted.
 Lemma valid_contract_exec_sd : ValidContractDynMut sep_contract_exec_sd fun_exec_sd.
 Proof. compute; solve. Admitted.
 
-Lemma valid_contract_exec_addi : ValidContractDynMut sep_contract_exec_addi fun_exec_addi.
+Lemma valid_contract_exec_addi : TwoPointO.ValidContractDynMutDebug sep_contract_exec_addi fun_exec_addi.
+Proof.
+  (* apply dynmutevarreflect_sound. *)
+  compute - [NamedEnv Lit Error valid_obligation].
 Proof. compute; solve. Admitted.
 
-Lemma valid_contract_exec_add : ValidContractDynMut sep_contract_exec_add fun_exec_add.
+Lemma valid_contract_exec_add : TwoPointO.ValidContractDynMutDebug sep_contract_exec_add fun_exec_add.
+Proof.
+  compute.
+  (* apply dynmutevarreflect_sound. *)
+  compute - [NamedEnv Lit Error valid_obligation].
 Proof. compute; solve. Admitted.
 
 Lemma valid_contract_exec_ret : ValidContractDynMut sep_contract_exec_ret fun_exec_ret.

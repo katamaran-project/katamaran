@@ -843,12 +843,12 @@ Module Mutators
          (fun '(pc2 , h2) => (dmut_put {| symbolicstate_pathcondition := pc2; symbolicstate_localstore := δ1; symbolicstate_heap := h2 |}))
          (extract_chunk_eqb (subst ζ1 c) h1 pc1)).
 
-  Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
+  (* Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
     dmut_get_heap >>= fun _ _ h =>
     match h with
     | nil => dmut_pure tt
     | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
-    end.
+    end. *)
 
   Module DynMutV1.
 
@@ -1095,8 +1095,7 @@ Module Mutators
         fun s =>
           let mut := (dmut_produce req ;;
                       dmut_exec s      >>= fun Σ1 ζ1 t =>
-                      dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens) ;;
-                      dmut_leakcheck)%dmut in
+                      dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens))%dmut in
           let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
           outcome_map (fun _ => tt) out
       end.
@@ -1569,8 +1568,7 @@ Module Mutators
         fun s =>
           let mut := (DynMutV1.dmut_produce req ;;
                       dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
-                      dmut_consume_evar ens (subst (sub_snoc ζ1 (result,τ) t) (create_evarenv_id _)) ;;
-                      dmut_leakcheck)%dmut in
+                      dmut_consume_evar ens (subst (sub_snoc ζ1 (result,τ) t) (create_evarenv_id _)))%dmut in
           let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
           outcome_map (fun _ => tt) out
       end.
@@ -2352,12 +2350,12 @@ Module Mutators
            (fun '(pc2 , h2) => (dmut_put {| symbolicstate_pathcondition := pc2; symbolicstate_localstore := δ1; symbolicstate_heap := h2 |}))
            (extract_chunk_eqb (subst ζ1 c) h1 pc1)).
 
-    Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
+    (* Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
       dmut_get_heap >>= fun _ _ h =>
       match h with
       | nil => dmut_pure tt
       | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
-      end.
+      end. *)
 
     Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
       match asn with
@@ -2882,8 +2880,7 @@ Module Mutators
         fun s =>
           let mut := (dmut_produce req ;;
                       dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
-                      dmut_consume_evar ens (subst (sub_snoc ζ1 (result::τ) t) (create_evarenv_id _)) ;;
-                      dmut_leakcheck)%dmut in
+                      dmut_consume_evar ens (subst (sub_snoc ζ1 (result::τ) t) (create_evarenv_id _)))%dmut in
           let out := mut Σ (sub_id Σ) (symbolicstate_initial δ) in
           sout_bind out (fun _ _ _ => sout_block (A:=Unit))
       end.

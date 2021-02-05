@@ -59,10 +59,10 @@ Module MinCapsTermKit <: TermKit.
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
-  | read_reg       : Fun ["reg" ∶ ty_enum regname ] ty_word
-  | read_reg_cap   : Fun ["reg" ∶ ty_enum regname ] ty_cap
-  | read_reg_num   : Fun ["reg" ∶ ty_enum regname ] ty_int
-  | write_reg      : Fun ["reg" ∶ ty_enum regname,
+  | read_reg       : Fun ["rreg" ∶ ty_enum regname ] ty_word
+  | read_reg_cap   : Fun ["creg" ∶ ty_enum regname ] ty_cap
+  | read_reg_num   : Fun ["nreg" ∶ ty_enum regname ] ty_int
+  | write_reg      : Fun ["wreg" ∶ ty_enum regname,
                           "w"  ∶ ty_word
                          ] ty_unit
   | next_pc        : Fun ctx_nil ty_cap
@@ -181,38 +181,52 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     (stm_call_external (ghost f) env_nil)
     (at level 10, f at next level) : exp_scope.
 
-  Definition fun_read_reg : Stm ["reg" ∶ ty_enum regname ] ty_word :=
-    stm_call_external (ghost open_ptsreg) [exp_var "reg"]%arg ;;
-    match: exp_var "reg" in regname with
-    | R0 => let: "x" := stm_read_register reg0 in callghost (close_ptsreg R0) ;; stm_exp x
-    | R1 => let: "x" := stm_read_register reg1 in callghost (close_ptsreg R1) ;; stm_exp x
-    | R2 => let: "x" := stm_read_register reg2 in callghost (close_ptsreg R2) ;; stm_exp x
-    | R3 => let: "x" := stm_read_register reg3 in callghost (close_ptsreg R3) ;; stm_exp x
+  Definition fun_read_reg : Stm ["rreg" ∶ ty_enum regname ] ty_word :=
+    match: exp_var "rreg" in regname with
+    | R0 =>
+      stm_call_external (ghost open_ptsreg) [exp_var "rreg"]%arg ;;
+      let: "x" := stm_read_register reg0 in callghost (close_ptsreg R0) ;; stm_exp x
+    | R1 =>
+      stm_call_external (ghost open_ptsreg) [exp_var "rreg"]%arg ;;
+      let: "x" := stm_read_register reg1 in callghost (close_ptsreg R1) ;; stm_exp x
+    | R2 =>
+      stm_call_external (ghost open_ptsreg) [exp_var "rreg"]%arg ;;
+      let: "x" := stm_read_register reg2 in callghost (close_ptsreg R2) ;; stm_exp x
+    | R3 =>
+      stm_call_external (ghost open_ptsreg) [exp_var "rreg"]%arg ;;
+      let: "x" := stm_read_register reg3 in callghost (close_ptsreg R3) ;; stm_exp x
     end.
 
-  Definition fun_read_reg_cap : Stm ["reg" ∶ ty_enum regname ] ty_cap :=
-    let: w := call read_reg (exp_var "reg") in
+  Definition fun_read_reg_cap : Stm ["creg" ∶ ty_enum regname ] ty_cap :=
+    let: w := call read_reg (exp_var "creg") in
     match: w with
     | inl i => fail "Err [read_reg_cap]: expect register to hold a capability"
     | inr c => stm_exp c
     end.
 
-  Definition fun_read_reg_num : Stm ["reg" ∶ ty_enum regname ] ty_int :=
-    let: w := call read_reg (exp_var "reg") in
+  Definition fun_read_reg_num : Stm ["nreg" ∶ ty_enum regname ] ty_int :=
+    let: w := call read_reg (exp_var "nreg") in
     match: w with
     | inl i => stm_exp i
     | inr c => fail "Err [read_reg_num]: expect register to hold a number"
     end.
 
-  Definition fun_write_reg : Stm ["reg" ∶ ty_enum regname,
+  Definition fun_write_reg : Stm ["wreg" ∶ ty_enum regname,
                                   "w" ∶ ty_word
                                  ] ty_unit :=
-    stm_call_external (ghost open_ptsreg) [exp_var "reg"]%arg ;;
-    match: exp_var "reg" in regname with
-    | R0 => let: "x" := stm_write_register reg0 (exp_var "w") in callghost (close_ptsreg R0) ;; stm_exp x
-    | R1 => let: "x" := stm_write_register reg1 (exp_var "w") in callghost (close_ptsreg R1) ;; stm_exp x
-    | R2 => let: "x" := stm_write_register reg2 (exp_var "w") in callghost (close_ptsreg R2) ;; stm_exp x
-    | R3 => let: "x" := stm_write_register reg3 (exp_var "w") in callghost (close_ptsreg R3) ;; stm_exp x
+    match: exp_var "wreg" in regname with
+    | R0 => 
+      stm_call_external (ghost open_ptsreg) [exp_var "wreg"]%arg ;;
+      let: "x" := stm_write_register reg0 (exp_var "w") in callghost (close_ptsreg R0) ;; stm_exp x
+    | R1 =>
+      stm_call_external (ghost open_ptsreg) [exp_var "wreg"]%arg ;;
+      let: "x" := stm_write_register reg1 (exp_var "w") in callghost (close_ptsreg R1) ;; stm_exp x
+    | R2 =>
+      stm_call_external (ghost open_ptsreg) [exp_var "wreg"]%arg ;;
+      let: "x" := stm_write_register reg2 (exp_var "w") in callghost (close_ptsreg R2) ;; stm_exp x
+    | R3 =>
+      stm_call_external (ghost open_ptsreg) [exp_var "wreg"]%arg ;;
+      let: "x" := stm_write_register reg3 (exp_var "w") in callghost (close_ptsreg R3) ;; stm_exp x
     end ;; stm_lit ty_unit tt.
 
   Definition fun_next_pc : Stm ctx_nil ty_cap :=
@@ -352,13 +366,103 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_exp lit_false.
 
     Definition fun_exec_mv : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_bool :=
-      let: w ∶ word := call read_reg (exp_var hv) in
-      call write_reg lv (exp_var w) ;;
-      call update_pc ;;
-      stm_lit ty_bool true.
+      match: (exp_var hv) in regname with
+      | R0 =>
+        match: (exp_var lv) in regname with
+        | R0 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          callghost (close_ptsreg R0) ;; 
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R1 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R2 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R3 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        end
+      | R1 =>
+        match: (exp_var lv) in regname with
+        | R0 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R1 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R2 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R3 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        end
+      | R2 =>
+        match: (exp_var lv) in regname with
+        | R0 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R1 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R2 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R3 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        end
+      | R3 =>
+        match: (exp_var lv) in regname with
+        | R0 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R1 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R2 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        | R3 =>
+          let: "mvw" ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var "mvw") ;;
+          call update_pc ;;
+          stm_lit ty_bool true
+        end
+      end.
 
     Definition fun_exec_jr : Stm [lv ∶ ty_lv] ty_bool :=
-      stm_call_external (ghost open_ptsreg) [exp_var "lv"]%arg ;;
       let: "c" ∶ ty_cap := call read_reg_cap lv in
       stm_write_register pc c ;;
       stm_lit ty_bool true.
