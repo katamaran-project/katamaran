@@ -195,20 +195,52 @@ Module MinCapsModel.
   Module Soundness := IrisSoundness MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit MinCapsIrisHeapKit.
   Export Soundness.
 
-  Lemma rM_sound `{sg : sailG Σ} {Γ es δ} :
-    ∀ ι : SymInstance (ctx_snoc ctx_nil ("address", ty_addr)),
-      evals es δ = inst ι (env_snoc env_nil ("address", ty_addr) (term_var "address"))
-      → ⊢ semTriple δ (MinCapsSymbolicContractKit.ASS.inst_assertion ι MinCapsSymbolicContractKit.ASS.asn_false)
-          (stm_call_external rM es)
-          (λ (v : Lit ty_addr) (δ' : LocalStore Γ),
-           MinCapsSymbolicContractKit.ASS.inst_assertion (env_snoc ι ("result", ty_addr) v)
-                                                         MinCapsSymbolicContractKit.ASS.asn_true ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (ι eq) "[% _]".
-    inversion H.
-  Qed.
-
   Import EnvNotations.
+
+  Lemma rM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
+  ∀ (ι : SymInstance (ctx_snoc (ctx_snoc ctx_nil ("address", ty_addr)) ("w", ty_int))),
+    evals es δ = [(ι ‼ "address")%exp]
+    → ⊢ semTriple δ (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "w")%exp) (stm_call_external rM es)
+          (λ (v : Z) (δ' : LocalStore Γ),
+             (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "w")%exp ∗ ⌜v = (ι ‼ "w")%exp⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (ι eq) "pre".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "[Hregs Hmem]".
+    iDestruct "Hmem" as (memmap) "[Hmem' %]".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in a.
+    dependent destruction a.
+    dependent destruction H.
+    dependent destruction H1.
+    dependent destruction H.
+    iModIntro. iModIntro.
+    cbn.
+    iDestruct (gen_heap.gen_heap_valid with "Hmem' pre") as "%".
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL "Hmem'".
+    - iExists memmap.
+      by iFrame.
+    - iSplitL; trivial.
+      iApply wp_value.
+      cbn.
+      iFrame.
+      specialize (H0 addr (ι ‼ "w")%exp).
+      cbn in H0.
+      iPureIntro.
+      unfold fun_rM.
+      split; split; trivial.
+      refine (H0 _); clear H0.
+      rewrite eq in x.
+      simpl in x.
+      apply (f_equal env_head) in x; cbn in x.
+      by subst.
+  Qed.
 
   Lemma close_ptsreg_sound `{sg : sailG Σ} {Γ R es δ} :
     ∀ ι : SymInstance (ctx_snoc ctx_nil ("w", ty_word)),
@@ -247,7 +279,8 @@ Module MinCapsModel.
   Lemma extSem `{sg : sailG Σ} : ExtSem (Σ := Σ).
     intros Γ τ Δ f es δ.
     destruct f.
-    - admit.
+    - cbn.
+      admit.
     - admit.
     - admit.
     - destruct f.

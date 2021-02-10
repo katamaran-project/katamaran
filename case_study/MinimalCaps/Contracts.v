@@ -519,11 +519,12 @@ Module MinCapsSymbolicContractKit <:
       | rM =>
         MkSepContract
           _ _
-          ["address" ∶ ty_int]
+          ["address" ∶ ty_int, "w" ∶ ty_int]
           [term_var "address"]%arg
-          asn_false
+          (term_var "address" ↦m term_var "w")
           "result"
-          asn_true
+          (term_var "address" ↦m term_var "w" ✱
+                    asn_eq (term_var "result") (term_var "w"))
       | wM =>
         MkSepContract
           _ _
