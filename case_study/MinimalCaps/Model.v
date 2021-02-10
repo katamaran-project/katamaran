@@ -56,6 +56,8 @@ From iris.program_logic Require Import weakestpre hoare adequacy.
 From iris.proofmode Require Import tactics.
 From stdpp Require namespaces fin_maps.
 
+Require Import Coq.Program.Equality.
+
 Set Implicit Arguments.
 
 Module gh := iris.base_logic.lib.gen_heap.
@@ -151,6 +153,12 @@ Module MinCapsModel.
       | R3 => reg_pointsTo reg3 v
       end.
 
+    Lemma MinCaps_ptsreg_regtag_to_reg `{sailRegG Σ} (reg : RegName) (v : Z + Capability) :
+      MinCaps_ptsreg reg v = reg_pointsTo (MinCapsSymbolicContractKit.regtag_to_reg reg) v.
+    Proof.
+      by destruct reg.
+    Qed.
+
     Definition region_addrs (b : Addr) (e : Addr + unit): list Addr :=
       match e with
       | inl e => filter (fun a => and (b ≤ a)%Z (a ≤ e)%Z) liveAddrs
@@ -187,7 +195,64 @@ Module MinCapsModel.
   Module Soundness := IrisSoundness MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit MinCapsIrisHeapKit.
   Export Soundness.
 
+  Lemma rM_sound `{sg : sailG Σ} {Γ es δ} :
+    ∀ ι : SymInstance (ctx_snoc ctx_nil ("address", ty_addr)),
+      evals es δ = inst ι (env_snoc env_nil ("address", ty_addr) (term_var "address"))
+      → ⊢ semTriple δ (MinCapsSymbolicContractKit.ASS.inst_assertion ι MinCapsSymbolicContractKit.ASS.asn_false)
+          (stm_call_external rM es)
+          (λ (v : Lit ty_addr) (δ' : LocalStore Γ),
+           MinCapsSymbolicContractKit.ASS.inst_assertion (env_snoc ι ("result", ty_addr) v)
+                                                         MinCapsSymbolicContractKit.ASS.asn_true ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (ι eq) "[% _]".
+    inversion H.
+  Qed.
+
+  Import EnvNotations.
+
+  Lemma close_ptsreg_sound `{sg : sailG Σ} {Γ R es δ} :
+    ∀ ι : SymInstance (ctx_snoc ctx_nil ("w", ty_word)),
+      evals es δ = env_nil
+      → ⊢ semTriple δ
+          (MinCapsIrisHeapKit.IrisRegs.reg_pointsTo (MinCapsSymbolicContractKit.regtag_to_reg R)
+                                                    (ι ‼ "w")%exp)
+          (stm_call_external (ghost (close_ptsreg R)) es)
+          (λ (_ : ()) (δ' : LocalStore Γ),
+           MinCapsIrisHeapKit.MinCaps_ptsreg R (ι ‼ "w")%exp
+                                             ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (ι eq) "ptsto".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in a.
+    dependent destruction a.
+    dependent destruction H.
+    dependent destruction H.
+    iModIntro.
+    iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; trivial.
+    iApply wp_value.
+    cbn.
+    rewrite MinCapsIrisHeapKit.MinCaps_ptsreg_regtag_to_reg.
+    by iFrame.
+  Qed.
+
   Lemma extSem `{sg : sailG Σ} : ExtSem (Σ := Σ).
+    intros Γ τ Δ f es δ.
+    destruct f.
+    - admit.
+    - admit.
+    - admit.
+    - destruct f.
+      + admit.
+      + eauto using close_ptsreg_sound.
   Admitted.
 
 End MinCapsModel.
