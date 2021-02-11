@@ -481,14 +481,13 @@ Module MinCapsSymbolicContractKit <:
       end.
 
   Definition sep_contract_open_ptsreg : SepContract ["reg" ∶ ty_enum regname] ty_unit :=
-    {| sep_contract_logic_variables := [ "r" ∶ ty_enum regname, "w" ∶ ty_word];
-       sep_contract_localstore      := [term_var "r"]%arg;
-       sep_contract_precondition    := term_var "r" ↦r term_var "w";
-       sep_contract_result          := "result_open_ptsreg";
+    {| sep_contract_logic_variables := [ "reg" ∶ ty_enum regname, "w" ∶ ty_word];
+       sep_contract_localstore      := [term_var "reg"]%arg;
+       sep_contract_precondition    := term_var "reg" ↦r term_var "w";
+       sep_contract_result          := "result";
        sep_contract_postcondition   :=
-         asn_eq (term_var "result_open_ptsreg") (term_lit ty_unit tt) ✱
          asn_match_enum
-           regname (term_var "r")
+           regname (term_var "reg")
            (fun k => match k with
                      | R0 => reg0 ↦ term_var "w"
                      | R1 => reg1 ↦ term_var "w"
@@ -528,17 +527,17 @@ Module MinCapsSymbolicContractKit <:
       | wM =>
         MkSepContract
           _ _
-          ["address" ∶ ty_int, "mem_value" ∶ ty_int]
-          [term_var "address", term_var "mem_value"]%arg
-          asn_false
+          ["address" ∶ ty_int, "new_value" ∶ ty_int, "old_value" ∶ ty_int]
+          [term_var "address", term_var "new_value"]%arg
+          (term_var "address" ↦m term_var "old_value")
           "result"
-          asn_true
+          (term_var "address" ↦m term_var "new_value")
       | dI =>
         MkSepContract
           _ _
           ["code" ∶ ty_int]
           [term_var "code"]%arg
-          asn_false
+          asn_true
           "result"
           asn_true
       | @ghost _ f =>
@@ -621,31 +620,47 @@ Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec
 Proof. compute; solve. Admitted.
 
 Lemma valid_contract_exec_jalr : ValidContractDynMut sep_contract_exec_jalr fun_exec_jalr.
-Proof. compute; solve. Admitted.
+Proof.
+  (* compute; solve. *)
+Admitted.
 
 Lemma valid_contract_exec_j : ValidContractDynMut sep_contract_exec_j fun_exec_j.
 Proof. compute; solve. Admitted.
 
 Lemma valid_contract_exec_jal : ValidContractDynMut sep_contract_exec_jal fun_exec_jal.
-Proof. compute; solve. Admitted.
+Proof.
+  (* compute; solve. *)
+Admitted.
 
 Lemma valid_contract_exec_bnez : ValidContractDynMut sep_contract_exec_bnez fun_exec_bnez.
-Proof. compute; solve. Admitted.
+Proof.
+  (* compute; solve. *)
+Admitted.
 
 Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
-Proof. compute; solve. Admitted.
+Proof.
+  (* compute; solve. *)
+Admitted.
 
 Lemma valid_contract_exec_ld : ValidContractDynMut sep_contract_exec_ld fun_exec_ld.
-Proof. compute; solve. Admitted.
+Proof.
+  (* compute; solve. *)
+Admitted.
 
 Lemma valid_contract_exec_sd : ValidContractDynMut sep_contract_exec_sd fun_exec_sd.
-Proof. compute; solve. Admitted.
+Proof.
+  (* compute; solve. *)
+Admitted.
 
 Lemma valid_contract_exec_addi : ValidContractDynMut sep_contract_exec_addi fun_exec_addi.
-Proof. compute; solve. Admitted.
+Proof.
+  (* compute; solve. *)
+Admitted.
 
 Lemma valid_contract_exec_add : ValidContractDynMut sep_contract_exec_add fun_exec_add.
-Proof. compute; solve. Admitted.
+Proof.
+  (* compute; solve. *)
+Admitted.
 
 Lemma valid_contract_exec_ret : ValidContractDynMut sep_contract_exec_ret fun_exec_ret.
 Proof. compute; solve. Qed.
@@ -654,7 +669,10 @@ Lemma valid_contract_exec_instr : ValidContractDynMut sep_contract_exec_instr fu
 Proof. compute; solve. Qed.
 
 Lemma valid_contract_exec : ValidContractDynMut sep_contract_exec fun_exec.
-Proof. compute; solve. Admitted.
+Proof.
+  (* compute; solve. *)
+Admitted.
 
 Lemma valid_contract_loop : ValidContractDynMut sep_contract_loop fun_loop.
 Proof. compute; solve. Qed.
+

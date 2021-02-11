@@ -181,10 +181,12 @@ Module MinCapsModel.
       | inr c => MinCaps_csafe (mG := mG) c
       end.
 
+    Import EnvNotations.
+
     Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
       (match p return Env Lit (MinCapsAssertionKit.𝑷_Ty p) -> iProp Σ with
       | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
-      | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head ts) 1 (env_head (env_tail ts))%Z
+      | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head (env_tail ts)) 1 (env_head ts)
       | safe => fun ts => MinCaps_safe (mG := mG) (env_head ts)
       | csafe => fun ts => MinCaps_csafe (mG := mG) (env_head ts)
       end) ts.
@@ -242,6 +244,48 @@ Module MinCapsModel.
       by subst.
   Qed.
 
+  Lemma wM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
+  ∀ (ι : SymInstance (ctx_snoc (ctx_snoc (ctx_snoc ctx_nil ("address", ty_addr)) ("new_value", ty_int)) ("old_value", ty_int))),
+    evals es δ = [(ι ‼ "address")%exp, (ι ‼ "new_value")%exp]
+    → ⊢ semTriple δ (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "old_value")%exp) (stm_call_external wM es)
+        (λ (v : Lit ty_unit) (δ' : LocalStore Γ),
+             (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "new_value")%exp) ∗ ⌜δ' = δ⌝).
+  Proof.
+  Admitted.
+
+  Lemma dI_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
+  ∀ (ι : SymInstance (ctx_snoc ctx_nil ("code", ty_int))),
+    evals es δ = [(ι ‼ "code")%exp]
+    → ⊢ semTriple δ (⌜is_true true⌝ ∧ emp) (stm_call_external dI es)
+          (λ (v : Lit ty_instr) (δ' : LocalStore Γ),
+             (⌜is_true true⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Proof.
+  Admitted.
+
+  Lemma open_ptsreg_sound `{sg : sailG Σ} {Γ es δ} :
+    ∀ ι : SymInstance (ctx_snoc (ctx_snoc ctx_nil ("reg", ty_lv)) ("w", ty_word)),
+      evals es δ = [(ι ‼ "reg")%exp]
+      → ⊢ semTriple δ
+          (MinCapsIrisHeapKit.MinCaps_ptsreg (ι ‼ "reg")%exp (ι ‼ "w")%exp)
+          (stm_call_external (ghost open_ptsreg) es)
+          (λ (v : ()) (δ' : LocalStore Γ),
+             (MinCapsSymbolicContractKit.ASS.inst_assertion (ι ► (("result", ty_unit) ↦ v))
+                  match (ι ‼ "reg")%exp with
+                  | R0 =>
+                      MinCapsSymbolicContractKit.ASS.asn_chunk
+                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg0 (term_var "w"))
+                  | R1 =>
+                      MinCapsSymbolicContractKit.ASS.asn_chunk
+                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg1 (term_var "w"))
+                  | R2 =>
+                      MinCapsSymbolicContractKit.ASS.asn_chunk
+                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg2 (term_var "w"))
+                  | R3 =>
+                      MinCapsSymbolicContractKit.ASS.asn_chunk
+                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg3 (term_var "w"))
+                  end) ∗ ⌜δ' = δ⌝).
+  Admitted.
+
   Lemma close_ptsreg_sound `{sg : sailG Σ} {Γ R es δ} :
     ∀ ι : SymInstance (ctx_snoc ctx_nil ("w", ty_word)),
       evals es δ = env_nil
@@ -278,15 +322,10 @@ Module MinCapsModel.
 
   Lemma extSem `{sg : sailG Σ} : ExtSem (Σ := Σ).
     intros Γ τ Δ f es δ.
-    destruct f.
-    - cbn.
-      admit.
-    - admit.
-    - admit.
-    - destruct f.
-      + admit.
-      + eauto using close_ptsreg_sound.
-  Admitted.
+    destruct f as [_|_|_|Γ' [ | reg ] es δ'];
+      cbn;
+      eauto using rM_sound, wM_sound, dI_sound, open_ptsreg_sound, close_ptsreg_sound.
+  Qed.
 
 End MinCapsModel.
 

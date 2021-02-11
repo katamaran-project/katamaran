@@ -108,7 +108,7 @@ Module MinCapsTermKit <: TermKit.
   (* read memory *)
   | rM    : FunX ["address" ∶ ty_int] ty_int
   (* write memory *)
-  | wM    : FunX ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_unit
+  | wM    : FunX ["address" ∶ ty_int, "new_value" ∶ ty_int] ty_unit
   | dI    : FunX ["code" ∶ ty_int] ty_instr
   | ghost {Δ} (f : FunGhost Δ): FunX Δ ty_unit
   .
