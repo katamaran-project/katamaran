@@ -306,7 +306,7 @@ Module Mutators
       | @term_projtup _ _ t n _ p     => (fun t => term_projtup t n (p:=p)) <$> eval_term_evar t
       | term_union U K t     => term_union U K <$> eval_term_evar t
       | term_record R ts     => term_record R <$> traverse_env (fun b => @eval_term_evar (snd b)) ts
-      | term_projrec t rf    => (fun t => term_projrec t rf) <$> eval_term_evar t
+      (* | term_projrec t rf    => (fun t => term_projrec t rf) <$> eval_term_evar t *)
       end%exp.
 
     Section WithMatchTerm.
@@ -398,7 +398,7 @@ Module Mutators
       - rewrite IHt; reflexivity.
       - rewrite IHt; reflexivity.
       - admit.
-      - rewrite IHt; reflexivity.
+      (* - rewrite IHt; reflexivity. *)
     Admitted.
 
   End WithEvarEnv.

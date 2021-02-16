@@ -170,12 +170,20 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_result          := "result";
        sep_contract_postcondition   :=
          pc ↦ term_var "opc" ✱
-            asn_eq (term_var "result")
-            (term_record capability
-                         [ (term_projrec (term_var "opc") "cap_permission"),
-                           (term_projrec (term_var "opc") "cap_begin"),
-                           (term_projrec (term_var "opc") "cap_end"),
-                           (term_binop binop_plus (term_projrec (term_var "opc") "cap_cursor") (term_lit ty_int 1))]);
+         asn_match_record
+           capability (term_var "opc")
+           (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+            "cap_permission" "perm")
+            "cap_begin" "beg")
+            "cap_end" "end")
+            "cap_cursor" "cur")
+           (asn_eq
+              (term_var "result")
+              (term_record capability
+                 [term_var "perm",
+                  term_var "beg",
+                  term_var "end",
+                  term_binop binop_plus (term_var "cur") (term_lit ty_addr 1)]))
     |}.
 
   Definition sep_contract_update_pc : SepContract ctx_nil ty_unit :=
@@ -262,23 +270,21 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result";
        sep_contract_postcondition   :=
-         asn_exist
-           "b" ty_addr
-           (asn_exist
-              "e" (ty_option ty_addr)
-              (asn_exist
-                 "a" ty_addr
-                 (asn_eq (term_var "b") (term_projrec (term_var "c") "cap_begin") ✱
-                         asn_eq (term_var "e") (term_projrec (term_var "c") "cap_end") ✱
-                         asn_eq (term_var "a") (term_projrec (term_var "c") "cap_cursor") ✱
-                         asn_match_option ty_addr (term_var "e") "e'"
-                         (asn_eq (term_var "result")
-                                 (term_binop binop_and
-                                             (term_binop binop_le (term_var "b") (term_var "a"))
-                                             (term_binop binop_le (term_var "a") (term_var "e'"))))
-                         (asn_eq (term_var "result") 
-                                 (term_binop binop_le (term_var "b") (term_var "a"))))))
-                     |}.
+         asn_match_record
+           capability (term_var "c")
+           (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+            "cap_permission" "perm")
+            "cap_begin" "b")
+            "cap_end" "e")
+            "cap_cursor" "a")
+           (asn_match_option ty_addr (term_var "e") "e'"
+              (asn_eq (term_var "result")
+                      (term_binop binop_and
+                                  (term_binop binop_le (term_var "b") (term_var "a"))
+                                  (term_binop binop_le (term_var "a") (term_var "e'"))))
+              (asn_eq (term_var "result")
+                      (term_binop binop_le (term_var "b") (term_var "a"))))
+    |}.
 
   (*
       @pre machInv;
@@ -569,6 +575,8 @@ Local Ltac solve :=
        | H: _ /\ _ |- _ => destruct H
        | H: Empty_set |- _ => destruct H
        | |- _ /\ _ => constructor
+       | |- context[Z.leb ?x ?y] =>
+         destruct (Z.leb_spec x y)
        end;
      cbn [List.length];
      subst; try congruence; try lia;
@@ -580,99 +588,79 @@ Local Notation "r '↦r' t" := (chunk_user ptsreg (env_nil ► (ty_enum regname 
 Local Notation "a '↦m' t" := (chunk_user ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t))) (at level 100, only printing).
 
 Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
-Proof. compute; solve. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_read_reg_cap : ValidContractDynMut sep_contract_read_reg_cap fun_read_reg_cap.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_read_reg_num : ValidContractDynMut sep_contract_read_reg_num fun_read_reg_num.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_write_reg.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_next_pc : ValidContractDynMut sep_contract_next_pc fun_next_pc.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_add_pc : ValidContractDynMut sep_contract_add_pc fun_add_pc.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_read_allowed : ValidContractDynMut sep_contract_read_allowed fun_read_allowed.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_write_allowed : ValidContractDynMut sep_contract_write_allowed fun_write_allowed.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_upper_bound : ValidContractDynMut sep_contract_upper_bound fun_upper_bound.
-Proof. apply dynmutevarreflect_sound; now compute. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_within_bounds : ValidContractDynMut sep_contract_within_bounds fun_within_bounds.
 Proof.
-  (* apply dynmutevarreflect_sound. *)
   compute - [NamedEnv Lit Error valid_obligation].
-  (* compute; solve. Qed. *)
-Admitted.
+  cbn; solve; fail.
+Abort.
 
-Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
-Proof. compute; solve. Admitted.
+Lemma valid_contract_exec_jr : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jr fun_exec_jr.
+Proof. compute. Abort.
 
-Lemma valid_contract_exec_jalr : ValidContractDynMut sep_contract_exec_jalr fun_exec_jalr.
-Proof.
-  (* compute; solve. *)
-Admitted.
+Lemma valid_contract_exec_jalr : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jalr fun_exec_jalr.
+Proof. compute. Abort.
 
-Lemma valid_contract_exec_j : ValidContractDynMut sep_contract_exec_j fun_exec_j.
-Proof. compute; solve. Admitted.
+Lemma valid_contract_exec_j : TwoPointO.ValidContractDynMutDebug sep_contract_exec_j fun_exec_j.
+Proof. compute. Abort.
 
-Lemma valid_contract_exec_jal : ValidContractDynMut sep_contract_exec_jal fun_exec_jal.
-Proof.
-  (* compute; solve. *)
-Admitted.
+Lemma valid_contract_exec_jal : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jal fun_exec_jal.
+Proof. compute. Abort.
 
-Lemma valid_contract_exec_bnez : ValidContractDynMut sep_contract_exec_bnez fun_exec_bnez.
-Proof.
-  (* compute; solve. *)
-Admitted.
+Lemma valid_contract_exec_bnez : TwoPointO.ValidContractDynMutDebug sep_contract_exec_bnez fun_exec_bnez.
+Proof. compute. Abort.
 
-Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
-Proof.
-  (* compute; solve. *)
-Admitted.
+Lemma valid_contract_exec_mv : TwoPointO.ValidContractDynMutDebug sep_contract_exec_mv fun_exec_mv.
+Proof. compute. Abort.
 
-Lemma valid_contract_exec_ld : ValidContractDynMut sep_contract_exec_ld fun_exec_ld.
-Proof.
-  (* compute; solve. *)
-Admitted.
+Lemma valid_contract_exec_ld : TwoPointO.ValidContractDynMutDebug sep_contract_exec_ld fun_exec_ld.
+Proof. compute. Abort.
 
-Lemma valid_contract_exec_sd : ValidContractDynMut sep_contract_exec_sd fun_exec_sd.
-Proof.
-  (* compute; solve. *)
-Admitted.
+Lemma valid_contract_exec_sd : TwoPointO.ValidContractDynMutDebug sep_contract_exec_sd fun_exec_sd.
+Proof. compute. Abort.
 
-Lemma valid_contract_exec_addi : ValidContractDynMut sep_contract_exec_addi fun_exec_addi.
-Proof.
-  (* compute; solve. *)
-Admitted.
+Lemma valid_contract_exec_addi : TwoPointO.ValidContractDynMutDebug sep_contract_exec_addi fun_exec_addi.
+Proof. compute. Abort.
 
-Lemma valid_contract_exec_add : ValidContractDynMut sep_contract_exec_add fun_exec_add.
-Proof.
-  (* compute; solve. *)
-Admitted.
+Lemma valid_contract_exec_add : TwoPointO.ValidContractDynMutDebug sep_contract_exec_add fun_exec_add.
+Proof. compute. Abort.
 
 Lemma valid_contract_exec_ret : ValidContractDynMut sep_contract_exec_ret fun_exec_ret.
-Proof. compute; solve. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec_instr : ValidContractDynMut sep_contract_exec_instr fun_exec_instr.
-Proof. compute; solve. Qed.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec : ValidContractDynMut sep_contract_exec fun_exec.
-Proof.
-  (* compute; solve. *)
-Admitted.
+Proof. compute - [NamedEnv Lit Error valid_obligation]. Abort.
 
 Lemma valid_contract_loop : ValidContractDynMut sep_contract_loop fun_loop.
-Proof. compute; solve. Qed.
-
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.

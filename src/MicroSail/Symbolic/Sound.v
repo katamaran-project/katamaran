@@ -672,11 +672,11 @@ Module Soundness
             do 3 (split; auto). intros ? ? <-.
             rewrite inst_subst_pathcondition.
             cbn. now rewrite <- Heqt2.
-          * apply POST_dcl. exists ζ2.
-            rewrite sub_comp_id_left, sub_comp_id_right.
-            do 3 (split; auto). intros ? ? <-.
-            rewrite inst_subst_pathcondition.
-            cbn. now rewrite <- Heqt2.
+          (* * apply POST_dcl. exists ζ2. *)
+          (*   rewrite sub_comp_id_left, sub_comp_id_right. *)
+          (*   do 3 (split; auto). intros ? ? <-. *)
+          (*   rewrite inst_subst_pathcondition. *)
+          (*   cbn. now rewrite <- Heqt2. *)
         + destruct l; cbn; auto.
           apply POST_dcl. exists ζ2.
           rewrite sub_comp_id_left, sub_comp_id_right.
@@ -694,10 +694,10 @@ Module Soundness
           rewrite sub_comp_id_left, sub_comp_id_right.
           do 3 (split; auto). intros ? ? <-.
           now rewrite inst_subst_pathcondition.
-        + apply POST_dcl. exists ζ2.
-          rewrite sub_comp_id_left, sub_comp_id_right.
-          do 3 (split; auto). intros ? ? <-.
-          now rewrite inst_subst_pathcondition.
+        (* + apply POST_dcl. exists ζ2. *)
+        (*   rewrite sub_comp_id_left, sub_comp_id_right. *)
+        (*   do 3 (split; auto). intros ? ? <-. *)
+        (*   now rewrite inst_subst_pathcondition. *)
       - unfold resultprop_specialize. cbn.
         apply POST_dcl. exists ζ2.
         rewrite sub_comp_id_left, sub_comp_id_right.

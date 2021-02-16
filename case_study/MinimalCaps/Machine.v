@@ -145,6 +145,8 @@ End MinCapsTermKit.
 Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   Module Export TM := Terms MinCapsTermKit.
 
+  Local Coercion stm_exp : Exp >-> Stm.
+
   Local Notation "'a'"  := (@exp_var _ "a" _ _) : exp_scope.
   Local Notation "'c'"  := (@exp_var _ "c" _ _) : exp_scope.
   Local Notation "'e'"  := (@exp_var _ "e" _ _) : exp_scope.
@@ -217,12 +219,17 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
 
   Definition fun_next_pc : Stm ctx_nil ty_cap :=
     let: "c" := stm_read_register pc in
-    stm_exp (exp_record capability
-                      [ ((exp_var "c")․"cap_permission"),
-                        ((exp_var "c")․"cap_begin"),
-                        ((exp_var "c")․"cap_end"),
-                        ((exp_var "c")․"cap_cursor") + lit_int 1
-                      ]%exp%arg).
+    stm_match_record capability (exp_var "c")
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+       "cap_permission" "perm")
+       "cap_begin" "beg")
+       "cap_end" "end")
+       "cap_cursor" "cur")
+      (exp_record capability
+         [ exp_var "perm",
+           exp_var "beg",
+           exp_var "end",
+           exp_var "cur" + lit_int 1 ]).
 
   Definition fun_update_pc : Stm ctx_nil ty_unit :=
     let: "c" := call next_pc in
@@ -231,13 +238,18 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
 
   Definition fun_add_pc : Stm ["offset" ∶ ty_int ] ty_unit :=
     let: "c" := stm_read_register pc in
-    stm_write_register pc
-      (exp_record capability
-                      [ ((exp_var "c")․"cap_permission"),
-                        ((exp_var "c")․"cap_begin"),
-                        ((exp_var "c")․"cap_end"),
-                        ((exp_var "c")․"cap_cursor") + (exp_var "offset")
-                      ]%exp%arg) ;;
+    stm_match_record capability (exp_var "c")
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+       "cap_permission" "perm")
+       "cap_begin" "beg")
+       "cap_end" "end")
+       "cap_cursor" "cur")
+      (stm_write_register pc
+        (exp_record capability
+           [ exp_var "perm",
+             exp_var "beg",
+             exp_var "end",
+             exp_var "cur" + exp_var "offset" ])) ;;
     stm_lit ty_unit tt.
 
   Definition fun_read_allowed : Stm ["p" ∶ ty_perm] ty_bool :=
@@ -289,37 +301,51 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
 
     Definition fun_exec_sd : Stm [hv ∶ ty_hv, lv ∶ ty_lv, "immediate" ∶ ty_int ] ty_bool :=
       let: "base_cap" ∶ cap  := call read_reg_cap lv in
-      let: "c" ∶ cap  := stm_exp (exp_record capability
-                      [ ((exp_var "base_cap")․"cap_permission"),
-                        ((exp_var "base_cap")․"cap_begin"),
-                        ((exp_var "base_cap")․"cap_end"),
-                        ((exp_var "base_cap")․"cap_cursor") + (exp_var "immediate")
-                      ]%exp%arg) in
-      let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (lit_string "Err: [exec_sd] no write permission") ;;
-      let: q ∶ bool := call within_bounds c in
-      stm_assert q (lit_string "Err: [exec_sd] out of bounds") ;;
-      let: w ∶ int := call read_reg_num hv in
-      call write_mem c․cursor w ;;
-      call update_pc ;;
-      stm_lit ty_bool true.
+      stm_match_record
+        capability (exp_var "base_cap")
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "perm")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (let: "c" ∶ cap := exp_record capability
+                             [ exp_var "perm",
+                               exp_var "beg",
+                               exp_var "end",
+                               exp_var "cursor" + exp_var "immediate"
+                             ] in
+         let: p ∶ bool := call read_allowed (exp_var "perm") in
+         stm_assert p (lit_string "Err: [exec_sd] no write permission") ;;
+         let: q ∶ bool := call within_bounds c in
+         stm_assert q (lit_string "Err: [exec_sd] out of bounds") ;;
+         let: w ∶ int := call read_reg_num hv in
+         call write_mem (exp_var "cursor") w ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
 
     Definition fun_exec_ld : Stm [lv ∶ ty_lv, hv ∶ ty_hv, "immediate" ∶ ty_int ] ty_bool :=
       let: "base_cap" ∶ cap  := call read_reg_cap hv in
-      let: "c" ∶ cap  := stm_exp (exp_record capability
-                      [ ((exp_var "base_cap")․"cap_permission"),
-                        ((exp_var "base_cap")․"cap_begin"),
-                        ((exp_var "base_cap")․"cap_end"),
-                        ((exp_var "base_cap")․"cap_cursor") + (exp_var "immediate")
-                      ]%exp%arg) in
-      let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (lit_string "Err: [exec_ld] no read permission") ;;
-      let: q ∶ bool := call within_bounds c in
-      stm_assert q (lit_string "Err: [exec_ld] out of bounds") ;;
-      let: n ∶ ty_memval := call read_mem c․cursor in
-      call write_reg lv (exp_inl (exp_var n)) ;;
-      call update_pc ;;
-      stm_lit ty_bool true.
+      stm_match_record
+        capability (exp_var "base_cap")
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "perm")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (let: "c" ∶ cap := exp_record capability
+                             [ exp_var "perm",
+                               exp_var "beg",
+                               exp_var "end",
+                               exp_var "cursor" + exp_var "immediate"
+                             ] in
+         let: p ∶ bool := call read_allowed (exp_var "perm") in
+         stm_assert p (lit_string "Err: [exec_ld] no read permission") ;;
+         let: q ∶ bool := call within_bounds c in
+         stm_assert q (lit_string "Err: [exec_ld] out of bounds") ;;
+         let: n ∶ ty_memval := call read_mem (exp_var "cursor") in
+         call write_reg lv (exp_inl (exp_var n)) ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
 
     Definition fun_exec_addi : Stm [lv ∶ ty_lv, hv ∶ ty_hv, "immediate" ∶ ty_int ] ty_bool :=
       let: "v" ∶ int := call read_reg_num hv in
@@ -413,13 +439,20 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
 
     Definition fun_exec : Stm ε ty_bool :=
       let: "c" := stm_read_register pc in
-      let: p ∶ bool := call read_allowed c․perm in
-      stm_assert p (lit_string "Err: [exec] no read permission") ;;
-      let: q ∶ bool := call within_bounds c in
-      stm_assert q (lit_string "Err: [exec] out of bounds") ;;
-      let: n ∶ ty_memval := call read_mem c․cursor in
-      let: i ∶ ty_instr := callex dI (exp_var n) in
-      call exec_instr i.
+      stm_match_record
+        capability (exp_var "c")
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "perm")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (let: p ∶ bool := call read_allowed (exp_var "perm") in
+         stm_assert p (lit_string "Err: [exec] no read permission") ;;
+         let: q ∶ bool := call within_bounds c in
+         stm_assert q (lit_string "Err: [exec] out of bounds") ;;
+         let: n ∶ ty_memval := call read_mem (exp_var "cursor") in
+         let: i ∶ ty_instr := callex dI (exp_var n) in
+         call exec_instr i).
 
     Definition fun_loop : Stm ε ty_unit :=
       let: "r" := call exec in

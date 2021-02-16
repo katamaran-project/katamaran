@@ -176,7 +176,7 @@ Module Assertions
       | @exp_projtup _ _ e n _ p => term_projtup (symbolic_eval_exp e) n (p := p)
       | exp_union E K e          => term_union E K (symbolic_eval_exp e)
       | exp_record R es          => term_record R (env_map (fun _ => symbolic_eval_exp) es)
-      | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf
+      (* | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf *)
       end%exp.
 
   Record SepContract (Δ : PCtx) (τ : Ty) : Type :=

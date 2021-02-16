@@ -220,9 +220,9 @@ Module Terms (Export termkit : TermKit).
     | exp_projtup {σs : Ctx Ty} (e : Exp Γ (ty_tuple σs)) (n : nat) {σ : Ty}
                   {p : ctx_nth_is σs n σ} : Exp Γ σ
     | exp_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)) : Exp Γ (ty_union U)
-    | exp_record  (R : 𝑹) (es : NamedEnv (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R)
-    | exp_projrec {R : 𝑹} (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
-                  {rfInR : rf∶σ ∈ 𝑹𝑭_Ty R} : Exp Γ σ.
+    | exp_record  (R : 𝑹) (es : NamedEnv (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R).
+    (* | exp_projrec {R : 𝑹} (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty} *)
+    (*               {rfInR : rf∶σ ∈ 𝑹𝑭_Ty R} : Exp Γ σ. *)
     Bind Scope exp_scope with Exp.
 
     Global Arguments exp_var {_} _ {_ _}.
@@ -230,7 +230,7 @@ Module Terms (Export termkit : TermKit).
     Global Arguments exp_tuple {_ _} _.
     Global Arguments exp_union {_} _ _.
     Global Arguments exp_record {_} _ _.
-    Global Arguments exp_projrec {_ _} _ _ {_ _}.
+    (* Global Arguments exp_projrec {_ _} _ _ {_ _}. *)
 
     Section ExpElimination.
 
@@ -260,7 +260,7 @@ Module Terms (Export termkit : TermKit).
       Hypothesis (P_projtup : forall (σs : Ctx Ty) (e : Exp Γ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@exp_projtup _ _ e n _ p)).
       Hypothesis (P_union   : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (exp_union U K e)).
       Hypothesis (P_record  : forall (R : 𝑹) (es : NamedEnv (Exp Γ) (𝑹𝑭_Ty R)), PNE es -> P (ty_record R) (exp_record R es)).
-      Hypothesis (P_projrec : forall (R : 𝑹) (e : Exp Γ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (exp_projrec e rf)).
+      (* Hypothesis (P_projrec : forall (R : 𝑹) (e : Exp Γ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (exp_projrec e rf)). *)
 
       Fixpoint Exp_rect {τ : Ty} (e : Exp Γ τ) {struct e} : P τ e :=
         match e with
@@ -277,7 +277,7 @@ Module Terms (Export termkit : TermKit).
         | @exp_projtup _ σs e n σ p => ltac:(apply P_projtup; auto)
         | exp_union U K e           => ltac:(apply P_union; auto)
         | exp_record R es           => ltac:(apply P_record; induction es; cbn; auto using unit)
-        | exp_projrec e rf          => ltac:(apply P_projrec; auto)
+        (* | exp_projrec e rf          => ltac:(apply P_projrec; auto) *)
         end.
 
     End ExpElimination.
@@ -347,7 +347,7 @@ Module Terms (Export termkit : TermKit).
                                          (fun σs _ => NamedEnv Lit σs)
                                          env_nil
                                          (fun σs _ vs _ e => env_snoc vs _ (eval e δ)) es)
-      | exp_projrec e rf    => 𝑹_unfold (eval e δ) ‼ rf
+      (* | exp_projrec e rf    => 𝑹_unfold (eval e δ) ‼ rf *)
       end.
 
     Definition evals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : LocalStore Γ) : LocalStore Δ :=
@@ -644,9 +644,9 @@ Module Terms (Export termkit : TermKit).
     | term_projtup {σs : Ctx Ty} (e : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
                    {p : ctx_nth_is σs n σ} : Term Σ σ
     | term_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)) : Term Σ (ty_union U)
-    | term_record  (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R)
-    | term_projrec {R : 𝑹} (e : Term Σ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty}
-                   {rfInR : InCtx (rf ∶ σ) (𝑹𝑭_Ty R)} : Term Σ σ.
+    | term_record  (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R).
+    (* | term_projrec {R : 𝑹} (e : Term Σ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty} *)
+    (*                {rfInR : InCtx (rf ∶ σ) (𝑹𝑭_Ty R)} : Term Σ σ. *)
     Local Set Transparent Obligations.
     Derive NoConfusion Signature for Term.
 
@@ -662,7 +662,7 @@ Module Terms (Export termkit : TermKit).
     Global Arguments term_projtup {_ _} _%exp _ {_ _}.
     Global Arguments term_union {_} _ _.
     Global Arguments term_record {_} _ _.
-    Global Arguments term_projrec {_ _} _ _ {_ _}.
+    (* Global Arguments term_projrec {_ _} _ _ {_ _}. *)
 
     Definition term_enum {Σ} (E : 𝑬) (k : 𝑬𝑲 E) : Term Σ (ty_enum E) :=
       term_lit (ty_enum E) k.
@@ -696,7 +696,7 @@ Module Terms (Export termkit : TermKit).
       Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
       Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union U K e)).
       Hypothesis (P_record     : forall (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)), PNE es -> P (ty_record R) (term_record R es)).
-      Hypothesis (P_projrec    : forall (R : 𝑹) (e : Term Σ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (term_projrec e rf)).
+      (* Hypothesis (P_projrec    : forall (R : 𝑹) (e : Term Σ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (term_projrec e rf)). *)
 
       Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) : P σ t :=
         match t with
@@ -713,7 +713,7 @@ Module Terms (Export termkit : TermKit).
         | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
         | @term_union _ U K e            => ltac:(eapply P_union; eauto)
         | @term_record _ R es            => ltac:(eapply P_record; induction es; cbn; eauto using unit)
-        | @term_projrec _ R e rf σ rfInR => ltac:(eapply P_projrec; eauto)
+        (* | @term_projrec _ R e rf σ rfInR => ltac:(eapply P_projrec; eauto) *)
         end.
 
     End Term_rect.
@@ -794,7 +794,7 @@ Module Terms (Export termkit : TermKit).
                                              (fun σs _ => NamedEnv Lit σs)
                                              env_nil
                                              (fun σs _ vs _ e => env_snoc vs _ (inst_term ι e)) es)
-      | @term_projrec _ _ e rf    => 𝑹_unfold (inst_term ι e) ‼ rf
+      (* | @term_projrec _ _ e rf    => 𝑹_unfold (inst_term ι e) ‼ rf *)
       end.
 
     Section TermEquivalence.
@@ -896,12 +896,12 @@ Module Terms (Export termkit : TermKit).
       };
       Term_eqb (@term_record ?(r) xs) (@term_record r ys) :=
          @env_eqb_hom _ (fun b => Term Σ (snd b)) (fun b => @Term_eqb _ (snd b)) _ xs ys;
-      Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
-               with (𝑹_eq_dec r1 r2) => {
-      Term_eqb (@term_projrec r e1 _ _ prf1) (@term_projrec ?(r) e2 _ _ prf2)
-        (left eq_refl) := InCtx_eqb prf1 prf2 && Term_eqb e1 e2;
-      Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2)
-        (right _) := false };
+      (* Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2) *)
+      (*          with (𝑹_eq_dec r1 r2) => { *)
+      (* Term_eqb (@term_projrec r e1 _ _ prf1) (@term_projrec ?(r) e2 _ _ prf2) *)
+      (*   (left eq_refl) := InCtx_eqb prf1 prf2 && Term_eqb e1 e2; *)
+      (* Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2) *)
+      (*   (right _) := false }; *)
 
       Term_eqb _ _ := false.
 
@@ -971,18 +971,18 @@ Module Terms (Export termkit : TermKit).
           microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
-      - destruct (𝑹_eq_dec R R1); cbn.
-        + destruct e. specialize (IHt1 e5). apply reflect_iff in IHt1.
-          assert (EqDec_𝑹𝑭 : EqDec 𝑹𝑭) by admit.
-          destruct (InCtx_eqb_spec rfInR rfInR0); cbn.
-          * apply iff_reflect. rewrite <- IHt1.
-            split.
-            intros e2. now dependent elimination e2.
-            intros e2. subst. now dependent elimination e.
-          * constructor. intros e. apply n.
-            now dependent elimination e.
-        + constructor. congruence.
-    Admitted.
+      (* - destruct (𝑹_eq_dec R R1); cbn. *)
+      (*   + destruct e. specialize (IHt1 e5). apply reflect_iff in IHt1. *)
+      (*     assert (EqDec_𝑹𝑭 : EqDec 𝑹𝑭) by admit. *)
+      (*     destruct (InCtx_eqb_spec rfInR rfInR0); cbn. *)
+      (*     * apply iff_reflect. rewrite <- IHt1. *)
+      (*       split. *)
+      (*       intros e2. now dependent elimination e2. *)
+      (*       intros e2. subst. now dependent elimination e. *)
+      (*     * constructor. intros e. apply n. *)
+      (*       now dependent elimination e. *)
+          (*   + constructor. congruence. *)
+    Qed.
 
   End SymbolicTerms.
   Bind Scope exp_scope with Term.
@@ -1008,7 +1008,7 @@ Module Terms (Export termkit : TermKit).
       | @term_projtup _ _ t n σ p => term_projtup (sub_term ζ t) n (p := p)
       | term_union U K t0         => term_union U K (sub_term ζ t0)
       | term_record R es          => term_record R (env_map (fun _ => sub_term ζ) es)
-      | term_projrec t rf         => term_projrec (sub_term ζ t) rf
+      (* | term_projrec t rf         => term_projrec (sub_term ζ t) rf *)
       end.
 
     Class Subst (T : LCtx -> Type) : Type :=
@@ -1275,7 +1275,7 @@ Module Terms (Export termkit : TermKit).
         option_map (fun t' => @term_projtup _ _ t' n _ p) (occurs_check_term xIn t)
       | term_union U K t => option_map (term_union U K) (occurs_check_term xIn t)
       | term_record R es => option_map (term_record R) (traverse_env (fun _ => occurs_check_term xIn) es)
-      | term_projrec t rf => option_map (fun t' => term_projrec t' rf) (occurs_check_term xIn t)
+      (* | term_projrec t rf => option_map (fun t' => term_projrec t' rf) (occurs_check_term xIn t) *)
       end.
 
     Global Instance OccursCheckTerm {σ} : OccursCheck (fun Σ => Term Σ σ) :=
@@ -1389,7 +1389,7 @@ Module Terms (Export termkit : TermKit).
           induction es; destruct X; cbn.
           * reflexivity.
           * now rewrite IHes, e0.
-        + solve.
+        (* + solve. *)
       - unfold occurs_check, OccursCheckTerm, subst, SubstTerm.
         intros ? ? ? t t' H1.
         induction t; cbn in H1.
@@ -1410,7 +1410,7 @@ Module Terms (Export termkit : TermKit).
         + solve. f_equal. auto.
         + solve. f_equal. auto.
         + solve. f_equal. admit.
-        + solve. f_equal. auto.
+        (* + solve. f_equal. auto. *)
     Admitted.
 
     Global Instance OccursCheckLawsList {T : LCtx -> Type} `{OccursCheckLaws T} :
@@ -1526,9 +1526,9 @@ Module Terms (Export termkit : TermKit).
           + f_equal.
             * apply IHes, X.
             * apply X.
-        - f_equal.
-          f_equal.
-          apply IHt.
+        (* - f_equal. *)
+        (*   f_equal. *)
+        (*   apply IHt. *)
       }
     Qed.
 
@@ -1716,10 +1716,10 @@ Module Terms (Export termkit : TermKit).
   Notation "e1 <= e2" := (exp_binop binop_le e1 e2) : exp_scope.
   Notation "e1 = e2" := (exp_binop binop_eq e1 e2) : exp_scope.
   Notation "- e" := (exp_neg e) : exp_scope.
-  Notation "e ․ f" := (* Using Unicode Character “․” (U+2024) *)
-      (@exp_projrec _ _ e f%string _ _)
-        (at level 9, no associativity, format
-         "e ․ f") : exp_scope.
+  (* Notation "e ․ f" := (* Using Unicode Character “․” (U+2024) *) *)
+  (*     (@exp_projrec _ _ e f%string _ _) *)
+  (*       (at level 9, no associativity, format *)
+  (*        "e ․ f") : exp_scope. *)
 
   Notation "[ x , .. , z ]" :=
     (tuplepat_snoc .. (tuplepat_snoc tuplepat_nil x) .. z) (at level 0) : pat_scope.
