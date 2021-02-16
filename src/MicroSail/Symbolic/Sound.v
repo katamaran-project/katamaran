@@ -511,8 +511,12 @@ Module Soundness
         rewrite sub_comp_id_right. change tt with (subst ζ2 tt).
         eapply apply_sprop_dcl; auto.
         + now rewrite sub_comp_id_left.
-        + admit.
-    Admitted.
+        + generalize (symbolicstate_produce_chunk (subst ζ1 c) s__sym).
+          clear. intros []. cbn. split; auto.
+          unfold pathcondition_geq.
+          intros * <-.
+          now rewrite inst_subst_pathcondition.
+    Qed.
 
     Lemma dmut_produce_chunk_sound {Γ Σ} (ι : SymInstance Σ) (c : Chunk Σ) :
       box approximates
