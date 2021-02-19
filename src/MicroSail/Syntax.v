@@ -1227,6 +1227,19 @@ Module Terms (Export termkit : TermKit).
       now rewrite ?sub_comp_assoc, sub_comp_wk1_comm.
     Qed.
 
+    Lemma sub_comp_shift_single {Σ x σ} (xInΣ : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+          sub_comp (sub_shift xInΣ) (sub_single xInΣ t) = sub_id (Σ - (x :: σ)).
+    Proof.
+      apply env_lookup_extensional.
+      intros [] ?.
+      unfold sub_comp, subst, SubstEnv, sub_single, sub_shift, sub_id.
+      rewrite env_map_tabulate, ?env_lookup_tabulate.
+      cbn.
+      rewrite env_lookup_tabulate.
+      now rewrite occurs_check_shift_var.
+    Qed.
+
+
   End SymbolicSubstitutions.
 
   Section MultiSubs.
