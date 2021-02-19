@@ -1239,6 +1239,14 @@ Module Terms (Export termkit : TermKit).
       now rewrite occurs_check_shift_var.
     Qed.
 
+    Lemma sub_single_lookup {Σ x σ} (xInΣ : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+      (sub_single xInΣ t ‼ x)%exp = t.
+    Proof.
+      unfold sub_single.
+      rewrite env_lookup_tabulate.
+      rewrite occurs_check_var_refl.
+      now cbn.
+    Qed.
 
   End SymbolicSubstitutions.
 
