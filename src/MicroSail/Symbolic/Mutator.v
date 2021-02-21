@@ -117,6 +117,14 @@ Module Mutators
       | v :: vs => fold_right1 cns sing v vs
       end.
 
+    Lemma fold_right_1_10 {A} {cns : A -> Prop -> Prop} {sing : A -> Prop} {nl : Prop}
+          (consNilIffSing : forall v, cns v nl <-> sing v)
+          (v : A) (l : list A) :
+          cns v (fold_right10 cns sing nl l) <-> fold_right1 cns sing v l.
+    Proof.
+      induction l; cbn; auto.
+    Qed.
+
     Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
       fold_right10 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) True pc.
 

@@ -149,7 +149,13 @@ Module Soundness
     Lemma represents_assume_formula {Γ Σ} (ι : SymInstance Σ) (s__sym : SymbolicState Γ Σ) (s__sc : SCState Γ) fml :
       represents ι s__sym s__sc /\ inst_formula ι fml <->
       represents ι (symbolicstate_assume_formula fml s__sym) s__sc.
-    Proof. unfold represents; destruct s__sym, s__sc; cbn; intuition. Qed.
+    Proof.
+      assert (and_true_r : forall v : Formula Σ, inst_formula ι v /\ True <-> inst_formula ι v) by intuition.
+      unfold represents; destruct s__sym, s__sc; cbn; intuition.
+      - rewrite <- (fold_right_1_10 and_true_r); intuition.
+      - rewrite <- (fold_right_1_10 and_true_r) in H2; intuition.
+      - rewrite <- (fold_right_1_10 and_true_r) in H2; intuition.
+    Qed.
 
     Lemma represents_produce_chunk {Γ Σ} (ι : SymInstance Σ) (c1 : Chunk Σ) (c2 : SCChunk)
           (s__sym : SymbolicState Γ Σ) (s__sc : SCState Γ) :
@@ -171,7 +177,11 @@ Module Soundness
     Proof.
       induction pc; cbn - [inst].
       - reflexivity.
-      - rewrite inst_subst_formula.
+      - assert (and_true_r2 : forall v, inst_formula ι v /\ True <-> inst_formula ι v) by intuition.
+        assert (and_true_r1 : forall v, inst_formula (inst ι ζ) v /\ True <-> inst_formula (inst ι ζ) v) by intuition.
+        rewrite <- (fold_right_1_10 and_true_r1).
+        rewrite <- (fold_right_1_10 and_true_r2).
+        rewrite inst_subst_formula.
         apply and_iff_compat_l, IHpc.
     Qed.
 
@@ -659,7 +669,11 @@ Module Soundness
             rewrite inst_subst_pathcondition.
             cbn. rewrite <- Heqt2.
             Transparent inst_pathcondition.
-            cbn. intuition.
+            assert (and_true_r : forall v, inst_formula ι2 v /\ True <-> inst_formula ι2 v) by intuition.
+            cbn.
+            rewrite <- (fold_right_1_10 and_true_r).
+            cbn.
+            intuition.
             Opaque inst_pathcondition.
           * apply POST_dcl. exists ζ2.
             rewrite sub_comp_id_left, sub_comp_id_right.
