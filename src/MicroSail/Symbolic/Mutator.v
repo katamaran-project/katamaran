@@ -106,8 +106,82 @@ Module Mutators
 
     Definition PathCondition (Σ : LCtx) : Type :=
       list (Formula Σ).
+    Fixpoint fold_right1 {A R} (cns : A -> R -> R) (sing : A -> R) (v : A) (l : list A) : R :=
+      match l with
+        nil => sing v
+      | v' :: vs => cns v (fold_right1 cns sing v' vs)
+      end.
+    Fixpoint fold_right10 {A R} (cns : A -> R -> R) (sing : A -> R) (nl : R) (l : list A) : R :=
+      match l with
+        nil => nl
+      | v :: vs => fold_right1 cns sing v vs
+      end.
+
     Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
-      List.fold_right (fun fml pc => inst_formula ι fml /\ pc) True pc.
+      fold_right10 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) True pc.
+
+    Global Instance instantiate_formula : Inst Formula Prop :=
+      {| inst Σ := inst_formula;
+         lift Σ P := formula_prop env_nil P
+      |}.
+    Global Instance instantiate_formula_laws : InstLaws Formula Prop.
+    Proof.
+      constructor; auto.
+      intros Σ Σ' ζ ι t.
+      induction t.
+      - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+        f_equal.
+        eauto using inst_subst.
+      - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+        f_equal.
+        eapply inst_subst.
+      - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+        f_equal; eapply inst_subst.
+      - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+        repeat f_equal; eapply inst_subst.
+    Qed.
+
+    Lemma inst_subst1 {Σ Σ' } (ζ : Sub Σ Σ') (ι : SymInstance Σ') (f : Formula Σ) (pc : list (Formula Σ)) :
+      fold_right1 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) (subst ζ f) (subst ζ pc) =
+      fold_right1 (fun fml pc => inst_formula (inst ι ζ) fml /\ pc) (fun fml => inst_formula (inst ι ζ) fml) f pc.
+    Proof.
+      revert f.
+      induction pc; intros f.
+      - unfold subst, SubstList, map, fold_right1.
+        change (inst ι (subst ζ f) = inst (inst ι ζ) f).
+        eapply inst_subst.
+      - unfold subst, SubstList, map, fold_right1.
+        f_equal.
+        + change (inst ι (subst ζ f) = inst (inst ι ζ) f).
+          eapply inst_subst.
+        + change (fold_right1 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) (subst ζ a) (subst ζ pc) =
+                  fold_right1 (fun fml pc => inst_formula (inst ι ζ) fml /\ pc) (fun fml => inst_formula (inst ι ζ) fml) a pc).
+          eapply IHpc.
+    Qed.
+
+    Lemma inst_subst10 {Σ Σ' } (ζ : Sub Σ Σ') (ι : SymInstance Σ') (pc : list (Formula Σ)) :
+      fold_right10 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) True (subst ζ pc) =
+      fold_right10 (fun fml pc => inst_formula (inst ι ζ) fml /\ pc) (fun fml => inst_formula (inst ι ζ) fml) True pc.
+    Proof.
+      destruct pc.
+      - now cbn.
+      - eapply inst_subst1.
+    Qed.
+
+    Global Instance instantiate_pathcondition : Inst PathCondition Prop :=
+      {| inst Σ := inst_pathcondition;
+         lift Σ P := (lift P : Formula Σ) :: nil
+      |}.
+
+    Global Instance instantiate_pathcondition_laws : InstLaws PathCondition Prop.
+    Proof.
+      constructor.
+      - intros Σ ι a.
+        unfold inst, lift, instantiate_pathcondition, inst_pathcondition.
+        now cbn.
+      - intros Σ Σ' ζ ι pc.
+        eapply inst_subst10.
+    Qed.
 
   End PathCondition.
 
