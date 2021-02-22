@@ -150,11 +150,10 @@ Module Soundness
       represents ι s__sym s__sc /\ inst_formula ι fml <->
       represents ι (symbolicstate_assume_formula fml s__sym) s__sc.
     Proof.
-      assert (and_true_r : forall v : Formula Σ, inst_formula ι v /\ True <-> inst_formula ι v) by intuition.
       unfold represents; destruct s__sym, s__sc; cbn; intuition.
-      - rewrite <- (fold_right_1_10 and_true_r); intuition.
-      - rewrite <- (fold_right_1_10 and_true_r) in H2; intuition.
-      - rewrite <- (fold_right_1_10 and_true_r) in H2; intuition.
+      - rewrite <- fold_right_1_10_prop; intuition.
+      - rewrite <- fold_right_1_10_prop in H2; intuition.
+      - rewrite <- fold_right_1_10_prop in H2; intuition.
     Qed.
 
     Lemma represents_produce_chunk {Γ Σ} (ι : SymInstance Σ) (c1 : Chunk Σ) (c2 : SCChunk)
@@ -177,10 +176,8 @@ Module Soundness
     Proof.
       induction pc; cbn - [inst].
       - reflexivity.
-      - assert (and_true_r2 : forall v, inst_formula ι v /\ True <-> inst_formula ι v) by intuition.
-        assert (and_true_r1 : forall v, inst_formula (inst ι ζ) v /\ True <-> inst_formula (inst ι ζ) v) by intuition.
-        rewrite <- (fold_right_1_10 and_true_r1).
-        rewrite <- (fold_right_1_10 and_true_r2).
+      - rewrite <- fold_right_1_10_prop.
+        rewrite <- fold_right_1_10_prop.
         rewrite inst_subst_formula.
         apply and_iff_compat_l, IHpc.
     Qed.
@@ -387,8 +384,7 @@ Module Soundness
       exists (sub_shift ςInΣ).
       repeat split.
       - unfold inst_pathcondition in H0; cbn in H0.
-        assert (and_true_r : forall v, inst_formula ι2 v /\ True <-> inst_formula ι2 v) by intuition.
-        rewrite <- (fold_right_1_10 and_true_r) in H0.
+        rewrite <- fold_right_1_10_prop in H0.
         destruct H0 as [eq1 pc2].
         change (inst ι1 (subst (sub_single ςInΣ t) pc) : Prop).
         rewrite inst_subst.
@@ -396,16 +392,14 @@ Module Soundness
         now rewrite (inst_shift_single H eq1).
       - rewrite inst_sub_id.
         unfold inst_pathcondition in H0; cbn in H0.
-        assert (and_true_r : forall v, inst_formula ι2 v /\ True <-> inst_formula ι2 v) by intuition.
-        rewrite <- (fold_right_1_10 and_true_r) in H0.
+        rewrite <- fold_right_1_10_prop in H0.
         destruct H0 as [eq1 pc2].
         symmetry.
         subst.
         cbn in eq1.
         eapply inst_shift_single; auto.
       - unfold inst_pathcondition in H0; cbn in H0.
-        assert (and_true_r : forall v, inst_formula ι2 v /\ True <-> inst_formula ι2 v) by intuition.
-        rewrite <- (fold_right_1_10 and_true_r) in H0.
+        rewrite <- fold_right_1_10_prop in H0.
         destruct H0 as [eq1 pc2].
         subst.
         cbn in eq1.
@@ -416,8 +410,7 @@ Module Soundness
       - rewrite inst_subst.
         f_equal.
         unfold inst_pathcondition in H0; cbn in H0.
-        assert (and_true_r : forall v, inst_formula ι2 v /\ True <-> inst_formula ι2 v) by intuition.
-        rewrite <- (fold_right_1_10 and_true_r) in H0.
+        rewrite <- fold_right_1_10_prop in H0.
         destruct H0 as [eq1 pc2].
         subst.
         cbn in eq1.
@@ -782,9 +775,8 @@ Module Soundness
             rewrite inst_subst_pathcondition.
             cbn. rewrite <- Heqt2.
             Transparent inst_pathcondition.
-            assert (and_true_r : forall v, inst_formula ι2 v /\ True <-> inst_formula ι2 v) by intuition.
             cbn.
-            rewrite <- (fold_right_1_10 and_true_r).
+            rewrite <- fold_right_1_10_prop.
             cbn.
             intuition.
             Opaque inst_pathcondition.

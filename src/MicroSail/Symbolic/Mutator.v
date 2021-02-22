@@ -125,6 +125,14 @@ Module Mutators
       induction l; cbn; auto.
     Qed.
 
+    Lemma fold_right_1_10_prop {A} {P : A -> Prop}
+          (v : A) (l : list A) :
+          P v /\ (fold_right10 (fun v acc => P v /\ acc) P True l) <-> fold_right1 (fun v acc => P v /\ acc) P v l.
+    Proof.
+      refine (fold_right_1_10 _ v l).
+      intuition.
+    Qed.
+
     Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
       fold_right10 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) True pc.
 
