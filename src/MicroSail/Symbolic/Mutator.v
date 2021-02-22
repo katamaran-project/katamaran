@@ -133,6 +133,7 @@ Module Mutators
       intuition.
     Qed.
 
+    (* Note: we use fold_right10 instead of fold_right to make inst_lift hold. *)
     Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
       fold_right10 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) True pc.
 
