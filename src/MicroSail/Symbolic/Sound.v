@@ -306,9 +306,35 @@ Module Soundness
     Lemma inst_shift_single {Σ σ ς} {ςInΣ : ς :: σ ∈ Σ}
           {ι2} {ι1} {t : Term (Σ - (ς :: σ)) σ} :
       syminstance_rel (sub_shift ςInΣ) ι1 ι2 ->
-      (ι2 ‼ ς)%exp = inst ι2 (subst (sub_shift ςInΣ) t) ->
+      inst ι2 (subst (sub_shift ςInΣ) t) = (ι2 ‼ ς)%exp ->
       inst ι1 (sub_single ςInΣ t) = ι2.
-    Admitted.
+    Proof.
+      intros srel eq.
+      unfold syminstance_rel in srel.
+      eapply env_lookup_extensional.
+      intros [x τ] xInΓ.
+      change (inst (inst ι1 (sub_single ςInΣ t)) (term_var x) = inst ι2 (term_var x)).
+      rewrite <- inst_subst.
+      pose proof (occurs_check_var_spec ςInΣ xInΓ) as occS.
+      destruct (occurs_check_var ςInΣ xInΓ).
+      - dependent destruction e.
+        destruct occS.
+        unfold subst, SubstTerm, sub_term.
+        rewrite sub_single_lookup.
+        now rewrite <-inst_subst.
+      - destruct occS as [eq' neq].
+        unfold subst, SubstTerm, sub_term.
+        subst xInΓ.
+        change (env_lookup (sub_single ςInΣ t) (shift_var ςInΣ i)) with (subst (Subst := SubstTerm) (sub_single ςInΣ t) (@term_var _ _ _ (shift_var ςInΣ i))).
+        replace (@term_var _ _ _ (shift_var ςInΣ i)) with (subst (Subst := SubstTerm) (sub_shift ςInΣ) (@term_var _ _ _ i)).
+        + rewrite <-subst_sub_comp.
+          rewrite sub_comp_shift_single.
+          rewrite subst_sub_id.
+          rewrite inst_subst.
+          now f_equal.
+        + unfold sub_shift. cbn.
+          now rewrite env_lookup_tabulate.
+    Qed.
 
     Lemma dmutres_assume_eq_spec' {Γ Σ σ} (s__sym : SymbolicState Γ Σ) (t1 t2 : Term Σ σ)
       (POST : ResultProperty Γ Unit Σ) (POST_dcl : resultprop_downwards_closed POST) :
