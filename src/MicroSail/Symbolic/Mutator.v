@@ -118,16 +118,16 @@ Module Mutators
       end.
 
     Lemma fold_right_1_10 {A} {cns : A -> Prop -> Prop} {sing : A -> Prop} {nl : Prop}
-          (consNilIffSing : forall v, cns v nl <-> sing v)
+          (consNilIffSing : forall v, sing v <-> cns v nl)
           (v : A) (l : list A) :
-          cns v (fold_right10 cns sing nl l) <-> fold_right1 cns sing v l.
+          fold_right1 cns sing v l <-> cns v (fold_right10 cns sing nl l).
     Proof.
       induction l; cbn; auto.
     Qed.
 
     Lemma fold_right_1_10_prop {A} {P : A -> Prop}
           (v : A) (l : list A) :
-          P v /\ (fold_right10 (fun v acc => P v /\ acc) P True l) <-> fold_right1 (fun v acc => P v /\ acc) P v l.
+          fold_right1 (fun v acc => P v /\ acc) P v l <-> P v /\ (fold_right10 (fun v acc => P v /\ acc) P True l).
     Proof.
       refine (fold_right_1_10 _ v l).
       intuition.
@@ -198,6 +198,12 @@ Module Mutators
         now cbn.
       - intros Σ Σ' ζ ι pc.
         eapply inst_subst10.
+    Qed.
+
+    Lemma inst_pathcondition_cons {Σ} (ι : SymInstance Σ) (f : Formula Σ) (pc : PathCondition Σ) :
+      inst ι (f :: pc) <-> inst ι f /\ inst ι pc.
+    Proof.
+      eapply fold_right_1_10_prop.
     Qed.
 
   End PathCondition.
