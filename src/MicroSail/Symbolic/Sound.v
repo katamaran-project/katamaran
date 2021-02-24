@@ -717,6 +717,32 @@ Module Soundness
         now rewrite ?inst_subst.
     Qed.
 
+    Lemma dmut_wf_sub {Γ1 Γ2 AT A Σ0} {instA : Inst AT A} (d : DynamicMutator Γ1 Γ2 AT Σ0) (wf_d : dmut_wf d) :
+      forall (Σ1 : LCtx) (ζ1 : Sub Σ0 Σ1), dmut_wf (dmut_sub ζ1 d).
+    Proof.
+      intros Σ1 ζ1 Σ2 Σ3 ζ2 ζ3 s2 POST POST_dcl. unfold dmut_sub.
+      rewrite <- sub_comp_assoc. now apply wf_d.
+    Qed.
+
+    Lemma dmut_wf_demonic_binary {Γ1 Γ2 AT A Σ0} `{Inst AT A} (d1 d2 : DynamicMutator Γ1 Γ2 AT Σ0) (wf_d1 : dmut_wf d1) (wf_d2 : dmut_wf d2) :
+      dmut_wf (dmut_demonic_binary d1 d2).
+    Proof.
+      unfold dmut_wf, dmut_demonic_binary in *. cbn.
+      intros * POST_dcl [H1 H2].
+      split.
+      - revert H1. now apply wf_d1.
+      - revert H2. now apply wf_d2.
+    Qed.
+
+    Lemma dmut_wf_angelic_binary {Γ1 Γ2 AT A Σ0} `{Inst AT A} (d1 d2 : DynamicMutator Γ1 Γ2 AT Σ0) (wf_d1 : dmut_wf d1) (wf_d2 : dmut_wf d2) :
+      dmut_wf (dmut_angelic_binary d1 d2).
+    Proof.
+      unfold dmut_wf, dmut_angelic_binary in *. cbn.
+      intros * POST_dcl [H1|H1].
+      - left. revert H1. now apply wf_d1.
+      - right. revert H1. now apply wf_d2.
+    Qed.
+
     Lemma dmut_wp_sub {Γ1 Γ2 A Σ0} (d : DynamicMutator Γ1 Γ2 A Σ0)
           (POST : StateProperty Γ2 A Σ0) (s : SymbolicState Γ1 Σ0) Σ1 (ζ : Sub Σ0 Σ1) :
         dmut_wp d POST s ->
@@ -783,6 +809,36 @@ Module Soundness
           apply dmutres_geq_syn_sem. exists ζ2.
           now rewrite sub_comp_id_left, subst_sub_comp, subst_symbolicstate_assume_formula.
     Qed.
+
+    Lemma dmut_wf_produce {Γ Σ} (asn : Assertion Σ) :
+      dmut_wf (@dmut_produce Γ Σ asn).
+    Proof.
+      induction asn; cbn.
+      - apply dmut_wf_assume_formula.
+      - admit.
+      - apply dmut_wf_demonic_binary.
+        + admit.
+        + admit.
+      - admit.
+      - destruct (term_get_sum s) eqn:?.
+        destruct s0; now apply dmut_wf_sub.
+        apply dmut_wf_demonic_binary.
+        + admit.
+        + admit.
+      - admit.
+      - destruct (term_get_pair s) eqn:?.
+        destruct p; now apply dmut_wf_sub.
+        admit.
+      - admit.
+      - destruct (term_get_record s) eqn:?.
+        now apply dmut_wf_sub.
+        admit.
+      - destruct (term_get_union s) eqn:?.
+        destruct s0. admit.
+        admit.
+      - admit.
+      - admit.
+    Admitted.
 
     Opaque dmut_assume_formula.
     Opaque subst.
@@ -1017,13 +1073,13 @@ Module Soundness
         + unfold dmut_bind_right.
           eapply dmut_bind_sound.
           apply dmut_wf_assume_formula.
-          admit.
+          intros. apply dmut_wf_sub, dmut_wf_produce.
           apply dmut_assume_formula_sound.
           intros.
           eapply approximates_sub; eauto.
         + eapply dmut_bind_sound.
           apply dmut_wf_assume_formula.
-          admit.
+          intros. apply dmut_wf_sub, dmut_wf_produce.
           apply dmut_assume_formula_sound.
           intros.
           eapply approximates_sub; eauto.
