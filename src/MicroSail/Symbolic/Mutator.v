@@ -109,12 +109,12 @@ Module Mutators
     Fixpoint fold_right1 {A R} (cns : A -> R -> R) (sing : A -> R) (v : A) (l : list A) : R :=
       match l with
         nil => sing v
-      | v' :: vs => cns v (fold_right1 cns sing v' vs)
+      | cons v' vs => cns v (fold_right1 cns sing v' vs)
       end.
     Fixpoint fold_right10 {A R} (cns : A -> R -> R) (sing : A -> R) (nl : R) (l : list A) : R :=
       match l with
         nil => nl
-      | v :: vs => fold_right1 cns sing v vs
+      | cons v vs => fold_right1 cns sing v vs
       end.
 
     Lemma fold_right_1_10 {A} {cns : A -> Prop -> Prop} {sing : A -> Prop} {nl : Prop}
@@ -187,7 +187,7 @@ Module Mutators
 
     Global Instance instantiate_pathcondition : Inst PathCondition Prop :=
       {| inst Σ := inst_pathcondition;
-         lift Σ P := (lift P : Formula Σ) :: nil
+         lift Σ P := cons (lift P : Formula Σ) nil
       |}.
 
     Global Instance instantiate_pathcondition_laws : InstLaws PathCondition Prop.
@@ -201,7 +201,7 @@ Module Mutators
     Qed.
 
     Lemma inst_pathcondition_cons {Σ} (ι : SymInstance Σ) (f : Formula Σ) (pc : PathCondition Σ) :
-      inst ι (f :: pc) <-> inst ι f /\ inst ι pc.
+      inst ι (cons f pc) <-> inst ι f /\ inst ι pc.
     Proof.
       eapply fold_right_1_10_prop.
     Qed.
@@ -275,32 +275,48 @@ Module Mutators
       | formula_eq t1 t2 =>
         if Term_eqb t1 t2
         then Some true
-        else Term_eqvb t1 t2
+        else None
+        (* else Term_eqvb t1 t2 *)
       | formula_neq t1 t2 =>
         if Term_eqb t1 t2
         then Some false
-        else option_map negb (Term_eqvb t1 t2)
+        else None
+        (* else option_map negb (Term_eqvb t1 t2) *)
       end.
 
-    Lemma try_solve_formula_spec {Σ ι} (fml : Formula Σ) :
+    Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) :
       OptionSpec
-        (fun b => inst_formula ι fml <-> is_true b)
+        (fun b => forall ι, inst_formula ι fml <-> is_true b)
         True
         (try_solve_formula fml).
     Proof.
       destruct fml; cbn.
       - dependent elimination t; constructor; auto.
       - constructor; auto.
-      - destruct (Term_eqb_spec t1 t2); cbn.
-        { constructor. apply reflect_iff. constructor. now subst. }
-        apply (Term_eqvb_spec t1 t2).
-      - destruct (Term_eqb_spec t1 t2); cbn.
-        { constructor. apply reflect_iff. constructor. congruence. }
-        apply optionspec_map.
-        destruct (Term_eqvb_spec (ι := ι) t1 t2); constructor; auto.
-        apply iff_reflect in H. apply reflect_iff. destruct H; constructor.
-        congruence.
-        congruence.
+      - destruct (Term_eqb_spec t1 t2); cbn; constructor; auto.
+        intros ι. apply reflect_iff. constructor. now subst.
+      - destruct (Term_eqb_spec t1 t2); cbn; constructor; auto.
+        intros ι. apply reflect_iff. constructor. now subst.
+    Qed.
+
+    Lemma try_solve_formula_subst {Σ0 Σ1} (ζ1 : Sub Σ0 Σ1) (fml : Formula Σ0) :
+      forall b,
+        try_solve_formula fml = Some b ->
+        try_solve_formula (subst ζ1 fml) = Some b.
+    Proof.
+      intros b. destruct fml; cbn.
+      - dependent elimination t; cbn; intros; try discriminate; auto.
+      - auto.
+      - repeat
+          match goal with
+          | |- context[Term_eqb ?t1 ?t2] =>
+            destruct (Term_eqb_spec t1 t2)
+          end; cbn; congruence.
+      - repeat
+          match goal with
+          | |- context[Term_eqb ?t1 ?t2] =>
+            destruct (Term_eqb_spec t1 t2)
+          end; cbn; congruence.
     Qed.
 
   End TrySolve.
@@ -813,7 +829,7 @@ Module Mutators
       dmut_freshen_recordpat 𝑿to𝑺 p
     end.
 
-  Definition dmutres_assume_eq {Γ Σ σ} (s : SymbolicState Γ Σ) (t1 t2 : Term Σ σ) :
+  Definition dmutres_try_assume_eq {Γ Σ σ} (s : SymbolicState Γ Σ) (t1 t2 : Term Σ σ) :
     option (DynamicMutatorResult Γ Unit Σ) :=
     match t1 with
     | @term_var _ ς σ ςInΣ =>
@@ -832,15 +848,29 @@ Module Mutators
     | _ => fun _ => None
     end t2.
 
-  Definition dmut_try_assume_eq {Γ Σ} (s : SymbolicState Γ Σ) (fml : Formula Σ) :
-    option (DynamicMutatorResult Γ Unit Σ) :=
+  Definition dmutres_assume_formula {Γ Σ} (s : SymbolicState Γ Σ) (fml : Formula Σ) :
+    DynamicMutatorResult Γ Unit Σ :=
     match fml with
     | formula_eq t1 t2 =>
-      match dmutres_assume_eq s t1 t2 with
-      | Some r => Some r
-      | None => dmutres_assume_eq s t2 t1
+      match dmutres_try_assume_eq s t1 t2 with
+      | Some r => r
+      | None =>
+        match dmutres_try_assume_eq s t2 t1 with
+        | Some r => r
+        | None =>
+          {| dmutres_context := Σ;
+             dmutres_substitution := sub_id _;
+             dmutres_result_value := tt;
+             dmutres_result_state := symbolicstate_assume_formula fml s;
+          |}
+        end
       end
-    | _ => None
+    | _ =>
+      {| dmutres_context := Σ;
+         dmutres_substitution := sub_id _;
+         dmutres_result_value := tt;
+         dmutres_result_state := symbolicstate_assume_formula fml s;
+      |}
     end.
 
   (* Add the provided formula to the path condition. *)
@@ -861,19 +891,7 @@ Module Mutators
            inconsistent. Prune this path. *)
         outcome_block
       | None =>
-        outcome_pure
-          (* Check if the formula is an equality that can be propagated. *)
-          match dmut_try_assume_eq s1 fml with
-          | Some r => r
-          | None =>
-            (* If everything fails, we simply add the formula to the path
-               condition verbatim. *)
-            {| dmutres_context := Σ1;
-               dmutres_substitution := sub_id Σ1;
-               dmutres_result_value := tt;
-               dmutres_result_state := symbolicstate_assume_formula fml s1;
-            |}
-          end
+        outcome_pure (dmutres_assume_formula s1 fml)
       end.
 
   Definition dmut_assume_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
@@ -909,20 +927,9 @@ Module Mutators
           (* Record the obligation. *)
           outcome_assertk
             (valid_obligation (obligation (symbolicstate_pathcondition s1) fml1))
-            (outcome_pure
-               (* We also want to assume the formula for the continuation, i.e.
-                  we actually perform a simple cut. First see if it's an
-                  equality that can be propagated. *)
-               match dmut_try_assume_eq s1 fml1 with
-               | Some r => r
-               | None =>
-                 (* We can't propagate the formula, so add it to the path
-                    condition. *)
-                 {| dmutres_substitution := sub_id Σ1;
-                    dmutres_result_value := tt;
-                    dmutres_result_state := symbolicstate_assume_formula fml1 s1;
-                 |}
-               end)
+            (* We also want to assume the formula for the continuation, i.e.
+               we actually perform a simple cut.  *)
+            (outcome_pure (dmutres_assume_formula s1 fml1))
         end%out.
 
   Definition dmut_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=

@@ -834,31 +834,37 @@ Module Terms (Export termkit : TermKit).
         end.
 
       Local Set Equations With UIP.
-      Lemma Term_eqvb_spec {ι σ} (t1 t2 : Term Σ σ) :
+      Lemma Term_eqvb_spec {σ} (t1 t2 : Term Σ σ) :
         OptionSpec
-          (fun b : bool => TermEqv ι t1 t2 <-> is_true b)
+          (fun b : bool => forall ι : SymInstance Σ, TermEqv ι t1 t2 <-> is_true b)
           True
           (Term_eqvb t1 t2).
       Proof.
         induction t1; dependent elimination t2; cbn; intros; try (solve [ constructor; auto ]).
         - destruct (InCtx_eqb_spec ςInΣ ςInΣ0); constructor; auto.
-          dependent elimination e. apply reflect_iff. constructor. reflexivity.
-        - rewrite eq_dec_refl. cbn. constructor. apply reflect_iff, Lit_eqb_spec.
+          dependent elimination e.
+          intros ι. apply reflect_iff. constructor. reflexivity.
+        - rewrite eq_dec_refl. cbn. constructor.
+          intros ι. apply reflect_iff, Lit_eqb_spec.
         - specialize (IHt1 e). revert IHt1.
-          apply optionspec_monotonic; [ intros ? <- | auto ].
+          apply optionspec_monotonic; auto.
+          intros ? H ι. specialize (H ι). rewrite <- H.
           unfold TermEqv; cbn; lia.
         - specialize (IHt1 e0). revert IHt1.
-          apply optionspec_monotonic; [ intros ? <- | auto ].
+          apply optionspec_monotonic; auto.
+          intros ? H ι. specialize (H ι). rewrite <- H.
           unfold TermEqv; cbn. split.
           + now intros ?%ssrbool.negb_inj.
           + congruence.
         - specialize (IHt1 t). revert IHt1.
-          apply optionspec_monotonic; [ intros ? <- | auto ].
+          apply optionspec_monotonic; auto.
+          intros ? H ι. specialize (H ι). rewrite <- H.
           unfold TermEqv; cbn. split; congruence.
-        - constructor. apply reflect_iff. constructor. discriminate.
-        - constructor. apply reflect_iff. constructor. discriminate.
+        - constructor. intros ?. apply reflect_iff. constructor. discriminate.
+        - constructor. intros ?. apply reflect_iff. constructor. discriminate.
         - specialize (IHt1 t0). revert IHt1.
-          apply optionspec_monotonic; [ intros ? <- | auto ].
+          apply optionspec_monotonic; auto.
+          intros ? H ι. specialize (H ι). rewrite <- H.
           unfold TermEqv; cbn. split; congruence.
       Qed.
 
@@ -1227,25 +1233,39 @@ Module Terms (Export termkit : TermKit).
       now rewrite ?sub_comp_assoc, sub_comp_wk1_comm.
     Qed.
 
-    Lemma sub_comp_shift_single {Σ x σ} (xInΣ : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
-          sub_comp (sub_shift xInΣ) (sub_single xInΣ t) = sub_id (Σ - (x :: σ)).
+    Lemma lookup_sub_id {Σ x σ} (xIn : x :: σ ∈ Σ) :
+      env_lookup (sub_id _) xIn = term_var x.
+    Proof. unfold sub_id; now rewrite env_lookup_tabulate. Qed.
+
+    Lemma lookup_sub_comp {Σ0 Σ1 Σ2} (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) {x σ} (xIn : x :: σ ∈ Σ0) :
+      env_lookup (sub_comp ζ1 ζ2) xIn = subst ζ2 (env_lookup ζ1 xIn).
     Proof.
-      apply env_lookup_extensional.
-      intros [] ?.
-      unfold sub_comp, subst, SubstEnv, sub_single, sub_shift, sub_id.
-      rewrite env_map_tabulate, ?env_lookup_tabulate.
-      cbn.
-      rewrite env_lookup_tabulate.
-      now rewrite occurs_check_shift_var.
+      unfold sub_comp, subst at 1, SubstEnv.
+      now rewrite env_lookup_map.
     Qed.
 
-    Lemma sub_single_lookup {Σ x σ} (xInΣ : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
-      (sub_single xInΣ t ‼ x)%exp = t.
+    Lemma lookup_sub_shift {Σ x σ y τ} (xIn : x :: σ ∈ Σ) (yIn : y :: τ ∈ Σ - (x :: σ)) :
+      env_lookup (sub_shift xIn) yIn = @term_var _ _ _ (shift_var xIn yIn).
+    Proof. unfold sub_shift; now rewrite env_lookup_tabulate. Qed.
+
+    Lemma lookup_sub_single_eq {Σ x σ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+      env_lookup (sub_single xIn t) xIn = t.
+    Proof. unfold sub_single. now rewrite env_lookup_tabulate, occurs_check_var_refl. Qed.
+
+    Lemma lookup_sub_single_neq {Σ x σ y τ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) (yIn : y :: τ ∈ _) :
+      env_lookup (sub_single xIn t) (shift_var xIn yIn) = term_var y.
+    Proof. unfold sub_single. now rewrite env_lookup_tabulate, occurs_check_shift_var. Qed.
+
+    Lemma sub_comp_shift_single {Σ x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+      sub_comp (sub_shift xIn) (sub_single xIn t) = sub_id _.
     Proof.
-      unfold sub_single.
-      rewrite env_lookup_tabulate.
-      rewrite occurs_check_var_refl.
-      now cbn.
+      apply env_lookup_extensional. intros [y τ] yIn.
+      rewrite lookup_sub_id.
+      rewrite lookup_sub_comp.
+      rewrite lookup_sub_shift.
+      cbn.
+      rewrite lookup_sub_single_neq.
+      reflexivity.
     Qed.
 
   End SymbolicSubstitutions.
