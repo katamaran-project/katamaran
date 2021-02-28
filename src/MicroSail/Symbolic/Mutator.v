@@ -136,6 +136,7 @@ Module Mutators
     (* Note: we use fold_right10 instead of fold_right to make inst_lift hold. *)
     Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
       fold_right10 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) True pc.
+    Global Arguments inst_pathcondition : simpl never.
 
     Global Instance instantiate_formula : Inst Formula Prop :=
       {| inst Σ := inst_formula;
@@ -1927,7 +1928,7 @@ Module Mutators
     Proof.
       induction k.
       - intros. cbn.
-        change (inst_term ι (sub_term (sub_shift xIn) t)) with
+        change (inst ι (sub_term (sub_shift xIn) t)) with
             (inst ι (subst (sub_shift xIn) t)).
         rewrite ?inst_subst.
         split; intros.
@@ -1936,15 +1937,14 @@ Module Mutators
             rewrite H4.
             cbn.
             f_equal.
-            unfold env_remove', sub_shift.
+            unfold inst, env_remove', sub_shift; cbn.
             rewrite env_map_tabulate.
             apply env_lookup_extensional.
             intros [y τ] yIn.
             now rewrite ?env_lookup_tabulate; cbn.
           }
           clear H3.
-          cbn.
-          unfold sub_single.
+          unfold inst, sub_single; cbn.
           rewrite env_map_tabulate.
           apply env_lookup_extensional.
           intros [y τ] yIn.

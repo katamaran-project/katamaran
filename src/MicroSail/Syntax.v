@@ -1630,6 +1630,8 @@ Module Terms (Export termkit : TermKit).
       now rewrite env_map_tabulate, env_lookup_tabulate.
     Qed.
 
+    Global Arguments inst {T A _ Σ} ι !_.
+
   End Instantiation.
 
   Section SymbolicLocalStore.

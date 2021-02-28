@@ -178,7 +178,7 @@ Module Soundness
       - now apply scmut_assert_formula_sound.
       - apply scmut_consume_chunk_sound in HYP.
         now destruct c.
-      - destruct (inst_term ι b); auto.
+      - destruct (inst ι b); auto.
       - auto.
       - admit.
       - admit.
@@ -212,7 +212,7 @@ Module Soundness
       - rewrite sepcon_comm.
         destruct c; now cbn in *.
       - unfold scmut_bind, scmut_assume_term in HYP. cbn in HYP.
-        destruct HYP as [H1 H2]. destruct (inst_term ι b) eqn:?; auto.
+        destruct HYP as [H1 H2]. unfold inst; cbn. destruct (inst_term ι b) eqn:?; auto.
       - auto.
       - admit.
       - admit.

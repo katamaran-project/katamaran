@@ -333,8 +333,7 @@ Module Soundness
       intros H.
       apply env_lookup_extensional; cbn.
       intros [] bIn.
-      unfold sub_id, sub_comp.
-      unfold subst, SubstEnv.
+      unfold sub_id, sub_comp, subst, SubstEnv, inst; cbn.
       rewrite ?env_lookup_map, ?env_lookup_tabulate.
       pose proof (occurs_check_var_spec ςInΣ bIn).
       destruct (occurs_check_var ςInΣ bIn) eqn:?.
