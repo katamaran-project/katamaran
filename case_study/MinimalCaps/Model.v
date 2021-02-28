@@ -251,6 +251,22 @@ Module MinCapsModel.
         (λ (v : Lit ty_unit) (δ' : LocalStore Γ),
              (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "new_value")%exp) ∗ ⌜δ' = δ⌝).
   Proof.
+    iIntros (ι eq) "pre".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "[Hregs Hmem]".
+    iDestruct "Hmem" as (memmap) "[Hmem' %]".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in a.
+    dependent destruction a.
+    dependent destruction H.
+    dependent destruction H1.
+    dependent destruction H.
+    iModIntro. iModIntro.
+    cbn.
+    iMod (gen_heap.gen_heap_update _ _ _ val with "Hmem' pre") as "Hmem' ptsto".
   Admitted.
 
   Lemma dI_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
