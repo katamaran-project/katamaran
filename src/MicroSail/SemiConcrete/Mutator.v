@@ -300,13 +300,13 @@ Module SemiConcrete
 
     Definition scmut_assume_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : SCMut Γ Γ unit :=
       fun s => outcome_assumek
-                 (inst_formula ι fml)
+                 (inst ι fml)
                  (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
     Definition scmut_assume_term {Γ Σ} (ι : SymInstance Σ) (t : Term Σ ty_bool) : SCMut Γ Γ unit :=
       scmut_assume_formula ι (formula_bool t).
     Definition scmut_assert_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : SCMut Γ Γ unit :=
       fun s => outcome_assertk
-                 (inst_formula ι fml)
+                 (inst ι fml)
                  (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
 
     Fixpoint scmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=

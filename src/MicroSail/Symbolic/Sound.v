@@ -143,22 +143,20 @@ Module Soundness
        a heap that has the same chunks in the same order. This can be relaxed
        later to allow permutations or even some kind of semantic equivalence. *)
     Definition represents {Γ Σ} (ι : SymInstance Σ) (s__sym : SymbolicState Γ Σ) (s__sc : SCState Γ) : Prop :=
-      inst                ι (symbolicstate_heap s__sym)       = scstate_heap s__sc /\
-      inst                ι (symbolicstate_localstore s__sym) = scstate_localstore s__sc /\
-      inst_pathcondition  ι (symbolicstate_pathcondition s__sym).
+      inst ι (symbolicstate_heap s__sym)       = scstate_heap s__sc /\
+      inst ι (symbolicstate_localstore s__sym) = scstate_localstore s__sc /\
+      inst ι (symbolicstate_pathcondition s__sym).
 
     (* This is a preservation lemma for state representation. The symbolic
        executor is allwed to add a formula (local assumption) to the
        path-condition if it's true for the current instance ι. We only
        need the -> direction I think. *)
     Lemma represents_assume_formula {Γ Σ} (ι : SymInstance Σ) (s__sym : SymbolicState Γ Σ) (s__sc : SCState Γ) fml :
-      represents ι s__sym s__sc /\ inst_formula ι fml <->
+      represents ι s__sym s__sc /\ inst ι fml <->
       represents ι (symbolicstate_assume_formula fml s__sym) s__sc.
     Proof.
-      unfold represents; destruct s__sym, s__sc; cbn; intuition.
-      - rewrite fold_right_1_10_prop; intuition.
-      - rewrite fold_right_1_10_prop in H2; intuition.
-      - rewrite fold_right_1_10_prop in H2; intuition.
+      unfold represents; destruct s__sym, s__sc. cbn - [inst].
+      rewrite inst_pathcondition_cons. intuition.
     Qed.
 
     Lemma represents_produce_chunk {Γ Σ} (ι : SymInstance Σ) (c1 : Chunk Σ) (c2 : SCChunk)
@@ -170,21 +168,6 @@ Module Soundness
       change (inst ι (cons c1 ?h)) with (cons (inst ι c1) (inst ι h)).
       split; intros H; destruct_propositional H; subst; intuition.
       now dependent elimination H1.
-    Qed.
-
-    Lemma inst_subst_formula {Σ1 Σ2} (ι : SymInstance Σ2) (ζ : Sub Σ1 Σ2) (fml : Formula Σ1) :
-      inst_formula (inst ι ζ) fml <-> inst_formula ι (subst ζ fml).
-    Proof. destruct fml; cbn - [inst]; now rewrite !inst_subst. Qed.
-
-    Lemma inst_subst_pathcondition {Σ1 Σ2} (ι : SymInstance Σ2) (ζ : Sub Σ1 Σ2) (pc : PathCondition Σ1) :
-      inst_pathcondition (inst ι ζ) pc <-> inst_pathcondition ι (subst ζ pc).
-    Proof.
-      induction pc; cbn - [inst].
-      - reflexivity.
-      - rewrite fold_right_1_10_prop.
-        rewrite fold_right_1_10_prop.
-        rewrite inst_subst_formula.
-        apply and_iff_compat_l, IHpc.
     Qed.
 
     (* This is another preservation lemma. This one covers every state change in
@@ -200,9 +183,8 @@ Module Soundness
         represents ι1 (subst ζ1 s__sym) s__sc.
     Proof.
       unfold syminstance_rel, represents; intros. subst.
-      destruct s__sym as [pc δ__sym h__sym], s__sc as [δ__sc h__sc];
-        cbn - [inst inst_pathcondition].
-      now rewrite !inst_subst, inst_subst_pathcondition.
+      destruct s__sym as [pc δ__sym h__sym], s__sc as [δ__sc h__sc]; cbn.
+      now rewrite !inst_subst.
     Qed.
 
     Definition ResultProperty Γ A Σ :=
@@ -392,11 +374,10 @@ Module Soundness
         apply (represents_rel eq_refl) in rep2.
         rewrite inst_sub_id. split; auto.
         apply represents_assume_formula. split; auto.
-        cbn - [inst].
         rewrite <- ?inst_subst.
+        cbn.
         rewrite <- subst_sub_comp.
         rewrite sub_comp_shift_single, subst_sub_id.
-        cbn - [inst].
         rewrite lookup_sub_single_eq.
         reflexivity.
     Qed.
@@ -676,7 +657,7 @@ Module Soundness
       destruct (try_solve_formula_spec (subst ζ1 fml)).
       - specialize (H2 ι1).
         unfold syminstance_rel in H0. subst.
-        rewrite inst_subst_formula in H1.
+        rewrite <- inst_subst in H1.
         apply H2 in H1. clear H2.
         unfold is_true in H1. subst a.
         cbn in H.
@@ -692,7 +673,7 @@ Module Soundness
         unfold resultprop_lift, stateprop_lift in H3.
         inster H3 by apply syminstance_rel_refl. apply H3.
         apply represents_assume_formula. split; auto.
-        rewrite <- inst_subst_formula. unfold syminstance_rel in H0; now subst.
+        rewrite inst_subst. unfold syminstance_rel in H0; now subst.
     Qed.
 
     Definition dmut_wf {Γ1 Γ2 AT Σ0 A} `{Inst AT A} (d : DynamicMutator Γ1 Γ2 AT Σ0) : Prop :=
@@ -796,7 +777,7 @@ Module Soundness
           apply (represents_rel eq_refl) in Hrep.
           rewrite inst_sub_id, sub_comp_id_right. split; auto.
           apply represents_assume_formula. split; auto.
-          rewrite inst_subst_formula, <- subst_sub_comp.
+          rewrite <- inst_subst, <- subst_sub_comp.
           now apply H0.
         + clear Heqo H0. cbn.
           apply dmutres_assume_formula_spec in H; auto.
@@ -1129,12 +1110,13 @@ Module Soundness
         eval e (inst ι δΓΣ) = inst ι (symbolic_eval_exp δΓΣ e).
       Proof.
         induction e; cbn; repeat f_equal; auto.
-        { now rewrite env_lookup_map. }
+        { unfold inst; cbn. now rewrite env_lookup_map. }
         2: {
           induction es as [|eb n es IHes]; cbn in *.
           { reflexivity. }
           { destruct X as [-> Heqs].
-            destruct (inst_term ι (symbolic_eval_exp δΓΣ eb));
+            change (inst_term ?ι ?t) with (inst ι t).
+            destruct (inst ι (symbolic_eval_exp δΓΣ eb));
               cbn; f_equal; auto.
           }
         }

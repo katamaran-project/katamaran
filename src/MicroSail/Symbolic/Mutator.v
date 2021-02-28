@@ -135,55 +135,28 @@ Module Mutators
 
     (* Note: we use fold_right10 instead of fold_right to make inst_lift hold. *)
     Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
-      fold_right10 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) True pc.
+      fold_right10 (fun fml pc => inst ι fml /\ pc) (fun fml => inst ι fml) True pc.
     Global Arguments inst_pathcondition : simpl never.
 
-    Global Instance instantiate_formula : Inst Formula Prop :=
-      {| inst Σ := inst_formula;
-         lift Σ P := formula_prop env_nil P
-      |}.
-    Global Instance instantiate_formula_laws : InstLaws Formula Prop.
-    Proof.
-      constructor; auto.
-      intros Σ Σ' ζ ι t.
-      induction t.
-      - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
-        f_equal.
-        eauto using inst_subst.
-      - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
-        f_equal.
-        eapply inst_subst.
-      - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
-        f_equal; eapply inst_subst.
-      - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
-        repeat f_equal; eapply inst_subst.
-    Qed.
-
     Lemma inst_subst1 {Σ Σ' } (ζ : Sub Σ Σ') (ι : SymInstance Σ') (f : Formula Σ) (pc : list (Formula Σ)) :
-      fold_right1 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) (subst ζ f) (subst ζ pc) =
-      fold_right1 (fun fml pc => inst_formula (inst ι ζ) fml /\ pc) (fun fml => inst_formula (inst ι ζ) fml) f pc.
+      fold_right1 (fun fml pc => inst ι fml /\ pc) (fun fml => inst ι fml) (subst ζ f) (subst ζ pc) =
+      fold_right1 (fun fml pc => inst (inst ι ζ) fml /\ pc) (fun fml => inst (inst ι ζ) fml) f pc.
     Proof.
       revert f.
-      induction pc; intros f.
-      - unfold subst, SubstList, map, fold_right1.
-        change (inst ι (subst ζ f) = inst (inst ι ζ) f).
-        eapply inst_subst.
-      - unfold subst, SubstList, map, fold_right1.
-        f_equal.
-        + change (inst ι (subst ζ f) = inst (inst ι ζ) f).
-          eapply inst_subst.
-        + change (fold_right1 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) (subst ζ a) (subst ζ pc) =
-                  fold_right1 (fun fml pc => inst_formula (inst ι ζ) fml /\ pc) (fun fml => inst_formula (inst ι ζ) fml) a pc).
-          eapply IHpc.
+      induction pc; intros f; cbn.
+      - apply inst_subst.
+      - f_equal.
+        + apply inst_subst.
+        + apply IHpc.
     Qed.
 
     Lemma inst_subst10 {Σ Σ' } (ζ : Sub Σ Σ') (ι : SymInstance Σ') (pc : list (Formula Σ)) :
-      fold_right10 (fun fml pc => inst_formula ι fml /\ pc) (fun fml => inst_formula ι fml) True (subst ζ pc) =
-      fold_right10 (fun fml pc => inst_formula (inst ι ζ) fml /\ pc) (fun fml => inst_formula (inst ι ζ) fml) True pc.
+      fold_right10 (fun fml pc => inst ι fml /\ pc) (fun fml => inst ι fml) True (subst ζ pc) =
+      fold_right10 (fun fml pc => inst (inst ι ζ) fml /\ pc) (fun fml => inst (inst ι ζ) fml) True pc.
     Proof.
       destruct pc.
-      - now cbn.
-      - eapply inst_subst1.
+      - reflexivity.
+      - apply inst_subst1.
     Qed.
 
     Global Instance instantiate_pathcondition : Inst PathCondition Prop :=
@@ -194,9 +167,7 @@ Module Mutators
     Global Instance instantiate_pathcondition_laws : InstLaws PathCondition Prop.
     Proof.
       constructor.
-      - intros Σ ι a.
-        unfold inst, lift, instantiate_pathcondition, inst_pathcondition.
-        now cbn.
+      - reflexivity.
       - intros Σ Σ' ζ ι pc.
         eapply inst_subst10.
     Qed.
@@ -204,7 +175,7 @@ Module Mutators
     Lemma inst_pathcondition_cons {Σ} (ι : SymInstance Σ) (f : Formula Σ) (pc : PathCondition Σ) :
       inst ι (cons f pc) <-> inst ι f /\ inst ι pc.
     Proof.
-      eapply fold_right_1_10_prop.
+      apply fold_right_1_10_prop.
     Qed.
 
   End PathCondition.
@@ -217,7 +188,7 @@ Module Mutators
 
   Definition valid_obligation : Obligation -> Prop :=
     fun '(obligation pc fml) =>
-      ForallNamed (fun ι => all_list (inst_formula ι) pc -> inst_formula ι fml).
+      ForallNamed (fun ι => all_list (inst ι) pc -> inst ι fml : Prop).
   Hint Unfold valid_obligation : core.
 
   Instance subst_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
@@ -287,7 +258,7 @@ Module Mutators
 
     Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) :
       OptionSpec
-        (fun b => forall ι, inst_formula ι fml <-> is_true b)
+        (fun b => forall ι, inst ι fml <-> is_true b)
         True
         (try_solve_formula fml).
     Proof.
@@ -640,7 +611,7 @@ Module Mutators
     Definition dmut_contradiction {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 s1 =>
         (⨂ (ι : SymInstance Σ1)
-            (_ : all_list (inst_formula ι) (symbolicstate_pathcondition s1)) =>
+            (_ : all_list (inst ι) (symbolicstate_pathcondition s1)) =>
          outcome_fail
            {| dmuterr_function        := func;
               dmuterr_message         := msg;
@@ -1800,8 +1771,8 @@ Module Mutators
       | sout_demonic_binary o1 o2 => outcome_demonic_binary (sout_run ι o1) (sout_run ι o2)
       | sout_fail msg => outcome_fail msg
       | sout_block => outcome_block
-      | sout_assertk P msg o => outcome_assertk (inst_formula ι P) (sout_run ι o)
-      | sout_assumek P o => outcome_assumek (inst_formula ι P) (sout_run ι o)
+      | sout_assertk P msg o => outcome_assertk (inst ι P) (sout_run ι o)
+      | sout_assumek P o => outcome_assumek (inst ι P) (sout_run ι o)
       | sout_demonicv b k => outcome_demonic (fun v => sout_run (env_snoc ι _ v) k)
       (* | sout_subst ζ k => outcome_demonic (fun ι' => outcome_assumek (syminstance_rel ζ ι ι') (sout_run ι' k)) *)
       | @sout_subst _ _ x σ xIn t k =>
@@ -1879,8 +1850,8 @@ Module Mutators
       | sout_demonic_binary o1 o2 => wp_sout ι o1 POST /\ wp_sout ι o2 POST
       | sout_fail msg => False
       | sout_block => True
-      | sout_assertk P msg o => inst_formula ι P /\ wp_sout ι o POST
-      | sout_assumek P o => inst_formula ι P -> wp_sout ι o POST
+      | sout_assertk P msg o => (inst ι P : Prop) /\ wp_sout ι o POST
+      | sout_assumek P o => (inst ι P : Prop) -> wp_sout ι o POST
       | sout_demonicv b k => forall v, wp_sout (env_snoc ι b v) k POST
       (* | sout_subst ζ k => *)
       (*   forall ι', *)
@@ -1901,8 +1872,8 @@ Module Mutators
       | sout_demonic_binary o1 o2 => sout_safe ι o1 /\ sout_safe ι o2
       | sout_fail msg => False
       | sout_block => True
-      | sout_assertk P msg o => inst_formula ι P /\ sout_safe ι o
-      | sout_assumek P o => inst_formula ι P -> sout_safe ι o
+      | sout_assertk P msg o => inst ι P /\ sout_safe ι o
+      | sout_assumek P o => (inst ι P : Prop) -> sout_safe ι o
       | sout_demonicv b k => forall v, sout_safe (env_snoc ι b v) k
       | @sout_subst _ _ x σ xIn t k =>
         let ι' := env_remove' (x,σ) ι xIn in

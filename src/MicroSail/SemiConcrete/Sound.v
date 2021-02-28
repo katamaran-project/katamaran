@@ -145,7 +145,7 @@ Module Soundness
       {δ1 : LocalStore Γ} {h1 : SCHeap} (POST : LocalStore Γ -> L) :
       outcome_satisfy (scmut_assert_formula ι fml {| scstate_localstore := δ1; scstate_heap := h1 |})
         (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
-      inst_scheap h1 ⊢ !! inst_formula ι fml ∧ emp ✱ POST δ1.
+      inst_scheap h1 ⊢ !! inst ι fml ∧ emp ✱ POST δ1.
     Proof.
       cbn. intros [H1 H2].
       rewrite <- sepcon_emp at 1.
@@ -161,7 +161,7 @@ Module Soundness
       {δ1 : LocalStore Γ} {h1 : SCHeap} (POST : LocalStore Γ -> L) :
       outcome_satisfy (scmut_assume_formula ι fml {| scstate_localstore := δ1; scstate_heap := h1 |})
         (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
-      inst_scheap h1 ✱ !! inst_formula ι fml ∧ emp ⊢ POST δ1.
+      inst_scheap h1 ✱ !! inst ι fml ∧ emp ⊢ POST δ1.
     Proof.
     Admitted.
 

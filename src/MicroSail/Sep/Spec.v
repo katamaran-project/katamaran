@@ -88,6 +88,36 @@ Module Assertions
     { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
   Qed.
 
+  Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
+    match fml with
+    | formula_bool t    => is_true (inst (A := Lit ty_bool) ι t)
+    | formula_prop ζ P  => uncurry_named P (inst ι ζ)
+    | formula_eq t1 t2  => inst ι t1 =  inst ι t2
+    | formula_neq t1 t2 => inst ι t1 <> inst ι t2
+    end.
+
+  Instance instantiate_formula : Inst Formula Prop :=
+    {| inst Σ := inst_formula;
+       lift Σ P := formula_prop env_nil P
+    |}.
+
+  Instance instantiate_formula_laws : InstLaws Formula Prop.
+  Proof.
+    constructor; auto.
+    intros Σ Σ' ζ ι t.
+    induction t.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      f_equal.
+      eauto using inst_subst.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      f_equal.
+      eapply inst_subst.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      f_equal; eapply inst_subst.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      repeat f_equal; eapply inst_subst.
+  Qed.
+
   Inductive Chunk (Σ : LCtx) : Type :=
   | chunk_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
@@ -247,14 +277,6 @@ Module Assertions
   Section Contracts.
     Context `{Logic : IHeaplet L}.
 
-    Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
-      match fml with
-      | formula_bool t    => is_true (inst (A := Lit ty_bool) ι t)
-      | formula_prop ζ P  => uncurry_named P (inst ι ζ)
-      | formula_eq t1 t2  => inst ι t1 =  inst ι t2
-      | formula_neq t1 t2 => inst ι t1 <> inst ι t2
-      end.
-
     Definition inst_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
       match c with
       | chunk_user p ts => luser p (inst ι ts)
@@ -263,7 +285,7 @@ Module Assertions
 
     Fixpoint inst_assertion {Σ} (ι : SymInstance Σ) (a : Assertion Σ) : L :=
       match a with
-      | asn_formula fml => !!(inst_formula ι fml) ∧ emp
+      | asn_formula fml => !!(inst ι fml) ∧ emp
       | asn_chunk c => inst_chunk ι c
       | asn_if b a1 a2 => if inst (A := Lit ty_bool) ι b then inst_assertion ι a1 else inst_assertion ι a2
       | asn_match_enum E k alts => inst_assertion ι (alts (inst (T := fun Σ => Term Σ _) ι k))
