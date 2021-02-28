@@ -266,7 +266,7 @@ Module MinCapsModel.
     dependent destruction H.
     iModIntro. iModIntro.
     cbn.
-    iMod (gen_heap.gen_heap_update _ _ _ val with "Hmem' pre") as "Hmem' ptsto".
+    iMod (gen_heap.gen_heap_update _ _ _ val with "Hmem' pre") as "[Hmem' ptsto]".
   Admitted.
 
   Lemma dI_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
