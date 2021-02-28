@@ -524,6 +524,10 @@ Module Mutators
       MkDynMutResult ζ2 a2 s2 => MkDynMutResult (sub_comp ζ1 ζ2) a2 s2
       end.
 
+    Lemma cosubst_dmutres_comp {AT Γ Σ1 Σ2 Σ3} (ζ12 : Sub Σ1 Σ2) (ζ23 : Sub Σ2 Σ3) (r : DynamicMutatorResult Γ AT Σ3) :
+      cosubst_dmutres (sub_comp ζ12 ζ23) r = cosubst_dmutres ζ12 (cosubst_dmutres ζ23 r).
+    Proof. destruct r; cbn; now rewrite sub_comp_assoc. Qed.
+
     (* A record to collect information when the symbolic execution signals a failure. *)
     Record DynamicMutatorError : Type :=
       MkDynMutError

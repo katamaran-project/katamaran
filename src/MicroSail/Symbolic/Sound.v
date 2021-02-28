@@ -290,6 +290,22 @@ Module Soundness
       intuition congruence.
     Qed.
 
+    Lemma resultprop_specialize_id {Γ A Σ} (P : ResultProperty Γ A Σ) :
+      forall r, resultprop_specialize (sub_id _) P r <-> P r.
+    Proof.
+      intros [Σ' ζ a s]; unfold resultprop_specialize; cbn.
+      now rewrite sub_comp_id_left.
+    Qed.
+
+    Lemma resultprop_specialize_comp {Γ A Σ1 Σ2 Σ3} (ζ12 : Sub Σ1 Σ2) (ζ23 : Sub Σ2 Σ3) (P : ResultProperty Γ A Σ1) :
+      forall r,
+        resultprop_specialize (sub_comp ζ12 ζ23) P r <->
+        resultprop_specialize ζ23 (resultprop_specialize ζ12 P) r.
+    Proof.
+      intros [Σ' ζ a s]; unfold resultprop_specialize; cbn.
+      now rewrite sub_comp_assoc.
+    Qed.
+
     Definition StateProperty Γ A Σ :=
       forall Σ1, Sub Σ Σ1 -> A Σ1 -> SymbolicState Γ Σ1 -> Prop.
 
@@ -722,6 +738,246 @@ Module Soundness
       - left. revert H1. now apply wf_d1.
       - right. revert H1. now apply wf_d2.
     Qed.
+
+    Module WfExperiments.
+
+      Definition dmutres_pathcondition {Γ AT Σ} (r : DynamicMutatorResult Γ AT Σ) : PathCondition (dmutres_context r).
+      Proof. eapply symbolicstate_pathcondition, dmutres_result_state. Defined.
+
+      Definition pc_geq {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc1 : PathCondition Σ1) (pc2 : PathCondition Σ2) : Prop :=
+        forall ι1 ι2,
+          syminstance_rel ζ12 ι1 ι2 ->
+          (inst ι2 pc2 : Prop) ->
+          (inst ι1 pc1 : Prop).
+
+      Definition outcome_result_geq {Γ AT A} `{Inst AT A} {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2)
+        (pc2 : PathCondition Σ2)
+        (or1 : Outcome (DynamicMutatorResult Γ AT Σ1))
+        (or2 : Outcome (DynamicMutatorResult Γ AT Σ2)) : Prop :=
+          forall
+            (P : ResultProperty Γ AT _) (P_dcl : resultprop_downwards_closed P)
+            (Q : ResultProperty Γ AT _) (Q_dcl : resultprop_downwards_closed Q)
+            (PQ : forall r,
+                pc_geq (dmutres_substitution r) pc2 (dmutres_pathcondition r) ->
+                resultprop_specialize ζ12 P r ->
+                Q r)
+            (QP : forall r,
+                pc_geq (dmutres_substitution r) pc2 (dmutres_pathcondition r) ->
+                Q r ->
+                resultprop_specialize ζ12 P r),
+          outcome_satisfy or1 P ->
+          outcome_satisfy or2 Q.
+
+      Definition dmut_geq {Γ1 Γ2 AT A} `{Inst AT A} {Σ0 Σ1}
+        (d0 : DynamicMutator Γ1 Γ2 AT Σ0)
+        (d1 : DynamicMutator Γ1 Γ2 AT Σ1) : Prop :=
+        forall Σ2 Σ3 (ζ02 : Sub Σ0 Σ2) (ζ13 : Sub Σ1 Σ3) (ζ23 : Sub Σ2 Σ3) s2 s3,
+          state_geq ζ23 s2 s3 ->
+          outcome_result_geq ζ23 (symbolicstate_pathcondition s3) (d0 Σ2 ζ02 s2) (d1 Σ3 ζ13 s3).
+
+      Definition dmut_wf {Γ1 Γ2 AT Σ0 A} `{Inst AT A} (d : DynamicMutator Γ1 Γ2 AT Σ0) : Prop :=
+        forall Σ1 Σ2 (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ0 Σ2) (ζ12 : Sub Σ1 Σ2) s1 s2,
+          state_geq ζ12 s1 s2 ->
+          outcome_result_geq ζ12 (symbolicstate_pathcondition s2) (d Σ1 ζ1 s1) (d Σ2 ζ2 s2).
+
+      Lemma dmut_wf_geq_id {Γ1 Γ2 AT Σ0 A} `{Inst AT A} (d : DynamicMutator Γ1 Γ2 AT Σ0) :
+        dmut_wf d <-> dmut_geq d d.
+      Proof. unfold dmut_wf, dmut_geq. reflexivity. Qed.
+
+      Definition DynamicMutatorArrow' Γ1 Γ2 A B Σ0 : Type :=
+        forall Σ1,
+          Sub Σ0 Σ1 -> A Σ1 ->
+          SymbolicState Γ1 Σ1 -> Outcome (DynamicMutatorResult Γ2 B Σ1).
+
+      Definition dmut_wf_arrow' {Γ1 Γ2 AT A BT B Σ0} `{Inst AT A, Inst BT B}
+        (f : DynamicMutatorArrow' Γ1 Γ2 AT BT Σ0) : Prop :=
+        forall Σ1 Σ2 (ζ01 : Sub Σ0 Σ1) (ζ02 : Sub Σ0 Σ2) (ζ12 : Sub Σ1 Σ2) (a1 : AT Σ1) (a2 : AT Σ2) s1 s2,
+          (forall (ι1 : SymInstance Σ1) (ι2 : SymInstance Σ2),
+              syminstance_rel ζ12 ι1 ι2 ->
+              forall s__sc : SCState Γ1,
+                represents ι2 s2 s__sc ->
+                represents ι1 s1 s__sc /\
+                inst ι1 a1 = inst ι2 a2) ->
+          outcome_result_geq ζ12 (symbolicstate_pathcondition s2) (f Σ1 ζ01 a1 s1) (f Σ2 ζ02 a2 s2).
+
+      Definition dmut_bind' {Γ1 Γ2 Γ3 A B Σ0}
+                 (ma : DynamicMutator Γ1 Γ2 A Σ0) (f : DynamicMutatorArrow' Γ2 Γ3 A B Σ0) : DynamicMutator Γ1 Γ3 B Σ0 :=
+        fun (Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (s1 : SymbolicState Γ1 Σ1) =>
+          outcome_bind (ma Σ1 ζ01 s1) (fun r : DynamicMutatorResult Γ2 A Σ1 =>
+          outcome_bind (f (dmutres_context r) (sub_comp ζ01 (dmutres_substitution r)) (dmutres_result_value r) (dmutres_result_state r))
+                       (fun r2 : DynamicMutatorResult Γ3 B (dmutres_context r) => outcome_pure (cosubst_dmutres (dmutres_substitution r) r2))).
+
+      Section WfBind.
+
+        Transparent represents.
+
+        Context
+          {AT A BT B} {substB : Subst BT} {instB : Inst BT B} {instA : Inst AT A}
+          {subA : Subst AT} {subLA : SubstLaws AT} {instLA : InstLaws AT A}.
+
+        Lemma dmut_wf_bind' {Γ1 Γ2 Γ3 Σ0} (d : DynamicMutator Γ1 Γ2 AT Σ0) (wf_d : dmut_wf d)
+              (f : DynamicMutatorArrow' Γ2 Γ3 AT BT Σ0)
+              (f_wf : dmut_wf_arrow' f) :
+          dmut_wf (dmut_bind' d f).
+        Proof.
+          (* unfold dmut_wf, dmut_bind', outcome_result_geq. *)
+          (* intros * Heqs * P_dcl * Q_dcl * PQ QP. *)
+          (* rewrite ?outcome_satisfy_bind. *)
+          (* apply wf_d with ζ12. auto. *)
+          (* - clear Q Q_dcl PQ QP. *)
+          (*   revert f_wf P P_dcl. clear. intros f_wf P P_dcl. *)
+          (*   unfold resultprop_downwards_closed. *)
+          (*   intros [Σ2 ζ12 a2 [pc2 δ2 h2]] [Σ3 ζ13 a3 [pc3 δ3 h3]] [ζ23 Hgeqr]; cbn in *. *)
+          (*   rewrite ?outcome_satisfy_bind; cbn. *)
+          (*   apply (f_wf _ _ _ _ ζ23). *)
+          (*   * intros ι2 ι3 rel23 s__sc. specialize (Hgeqr ι2 ι3 rel23 s__sc). *)
+          (*     destruct s__sc as [δ h]; unfold represents in *; cbn in *. *)
+          (*     intuition. *)
+          (*   * now apply resultprop_specialize_dcl. *)
+          (*   * now apply resultprop_specialize_dcl. *)
+          (*   * intros [Σ4 ζ34 a4 [pc4 δ4 h4]] Hgeqpc34; *)
+          (*       unfold resultprop_specialize; cbn in *. *)
+          (*     apply P_dcl. exists (sub_id _). *)
+          (*     intros ? ι4 <-. cbn. *)
+          (*     specialize (Hgeqr (inst (inst ι4 ζ34) ζ23)). *)
+          (*     specialize (Hgeqr (inst ι4 ζ34)). *)
+          (*     specialize (Hgeqr eq_refl). *)
+          (*     specialize (Hgeqpc34 (inst ι4 ζ34) ι4 eq_refl). *)
+          (*     revert Hgeqpc34. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros Hpc4. *)
+          (*     revert Hgeqr. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros Hpc3. *)
+          (*     rewrite ?inst_sub_id. *)
+          (*     rewrite <- ?inst_subst. *)
+          (*     rewrite <- sub_comp_assoc. *)
+          (*     intuition. *)
+          (*   * intros [Σ4 ζ34 a4 [pc4 δ4 h4]] Hgeqpc34; *)
+          (*       unfold resultprop_specialize; cbn in *. *)
+          (*     apply P_dcl. exists (sub_id _). *)
+          (*     intros ? ι4 <-. cbn. *)
+          (*     specialize (Hgeqr (inst (inst ι4 ζ34) ζ23)). *)
+          (*     specialize (Hgeqr (inst ι4 ζ34)). *)
+          (*     specialize (Hgeqr eq_refl). *)
+          (*     specialize (Hgeqpc34 (inst ι4 ζ34) ι4 eq_refl). *)
+          (*     revert Hgeqpc34. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros Hpc4. *)
+          (*     revert Hgeqr. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros Hpc3. *)
+          (*     rewrite ?inst_sub_id. *)
+          (*     rewrite <- ?inst_subst. *)
+          (*     rewrite <- sub_comp_assoc. *)
+          (*     intuition. *)
+          (* - clear P P_dcl PQ QP. *)
+          (*   revert f_wf Q Q_dcl. clear. intros f_wf Q Q_dcl. *)
+          (*   unfold resultprop_downwards_closed. *)
+          (*   intros [Σ3 ζ23 a3 [pc3 δ3 h3]] [Σ4 ζ24 a4 [pc4 δ4 h4]] [ζ34 Hgeqr]; cbn in *. *)
+          (*   rewrite ?outcome_satisfy_bind; cbn. *)
+          (*   apply (f_wf _ _ _ _ ζ34). *)
+          (*   * revert Hgeqr. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros ι3. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros ι4. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros rel34. *)
+          (*     unfold represents. cbn. *)
+          (*     intros Hgeq [δ h]. cbn - [inst]. *)
+          (*     intros. destruct_conjs. *)
+          (*     intuition. *)
+          (*   * now apply resultprop_specialize_dcl. *)
+          (*   * now apply resultprop_specialize_dcl. *)
+          (*   * intros [Σ5 ζ45 a5 [pc5 δ5 h5]]; unfold resultprop_specialize; cbn. *)
+          (*     intros Hgeqpc45. apply Q_dcl. *)
+          (*     exists (sub_id _). intros ? ι5 <-. cbn. *)
+          (*     specialize (Hgeqr (inst (inst ι5 ζ45) ζ34)). *)
+          (*     specialize (Hgeqr (inst ι5 ζ45)). *)
+          (*     specialize (Hgeqr eq_refl). *)
+          (*     specialize (Hgeqpc45 (inst ι5 ζ45) ι5 eq_refl). *)
+          (*     revert Hgeqpc45. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros Hpc5. *)
+          (*     revert Hgeqr. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros Hpc4. *)
+          (*     rewrite ?inst_sub_id. *)
+          (*     rewrite <- ?inst_subst. *)
+          (*     rewrite <- sub_comp_assoc. *)
+          (*     intuition. *)
+          (*   * intros [Σ5 ζ45 a5 [pc5 δ5 h5]]; unfold resultprop_specialize; cbn. *)
+          (*     intros Hgeqpc45. apply Q_dcl. *)
+          (*     exists (sub_id _). intros ? ι5 <-. cbn. *)
+          (*     specialize (Hgeqr (inst (inst ι5 ζ45) ζ34)). *)
+          (*     specialize (Hgeqr (inst ι5 ζ45)). *)
+          (*     specialize (Hgeqr eq_refl). *)
+          (*     specialize (Hgeqpc45 (inst ι5 ζ45) ι5 eq_refl). *)
+          (*     revert Hgeqpc45. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros Hpc5. *)
+          (*     revert Hgeqr. *)
+          (*     refine (@impl_forall_intro _ _ _ _); intros Hpc4. *)
+          (*     rewrite ?inst_sub_id. *)
+          (*     rewrite <- ?inst_subst. *)
+          (*     rewrite <- sub_comp_assoc. *)
+          (*     intuition. *)
+          (* - intros [Σ3 ζ23 a3 [pc3 δ3 h3]] Hgeqpc23; unfold resultprop_specialize; cbn in *. *)
+          (*   rewrite ?outcome_satisfy_bind; cbn. *)
+          (*   eapply (f_wf _ _ _ _ (sub_id _)). *)
+          (*   * intros ? ι3 <- s__sc. *)
+          (*     rewrite inst_sub_id. *)
+          (*     auto. *)
+          (*   * now apply resultprop_specialize_dcl. *)
+          (*   * now apply resultprop_specialize_dcl. *)
+          (*   * intros [Σ4 ζ34 b4 [pc4 δ4 h4]]; cbn. *)
+          (*     rewrite resultprop_specialize_id; cbn. *)
+          (*     intros Hgeqpc34 Hp. apply PQ. *)
+          (*     { unfold pc_geq; cbn. *)
+          (*       intros ι2 ι4 rel24 Hpc4. *)
+          (*       specialize (Hgeqpc34 (inst ι4 ζ34) ι4 eq_refl Hpc4). *)
+          (*       apply syminstance_rel_comp in rel24. *)
+          (*       specialize (Hgeqpc23 ι2 (inst ι4 ζ34) rel24). *)
+          (*       intuition. *)
+          (*     } *)
+          (*     unfold resultprop_specialize; cbn. *)
+          (*     now rewrite <- sub_comp_assoc. *)
+          (*   * intros r Hgeqpc34. *)
+          (*     rewrite resultprop_specialize_id. *)
+          (*     rewrite cosubst_dmutres_comp. *)
+          (*     apply QP. clear PQ QP. unfold pc_geq in *. *)
+          (*     destruct r as [Σ4 ζ34 b4 [pc4 δ4 h4]]; cbn in *. *)
+          (*     intros ι2 ι4 rel24. *)
+          (*     apply syminstance_rel_comp in rel24. *)
+          (*     specialize (Hgeqpc23 ι2 (inst ι4 ζ34) rel24). *)
+          (*     specialize (Hgeqpc34 (inst ι4 ζ34) ι4 eq_refl). *)
+          (*     intuition. *)
+          (* - intros [Σ3 ζ23 a3 [pc3 δ3 h3]] Hgeqpc23; unfold resultprop_specialize; cbn in *. *)
+          (*   rewrite ?outcome_satisfy_bind; cbn. *)
+          (*   eapply (f_wf _ _ _ _ (sub_id _)). *)
+          (*   * intros ? ι3 <- s__sc. *)
+          (*     rewrite inst_sub_id. *)
+          (*     auto. *)
+          (*   * now apply resultprop_specialize_dcl. *)
+          (*   * now apply resultprop_specialize_dcl. *)
+          (*   * intros r Hgeqpc34. *)
+          (*     rewrite resultprop_specialize_id. *)
+          (*     rewrite cosubst_dmutres_comp. *)
+          (*     apply QP. clear PQ QP. unfold pc_geq in *. *)
+          (*     destruct r as [Σ4 ζ34 b4 [pc4 δ4 h4]]; cbn in *. *)
+          (*     intros ι2 ι4 rel24. *)
+          (*     apply syminstance_rel_comp in rel24. *)
+          (*     specialize (Hgeqpc23 ι2 (inst ι4 ζ34) rel24). *)
+          (*     specialize (Hgeqpc34 (inst ι4 ζ34) ι4 eq_refl). *)
+          (*     intuition. *)
+          (*   * intros [Σ4 ζ34 b4 [pc4 δ4 h4]]; cbn. *)
+          (*     rewrite resultprop_specialize_id; cbn. *)
+          (*     intros Hgeqpc34 Hp. apply PQ. *)
+          (*     { unfold pc_geq; cbn. *)
+          (*       intros ι2 ι4 rel24 Hpc4. *)
+          (*       specialize (Hgeqpc34 (inst ι4 ζ34) ι4 eq_refl Hpc4). *)
+          (*       apply syminstance_rel_comp in rel24. *)
+          (*       specialize (Hgeqpc23 ι2 (inst ι4 ζ34) rel24). *)
+          (*       intuition. *)
+          (*     } *)
+          (*     unfold resultprop_specialize; cbn. *)
+          (*     now rewrite <- sub_comp_assoc. *)
+        Admitted.
+
+      End WfBind.
+
+    End WfExperiments.
 
     Lemma dmut_wp_sub {Γ1 Γ2 A Σ0} (d : DynamicMutator Γ1 Γ2 A Σ0)
           (POST : StateProperty Γ2 A Σ0) (s : SymbolicState Γ1 Σ0) Σ1 (ζ : Sub Σ0 Σ1) :
