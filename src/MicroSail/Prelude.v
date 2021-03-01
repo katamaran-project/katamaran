@@ -89,6 +89,19 @@ Section WithA.
 
 End WithA.
 
+Lemma all_list_map {A B} {P : B -> Prop} {xs : list A} (f : A -> B) :
+  all_list P (map f xs) <-> all_list (fun a => P (f a)) xs.
+Proof.
+  induction xs; cbn; intuition.
+Qed.
+
+Lemma all_list_impl {A} {P1 P2 : A -> Prop} {xs : list A} :
+  (forall x, P1 x -> P2 x) ->
+  all_list P1 xs -> all_list P2 xs.
+Proof.
+  induction xs; cbn; intuition.
+Qed.
+
 Section Equality.
 
   Definition f_equal_dec {A B : Type} (f : A -> B) {x y : A} (inj : f x = f y -> x = y)
