@@ -1631,6 +1631,7 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Global Arguments inst {T A _ Σ} ι !_.
+    Global Arguments lift {T A _ Σ} !_.
 
   End Instantiation.
 
