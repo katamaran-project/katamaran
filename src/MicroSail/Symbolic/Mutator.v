@@ -340,10 +340,10 @@ Module Mutators
       };
       match_chunk_eqb _ _  := fun _ => None.
 
-    Definition extract_chunk_eqb (ce : Chunk Σ) (h : SymbolicHeap Σ) (pc : PathCondition Σ) :
+    Definition extract_chunk_eqb (ce : Chunk Σ) (h : SymbolicHeap Σ) :
       list (PathCondition Σ * SymbolicHeap Σ) :=
       stdpp.base.omap
-        (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk_eqb ce cr pc))
+        (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk_eqb ce cr nil))
         (heap_extractions h).
 
   End ChunkExtraction.
@@ -875,6 +875,8 @@ Module Mutators
     dmut_eval_exp e >>= fun _ _ => dmut_assume_term.
   Definition dmut_assume_prop {Γ Σ} (P : abstract_named Lit Σ Prop) : DynamicMutator Γ Γ Unit Σ :=
     dmut_assume_formula (formula_prop (sub_id Σ) P).
+  Definition dmut_assume_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
+    fold_right (fun fml => dmut_bind_right (dmut_assume_formula fml)) (dmut_pure tt) fmls.
 
   Definition dmut_assert_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
     fun (Σ1 : NCtx 𝑺 Ty) (ζ1 : Sub Σ Σ1) pc1 (s1 : SymbolicState Γ Σ1) =>
@@ -916,12 +918,14 @@ Module Mutators
     dmut_eval_exp e >>= fun _ _ t => dmut_assert_term t.
   Definition dmut_produce_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
     dmut_modify (fun _ ζ => symbolicstate_produce_chunk (subst ζ c)).
-  Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ.
-    (* dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c *)
-    (*   (List.map *)
-    (*      (fun '(pc2 , h2) => (dmut_put {| symbolicstate_localstore := δ1; symbolicstate_heap := h2 |})) *)
-    (*      (extract_chunk_eqb (subst ζ1 c) h1 pc1)). *)
-  Admitted.
+
+  Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
+    dmut_get_heap >>= fun _ ζ1 h1 =>
+    dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c
+      (List.map
+         (fun '(Δpc , h2) =>
+            (dmut_assume_formulas Δpc ;; dmut_put_heap h2))
+         (extract_chunk_eqb (subst ζ1 c) h1)).
 
   Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
     dmut_get_heap >>= fun _ _ h =>
@@ -2372,6 +2376,8 @@ Module Mutators
       dmut_eval_exp e >>= fun _ _ => dmut_assume_term.
     Definition dmut_assume_prop {Γ Σ} (P : abstract_named Lit Σ Prop) : DynamicMutator Γ Γ Unit Σ :=
       dmut_assume_formula (formula_prop (sub_id Σ) P).
+    Definition dmut_assume_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
+      fold_right (fun fml => dmut_bind_right (dmut_assume_formula fml)) (dmut_pure tt) fmls.
 
     Definition dmut_assert_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
       fun (Σ1 : NCtx 𝑺 Ty) (ζ1 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s1 : SymbolicState Γ Σ1) =>
@@ -2439,14 +2445,13 @@ Module Mutators
       dmut_eval_exp e >>= fun _ _ t => dmut_assert_term t.
     Definition dmut_produce_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
       dmut_modify_heap (fun _ ζ => cons (subst ζ c)).
-    Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ.
-      (* dmut_get >>= fun Σ1 ζ1 '(MkSymbolicState pc1 δ1 h1) => *)
-      (* dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c *)
-      (*   (List.map *)
-      (*      (fun '(pc2 , h2) => (dmut_put {| symbolicstate_pathcondition := pc2; symbolicstate_localstore := δ1; symbolicstate_heap := h2 |})) *)
-      (*      (extract_chunk_eqb (subst ζ1 c) h1 pc1)). *)
-    Admitted.
-
+    Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
+      dmut_get_heap >>= fun _ ζ1 h1 =>
+      dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c
+        (List.map
+           (fun '(Δpc , h2) =>
+              (dmut_assume_formulas Δpc ;; dmut_put_heap h2))
+           (extract_chunk_eqb (subst ζ1 c) h1)).
 
     Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
       dmut_get_heap >>= fun _ _ h =>
