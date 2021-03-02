@@ -373,6 +373,41 @@ Module Soundness
         reflexivity.
     Qed.
 
+    Lemma try_solve_formula_geq {Σ0 Σ1} (fml0 : Formula Σ0) (fml1 : Formula Σ1) :
+      forall b0 b1,
+        try_solve_formula fml0 = Some b0 ->
+        try_solve_formula fml1 = Some b1 ->
+        forall (ζ1 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1),
+          geq ζ1 pc1 fml0 fml1 ->
+          forall ι,
+            (inst ι pc1 : Prop) ->
+            b0 = b1.
+    Proof.
+    Admitted.
+
+    Lemma dmutres_try_assume_eq_geq {Γ Σ0 σ} (pc0 : PathCondition Σ0) (t1 t2 : Term Σ0 σ) (s0 : SymbolicState Γ Σ0) :
+      OptionSpec
+        (fun '(MkDynMutResult ζ01 pc1 tt s1) =>
+           geqpc ζ01 (cons (formula_eq t1 t2) pc0) pc1 /\
+           geq ζ01 pc1 s0 s1)
+        True
+        (dmutres_try_assume_eq pc0 t1 t2 s0).
+    Proof.
+      destruct t1; cbn; try (constructor; auto; fail).
+      destruct (occurs_check ςInΣ t2) eqn:?; constructor; auto.
+      apply (@occurs_check_sound _ _ (@OccursCheckTerm _)) in Heqo;
+        auto with typeclass_instances. subst t2.
+      split.
+      - intros ι0 ι1 <- Hpc0. rewrite inst_pathcondition_cons.
+        rewrite <- ?inst_subst. split; cbn; auto.
+        rewrite lookup_sub_single_eq.
+        rewrite <- ?subst_sub_comp.
+        rewrite sub_comp_shift_single.
+        rewrite subst_sub_id.
+        reflexivity.
+      - now apply geq_subst.
+    Qed.
+
     Lemma dmutres_try_assume_eq_spec {Γ Σ σ} (pc : PathCondition Σ) (t1 t2 : Term Σ σ) (s__sym : SymbolicState Γ Σ)
       (POST : ResultProperty Γ Unit Σ) (POST_dcl : resultprop_downwards_closed POST) :
       OptionSpec
@@ -427,6 +462,31 @@ Module Soundness
       rewrite H.
       split; apply POST_dcl; exists (sub_id _); intros ? ? <-;
           rewrite ?inst_pathcondition_cons, ?inst_sub_id; intuition.
+    Qed.
+
+    Lemma dmutres_assume_formula_geq {Γ Σ0} (pc0 : PathCondition Σ0) (fml0 : Formula Σ0) (s0 : SymbolicState Γ Σ0) :
+      match dmutres_assume_formula pc0 fml0 s0 with
+      | MkDynMutResult ζ01 pc1 tt s1 =>
+        geqpc ζ01 (cons fml0 pc0) pc1 /\
+        geq ζ01 pc1 s0 s1
+      end.
+    Proof.
+      destruct fml0; cbn; try (split; [ apply geqpc_refl | apply geq_refl ]).
+      destruct (dmutres_try_assume_eq_geq pc0 t1 t2 s0); cbn.
+      { destruct a as [Σ1 ζ01 pc1 [] s1]; cbn; destruct_conjs; auto. }
+      clear H.
+      destruct (dmutres_try_assume_eq_geq pc0 t2 t1 s0); cbn.
+      { destruct a as [Σ1 ζ01 pc1 [] s1]; cbn.
+        destruct H as [Hpc01 Hs]. split; auto.
+        intros ? ? rel Hpc1. specialize (Hpc01 _ _ rel Hpc1).
+        rewrite inst_pathcondition_cons in *. cbn in *.
+        intuition.
+      }
+      clear H. split.
+      - intros ? ? <-.
+        rewrite inst_sub_id. rewrite ?inst_pathcondition_cons.
+        cbn. intuition.
+      - apply geq_refl.
     Qed.
 
     (* These should be kept abstract in the rest of the proof. If you need some
@@ -1001,34 +1061,71 @@ Module Soundness
         unfold dmut_assume_formula, dmut_wf'.
         intros * Hpc12 Hs12 Hζ12 P P_dcl H.
         remember (dmutres_assume_formula pc2 (subst ζ02 f) s2) as r.
-        destruct (try_solve_formula (subst ζ01 f)) eqn:Heq1;
-        destruct (try_solve_formula (subst ζ02 f)) eqn:Heq2; cbn in *.
-        - destruct b, b0; cbn in *; auto.
+        destruct (try_solve_formula_spec (subst ζ01 f));
+        destruct (try_solve_formula_spec (subst ζ02 f)); cbn in *.
+        - clear r Heqr. destruct a, a0; cbn in *; auto.
           + split; cbn. apply geqpc_refl.
             revert H. apply P_dcl. apply dmutres_geq_sem_sem'.
             exists ζ12. rewrite sub_comp_id_right.
             repeat split; auto. intros ? ? <-; now rewrite inst_sub_id.
-          + destruct (try_solve_formula_spec (subst ζ01 f)); try discriminate.
-            dependent elimination Heq1.
-            destruct (try_solve_formula_spec (subst ζ02 f)); try discriminate.
-            dependent elimination Heq2.
-            exfalso. admit.
-        - admit.
-        - destruct b; cbn in *; auto. split; cbn.
-          apply geqpc_refl. apply dmutres_assume_formula_spec in H; auto.
-          revert H. apply P_dcl. apply dmutres_geq_sem_sem'.
-          exists ζ12. rewrite sub_comp_id_right. repeat split; auto; try apply geq_refl.
-          + destruct (try_solve_formula_spec (subst ζ02 f)); try discriminate.
-            dependent elimination Heq2.
-            clear - H Hpc12 Hζ12. intros ι1 ι2 rel12 Hpc2.
-            specialize (Hpc12 ι1 ι2 rel12 Hpc2).
-            specialize (Hζ12 ι1 ι2 rel12 Hpc2).
-            specialize (H ι2).
-            rewrite inst_pathcondition_cons. split; auto.
-            rewrite inst_subst. rewrite Hζ12. rewrite <- inst_subst.
-            now apply H.
-          + intros ? ι2 <-; now rewrite inst_sub_id.
-        - admit.
+          + assert (forall ι, (inst ι pc2 : Prop) -> False).
+            { intros ι Hpc2. specialize (Hζ12 _ ι eq_refl Hpc2).
+              specialize (H0 (inst ι ζ12)). specialize (H1 ι).
+              rewrite inst_subst in H0. rewrite inst_subst in H1.
+              rewrite Hζ12 in H0. clear - H0 H1. intuition.
+            }
+            split; cbn. apply geqpc_refl. clear - H2.
+            admit.
+        - clear H1. destruct a; cbn in *; auto.
+          + subst r. pose proof (dmutres_assume_formula_geq pc2 (subst ζ02 f) s2) as Hgeq.
+            destruct (dmutres_assume_formula pc2 (subst ζ02 f) s2) as [Σ3 ζ23 pc3 [] s3]; cbn in *.
+            destruct Hgeq as [Hpc23 Hs23].
+            split; cbn.
+            * intros ι2 ι3 rel23 Hpc3. specialize (Hpc23 ι2 ι3 rel23 Hpc3).
+              rewrite inst_pathcondition_cons in Hpc23. now destruct Hpc23.
+            * revert H. apply P_dcl. exists (sub_comp ζ12 ζ23).
+              intros ι1 ι3 rel13 Hpc3. rewrite inst_sub_id.
+              apply syminstance_rel_comp in rel13.
+              pose (inst ι3 ζ23) as ι2.
+              specialize (Hpc23 ι2 ι3 eq_refl Hpc3).
+              specialize (Hs23 ι2 ι3 eq_refl Hpc3).
+              rewrite inst_pathcondition_cons in Hpc23. destruct Hpc23 as [Hfml Hpc2].
+              specialize (Hpc12 ι1 ι2 rel13 Hpc2).
+              specialize (Hs12 ι1 ι2 rel13 Hpc2).
+              specialize (Hζ12 ι1 ι2 rel13 Hpc2).
+              unfold sub_comp. rewrite inst_subst.
+              cbn. repeat split; auto.
+              now transitivity (inst ι2 s2).
+          + subst r. pose proof (dmutres_assume_formula_geq pc2 (subst ζ02 f) s2) as Hgeq.
+            destruct (dmutres_assume_formula pc2 (subst ζ02 f) s2) as [Σ3 ζ23 pc3 [] s3]; cbn in *.
+            destruct Hgeq as [Hpc23 Hs23].
+            split; cbn.
+            * intros ι2 ι3 rel23 Hpc3. specialize (Hpc23 ι2 ι3 rel23 Hpc3).
+              rewrite inst_pathcondition_cons in Hpc23. now destruct Hpc23.
+            * clear - H0 Hpc23 Hpc12. admit.
+        - clear H0 r Heqr. destruct a; cbn; auto. split; cbn.
+          apply geqpc_refl. rewrite sub_comp_id_right.
+          apply (dmutres_assume_formula_spec pc1 (subst ζ01 f) s1) in H; auto.
+          revert H. apply P_dcl. exists ζ12. intros ι1 ι2 <- Hpc2.
+          rewrite inst_pathcondition_cons, inst_sub_id, ?inst_subst; cbn.
+          intuition.
+          specialize (Hζ12 _ ι2 eq_refl Hpc2). rewrite Hζ12.
+          rewrite <- inst_subst. now apply H1.
+        - clear H0 H1. subst r.
+          pose proof (dmutres_assume_formula_geq pc2 (subst ζ02 f) s2) as Hgeq.
+          destruct (dmutres_assume_formula pc2 (subst ζ02 f) s2) as [Σ3 ζ23 pc3 [] s3]; cbn in *.
+          destruct Hgeq as [Hpc23 Hs23].
+          split; cbn.
+          * intros ι2 ι3 rel23 Hpc3. specialize (Hpc23 ι2 ι3 rel23 Hpc3).
+            rewrite inst_pathcondition_cons in Hpc23. now destruct Hpc23.
+          * apply (dmutres_assume_formula_spec pc1 (subst ζ01 f) s1) in H; auto.
+            revert H. apply P_dcl. exists (sub_comp ζ12 ζ23). intros ι1 ι3 <- Hpc3.
+            rewrite inst_pathcondition_cons, inst_sub_id.
+            unfold sub_comp; rewrite ?inst_subst; cbn.
+            repeat split; auto.
+            admit.
+            admit.
+            admit.
       Admitted.
 
     End WfExperiments.
