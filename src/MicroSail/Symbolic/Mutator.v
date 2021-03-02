@@ -32,6 +32,8 @@ From Coq Require Import
      Logic.EqdepFacts
      Program.Equality
      Program.Tactics
+     Relations.Relation_Definitions
+     Relations.Relation_Operators
      Strings.String
      Arith.PeanoNat
      ZArith.ZArith.
@@ -179,6 +181,75 @@ Module Mutators
     Qed.
 
   End PathCondition.
+
+  (* UNUSED *)
+  Section Rewrite.
+
+    Class Rewrite (T : LCtx -> Type) : Type :=
+      par_rewrite_once : forall Σ, PathCondition Σ -> T Σ -> T Σ -> Prop.
+
+    Definition rewrite {T} `{Rewrite T} {Σ} (pc : PathCondition Σ) : relation (T Σ) :=
+      clos_refl_sym_trans (T Σ) (par_rewrite_once pc).
+
+    Inductive RewriteTerm {Σ} (pc : PathCondition Σ) : forall σ, Term Σ σ -> Term Σ σ -> Prop :=
+    | rew_eq
+        {σ} {s t : Term Σ σ} :
+        In (formula_eq s t) pc ->
+        RewriteTerm pc s t
+    | rew_refl_var (ς : 𝑺) (σ : Ty) {ςInΣ : InCtx (ς ∶ σ) Σ} :
+        RewriteTerm pc (term_var ς) (term_var ς)
+    | rew_refl_lit (σ : Ty) (l : Lit σ) :
+        RewriteTerm pc (term_lit σ l) (term_lit σ l)
+    | rew_cong_binop
+        {σ1 σ2 σ3 : Ty}
+        (op : BinOp σ1 σ2 σ3) (s1 t1 : Term Σ σ1) (s2 t2 : Term Σ σ2) :
+        RewriteTerm pc s1 t1 -> RewriteTerm pc s2 t2 ->
+        RewriteTerm pc (term_binop op s1 s2) (term_binop op t1 t2)
+    | rew_cong_neg
+        (s t : Term Σ ty_int) :
+        RewriteTerm pc s t ->
+        RewriteTerm pc (term_neg s) (term_neg t)
+    | rew_cong_not
+        (s t : Term Σ ty_bool) :
+        RewriteTerm pc s t ->
+        RewriteTerm pc (term_not s) (term_not t)
+    | rew_cong_inl
+        {σ1 σ2 : Ty} (s t : Term Σ σ1) :
+        RewriteTerm pc s t ->
+        RewriteTerm pc (@term_inl _ σ1 σ2 s) (term_inl t)
+    | rew_cong_inr
+        {σ1 σ2 : Ty} (s t : Term Σ σ2) :
+        RewriteTerm pc s t ->
+        RewriteTerm pc (@term_inr _ σ1 σ2 s) (term_inr t)
+    | rew_cong_list
+        {σ} (ss ts : list (Term Σ σ)) :
+        (forall n s t, nth_error ss n = Some s -> nth_error ts n = Some t -> RewriteTerm pc s t) ->
+        RewriteTerm pc (term_list ss) (term_list ts)
+    | rew_cong_bvec
+        {n} (ss ts : Vector.t (Term Σ ty_bit) n) :
+        (forall n, RewriteTerm pc (Vector.nth ss n) (Vector.nth ts n)) ->
+        RewriteTerm pc (term_bvec ss) (term_bvec ts)
+    | rew_cong_tuple
+        {σs : Ctx Ty} (ss ts : Env (Term Σ) σs) :
+        (forall σ (σIn : σ ∈ σs), RewriteTerm pc (env_lookup ss σIn) (env_lookup ts σIn)) ->
+        RewriteTerm pc (term_tuple ss) (term_tuple ts)
+    | rew_cong_projtup
+        {σs : Ctx Ty} (s t : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
+        {p : ctx_nth_is σs n σ} :
+        RewriteTerm pc (@term_projtup _ _ s n σ p) (@term_projtup _ _ t n σ p)
+    | rew_cong_union
+        {U : 𝑼} (K : 𝑼𝑲 U) (s t : Term Σ (𝑼𝑲_Ty K)) :
+        RewriteTerm pc s t ->
+        RewriteTerm pc (term_union U K s) (term_union U K t)
+    | rew_cong_record
+        {R : 𝑹} (ss ts : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) :
+        (forall rf σ (rfIn : rf :: σ ∈ (𝑹𝑭_Ty R)), RewriteTerm pc (env_lookup ss rfIn) (env_lookup ts rfIn)) ->
+        RewriteTerm pc (term_record R ss) (term_record R ts).
+
+    Instance rew_term {σ} : Rewrite (fun Σ => Term Σ σ) :=
+      fun Σ pc => @RewriteTerm Σ pc σ.
+
+  End Rewrite.
 
   Definition SymbolicHeap (Σ : LCtx) : Type :=
     list (Chunk Σ).

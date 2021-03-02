@@ -149,6 +149,10 @@ Module Soundness
     Definition ResultProperty Γ A Σ :=
       DynamicMutatorResult Γ A Σ -> Prop.
 
+    (* UNUSED *)
+    Definition syngeq {AT} `{Subst AT, Rewrite AT} {Σ0 Σ1} (ζ1 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (a0 : AT Σ0) (a1 : AT Σ1) : Prop :=
+      rewrite pc1 a1 (subst ζ1 a0).
+
     Definition geqpc {Σ0 Σ1} (ζ1 : Sub Σ0 Σ1) (pc0 : PathCondition Σ0) (pc1 : PathCondition Σ1) : Prop :=
       forall (ι0 : SymInstance Σ0) (ι1 : SymInstance Σ1),
         syminstance_rel ζ1 ι0 ι1 ->
