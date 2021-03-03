@@ -682,7 +682,7 @@ Module Mutators
     Definition dmut_contradiction {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 pc1 s1 =>
         (⨂ (ι : SymInstance Σ1)
-            (_ : all_list (inst ι) pc1) =>
+            (_ : (inst ι pc1 : Prop)) =>
          outcome_fail
            {| dmuterr_function        := func;
               dmuterr_message         := msg;

@@ -1534,6 +1534,12 @@ Module Terms (Export termkit : TermKit).
           inst ι (subst ζ t) = inst (inst ι ζ) t
       }.
 
+    Global Instance instantiate_pair {AT BT : LCtx -> Set} {A B : Set} `{Inst AT A, Inst BT B} :
+      Inst (fun Σ => AT Σ * BT Σ)%type (A * B) :=
+      {| inst Σ ι '(a , b) := (inst ι a, inst ι b);
+         lift Σ '(a, b)    := (lift a , lift b);
+      |}.
+
     Global Arguments InstLaws T A {_ _ _}.
 
     Global Instance instantiatelaws_term {σ} : InstLaws (fun Σ => Term Σ σ) (Lit σ).
@@ -1586,6 +1592,14 @@ Module Terms (Export termkit : TermKit).
         rewrite List.map_map.
         apply List.map_ext, inst_subst.
       }
+    Qed.
+
+    Global Instance instantiatelaws_pair {AT BT : LCtx -> Set} {A B : Set} `{InstLaws AT A, InstLaws BT B} :
+      InstLaws (fun Σ => AT Σ * BT Σ)%type (A * B).
+    Proof.
+      constructor.
+      { intros ? ? []; cbn; f_equal; apply inst_lift. }
+      { intros ? ? ? ? []; cbn; f_equal; apply inst_subst. }
     Qed.
 
     Global Instance instantiatelaws_env {T : Set} {S : LCtx -> T -> Set} {A : T -> Set}
