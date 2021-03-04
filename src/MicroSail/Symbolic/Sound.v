@@ -1110,6 +1110,10 @@ Module Soundness
         - now apply dmut_fresh_dcl.
       Admitted.
 
+      Lemma dmut_consume_dcl {Γ Σ} (asn : Assertion Σ) :
+        dmut_dcl (@dmut_consume Γ Σ asn).
+      Proof. Admitted.
+
       Lemma dmut_exec_dcl {Γ Σ τ} (s : Stm Γ τ) :
         dmut_vac (@dmut_exec Γ τ Σ s).
       Proof. Admitted.
@@ -1275,15 +1279,68 @@ Module Soundness
       apply scmut_wp_demonic_binary. split; auto.
     Qed.
 
+    Lemma scmut_wp_angelic {Γ1 Γ2 A B} (sm : B -> SCMut Γ1 Γ2 A) (s__sc : SCState Γ1) (POST : A -> SCState Γ2 -> Prop) :
+      scmut_wp (scmut_angelic sm) POST s__sc <-> exists v, scmut_wp (sm v) POST s__sc.
+    Proof. unfold scmut_wp, scmut_angelic; cbn; intuition. Qed.
+
+    (* Lemma dmut_wp_angelic {A B Γ1 Γ2 Σ0 Σ1} (ζ01 : Sub Σ0 Σ1) (m : B -> DynamicMutator Γ1 Γ2 A Σ0) (POST : StateProperty Γ2 A Σ1) : *)
+    (*   forall pc1 s1, *)
+    (*     dmut_wp (dmut_sub ζ01 (dmut_angelic m)) POST pc1 s1 <-> *)
+    (*     exists b, dmut_wp (dmut_sub ζ01 (m b)) POST pc1 s1. *)
+    (* Proof. Admitted. *)
+
+    Lemma approximates_angelic {AT A BT B} `{Inst AT A, Inst BT B} {Γ1 Γ2 Σ} (ι : SymInstance Σ)
+      (dm : AT Σ -> DynamicMutator Γ1 Γ2 BT Σ) (dm_dcl : forall a, dmut_dcl (dm a))
+      (sm : A -> SCMut Γ1 Γ2 B)
+      (HYP : forall a, box approximates ι (dm a) (sm (inst ι a))) :
+      box approximates ι
+        (dmut_angelic dm)
+        (scmut_angelic sm).
+    Proof.
+      unfold box, approximates, dmut_wp, dmut_sub, dmut_angelic; cbn.
+      intros * Hrel * Hwp Hpc. specialize (Hwp Σ1 (sub_id _)).
+      destruct Hwp as [a Hwp]. exists (inst ι a). eapply HYP; eauto.
+      unfold dmut_wp, dmut_sub. intros. revert Hwp.
+      rewrite sub_comp_id_right, ?subst_sub_id.
+      eapply (dm_dcl a) with ζ0; eauto.
+      - intros ? ? <-; now rewrite ?inst_subst.
+      - intros ? ? <-; now rewrite ?inst_subst.
+      - intros ? ? <-; unfold sub_comp; now rewrite ?inst_subst.
+      - intros [Σ2 ζ2 pc2 a2 s2] [Σ3 ζ3 pc3 a3 s3] ?; cbn.
+        rewrite ?sub_comp_id_left.
+        now apply stateprop_lift_dcl.
+      - intros [Σ2 ζ2 pc2 a2 s2] ?; cbn.
+        rewrite ?sub_comp_id_left.
+        now apply stateprop_lift_vac.
+      - intros [Σ2 ζ2 pc2 a2 s2] []; unfold resultprop_specialize_pc; cbn in *.
+        now rewrite sub_comp_id_left in H2.
+    Qed.
+
     Lemma scmut_wp_demonic {Γ1 Γ2 A B} (sm : B -> SCMut Γ1 Γ2 A) (s__sc : SCState Γ1) (POST : A -> SCState Γ2 -> Prop) :
       scmut_wp (scmut_demonic sm) POST s__sc <-> forall v, scmut_wp (sm v) POST s__sc.
     Proof. unfold scmut_wp, scmut_demonic; cbn; intuition. Qed.
 
-    Lemma dmut_wp_demonic {Γ1 Γ2 Σ A B} (m : B -> DynamicMutator Γ1 Γ2 A Σ)
-      (POST : StateProperty Γ2 A Σ) pc (s : SymbolicState Γ1 Σ) :
-        dmut_wp (dmut_demonic m) POST pc s <->
-        forall b, dmut_wp (m b) POST pc s.
+    Lemma dmut_wp_sub_demonic {A B Γ1 Γ2 Σ0 Σ1} (ζ01 : Sub Σ0 Σ1) (m : B -> DynamicMutator Γ1 Γ2 A Σ0) (POST : StateProperty Γ2 A Σ1) :
+      forall pc1 s1,
+        dmut_wp (dmut_sub ζ01 (dmut_demonic m)) POST pc1 s1 <->
+        forall b, dmut_wp (dmut_sub ζ01 (m b)) POST pc1 s1.
     Proof. unfold dmut_wp, dmut_demonic; cbn; intuition. Qed.
+
+    Lemma approximates_demonic {A BT B} `{Inst BT B} {Γ1 Γ2 Σ} (ι : SymInstance Σ)
+      (dm : A -> DynamicMutator Γ1 Γ2 BT Σ)
+      (sm : A -> SCMut Γ1 Γ2 B)
+      (HYP : forall a, box approximates ι (dm a) (sm a)) :
+      box approximates ι
+        (dmut_demonic dm)
+        (scmut_demonic sm).
+    Proof.
+      unfold box, approximates.
+      intros Σ1 ζ01 ι1 Hrel * Hwp Hpc.
+      apply scmut_wp_demonic. intros a.
+      rewrite dmut_wp_sub_demonic in Hwp.
+      specialize (Hwp a).
+      apply (HYP a) in Hwp; auto.
+    Qed.
 
     Lemma subst_symbolicstate_produce_chunk {Γ Σ Σ1} (ζ1 : Sub Σ Σ1) (c : Chunk Σ) (s : SymbolicState Γ Σ) :
       subst ζ1 (symbolicstate_produce_chunk c s) = symbolicstate_produce_chunk (subst ζ1 c) (subst ζ1 s).
@@ -1643,6 +1700,47 @@ Module Soundness
       - admit.
       - apply dmut_bind_right_sound; auto using dmut_produce_dcl.
       - apply dmut_fresh_sound; auto using dmut_produce_dcl.
+    Admitted.
+
+    Lemma dmut_assert_formula_sound {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) :
+      box approximates
+        (Γ1 := Γ) (Γ2 := Γ) ι
+        (dmut_assert_formula fml)
+        (scmut_assert_formula ι fml).
+    Proof. Admitted.
+
+    Lemma dmut_consume_chunk_sound {Γ Σ} (c : Chunk Σ) (ι : SymInstance Σ) :
+      box approximates
+        (Γ1 := Γ) (Γ2 := Γ) ι
+        (dmut_consume_chunk c)
+        (scmut_consume_chunk (inst ι c)).
+    Proof. Admitted.
+
+    Lemma dmut_consume_sound {Γ Σ} (asn : Assertion Σ) (ι : SymInstance Σ) :
+      box approximates
+        (Γ1 := Γ) (Γ2 := Γ) ι
+        (dmut_consume asn)
+        (scmut_consume ι asn).
+    Proof.
+      induction asn; cbn [dmut_consume scmut_consume].
+      - apply dmut_assert_formula_sound.
+      - apply dmut_consume_chunk_sound.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - apply dmut_bind_right_sound;
+          auto using dmut_consume_dcl.
+      - apply (approximates_angelic (AT := fun Σ => Term Σ _) (A := Lit _)).
+        intros a. apply dmut_sub_dcl, dmut_consume_dcl.
+        intros a. apply approximates_sub with (env_snoc ι _ (inst ι a)).
+        apply syminstance_rel_snoc. split.
+        apply syminstance_rel_refl. reflexivity.
+        apply IHasn.
     Admitted.
 
     Lemma dmut_exec_sound {Γ Σ σ} (s : Stm Γ σ) (ι : SymInstance Σ) :
