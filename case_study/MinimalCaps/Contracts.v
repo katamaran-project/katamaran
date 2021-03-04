@@ -117,7 +117,7 @@ Module MinCapsSymbolicContractKit <:
 
   (* machInv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * regInvCap(pc) *)
   Definition machInv {Σ} : Assertion Σ :=
-    (regInv R0 "w0") ✱ (regInv R1 "w1") ✱ (regInv R2 "w2") ✱ (regInv R3  "w3") ✱ (regInvCap pc).
+    (regInv R0 "w0") ✱ (regInv R1 "w1") ✱ (regInv R2 "w2") ✱ (regInv R3 "w3") ✱ (regInvCap pc).
 
   Definition sep_contract_read_reg : SepContract ["rreg" ∶ ty_enum regname ] ty_word :=
     {| sep_contract_logic_variables := ["rreg" ∶ ty_enum regname];
@@ -486,6 +486,17 @@ Module MinCapsSymbolicContractKit <:
                      end)
     |}.
 
+  (* TODO: duplicate for single safe chunk, don't take entire machInv *)
+  (* TODO: add persistent predicates? *)
+  Definition sep_contract_duplicate_safe : SepContract ["reg" ∶ ty_enum regname] ty_unit :=
+    {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname];
+       sep_contract_localstore      := [term_var "reg"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "_";
+       sep_contract_postcondition   :=
+         machInv ✱ asn_match_enum regname (term_var "reg") (fun k => regInv k "w")
+    |}.
+      
   Definition regtag_to_reg (R : RegName) : Reg ty_word :=
     match R with
     | R0 => reg0
@@ -533,6 +544,7 @@ Module MinCapsSymbolicContractKit <:
         match f in FunGhost Δ return SepContract Δ ty_unit with
         | open_ptsreg    => sep_contract_open_ptsreg
         | close_ptsreg r => sep_contract_close_ptsreg r
+        | duplicate_safe => sep_contract_duplicate_safe
         end
       end.
 
@@ -620,9 +632,11 @@ Proof. compute; solve. Admitted.
 Lemma valid_contract_exec_bnez : ValidContractDynMut sep_contract_exec_bnez fun_exec_bnez.
 Proof. compute; solve. Admitted.
 *)
-Lemma valid_contract_exec_mv : TwoPointO.ValidContractDynMutDebug sep_contract_exec_mv fun_exec_mv.
+Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
 Proof.
-  compute.
+  (* WIP *)
+  (* apply dynmutevarreflect_sound. *)
+  compute - [NamedEnv Lit Error valid_obligation].
   compute; solve. Admitted.
 
 Lemma valid_contract_exec_ld : ValidContractDynMut sep_contract_exec_ld fun_exec_ld.

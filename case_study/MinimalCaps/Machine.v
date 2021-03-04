@@ -102,6 +102,7 @@ Module MinCapsTermKit <: TermKit.
   Inductive FunGhost : Ctx (𝑿 * Ty) -> Set :=
   | open_ptsreg : FunGhost ["reg" ∶ ty_enum regname]
   | close_ptsreg (R : RegName) : FunGhost ctx_nil
+  | duplicate_safe : FunGhost ["reg" ∶ ty_enum regname]
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -366,97 +367,112 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_exp lit_false.
 
     Definition fun_exec_mv : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_bool :=
-      match: (exp_var hv) in regname with
+      match: exp_var hv in regname with
       | R0 =>
-        match: (exp_var lv) in regname with
+        match: exp_var lv in regname with
         | R0 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
-          callghost (close_ptsreg R0) ;; 
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R1 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R2 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R3 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         end
       | R1 =>
-        match: (exp_var lv) in regname with
+        match: exp_var lv in regname with
         | R0 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R1 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R2 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R3 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         end
       | R2 =>
-        match: (exp_var lv) in regname with
+        match: exp_var lv in regname with
         | R0 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R1 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R2 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R3 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         end
       | R3 =>
-        match: (exp_var lv) in regname with
+        match: exp_var lv in regname with
         | R0 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R1 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R2 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         | R3 =>
-          let: "mvw" ∶ word := call read_reg (exp_var hv) in
-          call write_reg lv (exp_var "mvw") ;;
+          stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
+          let: w ∶ word := call read_reg (exp_var hv) in
+          call write_reg lv (exp_var w) ;;
           call update_pc ;;
           stm_lit ty_bool true
         end
