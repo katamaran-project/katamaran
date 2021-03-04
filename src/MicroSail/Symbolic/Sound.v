@@ -1406,11 +1406,11 @@ Module Soundness
           (d : DynamicMutator Γ Γ AT (Σ0 ▻ (x,τ))%ctx) (d_dcl : dmut_dcl d)
           (POST : StateProperty Γ AT Σ0)
           (POST_dcl : stateprop_downwards_closed POST)
+          (POST_vac : stateprop_vacuous POST)
           (pc : PathCondition Σ0) (s : SymbolicState Γ Σ0) :
       dmut_wp (dmut_fresh (x,τ) d) POST pc s <->
       dmut_wp d (stateprop_specialize sub_wk1 POST) (subst sub_wk1 pc) (subst sub_wk1 s).
     Proof.
-      (* OLD: *)
       (* unfold dmut_wp, dmut_fresh; cbn; split; intros HYP ? ?. *)
       (* - dependent elimination ζ1 as [@env_snoc Σ0 ζ1 _ v]; cbn in v. *)
       (*   rewrite <- subst_sub_comp, sub_comp_wk1_tail; cbn. *)
@@ -1446,48 +1446,84 @@ Module Soundness
       (*   now rewrite <- ?sub_comp_assoc, <- sub_comp_wk1_comm. *)
     Admitted.
 
+    Lemma inst_snoc_wk1 {Σ2 x τ} {ι0 : SymInstance (Σ2 ▻ (x :: τ))} {ι1} `{Subst AT} {substLawsA : SubstLaws AT} `{Inst AT A} {instLaws : InstLaws AT A} {t : AT Σ2} {v} :
+      syminstance_rel (sub_id Σ2 ► (x :: τ ↦ v)) ι0 ι1 -> inst ι0 (wk1 t) = inst ι1 t.
+    Proof.
+      unfold syminstance_rel.
+      intros; subst ι0.
+      change (wk1 t) with (subst (sub_wk1 (b := x :: τ)) t).
+      rewrite inst_subst.
+      f_equal.
+      rewrite <-inst_subst.
+      replace (subst (sub_id Σ2 ► (x :: τ ↦ v)) sub_wk1) with (sub_id Σ2); [now rewrite inst_sub_id|].
+      change (subst (sub_id Σ2 ► (x :: τ ↦ v)) sub_wk1) with (sub_comp sub_wk1 (sub_id Σ2 ► (x :: τ ↦ v))).
+      rewrite sub_comp_wk1_tail.
+      now cbn.
+    Qed.
+
+
     Lemma dmut_wp_sub_fresh {Γ Σ0 Σ1 AT A x τ} `{Subst AT, Inst AT A}
           (ζ1 : Sub Σ0 Σ1)
           (d : DynamicMutator Γ Γ AT (Σ0 ▻ (x,τ))%ctx)
           (POST : StateProperty Γ AT Σ1)
           (POST_dcl : stateprop_downwards_closed POST)
+          (POST_vac : stateprop_vacuous POST)
           (pc : PathCondition Σ1)
           (s : SymbolicState Γ Σ1) (wfd : dmut_dcl d) :
       dmut_wp (dmut_sub ζ1 (dmut_fresh (x,τ) d)) POST pc s <->
       dmut_wp (dmut_sub (sub_up1 ζ1) d) (stateprop_specialize sub_wk1 POST) (subst sub_wk1 pc) (subst sub_wk1 s).
     Proof.
       (* OLD: *)
-      (* unfold dmut_wp, dmut_sub, dmut_fresh; cbn; split; intros HYP Σ2 ζ2. *)
-      (* - dependent elimination ζ2 as [@env_snoc Σ1 ζ2 _ v]; cbn in v. *)
-      (*   rewrite <- ?subst_sub_comp, ?sub_comp_wk1_tail; cbn. *)
-      (*   specialize (HYP Σ2 ζ2). *)
-      (*   rewrite outcome_satisfy_map in HYP; cbn in *. *)
-      (*   apply (@wfd _ Σ2 _ (env_snoc (sub_id _) (_,τ) v)) in HYP; clear wfd. *)
-      (*   + change (wk1 (subst ζ2 ?t)) with (subst (sub_wk1 (b:=(x,τ))) (subst ζ2 t)) in HYP. *)
-      (*     rewrite <- ?subst_sub_comp, <- ?sub_snoc_comp, ?sub_comp_id_right, ?sub_comp_wk1_tail in HYP. *)
-      (*     cbn in HYP. rewrite sub_comp_id_right in HYP. *)
-      (*     rewrite <- sub_snoc_comp. revert HYP. *)
-      (*     apply outcome_satisfy_monotonic. *)
-      (*     intros [Σ3 ζ3 pc3 a3 s3]. cbn. clear. unfold stateprop_specialize. *)
-      (*     rewrite <- (sub_comp_assoc sub_wk1), sub_comp_wk1_tail. cbn. *)
-      (*     rewrite sub_comp_id_left. *)
-      (*     now rewrite <- sub_comp_assoc, sub_comp_wk1_tail. *)
-      (*   + revert POST_dcl. clear. intros. *)
-      (*     unfold resultprop_downwards_closed. *)
-      (*     intros [Σ3 ζ3 pc3 a3 s3] [Σ4 ζ4 pc4 a4 s4] Hgeq. *)
-      (*     cbn. apply POST_dcl. rewrite <- ?sub_comp_assoc. *)
-      (*     revert Hgeq. apply dmutres_geq_pre_comp. *)
-      (* - rewrite outcome_satisfy_map. *)
-      (*   specialize (HYP (Σ2 ▻ (x,τ)) (sub_up1 ζ2)). *)
-      (*   rewrite <- ?subst_sub_comp, ?sub_comp_wk1_comm in HYP. *)
-      (*   change (wk1 (b := (x,τ)) (subst ζ2 ?t)) with (subst (sub_wk1 (b := (x,τ))) (subst ζ2 t)). *)
-      (*   rewrite ?sub_up_comp, <- ?subst_sub_comp. *)
-      (*   revert HYP. apply outcome_satisfy_monotonic. *)
-      (*   intros [Σ3 ζ3 pc3 a3 s3]. clear. *)
-      (*   dependent elimination ζ3 as [@env_snoc Σ2 ζ3 _ t]. *)
-      (*   unfold stateprop_specialize. cbn. *)
-      (*   now rewrite <- ?sub_comp_assoc, <- sub_comp_wk1_comm. *)
-    Admitted.
+      unfold dmut_wp, dmut_sub, dmut_fresh; cbn; split; intros HYP Σ2 ζ2.
+      - dependent elimination ζ2 as [@env_snoc Σ1 ζ2 _ v]; cbn in v.
+        rewrite <- ?subst_sub_comp, ?sub_comp_wk1_tail; cbn.
+        specialize (HYP Σ2 ζ2).
+        rewrite outcome_satisfy_map in HYP; cbn in *.
+        Print dmut_dcl.
+        refine (wfd _ Σ2 _ _ _ (env_snoc (sub_id _) (_,τ) v) _ _ _ _ _ _ _ _ _ _ _ HYP); clear wfd.
+        + unfold geqpc.
+          intros.
+          now rewrite (inst_snoc_wk1 H1).
+        + unfold geq.
+          intros.
+          now rewrite (inst_snoc_wk1 H1).
+        + unfold geq, syminstance_rel.
+          intros. subst ι0.
+          rewrite <-inst_subst.
+          f_equal.
+          rewrite sub_up_comp.
+          change (subst _ (sub_comp _ _)) with (sub_comp (sub_comp (sub_up1 ζ1) (sub_up1 ζ2)) (sub_id Σ2 ► (x :: τ ↦ v))).
+          rewrite (sub_comp_assoc (sub_up1 ζ1)).
+          f_equal.
+          now rewrite <- (sub_snoc_comp ζ2),  sub_comp_id_right.
+        + revert POST_dcl. clear. intros.
+          unfold resultprop_downwards_closed.
+          intros [Σ3 ζ3 pc3 a3 s3] [Σ4 ζ4 pc4 a4 s4] Hgeq.
+          cbn. apply POST_dcl. rewrite <- ?sub_comp_assoc.
+          revert Hgeq. apply dmutres_geq_pre_comp.
+        + unfold resultprop_vacuous.
+          intros [Σ3 ζ3 pc3 a3 s3].
+          cbn.
+          eapply POST_vac.
+        + intros [Σ3 ζ3 pc3 a3 s3].
+          unfold resultprop_specialize_pc. cbn.
+          intros [geqpc post].
+          rewrite <-(sub_comp_assoc sub_wk1), sub_comp_wk1_tail in post.
+          cbn in post.
+          rewrite sub_comp_id_left in post.
+          unfold stateprop_specialize.
+          now rewrite <-(sub_comp_assoc sub_wk1), sub_comp_wk1_tail.
+      - rewrite outcome_satisfy_map.
+        specialize (HYP (Σ2 ▻ (x,τ)) (sub_up1 ζ2)).
+        rewrite <- ?subst_sub_comp, ?sub_comp_wk1_comm in HYP.
+        change (wk1 (b := (x,τ)) (subst ζ2 ?t)) with (subst (sub_wk1 (b := (x,τ))) (subst ζ2 t)).
+        rewrite ?sub_up_comp, <- ?subst_sub_comp.
+        revert HYP. apply outcome_satisfy_monotonic.
+        intros [Σ3 ζ3 pc3 a3 s3]. clear.
+        dependent elimination ζ3 as [@env_snoc Σ2 ζ3 _ t].
+        unfold stateprop_specialize. cbn.
+        now rewrite <- ?sub_comp_assoc, <- sub_comp_wk1_comm.
+    Qed.
 
     Lemma dmut_bind_sound {Γ1 Γ2 Γ3 Σ0 AT A BT B}
       `{Subst AT, Inst AT A, InstLaws BT B} (ι0 : SymInstance Σ0)
