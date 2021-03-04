@@ -1237,6 +1237,10 @@ Module Terms (Export termkit : TermKit).
       env_lookup (sub_id _) xIn = term_var x.
     Proof. unfold sub_id; now rewrite env_lookup_tabulate. Qed.
 
+    Lemma lookup_sub_wk1 {Σ x σ y τ} (xIn : x :: σ ∈ Σ) :
+      env_lookup (sub_wk1 (b := (y,τ))) xIn = @term_var _ _ _ (inctx_succ xIn).
+    Proof. unfold sub_wk1; now rewrite env_lookup_tabulate. Qed.
+
     Lemma lookup_sub_comp {Σ0 Σ1 Σ2} (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) {x σ} (xIn : x :: σ ∈ Σ0) :
       env_lookup (sub_comp ζ1 ζ2) xIn = subst ζ2 (env_lookup ζ1 xIn).
     Proof.
@@ -1267,6 +1271,21 @@ Module Terms (Export termkit : TermKit).
       rewrite lookup_sub_single_neq.
       reflexivity.
     Qed.
+
+    Lemma sub_up1_id {Σ x τ} : sub_up1 (b := (x,τ)) (sub_id Σ) = sub_id _.
+    Proof.
+      unfold sub_up1.
+      rewrite sub_comp_id_left.
+      apply env_lookup_extensional.
+      intros [y τ'] yIn.
+      destruct yIn as [pos eq].
+      destruct pos.
+      - dependent elimination eq; now cbn.
+      - rewrite lookup_sub_id.
+        cbn.
+        now rewrite lookup_sub_wk1.
+    Qed.
+
 
   End SymbolicSubstitutions.
 

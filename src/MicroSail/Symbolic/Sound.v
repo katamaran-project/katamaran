@@ -1157,6 +1157,19 @@ Module Soundness
       intuition.
     Qed.
 
+    Definition dmut_wp_sub_id {Γ1 Γ2 Σ0 A}
+      (m : DynamicMutator Γ1 Γ2 A Σ0)
+      (P : StateProperty Γ2 A Σ0)
+      (pc : PathCondition Σ0)
+      (s : SymbolicState Γ1 Σ0) :
+      dmut_wp (dmut_sub (sub_id _) m) P pc s <-> dmut_wp m P pc s.
+    Proof.
+      unfold dmut_wp, dmut_sub.
+      split; intros H *; specialize (H Σ1 ζ1);
+        rewrite ?sub_comp_id_left; rewrite ?sub_comp_id_left in H;
+          intuition.
+    Qed.
+
     Definition APPROX Γ1 Γ2 AT A {instA : Inst AT A} : Type :=
       forall Σ (ι : SymInstance Σ),
         DynamicMutator Γ1 Γ2 AT Σ -> SCMut Γ1 Γ2 A -> Prop.
@@ -1418,64 +1431,6 @@ Module Soundness
       now cbn.
     Qed.
 
-    Lemma dmut_wp_fresh {Γ Σ0 AT A x τ} `{Subst AT, Inst AT A}
-          (d : DynamicMutator Γ Γ AT (Σ0 ▻ (x,τ))%ctx) (d_dcl : dmut_dcl d)
-          (POST : StateProperty Γ AT Σ0)
-          (POST_dcl : stateprop_downwards_closed POST)
-          (POST_vac : stateprop_vacuous POST)
-          (pc : PathCondition Σ0) (s : SymbolicState Γ Σ0) :
-      dmut_wp (dmut_fresh (x,τ) d) POST pc s <->
-      dmut_wp d (stateprop_specialize sub_wk1 POST) (subst sub_wk1 pc) (subst sub_wk1 s).
-    Proof.
-      unfold dmut_wp, dmut_fresh; cbn; split; intros HYP ? ?.
-      - dependent elimination ζ1 as [@env_snoc Σ0 ζ1 _ v]; cbn in v.
-        rewrite <- subst_sub_comp, sub_comp_wk1_tail; cbn.
-        specialize (HYP Σ1 ζ1).
-        rewrite outcome_satisfy_map in HYP; cbn in *.
-        refine (@d_dcl _ Σ1 _ _ _ (env_snoc (sub_id _) (_,τ) v) _ _ _ _ _ _ _ _ _ _ _ HYP); clear d_dcl HYP.
-        + unfold geqpc.
-          intros.
-          now rewrite (inst_snoc_wk1 H1).
-        + unfold geq.
-          intros.
-          rewrite (inst_snoc_wk1 H1).
-          f_equal.
-          now rewrite <-subst_sub_comp, sub_comp_wk1_tail.
-        + unfold geq, syminstance_rel.
-          intros. subst ι0.
-          rewrite <-inst_subst.
-          f_equal.
-          change (subst _ _) with (sub_comp (sub_up1 ζ1) (sub_id Σ1 ► (x :: τ ↦ v))).
-          now rewrite <- (sub_snoc_comp ζ1),  sub_comp_id_right.
-        + revert POST_dcl. clear. intros.
-          unfold resultprop_downwards_closed.
-          intros [Σ3 ζ3 pc3 a3 s3] [Σ4 ζ4 pc4 a4 s4] Hgeq.
-          cbn. apply POST_dcl. rewrite <- ?sub_comp_assoc.
-          revert Hgeq. apply dmutres_geq_pre_comp.
-        + unfold resultprop_vacuous.
-          intros [Σ3 ζ3 pc3 a3 s3].
-          cbn.
-          eapply POST_vac.
-        + intros [Σ3 ζ3 pc3 a3 s3].
-          unfold resultprop_specialize_pc. cbn.
-          intros [geqpc post].
-          rewrite <-(sub_comp_assoc sub_wk1), sub_comp_wk1_tail in post.
-          cbn in post.
-          rewrite sub_comp_id_left in post.
-          unfold stateprop_specialize.
-          now rewrite <-(sub_comp_assoc sub_wk1), sub_comp_wk1_tail.
-      - rewrite outcome_satisfy_map.
-        specialize (HYP (Σ1 ▻ (x,τ)) (sub_up1 ζ1)).
-        rewrite <- ?subst_sub_comp, ?sub_comp_wk1_comm in HYP.
-        change (wk1 (b := (x,τ)) (subst ζ1 ?t)) with (subst (sub_wk1 (b := (x,τ))) (subst ζ1 t)).
-        rewrite <- ?subst_sub_comp. revert HYP.
-        apply outcome_satisfy_monotonic.
-        intros [Σ2 ζ2 pc2 a2 s2]. clear.
-        dependent elimination ζ2 as [@env_snoc Σ1 ζ2 _ t].
-        unfold stateprop_specialize. cbn.
-        now rewrite <- ?sub_comp_assoc, <- sub_comp_wk1_comm.
-    Qed.
-
     Lemma dmut_wp_sub_fresh {Γ Σ0 Σ1 AT A x τ} `{Subst AT, Inst AT A}
           (ζ1 : Sub Σ0 Σ1)
           (d : DynamicMutator Γ Γ AT (Σ0 ▻ (x,τ))%ctx)
@@ -1537,6 +1492,20 @@ Module Soundness
         dependent elimination ζ3 as [@env_snoc Σ2 ζ3 _ t].
         unfold stateprop_specialize. cbn.
         now rewrite <- ?sub_comp_assoc, <- sub_comp_wk1_comm.
+    Qed.
+
+    Lemma dmut_wp_fresh {Γ Σ0 AT A x τ} `{Subst AT, Inst AT A}
+          (d : DynamicMutator Γ Γ AT (Σ0 ▻ (x,τ))%ctx) (d_dcl : dmut_dcl d)
+          (POST : StateProperty Γ AT Σ0)
+          (POST_dcl : stateprop_downwards_closed POST)
+          (POST_vac : stateprop_vacuous POST)
+          (pc : PathCondition Σ0) (s : SymbolicState Γ Σ0) :
+      dmut_wp (dmut_fresh (x,τ) d) POST pc s <->
+      dmut_wp d (stateprop_specialize sub_wk1 POST) (subst sub_wk1 pc) (subst sub_wk1 s).
+    Proof.
+      rewrite <-dmut_wp_sub_id.
+      rewrite dmut_wp_sub_fresh; try assumption .
+      now rewrite sub_up1_id, dmut_wp_sub_id.
     Qed.
 
     Lemma dmut_bind_sound {Γ1 Γ2 Γ3 Σ0 AT A BT B}
