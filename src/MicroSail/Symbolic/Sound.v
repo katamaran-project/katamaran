@@ -1396,7 +1396,7 @@ Module Soundness
     Lemma dmut_wp_bind {AT A BT B} {instA : Inst AT A} {substB : Subst BT} {instB : Inst BT B}
           {Γ1 Γ2 Γ3 Σ0} (ma : DynamicMutator Γ1 Γ2 AT Σ0)
           (f : forall Σ', Sub Σ0 Σ' -> AT Σ' -> DynamicMutator Γ2 Γ3 BT Σ')
-          (f_dcl : dmut_arrow_dcl f)
+          (f_dcl : forall Σ ζ a, dmut_dcl (f Σ ζ a))
           (POST : StateProperty Γ3 BT Σ0) (POST_dcl : stateprop_downwards_closed POST) :
       forall pc (s0 : SymbolicState Γ1 Σ0),
         dmut_wp (dmut_bind ma f) POST pc s0 <->
@@ -1434,7 +1434,7 @@ Module Soundness
           {Γ1 Γ2 Γ3 Σ0 Σ1} (ζ1 : Sub Σ0 Σ1)
           (ma : DynamicMutator Γ1 Γ2 AT Σ0)
           (f : forall Σ', Sub Σ0 Σ' -> AT Σ' -> DynamicMutator Γ2 Γ3 BT Σ')
-          (f_dcl : dmut_arrow_dcl f)
+          (f_dcl : forall Σ ζ a, dmut_dcl (f Σ ζ a))
           (POST : StateProperty Γ3 BT Σ1) (POST_dcl : stateprop_downwards_closed POST) :
       forall pc1 s1,
         dmut_wp (dmut_sub ζ1 (dmut_bind ma f)) POST pc1 s1 <->
@@ -1570,6 +1570,7 @@ Module Soundness
       (sma : SCMut Γ1 Γ2 A)
       (dmf : forall Σ1, Sub Σ0 Σ1 -> AT Σ1 -> DynamicMutator Γ2 Γ3 BT Σ1)
       (dmf_dcl : dmut_arrow_dcl dmf)
+      (dmf_dcl' : forall (Σ : LCtx) (ζ : Sub Σ0 Σ) (a : AT Σ), dmut_dcl (dmf Σ ζ a))
       (smf : A -> SCMut Γ2 Γ3 B) :
       box approximates ι0 dma sma ->
       (forall Σ1 (ζ1 : Sub Σ0 Σ1) (a1 : AT Σ1) (ι1 : SymInstance Σ1),
@@ -1745,6 +1746,48 @@ Module Soundness
     Lemma dmut_exec_sound {Γ Σ σ} (s : Stm Γ σ) (ι : SymInstance Σ) :
       box approximates ι (dmut_exec s) (scmut_exec s).
     Proof. (* induction s; cbn [dmut_exec scmut_exec]. *) Admitted.
+
+    Module NewWP.
+
+      Definition dmut_wp {Γ1 Γ2 Σ0 Σ1 A}
+        (m : DynamicMutator Γ1 Γ2 A Σ0)
+        (POST : StateProperty Γ2 A Σ0)
+        (ζ1 : Sub Σ0 Σ1)
+        (pc1 : PathCondition Σ1)
+        (s1 : SymbolicState Γ1 Σ1) : Prop :=
+          outcome_satisfy
+            (m Σ1 ζ1 pc1 s1)
+            (fun '(MkDynMutResult ζ2 pc2 a2 s2) =>
+               POST _ (sub_comp ζ1 ζ2) pc2 a2 s2).
+
+      Lemma dmut_wp_monotonic {Γ1 Γ2 Σ0 A} (m : DynamicMutator Γ1 Γ2 A Σ0)
+            (P Q : StateProperty Γ2 A Σ0) (HYP : stateprop_impl P Q) :
+        forall {Σ1} (ζ : Sub Σ0 Σ1) (pc : PathCondition Σ1) (s : SymbolicState Γ1 Σ1),
+          dmut_wp m P ζ pc s -> dmut_wp m Q ζ pc s.
+      Proof.
+        unfold dmut_wp; cbn; intros Σ1 ζ1 pc1 s1.
+        apply outcome_satisfy_monotonic.
+        intros [Σ2 ζ2 pc2 a2 s2]; cbn.
+        intuition.
+      Qed.
+
+      Lemma dmut_wp_angelic {A B Γ1 Γ2 Σ0} (m : B Σ0 -> DynamicMutator Γ1 Γ2 A Σ0)
+            {Σ1} (ζ01 : Sub Σ0 Σ1) (POST : StateProperty Γ2 A Σ1) :
+        forall {Σ2} (ζ12 : Sub Σ1 Σ2) pc2 s2,
+          dmut_wp (dmut_sub ζ01 (dmut_angelic m)) POST ζ12 pc2 s2 <->
+          exists b, dmut_wp (dmut_sub ζ01 (m b)) POST ζ12 pc2 s2.
+      Proof. reflexivity. Qed.
+
+      Definition approximates {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
+        fun Σ ι dm sm =>
+          forall {Σ1} (ζ : Sub Σ Σ1) pc (s__sym : SymbolicState Γ1 Σ1) ι1 (POST : A -> SCState Γ2 -> Prop)
+                 (Hrel : syminstance_rel ζ ι ι1)
+                 (Hpc : inst ι1 pc : Prop)
+                 (Hwp : dmut_wp dm (stateprop_lift ι POST) ζ pc s__sym),
+            scmut_wp sm POST (inst ι1 s__sym).
+
+
+    End NewWP.
 
     Section Leftovers.
 
