@@ -302,8 +302,7 @@ Module Soundness
         + apply geq_trans with pc2 s2; auto.
     Qed.
 
-    Global Instance dmutres_geq_rewrite {Γ AT A Σ} `{Inst AT A} : RewriteRelation (@dmutres_geq Γ AT A Σ _).
-    Qed.
+    Global Instance dmutres_geq_rewrite {Γ AT A Σ} `{Inst AT A} : RewriteRelation (@dmutres_geq Γ AT A Σ _) := {}.
 
     Lemma dmutres_geq_pre_comp {AT A} `{Inst AT A} {Γ Σ1 Σ2 Σ3}
           (ζ2 : Sub Σ1 Σ2) (a2 : AT Σ2) pc2 (s2 : SymbolicState Γ Σ2)
