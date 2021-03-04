@@ -1602,6 +1602,7 @@ Module Soundness
         apply syminstance_rel_snoc in rel10.
         apply Hpost. now rewrite sub_comp_wk1_tail.
       - apply stateprop_lift_dcl.
+      - eapply stateprop_lift_vac.
     Qed.
 
     Lemma dmut_assume_formula_sound {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) :
