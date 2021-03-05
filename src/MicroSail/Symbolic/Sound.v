@@ -74,6 +74,8 @@ Module Soundness
 
     Definition inconsistent {Σ} (pc : PathCondition Σ) : Prop :=
       forall ι, ~ inst ι pc.
+    Definition contradiction (e : DynamicMutatorError) : Prop :=
+      False.
 
     Global Instance inst_heap : Inst SymbolicHeap SCHeap :=
       instantiate_list.
@@ -98,7 +100,7 @@ Module Soundness
     Definition DynamicMutatorArrow' Γ1 Γ2 A B Σ0 : Type :=
       forall Σ1,
         Sub Σ0 Σ1 -> A Σ1 -> PathCondition Σ1 ->
-        SymbolicState Γ1 Σ1 -> Outcome (DynamicMutatorResult Γ2 B Σ1).
+        SymbolicState Γ1 Σ1 -> Outcome (DynamicMutatorError) (DynamicMutatorResult Γ2 B Σ1).
 
     Local Notation "[ ι ] x == y" := (inst ι x = inst ι y) (at level 50).
 
@@ -670,9 +672,9 @@ Module Soundness
 
     Section Vacuous.
 
-      Definition outcome_vac `{Inst AT A} {Γ Σ} (pc : PathCondition Σ) (o : Outcome (DynamicMutatorResult Γ AT Σ)) : Prop :=
+      Definition outcome_vac `{Inst AT A} {Γ Σ} (pc : PathCondition Σ) (o : Outcome (DynamicMutatorError) (DynamicMutatorResult Γ AT Σ)) : Prop :=
         forall (P : ResultProperty Γ AT Σ) (P_vac : resultprop_vacuous P),
-          inconsistent pc -> outcome_satisfy o P.
+          inconsistent pc -> outcome_satisfy o contradiction P.
       Local Hint Unfold outcome_satisfy : core.
       Local Hint Unfold outcome_vac : core.
 
@@ -925,8 +927,8 @@ Module Soundness
           geq ζ12 pc2 ζ01 ζ02 ->
           forall (P : ResultProperty Γ2 AT Σ1) (P_dcl : resultprop_downwards_closed P) (P_vac : resultprop_vacuous P)
                  (Q : ResultProperty Γ2 AT Σ2) (PQ : forall r, resultprop_specialize_pc ζ12 pc2 P r -> Q r),
-            outcome_satisfy (d Σ1 ζ01 pc1 s1) P ->
-            outcome_satisfy (d Σ2 ζ02 pc2 s2) Q.
+            outcome_satisfy (d Σ1 ζ01 pc1 s1) contradiction P ->
+            outcome_satisfy (d Σ2 ζ02 pc2 s2) contradiction Q.
 
       Definition dmut_dcl' {Γ1 Γ2 AT Σ0 A} `{Inst AT A} (d : DynamicMutator Γ1 Γ2 AT Σ0) : Prop :=
         forall Σ1 Σ2 (ζ01 : Sub Σ0 Σ1) pc1 (s1 : SymbolicState Γ1 Σ1) (ζ12 : Sub Σ1 Σ2) pc2 s2 ζ02,
@@ -934,8 +936,8 @@ Module Soundness
           geq ζ12 pc2 s1 s2 ->
           geq ζ12 pc2 ζ01 ζ02 ->
           forall (P : ResultProperty Γ2 AT Σ1) (P_dcl : resultprop_downwards_closed P) (P_vac : resultprop_vacuous P),
-            outcome_satisfy (d Σ1 ζ01 pc1 s1) P ->
-            outcome_satisfy (d Σ2 ζ02 pc2 s2) (resultprop_specialize_pc ζ12 pc2 P).
+            outcome_satisfy (d Σ1 ζ01 pc1 s1) contradiction P ->
+            outcome_satisfy (d Σ2 ζ02 pc2 s2) contradiction (resultprop_specialize_pc ζ12 pc2 P).
 
       Lemma dmut_dcl_dcl' {Γ1 Γ2 AT Σ0 A} `{Inst AT A} (d : DynamicMutator Γ1 Γ2 AT Σ0) :
         dmut_dcl d <-> dmut_dcl' d.
@@ -979,8 +981,8 @@ Module Soundness
           geq ζ12 pc2 ζ01 ζ02 ->
           forall (P : ResultProperty Γ2 BT Σ1) (P_dcl : resultprop_downwards_closed P) (P_vac : resultprop_vacuous P)
             (Q : ResultProperty Γ2 BT Σ2) (PQ : forall r, resultprop_specialize_pc ζ12 pc2 P r -> Q r),
-            outcome_satisfy (f Σ1 ζ01 a1 pc1 s1) P ->
-            outcome_satisfy (f Σ2 ζ02 a2 pc2 s2) Q.
+            outcome_satisfy (f Σ1 ζ01 a1 pc1 s1) contradiction P ->
+            outcome_satisfy (f Σ2 ζ02 a2 pc2 s2) contradiction Q.
 
       Lemma dmut_bind_dcl' {AT A BT B} {substB : Subst BT} {instB : Inst BT B} {instA : Inst AT A}
             {subA : Subst AT} {subLA : SubstLaws AT} {instLA : InstLaws AT A}
@@ -1046,8 +1048,8 @@ Module Soundness
           geq ζ12 pc2 ζ01 ζ02 ->
           forall (P : ResultProperty Γ2 BT Σ1) (P_dcl : resultprop_downwards_closed P) (P_vac : resultprop_vacuous P)
             (Q : ResultProperty Γ2 BT Σ2) (PQ : forall r, resultprop_specialize_pc ζ12 pc2 P r -> Q r),
-            outcome_satisfy (f Σ1 ζ01 a1 Σ1 (sub_id _) pc1 s1) P ->
-            outcome_satisfy (f Σ2 ζ02 a2 Σ2 (sub_id _) pc2 s2) Q.
+            outcome_satisfy (f Σ1 ζ01 a1 Σ1 (sub_id _) pc1 s1) contradiction P ->
+            outcome_satisfy (f Σ2 ζ02 a2 Σ2 (sub_id _) pc2 s2) contradiction Q.
 
       Lemma dmut_bind_dcl {AT A BT B} {substB : Subst BT} {instB : Inst BT B} {instA : Inst AT A}
             {subA : Subst AT} {subLA : SubstLaws AT} {instLA : InstLaws AT A}
@@ -1305,7 +1307,7 @@ Module Soundness
       (m : SCMut Γ1 Γ2 A)
       (POST : A -> SCState Γ2 -> Prop)
       (s1 : SCState Γ1) : Prop :=
-      outcome_satisfy (m s1) (fun r => POST (scmutres_value r) (scmutres_state r)).
+      outcome_satisfy (m s1) (fun _ => False) (fun r => POST (scmutres_value r) (scmutres_state r)).
 
     Lemma scmut_wp_bind {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (f : A -> SCMut Γ2 Γ3 B)
           (POST : B -> SCState Γ3 -> Prop) :
@@ -1327,6 +1329,7 @@ Module Soundness
           (* SK: There is still some wiggle room here. We can generalize to
              oathconditions in Σ1 that are stronger than pc0. *)
           (m Σ1 ζ1 (subst ζ1 pc0) (subst ζ1 s1))
+          contradiction
           (fun '(MkDynMutResult ζ2 pc2 a2 s2) =>
              POST _ (sub_comp ζ1 ζ2) pc2 a2 s2).
 
@@ -1684,13 +1687,11 @@ Module Soundness
       dmut_wp (dmut_sub ζ1 (dmut_fresh (x,τ) d)) POST pc s <->
       dmut_wp (dmut_sub (sub_up1 ζ1) d) (stateprop_specialize sub_wk1 POST) (subst sub_wk1 pc) (subst sub_wk1 s).
     Proof.
-      (* OLD: *)
       unfold dmut_wp, dmut_sub, dmut_fresh; cbn; split; intros HYP Σ2 ζ2.
       - dependent elimination ζ2 as [@env_snoc Σ1 ζ2 _ v]; cbn in v.
         rewrite <- ?subst_sub_comp, ?sub_comp_wk1_tail; cbn.
         specialize (HYP Σ2 ζ2).
         rewrite outcome_satisfy_map in HYP; cbn in *.
-        Print dmut_dcl.
         refine (wfd _ Σ2 _ _ _ (env_snoc (sub_id _) (_,τ) v) _ _ _ _ _ _ _ _ _ _ _ HYP); clear wfd.
         + unfold geqpc.
           intros.
@@ -2008,6 +2009,7 @@ Module Soundness
         (s1 : SymbolicState Γ1 Σ1) : Prop :=
           outcome_satisfy
             (m Σ1 ζ1 pc1 s1)
+            contradiction
             (fun '(MkDynMutResult ζ2 pc2 a2 s2) =>
                POST _ (sub_comp ζ1 ζ2) pc2 a2 s2).
 

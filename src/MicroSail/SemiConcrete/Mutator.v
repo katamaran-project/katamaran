@@ -160,7 +160,7 @@ Module SemiConcrete
   Section SemiConcreteMutator.
 
     Definition SCMut (Γ1 Γ2 : PCtx) (A : Type) : Type :=
-      SCState Γ1 -> Outcome (SCMutResult Γ2 A).
+      SCState Γ1 -> Outcome string (SCMutResult Γ2 A).
     Bind Scope mutator_scope with SCMut.
 
     Definition scmut_demonic {Γ1 Γ2 I A} (ms : I -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
@@ -189,10 +189,6 @@ Module SemiConcrete
       scmut_bind ma (fun a => scmut_pure (f a)).
     Definition scmut_angelick_list {Γ1 Γ2 A B} (msg : string) (xs : list A) (k : A -> SCMut Γ1 Γ2 B) : SCMut Γ1 Γ2 B :=
       fun s => outcome_angelick_list msg xs (fun a => k a s).
-    Definition scmut_cover {Γ1 Γ2 A} : relation (SCMut Γ1 Γ2 A) :=
-      fun m1 m2 => forall s, outcome_cover (m1 s) (m2 s).
-    Instance scmut_cover_preorder {Γ1 Γ2 A} : PreOrder (@scmut_cover Γ1 Γ2 A).
-    Proof. split; firstorder. Qed.
 
   End SemiConcreteMutator.
   Bind Scope mutator_scope with SCMut.
@@ -513,7 +509,7 @@ Module SemiConcrete
   Import OutcomeNotations.
 
   Definition semiconcrete_outcome_contract {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
-    Outcome unit :=
+    Outcome string unit :=
     match c with
     | MkSepContract _ _ Σ δ req result  ens =>
       ⨂ ι : SymInstance Σ =>
@@ -527,6 +523,6 @@ Module SemiConcrete
     end.
 
   Definition ValidContractSCMut {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    outcome_satisfy (semiconcrete_outcome_contract c body) (fun _ => True).
+    outcome_satisfy (semiconcrete_outcome_contract c body) (fun _ => False) (fun _ => True).
 
 End SemiConcrete.

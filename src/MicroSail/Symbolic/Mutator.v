@@ -616,7 +616,7 @@ Module Mutators
   Section DynamicMutator.
 
     Definition DynamicMutator (Γ1 Γ2 : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
-      forall Σ', Sub Σ Σ' -> PathCondition Σ' -> SymbolicState Γ1 Σ' -> Outcome (DynamicMutatorResult Γ2 A Σ').
+      forall Σ', Sub Σ Σ' -> PathCondition Σ' -> SymbolicState Γ1 Σ' -> Outcome (DynamicMutatorError) (DynamicMutatorResult Γ2 A Σ').
     Bind Scope dmut_scope with DynamicMutator.
 
     Definition dmut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : DynamicMutator Γ Γ A Σ :=
@@ -1244,7 +1244,7 @@ Module Mutators
       end.
 
     Definition dmut_contract {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) :
-      Stm Δ τ -> Outcome unit :=
+      Stm Δ τ -> Outcome unit unit :=
       match c with
       | MkSepContract _ _ Σ δ req result ens =>
         fun s =>
@@ -1253,7 +1253,7 @@ Module Mutators
                       dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens) ;;
                       dmut_leakcheck)%dmut in
           let out := mut Σ (sub_id Σ) nil (symbolicstate_initial δ) in
-          outcome_map (fun _ => tt) out
+          outcome_bimap (fun _ => tt) (fun _ => tt) out
       end.
 
     Definition ValidContractDynMut (Δ : PCtx) (τ : Ty)
@@ -1718,7 +1718,7 @@ Module Mutators
       end.
 
     Definition dmut_contract_evar {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) :
-      Stm Δ τ -> Outcome unit :=
+      Stm Δ τ -> Outcome unit unit :=
       match c with
       | MkSepContract _ _ Σ δ req result ens =>
         fun s =>
@@ -1727,7 +1727,7 @@ Module Mutators
                       dmut_consume_evar ens (subst (sub_snoc ζ1 (result,τ) t) (create_evarenv_id _)) ;;
                       dmut_leakcheck)%dmut in
           let out := mut Σ (sub_id Σ) nil (symbolicstate_initial δ) in
-          outcome_map (fun _ => tt) out
+          outcome_bimap (fun _ => tt) (fun _ => tt) out
       end.
 
     Definition ValidContractDynMut (Δ : PCtx) (τ : Ty)
@@ -1747,7 +1747,7 @@ Module Mutators
       ValidContractDynMut c body.
     Proof.
       intros H.
-      apply (outcome_ok_spec _ (fun _ => True)) in H.
+      apply (outcome_ok_spec _ (fun _ => False) (fun _ => True)) in H.
       now rewrite outcome_satisfy_bind in H.
     Qed.
 
@@ -1840,26 +1840,6 @@ Module Mutators
         apply t.
         exact a.
     Defined.
-
-    Fixpoint sout_run {T A} `{Inst T A} {Σ} (ι : SymInstance Σ) (o : SymOutcome T Σ) : Outcome A :=
-      match o with
-      | sout_pure a => outcome_pure (inst ι a)
-      | sout_angelic os => outcome_angelic (fun i => sout_run ι (os i))
-      (* | sout_demonic os => outcome_demonic (fun i => sout_run ι (os i)) *)
-      | sout_angelic_binary o1 o2 => outcome_angelic_binary (sout_run ι o1) (sout_run ι o2)
-      | sout_demonic_binary o1 o2 => outcome_demonic_binary (sout_run ι o1) (sout_run ι o2)
-      | sout_fail msg => outcome_fail msg
-      | sout_block => outcome_block
-      | sout_assertk P msg o => outcome_assertk (inst ι P) (sout_run ι o)
-      | sout_assumek P o => outcome_assumek (inst ι P) (sout_run ι o)
-      | sout_demonicv b k => outcome_demonic (fun v => sout_run (env_snoc ι _ v) k)
-      (* | sout_subst ζ k => outcome_demonic (fun ι' => outcome_assumek (syminstance_rel ζ ι ι') (sout_run ι' k)) *)
-      | @sout_subst _ _ x σ xIn t k =>
-        let ι' := env_remove' (x,σ) ι xIn in
-        outcome_assumek
-          (env_lookup ι xIn = inst ι' t)
-          (sout_run ι' k)
-      end.
 
     (* Definition wp_sout {T A Σ} `{Inst T A} (ι : SymInstance Σ) (o : SymOutcome T Σ) (POST : A -> Prop) : Prop := *)
     (*   outcome_satisfy (sout_run ι o) POST. *)
