@@ -2033,7 +2033,7 @@ Module Soundness
 
       Definition approximates {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
         fun Σ ι dm sm =>
-          forall {Σ1} (ζ : Sub Σ Σ1) pc (s__sym : SymbolicState Γ1 Σ1) ι1 (POST : A -> SCState Γ2 -> Prop)
+          forall Σ1 (ζ : Sub Σ Σ1) pc (s__sym : SymbolicState Γ1 Σ1) ι1 (POST : A -> SCState Γ2 -> Prop)
                  (Hrel : syminstance_rel ζ ι ι1)
                  (Hpc : inst ι1 pc : Prop)
                  (Hwp : dmut_wp dm (stateprop_lift ι POST) ζ pc s__sym),

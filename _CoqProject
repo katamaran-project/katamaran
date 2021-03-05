@@ -1,4 +1,4 @@
--arg "-w all -w -undeclared-scope -w -disj-pattern-notation"
+-arg "-w all -w -undeclared-scope -w -disj-pattern-notation -w -convert_concl_no_check -w -omega-is-deprecated"
 -Q case_study/MinimalCaps MinimalCaps
 case_study/MinimalCaps/Contracts.v
 case_study/MinimalCaps/Machine.v

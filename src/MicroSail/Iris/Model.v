@@ -15,7 +15,7 @@ Require Import Equations.Prop.EqDec.
 From iris.bi Require Import interface.
 From iris.algebra Require Import gmap excl auth.
 From iris.base_logic Require Import lib.fancy_updates lib.own lib.gen_heap.
-From iris.program_logic Require Import weakestpre hoare adequacy.
+From iris.program_logic Require Import weakestpre adequacy.
 From iris.proofmode Require Import tactics.
 
 Require Import MicroSail.Sep.Spec.
@@ -106,7 +106,7 @@ Module ValsAndTerms
 
   Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-  Instance intoVal_lit {Γ τ} : IntoVal (MkTm (Γ := Γ) (τ := τ) δ (stm_lit _ l)) (MkVal _ δ l).
+  Instance intoVal_lit {Γ τ δ l} : IntoVal (MkTm (Γ := Γ) (τ := τ) δ (stm_lit _ l)) (MkVal _ δ l).
   intros; eapply of_to_val; by cbn.
   Defined.
 
