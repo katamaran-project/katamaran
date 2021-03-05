@@ -1553,7 +1553,7 @@ Module Terms (Export termkit : TermKit).
           inst ι (subst ζ t) = inst (inst ι ζ) t
       }.
 
-    Global Instance instantiate_pair {AT BT : LCtx -> Set} {A B : Set} `{Inst AT A, Inst BT B} :
+    Global Instance instantiate_pair {AT BT : LCtx -> Type} {A B : Type} `{Inst AT A, Inst BT B} :
       Inst (fun Σ => AT Σ * BT Σ)%type (A * B) :=
       {| inst Σ ι '(a , b) := (inst ι a, inst ι b);
          lift Σ '(a, b)    := (lift a , lift b);

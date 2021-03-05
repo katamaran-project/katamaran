@@ -223,17 +223,17 @@ Module SemiConcrete
 
     Local Open Scope mutator_scope.
 
-    Definition scmut_state {Γ Γ' A} (f : SCState Γ -> (SCState Γ' * A)) : SCMut Γ Γ' A :=
-      fun s => outcome_pure (let (s1,a) := f s in MkSCMutResult a s1).
+    Definition scmut_state {Γ Γ' A} (f : SCState Γ -> (A * SCState Γ')) : SCMut Γ Γ' A :=
+      fun s => outcome_pure (let (a,s1) := f s in MkSCMutResult a s1).
     Definition scmut_modify {Γ Γ'} (f : SCState Γ -> SCState Γ') : SCMut Γ Γ' unit :=
-      scmut_state (fun s => (f s,tt)).
+      scmut_state (fun s => (tt,f s)).
     Definition scmut_put {Γ Γ'} (s : SCState Γ') : SCMut Γ Γ' unit :=
-      scmut_state (fun _ => (s,tt)).
+      scmut_state (fun _ => (tt,s)).
     Definition scmut_get {Γ} : SCMut Γ Γ (SCState Γ) :=
       scmut_state (fun s => (s,s)).
 
     Definition scmut_state_local {Γ Γ' A} (f : LocalStore Γ -> (LocalStore Γ' * A)) : SCMut Γ Γ' A :=
-      scmut_state (fun '(MkSCState δ ĥ) => let (δ',a) := f δ in (MkSCState δ' ĥ,a)).
+      scmut_state (fun '(MkSCState δ ĥ) => let (δ',a) := f δ in (a,MkSCState δ' ĥ)).
     Definition scmut_modify_local {Γ Γ'} (f : LocalStore Γ -> LocalStore Γ') : SCMut Γ Γ' unit :=
       scmut_state_local (fun δ => (f δ,tt)).
     Definition scmut_put_local {Γ Γ'} (δ : LocalStore Γ') : SCMut Γ Γ' unit :=
@@ -252,7 +252,7 @@ Module SemiConcrete
       scmut_modify_local (fun δΓ => env_cat δΓ δΔ).
 
     Definition scmut_state_heap {Γ A} (f : SCHeap -> (SCHeap * A)) : SCMut Γ Γ A :=
-      scmut_state (fun '(MkSCState δ h) => let (h',a) := f h in (MkSCState δ h',a)).
+      scmut_state (fun '(MkSCState δ h) => let (h',a) := f h in (a,MkSCState δ h')).
     Definition scmut_modify_heap {Γ} (f : SCHeap -> SCHeap) : SCMut Γ Γ unit :=
       scmut_state_heap (fun h => (f h,tt)).
     Definition scmut_get_heap {Γ} : SCMut Γ Γ SCHeap :=

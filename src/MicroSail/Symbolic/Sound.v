@@ -569,6 +569,14 @@ Module Soundness
       Proof. Admitted.
       Local Hint Resolve dmut_demonic_finite_vac : core.
 
+      Lemma dmut_state_vac {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (f : forall Σ' : LCtx, Sub Σ Σ' -> SymbolicState Γ1 Σ' -> AT Σ' * SymbolicState Γ2 Σ') :
+        dmut_vac (dmut_state f).
+      Proof.
+        unfold dmut_vac, dmut_state, outcome_vac; intros.
+        destruct (f Σ1 ζ01 s1); cbn. now apply P_vac.
+      Qed.
+      Local Hint Resolve dmut_state_vac : core.
+
       Lemma dmut_assume_formula_vac {Γ Σ} (f : Formula Σ) :
         dmut_vac (@dmut_assume_formula Γ Σ f).
       Proof. Admitted.
@@ -998,6 +1006,19 @@ Module Soundness
         - right. revert PQ H1. apply d2_dcl; auto.
       Qed.
 
+      Lemma dmut_state_dcl {AT A} `{Inst AT A} {Γ1 Γ2 Σ}
+            (f : forall Σ' : LCtx, Sub Σ Σ' -> SymbolicState Γ1 Σ' -> AT Σ' * SymbolicState Γ2 Σ')
+            (f_dcl : True) :
+        dmut_dcl (dmut_state f).
+      Proof.
+        (* unfold dmut_dcl, dmut_state; intros until Q. intros PQ. *)
+        (* destruct (f Σ1 ζ01 s1) eqn:?, (f Σ2 ζ02 s2) eqn:?; cbn. *)
+        (* intros Hp. apply PQ. split; cbn. apply geqpc_refl. *)
+        (* revert Hp. rewrite sub_comp_id_right. *)
+        (* apply P_dcl. exists ζ12. *)
+      Admitted.
+      Local Hint Resolve dmut_state_dcl : core.
+
       Lemma dmut_assume_formula_dcl {Γ Σ} (f : Formula Σ) :
         dmut_dcl (@dmut_assume_formula Γ Σ f).
       Proof.
@@ -1114,7 +1135,7 @@ Module Soundness
       Proof. Admitted.
 
       Lemma dmut_exec_dcl {Γ Σ τ} (s : Stm Γ τ) :
-        dmut_vac (@dmut_exec Γ τ Σ s).
+        dmut_dcl (@dmut_exec Γ τ Σ s).
       Proof. Admitted.
 
     End DownwardsClosure.
@@ -1238,6 +1259,10 @@ Module Soundness
       (relι1 : syminstance_rel ζ1 ι ι1) (d : DynamicMutator Γ Γ Unit Σ) (s : SCMut Γ Γ unit) :
       box approximates ι d s -> box approximates ι1 (dmut_sub ζ1 d) s.
     Proof. intros H. eapply approximates_box_box; eauto. Qed.
+
+    Lemma approximates_pure {AT A} `{Subst AT, Inst AT A} {Γ Σ} (ι : SymInstance Σ) (a : AT Σ) :
+      box approximates ι (dmut_pure (Γ := Γ) a) (scmut_pure (inst ι a)).
+    Proof. Admitted.
 
     Lemma approximates_fail `{Inst AT A} {D Γ1 Γ2 Σ} func msg data ι s :
       box approximates ι (@dmut_fail Γ1 Γ2 AT Σ D func msg data) s.
@@ -1743,9 +1768,77 @@ Module Soundness
         apply IHasn.
     Admitted.
 
+    Lemma dmut_eval_exp_sound {Γ Σ τ} (e : Exp Γ τ) (ι : SymInstance Σ) :
+      box approximates ι (dmut_eval_exp e) (scmut_eval_exp e).
+    Proof. Admitted.
+
+    Lemma dmut_state_sound {AT A} `{Inst AT A} {Γ1 Γ2 Σ1} (ι1 : SymInstance Σ1)
+          (f : forall Σ2 (ζ12 : Sub Σ1 Σ2), SymbolicState Γ1 Σ2 -> AT Σ2 * SymbolicState Γ2 Σ2)
+          (g  : SCState Γ1 -> A * SCState Γ2)
+          (fg : forall Σ2 (ζ12 : Sub Σ1 Σ2) (ι2 : SymInstance Σ2) s2,
+              syminstance_rel ζ12 ι1 ι2 ->
+              inst ι2 (f Σ2 ζ12 s2) = g (inst ι2 s2)) :
+      box approximates ι1 (dmut_state f) (scmut_state g).
+    Proof.
+      unfold box, approximates, dmut_state, scmut_state, stateprop_lift, dmut_wp, dmut_sub, scmut_wp; cbn.
+      intros Σ2 ζ12 ι2 rel12 pc2 s2 POST Hf Hpc2; cbn in *.
+      specialize (Hf Σ2 (sub_id _)).
+      rewrite ?sub_comp_id_right, ?subst_sub_id in Hf.
+      destruct (f Σ2 ζ12 s2) eqn:?; cbn in *.
+      pose proof (f_equal (inst ι2) Heqp) as Hinst.
+      rewrite fg in Hinst; auto. rewrite Hinst. cbn.
+      apply Hf; auto. rewrite sub_comp_id_left. apply syminstance_rel_refl.
+    Qed.
+
     Lemma dmut_exec_sound {Γ Σ σ} (s : Stm Γ σ) (ι : SymInstance Σ) :
       box approximates ι (dmut_exec s) (scmut_exec s).
-    Proof. (* induction s; cbn [dmut_exec scmut_exec]. *) Admitted.
+    Proof.
+      induction s; cbn [dmut_exec scmut_exec].
+      - pose proof (approximates_pure (Γ := Γ) (ι := ι) (a := term_lit τ l)).
+        now cbn in H.
+      - apply dmut_eval_exp_sound.
+      - apply dmut_bind_sound;
+          auto using dmut_exec_dcl.
+        + admit.
+        + admit.
+        + admit.
+      - admit.
+      - apply dmut_bind_sound;
+          auto using dmut_exec_dcl.
+        + admit.
+        + admit.
+        + intros.
+          apply dmut_bind_right_sound.
+          admit.
+          admit.
+          apply dmut_state_sound.
+          { intros ? ? ? [δ h] ?; cbn.
+            f_equal. f_equal.
+            unfold inst; cbn.
+            rewrite env_map_update.
+            rewrite inst_subst.
+            unfold syminstance_rel in *. subst.
+            reflexivity.
+          }
+          apply approximates_pure.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - apply approximates_block.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - apply approximates_fail.
+    Admitted.
 
     Module NewWP.
 
