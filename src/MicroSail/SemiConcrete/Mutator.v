@@ -508,19 +508,24 @@ Module SemiConcrete
 
   Import OutcomeNotations.
 
+  Definition scmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
+   SymInstance (sep_contract_logic_variables c) -> SCMut Δ Δ unit :=
+    match c with
+    | MkSepContract _ _ Σ δ req result ens =>
+      fun ι =>
+      scmut_produce ι req ;;
+      scmut_exec s >>= fun v =>
+      scmut_consume (env_snoc ι (result::τ) v) ens ;;
+      scmut_leakcheck
+    end%mut.
+
   Definition semiconcrete_outcome_contract {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
     Outcome string unit :=
-    match c with
-    | MkSepContract _ _ Σ δ req result  ens =>
-      ⨂ ι : SymInstance Σ =>
-      let δΔ : LocalStore Δ := inst ι δ in
-      let mut := (scmut_produce ι req ;;
-                  scmut_exec s >>= fun v =>
-                  scmut_consume (env_snoc ι (result::τ) v) ens ;;
-                  scmut_leakcheck)%mut in
+      ⨂ ι : SymInstance (sep_contract_logic_variables c) =>
+      let δΔ : LocalStore Δ := inst ι (sep_contract_localstore c) in
+      let mut := scmut_contract c s ι in
       let out := mut (scstate_initial δΔ) in
-      outcome_map (fun _ => tt) out
-    end.
+      outcome_map (fun _ => tt) out.
 
   Definition ValidContractSCMut {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
     outcome_satisfy (semiconcrete_outcome_contract c body) (fun _ => False) (fun _ => True).

@@ -75,7 +75,7 @@ Module Soundness
     Definition inconsistent {Σ} (pc : PathCondition Σ) : Prop :=
       forall ι, ~ inst ι pc.
     Definition contradiction (e : DynamicMutatorError) : Prop :=
-      False.
+      inconsistent (dmuterr_pathcondition e).
 
     Global Instance inst_heap : Inst SymbolicHeap SCHeap :=
       instantiate_list.
@@ -712,11 +712,7 @@ Module Soundness
 
       Lemma dmut_fail_vac `{Inst AT A} {D Γ1 Γ2 Σ} func msg data :
         dmut_vac (@dmut_fail Γ1 Γ2 AT Σ D func msg data).
-      Proof.
-        unfold dmut_fail, dmut_vac, outcome_vac; cbn.
-        unfold inconsistent, Error. intros.
-        (* UH OH *)
-      Admitted.
+      Proof. unfold dmut_fail, dmut_vac, outcome_vac, contradiction; cbn; auto. Qed.
       Local Hint Resolve dmut_fail_vac : core.
 
       Lemma dmut_bind_vac' `{Inst AT A, Inst BT B} {Γ1 Γ2 Γ3 Σ0}
@@ -971,7 +967,11 @@ Module Soundness
 
       Lemma dmut_fail_dcl `{Inst AT A} {D Γ1 Γ2 Σ} func msg data :
         dmut_dcl (@dmut_fail Γ1 Γ2 AT Σ D func msg data).
-      Proof. apply dmut_dcl_dcl'. unfold dmut_dcl', dmut_fail; cbn. intuition. Qed.
+      Proof.
+        apply dmut_dcl_dcl'.
+        unfold dmut_dcl', dmut_fail, contradiction, inconsistent; cbn.
+        intuition.
+      Qed.
 
       Definition dmut_arrow_dcl' {Γ1 Γ2 AT A BT B Σ0} `{Inst AT A, Inst BT B}
         (f : DynamicMutatorArrow' Γ1 Γ2 AT BT Σ0) : Prop :=
@@ -1293,6 +1293,10 @@ Module Soundness
       (* Lemma dmut_exec_dcl {Γ Σ τ} (s : Stm Γ τ) : *)
       (*   dmut_dcl (@dmut_exec Γ τ Σ s). *)
       (* Proof. Admitted. *)
+
+      Lemma dmut_contract_dcl {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) :
+        dmut_dcl (@dmut_contract Γ τ c s).
+      Proof. Admitted.
 
     End DownwardsClosure.
 
@@ -1998,6 +2002,90 @@ Module Soundness
       - admit.
       - apply approximates_fail.
     Admitted.
+
+    Lemma dmut_leakcheck_sound {Γ Σ} (ι : SymInstance Σ) :
+      box approximates ι (@dmut_leakcheck Γ Σ) (@scmut_leakcheck Γ).
+    Proof.
+      unfold box, approximates, dmut_wp, scmut_wp; cbn; intros.
+      specialize (H0 Σ1 (sub_id _)).
+      rewrite outcome_satisfy_bind, subst_sub_id in H0.
+      destruct s__sym as [σ []]; cbn in *.
+      - unfold stateprop_lift in H0. specialize (H0 ι1).
+        rewrite ?sub_comp_id_left, ?subst_sub_id in H0.
+        inster H0 by apply syminstance_rel_refl. intuition.
+      - unfold contradiction in H0; cbn in H0.
+        rewrite subst_sub_id in H0. intuition.
+    Qed.
+
+    Lemma dmut_leakcheck_sound' {Γ Σ} (ι : SymInstance Σ) :
+      approximates ι (@dmut_leakcheck Γ Σ) (@scmut_leakcheck Γ).
+    Proof.
+      pose proof (@dmut_leakcheck_sound Γ Σ ι).
+      now apply box_proj in H.
+    Qed.
+
+    Opaque dmut_consume dmut_exec dmut_leakcheck dmut_produce.
+    Opaque scmut_consume scmut_exec scmut_leakcheck scmut_produce.
+
+    Lemma dmut_contract_sound {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) (ι : SymInstance (sep_contract_logic_variables c)) :
+      box approximates ι (@dmut_contract Γ τ c s) (@scmut_contract Γ τ c s ι).
+    Proof.
+      unfold dmut_contract, scmut_contract; destruct c as [Σ δ pre result post]; cbn in *.
+      unfold dmut_bind_right.
+      apply dmut_bind_sound; intros; auto_dcl.
+      apply dmut_produce_sound.
+      eapply approximates_sub; eauto.
+      apply dmut_bind_sound; intros; auto_dcl.
+      apply dmut_exec_sound.
+      apply dmut_bind_sound; intros; auto_dcl.
+      eapply approximates_sub; eauto.
+      unfold syminstance_rel in *; subst. rewrite <- H0.
+      apply dmut_consume_sound.
+      eapply approximates_sub; eauto.
+      apply dmut_leakcheck_sound.
+    Admitted.
+
+    Opaque scmut_contract dmut_contract.
+
+    Lemma outcome_satisfy_bimap {E F A B : Type} (o : Outcome E A) (f : E -> F) (g : A -> B) Q (P : B -> Prop) :
+      outcome_satisfy (outcome_bimap f g o) Q P <-> outcome_satisfy o (fun e => Q (f e)) (fun a => P (g a)).
+    Proof. induction o; firstorder. Qed.
+
+    Lemma outcome_satisfy_bimonotonic {E A} {P Q : E -> Prop} {R S : A -> Prop} (o : Outcome E A)
+          (hype : forall e, P e -> Q e)
+          (hypa : forall a, R a -> S a) :
+      outcome_satisfy o P R -> outcome_satisfy o Q S.
+    Proof. induction o; firstorder. Qed.
+
+    Lemma symbolic_sound {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
+      ValidContractDynMut c body ->
+      ValidContractSCMut c body.
+    Proof.
+      unfold ValidContractDynMut, ValidContractSCMut, outcome_safe,
+        dmut_contract_outcome, semiconcrete_outcome_contract; cbn.
+      rewrite outcome_satisfy_bimap. intros Hd ι.
+      pose proof (@dmut_contract_sound _ _ c body ι) as H. apply box_proj in H.
+      specialize (H nil (symbolicstate_initial (sep_contract_localstore c))).
+      rewrite outcome_satisfy_map.
+      match goal with
+      | |- outcome_satisfy ?o ?F ?P =>
+        change (outcome_satisfy o F (fun r => (fun v s => P (MkSCMutResult v s)) (scmutres_value r) (scmutres_state r)))
+      end.
+      apply H; [ idtac | now compute ]. clear H.
+      match goal with
+      | H: outcome_satisfy ?o (fun _ : DynamicMutatorError => False) ?P |- _ =>
+        apply (@outcome_satisfy_bimonotonic _ _ _ contradiction P P) in H;
+          auto; try contradiction
+      end.
+      intros Σ1 ζ01. revert Hd.
+      eapply dmut_contract_dcl with ζ01.
+      intros ? ? <-. now rewrite inst_subst.
+      intros ? ? <- []. now rewrite ?inst_subst.
+      intros ? ? <- []. now rewrite ?inst_sub_id.
+      unfold resultprop_downwards_closed. auto.
+      unfold resultprop_vacuous. auto.
+      intros [Σ2 ζ12 pc2 [] s2]; unfold stateprop_lift; cbn; auto.
+    Qed.
 
     Module NewWP.
 

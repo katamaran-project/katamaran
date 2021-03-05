@@ -1243,22 +1243,24 @@ Module Mutators
         dmut_fail "dmut_exec" "stm_bind not supported" tt
       end.
 
-    Definition dmut_contract {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) :
-      Stm Δ τ -> Outcome unit unit :=
+    Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
       match c with
       | MkSepContract _ _ Σ δ req result ens =>
-        fun s =>
-          let mut := (dmut_produce req ;;
-                      dmut_exec s      >>= fun Σ1 ζ1 t =>
-                      dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens) ;;
-                      dmut_leakcheck)%dmut in
-          let out := mut Σ (sub_id Σ) nil (symbolicstate_initial δ) in
-          outcome_bimap (fun _ => tt) (fun _ => tt) out
+          dmut_produce req ;;
+          dmut_exec s      >>= fun Σ1 ζ1 t =>
+          dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens) ;;
+          dmut_leakcheck
       end.
+
+    Definition dmut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) : Outcome unit unit :=
+      let δ    := sep_contract_localstore c in
+      let s__sym := symbolicstate_initial δ in
+      let mut := dmut_contract c s (sub_id _) nil s__sym in
+      outcome_bimap (fun _ => tt) (fun _ => tt) mut.
 
     Definition ValidContractDynMut (Δ : PCtx) (τ : Ty)
       (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      outcome_safe (dmut_contract c body).
+      outcome_safe (dmut_contract_outcome c body).
 
   End DynMutV1.
 
