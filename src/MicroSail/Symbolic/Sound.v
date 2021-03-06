@@ -102,6 +102,14 @@ Module Soundness
         Sub Σ0 Σ1 -> A Σ1 -> PathCondition Σ1 ->
         SymbolicState Γ1 Σ1 -> Outcome (DynamicMutatorError) (DynamicMutatorResult Γ2 B Σ1).
 
+    Definition dmut_bind' {Γ1 Γ2 Γ3 A B Σ0}
+               (ma : DynamicMutator Γ1 Γ2 A Σ0) (f : DynamicMutatorArrow' Γ2 Γ3 A B Σ0) : DynamicMutator Γ1 Γ3 B Σ0 :=
+      fun (Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) pc1 (s1 : SymbolicState Γ1 Σ1) =>
+        outcome_bind (ma Σ1 ζ01 pc1 s1) (fun r : DynamicMutatorResult Γ2 A Σ1 =>
+        outcome_bind (f (dmutres_context r) (sub_comp ζ01 (dmutres_substitution r)) (dmutres_result_value r) (dmutres_pathcondition r) (dmutres_result_state r))
+                     (fun r2 : DynamicMutatorResult Γ3 B (dmutres_context r) => outcome_pure (cosubst_dmutres (dmutres_substitution r) r2))).
+
+
     Local Notation "[ ι ] x == y" := (inst ι x = inst ι y) (at level 50).
 
     (* Read: If ς is equivalent to t in ι, then substituting t for ς is equivalent to the identity. *)
@@ -663,13 +671,6 @@ Module Soundness
 
     End ResultProp.
 
-    Definition dmut_bind' {Γ1 Γ2 Γ3 A B Σ0}
-               (ma : DynamicMutator Γ1 Γ2 A Σ0) (f : DynamicMutatorArrow' Γ2 Γ3 A B Σ0) : DynamicMutator Γ1 Γ3 B Σ0 :=
-      fun (Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) pc1 (s1 : SymbolicState Γ1 Σ1) =>
-        outcome_bind (ma Σ1 ζ01 pc1 s1) (fun r : DynamicMutatorResult Γ2 A Σ1 =>
-        outcome_bind (f (dmutres_context r) (sub_comp ζ01 (dmutres_substitution r)) (dmutres_result_value r) (dmutres_pathcondition r) (dmutres_result_state r))
-                     (fun r2 : DynamicMutatorResult Γ3 B (dmutres_context r) => outcome_pure (cosubst_dmutres (dmutres_substitution r) r2))).
-
     Section Vacuous.
 
       Definition outcome_vac `{Inst AT A} {Γ Σ} (pc : PathCondition Σ) (o : Outcome (DynamicMutatorError) (DynamicMutatorResult Γ AT Σ)) : Prop :=
@@ -740,6 +741,35 @@ Module Soundness
       Proof. unfold dmut_bind_right; eauto. Qed.
       Local Hint Resolve dmut_bind_right_vac : core.
 
+      Local Hint Extern 5 (outcome_vac _ (dmut_bind_right _ _ _ _ _)) =>
+        apply dmut_bind_right_vac : core.
+      Local Hint Extern 5 (outcome_vac _ (dmut_bind _ _ _ _ _)) =>
+        apply dmut_bind_vac; unfold dmut_arrow_vac; intros; destruct_conjs : core.
+      Local Hint Extern 5 (outcome_vac _ (dmut_pure _ _ _ _)) =>
+        apply dmut_pure_vac : core.
+
+      Lemma dmut_fmap_vac `{Subst AT, Subst BT, Inst AT A, Inst BT B} {Γ1 Γ2 Σ0}
+            (da : DynamicMutator Γ1 Γ2 AT Σ0) (da_vac : dmut_vac da)
+            (f : forall Σ1, Sub Σ0 Σ1 -> AT Σ1 -> BT Σ1) :
+        dmut_vac (dmut_fmap da f).
+      Proof. unfold dmut_fmap; auto. Qed.
+      Local Hint Resolve dmut_fmap_vac : core.
+
+      Lemma dmut_fmap2_vac `{Subst AT, Subst BT, Subst CT, Inst AT A, Inst BT B, Inst CT C} {Γ1 Γ2 Γ3 Σ0}
+            (da : DynamicMutator Γ1 Γ2 AT Σ0) (da_vac : dmut_vac da)
+            (db : DynamicMutator Γ2 Γ3 BT Σ0) (db_vac : dmut_vac db)
+            (f : forall Σ1, Sub Σ0 Σ1 -> AT Σ1 -> BT Σ1 -> CT Σ1) :
+        dmut_vac (dmut_fmap2 da db f).
+      Proof. unfold dmut_fmap2; auto. Qed.
+      Local Hint Resolve dmut_fmap2_vac : core.
+
+      Lemma dmut_pair_vac `{Subst AT, Subst BT, Inst AT A, Inst BT B} {Γ1 Γ2 Γ3 Σ0}
+            (da : DynamicMutator Γ1 Γ2 AT Σ0) (da_vac : dmut_vac da)
+            (db : DynamicMutator Γ2 Γ3 BT Σ0) (db_vac : dmut_vac db) :
+        dmut_vac (dmut_pair da db).
+      Proof. unfold dmut_pair; eauto. Qed.
+      Local Hint Resolve dmut_pair_vac : core.
+
       Lemma dmut_demonic_binary_vac `{Inst AT A} {Γ1 Γ2 Σ0}
         (d1 d2 : DynamicMutator Γ1 Γ2 AT Σ0) (vac_d1 : dmut_vac d1) (vac_d2 : dmut_vac d2) :
         dmut_vac (dmut_demonic_binary d1 d2).
@@ -786,22 +816,65 @@ Module Soundness
       Proof. unfold dmut_freshtermvar; auto. Qed.
       Local Hint Resolve dmut_freshtermvar_vac : core.
 
-      Local Hint Extern 5 (outcome_vac _ (dmut_bind_right _ _ _ _ _)) =>
-        apply dmut_bind_right_vac : core.
+      Lemma dmut_freshen_recordpat'_vac {Γ Σ σs Δ} (p : RecordPat σs Δ) :
+        dmut_vac (@dmut_freshen_recordpat' 𝑺 id σs Δ p Γ Σ).
+      Proof. induction p; cbn; eauto. Qed.
+      Local Hint Resolve dmut_freshen_recordpat'_vac : core.
+
+      Lemma dmut_freshen_recordpat_vac {Γ Σ R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
+        dmut_vac (@dmut_freshen_recordpat 𝑺 id R Δ p Γ Σ).
+      Proof. unfold dmut_freshen_recordpat; eauto. Qed.
+      Local Hint Resolve dmut_freshen_recordpat_vac : core.
 
       Lemma dmut_produce_vac {Γ Σ} (asn : Assertion Σ) :
         dmut_vac (@dmut_produce Γ Σ asn).
       Proof.
         induction asn; cbn [dmut_produce]; unfold dmut_assume_term; eauto.
         - destruct (term_get_sum s) as [[]|]; eauto 10.
-        - destruct (term_get_pair s) as [[]|]; auto. admit.
-        - destruct (term_get_record s); eauto. admit.
-        - destruct (term_get_union s) as [[]|]; auto.
+        - destruct (term_get_pair s) as [[]|]; eauto 10.
+        - destruct (term_get_record s); eauto.
+        - destruct (term_get_union s) as [[]|]; eauto.
+      Qed.
+      Local Hint Resolve dmut_produce_vac : core.
+
+      Lemma dmut_assert_formula_vac {Γ Σ} (f : Formula Σ) :
+        dmut_vac (@dmut_assert_formula Γ Σ f).
+      Proof. Admitted.
+      Local Hint Resolve dmut_assert_formula_vac : core.
+
+      Lemma dmut_consume_chunk_vac {Γ Σ} (c : Chunk Σ) :
+        dmut_vac (@dmut_consume_chunk Γ Σ c).
+      Proof. Admitted.
+      Local Hint Resolve dmut_consume_chunk_vac : core.
+
+      Lemma dmut_consume_vac {Γ Σ} (asn : Assertion Σ) :
+        dmut_vac (@dmut_consume Γ Σ asn).
+      Proof.
+        induction asn; cbn [dmut_consume];
+          unfold dmut_assert_term; eauto 10.
       Admitted.
+      Local Hint Resolve dmut_consume_vac : core.
 
       Lemma dmut_exec_vac {Γ Σ τ} (s : Stm Γ τ) :
         dmut_vac (@dmut_exec Γ τ Σ s).
+      Proof.
+        induction s; cbn [dmut_exec]; eauto.
+      Admitted.
+      Local Hint Resolve dmut_exec_vac : core.
+
+      Lemma dmut_call_vac {Γ Δ τ Σ} (c : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) :
+        dmut_vac (@dmut_call Γ Δ τ Σ c ts).
       Proof. Admitted.
+      Local Hint Resolve dmut_call_vac : core.
+
+      Lemma dmut_leakcheck_vac {Γ Σ} :
+        dmut_vac (@dmut_leakcheck Γ Σ).
+      Proof. Admitted.
+      Local Hint Resolve dmut_leakcheck_vac : core.
+
+      Lemma dmut_contract_vac {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ)  :
+        dmut_vac (@dmut_contract Γ τ c s).
+      Proof. destruct c; cbn; eauto 10. Qed.
 
     End Vacuous.
 
@@ -1382,7 +1455,7 @@ Module Soundness
       inster b by apply syminstance_rel_refl.
       unfold dmut_sub in b.
       (* apply b. *)
-    Admitted.
+    Abort.
 
     Definition box_box {Γ1 Γ2 AT A} {instA : Inst AT A} (R : APPROX Γ1 Γ2 AT A) :
       forall Σ (ι : SymInstance Σ) dm sm,
@@ -1392,7 +1465,7 @@ Module Soundness
       specialize (bb Σ2 (sub_comp ζ1 ζ2) ι2).
       inster bb by eapply syminstance_rel_trans; eauto.
       (* apply bb. *)
-    Admitted.
+    Abort.
 
     Definition approximates {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
       fun Σ ι dm sm =>
@@ -1937,6 +2010,10 @@ Module Soundness
       box approximates ι (dmut_eval_exp e) (scmut_eval_exp e).
     Proof. Admitted.
 
+    Lemma dmut_eval_exps_sound {Γ Δ Σ} (es : NamedEnv (Exp Γ) Δ) (ι : SymInstance Σ) :
+      box approximates ι (dmut_eval_exps es) (scmut_eval_exps es).
+    Proof. Admitted.
+
     Lemma dmut_state_sound {AT A} `{Inst AT A} {Γ1 Γ2 Σ1} (ι1 : SymInstance Σ1)
           (f : forall Σ2 (ζ12 : Sub Σ1 Σ2), SymbolicState Γ1 Σ2 -> AT Σ2 * SymbolicState Γ2 Σ2)
           (g  : SCState Γ1 -> A * SCState Γ2)
@@ -1954,6 +2031,13 @@ Module Soundness
       rewrite fg in Hinst; auto. rewrite Hinst. cbn.
       apply Hf; auto. rewrite sub_comp_id_left. apply syminstance_rel_refl.
     Qed.
+
+    Lemma dmut_call_sound {Γ Δ τ Σ} (c : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) (ι : SymInstance Σ) :
+      box approximates ι (@dmut_call Γ Δ τ Σ c ts) (scmut_call c (inst ι ts)).
+    Proof.
+      destruct c as [Σ__c δ pre result post]; cbn [dmut_call scmut_call].
+      apply approximates_angelic; intros; auto_dcl.
+    Admitted.
 
     Lemma dmut_exec_sound {Γ Σ σ} (s : Stm Γ σ) (ι : SymInstance Σ) :
       box approximates ι (dmut_exec s) (scmut_exec s).
@@ -1984,7 +2068,11 @@ Module Soundness
             reflexivity.
           }
           apply approximates_pure.
-      - admit.
+      - destruct (CEnv f) as [c|] eqn:?.
+        + apply dmut_bind_sound; intros; auto_dcl.
+          apply dmut_eval_exps_sound.
+          apply dmut_call_sound.
+        + admit.
       - admit.
       - admit.
       - admit.
@@ -2015,13 +2103,6 @@ Module Soundness
         inster H0 by apply syminstance_rel_refl. intuition.
       - unfold contradiction in H0; cbn in H0.
         rewrite subst_sub_id in H0. intuition.
-    Qed.
-
-    Lemma dmut_leakcheck_sound' {Γ Σ} (ι : SymInstance Σ) :
-      approximates ι (@dmut_leakcheck Γ Σ) (@scmut_leakcheck Γ).
-    Proof.
-      pose proof (@dmut_leakcheck_sound Γ Σ ι).
-      now apply box_proj in H.
     Qed.
 
     Opaque dmut_consume dmut_exec dmut_leakcheck dmut_produce.
@@ -2064,7 +2145,7 @@ Module Soundness
       unfold ValidContractDynMut, ValidContractSCMut, outcome_safe,
         dmut_contract_outcome, semiconcrete_outcome_contract; cbn.
       rewrite outcome_satisfy_bimap. intros Hd ι.
-      pose proof (@dmut_contract_sound _ _ c body ι) as H. apply box_proj in H.
+      pose proof (@dmut_contract_sound _ _ c body ι) as H. apply approximates_proj in H.
       specialize (H nil (symbolicstate_initial (sep_contract_localstore c))).
       rewrite outcome_satisfy_map.
       match goal with
