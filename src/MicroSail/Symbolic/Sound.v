@@ -150,6 +150,23 @@ Module Soundness
           instpc ι pc0.
       Infix "⊢" := (@entails _) (at level 80, no associativity).
 
+      Lemma entails_cons {Σ} (pc1 pc2 : PathCondition Σ) (f : Formula Σ) :
+        (pc1 ⊢ pc2 /\ (forall ι, (inst ι pc1 : Prop) -> inst ι f : Prop)) <-> pc1 ⊢ (f :: pc2)%list.
+      Proof.
+        split.
+        - intros (pc12 & pc1f).
+          intros ι ιpc1. cbn.
+          unfold inst, inst_pathcondition. cbn.
+          rewrite fold_right_1_10_prop.
+          intuition.
+        - intros pc1f2.
+          split; intros ι ιpc1;
+            specialize (pc1f2 ι ιpc1); cbn in pc1f2;
+            unfold inst, inst_pathcondition in pc1f2; cbn in pc1f2;
+            rewrite fold_right_1_10_prop in pc1f2;
+            destruct pc1f2 as [Hf Hpc2]; auto.
+      Qed.
+
       Global Instance preorder_entails {Σ} : PreOrder (@entails Σ).
       Proof.
         split.
@@ -269,12 +286,24 @@ Module Soundness
           True
           (dmutres_try_assume_eq pc0 t1 t2 s0).
       Proof.
-        (* (* OLD *) *)
-        (* destruct t1; cbn; try (constructor; auto; fail). *)
-        (* destruct (occurs_check ςInΣ t2) eqn:?; constructor; auto. *)
-        (* apply (@occurs_check_sound _ _ (@OccursCheckTerm _)) in Heqo; *)
-        (*   auto with typeclass_instances. *)
-      Admitted.
+        destruct t1; cbn; try (constructor; auto; fail).
+        destruct (occurs_check ςInΣ t2) eqn:?; constructor; auto.
+        apply (@occurs_check_sound _ _ (@OccursCheckTerm _) OccursCheckLawsTerm) in Heqo.
+        subst t2.
+        split.
+        - exists (sub_single ςInΣ t).
+          repeat split.
+          + unfold subst at 2, SubstList; cbn.
+            rewrite <-subst_sub_comp, sub_comp_shift_single, subst_sub_id, lookup_sub_single_eq.
+            now rewrite <-entails_cons.
+          + change (subst (sub_single ςInΣ t) (sub_id Σ0)) with (sub_comp (sub_id Σ0) (sub_single ςInΣ t)).
+            now rewrite sub_comp_id_left.
+        - exists (sub_shift ςInΣ).
+          repeat split; intros ι [eq ιpc]%inst_pathcondition_cons.
+          + now rewrite <-subst_sub_comp, inst_subst, (inst_single_shift ςInΣ t ι eq), inst_sub_id.
+          + refine (inst_single_shift ςInΣ t ι eq).
+          + now rewrite <-subst_sub_comp, inst_subst, (inst_single_shift ςInΣ t ι eq), inst_sub_id.
+      Qed.
 
       Opaque dmutres_try_assume_eq_spec.
 
