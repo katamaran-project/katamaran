@@ -236,9 +236,7 @@ Module Soundness
         Proper (entails_eq pc ==> entails_eq pc) (sub_comp ζ).
       Proof.
         intros ζ1 ζ2 ζ12.
-        change (sub_comp ζ ζ1) with (subst ζ1 ζ).
-        change (sub_comp ζ ζ2) with (subst ζ2 ζ).
-        rewrite ζ12; easy.
+        unfold sub_comp; rewrite ζ12; easy.
       Qed.
 
       (* A proper preorder on the result of a symbolic execution, using the
@@ -314,7 +312,7 @@ Module Soundness
           + unfold subst at 2, SubstList; cbn.
             rewrite <-subst_sub_comp, sub_comp_shift_single, subst_sub_id, lookup_sub_single_eq.
             now rewrite <-entails_cons.
-          + change (subst (sub_single ςInΣ t) (sub_id Σ0)) with (sub_comp (sub_id Σ0) (sub_single ςInΣ t)).
+          + fold (sub_comp (sub_id Σ0) (sub_single ςInΣ t)).
             now rewrite sub_comp_id_left.
         - exists (sub_shift ςInΣ).
           repeat split; intros ι [eq ιpc]%inst_pathcondition_cons.
