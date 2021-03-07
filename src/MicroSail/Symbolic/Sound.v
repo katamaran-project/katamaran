@@ -33,8 +33,10 @@ From Coq Require Import
      ZArith.ZArith
      Strings.String
      Classes.Morphisms
+     Classes.RelationClasses
      Classes.Morphisms_Prop
      Classes.Morphisms_Relations.
+Require Import Basics.
 
 From Equations Require Import
      Equations.
@@ -148,11 +150,61 @@ Module Soundness
           instpc ι pc0.
       Infix "⊢" := (@entails _) (at level 80, no associativity).
 
+      Global Instance preorder_entails {Σ} : PreOrder (@entails Σ).
+      Proof.
+        split.
+        - intuition.
+        - intros x y z xy yz ι ιx.
+          eauto.
+      Qed.
+
+      Global Instance proper_subst_pc_entails {Σ1 Σ2} {ζ}: Proper ((@entails Σ1) ==> (@entails Σ2)) (subst ζ).
+      Proof.
+        intros pc1 pc2 pc12 ι.
+        rewrite ?inst_subst; eauto.
+      Qed.
+
       Definition entails_eq {AT A} `{Inst AT A} {Σ} (pc : PathCondition Σ) (a0 a1 : AT Σ) : Prop :=
         forall (ι : SymInstance Σ), instpc ι pc -> inst ι a0 = inst ι a1.
       Notation "pc ⊢ a0 == a1" :=
         (entails_eq pc a0 a1)
         (at level 80, a0 at next level, no associativity).
+
+      Global Instance proper_subst_entails_eq `{instAT : Inst AT A} `{Subst AT} `{SubstLaws AT} `{InstLaws AT A} {Σ1 Σ2} {ζ : Sub Σ1 Σ2} {pc : PathCondition Σ1} :
+        Proper ((entails_eq pc) ==> (entails_eq (subst ζ pc))) (subst ζ).
+      Proof.
+        intros a1 a2 a12 ι.
+        rewrite ?inst_subst; auto.
+      Qed.
+
+      Global Instance proper_entails_eq_impl {AT A} `{Inst AT A} {Σ} : Proper (flip (@entails Σ) ==> eq ==> eq ==> impl) entails_eq.
+      Proof.
+        intros pc1 pc2 pc21 a1 _ [] a2 _ [] eq1 ι ιpc2; eauto.
+      Qed.
+
+      Global Instance proper_entails_eq_flip_impl {AT A} `{Inst AT A} {Σ} : Proper ((@entails Σ) ==> eq ==> eq ==> flip impl) entails_eq.
+      Proof.
+        intros pc1 pc2 pc21 a1 _ [] a2 _ [] eq1 ι ιpc2; eauto.
+      Qed.
+
+      Global Instance equiv_entails_eq `{instA : Inst AT A} {Σ} {pc : PathCondition Σ} : Equivalence (entails_eq pc).
+      Proof.
+        split.
+        - intuition.
+        - intros x y xy ι ipc; specialize (xy ι); intuition.
+        - intros x y z xy yz ι ipc.
+          specialize (xy ι ipc).
+          specialize (yz ι ipc).
+          intuition.
+      Qed.
+
+      Global Instance proper_entails_eq_flip_impl_pc {AT A} `{Inst AT A} {Σ} {pc : PathCondition Σ}: Proper (entails_eq pc ==> entails_eq pc ==> flip impl) (entails_eq pc).
+      Proof.
+        intros a1 a2 a12 a3 a4 a34 Heq.
+        transitivity a2; [|transitivity a4]; easy.
+      Qed.
+
+      Global Instance entails_eq_rewrite {AT A Σ} `{Inst AT A} {pc : PathCondition Σ} : RewriteRelation (entails_eq pc) := {}.
 
       (* A proper preorder on the result of a symbolic execution, using the
          generic semantic equality on every component. *)
@@ -165,6 +217,20 @@ Module Soundness
           pc2 ⊢ subst ζ12 a1 == a2 /\
           pc2 ⊢ subst ζ12 s1 == s2
         end.
+
+      Global Instance dmutres_geq_preorder {Γ AT A Σ} `{Subst AT, SubstLaws AT, Inst AT A, InstLaws AT A} : PreOrder (@dmutres_geq AT A _ _ Γ Σ).
+      Proof.
+        split.
+        - intros [ζ1 pc1 a1 s1]. exists (sub_id _).
+          rewrite ?subst_sub_id; easy.
+        - intros [Σ1 ζ1 pc1 a1 s1] [Σ2 ζ2 pc2 a2 s2] [Σ3 ζ3 pc3 a3 s3] (ζ12 & pc21 & ζ12' & a12 & s12) (ζ23 & pc32 & ζ23' & a23 & s23).
+          exists (sub_comp ζ12 ζ23).
+          rewrite ?subst_sub_comp; repeat split.
+          + now rewrite pc32, pc21.
+          + now rewrite <-ζ23', pc32, ζ12'.
+          + now rewrite <-a23, pc32, a12.
+          + now rewrite <-s23, pc32, s12.
+      Qed.
 
       (* A frequent special case. *)
       Lemma dmutres_geq_syntactic {Γ A V Σ} `{InstLaws A V} :
@@ -179,10 +245,23 @@ Module Soundness
            end
           ) ->
           dmutres_geq r1 r2.
-      Proof. Admitted.
+      Proof.
+        intros [Σ1 ζ1 pc1 a1 s1] [Σ2 ζ2 pc2 a2 s2] (ζ12 & ζ12' & pc12 & a12 & s12).
+        exists ζ12; intuition.
+        intros ι ιpc2; intuition.
+      Qed.
+
 
       Definition dmutres_equiv {AT A} `{Subst AT, Inst AT A} {Γ Σ} (r1 r2 : DynamicMutatorResult Γ AT Σ) : Prop :=
         dmutres_geq r1 r2 /\ dmutres_geq r2 r1.
+
+      Global Instance dmutres_equiv_equiv {Γ Σ} `{Subst AT, SubstLaws AT, Inst AT A, InstLaws AT A} : Equivalence (@dmutres_equiv _ _ _ _ Γ Σ).
+      Proof.
+        split.
+        - easy.
+        - intros x y [xy yx]; easy.
+        - intros x y z [xy yx] [yz zy]; split; transitivity y; easy.
+      Qed.
 
       Lemma dmutres_try_assume_eq_spec {Γ Σ0 σ} (pc0 : PathCondition Σ0) (t1 t2 : Term Σ0 σ) (s0 : SymbolicState Γ Σ0) :
         OptionSpec
