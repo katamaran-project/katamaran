@@ -997,8 +997,9 @@ Module Soundness
                  (f : DynamicMutatorArrow Γ1 Γ2 AT BT Σ0) : Prop :=
         forall Σ1 Σ2 (ζ01 : Sub Σ0 Σ1) (ζ02 : Sub Σ0 Σ2) (ζ12 : Sub Σ1 Σ2) pc1 pc2 (a1 : AT Σ1) (a2 : AT Σ2) s1 s2,
           pc2 ⊢ subst ζ12 pc1 ->
-          pc2 ⊢ subst ζ12 s1 == s2 ->
           pc2 ⊢ subst ζ12 ζ01 == ζ02 ->
+          pc2 ⊢ subst ζ12 a1 == a2 ->
+          pc2 ⊢ subst ζ12 s1 == s2 ->
           forall (P : ResultProperty Γ2 BT Σ1) (P_dcl : resultprop_downwards_closed P) (P_vac : resultprop_vacuous P)
             (Q : ResultProperty Γ2 BT Σ2) (PQ : forall r, resultprop_specialize_pc ζ12 pc2 P r -> Q r),
             outcome_satisfy (f Σ1 ζ01 a1 Σ1 (sub_id _) pc1 s1) contradiction P ->
