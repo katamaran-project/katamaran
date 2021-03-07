@@ -194,6 +194,16 @@ Module Soundness
         rewrite ?inst_subst; auto.
       Qed.
 
+      Global Instance proper_subst_entails_eq_pc
+             {Σ1 Σ2} {ζ : Sub Σ1 Σ2} `{InstLaws AT A}
+             (pc : PathCondition Σ2):
+        Proper (entails_eq pc ==> eq ==> entails_eq pc) (@subst AT _ Σ1 Σ2).
+      Proof.
+        intros ζ1 ζ2 ζ12 a1 a2 [] ι ιpc.
+        rewrite ?inst_subst.
+        now rewrite (ζ12 ι ιpc).
+      Qed.
+
       Global Instance proper_entails_eq_impl {AT A} `{Inst AT A} {Σ} : Proper (flip (@entails Σ) ==> eq ==> eq ==> impl) entails_eq.
       Proof.
         intros pc1 pc2 pc21 a1 _ [] a2 _ [] eq1 ι ιpc2; eauto.
