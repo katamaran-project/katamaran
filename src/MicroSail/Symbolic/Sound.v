@@ -239,10 +239,11 @@ Module Soundness
           intuition.
       Qed.
 
-      Global Instance proper_entails_eq_flip_impl_pc {AT A} `{Inst AT A} {Σ} {pc : PathCondition Σ}: Proper (entails_eq pc ==> entails_eq pc ==> flip impl) (entails_eq pc).
+      Global Instance proper_entails_eq_flip_impl_pc {AT A} `{Inst AT A} {Σ} {pc : PathCondition Σ}: Proper (entails_eq pc ==> entails_eq pc ==> iff) (entails_eq pc).
       Proof.
-        intros a1 a2 a12 a3 a4 a34 Heq.
-        transitivity a2; [|transitivity a4]; easy.
+        split; intros Heq.
+        - transitivity x; [|transitivity x0]; easy.
+        - transitivity y; [|transitivity y0]; easy.
       Qed.
 
       Global Instance proper_entails_eq_sub_comp
