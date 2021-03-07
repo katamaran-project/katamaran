@@ -1200,6 +1200,13 @@ Module Terms (Export termkit : TermKit).
       rewrite subst_sub_comp. reflexivity.
     Qed.
 
+    Lemma subst_assoc {Σ1 Σ2 Σ3} `{SubstLaws A} (t1 : A Σ1) (ζ2 : Sub Σ1 Σ2) (ζ3 : Sub Σ2 Σ3) :
+      subst ζ3 (subst ζ2 t1) = subst (subst ζ3 ζ2) t1.
+    Proof.
+      rewrite <- subst_sub_comp.
+      exact eq_refl.
+    Qed.
+
     Lemma sub_comp_wk1_tail {Σ0 Σ1 x τ} (ζ : Sub (Σ0 ▻ (x :: τ)) Σ1) :
       sub_comp sub_wk1 ζ = env_tail ζ.
     Proof.
