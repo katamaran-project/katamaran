@@ -327,17 +327,19 @@ Module Soundness
 
       Opaque dmutres_try_assume_eq_spec.
 
-      Lemma dmutres_assume_formula_spec {Γ Σ0} (pc0 : PathCondition Σ0) (fml0 : Formula Σ0) (s0 : SymbolicState Γ Σ0) :
-        dmutres_equiv (dmutres_assume_formula pc0 fml0 s0) (MkDynMutResult (sub_id _) (cons fml0 pc0) tt s0).
+      Lemma dmutres_assume_formula_spec {Γ Σ} (pc : PathCondition Σ) (fml : Formula Σ) (s : SymbolicState Γ Σ) :
+        dmutres_equiv (dmutres_assume_formula pc fml s) (MkDynMutResult (sub_id _) (cons fml pc) tt s).
       Proof.
-        (* (* OLD *) *)
-        (* destruct fml; cbn; auto. *)
-        (* destruct (dmutres_try_assume_eq_spec pc t1 t2 s__sym POST_dcl); auto. clear H. *)
-        (* destruct (dmutres_try_assume_eq_spec pc t2 t1 s__sym POST_dcl); auto. *)
-        (* rewrite H. *)
-        (* split; apply POST_dcl, dmutres_geq_low_equiv; exists (sub_id _); *)
-        (*   intros ? ? <-; rewrite ?inst_pathcondition_cons, ?inst_sub_id; intuition. *)
-      Admitted.
+        destruct fml; cbn; try easy.
+        destruct (dmutres_try_assume_eq_spec pc t1 t2 s); try easy. clear H.
+        destruct (dmutres_try_assume_eq_spec pc t2 t1 s); try easy.
+        rewrite <-H.
+        split; cbn; exists (sub_id _);
+          rewrite ?subst_sub_id; intuition;
+            (* do we need a notion of pc-entails-formula and Proper instances for cons-formula-pathcondition? *)
+            intros ι ιpc;
+            rewrite ?inst_pathcondition_cons in *; cbn; intuition.
+      Qed.
 
       Definition dmut_dcl {Γ1 Γ2 AT Σ0 A} `{Inst AT A} (d : DynamicMutator Γ1 Γ2 AT Σ0) : Prop.
         (* forall Σ1 Σ2 (ζ01 : Sub Σ0 Σ1) pc1 (s1 : SymbolicState Γ1 Σ1) (ζ12 : Sub Σ1 Σ2) pc2 s2 ζ02, *)
