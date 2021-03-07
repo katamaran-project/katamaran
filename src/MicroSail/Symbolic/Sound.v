@@ -195,7 +195,7 @@ Module Soundness
       Qed.
 
       Global Instance proper_subst_entails_eq_pc
-             {Σ1 Σ2} {ζ : Sub Σ1 Σ2} `{InstLaws AT A}
+             {Σ1 Σ2} `{InstLaws AT A}
              (pc : PathCondition Σ2):
         Proper (entails_eq pc ==> eq ==> entails_eq pc) (@subst AT _ Σ1 Σ2).
       Proof.
@@ -229,6 +229,16 @@ Module Soundness
       Proof.
         intros a1 a2 a12 a3 a4 a34 Heq.
         transitivity a2; [|transitivity a4]; easy.
+      Qed.
+
+      Global Instance proper_entails_eq_sub_comp
+             {Σ1 Σ2 Σ3} {ζ : Sub Σ1 Σ2} (pc : PathCondition Σ3):
+        Proper (entails_eq pc ==> entails_eq pc) (sub_comp ζ).
+      Proof.
+        intros ζ1 ζ2 ζ12.
+        change (sub_comp ζ ζ1) with (subst ζ1 ζ).
+        change (sub_comp ζ ζ2) with (subst ζ2 ζ).
+        rewrite ζ12; easy.
       Qed.
 
       Global Instance entails_eq_rewrite {AT A Σ} `{Inst AT A} {pc : PathCondition Σ} : RewriteRelation (entails_eq pc) := {}.
