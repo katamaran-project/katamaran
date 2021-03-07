@@ -241,8 +241,6 @@ Module Soundness
         rewrite ζ12; easy.
       Qed.
 
-      Global Instance entails_eq_rewrite {AT A Σ} `{Inst AT A} {pc : PathCondition Σ} : RewriteRelation (entails_eq pc) := {}.
-
       (* A proper preorder on the result of a symbolic execution, using the
          generic semantic equality on every component. *)
       Definition dmutres_geq {AT A} `{Subst AT, Inst AT A} {Γ Σ} (r1 r2 : DynamicMutatorResult Γ AT Σ) : Prop :=
