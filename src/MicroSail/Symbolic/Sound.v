@@ -204,6 +204,20 @@ Module Soundness
         now rewrite (ζ12 ι ιpc).
       Qed.
 
+
+      (* Not sure this instance is a good idea...
+         This seems to cause rewrite to take very long... *)
+      Global Instance proper_entails_pc_impl
+             {Σ} `{InstLaws AT A}
+             (pc : PathCondition Σ):
+           Proper (entails_eq pc ==> flip impl) (entails pc).
+      Proof.
+        intros pc1 pc2 pc12 pc02 ι ιpc.
+        specialize (pc12 ι ιpc).
+        specialize (pc02 ι ιpc).
+        intuition.
+      Qed.
+
       Global Instance proper_entails_eq_impl {AT A} `{Inst AT A} {Σ} : Proper (flip (@entails Σ) ==> eq ==> eq ==> impl) entails_eq.
       Proof.
         intros pc1 pc2 pc21 a1 _ [] a2 _ [] eq1 ι ιpc2; eauto.
@@ -938,6 +952,35 @@ Module Soundness
       Definition resultprop_downwards_closed {Γ AT Σ A} `{Inst AT A, Subst AT} (p : ResultProperty Γ AT Σ) : Prop :=
         forall (r1 r2 : DynamicMutatorResult Γ AT Σ),
           dmutres_geq r1 r2 -> p r1 -> p r2.
+
+      Lemma resultprop_specialize_dcl {Γ A AV Σ1 Σ2} `{InstLaws A AV} (ζ : Sub Σ1 Σ2)
+            (POST : ResultProperty Γ A Σ1) (POST_dcl : resultprop_downwards_closed POST) :
+        resultprop_downwards_closed (resultprop_specialize ζ POST).
+      Proof.
+        unfold resultprop_downwards_closed, resultprop_specialize.
+        eauto using POST_dcl, dmutres_geq_pre_comp.
+      Qed.
+
+      Lemma resultprop_specialize_pc_dcl {Γ A AV Σ1 Σ2} `{InstLaws A AV}
+            (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2)
+            (POST : ResultProperty Γ A Σ1) (POST_dcl : resultprop_downwards_closed POST) :
+        resultprop_downwards_closed (resultprop_specialize_pc ζ12 pc2 POST).
+      Proof.
+        unfold resultprop_downwards_closed, resultprop_specialize_pc.
+        intros r3 r4 r34 [Hpc23 Hpost].
+        (* intros [Σ3 ζ23 pc3 a3 s3] [Σ4 ζ24 pc4 a4 s4]; cbn. *)
+        (* intros [ζ34] [Hpc23 Hpost]; destruct_conjs; cbn. *)
+        split.
+        - destruct r3 as [Σ3 ζ23 pc3 a3 s3].
+          destruct r4 as [Σ4 ζ24 pc4 a4 s4].
+          destruct r34 as [ζ34 ?].
+          cbn in *. destruct_conjs.
+          refine (proper_entails_pc_impl _ _).
+          + now rewrite <-H4, <-subst_assoc, H3.
+          + now rewrite H3, Hpc23.
+        - refine (POST_dcl _ _ _ Hpost).
+          now eapply dmutres_geq_pre_comp.
+      Qed.
 
       Definition dmut_dcl {Γ1 Γ2 AT Σ0 A} `{Inst AT A, Subst AT} (d : DynamicMutator Γ1 Γ2 AT Σ0) : Prop :=
         forall Σ1 Σ2 (ζ01 : Sub Σ0 Σ1) pc1 (s1 : SymbolicState Γ1 Σ1) (ζ12 : Sub Σ1 Σ2) pc2 s2 ζ02,
