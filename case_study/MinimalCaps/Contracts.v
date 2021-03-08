@@ -149,13 +149,11 @@ Module MinCapsSymbolicContractKit <:
   Definition sep_contract_write_reg : SepContract ["wreg" ∶ ty_enum regname, "w"  ∶ ty_word] ty_unit :=
     {| sep_contract_logic_variables := ["wreg" ∶ ty_enum regname, "w" ∶ ty_word];
        sep_contract_localstore      := [term_var "wreg", term_var "w"]%arg;
-       sep_contract_precondition    := asn_exist "old_word" ty_word (term_var "wreg" ↦r term_var "old_word") ✱
-                                       asn_safe (term_var "w");
+       sep_contract_precondition    := asn_exist "old_word" ty_word (term_var "wreg" ↦r term_var "old_word");
        sep_contract_result          := "result";
        sep_contract_postcondition   :=
          asn_eq (term_var "result") (term_lit ty_unit tt) ✱
-         term_var "wreg" ↦r term_var "w" ✱
-         asn_safe (term_var "w");
+         term_var "wreg" ↦r term_var "w";
     |}.
 
   Definition sep_contract_next_pc : SepContract ctx_nil ty_cap :=
@@ -174,7 +172,7 @@ Module MinCapsSymbolicContractKit <:
     |}.
 
   Definition sep_contract_update_pc : SepContract ctx_nil ty_unit :=
-    {| sep_contract_logic_variables := ["opc" ∶ ty_cap ];
+    {| sep_contract_logic_variables := ctx_nil;
        sep_contract_localstore      := env_nil;
        sep_contract_precondition    := regInvCap pc;
        sep_contract_result          := "result";
