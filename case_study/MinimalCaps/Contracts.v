@@ -101,13 +101,14 @@ Module MinCapsSymbolicContractKit <:
   Local Notation "r '↦r' t" := (asn_chunk (chunk_user ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t)))) (at level 100).
   Local Notation "a '↦m' t" := (asn_chunk (chunk_user ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t)))) (at level 100).
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
+  Local Notation asn_safe w := (asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ w)))).
   (* Arguments asn_prop [_] & _. *)
 
   (* regInv(r) = ∃ w : word. r ↦ w * safe(w) *)
   Definition regInv {Σ} (r : RegName) (w : string) : Assertion Σ :=
     asn_exist w ty_word
               (term_lit (ty_enum regname) r ↦r (@term_var _ _ _ inctx_zero) ✱
-                asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (@term_var _ _ _ inctx_zero))))).
+                asn_safe (@term_var _ _ _ inctx_zero)).
 
   (* regInv(r) = ∃ c : cap. r ↦ c * csafe(c) *)
   Definition regInvCap {Σ} (r : Reg ty_cap) : Assertion Σ :=
@@ -123,7 +124,7 @@ Module MinCapsSymbolicContractKit <:
     {| sep_contract_logic_variables := ["rreg" ∶ ty_enum regname];
        sep_contract_localstore      := [term_var "rreg"]%arg;
        sep_contract_precondition    := machInv;
-       sep_contract_result          := "result";
+       sep_contract_result          := "result_read_reg";
        sep_contract_postcondition   := machInv;
     |}.
 
@@ -131,7 +132,7 @@ Module MinCapsSymbolicContractKit <:
     {| sep_contract_logic_variables := ["creg" ∶ ty_enum regname];
        sep_contract_localstore      := [term_var "creg"]%arg;
        sep_contract_precondition    := machInv;
-       sep_contract_result          := "result";
+       sep_contract_result          := "result_read_reg_cap";
        sep_contract_postcondition   := machInv;
     |}.
 
@@ -139,15 +140,14 @@ Module MinCapsSymbolicContractKit <:
     {| sep_contract_logic_variables := ["nreg" ∶ ty_enum regname];
        sep_contract_localstore      := [term_var "nreg"]%arg;
        sep_contract_precondition    := machInv;
-       sep_contract_result          := "result";
+       sep_contract_result          := "result_read_reg_num";
        sep_contract_postcondition   := machInv;
     |}.
 
   Definition sep_contract_write_reg : SepContract ["wreg" ∶ ty_enum regname, "w"  ∶ ty_word] ty_unit :=
     {| sep_contract_logic_variables := ["wreg" ∶ ty_enum regname, "w" ∶ ty_word];
        sep_contract_localstore      := [term_var "wreg", term_var "w"]%arg;
-       sep_contract_precondition    := machInv ✱ asn_chunk (chunk_user safe
-                                                                       (env_nil ► (ty_word ↦ (term_var "w"))));
+       sep_contract_precondition    := machInv ✱ asn_safe (term_var "w");
        sep_contract_result          := "result";
        sep_contract_postcondition   := machInv;
     |}.
@@ -486,15 +486,17 @@ Module MinCapsSymbolicContractKit <:
                      end)
     |}.
 
-  (* TODO: duplicate for single safe chunk, don't take entire machInv *)
   (* TODO: add persistent predicates? *)
   Definition sep_contract_duplicate_safe : SepContract ["reg" ∶ ty_enum regname] ty_unit :=
-    {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname];
+    {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word];
        sep_contract_localstore      := [term_var "reg"]%arg;
-       sep_contract_precondition    := machInv;
-       sep_contract_result          := "_";
+       sep_contract_precondition    := term_var "reg" ↦r term_var "w" ✱ asn_safe (term_var "w");
+       sep_contract_result          := "result_duplicate_safe";
        sep_contract_postcondition   :=
-         machInv ✱ asn_match_enum regname (term_var "reg") (fun k => regInv k "w")
+         asn_eq (term_var "result_duplicate_safe") (term_lit ty_unit tt) ✱
+         term_var "reg" ↦r term_var "w" ✱
+         asn_safe (term_var "w") ✱
+         asn_safe (term_var "w")
     |}.
       
   Definition regtag_to_reg (R : RegName) : Reg ty_word :=
@@ -579,6 +581,7 @@ Local Ltac solve :=
 Local Notation "r '↦' t" := (chunk_ptsreg r t) (at level 100, only printing).
 Local Notation "r '↦r' t" := (chunk_user ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t))) (at level 100, only printing).
 Local Notation "a '↦m' t" := (chunk_user ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t))) (at level 100, only printing).
+Local Notation safew w := (chunk_user safe (env_nil ► (ty_word ↦ w))).
 
 Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
 Proof. compute; solve. Qed.
