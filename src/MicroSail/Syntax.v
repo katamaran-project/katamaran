@@ -1023,8 +1023,6 @@ Module Terms (Export termkit : TermKit).
 
     Global Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=
       fun Σ1 Σ2 ζ => sub_term ζ.
-    Global Instance SubstPair {A B} `{Subst A, Subst B} : Subst (fun Σ => A Σ * B Σ)%type :=
-      fun Σ1 Σ2 ζ '(a,b) => (subst ζ a, subst ζ b).
     Global Instance SubstList {A} `{Subst A} : Subst (fun Σ => list (A Σ))%type :=
       fun Σ1 Σ2 ζ => List.map (subst ζ).
     Global Instance SubstEnv {B : Set} {A : Ctx _ -> B -> Set} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
@@ -1131,17 +1129,6 @@ Module Terms (Export termkit : TermKit).
           + f_equal.
             * apply IHes, X.
             * apply X.
-      }
-    Qed.
-
-    Global Instance SubstLawsPair {A B} `{SubstLaws A, SubstLaws B} : SubstLaws (fun Σ => A Σ * B Σ)%type.
-    Proof.
-      constructor.
-      { intros ? [t1 t2]; cbn.
-        f_equal; apply subst_sub_id.
-      }
-      { intros ? ? ? ? ? [t1 t2]; cbn.
-        f_equal; apply subst_sub_comp.
       }
     Qed.
 
@@ -1560,12 +1547,6 @@ Module Terms (Export termkit : TermKit).
           inst ι (subst ζ t) = inst (inst ι ζ) t
       }.
 
-    Global Instance instantiate_pair {AT BT : LCtx -> Type} {A B : Type} `{Inst AT A, Inst BT B} :
-      Inst (fun Σ => AT Σ * BT Σ)%type (A * B) :=
-      {| inst Σ ι '(a , b) := (inst ι a, inst ι b);
-         lift Σ '(a, b)    := (lift a , lift b);
-      |}.
-
     Global Arguments InstLaws T A {_ _ _}.
 
     Global Instance instantiatelaws_term {σ} : InstLaws (fun Σ => Term Σ σ) (Lit σ).
@@ -1620,14 +1601,6 @@ Module Terms (Export termkit : TermKit).
       }
     Qed.
 
-    Global Instance instantiatelaws_pair {AT BT : LCtx -> Set} {A B : Set} `{InstLaws AT A, InstLaws BT B} :
-      InstLaws (fun Σ => AT Σ * BT Σ)%type (A * B).
-    Proof.
-      constructor.
-      { intros ? ? []; cbn; f_equal; apply inst_lift. }
-      { intros ? ? ? ? []; cbn; f_equal; apply inst_subst. }
-    Qed.
-
     Global Instance instantiatelaws_env {T : Set} {S : LCtx -> T -> Set} {A : T -> Set}
            {_ : forall τ : T, Subst (fun Σ => S Σ τ)}
            {_ : forall τ : T, SubstLaws (fun Σ => S Σ τ)}
@@ -1674,6 +1647,62 @@ Module Terms (Export termkit : TermKit).
     Global Arguments lift {T A _ Σ} !_.
 
   End Instantiation.
+
+  Section SymbolicPair.
+
+    Definition Pair (A B : LCtx -> Type) (Σ : LCtx) : Type :=
+      A Σ * B Σ.
+    Global Instance SubstPair {A B} `{Subst A, Subst B} : Subst (Pair A B) :=
+      fun _ _ ζ '(a,b) => (subst ζ a, subst ζ b).
+
+    Global Instance SubstLawsPair {A B} `{SubstLaws A, SubstLaws B} : SubstLaws (Pair A B).
+    Proof.
+      constructor.
+      { intros ? [t1 t2]; cbn.
+        f_equal; apply subst_sub_id.
+      }
+      { intros ? ? ? ? ? [t1 t2]; cbn.
+        f_equal; apply subst_sub_comp.
+      }
+    Qed.
+
+    Global Instance InstPair {AT BT A B} `{Inst AT A, Inst BT B} :
+      Inst (Pair AT BT) (A * B) :=
+      {| inst Σ ι '(a , b) := (inst ι a, inst ι b);
+         lift Σ '(a, b)    := (lift a , lift b);
+      |}.
+
+    Global Instance InstLawsPair {AT BT A B} `{InstLaws AT A, InstLaws BT B} :
+      InstLaws (Pair AT BT) (A * B).
+    Proof.
+      constructor.
+      { intros ? ? []; cbn; f_equal; apply inst_lift. }
+      { intros ? ? ? ? []; cbn; f_equal; apply inst_subst. }
+    Qed.
+
+    Global Instance OccursCheckPair {AT BT} `{OccursCheck AT, OccursCheck BT} :
+      OccursCheck (Pair AT BT) :=
+      fun _ _ xIn '(a,b) =>
+        match occurs_check xIn a, occurs_check xIn b with
+        | Some a' , Some b' => Some (a', b')
+        | _       , _       => None
+        end.
+
+    Global Instance OccursCheckLawsPair {AT BT} `{OccursCheckLaws AT, OccursCheckLaws BT} :
+      OccursCheckLaws (Pair AT BT).
+    Proof.
+      constructor.
+      - intros. destruct t as [a b]; cbn.
+        now rewrite ?occurs_check_shift.
+      - intros ? ? ? [a b] [a' b']; cbn.
+        destruct (occurs_check xIn a) eqn:Heq1; intros; try discriminate.
+        destruct (occurs_check xIn b) eqn:Heq2; intros; try discriminate.
+        apply occurs_check_sound in Heq1.
+        apply occurs_check_sound in Heq2.
+        congruence.
+    Qed.
+
+  End SymbolicPair.
 
   Section SymbolicLocalStore.
 

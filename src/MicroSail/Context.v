@@ -374,8 +374,15 @@ Section WithBinding.
         now rewrite (IHxIn m p).
   Qed.
 
+  Fixpoint ctx_forallb (Γ : Ctx B) : (forall b, InCtx b Γ -> bool) -> bool :=
+    match Γ with
+    | ctx_nil      => fun _ => true
+    | ctx_snoc Γ b => fun p => p b inctx_zero && ctx_forallb (fun b bIn => p b (inctx_succ bIn))
+    end.
+
 End WithBinding.
 Arguments InCtx_ind [B b] _ _ _ [_].
+Arguments ctx_forallb [B] Γ p.
 
 Section WithAB.
   Context {A B : Set} (f : A -> B).

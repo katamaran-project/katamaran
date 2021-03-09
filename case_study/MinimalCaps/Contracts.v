@@ -486,6 +486,14 @@ Module MinCapsSymbolicContractKit <:
       | _             => None
       end.
 
+  Lemma linted_cenv :
+    forall Δ τ (f : Fun Δ τ),
+      match CEnv f with
+      | Some c => Linted c
+      | None   => True
+      end.
+  Proof. intros ? ? []; try constructor. Qed.
+
   Definition sep_contract_open_ptsreg : SepContract ["reg" ∶ ty_enum regname] ty_unit :=
     {| sep_contract_logic_variables := [ "reg" ∶ ty_enum regname, "w" ∶ ty_word];
        sep_contract_localstore      := [term_var "reg"]%arg;

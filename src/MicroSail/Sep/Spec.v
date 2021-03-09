@@ -108,7 +108,7 @@ Module Assertions
     induction t.
     - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
       f_equal.
-      eauto using inst_subst.
+      apply inst_subst.
     - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
       f_equal.
       eapply inst_subst.
@@ -189,6 +189,51 @@ Module Assertions
   (*     | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a) *)
   (*     end. *)
 
+  Global Instance OccursCheckFormula :
+    OccursCheck Formula :=
+    fun Σ b bIn fml =>
+      match fml with
+      | formula_bool t    => option_map formula_bool (occurs_check bIn t)
+      | formula_prop ζ P  => option_map (fun ζ => formula_prop ζ P) (occurs_check bIn ζ)
+      | formula_eq t1 t2  => option_map (fun '(t1,t2) => formula_eq t1 t2) (occurs_check bIn (t1, t2))
+      | formula_neq t1 t2 => option_map (fun '(t1,t2) => formula_neq t1 t2) (occurs_check bIn (t1, t2))
+      end.
+
+  Global Instance OccursCheckChunk :
+    OccursCheck Chunk :=
+    fun Σ b bIn c =>
+      match c with
+      | chunk_user p ts => option_map (chunk_user p) (occurs_check bIn ts)
+      | chunk_ptsreg r t => option_map (chunk_ptsreg r) (occurs_check bIn t)
+      end.
+
+  Global Instance OccursCheckAssertion :
+    OccursCheck Assertion :=
+    fix occurs Σ b (bIn : b ∈ Σ) (asn : Assertion Σ) : option (Assertion (Σ - b)) :=
+      match asn with
+      | asn_formula fml => option_map (@asn_formula _) (occurs_check bIn fml)
+      | asn_chunk c     => option_map (@asn_chunk _) (occurs_check bIn c)
+      | asn_if b a1 a2  =>
+        option_ap (option_ap (option_map (@asn_if _) (occurs_check bIn b)) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
+      | asn_match_enum E k alts => None (* TODO *)
+      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+        option_ap
+          (option_ap
+             (option_map
+                (fun s' alt_inl' alt_inr' =>
+                   asn_match_sum σ τ s' xl alt_inl' xr alt_inr')
+                (occurs_check bIn s))
+             (occurs (Σ ▻ (xl :: σ)) b (inctx_succ bIn) alt_inl))
+          (occurs (Σ ▻ (xr :: τ)) b (inctx_succ bIn) alt_inr)
+      | @asn_match_list _ σ s alt_nil xh xt alt_cons => None (* TODO *)
+      | @asn_match_pair _ σ1 σ2 s xl xr rhs => None (* TODO *)
+      | @asn_match_tuple _ σs Δ s p rhs => None (* TODO *)
+      | @asn_match_record _ R4 Δ s p rhs => None (* TODO *)
+      | asn_match_union U s alt__ctx alt__pat alt__rhs => None (* TODO *)
+      | asn_sep a1 a2 => option_ap (option_map (@asn_sep _) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
+      | asn_exist ς τ a => option_map (@asn_exist _ ς τ) (occurs _ _ (inctx_succ bIn) a)
+      end.
+
   Definition symbolic_eval_exp {Γ Σ} (δ : SymbolicLocalStore Γ Σ) :
     forall {σ} (e : Exp Γ σ), Term Σ σ :=
     fix symbolic_eval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
@@ -219,6 +264,23 @@ Module Assertions
       }.
 
   Arguments MkSepContract : clear implicits.
+
+  Definition lint_contract {Δ σ} (c : SepContract Δ σ) : bool :=
+    match c with
+    | {| sep_contract_logic_variables := Σ;
+         sep_contract_localstore      := δ;
+         sep_contract_precondition    := pre
+      |} =>
+      ctx_forallb Σ
+        (fun b bIn =>
+           match occurs_check bIn (δ , pre) with
+           | Some _ => false
+           | None   => true
+           end)
+    end.
+
+  Definition Linted {Δ σ} (c : SepContract Δ σ) : Prop :=
+    Bool.Is_true (lint_contract c).
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), option (SepContract Δ τ).
