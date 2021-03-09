@@ -187,7 +187,7 @@ Module Soundness
         (entails_eq pc a0 a1)
         (at level 80, a0 at next level, no associativity).
 
-      Global Instance proper_subst_entails_eq `{instAT : Inst AT A} `{Subst AT} `{SubstLaws AT} `{InstLaws AT A} {Σ1 Σ2} {ζ : Sub Σ1 Σ2} {pc : PathCondition Σ1} :
+      Global Instance proper_subst_entails_eq {AT A} `{InstLaws AT A} {Σ1 Σ2} {ζ : Sub Σ1 Σ2} {pc : PathCondition Σ1} :
         Proper ((entails_eq pc) ==> (entails_eq (subst ζ pc))) (subst ζ).
       Proof.
         intros a1 a2 a12 ι.
@@ -207,15 +207,16 @@ Module Soundness
 
       (* Not sure this instance is a good idea...
          This seems to cause rewrite to take very long... *)
-      Global Instance proper_entails_pc_impl
+      Global Instance proper_entails_pc_iff
              {Σ} `{InstLaws AT A}
              (pc : PathCondition Σ):
-           Proper (entails_eq pc ==> flip impl) (entails pc).
+           Proper (entails_eq pc ==> iff) (entails pc).
       Proof.
-        intros pc1 pc2 pc12 pc02 ι ιpc.
-        specialize (pc12 ι ιpc).
-        specialize (pc02 ι ιpc).
-        intuition.
+        intros pc1 pc2 pc12.
+        split; intros HYP ι ιpc;
+          specialize (pc12 ι ιpc);
+          specialize (HYP ι ιpc);
+          congruence.
       Qed.
 
       Global Instance proper_entails_eq_impl {AT A} `{Inst AT A} {Σ} : Proper (flip (@entails Σ) ==> eq ==> eq ==> impl) entails_eq.
@@ -976,9 +977,9 @@ Module Soundness
           destruct r4 as [Σ4 ζ24 pc4 a4 s4].
           destruct r34 as [ζ34 ?].
           cbn in *. destruct_conjs.
-          refine (proper_entails_pc_impl _ _).
-          + now rewrite <-H4, <-subst_assoc, H3.
-          + now rewrite H3, Hpc23.
+          rewrite <- H4, <- subst_assoc.
+          transitivity (subst ζ34 pc3); auto.
+          now rewrite Hpc23.
         - refine (POST_dcl _ _ _ Hpost).
           now eapply dmutres_geq_pre_comp.
       Qed.
