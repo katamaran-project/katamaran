@@ -208,7 +208,7 @@ Module SemiConcrete
       (scmut_bind ma (fun x => mb))
         (at level 80, ma at level 90, mb at level 200, right associativity) : mutator_scope.
     Notation "ma >>= f" := (scmut_bind ma f) (at level 50, left associativity) : mutator_scope.
-    Notation "m1 ;; m2" := (scmut_bind m1 (fun _ => m2)) : mutator_scope.
+    Notation "m1 ;; m2" := (scmut_bind_right m1 m2) : mutator_scope.
     Notation "ma *> mb" := (scmut_bind_right ma mb) (at level 50, left associativity) : mutator_scope.
     Notation "ma <* mb" := (scmut_bind_left ma mb) (at level 50, left associativity) : mutator_scope.
 
@@ -348,16 +348,18 @@ Module SemiConcrete
       match asn with
       | asn_formula fml => scmut_assert_formula ι fml
       | asn_chunk c     => scmut_consume_chunk (inst ι c)
-      | asn_if b a1 a2  => if inst (A := Lit ty_bool) ι b
-                           then scmut_consume ι a1
-                           else scmut_consume ι a2
+      | asn_if b a1 a2  => (scmut_assume_term ι b ;; scmut_consume ι a1) ⊗
+                           (scmut_assume_term ι (term_not b) ;; scmut_consume ι a2)
       | @asn_match_enum _ E k alts =>
         scmut_consume ι (alts (inst (T := fun Σ => Term Σ _) ι k))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        match inst (T := fun Σ => Term Σ _) ι s with
-        | inl v => scmut_consume (env_snoc ι (xl :: σ) v) alt_inl
-        | inr v => scmut_consume (env_snoc ι (xr :: τ) v) alt_inr
-        end
+        scmut_angelic_binary
+          (⨁ v : Lit σ =>
+           scmut_assert_formula ι (formula_eq s (term_lit (ty_sum _ _) (inl v))) ;;
+           scmut_consume (env_snoc ι (xl :: σ) v) alt_inl)
+          (⨁ v : Lit τ =>
+           scmut_assert_formula ι (formula_eq s (term_lit (ty_sum _ _) (inr v))) ;;
+           scmut_consume (env_snoc ι (xr :: τ) v) alt_inr)
       | asn_match_list s alt_nil xh xt alt_cons =>
         match inst (T := fun Σ => Term Σ _) ι s with
         | nil        => scmut_consume ι alt_nil

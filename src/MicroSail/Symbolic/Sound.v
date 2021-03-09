@@ -2179,7 +2179,13 @@ Module Soundness
       induction asn; cbn [dmut_consume scmut_consume].
       - apply dmut_assert_formula_sound.
       - apply dmut_consume_chunk_sound.
-      - admit.
+      - apply approximates_demonic_binary.
+        + apply dmut_bind_right_sound; auto_dcl;
+            unfold dmut_assume_term, scmut_assume_term;
+            auto using dmut_assume_formula_sound.
+        + apply dmut_bind_right_sound; auto_dcl;
+            unfold dmut_assume_term, scmut_assume_term;
+            auto using dmut_assume_formula_sound.
       - admit.
       - admit.
       - admit.

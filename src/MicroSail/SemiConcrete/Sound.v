@@ -180,11 +180,12 @@ Module Soundness
         (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
       inst_scheap h1 ⊢ inst_assertion ι asn ✱ POST δ1.
     Proof.
-      revert ι δ1 h1 POST. induction asn; cbn; intros ι δ1 h1 POST HYP.
+      revert ι δ1 h1 POST. induction asn; cbn - [inst inst_term]; intros ι δ1 h1 POST HYP.
       - now apply scmut_assert_formula_sound.
       - apply scmut_consume_chunk_sound in HYP.
         now destruct c.
-      - destruct (inst ι b); auto.
+      - cbn in HYP. change (inst_term ι b) with (inst ι b) in HYP.
+        destruct HYP as [H1 H2]. destruct (inst ι b) eqn:?; auto.
       - auto.
       - admit.
       - admit.
