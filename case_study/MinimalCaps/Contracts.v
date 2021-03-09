@@ -561,6 +561,14 @@ Module MinCapsSymbolicContractKit <:
         end
       end.
 
+  Lemma linted_cenvex :
+    forall Δ τ (f : FunX Δ τ),
+      Linted (CEnvEx f).
+  Proof.
+    intros ? ? []; try constructor.
+    destruct f; try constructor.
+  Qed.
+
 End MinCapsSymbolicContractKit.
 
 Module MinCapsMutators :=
