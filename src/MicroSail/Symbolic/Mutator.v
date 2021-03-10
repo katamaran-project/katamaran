@@ -254,13 +254,20 @@ Module Mutators
   Definition SymbolicHeap (Σ : LCtx) : Type :=
     list (Chunk Σ).
 
-  Inductive Obligation : Type :=
-  | obligation {Σ} (pc : PathCondition Σ) (fml : Formula Σ).
+  Record ObligationInfo : Type :=
+    MkObligationInfo
+      { obligation_logic_context   : LCtx;
+        obligation_program_context : PCtx;
+        obligation_localstore      : SymbolicLocalStore obligation_program_context obligation_logic_context;
+        obligation_heap            : SymbolicHeap obligation_logic_context;
+        obligation_pathcondition   : PathCondition obligation_logic_context;
+        obligation_formula         : Formula obligation_logic_context;
+      }.
 
-  Definition valid_obligation : Obligation -> Prop :=
-    fun '(obligation pc fml) =>
-      ForallNamed (fun ι => all_list (inst ι) pc -> inst ι fml : Prop).
-  Hint Unfold valid_obligation : core.
+  Inductive Obligation : ObligationInfo -> Prop :=
+  | obligation {Σ Γ δ h pc fml} :
+      ForallNamed (fun ι => all_list (inst ι) pc -> inst ι fml : Prop) ->
+      Obligation (@MkObligationInfo Σ Γ δ h pc fml).
 
   Instance subst_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
     SubstEnv.
@@ -1003,7 +1010,14 @@ Module Mutators
         | None =>
           (* Record the obligation. *)
           outcome_assertk
-            (valid_obligation (obligation pc1 fml1))
+            (Obligation
+               {| obligation_logic_context   := _;
+                  obligation_program_context := Γ;
+                  obligation_localstore      := symbolicstate_localstore s1;
+                  obligation_heap            := symbolicstate_heap s1;
+                  obligation_pathcondition   := pc1;
+                  obligation_formula         := fml1;
+               |})
             (* We also want to assume the formula for the continuation, i.e.
                we actually perform a simple cut.  *)
             (outcome_pure (dmutres_assume_formula pc1 fml1 s1))
