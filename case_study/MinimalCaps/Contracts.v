@@ -635,7 +635,8 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_within_bounds : ValidContractDynMut sep_contract_within_bounds fun_within_bounds.
 Proof.
-  compute - [NamedEnv Lit Error valid_obligation].
+  compute - [valid_obligation].
+  constructor.
   cbn; solve; fail.
 Abort.
 
@@ -676,7 +677,25 @@ Lemma valid_contract_exec_instr : ValidContractDynMut sep_contract_exec_instr fu
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec : ValidContractDynMut sep_contract_exec fun_exec.
-Proof. compute - [NamedEnv Lit Error valid_obligation]. Abort.
+Proof.
+  compute - [NamedEnv Lit Error valid_obligation].
+  constructor; repeat apply conj.
+  - (* O Permission *)
+    constructor.
+  - (* R Permission *)
+    constructor.
+    constructor.
+    + (* c = term_record capability [term_lit ty_perm R, term_var "beg", term_inl (term_var "e'"), term_var "cursor" *)
+      constructor.
+      split; auto.
+      admit.
+    + (* c = term_record capability [term_lit ty_perm R, term_var "beg", term_inr (term_var "_"), term_var "cursor" *)
+      constructor.
+      split; auto.
+      admit.
+  - (* RW Permission *)
+    admit.
+Abort.
 
 Lemma valid_contract_loop : ValidContractDynMut sep_contract_loop fun_loop.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
