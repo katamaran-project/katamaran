@@ -721,49 +721,6 @@ Module Terms (Export termkit : TermKit).
     Definition Term_rec Σ (P : forall σ, Term Σ σ -> Set) := Term_rect P.
     Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := Term_rect P.
 
-    Section Utils.
-
-      Definition term_get_lit {Σ σ} (t : Term Σ σ) : option (Lit σ) :=
-        match t with
-        | term_lit _ l => Some l
-        | _            => None
-        end.
-
-      Equations(noeqns) term_get_pair {Σ σ1 σ2} (t : Term Σ (ty_prod σ1 σ2)) :
-        option (Term Σ σ1 * Term Σ σ2) :=
-        term_get_pair (term_lit _ (t1,t2))          := Some (term_lit _ t1, term_lit _ t2);
-        term_get_pair (term_binop binop_pair t1 t2) := Some (t1, t2);
-        term_get_pair _ := None.
-
-      Equations(noeqns) term_get_sum {Σ σ1 σ2} (t : Term Σ (ty_sum σ1 σ2)) :
-        option (Term Σ σ1 + Term Σ σ2) :=
-        term_get_sum (term_lit _ (inl l)) := Some (inl (term_lit _ l));
-        term_get_sum (term_lit _ (inr l)) := Some (inr (term_lit _ l));
-        term_get_sum (term_inl t)         := Some (inl t);
-        term_get_sum (term_inr t)         := Some (inr t);
-        term_get_sum _ := None.
-
-      Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty_union U)) :
-        option { K : 𝑼𝑲 U & Term Σ (𝑼𝑲_Ty K) } :=
-        term_get_union (term_lit _ l)   :=
-          Some (let (K, p) := 𝑼_unfold l in existT K (term_lit _ p));
-        term_get_union (term_union K t) := Some (existT K t);
-        term_get_union _ := None.
-
-      Equations(noeqns) term_get_record {R Σ} (t : Term Σ (ty_record R)) :
-        option (NamedEnv (Term Σ) (𝑹𝑭_Ty R)) :=
-        term_get_record (term_lit _ v)        := Some (env_map (fun _ => term_lit _) (𝑹_unfold v));
-        term_get_record (@term_record _ R ts) := Some ts;
-        term_get_record _ := None.
-
-      (* Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty_tuple σs)) : *)
-      (*   option (Env (Term Σ) σs) := *)
-      (*   term_get_tuple (term_lit _ v)       := Some _; *)
-      (*   term_get_tuple (@term_tuple _ _ ts) := Some ts; *)
-      (*   term_get_tuple _ := None. *)
-
-    End Utils.
-
     Fixpoint inst_term {Σ : LCtx} (ι : SymInstance Σ) {σ : Ty} (t : Term Σ σ) {struct t} : Lit σ :=
       match t in Term _ σ return Lit σ with
       | @term_var _ x _      => ι ‼ x
@@ -1647,6 +1604,111 @@ Module Terms (Export termkit : TermKit).
     Global Arguments lift {T A _ Σ} !_.
 
   End Instantiation.
+
+  Section Utils.
+
+    Definition term_get_lit {Σ σ} (t : Term Σ σ) : option (Lit σ) :=
+      match t with
+      | term_lit _ l => Some l
+      | _            => None
+      end.
+
+    Lemma term_get_lit_spec {Σ σ} (s : Term Σ σ) :
+      OptionSpec
+        (fun l => forall ι : SymInstance Σ, inst ι s = l)
+        True
+        (term_get_lit s).
+    Proof.
+      dependent elimination s; cbn; try constructor; auto.
+    Qed
+.
+    Equations(noeqns) term_get_pair {Σ σ1 σ2} (t : Term Σ (ty_prod σ1 σ2)) :
+      option (Term Σ σ1 * Term Σ σ2) :=
+      term_get_pair (term_lit _ (t1,t2))          := Some (term_lit _ t1, term_lit _ t2);
+      term_get_pair (term_binop binop_pair t1 t2) := Some (t1, t2);
+      term_get_pair _ := None.
+
+    Lemma term_get_pair_spec {Σ σ1 σ2} (s : Term Σ (ty_prod σ1 σ2)) :
+      OptionSpec
+        (fun '(t1,t2) =>
+           forall ι : SymInstance Σ, inst ι s = (inst ι t1, inst ι t2) :> Lit (ty_prod _ _))
+        True
+        (term_get_pair s).
+    Proof.
+      dependent elimination s; cbn; try constructor; auto.
+      - destruct l; constructor; auto.
+      - dependent elimination op. constructor. reflexivity.
+    Qed.
+
+    Equations(noeqns) term_get_sum {Σ σ1 σ2} (t : Term Σ (ty_sum σ1 σ2)) :
+      option (Term Σ σ1 + Term Σ σ2) :=
+      term_get_sum (term_lit _ (inl l)) := Some (inl (term_lit _ l));
+      term_get_sum (term_lit _ (inr l)) := Some (inr (term_lit _ l));
+      term_get_sum (term_inl t)         := Some (inl t);
+      term_get_sum (term_inr t)         := Some (inr t);
+      term_get_sum _ := None.
+
+    Lemma term_get_sum_spec {Σ σ1 σ2} (s : Term Σ (ty_sum σ1 σ2)) :
+      OptionSpec
+        (fun s' => match s' with
+                   | inl t => forall ι : SymInstance Σ, inst ι s = inl (inst ι t) :> Lit (ty_sum _ _)
+                   | inr t => forall ι : SymInstance Σ, inst ι s = inr (inst ι t) :> Lit (ty_sum _ _)
+                   end)
+        True
+        (term_get_sum s).
+    Proof.
+      dependent elimination s; cbn; try constructor; auto.
+      destruct l; constructor; auto.
+    Qed.
+
+    Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty_union U)) :
+      option { K : 𝑼𝑲 U & Term Σ (𝑼𝑲_Ty K) } :=
+      term_get_union (term_lit _ l)   :=
+        Some (let (K, p) := 𝑼_unfold l in existT K (term_lit _ p));
+      term_get_union (term_union K t) := Some (existT K t);
+      term_get_union _ := None.
+
+    Lemma term_get_union_spec {Σ U} (s : Term Σ (ty_union U)) :
+      OptionSpec
+        (fun x : {K : 𝑼𝑲 U & Term Σ (𝑼𝑲_Ty K)} =>
+           match x with
+           | existT K t =>
+             forall ι : SymInstance Σ,
+               inst ι s =
+               𝑼_fold (@existT (𝑼𝑲 U) (fun K => Lit (𝑼𝑲_Ty K)) K (inst ι t)) :> Lit (ty_union U)
+           end)
+        True
+        (term_get_union s).
+    Proof.
+      dependent elimination s; cbn; try constructor; auto.
+      destruct (𝑼_unfold l) eqn:?. intros. cbn.
+      now rewrite <- Heqs, 𝑼_fold_unfold.
+    Qed.
+
+    Equations(noeqns) term_get_record {R Σ} (t : Term Σ (ty_record R)) :
+      option (NamedEnv (Term Σ) (𝑹𝑭_Ty R)) :=
+      term_get_record (term_lit _ v)        := Some (lift (𝑹_unfold v));
+      term_get_record (@term_record _ R ts) := Some ts;
+      term_get_record _ := None.
+
+    Lemma term_get_record_spec {Σ R} (s : Term Σ (ty_record R)) :
+      OptionSpec
+        (fun ts =>
+           forall ι, inst ι s = 𝑹_fold (inst ι ts) :> Lit (ty_record R))
+        True
+        (term_get_record s).
+    Proof.
+      dependent elimination s; try constructor; auto.
+      intros ι. now rewrite inst_lift, 𝑹_fold_unfold.
+    Qed.
+
+    (* Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty_tuple σs)) : *)
+    (*   option (Env (Term Σ) σs) := *)
+    (*   term_get_tuple (term_lit _ v)       := Some _; *)
+    (*   term_get_tuple (@term_tuple _ _ ts) := Some ts; *)
+    (*   term_get_tuple _ := None. *)
+
+  End Utils.
 
   Section SymbolicPair.
 
