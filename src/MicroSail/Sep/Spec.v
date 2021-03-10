@@ -123,6 +123,39 @@ Module Assertions
   | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
   Arguments chunk_user [_] _ _.
 
+  Definition chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
+    match c1 , c2 with
+    | chunk_user p1 ts1, chunk_user p2 ts2 =>
+      match eq_dec p1 p2 with
+      | left e => env_eqb_hom
+                    (@Term_eqb _)
+                    (eq_rect _ (fun p => Env _ (𝑷_Ty p)) ts1 _ e)
+                    ts2
+      | right _ => false
+      end
+    | chunk_ptsreg r1 t1 , chunk_ptsreg r2 t2 =>
+      match eq_dec_het r1 r2 with
+      | left e  => Term_eqb
+                     (eq_rect _ (Term Σ) t1 _ (f_equal projT1 e))
+                     t2
+      | right _ => false
+      end
+    | _ , _ => false
+    end.
+
+  (* Equations(noeqns) chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool := *)
+  (*   chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) *)
+  (*   with eq_dec p1 p2 => { *)
+  (*     chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := env_eqb_hom (@Term_eqb _) ts1 ts2; *)
+  (*     chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := false *)
+  (*   }; *)
+  (*   chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) *)
+  (*   with eq_dec_het r1 r2 => { *)
+  (*     chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left eq_refl) := Term_eqb t1 t2; *)
+  (*     chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := false *)
+  (*   }; *)
+  (*   chunk_eqb _ _  := false. *)
+
   Inductive Assertion (Σ : LCtx) : Type :=
   | asn_formula (fml : Formula Σ)
   | asn_chunk (c : Chunk Σ)

@@ -460,6 +460,12 @@ Module Mutators
       (* | term_projrec t rf    => (fun t => term_projrec t rf) <$> eval_term_evar t *)
       end%exp.
 
+    Definition eval_chunk_evar (c : Chunk Σe) : option (Chunk Σr) :=
+      match c with
+      | chunk_user p ts => chunk_user p <$> traverse_env (@eval_term_evar) ts
+      | chunk_ptsreg r t => chunk_ptsreg r <$> eval_term_evar t
+      end.
+
     Section WithMatchTerm.
 
       Variable match_term : forall {σ}, Term Σe σ -> Term Σr σ -> EvarEnv Σe Σr -> option (EvarEnv Σe Σr).
@@ -1270,18 +1276,28 @@ Module Mutators
 
       Context {Γ : PCtx}.
 
+      Definition extract_chunk_exact {Σ} (h : SymbolicHeap Σ) (c : Chunk Σ) :
+        option (SymbolicHeap Σ) :=
+        match List.find (fun '(c',h') => chunk_eqb c c') (heap_extractions h) with
+        | Some (_,h') => Some h'
+        | None        => None
+        end.
+
       Definition dmut_consume_chunk_evar {Σe Σr} (c : Chunk Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
         dmut_get_heap >>= fun _ ζ1 h =>
         let L1 := subst ζ1 L in
-        dmut_angelic_list
-          "dmut_consume_chunk_evar"
-          "Empty extraction"
-          {| evarerror_env := L1;
-             evarerror_data := c;
-          |}
-          (List.map
-             (fun '(L', h') => dmut_put_heap h';; dmut_pure L')
-             (extract_chunk c h L1)).
+        match base.mbind (extract_chunk_exact h ) (eval_chunk_evar L1 c) with
+        | Some h' => dmut_put_heap h' ;; dmut_pure L1
+        | None => dmut_angelic_list
+                    "dmut_consume_chunk_evar"
+                    "Empty extraction"
+                    {| evarerror_env := L1;
+                       evarerror_data := c;
+                    |}
+                    (List.map
+                       (fun '(L', h') => dmut_put_heap h';; dmut_pure L')
+                       (extract_chunk c h L1))
+        end.
 
       (* This function tries to assert the equality between the terms `te` from
          a callee context and `tr` from the caller context. The callee context
