@@ -619,6 +619,11 @@ Module Mutators
 
   End DynamicMutatorResult.
 
+  Definition inconsistent {Σ} (pc : PathCondition Σ) : Prop :=
+    forall ι, ~ inst ι pc.
+  Definition contradiction (e : DynamicMutatorError) : Prop :=
+    inconsistent (dmuterr_pathcondition e).
+
   Section DynamicMutator.
 
     Definition DynamicMutator (Γ1 Γ2 : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
@@ -633,8 +638,8 @@ Module Mutators
         outcome_bind (ma Σ0 ζ0 pc0 s0)                            (fun '(MkDynMutResult ζ1 pc1 a s1) =>
         outcome_bind (f _ (sub_comp ζ0 ζ1) a _ (sub_id _) pc1 s1) (fun '(MkDynMutResult ζ2 pc2 b s2) =>
         outcome_pure (MkDynMutResult (sub_comp ζ1 ζ2) pc2 b s2))).
-    Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) :
-      DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m).
+    (* Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) : *)
+    (*   DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m). *)
 
     Definition dmut_sub {Γ1 Γ2 A Σ1 Σ2} (ζ1 : Sub Σ1 Σ2) (p : DynamicMutator Γ1 Γ2 A Σ1) :
       DynamicMutator Γ1 Γ2 A Σ2 := fun Σ3 ζ2 => p _ (sub_comp ζ1 ζ2).
@@ -685,21 +690,24 @@ Module Mutators
              dmuterr_localstore      := symbolicstate_localstore s1;
              dmuterr_heap            := symbolicstate_heap s1;
           |}.
+
+    Inductive Contradiction (err : DynamicMutatorError) : Prop :=
+    | contradict (p : contradiction err).
+
     Definition dmut_contradiction {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 pc1 s1 =>
-        (⨂ (ι : SymInstance Σ1)
-            (_ : (inst ι pc1 : Prop)) =>
-         outcome_fail
-           {| dmuterr_function        := func;
-              dmuterr_message         := msg;
-              dmuterr_data            := data;
-              dmuterr_program_context := Γ1;
-              dmuterr_logic_context   := Σ1;
-              dmuterr_pathcondition   := pc1;
-              dmuterr_localstore      := symbolicstate_localstore s1;
-              dmuterr_heap            := symbolicstate_heap s1;
-           |}
-        )%out.
+        outcome_assertk
+          (Contradiction
+             {| dmuterr_function        := func;
+                dmuterr_message         := msg;
+                dmuterr_data            := data;
+                dmuterr_program_context := Γ1;
+                dmuterr_logic_context   := Σ1;
+                dmuterr_pathcondition   := pc1;
+                dmuterr_localstore      := symbolicstate_localstore s1;
+                dmuterr_heap            := symbolicstate_heap s1;
+             |}) outcome_block.
+
     Definition dmut_block {Γ1 Γ2 A Σ} : DynamicMutator Γ1 Γ2 A Σ :=
       fun _ _ _ _ => outcome_block.
 
@@ -746,6 +754,20 @@ Module Mutators
     Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
       dmut_fresh (x::σ) (dmut_pure (@term_var _ _ _ inctx_zero)).
     Global Arguments dmut_freshtermvar {_ _ _} _.
+
+    Record DebugCall : Type :=
+      MkDynMutBreakpoint
+        { debug_call_logic_context          : LCtx;
+          debug_call_function_parameters    : PCtx;
+          debug_call_function_result_type   : Ty;
+          debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
+          debug_call_function_arguments     : SymbolicLocalStore debug_call_function_parameters debug_call_logic_context;
+          debug_call_function_contract      : SepContract debug_call_function_parameters debug_call_function_result_type;
+          debug_call_pathcondition          : PathCondition debug_call_logic_context;
+          debug_call_program_context        : PCtx;
+          debug_call_localstore             : SymbolicLocalStore debug_call_program_context debug_call_logic_context;
+          debug_call_heap                   : SymbolicHeap debug_call_logic_context;
+        }.
 
   End DynamicMutator.
   Bind Scope dmut_scope with DynamicMutator.
@@ -1556,6 +1578,22 @@ Module Mutators
          end
       end.
 
+    Definition dmut_call_evar_debug {Γ Δ τ Σr} (f : 𝑭 Δ τ) (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
+      fun Σ1 ζ1 pc1 s1 =>
+        outcome_debug
+          {| debug_call_logic_context          := Σ1;
+             debug_call_function_parameters    := Δ;
+             debug_call_function_result_type   := τ;
+             debug_call_function_name          := f;
+             debug_call_function_arguments     := subst ζ1 ts;
+             debug_call_function_contract      := contract;
+             debug_call_pathcondition          := pc1;
+             debug_call_program_context        := Γ;
+             debug_call_localstore             := symbolicstate_localstore s1;
+             debug_call_heap                   := symbolicstate_heap s1;
+          |}
+          (dmut_call_evar contract ts ζ1 pc1 s1).
+
     (* TODO: The code should be rewritten so this variable can be removed. *)
     Parameter dummy : 𝑺.
 
@@ -1582,7 +1620,7 @@ Module Mutators
       | stm_call f es =>
         ts <- dmut_eval_exps es ;;
         match CEnv f with
-        | Some c => dmut_call_evar c ts
+        | Some c => dmut_call_evar_debug f c ts
         | None   => dmut_fail "dmut_exec_evar" "Function call without contract" (f,ts)
         end
       | stm_call_frame δ s =>
@@ -1735,29 +1773,30 @@ Module Mutators
         dmut_fail "dmut_exec_evar" "stm_bind not supported" tt
       end.
 
-    Definition dmut_contract_evar {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) :
-      Stm Δ τ -> Outcome unit unit :=
+    Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
       match c with
       | MkSepContract _ _ Σ δ req result ens =>
-        fun s =>
-          let mut := (DynMutV1.dmut_produce req ;;
-                      dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
-                      dmut_consume_evar ens (subst (sub_snoc ζ1 (result,τ) t) (create_evarenv_id _)) ;;
-                      dmut_leakcheck)%dmut in
-          let out := mut Σ (sub_id Σ) nil (symbolicstate_initial δ) in
-          outcome_bimap (fun _ => tt) (fun _ => tt) out
+          DynMutV1.dmut_produce req ;;
+          dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
+          dmut_consume_evar ens (subst (sub_snoc ζ1 (result,τ) t) (create_evarenv_id _)) ;;
+          dmut_leakcheck
       end.
 
+    Definition dmut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
+      Outcome DynamicMutatorError (DynamicMutatorResult Δ Unit (sep_contract_logic_variables c)) :=
+      let δ    := sep_contract_localstore c in
+      dmut_contract c s (sub_id _) nil (symbolicstate_initial δ).
+
     Definition ValidContractDynMut (Δ : PCtx) (τ : Ty)
-               (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      outcome_safe (dmut_contract_evar c body).
+      (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      outcome_safe (dmut_contract_outcome c body).
 
     Definition ValidContractDynMutReflect (Δ : PCtx) (τ : Ty)
                (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       is_true
         (outcome_ok (A := unit)
            (outcome_bind
-              (dmut_contract_evar c body)
+              (dmut_contract_outcome c body)
               (fun _ => outcome_block))).
 
     Lemma dynmutevarreflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :

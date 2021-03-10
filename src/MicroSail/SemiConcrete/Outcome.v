@@ -58,6 +58,7 @@ Inductive Outcome (E A : Type) : Type :=
 | outcome_block
 | outcome_assertk (P : Prop) (k : Outcome E A)
 | outcome_assumek (P : Prop) (k : Outcome E A)
+| outcome_debug {B : Type} (b : B) (k : Outcome E A)
 .
 
 Arguments outcome_pure {_ _} _.
@@ -102,6 +103,7 @@ Fixpoint outcome_map {E A B : Type} (f : A -> B) (o : Outcome E A) : Outcome E B
   | outcome_block                => outcome_block
   | outcome_assertk P k          => outcome_assertk P (outcome_map f k)
   | outcome_assumek P k          => outcome_assumek P (outcome_map f k)
+  | outcome_debug b k            => outcome_debug b (outcome_map f k)
   end.
 
 Fixpoint outcome_bimap {E F A B : Type} (f : E -> F) (g : A -> B) (o : Outcome E A) : Outcome F B :=
@@ -115,6 +117,7 @@ Fixpoint outcome_bimap {E F A B : Type} (f : E -> F) (g : A -> B) (o : Outcome E
   | outcome_block                => outcome_block
   | outcome_assertk P k          => outcome_assertk P (outcome_bimap f g k)
   | outcome_assumek P k          => outcome_assumek P (outcome_bimap f g k)
+  | outcome_debug b k            => outcome_debug b (outcome_bimap f g k)
   end.
 
 Fixpoint outcome_bind {E A B : Type} (o : Outcome E A) (f : A -> Outcome E B) : Outcome E B :=
@@ -128,10 +131,14 @@ Fixpoint outcome_bind {E A B : Type} (o : Outcome E A) (f : A -> Outcome E B) : 
   | outcome_block                => outcome_block
   | outcome_assertk P k          => outcome_assertk P (outcome_bind k f)
   | outcome_assumek P k          => outcome_assumek P (outcome_bind k f)
+  | outcome_debug b k            => outcome_debug b (outcome_bind k f)
   end.
 
 Definition Error {E} (msg : E) : Prop := False.
 Arguments Error {E} msg : simpl never.
+
+Inductive Debug {B} (b : B) (P : Prop) : Prop :=
+| debug (p : P).
 
 Fixpoint outcome_satisfy {E A : Type} (o : Outcome E A) (F : E -> Prop) (P : A -> Prop) : Prop :=
   match o with
@@ -144,6 +151,7 @@ Fixpoint outcome_satisfy {E A : Type} (o : Outcome E A) (F : E -> Prop) (P : A -
   | outcome_block                => True
   | outcome_assertk Q k          => Q /\ outcome_satisfy k F P
   | outcome_assumek Q k          => Q -> outcome_satisfy k F P
+  | outcome_debug b k            => Debug b (outcome_satisfy k F P)
   end.
 
 Definition outcome_safe {E A : Type} (o : Outcome E A) : Prop :=
@@ -202,6 +210,7 @@ Fixpoint outcome_ok {E A : Type} (o : Outcome E A) : bool :=
   | outcome_angelic_binary o1 o2 => outcome_ok o1 || outcome_ok o2
   | outcome_demonic_binary o1 o2 => outcome_ok o1 && outcome_ok o2
   | outcome_assumek P o => outcome_ok o
+  | outcome_debug b k => outcome_ok k
   | _ => false
   end.
 
@@ -291,6 +300,7 @@ Proof.
   - destruct (outcome_ok o1); intuition.
   - destruct (outcome_ok o1); intuition.
   - destruct (outcome_ok o1); intuition.
+  - constructor; intuition.
 Qed.
 
 Instance outcome_satisfy_iff_morphism {E A} (o : Outcome E A) (F : E -> Prop) :

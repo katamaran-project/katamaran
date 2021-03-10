@@ -74,11 +74,6 @@ Module Soundness
 
     Import DynMutV1.
 
-    Definition inconsistent {Σ} (pc : PathCondition Σ) : Prop :=
-      forall ι, ~ inst ι pc.
-    Definition contradiction (e : DynamicMutatorError) : Prop :=
-      inconsistent (dmuterr_pathcondition e).
-
     Global Instance inst_heap : Inst SymbolicHeap SCHeap :=
       instantiate_list.
     Global Instance instlaws_heap : InstLaws SymbolicHeap SCHeap.
@@ -774,7 +769,10 @@ Module Soundness
 
       Lemma dmut_contradiction_vac `{Inst AT A} {D Γ1 Γ2 Σ} func msg data :
         dmut_vac (@dmut_contradiction Γ1 Γ2 AT Σ D func msg data).
-      Proof. unfold dmut_contradiction; auto. Qed.
+      Proof.
+        unfold dmut_contradiction, dmut_vac, outcome_vac; cbn; intros.
+        constructor; auto. constructor; auto.
+      Qed.
       Local Hint Resolve dmut_contradiction_vac : core.
 
       Lemma dmut_fail_vac `{Inst AT A} {D Γ1 Γ2 Σ} func msg data :
