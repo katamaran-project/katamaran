@@ -840,6 +840,9 @@ Module Soundness
       Proof. Admitted.
       Local Hint Resolve dmut_demonic_binary_vac : core.
 
+      Local Hint Extern 5 (outcome_vac _ (dmut_demonic_binary _ _ _ _ _)) =>
+        apply dmut_demonic_binary_vac : core.
+
       Lemma dmut_angelic_binary_vac `{Inst AT A} {Γ1 Γ2 Σ0}
         (d1 d2 : DynamicMutator Γ1 Γ2 AT Σ0) (vac_d1 : dmut_vac d1) (vac_d2 : dmut_vac d2) :
         dmut_vac (dmut_angelic_binary d1 d2).
@@ -894,9 +897,13 @@ Module Soundness
         dmut_vac (@dmut_produce Γ Σ asn).
       Proof.
         induction asn; cbn [dmut_produce]; unfold dmut_assume_term; eauto.
-        - destruct (term_get_sum s) as [[]|]; eauto 10.
+        - apply dmut_bind_vac; auto.
+          unfold dmut_arrow_vac; intros.
+          destruct (term_get_sum a1) as [[]|]; eauto 10.
         - destruct (term_get_pair s) as [[]|]; eauto 10.
-        - destruct (term_get_record s); eauto.
+        - apply dmut_bind_vac; auto.
+          unfold dmut_arrow_vac; intros.
+          destruct (term_get_record a1); eauto.
         - destruct (term_get_union s) as [[]|]; eauto.
       Qed.
       Local Hint Resolve dmut_produce_vac : core.

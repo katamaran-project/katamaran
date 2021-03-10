@@ -1048,17 +1048,18 @@ Module Mutators
              dmut_assume_formula (formula_eq k1 (term_enum E k2)) ;;
              dmut_produce (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+        dmut_pure s >>= fun (Σ1 : LCtx) (ζ1 : Sub Σ Σ1) (s : Term Σ1 (ty_sum σ τ)) =>
         match term_get_sum s with
-        | Some (inl v) => dmut_sub (sub_id _ ► (xl::σ ↦ v)) (dmut_produce alt_inl)
-        | Some (inr v) => dmut_sub (sub_id _ ► (xr::τ ↦ v)) (dmut_produce alt_inr)
+        | Some (inl v) => dmut_sub (ζ1 ► (xl::σ ↦ v)) (dmut_produce alt_inl)
+        | Some (inr v) => dmut_sub (ζ1 ► (xr::τ ↦ v)) (dmut_produce alt_inr)
         | None =>
           dmut_demonic_binary
-            (dmut_freshtermvar xl >>= fun _ ζ vl =>
-             dmut_assume_formula (formula_eq (sub_term ζ s) (term_inl vl)) ;;
-             dmut_sub (ζ ► (xl::_ ↦ vl)) (dmut_produce alt_inl))
-            (dmut_freshtermvar xr >>= fun _ ζ vr =>
-             dmut_assume_formula (formula_eq (sub_term ζ s) (term_inr vr)) ;;
-             dmut_sub (ζ ► (xr::_ ↦ vr)) (dmut_produce alt_inr))
+            (dmut_freshtermvar xl >>= fun _ ζ2 vl =>
+             dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 s) (term_inl vl)) ;;
+             dmut_sub (sub_comp ζ1 ζ2 ► (xl::_ ↦ vl)) (dmut_produce alt_inl))
+            (dmut_freshtermvar xr >>= fun _ ζ2 vr =>
+             dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 s) (term_inr vr)) ;;
+             dmut_sub (sub_comp ζ1 ζ2 ► (xr::_ ↦ vr)) (dmut_produce alt_inr))
         end
       | asn_match_list s alt_nil xh xt alt_cons =>
         dmut_fail "dmut_produce" "Not implemented" asn
@@ -1073,14 +1074,15 @@ Module Mutators
       | asn_match_tuple s p rhs =>
         dmut_fail "dmut_produce" "Not implemented" asn
       | asn_match_record R s p rhs =>
+        dmut_pure s >>= fun _ ζ1 s =>
         match term_get_record s with
         | Some ts =>
           let ζ__R := record_pattern_match p ts in
-          dmut_sub (sub_id _ ►► ζ__R) (dmut_produce rhs)
+          dmut_sub (ζ1 ►► ζ__R) (dmut_produce rhs)
         | None =>
-          dmut_freshen_recordpat id p >>= fun _ ζ '(t__p,ζ__R) =>
-          dmut_assume_formula (formula_eq (sub_term ζ s) t__p) ;;
-          dmut_sub (ζ ►► ζ__R) (dmut_produce rhs)
+          dmut_freshen_recordpat id p >>= fun _ ζ2 '(t__p,ζ__R) =>
+          dmut_assume_formula (formula_eq (sub_term ζ2 s) t__p) ;;
+          dmut_sub (sub_comp ζ1 ζ2 ►► ζ__R) (dmut_produce rhs)
         end
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
         match term_get_union s with
@@ -1326,10 +1328,8 @@ Module Mutators
          variables are all evars and if possible, it will fill in evars that are
          strictly necessary for the assertion to be true. *)
       Definition dmut_assert_term_eq_evar {Σe Σr σ} (te : Term Σe σ) (tr : Term Σr σ) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        (* Make sure we get the up to date substitution. *)
-        dmut_pure tt >>= fun Σr1 ζ1 _ =>
-        let tr1 := sub_term ζ1 tr in
-        let L1  := subst ζ1 L in
+        (* Make sure we get up to date data. *)
+        dmut_pure (tr, L) >>= fun _ _ '(tr1,L1) =>
         (* Try to fully match te against tr1, potentially filling in some evars. *)
         match match_term te tr1 L1 with
         | Some e => dmut_pure e
@@ -1362,6 +1362,7 @@ Module Mutators
                    dmut_assert_term_eq_evar t1 (sub_term ζ t2).
 
       Definition dmut_consume_formula_evar {Σe Σr} (fml : Formula Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+        dmut_pure L >>= fun _ _ L =>
         match fml with
         | formula_bool b =>
           match eval_term_evar L b with
@@ -1410,6 +1411,7 @@ Module Mutators
         end.
 
       Fixpoint dmut_consume_evar {Σe Σr} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+        dmut_pure L >>= fun _ _ L =>
         match asn with
         | asn_formula fml => dmut_consume_formula_evar fml L
         | asn_chunk c => dmut_consume_chunk_evar c L
