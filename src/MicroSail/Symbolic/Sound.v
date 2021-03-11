@@ -319,6 +319,10 @@ Module Soundness
         now rewrite subst_assoc, H1.
       Qed.
 
+      Lemma subst_sub_id_right {Σ1 Σ2} (ζ : Sub Σ1 Σ2) :
+        subst ζ (sub_id _) = ζ.
+      Proof. exact (sub_comp_id_left ζ). Qed.
+
       Lemma dmutres_try_assume_eq_spec {Γ Σ0 σ} (pc0 : PathCondition Σ0) (t1 t2 : Term Σ0 σ) (s0 : SymbolicState Γ Σ0) :
         OptionSpec
           (dmutres_equiv (MkDynMutResult (sub_id _) (cons (formula_eq t1 t2) pc0) tt s0))
@@ -335,8 +339,7 @@ Module Soundness
           + unfold subst at 2, SubstList; cbn.
             rewrite <-subst_sub_comp, sub_comp_shift_single, subst_sub_id, lookup_sub_single_eq.
             now rewrite <-entails_cons.
-          + fold (sub_comp (sub_id Σ0) (sub_single ςInΣ t)).
-            now rewrite sub_comp_id_left.
+          + now rewrite subst_sub_id_right.
         - exists (sub_shift ςInΣ).
           repeat split; intros ι [eq ιpc]%inst_pathcondition_cons.
           + now rewrite <-subst_sub_comp, inst_subst, (inst_single_shift ςInΣ t ι eq), inst_sub_id.
@@ -1001,15 +1004,15 @@ Module Soundness
 
       Definition dmut_arrow_dcl {Γ1 Γ2 AT A BT B Σ0} `{Inst AT A, Subst AT, Inst BT B, Subst BT}
                  (f : DynamicMutatorArrow Γ1 Γ2 AT BT Σ0) : Prop :=
-        forall Σ1 Σ2 (ζ01 : Sub Σ0 Σ1) (ζ02 : Sub Σ0 Σ2) (ζ12 : Sub Σ1 Σ2) pc1 pc2 (a1 : AT Σ1) (a2 : AT Σ2) s1 s2,
-          pc2 ⊢ subst ζ12 pc1 ->
-          pc2 ⊢ subst ζ12 ζ01 == ζ02 ->
-          pc2 ⊢ subst ζ12 a1 == a2 ->
-          pc2 ⊢ subst ζ12 s1 == s2 ->
-          forall (P : ResultProperty Γ2 BT Σ1) (P_dcl : resultprop_downwards_closed P) (P_vac : resultprop_vacuous P)
-            (Q : ResultProperty Γ2 BT Σ2) (PQ : forall r, resultprop_specialize_pc ζ12 pc2 P r -> Q r),
-            outcome_satisfy (f Σ1 ζ01 a1 Σ1 (sub_id _) pc1 s1) contradiction P ->
-            outcome_satisfy (f Σ2 ζ02 a2 Σ2 (sub_id _) pc2 s2) contradiction Q.
+        forall Σ1 Σ2 Σ3 Σ4 (ζ01 : Sub Σ0 Σ1) (ζ12 : Sub Σ1 Σ2) (ζ03 : Sub Σ0 Σ3) (ζ34 : Sub Σ3 Σ4) (ζ24 : Sub Σ2 Σ4) (pc2 : PathCondition Σ2) (pc4 : PathCondition Σ4) (a1 : AT Σ1) (a3 : AT Σ3) (s2 : SymbolicState Γ1 Σ2) (s4 : SymbolicState Γ1 Σ4),
+          pc4 ⊢ subst ζ24 pc2 ->
+          pc4 ⊢ subst (subst ζ24 ζ12) ζ01 == subst ζ34 ζ03 ->
+          pc4 ⊢ subst (subst ζ24 ζ12) a1 == subst ζ34 a3 ->
+          pc4 ⊢ subst ζ24 s2 == s4 ->
+          forall (P : ResultProperty Γ2 BT Σ2) (P_dcl : resultprop_downwards_closed P) (P_vac : resultprop_vacuous P)
+            (Q : ResultProperty Γ2 BT Σ4) (PQ : forall r, resultprop_specialize_pc ζ24 pc4 P r -> Q r),
+            outcome_satisfy (f Σ1 ζ01 a1 Σ2 ζ12 pc2 s2) contradiction P ->
+            outcome_satisfy (f Σ3 ζ03 a3 Σ4 ζ34 pc4 s4) contradiction Q.
 
       Lemma dmut_bind_dcl {AT A BT B} `{InstLaws BT B} `{InstLaws AT A}
             {Γ1 Γ2 Γ3 Σ0} (d : DynamicMutator Γ1 Γ2 AT Σ0) (d_dcl : dmut_dcl d)
@@ -1027,8 +1030,10 @@ Module Soundness
           intros [Σ2 ζ12 pc2 a2 s2] [Σ3 ζ13 pc3 a3 s3] [ζ23 (Hpc23 & Hζ23 & Ha23 & Hs23)]; cbn in *.
           rewrite ?outcome_satisfy_bind; cbn.
           eapply f_dcl; eauto.
-          + unfold sub_comp.
+          + rewrite subst_sub_id_right, subst_sub_id.
+            repeat unfold sub_comp.
             now rewrite subst_assoc, Hζ23.
+          + now rewrite subst_sub_id, subst_sub_id_right.
           + (* rewrite inside bind? *)
             unfold resultprop_downwards_closed.
             intros [] [] Hgeq; cbn - [dmutres_geq].
@@ -1070,7 +1075,6 @@ Module Soundness
               unfold sub_comp in Hpost.
               now rewrite subst_assoc in Hpost.
       Qed.
-
     End SemanticDownwardsClosed.
 
 
@@ -1943,10 +1947,9 @@ Module Soundness
       rewrite inst_subst.
       f_equal.
       rewrite <-inst_subst.
-      replace (subst (sub_id Σ2 ► (x :: τ ↦ v)) sub_wk1) with (sub_id Σ2); [now rewrite inst_sub_id|].
       change (subst (sub_id Σ2 ► (x :: τ ↦ v)) sub_wk1) with (sub_comp sub_wk1 (sub_id Σ2 ► (x :: τ ↦ v))).
-      rewrite sub_comp_wk1_tail.
-      now cbn.
+      rewrite sub_comp_wk1_tail. cbn.
+      now rewrite inst_sub_id.
     Qed.
 
     Lemma dmut_wp_sub_fresh {Γ Σ0 Σ1 AT A x τ} `{Subst AT, Inst AT A}
