@@ -160,7 +160,7 @@ Module SemiConcrete
   Section SemiConcreteMutator.
 
     Definition SCMut (Γ1 Γ2 : PCtx) (A : Type) : Type :=
-      SCState Γ1 -> Outcome (SCMutResult Γ2 A).
+      SCState Γ1 -> Outcome string (SCMutResult Γ2 A).
     Bind Scope mutator_scope with SCMut.
 
     Definition scmut_demonic {Γ1 Γ2 I A} (ms : I -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
@@ -189,10 +189,6 @@ Module SemiConcrete
       scmut_bind ma (fun a => scmut_pure (f a)).
     Definition scmut_angelick_list {Γ1 Γ2 A B} (msg : string) (xs : list A) (k : A -> SCMut Γ1 Γ2 B) : SCMut Γ1 Γ2 B :=
       fun s => outcome_angelick_list msg xs (fun a => k a s).
-    Definition scmut_cover {Γ1 Γ2 A} : relation (SCMut Γ1 Γ2 A) :=
-      fun m1 m2 => forall s, outcome_cover (m1 s) (m2 s).
-    Instance scmut_cover_preorder {Γ1 Γ2 A} : PreOrder (@scmut_cover Γ1 Γ2 A).
-    Proof. split; firstorder. Qed.
 
   End SemiConcreteMutator.
   Bind Scope mutator_scope with SCMut.
@@ -212,7 +208,7 @@ Module SemiConcrete
       (scmut_bind ma (fun x => mb))
         (at level 80, ma at level 90, mb at level 200, right associativity) : mutator_scope.
     Notation "ma >>= f" := (scmut_bind ma f) (at level 50, left associativity) : mutator_scope.
-    Notation "m1 ;; m2" := (scmut_bind m1 (fun _ => m2)) : mutator_scope.
+    Notation "m1 ;; m2" := (scmut_bind_right m1 m2) : mutator_scope.
     Notation "ma *> mb" := (scmut_bind_right ma mb) (at level 50, left associativity) : mutator_scope.
     Notation "ma <* mb" := (scmut_bind_left ma mb) (at level 50, left associativity) : mutator_scope.
 
@@ -223,17 +219,17 @@ Module SemiConcrete
 
     Local Open Scope mutator_scope.
 
-    Definition scmut_state {Γ Γ' A} (f : SCState Γ -> (SCState Γ' * A)) : SCMut Γ Γ' A :=
-      fun s => outcome_pure (let (s1,a) := f s in MkSCMutResult a s1).
+    Definition scmut_state {Γ Γ' A} (f : SCState Γ -> (A * SCState Γ')) : SCMut Γ Γ' A :=
+      fun s => outcome_pure (let (a,s1) := f s in MkSCMutResult a s1).
     Definition scmut_modify {Γ Γ'} (f : SCState Γ -> SCState Γ') : SCMut Γ Γ' unit :=
-      scmut_state (fun s => (f s,tt)).
+      scmut_state (fun s => (tt,f s)).
     Definition scmut_put {Γ Γ'} (s : SCState Γ') : SCMut Γ Γ' unit :=
-      scmut_state (fun _ => (s,tt)).
+      scmut_state (fun _ => (tt,s)).
     Definition scmut_get {Γ} : SCMut Γ Γ (SCState Γ) :=
       scmut_state (fun s => (s,s)).
 
     Definition scmut_state_local {Γ Γ' A} (f : LocalStore Γ -> (LocalStore Γ' * A)) : SCMut Γ Γ' A :=
-      scmut_state (fun '(MkSCState δ ĥ) => let (δ',a) := f δ in (MkSCState δ' ĥ,a)).
+      scmut_state (fun '(MkSCState δ ĥ) => let (δ',a) := f δ in (a,MkSCState δ' ĥ)).
     Definition scmut_modify_local {Γ Γ'} (f : LocalStore Γ -> LocalStore Γ') : SCMut Γ Γ' unit :=
       scmut_state_local (fun δ => (f δ,tt)).
     Definition scmut_put_local {Γ Γ'} (δ : LocalStore Γ') : SCMut Γ Γ' unit :=
@@ -252,7 +248,7 @@ Module SemiConcrete
       scmut_modify_local (fun δΓ => env_cat δΓ δΔ).
 
     Definition scmut_state_heap {Γ A} (f : SCHeap -> (SCHeap * A)) : SCMut Γ Γ A :=
-      scmut_state (fun '(MkSCState δ h) => let (h',a) := f h in (MkSCState δ h',a)).
+      scmut_state (fun '(MkSCState δ h) => let (h',a) := f h in (a,MkSCState δ h')).
     Definition scmut_modify_heap {Γ} (f : SCHeap -> SCHeap) : SCMut Γ Γ unit :=
       scmut_state_heap (fun h => (f h,tt)).
     Definition scmut_get_heap {Γ} : SCMut Γ Γ SCHeap :=
@@ -300,13 +296,13 @@ Module SemiConcrete
 
     Definition scmut_assume_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : SCMut Γ Γ unit :=
       fun s => outcome_assumek
-                 (inst_formula ι fml)
+                 (inst ι fml)
                  (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
     Definition scmut_assume_term {Γ Σ} (ι : SymInstance Σ) (t : Term Σ ty_bool) : SCMut Γ Γ unit :=
       scmut_assume_formula ι (formula_bool t).
     Definition scmut_assert_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : SCMut Γ Γ unit :=
       fun s => outcome_assertk
-                 (inst_formula ι fml)
+                 (inst ι fml)
                  (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
 
     Fixpoint scmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
@@ -352,16 +348,18 @@ Module SemiConcrete
       match asn with
       | asn_formula fml => scmut_assert_formula ι fml
       | asn_chunk c     => scmut_consume_chunk (inst ι c)
-      | asn_if b a1 a2  => if inst (A := Lit ty_bool) ι b
-                           then scmut_consume ι a1
-                           else scmut_consume ι a2
+      | asn_if b a1 a2  => (scmut_assume_term ι b ;; scmut_consume ι a1) ⊗
+                           (scmut_assume_term ι (term_not b) ;; scmut_consume ι a2)
       | @asn_match_enum _ E k alts =>
         scmut_consume ι (alts (inst (T := fun Σ => Term Σ _) ι k))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        match inst (T := fun Σ => Term Σ _) ι s with
-        | inl v => scmut_consume (env_snoc ι (xl :: σ) v) alt_inl
-        | inr v => scmut_consume (env_snoc ι (xr :: τ) v) alt_inr
-        end
+        scmut_angelic_binary
+          (⨁ v : Lit σ =>
+           scmut_assert_formula ι (formula_eq s (term_lit (ty_sum _ _) (inl v))) ;;
+           scmut_consume (env_snoc ι (xl :: σ) v) alt_inl)
+          (⨁ v : Lit τ =>
+           scmut_assert_formula ι (formula_eq s (term_lit (ty_sum _ _) (inr v))) ;;
+           scmut_consume (env_snoc ι (xr :: τ) v) alt_inr)
       | asn_match_list s alt_nil xh xt alt_cons =>
         match inst (T := fun Σ => Term Σ _) ι s with
         | nil        => scmut_consume ι alt_nil
@@ -512,21 +510,26 @@ Module SemiConcrete
 
   Import OutcomeNotations.
 
-  Definition semiconcrete_outcome_contract {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
-    Outcome unit :=
+  Definition scmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
+   SymInstance (sep_contract_logic_variables c) -> SCMut Δ Δ unit :=
     match c with
-    | MkSepContract _ _ Σ δ req result  ens =>
-      ⨂ ι : SymInstance Σ =>
-      let δΔ : LocalStore Δ := inst ι δ in
-      let mut := (scmut_produce ι req ;;
-                  scmut_exec s >>= fun v =>
-                  scmut_consume (env_snoc ι (result::τ) v) ens ;;
-                  scmut_leakcheck)%mut in
+    | MkSepContract _ _ Σ δ req result ens =>
+      fun ι =>
+      scmut_produce ι req ;;
+      scmut_exec s >>= fun v =>
+      scmut_consume (env_snoc ι (result::τ) v) ens ;;
+      scmut_leakcheck
+    end%mut.
+
+  Definition semiconcrete_outcome_contract {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
+    Outcome string unit :=
+      ⨂ ι : SymInstance (sep_contract_logic_variables c) =>
+      let δΔ : LocalStore Δ := inst ι (sep_contract_localstore c) in
+      let mut := scmut_contract c s ι in
       let out := mut (scstate_initial δΔ) in
-      outcome_map (fun _ => tt) out
-    end.
+      outcome_map (fun _ => tt) out.
 
   Definition ValidContractSCMut {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    outcome_satisfy (semiconcrete_outcome_contract c body) (fun _ => True).
+    outcome_satisfy (semiconcrete_outcome_contract c body) (fun _ => False) (fun _ => True).
 
 End SemiConcrete.

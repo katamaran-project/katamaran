@@ -437,6 +437,7 @@ Module SepContracts.
          | H: Env _ ctx_nil |- _ => dependent destruction H
          | H: Env _ (ctx_snoc _ _) |- _ => dependent destruction H
          | H: _ /\ _ |- _ => destruct H
+         | |- Outcome.Debug _ _ => constructor
          | |- _ /\ _ => constructor
          end;
        compute

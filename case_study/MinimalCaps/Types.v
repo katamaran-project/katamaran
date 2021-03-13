@@ -98,7 +98,7 @@ Inductive InstructionConstructor : Set :=
 | kret.
 
 Section Records.
-  Local Set Primitive Projections.
+  (* Local Set Primitive Projections. *)
 
   Definition Addr : Set := Z.
 

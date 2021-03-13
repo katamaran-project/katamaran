@@ -52,8 +52,11 @@ From MicroSail Require Sep.Logic.
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
-From iris.proofmode Require tactics.
+From iris.program_logic Require Import weakestpre hoare adequacy.
+From iris.proofmode Require Import tactics.
 From stdpp Require namespaces fin_maps.
+
+Require Import Coq.Program.Equality.
 
 Set Implicit Arguments.
 
@@ -68,7 +71,7 @@ Module MinCapsModel.
     Variable maxAddr : nat.
 
     Module IrisRegs := IrisRegisters MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
-    Import IrisRegs.
+    Export IrisRegs.
 
     Section WithIrisNotations.
 
@@ -76,7 +79,6 @@ Module MinCapsModel.
     Import iris.bi.big_op.
     Import iris.base_logic.lib.iprop.
     Import iris.base_logic.lib.gen_heap.
-    Import iris.proofmode.tactics.
 
     Class mcMemG Σ := McMemG {
                           (* ghost variable for tracking state of registers *)
@@ -151,6 +153,12 @@ Module MinCapsModel.
       | R3 => reg_pointsTo reg3 v
       end.
 
+    Lemma MinCaps_ptsreg_regtag_to_reg `{sailRegG Σ} (reg : RegName) (v : Z + Capability) :
+      MinCaps_ptsreg reg v = reg_pointsTo (MinCapsSymbolicContractKit.regtag_to_reg reg) v.
+    Proof.
+      by destruct reg.
+    Qed.
+
     Definition region_addrs (b : Addr) (e : Addr + unit): list Addr :=
       match e with
       | inl e => filter (fun a => and (b ≤ a)%Z (a ≤ e)%Z) liveAddrs
@@ -173,10 +181,12 @@ Module MinCapsModel.
       | inr c => MinCaps_csafe (mG := mG) c
       end.
 
+    Import EnvNotations.
+
     Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
       (match p return Env Lit (MinCapsAssertionKit.𝑷_Ty p) -> iProp Σ with
       | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
-      | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head ts) 1 (env_head (env_tail ts))%Z
+      | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head (env_tail ts)) 1 (env_head ts)
       | safe => fun ts => MinCaps_safe (mG := mG) (env_head ts)
       | csafe => fun ts => MinCaps_csafe (mG := mG) (env_head ts)
       end) ts.
@@ -184,4 +194,154 @@ Module MinCapsModel.
     End WithIrisNotations.
   End MinCapsIrisHeapKit.
 
+  Module Soundness := IrisSoundness MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit MinCapsIrisHeapKit.
+  Export Soundness.
+
+  Import EnvNotations.
+
+  Lemma rM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
+  ∀ (ι : SymInstance (ctx_snoc (ctx_snoc ctx_nil ("address", ty_addr)) ("w", ty_int))),
+    evals es δ = [(ι ‼ "address")%exp]
+    → ⊢ semTriple δ (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "w")%exp) (stm_call_external rM es)
+          (λ (v : Z) (δ' : LocalStore Γ),
+             (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "w")%exp ∗ ⌜v = (ι ‼ "w")%exp⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (ι eq) "pre".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "[Hregs Hmem]".
+    iDestruct "Hmem" as (memmap) "[Hmem' %]".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in a.
+    dependent destruction a.
+    dependent destruction H.
+    dependent destruction H1.
+    dependent destruction H.
+    iModIntro. iModIntro.
+    cbn.
+    iDestruct (gen_heap.gen_heap_valid with "Hmem' pre") as "%".
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL "Hmem'".
+    - iExists memmap.
+      by iFrame.
+    - iSplitL; trivial.
+      iApply wp_value.
+      cbn.
+      iFrame.
+      specialize (H0 addr (ι ‼ "w")%exp).
+      cbn in H0.
+      iPureIntro.
+      unfold fun_rM.
+      split; split; trivial.
+      refine (H0 _); clear H0.
+      rewrite eq in x.
+      simpl in x.
+      apply (f_equal env_head) in x; cbn in x.
+      by subst.
+  Qed.
+
+  Lemma wM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
+  ∀ (ι : SymInstance (ctx_snoc (ctx_snoc (ctx_snoc ctx_nil ("address", ty_addr)) ("new_value", ty_int)) ("old_value", ty_int))),
+    evals es δ = [(ι ‼ "address")%exp, (ι ‼ "new_value")%exp]
+    → ⊢ semTriple δ (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "old_value")%exp) (stm_call_external wM es)
+        (λ (v : Lit ty_unit) (δ' : LocalStore Γ),
+             (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "new_value")%exp) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (ι eq) "pre".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "[Hregs Hmem]".
+    iDestruct "Hmem" as (memmap) "[Hmem' %]".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in a.
+    dependent destruction a.
+    dependent destruction H.
+    dependent destruction H1.
+    dependent destruction H.
+    iModIntro. iModIntro.
+    cbn.
+    iMod (gen_heap.gen_heap_update _ _ _ val with "Hmem' pre") as "[Hmem' ptsto]".
+  Admitted.
+
+  Lemma dI_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
+  ∀ (ι : SymInstance (ctx_snoc ctx_nil ("code", ty_int))),
+    evals es δ = [(ι ‼ "code")%exp]
+    → ⊢ semTriple δ (⌜is_true true⌝ ∧ emp) (stm_call_external dI es)
+          (λ (v : Lit ty_instr) (δ' : LocalStore Γ),
+             (⌜is_true true⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Proof.
+  Admitted.
+
+  Lemma open_ptsreg_sound `{sg : sailG Σ} {Γ es δ} :
+    ∀ ι : SymInstance (ctx_snoc (ctx_snoc ctx_nil ("reg", ty_lv)) ("w", ty_word)),
+      evals es δ = [(ι ‼ "reg")%exp]
+      → ⊢ semTriple δ
+          (MinCapsIrisHeapKit.MinCaps_ptsreg (ι ‼ "reg")%exp (ι ‼ "w")%exp)
+          (stm_call_external (ghost open_ptsreg) es)
+          (λ (v : ()) (δ' : LocalStore Γ),
+             (MinCapsSymbolicContractKit.ASS.inst_assertion (ι ► (("result", ty_unit) ↦ v))
+                  match (ι ‼ "reg")%exp with
+                  | R0 =>
+                      MinCapsSymbolicContractKit.ASS.asn_chunk
+                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg0 (term_var "w"))
+                  | R1 =>
+                      MinCapsSymbolicContractKit.ASS.asn_chunk
+                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg1 (term_var "w"))
+                  | R2 =>
+                      MinCapsSymbolicContractKit.ASS.asn_chunk
+                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg2 (term_var "w"))
+                  | R3 =>
+                      MinCapsSymbolicContractKit.ASS.asn_chunk
+                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg3 (term_var "w"))
+                  end) ∗ ⌜δ' = δ⌝).
+  Admitted.
+
+  Lemma close_ptsreg_sound `{sg : sailG Σ} {Γ R es δ} :
+    ∀ ι : SymInstance (ctx_snoc ctx_nil ("w", ty_word)),
+      evals es δ = env_nil
+      → ⊢ semTriple δ
+          (MinCapsIrisHeapKit.IrisRegs.reg_pointsTo (MinCapsSymbolicContractKit.regtag_to_reg R)
+                                                    (ι ‼ "w")%exp)
+          (stm_call_external (ghost (close_ptsreg R)) es)
+          (λ (_ : ()) (δ' : LocalStore Γ),
+           MinCapsIrisHeapKit.MinCaps_ptsreg R (ι ‼ "w")%exp
+                                             ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (ι eq) "ptsto".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "Hregs".
+    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in a.
+    dependent destruction a.
+    dependent destruction H.
+    dependent destruction H.
+    iModIntro.
+    iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; trivial.
+    iApply wp_value.
+    cbn.
+    rewrite MinCapsIrisHeapKit.MinCaps_ptsreg_regtag_to_reg.
+    by iFrame.
+  Qed.
+
+  Lemma extSem `{sg : sailG Σ} : ExtSem (Σ := Σ).
+    intros Γ τ Δ f es δ.
+    destruct f as [_|_|_|Γ' [ | reg ] es δ'];
+      cbn;
+      eauto using rM_sound, wM_sound, dI_sound, open_ptsreg_sound, close_ptsreg_sound.
+  Qed.
+
 End MinCapsModel.
+

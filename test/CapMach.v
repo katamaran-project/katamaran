@@ -502,13 +502,18 @@ Module CapProgramKit <: (ProgramKit CapTermKit).
 
   Definition fun_update_pc : Stm ctx_nil ty_unit :=
     let: "c" := stm_read_register pc in
-    stm_write_register pc
-      (exp_record capability
-                      [ ((exp_var "c")․"cap_permission"),
-                        ((exp_var "c")․"cap_begin"),
-                        ((exp_var "c")․"cap_end"),
-                        ((exp_var "c")․"cap_cursor") + lit_int 1
-                      ]%exp%arg) ;;
+    stm_match_record capability (exp_var "c")
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+       "cap_permission" "perm")
+       "cap_begin" "beg")
+       "cap_end" "end")
+       "cap_cursor" "cur")
+      (stm_write_register pc
+         (exp_record capability
+            [ exp_var "perm",
+              exp_var "beg",
+              exp_var "end",
+              exp_var "cur" + lit_int 1 ])) ;;
     stm_lit ty_unit tt.
 
   Definition fun_read_allowed : Stm ["p" ∶ ty_perm] ty_bool :=
@@ -573,13 +578,20 @@ Module CapProgramKit <: (ProgramKit CapTermKit).
 
     Definition fun_exec_store : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_unit :=
       let: c ∶ cap  := call read_reg_cap lv in
-      let: p ∶ bool := call write_allowed c․perm in
-      let: q ∶ bool := call within_bounds c in
-      stm_assert (p && q)
-        (lit_string "Err: [exec_store] assert failed") ;;
-      let: w ∶ word := call read_reg hv in
-      call write_mem c․cursor w ;;
-      call update_pc.
+      stm_match_record
+        capability (exp_var "c")
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "perm")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cur")
+        (let: p ∶ bool := call write_allowed (exp_var "perm") in
+         let: q ∶ bool := call within_bounds c in
+         stm_assert (p && q)
+           (lit_string "Err: [exec_store] assert failed") ;;
+         let: w ∶ word := call read_reg hv in
+         call write_mem (exp_var "cur") w ;;
+         call update_pc).
 
   End ExecStore.
 

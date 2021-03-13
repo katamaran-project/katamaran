@@ -88,10 +88,73 @@ Module Assertions
     { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
   Qed.
 
+  Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
+    match fml with
+    | formula_bool t    => is_true (inst (A := Lit ty_bool) ι t)
+    | formula_prop ζ P  => uncurry_named P (inst ι ζ)
+    | formula_eq t1 t2  => inst ι t1 =  inst ι t2
+    | formula_neq t1 t2 => inst ι t1 <> inst ι t2
+    end.
+
+  Instance instantiate_formula : Inst Formula Prop :=
+    {| inst Σ := inst_formula;
+       lift Σ P := formula_prop env_nil P
+    |}.
+
+  Instance instantiate_formula_laws : InstLaws Formula Prop.
+  Proof.
+    constructor; auto.
+    intros Σ Σ' ζ ι t.
+    induction t.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      f_equal.
+      apply inst_subst.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      f_equal.
+      eapply inst_subst.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      f_equal; eapply inst_subst.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      repeat f_equal; eapply inst_subst.
+  Qed.
+
   Inductive Chunk (Σ : LCtx) : Type :=
   | chunk_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
   Arguments chunk_user [_] _ _.
+
+  Definition chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
+    match c1 , c2 with
+    | chunk_user p1 ts1, chunk_user p2 ts2 =>
+      match eq_dec p1 p2 with
+      | left e => env_eqb_hom
+                    (@Term_eqb _)
+                    (eq_rect _ (fun p => Env _ (𝑷_Ty p)) ts1 _ e)
+                    ts2
+      | right _ => false
+      end
+    | chunk_ptsreg r1 t1 , chunk_ptsreg r2 t2 =>
+      match eq_dec_het r1 r2 with
+      | left e  => Term_eqb
+                     (eq_rect _ (Term Σ) t1 _ (f_equal projT1 e))
+                     t2
+      | right _ => false
+      end
+    | _ , _ => false
+    end.
+
+  (* Equations(noeqns) chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool := *)
+  (*   chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) *)
+  (*   with eq_dec p1 p2 => { *)
+  (*     chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := env_eqb_hom (@Term_eqb _) ts1 ts2; *)
+  (*     chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := false *)
+  (*   }; *)
+  (*   chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) *)
+  (*   with eq_dec_het r1 r2 => { *)
+  (*     chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left eq_refl) := Term_eqb t1 t2; *)
+  (*     chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := false *)
+  (*   }; *)
+  (*   chunk_eqb _ _  := false. *)
 
   Inductive Assertion (Σ : LCtx) : Type :=
   | asn_formula (fml : Formula Σ)
@@ -159,6 +222,51 @@ Module Assertions
   (*     | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a) *)
   (*     end. *)
 
+  Global Instance OccursCheckFormula :
+    OccursCheck Formula :=
+    fun Σ b bIn fml =>
+      match fml with
+      | formula_bool t    => option_map formula_bool (occurs_check bIn t)
+      | formula_prop ζ P  => option_map (fun ζ => formula_prop ζ P) (occurs_check bIn ζ)
+      | formula_eq t1 t2  => option_map (fun '(t1,t2) => formula_eq t1 t2) (occurs_check bIn (t1, t2))
+      | formula_neq t1 t2 => option_map (fun '(t1,t2) => formula_neq t1 t2) (occurs_check bIn (t1, t2))
+      end.
+
+  Global Instance OccursCheckChunk :
+    OccursCheck Chunk :=
+    fun Σ b bIn c =>
+      match c with
+      | chunk_user p ts => option_map (chunk_user p) (occurs_check bIn ts)
+      | chunk_ptsreg r t => option_map (chunk_ptsreg r) (occurs_check bIn t)
+      end.
+
+  Global Instance OccursCheckAssertion :
+    OccursCheck Assertion :=
+    fix occurs Σ b (bIn : b ∈ Σ) (asn : Assertion Σ) : option (Assertion (Σ - b)) :=
+      match asn with
+      | asn_formula fml => option_map (@asn_formula _) (occurs_check bIn fml)
+      | asn_chunk c     => option_map (@asn_chunk _) (occurs_check bIn c)
+      | asn_if b a1 a2  =>
+        option_ap (option_ap (option_map (@asn_if _) (occurs_check bIn b)) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
+      | asn_match_enum E k alts => None (* TODO *)
+      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+        option_ap
+          (option_ap
+             (option_map
+                (fun s' alt_inl' alt_inr' =>
+                   asn_match_sum σ τ s' xl alt_inl' xr alt_inr')
+                (occurs_check bIn s))
+             (occurs (Σ ▻ (xl :: σ)) b (inctx_succ bIn) alt_inl))
+          (occurs (Σ ▻ (xr :: τ)) b (inctx_succ bIn) alt_inr)
+      | @asn_match_list _ σ s alt_nil xh xt alt_cons => None (* TODO *)
+      | @asn_match_pair _ σ1 σ2 s xl xr rhs => None (* TODO *)
+      | @asn_match_tuple _ σs Δ s p rhs => None (* TODO *)
+      | @asn_match_record _ R4 Δ s p rhs => None (* TODO *)
+      | asn_match_union U s alt__ctx alt__pat alt__rhs => None (* TODO *)
+      | asn_sep a1 a2 => option_ap (option_map (@asn_sep _) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
+      | asn_exist ς τ a => option_map (@asn_exist _ ς τ) (occurs _ _ (inctx_succ bIn) a)
+      end.
+
   Definition symbolic_eval_exp {Γ Σ} (δ : SymbolicLocalStore Γ Σ) :
     forall {σ} (e : Exp Γ σ), Term Σ σ :=
     fix symbolic_eval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
@@ -176,7 +284,7 @@ Module Assertions
       | @exp_projtup _ _ e n _ p => term_projtup (symbolic_eval_exp e) n (p := p)
       | exp_union E K e          => term_union E K (symbolic_eval_exp e)
       | exp_record R es          => term_record R (env_map (fun _ => symbolic_eval_exp) es)
-      | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf
+      (* | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf *)
       end%exp.
 
   Record SepContract (Δ : PCtx) (τ : Ty) : Type :=
@@ -189,6 +297,23 @@ Module Assertions
       }.
 
   Arguments MkSepContract : clear implicits.
+
+  Definition lint_contract {Δ σ} (c : SepContract Δ σ) : bool :=
+    match c with
+    | {| sep_contract_logic_variables := Σ;
+         sep_contract_localstore      := δ;
+         sep_contract_precondition    := pre
+      |} =>
+      ctx_forallb Σ
+        (fun b bIn =>
+           match occurs_check bIn (δ , pre) with
+           | Some _ => false
+           | None   => true
+           end)
+    end.
+
+  Definition Linted {Δ σ} (c : SepContract Δ σ) : Prop :=
+    Bool.Is_true (lint_contract c).
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), option (SepContract Δ τ).
@@ -247,14 +372,6 @@ Module Assertions
   Section Contracts.
     Context `{Logic : IHeaplet L}.
 
-    Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
-      match fml with
-      | formula_bool t    => is_true (inst (A := Lit ty_bool) ι t)
-      | formula_prop ζ P  => uncurry_named P (inst ι ζ)
-      | formula_eq t1 t2  => inst ι t1 =  inst ι t2
-      | formula_neq t1 t2 => inst ι t1 <> inst ι t2
-      end.
-
     Definition inst_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
       match c with
       | chunk_user p ts => luser p (inst ι ts)
@@ -263,7 +380,7 @@ Module Assertions
 
     Fixpoint inst_assertion {Σ} (ι : SymInstance Σ) (a : Assertion Σ) : L :=
       match a with
-      | asn_formula fml => !!(inst_formula ι fml) ∧ emp
+      | asn_formula fml => !!(inst ι fml) ∧ emp
       | asn_chunk c => inst_chunk ι c
       | asn_if b a1 a2 => if inst (A := Lit ty_bool) ι b then inst_assertion ι a1 else inst_assertion ι a2
       | asn_match_enum E k alts => inst_assertion ι (alts (inst (T := fun Σ => Term Σ _) ι k))

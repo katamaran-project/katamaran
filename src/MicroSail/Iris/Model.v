@@ -15,7 +15,7 @@ Require Import Equations.Prop.EqDec.
 From iris.bi Require Import interface.
 From iris.algebra Require Import gmap excl auth.
 From iris.base_logic Require Import lib.fancy_updates lib.own lib.gen_heap.
-From iris.program_logic Require Import weakestpre hoare adequacy.
+From iris.program_logic Require Import weakestpre adequacy.
 From iris.proofmode Require Import tactics.
 
 Require Import MicroSail.Sep.Spec.
@@ -106,7 +106,7 @@ Module ValsAndTerms
 
   Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-  Instance intoVal_lit {Γ τ} : IntoVal (MkTm (Γ := Γ) (τ := τ) δ (stm_lit _ l)) (MkVal _ δ l).
+  Instance intoVal_lit {Γ τ δ l} : IntoVal (MkTm (Γ := Γ) (τ := τ) δ (stm_lit _ l)) (MkVal _ δ l).
   intros; eapply of_to_val; by cbn.
   Defined.
 
@@ -248,7 +248,7 @@ Module IrisInstance
                        sailG_memG :> memG Σ
                      }.
 
-  Instance sailG_irisG {Γ τ} `{sailG Σ} : irisG (microsail_lang Γ τ) Σ := {
+  Global Instance sailG_irisG {Γ τ} `{sailG Σ} : irisG (microsail_lang Γ τ) Σ := {
     iris_invG := sailG_invG;
     state_interp σ κs _ := (regs_inv σ.1 ∗ mem_inv sailG_memG σ.2)%I;
     fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
@@ -272,7 +272,7 @@ Module IrisInstance
     lentails := bi_entails;
   }.
 
-  Program Instance iProp_ILogicLaws : @logic.ILogicLaws (iProp Σ) iris_ILogic.
+  Global Program Instance iProp_ILogicLaws : @logic.ILogicLaws (iProp Σ) iris_ILogic.
   Next Obligation.
     iIntros; iFrame.
   Qed.
@@ -347,13 +347,13 @@ Module IrisInstance
     by iPureIntro.
   Qed.
 
-  Program Instance iris_ISepLogic : logic.ISepLogic (iProp Σ) :=
+  Global Program Instance iris_ISepLogic : logic.ISepLogic (iProp Σ) :=
   { logic.emp := emp%I;
     logic.sepcon P Q := (P ∗ Q)%I;
     logic.wand P Q := (P -∗ Q)%I
   }.
 
-  Program Instance iProp_ISepLogicLaws : @logic.ISepLogicLaws (iProp Σ) iris_ISepLogic.
+  Global Program Instance iProp_ISepLogicLaws : @logic.ISepLogicLaws (iProp Σ) iris_ISepLogic.
   Next Obligation.
     intros P Q R. split.
     - eapply bi.sep_assoc'.
@@ -389,12 +389,31 @@ Module IrisInstance
       by iSplit; iFrame.
   Qed.
 
-  Instance iris_IHeapLet : IHeaplet (iProp Σ) :=
+  Global Instance iris_IHeapLet : IHeaplet (iProp Σ) :=
     { is_ISepLogic := iris_ISepLogic;
       (* TODO: should be user-defined... *)
       luser p ts := luser_inst ts sailG_memG;
       lptsreg σ r t := reg_pointsTo r t
     }.
+
+  End IrisInstance.
+End IrisInstance.
+
+Module IrisSoundness
+       (Import termkit : TermKit)
+       (Import progkit : ProgramKit termkit)
+       (Import assertkit : AssertionKit termkit progkit)
+       (Import contractkit : SymbolicContractKit termkit progkit assertkit)
+       (Import irisheapkit : IrisHeapKit termkit progkit assertkit contractkit).
+
+  Module Inst := IrisInstance termkit progkit assertkit contractkit irisheapkit.
+  Export Inst.
+  Import CtxNotations.
+  Import EnvNotations.
+
+  Section IrisSoundness.
+
+  Context `{sailG Σ}.
 
   Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) :
     ⊢ (regs_inv regstore -∗ reg_pointsTo r v -∗ ⌜read_register regstore r = v⌝)%I.
@@ -1383,13 +1402,50 @@ Module IrisInstance
     iApply ("tripbody" with "P").
   Qed.
 
+  Definition ExtSem :=
+    ∀ (Γ : NCtx 𝑿 Ty) (τ : Ty)
+      (Δ : NCtx 𝑿 Ty) f (es : NamedEnv (Exp Γ) Δ) (δ : LocalStore Γ),
+      match CEnvEx f with
+      | MkSepContract _ _ Σ' θΔ req result ens =>
+        forall (ι : SymInstance Σ'),
+        evals es δ = inst ι θΔ ->
+        ⊢ semTriple δ (inst_assertion ι req) (stm_call_external f es)
+          (fun v δ' => inst_assertion (env_snoc ι (result :: τ) v) ens ∗ bi_pure (δ' = δ))
+      end.
+
+  Lemma iris_rule_stm_call_external
+    {Γ} (δ : LocalStore Γ) {τ} {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ) 
+    (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+    ExtSem ->
+    CTriple (evals es δ) P (λ v : Lit τ, Q v δ) (CEnvEx f) ->
+    ⊢ semTriple δ P (stm_call_external f es) Q.
+  Proof.
+    iIntros (extSem ctrip).
+    specialize (extSem _ _ _ f es δ).
+    destruct (CEnvEx f).
+    dependent destruction ctrip.
+    iIntros "P".
+    iPoseProof (H1 with "P") as "[frm pre]".
+    iApply (wp_mono _ _ _ (fun v => frame ∗ match v with | MkVal _ δ' v => inst_assertion (env_snoc ι (sep_contract_result0 :: τ) v) sep_contract_postcondition0 ∗ bi_pure (δ' = δ) end)%I).
+    - intros v.
+      destruct v.
+      iIntros "[frame [pre %]]".
+      subst.
+      iApply H2.
+      by iFrame.
+    - iApply wp_frame_l.
+      iFrame.
+      by iApply (extSem ι (eq_sym x)).
+  Qed.
+
   Lemma sound_stm {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
-    forall (PRE : iProp Σ) (POST : Lit τ -> LocalStore Γ -> iProp Σ)
-      (triple : δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄),
+    forall (PRE : iProp Σ) (POST : Lit τ -> LocalStore Γ -> iProp Σ),
+      ExtSem ->
+      δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄ ->
       ⊢ (□ ▷ ValidContractEnvSem CEnv -∗
           semTriple δ PRE s POST)%I.
   Proof.
-    iIntros (PRE POST triple) "#vcenv".
+    iIntros (PRE POST extSem triple) "#vcenv".
     iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
@@ -1419,28 +1475,28 @@ Module IrisInstance
     - by iApply iris_rule_stm_call_forwards.
     - by iApply iris_rule_stm_call_inline.
     - by iApply iris_rule_stm_call_frame.
-    - admit. (* by iApply iris_rule_stm_call_external_backwards. *)
+    - by iApply iris_rule_stm_call_external.
     - by iApply iris_rule_stm_bind.
-  Admitted.
+  Qed.
+
 
   Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
-    ValidContractEnv CEnv ->
+    ExtSem -> ValidContractEnv CEnv ->
     ⊢ ValidContractEnvSem CEnv.
   Proof.
-    intros vcenv.
+    intros extSem vcenv.
     iLöb as "IH".
     iIntros (σs σ f).
     specialize (vcenv σs σ f).
     destruct (CEnv f) as [[]|];[|trivial].
     specialize (vcenv _ eq_refl).
     iIntros (ι).
-    iApply sound_stm; [|trivial].
+    iApply (sound_stm extSem); [|trivial].
     apply (vcenv ι).
   Qed.
 
-
-  End IrisInstance.
-End IrisInstance.
+  End IrisSoundness.
+End IrisSoundness.
 
 Module Adequacy
        (Import termkit : TermKit)
@@ -1458,8 +1514,8 @@ Module Adequacy
   (* Module IrisRegs := IrisRegisters typekit termkit progkit assertkit contractkit. *)
   (* Import IrisRegs. *)
 
-  Module Inst := IrisInstance termkit progkit assertkit contractkit irisheapkit.
-  Import Inst.
+  Module Snd := IrisSoundness termkit progkit assertkit contractkit irisheapkit.
+  Import Snd.
 
   Definition sailΣ : gFunctors := #[ memΣ ; invΣ ; GFunctor regUR].
 
