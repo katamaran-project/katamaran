@@ -675,8 +675,9 @@ Module IrisSoundness
       iModIntro.
       iSplitR; [trivial|].
       iIntros (e2 σ2 efs2) "%".
-      dependent destruction H0.
-      dependent destruction H0.
+      dependent elimination H0.
+      dependent elimination s.
+      + inversion Heqkval.
       + iModIntro. iModIntro.
         iMod "Hclose" as "_".
         iFrame.
@@ -686,7 +687,7 @@ Module IrisSoundness
       + iMod "Hclose" as "_".
         cbn.
         iMod ("wpk" $! (γ1 , μ1) ks1 ks n with "state_inv") as "[% wpk]".
-        iMod ("wpk" $! _ _ _ (mk_prim_step H0)) as "wpk".
+        iMod ("wpk" $! _ _ _ (mk_prim_step s4)) as "wpk".
         iModIntro. iModIntro.
         iMod "wpk" as "[Hregs [wpk' _]]".
         iModIntro.
@@ -717,17 +718,17 @@ Module IrisSoundness
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s0.
     cbn.
     + rewrite wp_unfold. cbn.
       iModIntro. iModIntro.
       iMod "Hclose" as "_".
       iMod "wpv".
-      iPoseProof ("tripk" $! v δ with "wpv") as "wpk".
+      iPoseProof ("tripk" $! v _ with "wpv") as "wpk".
       iModIntro.
       iFrame; iSplitL; auto.
-      by iApply (wp_compat_block (env_snoc env_nil (x , σ) v) k (fun v0 => match v0 with | MkVal _ δ' v1 => R v1 δ' end )).
+      by iApply (wp_compat_block (env_snoc env_nil (x0 , σ0) v) _ (fun v0 => match v0 with | MkVal _ δ' v1 => R v1 δ' end )).
     + iModIntro. iModIntro.
       iMod "Hclose" as "_".
       cbn.
@@ -736,11 +737,11 @@ Module IrisSoundness
     + cbn.
       rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ s) (regs , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
-      iSpecialize ("wpv" $! (regs , μ) nil nil n with "state_inv").
+      rewrite (val_stuck (MkTm δ1 s1) _ [] _ _ [] (mk_prim_step s3)).
+      iSpecialize ("wpv" $! (γ1 , μ1) nil nil n with "state_inv").
       iMod "Hclose" as "_".
       iMod "wpv" as "[_ wpv]".
-      iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
+      iSpecialize ("wpv" $! (MkTm δ' s') _ nil (mk_prim_step s3)).
       iMod "wpv" as "wpv".
       iModIntro. iModIntro.
       iMod "wpv" as "[Hregs [wps _]]".
@@ -890,13 +891,13 @@ Module IrisSoundness
     iModIntro. iSplitR; [trivial|].
     iIntros (e3 σ2 efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro; iFrame.
     iSplitL; [|trivial].
-    destruct (eval e1 δ) eqn:Heqc.
+    destruct (eval e4 δ1) eqn:Heqc.
     - iApply "tripk".
       by iFrame.
     - iApply wp_compat_fail.
@@ -926,9 +927,9 @@ Module IrisSoundness
     iModIntro. iSplitR; [trivial|].
     iIntros (e3 σ2 efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
-    remember (eval e δ) as scrutinee.
+    dependent elimination H0.
+    dependent elimination s.
+    remember (eval e5 δ1) as scrutinee.
     destruct scrutinee as [|l ls].
     - iModIntro. iModIntro.
       iMod "Hclose" as "_".
@@ -941,7 +942,7 @@ Module IrisSoundness
       iModIntro.
       iFrame.
       iSplitL; [|trivial].
-      iApply (wp_compat_block (env_snoc (env_snoc env_nil (pair xh σ) l) (pair xt (ty_list σ)) ls)).
+      iApply (wp_compat_block (env_snoc (env_snoc env_nil (pair xh0 σ6) l) (pair xt0 (ty_list σ6)) ls)).
       iApply "tripcons".
       by iFrame.
   Qed.
@@ -963,22 +964,22 @@ Module IrisSoundness
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
-    remember (eval e δ) as scrutinee.
+    dependent elimination H0.
+    dependent elimination s.
+    remember (eval e6 δ1) as scrutinee.
     destruct scrutinee as [v1|v2].
     - iModIntro. iModIntro.
       iMod "Hclose" as "_".
       iModIntro. iFrame.
       iSplitL; [|trivial].
-      iApply (wp_compat_block (env_snoc env_nil (pair xinl σinl) v1)).
+      iApply (wp_compat_block (env_snoc env_nil (pair xinl0 σinl0) v1)).
       iApply ("tripinl" $! v1).
       by iFrame.
     - iModIntro. iModIntro.
       iMod "Hclose" as "_".
       iModIntro. iFrame.
       iSplitL; [|trivial].
-      iApply (wp_compat_block (env_snoc env_nil (pair xinr σinr) v2)).
+      iApply (wp_compat_block (env_snoc env_nil (pair xinr0 σinr0) v2)).
       iApply ("tripinr" $! v2).
       by iFrame.
   Qed.
@@ -999,15 +1000,15 @@ Module IrisSoundness
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ' efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
-    remember (eval e δ) as scrutinee.
+    dependent elimination H0.
+    dependent elimination s.
+    remember (eval e7 δ1) as scrutinee.
     destruct scrutinee as [v1 v2].
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply (wp_compat_block (env_snoc (env_snoc env_nil (pair xl σ1) v1) (pair xr σ2) v2)).
+    iApply (wp_compat_block (env_snoc (env_snoc env_nil (pair xl0 σ8) v1) (pair xr0 σ9) v2)).
     iApply ("trippair" $! v1 v2).
     by iFrame.
   Qed.
@@ -1026,8 +1027,8 @@ Module IrisSoundness
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ' efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro. iFrame.
@@ -1049,13 +1050,13 @@ Module IrisSoundness
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ' efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply (wp_compat_block (tuple_pattern_match p (eval e δ))).
+    iApply (wp_compat_block (tuple_pattern_match p0 (eval e9 δ1))).
     by iApply "triptup".
   Qed.
 
@@ -1077,15 +1078,15 @@ Module IrisSoundness
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    remember (𝑼_unfold (eval e δ)) as scrutinee.
+    remember (𝑼_unfold (eval e10 δ1)) as scrutinee.
     destruct scrutinee as [K v].
-    iApply (wp_compat_block (pattern_match (alt__p K) v)).
+    iApply (wp_compat_block (pattern_match (alt__pat K) v)).
     iSpecialize ("tripunion" $! K v).
     rewrite Heqscrutinee.
     rewrite 𝑼_fold_unfold.
@@ -1107,13 +1108,13 @@ Module IrisSoundness
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply (wp_compat_block (record_pattern_match p (𝑹_unfold (eval e δ)))).
+    iApply (wp_compat_block (record_pattern_match p1 (𝑹_unfold (eval e11 δ1)))).
     by iApply "triprec".
   Qed.
 
@@ -1160,8 +1161,8 @@ Module IrisSoundness
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s0.
     cbn.
     + rewrite wp_unfold; cbn.
       iModIntro. iModIntro.
@@ -1172,7 +1173,7 @@ Module IrisSoundness
       iSplitL; [|trivial].
       iApply wp_value.
       cbn.
-      iExists (env_lookup δ xIn).
+      iExists (env_lookup δ1 xInΓ).
       rewrite env_update_update env_update_lookup env_lookup_update.
       by iFrame.
     + iModIntro. iModIntro.
@@ -1182,11 +1183,11 @@ Module IrisSoundness
       by iApply wp_compat_fail.
     + rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ s) (regs , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
-      iSpecialize ("wpv" $! (regs , μ) nil nil n with "Hregs").
+      rewrite (val_stuck (MkTm δ1 s13) _ [] _ _ [] (mk_prim_step s14)).
+      iSpecialize ("wpv" $! _ nil nil n with "Hregs").
       iMod "Hclose".
       iMod "wpv" as "[_ wpv]".
-      iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
+      iSpecialize ("wpv" $! _ _ nil (mk_prim_step s14)).
       iMod "wpv" as "wpv".
       iModIntro. iModIntro.
       iMod "wpv" as "[Hregs [wps _]]".
@@ -1237,13 +1238,13 @@ Module IrisSoundness
     iModIntro.
     iSplitR; first trivial.
     iIntros (e2 σ2 efs) "%".
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s0.
     - iMod "Hclose" as "_".
       rewrite {1}/wp_pre.
-      rewrite (val_stuck (MkTm δΔ s) (γ1 , μ1) [] (MkTm δΔ' s') (γ' , μ') [] (mk_prim_step H0)).
+      rewrite (val_stuck (MkTm δΔ3 s9) (γ1 , μ1) [] _ _ [] (mk_prim_step s10)).
       iMod ("wpk" $! (γ1 , μ1) ks1 ks n with "Hregs") as "[% wpk]".
-      iMod ("wpk" $! _ _ _ (mk_prim_step H0)) as "wpk".
+      iMod ("wpk" $! _ _ _ (mk_prim_step s10)) as "wpk".
       iModIntro. iModIntro.
       iMod "wpk" as "[Hregs [wpk' _]]".
       iModIntro.
@@ -1284,8 +1285,8 @@ Module IrisSoundness
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
@@ -1303,7 +1304,7 @@ Module IrisSoundness
       iSplitL; [|trivial].
       iApply (H2 v).
       by iFrame.
-    - iSpecialize ("cenv" $! _ _ f).
+    - iSpecialize ("cenv" $! _ _ f0).
       rewrite ceq.
       iSpecialize ("cenv" $! ι with "req").
       iApply wp_frame_l.
@@ -1342,16 +1343,16 @@ Module IrisSoundness
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s0.
     cbn.
     + rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ s) (regs , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
-      iSpecialize ("wpv" $! (regs , μ) nil nil n with "Hregs").
+      rewrite (val_stuck (MkTm δ1 s17) (γ1 , μ1) [] _ _ [] (mk_prim_step s18)).
+      iSpecialize ("wpv" $! (γ1 , μ1) nil nil n with "Hregs").
       iMod "Hclose".
       iMod "wpv" as "[_ wpv]".
-      iSpecialize ("wpv" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0)).
+      iSpecialize ("wpv" $! _ _ nil (mk_prim_step s18)).
       iMod "wpv" as "wpv".
       iModIntro. iModIntro.
       iMod "wpv" as "[Hregs [wps _]]".
@@ -1362,7 +1363,7 @@ Module IrisSoundness
       iMod "Hclose" as "_".
       rewrite wp_unfold; cbn.
       iMod "wpv" as "wpv".
-      iPoseProof ("tripk" $! v δ with "wpv") as "wpk".
+      iPoseProof ("tripk" with "wpv") as "wpk".
       iModIntro.
       by iFrame.
     + iModIntro. iModIntro.
@@ -1386,8 +1387,8 @@ Module IrisSoundness
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ'' efs) "%".
     cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro. iFrame.
