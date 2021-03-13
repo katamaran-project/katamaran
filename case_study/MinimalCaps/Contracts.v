@@ -286,7 +286,7 @@ Module MinCapsSymbolicContractKit <:
       @post machInv;
       bool exec_jr(lv : lv) *)
   Definition sep_contract_exec_jr : SepContract ["lv" ∶ ty_lv] ty_bool :=
-    {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "c" ∶ ty_cap];
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv];
        sep_contract_localstore      := [term_var "lv"]%arg;
        sep_contract_precondition    := machInv;
        sep_contract_result          := "result";
