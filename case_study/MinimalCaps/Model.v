@@ -209,7 +209,7 @@ Module MinCapsModel.
   Proof.
     iIntros (ι eq) "pre".
     rewrite wp_unfold.
-    iIntros (σ' k ks1 ks n) "[Hregs Hmem]".
+    iIntros (σ' ks1 ks n) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
@@ -220,7 +220,7 @@ Module MinCapsModel.
     dependent destruction H.
     dependent destruction H1.
     dependent destruction H.
-    iModIntro. iModIntro. iModIntro.
+    iModIntro. iModIntro.
     cbn.
     iDestruct (gen_heap.gen_heap_valid with "Hmem' pre") as "%".
     iMod "Hclose" as "_".
@@ -254,7 +254,7 @@ Module MinCapsModel.
   Proof.
     iIntros (ι eq) "pre".
     rewrite wp_unfold.
-    iIntros (σ' k ks1 ks n) "[Hregs Hmem]".
+    iIntros (σ' ks1 ks n) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
@@ -316,7 +316,7 @@ Module MinCapsModel.
   Proof.
     iIntros (ι eq) "ptsto".
     rewrite wp_unfold.
-    iIntros (σ' k ks1 ks n) "Hregs".
+    iIntros (σ' ks1 ks n) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
     iSplitR; first by intuition.
@@ -325,9 +325,7 @@ Module MinCapsModel.
     dependent destruction H.
     dependent destruction H.
     dependent destruction H.
-    iModIntro.
-    iModIntro.
-    iModIntro.
+    iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
     iFrame.
