@@ -1026,12 +1026,12 @@ Module Mutators
             (dmut_assume_formulas Δpc ;; dmut_put_heap h2))
          (extract_chunk_eqb (subst ζ1 c) h1)).
 
-  (* Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
+  Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
     dmut_get_heap >>= fun _ _ h =>
     match h with
     | nil => dmut_pure tt
     | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
-    end. *)
+    end.
 
   Module DynMutV1.
 
@@ -2563,12 +2563,12 @@ Module Mutators
               (dmut_assume_formulas Δpc ;; dmut_put_heap h2))
            (extract_chunk_eqb (subst ζ1 c) h1)).
 
-    (* Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
+    Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
       dmut_get_heap >>= fun _ _ h =>
       match h with
       | nil => dmut_pure tt
       | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
-      end. *)
+      end.
 
     Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
       match asn with
