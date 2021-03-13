@@ -593,10 +593,10 @@ Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_re
 Proof. compute; solve. Qed.
 
 Lemma valid_contract_read_reg_cap : ValidContractDynMut sep_contract_read_reg_cap fun_read_reg_cap.
-Proof. compute; solve. Qed.
+Proof. compute; solve. Abort.
 
 Lemma valid_contract_read_reg_num : ValidContractDynMut sep_contract_read_reg_num fun_read_reg_num.
-Proof. compute; solve. Qed.
+Proof. compute; solve. Abort.
 
 Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_write_reg.
 Proof. compute; solve. Qed.
@@ -624,7 +624,7 @@ Proof.
   (* apply dynmutevarreflect_sound. *)
   compute - [NamedEnv Lit Error valid_obligation].
   (* compute; solve. Qed. *)
-Admitted.
+Abort.
 (*
 Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
 Proof. compute; solve. Admitted.
