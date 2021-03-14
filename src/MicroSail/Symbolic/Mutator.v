@@ -754,12 +754,15 @@ Module Mutators
     Global Arguments dmut_angelic_finite {_ _} _ {_ _ _ _} _.
     Global Arguments dmut_demonic_finite {_ _} _ {_ _ _ _} _.
 
-    Definition dmut_fresh {Γ A Σ} b (ma : DynamicMutator Γ Γ A (Σ ▻ b)) : DynamicMutator Γ Γ A Σ :=
+    Definition dmut_fresh {Γ A Σ} x τ (ma : DynamicMutator Γ Γ A (Σ ▻ (x :: τ))) : DynamicMutator Γ Γ A Σ :=
       fun Σ1 ζ1 pc1 s1 =>
-        outcome_map (cosubst_dmutres sub_wk1) (ma _ (sub_up1 ζ1) (wk1 pc1) (wk1 s1)).
-    Global Arguments dmut_fresh {_ _ _} _ _.
+        let x'  := fresh Σ1 (Some x) in
+        let ζ1x := sub_comp ζ1 sub_wk1 ► (x :: τ ↦ @term_var _ x' τ inctx_zero) in
+        outcome_map (cosubst_dmutres sub_wk1) (ma (Σ1 ▻ (x' :: τ)) ζ1x (wk1 pc1) (wk1 s1)).
+    Global Arguments dmut_fresh {_ _ _} _ _ _.
+
     Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
-      dmut_fresh (x::σ) (dmut_pure (@term_var _ _ _ inctx_zero)).
+      dmut_fresh x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
     Global Arguments dmut_freshtermvar {_ _ _} _.
 
     Record DebugCall : Type :=
@@ -1106,7 +1109,7 @@ Module Mutators
           dmut_fail "dmut_produce" "Not implemented" asn
         end
       | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
-      | asn_exist ς τ a => dmut_fresh (ς,τ) (dmut_produce a)
+      | asn_exist ς τ a => dmut_fresh ς τ (dmut_produce a)
       end.
 
     Fixpoint dmut_consume {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
@@ -1172,7 +1175,7 @@ Module Mutators
         dmut_assert_formulas (formula_eqs ts (env_map (fun b => sub_term ξ) δ)) ;;
         dmut_sub ξ
           (dmut_consume req ;;
-           dmut_fresh (result,τ)
+           dmut_fresh result τ
              (dmut_produce ens ;;
               dmut_pure (@term_var _ result _ inctx_zero)))
       end.
@@ -1226,7 +1229,7 @@ Module Mutators
            (formula_eq t (term_lit (ty_list _) nil));;
          dmut_exec s1) ⊗
         (dmut_fresh
-           (𝑿to𝑺 xh,_) (dmut_fresh (𝑿to𝑺 xt,_)
+           (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
            (dmut_assume_formula
               (formula_eq (sub_term (sub_comp sub_wk1 sub_wk1) t)
                           (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
@@ -1238,19 +1241,19 @@ Module Mutators
             dmut_pure t2)))
       | stm_match_sum e xinl s1 xinr s2 =>
         t <- dmut_eval_exp e ;;
-        dmut_fresh _
+        dmut_fresh _ _
           (dmut_assume_formula
              (formula_eq (sub_term sub_wk1 t) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
            dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
            dmut_bind_left (dmut_exec s1) dmut_pop_local) ⊗
-        dmut_fresh _
+        dmut_fresh _ _
           (dmut_assume_formula
              (formula_eq (sub_term sub_wk1 t) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
            dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
            dmut_bind_left (dmut_exec s2) dmut_pop_local)
       | stm_match_pair e xl xr s =>
         t <- dmut_eval_exp e ;;
-        dmut_fresh (𝑿to𝑺 xl,_) (dmut_fresh (𝑿to𝑺 xr,_)
+        dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
           (dmut_assume_formula
              (formula_eq
                 (sub_term (sub_comp sub_wk1 sub_wk1) t)
@@ -1584,7 +1587,7 @@ Module Mutators
          dmut_consume_evar req (create_evarenv Σe Σr) >>= fun Σr1 ζ1 E1 =>
          dmut_assert_namedenv_eq_evar δ (env_map (fun _ => sub_term ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
          match evarenv_to_option_sub E2 with
-         | Some ξ => dmut_sub ξ (dmut_fresh (result,τ) (DynMutV1.dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
+         | Some ξ => dmut_sub ξ (dmut_fresh result τ (DynMutV1.dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
          | None => dmut_fail
                      "dmut_call_evar"
                      "Uninstantiated evars after consuming precondition"
@@ -1670,7 +1673,7 @@ Module Mutators
            (formula_eq t (term_lit (ty_list _) nil));;
          dmut_exec_evar s1) ⊗
         (dmut_fresh
-           (𝑿to𝑺 xh,_) (dmut_fresh (𝑿to𝑺 xt,_)
+           (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
            (dmut_assume_formula
               (formula_eq (sub_term (sub_comp sub_wk1 sub_wk1) t)
                           (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
@@ -1690,12 +1693,12 @@ Module Mutators
           dmut_push_local t;;
           dmut_bind_left (dmut_exec_evar s2) dmut_pop_local
         | None =>
-          dmut_fresh _
+          dmut_fresh _ _
             (dmut_assume_formula
                (formula_eq (sub_term sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
              dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
              dmut_bind_left (dmut_exec_evar s1) dmut_pop_local) ⊗
-          dmut_fresh _
+          dmut_fresh _ _
             (dmut_assume_formula
                (formula_eq (sub_term sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
              dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
@@ -1712,7 +1715,7 @@ Module Mutators
           dmut_pop_local ;;
           dmut_pure t
         | None =>
-          dmut_fresh (𝑿to𝑺 xl,_) (dmut_fresh (𝑿to𝑺 xr,_)
+          dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
             (dmut_assume_formula
                (formula_eq
                   (sub_term (sub_comp sub_wk1 sub_wk1) t__sc)

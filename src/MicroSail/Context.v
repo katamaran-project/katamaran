@@ -26,7 +26,16 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-Require Import Coq.Logic.EqdepFacts Coq.Bool.Bool.
+From Coq Require Import
+     NArith.BinNat
+     Bool.Bool
+     Init.Datatypes
+     Init.Decimal
+     Logic.EqdepFacts
+     Numbers.DecimalString
+     Strings.Ascii
+     Strings.String.
+
 Require Import Equations.Equations.
 From stdpp Require
      base.
@@ -470,6 +479,12 @@ Section Resolution.
       end
     end.
 
+  Fixpoint ctx_names (Γ : NCtx Name D) : list Name :=
+    match Γ with
+    | ε       => nil
+    | Γ ▻ y∶_ => cons y (ctx_names Γ)
+    end.
+
 End Resolution.
 
 Module NameResolution.
@@ -481,3 +496,47 @@ Module NameResolution.
       exact xInΓ : typeclass_instances.
 
 End NameResolution.
+
+Section FreshName.
+
+  Local Open Scope string_scope.
+
+  Fixpoint split_at_dot' {R} (x : string) (k : string -> string -> R) {struct x} : R :=
+    match x with
+    | ""           => k "" ""
+    | String "." x => k "" x
+    | String a x   => split_at_dot' x (fun pre => k (String a pre))
+    end.
+
+  Definition split_at_dot (x : string) : (string * string) :=
+    split_at_dot' x pair.
+
+  Definition parse_number (x : string) : N :=
+    match NilEmpty.uint_of_string x with
+    | Some n => N.of_uint n
+    | None   => 0%N
+    end.
+
+  Definition unparse_number (x : N) : string :=
+    NilEmpty.string_of_uint (N.to_uint x).
+
+  Definition max_with_base (base : string) (xs : list string) : N :=
+    List.fold_left
+      (fun o x =>
+         match split_at_dot x with
+           (pre,suf) => if pre =? base
+                        then N.max o (parse_number suf)
+                        else o
+         end)
+      xs 0%N.
+
+  Definition fresh {T : Set} (xs : Ctx (string * T)) (x : option string) : string :=
+    let xs := ctx_names xs in
+    let x := match x with Some x => x | None => "x" end in
+    if List.find (String.eqb x) xs
+    then let base := fst (split_at_dot x) in
+         let n    := N.succ (max_with_base base xs) in
+         String.append base (String "."%char (unparse_number n))
+    else x.
+
+End FreshName.
