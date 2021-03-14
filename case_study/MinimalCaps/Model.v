@@ -216,10 +216,9 @@ Module MinCapsModel.
     iSplitR; first by intuition.
     iIntros (e2 σ'' efs) "%".
     cbn in H1.
-    dependent destruction H1.
-    dependent destruction H.
-    dependent destruction H1.
-    dependent destruction H.
+    dependent elimination H1.
+    dependent elimination s.
+    dependent destruction e0.
     iModIntro. iModIntro.
     cbn.
     iDestruct (gen_heap.gen_heap_valid with "Hmem' pre") as "%".
@@ -261,10 +260,9 @@ Module MinCapsModel.
     iSplitR; first by intuition.
     iIntros (e2 σ'' efs) "%".
     cbn in H1.
+    dependent elimination H1.
+    dependent destruction s.
     dependent destruction H1.
-    dependent destruction H.
-    dependent destruction H1.
-    dependent destruction H.
     iModIntro. iModIntro.
     cbn.
     iMod (gen_heap.gen_heap_update _ _ _ val with "Hmem' pre") as "[Hmem' ptsto]".
@@ -322,9 +320,9 @@ Module MinCapsModel.
     iSplitR; first by intuition.
     iIntros (e2 σ'' efs) "%".
     cbn in H.
-    dependent destruction H.
-    dependent destruction H.
-    dependent destruction H.
+    dependent elimination H.
+    dependent elimination s.
+    dependent destruction e0.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro.

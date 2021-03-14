@@ -662,13 +662,17 @@ Module IrisSoundness
       iMod "Hclose" as "e".
       iDestruct "e" as "_".
       iModIntro.
-      dependent destruction H0.
-      dependent destruction H0.
+      dependent elimination H0.
+      dependent elimination s; subst δ0.
       + rewrite env_drop_cat.
         iFrame.
         iSplitL; [|trivial].
         by iApply wp_value.
-      + dependent destruction H0.
+      + revert s4.
+        generalize (δ1 ►► δΔ2) as δ1'.
+        generalize (δ'0 ►► δΔ') as δ0'.
+        intros δ0' δ1' step.
+        dependent elimination step.
     - rewrite /wp_pre.
       rewrite <-Heqkval.
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -769,7 +773,7 @@ Module IrisSoundness
     iIntros (v') "Rv".
     destruct v'.
     iExists (env_head δ0).
-    by dependent destruction δ0.
+    by dependent elimination δ0.
   Qed.
 
   Lemma iris_rule_stm_block {Γ} (δ : LocalStore Γ)
@@ -798,13 +802,13 @@ Module IrisSoundness
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0.
+    dependent elimination H0.
+    dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro; iFrame.
     iSplitL; [|trivial].
-    destruct (eval e δ).
+    destruct (eval e2 δ1).
     - iApply "trips1".
       by iFrame.
     - iApply "trips2".
@@ -850,15 +854,15 @@ Module IrisSoundness
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
     unfold language.prim_step in H0; cbn in H0.
-    dependent destruction H0.
-    dependent destruction H0; cbn.
+    dependent elimination H0.
+    dependent elimination s; cbn.
     + rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ s1) (regs , μ) [] (MkTm δ' s') (γ' , μ') [] (mk_prim_step H0)).
-      iSpecialize ("wps1" $! (regs , μ) nil nil n with "Hregs").
+      rewrite (val_stuck (MkTm δ1 s7) (γ1 , μ1) [] _ _ [] (mk_prim_step s8)).
+      iSpecialize ("wps1" $! (γ1 , μ1) nil nil n with "Hregs").
       iMod "Hclose" as "_".
       iMod "wps1" as "[_ wps1]".
-      iMod ("wps1" $! (MkTm δ' s') (γ' , μ') nil (mk_prim_step H0))  as "wps1".
+      iMod ("wps1" $! (MkTm δ'1 s'0) _ nil (mk_prim_step s8))  as "wps1".
       iModIntro. iModIntro.
       iMod "wps1" as "[Hregs [wps' _]]".
       iFrame.
@@ -870,7 +874,7 @@ Module IrisSoundness
       iModIntro. iModIntro.
       iMod "Hclose" as "_".
       iMod "wps1" as "wps1".
-      iPoseProof ("trips2" $! δ with "wps1") as "wps2".
+      iPoseProof ("trips2" $! δ1 with "wps1") as "wps2".
       by iFrame.
     + iModIntro. iModIntro.
       iMod "Hclose" as "_".
@@ -1414,7 +1418,7 @@ Module IrisSoundness
       end.
 
   Lemma iris_rule_stm_call_external
-    {Γ} (δ : LocalStore Γ) {τ} {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ) 
+    {Γ} (δ : LocalStore Γ) {τ} {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
     (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
     ExtSem ->
     CTriple (evals es δ) P (λ v : Lit τ, Q v δ) (CEnvEx f) ->
@@ -1422,20 +1426,22 @@ Module IrisSoundness
   Proof.
     iIntros (extSem ctrip).
     specialize (extSem _ _ _ f es δ).
-    destruct (CEnvEx f).
-    dependent destruction ctrip.
+    revert ctrip extSem.
+    generalize (CEnvEx f) as contractF.
+    intros contractF ctrip extSem.
+    dependent elimination ctrip; cbn in extSem.
     iIntros "P".
-    iPoseProof (H1 with "P") as "[frm pre]".
-    iApply (wp_mono _ _ _ (fun v => frame ∗ match v with | MkVal _ δ' v => inst_assertion (env_snoc ι (sep_contract_result0 :: τ) v) sep_contract_postcondition0 ∗ bi_pure (δ' = δ) end)%I).
+    iPoseProof (l with "P") as "[frm pre]".
+    iApply (wp_mono _ _ _ (fun v => frame0 ∗ match v with | MkVal _ δ' v => inst_assertion (env_snoc ι (result :: τ) v) ens ∗ bi_pure (δ' = δ) end)%I).
     - intros v.
       destruct v.
       iIntros "[frame [pre %]]".
       subst.
-      iApply H2.
+      iApply l0.
       by iFrame.
     - iApply wp_frame_l.
       iFrame.
-      by iApply (extSem ι (eq_sym x)).
+      by iApply (extSem ι e).
   Qed.
 
   Lemma sound_stm {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
