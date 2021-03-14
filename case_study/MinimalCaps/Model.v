@@ -261,8 +261,8 @@ Module MinCapsModel.
     iIntros (e2 σ'' efs) "%".
     cbn in H1.
     dependent elimination H1.
-    dependent destruction s.
-    dependent destruction H1.
+    dependent elimination s.
+    dependent destruction e0.
     iModIntro. iModIntro.
     cbn.
     iMod (gen_heap.gen_heap_update _ _ _ val with "Hmem' pre") as "[Hmem' ptsto]".
