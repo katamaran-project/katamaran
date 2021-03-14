@@ -52,7 +52,8 @@ From MicroSail Require Sep.Logic.
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
-From iris.program_logic Require Import weakestpre hoare adequacy.
+From iris.algebra Require dfrac.
+From iris.program_logic Require Import weakestpre adequacy.
 From iris.proofmode Require Import tactics.
 From stdpp Require namespaces fin_maps.
 
@@ -94,7 +95,7 @@ Module MinCapsModel.
 
     Definition mem_inv : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        (∃ memmap, gen_heap_ctx (hG := mc_ghG (mcMemG := hG)) memmap ∗
+        (∃ memmap, gen_heap_interp (hG := mc_ghG (mcMemG := hG)) memmap ∗
                                 ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
@@ -123,16 +124,16 @@ Module MinCapsModel.
 
     Definition mem_res : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        ([∗ map] l↦v ∈ initMemMap μ, mapsto (hG := mc_ghG (mcMemG := hG)) l 1 v) %I.
+        ([∗ map] l↦v ∈ initMemMap μ, mapsto (hG := mc_ghG (mcMemG := hG)) l (DfracOwn 1) v) %I.
 
     Lemma mem_inv_init : forall Σ (μ : Memory), memPreG Σ ->
         ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
     Proof.
       iIntros (Σ μ gHP).
 
-      iMod (gen_heap_init (gen_heapPreG0 := gHP) (L := Addr) (V := Z) empty) as (gH) "inv".
+      iMod (gen_heap_init (gen_heapPreG0 := gHP) (L := Addr) (V := Z) empty) as (gH) "[inv _]".
       pose (memmap := initMemMap μ).
-      iMod (gen_heap_alloc_gen empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
+      iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
       iModIntro.
 
       rewrite (right_id empty union memmap).
@@ -169,9 +170,9 @@ Module MinCapsModel.
       match v with
       | MkCap O b e a => True%I
       | MkCap R b e a =>
-                ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a 1 v))%I
+                ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) v))%I
       | MkCap RW b e a =>
-                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a 1 v)
+                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) v)
       end.
 
 
@@ -186,7 +187,7 @@ Module MinCapsModel.
     Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
       (match p return Env Lit (MinCapsAssertionKit.𝑷_Ty p) -> iProp Σ with
       | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
-      | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head (env_tail ts)) 1 (env_head ts)
+      | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head (env_tail ts)) (DfracOwn 1) (env_head ts)
       | safe => fun ts => MinCaps_safe (mG := mG) (env_head ts)
       | csafe => fun ts => MinCaps_csafe (mG := mG) (env_head ts)
       end) ts.
@@ -202,23 +203,22 @@ Module MinCapsModel.
   Lemma rM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
   ∀ (ι : SymInstance (ctx_snoc (ctx_snoc ctx_nil ("address", ty_addr)) ("w", ty_int))),
     evals es δ = [(ι ‼ "address")%exp]
-    → ⊢ semTriple δ (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "w")%exp) (stm_call_external rM es)
+    → ⊢ semTriple δ (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp (dfrac.DfracOwn 1) (ι ‼ "w")%exp) (stm_call_external rM es)
           (λ (v : Z) (δ' : LocalStore Γ),
-             (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "w")%exp ∗ ⌜v = (ι ‼ "w")%exp⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+             (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp (dfrac.DfracOwn 1) (ι ‼ "w")%exp ∗ ⌜v = (ι ‼ "w")%exp⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (ι eq) "pre".
     rewrite wp_unfold.
     iIntros (σ' ks1 ks n) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
-    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
     iSplitR; first by intuition.
     iIntros (e2 σ'' efs) "%".
-    cbn in a.
-    dependent destruction a.
-    dependent destruction H.
-    dependent destruction H1.
-    dependent destruction H.
+    cbn in H1.
+    dependent elimination H1.
+    dependent elimination s.
+    dependent destruction e0.
     iModIntro. iModIntro.
     cbn.
     iDestruct (gen_heap.gen_heap_valid with "Hmem' pre") as "%".
@@ -247,23 +247,22 @@ Module MinCapsModel.
   Lemma wM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
   ∀ (ι : SymInstance (ctx_snoc (ctx_snoc (ctx_snoc ctx_nil ("address", ty_addr)) ("new_value", ty_int)) ("old_value", ty_int))),
     evals es δ = [(ι ‼ "address")%exp, (ι ‼ "new_value")%exp]
-    → ⊢ semTriple δ (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "old_value")%exp) (stm_call_external wM es)
+    → ⊢ semTriple δ (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp (dfrac.DfracOwn 1) (ι ‼ "old_value")%exp) (stm_call_external wM es)
         (λ (v : Lit ty_unit) (δ' : LocalStore Γ),
-             (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp 1 (ι ‼ "new_value")%exp) ∗ ⌜δ' = δ⌝).
+             (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp (dfrac.DfracOwn 1) (ι ‼ "new_value")%exp) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (ι eq) "pre".
     rewrite wp_unfold.
     iIntros (σ' ks1 ks n) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
-    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
     iSplitR; first by intuition.
     iIntros (e2 σ'' efs) "%".
-    cbn in a.
-    dependent destruction a.
-    dependent destruction H.
+    cbn in H1.
+    dependent elimination H1.
+    dependent destruction s.
     dependent destruction H1.
-    dependent destruction H.
     iModIntro. iModIntro.
     cbn.
     iMod (gen_heap.gen_heap_update _ _ _ val with "Hmem' pre") as "[Hmem' ptsto]".
@@ -316,16 +315,15 @@ Module MinCapsModel.
     iIntros (ι eq) "ptsto".
     rewrite wp_unfold.
     iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_intro_mask' _ empty) as "Hclose"; first set_solver.
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
     iSplitR; first by intuition.
     iIntros (e2 σ'' efs) "%".
-    cbn in a.
-    dependent destruction a.
-    dependent destruction H.
-    dependent destruction H.
-    iModIntro.
-    iModIntro.
+    cbn in H.
+    dependent elimination H.
+    dependent elimination s.
+    dependent destruction e0.
+    iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
     iFrame.

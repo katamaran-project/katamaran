@@ -9,14 +9,12 @@ defaults: &defaults
         no_output_timeout: 1200
 
 jobs:
-  coq-8-10: {<<: *defaults, docker: [{image: "skeuchel/coq:8.10"}]}
-  # coq-8-11: {<<: *defaults, docker: [{image: "skeuchel/coq:8.11"}]}
   coq-8-12: {<<: *defaults, docker: [{image: "skeuchel/coq:8.12"}]}
+  coq-8-13: {<<: *defaults, docker: [{image: "skeuchel/coq:8.13"}]}
 
 workflows:
   version: 2
   build:
     jobs:
-      - "coq-8-10"
-      # - "coq-8-11"
       - "coq-8-12"
+      - "coq-8-13"

@@ -600,6 +600,7 @@ Local Ltac solve :=
        | H: _ /\ _ |- _ => destruct H
        | H: Empty_set |- _ => destruct H
        | |- _ /\ _ => constructor
+       | |- Debug _ _ => constructor
        | |- context[Z.leb ?x ?y] =>
          destruct (Z.leb_spec x y)
        end;
@@ -645,9 +646,9 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_within_bounds : ValidContractDynMut sep_contract_within_bounds fun_within_bounds.
 Proof.
-  compute - [valid_obligation].
-  constructor.
-  cbn; solve; fail.
+  compute; solve.
+  - constructor; cbn; solve.
+  - constructor; cbn; solve.
 Abort.
 
 Lemma valid_contract_exec_jr : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jr fun_exec_jr.
@@ -725,7 +726,7 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec : ValidContractDynMut sep_contract_exec fun_exec.
 Proof.
-  compute - [NamedEnv Lit Error valid_obligation].
+  compute.
   constructor; repeat apply conj.
   - (* O Permission *)
     constructor.
