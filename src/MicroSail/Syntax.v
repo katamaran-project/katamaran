@@ -79,11 +79,13 @@ Module Type TermKit.
      standing for concrete literals in assertions. *)
   Parameter Inline 𝑺 : Set. (* input: \MIS *)
   Declare Instance 𝑺_eq_dec : EqDec 𝑺.
-  (* Punning of program variables with logical variables. *)
-  Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
 
   Notation PCtx := (NCtx 𝑿 Ty).
   Notation LCtx := (NCtx 𝑺 Ty).
+
+  (* Punning of program variables with logical variables. *)
+  Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
+  Parameter fresh : LCtx -> option 𝑺 -> 𝑺.
 
   (* Names of functions. *)
   Parameter Inline 𝑭 : PCtx -> Ty -> Set.

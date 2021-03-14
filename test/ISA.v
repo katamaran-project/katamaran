@@ -222,6 +222,7 @@ Module ISATermKit <: TermKit.
   Definition 𝑺        := string.
   Definition 𝑺_eq_dec := string_dec.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
+  Definition fresh := Context.fresh (T := Ty).
 
   (** FUNCTIONS **)
   (* Names are inspired by sail-riscv naming convention *)
