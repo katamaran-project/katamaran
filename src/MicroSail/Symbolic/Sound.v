@@ -1650,7 +1650,7 @@ Module Soundness
     Qed.
 
     Section WpSubFresh.
-      Local Transparent wk1.
+      Local Transparent wk1 subst.
       Lemma dmut_wp_sub_fresh {Γ Σ0 Σ1 AT A x τ} `{Subst AT, Inst AT A}
             (ζ1 : Sub Σ0 Σ1)
             (d : DynamicMutator Γ Γ AT (Σ0 ▻ (x,τ))%ctx)
@@ -1667,18 +1667,15 @@ Module Soundness
           rewrite <- ?subst_sub_comp, ?sub_comp_wk1_tail; cbn.
           specialize (HYP Σ2 ζ2).
           rewrite outcome_satisfy_map in HYP; cbn in *.
-          refine (wfd _ Σ2 _ _ _ (env_snoc (sub_id _) (_,τ) v) _ _ _ _ _ _ _ _ _ _ _ HYP); clear wfd HYP.
-          + unfold wk1.
-            rewrite <-subst_sub_comp, sub_comp_wk1_tail; cbn.
+          refine (wfd _ Σ2 _ _ _ (env_snoc (sub_id _) (_,τ) v) _ _ _ _ _ _ _ _ _ _ _ HYP); clear wfd HYP; unfold wk1.
+          + rewrite <-subst_sub_comp, sub_comp_wk1_tail; cbn.
             now rewrite subst_sub_id.
-          + unfold wk1.
-            rewrite <-subst_sub_comp, sub_comp_wk1_tail; cbn.
+          + rewrite <-subst_sub_comp, sub_comp_wk1_tail; cbn.
             now rewrite subst_sub_id.
-          + admit.
-            (* rewrite sub_snoc_comp. *)
-            (* unfold sub_comp. *)
-            (* rewrite subst_assoc. *)
-            (* unfold sub_ *)
+          + change (subst _ (sub_comp _ sub_wk1 ► (x :: τ ↦ _))) with
+                (sub_comp (sub_comp (sub_comp ζ1 ζ2) sub_wk1) (sub_id Σ2 ► (fresh Σ2 (Some x) :: τ ↦ v)) ► (x :: τ ↦ v)).
+            rewrite <-sub_snoc_comp, sub_comp_assoc, sub_comp_wk1_tail; cbn.
+            now rewrite sub_comp_id_right.
           + revert POST_dcl. clear. intros.
             unfold resultprop_downwards_closed.
             intros [Σ3 ζ3 pc3 a3 s3] [Σ4 ζ4 pc4 a4 s4] Hgeq.
