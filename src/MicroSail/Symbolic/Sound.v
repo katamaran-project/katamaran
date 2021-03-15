@@ -38,6 +38,8 @@ From Coq Require Import
      Classes.Morphisms_Relations.
 Require Import Basics.
 
+From Coq Require Lists.List.
+
 From Equations Require Import
      Equations.
 
@@ -748,11 +750,18 @@ Module Soundness
         dmut_vac (dmut_pair da db).
       Proof. unfold dmut_pair; eauto. Qed.
       Local Hint Resolve dmut_pair_vac : core.
+      Local Hint Unfold outcome_satisfy : core.
 
       Lemma dmut_demonic_binary_vac `{Inst AT A} {Γ1 Γ2 Σ0}
         (d1 d2 : DynamicMutator Γ1 Γ2 AT Σ0) (vac_d1 : dmut_vac d1) (vac_d2 : dmut_vac d2) :
         dmut_vac (dmut_demonic_binary d1 d2).
-      Proof. Admitted.
+      Proof.
+        unfold dmut_demonic_binary.
+        unfold dmut_vac in *.
+        unfold outcome_vac in *.
+        now cbn; eauto.
+      Qed.
+
       Local Hint Resolve dmut_demonic_binary_vac : core.
 
       Local Hint Extern 5 (outcome_vac _ (dmut_demonic_binary _ _ _ _ _)) =>
@@ -761,13 +770,33 @@ Module Soundness
       Lemma dmut_angelic_binary_vac `{Inst AT A} {Γ1 Γ2 Σ0}
         (d1 d2 : DynamicMutator Γ1 Γ2 AT Σ0) (vac_d1 : dmut_vac d1) (vac_d2 : dmut_vac d2) :
         dmut_vac (dmut_angelic_binary d1 d2).
-      Proof. Admitted.
+      Proof.
+        unfold dmut_angelic_binary.
+        unfold dmut_vac in *.
+        unfold outcome_vac in *.
+        now cbn; eauto.
+      Qed.
       Local Hint Resolve dmut_angelic_binary_vac : core.
+
+      Lemma dmut_demonic_list_vac {AT A} {F : Type} `{Subst AT, Inst AT A} {Γ1 Γ2 Σ} (l : list (DynamicMutator Γ1 Γ2 AT Σ)) :
+        List.Forall dmut_vac l ->
+        dmut_vac (dmut_demonic_list l).
+      Proof.
+      Admitted.
+      Local Hint Resolve dmut_demonic_list_vac : core.
 
       Lemma dmut_demonic_finite_vac {AT A} {F : Type} `{Subst AT, Inst AT A, finite.Finite F} {Γ Σ} (k : F -> DynamicMutator Γ Γ AT Σ) :
         (forall v, dmut_vac (k v)) ->
         dmut_vac (dmut_demonic_finite F k).
-      Proof. Admitted.
+      Proof.
+        intros kvac.
+        unfold dmut_demonic_finite.
+        enough (List.Forall dmut_vac (List.map k (finite.enum F))) by eauto.
+        eapply List.Forall_forall.
+        intros x [f [eq fInF]]%List.in_map_iff.
+        subst x.
+        now eapply kvac.
+      Qed.
       Local Hint Resolve dmut_demonic_finite_vac : core.
 
       Lemma dmut_state_vac {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (f : forall Σ' : LCtx, Sub Σ Σ' -> SymbolicState Γ1 Σ' -> AT Σ' * SymbolicState Γ2 Σ') :
