@@ -782,7 +782,10 @@ Module Soundness
         List.Forall dmut_vac l ->
         dmut_vac (dmut_demonic_list l).
       Proof.
-      Admitted.
+        induction 1 as [|r rs vacr vacrs]; cbn; eauto.
+        generalize rs at 1.
+        intros rs'; destruct rs'; auto.
+      Qed.
       Local Hint Resolve dmut_demonic_list_vac : core.
 
       Lemma dmut_demonic_finite_vac {AT A} {F : Type} `{Subst AT, Inst AT A, finite.Finite F} {Γ Σ} (k : F -> DynamicMutator Γ Γ AT Σ) :
@@ -807,9 +810,32 @@ Module Soundness
       Qed.
       Local Hint Resolve dmut_state_vac : core.
 
+      Lemma inconsistent_cons {Σ} {pc : PathCondition Σ} {f : Formula Σ} :
+        inconsistent pc -> inconsistent (f :: pc)%list.
+      Proof.
+        intros ipc ι; cbn; unfold instpc, inst_pathcondition; cbn.
+        rewrite fold_right_1_10_prop.
+        intros [Hf Hl].
+        exact (ipc _ Hl).
+      Qed.
+
+      Lemma dmutres_assume_formula_inconsistent {Γ Σ Σ1} {f : Formula Σ} {ζ1 : Sub Σ Σ1} {pc1 : PathCondition Σ1} {s1 : SymbolicState Γ Σ1} :
+        inconsistent pc1 ->
+        inconsistent (dmutres_pathcondition (dmutres_assume_formula pc1 (subst ζ1 f) s1)).
+      Admitted.
+
       Lemma dmut_assume_formula_vac {Γ Σ} (f : Formula Σ) :
         dmut_vac (@dmut_assume_formula Γ Σ f).
-      Proof. Admitted.
+      Proof.
+        unfold dmut_assume_formula.
+        intros Σ1 ζ1 pc1 s1.
+        destruct (try_solve_formula (subst ζ1 f)).
+        - destruct b; auto.
+        - intros P Pvac inc1.
+          unfold outcome_satisfy; cbn.
+          now eapply Pvac, dmutres_assume_formula_inconsistent.
+      Qed.
+
       Local Hint Resolve dmut_assume_formula_vac : core.
 
       Lemma dmut_produce_chunk_vac {Γ Σ} (c : Chunk Σ) :
