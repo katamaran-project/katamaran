@@ -419,104 +419,6 @@ Module Soundness
       - now f_equal.
     Qed.
 
-    (* UNUSED *)
-    Definition syngeq {AT} `{Subst AT, Rewrite AT} {Σ0 Σ1} (ζ1 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (a0 : AT Σ0) (a1 : AT Σ1) : Prop :=
-      rewrite pc1 a1 (subst ζ1 a0).
-
-    (* A generic preorder on symbolic data. The terms a0 and a1 should be
-       considered to be outputs of the executor along the same path, just with
-       different constraints. More specifically: if we run a symbolic
-       computation up to some point with result a0, then a1 denotes the result if
-       we ran it with the new constraints given by pc1. *)
-    Definition geq {AT A} `{Inst AT A} {Σ0 Σ1} (ζ1 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (a0 : AT Σ0) (a1 : AT Σ1) : Prop :=
-      forall (ι0 : SymInstance Σ0) (ι1 : SymInstance Σ1),
-        syminstance_rel ζ1 ι0 ι1 ->
-        (inst ι1 pc1 : Prop) ->
-        inst ι0 a0 = inst ι1 a1.
-
-    (* A preorder on path conditions. This encodes that either pc1 belongs to a
-       longer symbolic execution path or that it's the same path, but with
-       potentially additional constraints. *)
-    Definition geqpc {Σ0 Σ1} (ζ1 : Sub Σ0 Σ1) (pc0 : PathCondition Σ0) (pc1 : PathCondition Σ1) : Prop :=
-      forall (ι0 : SymInstance Σ0) (ι1 : SymInstance Σ1),
-        syminstance_rel ζ1 ι0 ι1 ->
-        (inst ι1 pc1 : Prop) ->
-        (inst ι0 pc0 : Prop).
-
-    Lemma geq_refl {AT A} `{Inst AT A} {Σ} (pc : PathCondition Σ) (a : AT Σ) :
-      geq (sub_id _) pc a a.
-    Proof. intros ? ? <-. now rewrite inst_sub_id. Qed.
-
-    Lemma geq_trans {AT A} `{Inst AT A} {Σ1 Σ2 Σ3}
-          {ζ12 : Sub Σ1 Σ2} (pc2 : PathCondition Σ2)
-          {ζ23 : Sub Σ2 Σ3} {pc3 : PathCondition Σ3}
-          {a1 : AT Σ1} (a2 : AT Σ2) {a3 : AT Σ3} :
-      geqpc ζ23 pc2 pc3 ->
-      geq ζ12 pc2 a1 a2 ->
-      geq ζ23 pc3 a2 a3 ->
-      geq (sub_comp ζ12 ζ23) pc3 a1 a3.
-    Proof.
-      intros Hpc23 Ha12 Ha23 ι1 ι3 rel13 Hpc3.
-      pose (inst ι3 ζ23) as ι2.
-      pose proof (Hpc23 ι2 ι3 eq_refl Hpc3) as Hpc2.
-      specialize (Ha23 ι2 ι3 eq_refl Hpc3).
-      apply syminstance_rel_comp in rel13.
-      specialize (Ha12 ι1 ι2 rel13 Hpc2).
-      now transitivity (inst ι2 a2).
-    Qed.
-
-    Lemma geq_syntactic {AT A} `{InstLaws AT A} {Σ0 Σ1} (ζ1 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (a0 : AT Σ0) (a1 : AT Σ1) :
-      a1 = subst ζ1 a0 ->
-      geq ζ1 pc1 a0 a1.
-    Proof.
-      unfold geq, syminstance_rel.
-      intros -> * <-. now rewrite inst_subst.
-    Qed.
-
-    Lemma geq_subst {AT A} `{InstLaws AT A} {Σ2 Σ3 Σ4} (a : AT Σ2) (ζ23 : Sub Σ2 Σ3) (ζ24 : Sub Σ2 Σ4) (ζ34 : Sub Σ3 Σ4)
-          (pc4 : PathCondition Σ4) :
-      geq ζ34 pc4 ζ23 ζ24 -> geq ζ34 pc4 (subst ζ23 a) (subst ζ24 a).
-    Proof.
-      intros Hζ34 ι3 ι4 rel34 Hpc4. specialize (Hζ34 ι3 ι4 rel34 Hpc4).
-      rewrite ?inst_subst. now f_equal.
-    Qed.
-
-    Lemma geq_pre_comp {Σ1 Σ2 Σ3 Σ4} (ζ12 : Sub Σ1 Σ2) (ζ23 : Sub Σ2 Σ3) (ζ24 : Sub Σ2 Σ4) (ζ34 : Sub Σ3 Σ4)
-          (pc4 : PathCondition Σ4) :
-      geq ζ34 pc4 ζ23 ζ24 -> geq ζ34 pc4 (sub_comp ζ12 ζ23) (sub_comp ζ12 ζ24).
-    Proof. apply geq_subst. Qed.
-
-    Lemma geq_sub_comp {Σ1 Σ2 Σ3} (pc3 : PathCondition Σ3) (ζ12 : Sub Σ1 Σ2) (ζ23 : Sub Σ2 Σ3) :
-      geq ζ23 pc3 ζ12 (sub_comp ζ12 ζ23).
-    Proof. apply geq_syntactic. reflexivity. Qed.
-
-    Lemma geqpc_refl {Σ} (pc : PathCondition Σ) :
-      geqpc (sub_id Σ) pc pc.
-    Proof. intros ? ι <-. now rewrite inst_sub_id. Qed.
-
-    Lemma geqpc_trans {Σ0 Σ1 Σ2} (ζ01 : Sub Σ0 Σ1) (ζ02 : Sub Σ0 Σ2) (ζ12 : Sub Σ1 Σ2)
-          (pc0 : PathCondition Σ0) (pc1 : PathCondition Σ1) (pc2 : PathCondition Σ2) :
-      geq ζ12 pc2 ζ01 ζ02 -> geqpc ζ01 pc0 pc1 -> geqpc ζ12 pc1 pc2 -> geqpc ζ02 pc0 pc2.
-    Proof.
-      intros Hζ H01 H12 ι0 ι2 rel02 Hpc2. pose (inst ι2 ζ12) as ι1.
-      specialize (Hζ ι1 ι2 eq_refl Hpc2).
-      assert (syminstance_rel ζ01 ι0 ι1) as rel01 by congruence.
-      eauto.
-    Qed.
-
-    Definition dmutres_geq_low_level {Γ A V Σ} {instA : Inst A V} (r1 r2 : DynamicMutatorResult Γ A Σ) : Prop :=
-      match r1 , r2 with
-      | MkDynMutResult ζ1 pc1 a1 s1, MkDynMutResult ζ2 pc2 a2 s2 =>
-        exists ζ12,
-        forall ι1 ι2,
-          syminstance_rel ζ12 ι1 ι2 ->
-          (inst ι2 pc2 : Prop) ->
-          inst ι1 pc1 /\
-          inst ι1 ζ1 = inst ι2 ζ2 /\
-          inst ι1 a1 = inst ι2 a2 /\
-          inst ι1 s1 = inst ι2 s2
-      end.
-
     Section StateProp.
 
       Definition StateProperty Γ A Σ :=
@@ -1042,55 +944,6 @@ Module Soundness
             now rewrite subst_assoc in Hpost.
     Qed.
 
-
-    Lemma dmutres_try_assume_eq_geq {Γ Σ0 σ} (pc0 : PathCondition Σ0) (t1 t2 : Term Σ0 σ) (s0 : SymbolicState Γ Σ0) :
-      OptionSpec
-        (fun '(MkDynMutResult ζ01 pc1 tt s1) =>
-           geqpc ζ01 (cons (formula_eq t1 t2) pc0) pc1 /\
-           geq ζ01 pc1 s0 s1)
-        True
-        (dmutres_try_assume_eq pc0 t1 t2 s0).
-    Proof.
-      destruct t1; cbn; try (constructor; auto; fail).
-      destruct (occurs_check ςInΣ t2) eqn:?; constructor; auto.
-      apply (@occurs_check_sound _ _ (@OccursCheckTerm _)) in Heqo;
-        auto with typeclass_instances. subst t2.
-      split.
-      - intros ι0 ι1 <- Hpc0. rewrite inst_pathcondition_cons.
-        rewrite <- ?inst_subst. split; cbn; auto.
-        rewrite lookup_sub_single_eq.
-        rewrite <- ?subst_sub_comp.
-        rewrite sub_comp_shift_single.
-        rewrite subst_sub_id.
-        reflexivity.
-      - now apply geq_syntactic.
-    Qed.
-
-    Lemma dmutres_assume_formula_geq {Γ Σ0} (pc0 : PathCondition Σ0) (fml0 : Formula Σ0) (s0 : SymbolicState Γ Σ0) :
-      match dmutres_assume_formula pc0 fml0 s0 with
-      | MkDynMutResult ζ01 pc1 tt s1 =>
-        geqpc ζ01 (cons fml0 pc0) pc1 /\
-        geq ζ01 pc1 s0 s1
-      end.
-    Proof.
-      destruct fml0; cbn; try (split; [ apply geqpc_refl | apply geq_refl ]).
-      destruct (dmutres_try_assume_eq_geq pc0 t1 t2 s0); cbn.
-      { destruct a as [Σ1 ζ01 pc1 [] s1]; cbn; destruct_conjs; auto. }
-      clear H.
-      destruct (dmutres_try_assume_eq_geq pc0 t2 t1 s0); cbn.
-      { destruct a as [Σ1 ζ01 pc1 [] s1]; cbn.
-        destruct H as [Hpc01 Hs]. split; auto.
-        intros ? ? rel Hpc1. specialize (Hpc01 _ _ rel Hpc1).
-        rewrite inst_pathcondition_cons in *. cbn in *.
-        intuition.
-      }
-      clear H. split.
-      - intros ? ? <-.
-        rewrite inst_sub_id. rewrite ?inst_pathcondition_cons.
-        cbn. intuition.
-      - apply geq_refl.
-    Qed.
-
     (* These should be kept abstract in the rest of the proof. If you need some
        property, add a lemma above. *)
     Local Opaque dmutres_try_assume_eq.
@@ -1100,9 +953,9 @@ Module Soundness
 
       Definition dmut_dcl' {Γ1 Γ2 AT Σ0 A} `{Inst AT A, Subst AT} (d : DynamicMutator Γ1 Γ2 AT Σ0) : Prop :=
         forall Σ1 Σ2 (ζ01 : Sub Σ0 Σ1) pc1 (s1 : SymbolicState Γ1 Σ1) (ζ12 : Sub Σ1 Σ2) pc2 s2 ζ02,
-          geqpc ζ12 pc1 pc2 ->
-          geq ζ12 pc2 s1 s2 ->
-          geq ζ12 pc2 ζ01 ζ02 ->
+          pc2 ⊢ subst ζ12 pc1 ->
+          pc2 ⊢ subst ζ12 s1 == s2 ->
+          pc2 ⊢ subst ζ12 ζ01 == ζ02 ->
           forall (P : ResultProperty Γ2 AT Σ1) (P_dcl : resultprop_downwards_closed P) (P_vac : resultprop_vacuous P),
             outcome_satisfy (d Σ1 ζ01 pc1 s1) contradiction P ->
             outcome_satisfy (d Σ2 ζ02 pc2 s2) contradiction (resultprop_specialize_pc ζ12 pc2 P).
@@ -1111,29 +964,29 @@ Module Soundness
             (d : DynamicMutator Γ1 Γ2 AT Σ0) :
         dmut_dcl d <-> dmut_dcl' d.
       Proof.
-        split.
-        - unfold dmut_dcl, dmut_dcl', geqpc, geq.
-          intros d_dcl * Hpc12 Hs12 Hζ12 P P_dcl P_vac.
-          eapply d_dcl; eauto;
-            intros ι Hpc2; rewrite inst_subst;
-            eauto using Hpc12, Hs12, Hζ12.
-        - unfold dmut_dcl, dmut_dcl'.
-          intros d_dcl * Hpc12 Hs12 Hζ12 P P_dcl P_vac Q PQ.
-          intros HP. eapply d_dcl in HP; eauto. revert HP.
-          apply outcome_satisfy_monotonic. intros r. apply PQ.
-          + intros ι1 ι2 ι12 Hpc2.
-            unfold syminstance_rel in *.
-            rewrite <-ι12, <-inst_subst.
-            now eapply Hpc12.
-          + intros ι1 ι2 ι12 Hpc2.
-            unfold syminstance_rel in *.
-            rewrite <-ι12, <-inst_subst.
-            now eapply Hs12.
-          + intros ι1 ι2 ι12 Hpc2.
-            unfold syminstance_rel in *.
-            rewrite <-ι12, <-inst_subst.
-            now eapply Hζ12.
-      Qed.
+        (* split. *)
+        (* - unfold dmut_dcl, dmut_dcl', geqpc, geq. *)
+        (*   intros d_dcl * Hpc12 Hs12 Hζ12 P P_dcl P_vac. *)
+        (*   eapply d_dcl; eauto; *)
+        (*     intros ι Hpc2; rewrite inst_subst; *)
+        (*     eauto using Hpc12, Hs12, Hζ12. *)
+        (* - unfold dmut_dcl, dmut_dcl'. *)
+        (*   intros d_dcl * Hpc12 Hs12 Hζ12 P P_dcl P_vac Q PQ. *)
+        (*   intros HP. eapply d_dcl in HP; eauto. revert HP. *)
+        (*   apply outcome_satisfy_monotonic. intros r. apply PQ. *)
+        (*   + intros ι1 ι2 ι12 Hpc2. *)
+        (*     unfold syminstance_rel in *. *)
+        (*     rewrite <-ι12, <-inst_subst. *)
+        (*     now eapply Hpc12. *)
+        (*   + intros ι1 ι2 ι12 Hpc2. *)
+        (*     unfold syminstance_rel in *. *)
+        (*     rewrite <-ι12, <-inst_subst. *)
+        (*     now eapply Hs12. *)
+        (*   + intros ι1 ι2 ι12 Hpc2. *)
+        (*     unfold syminstance_rel in *. *)
+        (*     rewrite <-ι12, <-inst_subst. *)
+        (*     now eapply Hζ12. *)
+      Admitted.
 
       Lemma dmut_pure_dcl {Γ AT Σ A} {subA: Subst AT} {sublAT: SubstLaws AT}
             {instA : Inst AT A} {instlA : InstLaws AT A} (a : AT Σ) :
@@ -1154,8 +1007,9 @@ Module Soundness
         dmut_dcl (@dmut_fail Γ1 Γ2 AT Σ D func msg data).
       Proof.
         apply dmut_dcl_dcl'.
-        unfold dmut_dcl', dmut_fail, contradiction, inconsistent; cbn.
-        intuition.
+        unfold dmut_dcl', dmut_fail, contradiction, inconsistent, not; cbn.
+        intros. unfold entails in H1. apply (H4 (inst ι ζ12)).
+        rewrite <- inst_subst. intuition.
       Qed.
 
       Lemma dmut_sub_dcl {Γ1 Γ2 AT A Σ0} `{Inst AT A, Subst AT} (d : DynamicMutator Γ1 Γ2 AT Σ0) (d_dcl : dmut_dcl d) :
