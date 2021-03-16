@@ -861,7 +861,19 @@ Module Soundness
 
       Lemma dmut_fresh_vac {AT A} `{Inst AT A} {Γ Σ σ x} (d : DynamicMutator Γ Γ AT (Σ ▻ (x :: σ))) (d_vac : dmut_vac d) :
         dmut_vac (dmut_fresh x σ d).
-      Proof. Admitted.
+      Proof.
+        unfold dmut_fresh, dmut_vac.
+        intros Σ1 ζ01 pc1 s1 P Pvac ipc1.
+        rewrite outcome_satisfy_map.
+        eapply d_vac.
+        - intros [Σ2 ζ2 pc2 a2 s2] incr.
+          now eapply Pvac.
+        - intros ι Hpc1.
+          unfold wk1 in Hpc1.
+          rewrite inst_subst in Hpc1.
+          now eapply (ipc1 (inst ι sub_wk1)).
+      Qed.
+
       Local Hint Resolve dmut_fresh_vac : core.
 
       Lemma dmut_freshtermvar_vac {Γ Σ σ x} :
