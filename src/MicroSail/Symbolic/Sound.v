@@ -976,29 +976,15 @@ Module Soundness
             (d : DynamicMutator Γ1 Γ2 AT Σ0) :
         dmut_dcl d <-> dmut_dcl' d.
       Proof.
-        (* split. *)
-        (* - unfold dmut_dcl, dmut_dcl', geqpc, geq. *)
-        (*   intros d_dcl * Hpc12 Hs12 Hζ12 P P_dcl P_vac. *)
-        (*   eapply d_dcl; eauto; *)
-        (*     intros ι Hpc2; rewrite inst_subst; *)
-        (*     eauto using Hpc12, Hs12, Hζ12. *)
-        (* - unfold dmut_dcl, dmut_dcl'. *)
-        (*   intros d_dcl * Hpc12 Hs12 Hζ12 P P_dcl P_vac Q PQ. *)
-        (*   intros HP. eapply d_dcl in HP; eauto. revert HP. *)
-        (*   apply outcome_satisfy_monotonic. intros r. apply PQ. *)
-        (*   + intros ι1 ι2 ι12 Hpc2. *)
-        (*     unfold syminstance_rel in *. *)
-        (*     rewrite <-ι12, <-inst_subst. *)
-        (*     now eapply Hpc12. *)
-        (*   + intros ι1 ι2 ι12 Hpc2. *)
-        (*     unfold syminstance_rel in *. *)
-        (*     rewrite <-ι12, <-inst_subst. *)
-        (*     now eapply Hs12. *)
-        (*   + intros ι1 ι2 ι12 Hpc2. *)
-        (*     unfold syminstance_rel in *. *)
-        (*     rewrite <-ι12, <-inst_subst. *)
-        (*     now eapply Hζ12. *)
-      Admitted.
+        split.
+        - unfold dmut_dcl, dmut_dcl'.
+          intros d_dcl * Hpc12 Hs12 Hζ12 P P_dcl P_vac.
+          eapply d_dcl; eauto.
+        - unfold dmut_dcl, dmut_dcl'.
+          intros d_dcl * Hpc12 Hs12 Hζ12 P P_dcl P_vac Q PQ.
+          intros HP. eapply d_dcl in HP; eauto. revert HP.
+          apply outcome_satisfy_monotonic. intros r. apply PQ.
+      Qed.
 
       Lemma dmut_pure_dcl {Γ AT Σ A} {subA: Subst AT} {sublAT: SubstLaws AT}
             {instA : Inst AT A} {instlA : InstLaws AT A} (a : AT Σ) :
