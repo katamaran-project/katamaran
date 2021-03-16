@@ -819,10 +819,26 @@ Module Soundness
         exact (ipc _ Hl).
       Qed.
 
-      Lemma dmutres_assume_formula_inconsistent {Γ Σ Σ1} {f : Formula Σ} {ζ1 : Sub Σ Σ1} {pc1 : PathCondition Σ1} {s1 : SymbolicState Γ Σ1} :
+      Lemma dmutres_assume_formula_inconsistent {Γ Σ Σ1} {f : Formula Σ} {ζ1 : Sub Σ Σ1}
+            {pc1 : PathCondition Σ1} {s1 : SymbolicState Γ Σ1} :
         inconsistent pc1 ->
         inconsistent (dmutres_pathcondition (dmutres_assume_formula pc1 (subst ζ1 f) s1)).
-      Admitted.
+      Proof.
+        intros ipc1 ι Hpc2.
+        destruct (dmutres_assume_formula_spec pc1 (subst ζ1 f) s1) as [_ geq2].
+        revert ι Hpc2 geq2.
+        generalize (dmutres_assume_formula pc1 (subst ζ1 f) s1).
+        intros [Σ2 ζ2 pc2 a2 s2] ι Hpc2 [ζ (pc21 & _)].
+        cbn in *.
+        eapply (ipc1 (inst ι ζ)).
+        specialize (pc21 ι Hpc2).
+        unfold inst, instantiate_pathcondition, inst_pathcondition in pc21.
+        cbn in pc21.
+        rewrite fold_right_1_10_prop in pc21.
+        destruct pc21 as (Hf & Hpc1).
+        change (instpc ι (subst ζ pc1)) in Hpc1.
+        now rewrite inst_subst in Hpc1.
+      Qed.
 
       Lemma dmut_assume_formula_vac {Γ Σ} (f : Formula Σ) :
         dmut_vac (@dmut_assume_formula Γ Σ f).
