@@ -743,16 +743,16 @@ Module Mutators
         | cons x xs  => dmut_demonic_binary x (dmut_demonic_list xs)
         end.
 
-    Definition dmut_angelic_finite {Γ A} F `{finite.Finite F, Subst A} {Σ}
-               (cont : F -> DynamicMutator Γ Γ A Σ) :
-      DynamicMutator Γ Γ A Σ :=
+    Definition dmut_angelic_finite {Γ1 Γ2 A} F `{finite.Finite F, Subst A} {Σ}
+               (cont : F -> DynamicMutator Γ1 Γ2 A Σ) :
+      DynamicMutator Γ1 Γ2 A Σ :=
       dmut_angelic_list "dmut_angelic_finite" "All branches failed" tt (map cont (finite.enum F)).
-    Definition dmut_demonic_finite {Γ A} F `{finite.Finite F, Subst A} {Σ}
-               (cont : F -> DynamicMutator Γ Γ A Σ) :
-      DynamicMutator Γ Γ A Σ :=
+    Definition dmut_demonic_finite {Γ1 Γ2 A} F `{finite.Finite F, Subst A} {Σ}
+               (cont : F -> DynamicMutator Γ1 Γ2 A Σ) :
+      DynamicMutator Γ1 Γ2 A Σ :=
       dmut_demonic_list (map cont (finite.enum F)).
-    Global Arguments dmut_angelic_finite {_ _} _ {_ _ _ _} _.
-    Global Arguments dmut_demonic_finite {_ _} _ {_ _ _ _} _.
+    Global Arguments dmut_angelic_finite {_ _ _} _ {_ _ _ _} _.
+    Global Arguments dmut_demonic_finite {_ _ _} _ {_ _ _ _} _.
 
     Definition dmut_fresh {Γ A Σ} x τ (ma : DynamicMutator Γ Γ A (Σ ▻ (x :: τ))) : DynamicMutator Γ Γ A Σ :=
       fun Σ1 ζ1 pc1 s1 =>
