@@ -469,13 +469,19 @@ Section WithB.
     | ctx_snoc Δ b => fun P => Forall (fun δ => forall v, P (env_snoc δ _ v))
     end.
 
-  Lemma Forall_forall (Δ : Ctx B) (P : Env D Δ -> Prop) (hyp: Forall P) :
-    (forall E : Env D Δ, P E).
+  Lemma Forall_forall (Δ : Ctx B) (P : Env D Δ -> Prop) :
+    (Forall P) <-> (forall E : Env D Δ, P E).
   Proof.
-    induction Δ; intros E; depelim E.
-    - apply hyp.
-    - apply (IHΔ (fun E => forall v, P (env_snoc E _ v))).
-      apply hyp.
+    split.
+    - induction Δ; intros hyp E; depelim E.
+      + apply hyp.
+      + apply (IHΔ (fun E => forall v, P (env_snoc E _ v))).
+        apply hyp.
+    - induction Δ; cbn.
+      + auto.
+      + intros hyp.
+        apply (IHΔ (fun E => forall v, P (env_snoc E _ v))).
+        auto.
   Qed.
 
 End WithB.

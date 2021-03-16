@@ -266,7 +266,7 @@ Module Mutators
 
   Inductive Obligation : ObligationInfo -> Prop :=
   | obligation {Σ Γ δ h pc fml} :
-      ForallNamed (fun ι => all_list (inst ι) pc -> inst ι fml : Prop) ->
+      ForallNamed (fun ι => (inst ι pc : Prop) -> inst ι fml : Prop) ->
       Obligation (@MkObligationInfo Σ Γ δ h pc fml).
 
   Instance subst_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=

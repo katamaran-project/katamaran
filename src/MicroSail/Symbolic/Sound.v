@@ -753,12 +753,20 @@ Module Soundness
           unfold outcome_satisfy; cbn.
           now eapply Pvac, dmutres_assume_formula_inconsistent.
       Qed.
-
       Local Hint Resolve dmut_assume_formula_vac : core.
+
+      Lemma dmut_modify_vac {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> SymbolicState Γ' Σ') :
+        dmut_vac (dmut_modify f).
+      Proof.
+        unfold dmut_modify; eauto.
+      Qed.
+      Local Hint Resolve dmut_modify_vac : core.
 
       Lemma dmut_produce_chunk_vac {Γ Σ} (c : Chunk Σ) :
         dmut_vac (@dmut_produce_chunk Γ Σ c).
-      Proof. Admitted.
+      Proof.
+        unfold dmut_produce_chunk; eauto.
+      Qed.
       Local Hint Resolve dmut_produce_chunk_vac : core.
 
       Lemma dmut_fresh_vac {AT A} `{Inst AT A} {Γ Σ σ x} (d : DynamicMutator Γ Γ AT (Σ ▻ (x :: σ))) (d_vac : dmut_vac d) :
@@ -810,7 +818,20 @@ Module Soundness
 
       Lemma dmut_assert_formula_vac {Γ Σ} (f : Formula Σ) :
         dmut_vac (@dmut_assert_formula Γ Σ f).
-      Proof. Admitted.
+      Proof.
+        unfold dmut_assert_formula.
+        intros Σ1 ζ1 pc1 s1.
+        destruct (try_solve_formula (subst ζ1 f)).
+        - destruct b; auto.
+        - intros P Pvac inc1.
+          unfold outcome_satisfy; cbn.
+          split.
+          + constructor. clear s1.
+            eapply Forall_forall.
+            intros E ιpc1.
+            exfalso; eapply inc1; eauto.
+          + now eapply Pvac, dmutres_assume_formula_inconsistent.
+      Qed.
       Local Hint Resolve dmut_assert_formula_vac : core.
 
       Lemma dmut_consume_chunk_vac {Γ Σ} (c : Chunk Σ) :
