@@ -680,6 +680,18 @@ Module Soundness
       Qed.
       Local Hint Resolve dmut_angelic_binary_vac : core.
 
+      Lemma dmut_angelic_list_vac {AT A} `{Subst AT, Inst AT A} {Γ1 Γ2 Σ}
+            {D} {func : string} {msg : string} {data:D}
+            (l : list (DynamicMutator Γ1 Γ2 AT Σ)) :
+        List.Forall dmut_vac l ->
+        dmut_vac (dmut_angelic_list func msg data l).
+      Proof.
+        induction 1 as [|r rs vacr vacrs]; cbn; eauto.
+        generalize rs at 1.
+        intros rs'; destruct rs'; auto.
+      Qed.
+      Local Hint Resolve dmut_angelic_list_vac : core.
+
       Lemma dmut_demonic_list_vac {AT A} {F : Type} `{Subst AT, Inst AT A} {Γ1 Γ2 Σ} (l : list (DynamicMutator Γ1 Γ2 AT Σ)) :
         List.Forall dmut_vac l ->
         dmut_vac (dmut_demonic_list l).
@@ -703,6 +715,20 @@ Module Soundness
         now eapply kvac.
       Qed.
       Local Hint Resolve dmut_demonic_finite_vac : core.
+
+      Lemma dmut_angelic_finite_vac {AT A} {F : Type} `{Subst AT, Inst AT A, finite.Finite F} {Γ Σ} (k : F -> DynamicMutator Γ Γ AT Σ) :
+        (forall v, dmut_vac (k v)) ->
+        dmut_vac (dmut_angelic_finite F k).
+      Proof.
+        intros kvac.
+        unfold dmut_angelic_finite.
+        enough (List.Forall dmut_vac (List.map k (finite.enum F))) by eauto.
+        eapply List.Forall_forall.
+        intros x [f [eq fInF]]%List.in_map_iff.
+        subst x.
+        now eapply kvac.
+      Qed.
+      Local Hint Resolve dmut_angelic_finite_vac : core.
 
       Lemma dmut_state_vac {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (f : forall Σ' : LCtx, Sub Σ Σ' -> SymbolicState Γ1 Σ' -> AT Σ' * SymbolicState Γ2 Σ') :
         dmut_vac (dmut_state f).
@@ -754,6 +780,14 @@ Module Soundness
           now eapply Pvac, dmutres_assume_formula_inconsistent.
       Qed.
       Local Hint Resolve dmut_assume_formula_vac : core.
+
+      Lemma dmut_assume_formulas_vac {Γ Σ} (pc : PathCondition Σ) :
+        dmut_vac (@dmut_assume_formulas Γ Σ pc).
+      Proof.
+        unfold dmut_assume_formulas.
+        induction pc; cbn; eauto.
+      Qed.
+      Local Hint Resolve dmut_assume_formulas_vac : core.
 
       Lemma dmut_modify_vac {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> SymbolicState Γ' Σ') :
         dmut_vac (dmut_modify f).
@@ -834,16 +868,71 @@ Module Soundness
       Qed.
       Local Hint Resolve dmut_assert_formula_vac : core.
 
+      Lemma dmut_modify_heap_vac {Γ Σ}
+            (f : forall Σ', Sub Σ Σ' -> SymbolicHeap Σ' -> SymbolicHeap Σ') :
+        dmut_vac (@dmut_modify_heap Γ Σ f).
+      Proof.
+        unfold dmut_modify_heap; eauto.
+      Qed.
+      Local Hint Resolve dmut_modify_heap_vac : core.
+
+      Lemma dmut_put_heap_vac {Γ Σ} (h : SymbolicHeap Σ) :
+        dmut_vac (@dmut_put_heap Γ Σ h).
+      Proof.
+        unfold dmut_put_heap; eauto.
+      Qed.
+      Local Hint Resolve dmut_put_heap_vac : core.
+
+      Lemma dmut_get_heap_vac {Γ Σ} :
+        dmut_vac (@dmut_get_heap Γ Σ).
+      Proof.
+        unfold dmut_get_heap; eauto.
+      Qed.
+      Local Hint Resolve dmut_get_heap_vac : core.
+
       Lemma dmut_consume_chunk_vac {Γ Σ} (c : Chunk Σ) :
         dmut_vac (@dmut_consume_chunk Γ Σ c).
-      Proof. Admitted.
+      Proof.
+        unfold dmut_consume_chunk.
+        eapply dmut_bind_vac; eauto.
+        intros Σ2 ζ2 pc2 a2 s2.
+        eapply dmut_angelic_list_vac.
+        eapply List.Forall_forall.
+        intros d [[pc3 h2] (eq & r)]%List.in_map_iff.
+        subst d; eauto.
+      Qed.
       Local Hint Resolve dmut_consume_chunk_vac : core.
+
+      Lemma dmut_angelic_vac {Γ1 Γ2 I AT A Σ} `{Inst AT A}
+            {ms : I -> DynamicMutator Γ1 Γ2 AT Σ} :
+        (exists i, dmut_vac (ms i)) ->
+        dmut_vac (dmut_angelic ms).
+      Proof.
+        unfold dmut_angelic.
+        intros [i msvac] Σ1 ζ1 pc1 s1 P Pvac Hpc1.
+        cbn. exists i. now eapply msvac.
+      Qed.
+      Local Hint Resolve dmut_angelic_vac : core.
 
       Lemma dmut_consume_vac {Γ Σ} (asn : Assertion Σ) :
         dmut_vac (@dmut_consume Γ Σ asn).
       Proof.
         induction asn; cbn [dmut_consume];
-          unfold dmut_assert_term; eauto 10.
+          unfold dmut_assert_term, dmut_assume_term; eauto 10.
+        - destruct (term_get_sum s) as [[s'|s']|s']; eauto.
+          eapply dmut_angelic_binary_vac.
+          + eapply dmut_angelic_vac.
+            admit.
+          + eapply dmut_angelic_vac.
+            admit.
+        - destruct (term_get_pair s) as [[t1 t2]|].
+          eauto.
+          eapply dmut_angelic_vac.
+          admit.
+        - destruct (term_get_record s).
+          eauto.
+          eapply dmut_angelic_vac.
+          admit.
       Admitted.
       Local Hint Resolve dmut_consume_vac : core.
 
