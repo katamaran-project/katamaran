@@ -603,14 +603,34 @@ Module Soundness
         (d : DynamicMutator Γ1 Γ2 AT Σ0) (vac_d : dmut_vac d)
         (f : DynamicMutatorArrow' Γ2 Γ3 AT BT Σ0) (vac_f : dmut_arrow_vac' f) :
         dmut_vac (dmut_bind' d f).
-      Proof. (* LESS IMPORTANT *) Admitted.
+      Proof.
+        unfold dmut_bind', dmut_vac, outcome_vac; cbn.
+        intros Σ1 ζ1 pc1 s1 P Pvac incpc1.
+        rewrite outcome_satisfy_bind.
+        eapply vac_d; auto.
+        intros [Σ2 ζ2 pc2 a2 s2] ιpc2; cbn.
+        rewrite outcome_satisfy_bind.
+        eapply vac_f; auto.
+        intros [Σ3 ζ3 pc3 a3 s3] ιpc3; cbn.
+        now eapply Pvac.
+      Qed.
       Local Hint Resolve dmut_bind_vac' : core.
 
       Lemma dmut_bind_vac `{Inst AT A, Inst BT B} {Γ1 Γ2 Γ3 Σ0}
         (d : DynamicMutator Γ1 Γ2 AT Σ0) (vac_d : dmut_vac d)
         (f : DynamicMutatorArrow Γ2 Γ3 AT BT Σ0) (vac_f : dmut_arrow_vac f) :
         dmut_vac (dmut_bind d f).
-      Proof. (* MORE IMPORTANT *) Admitted.
+      Proof.
+        unfold dmut_bind, dmut_vac, outcome_vac; cbn.
+        intros Σ1 ζ1 pc1 s1 P Pvac incpc1.
+        rewrite outcome_satisfy_bind.
+        eapply vac_d; auto.
+        intros [Σ2 ζ2 pc2 a2 s2] ιpc2; cbn.
+        rewrite outcome_satisfy_bind.
+        eapply vac_f; auto.
+        intros [Σ3 ζ3 pc3 a3 s3] ιpc3; cbn.
+        now eapply Pvac.
+      Qed.
       Local Hint Resolve dmut_bind_vac : core.
 
       Lemma dmut_sub_vac `{Inst AT A} {Γ1 Γ2 Σ0} (d : DynamicMutator Γ1 Γ2 AT Σ0) (vac_d : dmut_vac d) :
