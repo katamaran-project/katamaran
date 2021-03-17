@@ -212,19 +212,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   Definition fun_write_reg : Stm ["wreg" ∶ ty_enum regname,
                                   "w" ∶ ty_word
                                  ] ty_unit :=
+    stm_call_external (ghost open_ptsreg) [exp_var "wreg"]%arg ;;
     match: exp_var "wreg" in regname with
-    | R0 => 
-      stm_call_external (ghost open_ptsreg) [exp_var "wreg"]%arg ;;
-      let: "x" := stm_write_register reg0 (exp_var "w") in callghost (close_ptsreg R0) ;; stm_exp x
-    | R1 =>
-      stm_call_external (ghost open_ptsreg) [exp_var "wreg"]%arg ;;
-      let: "x" := stm_write_register reg1 (exp_var "w") in callghost (close_ptsreg R1) ;; stm_exp x
-    | R2 =>
-      stm_call_external (ghost open_ptsreg) [exp_var "wreg"]%arg ;;
-      let: "x" := stm_write_register reg2 (exp_var "w") in callghost (close_ptsreg R2) ;; stm_exp x
-    | R3 =>
-      stm_call_external (ghost open_ptsreg) [exp_var "wreg"]%arg ;;
-      let: "x" := stm_write_register reg3 (exp_var "w") in callghost (close_ptsreg R3) ;; stm_exp x
+    | R0 => let: "x" := stm_write_register reg0 (exp_var "w") in callghost (close_ptsreg R0) ;; stm_exp x
+    | R1 => let: "x" := stm_write_register reg1 (exp_var "w") in callghost (close_ptsreg R1) ;; stm_exp x
+    | R2 => let: "x" := stm_write_register reg2 (exp_var "w") in callghost (close_ptsreg R2) ;; stm_exp x
+    | R3 => let: "x" := stm_write_register reg3 (exp_var "w") in callghost (close_ptsreg R3) ;; stm_exp x
     end ;; stm_lit ty_unit tt.
 
   Definition fun_next_pc : Stm ctx_nil ty_cap :=
