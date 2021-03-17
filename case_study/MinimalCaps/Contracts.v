@@ -617,6 +617,7 @@ Local Notation safew w := (chunk_user safe (env_nil ► (ty_word ↦ w))).
 Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
+(* 
 Lemma valid_contract_read_reg_cap : ValidContractDynMut sep_contract_read_reg_cap fun_read_reg_cap.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
@@ -698,12 +699,9 @@ Close Scope env.
 
 Lemma valid_contract_exec_bnez : TwoPointO.ValidContractDynMutDebug sep_contract_exec_bnez fun_exec_bnez.
 Proof. compute. Abort.
+*)
 
-(* TODO: remove this *)
-(* Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
-Proof. apply dynmutevarreflect_sound; now compute. Qed. *)
-
-Lemma valid_contract_exec_mv : TwoPointO.ValidContractDynMutDebug sep_contract_exec_mv fun_exec_mv.
+Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
 Proof. compute. Abort.
 
 Lemma valid_contract_exec_ld : TwoPointO.ValidContractDynMutDebug sep_contract_exec_ld fun_exec_ld.

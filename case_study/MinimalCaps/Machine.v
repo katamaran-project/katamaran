@@ -187,19 +187,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     (at level 10, f at next level) : exp_scope.
 
   Definition fun_read_reg : Stm ["rreg" ∶ ty_enum regname ] ty_word :=
+    stm_call_external (ghost open_ptsreg) [exp_var "rreg"]%arg ;;
     match: exp_var "rreg" in regname with
-    | R0 =>
-      stm_call_external (ghost open_ptsreg) [exp_var "rreg"]%arg ;;
-      let: "x" := stm_read_register reg0 in callghost (close_ptsreg R0) ;; stm_exp x
-    | R1 =>
-      stm_call_external (ghost open_ptsreg) [exp_var "rreg"]%arg ;;
-      let: "x" := stm_read_register reg1 in callghost (close_ptsreg R1) ;; stm_exp x
-    | R2 =>
-      stm_call_external (ghost open_ptsreg) [exp_var "rreg"]%arg ;;
-      let: "x" := stm_read_register reg2 in callghost (close_ptsreg R2) ;; stm_exp x
-    | R3 =>
-      stm_call_external (ghost open_ptsreg) [exp_var "rreg"]%arg ;;
-      let: "x" := stm_read_register reg3 in callghost (close_ptsreg R3) ;; stm_exp x
+    | R0 => let: "x" := stm_read_register reg0 in callghost (close_ptsreg R0) ;; stm_exp x
+    | R1 => let: "x" := stm_read_register reg1 in callghost (close_ptsreg R1) ;; stm_exp x
+    | R2 => let: "x" := stm_read_register reg2 in callghost (close_ptsreg R2) ;; stm_exp x
+    | R3 => let: "x" := stm_read_register reg3 in callghost (close_ptsreg R3) ;; stm_exp x
     end.
 
   Definition fun_read_reg_cap : Stm ["creg" ∶ ty_enum regname ] ty_cap :=
