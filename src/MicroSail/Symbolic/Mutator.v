@@ -266,7 +266,7 @@ Module Mutators
 
   Inductive Obligation : ObligationInfo -> Prop :=
   | obligation {Σ Γ δ h pc fml} :
-      ForallNamed (fun ι => all_list (inst ι) pc -> inst ι fml : Prop) ->
+      ForallNamed (fun ι => (inst ι pc : Prop) -> inst ι fml : Prop) ->
       Obligation (@MkObligationInfo Σ Γ δ h pc fml).
 
   Instance subst_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
@@ -306,6 +306,30 @@ Module Mutators
 
   Section TrySolve.
 
+    Definition try_solve_eq {Σ σ} (t1 t2 : Term Σ σ) : option bool :=
+      if Term_eqb t1 t2
+      then Some true
+      else
+        (* If the terms are literals, we can trust the negative result. *)
+        match t1 , t2 with
+        | term_lit _ _ , term_lit _ _ => Some false
+        | _            , _            => None
+        end.
+
+    Lemma try_solve_eq_spec {Σ σ} (t1 t2 : Term Σ σ) :
+      OptionSpec
+        (fun b => forall ι, inst ι t1 = inst ι t2 <-> is_true b)
+        True
+        (try_solve_eq t1 t2).
+    Proof.
+      unfold try_solve_eq.
+      destruct (Term_eqb_spec t1 t2).
+      - constructor. intros. apply reflect_iff.
+        constructor. congruence.
+      - destruct t1; dependent elimination t2; constructor; auto.
+        intros. apply reflect_iff. constructor. cbn. congruence.
+    Qed.
+
     (* Check if the given formula is always true or always false for any
        assignments of the logic variables. *)
     Definition try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
@@ -317,15 +341,9 @@ Module Mutators
         | _            => None
         end
       | formula_prop _ _ => None
-      | formula_eq t1 t2 =>
-        if Term_eqb t1 t2
-        then Some true
-        else None
+      | formula_eq t1 t2 => try_solve_eq t1 t2
         (* else Term_eqvb t1 t2 *)
-      | formula_neq t1 t2 =>
-        if Term_eqb t1 t2
-        then Some false
-        else None
+      | formula_neq t1 t2 => option_map negb (try_solve_eq t1 t2)
         (* else option_map negb (Term_eqvb t1 t2) *)
       end.
 
@@ -338,30 +356,9 @@ Module Mutators
       destruct fml; cbn.
       - dependent elimination t; constructor; auto.
       - constructor; auto.
-      - destruct (Term_eqb_spec t1 t2); cbn; constructor; auto.
-        intros ι. apply reflect_iff. constructor. now subst.
-      - destruct (Term_eqb_spec t1 t2); cbn; constructor; auto.
-        intros ι. apply reflect_iff. constructor. now subst.
-    Qed.
-
-    Lemma try_solve_formula_subst {Σ0 Σ1} (ζ1 : Sub Σ0 Σ1) (fml : Formula Σ0) :
-      forall b,
-        try_solve_formula fml = Some b ->
-        try_solve_formula (subst ζ1 fml) = Some b.
-    Proof.
-      intros b. destruct fml; cbn.
-      - dependent elimination t; cbn; intros; try discriminate; auto.
-      - auto.
-      - repeat
-          match goal with
-          | |- context[Term_eqb ?t1 ?t2] =>
-            destruct (Term_eqb_spec t1 t2)
-          end; cbn; congruence.
-      - repeat
-          match goal with
-          | |- context[Term_eqb ?t1 ?t2] =>
-            destruct (Term_eqb_spec t1 t2)
-          end; cbn; congruence.
+      - destruct (try_solve_eq_spec t1 t2); now constructor.
+      - destruct (try_solve_eq_spec t1 t2); constructor; auto.
+        intros ι. specialize (H ι). destruct a; intuition.
     Qed.
 
   End TrySolve.
@@ -743,16 +740,16 @@ Module Mutators
         | cons x xs  => dmut_demonic_binary x (dmut_demonic_list xs)
         end.
 
-    Definition dmut_angelic_finite {Γ A} F `{finite.Finite F, Subst A} {Σ}
-               (cont : F -> DynamicMutator Γ Γ A Σ) :
-      DynamicMutator Γ Γ A Σ :=
+    Definition dmut_angelic_finite {Γ1 Γ2 A} F `{finite.Finite F, Subst A} {Σ}
+               (cont : F -> DynamicMutator Γ1 Γ2 A Σ) :
+      DynamicMutator Γ1 Γ2 A Σ :=
       dmut_angelic_list "dmut_angelic_finite" "All branches failed" tt (map cont (finite.enum F)).
-    Definition dmut_demonic_finite {Γ A} F `{finite.Finite F, Subst A} {Σ}
-               (cont : F -> DynamicMutator Γ Γ A Σ) :
-      DynamicMutator Γ Γ A Σ :=
+    Definition dmut_demonic_finite {Γ1 Γ2 A} F `{finite.Finite F, Subst A} {Σ}
+               (cont : F -> DynamicMutator Γ1 Γ2 A Σ) :
+      DynamicMutator Γ1 Γ2 A Σ :=
       dmut_demonic_list (map cont (finite.enum F)).
-    Global Arguments dmut_angelic_finite {_ _} _ {_ _ _ _} _.
-    Global Arguments dmut_demonic_finite {_ _} _ {_ _ _ _} _.
+    Global Arguments dmut_angelic_finite {_ _ _} _ {_ _ _ _} _.
+    Global Arguments dmut_demonic_finite {_ _ _} _ {_ _ _ _} _.
 
     Definition dmut_fresh {Γ A Σ} x τ (ma : DynamicMutator Γ Γ A (Σ ▻ (x :: τ))) : DynamicMutator Γ Γ A Σ :=
       fun Σ1 ζ1 pc1 s1 =>
