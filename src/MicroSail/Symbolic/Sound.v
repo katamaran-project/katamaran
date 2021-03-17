@@ -712,6 +712,14 @@ Module Soundness
       Qed.
       Local Hint Resolve dmut_angelic_list_vac : core.
 
+      Lemma dmut_demonic_vac {Γ1 Γ2 I AT Σ} `{Inst AT A} {ms : I -> DynamicMutator Γ1 Γ2 AT Σ} :
+        (forall i, dmut_vac (ms i)) ->
+        dmut_vac (dmut_demonic ms).
+      Proof.
+        unfold dmut_demonic, dmut_vac, outcome_vac in *; cbn; eauto.
+      Qed.
+      Local Hint Resolve dmut_demonic_vac : core.
+
       Lemma dmut_demonic_list_vac {AT A} {F : Type} `{Subst AT, Inst AT A} {Γ1 Γ2 Σ} (l : list (DynamicMutator Γ1 Γ2 AT Σ)) :
         List.Forall dmut_vac l ->
         dmut_vac (dmut_demonic_list l).
@@ -932,7 +940,6 @@ Module Soundness
         intros [i msvac] Σ1 ζ1 pc1 s1 P Pvac Hpc1.
         cbn. exists i. now eapply msvac.
       Qed.
-      Local Hint Resolve dmut_angelic_vac : core.
 
       Lemma dmut_consume_vac {Γ Σ} (asn : Assertion Σ) :
         dmut_vac (@dmut_consume Γ Σ asn).
@@ -956,17 +963,17 @@ Module Soundness
       Admitted.
       Local Hint Resolve dmut_consume_vac : core.
 
+      Lemma dmut_call_vac {Γ Δ τ Σ} (c : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) :
+        dmut_vac (@dmut_call Γ Δ τ Σ c ts).
+      Proof. Admitted.
+      Local Hint Resolve dmut_call_vac : core.
+
       Lemma dmut_exec_vac {Γ Σ τ} (s : Stm Γ τ) :
         dmut_vac (@dmut_exec Γ τ Σ s).
       Proof.
         induction s; cbn [dmut_exec]; eauto.
       Admitted.
       Local Hint Resolve dmut_exec_vac : core.
-
-      Lemma dmut_call_vac {Γ Δ τ Σ} (c : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) :
-        dmut_vac (@dmut_call Γ Δ τ Σ c ts).
-      Proof. Admitted.
-      Local Hint Resolve dmut_call_vac : core.
 
       Lemma dmut_leakcheck_vac {Γ Σ} :
         dmut_vac (@dmut_leakcheck Γ Σ).
