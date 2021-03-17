@@ -46,11 +46,7 @@ From MicroSail Require Import
 
 From MicroSail Require Environment.
 From MicroSail Require Sep.Logic.
-From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.
-From iris.bi Require interface big_op.
-From iris.proofmode Require tactics.
-From stdpp Require namespaces.
 
 Set Implicit Arguments.
 Import CtxNotations.
