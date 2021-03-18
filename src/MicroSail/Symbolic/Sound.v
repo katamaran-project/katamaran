@@ -203,8 +203,7 @@ Module Soundness
     (* Not sure this instance is a good idea...
        This seems to cause rewrite to take very long... *)
     Global Instance proper_entails_pc_iff
-           {Σ} `{InstLaws AT A}
-           (pc : PathCondition Σ):
+           {Σ} (pc : PathCondition Σ):
          Proper (entails_eq pc ==> iff) (entails pc).
     Proof.
       intros pc1 pc2 pc12.
@@ -214,7 +213,7 @@ Module Soundness
         congruence.
     Qed.
 
-    Global Instance proper_entails_eq_impl {AT A} `{Inst AT A} {Σ} : Proper (flip (@entails Σ) ==> eq ==> eq ==> impl) entails_eq.
+    Global Instance proper_entails_eq_impl {AT A} {Σ} {Γ} : Proper (flip (@entails Σ) ==> eq ==> eq ==> impl) (@entails_eq AT A Γ Σ).
     Proof.
       intros pc1 pc2 pc21 a1 _ [] a2 _ [] eq1 ι ιpc2; eauto.
     Qed.
@@ -989,6 +988,18 @@ Module Soundness
     Definition resultprop_specialize_pc {Γ A Σ1 Σ2} (ζ : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) :
       ResultProperty Γ A Σ1 -> ResultProperty Γ A Σ2 :=
       fun p r => dmutres_pathcondition r ⊢ subst (dmutres_substitution r) pc2 /\ p (cosubst_dmutres ζ r).
+
+    Lemma resultprop_specialize_pc_vac {Γ A AV Σ1 Σ2} `{InstLaws A AV}
+          (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2)
+          (POST : ResultProperty Γ A Σ1) (POST_vac : resultprop_vacuous POST) :
+      resultprop_vacuous (resultprop_specialize_pc ζ12 pc2 POST).
+    Proof.
+      intros [Σ3 ζ23 pc3 a3 s3] incpc; cbn in *.
+      unfold resultprop_specialize_pc; cbn.
+      split.
+      - intros ι Hpc3. exfalso. eapply (incpc _ Hpc3).
+      - eapply POST_vac; now cbn.
+    Qed.
 
     Lemma resultprop_specialize_pc_dcl {Γ A AV Σ1 Σ2} `{InstLaws A AV}
           (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2)
