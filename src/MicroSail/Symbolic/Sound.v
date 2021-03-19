@@ -1000,7 +1000,11 @@ Module Soundness
 
       Lemma dmut_leakcheck_vac {Γ Σ} :
         dmut_vac (@dmut_leakcheck Γ Σ).
-      Proof. Admitted.
+      Proof.
+        unfold dmut_leakcheck.
+        eapply dmut_bind_vac; eauto.
+        intros Σ1 ζ1 pc1 [|a hp]; eauto.
+      Qed.
       Local Hint Resolve dmut_leakcheck_vac : core.
 
       Lemma dmut_contract_vac {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ)  :
@@ -2143,16 +2147,14 @@ Module Soundness
     Lemma dmut_leakcheck_sound {Γ Σ} (ι : SymInstance Σ) :
       box approximates ι (@dmut_leakcheck Γ Σ) (@scmut_leakcheck Γ).
     Proof.
-      (* unfold box, approximates, dmut_wp, scmut_wp; cbn; intros. *)
-      (* specialize (H0 Σ1 (sub_id _)). *)
-      (* rewrite outcome_satisfy_bind, subst_sub_id in H0. *)
-      (* destruct s__sym as [σ []]; cbn in *. *)
-      (* - unfold stateprop_lift in H0. specialize (H0 ι1). *)
-      (*   rewrite ?sub_comp_id_left, ?subst_sub_id in H0. *)
-      (*   inster H0 by apply syminstance_rel_refl. intuition. *)
-      (* - unfold contradiction in H0; cbn in H0. *)
-      (*   rewrite subst_sub_id in H0. intuition. *)
-    Admitted.
+      unfold box, approximates, dmut_wp, scmut_wp; cbn; intros.
+      rewrite outcome_satisfy_bind in Hwp.
+      destruct s__sym as [σ []]; cbn in *.
+      - unfold stateprop_lift in Hwp. specialize (Hwp ι0).
+        rewrite ?sub_comp_id_right, subst_sub_id in Hwp.
+        eapply Hwp; eauto.
+      - exact (Hwp _ Hpc).
+    Qed.
 
     Opaque dmut_consume dmut_exec dmut_leakcheck dmut_produce.
     Opaque scmut_consume scmut_exec scmut_leakcheck scmut_produce.
