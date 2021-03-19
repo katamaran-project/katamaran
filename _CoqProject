@@ -4,6 +4,7 @@
 -arg "-w -convert_concl_no_check"
 -arg "-w -omega-is-deprecated"
 -arg "-w -ssr-search-moved"
+-arg "-native-compiler no"
 -Q case_study/MinimalCaps MinimalCaps
 case_study/MinimalCaps/Contracts.v
 case_study/MinimalCaps/Machine.v
