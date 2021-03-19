@@ -46,13 +46,13 @@ From MicroSail Require Import
 
 From MicroSail Require Environment.
 From MicroSail Require Sep.Logic.
-From iris.base_logic Require Export invariants.
 
 Set Implicit Arguments.
 Import CtxNotations.
 Import EnvNotations.
 Open Scope string_scope.
 Open Scope ctx_scope.
+Open Scope Z_scope.
 
 Inductive Predicate : Set :=
   ptsreg
@@ -595,6 +595,8 @@ Local Ltac solve :=
        | H: Env _ (ctx_snoc _ _) |- _ => dependent elimination H
        | H: _ /\ _ |- _ => destruct H
        | H: Empty_set |- _ => destruct H
+       | |- False \/ _ =>  right
+       | |- _ \/ False =>  left
        | |- _ /\ _ => constructor
        | |- Debug _ _ => constructor
        | |- context[Z.leb ?x ?y] =>
@@ -697,7 +699,18 @@ Lemma valid_contract_exec_bnez : TwoPointO.ValidContractDynMutDebug sep_contract
 Proof. compute. Abort.
 *)
 
-Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
+(* TODO: left here for debugging purposes *)
+Let word : Ty := ty_word. (* Let = delta expansion "replaces by def", Notation = print term it expands to *)
+Definition fun_exec_mv' : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool :=
+  stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
+  stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;; 
+  stm_call_external (ghost duplicate_safe) [exp_var "hv"]%arg ;;
+  let: "w" ∶ word := call read_reg (exp_var "hv") in
+  call write_reg (exp_var "lv") (exp_var "w") ;;
+  call update_pc ;;
+  stm_lit ty_bool true.
+
+Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv'.
 Proof. compute. Abort.
 
 Lemma valid_contract_exec_ld : TwoPointO.ValidContractDynMutDebug sep_contract_exec_ld fun_exec_ld.
