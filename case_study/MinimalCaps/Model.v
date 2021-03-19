@@ -208,6 +208,11 @@ Module MinCapsModel.
              (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp (dfrac.DfracOwn 1) (ι ‼ "w")%exp ∗ ⌜v = (ι ‼ "w")%exp⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (ι eq) "pre".
+    destruct (snocView es) as [es e_addr]. destruct (nilView es).
+    destruct (snocView ι) as [ι w].
+    destruct (snocView ι) as [ι addr].
+    destruct (nilView ι). cbn in eq.
+    cbn [env_lookup inctx_case_snoc].
     rewrite wp_unfold.
     iIntros (σ' ks1 ks n) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
@@ -218,7 +223,7 @@ Module MinCapsModel.
     cbn in H1.
     dependent elimination H1.
     dependent elimination s.
-    dependent destruction e0.
+    cbn in e0. destruct_conjs. subst.
     iModIntro. iModIntro.
     cbn.
     iDestruct (gen_heap.gen_heap_valid with "Hmem' pre") as "%".
@@ -232,16 +237,12 @@ Module MinCapsModel.
       iApply wp_value.
       cbn.
       iFrame.
-      specialize (H0 addr (ι ‼ "w")%exp).
+      specialize (H0 addr w H1).
+      dependent elimination eq.
       cbn in H0.
       iPureIntro.
       unfold fun_rM.
       split; split; trivial.
-      refine (H0 _); clear H0.
-      rewrite eq in x.
-      simpl in x.
-      apply (f_equal env_head) in x; cbn in x.
-      by subst.
   Qed.
 
   Lemma wM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
@@ -252,6 +253,14 @@ Module MinCapsModel.
              (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) (ι ‼ "address")%exp (dfrac.DfracOwn 1) (ι ‼ "new_value")%exp) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (ι eq) "pre".
+    destruct (snocView es) as [es e_new_value].
+    destruct (snocView es) as [es e_addr].
+    destruct (nilView es).
+    destruct (snocView ι) as [ι old_value].
+    destruct (snocView ι) as [ι new_value].
+    destruct (snocView ι) as [ι addr].
+    destruct (nilView ι). cbn in eq.
+    cbn [env_lookup inctx_case_snoc].
     rewrite wp_unfold.
     iIntros (σ' ks1 ks n) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
@@ -262,10 +271,10 @@ Module MinCapsModel.
     cbn in H1.
     dependent elimination H1.
     dependent elimination s.
-    dependent destruction e0.
+    cbn in e0. destruct_conjs. subst.
     iModIntro. iModIntro.
     cbn.
-    iMod (gen_heap.gen_heap_update _ _ _ val with "Hmem' pre") as "[Hmem' ptsto]".
+    iMod (gen_heap.gen_heap_update _ _ _ new_value with "Hmem' pre") as "[Hmem' ptsto]".
   Admitted.
 
   Lemma dI_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
@@ -313,6 +322,9 @@ Module MinCapsModel.
                                              ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (ι eq) "ptsto".
+    destruct (nilView es). clear eq.
+    destruct (snocView ι) as [ι w].
+    cbn [env_lookup inctx_case_snoc].
     rewrite wp_unfold.
     iIntros (σ' ks1 ks n) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -322,7 +334,7 @@ Module MinCapsModel.
     cbn in H.
     dependent elimination H.
     dependent elimination s.
-    dependent destruction e0.
+    cbn in e0. destruct_conjs. subst.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro.

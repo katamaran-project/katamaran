@@ -522,24 +522,19 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     (* TODO: actually decode to non-trivial instructions? *)
     inr ret.
 
-  Inductive CallEx : forall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
-  | callex_rM {addr : Z} {γ : RegStore} {μ : Memory} :
-      CallEx rM (env_snoc env_nil (_ , ty_int) addr)
-             (inr (fun_rM μ addr))
-             γ γ μ μ
-  | callex_wM {addr val : Z} {γ : RegStore} {μ : Memory} :
-      CallEx wM (env_snoc (env_snoc env_nil (_ , ty_int) addr) (_ , ty_int) val)
-             (inr tt)
-             γ γ μ (fun_wM μ addr val)
-  | callex_dI {code : Z} {γ : RegStore} {μ : Memory} :
-      CallEx dI (env_snoc env_nil (_ , ty_int) code)
-             (fun_dI code)
-             γ γ μ μ
-  | callex_ghost {Δ} {fg : FunGhost Δ} {δ : NamedEnv Lit Δ} {γ : RegStore} {μ : Memory} :
-      CallEx (ghost fg) δ (inr tt) γ γ μ μ
-  .
+  Definition call_external (γ : RegStore) (μ : Memory) {σs σ} (f : 𝑭𝑿 σs σ) :
+    abstract_named Lit σs (RegStore * Memory * (string + Lit σ)) :=
+    match f with
+    | rM      => fun addr     => (γ , μ                 , inr (fun_rM μ addr))
+    | wM      => fun addr val => (γ , fun_wM μ addr val , inr tt)
+    | dI      => fun code     => (γ , μ                 , fun_dI code)
+    | ghost _ => curry_named (fun _ => (γ , μ , inr tt))
+    end.
 
-  Definition ExternalCall := @CallEx.
+  Definition ExternalCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
+    match uncurry_named (call_external γ μ f) args with
+    | (γ'' , μ'' , res'') => μ' = μ'' /\ γ' = γ'' /\ res = res''
+    end.
 
   Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
     exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
@@ -548,7 +543,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args; repeat eexists; constructor.
-    - repeat eexists; constructor.
+    - exists γ, μ, (inr tt).
+      unfold ExternalCall, call_external, curry_named, uncurry_named.
+      rewrite uncurry_curry. auto.
   Qed.
 
 End MinCapsProgramKit.
