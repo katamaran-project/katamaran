@@ -484,6 +484,15 @@ Section WithB.
         auto.
   Qed.
 
+  Lemma uncurry_curry (Δ : Ctx B) (r : Type) (f : Env D Δ -> r) :
+    forall δ,
+      uncurry (curry f) δ = f δ.
+  Proof.
+    intros δ. revert r f. induction δ; cbn; intros.
+    - reflexivity.
+    - now rewrite IHδ.
+  Qed.
+
 End WithB.
 
 Definition abstract_named {X T : Set} (D : T -> Set) (Δ : NCtx X T) (r : Type) : Type :=
