@@ -739,25 +739,26 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 Lemma valid_contract_exec_instr : ValidContractDynMut sep_contract_exec_instr fun_exec_instr.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
-Lemma valid_contract_exec : ValidContractDynMut sep_contract_exec fun_exec.
+Definition debug_config : Config :=
+  {| config_debug_function _ _ f :=
+       match f with
+       | read_mem => true
+       | _        => false
+       end
+  |}.
+
+Lemma valid_contract_exec : ValidContractDynMutWithConfig debug_config sep_contract_exec fun_exec.
 Proof.
   compute.
-  constructor; repeat apply conj.
-  - (* O Permission *)
-    constructor.
-  - (* R Permission *)
-    constructor.
-    constructor.
-    + (* c = term_record capability [term_lit ty_perm R, term_var "beg", term_inl (term_var "e'"), term_var "cursor" *)
-      constructor.
-      split; auto.
-      admit.
-    + (* c = term_record capability [term_lit ty_perm R, term_var "beg", term_inr (term_var "_"), term_var "cursor" *)
-      constructor.
-      split; auto.
-      admit.
-  - (* RW Permission *)
-    admit.
+  repeat apply conj; auto.
+  - (* R Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_inl (term_var "e'"), term_var "cursor" *)
+    constructor. split; auto. admit.
+  - (* R Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_inr (term_var "_"), term_var "cursor" *)
+    constructor. split; auto. admit.
+  - (* RW Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_inl (term_var "e'"), term_var "cursor" *)
+    constructor. split; auto. admit.
+  - (* RW Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_inr (term_var "_"), term_var "cursor" *)
+    constructor. split; auto. admit.
 Abort.
 
 Lemma valid_contract_loop : ValidContractDynMut sep_contract_loop fun_loop.
