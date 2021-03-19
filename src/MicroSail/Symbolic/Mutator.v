@@ -1285,6 +1285,8 @@ Module Mutators
           dmut_pure tnew
       | stm_bind _ _ =>
         dmut_fail "dmut_exec" "stm_bind not supported" tt
+      | stm_debugk k =>
+        dmut_exec k
       end.
 
     Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
@@ -1787,6 +1789,8 @@ Module Mutators
         dmut_pure tnew
       | stm_bind _ _ =>
         dmut_fail "dmut_exec_evar" "stm_bind not supported" tt
+      | stm_debugk k =>
+        dmut_exec_evar k
       end.
 
     Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
@@ -3098,6 +3102,8 @@ Module Mutators
         dmut_pure tnew
       | stm_bind _ _ =>
         dmut_fail "dmut_exec_evar" "stm_bind not supported" tt
+      | stm_debugk k =>
+        dmut_exec_evar k
       end.
 
     Definition dmut_contract_evar {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) :

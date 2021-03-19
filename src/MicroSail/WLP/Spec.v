@@ -314,6 +314,7 @@ Module WLP
     | stm_write_register r e => meval e >>=
         (fun v => modify_global (fun γ => write_register γ r v) *> pure v)
     | stm_bind s k => WLP s >>= fun v => WLP (k v)
+    | stm_debugk k => WLP k
     end.
 
   Definition ValidContract {Γ τ} (c : Contract Γ τ) (s : Stm Γ τ) : Prop :=

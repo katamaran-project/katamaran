@@ -497,6 +497,8 @@ Module SemiConcrete
       | stm_bind s k =>
         v <- scmut_exec s ;;
         scmut_exec (k v)
+      | stm_debugk k =>
+        scmut_exec k
       end.
 
     Definition scmut_leakcheck {Γ} : SCMut Γ Γ unit :=

@@ -202,6 +202,10 @@ Module SmallStep
       (σ : Ty) (s : string) (k : Lit σ -> Stm Γ τ) :
       ⟨ γ , μ , δ , stm_bind (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
 
+  | step_debugk
+      (k : Stm Γ τ) :
+      ⟨ γ , μ , δ , stm_debugk k ⟩ ---> ⟨ γ , μ , δ , k ⟩
+
   where "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" := (@Step _ _ γ1%env μ1%env δ1%env γ2%env μ2%env δ2%env s1%exp s2%exp).
 
   Inductive Steps {Γ : PCtx} {σ : Ty} (γ1 : RegStore) (μ1 : Memory) (δ1 : LocalStore Γ) (s1 : Stm Γ σ) : RegStore -> Memory -> LocalStore Γ -> Stm Γ σ -> Prop :=
@@ -262,6 +266,7 @@ Module SmallStep
         | @stm_match_record   => idtac
         | @stm_read_register  => idtac
         | @stm_write_register => idtac
+        | @stm_debugk         => idtac
         end
       ].
 

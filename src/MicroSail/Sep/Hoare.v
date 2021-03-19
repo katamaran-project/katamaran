@@ -247,6 +247,11 @@ Module ProgramLogic
         (forall (v__σ : Lit σ) (δ' : LocalStore Γ),
             δ' ⊢ ⦃ Q v__σ δ' ⦄ k v__σ ⦃ R ⦄) ->
         δ ⊢ ⦃ P ⦄ stm_bind s k ⦃ R ⦄
+    | rule_stm_debugk
+        (k : Stm Γ τ)
+        (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
+        δ ⊢ ⦃ P ⦄ k ⦃ Q ⦄ ->
+        δ ⊢ ⦃ P ⦄ stm_debugk k ⦃ Q ⦄
     where "δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" := (@Triple _ δ _ P s Q).
 
     Context {SLL : ISepLogicLaws L}.

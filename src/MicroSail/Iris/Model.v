@@ -1444,6 +1444,29 @@ Module IrisSoundness
       by iApply (extSem ι e).
   Qed.
 
+  Lemma iris_rule_stm_debugk
+    {Γ τ} (δ : LocalStore Γ) (k : Stm Γ τ)
+    (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
+    ⊢ (semTriple δ P k Q -∗
+       semTriple δ P (stm_debugk k) Q)%I.
+  Proof.
+    iIntros "tripk P".
+    rewrite wp_unfold.
+    iIntros (σ ks1 ks n) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e3 σ2 efs) "%".
+    unfold language.prim_step in H0; cbn in H0.
+    dependent elimination H0.
+    dependent elimination s.
+    iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro; iFrame.
+    iSplitL; [|trivial].
+    iApply "tripk".
+    by iFrame.
+  Qed.
+
   Lemma sound_stm {Γ} {τ} (s : Stm Γ τ) {δ : LocalStore Γ}:
     forall (PRE : iProp Σ) (POST : Lit τ -> LocalStore Γ -> iProp Σ),
       ExtSem ->
@@ -1452,7 +1475,7 @@ Module IrisSoundness
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -1483,6 +1506,7 @@ Module IrisSoundness
     - by iApply iris_rule_stm_call_frame.
     - by iApply iris_rule_stm_call_external.
     - by iApply iris_rule_stm_bind.
+    - by iApply iris_rule_stm_debugk.
   Qed.
 
 

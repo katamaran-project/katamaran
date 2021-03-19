@@ -426,7 +426,8 @@ Module Terms (Export termkit : TermKit).
     | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
     (* EXPERIMENTAL *)
     (* | stm_while  (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) : Stm Γ ty_unit *)
-    | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ).
+    | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
+    | stm_debugk (k : Stm Γ τ).
 
     Section TransparentObligations.
 

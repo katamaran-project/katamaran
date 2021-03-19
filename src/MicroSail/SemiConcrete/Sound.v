@@ -450,7 +450,7 @@ Module Soundness
         apply entails_refl.
         apply lprop_right.
         now apply H.
-
+      - constructor. auto.
     Qed.
 
     Lemma scmut_exec_sound' {Γ σ} (s : Stm Γ σ) :
