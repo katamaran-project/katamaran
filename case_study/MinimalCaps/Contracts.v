@@ -127,19 +127,25 @@ Module MinCapsSymbolicContractKit <:
     |}.
 
   Definition sep_contract_read_reg_cap : SepContract ["creg" ∶ ty_enum regname ] ty_cap :=
-    {| sep_contract_logic_variables := ["creg" ∶ ty_enum regname];
+    {| sep_contract_logic_variables := ["creg" ∶ ty_enum regname, "w" ∶ ty_word];
        sep_contract_localstore      := [term_var "creg"]%arg;
-       sep_contract_precondition    := machInv;
+       sep_contract_precondition    := term_var "creg" ↦r term_var "w";
        sep_contract_result          := "result_read_reg_cap";
-       sep_contract_postcondition   := machInv;
+       sep_contract_postcondition   :=
+         asn_exist "c" ty_cap
+                   (asn_eq (term_var "result_read_reg_cap") (term_var "c") ✱
+                           term_var "creg" ↦r term_inr (term_var "c"));
     |}.
 
   Definition sep_contract_read_reg_num : SepContract ["nreg" ∶ ty_enum regname ] ty_int :=
-    {| sep_contract_logic_variables := ["nreg" ∶ ty_enum regname];
+    {| sep_contract_logic_variables := ["nreg" ∶ ty_enum regname, "w" ∶ ty_word];
        sep_contract_localstore      := [term_var "nreg"]%arg;
-       sep_contract_precondition    := machInv;
+       sep_contract_precondition    := term_var "nreg" ↦r term_var "w";
        sep_contract_result          := "result_read_reg_num";
-       sep_contract_postcondition   := machInv;
+       sep_contract_postcondition   :=
+         asn_exist "i" ty_int
+                   (asn_eq (term_var "result_read_reg_num") (term_var "i") ✱
+                           term_var "nreg" ↦r term_inl (term_var "i"));
     |}.
 
   Definition sep_contract_write_reg : SepContract ["wreg" ∶ ty_enum regname, "w"  ∶ ty_word] ty_unit :=
@@ -615,13 +621,13 @@ Local Notation safew w := (chunk_user safe (env_nil ► (ty_word ↦ w))).
 Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
-(* 
 Lemma valid_contract_read_reg_cap : ValidContractDynMut sep_contract_read_reg_cap fun_read_reg_cap.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_read_reg_num : ValidContractDynMut sep_contract_read_reg_num fun_read_reg_num.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
+(*
 Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_write_reg.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
