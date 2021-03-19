@@ -152,9 +152,9 @@ Module MinCapsSymbolicContractKit <:
     {| sep_contract_logic_variables := ["wreg" ∶ ty_enum regname, "w" ∶ ty_word];
        sep_contract_localstore      := [term_var "wreg", term_var "w"]%arg;
        sep_contract_precondition    := asn_exist "old_word" ty_word (term_var "wreg" ↦r term_var "old_word");
-       sep_contract_result          := "result";
+       sep_contract_result          := "result_write_reg";
        sep_contract_postcondition   :=
-         asn_eq (term_var "result") (term_lit ty_unit tt) ✱
+         asn_eq (term_var "result_write_reg") (term_lit ty_unit tt) ✱
          term_var "wreg" ↦r term_var "w";
     |}.
 
@@ -162,7 +162,7 @@ Module MinCapsSymbolicContractKit <:
     {| sep_contract_logic_variables := ["opc" ∶ ty_cap];
        sep_contract_localstore      := env_nil;
        sep_contract_precondition    := pc ↦ term_var "opc";
-       sep_contract_result          := "result";
+       sep_contract_result          := "result_next_pc";
        sep_contract_postcondition   :=
          pc ↦ term_var "opc" ✱
          asn_match_record
@@ -173,7 +173,7 @@ Module MinCapsSymbolicContractKit <:
             "cap_end" "end")
             "cap_cursor" "cur")
            (asn_eq
-              (term_var "result")
+              (term_var "result_next_pc")
               (term_record capability
                  [term_var "perm",
                   term_var "beg",
@@ -182,21 +182,23 @@ Module MinCapsSymbolicContractKit <:
     |}.
 
   Definition sep_contract_update_pc : SepContract ctx_nil ty_unit :=
-    {| sep_contract_logic_variables := ctx_nil;
+    {| sep_contract_logic_variables := ["opc" ∶ ty_cap];
        sep_contract_localstore      := env_nil;
-       sep_contract_precondition    := regInvCap pc;
-       sep_contract_result          := "result";
+       sep_contract_precondition    := pc ↦ term_var "opc";
+       sep_contract_result          := "result_update_pc";
        sep_contract_postcondition   :=
-         asn_eq (term_var "result") (term_lit ty_unit tt) ✱
-         regInvCap pc
+         asn_eq (term_var "result_update_pc") (term_lit ty_unit tt) ✱
+                asn_exist "npc" ty_cap (pc ↦ term_var "npc");
     |}.
 
   Definition sep_contract_add_pc : SepContract ["offset" ∶ ty_int] ty_unit :=
     {| sep_contract_logic_variables := ["opc" ∶ ty_cap, "offset" ∶ ty_int];
        sep_contract_localstore      := [term_var "offset"]%arg;
        sep_contract_precondition    := pc ↦ term_var "opc";
-       sep_contract_result          := "_";
-       sep_contract_postcondition   := asn_exist "npc" ty_cap (pc ↦ term_var "npc");
+       sep_contract_result          := "result_add_pc";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_add_pc") (term_lit ty_unit tt) ✱
+         asn_exist "npc" ty_cap (pc ↦ term_var "npc");
     |}.
 
   Definition sep_contract_read_mem : SepContract ["a" ∶ ty_addr ] ty_memval :=
@@ -221,13 +223,13 @@ Module MinCapsSymbolicContractKit <:
     {| sep_contract_logic_variables := ["p" ∶ ty_perm];
        sep_contract_localstore      := [term_var "p"]%arg;
        sep_contract_precondition    := asn_bool (term_lit ty_bool true);
-       sep_contract_result          := "result";
+       sep_contract_result          := "result_read_allowed";
        sep_contract_postcondition   :=
          asn_match_enum permission (term_var "p")
                         (fun p => match p with
-                                 | R  => asn_eq (term_var "result") (term_lit ty_bool true)
-                                 | RW => asn_eq (term_var "result") (term_lit ty_bool true)
-                                 | _  => asn_eq (term_var "result") (term_lit ty_bool false)
+                                 | R  => asn_eq (term_var "result_read_allowed") (term_lit ty_bool true)
+                                 | RW => asn_eq (term_var "result_read_allowed") (term_lit ty_bool true)
+                                 | _  => asn_eq (term_var "result_read_allowed") (term_lit ty_bool false)
                                end);
     |}.
 
@@ -235,12 +237,12 @@ Module MinCapsSymbolicContractKit <:
     {| sep_contract_logic_variables := ["p" ∶ ty_perm];
        sep_contract_localstore      := [term_var "p"]%arg;
        sep_contract_precondition    := asn_bool (term_lit ty_bool true);
-       sep_contract_result          := "result";
+       sep_contract_result          := "result_write_allowed";
        sep_contract_postcondition   :=
          asn_match_enum permission (term_var "p")
                         (fun p => match p with
-                                 | RW => asn_eq (term_var "result") (term_lit ty_bool true)
-                                 | _  => asn_eq (term_var "result") (term_lit ty_bool false)
+                                 | RW => asn_eq (term_var "result_write_allowed") (term_lit ty_bool true)
+                                 | _  => asn_eq (term_var "result_write_allowed") (term_lit ty_bool false)
                                end);
     |}.
 
@@ -248,12 +250,12 @@ Module MinCapsSymbolicContractKit <:
     {| sep_contract_logic_variables := ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr ];
        sep_contract_localstore      := [term_var "a", term_var "e"]%arg;
        sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result";
+       sep_contract_result          := "result_upper_bound";
        sep_contract_postcondition   := 
           asn_match_option ty_addr (term_var "e") "e'"
-                           (asn_eq (term_var "result")
+                           (asn_eq (term_var "result_upper_bound")
                                    (term_binop binop_le (term_var "a") (term_var "e'")))
-                           (asn_eq (term_var "result") (term_lit ty_bool true)); 
+                           (asn_eq (term_var "result_upper_bound") (term_lit ty_bool true));
     |}.
 
   (* 
@@ -265,7 +267,7 @@ Module MinCapsSymbolicContractKit <:
     {| sep_contract_logic_variables := ["c" ∶ ty_cap];
        sep_contract_localstore      := [term_var "c"]%arg;
        sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result";
+       sep_contract_result          := "result_within_bounds";
        sep_contract_postcondition   :=
          asn_match_record
            capability (term_var "c")
@@ -275,11 +277,11 @@ Module MinCapsSymbolicContractKit <:
             "cap_end" "e")
             "cap_cursor" "a")
            (asn_match_option ty_addr (term_var "e") "e'"
-              (asn_eq (term_var "result")
+              (asn_eq (term_var "result_within_bounds")
                       (term_binop binop_and
                                   (term_binop binop_le (term_var "b") (term_var "a"))
                                   (term_binop binop_le (term_var "a") (term_var "e'"))))
-              (asn_eq (term_var "result")
+              (asn_eq (term_var "result_within_bounds")
                       (term_binop binop_le (term_var "b") (term_var "a"))))
     |}.
 
@@ -627,7 +629,6 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 Lemma valid_contract_read_reg_num : ValidContractDynMut sep_contract_read_reg_num fun_read_reg_num.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
-(*
 Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_write_reg.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
@@ -656,6 +657,7 @@ Proof.
   - constructor; cbn; solve.
 Abort.
 
+(*
 Lemma valid_contract_exec_jr : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jr fun_exec_jr.
 Proof. compute. Abort.
 
