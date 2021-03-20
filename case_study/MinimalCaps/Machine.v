@@ -70,6 +70,7 @@ Module MinCapsTermKit <: TermKit.
   | next_pc        : Fun ctx_nil ty_cap
   | update_pc      : Fun ctx_nil ty_unit
   | add_pc         : Fun ["offset" ∶ ty_int] ty_unit
+  | valid_pc       : Fun ctx_nil ty_unit
   | read_mem       : Fun ["a"   ∶ ty_addr ] ty_memval
   | write_mem      : Fun ["a"   ∶ ty_addr,
                           "v"   ∶ ty_memval
@@ -105,6 +106,7 @@ Module MinCapsTermKit <: TermKit.
   | open_ptsreg : FunGhost ["reg" ∶ ty_enum regname]
   | close_ptsreg (R : RegName) : FunGhost ctx_nil
   | duplicate_safe : FunGhost ["reg" ∶ ty_enum regname]
+  | is_csafe : FunGhost ["c" ∶ ty_cap]
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -234,9 +236,26 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
            exp_var "end",
            exp_var "cur" + lit_int 1 ]).
 
+  Definition fun_valid_pc : Stm ctx_nil ty_unit :=
+    let: "c" := stm_read_register pc in
+    stm_match_record
+      capability (exp_var "c")
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "perm")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (let: p ∶ ty_bool := call read_allowed (exp_var "perm") in
+         stm_assert p (lit_string "Err: [valid_pc] no read permission") ;;
+         let: q ∶ ty_bool := call within_bounds c in
+         stm_assert q (lit_string "Err: [valid_pc] out of bounds") ;;
+         stm_call_external (ghost is_csafe) [exp_var "c"]%arg ;;
+         stm_lit ty_unit tt).
+
   Definition fun_update_pc : Stm ctx_nil ty_unit :=
     let: "c" := call next_pc in
     stm_write_register pc (exp_var "c") ;;
+    stm_debugk (call valid_pc) ;;
     stm_lit ty_unit tt.
 
   Definition fun_add_pc : Stm ["offset" ∶ ty_int ] ty_unit :=
@@ -476,6 +495,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     | next_pc        => fun_next_pc
     | update_pc      => fun_update_pc
     | add_pc         => fun_add_pc
+    | valid_pc       => fun_valid_pc
     | read_mem       => fun_read_mem
     | write_mem      => fun_write_mem
     | read_allowed   => fun_read_allowed
