@@ -763,7 +763,7 @@ Module Mutators
     Global Arguments dmut_freshtermvar {_ _ _} _.
 
     Record DebugCall : Type :=
-      MkDynMutBreakpoint
+      MkDebugCall
         { debug_call_logic_context          : LCtx;
           debug_call_function_parameters    : PCtx;
           debug_call_function_result_type   : Ty;
@@ -774,6 +774,17 @@ Module Mutators
           debug_call_program_context        : PCtx;
           debug_call_localstore             : SymbolicLocalStore debug_call_program_context debug_call_logic_context;
           debug_call_heap                   : SymbolicHeap debug_call_logic_context;
+        }.
+
+    Record DebugStm : Type :=
+      MkDebugStm
+        { debug_stm_program_context        : PCtx;
+          debug_stm_statement_type         : Ty;
+          debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
+          debug_stm_logic_context          : LCtx;
+          debug_stm_pathcondition          : PathCondition debug_stm_logic_context;
+          debug_stm_localstore             : SymbolicLocalStore debug_stm_program_context debug_stm_logic_context;
+          debug_stm_heap                   : SymbolicHeap debug_stm_logic_context;
         }.
 
   End DynamicMutator.
@@ -1805,7 +1816,16 @@ Module Mutators
         | stm_bind _ _ =>
           dmut_fail "dmut_exec_evar" "stm_bind not supported" tt
         | stm_debugk k =>
-          dmut_exec_evar k
+          fun Σ1 ζ1 pc1 s1 =>
+            outcome_debug
+              {| debug_stm_program_context        := Γ;
+                 debug_stm_statement              := k;
+                 debug_stm_logic_context          := Σ1;
+                 debug_stm_pathcondition          := pc1;
+                 debug_stm_localstore             := symbolicstate_localstore s1;
+                 debug_stm_heap                   := symbolicstate_heap s1;
+              |}
+              (dmut_exec_evar k ζ1 pc1 s1)
         end.
 
       Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
