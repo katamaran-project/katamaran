@@ -1886,19 +1886,26 @@ Module Soundness
         dmut_wp (dmut_sub ζ01 (dmut_assume_formula (Γ := Γ) fml)) POST ζ12 pc2 s2 <->
         POST Σ2 ζ12 (cons (subst (sub_comp ζ01 ζ12) fml) pc2) tt s2.
     Proof.
-      (* unfold dmut_wp, dmut_assume_formula, dmut_sub; intros; split; intros. *)
-      (* specialize (H Σ1 (sub_id _)). *)
-      (* - destruct (try_solve_formula_spec (subst (sub_comp ζ01 (sub_id Σ1)) fml)). *)
-      (*   destruct a; cbn in H. *)
-      (*   + unfold sub_comp in H. rewrite ?subst_sub_id in H. *)
-      (*     revert H. apply POST_dcl. exists (sub_id _). admit. *)
-      (*   + apply POST_vac. unfold inconsistent. intros ι. *)
-      (*     specialize (H0 ι). rewrite sub_comp_id_right in H0. *)
-      (*     rewrite inst_pathcondition_cons. intuition. *)
-      (*   + cbn in H. unfold sub_comp in H. rewrite ?subst_sub_id in H. *)
-      (*     admit. *)
-      (* - admit. *)
-    Admitted.
+      unfold dmut_wp, dmut_assume_formula, dmut_sub. intros.
+      destruct (try_solve_formula_spec (subst (sub_comp ζ01 ζ12) fml)); cbn in *.
+      destruct a; cbn in *.
+      - rewrite sub_comp_id_right; split; apply POST_dcl; exists (sub_id _);
+          rewrite ?subst_sub_id; intuition.
+        + intros ι Hpc. rewrite inst_pathcondition_cons in Hpc. intuition.
+        + intros ι Hpc. rewrite inst_pathcondition_cons. intuition.
+      - split; auto. intros _.
+        apply POST_vac. intros ι Hpc. rewrite inst_pathcondition_cons in Hpc.
+        specialize (H ι). intuition.
+      - clear H.
+        pose proof (dmutres_assume_formula_spec pc2 (subst (sub_comp ζ01 ζ12) fml) s2).
+        destruct (dmutres_assume_formula pc2 (subst (sub_comp ζ01 ζ12) fml) s2) as [Σ3 ζ23 pc3 [] s3].
+        destruct H as [H1 H2].
+        split; apply POST_dcl.
+        + apply dmutres_geq_pre_comp with _ _ _ ζ12 in H1. cbn - [dmutres_geq] in H1.
+          now rewrite sub_comp_id_right in H1.
+        + apply dmutres_geq_pre_comp with _ _ _ ζ12 in H2. cbn - [dmutres_geq] in H2.
+          now rewrite sub_comp_id_right in H2.
+    Qed.
 
     Lemma dmut_assume_formula_sound {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) :
       box approximates
