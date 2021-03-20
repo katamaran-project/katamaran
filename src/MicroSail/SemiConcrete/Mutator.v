@@ -342,6 +342,7 @@ Module SemiConcrete
         scmut_produce (ι ►► ι') (alt__rhs K)
       | asn_sep a1 a2   => scmut_produce ι a1 *> scmut_produce ι a2
       | asn_exist ς τ a => ⨂ v : Lit τ => scmut_produce (env_snoc ι (ς :: τ) v) a
+      | asn_debug => scmut_pure tt
       end.
 
     Fixpoint scmut_consume {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
@@ -384,6 +385,7 @@ Module SemiConcrete
         scmut_consume (ι ►► ι') (alt__rhs K)
       | asn_sep a1 a2   => scmut_consume ι a1 *> scmut_consume ι a2
       | asn_exist ς τ a => ⨁ v : Lit τ => scmut_consume (env_snoc ι (ς :: τ) v) a
+      | asn_debug => scmut_pure tt
       end.
 
     Definition scmut_call {Γ Δ τ} (contract : SepContract Δ τ) (vs : LocalStore Δ) : SCMut Γ Γ (Lit τ) :=

@@ -1127,6 +1127,7 @@ Module Mutators
         end
       | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
       | asn_exist ς τ a => dmut_fresh ς τ (dmut_produce a)
+      | asn_debug => dmut_pure tt
       end.
 
     Fixpoint dmut_consume {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
@@ -1183,6 +1184,7 @@ Module Mutators
       | asn_exist ς τ a =>
         ⨁ t : Term Σ τ =>
         dmut_sub (sub_snoc (sub_id _) (ς , τ) t) (dmut_consume a)
+      | asn_debug => dmut_pure tt
       end.
 
     Definition dmut_call {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
@@ -1596,6 +1598,7 @@ Module Mutators
                  evarerror_data := asn
               |}
           end
+        | asn_debug => dmut_pure L
         end.
 
     End CallerContext.
@@ -2690,6 +2693,7 @@ Module Mutators
         end
       | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
       | asn_exist ς τ a => dmut_fresh (ς,τ) (dmut_produce a)
+      | asn_debug => dmut_pure tt
       end.
 
     Section CallerContext.
@@ -2946,6 +2950,7 @@ Module Mutators
                  evarerror_data := asn
               |}
           end
+        | asn_debug => dmut_pure L
         end.
 
     End CallerContext.
