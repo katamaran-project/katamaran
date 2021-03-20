@@ -1906,42 +1906,16 @@ Module Soundness
         (dmut_assume_formula fml)
         (scmut_assume_formula ι fml).
     Proof.
-      (* OLD PROOF. This one didn't use the lemma dmut_wp_assume_formula before, but should. *)
-      (* unfold box, approximates. *)
-      (* intros * <- ? ? POST Hwp Hpc. *)
-      (* unfold dmut_wp, dmut_sub, dmut_assume_formula in Hwp. *)
-      (* specialize (Hwp Σ1 (sub_id Σ1)). *)
-      (* rewrite sub_comp_id_right in Hwp. *)
-      (* unfold scmut_wp, scmut_assume_formula. cbn. *)
-      (* intros Hfml. rewrite ?subst_sub_id in Hwp. *)
-      (* destruct (try_solve_formula_spec (subst ζ1 fml)). *)
-      (* - specialize (H ι1). rewrite inst_subst in H. *)
-      (*   apply H in Hfml. clear H. *)
-      (*   unfold is_true in Hfml. subst a. *)
-      (*   cbn in Hwp. *)
-      (*   rewrite ?sub_comp_id_left in Hwp. *)
-      (*   unfold stateprop_lift in Hwp. *)
-      (*   inster Hwp by apply syminstance_rel_refl. *)
-      (*   now apply Hwp. *)
-      (* - clear H. *)
-      (*   destruct (dmutres_assume_formula pc (subst ζ1 fml) s__sym) as [Σ2 ζ2 [] s2] eqn:?. *)
-      (*   + cbn in Hwp. rewrite sub_comp_id_left in Hwp. *)
-      (*     assert (resultprop_lift ι1 POST (dmutres_assume_formula pc (subst ζ1 fml) s__sym)) *)
-      (*       by (rewrite Heqd; apply Hwp). *)
-      (*     rewrite (dmutres_assume_formula_spec pc (subst ζ1 fml) s__sym) in H; auto using resultprop_lift_dcl. *)
-      (*     unfold resultprop_lift, stateprop_lift in H. *)
-      (*     inster H by apply syminstance_rel_refl. apply H. *)
-      (*     rewrite inst_pathcondition_cons. *)
-      (*     rewrite inst_subst. auto. *)
-      (*   + cbn in Hwp. rewrite sub_comp_id_left in Hwp. *)
-      (*     assert (resultprop_lift ι1 POST (dmutres_assume_formula pc (subst ζ1 fml) s__sym)) *)
-      (*       by (rewrite Heqd; apply Hwp). *)
-      (*     rewrite dmutres_assume_formula_spec in H; auto using resultprop_lift_dcl. *)
-      (*     unfold resultprop_lift, stateprop_lift in H. *)
-      (*     inster H by apply syminstance_rel_refl. apply H. *)
-      (*     rewrite inst_pathcondition_cons. *)
-      (*     rewrite inst_subst. auto. *)
-    Admitted.
+      unfold box, approximates.
+      intros * <- ? ? ? ? ? POST -> Hpc Hwp.
+      rewrite dmut_wp_assume_formula in Hwp;
+        [|eapply stateprop_lift_dcl|eapply stateprop_lift_vac].
+      unfold stateprop_lift in Hwp.
+      specialize (Hwp ι0 eq_refl).
+      unfold scmut_wp, scmut_assume_formula. cbn.
+      rewrite subst_sub_comp, inst_pathcondition_cons, ?inst_subst in Hwp.
+      intuition.
+    Qed.
 
     (* Lemma dmut_wp_angelic_list {Γ1 Γ2 AT D} `{Subst AT} {Σ0 Σ1} (ζ01 : Sub Σ0 Σ1) (func msg : string) (data : D) *)
     (*       (xs : list (DynamicMutator Γ1 Γ2 AT Σ0)) : *)
