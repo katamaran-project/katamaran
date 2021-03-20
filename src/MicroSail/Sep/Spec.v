@@ -180,7 +180,8 @@ Module Assertions
       (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
       (alt__rhs : forall (K : 𝑼𝑲 U), Assertion (Σ ▻▻ alt__ctx K))
   | asn_sep  (a1 a2 : Assertion Σ)
-  | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς :: τ))).
+  | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς :: τ)))
+  | asn_debug.
   Arguments asn_match_enum [_] E _ _.
   Arguments asn_match_sum [_] σ τ _ _ _.
   Arguments asn_match_list [_] {σ} s alt_nil xh xt alt_cons.
@@ -189,6 +190,7 @@ Module Assertions
   Arguments asn_match_record [_] R {Δ} s p rhs.
   Arguments asn_match_union [_] U s alt__ctx alt__pat alt__rhs.
   Arguments asn_exist [_] _ _ _.
+  Arguments asn_debug {_}.
 
   Notation asn_bool b := (asn_formula (formula_bool b)).
   Notation asn_prop Σ P := (asn_formula (@formula_prop Σ Σ (sub_id Σ) P)).
@@ -265,6 +267,7 @@ Module Assertions
       | asn_match_union U s alt__ctx alt__pat alt__rhs => None (* TODO *)
       | asn_sep a1 a2 => option_ap (option_map (@asn_sep _) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
       | asn_exist ς τ a => option_map (@asn_exist _ ς τ) (occurs _ _ (inctx_succ bIn) a)
+      | asn_debug => Some asn_debug
       end.
 
   Definition symbolic_eval_exp {Γ Σ} (δ : SymbolicLocalStore Γ Σ) :
@@ -413,6 +416,7 @@ Module Assertions
         inst_assertion (ι ►► ι') (alt__rhs K)
       | asn_sep a1 a2 => inst_assertion ι a1 ✱ inst_assertion ι a2
       | asn_exist ς τ a => ∃ (v : Lit τ), inst_assertion (ι ► (ς∶τ ↦ v)) a
+      | asn_debug => emp
     end%logic.
 
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
