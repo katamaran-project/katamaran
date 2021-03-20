@@ -2089,15 +2089,16 @@ Module Soundness
               inst ι2 (f Σ2 ζ12 s2) = g (inst ι2 s2)) :
       box approximates ι1 (dmut_state f) (scmut_state g).
     Proof.
-      (* unfold box, approximates, dmut_state, scmut_state, stateprop_lift, dmut_wp, dmut_sub, scmut_wp; cbn. *)
-      (* intros Σ2 ζ12 ι2 rel12 pc2 s2 POST Hf Hpc2; cbn in *. *)
-      (* specialize (Hf Σ2 (sub_id _)). *)
-      (* rewrite ?sub_comp_id_right, ?subst_sub_id in Hf. *)
-      (* destruct (f Σ2 ζ12 s2) eqn:?; cbn in *. *)
-      (* pose proof (f_equal (inst ι2) Heqp) as Hinst. *)
-      (* rewrite fg in Hinst; auto. rewrite Hinst. cbn. *)
-      (* apply Hf; auto. rewrite sub_comp_id_left. apply syminstance_rel_refl. *)
-    Admitted.
+      unfold box, approximates, dmut_state, scmut_state, stateprop_lift, dmut_wp, dmut_sub, scmut_wp; cbn.
+      intros Σ2 ζ12 ι2 <- Σ3 ζ23 pc3 s__sym ι3 POST -> Hpc3 Hf; cbn in *.
+      destruct (f Σ3 (sub_comp ζ12 ζ23) s__sym) eqn:?; cbn in *.
+      rewrite sub_comp_id_right in Hf.
+      pose proof (f_equal (inst ι3) Heqp) as Hinst.
+      rewrite fg in Hinst; auto. rewrite Hinst. cbn.
+      apply Hf; auto.
+      unfold sub_comp, syminstance_rel.
+      now rewrite inst_subst.
+    Qed.
 
     Lemma dmut_call_sound {Γ Δ τ Σ} (c : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) (ι : SymInstance Σ) :
       box approximates ι (@dmut_call Γ Δ τ Σ c ts) (scmut_call c (inst ι ts)).
