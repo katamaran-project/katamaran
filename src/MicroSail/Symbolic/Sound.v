@@ -2033,13 +2033,53 @@ Module Soundness
         apply IHasn.
     Admitted.
 
+    Lemma eval_exp_inst {Γ Σ τ} (ι : SymInstance Σ) (δΓΣ : SymbolicLocalStore Γ Σ) (e : Exp Γ τ) :
+      eval e (inst ι δΓΣ) = inst ι (symbolic_eval_exp δΓΣ e).
+    Proof.
+      induction e; cbn; repeat f_equal; auto.
+      { unfold inst; cbn. now rewrite env_lookup_map. }
+      2: {
+        induction es as [|eb n es IHes]; cbn in *.
+        { reflexivity. }
+        { destruct X as [-> Heqs].
+          change (inst_term ?ι ?t) with (inst ι t).
+          destruct (inst ι (symbolic_eval_exp δΓΣ eb));
+            cbn; f_equal; auto.
+        }
+      }
+      all: induction es; cbn in *; destruct_conjs; f_equal; auto.
+    Qed.
+
     Lemma dmut_eval_exp_sound {Γ Σ τ} (e : Exp Γ τ) (ι : SymInstance Σ) :
       box approximates ι (dmut_eval_exp e) (scmut_eval_exp e).
-    Proof. Admitted.
+    Proof.
+      unfold dmut_eval_exps, scmut_eval_exps, box, approximates, dmut_gets_local, dmut_gets, scmut_gets_local, scmut_state_local, dmut_sub, dmut_wp, scmut_wp, stateprop_lift; cbn.
+      intros * <- * -> Hpc Hwp.
+      rewrite sub_comp_id_right in Hwp.
+      specialize (Hwp ι0 eq_refl Hpc).
+      change (scstate_localstore (inst ι0 s__sym)) with (inst ι0 (scstate_localstore s__sym)).
+      refine (eq_ind _ (fun x => POST x _) Hwp _ _).
+      replace (scstate_localstore (inst ι0 s__sym)) with (inst ι0 (symbolicstate_localstore s__sym));
+        eauto using eval_exp_inst.
+      now destruct s__sym.
+    Qed.
 
     Lemma dmut_eval_exps_sound {Γ Δ Σ} (es : NamedEnv (Exp Γ) Δ) (ι : SymInstance Σ) :
       box approximates ι (dmut_eval_exps es) (scmut_eval_exps es).
-    Proof. Admitted.
+    Proof.
+      unfold dmut_eval_exps, scmut_eval_exps, box, approximates, dmut_gets_local, dmut_gets, scmut_gets_local, scmut_state_local, dmut_sub, dmut_wp, scmut_wp, stateprop_lift; cbn.
+      intros * <- * -> Hpc Hwp.
+      rewrite sub_comp_id_right in Hwp.
+      specialize (Hwp ι0 eq_refl Hpc).
+      change (scstate_localstore (inst ι0 s__sym)) with (inst ι0 (scstate_localstore s__sym)).
+      unfold inst, inst_localstore, instantiate_env in Hwp.
+      rewrite env_map_map in Hwp.
+      refine (eq_ind _ (fun x => POST x _) Hwp _ _).
+      eapply env_map_ext.
+      replace (scstate_localstore (inst ι0 s__sym)) with (inst ι0 (symbolicstate_localstore s__sym));
+        eauto using eval_exp_inst.
+      now destruct s__sym.
+    Qed.
 
     Lemma dmut_state_sound {AT A} `{Inst AT A} {Γ1 Γ2 Σ1} (ι1 : SymInstance Σ1)
           (f : forall Σ2 (ζ12 : Sub Σ1 Σ2), SymbolicState Γ1 Σ2 -> AT Σ2 * SymbolicState Γ2 Σ2)
@@ -2213,23 +2253,6 @@ Module Soundness
       Qed.
 
       Transparent inst instantiate_env.
-
-      Lemma eval_exp_inst {Γ Σ τ} (ι : SymInstance Σ) (δΓΣ : SymbolicLocalStore Γ Σ) (e : Exp Γ τ) :
-        eval e (inst ι δΓΣ) = inst ι (symbolic_eval_exp δΓΣ e).
-      Proof.
-        induction e; cbn; repeat f_equal; auto.
-        { unfold inst; cbn. now rewrite env_lookup_map. }
-        2: {
-          induction es as [|eb n es IHes]; cbn in *.
-          { reflexivity. }
-          { destruct X as [-> Heqs].
-            change (inst_term ?ι ?t) with (inst ι t).
-            destruct (inst ι (symbolic_eval_exp δΓΣ eb));
-              cbn; f_equal; auto.
-          }
-        }
-        all: induction es; cbn in *; destruct_conjs; f_equal; auto.
-      Qed.
 
     End Leftovers.
 
