@@ -185,7 +185,7 @@ Module MinCapsSymbolicContractKit <:
   Definition sep_contract_valid_pc : SepContract ctx_nil ty_unit :=
     {| sep_contract_logic_variables := ["c" ∶ ty_cap];
        sep_contract_localstore      := env_nil;
-       sep_contract_precondition    := pc ↦ term_var "c";
+       sep_contract_precondition    := asn_debug ✱ pc ↦ term_var "c";
        sep_contract_result          := "result_valid_pc";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_valid_pc") (term_lit ty_unit tt) ✱
@@ -538,10 +538,7 @@ Module MinCapsSymbolicContractKit <:
   Definition sep_contract_is_csafe : SepContract ["c" ∶ ty_cap] ty_unit :=
     {| sep_contract_logic_variables := ["c" ∶ ty_cap];
        sep_contract_localstore      := [term_var "c"]%arg;
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_is_csafe";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_is_csafe") (term_lit ty_unit tt) ✱
+       sep_contract_precondition    :=
          asn_match_record
            capability (term_var "c")
            (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
@@ -551,14 +548,18 @@ Module MinCapsSymbolicContractKit <:
             "cap_cursor" "a")
            (asn_match_enum permission (term_var "perm")
                            (fun p => match p with
-                                  | O => asn_false (* this case makes no sense, valid_pc will fail if c has no perm *)
+                                  | O => asn_true
                                   | _ =>
                                     asn_match_option ty_addr (term_var "e") "e'"
-                                                     ((asn_bool (term_binop binop_and
+                                                     (asn_bool (term_binop binop_and
                                                                            (term_binop binop_le (term_var "b") (term_var "a"))
-                                                                           (term_binop binop_le (term_var "a") (term_var "e'")))) ✱ asn_csafe (term_var "c"))
-                                                     ((asn_bool (term_binop binop_le (term_var "b") (term_var "a"))) ✱ asn_csafe (term_var "c"))
+                                                                           (term_binop binop_le (term_var "a") (term_var "e'"))))
+                                                     (asn_bool (term_binop binop_le (term_var "b") (term_var "a")))
                                   end));
+       sep_contract_result          := "result_is_csafe";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_is_csafe") (term_lit ty_unit tt) ✱
+                asn_csafe (term_var "c");
     |}.
       
   Definition regtag_to_reg (R : RegName) : Reg ty_word :=
@@ -673,7 +674,8 @@ Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_valid_pc : ValidContractDynMut sep_contract_valid_pc fun_valid_pc.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. compute. Abort.
+(* apply dynmutevarreflect_sound; reflexivity. Abort. *)
 
 Lemma valid_contract_next_pc : ValidContractDynMut sep_contract_next_pc fun_next_pc.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
