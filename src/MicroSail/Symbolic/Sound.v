@@ -1886,19 +1886,26 @@ Module Soundness
         dmut_wp (dmut_sub ζ01 (dmut_assume_formula (Γ := Γ) fml)) POST ζ12 pc2 s2 <->
         POST Σ2 ζ12 (cons (subst (sub_comp ζ01 ζ12) fml) pc2) tt s2.
     Proof.
-      (* unfold dmut_wp, dmut_assume_formula, dmut_sub; intros; split; intros. *)
-      (* specialize (H Σ1 (sub_id _)). *)
-      (* - destruct (try_solve_formula_spec (subst (sub_comp ζ01 (sub_id Σ1)) fml)). *)
-      (*   destruct a; cbn in H. *)
-      (*   + unfold sub_comp in H. rewrite ?subst_sub_id in H. *)
-      (*     revert H. apply POST_dcl. exists (sub_id _). admit. *)
-      (*   + apply POST_vac. unfold inconsistent. intros ι. *)
-      (*     specialize (H0 ι). rewrite sub_comp_id_right in H0. *)
-      (*     rewrite inst_pathcondition_cons. intuition. *)
-      (*   + cbn in H. unfold sub_comp in H. rewrite ?subst_sub_id in H. *)
-      (*     admit. *)
-      (* - admit. *)
-    Admitted.
+      unfold dmut_wp, dmut_assume_formula, dmut_sub. intros.
+      destruct (try_solve_formula_spec (subst (sub_comp ζ01 ζ12) fml)); cbn in *.
+      destruct a; cbn in *.
+      - rewrite sub_comp_id_right; split; apply POST_dcl; exists (sub_id _);
+          rewrite ?subst_sub_id; intuition.
+        + intros ι Hpc. rewrite inst_pathcondition_cons in Hpc. intuition.
+        + intros ι Hpc. rewrite inst_pathcondition_cons. intuition.
+      - split; auto. intros _.
+        apply POST_vac. intros ι Hpc. rewrite inst_pathcondition_cons in Hpc.
+        specialize (H ι). intuition.
+      - clear H.
+        pose proof (dmutres_assume_formula_spec pc2 (subst (sub_comp ζ01 ζ12) fml) s2).
+        destruct (dmutres_assume_formula pc2 (subst (sub_comp ζ01 ζ12) fml) s2) as [Σ3 ζ23 pc3 [] s3].
+        destruct H as [H1 H2].
+        split; apply POST_dcl.
+        + apply dmutres_geq_pre_comp with _ _ _ ζ12 in H1. cbn - [dmutres_geq] in H1.
+          now rewrite sub_comp_id_right in H1.
+        + apply dmutres_geq_pre_comp with _ _ _ ζ12 in H2. cbn - [dmutres_geq] in H2.
+          now rewrite sub_comp_id_right in H2.
+    Qed.
 
     Lemma dmut_assume_formula_sound {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) :
       box approximates
@@ -1906,42 +1913,16 @@ Module Soundness
         (dmut_assume_formula fml)
         (scmut_assume_formula ι fml).
     Proof.
-      (* OLD PROOF. This one didn't use the lemma dmut_wp_assume_formula before, but should. *)
-      (* unfold box, approximates. *)
-      (* intros * <- ? ? POST Hwp Hpc. *)
-      (* unfold dmut_wp, dmut_sub, dmut_assume_formula in Hwp. *)
-      (* specialize (Hwp Σ1 (sub_id Σ1)). *)
-      (* rewrite sub_comp_id_right in Hwp. *)
-      (* unfold scmut_wp, scmut_assume_formula. cbn. *)
-      (* intros Hfml. rewrite ?subst_sub_id in Hwp. *)
-      (* destruct (try_solve_formula_spec (subst ζ1 fml)). *)
-      (* - specialize (H ι1). rewrite inst_subst in H. *)
-      (*   apply H in Hfml. clear H. *)
-      (*   unfold is_true in Hfml. subst a. *)
-      (*   cbn in Hwp. *)
-      (*   rewrite ?sub_comp_id_left in Hwp. *)
-      (*   unfold stateprop_lift in Hwp. *)
-      (*   inster Hwp by apply syminstance_rel_refl. *)
-      (*   now apply Hwp. *)
-      (* - clear H. *)
-      (*   destruct (dmutres_assume_formula pc (subst ζ1 fml) s__sym) as [Σ2 ζ2 [] s2] eqn:?. *)
-      (*   + cbn in Hwp. rewrite sub_comp_id_left in Hwp. *)
-      (*     assert (resultprop_lift ι1 POST (dmutres_assume_formula pc (subst ζ1 fml) s__sym)) *)
-      (*       by (rewrite Heqd; apply Hwp). *)
-      (*     rewrite (dmutres_assume_formula_spec pc (subst ζ1 fml) s__sym) in H; auto using resultprop_lift_dcl. *)
-      (*     unfold resultprop_lift, stateprop_lift in H. *)
-      (*     inster H by apply syminstance_rel_refl. apply H. *)
-      (*     rewrite inst_pathcondition_cons. *)
-      (*     rewrite inst_subst. auto. *)
-      (*   + cbn in Hwp. rewrite sub_comp_id_left in Hwp. *)
-      (*     assert (resultprop_lift ι1 POST (dmutres_assume_formula pc (subst ζ1 fml) s__sym)) *)
-      (*       by (rewrite Heqd; apply Hwp). *)
-      (*     rewrite dmutres_assume_formula_spec in H; auto using resultprop_lift_dcl. *)
-      (*     unfold resultprop_lift, stateprop_lift in H. *)
-      (*     inster H by apply syminstance_rel_refl. apply H. *)
-      (*     rewrite inst_pathcondition_cons. *)
-      (*     rewrite inst_subst. auto. *)
-    Admitted.
+      unfold box, approximates.
+      intros * <- ? ? ? ? ? POST -> Hpc Hwp.
+      rewrite dmut_wp_assume_formula in Hwp;
+        [|eapply stateprop_lift_dcl|eapply stateprop_lift_vac].
+      unfold stateprop_lift in Hwp.
+      specialize (Hwp ι0 eq_refl).
+      unfold scmut_wp, scmut_assume_formula. cbn.
+      rewrite subst_sub_comp, inst_pathcondition_cons, ?inst_subst in Hwp.
+      intuition.
+    Qed.
 
     (* Lemma dmut_wp_angelic_list {Γ1 Γ2 AT D} `{Subst AT} {Σ0 Σ1} (ζ01 : Sub Σ0 Σ1) (func msg : string) (data : D) *)
     (*       (xs : list (DynamicMutator Γ1 Γ2 AT Σ0)) : *)
@@ -2059,13 +2040,53 @@ Module Soundness
         apply IHasn.
     Admitted.
 
+    Lemma eval_exp_inst {Γ Σ τ} (ι : SymInstance Σ) (δΓΣ : SymbolicLocalStore Γ Σ) (e : Exp Γ τ) :
+      eval e (inst ι δΓΣ) = inst ι (symbolic_eval_exp δΓΣ e).
+    Proof.
+      induction e; cbn; repeat f_equal; auto.
+      { unfold inst; cbn. now rewrite env_lookup_map. }
+      2: {
+        induction es as [|eb n es IHes]; cbn in *.
+        { reflexivity. }
+        { destruct X as [-> Heqs].
+          change (inst_term ?ι ?t) with (inst ι t).
+          destruct (inst ι (symbolic_eval_exp δΓΣ eb));
+            cbn; f_equal; auto.
+        }
+      }
+      all: induction es; cbn in *; destruct_conjs; f_equal; auto.
+    Qed.
+
     Lemma dmut_eval_exp_sound {Γ Σ τ} (e : Exp Γ τ) (ι : SymInstance Σ) :
       box approximates ι (dmut_eval_exp e) (scmut_eval_exp e).
-    Proof. Admitted.
+    Proof.
+      unfold dmut_eval_exps, scmut_eval_exps, box, approximates, dmut_gets_local, dmut_gets, scmut_gets_local, scmut_state_local, dmut_sub, dmut_wp, scmut_wp, stateprop_lift; cbn.
+      intros * <- * -> Hpc Hwp.
+      rewrite sub_comp_id_right in Hwp.
+      specialize (Hwp ι0 eq_refl Hpc).
+      change (scstate_localstore (inst ι0 s__sym)) with (inst ι0 (scstate_localstore s__sym)).
+      refine (eq_ind _ (fun x => POST x _) Hwp _ _).
+      replace (scstate_localstore (inst ι0 s__sym)) with (inst ι0 (symbolicstate_localstore s__sym));
+        eauto using eval_exp_inst.
+      now destruct s__sym.
+    Qed.
 
     Lemma dmut_eval_exps_sound {Γ Δ Σ} (es : NamedEnv (Exp Γ) Δ) (ι : SymInstance Σ) :
       box approximates ι (dmut_eval_exps es) (scmut_eval_exps es).
-    Proof. Admitted.
+    Proof.
+      unfold dmut_eval_exps, scmut_eval_exps, box, approximates, dmut_gets_local, dmut_gets, scmut_gets_local, scmut_state_local, dmut_sub, dmut_wp, scmut_wp, stateprop_lift; cbn.
+      intros * <- * -> Hpc Hwp.
+      rewrite sub_comp_id_right in Hwp.
+      specialize (Hwp ι0 eq_refl Hpc).
+      change (scstate_localstore (inst ι0 s__sym)) with (inst ι0 (scstate_localstore s__sym)).
+      unfold inst, inst_localstore, instantiate_env in Hwp.
+      rewrite env_map_map in Hwp.
+      refine (eq_ind _ (fun x => POST x _) Hwp _ _).
+      eapply env_map_ext.
+      replace (scstate_localstore (inst ι0 s__sym)) with (inst ι0 (symbolicstate_localstore s__sym));
+        eauto using eval_exp_inst.
+      now destruct s__sym.
+    Qed.
 
     Lemma dmut_state_sound {AT A} `{Inst AT A} {Γ1 Γ2 Σ1} (ι1 : SymInstance Σ1)
           (f : forall Σ2 (ζ12 : Sub Σ1 Σ2), SymbolicState Γ1 Σ2 -> AT Σ2 * SymbolicState Γ2 Σ2)
@@ -2075,15 +2096,16 @@ Module Soundness
               inst ι2 (f Σ2 ζ12 s2) = g (inst ι2 s2)) :
       box approximates ι1 (dmut_state f) (scmut_state g).
     Proof.
-      (* unfold box, approximates, dmut_state, scmut_state, stateprop_lift, dmut_wp, dmut_sub, scmut_wp; cbn. *)
-      (* intros Σ2 ζ12 ι2 rel12 pc2 s2 POST Hf Hpc2; cbn in *. *)
-      (* specialize (Hf Σ2 (sub_id _)). *)
-      (* rewrite ?sub_comp_id_right, ?subst_sub_id in Hf. *)
-      (* destruct (f Σ2 ζ12 s2) eqn:?; cbn in *. *)
-      (* pose proof (f_equal (inst ι2) Heqp) as Hinst. *)
-      (* rewrite fg in Hinst; auto. rewrite Hinst. cbn. *)
-      (* apply Hf; auto. rewrite sub_comp_id_left. apply syminstance_rel_refl. *)
-    Admitted.
+      unfold box, approximates, dmut_state, scmut_state, stateprop_lift, dmut_wp, dmut_sub, scmut_wp; cbn.
+      intros Σ2 ζ12 ι2 <- Σ3 ζ23 pc3 s__sym ι3 POST -> Hpc3 Hf; cbn in *.
+      destruct (f Σ3 (sub_comp ζ12 ζ23) s__sym) eqn:?; cbn in *.
+      rewrite sub_comp_id_right in Hf.
+      pose proof (f_equal (inst ι3) Heqp) as Hinst.
+      rewrite fg in Hinst; auto. rewrite Hinst. cbn.
+      apply Hf; auto.
+      unfold sub_comp, syminstance_rel.
+      now rewrite inst_subst.
+    Qed.
 
     Lemma dmut_call_sound {Γ Δ τ Σ} (c : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) (ι : SymInstance Σ) :
       box approximates ι (@dmut_call Γ Δ τ Σ c ts) (scmut_call c (inst ι ts)).
@@ -2239,23 +2261,6 @@ Module Soundness
       Qed.
 
       Transparent inst instantiate_env.
-
-      Lemma eval_exp_inst {Γ Σ τ} (ι : SymInstance Σ) (δΓΣ : SymbolicLocalStore Γ Σ) (e : Exp Γ τ) :
-        eval e (inst ι δΓΣ) = inst ι (symbolic_eval_exp δΓΣ e).
-      Proof.
-        induction e; cbn; repeat f_equal; auto.
-        { unfold inst; cbn. now rewrite env_lookup_map. }
-        2: {
-          induction es as [|eb n es IHes]; cbn in *.
-          { reflexivity. }
-          { destruct X as [-> Heqs].
-            change (inst_term ?ι ?t) with (inst ι t).
-            destruct (inst ι (symbolic_eval_exp δΓΣ eb));
-              cbn; f_equal; auto.
-          }
-        }
-        all: induction es; cbn in *; destruct_conjs; f_equal; auto.
-      Qed.
 
     End Leftovers.
 
