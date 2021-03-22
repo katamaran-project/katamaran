@@ -348,7 +348,7 @@ Module MinCapsModel.
 
   Lemma extSem `{sg : sailG Σ} : ExtSem (Σ := Σ).
     intros Γ τ Δ f es δ.
-    destruct f as [_|_|_|Γ' [ | reg | | ] es δ'];
+    destruct f as [_|_|_|Γ' [ | reg | ] es δ'];
       cbn;
       eauto using rM_sound, wM_sound, dI_sound, open_ptsreg_sound, close_ptsreg_sound.
     (* TODO: case for duplicate_safe & is_csafe, add lemma duplicate_safe_sound, add to eauto using ... *)
