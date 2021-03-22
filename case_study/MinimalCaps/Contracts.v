@@ -248,16 +248,14 @@ Module MinCapsSymbolicContractKit <:
                                end);
     |}.
 
-  Definition sep_contract_upper_bound : SepContract ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr ] ty_bool :=
-    {| sep_contract_logic_variables := ["a" ∶ ty_addr, "e" ∶ ty_option ty_addr ];
+  Definition sep_contract_upper_bound : SepContract ["a" ∶ ty_addr, "e" ∶ ty_addr ] ty_bool :=
+    {| sep_contract_logic_variables := ["a" ∶ ty_addr, "e" ∶ ty_addr ];
        sep_contract_localstore      := [term_var "a", term_var "e"]%arg;
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_upper_bound";
        sep_contract_postcondition   := 
-          asn_match_option ty_addr (term_var "e") "e'"
-                           (asn_eq (term_var "result_upper_bound")
-                                   (term_binop binop_le (term_var "a") (term_var "e'")))
-                           (asn_eq (term_var "result_upper_bound") (term_lit ty_bool true));
+         (asn_eq (term_var "result_upper_bound")
+                 (term_binop binop_le (term_var "a") (term_var "e")));
     |}.
 
   (* 
@@ -278,13 +276,10 @@ Module MinCapsSymbolicContractKit <:
             "cap_begin" "b")
             "cap_end" "e")
             "cap_cursor" "a")
-           (asn_match_option ty_addr (term_var "e") "e'"
               (asn_eq (term_var "result_within_bounds")
                       (term_binop binop_and
                                   (term_binop binop_le (term_var "b") (term_var "a"))
-                                  (term_binop binop_le (term_var "a") (term_var "e'"))))
-              (asn_eq (term_var "result_within_bounds")
-                      (term_binop binop_le (term_var "b") (term_var "a"))))
+                                  (term_binop binop_le (term_var "a") (term_var "e"))));
     |}.
 
   (*
@@ -656,8 +651,7 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 Lemma valid_contract_within_bounds : ValidContractDynMut sep_contract_within_bounds fun_within_bounds.
 Proof.
   compute; solve.
-  - constructor; cbn; solve.
-  - constructor; cbn; solve.
+  constructor; cbn; solve.
 Abort.
 
 (*
@@ -754,13 +748,9 @@ Lemma valid_contract_exec : ValidContractDynMutWithConfig debug_config sep_contr
 Proof.
   compute.
   repeat apply conj; auto.
-  - (* R Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_inl (term_var "e'"), term_var "cursor" *)
+  - (* R Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_var "e", term_var "cursor" *)
     constructor. split; auto. admit.
-  - (* R Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_inr (term_var "_"), term_var "cursor" *)
-    constructor. split; auto. admit.
-  - (* RW Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_inl (term_var "e'"), term_var "cursor" *)
-    constructor. split; auto. admit.
-  - (* RW Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_inr (term_var "_"), term_var "cursor" *)
+  - (* RW Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_var "e", term_var "cursor" *)
     constructor. split; auto. admit.
 Abort.
 
