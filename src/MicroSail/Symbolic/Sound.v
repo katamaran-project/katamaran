@@ -1968,13 +1968,50 @@ Module Soundness
       intuition.
     Qed.
 
-    (* Lemma dmut_wp_angelic_list {Γ1 Γ2 AT D} `{Subst AT} {Σ0 Σ1} (ζ01 : Sub Σ0 Σ1) (func msg : string) (data : D) *)
-    (*       (xs : list (DynamicMutator Γ1 Γ2 AT Σ0)) : *)
-    (*   forall POST pc s, *)
-    (*     dmut_wp (dmut_sub ζ01 (dmut_angelic_list func msg data xs)) POST pc s <-> *)
-    (*     exists d, List.In d xs /\ dmut_wp (dmut_sub ζ01 d) POST pc s. *)
-    (* Proof. *)
-    (* Admitted. *)
+    Lemma dmut_wp_angelic_binary {Γ1 Γ2 AT D} `{Subst AT} {Σ0 Σ1} (ζ01 : Sub Σ0 Σ1) (func msg : string) (data : D)
+          (d1 d2 : DynamicMutator Γ1 Γ2 AT Σ0) :
+      forall Σ2 POST (ζ12 : Sub Σ1 Σ2) pc2 s2,
+        dmut_wp (dmut_sub ζ01 (dmut_angelic_binary d1 d2)) POST ζ12 pc2 s2 <->
+        (dmut_wp (dmut_sub ζ01 d1) POST ζ12 pc2 s2 \/
+         dmut_wp (dmut_sub ζ01 d2) POST ζ12 pc2 s2).
+    Proof.
+      intros POST ζ12 pc2 s2.
+      unfold dmut_wp, dmut_sub, dmut_angelic_binary; cbn.
+      intuition.
+    Qed.
+
+    Lemma dmut_wp_angelic_list {Γ1 Γ2 AT D} `{Subst AT} {Σ0 Σ1} (ζ01 : Sub Σ0 Σ1) (func msg : string) (data : D)
+          (xs : list (DynamicMutator Γ1 Γ2 AT Σ0)) :
+      forall Σ2 POST (ζ12 : Sub Σ1 Σ2) pc2 s2,
+        dmut_wp (dmut_sub ζ01 (dmut_angelic_list func msg data xs)) POST ζ12 pc2 s2 <->
+        (exists d, List.In d xs /\
+                dmut_wp (dmut_sub ζ01 d) POST ζ12 pc2 s2).
+    Proof.
+      revert ζ01.
+      induction xs.
+      - intros ζ01 POST ζ12 pc2 s2; cbn.
+        split.
+        + intros [[ctr] _].
+          admit.
+        + admit.
+      - intros ζ01 Σ2 POST ζ12 pc2 s2; cbn.
+        destruct xs.
+        + split.
+          intros Hwp.
+          exists a; split; eauto.
+          intros [d [[->|[]] Hwp]].
+          eauto.
+        + split.
+          * intros [Hwp|Hwp].
+            exists a. split; eauto.
+            destruct (proj1 (IHxs ζ01 Σ2 POST ζ12 pc2 s2) Hwp) as [d2 [d2InDs Hwp2]].
+            exists d2; eauto.
+          * intros [d0 [[<-|d0InDs] Hwp]].
+            left. exact Hwp.
+            right.
+            eapply (proj2 (IHxs ζ01 Σ2 POST ζ12 pc2 s2)).
+            exists d0; eauto.
+    Admitted.
 
     (* Lemma dmut_wp_angelic_finite {Γ1 Γ2 AT F} `{finite.Finite F, Subst AT} {Σ0 Σ1} (ζ01 : Sub Σ0 Σ1) (k : F -> DynamicMutator Γ1 Γ2 AT Σ0) : *)
     (*   forall POST pc s, *)
