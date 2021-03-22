@@ -991,10 +991,54 @@ Module Soundness
       Proof. Admitted.
       Local Hint Resolve dmut_call_vac : core.
 
+      Lemma dmut_eval_exp_vac {Γ σ} {e : Exp Γ σ} {Σ} :
+        dmut_vac (dmut_eval_exp (Σ := Σ) e).
+      Proof.
+        unfold dmut_eval_exp, dmut_gets_local, dmut_gets; eauto.
+      Qed.
+      Local Hint Resolve dmut_eval_exp_vac : core.
+
+      Lemma dmut_eval_exps_vac {Γ Σ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) :
+        dmut_vac (dmut_eval_exps (Σ := Σ) es).
+      Proof.
+        unfold dmut_eval_exps, dmut_gets_local, dmut_gets; eauto.
+      Qed.
+      Local Hint Resolve dmut_eval_exps_vac : core.
+
+      Ltac auto_vac :=
+        repeat (
+          match goal with
+          | |- dmut_vac (dmut_bind _ _) => eapply dmut_bind_vac
+          | |- dmut_arrow_vac ?f => intros Σ3 ζ3 pc3 a3 s3
+          | |- outcome_vac ?pc (dmut_bind_right _ _ _ _ _) =>
+            eapply dmut_bind_right_vac
+          | |- outcome_vac ?pc (dmut_assume_formula _ _ _ _) =>
+            eapply dmut_assume_formula_vac
+          | |- dmut_vac (dmut_bind_right _ _) => eapply dmut_bind_right_vac
+          | |- dmut_vac (dmut_demonic_binary _ _) =>
+            eapply dmut_demonic_binary_vac
+          | |- outcome_vac ?pc (dmut_fresh _ _ _ _ _ _ _) =>
+            eapply dmut_fresh_vac
+          | |- dmut_vac (dmut_fresh _ _ _) =>
+            eapply dmut_fresh_vac
+          | |- outcome_vac ?pc (dmut_demonic _ _ _ _) =>
+            eapply dmut_demonic_vac
+          | |- outcome_vac ?pc (dmut_demonic_binary _ _ _ _ _) =>
+            eapply dmut_demonic_binary_vac
+          | |- outcome_vac ?pc (dmut_call _ _ _ _ _) => eapply dmut_call_vac
+          | |- outcome_vac _ (match ?e with _ => _ end _ _ _ _) => destruct e
+          end; eauto).
+
       Lemma dmut_exec_vac {Γ Σ τ} (s : Stm Γ τ) :
         dmut_vac (@dmut_exec Γ τ Σ s).
       Proof.
-        induction s; cbn [dmut_exec]; eauto.
+        revert Σ.
+        induction s; intros Σ; cbn [dmut_exec];
+          unfold dmut_assume_exp, dmut_assume_term, dmut_eval_exps, dmut_eval_exp, dmut_put_local, dmut_pop_local, dmut_pushs_local, dmut_pops_local, dmut_push_local, dmut_modify_local, dmut_get_local, dmut_gets_local, dmut_gets, dmut_state_local, dmut_bind_left; eauto; auto_vac.
+        - eapply dmut_angelic_vac.
+          admit.
+        - eapply dmut_angelic_vac.
+          exists a3; eauto.
       Admitted.
       Local Hint Resolve dmut_exec_vac : core.
 
