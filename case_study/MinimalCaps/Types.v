@@ -106,7 +106,7 @@ Section Records.
     MkCap
       { cap_permission : Permission;
         cap_begin      : Addr;
-        cap_end        : Addr + unit;
+        cap_end        : Addr;
         cap_cursor     : Addr;
       }.
 

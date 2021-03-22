@@ -160,11 +160,8 @@ Module MinCapsModel.
       by destruct reg.
     Qed.
 
-    Definition region_addrs (b : Addr) (e : Addr + unit): list Addr :=
-      match e with
-      | inl e => filter (fun a => and (b ≤ a)%Z (a ≤ e)%Z) liveAddrs
-      | inr _ => filter (fun a => (b ≤ a)%Z) liveAddrs
-      end.
+    Definition region_addrs (b e : Addr) : list Addr :=
+      filter (fun a => and (b ≤ a)%Z (a ≤ e)%Z) liveAddrs.
 
     Definition MinCaps_csafe `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Capability) : iProp Σ :=
       match v with

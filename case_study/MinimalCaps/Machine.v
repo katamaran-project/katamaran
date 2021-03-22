@@ -80,7 +80,7 @@ Module MinCapsTermKit <: TermKit.
   (*                         "p2"  ∶ ty_perm *)
   (*                        ] ty_bool *)
   | upper_bound    : Fun ["a"   ∶ ty_addr,
-                          "e"   ∶ ty_option ty_addr
+                          "e"   ∶ ty_addr
                          ] ty_bool
   | within_bounds  : Fun ["c"   ∶ ty_cap ] ty_bool
   | compute_rv     : Fun ["rv" ∶ ty_rv] ty_word
@@ -287,11 +287,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
        stm_exp (exp_var "u" && (exp_var "b" <= exp_var "a"))).
 
-  Definition fun_upper_bound : Stm ["a"   ∶ ty_addr, "e"   ∶ ty_option ty_addr] ty_bool :=
-    match: e with
-    | inl e => stm_exp (a <= e)
-    | inr "_" => stm_exp (lit_bool true)
-    end.
+  Definition fun_upper_bound : Stm ["a"   ∶ ty_addr, "e"   ∶ ty_addr] ty_bool :=
+    stm_exp (a <= e).
+
   Section ExecStore.
 
     Local Notation "'perm'"   := "cap_permission" : string_scope.
