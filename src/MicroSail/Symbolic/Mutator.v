@@ -1316,8 +1316,8 @@ Module Mutators
       | MkSepContract _ _ Σ δ req result ens =>
           dmut_produce req ;;
           dmut_exec s      >>= fun Σ1 ζ1 t =>
-          dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens) ;;
-          dmut_leakcheck
+          dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens)
+          (* dmut_leakcheck *)
       end.
 
     Definition dmut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) : Outcome unit unit :=
@@ -1837,7 +1837,8 @@ Module Mutators
             DynMutV1.dmut_produce req ;;
             dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
             dmut_consume_evar ens (subst (sub_snoc ζ1 (result,τ) t) (create_evarenv_id _)) ;;
-            dmut_leakcheck
+            (* dmut_leakcheck *)
+            dmut_pure tt
         end.
 
       Definition dmut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
@@ -3159,7 +3160,7 @@ Module Mutators
           let mut := (dmut_produce req ;;
                       dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
                       dmut_consume_evar ens (subst (sub_snoc ζ1 (result::τ) t) (create_evarenv_id _)) ;;
-                      dmut_leakcheck)%dmut in
+                      dmut_pure tt (* dmut_leakcheck *))%dmut in
           let out := mut Σ (sub_id Σ) nil (symbolicstate_initial δ) in
           sout_bind out (fun _ _ _ => sout_block (A:=Unit))
       end.
