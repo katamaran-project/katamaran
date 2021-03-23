@@ -1053,7 +1053,13 @@ Module Soundness
 
       Lemma dmut_contract_vac {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ)  :
         dmut_vac (@dmut_contract Γ τ c s).
-      Proof. destruct c; cbn; eauto 10. Qed.
+      Proof.
+        destruct c; cbn; eauto 10.
+        apply dmut_bind_right_vac; eauto 10.
+        apply dmut_bind_vac; eauto 10.
+        unfold dmut_arrow_vac; intros.
+        eapply dmut_sub_vac; eauto 10.
+      Qed.
 
     End Vacuous.
 
@@ -2265,19 +2271,19 @@ Module Soundness
     Lemma dmut_contract_sound {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) (ι : SymInstance (sep_contract_logic_variables c)) :
       box approximates ι (@dmut_contract Γ τ c s) (@scmut_contract Γ τ c s ι).
     Proof.
-      unfold dmut_contract, scmut_contract; destruct c as [Σ δ pre result post]; cbn in *.
-      unfold dmut_bind_right.
-      apply dmut_bind_sound; intros; auto_dcl.
-      apply dmut_produce_sound.
-      eapply approximates_sub; eauto.
-      apply dmut_bind_sound; intros; auto_dcl.
-      apply dmut_exec_sound.
-      apply dmut_bind_sound; intros; auto_dcl.
-      eapply approximates_sub; eauto.
-      unfold syminstance_rel in *; subst. rewrite <- H0.
-      apply dmut_consume_sound.
-      eapply approximates_sub; eauto.
-      apply dmut_leakcheck_sound.
+      (* unfold dmut_contract, scmut_contract; destruct c as [Σ δ pre result post]; cbn in *. *)
+      (* unfold dmut_bind_right. *)
+      (* apply dmut_bind_sound; intros; auto_dcl. *)
+      (* apply dmut_produce_sound. *)
+      (* eapply approximates_sub; eauto. *)
+      (* apply dmut_bind_sound; intros; auto_dcl. *)
+      (* apply dmut_exec_sound. *)
+      (* apply dmut_bind_sound; intros; auto_dcl. *)
+      (* eapply approximates_sub; eauto. *)
+      (* unfold syminstance_rel in *; subst. rewrite <- H0. *)
+      (* apply dmut_consume_sound. *)
+      (* eapply approximates_sub; eauto. *)
+      (* apply dmut_leakcheck_sound. *)
     Admitted.
 
     Opaque scmut_contract dmut_contract.
