@@ -243,19 +243,20 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     stm_lit ty_unit tt.
 
   Definition fun_add_pc : Stm ["offset" ∶ ty_int ] ty_unit :=
-    let: "c" := stm_read_register pc in
-    stm_match_record capability (exp_var "c")
+    let: "opc" := stm_read_register pc in
+    stm_match_record capability (exp_var "opc")
       (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
        "cap_permission" "perm")
        "cap_begin" "beg")
        "cap_end" "end")
        "cap_cursor" "cur")
-      (stm_write_register pc
-        (exp_record capability
+      (let: "npc" := (exp_record capability
            [ exp_var "perm",
              exp_var "beg",
              exp_var "end",
-             exp_var "cur" + exp_var "offset" ])) ;;
+             exp_var "cur" + exp_var "offset" ]) in
+       stm_call_external (ghost csafe_move_cursor) [exp_var "opc", exp_var "npc"]%arg ;;
+       stm_write_register pc (exp_var "npc")) ;;
     stm_lit ty_unit tt.
 
   Definition fun_read_allowed : Stm ["p" ∶ ty_perm] ty_bool :=

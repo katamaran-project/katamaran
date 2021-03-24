@@ -199,11 +199,12 @@ Module MinCapsSymbolicContractKit <:
   Definition sep_contract_add_pc : SepContract ["offset" ∶ ty_int] ty_unit :=
     {| sep_contract_logic_variables := ["opc" ∶ ty_cap, "offset" ∶ ty_int];
        sep_contract_localstore      := [term_var "offset"]%arg;
-       sep_contract_precondition    := pc ↦ term_var "opc";
+       sep_contract_precondition    := pc ↦ term_var "opc" ✱ asn_csafe (term_var "opc");
        sep_contract_result          := "result_add_pc";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_add_pc") (term_lit ty_unit tt) ✱
-         asn_exist "npc" ty_cap (pc ↦ term_var "npc");
+                asn_exist "npc" ty_cap
+                (pc ↦ term_var "npc" ✱ asn_csafe (term_var "npc"));
     |}.
 
   Definition sep_contract_read_mem : SepContract ["a" ∶ ty_addr ] ty_memval :=
@@ -716,14 +717,14 @@ Proof.
   constructor; cbn; solve.
 Abort.
 
+Lemma valid_contract_exec_j : ValidContractDynMut sep_contract_exec_j fun_exec_j.
+Proof. compute. Abort.
+
 (*
-Lemma valid_contract_exec_jr : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jr fun_exec_jr.
+Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
 Proof. compute. Abort.
 
 Lemma valid_contract_exec_jalr : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jalr fun_exec_jalr.
-Proof. compute. Abort.
-
-Lemma valid_contract_exec_j : TwoPointO.ValidContractDynMutDebug sep_contract_exec_j fun_exec_j.
 Proof. compute. Abort.
 
 Lemma valid_contract_exec_jal : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jal fun_exec_jal.
