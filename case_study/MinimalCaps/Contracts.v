@@ -765,6 +765,7 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 Lemma valid_contract_exec_jalr : ValidContractDynMut sep_contract_exec_jalr fun_exec_jalr.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
+(*
 Ltac debug_satisfy_forget_post :=
   match goal with
   | |- outcome_satisfy ?o ?P =>
@@ -797,6 +798,7 @@ Ltac debug_satisfy_eval_cbv :=
 
 Close Scope exp.
 Close Scope env.
+*)
 
 Lemma valid_contract_exec_bnez : ValidContractDynMut sep_contract_exec_bnez fun_exec_bnez.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
