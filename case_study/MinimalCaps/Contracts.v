@@ -539,6 +539,7 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_result          := "result_csafe_move_cursor";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_csafe_move_cursor") (term_lit ty_unit tt) ✱
+                asn_csafe (term_var "c") ✱
                 asn_csafe (term_record capability
                                        [term_var "p",
                                         term_var "b",
@@ -548,7 +549,7 @@ Module MinCapsSymbolicContractKit <:
 
   (*
     @pre ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ safe(c) ∧ (∃ a′. c′ = mkcap(b,e,a′,p));
-    @post safe(c′)
+    @post safe(c) ∧ safe(c′)
     unit csafe_move_cursor(c c′ : capability);
    *)
   Definition sep_contract_csafe_move_cursor : SepContract ["c" ∶ ty_cap, "c'" ∶ ty_cap] ty_unit :=
@@ -558,6 +559,7 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_result          := "result_csafe_move_cursor";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_csafe_move_cursor") (term_lit ty_unit tt) ✱
+                asn_csafe (term_var "c") ✱
                 asn_match_cap (term_var "c") "p" "b" "e" "_"
                 (asn_exist "a" ty_addr
                            (asn_eq (term_var "c'")
@@ -567,6 +569,21 @@ Module MinCapsSymbolicContractKit <:
                                                  term_var "e",
                                                  term_var "a"]) ✱
                                    asn_csafe (term_var "c'")));
+    |}.
+
+  (*
+    @pre csafe(c)
+    @post safe(c)
+    unit lift_csafe(c : capability);
+   *)
+  Definition sep_contract_lift_csafe : SepContract ["c" ∶ ty_cap] ty_unit :=
+    {| sep_contract_logic_variables := ["c" ∶ ty_cap];
+       sep_contract_localstore      := [term_var "c"]%arg;
+       sep_contract_precondition    := asn_csafe (term_var "c");
+       sep_contract_result          := "result_lift_csafe";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_lift_csafe") (term_lit ty_unit tt) ✱
+                asn_safe (term_inr (term_var "c"));
     |}.
       
   Definition regtag_to_reg (R : RegName) : Reg ty_word :=
@@ -619,6 +636,7 @@ Module MinCapsSymbolicContractKit <:
         | close_ptsreg r    => sep_contract_close_ptsreg r
         | duplicate_safe    => sep_contract_duplicate_safe
         | csafe_move_cursor => sep_contract_csafe_move_cursor
+        | lift_csafe        => sep_contract_lift_csafe
         end
       end.
 
@@ -718,16 +736,16 @@ Proof.
 Abort.
 
 Lemma valid_contract_exec_j : ValidContractDynMut sep_contract_exec_j fun_exec_j.
-Proof. compute. Abort.
+Proof. compute; solve. Abort.
+
+Lemma valid_contract_exec_jal : ValidContractDynMut sep_contract_exec_jal fun_exec_jal.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 (*
 Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
 Proof. compute. Abort.
 
 Lemma valid_contract_exec_jalr : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jalr fun_exec_jalr.
-Proof. compute. Abort.
-
-Lemma valid_contract_exec_jal : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jal fun_exec_jal.
 Proof. compute. Abort.
 
 Ltac debug_satisfy_forget_post :=

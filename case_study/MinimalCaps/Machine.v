@@ -106,6 +106,7 @@ Module MinCapsTermKit <: TermKit.
   | close_ptsreg (R : RegName) : FunGhost ctx_nil
   | duplicate_safe : FunGhost ["reg" ∶ ty_enum regname]
   | csafe_move_cursor : FunGhost ["c" ∶ ty_cap, "c'" ∶ ty_cap]
+  | lift_csafe : FunGhost ["c" ∶ ty_cap]
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -406,7 +407,11 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_lit ty_bool true.
 
     Definition fun_exec_jal : Stm [lv ∶ ty_lv, offset ∶ ty_int] ty_bool :=
+      let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
+      stm_call_external (ghost csafe_move_cursor) [exp_var "opc", exp_var "npc"]%arg ;;
+      stm_call_external (ghost lift_csafe) [exp_var "npc"]%arg ;;
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg lv (exp_inr (exp_var "npc")) ;;
       call exec_j offset.
 
