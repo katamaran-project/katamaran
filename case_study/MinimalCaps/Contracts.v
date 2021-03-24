@@ -144,7 +144,8 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_postcondition   :=
          asn_exist "c" ty_cap
                    (asn_eq (term_var "result_read_reg_cap") (term_var "c") ✱
-                           term_var "creg" ↦r term_inr (term_var "c"));
+                           asn_eq (term_var "w") (term_inr (term_var "c")) ✱
+                           term_var "creg" ↦r (term_var "w"));
     |}.
 
   Definition sep_contract_read_reg_num : SepContract ["nreg" ∶ ty_enum regname ] ty_int :=
@@ -585,6 +586,21 @@ Module MinCapsSymbolicContractKit <:
          asn_eq (term_var "result_lift_csafe") (term_lit ty_unit tt) ✱
                 asn_safe (term_inr (term_var "c"));
     |}.
+
+  (*
+    @pre safe(c)
+    @post csafe(c)
+    unit specialize_safe_to_cap(c : capability);
+   *)
+  Definition sep_contract_specialize_safe_to_cap : SepContract ["c" ∶ ty_cap] ty_unit :=
+    {| sep_contract_logic_variables := ["c" ∶ ty_cap];
+       sep_contract_localstore      := [term_var "c"]%arg;
+       sep_contract_precondition    := asn_safe (term_inr (term_var "c"));
+       sep_contract_result          := "result_specialize_safe_to_cap";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_specialize_safe_to_cap") (term_lit ty_unit tt) ✱
+                asn_csafe (term_var "c");
+    |}.
       
   Definition regtag_to_reg (R : RegName) : Reg ty_word :=
     match R with
@@ -632,11 +648,12 @@ Module MinCapsSymbolicContractKit <:
           asn_true
       | @ghost _ f =>
         match f in FunGhost Δ return SepContract Δ ty_unit with
-        | open_ptsreg       => sep_contract_open_ptsreg
-        | close_ptsreg r    => sep_contract_close_ptsreg r
-        | duplicate_safe    => sep_contract_duplicate_safe
-        | csafe_move_cursor => sep_contract_csafe_move_cursor
-        | lift_csafe        => sep_contract_lift_csafe
+        | open_ptsreg            => sep_contract_open_ptsreg
+        | close_ptsreg r         => sep_contract_close_ptsreg r
+        | duplicate_safe         => sep_contract_duplicate_safe
+        | csafe_move_cursor      => sep_contract_csafe_move_cursor
+        | lift_csafe             => sep_contract_lift_csafe
+        | specialize_safe_to_cap => sep_contract_specialize_safe_to_cap
         end
       end.
 
@@ -735,18 +752,17 @@ Proof.
   constructor; cbn; solve.
 Abort.
 
+Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+
 Lemma valid_contract_exec_j : ValidContractDynMut sep_contract_exec_j fun_exec_j.
 Proof. compute; solve. Abort.
 
 Lemma valid_contract_exec_jal : ValidContractDynMut sep_contract_exec_jal fun_exec_jal.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
-(*
-Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
-Proof. compute. Abort.
-
-Lemma valid_contract_exec_jalr : TwoPointO.ValidContractDynMutDebug sep_contract_exec_jalr fun_exec_jalr.
-Proof. compute. Abort.
+Lemma valid_contract_exec_jalr : ValidContractDynMut sep_contract_exec_jalr fun_exec_jalr.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Ltac debug_satisfy_forget_post :=
   match goal with
@@ -774,13 +790,14 @@ Ltac debug_satisfy_eval_cbn_inputs :=
 Ltac debug_satisfy_eval_cbv :=
   match goal with
   | |- outcome_satisfy ?o ?P =>
-    let o' := eval cbv - [NamedEnv Lit Error valid_obligation] in o in
+    let o' := eval cbv - [NamedEnv Lit Error] in o in
     change_no_check (outcome_satisfy o' P); cbn [outcome_satisfy]
   end.
 
 Close Scope exp.
 Close Scope env.
 
+(*
 Lemma valid_contract_exec_bnez : TwoPointO.ValidContractDynMutDebug sep_contract_exec_bnez fun_exec_bnez.
 Proof. compute. Abort.
 *)

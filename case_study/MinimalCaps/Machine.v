@@ -107,6 +107,7 @@ Module MinCapsTermKit <: TermKit.
   | duplicate_safe : FunGhost ["reg" ∶ ty_enum regname]
   | csafe_move_cursor : FunGhost ["c" ∶ ty_cap, "c'" ∶ ty_cap]
   | lift_csafe : FunGhost ["c" ∶ ty_cap]
+  | specialize_safe_to_cap : FunGhost ["c" ∶ ty_cap]
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -392,13 +393,20 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       call update_pc ;;
       stm_lit ty_bool true.
 
-    Definition fun_exec_jr : Stm [lv ∶ ty_lv] ty_bool :=
-      let: "c" ∶ ty_cap := call read_reg_cap lv in
-      stm_write_register pc c ;;
+    Definition fun_exec_jr : Stm ["lv" ∶ ty_lv] ty_bool :=
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+      let: "c" ∶ ty_cap := call read_reg_cap (exp_var "lv") in
+      stm_write_register pc (exp_var "c") ;;
+      stm_call_external (ghost duplicate_safe) [exp_var "lv"]%arg ;;
+      stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
       stm_lit ty_bool true.
 
     Definition fun_exec_jalr : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+      let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
+      stm_call_external (ghost csafe_move_cursor) [exp_var "opc", exp_var "npc"]%arg ;;
+      stm_call_external (ghost lift_csafe) [exp_var "npc"]%arg ;;
+      stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg (exp_var "lv1") (exp_inr (exp_var "npc")) ;;
       call exec_jr (exp_var "lv2").
 
