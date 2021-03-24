@@ -108,6 +108,7 @@ Module MinCapsTermKit <: TermKit.
   | csafe_move_cursor : FunGhost ["c" ∶ ty_cap, "c'" ∶ ty_cap]
   | lift_csafe : FunGhost ["c" ∶ ty_cap]
   | specialize_safe_to_cap : FunGhost ["c" ∶ ty_cap]
+  | int_safe : FunGhost ["i" ∶ ty_int]
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -354,18 +355,25 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
          call update_pc ;;
          stm_lit ty_bool true).
 
-    Definition fun_exec_addi : Stm [lv ∶ ty_lv, hv ∶ ty_hv, "immediate" ∶ ty_int ] ty_bool :=
-      let: "v" ∶ int := call read_reg_num hv in
-      let: "res" ∶ int := stm_exp (exp_var "v" + exp_var "immediate") in
-      call write_reg lv (exp_inl (exp_var "res")) ;;
+    Definition fun_exec_addi : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int ] ty_bool :=
+      stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
+      let: "v" ∶ ty_int := call read_reg_num (exp_var "hv") in
+      let: "res" ∶ ty_int := stm_exp (exp_var "v" + exp_var "immediate") in
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+      call write_reg (exp_var "lv") (exp_inl (exp_var "res")) ;;
+      stm_call_external (ghost int_safe) [exp_var "res"]%arg ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
     Definition fun_exec_add : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv ] ty_bool :=
+      stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "lv3") (fun _ => stm_lit ty_unit tt) ;;
       let: "v1" ∶ int := call read_reg_num (exp_var "lv2") in
       let: "v2" ∶ int := call read_reg_num (exp_var "lv3") in
       let: "res" ∶ int := stm_exp (exp_var "v1" + exp_var "v2") in
+      stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg (exp_var "lv1") (exp_inl (exp_var "res")) ;;
+      stm_call_external (ghost int_safe) [exp_var "res"]%arg ;;
       call update_pc ;;
       stm_lit ty_bool true.
 

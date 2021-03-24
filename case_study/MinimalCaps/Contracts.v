@@ -602,6 +602,21 @@ Module MinCapsSymbolicContractKit <:
          asn_eq (term_var "result_specialize_safe_to_cap") (term_lit ty_unit tt) ✱
                 asn_csafe (term_var "c");
     |}.
+
+  (*
+    @pre true
+    @post safe(i)
+    unit int_safe(i : int);
+   *)
+  Definition sep_contract_int_safe : SepContract ["i" ∶ ty_int] ty_unit :=
+    {| sep_contract_logic_variables := ["i" ∶ ty_int];
+       sep_contract_localstore      := [term_var "i"]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_int_safe";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_int_safe") (term_lit ty_unit tt) ✱
+                asn_safe (term_inl (term_var "i"));
+    |}.
       
   Definition regtag_to_reg (R : RegName) : Reg ty_word :=
     match R with
@@ -655,6 +670,7 @@ Module MinCapsSymbolicContractKit <:
         | csafe_move_cursor      => sep_contract_csafe_move_cursor
         | lift_csafe             => sep_contract_lift_csafe
         | specialize_safe_to_cap => sep_contract_specialize_safe_to_cap
+        | int_safe               => sep_contract_int_safe
         end
       end.
 
@@ -812,11 +828,11 @@ Proof. compute. Abort.
 Lemma valid_contract_exec_sd : TwoPointO.ValidContractDynMutDebug sep_contract_exec_sd fun_exec_sd.
 Proof. compute. Abort.
 
-Lemma valid_contract_exec_addi : TwoPointO.ValidContractDynMutDebug sep_contract_exec_addi fun_exec_addi.
-Proof. compute. Abort.
+Lemma valid_contract_exec_addi : ValidContractDynMut sep_contract_exec_addi fun_exec_addi.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
-Lemma valid_contract_exec_add : TwoPointO.ValidContractDynMutDebug sep_contract_exec_add fun_exec_add.
-Proof. compute. Abort.
+Lemma valid_contract_exec_add : ValidContractDynMut sep_contract_exec_add fun_exec_add.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec_ret : ValidContractDynMut sep_contract_exec_ret fun_exec_ret.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
