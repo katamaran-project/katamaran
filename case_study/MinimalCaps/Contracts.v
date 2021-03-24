@@ -99,6 +99,15 @@ Module MinCapsSymbolicContractKit <:
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_safe w := (asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ w)))).
   Local Notation asn_csafe c := (asn_chunk (chunk_user csafe (env_nil ► (ty_cap ↦ c)))).
+  Local Notation asn_match_cap c p b e a asn :=
+    (asn_match_record
+       capability c
+       (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+        "cap_permission" p)
+        "cap_begin" b)
+        "cap_end" e)
+        "cap_cursor" a)
+       asn).
   (* Arguments asn_prop [_] & _. *)
 
   (* regInv(r) = ∃ w : word. r ↦ w * safe(w) *)
@@ -166,26 +175,20 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_result          := "result_next_pc";
        sep_contract_postcondition   :=
          pc ↦ term_var "opc" ✱
-         asn_match_record
-           capability (term_var "opc")
-           (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-            "cap_permission" "perm")
-            "cap_begin" "beg")
-            "cap_end" "end")
-            "cap_cursor" "cur")
-           (asn_eq
-              (term_var "result_next_pc")
-              (term_record capability
-                 [term_var "perm",
-                  term_var "beg",
-                  term_var "end",
-                  term_binop binop_plus (term_var "cur") (term_lit ty_addr 1)]))
+            asn_match_cap (term_var "opc") "perm" "beg" "end" "cur"
+            (asn_eq
+               (term_var "result_next_pc")
+               (term_record capability
+                            [term_var "perm",
+                             term_var "beg",
+                             term_var "end",
+                             term_binop binop_plus (term_var "cur") (term_lit ty_addr 1)]))
     |}.
 
   Definition sep_contract_update_pc : SepContract ctx_nil ty_unit :=
     {| sep_contract_logic_variables := ["opc" ∶ ty_cap];
        sep_contract_localstore      := env_nil;
-       sep_contract_precondition    := pc ↦ term_var "opc";
+       sep_contract_precondition    := pc ↦ term_var "opc" ✱ asn_csafe (term_var "opc");
        sep_contract_result          := "result_update_pc";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_update_pc") (term_lit ty_unit tt) ✱
@@ -269,17 +272,11 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_within_bounds";
        sep_contract_postcondition   :=
-         asn_match_record
-           capability (term_var "c")
-           (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-            "cap_permission" "perm")
-            "cap_begin" "b")
-            "cap_end" "e")
-            "cap_cursor" "a")
-              (asn_eq (term_var "result_within_bounds")
-                      (term_binop binop_and
-                                  (term_binop binop_le (term_var "b") (term_var "a"))
-                                  (term_binop binop_le (term_var "a") (term_var "e"))));
+         asn_match_cap (term_var "c") "perm" "b" "e" "a"
+                       (asn_eq (term_var "result_within_bounds")
+                               (term_binop binop_and
+                                           (term_binop binop_le (term_var "b") (term_var "a"))
+                                           (term_binop binop_le (term_var "a") (term_var "e"))));
     |}.
 
   (*
@@ -518,6 +515,58 @@ Module MinCapsSymbolicContractKit <:
          asn_safe (term_var "w") ✱
          asn_safe (term_var "w")
     |}.
+
+  (* TODO: this contract doesn't work... fails to find csafe chunk on heap *)
+  (* Definition sep_contract_csafe_move_cursor : SepContract ["c" ∶ ty_cap, "c'" ∶ ty_cap] ty_unit :=
+    {| sep_contract_logic_variables := ["p" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr, "a" ∶ ty_addr, "a'" ∶ ty_addr];
+       sep_contract_localstore      := 
+               [term_record capability
+                            [term_var "p",
+                             term_var "b",
+                             term_var "e",
+                             term_var "a"], 
+               term_record capability
+                            [term_var "p",
+                             term_var "b",
+                             term_var "e",
+                             term_var "a'"]]%arg;
+       sep_contract_precondition    := asn_csafe (term_record capability
+                                                              [term_var "p",
+                                                               term_var "b",
+                                                               term_var "e",
+                                                               term_var "a"]);
+       sep_contract_result          := "result_csafe_move_cursor";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_csafe_move_cursor") (term_lit ty_unit tt) ✱
+                asn_csafe (term_record capability
+                                       [term_var "p",
+                                        term_var "b",
+                                        term_var "e",
+                                        term_var "a'"]);
+    |}. *)
+
+  (*
+    @pre ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ safe(c) ∧ (∃ a′. c′ = mkcap(b,e,a′,p));
+    @post safe(c′)
+    unit csafe_move_cursor(c c′ : capability);
+   *)
+  Definition sep_contract_csafe_move_cursor : SepContract ["c" ∶ ty_cap, "c'" ∶ ty_cap] ty_unit :=
+    {| sep_contract_logic_variables := ["c" ∶ ty_cap, "c'" ∶ ty_cap];
+       sep_contract_localstore      := [term_var "c", term_var "c'"]%arg;
+       sep_contract_precondition    := asn_csafe (term_var "c");
+       sep_contract_result          := "result_csafe_move_cursor";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_csafe_move_cursor") (term_lit ty_unit tt) ✱
+                asn_match_cap (term_var "c") "p" "b" "e" "_"
+                (asn_exist "a" ty_addr
+                           (asn_eq (term_var "c'")
+                                   (term_record capability
+                                                [term_var "p",
+                                                 term_var "b",
+                                                 term_var "e",
+                                                 term_var "a"]) ✱
+                                   asn_csafe (term_var "c'")));
+    |}.
       
   Definition regtag_to_reg (R : RegName) : Reg ty_word :=
     match R with
@@ -565,9 +614,10 @@ Module MinCapsSymbolicContractKit <:
           asn_true
       | @ghost _ f =>
         match f in FunGhost Δ return SepContract Δ ty_unit with
-        | open_ptsreg    => sep_contract_open_ptsreg
-        | close_ptsreg r => sep_contract_close_ptsreg r
-        | duplicate_safe => sep_contract_duplicate_safe
+        | open_ptsreg       => sep_contract_open_ptsreg
+        | close_ptsreg r    => sep_contract_close_ptsreg r
+        | duplicate_safe    => sep_contract_duplicate_safe
+        | csafe_move_cursor => sep_contract_csafe_move_cursor
         end
       end.
 
@@ -615,7 +665,18 @@ Local Ltac solve :=
 Local Notation "r '↦' t" := (chunk_ptsreg r t) (at level 100, only printing).
 Local Notation "r '↦r' t" := (chunk_user ptsreg (env_nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t))) (at level 100, only printing).
 Local Notation "a '↦m' t" := (chunk_user ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t))) (at level 100, only printing).
+Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 Local Notation safew w := (chunk_user safe (env_nil ► (ty_word ↦ w))).
+Local Notation asn_csafe c := (asn_chunk (chunk_user csafe (env_nil ► (ty_cap ↦ c)))).
+Local Notation asn_match_cap c p b e a asn :=
+(asn_match_record
+    capability c
+    (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+    "cap_permission" p)
+    "cap_begin" b)
+    "cap_end" e)
+    "cap_cursor" a)
+    asn).
 
 Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
@@ -635,9 +696,8 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 Lemma valid_contract_add_pc : ValidContractDynMut sep_contract_add_pc fun_add_pc.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
-(* TODO: currently doesn't succeed *)
 Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
-Proof. compute. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_read_allowed : ValidContractDynMut sep_contract_read_allowed fun_read_allowed.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.

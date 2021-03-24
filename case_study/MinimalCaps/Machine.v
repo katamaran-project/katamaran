@@ -105,6 +105,7 @@ Module MinCapsTermKit <: TermKit.
   | open_ptsreg : FunGhost ["reg" ∶ ty_enum regname]
   | close_ptsreg (R : RegName) : FunGhost ctx_nil
   | duplicate_safe : FunGhost ["reg" ∶ ty_enum regname]
+  | csafe_move_cursor : FunGhost ["c" ∶ ty_cap, "c'" ∶ ty_cap]
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -235,8 +236,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
            exp_var "cur" + lit_int 1 ]).
 
   Definition fun_update_pc : Stm ctx_nil ty_unit :=
-    let: "c" := call next_pc in
-    stm_write_register pc (exp_var "c") ;;
+    let: "opc" := stm_read_register pc in
+    let: "npc" := call next_pc in
+    stm_call_external (ghost csafe_move_cursor) [exp_var "opc", exp_var "npc"]%arg ;;
+    stm_write_register pc (exp_var "npc") ;;
     stm_lit ty_unit tt.
 
   Definition fun_add_pc : Stm ["offset" ∶ ty_int ] ty_unit :=
