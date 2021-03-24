@@ -654,6 +654,8 @@ Local Ltac solve :=
        | |- _ \/ False =>  left
        | |- _ /\ _ => constructor
        | |- Debug _ _ => constructor
+       | |- Debug _ True \/ _ => left
+       | |- (_ \/ _) \/ _ =>  rewrite or_assoc
        | |- context[Z.leb ?x ?y] =>
          destruct (Z.leb_spec x y)
        end;
@@ -764,19 +766,8 @@ Lemma valid_contract_exec_bnez : TwoPointO.ValidContractDynMutDebug sep_contract
 Proof. compute. Abort.
 *)
 
-(* TODO: left here for debugging purposes *)
-Let word : Ty := ty_word. (* Let = delta expansion "replaces by def", Notation = print term it expands to *)
-Definition fun_exec_mv' : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool :=
-  stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
-  stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;; 
-  stm_call_external (ghost duplicate_safe) [exp_var "hv"]%arg ;;
-  let: "w" ∶ word := call read_reg (exp_var "hv") in
-  call write_reg (exp_var "lv") (exp_var "w") ;;
-  stm_debugk (call update_pc) ;;
-  stm_lit ty_bool true.
-
-Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv'.
-Proof. compute. Abort.
+Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec_ld : TwoPointO.ValidContractDynMutDebug sep_contract_exec_ld fun_exec_ld.
 Proof. compute. Abort.
