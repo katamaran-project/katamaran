@@ -156,7 +156,8 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_postcondition   :=
          asn_exist "i" ty_int
                    (asn_eq (term_var "result_read_reg_num") (term_var "i") ✱
-                           term_var "nreg" ↦r term_inl (term_var "i"));
+                           asn_eq (term_var "w") (term_inl (term_var "i")) ✱
+                           term_var "nreg" ↦r term_var "w");
     |}.
 
   Definition sep_contract_write_reg : SepContract ["wreg" ∶ ty_enum regname, "w"  ∶ ty_word] ty_unit :=
@@ -797,10 +798,8 @@ Ltac debug_satisfy_eval_cbv :=
 Close Scope exp.
 Close Scope env.
 
-(*
-Lemma valid_contract_exec_bnez : TwoPointO.ValidContractDynMutDebug sep_contract_exec_bnez fun_exec_bnez.
-Proof. compute. Abort.
-*)
+Lemma valid_contract_exec_bnez : ValidContractDynMut sep_contract_exec_bnez fun_exec_bnez.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.

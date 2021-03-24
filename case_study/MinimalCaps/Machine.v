@@ -423,11 +423,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       call write_reg lv (exp_inr (exp_var "npc")) ;;
       call exec_j offset.
 
-    Definition fun_exec_bnez : Stm [lv ∶ ty_lv, immediate ∶ ty_int ] ty_bool :=
-      let: "c" ∶ ty_int := call read_reg_num (exp_var lv) in
-      stm_if (exp_binop binop_eq c (lit_int 0))
+    Definition fun_exec_bnez : Stm ["lv" ∶ ty_lv, "immediate" ∶ ty_int ] ty_bool :=
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+      let: "c" ∶ ty_int := call read_reg_num (exp_var "lv") in
+      stm_if (exp_binop binop_eq (exp_var "c") (lit_int 0))
              (call update_pc ;; stm_lit ty_bool true)
-             (call add_pc (exp_var immediate) ;; stm_lit ty_bool true).
+             (call add_pc (exp_var "immediate") ;; stm_lit ty_bool true).
 
     Definition fun_exec_instr : Stm [i ∶ ty_instr] ty_bool :=
       stm_match_union_alt
