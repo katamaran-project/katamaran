@@ -210,21 +210,19 @@ Module MinCapsSymbolicContractKit <:
     |}.
 
   Definition sep_contract_read_mem : SepContract ["a" ∶ ty_addr ] ty_memval :=
-    {| sep_contract_logic_variables := ["a" ∶ ty_addr, "n" ∶ ty_int];
+    {| sep_contract_logic_variables := ["a" ∶ ty_addr];
        sep_contract_localstore      := [term_var "a"]%arg;
-       sep_contract_precondition    := term_var "a" ↦m term_var "n";
+       sep_contract_precondition    := machInv;
        sep_contract_result          := "result";
-       sep_contract_postcondition   :=
-         term_var "a" ↦m term_var "n" ✱
-                  asn_eq (term_var "result") (term_var "n");
+       sep_contract_postcondition   := machInv;
     |}.
 
   Definition sep_contract_write_mem : SepContract ["a" ∶ ty_addr, "v" ∶ ty_memval ] ty_unit :=
-    {| sep_contract_logic_variables := ["a" ∶ ty_addr, "v" ∶ ty_memval, "ov" ∶ ty_memval];
+    {| sep_contract_logic_variables := ["a" ∶ ty_addr, "v" ∶ ty_memval];
        sep_contract_localstore      := [term_var "a", term_var "v"]%arg;
-       sep_contract_precondition    := term_var "a" ↦m term_var "ov";
+       sep_contract_precondition    := machInv;
        sep_contract_result          := "result";
-       sep_contract_postcondition   := term_var "a" ↦m term_var "v";
+       sep_contract_postcondition   := machInv;
     |}.
 
   Definition sep_contract_read_allowed : SepContract ["p" ∶ ty_perm ] ty_bool :=
@@ -617,7 +615,7 @@ Module MinCapsSymbolicContractKit <:
          asn_eq (term_var "result_int_safe") (term_lit ty_unit tt) ✱
                 asn_safe (term_inl (term_var "i"));
     |}.
-      
+
   Definition regtag_to_reg (R : RegName) : Reg ty_word :=
     match R with
     | R0 => reg0
@@ -754,6 +752,12 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
+Lemma valid_contract_read_mem : ValidContractDynMut sep_contract_read_mem fun_read_mem.
+Proof. compute. Abort.
+
+Lemma valid_contract_write_mem : ValidContractDynMut sep_contract_write_mem fun_write_mem.
+Proof. compute. Abort.
+
 Lemma valid_contract_read_allowed : ValidContractDynMut sep_contract_read_allowed fun_read_allowed.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
@@ -822,11 +826,11 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
-Lemma valid_contract_exec_ld : TwoPointO.ValidContractDynMutDebug sep_contract_exec_ld fun_exec_ld.
-Proof. compute. Abort.
+Lemma valid_contract_exec_ld : ValidContractDynMut sep_contract_exec_ld fun_exec_ld.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
-Lemma valid_contract_exec_sd : TwoPointO.ValidContractDynMutDebug sep_contract_exec_sd fun_exec_sd.
-Proof. compute. Abort.
+Lemma valid_contract_exec_sd : ValidContractDynMut sep_contract_exec_sd fun_exec_sd.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec_addi : ValidContractDynMut sep_contract_exec_addi fun_exec_addi.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
@@ -848,15 +852,8 @@ Definition debug_config : Config :=
        end
   |}.
 
-Lemma valid_contract_exec : ValidContractDynMutWithConfig debug_config sep_contract_exec fun_exec.
-Proof.
-  compute.
-  repeat apply conj; auto.
-  - (* R Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_var "e", term_var "cursor" *)
-    constructor. split; auto. admit.
-  - (* RW Permission, c = term_record capability [term_lit ty_perm R, term_var "beg", term_var "e", term_var "cursor" *)
-    constructor. split; auto. admit.
-Abort.
+Lemma valid_contract_exec : ValidContractDynMut sep_contract_exec fun_exec.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_loop : ValidContractDynMut sep_contract_loop fun_loop.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
