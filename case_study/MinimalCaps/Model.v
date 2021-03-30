@@ -343,6 +343,37 @@ Module MinCapsModel.
     by iFrame.
   Qed.
 
+  Lemma int_safe_sound `{sg : sailG Σ} {Γ es δ} :
+    ∀ ι : SymInstance (ctx_snoc ctx_nil ("i", ty_int)),
+      evals es δ = [(ι ‼ "i")%exp]
+      → ⊢ semTriple δ
+          (⌜is_true true⌝ ∧ emp)
+          (stm_call_external (ghost int_safe) es)
+          (λ (v : ()) (δ' : LocalStore Γ),
+           (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inl (ι ‼ "i")%exp) ∗ ⌜δ' = δ⌝)%I).
+  Proof.
+    iIntros (ι Heq) "_".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in H.
+    dependent elimination H.
+    dependent elimination s.
+    rewrite Heq in e0.
+    cbn in e0.
+    destruct e0 as (Hμ & Hγ & Hres).
+    subst.
+    do 2 iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; [|cbn; trivial].
+    by iApply wp_value.
+  Qed.
+
   Lemma extSem `{sg : sailG Σ} : ExtSem (Σ := Σ).
     intros Γ τ Δ f es δ.
     destruct f as [_|_|_|Γ' [ | reg | | | | | ] es δ'];
