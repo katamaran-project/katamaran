@@ -414,19 +414,18 @@ Module MinCapsModel.
   (* TODO: make safe pred in PRE persistent in proof (P ⊢ □ P),
            add instance of Persistent class for MinCaps_[c]safe for this *)
   Lemma duplicate_safe_sound `{sg : sailG Σ} {Γ es δ} :
-  ∀ ι : SymInstance (ctx_snoc (ctx_snoc ctx_nil ("reg", ty_lv)) ("w", ty_word)),
-    evals es δ = [(ι ‼ "reg")%exp]
+  ∀ ι : SymInstance (ctx_snoc ctx_nil ("w", ty_word)),
+    evals es δ = [(ι ‼ "w")%exp]
     → ⊢ semTriple δ
-          (MinCapsIrisHeapKit.MinCaps_ptsreg (ι ‼ "reg")%exp (ι ‼ "w")%exp
-            ∗ □ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
+        (□ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
           (stm_call_external (ghost duplicate_safe) es)
           (λ (v : ()) (δ' : LocalStore Γ),
-           ((((⌜v = tt⌝ ∧ emp) ∗ MinCapsIrisHeapKit.MinCaps_ptsreg (ι ‼ "reg")%exp (ι ‼ "w")%exp)
-              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
-              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
+           (((⌜v = tt⌝ ∧ emp)
+             ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
+             ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
              ∗ ⌜δ' = δ⌝).
   Proof.
-    iIntros (ι Heq) "[Hpts # Hsafe]".
+    iIntros (ι Heq) "# Hsafe".
     rewrite wp_unfold.
     iIntros (σ' ks1 ks n) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -448,7 +447,6 @@ Module MinCapsModel.
     iApply wp_value.
     cbn.
     iSplitL; trivial.
-    iFrame.
     iSplitL; try iAssumption.
     iSplitL; trivial; try iAssumption.
   Qed.
