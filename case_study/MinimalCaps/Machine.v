@@ -104,7 +104,7 @@ Module MinCapsTermKit <: TermKit.
   Inductive FunGhost : Ctx (𝑿 * Ty) -> Set :=
   | open_ptsreg : FunGhost ["reg" ∶ ty_enum regname]
   | close_ptsreg (R : RegName) : FunGhost ctx_nil
-  | duplicate_safe : FunGhost ["reg" ∶ ty_enum regname]
+  | duplicate_safe : FunGhost ["w" ∶ ty_word]
   | csafe_move_cursor : FunGhost ["c" ∶ ty_cap, "c'" ∶ ty_cap]
   | lift_csafe : FunGhost ["c" ∶ ty_cap]
   | specialize_safe_to_cap : FunGhost ["c" ∶ ty_cap]
@@ -400,8 +400,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     Definition fun_exec_mv : Stm [lv ∶ ty_lv, hv ∶ ty_hv] ty_bool :=
       stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
-      stm_call_external (ghost duplicate_safe) [exp_var hv]%arg ;;
       let: w ∶ word := call read_reg (exp_var hv) in
+      stm_call_external (ghost duplicate_safe) [exp_var w]%arg ;;
       call write_reg lv (exp_var w) ;;
       call update_pc ;;
       stm_lit ty_bool true.
@@ -410,7 +410,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       let: "c" ∶ ty_cap := call read_reg_cap (exp_var "lv") in
       stm_write_register pc (exp_var "c") ;;
-      stm_call_external (ghost duplicate_safe) [exp_var "lv"]%arg ;;
+      stm_call_external (ghost duplicate_safe) [exp_inr (exp_var "c")]%arg ;;
       stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
       stm_lit ty_bool true.
 

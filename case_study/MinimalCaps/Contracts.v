@@ -505,14 +505,13 @@ Module MinCapsSymbolicContractKit <:
     |}.
 
   (* TODO: add persistent predicates? *)
-  Definition sep_contract_duplicate_safe : SepContract ["reg" ∶ ty_enum regname] ty_unit :=
-    {| sep_contract_logic_variables := ["reg" ∶ ty_enum regname, "w" ∶ ty_word];
-       sep_contract_localstore      := [term_var "reg"]%arg;
-       sep_contract_precondition    := term_var "reg" ↦r term_var "w" ✱ asn_safe (term_var "w");
+  Definition sep_contract_duplicate_safe : SepContract ["w" ∶ ty_word] ty_unit :=
+    {| sep_contract_logic_variables := ["w" ∶ ty_word];
+       sep_contract_localstore      := [term_var "w"]%arg;
+       sep_contract_precondition    := asn_safe (term_var "w");
        sep_contract_result          := "result_duplicate_safe";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_duplicate_safe") (term_lit ty_unit tt) ✱
-         term_var "reg" ↦r term_var "w" ✱
          asn_safe (term_var "w") ✱
          asn_safe (term_var "w")
     |}.
