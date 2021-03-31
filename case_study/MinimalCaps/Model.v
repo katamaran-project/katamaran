@@ -406,37 +406,87 @@ Module MinCapsModel.
     iModIntro.
     iFrame.
     iSplitL; [|cbn;trivial].
-    unfold MinCapsIrisHeapKit.MinCaps_safe.
     iApply wp_value.
     cbn.
     by iFrame.
   Qed.
 
+  (* TODO: make safe pred in PRE persistent in proof (P ⊢ □ P),
+           add instance of Persistent class for MinCaps_[c]safe for this *)
   Lemma duplicate_safe_sound `{sg : sailG Σ} {Γ es δ} :
   ∀ ι : SymInstance (ctx_snoc (ctx_snoc ctx_nil ("reg", ty_lv)) ("w", ty_word)),
     evals es δ = [(ι ‼ "reg")%exp]
     → ⊢ semTriple δ
           (MinCapsIrisHeapKit.MinCaps_ptsreg (ι ‼ "reg")%exp (ι ‼ "w")%exp
-            ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
+            ∗ □ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
           (stm_call_external (ghost duplicate_safe) es)
           (λ (v : ()) (δ' : LocalStore Γ),
            ((((⌜v = tt⌝ ∧ emp) ∗ MinCapsIrisHeapKit.MinCaps_ptsreg (ι ‼ "reg")%exp (ι ‼ "w")%exp)
               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
              ∗ ⌜δ' = δ⌝).
-  Admitted.
+  Proof.
+    iIntros (ι Heq) "[Hpts # Hsafe]".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in H.
+    dependent elimination H.
+    dependent elimination s.
+    rewrite Heq in e0.
+    cbn in e0.
+    destruct e0 as (Hμ & Hγ & Hres).
+    subst.
+    do 2 iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; [|cbn;trivial].
+    iApply wp_value.
+    cbn.
+    iSplitL; trivial.
+    iFrame.
+    iSplitL; try iAssumption.
+    iSplitL; trivial; try iAssumption.
+  Qed.
 
   Lemma specialize_safe_to_cap_sound `{sg : sailG Σ} {Γ es δ} :
  ∀ ι : SymInstance (ctx_snoc ctx_nil ("c", ty_cap)),
    evals es δ = [(ι ‼ "c")%exp]
    → ⊢ semTriple δ
-       (MinCapsIrisHeapKit.MinCaps_csafe (mG := sailG_memG) (ι ‼ "c")%exp)
+       (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inr (ι ‼ "c")%exp))
          (stm_call_external (ghost specialize_safe_to_cap) es)
          (λ (v : ()) (δ' : LocalStore Γ),
           ((⌜v = tt⌝ ∧ emp)
             ∗ MinCapsIrisHeapKit.MinCaps_csafe (mG := sailG_memG) (ι ‼ "c")%exp)
             ∗ ⌜δ' = δ⌝).
-  Admitted.
+  Proof.
+    iIntros (ι Heq) "Hsafe".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in H.
+    dependent elimination H.
+    dependent elimination s.
+    rewrite Heq in e0.
+    cbn in e0.
+    destruct e0 as (Hμ & Hγ & Hres).
+    subst.
+    do 2 iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; [|cbn;trivial].
+    iApply wp_value.
+    cbn.
+    by iFrame.
+  Qed.
 
   Lemma extSem `{sg : sailG Σ} : ExtSem (Σ := Σ).
     intros Γ τ Δ f es δ.
