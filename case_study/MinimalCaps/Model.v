@@ -344,13 +344,15 @@ Module MinCapsModel.
   Qed.
 
   Lemma int_safe_sound `{sg : sailG Σ} {Γ es δ} :
-    ∀ ι : SymInstance (ctx_snoc ctx_nil ("i", ty_int)),
-      evals es δ = [(ι ‼ "i")%exp]
-      → ⊢ semTriple δ
-          (⌜is_true true⌝ ∧ emp)
-          (stm_call_external (ghost int_safe) es)
-          (λ (v : ()) (δ' : LocalStore Γ),
-           (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inl (ι ‼ "i")%exp) ∗ ⌜δ' = δ⌝)%I).
+  ∀ ι : SymInstance (ctx_snoc ctx_nil ("i", ty_addr)),
+    evals es δ = [(ι ‼ "i")%exp]
+    → ⊢ semTriple δ
+        (⌜is_true true⌝ ∧ emp)
+        (stm_call_external (ghost int_safe) es)
+        (λ (v : ()) (δ' : LocalStore Γ),
+         ((⌜v = tt⌝ ∧ emp)
+           ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inl (ι ‼ "i")%exp))
+           ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (ι Heq) "_".
     rewrite wp_unfold.
@@ -374,12 +376,73 @@ Module MinCapsModel.
     by iApply wp_value.
   Qed.
 
+  Lemma lift_csafe_sound `{sg : sailG Σ} {Γ es δ} :
+    ∀ ι : SymInstance (ctx_snoc ctx_nil ("c", ty_cap)),
+      evals es δ = [(ι ‼ "c")%exp]
+      → ⊢ semTriple δ
+          (MinCapsIrisHeapKit.MinCaps_csafe (mG := sailG_memG) (ι ‼ "c")%exp)
+          (stm_call_external (ghost lift_csafe) es)
+          (λ (v : ()) (δ' : LocalStore Γ),
+           ((⌜v = tt⌝ ∧ emp)
+             ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inr (ι ‼ "c")%exp))
+             ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (ι Heq) "Hpre".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in H.
+    dependent elimination H.
+    dependent elimination s.
+    rewrite Heq in e0.
+    cbn in e0.
+    destruct e0 as (Hμ & Hγ & Hres).
+    subst.
+    do 2 iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; [|cbn;trivial].
+    unfold MinCapsIrisHeapKit.MinCaps_safe.
+    iApply wp_value.
+    cbn.
+    by iFrame.
+  Qed.
+
+  Lemma duplicate_safe_sound `{sg : sailG Σ} {Γ es δ} :
+  ∀ ι : SymInstance (ctx_snoc (ctx_snoc ctx_nil ("reg", ty_lv)) ("w", ty_word)),
+    evals es δ = [(ι ‼ "reg")%exp]
+    → ⊢ semTriple δ
+          (MinCapsIrisHeapKit.MinCaps_ptsreg (ι ‼ "reg")%exp (ι ‼ "w")%exp
+            ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
+          (stm_call_external (ghost duplicate_safe) es)
+          (λ (v : ()) (δ' : LocalStore Γ),
+           ((((⌜v = tt⌝ ∧ emp) ∗ MinCapsIrisHeapKit.MinCaps_ptsreg (ι ‼ "reg")%exp (ι ‼ "w")%exp)
+              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
+              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
+             ∗ ⌜δ' = δ⌝).
+  Admitted.
+
+  Lemma specialize_safe_to_cap_sound `{sg : sailG Σ} {Γ es δ} :
+ ∀ ι : SymInstance (ctx_snoc ctx_nil ("c", ty_cap)),
+   evals es δ = [(ι ‼ "c")%exp]
+   → ⊢ semTriple δ
+       (MinCapsIrisHeapKit.MinCaps_csafe (mG := sailG_memG) (ι ‼ "c")%exp)
+         (stm_call_external (ghost specialize_safe_to_cap) es)
+         (λ (v : ()) (δ' : LocalStore Γ),
+          ((⌜v = tt⌝ ∧ emp)
+            ∗ MinCapsIrisHeapKit.MinCaps_csafe (mG := sailG_memG) (ι ‼ "c")%exp)
+            ∗ ⌜δ' = δ⌝).
+  Admitted.
+
   Lemma extSem `{sg : sailG Σ} : ExtSem (Σ := Σ).
     intros Γ τ Δ f es δ.
     destruct f as [_|_|_|Γ' [ | reg | | | | | ] es δ'];
-      cbn;
-      eauto using rM_sound, wM_sound, dI_sound, open_ptsreg_sound, close_ptsreg_sound.
-    (* TODO: case for duplicate_safe & is_csafe, add lemma duplicate_safe_sound, add to eauto using ... *)
+      cbn - [MinCapsIrisHeapKit.MinCaps_safe];
+      eauto using rM_sound, wM_sound, dI_sound, open_ptsreg_sound, close_ptsreg_sound, int_safe_sound, lift_csafe_sound, specialize_safe_to_cap_sound, duplicate_safe_sound.
   Admitted.
 
 End MinCapsModel.
