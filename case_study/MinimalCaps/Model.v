@@ -189,6 +189,12 @@ Module MinCapsModel.
       | csafe => fun ts => MinCaps_csafe (mG := mG) (env_head ts)
       end) ts.
 
+    Instance MinCaps_csafe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (c : Capability) : Persistent (MinCaps_csafe (mG := mG) c).
+    Proof. destruct c; destruct cap_permission; apply _. Qed.
+
+    Instance MinCaps_safe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Z + Capability) : Persistent (MinCaps_safe (mG := mG) v).
+    Proof. destruct v; apply _. Qed.
+
     End WithIrisNotations.
   End MinCapsIrisHeapKit.
 
@@ -411,8 +417,7 @@ Module MinCapsModel.
     by iFrame.
   Qed.
 
-  (* TODO: make safe pred in PRE persistent in proof (P ⊢ □ P),
-           add instance of Persistent class for MinCaps_[c]safe for this *)
+  (* TODO: make safe pred in PRE persistent in proof (P ⊢ □ P) *)
   Lemma duplicate_safe_sound `{sg : sailG Σ} {Γ es δ} :
   ∀ ι : SymInstance (ctx_snoc ctx_nil ("w", ty_word)),
     evals es δ = [(ι ‼ "w")%exp]
@@ -425,7 +430,7 @@ Module MinCapsModel.
              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
              ∗ ⌜δ' = δ⌝).
   Proof.
-    iIntros (ι Heq) "# Hsafe".
+    iIntros (ι Heq) "#Hsafe".
     rewrite wp_unfold.
     iIntros (σ' ks1 ks n) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
