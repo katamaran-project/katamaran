@@ -189,10 +189,10 @@ Module MinCapsModel.
       | csafe => fun ts => MinCaps_csafe (mG := mG) (env_head ts)
       end) ts.
 
-    Instance MinCaps_csafe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (c : Capability) : Persistent (MinCaps_csafe (mG := mG) c).
+    Global Instance MinCaps_csafe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (c : Capability) : Persistent (MinCaps_csafe (mG := mG) c).
     Proof. destruct c; destruct cap_permission; apply _. Qed.
 
-    Instance MinCaps_safe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Z + Capability) : Persistent (MinCaps_safe (mG := mG) v).
+    Global Instance MinCaps_safe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Z + Capability) : Persistent (MinCaps_safe (mG := mG) v).
     Proof. destruct v; apply _. Qed.
 
     End WithIrisNotations.
@@ -417,12 +417,11 @@ Module MinCapsModel.
     by iFrame.
   Qed.
 
-  (* TODO: make safe pred in PRE persistent in proof (P ⊢ □ P) *)
   Lemma duplicate_safe_sound `{sg : sailG Σ} {Γ es δ} :
   ∀ ι : SymInstance (ctx_snoc ctx_nil ("w", ty_word)),
     evals es δ = [(ι ‼ "w")%exp]
     → ⊢ semTriple δ
-        (□ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
+        (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (ι ‼ "w")%exp)
           (stm_call_external (ghost duplicate_safe) es)
           (λ (v : ()) (δ' : LocalStore Γ),
            (((⌜v = tt⌝ ∧ emp)
