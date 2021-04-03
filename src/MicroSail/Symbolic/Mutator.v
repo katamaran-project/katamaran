@@ -27,7 +27,12 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Arith.PeanoNat
      Bool.Bool
+     Classes.Morphisms
+     Classes.Morphisms_Prop
+     Classes.Morphisms_Relations
+     Classes.RelationClasses
      Lists.List
      Logic.EqdepFacts
      Program.Equality
@@ -35,7 +40,6 @@ From Coq Require Import
      Relations.Relation_Definitions
      Relations.Relation_Operators
      Strings.String
-     Arith.PeanoNat
      ZArith.ZArith.
 From Coq Require
      Vector.
@@ -763,12 +767,12 @@ Module Mutators
     Global Arguments dmut_angelic_finite {_ _ _} _ {_ _ _ _} _.
     Global Arguments dmut_demonic_finite {_ _ _} _ {_ _ _ _} _.
 
-    Definition dmut_fresh {Γ A Σ} x τ (ma : DynamicMutator Γ Γ A (Σ ▻ (x :: τ))) : DynamicMutator Γ Γ A Σ :=
+    Definition dmut_fresh {Γ1 Γ2 A Σ} x τ (ma : DynamicMutator Γ1 Γ2 A (Σ ▻ (x :: τ))) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 pc1 s1 =>
         let x'  := fresh Σ1 (Some x) in
         let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
         outcome_map (cosubst_dmutres sub_wk1) (ma (Σ1 ▻ (x' :: τ)) ζ1x (wk1 pc1) (wk1 s1)).
-    Global Arguments dmut_fresh {_ _ _} _ _ _.
+    Global Arguments dmut_fresh {_ _ _ _} _ _ _.
 
     Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
       dmut_fresh x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
@@ -1114,7 +1118,7 @@ Module Mutators
         | Some (vl, vr) => dmut_sub (sub_id _ ► (xl::_ ↦ vl) ► (xr::_ ↦ vr)) (dmut_produce rhs)
         | None =>
           dmut_pair (dmut_freshtermvar xl) (dmut_freshtermvar xr) >>= fun _ ζ '(vl,vr) =>
-          dmut_assume_formula (formula_eq (sub_term ζ s) (term_binop binop_pair vl vr)) ;;
+          dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_binop binop_pair vl vr)) ;;
           dmut_sub (ζ ► (xl::_ ↦ vl) ► (xr::_ ↦ vr)) (dmut_produce rhs)
         end
       | asn_match_tuple s p rhs =>
@@ -1127,7 +1131,7 @@ Module Mutators
           dmut_sub (ζ1 ►► ζ__R) (dmut_produce rhs)
         | None =>
           dmut_freshen_recordpat id p >>= fun _ ζ2 '(t__p,ζ__R) =>
-          dmut_assume_formula (formula_eq (sub_term ζ2 s) t__p) ;;
+          dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 s) t__p) ;;
           dmut_sub (sub_comp ζ1 ζ2 ►► ζ__R) (dmut_produce rhs)
         end
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
@@ -1203,7 +1207,7 @@ Module Mutators
       match contract with
       | MkSepContract _ _ Σe δ req result ens =>
         ⨁ ξ : Sub Σe Σr =>
-        dmut_assert_formulas (formula_eqs ts (env_map (fun b => sub_term ξ) δ)) ;;
+        dmut_assert_formulas (formula_eqs ts (env_map (fun b => subst (T := fun Σ => Term Σ _) ξ) δ)) ;;
         dmut_sub ξ
           (dmut_consume req ;;
            dmut_fresh result τ
@@ -1262,7 +1266,7 @@ Module Mutators
         (dmut_fresh
            (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
            (dmut_assume_formula
-              (formula_eq (sub_term (sub_comp sub_wk1 sub_wk1) t)
+              (formula_eq (subst (sub_comp sub_wk1 sub_wk1) t)
                           (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
             dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
             dmut_push_local (@term_var _ _ _ inctx_zero);;
@@ -1274,12 +1278,12 @@ Module Mutators
         t <- dmut_eval_exp e ;;
         dmut_fresh _ _
           (dmut_assume_formula
-             (formula_eq (sub_term sub_wk1 t) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
+             (formula_eq (subst sub_wk1 t) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
            dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
            dmut_bind_left (dmut_exec s1) dmut_pop_local) ⊗
         dmut_fresh _ _
           (dmut_assume_formula
-             (formula_eq (sub_term sub_wk1 t) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
+             (formula_eq (subst sub_wk1 t) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
            dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
            dmut_bind_left (dmut_exec s2) dmut_pop_local)
       | stm_match_pair e xl xr s =>
@@ -1287,7 +1291,7 @@ Module Mutators
         dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
           (dmut_assume_formula
              (formula_eq
-                (sub_term (sub_comp sub_wk1 sub_wk1) t)
+                (subst (sub_comp sub_wk1 sub_wk1) t)
                 (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
            dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
            dmut_push_local (@term_var _ _ _ inctx_zero);;
@@ -1297,9 +1301,11 @@ Module Mutators
            dmut_pure t))
       | stm_match_enum E e alts =>
         t <- dmut_eval_exp e ;;
-        ⨂ K : 𝑬𝑲 E =>
-          dmut_assume_formula (formula_eq t (term_enum E K));;
-          dmut_exec (alts K)
+        dmut_demonic_finite
+          (𝑬𝑲 E)
+          (fun K =>
+             dmut_assume_formula (formula_eq t (term_enum E K));;
+             dmut_exec (alts K))
       | stm_match_tuple e p s =>
         dmut_fail "dmut_exec" "stm_match_tuple not implemented" tt
       | stm_match_union U e alt__ctx alt__pat =>
@@ -1409,7 +1415,7 @@ Module Mutators
         dmut_assert_namedenv_eq_evar env_nil env_nil := dmut_pure;
         dmut_assert_namedenv_eq_evar (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) :=
           fun L => dmut_assert_namedenv_eq_evar E1 E2 L >>= fun _ ζ =>
-                   dmut_assert_term_eq_evar t1 (sub_term ζ t2).
+                   dmut_assert_term_eq_evar t1 (subst (T := fun Σ => Term Σ _) ζ t2).
 
       Definition dmut_consume_formula_evar {Σe Σr} (fml : Formula Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
         dmut_pure L >>= fun _ _ L =>
@@ -1512,7 +1518,7 @@ Module Mutators
                     | (L' , Some t) =>
                       (* TODO(2.0): This assert should move before the *)
                       (* consumption of the alternative. *)
-                      (dmut_assert_formula (formula_eq (sub_term ζ s) (term_inl t)) ;;
+                      (dmut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_inl t)) ;;
                        dmut_pure L')
                     | (_ , None) =>
                       dmut_fail
@@ -1528,7 +1534,7 @@ Module Mutators
                     | (L' , Some t) =>
                       (* TODO(2.0): This assert should move before the *)
                       (* consumption of the alternative. *)
-                      (dmut_assert_formula (formula_eq (sub_term ζ s) (term_inr t)) ;;
+                      (dmut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_inr t)) ;;
                        dmut_pure L')
                     | (_ , None) =>
                       dmut_fail
@@ -1619,7 +1625,7 @@ Module Mutators
       match contract with
       | MkSepContract _ _ Σe δ req result ens =>
          dmut_consume_evar req (create_evarenv Σe Σr) >>= fun Σr1 ζ1 E1 =>
-         dmut_assert_namedenv_eq_evar δ (env_map (fun _ => sub_term ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
+         dmut_assert_namedenv_eq_evar δ (env_map (fun _ => subst (T := fun Σ => Term Σ _) ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
          match evarenv_to_option_sub E2 with
          | Some ξ => dmut_sub ξ (dmut_fresh result τ (DynMutV1.dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
          | None => dmut_fail
@@ -1713,7 +1719,7 @@ Module Mutators
           (dmut_fresh
              (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
              (dmut_assume_formula
-                (formula_eq (sub_term (sub_comp sub_wk1 sub_wk1) t)
+                (formula_eq (subst (sub_comp sub_wk1 sub_wk1) t)
                             (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
               dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
               dmut_push_local (@term_var _ _ _ inctx_zero);;
@@ -1733,12 +1739,12 @@ Module Mutators
           | None =>
             dmut_fresh _ _
               (dmut_assume_formula
-                 (formula_eq (sub_term sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
+                 (formula_eq (subst sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
                dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
                dmut_bind_left (dmut_exec_evar s1) dmut_pop_local) ⊗
             dmut_fresh _ _
               (dmut_assume_formula
-                 (formula_eq (sub_term sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
+                 (formula_eq (subst sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
                dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
                dmut_bind_left (dmut_exec_evar s2) dmut_pop_local)
           end
@@ -1756,7 +1762,7 @@ Module Mutators
             dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
               (dmut_assume_formula
                  (formula_eq
-                    (sub_term (sub_comp sub_wk1 sub_wk1) t__sc)
+                    (subst (sub_comp sub_wk1 sub_wk1) t__sc)
                     (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
                dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
                dmut_push_local (@term_var _ _ _ inctx_zero);;
@@ -1789,7 +1795,7 @@ Module Mutators
           match term_get_union t__sc with
           | Some (existT K t__field) =>
             dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-              dmut_assume_formula (formula_eq t__pat (sub_term ζ2 t__field));;
+              dmut_assume_formula (formula_eq t__pat (subst (T := fun Σ => Term Σ _) ζ2 t__field));;
               dmut_pushs_local δ__Δ;;
               t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
               dmut_pops_local _;;
@@ -1799,7 +1805,7 @@ Module Mutators
               (𝑼𝑲 U)
               (fun K =>
                  dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-                 dmut_assume_formula (formula_eq (sub_term ζ2 t__sc) (term_union U K t__pat));;
+                 dmut_assume_formula (formula_eq (subst ζ2 t__sc) (term_union U K t__pat));;
                  dmut_pushs_local δ__Δ;;
                  t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
                  dmut_pops_local _;;
@@ -1889,174 +1895,213 @@ Module Mutators
 
   Section SymbolicOutcomes.
 
-    Inductive SymOutcome (A: LCtx -> Type) (Σ : NCtx 𝑺 Ty) : Type :=
+    Inductive SymOutcome (E A : LCtx -> Type) (Σ : NCtx 𝑺 Ty) : Type :=
     | sout_pure (a: A Σ)
-    | sout_angelic {I : Type} (os: I -> SymOutcome A Σ)
+    | sout_angelic {I : Type} (os: I -> SymOutcome E A Σ)
     (* | sout_demonic {I : Type} (os: I -> SymOutcome A Σ) *)
-    | sout_angelic_binary (o1 o2 : SymOutcome A Σ)
-    | sout_demonic_binary (o1 o2 : SymOutcome A Σ)
-    | sout_fail {E} (msg : E)
+    | sout_angelic_binary (o1 o2 : SymOutcome E A Σ)
+    | sout_demonic_binary (o1 o2 : SymOutcome E A Σ)
+    | sout_fail (msg : E Σ)
     | sout_block
-    | sout_assertk {E} (P : Formula Σ) (msg : E) (k : SymOutcome A Σ)
-    | sout_assumek (P : Formula Σ) (k : SymOutcome A Σ)
-    | sout_demonicv b (k : SymOutcome A (Σ ▻ b))
+    | sout_assertk (P : Formula Σ) (msg : E Σ) (k : SymOutcome E A Σ)
+    | sout_assumek (P : Formula Σ) (k : SymOutcome E A Σ)
+    | sout_demonicv b (k : SymOutcome E A (Σ ▻ b))
     (* | sout_subst {Σ'} (ζ : Sub Σ Σ') (k : SymOutcome A Σ'). *)
-    | sout_subst x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (k : SymOutcome A (Σ - (x,σ))).
+    | sout_subst x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (k : SymOutcome E A (Σ - (x,σ))).
 
-    Global Arguments sout_pure {_ _} _.
+    Global Arguments sout_pure {_ _ _} _.
     Global Arguments sout_fail {_ _ _} _.
-    Global Arguments sout_block {_ _}.
-    Global Arguments sout_demonicv {_ _} _ _.
-    Global Arguments sout_subst {_ _} x {_ _} t k.
+    Global Arguments sout_block {_ _ _}.
+    Global Arguments sout_demonicv {_ _ _} _ _.
+    Global Arguments sout_subst {_ _ _} x {_ _} t k.
 
-    Fixpoint subst_symoutcome {A} `{Subst A} {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (o : SymOutcome A Σ1) : SymOutcome A Σ2 :=
+    Fixpoint sout_multisub {ET AT Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : SymOutcome ET AT Σ2 -> SymOutcome ET AT Σ1.
+    Proof.
+      destruct ζ; intros o.
+      - exact o.
+      - eapply sout_subst.
+        apply t.
+        eapply sout_multisub.
+        apply ζ.
+        apply o.
+    Defined.
+
+    Fixpoint subst_symoutcome {E A} `{Subst E, Subst A} {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (o : SymOutcome E A Σ1) : SymOutcome E A Σ2 :=
       match o with
       | sout_pure a => sout_pure (subst ζ a)
       | sout_angelic os => sout_angelic (fun i => subst_symoutcome ζ (os i))
       (* | sout_demonic os => sout_demonic (fun i => subst_symoutcome ζ (os i)) *)
       | sout_angelic_binary o1 o2 => sout_angelic_binary (subst_symoutcome ζ o1) (subst_symoutcome ζ o2)
       | sout_demonic_binary o1 o2 => sout_demonic_binary (subst_symoutcome ζ o1) (subst_symoutcome ζ o2)
-      | sout_fail msg => sout_fail msg
+      | sout_fail msg => sout_fail (subst ζ msg)
       | sout_block => sout_block
-      | sout_assertk P msg o => sout_assertk (subst ζ P) msg (subst_symoutcome ζ o)
+      | sout_assertk P msg o => sout_assertk (subst ζ P) (subst ζ msg) (subst_symoutcome ζ o)
       | sout_assumek P o => sout_assumek (subst ζ P) (subst_symoutcome ζ o)
       | sout_demonicv b k => sout_demonicv b (subst_symoutcome (sub_up1 ζ) k)
       (* | sout_subst ζ2 k => _ *)
-      | @sout_subst _ _ x σ xIn t k =>
+      | @sout_subst _ _ _ x σ xIn t k =>
         let ζ' := sub_comp (sub_shift _) ζ in
         sout_assumek
-          (formula_eq (env_lookup ζ xIn) (sub_term ζ' t))
+          (formula_eq (env_lookup ζ xIn) (subst (T := fun Σ => Term Σ _) ζ' t))
           (subst_symoutcome ζ' k)
       end.
 
-    Instance SubstSymOutcome {A} `{Subst A} : Subst (SymOutcome A) :=
+    Instance SubstSymOutcome {E A} `{Subst E, Subst A} : Subst (SymOutcome E A) :=
       fun Σ1 Σ2 ζ o => subst_symoutcome ζ o.
 
-    Definition sout_bind {A B Σ} (ma : SymOutcome A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> SymOutcome B Σ') : SymOutcome B Σ.
-    Proof.
-      revert f.
-      induction ma; cbn; intros.
-      - apply (f _ (sub_id _) a).
-      - refine (sout_angelic (fun i : I => _)).
-        apply (X i f).
-      (* - refine (sout_demonic (fun i : I => _)). *)
-      (*   apply (X i f). *)
-      - refine (sout_angelic_binary _ _).
-        apply (IHma1 f).
-        apply (IHma2 f).
-      - refine (sout_demonic_binary _ _).
-        apply (IHma1 f).
-        apply (IHma2 f).
-      - apply (sout_fail msg).
-      - apply sout_block.
-      - eapply sout_assertk.
-        apply P.
-        apply msg.
-        apply (IHma f).
-      - apply sout_assumek.
-        apply P.
-        apply (IHma f).
-      - apply (@sout_demonicv _ _ b).
-        apply IHma.
-        intros Σ' ζ a.
-        apply (f Σ' (env_tail ζ) a).
-      (* - refine (sout_subst ζ _). *)
-      (*   apply IHma. *)
-      (*   intros Σ2 ζ2 a2. *)
-      (*   apply (f _ (sub_comp ζ ζ2) a2). *)
-      - eapply (@sout_subst _ _ x σ).
-        apply t.
-        apply IHma.
-        intros Σ' ζ a.
-        apply f.
-        refine (sub_comp _ ζ).
-        apply sub_single.
-        apply t.
-        exact a.
-    Defined.
-
-    (* Definition wp_sout {T A Σ} `{Inst T A} (ι : SymInstance Σ) (o : SymOutcome T Σ) (POST : A -> Prop) : Prop := *)
-    (*   outcome_satisfy (sout_run ι o) POST. *)
-
-    (* Fixpoint wp_sout {T Σ0} (ι0 : SymInstance Σ0) (o : SymOutcome T Σ0) *)
-    (*          (POST : forall Σ1 (ζ1 : Sub Σ0 Σ1) (ι1 : SymInstance Σ1), *)
-    (*              syminstance_rel ζ1 ι0 ι1 -> T Σ1 -> Prop) {struct o} : Prop. *)
-    (* refine ( *)
-    (*   match o with *)
-    (*   | sout_pure a => @POST _ (sub_id _) ι0 (syminstance_rel_refl ι0) a *)
-    (*   | @sout_angelic _ _ X os => exists (x : X), wp_sout _ _ ι0 (os x) POST *)
-    (*   | sout_angelic_binary o1 o2 => *)
-    (*     wp_sout _ _ ι0 o1 POST \/ wp_sout _ _ ι0 o2 POST *)
-    (*   | sout_demonic_binary o1 o2 => *)
-    (*     wp_sout _ _ ι0 o1 POST /\ wp_sout _ _ ι0 o2 POST *)
-    (*   | sout_fail msg => False *)
-    (*   | sout_block => True *)
-    (*   | sout_assertk P o => *)
-    (*     inst_formula ι0 P /\ wp_sout _ _ ι0 o POST *)
-    (*   | sout_assumek P o => *)
-    (*     inst_formula ι0 P -> wp_sout _ _ ι0 o POST *)
-    (*   | sout_demonicv k => *)
-    (*     forall v, wp_sout _ _ (env_snoc ι0 _ v) k _ *)
-    (*   | @sout_subst _ _ x σ xIn t k => *)
-    (*     let ι1 := env_remove' (x,σ) ι0 xIn in *)
-    (*     forall (p : env_lookup ι0 xIn = inst ι1 t), *)
-    (*     wp_sout _ _ ι1 k _ *)
-    (*     (* wp_sout ι' k POST *) *)
-    (*   end). *)
-    (* - destruct p as [x σ]. *)
-    (*   intros. *)
-    (*   dependent elimination ζ1. *)
-    (*   apply syminstance_rel_snoc in H. destruct H. *)
-    (*   revert X. *)
-    (*   eapply POST. *)
-    (*   apply H. *)
-    (* - intros Σ2 ζ2 ι2 rel2. *)
-    (*   apply (POST Σ2 (sub_comp (sub_single xIn t) ζ2) ι2). *)
-    (*   subst ι1. revert p rel2. clear. *)
-    (*   unfold syminstance_rel. intros. *)
-    (*   unfold sub_comp, subst, SubstEnv, sub_single. *)
-    (*   cbn - [instantiate_term]. *)
-    (*   rewrite env_map_map, env_map_tabulate. *)
-    (*   apply env_lookup_extensional. intros [y τ] yIn. *)
-    (*   rewrite env_lookup_tabulate. *)
-    (*   destruct (occurs_check_sum_var xIn yIn). *)
-    (*   + dependent elimination e; cbn - [instantiate_term]. *)
-    (*     rewrite inst_subst. rewrite rel2. symmetry. cbn in *. *)
-    (*     admit. *)
-    (*   + rewrite inst_subst. cbn. *)
-    (*     rewrite env_lookup_map. *)
-    (*     apply (f_equal (fun E => env_lookup E _)) in rel2. *)
-    (*     revert rel2. cbn. *)
-    (*     unfold env_remove'. *)
-    (*     rewrite env_lookup_tabulate. *)
-    (*     rewrite env_lookup_map. *)
-    (*     Set Printing Implicit. *)
-    (*     intros. cbn in *. admit. *)
-    (* Admitted.  *)
-
-    Fixpoint wp_sout {T A Σ} `{Inst T A} (ι : SymInstance Σ) (o : SymOutcome T Σ) (POST : A -> Prop) {struct o} : Prop :=
+    Fixpoint inst_symoutcome {ET E AT A} `{Inst ET E, Inst AT A} {Σ} (ι : SymInstance Σ) (o : SymOutcome ET AT Σ) : Outcome E A :=
       match o with
-      | sout_pure a => POST (inst ι a)
-      | sout_angelic os => exists i, wp_sout ι (os i) POST
-      (* | sout_demonic os => forall i, wp_sout ι (os i) POST *)
-      | sout_angelic_binary o1 o2 => wp_sout ι o1 POST \/ wp_sout ι o2 POST
-      | sout_demonic_binary o1 o2 => wp_sout ι o1 POST /\ wp_sout ι o2 POST
-      | sout_fail msg => False
-      | sout_block => True
-      | sout_assertk P msg o => (inst ι P : Prop) /\ wp_sout ι o POST
-      | sout_assumek P o => (inst ι P : Prop) -> wp_sout ι o POST
-      | sout_demonicv b k => forall v, wp_sout (env_snoc ι b v) k POST
-      (* | sout_subst ζ k => *)
-      (*   forall ι', *)
-      (*     syminstance_rel ζ ι ι' -> *)
-      (*     wp_sout ι' k POST *)
-      | @sout_subst _ _ x σ xIn t k =>
-        let ι' := env_remove' (x,σ) ι xIn in
-        env_lookup ι xIn = inst ι' t ->
-        wp_sout ι' k POST
+      | sout_pure a                               => outcome_pure (inst ι a)
+      | sout_angelic os                           => outcome_angelic (fun i => inst_symoutcome ι (os i))
+      | sout_angelic_binary o1 o2                 => outcome_angelic_binary (inst_symoutcome ι o1) (inst_symoutcome ι o2)
+      | sout_demonic_binary o1 o2                 => outcome_demonic_binary (inst_symoutcome ι o1) (inst_symoutcome ι o2)
+      | sout_fail msg                             => outcome_fail (inst ι msg)
+      | sout_block                                => outcome_block
+      | sout_assertk fml msg o                    => outcome_assertk
+                                                       (* TODO: Record some information for this obligation. *)
+                                                       (inst ι fml)
+                                                       (* (inst ι msg) *)
+                                                       (inst_symoutcome ι o)
+      | sout_assumek fml o                        => outcome_assumek (inst ι fml) (inst_symoutcome ι o)
+      | sout_demonicv b k                         => outcome_demonic (fun v : Lit (snd b) => inst_symoutcome (env_snoc ι b v) k)
+      | @sout_subst _ _ _ x σ xIn t k             =>
+        let ι' := env_remove' _ ι xIn in
+        outcome_assumek
+          (env_lookup ι xIn = inst ι' t)
+          (inst_symoutcome ι' k)
       end.
 
-    Fixpoint sout_safe {T A Σ} `{Inst T A} (ι : SymInstance Σ) (o : SymOutcome T Σ) {struct o} : Prop :=
+    Fixpoint sout_bind {E A B Σ} (ma : SymOutcome E A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> SymOutcome E B Σ') {struct ma} : SymOutcome E B Σ :=
+      match ma with
+      | sout_pure a                   => f Σ (sub_id Σ) a
+      | @sout_angelic _ _ _ I0 os     => sout_angelic (fun i : I0 => sout_bind (os i) f)
+      | sout_angelic_binary o1 o2     => sout_angelic_binary (sout_bind o1 f) (sout_bind o2 f)
+      | sout_demonic_binary o1 o2     => sout_demonic_binary (sout_bind o1 f) (sout_bind o2 f)
+      | sout_fail msg                 => sout_fail msg
+      | sout_block                    => sout_block
+      | sout_assertk P msg k          => sout_assertk P msg (sout_bind k f)
+      | sout_assumek P k              => sout_assumek P (sout_bind k f)
+      | sout_demonicv b k             => sout_demonicv b (sout_bind k (fun Σ' ζ a => f Σ' (env_tail ζ) a))
+      | @sout_subst _ _ _ x σ xIn t k => sout_subst x t (sout_bind k (fun Σ' ζ a => f Σ' (sub_comp (sub_single xIn t) ζ) a))
+      end.
+
+    Fixpoint sout_wp {ET E AT A Σ} `{Inst ET E, Inst AT A} (o : SymOutcome ET AT Σ) (ι : SymInstance Σ) (F : E -> Prop) (POST : A -> Prop) : Prop :=
+      match o with
+      | sout_pure a                               => POST (inst ι a)
+      | sout_angelic os                           => exists i, sout_wp (os i) ι F POST
+      | sout_angelic_binary o1 o2                 => (sout_wp o1 ι F POST) \/ (sout_wp o2 ι F POST)
+      | sout_demonic_binary o1 o2                 => (sout_wp o1 ι F POST) /\ (sout_wp o2 ι F POST)
+      | sout_fail msg                             => F (inst ι msg)
+      | sout_block                                => True
+      | sout_assertk fml msg o                    => inst ι fml /\ sout_wp o ι F POST
+      | sout_assumek fml o                        => (inst ι fml : Prop) -> sout_wp o ι F POST
+      | sout_demonicv b k                         => forall (v : Lit (snd b)), sout_wp k (env_snoc ι b v) F POST
+      | @sout_subst _ _ _ x σ xIn t k             =>
+        let ι' := env_remove' _ ι xIn in
+        env_lookup ι xIn = inst ι' t -> sout_wp k ι' F POST
+      end.
+
+    Definition sout_wp' {ET E AT A Σ} `{Inst ET E, Inst AT A} (o : SymOutcome ET AT Σ) (ι : SymInstance Σ) (F : E -> Prop) (POST : A -> Prop) : Prop :=
+      outcome_satisfy (inst_symoutcome ι o) F POST.
+
+    Lemma sout_wp_wp' {ET E AT A Σ} `{Inst ET E, Inst AT A} (o : SymOutcome ET AT Σ) (ι : SymInstance Σ) (F : E -> Prop) (POST : A -> Prop) :
+      sout_wp o ι F POST <-> sout_wp' o ι F POST.
+    Proof.
+      unfold sout_wp'.
+      induction o; cbn; auto.
+      - split; intros [i HYP]; exists i; revert HYP; apply H1.
+      - specialize (IHo1 ι). specialize (IHo2 ι). intuition.
+      - specialize (IHo1 ι). specialize (IHo2 ι). intuition.
+      - specialize (IHo ι). intuition.
+      - specialize (IHo ι). intuition.
+      - split; intros HYP v; specialize (HYP v); specialize (IHo (env_snoc ι b v)); intuition.
+      - specialize (IHo (env_remove' (x :: σ) ι xIn)). intuition.
+    Qed.
+
+    Lemma sout_wp_monotonic {ET E AT A Σ} `{Inst ET E, Inst AT A}
+      (o : SymOutcome ET AT Σ) (ι : SymInstance Σ) (F : E -> Prop)
+      (P Q : A -> Prop) (PQ : forall a, P a -> Q a) :
+      sout_wp o ι F P ->
+      sout_wp o ι F Q.
+    Proof. rewrite ?sout_wp_wp'. now apply outcome_satisfy_monotonic. Qed.
+
+    Lemma inst_sub_shift {Σ} (ι : SymInstance Σ) {b} (bIn : b ∈ Σ) :
+      inst ι (sub_shift bIn) = env_remove' b ι bIn.
+    Proof.
+      unfold env_remove', sub_shift, inst; cbn.
+      apply env_lookup_extensional. intros [y τ] yIn.
+      now rewrite env_lookup_map, ?env_lookup_tabulate.
+    Qed.
+
+    Lemma sout_wp_subst {ET E AT A} `{InstLaws ET E, InstLaws AT A} {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2)
+      (o : SymOutcome ET AT Σ1) (ι : SymInstance Σ2) (F : E -> Prop) (POST : A -> Prop) :
+      sout_wp (subst ζ12 o) ι F POST <-> sout_wp o (inst ι ζ12) F POST.
+    Proof.
+      cbv [subst SubstSymOutcome]. revert Σ2 ι ζ12.
+      induction o; cbn; intros.
+      - now rewrite inst_subst.
+      - split; intros [i HYP]; exists i; revert HYP; apply (H7 i Σ2 ι ζ12).
+      - now rewrite IHo1, IHo2.
+      - now rewrite IHo1, IHo2.
+      - now rewrite inst_subst.
+      - reflexivity.
+      - now rewrite IHo, inst_subst.
+      - now rewrite IHo, inst_subst.
+      - destruct b as [x τ].
+        split; intros HYP v; specialize (HYP v); revert HYP;
+          rewrite (IHo _ (env_snoc ι (x :: τ) v) (sub_up1 ζ12));
+          unfold sub_up1, sub_comp;
+          now rewrite inst_sub_snoc, inst_subst, inst_sub_wk1.
+      - rewrite IHo. unfold sub_comp.
+        now rewrite ?inst_subst, inst_sub_shift, <- inst_lookup.
+    Qed.
+
+    Definition sout_geq {ET E AT A} `{Inst ET E, Inst AT A} {Σ} (o1 o2 : SymOutcome ET AT Σ) : Prop :=
+      forall F (P Q : A -> Prop) (PQ : forall a, P a -> Q a) ι,
+        sout_wp o1 ι F P ->
+        sout_wp o2 ι F Q.
+
+    Global Instance preorder_sout_geq {ET E AT A} `{Inst ET E, Inst AT A} {Σ} : PreOrder (sout_geq (Σ := Σ)).
+    Proof.
+      constructor.
+      - unfold sout_geq; intros o * PQ *.
+        now apply sout_wp_monotonic.
+      - intros x y z. unfold sout_geq.
+        intros Rxy Ryz F P Q PQ ι.
+        specialize (Rxy F P Q PQ ι).
+        specialize (Ryz F Q Q (fun _ p => p) ι).
+        auto.
+    Qed.
+
+    Definition sout_arrow ET AT BT Σ : Type :=
+      forall Σ', Sub Σ Σ' -> AT Σ' -> SymOutcome ET BT Σ'.
+
+    (* Definition sout_arrow_dcl {ET E AT A BT B} `{Subst ET, Subst BT, Inst ET E, Inst AT A, Inst BT B} {Σ} (f : sout_arrow ET AT BT Σ) : Prop := *)
+    (*   forall Σ1 Σ2 ζ1 ζ2 ζ12 a1 a2, *)
+    (*     (forall ι1 ι2, ι1 = inst ι2 ζ12 -> inst ι1 a1 = inst ι2 a2) -> *)
+    (*     sout_geq (subst ζ12 (f Σ1 ζ1 a1)) (f Σ2 ζ2 a2). *)
+
+    Definition sout_arrow_dcl {ET E AT A BT B} `{Subst ET, Subst BT, Inst ET E, Inst AT A, Inst BT B} {Σ} (f : sout_arrow ET AT BT Σ) : Prop :=
+      forall Σ1 Σ2 ζ1 ζ2 ζ12 a1 a2 (F : E -> Prop) (P Q : B -> Prop) (PQ : forall b, P b -> Q b),
+       forall (ι1 : SymInstance Σ1) (ι2 : SymInstance Σ2),
+         ι1 = inst ι2 ζ12 ->
+         inst ι1 ζ1 = inst ι2 ζ2 ->
+         inst ι1 a1 = inst ι2 a2 ->
+         sout_wp (f Σ1 ζ1 a1) ι1 F P ->
+         sout_wp (f Σ2 ζ2 a2) ι2 F Q.
+
+    (* Lemma sout_arrow_dcl_dcl' {ET E AT A BT B} `{InstLaws ET E, Inst AT A, InstLaws BT B} {Σ} (f : sout_arrow ET AT BT Σ) : *)
+    (*   sout_arrow_dcl f <-> sout_arrow_dcl' f. *)
+    (* Proof. *)
+    (*   unfold sout_arrow_dcl, sout_arrow_dcl', sout_geq. *)
+    (*   setoid_rewrite sout_wp_subst. *)
+    (*   split; intros HYP Σ1 Σ2 ζ1 ζ2 ζ12 a1 a2; *)
+    (*     specialize (HYP Σ1 Σ2 ζ1 ζ2 ζ12 a1 a2). *)
+    (*   - intros F P Q PQ ι1 ι2 -> Hζ Ha. apply HYP; auto. *)
+    (*     intros ι1' ι2'.  *)
+    (* Qed. *)
+
+    Fixpoint sout_safe {ET AT A Σ} `{Inst AT A} (ι : SymInstance Σ) (o : SymOutcome ET AT Σ) {struct o} : Prop :=
       match o with
       | sout_pure a => True
       | sout_angelic os => exists i, sout_safe ι (os i)
@@ -2068,63 +2113,74 @@ Module Mutators
       | sout_assertk P msg o => inst ι P /\ sout_safe ι o
       | sout_assumek P o => (inst ι P : Prop) -> sout_safe ι o
       | sout_demonicv b k => forall v, sout_safe (env_snoc ι b v) k
-      | @sout_subst _ _ x σ xIn t k =>
+      | @sout_subst _ _ _ x σ xIn t k =>
         let ι' := env_remove' (x,σ) ι xIn in
         env_lookup ι xIn = inst ι' t ->
         sout_safe ι' k
       end.
+    Global Arguments sout_safe {_ _ _} Σ {_} ι o.
 
-    Global Arguments sout_safe {_ _} Σ {_} ι o.
-
-    Lemma wp_sout_bind {T A S B} `{InstLaws T A, InstLaws S B} {Σ} (ma : SymOutcome T Σ)
-          (f : forall Σ', Sub Σ Σ' -> T Σ' -> SymOutcome S Σ') POST :
-      forall ι,
-        wp_sout ι (sout_bind ma f) POST <->
-        wp_sout ι ma (fun a => wp_sout ι (f Σ (sub_id _) (lift a)) POST).
-    Proof.
-    Admitted.
-
-    Lemma wp_sout_assumek_subst {T A} `{InstLaws T A} {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ)
-          (k : SymOutcome T Σ) :
+    Lemma sout_wp_bind {ET E AT A S B} `{InstLaws ET E, InstLaws AT A, InstLaws S B} {Σ} (ma : SymOutcome ET AT Σ)
+          (f : forall Σ', Sub Σ Σ' -> AT Σ' -> SymOutcome ET S Σ') (f_dcl : sout_arrow_dcl f) F :
       forall ι POST,
-        wp_sout ι (sout_assumek (formula_eq (term_var x) (sub_term (sub_shift xIn) t)) k) POST <->
-        wp_sout ι (sout_subst x t (subst (sub_single xIn t) k)) POST.
+        sout_wp (sout_bind ma f) ι F POST <->
+        sout_wp ma ι F (fun a => sout_wp (f Σ (sub_id _) (lift a)) ι F POST).
     Proof.
-      induction k.
-      - intros. cbn.
-        change (inst ι (sub_term (sub_shift xIn) t)) with
-            (inst ι (subst (sub_shift xIn) t)).
-        rewrite ?inst_subst.
-        split; intros.
-        + enough ((inst (env_remove' (x∶σ) ι xIn) (sub_single xIn t)) = ι).
-          { rewrite H5. apply H3.
-            rewrite H4.
-            cbn.
-            f_equal.
-            unfold inst, env_remove', sub_shift; cbn.
-            rewrite env_map_tabulate.
-            apply env_lookup_extensional.
-            intros [y τ] yIn.
-            now rewrite ?env_lookup_tabulate; cbn.
-          }
-          clear H3.
-          unfold inst, sub_single; cbn.
-          rewrite env_map_tabulate.
-          apply env_lookup_extensional.
-          intros [y τ] yIn.
-          rewrite env_lookup_tabulate; cbn.
-          pose proof (occurs_check_var_spec xIn yIn).
-          destruct (occurs_check_var xIn yIn) eqn:?.
-          * dependent elimination e. cbn in *. subst yIn.
-            symmetry. apply H4.
-          * destruct H3. cbn.
-            unfold env_remove'.
-            rewrite env_lookup_tabulate.
-            subst yIn. reflexivity.
-        + rewrite H4 in H3.
-    Admitted.
+      (* apply sout_arrow_dcl_dcl' in f_dcl. *)
+      intros ι. induction ma; cbn; intros POST; auto.
+      - split; eapply f_dcl with (sub_id _); now rewrite ?inst_sub_id, ?inst_lift.
+      - split; intros [i HYP]; exists i; revert HYP; now rewrite H11.
+      - now rewrite IHma1, IHma2.
+      - now rewrite IHma1, IHma2.
+      - now rewrite IHma.
+      - now rewrite IHma.
+      - assert (sout_arrow_dcl (fun (Σ' : LCtx) (ζ : Sub (Σ ▻ b) Σ') (a : AT Σ') => f Σ' (env_tail ζ) a)) as f_dcl'.
+        { unfold sout_arrow_dcl. intros * PQ ι1 ι2 -> Hζ Ha.
+          eapply f_dcl; eauto.
+          destruct (snocView ζ1), (snocView ζ2); cbn in Hζ.
+          apply noConfusion_inv in Hζ. cbn in Hζ. now inversion Hζ.
+        }
+        destruct b as [x τ].
+        split; intros HYP v; specialize (HYP v); revert HYP; rewrite IHma; clear IHma; auto;
+          apply sout_wp_monotonic; intros a.
+        + apply f_dcl with (sub_snoc (sub_id _) (x :: τ) (term_lit τ v)); auto.
+          * now rewrite inst_sub_snoc, inst_sub_id.
+          * rewrite inst_sub_id, <- sub_up1_id. cbn.
+            now rewrite sub_comp_id_left, inst_sub_wk1.
+          * now rewrite ?inst_lift.
+        + apply f_dcl with sub_wk1; auto.
+          * now rewrite inst_sub_wk1.
+          * rewrite inst_sub_id, <- sub_up1_id. cbn.
+            now rewrite sub_comp_id_left, inst_sub_wk1.
+          * now rewrite ?inst_lift.
+      - assert (sout_arrow_dcl (fun (Σ' : LCtx) (ζ : Sub (Σ - (x :: σ)) Σ') (a : AT Σ') => f Σ' (sub_comp (sub_single xIn t) ζ) a)) as f_dcl'.
+        { unfold sout_arrow_dcl. intros * PQ ι1 ι2 -> Hζ Ha.
+          eapply f_dcl; eauto. unfold sub_comp.
+          now rewrite ?inst_subst, Hζ.
+        }
+        split; intros Hwp HYP; specialize (Hwp HYP); revert Hwp; rewrite IHma; clear IHma; auto;
+          apply sout_wp_monotonic; intros a.
+        + apply f_dcl with (sub_shift xIn); auto.
+          * now rewrite inst_sub_shift.
+          * unfold sub_comp. now rewrite ?inst_subst, ?inst_sub_id, inst_sub_single.
+          * now rewrite ?inst_lift.
+        + apply f_dcl with (sub_single xIn t); auto.
+          * symmetry. now apply inst_sub_single.
+          * unfold sub_comp. now rewrite ?inst_subst, ?inst_sub_id, inst_sub_single.
+          * now rewrite ?inst_lift.
+    Qed.
 
-    Definition sout_angelic_binary_prune {A Σ} (o1 o2 : SymOutcome A Σ) : SymOutcome A Σ :=
+    Lemma sout_wp_assumek_subst {ET E AT A} `{InstLaws ET E, InstLaws AT A} {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ)
+          (k : SymOutcome ET AT Σ) :
+      forall ι F POST,
+        sout_wp (sout_assumek (formula_eq (term_var x) (subst (T := fun Σ => Term Σ _) (sub_shift xIn) t)) k) ι F POST <->
+        sout_wp (sout_subst x t (subst (sub_single xIn t) k)) ι F POST.
+    Proof.
+      cbn. intros *. rewrite inst_subst. rewrite inst_sub_shift, sout_wp_subst.
+      split; intros Hwp HYP; specialize (Hwp HYP); revert Hwp; now rewrite inst_sub_single.
+    Qed.
+
+    Definition sout_angelic_binary_prune {ET AT Σ} (o1 o2 : SymOutcome ET AT Σ) : SymOutcome ET AT Σ :=
       match o1 , o2 with
       | sout_block  , _           => sout_block
       | _           , sout_block  => sout_block
@@ -2133,7 +2189,7 @@ Module Mutators
       | _           , _           => sout_angelic_binary o1 o2
       end.
 
-    Definition sout_demonic_binary_prune {A Σ} (o1 o2 : SymOutcome A Σ) : SymOutcome A Σ :=
+    Definition sout_demonic_binary_prune {ET AT Σ} (o1 o2 : SymOutcome ET AT Σ) : SymOutcome ET AT Σ :=
       match o1 , o2 with
       | sout_block  , _           => o2
       | _           , sout_block  => o1
@@ -2142,25 +2198,25 @@ Module Mutators
       | _           , _           => sout_demonic_binary o1 o2
       end.
 
-    Definition sout_assertk_prune {A Σ E} (fml : Formula Σ) (msg : E) (o : SymOutcome A Σ) : SymOutcome A Σ :=
+    Definition sout_assertk_prune {ET AT Σ} (fml : Formula Σ) (msg : ET Σ) (o : SymOutcome ET AT Σ) : SymOutcome ET AT Σ :=
       match o with
       | sout_fail s => sout_fail s
       | _           => sout_assertk fml msg o
       end.
 
-    Definition sout_assumek_prune {A Σ} (fml : Formula Σ) (o : SymOutcome A Σ) : SymOutcome A Σ :=
+    Definition sout_assumek_prune {ET AT Σ} (fml : Formula Σ) (o : SymOutcome ET AT Σ) : SymOutcome ET AT Σ :=
       match o with
       | sout_block => sout_block
       | _          => sout_assumek fml o
       end.
 
-    Definition sout_demonicv_prune {A Σ} b (o : SymOutcome A (Σ ▻ b)) : SymOutcome A Σ :=
+    Definition sout_demonicv_prune {ET AT Σ} b (o : SymOutcome ET AT (Σ ▻ b)) : SymOutcome ET AT Σ :=
       match o with
       | sout_block => sout_block
-      | @sout_subst _ _ x σ (MkInCtx n p) t k =>
+      | @sout_subst _ _ _ x σ (MkInCtx n p) t k =>
         match n return
               forall (p : ctx_nth_is (ctx_snoc Σ b) n (pair x σ)),
-                SymOutcome A (ctx_remove (MkInCtx n p)) -> SymOutcome A Σ
+                SymOutcome ET AT (ctx_remove (MkInCtx n p)) -> SymOutcome ET AT Σ
         with
         | O   => fun p k => k
         | S n => fun _ _ => sout_demonicv b o
@@ -2168,13 +2224,13 @@ Module Mutators
       | _ => sout_demonicv b o
       end.
 
-    Definition sout_subst_prune {A Σ x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ) (k : SymOutcome A (Σ - (x,σ))) : SymOutcome A Σ :=
+    Definition sout_subst_prune {ET AT Σ x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ) (k : SymOutcome ET AT (Σ - (x,σ))) : SymOutcome ET AT Σ :=
       match k with
       | sout_block => sout_block
       | _          => sout_subst x t k
       end.
 
-    Fixpoint sout_prune {A Σ} (o : SymOutcome A Σ) : SymOutcome A Σ :=
+    Fixpoint sout_prune {ET AT Σ} (o : SymOutcome ET AT Σ) : SymOutcome ET AT Σ :=
       match o with
       | sout_pure a => sout_pure a
       | sout_fail msg => sout_fail msg
@@ -2195,7 +2251,7 @@ Module Mutators
         sout_subst_prune t (sout_prune k)
       end.
 
-    Definition sout_ok {A Σ} (o : SymOutcome A Σ) : bool :=
+    Definition sout_ok {ET AT Σ} (o : SymOutcome ET AT Σ) : bool :=
       match sout_prune o with
       | sout_block  => true
       | _           => false
@@ -2228,12 +2284,46 @@ Module Mutators
         apply (subst ζ s).
       Defined.
 
+      Global Instance SubstLawsDynamicMutatorResult {Γ A} `{SubstLaws A} : SubstLaws (DynamicMutatorResult Γ A).
+      Proof.
+        constructor.
+        - intros ? []; cbn; now rewrite ?subst_sub_id.
+        - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+      Qed.
+
+      (* A record to collect information when the symbolic execution signals a failure. *)
+      Record DynamicMutatorError (Σ : LCtx) : Type :=
+        MkDynMutError
+          { dmuterr_function        : string;
+            dmuterr_message         : string;
+            dmuterr_program_context : PCtx;
+            dmuterr_localstore      : SymbolicLocalStore dmuterr_program_context Σ;
+            dmuterr_heap            : SymbolicHeap Σ;
+            dmuterr_pathcondition   : PathCondition Σ;
+          }.
+      Global Arguments MkDynMutError {Σ} _ _ _ _ _ _.
+
+      Global Instance SubstDynamicMutatorError : Subst DynamicMutatorError :=
+        fun Σ1 Σ2 ζ12 err =>
+          match err with
+          | MkDynMutError f m Γ δ h pc => MkDynMutError f m Γ (subst ζ12 δ) (subst ζ12 h) (subst ζ12 pc)
+          end.
+
+      Global Instance SubstLawsDynamicMutatorError : SubstLaws DynamicMutatorError.
+      Proof.
+        constructor.
+        - intros ? []; cbn; now rewrite ?subst_sub_id.
+        - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+      Qed.
+
+      Inductive Error (Σ : LCtx) (msg : DynamicMutatorError Σ) : Prop :=.
+
     End DynamicMutatorResult.
 
     Section DynamicMutator.
 
       Definition DynamicMutator (Γ1 Γ2 : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
-        forall Σ', Sub Σ Σ' -> PathCondition Σ' -> SymbolicState Γ1 Σ' -> SymOutcome (DynamicMutatorResult Γ2 A) Σ'.
+        forall Σ', Sub Σ Σ' -> PathCondition Σ' -> SymbolicState Γ1 Σ' -> SymOutcome DynamicMutatorError (DynamicMutatorResult Γ2 A) Σ'.
       Bind Scope dmut_scope with DynamicMutator.
 
       Definition dmut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : DynamicMutator Γ Γ A Σ.
@@ -2259,13 +2349,16 @@ Module Mutators
         apply b3.
         apply δ3.
       Defined.
-
-      Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) :
-        DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m).
+      Global
+      (* Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) : *)
+      (*   DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m). *)
 
       Definition dmut_sub {Γ1 Γ2 A Σ1 Σ2} (ζ1 : Sub Σ1 Σ2) (p : DynamicMutator Γ1 Γ2 A Σ1) :
         DynamicMutator Γ1 Γ2 A Σ2 := fun Σ3 ζ2 => p _ (sub_comp ζ1 ζ2).
       Global Arguments dmut_sub {_ _ _ _ _} ζ1 p.
+      Definition dmut_strength {Γ1 Γ2 A B Σ} `{Subst A, Subst B} (ma : DynamicMutator Γ1 Γ2 A Σ) (b : B Σ) :
+        DynamicMutator Γ1 Γ2 (fun Σ => A Σ * B Σ)%type Σ :=
+        dmut_bind ma (fun _ ζ a => dmut_pure (a, subst ζ b)).
       Definition dmut_bind_right {Γ1 Γ2 Γ3 A B Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) : DynamicMutator Γ1 Γ3 B Σ :=
         dmut_bind ma (fun _ ζ _ => dmut_sub ζ mb).
       Definition dmut_bind_left {Γ1 Γ2 Γ3 A B} `{Subst A} {Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) : DynamicMutator Γ1 Γ3 A Σ :=
@@ -2287,18 +2380,12 @@ Module Mutators
         DynamicMutator Γ1 Γ3 (fun Σ => A Σ * B Σ)%type Σ :=
         dmut_fmap2 ma mb (fun _ _ => pair).
 
-      Definition dmut_fail {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ :=
-        fun Σ1 ζ1 pc1 s1 =>
-          sout_fail
-            {| dmuterr_function        := func;
-               dmuterr_message         := msg;
-               dmuterr_data            := data;
-               dmuterr_program_context := Γ1;
-               dmuterr_logic_context   := Σ1;
-               dmuterr_pathcondition   := pc1;
-               dmuterr_localstore      := symbolicstate_localstore s1;
-               dmuterr_heap            := symbolicstate_heap s1;
-            |}.
+      Definition dmut_fail {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ.
+        intros Σ1 ζ1 pc1 [δ1 h1].
+        apply sout_fail.
+        apply (@MkDynMutError _ func msg Γ1); assumption.
+      Defined.
+
       Definition dmut_block {Γ1 Γ2 A Σ} : DynamicMutator Γ1 Γ2 A Σ :=
         fun _ _ _ _ => sout_block.
 
@@ -2338,18 +2425,40 @@ Module Mutators
       Global Arguments dmut_angelic_finite {_ _} _ {_ _ _ _} _.
       Global Arguments dmut_demonic_finite {_ _} _ {_ _ _ _} _.
 
-      Definition dmut_fresh {Γ A Σ} b (ma : DynamicMutator Γ Γ A (Σ ▻ b)) : DynamicMutator Γ Γ A Σ.
-        intros Σ1 ζ1 pc1 s1.
-        eapply sout_demonicv.
-        apply ma.
-        apply (sub_up1 ζ1).
-        apply (wk1 pc1).
-        apply (wk1 s1).
-      Defined.
-      Global Arguments dmut_fresh {_ _ _} _ _.
+      Definition dmut_fresh {Γ1 Γ2 A Σ} x τ (ma : DynamicMutator Γ1 Γ2 A (Σ ▻ (x :: τ))) : DynamicMutator Γ1 Γ2 A Σ :=
+        fun Σ1 ζ1 pc1 s1 =>
+          let x'  := fresh Σ1 (Some x) in
+          let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
+          sout_demonicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 s1)).
+      Global Arguments dmut_fresh {_ _ _ _} _ _ _.
       Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
-        dmut_fresh (x,σ) (dmut_pure (@term_var _ _ _ inctx_zero)).
+        dmut_fresh x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
       Global Arguments dmut_freshtermvar {_ _ _} _.
+
+      Record DebugCall : Type :=
+        MkDebugCall
+          { debug_call_logic_context          : LCtx;
+            debug_call_function_parameters    : PCtx;
+            debug_call_function_result_type   : Ty;
+            debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
+            debug_call_function_arguments     : SymbolicLocalStore debug_call_function_parameters debug_call_logic_context;
+            debug_call_function_contract      : SepContract debug_call_function_parameters debug_call_function_result_type;
+            debug_call_pathcondition          : PathCondition debug_call_logic_context;
+            debug_call_program_context        : PCtx;
+            debug_call_localstore             : SymbolicLocalStore debug_call_program_context debug_call_logic_context;
+            debug_call_heap                   : SymbolicHeap debug_call_logic_context;
+          }.
+
+      Record DebugStm : Type :=
+        MkDebugStm
+          { debug_stm_program_context        : PCtx;
+            debug_stm_statement_type         : Ty;
+            debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
+            debug_stm_logic_context          : LCtx;
+            debug_stm_pathcondition          : PathCondition debug_stm_logic_context;
+            debug_stm_localstore             : SymbolicLocalStore debug_stm_program_context debug_stm_logic_context;
+            debug_stm_heap                   : SymbolicHeap debug_stm_logic_context;
+          }.
 
     End DynamicMutator.
     Bind Scope dmut_scope with DynamicMutator.
@@ -2506,16 +2615,28 @@ Module Mutators
       | _ => None
       end.
 
-    Fixpoint sout_multisub {A Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : SymOutcome A Σ2 -> SymOutcome A Σ1.
-    Proof.
-      destruct ζ; intros o.
-      - exact o.
-      - eapply sout_subst.
-        apply t.
-        eapply sout_multisub.
-        apply ζ.
-        apply o.
-    Defined.
+    Definition dmutres_assume_formula {Γ Σ} (pc : PathCondition Σ) (fml : Formula Σ) (s : SymbolicState Γ Σ) :
+      SymOutcome DynamicMutatorError (DynamicMutatorResult Γ Unit) Σ :=
+      (* Check if the formula is an equality that can be propagated. *)
+      match try_propagate fml with
+      | Some (existT Σ2 ζ) =>
+        let ζ' := sub_multi ζ in
+        sout_multisub ζ
+          (sout_pure
+             {| dmutres_pathcondition := subst ζ' pc;
+                dmutres_result_value := tt;
+                dmutres_result_state := subst ζ' s;
+             |})
+      | None =>
+        (* If everything fails, we simply add the formula to the path
+           condition verbatim. *)
+        sout_assumek fml
+          (sout_pure
+             {| dmutres_pathcondition := cons fml pc;
+                dmutres_result_value := tt;
+                dmutres_result_state := s;
+             |})
+      end.
 
     (* Add the provided formula to the path condition. *)
     Definition dmut_assume_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
@@ -2534,25 +2655,7 @@ Module Mutators
              inconsistent. Prune this path. *)
           sout_block
         | None =>
-          (* Check if the formula is an equality that can be propagated. *)
-            match try_propagate fml with
-            | Some (existT Σ2 ζ) =>
-              sout_multisub ζ
-                (sout_pure
-                   {| dmutres_pathcondition := subst (sub_multi ζ) pc1;
-                      dmutres_result_value := tt;
-                      dmutres_result_state := subst (sub_multi ζ) s1;
-                   |})
-            | None =>
-              (* If everything fails, we simply add the formula to the path
-                 condition verbatim. *)
-              sout_assumek fml
-                (sout_pure
-                   {| dmutres_pathcondition := cons fml pc1;
-                      dmutres_result_value := tt;
-                      dmutres_result_state := s1;
-                   |})
-            end
+          dmutres_assume_formula pc1 fml s1
         end.
 
     Definition dmut_assume_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
@@ -2578,48 +2681,26 @@ Module Mutators
           sout_fail
             {| dmuterr_function        := "dmut_assert_formula";
                dmuterr_message         := "Formula is always false";
-               dmuterr_data            := fml1;
                dmuterr_program_context := Γ;
-               dmuterr_logic_context   := Σ1;
                dmuterr_pathcondition   := pc1;
                dmuterr_localstore      := symbolicstate_localstore s1;
                dmuterr_heap            := symbolicstate_heap s1;
+               (* dmuterr_data         := fml1; *)
             |}
-
         | None =>
           (* Record the obligation. *)
           sout_assertk fml1
             {| dmuterr_function        := "dmut_assert_formula";
-               dmuterr_message         := "proof obligation";
-               dmuterr_data            := fml1;
+               dmuterr_message         := "Proof obligation";
                dmuterr_program_context := Γ;
-               dmuterr_logic_context   := Σ1;
                dmuterr_pathcondition   := pc1;
                dmuterr_localstore      := symbolicstate_localstore s1;
                dmuterr_heap            := symbolicstate_heap s1;
+               (* dmuterr_data         := fml1; *)
             |}
             (* We also want to assume the formula for the continuation, i.e.
-               we actually perform a simple cut. First see if it's an
-               equality that can be propagated. *)
-            match try_propagate fml1 with
-            | Some (existT Σ2 ζs) =>
-              sout_multisub ζs
-                (let ζ := sub_multi ζs in
-                 sout_pure
-                   {| dmutres_pathcondition := subst ζ pc1;
-                      dmutres_result_value := tt;
-                      dmutres_result_state := subst ζ s1;
-                   |})
-            | None =>
-              (* We can't propagate the formula, so add it to the path
-                 condition. *)
-              sout_assumek fml1
-                (sout_pure
-                   {| dmutres_pathcondition := cons fml1 pc1;
-                      dmutres_result_value := tt;
-                      dmutres_result_state := s1;
-                   |})
-            end
+               we actually perform a simple cut.  *)
+            (dmutres_assume_formula pc1 fml1 s1)
         end.
 
     Definition dmut_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
@@ -2645,6 +2726,23 @@ Module Mutators
       | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
       end.
 
+    Definition dmut_match_sum {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (s : Term Σ (ty_sum σ τ))
+      (dinl : forall Σ', Sub Σ Σ' -> Term Σ' σ -> DynamicMutator Γ1 Γ2 AT Σ')
+      (dinr : forall Σ', Sub Σ Σ' -> Term Σ' τ -> DynamicMutator Γ1 Γ2 AT Σ') :
+      DynamicMutator Γ1 Γ2 AT Σ :=
+     match @term_get_sum Σ σ τ s with
+     | Some (inl t) => dinl Σ (sub_id Σ) t
+     | Some (inr t) => dinr Σ (sub_id Σ) t
+     | None =>
+        dmut_demonic_binary
+          (dmut_freshtermvar x >>= fun _ ζ sl =>
+           dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (@term_inl _ σ τ sl)) ;;
+           dinl _ ζ sl)
+          (dmut_freshtermvar y >>= fun Σ' ζ sr =>
+           dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (@term_inr _ σ τ sr)) ;;
+           dinr Σ' ζ sr)
+     end.
+
     Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
       match asn with
       | asn_formula fml => dmut_assume_formula fml
@@ -2658,31 +2756,18 @@ Module Mutators
              dmut_assume_formula (formula_eq k1 (term_enum E k2)) ;;
              dmut_produce (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        match term_get_sum s with
-        | Some (inl v) =>
-          dmut_fresh (xl , σ)
-                     (dmut_assume_formula (formula_eq (sub_term sub_wk1 v) (@term_var _ _ _ inctx_zero)) ;;
-                      dmut_produce alt_inl)
-        | Some (inr v) =>
-          dmut_fresh (xr , τ) 
-                     (dmut_assume_formula (formula_eq (sub_term sub_wk1 v) (@term_var _ _ _ inctx_zero)) ;;
-                      dmut_produce alt_inr)
-        | None => 
-          dmut_demonic_binary
-            (dmut_fresh (xl , σ)
-                        (dmut_assume_formula (formula_eq (sub_term sub_wk1 s) (term_inl (@term_var _ _ _ inctx_zero))) ;;
-                         dmut_produce alt_inl))
-            (dmut_fresh (xr , τ)
-                        (dmut_assume_formula (formula_eq (sub_term sub_wk1 s) (term_inr (@term_var _ _ _ inctx_zero))) ;;
-                         dmut_produce alt_inr))
-        end
-      | asn_match_list s alt_nil xh xt alt_cons => dmut_fail "dmut_produce" "Not implemented" asn
+        dmut_match_sum
+          xl xr s
+          (fun _ ζ sl => dmut_sub (sub_snoc ζ (xl::σ) sl) (dmut_produce alt_inl))
+          (fun _ ζ sr => dmut_sub (sub_snoc ζ (xr::τ) sr) (dmut_produce alt_inr))
+      | asn_match_list s alt_nil xh xt alt_cons =>
+        dmut_fail "dmut_produce" "Not implemented" asn
       | asn_match_pair s xl xr rhs =>
         match term_get_pair s with
         | Some (vl, vr) => dmut_sub (sub_id _ ► (xl::_ ↦ vl) ► (xr::_ ↦ vr)) (dmut_produce rhs)
         | None =>
           dmut_pair (dmut_freshtermvar xl) (dmut_freshtermvar xr) >>= fun _ ζ '(vl,vr) =>
-          dmut_assume_formula (formula_eq (sub_term ζ s) (term_binop binop_pair vl vr)) ;;
+          dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_binop binop_pair vl vr)) ;;
           dmut_sub (ζ ► (xl::_ ↦ vl) ► (xr::_ ↦ vr)) (dmut_produce rhs)
         end
       | asn_match_tuple s p rhs =>
@@ -2694,7 +2779,7 @@ Module Mutators
           dmut_sub (sub_id _ ►► ζ__R) (dmut_produce rhs)
         | None =>
           dmut_freshen_recordpat id p >>= fun _ ζ '(t__p,ζ__R) =>
-          dmut_assume_formula (formula_eq (sub_term ζ s) t__p) ;;
+          dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) t__p) ;;
           dmut_sub (ζ ►► ζ__R) (dmut_produce rhs)
         end
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
@@ -2705,9 +2790,210 @@ Module Mutators
           dmut_fail "dmut_produce" "Not implemented" asn
         end
       | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
-      | asn_exist ς τ a => dmut_fresh (ς,τ) (dmut_produce a)
+      | asn_exist ς τ a => dmut_fresh ς τ (dmut_produce a)
       | asn_debug => dmut_pure tt
       end.
+
+    Fixpoint dmut_consume {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
+      match asn with
+      | asn_formula fml => dmut_assert_formula fml
+      | asn_chunk c     => dmut_consume_chunk c
+      | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_consume a1) ⊗
+                           (dmut_assume_term (term_not b) ;; dmut_consume a2)
+      | @asn_match_enum _ E k1 alts =>
+        dmut_angelic_finite
+          (𝑬𝑲 E)
+          (fun k2 =>
+             dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
+             dmut_consume (alts k2))
+      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+        match term_get_sum s with
+        | Some (inl t) => dmut_sub (sub_id _ ► (xl::σ ↦ t)) (dmut_consume alt_inl)
+        | Some (inr t) => dmut_sub (sub_id _ ► (xr::τ ↦ t)) (dmut_consume alt_inr)
+        | None =>
+          dmut_angelic_binary
+            (⨁ t : Term Σ σ =>
+             dmut_assert_formula (formula_eq s (term_inl t)) ;;
+             dmut_sub (sub_snoc (sub_id _) (xl , σ) t) (dmut_consume alt_inl))
+            (⨁ t : Term Σ τ =>
+             dmut_assert_formula (formula_eq s (term_inr t)) ;;
+             dmut_sub (sub_snoc (sub_id _) (xr , τ) t) (dmut_consume alt_inr))
+        end
+      | asn_match_list s alt_nil xh xt alt_cons =>
+        dmut_fail "dmut_consume" "Not implemented" asn
+      | asn_match_pair s xl xr rhs =>
+        match term_get_pair s with
+        | Some (tl, tr) => dmut_sub (sub_id _ ► (xl::_ ↦ tl) ► (xr::_ ↦ tr)) (dmut_consume rhs)
+        | None =>
+          ⨁ (tl : Term Σ _) (tr : Term Σ _) =>
+          dmut_assert_formula (formula_eq s (term_binop binop_pair tl tr)) ;;
+          dmut_sub (sub_id _ ► (xl::_ ↦ tl) ► (xr::_ ↦ tr)) (dmut_consume rhs)
+        end
+      | asn_match_tuple s p rhs =>
+        dmut_fail "dmut_consume" "Not implemented" asn
+      | asn_match_record R s p rhs =>
+        match term_get_record s with
+        | Some ts =>
+          let ζ__R := record_pattern_match p ts in
+          dmut_sub (sub_id _ ►► ζ__R) (dmut_consume rhs)
+        | None =>
+          ⨁ ts =>
+          dmut_assert_formula (formula_eq s (term_record R ts)) ;;
+          let ζ__R := record_pattern_match p ts in
+          dmut_sub (sub_id _ ►► ζ__R) (dmut_consume rhs)
+        end
+      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+        dmut_fail  "dmut_consume" "Not implemented" asn
+      | asn_sep a1 a2   => dmut_consume a1 ;; dmut_consume a2
+      | asn_exist ς τ a =>
+        ⨁ t : Term Σ τ =>
+        dmut_sub (sub_snoc (sub_id _) (ς , τ) t) (dmut_consume a)
+      | asn_debug => dmut_pure tt
+      end.
+
+    Definition dmut_call {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
+      match contract with
+      | MkSepContract _ _ Σe δ req result ens =>
+        ⨁ ξ : Sub Σe Σr =>
+        dmut_assert_formulas (formula_eqs ts (env_map (fun b => subst (T := fun Σ => Term Σ _) ξ) δ)) ;;
+        dmut_sub ξ
+          (dmut_consume req ;;
+           dmut_fresh result τ
+             (dmut_produce ens ;;
+              dmut_pure (@term_var _ result _ inctx_zero)))
+      end.
+
+    Fixpoint dmut_exec {Γ τ Σ} (s : Stm Γ τ) {struct s} :
+      DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σ :=
+      match s with
+      | stm_lit _ l => dmut_pure (term_lit τ l)
+      | stm_exp e => dmut_eval_exp e
+      | stm_let x τ s1 s2 =>
+        t1 <- dmut_exec s1 ;;
+        dmut_push_local t1 ;;
+        t2 <- dmut_exec s2 ;;
+        dmut_pop_local ;;
+        dmut_pure t2
+      | stm_block δ s =>
+        dmut_pushs_local (lift δ) ;;
+        t <- dmut_exec s ;;
+        dmut_pops_local _ ;;
+        dmut_pure t
+      | stm_assign x s =>
+        t <- dmut_exec s ;;
+        dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
+        dmut_pure t
+      | stm_call f es =>
+        ts <- dmut_eval_exps es ;;
+        match CEnv f with
+        | Some c => dmut_call c ts
+        | None   => dmut_fail "dmut_exec" "Function call without contract" (f,ts)
+        end
+      | stm_call_frame δ s =>
+        δr <- dmut_get_local ;;
+        dmut_put_local (lift δ) ;;
+        dmut_bind_left (dmut_exec s) (dmut_put_local δr)
+      | stm_call_external f es =>
+        ts <- dmut_eval_exps es ;;
+        dmut_call (CEnvEx f) ts
+      | stm_if e s1 s2 =>
+          (dmut_assume_exp e ;; dmut_exec s1) ⊗
+          (dmut_assume_exp (exp_not e) ;; dmut_exec s2)
+      | stm_seq s1 s2 => dmut_exec s1 ;; dmut_exec s2
+      | stm_assertk e1 _ k =>
+        t <- dmut_eval_exp e1 ;;
+        dmut_assume_term t ;;
+        dmut_exec k
+      | stm_fail _ _ =>
+        dmut_block
+      | stm_match_list e s1 xh xt s2 =>
+        t <- dmut_eval_exp e ;;
+        (dmut_assume_formula
+           (formula_eq t (term_lit (ty_list _) nil));;
+         dmut_exec s1) ⊗
+        (dmut_fresh
+           (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
+           (dmut_assume_formula
+              (formula_eq (subst (sub_comp sub_wk1 sub_wk1) t)
+                          (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
+            dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
+            dmut_push_local (@term_var _ _ _ inctx_zero);;
+            t2 <- dmut_exec s2 ;;
+            dmut_pop_local ;;
+            dmut_pop_local ;;
+            dmut_pure t2)))
+      | stm_match_sum e xinl s1 xinr s2 =>
+        t <- dmut_eval_exp e ;;
+        dmut_fresh _ _
+          (dmut_assume_formula
+             (formula_eq (subst sub_wk1 t) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
+           dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
+           dmut_bind_left (dmut_exec s1) dmut_pop_local) ⊗
+        dmut_fresh _ _
+          (dmut_assume_formula
+             (formula_eq (subst sub_wk1 t) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
+           dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
+           dmut_bind_left (dmut_exec s2) dmut_pop_local)
+      | stm_match_pair e xl xr s =>
+        t <- dmut_eval_exp e ;;
+        dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
+          (dmut_assume_formula
+             (formula_eq
+                (subst (sub_comp sub_wk1 sub_wk1) t)
+                (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
+           dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
+           dmut_push_local (@term_var _ _ _ inctx_zero);;
+           t <- dmut_exec s ;;
+           dmut_pop_local ;;
+           dmut_pop_local ;;
+           dmut_pure t))
+      | stm_match_enum E e alts =>
+        t <- dmut_eval_exp e ;;
+        dmut_demonic_finite
+          (𝑬𝑲 E)
+          (fun K =>
+             dmut_assume_formula (formula_eq t (term_enum E K));;
+             dmut_exec (alts K))
+      | stm_match_tuple e p s =>
+        dmut_fail "dmut_exec" "stm_match_tuple not implemented" tt
+      | stm_match_union U e alt__ctx alt__pat =>
+        dmut_fail "dmut_exec" "stm_match_union not implemented" tt
+      | @stm_match_record _ _ _ _ _ τ _ =>
+        dmut_fail "dmut_exec" "stm_match_record not implemented" tt
+      | stm_read_register reg =>
+        ⨁ t =>
+          dmut_consume_chunk (chunk_ptsreg reg t);;
+          dmut_produce_chunk (chunk_ptsreg reg t);;
+          dmut_pure t
+      | stm_write_register reg e =>
+        tnew <- dmut_eval_exp e ;;
+        ⨁ told =>
+          dmut_consume_chunk (chunk_ptsreg reg told);;
+          dmut_produce_chunk (chunk_ptsreg reg tnew);;
+          dmut_pure tnew
+      | stm_bind _ _ =>
+        dmut_fail "dmut_exec" "stm_bind not supported" tt
+      | stm_debugk k =>
+        dmut_exec k
+      end.
+
+    Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
+      match c with
+      | MkSepContract _ _ Σ δ req result ens =>
+          dmut_produce req ;;
+          dmut_exec s      >>= fun Σ1 ζ1 t =>
+          dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens)
+          (* dmut_leakcheck *)
+      end.
+
+    Program Definition dmut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
+      SymOutcome DynamicMutatorError Unit (sep_contract_logic_variables c) :=
+      let δ    := sep_contract_localstore c in
+      let s__sym := symbolicstate_initial δ in
+      sout_bind (dmut_contract c s (sub_id _) nil s__sym) (fun _ _ _ => sout_block).
+
+    Definition ValidContractDynMut (Δ : PCtx) (τ : Ty) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      ForallNamed (fun ι => sout_safe (sep_contract_logic_variables c) ι (dmut_contract_outcome c body)).
 
     Section CallerContext.
 
@@ -2733,7 +3019,7 @@ Module Mutators
       Definition dmut_assert_term_eq_evar {Σe Σr σ} (te : Term Σe σ) (tr : Term Σr σ) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
         (* Make sure we get the up to date substitution. *)
         dmut_pure tt >>= fun Σr1 ζ1 _ =>
-        let tr1 := sub_term ζ1 tr in
+        let tr1 := subst (T := fun Σ => Term Σ _) ζ1 tr in
         let L1  := subst ζ1 L in
         (* Try to fully match te against tr1, potentially filling in some evars. *)
         match match_term te tr1 L1 with
@@ -2764,7 +3050,7 @@ Module Mutators
         dmut_assert_namedenv_eq_evar env_nil env_nil := dmut_pure;
         dmut_assert_namedenv_eq_evar (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) :=
           fun L => dmut_assert_namedenv_eq_evar E1 E2 L >>= fun _ ζ =>
-                   dmut_assert_term_eq_evar t1 (sub_term ζ t2).
+                   dmut_assert_term_eq_evar t1 (subst (T := fun Σ => Term Σ _) ζ t2).
 
       Definition dmut_consume_formula_evar {Σe Σr} (fml : Formula Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
         match fml with
@@ -2865,7 +3151,7 @@ Module Mutators
                     | (L' , Some t) =>
                       (* TODO(2.0): This assert should move before the *)
                       (* consumption of the alternative. *)
-                      (dmut_assert_formula (formula_eq (sub_term ζ s) (term_inl t)) ;;
+                      (dmut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_inl t)) ;;
                        dmut_pure L')
                     | (_ , None) =>
                       dmut_fail
@@ -2881,7 +3167,7 @@ Module Mutators
                     | (L' , Some t) =>
                       (* TODO(2.0): This assert should move before the *)
                       (* consumption of the alternative. *)
-                      (dmut_assert_formula (formula_eq (sub_term ζ s) (term_inr t)) ;;
+                      (dmut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_inr t)) ;;
                        dmut_pure L')
                     | (_ , None) =>
                       dmut_fail
@@ -2972,9 +3258,9 @@ Module Mutators
       match contract with
       | MkSepContract _ _ Σe δ req result ens =>
          dmut_consume_evar req (create_evarenv Σe Σr) >>= fun Σr1 ζ1 E1 =>
-         dmut_assert_namedenv_eq_evar δ (env_map (fun _ => sub_term ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
+         dmut_assert_namedenv_eq_evar δ (env_map (fun _ => subst (T := fun Σ => Term Σ _) ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
          match evarenv_to_option_sub E2 with
-         | Some ξ => dmut_sub ξ (dmut_fresh (result,τ) (dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
+         | Some ξ => dmut_sub ξ (dmut_fresh result τ (dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
          | None => dmut_fail
                      "dmut_call_evar"
                      "Uninstantiated evars after consuming precondition"
@@ -3041,9 +3327,9 @@ Module Mutators
            (formula_eq t (term_lit (ty_list _) nil));;
          dmut_exec_evar s1) ⊗
         (dmut_fresh
-           (𝑿to𝑺 xh,_) (dmut_fresh (𝑿to𝑺 xt,_)
+           (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
            (dmut_assume_formula
-              (formula_eq (sub_term (sub_comp sub_wk1 sub_wk1) t)
+              (formula_eq (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) t)
                           (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
             dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
             dmut_push_local (@term_var _ _ _ inctx_zero);;
@@ -3061,14 +3347,14 @@ Module Mutators
           dmut_push_local t;;
           dmut_bind_left (dmut_exec_evar s2) dmut_pop_local
         | None =>
-          dmut_fresh _
+          dmut_fresh _ _
             (dmut_assume_formula
-               (formula_eq (sub_term sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
+               (formula_eq (subst (T := fun Σ => Term Σ _) sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
              dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
              dmut_bind_left (dmut_exec_evar s1) dmut_pop_local) ⊗
-          dmut_fresh _
+          dmut_fresh _ _
             (dmut_assume_formula
-               (formula_eq (sub_term sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
+               (formula_eq (subst (T := fun Σ => Term Σ _) sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
              dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
              dmut_bind_left (dmut_exec_evar s2) dmut_pop_local)
         end
@@ -3083,10 +3369,10 @@ Module Mutators
           dmut_pop_local ;;
           dmut_pure t
         | None =>
-          dmut_fresh (𝑿to𝑺 xl,_) (dmut_fresh (𝑿to𝑺 xr,_)
+          dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
             (dmut_assume_formula
                (formula_eq
-                  (sub_term (sub_comp sub_wk1 sub_wk1) t__sc)
+                  (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) t__sc)
                   (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
              dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
              dmut_push_local (@term_var _ _ _ inctx_zero);;
@@ -3119,7 +3405,7 @@ Module Mutators
         match term_get_union t__sc with
         | Some (existT K t__field) =>
           dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-            dmut_assume_formula (formula_eq t__pat (sub_term ζ2 t__field));;
+            dmut_assume_formula (formula_eq t__pat (subst (T := fun Σ => Term Σ _) ζ2 t__field));;
             dmut_pushs_local δ__Δ;;
             t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
             dmut_pops_local _;;
@@ -3129,7 +3415,7 @@ Module Mutators
             (𝑼𝑲 U)
             (fun K =>
                dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-               dmut_assume_formula (formula_eq (sub_term ζ2 t__sc) (term_union U K t__pat));;
+               dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 t__sc) (term_union U K t__pat));;
                dmut_pushs_local δ__Δ;;
                t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
                dmut_pops_local _;;
@@ -3165,7 +3451,7 @@ Module Mutators
       end.
 
     Definition dmut_contract_evar {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) :
-      Stm Δ τ -> SymOutcome Unit (sep_contract_logic_variables c) :=
+      Stm Δ τ -> SymOutcome DynamicMutatorError Unit (sep_contract_logic_variables c) :=
       match c with
       | MkSepContract _ _ Σ δ req result ens =>
         fun s =>
@@ -3177,12 +3463,12 @@ Module Mutators
           sout_bind out (fun _ _ _ => sout_block (A:=Unit))
       end.
 
-    Definition ValidContractDynMut (Δ : PCtx) (τ : Ty)
+    Definition ValidContractDynMutEvar (Δ : PCtx) (τ : Ty)
                (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       ForallNamed
         (fun ι => sout_safe _ ι (dmut_contract_evar c body)).
 
-    Definition sout_ok_opaque Σ (o : SymOutcome Unit Σ) : Prop :=
+    Definition sout_ok_opaque Σ (o : SymOutcome DynamicMutatorError Unit Σ) : Prop :=
       is_true (sout_ok o).
     Global Arguments sout_ok_opaque : clear implicits.
     Global Opaque sout_ok_opaque.
@@ -3194,7 +3480,7 @@ Module Mutators
     Definition ValidContractDynMutReflect (Δ : PCtx) (τ : Ty)
                (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       is_true
-        (sout_ok (A := Unit) (sout_prune (dmut_contract_evar c body))).
+        (sout_ok (AT := Unit) (sout_prune (dmut_contract_evar c body))).
 
     (* Lemma dynmutevarreflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : *)
     (*   ValidContractDynMutReflect c body -> *)

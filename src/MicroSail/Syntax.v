@@ -1613,6 +1613,24 @@ Module Terms (Export termkit : TermKit).
       inst ι (sub_snoc ζ (ς,τ) t) = env_snoc (inst ι ζ) (ς,τ) (inst ι t).
     Proof. reflexivity. Qed.
 
+    Lemma inst_sub_single {Σ} (ι : SymInstance Σ) {x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+      inst (env_remove' _ ι xIn) t = env_lookup ι xIn ->
+      inst (env_remove' _ ι xIn) (sub_single xIn t) = ι.
+    Proof.
+      intros HYP. apply env_lookup_extensional. intros [y τ] yIn.
+      unfold inst, sub_single; cbn.
+      rewrite env_lookup_map, env_lookup_tabulate.
+      pose proof (occurs_check_var_spec xIn yIn).
+      destruct (occurs_check_var xIn yIn).
+      * dependent elimination e. subst yIn. exact HYP.
+      * destruct H; subst yIn. cbn. unfold env_remove'.
+        now rewrite env_lookup_tabulate.
+    Qed.
+
+    Lemma inst_lookup {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : InCtx (x :: τ) Σ0) :
+      inst ι (env_lookup ζ xIn) = env_lookup (inst (A := SymInstance Σ0) ι ζ) xIn.
+    Proof. cbn. now rewrite env_lookup_map. Qed.
+
     Global Arguments inst {T A _ Σ} ι !_.
     Global Arguments lift {T A _ Σ} !_.
 
