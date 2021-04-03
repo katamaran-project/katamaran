@@ -70,6 +70,7 @@ Module Soundness
   Module LOG := ProgramLogic termkit progkit assertkit contractkit.
   Import LOG.
   Module SCMUT := SemiConcrete.Sound.Soundness termkit progkit assertkit contractkit.
+  Import SCMUT.
   Import SCMUT.MUT.
 
   Module DynMutV1Soundness.

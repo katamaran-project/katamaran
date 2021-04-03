@@ -269,6 +269,11 @@ Module Mutators
       ForallNamed (fun ι => (inst ι pc : Prop) -> inst ι fml : Prop) ->
       Obligation (@MkObligationInfo Σ Γ δ h pc fml).
 
+  Section TransparentObligations.
+    Local Set Transparent Obligations.
+    Derive NoConfusion for ObligationInfo.
+  End TransparentObligations.
+
   Instance subst_localstore {Γ} : Subst (SymbolicLocalStore Γ) :=
     SubstEnv.
   Instance substlaws_localstore {Γ} : SubstLaws (SymbolicLocalStore Γ) :=
@@ -754,7 +759,7 @@ Module Mutators
     Definition dmut_fresh {Γ A Σ} x τ (ma : DynamicMutator Γ Γ A (Σ ▻ (x :: τ))) : DynamicMutator Γ Γ A Σ :=
       fun Σ1 ζ1 pc1 s1 =>
         let x'  := fresh Σ1 (Some x) in
-        let ζ1x := sub_comp ζ1 sub_wk1 ► (x :: τ ↦ @term_var _ x' τ inctx_zero) in
+        let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
         outcome_map (cosubst_dmutres sub_wk1) (ma (Σ1 ▻ (x' :: τ)) ζ1x (wk1 pc1) (wk1 s1)).
     Global Arguments dmut_fresh {_ _ _} _ _ _.
 
@@ -1084,16 +1089,16 @@ Module Mutators
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         dmut_pure s >>= fun (Σ1 : LCtx) (ζ1 : Sub Σ Σ1) (s : Term Σ1 (ty_sum σ τ)) =>
         match term_get_sum s with
-        | Some (inl v) => dmut_sub (ζ1 ► (xl::σ ↦ v)) (dmut_produce alt_inl)
-        | Some (inr v) => dmut_sub (ζ1 ► (xr::τ ↦ v)) (dmut_produce alt_inr)
+        | Some (inl v) => dmut_sub (sub_snoc ζ1 (xl::σ) v) (dmut_produce alt_inl)
+        | Some (inr v) => dmut_sub (sub_snoc ζ1 (xr::τ) v) (dmut_produce alt_inr)
         | None =>
           dmut_demonic_binary
             (dmut_freshtermvar xl >>= fun _ ζ2 vl =>
              dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 s) (term_inl vl)) ;;
-             dmut_sub (sub_comp ζ1 ζ2 ► (xl::_ ↦ vl)) (dmut_produce alt_inl))
+             dmut_sub (sub_snoc (sub_comp ζ1 ζ2) (xl::_) vl) (dmut_produce alt_inl))
             (dmut_freshtermvar xr >>= fun _ ζ2 vr =>
              dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 s) (term_inr vr)) ;;
-             dmut_sub (sub_comp ζ1 ζ2 ► (xr::_ ↦ vr)) (dmut_produce alt_inr))
+             dmut_sub (sub_snoc (sub_comp ζ1 ζ2) (xr::_) vr) (dmut_produce alt_inr))
         end
       | asn_match_list s alt_nil xh xt alt_cons =>
         dmut_fail "dmut_produce" "Not implemented" asn

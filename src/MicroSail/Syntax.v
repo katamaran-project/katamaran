@@ -1016,7 +1016,7 @@ Module Terms (Export termkit : TermKit).
 
     Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
       let '(ς :: σ) := b in
-      env_snoc (sub_comp ζ sub_wk1) (ς :: σ) (@term_var _ ς σ inctx_zero).
+      sub_snoc (sub_comp ζ sub_wk1) (ς :: σ) (@term_var _ ς σ inctx_zero).
 
     Definition sub_single {Σ x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) : Sub Σ (Σ - (x :: σ)) :=
       @env_tabulate
@@ -1587,6 +1587,12 @@ Module Terms (Export termkit : TermKit).
     Global Instance instantiatelaws_sub {Σ} : InstLaws (Sub Σ) (SymInstance Σ).
     Proof. apply instantiatelaws_env. Qed.
 
+    Lemma inst_env_snoc {B : Set} {AT : LCtx -> B -> Set}
+           {A : B -> Set} {_ : forall b : B, Inst (fun Σ => AT Σ b) (A b)}
+           {Γ : Ctx B} {Σ} (ι : SymInstance Σ) (E : Env (AT Σ) Γ) (b : B) (a : AT Σ b) :
+      inst ι (env_snoc E b a) = env_snoc (inst ι E) b (inst ι a).
+    Proof. reflexivity. Qed.
+
     Lemma inst_sub_wk1 {Σ ς τ v} (ι : SymInstance Σ) :
       inst (ι ► (ς∶τ ↦ v)) sub_wk1 = ι.
     Proof.
@@ -1602,6 +1608,10 @@ Module Terms (Export termkit : TermKit).
       intros [x τ] ?; unfold sub_id; cbn.
       now rewrite env_map_tabulate, env_lookup_tabulate.
     Qed.
+
+    Lemma inst_sub_snoc {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) ς τ (t : Term Σ1 τ) :
+      inst ι (sub_snoc ζ (ς,τ) t) = env_snoc (inst ι ζ) (ς,τ) (inst ι t).
+    Proof. reflexivity. Qed.
 
     Global Arguments inst {T A _ Σ} ι !_.
     Global Arguments lift {T A _ Σ} !_.
