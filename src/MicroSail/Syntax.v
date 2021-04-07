@@ -1245,18 +1245,25 @@ Module Terms (Export termkit : TermKit).
 
   Section MultiSubs.
 
-    Inductive MultiSub : forall (Σ1 Σ2 : LCtx), Set :=
-    | multisub_id {Σ}       : MultiSub Σ Σ
-    | multisub_cons {Σ Σ' x σ} (xIn : (x::σ) ∈ Σ) (t : Term (Σ - (x::σ)) σ)
+    Inductive MultiSub (Σ : LCtx) : LCtx -> Set :=
+    | multisub_id        : MultiSub Σ Σ
+    | multisub_cons {Σ' x σ} (xIn : (x::σ) ∈ Σ) (t : Term (Σ - (x::σ)) σ)
                     (ζ : MultiSub (Σ - (x::σ)) Σ')
                     : MultiSub Σ Σ'.
 
+    Global Arguments multisub_id {_}.
     Global Arguments multisub_cons {_ _} x {_ _} t ζ.
 
     Fixpoint sub_multi {Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : Sub Σ1 Σ2 :=
-      match ζ in (MultiSub Σ3 Σ4) return (Sub Σ3 Σ4) with
+      match ζ with
       | multisub_id         => sub_id _
       | multisub_cons x t ζ => sub_comp (sub_single _ t) (sub_multi ζ)
+      end.
+
+    Fixpoint sub_multishift {Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : Sub Σ2 Σ1 :=
+      match ζ with
+      | multisub_id         => sub_id _
+      | multisub_cons x t ζ => sub_comp (sub_multishift ζ) (sub_shift _)
       end.
 
   End MultiSubs.
