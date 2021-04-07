@@ -516,59 +516,43 @@ Module MinCapsSymbolicContractKit <:
          asn_safe (term_var "w")
     |}.
 
-  (* TODO: this contract doesn't work... fails to find csafe chunk on heap *)
-  (* Definition sep_contract_csafe_move_cursor : SepContract ["c" ∶ ty_cap, "c'" ∶ ty_cap] ty_unit :=
-    {| sep_contract_logic_variables := ["p" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr, "a" ∶ ty_addr, "a'" ∶ ty_addr];
-       sep_contract_localstore      := 
-               [term_record capability
-                            [term_var "p",
-                             term_var "b",
-                             term_var "e",
-                             term_var "a"], 
-               term_record capability
-                            [term_var "p",
-                             term_var "b",
-                             term_var "e",
-                             term_var "a'"]]%arg;
-       sep_contract_precondition    := asn_csafe (term_record capability
-                                                              [term_var "p",
-                                                               term_var "b",
-                                                               term_var "e",
-                                                               term_var "a"]);
-       sep_contract_result          := "result_csafe_move_cursor";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_csafe_move_cursor") (term_lit ty_unit tt) ✱
-                asn_csafe (term_var "c") ✱
-                asn_csafe (term_record capability
-                                       [term_var "p",
-                                        term_var "b",
-                                        term_var "e",
-                                        term_var "a'"]);
-    |}. *)
-
-  (*
-    @pre ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ safe(c) ∧ (∃ a′. c′ = mkcap(b,e,a′,p));
-    @post safe(c) ∧ safe(c′)
-    unit csafe_move_cursor(c c′ : capability);
-   *)
   Definition sep_contract_csafe_move_cursor : SepContract ["c" ∶ ty_cap, "c'" ∶ ty_cap] ty_unit :=
-    {| sep_contract_logic_variables := ["c" ∶ ty_cap, "c'" ∶ ty_cap];
-       sep_contract_localstore      := [term_var "c", term_var "c'"]%arg;
-       sep_contract_precondition    := asn_csafe (term_var "c");
+    let Σ : LCtx := ["p" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr, "a" ∶ ty_addr, "a'" ∶ ty_addr]%ctx in
+    let c  : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a"] in
+    let c' : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a'"] in
+    {| sep_contract_logic_variables := Σ;
+       sep_contract_localstore      := [c, c']%arg;
+       sep_contract_precondition    := asn_csafe c;
        sep_contract_result          := "result_csafe_move_cursor";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_csafe_move_cursor") (term_lit ty_unit tt) ✱
-                asn_csafe (term_var "c") ✱
-                asn_match_cap (term_var "c") "p" "b" "e" "_"
-                (asn_exist "a" ty_addr
-                           (asn_eq (term_var "c'")
-                                   (term_record capability
-                                                [term_var "p",
-                                                 term_var "b",
-                                                 term_var "e",
-                                                 term_var "a"]) ✱
-                                   asn_csafe (term_var "c'")));
+         asn_csafe (sub_term sub_wk1 c) ✱
+         asn_csafe (sub_term sub_wk1 c');
     |}.
+
+  (* (* Old contract *)
+  (*   @pre ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ safe(c) ∧ (∃ a′. c′ = mkcap(b,e,a′,p)); *)
+  (*   @post safe(c) ∧ safe(c′) *)
+  (*   unit csafe_move_cursor(c c′ : capability); *)
+  (*  *) *)
+  (* Definition sep_contract_csafe_move_cursor : SepContract ["c" ∶ ty_cap, "c'" ∶ ty_cap] ty_unit := *)
+  (*   {| sep_contract_logic_variables := ["c" ∶ ty_cap, "c'" ∶ ty_cap]; *)
+  (*      sep_contract_localstore      := [term_var "c", term_var "c'"]%arg; *)
+  (*      sep_contract_precondition    := asn_csafe (term_var "c"); *)
+  (*      sep_contract_result          := "result_csafe_move_cursor"; *)
+  (*      sep_contract_postcondition   := *)
+  (*        asn_eq (term_var "result_csafe_move_cursor") (term_lit ty_unit tt) ✱ *)
+  (*               asn_csafe (term_var "c") ✱ *)
+  (*               asn_match_cap (term_var "c") "p" "b" "e" "_" *)
+  (*               (asn_exist "a" ty_addr *)
+  (*                          (asn_eq (term_var "c'") *)
+  (*                                  (term_record capability *)
+  (*                                               [term_var "p", *)
+  (*                                                term_var "b", *)
+  (*                                                term_var "e", *)
+  (*                                                term_var "a"]) ✱ *)
+  (*                                  asn_csafe (term_var "c'"))); *)
+  (*   |}. *)
 
   (*
     @pre csafe(c)

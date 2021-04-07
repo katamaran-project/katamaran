@@ -479,10 +479,15 @@ Module Mutators
 
       Variable match_term : forall {σ}, Term Σe σ -> Term Σr σ -> EvarEnv Σe Σr -> option (EvarEnv Σe Σr).
 
-      Equations(noeqns) match_env'  {σs} (te : Env (Term Σe) σs) (tr : Env (Term Σr) σs) :
+      Equations(noeqns) match_env' {σs} (te : Env (Term Σe) σs) (tr : Env (Term Σr) σs) :
         EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
         match_env' env_nil env_nil := Some;
         match_env' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_env' E1 E2 >=> match_term t1 t2.
+
+      Equations(noeqns) match_nenv' {N : Set} {Δ : NCtx N Ty} (te : NamedEnv (Term Σe) Δ) (tr : NamedEnv (Term Σr) Δ) :
+        EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
+        match_nenv' env_nil env_nil := Some;
+        match_nenv' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_nenv' E1 E2 >=> match_term t1 t2.
 
     End WithMatchTerm.
 
@@ -513,10 +518,12 @@ Module Mutators
       match_term (term_inr t1) (term_inr t2) := match_term t1 t2;
       match_term (term_inr t1) (term_lit (inr l2)) := match_term t1 (term_lit _ l2);
       match_term (term_tuple ts1) (term_tuple ts2) := match_env' (@match_term) ts1 ts2;
+      match_term (term_record _ ts1) (term_record _ ts2) := match_nenv' (@match_term) ts1 ts2;
       (* Obviously more matchings can be added here. *)
       match_term _ _ := fun _ => None.
 
     Definition match_env := @match_env' (@match_term).
+    Definition match_nenv := @match_nenv' (@match_term).
 
     Equations(noeqns) match_chunk (ce : Chunk Σe) (cr : Chunk Σr) :
       EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
