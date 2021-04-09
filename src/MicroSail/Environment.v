@@ -288,13 +288,27 @@ Section WithBinding.
           env_lookup E1 bInΓ = env_lookup E2 bInΓ) ->
       E1 = E2.
     Proof.
-    Admitted.
+      induction E1 as [|Γ E1 HE1 b v1].
+      - now destruct (nilView E2).
+      - destruct (snocView E2) as [E2 v2].
+        intros eq.
+        f_equal.
+        + eapply HE1.
+          intros b' bInΓ.
+          eapply (eq b' (inctx_succ bInΓ)).
+        + eapply (eq _ inctx_zero).
+    Qed.
 
     Lemma env_lookup_tabulate {Γ} (g : forall (b : B) , InCtx b Γ -> D b) :
       forall {b} (bInΓ : InCtx b Γ),
         env_lookup (env_tabulate g) bInΓ = g b bInΓ.
     Proof.
-    Admitted.
+      induction Γ; intros b' bInΓ.
+      - destruct (MicroSail.Context.nilView bInΓ).
+      - destruct (MicroSail.Context.snocView bInΓ).
+        + now cbn.
+        + eapply (IHΓ (fun b bInΓ => g b (inctx_succ bInΓ))).
+    Qed.
 
   End WithDom.
 
