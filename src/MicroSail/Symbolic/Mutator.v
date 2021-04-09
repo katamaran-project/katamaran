@@ -2828,22 +2828,23 @@ Module Mutators
       | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
       end.
 
-    Definition dmut_match_sum {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (s : Term Σ (ty_sum σ τ))
+    Definition dmut_match_sum {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (t : Term Σ (ty_sum σ τ))
       (dinl : forall Σ', Sub Σ Σ' -> Term Σ' σ -> DynamicMutator Γ1 Γ2 AT Σ')
       (dinr : forall Σ', Sub Σ Σ' -> Term Σ' τ -> DynamicMutator Γ1 Γ2 AT Σ') :
       DynamicMutator Γ1 Γ2 AT Σ :=
-     match @term_get_sum Σ σ τ s with
-     | Some (inl t) => dinl Σ (sub_id Σ) t
-     | Some (inr t) => dinr Σ (sub_id Σ) t
-     | None =>
-        dmut_demonic_binary
-          (dmut_freshtermvar x >>= fun _ ζ sl =>
-           dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (@term_inl _ σ τ sl)) ;;
-           dinl _ ζ sl)
-          (dmut_freshtermvar y >>= fun Σ' ζ sr =>
-           dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (@term_inr _ σ τ sr)) ;;
-           dinr Σ' ζ sr)
-     end.
+      fun Σ1 ζ01 =>
+        match term_get_sum (subst (T := fun Σ => Term Σ _) ζ01 t) with
+        | Some (inl tl) => dinl Σ1 ζ01 tl Σ1 (sub_id _)
+        | Some (inr tr) => dinr Σ1 ζ01 tr Σ1 (sub_id _)
+        | None =>
+           (dmut_demonic_binary (Γ1 := Γ1) (Γ2 := Γ2)
+             (dmut_freshtermvar x >>= fun Σ2 ζ12 sl =>
+              dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ12 t) (@term_inl _ σ τ sl)) ;;
+              dinl _ ζ12 sl)
+             (dmut_freshtermvar y >>= fun Σ2 ζ12 sr =>
+              dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ12 t) (@term_inr _ σ τ sr)) ;;
+              dinr _ ζ12 sr)) Σ1 ζ01
+        end.
 
     Definition dmut_match_pair {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (s : Term Σ (ty_prod σ τ))
       (d : forall Σ', Sub Σ Σ' -> Term Σ' σ * Term Σ' τ  -> DynamicMutator Γ1 Γ2 AT Σ') :
@@ -2916,8 +2917,8 @@ Module Mutators
              dmut_consume (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match term_get_sum s with
-        | Some (inl t) => dmut_sub (sub_id _ ► (xl::σ ↦ t)) (dmut_consume alt_inl)
-        | Some (inr t) => dmut_sub (sub_id _ ► (xr::τ ↦ t)) (dmut_consume alt_inr)
+        | Some (inl t) => dmut_sub (sub_snoc (sub_id _) (xl::σ) t) (dmut_consume alt_inl)
+        | Some (inr t) => dmut_sub (sub_snoc (sub_id _) (xr::τ) t) (dmut_consume alt_inr)
         | None =>
           dmut_angelic_binary
             (⨁ t : Term Σ σ =>

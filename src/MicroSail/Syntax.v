@@ -1689,8 +1689,12 @@ Module Terms (Export termkit : TermKit).
     Lemma term_get_sum_spec {Σ σ1 σ2} (s : Term Σ (ty_sum σ1 σ2)) :
       OptionSpec
         (fun s' => match s' with
-                   | inl t => forall ι : SymInstance Σ, inst ι s = inl (inst ι t) :> Lit (ty_sum _ _)
-                   | inr t => forall ι : SymInstance Σ, inst ι s = inr (inst ι t) :> Lit (ty_sum _ _)
+                   | inl t => forall ι : SymInstance Σ,
+                       inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Lit σ1 + Lit σ2) ι s =
+                       @inl (Lit σ1) (Lit σ2) (inst ι t)
+                   | inr t => forall ι : SymInstance Σ,
+                       inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Lit σ1 + Lit σ2) ι s =
+                       @inr (Lit σ1) (Lit σ2) (inst ι t)
                    end)
         True
         (term_get_sum s).
