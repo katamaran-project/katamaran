@@ -1669,7 +1669,9 @@ Module Terms (Export termkit : TermKit).
     Lemma term_get_pair_spec {Σ σ1 σ2} (s : Term Σ (ty_prod σ1 σ2)) :
       OptionSpec
         (fun '(t1,t2) =>
-           forall ι : SymInstance Σ, inst ι s = (inst ι t1, inst ι t2) :> Lit (ty_prod _ _))
+           forall ι : SymInstance Σ,
+             inst (T := fun Σ => Term Σ (ty_prod σ1 σ2)) (A := Lit σ1 * Lit σ2) ι s =
+             (inst (A := Lit σ1) ι t1, inst (A := Lit σ2) ι t2))
         True
         (term_get_pair s).
     Proof.
@@ -1716,7 +1718,7 @@ Module Terms (Export termkit : TermKit).
            match x with
            | existT K t =>
              forall ι : SymInstance Σ,
-               inst ι s =
+               inst (T := fun Σ => Term Σ (ty_union U)) (A := 𝑼𝑻 U) ι s =
                𝑼_fold (@existT (𝑼𝑲 U) (fun K => Lit (𝑼𝑲_Ty K)) K (inst ι t)) :> Lit (ty_union U)
            end)
         True
@@ -1736,7 +1738,9 @@ Module Terms (Export termkit : TermKit).
     Lemma term_get_record_spec {Σ R} (s : Term Σ (ty_record R)) :
       OptionSpec
         (fun ts =>
-           forall ι, inst ι s = 𝑹_fold (inst ι ts) :> Lit (ty_record R))
+           forall ι : SymInstance Σ,
+             inst (T := fun Σ => Term Σ (ty_record R)) (A := 𝑹𝑻 R) ι s =
+             𝑹_fold (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (𝑹𝑭_Ty R)) (A := NamedEnv Lit (𝑹𝑭_Ty R)) ι ts))
         True
         (term_get_record s).
     Proof.
