@@ -371,6 +371,12 @@ Module Soundness
       apply (P a sc2).
     Defined.
 
+    Ltac fold_dmut_wp :=
+      match goal with
+      | |- context[sout_wp (?d ?Σ ?ζ ?pc ?s) ?ι ?F (fun r => ?P _ _)] =>
+        change (sout_wp (d Σ ζ pc s) ι F _) with (dmut_wp d ζ pc s ι F P)
+      end.
+
     Lemma dmut_wp_monotonic {AT A} `{Inst AT A} {Γ1 Γ2 Σ0 Σ1} (d : DynamicMutator Γ1 Γ2 AT Σ0)
       (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (s11 : SymbolicState Γ1 Σ1) (ι1 : SymInstance Σ1)
       F (P Q : A -> SCState Γ2 -> Prop) (PQ : forall a s, P a s -> Q a s) :
@@ -405,35 +411,6 @@ Module Soundness
       dmut_wp (dmut_sub ζ01 d) ζ12 pc2 s2 ι2 F P <->
       dmut_wp d (sub_comp ζ01 ζ12) pc2 s2 ι2 F P.
     Proof. reflexivity. Qed.
-
-    Lemma dmut_wp_assume_formula {Γ Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (fml : Formula Σ1) (s2 : SymbolicState Γ Σ2)
-          (ι2 : SymInstance Σ2) (F : string -> Prop) P :
-      instpc ι2 pc2 ->
-      dmut_wp (dmut_assume_formula fml) ζ12 pc2 s2 ι2 F P <->
-      ((inst (inst ι2 ζ12) fml : Prop) -> P tt (inst ι2 s2)).
-    Proof.
-      unfold dmut_wp, dmut_assume_formula. intros.
-      rewrite sout_wp_bind; auto.
-      - rewrite sout_wp_assume_formula.
-        rewrite ?subst_sub_id, ?inst_subst.
-        reflexivity.
-      - unfold sout_arrow_dcl. cbn. intros.
-        revert H5. rewrite ?inst_subst.
-        rewrite H3, H4. apply PQ.
-    Qed.
-
-    Lemma dmut_wp_assert_formula {Γ Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (fml : Formula Σ1) (s2 : SymbolicState Γ Σ2)
-      (ι2 : SymInstance Σ2) (Hpc2 : instpc ι2 pc2) (F : string -> Prop) P (HF : forall e, F e <-> False) :
-      dmut_wp (dmut_assert_formula fml) ζ12 pc2 s2 ι2 F P <->
-      (inst (inst ι2 ζ12) fml /\ P tt (inst ι2 s2)).
-    Proof.
-      unfold dmut_wp, dmut_assert_formula.
-      rewrite sout_wp_bind, sout_wp_assert_formula; cbn;
-        rewrite ?inst_subst, ?inst_sub_id; auto.
-      unfold sout_arrow_dcl. cbn. intros.
-      revert H4. rewrite ?inst_subst.
-      rewrite H2, H3. apply PQ.
-    Qed.
 
     Definition dmut_geq {Γ1 Γ2 AT Σ0 A} `{Inst AT A, Subst AT} (d1 d2 : DynamicMutator Γ1 Γ2 AT Σ0) : Prop :=
       forall Σ1 Σ2 (ζ01 : Sub Σ0 Σ1) pc1 (s1 : SymbolicState Γ1 Σ1) (ζ12 : Sub Σ1 Σ2) pc2 s2 ζ02 ι1 ι2,
@@ -697,161 +674,6 @@ Module Soundness
       now apply dmut_arrow_dcl_specialize.
     Qed.
 
-    Lemma dmut_assume_formula_dcl {Γ Σ} (fml : Formula Σ) :
-      dmut_dcl (Γ1 := Γ) (dmut_assume_formula fml).
-    Proof.
-      unfold dmut_dcl, dmut_geq; intros. revert H4.
-      rewrite ?dmut_wp_assume_formula; auto.
-      rewrite H2, H3. intuition.
-    Qed.
-
-    Ltac fold_dmut_wp :=
-      match goal with
-      | |- context[sout_wp (?d ?Σ ?ζ ?pc ?s) ?ι ?F (fun r => ?P _ _)] =>
-        change (sout_wp (d Σ ζ pc s) ι F _) with (dmut_wp d ζ pc s ι F P)
-      end.
-
-    Lemma dmut_wp_match_sum {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1} (x y : 𝑺) (σ τ : Ty) (s : Term Σ1 (ty_sum σ τ))
-          (dinl : dmut_arrow Γ1 Γ2 (fun Σ => Term Σ σ) AT Σ1) (dinl_dcl : dmut_arrow_dcl dinl)
-          (dinr : dmut_arrow Γ1 Γ2 (fun Σ => Term Σ τ) AT Σ1) (dinr_dcl : dmut_arrow_dcl dinr)
-          Σ2 (ζ12 : Sub Σ1 Σ2) pc2 s2 ι2 F P :
-      instpc ι2 pc2 ->
-      dmut_wp (dmut_match_sum x y s dinl dinr) ζ12 pc2 s2 ι2 F P <->
-      (forall sl,
-          inst (T := fun Σ => Term Σ _) (A := Lit σ + Lit τ) (inst ι2 ζ12) s =
-          @inl (Lit σ) (Lit τ) (inst (T := fun Σ => Term Σ _) (A := Lit σ) ι2 sl) ->
-          dmut_wp (dinl Σ2 ζ12 sl) (sub_id Σ2) pc2 s2 ι2 F P) /\
-      (forall sr,
-          inst (T := fun Σ => Term Σ (ty_sum σ τ)) (A := Lit σ + Lit τ) (inst ι2 ζ12) s =
-          @inr (Lit σ) (Lit τ) (inst (T := fun Σ => Term Σ τ) (A := Lit τ) ι2 sr) ->
-          dmut_wp (dinr Σ2 ζ12 sr) (sub_id Σ2) pc2 s2 ι2 F P).
-    Proof.
-      intros Hpc2. unfold dmut_match_sum. cbn.
-      destruct (term_get_sum_spec (subst (T := fun Σ => Term Σ (ty_sum σ τ)) ζ12 s)) as [[sl|sr] Heqιs|_].
-      - fold_dmut_wp. specialize (Heqιs ι2). rewrite inst_subst in Heqιs. split.
-        + intros Hwp. split.
-          * intros sl' Heq. revert Hwp. rewrite Heqιs in Heq. inversion Heq.
-            eapply dinl_dcl; unfold sub_comp;
-              rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
-          * intros sr Heq. rewrite Heqιs in Heq. discriminate.
-        + intros [Hl Hr]. specialize (Hl sl Heqιs). revert Hl.
-          eapply dinl_dcl; unfold sub_comp;
-            rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
-      - fold_dmut_wp. specialize (Heqιs ι2). rewrite inst_subst in Heqιs. split.
-        + intros Hwp. split.
-          * intros sl Heq. rewrite Heqιs in Heq. discriminate.
-          * intros sr' Heq. revert Hwp. rewrite Heqιs in Heq. inversion Heq.
-            eapply dinr_dcl; unfold sub_comp;
-              rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
-        + intros [Hl Hr]. specialize (Hr sr Heqιs). revert Hr.
-          eapply dinr_dcl; unfold sub_comp;
-            rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
-      - fold_dmut_wp. rewrite dmut_wp_demonic_binary. unfold dmut_freshtermvar.
-        rewrite ?dmut_wp_bind, ?dmut_wp_fresh; auto.
-        setoid_rewrite dmut_wp_pure.
-        { split; intros [Hl Hr]; (split; [clear Hr|clear Hl]).
-          - intros sl Heqsl. specialize (Hl (inst ι2 sl)).
-            rewrite dmut_wp_bind_right, dmut_wp_assume_formula in Hl; auto.
-            + cbn in Hl. fold_inst_term.
-              rewrite inst_subst, inst_sub_id, ?inst_lift in Hl.
-              specialize (Hl Heqsl). revert Hl.
-              eapply dinl_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
-            + clear Hl Heqsl. now apply dmut_arrow_dcl_specialize.
-          - intros sr Heqsr. specialize (Hr (inst ι2 sr)).
-            rewrite dmut_wp_bind_right, dmut_wp_assume_formula in Hr; auto.
-            + cbn in Hr. fold_inst_term.
-              rewrite inst_subst, inst_sub_id, ?inst_lift in Hr.
-              specialize (Hr Heqsr). revert Hr.
-              eapply dinr_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
-            + clear Hr Heqsr. now apply dmut_arrow_dcl_specialize.
-          - intros vl. specialize (Hl (term_lit _ vl)). revert Hl.
-            rewrite dmut_wp_bind_right, dmut_wp_assume_formula; auto.
-            cbn. fold_inst_term. rewrite ?inst_subst, ?inst_lift, ?inst_sub_id.
-            intros Hwp Heq. specialize (Hwp Heq). revert Hwp.
-            eapply dinl_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
-            now apply dmut_arrow_dcl_specialize.
-          - intros vr. specialize (Hr (term_lit _ vr)). revert Hr.
-            rewrite dmut_wp_bind_right, dmut_wp_assume_formula; auto.
-            cbn. fold_inst_term. rewrite ?inst_subst, ?inst_lift, ?inst_sub_id.
-            intros Hwp Heq. specialize (Hwp Heq). revert Hwp.
-            eapply dinr_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
-            now apply dmut_arrow_dcl_specialize.
-        }
-        + apply dmut_pure_dcl.
-        + apply dmut_pure_dcl.
-        + apply dmut_bind_right_arrow_dcl; eauto.
-          intros until Q; intros PQ. rewrite ?dmut_wp_assume_formula; eauto.
-          cbn. revert H6 H7 H8. clear - PQ. unfold sub_comp. rewrite ?inst_subst.
-          fold_inst_term. intros -> -> ->. intuition.
-        + apply dmut_bind_right_arrow_dcl; eauto.
-          intros until Q; intros PQ. rewrite ?dmut_wp_assume_formula; eauto.
-          cbn. revert H6 H7 H8. clear - PQ. unfold sub_comp. rewrite ?inst_subst.
-          fold_inst_term. intros -> -> ->. intuition.
-    Qed.
-
-    Definition dmut_wp_match_pair {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1} (x y : 𝑺) (σ τ : Ty) (s : Term Σ1 (ty_prod σ τ))
-      (d : dmut_arrow Γ1 Γ2 (Pair (fun Σ => Term Σ σ) (fun Σ => Term Σ τ)) AT Σ1) (d_dcl : dmut_arrow_dcl d)
-          Σ2 (ζ12 : Sub Σ1 Σ2) pc2 s2 ι2 (Hpc : instpc ι2 pc2) F P :
-      dmut_wp (dmut_match_pair x y s d) ζ12 pc2 s2 ι2 F P <->
-      (forall sl sr,
-          inst (T := fun Σ => Term Σ _) (A := Lit (ty_prod σ τ)) (inst ι2 ζ12) s =
-          (inst (T := fun Σ => Term Σ _) (A := Lit σ) ι2 sl,
-           inst (T := fun Σ => Term Σ _) (A := Lit τ) ι2 sr) ->
-          dmut_wp (d Σ2 ζ12 (sl,sr)) (sub_id Σ2) pc2 s2 ι2 F P).
-    Proof.
-      unfold dmut_match_pair. cbn.
-      destruct (term_get_pair_spec (subst (T := fun Σ => Term Σ _) ζ12 s)) as [[sl sr] Heqs|];
-        fold_dmut_wp.
-      - specialize (Heqs ι2). rewrite inst_subst in Heqs.
-        split.
-        + intros Hwp sl2 sr2 Heqs2. rewrite Heqs2 in Heqs.
-          inversion Heqs. revert Hwp.
-          eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
-        + intros Hwp. specialize (Hwp sl sr).
-          rewrite ?inst_subst in Hwp. specialize (Hwp Heqs).
-          revert Hwp.
-          eapply d_dcl; unfold sub_comp; cbn; fold_inst_term;
-            rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
-      - unfold dmut_freshtermvar.
-        rewrite dmut_wp_bind; eauto.
-        rewrite dmut_wp_pair; eauto.
-        rewrite dmut_wp_fresh; eauto.
-        split; intros Hwp.
-        { intros sl sr Heqs.
-          specialize (Hwp (inst ι2 sl)). rewrite dmut_wp_pure in Hwp.
-          rewrite dmut_wp_fresh in Hwp; eauto; [|apply dmut_pure_dcl].
-          specialize (Hwp (inst ι2 sr)). rewrite dmut_wp_pure in Hwp.
-          cbn - [dmut_wp] in Hwp.
-          rewrite dmut_wp_bind_right in Hwp; eauto; [|now apply dmut_arrow_dcl_specialize].
-          rewrite dmut_wp_assume_formula in Hwp; eauto.
-          cbn in Hwp. fold_inst_term.
-          rewrite ?subst_sub_id, ?inst_lift in Hwp.
-          specialize (Hwp Heqs). revert Hwp.
-          eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
-        }
-        { intros vl. rewrite dmut_wp_pure.
-          rewrite dmut_wp_fresh; eauto; [|apply dmut_pure_dcl].
-          intros vr. rewrite dmut_wp_pure. cbn - [dmut_wp].
-          rewrite dmut_wp_bind_right; eauto; [|now apply dmut_arrow_dcl_specialize].
-          rewrite dmut_wp_assume_formula; eauto.
-          cbn. fold_inst_term. rewrite ?subst_sub_id, ?inst_lift.
-          intros Heqs. specialize (Hwp (lift vl) (lift vr) Heqs). revert Hwp.
-          eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
-        }
-        + apply dmut_pure_dcl.
-        + apply dmut_fresh_dcl, dmut_pure_dcl.
-        + intros until Q; intros PQ. destruct a1 as [sl0 sr0], a2 as [sl3 sr3]; cbn.
-          unfold sub_comp in H7; rewrite ?inst_subst in H7.
-          inversion H8.
-          rewrite ?dmut_wp_bind_right; eauto.
-          rewrite ?dmut_wp_assume_formula; eauto.
-          cbn. fold_inst_term. rewrite ?inst_subst.
-          rewrite H7, H11, H12.
-          intros Hwp Heqs; specialize (Hwp Heqs); revert Hwp.
-          eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_lift; eauto.
-          now apply dmut_arrow_dcl_specialize.
-          now apply dmut_arrow_dcl_specialize.
-    Qed.
 
     Lemma dmut_bind_dcl {AT A BT B} `{InstLaws AT A, InstLaws BT B}
         {Γ1 Γ2 Γ3 Σ0} (d : DynamicMutator Γ1 Γ2 AT Σ0) (d_dcl : dmut_dcl d)
@@ -892,16 +714,6 @@ Module Soundness
       - right. revert Hwp2. eapply d2_dcl; eauto.
     Qed.
 
-
-    Lemma dmut_assert_formula_dcl {Γ Σ} (fml : Formula Σ) :
-      dmut_dcl (Γ1 := Γ) (dmut_assert_formula fml).
-    Proof.
-      intros until Q; intros PQ.
-      rewrite ?dmut_wp_assert_formula; auto.
-      rewrite H2, H3. intuition.
-      admit. admit.
-    Admitted.
-
     Lemma dmut_state_dcl {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ}
           (f : forall Σ' : LCtx, Sub Σ Σ' -> SymbolicState Γ1 Σ' -> Pair AT (SymbolicState Γ2) Σ')
           (f_dcl : forall Σ1 Σ2 (ζ01 : Sub Σ Σ1) (ζ02 : Sub Σ Σ2) (ζ12 : Sub Σ1 Σ2) (s1 : SymbolicState Γ1 Σ1) (s2 : SymbolicState Γ1 Σ2) ι1 ι2,
@@ -917,16 +729,6 @@ Module Soundness
       inversion Hf. intros Hp. apply PQ. revert Hp. intuition.
     Qed.
     Local Hint Resolve dmut_state_dcl : core.
-
-    Lemma dmut_produce_chunk_dcl {Γ Σ} (c : Chunk Σ) :
-      dmut_dcl (Γ1 := Γ) (dmut_produce_chunk c).
-    Proof.
-      unfold dmut_produce_chunk, dmut_modify_heap, dmut_modify.
-      apply dmut_state_dcl. destruct s1 as [δ1 h1], s2 as [δ2 h2].
-      cbn - [instantiate_list]. intros. inversion H0. cbn.
-      change (List.map (inst ?ι) ?h) with (inst ι h).
-      rewrite ?inst_subst. congruence.
-    Qed.
 
     Lemma dmut_block_dcl {AT A} `{Subst AT, Inst AT A} {Γ1 Γ2 Σ}  :
       dmut_dcl (Γ1 := Γ1) (Γ2 := Γ2) (Σ0 := Σ) dmut_block.
@@ -978,30 +780,231 @@ Module Soundness
       intros [x [? xIn]]. subst d. apply k_dcl.
     Qed.
 
-    Lemma dmut_match_sum_dcl {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ x y σ τ} (s : Term Σ (ty_sum σ τ))
-      (dinl : dmut_arrow Γ1 Γ2 (fun Σ => Term Σ σ) AT Σ) (dinl_dcl : dmut_arrow_dcl dinl)
-      (dinr : dmut_arrow Γ1 Γ2 (fun Σ => Term Σ τ) AT Σ) (dinr_dcl : dmut_arrow_dcl dinr) :
-      dmut_dcl (dmut_match_sum x y s dinl dinr).
+    Lemma dmut_wp_assume_formula {Γ Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (fml : Formula Σ1) (s2 : SymbolicState Γ Σ2)
+          (ι2 : SymInstance Σ2) (F : string -> Prop) P :
+      instpc ι2 pc2 ->
+      dmut_wp (dmut_assume_formula fml) ζ12 pc2 s2 ι2 F P <->
+      ((inst (inst ι2 ζ12) fml : Prop) -> P tt (inst ι2 s2)).
     Proof.
-      intros until Q; intros PQ. rewrite ?dmut_wp_match_sum; auto.
+      unfold dmut_wp, dmut_assume_formula. intros.
+      rewrite sout_wp_bind; auto.
+      - rewrite sout_wp_assume_formula.
+        rewrite ?subst_sub_id, ?inst_subst.
+        reflexivity.
+      - unfold sout_arrow_dcl. cbn. intros.
+        revert H5. rewrite ?inst_subst.
+        rewrite H3, H4. apply PQ.
+    Qed.
+
+    Lemma dmut_assume_formula_dcl {Γ Σ} (fml : Formula Σ) :
+      dmut_dcl (Γ1 := Γ) (dmut_assume_formula fml).
+    Proof.
+      unfold dmut_dcl, dmut_geq; intros. revert H4.
+      rewrite ?dmut_wp_assume_formula; auto.
+      rewrite H2, H3. intuition.
+    Qed.
+
+    Lemma dmut_wp_assert_formula {Γ Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (fml : Formula Σ1) (s2 : SymbolicState Γ Σ2)
+      (ι2 : SymInstance Σ2) (Hpc2 : instpc ι2 pc2) (F : string -> Prop) P (HF : forall e, F e <-> False) :
+      dmut_wp (dmut_assert_formula fml) ζ12 pc2 s2 ι2 F P <->
+      (inst (inst ι2 ζ12) fml /\ P tt (inst ι2 s2)).
+    Proof.
+      unfold dmut_wp, dmut_assert_formula.
+      rewrite sout_wp_bind, sout_wp_assert_formula; cbn;
+        rewrite ?inst_subst, ?inst_sub_id; auto.
+      unfold sout_arrow_dcl. cbn. intros.
+      revert H4. rewrite ?inst_subst.
+      rewrite H2, H3. apply PQ.
+    Qed.
+
+    Lemma dmut_assert_formula_dcl {Γ Σ} (fml : Formula Σ) :
+      dmut_dcl (Γ1 := Γ) (dmut_assert_formula fml).
+    Proof.
+      intros until Q; intros PQ.
+      rewrite ?dmut_wp_assert_formula; auto.
+      rewrite H2, H3. intuition.
+      admit. admit.
+    Admitted.
+
+    Lemma dmut_wp_match_enum {AT A E} `{InstLaws AT A} {Γ1 Γ2 Σ1} (t : Term Σ1 (ty_enum E))
+      (d : 𝑬𝑲 E -> DynamicMutator Γ1 Γ2 AT Σ1)
+      Σ2 (ζ12 : Sub Σ1 Σ2) pc2 s2 ι2 F P :
+      instpc ι2 pc2 ->
+      dmut_wp (dmut_match_enum t d) ζ12 pc2 s2 ι2 F P <->
+      dmut_wp (d (inst (T := fun Σ => Term Σ _) (A := 𝑬𝑲 E) (inst ι2 ζ12) t)) ζ12 pc2 s2 ι2 F P.
+    Proof.
+      intros Hpc2. unfold dmut_match_enum. cbn.
+      destruct (term_get_lit_spec (subst (T := fun Σ => Term Σ (ty_enum E)) ζ12 t)) as [k Heqιs|]; cbn [Lit] in *.
+      - fold_dmut_wp. specialize (Heqιs ι2). rewrite inst_subst in Heqιs. now rewrite Heqιs.
+      - fold_dmut_wp. admit.
+    Admitted.
+
+    Lemma dmut_wp_match_sum {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1} (x y : 𝑺) (σ τ : Ty) (s : Term Σ1 (ty_sum σ τ))
+      (dinl : DynamicMutator Γ1 Γ2 AT (Σ1 ▻ (x :: σ)))  (dinl_dcl : dmut_dcl dinl)
+      (dinr : DynamicMutator Γ1 Γ2 AT (Σ1 ▻ (y :: τ)))  (dinr_dcl : dmut_dcl dinr)
+      Σ2 (ζ12 : Sub Σ1 Σ2) pc2 s2 ι2 F P :
+      instpc ι2 pc2 ->
+      dmut_wp (dmut_match_sum s dinl dinr) ζ12 pc2 s2 ι2 F P <->
+      (forall sl,
+          inst (T := fun Σ => Term Σ _) (A := Lit σ + Lit τ) (inst ι2 ζ12) s =
+          @inl (Lit σ) (Lit τ) (inst (T := fun Σ => Term Σ _) (A := Lit σ) ι2 sl) ->
+          dmut_wp dinl (sub_snoc ζ12 (x :: σ) sl) pc2 s2 ι2 F P) /\
+      (forall sr,
+          inst (T := fun Σ => Term Σ (ty_sum σ τ)) (A := Lit σ + Lit τ) (inst ι2 ζ12) s =
+          @inr (Lit σ) (Lit τ) (inst (T := fun Σ => Term Σ τ) (A := Lit τ) ι2 sr) ->
+          dmut_wp dinr (sub_snoc ζ12 (y :: τ) sr) pc2 s2 ι2 F P).
+    Proof.
+      intros Hpc2. unfold dmut_match_sum. cbn.
+      destruct (term_get_sum_spec (subst (T := fun Σ => Term Σ (ty_sum σ τ)) ζ12 s)) as [[sl|sr] Heqιs|_].
+      - fold_dmut_wp. specialize (Heqιs ι2). rewrite inst_subst in Heqιs. split.
+        + intros Hwp. split.
+          * intros sl' Heq. revert Hwp. rewrite Heqιs in Heq. inversion Heq.
+            eapply dinl_dcl; unfold sub_comp;
+              rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_snoc; eauto.
+            now f_equal.
+          * intros sr Heq. rewrite Heqιs in Heq. discriminate.
+        + intros [Hl Hr]. specialize (Hl sl Heqιs). revert Hl. auto.
+      - fold_dmut_wp. specialize (Heqιs ι2). rewrite inst_subst in Heqιs. split.
+        + intros Hwp. split.
+          * intros sl Heq. rewrite Heqιs in Heq. discriminate.
+          * intros sr' Heq. revert Hwp. rewrite Heqιs in Heq. inversion Heq.
+            eapply dinr_dcl; unfold sub_comp;
+              rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_snoc; eauto.
+            now f_equal.
+        + intros [Hl Hr]. specialize (Hr sr Heqιs). revert Hr.
+          eapply dinr_dcl; unfold sub_comp;
+            rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
+      - fold_dmut_wp. rewrite dmut_wp_demonic_binary.
+        rewrite ?dmut_wp_fresh; auto.
+        { split; intros [Hl Hr]; (split; [clear Hr|clear Hl]).
+          - intros sl Heqsl. specialize (Hl (inst ι2 sl)).
+            rewrite dmut_wp_bind_right, dmut_wp_assume_formula in Hl; auto.
+            rewrite inst_sub_snoc in Hl. cbn in Hl.
+            rewrite inst_subst, inst_sub_wk1 in Hl.
+            specialize (Hl Heqsl). revert Hl.
+            eapply dinl_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+          - intros sr Heqsr. specialize (Hr (inst ι2 sr)).
+            rewrite dmut_wp_bind_right, dmut_wp_assume_formula in Hr; auto.
+            rewrite inst_sub_snoc in Hr. cbn in Hr.
+            rewrite inst_subst, inst_sub_wk1 in Hr.
+            specialize (Hr Heqsr). revert Hr.
+            eapply dinr_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+          - intros vl. specialize (Hl (term_lit _ vl)).
+            rewrite dmut_wp_bind_right, dmut_wp_assume_formula; auto.
+            rewrite inst_sub_snoc. cbn. rewrite inst_subst, inst_sub_wk1.
+            intros Heq. specialize (Hl Heq). revert Hl.
+            eapply dinl_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+          - intros vr. specialize (Hr (term_lit _ vr)).
+            rewrite dmut_wp_bind_right, dmut_wp_assume_formula; auto.
+            rewrite inst_sub_snoc. cbn. rewrite inst_subst, inst_sub_wk1.
+            intros Heq. specialize (Hr Heq). revert Hr.
+            eapply dinr_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+        }
+        + apply dmut_bind_right_dcl; auto.
+          apply dmut_assume_formula_dcl.
+        + apply dmut_bind_right_dcl; auto.
+          apply dmut_assume_formula_dcl.
+    Qed.
+
+    Definition dmut_wp_match_pair {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1} (x y : 𝑺) (σ τ : Ty) (s : Term Σ1 (ty_prod σ τ))
+      (d : DynamicMutator Γ1 Γ2 AT (Σ1 ▻ (x :: σ) ▻ (y :: τ))) (d_dcl : dmut_dcl d)
+      Σ2 (ζ12 : Sub Σ1 Σ2) pc2 s2 ι2 (Hpc : instpc ι2 pc2) F P :
+      dmut_wp (dmut_match_pair s d) ζ12 pc2 s2 ι2 F P <->
+      (forall sl sr,
+          inst (T := fun Σ => Term Σ _) (A := Lit (ty_prod σ τ)) (inst ι2 ζ12) s =
+          (inst (T := fun Σ => Term Σ _) (A := Lit σ) ι2 sl,
+           inst (T := fun Σ => Term Σ _) (A := Lit τ) ι2 sr) ->
+          dmut_wp d (sub_snoc (sub_snoc ζ12 (x :: σ) sl) (y :: τ) sr) pc2 s2 ι2 F P).
+    Proof.
+      unfold dmut_match_pair. cbn - [sub_wk1].
+      destruct (term_get_pair_spec (subst (T := fun Σ => Term Σ _) ζ12 s)) as [[sl sr] Heqs|];
+        fold_dmut_wp.
+      - specialize (Heqs ι2). rewrite inst_subst in Heqs.
+        split.
+        + intros Hwp sl2 sr2 Heqs2. rewrite Heqs2 in Heqs.
+          inversion Heqs. revert Hwp.
+          eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+          f_equal; auto. f_equal; auto.
+        + intros Hwp. specialize (Hwp sl sr Heqs). revert Hwp.
+          eapply d_dcl; unfold sub_comp; cbn; fold_inst_term;
+            rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
+      - split; intros Hwp.
+        { intros sl sr Heqs.
+          rewrite dmut_wp_fresh in Hwp; auto. specialize (Hwp (inst ι2 sl)).
+          rewrite dmut_wp_fresh in Hwp; auto. specialize (Hwp (inst ι2 sr)).
+          rewrite dmut_wp_bind_right in Hwp; auto.
+          rewrite dmut_wp_assume_formula in Hwp; auto.
+          rewrite ?inst_sub_snoc in Hwp. cbn - [sub_wk1] in Hwp.
+          unfold sub_comp in Hwp. rewrite ?inst_subst, ?inst_sub_wk1 in Hwp.
+          specialize (Hwp Heqs). revert Hwp.
+          eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
+          - apply dmut_bind_right_dcl; auto.
+            apply dmut_assume_formula_dcl.
+          - apply dmut_fresh_dcl.
+            apply dmut_bind_right_dcl; auto.
+            apply dmut_assume_formula_dcl.
+        }
+        { rewrite dmut_wp_fresh; auto. intros vl.
+          rewrite dmut_wp_fresh; auto. intros vr.
+          rewrite dmut_wp_bind_right; auto.
+          rewrite dmut_wp_assume_formula; auto.
+          unfold sub_comp. rewrite ?inst_sub_snoc. cbn - [sub_wk1].
+          rewrite ?inst_subst, ?inst_sub_wk1. intros Heqs.
+          specialize (Hwp (lift vl) (lift vr) Heqs). revert Hwp.
+          eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
+          - apply dmut_bind_right_dcl; auto.
+            apply dmut_assume_formula_dcl.
+          - apply dmut_fresh_dcl.
+            apply dmut_bind_right_dcl; auto.
+            apply dmut_assume_formula_dcl.
+        }
+    Qed.
+
+    Lemma dmut_match_enum_dcl {AT A E} `{InstLaws AT A} {Γ1 Γ2 Σ1} (t : Term Σ1 (ty_enum E))
+      (d : 𝑬𝑲 E -> DynamicMutator Γ1 Γ2 AT Σ1) (d_dcl : forall K, dmut_dcl (d K)) :
+      dmut_dcl (dmut_match_enum t d).
+    Proof.
+      intros until Q; intros PQ. rewrite ?dmut_wp_match_enum; auto.
+      subst. rewrite H7. eapply d_dcl; eauto.
+    Qed.
+
+    Lemma dmut_match_sum_dcl {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ x y σ τ} (s : Term Σ (ty_sum σ τ))
+      (dinl : DynamicMutator Γ1 Γ2 AT (Σ ▻ (x :: σ))) (dinl_dcl : dmut_dcl dinl)
+      (dinr : DynamicMutator Γ1 Γ2 AT (Σ ▻ (y :: τ))) (dinr_dcl : dmut_dcl dinr) :
+      dmut_dcl (dmut_match_sum s dinl dinr).
+    Proof.
+      intros until Q; intros PQ. rewrite ?dmut_wp_match_sum; auto. cbn.
       intros [Hl Hr].
       split.
       - intros sl Heq. specialize (Hl (lift (inst ι2 sl))).
         inster Hl by (rewrite inst_lift; intuition). revert Hl.
-        eapply dinl_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
+        eapply dinl_dcl; rewrite ?inst_sub_snoc, ?inst_lift; auto.
+        f_equal. auto.
       - intros sr Heq. specialize (Hr (lift (inst ι2 sr))).
         inster Hr by (rewrite inst_lift; intuition). revert Hr.
-        eapply dinr_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
+        eapply dinr_dcl; rewrite ?inst_sub_snoc, ?inst_lift; auto.
+        f_equal. auto.
     Qed.
 
     Lemma dmut_match_pair_dcl {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1 x y σ τ} (s : Term Σ1 (ty_prod σ τ))
-      (d : dmut_arrow Γ1 Γ2 (Pair (fun Σ => Term Σ σ) (fun Σ => Term Σ τ)) AT Σ1) (d_dcl : dmut_arrow_dcl d) :
-      dmut_dcl (dmut_match_pair x y s d).
+      (d : DynamicMutator Γ1 Γ2 AT (Σ1 ▻ (x :: σ) ▻ (y :: τ))) (d_dcl : dmut_dcl d) :
+      dmut_dcl (dmut_match_pair s d).
     Proof.
       intros until Q; intros PQ. rewrite ?dmut_wp_match_pair; auto.
       intros Hwp sl sr Heqs. specialize (Hwp (lift (inst ι2 sl)) (lift (inst ι2 sr))).
-      inster Hwp by (rewrite ?inst_lift; intuition). revert Hwp.
-      eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
+      rewrite ?inst_lift in Hwp. rewrite <- H7 in Heqs. specialize (Hwp Heqs). revert Hwp.
+      eapply d_dcl; unfold sub_comp; rewrite ?inst_sub_snoc, ?inst_lift; auto.
+      f_equal; auto. f_equal; auto.
+    Qed.
+
+    Lemma dmut_produce_chunk_dcl {Γ Σ} (c : Chunk Σ) :
+      dmut_dcl (Γ1 := Γ) (dmut_produce_chunk c).
+    Proof.
+      unfold dmut_produce_chunk, dmut_modify_heap, dmut_modify.
+      apply dmut_state_dcl. destruct s1 as [δ1 h1], s2 as [δ2 h2].
+      cbn - [instantiate_list]. intros. inversion H0. cbn.
+      change (List.map (inst ?ι) ?h) with (inst ι h).
+      rewrite ?inst_subst. congruence.
     Qed.
 
     Lemma dmut_produce_dcl {Γ Σ} (asn : Assertion Σ) :
@@ -1012,13 +1015,10 @@ Module Soundness
       - apply dmut_produce_chunk_dcl.
       - apply dmut_demonic_binary_dcl; apply dmut_bind_right_dcl;
           unfold dmut_assume_term; auto using dmut_assume_formula_dcl.
-      - apply dmut_demonic_finite_dcl. intros K.
-        apply dmut_bind_right_dcl; auto using dmut_assume_formula_dcl.
-      - apply dmut_match_sum_dcl.
-        + admit.
-        + admit.
+      - now apply dmut_match_enum_dcl.
+      - now apply dmut_match_sum_dcl.
       - admit.
-      - apply dmut_match_pair_dcl. admit.
+      - now apply dmut_match_pair_dcl.
       - admit.
       - admit.
       - admit.
@@ -1084,11 +1084,6 @@ Module Soundness
         DynamicMutator Γ1 Γ2 AT Σ -> SCMut Γ1 Γ2 A -> Prop.
     Arguments APPROX _ _ _ _ {_}.
 
-    Definition inst_dmut {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ) (d : DynamicMutator Γ1 Γ2 AT Σ) : SCMut Γ1 Γ2 A.
-    Proof.
-      intros ?. eapply inst_symoutcome. apply ι. apply d. apply sub_id. apply nil. apply (lift X).
-    Defined.
-
     Definition bapprox {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
       fun Σ0 ι0 dm sm =>
         forall Σ1 (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (ι1 : SymInstance Σ1) POST s1,
@@ -1096,6 +1091,81 @@ Module Soundness
           instpc ι1 pc1 ->
           dmut_wp dm ζ01 pc1 s1 ι1 (fun _ => False) POST ->
           scmut_wp sm POST (inst ι1 s1).
+
+    Definition bapprox2 {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
+      fun Σ0 ι0 dm sm =>
+        forall POST sc,
+          dmut_wp dm (lift ι0) nil (lift sc) env_nil (fun _ => False) POST ->
+          scmut_wp sm POST sc.
+
+    Lemma bapprox_bapprox2 {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ)
+      (dm : DynamicMutator Γ1 Γ2 AT Σ) (dm_dcl : dmut_dcl dm) (sm : SCMut Γ1 Γ2 A) :
+      bapprox ι dm sm <-> bapprox2 ι dm sm.
+    Proof.
+      unfold bapprox, bapprox2. split; intros HYP.
+      - intros POST sc Hwp.
+        specialize (HYP ctx_nil (lift ι) nil env_nil POST (lift sc)).
+        rewrite ?inst_lift in HYP. apply HYP; auto. constructor.
+      - intros ? ? ? ? ? ? Hι Hpc Hwp. specialize (HYP POST (inst ι1 s1)).
+        apply HYP. revert Hwp.
+        apply (dm_dcl Σ1 ε ζ01 _ _ (lift ι1)); rewrite ?inst_lift; auto.
+        constructor.
+    Qed.
+
+    Definition inst_dmut {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ) (d : DynamicMutator Γ1 Γ2 AT Σ) : SCMut Γ1 Γ2 A :=
+      fun sc => inst_symoutcome ι (d Σ (sub_id Σ) nil (lift sc)).
+    Definition inst_dmut' {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ) (d : DynamicMutator Γ1 Γ2 AT Σ) : SCMut Γ1 Γ2 A :=
+      fun sc => inst_symoutcome env_nil (d ctx_nil (lift ι) nil (lift sc)).
+
+    Definition bapprox3 {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
+      fun Σ0 ι0 dm sm =>
+        forall POST sc,
+          scmut_wp (inst_dmut ι0 dm) POST sc ->
+          scmut_wp sm POST sc.
+
+    Definition bapprox4 {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
+      fun Σ0 ι0 dm sm =>
+        forall POST sc,
+          scmut_wp (inst_dmut' ι0 dm) POST sc ->
+          scmut_wp sm POST sc.
+
+    Lemma bapprox_bapprox3 {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ)
+      (dm : DynamicMutator Γ1 Γ2 AT Σ) (dm_dcl : dmut_dcl dm) (sm : SCMut Γ1 Γ2 A) :
+      bapprox ι dm sm <-> bapprox3 ι dm sm.
+    Proof.
+      split; unfold bapprox, bapprox3; intros HYP.
+      - intros POST sc Hwp.
+        specialize (HYP Σ (sub_id _) nil ι POST (lift sc)).
+        inster HYP by rewrite ?inst_sub_id; constructor.
+        rewrite inst_lift in HYP. apply HYP.
+        unfold dmut_wp. rewrite sout_wp_wp'. exact Hwp.
+      - intros ? ? ? ? ? ? Hι Hpc Hwp. apply HYP.
+        unfold scmut_wp, inst_dmut.
+        change (sout_wp' (dm Σ (sub_id Σ) nil (lift (inst ι1 s1))) ι (fun _ : string => False)
+                         (fun X : SCMutResult Γ2 A => POST (scmutres_value X) (scmutres_state X))).
+        rewrite <- sout_wp_wp'. fold_dmut_wp. revert Hwp.
+        eapply dm_dcl; rewrite ?inst_sub_id, ?inst_lift; eauto.
+        constructor.
+    Qed.
+
+    Lemma bapprox_bapprox4 {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ)
+      (dm : DynamicMutator Γ1 Γ2 AT Σ) (dm_dcl : dmut_dcl dm) (sm : SCMut Γ1 Γ2 A) :
+      bapprox ι dm sm <-> bapprox4 ι dm sm.
+    Proof.
+      split; unfold bapprox, bapprox4; intros HYP.
+      - intros POST sc Hwp.
+        specialize (HYP ctx_nil (lift ι) nil env_nil POST (lift sc)).
+        inster HYP by rewrite ?inst_lift; constructor.
+        rewrite inst_lift in HYP. apply HYP.
+        unfold dmut_wp. rewrite sout_wp_wp'. exact Hwp.
+      - intros ? ? ? ? ? ? Hι Hpc Hwp. apply HYP.
+        unfold scmut_wp, inst_dmut'.
+        change (sout_wp' (dm ctx_nil (lift ι) nil (lift (inst ι1 s1))) env_nil (fun _ : string => False)
+                         (fun X : SCMutResult Γ2 A => POST (scmutres_value X) (scmutres_state X))).
+        rewrite <- sout_wp_wp'. fold_dmut_wp. revert Hwp.
+        eapply dm_dcl; rewrite ?inst_sub_id, ?inst_lift; eauto.
+        constructor.
+    Qed.
 
     Lemma bapprox_demonic_binary {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ)
           (dm1 dm2 : DynamicMutator Γ1 Γ2 AT Σ) (sm1 sm2 : SCMut Γ1 Γ2 A) :
@@ -1130,8 +1200,38 @@ Module Soundness
       - unfold sub_comp. now rewrite ?inst_sub_snoc, ?inst_subst, ?inst_sub_wk1.
     Qed.
 
+    Lemma bapprox2_fresh {Γ Σ ς τ} (ι : SymInstance Σ)
+          (dm : DynamicMutator Γ Γ Unit (Σ ▻ (ς,τ))) (d_dcl : dmut_dcl dm)
+          (sm : Lit τ -> SCMut Γ Γ unit) :
+      (forall v, bapprox2 (env_snoc ι _ v) dm (sm v)) ->
+      bapprox2 ι
+        (dmut_fresh ς τ dm)
+        (scmut_demonic sm).
+    Proof.
+      unfold bapprox2, scmut_demonic. intros HYP POST sc Hwp vτ. apply HYP.
+      rewrite dmut_wp_fresh in Hwp; eauto. apply (Hwp vτ). constructor.
+    Qed.
+
+    Lemma bapprox_bind {AT A BT B} `{InstLaws AT A, InstLaws BT B}
+      {Γ1 Γ2 Γ3 Σ0} (ι0 : SymInstance Σ0)
+      (dma : DynamicMutator Γ1 Γ2 AT Σ0) (sma : SCMut Γ1 Γ2 A)
+      (dmf : dmut_arrow Γ2 Γ3 AT BT Σ0)
+      (dmf_dcl : dmut_arrow_dcl dmf)
+      (smf : A -> SCMut Γ2 Γ3 B) :
+      bapprox ι0 dma sma ->
+      (forall (a0 : AT Σ0),
+          bapprox ι0 (dmf Σ0 (sub_id _) a0) (smf (inst ι0 a0))) ->
+      bapprox ι0 (dmut_bind dma dmf) (scmut_bind sma smf).
+    Proof.
+      unfold bapprox. intros Hapa Hapf * Hι Hpc.
+      rewrite dmut_wp_bind; eauto. rewrite scmut_wp_bind.
+      intros Hwp. eapply Hapa; eauto. revert Hwp.
+      apply dmut_wp_monotonic. intros a sc2 Hwp.
+      apply Hapf in Hwp; auto. revert Hwp. now rewrite ?inst_lift.
+    Qed.
+
     Lemma bapprox_bind_right {AT A BT B} `{InstLaws AT A, InstLaws BT B}
-      {Γ1 Γ2 Γ3 Σ0 } (ι0 : SymInstance Σ0)
+      {Γ1 Γ2 Γ3 Σ0} (ι0 : SymInstance Σ0)
       (dma : DynamicMutator Γ1 Γ2 AT Σ0) (sma : SCMut Γ1 Γ2 A)
       (dmb : DynamicMutator Γ2 Γ3 BT Σ0) (dmb_dcl : dmut_dcl dmb) (smb : SCMut Γ2 Γ3 B) :
       bapprox ι0 dma sma ->
@@ -1147,6 +1247,32 @@ Module Soundness
       now rewrite inst_lift.
     Qed.
 
+    Lemma bapprox2_assume_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) :
+      bapprox2
+        (Γ1 := Γ) (Γ2 := Γ) ι
+        (dmut_assume_formula fml)
+        (scmut_assume_formula ι fml).
+    Proof.
+      unfold bapprox2. intros POST sc.
+      rewrite dmut_wp_assume_formula; auto. rewrite ?inst_lift.
+      intuition.
+      constructor.
+    Qed.
+
+    Lemma bapprox_angelic {AT A BT B} `{InstLaws AT A, InstLaws BT B} {Γ Σ} (ι : SymInstance Σ)
+      (dm : AT Σ -> DynamicMutator Γ Γ BT Σ)
+      (sm : A -> SCMut Γ Γ B) :
+      (forall a, bapprox ι (dm a) (sm (inst ι a))) ->
+      bapprox ι
+        (dmut_angelic dm)
+        (scmut_angelic sm).
+    Proof.
+      unfold bapprox, dmut_angelic.
+      intros HYP * Hι Hpc [a Hwp]. rewrite scmut_wp_angelic. exists (inst ι a).
+      change (dmut_wp (dm a) ζ01 pc1 s1 ι1 (fun _ => False) POST) in Hwp.
+      revert Hwp. apply HYP; auto.
+    Qed.
+
     Lemma bapprox_assume_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) :
       bapprox
         (Γ1 := Γ) (Γ2 := Γ) ι
@@ -1155,6 +1281,17 @@ Module Soundness
     Proof.
       unfold bapprox. intros * -> Hpc Hwp Hfml. revert Hwp.
       rewrite dmut_wp_assume_formula; eauto. cbn. intuition.
+    Qed.
+
+    Lemma bapprox_assert_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) :
+      bapprox
+        (Γ1 := Γ) (Γ2 := Γ) ι
+        (dmut_assert_formula fml)
+        (scmut_assert_formula ι fml).
+    Proof.
+      unfold bapprox. intros * Hι Hpc1.
+      rewrite dmut_wp_assert_formula; eauto.
+      cbn. intuition.
     Qed.
 
     Lemma bapprox_produce_chunk {Γ Σ} (ι : SymInstance Σ) (c : Chunk Σ) :
@@ -1168,6 +1305,59 @@ Module Soundness
       intros * -> Hpc1. destruct s1. cbn. now rewrite inst_subst.
     Qed.
 
+    Lemma bapprox_match_enum {AT A E} `{InstLaws AT A} {Γ1 Γ2 Σ1} (t : Term Σ1 (ty_enum E))
+      (dm : Lit (ty_enum E) -> DynamicMutator Γ1 Γ2 AT Σ1)
+      (sm : Lit (ty_enum E) -> SCMut Γ1 Γ2 A)
+      (ι : SymInstance Σ1) :
+      (forall k, bapprox ι (dm k) (sm k)) ->
+      bapprox
+        ι
+        (dmut_match_enum t dm)
+        (sm (inst ι t)).
+    Proof.
+      unfold bapprox. intros Hap * ? Hpc. subst.
+      rewrite dmut_wp_match_enum; auto. now apply Hap.
+    Qed.
+
+    Lemma bapprox_match_sum {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1} {x y : 𝑺} {σ τ} (s : Term Σ1 (ty_sum σ τ))
+      (dinl : DynamicMutator Γ1 Γ2 AT (Σ1 ▻ (x :: σ))) (dinl_dcl : dmut_dcl dinl)
+      (dinr : DynamicMutator Γ1 Γ2 AT (Σ1 ▻ (y :: τ))) (dinr_dcl : dmut_dcl dinr)
+      (sinl : Lit σ -> SCMut Γ1 Γ2 A) (sinr : Lit τ -> SCMut Γ1 Γ2 A) (ι : SymInstance Σ1) :
+      (forall v, bapprox (env_snoc ι _ v) dinl (sinl v)) ->
+      (forall v, bapprox (env_snoc ι _ v) dinr (sinr v)) ->
+      bapprox
+        ι
+        (dmut_match_sum s dinl dinr)
+        match inst (T := fun Σ => Term Σ (ty_sum σ τ)) (A := Lit σ + Lit τ) ι s with
+        | inl v => sinl v
+        | inr v => sinr v
+        end.
+    Proof.
+      unfold bapprox. intros Hapl Hapr * ? Hpc.
+      rewrite dmut_wp_match_sum; auto. intros [Hl Hr].
+      destruct (inst ι s) eqn:Heqs; [ clear Hr | clear Hl ]; subst ι.
+      + specialize (Hl (term_lit σ l) Heqs). revert Hl. now apply Hapl.
+      + specialize (Hr (term_lit τ l) Heqs). revert Hr. now apply Hapr.
+    Qed.
+
+    Lemma bapprox_match_pair {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1} {x y : 𝑺} {σ τ} (s : Term Σ1 (ty_prod σ τ))
+      (dm : DynamicMutator Γ1 Γ2 AT (Σ1 ▻ (x :: σ) ▻ (y :: τ))) (dm_dcl : dmut_dcl dm)
+      (sm : Lit σ -> Lit τ -> SCMut Γ1 Γ2 A) (ι : SymInstance Σ1) :
+      (forall vl vr, bapprox (env_snoc (env_snoc ι _ vl) _ vr) dm (sm vl vr)) ->
+      bapprox
+        ι
+        (dmut_match_pair s dm)
+        match inst (T := fun Σ => Term Σ (ty_prod σ τ)) (A := Lit σ * Lit τ) ι s with
+        | (vl , vr) => sm vl vr
+        end.
+    Proof.
+      unfold bapprox. intros Hap * ? Hpc.
+      rewrite dmut_wp_match_pair; auto. intros Hwp.
+      destruct (inst ι s) as [vl vr] eqn:Heqs. subst ι.
+      specialize (Hwp (lift vl) (lift vr) Heqs). revert Hwp.
+      now apply Hap.
+    Qed.
+
     Lemma bapprox_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) :
       bapprox
         (Γ1 := Γ) (Γ2 := Γ) ι
@@ -1179,45 +1369,10 @@ Module Soundness
       - apply bapprox_produce_chunk.
       - apply bapprox_demonic_binary; apply bapprox_bind_right;
           try apply bapprox_assume_formula; auto using dmut_produce_dcl.
-      - unfold bapprox. intros * Hι Hpc. rewrite dmut_wp_demonic_finite.
-        intros Hwp. pose (inst ι k) as x. cbn in x. specialize (Hwp x).
-        revert Hwp. rewrite dmut_wp_bind_right; eauto using dmut_produce_dcl.
-        rewrite dmut_wp_assume_formula; auto. cbn. intros Hwp.
-        subst ι x. specialize (Hwp eq_refl). eapply H in Hwp; eauto.
-        revert Hwp. rewrite inst_lift. auto.
-        intros.
-        apply dmut_bind_right_dcl.
-        apply dmut_assume_formula_dcl.
-        apply dmut_produce_dcl.
-      - unfold bapprox. intros * ? Hpc.
-        rewrite dmut_wp_match_sum; auto. intros [Hl Hr].
-        destruct (inst ι s) eqn:Heqs; [ clear Hr | clear Hl ]; subst ι.
-        + specialize (Hl (term_lit σ l) Heqs). revert Hl.
-          rewrite dmut_wp_sub, sub_comp_id_right. now apply IHasn1.
-        + specialize (Hr (term_lit τ l) Heqs). revert Hr.
-          rewrite dmut_wp_sub, sub_comp_id_right. now apply IHasn2.
-        + intros until Q. intros PQ. rewrite ?dmut_wp_sub.
-          eapply dmut_produce_dcl; eauto. revert H3.
-          unfold sub_comp. rewrite ?inst_subst, ?inst_sub_snoc.
-          intuition.
-        + intros until Q. intros PQ. rewrite ?dmut_wp_sub.
-          eapply dmut_produce_dcl; eauto. revert H3.
-          unfold sub_comp. rewrite ?inst_subst, ?inst_sub_snoc.
-          intuition.
+      - now apply (bapprox_match_enum k _ (fun K => scmut_produce ι (alts K))).
+      - apply bapprox_match_sum; auto using dmut_produce_dcl.
       - admit.
-      - unfold bapprox.  intros * ? Hpc.
-        rewrite dmut_wp_match_pair; auto.
-        + intros Hwp.
-          destruct (inst ι s) as [vl vr] eqn:Heqs.
-          specialize (Hwp (lift vl) (lift vr)).
-          rewrite ?inst_lift in Hwp. subst ι.
-          specialize (Hwp Heqs). revert Hwp.
-          rewrite dmut_wp_sub, sub_comp_id_right.
-          now apply IHasn.
-        + intros until Q. intros PQ. destruct a1, a2. rewrite ?dmut_wp_sub.
-          eapply dmut_produce_dcl; eauto. revert H3. inversion H4. clear H4.
-          unfold sub_comp. rewrite ?inst_subst, ?inst_sub_snoc.
-          intros. cbn. f_equal; auto. f_equal; auto.
+      - apply bapprox_match_pair; auto using dmut_produce_dcl.
       - admit.
       - admit.
       - admit.
@@ -1225,17 +1380,6 @@ Module Soundness
       - apply bapprox_fresh; auto using dmut_produce_dcl.
       - unfold bapprox. intuition.
     Admitted.
-
-    Lemma bapprox_assert_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) :
-      bapprox
-        (Γ1 := Γ) (Γ2 := Γ) ι
-        (dmut_assert_formula fml)
-        (scmut_assert_formula ι fml).
-    Proof.
-      unfold bapprox. intros * Hι Hpc1.
-      rewrite dmut_wp_assert_formula; eauto.
-      cbn. intuition.
-    Qed.
 
     Lemma bapprox_consume_chunk {Γ Σ} (ι : SymInstance Σ) (c : Chunk Σ) :
       bapprox
@@ -1302,20 +1446,6 @@ Module Soundness
       - admit.
     Admitted.
 
-    Lemma bapprox_angelic {AT A BT B} `{InstLaws AT A, InstLaws BT B} {Γ Σ} (ι : SymInstance Σ)
-      (dm : AT Σ -> DynamicMutator Γ Γ BT Σ)
-      (sm : A -> SCMut Γ Γ B) :
-      (forall a, bapprox ι (dm a) (sm (inst ι a))) ->
-      bapprox ι
-        (dmut_angelic dm)
-        (scmut_angelic sm).
-    Proof.
-      unfold bapprox, dmut_angelic.
-      intros HYP * Hι Hpc [a Hwp]. rewrite scmut_wp_angelic. exists (inst ι a).
-      change (dmut_wp (dm a) ζ01 pc1 s1 ι1 (fun _ => False) POST) in Hwp.
-      revert Hwp. apply HYP; auto.
-    Qed.
-
     Lemma bapprox_call {Γ Δ τ Σ} (c : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) (ι : SymInstance Σ) :
       bapprox ι (@dmut_call Γ Δ τ Σ c ts) (scmut_call c (inst ι ts)).
     Proof.
@@ -1335,6 +1465,19 @@ Module Soundness
     Lemma bapprox_exec {Γ Σ σ} (s : Stm Γ σ) (ι : SymInstance Σ) :
       bapprox ι (dmut_exec s) (scmut_exec s).
     Proof.
+      induction s; cbn [dmut_exec scmut_exec].
+      - admit.
+      - admit.
+      - admit.
+      - admit.
+      - apply bapprox_bind; auto. admit.
+        intros a.
+        apply bapprox_bind_right; auto.
+        apply dmut_pure_dcl.
+        admit.
+        admit.
+      - admit.
+      -
     Admitted.
 
     (* Print Assumptions dmut_wp_assume_formula. *)
