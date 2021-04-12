@@ -464,7 +464,6 @@ Module Mutators
       | term_not t           => term_not <$> eval_term_evar t
       | term_inl t           => term_inl <$> eval_term_evar t
       | term_inr t           => term_inr <$> eval_term_evar t
-      | term_list ts         => term_list <$> traverse_list eval_term_evar ts
       | term_bvec ts         => term_bvec <$> traverse_vector eval_term_evar ts
       | term_tuple ts        => term_tuple <$> traverse_env (@eval_term_evar) ts
       | @term_projtup _ _ t n _ p     => (fun t => term_projtup t n (p:=p)) <$> eval_term_evar t
@@ -565,11 +564,6 @@ Module Mutators
       - rewrite IHt; reflexivity.
       - rewrite IHt; reflexivity.
       - rewrite IHt; reflexivity.
-      - apply fmap_Some_2.
-        induction es as [|t ts]; cbn in *.
-        + reflexivity.
-        + destruct X as [Xt Xts].
-          rewrite Xt, (IHts Xts); reflexivity.
       - admit.
       - admit.
       - rewrite IHt; reflexivity.
@@ -866,6 +860,12 @@ Module Mutators
     dmut_modify_local (fun Σ1 ζ1 δ1 => env_snoc δ1 (x::σ) (subst (T:= fun Σ => Term Σ σ) ζ1 t)).
   Definition dmut_pushs_local {Γ Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) : DynamicMutator Γ (Γ ▻▻ Δ) Unit Σ :=
     dmut_modify_local (fun Σ1 ζ1 δ1 => δ1 ►► subst (T := SymbolicLocalStore Δ) ζ1 δΔ).
+  Definition dmut_pushpop {AT} `{Subst AT} {Γ1 Γ2 x σ Σ} (t : Term Σ σ) (d : DynamicMutator (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT Σ) :
+    DynamicMutator Γ1 Γ2 AT Σ :=
+    dmut_push_local t ;; dmut_bind_left d dmut_pop_local.
+  Definition dmut_pushspops {AT} `{Subst AT} {Γ1 Γ2 Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) (d : DynamicMutator (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) AT Σ) :
+    DynamicMutator Γ1 Γ2 AT Σ :=
+    dmut_pushs_local δΔ ;; dmut_bind_left d (dmut_pops_local Δ).
   Definition dmut_get_heap {Γ Σ} : DynamicMutator Γ Γ SymbolicHeap Σ :=
     dmut_state (fun _ _ s1 => (symbolicstate_heap s1,s1)).
   Definition dmut_modify_heap {Γ Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicHeap Σ' -> SymbolicHeap Σ') : DynamicMutator Γ Γ Unit Σ :=
@@ -1222,15 +1222,9 @@ Module Mutators
       | stm_exp e => dmut_eval_exp e
       | stm_let x τ s1 s2 =>
         t1 <- dmut_exec s1 ;;
-        dmut_push_local t1 ;;
-        t2 <- dmut_exec s2 ;;
-        dmut_pop_local ;;
-        dmut_pure t2
+        dmut_pushpop t1 (dmut_exec s2)
       | stm_block δ s =>
-        dmut_pushs_local (lift δ) ;;
-        t <- dmut_exec s ;;
-        dmut_pops_local _ ;;
-        dmut_pure t
+        dmut_pushspops (lift δ) (dmut_exec s)
       | stm_assign x s =>
         t <- dmut_exec s ;;
         dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
@@ -2780,6 +2774,12 @@ Module Mutators
       dmut_modify_local (fun Σ1 ζ1 δ1 => env_snoc δ1 (x,σ) (subst (T:= fun Σ => Term Σ σ) ζ1 t)).
     Definition dmut_pushs_local {Γ Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) : DynamicMutator Γ (Γ ▻▻ Δ) Unit Σ :=
       dmut_modify_local (fun Σ1 ζ1 δ1 => δ1 ►► subst (T := SymbolicLocalStore Δ) ζ1 δΔ).
+    Definition dmut_pushpop {AT} `{Subst AT} {Γ1 Γ2 x σ Σ} (t : Term Σ σ) (d : DynamicMutator (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT Σ) :
+      DynamicMutator Γ1 Γ2 AT Σ :=
+      dmut_push_local t ;; dmut_bind_left d dmut_pop_local.
+    Definition dmut_pushspops {AT} `{Subst AT} {Γ1 Γ2 Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) (d : DynamicMutator (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) AT Σ) :
+      DynamicMutator Γ1 Γ2 AT Σ :=
+      dmut_pushs_local δΔ ;; dmut_bind_left d (dmut_pops_local Δ).
     Definition dmut_get_heap {Γ Σ} : DynamicMutator Γ Γ SymbolicHeap Σ :=
       dmut_state (fun _ _ s1 => (symbolicstate_heap s1,s1)).
     Definition dmut_modify_heap {Γ Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicHeap Σ' -> SymbolicHeap Σ') : DynamicMutator Γ Γ Unit Σ :=
@@ -3069,15 +3069,9 @@ Module Mutators
       | stm_exp e => dmut_eval_exp e
       | stm_let x τ s1 s2 =>
         t1 <- dmut_exec s1 ;;
-        dmut_push_local t1 ;;
-        t2 <- dmut_exec s2 ;;
-        dmut_pop_local ;;
-        dmut_pure t2
+        dmut_pushpop t1 (dmut_exec s2)
       | stm_block δ s =>
-        dmut_pushs_local (lift δ) ;;
-        t <- dmut_exec s ;;
-        dmut_pops_local _ ;;
-        dmut_pure t
+        dmut_pushspops (lift δ) (dmut_exec s)
       | stm_assign x s =>
         t <- dmut_exec s ;;
         dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
@@ -3124,28 +3118,20 @@ Module Mutators
       | stm_match_sum e xinl s1 xinr s2 =>
         t <- dmut_eval_exp e ;;
         dmut_match_sum t
-          (dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero) ;; dmut_bind_left (dmut_exec s1) dmut_pop_local)
-          (dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero) ;; dmut_bind_left (dmut_exec s2) dmut_pop_local)
+          (dmut_pushpop (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero) (dmut_exec s1))
+          (dmut_pushpop (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero) (dmut_exec s2))
       | stm_match_pair e xl xr s =>
         t <- dmut_eval_exp e ;;
-        dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
-          (dmut_assume_formula
-             (formula_eq
-                (subst (sub_comp sub_wk1 sub_wk1) t)
-                (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
-           dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
-           dmut_push_local (@term_var _ _ _ inctx_zero);;
-           t <- dmut_exec s ;;
-           dmut_pop_local ;;
-           dmut_pop_local ;;
-           dmut_pure t))
+        dmut_match_pair
+          t
+          (dmut_pushspops
+             (env_snoc (env_snoc env_nil
+                (xl :: _) (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)))
+                (xr :: _) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero))
+             (dmut_exec s))
       | stm_match_enum E e alts =>
         t <- dmut_eval_exp e ;;
-        dmut_demonic_finite
-          (𝑬𝑲 E)
-          (fun K =>
-             dmut_assume_formula (formula_eq t (term_enum E K));;
-             dmut_exec (alts K))
+        dmut_match_enum t (fun K => dmut_exec (alts K))
       | stm_match_tuple e p s =>
         dmut_fail "dmut_exec" "stm_match_tuple not implemented" tt
       | stm_match_union U e alt__ctx alt__pat =>

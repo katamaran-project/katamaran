@@ -640,7 +640,6 @@ Module Terms (Export termkit : TermKit).
     | term_not     (e : Term Σ ty_bool) : Term Σ ty_bool
     | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty_sum σ1 σ2)
     | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2)
-    | term_list    {σ : Ty} (es : list (Term Σ σ)) : Term Σ (ty_list σ)
     (* Experimental features *)
     | term_bvec    {n} (es : Vector.t (Term Σ ty_bit) n) : Term Σ (ty_bvec n)
     | term_tuple   {σs : Ctx Ty} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs)
@@ -659,7 +658,6 @@ Module Terms (Export termkit : TermKit).
     Global Arguments term_not {_} _.
     Global Arguments term_inl {_ _ _} _.
     Global Arguments term_inr {_ _ _} _.
-    Global Arguments term_list {_ _} _.
     Global Arguments term_bvec {_ _} _%exp.
     Global Arguments term_tuple {_ _} _%exp.
     Global Arguments term_projtup {_ _} _%exp _ {_ _}.
@@ -670,6 +668,12 @@ Module Terms (Export termkit : TermKit).
     Definition term_enum {Σ} (E : 𝑬) (k : 𝑬𝑲 E) : Term Σ (ty_enum E) :=
       term_lit (ty_enum E) k.
     Global Arguments term_enum {_} _ _.
+
+    Fixpoint term_list {Σ σ} (ts : list (Term Σ σ)) : Term Σ (ty_list σ) :=
+      match ts with
+      | nil       => term_lit (ty_list σ) nil
+      | cons t ts => term_binop binop_cons t (term_list ts)
+      end.
 
     Section Term_rect.
 
@@ -711,7 +715,6 @@ Module Terms (Export termkit : TermKit).
         | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
         | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
         | @term_bvec _ _ es              => ltac:(apply P_bvec; induction es; cbn; auto using unit)
-        | @term_list _ σ es              => ltac:(eapply P_list; induction es; cbn; eauto using unit)
         | @term_tuple _ σs es            => ltac:(eapply P_tuple; induction es; cbn; eauto using unit)
         | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
         | @term_union _ U K e            => ltac:(eapply P_union; eauto)
@@ -733,7 +736,6 @@ Module Terms (Export termkit : TermKit).
       | term_not e           => negb (inst_term ι e)
       | term_inl e           => inl (inst_term ι e)
       | term_inr e           => inr (inst_term ι e)
-      | term_list es         => List.map (fun e => inst_term ι e) es
       | term_bvec es         => Vector.t_rect
                                  _ (fun m (_ : Vector.t (Term Σ ty_bit) m) => Word.word m)
                                  Word.WO (fun eb m _ (vs : Word.word m) =>
@@ -844,7 +846,6 @@ Module Terms (Export termkit : TermKit).
       Term_eqb (term_not x) (term_not y) := Term_eqb x y;
       Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
       Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
-      Term_eqb (term_list xs) (term_list ys) := list_beq Term_eqb xs ys;
       Term_eqb (term_bvec xs) (term_bvec ys) := Vector.eqb _ Term_eqb xs ys;
       Term_eqb (term_tuple x) (term_tuple y) :=
          @env_eqb_hom _ (Term Σ) (@Term_eqb _) _ x y;
@@ -893,25 +894,16 @@ Module Terms (Export termkit : TermKit).
           apply ne; constructor.
       - apply (@ssrbool.iffP (es = es0)).
         + revert es0.
-          induction es as [|x xs]; intros [|y ys]; cbn in *; try (constructor; congruence).
-          destruct X as [x1 x2].
-          specialize (IHxs x2 ys).
-          specialize (x1 y).
-          microsail_solve_eqb_spec.
-        + microsail_solve_eqb_spec.
-        + microsail_solve_eqb_spec.
-      - apply (@ssrbool.iffP (es = es1)).
-        + revert es1.
-          induction es; intros es1; dependent elimination es1; microsail_solve_eqb_spec.
+          induction es; intros es0; dependent elimination es0; microsail_solve_eqb_spec.
           destruct X as [x1 x2].
           specialize (IHes x2 t).
           specialize (x1 h0).
           microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
-      - apply (@ssrbool.iffP (es = es2)).
-        + revert es2.
-          induction es; intros es2; dependent elimination es2; microsail_solve_eqb_spec.
+      - apply (@ssrbool.iffP (es = es1)).
+        + revert es1.
+          induction es; intros es1; dependent elimination es1; microsail_solve_eqb_spec.
           destruct X as [x1 x2].
           specialize (IHes x1 E).
           specialize (x2 db0).
@@ -928,9 +920,9 @@ Module Terms (Export termkit : TermKit).
       - destruct (𝑼𝑲_eq_dec K K0); cbn.
         + destruct e. specialize (IHt1 e4). microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
-      - apply (@ssrbool.iffP (es = es3)).
-        + revert es3.
-          induction es; intros es3; dependent elimination es3; microsail_solve_eqb_spec.
+      - apply (@ssrbool.iffP (es = es2)).
+        + revert es2.
+          induction es; intros es2; dependent elimination es2; microsail_solve_eqb_spec.
           destruct X as [x1 x2].
           specialize (IHes x1 E).
           specialize (x2 db0).
@@ -968,7 +960,6 @@ Module Terms (Export termkit : TermKit).
       | term_not t0               => term_not (sub_term ζ t0)
       | @term_inl _ σ1 σ2 t0      => term_inl (sub_term ζ t0)
       | @term_inr _ σ1 σ2 t0      => term_inr (sub_term ζ t0)
-      | @term_list _ σ es         => term_list (List.map (sub_term ζ) es)
       | term_bvec es              => term_bvec (Vector.map (sub_term ζ) es)
       | term_tuple es             => term_tuple (env_map (fun σ => @sub_term σ _ _ ζ) es)
       | @term_projtup _ _ t n σ p => term_projtup (sub_term ζ t) n (p := p)
@@ -1052,11 +1043,6 @@ Module Terms (Export termkit : TermKit).
         - induction es; cbn in *.
           + reflexivity.
           + f_equal.
-            * apply X.
-            * apply IHes, X.
-        - induction es; cbn in *.
-          + reflexivity.
-          + f_equal.
             * apply IHes, X.
             * apply X.
         - induction es; cbn in *.
@@ -1069,11 +1055,6 @@ Module Terms (Export termkit : TermKit).
         induction t; cbn; f_equal; try assumption.
         - unfold sub_comp, subst at 1, SubstEnv.
           now rewrite env_lookup_map.
-        - induction es; cbn in *.
-          + reflexivity.
-          + f_equal.
-            * apply X.
-            * apply IHes, X.
         - induction es; cbn in *.
           + reflexivity.
           + f_equal.
@@ -1289,7 +1270,6 @@ Module Terms (Export termkit : TermKit).
       | term_not t => option_map term_not (occurs_check_term xIn t)
       | term_inl t => option_map term_inl (occurs_check_term xIn t)
       | term_inr t => option_map term_inr (occurs_check_term xIn t)
-      | term_list es => option_map term_list (traverse_list (occurs_check_term xIn) es)
       | term_bvec es => option_map term_bvec (traverse_vector (occurs_check_term xIn) es)
       | term_tuple es => option_map term_tuple (traverse_env (@occurs_check_term _ _ xIn) es)
       | @term_projtup _ σs t n σ p =>
@@ -1399,10 +1379,6 @@ Module Terms (Export termkit : TermKit).
         + solve.
           induction es; destruct X; cbn.
           * reflexivity.
-          * now rewrite e, IHes.
-        + solve.
-          induction es; destruct X; cbn.
-          * reflexivity.
           * now rewrite IHes, e0.
         + solve.
         + solve.
@@ -1425,7 +1401,6 @@ Module Terms (Export termkit : TermKit).
         + solve. f_equal; auto.
         + solve. f_equal; auto.
         + solve. f_equal; auto.
-        + solve. f_equal. admit.
         + solve. f_equal. admit.
         + solve. f_equal. admit.
         + solve. f_equal. auto.
@@ -1522,11 +1497,6 @@ Module Terms (Export termkit : TermKit).
       { reflexivity. }
       { induction t; cbn; try (f_equal; auto; fail).
         - now rewrite env_lookup_map.
-        - induction es; cbn in *.
-          + reflexivity.
-          + f_equal.
-            * apply X.
-            * apply IHes, X.
         - induction es; cbn in *.
           + reflexivity.
           + change (sub_term ζ h) with (subst ζ h).

@@ -247,6 +247,13 @@ Module SemiConcrete
     Definition scmut_pushs_local {Γ Δ} (δΔ : LocalStore Δ) : SCMut Γ (Γ ▻▻ Δ) unit :=
       scmut_modify_local (fun δΓ => env_cat δΓ δΔ).
 
+    Definition scmut_pushpop {A} {Γ1 Γ2 x σ} (v : Lit σ) (d : SCMut (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) A) :
+      SCMut Γ1 Γ2 A :=
+      scmut_push_local v ;; scmut_bind_left d scmut_pop_local.
+    Definition scmut_pushspops {A} {Γ1 Γ2 Δ} (δΔ : LocalStore Δ) (d : SCMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) :
+      SCMut Γ1 Γ2 A :=
+      scmut_pushs_local δΔ ;; scmut_bind_left d (scmut_pops_local Δ).
+
     Definition scmut_state_heap {Γ A} (f : SCHeap -> (SCHeap * A)) : SCMut Γ Γ A :=
       scmut_state (fun '(MkSCState δ h) => let (h',a) := f h in (a,MkSCState δ h')).
     Definition scmut_modify_heap {Γ} (f : SCHeap -> SCHeap) : SCMut Γ Γ unit :=
@@ -405,16 +412,12 @@ Module SemiConcrete
       | stm_exp e => scmut_eval_exp e
       | stm_let x σ s k =>
         v <- scmut_exec s ;;
-        scmut_push_local v *>
-        scmut_exec k       <*
-        scmut_pop_local
+        scmut_pushpop v (scmut_exec k)
       | stm_block δ k =>
-        scmut_pushs_local δ *>
-        scmut_exec k <*
-        scmut_pops_local _
+        scmut_pushspops δ (scmut_exec k)
       | stm_assign x e =>
         v <- scmut_exec e ;;
-        scmut_modify_local (fun δ => δ ⟪ x ↦ v ⟫)%env *>
+        scmut_modify_local (fun δ => δ ⟪ x ↦ v ⟫)%env ;;
         scmut_pure v
       | stm_call f es =>
         match CEnv f with
@@ -456,22 +459,20 @@ Module SemiConcrete
         scmut_consume_chunk (scchunk_ptsreg reg v__old) ;;
         scmut_produce_chunk (scchunk_ptsreg reg v__new) ;;
         scmut_pure v__new
-      | stm_match_list e s1 xh xt s2 =>
+      | @stm_match_list _ _ σ e s1 xh xt s2 =>
         v <- scmut_eval_exp e ;;
-        match v with
+        match v : list (Lit σ) with
         | nil => scmut_exec s1
         | cons h t =>
-          scmut_push_local h ;;
-          scmut_push_local (σ := ty_list _) t ;;
-          scmut_exec s2 <*
-          scmut_pop_local <*
-          scmut_pop_local
+          scmut_pushspops
+            (env_snoc (env_snoc env_nil (xh :: σ) h) (xt :: ty_list σ) t)
+            (scmut_exec s2)
         end
       | stm_match_sum e xinl s1 xinr s2 =>
         v <- scmut_eval_exp e ;;
         match v with
-        | inl v => scmut_push_local v ;; scmut_exec s1 <* scmut_pop_local
-        | inr v => scmut_push_local v ;; scmut_exec s2 <* scmut_pop_local
+        | inl v => scmut_pushpop v (scmut_exec s1)
+        | inr v => scmut_pushpop v (scmut_exec s2)
         end
       | stm_match_pair e xl xr s =>
         v <- scmut_eval_exp e ;;
@@ -488,14 +489,10 @@ Module SemiConcrete
       | stm_match_union U e alt__pat alt__rhs =>
         v <- scmut_eval_exp e ;;
         let (K , v) := 𝑼_unfold v in
-        scmut_pushs_local (pattern_match (alt__pat K) v) ;;
-        scmut_exec (alt__rhs K) <*
-        scmut_pops_local _
+        scmut_pushspops (pattern_match (alt__pat K) v) (scmut_exec (alt__rhs K))
       | stm_match_record R e p rhs =>
         v <- scmut_eval_exp e ;;
-        scmut_pushs_local (record_pattern_match p (𝑹_unfold v)) ;;
-        scmut_exec rhs <*
-        scmut_pops_local _
+        scmut_pushspops (record_pattern_match p (𝑹_unfold v)) (scmut_exec rhs)
       | stm_bind s k =>
         v <- scmut_exec s ;;
         scmut_exec (k v)
