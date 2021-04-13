@@ -388,8 +388,7 @@ Module Soundness
       - (* stm_match_sum *)
         apply rule_stm_match_sum; cbn; intros;
           apply rule_pull; intro Heval; rewrite Heval in HYP.
-        + unfold scmut_bind_left, scmut_bind in HYP.
-          repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+        + repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
           now apply IHs1.
 
         + unfold scmut_bind_left, scmut_bind in HYP.
@@ -398,7 +397,8 @@ Module Soundness
 
       - (* stm_match_pair *)
         apply rule_stm_match_pair; cbn; intros;
-          apply rule_pull; intro Heval; rewrite Heval in HYP.
+          apply rule_pull; intro Heval; rewrite Heval in HYP; cbn in HYP.
+        repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
         now apply IHs.
 
       - (* stm_match_enum *)

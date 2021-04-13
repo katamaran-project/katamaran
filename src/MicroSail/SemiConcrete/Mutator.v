@@ -312,6 +312,17 @@ Module SemiConcrete
                  (inst ι fml)
                  (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
 
+    Definition scmut_match_sum {A} {Γ1 Γ2 σ τ} (v : Lit σ + Lit τ)
+      (sinl : Lit σ -> SCMut Γ1 Γ2 A) (sinr : Lit τ -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
+      match v with
+      | inl v => sinl v
+      | inr v => sinr v
+      end.
+
+    Definition scmut_match_pair {A} {Γ1 Γ2 σ τ} (v : Lit σ * Lit τ)
+      (m : Lit σ -> Lit τ -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
+      match v with (vl,vr) => m vl vr end.
+
     Fixpoint scmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
       match asn with
       | asn_formula fml => scmut_assume_formula ι fml
@@ -321,19 +332,19 @@ Module SemiConcrete
       | @asn_match_enum _ E k alts =>
         scmut_produce ι (alts (inst (T := fun Σ => Term Σ _) ι k))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        match inst (T := fun Σ => Term Σ _) ι s with
-        | inl v => scmut_produce (env_snoc ι (xl :: σ) v) alt_inl
-        | inr v => scmut_produce (env_snoc ι (xr :: τ) v) alt_inr
-        end
+        scmut_match_sum
+          (inst (T := fun Σ => Term Σ _) ι s)
+          (fun v => scmut_produce (env_snoc ι (xl :: σ) v) alt_inl)
+          (fun v => scmut_produce (env_snoc ι (xr :: τ) v) alt_inr)
       | asn_match_list s alt_nil xh xt alt_cons =>
         match inst (T := fun Σ => Term Σ _) ι s with
         | nil        => scmut_produce ι alt_nil
         | cons vh vt => scmut_produce (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
         end
       | asn_match_pair s xl xr rhs =>
-        match inst (T := fun Σ => Term Σ _) ι s with
-        | (vl,vr)    => scmut_produce (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs
-        end
+        scmut_match_pair
+          (inst (T := fun Σ => Term Σ _) ι s)
+          (fun vl vr => scmut_produce (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
       | asn_match_tuple s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
         let ι' := tuple_pattern_match p t in
@@ -361,22 +372,19 @@ Module SemiConcrete
       | @asn_match_enum _ E k alts =>
         scmut_consume ι (alts (inst (T := fun Σ => Term Σ _) ι k))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        scmut_angelic_binary
-          (⨁ v : Lit σ =>
-           scmut_assert_formula ι (formula_eq s (term_lit (ty_sum _ _) (inl v))) ;;
-           scmut_consume (env_snoc ι (xl :: σ) v) alt_inl)
-          (⨁ v : Lit τ =>
-           scmut_assert_formula ι (formula_eq s (term_lit (ty_sum _ _) (inr v))) ;;
-           scmut_consume (env_snoc ι (xr :: τ) v) alt_inr)
+        scmut_match_sum
+          (inst (T := fun Σ => Term Σ _) ι s)
+          (fun v => scmut_consume (env_snoc ι (xl :: σ) v) alt_inl)
+          (fun v => scmut_consume (env_snoc ι (xr :: τ) v) alt_inr)
       | asn_match_list s alt_nil xh xt alt_cons =>
         match inst (T := fun Σ => Term Σ _) ι s with
         | nil        => scmut_consume ι alt_nil
         | cons vh vt => scmut_consume (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
         end
       | asn_match_pair s xl xr rhs =>
-        match inst (T := fun Σ => Term Σ _) ι s with
-        | (vl,vr)    => scmut_consume (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs
-        end
+        scmut_match_pair
+          (inst (T := fun Σ => Term Σ _) ι s)
+          (fun vl vr => scmut_consume (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
       | asn_match_tuple s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
         let ι' := tuple_pattern_match p t in
@@ -470,17 +478,18 @@ Module SemiConcrete
         end
       | stm_match_sum e xinl s1 xinr s2 =>
         v <- scmut_eval_exp e ;;
-        match v with
-        | inl v => scmut_pushpop v (scmut_exec s1)
-        | inr v => scmut_pushpop v (scmut_exec s2)
-        end
+        scmut_match_sum
+          v
+          (fun v => scmut_pushpop v (scmut_exec s1))
+          (fun v => scmut_pushpop v (scmut_exec s2))
       | stm_match_pair e xl xr s =>
         v <- scmut_eval_exp e ;;
-        scmut_push_local (fst v) ;;
-        scmut_push_local (snd v) ;;
-        scmut_exec s <*
-        scmut_pop_local <*
-        scmut_pop_local
+        scmut_match_pair
+          v
+          (fun vl vr =>
+             scmut_pushspops
+               (env_snoc (env_snoc env_nil (xl :: _) vl) (xr :: _) vr)
+               (scmut_exec s))
       | stm_match_tuple e p rhs =>
         v <- scmut_eval_exp e ;;
         scmut_pushs_local (tuple_pattern_match p v) ;;

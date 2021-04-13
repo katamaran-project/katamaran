@@ -265,6 +265,16 @@ Module Soundness
       (s1 : SCState Γ1) : Prop :=
       outcome_satisfy (m s1) (fun _ => False) (fun r => POST (scmutres_value r) (scmutres_state r)).
 
+    Lemma scmut_wp_monotonic {A} {Γ1 Γ2} (m : SCMut Γ1 Γ2 A) (s1 : SCState Γ1)
+      (P Q : A -> SCState Γ2 -> Prop) (PQ : forall a s, P a s -> Q a s) :
+      scmut_wp m P s1 -> scmut_wp m Q s1.
+    Proof. unfold scmut_wp. apply outcome_satisfy_monotonic; intros []; apply PQ. Qed.
+
+    Lemma scmut_wp_equiv {A} {Γ1 Γ2} (m : SCMut Γ1 Γ2 A) (s1 : SCState Γ1)
+      (P Q : A -> SCState Γ2 -> Prop) (PQ : forall a s, P a s <-> Q a s) :
+        scmut_wp m P s1 <-> scmut_wp m Q s1.
+    Proof. split; apply scmut_wp_monotonic; apply PQ. Qed.
+
     Lemma scmut_wp_bind {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (f : A -> SCMut Γ2 Γ3 B)
           (POST : B -> SCState Γ3 -> Prop) :
       forall s1 : SCState Γ1,
@@ -1082,28 +1092,7 @@ Module Soundness
           unfold dmut_assume_term; auto using dmut_assume_formula_dcl.
       - apply dmut_angelic_finite_dcl. intros K.
         apply dmut_bind_right_dcl; auto using dmut_assert_formula_dcl.
-      - destruct (term_get_sum_spec s);
-          [ destruct a as [sl|sr]; now apply dmut_sub_dcl |].
-        apply dmut_angelic_binary_dcl.
-        intros until Q; intros PQ. rewrite ?dmut_wp_angelic.
-        intros [sl Hwp]; exists sl; revert Hwp.
-        rewrite ?dmut_wp_bind_right; auto.
-        rewrite ?dmut_wp_assert_formula; auto.
-        rewrite ?dmut_wp_sub.
-        intros [Hfml Hwp]; split; [revert Hfml|revert Hwp].
-        cbn. rewrite H4. auto.
-        eapply IHasn1; eauto; unfold sub_comp;
-          rewrite ?inst_subst, ?inst_lift, ?inst_sub_snoc, ?inst_sub_id; intuition.
-        admit.
-        admit.
-        now apply dmut_sub_dcl.
-        now apply dmut_sub_dcl.
-        clear - IHasn2. intros until Q; intros PQ.
-        rewrite ?dmut_wp_angelic.
-        intros [sr Hwp]; exists sr; revert Hwp.
-        eapply dmut_bind_right_dcl; eauto.
-        apply dmut_assert_formula_dcl.
-        now apply dmut_sub_dcl.
+      - now apply dmut_match_sum_dcl.
       - admit.
       - admit.
       - admit.
@@ -1294,9 +1283,9 @@ Module Soundness
       unfold bapprox. intros A1 A2 * -> Hpc1.
       rewrite dmut_wp_bind_right; auto.
       unfold scmut_bind_right. rewrite scmut_wp_bind.
-      intros Hwp; eapply A1 in Hwp; eauto. revert Hwp. unfold scmut_wp.
-      apply outcome_satisfy_monotonic. intros [a s2]; cbn.
-      intros Hwp; eapply A2 in Hwp; eauto. revert Hwp. unfold scmut_wp.
+      intros Hwp; eapply A1 in Hwp; eauto. revert Hwp.
+      apply scmut_wp_monotonic; intros a s2.
+      intros Hwp; eapply A2 in Hwp; eauto. revert Hwp. 
       now rewrite inst_lift.
     Qed.
 
@@ -1312,8 +1301,8 @@ Module Soundness
       rewrite dmut_wp_bind_left; auto.
       unfold scmut_bind_left. rewrite scmut_wp_bind.
       intros Hwp; eapply A1 in Hwp; eauto. revert Hwp.
-      apply outcome_satisfy_monotonic. intros [a s2]. cbn.
-      rewrite scmut_wp_bind. intros Hwp; eapply A2 in Hwp; eauto. revert Hwp.
+      apply scmut_wp_monotonic; intros a s2. rewrite scmut_wp_bind.
+      intros Hwp; eapply A2 in Hwp; eauto. revert Hwp.
       now rewrite inst_lift.
     Qed.
 
@@ -1412,10 +1401,7 @@ Module Soundness
       bapprox
         ι
         (dmut_match_sum s dinl dinr)
-        match inst (T := fun Σ => Term Σ (ty_sum σ τ)) (A := Lit σ + Lit τ) ι s with
-        | inl v => sinl v
-        | inr v => sinr v
-        end.
+        (scmut_match_sum (inst (T := fun Σ => Term Σ (ty_sum σ τ)) (A := Lit σ + Lit τ) ι s) sinl sinr).
     Proof.
       unfold bapprox. intros Hapl Hapr * ? Hpc.
       rewrite dmut_wp_match_sum; auto. intros [Hl Hr].
@@ -1431,9 +1417,7 @@ Module Soundness
       bapprox
         ι
         (dmut_match_pair s dm)
-        match inst (T := fun Σ => Term Σ (ty_prod σ τ)) (A := Lit σ * Lit τ) ι s with
-        | (vl , vr) => sm vl vr
-        end.
+        (scmut_match_pair (inst (T := fun Σ => Term Σ (ty_prod σ τ)) (A := Lit σ * Lit τ) ι s) sm).
     Proof.
       unfold bapprox. intros Hap * ? Hpc.
       rewrite dmut_wp_match_pair; auto. intros Hwp.
@@ -1488,45 +1472,9 @@ Module Soundness
         apply bapprox_assume_formula.
       - unfold bapprox. intros * Hι Hpc.
         admit.
-      - unfold bapprox. intros * Hι Hpc.
-        rewrite scmut_wp_angelic_binary, ?scmut_wp_angelic.
-        destruct (term_get_sum_spec s);
-          [ destruct a as [sl|sr]
-          | rewrite dmut_wp_angelic_binary; auto;
-            intros [Hwp|Hwp]; [left|right]; revert Hwp
-          ].
-        + rewrite dmut_wp_sub. intros Hwp.
-          left. exists (inst (T := fun Σ => Term Σ σ) ι sl).
-          eapply IHasn1 in Hwp; eauto. unfold scmut_bind_right.
-          rewrite scmut_wp_bind. cbn; split; auto.
-          revert Hwp. unfold sub_comp.
-          rewrite inst_subst, inst_sub_snoc, inst_sub_id.
-          now subst.
-        + rewrite dmut_wp_sub. intros Hwp.
-          right. exists (inst (T := fun Σ => Term Σ τ) ι sr).
-          eapply IHasn2 in Hwp; eauto. unfold scmut_bind_right.
-          rewrite scmut_wp_bind. cbn; split; auto.
-          revert Hwp. unfold sub_comp.
-          rewrite inst_subst, inst_sub_snoc, inst_sub_id.
-          now subst.
-        + clear H. rewrite dmut_wp_angelic. intros [sl Hwp].
-          exists (inst (T := fun Σ => Term Σ σ) ι sl).
-          revert Hwp. unfold scmut_bind_right. rewrite dmut_wp_bind_right, scmut_wp_bind; auto.
-          rewrite dmut_wp_assert_formula, dmut_wp_sub; auto. intros [Hfml Hwp].
-          eapply IHasn1 in Hwp; eauto. subst. cbn. split. exact Hfml.
-          revert Hwp. unfold sub_comp.
-          now rewrite inst_subst, inst_sub_snoc, inst_sub_id, inst_lift.
-          apply dmut_sub_dcl, dmut_consume_dcl.
-        + clear H. rewrite dmut_wp_angelic. intros [sr Hwp].
-          exists (inst (T := fun Σ => Term Σ τ) ι sr).
-          revert Hwp. unfold scmut_bind_right. rewrite dmut_wp_bind_right, scmut_wp_bind; auto.
-          rewrite dmut_wp_assert_formula, dmut_wp_sub; auto. intros [Hfml Hwp].
-          eapply IHasn2 in Hwp; eauto. subst. cbn. split. exact Hfml.
-          revert Hwp. unfold sub_comp.
-          now rewrite inst_subst, inst_sub_snoc, inst_sub_id, inst_lift.
-          apply dmut_sub_dcl, dmut_consume_dcl.
+      - apply bapprox_match_sum; auto using dmut_consume_dcl.
       - admit.
-      - admit.
+      - apply bapprox_match_pair; auto using dmut_consume_dcl.
       - admit.
     Admitted.
 
@@ -1571,9 +1519,9 @@ Module Soundness
       now rewrite eval_exp_inst.
     Qed.
 
-    Lemma bapprox_pushpop {AT A} `{InstLaws AT A} {Γ x σ Σ} (ι : SymInstance Σ) (a : Term Σ σ)
-      (dm : DynamicMutator (Γ ▻ (x :: σ)) (Γ ▻ (x :: σ)) AT Σ) (dm_dcl : dmut_dcl dm)
-      (sm : SCMut (Γ ▻ (x :: σ)) (Γ ▻ (x :: σ)) A) :
+    Lemma bapprox_pushpop {AT A} `{InstLaws AT A} {Γ1 Γ2 x σ Σ} (ι : SymInstance Σ) (a : Term Σ σ)
+      (dm : DynamicMutator (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT Σ) (dm_dcl : dmut_dcl dm)
+      (sm : SCMut (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) A) :
       bapprox ι dm sm ->
       bapprox ι (dmut_pushpop a dm) (scmut_pushpop (inst ι a) sm).
     Proof.
@@ -1595,10 +1543,18 @@ Module Soundness
       f_equal. f_equal. subst. now destruct (snocView δ1).
     Qed.
 
-    Lemma bapprox_exec {Γ Σ σ} (s : Stm Γ σ) (ι : SymInstance Σ) :
-      bapprox ι (dmut_exec s) (scmut_exec s).
+    Lemma bapprox_pushspops {AT A} `{InstLaws AT A} {Γ1 Γ2 Δ Σ} (ι : SymInstance Σ) (δΔ : SymbolicLocalStore Δ Σ)
+      (dm : DynamicMutator (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) AT Σ) (dm_dcl : dmut_dcl dm)
+      (sm : SCMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) :
+      bapprox ι dm sm ->
+      bapprox ι (dmut_pushspops δΔ dm) (scmut_pushspops (inst ι δΔ) sm).
+    Proof. Admitted.
+
+    Lemma bapprox_exec {Γ σ} (s : Stm Γ σ) :
+      forall Σ (ι : SymInstance Σ),
+        bapprox ι (dmut_exec s) (scmut_exec s).
     Proof.
-      induction s; cbn [dmut_exec scmut_exec].
+      induction s; cbn [dmut_exec scmut_exec]; intros Σ ι.
       - unfold bapprox. cbn. auto.
       - now apply bapprox_eval_exp.
       - apply bapprox_bind; auto. admit.
@@ -1631,18 +1587,13 @@ Module Soundness
       - admit.
       - apply bapprox_bind. admit.
         apply bapprox_eval_exp.
-        intros t. apply bapprox_match_sum.
-        + admit.
-        + admit.
-        + cbn. intros vl.
-          apply bapprox_pushpop; auto using dmut_exec_dcl.
-          admit.
-        + cbn. intros vr.
-          apply bapprox_pushpop; auto using dmut_exec_dcl.
-          admit.
+        intros t. apply bapprox_match_sum. admit. admit.
+        + intros ?. apply bapprox_pushpop; auto using dmut_exec_dcl.
+        + intros ?. apply bapprox_pushpop; auto using dmut_exec_dcl.
       - apply bapprox_bind. admit.
         apply bapprox_eval_exp.
-        intros t. admit.
+        intros t. apply bapprox_match_pair. admit.
+        intros ? ?. apply bapprox_pushspops; auto using dmut_exec_dcl.
       - apply bapprox_bind. admit.
         apply bapprox_eval_exp.
         intros t. admit.

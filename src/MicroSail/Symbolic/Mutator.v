@@ -3006,28 +3006,11 @@ Module Mutators
              dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
              dmut_consume (alts k2))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        match term_get_sum s with
-        | Some (inl t) => dmut_sub (sub_snoc (sub_id _) (xl::σ) t) (dmut_consume alt_inl)
-        | Some (inr t) => dmut_sub (sub_snoc (sub_id _) (xr::τ) t) (dmut_consume alt_inr)
-        | None =>
-          dmut_angelic_binary
-            (⨁ t : Term Σ σ =>
-             dmut_assert_formula (formula_eq s (term_inl t)) ;;
-             dmut_sub (sub_snoc (sub_id _) (xl , σ) t) (dmut_consume alt_inl))
-            (⨁ t : Term Σ τ =>
-             dmut_assert_formula (formula_eq s (term_inr t)) ;;
-             dmut_sub (sub_snoc (sub_id _) (xr , τ) t) (dmut_consume alt_inr))
-        end
+        dmut_match_sum s (dmut_consume alt_inl) (dmut_consume alt_inr)
       | asn_match_list s alt_nil xh xt alt_cons =>
         dmut_fail "dmut_consume" "Not implemented" asn
       | asn_match_pair s xl xr rhs =>
-        match term_get_pair s with
-        | Some (tl, tr) => dmut_sub (sub_id _ ► (xl::_ ↦ tl) ► (xr::_ ↦ tr)) (dmut_consume rhs)
-        | None =>
-          ⨁ (tl : Term Σ _) (tr : Term Σ _) =>
-          dmut_assert_formula (formula_eq s (term_binop binop_pair tl tr)) ;;
-          dmut_sub (sub_id _ ► (xl::_ ↦ tl) ► (xr::_ ↦ tr)) (dmut_consume rhs)
-        end
+        dmut_match_pair s (dmut_consume rhs)
       | asn_match_tuple s p rhs =>
         dmut_fail "dmut_consume" "Not implemented" asn
       | asn_match_record R s p rhs =>
