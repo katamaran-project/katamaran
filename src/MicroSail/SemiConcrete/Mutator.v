@@ -323,14 +323,20 @@ Module SemiConcrete
       (m : Lit σ -> Lit τ -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
       match v with (vl,vr) => m vl vr end.
 
+    Definition scmut_match_enum {A E} {Γ1 Γ2} (v : 𝑬𝑲 E)
+      (m : 𝑬𝑲 E -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
+      m v.
+
     Fixpoint scmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
       match asn with
       | asn_formula fml => scmut_assume_formula ι fml
       | asn_chunk c     => scmut_produce_chunk (inst ι c)
       | asn_if b a1 a2  => (scmut_assume_term ι b ;; scmut_produce ι a1) ⊗
                            (scmut_assume_term ι (term_not b) ;; scmut_produce ι a2)
-      | @asn_match_enum _ E k alts =>
-        scmut_produce ι (alts (inst (T := fun Σ => Term Σ _) ι k))
+      | asn_match_enum E k alts =>
+        scmut_match_enum
+          (inst (T := fun Σ => Term Σ _) ι k)
+          (fun K => scmut_produce ι (alts K))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         scmut_match_sum
           (inst (T := fun Σ => Term Σ _) ι s)
@@ -369,8 +375,10 @@ Module SemiConcrete
       | asn_chunk c     => scmut_consume_chunk (inst ι c)
       | asn_if b a1 a2  => (scmut_assume_term ι b ;; scmut_consume ι a1) ⊗
                            (scmut_assume_term ι (term_not b) ;; scmut_consume ι a2)
-      | @asn_match_enum _ E k alts =>
-        scmut_consume ι (alts (inst (T := fun Σ => Term Σ _) ι k))
+      | asn_match_enum E k alts =>
+        scmut_match_enum
+          (inst (T := fun Σ => Term Σ _) ι k)
+          (fun K => scmut_consume ι (alts K))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         scmut_match_sum
           (inst (T := fun Σ => Term Σ _) ι s)
@@ -454,7 +462,9 @@ Module SemiConcrete
         scmut_block
       | stm_match_enum E e alts =>
         K <- scmut_eval_exp e ;;
-        scmut_exec (alts K)
+        scmut_match_enum
+          K
+          (fun K => scmut_exec (alts K))
       | stm_read_register reg =>
         ⨁ v : Lit τ =>
         let c := scchunk_ptsreg reg v in

@@ -2910,7 +2910,6 @@ Module Mutators
         | None => dmut_demonic_finite
                     (𝑬𝑲 E)
                     (fun k => dmut_assume_formula (formula_eq t' (term_enum E k));; dmut_sub ζ01 (d k)) _ (sub_id Σ1)
-
         end.
 
     Definition dmut_match_sum {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (t : Term Σ (ty_sum σ τ))
@@ -2999,12 +2998,8 @@ Module Mutators
       | asn_chunk c     => dmut_consume_chunk c
       | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_consume a1) ⊗
                            (dmut_assume_term (term_not b) ;; dmut_consume a2)
-      | @asn_match_enum _ E k1 alts =>
-        dmut_angelic_finite
-          (𝑬𝑲 E)
-          (fun k2 =>
-             dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
-             dmut_consume (alts k2))
+      | asn_match_enum E t alts =>
+        dmut_match_enum t (fun k => dmut_consume (alts k))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         dmut_match_sum s (dmut_consume alt_inl) (dmut_consume alt_inr)
       | asn_match_list s alt_nil xh xt alt_cons =>
@@ -3037,7 +3032,7 @@ Module Mutators
       match contract with
       | MkSepContract _ _ Σe δ req result ens =>
         ⨁ ξ : Sub Σe Σr =>
-        dmut_assert_formulas (formula_eqs ts (env_map (fun b => subst (T := fun Σ => Term Σ _) ξ) δ)) ;;
+        dmut_assert_formulas (formula_eqs ts (subst ξ δ)) ;;
         dmut_sub ξ
           (dmut_consume req ;;
            dmut_fresh result τ
