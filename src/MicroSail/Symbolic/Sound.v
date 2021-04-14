@@ -111,6 +111,17 @@ Module Soundness
     subst ζ (sub_id _) = ζ.
   Proof. exact (sub_comp_id_left ζ). Qed.
 
+  Lemma inst_record_pattern_match {Δ__R : NCtx 𝑹𝑭 Ty} {Σ Δ : LCtx}
+    (ι : SymInstance Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ__R) :
+    inst ι (record_pattern_match p ts) = record_pattern_match p (inst ι ts).
+  Proof.
+    unfold inst at 1; cbn.
+    induction p; cbn.
+    - reflexivity.
+    - destruct (snocView ts); cbn.
+      f_equal. apply IHp.
+  Qed.
+
   Section Entailment.
 
     (* A preorder on path conditions. This encodes that either pc1 belongs to a
@@ -669,6 +680,16 @@ Module Soundness
     Proof.
     Admitted.
 
+    Lemma dmut_wp_freshtermvar {Γ Σ Σ1 x σ}
+      (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s1 : SymbolicState Γ Σ1) (ι1 : SymInstance Σ1)
+      (F : string -> Prop) (P : Lit σ -> SCState Γ -> Prop) (Hpc : instpc ι1 pc1) :
+      dmut_wp (@dmut_freshtermvar Γ _ σ x) ζ01 pc1 s1 ι1 F P <->
+      forall v : Lit σ, P v (inst ι1 s1).
+    Proof.
+      unfold dmut_freshtermvar. rewrite dmut_wp_fresh; auto.
+      apply dmut_pure_dcl.
+    Qed.
+
     Lemma dmut_fail_dcl `{Inst AT A, Subst AT} {D Γ1 Γ2 Σ} func msg data :
       dmut_dcl (@dmut_fail Γ1 Γ2 AT Σ D func msg data).
     Proof.
@@ -986,15 +1007,11 @@ Module Soundness
       unfold dmut_match_pair. cbn - [sub_wk1].
       destruct (term_get_pair_spec (subst (T := fun Σ => Term Σ _) ζ12 s)) as [[sl sr] Heqs|];
         fold_dmut_wp.
-      - specialize (Heqs ι2). rewrite inst_subst in Heqs.
-        split.
-        + intros Hwp sl2 sr2 Heqs2. rewrite Heqs2 in Heqs.
-          inversion Heqs. revert Hwp.
-          eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
-          f_equal; auto. f_equal; auto.
-        + intros Hwp. specialize (Hwp sl sr Heqs). revert Hwp.
-          eapply d_dcl; unfold sub_comp; cbn; fold_inst_term;
-            rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
+      - specialize (Heqs ι2). rewrite inst_subst in Heqs. split; auto.
+        intros Hwp sl2 sr2 Heqs2. rewrite Heqs2 in Heqs.
+        inversion Heqs. revert Hwp.
+        eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+        f_equal; auto. f_equal; auto.
       - split; intros Hwp.
         { intros sl sr Heqs.
           rewrite dmut_wp_fresh in Hwp; auto. specialize (Hwp (inst ι2 sl)).
@@ -1026,6 +1043,117 @@ Module Soundness
             apply dmut_assume_formula_dcl.
         }
     Qed.
+
+    Lemma dmut_wp_freshen_recordpat' {Γ : PCtx} {σs : NCtx 𝑹𝑭 Ty} {Σ1 Δ : LCtx}
+      (p : RecordPat σs Δ)
+      (Σ2 : LCtx) (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2)
+      (s2 : SymbolicState Γ Σ2) (ι2 : SymInstance Σ2) (Hpc : instpc ι2 pc2)
+      (F : string -> Prop) (P : NamedEnv Lit σs * SymInstance Δ -> SCState Γ -> Prop) :
+      dmut_wp (dmut_freshen_recordpat' id p) ζ12 pc2 s2 ι2 F P <->
+      forall (ts : NamedEnv Lit σs) (ιΔ : SymInstance Δ),
+        record_pattern_match p ts = ιΔ -> P (ts,ιΔ) (inst ι2 s2).
+    Proof.
+      induction p; cbn - [dmut_wp].
+      - split; cbn; auto.
+        intros HP * Heq.
+        subst.
+        now destruct (nilView ts).
+      - unfold dmut_fmap2. rewrite dmut_wp_bind; auto.
+        rewrite IHp. split; intros Hwp ts ιΔ.
+        + destruct (snocView ts) as [ts].
+          destruct (snocView ιΔ) as [ιΔ]. cbn.
+          specialize (Hwp ts ιΔ).
+          remember (record_pattern_match p ts) as ιΔ'.
+          intros Heq. dependent elimination Heq.
+          specialize (Hwp eq_refl).
+          rewrite dmut_wp_fmap, dmut_wp_sub in Hwp; auto.
+          rewrite dmut_wp_freshtermvar in Hwp; auto.
+          specialize (Hwp v). cbn in Hwp.
+          rewrite ?inst_lift in Hwp.
+          change (P (inst ι2 (subst ζ12 (lift ts)) ► (rf :: τ ↦ v) ,
+                     inst ι2 (subst ζ12 (lift ιΔ')) ► (x :: τ ↦ v))
+                    (inst ι2 s2)) in Hwp.
+          now rewrite ?inst_subst, ?inst_lift in Hwp.
+          clear. unfold sout_mapping_dcl. intros. cbn.
+          change
+            (inst ι1 (subst ζ01 (lift ts)) ► (rf :: τ ↦ inst ι1 a1) :: inst ι1 (subst ζ01 (lift ιΔ')) ► (x :: τ ↦ inst ι1 a1) =
+             inst ι2 (subst ζ02 (lift ts)) ► (rf :: τ ↦ inst ι2 a2) :: inst ι2 (subst ζ02 (lift ιΔ')) ► (x :: τ ↦ inst ι2 a2)).
+          rewrite ?inst_subst, ?inst_lift. cbn. now rewrite H1.
+        + intros Heq.
+          rewrite dmut_wp_fmap, dmut_wp_sub; auto.
+          rewrite dmut_wp_freshtermvar; auto.
+          intros v. cbn. rewrite ?inst_lift.
+          change (P (inst ι2 (subst ζ12 (lift ts)) ► (rf :: τ ↦ v) ,
+                     inst ι2 (subst ζ12 (lift ιΔ)) ► (x :: τ ↦ v))
+                    (inst ι2 s2)).
+          rewrite ?inst_subst, ?inst_lift.
+          specialize (Hwp (env_snoc ts (_,_) v) (env_snoc ιΔ (_,_) v)).
+          cbn in Hwp. now inster Hwp by now rewrite Heq.
+          clear. unfold sout_mapping_dcl. intros. cbn.
+          change
+            (inst ι1 (subst ζ01 (lift ts)) ► (rf :: τ ↦ inst ι1 a1) :: inst ι1 (subst ζ01 (lift ιΔ)) ► (x :: τ ↦ inst ι1 a1) =
+             inst ι2 (subst ζ02 (lift ts)) ► (rf :: τ ↦ inst ι2 a2) :: inst ι2 (subst ζ02 (lift ιΔ)) ► (x :: τ ↦ inst ι2 a2)).
+          rewrite ?inst_subst, ?inst_lift. cbn. now rewrite H1.
+        + clear. intros until Q; intros PQ.
+          cbn - [sub_id sub_wk1]. intros HYP v. specialize (HYP v). revert HYP.
+          rewrite ?inst_subst, ?inst_sub_wk1.
+          rewrite <- ?sub_up1_id. cbn. rewrite ?sub_comp_id_left.
+          destruct a1 as [ts0 ιΔ0], a2 as [ts2 ιΔ2]. cbn - [inst].
+          admit.
+    Admitted.
+
+    Lemma dmut_wp_match_record {R AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1 Δ} (t : Term Σ1 (ty_record R))
+      (p : @RecordPat 𝑺 (𝑹𝑭_Ty R) Δ) (d : DynamicMutator Γ1 Γ2 AT (Σ1 ▻▻ Δ)) (d_dcl : dmut_dcl d)
+      Σ2 (ζ12 : Sub Σ1 Σ2) pc2 (s2 : SymbolicState Γ1 Σ2) (ι2 : SymInstance Σ2) (Hpc : instpc ι2 pc2)
+      (F : string -> Prop) (P : A -> SCState Γ2 -> Prop) :
+      dmut_wp (dmut_match_record p t d) ζ12 pc2 s2 ι2 F P <->
+      forall ts : NamedEnv (Term _) (𝑹𝑭_Ty R),
+        inst (T := fun Σ => Term Σ _) (A := Lit (ty_record R)) (inst ι2 ζ12) t = 𝑹_fold (inst ι2 ts) ->
+        dmut_wp d (ζ12 ►► record_pattern_match p ts) pc2 s2 ι2 F P.
+    Proof.
+      unfold dmut_match_record. cbn.
+      destruct (term_get_record_spec (subst (T := fun Σ => Term Σ _) ζ12 t)) as [ts Heqts|];
+        fold_dmut_wp.
+      - specialize (Heqts ι2). rewrite inst_subst in Heqts. split; auto.
+        intros Hwp ts2 Heqts2. rewrite Heqts2 in Heqts.
+        apply (f_equal (@𝑹_unfold R)) in Heqts.
+        rewrite ?𝑹_unfold_fold in Heqts. revert Hwp.
+        eapply d_dcl; rewrite ?inst_sub_id; eauto.
+        unfold inst; cbn. rewrite ?env_map_cat.
+        f_equal.
+        change (inst ι2 (record_pattern_match p ts) = inst ι2 (record_pattern_match p ts2)).
+        now rewrite ?inst_record_pattern_match, Heqts.
+      - rewrite dmut_wp_bind; auto.
+        split; intros Hwp.
+        { intros ts Heqts.
+          unfold dmut_freshen_recordpat in Hwp.
+          rewrite dmut_wp_fmap in Hwp; auto.
+          rewrite dmut_wp_freshen_recordpat' in Hwp; auto.
+          specialize (Hwp (inst ι2 ts) _ eq_refl).
+          rewrite <- inst_record_pattern_match in Hwp.
+          remember (record_pattern_match p ts) as ts__R.
+          cbn - [dmut_wp inst_term] in Hwp.
+          rewrite subst_sub_id, inst_lift in Hwp.
+          rewrite dmut_wp_bind_right, dmut_wp_assume_formula in Hwp; auto.
+          cbn - [inst_term] in Hwp. fold_inst_term.
+          rewrite inst_lift in Hwp. rewrite Heqts in Hwp.
+          cbn in Hwp. inster Hwp by admit.
+          rewrite inst_lift, dmut_wp_sub in Hwp.
+          revert Hwp.
+          eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; eauto.
+          unfold inst; cbn.
+          rewrite ?env_map_cat.
+          f_equal.
+          change (inst (inst ι2 ζ12) (sub_id Σ1) = inst ι2 ζ12).
+          now rewrite inst_sub_id.
+          change (inst (inst ι2 ζ12) (lift (inst ι2 ts__R)) = inst ι2 ts__R).
+          now rewrite inst_lift.
+          now apply dmut_sub_dcl.
+          clear. unfold sout_mapping_dcl. destruct a1, a2; cbn - [inst_term].
+          intros. fold_inst_term. subst. inversion H1. f_equal; auto.
+          admit.
+        }
+    Admitted.
 
     Lemma dmut_match_enum_dcl {AT A E} `{InstLaws AT A} {Γ1 Γ2 Σ1} (t : Term Σ1 (ty_enum E))
       (d : 𝑬𝑲 E -> DynamicMutator Γ1 Γ2 AT Σ1) (d_dcl : forall K, dmut_dcl (d K)) :
@@ -1064,6 +1192,17 @@ Module Soundness
       f_equal; auto. f_equal; auto.
     Qed.
 
+    Lemma dmut_match_record_dcl {R AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1 Δ} (t : Term Σ1 (ty_record R))
+      (p : @RecordPat 𝑺 (𝑹𝑭_Ty R) Δ) (d : DynamicMutator Γ1 Γ2 AT (Σ1 ▻▻ Δ)) (d_dcl : dmut_dcl d) :
+      dmut_dcl (@dmut_match_record AT R Γ1 Γ2 Σ1 Δ p t d).
+    Proof.
+      intros until Q; intros PQ. rewrite ?dmut_wp_match_record; auto.
+      intros Hwp ζ__R Heqs. specialize (Hwp (lift (inst ι2 ζ__R))).
+      rewrite ?inst_lift in Hwp. rewrite <- H7 in Heqs. specialize (Hwp Heqs). revert Hwp.
+      eapply d_dcl; eauto. unfold inst at 1 3; cbn. rewrite ?env_map_cat.
+      f_equal. exact H7. admit.
+    Admitted.
+
     Lemma dmut_produce_chunk_dcl {Γ Σ} (c : Chunk Σ) :
       dmut_dcl (Γ1 := Γ) (dmut_produce_chunk c).
     Proof.
@@ -1087,7 +1226,7 @@ Module Soundness
       - admit.
       - now apply dmut_match_pair_dcl.
       - admit.
-      - admit.
+      - now apply dmut_match_record_dcl.
       - admit.
       - now apply dmut_bind_right_dcl.
       - now apply dmut_fresh_dcl.
@@ -1117,7 +1256,7 @@ Module Soundness
       - admit.
       - now apply dmut_match_pair_dcl.
       - admit.
-      - admit.
+      - now apply dmut_match_record_dcl.
       - admit.
       - now apply dmut_bind_right_dcl.
       - admit.
@@ -1455,6 +1594,28 @@ Module Soundness
       now apply Hap.
     Qed.
 
+    Lemma bapprox_match_record {R AT A} `{InstLaws AT A} {Γ1 Γ2 Σ0 Δ} (t : Term Σ0 (ty_record R))
+      (p : @RecordPat 𝑺 (𝑹𝑭_Ty R) Δ) (dm : DynamicMutator Γ1 Γ2 AT (Σ0 ▻▻ Δ)) (dm_dcl : dmut_dcl dm)
+      (sm : SymInstance Δ -> SCMut Γ1 Γ2 A) (ι : SymInstance Σ0) :
+      (forall ι__Δ : SymInstance Δ, bapprox (env_cat ι ι__Δ) dm (sm ι__Δ)) ->
+      bapprox
+        ι
+        (dmut_match_record p t dm)
+        (scmut_match_record p (inst (T := fun Σ => Term Σ (ty_record R)) ι t) sm).
+    Proof.
+      unfold bapprox. intros Hap * Hι Hpc.
+      rewrite dmut_wp_match_record; auto. intros Hwp.
+      unfold scmut_match_record.
+      specialize (Hwp (lift (𝑹_unfold (inst (T := fun Σ => Term Σ _) ι t)))).
+      inster Hwp by now rewrite inst_lift, 𝑹_fold_unfold, Hι.
+      eapply Hap; eauto. cbn [Lit].
+      generalize (𝑹_unfold (inst (T := fun Σ => Term Σ (ty_record R)) (A := 𝑹𝑻 R) ι t)).
+      subst. clear. intros ts. unfold inst at 2; cbn.
+      rewrite env_map_cat. f_equal.
+      change (record_pattern_match p ts = inst ι1 (record_pattern_match p (lift ts))).
+      now rewrite inst_record_pattern_match, inst_lift.
+    Qed.
+
     Lemma bapprox_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) :
       bapprox
         (Γ1 := Γ) (Γ2 := Γ) ι
@@ -1471,7 +1632,7 @@ Module Soundness
       - admit.
       - apply bapprox_match_pair; auto using dmut_produce_dcl.
       - admit.
-      - admit.
+      - apply bapprox_match_record; auto using dmut_produce_dcl.
       - admit.
       - apply bapprox_bind_right; auto using dmut_produce_dcl.
       - apply bapprox_fresh; auto using dmut_produce_dcl.
@@ -1504,7 +1665,7 @@ Module Soundness
       - admit.
       - apply bapprox_match_pair; auto using dmut_consume_dcl.
       - admit.
-      - admit.
+      - apply bapprox_match_record; auto using dmut_consume_dcl.
       - admit.
       - apply bapprox_bind_right; auto using dmut_consume_dcl.
       - apply (bapprox_angelic (AT := fun Σ => Term Σ τ)). intros t.

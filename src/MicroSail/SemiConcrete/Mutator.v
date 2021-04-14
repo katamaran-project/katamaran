@@ -327,6 +327,10 @@ Module SemiConcrete
       (m : 𝑬𝑲 E -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
       m v.
 
+    Definition scmut_match_record {A R} {Γ1 Γ2 Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Lit (ty_record R))
+      (m : SymInstance Δ -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
+      m (record_pattern_match p (𝑹_unfold t)).
+
     Fixpoint scmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : SCMut Γ Γ unit :=
       match asn with
       | asn_formula fml => scmut_assume_formula ι fml
@@ -356,9 +360,9 @@ Module SemiConcrete
         let ι' := tuple_pattern_match p t in
         scmut_produce (ι ►► ι') rhs
       | asn_match_record R s p rhs =>
-        let t := inst (T := fun Σ => Term Σ _) ι s in
-        let ι' := record_pattern_match p (𝑹_unfold t) in
-        scmut_produce (ι ►► ι') rhs
+        scmut_match_record p
+          (inst (T := fun Σ => Term Σ _) ι s)
+          (fun ι' => scmut_produce (ι ►► ι') rhs)
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
         let (K , v) := 𝑼_unfold t in
@@ -398,9 +402,9 @@ Module SemiConcrete
         let ι' := tuple_pattern_match p t in
         scmut_consume (ι ►► ι') rhs
       | asn_match_record R s p rhs =>
-        let t := inst (T := fun Σ => Term Σ _) ι s in
-        let ι' := record_pattern_match p (𝑹_unfold t) in
-        scmut_consume (ι ►► ι') rhs
+        scmut_match_record p
+          (inst (T := fun Σ => Term Σ _) ι s)
+          (fun ι' => scmut_consume (ι ►► ι') rhs)
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
         let (K , v) := 𝑼_unfold t in
