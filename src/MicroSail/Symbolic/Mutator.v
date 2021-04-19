@@ -255,8 +255,7 @@ Module Mutators
 
   End Rewrite.
 
-  Definition SymbolicHeap (Σ : LCtx) : Type :=
-    list (Chunk Σ).
+  Definition SymbolicHeap : LCtx -> Type := List Chunk.
 
   Record ObligationInfo : Type :=
     MkObligationInfo
@@ -377,12 +376,6 @@ Module Mutators
   Section ChunkExtraction.
     Context {Σ : LCtx}.
 
-    Fixpoint heap_extractions (h : SymbolicHeap Σ) : list (Chunk Σ * SymbolicHeap Σ) :=
-      match h with
-      | nil      => []
-      | cons c h => cons (c , h) (map (fun '(c', h') => (c' , cons c h')) (heap_extractions h))
-      end.
-
     Section WithMatchTerm.
 
       Variable match_term_eqb : forall {σ}, Term Σ σ -> Term Σ σ -> PathCondition Σ -> option (PathCondition Σ).
@@ -425,7 +418,7 @@ Module Mutators
       match_chunk_eqb _ _  := fun _ => None.
 
     Definition extract_chunk_eqb (ce : Chunk Σ) (h : SymbolicHeap Σ) :
-      list (PathCondition Σ * SymbolicHeap Σ) :=
+      List (Pair PathCondition SymbolicHeap) Σ :=
       stdpp.base.omap
         (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk_eqb ce cr nil))
         (heap_extractions h).
@@ -543,7 +536,7 @@ Module Mutators
       match_chunk _ _  := fun _ => None.
 
     Definition extract_chunk (ce : Chunk Σe) (h : SymbolicHeap Σr) (L : EvarEnv Σe Σr) :
-      list (EvarEnv Σe Σr * SymbolicHeap Σr) :=
+      List (Pair (EvarEnv Σe) SymbolicHeap) Σr :=
       omap
         (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk ce cr L))
         (heap_extractions h).
@@ -2648,31 +2641,31 @@ Module Mutators
         fun Σ1 ζ1 pc1 s1 => sout_angelic_binary (m1 Σ1 ζ1 pc1 s1) (m2 Σ1 ζ1 pc1 s1).
       Definition dmut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
         fun Σ1 ζ1 pc1 s1 => sout_demonic_binary (m1 Σ1 ζ1 pc1 s1) (m2 Σ1 ζ1 pc1 s1).
-      Definition dmut_angelic_list {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) :
-        list (DynamicMutator Γ1 Γ2 A Σ) -> DynamicMutator Γ1 Γ2 A Σ :=
-        fix dmut_angelic_list (xs : list (DynamicMutator Γ1 Γ2 A Σ)) :=
-          match xs with
-          | nil        => dmut_fail func msg data
-          | cons x nil => x
-          | cons x xs  => dmut_angelic_binary x (dmut_angelic_list xs)
-          end.
-      Definition dmut_demonic_list {Γ1 Γ2 A Σ} :
-        list (DynamicMutator Γ1 Γ2 A Σ) -> DynamicMutator Γ1 Γ2 A Σ :=
-        fix dmut_demonic_list (xs : list (DynamicMutator Γ1 Γ2 A Σ)) :=
-          match xs with
-          | nil        => dmut_block
-          | cons x nil => x
-          | cons x xs  => dmut_demonic_binary x (dmut_demonic_list xs)
-          end.
+      Fixpoint dmut_angelic_list {AT D} `{Subst AT} {Γ Σ} (func : string) (msg : string) (data:D) (xs : List AT Σ) :
+        DynamicMutator Γ Γ AT Σ :=
+        match xs with
+        | nil        => dmut_fail func msg data
+        | cons x nil => dmut_pure x
+        | cons x xs  => dmut_angelic_binary (dmut_pure x) (dmut_angelic_list func msg data xs)
+        end.
+      Fixpoint dmut_demonic_list {AT} `{Subst AT} {Γ Σ} (xs : List AT Σ) : DynamicMutator Γ Γ AT Σ :=
+        match xs with
+        | nil        => dmut_block
+        | cons x nil => dmut_pure x
+        | cons x xs  => dmut_demonic_binary (dmut_pure x) (dmut_demonic_list xs)
+        end.
 
       Definition dmut_angelic_finite {Γ1 Γ2 A} F `{finite.Finite F} {Σ}
-                 (cont : F -> DynamicMutator Γ1 Γ2 A Σ) :
-        DynamicMutator Γ1 Γ2 A Σ :=
-        dmut_angelic_list "dmut_angelic_finite" "All branches failed" tt (map cont (finite.enum F)).
+        (cont : F -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+        dmut_bind
+          (dmut_angelic_list "dmut_angelic_finite" "All branches failed" tt (finite.enum F))
+          (fun (Σ' : LCtx) (ζ : Sub Σ Σ') (x : F) => dmut_sub ζ (cont x)).
+
       Definition dmut_demonic_finite {Γ1 Γ2 A} F `{finite.Finite F} {Σ}
-                 (cont : F -> DynamicMutator Γ1 Γ2 A Σ) :
-        DynamicMutator Γ1 Γ2 A Σ :=
-        dmut_demonic_list (map cont (finite.enum F)).
+        (cont : F -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+        dmut_bind
+          (dmut_demonic_list (finite.enum F))
+          (fun (Σ' : LCtx) (ζ : Sub Σ Σ') (x : F) => dmut_sub ζ (cont x)).
       Global Arguments dmut_angelic_finite {_ _ _} _ {_ _ _} _.
       Global Arguments dmut_demonic_finite {_ _ _} _ {_ _ _} _.
 
@@ -2887,12 +2880,11 @@ Module Mutators
     Definition dmut_produce_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
       dmut_modify_heap (fun _ ζ => cons (subst ζ c)).
     Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
-      dmut_get_heap >>= fun _ ζ1 h1 =>
-      dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c
-        (List.map
-           (fun '(Δpc , h2) =>
-              (dmut_assume_formulas Δpc ;; dmut_put_heap h2))
-           (extract_chunk_eqb (subst ζ1 c) h1)).
+       dmut_get_heap >>= fun Σ1 ζ1 h1 =>
+       dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c
+         (extract_chunk_eqb (subst ζ1 c) h1) >>= fun Σ2 ζ2 '(Δpc2 , h2) =>
+       dmut_assert_formulas Δpc2 ;;
+       dmut_put_heap h2.
 
     Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
       dmut_get_heap >>= fun _ _ h =>
@@ -3160,18 +3152,20 @@ Module Mutators
 
       Context {Γ : PCtx}.
 
-      Definition dmut_consume_chunk_evar {Σe Σr} (c : Chunk Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        dmut_get_heap >>= fun _ ζ1 h =>
-        let L1 := subst ζ1 L in
-        dmut_angelic_list
+      Definition dmut_consume_chunk_evar {Σe Σr} (c : Chunk Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr.
+        refine (dmut_get_heap >>= fun Σ1 ζ1 h1 => _).
+        refine (let L1 := subst ζ1 L in _).
+        eapply dmut_bind.
+        apply (dmut_angelic_list
           "dmut_consume_chunk_evar"
           "Empty extraction"
           {| evarerror_env := L1;
              evarerror_data := c;
           |}
-          (List.map
-             (fun '(L', h') => dmut_put_heap h';; dmut_pure L')
-             (extract_chunk c h L1)).
+          (extract_chunk c h1 L1)).
+        intros Σ2 ζ2 [L2 h2].
+        refine (dmut_put_heap h2;; dmut_pure L2).
+      Defined.
 
       (* This function tries to assert the equality between the terms `te` from
          a callee context and `tr` from the caller context. The callee context

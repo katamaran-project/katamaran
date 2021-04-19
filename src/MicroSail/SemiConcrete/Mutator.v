@@ -98,12 +98,6 @@ Module SemiConcrete
 
   Section ChunkExtraction.
 
-    Fixpoint heap_extractions (h : SCHeap) : list (SCChunk * SCHeap) :=
-      match h with
-      | nil      => []
-      | cons c h => cons (pair c h) (map (fun '(pair c' h') => (pair c' (cons c h'))) (heap_extractions h))
-      end.
-
     Equations(noeqns) match_chunk_eqb (ce : SCChunk) (cr : SCChunk) : bool :=
       match_chunk_eqb (scchunk_user p1 vs1) (scchunk_user p2 vs2)
       with eq_dec p1 p2 => {

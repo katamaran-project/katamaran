@@ -256,3 +256,9 @@ Lemma optionspec_monotonic {A : Type} (S1 S2 : A -> Prop) (N1 N2 : Prop)
   forall (o : option A),
     OptionSpec S1 N1 o -> OptionSpec S2 N2 o.
 Proof. intros ? []; constructor; auto. Qed.
+
+Fixpoint heap_extractions {C} (h : list C) : list (C * list C) :=
+  match h with
+  | nil      => []
+  | cons c h => cons (pair c h) (map (fun '(pair c' h') => (pair c' (cons c h'))) (heap_extractions h))
+  end.

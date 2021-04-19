@@ -628,6 +628,15 @@ Module Terms (Export termkit : TermKit).
   Definition SymInstance (Σ : LCtx) : Set := NamedEnv Lit Σ.
   Bind Scope env_scope with SymInstance.
 
+  Section Symbolic.
+
+    Definition List (A : LCtx -> Type) (Σ : LCtx) : Type :=
+      list (A Σ).
+    Definition Const (A : Type) (Σ : LCtx) : Type :=
+      A.
+
+  End Symbolic.
+
   Section SymbolicTerms.
 
     Local Unset Elimination Schemes.
@@ -974,8 +983,10 @@ Module Terms (Export termkit : TermKit).
 
     Global Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=
       fun Σ1 Σ2 ζ => sub_term ζ.
-    Global Instance SubstList {A} `{Subst A} : Subst (fun Σ => list (A Σ))%type :=
+    Global Instance SubstList {A} `{Subst A} : Subst (List A) :=
       fun Σ1 Σ2 ζ => List.map (subst ζ).
+    Global Instance SubstConst {A} `{finite.Finite A} : Subst (Const A) :=
+      fun _ _ _ x => x.
     Global Instance SubstEnv {B : Set} {A : Ctx _ -> B -> Set} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
       Subst (fun Σ => Env (A Σ) Δ) :=
       fun Σ1 Σ2 ζ => env_map (fun b a => subst ζ a).
@@ -1073,7 +1084,7 @@ Module Terms (Export termkit : TermKit).
       }
     Qed.
 
-    Global Instance SubstLawsList {A} `{SubstLaws A} : SubstLaws (fun Σ => list (A Σ))%type.
+    Global Instance SubstLawsList {A} `{SubstLaws A} : SubstLaws (List A).
     Proof.
       constructor.
       { intros ? t.
@@ -1083,6 +1094,9 @@ Module Terms (Export termkit : TermKit).
         induction t; cbn; f_equal; auto using subst_sub_comp.
       }
     Qed.
+
+    Global Instance SubstLawsConst {A} `{finite.Finite A} : SubstLaws (Const A).
+    Proof. constructor; reflexivity. Qed.
 
     Global Instance SubstLawsEnv {B : Set} {A : Ctx _ -> B -> Set}
       `{forall b, Subst (fun Σ => A Σ b), forall b, SubstLaws (fun Σ => A Σ b)}
@@ -1283,7 +1297,7 @@ Module Terms (Export termkit : TermKit).
       fun _ _ xIn => occurs_check_term xIn.
 
     Global Instance OccursCheckList {T : LCtx -> Type} `{OccursCheck T} :
-      OccursCheck (fun Σ => list (T Σ)) :=
+      OccursCheck (List T) :=
       fun _ _ xIn => traverse_list (occurs_check xIn).
 
     Global Instance OccursCheckEnv {I : Set} {T : LCtx -> I -> Set}
@@ -1466,9 +1480,15 @@ Module Terms (Export termkit : TermKit).
       |}.
 
     Global Instance instantiate_list {T : LCtx -> Set} {A : Set} `{Inst T A} :
-      Inst (fun Σ => list (T Σ)) (list A) :=
+      Inst (List T) (list A) :=
       {| inst Σ ι := List.map (inst ι);
          lift Σ   := List.map lift;
+      |}.
+
+    Global Instance instantiate_const {A} `{finite.Finite A} :
+      Inst (Const A) A :=
+      {| inst Σ ι x := x;
+         lift Σ   x := x;
       |}.
 
     Global Instance instantiate_env {T : Set} {S : LCtx -> T -> Set}
@@ -1499,7 +1519,7 @@ Module Terms (Export termkit : TermKit).
         - now rewrite env_lookup_map.
         - induction es; cbn in *.
           + reflexivity.
-          + change (sub_term ζ h) with (subst ζ h).
+          + change (sub_term ζ h) with (subst (T := fun Σ => Term Σ _) ζ h).
             f_equal.
             * now destruct X as [->].
             * apply IHes, X.
@@ -1524,7 +1544,7 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Global Instance instantiatelaws_list {T : LCtx -> Set} {A : Set} `{InstLaws T A} :
-      InstLaws (fun Σ => list (T Σ)) (list A).
+      InstLaws (List T) (list A).
     Proof.
       constructor.
       { intros; cbn.
@@ -1537,6 +1557,10 @@ Module Terms (Export termkit : TermKit).
         apply List.map_ext, inst_subst.
       }
     Qed.
+
+    Global Instance instantiatelaws_const {A} `{finite.Finite A} :
+      InstLaws (Const A) A.
+    Proof. constructor; reflexivity. Qed.
 
     Global Instance instantiatelaws_env {T : Set} {S : LCtx -> T -> Set} {A : T -> Set}
            {_ : forall τ : T, Subst (fun Σ => S Σ τ)}
