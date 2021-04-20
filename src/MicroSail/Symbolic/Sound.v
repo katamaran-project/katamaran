@@ -696,14 +696,45 @@ Module Soundness
             right. apply IHxs. exists x. split; auto.
     Admitted.
 
-    Lemma dmut_wp_demonic_finite {X AT A} `{finite.Finite X, Subst AT, Inst AT A} {Γ1 Γ2 Σ Σ1}
+    Lemma dmut_wp_demonic_list {AT A} `{InstLaws AT A} {Γ Σ}
+      (xs : List AT Σ) Σ1 (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s11 : SymbolicState Γ Σ1) (ι1 : SymInstance Σ1)
+      (F : string -> Prop) (P : A -> SCState Γ -> Prop) :
+      dmut_wp (dmut_demonic_list xs) ζ01 pc1 s11 ι1 F P <->
+      forall x : AT _, List.In x xs -> P (inst (inst ι1 ζ01) x) (inst ι1 s11).
+    Proof.
+      induction xs.
+      - cbn; firstorder.
+      - destruct xs; cbn; rewrite inst_subst; intuition.
+    Qed.
+
+    Lemma dmut_wp_demonic_finite {X AT A} `{finite.Finite X, Subst AT, Inst AT A, InstLaws AT A, SubstLaws AT} {Γ1 Γ2 Σ Σ1}
       (k : X -> DynamicMutator Γ1 Γ2 AT Σ) (k_dcl : forall x, dmut_dcl (k x))
       (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s1 : SymbolicState Γ1 Σ1) (ι1 : SymInstance Σ1)
-      (F : string -> Prop) (P : A -> SCState Γ2 -> Prop) :
+      (F : string -> Prop) (P : A -> SCState Γ2 -> Prop) (Hpc : instpc ι1 pc1) :
       dmut_wp (dmut_demonic_finite X k) ζ01 pc1 s1 ι1 F P <->
       (forall x : X, dmut_wp (k x) ζ01 pc1 s1 ι1 F P).
     Proof.
-    Admitted.
+      unfold dmut_demonic_finite.
+      rewrite dmut_wp_bind.
+      - rewrite dmut_wp_demonic_list.
+        setoid_rewrite dmut_wp_sub.
+        setoid_rewrite sub_comp_id_left.
+        setoid_rewrite <-base.elem_of_list_In.
+        split.
+        + intros Hk x.
+          specialize (Hk x).
+          specialize (Hk (finite.elem_of_enum x)).
+          revert Hk.
+          eapply k_dcl; erewrite ?inst_sub_id, ?inst_lift; trivial.
+        + intros Hk x _.
+          specialize (Hk x).
+          revert Hk.
+          eapply k_dcl; erewrite ?inst_sub_id, ?inst_lift; trivial.
+      - intros until Q; intros PQ. rewrite ?dmut_wp_sub.
+        unfold instantiate_const, inst in H12; subst.
+        eapply k_dcl; eauto.
+      - eauto.
+    Qed.
 
     Lemma dmut_wp_freshtermvar {Γ Σ Σ1 x σ}
       (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s1 : SymbolicState Γ Σ1) (ι1 : SymInstance Σ1)
@@ -898,6 +929,25 @@ Module Soundness
         rewrite H3, H4. apply PQ.
     Qed.
 
+    Lemma dmut_assume_formula_dcl {Γ Σ} (fml : Formula Σ) :
+      dmut_dcl (Γ1 := Γ) (dmut_assume_formula fml).
+    Proof.
+      unfold dmut_dcl, dmut_geq; intros. revert H4.
+      rewrite ?dmut_wp_assume_formula; auto.
+      rewrite H2, H3. intuition.
+    Qed.
+
+    Lemma dmut_assume_formulas_dcl {Γ Σ} (fmls : list (Formula Σ)) :
+      dmut_dcl (Γ1 := Γ) (dmut_assume_formulas fmls).
+    Proof.
+      induction fmls.
+      + now eapply dmut_pure_dcl.
+      + cbn.
+        eapply dmut_bind_right_dcl.
+        eapply dmut_assume_formula_dcl.
+        eapply IHfmls.
+    Qed.
+
     Lemma dmut_wp_assume_formulas {Γ Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (fmls : list (Formula Σ1)) (s2 : SymbolicState Γ Σ2)
       (ι2 : SymInstance Σ2) (Hpc2 : instpc ι2 pc2) (F : string -> Prop) P (HF : forall e, F e <-> False) :
       dmut_wp (dmut_assume_formulas fmls) ζ12 pc2 s2 ι2 F P <->
@@ -913,15 +963,7 @@ Module Soundness
         rewrite inst_pathcondition_cons.
         rewrite inst_lift.
         intuition.
-        admit.
-    Admitted.
-
-    Lemma dmut_assume_formula_dcl {Γ Σ} (fml : Formula Σ) :
-      dmut_dcl (Γ1 := Γ) (dmut_assume_formula fml).
-    Proof.
-      unfold dmut_dcl, dmut_geq; intros. revert H4.
-      rewrite ?dmut_wp_assume_formula; auto.
-      rewrite H2, H3. intuition.
+        eapply dmut_assume_formulas_dcl.
     Qed.
 
     Lemma dmut_wp_assert_formula {Γ Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (fml : Formula Σ1) (s2 : SymbolicState Γ Σ2)
@@ -995,6 +1037,7 @@ Module Soundness
           apply dmut_bind_right_dcl.
           apply dmut_assume_formula_dcl.
           now apply dmut_sub_dcl.
+        + assumption.
     Qed.
 
     Lemma dmut_wp_match_sum {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1} (x y : 𝑺) (σ τ : Ty) (s : Term Σ1 (ty_sum σ τ))
