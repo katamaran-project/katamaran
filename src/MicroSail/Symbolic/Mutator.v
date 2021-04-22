@@ -2106,7 +2106,7 @@ Module Mutators
         inst ι1 (f Σ1 ζ01 a1) = inst ι2 (f Σ2 ζ02 a2).
 
     Definition sout_arrow_dcl {ET E AT A BT B} `{Subst ET, Subst BT, Inst ET E, Inst AT A, Inst BT B} {Σ} (f : sout_arrow ET AT BT Σ) : Prop :=
-      forall Σ1 Σ2 ζ1 ζ2 pc1 pc2 ζ12 a1 a2 (F : E -> Prop) (P Q : B -> Prop) (PQ : forall b, P b -> Q b),
+      forall Σ1 Σ2 ζ1 ζ2 pc1 pc2 ζ12 a1 a2 (F : E -> Prop) (HF : forall e, F e <-> False) (P Q : B -> Prop) (PQ : forall b, P b -> Q b),
        forall (ι1 : SymInstance Σ1) (ι2 : SymInstance Σ2),
          ι1 = inst ι2 ζ12 ->
          instpc ι1 pc1 ->
@@ -2245,7 +2245,7 @@ Module Mutators
     Qed.
 
     Lemma sout_wp_bind {ET E AT A BT B} `{InstLaws ET E, InstLaws AT A, InstLaws BT B} {Σ} (pc : PathCondition Σ) (ma : SymOutcome ET AT Σ)
-          (f : forall Σ', Sub Σ Σ' -> PathCondition Σ' -> AT Σ' -> SymOutcome ET BT Σ') (f_dcl : sout_arrow_dcl f) F :
+          (f : forall Σ', Sub Σ Σ' -> PathCondition Σ' -> AT Σ' -> SymOutcome ET BT Σ') (f_dcl : sout_arrow_dcl f) F (HF : forall e, F e <-> False) :
       forall (ι : SymInstance Σ) (Hpc : instpc ι pc) POST,
         sout_wp (sout_bind pc ma f) ι F POST <->
         sout_wp ma ι F (fun a => sout_wp (f Σ (sub_id _) pc (lift a)) ι F POST).
