@@ -591,6 +591,35 @@ Module Soundness
       now apply dmut_arrow_dcl_specialize.
     Qed.
 
+    Lemma dmut_bind_arrow_dcl {AT A BT B CT C} `{InstLaws AT A, InstLaws BT B, InstLaws CT C}
+        {Γ1 Γ2 Γ3 Σ0}
+        (d1 : dmut_arrow Γ1 Γ2 AT BT Σ0) (d1_dcl : dmut_arrow_dcl d1)
+        (d2 : dmut_arrow Γ2 Γ3 BT CT Σ0) (d2_dcl : dmut_arrow_dcl d2) :
+      dmut_arrow_dcl (fun Σ2 ζ02 a2 => dmut_bind (d1 Σ2 ζ02 a2) (fun Σ3 ζ23 a3 => d2 Σ3 (sub_comp ζ02 ζ23) a3)).
+    Proof.
+      unfold dmut_arrow_dcl, dmut_geq.
+      intros * -> Hpc1 Hpc2 Hζ Ha Hs F HF P Q PQ; cbn.
+      rewrite ?dmut_wp_bind; auto. eapply d1_dcl; eauto. intros a s.
+      eapply d2_dcl; eauto; unfold sub_comp in *; rewrite ?inst_subst in Hζ;
+        rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; intuition.
+
+      unfold dmut_arrow_dcl.
+      intros * -> Hpc3 Hpc4 Hζ2 Ha2 Hs2 F2 HF2 P2 Q2 PQ2; cbn.
+      eapply d2_dcl; eauto.
+      unfold sub_comp.
+      unfold sub_comp in Hζ2.
+      rewrite ?inst_subst in Hζ2.
+      now rewrite ?inst_subst, Hζ2.
+
+      unfold dmut_arrow_dcl.
+      intros * -> Hpc3 Hpc4 Hζ2 Ha2 Hs2 F2 HF2 P2 Q2 PQ2; cbn.
+      eapply d2_dcl; eauto.
+      unfold sub_comp.
+      unfold sub_comp in Hζ2.
+      rewrite ?inst_subst in Hζ2.
+      now rewrite ?inst_subst, Hζ2.
+    Qed.
+
     Lemma dmut_sub_arrow_dcl {AT A BT B} `{InstLaws AT A, InstLaws BT B} {Γ2 Γ3 Σ0} (d : DynamicMutator Γ2 Γ3 BT Σ0) (d_dcl : dmut_dcl d) :
       dmut_arrow_dcl (fun (Σ2 : LCtx) (ζ02 : Sub Σ0 Σ2) (_ : AT Σ2) => dmut_sub ζ02 d).
     Proof. intros until Q; intros PQ. rewrite ?dmut_wp_sub. eapply d_dcl; eauto. Qed.
@@ -672,12 +701,12 @@ Module Soundness
 
     Lemma dmut_wp_angelic_list {AT A D} `{InstLaws AT A} {Γ Σ} (func msg : string) (data : D)
       (xs : List AT Σ) Σ1 (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s11 : SymbolicState Γ Σ1) (ι1 : SymInstance Σ1)
-      (F : string -> Prop) (P : A -> SCState Γ -> Prop) :
+      (F : string -> Prop) (HF : forall e, F e <-> False) (P : A -> SCState Γ -> Prop) :
       dmut_wp (dmut_angelic_list func msg data xs) ζ01 pc1 s11 ι1 F P <->
       exists x : AT _, List.In x xs /\ P (inst (inst ι1 ζ01) x) (inst ι1 s11).
     Proof.
       induction xs; cbn - [dmut_wp].
-      - rewrite dmut_wp_fail. split. admit.
+      - rewrite dmut_wp_fail. split. intro Fm; exfalso; intuition.
         intros []; intuition.
       - destruct xs; cbn - [dmut_wp] in *.
         + rewrite dmut_wp_fail in IHxs.
@@ -695,7 +724,7 @@ Module Soundness
             destruct Hwp as [Hwp|Hwp]. subst.
             right. apply IHxs. exists x. split; auto.
             right. apply IHxs. exists x. split; auto.
-    Admitted.
+    Qed.
 
     Lemma dmut_wp_demonic_list {AT A} `{InstLaws AT A} {Γ Σ}
       (xs : List AT Σ) Σ1 (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s11 : SymbolicState Γ Σ1) (ι1 : SymInstance Σ1)
