@@ -1479,7 +1479,7 @@ Module Terms (Export termkit : TermKit).
          lift Σ l   := term_lit σ l;
       |}.
 
-    Global Instance instantiate_list {T : LCtx -> Set} {A : Set} `{Inst T A} :
+    Global Instance instantiate_list {T : LCtx -> Type} {A : Type} `{Inst T A} :
       Inst (List T) (list A) :=
       {| inst Σ ι := List.map (inst ι);
          lift Σ   := List.map lift;
