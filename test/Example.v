@@ -439,7 +439,10 @@ Module SepContracts.
          | H: _ /\ _ |- _ => destruct H
          | |- Outcome.Debug _ _ => constructor
          | |- _ /\ _ => constructor
-         | |- Obligation _ => constructor
+         | |- VerificationCondition _ => constructor; cbn
+         | |- Obligation _ _ _ => constructor; cbn
+         | |- _ \/ False => left
+         | |- False \/ _ => right
          end;
        compute
        - [Pos.of_succ_nat List.length Pos.succ Z.pos_sub Z.succ Z.of_nat Z.add
@@ -455,7 +458,7 @@ Module SepContracts.
   Hint Resolve valid_contract_length : contracts.
 
   Lemma valid_contract_cmp : ValidContract sep_contract_cmp (Pi cmp).
-  Proof. solve. Qed.
+  Proof. solve. left. solve. Qed.
   Hint Resolve valid_contract_cmp : contracts.
 
 End SepContracts.

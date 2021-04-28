@@ -108,24 +108,23 @@ Module Soundness
 
     Local Ltac sound_inster :=
       match goal with
-      | [ IH: outcome_satisfy (scmut_exec ?s _) _ _ |-
-          outcome_satisfy (scmut_exec ?s _) _ _ ] =>
+      | [ IH: outcome_satisfy (scmut_exec ?s _) _ |-
+          outcome_satisfy (scmut_exec ?s _) _ ] =>
         refine (outcome_satisfy_monotonic _ _ IH); clear IH
-      | [ IH: outcome_satisfy (scmut_consume _ ?a _) _ _ |-
-          outcome_satisfy (scmut_consume _ ?a _) _ _ ] =>
+      | [ IH: outcome_satisfy (scmut_consume _ ?a _) _ |-
+          outcome_satisfy (scmut_consume _ ?a _) _ ] =>
         refine (outcome_satisfy_monotonic _ _ IH); clear IH
-      | [ IH: outcome_satisfy (scmut_produce _ ?a _) _ _ |-
-          outcome_satisfy (scmut_produce _ ?a _) _ _ ] =>
+      | [ IH: outcome_satisfy (scmut_produce _ ?a _) _ |-
+          outcome_satisfy (scmut_produce _ ?a _) _ ] =>
         refine (outcome_satisfy_monotonic _ _ IH); clear IH
-      | [ IH: outcome_satisfy ?o _ _ |-
-          outcome_satisfy ?o _ _ ] =>
+      | [ IH: outcome_satisfy ?o _ |-
+          outcome_satisfy ?o _ ] =>
         refine (outcome_satisfy_monotonic _ _ IH); clear IH
       end.
 
     Lemma scmut_consume_chunk_sound {Γ} {δ1 : LocalStore Γ} {h1 : SCHeap} (c : SCChunk) (POST : LocalStore Γ -> L) :
       outcome_satisfy
         (scmut_consume_chunk c {| scstate_localstore := δ1; scstate_heap := h1 |})
-        (fun _ => False)
         (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
       interpret_scheap h1 ⊢ interpret_scchunk c ✱ POST δ1.
     Proof.
@@ -146,7 +145,6 @@ Module Soundness
       {δ1 : LocalStore Γ} {h1 : SCHeap} (POST : LocalStore Γ -> L) :
       outcome_satisfy
         (scmut_assert_formula ι fml {| scstate_localstore := δ1; scstate_heap := h1 |})
-        (fun _ => False)
         (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
       interpret_scheap h1 ⊢ !! inst ι fml ∧ emp ✱ POST δ1.
     Proof.
@@ -164,7 +162,6 @@ Module Soundness
       {δ1 : LocalStore Γ} {h1 : SCHeap} (POST : LocalStore Γ -> L) :
       outcome_satisfy
         (scmut_assume_formula ι fml {| scstate_localstore := δ1; scstate_heap := h1 |})
-        (fun _ => False)
         (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
       interpret_scheap h1 ✱ !! inst ι fml ∧ emp ⊢ POST δ1.
     Proof.
@@ -176,7 +173,6 @@ Module Soundness
     Lemma scmut_consume_sound {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
         (scmut_consume ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
-        (fun _ => False)
         (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
       interpret_scheap h1 ⊢ interpret_assertion ι asn ✱ POST δ1.
     Proof.
@@ -211,7 +207,6 @@ Module Soundness
     Lemma scmut_produce_sound {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
         (scmut_produce ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
-        (fun _ => False)
         (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
       interpret_scheap h1 ✱ interpret_assertion ι asn ⊢ POST δ1.
     Proof.
@@ -248,7 +243,6 @@ Module Soundness
     Lemma scmut_produce_sound' {Γ Σ} {δ1 : LocalStore Γ} {h1 : SCHeap} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       outcome_satisfy
         (scmut_produce ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
-        (fun _ => False)
         (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
       interpret_assertion ι asn ⊢ interpret_scheap h1 -✱ POST δ1.
     Proof.
@@ -261,7 +255,6 @@ Module Soundness
           (c : SepContract Δ τ) :
       outcome_satisfy
         (scmut_call c δΔ {| scstate_localstore := δΓ; scstate_heap := h |})
-        (fun _ => False)
         (fun r =>
            interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_value r) (scmutres_localstore r)) ->
       CTriple δΔ (interpret_scheap h) (fun v => POST v δΓ) c.
@@ -292,7 +285,6 @@ Module Soundness
       forall (δ1 : LocalStore Γ) (h1 : SCHeap) (POST : Lit σ -> LocalStore Γ -> L),
         outcome_satisfy
           (scmut_exec s (MkSCState δ1 h1))
-          (fun _ => False)
           (fun '(MkSCMutResult v2 (MkSCState δ2 h2)) =>
              interpret_scheap h2 ⊢ POST v2 δ2) ->
         δ1 ⊢ ⦃ interpret_scheap h1 ⦄ s ⦃ POST ⦄.
@@ -457,7 +449,6 @@ Module Soundness
       forall (δ1 : LocalStore Γ) (h1 : SCHeap) (POST : Lit σ -> LocalStore Γ -> L),
         outcome_satisfy
           (scmut_exec s (MkSCState δ1 h1))
-          (fun _ => False)
           (fun '(MkSCMutResult v2 (MkSCState δ2 h2)) =>
              interpret_scheap h2 ⊢ POST v2 δ2) ->
         interpret_scheap h1 ⊢ WP s POST δ1.
