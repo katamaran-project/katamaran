@@ -672,7 +672,6 @@ Module MinCapsMutators :=
     MinCapsAssertionKit
     MinCapsSymbolicContractKit.
 Import MinCapsMutators.
-Import DynMutV2.
 
 Local Ltac solve :=
   repeat

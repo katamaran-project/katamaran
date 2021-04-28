@@ -134,13 +134,6 @@ Module Soundness
         instpc ι pc -> (inst ι f : Prop).
     Infix "⊢f" := (@entails_formula _) (at level 80, no associativity).
 
-    Global Instance proper_inconsistent {Σ} :
-      Proper (@entails Σ ==> flip impl) inconsistent.
-    Proof.
-      intros pc1 pc2 Hpc incpc2 ι Hpc1.
-      now eapply incpc2, Hpc, Hpc1.
-    Qed.
-
     Lemma entails_cons {Σ} (pc1 pc2 : PathCondition Σ) (f : Formula Σ) :
       (pc1 ⊢ pc2 /\ pc1 ⊢f f) <-> pc1 ⊢ (f :: pc2)%list.
     Proof.
@@ -317,8 +310,6 @@ Module Soundness
   End SemiConcreteWP.
 
   Module TwoPointOSoundness.
-
-    Import TwoPointO.
 
     Global Instance InstDynamicMutatorError : Inst DynamicMutatorError string :=
       {| inst _ _ := dmuterr_message;
@@ -2108,10 +2099,10 @@ Module Soundness
     Admitted.
 
     Lemma symbolic_sound {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
-      ValidContractDynMut c body ->
+      ValidContractNoEvar c body ->
       ValidContractSCMut c body.
     Proof.
-      unfold ValidContractDynMut, ValidContractSCMut. intros Hwp.
+      unfold ValidContractNoEvar, ValidContractSCMut. intros Hwp.
       unfold ForallNamed in Hwp. rewrite Forall_forall in Hwp.
       intros ι. cbn. specialize (Hwp ι).
       pose proof (bapprox_contract c body) as H.

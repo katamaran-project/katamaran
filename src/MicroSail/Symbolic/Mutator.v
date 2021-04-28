@@ -579,492 +579,6 @@ Module Mutators
 
   End SymbolicUnit.
 
-  Section DynamicMutatorResult.
-
-    (* Local Set Primitive Projections. *)
-    Local Set Maximal Implicit Insertion.
-
-    Record DynamicMutatorResult (Γ : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
-      MkDynMutResult {
-          dmutres_context       : LCtx;
-          dmutres_substitution  : Sub Σ dmutres_context;
-          dmutres_pathcondition : PathCondition dmutres_context;
-          dmutres_result_value  : A dmutres_context;
-          dmutres_result_state  : SymbolicState Γ dmutres_context;
-        }.
-
-    Global Arguments MkDynMutResult {_ _ _ _} _ _ _ _.
-
-    (* Contravariant substitution for results. *)
-    Definition cosubst_dmutres {Γ A Σ0 Σ1} (ζ1 : Sub Σ0 Σ1) (r : DynamicMutatorResult Γ A Σ1) :
-      DynamicMutatorResult Γ A Σ0 :=
-      match r with
-      MkDynMutResult ζ2 pc2 a2 s2 => MkDynMutResult (sub_comp ζ1 ζ2) pc2 a2 s2
-      end.
-
-    Lemma cosubst_dmutres_comp {AT Γ Σ1 Σ2 Σ3} (ζ12 : Sub Σ1 Σ2) (ζ23 : Sub Σ2 Σ3) (r : DynamicMutatorResult Γ AT Σ3) :
-      cosubst_dmutres (sub_comp ζ12 ζ23) r = cosubst_dmutres ζ12 (cosubst_dmutres ζ23 r).
-    Proof. destruct r; cbn; now rewrite sub_comp_assoc. Qed.
-
-    (* A record to collect information when the symbolic execution signals a failure. *)
-    Record DynamicMutatorError : Type :=
-      MkDynMutError
-        { dmuterr_function        : string;
-          dmuterr_message         : string;
-          dmuterr_data_type       : Type;
-          dmuterr_data            : dmuterr_data_type;
-          dmuterr_logic_context   : LCtx;
-          dmuterr_program_context : PCtx;
-          dmuterr_localstore      : SymbolicLocalStore dmuterr_program_context dmuterr_logic_context;
-          dmuterr_pathcondition   : PathCondition dmuterr_logic_context;
-          dmuterr_heap            : SymbolicHeap dmuterr_logic_context;
-        }.
-
-    Global Arguments MkDynMutError _ _ {_} _ _ _ _ _ _.
-
-  End DynamicMutatorResult.
-
-  Definition inconsistent {Σ} (pc : PathCondition Σ) : Prop :=
-    forall ι, ~ inst ι pc.
-  Definition contradiction (e : DynamicMutatorError) : Prop :=
-    inconsistent (dmuterr_pathcondition e).
-
-  Section DynamicMutator.
-
-    Definition DynamicMutator (Γ1 Γ2 : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
-      forall Σ', Sub Σ Σ' -> PathCondition Σ' -> SymbolicState Γ1 Σ' -> Outcome (DynamicMutatorError) (DynamicMutatorResult Γ2 A Σ').
-    Bind Scope dmut_scope with DynamicMutator.
-
-    Definition dmut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : DynamicMutator Γ Γ A Σ :=
-      fun Σ' ζ pc s => outcome_pure (MkDynMutResult (sub_id Σ') pc (subst ζ a) s).
-    Definition dmut_bind {Γ1 Γ2 Γ3 A B Σ}
-      (ma : DynamicMutator Γ1 Γ2 A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> DynamicMutator Γ2 Γ3 B Σ') : DynamicMutator Γ1 Γ3 B Σ :=
-      fun Σ0 ζ0 pc0 s0 =>
-        outcome_bind (ma Σ0 ζ0 pc0 s0)                            (fun '(MkDynMutResult ζ1 pc1 a s1) =>
-        outcome_bind (f _ (sub_comp ζ0 ζ1) a _ (sub_id _) pc1 s1) (fun '(MkDynMutResult ζ2 pc2 b s2) =>
-        outcome_pure (MkDynMutResult (sub_comp ζ1 ζ2) pc2 b s2))).
-    (* Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) : *)
-    (*   DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m). *)
-
-    Definition dmut_sub {Γ1 Γ2 A Σ1 Σ2} (ζ1 : Sub Σ1 Σ2) (p : DynamicMutator Γ1 Γ2 A Σ1) :
-      DynamicMutator Γ1 Γ2 A Σ2 := fun Σ3 ζ2 => p _ (sub_comp ζ1 ζ2).
-    Global Arguments dmut_sub {_ _ _ _ _} ζ1 p.
-    Definition dmut_strength {Γ1 Γ2 A B Σ} `{Subst A, Subst B} (ma : DynamicMutator Γ1 Γ2 A Σ) (b : B Σ) :
-      DynamicMutator Γ1 Γ2 (fun Σ => A Σ * B Σ)%type Σ :=
-      dmut_bind ma (fun _ ζ a => dmut_pure (a, subst ζ b)).
-    Definition dmut_bind_right {Γ1 Γ2 Γ3 A B Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) : DynamicMutator Γ1 Γ3 B Σ :=
-      dmut_bind ma (fun _ ζ _ => dmut_sub ζ mb).
-    Definition dmut_bind_left {Γ1 Γ2 Γ3 A B} `{Subst A} {Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) : DynamicMutator Γ1 Γ3 A Σ :=
-      dmut_bind ma (fun _ ζ a => dmut_bind_right (dmut_sub ζ mb) (dmut_pure a)) .
-    Definition dmut_fmap {Γ1 Γ2 Σ A B} `{Subst A, Subst B}
-      (ma : DynamicMutator Γ1 Γ2 A Σ)
-      (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ') :
-      DynamicMutator Γ1 Γ2 B Σ :=
-      dmut_bind ma (fun Σ1 ζ1 a => dmut_pure (f Σ1 ζ1 a)).
-    Definition dmut_fmap2 {Γ1 Γ2 Γ3 Σ A B C} `{Subst A, Subst B, Subst C}
-      (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ)
-      (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ' -> C Σ') :
-      DynamicMutator Γ1 Γ3 C Σ :=
-      dmut_bind ma (fun Σ1 ζ1 a =>
-        dmut_bind (dmut_sub ζ1 mb) (fun Σ2 ζ2 b =>
-          dmut_pure (f Σ2 (sub_comp ζ1 ζ2) (subst ζ2 a) b))).
-    Definition dmut_pair {Γ1 Γ2 Γ3 Σ A B} `{Subst A, Subst B}
-      (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) :
-      DynamicMutator Γ1 Γ3 (Pair A B) Σ :=
-      dmut_fmap2 ma mb (fun _ _ => pair).
-
-    (* There are two kinds of failures of the symbolic execution. dmut_fail
-       is an unconditional fail: the current branch of choices is deemed invalid
-       and the executor should backtrack. dmut_contradiction is more liberal.
-       Instead of completely failing, it allows the current choices but requires
-       the path condition to be inconsistent. Essentially, this is should be a
-       dmut_block, but the execution engine could not derive the
-       inconsistency automatically. If in doubt, be more conservative and use
-       dmut_fail, because it allows for pruning of branches. Change to
-       dmut_contradiction if you're convinced that you require it for a
-       completeness issue. *)
-    Definition dmut_fail {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 =>
-        outcome_fail
-          {| dmuterr_function        := func;
-             dmuterr_message         := msg;
-             dmuterr_data            := data;
-             dmuterr_program_context := Γ1;
-             dmuterr_logic_context   := Σ1;
-             dmuterr_pathcondition   := pc1;
-             dmuterr_localstore      := symbolicstate_localstore s1;
-             dmuterr_heap            := symbolicstate_heap s1;
-          |}.
-
-    Inductive Contradiction (err : DynamicMutatorError) : Prop :=
-    | contradict (p : contradiction err).
-
-    Definition dmut_contradiction {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 =>
-        outcome_assertk
-          (Contradiction
-             {| dmuterr_function        := func;
-                dmuterr_message         := msg;
-                dmuterr_data            := data;
-                dmuterr_program_context := Γ1;
-                dmuterr_logic_context   := Σ1;
-                dmuterr_pathcondition   := pc1;
-                dmuterr_localstore      := symbolicstate_localstore s1;
-                dmuterr_heap            := symbolicstate_heap s1;
-             |}) outcome_block.
-
-    Definition dmut_block {Γ1 Γ2 A Σ} : DynamicMutator Γ1 Γ2 A Σ :=
-      fun _ _ _ _ => outcome_block.
-
-    Definition dmut_angelic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 => outcome_angelic (fun i => ms i Σ1 ζ1 pc1 s1).
-    Definition dmut_demonic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 => outcome_demonic (fun i => ms i Σ1 ζ1 pc1 s1).
-    Definition dmut_angelic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 => outcome_angelic_binary (m1 Σ1 ζ1 pc1 s1) (m2 Σ1 ζ1 pc1 s1).
-    Definition dmut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 => outcome_demonic_binary (m1 Σ1 ζ1 pc1 s1) (m2 Σ1 ζ1 pc1 s1).
-    Definition dmut_angelic_list {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) :
-      list (DynamicMutator Γ1 Γ2 A Σ) -> DynamicMutator Γ1 Γ2 A Σ :=
-      fix dmut_angelic_list (xs : list (DynamicMutator Γ1 Γ2 A Σ)) :=
-        match xs with
-        | nil        => dmut_contradiction func msg data
-        | cons x nil => x
-        | cons x xs  => dmut_angelic_binary x (dmut_angelic_list xs)
-        end.
-    Definition dmut_demonic_list {Γ1 Γ2 A Σ} :
-      list (DynamicMutator Γ1 Γ2 A Σ) -> DynamicMutator Γ1 Γ2 A Σ :=
-      fix dmut_demonic_list (xs : list (DynamicMutator Γ1 Γ2 A Σ)) :=
-        match xs with
-        | nil        => dmut_block
-        | cons x nil => x
-        | cons x xs  => dmut_demonic_binary x (dmut_demonic_list xs)
-        end.
-
-    Definition dmut_angelic_finite {Γ1 Γ2 A} F `{finite.Finite F, Subst A} {Σ}
-               (cont : F -> DynamicMutator Γ1 Γ2 A Σ) :
-      DynamicMutator Γ1 Γ2 A Σ :=
-      dmut_angelic_list "dmut_angelic_finite" "All branches failed" tt (map cont (finite.enum F)).
-    Definition dmut_demonic_finite {Γ1 Γ2 A} F `{finite.Finite F, Subst A} {Σ}
-               (cont : F -> DynamicMutator Γ1 Γ2 A Σ) :
-      DynamicMutator Γ1 Γ2 A Σ :=
-      dmut_demonic_list (map cont (finite.enum F)).
-    Global Arguments dmut_angelic_finite {_ _ _} _ {_ _ _ _} _.
-    Global Arguments dmut_demonic_finite {_ _ _} _ {_ _ _ _} _.
-
-    Definition dmut_fresh {Γ1 Γ2 A Σ} x τ (ma : DynamicMutator Γ1 Γ2 A (Σ ▻ (x :: τ))) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 =>
-        let x'  := fresh Σ1 (Some x) in
-        let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
-        outcome_map (cosubst_dmutres sub_wk1) (ma (Σ1 ▻ (x' :: τ)) ζ1x (wk1 pc1) (wk1 s1)).
-    Global Arguments dmut_fresh {_ _ _ _} _ _ _.
-
-    Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
-      dmut_fresh x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
-    Global Arguments dmut_freshtermvar {_ _ _} _.
-
-    Record DebugCall : Type :=
-      MkDebugCall
-        { debug_call_logic_context          : LCtx;
-          debug_call_function_parameters    : PCtx;
-          debug_call_function_result_type   : Ty;
-          debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
-          debug_call_function_arguments     : SymbolicLocalStore debug_call_function_parameters debug_call_logic_context;
-          debug_call_function_contract      : SepContract debug_call_function_parameters debug_call_function_result_type;
-          debug_call_pathcondition          : PathCondition debug_call_logic_context;
-          debug_call_program_context        : PCtx;
-          debug_call_localstore             : SymbolicLocalStore debug_call_program_context debug_call_logic_context;
-          debug_call_heap                   : SymbolicHeap debug_call_logic_context;
-        }.
-
-    Record DebugStm : Type :=
-      MkDebugStm
-        { debug_stm_program_context        : PCtx;
-          debug_stm_statement_type         : Ty;
-          debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
-          debug_stm_logic_context          : LCtx;
-          debug_stm_pathcondition          : PathCondition debug_stm_logic_context;
-          debug_stm_localstore             : SymbolicLocalStore debug_stm_program_context debug_stm_logic_context;
-          debug_stm_heap                   : SymbolicHeap debug_stm_logic_context;
-        }.
-
-  End DynamicMutator.
-  Bind Scope dmut_scope with DynamicMutator.
-
-  Module DynamicMutatorNotations.
-
-    Notation "'⨂' x .. y => F" :=
-      (dmut_demonic (fun x => .. (dmut_demonic (fun y => F)) .. )) : dmut_scope.
-
-    Notation "'⨁' x .. y => F" :=
-      (dmut_angelic (fun x => .. (dmut_angelic (fun y => F)) .. )) : dmut_scope.
-
-    Infix "⊗" := dmut_demonic_binary (at level 40, left associativity) : dmut_scope.
-    Infix "⊕" := dmut_angelic_binary (at level 50, left associativity) : dmut_scope.
-
-    Notation "x <- ma ;; mb" := (dmut_bind ma (fun _ _ x => mb)) (at level 80, ma at level 90, mb at level 200, right associativity) : dmut_scope.
-    Notation "ma >>= f" := (dmut_bind ma f) (at level 50, left associativity) : dmut_scope.
-    Notation "m1 ;; m2" := (dmut_bind_right m1 m2) : dmut_scope.
-
-  End DynamicMutatorNotations.
-  Import DynamicMutatorNotations.
-  Local Open Scope dmut_scope.
-
-  Definition dmut_state {Γ Γ' A Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> A Σ' * SymbolicState Γ' Σ') :
-    DynamicMutator Γ Γ' A Σ :=
-    fun Σ1 ζ1 pc1 s1 =>
-      let (a, s2) := f Σ1 ζ1 s1 in
-      outcome_pure
-        {| dmutres_substitution  := sub_id Σ1;
-           dmutres_pathcondition := pc1;
-           dmutres_result_value  := a;
-           dmutres_result_state  := s2;
-        |}.
-  Definition dmut_gets {Γ Σ A} (f : forall Σ1, Sub Σ Σ1 -> SymbolicState Γ Σ1 -> A Σ1) :
-    DynamicMutator Γ Γ A Σ :=
-    dmut_state (fun Σ1 ζ1 s1 => (f Σ1 ζ1 s1,s1)).
-  Definition dmut_get {Γ Σ} : DynamicMutator Γ Γ (SymbolicState Γ) Σ :=
-    dmut_gets (fun _ _ s => s).
-  Definition dmut_modify {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> SymbolicState Γ' Σ') :
-    DynamicMutator Γ Γ' Unit Σ :=
-    dmut_state (fun Σ1 ζ1 s1 => (tt, f Σ1 ζ1 s1)).
-  Definition dmut_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
-    dmut_modify (fun Σ1 ζ1 _ => subst ζ1 s).
-
-  Definition dmut_state_local {Γ Γ' A Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Γ Σ' -> A Σ' * SymbolicLocalStore Γ' Σ') :
-    DynamicMutator Γ Γ' A Σ :=
-    dmut_state (fun Σ1 ζ1 '(MkSymbolicState δ1 h1) => let (a, δ2) := f Σ1 ζ1 δ1 in (a,MkSymbolicState δ2 h1)).
-  Definition dmut_gets_local {Γ Σ A} (f : forall Σ1, Sub Σ Σ1 -> SymbolicLocalStore Γ Σ1 -> A Σ1) :
-    DynamicMutator Γ Γ A Σ :=
-    dmut_gets (fun Σ1 ζ1 s1 => f Σ1 ζ1 (symbolicstate_localstore s1)).
-  Definition dmut_get_local {Γ Σ} : DynamicMutator Γ Γ (fun Σ => SymbolicLocalStore Γ Σ) Σ :=
-    dmut_gets_local (fun _ _ δ => δ).
-  Definition dmut_modify_local {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Γ Σ' -> SymbolicLocalStore Γ' Σ') : DynamicMutator Γ Γ' Unit Σ :=
-    dmut_state_local (fun Σ1 ζ1 δ1 => (tt,f Σ1 ζ1 δ1)).
-  Definition dmut_put_local {Γ Γ' Σ} (δ' : SymbolicLocalStore Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
-    dmut_modify_local (fun Σ1 ζ1 _ => subst ζ1 δ').
-  Definition dmut_pop_local {Γ x σ Σ} : DynamicMutator (Γ ▻ (x :: σ)) Γ Unit Σ :=
-    dmut_modify_local (fun Σ1 ζ1 => env_tail).
-  Definition dmut_pops_local {Γ} Δ {Σ} : DynamicMutator (Γ ▻▻ Δ) Γ Unit Σ :=
-    dmut_modify_local (fun Σ1 ζ1 => env_drop Δ).
-  Definition dmut_push_local {Γ x σ Σ} (t : Term Σ σ) : DynamicMutator Γ (Γ ▻ (x :: σ)) Unit Σ :=
-    dmut_modify_local (fun Σ1 ζ1 δ1 => env_snoc δ1 (x::σ) (subst (T:= fun Σ => Term Σ σ) ζ1 t)).
-  Definition dmut_pushs_local {Γ Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) : DynamicMutator Γ (Γ ▻▻ Δ) Unit Σ :=
-    dmut_modify_local (fun Σ1 ζ1 δ1 => δ1 ►► subst (T := SymbolicLocalStore Δ) ζ1 δΔ).
-  Definition dmut_pushpop {AT} `{Subst AT} {Γ1 Γ2 x σ Σ} (t : Term Σ σ) (d : DynamicMutator (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT Σ) :
-    DynamicMutator Γ1 Γ2 AT Σ :=
-    dmut_push_local t ;; dmut_bind_left d dmut_pop_local.
-  Definition dmut_pushspops {AT} `{Subst AT} {Γ1 Γ2 Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) (d : DynamicMutator (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) AT Σ) :
-    DynamicMutator Γ1 Γ2 AT Σ :=
-    dmut_pushs_local δΔ ;; dmut_bind_left d (dmut_pops_local Δ).
-  Definition dmut_get_heap {Γ Σ} : DynamicMutator Γ Γ SymbolicHeap Σ :=
-    dmut_state (fun _ _ s1 => (symbolicstate_heap s1,s1)).
-  Definition dmut_modify_heap {Γ Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicHeap Σ' -> SymbolicHeap Σ') : DynamicMutator Γ Γ Unit Σ :=
-    dmut_modify (fun Σ1 ζ1 '(MkSymbolicState δ1 h1) => MkSymbolicState δ1 (f Σ1 ζ1 h1)).
-  Definition dmut_put_heap {Γ Σ} (h : SymbolicHeap Σ) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_modify_heap (fun Σ1 ζ1 _ => subst ζ1 h).
-  Definition dmut_eval_exp {Γ σ} (e : Exp Γ σ) {Σ} : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
-    dmut_gets_local (fun Σ1 ζ1 δ1 => symbolic_eval_exp δ1 e).
-  Definition dmut_eval_exps {Γ Σ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs) Σ :=
-    dmut_gets_local (fun Σ1 ζ1 δ1 => env_map (fun _ => symbolic_eval_exp δ1) es).
-
-  Fixpoint dmut_freshen_tuplepat' {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
-    DynamicMutator Γ Γ (fun Σ => Env (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
-    match p with
-    | tuplepat_nil =>
-      dmut_pure (env_nil, env_nil)
-    | tuplepat_snoc p x =>
-      dmut_fmap2
-        (dmut_freshen_tuplepat' p)
-        (dmut_freshtermvar (𝑿to𝑺 x))
-        (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs _ t__x, env_snoc ts__Δ (x::_) t__x))
-    end.
-
-  Definition dmut_freshen_tuplepat {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
-    DynamicMutator Γ Γ (Pair (fun Σ => Term Σ (ty_tuple σs)) (fun Σ => NamedEnv (Term Σ) Δ)) Σ :=
-    dmut_fmap
-      (dmut_freshen_tuplepat' p)
-      (fun _ _ '(t__σs, t__Δ) => (term_tuple t__σs, t__Δ)).
-
-  Fixpoint dmut_freshen_recordpat' {N : Set} (inj__N : N -> 𝑺) {σs} {Δ : NCtx N Ty} (p : RecordPat σs Δ) {Γ Σ} :
-    DynamicMutator Γ Γ (Pair (fun Σ => NamedEnv (Term Σ) σs) (fun Σ => NamedEnv (Term Σ) Δ)) Σ :=
-    match p with
-    | recordpat_nil =>
-      dmut_pure (env_nil, env_nil)
-    | recordpat_snoc p rf x =>
-      dmut_fmap2
-        (dmut_freshen_recordpat' inj__N p)
-        (dmut_freshtermvar (inj__N x))
-        (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs (rf::_) t__x, env_snoc ts__Δ (x::_) t__x))
-    end.
-
-  Definition dmut_freshen_recordpat {N : Set} (inj__N : N -> 𝑺) {R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
-    DynamicMutator Γ Γ (Pair (fun Σ => Term Σ (ty_record R)) (fun Σ => NamedEnv (Term Σ) Δ)) Σ :=
-    dmut_fmap
-      (dmut_freshen_recordpat' inj__N p)
-      (fun _ _ '(t__σs, t__Δ) => (term_record R t__σs, t__Δ)).
-
-  Definition dmut_freshen_pattern {Γ Σ Δ σ} (p : Pattern Δ σ) :
-    DynamicMutator Γ Γ (Pair (fun Σ => Term Σ σ) (fun Σ => NamedEnv (Term Σ) Δ)) Σ :=
-    match p with
-    | pat_var x =>
-      dmut_fmap
-        (dmut_freshtermvar (𝑿to𝑺 x))
-        (fun _ _ t => (t,[t]%arg))
-    | pat_unit =>
-      dmut_pure (term_lit ty_unit tt,env_nil)
-    | pat_pair x y =>
-      dmut_fmap2
-        (dmut_freshtermvar (𝑿to𝑺 x))
-        (dmut_freshtermvar (𝑿to𝑺 y))
-        (fun _ _ t__x t__y => (term_binop binop_pair t__x t__y, [t__x,t__y]%arg))
-    | pat_tuple p =>
-      dmut_freshen_tuplepat p
-    | pat_record p =>
-      dmut_freshen_recordpat 𝑿to𝑺 p
-    end.
-
-  Definition dmutres_try_assume_eq {Γ Σ σ} (pc : PathCondition Σ) (t1 t2 : Term Σ σ) (s : SymbolicState Γ Σ) :
-    option (DynamicMutatorResult Γ Unit Σ) :=
-    match t1 with
-    | @term_var _ ς σ ςInΣ =>
-      fun t2 : Term Σ σ =>
-        match occurs_check ςInΣ t2 with
-        | Some t =>
-          let ζ := sub_single ςInΣ t in
-          Some
-            {| dmutres_context := Σ - (ς :: σ);
-               dmutres_substitution := ζ;
-               dmutres_pathcondition := subst ζ pc;
-               dmutres_result_value := tt;
-               dmutres_result_state := subst ζ s;
-            |}
-        | None => None
-        end
-    | _ => fun _ => None
-    end t2.
-
-  Definition dmutres_assume_formula {Γ Σ} (pc : PathCondition Σ) (fml : Formula Σ) (s : SymbolicState Γ Σ) :
-    DynamicMutatorResult Γ Unit Σ :=
-    match fml with
-    | formula_eq t1 t2 =>
-      match dmutres_try_assume_eq pc t1 t2 s with
-      | Some r => r
-      | None =>
-        match dmutres_try_assume_eq pc t2 t1 s with
-        | Some r => r
-        | None =>
-          {| dmutres_context := Σ;
-             dmutres_substitution := sub_id _;
-             dmutres_pathcondition := cons fml pc;
-             dmutres_result_value := tt;
-             dmutres_result_state := s;
-          |}
-        end
-      end
-    | _ =>
-      {| dmutres_context := Σ;
-         dmutres_substitution := sub_id _;
-         dmutres_pathcondition := cons fml pc;
-         dmutres_result_value := tt;
-         dmutres_result_state := s;
-      |}
-    end.
-
-  (* Add the provided formula to the path condition. *)
-  Definition dmut_assume_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
-    fun Σ1 ζ1 pc1 s1 =>
-      let fml := subst ζ1 fml in
-      match try_solve_formula fml with
-      | Some true =>
-        (* The formula is always true. Just skip it. *)
-        outcome_pure
-          {| dmutres_context := Σ1;
-             dmutres_substitution := sub_id Σ1;
-             dmutres_pathcondition := pc1;
-             dmutres_result_value := tt;
-             dmutres_result_state := s1;
-          |}
-      | Some false =>
-        (* The formula is always false, so the path condition with it would become
-           inconsistent. Prune this path. *)
-        outcome_block
-      | None =>
-        outcome_pure (dmutres_assume_formula pc1 fml s1)
-      end.
-
-  Definition dmut_assume_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_assume_formula (formula_bool t).
-  Definition dmut_assume_exp {Γ Σ} (e : Exp Γ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_eval_exp e >>= fun _ _ => dmut_assume_term.
-  Definition dmut_assume_prop {Γ Σ} (P : abstract_named Lit Σ Prop) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_assume_formula (formula_prop (sub_id Σ) P).
-  Definition dmut_assume_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
-    fold_right (fun fml => dmut_bind_right (dmut_assume_formula fml)) (dmut_pure tt) fmls.
-
-  Definition dmut_assert_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
-    fun (Σ1 : NCtx 𝑺 Ty) (ζ1 : Sub Σ Σ1) pc1 (s1 : SymbolicState Γ Σ1) =>
-      let fml1 := subst ζ1 fml in
-      match try_solve_formula fml1 with
-        | Some true =>
-          outcome_pure
-            {| dmutres_substitution := sub_id Σ1;
-               dmutres_pathcondition := pc1;
-               dmutres_result_value := tt;
-               dmutres_result_state := s1;
-            |}
-        | Some false =>
-          outcome_fail
-            {| dmuterr_function        := "dmut_assert_formula";
-               dmuterr_message         := "Formula is always false";
-               dmuterr_data            := fml1;
-               dmuterr_program_context := Γ;
-               dmuterr_logic_context   := Σ1;
-               dmuterr_pathcondition   := pc1;
-               dmuterr_localstore      := symbolicstate_localstore s1;
-               dmuterr_heap            := symbolicstate_heap s1;
-            |}
-
-        | None =>
-          (* Record the obligation. *)
-          outcome_assertk
-            (Obligation
-               {| obligation_logic_context   := _;
-                  obligation_program_context := Γ;
-                  obligation_localstore      := symbolicstate_localstore s1;
-                  obligation_heap            := symbolicstate_heap s1;
-                  obligation_pathcondition   := pc1;
-                  obligation_formula         := fml1;
-               |})
-            (* We also want to assume the formula for the continuation, i.e.
-               we actually perform a simple cut.  *)
-            (outcome_pure (dmutres_assume_formula pc1 fml1 s1))
-        end%out.
-
-  Definition dmut_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
-    fold_right (fun fml => dmut_bind_right (dmut_assert_formula fml)) (dmut_pure tt) fmls.
-  Definition dmut_assert_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_assert_formula (formula_bool t).
-  Definition dmut_assert_exp {Γ Σ} (e : Exp Γ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_eval_exp e >>= fun _ _ t => dmut_assert_term t.
-  Definition dmut_produce_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_modify (fun _ ζ => symbolicstate_produce_chunk (subst ζ c)).
-
-  Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_get_heap >>= fun _ ζ1 h1 =>
-    dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c
-      (List.map
-         (fun '(Δpc , h2) =>
-            (dmut_assume_formulas Δpc ;; dmut_put_heap h2))
-         (extract_chunk_eqb (subst ζ1 c) h1)).
-
-  Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
-    dmut_get_heap >>= fun _ _ h =>
-    match h with
-    | nil => dmut_pure tt
-    | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
-    end.
-
   Record Config : Type :=
     MkConfig
       { config_debug_function : forall Δ τ, 𝑭 Δ τ -> bool;
@@ -1073,810 +587,6 @@ Module Mutators
   Definition default_config : Config :=
     {| config_debug_function _ _ f := false;
     |}.
-
-  Module DynMutV1.
-
-    Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
-      match asn with
-      | asn_formula fml => dmut_assume_formula fml
-      | asn_chunk c     => dmut_produce_chunk c
-      | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
-                                                                  (dmut_assume_term (term_not b) ;; dmut_produce a2)
-      | asn_match_enum E k1 alts =>
-        dmut_demonic_finite
-          (𝑬𝑲 E)
-          (fun k2 =>
-             dmut_assume_formula (formula_eq k1 (term_enum E k2)) ;;
-             dmut_produce (alts k2))
-      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        dmut_pure s >>= fun (Σ1 : LCtx) (ζ1 : Sub Σ Σ1) (s : Term Σ1 (ty_sum σ τ)) =>
-        match term_get_sum s with
-        | Some (inl v) => dmut_sub (sub_snoc ζ1 (xl::σ) v) (dmut_produce alt_inl)
-        | Some (inr v) => dmut_sub (sub_snoc ζ1 (xr::τ) v) (dmut_produce alt_inr)
-        | None =>
-          dmut_demonic_binary
-            (dmut_freshtermvar xl >>= fun _ ζ2 vl =>
-             dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 s) (term_inl vl)) ;;
-             dmut_sub (sub_snoc (sub_comp ζ1 ζ2) (xl::_) vl) (dmut_produce alt_inl))
-            (dmut_freshtermvar xr >>= fun _ ζ2 vr =>
-             dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 s) (term_inr vr)) ;;
-             dmut_sub (sub_snoc (sub_comp ζ1 ζ2) (xr::_) vr) (dmut_produce alt_inr))
-        end
-      | asn_match_list s alt_nil xh xt alt_cons =>
-        dmut_fail "dmut_produce" "Not implemented" asn
-      | asn_match_pair s xl xr rhs =>
-        match term_get_pair s with
-        | Some (vl, vr) => dmut_sub (sub_id _ ► (xl::_ ↦ vl) ► (xr::_ ↦ vr)) (dmut_produce rhs)
-        | None =>
-          dmut_pair (dmut_freshtermvar xl) (dmut_freshtermvar xr) >>= fun _ ζ '(vl,vr) =>
-          dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_binop binop_pair vl vr)) ;;
-          dmut_sub (ζ ► (xl::_ ↦ vl) ► (xr::_ ↦ vr)) (dmut_produce rhs)
-        end
-      | asn_match_tuple s p rhs =>
-        dmut_fail "dmut_produce" "Not implemented" asn
-      | asn_match_record R s p rhs =>
-        dmut_pure s >>= fun _ ζ1 s =>
-        match term_get_record s with
-        | Some ts =>
-          let ζ__R := record_pattern_match p ts in
-          dmut_sub (ζ1 ►► ζ__R) (dmut_produce rhs)
-        | None =>
-          dmut_freshen_recordpat id p >>= fun _ ζ2 '(t__p,ζ__R) =>
-          dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 s) t__p) ;;
-          dmut_sub (sub_comp ζ1 ζ2 ►► ζ__R) (dmut_produce rhs)
-        end
-      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-        match term_get_union s with
-        | Some (existT K ts) =>
-          dmut_fail "dmut_produce" "Not implemented" asn
-        | None =>
-          dmut_fail "dmut_produce" "Not implemented" asn
-        end
-      | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
-      | asn_exist ς τ a => dmut_fresh ς τ (dmut_produce a)
-      | asn_debug => dmut_pure tt
-      end.
-
-    Fixpoint dmut_consume {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
-      match asn with
-      | asn_formula fml => dmut_assert_formula fml
-      | asn_chunk c     => dmut_consume_chunk c
-      | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_consume a1) ⊗
-                           (dmut_assume_term (term_not b) ;; dmut_consume a2)
-      | @asn_match_enum _ E k1 alts =>
-        dmut_angelic_finite
-          (𝑬𝑲 E)
-          (fun k2 =>
-             dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
-             dmut_consume (alts k2))
-      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        match term_get_sum s with 
-        | Some (inl t) => dmut_sub (sub_id _ ► (xl::σ ↦ t)) (dmut_consume alt_inl)
-        | Some (inr t) => dmut_sub (sub_id _ ► (xr::τ ↦ t)) (dmut_consume alt_inr)
-        | None =>
-          dmut_angelic_binary
-            (⨁ t : Term Σ σ =>
-             dmut_assert_formula (formula_eq s (term_inl t)) ;;
-             dmut_sub (sub_snoc (sub_id _) (xl , σ) t) (dmut_consume alt_inl))
-            (⨁ t : Term Σ τ =>
-             dmut_assert_formula (formula_eq s (term_inr t)) ;;
-             dmut_sub (sub_snoc (sub_id _) (xr , τ) t) (dmut_consume alt_inr))
-        end
-      | asn_match_list s alt_nil xh xt alt_cons =>
-        dmut_fail "dmut_consume" "Not implemented" asn
-      | asn_match_pair s xl xr rhs =>
-        match term_get_pair s with
-        | Some (tl, tr) => dmut_sub (sub_id _ ► (xl::_ ↦ tl) ► (xr::_ ↦ tr)) (dmut_consume rhs)
-        | None =>
-          ⨁ (tl : Term Σ _) (tr : Term Σ _) =>
-          dmut_assert_formula (formula_eq s (term_binop binop_pair tl tr)) ;;
-          dmut_sub (sub_id _ ► (xl::_ ↦ tl) ► (xr::_ ↦ tr)) (dmut_consume rhs)
-        end
-      | asn_match_tuple s p rhs =>
-        dmut_fail "dmut_consume" "Not implemented" asn
-      | asn_match_record R s p rhs =>
-        match term_get_record s with
-        | Some ts =>
-          let ζ__R := record_pattern_match p ts in
-          dmut_sub (sub_id _ ►► ζ__R) (dmut_consume rhs)
-        | None =>
-          ⨁ ts =>
-          dmut_assert_formula (formula_eq s (term_record R ts)) ;;
-          let ζ__R := record_pattern_match p ts in
-          dmut_sub (sub_id _ ►► ζ__R) (dmut_consume rhs)
-        end
-      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-        dmut_fail  "dmut_consume" "Not implemented" asn
-      | asn_sep a1 a2   => dmut_consume a1 ;; dmut_consume a2
-      | asn_exist ς τ a =>
-        ⨁ t : Term Σ τ =>
-        dmut_sub (sub_snoc (sub_id _) (ς , τ) t) (dmut_consume a)
-      | asn_debug => dmut_pure tt
-      end.
-
-    Definition dmut_call {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
-      match contract with
-      | MkSepContract _ _ Σe δ req result ens =>
-        ⨁ ξ : Sub Σe Σr =>
-        dmut_assert_formulas (formula_eqs ts (env_map (fun b => subst (T := fun Σ => Term Σ _) ξ) δ)) ;;
-        dmut_sub ξ
-          (dmut_consume req ;;
-           dmut_fresh result τ
-             (dmut_produce ens ;;
-              dmut_pure (@term_var _ result _ inctx_zero)))
-      end.
-
-    Fixpoint dmut_exec {Γ τ Σ} (s : Stm Γ τ) {struct s} :
-      DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σ :=
-      match s with
-      | stm_lit _ l => dmut_pure (term_lit τ l)
-      | stm_exp e => dmut_eval_exp e
-      | stm_let x τ s1 s2 =>
-        t1 <- dmut_exec s1 ;;
-        dmut_pushpop t1 (dmut_exec s2)
-      | stm_block δ s =>
-        dmut_pushspops (lift δ) (dmut_exec s)
-      | stm_assign x s =>
-        t <- dmut_exec s ;;
-        dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
-        dmut_pure t
-      | stm_call f es =>
-        ts <- dmut_eval_exps es ;;
-        match CEnv f with
-        | Some c => dmut_call c ts
-        | None   => dmut_fail "dmut_exec" "Function call without contract" (f,ts)
-        end
-      | stm_call_frame δ s =>
-        δr <- dmut_get_local ;;
-        dmut_put_local (lift δ) ;;
-        dmut_bind_left (dmut_exec s) (dmut_put_local δr)
-      | stm_call_external f es =>
-        ts <- dmut_eval_exps es ;;
-        dmut_call (CEnvEx f) ts
-      | stm_if e s1 s2 =>
-          (dmut_assume_exp e ;; dmut_exec s1) ⊗
-          (dmut_assume_exp (exp_not e) ;; dmut_exec s2)
-      | stm_seq s1 s2 => dmut_exec s1 ;; dmut_exec s2
-      | stm_assertk e1 _ k =>
-        t <- dmut_eval_exp e1 ;;
-        dmut_assume_term t ;;
-        dmut_exec k
-      | stm_fail _ _ =>
-        dmut_block
-      | stm_match_list e s1 xh xt s2 =>
-        t <- dmut_eval_exp e ;;
-        (dmut_assume_formula
-           (formula_eq t (term_lit (ty_list _) nil));;
-         dmut_exec s1) ⊗
-        (dmut_fresh
-           (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
-           (dmut_assume_formula
-              (formula_eq (subst (sub_comp sub_wk1 sub_wk1) t)
-                          (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
-            dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
-            dmut_push_local (@term_var _ _ _ inctx_zero);;
-            t2 <- dmut_exec s2 ;;
-            dmut_pop_local ;;
-            dmut_pop_local ;;
-            dmut_pure t2)))
-      | stm_match_sum e xinl s1 xinr s2 =>
-        t <- dmut_eval_exp e ;;
-        dmut_fresh _ _
-          (dmut_assume_formula
-             (formula_eq (subst sub_wk1 t) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
-           dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
-           dmut_bind_left (dmut_exec s1) dmut_pop_local) ⊗
-        dmut_fresh _ _
-          (dmut_assume_formula
-             (formula_eq (subst sub_wk1 t) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
-           dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
-           dmut_bind_left (dmut_exec s2) dmut_pop_local)
-      | stm_match_pair e xl xr s =>
-        t <- dmut_eval_exp e ;;
-        dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
-          (dmut_assume_formula
-             (formula_eq
-                (subst (sub_comp sub_wk1 sub_wk1) t)
-                (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
-           dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
-           dmut_push_local (@term_var _ _ _ inctx_zero);;
-           t <- dmut_exec s ;;
-           dmut_pop_local ;;
-           dmut_pop_local ;;
-           dmut_pure t))
-      | stm_match_enum E e alts =>
-        t <- dmut_eval_exp e ;;
-        dmut_demonic_finite
-          (𝑬𝑲 E)
-          (fun K =>
-             dmut_assume_formula (formula_eq t (term_enum E K));;
-             dmut_exec (alts K))
-      | stm_match_tuple e p s =>
-        dmut_fail "dmut_exec" "stm_match_tuple not implemented" tt
-      | stm_match_union U e alt__ctx alt__pat =>
-        dmut_fail "dmut_exec" "stm_match_union not implemented" tt
-      | @stm_match_record _ _ _ _ _ τ _ =>
-        dmut_fail "dmut_exec" "stm_match_record not implemented" tt
-      | stm_read_register reg =>
-        ⨁ t =>
-          dmut_consume_chunk (chunk_ptsreg reg t);;
-          dmut_produce_chunk (chunk_ptsreg reg t);;
-          dmut_pure t
-      | stm_write_register reg e =>
-        tnew <- dmut_eval_exp e ;;
-        ⨁ told =>
-          dmut_consume_chunk (chunk_ptsreg reg told);;
-          dmut_produce_chunk (chunk_ptsreg reg tnew);;
-          dmut_pure tnew
-      | stm_bind _ _ =>
-        dmut_fail "dmut_exec" "stm_bind not supported" tt
-      | stm_debugk k =>
-        dmut_exec k
-      end.
-
-    Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
-      match c with
-      | MkSepContract _ _ Σ δ req result ens =>
-          dmut_produce req ;;
-          dmut_exec s      >>= fun Σ1 ζ1 t =>
-          dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens)
-          (* dmut_leakcheck *)
-      end.
-
-    Definition dmut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) : Outcome unit unit :=
-      let δ    := sep_contract_localstore c in
-      let s__sym := symbolicstate_initial δ in
-      let mut := dmut_contract c s (sub_id _) nil s__sym in
-      outcome_bimap (fun _ => tt) (fun _ => tt) mut.
-
-    Definition ValidContractDynMut (Δ : PCtx) (τ : Ty)
-      (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      outcome_safe (dmut_contract_outcome c body).
-
-  End DynMutV1.
-
-  Module DynMutV2.
-
-    Section CallerContext.
-
-      Context {Γ : PCtx}.
-
-      Definition extract_chunk_exact {Σ} (h : SymbolicHeap Σ) (c : Chunk Σ) :
-        option (SymbolicHeap Σ) :=
-        match List.find (fun '(c',h') => chunk_eqb c c') (heap_extractions h) with
-        | Some (_,h') => Some h'
-        | None        => None
-        end.
-
-      Definition dmut_consume_chunk_evar {Σe Σr} (c : Chunk Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        dmut_get_heap >>= fun _ ζ1 h =>
-        let L1 := subst ζ1 L in
-        match base.mbind (extract_chunk_exact h ) (eval_chunk_evar L1 c) with
-        | Some h' => dmut_put_heap h' ;; dmut_pure L1
-        | None => dmut_angelic_list
-                    "dmut_consume_chunk_evar"
-                    "Empty extraction"
-                    {| evarerror_env := L1;
-                       evarerror_data := c;
-                    |}
-                    (List.map
-                       (fun '(L', h') => dmut_put_heap h';; dmut_pure L')
-                       (extract_chunk c h L1))
-        end.
-
-      (* This function tries to assert the equality between the terms `te` from
-         a callee context and `tr` from the caller context. The callee context
-         variables are all evars and if possible, it will fill in evars that are
-         strictly necessary for the assertion to be true. *)
-      Definition dmut_assert_term_eq_evar {Σe Σr σ} (te : Term Σe σ) (tr : Term Σr σ) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        (* Make sure we get up to date data. *)
-        dmut_pure (tr, L) >>= fun _ _ '(tr1,L1) =>
-        (* Try to fully match te against tr1, potentially filling in some evars. *)
-        match match_term te tr1 L1 with
-        | Some e => dmut_pure e
-        | None =>
-          (* The match failed. See if all evars in te are already known.*)
-          match eval_term_evar L1 te with
-          | Some te1 =>
-            (* All evars are known. So assert the equality between the terms in
-               the caller context. *)
-            dmut_assert_formula (formula_eq te1 tr1);; dmut_pure L1
-          | None =>
-            (* Give up. This is currently missing some corner cases where a
-               sub-term of te would already constrain all appearing evars, but
-               which can't be fully unified with tr. match_term could be
-               augmented to also handle this kind of case. *)
-            dmut_fail
-              "dmut_assert_term_eq_evar"
-              "Uninstantiated evars variable"
-              {| evarerror_env := L;
-                 evarerror_data := (te,tr)
-              |}
-          end
-        end.
-
-      Equations(noeqns) dmut_assert_namedenv_eq_evar {X Σe Σr σs} (te : NamedEnv (X:=X) (Term Σe) σs) (tr : NamedEnv (Term Σr) σs) :
-        EvarEnv Σe Σr -> DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        dmut_assert_namedenv_eq_evar env_nil env_nil := dmut_pure;
-        dmut_assert_namedenv_eq_evar (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) :=
-          fun L => dmut_assert_namedenv_eq_evar E1 E2 L >>= fun _ ζ =>
-                   dmut_assert_term_eq_evar t1 (subst (T := fun Σ => Term Σ _) ζ t2).
-
-      Definition dmut_consume_formula_evar {Σe Σr} (fml : Formula Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        dmut_pure L >>= fun _ _ L =>
-        match fml with
-        | formula_bool b =>
-          match eval_term_evar L b with
-          | Some b' => dmut_assert_term b';; dmut_pure L
-          | None    => dmut_fail
-                         "dmut_consume_formula_evar"
-                         "Uninstantiated evars when consuming formula"
-                         {| evarerror_env := L;
-                            evarerror_data := fml
-                         |}
-          end
-        | formula_prop ζ P =>
-          match evarenv_to_option_sub L with
-          | Some ζ' => dmut_assert_formula (formula_prop (sub_comp ζ ζ') P);; dmut_pure L
-          | None   => dmut_fail
-                        "dmut_consume_formula_evar"
-                        "Uninstantiated evars when consuming formula"
-                        {| evarerror_env := L;
-                           evarerror_data := fml
-                        |}
-          end
-        | formula_eq t1 t2 =>
-          match eval_term_evar L t1, eval_term_evar L t2 with
-          | Some t1', Some t2' => dmut_assert_formula (formula_eq t1' t2') ;; dmut_pure L
-          | Some t1', None     => dmut_assert_term_eq_evar t2 t1' L
-          | None    , Some t2' => dmut_assert_term_eq_evar t1 t2' L
-          | _       , _        => dmut_fail
-                                    "dmut_consume_formula_evar"
-                                    "Uninstantiated evars when consuming formula"
-                                    {| evarerror_env := L;
-                                       evarerror_data := fml
-                                    |}
-          end
-        | formula_neq t1 t2 =>
-          match eval_term_evar L t1, eval_term_evar L t2 with
-          | Some t1', Some t2' => dmut_assert_formula (formula_neq t1' t2') ;; dmut_pure L
-          (* | Some t1', None     => dmut_assert_term_neq_evar t2 t1' L *)
-          (* | None    , Some t2' => dmut_assert_term_neq_evar t1 t2' L *)
-          | _       , _        => dmut_fail
-                                    "dmut_consume_formula_evar"
-                                    "Uninstantiated evars when consuming formula"
-                                    {| evarerror_env := L;
-                                       evarerror_data := fml
-                                    |}
-          end
-        end.
-
-      Fixpoint dmut_consume_evar {Σe Σr} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        dmut_pure L >>= fun _ _ L =>
-        match asn with
-        | asn_formula fml => dmut_consume_formula_evar fml L
-        | asn_chunk c => dmut_consume_chunk_evar c L
-        | asn_if b a1 a2 =>
-          match eval_term_evar L b with
-          | Some b' => (dmut_assert_term b';; dmut_consume_evar a1 L)
-                         ⊕
-                       (dmut_assert_term (term_not b');; dmut_consume_evar a2 L)
-          | None    => dmut_fail
-                         "dmut_consume_evar"
-                         "Uninstantiated evars when consuming assertion"
-                         {| evarerror_env := L;
-                            evarerror_data := asn
-                         |}
-          end
-        | asn_match_enum E k alts =>
-          match eval_term_evar L k with
-          | Some k1 =>
-            dmut_angelic_finite
-              (𝑬𝑲 E)
-              (fun k2 =>
-                 dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
-                 dmut_consume_evar (alts k2) L)
-          | None => dmut_fail
-                      "dmut_consume_evar"
-                      "Uninstantiated evars when consuming assertion"
-                      {| evarerror_env := L;
-                         evarerror_data := asn
-                      |}
-          end
-        | asn_match_sum σ τ scr xl alt_inl xr alt_inr =>
-          match eval_term_evar L scr with
-          | Some s =>
-            match term_get_sum s with
-            | Some (inl t) =>
-              let Lxl := L ► (xl∶σ ↦ Some t) in
-              Lxl' <- dmut_consume_evar alt_inl Lxl ;;
-              dmut_pure (env_tail Lxl')
-            | Some (inr t) =>
-              let Lxr := L ► (xr∶τ ↦ Some t) in
-              Lxr' <- dmut_consume_evar alt_inr Lxr ;;
-              dmut_pure (env_tail Lxr')
-            | None =>
-              dmut_angelic_binary
-                (let Lxl := L ► (xl∶σ ↦ None) in
-                  dmut_consume_evar alt_inl Lxl >>= fun _ ζ Lxl' =>
-                    match env_unsnoc Lxl' with
-                    | (L' , Some t) =>
-                      (* TODO(2.0): This assert should move before the *)
-                      (* consumption of the alternative. *)
-                      (dmut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_inl t)) ;;
-                       dmut_pure L')
-                    | (_ , None) =>
-                      dmut_fail
-                        "dmut_consume_evar"
-                        "Uninstantiated evars when consuming assertion"
-                        {| evarerror_env := Lxl;
-                           evarerror_data := alt_inl
-                        |}
-                    end)
-                (let Lxr := L ► (xr∶τ ↦ None) in
-                  dmut_consume_evar alt_inr Lxr >>= fun _ ζ Lxr' =>
-                    match env_unsnoc Lxr' with
-                    | (L' , Some t) =>
-                      (* TODO(2.0): This assert should move before the *)
-                      (* consumption of the alternative. *)
-                      (dmut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_inr t)) ;;
-                       dmut_pure L')
-                    | (_ , None) =>
-                      dmut_fail
-                        "dmut_consume_evar"
-                        "Uninstantiated evars when consuming assertion"
-                        {| evarerror_env := Lxr;
-                           evarerror_data := alt_inr
-                        |}
-                    end)
-            end
-          | None => dmut_fail
-                      "dmut_consume_evar"
-                      "Uninstantiated evars when consuming assertion"
-                      {| evarerror_env := L;
-                         evarerror_data := asn
-                      |}
-          end
-        | asn_match_list s alt_nil xh xt alt_cons =>
-          dmut_fail "dmut_consume_evar" "Not implemented" asn
-        | asn_match_pair scr xl xr rhs =>
-          match eval_term_evar L scr with
-          | Some s =>
-            match term_get_pair s with
-            | Some (tl, tr) =>
-              let Lrhs := L ► (xl∶_ ↦ Some tl) ► (xr∶_ ↦ Some tr) in
-              Lrhs' <- dmut_consume_evar rhs Lrhs ;;
-              dmut_pure (env_tail (env_tail Lrhs'))
-            | None =>
-              dmut_fail "dmut_consume_evar" "Not implemented" asn
-            end
-          | None => dmut_fail
-                      "dmut_consume_evar"
-                      "Uninstantiated evars when consuming assertion"
-                      {| evarerror_env := L;
-                         evarerror_data := asn
-                      |}
-          end
-        | asn_match_tuple s p rhs =>
-          dmut_fail "dmut_consume_evar" "Not implemented" asn
-        | asn_match_record R scr p rhs =>
-          match eval_term_evar L scr with
-          | Some s =>
-            match term_get_record s with
-            | Some ts  =>
-              let ζ__R := record_pattern_match p ts in
-              let LR := L ►► env_map (fun _ t => Some t) ζ__R in
-              LR' <- dmut_consume_evar rhs LR ;;
-              dmut_pure (env_drop _ LR')
-            | None =>
-              dmut_fail "dmut_consume_evar" "Not implemented" asn
-            end
-          | None => dmut_fail
-                      "dmut_consume_evar"
-                      "Uninstantiated evars when consuming assertion"
-                      {| evarerror_env := L;
-                         evarerror_data := asn
-                      |}
-          end
-        | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-          dmut_fail  "dmut_consume_evar" "Not implemented" asn
-        | asn_sep a1 a2 =>
-          dmut_consume_evar a1 L >>= fun _ _ => dmut_consume_evar a2
-        | asn_exist ς τ a =>
-          (* Dynamically allocate a new evar ς in the EvarEnv. *)
-          let Lς := L ► (ς∶τ ↦ None) in
-          dmut_consume_evar a Lς >>= fun _ _ Lς' =>
-          (* Split off the last evar again. *)
-          match env_unsnoc Lς' with
-          | (L' , Some _) =>
-            (* ς has been instantiated during execution. So we just return the
-            final EvarEnv with ς stripped off. *)
-            dmut_pure L'
-          | (_  , None)   =>
-            (* During execution the evar ς was never instantiated, so fail. *)
-            dmut_fail
-              "dmut_consume_evar"
-              "Uninstantiated evars when consuming assertion"
-              {| evarerror_env := L;
-                 evarerror_data := asn
-              |}
-          end
-        | asn_debug => dmut_pure L
-        end.
-
-    End CallerContext.
-
-    Definition dmut_call_evar {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
-      match contract with
-      | MkSepContract _ _ Σe δ req result ens =>
-         dmut_consume_evar req (create_evarenv Σe Σr) >>= fun Σr1 ζ1 E1 =>
-         dmut_assert_namedenv_eq_evar δ (env_map (fun _ => subst (T := fun Σ => Term Σ _) ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
-         match evarenv_to_option_sub E2 with
-         | Some ξ => dmut_sub ξ (dmut_fresh result τ (DynMutV1.dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
-         | None => dmut_fail
-                     "dmut_call_evar"
-                     "Uninstantiated evars after consuming precondition"
-                     {| evarerror_env := E2;
-                        evarerror_data := (contract,ts)
-                     |}
-         end
-      end.
-
-    Section WithConfig.
-
-      Variable cfg : Config.
-
-      Definition dmut_call_evar_debug {Γ Δ τ Σr} (f : 𝑭 Δ τ) (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
-        fun Σ1 ζ1 pc1 s1 =>
-          let o := dmut_call_evar contract ts ζ1 pc1 s1 in
-          if config_debug_function cfg f
-          then outcome_debug
-                 {| debug_call_logic_context          := Σ1;
-                    debug_call_function_parameters    := Δ;
-                    debug_call_function_result_type   := τ;
-                    debug_call_function_name          := f;
-                    debug_call_function_arguments     := subst ζ1 ts;
-                    debug_call_function_contract      := contract;
-                    debug_call_pathcondition          := pc1;
-                    debug_call_program_context        := Γ;
-                    debug_call_localstore             := symbolicstate_localstore s1;
-                    debug_call_heap                   := symbolicstate_heap s1;
-                 |}
-                 o
-          else o.
-
-      Fixpoint dmut_exec_evar {Γ τ Σ} (s : Stm Γ τ) {struct s} :
-        DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σ :=
-        match s with
-        | stm_lit _ l => dmut_pure (term_lit τ l)
-        | stm_exp e => dmut_eval_exp e
-        | stm_let x τ s1 s2 =>
-          t1 <- dmut_exec_evar s1 ;;
-          dmut_push_local t1 ;;
-          t2 <- dmut_exec_evar s2 ;;
-          dmut_pop_local ;;
-          dmut_pure t2
-        | stm_block δ s =>
-          dmut_pushs_local (lift δ) ;;
-          t <- dmut_exec_evar s ;;
-          dmut_pops_local _ ;;
-          dmut_pure t
-        | stm_assign x s =>
-          t <- dmut_exec_evar s ;;
-          dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
-          dmut_pure t
-        | stm_call f es =>
-          ts <- dmut_eval_exps es ;;
-          match CEnv f with
-          | Some c => dmut_call_evar_debug f c ts
-          | None   => dmut_fail "dmut_exec_evar" "Function call without contract" (f,ts)
-          end
-        | stm_call_frame δ s =>
-          δr <- dmut_get_local ;;
-          dmut_put_local (lift δ) ;;
-          dmut_bind_left (dmut_exec_evar s) (dmut_put_local δr)
-        | stm_call_external f es =>
-          ts <- dmut_eval_exps es ;;
-          dmut_call_evar (CEnvEx f) ts
-        | stm_if e s1 s2 =>
-          t__sc <- dmut_eval_exp e ;;
-          match term_get_lit t__sc with
-          | Some b =>
-            if b
-            then dmut_exec_evar s1
-            else dmut_exec_evar s2
-          | None =>
-            (dmut_assume_term t__sc ;; dmut_exec_evar s1) ⊗
-            (dmut_assume_term (term_not t__sc) ;; dmut_exec_evar s2)
-          end
-        | stm_seq s1 s2 => dmut_exec_evar s1 ;; dmut_exec_evar s2
-        | stm_assertk e1 _ k =>
-          t <- dmut_eval_exp e1 ;;
-          dmut_assume_term t ;;
-          dmut_exec_evar k
-        | stm_fail _ _ =>
-          dmut_block
-        | stm_match_list e s1 xh xt s2 =>
-          t <- dmut_eval_exp e ;;
-          (dmut_assume_formula
-             (formula_eq t (term_lit (ty_list _) nil));;
-           dmut_exec_evar s1) ⊗
-          (dmut_fresh
-             (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
-             (dmut_assume_formula
-                (formula_eq (subst (sub_comp sub_wk1 sub_wk1) t)
-                            (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
-              dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
-              dmut_push_local (@term_var _ _ _ inctx_zero);;
-              t2 <- dmut_exec_evar s2 ;;
-              dmut_pop_local ;;
-              dmut_pop_local ;;
-              dmut_pure t2)))
-        | stm_match_sum e xinl s1 xinr s2 =>
-          t__sc <- dmut_eval_exp e ;;
-          match term_get_sum t__sc with
-          | Some (inl t) =>
-            dmut_push_local t;;
-            dmut_bind_left (dmut_exec_evar s1) dmut_pop_local
-          | Some (inr t) =>
-            dmut_push_local t;;
-            dmut_bind_left (dmut_exec_evar s2) dmut_pop_local
-          | None =>
-            dmut_fresh _ _
-              (dmut_assume_formula
-                 (formula_eq (subst sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
-               dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
-               dmut_bind_left (dmut_exec_evar s1) dmut_pop_local) ⊗
-            dmut_fresh _ _
-              (dmut_assume_formula
-                 (formula_eq (subst sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
-               dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
-               dmut_bind_left (dmut_exec_evar s2) dmut_pop_local)
-          end
-        | stm_match_pair e xl xr s =>
-          t__sc <- dmut_eval_exp e ;;
-          match term_get_pair t__sc with
-          | Some (t1,t2) =>
-            dmut_push_local t1;;
-            dmut_push_local t2;;
-            t <- dmut_exec_evar s ;;
-            dmut_pop_local ;;
-            dmut_pop_local ;;
-            dmut_pure t
-          | None =>
-            dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
-              (dmut_assume_formula
-                 (formula_eq
-                    (subst (sub_comp sub_wk1 sub_wk1) t__sc)
-                    (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
-               dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
-               dmut_push_local (@term_var _ _ _ inctx_zero);;
-               t <- dmut_exec_evar s ;;
-               dmut_pop_local ;;
-               dmut_pop_local ;;
-               dmut_pure t))
-          end
-        | stm_match_enum E e alts =>
-          t__sc <- dmut_eval_exp e ;;
-          match term_get_lit t__sc with
-          | Some K => dmut_exec_evar (alts K)
-          | None =>
-            dmut_demonic_finite
-              (𝑬𝑲 E)
-              (fun K =>
-                 dmut_assume_formula (formula_eq t__sc (term_enum E K));;
-                 dmut_exec_evar (alts K))
-          end
-        | stm_match_tuple e p s =>
-          ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_tuplepat p) ;;
-          let '(t__sc,(t__p,t__Δ)) := ts in
-          dmut_assume_formula (formula_eq t__sc t__p) ;;
-          dmut_pushs_local t__Δ ;;
-          t <- dmut_exec_evar s ;;
-          dmut_pops_local _ ;;
-          dmut_pure t
-        | stm_match_union U e alt__pat alt__rhs =>
-          t__sc <- dmut_eval_exp e ;;
-          match term_get_union t__sc with
-          | Some (existT K t__field) =>
-            dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-              dmut_assume_formula (formula_eq t__pat (subst (T := fun Σ => Term Σ _) ζ2 t__field));;
-              dmut_pushs_local δ__Δ;;
-              t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
-              dmut_pops_local _;;
-              dmut_pure t__rhs)
-          | None =>
-            dmut_demonic_finite
-              (𝑼𝑲 U)
-              (fun K =>
-                 dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-                 dmut_assume_formula (formula_eq (subst ζ2 t__sc) (term_union U K t__pat));;
-                 dmut_pushs_local δ__Δ;;
-                 t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
-                 dmut_pops_local _;;
-                 dmut_pure t__rhs))
-          end
-        | stm_match_record R e p s =>
-          ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat 𝑿to𝑺 p) ;;
-          let '(t__sc,(t__p,t__Δ)) := ts in
-          dmut_assume_formula (formula_eq t__sc t__p) ;;
-          dmut_pushs_local t__Δ ;;
-          t <- dmut_exec_evar s ;;
-          dmut_pops_local _ ;;
-          dmut_pure t
-        | stm_read_register reg =>
-          let x := fresh Σ None in
-          dmut_consume_chunk_evar (chunk_ptsreg reg (@term_var [(x,_)] x _ inctx_zero)) [None]%arg >>= fun Σ1 _ E1 =>
-          match snd (env_unsnoc E1) with
-          | Some t => dmut_produce_chunk (chunk_ptsreg reg t) ;; dmut_pure t
-          (* Extracting the points to chunk should never fail here. Because there is exactly one binding
-             in the ghost environment and the chunk matching will always instantiate it. *)
-          | None => dmut_fail "dmut_exec_evar" "You have found a unicorn." tt
-          end
-        | stm_write_register reg e =>
-          let x := fresh Σ None in
-          tnew <- dmut_eval_exp e ;;
-          dmut_consume_chunk_evar (chunk_ptsreg reg (@term_var _ x _ inctx_zero)) [None]%arg ;;
-          dmut_produce_chunk (chunk_ptsreg reg tnew) ;;
-          dmut_pure tnew
-        | stm_bind _ _ =>
-          dmut_fail "dmut_exec_evar" "stm_bind not supported" tt
-        | stm_debugk k =>
-          fun Σ1 ζ1 pc1 s1 =>
-            outcome_debug
-              {| debug_stm_program_context        := Γ;
-                 debug_stm_statement              := k;
-                 debug_stm_logic_context          := Σ1;
-                 debug_stm_pathcondition          := pc1;
-                 debug_stm_localstore             := symbolicstate_localstore s1;
-                 debug_stm_heap                   := symbolicstate_heap s1;
-              |}
-              (dmut_exec_evar k ζ1 pc1 s1)
-        end.
-
-      Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
-        match c with
-        | MkSepContract _ _ Σ δ req result ens =>
-            DynMutV1.dmut_produce req ;;
-            dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
-            dmut_consume_evar ens (subst (sub_snoc ζ1 (result,τ) t) (create_evarenv_id _)) ;;
-            (* dmut_leakcheck *)
-            dmut_pure tt
-        end.
-
-      Definition dmut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
-        Outcome DynamicMutatorError (DynamicMutatorResult Δ Unit (sep_contract_logic_variables c)) :=
-        let δ    := sep_contract_localstore c in
-        dmut_contract c s (sub_id _) nil (symbolicstate_initial δ).
-
-      Definition ValidContractDynMutWithConfig (Δ : PCtx) (τ : Ty)
-        (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-        outcome_safe (dmut_contract_outcome c body).
-
-    End WithConfig.
-
-    Definition ValidContractDynMut (Δ : PCtx) (τ : Ty)
-      (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      outcome_safe (dmut_contract_outcome default_config c body).
-
-    Definition ValidContractDynMutReflect (Δ : PCtx) (τ : Ty)
-               (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true
-        (outcome_ok (A := unit)
-           (outcome_bind
-              (dmut_contract_outcome default_config c body)
-              (fun _ => outcome_block))).
-
-    Lemma dynmutevarreflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-      ValidContractDynMutReflect c body ->
-      ValidContractDynMut c body.
-    Proof.
-      intros H.
-      apply (outcome_ok_spec _ (fun _ => False) (fun _ => True)) in H.
-      now rewrite outcome_satisfy_bind in H.
-    Qed.
-
-  End DynMutV2.
 
   Section SymbolicOutcomes.
 
@@ -2516,1284 +1226,1285 @@ Module Mutators
 
   End SymbolicOutcomes.
 
-  Module TwoPointO.
+  Section EvarExplanation.
 
-    Section EvarExplanation.
+    (* We currently avoid introducing existential variables into the
+       underlying symbolic path monad, because this would make the system more
+       complicated. Instead we avoid using existential quantification of the
+       path monad altogether and deal with it in the mutator instead.
 
-      (* We currently avoid introducing existential variables into the
-         underlying symbolic path monad, because this would make the system more
-         complicated. Instead we avoid using existential quantification of the
-         path monad altogether and deal with it in the mutator instead.
+       This is achieved by temporarily creating an [EvarEnv] when needed, i.e.
+       when *consuming* the post-condition at the end of a function, or the
+       pre-condition of a called function. An [EvarEnv] can be understood as a
+       system of equations between existential variables and term in which
+       those existentials are fresh (c.f. solved forms for Hindley-Milner
+       constraint-based type checking).
 
-         This is achieved by temporarily creating an [EvarEnv] when needed, i.e.
-         when *consuming* the post-condition at the end of a function, or the
-         pre-condition of a called function. An [EvarEnv] can be understood as a
-         system of equations between existential variables and term in which
-         those existentials are fresh (c.f. solved forms for Hindley-Milner
-         constraint-based type checking).
+       Effectively, we have something like this
 
-         Effectively, we have something like this
+           [∀ᾱ∃β̄, (βᵢ = tᵢ) ∧ ..]
 
-             [∀ᾱ∃β̄, (βᵢ = tᵢ) ∧ ..]
+       All existential variables β̄ (angelic choice) come after the universal
+       variables ᾱ (demonic choice). We also avoid introducing new universals
+       during consume to keep this order. In this setting the [EvarEnv] can be
+       interpreted as a set of equations between a subset of existential
+       variables [βᵢ] and terms [tᵢ] such that [freevars (tᵢ) ⊆ ᾱ`].
 
-         All existential variables β̄ (angelic choice) come after the universal
-         variables ᾱ (demonic choice). We also avoid introducing new universals
-         during consume to keep this order. In this setting the [EvarEnv] can be
-         interpreted as a set of equations between a subset of existential
-         variables [βᵢ] and terms [tᵢ] such that [freevars (tᵢ) ⊆ ᾱ`].
+       Equations are discovered by semi-unification and added to the EvarEnv.
+       See [dmut_consume_formula_evar] and [dmut_consume_chunk_evar] for
+       details.
+     *)
 
-         Equations are discovered by semi-unification and added to the EvarEnv.
-         See [dmut_consume_formula_evar] and [dmut_consume_chunk_evar] for
-         details.
-       *)
+    Lemma exists_distr A P Q :
+      (exists a : A, P a \/ Q a) <->
+      (exists a : A, P a) \/ (exists a, Q a).
+    Proof. firstorder. Qed.
 
-      Lemma exists_distr A P Q :
-        (exists a : A, P a \/ Q a) <->
-        (exists a : A, P a) \/ (exists a, Q a).
-      Proof. firstorder. Qed.
+    Lemma exists_distr_conj A P Q :
+      (exists a : A, P /\ Q a) <->
+      P /\ (exists a : A, Q a).
+    Proof. firstorder. Qed.
 
-      Lemma exists_distr_conj A P Q :
-        (exists a : A, P /\ Q a) <->
-        P /\ (exists a : A, Q a).
-      Proof. firstorder. Qed.
+    Lemma if_demonic (b : bool) (P Q : Prop) :
+      (if b then P else Q) <->
+      (b = true -> P) /\ (b = false -> Q).
+    Proof. destruct b; intuition. Qed.
 
-      Lemma if_demonic (b : bool) (P Q : Prop) :
-        (if b then P else Q) <->
-        (b = true -> P) /\ (b = false -> Q).
-      Proof. destruct b; intuition. Qed.
+    Lemma if_angelic (b : bool) (P Q : Prop) :
+      (if b then P else Q) <->
+      (b = true /\ P) \/ (b = false /\ Q).
+    Proof. destruct b; intuition. Qed.
 
-      Lemma if_angelic (b : bool) (P Q : Prop) :
-        (if b then P else Q) <->
-        (b = true /\ P) \/ (b = false /\ Q).
-      Proof. destruct b; intuition. Qed.
+  End EvarExplanation.
 
-    End EvarExplanation.
+  Section DynamicMutatorResult.
 
-    Section DynamicMutatorResult.
+    (* Local Set Primitive Projections. *)
+    Local Set Maximal Implicit Insertion.
 
-      (* Local Set Primitive Projections. *)
-      Local Set Maximal Implicit Insertion.
+    Record DynamicMutatorResult (Γ : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
+      MkDynMutResult {
+          dmutres_result_value : A Σ;
+          dmutres_result_state : SymbolicState Γ Σ;
+        }.
 
-      Record DynamicMutatorResult (Γ : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
-        MkDynMutResult {
-            dmutres_result_value : A Σ;
-            dmutres_result_state : SymbolicState Γ Σ;
-          }.
+    Global Arguments MkDynMutResult {_ _ _} _ _.
 
-      Global Arguments MkDynMutResult {_ _ _} _ _.
+    Global Instance SubstDynamicMutatorResult {Γ A} `{Subst A} : Subst (DynamicMutatorResult Γ A).
+    Proof.
+      intros Σ1 Σ2 ζ [a s].
+      constructor.
+      apply (subst ζ a).
+      apply (subst ζ s).
+    Defined.
 
-      Global Instance SubstDynamicMutatorResult {Γ A} `{Subst A} : Subst (DynamicMutatorResult Γ A).
-      Proof.
-        intros Σ1 Σ2 ζ [a s].
-        constructor.
-        apply (subst ζ a).
-        apply (subst ζ s).
-      Defined.
+    Global Instance SubstLawsDynamicMutatorResult {Γ A} `{SubstLaws A} : SubstLaws (DynamicMutatorResult Γ A).
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
 
-      Global Instance SubstLawsDynamicMutatorResult {Γ A} `{SubstLaws A} : SubstLaws (DynamicMutatorResult Γ A).
-      Proof.
-        constructor.
-        - intros ? []; cbn; now rewrite ?subst_sub_id.
-        - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
-      Qed.
+    (* A record to collect information when the symbolic execution signals a failure. *)
+    Record DynamicMutatorError (Σ : LCtx) : Type :=
+      MkDynMutError
+        { dmuterr_function        : string;
+          dmuterr_message         : string;
+          dmuterr_program_context : PCtx;
+          dmuterr_localstore      : SymbolicLocalStore dmuterr_program_context Σ;
+          dmuterr_heap            : SymbolicHeap Σ;
+          dmuterr_pathcondition   : PathCondition Σ;
+        }.
+    Global Arguments MkDynMutError {Σ} _ _ _ _ _ _.
 
-      (* A record to collect information when the symbolic execution signals a failure. *)
-      Record DynamicMutatorError (Σ : LCtx) : Type :=
-        MkDynMutError
-          { dmuterr_function        : string;
-            dmuterr_message         : string;
-            dmuterr_program_context : PCtx;
-            dmuterr_localstore      : SymbolicLocalStore dmuterr_program_context Σ;
-            dmuterr_heap            : SymbolicHeap Σ;
-            dmuterr_pathcondition   : PathCondition Σ;
-          }.
-      Global Arguments MkDynMutError {Σ} _ _ _ _ _ _.
-
-      Global Instance SubstDynamicMutatorError : Subst DynamicMutatorError :=
-        fun Σ1 Σ2 ζ12 err =>
-          match err with
-          | MkDynMutError f m Γ δ h pc => MkDynMutError f m Γ (subst ζ12 δ) (subst ζ12 h) (subst ζ12 pc)
-          end.
-
-      Global Instance SubstLawsDynamicMutatorError : SubstLaws DynamicMutatorError.
-      Proof.
-        constructor.
-        - intros ? []; cbn; now rewrite ?subst_sub_id.
-        - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
-      Qed.
-
-      Inductive Error (Σ : LCtx) (msg : DynamicMutatorError Σ) : Prop :=.
-
-    End DynamicMutatorResult.
-
-    Section DynamicMutator.
-
-      Definition DynamicMutator (Γ1 Γ2 : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
-        forall Σ', Sub Σ Σ' -> PathCondition Σ' -> SymbolicState Γ1 Σ' -> SymOutcome DynamicMutatorError (DynamicMutatorResult Γ2 A) Σ'.
-      Bind Scope dmut_scope with DynamicMutator.
-
-      Definition dmut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : DynamicMutator Γ Γ A Σ.
-        intros Σ1 ζ1 pc1 δ.
-        apply sout_pure.
-        constructor.
-        apply (subst ζ1 a).
-        apply δ.
-      Defined.
-
-      Definition dmut_bind {Γ1 Γ2 Γ3 A B Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> DynamicMutator Γ2 Γ3 B Σ') : DynamicMutator Γ1 Γ3 B Σ.
-      Proof.
-        intros Σ1 ζ1 pc1 δ1.
-        apply (sout_bind pc1 (ma Σ1 ζ1 pc1 δ1)).
-        intros Σ2 ζ2 pc2 [a2 δ2].
-        eapply (sout_bind pc2).
-        apply (f Σ2 (sub_comp ζ1 ζ2) a2 _ (sub_id _) pc2 δ2).
-        intros Σ3 ζ3 pc3 [b3 δ3].
-        apply sout_pure.
-        constructor.
-        apply b3.
-        apply δ3.
-      Defined.
-      (* Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) : *)
-      (*   DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m). *)
-
-      Definition dmut_sub {Γ1 Γ2 A Σ1 Σ2} (ζ1 : Sub Σ1 Σ2) (p : DynamicMutator Γ1 Γ2 A Σ1) :
-        DynamicMutator Γ1 Γ2 A Σ2 := fun Σ3 ζ2 => p _ (sub_comp ζ1 ζ2).
-      Global Arguments dmut_sub {_ _ _ _ _} ζ1 p.
-      Definition dmut_strength {Γ1 Γ2 A B Σ} `{Subst A, Subst B} (ma : DynamicMutator Γ1 Γ2 A Σ) (b : B Σ) :
-        DynamicMutator Γ1 Γ2 (fun Σ => A Σ * B Σ)%type Σ :=
-        dmut_bind ma (fun _ ζ a => dmut_pure (a, subst ζ b)).
-      Definition dmut_bind_right {Γ1 Γ2 Γ3 A B Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) : DynamicMutator Γ1 Γ3 B Σ :=
-        dmut_bind ma (fun _ ζ _ => dmut_sub ζ mb).
-      Definition dmut_bind_left {Γ1 Γ2 Γ3 A B} `{Subst A} {Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) : DynamicMutator Γ1 Γ3 A Σ :=
-        dmut_bind ma (fun _ ζ a => dmut_bind_right (dmut_sub ζ mb) (dmut_pure a)) .
-      Definition dmut_fmap {Γ1 Γ2 Σ A B} `{Subst A, Subst B}
-        (ma : DynamicMutator Γ1 Γ2 A Σ)
-        (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ') :
-        DynamicMutator Γ1 Γ2 B Σ :=
-        fun Σ1 ζ01 pc1 s1 =>
-          @sout_map _ (DynamicMutatorResult Γ2 A) (DynamicMutatorResult Γ2 B) Σ1
-          (fun Σ2 ζ12 '(MkDynMutResult a2 s2) => MkDynMutResult (f Σ2 (sub_comp ζ01 ζ12) a2) s2)
-          (ma Σ1 ζ01 pc1 s1).
-      Definition dmut_fmap2 {Γ1 Γ2 Γ3 Σ A B C} `{Subst A, Subst B, Subst C}
-        (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ)
-        (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ' -> C Σ') :
-        DynamicMutator Γ1 Γ3 C Σ :=
-        dmut_bind ma (fun Σ1 ζ01 a1 =>
-          dmut_fmap (dmut_sub ζ01 mb) (fun Σ2 ζ12 =>
-            f Σ2 (sub_comp ζ01 ζ12) (subst ζ12 a1))).
-      Definition dmut_pair {Γ1 Γ2 Γ3 Σ A B} `{Subst A, Subst B}
-        (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) :
-        DynamicMutator Γ1 Γ3 (fun Σ => A Σ * B Σ)%type Σ :=
-        dmut_fmap2 ma mb (fun _ _ => pair).
-
-      Definition dmut_fail {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ.
-        intros Σ1 ζ1 pc1 [δ1 h1].
-        apply sout_fail.
-        apply (@MkDynMutError _ func msg Γ1); assumption.
-      Defined.
-
-      Definition dmut_block {Γ1 Γ2 A Σ} : DynamicMutator Γ1 Γ2 A Σ :=
-        fun _ _ _ _ => sout_block.
-
-      Definition dmut_angelic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-        fun Σ1 ζ1 pc1 s1 => sout_angelic (fun i => ms i Σ1 ζ1 pc1 s1).
-      (* Definition dmut_demonic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ := *)
-      (*   fun Σ1 ζ1 s1 => sout_demonic (fun i => ms i Σ1 ζ1 s1). *)
-      Definition dmut_angelic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-        fun Σ1 ζ1 pc1 s1 => sout_angelic_binary (m1 Σ1 ζ1 pc1 s1) (m2 Σ1 ζ1 pc1 s1).
-      Definition dmut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-        fun Σ1 ζ1 pc1 s1 => sout_demonic_binary (m1 Σ1 ζ1 pc1 s1) (m2 Σ1 ζ1 pc1 s1).
-      Fixpoint dmut_angelic_list {AT D} `{Subst AT} {Γ Σ} (func : string) (msg : string) (data:D) (xs : List AT Σ) :
-        DynamicMutator Γ Γ AT Σ :=
-        match xs with
-        | nil        => dmut_fail func msg data
-        | cons x nil => dmut_pure x
-        | cons x xs  => dmut_angelic_binary (dmut_pure x) (dmut_angelic_list func msg data xs)
-        end.
-      Fixpoint dmut_demonic_list {AT} `{Subst AT} {Γ Σ} (xs : List AT Σ) : DynamicMutator Γ Γ AT Σ :=
-        match xs with
-        | nil        => dmut_block
-        | cons x nil => dmut_pure x
-        | cons x xs  => dmut_demonic_binary (dmut_pure x) (dmut_demonic_list xs)
+    Global Instance SubstDynamicMutatorError : Subst DynamicMutatorError :=
+      fun Σ1 Σ2 ζ12 err =>
+        match err with
+        | MkDynMutError f m Γ δ h pc => MkDynMutError f m Γ (subst ζ12 δ) (subst ζ12 h) (subst ζ12 pc)
         end.
 
-      Definition dmut_angelic_finite {Γ1 Γ2 A} F `{finite.Finite F} {Σ}
-        (cont : F -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-        dmut_bind
-          (dmut_angelic_list "dmut_angelic_finite" "All branches failed" tt (finite.enum F))
-          (fun (Σ' : LCtx) (ζ : Sub Σ Σ') (x : F) => dmut_sub ζ (cont x)).
+    Global Instance SubstLawsDynamicMutatorError : SubstLaws DynamicMutatorError.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
 
-      Definition dmut_demonic_finite {Γ1 Γ2 A} F `{finite.Finite F} {Σ}
-        (cont : F -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-        dmut_bind
-          (dmut_demonic_list (finite.enum F))
-          (fun (Σ' : LCtx) (ζ : Sub Σ Σ') (x : F) => dmut_sub ζ (cont x)).
-      Global Arguments dmut_angelic_finite {_ _ _} _ {_ _ _} _.
-      Global Arguments dmut_demonic_finite {_ _ _} _ {_ _ _} _.
+    Inductive Error (Σ : LCtx) (msg : DynamicMutatorError Σ) : Prop :=.
 
-      Definition dmut_fresh {Γ1 Γ2 A Σ} x τ (ma : DynamicMutator Γ1 Γ2 A (Σ ▻ (x :: τ))) : DynamicMutator Γ1 Γ2 A Σ :=
-        fun Σ1 ζ1 pc1 s1 =>
-          let x'  := fresh Σ1 (Some x) in
-          let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
-          sout_demonicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 s1)).
-      Global Arguments dmut_fresh {_ _ _ _} _ _ _.
-      Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
-        dmut_fresh x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
-      Global Arguments dmut_freshtermvar {_ _ _} _.
+  End DynamicMutatorResult.
 
-      Record DebugCall : Type :=
-        MkDebugCall
-          { debug_call_function_parameters    : PCtx;
-            debug_call_function_result_type   : Ty;
-            debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
-            debug_call_function_arguments     : LocalStore debug_call_function_parameters;
-            debug_call_function_contract      : SepContract debug_call_function_parameters debug_call_function_result_type;
-            debug_call_pathcondition          : Prop;
-            debug_call_program_context        : PCtx;
-            debug_call_localstore             : LocalStore debug_call_program_context;
-            debug_call_heap                   : SCHeap;
-          }.
+  Section DynamicMutator.
 
-      Record DebugStm : Type :=
-        MkDebugStm
-          { debug_stm_program_context        : PCtx;
-            debug_stm_statement_type         : Ty;
-            debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
-            debug_stm_logic_context          : LCtx;
-            debug_stm_pathcondition          : PathCondition debug_stm_logic_context;
-            debug_stm_localstore             : SymbolicLocalStore debug_stm_program_context debug_stm_logic_context;
-            debug_stm_heap                   : SymbolicHeap debug_stm_logic_context;
-          }.
-
-      Record SDebugCall (Σ : LCtx) : Type :=
-        MkSDebugCall
-          { sdebug_call_function_parameters    : PCtx;
-            sdebug_call_function_result_type   : Ty;
-            sdebug_call_function_name          : 𝑭 sdebug_call_function_parameters sdebug_call_function_result_type;
-            sdebug_call_function_arguments     : SymbolicLocalStore sdebug_call_function_parameters Σ;
-            sdebug_call_function_contract      : SepContract sdebug_call_function_parameters sdebug_call_function_result_type;
-            sdebug_call_pathcondition          : PathCondition Σ;
-            sdebug_call_program_context        : PCtx;
-            sdebug_call_localstore             : SymbolicLocalStore sdebug_call_program_context Σ;
-            sdebug_call_heap                   : SymbolicHeap Σ;
-          }.
-
-      Record SDebugStm (Σ : LCtx) : Type :=
-        MkSDebugStm
-          { sdebug_stm_program_context        : PCtx;
-            sdebug_stm_statement_type         : Ty;
-            sdebug_stm_statement              : Stm sdebug_stm_program_context sdebug_stm_statement_type;
-            sdebug_stm_pathcondition          : PathCondition Σ;
-            sdebug_stm_localstore             : SymbolicLocalStore sdebug_stm_program_context Σ;
-            sdebug_stm_heap                   : SymbolicHeap Σ;
-          }.
-
-      Global Instance SubstDebugCall : Subst SDebugCall :=
-        fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugCall Σ0) =>
-          match d with
-          | MkSDebugCall f ts c pc δ h =>
-            MkSDebugCall f (subst ζ01 ts) c (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
-          end.
-
-      Global Instance InstDebugCall : Inst SDebugCall DebugCall :=
-        {| inst Σ ι d :=
-             match d with
-             | MkSDebugCall f ts c pc δ h =>
-               MkDebugCall f (inst ι ts) c (inst ι pc) (inst ι δ) (inst ι h)
-             end;
-           lift Σ d :=
-             match d with
-             | MkDebugCall f ts c pc δ h =>
-               MkSDebugCall f (lift ts) c (lift pc) (lift δ) (lift h)
-             end
-        |}.
-
-    End DynamicMutator.
+    Definition DynamicMutator (Γ1 Γ2 : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
+      forall Σ', Sub Σ Σ' -> PathCondition Σ' -> SymbolicState Γ1 Σ' -> SymOutcome DynamicMutatorError (DynamicMutatorResult Γ2 A) Σ'.
     Bind Scope dmut_scope with DynamicMutator.
 
-    Module DynamicMutatorNotations.
-
-      (* Notation "'⨂' x .. y => F" := *)
-      (*   (dmut_demonic (fun x => .. (dmut_demonic (fun y => F)) .. )) : dmut_scope. *)
-
-      Notation "'⨁' x .. y => F" :=
-        (dmut_angelic (fun x => .. (dmut_angelic (fun y => F)) .. )) : dmut_scope.
-
-      Infix "⊗" := dmut_demonic_binary (at level 40, left associativity) : dmut_scope.
-      Infix "⊕" := dmut_angelic_binary (at level 50, left associativity) : dmut_scope.
-
-      Notation "x <- ma ;; mb" := (dmut_bind ma (fun _ _ x => mb)) (at level 80, ma at level 90, mb at level 200, right associativity) : dmut_scope.
-      Notation "ma >>= f" := (dmut_bind ma f) (at level 50, left associativity) : dmut_scope.
-      Notation "m1 ;; m2" := (dmut_bind_right m1 m2) : dmut_scope.
-
-    End DynamicMutatorNotations.
-    Import DynamicMutatorNotations.
-    Local Open Scope dmut_scope.
-
-    Definition dmut_state {Γ Γ' A Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> A Σ' * SymbolicState Γ' Σ') :
-      DynamicMutator Γ Γ' A Σ.
-    Proof.
-      intros Σ1 ζ1 pc1 s1.
-      destruct (f Σ1 ζ1 s1) as [a1 s1'].
+    Definition dmut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : DynamicMutator Γ Γ A Σ.
+      intros Σ1 ζ1 pc1 δ.
       apply sout_pure.
       constructor.
-      apply a1.
-      apply s1'.
+      apply (subst ζ1 a).
+      apply δ.
     Defined.
-    Definition dmut_gets {Γ Σ A} (f : forall Σ1, Sub Σ Σ1 -> SymbolicState Γ Σ1 -> A Σ1) :
-      DynamicMutator Γ Γ A Σ :=
-      dmut_state (fun Σ1 ζ1 s1 => (f Σ1 ζ1 s1,s1)).
-    Definition dmut_get {Γ Σ} : DynamicMutator Γ Γ (SymbolicState Γ) Σ :=
-      dmut_gets (fun _ _ s => s).
-    Definition dmut_modify {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> SymbolicState Γ' Σ') :
-      DynamicMutator Γ Γ' Unit Σ :=
-      dmut_state (fun Σ1 ζ1 s1 => (tt, f Σ1 ζ1 s1)).
-    Definition dmut_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
-      dmut_modify (fun Σ1 ζ1 _ => subst ζ1 s).
 
-    Definition dmut_state_local {Γ Γ' A Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Γ Σ' -> A Σ' * SymbolicLocalStore Γ' Σ') :
-      DynamicMutator Γ Γ' A Σ :=
-      dmut_state (fun Σ1 ζ1 '(MkSymbolicState δ1 h1) => let (a, δ2) := f Σ1 ζ1 δ1 in (a,MkSymbolicState δ2 h1)).
-    Definition dmut_gets_local {Γ Σ A} (f : forall Σ1, Sub Σ Σ1 -> SymbolicLocalStore Γ Σ1 -> A Σ1) :
-      DynamicMutator Γ Γ A Σ :=
-      dmut_gets (fun Σ1 ζ1 s1 => f Σ1 ζ1 (symbolicstate_localstore s1)).
-    Definition dmut_get_local {Γ Σ} : DynamicMutator Γ Γ (fun Σ => SymbolicLocalStore Γ Σ) Σ :=
-      dmut_gets_local (fun _ _ δ => δ).
-    Definition dmut_modify_local {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Γ Σ' -> SymbolicLocalStore Γ' Σ') : DynamicMutator Γ Γ' Unit Σ :=
-      dmut_state_local (fun Σ1 ζ1 δ1 => (tt,f Σ1 ζ1 δ1)).
-    Definition dmut_put_local {Γ Γ' Σ} (δ' : SymbolicLocalStore Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
-      dmut_modify_local (fun Σ1 ζ1 _ => subst ζ1 δ').
-    Definition dmut_pop_local {Γ x σ Σ} : DynamicMutator (Γ ▻ (x , σ)) Γ Unit Σ :=
-      dmut_modify_local (fun Σ1 ζ1 => env_tail).
-    Definition dmut_pops_local {Γ} Δ {Σ} : DynamicMutator (Γ ▻▻ Δ) Γ Unit Σ :=
-      dmut_modify_local (fun Σ1 ζ1 => env_drop Δ).
-    Definition dmut_push_local {Γ x σ Σ} (t : Term Σ σ) : DynamicMutator Γ (Γ ▻ (x , σ)) Unit Σ :=
-      dmut_modify_local (fun Σ1 ζ1 δ1 => env_snoc δ1 (x,σ) (subst (T:= fun Σ => Term Σ σ) ζ1 t)).
-    Definition dmut_pushs_local {Γ Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) : DynamicMutator Γ (Γ ▻▻ Δ) Unit Σ :=
-      dmut_modify_local (fun Σ1 ζ1 δ1 => δ1 ►► subst (T := SymbolicLocalStore Δ) ζ1 δΔ).
-    Definition dmut_pushpop {AT} `{Subst AT} {Γ1 Γ2 x σ Σ} (t : Term Σ σ) (d : DynamicMutator (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT Σ) :
-      DynamicMutator Γ1 Γ2 AT Σ :=
-      dmut_push_local t ;; dmut_bind_left d dmut_pop_local.
-    Definition dmut_pushspops {AT} `{Subst AT} {Γ1 Γ2 Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) (d : DynamicMutator (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) AT Σ) :
-      DynamicMutator Γ1 Γ2 AT Σ :=
-      dmut_pushs_local δΔ ;; dmut_bind_left d (dmut_pops_local Δ).
-    Definition dmut_get_heap {Γ Σ} : DynamicMutator Γ Γ SymbolicHeap Σ :=
-      dmut_state (fun _ _ s1 => (symbolicstate_heap s1,s1)).
-    Definition dmut_modify_heap {Γ Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicHeap Σ' -> SymbolicHeap Σ') : DynamicMutator Γ Γ Unit Σ :=
-      dmut_modify (fun Σ1 ζ1 '(MkSymbolicState δ1 h1) => MkSymbolicState δ1 (f Σ1 ζ1 h1)).
-    Definition dmut_put_heap {Γ Σ} (h : SymbolicHeap Σ) : DynamicMutator Γ Γ Unit Σ :=
-      dmut_modify_heap (fun Σ1 ζ1 _ => subst ζ1 h).
-    Definition dmut_eval_exp {Γ σ} (e : Exp Γ σ) {Σ} : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
-      dmut_gets_local (fun Σ1 ζ1 δ1 => symbolic_eval_exp δ1 e).
-    Definition dmut_eval_exps {Γ Σ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs) Σ :=
-      dmut_gets_local (fun Σ1 ζ1 δ1 => env_map (fun _ => symbolic_eval_exp δ1) es).
+    Definition dmut_bind {Γ1 Γ2 Γ3 A B Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> DynamicMutator Γ2 Γ3 B Σ') : DynamicMutator Γ1 Γ3 B Σ.
+    Proof.
+      intros Σ1 ζ1 pc1 δ1.
+      apply (sout_bind pc1 (ma Σ1 ζ1 pc1 δ1)).
+      intros Σ2 ζ2 pc2 [a2 δ2].
+      eapply (sout_bind pc2).
+      apply (f Σ2 (sub_comp ζ1 ζ2) a2 _ (sub_id _) pc2 δ2).
+      intros Σ3 ζ3 pc3 [b3 δ3].
+      apply sout_pure.
+      constructor.
+      apply b3.
+      apply δ3.
+    Defined.
+    (* Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) : *)
+    (*   DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m). *)
 
-    Fixpoint dmut_freshen_tuplepat' {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
-      DynamicMutator Γ Γ (fun Σ => Env (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
-      match p with
-      | tuplepat_nil =>
-        dmut_pure (env_nil, env_nil)
-      | tuplepat_snoc p x =>
-        dmut_fmap2
-          (dmut_freshen_tuplepat' p)
-          (dmut_freshtermvar (𝑿to𝑺 x))
-          (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs _ t__x, env_snoc ts__Δ (x,_) t__x))
+    Definition dmut_sub {Γ1 Γ2 A Σ1 Σ2} (ζ1 : Sub Σ1 Σ2) (p : DynamicMutator Γ1 Γ2 A Σ1) :
+      DynamicMutator Γ1 Γ2 A Σ2 := fun Σ3 ζ2 => p _ (sub_comp ζ1 ζ2).
+    Global Arguments dmut_sub {_ _ _ _ _} ζ1 p.
+    Definition dmut_strength {Γ1 Γ2 A B Σ} `{Subst A, Subst B} (ma : DynamicMutator Γ1 Γ2 A Σ) (b : B Σ) :
+      DynamicMutator Γ1 Γ2 (fun Σ => A Σ * B Σ)%type Σ :=
+      dmut_bind ma (fun _ ζ a => dmut_pure (a, subst ζ b)).
+    Definition dmut_bind_right {Γ1 Γ2 Γ3 A B Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) : DynamicMutator Γ1 Γ3 B Σ :=
+      dmut_bind ma (fun _ ζ _ => dmut_sub ζ mb).
+    Definition dmut_bind_left {Γ1 Γ2 Γ3 A B} `{Subst A} {Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) : DynamicMutator Γ1 Γ3 A Σ :=
+      dmut_bind ma (fun _ ζ a => dmut_bind_right (dmut_sub ζ mb) (dmut_pure a)) .
+    Definition dmut_fmap {Γ1 Γ2 Σ A B} `{Subst A, Subst B}
+      (ma : DynamicMutator Γ1 Γ2 A Σ)
+      (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ') :
+      DynamicMutator Γ1 Γ2 B Σ :=
+      fun Σ1 ζ01 pc1 s1 =>
+        @sout_map _ (DynamicMutatorResult Γ2 A) (DynamicMutatorResult Γ2 B) Σ1
+        (fun Σ2 ζ12 '(MkDynMutResult a2 s2) => MkDynMutResult (f Σ2 (sub_comp ζ01 ζ12) a2) s2)
+        (ma Σ1 ζ01 pc1 s1).
+    Definition dmut_fmap2 {Γ1 Γ2 Γ3 Σ A B C} `{Subst A, Subst B, Subst C}
+      (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ)
+      (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ' -> C Σ') :
+      DynamicMutator Γ1 Γ3 C Σ :=
+      dmut_bind ma (fun Σ1 ζ01 a1 =>
+        dmut_fmap (dmut_sub ζ01 mb) (fun Σ2 ζ12 =>
+          f Σ2 (sub_comp ζ01 ζ12) (subst ζ12 a1))).
+    Definition dmut_pair {Γ1 Γ2 Γ3 Σ A B} `{Subst A, Subst B}
+      (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ) :
+      DynamicMutator Γ1 Γ3 (fun Σ => A Σ * B Σ)%type Σ :=
+      dmut_fmap2 ma mb (fun _ _ => pair).
+
+    Definition dmut_fail {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ.
+      intros Σ1 ζ1 pc1 [δ1 h1].
+      apply sout_fail.
+      apply (@MkDynMutError _ func msg Γ1); assumption.
+    Defined.
+
+    Definition dmut_block {Γ1 Γ2 A Σ} : DynamicMutator Γ1 Γ2 A Σ :=
+      fun _ _ _ _ => sout_block.
+
+    Definition dmut_angelic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+      fun Σ1 ζ1 pc1 s1 => sout_angelic (fun i => ms i Σ1 ζ1 pc1 s1).
+    (* Definition dmut_demonic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ := *)
+    (*   fun Σ1 ζ1 s1 => sout_demonic (fun i => ms i Σ1 ζ1 s1). *)
+    Definition dmut_angelic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+      fun Σ1 ζ1 pc1 s1 => sout_angelic_binary (m1 Σ1 ζ1 pc1 s1) (m2 Σ1 ζ1 pc1 s1).
+    Definition dmut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+      fun Σ1 ζ1 pc1 s1 => sout_demonic_binary (m1 Σ1 ζ1 pc1 s1) (m2 Σ1 ζ1 pc1 s1).
+    Fixpoint dmut_angelic_list {AT D} `{Subst AT} {Γ Σ} (func : string) (msg : string) (data:D) (xs : List AT Σ) :
+      DynamicMutator Γ Γ AT Σ :=
+      match xs with
+      | nil        => dmut_fail func msg data
+      | cons x nil => dmut_pure x
+      | cons x xs  => dmut_angelic_binary (dmut_pure x) (dmut_angelic_list func msg data xs)
+      end.
+    Fixpoint dmut_demonic_list {AT} `{Subst AT} {Γ Σ} (xs : List AT Σ) : DynamicMutator Γ Γ AT Σ :=
+      match xs with
+      | nil        => dmut_block
+      | cons x nil => dmut_pure x
+      | cons x xs  => dmut_demonic_binary (dmut_pure x) (dmut_demonic_list xs)
       end.
 
-    Definition dmut_freshen_tuplepat {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
-      DynamicMutator Γ Γ (fun Σ => Term Σ (ty_tuple σs) * NamedEnv (Term Σ) Δ)%type Σ :=
-      dmut_fmap
+    Definition dmut_angelic_finite {Γ1 Γ2 A} F `{finite.Finite F} {Σ}
+      (cont : F -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+      dmut_bind
+        (dmut_angelic_list "dmut_angelic_finite" "All branches failed" tt (finite.enum F))
+        (fun (Σ' : LCtx) (ζ : Sub Σ Σ') (x : F) => dmut_sub ζ (cont x)).
+
+    Definition dmut_demonic_finite {Γ1 Γ2 A} F `{finite.Finite F} {Σ}
+      (cont : F -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+      dmut_bind
+        (dmut_demonic_list (finite.enum F))
+        (fun (Σ' : LCtx) (ζ : Sub Σ Σ') (x : F) => dmut_sub ζ (cont x)).
+    Global Arguments dmut_angelic_finite {_ _ _} _ {_ _ _} _.
+    Global Arguments dmut_demonic_finite {_ _ _} _ {_ _ _} _.
+
+    Definition dmut_fresh {Γ1 Γ2 A Σ} x τ (ma : DynamicMutator Γ1 Γ2 A (Σ ▻ (x :: τ))) : DynamicMutator Γ1 Γ2 A Σ :=
+      fun Σ1 ζ1 pc1 s1 =>
+        let x'  := fresh Σ1 (Some x) in
+        let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
+        sout_demonicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 s1)).
+    Global Arguments dmut_fresh {_ _ _ _} _ _ _.
+    Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
+      dmut_fresh x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
+    Global Arguments dmut_freshtermvar {_ _ _} _.
+
+    Record DebugCall : Type :=
+      MkDebugCall
+        { debug_call_function_parameters    : PCtx;
+          debug_call_function_result_type   : Ty;
+          debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
+          debug_call_function_arguments     : LocalStore debug_call_function_parameters;
+          debug_call_function_contract      : SepContract debug_call_function_parameters debug_call_function_result_type;
+          debug_call_pathcondition          : Prop;
+          debug_call_program_context        : PCtx;
+          debug_call_localstore             : LocalStore debug_call_program_context;
+          debug_call_heap                   : SCHeap;
+        }.
+
+    Record DebugStm : Type :=
+      MkDebugStm
+        { debug_stm_program_context        : PCtx;
+          debug_stm_statement_type         : Ty;
+          debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
+          debug_stm_logic_context          : LCtx;
+          debug_stm_pathcondition          : PathCondition debug_stm_logic_context;
+          debug_stm_localstore             : SymbolicLocalStore debug_stm_program_context debug_stm_logic_context;
+          debug_stm_heap                   : SymbolicHeap debug_stm_logic_context;
+        }.
+
+    Record SDebugCall (Σ : LCtx) : Type :=
+      MkSDebugCall
+        { sdebug_call_function_parameters    : PCtx;
+          sdebug_call_function_result_type   : Ty;
+          sdebug_call_function_name          : 𝑭 sdebug_call_function_parameters sdebug_call_function_result_type;
+          sdebug_call_function_arguments     : SymbolicLocalStore sdebug_call_function_parameters Σ;
+          sdebug_call_function_contract      : SepContract sdebug_call_function_parameters sdebug_call_function_result_type;
+          sdebug_call_pathcondition          : PathCondition Σ;
+          sdebug_call_program_context        : PCtx;
+          sdebug_call_localstore             : SymbolicLocalStore sdebug_call_program_context Σ;
+          sdebug_call_heap                   : SymbolicHeap Σ;
+        }.
+
+    Record SDebugStm (Σ : LCtx) : Type :=
+      MkSDebugStm
+        { sdebug_stm_program_context        : PCtx;
+          sdebug_stm_statement_type         : Ty;
+          sdebug_stm_statement              : Stm sdebug_stm_program_context sdebug_stm_statement_type;
+          sdebug_stm_pathcondition          : PathCondition Σ;
+          sdebug_stm_localstore             : SymbolicLocalStore sdebug_stm_program_context Σ;
+          sdebug_stm_heap                   : SymbolicHeap Σ;
+        }.
+
+    Global Instance SubstDebugCall : Subst SDebugCall :=
+      fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugCall Σ0) =>
+        match d with
+        | MkSDebugCall f ts c pc δ h =>
+          MkSDebugCall f (subst ζ01 ts) c (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
+        end.
+
+    Global Instance InstDebugCall : Inst SDebugCall DebugCall :=
+      {| inst Σ ι d :=
+           match d with
+           | MkSDebugCall f ts c pc δ h =>
+             MkDebugCall f (inst ι ts) c (inst ι pc) (inst ι δ) (inst ι h)
+           end;
+         lift Σ d :=
+           match d with
+           | MkDebugCall f ts c pc δ h =>
+             MkSDebugCall f (lift ts) c (lift pc) (lift δ) (lift h)
+           end
+      |}.
+
+  End DynamicMutator.
+  Bind Scope dmut_scope with DynamicMutator.
+
+  Module DynamicMutatorNotations.
+
+    (* Notation "'⨂' x .. y => F" := *)
+    (*   (dmut_demonic (fun x => .. (dmut_demonic (fun y => F)) .. )) : dmut_scope. *)
+
+    Notation "'⨁' x .. y => F" :=
+      (dmut_angelic (fun x => .. (dmut_angelic (fun y => F)) .. )) : dmut_scope.
+
+    Infix "⊗" := dmut_demonic_binary (at level 40, left associativity) : dmut_scope.
+    Infix "⊕" := dmut_angelic_binary (at level 50, left associativity) : dmut_scope.
+
+    Notation "x <- ma ;; mb" := (dmut_bind ma (fun _ _ x => mb)) (at level 80, ma at level 90, mb at level 200, right associativity) : dmut_scope.
+    Notation "ma >>= f" := (dmut_bind ma f) (at level 50, left associativity) : dmut_scope.
+    Notation "m1 ;; m2" := (dmut_bind_right m1 m2) : dmut_scope.
+
+  End DynamicMutatorNotations.
+  Import DynamicMutatorNotations.
+  Local Open Scope dmut_scope.
+
+  Definition dmut_state {Γ Γ' A Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> A Σ' * SymbolicState Γ' Σ') :
+    DynamicMutator Γ Γ' A Σ.
+  Proof.
+    intros Σ1 ζ1 pc1 s1.
+    destruct (f Σ1 ζ1 s1) as [a1 s1'].
+    apply sout_pure.
+    constructor.
+    apply a1.
+    apply s1'.
+  Defined.
+  Definition dmut_gets {Γ Σ A} (f : forall Σ1, Sub Σ Σ1 -> SymbolicState Γ Σ1 -> A Σ1) :
+    DynamicMutator Γ Γ A Σ :=
+    dmut_state (fun Σ1 ζ1 s1 => (f Σ1 ζ1 s1,s1)).
+  Definition dmut_get {Γ Σ} : DynamicMutator Γ Γ (SymbolicState Γ) Σ :=
+    dmut_gets (fun _ _ s => s).
+  Definition dmut_modify {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> SymbolicState Γ' Σ') :
+    DynamicMutator Γ Γ' Unit Σ :=
+    dmut_state (fun Σ1 ζ1 s1 => (tt, f Σ1 ζ1 s1)).
+  Definition dmut_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
+    dmut_modify (fun Σ1 ζ1 _ => subst ζ1 s).
+
+  Definition dmut_state_local {Γ Γ' A Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Γ Σ' -> A Σ' * SymbolicLocalStore Γ' Σ') :
+    DynamicMutator Γ Γ' A Σ :=
+    dmut_state (fun Σ1 ζ1 '(MkSymbolicState δ1 h1) => let (a, δ2) := f Σ1 ζ1 δ1 in (a,MkSymbolicState δ2 h1)).
+  Definition dmut_gets_local {Γ Σ A} (f : forall Σ1, Sub Σ Σ1 -> SymbolicLocalStore Γ Σ1 -> A Σ1) :
+    DynamicMutator Γ Γ A Σ :=
+    dmut_gets (fun Σ1 ζ1 s1 => f Σ1 ζ1 (symbolicstate_localstore s1)).
+  Definition dmut_get_local {Γ Σ} : DynamicMutator Γ Γ (fun Σ => SymbolicLocalStore Γ Σ) Σ :=
+    dmut_gets_local (fun _ _ δ => δ).
+  Definition dmut_modify_local {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Γ Σ' -> SymbolicLocalStore Γ' Σ') : DynamicMutator Γ Γ' Unit Σ :=
+    dmut_state_local (fun Σ1 ζ1 δ1 => (tt,f Σ1 ζ1 δ1)).
+  Definition dmut_put_local {Γ Γ' Σ} (δ' : SymbolicLocalStore Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
+    dmut_modify_local (fun Σ1 ζ1 _ => subst ζ1 δ').
+  Definition dmut_pop_local {Γ x σ Σ} : DynamicMutator (Γ ▻ (x , σ)) Γ Unit Σ :=
+    dmut_modify_local (fun Σ1 ζ1 => env_tail).
+  Definition dmut_pops_local {Γ} Δ {Σ} : DynamicMutator (Γ ▻▻ Δ) Γ Unit Σ :=
+    dmut_modify_local (fun Σ1 ζ1 => env_drop Δ).
+  Definition dmut_push_local {Γ x σ Σ} (t : Term Σ σ) : DynamicMutator Γ (Γ ▻ (x , σ)) Unit Σ :=
+    dmut_modify_local (fun Σ1 ζ1 δ1 => env_snoc δ1 (x,σ) (subst (T:= fun Σ => Term Σ σ) ζ1 t)).
+  Definition dmut_pushs_local {Γ Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) : DynamicMutator Γ (Γ ▻▻ Δ) Unit Σ :=
+    dmut_modify_local (fun Σ1 ζ1 δ1 => δ1 ►► subst (T := SymbolicLocalStore Δ) ζ1 δΔ).
+  Definition dmut_pushpop {AT} `{Subst AT} {Γ1 Γ2 x σ Σ} (t : Term Σ σ) (d : DynamicMutator (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT Σ) :
+    DynamicMutator Γ1 Γ2 AT Σ :=
+    dmut_push_local t ;; dmut_bind_left d dmut_pop_local.
+  Definition dmut_pushspops {AT} `{Subst AT} {Γ1 Γ2 Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) (d : DynamicMutator (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) AT Σ) :
+    DynamicMutator Γ1 Γ2 AT Σ :=
+    dmut_pushs_local δΔ ;; dmut_bind_left d (dmut_pops_local Δ).
+  Definition dmut_get_heap {Γ Σ} : DynamicMutator Γ Γ SymbolicHeap Σ :=
+    dmut_state (fun _ _ s1 => (symbolicstate_heap s1,s1)).
+  Definition dmut_modify_heap {Γ Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicHeap Σ' -> SymbolicHeap Σ') : DynamicMutator Γ Γ Unit Σ :=
+    dmut_modify (fun Σ1 ζ1 '(MkSymbolicState δ1 h1) => MkSymbolicState δ1 (f Σ1 ζ1 h1)).
+  Definition dmut_put_heap {Γ Σ} (h : SymbolicHeap Σ) : DynamicMutator Γ Γ Unit Σ :=
+    dmut_modify_heap (fun Σ1 ζ1 _ => subst ζ1 h).
+  Definition dmut_eval_exp {Γ σ} (e : Exp Γ σ) {Σ} : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
+    dmut_gets_local (fun Σ1 ζ1 δ1 => symbolic_eval_exp δ1 e).
+  Definition dmut_eval_exps {Γ Σ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs) Σ :=
+    dmut_gets_local (fun Σ1 ζ1 δ1 => env_map (fun _ => symbolic_eval_exp δ1) es).
+
+  Fixpoint dmut_freshen_tuplepat' {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
+    DynamicMutator Γ Γ (fun Σ => Env (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
+    match p with
+    | tuplepat_nil =>
+      dmut_pure (env_nil, env_nil)
+    | tuplepat_snoc p x =>
+      dmut_fmap2
         (dmut_freshen_tuplepat' p)
-        (fun _ _ '(t__σs, t__Δ) => (term_tuple t__σs, t__Δ)).
+        (dmut_freshtermvar (𝑿to𝑺 x))
+        (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs _ t__x, env_snoc ts__Δ (x,_) t__x))
+    end.
 
-    Fixpoint dmut_freshen_recordpat' {N : Set} (inj__N : N -> 𝑺) {σs} {Δ : NCtx N Ty} (p : RecordPat σs Δ) {Γ Σ} :
-      DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
-      match p with
-      | recordpat_nil =>
-        dmut_pure (env_nil, env_nil)
-      | recordpat_snoc p rf x =>
-        dmut_fmap2
-          (dmut_freshen_recordpat' inj__N p)
-          (dmut_freshtermvar (inj__N x))
-          (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs (rf::_) t__x, env_snoc ts__Δ (x::_) t__x))
-      end.
+  Definition dmut_freshen_tuplepat {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
+    DynamicMutator Γ Γ (fun Σ => Term Σ (ty_tuple σs) * NamedEnv (Term Σ) Δ)%type Σ :=
+    dmut_fmap
+      (dmut_freshen_tuplepat' p)
+      (fun _ _ '(t__σs, t__Δ) => (term_tuple t__σs, t__Δ)).
 
-    Definition dmut_freshen_recordpat {N : Set} (inj__N : N -> 𝑺) {R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
-      DynamicMutator Γ Γ (fun Σ => Term Σ (ty_record R) * NamedEnv (Term Σ) Δ)%type Σ :=
-      dmut_fmap
+  Fixpoint dmut_freshen_recordpat' {N : Set} (inj__N : N -> 𝑺) {σs} {Δ : NCtx N Ty} (p : RecordPat σs Δ) {Γ Σ} :
+    DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
+    match p with
+    | recordpat_nil =>
+      dmut_pure (env_nil, env_nil)
+    | recordpat_snoc p rf x =>
+      dmut_fmap2
         (dmut_freshen_recordpat' inj__N p)
-        (fun _ _ '(t__σs, t__Δ) => (term_record R t__σs, t__Δ)).
+        (dmut_freshtermvar (inj__N x))
+        (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs (rf::_) t__x, env_snoc ts__Δ (x::_) t__x))
+    end.
 
-    Definition dmut_freshen_pattern {Γ Σ Δ σ} (p : Pattern Δ σ) :
-      DynamicMutator Γ Γ (fun Σ => Term Σ σ * NamedEnv (Term Σ) Δ)%type Σ :=
-      match p with
-      | pat_var x =>
-        dmut_fmap
-          (dmut_freshtermvar (𝑿to𝑺 x))
-          (fun _ _ t => (t,[t]%arg))
-      | pat_unit =>
-        dmut_pure (term_lit ty_unit tt,env_nil)
-      | pat_pair x y =>
-        dmut_fmap2
-          (dmut_freshtermvar (𝑿to𝑺 x))
-          (dmut_freshtermvar (𝑿to𝑺 y))
-          (fun _ _ t__x t__y => (term_binop binop_pair t__x t__y, [t__x,t__y]%arg))
-      | pat_tuple p =>
-        dmut_freshen_tuplepat p
-      | pat_record p =>
-        dmut_freshen_recordpat 𝑿to𝑺 p
+  Definition dmut_freshen_recordpat {N : Set} (inj__N : N -> 𝑺) {R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
+    DynamicMutator Γ Γ (fun Σ => Term Σ (ty_record R) * NamedEnv (Term Σ) Δ)%type Σ :=
+    dmut_fmap
+      (dmut_freshen_recordpat' inj__N p)
+      (fun _ _ '(t__σs, t__Δ) => (term_record R t__σs, t__Δ)).
+
+  Definition dmut_freshen_pattern {Γ Σ Δ σ} (p : Pattern Δ σ) :
+    DynamicMutator Γ Γ (fun Σ => Term Σ σ * NamedEnv (Term Σ) Δ)%type Σ :=
+    match p with
+    | pat_var x =>
+      dmut_fmap
+        (dmut_freshtermvar (𝑿to𝑺 x))
+        (fun _ _ t => (t,[t]%arg))
+    | pat_unit =>
+      dmut_pure (term_lit ty_unit tt,env_nil)
+    | pat_pair x y =>
+      dmut_fmap2
+        (dmut_freshtermvar (𝑿to𝑺 x))
+        (dmut_freshtermvar (𝑿to𝑺 y))
+        (fun _ _ t__x t__y => (term_binop binop_pair t__x t__y, [t__x,t__y]%arg))
+    | pat_tuple p =>
+      dmut_freshen_tuplepat p
+    | pat_record p =>
+      dmut_freshen_recordpat 𝑿to𝑺 p
+    end.
+
+  (* Add the provided formula to the path condition. *)
+  Definition dmut_assume_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
+    fun Σ1 ζ1 pc1 s1 =>
+      sout_bind pc1
+        (sout_assume_formula pc1 (subst ζ1 fml))
+        (fun Σ2 ζ12 pc2 v => sout_pure {| dmutres_result_value := v; dmutres_result_state := subst ζ12 s1 |}).
+
+  Definition dmut_assume_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
+    dmut_assume_formula (formula_bool t).
+  Definition dmut_assume_exp {Γ Σ} (e : Exp Γ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
+    dmut_eval_exp e >>= fun _ _ => dmut_assume_term.
+  Definition dmut_assume_prop {Γ Σ} (P : abstract_named Lit Σ Prop) : DynamicMutator Γ Γ Unit Σ :=
+    dmut_assume_formula (formula_prop (sub_id Σ) P).
+  Definition dmut_assume_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
+    fold_right (fun fml => dmut_bind_right (dmut_assume_formula fml)) (dmut_pure tt) fmls.
+
+  Definition dmut_assert_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
+    fun Σ1 ζ1 pc1 s1 =>
+      sout_bind pc1
+        (sout_assert_formula
+           {| dmuterr_function        := "dmut_assert_formula";
+              dmuterr_message         := "Proof obligation";
+              dmuterr_program_context := Γ;
+              dmuterr_pathcondition   := pc1;
+              dmuterr_localstore      := symbolicstate_localstore s1;
+              dmuterr_heap            := symbolicstate_heap s1;
+              (* dmuterr_data         := fml1; *)
+           |}
+           pc1 (subst ζ1 fml))
+        (fun Σ2 ζ12 pc2 v => sout_pure {| dmutres_result_value := v; dmutres_result_state := subst ζ12 s1 |}).
+
+  Definition dmut_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
+    fold_right (fun fml => dmut_bind_right (dmut_assert_formula fml)) (dmut_pure tt) fmls.
+  Definition dmut_assert_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
+    dmut_assert_formula (formula_bool t).
+  Definition dmut_assert_exp {Γ Σ} (e : Exp Γ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
+    dmut_eval_exp e >>= fun _ _ t => dmut_assert_term t.
+  Definition dmut_produce_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
+    dmut_modify_heap (fun _ ζ => cons (subst ζ c)).
+  Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
+     dmut_get_heap >>= fun Σ1 ζ1 h1 =>
+     dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c
+       (extract_chunk_eqb (subst ζ1 c) h1) >>= fun Σ2 ζ2 '(Δpc2 , h2) =>
+     dmut_assert_formulas Δpc2 ;;
+     dmut_put_heap h2.
+
+  Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
+    dmut_get_heap >>= fun _ _ h =>
+    match h with
+    | nil => dmut_pure tt
+    | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
+    end.
+
+  Definition dmut_match_enum {AT E} {Γ1 Γ2 Σ} (t : Term Σ (ty_enum E))
+    (d : 𝑬𝑲 E -> DynamicMutator Γ1 Γ2 AT Σ) : DynamicMutator Γ1 Γ2 AT Σ :=
+    fun Σ1 ζ01 =>
+      let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
+      match term_get_lit t' with
+      | Some k => d k Σ1 ζ01
+      | None => dmut_demonic_finite
+                  (𝑬𝑲 E)
+                  (fun k => dmut_assume_formula (formula_eq t' (term_enum E k));; dmut_sub ζ01 (d k)) _ (sub_id Σ1)
       end.
 
-    (* Add the provided formula to the path condition. *)
-    Definition dmut_assume_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
-      fun Σ1 ζ1 pc1 s1 =>
-        sout_bind pc1
-          (sout_assume_formula pc1 (subst ζ1 fml))
-          (fun Σ2 ζ12 pc2 v => sout_pure {| dmutres_result_value := v; dmutres_result_state := subst ζ12 s1 |}).
-
-    Definition dmut_assume_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
-      dmut_assume_formula (formula_bool t).
-    Definition dmut_assume_exp {Γ Σ} (e : Exp Γ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
-      dmut_eval_exp e >>= fun _ _ => dmut_assume_term.
-    Definition dmut_assume_prop {Γ Σ} (P : abstract_named Lit Σ Prop) : DynamicMutator Γ Γ Unit Σ :=
-      dmut_assume_formula (formula_prop (sub_id Σ) P).
-    Definition dmut_assume_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
-      fold_right (fun fml => dmut_bind_right (dmut_assume_formula fml)) (dmut_pure tt) fmls.
-
-    Definition dmut_assert_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
-      fun Σ1 ζ1 pc1 s1 =>
-        sout_bind pc1
-          (sout_assert_formula
-             {| dmuterr_function        := "dmut_assert_formula";
-                dmuterr_message         := "Proof obligation";
-                dmuterr_program_context := Γ;
-                dmuterr_pathcondition   := pc1;
-                dmuterr_localstore      := symbolicstate_localstore s1;
-                dmuterr_heap            := symbolicstate_heap s1;
-                (* dmuterr_data         := fml1; *)
-             |}
-             pc1 (subst ζ1 fml))
-          (fun Σ2 ζ12 pc2 v => sout_pure {| dmutres_result_value := v; dmutres_result_state := subst ζ12 s1 |}).
-
-    Definition dmut_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
-      fold_right (fun fml => dmut_bind_right (dmut_assert_formula fml)) (dmut_pure tt) fmls.
-    Definition dmut_assert_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
-      dmut_assert_formula (formula_bool t).
-    Definition dmut_assert_exp {Γ Σ} (e : Exp Γ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
-      dmut_eval_exp e >>= fun _ _ t => dmut_assert_term t.
-    Definition dmut_produce_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
-      dmut_modify_heap (fun _ ζ => cons (subst ζ c)).
-    Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
-       dmut_get_heap >>= fun Σ1 ζ1 h1 =>
-       dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c
-         (extract_chunk_eqb (subst ζ1 c) h1) >>= fun Σ2 ζ2 '(Δpc2 , h2) =>
-       dmut_assert_formulas Δpc2 ;;
-       dmut_put_heap h2.
-
-    Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
-      dmut_get_heap >>= fun _ _ h =>
-      match h with
-      | nil => dmut_pure tt
-      | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
-      end.
-
-    Definition dmut_match_enum {AT E} {Γ1 Γ2 Σ} (t : Term Σ (ty_enum E))
-      (d : 𝑬𝑲 E -> DynamicMutator Γ1 Γ2 AT Σ) : DynamicMutator Γ1 Γ2 AT Σ :=
-      fun Σ1 ζ01 =>
-        let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
-        match term_get_lit t' with
-        | Some k => d k Σ1 ζ01
-        | None => dmut_demonic_finite
-                    (𝑬𝑲 E)
-                    (fun k => dmut_assume_formula (formula_eq t' (term_enum E k));; dmut_sub ζ01 (d k)) _ (sub_id Σ1)
-        end.
-
-    Definition dmut_match_sum {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (t : Term Σ (ty_sum σ τ))
-      (dinl : DynamicMutator Γ1 Γ2 AT (Σ ▻ (x :: σ)))
-      (dinr : DynamicMutator Γ1 Γ2 AT (Σ ▻ (y :: τ))) :
-      DynamicMutator Γ1 Γ2 AT Σ :=
-      fun Σ1 ζ01 =>
-        match term_get_sum (subst (T := fun Σ => Term Σ _) ζ01 t) with
-        | Some (inl tl) => dinl Σ1 (sub_snoc ζ01 (x :: σ) tl)
-        | Some (inr tr) => dinr Σ1 (sub_snoc ζ01 (y :: τ) tr)
-        | None =>
-          dmut_demonic_binary
-            (dmut_fresh x σ
-               (dmut_assume_formula
-                  (formula_eq
-                     (subst (T := fun Σ => Term Σ _) sub_wk1 t)
-                     (@term_inl _ σ τ (@term_var _ _ _ inctx_zero))) ;;
-                dinl))
-            (dmut_fresh y τ
-               (dmut_assume_formula
-                  (formula_eq
-                     (subst (T := fun Σ => Term Σ _) sub_wk1 t)
-                     (@term_inr _ σ τ (@term_var _ _ _ inctx_zero))) ;;
-                dinr)) ζ01
-        end.
-
-    Definition dmut_match_pair {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (s : Term Σ (ty_prod σ τ))
-      (d : DynamicMutator Γ1 Γ2 AT (Σ ▻ (x :: σ) ▻ (y :: τ))) : DynamicMutator Γ1 Γ2 AT Σ :=
-      fun Σ1 ζ01 =>
-      match term_get_pair (subst (T := fun Σ => Term Σ _) ζ01 s) with
-      | Some (tl,tr) => d Σ1 (sub_snoc (sub_snoc ζ01 (x :: σ) tl) (y :: τ) tr)
+  Definition dmut_match_sum {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (t : Term Σ (ty_sum σ τ))
+    (dinl : DynamicMutator Γ1 Γ2 AT (Σ ▻ (x :: σ)))
+    (dinr : DynamicMutator Γ1 Γ2 AT (Σ ▻ (y :: τ))) :
+    DynamicMutator Γ1 Γ2 AT Σ :=
+    fun Σ1 ζ01 =>
+      match term_get_sum (subst (T := fun Σ => Term Σ _) ζ01 t) with
+      | Some (inl tl) => dinl Σ1 (sub_snoc ζ01 (x :: σ) tl)
+      | Some (inr tr) => dinr Σ1 (sub_snoc ζ01 (y :: τ) tr)
       | None =>
-        dmut_fresh x σ (dmut_fresh y τ
-          (dmut_assume_formula
-             (formula_eq
-                (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) s)
-                (term_binop
-                   binop_pair
-                   (@term_var _ x σ (inctx_succ inctx_zero))
-                   (@term_var _ y τ inctx_zero))) ;;
-           d))
-          Σ1 ζ01
+        dmut_demonic_binary
+          (dmut_fresh x σ
+             (dmut_assume_formula
+                (formula_eq
+                   (subst (T := fun Σ => Term Σ _) sub_wk1 t)
+                   (@term_inl _ σ τ (@term_var _ _ _ inctx_zero))) ;;
+              dinl))
+          (dmut_fresh y τ
+             (dmut_assume_formula
+                (formula_eq
+                   (subst (T := fun Σ => Term Σ _) sub_wk1 t)
+                   (@term_inr _ σ τ (@term_var _ _ _ inctx_zero))) ;;
+              dinr)) ζ01
       end.
 
-    Definition dmut_match_record {AT R} {Γ1 Γ2 Σ Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Term Σ (ty_record R))
-      (d : DynamicMutator Γ1 Γ2 AT (Σ ▻▻ Δ)) : DynamicMutator Γ1 Γ2 AT Σ :=
-      fun Σ1 ζ01 =>
-      match term_get_record (subst (T := fun Σ => Term Σ _) ζ01 t) with
+  Definition dmut_match_pair {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (s : Term Σ (ty_prod σ τ))
+    (d : DynamicMutator Γ1 Γ2 AT (Σ ▻ (x :: σ) ▻ (y :: τ))) : DynamicMutator Γ1 Γ2 AT Σ :=
+    fun Σ1 ζ01 =>
+    match term_get_pair (subst (T := fun Σ => Term Σ _) ζ01 s) with
+    | Some (tl,tr) => d Σ1 (sub_snoc (sub_snoc ζ01 (x :: σ) tl) (y :: τ) tr)
+    | None =>
+      dmut_fresh x σ (dmut_fresh y τ
+        (dmut_assume_formula
+           (formula_eq
+              (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) s)
+              (term_binop
+                 binop_pair
+                 (@term_var _ x σ (inctx_succ inctx_zero))
+                 (@term_var _ y τ inctx_zero))) ;;
+         d))
+        Σ1 ζ01
+    end.
+
+  Definition dmut_match_record {AT R} {Γ1 Γ2 Σ Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Term Σ (ty_record R))
+    (d : DynamicMutator Γ1 Γ2 AT (Σ ▻▻ Δ)) : DynamicMutator Γ1 Γ2 AT Σ :=
+    fun Σ1 ζ01 =>
+    match term_get_record (subst (T := fun Σ => Term Σ _) ζ01 t) with
+    | Some ts =>
+      let ζ__R := record_pattern_match p ts in
+      d Σ1 (ζ01 ►► ζ__R)
+    | None =>
+      (dmut_freshen_recordpat id p >>= fun _ ζ '(t__p,ζ__R) =>
+      dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ t) t__p) ;;
+      dmut_sub (ζ ►► ζ__R) d) ζ01
+    end.
+
+  Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
+    match asn with
+    | asn_formula fml => dmut_assume_formula fml
+    | asn_chunk c     => dmut_produce_chunk c
+    | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
+                         (dmut_assume_term (term_not b) ;; dmut_produce a2)
+    | asn_match_enum E t alts =>
+      dmut_match_enum t (fun k => dmut_produce (alts k))
+    | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+      dmut_match_sum s (dmut_produce alt_inl) (dmut_produce alt_inr)
+    | asn_match_list s alt_nil xh xt alt_cons =>
+      dmut_fail "dmut_produce" "Not implemented" asn
+    | asn_match_pair s xl xr rhs =>
+      dmut_match_pair s (dmut_produce rhs)
+    | asn_match_tuple s p rhs =>
+      dmut_fail "dmut_produce" "Not implemented" asn
+    | asn_match_record R s p rhs =>
+      dmut_match_record p s (dmut_produce rhs)
+    | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+      match term_get_union s with
+      | Some (existT K ts) =>
+        dmut_fail "dmut_produce" "Not implemented" asn
+      | None =>
+        dmut_fail "dmut_produce" "Not implemented" asn
+      end
+    | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
+    | asn_exist ς τ a => dmut_fresh ς τ (dmut_produce a)
+    | asn_debug => dmut_pure tt
+    end.
+
+  Fixpoint dmut_consume {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
+    match asn with
+    | asn_formula fml => dmut_assert_formula fml
+    | asn_chunk c     => dmut_consume_chunk c
+    | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_consume a1) ⊗
+                         (dmut_assume_term (term_not b) ;; dmut_consume a2)
+    | asn_match_enum E t alts =>
+      dmut_match_enum t (fun k => dmut_consume (alts k))
+    | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+      dmut_match_sum s (dmut_consume alt_inl) (dmut_consume alt_inr)
+    | asn_match_list s alt_nil xh xt alt_cons =>
+      dmut_fail "dmut_consume" "Not implemented" asn
+    | asn_match_pair s xl xr rhs =>
+      dmut_match_pair s (dmut_consume rhs)
+    | asn_match_tuple s p rhs =>
+      dmut_fail "dmut_consume" "Not implemented" asn
+    | asn_match_record R s p rhs =>
+      dmut_match_record p s (dmut_consume rhs)
+    | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+      dmut_fail  "dmut_consume" "Not implemented" asn
+    | asn_sep a1 a2   => dmut_consume a1 ;; dmut_consume a2
+    | asn_exist ς τ a =>
+      ⨁ t : Term Σ τ =>
+      dmut_sub (sub_snoc (sub_id _) (ς , τ) t) (dmut_consume a)
+    | asn_debug => dmut_pure tt
+    end.
+
+  Definition dmut_call {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
+    match contract with
+    | MkSepContract _ _ Σe δ req result ens =>
+      ⨁ ξ : Sub Σe Σr =>
+      dmut_assert_formulas (formula_eqs ts (subst ξ δ)) ;;
+      dmut_sub ξ
+        (dmut_consume req ;;
+         dmut_fresh result τ
+           (dmut_produce ens ;;
+            dmut_pure (@term_var _ result _ inctx_zero)))
+    end.
+
+  Fixpoint dmut_exec {Γ τ Σ} (s : Stm Γ τ) {struct s} :
+    DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σ :=
+    match s with
+    | stm_lit _ l => dmut_pure (term_lit τ l)
+    | stm_exp e => dmut_eval_exp e
+    | stm_let x τ s1 s2 =>
+      t1 <- dmut_exec s1 ;;
+      dmut_pushpop t1 (dmut_exec s2)
+    | stm_block δ s =>
+      dmut_pushspops (lift δ) (dmut_exec s)
+    | stm_assign x s =>
+      t <- dmut_exec s ;;
+      dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
+      dmut_pure t
+    | stm_call f es =>
+      ts <- dmut_eval_exps es ;;
+      match CEnv f with
+      | Some c => dmut_call c ts
+      | None   => dmut_fail "dmut_exec" "Function call without contract" (f,ts)
+      end
+    | stm_call_frame δ s =>
+      δr <- dmut_get_local ;;
+      dmut_put_local (lift δ) ;;
+      dmut_bind_left (dmut_exec s) (dmut_put_local δr)
+    | stm_call_external f es =>
+      ts <- dmut_eval_exps es ;;
+      dmut_call (CEnvEx f) ts
+    | stm_if e s1 s2 =>
+        (dmut_assume_exp e ;; dmut_exec s1) ⊗
+        (dmut_assume_exp (exp_not e) ;; dmut_exec s2)
+    | stm_seq s1 s2 => dmut_exec s1 ;; dmut_exec s2
+    | stm_assertk e1 _ k =>
+      t <- dmut_eval_exp e1 ;;
+      dmut_assume_term t ;;
+      dmut_exec k
+    | stm_fail _ _ =>
+      dmut_block
+    | stm_match_list e s1 xh xt s2 =>
+      t <- dmut_eval_exp e ;;
+      (dmut_assume_formula
+         (formula_eq t (term_lit (ty_list _) nil));;
+       dmut_exec s1) ⊗
+      (dmut_fresh
+         (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
+         (dmut_assume_formula
+            (formula_eq (subst (sub_comp sub_wk1 sub_wk1) t)
+                        (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
+          dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
+          dmut_push_local (@term_var _ _ _ inctx_zero);;
+          t2 <- dmut_exec s2 ;;
+          dmut_pop_local ;;
+          dmut_pop_local ;;
+          dmut_pure t2)))
+    | stm_match_sum e xinl s1 xinr s2 =>
+      t <- dmut_eval_exp e ;;
+      dmut_match_sum t
+        (dmut_pushpop (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero) (dmut_exec s1))
+        (dmut_pushpop (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero) (dmut_exec s2))
+    | stm_match_pair e xl xr s =>
+      t <- dmut_eval_exp e ;;
+      dmut_match_pair
+        t
+        (dmut_pushspops
+           (env_snoc (env_snoc env_nil
+              (xl :: _) (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)))
+              (xr :: _) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero))
+           (dmut_exec s))
+    | stm_match_enum E e alts =>
+      t <- dmut_eval_exp e ;;
+      dmut_match_enum t (fun K => dmut_exec (alts K))
+    | stm_match_tuple e p s =>
+      dmut_fail "dmut_exec" "stm_match_tuple not implemented" tt
+    | stm_match_union U e alt__ctx alt__pat =>
+      dmut_fail "dmut_exec" "stm_match_union not implemented" tt
+    | @stm_match_record _ _ R Δ e p rhs =>
+      t <- dmut_eval_exp e ;;
+      match term_get_record t with
       | Some ts =>
         let ζ__R := record_pattern_match p ts in
-        d Σ1 (ζ01 ►► ζ__R)
+        dmut_pushspops ζ__R (dmut_exec rhs)
       | None =>
-        (dmut_freshen_recordpat id p >>= fun _ ζ '(t__p,ζ__R) =>
+        dmut_freshen_recordpat 𝑿to𝑺 p >>= fun _ ζ '(t__p,ζ__R) =>
         dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ t) t__p) ;;
-        dmut_sub (ζ ►► ζ__R) d) ζ01
-      end.
+        dmut_pushspops ζ__R (dmut_exec rhs)
+      end
+    | stm_read_register reg =>
+      ⨁ t =>
+        dmut_consume_chunk (chunk_ptsreg reg t);;
+        dmut_produce_chunk (chunk_ptsreg reg t);;
+        dmut_pure t
+    | stm_write_register reg e =>
+      tnew <- dmut_eval_exp e ;;
+      ⨁ told =>
+        dmut_consume_chunk (chunk_ptsreg reg told);;
+        dmut_produce_chunk (chunk_ptsreg reg tnew);;
+        dmut_pure tnew
+    | stm_bind _ _ =>
+      dmut_fail "dmut_exec" "stm_bind not supported" tt
+    | stm_debugk k =>
+      dmut_exec k
+    end.
 
-    Fixpoint dmut_produce {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
-      match asn with
-      | asn_formula fml => dmut_assume_formula fml
-      | asn_chunk c     => dmut_produce_chunk c
-      | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
-                           (dmut_assume_term (term_not b) ;; dmut_produce a2)
-      | asn_match_enum E t alts =>
-        dmut_match_enum t (fun k => dmut_produce (alts k))
-      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        dmut_match_sum s (dmut_produce alt_inl) (dmut_produce alt_inr)
-      | asn_match_list s alt_nil xh xt alt_cons =>
-        dmut_fail "dmut_produce" "Not implemented" asn
-      | asn_match_pair s xl xr rhs =>
-        dmut_match_pair s (dmut_produce rhs)
-      | asn_match_tuple s p rhs =>
-        dmut_fail "dmut_produce" "Not implemented" asn
-      | asn_match_record R s p rhs =>
-        dmut_match_record p s (dmut_produce rhs)
-      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-        match term_get_union s with
-        | Some (existT K ts) =>
-          dmut_fail "dmut_produce" "Not implemented" asn
+  Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
+    match c with
+    | MkSepContract _ _ Σ δ req result ens =>
+        dmut_produce req ;;
+        dmut_exec s      >>= fun Σ1 ζ1 t =>
+        dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens)
+        (* dmut_leakcheck *)
+    end.
+
+  Program Definition dmut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
+    SymOutcome DynamicMutatorError Unit (sep_contract_logic_variables c) :=
+    let δ    := sep_contract_localstore c in
+    let s__sym := symbolicstate_initial δ in
+    sout_bind nil (dmut_contract c s (sub_id _) nil s__sym) (fun _ _ _ _ => sout_block).
+
+  Definition ValidContractNoEvar (Δ : PCtx) (τ : Ty) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    ForallNamed (fun ι => sout_safe (sep_contract_logic_variables c) ι (dmut_contract_outcome c body)).
+
+  Section CallerContext.
+
+    Context {Γ : PCtx}.
+
+    Definition dmut_consume_chunk_evar {Σe Σr} (c : Chunk Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr.
+      refine (dmut_get_heap >>= fun Σ1 ζ1 h1 => _).
+      refine (let L1 := subst ζ1 L in _).
+      eapply dmut_bind.
+      apply (dmut_angelic_list
+        "dmut_consume_chunk_evar"
+        "Empty extraction"
+        {| evarerror_env := L1;
+           evarerror_data := c;
+        |}
+        (extract_chunk c h1 L1)).
+      intros Σ2 ζ2 [L2 h2].
+      refine (dmut_put_heap h2;; dmut_pure L2).
+    Defined.
+
+    (* This function tries to assert the equality between the terms `te` from
+       a callee context and `tr` from the caller context. The callee context
+       variables are all evars and if possible, it will fill in evars that are
+       strictly necessary for the assertion to be true. *)
+    Definition dmut_assert_term_eq_evar {Σe Σr σ} (te : Term Σe σ) (tr : Term Σr σ) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+      (* Make sure we get the up to date substitution. *)
+      dmut_pure tt >>= fun Σr1 ζ1 _ =>
+      let tr1 := subst (T := fun Σ => Term Σ _) ζ1 tr in
+      let L1  := subst ζ1 L in
+      (* Try to fully match te against tr1, potentially filling in some evars. *)
+      match match_term te tr1 L1 with
+      | Some e => dmut_pure e
+      | None =>
+        (* The match failed. See if all evars in te are already known.*)
+        match eval_term_evar L1 te with
+        | Some te1 =>
+          (* All evars are known. So assert the equality between the terms in
+             the caller context. *)
+          dmut_assert_formula (formula_eq te1 tr1);; dmut_pure L1
         | None =>
-          dmut_fail "dmut_produce" "Not implemented" asn
+          (* Give up. This is currently missing some corner cases where a
+             sub-term of te would already constrain all appearing evars, but
+             which can't be fully unified with tr. match_term could be
+             augmented to also handle this kind of case. *)
+          dmut_fail
+            "dmut_assert_term_eq_evar"
+            "Uninstantiated evars variable"
+            {| evarerror_env := L;
+               evarerror_data := (te,tr)
+            |}
         end
-      | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
-      | asn_exist ς τ a => dmut_fresh ς τ (dmut_produce a)
-      | asn_debug => dmut_pure tt
       end.
 
-    Fixpoint dmut_consume {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
+    Equations(noeqns) dmut_assert_namedenv_eq_evar {X Σe Σr σs} (te : NamedEnv (X:=X) (Term Σe) σs) (tr : NamedEnv (Term Σr) σs) :
+      EvarEnv Σe Σr -> DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+      dmut_assert_namedenv_eq_evar env_nil env_nil := dmut_pure;
+      dmut_assert_namedenv_eq_evar (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) :=
+        fun L => dmut_assert_namedenv_eq_evar E1 E2 L >>= fun _ ζ =>
+                 dmut_assert_term_eq_evar t1 (subst (T := fun Σ => Term Σ _) ζ t2).
+
+    Definition dmut_consume_formula_evar {Σe Σr} (fml : Formula Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
+      match fml with
+      | formula_bool b =>
+        match eval_term_evar L b with
+        | Some b' => dmut_assert_term b';; dmut_pure L
+        | None    => dmut_fail
+                       "dmut_consume_formula_evar"
+                       "Uninstantiated evars when consuming formula"
+                       {| evarerror_env := L;
+                          evarerror_data := fml
+                       |}
+        end
+      | formula_prop ζ P =>
+        match evarenv_to_option_sub L with
+        | Some ζ' => dmut_assert_formula (formula_prop (sub_comp ζ ζ') P);; dmut_pure L
+        | None   => dmut_fail
+                      "dmut_consume_formula_evar"
+                      "Uninstantiated evars when consuming formula"
+                      {| evarerror_env := L;
+                         evarerror_data := fml
+                      |}
+        end
+      | formula_eq t1 t2 =>
+        match eval_term_evar L t1, eval_term_evar L t2 with
+        | Some t1', Some t2' => dmut_assert_formula (formula_eq t1' t2') ;; dmut_pure L
+        | Some t1', None     => dmut_assert_term_eq_evar t2 t1' L
+        | None    , Some t2' => dmut_assert_term_eq_evar t1 t2' L
+        | _       , _        => dmut_fail
+                                  "dmut_consume_formula_evar"
+                                  "Uninstantiated evars when consuming formula"
+                                  {| evarerror_env := L;
+                                     evarerror_data := fml
+                                  |}
+        end
+      | formula_neq t1 t2 =>
+        match eval_term_evar L t1, eval_term_evar L t2 with
+        | Some t1', Some t2' => dmut_assert_formula (formula_neq t1' t2') ;; dmut_pure L
+        (* | Some t1', None     => dmut_assert_term_neq_evar t2 t1' L *)
+        (* | None    , Some t2' => dmut_assert_term_neq_evar t1 t2' L *)
+        | _       , _        => dmut_fail
+                                  "dmut_consume_formula_evar"
+                                  "Uninstantiated evars when consuming formula"
+                                  {| evarerror_env := L;
+                                     evarerror_data := fml
+                                  |}
+        end
+      end.
+
+    Fixpoint dmut_consume_evar {Σe Σr} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
       match asn with
-      | asn_formula fml => dmut_assert_formula fml
-      | asn_chunk c     => dmut_consume_chunk c
-      | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_consume a1) ⊗
-                           (dmut_assume_term (term_not b) ;; dmut_consume a2)
-      | asn_match_enum E t alts =>
-        dmut_match_enum t (fun k => dmut_consume (alts k))
-      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        dmut_match_sum s (dmut_consume alt_inl) (dmut_consume alt_inr)
+      | asn_formula fml => dmut_consume_formula_evar fml L
+      | asn_chunk c => dmut_consume_chunk_evar c L
+      | asn_if b a1 a2 =>
+        match eval_term_evar L b with
+        | Some b' => (dmut_assert_term b';; dmut_consume_evar a1 L)
+                       ⊕
+                     (dmut_assert_term (term_not b');; dmut_consume_evar a2 L)
+        | None    => dmut_fail
+                       "dmut_consume_evar"
+                       "Uninstantiated evars when consuming assertion"
+                       {| evarerror_env := L;
+                          evarerror_data := asn
+                       |}
+        end
+      | asn_match_enum E k alts =>
+        match eval_term_evar L k with
+        | Some k1 =>
+          dmut_angelic_finite
+            (𝑬𝑲 E)
+            (fun k2 =>
+               dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
+               dmut_consume_evar (alts k2) L)
+        | None => dmut_fail
+                    "dmut_consume_evar"
+                    "Uninstantiated evars when consuming assertion"
+                    {| evarerror_env := L;
+                       evarerror_data := asn
+                    |}
+        end
+      | asn_match_sum σ τ scr xl alt_inl xr alt_inr =>
+        match eval_term_evar L scr with
+        | Some s =>
+          match term_get_sum s with
+          | Some (inl t) =>
+            let Lxl := L ► (xl∶σ ↦ Some t) in
+            Lxl' <- dmut_consume_evar alt_inl Lxl ;;
+            dmut_pure (env_tail Lxl')
+          | Some (inr t) =>
+            let Lxr := L ► (xr∶τ ↦ Some t) in
+            Lxr' <- dmut_consume_evar alt_inr Lxr ;;
+            dmut_pure (env_tail Lxr')
+          | None =>
+            dmut_angelic_binary
+              (let Lxl := L ► (xl∶σ ↦ None) in
+                dmut_consume_evar alt_inl Lxl >>= fun _ ζ Lxl' =>
+                  match env_unsnoc Lxl' with
+                  | (L' , Some t) =>
+                    (* TODO(2.0): This assert should move before the *)
+                    (* consumption of the alternative. *)
+                    (dmut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_inl t)) ;;
+                     dmut_pure L')
+                  | (_ , None) =>
+                    dmut_fail
+                      "dmut_consume_evar"
+                      "Uninstantiated evars when consuming assertion"
+                      {| evarerror_env := Lxl;
+                         evarerror_data := alt_inl
+                      |}
+                  end)
+              (let Lxr := L ► (xr∶τ ↦ None) in
+                dmut_consume_evar alt_inr Lxr >>= fun _ ζ Lxr' =>
+                  match env_unsnoc Lxr' with
+                  | (L' , Some t) =>
+                    (* TODO(2.0): This assert should move before the *)
+                    (* consumption of the alternative. *)
+                    (dmut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_inr t)) ;;
+                     dmut_pure L')
+                  | (_ , None) =>
+                    dmut_fail
+                      "dmut_consume_evar"
+                      "Uninstantiated evars when consuming assertion"
+                      {| evarerror_env := Lxr;
+                         evarerror_data := alt_inr
+                      |}
+                  end)
+          end
+        | _ => dmut_fail
+                 "dmut_consume_evar"
+                 "Uninstantiated evars when consuming assertion"
+                 {| evarerror_env := L;
+                    evarerror_data := asn
+                 |}
+        end
       | asn_match_list s alt_nil xh xt alt_cons =>
-        dmut_fail "dmut_consume" "Not implemented" asn
-      | asn_match_pair s xl xr rhs =>
-        dmut_match_pair s (dmut_consume rhs)
+        dmut_fail "dmut_consume_evar" "Not implemented" asn
+      | asn_match_pair scr xl xr rhs =>
+        match eval_term_evar L scr with
+        | Some s =>
+          match term_get_pair s with
+          | Some (tl, tr) =>
+            let Lrhs := L ► (xl∶_ ↦ Some tl) ► (xr∶_ ↦ Some tr) in
+            Lrhs' <- dmut_consume_evar rhs Lrhs ;;
+            dmut_pure (env_tail (env_tail Lrhs'))
+          | None =>
+            dmut_fail "dmut_consume_evar" "Not implemented" asn
+          end
+        | None => dmut_fail
+                    "dmut_consume_evar"
+                    "Uninstantiated evars when consuming assertion"
+                    {| evarerror_env := L;
+                       evarerror_data := asn
+                    |}
+        end
       | asn_match_tuple s p rhs =>
-        dmut_fail "dmut_consume" "Not implemented" asn
-      | asn_match_record R s p rhs =>
-        dmut_match_record p s (dmut_consume rhs)
+        dmut_fail "dmut_consume_evar" "Not implemented" asn
+      | asn_match_record R scr p rhs =>
+        match eval_term_evar L scr with
+        | Some s =>
+          match term_get_record s with
+          | Some ts  =>
+            let ζ__R := record_pattern_match p ts in
+            let LR := L ►► env_map (fun _ t => Some t) ζ__R in
+            LR' <- dmut_consume_evar rhs LR ;;
+            dmut_pure (env_drop _ LR')
+          | None =>
+            dmut_fail "dmut_consume_evar" "Not implemented" asn
+          end
+        | None => dmut_fail
+                    "dmut_consume_evar"
+                    "Uninstantiated evars when consuming assertion"
+                    {| evarerror_env := L;
+                       evarerror_data := asn
+                    |}
+        end
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-        dmut_fail  "dmut_consume" "Not implemented" asn
-      | asn_sep a1 a2   => dmut_consume a1 ;; dmut_consume a2
+        dmut_fail  "dmut_consume_evar" "Not implemented" asn
+      | asn_sep a1 a2 =>
+        dmut_consume_evar a1 L >>= fun _ _ => dmut_consume_evar a2
       | asn_exist ς τ a =>
-        ⨁ t : Term Σ τ =>
-        dmut_sub (sub_snoc (sub_id _) (ς , τ) t) (dmut_consume a)
-      | asn_debug => dmut_pure tt
+        (* Dynamically allocate a new evar ς in the EvarEnv. *)
+        let Lς := L ► (ς∶τ ↦ None) in
+        dmut_consume_evar a Lς >>= fun _ _ Lς' =>
+        (* Split off the last evar again. *)
+        match env_unsnoc Lς' with
+        | (L' , Some _) =>
+          (* ς has been instantiated during execution. So we just return the
+          final EvarEnv with ς stripped off. *)
+          dmut_pure L'
+        | (_  , None)   =>
+          (* During execution the evar ς was never instantiated, so fail. *)
+          dmut_fail
+            "dmut_consume_evar"
+            "Uninstantiated evars when consuming assertion"
+            {| evarerror_env := L;
+               evarerror_data := asn
+            |}
+        end
+      | asn_debug => dmut_pure L
       end.
 
-    Definition dmut_call {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
-      match contract with
-      | MkSepContract _ _ Σe δ req result ens =>
-        ⨁ ξ : Sub Σe Σr =>
-        dmut_assert_formulas (formula_eqs ts (subst ξ δ)) ;;
-        dmut_sub ξ
-          (dmut_consume req ;;
-           dmut_fresh result τ
-             (dmut_produce ens ;;
-              dmut_pure (@term_var _ result _ inctx_zero)))
-      end.
+  End CallerContext.
 
-    Fixpoint dmut_exec {Γ τ Σ} (s : Stm Γ τ) {struct s} :
+  Definition dmut_call_evar {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
+    match contract with
+    | MkSepContract _ _ Σe δ req result ens =>
+       dmut_consume_evar req (create_evarenv Σe Σr) >>= fun Σr1 ζ1 E1 =>
+       dmut_assert_namedenv_eq_evar δ (env_map (fun _ => subst (T := fun Σ => Term Σ _) ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
+       match evarenv_to_option_sub E2 with
+       | Some ξ => dmut_sub ξ (dmut_fresh result τ (dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
+       | None => dmut_fail
+                   "dmut_call_evar"
+                   "Uninstantiated evars after consuming precondition"
+                   {| evarerror_env := E2;
+                      evarerror_data := (contract,ts)
+                   |}
+       end
+    end.
+
+  Section WithConfig.
+
+    Variable cfg : Config.
+
+    Definition dmut_call_evar_debug {Γ Δ τ Σr} (f : 𝑭 Δ τ) (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
+      fun Σ1 ζ1 pc1 s1 =>
+        let o := dmut_call_evar contract ts ζ1 pc1 s1 in
+        if config_debug_function cfg f
+        then sout_debug
+               {| sdebug_call_function_parameters    := Δ;
+                  sdebug_call_function_result_type   := τ;
+                  sdebug_call_function_name          := f;
+                  sdebug_call_function_arguments     := subst ζ1 ts;
+                  sdebug_call_function_contract      := contract;
+                  sdebug_call_pathcondition          := pc1;
+                  sdebug_call_program_context        := Γ;
+                  sdebug_call_localstore             := symbolicstate_localstore s1;
+                  sdebug_call_heap                   := symbolicstate_heap s1;
+               |}
+               o
+        else o.
+
+    Fixpoint dmut_exec_evar {Γ τ Σ} (s : Stm Γ τ) {struct s} :
       DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σ :=
       match s with
       | stm_lit _ l => dmut_pure (term_lit τ l)
       | stm_exp e => dmut_eval_exp e
       | stm_let x τ s1 s2 =>
-        t1 <- dmut_exec s1 ;;
-        dmut_pushpop t1 (dmut_exec s2)
+        t1 <- dmut_exec_evar s1 ;;
+        dmut_push_local t1 ;;
+        t2 <- dmut_exec_evar s2 ;;
+        dmut_pop_local ;;
+        dmut_pure t2
       | stm_block δ s =>
-        dmut_pushspops (lift δ) (dmut_exec s)
+        dmut_pushs_local (lift δ) ;;
+        t <- dmut_exec_evar s ;;
+        dmut_pops_local _ ;;
+        dmut_pure t
       | stm_assign x s =>
-        t <- dmut_exec s ;;
+        t <- dmut_exec_evar s ;;
         dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
         dmut_pure t
       | stm_call f es =>
         ts <- dmut_eval_exps es ;;
         match CEnv f with
-        | Some c => dmut_call c ts
-        | None   => dmut_fail "dmut_exec" "Function call without contract" (f,ts)
+        | Some c => dmut_call_evar_debug f c ts
+        | None   => dmut_fail "dmut_exec_evar" "Function call without contract" (f,ts)
         end
       | stm_call_frame δ s =>
         δr <- dmut_get_local ;;
         dmut_put_local (lift δ) ;;
-        dmut_bind_left (dmut_exec s) (dmut_put_local δr)
+        dmut_bind_left (dmut_exec_evar s) (dmut_put_local δr)
       | stm_call_external f es =>
         ts <- dmut_eval_exps es ;;
-        dmut_call (CEnvEx f) ts
+        dmut_call_evar (CEnvEx f) ts
       | stm_if e s1 s2 =>
-          (dmut_assume_exp e ;; dmut_exec s1) ⊗
-          (dmut_assume_exp (exp_not e) ;; dmut_exec s2)
-      | stm_seq s1 s2 => dmut_exec s1 ;; dmut_exec s2
+        t__sc <- dmut_eval_exp e ;;
+        match term_get_lit t__sc with
+        | Some b =>
+          if b
+          then dmut_exec_evar s1
+          else dmut_exec_evar s2
+        | None =>
+          (dmut_assume_term t__sc ;; dmut_exec_evar s1) ⊗
+          (dmut_assume_term (term_not t__sc) ;; dmut_exec_evar s2)
+        end
+      | stm_seq s1 s2 => dmut_exec_evar s1 ;; dmut_exec_evar s2
       | stm_assertk e1 _ k =>
         t <- dmut_eval_exp e1 ;;
-        dmut_assume_term t ;;
-        dmut_exec k
+        dmut_assert_term t ;;
+        dmut_exec_evar k
       | stm_fail _ _ =>
         dmut_block
       | stm_match_list e s1 xh xt s2 =>
         t <- dmut_eval_exp e ;;
         (dmut_assume_formula
            (formula_eq t (term_lit (ty_list _) nil));;
-         dmut_exec s1) ⊗
+         dmut_exec_evar s1) ⊗
         (dmut_fresh
            (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
            (dmut_assume_formula
-              (formula_eq (subst (sub_comp sub_wk1 sub_wk1) t)
+              (formula_eq (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) t)
                           (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
             dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
             dmut_push_local (@term_var _ _ _ inctx_zero);;
-            t2 <- dmut_exec s2 ;;
+            t2 <- dmut_exec_evar s2 ;;
             dmut_pop_local ;;
             dmut_pop_local ;;
             dmut_pure t2)))
       | stm_match_sum e xinl s1 xinr s2 =>
-        t <- dmut_eval_exp e ;;
-        dmut_match_sum t
-          (dmut_pushpop (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero) (dmut_exec s1))
-          (dmut_pushpop (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero) (dmut_exec s2))
-      | stm_match_pair e xl xr s =>
-        t <- dmut_eval_exp e ;;
-        dmut_match_pair
-          t
-          (dmut_pushspops
-             (env_snoc (env_snoc env_nil
-                (xl :: _) (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)))
-                (xr :: _) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero))
-             (dmut_exec s))
-      | stm_match_enum E e alts =>
-        t <- dmut_eval_exp e ;;
-        dmut_match_enum t (fun K => dmut_exec (alts K))
-      | stm_match_tuple e p s =>
-        dmut_fail "dmut_exec" "stm_match_tuple not implemented" tt
-      | stm_match_union U e alt__ctx alt__pat =>
-        dmut_fail "dmut_exec" "stm_match_union not implemented" tt
-      | @stm_match_record _ _ R Δ e p rhs =>
-        t <- dmut_eval_exp e ;;
-        match term_get_record t with
-        | Some ts =>
-          let ζ__R := record_pattern_match p ts in
-          dmut_pushspops ζ__R (dmut_exec rhs)
+        t__sc <- dmut_eval_exp e ;;
+        match term_get_sum t__sc with
+        | Some (inl t) =>
+          dmut_push_local t;;
+          dmut_bind_left (dmut_exec_evar s1) dmut_pop_local
+        | Some (inr t) =>
+          dmut_push_local t;;
+          dmut_bind_left (dmut_exec_evar s2) dmut_pop_local
         | None =>
-          dmut_freshen_recordpat 𝑿to𝑺 p >>= fun _ ζ '(t__p,ζ__R) =>
-          dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ t) t__p) ;;
-          dmut_pushspops ζ__R (dmut_exec rhs)
+          dmut_fresh _ _
+            (dmut_assume_formula
+               (formula_eq (subst (T := fun Σ => Term Σ _) sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
+             dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
+             dmut_bind_left (dmut_exec_evar s1) dmut_pop_local) ⊗
+          dmut_fresh _ _
+            (dmut_assume_formula
+               (formula_eq (subst (T := fun Σ => Term Σ _) sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
+             dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
+             dmut_bind_left (dmut_exec_evar s2) dmut_pop_local)
         end
-      | stm_read_register reg =>
-        ⨁ t =>
-          dmut_consume_chunk (chunk_ptsreg reg t);;
-          dmut_produce_chunk (chunk_ptsreg reg t);;
+      | stm_match_pair e xl xr s =>
+        t__sc <- dmut_eval_exp e ;;
+        match term_get_pair t__sc with
+        | Some (t1,t2) =>
+          dmut_push_local t1;;
+          dmut_push_local t2;;
+          t <- dmut_exec_evar s ;;
+          dmut_pop_local ;;
+          dmut_pop_local ;;
           dmut_pure t
+        | None =>
+          dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
+            (dmut_assume_formula
+               (formula_eq
+                  (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) t__sc)
+                  (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
+             dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
+             dmut_push_local (@term_var _ _ _ inctx_zero);;
+             t <- dmut_exec_evar s ;;
+             dmut_pop_local ;;
+             dmut_pop_local ;;
+             dmut_pure t))
+        end
+      | stm_match_enum E e alts =>
+        t__sc <- dmut_eval_exp e ;;
+        match term_get_lit t__sc with
+        | Some K => dmut_exec_evar (alts K)
+        | None =>
+          dmut_demonic_finite
+            (𝑬𝑲 E)
+            (fun K =>
+               dmut_assume_formula (formula_eq t__sc (term_enum E K));;
+               dmut_exec_evar (alts K))
+        end
+      | stm_match_tuple e p s =>
+        ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_tuplepat p) ;;
+        let '(t__sc,(t__p,t__Δ)) := ts in
+        dmut_assume_formula (formula_eq t__sc t__p) ;;
+        dmut_pushs_local t__Δ ;;
+        t <- dmut_exec_evar s ;;
+        dmut_pops_local _ ;;
+        dmut_pure t
+      | stm_match_union U e alt__pat alt__rhs =>
+        t__sc <- dmut_eval_exp e ;;
+        match term_get_union t__sc with
+        | Some (existT K t__field) =>
+          dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
+            dmut_assume_formula (formula_eq t__pat (subst (T := fun Σ => Term Σ _) ζ2 t__field));;
+            dmut_pushs_local δ__Δ;;
+            t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
+            dmut_pops_local _;;
+            dmut_pure t__rhs)
+        | None =>
+          dmut_demonic_finite
+            (𝑼𝑲 U)
+            (fun K =>
+               dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
+               dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 t__sc) (term_union U K t__pat));;
+               dmut_pushs_local δ__Δ;;
+               t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
+               dmut_pops_local _;;
+               dmut_pure t__rhs))
+        end
+      | stm_match_record R e p s =>
+        ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat 𝑿to𝑺 p) ;;
+        let '(t__sc,(t__p,t__Δ)) := ts in
+        dmut_assume_formula (formula_eq t__sc t__p) ;;
+        dmut_pushs_local t__Δ ;;
+        t <- dmut_exec_evar s ;;
+        dmut_pops_local _ ;;
+        dmut_pure t
+      | stm_read_register reg =>
+        let x := fresh Σ None in
+        dmut_consume_chunk_evar (chunk_ptsreg reg (@term_var [(x,_)] x _ inctx_zero)) [None]%arg >>= fun Σ1 _ E1 =>
+        match snd (env_unsnoc E1) with
+        | Some t => dmut_produce_chunk (chunk_ptsreg reg t) ;; dmut_pure t
+        (* Extracting the points to chunk should never fail here. Because there is exactly one binding
+           in the ghost environment and the chunk matching will always instantiate it. *)
+        | None => dmut_fail "dmut_exec_evar" "You have found a unicorn." tt
+        end
       | stm_write_register reg e =>
+        let x := fresh Σ None in
         tnew <- dmut_eval_exp e ;;
-        ⨁ told =>
-          dmut_consume_chunk (chunk_ptsreg reg told);;
-          dmut_produce_chunk (chunk_ptsreg reg tnew);;
-          dmut_pure tnew
+        dmut_consume_chunk_evar (chunk_ptsreg reg (@term_var _ x _ inctx_zero)) [None]%arg ;;
+        dmut_produce_chunk (chunk_ptsreg reg tnew) ;;
+        dmut_pure tnew
       | stm_bind _ _ =>
-        dmut_fail "dmut_exec" "stm_bind not supported" tt
+        dmut_fail "dmut_exec_evar" "stm_bind not supported" tt
       | stm_debugk k =>
-        dmut_exec k
+        dmut_exec_evar k
       end.
 
-    Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
+    Definition dmut_contract_evar {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
       match c with
       | MkSepContract _ _ Σ δ req result ens =>
           dmut_produce req ;;
-          dmut_exec s      >>= fun Σ1 ζ1 t =>
-          dmut_sub (sub_snoc ζ1 (result,τ) t) (dmut_consume ens)
+          dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
+          dmut_consume_evar ens (subst (sub_snoc ζ1 (result,τ) t) (create_evarenv_id _)) ;;
           (* dmut_leakcheck *)
-      end.
-
-    Program Definition dmut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
-      SymOutcome DynamicMutatorError Unit (sep_contract_logic_variables c) :=
-      let δ    := sep_contract_localstore c in
-      let s__sym := symbolicstate_initial δ in
-      sout_bind nil (dmut_contract c s (sub_id _) nil s__sym) (fun _ _ _ _ => sout_block).
-
-    Definition ValidContractDynMut (Δ : PCtx) (τ : Ty) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      ForallNamed (fun ι => sout_safe (sep_contract_logic_variables c) ι (dmut_contract_outcome c body)).
-
-    Section CallerContext.
-
-      Context {Γ : PCtx}.
-
-      Definition dmut_consume_chunk_evar {Σe Σr} (c : Chunk Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr.
-        refine (dmut_get_heap >>= fun Σ1 ζ1 h1 => _).
-        refine (let L1 := subst ζ1 L in _).
-        eapply dmut_bind.
-        apply (dmut_angelic_list
-          "dmut_consume_chunk_evar"
-          "Empty extraction"
-          {| evarerror_env := L1;
-             evarerror_data := c;
-          |}
-          (extract_chunk c h1 L1)).
-        intros Σ2 ζ2 [L2 h2].
-        refine (dmut_put_heap h2;; dmut_pure L2).
-      Defined.
-
-      (* This function tries to assert the equality between the terms `te` from
-         a callee context and `tr` from the caller context. The callee context
-         variables are all evars and if possible, it will fill in evars that are
-         strictly necessary for the assertion to be true. *)
-      Definition dmut_assert_term_eq_evar {Σe Σr σ} (te : Term Σe σ) (tr : Term Σr σ) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        (* Make sure we get the up to date substitution. *)
-        dmut_pure tt >>= fun Σr1 ζ1 _ =>
-        let tr1 := subst (T := fun Σ => Term Σ _) ζ1 tr in
-        let L1  := subst ζ1 L in
-        (* Try to fully match te against tr1, potentially filling in some evars. *)
-        match match_term te tr1 L1 with
-        | Some e => dmut_pure e
-        | None =>
-          (* The match failed. See if all evars in te are already known.*)
-          match eval_term_evar L1 te with
-          | Some te1 =>
-            (* All evars are known. So assert the equality between the terms in
-               the caller context. *)
-            dmut_assert_formula (formula_eq te1 tr1);; dmut_pure L1
-          | None =>
-            (* Give up. This is currently missing some corner cases where a
-               sub-term of te would already constrain all appearing evars, but
-               which can't be fully unified with tr. match_term could be
-               augmented to also handle this kind of case. *)
-            dmut_fail
-              "dmut_assert_term_eq_evar"
-              "Uninstantiated evars variable"
-              {| evarerror_env := L;
-                 evarerror_data := (te,tr)
-              |}
-          end
-        end.
-
-      Equations(noeqns) dmut_assert_namedenv_eq_evar {X Σe Σr σs} (te : NamedEnv (X:=X) (Term Σe) σs) (tr : NamedEnv (Term Σr) σs) :
-        EvarEnv Σe Σr -> DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        dmut_assert_namedenv_eq_evar env_nil env_nil := dmut_pure;
-        dmut_assert_namedenv_eq_evar (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) :=
-          fun L => dmut_assert_namedenv_eq_evar E1 E2 L >>= fun _ ζ =>
-                   dmut_assert_term_eq_evar t1 (subst (T := fun Σ => Term Σ _) ζ t2).
-
-      Definition dmut_consume_formula_evar {Σe Σr} (fml : Formula Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        match fml with
-        | formula_bool b =>
-          match eval_term_evar L b with
-          | Some b' => dmut_assert_term b';; dmut_pure L
-          | None    => dmut_fail
-                         "dmut_consume_formula_evar"
-                         "Uninstantiated evars when consuming formula"
-                         {| evarerror_env := L;
-                            evarerror_data := fml
-                         |}
-          end
-        | formula_prop ζ P =>
-          match evarenv_to_option_sub L with
-          | Some ζ' => dmut_assert_formula (formula_prop (sub_comp ζ ζ') P);; dmut_pure L
-          | None   => dmut_fail
-                        "dmut_consume_formula_evar"
-                        "Uninstantiated evars when consuming formula"
-                        {| evarerror_env := L;
-                           evarerror_data := fml
-                        |}
-          end
-        | formula_eq t1 t2 =>
-          match eval_term_evar L t1, eval_term_evar L t2 with
-          | Some t1', Some t2' => dmut_assert_formula (formula_eq t1' t2') ;; dmut_pure L
-          | Some t1', None     => dmut_assert_term_eq_evar t2 t1' L
-          | None    , Some t2' => dmut_assert_term_eq_evar t1 t2' L
-          | _       , _        => dmut_fail
-                                    "dmut_consume_formula_evar"
-                                    "Uninstantiated evars when consuming formula"
-                                    {| evarerror_env := L;
-                                       evarerror_data := fml
-                                    |}
-          end
-        | formula_neq t1 t2 =>
-          match eval_term_evar L t1, eval_term_evar L t2 with
-          | Some t1', Some t2' => dmut_assert_formula (formula_neq t1' t2') ;; dmut_pure L
-          (* | Some t1', None     => dmut_assert_term_neq_evar t2 t1' L *)
-          (* | None    , Some t2' => dmut_assert_term_neq_evar t1 t2' L *)
-          | _       , _        => dmut_fail
-                                    "dmut_consume_formula_evar"
-                                    "Uninstantiated evars when consuming formula"
-                                    {| evarerror_env := L;
-                                       evarerror_data := fml
-                                    |}
-          end
-        end.
-
-      Fixpoint dmut_consume_evar {Σe Σr} (asn : Assertion Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr :=
-        match asn with
-        | asn_formula fml => dmut_consume_formula_evar fml L
-        | asn_chunk c => dmut_consume_chunk_evar c L
-        | asn_if b a1 a2 =>
-          match eval_term_evar L b with
-          | Some b' => (dmut_assert_term b';; dmut_consume_evar a1 L)
-                         ⊕
-                       (dmut_assert_term (term_not b');; dmut_consume_evar a2 L)
-          | None    => dmut_fail
-                         "dmut_consume_evar"
-                         "Uninstantiated evars when consuming assertion"
-                         {| evarerror_env := L;
-                            evarerror_data := asn
-                         |}
-          end
-        | asn_match_enum E k alts =>
-          match eval_term_evar L k with
-          | Some k1 =>
-            dmut_angelic_finite
-              (𝑬𝑲 E)
-              (fun k2 =>
-                 dmut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
-                 dmut_consume_evar (alts k2) L)
-          | None => dmut_fail
-                      "dmut_consume_evar"
-                      "Uninstantiated evars when consuming assertion"
-                      {| evarerror_env := L;
-                         evarerror_data := asn
-                      |}
-          end
-        | asn_match_sum σ τ scr xl alt_inl xr alt_inr =>
-          match eval_term_evar L scr with
-          | Some s =>
-            match term_get_sum s with
-            | Some (inl t) =>
-              let Lxl := L ► (xl∶σ ↦ Some t) in
-              Lxl' <- dmut_consume_evar alt_inl Lxl ;;
-              dmut_pure (env_tail Lxl')
-            | Some (inr t) =>
-              let Lxr := L ► (xr∶τ ↦ Some t) in
-              Lxr' <- dmut_consume_evar alt_inr Lxr ;;
-              dmut_pure (env_tail Lxr')
-            | None =>
-              dmut_angelic_binary
-                (let Lxl := L ► (xl∶σ ↦ None) in
-                  dmut_consume_evar alt_inl Lxl >>= fun _ ζ Lxl' =>
-                    match env_unsnoc Lxl' with
-                    | (L' , Some t) =>
-                      (* TODO(2.0): This assert should move before the *)
-                      (* consumption of the alternative. *)
-                      (dmut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_inl t)) ;;
-                       dmut_pure L')
-                    | (_ , None) =>
-                      dmut_fail
-                        "dmut_consume_evar"
-                        "Uninstantiated evars when consuming assertion"
-                        {| evarerror_env := Lxl;
-                           evarerror_data := alt_inl
-                        |}
-                    end)
-                (let Lxr := L ► (xr∶τ ↦ None) in
-                  dmut_consume_evar alt_inr Lxr >>= fun _ ζ Lxr' =>
-                    match env_unsnoc Lxr' with
-                    | (L' , Some t) =>
-                      (* TODO(2.0): This assert should move before the *)
-                      (* consumption of the alternative. *)
-                      (dmut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ s) (term_inr t)) ;;
-                       dmut_pure L')
-                    | (_ , None) =>
-                      dmut_fail
-                        "dmut_consume_evar"
-                        "Uninstantiated evars when consuming assertion"
-                        {| evarerror_env := Lxr;
-                           evarerror_data := alt_inr
-                        |}
-                    end)
-            end
-          | _ => dmut_fail
-                   "dmut_consume_evar"
-                   "Uninstantiated evars when consuming assertion"
-                   {| evarerror_env := L;
-                      evarerror_data := asn
-                   |}
-          end
-        | asn_match_list s alt_nil xh xt alt_cons =>
-          dmut_fail "dmut_consume_evar" "Not implemented" asn
-        | asn_match_pair scr xl xr rhs =>
-          match eval_term_evar L scr with
-          | Some s =>
-            match term_get_pair s with
-            | Some (tl, tr) =>
-              let Lrhs := L ► (xl∶_ ↦ Some tl) ► (xr∶_ ↦ Some tr) in
-              Lrhs' <- dmut_consume_evar rhs Lrhs ;;
-              dmut_pure (env_tail (env_tail Lrhs'))
-            | None =>
-              dmut_fail "dmut_consume_evar" "Not implemented" asn
-            end
-          | None => dmut_fail
-                      "dmut_consume_evar"
-                      "Uninstantiated evars when consuming assertion"
-                      {| evarerror_env := L;
-                         evarerror_data := asn
-                      |}
-          end
-        | asn_match_tuple s p rhs =>
-          dmut_fail "dmut_consume_evar" "Not implemented" asn
-        | asn_match_record R scr p rhs =>
-          match eval_term_evar L scr with
-          | Some s =>
-            match term_get_record s with
-            | Some ts  =>
-              let ζ__R := record_pattern_match p ts in
-              let LR := L ►► env_map (fun _ t => Some t) ζ__R in
-              LR' <- dmut_consume_evar rhs LR ;;
-              dmut_pure (env_drop _ LR')
-            | None =>
-              dmut_fail "dmut_consume_evar" "Not implemented" asn
-            end
-          | None => dmut_fail
-                      "dmut_consume_evar"
-                      "Uninstantiated evars when consuming assertion"
-                      {| evarerror_env := L;
-                         evarerror_data := asn
-                      |}
-          end
-        | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-          dmut_fail  "dmut_consume_evar" "Not implemented" asn
-        | asn_sep a1 a2 =>
-          dmut_consume_evar a1 L >>= fun _ _ => dmut_consume_evar a2
-        | asn_exist ς τ a =>
-          (* Dynamically allocate a new evar ς in the EvarEnv. *)
-          let Lς := L ► (ς∶τ ↦ None) in
-          dmut_consume_evar a Lς >>= fun _ _ Lς' =>
-          (* Split off the last evar again. *)
-          match env_unsnoc Lς' with
-          | (L' , Some _) =>
-            (* ς has been instantiated during execution. So we just return the
-            final EvarEnv with ς stripped off. *)
-            dmut_pure L'
-          | (_  , None)   =>
-            (* During execution the evar ς was never instantiated, so fail. *)
-            dmut_fail
-              "dmut_consume_evar"
-              "Uninstantiated evars when consuming assertion"
-              {| evarerror_env := L;
-                 evarerror_data := asn
-              |}
-          end
-        | asn_debug => dmut_pure L
-        end.
-
-    End CallerContext.
-
-    Definition dmut_call_evar {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
-      match contract with
-      | MkSepContract _ _ Σe δ req result ens =>
-         dmut_consume_evar req (create_evarenv Σe Σr) >>= fun Σr1 ζ1 E1 =>
-         dmut_assert_namedenv_eq_evar δ (env_map (fun _ => subst (T := fun Σ => Term Σ _) ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
-         match evarenv_to_option_sub E2 with
-         | Some ξ => dmut_sub ξ (dmut_fresh result τ (dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
-         | None => dmut_fail
-                     "dmut_call_evar"
-                     "Uninstantiated evars after consuming precondition"
-                     {| evarerror_env := E2;
-                        evarerror_data := (contract,ts)
-                     |}
-         end
-      end.
-
-    Section WithConfig.
-
-      Variable cfg : Config.
-
-      Definition dmut_call_evar_debug {Γ Δ τ Σr} (f : 𝑭 Δ τ) (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
-        fun Σ1 ζ1 pc1 s1 =>
-          let o := dmut_call_evar contract ts ζ1 pc1 s1 in
-          if config_debug_function cfg f
-          then sout_debug
-                 {| sdebug_call_function_parameters    := Δ;
-                    sdebug_call_function_result_type   := τ;
-                    sdebug_call_function_name          := f;
-                    sdebug_call_function_arguments     := subst ζ1 ts;
-                    sdebug_call_function_contract      := contract;
-                    sdebug_call_pathcondition          := pc1;
-                    sdebug_call_program_context        := Γ;
-                    sdebug_call_localstore             := symbolicstate_localstore s1;
-                    sdebug_call_heap                   := symbolicstate_heap s1;
-                 |}
-                 o
-          else o.
-
-      Fixpoint dmut_exec_evar {Γ τ Σ} (s : Stm Γ τ) {struct s} :
-        DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σ :=
-        match s with
-        | stm_lit _ l => dmut_pure (term_lit τ l)
-        | stm_exp e => dmut_eval_exp e
-        | stm_let x τ s1 s2 =>
-          t1 <- dmut_exec_evar s1 ;;
-          dmut_push_local t1 ;;
-          t2 <- dmut_exec_evar s2 ;;
-          dmut_pop_local ;;
-          dmut_pure t2
-        | stm_block δ s =>
-          dmut_pushs_local (lift δ) ;;
-          t <- dmut_exec_evar s ;;
-          dmut_pops_local _ ;;
-          dmut_pure t
-        | stm_assign x s =>
-          t <- dmut_exec_evar s ;;
-          dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
-          dmut_pure t
-        | stm_call f es =>
-          ts <- dmut_eval_exps es ;;
-          match CEnv f with
-          | Some c => dmut_call_evar_debug f c ts
-          | None   => dmut_fail "dmut_exec_evar" "Function call without contract" (f,ts)
-          end
-        | stm_call_frame δ s =>
-          δr <- dmut_get_local ;;
-          dmut_put_local (lift δ) ;;
-          dmut_bind_left (dmut_exec_evar s) (dmut_put_local δr)
-        | stm_call_external f es =>
-          ts <- dmut_eval_exps es ;;
-          dmut_call_evar (CEnvEx f) ts
-        | stm_if e s1 s2 =>
-          t__sc <- dmut_eval_exp e ;;
-          match term_get_lit t__sc with
-          | Some b =>
-            if b
-            then dmut_exec_evar s1
-            else dmut_exec_evar s2
-          | None =>
-            (dmut_assume_term t__sc ;; dmut_exec_evar s1) ⊗
-            (dmut_assume_term (term_not t__sc) ;; dmut_exec_evar s2)
-          end
-        | stm_seq s1 s2 => dmut_exec_evar s1 ;; dmut_exec_evar s2
-        | stm_assertk e1 _ k =>
-          t <- dmut_eval_exp e1 ;;
-          dmut_assert_term t ;;
-          dmut_exec_evar k
-        | stm_fail _ _ =>
           dmut_block
-        | stm_match_list e s1 xh xt s2 =>
-          t <- dmut_eval_exp e ;;
-          (dmut_assume_formula
-             (formula_eq t (term_lit (ty_list _) nil));;
-           dmut_exec_evar s1) ⊗
-          (dmut_fresh
-             (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
-             (dmut_assume_formula
-                (formula_eq (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) t)
-                            (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
-              dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
-              dmut_push_local (@term_var _ _ _ inctx_zero);;
-              t2 <- dmut_exec_evar s2 ;;
-              dmut_pop_local ;;
-              dmut_pop_local ;;
-              dmut_pure t2)))
-        | stm_match_sum e xinl s1 xinr s2 =>
-          t__sc <- dmut_eval_exp e ;;
-          match term_get_sum t__sc with
-          | Some (inl t) =>
-            dmut_push_local t;;
-            dmut_bind_left (dmut_exec_evar s1) dmut_pop_local
-          | Some (inr t) =>
-            dmut_push_local t;;
-            dmut_bind_left (dmut_exec_evar s2) dmut_pop_local
-          | None =>
-            dmut_fresh _ _
-              (dmut_assume_formula
-                 (formula_eq (subst (T := fun Σ => Term Σ _) sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
-               dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
-               dmut_bind_left (dmut_exec_evar s1) dmut_pop_local) ⊗
-            dmut_fresh _ _
-              (dmut_assume_formula
-                 (formula_eq (subst (T := fun Σ => Term Σ _) sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
-               dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
-               dmut_bind_left (dmut_exec_evar s2) dmut_pop_local)
-          end
-        | stm_match_pair e xl xr s =>
-          t__sc <- dmut_eval_exp e ;;
-          match term_get_pair t__sc with
-          | Some (t1,t2) =>
-            dmut_push_local t1;;
-            dmut_push_local t2;;
-            t <- dmut_exec_evar s ;;
-            dmut_pop_local ;;
-            dmut_pop_local ;;
-            dmut_pure t
-          | None =>
-            dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
-              (dmut_assume_formula
-                 (formula_eq
-                    (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) t__sc)
-                    (term_binop binop_pair (@term_var _ (𝑿to𝑺 xl) _ (inctx_succ inctx_zero)) (@term_var _ (𝑿to𝑺 xr) _ inctx_zero)));;
-               dmut_push_local (@term_var _ _ _ (inctx_succ inctx_zero));;
-               dmut_push_local (@term_var _ _ _ inctx_zero);;
-               t <- dmut_exec_evar s ;;
-               dmut_pop_local ;;
-               dmut_pop_local ;;
-               dmut_pure t))
-          end
-        | stm_match_enum E e alts =>
-          t__sc <- dmut_eval_exp e ;;
-          match term_get_lit t__sc with
-          | Some K => dmut_exec_evar (alts K)
-          | None =>
-            dmut_demonic_finite
-              (𝑬𝑲 E)
-              (fun K =>
-                 dmut_assume_formula (formula_eq t__sc (term_enum E K));;
-                 dmut_exec_evar (alts K))
-          end
-        | stm_match_tuple e p s =>
-          ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_tuplepat p) ;;
-          let '(t__sc,(t__p,t__Δ)) := ts in
-          dmut_assume_formula (formula_eq t__sc t__p) ;;
-          dmut_pushs_local t__Δ ;;
-          t <- dmut_exec_evar s ;;
-          dmut_pops_local _ ;;
-          dmut_pure t
-        | stm_match_union U e alt__pat alt__rhs =>
-          t__sc <- dmut_eval_exp e ;;
-          match term_get_union t__sc with
-          | Some (existT K t__field) =>
-            dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-              dmut_assume_formula (formula_eq t__pat (subst (T := fun Σ => Term Σ _) ζ2 t__field));;
-              dmut_pushs_local δ__Δ;;
-              t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
-              dmut_pops_local _;;
-              dmut_pure t__rhs)
-          | None =>
-            dmut_demonic_finite
-              (𝑼𝑲 U)
-              (fun K =>
-                 dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-                 dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 t__sc) (term_union U K t__pat));;
-                 dmut_pushs_local δ__Δ;;
-                 t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
-                 dmut_pops_local _;;
-                 dmut_pure t__rhs))
-          end
-        | stm_match_record R e p s =>
-          ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat 𝑿to𝑺 p) ;;
-          let '(t__sc,(t__p,t__Δ)) := ts in
-          dmut_assume_formula (formula_eq t__sc t__p) ;;
-          dmut_pushs_local t__Δ ;;
-          t <- dmut_exec_evar s ;;
-          dmut_pops_local _ ;;
-          dmut_pure t
-        | stm_read_register reg =>
-          let x := fresh Σ None in
-          dmut_consume_chunk_evar (chunk_ptsreg reg (@term_var [(x,_)] x _ inctx_zero)) [None]%arg >>= fun Σ1 _ E1 =>
-          match snd (env_unsnoc E1) with
-          | Some t => dmut_produce_chunk (chunk_ptsreg reg t) ;; dmut_pure t
-          (* Extracting the points to chunk should never fail here. Because there is exactly one binding
-             in the ghost environment and the chunk matching will always instantiate it. *)
-          | None => dmut_fail "dmut_exec_evar" "You have found a unicorn." tt
-          end
-        | stm_write_register reg e =>
-          let x := fresh Σ None in
-          tnew <- dmut_eval_exp e ;;
-          dmut_consume_chunk_evar (chunk_ptsreg reg (@term_var _ x _ inctx_zero)) [None]%arg ;;
-          dmut_produce_chunk (chunk_ptsreg reg tnew) ;;
-          dmut_pure tnew
-        | stm_bind _ _ =>
-          dmut_fail "dmut_exec_evar" "stm_bind not supported" tt
-        | stm_debugk k =>
-          dmut_exec_evar k
-        end.
+      end.
 
-      Definition dmut_contract_evar {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
-        match c with
-        | MkSepContract _ _ Σ δ req result ens =>
-            dmut_produce req ;;
-            dmut_exec_evar s      >>= fun Σ1 ζ1 t =>
-            dmut_consume_evar ens (subst (sub_snoc ζ1 (result,τ) t) (create_evarenv_id _)) ;;
-            (* dmut_leakcheck *)
-            dmut_pure tt
-        end.
+    (* Definition dmut_contract_evar {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) : *)
+    (*   Stm Δ τ -> SymOutcome DynamicMutatorError Unit (sep_contract_logic_variables c) := *)
+    (*   match c with *)
+    (*   | MkSepContract _ _ Σ δ req result ens => *)
+    (*     fun s => *)
+    (*       let mut := (dmut_produce req ;; *)
+    (*                   dmut_exec_evar s      >>= fun Σ1 ζ1 t => *)
+    (*                   dmut_consume_evar ens (subst (sub_snoc ζ1 (result::τ) t) (create_evarenv_id _)) ;; *)
+    (*                   dmut_pure tt (* dmut_leakcheck *))%dmut in *)
+    (*       let out := mut Σ (sub_id Σ) nil (symbolicstate_initial δ) in *)
+    (*       sout_bind nil out (fun _ _ _ _ => sout_block (A:=Unit)) *)
+    (*   end. *)
 
-      (* Definition dmut_contract_evar {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) : *)
-      (*   Stm Δ τ -> SymOutcome DynamicMutatorError Unit (sep_contract_logic_variables c) := *)
-      (*   match c with *)
-      (*   | MkSepContract _ _ Σ δ req result ens => *)
-      (*     fun s => *)
-      (*       let mut := (dmut_produce req ;; *)
-      (*                   dmut_exec_evar s      >>= fun Σ1 ζ1 t => *)
-      (*                   dmut_consume_evar ens (subst (sub_snoc ζ1 (result::τ) t) (create_evarenv_id _)) ;; *)
-      (*                   dmut_pure tt (* dmut_leakcheck *))%dmut in *)
-      (*       let out := mut Σ (sub_id Σ) nil (symbolicstate_initial δ) in *)
-      (*       sout_bind nil out (fun _ _ _ _ => sout_block (A:=Unit)) *)
-      (*   end. *)
+    Definition dmut_contract_evar_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
+      SymOutcome
+        DynamicMutatorError
+        (DynamicMutatorResult Δ Unit)
+        (sep_contract_logic_variables c) :=
+      let δ    := sep_contract_localstore c in
+      dmut_contract_evar c s (sub_id _) nil (symbolicstate_initial δ).
 
-      Definition dmut_contract_evar_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
-        SymOutcome
-          DynamicMutatorError
-          (DynamicMutatorResult Δ Unit)
-          (sep_contract_logic_variables c) :=
-        let δ    := sep_contract_localstore c in
-        dmut_contract_evar c s (sub_id _) nil (symbolicstate_initial δ).
+    Definition ValidContractWithConfig {Δ τ}
+      (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      ForallNamed (fun ι => sout_safe _ ι (dmut_contract_evar_outcome c body)).
 
-      Definition ValidContractDynMutWithConfig {Δ τ}
-        (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-        ForallNamed (fun ι => sout_safe _ ι (dmut_contract_evar_outcome c body)).
+  End WithConfig.
 
-    End WithConfig.
+  Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    ValidContractWithConfig default_config c body.
 
-    Definition ValidContractDynMutEvar (Δ : PCtx) (τ : Ty)
-               (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      ValidContractDynMutWithConfig default_config c body.
+  (* Transitional old name. *)
+  Definition ValidContractDynMut {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    ValidContract c body.
 
-    Definition sout_ok_opaque {ET AT Σ} (o : SymOutcome ET AT Σ) : Prop :=
-      is_true (sout_ok o).
-    Global Arguments sout_ok_opaque {ET AT} Σ o.
-    Global Opaque sout_ok_opaque.
+  Definition sout_ok_opaque {ET AT Σ} (o : SymOutcome ET AT Σ) : Prop :=
+    is_true (sout_ok o).
+  Global Arguments sout_ok_opaque {ET AT} Σ o.
+  Global Opaque sout_ok_opaque.
 
-    Definition ValidContractDynMutDebug (Δ : PCtx) (τ : Ty)
-               (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      sout_ok_opaque _ (sout_prune (dmut_contract_evar_outcome default_config c body)).
+  Definition ValidContractDebug {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    sout_ok_opaque _ (sout_prune (dmut_contract_evar_outcome default_config c body)).
 
-    Definition ValidContractDynMutReflect (Δ : PCtx) (τ : Ty)
-               (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (sout_ok (sout_prune (dmut_contract_evar_outcome default_config c body))).
+  Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    is_true (sout_ok (sout_prune (dmut_contract_evar_outcome default_config c body))).
 
-    Lemma dynmutevarreflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-      ValidContractDynMutReflect c body ->
-      ValidContractDynMutEvar c body.
-    Proof.
-      (* intros H. *)
-      (* apply (outcome_ok_spec _ (fun _ => True)) in H. *)
-      (* now rewrite outcome_satisfy_bind in H. *)
-    Admitted.
+  (* Transitional old name. *)
+  Definition ValidContractDynMutReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    ValidContractReflect c body.
 
-  End TwoPointO.
+  Lemma dynmutevarreflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+    ValidContractReflect c body ->
+    ValidContract c body.
+  Proof.
+    (* intros H. *)
+    (* apply (outcome_ok_spec _ (fun _ => True)) in H. *)
+    (* now rewrite outcome_satisfy_bind in H. *)
+  Admitted.
 
 End Mutators.
