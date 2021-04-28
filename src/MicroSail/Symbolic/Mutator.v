@@ -1460,9 +1460,9 @@ Module Mutators
         | asn_chunk c => dmut_consume_chunk_evar c L
         | asn_if b a1 a2 =>
           match eval_term_evar L b with
-          | Some b' => (dmut_assume_term b';; dmut_consume_evar a1 L)
-                         ⊗
-                       (dmut_assume_term (term_not b');; dmut_consume_evar a2 L)
+          | Some b' => (dmut_assert_term b';; dmut_consume_evar a1 L)
+                         ⊕
+                       (dmut_assert_term (term_not b');; dmut_consume_evar a2 L)
           | None    => dmut_fail
                          "dmut_consume_evar"
                          "Uninstantiated evars when consuming assertion"
@@ -2507,6 +2507,57 @@ Module Mutators
 
   Module TwoPointO.
 
+    Section EvarExplanation.
+
+      (* We currently avoid introducing existential variables into the
+         underlying symbolic path monad, because this would make the system more
+         complicated. Instead we avoid using existential quantification of the
+         path monad altogether and deal with it in the mutator instead.
+
+         This is achieved by temporarily creating an [EvarEnv] when needed, i.e.
+         when *consuming* the post-condition at the end of a function, or the
+         pre-condition of a called function. An [EvarEnv] can be understood as a
+         system of equations between existential variables and term in which
+         those existentials are fresh (c.f. solved forms for Hindley-Milner
+         constraint-based type checking).
+
+         Effectively, we have something like this
+
+             [∀ᾱ∃β̄, (βᵢ = tᵢ) ∧ ..]
+
+         All existential variables β̄ (angelic choice) come after the universal
+         variables ᾱ (demonic choice). We also avoid introducing new universals
+         during consume to keep this order. In this setting the [EvarEnv] can be
+         interpreted as a set of equations between a subset of existential
+         variables [βᵢ] and terms [tᵢ] such that [freevars (tᵢ) ⊆ ᾱ`].
+
+         Equations are discovered by semi-unification and added to the EvarEnv.
+         See [dmut_consume_formula_evar] and [dmut_consume_chunk_evar] for
+         details.
+       *)
+
+      Lemma exists_distr A P Q :
+        (exists a : A, P a \/ Q a) <->
+        (exists a : A, P a) \/ (exists a, Q a).
+      Proof. firstorder. Qed.
+
+      Lemma exists_distr_conj A P Q :
+        (exists a : A, P /\ Q a) <->
+        P /\ (exists a : A, Q a).
+      Proof. firstorder. Qed.
+
+      Lemma if_demonic (b : bool) (P Q : Prop) :
+        (if b then P else Q) <->
+        (b = true -> P) /\ (b = false -> Q).
+      Proof. destruct b; intuition. Qed.
+
+      Lemma if_angelic (b : bool) (P Q : Prop) :
+        (if b then P else Q) <->
+        (b = true /\ P) \/ (b = false /\ Q).
+      Proof. destruct b; intuition. Qed.
+
+    End EvarExplanation.
+
     Section DynamicMutatorResult.
 
       (* Local Set Primitive Projections. *)
@@ -3261,9 +3312,9 @@ Module Mutators
         | asn_chunk c => dmut_consume_chunk_evar c L
         | asn_if b a1 a2 =>
           match eval_term_evar L b with
-          | Some b' => (dmut_assume_term b';; dmut_consume_evar a1 L)
-                         ⊗
-                       (dmut_assume_term (term_not b');; dmut_consume_evar a2 L)
+          | Some b' => (dmut_assert_term b';; dmut_consume_evar a1 L)
+                         ⊕
+                       (dmut_assert_term (term_not b');; dmut_consume_evar a2 L)
           | None    => dmut_fail
                          "dmut_consume_evar"
                          "Uninstantiated evars when consuming assertion"
