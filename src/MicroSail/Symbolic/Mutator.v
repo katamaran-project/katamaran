@@ -255,8 +255,6 @@ Module Mutators
 
   End Rewrite.
 
-  Definition SymbolicHeap : LCtx -> Type := List Chunk.
-
   Record ObligationInfo : Type :=
     MkObligationInfo
       { obligation_logic_context   : LCtx;

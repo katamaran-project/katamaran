@@ -63,19 +63,6 @@ Module SemiConcrete
 
   Export symcontractkit.
 
-  Inductive SCChunk : Type :=
-  | scchunk_user   (p : 𝑷) (vs : Env Lit (𝑷_Ty p))
-  | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ).
-  Arguments scchunk_user _ _ : clear implicits.
-
-  Section TransparentObligations.
-    Local Set Transparent Obligations.
-    Derive NoConfusion for SCChunk.
-  End TransparentObligations.
-
-  Definition SCHeap  : Type :=
-    list SCChunk.
-
   Section SemiConcreteState.
 
     Local Set Primitive Projections.
@@ -274,26 +261,8 @@ Module SemiConcrete
     Global Arguments scmut_produce_chunk {Γ} _.
     Global Arguments scmut_consume_chunk {Γ} _.
 
-    Global Instance inst_chunk : Inst Chunk SCChunk :=
-      {| inst Σ ι c := match c with
-                       | chunk_user p ts => scchunk_user p (inst ι ts)
-                       | chunk_ptsreg r t => scchunk_ptsreg r (inst ι t)
-                       end;
-         lift Σ c   := match c with
-                       | scchunk_user p vs => chunk_user p (lift vs)
-                       | scchunk_ptsreg r v => chunk_ptsreg r (lift v)
-                       end
-      |}.
-
     Local Opaque instantiate_env.
     Local Opaque instantiate_term.
-
-    Global Instance instlaws_chunk : InstLaws Chunk SCChunk.
-    Proof.
-      constructor.
-      - intros ? ? []; cbn; f_equal; apply inst_lift.
-      - intros ? ? ζ ι []; cbn; f_equal; apply inst_subst.
-    Qed.
 
     Definition scmut_assume_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : SCMut Γ Γ unit :=
       fun s => outcome_assumek

@@ -72,18 +72,18 @@ Module Soundness
 
     Context `{HL: IHeaplet L} {SLL: ISepLogicLaws L}.
 
-    Definition inst_scchunk (c : SCChunk) : L :=
+    Definition interpret_scchunk (c : SCChunk) : L :=
       match c with
       | scchunk_user p vs => luser p vs
       | scchunk_ptsreg r v => lptsreg r v
       end.
 
-    Definition inst_scheap : SCHeap -> L :=
-      List.fold_right (fun c h => inst_scchunk c ✱ h) emp.
-    Global Arguments inst_scheap !h.
+    Definition interpret_scheap : SCHeap -> L :=
+      List.fold_right (fun c h => interpret_scchunk c ✱ h) emp.
+    Global Arguments interpret_scheap !h.
 
     Lemma in_heap_extractions {h c1 h1} (hyp : List.In (c1 , h1) (heap_extractions h)) :
-      inst_scheap h ⊣⊢s inst_scchunk c1 ✱ inst_scheap h1.
+      interpret_scheap h ⊣⊢s interpret_scchunk c1 ✱ interpret_scheap h1.
     Proof.
       revert c1 h1 hyp.
       induction h; cbn; intros.
@@ -126,8 +126,8 @@ Module Soundness
       outcome_satisfy
         (scmut_consume_chunk c {| scstate_localstore := δ1; scstate_heap := h1 |})
         (fun _ => False)
-        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
-      inst_scheap h1 ⊢ inst_scchunk c ✱ POST δ1.
+        (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      interpret_scheap h1 ⊢ interpret_scchunk c ✱ POST δ1.
     Proof.
       unfold scmut_consume_chunk, scmut_angelick_list, scmut_bind.
       cbn - [outcome_angelick_list]. rewrite outcome_satisfy_angelick_list.
@@ -147,8 +147,8 @@ Module Soundness
       outcome_satisfy
         (scmut_assert_formula ι fml {| scstate_localstore := δ1; scstate_heap := h1 |})
         (fun _ => False)
-        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
-      inst_scheap h1 ⊢ !! inst ι fml ∧ emp ✱ POST δ1.
+        (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      interpret_scheap h1 ⊢ !! inst ι fml ∧ emp ✱ POST δ1.
     Proof.
       cbn. intros [H1 H2].
       rewrite <- sepcon_emp at 1.
@@ -165,8 +165,8 @@ Module Soundness
       outcome_satisfy
         (scmut_assume_formula ι fml {| scstate_localstore := δ1; scstate_heap := h1 |})
         (fun _ => False)
-        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
-      inst_scheap h1 ✱ !! inst ι fml ∧ emp ⊢ POST δ1.
+        (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      interpret_scheap h1 ✱ !! inst ι fml ∧ emp ⊢ POST δ1.
     Proof.
     Admitted.
 
@@ -177,8 +177,8 @@ Module Soundness
       outcome_satisfy
         (scmut_consume ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
         (fun _ => False)
-        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
-      inst_scheap h1 ⊢ inst_assertion ι asn ✱ POST δ1.
+        (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      interpret_scheap h1 ⊢ interpret_assertion ι asn ✱ POST δ1.
     Proof.
       revert ι δ1 h1 POST. induction asn; cbn - [inst inst_term]; intros ι δ1 h1 POST HYP.
       - now apply scmut_assert_formula_sound.
@@ -196,12 +196,12 @@ Module Soundness
       - unfold scmut_bind_right, scmut_bind in HYP.
         rewrite outcome_satisfy_bind in HYP.
         rewrite sepcon_assoc.
-        apply (IHasn1 ι δ1 h1 (fun δ => inst_assertion ι asn2 ✱ POST δ)); clear IHasn1.
+        apply (IHasn1 ι δ1 h1 (fun δ => interpret_assertion ι asn2 ✱ POST δ)); clear IHasn1.
         sound_inster.
         intros [? [δ2 h2]] HYP; cbn.
         now apply (IHasn2 ι δ2 h2 POST).
       - destruct HYP as [v HYP].
-        apply (entails_trans (inst_scheap h1) (inst_assertion (env_snoc ι (ς , τ) v) asn ✱ POST δ1)).
+        apply (entails_trans (interpret_scheap h1) (interpret_assertion (env_snoc ι (ς , τ) v) asn ✱ POST δ1)).
         + now apply IHasn.
         + apply sepcon_entails.
           apply lex_right with v, entails_refl.
@@ -212,8 +212,8 @@ Module Soundness
       outcome_satisfy
         (scmut_produce ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
         (fun _ => False)
-        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
-      inst_scheap h1 ✱ inst_assertion ι asn ⊢ POST δ1.
+        (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      interpret_scheap h1 ✱ interpret_assertion ι asn ⊢ POST δ1.
     Proof.
       revert ι δ1 h1 POST. induction asn; cbn - [scmut_assume_formula]; intros ι δ1 h1 POST HYP.
       - now apply scmut_assume_formula_sound.
@@ -232,7 +232,7 @@ Module Soundness
         rewrite outcome_satisfy_bind in HYP.
         rewrite <- sepcon_assoc.
         apply wand_sepcon_adjoint.
-        apply (IHasn1 ι δ1 h1 (fun δ => inst_assertion ι asn2 -✱ POST δ)); clear IHasn1.
+        apply (IHasn1 ι δ1 h1 (fun δ => interpret_assertion ι asn2 -✱ POST δ)); clear IHasn1.
         sound_inster.
         intros [? [δ2 h2]] HYP; cbn.
         apply wand_sepcon_adjoint.
@@ -249,8 +249,8 @@ Module Soundness
       outcome_satisfy
         (scmut_produce ι asn {| scstate_localstore := δ1; scstate_heap := h1 |})
         (fun _ => False)
-        (fun r => inst_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
-      inst_assertion ι asn ⊢ inst_scheap h1 -✱ POST δ1.
+        (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      interpret_assertion ι asn ⊢ interpret_scheap h1 -✱ POST δ1.
     Proof.
       intros. apply wand_sepcon_adjoint. rewrite sepcon_comm.
       now apply (scmut_produce_sound _ H).
@@ -263,16 +263,16 @@ Module Soundness
         (scmut_call c δΔ {| scstate_localstore := δΓ; scstate_heap := h |})
         (fun _ => False)
         (fun r =>
-           inst_scheap (scmutres_heap r) ⊢ POST (scmutres_value r) (scmutres_localstore r)) ->
-      CTriple δΔ (inst_scheap h) (fun v => POST v δΓ) c.
+           interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_value r) (scmutres_localstore r)) ->
+      CTriple δΔ (interpret_scheap h) (fun v => POST v δΓ) c.
     Proof.
       destruct c as [Σe δe req result ens] eqn:Heqc.
       intros [ι [Heqs HYP]].
       unfold scmut_angelic, scmut_bind, scmut_pure in HYP; cbn in HYP.
       repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
       repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
-      pose (fun δ => ∀ v, inst_assertion (env_snoc ι (result,_) v) ens -✱ POST v δ) as frame.
-      assert (inst_scheap h ⊢ frame δΓ ✱ inst_assertion ι req ).
+      pose (fun δ => ∀ v, interpret_assertion (env_snoc ι (result,_) v) ens -✱ POST v δ) as frame.
+      assert (interpret_scheap h ⊢ frame δΓ ✱ interpret_assertion ι req ).
       { rewrite sepcon_comm.
         apply (scmut_consume_sound frame).
         sound_inster.
@@ -294,8 +294,8 @@ Module Soundness
           (scmut_exec s (MkSCState δ1 h1))
           (fun _ => False)
           (fun '(MkSCMutResult v2 (MkSCState δ2 h2)) =>
-             inst_scheap h2 ⊢ POST v2 δ2) ->
-        δ1 ⊢ ⦃ inst_scheap h1 ⦄ s ⦃ POST ⦄.
+             interpret_scheap h2 ⊢ POST v2 δ2) ->
+        δ1 ⊢ ⦃ interpret_scheap h1 ⦄ s ⦃ POST ⦄.
     Proof.
       induction s;
         unfold scmut_bind, scmut_bind_left, scmut_bind_right, scmut_push_local,
@@ -312,7 +312,7 @@ Module Soundness
         eapply rule_consequence_left.
         eapply rule_stm_let; intros; apply rule_wp.
 
-        apply lex_right with (inst_scheap h1).
+        apply lex_right with (interpret_scheap h1).
         apply land_right.
         apply entails_refl.
         apply lprop_right.
@@ -320,7 +320,7 @@ Module Soundness
         sound_inster.
         intros [v2 [δ2 h2]] HYP; cbn.
 
-        apply lex_right with (inst_scheap h2).
+        apply lex_right with (interpret_scheap h2).
         apply land_right.
         apply entails_refl.
         apply lprop_right.
@@ -353,7 +353,7 @@ Module Soundness
         eapply rule_consequence_left.
         eapply rule_stm_seq; intros; apply rule_wp.
 
-        apply lex_right with (inst_scheap h1).
+        apply lex_right with (interpret_scheap h1).
         apply land_right.
         apply entails_refl.
         apply lprop_right.
@@ -361,7 +361,7 @@ Module Soundness
         sound_inster.
         intros [v2 [δ2 h2]] HYP; cbn.
 
-        apply lex_right with (inst_scheap h2).
+        apply lex_right with (interpret_scheap h2).
         apply land_right.
         apply entails_refl.
         apply lprop_right.
@@ -437,7 +437,7 @@ Module Soundness
         eapply rule_consequence_left.
         eapply rule_stm_bind; intros; apply rule_wp.
 
-        apply lex_right with (inst_scheap h1).
+        apply lex_right with (interpret_scheap h1).
         apply land_right.
         apply entails_refl.
         apply lprop_right.
@@ -445,7 +445,7 @@ Module Soundness
         sound_inster.
         intros [v2 [δ2 h2]] HYP; cbn.
 
-        apply lex_right with (inst_scheap h2).
+        apply lex_right with (interpret_scheap h2).
         apply land_right.
         apply entails_refl.
         apply lprop_right.
@@ -459,13 +459,13 @@ Module Soundness
           (scmut_exec s (MkSCState δ1 h1))
           (fun _ => False)
           (fun '(MkSCMutResult v2 (MkSCState δ2 h2)) =>
-             inst_scheap h2 ⊢ POST v2 δ2) ->
-        inst_scheap h1 ⊢ WP s POST δ1.
+             interpret_scheap h2 ⊢ POST v2 δ2) ->
+        interpret_scheap h1 ⊢ WP s POST δ1.
     Proof.
       cbn in *; intros.
       unfold WP.
       apply scmut_exec_sound in H.
-      apply lex_right with (inst_scheap h1).
+      apply lex_right with (interpret_scheap h1).
       apply land_right.
       reflexivity.
       now apply lprop_right.
@@ -489,7 +489,7 @@ Module Soundness
         eapply rule_consequence_left.
         apply rule_wp.
         apply entails_trans with
-            (inst_scheap nil -✱ WP body (fun (v : Lit τ) (_ : LocalStore Δ) => inst_assertion (env_snoc ι (result,τ) v) ens) δ).
+            (interpret_scheap nil -✱ WP body (fun (v : Lit τ) (_ : LocalStore Δ) => interpret_assertion (env_snoc ι (result,τ) v) ens) δ).
         apply scmut_produce_sound'.
         2: {
           rewrite <- sepcon_emp.
@@ -501,7 +501,7 @@ Module Soundness
         apply scmut_exec_sound'. cbn.
         sound_inster.
         intros [v3 [δ3 h3]] HYP; cbn.
-        enough (inst_scheap h3 ⊢ inst_assertion (env_snoc ι (result,τ) v3) ens ✱ emp)
+        enough (interpret_scheap h3 ⊢ interpret_assertion (env_snoc ι (result,τ) v3) ens ✱ emp)
           by now rewrite sepcon_emp in H.
         change emp with ((fun _ => emp) δ3).
         apply (scmut_consume_sound (asn := ens)).

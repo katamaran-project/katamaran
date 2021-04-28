@@ -77,11 +77,6 @@ Module Soundness
   (* Avoid some Prop <-> Type confusion. *)
   Notation instpc ι pc := (@inst _ _ instantiate_pathcondition _ ι pc).
 
-  Global Instance inst_heap : Inst SymbolicHeap SCHeap :=
-    instantiate_list.
-  Global Instance instlaws_heap : InstLaws SymbolicHeap SCHeap.
-  Proof. apply instantiatelaws_list. Qed.
-
   Global Instance inst_symbolicstate {Γ} : Inst (SymbolicState Γ) (SCState Γ) :=
     {| inst Σ ι '(MkSymbolicState δ h) := MkSCState (inst ι δ) (inst ι h);
        lift Σ '(MkSCState δ h) := MkSymbolicState (lift δ) (lift h);

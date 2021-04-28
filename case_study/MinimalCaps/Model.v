@@ -296,7 +296,7 @@ Module MinCapsModel.
           (MinCapsIrisHeapKit.MinCaps_ptsreg (ι ‼ "reg")%exp (ι ‼ "w")%exp)
           (stm_call_external (ghost open_ptsreg) es)
           (λ (v : ()) (δ' : LocalStore Γ),
-             (MinCapsSymbolicContractKit.ASS.inst_assertion (ι ► (("result", ty_unit) ↦ v))
+             (MinCapsSymbolicContractKit.ASS.interpret_assertion (ι ► (("result", ty_unit) ↦ v))
                   match (ι ‼ "reg")%exp with
                   | R0 =>
                       MinCapsSymbolicContractKit.ASS.asn_chunk

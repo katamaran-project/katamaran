@@ -78,8 +78,8 @@ Module ProgramLogic
         (req : Assertion Σ) (ens : Assertion (Σ ▻ (result :: σ)))
         (frame : L) :
         δΔ = inst ι θΔ ->
-        pre ⊢ frame ✱ inst_assertion ι req ->
-        (forall v, frame ✱ inst_assertion (env_snoc ι (result :: σ) v) ens ⊢ post v) ->
+        pre ⊢ frame ✱ interpret_assertion ι req ->
+        (forall v, frame ✱ interpret_assertion (env_snoc ι (result :: σ) v) ens ⊢ post v) ->
         CTriple δΔ pre post (MkSepContract _ _ _ θΔ req result ens).
 
     Inductive Triple {Γ : PCtx} (δ : LocalStore Γ) {τ : Ty} :
@@ -443,9 +443,9 @@ Module ProgramLogic
     Definition ValidContract {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) : Prop :=
       forall (ι : SymInstance (sep_contract_logic_variables c)),
         inst_contract_localstore c ι ⊢
-          ⦃ inst_contract_precondition c ι ⦄
+          ⦃ interpret_contract_precondition c ι ⦄
             body
-          ⦃ fun v _ => inst_contract_postcondition c ι v ⦄.
+          ⦃ fun v _ => interpret_contract_postcondition c ι v ⦄.
 
     Definition ValidContractEnv (cenv : SepContractEnv) : Prop :=
       forall (Δ : PCtx) (τ : Ty) (f : 𝑭 Δ τ) (c : SepContract Δ τ),
