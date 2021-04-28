@@ -2306,7 +2306,7 @@ Module Mutators
       | stm_seq s1 s2 => dmut_exec_evar s1 ;; dmut_exec_evar s2
       | stm_assertk e1 _ k =>
         t <- dmut_eval_exp e1 ;;
-        dmut_assert_term t ;;
+        dmut_assume_term t ;;
         dmut_exec_evar k
       | stm_fail _ _ =>
         dmut_block

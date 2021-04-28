@@ -751,8 +751,7 @@ Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_within_bounds : ValidContractDynMut sep_contract_within_bounds fun_within_bounds.
 Proof.
-  compute; solve.
-  constructor; cbn; solve.
+  compute - [sout_safe]; cbn; solve.
 Abort.
 
 Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
