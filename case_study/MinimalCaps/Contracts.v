@@ -752,13 +752,13 @@ Lemma valid_contract_upper_bound : ValidContractDynMut sep_contract_upper_bound 
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_within_bounds : ValidContractDynMut sep_contract_within_bounds fun_within_bounds.
-Proof. compute; solve. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec_j : ValidContractDynMut sep_contract_exec_j fun_exec_j.
-Proof. compute; solve. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
 
 Lemma valid_contract_exec_jal : ValidContractDynMut sep_contract_exec_jal fun_exec_jal.
 Proof. apply dynmutevarreflect_sound; reflexivity. Abort.

@@ -458,7 +458,7 @@ Module SepContracts.
   Hint Resolve valid_contract_length : contracts.
 
   Lemma valid_contract_cmp : ValidContract sep_contract_cmp (Pi cmp).
-  Proof. solve. left. solve. Qed.
+  Proof. solve. Qed.
   Hint Resolve valid_contract_cmp : contracts.
 
 End SepContracts.

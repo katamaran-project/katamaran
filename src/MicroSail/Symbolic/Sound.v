@@ -1345,7 +1345,7 @@ Module Soundness
       - admit.
       - now apply dmut_bind_right_dcl.
       - now apply dmut_fresh_dcl.
-      - apply dmut_pure_dcl.
+      - admit.
     Admitted.
 
     Lemma dmut_consume_chunk_dcl {Γ Σ} (c : Chunk Σ) :
@@ -1375,7 +1375,7 @@ Module Soundness
       - admit.
       - now apply dmut_bind_right_dcl.
       - admit.
-      - apply dmut_pure_dcl.
+      - admit.
     Admitted.
 
     Lemma dmut_exec_dcl {Γ τ Σ} (s : Stm Γ τ) :
@@ -1864,7 +1864,7 @@ Module Soundness
       - apply bapprox_bind_right; auto using dmut_consume_dcl.
       - apply (bapprox_angelic (AT := fun Σ => Term Σ τ)). intros t.
         eapply bapprox_sub; eauto. now rewrite inst_sub_snoc, inst_sub_id.
-      - now apply bapprox_pure.
+      - admit.
     Admitted.
 
     Lemma bapprox_call {Γ Δ τ Σ} (c : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) (ι : SymInstance Σ) :
@@ -2060,7 +2060,7 @@ Module Soundness
         apply (bapprox_produce_chunk (chunk_ptsreg reg t)).
         now apply bapprox_pure.
       - admit.
-      - apply IHs.
+      - admit.
     Admitted.
 
     Lemma bapprox_contract {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) (ι : SymInstance (sep_contract_logic_variables c)) :

@@ -928,7 +928,7 @@ Module Mutators
         let ι' := env_remove' (x,σ) ι xIn in
         env_lookup ι xIn = inst ι' t ->
         sout_safe ι' k
-      | sout_debug d k => sout_safe ι k
+      | sout_debug d k => Debug (inst ι d) (sout_safe ι k)
       end.
     Global Arguments sout_safe {_} Σ ι o.
 
@@ -1234,7 +1234,7 @@ Module Mutators
         sout_demonicv_prune (sout_prune o)
       | sout_subst x t k =>
         sout_subst_prune t (sout_prune k)
-      | sout_debug d k => sout_prune k
+      | sout_debug d k => sout_debug d (sout_prune k)
       end.
 
     Definition sout_ok {AT Σ} (o : SymOutcome AT Σ) : bool :=
@@ -1448,17 +1448,24 @@ Module Mutators
       dmut_fresh x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
     Global Arguments dmut_freshtermvar {_ _ _} _.
 
+    Definition dmut_debug {AT DT D} `{Subst DT, Inst DT D} {Σ0 Γ1 Γ2}
+      (d : forall Σ1, Sub Σ0 Σ1 -> PathCondition Σ1 -> SymbolicState Γ1 Σ1 -> DT Σ1)
+      (m : DynamicMutator Γ1 Γ2 AT Σ0) : DynamicMutator Γ1 Γ2 AT Σ0 :=
+      fun Σ1 ζ01 pc1 s1 => sout_debug (d Σ1 ζ01 pc1 s1) (m Σ1 ζ01 pc1 s1).
+
     Record DebugCall : Type :=
       MkDebugCall
-        { debug_call_function_parameters    : PCtx;
+        { debug_call_logic_context          : LCtx;
+          debug_call_instance               : SymInstance debug_call_logic_context;
+          debug_call_function_parameters    : PCtx;
           debug_call_function_result_type   : Ty;
           debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
-          debug_call_function_arguments     : LocalStore debug_call_function_parameters;
+          debug_call_function_arguments     : SymbolicLocalStore debug_call_function_parameters debug_call_logic_context;
           debug_call_function_contract      : SepContract debug_call_function_parameters debug_call_function_result_type;
-          debug_call_pathcondition          : Prop;
+          debug_call_pathcondition          : PathCondition debug_call_logic_context;
           debug_call_program_context        : PCtx;
-          debug_call_localstore             : LocalStore debug_call_program_context;
-          debug_call_heap                   : SCHeap;
+          debug_call_localstore             : SymbolicLocalStore debug_call_program_context debug_call_logic_context;
+          debug_call_heap                   : SymbolicHeap debug_call_logic_context;
         }.
 
     Record DebugStm : Type :=
@@ -1467,9 +1474,20 @@ Module Mutators
           debug_stm_statement_type         : Ty;
           debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
           debug_stm_logic_context          : LCtx;
+          debug_stm_instance               : SymInstance debug_stm_logic_context;
           debug_stm_pathcondition          : PathCondition debug_stm_logic_context;
           debug_stm_localstore             : SymbolicLocalStore debug_stm_program_context debug_stm_logic_context;
           debug_stm_heap                   : SymbolicHeap debug_stm_logic_context;
+        }.
+
+    Record DebugAsn : Type :=
+      MkDebugAsn
+        { debug_asn_logic_context          : LCtx;
+          debug_asn_instance               : SymInstance debug_asn_logic_context;
+          debug_asn_pathcondition          : PathCondition debug_asn_logic_context;
+          debug_asn_program_context        : PCtx;
+          debug_asn_localstore             : SymbolicLocalStore debug_asn_program_context debug_asn_logic_context;
+          debug_asn_heap                   : SymbolicHeap debug_asn_logic_context;
         }.
 
     Record SDebugCall (Σ : LCtx) : Type :=
@@ -1495,6 +1513,14 @@ Module Mutators
           sdebug_stm_heap                   : SymbolicHeap Σ;
         }.
 
+    Record SDebugAsn (Σ : LCtx) : Type :=
+      MkSDebugAsn
+        { sdebug_asn_pathcondition          : PathCondition Σ;
+          sdebug_asn_program_context        : PCtx;
+          sdebug_asn_localstore             : SymbolicLocalStore sdebug_asn_program_context Σ;
+          sdebug_asn_heap                   : SymbolicHeap Σ;
+        }.
+
     Global Instance SubstDebugCall : Subst SDebugCall :=
       fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugCall Σ0) =>
         match d with
@@ -1506,12 +1532,52 @@ Module Mutators
       {| inst Σ ι d :=
            match d with
            | MkSDebugCall f ts c pc δ h =>
-             MkDebugCall f (inst ι ts) c (inst ι pc) (inst ι δ) (inst ι h)
+             MkDebugCall ι f ts c pc δ h
            end;
          lift Σ d :=
            match d with
-           | MkDebugCall f ts c pc δ h =>
-             MkSDebugCall f (lift ts) c (lift pc) (lift δ) (lift h)
+           | MkDebugCall ι f ts c pc δ h =>
+             MkSDebugCall f (lift (inst ι ts)) c (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
+           end;
+      |}.
+
+    Global Instance SubstDebugStm : Subst SDebugStm :=
+      fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugStm Σ0) =>
+        match d with
+        | MkSDebugStm s pc δ h =>
+          MkSDebugStm s (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
+        end.
+
+    Global Instance InstDebugStm : Inst SDebugStm DebugStm :=
+      {| inst Σ ι d :=
+           match d with
+           | MkSDebugStm s pc δ h =>
+             MkDebugStm s ι pc δ h
+           end;
+         lift Σ d :=
+           match d with
+           | MkDebugStm s ι pc δ h =>
+             MkSDebugStm s (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
+           end
+      |}.
+
+    Global Instance SubstDebugAsn : Subst SDebugAsn :=
+      fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugAsn Σ0) =>
+        match d with
+        | MkSDebugAsn pc δ h =>
+          MkSDebugAsn (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
+        end.
+
+    Global Instance InstDebugAsn : Inst SDebugAsn DebugAsn :=
+      {| inst Σ ι d :=
+           match d with
+           | MkSDebugAsn pc δ h =>
+             MkDebugAsn ι pc δ h
+           end;
+         lift Σ d :=
+           match d with
+           | MkDebugAsn ι pc δ h =>
+             MkSDebugAsn (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
            end
       |}.
 
@@ -1796,7 +1862,15 @@ Module Mutators
       end
     | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
     | asn_exist ς τ a => dmut_fresh ς τ (dmut_produce a)
-    | asn_debug => dmut_pure tt
+    | asn_debug =>
+      dmut_debug
+        (fun Σ1 ζ01 pc1 s1 =>
+           {| sdebug_asn_pathcondition := pc1;
+              sdebug_asn_program_context := Γ;
+              sdebug_asn_localstore := symbolicstate_localstore s1;
+              sdebug_asn_heap := symbolicstate_heap s1
+           |})
+        (dmut_pure tt)
     end.
 
   Fixpoint dmut_consume {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
@@ -1823,7 +1897,15 @@ Module Mutators
     | asn_exist ς τ a =>
       ⨁ t : Term Σ τ =>
       dmut_sub (sub_snoc (sub_id _) (ς , τ) t) (dmut_consume a)
-    | asn_debug => dmut_pure tt
+    | asn_debug =>
+      dmut_debug
+        (fun Σ1 ζ01 pc1 s1 =>
+           {| sdebug_asn_pathcondition := pc1;
+              sdebug_asn_program_context := Γ;
+              sdebug_asn_localstore := symbolicstate_localstore s1;
+              sdebug_asn_heap := symbolicstate_heap s1
+           |})
+        (dmut_pure tt)
     end.
 
   Definition dmut_call {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
@@ -1937,7 +2019,14 @@ Module Mutators
     | stm_bind _ _ =>
       dmut_fail "dmut_exec" "stm_bind not supported" tt
     | stm_debugk k =>
-      dmut_exec k
+      dmut_debug
+        (fun Σ1 ζ01 pc1 s1 =>
+           {| sdebug_stm_statement := k;
+              sdebug_stm_pathcondition := pc1;
+              sdebug_stm_localstore := symbolicstate_localstore s1;
+              sdebug_stm_heap := symbolicstate_heap s1
+           |})
+        (dmut_exec k)
     end.
 
   Definition dmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
@@ -2214,7 +2303,15 @@ Module Mutators
                evarerror_data := asn
             |}
         end
-      | asn_debug => dmut_pure L
+      | asn_debug =>
+        dmut_debug
+          (fun Σ1 ζ01 pc1 s1 =>
+             {| sdebug_asn_pathcondition := pc1;
+                sdebug_asn_program_context := Γ;
+                sdebug_asn_localstore := symbolicstate_localstore s1;
+                sdebug_asn_heap := symbolicstate_heap s1
+             |})
+          (dmut_pure L)
       end.
 
   End CallerContext.
@@ -2434,7 +2531,14 @@ Module Mutators
       | stm_bind _ _ =>
         dmut_fail "dmut_exec_evar" "stm_bind not supported" tt
       | stm_debugk k =>
-        dmut_exec_evar k
+        dmut_debug
+          (fun Σ1 ζ01 pc1 s1 =>
+             {| sdebug_stm_statement := k;
+                sdebug_stm_pathcondition := pc1;
+                sdebug_stm_localstore := symbolicstate_localstore s1;
+                sdebug_stm_heap := symbolicstate_heap s1
+             |})
+          (dmut_exec_evar k)
       end.
 
     Definition dmut_contract_evar {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) : DynamicMutator Δ Δ Unit (sep_contract_logic_variables c) :=
@@ -2469,7 +2573,7 @@ Module Mutators
 
     Definition ValidContractWithConfig {Δ τ}
       (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationCondition (dmut_contract_evar_outcome c body).
+      VerificationCondition (sout_prune (dmut_contract_evar_outcome c body)).
 
   End WithConfig.
 
@@ -2484,9 +2588,6 @@ Module Mutators
     is_true (sout_ok o).
   Global Arguments sout_ok_opaque {AT} Σ o.
   Global Opaque sout_ok_opaque.
-
-  Definition ValidContractDebug {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    sout_ok_opaque _ (sout_prune (dmut_contract_evar_outcome default_config c body)).
 
   Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
     is_true (sout_ok (sout_prune (dmut_contract_evar_outcome default_config c body))).
