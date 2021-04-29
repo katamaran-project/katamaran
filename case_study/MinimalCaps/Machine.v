@@ -292,7 +292,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       "cap_end" "e")
       "cap_cursor" "a")
       (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
-       stm_exp (exp_var "u" && (exp_var "b" <= exp_var "a"))).
+       stm_exp ((exp_var "b" <= exp_var "a") && exp_var "u")).
 
   Definition fun_upper_bound : Stm ["a"   ∶ ty_addr, "e"   ∶ ty_addr] ty_bool :=
     stm_exp (a <= e).

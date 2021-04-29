@@ -592,7 +592,6 @@ Module ISAMutators :=
     ISAAssertionKit
     ISASymbolicContractKit.
 Import ISAMutators.
-Import DynMutV2.
 
 Lemma valid_contract_rX : ValidContractDynMutReflect sep_contract_rX fun_rX.
 Proof. Time (now compute). Qed.

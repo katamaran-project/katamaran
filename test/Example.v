@@ -427,7 +427,6 @@ Module SepContracts.
       ExampleAssertionKit
       ExampleSymbolicContractKit.
   Import ExampleMutators.
-  Import DynMutV2.
 
   Local Ltac solve :=
     repeat
@@ -440,7 +439,10 @@ Module SepContracts.
          | H: _ /\ _ |- _ => destruct H
          | |- Outcome.Debug _ _ => constructor
          | |- _ /\ _ => constructor
-         | |- Obligation _ => constructor
+         | |- VerificationCondition _ => constructor; cbn
+         | |- Obligation _ _ _ => constructor; cbn
+         | |- _ \/ False => left
+         | |- False \/ _ => right
          end;
        compute
        - [Pos.of_succ_nat List.length Pos.succ Z.pos_sub Z.succ Z.of_nat Z.add
@@ -451,17 +453,12 @@ Module SepContracts.
        auto
       ).
 
-  Lemma valid_contract_length {σ} : ValidContractDynMut (@sep_contract_length σ) (Pi length).
+  Lemma valid_contract_length {σ} : ValidContract (@sep_contract_length σ) (Pi length).
   Proof. solve; lia. Qed.
   Hint Resolve valid_contract_length : contracts.
 
-  Lemma valid_contract_cmp : ValidContractDynMut sep_contract_cmp (Pi cmp).
-  Proof.
-    solve.
-    - left. solve.
-    - right. left. solve.
-    - right. right. solve.
-  Qed.
+  Lemma valid_contract_cmp : ValidContract sep_contract_cmp (Pi cmp).
+  Proof. solve. Qed.
   Hint Resolve valid_contract_cmp : contracts.
 
 End SepContracts.
