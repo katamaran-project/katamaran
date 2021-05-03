@@ -657,8 +657,8 @@ Module MinCapsSymbolicContractKit <:
                              term_var "address"]) ✱
                         (asn_match_enum permission (term_var "p")
                             (fun p => match p with
-                                    | O  => asn_false
-                                    | _  => asn_within_bounds (term_var "address") (term_var "b") (term_var "e")
+                                    | RW => asn_within_bounds (term_var "address") (term_var "b") (term_var "e")
+                                    | _  => asn_false
                                     end));
        sep_contract_result          := "wM_result";
        sep_contract_postcondition   :=

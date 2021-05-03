@@ -631,29 +631,53 @@ Module MinCapsModel.
     - (* wM *)
       iIntros (Heq) "[#Hcsafe Hp]".
       rewrite wp_unfold.
-      iIntros (σ' ks1 ks n) "Hregs".
+      iIntros (σ' ks1 ks n) "[Hregs Hmem]".
+      iDestruct "Hmem" as (memmap) "[Hmem' %]".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
       iSplitR; first by intuition.
       iIntros (e2 σ'' efs) "%".
-      cbn in H.
-      dependent elimination H.
+      cbn in H0.
+      dependent elimination H0.
       dependent elimination s.
       rewrite Heq in e0.
       cbn in e0.
       destruct e0 as (Hμ & Hγ & Hres).
       subst.
       do 2 iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iSplitL; trivial.
-      iSplitR "Hp"; trivial; cbn.
-      + iDestruct "Hregs" as "[Hinv _]"; trivial.
-      + admit.
-      + iSplitL; trivial.
-        cbn.
-        destruct v1; iApply wp_value; cbn; trivial;
-          repeat (iSplitL; trivial).
+      cbn.
+      destruct v1;
+        try (cbn; iDestruct "Hp" as "[% _]"; unfold is_true in *; discriminate H0).
+      cbn.
+      iDestruct "Hp" as "[% _]".
+      iAssert (gen_heap.mapsto v3 (dfrac.DfracOwn 1) _)%I as "Hown".
+        + admit.
+        + iMod (gen_heap.gen_heap_update _ _ _ v2 with "Hmem' Hown") as "[Hmem' ptsto]".
+          iMod "Hclose" as "_".
+          iModIntro.
+          iSplitL; trivial.
+          cbn.
+          iSplitL "Hregs"; first by iFrame.
+          * iExists (<[v3:=v2]> memmap).
+            iSplitL.
+            { iFrame. }
+            { iPureIntro.
+              apply map_Forall_lookup.
+              intros i x Hl.
+              unfold fun_wM.
+              cbn in *.
+              destruct (v3 =? i) eqn:?.
+              - rewrite -> Z.eqb_eq in Heqb.
+                subst.
+                apply (lookup_insert_rev memmap i); assumption.
+              - rewrite -> map_Forall_lookup in H.
+                rewrite -> Z.eqb_neq in Heqb.
+                rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in Hl.
+                apply H; assumption.
+            }
+          * iSplitL; trivial.
+            iApply wp_value; cbn; trivial;
+              repeat (iSplitL; trivial).
   Admitted.
 
   (* TODO: fix *)
