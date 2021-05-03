@@ -321,6 +321,8 @@ Module Mutators
         (* If the terms are literals, we can trust the negative result. *)
         match t1 , t2 with
         | term_lit _ _ , term_lit _ _ => Some false
+        | term_inr _ , term_inl _ => Some false
+        | term_inl _ , term_inr _ => Some false
         | _            , _            => None
         end.
 
@@ -334,8 +336,8 @@ Module Mutators
       destruct (Term_eqb_spec t1 t2).
       - constructor. intros. apply reflect_iff.
         constructor. congruence.
-      - destruct t1; dependent elimination t2; constructor; auto.
-        intros. apply reflect_iff. constructor. cbn. congruence.
+      - destruct t1; dependent elimination t2; constructor; auto;
+        intros; apply reflect_iff; constructor; cbn; congruence.
     Qed.
 
     (* Check if the given formula is always true or always false for any
