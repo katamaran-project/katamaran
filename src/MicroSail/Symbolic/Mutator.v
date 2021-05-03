@@ -632,6 +632,12 @@ Module Mutators
     Global Arguments sout_demonicv {_ _} _ _.
     Global Arguments sout_subst {_ _} x {_ _} t k.
 
+    Fixpoint sout_demonic_close {A} Σ : SymOutcome A Σ -> SymOutcome A ε :=
+      match Σ with
+      | ctx_nil      => fun k => k
+      | ctx_snoc Σ b => fun k => sout_demonic_close (sout_demonicv b k)
+      end.
+
     Fixpoint sout_multisub {AT Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : SymOutcome AT Σ2 -> SymOutcome AT Σ1.
     Proof.
       destruct ζ; intros o.
@@ -1249,8 +1255,8 @@ Module Mutators
 
   Section VerificationConditions.
 
-    Inductive VerificationCondition {AT Σ} (p : SymOutcome AT Σ) : Prop :=
-    | vc (P : ForallNamed (fun ι : SymInstance Σ => sout_safe _ ι p)).
+    Inductive VerificationCondition {AT} (p : SymOutcome AT ctx_nil) : Prop :=
+    | vc (P : sout_safe _ env_nil p).
 
   End VerificationConditions.
 
@@ -2567,14 +2573,14 @@ Module Mutators
     (*   end. *)
 
     Definition dmut_contract_evar_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
-      SymOutcome
-        (DynamicMutatorResult Δ Unit)
-        (sep_contract_logic_variables c) :=
+      SymOutcome Unit ε :=
       let δ    := sep_contract_localstore c in
-      dmut_contract_evar c s (sub_id _) nil (symbolicstate_initial δ).
+      sout_demonic_close
+        (sout_map
+           (fun _ _ _ => tt)
+           (dmut_contract_evar c s (sub_id _) nil (symbolicstate_initial δ))).
 
-    Definition ValidContractWithConfig {Δ τ}
-      (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition (sout_prune (dmut_contract_evar_outcome c body)).
 
   End WithConfig.
