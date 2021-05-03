@@ -1222,8 +1222,8 @@ Module IrisSoundness
       match cenv σs σ f with
       | Some (MkSepContract _ _ ctxΣ θΔ pre result post) =>
         ∀ (ι : SymInstance ctxΣ),
-          semTriple (inst ι θΔ) (inst_assertion (L:=iProp Σ) ι pre) (Pi f)
-                    (fun v δ' => inst_assertion (env_snoc ι (result , σ) v) post)
+          semTriple (inst ι θΔ) (interpret_assertion (L:=iProp Σ) ι pre) (Pi f)
+                    (fun v δ' => interpret_assertion (env_snoc ι (result , σ) v) post)
       | None => True
       end)%I.
 
@@ -1301,7 +1301,7 @@ Module IrisSoundness
     iApply wp_compat_call_frame.
     rewrite H0.
     iApply (wp_mono _ _ _ (fun v => frame ∗ match v with
-                                            | MkVal _ _ v => inst_assertion (env_snoc ι (result,σ) v) ens
+                                            | MkVal _ _ v => interpret_assertion (env_snoc ι (result,σ) v) ens
                                             end)%I).
     - intros [δ' v]; cbn.
       iIntros "[fr ens]".
@@ -1413,8 +1413,8 @@ Module IrisSoundness
       | MkSepContract _ _ Σ' θΔ req result ens =>
         forall (ι : SymInstance Σ'),
         evals es δ = inst ι θΔ ->
-        ⊢ semTriple δ (inst_assertion ι req) (stm_call_external f es)
-          (fun v δ' => inst_assertion (env_snoc ι (result :: τ) v) ens ∗ bi_pure (δ' = δ))
+        ⊢ semTriple δ (interpret_assertion ι req) (stm_call_external f es)
+          (fun v δ' => interpret_assertion (env_snoc ι (result :: τ) v) ens ∗ bi_pure (δ' = δ))
       end.
 
   Lemma iris_rule_stm_call_external
@@ -1432,7 +1432,7 @@ Module IrisSoundness
     dependent elimination ctrip; cbn in extSem.
     iIntros "P".
     iPoseProof (l with "P") as "[frm pre]".
-    iApply (wp_mono _ _ _ (fun v => frame0 ∗ match v with | MkVal _ δ' v => inst_assertion (env_snoc ι (result :: τ) v) ens ∗ bi_pure (δ' = δ) end)%I).
+    iApply (wp_mono _ _ _ (fun v => frame0 ∗ match v with | MkVal _ δ' v => interpret_assertion (env_snoc ι (result :: τ) v) ens ∗ bi_pure (δ' = δ) end)%I).
     - intros v.
       destruct v.
       iIntros "[frame [pre %]]".

@@ -118,43 +118,103 @@ Module Assertions
       repeat f_equal; eapply inst_subst.
   Qed.
 
-  Inductive Chunk (Σ : LCtx) : Type :=
-  | chunk_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
-  | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
-  Arguments chunk_user [_] _ _.
+  Section Chunks.
 
-  Definition chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
-    match c1 , c2 with
-    | chunk_user p1 ts1, chunk_user p2 ts2 =>
-      match eq_dec p1 p2 with
-      | left e => env_eqb_hom
-                    (@Term_eqb _)
-                    (eq_rect _ (fun p => Env _ (𝑷_Ty p)) ts1 _ e)
-                    ts2
-      | right _ => false
-      end
-    | chunk_ptsreg r1 t1 , chunk_ptsreg r2 t2 =>
-      match eq_dec_het r1 r2 with
-      | left e  => Term_eqb
-                     (eq_rect _ (Term Σ) t1 _ (f_equal projT1 e))
-                     t2
-      | right _ => false
-      end
-    | _ , _ => false
-    end.
+    (* Semi-concrete chunks *)
+    Inductive SCChunk : Type :=
+    | scchunk_user   (p : 𝑷) (vs : Env Lit (𝑷_Ty p))
+    | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ).
+    Global Arguments scchunk_user _ _ : clear implicits.
 
-  (* Equations(noeqns) chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool := *)
-  (*   chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) *)
-  (*   with eq_dec p1 p2 => { *)
-  (*     chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := env_eqb_hom (@Term_eqb _) ts1 ts2; *)
-  (*     chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := false *)
-  (*   }; *)
-  (*   chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) *)
-  (*   with eq_dec_het r1 r2 => { *)
-  (*     chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left eq_refl) := Term_eqb t1 t2; *)
-  (*     chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := false *)
-  (*   }; *)
-  (*   chunk_eqb _ _  := false. *)
+    Section TransparentObligations.
+      Local Set Transparent Obligations.
+      Derive NoConfusion for SCChunk.
+    End TransparentObligations.
+
+    (* Symbolic chunks *)
+    Inductive Chunk (Σ : LCtx) : Type :=
+    | chunk_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
+    | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
+    Global Arguments chunk_user [_] _ _.
+
+    Definition chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
+      match c1 , c2 with
+      | chunk_user p1 ts1, chunk_user p2 ts2 =>
+        match eq_dec p1 p2 with
+        | left e => env_eqb_hom
+                      (@Term_eqb _)
+                      (eq_rect _ (fun p => Env _ (𝑷_Ty p)) ts1 _ e)
+                      ts2
+        | right _ => false
+        end
+      | chunk_ptsreg r1 t1 , chunk_ptsreg r2 t2 =>
+        match eq_dec_het r1 r2 with
+        | left e  => Term_eqb
+                       (eq_rect _ (Term Σ) t1 _ (f_equal projT1 e))
+                       t2
+        | right _ => false
+        end
+      | _ , _ => false
+      end.
+
+    (* Equations(noeqns) chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool := *)
+    (*   chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) *)
+    (*   with eq_dec p1 p2 => { *)
+    (*     chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := env_eqb_hom (@Term_eqb _) ts1 ts2; *)
+    (*     chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := false *)
+    (*   }; *)
+    (*   chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) *)
+    (*   with eq_dec_het r1 r2 => { *)
+    (*     chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left eq_refl) := Term_eqb t1 t2; *)
+    (*     chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := false *)
+    (*   }; *)
+    (*   chunk_eqb _ _  := false. *)
+
+    Global Instance sub_chunk : Subst Chunk :=
+      fun Σ1 Σ2 ζ c =>
+        match c with
+        | chunk_user p ts => chunk_user p (subst ζ ts)
+        | chunk_ptsreg r t => chunk_ptsreg r (subst ζ t)
+        end.
+
+    Global Instance substlaws_chunk : SubstLaws Chunk.
+    Proof.
+      constructor.
+      { intros ? []; cbn; f_equal; apply subst_sub_id. }
+      { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
+    Qed.
+
+    Global Instance inst_chunk : Inst Chunk SCChunk :=
+      {| inst Σ ι c := match c with
+                       | chunk_user p ts => scchunk_user p (inst ι ts)
+                       | chunk_ptsreg r t => scchunk_ptsreg r (inst ι t)
+                       end;
+         lift Σ c   := match c with
+                       | scchunk_user p vs => chunk_user p (lift vs)
+                       | scchunk_ptsreg r v => chunk_ptsreg r (lift v)
+                       end
+      |}.
+
+    Global Instance instlaws_chunk : InstLaws Chunk SCChunk.
+    Proof.
+      constructor.
+      - intros ? ? []; cbn; f_equal; apply inst_lift.
+      - intros ? ? ζ ι []; cbn; f_equal; apply inst_subst.
+    Qed.
+
+  End Chunks.
+
+  Section Heaps.
+
+    Definition SCHeap : Type := list SCChunk.
+    Definition SymbolicHeap : LCtx -> Type := List Chunk.
+
+    Global Instance inst_heap : Inst SymbolicHeap SCHeap :=
+      instantiate_list.
+    Global Instance instlaws_heap : InstLaws SymbolicHeap SCHeap.
+    Proof. apply instantiatelaws_list. Qed.
+
+  End Heaps.
 
   Inductive Assertion (Σ : LCtx) : Type :=
   | asn_formula (fml : Formula Σ)
@@ -198,20 +258,6 @@ Module Assertions
   Notation asn_true := (asn_bool (term_lit ty_bool true)).
   Notation asn_false := (asn_bool (term_lit ty_bool false)).
 
-  Instance sub_chunk : Subst Chunk :=
-    fun Σ1 Σ2 ζ c =>
-      match c with
-      | chunk_user p ts => chunk_user p (subst ζ ts)
-      | chunk_ptsreg r t => chunk_ptsreg r (subst ζ t)
-      end.
-
-  Instance substlaws_chunk : SubstLaws Chunk.
-  Proof.
-    constructor.
-    { intros ? []; cbn; f_equal; apply subst_sub_id. }
-    { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
-  Qed.
-
   (* Instance sub_assertion : Subst Assertion := *)
   (*   fix sub_assertion {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (a : Assertion Σ1) {struct a} : Assertion Σ2 := *)
   (*     match a with *)
@@ -220,8 +266,21 @@ Module Assertions
   (*     | asn_if b a1 a2 => asn_if (subst ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2) *)
   (*     | asn_match_enum E k alts => *)
   (*       asn_match_enum E (subst ζ k) (fun z => sub_assertion ζ (alts z)) *)
+  (*     | asn_match_sum σ τ t xl al xr ar => *)
+  (*       asn_match_sum σ τ (subst ζ t) xl (sub_assertion (sub_up1 ζ) al) xr (sub_assertion (sub_up1 ζ) ar) *)
+  (*     | asn_match_list s anil xh xt acons => *)
+  (*       asn_match_list (subst ζ s) (sub_assertion ζ anil) xh xt (sub_assertion (sub_up1 (sub_up1 ζ)) acons) *)
+  (*     | asn_match_pair s xl xr asn => *)
+  (*       asn_match_pair (subst ζ s) xl xr (sub_assertion (sub_up1 (sub_up1 ζ)) asn) *)
+  (*     | asn_match_tuple s p rhs => *)
+  (*       asn_match_tuple (subst ζ s) p (sub_assertion _ rhs) *)
+  (*     | asn_match_record R s p rhs => *)
+  (*       asn_match_record R (subst ζ s) p (sub_assertion _ rhs) *)
+  (*     | asn_match_union U s ctx pat rhs => *)
+  (*       asn_match_union U (subst ζ s) ctx pat (fun K => sub_assertion _ (rhs K)) *)
   (*     | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2) *)
   (*     | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a) *)
+  (*     | asn_debug => asn_debug *)
   (*     end. *)
 
   Global Instance OccursCheckFormula :
@@ -375,47 +434,47 @@ Module Assertions
   Section Contracts.
     Context `{Logic : IHeaplet L}.
 
-    Definition inst_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
+    Definition interpret_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
       match c with
       | chunk_user p ts => luser p (inst ι ts)
       | chunk_ptsreg r t => lptsreg r (inst ι t)
       end.
 
-    Fixpoint inst_assertion {Σ} (ι : SymInstance Σ) (a : Assertion Σ) : L :=
+    Fixpoint interpret_assertion {Σ} (ι : SymInstance Σ) (a : Assertion Σ) : L :=
       match a with
       | asn_formula fml => !!(inst ι fml) ∧ emp
-      | asn_chunk c => inst_chunk ι c
-      | asn_if b a1 a2 => if inst (A := Lit ty_bool) ι b then inst_assertion ι a1 else inst_assertion ι a2
-      | asn_match_enum E k alts => inst_assertion ι (alts (inst (T := fun Σ => Term Σ _) ι k))
+      | asn_chunk c => interpret_chunk ι c
+      | asn_if b a1 a2 => if inst (A := Lit ty_bool) ι b then interpret_assertion ι a1 else interpret_assertion ι a2
+      | asn_match_enum E k alts => interpret_assertion ι (alts (inst (T := fun Σ => Term Σ _) ι k))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match inst (T := fun Σ => Term Σ _) ι s with
-        | inl v => inst_assertion (ι ► (xl :: σ ↦ v)) alt_inl
-        | inr v => inst_assertion (ι ► (xr :: τ ↦ v)) alt_inr
+        | inl v => interpret_assertion(ι ► (xl :: σ ↦ v)) alt_inl
+        | inr v => interpret_assertion(ι ► (xr :: τ ↦ v)) alt_inr
         end
       | asn_match_list s alt_nil xh xt alt_cons =>
         match inst (T := fun Σ => Term Σ _) ι s with
-        | nil        => inst_assertion ι alt_nil
-        | cons vh vt => inst_assertion (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
+        | nil        => interpret_assertion ι alt_nil
+        | cons vh vt => interpret_assertion(ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
         end
       | asn_match_pair s xl xr rhs =>
         match inst (T := fun Σ => Term Σ _) ι s with
-        | (vl,vr)    => inst_assertion (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs
+        | (vl,vr)    => interpret_assertion(ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs
         end
       | asn_match_tuple s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
         let ι' := tuple_pattern_match p t in
-        inst_assertion (ι ►► ι') rhs
+        interpret_assertion(ι ►► ι') rhs
       | asn_match_record R s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
         let ι' := record_pattern_match p (𝑹_unfold t) in
-        inst_assertion (ι ►► ι') rhs
+        interpret_assertion(ι ►► ι') rhs
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
         let (K , v) := 𝑼_unfold t in
         let ι' := pattern_match (alt__pat K) v in
-        inst_assertion (ι ►► ι') (alt__rhs K)
-      | asn_sep a1 a2 => inst_assertion ι a1 ✱ inst_assertion ι a2
-      | asn_exist ς τ a => ∃ (v : Lit τ), inst_assertion (ι ► (ς∶τ ↦ v)) a
+        interpret_assertion(ι ►► ι') (alt__rhs K)
+      | asn_sep a1 a2 => interpret_assertion ι a1 ✱ interpret_assertion ι a2
+      | asn_exist ς τ a => ∃ (v : Lit τ), interpret_assertion(ι ► (ς∶τ ↦ v)) a
       | asn_debug => emp
     end%logic.
 
@@ -423,17 +482,17 @@ Module Assertions
       (ι : SymInstance (sep_contract_logic_variables c)) : LocalStore Δ :=
       inst ι (sep_contract_localstore c).
 
-    Definition inst_contract_precondition {Δ τ} (c : SepContract Δ τ)
+    Definition interpret_contract_precondition {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) : L :=
-      inst_assertion ι (sep_contract_precondition c).
+      interpret_assertion ι (sep_contract_precondition c).
 
-    Definition inst_contract_postcondition {Δ τ} (c : SepContract Δ τ)
+    Definition interpret_contract_postcondition {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
-        inst_assertion (env_snoc ι (sep_contract_result c::τ) result) (sep_contract_postcondition c).
+        interpret_assertion (env_snoc ι (sep_contract_result c::τ) result) (sep_contract_postcondition c).
 
   End Contracts.
 
-  Arguments inst_assertion {_ _ _} _ _.
+  Arguments interpret_assertion {_ _ _} _ _.
 
 End Assertions.
 

@@ -63,19 +63,6 @@ Module SemiConcrete
 
   Export symcontractkit.
 
-  Inductive SCChunk : Type :=
-  | scchunk_user   (p : 𝑷) (vs : Env Lit (𝑷_Ty p))
-  | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ).
-  Arguments scchunk_user _ _ : clear implicits.
-
-  Section TransparentObligations.
-    Local Set Transparent Obligations.
-    Derive NoConfusion for SCChunk.
-  End TransparentObligations.
-
-  Definition SCHeap  : Type :=
-    list SCChunk.
-
   Section SemiConcreteState.
 
     Local Set Primitive Projections.
@@ -154,7 +141,7 @@ Module SemiConcrete
   Section SemiConcreteMutator.
 
     Definition SCMut (Γ1 Γ2 : PCtx) (A : Type) : Type :=
-      SCState Γ1 -> Outcome string (SCMutResult Γ2 A).
+      SCState Γ1 -> Outcome (SCMutResult Γ2 A).
     Bind Scope mutator_scope with SCMut.
 
     Definition scmut_demonic {Γ1 Γ2 I A} (ms : I -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
@@ -274,26 +261,8 @@ Module SemiConcrete
     Global Arguments scmut_produce_chunk {Γ} _.
     Global Arguments scmut_consume_chunk {Γ} _.
 
-    Global Instance inst_chunk : Inst Chunk SCChunk :=
-      {| inst Σ ι c := match c with
-                       | chunk_user p ts => scchunk_user p (inst ι ts)
-                       | chunk_ptsreg r t => scchunk_ptsreg r (inst ι t)
-                       end;
-         lift Σ c   := match c with
-                       | scchunk_user p vs => chunk_user p (lift vs)
-                       | scchunk_ptsreg r v => chunk_ptsreg r (lift v)
-                       end
-      |}.
-
     Local Opaque instantiate_env.
     Local Opaque instantiate_term.
-
-    Global Instance instlaws_chunk : InstLaws Chunk SCChunk.
-    Proof.
-      constructor.
-      - intros ? ? []; cbn; f_equal; apply inst_lift.
-      - intros ? ? ζ ι []; cbn; f_equal; apply inst_subst.
-    Qed.
 
     Definition scmut_assume_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : SCMut Γ Γ unit :=
       fun s => outcome_assumek
@@ -540,7 +509,7 @@ Module SemiConcrete
     end%mut.
 
   Definition semiconcrete_outcome_contract {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
-    Outcome string unit :=
+    Outcome unit :=
       ⨂ ι : SymInstance (sep_contract_logic_variables c) =>
       let δΔ : LocalStore Δ := inst ι (sep_contract_localstore c) in
       let mut := scmut_contract c s ι in
@@ -548,6 +517,6 @@ Module SemiConcrete
       outcome_map (fun _ => tt) out.
 
   Definition ValidContractSCMut {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    outcome_satisfy (semiconcrete_outcome_contract c body) (fun _ => False) (fun _ => True).
+    outcome_satisfy (semiconcrete_outcome_contract c body) (fun _ => True).
 
 End SemiConcrete.
