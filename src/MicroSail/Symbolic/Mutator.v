@@ -287,6 +287,19 @@ Module Mutators
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    Global Instance OccursCheckMessage : OccursCheck Message :=
+      fun Σ x xIn msg =>
+        match msg with
+        | MkMessage f m Γ δ h pc =>
+          option_ap
+            (option_ap
+               (option_map
+                  (MkMessage f m Γ)
+                  (occurs_check xIn δ))
+               (occurs_check xIn h))
+            (occurs_check xIn pc)
+        end.
+
     Inductive Error (Σ : LCtx) (msg : Message Σ) : Prop :=.
 
   End Messages.
@@ -596,6 +609,14 @@ Module Mutators
       @Build_Inst Unit unit (fun _ _ x => x) (fun _ x  => x).
     Global Instance InstLawsUnit : InstLaws Unit unit.
     Proof. constructor; reflexivity. Qed.
+    Global Instance OccursCheckUnit : OccursCheck Unit :=
+      fun _ _ _ _ => Some tt.
+    Global Instance OccursCheckLawsUnit : OccursCheckLaws Unit.
+    Proof.
+      constructor; cbn.
+      - destruct t; reflexivity.
+      - destruct t, t'; reflexivity.
+    Qed.
 
   End SymbolicUnit.
 
