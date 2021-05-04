@@ -555,22 +555,23 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   Definition fun_wM (μ : Memory) (addr val : Lit ty_int) : Memory :=
     fun addr' => if Z.eqb addr addr' then val else μ addr'.
 
-  Definition fun_dI (code : Lit ty_int) : string + Lit ty_instr :=
-    (* TODO: actually decode to non-trivial instructions? *)
-    inr ret.
-
-  Definition call_external (γ : RegStore) (μ : Memory) {σs σ} (f : 𝑭𝑿 σs σ) :
-    abstract_named Lit σs (RegStore * Memory * (string + Lit σ)) :=
+  Definition ExternalCall {σs σ} (f : 𝑭𝑿 σs σ) :
+    forall (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
     match f with
-    | rM      => fun addr     => (γ , μ                 , inr (fun_rM μ addr))
-    | wM      => fun addr val => (γ , fun_wM μ addr val , inr tt)
-    | dI      => fun code     => (γ , μ                 , fun_dI code)
-    | ghost _ => curry_named (fun _ => (γ , μ , inr tt))
-    end.
-
-  Definition ExternalCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
-    match uncurry_named (call_external γ μ f) args with
-    | (γ'' , μ'' , res'') => μ' = μ'' /\ γ' = γ'' /\ res = res''
+    | rM      => fun args res γ γ' μ μ' =>
+                   let addr := (args ‼ "address")%exp in
+                   (γ' , μ' , res) = (γ , μ , inr (fun_rM μ addr))
+    | wM      => fun args res γ γ' μ μ' =>
+                   let addr := (args ‼ "address")%exp in
+                   let val  := (args ‼ "new_value")%exp in
+                   (γ' , μ' , res) = (γ , fun_wM μ addr val , inr tt)
+    | dI      => fun args res γ γ' μ μ' =>
+                   let code := (args ‼ "code")%exp in
+                   (* Non-deterministically return any possible result *)
+                   (exists res' : Lit (ty_sum ty_string ty_instr),
+                     (γ' , μ' , res) = (γ , μ , res'))%type
+    | ghost f => fun _ res γ γ' μ μ' =>
+                   (γ' , μ' , res) = (γ , μ , inr tt)
     end.
 
   Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
@@ -579,10 +580,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     destruct f; cbn.
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args; repeat eexists; constructor.
-    - repeat depelim args; repeat eexists; constructor.
-    - exists γ, μ, (inr tt).
-      unfold ExternalCall, call_external, curry_named, uncurry_named.
-      rewrite uncurry_curry. auto.
+    - repeat depelim args. exists γ, μ, (inr ret), (inr ret). reflexivity.
+    - exists γ, μ, (inr tt). reflexivity.
   Qed.
 
 End MinCapsProgramKit.
