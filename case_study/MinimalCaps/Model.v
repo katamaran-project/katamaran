@@ -301,11 +301,11 @@ Module MinCapsModel.
     iFrame.
     iSplitL; trivial.
     destruct res.
-    - admit.
+    - iApply wp_compat_fail.
     - iApply wp_value.
       cbn.
       iSplit; trivial.
-  Admitted.
+  Qed.
 
   Lemma open_ptsreg_sound `{sg : sailG Σ} {Γ es δ} :
     forall reg w,
@@ -640,9 +640,9 @@ Module MinCapsModel.
       cbn in H0.
       dependent elimination H0.
       dependent elimination s.
-      rewrite Heq in e0.
-      cbn in e0.
-      dependent elimination e0.
+      rewrite Heq in e1.
+      cbn in e1.
+      dependent elimination e1.
       do 2 iModIntro.
       cbn.
       destruct p;
