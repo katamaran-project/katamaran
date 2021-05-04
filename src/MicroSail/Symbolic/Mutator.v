@@ -287,6 +287,19 @@ Module Mutators
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    Global Instance OccursCheckMessage : OccursCheck Message :=
+      fun Σ x xIn msg =>
+        match msg with
+        | MkMessage f m Γ δ h pc =>
+          option_ap
+            (option_ap
+               (option_map
+                  (MkMessage f m Γ)
+                  (occurs_check xIn δ))
+               (occurs_check xIn h))
+            (occurs_check xIn pc)
+        end.
+
     Inductive Error (Σ : LCtx) (msg : Message Σ) : Prop :=.
 
   End Messages.
@@ -337,6 +350,8 @@ Module Mutators
         (* If the terms are literals, we can trust the negative result. *)
         match t1 , t2 with
         | term_lit _ _ , term_lit _ _ => Some false
+        | term_inr _ , term_inl _ => Some false
+        | term_inl _ , term_inr _ => Some false
         | _            , _            => None
         end.
 
@@ -350,8 +365,8 @@ Module Mutators
       destruct (Term_eqb_spec t1 t2).
       - constructor. intros. apply reflect_iff.
         constructor. congruence.
-      - destruct t1; dependent elimination t2; constructor; auto.
-        intros. apply reflect_iff. constructor. cbn. congruence.
+      - destruct t1; dependent elimination t2; constructor; auto;
+        intros; apply reflect_iff; constructor; cbn; congruence.
     Qed.
 
     (* Check if the given formula is always true or always false for any
@@ -595,6 +610,14 @@ Module Mutators
       @Build_Inst Unit unit (fun _ _ x => x) (fun _ x  => x).
     Global Instance InstLawsUnit : InstLaws Unit unit.
     Proof. constructor; reflexivity. Qed.
+    Global Instance OccursCheckUnit : OccursCheck Unit :=
+      fun _ _ _ _ => Some tt.
+    Global Instance OccursCheckLawsUnit : OccursCheckLaws Unit.
+    Proof.
+      constructor; cbn.
+      - destruct t; reflexivity.
+      - destruct t, t'; reflexivity.
+    Qed.
 
   End SymbolicUnit.
 
@@ -630,6 +653,12 @@ Module Mutators
     Global Arguments sout_block {_ _}.
     Global Arguments sout_demonicv {_ _} _ _.
     Global Arguments sout_subst {_ _} x {_ _} t k.
+
+    Fixpoint sout_demonic_close {A} Σ : SymOutcome A Σ -> SymOutcome A ε :=
+      match Σ with
+      | ctx_nil      => fun k => k
+      | ctx_snoc Σ b => fun k => sout_demonic_close (sout_demonicv b k)
+      end.
 
     Fixpoint sout_multisub {AT Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : SymOutcome AT Σ2 -> SymOutcome AT Σ1.
     Proof.
@@ -1248,8 +1277,8 @@ Module Mutators
 
   Section VerificationConditions.
 
-    Inductive VerificationCondition {AT Σ} (p : SymOutcome AT Σ) : Prop :=
-    | vc (P : ForallNamed (fun ι : SymInstance Σ => sout_safe _ ι p)).
+    Inductive VerificationCondition {AT} (p : SymOutcome AT ctx_nil) : Prop :=
+    | vc (P : sout_safe _ env_nil p).
 
   End VerificationConditions.
 
@@ -2566,14 +2595,14 @@ Module Mutators
     (*   end. *)
 
     Definition dmut_contract_evar_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
-      SymOutcome
-        (DynamicMutatorResult Δ Unit)
-        (sep_contract_logic_variables c) :=
+      SymOutcome Unit ε :=
       let δ    := sep_contract_localstore c in
-      dmut_contract_evar c s (sub_id _) nil (symbolicstate_initial δ).
+      sout_demonic_close
+        (sout_map
+           (fun _ _ _ => tt)
+           (dmut_contract_evar c s (sub_id _) nil (symbolicstate_initial δ))).
 
-    Definition ValidContractWithConfig {Δ τ}
-      (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition (sout_prune (dmut_contract_evar_outcome c body)).
 
   End WithConfig.

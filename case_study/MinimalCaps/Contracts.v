@@ -108,6 +108,11 @@ Module MinCapsSymbolicContractKit <:
         "cap_end" e)
         "cap_cursor" a)
        asn).
+  Local Notation asn_within_bounds a b e :=
+    (asn_formula (formula_bool (term_binop binop_and
+                              (term_binop binop_le b a)
+                              (term_binop binop_le a e)))).
+
   (* Arguments asn_prop [_] & _. *)
 
   (* regInv(r) = ∃ w : word. r ↦ w * safe(w) *)
@@ -209,20 +214,22 @@ Module MinCapsSymbolicContractKit <:
                 (pc ↦ term_var "npc" ✱ asn_csafe (term_var "npc"));
     |}.
 
-  Definition sep_contract_read_mem : SepContract ["a" ∶ ty_addr ] ty_memval :=
-    {| sep_contract_logic_variables := ["a" ∶ ty_addr];
-       sep_contract_localstore      := [term_var "a"]%arg;
-       sep_contract_precondition    := machInv;
-       sep_contract_result          := "result";
-       sep_contract_postcondition   := machInv;
+  Definition sep_contract_read_mem : SepContract ["c" ∶ ty_cap ] ty_memval :=
+    {| sep_contract_logic_variables := ["c" ∶ ty_cap];
+       sep_contract_localstore      := [term_var "c"]%arg;
+       sep_contract_precondition    := asn_csafe (term_var "c");
+       sep_contract_result          := "read_mem_result";
+       sep_contract_postcondition   :=
+         asn_csafe (term_var "c") ✱ asn_safe (term_inl (term_var "read_mem_result"))
     |}.
 
-  Definition sep_contract_write_mem : SepContract ["a" ∶ ty_addr, "v" ∶ ty_memval ] ty_unit :=
-    {| sep_contract_logic_variables := ["a" ∶ ty_addr, "v" ∶ ty_memval];
-       sep_contract_localstore      := [term_var "a", term_var "v"]%arg;
-       sep_contract_precondition    := machInv;
-       sep_contract_result          := "result";
-       sep_contract_postcondition   := machInv;
+  Definition sep_contract_write_mem : SepContract ["c" ∶ ty_cap, "v" ∶ ty_memval ] ty_unit :=
+    {| sep_contract_logic_variables := ["c" ∶ ty_cap, "v" ∶ ty_memval];
+       sep_contract_localstore      := [term_var "c", term_var "v"]%arg;
+       sep_contract_precondition    := asn_csafe (term_var "c");
+       sep_contract_result          := "write_mem_result";
+       sep_contract_postcondition   :=
+         asn_csafe (term_var "c") ✱ asn_eq (term_var "write_mem_result") (term_lit ty_unit tt);
     |}.
 
   Definition sep_contract_read_allowed : SepContract ["p" ∶ ty_perm ] ty_bool :=
@@ -615,34 +622,68 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_postcondition   := term_enum regname r ↦r term_var "w"
     |}.
 
+  Definition sep_contract_rM : SepContract ["address" ∶ ty_addr] ty_int :=
+    {| sep_contract_logic_variables := ["address" ∶ ty_addr, "p" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr];
+       sep_contract_localstore      := [term_var "address"]%arg;
+       sep_contract_precondition    :=
+         asn_csafe (term_record capability
+                            [term_var "p",
+                             term_var "b",
+                             term_var "e",
+                             term_var "address"]) ✱
+                        (asn_match_enum permission (term_var "p")
+                            (fun p => match p with
+                                    | O  => asn_false
+                                    | _  => asn_within_bounds (term_var "address") (term_var "b") (term_var "e")
+                                    end));
+       sep_contract_result          := "rM_result";
+       sep_contract_postcondition   :=
+         asn_csafe (term_record capability
+                            [term_var "p",
+                             term_var "b",
+                             term_var "e",
+                             term_var "address"])
+           ✱ asn_safe (term_inl (term_var "rM_result"))
+    |}.
+
+  Definition sep_contract_wM : SepContract ["address" ∶ ty_addr, "new_value" ∶ ty_memval] ty_unit :=
+    {| sep_contract_logic_variables := ["address" ∶ ty_addr, "new_value" ∶ ty_memval, "p" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr];
+       sep_contract_localstore      := [term_var "address", term_var "new_value"]%arg;
+       sep_contract_precondition    :=
+         asn_csafe (term_record capability
+                            [term_var "p",
+                             term_var "b",
+                             term_var "e",
+                             term_var "address"]) ✱
+                        (asn_match_enum permission (term_var "p")
+                            (fun p => match p with
+                                    | RW => asn_within_bounds (term_var "address") (term_var "b") (term_var "e")
+                                    | _  => asn_false
+                                    end));
+       sep_contract_result          := "wM_result";
+       sep_contract_postcondition   :=
+         asn_csafe (term_record capability
+                            [term_var "p",
+                             term_var "b",
+                             term_var "e",
+                             term_var "address"])
+           ✱ asn_eq (term_var "wM_result") (term_lit ty_unit tt)
+    |}.
+
+  Definition sep_contract_dI : SepContract ["code" ∶ ty_int] ty_instr :=
+    {| sep_contract_logic_variables := ["code" ∶ ty_int];
+       sep_contract_localstore      := [term_var "code"]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "_";
+       sep_contract_postcondition   := asn_true;
+    |}.
+
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
-      | rM =>
-        MkSepContract
-          _ _
-          ["address" ∶ ty_int, "w" ∶ ty_int]
-          [term_var "address"]%arg
-          (term_var "address" ↦m term_var "w")
-          "result"
-          (term_var "address" ↦m term_var "w" ✱
-                    asn_eq (term_var "result") (term_var "w"))
-      | wM =>
-        MkSepContract
-          _ _
-          ["address" ∶ ty_int, "new_value" ∶ ty_int, "old_value" ∶ ty_int]
-          [term_var "address", term_var "new_value"]%arg
-          (term_var "address" ↦m term_var "old_value")
-          "result"
-          (term_var "address" ↦m term_var "new_value")
-      | dI =>
-        MkSepContract
-          _ _
-          ["code" ∶ ty_int]
-          [term_var "code"]%arg
-          asn_true
-          "result"
-          asn_true
+      | rM => sep_contract_rM
+      | wM => sep_contract_wM
+      | dI => sep_contract_dI
       | @ghost _ f =>
         match f in FunGhost Δ return SepContract Δ ty_unit with
         | open_ptsreg            => sep_contract_open_ptsreg
@@ -716,55 +757,55 @@ Local Notation asn_match_cap c p b e a asn :=
     asn).
 
 Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_read_reg_cap : ValidContractDynMut sep_contract_read_reg_cap fun_read_reg_cap.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_read_reg_num : ValidContractDynMut sep_contract_read_reg_num fun_read_reg_num.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_write_reg.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_next_pc : ValidContractDynMut sep_contract_next_pc fun_next_pc.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_add_pc : ValidContractDynMut sep_contract_add_pc fun_add_pc.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_read_mem : ValidContractDynMut sep_contract_read_mem fun_read_mem.
-Proof. compute. Abort.
+Proof. compute; solve. Qed.
 
 Lemma valid_contract_write_mem : ValidContractDynMut sep_contract_write_mem fun_write_mem.
-Proof. compute. Abort.
+Proof. compute; solve. Qed.
 
 Lemma valid_contract_read_allowed : ValidContractDynMut sep_contract_read_allowed fun_read_allowed.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_write_allowed : ValidContractDynMut sep_contract_write_allowed fun_write_allowed.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_upper_bound : ValidContractDynMut sep_contract_upper_bound fun_upper_bound.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_within_bounds : ValidContractDynMut sep_contract_within_bounds fun_within_bounds.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_j : ValidContractDynMut sep_contract_exec_j fun_exec_j.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_jal : ValidContractDynMut sep_contract_exec_jal fun_exec_jal.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_jalr : ValidContractDynMut sep_contract_exec_jalr fun_exec_jalr.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 (*
 Ltac debug_satisfy_forget_post :=
@@ -802,28 +843,28 @@ Close Scope env.
 *)
 
 Lemma valid_contract_exec_bnez : ValidContractDynMut sep_contract_exec_bnez fun_exec_bnez.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_ld : ValidContractDynMut sep_contract_exec_ld fun_exec_ld.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_sd : ValidContractDynMut sep_contract_exec_sd fun_exec_sd.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_addi : ValidContractDynMut sep_contract_exec_addi fun_exec_addi.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_add : ValidContractDynMut sep_contract_exec_add fun_exec_add.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_ret : ValidContractDynMut sep_contract_exec_ret fun_exec_ret.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_instr : ValidContractDynMut sep_contract_exec_instr fun_exec_instr.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Definition debug_config : Config :=
   {| config_debug_function _ _ f :=
@@ -834,7 +875,7 @@ Definition debug_config : Config :=
   |}.
 
 Lemma valid_contract_exec : ValidContractDynMut sep_contract_exec fun_exec.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_loop : ValidContractDynMut sep_contract_loop fun_loop.
-Proof. apply dynmutevarreflect_sound; reflexivity. Abort.
+Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
