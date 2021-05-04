@@ -629,6 +629,11 @@ Module MinCapsModel.
       cbn.
       destruct v1; trivial; iSplit; trivial; iSplit; trivial.
     - (* wM *)
+      rename v into e.
+      rename v0 into b.
+      rename v1 into p.
+      rename v2 into w.
+      rename v3 into address.
       iIntros (Heq) "[#Hcsafe Hp]".
       rewrite wp_unfold.
       iIntros (σ' ks1 ks n) "[Hregs Hmem]".
@@ -640,63 +645,65 @@ Module MinCapsModel.
       cbn in H0.
       dependent elimination H0.
       dependent elimination s.
-      rewrite Heq in e0.
-      cbn in e0.
-      destruct e0 as (Hμ & Hγ & Hres).
+      rewrite Heq in e1.
+      cbn in e1.
+      destruct e1 as (Hμ & Hγ & Hres).
       subst.
       do 2 iModIntro.
       cbn.
-      destruct v1;
-        try (cbn; iDestruct "Hp" as "[% _]"; unfold is_true in *; discriminate H0).
-      cbn.
-      iDestruct "Hp" as "[% _]".
-      iAssert (gen_heap.mapsto v3 (dfrac.DfracOwn 1) _)%I as "Hown".
-        + admit.
-        + iMod (gen_heap.gen_heap_update _ _ _ v2 with "Hmem' Hown") as "[Hmem' ptsto]".
-          iMod "Hclose" as "_".
-          iModIntro.
-          iSplitL; trivial.
-          cbn.
-          iSplitL "Hregs"; first by iFrame.
-          * iExists (<[v3:=v2]> memmap).
-            iSplitL.
-            { iFrame. }
-            { iPureIntro.
-              apply map_Forall_lookup.
-              intros i x Hl.
-              unfold fun_wM.
-              cbn in *.
-              destruct (v3 =? i) eqn:?.
-              - rewrite -> Z.eqb_eq in Heqb.
-                subst.
-                apply (lookup_insert_rev memmap i); assumption.
-              - rewrite -> map_Forall_lookup in H.
-                rewrite -> Z.eqb_neq in Heqb.
-                rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in Hl.
-                apply H; assumption.
-            }
-          * iSplitL; trivial.
-            iApply wp_value; cbn; trivial;
-              repeat (iSplitL; trivial).
+      destruct p;
+        cbn;
+        iDestruct "Hp" as "[% _]";
+        try (unfold is_true in *; discriminate H0).
+      iAssert (gen_heap.mapsto address (dfrac.DfracOwn 1) _)%I as "Hown".
+      + admit.
+      + iMod (gen_heap.gen_heap_update _ _ _ w with "Hmem' Hown") as "[Hmem' ptsto]".
+        iMod "Hclose" as "_".
+        iModIntro.
+        iSplitL; trivial.
+        cbn.
+        iSplitL "Hregs"; first by iFrame.
+        * iExists (<[address:=w]> memmap).
+          iSplitL.
+          { iFrame. }
+          { iPureIntro.
+            apply map_Forall_lookup.
+            intros i x Hl.
+            unfold fun_wM.
+            cbn in *.
+            destruct (address =? i) eqn:Heqb.
+            - rewrite -> Z.eqb_eq in Heqb.
+              subst.
+              apply (lookup_insert_rev memmap i); assumption.
+            - rewrite -> map_Forall_lookup in H.
+              rewrite -> Z.eqb_neq in Heqb.
+              rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in Hl.
+              apply H; assumption.
+          }
+        * iSplitL; trivial.
+          iApply wp_value; cbn; trivial;
+            repeat (iSplitL; trivial).
   Admitted.
 
-  (* TODO: fix *)
-  (* 
+  (* TODO: fix 
   Lemma rM_sound2 `{sg : sailG Σ} `{invG} {Γ es δ} :
     forall address (p : Lit ty_perm) (b e : Lit ty_addr),
+      let ι := env_snoc (env_snoc (env_snoc (env_snoc env_nil (_ , ty_addr) address)
+                                           ("p" , ty_perm) p)
+                                 (_ , ty_addr) b)
+                       (_ , ty_addr) e in
       evals es δ = env_snoc env_nil (_ , ty_addr) address
     → ⊢ semTriple δ
         (MinCapsIrisHeapKit.MinCaps_csafe (mG := sailG_memG)
            (MkCap p b e address)
-           ∗ MinCapsSymbolicContractKit.ASS.inst_assertion
-           [address, p, b, e]
-           match ([address, p, b, e] ‼ "p")%exp with
-           | O => MinCapsSymbolicContractKit.ASS.asn_false
-           | _ =>
+           ∗ MinCapsSymbolicContractKit.ASS.interpret_assertion ι
+           match p with
+           | RW =>
              MinCapsSymbolicContractKit.ASS.asn_bool
                (term_binop binop_and
                            (term_binop binop_le (term_lit ty_addr b) (term_lit ty_addr address))
                            (term_binop binop_le (term_lit ty_addr address) (term_lit ty_addr e)))
+           | _  => MinCapsSymbolicContractKit.ASS.asn_false
            end) (stm_call_external rM es)
         (λ (v3 : Z) (δ' : LocalStore Γ),
          (MinCapsIrisHeapKit.MinCaps_csafe (mG := sailG_memG)
