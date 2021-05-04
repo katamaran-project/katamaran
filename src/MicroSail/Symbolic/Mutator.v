@@ -387,7 +387,8 @@ Module Mutators
 
   End TrySolve.
 
-  Infix ">=>" := ssrfun.pcomp (at level 80, right associativity).
+  Definition pcomp {A B C : Type} (f : A -> option B) (g : B -> option C) := fun (x : A) => base.mbind g (f x).
+  Infix ">=>" := pcomp (at level 80, right associativity).
 
   Section ChunkExtraction.
     Context {Σ : LCtx}.
