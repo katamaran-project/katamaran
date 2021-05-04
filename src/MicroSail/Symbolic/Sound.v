@@ -878,19 +878,47 @@ Module Soundness
     (*       apply l_dcl. now right. *)
     (* Qed. *)
 
-    (* Lemma dmut_angelic_list_dcl {AT A D} `{Subst AT, Inst AT A} {Γ1 Γ2 Σ} func msg (data : D) (l : list (DynamicMutator Γ1 Γ2 AT Σ)) *)
-    (*   (l_dcl : forall d, List.In d l -> dmut_dcl d) : *)
-    (*   dmut_dcl (dmut_angelic_list func msg data l). *)
-    (* Proof. *)
-    (*   induction l; cbn. *)
-    (*   - apply dmut_fail_dcl. *)
-    (*   - destruct l. *)
-    (*     + apply l_dcl. now left. *)
-    (*     + apply dmut_angelic_binary_dcl. *)
-    (*       apply l_dcl. now left. *)
-    (*       apply IHl. intros d' dIn'. *)
-    (*       apply l_dcl. now right. *)
-    (* Qed. *)
+    Lemma dmut_angelic_list_dcl {AT A D} `{Subst AT, SubstLaws AT, Inst AT A, InstLaws AT A}
+          {Γ Σ} func msg (data : D) (l : list (AT Σ)) :
+      dmut_dcl (Γ2 := Γ) (dmut_angelic_list func msg data l).
+    Proof.
+      induction l; cbn.
+      - apply dmut_fail_dcl.
+      - destruct l.
+        + apply dmut_pure_dcl.
+        + apply dmut_angelic_binary_dcl.
+          apply dmut_pure_dcl.
+          apply IHl.
+    Qed.
+
+    Lemma dmut_angelic_list_arrow_dcl {AT A BT B D} `{Subst AT, SubstLaws AT, Inst AT A, InstLaws AT A, Inst BT B, InstLaws BT B}
+          {Γ Σ} func msg (data : D) (l : forall Σ2 (ζ : Sub Σ Σ2) s, list (BT Σ2))
+      (Hl : forall (Σ1 Σ2 : LCtx) (ζ01 : Sub Σ Σ1) (ζ02 : Sub Σ Σ2) (a1 : AT Σ1) (a2 : AT Σ2) (Σ3 Σ4 : LCtx)
+         (ζ13 : Sub Σ1 Σ3) (ζ24 : Sub Σ2 Σ4) (ζ34 : Sub Σ3 Σ4) (pc3 : PathCondition Σ3) (pc4 : PathCondition Σ4)
+         (ι3 : SymInstance Σ3) (ι4 : SymInstance Σ4),
+          ι3 = inst ι4 ζ34 ->
+          instpc ι3 pc3 ->
+          instpc ι4 pc4 ->
+          inst ι3 (sub_comp ζ01 ζ13) = inst ι4 (sub_comp ζ02 ζ24) ->
+          inst (inst ι3 ζ13) a1 = inst (inst ι4 ζ24) a2 ->
+          inst (inst ι3 ζ13) (l Σ1 ζ01 a1) = inst (inst ι4 ζ24) (l Σ2 ζ02 a2)) :
+      dmut_arrow_dcl (Γ2 := Γ) (fun Σ2 (ζ : Sub Σ Σ2) s => dmut_angelic_list func msg data (l Σ2 ζ s)).
+    Proof.
+      unfold dmut_arrow_dcl.
+      intros until Q.
+      intros PQ.
+      assert (eql : inst (inst ι3 ζ13) (l Σ1 ζ01 a1) = inst (inst ι4 ζ24) (l Σ2 ζ02 a2)) by (eapply Hl; eauto).
+      rewrite ?dmut_wp_angelic_list; eauto.
+      intros (x & xInl1 & Px).
+      apply (List.in_map (inst (inst ι3 ζ13))) in xInl1.
+      unfold inst at 1 3 in eql; cbn in eql.
+      rewrite eql in xInl1.
+      eapply List.in_map_iff in xInl1.
+      destruct xInl1 as (x2 & eq2 & x2Inl2).
+      apply PQ in Px.
+      rewrite <-eq2,H17 in Px.
+      exists x2; eauto.
+    Qed.
 
     (* Lemma dmut_demonic_finite_dcl {F AT A} `{finite.Finite F, Subst AT, Inst AT A} {Γ Σ} *)
     (*   (k : F -> DynamicMutator Γ Γ AT Σ) (k_dcl : forall x, dmut_dcl (k x)) : *)
