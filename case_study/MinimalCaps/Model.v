@@ -652,16 +652,6 @@ Module MinCapsModel.
       rewrite wp_unfold.
       iIntros (σ' ks1 ks n) "[Hregs Hmem]".
       iDestruct "Hmem" as (memmap) "[Hmem' %]".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iSplitR; first by intuition.
-      iIntros (e2 σ'' efs) "%".
-      cbn in H1.
-      dependent elimination H1.
-      dependent elimination s.
-      rewrite Heq in e1.
-      cbn in e1.
-      dependent elimination e1.
       iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@address) (∃ v, gen_heap.mapsto address (dfrac.DfracOwn 1) _))%I as "Hown".
       { iDestruct "Hcsafe" as "[[% %] Hcsafe]".
         iApply (big_sepL_elem_of with "Hcsafe").
@@ -673,37 +663,49 @@ Module MinCapsModel.
         apply Zle_is_le_bool in He.
         split; assumption.
       }
+      iInv "Hown" as "Hinv" "Hclose".
+      iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+      iModIntro.
+      iSplitR; first by intuition.
+      iIntros (e2 σ'' efs) "%".
+      cbn in H1.
+      dependent elimination H1.
+      dependent elimination s.
+      rewrite Heq in e1.
+      cbn in e1.
+      dependent elimination e1.
       do 2 iModIntro.
+      iDestruct "Hinv" as (v) "Hav".
+      iMod (gen_heap.gen_heap_update _ _ _ w with "Hmem' Hav") as "[Hmem' Hav]".
+      iMod "Hclose2" as "_".
+      iAssert (▷ (∃ v0 : Z, gen_heap.mapsto address (dfrac.DfracOwn 1) v0))%I with "[Hav]" as "Hinv".
+      { iModIntro. now iExists w. }
+      iMod ("Hclose" with "Hinv") as "_".
+      iModIntro.
+      iSplitL; trivial.
       cbn.
-      (* iInv "Hown" as "Hinv".
-        iMod (gen_heap.gen_heap_update _ _ _ w with "Hmem' Hinv") as "[Hmem' ptsto]".
-        iMod "Hclose" as "_".
-        iModIntro.
-        iSplitL; trivial.
-        cbn.
-        iSplitL "Hregs"; first by iFrame.
-        * iExists (<[address:=w]> memmap).
-          iSplitL.
-          { iFrame. }
-          { iPureIntro.
-            apply map_Forall_lookup.
-            intros i x Hl.
-            unfold fun_wM.
-            cbn in *.
-            destruct (address =? i) eqn:Heqb.
-            - rewrite -> Z.eqb_eq in Heqb.
-              subst.
-              apply (lookup_insert_rev memmap i); assumption.
-            - rewrite -> map_Forall_lookup in H.
-              rewrite -> Z.eqb_neq in Heqb.
-              rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in Hl.
-              apply H; assumption.
-          }
-        * iSplitL; trivial.
-          iApply wp_value; cbn; trivial;
-            repeat (iSplitL; trivial).
-       *)
-  Admitted.
+      iSplitL "Hregs"; first by iFrame.
+      * iExists (<[address:=w]> memmap).
+        iSplitL.
+        { iFrame. }
+        { iPureIntro.
+          apply map_Forall_lookup.
+          intros i x Hl.
+          unfold fun_wM.
+          cbn in *.
+          destruct (address =? i) eqn:Heqb.
+          - rewrite -> Z.eqb_eq in Heqb.
+            subst.
+            apply (lookup_insert_rev memmap i); assumption.
+          - rewrite -> map_Forall_lookup in H0.
+            rewrite -> Z.eqb_neq in Heqb.
+            rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in Hl.
+            apply H0; assumption.
+        }
+      * iSplitL; trivial.
+        iApply wp_value; cbn; trivial;
+          repeat (iSplitL; trivial).
+  Qed.
 
   (* TODO: fix 
   Lemma rM_sound2 `{sg : sailG Σ} `{invG} {Γ es δ} :
