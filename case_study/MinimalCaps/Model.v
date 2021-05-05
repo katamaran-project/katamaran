@@ -99,13 +99,7 @@ Module MinCapsModel.
                                 ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
-    Fixpoint natsTo (n : nat) : list nat :=
-      match n with
-      | 0 => []
-      | S n => n :: natsTo n
-      end.
-
-    Definition liveAddrs : list Addr := map Z.of_nat (natsTo maxAddr).
+    Definition liveAddrs : list Addr := seqZ 0 maxAddr.
     Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr Z ).
 
     Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : Z), μ a = v) (initMemMap μ).
@@ -163,15 +157,36 @@ Module MinCapsModel.
     Definition region_addrs (b e : Addr) : list Addr :=
       filter (fun a => and (b ≤ a)%Z (a ≤ e)%Z) liveAddrs.
 
+    Lemma element_of_region_addrs (a b e : Addr) :
+      b ∈ liveAddrs → e ∈ liveAddrs →
+      (b <= a)%Z /\ (a <= e)%Z ->
+      a ∈ region_addrs b e.
+    Proof.
+      intros Hb He [Hba Hae].
+      apply elem_of_list_filter.
+      repeat (split; try assumption).
+      apply elem_of_seqZ in Hb.
+      apply elem_of_seqZ in He.
+      apply elem_of_seqZ.
+      split.
+      - destruct Hb as [Hb _].
+        eapply Z.le_trans; first apply Hb.
+        assumption.
+      - destruct He as [_ He].
+        eapply Z.le_lt_trans; first apply Hae.
+        assumption.
+    Qed.
+
     Definition MinCaps_csafe `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Capability) : iProp Σ :=
       match v with
       | MkCap O b e a => True%I
       | MkCap R b e a =>
-                ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) v))%I
+        (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
+          [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) v))%I
       | MkCap RW b e a =>
-                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) v)
+        (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
+                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) v))
       end.
-
 
     Definition MinCaps_safe `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Z + Capability) : iProp Σ :=
       match v with
@@ -622,7 +637,7 @@ Module MinCapsModel.
       iSplitL; trivial.
       iApply wp_value.
       cbn.
-      destruct v1; trivial; iSplit; trivial; iSplit; trivial.
+      destruct v1; iSplit; trivial; iSplit; trivial.
     - (* wM *)
       rename v into e.
       rename v0 into b.
@@ -630,6 +645,10 @@ Module MinCapsModel.
       rename v2 into w.
       rename v3 into address.
       iIntros (Heq) "[#Hcsafe Hp]".
+      destruct p;
+        cbn;
+        iDestruct "Hp" as "[% _]";
+        try (unfold is_true in *; discriminate H).
       rewrite wp_unfold.
       iIntros (σ' ks1 ks n) "[Hregs Hmem]".
       iDestruct "Hmem" as (memmap) "[Hmem' %]".
@@ -637,21 +656,27 @@ Module MinCapsModel.
       iModIntro.
       iSplitR; first by intuition.
       iIntros (e2 σ'' efs) "%".
-      cbn in H0.
-      dependent elimination H0.
+      cbn in H1.
+      dependent elimination H1.
       dependent elimination s.
       rewrite Heq in e1.
       cbn in e1.
       dependent elimination e1.
+      iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@address) (∃ v, gen_heap.mapsto address (dfrac.DfracOwn 1) _))%I as "Hown".
+      { iDestruct "Hcsafe" as "[[% %] Hcsafe]".
+        iApply (big_sepL_elem_of with "Hcsafe").
+        apply MinCapsIrisHeapKit.element_of_region_addrs; try assumption.
+        unfold is_true in H.
+        apply andb_prop in H.
+        destruct H as [Hb He].
+        apply Zle_is_le_bool in Hb.
+        apply Zle_is_le_bool in He.
+        split; assumption.
+      }
       do 2 iModIntro.
       cbn.
-      destruct p;
-        cbn;
-        iDestruct "Hp" as "[% _]";
-        try (unfold is_true in *; discriminate H0).
-      iAssert (gen_heap.mapsto address (dfrac.DfracOwn 1) _)%I as "Hown".
-      + admit.
-      + iMod (gen_heap.gen_heap_update _ _ _ w with "Hmem' Hown") as "[Hmem' ptsto]".
+      (* iInv "Hown" as "Hinv".
+        iMod (gen_heap.gen_heap_update _ _ _ w with "Hmem' Hinv") as "[Hmem' ptsto]".
         iMod "Hclose" as "_".
         iModIntro.
         iSplitL; trivial.
@@ -677,6 +702,7 @@ Module MinCapsModel.
         * iSplitL; trivial.
           iApply wp_value; cbn; trivial;
             repeat (iSplitL; trivial).
+       *)
   Admitted.
 
   (* TODO: fix 
