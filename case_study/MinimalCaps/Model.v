@@ -81,17 +81,19 @@ Module MinCapsModel.
     Import iris.base_logic.lib.iprop.
     Import iris.base_logic.lib.gen_heap.
 
+    Definition MemVal : Set := Z + Capability.
+
     Class mcMemG Σ := McMemG {
                           (* ghost variable for tracking state of registers *)
-                          mc_ghG :> gh.gen_heapG Z Z Σ;
+                          mc_ghG :> gh.gen_heapG Z MemVal Σ;
                           mc_invNs : namespace
                         }.
 
-    Definition memPreG : gFunctors -> Set := fun Σ => gh.gen_heapPreG Z Z Σ.
+    Definition memPreG : gFunctors -> Set := fun Σ => gh.gen_heapPreG Z MemVal Σ.
     Definition memG : gFunctors -> Set := mcMemG.
-    Definition memΣ : gFunctors := gh.gen_heapΣ Z Z.
+    Definition memΣ : gFunctors := gh.gen_heapΣ Z MemVal.
 
-    Definition memΣ_PreG : forall {Σ}, subG memΣ Σ -> memPreG Σ := fun {Σ} => gh.subG_gen_heapPreG (Σ := Σ) (L := Z) (V := Z).
+    Definition memΣ_PreG : forall {Σ}, subG memΣ Σ -> memPreG Σ := fun {Σ} => gh.subG_gen_heapPreG (Σ := Σ) (L := Z) (V := MemVal).
 
     Definition mem_inv : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
@@ -100,9 +102,9 @@ Module MinCapsModel.
         )%I.
 
     Definition liveAddrs : list Addr := seqZ 0 maxAddr.
-    Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr Z ).
+    Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
 
-    Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : Z), μ a = v) (initMemMap μ).
+    Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
     Proof.
       unfold initMemMap.
       rewrite map_Forall_to_list.
@@ -125,7 +127,7 @@ Module MinCapsModel.
     Proof.
       iIntros (Σ μ gHP).
 
-      iMod (gen_heap_init (gen_heapPreG0 := gHP) (L := Addr) (V := Z) empty) as (gH) "[inv _]".
+      iMod (gen_heap_init (gen_heapPreG0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
       pose (memmap := initMemMap μ).
       iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
       iModIntro.
@@ -185,7 +187,7 @@ Module MinCapsModel.
           [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) v))%I
       | MkCap RW b e a =>
         (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
-                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) v))
+                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) v))%I
       end.
 
     Definition MinCaps_safe `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Z + Capability) : iProp Σ :=
@@ -219,7 +221,7 @@ Module MinCapsModel.
     Global Instance MinCaps_csafe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (c : Capability) : Persistent (MinCaps_csafe (mG := mG) c).
     Proof. destruct c; destruct cap_permission; apply _. Qed.
 
-    Global Instance MinCaps_safe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : Z + Capability) : Persistent (MinCaps_safe (mG := mG) v).
+    Global Instance MinCaps_safe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (v : MemVal) : Persistent (MinCaps_safe (mG := mG) v).
     Proof. destruct v; apply _. Qed.
 
     End WithIrisNotations.
@@ -556,28 +558,57 @@ Module MinCapsModel.
       destruct_SymInstance;
       eauto using dI_sound, open_ptsreg_sound, close_ptsreg_sound, int_safe_sound, lift_csafe_sound, specialize_safe_to_cap_sound, duplicate_safe_sound, csafe_move_cursor_safe_sound.
     - (* rM *)
+      rename v into e.
+      rename v0 into b.
+      rename v1 into p.
+      rename v2 into address.
       iIntros (Heq) "[#Hcsafe Hp]".
-      rewrite wp_unfold.
-      iIntros (σ' ks1 ks n) "Hregs".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iSplitR; first by intuition.
-      iIntros (e2 σ'' efs) "%".
-      cbn in H.
-      dependent elimination H.
-      dependent elimination s.
-      rewrite Heq in e0.
-      cbn in e0.
-      dependent elimination e0.
-      do 2 iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iSplitL; trivial.
-      cbn.
-      iSplitL; trivial.
-      iApply wp_value.
-      cbn.
-      destruct v1; iSplit; trivial; iSplit; trivial.
+      destruct p;
+        cbn;
+        iDestruct "Hp" as "[% _]";
+        try (unfold is_true in *; discriminate H).
+      rewrite wp_unfold;
+      unfold is_true in H;
+      apply andb_prop in H;
+      destruct H as [Hb He];
+      apply Zle_is_le_bool in Hb;
+      apply Zle_is_le_bool in He;
+      iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@address) (∃ v, gen_heap.mapsto address (dfrac.DfracOwn 1) _))%I as "Hown".
+      { iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hcsafe"). }
+      + iIntros (σ' ks1 ks n) "[Hregs Hmem]".
+        iDestruct "Hmem" as (memmap) "[Hmem' %]".
+        iInv "Hown" as "Hinv" "Hclose".
+        iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+        iModIntro.
+        iSplitR; first by intuition.
+        iIntros (e2 σ'' efs) "%".
+        cbn in H.
+        dependent elimination H0.
+        dependent elimination s.
+        rewrite Heq in e1.
+        cbn in e1.
+        dependent elimination e1.
+        do 2 iModIntro.
+        iDestruct "Hinv" as (v) "Hav".
+        iMod "Hclose2" as "_".
+        iAssert (▷ (∃ v0 : Z + Capability, gen_heap.mapsto address (dfrac.DfracOwn 1) v0))%I with "[Hav]" as "Hinv".
+        { iModIntro. now iExists v. }
+        iMod ("Hclose" with "Hinv") as "_".
+        iModIntro.
+        cbn.
+        iSplitL "Hmem' Hregs".
+        iSplitL "Hregs"; first iFrame.
+        iExists memmap.
+        iSplitL "Hmem'"; first iFrame.
+        iPureIntro; assumption.
+        iSplitL; trivial.
+        iApply wp_value; cbn.
+        iSplitL; trivial.
+        iSplitL; try iAssumption.
+        destruct (fun_rM μ'3 address); cbn; try trivial.
+        (* TODO: add safe for all values in mapsto, then this will be provable *)
+        admit.
+      + admit. (* TODO: this will be identical to the previous case *)
     - (* wM *)
       rename v into e.
       rename v0 into b.
@@ -614,7 +645,7 @@ Module MinCapsModel.
       iDestruct "Hinv" as (v) "Hav".
       iMod (gen_heap.gen_heap_update _ _ _ w with "Hmem' Hav") as "[Hmem' Hav]".
       iMod "Hclose2" as "_".
-      iAssert (▷ (∃ v0 : Z, gen_heap.mapsto address (dfrac.DfracOwn 1) v0))%I with "[Hav]" as "Hinv".
+      iAssert (▷ (∃ v0 : Z + Capability, gen_heap.mapsto address (dfrac.DfracOwn 1) v0))%I with "[Hav]" as "Hinv".
       { iModIntro. now iExists w. }
       iMod ("Hclose" with "Hinv") as "_".
       iModIntro.
@@ -639,7 +670,7 @@ Module MinCapsModel.
       + iSplitL; trivial.
         iApply wp_value; cbn; trivial;
           repeat (iSplitL; trivial).
-  Qed.
+  Admitted.
 
   (* TODO: fix 
   Lemma rM_sound2 `{sg : sailG Σ} `{invG} {Γ es δ} :
