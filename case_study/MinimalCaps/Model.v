@@ -554,7 +554,7 @@ Module MinCapsModel.
       cbn - [MinCapsIrisHeapKit.MinCaps_safe MinCapsIrisHeapKit.MinCaps_csafe];
       intros ι;
       destruct_SymInstance;
-      eauto using rM_sound, wM_sound, dI_sound, open_ptsreg_sound, close_ptsreg_sound, int_safe_sound, lift_csafe_sound, specialize_safe_to_cap_sound, duplicate_safe_sound, csafe_move_cursor_safe_sound, rM_sound.
+      eauto using dI_sound, open_ptsreg_sound, close_ptsreg_sound, int_safe_sound, lift_csafe_sound, specialize_safe_to_cap_sound, duplicate_safe_sound, csafe_move_cursor_safe_sound.
     - (* rM *)
       iIntros (Heq) "[#Hcsafe Hp]".
       rewrite wp_unfold.
