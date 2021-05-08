@@ -194,6 +194,18 @@ Module MinCapsModel.
       | inr c => MinCaps_csafe (mG := mG) c
       end.
 
+    Lemma specialize_range `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (b e addr : Addr) :
+      ⊢ ⌜ (b <= addr)%Z /\ (addr <= e)%Z ⌝ -∗
+        (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
+          [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) v))%I -∗
+        (inv (mc_invNs (mcMemG := mG) .@ addr) (∃ v, mapsto (hG := mc_ghG (mcMemG := mG)) addr (DfracOwn 1) v))%I.
+    Proof.
+      iIntros "[% %] [[% %] Hrange]".
+      iApply (big_sepL_elem_of with "Hrange").
+      apply element_of_region_addrs; try assumption.
+      split; assumption.
+    Qed.
+
     Import EnvNotations.
 
     Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
@@ -217,78 +229,6 @@ Module MinCapsModel.
   Export Soundness.
 
   Import EnvNotations.
-
-  Lemma rM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
-    forall address w,
-    evals es δ = env_snoc env_nil (_ , ty_addr) address 
-    → ⊢ semTriple δ (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) address (dfrac.DfracOwn 1) w) (stm_call_external rM es)
-          (λ (v : Z) (δ' : LocalStore Γ),
-             (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) address (dfrac.DfracOwn 1) w ∗ ⌜v = w⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (address w eq) "pre".
-    destruct (snocView es) as [es e_addr]. destruct (nilView es).
-    cbn [env_lookup inctx_case_snoc].
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "[Hregs Hmem]".
-    iDestruct "Hmem" as (memmap) "[Hmem' %]".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H1.
-    dependent elimination H1.
-    dependent elimination s.
-    cbn in e0.
-    dependent elimination e0.
-    iModIntro. iModIntro.
-    cbn.
-    iDestruct (gen_heap.gen_heap_valid with "Hmem' pre") as "%".
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL "Hmem'".
-    - iExists memmap.
-      by iFrame.
-    - iSplitL; trivial.
-      iApply wp_value.
-      cbn.
-      iFrame.
-      specialize (H0 address w H1).
-      cbn in eq; dependent elimination eq.
-      cbn in H0.
-      iPureIntro.
-      unfold fun_rM.
-      split; split; trivial.
-  Qed.
-
-  Lemma wM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
-    forall address new_value old_value,
-    evals es δ = env_snoc (env_snoc env_nil (_ , ty_addr) address) (_ , ty_int) new_value
-    → ⊢ semTriple δ (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) address (dfrac.DfracOwn 1) old_value) (stm_call_external wM es)
-        (λ (v : Lit ty_unit) (δ' : LocalStore Γ),
-             (gen_heap.mapsto (hG := MinCapsIrisHeapKit.mc_ghG (mcMemG := sailG_memG)) address (dfrac.DfracOwn 1) new_value) ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (address new_value old_value eq) "pre".
-    destruct (snocView es) as [es e_new_value].
-    destruct (snocView es) as [es e_addr].
-    destruct (nilView es).
-    cbn in eq.
-    cbn [env_lookup inctx_case_snoc].
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "[Hregs Hmem]".
-    iDestruct "Hmem" as (memmap) "[Hmem' %]".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H1.
-    dependent elimination H1.
-    dependent elimination s.
-    cbn in e0. destruct_conjs. subst.
-    iModIntro. iModIntro.
-    cbn.
-    iMod (gen_heap.gen_heap_update _ _ _ new_value with "Hmem' pre") as "[Hmem' ptsto]".
-  Admitted.
 
   Lemma dI_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
     forall code : Lit ty_int,
@@ -652,24 +592,20 @@ Module MinCapsModel.
       rewrite wp_unfold.
       iIntros (σ' ks1 ks n) "[Hregs Hmem]".
       iDestruct "Hmem" as (memmap) "[Hmem' %]".
+      unfold is_true in H.
+      apply andb_prop in H.
+      destruct H as [Hb He].
+      apply Zle_is_le_bool in Hb.
+      apply Zle_is_le_bool in He.
       iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@address) (∃ v, gen_heap.mapsto address (dfrac.DfracOwn 1) _))%I as "Hown".
-      { iDestruct "Hcsafe" as "[[% %] Hcsafe]".
-        iApply (big_sepL_elem_of with "Hcsafe").
-        apply MinCapsIrisHeapKit.element_of_region_addrs; try assumption.
-        unfold is_true in H.
-        apply andb_prop in H.
-        destruct H as [Hb He].
-        apply Zle_is_le_bool in Hb.
-        apply Zle_is_le_bool in He.
-        split; assumption.
-      }
+      { iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hcsafe"). }
       iInv "Hown" as "Hinv" "Hclose".
       iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
       iModIntro.
       iSplitR; first by intuition.
       iIntros (e2 σ'' efs) "%".
-      cbn in H1.
-      dependent elimination H1.
+      cbn in H.
+      dependent elimination H.
       dependent elimination s.
       rewrite Heq in e1.
       cbn in e1.
@@ -685,24 +621,22 @@ Module MinCapsModel.
       iSplitL; trivial.
       cbn.
       iSplitL "Hregs"; first by iFrame.
-      * iExists (<[address:=w]> memmap).
-        iSplitL.
-        { iFrame. }
-        { iPureIntro.
+      + iExists (<[address:=w]> memmap).
+        iSplitL; first by iFrame.
+        iPureIntro.
           apply map_Forall_lookup.
           intros i x Hl.
           unfold fun_wM.
           cbn in *.
           destruct (address =? i) eqn:Heqb.
-          - rewrite -> Z.eqb_eq in Heqb.
+          * rewrite -> Z.eqb_eq in Heqb.
             subst.
             apply (lookup_insert_rev memmap i); assumption.
-          - rewrite -> map_Forall_lookup in H0.
+          * rewrite -> map_Forall_lookup in H0.
             rewrite -> Z.eqb_neq in Heqb.
             rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in Hl.
             apply H0; assumption.
-        }
-      * iSplitL; trivial.
+      + iSplitL; trivial.
         iApply wp_value; cbn; trivial;
           repeat (iSplitL; trivial).
   Qed.
