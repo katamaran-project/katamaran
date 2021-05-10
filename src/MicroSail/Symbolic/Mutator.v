@@ -1490,8 +1490,8 @@ Module Mutators
           debug_call_function_parameters    : PCtx;
           debug_call_function_result_type   : Ty;
           debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
-          debug_call_function_arguments     : SymbolicLocalStore debug_call_function_parameters debug_call_logic_context;
           debug_call_function_contract      : SepContract debug_call_function_parameters debug_call_function_result_type;
+          debug_call_function_arguments     : SymbolicLocalStore debug_call_function_parameters debug_call_logic_context;
           debug_call_pathcondition          : PathCondition debug_call_logic_context;
           debug_call_program_context        : PCtx;
           debug_call_localstore             : SymbolicLocalStore debug_call_program_context debug_call_logic_context;
@@ -1525,10 +1525,10 @@ Module Mutators
         { sdebug_call_function_parameters    : PCtx;
           sdebug_call_function_result_type   : Ty;
           sdebug_call_function_name          : 𝑭 sdebug_call_function_parameters sdebug_call_function_result_type;
-          sdebug_call_function_arguments     : SymbolicLocalStore sdebug_call_function_parameters Σ;
           sdebug_call_function_contract      : SepContract sdebug_call_function_parameters sdebug_call_function_result_type;
-          sdebug_call_pathcondition          : PathCondition Σ;
+          sdebug_call_function_arguments     : SymbolicLocalStore sdebug_call_function_parameters Σ;
           sdebug_call_program_context        : PCtx;
+          sdebug_call_pathcondition          : PathCondition Σ;
           sdebug_call_localstore             : SymbolicLocalStore sdebug_call_program_context Σ;
           sdebug_call_heap                   : SymbolicHeap Σ;
         }.
@@ -1545,8 +1545,8 @@ Module Mutators
 
     Record SDebugAsn (Σ : LCtx) : Type :=
       MkSDebugAsn
-        { sdebug_asn_pathcondition          : PathCondition Σ;
-          sdebug_asn_program_context        : PCtx;
+        { sdebug_asn_program_context        : PCtx;
+          sdebug_asn_pathcondition          : PathCondition Σ;
           sdebug_asn_localstore             : SymbolicLocalStore sdebug_asn_program_context Σ;
           sdebug_asn_heap                   : SymbolicHeap Σ;
         }.
@@ -1554,22 +1554,37 @@ Module Mutators
     Global Instance SubstDebugCall : Subst SDebugCall :=
       fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugCall Σ0) =>
         match d with
-        | MkSDebugCall f ts c pc δ h =>
-          MkSDebugCall f (subst ζ01 ts) c (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
+        | MkSDebugCall f c ts pc δ h =>
+          MkSDebugCall f c (subst ζ01 ts) (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
         end.
 
     Global Instance InstDebugCall : Inst SDebugCall DebugCall :=
       {| inst Σ ι d :=
            match d with
-           | MkSDebugCall f ts c pc δ h =>
-             MkDebugCall ι f ts c pc δ h
+           | MkSDebugCall f c ts pc δ h =>
+             MkDebugCall ι f c ts pc δ h
            end;
          lift Σ d :=
            match d with
-           | MkDebugCall ι f ts c pc δ h =>
-             MkSDebugCall f (lift (inst ι ts)) c (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
+           | MkDebugCall ι f c ts pc δ h =>
+             MkSDebugCall f c (lift (inst ι ts)) (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
            end;
       |}.
+
+    Global Instance OccursCheckDebugCall : OccursCheck SDebugCall :=
+      fun Σ x xIn d =>
+        match d with
+        | MkSDebugCall f c ts pc δ h =>
+          option_ap
+            (option_ap
+               (option_ap
+                  (option_map
+                     (fun ts' => @MkSDebugCall _ _ _ f c ts' _)
+                     (occurs_check xIn ts))
+                  (occurs_check xIn pc))
+               (occurs_check xIn δ))
+            (occurs_check xIn h)
+        end.
 
     Global Instance SubstDebugStm : Subst SDebugStm :=
       fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugStm Σ0) =>
@@ -1591,6 +1606,19 @@ Module Mutators
            end
       |}.
 
+    Global Instance OccursCheckDebugStm : OccursCheck SDebugStm :=
+      fun Σ x xIn d =>
+        match d with
+        | MkSDebugStm s pc δ h =>
+          option_ap
+            (option_ap
+               (option_map
+                  (MkSDebugStm s)
+                  (occurs_check xIn pc))
+               (occurs_check xIn δ))
+            (occurs_check xIn h)
+        end.
+
     Global Instance SubstDebugAsn : Subst SDebugAsn :=
       fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugAsn Σ0) =>
         match d with
@@ -1610,6 +1638,19 @@ Module Mutators
              MkSDebugAsn (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
            end
       |}.
+
+    Global Instance OccursCheckDebugAsn : OccursCheck SDebugAsn :=
+      fun Σ x xIn d =>
+        match d with
+        | MkSDebugAsn pc δ h =>
+          option_ap
+            (option_ap
+               (option_map
+                  (@MkSDebugAsn _ _)
+                  (occurs_check xIn pc))
+               (occurs_check xIn δ))
+            (occurs_check xIn h)
+        end.
 
   End DynamicMutator.
   Bind Scope dmut_scope with DynamicMutator.
