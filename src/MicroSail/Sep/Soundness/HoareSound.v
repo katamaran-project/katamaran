@@ -1,7 +1,7 @@
 Require Import Coq.Program.Tactics.
 Require Import Coq.Program.Equality.
 Require Import FunctionalExtensionality.
-Require Import Equations.Equations.
+From Equations Require Import Equations.
 
 Require Import MicroSail.Syntax.
 Require Import MicroSail.Tactics.

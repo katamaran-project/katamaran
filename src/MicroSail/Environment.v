@@ -1,5 +1,5 @@
 Require Import Coq.Program.Equality.
-Require Import Equations.Equations.
+From Equations Require Import Equations.
 Require Import MicroSail.Context.
 Require Import MicroSail.Notation.
 Require Import MicroSail.Tactics.

@@ -36,7 +36,7 @@ From Coq Require Import
      Strings.Ascii
      Strings.String.
 
-Require Import Equations.Equations.
+From Equations Require Import Equations.
 From stdpp Require
      base.
 Require Import MicroSail.Notation.

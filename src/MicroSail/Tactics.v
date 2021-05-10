@@ -27,7 +27,7 @@
 (******************************************************************************)
 
 Require Import Coq.Bool.Bool.
-Require Import Equations.Equations.
+From Equations Require Import Equations.
 
 (* Extract the head of a term.
    from http://poleiro.info/posts/2018-10-15-checking-for-constructors.html
