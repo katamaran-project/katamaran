@@ -1010,6 +1010,11 @@ Module Terms (Export termkit : TermKit).
         (D := fun b => Term _ (snd b))
         (fun '(ς :: σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
 
+    Definition sub_wk_multi {Σ} Δ : Sub Σ (Σ ▻▻ Δ) :=
+      env_tabulate
+        (D := fun b => Term _ (snd b))
+        (fun '(ς :: σ) ςIn => @term_var _ ς σ (inctx_cat ςIn Δ)).
+
     Definition sub_comp {Σ1 Σ2 Σ3} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) : Sub Σ1 Σ3 :=
       subst ζ2 ζ1.
 
@@ -1159,6 +1164,14 @@ Module Terms (Export termkit : TermKit).
       rewrite env_lookup_tabulate.
       dependent elimination ζ.
       now cbn.
+    Qed.
+
+    Lemma sub_comp_shift {Σ0 Σ1 x τ} (xIn : (x :: τ) ∈ Σ0) (ζ : Sub Σ0 Σ1) :
+      sub_comp (sub_shift xIn) ζ = env_remove' (x :: τ) ζ xIn.
+    Proof.
+      apply env_lookup_extensional. intros [y σ] yIn.
+      unfold sub_comp, subst, SubstEnv, sub_shift, env_remove'; cbn.
+      now rewrite env_lookup_map, ?env_lookup_tabulate.
     Qed.
 
     Lemma sub_comp_wk1_comm {Σ0 Σ1 x τ} (ζ : Sub Σ0 Σ1) :
