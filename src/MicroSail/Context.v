@@ -342,6 +342,50 @@ Section WithBinding.
   Definition occurs_check_var {Σ} {x y : B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) : (x = y) + (InCtx y (ctx_remove Σ xIn)) :=
     occurs_check_index (inctx_at xIn) (inctx_at yIn) (inctx_valid xIn) (inctx_valid yIn).
 
+  Inductive OccursCheckView {Σ} {x : B} (xIn : InCtx x Σ) : forall y, InCtx y Σ -> Set :=
+  | Same : OccursCheckView xIn xIn
+  | Diff {y} (yIn : InCtx y (ctx_remove Σ xIn)) : OccursCheckView xIn (shift_var xIn yIn).
+
+  Definition occurs_check_view_step {Σ} {b x y: B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) :
+    OccursCheckView xIn yIn ->
+    OccursCheckView (Σ := ctx_snoc Σ b) (inctx_succ xIn) (inctx_succ yIn) :=
+    fun v =>
+    match v with
+    | Same _     => Same (inctx_succ xIn)
+    | Diff _ yIn => Diff (inctx_succ xIn) (inctx_succ yIn)
+    end.
+
+  Fixpoint occurs_check_view_index {Σ} {x y: B} {m n : nat} {struct Σ} :
+    forall (p : ctx_nth_is Σ m x) (q : ctx_nth_is Σ n y),
+      OccursCheckView
+        {| inctx_at := m; inctx_valid := p |}
+        {| inctx_at := n; inctx_valid := q |} :=
+    match Σ with
+    | ctx_nil => fun _ (q : ctx_nth_is ctx_nil n y) => match q with end
+    | ctx_snoc Σ b =>
+      match m , n with
+      | 0   , 0   => fun (p : ctx_nth_is (ctx_snoc Σ b) 0 x) q =>
+               match p , q with
+               | eq_refl , eq_refl =>
+                 Same (@MkInCtx b (@ctx_snoc B Σ b) 0 eq_refl)
+               end
+      | 0   , S n => fun p (q : ctx_nth_is (ctx_snoc Σ b) (S n) y) =>
+                       Diff
+                         (@MkInCtx x (@ctx_snoc B Σ b) 0 p)
+                         (@MkInCtx y Σ n q)
+      | S m , 0   => fun p (q : ctx_nth_is (ctx_snoc Σ b) 0 y) =>
+                       Diff
+                         (@MkInCtx x (@ctx_snoc B Σ b) (S m) p)
+                         (@MkInCtx _ (ctx_snoc (ctx_remove Σ _) b) 0 q)
+      | S m , S n => fun p q =>
+                       occurs_check_view_step
+                         (@occurs_check_view_index Σ x y m n p q)
+      end
+    end.
+
+  Definition occurs_check_view {Σ} {x y: B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) : OccursCheckView xIn yIn :=
+    occurs_check_view_index (inctx_valid xIn) (inctx_valid yIn).
+
   Lemma occurs_check_var_spec {Σ} {x y : B} (xIn : InCtx x Σ) (yIn : InCtx y Σ) :
     match occurs_check_var xIn yIn with
     | inl e    => eq_rect x (fun z => InCtx z Σ) xIn y e = yIn
