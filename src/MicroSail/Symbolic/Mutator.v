@@ -955,7 +955,7 @@ Module Mutators
       | sout_assumek fml o => (inst ι fml : Prop) -> sout_safe ι o
       | sout_demonicv b k => forall v, sout_safe (env_snoc ι b v) k
       | @sout_subst _ _ x σ xIn t k =>
-        let ι' := env_remove' (x,σ) ι xIn in
+        let ι' := env_remove (x,σ) ι xIn in
         env_lookup ι xIn = inst ι' t ->
         sout_safe ι' k
       | sout_debug d k => Debug (inst ι d) (sout_safe ι k)

@@ -310,6 +310,18 @@ Section WithBinding.
         + eapply (IHΓ (fun b bInΓ => g b (inctx_succ bInΓ))).
     Qed.
 
+    Lemma env_remove_remove' {Γ x} (E : Env Γ) (xIn : x ∈ Γ) :
+      env_remove x E xIn = env_remove' x E xIn.
+    Proof.
+      unfold env_remove'. induction E.
+      - destruct (Context.nilView xIn).
+      - destruct (Context.snocView xIn).
+        + apply env_lookup_extensional.
+          intros y yIn. rewrite env_lookup_tabulate.
+          reflexivity.
+        + cbn. f_equal. apply IHE.
+    Qed.
+
   End WithDom.
 
   Arguments Env : clear implicits.
