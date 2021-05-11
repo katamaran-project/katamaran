@@ -1534,11 +1534,25 @@ Module Mutators
       | cons x nil => dmut_pure x
       | cons x xs  => dmut_angelic_binary (dmut_pure x) (dmut_angelic_list func msg data xs)
       end.
+    Fixpoint dmut_angelic_listk {AT D} {Γ1 Γ2 Σ} (func : string) (msg : string) (data:D) (xs : List AT Σ)
+      {BT} (k : AT Σ -> DynamicMutator Γ1 Γ2 BT Σ) {struct xs} : DynamicMutator Γ1 Γ2 BT Σ :=
+      match xs with
+      | nil => dmut_fail func msg data
+      | cons x nil => k x
+      | cons x xs => dmut_angelic_binary (k x) (dmut_angelic_listk func msg data xs k)
+      end.
     Fixpoint dmut_demonic_list {AT} `{Subst AT} {Γ Σ} (xs : List AT Σ) : DynamicMutator Γ Γ AT Σ :=
       match xs with
       | nil        => dmut_block
       | cons x nil => dmut_pure x
       | cons x xs  => dmut_demonic_binary (dmut_pure x) (dmut_demonic_list xs)
+      end.
+    Fixpoint dmut_demonic_listk {AT} {Γ1 Γ2 Σ} (xs : List AT Σ)
+      {BT} (k : AT Σ -> DynamicMutator Γ1 Γ2 BT Σ) {struct xs} : DynamicMutator Γ1 Γ2 BT Σ :=
+      match xs with
+      | nil => dmut_block
+      | cons x nil => k x
+      | cons x xs => dmut_demonic_binary (k x) (dmut_demonic_listk xs k)
       end.
 
     Definition dmut_angelic_finite {Γ1 Γ2 A} F `{finite.Finite F} {Σ}
@@ -1927,6 +1941,32 @@ Module Mutators
     | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
     end.
 
+  Definition dmut_match_bool_demonic {AT} {Γ1 Γ2 Σ} (t : Term Σ ty_bool)
+    (dt df : DynamicMutator Γ1 Γ2 AT Σ) : DynamicMutator Γ1 Γ2 AT Σ :=
+    fun Σ1 ζ01 =>
+      let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
+      match term_get_lit t' with
+      | Some true => dt Σ1 ζ01
+      | Some false => df Σ1 ζ01
+      | None =>
+        ((dmut_assume_formula (formula_bool t') ;; dmut_sub ζ01 dt) ⊗
+         (dmut_assume_formula (formula_bool (term_not t')) ;; dmut_sub ζ01 df))
+          (sub_id Σ1)
+      end.
+
+  Definition dmut_match_bool_angelic {AT} {Γ1 Γ2 Σ} (t : Term Σ ty_bool)
+    (dt df : DynamicMutator Γ1 Γ2 AT Σ) : DynamicMutator Γ1 Γ2 AT Σ :=
+    fun Σ1 ζ01 =>
+      let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
+      match term_get_lit t' with
+      | Some true => dt Σ1 ζ01
+      | Some false => df Σ1 ζ01
+      | None =>
+        ((dmut_assert_formula (formula_bool t') ;; dmut_sub ζ01 dt) ⊕
+         (dmut_assert_formula (formula_bool (term_not t')) ;; dmut_sub ζ01 df))
+          (sub_id Σ1)
+      end.
+
   Definition dmut_match_enum {AT E} {Γ1 Γ2 Σ} (t : Term Σ (ty_enum E))
     (d : 𝑬𝑲 E -> DynamicMutator Γ1 Γ2 AT Σ) : DynamicMutator Γ1 Γ2 AT Σ :=
     fun Σ1 ζ01 =>
@@ -2029,6 +2069,41 @@ Module Mutators
               sdebug_asn_heap := symbolicstate_heap s1
            |})
         (dmut_pure tt)
+    end.
+
+  Fixpoint dmut_producek {Γ1 Γ2 Σ} (asn : Assertion Σ) {AT} (k : DynamicMutator Γ1 Γ2 AT Σ) {struct asn} : DynamicMutator Γ1 Γ2 AT Σ :=
+    match asn with
+    | asn_formula fml => dmut_assume_formula fml;; k
+    | asn_chunk c => dmut_produce_chunk c;; k
+    | asn_if b asn1 asn2 => (dmut_assume_term b;; dmut_producek asn1 k) ⊗ (dmut_assume_term b;; dmut_producek asn2 k)
+    | asn_match_enum E k0 alts => dmut_match_enum k0 (fun k1 : 𝑬𝑲 E => dmut_producek (alts k1) k)
+    | asn_match_sum σ τ s xl asn1 xr asn2 =>
+      dmut_match_sum s (dmut_producek asn1 (dmut_sub sub_wk1 k)) (dmut_producek asn2 (dmut_sub sub_wk1 k))
+    | asn_match_list s alt_nil xh xt alt_cons =>
+      dmut_fail "dmut_produce" "Not implemented" asn
+    | asn_match_pair s xl xr asn =>
+      dmut_match_pair s (dmut_producek asn (dmut_sub (sub_wk_multi (ε ▻ (xl,_) ▻ (xr,_))) k))
+    | asn_match_tuple s p rhs =>
+      dmut_fail "dmut_produce" "Not implemented" asn
+    | asn_match_record R s p asn => dmut_match_record p s (dmut_producek asn (dmut_sub (sub_wk_multi _) k))
+    | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+      match term_get_union s with
+      | Some (existT K ts) =>
+        dmut_fail "dmut_produce" "Not implemented" asn
+      | None =>
+        dmut_fail "dmut_produce" "Not implemented" asn
+      end
+    | asn_sep asn1 asn2 => dmut_producek asn1 (dmut_producek asn2 k)
+    | asn_exist ς τ asn => dmut_fresh ς τ (dmut_producek asn (dmut_sub sub_wk1 k))
+    | asn_debug =>
+      dmut_debug
+        (fun Σ1 ζ01 pc1 s1 =>
+           {| sdebug_asn_program_context := Γ1;
+              sdebug_asn_pathcondition := pc1;
+              sdebug_asn_localstore := symbolicstate_localstore s1;
+              sdebug_asn_heap := symbolicstate_heap s1
+           |})
+        k
     end.
 
   Fixpoint dmut_consume {Γ Σ} (asn : Assertion Σ) : DynamicMutator Γ Γ Unit Σ :=
