@@ -427,7 +427,6 @@ Module Mutators
       match_term_eqb (term_inl t1) (term_lit (inl l2)) := match_term_eqb t1 (term_lit _ l2);
       match_term_eqb (term_inr t1) (term_inr t2) := match_term_eqb t1 t2;
       match_term_eqb (term_inr t1) (term_lit (inr l2)) := match_term_eqb t1 (term_lit _ l2);
-      match_term_eqb (term_tuple ts1) (term_tuple ts2) := match_env_eqb' (@match_term_eqb) ts1 ts2;
       match_term_eqb te tr :=
         if Term_eqb te tr
         then Some
@@ -489,8 +488,6 @@ Module Mutators
       | term_not t           => term_not <$> eval_term_evar t
       | term_inl t           => term_inl <$> eval_term_evar t
       | term_inr t           => term_inr <$> eval_term_evar t
-      | term_bvec ts         => term_bvec <$> traverse_vector eval_term_evar ts
-      | term_tuple ts        => term_tuple <$> traverse_env (@eval_term_evar) ts
       | @term_projtup _ _ t n _ p     => (fun t => term_projtup t n (p:=p)) <$> eval_term_evar t
       | term_union U K t     => term_union U K <$> eval_term_evar t
       | term_record R ts     => term_record R <$> traverse_env (fun b => @eval_term_evar (snd b)) ts
@@ -545,7 +542,6 @@ Module Mutators
       match_term (term_inl t1) (term_lit (inl l2)) := match_term t1 (term_lit _ l2);
       match_term (term_inr t1) (term_inr t2) := match_term t1 t2;
       match_term (term_inr t1) (term_lit (inr l2)) := match_term t1 (term_lit _ l2);
-      match_term (term_tuple ts1) (term_tuple ts2) := match_env' (@match_term) ts1 ts2;
       match_term (term_record _ ts1) (term_record _ ts2) := match_nenv' (@match_term) ts1 ts2;
       (* Obviously more matchings can be added here. *)
       match_term _ _ := fun _ => None.
@@ -589,8 +585,6 @@ Module Mutators
       - rewrite IHt; reflexivity.
       - rewrite IHt; reflexivity.
       - rewrite IHt; reflexivity.
-      - admit.
-      - admit.
       - rewrite IHt; reflexivity.
       - rewrite IHt; reflexivity.
       - admit.
