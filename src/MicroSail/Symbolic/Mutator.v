@@ -645,7 +645,7 @@ Module Mutators
     | sout_demonicv b (k : SymOutcome A (Σ ▻ b))
     (* | sout_subst {Σ'} (ζ : Sub Σ Σ') (k : SymOutcome A Σ'). *)
     | sout_subst x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (k : SymOutcome A (Σ - (x,σ)))
-    | sout_debug {BT B} {subB : Subst BT} {instB : Inst BT B}
+    | sout_debug {BT B} {subB : Subst BT} {instB : Inst BT B} {occB: OccursCheck BT}
        (b : BT Σ) (k : SymOutcome A Σ).
 
     Global Arguments sout_pure {_ _} _.
@@ -694,6 +694,37 @@ Module Mutators
 
     Instance SubstSymOutcome {E A} `{Subst E, Subst A} : Subst (SymOutcome A) :=
       fun Σ1 Σ2 ζ o => subst_symoutcome ζ o.
+
+    Fixpoint occurs_check_symoutcome {A} `{Subst A, OccursCheck A} {Σ x} (xIn : x ∈ Σ) (o : SymOutcome A Σ) :
+      option (SymOutcome A (Σ - x)) :=
+      match o with
+      | sout_pure a => option_map sout_pure (occurs_check xIn a)
+      | sout_angelic _ => None
+      | sout_angelic_binary o1 o2 =>
+        option_ap (option_map (sout_angelic_binary (Σ := Σ - x)) (occurs_check_symoutcome xIn o1)) (occurs_check_symoutcome xIn o2)
+      | sout_demonic_binary o1 o2 =>
+        option_ap (option_map (sout_demonic_binary (Σ := Σ - x)) (occurs_check_symoutcome xIn o1)) (occurs_check_symoutcome xIn o2)
+      | sout_fail msg => option_map sout_fail (occurs_check xIn msg)
+      | sout_block => Some sout_block
+      | sout_assertk P msg o =>
+        option_ap (option_ap (option_map (sout_assertk (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check xIn msg)) (occurs_check_symoutcome xIn o)
+      | sout_assumek P o => option_ap (option_map (sout_assumek (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check_symoutcome xIn o)
+      | sout_demonicv b o => option_map (sout_demonicv b) (occurs_check_symoutcome (inctx_succ xIn) o)
+      | @sout_subst _ _ y σ yIn t o0 =>
+        match occurs_check_view yIn xIn with
+        | Same _ => Some o0
+        | @Diff _ _ _ _ x xIn =>
+          option_ap
+            (option_map
+               (fun (t' : Term (Σ - (y :: σ) - x) σ) (o' : SymOutcome A (Σ - (y :: σ) - x)) =>
+                  sout_subst
+                    y
+                    (eq_rect (Σ - (y :: σ) - x) (fun c : LCtx => Term c σ) t' (Σ - x - (y :: σ)) (swap_remove yIn xIn))
+                    (eq_rect (Σ - (y :: σ) - x) (fun c : LCtx => SymOutcome A c) o' (Σ - x - (y :: σ)) (swap_remove yIn xIn)))
+               (occurs_check xIn t)) (occurs_check_symoutcome xIn o0)
+        end
+      | sout_debug b o => option_ap (option_map (sout_debug (Σ := Σ - x)) (occurs_check xIn b)) (occurs_check_symoutcome xIn o)
+      end.
 
     Fixpoint inst_symoutcome {AT A} `{Inst AT A} {Σ} (ι : SymInstance Σ) (o : SymOutcome AT Σ) : Outcome A :=
       match o with
@@ -1478,7 +1509,7 @@ Module Mutators
       dmut_fresh x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
     Global Arguments dmut_freshtermvar {_ _ _} _.
 
-    Definition dmut_debug {AT DT D} `{Subst DT, Inst DT D} {Σ0 Γ1 Γ2}
+    Definition dmut_debug {AT DT D} `{Subst DT, Inst DT D, OccursCheck DT} {Σ0 Γ1 Γ2}
       (d : forall Σ1, Sub Σ0 Σ1 -> PathCondition Σ1 -> SymbolicState Γ1 Σ1 -> DT Σ1)
       (m : DynamicMutator Γ1 Γ2 AT Σ0) : DynamicMutator Γ1 Γ2 AT Σ0 :=
       fun Σ1 ζ01 pc1 s1 => sout_debug (d Σ1 ζ01 pc1 s1) (m Σ1 ζ01 pc1 s1).

@@ -433,6 +433,49 @@ Section WithBinding.
     | ctx_snoc Γ b => fun p => p b inctx_zero && ctx_forallb (fun b bIn => p b (inctx_succ bIn))
     end.
 
+  Fixpoint flip_remove_index {Γ : Ctx B} {y x} (n m : nat) {struct Γ} :
+    forall
+      (q : ctx_nth_is Γ n y)
+      (p : ctx_nth_is (ctx_remove Γ {| inctx_at := n; inctx_valid := q |}) m x),
+      InCtx y (ctx_remove Γ (shift_index n m q p)) :=
+   match Γ with
+   | ctx_nil => fun q => match q with end
+   | ctx_snoc Γ b =>
+       match n with
+       | 0 =>
+         fun q p =>
+           @MkInCtx y (ctx_remove (ctx_snoc Γ b) (shift_index 0 m q p)) 0 q
+       | S n =>
+         fun q =>
+           match m with
+           | 0 => fun _ => @MkInCtx y Γ n q
+           | S m => fun p => inctx_succ (flip_remove_index n m q p)
+           end
+       end
+   end.
+
+  (* Calculates x ∈ Γ - y => y ∈ Γ - x *)
+  Definition flip_remove {Γ : Ctx B} {y x : B} (yIn : InCtx y Γ) (xIn : InCtx x (@ctx_remove Γ y yIn)) :
+    InCtx y (@ctx_remove Γ x (@shift_var y x Γ yIn xIn)) :=
+    flip_remove_index (inctx_at yIn) (inctx_at xIn) (inctx_valid yIn) (inctx_valid xIn).
+
+  (* Σ - y - x = Σ - x - y *)
+  Lemma swap_remove {Γ : Ctx B} {y x} (yIn : InCtx y Γ) (xIn : InCtx x (ctx_remove Γ yIn)) :
+    ctx_remove (ctx_remove Γ yIn) xIn =
+    ctx_remove (ctx_remove Γ (shift_var yIn xIn)) (flip_remove yIn xIn).
+  Proof.
+    destruct yIn as [n q], xIn as [m p]. cbn in *.
+    unfold shift_var. cbn.
+    revert n q m p.
+    induction Γ; intros n q m p.
+    destruct q.
+    destruct n; cbn in q.
+    - reflexivity.
+    - destruct m; cbn in p.
+      + reflexivity.
+      + cbn in *. f_equal. apply IHΓ.
+  Defined.
+
 End WithBinding.
 Arguments InCtx_ind [B b] _ _ _ [_].
 Arguments ctx_forallb [B] Γ p.
