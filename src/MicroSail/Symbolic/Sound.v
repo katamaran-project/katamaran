@@ -646,6 +646,26 @@ Module Soundness
       exists i, dmut_wp (d i) ζ01 pc1 s1 ι1 P.
     Proof. reflexivity. Qed.
 
+    Lemma dmut_wp_angelicv {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ Σ1 x σ} (d : DynamicMutator Γ1 Γ2 AT (Σ ▻ (x :: σ))) (d_dcl : dmut_dcl d)
+          (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s1 : SymbolicState Γ1 Σ1) (ι1 : SymInstance Σ1)
+          (P : A -> SCState Γ2 -> Prop) (hpc : instpc ι1 pc1) :
+      dmut_wp (dmut_angelicv x σ d) ζ01 pc1 s1 ι1 P <->
+      exists v : Lit σ, dmut_wp d (sub_snoc ζ01 (x :: σ) (term_lit σ v)) pc1 s1 ι1 P.
+    Proof.
+      unfold dmut_wp, dmut_angelicv; cbn.
+      split; intros [v Hwp]; exists v; revert Hwp.
+      - apply (d_dcl
+                 (Σ1 ▻ (fresh Σ1 (Some x) :: σ)) Σ1 (sub_snoc (sub_comp ζ01 sub_wk1) (x :: σ) (term_var (fresh Σ1 (Some x)))) (subst sub_wk1 pc1)
+                 (subst sub_wk1 s1) (sub_snoc (sub_id Σ1) (fresh Σ1 (Some x) :: σ) (term_lit σ v)) pc1 s1 (sub_snoc ζ01 (x :: σ) (term_lit σ v)));
+          rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_wk1, ?inst_sub_id; auto; cbn.
+        unfold sub_comp. now rewrite inst_subst, inst_sub_wk1.
+      - apply (d_dcl
+                 Σ1 (Σ1 ▻ (fresh Σ1 (Some x) :: σ)) (sub_snoc ζ01 (x :: σ) (term_lit σ v)) pc1 s1 sub_wk1 (subst sub_wk1 pc1) (subst sub_wk1 s1)
+                 (sub_snoc (sub_comp ζ01 sub_wk1) (x :: σ) (term_var (fresh Σ1 (Some x)))));
+          rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_wk1, ?inst_sub_id; auto; cbn.
+        unfold sub_comp. now rewrite inst_subst, inst_sub_wk1.
+    Qed.
+
     Lemma dmut_wp_demonicv {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ Σ1 x σ} (d : DynamicMutator Γ1 Γ2 AT (Σ ▻ (x :: σ))) (d_dcl : dmut_dcl d)
           (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s1 : SymbolicState Γ1 Σ1) (ι1 : SymInstance Σ1)
           (P : A -> SCState Γ2 -> Prop) (hpc : instpc ι1 pc1) :
@@ -1514,6 +1534,21 @@ Module Soundness
       bapprox ι (dmut_angelic_binary dm1 dm2) (scmut_angelic_binary sm1 sm2).
     Proof. unfold bapprox. cbn. intuition. Qed.
 
+    Lemma bapprox_angelicv {Γ Σ ς τ} (ι : SymInstance Σ)
+          (dm : DynamicMutator Γ Γ Unit (Σ ▻ (ς,τ))) (d_dcl : dmut_dcl dm)
+          (sm : Lit τ -> SCMut Γ Γ unit) :
+      (forall v, bapprox (env_snoc ι _ v) dm (sm v)) ->
+      bapprox ι
+        (dmut_angelicv ς τ dm)
+        (scmut_angelic sm).
+    Proof.
+      unfold bapprox. intros HYP * Hι Hpc.
+      rewrite dmut_wp_angelicv, scmut_wp_angelic; auto.
+      intros [vτ Hwp]. exists vτ.
+      apply (HYP vτ _ (sub_snoc ζ01 (ς :: τ) (term_lit τ vτ)) pc1); auto.
+      subst ι; reflexivity.
+    Qed.
+
     Lemma bapprox_demonicv {Γ Σ ς τ} (ι : SymInstance Σ)
           (dm : DynamicMutator Γ Γ Unit (Σ ▻ (ς,τ))) (d_dcl : dmut_dcl dm)
           (sm : Lit τ -> SCMut Γ Γ unit) :
@@ -1522,15 +1557,11 @@ Module Soundness
         (dmut_demonicv ς τ dm)
         (scmut_demonic sm).
     Proof.
-      unfold bapprox, scmut_demonic. intros HYP * Hι Hpc Hwp vτ.
+      unfold bapprox. intros HYP * Hι Hpc.
+      rewrite dmut_wp_demonicv, scmut_wp_demonic; auto.
+      intros Hwp vτ.
       apply (HYP vτ _ (sub_snoc ζ01 (ς :: τ) (term_lit τ vτ)) pc1); auto.
       subst ι; reflexivity.
-      unfold dmut_demonicv in Hwp. cbn in Hwp. specialize (Hwp vτ). revert Hwp.
-      eapply (d_dcl _ _ _ _ _ (sub_snoc (sub_id Σ1) (fresh Σ1 (Some ς) :: τ) (term_lit τ vτ))); auto.
-      - now rewrite inst_sub_snoc, inst_sub_id.
-      - now rewrite inst_subst, inst_sub_wk1.
-      - now rewrite inst_subst, inst_sub_wk1.
-      - unfold sub_comp. now rewrite ?inst_sub_snoc, ?inst_subst, ?inst_sub_wk1.
     Qed.
 
     Lemma bapprox2_demonicv {Γ Σ ς τ} (ι : SymInstance Σ)
@@ -1892,8 +1923,7 @@ Module Soundness
       - apply bapprox_demonic_match_record; auto using dmut_consume_dcl.
       - admit.
       - apply bapprox_bind_right; auto using dmut_consume_dcl.
-      - apply (bapprox_angelic (AT := fun Σ => Term Σ τ)). intros t.
-        eapply bapprox_sub; eauto. now rewrite inst_sub_snoc, inst_sub_id.
+      - apply bapprox_angelicv; auto using dmut_consume_dcl.
       - admit.
     Admitted.
 

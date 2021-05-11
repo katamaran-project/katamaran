@@ -2288,8 +2288,7 @@ Module Mutators
       dmut_fail  "dmut_consume" "Not implemented" asn
     | asn_sep a1 a2   => dmut_consume a1 ;; dmut_consume a2
     | asn_exist ς τ a =>
-      ⨁ t : Term Σ τ =>
-      dmut_sub (sub_snoc (sub_id _) (ς , τ) t) (dmut_consume a)
+      dmut_angelicv ς τ (dmut_consume a)
     | asn_debug =>
       dmut_debug
         (fun Σ1 ζ01 pc1 s1 =>
