@@ -1723,15 +1723,21 @@ Module Mutators
     Global Arguments dmut_angelic_finite {_ _ _} _ {_ _ _} _.
     Global Arguments dmut_demonic_finite {_ _ _} _ {_ _ _} _.
 
-    Definition dmut_fresh {Γ1 Γ2 A Σ} x τ (ma : DynamicMutator Γ1 Γ2 A (Σ ▻ (x :: τ))) : DynamicMutator Γ1 Γ2 A Σ :=
+    Definition dmut_angelicv {Γ1 Γ2 A Σ} x τ (ma : DynamicMutator Γ1 Γ2 A (Σ ▻ (x :: τ))) : DynamicMutator Γ1 Γ2 A Σ :=
+      fun Σ1 ζ1 pc1 s1 =>
+        let x'  := fresh Σ1 (Some x) in
+        let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
+        sout_angelicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 s1)).
+    Global Arguments dmut_angelicv {_ _ _ _} _ _ _.
+    Definition dmut_demonicv {Γ1 Γ2 A Σ} x τ (ma : DynamicMutator Γ1 Γ2 A (Σ ▻ (x :: τ))) : DynamicMutator Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 pc1 s1 =>
         let x'  := fresh Σ1 (Some x) in
         let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
         sout_demonicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 s1)).
-    Global Arguments dmut_fresh {_ _ _ _} _ _ _.
-    Definition dmut_freshtermvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
-      dmut_fresh x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
-    Global Arguments dmut_freshtermvar {_ _ _} _.
+    Global Arguments dmut_demonicv {_ _ _ _} _ _ _.
+    Definition dmut_demonic_termvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
+      dmut_demonicv x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
+    Global Arguments dmut_demonic_termvar {_ _ _} _.
 
     Definition dmut_debug {AT DT D} `{Subst DT, Inst DT D, OccursCheck DT} {Σ0 Γ1 Γ2}
       (d : forall Σ1, Sub Σ0 Σ1 -> PathCondition Σ1 -> SymbolicState Γ1 Σ1 -> DT Σ1)
@@ -1987,60 +1993,60 @@ Module Mutators
   Definition dmut_eval_exps {Γ Σ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs) Σ :=
     dmut_gets_local (fun Σ1 ζ1 δ1 => env_map (fun _ => symbolic_eval_exp δ1) es).
 
-  Fixpoint dmut_freshen_tuplepat' {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
+  Fixpoint dmut_demonic_freshen_tuplepat' {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
     DynamicMutator Γ Γ (fun Σ => Env (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
     match p with
     | tuplepat_nil =>
       dmut_pure (env_nil, env_nil)
     | tuplepat_snoc p x =>
       dmut_fmap2
-        (dmut_freshen_tuplepat' p)
-        (dmut_freshtermvar (𝑿to𝑺 x))
+        (dmut_demonic_freshen_tuplepat' p)
+        (dmut_demonic_termvar (𝑿to𝑺 x))
         (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs _ t__x, env_snoc ts__Δ (x,_) t__x))
     end.
 
-  Definition dmut_freshen_tuplepat {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
+  Definition dmut_demonic_freshen_tuplepat {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
     DynamicMutator Γ Γ (fun Σ => Term Σ (ty_tuple σs) * NamedEnv (Term Σ) Δ)%type Σ :=
     dmut_fmap
-      (dmut_freshen_tuplepat' p)
+      (dmut_demonic_freshen_tuplepat' p)
       (fun _ _ '(t__σs, t__Δ) => (term_tuple t__σs, t__Δ)).
 
-  Fixpoint dmut_freshen_recordpat' {N : Set} (inj__N : N -> 𝑺) {σs} {Δ : NCtx N Ty} (p : RecordPat σs Δ) {Γ Σ} :
+  Fixpoint dmut_demonic_freshen_recordpat' {N : Set} (inj__N : N -> 𝑺) {σs} {Δ : NCtx N Ty} (p : RecordPat σs Δ) {Γ Σ} :
     DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
     match p with
     | recordpat_nil =>
       dmut_pure (env_nil, env_nil)
     | recordpat_snoc p rf x =>
       dmut_fmap2
-        (dmut_freshen_recordpat' inj__N p)
-        (dmut_freshtermvar (inj__N x))
+        (dmut_demonic_freshen_recordpat' inj__N p)
+        (dmut_demonic_termvar (inj__N x))
         (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs (rf::_) t__x, env_snoc ts__Δ (x::_) t__x))
     end.
 
-  Definition dmut_freshen_recordpat {N : Set} (inj__N : N -> 𝑺) {R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
+  Definition dmut_demonic_freshen_recordpat {N : Set} (inj__N : N -> 𝑺) {R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
     DynamicMutator Γ Γ (fun Σ => Term Σ (ty_record R) * NamedEnv (Term Σ) Δ)%type Σ :=
     dmut_fmap
-      (dmut_freshen_recordpat' inj__N p)
+      (dmut_demonic_freshen_recordpat' inj__N p)
       (fun _ _ '(t__σs, t__Δ) => (term_record R t__σs, t__Δ)).
 
-  Definition dmut_freshen_pattern {Γ Σ Δ σ} (p : Pattern Δ σ) :
+  Definition dmut_demonic_freshen_pattern {Γ Σ Δ σ} (p : Pattern Δ σ) :
     DynamicMutator Γ Γ (fun Σ => Term Σ σ * NamedEnv (Term Σ) Δ)%type Σ :=
     match p with
     | pat_var x =>
       dmut_fmap
-        (dmut_freshtermvar (𝑿to𝑺 x))
+        (dmut_demonic_termvar (𝑿to𝑺 x))
         (fun _ _ t => (t,[t]%arg))
     | pat_unit =>
       dmut_pure (term_lit ty_unit tt,env_nil)
     | pat_pair x y =>
       dmut_fmap2
-        (dmut_freshtermvar (𝑿to𝑺 x))
-        (dmut_freshtermvar (𝑿to𝑺 y))
+        (dmut_demonic_termvar (𝑿to𝑺 x))
+        (dmut_demonic_termvar (𝑿to𝑺 y))
         (fun _ _ t__x t__y => (term_binop binop_pair t__x t__y, [t__x,t__y]%arg))
     | pat_tuple p =>
-      dmut_freshen_tuplepat p
+      dmut_demonic_freshen_tuplepat p
     | pat_record p =>
-      dmut_freshen_recordpat 𝑿to𝑺 p
+      dmut_demonic_freshen_recordpat 𝑿to𝑺 p
     end.
 
   (* Add the provided formula to the path condition. *)
@@ -2095,7 +2101,7 @@ Module Mutators
     | _   => dmut_fail "dmut_leakcheck" "Heap leak" h
     end.
 
-  Definition dmut_match_bool_demonic {AT} {Γ1 Γ2 Σ} (t : Term Σ ty_bool)
+  Definition dmut_demonic_match_bool {AT} {Γ1 Γ2 Σ} (t : Term Σ ty_bool)
     (dt df : DynamicMutator Γ1 Γ2 AT Σ) : DynamicMutator Γ1 Γ2 AT Σ :=
     fun Σ1 ζ01 =>
       let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
@@ -2121,7 +2127,7 @@ Module Mutators
           (sub_id Σ1)
       end.
 
-  Definition dmut_match_enum {AT E} {Γ1 Γ2 Σ} (t : Term Σ (ty_enum E))
+  Definition dmut_demonic_match_enum {AT E} {Γ1 Γ2 Σ} (t : Term Σ (ty_enum E))
     (d : 𝑬𝑲 E -> DynamicMutator Γ1 Γ2 AT Σ) : DynamicMutator Γ1 Γ2 AT Σ :=
     fun Σ1 ζ01 =>
       let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
@@ -2132,7 +2138,7 @@ Module Mutators
                   (fun k => dmut_assume_formula (formula_eq t' (term_enum E k));; dmut_sub ζ01 (d k)) _ (sub_id Σ1)
       end.
 
-  Definition dmut_match_sum {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (t : Term Σ (ty_sum σ τ))
+  Definition dmut_demonic_match_sum {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (t : Term Σ (ty_sum σ τ))
     (dinl : DynamicMutator Γ1 Γ2 AT (Σ ▻ (x :: σ)))
     (dinr : DynamicMutator Γ1 Γ2 AT (Σ ▻ (y :: τ))) :
     DynamicMutator Γ1 Γ2 AT Σ :=
@@ -2142,13 +2148,13 @@ Module Mutators
       | Some (inr tr) => dinr Σ1 (sub_snoc ζ01 (y :: τ) tr)
       | None =>
         dmut_demonic_binary
-          (dmut_fresh x σ
+          (dmut_demonicv x σ
              (dmut_assume_formula
                 (formula_eq
                    (subst (T := fun Σ => Term Σ _) sub_wk1 t)
                    (@term_inl _ σ τ (@term_var _ _ _ inctx_zero))) ;;
               dinl))
-          (dmut_fresh y τ
+          (dmut_demonicv y τ
              (dmut_assume_formula
                 (formula_eq
                    (subst (T := fun Σ => Term Σ _) sub_wk1 t)
@@ -2156,13 +2162,13 @@ Module Mutators
               dinr)) ζ01
       end.
 
-  Definition dmut_match_pair {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (s : Term Σ (ty_prod σ τ))
+  Definition dmut_demonic_match_pair {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (s : Term Σ (ty_prod σ τ))
     (d : DynamicMutator Γ1 Γ2 AT (Σ ▻ (x :: σ) ▻ (y :: τ))) : DynamicMutator Γ1 Γ2 AT Σ :=
     fun Σ1 ζ01 =>
     match term_get_pair (subst (T := fun Σ => Term Σ _) ζ01 s) with
     | Some (tl,tr) => d Σ1 (sub_snoc (sub_snoc ζ01 (x :: σ) tl) (y :: τ) tr)
     | None =>
-      dmut_fresh x σ (dmut_fresh y τ
+      dmut_demonicv x σ (dmut_demonicv y τ
         (dmut_assume_formula
            (formula_eq
               (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) s)
@@ -2174,7 +2180,7 @@ Module Mutators
         Σ1 ζ01
     end.
 
-  Definition dmut_match_record {AT R} {Γ1 Γ2 Σ Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Term Σ (ty_record R))
+  Definition dmut_demonic_match_record {AT R} {Γ1 Γ2 Σ Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Term Σ (ty_record R))
     (d : DynamicMutator Γ1 Γ2 AT (Σ ▻▻ Δ)) : DynamicMutator Γ1 Γ2 AT Σ :=
     fun Σ1 ζ01 =>
     match term_get_record (subst (T := fun Σ => Term Σ _) ζ01 t) with
@@ -2182,7 +2188,7 @@ Module Mutators
       let ζ__R := record_pattern_match p ts in
       d Σ1 (ζ01 ►► ζ__R)
     | None =>
-      (dmut_freshen_recordpat id p >>= fun _ ζ '(t__p,ζ__R) =>
+      (dmut_demonic_freshen_recordpat id p >>= fun _ ζ '(t__p,ζ__R) =>
       dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ t) t__p) ;;
       dmut_sub (ζ ►► ζ__R) d) ζ01
     end.
@@ -2194,17 +2200,17 @@ Module Mutators
     | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
                          (dmut_assume_term (term_not b) ;; dmut_produce a2)
     | asn_match_enum E t alts =>
-      dmut_match_enum t (fun k => dmut_produce (alts k))
+      dmut_demonic_match_enum t (fun k => dmut_produce (alts k))
     | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-      dmut_match_sum s (dmut_produce alt_inl) (dmut_produce alt_inr)
+      dmut_demonic_match_sum s (dmut_produce alt_inl) (dmut_produce alt_inr)
     | asn_match_list s alt_nil xh xt alt_cons =>
       dmut_fail "dmut_produce" "Not implemented" asn
     | asn_match_pair s xl xr rhs =>
-      dmut_match_pair s (dmut_produce rhs)
+      dmut_demonic_match_pair s (dmut_produce rhs)
     | asn_match_tuple s p rhs =>
       dmut_fail "dmut_produce" "Not implemented" asn
     | asn_match_record R s p rhs =>
-      dmut_match_record p s (dmut_produce rhs)
+      dmut_demonic_match_record p s (dmut_produce rhs)
     | asn_match_union U s alt__ctx alt__pat alt__rhs =>
       match term_get_union s with
       | Some (existT K ts) =>
@@ -2213,7 +2219,7 @@ Module Mutators
         dmut_fail "dmut_produce" "Not implemented" asn
       end
     | asn_sep a1 a2   => dmut_produce a1 ;; dmut_produce a2
-    | asn_exist ς τ a => dmut_fresh ς τ (dmut_produce a)
+    | asn_exist ς τ a => dmut_demonicv ς τ (dmut_produce a)
     | asn_debug =>
       dmut_debug
         (fun Σ1 ζ01 pc1 s1 =>
@@ -2230,16 +2236,16 @@ Module Mutators
     | asn_formula fml => dmut_assume_formula fml;; k
     | asn_chunk c => dmut_produce_chunk c;; k
     | asn_if b asn1 asn2 => (dmut_assume_term b;; dmut_producek asn1 k) ⊗ (dmut_assume_term b;; dmut_producek asn2 k)
-    | asn_match_enum E k0 alts => dmut_match_enum k0 (fun k1 : 𝑬𝑲 E => dmut_producek (alts k1) k)
+    | asn_match_enum E k0 alts => dmut_demonic_match_enum k0 (fun k1 : 𝑬𝑲 E => dmut_producek (alts k1) k)
     | asn_match_sum σ τ s xl asn1 xr asn2 =>
-      dmut_match_sum s (dmut_producek asn1 (dmut_sub sub_wk1 k)) (dmut_producek asn2 (dmut_sub sub_wk1 k))
+      dmut_demonic_match_sum s (dmut_producek asn1 (dmut_sub sub_wk1 k)) (dmut_producek asn2 (dmut_sub sub_wk1 k))
     | asn_match_list s alt_nil xh xt alt_cons =>
       dmut_fail "dmut_produce" "Not implemented" asn
     | asn_match_pair s xl xr asn =>
-      dmut_match_pair s (dmut_producek asn (dmut_sub (sub_wk_multi (ε ▻ (xl,_) ▻ (xr,_))) k))
+      dmut_demonic_match_pair s (dmut_producek asn (dmut_sub (sub_wk_multi (ε ▻ (xl,_) ▻ (xr,_))) k))
     | asn_match_tuple s p rhs =>
       dmut_fail "dmut_produce" "Not implemented" asn
-    | asn_match_record R s p asn => dmut_match_record p s (dmut_producek asn (dmut_sub (sub_wk_multi _) k))
+    | asn_match_record R s p asn => dmut_demonic_match_record p s (dmut_producek asn (dmut_sub (sub_wk_multi _) k))
     | asn_match_union U s alt__ctx alt__pat alt__rhs =>
       match term_get_union s with
       | Some (existT K ts) =>
@@ -2248,7 +2254,7 @@ Module Mutators
         dmut_fail "dmut_produce" "Not implemented" asn
       end
     | asn_sep asn1 asn2 => dmut_producek asn1 (dmut_producek asn2 k)
-    | asn_exist ς τ asn => dmut_fresh ς τ (dmut_producek asn (dmut_sub sub_wk1 k))
+    | asn_exist ς τ asn => dmut_demonicv ς τ (dmut_producek asn (dmut_sub sub_wk1 k))
     | asn_debug =>
       dmut_debug
         (fun Σ1 ζ01 pc1 s1 =>
@@ -2267,17 +2273,17 @@ Module Mutators
     | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_consume a1) ⊗
                          (dmut_assume_term (term_not b) ;; dmut_consume a2)
     | asn_match_enum E t alts =>
-      dmut_match_enum t (fun k => dmut_consume (alts k))
+      dmut_demonic_match_enum t (fun k => dmut_consume (alts k))
     | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-      dmut_match_sum s (dmut_consume alt_inl) (dmut_consume alt_inr)
+      dmut_demonic_match_sum s (dmut_consume alt_inl) (dmut_consume alt_inr)
     | asn_match_list s alt_nil xh xt alt_cons =>
       dmut_fail "dmut_consume" "Not implemented" asn
     | asn_match_pair s xl xr rhs =>
-      dmut_match_pair s (dmut_consume rhs)
+      dmut_demonic_match_pair s (dmut_consume rhs)
     | asn_match_tuple s p rhs =>
       dmut_fail "dmut_consume" "Not implemented" asn
     | asn_match_record R s p rhs =>
-      dmut_match_record p s (dmut_consume rhs)
+      dmut_demonic_match_record p s (dmut_consume rhs)
     | asn_match_union U s alt__ctx alt__pat alt__rhs =>
       dmut_fail  "dmut_consume" "Not implemented" asn
     | asn_sep a1 a2   => dmut_consume a1 ;; dmut_consume a2
@@ -2302,7 +2308,7 @@ Module Mutators
       dmut_assert_formulas (formula_eqs ts (subst ξ δ)) ;;
       dmut_sub ξ
         (dmut_consume req ;;
-         dmut_fresh result τ
+         dmut_demonicv result τ
            (dmut_produce ens ;;
             dmut_pure (@term_var _ result _ inctx_zero)))
     end.
@@ -2349,8 +2355,8 @@ Module Mutators
       (dmut_assume_formula
          (formula_eq t (term_lit (ty_list _) nil));;
        dmut_exec s1) ⊗
-      (dmut_fresh
-         (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
+      (dmut_demonicv
+         (𝑿to𝑺 xh) _ (dmut_demonicv (𝑿to𝑺 xt) _
          (dmut_assume_formula
             (formula_eq (subst (sub_comp sub_wk1 sub_wk1) t)
                         (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
@@ -2362,12 +2368,12 @@ Module Mutators
           dmut_pure t2)))
     | stm_match_sum e xinl s1 xinr s2 =>
       t <- dmut_eval_exp e ;;
-      dmut_match_sum t
+      dmut_demonic_match_sum t
         (dmut_pushpop (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero) (dmut_exec s1))
         (dmut_pushpop (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero) (dmut_exec s2))
     | stm_match_pair e xl xr s =>
       t <- dmut_eval_exp e ;;
-      dmut_match_pair
+      dmut_demonic_match_pair
         t
         (dmut_pushspops
            (env_snoc (env_snoc env_nil
@@ -2376,7 +2382,7 @@ Module Mutators
            (dmut_exec s))
     | stm_match_enum E e alts =>
       t <- dmut_eval_exp e ;;
-      dmut_match_enum t (fun K => dmut_exec (alts K))
+      dmut_demonic_match_enum t (fun K => dmut_exec (alts K))
     | stm_match_tuple e p s =>
       dmut_fail "dmut_exec" "stm_match_tuple not implemented" tt
     | stm_match_union U e alt__ctx alt__pat =>
@@ -2388,7 +2394,7 @@ Module Mutators
         let ζ__R := record_pattern_match p ts in
         dmut_pushspops ζ__R (dmut_exec rhs)
       | None =>
-        dmut_freshen_recordpat 𝑿to𝑺 p >>= fun _ ζ '(t__p,ζ__R) =>
+        dmut_demonic_freshen_recordpat 𝑿to𝑺 p >>= fun _ ζ '(t__p,ζ__R) =>
         dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ t) t__p) ;;
         dmut_pushspops ζ__R (dmut_exec rhs)
       end
@@ -2708,7 +2714,7 @@ Module Mutators
        dmut_consume_evar req (create_evarenv Σe Σr) >>= fun Σr1 ζ1 E1 =>
        dmut_assert_namedenv_eq_evar δ (env_map (fun _ => subst (T := fun Σ => Term Σ _) ζ1) ts) E1 >>= fun Σr2 ζ2 E2 =>
        match evarenv_to_option_sub E2 with
-       | Some ξ => dmut_sub ξ (dmut_fresh result τ (dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
+       | Some ξ => dmut_sub ξ (dmut_demonicv result τ (dmut_produce ens ;; dmut_pure (@term_var _ result _ inctx_zero)))
        | None => dmut_fail
                    "dmut_call_evar"
                    "Uninstantiated evars after consuming precondition"
@@ -2796,8 +2802,8 @@ Module Mutators
         (dmut_assume_formula
            (formula_eq t (term_lit (ty_list _) nil));;
          dmut_exec_evar s1) ⊗
-        (dmut_fresh
-           (𝑿to𝑺 xh) _ (dmut_fresh (𝑿to𝑺 xt) _
+        (dmut_demonicv
+           (𝑿to𝑺 xh) _ (dmut_demonicv (𝑿to𝑺 xt) _
            (dmut_assume_formula
               (formula_eq (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) t)
                           (term_binop binop_cons (@term_var _ _ _ (inctx_succ inctx_zero)) (@term_var _ _ _ inctx_zero)));;
@@ -2817,12 +2823,12 @@ Module Mutators
           dmut_push_local t;;
           dmut_bind_left (dmut_exec_evar s2) dmut_pop_local
         | None =>
-          dmut_fresh _ _
+          dmut_demonicv _ _
             (dmut_assume_formula
                (formula_eq (subst (T := fun Σ => Term Σ _) sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
              dmut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
              dmut_bind_left (dmut_exec_evar s1) dmut_pop_local) ⊗
-          dmut_fresh _ _
+          dmut_demonicv _ _
             (dmut_assume_formula
                (formula_eq (subst (T := fun Σ => Term Σ _) sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
              dmut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
@@ -2839,7 +2845,7 @@ Module Mutators
           dmut_pop_local ;;
           dmut_pure t
         | None =>
-          dmut_fresh (𝑿to𝑺 xl) _ (dmut_fresh (𝑿to𝑺 xr) _
+          dmut_demonicv (𝑿to𝑺 xl) _ (dmut_demonicv (𝑿to𝑺 xr) _
             (dmut_assume_formula
                (formula_eq
                   (subst (T := fun Σ => Term Σ _) (sub_comp sub_wk1 sub_wk1) t__sc)
@@ -2863,7 +2869,7 @@ Module Mutators
                dmut_exec_evar (alts K))
         end
       | stm_match_tuple e p s =>
-        ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_tuplepat p) ;;
+        ts <- dmut_pair (dmut_eval_exp e) (dmut_demonic_freshen_tuplepat p) ;;
         let '(t__sc,(t__p,t__Δ)) := ts in
         dmut_assume_formula (formula_eq t__sc t__p) ;;
         dmut_pushs_local t__Δ ;;
@@ -2874,7 +2880,7 @@ Module Mutators
         t__sc <- dmut_eval_exp e ;;
         match term_get_union t__sc with
         | Some (existT K t__field) =>
-          dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
+          dmut_demonic_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
             dmut_assume_formula (formula_eq t__pat (subst (T := fun Σ => Term Σ _) ζ2 t__field));;
             dmut_pushs_local δ__Δ;;
             t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
@@ -2884,7 +2890,7 @@ Module Mutators
           dmut_demonic_finite
             (𝑼𝑲 U)
             (fun K =>
-               dmut_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
+               dmut_demonic_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
                dmut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 t__sc) (term_union U K t__pat));;
                dmut_pushs_local δ__Δ;;
                t__rhs <- dmut_sub ζ2 (dmut_exec_evar (alt__rhs K));;
@@ -2892,7 +2898,7 @@ Module Mutators
                dmut_pure t__rhs))
         end
       | stm_match_record R e p s =>
-        ts <- dmut_pair (dmut_eval_exp e) (dmut_freshen_recordpat 𝑿to𝑺 p) ;;
+        ts <- dmut_pair (dmut_eval_exp e) (dmut_demonic_freshen_recordpat 𝑿to𝑺 p) ;;
         let '(t__sc,(t__p,t__Δ)) := ts in
         dmut_assume_formula (formula_eq t__sc t__p) ;;
         dmut_pushs_local t__Δ ;;
