@@ -636,17 +636,21 @@ Module Mutators
     | sout_block
     | sout_assertk (P : Formula Σ) (msg : Message Σ) (k : SymOutcome A Σ)
     | sout_assumek (P : Formula Σ) (k : SymOutcome A Σ)
+    | sout_angelicv b (k : SymOutcome A (Σ ▻ b))
     | sout_demonicv b (k : SymOutcome A (Σ ▻ b))
     (* | sout_subst {Σ'} (ζ : Sub Σ Σ') (k : SymOutcome A Σ'). *)
-    | sout_subst x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (k : SymOutcome A (Σ - (x,σ)))
+    | sout_assert_vareq x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (msg : Message (Σ - (x,σ))) (k : SymOutcome A (Σ - (x,σ)))
+    | sout_assume_vareq x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (k : SymOutcome A (Σ - (x,σ)))
     | sout_debug {BT B} {subB : Subst BT} {instB : Inst BT B} {occB: OccursCheck BT}
        (b : BT Σ) (k : SymOutcome A Σ).
 
     Global Arguments sout_pure {_ _} _.
     Global Arguments sout_fail {_ _} _.
     Global Arguments sout_block {_ _}.
+    Global Arguments sout_angelicv {_ _} _ _.
     Global Arguments sout_demonicv {_ _} _ _.
-    Global Arguments sout_subst {_ _} x {_ _} t k.
+    Global Arguments sout_assert_vareq {_ _} x {_ _} t msg k.
+    Global Arguments sout_assume_vareq {_ _} x {_ _} t k.
 
     Fixpoint sout_demonic_close {A} Σ : SymOutcome A Σ -> SymOutcome A ε :=
       match Σ with
@@ -654,13 +658,13 @@ Module Mutators
       | ctx_snoc Σ b => fun k => sout_demonic_close (sout_demonicv b k)
       end.
 
-    Fixpoint sout_multisub {AT Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : SymOutcome AT Σ2 -> SymOutcome AT Σ1.
+    Fixpoint sout_assume_multisub {AT Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : SymOutcome AT Σ2 -> SymOutcome AT Σ1.
     Proof.
       destruct ζ; intros o.
       - exact o.
-      - eapply sout_subst.
+      - eapply sout_assume_vareq.
         apply t.
-        eapply sout_multisub.
+        eapply sout_assume_multisub.
         apply ζ.
         apply o.
     Defined.
@@ -676,9 +680,16 @@ Module Mutators
       | sout_block => sout_block
       | sout_assertk P msg o => sout_assertk (subst ζ P) (subst ζ msg) (subst_symoutcome ζ o)
       | sout_assumek P o => sout_assumek (subst ζ P) (subst_symoutcome ζ o)
+      | sout_angelicv b k => sout_angelicv b (subst_symoutcome (sub_up1 ζ) k)
       | sout_demonicv b k => sout_demonicv b (subst_symoutcome (sub_up1 ζ) k)
       (* | sout_subst ζ2 k => _ *)
-      | @sout_subst _ _ x σ xIn t k =>
+      | @sout_assert_vareq _ _ x σ xIn t msg k =>
+        let ζ' := sub_comp (sub_shift _) ζ in
+        sout_assertk
+          (formula_eq (env_lookup ζ xIn) (subst (T := fun Σ => Term Σ _) ζ' t))
+          (subst (T:=Message) ζ' msg)
+          (subst_symoutcome ζ' k)
+      | @sout_assume_vareq _ _ x σ xIn t k =>
         let ζ' := sub_comp (sub_shift _) ζ in
         sout_assumek
           (formula_eq (env_lookup ζ xIn) (subst (T := fun Σ => Term Σ _) ζ' t))
@@ -703,8 +714,27 @@ Module Mutators
       | sout_assertk P msg o =>
         option_ap (option_ap (option_map (sout_assertk (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check xIn msg)) (occurs_check_symoutcome xIn o)
       | sout_assumek P o => option_ap (option_map (sout_assumek (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check_symoutcome xIn o)
+      | sout_angelicv b o => option_map (sout_angelicv b) (occurs_check_symoutcome (inctx_succ xIn) o)
       | sout_demonicv b o => option_map (sout_demonicv b) (occurs_check_symoutcome (inctx_succ xIn) o)
-      | @sout_subst _ _ y σ yIn t o =>
+      | @sout_assert_vareq _ _ y σ yIn t msg o =>
+        match occurs_check_view yIn xIn with
+        | Same _ => None
+        | @Diff _ _ _ _ x xIn =>
+          option_ap
+            (option_ap
+               (option_map
+                  (fun (t' : Term (Σ - (y :: σ) - x) σ) (msg' : Message (Σ - (y :: σ) - x)) (o' : SymOutcome A (Σ - (y :: σ) - x)) =>
+                     let e := swap_remove yIn xIn in
+                     sout_assert_vareq
+                       y
+                       (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e)
+                       (eq_rect (Σ - (y :: σ) - x) Message msg' (Σ - x - (y :: σ)) e)
+                       (eq_rect (Σ - (y :: σ) - x) (SymOutcome A) o' (Σ - x - (y :: σ)) e))
+                  (occurs_check xIn t))
+               (occurs_check xIn msg))
+            (occurs_check_symoutcome xIn o)
+        end
+      | @sout_assume_vareq _ _ y σ yIn t o =>
         match occurs_check_view yIn xIn with
         | Same _ => Some o
         | @Diff _ _ _ _ x xIn =>
@@ -712,7 +742,7 @@ Module Mutators
             (option_map
                (fun (t' : Term (Σ - (y :: σ) - x) σ) (o' : SymOutcome A (Σ - (y :: σ) - x)) =>
                   let e := swap_remove yIn xIn in
-                  sout_subst
+                  sout_assume_vareq
                     y
                     (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e)
                     (eq_rect (Σ - (y :: σ) - x) (SymOutcome A) o' (Σ - x - (y :: σ)) e))
@@ -734,8 +764,14 @@ Module Mutators
                                            (Obligation ι msg fml)
                                            (inst_symoutcome ι o)
       | sout_assumek fml o            => outcome_assumek (inst ι fml) (inst_symoutcome ι o)
+      | sout_angelicv b k             => outcome_angelic (fun v : Lit (snd b) => inst_symoutcome (env_snoc ι b v) k)
       | sout_demonicv b k             => outcome_demonic (fun v : Lit (snd b) => inst_symoutcome (env_snoc ι b v) k)
-      | @sout_subst _ _ x σ xIn t k =>
+      | @sout_assert_vareq _ _ x σ xIn t msg k =>
+        let ι' := env_remove' _ ι xIn in
+        outcome_assertk
+          (env_lookup ι xIn = inst ι' t)
+          (inst_symoutcome ι' k)
+      | @sout_assume_vareq _ _ x σ xIn t k =>
         let ι' := env_remove' _ ι xIn in
         outcome_assumek
           (env_lookup ι xIn = inst ι' t)
@@ -763,10 +799,14 @@ Module Mutators
       | sout_block                    => sout_block
       | sout_assertk fml msg k        => sout_assertk fml msg (sout_map f k)
       | sout_assumek fml k            => sout_assumek fml (sout_map f k)
+      | sout_angelicv b k             => sout_angelicv b (sout_map (fun Σ' ζ a => f Σ' (env_tail ζ) a) k)
       | sout_demonicv b k             => sout_demonicv b (sout_map (fun Σ' ζ a => f Σ' (env_tail ζ) a) k)
-      | @sout_subst _ _ x σ xIn t k =>
+      | @sout_assert_vareq _ _ x σ xIn t msg k =>
         let ζ' := sub_single xIn t in
-        sout_subst x t (sout_map (fun Σ' ζ => f Σ' (sub_comp ζ' ζ)) k)
+        sout_assert_vareq x t msg (sout_map (fun Σ' ζ => f Σ' (sub_comp ζ' ζ)) k)
+      | @sout_assume_vareq _ _ x σ xIn t k =>
+        let ζ' := sub_single xIn t in
+        sout_assume_vareq x t (sout_map (fun Σ' ζ => f Σ' (sub_comp ζ' ζ)) k)
       | sout_debug d k                => sout_debug d (sout_map f k)
       end.
 
@@ -780,10 +820,14 @@ Module Mutators
       | sout_block                    => sout_block
       | sout_assertk fml msg k        => sout_assertk fml msg (sout_bind (cons fml pc) k f)
       | sout_assumek fml k            => sout_assumek fml (sout_bind (cons fml pc) k f)
+      | sout_angelicv b k             => sout_angelicv b (sout_bind (subst sub_wk1 pc) k (fun Σ' ζ a => f Σ' (env_tail ζ) a))
       | sout_demonicv b k             => sout_demonicv b (sout_bind (subst sub_wk1 pc) k (fun Σ' ζ a => f Σ' (env_tail ζ) a))
-      | @sout_subst _ _ x σ xIn t k =>
+      | @sout_assert_vareq _ _ x σ xIn t msg k =>
         let ζ' := sub_single xIn t in
-        sout_subst x t (sout_bind (subst ζ' pc) k (fun Σ' ζ => f Σ' (sub_comp ζ' ζ)))
+        sout_assert_vareq x t msg (sout_bind (subst ζ' pc) k (fun Σ' ζ => f Σ' (sub_comp ζ' ζ)))
+      | @sout_assume_vareq _ _ x σ xIn t k =>
+        let ζ' := sub_single xIn t in
+        sout_assume_vareq x t (sout_bind (subst ζ' pc) k (fun Σ' ζ => f Σ' (sub_comp ζ' ζ)))
       | sout_debug d k                => sout_debug d (sout_bind pc k f)
       end.
 
@@ -815,7 +859,7 @@ Module Mutators
       SymOutcome Unit Σ :=
       (* Check if the formula is an equality that can be propagated. *)
       match try_propagate fml with
-      | Some (existT Σ2 ζ) => sout_multisub ζ (sout_pure tt)
+      | Some (existT Σ2 ζ) => sout_assume_multisub ζ (sout_pure tt)
       | None =>
         (* If everything fails, we simply add the formula to the path
            condition verbatim. *)
@@ -843,8 +887,12 @@ Module Mutators
       | sout_block                                => True
       | sout_assertk fml msg o                    => inst ι fml /\ sout_wp o ι POST
       | sout_assumek fml o                        => (inst ι fml : Prop) -> sout_wp o ι POST
+      | sout_angelicv b k                         => exists (v : Lit (snd b)), sout_wp k (env_snoc ι b v) POST
       | sout_demonicv b k                         => forall (v : Lit (snd b)), sout_wp k (env_snoc ι b v) POST
-      | @sout_subst _ _ x σ xIn t k             =>
+      | @sout_assert_vareq _ _ x σ xIn t msg k    =>
+        let ι' := env_remove' _ ι xIn in
+        env_lookup ι xIn = inst ι' t /\ sout_wp k ι' POST
+      | @sout_assume_vareq _ _ x σ xIn t k        =>
         let ι' := env_remove' _ ι xIn in
         env_lookup ι xIn = inst ι' t -> sout_wp k ι' POST
       | sout_debug d k                            => Debug (inst ι d) (sout_wp k ι POST)
@@ -865,7 +913,9 @@ Module Mutators
       - specialize (IHo ι). intuition.
         constructor; auto.
       - specialize (IHo ι). intuition.
+      - split; intros [v HYP]; exists v; specialize (IHo (env_snoc ι b v)); intuition.
       - split; intros HYP v; specialize (HYP v); specialize (IHo (env_snoc ι b v)); intuition.
+      - specialize (IHo (env_remove' (x :: σ) ι xIn)). intuition.
       - specialize (IHo (env_remove' (x :: σ) ι xIn)). intuition.
       - split; intros [HYP]; constructor; revert HYP; apply IHo.
     Qed.
@@ -942,10 +992,17 @@ Module Mutators
       - now rewrite IHo, inst_subst.
       - now rewrite IHo, inst_subst.
       - destruct b as [x τ].
+        split; intros [v HYP]; exists v; revert HYP;
+          rewrite (IHo _ (env_snoc ι (x :: τ) v) (sub_up1 ζ12));
+          unfold sub_up1, sub_comp;
+          now rewrite inst_sub_snoc, inst_subst, inst_sub_wk1.
+      - destruct b as [x τ].
         split; intros HYP v; specialize (HYP v); revert HYP;
           rewrite (IHo _ (env_snoc ι (x :: τ) v) (sub_up1 ζ12));
           unfold sub_up1, sub_comp;
           now rewrite inst_sub_snoc, inst_subst, inst_sub_wk1.
+      - rewrite IHo. unfold sub_comp.
+        now rewrite ?inst_subst, inst_sub_shift, <- inst_lookup.
       - rewrite IHo. unfold sub_comp.
         now rewrite ?inst_subst, inst_sub_shift, <- inst_lookup.
       - split; intros [HYP]; constructor; revert HYP; apply IHo.
@@ -980,8 +1037,14 @@ Module Mutators
       | sout_assertk fml msg o =>
         Obligation ι msg fml /\ sout_safe ι o
       | sout_assumek fml o => (inst ι fml : Prop) -> sout_safe ι o
+      | sout_angelicv b k => exists v, sout_safe (env_snoc ι b v) k
       | sout_demonicv b k => forall v, sout_safe (env_snoc ι b v) k
-      | @sout_subst _ _ x σ xIn t k =>
+      | @sout_assert_vareq _ _ x σ xIn t msg k =>
+        (let ζ := sub_shift xIn in
+        Obligation ι (subst (T:=Message) ζ msg) (formula_eq (term_var x) (subst (T:=fun Σ => Term Σ σ) ζ t))) /\
+        (let ι' := env_remove (x,σ) ι xIn in
+        sout_safe ι' k)
+      | @sout_assume_vareq _ _ x σ xIn t k =>
         let ι' := env_remove (x,σ) ι xIn in
         env_lookup ι xIn = inst ι' t ->
         sout_safe ι' k
@@ -1010,6 +1073,21 @@ Module Mutators
       - rewrite IHma; auto.
       - rewrite IHma; auto.
       - destruct b as [x σ]; cbn. setoid_rewrite IHma.
+        split; (intros [v Hwp]; exists v; revert Hwp; apply sout_wp_monotonic; intros a;
+                match goal with | |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto end).
+        + eapply (f_dcl _ _ _ _ _ _ (sub_snoc (sub_id _) (x :: σ) (term_lit σ v)));
+            rewrite ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+          rewrite <- sub_comp_wk1_tail; unfold sub_comp.
+          now rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_wk1.
+        + eapply (f_dcl _ _ _ _ _ _ sub_wk1);
+            rewrite ?inst_sub_wk1, ?inst_lift; auto.
+          rewrite <- sub_comp_wk1_tail; unfold sub_comp.
+          now rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_wk1.
+        + unfold sout_mapping_dcl. intros. eapply f_dcl; eauto.
+          rewrite <- ?sub_comp_wk1_tail; unfold sub_comp.
+          rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_wk1.
+          intuition.
+      - destruct b as [x σ]; cbn. setoid_rewrite IHma.
         split; (intros Hwp v; specialize (Hwp v); revert Hwp; apply sout_wp_monotonic; intros a;
                 match goal with | |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto end).
         + eapply (f_dcl _ _ _ _ _ _ (sub_snoc (sub_id _) (x :: σ) (term_lit σ v)));
@@ -1023,6 +1101,18 @@ Module Mutators
         + unfold sout_mapping_dcl. intros. eapply f_dcl; eauto.
           rewrite <- ?sub_comp_wk1_tail; unfold sub_comp.
           rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_wk1.
+          intuition.
+      - rewrite IHma.
+        split; (intros [Heq Hwp]; split; auto; revert Hwp; apply sout_wp_monotonic; intros a;
+                match goal with | |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto end).
+        + apply (f_dcl _ _ _ _ _ _ (sub_shift xIn)); unfold sub_comp;
+            rewrite ?inst_subst, ?inst_lift, ?inst_sub_id, ?inst_sub_shift; auto.
+          now rewrite inst_sub_single.
+        + apply (f_dcl _ _ _ _ _ _ (sub_single xIn t)); unfold sub_comp;
+            rewrite ?inst_subst, ?inst_lift, ?inst_sub_id, ?inst_sub_single; auto.
+        + unfold sout_mapping_dcl. intros.
+          eapply f_dcl; unfold sub_comp;
+            rewrite ?inst_subst, ?inst_lift, ?inst_sub_id, ?inst_sub_shift; auto.
           intuition.
       - rewrite IHma.
         split; (intros Hwp Heq; specialize (Hwp Heq); revert Hwp; apply sout_wp_monotonic; intros a;
@@ -1065,6 +1155,38 @@ Module Mutators
         now rewrite inst_sub_id.
         now rewrite inst_pathcondition_cons.
       - destruct b as [x σ]; cbn.
+        split; (intros [v Hwp]; exists v; revert Hwp).
+        + rewrite IHma.
+          * apply sout_wp_monotonic. intros a.
+            unfold sout_arrow_dcl in f_dcl.
+            eapply (f_dcl _ _ _ _ _ _ (sub_snoc (sub_id _) (x :: σ) (term_lit σ v))); eauto.
+            now rewrite inst_sub_snoc, inst_sub_id.
+            now rewrite inst_subst, inst_sub_wk1.
+            rewrite <- sub_up1_id. unfold sub_up1.
+            rewrite sub_comp_id_left. cbn [env_tail sub_snoc].
+            now rewrite inst_sub_wk1, inst_sub_id.
+            now rewrite ?inst_lift.
+          * unfold sout_arrow_dcl. intros. revert H12.
+            destruct (snocView ζ1), (snocView ζ2).
+            cbn in H10. apply inversion_eq_env_snoc in H10.
+            destruct H10. eapply f_dcl; eauto.
+          * now rewrite inst_subst, inst_sub_wk1.
+        + rewrite IHma.
+          * apply sout_wp_monotonic. intros a.
+            unfold sout_arrow_dcl in f_dcl.
+            eapply (f_dcl _ _ _ _ _ _ sub_wk1); eauto.
+            now rewrite inst_sub_wk1.
+            now rewrite inst_subst, inst_sub_wk1.
+            rewrite <- sub_up1_id. unfold sub_up1.
+            rewrite sub_comp_id_left. cbn [env_tail sub_snoc].
+            now rewrite inst_sub_wk1, inst_sub_id.
+            now rewrite ?inst_lift.
+          * unfold sout_arrow_dcl. intros. revert H12.
+            destruct (snocView ζ1), (snocView ζ2).
+            cbn in H10. apply inversion_eq_env_snoc in H10.
+            destruct H10. eapply f_dcl; eauto.
+          * now rewrite inst_subst, inst_sub_wk1.
+      - destruct b as [x σ]; cbn.
         split; (intros Hwp v; specialize (Hwp v); revert Hwp).
         + rewrite IHma.
           * apply sout_wp_monotonic. intros a.
@@ -1096,6 +1218,31 @@ Module Mutators
             cbn in H10. apply inversion_eq_env_snoc in H10.
             destruct H10. eapply f_dcl; eauto.
           * now rewrite inst_subst, inst_sub_wk1.
+      - split; (intros [Heq Hwp]; split; auto; revert Hwp).
+        + rewrite IHma.
+          * apply sout_wp_monotonic. intros a.
+            apply (f_dcl _ _ _ _ _ _ (sub_shift xIn)); auto.
+            now rewrite inst_sub_shift.
+            now rewrite inst_subst, inst_sub_single.
+            now rewrite sub_comp_id_right, inst_sub_id, inst_sub_single.
+            now rewrite ?inst_lift.
+          * unfold sout_arrow_dcl. intros. revert H12.
+            apply (f_dcl _ _ _ _ _ _ ζ12); auto.
+            unfold sub_comp. rewrite ?inst_subst.
+            congruence.
+          * now rewrite inst_subst, inst_sub_single.
+        + rewrite IHma.
+          * apply sout_wp_monotonic. intros a.
+            apply (f_dcl _ _ _ _ _ _ (sub_single xIn t)); auto.
+            now rewrite inst_sub_single.
+            now rewrite inst_subst, inst_sub_single.
+            now rewrite sub_comp_id_right, inst_sub_id, inst_sub_single.
+            now rewrite ?inst_lift.
+          * unfold sout_arrow_dcl. intros. revert H12.
+            apply (f_dcl _ _ _ _ _ _ ζ12); auto.
+            unfold sub_comp. rewrite ?inst_subst.
+            congruence.
+          * now rewrite inst_subst, inst_sub_single.
       - split; (intros Hwp Heq; specialize (Hwp Heq); revert Hwp).
         + rewrite IHma.
           * apply sout_wp_monotonic. intros a.
@@ -1128,7 +1275,7 @@ Module Mutators
           (k : SymOutcome AT Σ) :
       forall ι POST,
         sout_wp (sout_assumek (formula_eq (term_var x) (subst (T := fun Σ => Term Σ _) (sub_shift xIn) t)) k) ι POST <->
-        sout_wp (sout_subst x t (subst (sub_single xIn t) k)) ι POST.
+        sout_wp (sout_assume_vareq x t (subst (sub_single xIn t) k)) ι POST.
     Proof.
       cbn. intros *. rewrite inst_subst. rewrite inst_sub_shift, sout_wp_subst.
       split; intros Hwp HYP; specialize (Hwp HYP); revert Hwp; now rewrite inst_sub_single.
@@ -1154,10 +1301,10 @@ Module Mutators
         now rewrite inst_sub_single.
     Qed.
 
-    Lemma sout_wp_multisub {AT A} `{InstLaws AT A} {Σ0 Σ1} (ζ : MultiSub Σ0 Σ1)
+    Lemma sout_wp_assume_multisub {AT A} `{InstLaws AT A} {Σ0 Σ1} (ζ : MultiSub Σ0 Σ1)
       (o : SymOutcome AT Σ1) (ι0 : SymInstance Σ0) (ι1 : SymInstance Σ1) (P : A -> Prop) :
       ι0 = inst ι1 (sub_multi ζ) ->
-      sout_wp (sout_multisub ζ o) ι0 P <-> (inst_multisub ι0 ζ -> sout_wp o ι1 P).
+      sout_wp (sout_assume_multisub ζ o) ι0 P <-> (inst_multisub ι0 ζ -> sout_wp o ι1 P).
     Proof.
       intros Heqι. induction ζ; cbn in *.
       - rewrite inst_sub_id in Heqι. subst. intuition.
@@ -1169,7 +1316,7 @@ Module Mutators
 
     Lemma sout_wp_multisub' {AT A} `{InstLaws ET E, InstLaws AT A} {Σ0 Σ1} (ζ : MultiSub Σ0 Σ1)
       (o : SymOutcome AT Σ1) (ι0 : SymInstance Σ0) (F : E -> Prop) (P : A -> Prop) :
-      sout_wp (sout_multisub ζ o) ι0 P <-> (inst_multisub ι0 ζ -> sout_wp o (inst ι0 (sub_multishift ζ)) P).
+      sout_wp (sout_assume_multisub ζ o) ι0 P <-> (inst_multisub ι0 ζ -> sout_wp o (inst ι0 (sub_multishift ζ)) P).
     Proof.
       induction ζ; cbn in *.
       - rewrite inst_sub_id. intuition.
@@ -1252,16 +1399,29 @@ Module Mutators
       | _          => sout_assumek fml o
       end.
 
+    Definition sout_angelicv_prune {AT} `{OccursCheck AT} {Σ} b (o : SymOutcome AT (Σ ▻ b)) : SymOutcome AT Σ :=
+      match o with
+      (* This is not good *)
+      (* | sout_fail s => sout_fail s *)
+      | _           => sout_angelicv b o
+      end.
+
     Definition sout_demonicv_prune {AT} `{OccursCheck AT} {Σ} b (o : SymOutcome AT (Σ ▻ b)) : SymOutcome AT Σ :=
       match @occurs_check_symoutcome AT _ (Σ ▻ b) b inctx_zero o with
       | Some o => o
       | None   => sout_demonicv b o
       end.
 
-    Definition sout_subst_prune {AT Σ x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ) (k : SymOutcome AT (Σ - (x,σ))) : SymOutcome AT Σ :=
+    Definition sout_assert_vareq_prune {AT Σ x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ) (msg : Message (Σ - (x,σ))) (k : SymOutcome AT (Σ - (x,σ))) : SymOutcome AT Σ :=
+      match k with
+      (* | sout_fail s => sout_fail s *)
+      | _          => sout_assert_vareq x t msg k
+      end.
+
+    Definition sout_assume_vareq_prune {AT Σ x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ) (k : SymOutcome AT (Σ - (x,σ))) : SymOutcome AT Σ :=
       match k with
       | sout_block => sout_block
-      | _          => sout_subst x t k
+      | _          => sout_assume_vareq x t k
       end.
 
     Fixpoint sout_prune {AT} `{OccursCheck AT} {Σ} (o : SymOutcome AT Σ) : SymOutcome AT Σ :=
@@ -1279,10 +1439,14 @@ Module Mutators
         sout_assertk_prune P msg (sout_prune o)
       | sout_assumek P o =>
         sout_assumek_prune P (sout_prune o)
+      | sout_angelicv b o =>
+        sout_angelicv_prune (sout_prune o)
       | sout_demonicv b o =>
         sout_demonicv_prune (sout_prune o)
-      | sout_subst x t k =>
-        sout_subst_prune t (sout_prune k)
+      | sout_assert_vareq x t msg k =>
+        sout_assert_vareq_prune t msg (sout_prune k)
+      | sout_assume_vareq x t k =>
+        sout_assume_vareq_prune t (sout_prune k)
       | sout_debug d k => sout_debug d (sout_prune k)
       end.
 
@@ -1356,6 +1520,7 @@ Module Mutators
     - rewrite IHma1, IHma2; eauto.
     - rewrite IHma; auto.
     - rewrite IHma; auto.
+    - admit.
     - destruct b as [x σ]; cbn. setoid_rewrite IHma.
       split; (intros Hwp v; specialize (Hwp v); revert Hwp; apply sout_wp_monotonic; intros a;
               match goal with | |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto end).
