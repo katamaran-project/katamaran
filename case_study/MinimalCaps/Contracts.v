@@ -716,22 +716,23 @@ Import MinCapsMutators.
 
 Local Ltac solve :=
   repeat
-    (repeat intro;
-     repeat
+    (repeat
        match goal with
-       | H: NamedEnv _ _ |- _ => unfold NamedEnv in H
-       | H: Env _ ctx_nil |- _ => dependent elimination H
-       | H: Env _ (ctx_snoc _ _) |- _ => dependent elimination H
        | H: _ /\ _ |- _ => destruct H
        | H: Empty_set |- _ => destruct H
+       | |- forall _, _ => intro
        | |- False \/ _ =>  right
        | |- _ \/ False =>  left
        | |- _ /\ _ => constructor
-       | |- VerificationCondition _ => constructor; cbn
+       | |- VerificationCondition _ =>
+         constructor;
+         cbv [sout_safe env_remove env_lookup inctx_case_snoc eval_binop is_true
+              inst instantiate_term instantiate_formula inst_term inst_formula];
+         cbn
        | |- Obligation _ _ _ => constructor; cbn
        | |- Debug _ _ => constructor
        | |- Debug _ True \/ _ => left
-       | |- (_ \/ _) \/ _ =>  rewrite or_assoc
+       | |- (_ \/ _) \/ _ => rewrite or_assoc
        | |- context[Z.leb ?x ?y] =>
          destruct (Z.leb_spec x y)
        end;
