@@ -1557,15 +1557,10 @@ Module Mutators
 
     Definition dmut_angelic_finite {Γ1 Γ2 A} F `{finite.Finite F} {Σ}
       (cont : F -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      dmut_bind
-        (dmut_angelic_list "dmut_angelic_finite" "All branches failed" tt (finite.enum F))
-        (fun (Σ' : LCtx) (ζ : Sub Σ Σ') (x : F) => dmut_sub ζ (cont x)).
-
+      dmut_angelic_listk "dmut_angelic_finite" "All branches failed" tt (finite.enum F) cont.
     Definition dmut_demonic_finite {Γ1 Γ2 A} F `{finite.Finite F} {Σ}
       (cont : F -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      dmut_bind
-        (dmut_demonic_list (finite.enum F))
-        (fun (Σ' : LCtx) (ζ : Sub Σ Σ') (x : F) => dmut_sub ζ (cont x)).
+      (dmut_demonic_listk (finite.enum F)) cont.
     Global Arguments dmut_angelic_finite {_ _ _} _ {_ _ _} _.
     Global Arguments dmut_demonic_finite {_ _ _} _ {_ _ _} _.
 
@@ -2287,15 +2282,14 @@ Module Mutators
     Definition dmut_consume_chunk_evar {Σe Σr} (c : Chunk Σe) (L : EvarEnv Σe Σr) : DynamicMutator Γ Γ (EvarEnv Σe) Σr.
       refine (dmut_get_heap >>= fun Σ1 ζ1 h1 => _).
       refine (let L1 := subst ζ1 L in _).
-      eapply dmut_bind.
-      apply (dmut_angelic_list
+      apply (dmut_angelic_listk
         "dmut_consume_chunk_evar"
         "Empty extraction"
         {| evarerror_env := L1;
            evarerror_data := c;
         |}
         (extract_chunk c h1 L1)).
-      intros Σ2 ζ2 [L2 h2].
+      intros [L2 h2].
       refine (dmut_put_heap h2;; dmut_pure L2).
     Defined.
 

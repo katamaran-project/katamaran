@@ -704,6 +704,23 @@ Module Soundness
       - destruct xs; cbn; rewrite inst_subst; intuition.
     Qed.
 
+    Lemma dmut_wp_demonic_listk {AT BT B} `{InstLaws BT B} {Γ1 Γ2 Σ}
+          (xs : List AT Σ) (k : AT Σ -> DynamicMutator Γ1 Γ2 BT Σ)
+          Σ1 (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s11 : SymbolicState Γ1 Σ1) (ι1 : SymInstance Σ1)
+      (P : B -> SCState Γ2 -> Prop) :
+      dmut_wp (dmut_demonic_listk xs k) ζ01 pc1 s11 ι1 P <->
+      forall x : AT _, List.In x xs -> dmut_wp (k x) ζ01 pc1 s11 ι1 P.
+    Proof.
+      induction xs.
+      - cbn; firstorder.
+      - destruct xs.
+        + cbn - [dmut_wp] in *.
+          intuition.
+        + change (dmut_wp (dmut_demonic_listk (a :: a0 :: xs)%list k) ζ01 pc1 s11 ι1 P)
+            with (dmut_wp (k a) ζ01 pc1 s11 ι1 P /\ dmut_wp (dmut_demonic_listk (a0 :: xs)%list k) ζ01 pc1 s11 ι1 P).
+          rewrite IHxs. cbn. intuition.
+    Qed.
+
     Lemma dmut_wp_demonic_finite {X AT A} `{finite.Finite X, Subst AT, Inst AT A, InstLaws AT A, SubstLaws AT} {Γ1 Γ2 Σ Σ1}
       (k : X -> DynamicMutator Γ1 Γ2 AT Σ) (k_dcl : forall x, dmut_dcl (k x))
       (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s1 : SymbolicState Γ1 Σ1) (ι1 : SymInstance Σ1)
@@ -712,25 +729,10 @@ Module Soundness
       (forall x : X, dmut_wp (k x) ζ01 pc1 s1 ι1 P).
     Proof.
       unfold dmut_demonic_finite.
-      rewrite dmut_wp_bind.
-      - rewrite dmut_wp_demonic_list.
-        setoid_rewrite dmut_wp_sub.
-        setoid_rewrite sub_comp_id_left.
-        setoid_rewrite <-base.elem_of_list_In.
-        split.
-        + intros Hk x.
-          specialize (Hk x).
-          specialize (Hk (finite.elem_of_enum x)).
-          revert Hk.
-          eapply k_dcl; erewrite ?inst_sub_id, ?inst_lift; trivial.
-        + intros Hk x _.
-          specialize (Hk x).
-          revert Hk.
-          eapply k_dcl; erewrite ?inst_sub_id, ?inst_lift; trivial.
-      - intros until Q; intros PQ. rewrite ?dmut_wp_sub.
-        unfold instantiate_const, inst in H12; subst.
-        eapply k_dcl; eauto.
-      - eauto.
+      rewrite dmut_wp_demonic_listk.
+      setoid_rewrite <-base.elem_of_list_In.
+      split; intros HYP x; specialize (HYP x); auto.
+      apply HYP, finite.elem_of_enum.
     Qed.
 
     Lemma dmut_wp_freshtermvar {Γ Σ Σ1 x σ}
