@@ -1248,8 +1248,40 @@ Module Terms (Export termkit : TermKit).
         now rewrite lookup_sub_wk1.
     Qed.
 
-
   End SymbolicSubstitutions.
+
+  Section FunWithBoxes.
+
+    Definition CType : Type := LCtx -> Type.
+    Definition Valid (A : CType) : Type :=
+      forall Σ, A Σ.
+    Definition Impl (A B : CType) : CType :=
+      fun Σ => A Σ -> B Σ.
+    Definition Box (A : CType) : CType :=
+      fun Σ0 => forall Σ1 (ζ01 : Sub Σ0 Σ1), A Σ1.
+
+    Notation "⊢ A" := (Valid A) (at level 90).
+    Notation "A ->> B" := (Impl A B) (at level 80, right associativity).
+    Notation "□ A" := (Box A) (at level 11, format "□ A", right associativity).
+
+    Definition K {A B} :
+      ⊢ □(A ->> B) ->> (□A ->> □B) :=
+      fun Σ0 f a Σ1 ζ01 => f Σ1 ζ01 (a Σ1 ζ01).
+    Definition T {A} :
+      ⊢ □A ->> A :=
+      fun Σ0 a => a Σ0 (sub_id Σ0).
+    Definition four {A} :
+      ⊢ □A ->> □□A :=
+      fun Σ0 a Σ1 ζ01 Σ2 ζ12 => a Σ2 (sub_comp ζ01 ζ12).
+
+    Definition valid_box {A} :
+      (⊢ A) -> (⊢ □A) :=
+      fun a Σ0 Σ1 ζ01 => a Σ1.
+
+    Definition persistent (A : CType) : Type :=
+      ⊢ A ->> □A.
+
+  End FunWithBoxes.
 
   Section MultiSubs.
 
