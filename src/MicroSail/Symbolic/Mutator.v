@@ -1307,6 +1307,68 @@ Module Mutators
 
   End VerificationConditions.
 
+  Module DCLLogRel.
+
+    Notation "⊢ A" := (Valid A) (at level 90).
+    Notation "A ->> B" := (Impl A B) (at level 80, right associativity).
+    Notation "□ A" := (Box A) (at level 9, format "□ A", right associativity).
+
+    Class LR (T : CType) : Type :=
+      lr : forall Σ0 Σ1, Sub Σ0 Σ1 -> T Σ0 -> T Σ1 -> Prop.
+
+    Instance LRFormula : LR Formula :=
+      fun Σ0 Σ1 ζ01 f0 f1 =>
+        forall ι1 : SymInstance Σ1,
+          inst_formula (inst ι1 ζ01) f0 <-> inst_formula ι1 f1.
+
+    Instance LRSymOutcome {AT A} `{LR AT, Inst AT A} : LR (SymOutcome AT) :=
+      fun Σ0 Σ1 ζ01 o0 o1 =>
+        forall (ι1 : SymInstance Σ1) (POST : A -> Prop),
+          sout_wp o0 (inst ι1 ζ01) POST <-> sout_wp o1 ι1 POST.
+
+    Instance LRImpl {A B} `{LR A, LR B} : LR (A ->> B) :=
+      fun Σ0 Σ1 ζ01 f0 f1 =>
+        forall a0 a1,
+          lr ζ01 a0 a1 -> lr (T := B) ζ01 (f0 a0) (f1 a1).
+
+    (* Instance LRPair {A B} `{LR A, LR B} : LR (Pair A B) := *)
+    (*   fun Σ0 ab1 ab2 => *)
+    (*     let (a1, b1) := ab1 in *)
+    (*     let (a2, b2) := ab2 in *)
+    (*     rel Σ0 a1 a2 /\ rel Σ0 b1 b2. *)
+
+    Instance LRBox {A} `{LR A} : LR (□ A) :=
+      fun Σ0 Σ1 ζ01 b1 b2 =>
+        forall Σ2 (ζ02 : Sub Σ0 Σ2) (ζ12 : Sub Σ1 Σ2),
+          (* lr ζ12 ζ01 ζ02 -> *)
+          lr ζ12 (b1 _ ζ01) (b2 _ ζ12).
+
+    Definition sout_mapping_dcl {AT BT} `{LR AT, LR BT} {Σ0} (f : (□ (AT ->> BT)) Σ0) : Prop :=
+      forall Σ1 (ζ01 : Sub Σ0 Σ1), lr ζ01 f (four f ζ01).
+
+    Lemma sout_wp_map' {AT A BT B} `{LR AT, LR BT, InstLaws AT A, Inst BT B} {Σ} (ma : SymOutcome AT Σ)
+      (f : (□ (AT ->> BT)) Σ) (f_dcl : sout_mapping_dcl f) :
+      forall (ι : SymInstance Σ) POST,
+        sout_wp (sout_map f ma) ι POST <->
+        sout_wp ma ι (fun a => POST (inst ι (f Σ (sub_id Σ) (lift a)))).
+    Proof.
+    intros ι. induction ma; cbn; intros POST; auto.
+    - assert (inst ι (f Σ (sub_id Σ) a) =
+              inst ι (f Σ (sub_id Σ) (lift (inst ι a)))) as ->; auto.
+      cbv [sout_mapping_dcl lr LRBox LRImpl] in f_dcl.
+      admit.
+    - split; intros [i HYP]; exists i; revert HYP; rewrite H6; eauto.
+    - rewrite IHma1, IHma2; eauto.
+    - rewrite IHma1, IHma2; eauto.
+    - rewrite IHma; auto.
+    - rewrite IHma; auto.
+    - destruct b as [x σ]; cbn. setoid_rewrite IHma.
+      split; (intros Hwp v; specialize (Hwp v); revert Hwp; apply sout_wp_monotonic; intros a;
+              match goal with | |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto end).
+    Admitted.
+
+  End DCLLogRel.
+
   Section EvarExplanation.
 
     (* We currently avoid introducing existential variables into the
