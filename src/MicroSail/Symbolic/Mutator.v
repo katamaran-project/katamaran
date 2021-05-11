@@ -695,7 +695,7 @@ Module Mutators
     Instance SubstSymOutcome {E A} `{Subst E, Subst A} : Subst (SymOutcome A) :=
       fun Σ1 Σ2 ζ o => subst_symoutcome ζ o.
 
-    Fixpoint occurs_check_symoutcome {A} `{Subst A, OccursCheck A} {Σ x} (xIn : x ∈ Σ) (o : SymOutcome A Σ) :
+    Fixpoint occurs_check_symoutcome {A} `{OccursCheck A} {Σ x} (xIn : x ∈ Σ) (o : SymOutcome A Σ) :
       option (SymOutcome A (Σ - x)) :=
       match o with
       | sout_pure a => option_map sout_pure (occurs_check xIn a)
@@ -710,18 +710,20 @@ Module Mutators
         option_ap (option_ap (option_map (sout_assertk (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check xIn msg)) (occurs_check_symoutcome xIn o)
       | sout_assumek P o => option_ap (option_map (sout_assumek (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check_symoutcome xIn o)
       | sout_demonicv b o => option_map (sout_demonicv b) (occurs_check_symoutcome (inctx_succ xIn) o)
-      | @sout_subst _ _ y σ yIn t o0 =>
+      | @sout_subst _ _ y σ yIn t o =>
         match occurs_check_view yIn xIn with
-        | Same _ => Some o0
+        | Same _ => Some o
         | @Diff _ _ _ _ x xIn =>
           option_ap
             (option_map
                (fun (t' : Term (Σ - (y :: σ) - x) σ) (o' : SymOutcome A (Σ - (y :: σ) - x)) =>
+                  let e := swap_remove yIn xIn in
                   sout_subst
                     y
-                    (eq_rect (Σ - (y :: σ) - x) (fun c : LCtx => Term c σ) t' (Σ - x - (y :: σ)) (swap_remove yIn xIn))
-                    (eq_rect (Σ - (y :: σ) - x) (fun c : LCtx => SymOutcome A c) o' (Σ - x - (y :: σ)) (swap_remove yIn xIn)))
-               (occurs_check xIn t)) (occurs_check_symoutcome xIn o0)
+                    (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e)
+                    (eq_rect (Σ - (y :: σ) - x) (SymOutcome A) o' (Σ - x - (y :: σ)) e))
+               (occurs_check xIn t))
+            (occurs_check_symoutcome xIn o)
         end
       | sout_debug b o => option_ap (option_map (sout_debug (Σ := Σ - x)) (occurs_check xIn b)) (occurs_check_symoutcome xIn o)
       end.
@@ -1256,18 +1258,10 @@ Module Mutators
       | _          => sout_assumek fml o
       end.
 
-    Definition sout_demonicv_prune {AT Σ} b (o : SymOutcome AT (Σ ▻ b)) : SymOutcome AT Σ :=
-      match o with
-      | sout_block => sout_block
-      | @sout_subst _ _ x σ (MkInCtx n p) t k =>
-        match n return
-              forall (p : ctx_nth_is (ctx_snoc Σ b) n (pair x σ)),
-                SymOutcome AT (ctx_remove (MkInCtx n p)) -> SymOutcome AT Σ
-        with
-        | O   => fun p k => k
-        | S n => fun _ _ => sout_demonicv b o
-        end p k
-      | _ => sout_demonicv b o
+    Definition sout_demonicv_prune {AT} `{OccursCheck AT} {Σ} b (o : SymOutcome AT (Σ ▻ b)) : SymOutcome AT Σ :=
+      match @occurs_check_symoutcome AT _ (Σ ▻ b) b inctx_zero o with
+      | Some o => o
+      | None   => sout_demonicv b o
       end.
 
     Definition sout_subst_prune {AT Σ x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ) (k : SymOutcome AT (Σ - (x,σ))) : SymOutcome AT Σ :=
@@ -1276,7 +1270,7 @@ Module Mutators
       | _          => sout_subst x t k
       end.
 
-    Fixpoint sout_prune {AT Σ} (o : SymOutcome AT Σ) : SymOutcome AT Σ :=
+    Fixpoint sout_prune {AT} `{OccursCheck AT} {Σ} (o : SymOutcome AT Σ) : SymOutcome AT Σ :=
       match o with
       | sout_pure a => sout_pure a
       | sout_fail msg => sout_fail msg
@@ -1298,7 +1292,7 @@ Module Mutators
       | sout_debug d k => sout_debug d (sout_prune k)
       end.
 
-    Definition sout_ok {AT Σ} (o : SymOutcome AT Σ) : bool :=
+    Definition sout_ok {AT} `{OccursCheck AT} {Σ} (o : SymOutcome AT Σ) : bool :=
       match sout_prune o with
       | sout_block  => true
       | _           => false
@@ -2675,7 +2669,7 @@ Module Mutators
            (dmut_contract_evar c s (sub_id _) nil (symbolicstate_initial δ))).
 
     Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationCondition (sout_prune (dmut_contract_evar_outcome c body)).
+      VerificationCondition (sout_prune (sout_prune (dmut_contract_evar_outcome c body))).
 
   End WithConfig.
 
@@ -2686,9 +2680,9 @@ Module Mutators
   Definition ValidContractDynMut {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
     ValidContract c body.
 
-  Definition sout_ok_opaque {AT Σ} (o : SymOutcome AT Σ) : Prop :=
+  Definition sout_ok_opaque {AT} `{OccursCheck AT} {Σ} (o : SymOutcome AT Σ) : Prop :=
     is_true (sout_ok o).
-  Global Arguments sout_ok_opaque {AT} Σ o.
+  Global Arguments sout_ok_opaque {AT _} Σ o.
   Global Opaque sout_ok_opaque.
 
   Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
