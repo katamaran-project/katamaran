@@ -497,6 +497,59 @@ Module SemiConcrete
 
   Import OutcomeNotations.
 
+  Section SemiConcreteWP.
+
+    Definition scmut_wp {Γ1 Γ2 A}
+      (m : SCMut Γ1 Γ2 A)
+      (POST : A -> SCState Γ2 -> Prop)
+      (s1 : SCState Γ1) : Prop :=
+      outcome_satisfy (m s1) (fun r => POST (scmutres_value r) (scmutres_state r)).
+
+    Lemma scmut_wp_monotonic {A} {Γ1 Γ2} (m : SCMut Γ1 Γ2 A) (s1 : SCState Γ1)
+      (P Q : A -> SCState Γ2 -> Prop) (PQ : forall a s, P a s -> Q a s) :
+      scmut_wp m P s1 -> scmut_wp m Q s1.
+    Proof. unfold scmut_wp. apply outcome_satisfy_monotonic; intros []; apply PQ. Qed.
+
+    Lemma scmut_wp_equiv {A} {Γ1 Γ2} (m : SCMut Γ1 Γ2 A) (s1 : SCState Γ1)
+      (P Q : A -> SCState Γ2 -> Prop) (PQ : forall a s, P a s <-> Q a s) :
+        scmut_wp m P s1 <-> scmut_wp m Q s1.
+    Proof. split; apply scmut_wp_monotonic; apply PQ. Qed.
+
+    Lemma scmut_wp_bind {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (f : A -> SCMut Γ2 Γ3 B)
+          (POST : B -> SCState Γ3 -> Prop) :
+      forall s1 : SCState Γ1,
+        scmut_wp (scmut_bind ma f) POST s1 <->
+        scmut_wp ma (fun a => scmut_wp (f a) POST) s1.
+    Proof.
+      unfold SCMut, scmut_bind, scmut_wp in *; cbn; intros.
+      now rewrite outcome_satisfy_bind.
+    Qed.
+
+    Lemma scmut_wp_demonic {Γ1 Γ2 A B} (sm : B -> SCMut Γ1 Γ2 A) (s__sc : SCState Γ1) (POST : A -> SCState Γ2 -> Prop) :
+      scmut_wp (scmut_demonic sm) POST s__sc <-> forall v, scmut_wp (sm v) POST s__sc.
+    Proof. unfold scmut_wp, scmut_demonic; cbn; intuition. Qed.
+
+    Lemma scmut_wp_demonic_binary {Γ1 Γ2 A} (sm1 sm2 : SCMut Γ1 Γ2 A) (s__sc : SCState Γ1) (POST : A -> SCState Γ2 -> Prop) :
+      scmut_wp (scmut_demonic_binary sm1 sm2) POST s__sc <->
+      scmut_wp sm1 POST s__sc /\ scmut_wp sm2 POST s__sc.
+    Proof. unfold scmut_wp, scmut_demonic_binary; cbn; intuition. Qed.
+
+    Lemma scmut_wp_angelic {Γ1 Γ2 A B} (sm : B -> SCMut Γ1 Γ2 A) (s__sc : SCState Γ1) (POST : A -> SCState Γ2 -> Prop) :
+      scmut_wp (scmut_angelic sm) POST s__sc <-> exists v, scmut_wp (sm v) POST s__sc.
+    Proof. unfold scmut_wp, scmut_angelic; cbn; intuition. Qed.
+
+    Lemma scmut_wp_angelic_binary {Γ1 Γ2 A} (sm1 sm2 : SCMut Γ1 Γ2 A) (s__sc : SCState Γ1) (POST : A -> SCState Γ2 -> Prop) :
+      scmut_wp (scmut_angelic_binary sm1 sm2) POST s__sc <->
+      scmut_wp sm1 POST s__sc \/ scmut_wp sm2 POST s__sc.
+    Proof. unfold scmut_wp, scmut_angelic_binary; cbn; intuition. Qed.
+
+    Lemma scmut_wp_state {Γ1 Γ2 A} (f : SCState Γ1 -> A * SCState Γ2) (POST : A -> SCState Γ2 -> Prop) :
+      forall (s1 : SCState Γ1),
+        scmut_wp (scmut_state f) POST s1 <-> POST (fst (f s1)) (snd (f s1)).
+    Proof. intros s1. cbn. now destruct (f s1); cbn. Qed.
+
+  End SemiConcreteWP.
+
   Definition scmut_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
    SymInstance (sep_contract_logic_variables c) -> SCMut Δ Δ unit :=
     match c with
