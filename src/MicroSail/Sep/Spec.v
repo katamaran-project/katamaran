@@ -28,6 +28,8 @@
 
 From Coq Require
      Vector.
+From Coq Require Import
+     Program.Tactics.
 
 From MicroSail Require Import
      Notation
@@ -117,6 +119,123 @@ Module Assertions
     - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
       repeat f_equal; eapply inst_subst.
   Qed.
+
+  Global Instance OccursCheckFormula : OccursCheck Formula :=
+    fun Σ x xIn fml =>
+          match fml with
+          | formula_bool t    => option_map formula_bool (occurs_check xIn t)
+          | formula_prop ζ P  => option_map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
+          | formula_eq t1 t2  => option_ap (option_map (@formula_eq _ _) (occurs_check xIn t1)) (occurs_check xIn t2)
+          | formula_neq t1 t2 => option_ap (option_map (@formula_neq _ _) (occurs_check xIn t1)) (occurs_check xIn t2)
+            end.
+
+  Global Instance OccursCheckLawsFormula : OccursCheckLaws Formula.
+  Proof.
+    constructor.
+    - intros ? ? ? ? []; cbn;
+        now rewrite ?occurs_check_shift.
+    - intros ? ? ? [] fml' Heq; cbn in *.
+      + apply option_map_eq_some' in Heq; destruct_conjs; subst; cbn.
+        f_equal. now apply (occurs_check_sound (T := fun Σ => Term Σ _)).
+      + apply option_map_eq_some' in Heq; destruct_conjs; subst; cbn.
+        f_equal. now apply occurs_check_sound.
+      + apply option_bind_eq_some in Heq; destruct Heq as (f & Heq1 & Heq2).
+        apply option_bind_eq_some in Heq1; destruct Heq1 as (t1' & Heq11 & Heq12).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq11. subst t1.
+        apply noConfusion_inv in Heq12; cbn in Heq12; subst f; cbn.
+        apply option_bind_eq_some in Heq2; destruct Heq2 as (t2' & Heq21 & Heq22).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq21. subst t2.
+        apply noConfusion_inv in Heq22; cbn in Heq22; subst fml'; cbn.
+        reflexivity.
+      + apply option_bind_eq_some in Heq; destruct Heq as (f & Heq1 & Heq2).
+        apply option_bind_eq_some in Heq1; destruct Heq1 as (t1' & Heq11 & Heq12).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq11. subst t1.
+        apply noConfusion_inv in Heq12; cbn in Heq12; subst f; cbn.
+        apply option_bind_eq_some in Heq2; destruct Heq2 as (t2' & Heq21 & Heq22).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq21. subst t2.
+        apply noConfusion_inv in Heq22; cbn in Heq22; subst fml'; cbn.
+        reflexivity.
+  Qed.
+
+  (* The path condition expresses a set of constraints on the logic variables
+     that encode the path taken during execution. *)
+  Section PathCondition.
+
+    Definition PathCondition (Σ : LCtx) : Type :=
+      list (Formula Σ).
+    Fixpoint fold_right1 {A R} (cns : A -> R -> R) (sing : A -> R) (v : A) (l : list A) : R :=
+      match l with
+        nil => sing v
+      | cons v' vs => cns v (fold_right1 cns sing v' vs)
+      end.
+    Fixpoint fold_right10 {A R} (cns : A -> R -> R) (sing : A -> R) (nl : R) (l : list A) : R :=
+      match l with
+        nil => nl
+      | cons v vs => fold_right1 cns sing v vs
+      end.
+
+    Lemma fold_right_1_10 {A} {cns : A -> Prop -> Prop} {sing : A -> Prop} {nl : Prop}
+          (consNilIffSing : forall v, sing v <-> cns v nl)
+          (v : A) (l : list A) :
+          fold_right1 cns sing v l <-> cns v (fold_right10 cns sing nl l).
+    Proof.
+      induction l; cbn; auto.
+    Qed.
+
+    Lemma fold_right_1_10_prop {A} {P : A -> Prop}
+          (v : A) (l : list A) :
+          fold_right1 (fun v acc => P v /\ acc) P v l <-> P v /\ (fold_right10 (fun v acc => P v /\ acc) P True l).
+    Proof.
+      refine (fold_right_1_10 _ v l).
+      intuition.
+    Qed.
+
+    (* Note: we use fold_right10 instead of fold_right to make inst_lift hold. *)
+    Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
+      fold_right10 (fun fml pc => inst ι fml /\ pc) (fun fml => inst ι fml) True pc.
+    Global Arguments inst_pathcondition : simpl never.
+
+    Lemma inst_subst1 {Σ Σ' } (ζ : Sub Σ Σ') (ι : SymInstance Σ') (f : Formula Σ) (pc : list (Formula Σ)) :
+      fold_right1 (fun fml pc => inst ι fml /\ pc) (fun fml => inst ι fml) (subst ζ f) (subst ζ pc) =
+      fold_right1 (fun fml pc => inst (inst ι ζ) fml /\ pc) (fun fml => inst (inst ι ζ) fml) f pc.
+    Proof.
+      revert f.
+      induction pc; intros f; cbn.
+      - apply inst_subst.
+      - f_equal.
+        + apply inst_subst.
+        + apply IHpc.
+    Qed.
+
+    Lemma inst_subst10 {Σ Σ' } (ζ : Sub Σ Σ') (ι : SymInstance Σ') (pc : list (Formula Σ)) :
+      fold_right10 (fun fml pc => inst ι fml /\ pc) (fun fml => inst ι fml) True (subst ζ pc) =
+      fold_right10 (fun fml pc => inst (inst ι ζ) fml /\ pc) (fun fml => inst (inst ι ζ) fml) True pc.
+    Proof.
+      destruct pc.
+      - reflexivity.
+      - apply inst_subst1.
+    Qed.
+
+    Global Instance instantiate_pathcondition : Inst PathCondition Prop :=
+      {| inst Σ := inst_pathcondition;
+         lift Σ P := cons (lift P : Formula Σ) nil
+      |}.
+
+    Global Instance instantiate_pathcondition_laws : InstLaws PathCondition Prop.
+    Proof.
+      constructor.
+      - reflexivity.
+      - intros Σ Σ' ζ ι pc.
+        eapply inst_subst10.
+    Qed.
+
+    Lemma inst_pathcondition_cons {Σ} (ι : SymInstance Σ) (f : Formula Σ) (pc : PathCondition Σ) :
+      inst ι (cons f pc) <-> inst ι f /\ inst ι pc.
+    Proof.
+      apply fold_right_1_10_prop.
+    Qed.
+
+  End PathCondition.
 
   Section Chunks.
 
@@ -282,16 +401,6 @@ Module Assertions
   (*     | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a) *)
   (*     | asn_debug => asn_debug *)
   (*     end. *)
-
-  Global Instance OccursCheckFormula :
-    OccursCheck Formula :=
-    fun Σ b bIn fml =>
-      match fml with
-      | formula_bool t    => option_map formula_bool (occurs_check bIn t)
-      | formula_prop ζ P  => option_map (fun ζ => formula_prop ζ P) (occurs_check bIn ζ)
-      | formula_eq t1 t2  => option_map (fun '(t1,t2) => formula_eq t1 t2) (occurs_check bIn (t1, t2))
-      | formula_neq t1 t2 => option_map (fun '(t1,t2) => formula_neq t1 t2) (occurs_check bIn (t1, t2))
-      end.
 
   Global Instance OccursCheckChunk :
     OccursCheck Chunk :=
