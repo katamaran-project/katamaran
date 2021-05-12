@@ -274,6 +274,10 @@ Module SemiConcrete
       fun s => outcome_assertk
                  (inst ι fml)
                  (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
+    Definition scmut_assert_formulak {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fml : Formula Σ) (k : SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
+      fun s => outcome_assertk (inst ι fml) (k s).
+    Definition scmut_assert_formulask {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) (k : SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
+      fold_right (scmut_assert_formulak ι) k fmls.
 
     Definition scmut_match_sum {A} {Γ1 Γ2 σ τ} (v : Lit σ + Lit τ)
       (sinl : Lit σ -> SCMut Γ1 Γ2 A) (sinr : Lit τ -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
@@ -382,11 +386,11 @@ Module SemiConcrete
       match contract with
       | MkSepContract _ _ Σe δ req result ens =>
         ⨁ ι : SymInstance Σe =>
-        ⨁ H : vs = inst ι δ =>
-        scmut_consume ι req  ;;
-        ⨂ v : Lit τ =>
-        scmut_produce (env_snoc ι (result::τ) v) ens ;;
-        scmut_pure v
+        scmut_assert_formulask ι (formula_eqs δ (lift vs))
+         (scmut_consume ι req  ;;
+          ⨂ v : Lit τ =>
+          scmut_produce (env_snoc ι (result::τ) v) ens ;;
+          scmut_pure v)
       end.
 
     Fixpoint scmut_exec {Γ τ} (s : Stm Γ τ) : SCMut Γ Γ (Lit τ) :=

@@ -538,6 +538,12 @@ Module Mutators
     Global Arguments sout_assert_vareq {_ _} x {_ _} t msg k.
     Global Arguments sout_assume_vareq {_ _} x {_ _} t k.
 
+    Fixpoint sout_angelicvs {A Σ} Δ : SymOutcome A (Σ ▻▻ Δ) -> SymOutcome A Σ :=
+      match Δ with
+      | ε     => fun k => k
+      | Δ ▻ b => fun k => sout_angelicvs Δ (sout_angelicv b k)
+      end.
+
     Fixpoint sout_demonic_close {A} Σ : SymOutcome A Σ -> SymOutcome A ε :=
       match Σ with
       | ctx_nil      => fun k => k
@@ -942,6 +948,25 @@ Module Mutators
       env_snoc E1 b v1 = env_snoc E2 b v2 ->
       E1 = E2 /\ v1 = v2.
     Proof. intros H. now dependent elimination H. Qed.
+
+    Lemma sout_wp_angelicvs {AT A} `{Inst AT A} Σ Δ (ma : SymOutcome AT (Σ ▻▻ Δ)) :
+      forall (ι : SymInstance Σ) POST,
+        sout_wp (sout_angelicvs Δ ma) ι POST <->
+        exists ιΔ : SymInstance Δ, sout_wp ma (env_cat ι ιΔ) POST.
+    Proof.
+      intros ι POST.
+      induction Δ; cbn.
+      - split.
+        + intros Hwp. exists env_nil. apply Hwp.
+        + intros [ιΔ Hwp]. destruct (nilView ιΔ). apply Hwp.
+      - rewrite IHΔ. cbn.
+        split; intros [ιΔ Hwp].
+        + destruct Hwp as [v Hwp].
+          exists (env_snoc ιΔ _ v).
+          apply Hwp.
+        + destruct (snocView ιΔ) as [ιΔ v].
+          exists ιΔ, v. apply Hwp.
+    Qed.
 
     Lemma sout_wp_map {AT A BT B} `{InstLaws AT A, Inst BT B} {Σ} (ma : SymOutcome AT Σ)
       (f : sout_mapping AT BT Σ) (f_dcl : sout_mapping_dcl f) :
@@ -1980,6 +2005,11 @@ Module Mutators
      dmut_assert_formulas Δpc2 ;;
      dmut_put_heap h2.
 
+  Definition dmut_assert_formulak {A Γ1 Γ2 Σ} (fml : Formula Σ) (k : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+    dmut_bind_right (dmut_assert_formula fml) k.
+  Definition dmut_assert_formulask {A Γ1 Γ2 Σ} (fmls : list (Formula Σ)) (k: DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
+    fold_right dmut_assert_formulak k fmls.
+
   Definition dmut_leakcheck {Γ Σ} : DynamicMutator Γ Γ Unit Σ :=
     dmut_get_heap >>= fun _ _ h =>
     match h with
@@ -2186,16 +2216,25 @@ Module Mutators
         (dmut_pure tt)
     end.
 
+  Definition dmut_angelicvs {A Γ1 Γ2 Σ} Δ (k : DynamicMutator Γ1 Γ2 A (Σ ▻▻ Δ)) : DynamicMutator Γ1 Γ2 A Σ :=
+    fun Σ1 ζ01 pc1 s1 =>
+      let ζl   := sub_cat_left Δ in
+      let ζ01' := sub_comp ζ01 ζl ►► sub_cat_right Δ in
+      sout_angelicvs Δ (k (Σ1 ▻▻ Δ) ζ01' (subst ζl pc1) (subst ζl s1)).
+
   Definition dmut_call {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
     match contract with
     | MkSepContract _ _ Σe δ req result ens =>
-      ⨁ ξ : Sub Σe Σr =>
-      dmut_assert_formulas (formula_eqs ts (subst ξ δ)) ;;
-      dmut_sub ξ
-        (dmut_consume req ;;
-         dmut_demonicv result τ
-           (dmut_produce ens ;;
-            dmut_pure (@term_var _ result _ inctx_zero)))
+      let ζleft := sub_cat_left Σe in
+      let ζright := sub_cat_right Σe in
+      dmut_angelicvs Σe
+        (dmut_assert_formulask
+           (formula_eqs (subst ζright δ) (subst (T:=fun Σ => NamedEnv (Term Σ) Δ) ζleft ts))
+           (dmut_sub ζright
+              (dmut_consume req ;;
+               dmut_demonicv result τ
+                 (dmut_produce ens ;;
+                  dmut_pure (@term_var _ result _ inctx_zero)))))
     end.
 
   Fixpoint dmut_exec {Γ τ Σ} (s : Stm Γ τ) {struct s} :

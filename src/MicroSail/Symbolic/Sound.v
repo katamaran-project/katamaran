@@ -614,6 +614,23 @@ Module Soundness
         unfold sub_comp. now rewrite inst_subst, inst_sub_wk1.
     Qed.
 
+    Lemma dmut_wp_angelicvs {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ Σ1 Δ} (d : DynamicMutator Γ1 Γ2 AT (Σ ▻▻ Δ)) (d_dcl : dmut_dcl d)
+      (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s1 : SymbolicState Γ1 Σ1) (ι1 : SymInstance Σ1)
+      (P : A -> SCState Γ2 -> Prop) (hpc : instpc ι1 pc1) :
+      dmut_wp (dmut_angelicvs Δ d) ζ01 pc1 s1 ι1 P <->
+      exists ιΔ : SymInstance Δ, dmut_wp d (env_cat ζ01 (lift (T := fun Σ => Sub _ Σ) ιΔ)) pc1 s1 ι1 P.
+    Proof.
+      unfold dmut_wp, dmut_angelicvs; cbn.
+      rewrite sout_wp_angelicvs.
+      split; intros [ιΔ Hwp]; exists ιΔ; revert Hwp.
+      - (* eapply d_dcl; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_wk1, ?inst_sub_id; auto; cbn. *)
+        (* unfold sub_comp. now rewrite inst_subst, inst_sub_wk1. *)
+        admit.
+      - (* eapply d_dcl; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_wk1, ?inst_sub_id; auto; cbn. *)
+        (* unfold sub_comp. now rewrite inst_subst, inst_sub_wk1. *)
+        admit.
+    Admitted.
+
     Lemma dmut_wp_demonicv {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ Σ1 x σ} (d : DynamicMutator Γ1 Γ2 AT (Σ ▻ (x :: σ))) (d_dcl : dmut_dcl d)
           (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (s1 : SymbolicState Γ1 Σ1) (ι1 : SymInstance Σ1)
           (P : A -> SCState Γ2 -> Prop) (hpc : instpc ι1 pc1) :
@@ -973,6 +990,24 @@ Module Soundness
       revert H4. rewrite ?inst_subst.
       rewrite H2, H3. apply PQ.
     Qed.
+
+    Lemma dmut_wp_assert_formulak {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1 Σ2} (fml : Formula Σ1) (k : DynamicMutator Γ1 Γ2 AT Σ1) (k_dcl : dmut_dcl k) (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (s2 : SymbolicState Γ1 Σ2)
+      (ι2 : SymInstance Σ2) (Hpc2 : instpc ι2 pc2) P :
+      dmut_wp (dmut_assert_formulak fml k) ζ12 pc2 s2 ι2 P <->
+      (inst (inst ι2 ζ12) fml /\ dmut_wp k ζ12 pc2 s2 ι2 P).
+    Proof.
+      unfold dmut_assert_formulak.
+      rewrite dmut_wp_bind_right; auto.
+      rewrite dmut_wp_assert_formula; auto.
+      admit.
+    Admitted.
+
+    Lemma dmut_wp_assert_formulask {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1 Σ2} (fmls : PathCondition Σ1) (k : DynamicMutator Γ1 Γ2 AT Σ1) (k_dcl : dmut_dcl k) (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (s2 : SymbolicState Γ1 Σ2)
+      (ι2 : SymInstance Σ2) (Hpc2 : instpc ι2 pc2) P :
+      dmut_wp (dmut_assert_formulask fmls k) ζ12 pc2 s2 ι2 P <->
+      (inst (inst ι2 ζ12) fmls /\ dmut_wp k ζ12 pc2 s2 ι2 P).
+    Proof.
+    Admitted.
 
     Lemma dmut_assert_formula_dcl {Γ Σ} (fml : Formula Σ) :
       dmut_dcl (Γ1 := Γ) (dmut_assert_formula fml).
@@ -1497,6 +1532,20 @@ Module Soundness
       subst ι; reflexivity.
     Qed.
 
+    Lemma bapprox_angelicvs {AT A} `{Subst AT, Inst AT A} {Γ Σ Δ} (ι : SymInstance Σ)
+          (dm : DynamicMutator Γ Γ AT (Σ ▻▻ Δ)) (d_dcl : dmut_dcl dm)
+          (sm : SymInstance Δ -> SCMut Γ Γ A) :
+      (forall ιΔ, bapprox (env_cat ι ιΔ) dm (sm ιΔ)) ->
+      bapprox ι
+        (dmut_angelicvs Δ dm)
+        (scmut_angelic sm).
+    Proof.
+      unfold bapprox. intros HYP * Hι Hpc.
+      rewrite dmut_wp_angelicvs, scmut_wp_angelic; auto.
+      intros [ιΔ Hwp]. exists ιΔ. revert Hwp.
+      apply HYP; auto.
+    Admitted.
+
     Lemma bapprox_demonicv {Γ Σ ς τ} (ι : SymInstance Σ)
           (dm : DynamicMutator Γ Γ Unit (Σ ▻ (ς,τ))) (d_dcl : dmut_dcl dm)
           (sm : Lit τ -> SCMut Γ Γ unit) :
@@ -1644,6 +1693,20 @@ Module Soundness
       rewrite dmut_wp_assert_formula; eauto.
       cbn. intuition.
     Qed.
+
+    Lemma bapprox_assert_formulak {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ) (fml : Formula Σ)
+      (dm : DynamicMutator Γ1 Γ2 AT Σ) (sm : SCMut Γ1 Γ2 A) :
+      bapprox ι dm sm ->
+      bapprox ι (dmut_assert_formulak fml dm) (scmut_assert_formulak ι fml sm).
+    Proof.
+    Admitted.
+
+    Lemma bapprox_assert_formulask {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ) (fmls : List Formula Σ)
+      (dm : DynamicMutator Γ1 Γ2 AT Σ) (sm : SCMut Γ1 Γ2 A) :
+      bapprox ι dm sm ->
+      bapprox ι (dmut_assert_formulask fmls dm) (scmut_assert_formulask ι fmls sm).
+    Proof.
+    Admitted.
 
     Lemma bapprox_state {AT A} `{Subst AT, Inst AT A} {Γ1 Γ2 Σ0} (ι0 : SymInstance Σ0)
           (f : forall Σ1 (ζ01 : Sub Σ0 Σ1), SymbolicState Γ1 Σ1 -> Pair AT (SymbolicState Γ2) Σ1)
@@ -1879,55 +1942,21 @@ Module Soundness
       bapprox ι (@dmut_call Γ Δ τ Σ c ts) (scmut_call c (inst ι ts)).
     Proof.
       destruct c as [Σ__c δ pre result post]; cbn [dmut_call scmut_call].
-      apply bapprox_angelic. intros ζ. unfold bapprox. intros * Hι Hpc.
-      rewrite dmut_wp_bind_right; auto.
-      rewrite dmut_wp_assert_formulas; auto.
-      intros [Hfmls Hwp]. rewrite dmut_wp_sub in Hwp.
-      rewrite scmut_wp_angelic.
-      assert (inst ι ts = inst (inst ι ζ) δ) as Heq.
-      { rewrite <- Hι in Hfmls. clear - Hfmls.
-        induction ts; [destruct (nilView δ) | destruct (snocView δ)].
-        - reflexivity.
-        - cbn - [inst] in Hfmls.
-          rewrite inst_pathcondition_cons in Hfmls.
-          destruct Hfmls as [Hfml Hfmls].
-          cbn. f_equal.
-          + now apply IHts.
-          + now rewrite <- inst_subst.
-      }
-      exists Heq.
-      rewrite dmut_wp_bind_right in Hwp; auto.
-      eapply bapprox_consume in Hwp; eauto. revert Hwp.
-      unfold sub_comp, scmut_bind_right.
-      rewrite inst_subst, inst_lift, scmut_wp_bind.
-      subst ι. apply scmut_wp_monotonic.
-      intros _ sc__consume Hwp.
-      rewrite dmut_wp_demonicv in Hwp; auto.
-      rewrite scmut_wp_demonic. intros v.
-      specialize (Hwp v).
-      rewrite scmut_wp_bind.
-      rewrite dmut_wp_bind_right in Hwp; auto.
-      eapply bapprox_produce in Hwp; eauto. revert Hwp.
-      rewrite inst_sub_snoc, inst_subst, inst_lift. cbn.
-      apply scmut_wp_monotonic.
-      intros _ sc__produce.
-      now rewrite inst_lift.
-      apply dmut_pure_dcl.
-      apply dmut_bind_right_dcl.
-      apply dmut_produce_dcl.
-      apply dmut_pure_dcl.
-      apply dmut_demonicv_dcl.
-      apply dmut_bind_right_dcl.
-      apply dmut_produce_dcl.
-      apply dmut_pure_dcl.
-      apply dmut_sub_dcl.
-      apply dmut_bind_right_dcl.
-      apply dmut_consume_dcl.
-      apply dmut_demonicv_dcl.
-      apply dmut_bind_right_dcl.
-      apply dmut_produce_dcl.
-      apply dmut_pure_dcl.
-    Qed.
+      apply bapprox_angelicvs. admit.
+      intros ιc. change (SymInstance Σ__c) in ιc.
+      unfold bapprox. intros * Hι Hpc.
+      rewrite dmut_wp_assert_formulask; auto.
+      rewrite scmut_wp_assert_formulask.
+      intros [Hfmls Hwp]. split.
+      - admit.
+      - rewrite dmut_wp_sub, dmut_wp_bind_right in Hwp; auto.
+        rewrite scmut_wp_bind_right.
+        eapply bapprox_consume in Hwp; eauto. revert Hwp.
+        unfold sub_comp. rewrite inst_subst, <- Hι.
+        admit.
+        admit.
+      - admit.
+    Admitted.
 
     Lemma eval_exp_inst {Γ Σ τ} (ι : SymInstance Σ) (δΓΣ : SymbolicLocalStore Γ Σ) (e : Exp Γ τ) :
       eval e (inst ι δΓΣ) = inst ι (symbolic_eval_exp δΓΣ e).

@@ -141,14 +141,50 @@ Module Soundness
       assumption.
     Qed.
 
+    Definition liftP {Γ} (POST : LocalStore Γ -> L) : SCState Γ -> Prop :=
+      fun s => interpret_scheap (scstate_heap s) ⊢ POST (scstate_localstore s).
+
+    Lemma scmut_wp_bind_right {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (mb : SCMut Γ2 Γ3 B)
+          (POST : B -> SCState Γ3 -> Prop) :
+      forall s1 : SCState Γ1,
+        scmut_wp (scmut_bind_right ma mb) POST s1 <->
+        scmut_wp ma (fun _ => scmut_wp mb POST) s1.
+    Proof. intros s1. unfold scmut_bind_right. now rewrite scmut_wp_bind. Qed.
+
+    Lemma scmut_wp_assert_formula {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
+      {s : SCState Γ} (POST : unit -> SCState Γ -> Prop) :
+      scmut_wp (scmut_assert_formula ι fml) POST s <->
+      inst ι fml /\ POST tt s.
+    Proof. reflexivity. Qed.
+
+    Lemma scmut_wp_assert_formulak {A Γ1 Γ2 Σ} {ι : SymInstance Σ} {fml : Formula Σ}
+      {k : SCMut Γ1 Γ2 A} {s : SCState Γ1} (POST : A -> SCState Γ2 -> Prop) :
+      scmut_wp (scmut_assert_formulak ι fml k) POST s <->
+      inst ι fml /\ scmut_wp k POST s.
+    Proof. reflexivity. Qed.
+
+    Lemma scmut_wp_assert_formulask {A Γ1 Γ2 Σ} {ι : SymInstance Σ} {fmls : list (Formula Σ)}
+      {k : SCMut Γ1 Γ2 A} {s : SCState Γ1} (POST : A -> SCState Γ2 -> Prop) :
+      scmut_wp (scmut_assert_formulask ι fmls k) POST s <->
+      inst (T := PathCondition) ι fmls /\ scmut_wp k POST s.
+    Proof.
+      unfold scmut_assert_formulask.
+      induction fmls; cbn - [scmut_wp].
+      - clear. intuition. constructor.
+      - rewrite inst_pathcondition_cons, scmut_wp_assert_formulak, IHfmls.
+        clear. intuition.
+    Qed.
+
     Lemma scmut_assert_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
       {δ1 : LocalStore Γ} {h1 : SCHeap} (POST : LocalStore Γ -> L) :
-      outcome_satisfy
-        (scmut_assert_formula ι fml {| scstate_localstore := δ1; scstate_heap := h1 |})
-        (fun r => interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_localstore r)) ->
+      scmut_wp
+        (scmut_assert_formula ι fml)
+        (fun _ => liftP POST)
+        {| scstate_localstore := δ1; scstate_heap := h1 |} ->
       interpret_scheap h1 ⊢ !! inst ι fml ∧ emp ✱ POST δ1.
     Proof.
-      cbn. intros [H1 H2].
+      rewrite scmut_wp_assert_formula.
+      unfold liftP. cbn. intros [Hfml HP].
       rewrite <- sepcon_emp at 1.
       rewrite sepcon_comm.
       apply sepcon_entails.
@@ -253,33 +289,38 @@ Module Soundness
     Lemma scmut_call_sound {Γ Δ τ} (δΓ : LocalStore Γ) (δΔ : LocalStore Δ)
           (h : SCHeap) (POST : Lit τ -> LocalStore Γ -> L)
           (c : SepContract Δ τ) :
-      outcome_satisfy
-        (scmut_call c δΔ {| scstate_localstore := δΓ; scstate_heap := h |})
-        (fun r =>
-           interpret_scheap (scmutres_heap r) ⊢ POST (scmutres_value r) (scmutres_localstore r)) ->
+      scmut_wp
+        (scmut_call c δΔ)
+        (fun a => liftP (POST a))
+        {| scstate_localstore := δΓ; scstate_heap := h |} ->
       CTriple δΔ (interpret_scheap h) (fun v => POST v δΓ) c.
     Proof.
       destruct c as [Σe δe req result ens] eqn:Heqc.
-      intros [ι [Heqs HYP]].
-      unfold scmut_angelic, scmut_bind, scmut_pure in HYP; cbn in HYP.
-      repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
-      repeat setoid_rewrite outcome_satisfy_bind in HYP; cbn in HYP.
+      unfold scmut_call. rewrite scmut_wp_angelic.
+      intros [ι Hwp]; revert Hwp.
+      rewrite scmut_wp_assert_formulask.
+      intros [Hfmls Hwp]; revert Hwp.
+      rewrite scmut_wp_bind_right.
       pose (fun δ => ∀ v, interpret_assertion (env_snoc ι (result,_) v) ens -✱ POST v δ) as frame.
+      unfold scmut_wp, scmut_demonic. cbn. intros HYP.
       assert (interpret_scheap h ⊢ frame δΓ ✱ interpret_assertion ι req ).
       { rewrite sepcon_comm.
         apply (scmut_consume_sound frame).
         sound_inster.
+        unfold scmut_bind_right, scmut_bind.
         intros [? [δ2 h2]] HYP; cbn.
         apply lall_right; intro v.
         specialize (HYP v).
+        rewrite outcome_satisfy_bind in HYP.
         now apply wand_sepcon_adjoint, scmut_produce_sound.
       }
       constructor 1 with ι (frame δΓ); auto.
-      intro v.
-      apply wand_sepcon_adjoint.
-      apply lall_left with v.
-      apply entails_refl.
-    Qed.
+      - clear - Hfmls. admit.
+      - intro v.
+        apply wand_sepcon_adjoint.
+        apply lall_left with v.
+        apply entails_refl.
+    Admitted.
 
     Lemma scmut_exec_sound {Γ σ} (s : Stm Γ σ) :
       forall (δ1 : LocalStore Γ) (h1 : SCHeap) (POST : Lit σ -> LocalStore Γ -> L),
