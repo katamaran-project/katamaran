@@ -485,7 +485,7 @@ Module SemiConcrete
       forall δ h, scmut_wp m P δ h <-> scmut_wp m Q δ h.
     Proof. split; apply scmut_wp_monotonic; apply PQ. Qed.
 
-    Lemma scmut_wp_porue {A Γ} (a : A) (POST : A -> SCProp Γ) :
+    Lemma scmut_wp_pure {A Γ} (a : A) (POST : A -> SCProp Γ) :
       forall δ h,
         scmut_wp (scmut_pure a) POST δ h <->
         POST a δ h.
@@ -532,6 +532,81 @@ Module SemiConcrete
     Proof.
       unfold scmut_wp, scmut_state. cbn.
       intros. reflexivity.
+    Qed.
+
+    Lemma scmut_wp_bind_right {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (mb : SCMut Γ2 Γ3 B)
+      (POST : B -> SCProp Γ3) :
+      forall δ h,
+        scmut_wp (scmut_bind_right ma mb) POST δ h <->
+        scmut_wp ma (fun _ => scmut_wp mb POST) δ h.
+    Proof. intros δ h. unfold scmut_bind_right. now rewrite scmut_wp_bind. Qed.
+
+    Lemma scmut_wp_assert_formula {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
+      (POST : unit -> SCProp Γ ) :
+      forall δ h,
+        scmut_wp (scmut_assert_formula ι fml) POST δ h <->
+        inst ι fml /\ POST tt δ h.
+    Proof. reflexivity. Qed.
+
+    Lemma scmut_wp_assume_formula {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
+      (POST : unit -> SCProp Γ ) :
+      forall δ h,
+        scmut_wp (scmut_assume_formula ι fml) POST δ h <->
+        (inst (A := Prop) ι fml -> POST tt δ h).
+    Proof. reflexivity. Qed.
+
+    Lemma scmut_wp_assert_formulak {A Γ1 Γ2 Σ} {ι : SymInstance Σ} {fml : Formula Σ}
+      {k : SCMut Γ1 Γ2 A} (POST : A -> SCProp Γ2) :
+      forall δ h,
+        scmut_wp (scmut_assert_formulak ι fml k) POST δ h <->
+        inst ι fml /\ scmut_wp k POST δ h.
+    Proof. reflexivity. Qed.
+
+    Lemma scmut_wp_assert_formulask {A Γ1 Γ2 Σ} {ι : SymInstance Σ} {fmls : list (Formula Σ)}
+      {k : SCMut Γ1 Γ2 A} (POST : A -> SCProp Γ2) :
+      forall δ h,
+        scmut_wp (scmut_assert_formulask ι fmls k) POST δ h <->
+        inst (T := PathCondition) ι fmls /\ scmut_wp k POST δ h.
+    Proof.
+      intros δ h. unfold scmut_assert_formulask.
+      induction fmls; cbn.
+      - clear. intuition. constructor.
+      - rewrite inst_pathcondition_cons, scmut_wp_assert_formulak, IHfmls.
+        clear. intuition.
+    Qed.
+
+    Lemma scmut_wp_match_sum {A Γ1 Γ2 σ τ} (v : Lit σ + Lit τ)
+      (kl : Lit σ -> SCMut Γ1 Γ2 A) (kr : Lit τ -> SCMut Γ1 Γ2 A) :
+      forall POST δ h,
+        scmut_wp (scmut_match_sum v kl kr) POST δ h <->
+        match v with
+        | inl v => scmut_wp (kl v) POST δ h
+        | inr v => scmut_wp (kr v) POST δ h
+        end.
+    Proof. destruct v; reflexivity. Qed.
+
+    Lemma scmut_wp_match_pair {A Γ1 Γ2 σ τ} (v : Lit σ * Lit τ)
+      (k : Lit σ -> Lit τ -> SCMut Γ1 Γ2 A) :
+      forall POST δ h,
+        scmut_wp (scmut_match_pair v k) POST δ h <->
+        match v with
+        | (vl,vr) => scmut_wp (k vl vr) POST δ h
+        end.
+    Proof. destruct v; reflexivity. Qed.
+
+    Lemma scmut_wp_match_record {A R Γ1 Γ2 Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (v : Lit (ty_record R))
+          (k : SymInstance Δ → SCMut Γ1 Γ2 A) :
+      forall POST δ h,
+        scmut_wp (scmut_match_record p v k) POST δ h <->
+        forall vs : NamedEnv Lit (𝑹𝑭_Ty R),
+          v = 𝑹_fold vs ->
+          scmut_wp (k (record_pattern_match p vs)) POST δ h.
+    Proof.
+      intros. unfold scmut_match_record.
+      split; intros Hwp.
+      - intros vs ->. now rewrite 𝑹_unfold_fold in Hwp.
+      - specialize (Hwp (𝑹_unfold v)). rewrite 𝑹_fold_unfold in Hwp.
+        now apply Hwp.
     Qed.
 
   End SemiConcreteWP.

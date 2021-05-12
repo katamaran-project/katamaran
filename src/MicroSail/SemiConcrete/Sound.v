@@ -150,47 +150,6 @@ Module Soundness
       assumption.
     Qed.
 
-    Lemma scmut_wp_bind_right {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (mb : SCMut Γ2 Γ3 B)
-      (POST : B -> SCProp Γ3) :
-      forall δ h,
-        scmut_wp (scmut_bind_right ma mb) POST δ h <->
-        scmut_wp ma (fun _ => scmut_wp mb POST) δ h.
-    Proof. intros δ h. unfold scmut_bind_right. now rewrite scmut_wp_bind. Qed.
-
-    Lemma scmut_wp_assert_formula {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
-      (POST : unit -> SCProp Γ ) :
-      forall δ h,
-        scmut_wp (scmut_assert_formula ι fml) POST δ h <->
-        inst ι fml /\ POST tt δ h.
-    Proof. reflexivity. Qed.
-
-    Lemma scmut_wp_assume_formula {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
-      (POST : unit -> SCProp Γ ) :
-      forall δ h,
-        scmut_wp (scmut_assume_formula ι fml) POST δ h <->
-        (inst (A := Prop) ι fml -> POST tt δ h).
-    Proof. reflexivity. Qed.
-
-    Lemma scmut_wp_assert_formulak {A Γ1 Γ2 Σ} {ι : SymInstance Σ} {fml : Formula Σ}
-      {k : SCMut Γ1 Γ2 A} (POST : A -> SCProp Γ2) :
-      forall δ h,
-        scmut_wp (scmut_assert_formulak ι fml k) POST δ h <->
-        inst ι fml /\ scmut_wp k POST δ h.
-    Proof. reflexivity. Qed.
-
-    Lemma scmut_wp_assert_formulask {A Γ1 Γ2 Σ} {ι : SymInstance Σ} {fmls : list (Formula Σ)}
-      {k : SCMut Γ1 Γ2 A} (POST : A -> SCProp Γ2) :
-      forall δ h,
-        scmut_wp (scmut_assert_formulask ι fmls k) POST δ h <->
-        inst (T := PathCondition) ι fmls /\ scmut_wp k POST δ h.
-    Proof.
-      intros δ h. unfold scmut_assert_formulask.
-      induction fmls; cbn.
-      - clear. intuition. constructor.
-      - rewrite inst_pathcondition_cons, scmut_wp_assert_formulak, IHfmls.
-        clear. intuition.
-    Qed.
-
     Lemma scmut_assert_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
       (POST : LocalStore Γ -> L) :
       forall δ h,
@@ -249,12 +208,12 @@ Module Soundness
         change (inst_term ι b) with (inst ι b).
         intros [H1 H2]. destruct (inst ι b) eqn:?; auto.
       - auto.
-      - admit.
-      - admit.
-      - admit.
-      - admit.
-      - admit.
-      - admit.
+      - destruct (inst ι s); auto.
+      - destruct (inst ι s); auto.
+      - destruct (inst ι s); auto.
+      - auto.
+      - auto.
+      - destruct (𝑼_unfold (inst ι s)); auto.
       - rewrite scmut_wp_bind_right. intros Hwp.
         rewrite sepcon_assoc.
         apply (IHasn1 ι (fun δ => interpret_assertion ι asn2 ✱ POST δ) δ1 h1); clear IHasn1.
@@ -266,8 +225,8 @@ Module Soundness
         + apply sepcon_entails.
           apply lex_right with v, entails_refl.
           apply entails_refl.
-      - admit.
-    Admitted.
+      - now rewrite scmut_wp_pure, sepcon_comm, sepcon_emp.
+    Qed.
 
     Lemma scmut_produce_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       forall δ h,
@@ -284,12 +243,12 @@ Module Soundness
         change (inst_term ι b) with (inst ι b).
         intros [H1 H2]. destruct (inst ι b) eqn:?; auto.
       - auto.
-      - admit.
-      - admit.
-      - admit.
-      - admit.
-      - admit.
-      - admit.
+      - destruct (inst ι s); auto.
+      - destruct (inst ι s); auto.
+      - destruct (inst ι s); auto.
+      - auto.
+      - auto.
+      - destruct (𝑼_unfold (inst ι s)); auto.
       - rewrite scmut_wp_bind_right. intros Hwp.
         rewrite <- sepcon_assoc.
         apply wand_sepcon_adjoint.
@@ -304,8 +263,8 @@ Module Soundness
         apply wand_sepcon_adjoint.
         rewrite sepcon_comm.
         now apply IHasn.
-      - admit.
-    Admitted.
+      - now rewrite scmut_wp_pure, sepcon_emp.
+    Qed.
 
     Lemma scmut_produce_sound' {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       forall δ h,
@@ -325,7 +284,7 @@ Module Soundness
         δΓ h ->
       CTriple δΔ (interpret_scheap h) (fun v => POST v δΓ) c.
     Proof.
-      destruct c as [Σe δe req result ens] eqn:Heqc.
+      destruct c as [Σe δe req result ens].
       unfold scmut_call. rewrite scmut_wp_angelic.
       intros [ι Hwp]; revert Hwp.
       rewrite scmut_wp_assert_formulask.
@@ -345,12 +304,13 @@ Module Soundness
         now apply wand_sepcon_adjoint, scmut_produce_sound.
       }
       constructor 1 with ι (frame δΓ); auto.
-      - clear - Hfmls. admit.
+      - apply inst_formula_eqs in Hfmls.
+        now rewrite inst_lift in Hfmls.
       - intro v.
         apply wand_sepcon_adjoint.
         apply lall_left with v.
         apply entails_refl.
-    Admitted.
+    Qed.
 
     Lemma scmut_exec_sound {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> LocalStore Γ -> L) :
       forall (δ1 : LocalStore Γ) (h1 : SCHeap),

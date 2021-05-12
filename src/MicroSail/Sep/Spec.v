@@ -240,6 +240,17 @@ Module Assertions
       apply fold_right_1_10_prop.
     Qed.
 
+    Lemma inst_formula_eqs {Δ Σ} (ι : SymInstance Σ) (xs ys : SymbolicLocalStore Δ Σ) :
+      inst (T := PathCondition) (A := Prop)ι (formula_eqs xs ys) -> inst ι xs = inst ι ys.
+    Proof.
+      induction xs.
+      - destruct (nilView ys). reflexivity.
+      - destruct (snocView ys). cbn - [inst].
+        rewrite inst_pathcondition_cons. intros [Hfml Hpc].
+        change (inst ι xs ► (b ↦ inst ι db) = inst ι E ► (b ↦ inst ι v)).
+        f_equal. now apply IHxs. apply Hfml.
+    Qed.
+
   End PathCondition.
 
   (* Avoid some Prop <-> Type confusion. *)
