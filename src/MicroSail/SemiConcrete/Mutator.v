@@ -63,26 +63,6 @@ Module SemiConcrete
 
   Export symcontractkit.
 
-  Section SemiConcreteState.
-
-    Local Set Primitive Projections.
-
-    Record SCState (Γ : PCtx) : Type :=
-      MkSCState
-        { scstate_localstore    : LocalStore Γ;
-          scstate_heap          : SCHeap;
-        }.
-    Global Arguments scstate_localstore {_} _.
-    Global Arguments scstate_heap {_} _.
-
-    Definition scstate_initial {Γ} (δ : LocalStore Γ) : SCState Γ :=
-      MkSCState δ nil.
-
-    Definition scstate_produce_chunk {Γ} (c : SCChunk) : SCState Γ -> SCState Γ :=
-      fun '(MkSCState δ h) => MkSCState δ (cons c h).
-
-  End SemiConcreteState.
-
   Section ChunkExtraction.
 
     Equations(noeqns) match_chunk_eqb (ce : SCChunk) (cr : SCChunk) : bool :=
@@ -133,7 +113,8 @@ Module SemiConcrete
     Record SCMutResult (Γ : PCtx) (A : Type) : Type :=
       MkSCMutResult {
           scmutres_value : A;
-          scmutres_state : SCState Γ;
+          scmutres_store : LocalStore Γ;
+          scmutres_heap  : SCHeap;
         }.
 
   End SemiConcreteMutatorResult.
@@ -141,27 +122,27 @@ Module SemiConcrete
   Section SemiConcreteMutator.
 
     Definition SCMut (Γ1 Γ2 : PCtx) (A : Type) : Type :=
-      SCState Γ1 -> Outcome (SCMutResult Γ2 A).
+      LocalStore Γ1 -> SCHeap -> Outcome (SCMutResult Γ2 A).
     Bind Scope mutator_scope with SCMut.
 
     Definition scmut_demonic {Γ1 Γ2 I A} (ms : I -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
-      fun (s : SCState Γ1) => (⨂ i : I => ms i s)%out.
+      fun δ h => (⨂ i : I => ms i δ h)%out.
     Definition scmut_angelic {Γ1 Γ2 I A} (ms : I -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
-      fun (s : SCState Γ1) => (⨁ i : I => ms i s)%out.
+      fun δ h => (⨁ i : I => ms i δ h)%out.
     Definition scmut_fail {Γ1 Γ2 A} (msg : string) : SCMut Γ1 Γ2 A :=
-      fun s => outcome_fail msg.
+      fun δ h => outcome_fail msg.
     Definition scmut_block {Γ1 Γ2 A} : SCMut Γ1 Γ2 A :=
-      fun s => outcome_block.
+      fun δ h => outcome_block.
 
     Definition scmut_demonic_binary {Γ1 Γ2 A} (m1 m2 : SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
-      fun s => outcome_demonic_binary (m1 s) (m2 s).
+      fun δ h => outcome_demonic_binary (m1 δ h) (m2 δ h).
     Definition scmut_angelic_binary {Γ1 Γ2 A} (m1 m2 : SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
-      fun s => outcome_angelic_binary (m1 s) (m2 s).
+      fun δ h => outcome_angelic_binary (m1 δ h) (m2 δ h).
 
     Definition scmut_pure {Γ A} (a : A) : SCMut Γ Γ A :=
-      fun s => outcome_pure (MkSCMutResult a s).
+      fun δ h => outcome_pure (MkSCMutResult a δ h).
     Definition scmut_bind {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (f : A -> SCMut Γ2 Γ3 B) : SCMut Γ1 Γ3 B :=
-      fun s0 => outcome_bind (ma s0) (fun '(MkSCMutResult a s1) => f a s1).
+      fun δ0 h0 => outcome_bind (ma δ0 h0) (fun '(MkSCMutResult a δ1 h1) => f a δ1 h1).
     Definition scmut_bind_right {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (mb : SCMut Γ2 Γ3 B) : SCMut Γ1 Γ3 B :=
       scmut_bind ma (fun _ => mb).
     Definition scmut_bind_left {Γ1 Γ2 Γ3 A B} (ma : SCMut Γ1 Γ2 A) (mb : SCMut Γ2 Γ3 B) : SCMut Γ1 Γ3 A :=
@@ -169,7 +150,7 @@ Module SemiConcrete
     Definition scmut_map {Γ1 Γ2 A B} (f : A -> B) (ma : SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 B :=
       scmut_bind ma (fun a => scmut_pure (f a)).
     Definition scmut_angelick_list {Γ1 Γ2 A B} (msg : string) (xs : list A) (k : A -> SCMut Γ1 Γ2 B) : SCMut Γ1 Γ2 B :=
-      fun s => outcome_angelick_list msg xs (fun a => k a s).
+      fun δ h => outcome_angelick_list msg xs (fun a => k a δ h).
 
   End SemiConcreteMutator.
   Bind Scope mutator_scope with SCMut.
@@ -200,57 +181,38 @@ Module SemiConcrete
 
     Local Open Scope mutator_scope.
 
-    Definition scmut_state {Γ Γ' A} (f : SCState Γ -> (A * SCState Γ')) : SCMut Γ Γ' A :=
-      fun s => outcome_pure (let (a,s1) := f s in MkSCMutResult a s1).
-    Definition scmut_modify {Γ Γ'} (f : SCState Γ -> SCState Γ') : SCMut Γ Γ' unit :=
-      scmut_state (fun s => (tt,f s)).
-    Definition scmut_put {Γ Γ'} (s : SCState Γ') : SCMut Γ Γ' unit :=
-      scmut_state (fun _ => (tt,s)).
-    Definition scmut_get {Γ} : SCMut Γ Γ (SCState Γ) :=
-      scmut_state (fun s => (s,s)).
+    Definition scmut_state {Γ Γ' A} (f : LocalStore Γ -> SCHeap -> SCMutResult Γ' A) : SCMut Γ Γ' A :=
+      fun δ h => outcome_pure (let (a,δ1,h1) := f δ h in MkSCMutResult a δ1 h1).
 
-    Definition scmut_state_local {Γ Γ' A} (f : LocalStore Γ -> (LocalStore Γ' * A)) : SCMut Γ Γ' A :=
-      scmut_state (fun '(MkSCState δ ĥ) => let (δ',a) := f δ in (a,MkSCState δ' ĥ)).
-    Definition scmut_modify_local {Γ Γ'} (f : LocalStore Γ -> LocalStore Γ') : SCMut Γ Γ' unit :=
-      scmut_state_local (fun δ => (f δ,tt)).
     Definition scmut_put_local {Γ Γ'} (δ : LocalStore Γ') : SCMut Γ Γ' unit :=
-      scmut_state_local (fun _ => (δ,tt)).
+      scmut_state (fun _ h => MkSCMutResult tt δ h).
     Definition scmut_get_local {Γ} : SCMut Γ Γ (LocalStore Γ) :=
-      scmut_state_local (fun δ => (δ,δ)).
-    Definition scmut_gets_local {Γ A} (f : LocalStore Γ -> A) : SCMut Γ Γ A :=
-      scmut_state_local (fun δ => (δ,f δ)).
+      scmut_state (fun δ h => MkSCMutResult δ δ h).
     Definition scmut_pop_local {Γ x σ} : SCMut (Γ ▻ (x :: σ)) Γ unit :=
-      scmut_modify_local (fun δ => env_tail δ).
+      scmut_state (fun δ h => MkSCMutResult () (env_tail δ) h).
     Definition scmut_pops_local {Γ} Δ : SCMut (Γ ▻▻ Δ) Γ unit :=
-      scmut_modify_local (fun δΓΔ => env_drop Δ δΓΔ).
+      scmut_state (fun δ h => MkSCMutResult () (env_drop Δ δ) h).
     Definition scmut_push_local {Γ x σ} (v : Lit σ) : SCMut Γ (Γ ▻ (x :: σ)) unit :=
-      scmut_modify_local (fun δ => env_snoc δ (x :: σ) v).
+      scmut_state (fun δ h => MkSCMutResult () (env_snoc δ (x :: σ) v) h).
     Definition scmut_pushs_local {Γ Δ} (δΔ : LocalStore Δ) : SCMut Γ (Γ ▻▻ Δ) unit :=
-      scmut_modify_local (fun δΓ => env_cat δΓ δΔ).
-
+      scmut_state (fun δ h => MkSCMutResult () (env_cat δ δΔ) h).
     Definition scmut_pushpop {A} {Γ1 Γ2 x σ} (v : Lit σ) (d : SCMut (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) A) :
       SCMut Γ1 Γ2 A :=
       scmut_push_local v ;; scmut_bind_left d scmut_pop_local.
     Definition scmut_pushspops {A} {Γ1 Γ2 Δ} (δΔ : LocalStore Δ) (d : SCMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) :
       SCMut Γ1 Γ2 A :=
       scmut_pushs_local δΔ ;; scmut_bind_left d (scmut_pops_local Δ).
-
-    Definition scmut_state_heap {Γ A} (f : SCHeap -> (SCHeap * A)) : SCMut Γ Γ A :=
-      scmut_state (fun '(MkSCState δ h) => let (h',a) := f h in (a,MkSCState δ h')).
-    Definition scmut_modify_heap {Γ} (f : SCHeap -> SCHeap) : SCMut Γ Γ unit :=
-      scmut_state_heap (fun h => (f h,tt)).
     Definition scmut_get_heap {Γ} : SCMut Γ Γ SCHeap :=
-      scmut_state_heap (fun h => (h,h)).
+      scmut_state (fun δ h => MkSCMutResult h δ h).
     Definition scmut_put_heap {Γ} (h : SCHeap) : SCMut Γ Γ unit :=
-      scmut_state_heap (fun _ => (h,tt)).
+      scmut_state (fun δ _ => MkSCMutResult tt δ h).
 
     Definition scmut_eval_exp {Γ σ} (e : Exp Γ σ) : SCMut Γ Γ (Lit σ) :=
-      scmut_gets_local (fun δ => eval e δ).
+      scmut_state (fun δ h => MkSCMutResult (eval e δ) δ h).
     Definition scmut_eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : SCMut Γ Γ (LocalStore σs) :=
-      scmut_gets_local (fun δ => env_map (fun _ e => eval e δ) es).
-
+      scmut_state (fun δ h => MkSCMutResult (env_map (fun _ e => eval e δ) es) δ h).
     Definition scmut_produce_chunk {Γ} (c : SCChunk) : SCMut Γ Γ unit :=
-      scmut_modify (scstate_produce_chunk c).
+      scmut_state (fun δ h => MkSCMutResult () δ (cons c h)).
     Definition scmut_consume_chunk {Γ} (c : SCChunk) : SCMut Γ Γ unit :=
       scmut_get_heap >>= fun h =>
         scmut_angelick_list
@@ -265,17 +227,13 @@ Module SemiConcrete
     Local Opaque instantiate_term.
 
     Definition scmut_assume_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : SCMut Γ Γ unit :=
-      fun s => outcome_assumek
-                 (inst ι fml)
-                 (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
+      fun δ h => outcome_assumek (inst ι fml) (outcome_pure (MkSCMutResult tt δ h)).
     Definition scmut_assume_term {Γ Σ} (ι : SymInstance Σ) (t : Term Σ ty_bool) : SCMut Γ Γ unit :=
       scmut_assume_formula ι (formula_bool t).
     Definition scmut_assert_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : SCMut Γ Γ unit :=
-      fun s => outcome_assertk
-                 (inst ι fml)
-                 (outcome_pure {| scmutres_value := tt; scmutres_state := s |}).
+      fun δ h => outcome_assertk (inst ι fml) (outcome_pure (MkSCMutResult tt δ h)).
     Definition scmut_assert_formulak {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fml : Formula Σ) (k : SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
-      fun s => outcome_assertk (inst ι fml) (k s).
+      fun δ h => outcome_assertk (inst ι fml) (k δ h).
     Definition scmut_assert_formulask {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) (k : SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
       fold_right (scmut_assert_formulak ι) k fmls.
 
@@ -404,7 +362,7 @@ Module SemiConcrete
         scmut_pushspops δ (scmut_exec k)
       | stm_assign x e =>
         v <- scmut_exec e ;;
-        scmut_modify_local (fun δ => δ ⟪ x ↦ v ⟫)%env ;;
+        scmut_state (fun δ h => MkSCMutResult tt (δ ⟪ x ↦ v ⟫)%env h) ;;
         scmut_pure v
       | stm_call f es =>
         match CEnv f with
@@ -509,8 +467,8 @@ Module SemiConcrete
     Definition scmut_wp {Γ1 Γ2 A} (m : SCMut Γ1 Γ2 A) (POST : A -> SCProp Γ2) : SCProp Γ1 :=
       fun δ h =>
         outcome_satisfy
-          (m {| scstate_localstore := δ; scstate_heap := h |})
-          (fun r => POST (scmutres_value r) (scstate_localstore (scmutres_state r)) (scstate_heap (scmutres_state r))).
+          (m δ h)
+          (fun r => POST (scmutres_value r) (scmutres_store r) (scmutres_heap r)).
     Global Arguments scmut_wp : simpl never.
 
     Lemma scmut_wp_monotonic {A} {Γ1 Γ2} (m : SCMut Γ1 Γ2 A)
@@ -565,15 +523,15 @@ Module SemiConcrete
         scmut_wp sm1 POST δ h \/ scmut_wp sm2 POST δ h.
     Proof. unfold scmut_wp, scmut_angelic_binary; cbn; intuition. Qed.
 
-    Lemma scmut_wp_state {Γ1 Γ2 A} (f : SCState Γ1 -> A * SCState Γ2) (POST : A -> SCProp Γ2) :
+    Lemma scmut_wp_state {Γ1 Γ2 A} (f : LocalStore Γ1 -> SCHeap -> SCMutResult Γ2 A) (POST : A -> SCProp Γ2) :
       forall δ h,
         scmut_wp (scmut_state f) POST δ h <->
-        match f (MkSCState δ h) with
-        | (a,MkSCState δ' h') => POST a δ' h'
+        match f δ h with
+        | MkSCMutResult a δ' h' => POST a δ' h'
         end.
     Proof.
       unfold scmut_wp, scmut_state. cbn.
-      intros ? ?. now destruct (f _).
+      intros. reflexivity.
     Qed.
 
   End SemiConcreteWP.

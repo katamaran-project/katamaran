@@ -75,18 +75,6 @@ Module Soundness
 
   Local Notation "[ ι ] x == y" := (inst ι x = inst ι y) (at level 50).
 
-  Global Instance inst_symbolicstate {Γ} : Inst (SymbolicState Γ) (SCState Γ) :=
-    {| inst Σ ι '(MkSymbolicState δ h) := MkSCState (inst ι δ) (inst ι h);
-       lift Σ '(MkSCState δ h) := MkSymbolicState (lift δ) (lift h);
-    |}.
-
-  Global Instance instlaws_symbolicState {Γ} : InstLaws (SymbolicState Γ) (SCState Γ).
-  Proof.
-    constructor.
-    - intros ? ? []; cbn; now rewrite ?inst_lift.
-    - intros ? ? ? ? []; cbn; now rewrite ?inst_subst.
-  Qed.
-
   (* Read: If ς is equivalent to t in ι, then substituting t for ς is equivalent to the identity. *)
   Lemma inst_single_shift {Σ ς σ} (ςInΣ : ς :: σ ∈ Σ) (t : Term (Σ - (ς :: σ)) σ) ι :
     [ ι ] term_var ς == subst (sub_shift ςInΣ) t ->
@@ -123,15 +111,17 @@ Module Soundness
     Proof.
       constructor.
       - intros ? ? r.
-        destruct r as [a s].
+        destruct r as [a δ h].
         constructor.
         revert a. now apply inst.
-        revert s. now apply inst.
+        revert δ. now apply inst.
+        revert h. now apply inst.
       - intros ? r.
-        destruct r as [a s].
+        destruct r as [a δ h].
         constructor.
         apply (lift a).
-        apply (lift s).
+        apply (lift δ).
+        apply (lift h).
     Defined.
 
     Global Instance InstLawsDynamicMutatorResult {AT A} `{InstLaws AT A} {Γ} : InstLaws (DynamicMutatorResult Γ AT) (SCMutResult Γ A).
@@ -141,23 +131,23 @@ Module Soundness
       - intros ? ? ? ? []; cbn; now rewrite ?inst_subst.
     Qed.
 
-    Lemma sout_arrow_dcl_eta {AT A BT B} `{Subst AT, Subst BT, Inst AT A, Inst BT B} {Γ Σ1} (f : sout_arrow (DynamicMutatorResult Γ AT) BT Σ1) :
-      sout_arrow_dcl
-        (AT := DynamicMutatorResult Γ AT)
-        (fun Σ2 ζ12 pc2 r =>
-           f Σ2 ζ12 pc2 {| dmutres_result_value := dmutres_result_value r; dmutres_result_state := dmutres_result_state r |}) ->
-      sout_arrow_dcl f.
-    Proof.
-      intros HYP Σ2 Σ3 ζ12 ζ13 pc2 pc3 ζ23 r2 r3 F P Q PQ ι2 ι3;
-        specialize (HYP Σ2 Σ3 ζ12 ζ13 pc2 pc3 ζ23 r2 r3 F P Q PQ ι2 ι3);
-        destruct r2, r3; intuition.
-    Qed.
+    (* Lemma sout_arrow_dcl_eta {AT A BT B} `{Subst AT, Subst BT, Inst AT A, Inst BT B} {Γ Σ1} (f : sout_arrow (DynamicMutatorResult Γ AT) BT Σ1) : *)
+    (*   sout_arrow_dcl *)
+    (*     (AT := DynamicMutatorResult Γ AT) *)
+    (*     (fun Σ2 ζ12 pc2 r => *)
+    (*        f Σ2 ζ12 pc2 {| dmutres_value := dmutres_result_value r; dmutres_result_state := dmutres_result_state r |}) -> *)
+    (*   sout_arrow_dcl f. *)
+    (* Proof. *)
+    (*   intros HYP Σ2 Σ3 ζ12 ζ13 pc2 pc3 ζ23 r2 r3 F P Q PQ ι2 ι3; *)
+    (*     specialize (HYP Σ2 Σ3 ζ12 ζ13 pc2 pc3 ζ23 r2 r3 F P Q PQ ι2 ι3); *)
+    (*     destruct r2, r3; intuition. *)
+    (* Qed. *)
 
     Lemma sout_arrow_dcl_pure {BT B} `{Subst ET, Subst BT, Inst BT B} {Γ3 Σ1} :
         sout_arrow_dcl
           (fun (Σ3 : LCtx) (_ : Sub Σ1 Σ3) (_ : PathCondition Σ3) (X : DynamicMutatorResult Γ3 BT Σ3) =>
              match X with
-             | MkDynMutResult b3 δ3 => sout_pure (MkDynMutResult b3 δ3)
+             | MkDynMutResult b3 δ3 h3 => sout_pure (MkDynMutResult b3 δ3 h3)
              end).
     Proof. unfold sout_arrow_dcl. destruct a1, a2. cbn. intuition. Qed.
 
@@ -167,15 +157,13 @@ Module Soundness
     Definition dmut_wp {AT A} `{Inst AT A} {Γ1 Γ2 Σ0} (d : DynamicMutator Γ1 Γ2 AT Σ0)
       {Σ1} (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SymbolicLocalStore Γ1 Σ1) (h1 : SymbolicHeap Σ1)
       (ι1 : SymInstance Σ1) (P : A -> SCProp Γ2) : Prop :=
-      sout_wp
-        (d Σ1 ζ01 pc1 {| symbolicstate_localstore := δ1; symbolicstate_heap := h1 |}) ι1
-        (fun r => P (scmutres_value r) (scstate_localstore (scmutres_state r)) (scstate_heap (scmutres_state r))).
+      sout_wp (d Σ1 ζ01 pc1 δ1 h1) ι1 (fun r => P (scmutres_value r) (scmutres_store r) (scmutres_heap r)).
     Global Arguments dmut_wp : simpl never.
 
     Ltac fold_dmut_wp :=
       match goal with
-      | |- context[sout_wp (?d ?Σ ?ζ ?pc (MkSymbolicState ?δ ?h)) ?ι (fun r => ?P _ _ _)] =>
-        change (sout_wp (d Σ ζ pc (MkSymbolicState δ h)) ι _) with (dmut_wp d ζ pc δ h ι P)
+      | |- context[sout_wp (?d ?Σ ?ζ ?pc ?δ ?h) ?ι (fun r => ?P _ _ _)] =>
+        change (sout_wp (d Σ ζ pc δ h) ι _) with (dmut_wp d ζ pc δ h ι P)
       end.
 
     Lemma dmut_wp_monotonic {AT A} `{Inst AT A} {Γ1 Γ2 Σ0 Σ1} (d : DynamicMutator Γ1 Γ2 AT Σ0)
@@ -267,7 +255,7 @@ Module Soundness
     Proof.
       unfold dmut_wp, dmut_bind; cbn.
       rewrite sout_wp_bind; auto. split; apply sout_wp_monotonic.
-      - intros [a [scδ2 sch2]]; cbn. rewrite sub_comp_id_right.
+      - intros [a scδ2 sch2]; cbn. rewrite sub_comp_id_right.
         rewrite sout_wp_bind; try exact sout_arrow_dcl_pure; auto.
         unfold dmut_arrow_dcl, dmut_wp in f_dcl. cbn.
         specialize (f_dcl Σ2 Σ0 ζ02 (sub_id _) (lift a) (lift a) Σ2 Σ2 (sub_id _) ζ02 (sub_id _) pc2 pc2).
@@ -277,7 +265,7 @@ Module Soundness
         intros Hwp; apply f_dcl; revert Hwp.
         apply sout_wp_monotonic. intros [b sc3]. cbn.
         now rewrite ?inst_lift.
-      - intros [a [scδ2 sch2]]; cbn. rewrite sub_comp_id_right.
+      - intros [a scδ2 sch2]; cbn. rewrite sub_comp_id_right.
         rewrite sout_wp_bind; try exact sout_arrow_dcl_pure; auto.
         unfold dmut_arrow_dcl, dmut_wp in f_dcl. cbn.
         specialize (f_dcl Σ0 Σ2 (sub_id _) ζ02 (lift a) (lift a) Σ2 Σ2 ζ02 (sub_id _) (sub_id _) pc2 pc2).
@@ -287,17 +275,15 @@ Module Soundness
         intros Hwp; apply f_dcl in Hwp; revert Hwp.
         apply sout_wp_monotonic. intros [b sc3]. cbn.
         now rewrite ?inst_lift.
-      - unfold sout_arrow_dcl. destruct a1 as [a1 s21], a2 as [a3 s23]; cbn. intros.
+      - unfold sout_arrow_dcl. destruct a1 as [a1 δ1 h1], a2 as [a3 δ3 h3]; cbn. intros.
         revert H12. inversion H11. clear H11.
-        destruct s21 as [δ1 h1], s23 as [δ3 h3].
-        inversion H14. clear H14.
         rewrite ?sout_wp_bind; try exact sout_arrow_dcl_pure; auto.
         unfold lift; cbn. setoid_rewrite inst_lift.
         unfold dmut_arrow_dcl, dmut_wp in f_dcl.
         specialize (f_dcl Σ1 Σ3 (sub_comp ζ02 ζ1) (sub_comp ζ02 ζ2) a1 a3 Σ1 Σ3 (sub_id _) (sub_id _) ζ12 pc1 pc0).
         specialize (f_dcl δ1 h1 δ3 h3 ι1 ι0).
         inster f_dcl by (try exact HF0; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id; intuition).
-        specialize (f_dcl (fun b δ h => P (MkSCMutResult b (MkSCState δ h))) (fun b δ h => Q0 (MkSCMutResult b (MkSCState δ h)))).
+        specialize (f_dcl (fun b δ h => P (MkSCMutResult b δ h)) (fun b δ h => Q0 (MkSCMutResult b δ h))).
         apply f_dcl; intuition.
     Qed.
 
@@ -310,10 +296,10 @@ Module Soundness
       dmut_wp d ζ02 pc2 δ2 h2 ι2 (fun a : A => Q (inst ι2 (f Σ2 ζ02 (lift a)))).
     Proof.
       unfold dmut_fmap, dmut_wp. rewrite sout_wp_map.
-      split; apply sout_wp_monotonic; intros [a sc2]; cbn.
-      - now rewrite sub_comp_id_right, inst_lift.
-      - now rewrite sub_comp_id_right, inst_lift.
-      - unfold sout_mapping_dcl. destruct a1 as [a1 s1], a2 as [a3 s3]; cbn.
+      split; apply sout_wp_monotonic; intros [a δ2' h2']; cbn.
+      - now rewrite sub_comp_id_right, ?inst_lift.
+      - now rewrite sub_comp_id_right, ?inst_lift.
+      - unfold sout_mapping_dcl. destruct a1 as [a1 δ1 h1], a2 as [a3 δ3 h3]; cbn.
         intros * -> Hζ. inversion 1. f_equal.
         eapply f_dcl; unfold sub_comp; rewrite ?inst_subst; intuition.
     Qed.
@@ -430,14 +416,14 @@ Module Soundness
       apply dmut_pure_arrow_dcl.
     Qed.
 
-    Lemma dmut_wp_state {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ1 Σ2} (f : forall Σ2, Sub Σ1 Σ2 -> SymbolicState Γ1 Σ2 -> Pair AT (SymbolicState Γ2) Σ2)
-          (pc2 : PathCondition Σ2) (δ2 : SymbolicLocalStore Γ1 Σ2) (h2 : SymbolicHeap Σ2) (ζ12 : Sub Σ1 Σ2) (ι2 : SymInstance Σ2) (Q : A -> SCProp Γ2) :
+    Lemma dmut_wp_state {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ1 Σ2}
+      (f : forall Σ2, Sub Σ1 Σ2 -> SymbolicLocalStore Γ1 Σ2 -> SymbolicHeap Σ2 -> DynamicMutatorResult Γ2 AT Σ2)
+      (pc2 : PathCondition Σ2) (δ2 : SymbolicLocalStore Γ1 Σ2) (h2 : SymbolicHeap Σ2) (ζ12 : Sub Σ1 Σ2) (ι2 : SymInstance Σ2) (Q : A -> SCProp Γ2) :
       dmut_wp (dmut_state f) ζ12 pc2 δ2 h2 ι2 Q <->
-      match f Σ2 ζ12 (MkSymbolicState δ2 h2) with | (a, MkSymbolicState δ2' h2') => Q (inst ι2 a) (inst ι2 δ2') (inst ι2 h2') end.
+      match f Σ2 ζ12 δ2 h2 with MkDynMutResult a δ2' h2' => Q (inst ι2 a) (inst ι2 δ2') (inst ι2 h2') end.
     Proof.
       unfold dmut_wp, dmut_state; cbn.
-      destruct (f Σ2 ζ12 _); cbn.
-      now destruct s.
+      now destruct (f Σ2 ζ12 _).
     Qed.
 
     Lemma dmut_wp_demonic_binary {AT A} `{Inst AT A} {Γ1 Γ2 Σ0 Σ1} (d1 d2 : DynamicMutator Γ1 Γ2 AT Σ0)
@@ -683,40 +669,65 @@ Module Soundness
     Qed.
 
     Lemma dmut_state_dcl {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ}
-          (f : forall Σ' : LCtx, Sub Σ Σ' -> SymbolicState Γ1 Σ' -> Pair AT (SymbolicState Γ2) Σ')
-          (f_dcl : forall Σ1 Σ2 (ζ01 : Sub Σ Σ1) (ζ02 : Sub Σ Σ2) (ζ12 : Sub Σ1 Σ2) (s1 : SymbolicState Γ1 Σ1) (s2 : SymbolicState Γ1 Σ2) ι1 ι2,
-              ι1 = inst ι2 ζ12 ->
-              inst ι1 s1 = inst ι2 s2 ->
-              inst ι1 ζ01 = inst ι2 ζ02 ->
-              inst ι1 (f Σ1 ζ01 s1) = inst ι2 (f Σ2 ζ02 s2)) :
+      (f : forall Σ' : LCtx, Sub Σ Σ' -> SymbolicLocalStore Γ1 Σ' -> SymbolicHeap Σ' -> DynamicMutatorResult Γ2 AT Σ')
+      (f_dcl :
+         forall Σ1 Σ2 (ζ01 : Sub Σ Σ1) (ζ02 : Sub Σ Σ2) (ζ12 : Sub Σ1 Σ2)
+           (δ1 : SymbolicLocalStore Γ1 Σ1) (h1 : SymbolicHeap Σ1)
+           (δ2 : SymbolicLocalStore Γ1 Σ2) (h2 : SymbolicHeap Σ2) ι1 ι2,
+           ι1 = inst ι2 ζ12 ->
+           inst ι1 δ1 = inst ι2 δ2 ->
+           inst ι1 h1 = inst ι2 h2 ->
+           inst ι1 ζ01 = inst ι2 ζ02 ->
+           inst ι1 (f Σ1 ζ01 δ1 h1) = inst ι2 (f Σ2 ζ02 δ2 h2)) :
       dmut_dcl (dmut_state f).
     Proof.
       unfold dmut_dcl; intros until Q. intros PQ. rewrite ?dmut_wp_state.
-      pose proof (f_dcl Σ1 Σ2 ζ01 ζ02 ζ12 (MkSymbolicState δ1 h1) (MkSymbolicState δ2 h2) ι1 ι2) as Hf.
-      destruct (f Σ1 ζ01 (MkSymbolicState δ1 h1)), (f Σ2 ζ02 (MkSymbolicState δ2 h2)); cbn.
-      destruct s as [δ1' h1'], s0 as [δ2' h2']. cbn in Hf. inster Hf by (f_equal; auto).
+      pose proof (f_dcl Σ1 Σ2 ζ01 ζ02 ζ12 δ1 h1 δ2 h2 ι1 ι2) as Hf.
+      destruct (f Σ1 ζ01 δ1 h1), (f Σ2 ζ02 δ2 h2); cbn.
+      cbn in Hf. inster Hf by (f_equal; auto).
       inversion Hf. intros Hp. apply PQ. revert Hp. intuition.
     Qed.
     Local Hint Resolve dmut_state_dcl : core.
 
+    Lemma dmut_put_local_dcl {Γ1 Γ2 Σ} (δ : SymbolicLocalStore Γ2 Σ) :
+      dmut_dcl (dmut_put_local (Γ := Γ1) δ).
+    Proof.
+      apply dmut_state_dcl. intros * -> Heqδ Heqh Heqζ. cbn.
+      f_equal; auto. rewrite ?inst_subst. intuition.
+    Qed.
+    Local Hint Resolve dmut_put_local_dcl : core.
+
+    Lemma dmut_get_local_dcl {Γ Σ}  :
+      dmut_dcl (dmut_get_local (Σ := Σ) (Γ := Γ)).
+    Proof.
+      apply dmut_state_dcl. intros * -> Heqδ Heqh Heqζ. cbn.
+      f_equal; auto.
+    Qed.
+    Local Hint Resolve dmut_get_local_dcl : core.
+
     Lemma dmut_put_heap_dcl {Γ Σ} (h : SymbolicHeap Σ) :
       dmut_dcl (dmut_put_heap (Γ := Γ) h).
     Proof.
-      apply dmut_state_dcl. destruct s1 as [δ h1], s2 as [δ2 h2].
-      cbn. intros ? ? -> Heqs Heqζ. inversion Heqs.
-      f_equal. f_equal. rewrite ?inst_subst. intuition.
+      apply dmut_state_dcl. intros * -> Heqδ Heqh Heqζ. cbn.
+      f_equal; auto. rewrite ?inst_subst. intuition.
     Qed.
     Local Hint Resolve dmut_put_heap_dcl : core.
+
+    Lemma dmut_get_heap_dcl {Γ Σ} :
+      dmut_dcl (dmut_get_heap (Γ := Γ) (Σ := Σ)).
+    Proof.
+      apply dmut_state_dcl. intros * -> Heqδ Heqh Heqζ.
+      cbn. f_equal; auto.
+    Qed.
+    Local Hint Resolve dmut_get_heap_dcl : core.
 
     Lemma dmut_pop_local_dcl {Γ x σ Σ} :
       dmut_dcl (@dmut_pop_local Γ x σ Σ).
     Proof.
-      unfold dmut_pop_local, dmut_modify_local, dmut_state_local.
-      apply dmut_state_dcl. destruct s1 as [δ1 h1], s2 as [δ2 h2]; cbn.
-      intros * -> Hs Hζ. inversion Hs. clear Hs.
-      destruct (snocView δ1), (snocView δ2). cbn in H0.
-      apply noConfusion_inv, (f_equal pr1) in H0. cbn in H0.
-      f_equal. f_equal. cbn. apply H0.
+      unfold dmut_pop_local. apply dmut_state_dcl. intros * -> Hδ Hh Hζ.
+      destruct (snocView δ1), (snocView δ2). cbn in Hδ.
+      apply noConfusion_inv, (f_equal pr1) in Hδ. cbn in Hδ.
+      cbn. f_equal. apply Hδ. auto.
     Qed.
 
     Lemma dmut_block_dcl {AT A} `{Subst AT, Inst AT A} {Γ1 Γ2 Σ}  :
@@ -1234,9 +1245,8 @@ Module Soundness
     Lemma dmut_produce_chunk_dcl {Γ Σ} (c : Chunk Σ) :
       dmut_dcl (Γ1 := Γ) (dmut_produce_chunk c).
     Proof.
-      unfold dmut_produce_chunk, dmut_modify_heap, dmut_modify.
-      apply dmut_state_dcl. destruct s1 as [δ1 h1], s2 as [δ2 h2].
-      cbn - [instantiate_list]. intros. inversion H0. cbn.
+      unfold dmut_produce_chunk. apply dmut_state_dcl.
+      intros * -> Hδ Hh Hζ. cbn.
       change (List.map (inst ?ι) ?h) with (inst ι h).
       rewrite ?inst_subst. congruence.
     Qed.
@@ -1266,8 +1276,7 @@ Module Soundness
     Proof.
       unfold dmut_consume_chunk.
       apply dmut_bind_dcl.
-      apply dmut_state_dcl. destruct s1, s2; cbn.
-      intros. congruence.
+      apply dmut_get_heap_dcl.
       intros until Q. intros PQ.
     Admitted.
 
@@ -1329,9 +1338,9 @@ Module Soundness
     Qed.
 
     Definition inst_dmut {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ) (d : DynamicMutator Γ1 Γ2 AT Σ) : SCMut Γ1 Γ2 A :=
-      fun sc => inst_symoutcome ι (d Σ (sub_id Σ) nil (lift sc)).
+      fun δ h => inst_symoutcome ι (d Σ (sub_id Σ) nil (lift δ) (lift h)).
     Definition inst_dmut' {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ) (d : DynamicMutator Γ1 Γ2 AT Σ) : SCMut Γ1 Γ2 A :=
-      fun sc => inst_symoutcome env_nil (d ctx_nil (lift ι) nil (lift sc)).
+      fun δ h => inst_symoutcome env_nil (d ctx_nil (lift ι) nil (lift δ) (lift h)).
 
     Definition bapprox3 {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
       fun Σ0 ι0 dm sm =>
@@ -1599,17 +1608,17 @@ Module Soundness
     Admitted.
 
     Lemma bapprox_state {AT A} `{Subst AT, Inst AT A} {Γ1 Γ2 Σ0} (ι0 : SymInstance Σ0)
-          (f : forall Σ1 (ζ01 : Sub Σ0 Σ1), SymbolicState Γ1 Σ1 -> Pair AT (SymbolicState Γ2) Σ1)
-          (g : SCState Γ1 -> A * SCState Γ2)
-          (fg : forall Σ1 ζ01 s1 ι1,
-                 ι0 = inst ι1 ζ01 -> inst ι1 (f Σ1 ζ01 s1) = g (inst ι1 s1)) :
+      (f : forall Σ1 (ζ01 : Sub Σ0 Σ1), SymbolicLocalStore Γ1 Σ1 -> SymbolicHeap Σ1 -> DynamicMutatorResult Γ2 AT Σ1)
+      (g : LocalStore Γ1 -> SCHeap -> SCMutResult Γ2 A)
+      (fg : forall Σ1 ζ01 δ1 h1 ι1,
+          ι0 = inst ι1 ζ01 -> inst ι1 (f Σ1 ζ01 δ1 h1) = g (inst ι1 δ1) (inst ι1 h1)) :
       bapprox ι0 (dmut_state f) (scmut_state g).
     Proof.
       unfold bapprox. intros * Hι Hpc.
       rewrite dmut_wp_state, scmut_wp_state.
-      specialize (fg Σ1 ζ01 (MkSymbolicState δ1 h1) ι1 Hι).
-      destruct (f Σ1 ζ01 _) as [a1 [δ2 h2]]. cbn in *.
-      destruct (g _) as [a [δ3 h3]].
+      specialize (fg Σ1 ζ01 δ1 h1 ι1 Hι).
+      destruct (f Σ1 ζ01 _ _) as [a1 δ2 h2]. cbn in *.
+      destruct (g _ _) as [a δ3 h3].
       inversion fg. now subst.
     Qed.
 
@@ -1621,7 +1630,6 @@ Module Soundness
     Proof.
       unfold bapprox. intros * Hι Hpc.
       unfold dmut_produce_chunk, scmut_produce_chunk.
-      unfold dmut_modify_heap, dmut_modify, scmut_modify.
       rewrite dmut_wp_state, scmut_wp_state. cbn. subst.
       now rewrite inst_subst.
     Qed.
@@ -1757,8 +1765,8 @@ Module Soundness
     Proof.
       unfold bapprox. intros * Hι Hpc.
       unfold dmut_consume_chunk, scmut_consume_chunk.
-      unfold dmut_get_heap, scmut_get_heap, scmut_state_heap.
-      unfold dmut_put_heap, dmut_modify_heap, dmut_modify.
+      unfold dmut_get_heap, scmut_get_heap.
+      unfold dmut_put_heap, scmut_put_heap.
       rewrite dmut_wp_bind, scmut_wp_bind; auto.
       rewrite dmut_wp_state, scmut_wp_state.
       rewrite dmut_wp_bind; auto.
@@ -1801,7 +1809,8 @@ Module Soundness
           exists (c1, h1'). split; auto.
         + destruct (MUT.match_chunk_eqb_spec (inst ι c) (inst ι c')); auto.
       - cbn; now subst.
-      - admit.
+      - apply dmut_state_dcl. intros * ->. cbn.
+        rewrite ?inst_subst, ?inst_lift. congruence.
       - admit.
     Admitted.
 
@@ -1870,8 +1879,8 @@ Module Soundness
     Lemma bapprox_eval_exp {Γ Σ τ} (e : Exp Γ τ) (ι : SymInstance Σ) :
       bapprox ι (dmut_eval_exp e) (scmut_eval_exp e).
     Proof.
-      unfold dmut_eval_exp, scmut_eval_exp, dmut_gets_local, dmut_gets, scmut_gets_local, scmut_state_local.
-      apply bapprox_state. intros. destruct s1. cbn. f_equal.
+      unfold dmut_eval_exp, scmut_eval_exp.
+      apply bapprox_state. intros. cbn. f_equal.
       now rewrite eval_exp_inst.
     Qed.
 
@@ -1885,18 +1894,14 @@ Module Soundness
       apply bapprox_bind_right; auto.
       apply dmut_bind_left_dcl; auto.
       apply dmut_pop_local_dcl.
-      unfold
-        dmut_push_local, dmut_modify_local, dmut_state_local,
-        scmut_push_local, scmut_modify_local, scmut_state_local.
-      apply bapprox_state. destruct s1 as [δ1 h1]; intros. cbn.
+      unfold dmut_push_local, scmut_push_local.
+      apply bapprox_state. intros. cbn.
       f_equal. f_equal. subst. now rewrite <- inst_subst.
       apply bapprox_bind_left; eauto.
       apply dmut_pop_local_dcl.
-      unfold
-        dmut_pop_local, dmut_modify_local, dmut_state_local,
-        scmut_pop_local, scmut_modify_local, scmut_state_local.
-      apply bapprox_state. destruct s1 as [δ1 h1]; intros. cbn.
-      f_equal. f_equal. subst. now destruct (snocView δ1).
+      unfold dmut_pop_local, scmut_pop_local.
+      apply bapprox_state. intros. cbn.
+      f_equal. subst. now destruct (snocView δ1).
     Qed.
 
     Lemma bapprox_pushspops {AT A} `{InstLaws AT A} {Γ1 Γ2 Δ Σ} (ι : SymInstance Σ)
@@ -1924,12 +1929,9 @@ Module Soundness
         intros a.
         apply bapprox_bind_right; auto.
         apply dmut_pure_dcl.
-        unfold
-          dmut_modify_local, dmut_state_local,
-          scmut_modify_local, scmut_state_local.
         apply bapprox_state.
-        destruct s1 as [δ1 h1]; intros * ->; cbn.
-        f_equal. f_equal. rewrite <- inst_subst.
+        intros * ->; cbn.
+        f_equal. rewrite <- inst_subst.
         unfold inst at 1; cbn.
         now rewrite env_map_update.
         now apply bapprox_pure.
@@ -1938,13 +1940,11 @@ Module Soundness
           intros ?. apply bapprox_call.
         + admit.
       - apply bapprox_bind. admit.
-        { apply bapprox_state. destruct s1; cbn; auto. }
+        { apply bapprox_state. cbn; auto. }
         intros δ0. apply bapprox_bind_right.
         apply dmut_bind_left_dcl. apply dmut_exec_dcl.
-        { apply dmut_state_dcl.
-          destruct s1, s2; intros ? ? -> Heqs Heqζ; inversion Heqs; cbn in *.
-          rewrite ?inst_subst. f_equal. f_equal; congruence. }
-        { apply bapprox_state. destruct s1; cbn; intros.
+        apply dmut_put_local_dcl.
+        { apply bapprox_state. cbn; intros.
           now rewrite inst_subst, inst_lift. }
         admit.
       - apply bapprox_bind. admit. admit. intros args.

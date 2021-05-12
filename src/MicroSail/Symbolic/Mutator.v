@@ -197,36 +197,6 @@ Module Mutators
 
   End Obligations.
 
-  Section SymbolicState.
-
-    (* Local Set Primitive Projections. *)
-
-    Record SymbolicState (Γ : PCtx) (Σ : LCtx) : Type :=
-      MkSymbolicState
-        { symbolicstate_localstore    : SymbolicLocalStore Γ Σ;
-          symbolicstate_heap          : SymbolicHeap Σ
-        }.
-    Global Arguments symbolicstate_localstore {_ _} _.
-    Global Arguments symbolicstate_heap {_ _} _.
-
-    Definition symbolicstate_initial {Γ Σ} (δ : SymbolicLocalStore Γ Σ) : SymbolicState Γ Σ :=
-      MkSymbolicState δ nil.
-
-    Global Instance subst_symbolicstate {Γ} : Subst (SymbolicState Γ) :=
-      fun Σ1 Σ2 ζ '(MkSymbolicState ŝ ĥ) =>
-        MkSymbolicState (subst ζ ŝ) (subst ζ ĥ).
-    Global Instance substlaws_symbolicstate {Γ} : SubstLaws (SymbolicState Γ).
-    Proof.
-      constructor.
-      { intros ? []; cbn; f_equal; now rewrite subst_sub_id. }
-      { intros ? ? ? ? ? []; cbn; f_equal; now rewrite subst_sub_comp. }
-    Qed.
-
-    Definition symbolicstate_produce_chunk {Γ Σ} (c : Chunk Σ) : SymbolicState Γ Σ -> SymbolicState Γ Σ :=
-      fun '(MkSymbolicState δ h) => MkSymbolicState δ (cons c h).
-
-  End SymbolicState.
-
   Section TrySolve.
 
     Definition try_solve_eq {Σ σ} (t1 t2 : Term Σ σ) : option bool :=
@@ -1497,19 +1467,21 @@ Module Mutators
 
     Record DynamicMutatorResult (Γ : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
       MkDynMutResult {
-          dmutres_result_value : A Σ;
-          dmutres_result_state : SymbolicState Γ Σ;
+          dmutres_value : A Σ;
+          dmutres_store : SymbolicLocalStore Γ Σ;
+          dmutres_heap  : SymbolicHeap Σ;
         }.
 
-    Global Arguments MkDynMutResult {_ _ _} _ _.
+    Global Arguments MkDynMutResult {_ _ _} _ _ _.
 
     Global Instance SubstDynamicMutatorResult {Γ A} `{Subst A} : Subst (DynamicMutatorResult Γ A).
     Proof.
-      intros Σ1 Σ2 ζ [a s].
+      intros Σ1 Σ2 ζ [a δ h].
       constructor.
       apply (subst ζ a).
-      apply (subst ζ s).
-    Defined.
+      apply (subst ζ δ).
+      apply (subst ζ h).
+   Defined.
 
     Global Instance SubstLawsDynamicMutatorResult {Γ A} `{SubstLaws A} : SubstLaws (DynamicMutatorResult Γ A).
     Proof.
@@ -1523,29 +1495,31 @@ Module Mutators
   Section DynamicMutator.
 
     Definition DynamicMutator (Γ1 Γ2 : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
-      forall Σ', Sub Σ Σ' -> PathCondition Σ' -> SymbolicState Γ1 Σ' -> SymOutcome (DynamicMutatorResult Γ2 A) Σ'.
+      forall Σ', Sub Σ Σ' -> PathCondition Σ' -> SymbolicLocalStore Γ1 Σ' -> SymbolicHeap Σ' -> SymOutcome (DynamicMutatorResult Γ2 A) Σ'.
     Bind Scope dmut_scope with DynamicMutator.
 
     Definition dmut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : DynamicMutator Γ Γ A Σ.
-      intros Σ1 ζ1 pc1 δ.
+      intros Σ1 ζ1 pc1 δ h.
       apply sout_pure.
       constructor.
       apply (subst ζ1 a).
       apply δ.
+      apply h.
     Defined.
 
     Definition dmut_bind {Γ1 Γ2 Γ3 A B Σ} (ma : DynamicMutator Γ1 Γ2 A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> DynamicMutator Γ2 Γ3 B Σ') : DynamicMutator Γ1 Γ3 B Σ.
     Proof.
-      intros Σ1 ζ1 pc1 δ1.
-      apply (sout_bind pc1 (ma Σ1 ζ1 pc1 δ1)).
-      intros Σ2 ζ2 pc2 [a2 δ2].
+      intros Σ1 ζ1 pc1 δ1 h1.
+      apply (sout_bind pc1 (ma Σ1 ζ1 pc1 δ1 h1)).
+      intros Σ2 ζ2 pc2 [a2 δ2 h2].
       eapply (sout_bind pc2).
-      apply (f Σ2 (sub_comp ζ1 ζ2) a2 _ (sub_id _) pc2 δ2).
-      intros Σ3 ζ3 pc3 [b3 δ3].
+      apply (f Σ2 (sub_comp ζ1 ζ2) a2 _ (sub_id _) pc2 δ2 h2).
+      intros Σ3 ζ3 pc3 [b3 δ3 h3].
       apply sout_pure.
       constructor.
       apply b3.
       apply δ3.
+      apply h3.
     Defined.
     (* Definition dmut_join {Γ1 Γ2 Γ3 A Σ} (mm : DynamicMutator Γ1 Γ2 (DynamicMutator Γ2 Γ3 A) Σ) : *)
     (*   DynamicMutator Γ1 Γ3 A Σ := dmut_bind mm (fun _ _ m => m). *)
@@ -1564,10 +1538,10 @@ Module Mutators
       (ma : DynamicMutator Γ1 Γ2 A Σ)
       (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ') :
       DynamicMutator Γ1 Γ2 B Σ :=
-      fun Σ1 ζ01 pc1 s1 =>
+      fun Σ1 ζ01 pc1 δ1 h1 =>
         @sout_map (DynamicMutatorResult Γ2 A) (DynamicMutatorResult Γ2 B) Σ1
-        (fun Σ2 ζ12 '(MkDynMutResult a2 s2) => MkDynMutResult (f Σ2 (sub_comp ζ01 ζ12) a2) s2)
-        (ma Σ1 ζ01 pc1 s1).
+        (fun Σ2 ζ12 '(MkDynMutResult a2 δ2 h2) => MkDynMutResult (f Σ2 (sub_comp ζ01 ζ12) a2) δ2 h2)
+        (ma Σ1 ζ01 pc1 δ1 h1).
     Definition dmut_fmap2 {Γ1 Γ2 Γ3 Σ A B C} `{Subst A, Subst B, Subst C}
       (ma : DynamicMutator Γ1 Γ2 A Σ) (mb : DynamicMutator Γ2 Γ3 B Σ)
       (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ' -> C Σ') :
@@ -1581,22 +1555,22 @@ Module Mutators
       dmut_fmap2 ma mb (fun _ _ => pair).
 
     Definition dmut_fail {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : DynamicMutator Γ1 Γ2 A Σ.
-      intros Σ1 ζ1 pc1 [δ1 h1].
+      intros Σ1 ζ1 pc1 δ1 h1.
       apply sout_fail.
       apply (@MkMessage _ func msg Γ1); assumption.
     Defined.
 
     Definition dmut_block {Γ1 Γ2 A Σ} : DynamicMutator Γ1 Γ2 A Σ :=
-      fun _ _ _ _ => sout_block.
+      fun _ _ _ _ _ => sout_block.
 
     Definition dmut_angelic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 => sout_angelic (fun i => ms i Σ1 ζ1 pc1 s1).
+      fun Σ1 ζ1 pc1 δ1 h1 => sout_angelic (fun i => ms i Σ1 ζ1 pc1 δ1 h1).
     (* Definition dmut_demonic {Γ1 Γ2 I A Σ} (ms : I -> DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ := *)
     (*   fun Σ1 ζ1 s1 => sout_demonic (fun i => ms i Σ1 ζ1 s1). *)
     Definition dmut_angelic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 => sout_angelic_binary (m1 Σ1 ζ1 pc1 s1) (m2 Σ1 ζ1 pc1 s1).
+      fun Σ1 ζ1 pc1 δ1 h1 => sout_angelic_binary (m1 Σ1 ζ1 pc1 δ1 h1) (m2 Σ1 ζ1 pc1 δ1 h1).
     Definition dmut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : DynamicMutator Γ1 Γ2 A Σ) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 => sout_demonic_binary (m1 Σ1 ζ1 pc1 s1) (m2 Σ1 ζ1 pc1 s1).
+      fun Σ1 ζ1 pc1 δ1 h1 => sout_demonic_binary (m1 Σ1 ζ1 pc1 δ1 h1) (m2 Σ1 ζ1 pc1 δ1 h1).
     Fixpoint dmut_angelic_list {AT D} `{Subst AT} {Γ Σ} (func : string) (msg : string) (data:D) (xs : List AT Σ) :
       DynamicMutator Γ Γ AT Σ :=
       match xs with
@@ -1635,25 +1609,25 @@ Module Mutators
     Global Arguments dmut_demonic_finite {_ _ _} _ {_ _ _} _.
 
     Definition dmut_angelicv {Γ1 Γ2 A Σ} x τ (ma : DynamicMutator Γ1 Γ2 A (Σ ▻ (x :: τ))) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 =>
+      fun Σ1 ζ1 pc1 δ1 h1 =>
         let x'  := fresh Σ1 (Some x) in
         let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
-        sout_angelicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 s1)).
+        sout_angelicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 δ1) (subst sub_wk1 h1)).
     Global Arguments dmut_angelicv {_ _ _ _} _ _ _.
     Definition dmut_demonicv {Γ1 Γ2 A Σ} x τ (ma : DynamicMutator Γ1 Γ2 A (Σ ▻ (x :: τ))) : DynamicMutator Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 s1 =>
+      fun Σ1 ζ1 pc1 δ1 h1 =>
         let x'  := fresh Σ1 (Some x) in
         let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
-        sout_demonicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 s1)).
+        sout_demonicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 δ1) (subst sub_wk1 h1)).
     Global Arguments dmut_demonicv {_ _ _ _} _ _ _.
     Definition dmut_demonic_termvar {Γ Σ σ} (x : 𝑺) : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
       dmut_demonicv x σ (dmut_pure (@term_var _ _ _ inctx_zero)).
     Global Arguments dmut_demonic_termvar {_ _ _} _.
 
     Definition dmut_debug {AT DT D} `{Subst DT, Inst DT D, OccursCheck DT} {Σ0 Γ1 Γ2}
-      (d : forall Σ1, Sub Σ0 Σ1 -> PathCondition Σ1 -> SymbolicState Γ1 Σ1 -> DT Σ1)
+      (d : forall Σ1, Sub Σ0 Σ1 -> PathCondition Σ1 -> SymbolicLocalStore Γ1 Σ1 -> SymbolicHeap Σ1 -> DT Σ1)
       (m : DynamicMutator Γ1 Γ2 AT Σ0) : DynamicMutator Γ1 Γ2 AT Σ0 :=
-      fun Σ1 ζ01 pc1 s1 => sout_debug (d Σ1 ζ01 pc1 s1) (m Σ1 ζ01 pc1 s1).
+      fun Σ1 ζ01 pc1 δ1 h1 => sout_debug (d Σ1 ζ01 pc1 δ1 h1) (m Σ1 ζ01 pc1 δ1 h1).
 
     Record DebugCall : Type :=
       MkDebugCall
@@ -1846,47 +1820,30 @@ Module Mutators
   Import DynamicMutatorNotations.
   Local Open Scope dmut_scope.
 
-  Definition dmut_state {Γ Γ' A Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> A Σ' * SymbolicState Γ' Σ') :
+  Definition dmut_state {Γ Γ' A Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Γ Σ' -> SymbolicHeap Σ' -> DynamicMutatorResult Γ' A Σ') :
     DynamicMutator Γ Γ' A Σ.
   Proof.
-    intros Σ1 ζ1 pc1 s1.
-    destruct (f Σ1 ζ1 s1) as [a1 s1'].
+    intros Σ1 ζ1 pc1 δ1 h1.
+    destruct (f Σ1 ζ1 δ1 h1) as [a δ2 h2].
     apply sout_pure.
     constructor.
-    apply a1.
-    apply s1'.
+    apply a.
+    apply δ2.
+    apply h2.
   Defined.
-  Definition dmut_gets {Γ Σ A} (f : forall Σ1, Sub Σ Σ1 -> SymbolicState Γ Σ1 -> A Σ1) :
-    DynamicMutator Γ Γ A Σ :=
-    dmut_state (fun Σ1 ζ1 s1 => (f Σ1 ζ1 s1,s1)).
-  Definition dmut_get {Γ Σ} : DynamicMutator Γ Γ (SymbolicState Γ) Σ :=
-    dmut_gets (fun _ _ s => s).
-  Definition dmut_modify {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicState Γ Σ' -> SymbolicState Γ' Σ') :
-    DynamicMutator Γ Γ' Unit Σ :=
-    dmut_state (fun Σ1 ζ1 s1 => (tt, f Σ1 ζ1 s1)).
-  Definition dmut_put {Γ Γ' Σ} (s : SymbolicState Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
-    dmut_modify (fun Σ1 ζ1 _ => subst ζ1 s).
 
-  Definition dmut_state_local {Γ Γ' A Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Γ Σ' -> A Σ' * SymbolicLocalStore Γ' Σ') :
-    DynamicMutator Γ Γ' A Σ :=
-    dmut_state (fun Σ1 ζ1 '(MkSymbolicState δ1 h1) => let (a, δ2) := f Σ1 ζ1 δ1 in (a,MkSymbolicState δ2 h1)).
-  Definition dmut_gets_local {Γ Σ A} (f : forall Σ1, Sub Σ Σ1 -> SymbolicLocalStore Γ Σ1 -> A Σ1) :
-    DynamicMutator Γ Γ A Σ :=
-    dmut_gets (fun Σ1 ζ1 s1 => f Σ1 ζ1 (symbolicstate_localstore s1)).
   Definition dmut_get_local {Γ Σ} : DynamicMutator Γ Γ (fun Σ => SymbolicLocalStore Γ Σ) Σ :=
-    dmut_gets_local (fun _ _ δ => δ).
-  Definition dmut_modify_local {Γ Γ' Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicLocalStore Γ Σ' -> SymbolicLocalStore Γ' Σ') : DynamicMutator Γ Γ' Unit Σ :=
-    dmut_state_local (fun Σ1 ζ1 δ1 => (tt,f Σ1 ζ1 δ1)).
+    dmut_state (fun _ _ δ h => MkDynMutResult δ δ h).
   Definition dmut_put_local {Γ Γ' Σ} (δ' : SymbolicLocalStore Γ' Σ) : DynamicMutator Γ Γ' Unit Σ :=
-    dmut_modify_local (fun Σ1 ζ1 _ => subst ζ1 δ').
+    dmut_state (fun _ ζ _ h => MkDynMutResult tt (subst ζ δ') h).
   Definition dmut_pop_local {Γ x σ Σ} : DynamicMutator (Γ ▻ (x , σ)) Γ Unit Σ :=
-    dmut_modify_local (fun Σ1 ζ1 => env_tail).
+    dmut_state (fun _ _ δ h => MkDynMutResult tt (env_tail δ) h).
   Definition dmut_pops_local {Γ} Δ {Σ} : DynamicMutator (Γ ▻▻ Δ) Γ Unit Σ :=
-    dmut_modify_local (fun Σ1 ζ1 => env_drop Δ).
+    dmut_state (fun _ _ δ h => MkDynMutResult tt (env_drop Δ δ) h).
   Definition dmut_push_local {Γ x σ Σ} (t : Term Σ σ) : DynamicMutator Γ (Γ ▻ (x , σ)) Unit Σ :=
-    dmut_modify_local (fun Σ1 ζ1 δ1 => env_snoc δ1 (x,σ) (subst (T:= fun Σ => Term Σ σ) ζ1 t)).
+    dmut_state (fun _ ζ δ h => MkDynMutResult tt (env_snoc δ (x :: σ) (subst ζ t)) h).
   Definition dmut_pushs_local {Γ Δ Σ} (δΔ : NamedEnv (Term Σ) Δ) : DynamicMutator Γ (Γ ▻▻ Δ) Unit Σ :=
-    dmut_modify_local (fun Σ1 ζ1 δ1 => δ1 ►► subst (T := SymbolicLocalStore Δ) ζ1 δΔ).
+    dmut_state (fun _ ζ δ h => MkDynMutResult tt (δ ►► (subst ζ δΔ)) h).
   Definition dmut_pushpop {AT} `{Subst AT} {Γ1 Γ2 x σ Σ} (t : Term Σ σ) (d : DynamicMutator (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT Σ) :
     DynamicMutator Γ1 Γ2 AT Σ :=
     dmut_push_local t ;; dmut_bind_left d dmut_pop_local.
@@ -1894,15 +1851,13 @@ Module Mutators
     DynamicMutator Γ1 Γ2 AT Σ :=
     dmut_pushs_local δΔ ;; dmut_bind_left d (dmut_pops_local Δ).
   Definition dmut_get_heap {Γ Σ} : DynamicMutator Γ Γ SymbolicHeap Σ :=
-    dmut_state (fun _ _ s1 => (symbolicstate_heap s1,s1)).
-  Definition dmut_modify_heap {Γ Σ} (f : forall Σ', Sub Σ Σ' -> SymbolicHeap Σ' -> SymbolicHeap Σ') : DynamicMutator Γ Γ Unit Σ :=
-    dmut_modify (fun Σ1 ζ1 '(MkSymbolicState δ1 h1) => MkSymbolicState δ1 (f Σ1 ζ1 h1)).
+    dmut_state (fun _ _ δ h => MkDynMutResult h δ h).
   Definition dmut_put_heap {Γ Σ} (h : SymbolicHeap Σ) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_modify_heap (fun Σ1 ζ1 _ => subst ζ1 h).
+    dmut_state (fun _ ζ δ _ => MkDynMutResult tt δ (subst ζ h)).
   Definition dmut_eval_exp {Γ σ} (e : Exp Γ σ) {Σ} : DynamicMutator Γ Γ (fun Σ => Term Σ σ) Σ :=
-    dmut_gets_local (fun Σ1 ζ1 δ1 => symbolic_eval_exp δ1 e).
-  Definition dmut_eval_exps {Γ Σ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : DynamicMutator Γ Γ (fun Σ => NamedEnv (Term Σ) σs) Σ :=
-    dmut_gets_local (fun Σ1 ζ1 δ1 => env_map (fun _ => symbolic_eval_exp δ1) es).
+    dmut_state (fun _ ζ δ h => MkDynMutResult (symbolic_eval_exp δ e) δ h).
+  Definition dmut_eval_exps {Γ Σ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : DynamicMutator Γ Γ (SymbolicLocalStore σs) Σ :=
+    dmut_state (fun _ ζ δ h => MkDynMutResult (env_map (fun _ => symbolic_eval_exp δ) es) δ h).
 
   Fixpoint dmut_demonic_freshen_tuplepat' {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
     DynamicMutator Γ Γ (fun Σ => Env (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
@@ -1962,10 +1917,10 @@ Module Mutators
 
   (* Add the provided formula to the path condition. *)
   Definition dmut_assume_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
-    fun Σ1 ζ1 pc1 s1 =>
+    fun Σ1 ζ1 pc1 δ1 h1 =>
       sout_bind pc1
         (sout_assume_formula pc1 (subst ζ1 fml))
-        (fun Σ2 ζ12 pc2 v => sout_pure {| dmutres_result_value := v; dmutres_result_state := subst ζ12 s1 |}).
+        (fun Σ2 ζ12 pc2 v => sout_pure (MkDynMutResult v (subst ζ12 δ1) (subst ζ12 h1))).
 
   Definition dmut_assume_term {Γ Σ} (t : Term Σ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
     dmut_assume_formula (formula_bool t).
@@ -1977,18 +1932,18 @@ Module Mutators
     fold_right (fun fml => dmut_bind_right (dmut_assume_formula fml)) (dmut_pure tt) fmls.
 
   Definition dmut_assert_formula {Γ Σ} (fml : Formula Σ) : DynamicMutator Γ Γ Unit Σ :=
-    fun Σ1 ζ1 pc1 s1 =>
+    fun Σ1 ζ1 pc1 δ1 h1 =>
       sout_bind pc1
         (sout_assert_formula
            {| msg_function        := "dmut_assert_formula";
               msg_message         := "Proof obligation";
               msg_program_context := Γ;
               msg_pathcondition   := pc1;
-              msg_localstore      := symbolicstate_localstore s1;
-              msg_heap            := symbolicstate_heap s1;
+              msg_localstore      := δ1;
+              msg_heap            := h1;
            |}
            pc1 (subst ζ1 fml))
-        (fun Σ2 ζ12 pc2 v => sout_pure {| dmutres_result_value := v; dmutres_result_state := subst ζ12 s1 |}).
+        (fun Σ2 ζ12 pc2 v => sout_pure (MkDynMutResult v (subst ζ12 δ1) (subst ζ12 h1))).
 
   Definition dmut_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : DynamicMutator Γ Γ Unit Σ :=
     fold_right (fun fml => dmut_bind_right (dmut_assert_formula fml)) (dmut_pure tt) fmls.
@@ -1997,7 +1952,7 @@ Module Mutators
   Definition dmut_assert_exp {Γ Σ} (e : Exp Γ ty_bool) : DynamicMutator Γ Γ Unit Σ :=
     dmut_eval_exp e >>= fun _ _ t => dmut_assert_term t.
   Definition dmut_produce_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
-    dmut_modify_heap (fun _ ζ => cons (subst ζ c)).
+    dmut_state (fun _ ζ δ h => MkDynMutResult tt δ (cons (subst ζ c) h)).
   Definition dmut_consume_chunk {Γ Σ} (c : Chunk Σ) : DynamicMutator Γ Γ Unit Σ :=
      dmut_get_heap >>= fun Σ1 ζ1 h1 =>
      dmut_angelic_list "dmut_consume_chunk" "Empty extraction" c
@@ -2138,11 +2093,11 @@ Module Mutators
     | asn_exist ς τ a => dmut_demonicv ς τ (dmut_produce a)
     | asn_debug =>
       dmut_debug
-        (fun Σ1 ζ01 pc1 s1 =>
+        (fun Σ1 ζ01 pc1 δ1 h1 =>
            {| sdebug_asn_pathcondition := pc1;
               sdebug_asn_program_context := Γ;
-              sdebug_asn_localstore := symbolicstate_localstore s1;
-              sdebug_asn_heap := symbolicstate_heap s1
+              sdebug_asn_localstore := δ1;
+              sdebug_asn_heap := h1;
            |})
         (dmut_pure tt)
     end.
@@ -2173,11 +2128,11 @@ Module Mutators
     | asn_exist ς τ asn => dmut_demonicv ς τ (dmut_producek asn (dmut_sub sub_wk1 k))
     | asn_debug =>
       dmut_debug
-        (fun Σ1 ζ01 pc1 s1 =>
+        (fun Σ1 ζ01 pc1 δ1 h1 =>
            {| sdebug_asn_program_context := Γ1;
               sdebug_asn_pathcondition := pc1;
-              sdebug_asn_localstore := symbolicstate_localstore s1;
-              sdebug_asn_heap := symbolicstate_heap s1
+              sdebug_asn_localstore := δ1;
+              sdebug_asn_heap := h1
            |})
         k
     end.
@@ -2207,20 +2162,20 @@ Module Mutators
       dmut_angelicv ς τ (dmut_consume a)
     | asn_debug =>
       dmut_debug
-        (fun Σ1 ζ01 pc1 s1 =>
+        (fun Σ1 ζ01 pc1 δ1 h1 =>
            {| sdebug_asn_pathcondition := pc1;
               sdebug_asn_program_context := Γ;
-              sdebug_asn_localstore := symbolicstate_localstore s1;
-              sdebug_asn_heap := symbolicstate_heap s1
+              sdebug_asn_localstore := δ1;
+              sdebug_asn_heap := h1;
            |})
         (dmut_pure tt)
     end.
 
   Definition dmut_angelicvs {A Γ1 Γ2 Σ} Δ (k : DynamicMutator Γ1 Γ2 A (Σ ▻▻ Δ)) : DynamicMutator Γ1 Γ2 A Σ :=
-    fun Σ1 ζ01 pc1 s1 =>
+    fun Σ1 ζ01 pc1 δ1 h1 =>
       let ζl   := sub_cat_left Δ in
       let ζ01' := sub_comp ζ01 ζl ►► sub_cat_right Δ in
-      sout_angelicvs Δ (k (Σ1 ▻▻ Δ) ζ01' (subst ζl pc1) (subst ζl s1)).
+      sout_angelicvs Δ (k (Σ1 ▻▻ Δ) ζ01' (subst ζl pc1) (subst ζl δ1) (subst ζl h1)).
 
   Definition dmut_call {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
     match contract with
@@ -2249,7 +2204,7 @@ Module Mutators
       dmut_pushspops (lift δ) (dmut_exec s)
     | stm_assign x s =>
       t <- dmut_exec s ;;
-      dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
+      dmut_state (fun _ ζ δ h => MkDynMutResult tt (δ ⟪ x ↦ subst ζ t ⟫)%env h) ;;
       dmut_pure t
     | stm_call f es =>
       ts <- dmut_eval_exps es ;;
@@ -2337,11 +2292,11 @@ Module Mutators
       dmut_fail "dmut_exec" "stm_bind not supported" tt
     | stm_debugk k =>
       dmut_debug
-        (fun Σ1 ζ01 pc1 s1 =>
+        (fun Σ1 ζ01 pc1 δ1 h1 =>
            {| sdebug_stm_statement := k;
               sdebug_stm_pathcondition := pc1;
-              sdebug_stm_localstore := symbolicstate_localstore s1;
-              sdebug_stm_heap := symbolicstate_heap s1
+              sdebug_stm_localstore := δ1;
+              sdebug_stm_heap := h1
            |})
         (dmut_exec k)
     end.
@@ -2358,8 +2313,7 @@ Module Mutators
   Definition dmut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
     SymOutcome Unit (sep_contract_logic_variables c) :=
     let δ    := sep_contract_localstore c in
-    let s__sym := symbolicstate_initial δ in
-    sout_bind nil (dmut_contract c s (sub_id _) nil s__sym) (fun _ _ _ _ => sout_block).
+    sout_bind nil (dmut_contract c s (sub_id _) nil δ nil) (fun _ _ _ _ => sout_block).
 
   Definition ValidContractNoEvar (Δ : PCtx) (τ : Ty) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
     ForallNamed (fun ι => sout_safe (sep_contract_logic_variables c) ι (dmut_contract_outcome c body)).
@@ -2621,11 +2575,11 @@ Module Mutators
         end
       | asn_debug =>
         dmut_debug
-          (fun Σ1 ζ01 pc1 s1 =>
+          (fun Σ1 ζ01 pc1 δ1 h1 =>
              {| sdebug_asn_pathcondition := pc1;
                 sdebug_asn_program_context := Γ;
-                sdebug_asn_localstore := symbolicstate_localstore s1;
-                sdebug_asn_heap := symbolicstate_heap s1
+                sdebug_asn_localstore := δ1;
+                sdebug_asn_heap := h1;
              |})
           (dmut_pure L)
       end.
@@ -2653,8 +2607,8 @@ Module Mutators
     Variable cfg : Config.
 
     Definition dmut_call_evar_debug {Γ Δ τ Σr} (f : 𝑭 Δ τ) (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : DynamicMutator Γ Γ (fun Σ => Term Σ τ) Σr :=
-      fun Σ1 ζ1 pc1 s1 =>
-        let o := dmut_call_evar contract ts ζ1 pc1 s1 in
+      fun Σ1 ζ1 pc1 δ1 h1 =>
+        let o := dmut_call_evar contract ts ζ1 pc1 δ1 h1 in
         if config_debug_function cfg f
         then sout_debug
                {| sdebug_call_function_parameters    := Δ;
@@ -2664,8 +2618,8 @@ Module Mutators
                   sdebug_call_function_contract      := contract;
                   sdebug_call_pathcondition          := pc1;
                   sdebug_call_program_context        := Γ;
-                  sdebug_call_localstore             := symbolicstate_localstore s1;
-                  sdebug_call_heap                   := symbolicstate_heap s1;
+                  sdebug_call_localstore             := δ1;
+                  sdebug_call_heap                   := h1;
                |}
                o
         else o.
@@ -2688,7 +2642,7 @@ Module Mutators
         dmut_pure t
       | stm_assign x s =>
         t <- dmut_exec_evar s ;;
-        dmut_modify_local (fun _ ζ δ => δ ⟪ x ↦ subst ζ t ⟫)%env ;;
+        dmut_state (fun _ ζ δ h => MkDynMutResult tt (δ ⟪ x ↦ subst ζ t ⟫)%env h) ;;
         dmut_pure t
       | stm_call f es =>
         ts <- dmut_eval_exps es ;;
@@ -2848,11 +2802,11 @@ Module Mutators
         dmut_fail "dmut_exec_evar" "stm_bind not supported" tt
       | stm_debugk k =>
         dmut_debug
-          (fun Σ1 ζ01 pc1 s1 =>
+          (fun Σ1 ζ01 pc1 δ1 h1 =>
              {| sdebug_stm_statement := k;
                 sdebug_stm_pathcondition := pc1;
-                sdebug_stm_localstore := symbolicstate_localstore s1;
-                sdebug_stm_heap := symbolicstate_heap s1
+                sdebug_stm_localstore := δ1;
+                sdebug_stm_heap := h1;
              |})
           (dmut_exec_evar k)
       end.
@@ -2886,7 +2840,7 @@ Module Mutators
       sout_demonic_close
         (sout_map
            (fun _ _ _ => tt)
-           (dmut_contract_evar c s (sub_id _) nil (symbolicstate_initial δ))).
+           (dmut_contract_evar c s (sub_id _) nil δ nil)).
 
     Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition (sout_prune (sout_prune (dmut_contract_evar_outcome c body))).

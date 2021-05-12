@@ -67,9 +67,6 @@ Module Soundness
 
   Section Soundness.
 
-    Notation "'scmutres_heap' r" := (scstate_heap (scmutres_state r)) (at level 10).
-    Notation "'scmutres_localstore' r" := (scstate_localstore (scmutres_state r)) (at level 10).
-
     Context `{HL: IHeaplet L} {SLL: ISepLogicLaws L}.
 
     Definition interpret_scchunk (c : SCChunk) : L :=
@@ -140,7 +137,7 @@ Module Soundness
         interpret_scheap h ⊢ interpret_scchunk c ✱ POST δ.
     Proof.
       intros δ h.
-      unfold scmut_consume_chunk, scmut_get_heap, scmut_state_heap.
+      unfold scmut_consume_chunk, scmut_get_heap.
       rewrite scmut_wp_bind, scmut_wp_state, scmut_wp_angelick_list.
       intros (hr & H1 & H2). unfold extract_chunk_eqb in H1.
       rewrite List.in_map_iff in H1. destruct H1 as [[c1 h1] [Heq H1]].
@@ -363,8 +360,7 @@ Module Soundness
       induction s; intros ? ?; cbn;
         unfold scmut_pushspops, scmut_pushs_local, scmut_pops_local,
           scmut_pushpop, scmut_push_local, scmut_pop_local,
-          scmut_eval_exp, scmut_gets_local, scmut_get_local, scmut_put_local,
-          scmut_modify_local, scmut_state_local,
+          scmut_eval_exp, scmut_get_local, scmut_put_local,
           scmut_bind_right, scmut_bind_left;
         repeat (rewrite ?scmut_wp_bind, ?scmut_wp_state; cbn); intros HYP.
 
