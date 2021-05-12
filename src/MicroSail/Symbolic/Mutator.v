@@ -2242,10 +2242,10 @@ Module Mutators
     | asn_match_list s alt_nil xh xt alt_cons =>
       dmut_fail "dmut_produce" "Not implemented" asn
     | asn_match_pair s xl xr asn =>
-      dmut_demonic_match_pair s (dmut_producek asn (dmut_sub (sub_wk_multi (ε ▻ (xl,_) ▻ (xr,_))) k))
+      dmut_demonic_match_pair s (dmut_producek asn (dmut_sub (sub_cat_left (ε ▻ (xl,_) ▻ (xr,_))) k))
     | asn_match_tuple s p rhs =>
       dmut_fail "dmut_produce" "Not implemented" asn
-    | asn_match_record R s p asn => dmut_demonic_match_record p s (dmut_producek asn (dmut_sub (sub_wk_multi _) k))
+    | asn_match_record R s p asn => dmut_demonic_match_record p s (dmut_producek asn (dmut_sub (sub_cat_left _) k))
     | asn_match_union U s alt__ctx alt__pat alt__rhs =>
       match term_get_union s with
       | Some (existT K ts) =>

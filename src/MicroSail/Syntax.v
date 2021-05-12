@@ -991,10 +991,15 @@ Module Terms (Export termkit : TermKit).
         (D := fun b => Term _ (snd b))
         (fun '(ς :: σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
 
-    Definition sub_wk_multi {Σ} Δ : Sub Σ (Σ ▻▻ Δ) :=
+    Definition sub_cat_left {Σ} Δ : Sub Σ (Σ ▻▻ Δ) :=
       env_tabulate
         (D := fun b => Term _ (snd b))
-        (fun '(ς :: σ) ςIn => @term_var _ ς σ (inctx_cat ςIn Δ)).
+        (fun '(ς :: σ) ςIn => @term_var _ ς σ (inctx_cat_left Δ ςIn)).
+
+    Definition sub_cat_right {Σ} Δ : Sub Δ (Σ ▻▻ Δ) :=
+      env_tabulate
+        (D := fun b => Term _ (snd b))
+        (fun '(ς :: σ) ςIn => @term_var _ ς σ (inctx_cat_right ςIn)).
 
     Definition sub_comp {Σ1 Σ2 Σ3} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) : Sub Σ1 Σ3 :=
       subst ζ2 ζ1.
@@ -1005,6 +1010,9 @@ Module Terms (Export termkit : TermKit).
     Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
       let '(ς :: σ) := b in
       sub_snoc (sub_comp ζ sub_wk1) (ς :: σ) (@term_var _ ς σ inctx_zero).
+
+    Definition sub_up {Σ1 Σ2} (ζ : Sub Σ1 Σ2) Δ : Sub (Σ1 ▻▻ Δ) (Σ2 ▻▻ Δ) :=
+      sub_comp ζ (sub_cat_left Δ) ►► sub_cat_right Δ.
 
     Definition sub_single {Σ x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) : Sub Σ (Σ - (x :: σ)) :=
       @env_tabulate

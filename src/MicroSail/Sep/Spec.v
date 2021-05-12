@@ -415,7 +415,7 @@ Module Assertions
                                (sep_contract_pun_logvars Δ Σ)
                                (𝑿to𝑺 x)
                                σ
-                               (inctx_cat (inctx_map (fun '(y::τ) => (𝑿to𝑺 y::τ)) xIn) Σ)))
+                               (inctx_cat_left Σ (inctx_map (fun '(y::τ) => (𝑿to𝑺 y::τ)) xIn))))
             req result ens
         end.
 

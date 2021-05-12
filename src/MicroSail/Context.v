@@ -205,12 +205,6 @@ Section WithBinding.
     InCtx b (ctx_snoc Γ b') :=
     @MkInCtx _ (ctx_snoc Γ b') (S (inctx_at bIn)) (inctx_valid bIn).
 
-  Fixpoint inctx_cat {b : B} {Γ : Ctx B} (bIn : InCtx b Γ) (Δ : Ctx B) : InCtx b (ctx_cat Γ Δ) :=
-    match Δ with
-    | ctx_nil      => bIn
-    | ctx_snoc Δ _ => inctx_succ (inctx_cat bIn Δ)
-    end.
-
   Inductive NilView {b : B} (i : InCtx b ctx_nil) : Set :=.
 
   Definition nilView {b : B} (i : InCtx b ctx_nil) : NilView i :=
@@ -239,6 +233,23 @@ Section WithBinding.
     - destruct (nilView bIn).
     - destruct (snocView bIn); constructor.
   Defined.
+
+  Fixpoint inctx_cat_left {b : B} {Γ : Ctx B} (Δ : Ctx B) (bIn : InCtx b Γ) : InCtx b (ctx_cat Γ Δ) :=
+    match Δ with
+    | ctx_nil      => bIn
+    | ctx_snoc Δ _ => inctx_succ (inctx_cat_left Δ bIn)
+    end.
+
+  Fixpoint inctx_cat_right {b : B} {Γ : Ctx B} (Δ : Ctx B) : InCtx b Δ -> InCtx b (ctx_cat Γ Δ) :=
+    match Δ with
+    | ctx_nil      => fun bIn => match nilView bIn with end
+    | ctx_snoc Δ _ =>
+      fun bIn =>
+        match snocView bIn with
+        | snocViewZero => inctx_zero
+        | snocViewSucc bIn => inctx_succ (inctx_cat_right bIn)
+        end
+    end.
 
   (* Custom pattern matching in cases where the context was already refined
      by a different match, i.e. on environments. *)
