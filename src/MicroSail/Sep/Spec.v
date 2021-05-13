@@ -241,14 +241,18 @@ Module Assertions
     Qed.
 
     Lemma inst_formula_eqs {Δ Σ} (ι : SymInstance Σ) (xs ys : SymbolicLocalStore Δ Σ) :
-      inst (T := PathCondition) (A := Prop)ι (formula_eqs xs ys) -> inst ι xs = inst ι ys.
+      inst (T := PathCondition) (A := Prop)ι (formula_eqs xs ys) <-> inst ι xs = inst ι ys.
     Proof.
       induction xs.
-      - destruct (nilView ys). reflexivity.
+      - destruct (nilView ys). cbn. intuition. constructor.
       - destruct (snocView ys). cbn - [inst].
-        rewrite inst_pathcondition_cons. intros [Hfml Hpc].
-        change (inst ι xs ► (b ↦ inst ι db) = inst ι E ► (b ↦ inst ι v)).
-        f_equal. now apply IHxs. apply Hfml.
+        rewrite inst_pathcondition_cons, IHxs. clear IHxs.
+        change (inst ι db = inst ι v /\ inst ι xs = inst ι E <->
+                inst ι xs ► (b ↦ inst ι db) = inst ι E ► (b ↦ inst ι v)).
+        split.
+        + intros [Hfml Hpc]; f_equal; auto.
+        + intros Heq. apply noConfusion_inv in Heq. cbn in Heq.
+          inversion Heq. intuition.
     Qed.
 
   End PathCondition.

@@ -1985,7 +1985,7 @@ Module Mutators
           (sub_id Σ1)
       end.
 
-  Definition dmut_match_bool_angelic {AT} {Γ1 Γ2 Σ} (t : Term Σ ty_bool)
+  Definition dmut_angelic_match_bool {AT} {Γ1 Γ2 Σ} (t : Term Σ ty_bool)
     (dt df : DynamicMutator Γ1 Γ2 AT Σ) : DynamicMutator Γ1 Γ2 AT Σ :=
     fun Σ1 ζ01 =>
       let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
@@ -2068,8 +2068,8 @@ Module Mutators
     match asn with
     | asn_formula fml => dmut_assume_formula fml
     | asn_chunk c     => dmut_produce_chunk c
-    | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_produce a1) ⊗
-                         (dmut_assume_term (term_not b) ;; dmut_produce a2)
+    | asn_if b a1 a2  =>
+      dmut_demonic_match_bool b (dmut_produce a1) (dmut_produce a2)
     | asn_match_enum E t alts =>
       dmut_demonic_match_enum t (fun k => dmut_produce (alts k))
     | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
@@ -2106,7 +2106,8 @@ Module Mutators
     match asn with
     | asn_formula fml => dmut_assume_formula fml;; k
     | asn_chunk c => dmut_produce_chunk c;; k
-    | asn_if b asn1 asn2 => (dmut_assume_term b;; dmut_producek asn1 k) ⊗ (dmut_assume_term b;; dmut_producek asn2 k)
+    | asn_if b asn1 asn2 =>
+      dmut_demonic_match_bool b (dmut_producek asn1 k) (dmut_producek asn2 k)
     | asn_match_enum E k0 alts => dmut_demonic_match_enum k0 (fun k1 : 𝑬𝑲 E => dmut_producek (alts k1) k)
     | asn_match_sum σ τ s xl asn1 xr asn2 =>
       dmut_demonic_match_sum s (dmut_producek asn1 (dmut_sub sub_wk1 k)) (dmut_producek asn2 (dmut_sub sub_wk1 k))
@@ -2141,8 +2142,8 @@ Module Mutators
     match asn with
     | asn_formula fml => dmut_assert_formula fml
     | asn_chunk c     => dmut_consume_chunk c
-    | asn_if b a1 a2  => (dmut_assume_term b ;; dmut_consume a1) ⊗
-                         (dmut_assume_term (term_not b) ;; dmut_consume a2)
+    | asn_if b a1 a2  =>
+      dmut_demonic_match_bool b (dmut_consume a1) (dmut_consume a2)
     | asn_match_enum E t alts =>
       dmut_demonic_match_enum t (fun k => dmut_consume (alts k))
     | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
@@ -2220,8 +2221,8 @@ Module Mutators
       ts <- dmut_eval_exps es ;;
       dmut_call (CEnvEx f) ts
     | stm_if e s1 s2 =>
-        (dmut_assume_exp e ;; dmut_exec s1) ⊗
-        (dmut_assume_exp (exp_not e) ;; dmut_exec s2)
+      t <- dmut_eval_exp e ;;
+      dmut_demonic_match_bool t (dmut_exec s1) (dmut_exec s2)
     | stm_seq s1 s2 => dmut_exec s1 ;; dmut_exec s2
     | stm_assertk e1 _ k =>
       t <- dmut_eval_exp e1 ;;

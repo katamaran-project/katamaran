@@ -237,6 +237,9 @@ Module SemiConcrete
     Definition scmut_assert_formulask {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) (k : SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
       fold_right (scmut_assert_formulak ι) k fmls.
 
+    Definition scmut_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
+      if v then kt else kf.
+
     Definition scmut_match_sum {A} {Γ1 Γ2 σ τ} (v : Lit σ + Lit τ)
       (sinl : Lit σ -> SCMut Γ1 Γ2 A) (sinr : Lit τ -> SCMut Γ1 Γ2 A) : SCMut Γ1 Γ2 A :=
       match v with
@@ -260,8 +263,7 @@ Module SemiConcrete
       match asn with
       | asn_formula fml => scmut_assume_formula ι fml
       | asn_chunk c     => scmut_produce_chunk (inst ι c)
-      | asn_if b a1 a2  => (scmut_assume_term ι b ;; scmut_produce ι a1) ⊗
-                           (scmut_assume_term ι (term_not b) ;; scmut_produce ι a2)
+      | asn_if b a1 a2  => scmut_match_bool (inst ι b) (scmut_produce ι a1) (scmut_produce ι a2)
       | asn_match_enum E k alts =>
         scmut_match_enum
           (inst (T := fun Σ => Term Σ _) ι k)
@@ -302,8 +304,7 @@ Module SemiConcrete
       match asn with
       | asn_formula fml => scmut_assert_formula ι fml
       | asn_chunk c     => scmut_consume_chunk (inst ι c)
-      | asn_if b a1 a2  => (scmut_assume_term ι b ;; scmut_consume ι a1) ⊗
-                           (scmut_assume_term ι (term_not b) ;; scmut_consume ι a2)
+      | asn_if b a1 a2  => scmut_match_bool (inst ι b) (scmut_consume ι a1) (scmut_consume ι a2)
       | asn_match_enum E k alts =>
         scmut_match_enum
           (inst (T := fun Σ => Term Σ _) ι k)
@@ -378,9 +379,7 @@ Module SemiConcrete
         scmut_pure v
       | stm_if e s1 s2 =>
         v <- scmut_eval_exp e ;;
-        if v
-        then scmut_exec s1
-        else scmut_exec s2
+        scmut_match_bool v (scmut_exec s1) (scmut_exec s2)
       | stm_seq e k => scmut_exec e ;; scmut_exec k
       | stm_assertk e1 _ k =>
         v <- scmut_eval_exp e1 ;;
@@ -574,6 +573,14 @@ Module SemiConcrete
       - rewrite inst_pathcondition_cons, scmut_wp_assert_formulak, IHfmls.
         clear. intuition.
     Qed.
+
+    Lemma scmut_wp_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : SCMut Γ1 Γ2 A) :
+      forall POST δ h,
+        scmut_wp (scmut_match_bool v kt kf) POST δ h <->
+        if v
+        then scmut_wp kt POST δ h
+        else scmut_wp kf POST δ h.
+    Proof. destruct v; reflexivity. Qed.
 
     Lemma scmut_wp_match_sum {A Γ1 Γ2 σ τ} (v : Lit σ + Lit τ)
       (kl : Lit σ -> SCMut Γ1 Γ2 A) (kr : Lit τ -> SCMut Γ1 Γ2 A) :

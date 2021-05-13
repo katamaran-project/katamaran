@@ -202,11 +202,7 @@ Module Soundness
       revert POST. induction asn; cbn - [inst inst_term]; intros POST δ1 h1.
       - now apply scmut_assert_formula_sound.
       - destruct c; now apply scmut_consume_chunk_sound.
-      - unfold scmut_assume_term.
-        rewrite scmut_wp_demonic_binary, ?scmut_wp_bind_right,
-          ?scmut_wp_assume_formula. cbn.
-        change (inst_term ι b) with (inst ι b).
-        intros [H1 H2]. destruct (inst ι b) eqn:?; auto.
+      - destruct (inst ι b); auto.
       - auto.
       - destruct (inst ι s); auto.
       - destruct (inst ι s); auto.
@@ -237,11 +233,7 @@ Module Soundness
       - now apply scmut_assume_formula_sound.
       - rewrite sepcon_comm.
         destruct c; now cbn in *.
-      - unfold scmut_assume_term.
-        rewrite scmut_wp_demonic_binary, ?scmut_wp_bind_right,
-          ?scmut_wp_assume_formula. cbn.
-        change (inst_term ι b) with (inst ι b).
-        intros [H1 H2]. destruct (inst ι b) eqn:?; auto.
+      - destruct (inst ι b); auto.
       - auto.
       - destruct (inst ι s); auto.
       - destruct (inst ι s); auto.
