@@ -1566,9 +1566,9 @@ Module Soundness
       apply HYP; auto.
     Admitted.
 
-    Lemma bapprox_demonicv {Γ Σ ς τ} (ι : SymInstance Σ)
-          (dm : DynamicMutator Γ Γ Unit (Σ ▻ (ς,τ))) (d_dcl : dmut_dcl dm)
-          (sm : Lit τ -> SCMut Γ Γ unit) :
+    Lemma bapprox_demonicv {AT A} `{InstLaws AT A} {Γ Σ ς τ} (ι : SymInstance Σ)
+          (dm : DynamicMutator Γ Γ AT (Σ ▻ (ς,τ))) (d_dcl : dmut_dcl dm)
+          (sm : Lit τ -> SCMut Γ Γ A) :
       (forall v, bapprox (env_snoc ι _ v) dm (sm v)) ->
       bapprox ι
         (dmut_demonicv ς τ dm)
@@ -1581,9 +1581,9 @@ Module Soundness
       subst ι; reflexivity.
     Qed.
 
-    Lemma bapprox2_demonicv {Γ Σ ς τ} (ι : SymInstance Σ)
-          (dm : DynamicMutator Γ Γ Unit (Σ ▻ (ς,τ))) (d_dcl : dmut_dcl dm)
-          (sm : Lit τ -> SCMut Γ Γ unit) :
+    Lemma bapprox2_demonicv {AT A} `{InstLaws AT A} {Γ Σ ς τ} (ι : SymInstance Σ)
+          (dm : DynamicMutator Γ Γ AT (Σ ▻ (ς,τ))) (d_dcl : dmut_dcl dm)
+          (sm : Lit τ -> SCMut Γ Γ A) :
       (forall v, bapprox2 (env_snoc ι _ v) dm (sm v)) ->
       bapprox2 ι
         (dmut_demonicv ς τ dm)
@@ -1991,6 +1991,11 @@ Module Soundness
       - now apply bapprox_debug, bapprox_pure.
     Admitted.
 
+    Lemma sub_comp_cat_right {Σ1 Σ2 Σ} (ζ1 : Sub Σ1 Σ) (ζ2 : Sub Σ2 Σ) :
+      sub_comp (sub_cat_right Σ2) (ζ1 ►► ζ2) = ζ2.
+    Proof.
+    Admitted.
+
     Lemma bapprox_call {Γ Δ τ Σ} (c : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) (ι : SymInstance Σ) :
       bapprox ι (@dmut_call Γ Δ τ Σ c ts) (scmut_call c (inst ι ts)).
     Proof.
@@ -1998,16 +2003,22 @@ Module Soundness
       apply bapprox_angelicvs. admit.
       intros ιc. change (SymInstance Σ__c) in ιc.
       unfold bapprox. intros * Hι Hpc.
+      destruct (catView ζ01) as [ζ01 ζc].
+      change (Sub Σ Σ1) in ζ01.
+      change (Sub Σ__c Σ1) in ζc.
       rewrite dmut_wp_assert_formulask; auto.
       rewrite scmut_wp_assert_formulask.
       rewrite ?inst_formula_eqs.
       rewrite ?inst_subst, ?inst_lift.
       intros [Hfmls Hwp]. split.
       - admit.
-      - rewrite dmut_wp_sub, dmut_wp_bind_right in Hwp; auto.
-        rewrite scmut_wp_bind_right.
-        eapply bapprox_consume in Hwp; eauto. revert Hwp.
-        unfold sub_comp. rewrite inst_subst, <- Hι.
+      - rewrite dmut_wp_sub in Hwp. revert Hwp.
+        rewrite sub_comp_cat_right.
+        eapply bapprox_bind_right; eauto. admit.
+        admit.
+        eapply bapprox_demonicv. admit.
+        intros v.
+        apply bapprox_bind_right; auto. admit.
         admit.
         admit.
       - admit.
