@@ -109,6 +109,22 @@ Section WithBinding.
       | env_snoc E db => env_snoc (env_cat EΓ E) db
       end.
 
+    Inductive CatView {Γ Δ} : Env (ctx_cat Γ Δ) -> Set :=
+    | isCat (EΓ : Env Γ) (EΔ : Env Δ) : CatView (env_cat EΓ EΔ).
+
+    Fixpoint catView {Γ Δ} : forall E : Env (ctx_cat Γ Δ), CatView E :=
+      match Δ with
+      | ctx_nil => fun E => isCat E env_nil
+      | ctx_snoc Δ b =>
+        fun E =>
+          match snocView E with
+          | isSnoc E v =>
+            match catView E with
+            | isCat EΓ EΔ => isCat EΓ (env_snoc EΔ v)
+            end
+          end
+      end.
+
     Fixpoint env_lookup {Γ} (E : Env Γ) : forall b, InCtx b Γ -> D b :=
       match E with
       | env_nil => fun _ => inctx_case_nil
