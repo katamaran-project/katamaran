@@ -29,12 +29,14 @@
 From Coq Require
      Vector.
 From Coq Require Import
+     Bool.Bool
      Classes.Morphisms
      Classes.RelationClasses
      Classes.Morphisms_Prop
      Classes.Morphisms_Relations
      Program.Basics
-     Program.Tactics.
+     Program.Tactics
+     String.
 
 From MicroSail Require Import
      Notation
@@ -240,7 +242,7 @@ Module Assertions
       apply fold_right_1_10_prop.
     Qed.
 
-    Lemma inst_formula_eqs {Δ Σ} (ι : SymInstance Σ) (xs ys : SymbolicLocalStore Δ Σ) :
+    Lemma inst_formula_eqs {Δ Σ} (ι : SymInstance Σ) (xs ys : SStore Δ Σ) :
       inst (T := PathCondition) (A := Prop)ι (formula_eqs xs ys) <-> inst ι xs = inst ι ys.
     Proof.
       induction xs.
@@ -400,6 +402,54 @@ Module Assertions
 
   End Entailment.
 
+  Section Solver.
+
+    (* Poor man's unification *)
+    Definition try_unify {Σ σ} (t1 t2 : Term Σ σ) :
+      option { Σ' & MultiSub Σ Σ' } :=
+      match t1 with
+      | @term_var _ ς σ ςInΣ =>
+        fun t2 : Term Σ σ =>
+          match occurs_check ςInΣ t2 with
+          | Some t => Some (existT _ (multisub_cons ς t multisub_id))
+          | None => None
+          end
+      | _ => fun _ => None
+      end t2.
+
+    Definition try_propagate {Σ} (fml : Formula Σ) :
+      option { Σ' & MultiSub Σ Σ' } :=
+      match fml with
+      | formula_eq t1 t2 =>
+        match try_unify t1 t2 with
+        | Some r => Some r
+        | None => try_unify t2 t1
+        end
+      | _ => None
+      end.
+
+    Lemma try_unify_spec {Σ σ} (t1 t2 : Term Σ σ) :
+      OptionSpec (fun '(existT Σ' ζ) => forall ι, inst ι t1 = inst ι t2 <-> inst_multisub ι ζ) True (try_unify t1 t2).
+    Proof.
+      unfold try_unify. destruct t1; cbn; try (constructor; auto; fail).
+      destruct (occurs_check ςInΣ t2) eqn:Heq; constructor; auto.
+      apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq. subst.
+      intros ι. rewrite inst_subst, inst_sub_shift.
+      cbn. intuition.
+    Qed.
+
+    Lemma try_propagate_spec {Σ} (fml : Formula Σ) :
+      OptionSpec (fun '(existT Σ' ζ) => forall ι, (inst ι fml : Prop) <-> inst_multisub ι ζ) True (try_propagate fml).
+    Proof.
+      unfold try_propagate; destruct fml; cbn; try (constructor; auto; fail).
+      destruct (try_unify_spec t1 t2) as [[Σ' ζ] HYP|_]. constructor. auto.
+      destruct (try_unify_spec t2 t1) as [[Σ' ζ] HYP|_]. constructor.
+      intros ι. specialize (HYP ι). intuition.
+      now constructor.
+    Qed.
+
+  End Solver.
+
   Section Chunks.
 
     (* Semi-concrete chunks *)
@@ -484,19 +534,71 @@ Module Assertions
       - intros ? ? ζ ι []; cbn; f_equal; apply inst_subst.
     Qed.
 
+    Global Instance OccursCheckChunk :
+      OccursCheck Chunk :=
+      fun Σ b bIn c =>
+        match c with
+        | chunk_user p ts => option_map (chunk_user p) (occurs_check bIn ts)
+        | chunk_ptsreg r t => option_map (chunk_ptsreg r) (occurs_check bIn t)
+        end.
+
   End Chunks.
 
   Section Heaps.
 
     Definition SCHeap : Type := list SCChunk.
-    Definition SymbolicHeap : LCtx -> Type := List Chunk.
+    Definition SHeap : LCtx -> Type := List Chunk.
 
-    Global Instance inst_heap : Inst SymbolicHeap SCHeap :=
+    Global Instance inst_heap : Inst SHeap SCHeap :=
       instantiate_list.
-    Global Instance instlaws_heap : InstLaws SymbolicHeap SCHeap.
+    Global Instance instlaws_heap : InstLaws SHeap SCHeap.
     Proof. apply instantiatelaws_list. Qed.
 
   End Heaps.
+
+  Section Messages.
+
+    (* A record to collect information passed to the user. *)
+    Record Message (Σ : LCtx) : Type :=
+      MkMessage
+        { msg_function        : string;
+          msg_message         : string;
+          msg_program_context : PCtx;
+          msg_localstore      : SStore msg_program_context Σ;
+          msg_heap            : SHeap Σ;
+          msg_pathcondition   : PathCondition Σ;
+        }.
+    Global Arguments MkMessage {Σ} _ _ _ _ _ _.
+
+    Global Instance SubstMessage : Subst Message :=
+      fun Σ1 Σ2 ζ12 err =>
+        match err with
+        | MkMessage f m Γ δ h pc => MkMessage f m Γ (subst ζ12 δ) (subst ζ12 h) (subst ζ12 pc)
+        end.
+
+    Global Instance SubstLawsMessage : SubstLaws Message.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    Global Instance OccursCheckMessage : OccursCheck Message :=
+      fun Σ x xIn msg =>
+        match msg with
+        | MkMessage f m Γ δ h pc =>
+          option_ap
+            (option_ap
+               (option_map
+                  (MkMessage f m Γ)
+                  (occurs_check xIn δ))
+               (occurs_check xIn h))
+            (occurs_check xIn pc)
+        end.
+
+    Inductive Error (Σ : LCtx) (msg : Message Σ) : Prop :=.
+
+  End Messages.
 
   Inductive Assertion (Σ : LCtx) : Type :=
   | asn_formula (fml : Formula Σ)
@@ -565,14 +667,6 @@ Module Assertions
   (*     | asn_debug => asn_debug *)
   (*     end. *)
 
-  Global Instance OccursCheckChunk :
-    OccursCheck Chunk :=
-    fun Σ b bIn c =>
-      match c with
-      | chunk_user p ts => option_map (chunk_user p) (occurs_check bIn ts)
-      | chunk_ptsreg r t => option_map (chunk_ptsreg r) (occurs_check bIn t)
-      end.
-
   Global Instance OccursCheckAssertion :
     OccursCheck Assertion :=
     fix occurs Σ b (bIn : b ∈ Σ) (asn : Assertion Σ) : option (Assertion (Σ - b)) :=
@@ -601,30 +695,10 @@ Module Assertions
       | asn_debug => Some asn_debug
       end.
 
-  Definition symbolic_eval_exp {Γ Σ} (δ : SymbolicLocalStore Γ Σ) :
-    forall {σ} (e : Exp Γ σ), Term Σ σ :=
-    fix symbolic_eval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
-      match e with
-      | exp_var ς                => δ ‼ ς
-      | exp_lit σ l              => term_lit σ l
-      | exp_binop op e1 e2       => term_binop op (symbolic_eval_exp e1) (symbolic_eval_exp e2)
-      | exp_neg e                => term_neg (symbolic_eval_exp e)
-      | exp_not e                => term_not (symbolic_eval_exp e)
-      | exp_inl e                => term_inl (symbolic_eval_exp e)
-      | exp_inr e                => term_inr (symbolic_eval_exp e)
-      | exp_list es              => term_list (List.map symbolic_eval_exp es)
-      | exp_bvec es              => term_bvec (Vector.map symbolic_eval_exp es)
-      | exp_tuple es             => term_tuple (env_map (@symbolic_eval_exp) es)
-      | @exp_projtup _ _ e n _ p => term_projtup (symbolic_eval_exp e) n (p := p)
-      | exp_union E K e          => term_union E K (symbolic_eval_exp e)
-      | exp_record R es          => term_record R (env_map (fun _ => symbolic_eval_exp) es)
-      (* | exp_projrec e rf         => term_projrec (symbolic_eval_exp e) rf *)
-      end%exp.
-
   Record SepContract (Δ : PCtx) (τ : Ty) : Type :=
     MkSepContract
       { sep_contract_logic_variables  : LCtx;
-        sep_contract_localstore       : SymbolicLocalStore Δ sep_contract_logic_variables;
+        sep_contract_localstore       : SStore Δ sep_contract_logic_variables;
         sep_contract_precondition     : Assertion sep_contract_logic_variables;
         sep_contract_result           : 𝑺;
         sep_contract_postcondition    : Assertion (sep_contract_logic_variables ▻ (sep_contract_result :: τ));
@@ -653,6 +727,179 @@ Module Assertions
     forall Δ τ (f : 𝑭 Δ τ), option (SepContract Δ τ).
   Definition SepContractEnvEx : Type :=
     forall Δ τ (f : 𝑭𝑿 Δ τ), SepContract Δ τ.
+
+  Section DebugInfo.
+
+    Record DebugCall : Type :=
+      MkDebugCall
+        { debug_call_logic_context          : LCtx;
+          debug_call_instance               : SymInstance debug_call_logic_context;
+          debug_call_function_parameters    : PCtx;
+          debug_call_function_result_type   : Ty;
+          debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
+          debug_call_function_contract      : SepContract debug_call_function_parameters debug_call_function_result_type;
+          debug_call_function_arguments     : SStore debug_call_function_parameters debug_call_logic_context;
+          debug_call_pathcondition          : PathCondition debug_call_logic_context;
+          debug_call_program_context        : PCtx;
+          debug_call_localstore             : SStore debug_call_program_context debug_call_logic_context;
+          debug_call_heap                   : SHeap debug_call_logic_context;
+        }.
+
+    Record DebugStm : Type :=
+      MkDebugStm
+        { debug_stm_program_context        : PCtx;
+          debug_stm_statement_type         : Ty;
+          debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
+          debug_stm_logic_context          : LCtx;
+          debug_stm_instance               : SymInstance debug_stm_logic_context;
+          debug_stm_pathcondition          : PathCondition debug_stm_logic_context;
+          debug_stm_localstore             : SStore debug_stm_program_context debug_stm_logic_context;
+          debug_stm_heap                   : SHeap debug_stm_logic_context;
+        }.
+
+    Record DebugAsn : Type :=
+      MkDebugAsn
+        { debug_asn_logic_context          : LCtx;
+          debug_asn_instance               : SymInstance debug_asn_logic_context;
+          debug_asn_pathcondition          : PathCondition debug_asn_logic_context;
+          debug_asn_program_context        : PCtx;
+          debug_asn_localstore             : SStore debug_asn_program_context debug_asn_logic_context;
+          debug_asn_heap                   : SHeap debug_asn_logic_context;
+        }.
+
+    Record SDebugCall (Σ : LCtx) : Type :=
+      MkSDebugCall
+        { sdebug_call_function_parameters    : PCtx;
+          sdebug_call_function_result_type   : Ty;
+          sdebug_call_function_name          : 𝑭 sdebug_call_function_parameters sdebug_call_function_result_type;
+          sdebug_call_function_contract      : SepContract sdebug_call_function_parameters sdebug_call_function_result_type;
+          sdebug_call_function_arguments     : SStore sdebug_call_function_parameters Σ;
+          sdebug_call_program_context        : PCtx;
+          sdebug_call_pathcondition          : PathCondition Σ;
+          sdebug_call_localstore             : SStore sdebug_call_program_context Σ;
+          sdebug_call_heap                   : SHeap Σ;
+        }.
+
+    Record SDebugStm (Σ : LCtx) : Type :=
+      MkSDebugStm
+        { sdebug_stm_program_context        : PCtx;
+          sdebug_stm_statement_type         : Ty;
+          sdebug_stm_statement              : Stm sdebug_stm_program_context sdebug_stm_statement_type;
+          sdebug_stm_pathcondition          : PathCondition Σ;
+          sdebug_stm_localstore             : SStore sdebug_stm_program_context Σ;
+          sdebug_stm_heap                   : SHeap Σ;
+        }.
+
+    Record SDebugAsn (Σ : LCtx) : Type :=
+      MkSDebugAsn
+        { sdebug_asn_program_context        : PCtx;
+          sdebug_asn_pathcondition          : PathCondition Σ;
+          sdebug_asn_localstore             : SStore sdebug_asn_program_context Σ;
+          sdebug_asn_heap                   : SHeap Σ;
+        }.
+
+    Global Instance SubstDebugCall : Subst SDebugCall :=
+      fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugCall Σ0) =>
+        match d with
+        | MkSDebugCall f c ts pc δ h =>
+          MkSDebugCall f c (subst ζ01 ts) (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
+        end.
+
+    Global Instance InstDebugCall : Inst SDebugCall DebugCall :=
+      {| inst Σ ι d :=
+           match d with
+           | MkSDebugCall f c ts pc δ h =>
+             MkDebugCall ι f c ts pc δ h
+           end;
+         lift Σ d :=
+           match d with
+           | MkDebugCall ι f c ts pc δ h =>
+             MkSDebugCall f c (lift (inst ι ts)) (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
+           end;
+      |}.
+
+    Global Instance OccursCheckDebugCall : OccursCheck SDebugCall :=
+      fun Σ x xIn d =>
+        match d with
+        | MkSDebugCall f c ts pc δ h =>
+          option_ap
+            (option_ap
+               (option_ap
+                  (option_map
+                     (fun ts' => @MkSDebugCall _ _ _ f c ts' _)
+                     (occurs_check xIn ts))
+                  (occurs_check xIn pc))
+               (occurs_check xIn δ))
+            (occurs_check xIn h)
+        end.
+
+    Global Instance SubstDebugStm : Subst SDebugStm :=
+      fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugStm Σ0) =>
+        match d with
+        | MkSDebugStm s pc δ h =>
+          MkSDebugStm s (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
+        end.
+
+    Global Instance InstDebugStm : Inst SDebugStm DebugStm :=
+      {| inst Σ ι d :=
+           match d with
+           | MkSDebugStm s pc δ h =>
+             MkDebugStm s ι pc δ h
+           end;
+         lift Σ d :=
+           match d with
+           | MkDebugStm s ι pc δ h =>
+             MkSDebugStm s (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
+           end
+      |}.
+
+    Global Instance OccursCheckDebugStm : OccursCheck SDebugStm :=
+      fun Σ x xIn d =>
+        match d with
+        | MkSDebugStm s pc δ h =>
+          option_ap
+            (option_ap
+               (option_map
+                  (MkSDebugStm s)
+                  (occurs_check xIn pc))
+               (occurs_check xIn δ))
+            (occurs_check xIn h)
+        end.
+
+    Global Instance SubstDebugAsn : Subst SDebugAsn :=
+      fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugAsn Σ0) =>
+        match d with
+        | MkSDebugAsn pc δ h =>
+          MkSDebugAsn (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
+        end.
+
+    Global Instance InstDebugAsn : Inst SDebugAsn DebugAsn :=
+      {| inst Σ ι d :=
+           match d with
+           | MkSDebugAsn pc δ h =>
+             MkDebugAsn ι pc δ h
+           end;
+         lift Σ d :=
+           match d with
+           | MkDebugAsn ι pc δ h =>
+             MkSDebugAsn (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
+           end
+      |}.
+
+    Global Instance OccursCheckDebugAsn : OccursCheck SDebugAsn :=
+      fun Σ x xIn d =>
+        match d with
+        | MkSDebugAsn pc δ h =>
+          option_ap
+            (option_ap
+               (option_map
+                  (@MkSDebugAsn _ _)
+                  (occurs_check xIn pc))
+               (occurs_check xIn δ))
+            (occurs_check xIn h)
+        end.
+
+  End DebugInfo.
 
   Section Experimental.
 
@@ -705,6 +952,8 @@ Module Assertions
 
   Section Contracts.
     Context `{Logic : IHeaplet L}.
+
+    Import LogicNotations.
 
     Definition interpret_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
       match c with
@@ -765,6 +1014,172 @@ Module Assertions
   End Contracts.
 
   Arguments interpret_assertion {_ _ _} _ _.
+
+  Section TrySolve.
+
+    Definition try_solve_eq {Σ σ} (t1 t2 : Term Σ σ) : option bool :=
+      if Term_eqb t1 t2
+      then Some true
+      else
+        (* If the terms are literals, we can trust the negative result. *)
+        match t1 , t2 with
+        | term_lit _ _ , term_lit _ _ => Some false
+        | term_inr _ , term_inl _ => Some false
+        | term_inl _ , term_inr _ => Some false
+        | _            , _            => None
+        end.
+
+    Lemma try_solve_eq_spec {Σ σ} (t1 t2 : Term Σ σ) :
+      OptionSpec
+        (fun b => forall ι, inst ι t1 = inst ι t2 <-> is_true b)
+        True
+        (try_solve_eq t1 t2).
+    Proof.
+      unfold try_solve_eq.
+      destruct (Term_eqb_spec t1 t2).
+      - constructor. intros. apply reflect_iff.
+        constructor. congruence.
+      - destruct t1; dependent elimination t2; constructor; auto;
+        intros; apply reflect_iff; constructor; cbn; congruence.
+    Qed.
+
+    (* Check if the given formula is always true or always false for any
+       assignments of the logic variables. *)
+    Definition try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
+      match fml with
+      | formula_bool t =>
+        match t in Term _ σ return option (Lit σ)
+        with
+        | term_lit _ b => Some b
+        | _            => None
+        end
+      | formula_prop _ _ => None
+      | formula_eq t1 t2 => try_solve_eq t1 t2
+        (* else Term_eqvb t1 t2 *)
+      | formula_neq t1 t2 => option_map negb (try_solve_eq t1 t2)
+        (* else option_map negb (Term_eqvb t1 t2) *)
+      end.
+
+    Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) :
+      OptionSpec
+        (fun b => forall ι, inst ι fml <-> is_true b)
+        True
+        (try_solve_formula fml).
+    Proof.
+      destruct fml; cbn.
+      - dependent elimination t; constructor; auto.
+      - constructor; auto.
+      - destruct (try_solve_eq_spec t1 t2); now constructor.
+      - destruct (try_solve_eq_spec t1 t2); constructor; auto.
+        intros ι. specialize (H ι). destruct a; intuition.
+    Qed.
+
+  End TrySolve.
+
+  Section ChunkExtraction.
+    Context {Σ : LCtx}.
+
+    Infix ">=>" := option_comp (at level 80, right associativity).
+
+    Section WithMatchTerm.
+
+      Variable match_term_eqb : forall {σ}, Term Σ σ -> Term Σ σ -> PathCondition Σ -> option (PathCondition Σ).
+
+      Equations(noeqns) match_env_eqb' {σs} (te : Env (Term Σ) σs) (tr : Env (Term Σ) σs) :
+        PathCondition Σ -> option (PathCondition Σ) :=
+        match_env_eqb' env_nil env_nil := Some;
+        match_env_eqb' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_env_eqb' E1 E2 >=> match_term_eqb t1 t2.
+
+    End WithMatchTerm.
+
+    Equations(noeqns) match_term_eqb {σ} (te : Term Σ σ) (tr : Term Σ σ) :
+      PathCondition Σ -> option (PathCondition Σ) :=
+      match_term_eqb (term_lit ?(σ) l1) (term_lit σ l2) :=
+        if Lit_eqb σ l1 l2 then Some else fun _ => None;
+      match_term_eqb (term_inl t1) (term_inl t2) := match_term_eqb t1 t2;
+      match_term_eqb (term_inl t1) (term_lit (inl l2)) := match_term_eqb t1 (term_lit _ l2);
+      match_term_eqb (term_inr t1) (term_inr t2) := match_term_eqb t1 t2;
+      match_term_eqb (term_inr t1) (term_lit (inr l2)) := match_term_eqb t1 (term_lit _ l2);
+      match_term_eqb te tr :=
+        if Term_eqb te tr
+        then Some
+        else fun pc => Some (cons (formula_eq te tr) pc).
+
+    Definition match_env_eqb := @match_env_eqb' (@match_term_eqb).
+
+    Equations(noeqns) match_chunk_eqb (ce : Chunk Σ) (cr : Chunk Σ) :
+      PathCondition Σ -> option (PathCondition Σ) :=
+      match_chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2)
+      with eq_dec p1 p2 => {
+        match_chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := match_env_eqb ts1 ts2;
+        match_chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := fun _ => None
+      };
+      match_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
+      with eq_dec_het r1 r2 => {
+        match_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left eq_refl) := match_term_eqb t1 t2;
+        match_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := fun _ => None
+      };
+      match_chunk_eqb _ _  := fun _ => None.
+
+    Lemma match_chunk_eqb_spec (ce cr : Chunk Σ) (fmls : List Formula Σ) :
+      OptionSpec
+        (fun fmls2 =>
+           forall ι : SymInstance Σ,
+             instpc ι fmls2 ->
+             inst ι ce = inst ι cr /\ instpc ι fmls)
+        True
+        (match_chunk_eqb ce cr fmls).
+    Proof.
+      destruct ce, cr; cbn; try constructor; auto.
+      - destruct (eq_dec p p0); cbn.
+        + destruct e; cbn. admit.
+        + now constructor.
+      - destruct (eq_dec_het r r0); cbn.
+        + dependent elimination e; cbn. admit.
+        + now constructor.
+    Admitted.
+
+    Definition extract_chunk_eqb (ce : Chunk Σ) (h : SHeap Σ) :
+      List (Pair PathCondition SHeap) Σ :=
+      stdpp.base.omap
+        (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk_eqb ce cr nil))
+        (heap_extractions h).
+
+  End ChunkExtraction.
+
+  Section WithEvarEnv.
+
+    Import stdpp.base.
+
+    Context {Σe Σr} (δ : EvarEnv Σe Σr).
+
+    Definition eval_chunk_evar (c : Chunk Σe) : option (Chunk Σr) :=
+      match c with
+      | chunk_user p ts => chunk_user p <$> traverse_env (eval_term_evar δ) ts
+      | chunk_ptsreg r t => chunk_ptsreg r <$> eval_term_evar δ t
+      end.
+
+    Equations(noeqns) match_chunk (ce : Chunk Σe) (cr : Chunk Σr) :
+      EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
+      match_chunk (chunk_user p1 ts1) (chunk_user p2 ts2)
+      with eq_dec p1 p2 => {
+        match_chunk (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := match_env ts1 ts2;
+        match_chunk (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := fun _ => None
+      };
+      match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
+      with eq_dec_het r1 r2 => {
+        match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left eq_refl) := match_term t1 t2;
+        match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := fun _ => None
+      };
+      match_chunk _ _  := fun _ => None.
+
+    Definition extract_chunk (ce : Chunk Σe) (h : SHeap Σr) (L : EvarEnv Σe Σr) :
+      List (Pair (EvarEnv Σe) SHeap) Σr :=
+      omap
+        (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk ce cr L))
+        (heap_extractions h).
+
+  End WithEvarEnv.
 
 End Assertions.
 

@@ -1217,65 +1217,16 @@ Module Terms (Export termkit : TermKit).
         now rewrite lookup_sub_wk1.
     Qed.
 
+    Lemma subst_sub_id_right {Σ1 Σ2} (ζ : Sub Σ1 Σ2) :
+      subst ζ (sub_id _) = ζ.
+    Proof. exact (sub_comp_id_left ζ). Qed.
+
+    Lemma sub_comp_cat_right {Σ1 Σ2 Σ} (ζ1 : Sub Σ1 Σ) (ζ2 : Sub Σ2 Σ) :
+      sub_comp (sub_cat_right Σ2) (ζ1 ►► ζ2) = ζ2.
+    Proof.
+    Admitted.
+
   End SymbolicSubstitutions.
-
-  Section FunWithBoxes.
-
-    Definition CType : Type := LCtx -> Type.
-    Definition Valid (A : CType) : Type :=
-      forall Σ, A Σ.
-    Definition Impl (A B : CType) : CType :=
-      fun Σ => A Σ -> B Σ.
-    Definition Box (A : CType) : CType :=
-      fun Σ0 => forall Σ1 (ζ01 : Sub Σ0 Σ1), A Σ1.
-
-    Notation "⊢ A" := (Valid A) (at level 90).
-    Notation "A ->> B" := (Impl A B) (at level 80, right associativity).
-    Notation "□ A" := (Box A) (at level 11, format "□ A", right associativity).
-
-    Definition K {A B} :
-      ⊢ □(A ->> B) ->> (□A ->> □B) :=
-      fun Σ0 f a Σ1 ζ01 => f Σ1 ζ01 (a Σ1 ζ01).
-    Definition T {A} :
-      ⊢ □A ->> A :=
-      fun Σ0 a => a Σ0 (sub_id Σ0).
-    Definition four {A} :
-      ⊢ □A ->> □□A :=
-      fun Σ0 a Σ1 ζ01 Σ2 ζ12 => a Σ2 (sub_comp ζ01 ζ12).
-
-    Definition valid_box {A} :
-      (⊢ A) -> (⊢ □A) :=
-      fun a Σ0 Σ1 ζ01 => a Σ1.
-
-    Definition persistent (A : CType) : Type :=
-      ⊢ A ->> □A.
-
-  End FunWithBoxes.
-
-  Section MultiSubs.
-
-    Inductive MultiSub (Σ : LCtx) : LCtx -> Set :=
-    | multisub_id        : MultiSub Σ Σ
-    | multisub_cons {Σ' x σ} (xIn : (x::σ) ∈ Σ) (t : Term (Σ - (x::σ)) σ)
-                    (ζ : MultiSub (Σ - (x::σ)) Σ')
-                    : MultiSub Σ Σ'.
-
-    Global Arguments multisub_id {_}.
-    Global Arguments multisub_cons {_ _} x {_ _} t ζ.
-
-    Fixpoint sub_multi {Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : Sub Σ1 Σ2 :=
-      match ζ with
-      | multisub_id         => sub_id _
-      | multisub_cons x t ζ => sub_comp (sub_single _ t) (sub_multi ζ)
-      end.
-
-    Fixpoint sub_multishift {Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : Sub Σ2 Σ1 :=
-      match ζ with
-      | multisub_id         => sub_id _
-      | multisub_cons x t ζ => sub_comp (sub_multishift ζ) (sub_shift _)
-      end.
-
-  End MultiSubs.
 
   Section OccursCheck.
 
@@ -1421,8 +1372,16 @@ Module Terms (Export termkit : TermKit).
         + solve. f_equal; auto.
         + solve. f_equal. auto.
         + solve. f_equal. auto.
-        + solve. f_equal. admit.
-        (* + solve. f_equal. auto. *)
+        + solve. f_equal.
+          change (es = subst (sub_shift xIn) H1).
+          induction es; destruct X; cbn.
+          * destruct (nilView H1). reflexivity.
+          * destruct (snocView H1).
+            change (es ► (b ↦ db) = subst (sub_shift xIn) E ► (b ↦ subst (sub_shift xIn) v)).
+            f_equal. apply IHes; auto. clear - H.
+            admit.
+            apply e0. clear - H.
+            admit.
     Admitted.
 
     Global Instance OccursCheckLawsList {T : LCtx -> Type} `{OccursCheckLaws T} :
@@ -1605,6 +1564,14 @@ Module Terms (Export termkit : TermKit).
       inst ι (sub_snoc ζ (ς,τ) t) = env_snoc (inst ι ζ) (ς,τ) (inst ι t).
     Proof. reflexivity. Qed.
 
+    Lemma inst_sub_shift {Σ} (ι : SymInstance Σ) {b} (bIn : b ∈ Σ) :
+      inst ι (sub_shift bIn) = env_remove' b ι bIn.
+    Proof.
+      unfold env_remove', sub_shift, inst; cbn.
+      apply env_lookup_extensional. intros [y τ] yIn.
+      now rewrite env_lookup_map, ?env_lookup_tabulate.
+    Qed.
+
     Lemma inst_sub_single {Σ} (ι : SymInstance Σ) {x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
       inst (env_remove' _ ι xIn) t = env_lookup ι xIn ->
       inst (env_remove' _ ι xIn) (sub_single xIn t) = ι.
@@ -1623,10 +1590,66 @@ Module Terms (Export termkit : TermKit).
       inst ι (env_lookup ζ xIn) = env_lookup (inst (A := SymInstance Σ0) ι ζ) xIn.
     Proof. cbn. now rewrite env_lookup_map. Qed.
 
+    Lemma inst_record_pattern_match {Δ__R : NCtx 𝑹𝑭 Ty} {Σ Δ : LCtx}
+      (ι : SymInstance Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ__R) :
+      inst ι (record_pattern_match p ts) = record_pattern_match p (inst ι ts).
+    Proof.
+      unfold inst at 1; cbn.
+      induction p; cbn.
+      - reflexivity.
+      - destruct (snocView ts); cbn.
+        f_equal. apply IHp.
+    Qed.
+
     Global Arguments inst {T A _ Σ} ι !_.
     Global Arguments lift {T A _ Σ} !_.
 
   End Instantiation.
+
+  Section MultiSubs.
+
+    Inductive MultiSub (Σ : LCtx) : LCtx -> Set :=
+    | multisub_id        : MultiSub Σ Σ
+    | multisub_cons {Σ' x σ} (xIn : (x::σ) ∈ Σ) (t : Term (Σ - (x::σ)) σ)
+                    (ζ : MultiSub (Σ - (x::σ)) Σ')
+                    : MultiSub Σ Σ'.
+
+    Global Arguments multisub_id {_}.
+    Global Arguments multisub_cons {_ _} x {_ _} t ζ.
+
+    Fixpoint sub_multi {Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : Sub Σ1 Σ2 :=
+      match ζ with
+      | multisub_id         => sub_id _
+      | multisub_cons x t ζ => sub_comp (sub_single _ t) (sub_multi ζ)
+      end.
+
+    Fixpoint sub_multishift {Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : Sub Σ2 Σ1 :=
+      match ζ with
+      | multisub_id         => sub_id _
+      | multisub_cons x t ζ => sub_comp (sub_multishift ζ) (sub_shift _)
+      end.
+
+    Fixpoint inst_multisub {Σ0 Σ1} (ι : SymInstance Σ0) (ζ : MultiSub Σ0 Σ1) : Prop :=
+      match ζ with
+      | multisub_id => True
+      | @multisub_cons _ Σ' x σ xIn t ζ0 =>
+        let ι' := env_remove' (x :: σ) ι xIn in
+        env_lookup ι xIn = inst ι' t /\ inst_multisub ι' ζ0
+      end.
+
+    Lemma inst_multi {Σ1 Σ2} (ι1 : SymInstance Σ1) (ζ : MultiSub Σ1 Σ2) :
+      inst_multisub ι1 ζ ->
+      inst (inst ι1 (sub_multishift ζ)) (sub_multi ζ) = ι1.
+    Proof.
+      intros Hζ. induction ζ; cbn.
+      - now rewrite ?inst_sub_id.
+      - cbn in Hζ. destruct Hζ as [? Hζ]. rewrite <- inst_sub_shift in Hζ.
+        unfold sub_comp. rewrite ?inst_subst.
+        rewrite IHζ; auto. rewrite inst_sub_shift.
+        now rewrite inst_sub_single.
+    Qed.
+
+  End MultiSubs.
 
   Section Utils.
 
@@ -1797,19 +1820,211 @@ Module Terms (Export termkit : TermKit).
 
   End SymbolicPair.
 
-  Section SymbolicLocalStore.
+  Section SymbolicUnit.
 
-    Definition SymbolicLocalStore (Γ : PCtx) (Σ : LCtx) : Type :=
+    Definition Unit : LCtx -> Type := fun _ => unit.
+    Global Instance SubstUnit : Subst Unit :=
+      fun _ _ _ t => t.
+    Global Instance SubstLawsUnit : SubstLaws Unit.
+    Proof. constructor; reflexivity. Qed.
+    Global Instance InstUnit : Inst Unit unit :=
+      @Build_Inst Unit unit (fun _ _ x => x) (fun _ x  => x).
+    Global Instance InstLawsUnit : InstLaws Unit unit.
+    Proof. constructor; reflexivity. Qed.
+    Global Instance OccursCheckUnit : OccursCheck Unit :=
+      fun _ _ _ _ => Some tt.
+    Global Instance OccursCheckLawsUnit : OccursCheckLaws Unit.
+    Proof.
+      constructor; cbn.
+      - destruct t; reflexivity.
+      - destruct t, t'; reflexivity.
+    Qed.
+
+  End SymbolicUnit.
+
+  Section SymbolicStore.
+
+    Definition SStore (Γ : PCtx) (Σ : LCtx) : Type :=
       NamedEnv (Term Σ) Γ.
 
-    Global Program Instance inst_localstore {Γ} : Inst (SymbolicLocalStore Γ) (LocalStore Γ) :=
+    Global Instance subst_localstore {Γ} : Subst (SStore Γ) :=
+      SubstEnv.
+    Global Instance substlaws_localstore {Γ} : SubstLaws (SStore Γ) :=
+      SubstLawsEnv.
+    Global Program Instance inst_localstore {Γ} : Inst (SStore Γ) (LocalStore Γ) :=
       instantiate_env.
 
-    Global Instance instlaws_localstore {Γ} : InstLaws (SymbolicLocalStore Γ) (LocalStore Γ).
+    Global Instance instlaws_localstore {Γ} : InstLaws (SStore Γ) (LocalStore Γ).
     Proof. apply instantiatelaws_env. Qed.
 
-  End SymbolicLocalStore.
-  Bind Scope env_scope with SymbolicLocalStore.
+    Lemma subst_lookup {Γ Σ Σ' x σ} (xInΓ : (x ∶ σ)%ctx ∈ Γ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :
+      (subst ζ (δ ‼ x)%exp = (subst ζ δ ‼ x)%exp).
+    Proof.
+      unfold subst at 2, subst_localstore, SubstEnv.
+      now rewrite env_lookup_map.
+    Qed.
+
+  End SymbolicStore.
+  Bind Scope env_scope with SStore.
+
+  Definition seval_exp {Γ Σ} (δ : SStore Γ Σ) :
+    forall {σ} (e : Exp Γ σ), Term Σ σ :=
+    fix seval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
+      match e with
+      | exp_var ς                => δ ‼ ς
+      | exp_lit σ l              => term_lit σ l
+      | exp_binop op e1 e2       => term_binop op (seval_exp e1) (seval_exp e2)
+      | exp_neg e                => term_neg (seval_exp e)
+      | exp_not e                => term_not (seval_exp e)
+      | exp_inl e                => term_inl (seval_exp e)
+      | exp_inr e                => term_inr (seval_exp e)
+      | exp_list es              => term_list (List.map seval_exp es)
+      | exp_bvec es              => term_bvec (Vector.map seval_exp es)
+      | exp_tuple es             => term_tuple (env_map (@seval_exp) es)
+      | @exp_projtup _ _ e n _ p => term_projtup (seval_exp e) n (p := p)
+      | exp_union E K e          => term_union E K (seval_exp e)
+      | exp_record R es          => term_record R (env_map (fun _ => seval_exp) es)
+      (* | exp_projrec e rf         => term_projrec (seval_exp e) rf *)
+      end%exp.
+
+  Lemma eval_exp_inst {Γ Σ τ} (ι : SymInstance Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
+    eval e (inst ι δΓΣ) = inst ι (seval_exp δΓΣ e).
+  Proof.
+    induction e; cbn; repeat f_equal; auto.
+    { unfold inst; cbn. now rewrite env_lookup_map. }
+    2: {
+      induction es as [|eb n es IHes]; cbn in *.
+      { reflexivity. }
+      { destruct X as [-> Heqs].
+        change (inst_term ?ι ?t) with (inst ι t).
+        destruct (inst ι (seval_exp δΓΣ eb));
+          cbn; f_equal; auto.
+      }
+    }
+    all: induction es; cbn in *; destruct_conjs; f_equal; auto.
+  Qed.
+
+  Lemma subst_seval {Γ τ Σ Σ'} (e : Exp Γ τ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :
+    subst (T := fun Σ => Term Σ _) ζ (seval_exp δ e) = seval_exp (subst ζ δ) e.
+  Proof.
+    induction e; cbn; f_equal; auto.
+    { now rewrite (subst_lookup xInΓ). }
+    all: induction es; cbn in *; destruct_conjs; f_equal; auto.
+  Qed.
+
+  Definition EvarEnv (Σe Σr : LCtx) : Type := Env (fun b => option (Term Σr (snd b))) Σe.
+
+  Global Instance SubstEvarEnv {Σe} : Subst (EvarEnv Σe) :=
+    fun Σ1 Σ2 ζ => env_map (fun _ => option_map (subst ζ)).
+
+  Definition create_evarenv (Σe Σr : LCtx) : EvarEnv Σe Σr :=
+    env_tabulate (fun _ _ => None).
+  Definition create_evarenv_id (Σ : LCtx) : EvarEnv Σ Σ :=
+    env_tabulate (fun '(x::σ) xIn => Some (term_var x)).
+
+  Record EvarError (Σe Σr : LCtx) (D : Type) : Type :=
+    { evarerror_env  : EvarEnv Σe Σr;
+      evarerror_data : D;
+    }.
+
+  Section WithEvarEnv.
+
+    Import stdpp.base.
+
+    Context {Σe Σr} (δ : EvarEnv Σe Σr).
+
+    Infix ">=>" := option_comp (at level 80, right associativity).
+
+    Fixpoint eval_term_evar {σ : Ty} (t : Term Σe σ) {struct t} : option (Term Σr σ) :=
+      match t in Term _ σ return option (Term Σr σ) with
+      | @term_var _ x _      => δ ‼ x
+      | term_lit _ l         => Some (term_lit _ l)
+      | term_binop op t1 t2  => t1 ← eval_term_evar t1 ;
+                                t2 ← eval_term_evar t2 ;
+                                Some (term_binop op t1 t2)
+      | term_neg t           => term_neg <$> eval_term_evar t
+      | term_not t           => term_not <$> eval_term_evar t
+      | term_inl t           => term_inl <$> eval_term_evar t
+      | term_inr t           => term_inr <$> eval_term_evar t
+      | @term_projtup _ _ t n _ p     => (fun t => term_projtup t n (p:=p)) <$> eval_term_evar t
+      | term_union U K t     => term_union U K <$> eval_term_evar t
+      | term_record R ts     => term_record R <$> traverse_env (fun b => @eval_term_evar (snd b)) ts
+      (* | term_projrec t rf    => (fun t => term_projrec t rf) <$> eval_term_evar t *)
+      end%exp.
+    Global Arguments eval_term_evar [σ] t.
+
+    Section WithMatchTerm.
+
+      Variable match_term : forall {σ}, Term Σe σ -> Term Σr σ -> EvarEnv Σe Σr -> option (EvarEnv Σe Σr).
+
+      Equations(noeqns) match_env' {σs} (te : Env (Term Σe) σs) (tr : Env (Term Σr) σs) :
+        EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
+        match_env' env_nil env_nil := Some;
+        match_env' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_env' E1 E2 >=> match_term t1 t2.
+
+      Equations(noeqns) match_nenv' {N : Set} {Δ : NCtx N Ty} (te : NamedEnv (Term Σe) Δ) (tr : NamedEnv (Term Σr) Δ) :
+        EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
+        match_nenv' env_nil env_nil := Some;
+        match_nenv' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_nenv' E1 E2 >=> match_term t1 t2.
+
+    End WithMatchTerm.
+
+    (* The match_term function tries to match the term te from the callee
+       contract against a term tr from the caller environment. NOTE(!): This
+       function tries not to do anything intelligent with constructs that have
+       non-trivial equalities (like plus, projections, ..). It is therefore
+       necessarily incomplete. Potentially it can later be replaced by something
+       that simply assumes the equality and checks if this is still consistent
+       with the path condition.
+     *)
+    Equations(noeqns) match_term {σ} (te : Term Σe σ) (tr : Term Σr σ) :
+      EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
+      match_term (@term_var ς σ ςInΣe) tr :=
+        fun L =>
+          match (L ‼ ς)%exp with
+          (* There's already a binding for ς in the evar environment. Make sure
+             it corresponds to the term tr. *)
+          | Some tr' => if Term_eqb tr' tr then Some L else None
+          (* There's no binding for ς in the evar environment. Create a new one by
+             inserting tr. *)
+          | None     => Some (L ⟪ ς ↦ Some tr ⟫)%env
+          end;
+      match_term (term_lit ?(σ) l1) (term_lit σ l2) :=
+        if Lit_eqb σ l1 l2 then Some else fun _ => None;
+      match_term (term_inl t1) (term_inl t2) := match_term t1 t2;
+      match_term (term_inl t1) (term_lit (inl l2)) := match_term t1 (term_lit _ l2);
+      match_term (term_inr t1) (term_inr t2) := match_term t1 t2;
+      match_term (term_inr t1) (term_lit (inr l2)) := match_term t1 (term_lit _ l2);
+      match_term (term_record _ ts1) (term_record _ ts2) := match_nenv' (@match_term) ts1 ts2;
+      (* Obviously more matchings can be added here. *)
+      match_term _ _ := fun _ => None.
+
+    Definition match_env := @match_env' (@match_term).
+    Definition match_nenv := @match_nenv' (@match_term).
+
+    Definition evarenv_to_option_sub : option (Sub Σe Σr) :=
+      traverse_env (M := option) (fun b mt => mt) δ.
+
+    Lemma eval_term_evar_refines_sub_term (ζ : Sub Σe Σr) :
+      evarenv_to_option_sub = Some ζ ->
+      forall σ (t : Term _ σ), eval_term_evar t = Some (sub_term ζ t).
+    Proof.
+      intros hyp.
+      induction t; cbn in *.
+      - admit.
+      - reflexivity.
+      - rewrite IHt1, IHt2; reflexivity.
+      - rewrite IHt; reflexivity.
+      - rewrite IHt; reflexivity.
+      - rewrite IHt; reflexivity.
+      - rewrite IHt; reflexivity.
+      - rewrite IHt; reflexivity.
+      - rewrite IHt; reflexivity.
+      - admit.
+      (* - rewrite IHt; reflexivity. *)
+    Admitted.
+
+  End WithEvarEnv.
 
   Section Contracts.
 

@@ -726,7 +726,7 @@ Local Ltac solve :=
        | |- _ /\ _ => constructor
        | |- VerificationCondition _ =>
          constructor;
-         cbv [sout_safe env_remove env_lookup inctx_case_snoc eval_binop is_true
+         cbv [spath_safe env_remove env_lookup inctx_case_snoc eval_binop is_true
               inst instantiate_term instantiate_formula inst_term inst_formula];
          cbn
        | |- Obligation _ _ _ => constructor; cbn

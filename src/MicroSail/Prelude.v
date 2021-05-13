@@ -231,6 +231,11 @@ Definition option_ap {A B : Type} (f : option (A -> B)) (a : option A) : option 
   | None => None
   end.
 
+Definition option_bind {A B : Type} (f : A -> option B) (a : option A) : option B :=
+  base.mbind f a.
+Definition option_comp {A B C : Type} (f : A -> option B) (g : B -> option C) :=
+  fun a => option_bind g (f a).
+
 Lemma optionspec_map {A B : Type} (S : B -> Prop) (N : Prop)
       (f : A -> B) (o : option A) :
   OptionSpec S N (option_map f o) <->
@@ -262,3 +267,15 @@ Fixpoint heap_extractions {C} (h : list C) : list (C * list C) :=
   | nil      => []
   | cons c h => cons (pair c h) (map (fun '(pair c' h') => (pair c' (cons c h'))) (heap_extractions h))
   end.
+
+Lemma heap_extractions_map {A B} (f : A -> B) (h : list A) :
+  heap_extractions (List.map f h) = List.map (base.prod_map f (List.map f)) (heap_extractions h).
+Proof.
+  induction h; cbn.
+  - reflexivity.
+  - f_equal.
+    rewrite IHh.
+    rewrite ?List.map_map.
+    apply List.map_ext.
+    intros [x xs]. reflexivity.
+Qed.

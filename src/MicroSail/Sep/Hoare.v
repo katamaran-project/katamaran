@@ -62,6 +62,7 @@ Module ProgramLogic
 
 
   Open Scope logic.
+  Import LogicNotations.
 
   Section Triples.
 
@@ -74,7 +75,7 @@ Module ProgramLogic
       SepContract Δ σ -> Prop :=
     | rule_sep_contract
         (result : 𝑺)
-        (Σ  : LCtx) (θΔ : SymbolicLocalStore Δ Σ) (ι : SymInstance Σ)
+        (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : SymInstance Σ)
         (req : Assertion Σ) (ens : Assertion (Σ ▻ (result :: σ)))
         (frame : L) :
         δΔ = inst ι θΔ ->

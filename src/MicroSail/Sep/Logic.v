@@ -29,20 +29,25 @@ Arguments lfalse : simpl never.
 
 Delimit Scope logic with logic.
 Local Open Scope logic.
-Notation "P '⊢' Q" := (lentails P Q) (at level 80, no associativity) : logic_entails.
-Open Scope logic_entails.
-Notation "'∃' x .. y , P " :=
-  (lex (fun x => .. (lex (fun y => P%logic)) ..)) (at level 65, x binder, y binder, right associativity) : logic.
-Notation "'∀' x .. y , P " :=
-  (lall (fun x => .. (lall (fun y => P%logic)) ..)) (at level 65, x binder, y binder, right associativity) : logic.
-Infix "∨" := lor (at level 50, left associativity) : logic.
-Infix "∧" := land (at level 40, left associativity) : logic.
-Notation "P '-->' Q" := (limpl P Q) (at level 55, right associativity) : logic.
-Notation "P '<-->' Q" := (land (limpl P Q) (limpl Q P))
-  (at level 57, no associativity) : logic.
-Notation "'!!' e" := (lprop e) (at level 25) : logic.
-Notation "⊥" := lfalse.
-Notation "⊤" := ltrue.
+
+Module LogicNotations.
+  Notation "P '⊢' Q" := (lentails P Q) (at level 80, no associativity) : logic_entails.
+  Open Scope logic_entails.
+  Notation "'∃' x .. y , P " :=
+    (lex (fun x => .. (lex (fun y => P%logic)) ..)) (at level 65, x binder, y binder, right associativity) : logic.
+  Notation "'∀' x .. y , P " :=
+    (lall (fun x => .. (lall (fun y => P%logic)) ..)) (at level 65, x binder, y binder, right associativity) : logic.
+  Infix "∨" := lor (at level 50, left associativity) : logic.
+  Infix "∧" := land (at level 40, left associativity) : logic.
+  Notation "P '-->' Q" := (limpl P Q) (at level 55, right associativity) : logic.
+  Notation "P '<-->' Q" := (land (limpl P Q) (limpl Q P))
+    (at level 57, no associativity) : logic.
+  Notation "'!!' e" := (lprop e) (at level 25) : logic.
+  Notation "⊥" := lfalse.
+  Notation "⊤" := ltrue.
+End LogicNotations.
+
+Import LogicNotations.
 
 Class ILogicLaws (L : Type) (LL : ILogic L) :=
 { entails_refl  : forall P, P ⊢ P;

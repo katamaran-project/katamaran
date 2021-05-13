@@ -338,6 +338,27 @@ Section WithBinding.
         + cbn. f_equal. apply IHE.
     Qed.
 
+    Section Inversions.
+
+      Lemma inversion_eq_env_snoc {Γ : Ctx B} {b : B} (E1 E2 : Env Γ) (v1 v2 : D b) :
+        env_snoc E1 v1 = env_snoc E2 v2 ->
+        E1 = E2 /\ v1 = v2.
+      Proof. intros H. now dependent elimination H. Qed.
+
+      Lemma inversion_eq_env_cat {Γ Δ : Ctx B} (EΓ1 EΓ2 : Env Γ) (EΔ1 EΔ2 : Env Δ) :
+        env_cat EΓ1 EΔ1 = env_cat EΓ2 EΔ2 ->
+        EΓ1 = EΓ2 /\ EΔ1 = EΔ2.
+      Proof.
+        induction EΔ1; cbn.
+        - destruct (nilView EΔ2); cbn. intuition.
+        - destruct (snocView EΔ2); cbn. intros H.
+          apply inversion_eq_env_snoc in H. destruct H as [H1 H2].
+          apply IHEΔ1 in H1. destruct H1. split; auto.
+          now f_equal.
+      Qed.
+
+    End Inversions.
+
   End WithDom.
 
   Arguments Env : clear implicits.
