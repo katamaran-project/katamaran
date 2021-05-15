@@ -569,36 +569,77 @@ Module Terms (Export termkit : TermKit).
 
   Section PatternMatching.
 
-    Fixpoint tuple_pattern_match {N : Set} {σs : Ctx Ty} {Δ : NCtx N Ty}
+    Definition tuple_pattern_match_env {N : Set} {T : Ty -> Set} :
+      forall {σs : Ctx Ty} {Δ : NCtx N Ty},
+        TuplePat σs Δ -> Env T σs -> NamedEnv T Δ :=
+      fix pattern_match {σs} {Δ} p {struct p} :=
+        match p with
+        | tuplepat_nil => fun _ => env_nil
+        | tuplepat_snoc p x =>
+          fun EΔ =>
+            match snocView EΔ with
+            | isSnoc E v => pattern_match p E ► (_ :: _ ↦ v)
+            end
+        end.
+
+    Definition tuple_pattern_match_env_reverse {N : Set} {T : Ty -> Set} :
+      forall {σs : Ctx Ty} {Δ : NCtx N Ty},
+        TuplePat σs Δ -> NamedEnv T Δ -> Env T σs :=
+      fix pattern_match {σs} {Δ} p {struct p} :=
+        match p with
+        | tuplepat_nil => fun _ => env_nil
+        | tuplepat_snoc p x =>
+          fun EΔ =>
+            match snocView EΔ with
+            | isSnoc E v => pattern_match p E ► (_ ↦ v)
+            end
+        end.
+
+    Fixpoint tuple_pattern_match_lit {N : Set} {σs : Ctx Ty} {Δ : NCtx N Ty}
              (p : TuplePat σs Δ) {struct p} : Lit (ty_tuple σs) -> NamedEnv Lit Δ :=
       match p with
       | tuplepat_nil => fun _ => env_nil
       | tuplepat_snoc p x =>
         fun lit =>
           env_snoc
-            (tuple_pattern_match p (fst lit)) (x∶_)%ctx
+            (tuple_pattern_match_lit p (fst lit)) (x∶_)%ctx
             (snd lit)
       end.
 
-    Fixpoint record_pattern_match {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+    Fixpoint record_pattern_match_env {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
              (p : RecordPat rfs Δ) {struct p} : NamedEnv V rfs -> NamedEnv V Δ :=
       match p with
       | recordpat_nil => fun _ => env_nil
       | recordpat_snoc p rf x =>
         fun E =>
           env_snoc
-            (record_pattern_match p (env_tail E)) (x∶_)
+            (record_pattern_match_env p (env_tail E)) (x∶_)
             (env_lookup E inctx_zero)
       end.
 
-    Definition pattern_match {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
+    Fixpoint record_pattern_match_env_reverse {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+             (p : RecordPat rfs Δ) {struct p} :  NamedEnv V Δ -> NamedEnv V rfs :=
+      match p with
+      | recordpat_nil => fun _ => env_nil
+      | recordpat_snoc p rf x =>
+        fun E =>
+          env_snoc
+            (record_pattern_match_env_reverse p (env_tail E)) (rf∶_)
+            (env_lookup E inctx_zero)
+      end.
+
+    Definition record_pattern_match_lit {N : Set} {R} {Δ : NCtx N Ty}
+      (p : RecordPat (𝑹𝑭_Ty R) Δ) : Lit (ty_record R) -> NamedEnv Lit Δ :=
+      fun v => record_pattern_match_env p (𝑹_unfold v).
+
+    Definition pattern_match_lit {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
       Lit σ -> NamedEnv Lit Δ :=
       match p with
       | pat_var x => fun v => env_snoc env_nil (x∶_) v
       | pat_unit => fun _ => env_nil
       | pat_pair x y => fun '(u , v) => env_snoc (env_snoc env_nil (x∶_) u) (y∶_) v
-      | pat_tuple p => tuple_pattern_match p
-      | pat_record p => fun r => record_pattern_match p (𝑹_unfold r)
+      | pat_tuple p => tuple_pattern_match_lit p
+      | pat_record p => record_pattern_match_lit p
       end.
 
   End PatternMatching.
@@ -1592,7 +1633,7 @@ Module Terms (Export termkit : TermKit).
 
     Lemma inst_record_pattern_match {Δ__R : NCtx 𝑹𝑭 Ty} {Σ Δ : LCtx}
       (ι : SymInstance Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ__R) :
-      inst ι (record_pattern_match p ts) = record_pattern_match p (inst ι ts).
+      inst ι (record_pattern_match_env p ts) = record_pattern_match_env p (inst ι ts).
     Proof.
       unfold inst at 1; cbn.
       induction p; cbn.
@@ -1756,11 +1797,23 @@ Module Terms (Export termkit : TermKit).
       intros ι. now rewrite inst_lift, 𝑹_fold_unfold.
     Qed.
 
-    (* Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty_tuple σs)) : *)
-    (*   option (Env (Term Σ) σs) := *)
-    (*   term_get_tuple (term_lit _ v)       := Some _; *)
-    (*   term_get_tuple (@term_tuple _ _ ts) := Some ts; *)
-    (*   term_get_tuple _ := None. *)
+    Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty_tuple σs)) :
+      option (Env (Term Σ) σs) :=
+      (* term_get_tuple (term_lit _ v)       := Some _; *)
+      (* term_get_tuple (@term_tuple _ _ ts) := Some ts; *)
+      term_get_tuple _ := None.
+
+    Lemma term_get_tuple_spec {Σ σs} (s : Term Σ (ty_tuple σs)) :
+      OptionSpec
+        (fun ts =>
+           forall ι : SymInstance Σ,
+             inst (T := fun Σ => Term Σ (ty_tuple σs)) (A := Lit (ty_tuple σs)) ι s =
+             inst ι (term_tuple ts))
+        True
+        (term_get_tuple s).
+    Proof.
+      now constructor.
+    Qed.
 
   End Utils.
 

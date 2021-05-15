@@ -1216,9 +1216,17 @@ Module Mutators
         let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
         spath_demonicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 δ1) (subst sub_wk1 h1)).
     Global Arguments smut_demonicv {_ _ _ _} _ _ _.
-    Definition smut_demonic_termvar {Γ Σ σ} (x : 𝑺) : SMut Γ Γ (fun Σ => Term Σ σ) Σ :=
-      smut_demonicv x σ (smut_pure (@term_var _ _ _ inctx_zero)).
-    Global Arguments smut_demonic_termvar {_ _ _} _.
+    Definition smut_demonic_termvar {Γ Σ} (x : option 𝑺) σ : SMut Γ Γ (fun Σ => Term Σ σ) Σ :=
+      fun Σ1 ζ1 pc1 δ1 h1 =>
+        let y := fresh Σ1 x in
+        spath_demonicv (y :: σ)
+          (spath_pure
+             {|
+               smutres_value := @term_var _ y σ inctx_zero;
+               smutres_store := subst sub_wk1 δ1;
+               smutres_heap := subst sub_wk1 h1;
+             |}).
+    Global Arguments smut_demonic_termvar {_ _} x σ.
 
     Definition smut_debug {AT DT D} `{Subst DT, Inst DT D, OccursCheck DT} {Σ0 Γ1 Γ2}
       (d : forall Σ1, Sub Σ0 Σ1 -> PathCondition Σ1 -> SStore Γ1 Σ1 -> SHeap Σ1 -> DT Σ1)
@@ -1286,61 +1294,15 @@ Module Mutators
   Definition smut_eval_exps {Γ Σ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : SMut Γ Γ (SStore σs) Σ :=
     smut_state (fun _ ζ δ h => MkSMutResult (env_map (fun _ => seval_exp δ) es) δ h).
 
-  Fixpoint smut_demonic_freshen_tuplepat' {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
-    SMut Γ Γ (fun Σ => Env (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
-    match p with
-    | tuplepat_nil =>
-      smut_pure (env_nil, env_nil)
-    | tuplepat_snoc p x =>
-      smut_fmap2
-        (smut_demonic_freshen_tuplepat' p)
-        (smut_demonic_termvar (𝑿to𝑺 x))
-        (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs _ t__x, env_snoc ts__Δ (x,_) t__x))
-    end.
-
-  Definition smut_demonic_freshen_tuplepat {σs Δ} (p : TuplePat σs Δ) {Γ Σ} :
-    SMut Γ Γ (fun Σ => Term Σ (ty_tuple σs) * NamedEnv (Term Σ) Δ)%type Σ :=
-    smut_fmap
-      (smut_demonic_freshen_tuplepat' p)
-      (fun _ _ '(t__σs, t__Δ) => (term_tuple t__σs, t__Δ)).
-
-  Fixpoint smut_demonic_freshen_recordpat' {N : Set} (inj__N : N -> 𝑺) {σs} {Δ : NCtx N Ty} (p : RecordPat σs Δ) {Γ Σ} :
-    SMut Γ Γ (fun Σ => NamedEnv (Term Σ) σs * NamedEnv (Term Σ) Δ)%type Σ :=
-    match p with
-    | recordpat_nil =>
-      smut_pure (env_nil, env_nil)
-    | recordpat_snoc p rf x =>
-      smut_fmap2
-        (smut_demonic_freshen_recordpat' inj__N p)
-        (smut_demonic_termvar (inj__N x))
-        (fun _ _ '(ts__σs, ts__Δ) t__x => (env_snoc ts__σs (rf::_) t__x, env_snoc ts__Δ (x::_) t__x))
-    end.
-
-  Definition smut_demonic_freshen_recordpat {N : Set} (inj__N : N -> 𝑺) {R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) {Γ Σ} :
-    SMut Γ Γ (fun Σ => Term Σ (ty_record R) * NamedEnv (Term Σ) Δ)%type Σ :=
-    smut_fmap
-      (smut_demonic_freshen_recordpat' inj__N p)
-      (fun _ _ '(t__σs, t__Δ) => (term_record R t__σs, t__Δ)).
-
-  Definition smut_demonic_freshen_pattern {Γ Σ Δ σ} (p : Pattern Δ σ) :
-    SMut Γ Γ (fun Σ => Term Σ σ * NamedEnv (Term Σ) Δ)%type Σ :=
-    match p with
-    | pat_var x =>
-      smut_fmap
-        (smut_demonic_termvar (𝑿to𝑺 x))
-        (fun _ _ t => (t,[t]%arg))
-    | pat_unit =>
-      smut_pure (term_lit ty_unit tt,env_nil)
-    | pat_pair x y =>
-      smut_fmap2
-        (smut_demonic_termvar (𝑿to𝑺 x))
-        (smut_demonic_termvar (𝑿to𝑺 y))
-        (fun _ _ t__x t__y => (term_binop binop_pair t__x t__y, [t__x,t__y]%arg))
-    | pat_tuple p =>
-      smut_demonic_freshen_tuplepat p
-    | pat_record p =>
-      smut_demonic_freshen_recordpat 𝑿to𝑺 p
-    end.
+  Fixpoint smut_demonic_freshen_ctx {N : Set} {Γ Σ0} (n : N -> 𝑺) (Δ : NCtx N Ty) :
+    SMut Γ Γ (fun Σ => NamedEnv (Term Σ) Δ) Σ0 :=
+   match Δ  with
+   | ε            => smut_pure env_nil
+   | Δ ▻ (x :: σ) =>
+       smut_demonic_freshen_ctx n Δ        >>= fun _ _ δΔ =>
+       smut_demonic_termvar (Some (n x)) σ >>= fun _ ζ12 t =>
+       smut_pure (subst ζ12 δΔ ► (x :: σ ↦ t))
+   end.
 
   (* Add the provided formula to the path condition. *)
   Definition smut_assume_formula {Γ Σ} (fml : Formula Σ) : SMut Γ Γ Unit Σ :=
@@ -1427,28 +1389,30 @@ Module Mutators
                   (fun k => smut_assume_formula (formula_eq t' (term_enum E k));; smut_sub ζ01 (d k)) _ (sub_id Σ1)
       end.
 
-  Definition smut_demonic_match_sum {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (t : Term Σ (ty_sum σ τ))
-    (dinl : SMut Γ1 Γ2 AT (Σ ▻ (x :: σ)))
-    (dinr : SMut Γ1 Γ2 AT (Σ ▻ (y :: τ))) :
-    SMut Γ1 Γ2 AT Σ :=
+  Definition smut_demonic_match_sum' {AT Γ1 Γ2 Σ0} (x y : 𝑺) {σ τ} (t : Term Σ0 (ty_sum σ τ))
+    (dinl : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 σ -> SMut Γ1 Γ2 AT Σ1)
+    (dinr : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 τ -> SMut Γ1 Γ2 AT Σ1) :
+    SMut Γ1 Γ2 AT Σ0 :=
+    smut_demonic_binary
+      (smut_demonic_termvar (Some x) σ >>= fun _ ζ12 tσ =>
+       smut_assume_formula
+         (formula_eq (subst (T := fun Σ => Term Σ _) ζ12 t) (term_inl tσ)) ;;
+          dinl _ ζ12 tσ)
+      (smut_demonic_termvar (Some y) τ >>= fun _ ζ12 tτ =>
+       smut_assume_formula
+         (formula_eq (subst (T := fun Σ => Term Σ _) ζ12 t) (term_inr tτ)) ;;
+          dinr _ ζ12 tτ).
+
+  Definition smut_demonic_match_sum {AT Γ1 Γ2 Σ0} (x y : 𝑺) {σ τ} (t : Term Σ0 (ty_sum σ τ))
+    (dinl : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 σ -> SMut Γ1 Γ2 AT Σ1)
+    (dinr : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 τ -> SMut Γ1 Γ2 AT Σ1) :
+    SMut Γ1 Γ2 AT Σ0 :=
     fun Σ1 ζ01 =>
-      match term_get_sum (subst (T := fun Σ => Term Σ _) ζ01 t) with
-      | Some (inl tl) => dinl Σ1 (sub_snoc ζ01 (x :: σ) tl)
-      | Some (inr tr) => dinr Σ1 (sub_snoc ζ01 (y :: τ) tr)
-      | None =>
-        smut_demonic_binary
-          (smut_demonicv x σ
-             (smut_assume_formula
-                (formula_eq
-                   (subst (T := fun Σ => Term Σ _) sub_wk1 t)
-                   (@term_inl _ σ τ (@term_var _ _ _ inctx_zero))) ;;
-              dinl))
-          (smut_demonicv y τ
-             (smut_assume_formula
-                (formula_eq
-                   (subst (T := fun Σ => Term Σ _) sub_wk1 t)
-                   (@term_inr _ σ τ (@term_var _ _ _ inctx_zero))) ;;
-              dinr)) ζ01
+      let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
+      match term_get_sum t' with
+      | Some (inl tl) => dinl Σ1 ζ01 tl Σ1 (sub_id _)
+      | Some (inr tr) => dinr Σ1 ζ01 tr Σ1 (sub_id _)
+      | None => smut_demonic_match_sum' x y t' (four dinl ζ01) (four dinr ζ01) (sub_id _)
       end.
 
   Definition smut_demonic_match_pair {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (s : Term Σ (ty_prod σ τ))
@@ -1469,18 +1433,103 @@ Module Mutators
         Σ1 ζ01
     end.
 
-  Definition smut_demonic_match_record {AT R} {Γ1 Γ2 Σ Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Term Σ (ty_record R))
-    (d : SMut Γ1 Γ2 AT (Σ ▻▻ Δ)) : SMut Γ1 Γ2 AT Σ :=
+  Definition smut_demonic_match_record' {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2 Σ0} {Δ : NCtx N Ty}
+    (t : Term Σ0 (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ)
+    (d : forall Σ1, Sub Σ0 Σ1 -> NamedEnv (Term Σ1) Δ -> SMut Γ1 Γ2 AT Σ1) :
+    SMut Γ1 Γ2 AT Σ0 :=
+    smut_demonic_freshen_ctx n Δ >>= fun _ ζ01 ts =>
+    smut_assume_formula
+      (formula_eq
+         (subst ζ01 t)
+         (term_record R (record_pattern_match_env_reverse p ts))) ;;
+    d _ ζ01 ts.
+
+  Definition smut_demonic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2 Σ0} {Δ : NCtx N Ty}
+    (t : Term Σ0 (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ)
+    (d : forall Σ1, Sub Σ0 Σ1 -> NamedEnv (Term Σ1) Δ -> SMut Γ1 Γ2 AT Σ1) :
+    SMut Γ1 Γ2 AT Σ0 :=
     fun Σ1 ζ01 =>
-    match term_get_record (subst (T := fun Σ => Term Σ _) ζ01 t) with
-    | Some ts =>
-      let ζ__R := record_pattern_match p ts in
-      d Σ1 (ζ01 ►► ζ__R)
-    | None =>
-      (smut_demonic_freshen_recordpat id p >>= fun _ ζ '(t__p,ζ__R) =>
-      smut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ t) t__p) ;;
-      smut_sub (ζ ►► ζ__R) d) ζ01
+      let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
+      match term_get_record t' with
+      | Some ts =>
+        let tsΔ := record_pattern_match_env p ts in
+        d Σ1 ζ01 tsΔ Σ1 (sub_id _)
+      | None =>
+        smut_demonic_match_record' n t' p (four d ζ01) (sub_id _)
+      end.
+
+  Definition smut_demonic_match_tuple' {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2 Σ0} {Δ : NCtx N Ty}
+    (t : Term Σ0 (ty_tuple σs)) (p : TuplePat σs Δ)
+    (d : forall Σ1, Sub Σ0 Σ1 -> NamedEnv (Term Σ1) Δ -> SMut Γ1 Γ2 AT Σ1) :
+    SMut Γ1 Γ2 AT Σ0 :=
+    smut_demonic_freshen_ctx n Δ >>= fun _ ζ01 ts =>
+    smut_assume_formula
+      (formula_eq
+         (subst ζ01 t)
+         (term_tuple (tuple_pattern_match_env_reverse p ts))) ;;
+      d _ ζ01 ts.
+
+  Definition smut_demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2 Σ0} {Δ : NCtx N Ty}
+    (t : Term Σ0 (ty_tuple σs)) (p : TuplePat σs Δ)
+    (d : forall Σ1, Sub Σ0 Σ1 -> NamedEnv (Term Σ1) Δ -> SMut Γ1 Γ2 AT Σ1) :
+    SMut Γ1 Γ2 AT Σ0 :=
+    fun Σ1 ζ01 =>
+      let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
+      match term_get_tuple t' with
+      | Some ts =>
+        let tsΔ := tuple_pattern_match_env p ts in
+        d Σ1 ζ01 tsΔ Σ1 (sub_id _)
+      | None => smut_demonic_match_tuple' n t' p (four d ζ01) (sub_id _)
+      end.
+
+  Definition pattern_match_env_reverse {N : Set} {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
+    NamedEnv (Term Σ) Δ -> Term Σ σ :=
+    match p with
+    | pat_var x    => fun Ex => match snocView Ex with isSnoc _ t => t end
+    | pat_unit     => fun _ => term_lit ty_unit tt
+    | pat_pair x y => fun Exy => match snocView Exy with
+                                   isSnoc Ex ty =>
+                                   match snocView Ex with
+                                     isSnoc _ tx => term_binop binop_pair tx ty
+                                   end
+                                 end
+    | pat_tuple p  => fun EΔ => term_tuple (tuple_pattern_match_env_reverse p EΔ)
+    | pat_record p => fun EΔ => term_record _ (record_pattern_match_env_reverse p EΔ)
     end.
+
+  Definition smut_demonic_match_pattern {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 σ Σ0} {Δ : NCtx N Ty}
+    (t : Term Σ0 σ) (p : Pattern Δ σ)
+    (d : forall Σ1, Sub Σ0 Σ1 -> NamedEnv (Term Σ1) Δ -> SMut Γ1 Γ2 AT Σ1) :
+    SMut Γ1 Γ2 AT Σ0 :=
+    smut_demonic_freshen_ctx n Δ >>= fun _ ζ01 ts =>
+    smut_assume_formula
+      (formula_eq
+         (subst ζ01 t)
+         (pattern_match_env_reverse p ts)) ;;
+    d _ ζ01 ts.
+
+  Definition smut_demonic_match_union' {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U Σ0} {Δ : 𝑼𝑲 U -> NCtx N Ty}
+    (t : Term Σ0 (ty_union U)) (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
+    (d : forall (K : 𝑼𝑲 U) Σ1, Sub Σ0 Σ1 -> NamedEnv (Term Σ1) (Δ K) -> SMut Γ1 Γ2 AT Σ1) :
+    SMut Γ1 Γ2 AT Σ0 :=
+    smut_demonic_finite (𝑼𝑲 U)
+      (fun K =>
+         smut_demonic_termvar None (𝑼𝑲_Ty K) >>= fun Σ1 ζ01 t__field =>
+         smut_assume_formula (formula_eq (term_union U K t__field) (subst ζ01 t)) ;;
+         smut_demonic_match_pattern n t__field (p K) (four (d K) ζ01)).
+
+  Definition smut_demonic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U Σ0} {Δ : 𝑼𝑲 U -> NCtx N Ty}
+    (t : Term Σ0 (ty_union U)) (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
+    (d : forall (K : 𝑼𝑲 U) Σ1, Sub Σ0 Σ1 -> NamedEnv (Term Σ1) (Δ K) -> SMut Γ1 Γ2 AT Σ1) :
+    SMut Γ1 Γ2 AT Σ0 :=
+    fun Σ1 ζ01 =>
+      let t' := subst (T := fun Σ => Term Σ _) ζ01 t in
+      match term_get_union t' with
+      | Some (existT K t__field) =>
+        smut_demonic_match_pattern n t__field (p K) (four (d K) ζ01) (sub_id _)
+      | None =>
+        smut_demonic_match_union' n t' p (fun K => four (d K) ζ01) (sub_id _)
+      end.
 
   Fixpoint smut_produce {Γ Σ} (asn : Assertion Σ) : SMut Γ Γ Unit Σ :=
     match asn with
@@ -1491,22 +1540,19 @@ Module Mutators
     | asn_match_enum E t alts =>
       smut_demonic_match_enum t (fun k => smut_produce (alts k))
     | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-      smut_demonic_match_sum s (smut_produce alt_inl) (smut_produce alt_inr)
+      smut_demonic_match_sum xl xr s
+        (fun Σ1 ζ01 t => smut_sub (sub_snoc ζ01 (xl :: _) t) (smut_produce alt_inl))
+        (fun Σ1 ζ01 t => smut_sub (sub_snoc ζ01 (xr :: _) t) (smut_produce alt_inr))
     | asn_match_list s alt_nil xh xt alt_cons =>
       smut_fail "smut_produce" "Not implemented" asn
     | asn_match_pair s xl xr rhs =>
       smut_demonic_match_pair s (smut_produce rhs)
     | asn_match_tuple s p rhs =>
-      smut_fail "smut_produce" "Not implemented" asn
+      smut_demonic_match_tuple id s p (fun Σ1 ζ01 ts => smut_sub (ζ01 ►► ts) (smut_produce rhs))
     | asn_match_record R s p rhs =>
-      smut_demonic_match_record p s (smut_produce rhs)
+      smut_demonic_match_record id s p (fun Σ1 ζ01 ts => smut_sub (ζ01 ►► ts) (smut_produce rhs))
     | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-      match term_get_union s with
-      | Some (existT K ts) =>
-        smut_fail "smut_produce" "Not implemented" asn
-      | None =>
-        smut_fail "smut_produce" "Not implemented" asn
-      end
+      smut_demonic_match_union id s alt__pat (fun K Σ1 ζ01 ts => smut_sub (ζ01 ►► ts) (smut_produce (alt__rhs K)))
     | asn_sep a1 a2   => smut_produce a1 ;; smut_produce a2
     | asn_exist ς τ a => smut_demonicv ς τ (smut_produce a)
     | asn_debug =>
@@ -1528,21 +1574,19 @@ Module Mutators
       smut_demonic_match_bool b (smut_producek asn1 k) (smut_producek asn2 k)
     | asn_match_enum E k0 alts => smut_demonic_match_enum k0 (fun k1 : 𝑬𝑲 E => smut_producek (alts k1) k)
     | asn_match_sum σ τ s xl asn1 xr asn2 =>
-      smut_demonic_match_sum s (smut_producek asn1 (smut_sub sub_wk1 k)) (smut_producek asn2 (smut_sub sub_wk1 k))
+      smut_fail "smut_produce" "Not implemented" asn
     | asn_match_list s alt_nil xh xt alt_cons =>
       smut_fail "smut_produce" "Not implemented" asn
     | asn_match_pair s xl xr asn =>
       smut_demonic_match_pair s (smut_producek asn (smut_sub (sub_cat_left (ε ▻ (xl,_) ▻ (xr,_))) k))
-    | asn_match_tuple s p rhs =>
-      smut_fail "smut_produce" "Not implemented" asn
-    | asn_match_record R s p asn => smut_demonic_match_record p s (smut_producek asn (smut_sub (sub_cat_left _) k))
+    | asn_match_tuple s p asn =>
+      smut_demonic_match_tuple id s p
+        (fun Σ1 ζ01 ts => smut_sub (env_cat ζ01 ts) (smut_producek asn (smut_sub (sub_cat_left _) k)))
+    | asn_match_record R s p asn =>
+      smut_demonic_match_record id s p
+        (fun Σ1 ζ01 ts => smut_sub (env_cat ζ01 ts) (smut_producek asn (smut_sub (sub_cat_left _) k)))
     | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-      match term_get_union s with
-      | Some (existT K ts) =>
-        smut_fail "smut_produce" "Not implemented" asn
-      | None =>
-        smut_fail "smut_produce" "Not implemented" asn
-      end
+      smut_fail "smut_produce" "Not implemented" asn
     | asn_sep asn1 asn2 => smut_producek asn1 (smut_producek asn2 k)
     | asn_exist ς τ asn => smut_demonicv ς τ (smut_producek asn (smut_sub sub_wk1 k))
     | asn_debug =>
@@ -1565,15 +1609,17 @@ Module Mutators
     | asn_match_enum E t alts =>
       smut_demonic_match_enum t (fun k => smut_consume (alts k))
     | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-      smut_demonic_match_sum s (smut_consume alt_inl) (smut_consume alt_inr)
+      smut_demonic_match_sum xl xr s
+        (fun Σ1 ζ01 t => smut_sub (sub_snoc ζ01 (xl :: _) t) (smut_consume alt_inl))
+        (fun Σ1 ζ01 t => smut_sub (sub_snoc ζ01 (xr :: _) t) (smut_consume alt_inr))
     | asn_match_list s alt_nil xh xt alt_cons =>
       smut_fail "smut_consume" "Not implemented" asn
     | asn_match_pair s xl xr rhs =>
       smut_demonic_match_pair s (smut_consume rhs)
     | asn_match_tuple s p rhs =>
-      smut_fail "smut_consume" "Not implemented" asn
+      smut_demonic_match_tuple id s p (fun Σ1 ζ01 ts => smut_sub (ζ01 ►► ts) (smut_consume rhs))
     | asn_match_record R s p rhs =>
-      smut_demonic_match_record p s (smut_consume rhs)
+      smut_demonic_match_record id s p (fun Σ1 ζ01 ts => smut_sub (ζ01 ►► ts) (smut_consume rhs))
     | asn_match_union U s alt__ctx alt__pat alt__rhs =>
       smut_fail  "smut_consume" "Not implemented" asn
     | asn_sep a1 a2   => smut_consume a1 ;; smut_consume a2
@@ -1610,6 +1656,38 @@ Module Mutators
                  (smut_produce ens ;;
                   smut_pure (@term_var _ result _ inctx_zero)))))
     end.
+
+  Definition smut_exec_match_record {AT} `{Subst AT} {R Γ Δ Σ0}
+    (t : Term Σ0 (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ)
+    (d : SMut (Γ ▻▻ Δ) (Γ ▻▻ Δ) AT Σ0) : SMut Γ Γ AT Σ0 :=
+    smut_demonic_match_record 𝑿to𝑺 t p
+      (fun Σ1 ζ01 ts => smut_pushspops ts (smut_sub ζ01 d)).
+
+  Definition smut_exec_match_tuple {AT} `{Subst AT} {σs Γ Δ Σ0}
+    (t : Term Σ0 (ty_tuple σs)) (p : TuplePat σs Δ)
+    (d : SMut (Γ ▻▻ Δ) (Γ ▻▻ Δ) AT Σ0) : SMut Γ Γ AT Σ0 :=
+    smut_demonic_match_tuple 𝑿to𝑺 t p
+      (fun Σ1 ζ01 ts => smut_pushspops ts (smut_sub ζ01 d)).
+
+  Definition smut_exec_match_pattern {AT} `{Subst AT} {Γ Δ σ Σ0}
+    (t : Term Σ0 σ) (p : Pattern Δ σ)
+    (rhs : SMut (Γ ▻▻ Δ) (Γ ▻▻ Δ) AT Σ0) :
+    SMut Γ Γ AT Σ0 :=
+      smut_demonic_freshen_ctx 𝑿to𝑺 Δ >>= fun _ ζ01 ts =>
+      smut_assume_formula
+        (formula_eq
+           (subst ζ01 t)
+           (pattern_match_env_reverse p ts)) ;;
+      smut_pushspops ts (smut_sub ζ01 rhs).
+
+  Definition smut_exec_match_union {AT} `{Subst AT} {U Γ Σ0} {Δ : 𝑼𝑲 U -> PCtx}
+    (t : Term Σ0 (ty_union U))
+    (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
+    (rhs : forall K : 𝑼𝑲 U, SMut (Γ ▻▻ Δ K) (Γ ▻▻ Δ K) AT Σ0) :
+    SMut Γ Γ AT Σ0 :=
+    smut_demonic_match_union
+      𝑿to𝑺 t p
+      (fun K Σ1 ζ01 ts => smut_pushspops ts (smut_sub ζ01 (rhs K))).
 
   Fixpoint smut_exec {Γ τ Σ} (s : Stm Γ τ) {struct s} :
     SMut Γ Γ (fun Σ => Term Σ τ) Σ :=
@@ -1666,9 +1744,10 @@ Module Mutators
           smut_pure t2)))
     | stm_match_sum e xinl s1 xinr s2 =>
       t <- smut_eval_exp e ;;
-      smut_demonic_match_sum t
-        (smut_pushpop (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero) (smut_exec s1))
-        (smut_pushpop (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero) (smut_exec s2))
+      smut_demonic_match_sum
+        (𝑿to𝑺 xinl) (𝑿to𝑺 xinr) t
+        (fun _ _ tl => smut_pushpop tl (smut_exec s1))
+        (fun _ _ tr => smut_pushpop tr (smut_exec s2))
     | stm_match_pair e xl xr s =>
       t <- smut_eval_exp e ;;
       smut_demonic_match_pair
@@ -1681,21 +1760,15 @@ Module Mutators
     | stm_match_enum E e alts =>
       t <- smut_eval_exp e ;;
       smut_demonic_match_enum t (fun K => smut_exec (alts K))
-    | stm_match_tuple e p s =>
-      smut_fail "smut_exec" "stm_match_tuple not implemented" tt
-    | stm_match_union U e alt__ctx alt__pat =>
-      smut_fail "smut_exec" "stm_match_union not implemented" tt
+    | stm_match_tuple e p rhs =>
+      t <- smut_eval_exp e ;;
+      smut_exec_match_tuple t p (smut_exec rhs)
+    | stm_match_union U e alt__pat alt__rhs =>
+      t <- smut_eval_exp e ;;
+      smut_exec_match_union t alt__pat (fun K => smut_exec (alt__rhs K))
     | @stm_match_record _ _ R Δ e p rhs =>
       t <- smut_eval_exp e ;;
-      match term_get_record t with
-      | Some ts =>
-        let ζ__R := record_pattern_match p ts in
-        smut_pushspops ζ__R (smut_exec rhs)
-      | None =>
-        smut_demonic_freshen_recordpat 𝑿to𝑺 p >>= fun _ ζ '(t__p,ζ__R) =>
-        smut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ t) t__p) ;;
-        smut_pushspops ζ__R (smut_exec rhs)
-      end
+      smut_exec_match_record t p (smut_exec rhs)
     | stm_read_register reg =>
       ⨁ t =>
         smut_consume_chunk (chunk_ptsreg reg t);;
@@ -1955,7 +2028,7 @@ Module Mutators
         | Some s =>
           match term_get_record s with
           | Some ts  =>
-            let ζ__R := record_pattern_match p ts in
+            let ζ__R := record_pattern_match_env p ts in
             let LR := L ►► env_map (fun _ t => Some t) ζ__R in
             LR' <- smut_consume_evar rhs LR ;;
             smut_pure (env_drop _ LR')
@@ -2111,26 +2184,11 @@ Module Mutators
             smut_pop_local ;;
             smut_pure t2)))
       | stm_match_sum e xinl s1 xinr s2 =>
-        t__sc <- smut_eval_exp e ;;
-        match term_get_sum t__sc with
-        | Some (inl t) =>
-          smut_push_local t;;
-          smut_bind_left (smut_exec_evar s1) smut_pop_local
-        | Some (inr t) =>
-          smut_push_local t;;
-          smut_bind_left (smut_exec_evar s2) smut_pop_local
-        | None =>
-          smut_demonicv _ _
-            (smut_assume_formula
-               (formula_eq (subst (T := fun Σ => Term Σ _) sub_wk1 t__sc) (term_inl (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero)));;
-             smut_push_local (@term_var _ (𝑿to𝑺 xinl) _ inctx_zero);;
-             smut_bind_left (smut_exec_evar s1) smut_pop_local) ⊗
-          smut_demonicv _ _
-            (smut_assume_formula
-               (formula_eq (subst (T := fun Σ => Term Σ _) sub_wk1 t__sc) (term_inr (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero)));;
-             smut_push_local (@term_var _ (𝑿to𝑺 xinr) _ inctx_zero);;
-             smut_bind_left (smut_exec_evar s2) smut_pop_local)
-        end
+        t <- smut_eval_exp e ;;
+        smut_demonic_match_sum
+          (𝑿to𝑺 xinl) (𝑿to𝑺 xinr) t
+          (fun _ _ tl => smut_pushpop tl (smut_exec s1))
+          (fun _ _ tr => smut_pushpop tr (smut_exec s2))
       | stm_match_pair e xl xr s =>
         t__sc <- smut_eval_exp e ;;
         match term_get_pair t__sc with
@@ -2165,43 +2223,15 @@ Module Mutators
                smut_assume_formula (formula_eq t__sc (term_enum E K));;
                smut_exec_evar (alts K))
         end
-      | stm_match_tuple e p s =>
-        ts <- smut_pair (smut_eval_exp e) (smut_demonic_freshen_tuplepat p) ;;
-        let '(t__sc,(t__p,t__Δ)) := ts in
-        smut_assume_formula (formula_eq t__sc t__p) ;;
-        smut_pushs_local t__Δ ;;
-        t <- smut_exec_evar s ;;
-        smut_pops_local _ ;;
-        smut_pure t
+      | stm_match_tuple e p rhs =>
+        t <- smut_eval_exp e ;;
+        smut_exec_match_tuple t p (smut_exec_evar rhs)
       | stm_match_union U e alt__pat alt__rhs =>
-        t__sc <- smut_eval_exp e ;;
-        match term_get_union t__sc with
-        | Some (existT K t__field) =>
-          smut_demonic_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-            smut_assume_formula (formula_eq t__pat (subst (T := fun Σ => Term Σ _) ζ2 t__field));;
-            smut_pushs_local δ__Δ;;
-            t__rhs <- smut_sub ζ2 (smut_exec_evar (alt__rhs K));;
-            smut_pops_local _;;
-            smut_pure t__rhs)
-        | None =>
-          smut_demonic_finite
-            (𝑼𝑲 U)
-            (fun K =>
-               smut_demonic_freshen_pattern (alt__pat K) >>= (fun Σ2 ζ2 '(t__pat, δ__Δ) =>
-               smut_assume_formula (formula_eq (subst (T := fun Σ => Term Σ _) ζ2 t__sc) (term_union U K t__pat));;
-               smut_pushs_local δ__Δ;;
-               t__rhs <- smut_sub ζ2 (smut_exec_evar (alt__rhs K));;
-               smut_pops_local _;;
-               smut_pure t__rhs))
-        end
-      | stm_match_record R e p s =>
-        ts <- smut_pair (smut_eval_exp e) (smut_demonic_freshen_recordpat 𝑿to𝑺 p) ;;
-        let '(t__sc,(t__p,t__Δ)) := ts in
-        smut_assume_formula (formula_eq t__sc t__p) ;;
-        smut_pushs_local t__Δ ;;
-        t <- smut_exec_evar s ;;
-        smut_pops_local _ ;;
-        smut_pure t
+        t <- smut_eval_exp e ;;
+        smut_exec_match_union t alt__pat (fun K => smut_exec_evar (alt__rhs K))
+      | stm_match_record R e p rhs =>
+        t <- smut_eval_exp e ;;
+        smut_exec_match_record t p (smut_exec_evar rhs)
       | stm_read_register reg =>
         let x := fresh Σ None in
         smut_consume_chunk_evar (chunk_ptsreg reg (@term_var [(x,_)] x _ inctx_zero)) [None]%arg >>= fun Σ1 _ E1 =>

@@ -1185,16 +1185,16 @@ Module Assertions
         end
       | asn_match_tuple s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
-        let ι' := tuple_pattern_match p t in
+        let ι' := tuple_pattern_match_lit p t in
         interpret_assertion(ι ►► ι') rhs
       | asn_match_record R s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
-        let ι' := record_pattern_match p (𝑹_unfold t) in
+        let ι' := record_pattern_match_lit p t in
         interpret_assertion(ι ►► ι') rhs
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
         let (K , v) := 𝑼_unfold t in
-        let ι' := pattern_match (alt__pat K) v in
+        let ι' := pattern_match_lit (alt__pat K) v in
         interpret_assertion(ι ►► ι') (alt__rhs K)
       | asn_sep a1 a2 => interpret_assertion ι a1 ✱ interpret_assertion ι a2
       | asn_exist ς τ a => ∃ (v : Lit τ), interpret_assertion(ι ► (ς∶τ ↦ v)) a

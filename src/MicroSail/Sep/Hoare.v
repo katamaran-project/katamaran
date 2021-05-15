@@ -184,7 +184,7 @@ Module ProgramLogic
         {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
         (p : TuplePat σs Δ) (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
-        env_cat δ (tuple_pattern_match p (eval e δ)) ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
+        env_cat δ (tuple_pattern_match_lit p (eval e δ)) ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_match_tuple e p rhs ⦃ Q ⦄
     | rule_stm_match_union
         {U : 𝑼} (e : Exp Γ (ty_union U))
@@ -193,13 +193,13 @@ Module ProgramLogic
         (alt__r : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__Δ K) τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
         (forall (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
-            env_cat δ (pattern_match (alt__p K) v) ⊢ ⦃ P ∧ !! (eval e δ = 𝑼_fold (existT K v)) ⦄ alt__r K ⦃ fun v δ' => Q v (env_drop (alt__Δ K) δ') ⦄) ->
+            env_cat δ (pattern_match_lit (alt__p K) v) ⊢ ⦃ P ∧ !! (eval e δ = 𝑼_fold (existT K v)) ⦄ alt__r K ⦃ fun v δ' => Q v (env_drop (alt__Δ K) δ') ⦄) ->
         δ ⊢ ⦃ P ⦄ stm_match_union U e alt__p alt__r ⦃ Q ⦄
     | rule_stm_match_record
         {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : L) (Q : Lit τ -> LocalStore Γ -> L) :
-        env_cat δ (record_pattern_match p (𝑹_unfold (eval e δ))) ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
+        env_cat δ (record_pattern_match_lit p (eval e δ)) ⊢ ⦃ P ⦄ rhs ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
         δ ⊢ ⦃ P ⦄ stm_match_record R e p rhs ⦃ Q ⦄
     | rule_stm_read_register
         (r : 𝑹𝑬𝑮 τ) (v : Lit τ) :

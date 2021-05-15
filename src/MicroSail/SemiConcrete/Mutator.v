@@ -257,7 +257,7 @@ Module SemiConcrete
 
     Definition cmut_match_record {A R} {Γ1 Γ2 Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Lit (ty_record R))
       (m : SymInstance Δ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-      m (record_pattern_match p (𝑹_unfold t)).
+      m (record_pattern_match_lit p t).
 
     Fixpoint cmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
       match asn with
@@ -284,7 +284,7 @@ Module SemiConcrete
           (fun vl vr => cmut_produce (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
       | asn_match_tuple s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
-        let ι' := tuple_pattern_match p t in
+        let ι' := tuple_pattern_match_lit p t in
         cmut_produce (ι ►► ι') rhs
       | asn_match_record R s p rhs =>
         cmut_match_record p
@@ -293,7 +293,7 @@ Module SemiConcrete
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
         let (K , v) := 𝑼_unfold t in
-        let ι' := pattern_match (alt__pat K) v in
+        let ι' := pattern_match_lit (alt__pat K) v in
         cmut_produce (ι ►► ι') (alt__rhs K)
       | asn_sep a1 a2   => cmut_produce ι a1 *> cmut_produce ι a2
       | asn_exist ς τ a => ⨂ v : Lit τ => cmut_produce (env_snoc ι (ς :: τ) v) a
@@ -325,7 +325,7 @@ Module SemiConcrete
           (fun vl vr => cmut_consume (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
       | asn_match_tuple s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
-        let ι' := tuple_pattern_match p t in
+        let ι' := tuple_pattern_match_lit p t in
         cmut_consume (ι ►► ι') rhs
       | asn_match_record R s p rhs =>
         cmut_match_record p
@@ -334,7 +334,7 @@ Module SemiConcrete
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
         let t := inst (T := fun Σ => Term Σ _) ι s in
         let (K , v) := 𝑼_unfold t in
-        let ι' := pattern_match (alt__pat K) v in
+        let ι' := pattern_match_lit (alt__pat K) v in
         cmut_consume (ι ►► ι') (alt__rhs K)
       | asn_sep a1 a2   => cmut_consume ι a1 *> cmut_consume ι a2
       | asn_exist ς τ a => ⨁ v : Lit τ => cmut_consume (env_snoc ι (ς :: τ) v) a
@@ -430,16 +430,16 @@ Module SemiConcrete
                (cmut_exec s))
       | stm_match_tuple e p rhs =>
         v <- cmut_eval_exp e ;;
-        cmut_pushs_local (tuple_pattern_match p v) ;;
+        cmut_pushs_local (tuple_pattern_match_lit p v) ;;
         cmut_exec rhs <*
         cmut_pops_local _
       | stm_match_union U e alt__pat alt__rhs =>
         v <- cmut_eval_exp e ;;
         let (K , v) := 𝑼_unfold v in
-        cmut_pushspops (pattern_match (alt__pat K) v) (cmut_exec (alt__rhs K))
+        cmut_pushspops (pattern_match_lit (alt__pat K) v) (cmut_exec (alt__rhs K))
       | stm_match_record R e p rhs =>
         v <- cmut_eval_exp e ;;
-        cmut_pushspops (record_pattern_match p (𝑹_unfold v)) (cmut_exec rhs)
+        cmut_pushspops (record_pattern_match_lit p v) (cmut_exec rhs)
       | stm_bind s k =>
         v <- cmut_exec s ;;
         cmut_exec (k v)
@@ -607,12 +607,15 @@ Module SemiConcrete
         cmut_wp (cmut_match_record p v k) POST δ h <->
         forall vs : NamedEnv Lit (𝑹𝑭_Ty R),
           v = 𝑹_fold vs ->
-          cmut_wp (k (record_pattern_match p vs)) POST δ h.
+          cmut_wp (k (record_pattern_match_env p vs)) POST δ h.
     Proof.
       intros. unfold cmut_match_record.
       split; intros Hwp.
-      - intros vs ->. now rewrite 𝑹_unfold_fold in Hwp.
-      - specialize (Hwp (𝑹_unfold v)). rewrite 𝑹_fold_unfold in Hwp.
+      - intros vs ->.
+        unfold record_pattern_match_lit in Hwp.
+        now rewrite 𝑹_unfold_fold in Hwp.
+      - specialize (Hwp (𝑹_unfold v)).
+        rewrite 𝑹_fold_unfold in Hwp.
         now apply Hwp.
     Qed.
 

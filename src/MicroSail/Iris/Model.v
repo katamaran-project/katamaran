@@ -1044,7 +1044,7 @@ Module IrisSoundness
         {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
         (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-    ⊢ ((semTriple (env_cat δ (tuple_pattern_match p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
+    ⊢ ((semTriple (env_cat δ (tuple_pattern_match_lit p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
        semTriple δ P (stm_match_tuple e p rhs) Q)%I.
   Proof.
     iIntros "triptup P".
@@ -1060,7 +1060,7 @@ Module IrisSoundness
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply (wp_compat_block (tuple_pattern_match p0 (eval e9 δ1))).
+    iApply (wp_compat_block (tuple_pattern_match_lit p0 (eval e9 δ1))).
     by iApply "triptup".
   Qed.
 
@@ -1071,7 +1071,7 @@ Module IrisSoundness
         (alt__r : forall (K : 𝑼𝑲 U), Stm (ctx_cat Γ (alt__Δ K)) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
         ⊢ ((∀ (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
-               semTriple (env_cat δ (pattern_match (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) -∗
+               semTriple (env_cat δ (pattern_match_lit (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) -∗
                semTriple δ P (stm_match_union U e alt__p alt__r) Q
           )%I.
   Proof.
@@ -1090,7 +1090,7 @@ Module IrisSoundness
     iSplitL; [|trivial].
     remember (𝑼_unfold (eval e10 δ1)) as scrutinee.
     destruct scrutinee as [K v].
-    iApply (wp_compat_block (pattern_match (alt__pat K) v)).
+    iApply (wp_compat_block (pattern_match_lit (alt__pat K) v)).
     iSpecialize ("tripunion" $! K v).
     rewrite Heqscrutinee.
     rewrite 𝑼_fold_unfold.
@@ -1102,7 +1102,7 @@ Module IrisSoundness
         {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        ⊢ ((semTriple (env_cat δ (record_pattern_match p (𝑹_unfold (eval e δ)))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
+        ⊢ ((semTriple (env_cat δ (record_pattern_match_lit p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
         semTriple δ P (stm_match_record R e p rhs) Q)%I.
   Proof.
     iIntros "triprec P".
@@ -1118,7 +1118,7 @@ Module IrisSoundness
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply (wp_compat_block (record_pattern_match p1 (𝑹_unfold (eval e11 δ1)))).
+    iApply (wp_compat_block (record_pattern_match_lit p1 (eval e11 δ1))).
     by iApply "triprec".
   Qed.
 
