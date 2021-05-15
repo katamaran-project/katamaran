@@ -792,7 +792,7 @@ Module Soundness
   Proof.
     unfold smut_wp, smut_assume_formula. intros.
     rewrite spath_wp_bind; auto.
-    - rewrite spath_wp_assume_formula.
+    - rewrite spath_wp_assume_formula; auto.
       rewrite ?subst_sub_id, ?inst_subst.
       reflexivity.
     - unfold spath_arrow_dcl. cbn. intros.

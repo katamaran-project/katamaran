@@ -181,16 +181,22 @@ Module Mutators
       | ctx_snoc Σ b => fun k => spath_demonic_close (spath_demonicv b k)
       end.
 
-    Fixpoint spath_assume_multisub {AT Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : SPath AT Σ2 -> SPath AT Σ1.
-    Proof.
-      destruct ζ; intros o.
-      - exact o.
-      - eapply spath_assume_vareq.
-        apply t.
-        eapply spath_assume_multisub.
-        apply ζ.
-        apply o.
-    Defined.
+    Fixpoint spath_assume_multisub {AT Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : SPath AT Σ2 -> SPath AT Σ1 :=
+      match ζ with
+      | multisub_id         =>
+        fun p => p
+      | multisub_cons x t ζ =>
+        fun p => spath_assume_vareq x t (spath_assume_multisub ζ p)
+      end.
+
+    Fixpoint spath_assert_multisub {AT Σ1 Σ2} (msg : Message Σ1) (ζ : MultiSub Σ1 Σ2) : (Message Σ2 -> SPath AT Σ2) -> SPath AT Σ1 :=
+      match ζ with
+      | multisub_id         =>
+        fun p => p msg
+      | multisub_cons x t ζ =>
+        let msg' := subst (sub_single _ t) msg in
+        fun p => spath_assert_vareq x t msg' (spath_assert_multisub msg' ζ p)
+      end.
 
     Fixpoint subst_spath {A} `{Subst A} {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (o : SPath A Σ1) : SPath A Σ2 :=
       match o with
@@ -354,27 +360,61 @@ Module Mutators
       | spath_debug d k                => spath_debug d (spath_bind pc k f)
       end.
 
-    Definition spath_assume_formula {Σ} (pc : PathCondition Σ) (fml : Formula Σ) :
+    Fixpoint spath_assume_formulas_without_solver {A Σ}
+      (fmls : List Formula Σ) (k : SPath A Σ) {struct fmls} : SPath A Σ :=
+      match fmls with
+      | nil           => k
+      | cons fml fmls =>
+        spath_assumek
+          fml
+          (spath_assume_formulas_without_solver fmls k)
+      end.
+
+    Fixpoint spath_assert_formulas_without_solver {A Σ}
+      (msg : Message Σ) (fmls : List Formula Σ) (k : SPath A Σ) {struct fmls} : SPath A Σ :=
+      match fmls with
+      | nil           => k
+      | cons fml fmls =>
+        spath_assertk
+          fml
+          msg
+          (spath_assert_formulas_without_solver msg fmls k)
+      end.
+
+    Definition spath_assume_formula {Σ} (fml : Formula Σ) (pc : PathCondition Σ) :
       SPath Unit Σ :=
-      (* Check if the formula is an equality that can be propagated. *)
-      match try_propagate fml with
-      | Some (existT Σ2 ζ) => spath_assume_multisub ζ (spath_pure tt)
+      match solver pc fml with
+      | Some (existT Σ1 (ζ , fmls)) =>
+        (* Assume variable equalities and the residual constraints *)
+        spath_assume_multisub ζ
+          (spath_assume_formulas_without_solver fmls (spath_pure tt))
       | None =>
-        (* If everything fails, we simply add the formula to the path
-           condition verbatim. *)
-        spath_assumek fml (spath_pure tt)
+        (* The formula is inconsistent with the path constraints. *)
+        spath_block
+      end.
+
+    Fixpoint spath_assume_formulas {Σ} (fmls : List Formula Σ) (pc : PathCondition Σ) {struct fmls} :
+      SPath Unit Σ :=
+      match fmls with
+      | nil => spath_pure tt
+      | cons fml fmls =>
+        spath_bind
+          pc
+          (spath_assume_formulas fmls pc)
+          (fun Σ1 ζ01 pc1 _ => spath_assume_formula (subst ζ01 fml) pc1)
       end.
 
     Definition spath_assert_formula {Σ} (msg : Message Σ) (pc : PathCondition Σ) (fml : Formula Σ) :
       SPath Unit Σ :=
-        match try_solve_formula fml with
-        | Some true => spath_pure tt
-        | Some false => spath_fail msg
-        | None =>
-          spath_assertk fml msg
-            (* We also want to assume the formula for the continuation. *)
-            (spath_assume_formula pc fml)
-        end.
+      match solver pc fml with
+      | Some (existT Σ1 (ζ , fmls)) =>
+        (* Assert variable equalities and the residual constraints *)
+        spath_assert_multisub msg ζ
+          (fun msg' => spath_assert_formulas_without_solver msg' fmls (spath_pure tt))
+      | None =>
+        (* The formula is inconsistent with the path constraints. *)
+        spath_fail msg
+      end.
 
     Fixpoint spath_wp {AT A Σ} `{Inst AT A} (o : SPath AT Σ) (ι : SymInstance Σ) (POST : A -> Prop) : Prop :=
       match o with
@@ -816,51 +856,95 @@ Module Mutators
     Qed.
 
     Lemma spath_wp_assume_multisub {AT A} `{InstLaws AT A} {Σ0 Σ1} (ζ : MultiSub Σ0 Σ1)
-      (o : SPath AT Σ1) (ι0 : SymInstance Σ0) (ι1 : SymInstance Σ1) (P : A -> Prop) :
-      ι0 = inst ι1 (sub_multi ζ) ->
-      spath_wp (spath_assume_multisub ζ o) ι0 P <-> (inst_multisub ι0 ζ -> spath_wp o ι1 P).
-    Proof.
-      intros Heqι. induction ζ; cbn in *.
-      - rewrite inst_sub_id in Heqι. subst. intuition.
-      - unfold sub_comp in Heqι. rewrite inst_subst in Heqι.
-        rewrite IHζ. intuition. rewrite <- inst_sub_shift. subst.
-        rewrite <- inst_subst. pose proof (sub_comp_shift_single xIn t) as Hid.
-        unfold sub_comp in Hid. now rewrite Hid, inst_sub_id.
-    Qed.
-
-    Lemma spath_wp_multisub' {AT A} `{InstLaws AT A} {Σ0 Σ1} (ζ : MultiSub Σ0 Σ1)
       (o : SPath AT Σ1) (ι0 : SymInstance Σ0) (P : A -> Prop) :
-      spath_wp (spath_assume_multisub ζ o) ι0 P <-> (inst_multisub ι0 ζ -> spath_wp o (inst ι0 (sub_multishift ζ)) P).
+      spath_wp (spath_assume_multisub ζ o) ι0 P <->
+      (inst_multisub ι0 ζ -> spath_wp o (inst ι0 (sub_multishift ζ)) P).
     Proof.
       induction ζ; cbn in *.
       - rewrite inst_sub_id. intuition.
-      - unfold sub_comp. rewrite inst_subst.
-        rewrite IHζ. rewrite inst_sub_shift.
+      - rewrite IHζ. clear IHζ.
+        rewrite <- inst_sub_shift.
+        unfold sub_comp. rewrite inst_subst.
+        intuition.
+    Qed.
+
+    Lemma spath_wp_assert_multisub {AT A} `{InstLaws AT A} {Σ0 Σ1} (msg : Message _) (ζ : MultiSub Σ0 Σ1)
+      (o : Message _ -> SPath AT Σ1) (ι0 : SymInstance Σ0) (P : A -> Prop) :
+      spath_wp (spath_assert_multisub msg ζ o) ι0 P <->
+      (inst_multisub ι0 ζ /\ spath_wp (o (subst (sub_multi ζ) msg)) (inst ι0 (sub_multishift ζ)) P).
+    Proof.
+      induction ζ; cbn in *.
+      - rewrite inst_sub_id, subst_sub_id. intuition.
+      - rewrite IHζ. clear IHζ.
+        rewrite subst_sub_comp.
+        rewrite <- inst_sub_shift.
+        unfold sub_comp. rewrite inst_subst.
+        intuition.
+    Qed.
+
+    Lemma spath_wp_assume_formulas_without_solver {AT A} `{Inst AT A} {Σ0}
+      (fmls : List Formula Σ0) (o : SPath AT Σ0) (ι0 : SymInstance Σ0) (POST : A -> Prop) :
+      spath_wp (spath_assume_formulas_without_solver fmls o) ι0 POST <->
+      (instpc ι0 fmls -> spath_wp o ι0 POST).
+    Proof.
+      induction fmls; cbn.
+      - intuition. apply H0. constructor.
+      - rewrite inst_pathcondition_cons.
+        intuition.
+    Qed.
+
+    Lemma spath_wp_assert_formulas_without_solver {AT A} `{Inst AT A} {Σ0}
+      (msg : Message Σ0) (fmls : List Formula Σ0) (o : SPath AT Σ0) (ι0 : SymInstance Σ0) (POST : A -> Prop) :
+      spath_wp (spath_assert_formulas_without_solver msg fmls o) ι0 POST <->
+      (instpc ι0 fmls /\ spath_wp o ι0 POST).
+    Proof.
+      induction fmls; cbn.
+      - intuition. constructor.
+      - rewrite inst_pathcondition_cons.
         intuition.
     Qed.
 
     Lemma spath_wp_assume_formula {Σ} (pc : PathCondition Σ) (fml : Formula Σ) (ι : SymInstance Σ) :
       forall (P : unit -> Prop),
-        (* instpc ι pc -> *)
-        spath_wp (spath_assume_formula pc fml) ι P <->
+        instpc ι pc ->
+        spath_wp (spath_assume_formula fml pc) ι P <->
         ((inst ι fml : Prop) -> P tt).
     Proof.
-      unfold spath_assume_formula. intros ?.
-      destruct (try_propagate_spec fml) as [[Σ' ζ] HYP|_]; cbn; auto.
-      now rewrite HYP, spath_wp_multisub'.
+      unfold spath_assume_formula. intros ? Hpc.
+      destruct (solver_spec pc fml) as [[Σ1 [ζ fmls]]|].
+      - specialize (H ι Hpc). destruct H as [Hζ Hfmls].
+        specialize (Hfmls (inst ι (sub_multishift ζ))).
+        rewrite spath_wp_assume_multisub, spath_wp_assume_formulas_without_solver.
+        cbn. split.
+        + intros HP ?. apply HP; auto.
+          rewrite inst_multi in Hfmls; auto.
+          apply Hfmls; auto.
+        + intros HP ? ?. apply HP. apply Hfmls; auto.
+          rewrite inst_multi; auto.
+      - specialize (H _ Hpc).
+        cbn; intuition.
     Qed.
 
     Lemma spath_wp_assert_formula {Σ} (msg : Message Σ) (pc : PathCondition Σ) (fml : Formula Σ) (ι : SymInstance Σ) :
       forall (P : unit -> Prop),
-        (* instpc ι pc -> *)
+        instpc ι pc ->
         spath_wp (spath_assert_formula msg pc fml) ι P <->
         (inst ι fml /\ P tt).
     Proof.
-      unfold spath_assert_formula. intros ?.
-      destruct (try_solve_formula_spec fml) as [b HYP|].
-      - rewrite HYP. destruct b; cbn; intuition.
-      - cbn. rewrite spath_wp_assume_formula.
-        intuition.
+      unfold spath_assert_formula. intros ? Hpc.
+      destruct (solver_spec pc fml) as [[Σ1 [ζ fmls]]|].
+      - specialize (H ι Hpc). destruct H as [Hζ Hfmls].
+        specialize (Hfmls (inst ι (sub_multishift ζ))).
+        rewrite spath_wp_assert_multisub, spath_wp_assert_formulas_without_solver.
+        cbn. split.
+        + intros [? [? HP]]. split; auto.
+          apply Hfmls; auto.
+          rewrite inst_multi; auto.
+        + intros [? Hp]. split; auto.
+          split; auto. apply Hfmls; auto.
+          rewrite inst_multi; auto.
+      - specialize (H _ Hpc). cbn.
+        cbn; intuition.
     Qed.
 
     Definition spath_angelic_binary_prune {AT Σ} (o1 o2 : SPath AT Σ) : SPath AT Σ :=
@@ -1262,15 +1346,8 @@ Module Mutators
   Definition smut_assume_formula {Γ Σ} (fml : Formula Σ) : SMut Γ Γ Unit Σ :=
     fun Σ1 ζ1 pc1 δ1 h1 =>
       spath_bind pc1
-        (spath_assume_formula pc1 (subst ζ1 fml))
+        (spath_assume_formula (subst ζ1 fml) pc1)
         (fun Σ2 ζ12 pc2 v => spath_pure (MkSMutResult v (subst ζ12 δ1) (subst ζ12 h1))).
-
-  Definition smut_assume_term {Γ Σ} (t : Term Σ ty_bool) : SMut Γ Γ Unit Σ :=
-    smut_assume_formula (formula_bool t).
-  Definition smut_assume_exp {Γ Σ} (e : Exp Γ ty_bool) : SMut Γ Γ Unit Σ :=
-    smut_eval_exp e >>= fun _ _ => smut_assume_term.
-  Definition smut_assume_prop {Γ Σ} (P : abstract_named Lit Σ Prop) : SMut Γ Γ Unit Σ :=
-    smut_assume_formula (formula_prop (sub_id Σ) P).
   Definition smut_assume_formulas {Γ Σ} (fmls : list (Formula Σ)) : SMut Γ Γ Unit Σ :=
     fold_right (fun fml => smut_bind_right (smut_assume_formula fml)) (smut_pure tt) fmls.
 
@@ -1292,8 +1369,6 @@ Module Mutators
     fold_right (fun fml => smut_bind_right (smut_assert_formula fml)) (smut_pure tt) fmls.
   Definition smut_assert_term {Γ Σ} (t : Term Σ ty_bool) : SMut Γ Γ Unit Σ :=
     smut_assert_formula (formula_bool t).
-  Definition smut_assert_exp {Γ Σ} (e : Exp Γ ty_bool) : SMut Γ Γ Unit Σ :=
-    smut_eval_exp e >>= fun _ _ t => smut_assert_term t.
   Definition smut_produce_chunk {Γ Σ} (c : Chunk Σ) : SMut Γ Γ Unit Σ :=
     smut_state (fun _ ζ δ h => MkSMutResult tt δ (cons (subst ζ c) h)).
   Definition smut_consume_chunk {Γ Σ} (c : Chunk Σ) : SMut Γ Γ Unit Σ :=
@@ -1569,7 +1644,7 @@ Module Mutators
     | stm_seq s1 s2 => smut_exec s1 ;; smut_exec s2
     | stm_assertk e1 _ k =>
       t <- smut_eval_exp e1 ;;
-      smut_assume_term t ;;
+      smut_assume_formula (formula_bool t) ;;
       smut_exec k
     | stm_fail _ _ =>
       smut_block
@@ -2009,13 +2084,13 @@ Module Mutators
           then smut_exec_evar s1
           else smut_exec_evar s2
         | None =>
-          (smut_assume_term t__sc ;; smut_exec_evar s1) ⊗
-          (smut_assume_term (term_not t__sc) ;; smut_exec_evar s2)
+          (smut_assume_formula (formula_bool t__sc) ;; smut_exec_evar s1) ⊗
+          (smut_assume_formula (formula_bool (term_not t__sc)) ;; smut_exec_evar s2)
         end
       | stm_seq s1 s2 => smut_exec_evar s1 ;; smut_exec_evar s2
       | stm_assertk e1 _ k =>
         t <- smut_eval_exp e1 ;;
-        smut_assume_term t ;;
+        smut_assume_formula (formula_bool t) ;;
         smut_exec_evar k
       | stm_fail _ _ =>
         smut_block

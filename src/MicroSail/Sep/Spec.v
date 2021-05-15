@@ -404,6 +404,63 @@ Module Assertions
 
   Section Solver.
 
+    Definition try_solve_eq {Σ σ} (t1 t2 : Term Σ σ) : option bool :=
+      if Term_eqb t1 t2
+      then Some true
+      else
+        (* If the terms are literals, we can trust the negative result. *)
+        match t1 , t2 with
+        | term_lit _ _ , term_lit _ _ => Some false
+        | term_inr _   , term_inl _   => Some false
+        | term_inl _   , term_inr _   => Some false
+        | _            , _            => None
+        end.
+
+    Lemma try_solve_eq_spec {Σ σ} (t1 t2 : Term Σ σ) :
+      OptionSpec
+        (fun b => forall ι, inst ι t1 = inst ι t2 <-> is_true b)
+        True
+        (try_solve_eq t1 t2).
+    Proof.
+      unfold try_solve_eq.
+      destruct (Term_eqb_spec t1 t2).
+      - constructor. intros. apply reflect_iff.
+        constructor. congruence.
+      - destruct t1; dependent elimination t2; constructor; auto;
+        intros; apply reflect_iff; constructor; cbn; congruence.
+    Qed.
+
+    (* Check if the given formula is always true or always false for any
+       assignments of the logic variables. *)
+    Definition try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
+      match fml with
+      | formula_bool t =>
+        match t in Term _ σ return option (Lit σ)
+        with
+        | term_lit _ b => Some b
+        | _            => None
+        end
+      | formula_prop _ _ => None
+      | formula_eq t1 t2 => try_solve_eq t1 t2
+        (* else Term_eqvb t1 t2 *)
+      | formula_neq t1 t2 => option_map negb (try_solve_eq t1 t2)
+        (* else option_map negb (Term_eqvb t1 t2) *)
+      end.
+
+    Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) :
+      OptionSpec
+        (fun b => forall ι, inst ι fml <-> is_true b)
+        True
+        (try_solve_formula fml).
+    Proof.
+      destruct fml; cbn.
+      - dependent elimination t; constructor; auto.
+      - constructor; auto.
+      - destruct (try_solve_eq_spec t1 t2); now constructor.
+      - destruct (try_solve_eq_spec t1 t2); constructor; auto.
+        intros ι. specialize (H ι). destruct a; intuition.
+    Qed.
+
     (* Poor man's unification *)
     Definition try_unify {Σ σ} (t1 t2 : Term Σ σ) :
       option { Σ' & MultiSub Σ Σ' } :=
@@ -446,6 +503,151 @@ Module Assertions
       destruct (try_unify_spec t2 t1) as [[Σ' ζ] HYP|_]. constructor.
       intros ι. specialize (HYP ι). intuition.
       now constructor.
+    Qed.
+
+    Open Scope lazy_bool_scope.
+    Equations(noind) formula_eqb {Σ} (f1 f2 : Formula Σ) : bool :=
+      formula_eqb (formula_bool t1) (formula_bool t2) := Term_eqb t1 t2;
+      formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) with eq_dec σ τ => {
+        formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ ?(σ) t21 t22) (left eq_refl) :=
+          Term_eqb t11 t21 &&& Term_eqb t12 t22;
+       formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) (right _) := false
+      };
+      formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ τ t21 t22) with eq_dec σ τ => {
+        formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ ?(σ) t21 t22) (left eq_refl) :=
+          Term_eqb t11 t21 &&& Term_eqb t12 t22;
+        formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ τ t21 t22) (right _) := false
+      };
+      formula_eqb _ _ := false.
+
+    Lemma formula_eqb_spec {Σ} (f1 f2 : Formula Σ) :
+      BoolSpec (f1 = f2) True (formula_eqb f1 f2).
+    Proof.
+      induction f1; dependent elimination f2;
+        simp formula_eqb;
+        try (constructor; auto; fail).
+      - destruct (Term_eqb_spec t t0); constructor; intuition.
+      - destruct (eq_dec σ σ0); cbn.
+        + destruct e.
+          repeat
+            match goal with
+            | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+                try (constructor; intuition; fail)
+            end.
+        + constructor; auto.
+      - destruct (eq_dec σ σ1); cbn.
+        + destruct e.
+          repeat
+            match goal with
+            | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+                try (constructor; intuition; fail)
+            end.
+        + constructor; auto.
+    Qed.
+
+    Fixpoint try_assumption {Σ} (pc : PathCondition Σ) (fml : Formula Σ) {struct pc} : bool :=
+      match pc with
+      | nil       => false
+      | cons f pc => formula_eqb f fml ||| try_assumption pc fml
+      end.
+
+    Lemma try_assumption_spec {Σ} (pc : PathCondition Σ) (fml : Formula Σ) :
+      BoolSpec (forall ι, instpc ι pc -> inst (A := Prop) ι fml) True (try_assumption pc fml).
+    Proof.
+      induction pc; cbn.
+      - constructor; auto.
+      - destruct (formula_eqb_spec a fml).
+        + subst a. constructor. intros ι.
+          rewrite inst_pathcondition_cons.
+          intuition.
+        + destruct IHpc.
+          * constructor. intros ι.
+            rewrite inst_pathcondition_cons.
+            intuition.
+          * constructor; auto.
+    Qed.
+
+    Definition solver {Σ0} (pc : PathCondition Σ0) (fml : Formula Σ0) :
+      option { Σ1 & MultiSub Σ0 Σ1 * List Formula Σ1 }%type :=
+      match try_propagate fml with
+      | Some (existT Σ1 vareqs) => Some (existT Σ1 (vareqs , nil))
+      | None =>
+        match try_solve_formula fml with
+        | Some true => Some (existT Σ0 (multisub_id , nil))
+        | Some false => None
+        | None =>
+          if try_assumption pc fml
+          then Some (existT Σ0 (multisub_id , nil))
+          else Some (existT Σ0 (multisub_id , (cons fml nil)))
+        end
+      end.
+
+    Lemma inst_multisub_inst_sub_multi {Σ0 Σ1} (ζ01 : MultiSub Σ0 Σ1) (ι1 : SymInstance Σ1) :
+      inst_multisub (inst ι1 (sub_multi ζ01)) ζ01.
+    Proof.
+        induction ζ01; cbn; auto.
+        unfold sub_comp.
+        rewrite <- inst_sub_shift.
+        rewrite <- ?inst_subst.
+        repeat
+          match goal with
+          | |- context[subst ?ζ1 ?ζ2] =>
+            change (subst ζ1 ζ2) with (sub_comp ζ2 ζ1)
+          end.
+        rewrite <- inst_lookup.
+        rewrite lookup_sub_comp.
+        rewrite lookup_sub_single_eq.
+        rewrite <- subst_sub_comp.
+        rewrite <- sub_comp_assoc.
+        rewrite sub_comp_shift_single.
+        rewrite sub_comp_id_left.
+        split; auto.
+    Qed.
+
+    Lemma solver_spec {Σ0} (pc : PathCondition Σ0) (fml : Formula Σ0) :
+      OptionSpec
+        (fun '(existT Σ1 (ζ, fmls)) =>
+           forall ι0,
+             instpc ι0 pc ->
+             (inst (A:= Prop) ι0 fml -> inst_multisub ι0 ζ) /\
+             (forall ι1,
+                 ι0 = inst ι1 (sub_multi ζ) ->
+                 inst ι0 fml <-> inst ι1 fmls))
+        (forall ι, instpc ι pc -> inst (A := Prop) ι fml -> False)
+        (solver pc fml).
+    Proof.
+      unfold solver.
+      destruct (try_propagate_spec fml) as [[Σ1 ζ01]|].
+      { constructor. intros ι0 Hpc. specialize (H ι0).
+        split. intuition. intros ι1 ->.
+        change (inst (inst ι1 (sub_multi ζ01)) fml <-> True).
+        intuition. clear H. apply H1.
+        apply inst_multisub_inst_sub_multi.
+      }
+      clear H.
+      destruct (try_solve_formula_spec fml) as [b|].
+      { destruct b.
+        - constructor. intros ι0 Hpc. cbn. split; auto.
+          intros ? Hι. rewrite inst_sub_id in Hι. subst ι1.
+          specialize (H ι0). intuition. constructor.
+        - constructor. unfold is_true in H. intuition.
+      }
+      clear H.
+      destruct (try_assumption_spec pc fml).
+      { constructor. intros ι0 Hpc. specialize (H ι0).
+        cbn. split; auto. intros ι1 ->.
+        rewrite inst_sub_id in *. intuition.
+        constructor.
+      }
+      clear H.
+      { constructor. intros ι0 Hpc. split.
+        cbn; auto. intros ι1 ->.
+        rewrite inst_pathcondition_cons.
+        cbn. rewrite inst_sub_id.
+        intuition. constructor.
+      }
     Qed.
 
   End Solver.
@@ -1014,67 +1216,6 @@ Module Assertions
   End Contracts.
 
   Arguments interpret_assertion {_ _ _} _ _.
-
-  Section TrySolve.
-
-    Definition try_solve_eq {Σ σ} (t1 t2 : Term Σ σ) : option bool :=
-      if Term_eqb t1 t2
-      then Some true
-      else
-        (* If the terms are literals, we can trust the negative result. *)
-        match t1 , t2 with
-        | term_lit _ _ , term_lit _ _ => Some false
-        | term_inr _ , term_inl _ => Some false
-        | term_inl _ , term_inr _ => Some false
-        | _            , _            => None
-        end.
-
-    Lemma try_solve_eq_spec {Σ σ} (t1 t2 : Term Σ σ) :
-      OptionSpec
-        (fun b => forall ι, inst ι t1 = inst ι t2 <-> is_true b)
-        True
-        (try_solve_eq t1 t2).
-    Proof.
-      unfold try_solve_eq.
-      destruct (Term_eqb_spec t1 t2).
-      - constructor. intros. apply reflect_iff.
-        constructor. congruence.
-      - destruct t1; dependent elimination t2; constructor; auto;
-        intros; apply reflect_iff; constructor; cbn; congruence.
-    Qed.
-
-    (* Check if the given formula is always true or always false for any
-       assignments of the logic variables. *)
-    Definition try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
-      match fml with
-      | formula_bool t =>
-        match t in Term _ σ return option (Lit σ)
-        with
-        | term_lit _ b => Some b
-        | _            => None
-        end
-      | formula_prop _ _ => None
-      | formula_eq t1 t2 => try_solve_eq t1 t2
-        (* else Term_eqvb t1 t2 *)
-      | formula_neq t1 t2 => option_map negb (try_solve_eq t1 t2)
-        (* else option_map negb (Term_eqvb t1 t2) *)
-      end.
-
-    Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) :
-      OptionSpec
-        (fun b => forall ι, inst ι fml <-> is_true b)
-        True
-        (try_solve_formula fml).
-    Proof.
-      destruct fml; cbn.
-      - dependent elimination t; constructor; auto.
-      - constructor; auto.
-      - destruct (try_solve_eq_spec t1 t2); now constructor.
-      - destruct (try_solve_eq_spec t1 t2); constructor; auto.
-        intros ι. specialize (H ι). destruct a; intuition.
-    Qed.
-
-  End TrySolve.
 
   Section ChunkExtraction.
     Context {Σ : LCtx}.
