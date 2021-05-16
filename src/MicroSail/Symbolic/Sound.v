@@ -2031,24 +2031,27 @@ Module Soundness
     apply bapprox_bind. admit.
     apply bapprox_exec.
     intros res.
+    apply bapprox_bind_right.
+    apply smut_block_dcl.
     eapply bapprox_sub; eauto.
     rewrite inst_sub_snoc, inst_sub_id.
     apply bapprox_consume.
+    apply bapprox_block.
   Admitted.
 
   Lemma symbolic_sound {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
     ValidContractNoEvar c body ->
     ValidContractCMut c body.
   Proof.
-    unfold ValidContractNoEvar, ValidContractCMut. intros Hwp.
-    unfold ForallNamed in Hwp. rewrite Forall_forall in Hwp.
-    intros ι. cbn. specialize (Hwp ι).
-    pose proof (bapprox_contract c body) as H.
-    specialize (H ι _ (sub_id _) nil ι (fun _ _ _ => True)).
-    specialize (H (sep_contract_localstore c) nil).
-    rewrite inst_sub_id in H. inster H by constructor.
-    apply H. clear H.
+    unfold ValidContractNoEvar, ValidContractCMut. intros [Hwp].
+    intros ι. cbn. cbn in Hwp.
     unfold smut_contract_outcome in Hwp.
+    (* specialize (Hwp ι). *)
+    (* pose proof (bapprox_contract c body) as H. *)
+    (* specialize (H ι _ (sub_id _) nil ι (fun _ _ _ => True)). *)
+    (* specialize (H (sep_contract_localstore c) nil). *)
+    (* rewrite inst_sub_id in H. inster H by constructor. *)
+    (* apply H. clear H. *)
   Admitted.
 
   (* Print Assumptions smut_wp_assume_formula. *)

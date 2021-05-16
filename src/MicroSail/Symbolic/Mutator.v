@@ -1815,17 +1815,21 @@ Module Mutators
     | MkSepContract _ _ Σ δ req result ens =>
         smut_produce req ;;
         smut_exec s      >>= fun Σ1 ζ1 t =>
-        smut_sub (sub_snoc ζ1 (result,τ) t) (smut_consume ens)
+        smut_sub (sub_snoc ζ1 (result,τ) t) (smut_consume ens) ;;
         (* smut_leakcheck *)
+        smut_block
     end.
 
   Definition smut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
-    SPath Unit (sep_contract_logic_variables c) :=
+    SPath Unit ε :=
     let δ    := sep_contract_localstore c in
-    spath_bind nil (smut_contract c s (sub_id _) nil δ nil) (fun _ _ _ _ => spath_block).
+    spath_demonic_close
+      (spath_map
+         (fun _ _ _ => tt)
+         (smut_contract c s (sub_id _) nil δ nil)).
 
-  Definition ValidContractNoEvar (Δ : PCtx) (τ : Ty) (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    ForallNamed (fun ι => spath_safe (sep_contract_logic_variables c) ι (smut_contract_outcome c body)).
+  Definition ValidContractNoEvar {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+    VerificationCondition (spath_prune (spath_prune (smut_contract_outcome c body))).
 
   Section CallerContext.
 

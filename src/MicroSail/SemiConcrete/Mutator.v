@@ -628,7 +628,8 @@ Module SemiConcrete
       fun ι =>
       cmut_produce ι req ;;
       cmut_exec s >>= fun v =>
-      cmut_consume (env_snoc ι (result::τ) v) ens
+      cmut_consume (env_snoc ι (result::τ) v) ens ;;
+      cmut_block
       (* cmut_leakcheck *)
     end%mut.
 

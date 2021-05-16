@@ -500,7 +500,8 @@ Module Soundness
           by now rewrite sepcon_emp in H.
         change emp with ((fun _ => emp) δ3).
         apply (cmut_consume_sound (asn := ens)).
-        revert HYP. apply cmut_wp_monotonic.
+        revert HYP. rewrite cmut_wp_bind_right.
+        apply cmut_wp_monotonic.
         intros _ δ4 h4 HYP. unfold liftP.
     Admitted.
 
