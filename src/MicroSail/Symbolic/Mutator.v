@@ -71,51 +71,76 @@ Module Mutators
 
   Export symcontractkit.
 
+  Declare Scope modal.
+  Delimit Scope modal with modal.
+
   Definition TYPE : Type := LCtx -> Type.
+  Bind Scope modal with TYPE.
   Definition Valid (A : TYPE) : Type :=
     forall Σ, A Σ.
   Definition Impl (A B : TYPE) : TYPE :=
     fun Σ => A Σ -> B Σ.
   Definition Box (A : TYPE) : TYPE :=
     fun Σ0 => forall Σ1 (ζ01 : Sub Σ0 Σ1), A Σ1.
+  Definition Snoc (A : TYPE) (b : 𝑺 * Ty) : TYPE :=
+    fun Σ => A (Σ ▻ b).
+  Definition Const (A : Type) : TYPE :=
+    fun _ => A.
+  Definition Forall {I : Type} (A : I -> TYPE) : TYPE :=
+    fun Σ => forall i : I, A i Σ.
+  Definition Cat (A : TYPE) (Δ : LCtx) : TYPE :=
+    fun Σ => A (Σ ▻▻ Δ).
 
   Module ModalNotations.
 
-    Notation "⊢ A" := (Valid A) (at level 90).
-    Notation "A ->> B" := (Impl A B) (at level 80, right associativity).
-    Notation "□ A" := (Box A) (at level 11, format "□ A", right associativity).
+    Notation "⊢ A" := (Valid A%modal) (at level 100).
+    Notation "A -> B" := (Impl A%modal B%modal) : modal.
+    Notation "□ A" := (Box A%modal) (at level 85, format "□ A", right associativity) : modal.
+    Notation "⌜ A ⌝" := (Const A%type) : modal.
+    Notation "'∀' x .. y , P " :=
+      (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
+        (at level 99, x binder, y binder, right associativity)
+      : modal.
 
   End ModalNotations.
   Import ModalNotations.
+  Open Scope modal.
 
   Definition K {A B} :
-    ⊢ □(A ->> B) ->> (□A ->> □B) :=
+    ⊢ □(A -> B) -> (□A -> □B) :=
     fun Σ0 f a Σ1 ζ01 => f Σ1 ζ01 (a Σ1 ζ01).
   Definition T {A} :
-    ⊢ □A ->> A :=
+    ⊢ □A -> A :=
     fun Σ0 a => a Σ0 (sub_id Σ0).
   Definition four {A} :
-    ⊢ □A ->> □□A :=
+    ⊢ □A -> □□A :=
     fun Σ0 a Σ1 ζ01 Σ2 ζ12 => a Σ2 (sub_comp ζ01 ζ12).
+  Global Arguments four : simpl never.
 
   Definition valid_box {A} :
     (⊢ A) -> (⊢ □A) :=
     fun a Σ0 Σ1 ζ01 => a Σ1.
 
   Definition persistent (A : TYPE) : Type :=
-    ⊢ A ->> □A.
+    ⊢ A -> □A.
+
+  Definition PROP : TYPE :=
+    fun _ => Prop.
 
   Section LogicalRelation.
 
     Class LR (T : TYPE) : Type :=
       lr : forall Σ0 Σ1, Sub Σ0 Σ1 -> T Σ0 -> T Σ1 -> Prop.
 
+    Global Instance LRPROP : LR PROP :=
+      fun Σ0 Σ1 ζ01 P Q => (P -> Q)%type.
+
     Global Instance LRFormula : LR Formula :=
       fun Σ0 Σ1 ζ01 f0 f1 =>
         forall ι1 : SymInstance Σ1,
           inst_formula (inst ι1 ζ01) f0 <-> inst_formula ι1 f1.
 
-    Global Instance LRImpl {A B} `{LR A, LR B} : LR (A ->> B) :=
+    Global Instance LRImpl {A B} `{LR A, LR B} : LR (A -> B) :=
       fun Σ0 Σ1 ζ01 f0 f1 =>
         forall a0 a1,
           lr ζ01 a0 a1 -> lr (T := B) ζ01 (f0 a0) (f1 a1).
@@ -478,11 +503,11 @@ Module Mutators
         forall (ι1 : SymInstance Σ1) (POST : A -> Prop),
           spath_wp o0 (inst ι1 ζ01) POST <-> spath_wp o1 ι1 POST.
 
-    Definition new_spath_mapping_dcl {AT BT} `{LR AT, LR BT} {Σ0} (f : (□ (AT ->> BT)) Σ0) : Prop :=
+    Definition new_spath_mapping_dcl {AT BT} `{LR AT, LR BT} {Σ0} (f : (□ (AT -> BT)) Σ0) : Prop :=
       forall Σ1 (ζ01 : Sub Σ0 Σ1), lr ζ01 f (four f ζ01).
 
     Lemma new_spath_wp_map' {AT A BT B} `{LR AT, LR BT, InstLaws AT A, Inst BT B} {Σ} (ma : SPath AT Σ)
-      (f : (□ (AT ->> BT)) Σ) (f_dcl : new_spath_mapping_dcl f) :
+      (f : (□ (AT -> BT)) Σ) (f_dcl : new_spath_mapping_dcl f) :
       forall (ι : SymInstance Σ) POST,
         spath_wp (spath_map f ma) ι POST <->
         spath_wp ma ι (fun a => POST (inst ι (f Σ (sub_id Σ) (lift a)))).
