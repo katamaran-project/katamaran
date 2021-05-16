@@ -73,22 +73,10 @@ Module Soundness
   Import SCMUT.
   Import SCMUT.MUT.
 
-  Global Instance InstSMutResult {AT A} `{Inst AT A} {Γ} : Inst (SMutResult Γ AT) (CMutResult Γ A).
-  Proof.
-    constructor.
-    - intros ? ? r.
-      destruct r as [a δ h].
-      constructor.
-      revert a. now apply inst.
-      revert δ. now apply inst.
-      revert h. now apply inst.
-    - intros ? r.
-      destruct r as [a δ h].
-      constructor.
-      apply (lift a).
-      apply (lift δ).
-      apply (lift h).
-  Defined.
+  Global Instance InstSMutResult {AT A} `{Inst AT A} {Γ} : Inst (SMutResult Γ AT) (CMutResult Γ A) :=
+    {| inst Σ '(MkSMutResult a δ h) ι := MkCMutResult (inst a ι) (inst δ ι) (inst h ι);
+       lift Σ '(MkCMutResult a δ h) := MkSMutResult (lift a) (lift δ) (lift h);
+    |}.
 
   Global Instance InstLawsSMutResult {AT A} `{InstLaws AT A} {Γ} : InstLaws (SMutResult Γ AT) (CMutResult Γ A).
   Proof.
@@ -123,13 +111,13 @@ Module Soundness
   Definition smut_wp {AT A} `{Inst AT A} {Γ1 Γ2 Σ0} (d : SMut Γ1 Γ2 AT Σ0)
     {Σ1} (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1)
     (ι1 : SymInstance Σ1) (P : A -> SCProp Γ2) : Prop :=
-    spath_wp (d Σ1 ζ01 pc1 δ1 h1) ι1 (fun r => P (scmutres_value r) (scmutres_store r) (scmutres_heap r)).
+    spath_wp (d Σ1 ζ01 pc1 δ1 h1) (fun r => P (scmutres_value r) (scmutres_store r) (scmutres_heap r)) ι1.
   Global Arguments smut_wp : simpl never.
 
   Ltac fold_smut_wp :=
     match goal with
-    | |- context[spath_wp (?d ?Σ ?ζ ?pc ?δ ?h) ?ι (fun r => ?P _ _ _)] =>
-      change (spath_wp (d Σ ζ pc δ h) ι _) with (smut_wp d ζ pc δ h ι P)
+    | |- context[spath_wp (?d ?Σ ?ζ ?pc ?δ ?h) (fun r => ?P _ _ _) ?ι] =>
+      change (spath_wp (d Σ ζ pc δ h) _ ι) with (smut_wp d ζ pc δ h ι P)
     end.
 
   Lemma smut_wp_monotonic {AT A} `{Inst AT A} {Γ1 Γ2 Σ0 Σ1} (d : SMut Γ1 Γ2 AT Σ0)
@@ -151,7 +139,7 @@ Module Soundness
   Lemma smut_wp_pure {AT A} `{InstLaws AT A} {Γ Σ0 Σ1} (a0 : AT Σ0)
     (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
     (P : A -> SCProp Γ) :
-    smut_wp (smut_pure (Γ := Γ) a0) ζ01 pc1 δ1 h1 ι1 P <-> P (inst (inst ι1 ζ01) a0) (inst ι1 δ1) (inst ι1 h1).
+    smut_wp (smut_pure (Γ := Γ) a0) ζ01 pc1 δ1 h1 ι1 P <-> P (inst a0 (inst ζ01 ι1)) (inst δ1 ι1) (inst h1 ι1).
   Proof. unfold smut_wp, smut_pure; cbn. now rewrite inst_subst. Qed.
 
   Lemma smut_wp_fail {AT A D} `{Subst AT, Inst AT A} {Γ1 Γ2 Σ0 Σ1} (func msg : string) (data : D) (ζ01 : Sub Σ0 Σ1)
@@ -164,7 +152,7 @@ Module Soundness
     (pc2 : PathCondition Σ2) (δ2 : SStore Γ1 Σ2) (h2 : SHeap Σ2) (ζ12 : Sub Σ1 Σ2) (ι2 : SymInstance Σ2)
     (P : A -> SCProp Γ2) :
     smut_wp (smut_sub ζ01 d) ζ12 pc2 δ2 h2 ι2 P <->
-    smut_wp d (sub_comp ζ01 ζ12) pc2 δ2 h2 ι2 P.
+    smut_wp d (subst ζ01 ζ12) pc2 δ2 h2 ι2 P.
   Proof. reflexivity. Qed.
 
   Lemma smut_wp_debug {AT A DT D} `{InstLaws AT A, Subst DT, Inst DT D, OccursCheck DT} {Γ1 Γ2 Σ0 Σ1} d (k : SMut Γ1 Γ2 AT Σ0)
@@ -179,12 +167,12 @@ Module Soundness
 
   Definition smut_geq {Γ1 Γ2 AT Σ0 A} `{Inst AT A, Subst AT} (d1 d2 : SMut Γ1 Γ2 AT Σ0) : Prop :=
     forall Σ1 Σ2 (ζ01 : Sub Σ0 Σ1) pc1 (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ζ12 : Sub Σ1 Σ2) pc2 δ2 h2 ζ02 ι1 ι2,
-      ι1 = inst ι2 ζ12 ->
-      instpc ι1 pc1 ->
-      instpc ι2 pc2 ->
-      inst ι1 δ1 = inst ι2 δ2 ->
-      inst ι1 h1 = inst ι2 h2 ->
-      inst ι1 ζ01 = inst ι2 ζ02 ->
+      ι1 = inst ζ12 ι2 ->
+      instpc pc1 ι1 ->
+      instpc pc2 ι2 ->
+      inst δ1 ι1 = inst δ2 ι2 ->
+      inst h1 ι1 = inst h2 ι2 ->
+      inst ζ01 ι1 = inst ζ02 ι2 ->
       forall (P Q : A -> SCProp Γ2) (PQ : forall a δ h, P a δ h -> Q a δ h),
         smut_wp d1 ζ01 pc1 δ1 h1 ι1 P ->
         smut_wp d2 ζ02 pc2 δ2 h2 ι2 Q.
@@ -195,13 +183,13 @@ Module Soundness
   Definition smut_arrow_dcl {AT A BT B} `{Subst BT, Inst AT A, Inst BT B} {Γ1 Γ2 Σ0} (f : smut_arrow Γ1 Γ2 AT BT Σ0) : Prop :=
     forall Σ1 Σ2 ζ01 ζ02 a1 a2 Σ3 Σ4 ζ13 ζ24 ζ34 pc3 pc4 δ3 h3 δ4 h4,
     forall (ι3 : SymInstance Σ3) (ι4 : SymInstance Σ4),
-      ι3 = inst ι4 ζ34 ->
-      instpc ι3 pc3 ->
-      instpc ι4 pc4 ->
-      inst ι3 (sub_comp ζ01 ζ13) = inst ι4 (sub_comp ζ02 ζ24) ->
-      inst (inst ι3 ζ13) a1 = inst (inst ι4 ζ24) a2 ->
-      inst ι3 δ3 = inst ι4 δ4 ->
-      inst ι3 h3 = inst ι4 h4 ->
+      ι3 = inst ζ34 ι4 ->
+      instpc pc3 ι3 ->
+      instpc pc4 ι4 ->
+      inst (subst ζ01 ζ13) ι3 = inst (subst ζ02 ζ24) ι4 ->
+      inst a1 (inst ζ13 ι3) = inst a2 (inst ζ24 ι4) ->
+      inst δ3 ι3 = inst δ4 ι4 ->
+      inst h3 ι3 = inst h4 ι4 ->
       forall (P Q : B -> SCProp Γ2) (PQ : forall b δ h, P b δ h -> Q b δ h),
         smut_wp (f Σ1 ζ01 a1) ζ13 pc3 δ3 h3 ι3 P ->
         smut_wp (f Σ2 ζ02 a2) ζ24 pc4 δ4 h4 ι4 Q.
@@ -212,7 +200,7 @@ Module Soundness
       smut_dcl (f Σ1 ζ01 a1).
   Proof.
     unfold smut_dcl, smut_geq. intros until Q; intros PQ.
-    eapply f_dcl; eauto; unfold sub_comp; rewrite ?inst_subst; congruence.
+    eapply f_dcl; eauto; rewrite ?inst_subst; congruence.
   Qed.
 
   Lemma smut_pure_dcl {AT A} `{InstLaws AT A} {Γ Σ} (a : AT Σ) :
@@ -225,7 +213,7 @@ Module Soundness
   Lemma smut_wp_bind {AT A BT B} `{InstLaws AT A, InstLaws BT B} {Γ1 Γ2 Γ3 Σ0 Σ2}
     (d : SMut Γ1 Γ2 AT Σ0) (f : smut_arrow Γ2 Γ3 AT BT Σ0) (f_dcl : smut_arrow_dcl f)
     (pc2 : PathCondition Σ2) (δ2 : SStore Γ1 Σ2) (h2 : SHeap Σ2) (ζ02 : Sub Σ0 Σ2) (ι2 : SymInstance Σ2)
-    (Q : B -> SCProp Γ3) (Hpc2 : instpc ι2 pc2) :
+    (Q : B -> SCProp Γ3) (Hpc2 : instpc pc2 ι2) :
     smut_wp (smut_bind d f) ζ02 pc2 δ2 h2 ι2 Q <->
     smut_wp d ζ02 pc2 δ2 h2 ι2 (fun a δ h => smut_wp (f _ (sub_id _) (lift a)) ζ02 pc2 (lift δ) (lift h) ι2 Q).
   Proof.
@@ -236,7 +224,7 @@ Module Soundness
       unfold smut_arrow_dcl, smut_wp in f_dcl. cbn.
       specialize (f_dcl Σ2 Σ0 ζ02 (sub_id _) (lift a) (lift a) Σ2 Σ2 (sub_id _) ζ02 (sub_id _) pc2 pc2).
       specialize (f_dcl (lift scδ2) (lift sch2) (lift scδ2) (lift sch2) ι2 ι2).
-      inster f_dcl by (unfold sub_comp; rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; auto).
+      inster f_dcl by (rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; auto).
       specialize (f_dcl Q Q). inster f_dcl by auto.
       intros Hwp; apply f_dcl; revert Hwp.
       apply spath_wp_monotonic. intros [b sc3]. cbn.
@@ -246,7 +234,7 @@ Module Soundness
       unfold smut_arrow_dcl, smut_wp in f_dcl. cbn.
       specialize (f_dcl Σ0 Σ2 (sub_id _) ζ02 (lift a) (lift a) Σ2 Σ2 ζ02 (sub_id _) (sub_id _) pc2 pc2).
       specialize (f_dcl (lift scδ2) (lift sch2) (lift scδ2) (lift sch2) ι2 ι2).
-      inster f_dcl by (unfold sub_comp; rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; auto).
+      inster f_dcl by (rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; auto).
       specialize (f_dcl Q Q). inster f_dcl by auto.
       intros Hwp; apply f_dcl in Hwp; revert Hwp.
       apply spath_wp_monotonic. intros [b sc3]. cbn.
@@ -256,9 +244,9 @@ Module Soundness
       rewrite ?spath_wp_bind; try exact spath_arrow_dcl_pure; auto.
       unfold lift; cbn. setoid_rewrite inst_lift.
       unfold smut_arrow_dcl, smut_wp in f_dcl.
-      specialize (f_dcl Σ1 Σ3 (sub_comp ζ02 ζ1) (sub_comp ζ02 ζ2) a1 a3 Σ1 Σ3 (sub_id _) (sub_id _) ζ12 pc1 pc0).
+      specialize (f_dcl Σ1 Σ3 (subst ζ02 ζ1) (subst ζ02 ζ2) a1 a3 Σ1 Σ3 (sub_id _) (sub_id _) ζ12 pc1 pc0).
       specialize (f_dcl δ1 h1 δ3 h3 ι1 ι0).
-      inster f_dcl by (try exact HF0; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id; intuition).
+      inster f_dcl by (try exact HF0; rewrite ?inst_subst, ?inst_sub_id; intuition).
       specialize (f_dcl (fun b δ h => P (MkCMutResult b δ h)) (fun b δ h => Q0 (MkCMutResult b δ h))).
       apply f_dcl; intuition.
   Qed.
@@ -267,9 +255,9 @@ Module Soundness
     (d : SMut Γ1 Γ2 AT Σ0) (f : forall Σ1, Sub Σ0 Σ1 -> AT Σ1 -> BT Σ1)
     (f_dcl : spath_mapping_dcl f)
     (pc2 : PathCondition Σ2) (δ2 : SStore Γ1 Σ2) (h2 : SHeap Σ2) (ζ02 : Sub Σ0 Σ2) (ι2 : SymInstance Σ2)
-    (Q : B -> SCProp Γ2) (Hpc2 : instpc ι2 pc2) :
+    (Q : B -> SCProp Γ2) (Hpc2 : instpc pc2 ι2) :
     smut_wp (smut_fmap d f) ζ02 pc2 δ2 h2 ι2 Q <->
-    smut_wp d ζ02 pc2 δ2 h2 ι2 (fun a : A => Q (inst ι2 (f Σ2 ζ02 (lift a)))).
+    smut_wp d ζ02 pc2 δ2 h2 ι2 (fun a : A => Q (inst (f Σ2 ζ02 (lift a)) ι2)).
   Proof.
     unfold smut_fmap, smut_wp. rewrite spath_wp_map.
     split; apply spath_wp_monotonic; intros [a δ2' h2']; cbn.
@@ -277,12 +265,12 @@ Module Soundness
     - now rewrite sub_comp_id_right, ?inst_lift.
     - unfold spath_mapping_dcl. destruct a1 as [a1 δ1 h1], a2 as [a3 δ3 h3]; cbn.
       intros * -> Hζ. inversion 1. f_equal.
-      eapply f_dcl; unfold sub_comp; rewrite ?inst_subst; intuition.
+      eapply f_dcl; rewrite ?inst_subst; intuition.
   Qed.
 
   Lemma smut_wp_pair {AT A BT B} `{InstLaws AT A, InstLaws BT B} {Γ1 Γ2 Γ3 Σ0 Σ1}
     (da : SMut Γ1 Γ2 AT Σ0) (db : SMut Γ2 Γ3 BT Σ0) (db_dcl : smut_dcl db)
-    (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) δ1 h1 ι1 (Hpc : instpc ι1 pc1) P :
+    (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) δ1 h1 ι1 (Hpc : instpc pc1 ι1) P :
     smut_wp (smut_pair da db) ζ01 pc1 δ1 h1 ι1 P <->
     smut_wp da ζ01 pc1 δ1 h1 ι1 (fun a δ2 h2 => smut_wp db ζ01 pc1 (lift δ2) (lift h2) ι1 (fun b => P (a,b))).
   Proof.
@@ -309,7 +297,7 @@ Module Soundness
   Lemma smut_wp_bind_right {AT A BT B} `{InstLaws AT A, InstLaws BT B} {Γ1 Γ2 Γ3 Σ0 Σ1}
         (d1 : SMut Γ1 Γ2 AT Σ0) (d2 : SMut Γ2 Γ3 BT Σ0) (d2_dcl : smut_dcl d2)
         (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
-        (P : B -> SCProp Γ3) (Hpc1 : instpc ι1 pc1) :
+        (P : B -> SCProp Γ3) (Hpc1 : instpc pc1 ι1) :
     smut_wp (smut_bind_right d1 d2) ζ01 pc1 δ1 h1 ι1 P <->
     smut_wp d1 ζ01 pc1 δ1 h1 ι1 (fun a δ2 h2 => smut_wp d2 ζ01 pc1 (lift δ2) (lift h2) ι1 P).
   Proof.
@@ -338,27 +326,23 @@ Module Soundness
       {Γ1 Γ2 Γ3 Σ0}
       (d1 : smut_arrow Γ1 Γ2 AT BT Σ0) (d1_dcl : smut_arrow_dcl d1)
       (d2 : smut_arrow Γ2 Γ3 BT CT Σ0) (d2_dcl : smut_arrow_dcl d2) :
-    smut_arrow_dcl (fun Σ2 ζ02 a2 => smut_bind (d1 Σ2 ζ02 a2) (fun Σ3 ζ23 a3 => d2 Σ3 (sub_comp ζ02 ζ23) a3)).
+    smut_arrow_dcl (fun Σ2 ζ02 a2 => smut_bind (d1 Σ2 ζ02 a2) (fun Σ3 ζ23 a3 => d2 Σ3 (subst ζ02 ζ23) a3)).
   Proof.
     unfold smut_arrow_dcl, smut_geq.
     intros * -> Hpc1 Hpc2 Hζ Ha Hδ Hh P Q PQ; cbn.
     rewrite ?smut_wp_bind; auto. eapply d1_dcl; eauto. intros a δ h.
-    eapply d2_dcl; eauto; unfold sub_comp in *; rewrite ?inst_subst in Hζ;
+    eapply d2_dcl; eauto; rewrite ?inst_subst in Hζ;
       rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; intuition.
 
     unfold smut_arrow_dcl.
     intros * -> Hpc3 Hpc4 Hζ2 Ha2 Hδ2 Hh2 P2 Q2 PQ2; cbn.
     eapply d2_dcl; eauto.
-    unfold sub_comp.
-    unfold sub_comp in Hζ2.
     rewrite ?inst_subst in Hζ2.
     now rewrite ?inst_subst, Hζ2.
 
     unfold smut_arrow_dcl.
     intros * -> Hpc3 Hpc4 Hζ2 Ha2 Hδ2 Hh2 P2 Q2 PQ2; cbn.
     eapply d2_dcl; eauto.
-    unfold sub_comp.
-    unfold sub_comp in Hζ2.
     rewrite ?inst_subst in Hζ2.
     now rewrite ?inst_subst, Hζ2.
   Qed.
@@ -378,13 +362,13 @@ Module Soundness
   Lemma smut_wp_bind_left {AT A BT B} `{InstLaws AT A, InstLaws BT B} {Γ1 Γ2 Γ3 Σ0 Σ1}
         (d1 : SMut Γ1 Γ2 AT Σ0) (d2 : SMut Γ2 Γ3 BT Σ0) (d2_dcl : smut_dcl d2)
         (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
-        (P : A -> SCProp Γ3) (Hpc1 : instpc ι1 pc1) :
+        (P : A -> SCProp Γ3) (Hpc1 : instpc pc1 ι1) :
     smut_wp (smut_bind_left d1 d2) ζ01 pc1 δ1 h1 ι1 P <->
     smut_wp d1 ζ01 pc1 δ1 h1 ι1 (fun a δ2 h2 => smut_wp d2 ζ01 pc1 (lift δ2) (lift h2) ι1 (fun _ => P a)).
   Proof.
     unfold smut_bind_left. rewrite smut_wp_bind; auto. apply smut_wp_equiv.
     intros a scδ2 sch2. rewrite smut_wp_bind_right, smut_wp_sub; auto.
-    split; eapply d2_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id; auto;
+    split; eapply d2_dcl; rewrite ?inst_subst, ?inst_sub_id; auto;
       intros _ scδ3 sch3; now rewrite smut_wp_pure, ?inst_lift.
     apply smut_pure_dcl.
     apply smut_bind_right_arrow_dcl.
@@ -396,7 +380,7 @@ Module Soundness
     (f : forall Σ2, Sub Σ1 Σ2 -> SStore Γ1 Σ2 -> SHeap Σ2 -> SMutResult Γ2 AT Σ2)
     (pc2 : PathCondition Σ2) (δ2 : SStore Γ1 Σ2) (h2 : SHeap Σ2) (ζ12 : Sub Σ1 Σ2) (ι2 : SymInstance Σ2) (Q : A -> SCProp Γ2) :
     smut_wp (smut_state f) ζ12 pc2 δ2 h2 ι2 Q <->
-    match f Σ2 ζ12 δ2 h2 with MkSMutResult a δ2' h2' => Q (inst ι2 a) (inst ι2 δ2') (inst ι2 h2') end.
+    match f Σ2 ζ12 δ2 h2 with MkSMutResult a δ2' h2' => Q (inst a ι2) (inst δ2' ι2) (inst h2' ι2) end.
   Proof.
     unfold smut_wp, smut_state; cbn.
     now destruct (f Σ2 ζ12 _).
@@ -419,39 +403,39 @@ Module Soundness
   Lemma smut_wp_angelic {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ0 Σ1} {x : option 𝑺} {σ : Ty}
     (k : forall Σ1 : LCtx, Sub Σ0 Σ1 -> Term Σ1 σ -> SMut Γ1 Γ2 AT Σ1) (k_dcl : smut_arrow_dcl k)
     (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
-    (P : A -> SCProp Γ2) (Hpc : instpc ι1 pc1) :
+    (P : A -> SCProp Γ2) (Hpc : instpc pc1 ι1) :
     smut_wp (smut_angelic x σ k) ζ01 pc1 δ1 h1 ι1 P <->
     exists v : Lit σ, smut_wp (k _ (sub_id _) (lift (T := fun Σ => Term Σ σ) v)) ζ01 pc1 δ1 h1 ι1 P.
   Proof.
     unfold smut_wp, smut_angelic; cbn - [spath_angelic].
-    split; intros [v Hwp]; exists v; revert Hwp; eapply k_dcl; unfold four, sub_comp;
+    split; intros [v Hwp]; exists v; revert Hwp; eapply k_dcl; unfold four;
       repeat rewrite ?inst_sub_snoc, ?inst_subst, ?inst_sub_wk1, ?inst_sub_id; auto.
     now instantiate (1 := term_lit _ v).
   Qed.
 
   Lemma smut_wp_angelicv {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ Σ1 x σ} (d : SMut Γ1 Γ2 AT (Σ ▻ (x :: σ))) (d_dcl : smut_dcl d)
         (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
-        (P : A -> SCProp Γ2) (hpc : instpc ι1 pc1) :
+        (P : A -> SCProp Γ2) (hpc : instpc pc1 ι1) :
     smut_wp (smut_angelicv x σ d) ζ01 pc1 δ1 h1 ι1 P <->
     exists v : Lit σ, smut_wp d (sub_snoc ζ01 (x :: σ) (term_lit σ v)) pc1 δ1 h1 ι1 P.
   Proof.
     unfold smut_wp, smut_angelicv; cbn.
     split; intros [v Hwp]; exists v; revert Hwp.
     - apply (d_dcl
-               (Σ1 ▻ (fresh Σ1 (Some x) :: σ)) Σ1 (sub_snoc (sub_comp ζ01 sub_wk1) (x :: σ) (term_var (fresh Σ1 (Some x)))) (subst sub_wk1 pc1)
-               (subst sub_wk1 δ1) (subst sub_wk1 h1) (sub_snoc (sub_id Σ1) (fresh Σ1 (Some x) :: σ) (term_lit σ v)) pc1 δ1 h1 (sub_snoc ζ01 (x :: σ) (term_lit σ v)));
+               (Σ1 ▻ (fresh Σ1 (Some x) :: σ)) Σ1 (sub_snoc (subst ζ01 sub_wk1) (x :: σ) (term_var (fresh Σ1 (Some x)))) (subst pc1 sub_wk1)
+               (subst δ1 sub_wk1) (subst h1 sub_wk1) (sub_snoc (sub_id Σ1) (fresh Σ1 (Some x) :: σ) (term_lit σ v)) pc1 δ1 h1 (sub_snoc ζ01 (x :: σ) (term_lit σ v)));
         rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_wk1, ?inst_sub_id; auto; cbn.
-      unfold sub_comp. now rewrite inst_subst, inst_sub_wk1.
+      now rewrite inst_subst, inst_sub_wk1.
     - apply (d_dcl
-               Σ1 (Σ1 ▻ (fresh Σ1 (Some x) :: σ)) (sub_snoc ζ01 (x :: σ) (term_lit σ v)) pc1 δ1 h1 sub_wk1 (subst sub_wk1 pc1) (subst sub_wk1 δ1) (subst sub_wk1 h1)
-               (sub_snoc (sub_comp ζ01 sub_wk1) (x :: σ) (term_var (fresh Σ1 (Some x)))));
+               Σ1 (Σ1 ▻ (fresh Σ1 (Some x) :: σ)) (sub_snoc ζ01 (x :: σ) (term_lit σ v)) pc1 δ1 h1 sub_wk1 (subst pc1 sub_wk1) (subst δ1 sub_wk1) (subst h1 sub_wk1)
+               (sub_snoc (subst ζ01 sub_wk1) (x :: σ) (term_var (fresh Σ1 (Some x)))));
         rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_wk1, ?inst_sub_id; auto; cbn.
-      unfold sub_comp. now rewrite inst_subst, inst_sub_wk1.
+      now rewrite inst_subst, inst_sub_wk1.
   Qed.
 
   Lemma smut_wp_angelicvs {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ Σ1 Δ} (d : SMut Γ1 Γ2 AT (Σ ▻▻ Δ)) (d_dcl : smut_dcl d)
     (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
-    (P : A -> SCProp Γ2) (hpc : instpc ι1 pc1) :
+    (P : A -> SCProp Γ2) (hpc : instpc pc1 ι1) :
     smut_wp (smut_angelicvs Δ d) ζ01 pc1 δ1 h1 ι1 P <->
     exists ιΔ : SymInstance Δ, smut_wp d (env_cat ζ01 (lift (T := fun Σ => Sub _ Σ) ιΔ)) pc1 δ1 h1 ι1 P.
   Proof.
@@ -459,38 +443,38 @@ Module Soundness
     rewrite spath_wp_angelicvs.
     split; intros [ιΔ Hwp]; exists ιΔ; revert Hwp.
     - (* eapply d_dcl; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_wk1, ?inst_sub_id; auto; cbn. *)
-      (* unfold sub_comp. now rewrite inst_subst, inst_sub_wk1. *)
+      (* now rewrite inst_subst, inst_sub_wk1. *)
       admit.
     - (* eapply d_dcl; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_wk1, ?inst_sub_id; auto; cbn. *)
-      (* unfold sub_comp. now rewrite inst_subst, inst_sub_wk1. *)
+      (* now rewrite inst_subst, inst_sub_wk1. *)
       admit.
   Admitted.
 
   Lemma smut_wp_demonicv {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ Σ1 x σ} (d : SMut Γ1 Γ2 AT (Σ ▻ (x :: σ))) (d_dcl : smut_dcl d)
         (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
-        (P : A -> SCProp Γ2) (hpc : instpc ι1 pc1) :
+        (P : A -> SCProp Γ2) (hpc : instpc pc1 ι1) :
     smut_wp (smut_demonicv x σ d) ζ01 pc1 δ1 h1 ι1 P <->
     forall v : Lit σ, smut_wp d (sub_snoc ζ01 (x :: σ) (term_lit σ v)) pc1 δ1 h1 ι1 P.
   Proof.
     unfold smut_wp, smut_demonicv; cbn.
     split; intros Hwp v; specialize (Hwp v); revert Hwp.
     - apply (d_dcl
-               (Σ1 ▻ (fresh Σ1 (Some x) :: σ)) Σ1 (sub_snoc (sub_comp ζ01 sub_wk1) (x :: σ) (term_var (fresh Σ1 (Some x)))) (subst sub_wk1 pc1)
-               (subst sub_wk1 δ1) (subst sub_wk1 h1) (sub_snoc (sub_id Σ1) (fresh Σ1 (Some x) :: σ) (term_lit σ v)) pc1 δ1 h1 (sub_snoc ζ01 (x :: σ) (term_lit σ v)));
+               (Σ1 ▻ (fresh Σ1 (Some x) :: σ)) Σ1 (sub_snoc (subst ζ01 sub_wk1) (x :: σ) (term_var (fresh Σ1 (Some x)))) (subst pc1 sub_wk1)
+               (subst δ1 sub_wk1) (subst h1 sub_wk1) (sub_snoc (sub_id Σ1) (fresh Σ1 (Some x) :: σ) (term_lit σ v)) pc1 δ1 h1 (sub_snoc ζ01 (x :: σ) (term_lit σ v)));
         rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_wk1, ?inst_sub_id; auto; cbn.
-      unfold sub_comp. now rewrite inst_subst, inst_sub_wk1.
+      now rewrite inst_subst, inst_sub_wk1.
     - apply (d_dcl
-               Σ1 (Σ1 ▻ (fresh Σ1 (Some x) :: σ)) (sub_snoc ζ01 (x :: σ) (term_lit σ v)) pc1 δ1 h1 sub_wk1 (subst sub_wk1 pc1) (subst sub_wk1 δ1) (subst sub_wk1 h1)
-               (sub_snoc (sub_comp ζ01 sub_wk1) (x :: σ) (term_var (fresh Σ1 (Some x)))));
+               Σ1 (Σ1 ▻ (fresh Σ1 (Some x) :: σ)) (sub_snoc ζ01 (x :: σ) (term_lit σ v)) pc1 δ1 h1 sub_wk1 (subst pc1 sub_wk1) (subst δ1 sub_wk1) (subst h1 sub_wk1)
+               (sub_snoc (subst ζ01 sub_wk1) (x :: σ) (term_var (fresh Σ1 (Some x)))));
         rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_wk1, ?inst_sub_id; auto; cbn.
-      unfold sub_comp. now rewrite inst_subst, inst_sub_wk1.
+      now rewrite inst_subst, inst_sub_wk1.
   Qed.
 
   Lemma smut_wp_angelic_list {AT A D} `{InstLaws AT A} {Γ Σ} (func msg : string) (data : D)
     (xs : List AT Σ) Σ1 (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
     (P : A -> SCProp Γ) :
     smut_wp (smut_angelic_list func msg data xs) ζ01 pc1 δ1 h1 ι1 P <->
-    exists x : AT _, List.In x xs /\ P (inst (inst ι1 ζ01) x) (inst ι1 δ1) (inst ι1 h1).
+    exists x : AT _, List.In x xs /\ P (inst x (inst ζ01 ι1)) (inst δ1 ι1) (inst h1 ι1).
   Proof.
     induction xs; cbn - [smut_wp].
     - rewrite smut_wp_fail. split. intro Fm; exfalso; intuition.
@@ -517,7 +501,7 @@ Module Soundness
     (xs : List AT Σ) Σ1 (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
     (P : A -> SCProp Γ) :
     smut_wp (smut_demonic_list xs) ζ01 pc1 δ1 h1 ι1 P <->
-    forall x : AT _, List.In x xs -> P (inst (inst ι1 ζ01) x) (inst ι1 δ1) (inst ι1 h1).
+    forall x : AT _, List.In x xs -> P (inst x (inst ζ01 ι1)) (inst δ1 ι1) (inst h1 ι1).
   Proof.
     induction xs.
     - cbn; firstorder.
@@ -548,7 +532,7 @@ Module Soundness
   Lemma smut_wp_demonic_finite {X AT A} `{finite.Finite X, Subst AT, Inst AT A, InstLaws AT A, SubstLaws AT} {Γ1 Γ2 Σ Σ1}
     (k : X -> SMut Γ1 Γ2 AT Σ) (k_dcl : forall x, smut_dcl (k x))
     (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
-    (P : A -> SCProp Γ2) (Hpc : instpc ι1 pc1) :
+    (P : A -> SCProp Γ2) (Hpc : instpc pc1 ι1) :
     smut_wp (smut_demonic_finite X k) ζ01 pc1 δ1 h1 ι1 P <->
     (forall x : X, smut_wp (k x) ζ01 pc1 δ1 h1 ι1 P).
   Proof.
@@ -561,9 +545,9 @@ Module Soundness
 
   Lemma smut_wp_demonic_termvar {Γ Σ Σ1 x σ}
     (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
-    (P : Lit σ -> SCProp Γ) (Hpc : instpc ι1 pc1) :
+    (P : Lit σ -> SCProp Γ) (Hpc : instpc pc1 ι1) :
     smut_wp (smut_demonic_termvar x σ) ζ01 pc1 δ1 h1 ι1 P <->
-    forall v : Lit σ, P v (inst ι1 δ1) (inst ι1 h1).
+    forall v : Lit σ, P v (inst δ1 ι1) (inst h1 ι1).
   Proof.
     unfold smut_wp, smut_demonic_termvar; cbn.
     split; intros Hwp v; specialize (Hwp v); revert Hwp;
@@ -581,7 +565,7 @@ Module Soundness
     forall (Σ1 : LCtx) (ζ1 : Sub Σ0 Σ1), smut_dcl (smut_sub ζ1 d).
   Proof.
     unfold smut_dcl, smut_geq. intros * -> Hpc1 Hpc2 Hs Hζ * PQ. rewrite ?smut_wp_sub.
-    apply d_dcl with ζ12; auto. unfold sub_comp. rewrite ?inst_subst. congruence.
+    apply d_dcl with ζ12; auto. rewrite ?inst_subst. congruence.
   Qed.
 
   Lemma smut_demonicv_dcl {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ x σ} (d : SMut Γ1 Γ2 AT (Σ ▻ (x :: σ))) (d_dcl : smut_dcl d) :
@@ -599,7 +583,7 @@ Module Soundness
   Proof. Admitted.
 
   Ltac fold_inst_term :=
-    repeat change (@inst_term ?Σ ?ι ?σ ?t) with (@inst (fun Σ => Term Σ σ) (Lit σ) (@instantiate_term σ) Σ ι t) in *.
+    repeat change (@inst_term ?Σ ?σ ?t ?ι) with (@inst (fun Σ => Term Σ σ) (Lit σ) (@instantiate_term σ) Σ t ι) in *.
 
   Lemma smut_bind_dcl {AT A BT B} `{InstLaws AT A, InstLaws BT B}
       {Γ1 Γ2 Γ3 Σ0} (d : SMut Γ1 Γ2 AT Σ0) (d_dcl : smut_dcl d)
@@ -608,8 +592,7 @@ Module Soundness
   Proof.
     unfold smut_dcl, smut_geq. intros * -> Hpc1 Hpc2 Hδ Hh Hζ P Q PQ; cbn.
     rewrite ?smut_wp_bind; auto. eapply d_dcl; eauto. intros a δ h.
-    eapply f_dcl; eauto; unfold sub_comp;
-      rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; intuition.
+    eapply f_dcl; eauto; rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; intuition.
   Qed.
 
   Lemma smut_bind_right_dcl `{InstLaws AT A, InstLaws BT B} {Γ1 Γ2 Γ3 Σ0}
@@ -657,11 +640,11 @@ Module Soundness
        forall Σ1 Σ2 (ζ01 : Sub Σ Σ1) (ζ02 : Sub Σ Σ2) (ζ12 : Sub Σ1 Σ2)
          (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1)
          (δ2 : SStore Γ1 Σ2) (h2 : SHeap Σ2) ι1 ι2,
-         ι1 = inst ι2 ζ12 ->
-         inst ι1 δ1 = inst ι2 δ2 ->
-         inst ι1 h1 = inst ι2 h2 ->
-         inst ι1 ζ01 = inst ι2 ζ02 ->
-         inst ι1 (f Σ1 ζ01 δ1 h1) = inst ι2 (f Σ2 ζ02 δ2 h2)) :
+         ι1 = inst ζ12 ι2 ->
+         inst δ1 ι1 = inst δ2 ι2 ->
+         inst h1 ι1 = inst h2 ι2 ->
+         inst ζ01 ι1 = inst ζ02 ι2 ->
+         inst (f Σ1 ζ01 δ1 h1) ι1 = inst (f Σ2 ζ02 δ2 h2) ι2) :
     smut_dcl (smut_state f).
   Proof.
     unfold smut_dcl; intros until Q. intros PQ. rewrite ?smut_wp_state.
@@ -749,21 +732,21 @@ Module Soundness
     (Hl : forall (Σ1 Σ2 : LCtx) (ζ01 : Sub Σ Σ1) (ζ02 : Sub Σ Σ2) (a1 : AT Σ1) (a2 : AT Σ2) (Σ3 Σ4 : LCtx)
        (ζ13 : Sub Σ1 Σ3) (ζ24 : Sub Σ2 Σ4) (ζ34 : Sub Σ3 Σ4) (pc3 : PathCondition Σ3) (pc4 : PathCondition Σ4)
        (ι3 : SymInstance Σ3) (ι4 : SymInstance Σ4),
-        ι3 = inst ι4 ζ34 ->
-        instpc ι3 pc3 ->
-        instpc ι4 pc4 ->
-        inst ι3 (sub_comp ζ01 ζ13) = inst ι4 (sub_comp ζ02 ζ24) ->
-        inst (inst ι3 ζ13) a1 = inst (inst ι4 ζ24) a2 ->
-        inst (inst ι3 ζ13) (l Σ1 ζ01 a1) = inst (inst ι4 ζ24) (l Σ2 ζ02 a2)) :
+        ι3 = inst ζ34 ι4 ->
+        instpc pc3 ι3 ->
+        instpc pc4 ι4 ->
+        inst (subst ζ01 ζ13) ι3 = inst (subst ζ02 ζ24) ι4 ->
+        inst a1 (inst ζ13 ι3) = inst a2 (inst ζ24 ι4) ->
+        inst (l Σ1 ζ01 a1) (inst ζ13 ι3) = inst (l Σ2 ζ02 a2) (inst ζ24 ι4)) :
     smut_arrow_dcl (Γ2 := Γ) (fun Σ2 (ζ : Sub Σ Σ2) s => smut_angelic_list func msg data (l Σ2 ζ s)).
   Proof.
     unfold smut_arrow_dcl.
     intros until Q.
     intros PQ.
-    assert (eql : inst (inst ι3 ζ13) (l Σ1 ζ01 a1) = inst (inst ι4 ζ24) (l Σ2 ζ02 a2)) by (eapply Hl; eauto).
+    assert (eql : inst (l Σ1 ζ01 a1) (inst ζ13 ι3) = inst (l Σ2 ζ02 a2) (inst ζ24 ι4)) by (eapply Hl; eauto).
     rewrite ?smut_wp_angelic_list; eauto.
     intros (x & xInl1 & Px).
-    apply (List.in_map (inst (inst ι3 ζ13))) in xInl1.
+    apply (List.in_map (fun x => inst x (inst ζ13 ι3))) in xInl1.
     unfold inst at 1 3 in eql; cbn in eql.
     rewrite eql in xInl1.
     eapply List.in_map_iff in xInl1.
@@ -792,19 +775,19 @@ Module Soundness
   (* Qed. *)
 
   Lemma smut_wp_assume_formula {Γ Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (fml : Formula Σ1)
-    (δ2 : SStore Γ Σ2) (h2 : SHeap Σ2) (ι2 : SymInstance Σ2) P :
-    instpc ι2 pc2 ->
-    smut_wp (smut_assume_formula fml) ζ12 pc2 δ2 h2 ι2 P <->
-    ((inst (inst ι2 ζ12) fml : Prop) -> P tt (inst ι2 δ2) (inst ι2 h2)).
+    (δ2 : SStore Γ Σ2) (h2 : SHeap Σ2) (ι2 : SymInstance Σ2) POST :
+    instpc pc2 ι2 ->
+    smut_wp (smut_assume_formula fml) ζ12 pc2 δ2 h2 ι2 POST <->
+    ((inst fml (inst ζ12 ι2) : Prop) -> POST tt (inst δ2 ι2) (inst h2 ι2)).
   Proof.
     unfold smut_wp, smut_assume_formula. intros.
     rewrite spath_wp_bind; auto.
     - rewrite spath_wp_assume_formula; auto.
-      rewrite ?subst_sub_id, ?inst_subst.
+      unfold T. rewrite ?subst_sub_id, ?inst_subst.
       reflexivity.
-    - unfold spath_arrow_dcl. cbn. intros.
-      revert H5. rewrite ?inst_subst.
-      rewrite H3, H4. apply PQ.
+    - unfold spath_arrow_dcl. cbn.
+      intros * PQ * Hι Hpc1 Hpc2 Hζ Ha.
+      rewrite ?inst_subst. intuition.
   Qed.
 
   Lemma smut_assume_formula_dcl {Γ Σ} (fml : Formula Σ) :
@@ -827,9 +810,9 @@ Module Soundness
   Qed.
 
   Lemma smut_wp_assume_formulas {Γ Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (fmls : list (Formula Σ1))
-    (δ2 : SStore Γ Σ2) (h2 : SHeap Σ2) (ι2 : SymInstance Σ2) (Hpc2 : instpc ι2 pc2) P :
-    smut_wp (smut_assume_formulas fmls) ζ12 pc2 δ2 h2 ι2 P <->
-    (instpc (inst ι2 ζ12) fmls -> P tt (inst ι2 δ2) (inst ι2 h2)).
+    (δ2 : SStore Γ Σ2) (h2 : SHeap Σ2) (ι2 : SymInstance Σ2) (Hpc2 : instpc pc2 ι2) POST :
+    smut_wp (smut_assume_formulas fmls) ζ12 pc2 δ2 h2 ι2 POST <->
+    (instpc fmls (inst ζ12 ι2) -> POST tt (inst δ2 ι2) (inst h2 ι2)).
   Proof.
     unfold smut_assume_formulas. revert δ2 h2.
     induction fmls; cbn [List.fold_right]; intros δ2 h2.
@@ -846,9 +829,9 @@ Module Soundness
 
   Lemma smut_wp_assert_formula {Γ Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (fml : Formula Σ1)
     (δ2 : SStore Γ Σ2) (h2 : SHeap Σ2)
-    (ι2 : SymInstance Σ2) (Hpc2 : instpc ι2 pc2) P :
-    smut_wp (smut_assert_formula fml) ζ12 pc2 δ2 h2 ι2 P <->
-    (inst (inst ι2 ζ12) fml /\ P tt (inst ι2 δ2) (inst ι2 h2)).
+    (ι2 : SymInstance Σ2) (Hpc2 : instpc pc2 ι2) POST :
+    smut_wp (smut_assert_formula fml) ζ12 pc2 δ2 h2 ι2 POST <->
+    (inst fml (inst ζ12 ι2) /\ POST tt (inst δ2 ι2) (inst h2 ι2)).
   Proof.
     unfold smut_wp, smut_assert_formula.
     rewrite spath_wp_bind, spath_wp_assert_formula; cbn;
@@ -859,9 +842,9 @@ Module Soundness
   Qed.
 
   Lemma smut_wp_assert_formulak {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1 Σ2} (fml : Formula Σ1) (k : SMut Γ1 Γ2 AT Σ1) (k_dcl : smut_dcl k)
-    (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (δ2 : SStore Γ1 Σ2) (h2 : SHeap Σ2) (ι2 : SymInstance Σ2) (Hpc2 : instpc ι2 pc2) P :
-    smut_wp (smut_assert_formulak fml k) ζ12 pc2 δ2 h2 ι2 P <->
-    (inst (inst ι2 ζ12) fml /\ smut_wp k ζ12 pc2 δ2 h2 ι2 P).
+    (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (δ2 : SStore Γ1 Σ2) (h2 : SHeap Σ2) (ι2 : SymInstance Σ2) (Hpc2 : instpc pc2 ι2) POST :
+    smut_wp (smut_assert_formulak fml k) ζ12 pc2 δ2 h2 ι2 POST <->
+    (inst fml (inst ζ12 ι2) /\ smut_wp k ζ12 pc2 δ2 h2 ι2 POST).
   Proof.
     unfold smut_assert_formulak.
     rewrite smut_wp_bind_right; auto.
@@ -906,9 +889,9 @@ Module Soundness
 
   Lemma smut_wp_assert_formulask {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1 Σ2} (fmls : PathCondition Σ1) (k : SMut Γ1 Γ2 AT Σ1) (k_dcl : smut_dcl k)
     (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (δ2 : SStore Γ1 Σ2) (h2 : SHeap Σ2)
-    (ι2 : SymInstance Σ2) (Hpc2 : instpc ι2 pc2) P :
-    smut_wp (smut_assert_formulask fmls k) ζ12 pc2 δ2 h2 ι2 P <->
-    (inst (inst ι2 ζ12) fmls /\ smut_wp k ζ12 pc2 δ2 h2 ι2 P).
+    (ι2 : SymInstance Σ2) (Hpc2 : instpc pc2 ι2) POST :
+    smut_wp (smut_assert_formulask fmls k) ζ12 pc2 δ2 h2 ι2 POST <->
+    (inst fmls (inst ζ12 ι2) /\ smut_wp k ζ12 pc2 δ2 h2 ι2 POST).
   Proof.
     unfold smut_assert_formulask. revert δ2 h2.
     induction fmls; cbn [List.fold_right]; intros δ2 h2.
@@ -922,9 +905,9 @@ Module Soundness
 
   Lemma smut_wp_assert_formulas {Γ Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2) (fmls : list (Formula Σ1))
     (δ2 : SStore Γ Σ2) (h2 : SHeap Σ2)
-    (ι2 : SymInstance Σ2) (Hpc2 : instpc ι2 pc2) P :
-    smut_wp (smut_assert_formulas fmls) ζ12 pc2 δ2 h2 ι2 P <->
-    (instpc (inst ι2 ζ12) fmls /\ P tt (inst ι2 δ2) (inst ι2 h2)).
+    (ι2 : SymInstance Σ2) (Hpc2 : instpc pc2 ι2) POST :
+    smut_wp (smut_assert_formulas fmls) ζ12 pc2 δ2 h2 ι2 POST <->
+    (instpc fmls (inst ζ12 ι2) /\ POST tt (inst δ2 ι2) (inst h2 ι2)).
   Proof.
     unfold smut_assert_formulas. revert δ2 h2.
     induction fmls; cbn [List.fold_right]; intros δ2 h2.
@@ -941,17 +924,17 @@ Module Soundness
 
   Lemma smut_wp_demonic_match_bool {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1} (s : Term Σ1 ty_bool)
     (kt kf : SMut Γ1 Γ2 AT Σ1) (kt_dcl : smut_dcl kt) (kf_dcl : smut_dcl kf)
-    Σ2 (ζ12 : Sub Σ1 Σ2) pc2 δ2 h2 ι2 P :
-    instpc ι2 pc2 ->
-    smut_wp (smut_demonic_match_bool s kt kf) ζ12 pc2 δ2 h2 ι2 P <->
-    (inst (T := fun Σ => Term Σ _) (A := Lit ty_bool) (inst ι2 ζ12) s = true ->
-     smut_wp kt ζ12 pc2 δ2 h2 ι2 P) /\
-    (inst (T := fun Σ => Term Σ _) (A := Lit ty_bool) (inst ι2 ζ12) s = false ->
-     smut_wp kf ζ12 pc2 δ2 h2 ι2 P).
+    Σ2 (ζ12 : Sub Σ1 Σ2) pc2 δ2 h2 (ι2 : SymInstance Σ2) POST :
+    instpc pc2 ι2 ->
+    smut_wp (smut_demonic_match_bool s kt kf) ζ12 pc2 δ2 h2 ι2 POST <->
+    (inst (T := fun Σ => Term Σ _) (A := Lit ty_bool) s (inst ζ12 ι2) = true ->
+     smut_wp kt ζ12 pc2 δ2 h2 ι2 POST) /\
+    (inst (T := fun Σ => Term Σ _) (A := Lit ty_bool) s (inst ζ12 ι2) = false ->
+     smut_wp kf ζ12 pc2 δ2 h2 ι2 POST).
   Proof.
     intros Hpc2. unfold smut_demonic_match_bool.
     unfold smut_wp at 1.
-    destruct (term_get_lit_spec (subst (T := fun Σ => Term Σ ty_bool) ζ12 s)) as [[] Heqιs|_]; fold_smut_wp.
+    destruct (term_get_lit_spec (subst (T := fun Σ => Term Σ ty_bool) s ζ12)) as [[] Heqιs|_]; fold_smut_wp.
     - specialize (Heqιs ι2). rewrite inst_subst in Heqιs. split.
       + intros Hwp. split; auto.
         intros Heq. rewrite Heqιs in Heq. discriminate.
@@ -965,33 +948,33 @@ Module Soundness
       + rewrite smut_wp_bind_right, smut_wp_assume_formula in Ht; auto.
         cbn in Ht. rewrite inst_sub_id, inst_subst in Ht.
         intros Heq. specialize (Ht Heq). revert Ht.
-        eapply kt_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
+        eapply kt_dcl; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
         now apply smut_sub_dcl.
       + rewrite smut_wp_bind_right, smut_wp_assume_formula in Hf; auto.
         cbn in Hf. fold_inst_term. rewrite inst_sub_id, inst_subst in Hf.
         intros Heq. unfold is_true in Hf. rewrite negb_true_iff in Hf. specialize (Hf Heq). revert Hf.
-        eapply kf_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
+        eapply kf_dcl; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
         now apply smut_sub_dcl.
       + rewrite smut_wp_bind_right, smut_wp_assume_formula; auto.
         cbn. rewrite inst_sub_id, inst_subst.
         intros Heq. specialize (Ht Heq). revert Ht.
-        eapply kt_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
+        eapply kt_dcl; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
         now apply smut_sub_dcl.
       + rewrite smut_wp_bind_right, smut_wp_assume_formula; auto.
         cbn. fold_inst_term. rewrite inst_sub_id, inst_subst.
         intros Heq. unfold is_true in Heq. rewrite negb_true_iff in Heq. specialize (Hf Heq). revert Hf.
-        eapply kf_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
+        eapply kf_dcl; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; auto.
         now apply smut_sub_dcl.
   Qed.
 
   Lemma smut_wp_angelic_match_bool {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1} (s : Term Σ1 ty_bool)
     (kt kf : SMut Γ1 Γ2 AT Σ1) (kt_dcl : smut_dcl kt) (kf_dcl : smut_dcl kf)
     Σ2 (ζ12 : Sub Σ1 Σ2) pc2 δ2 h2 ι2 P :
-    instpc ι2 pc2 ->
+    instpc pc2 ι2 ->
     smut_wp (smut_angelic_match_bool s kt kf) ζ12 pc2 δ2 h2 ι2 P <->
-    (inst (T := fun Σ => Term Σ _) (A := Lit ty_bool) (inst ι2 ζ12) s = true /\
+    (inst (T := fun Σ => Term Σ _) (A := Lit ty_bool) s (inst ζ12 ι2) = true /\
      smut_wp kt ζ12 pc2 δ2 h2 ι2 P \/
-     inst (T := fun Σ => Term Σ _) (A := Lit ty_bool) (inst ι2 ζ12) s = false /\
+     inst (T := fun Σ => Term Σ _) (A := Lit ty_bool) s (inst ζ12 ι2) = false /\
      smut_wp kf ζ12 pc2 δ2 h2 ι2 P).
   Proof.
   Admitted.
@@ -999,16 +982,16 @@ Module Soundness
   Lemma smut_wp_demonic_match_enum {AT A E} `{InstLaws AT A} {Γ1 Γ2 Σ1} (t : Term Σ1 (ty_enum E))
     (d : 𝑬𝑲 E -> SMut Γ1 Γ2 AT Σ1) (d_dcl : forall x, smut_dcl (d x))
     Σ2 (ζ12 : Sub Σ1 Σ2) pc2 δ2 h2 ι2 P :
-    instpc ι2 pc2 ->
+    instpc pc2 ι2 ->
     smut_wp (smut_demonic_match_enum t d) ζ12 pc2 δ2 h2 ι2 P <->
-    smut_wp (d (inst (T := fun Σ => Term Σ _) (A := 𝑬𝑲 E) (inst ι2 ζ12) t)) ζ12 pc2 δ2 h2 ι2 P.
+    smut_wp (d (inst (T := fun Σ => Term Σ _) (A := 𝑬𝑲 E) t (inst ζ12 ι2))) ζ12 pc2 δ2 h2 ι2 P.
   Proof.
     intros Hpc2. unfold smut_demonic_match_enum. cbn.
     unfold smut_wp at 1.
-    destruct (term_get_lit_spec (subst (T := fun Σ => Term Σ (ty_enum E)) ζ12 t)) as [k Heqιs|]; cbn [Lit] in *.
+    destruct (term_get_lit_spec (subst (T := fun Σ => Term Σ (ty_enum E)) t ζ12)) as [k Heqιs|]; cbn [Lit] in *.
     - fold_smut_wp. specialize (Heqιs ι2). rewrite inst_subst in Heqιs. now rewrite Heqιs.
     - fold_smut_wp. rewrite smut_wp_demonic_finite. split; intros Hwp.
-      + specialize (Hwp (inst (T := fun Σ => Term Σ _) (inst ι2 ζ12) t)).
+      + specialize (Hwp (inst (T := fun Σ => Term Σ _) t (inst ζ12 ι2))).
         rewrite smut_wp_bind_right, smut_wp_assume_formula, smut_wp_sub in Hwp; auto.
         rewrite sub_comp_id_right, inst_sub_id in Hwp. cbn in Hwp.
         inster Hwp by now rewrite inst_subst. revert Hwp.
@@ -1031,40 +1014,36 @@ Module Soundness
     (dinl : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 σ -> SMut Γ1 Γ2 AT Σ1) (dinl_dcl : smut_arrow_dcl dinl)
     (dinr : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 τ -> SMut Γ1 Γ2 AT Σ1) (dinr_dcl : smut_arrow_dcl dinr)
     Σ1 (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
-    (P : A -> SCProp Γ2) (Hpc : instpc ι1 pc1) :
+    (P : A -> SCProp Γ2) (Hpc : instpc pc1 ι1) :
     smut_wp (smut_demonic_match_sum x y s dinl dinr) ζ01 pc1 δ1 h1 ι1 P <->
     (forall vl,
-        inst (T := fun Σ => Term Σ _) (A := Lit σ + Lit τ) (inst ι1 ζ01) s =
+        inst (T := fun Σ => Term Σ _) (A := Lit σ + Lit τ) s (inst ζ01 ι1) =
         @inl (Lit σ) (Lit τ) vl ->
         smut_wp (dinl _ (sub_id _) (term_lit σ vl)) ζ01 pc1 δ1 h1 ι1 P) /\
     (forall vr,
-        inst (T := fun Σ => Term Σ (ty_sum σ τ)) (A := Lit σ + Lit τ) (inst ι1 ζ01) s =
+        inst (T := fun Σ => Term Σ (ty_sum σ τ)) (A := Lit σ + Lit τ) s (inst ζ01 ι1) =
         @inr (Lit σ) (Lit τ) vr ->
         smut_wp (dinr _ (sub_id _) (term_lit τ vr)) ζ01 pc1 δ1 h1 ι1 P).
   Proof.
     unfold smut_demonic_match_sum.
     unfold smut_wp at 1. cbn.
-    destruct (term_get_sum_spec (subst (T := fun Σ => Term Σ (ty_sum σ τ)) ζ01 s)) as [[sl|sr] Heqιs|_].
+    destruct (term_get_sum_spec (subst (T := fun Σ => Term Σ (ty_sum σ τ)) s ζ01)) as [[sl|sr] Heqιs|_].
     - fold_smut_wp. specialize (Heqιs ι1). rewrite inst_subst in Heqιs. split.
       + intros Hwp. split.
         * intros v Heq. revert Hwp. rewrite Heqιs in Heq.
           apply noConfusion_inv in Heq. cbn in Heq. subst v.
-          eapply dinl_dcl; unfold sub_comp;
-            rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_snoc; eauto.
+          eapply dinl_dcl; rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_snoc; eauto.
         * intros v Heq. rewrite Heqιs in Heq. discriminate.
-      + intros [Hl Hr]. specialize (Hl (inst ι1 sl) Heqιs). revert Hl.
-        eapply dinl_dcl; unfold sub_comp;
-          rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_snoc; eauto.
+      + intros [Hl Hr]. specialize (Hl (inst sl ι1) Heqιs). revert Hl.
+        eapply dinl_dcl; rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_snoc; eauto.
     - fold_smut_wp. specialize (Heqιs ι1). rewrite inst_subst in Heqιs. split.
       + intros Hwp. split.
         * intros v Heq. rewrite Heqιs in Heq. discriminate.
         * intros v Heq. revert Hwp. rewrite Heqιs in Heq.
           apply noConfusion_inv in Heq. cbn in Heq. subst v.
-          eapply dinr_dcl; unfold sub_comp;
-            rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_snoc; eauto.
-      + intros [Hl Hr]. specialize (Hr (inst ι1 sr) Heqιs). revert Hr.
-        eapply dinr_dcl; unfold sub_comp;
-          rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_snoc; eauto.
+          eapply dinr_dcl; rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_snoc; eauto.
+      + intros [Hl Hr]. specialize (Hr (inst sr ι1) Heqιs). revert Hr.
+        eapply dinr_dcl; rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_snoc; eauto.
     - fold_smut_wp. unfold smut_demonic_match_sum'.
       rewrite smut_wp_demonic_binary, ?smut_wp_bind, ?smut_wp_demonic_termvar; auto.
       { split; intros [Hl Hr];
@@ -1074,28 +1053,28 @@ Module Soundness
           cbn in Hl. fold_inst_term.
           rewrite ?subst_sub_id, ?inst_subst, ?inst_sub_id, ?inst_lift in Hl.
           specialize (Hl Heq). revert Hl.
-          eapply dinl_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+          eapply dinl_dcl; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
           admit.
         - intros v Heq. specialize (Hr v).
           rewrite smut_wp_bind_right, smut_wp_assume_formula in Hr; auto.
           cbn in Hr. fold_inst_term.
           rewrite ?subst_sub_id, ?inst_subst, ?inst_sub_id, ?inst_lift in Hr.
           specialize (Hr Heq). revert Hr.
-          eapply dinr_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+          eapply dinr_dcl; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
           admit.
         - intros v. specialize (Hl v).
           rewrite smut_wp_bind_right, smut_wp_assume_formula; auto. cbn.
           fold_inst_term.
           rewrite ?subst_sub_id, ?inst_subst, ?inst_sub_id, ?inst_lift.
           intros Heq. specialize (Hl Heq). revert Hl.
-          eapply dinl_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+          eapply dinl_dcl; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
           admit.
         - intros v. specialize (Hr v).
           rewrite smut_wp_bind_right, smut_wp_assume_formula; auto. cbn.
           fold_inst_term.
           rewrite ?subst_sub_id, ?inst_subst, ?inst_sub_id, ?inst_lift.
           intros Heq. specialize (Hr Heq). revert Hr.
-          eapply dinr_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+          eapply dinr_dcl; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
           admit.
       }
       admit.
@@ -1104,33 +1083,33 @@ Module Soundness
 
   Definition smut_wp_demonic_match_pair {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ1} (x y : 𝑺) (σ τ : Ty) (s : Term Σ1 (ty_prod σ τ))
     (d : SMut Γ1 Γ2 AT (Σ1 ▻ (x :: σ) ▻ (y :: τ))) (d_dcl : smut_dcl d)
-    Σ2 (ζ12 : Sub Σ1 Σ2) pc2 δ2 h2 ι2 (Hpc : instpc ι2 pc2) P :
+    Σ2 (ζ12 : Sub Σ1 Σ2) pc2 δ2 h2 ι2 (Hpc : instpc pc2 ι2) P :
     smut_wp (smut_demonic_match_pair s d) ζ12 pc2 δ2 h2 ι2 P <->
     (forall sl sr,
-        inst (T := fun Σ => Term Σ _) (A := Lit (ty_prod σ τ)) (inst ι2 ζ12) s =
-        (inst (T := fun Σ => Term Σ _) (A := Lit σ) ι2 sl,
-         inst (T := fun Σ => Term Σ _) (A := Lit τ) ι2 sr) ->
+        inst (T := fun Σ => Term Σ _) (A := Lit (ty_prod σ τ)) s (inst ζ12 ι2) =
+        (inst (T := fun Σ => Term Σ _) (A := Lit σ) sl ι2,
+         inst (T := fun Σ => Term Σ _) (A := Lit τ) sr ι2) ->
         smut_wp d (sub_snoc (sub_snoc ζ12 (x :: σ) sl) (y :: τ) sr) pc2 δ2 h2 ι2 P).
   Proof.
     unfold smut_demonic_match_pair. cbn - [sub_wk1].
     unfold smut_wp at 1.
-    destruct (term_get_pair_spec (subst (T := fun Σ => Term Σ _) ζ12 s)) as [[sl sr] Heqs|];
+    destruct (term_get_pair_spec (subst (T := fun Σ => Term Σ _) s ζ12)) as [[sl sr] Heqs|];
       fold_smut_wp.
     - specialize (Heqs ι2). rewrite inst_subst in Heqs. split; auto.
       intros Hwp sl2 sr2 Heqs2. rewrite Heqs2 in Heqs.
       inversion Heqs. revert Hwp.
-      eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
+      eapply d_dcl; rewrite ?inst_subst, ?inst_sub_snoc, ?inst_sub_id, ?inst_lift; auto.
       f_equal; auto. f_equal; auto.
     - split; intros Hwp.
       { intros sl sr Heqs.
-        rewrite smut_wp_demonicv in Hwp; auto. specialize (Hwp (inst ι2 sl)).
-        rewrite smut_wp_demonicv in Hwp; auto. specialize (Hwp (inst ι2 sr)).
+        rewrite smut_wp_demonicv in Hwp; auto. specialize (Hwp (inst sl ι2)).
+        rewrite smut_wp_demonicv in Hwp; auto. specialize (Hwp (inst sr ι2)).
         rewrite smut_wp_bind_right in Hwp; auto.
         rewrite smut_wp_assume_formula in Hwp; auto.
         rewrite ?inst_sub_snoc in Hwp. cbn - [sub_wk1] in Hwp.
-        unfold sub_comp in Hwp. rewrite ?inst_subst, ?inst_sub_wk1 in Hwp.
+        rewrite ?inst_subst, ?inst_sub_wk1 in Hwp.
         specialize (Hwp Heqs). revert Hwp.
-        eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
+        eapply d_dcl; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
         - apply smut_bind_right_dcl; auto.
           apply smut_assume_formula_dcl.
         - apply smut_demonicv_dcl.
@@ -1141,10 +1120,10 @@ Module Soundness
         rewrite smut_wp_demonicv; auto. intros vr.
         rewrite smut_wp_bind_right; auto.
         rewrite smut_wp_assume_formula; auto.
-        unfold sub_comp. rewrite ?inst_sub_snoc. cbn - [sub_wk1].
+        rewrite ?inst_sub_snoc. cbn - [sub_wk1].
         rewrite ?inst_subst, ?inst_sub_wk1. intros Heqs.
         specialize (Hwp (lift vl) (lift vr) Heqs). revert Hwp.
-        eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
+        eapply d_dcl; rewrite ?inst_subst, ?inst_sub_id, ?inst_lift; eauto.
         - apply smut_bind_right_dcl; auto.
           apply smut_assume_formula_dcl.
         - apply smut_demonicv_dcl.
@@ -1192,7 +1171,7 @@ Module Soundness
   (*       cbn in Hwp. inster Hwp by admit. *)
   (*       rewrite inst_lift, smut_wp_sub in Hwp. *)
   (*       revert Hwp. *)
-  (*       eapply d_dcl; unfold sub_comp; rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; eauto. *)
+  (*       eapply d_dcl; rewrite ?inst_subst, ?inst_lift, ?inst_sub_id; eauto. *)
   (*       unfold inst; cbn. *)
   (*       rewrite ?env_map_cat. *)
   (*       f_equal. *)
@@ -1261,9 +1240,9 @@ Module Soundness
     smut_dcl (smut_demonic_match_pair s d).
   Proof.
     intros until Q; intros PQ. rewrite ?smut_wp_demonic_match_pair; auto.
-    intros Hwp sl sr Heqs. specialize (Hwp (lift (inst ι2 sl)) (lift (inst ι2 sr))).
+    intros Hwp sl sr Heqs. specialize (Hwp (lift (inst sl ι2)) (lift (inst sr ι2))).
     rewrite ?inst_lift in Hwp. rewrite <- H8 in Heqs. specialize (Hwp Heqs). revert Hwp.
-    eapply d_dcl; unfold sub_comp; rewrite ?inst_sub_snoc, ?inst_lift; auto.
+    eapply d_dcl; rewrite ?inst_sub_snoc, ?inst_lift; auto.
     f_equal; auto. f_equal; auto.
   Qed.
 
@@ -1283,7 +1262,7 @@ Module Soundness
   Proof.
     unfold smut_produce_chunk. apply smut_state_dcl.
     intros * -> Hδ Hh Hζ. cbn.
-    change (List.map (inst ?ι) ?h) with (inst ι h).
+    change (List.map (fun x => inst x ?ι) ?h) with (inst h ι).
     rewrite ?inst_subst. congruence.
   Qed.
 
@@ -1356,10 +1335,10 @@ Module Soundness
   Definition bapprox {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
     fun Σ0 ι0 dm sm =>
       forall Σ1 (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (ι1 : SymInstance Σ1) POST δ1 h1,
-        ι0 = inst ι1 ζ01 ->
-        instpc ι1 pc1 ->
+        ι0 = inst ζ01 ι1 ->
+        instpc pc1 ι1 ->
         smut_wp dm ζ01 pc1 δ1 h1 ι1 POST ->
-        cmut_wp sm POST (inst ι1 δ1) (inst ι1 h1).
+        cmut_wp sm POST (inst δ1 ι1) (inst h1 ι1).
 
   Definition bapprox2 {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
     fun Σ0 ι0 dm sm =>
@@ -1375,16 +1354,16 @@ Module Soundness
     - intros POST δ h Hwp.
       specialize (HYP ctx_nil (lift ι) nil env_nil POST (lift δ) (lift h)).
       rewrite ?inst_lift in HYP. apply HYP; auto. constructor.
-    - intros ? ? ? ? ? ? ? Hι Hpc Hwp. specialize (HYP POST (inst ι1 δ1) (inst ι1 h1)).
+    - intros ? ? ? ? ? ? ? Hι Hpc Hwp. specialize (HYP POST (inst δ1 ι1) (inst h1 ι1)).
       apply HYP. revert Hwp.
       apply (dm_dcl Σ1 ε ζ01 _ _ _ (lift ι1)); rewrite ?inst_lift; auto.
       constructor.
   Qed.
 
   Definition inst_dmut {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ) (d : SMut Γ1 Γ2 AT Σ) : CMut Γ1 Γ2 A :=
-    fun δ h => inst_spath ι (d Σ (sub_id Σ) nil (lift δ) (lift h)).
+    fun δ h => inst_spath (d Σ (sub_id Σ) nil (lift δ) (lift h)) ι.
   Definition inst_dmut' {AT A} `{Inst AT A} {Γ1 Γ2 Σ} (ι : SymInstance Σ) (d : SMut Γ1 Γ2 AT Σ) : CMut Γ1 Γ2 A :=
-    fun δ h => inst_spath env_nil (d ctx_nil (lift ι) nil (lift δ) (lift h)).
+    fun δ h => inst_spath (d ctx_nil (lift ι) nil (lift δ) (lift h)) env_nil.
 
   Definition bapprox3 {Γ1 Γ2 AT A} {instA : Inst AT A} : APPROX Γ1 Γ2 AT A :=
     fun Σ0 ι0 dm sm =>
@@ -1517,7 +1496,7 @@ Module Soundness
   Qed.
 
   Lemma bapprox_pure {AT A} `{InstLaws AT A} {Γ Σ} (ι : SymInstance Σ) (t : AT Σ) (a : A) :
-    a = inst ι t ->
+    a = inst t ι ->
     bapprox ι (smut_pure (Γ := Γ) t) (cmut_pure a).
   Proof.
     unfold bapprox. intros -> * -> Hpc.
@@ -1536,7 +1515,7 @@ Module Soundness
     (smf : A -> CMut Γ2 Γ3 B) :
     bapprox ι0 dma sma ->
     (forall (a0 : AT Σ0),
-        bapprox ι0 (dmf Σ0 (sub_id _) a0) (smf (inst ι0 a0))) ->
+        bapprox ι0 (dmf Σ0 (sub_id _) a0) (smf (inst a0 ι0))) ->
     bapprox ι0 (smut_bind dma dmf) (cmut_bind sma smf).
   Proof.
     unfold bapprox. intros Hapa Hapf * Hι Hpc.
@@ -1607,12 +1586,12 @@ Module Soundness
 
   Lemma bapprox_sub {AT A} `{Inst AT A, Subst AT} {Γ Σ0 Σ1} (ζ01 : Sub Σ0 Σ1)
     (d : SMut Γ Γ AT Σ0) (s : CMut Γ Γ A) (ι0 : SymInstance Σ0) (ι1 : SymInstance Σ1) :
-    ι0 = inst ι1 ζ01 ->
+    ι0 = inst ζ01 ι1 ->
     bapprox ι0 d s -> bapprox ι1 (smut_sub ζ01 d) s.
   Proof.
     intros Hι0 Hap. unfold bapprox. intros * Hι1 Hpc2.
     rewrite smut_wp_sub. apply Hap; auto.
-    unfold sub_comp; rewrite inst_subst; now subst.
+    rewrite inst_subst; now subst.
   Qed.
 
   Lemma bapprox_assume_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) :
@@ -1659,7 +1638,7 @@ Module Soundness
     (f : forall Σ1 (ζ01 : Sub Σ0 Σ1), SStore Γ1 Σ1 -> SHeap Σ1 -> SMutResult Γ2 AT Σ1)
     (g : LocalStore Γ1 -> SCHeap -> CMutResult Γ2 A)
     (fg : forall Σ1 ζ01 δ1 h1 ι1,
-        ι0 = inst ι1 ζ01 -> inst ι1 (f Σ1 ζ01 δ1 h1) = g (inst ι1 δ1) (inst ι1 h1)) :
+        ι0 = inst ζ01 ι1 -> inst (f Σ1 ζ01 δ1 h1) ι1 = g (inst δ1 ι1) (inst h1 ι1)) :
     bapprox ι0 (smut_state f) (cmut_state g).
   Proof.
     unfold bapprox. intros * Hι Hpc.
@@ -1674,7 +1653,7 @@ Module Soundness
     bapprox
       (Γ1 := Γ) (Γ2 := Γ) ι
       (smut_produce_chunk c)
-      (cmut_produce_chunk (inst ι c)).
+      (cmut_produce_chunk (inst c ι)).
   Proof.
     unfold bapprox. intros * Hι Hpc.
     unfold smut_produce_chunk, cmut_produce_chunk.
@@ -1690,12 +1669,12 @@ Module Soundness
     bapprox
       ι
       (smut_demonic_match_bool s dt df)
-      (cmut_match_bool (inst ι s) st sf).
+      (cmut_match_bool (inst s ι) st sf).
   Proof.
     intros ? ?. unfold bapprox. intros * -> ?.
     rewrite smut_wp_demonic_match_bool; auto.
     rewrite cmut_wp_match_bool.
-    destruct (inst (inst ι1 ζ01) s); intuition.
+    destruct (inst s (inst ζ01 ι1)); intuition.
   Qed.
 
   Lemma bapprox_demonic_match_enum {AT A E} `{InstLaws AT A} {Γ1 Γ2 Σ1} (t : Term Σ1 (ty_enum E))
@@ -1706,7 +1685,7 @@ Module Soundness
     bapprox
       ι
       (smut_demonic_match_enum t dm)
-      (cmut_match_enum (inst (T := fun Σ => Term Σ (ty_enum E)) ι t) sm).
+      (cmut_match_enum (inst (T := fun Σ => Term Σ (ty_enum E)) t ι) sm).
   Proof.
     unfold bapprox. intros Hap * ? Hpc. subst.
     rewrite smut_wp_demonic_match_enum; auto. now apply Hap.
@@ -1737,11 +1716,11 @@ Module Soundness
     bapprox
       ι
       (smut_demonic_match_pair s dm)
-      (cmut_match_pair (inst (T := fun Σ => Term Σ (ty_prod σ τ)) (A := Lit σ * Lit τ) ι s) sm).
+      (cmut_match_pair (inst (T := fun Σ => Term Σ (ty_prod σ τ)) (A := Lit σ * Lit τ) s ι) sm).
   Proof.
     unfold bapprox. intros Hap * ? Hpc.
     rewrite smut_wp_demonic_match_pair; auto. intros Hwp.
-    destruct (inst ι s) as [vl vr] eqn:Heqs. subst ι.
+    destruct (inst s ι) as [vl vr] eqn:Heqs. subst ι.
     specialize (Hwp (lift vl) (lift vr) Heqs). revert Hwp.
     now apply Hap.
   Qed.
@@ -1805,7 +1784,7 @@ Module Soundness
     bapprox
       (Γ1 := Γ) (Γ2 := Γ) ι
       (smut_consume_chunk c)
-      (cmut_consume_chunk (inst ι c)).
+      (cmut_consume_chunk (inst c ι)).
   Proof.
     unfold bapprox. intros * Hι Hpc.
     unfold smut_consume_chunk, cmut_consume_chunk.
@@ -1822,7 +1801,7 @@ Module Soundness
     rewrite smut_wp_state in Hwp; auto. cbn in Hwp, HIn.
     rewrite ?inst_subst, ?inst_lift in Hwp. cbn.
     rewrite cmut_wp_angelick_list.
-    exists (inst ι h').
+    exists (inst h' ι).
     split.
     - apply base.elem_of_list_In in HIn.
       unfold extract_chunk_eqb, extract_scchunk_eqb in *.
@@ -1833,7 +1812,7 @@ Module Soundness
       destruct (match_chunk_eqb_spec c c' nil); cbn in Heq; try discriminate.
       inversion Heq. subst h'' a. clear Heq.
       specialize (H ι). inster H by (subst; auto). destruct H as [H _].
-      exists (inst ι c', inst (T := List Chunk) ι h'). cbn.
+      exists (inst c' ι, inst (T := List Chunk) h' ι). cbn.
       apply base.elem_of_list_In in HIn.
       split; auto. apply List.filter_In.
       split.
@@ -1844,14 +1823,14 @@ Module Soundness
         destruct HIn as [[c1 h1'] [Heq HIn]].
         unfold base.prod_map in Heq; cbn in Heq.
         rewrite <- List.map_map in Heq.
-        change (lift (inst ι1 c1) :: lift (inst ι1 h1') = c' :: h') in Heq.
+        change (lift (inst c1 ι1) :: lift (inst h1' ι1) = c' :: h') in Heq.
         inversion Heq. subst. clear Heq.
         rewrite ?inst_lift in *.
         unfold inst at 3. cbn.
         rewrite heap_extractions_map.
         rewrite List.in_map_iff.
         exists (c1, h1'). split; auto.
-      + destruct (match_scchunk_eqb_spec (inst ι c) (inst ι c')); auto.
+      + destruct (match_scchunk_eqb_spec (inst c ι) (inst c' ι)); auto.
     - cbn; now subst.
     - apply smut_state_dcl. intros * ->. cbn.
       rewrite ?inst_subst, ?inst_lift. congruence.
@@ -1882,7 +1861,7 @@ Module Soundness
   Admitted.
 
   Lemma bapprox_call {Γ Δ τ Σ} (c : SepContract Δ τ) (ts : NamedEnv (Term Σ) Δ) (ι : SymInstance Σ) :
-    bapprox ι (@smut_call Γ Δ τ Σ c ts) (cmut_call c (inst ι ts)).
+    bapprox ι (@smut_call Γ Δ τ Σ c ts) (cmut_call c (inst ts ι)).
   Proof.
     destruct c as [Σ__c δ pre result post]; cbn [smut_call cmut_call].
     apply bapprox_angelicvs. admit.
@@ -1921,7 +1900,7 @@ Module Soundness
     (dm : SMut (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT Σ) (dm_dcl : smut_dcl dm)
     (sm : CMut (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) A) :
     bapprox ι dm sm ->
-    bapprox ι (smut_pushpop a dm) (cmut_pushpop (inst ι a) sm).
+    bapprox ι (smut_pushpop a dm) (cmut_pushpop (inst a ι) sm).
   Proof.
     intros Hap. unfold smut_pushpop, cmut_pushpop.
     apply bapprox_bind_right; auto.
@@ -1941,7 +1920,7 @@ Module Soundness
     (dm : SMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) AT Σ) (dm_dcl : smut_dcl dm)
     (sm : CMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) (Hap : bapprox ι dm sm) :
     forall (δ__sym : SStore Δ Σ) (δ__sc : LocalStore Δ),
-      δ__sc = inst ι δ__sym ->
+      δ__sc = inst δ__sym ι ->
       bapprox ι (smut_pushspops δ__sym dm) (cmut_pushspops δ__sc sm).
   Proof. Admitted.
 

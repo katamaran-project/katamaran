@@ -533,8 +533,8 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_result          := "result_csafe_move_cursor";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_csafe_move_cursor") (term_lit ty_unit tt) ✱
-         asn_csafe (sub_term sub_wk1 c) ✱
-         asn_csafe (sub_term sub_wk1 c');
+         asn_csafe (sub_term c sub_wk1) ✱
+         asn_csafe (sub_term c' sub_wk1);
     |}.
 
   (* (* Old contract *)

@@ -78,9 +78,9 @@ Module ProgramLogic
         (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : SymInstance Σ)
         (req : Assertion Σ) (ens : Assertion (Σ ▻ (result :: σ)))
         (frame : L) :
-        δΔ = inst ι θΔ ->
-        pre ⊢ frame ✱ interpret_assertion ι req ->
-        (forall v, frame ✱ interpret_assertion (env_snoc ι (result :: σ) v) ens ⊢ post v) ->
+        δΔ = inst θΔ ι ->
+        pre ⊢ frame ✱ interpret_assertion req ι ->
+        (forall v, frame ✱ interpret_assertion ens (env_snoc ι (result :: σ) v) ⊢ post v) ->
         CTriple δΔ pre post (MkSepContract _ _ _ θΔ req result ens).
 
     Inductive Triple {Γ : PCtx} (δ : LocalStore Γ) {τ : Ty} :

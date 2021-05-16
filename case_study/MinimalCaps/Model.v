@@ -271,7 +271,7 @@ Module MinCapsModel.
           (MinCapsIrisHeapKit.MinCaps_ptsreg reg w)
           (stm_call_external (ghost open_ptsreg) es)
           (λ (v : ()) (δ' : LocalStore Γ),
-             (MinCapsSymbolicContractKit.ASS.interpret_assertion (ι ► (("result", ty_unit) ↦ v))
+             (MinCapsSymbolicContractKit.ASS.interpret_assertion
                   match (ι ‼ "reg")%exp with
                   | R0 =>
                       MinCapsSymbolicContractKit.ASS.asn_chunk
@@ -285,7 +285,7 @@ Module MinCapsModel.
                   | R3 =>
                       MinCapsSymbolicContractKit.ASS.asn_chunk
                         (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg3 (term_var "w"))
-                  end) ∗ ⌜δ' = δ⌝).
+                  end (ι ► (("result", ty_unit) ↦ v))) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (reg w ι  Heq) "Hpre".
     rewrite wp_unfold.
@@ -672,4 +672,3 @@ Module MinCapsModel.
    *)
 
 End MinCapsModel.
-

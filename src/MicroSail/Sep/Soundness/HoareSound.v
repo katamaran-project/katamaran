@@ -131,10 +131,10 @@ Module HoareSound
             ⟨ γ, μ, δ, Pi f ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
             forall (γframe γfocus : Heap),
               split (heap γ) γframe γfocus ->
-              (interpret_assertion (L:=HProp) ι pre) γfocus ->
+              (interpret_assertion (L:=HProp) pre ι) γfocus ->
               exists (γfocus' : Heap),
                 split (heap γ') γframe γfocus' /\
-                ResultOrFail s' (fun v => interpret_assertion (env_snoc ι (result :: σ) v) post γfocus')
+                ResultOrFail s' (fun v => interpret_assertion post (env_snoc ι (result :: σ) v) γfocus')
         | None => False
         end.
 

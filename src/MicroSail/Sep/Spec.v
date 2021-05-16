@@ -82,12 +82,12 @@ Module Assertions
       formula_eq t t' :: formula_eqs δ δ'.
 
   Instance sub_formula : Subst Formula :=
-    fun Σ1 Σ2 ζ fml =>
+    fun Σ1 fml Σ2 ζ =>
       match fml with
-      | formula_bool t    => formula_bool (subst ζ t)
-      | formula_prop ζ' P => formula_prop (subst ζ ζ') P
-      | formula_eq t1 t2  => formula_eq (subst ζ t1) (subst ζ t2)
-      | formula_neq t1 t2 => formula_neq (subst ζ t1) (subst ζ t2)
+      | formula_bool t    => formula_bool (subst t ζ)
+      | formula_prop ζ' P => formula_prop (subst ζ' ζ) P
+      | formula_eq t1 t2  => formula_eq (subst t1 ζ) (subst t2 ζ)
+      | formula_neq t1 t2 => formula_neq (subst t1 ζ) (subst t2 ζ)
       end.
 
   Instance substlaws_formula : SubstLaws Formula.
@@ -97,12 +97,12 @@ Module Assertions
     { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
   Qed.
 
-  Definition inst_formula {Σ} (ι : SymInstance Σ) (fml : Formula Σ) : Prop :=
+  Definition inst_formula {Σ} (fml : Formula Σ) (ι : SymInstance Σ) : Prop :=
     match fml with
-    | formula_bool t    => is_true (inst (A := Lit ty_bool) ι t)
-    | formula_prop ζ P  => uncurry_named P (inst ι ζ)
-    | formula_eq t1 t2  => inst ι t1 =  inst ι t2
-    | formula_neq t1 t2 => inst ι t1 <> inst ι t2
+    | formula_bool t    => is_true (inst (A := Lit ty_bool) t ι)
+    | formula_prop ζ P  => uncurry_named P (inst ζ ι)
+    | formula_eq t1 t2  => inst t1 ι =  inst t2 ι
+    | formula_neq t1 t2 => inst t1 ι <> inst t2 ι
     end.
 
   Instance instantiate_formula : Inst Formula Prop :=
@@ -198,13 +198,13 @@ Module Assertions
     Qed.
 
     (* Note: we use fold_right10 instead of fold_right to make inst_lift hold. *)
-    Definition inst_pathcondition {Σ} (ι : SymInstance Σ) (pc : PathCondition Σ) : Prop :=
-      fold_right10 (fun fml pc => inst ι fml /\ pc) (fun fml => inst ι fml) True pc.
+    Definition inst_pathcondition {Σ} (pc : PathCondition Σ) (ι : SymInstance Σ) : Prop :=
+      fold_right10 (fun fml pc => inst fml ι /\ pc) (fun fml => inst fml ι) True pc.
     Global Arguments inst_pathcondition : simpl never.
 
     Lemma inst_subst1 {Σ Σ' } (ζ : Sub Σ Σ') (ι : SymInstance Σ') (f : Formula Σ) (pc : list (Formula Σ)) :
-      fold_right1 (fun fml pc => inst ι fml /\ pc) (fun fml => inst ι fml) (subst ζ f) (subst ζ pc) =
-      fold_right1 (fun fml pc => inst (inst ι ζ) fml /\ pc) (fun fml => inst (inst ι ζ) fml) f pc.
+      fold_right1 (fun fml pc => inst fml ι /\ pc) (fun fml => inst fml ι) (subst f ζ) (subst pc ζ) =
+      fold_right1 (fun fml pc => inst fml (inst ζ ι) /\ pc) (fun fml => inst fml (inst ζ ι)) f pc.
     Proof.
       revert f.
       induction pc; intros f; cbn.
@@ -215,8 +215,8 @@ Module Assertions
     Qed.
 
     Lemma inst_subst10 {Σ Σ' } (ζ : Sub Σ Σ') (ι : SymInstance Σ') (pc : list (Formula Σ)) :
-      fold_right10 (fun fml pc => inst ι fml /\ pc) (fun fml => inst ι fml) True (subst ζ pc) =
-      fold_right10 (fun fml pc => inst (inst ι ζ) fml /\ pc) (fun fml => inst (inst ι ζ) fml) True pc.
+      fold_right10 (fun fml pc => inst fml ι /\ pc) (fun fml => inst fml ι) True (subst pc ζ) =
+      fold_right10 (fun fml pc => inst fml (inst ζ ι) /\ pc) (fun fml => inst fml (inst ζ ι)) True pc.
     Proof.
       destruct pc.
       - reflexivity.
@@ -237,20 +237,20 @@ Module Assertions
     Qed.
 
     Lemma inst_pathcondition_cons {Σ} (ι : SymInstance Σ) (f : Formula Σ) (pc : PathCondition Σ) :
-      inst ι (cons f pc) <-> inst ι f /\ inst ι pc.
+      inst (cons f pc) ι <-> inst f ι /\ inst pc ι.
     Proof.
-      apply fold_right_1_10_prop.
+      apply (fold_right_1_10_prop (P := fun fml => inst fml ι)).
     Qed.
 
     Lemma inst_formula_eqs {Δ Σ} (ι : SymInstance Σ) (xs ys : SStore Δ Σ) :
-      inst (T := PathCondition) (A := Prop)ι (formula_eqs xs ys) <-> inst ι xs = inst ι ys.
+      inst (T := PathCondition) (A := Prop) (formula_eqs xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs.
       - destruct (nilView ys). cbn. intuition. constructor.
       - destruct (snocView ys). cbn - [inst].
         rewrite inst_pathcondition_cons, IHxs. clear IHxs.
-        change (inst ι db = inst ι v /\ inst ι xs = inst ι E <->
-                inst ι xs ► (b ↦ inst ι db) = inst ι E ► (b ↦ inst ι v)).
+        change (inst db ι = inst v ι /\ inst xs ι = inst E ι <->
+                inst xs ι ► (b ↦ inst db ι) = inst E ι ► (b ↦ inst v ι)).
         split.
         + intros [Hfml Hpc]; f_equal; auto.
         + intros Heq. apply noConfusion_inv in Heq. cbn in Heq.
@@ -269,14 +269,14 @@ Module Assertions
        potentially some constraints substituted away). *)
     Definition entails {Σ} (pc1 pc0 : PathCondition Σ) : Prop :=
       forall (ι : SymInstance Σ),
-        instpc ι pc1 ->
-        instpc ι pc0.
+        instpc pc1 ι ->
+        instpc pc0 ι.
     Infix "⊢" := (@entails _) (at level 80, no associativity).
 
     Definition entails_formula {Σ}
                (pc : PathCondition Σ) (f : Formula Σ) : Prop :=
       forall (ι : SymInstance Σ),
-        instpc ι pc -> (inst ι f : Prop).
+        instpc pc ι -> (inst f ι : Prop).
     Infix "⊢f" := (@entails_formula _) (at level 80, no associativity).
 
     Lemma entails_cons {Σ} (pc1 pc2 : PathCondition Σ) (f : Formula Σ) :
@@ -304,34 +304,35 @@ Module Assertions
         eauto.
     Qed.
 
-    Global Instance proper_subst_pc_entails {Σ1 Σ2} {ζ}: Proper ((@entails Σ1) ==> (@entails Σ2)) (subst ζ).
-    Proof.
-      intros pc1 pc2 pc12 ι.
-      rewrite ?inst_subst; eauto.
-    Qed.
+    (* Global Instance proper_subst_pc_entails {Σ1 Σ2} : *)
+    (*   Proper ((@entails Σ1) ==> eq ==> (@entails Σ2)) (subst (T := PathCondition)) . *)
+    (* Proof. *)
+    (*   intros pc1 pc2 pc12 ι. *)
+    (*   rewrite ?inst_subst; eauto. *)
+    (* Qed. *)
 
     Definition entails_eq {AT A} `{Inst AT A} {Σ} (pc : PathCondition Σ) (a0 a1 : AT Σ) : Prop :=
-      forall (ι : SymInstance Σ), instpc ι pc -> inst ι a0 = inst ι a1.
+      forall (ι : SymInstance Σ), instpc pc ι -> inst a0 ι = inst a1 ι.
     Notation "pc ⊢ a0 == a1" :=
       (entails_eq pc a0 a1)
       (at level 80, a0 at next level, no associativity).
 
-    Global Instance proper_subst_entails_eq {AT A} `{InstLaws AT A} {Σ1 Σ2} {ζ : Sub Σ1 Σ2} {pc : PathCondition Σ1} :
-      Proper ((entails_eq pc) ==> (entails_eq (subst ζ pc))) (subst ζ).
-    Proof.
-      intros a1 a2 a12 ι.
-      rewrite ?inst_subst; auto.
-    Qed.
+    (* Global Instance proper_subst_entails_eq {AT A} `{InstLaws AT A} {Σ1 Σ2} {ζ : Sub Σ1 Σ2} {pc : PathCondition Σ1} : *)
+    (*   Proper ((entails_eq pc) ==> (entails_eq (subst pc ζ))) (subst ζ). *)
+    (* Proof. *)
+    (*   intros a1 a2 a12 ι. *)
+    (*   rewrite ?inst_subst; auto. *)
+    (* Qed. *)
 
-    Global Instance proper_subst_entails_eq_pc
-           {Σ1 Σ2} `{InstLaws AT A}
-           (pc : PathCondition Σ2):
-      Proper (entails_eq pc ==> eq ==> entails_eq pc) (@subst AT _ Σ1 Σ2).
-    Proof.
-      intros ζ1 ζ2 ζ12 a1 a2 [] ι ιpc.
-      rewrite ?inst_subst.
-      now rewrite (ζ12 ι ιpc).
-    Qed.
+    (* Global Instance proper_subst_entails_eq_pc *)
+    (*        {Σ1 Σ2} `{InstLaws AT A} *)
+    (*        (pc : PathCondition Σ2): *)
+    (*   Proper (entails_eq pc ==> eq ==> entails_eq pc) (@subst AT _ Σ1 Σ2). *)
+    (* Proof. *)
+    (*   intros ζ1 ζ2 ζ12 a1 a2 [] ι ιpc. *)
+    (*   rewrite ?inst_subst. *)
+    (*   now rewrite (ζ12 ι ιpc). *)
+    (* Qed. *)
 
 
     (* Not sure this instance is a good idea...
@@ -388,10 +389,12 @@ Module Assertions
 
     Global Instance proper_entails_eq_sub_comp
            {Σ1 Σ2 Σ3} {ζ : Sub Σ1 Σ2} (pc : PathCondition Σ3):
-      Proper (entails_eq pc ==> entails_eq pc) (sub_comp ζ).
+      Proper (entails_eq pc ==> entails_eq pc) (subst ζ).
     Proof.
       intros ζ1 ζ2 ζ12.
-      unfold sub_comp; rewrite ζ12; easy.
+      unfold entails_eq in *.
+      intros ι Hpc. specialize (ζ12 ι Hpc).
+      now rewrite ?inst_subst, ζ12.
     Qed.
 
     (* Infix "⊢" := (@entails _) (at level 80, no associativity). *)
@@ -418,7 +421,7 @@ Module Assertions
 
     Lemma try_solve_eq_spec {Σ σ} (t1 t2 : Term Σ σ) :
       OptionSpec
-        (fun b => forall ι, inst ι t1 = inst ι t2 <-> is_true b)
+        (fun b => forall ι, inst t1 ι = inst t2 ι <-> is_true b)
         True
         (try_solve_eq t1 t2).
     Proof.
@@ -449,7 +452,7 @@ Module Assertions
 
     Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) :
       OptionSpec
-        (fun b => forall ι, inst ι fml <-> is_true b)
+        (fun b => forall ι, inst fml ι <-> is_true b)
         True
         (try_solve_formula fml).
     Proof.
@@ -486,7 +489,7 @@ Module Assertions
       end.
 
     Lemma try_unify_spec {Σ σ} (t1 t2 : Term Σ σ) :
-      OptionSpec (fun '(existT Σ' ζ) => forall ι, inst ι t1 = inst ι t2 <-> inst_multisub ι ζ) True (try_unify t1 t2).
+      OptionSpec (fun '(existT Σ' ζ) => forall ι, inst t1 ι = inst t2 ι <-> inst_multisub ζ ι) True (try_unify t1 t2).
     Proof.
       unfold try_unify. destruct t1; cbn; try (constructor; auto; fail).
       destruct (occurs_check ςInΣ t2) eqn:Heq; constructor; auto.
@@ -496,7 +499,7 @@ Module Assertions
     Qed.
 
     Lemma try_propagate_spec {Σ} (fml : Formula Σ) :
-      OptionSpec (fun '(existT Σ' ζ) => forall ι, (inst ι fml : Prop) <-> inst_multisub ι ζ) True (try_propagate fml).
+      OptionSpec (fun '(existT Σ' ζ) => forall ι, (inst fml ι : Prop) <-> inst_multisub ζ ι) True (try_propagate fml).
     Proof.
       unfold try_propagate; destruct fml; cbn; try (constructor; auto; fail).
       destruct (try_unify_spec t1 t2) as [[Σ' ζ] HYP|_]. constructor. auto.
@@ -554,7 +557,7 @@ Module Assertions
       end.
 
     Lemma try_assumption_spec {Σ} (pc : PathCondition Σ) (fml : Formula Σ) :
-      BoolSpec (forall ι, instpc ι pc -> inst (A := Prop) ι fml) True (try_assumption pc fml).
+      BoolSpec (forall ι, instpc pc ι -> inst (A := Prop) fml ι) True (try_assumption pc fml).
     Proof.
       induction pc; cbn.
       - constructor; auto.
@@ -585,10 +588,9 @@ Module Assertions
       end.
 
     Lemma inst_multisub_inst_sub_multi {Σ0 Σ1} (ζ01 : MultiSub Σ0 Σ1) (ι1 : SymInstance Σ1) :
-      inst_multisub (inst ι1 (sub_multi ζ01)) ζ01.
+      inst_multisub ζ01 (inst (sub_multi ζ01) ι1).
     Proof.
         induction ζ01; cbn; auto.
-        unfold sub_comp.
         rewrite <- inst_sub_shift.
         rewrite <- ?inst_subst.
         repeat
@@ -610,19 +612,19 @@ Module Assertions
       OptionSpec
         (fun '(existT Σ1 (ζ, fmls)) =>
            forall ι0,
-             instpc ι0 pc ->
-             (inst (A:= Prop) ι0 fml -> inst_multisub ι0 ζ) /\
+             instpc pc ι0 ->
+             (inst (A:= Prop) fml ι0 -> inst_multisub ζ ι0) /\
              (forall ι1,
-                 ι0 = inst ι1 (sub_multi ζ) ->
-                 inst ι0 fml <-> inst ι1 fmls))
-        (forall ι, instpc ι pc -> inst (A := Prop) ι fml -> False)
+                 ι0 = inst (sub_multi ζ) ι1 ->
+                 inst fml ι0 <-> inst fmls ι1))
+        (forall ι, instpc pc ι -> inst (A := Prop) fml ι -> False)
         (solver pc fml).
     Proof.
       unfold solver.
       destruct (try_propagate_spec fml) as [[Σ1 ζ01]|].
       { constructor. intros ι0 Hpc. specialize (H ι0).
         split. intuition. intros ι1 ->.
-        change (inst (inst ι1 (sub_multi ζ01)) fml <-> True).
+        change (inst fml (inst (sub_multi ζ01) ι1) <-> True).
         intuition. clear H. apply H1.
         apply inst_multisub_inst_sub_multi.
       }
@@ -705,10 +707,10 @@ Module Assertions
     (*   chunk_eqb _ _  := false. *)
 
     Global Instance sub_chunk : Subst Chunk :=
-      fun Σ1 Σ2 ζ c =>
+      fun Σ1 c Σ2 ζ =>
         match c with
-        | chunk_user p ts => chunk_user p (subst ζ ts)
-        | chunk_ptsreg r t => chunk_ptsreg r (subst ζ t)
+        | chunk_user p ts => chunk_user p (subst ts ζ)
+        | chunk_ptsreg r t => chunk_ptsreg r (subst t ζ)
         end.
 
     Global Instance substlaws_chunk : SubstLaws Chunk.
@@ -719,9 +721,9 @@ Module Assertions
     Qed.
 
     Global Instance inst_chunk : Inst Chunk SCChunk :=
-      {| inst Σ ι c := match c with
-                       | chunk_user p ts => scchunk_user p (inst ι ts)
-                       | chunk_ptsreg r t => scchunk_ptsreg r (inst ι t)
+      {| inst Σ c ι := match c with
+                       | chunk_user p ts => scchunk_user p (inst ts ι)
+                       | chunk_ptsreg r t => scchunk_ptsreg r (inst t ι)
                        end;
          lift Σ c   := match c with
                        | scchunk_user p vs => chunk_user p (lift vs)
@@ -773,9 +775,9 @@ Module Assertions
     Global Arguments MkMessage {Σ} _ _ _ _ _ _.
 
     Global Instance SubstMessage : Subst Message :=
-      fun Σ1 Σ2 ζ12 err =>
-        match err with
-        | MkMessage f m Γ δ h pc => MkMessage f m Γ (subst ζ12 δ) (subst ζ12 h) (subst ζ12 pc)
+      fun Σ1 msg Σ2 ζ12 =>
+        match msg with
+        | MkMessage f m Γ δ h pc => MkMessage f m Γ (subst δ ζ12) (subst h ζ12) (subst pc ζ12)
         end.
 
     Global Instance SubstLawsMessage : SubstLaws Message.
@@ -1001,14 +1003,14 @@ Module Assertions
         }.
 
     Global Instance SubstDebugCall : Subst SDebugCall :=
-      fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugCall Σ0) =>
+      fun Σ0 d Σ1 ζ01 =>
         match d with
         | MkSDebugCall f c ts pc δ h =>
-          MkSDebugCall f c (subst ζ01 ts) (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
+          MkSDebugCall f c (subst ts ζ01) (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
     Global Instance InstDebugCall : Inst SDebugCall DebugCall :=
-      {| inst Σ ι d :=
+      {| inst Σ d ι :=
            match d with
            | MkSDebugCall f c ts pc δ h =>
              MkDebugCall ι f c ts pc δ h
@@ -1016,7 +1018,7 @@ Module Assertions
          lift Σ d :=
            match d with
            | MkDebugCall ι f c ts pc δ h =>
-             MkSDebugCall f c (lift (inst ι ts)) (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
+             MkSDebugCall f c (lift (inst ts ι)) (lift (inst pc ι)) (lift (inst δ ι)) (lift (inst h ι))
            end;
       |}.
 
@@ -1036,14 +1038,14 @@ Module Assertions
         end.
 
     Global Instance SubstDebugStm : Subst SDebugStm :=
-      fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugStm Σ0) =>
+      fun Σ0 d Σ1 ζ01 =>
         match d with
         | MkSDebugStm s pc δ h =>
-          MkSDebugStm s (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
+          MkSDebugStm s (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
     Global Instance InstDebugStm : Inst SDebugStm DebugStm :=
-      {| inst Σ ι d :=
+      {| inst Σ d ι :=
            match d with
            | MkSDebugStm s pc δ h =>
              MkDebugStm s ι pc δ h
@@ -1051,7 +1053,7 @@ Module Assertions
          lift Σ d :=
            match d with
            | MkDebugStm s ι pc δ h =>
-             MkSDebugStm s (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
+             MkSDebugStm s (lift (inst pc ι)) (lift (inst δ ι)) (lift (inst h ι))
            end
       |}.
 
@@ -1069,14 +1071,14 @@ Module Assertions
         end.
 
     Global Instance SubstDebugAsn : Subst SDebugAsn :=
-      fun (Σ0 Σ1 : LCtx) (ζ01 : Sub Σ0 Σ1) (d : SDebugAsn Σ0) =>
+      fun Σ0 d Σ1 ζ01 =>
         match d with
         | MkSDebugAsn pc δ h =>
-          MkSDebugAsn (subst ζ01 pc) (subst ζ01 δ) (subst ζ01 h)
+          MkSDebugAsn (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
     Global Instance InstDebugAsn : Inst SDebugAsn DebugAsn :=
-      {| inst Σ ι d :=
+      {| inst Σ d ι :=
            match d with
            | MkSDebugAsn pc δ h =>
              MkDebugAsn ι pc δ h
@@ -1084,7 +1086,7 @@ Module Assertions
          lift Σ d :=
            match d with
            | MkDebugAsn ι pc δ h =>
-             MkSDebugAsn (lift (inst ι pc)) (lift (inst ι δ)) (lift (inst ι h))
+             MkSDebugAsn (lift (inst pc ι)) (lift (inst δ ι)) (lift (inst h ι))
            end
       |}.
 
@@ -1157,61 +1159,61 @@ Module Assertions
 
     Import LogicNotations.
 
-    Definition interpret_chunk {Σ} (ι : SymInstance Σ) (c : Chunk Σ) : L :=
+    Definition interpret_chunk {Σ} (c : Chunk Σ) (ι : SymInstance Σ) : L :=
       match c with
-      | chunk_user p ts => luser p (inst ι ts)
-      | chunk_ptsreg r t => lptsreg r (inst ι t)
+      | chunk_user p ts => luser p (inst ts ι)
+      | chunk_ptsreg r t => lptsreg r (inst t ι)
       end.
 
-    Fixpoint interpret_assertion {Σ} (ι : SymInstance Σ) (a : Assertion Σ) : L :=
+    Fixpoint interpret_assertion {Σ} (a : Assertion Σ) (ι : SymInstance Σ) : L :=
       match a with
-      | asn_formula fml => !!(inst ι fml) ∧ emp
-      | asn_chunk c => interpret_chunk ι c
-      | asn_if b a1 a2 => if inst (A := Lit ty_bool) ι b then interpret_assertion ι a1 else interpret_assertion ι a2
-      | asn_match_enum E k alts => interpret_assertion ι (alts (inst (T := fun Σ => Term Σ _) ι k))
+      | asn_formula fml => !!(inst fml ι) ∧ emp
+      | asn_chunk c => interpret_chunk c ι
+      | asn_if b a1 a2 => if inst (A := Lit ty_bool) b ι then interpret_assertion a1 ι else interpret_assertion a2 ι
+      | asn_match_enum E k alts => interpret_assertion (alts (inst (T := fun Σ => Term Σ _) k ι)) ι
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        match inst (T := fun Σ => Term Σ _) ι s with
-        | inl v => interpret_assertion(ι ► (xl :: σ ↦ v)) alt_inl
-        | inr v => interpret_assertion(ι ► (xr :: τ ↦ v)) alt_inr
+        match inst (T := fun Σ => Term Σ _) s ι with
+        | inl v => interpret_assertion alt_inl (ι ► (xl :: σ ↦ v))
+        | inr v => interpret_assertion alt_inr (ι ► (xr :: τ ↦ v))
         end
       | asn_match_list s alt_nil xh xt alt_cons =>
-        match inst (T := fun Σ => Term Σ _) ι s with
-        | nil        => interpret_assertion ι alt_nil
-        | cons vh vt => interpret_assertion(ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
+        match inst (T := fun Σ => Term Σ _) s ι with
+        | nil        => interpret_assertion alt_nil ι
+        | cons vh vt => interpret_assertion alt_cons (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt))
         end
       | asn_match_pair s xl xr rhs =>
-        match inst (T := fun Σ => Term Σ _) ι s with
-        | (vl,vr)    => interpret_assertion(ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs
+        match inst (T := fun Σ => Term Σ _) s ι with
+        | (vl,vr)    => interpret_assertion rhs (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr))
         end
       | asn_match_tuple s p rhs =>
-        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let t := inst (T := fun Σ => Term Σ _) s ι in
         let ι' := tuple_pattern_match_lit p t in
-        interpret_assertion(ι ►► ι') rhs
+        interpret_assertion rhs (ι ►► ι')
       | asn_match_record R s p rhs =>
-        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let t := inst (T := fun Σ => Term Σ _) s ι in
         let ι' := record_pattern_match_lit p t in
-        interpret_assertion(ι ►► ι') rhs
+        interpret_assertion rhs (ι ►► ι')
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let t := inst (T := fun Σ => Term Σ _) s ι in
         let (K , v) := 𝑼_unfold t in
         let ι' := pattern_match_lit (alt__pat K) v in
-        interpret_assertion(ι ►► ι') (alt__rhs K)
-      | asn_sep a1 a2 => interpret_assertion ι a1 ✱ interpret_assertion ι a2
-      | asn_exist ς τ a => ∃ (v : Lit τ), interpret_assertion(ι ► (ς∶τ ↦ v)) a
+        interpret_assertion (alt__rhs K) (ι ►► ι')
+      | asn_sep a1 a2 => interpret_assertion a1 ι ✱ interpret_assertion a2 ι
+      | asn_exist ς τ a => ∃ (v : Lit τ), interpret_assertion a (ι ► (ς∶τ ↦ v))
       | asn_debug => emp
     end%logic.
 
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) : LocalStore Δ :=
-      inst ι (sep_contract_localstore c).
+      inst (sep_contract_localstore c) ι.
 
     Definition interpret_contract_precondition {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) : L :=
-      interpret_assertion ι (sep_contract_precondition c).
+      interpret_assertion (sep_contract_precondition c) ι.
 
     Definition interpret_contract_postcondition {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
-        interpret_assertion (env_snoc ι (sep_contract_result c::τ) result) (sep_contract_postcondition c).
+        interpret_assertion (sep_contract_postcondition c) (env_snoc ι (sep_contract_result c::τ) result).
 
   End Contracts.
 
@@ -1266,8 +1268,8 @@ Module Assertions
       OptionSpec
         (fun fmls2 =>
            forall ι : SymInstance Σ,
-             instpc ι fmls2 ->
-             inst ι ce = inst ι cr /\ instpc ι fmls)
+             instpc fmls2 ι ->
+             inst ce ι = inst cr ι /\ instpc fmls ι)
         True
         (match_chunk_eqb ce cr fmls).
     Proof.

@@ -138,7 +138,7 @@ Module Soundness
         cmut_wp
           (cmut_assert_formula ι fml)
           (fun _ => liftP POST) δ h ->
-      interpret_scheap h ⊢ !! inst ι fml ∧ emp ✱ POST δ.
+      interpret_scheap h ⊢ !! inst fml ι ∧ emp ✱ POST δ.
     Proof.
       intros ? ?. rewrite cmut_wp_assert_formula.
       intros [Hfml HP].
@@ -156,7 +156,7 @@ Module Soundness
         cmut_wp
           (cmut_assume_formula ι fml)
           (fun _ => liftP POST) δ h ->
-      interpret_scheap h ✱ !! inst ι fml ∧ emp ⊢ POST δ.
+      interpret_scheap h ✱ !! inst fml ι ∧ emp ⊢ POST δ.
     Proof.
       intros ? ?. rewrite cmut_wp_assume_formula.
       intros HYP.
@@ -179,26 +179,26 @@ Module Soundness
     Lemma cmut_consume_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       forall δ h,
         cmut_wp (cmut_consume ι asn) (fun _ => liftP POST) δ h ->
-        interpret_scheap h ⊢ interpret_assertion ι asn ✱ POST δ.
+        interpret_scheap h ⊢ interpret_assertion asn ι ✱ POST δ.
     Proof.
       revert POST. induction asn; cbn - [inst inst_term]; intros POST δ1 h1.
       - now apply cmut_assert_formula_sound.
       - destruct c; now apply cmut_consume_chunk_sound.
-      - destruct (inst ι b); auto.
+      - destruct (inst b ι); auto.
       - auto.
-      - destruct (inst ι s); auto.
-      - destruct (inst ι s); auto.
-      - destruct (inst ι s); auto.
+      - destruct (inst s ι); auto.
+      - destruct (inst s ι); auto.
+      - destruct (inst s ι); auto.
       - auto.
       - auto.
-      - destruct (𝑼_unfold (inst ι s)); auto.
+      - destruct (𝑼_unfold (inst s ι)); auto.
       - rewrite cmut_wp_bind_right. intros Hwp.
         rewrite sepcon_assoc.
-        apply (IHasn1 ι (fun δ => interpret_assertion ι asn2 ✱ POST δ) δ1 h1); clear IHasn1.
+        apply (IHasn1 ι (fun δ => interpret_assertion asn2 ι ✱ POST δ) δ1 h1); clear IHasn1.
         revert Hwp. apply cmut_wp_monotonic. intros _ δ2 h2.
         now apply (IHasn2 ι POST δ2 h2).
       - rewrite cmut_wp_angelic. intros [v Hwp].
-        apply (entails_trans (interpret_scheap h1) (interpret_assertion (env_snoc ι (ς , τ) v) asn ✱ POST δ1)).
+        apply (entails_trans (interpret_scheap h1) (interpret_assertion asn (env_snoc ι (ς , τ) v) ✱ POST δ1)).
         + now apply IHasn.
         + apply sepcon_entails.
           apply lex_right with v, entails_refl.
@@ -209,24 +209,24 @@ Module Soundness
     Lemma cmut_produce_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       forall δ h,
         cmut_wp (cmut_produce ι asn) (fun _ => liftP POST) δ h ->
-        interpret_scheap h ✱ interpret_assertion ι asn ⊢ POST δ.
+        interpret_scheap h ✱ interpret_assertion asn ι ⊢ POST δ.
     Proof.
       revert POST. induction asn; cbn - [cmut_assume_formula]; intros POST δ1 h1.
       - now apply cmut_assume_formula_sound.
       - rewrite sepcon_comm.
         destruct c; now cbn in *.
-      - destruct (inst ι b); auto.
+      - destruct (inst b ι); auto.
       - auto.
-      - destruct (inst ι s); auto.
-      - destruct (inst ι s); auto.
-      - destruct (inst ι s); auto.
+      - destruct (inst s ι); auto.
+      - destruct (inst s ι); auto.
+      - destruct (inst s ι); auto.
       - auto.
       - auto.
-      - destruct (𝑼_unfold (inst ι s)); auto.
+      - destruct (𝑼_unfold (inst s ι)); auto.
       - rewrite cmut_wp_bind_right. intros Hwp.
         rewrite <- sepcon_assoc.
         apply wand_sepcon_adjoint.
-        apply (IHasn1 ι (fun δ => interpret_assertion ι asn2 -✱ POST δ) δ1 h1 ); clear IHasn1.
+        apply (IHasn1 ι (fun δ => interpret_assertion asn2 ι -✱ POST δ) δ1 h1 ); clear IHasn1.
         revert Hwp. apply cmut_wp_monotonic. intros _ δ2 h2 Hwp.
         unfold liftP. apply wand_sepcon_adjoint.
         now apply (IHasn2 ι POST δ2 h2).
@@ -243,7 +243,7 @@ Module Soundness
     Lemma cmut_produce_sound' {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       forall δ h,
         cmut_wp (cmut_produce ι asn) (fun _ => liftP POST) δ h ->
-        interpret_assertion ι asn ⊢ interpret_scheap h -✱ POST δ.
+        interpret_assertion asn ι ⊢ interpret_scheap h -✱ POST δ.
     Proof.
       intros. apply wand_sepcon_adjoint. rewrite sepcon_comm.
       now apply cmut_produce_sound.
@@ -264,9 +264,9 @@ Module Soundness
       rewrite cmut_wp_assert_formulask.
       intros [Hfmls Hwp]; revert Hwp.
       rewrite cmut_wp_bind_right.
-      pose (fun δ => ∀ v, interpret_assertion (env_snoc ι (result,_) v) ens -✱ POST v δ) as frame.
+      pose (fun δ => ∀ v, interpret_assertion ens (env_snoc ι (result,_) v) -✱ POST v δ) as frame.
       intros HYP.
-      assert (interpret_scheap h ⊢ frame δΓ ✱ interpret_assertion ι req ).
+      assert (interpret_scheap h ⊢ frame δΓ ✱ interpret_assertion req ι ).
       { rewrite sepcon_comm.
         apply (cmut_consume_sound frame).
         revert HYP. apply cmut_wp_monotonic.
@@ -480,12 +480,12 @@ Module Soundness
       unfold ValidContractCMut, ValidContract.
       unfold inst_contract_localstore.
       destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
-      - specialize (HYP ι). remember (inst ι δΣ) as δ.
+      - specialize (HYP ι). remember (inst δΣ ι) as δ.
         rewrite cmut_wp_bind_right in HYP.
         eapply rule_consequence_left.
         apply rule_wp.
         apply entails_trans with
-            (interpret_scheap nil -✱ WP body (fun (v : Lit τ) (_ : LocalStore Δ) => interpret_assertion (env_snoc ι (result,τ) v) ens) δ).
+            (interpret_scheap nil -✱ WP body (fun (v : Lit τ) (_ : LocalStore Δ) => interpret_assertion ens (env_snoc ι (result,τ) v)) δ).
         apply cmut_produce_sound'.
         2: {
           rewrite <- sepcon_emp.
@@ -496,7 +496,7 @@ Module Soundness
         intros _ δ2 h2 HYP. apply cmut_exec_sound'.
         revert HYP. rewrite cmut_wp_bind. apply cmut_wp_monotonic.
         intros v3 δ3 h3 HYP.
-        enough (interpret_scheap h3 ⊢ interpret_assertion (env_snoc ι (result,τ) v3) ens ✱ emp)
+        enough (interpret_scheap h3 ⊢ interpret_assertion ens (env_snoc ι (result,τ) v3) ✱ emp)
           by now rewrite sepcon_emp in H.
         change emp with ((fun _ => emp) δ3).
         apply (cmut_consume_sound (asn := ens)).

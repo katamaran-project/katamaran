@@ -227,13 +227,13 @@ Module SemiConcrete
     Local Opaque instantiate_term.
 
     Definition cmut_assume_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : CMut Γ Γ unit :=
-      fun δ h => outcome_assumek (inst ι fml) (outcome_pure (MkCMutResult tt δ h)).
+      fun δ h => outcome_assumek (inst fml ι) (outcome_pure (MkCMutResult tt δ h)).
     Definition cmut_assume_term {Γ Σ} (ι : SymInstance Σ) (t : Term Σ ty_bool) : CMut Γ Γ unit :=
       cmut_assume_formula ι (formula_bool t).
     Definition cmut_assert_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : CMut Γ Γ unit :=
-      fun δ h => outcome_assertk (inst ι fml) (outcome_pure (MkCMutResult tt δ h)).
+      fun δ h => outcome_assertk (inst fml ι) (outcome_pure (MkCMutResult tt δ h)).
     Definition cmut_assert_formulak {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fml : Formula Σ) (k : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-      fun δ h => outcome_assertk (inst ι fml) (k δ h).
+      fun δ h => outcome_assertk (inst fml ι) (k δ h).
     Definition cmut_assert_formulask {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) (k : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
       fold_right (cmut_assert_formulak ι) k fmls.
 
@@ -262,36 +262,36 @@ Module SemiConcrete
     Fixpoint cmut_produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
       match asn with
       | asn_formula fml => cmut_assume_formula ι fml
-      | asn_chunk c     => cmut_produce_chunk (inst ι c)
-      | asn_if b a1 a2  => cmut_match_bool (inst ι b) (cmut_produce ι a1) (cmut_produce ι a2)
+      | asn_chunk c     => cmut_produce_chunk (inst c ι)
+      | asn_if b a1 a2  => cmut_match_bool (inst b ι) (cmut_produce ι a1) (cmut_produce ι a2)
       | asn_match_enum E k alts =>
         cmut_match_enum
-          (inst (T := fun Σ => Term Σ _) ι k)
+          (inst (T := fun Σ => Term Σ _) k ι)
           (fun K => cmut_produce ι (alts K))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         cmut_match_sum
-          (inst (T := fun Σ => Term Σ _) ι s)
+          (inst (T := fun Σ => Term Σ _) s ι)
           (fun v => cmut_produce (env_snoc ι (xl :: σ) v) alt_inl)
           (fun v => cmut_produce (env_snoc ι (xr :: τ) v) alt_inr)
       | asn_match_list s alt_nil xh xt alt_cons =>
-        match inst (T := fun Σ => Term Σ _) ι s with
+        match inst (T := fun Σ => Term Σ _) s ι with
         | nil        => cmut_produce ι alt_nil
         | cons vh vt => cmut_produce (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
         end
       | asn_match_pair s xl xr rhs =>
         cmut_match_pair
-          (inst (T := fun Σ => Term Σ _) ι s)
+          (inst (T := fun Σ => Term Σ _) s ι)
           (fun vl vr => cmut_produce (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
       | asn_match_tuple s p rhs =>
-        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let t := inst (T := fun Σ => Term Σ _) s ι in
         let ι' := tuple_pattern_match_lit p t in
         cmut_produce (ι ►► ι') rhs
       | asn_match_record R s p rhs =>
         cmut_match_record p
-          (inst (T := fun Σ => Term Σ _) ι s)
+          (inst (T := fun Σ => Term Σ _) s ι)
           (fun ι' => cmut_produce (ι ►► ι') rhs)
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let t := inst (T := fun Σ => Term Σ _) s ι in
         let (K , v) := 𝑼_unfold t in
         let ι' := pattern_match_lit (alt__pat K) v in
         cmut_produce (ι ►► ι') (alt__rhs K)
@@ -303,36 +303,36 @@ Module SemiConcrete
     Fixpoint cmut_consume {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
       match asn with
       | asn_formula fml => cmut_assert_formula ι fml
-      | asn_chunk c     => cmut_consume_chunk (inst ι c)
-      | asn_if b a1 a2  => cmut_match_bool (inst ι b) (cmut_consume ι a1) (cmut_consume ι a2)
+      | asn_chunk c     => cmut_consume_chunk (inst c ι)
+      | asn_if b a1 a2  => cmut_match_bool (inst b ι) (cmut_consume ι a1) (cmut_consume ι a2)
       | asn_match_enum E k alts =>
         cmut_match_enum
-          (inst (T := fun Σ => Term Σ _) ι k)
+          (inst (T := fun Σ => Term Σ _) k ι)
           (fun K => cmut_consume ι (alts K))
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         cmut_match_sum
-          (inst (T := fun Σ => Term Σ _) ι s)
+          (inst (T := fun Σ => Term Σ _) s ι)
           (fun v => cmut_consume (env_snoc ι (xl :: σ) v) alt_inl)
           (fun v => cmut_consume (env_snoc ι (xr :: τ) v) alt_inr)
       | asn_match_list s alt_nil xh xt alt_cons =>
-        match inst (T := fun Σ => Term Σ _) ι s with
+        match inst (T := fun Σ => Term Σ _) s ι with
         | nil        => cmut_consume ι alt_nil
         | cons vh vt => cmut_consume (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
         end
       | asn_match_pair s xl xr rhs =>
         cmut_match_pair
-          (inst (T := fun Σ => Term Σ _) ι s)
+          (inst (T := fun Σ => Term Σ _) s ι)
           (fun vl vr => cmut_consume (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
       | asn_match_tuple s p rhs =>
-        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let t := inst (T := fun Σ => Term Σ _) s ι in
         let ι' := tuple_pattern_match_lit p t in
         cmut_consume (ι ►► ι') rhs
       | asn_match_record R s p rhs =>
         cmut_match_record p
-          (inst (T := fun Σ => Term Σ _) ι s)
+          (inst (T := fun Σ => Term Σ _) s ι)
           (fun ι' => cmut_consume (ι ►► ι') rhs)
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-        let t := inst (T := fun Σ => Term Σ _) ι s in
+        let t := inst (T := fun Σ => Term Σ _) s ι in
         let (K , v) := 𝑼_unfold t in
         let ι' := pattern_match_lit (alt__pat K) v in
         cmut_consume (ι ►► ι') (alt__rhs K)
@@ -544,28 +544,28 @@ Module SemiConcrete
       (POST : unit -> SCProp Γ ) :
       forall δ h,
         cmut_wp (cmut_assert_formula ι fml) POST δ h <->
-        inst ι fml /\ POST tt δ h.
+        inst fml ι /\ POST tt δ h.
     Proof. reflexivity. Qed.
 
     Lemma cmut_wp_assume_formula {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
       (POST : unit -> SCProp Γ ) :
       forall δ h,
         cmut_wp (cmut_assume_formula ι fml) POST δ h <->
-        (inst (A := Prop) ι fml -> POST tt δ h).
+        (inst (A := Prop) fml ι -> POST tt δ h).
     Proof. reflexivity. Qed.
 
     Lemma cmut_wp_assert_formulak {A Γ1 Γ2 Σ} {ι : SymInstance Σ} {fml : Formula Σ}
       {k : CMut Γ1 Γ2 A} (POST : A -> SCProp Γ2) :
       forall δ h,
         cmut_wp (cmut_assert_formulak ι fml k) POST δ h <->
-        inst ι fml /\ cmut_wp k POST δ h.
+        inst fml ι /\ cmut_wp k POST δ h.
     Proof. reflexivity. Qed.
 
     Lemma cmut_wp_assert_formulask {A Γ1 Γ2 Σ} {ι : SymInstance Σ} {fmls : list (Formula Σ)}
       {k : CMut Γ1 Γ2 A} (POST : A -> SCProp Γ2) :
       forall δ h,
         cmut_wp (cmut_assert_formulask ι fmls k) POST δ h <->
-        inst (T := PathCondition) ι fmls /\ cmut_wp k POST δ h.
+        inst (T := PathCondition) fmls ι /\ cmut_wp k POST δ h.
     Proof.
       intros δ h. unfold cmut_assert_formulask.
       induction fmls; cbn.
@@ -635,7 +635,7 @@ Module SemiConcrete
 
   Definition ValidContractCMut {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
     forall ι : SymInstance (sep_contract_logic_variables c),
-      let δΔ : LocalStore Δ := inst ι (sep_contract_localstore c) in
+      let δΔ : LocalStore Δ := inst (sep_contract_localstore c) ι in
       cmut_wp (cmut_contract c body ι) (fun _ _ _ => True) δΔ nil.
 
 End SemiConcrete.
