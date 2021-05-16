@@ -416,12 +416,18 @@ Module Soundness
     smut_wp d1 ζ01 pc1 δ1 h1 ι1 P \/ smut_wp d2 ζ01 pc1 δ1 h1 ι1 P.
   Proof. reflexivity. Qed.
 
-  Lemma smut_wp_angelic {AT A I} `{Inst AT A} {Γ1 Γ2 Σ Σ1} (d : I -> SMut Γ1 Γ2 AT Σ) (* (d_dcl : smut_dcl d) *)
-    (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
-    (P : A -> SCProp Γ2) :
-    smut_wp (smut_angelic d) ζ01 pc1 δ1 h1 ι1 P <->
-    exists i, smut_wp (d i) ζ01 pc1 δ1 h1 ι1 P.
-  Proof. reflexivity. Qed.
+  Lemma smut_wp_angelic {AT A} `{InstLaws AT A} {Γ1 Γ2 Σ0 Σ1} {x : option 𝑺} {σ : Ty}
+    (k : forall Σ1 : LCtx, Sub Σ0 Σ1 -> Term Σ1 σ -> SMut Γ1 Γ2 AT Σ1) (k_dcl : smut_arrow_dcl k)
+    (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
+    (P : A -> SCProp Γ2) (Hpc : instpc ι1 pc1) :
+    smut_wp (smut_angelic x σ k) ζ01 pc1 δ1 h1 ι1 P <->
+    exists v : Lit σ, smut_wp (k _ (sub_id _) (lift (T := fun Σ => Term Σ σ) v)) ζ01 pc1 δ1 h1 ι1 P.
+  Proof.
+    unfold smut_wp, smut_angelic; cbn - [spath_angelic].
+    split; intros [v Hwp]; exists v; revert Hwp; eapply k_dcl; unfold four, sub_comp;
+      repeat rewrite ?inst_sub_snoc, ?inst_subst, ?inst_sub_wk1, ?inst_sub_id; auto.
+    now instantiate (1 := term_lit _ v).
+  Qed.
 
   Lemma smut_wp_angelicv {AT A} `{Inst AT A, Subst AT} {Γ1 Γ2 Σ Σ1 x σ} (d : SMut Γ1 Γ2 AT (Σ ▻ (x :: σ))) (d_dcl : smut_dcl d)
         (ζ01 : Sub Σ Σ1) (pc1 : PathCondition Σ1) (δ1 : SStore Γ1 Σ1) (h1 : SHeap Σ1) (ι1 : SymInstance Σ1)
@@ -1586,18 +1592,17 @@ Module Soundness
     constructor.
   Qed.
 
-  Lemma bapprox_angelic {AT A BT B} `{InstLaws AT A, InstLaws BT B} {Γ Σ} (ι : SymInstance Σ)
-    (dm : AT Σ -> SMut Γ Γ BT Σ)
-    (sm : A -> CMut Γ Γ B) :
-    (forall a, bapprox ι (dm a) (sm (inst ι a))) ->
-    bapprox ι
-      (smut_angelic dm)
+  Lemma bapprox_angelic {AT A} `{InstLaws AT A} (x : option 𝑺) (σ : Ty) {Γ1 Γ2 Σ0} (ι0 : SymInstance Σ0)
+    (dm : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 σ -> SMut Γ1 Γ2 AT Σ1) (dm_dcl : smut_arrow_dcl dm)
+    (sm : Lit σ -> CMut Γ1 Γ2 A) :
+    (forall v : Lit σ, bapprox ι0 (dm Σ0 (sub_id _) (lift v)) (sm v)) ->
+    bapprox ι0
+      (smut_angelic x σ dm)
       (cmut_angelic sm).
   Proof.
     intros HYP. unfold bapprox. intros * Hι Hpc.
-    rewrite smut_wp_angelic, cmut_wp_angelic.
-    intros [a Hwp]. exists (inst ι a).
-    revert Hwp. apply HYP; auto.
+    rewrite smut_wp_angelic, cmut_wp_angelic; auto.
+    intros [v Hwp]. exists v. revert Hwp. apply HYP; auto.
   Qed.
 
   Lemma bapprox_sub {AT A} `{Inst AT A, Subst AT} {Γ Σ0 Σ1} (ζ01 : Sub Σ0 Σ1)
@@ -1997,22 +2002,21 @@ Module Soundness
     - admit.
     - admit.
     - admit.
-    - apply (bapprox_angelic (AT := fun Σ => Term Σ τ)).
-      intros t. apply bapprox_bind_right. admit.
-      (* apply bapprox_consume_chunk. *)
-      admit.
+    - apply bapprox_angelic; auto. admit.
+      intros v.
+      apply bapprox_bind_right. admit.
+      apply bapprox_consume_chunk.
       apply bapprox_bind_right. apply smut_pure_dcl.
-      apply (bapprox_produce_chunk (chunk_ptsreg reg t)).
+      apply bapprox_produce_chunk.
       now apply bapprox_pure.
     - apply bapprox_bind. admit.
       apply bapprox_eval_exp.
-      intros t.
-      apply (bapprox_angelic (AT := fun Σ => Term Σ τ)).
-      intros t'. apply bapprox_bind_right. admit.
-      (* apply bapprox_consume_chunk. *)
-      admit.
+      intros tnew.
+      apply bapprox_angelic. admit.
+      intros vold. apply bapprox_bind_right. admit.
+      apply bapprox_consume_chunk. rewrite subst_sub_id.
       apply bapprox_bind_right. apply smut_pure_dcl.
-      apply (bapprox_produce_chunk (chunk_ptsreg reg t)).
+      apply (bapprox_produce_chunk (chunk_ptsreg reg tnew)).
       now apply bapprox_pure.
     - admit.
     - admit.

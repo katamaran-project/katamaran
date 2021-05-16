@@ -145,8 +145,6 @@ Module Mutators
 
     Inductive SPath (A : LCtx -> Type) (Σ : LCtx) : Type :=
     | spath_pure (a: A Σ)
-    | spath_angelic {I : Type} (os: I -> SPath A Σ)
-    (* | spath_demonic {I : Type} (os: I -> SPath A Σ) *)
     | spath_angelic_binary (o1 o2 : SPath A Σ)
     | spath_demonic_binary (o1 o2 : SPath A Σ)
     | spath_fail (msg : Message Σ)
@@ -155,7 +153,6 @@ Module Mutators
     | spath_assumek (P : Formula Σ) (k : SPath A Σ)
     | spath_angelicv b (k : SPath A (Σ ▻ b))
     | spath_demonicv b (k : SPath A (Σ ▻ b))
-    (* | spath_subst {Σ'} (ζ : Sub Σ Σ') (k : SPath A Σ'). *)
     | spath_assert_vareq x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (msg : Message (Σ - (x,σ))) (k : SPath A (Σ - (x,σ)))
     | spath_assume_vareq x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (k : SPath A (Σ - (x,σ)))
     | spath_debug {BT B} {subB : Subst BT} {instB : Inst BT B} {occB: OccursCheck BT}
@@ -201,8 +198,6 @@ Module Mutators
     Fixpoint subst_spath {A} `{Subst A} {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (o : SPath A Σ1) : SPath A Σ2 :=
       match o with
       | spath_pure a => spath_pure (subst ζ a)
-      | spath_angelic os => spath_angelic (fun i => subst_spath ζ (os i))
-      (* | spath_demonic os => spath_demonic (fun i => subst_spath ζ (os i)) *)
       | spath_angelic_binary o1 o2 => spath_angelic_binary (subst_spath ζ o1) (subst_spath ζ o2)
       | spath_demonic_binary o1 o2 => spath_demonic_binary (subst_spath ζ o1) (subst_spath ζ o2)
       | spath_fail msg => spath_fail (subst ζ msg)
@@ -211,7 +206,6 @@ Module Mutators
       | spath_assumek P o => spath_assumek (subst ζ P) (subst_spath ζ o)
       | spath_angelicv b k => spath_angelicv b (subst_spath (sub_up1 ζ) k)
       | spath_demonicv b k => spath_demonicv b (subst_spath (sub_up1 ζ) k)
-      (* | spath_subst ζ2 k => _ *)
       | @spath_assert_vareq _ _ x σ xIn t msg k =>
         let ζ' := sub_comp (sub_shift _) ζ in
         spath_assertk
@@ -233,7 +227,6 @@ Module Mutators
       option (SPath A (Σ - x)) :=
       match o with
       | spath_pure a => option_map spath_pure (occurs_check xIn a)
-      | spath_angelic _ => None
       | spath_angelic_binary o1 o2 =>
         option_ap (option_map (spath_angelic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2)
       | spath_demonic_binary o1 o2 =>
@@ -284,7 +277,6 @@ Module Mutators
     Fixpoint inst_spath {AT A} `{Inst AT A} {Σ} (ι : SymInstance Σ) (o : SPath AT Σ) : Outcome A :=
       match o with
       | spath_pure a                   => outcome_pure (inst ι a)
-      | spath_angelic os               => outcome_angelic (fun i => inst_spath ι (os i))
       | spath_angelic_binary o1 o2     => outcome_angelic_binary (inst_spath ι o1) (inst_spath ι o2)
       | spath_demonic_binary o1 o2     => outcome_demonic_binary (inst_spath ι o1) (inst_spath ι o2)
       | spath_fail msg                 => outcome_fail msg
@@ -318,10 +310,17 @@ Module Mutators
     (*     (forall ι1 ι2, ι1 = inst ι2 ζ12 -> inst ι1 a1 = inst ι2 a2) -> *)
     (*     spath_geq (subst ζ12 (f Σ1 ζ1 a1)) (f Σ2 ζ2 a2). *)
 
+    Definition spath_angelic {AT Σ0} (x : option 𝑺) σ
+      (k : forall Σ1, Sub Σ0 Σ1 -> PathCondition Σ1 -> Term Σ1 σ -> SPath AT Σ1)
+      (pc0 : PathCondition Σ0) : SPath AT Σ0 :=
+      let y := fresh Σ0 x in
+      spath_angelicv
+        (y :: σ) (k (Σ0 ▻ (y :: σ)) sub_wk1 (subst sub_wk1 pc0) (@term_var _ y σ inctx_zero)).
+    Global Arguments spath_angelic {_ _} x σ k.
+
     Fixpoint spath_map {A B Σ} (f : spath_mapping A B Σ) (ma : SPath A Σ) : SPath B Σ :=
       match ma with
       | spath_pure a                   => spath_pure (f Σ (sub_id Σ) a)
-      | @spath_angelic _ _ I0 os     => spath_angelic (fun i : I0 => spath_map f (os i))
       | spath_angelic_binary o1 o2     => spath_angelic_binary (spath_map f o1) (spath_map f o2)
       | spath_demonic_binary o1 o2     => spath_demonic_binary (spath_map f o1) (spath_map f o2)
       | spath_fail msg                 => spath_fail msg
@@ -342,7 +341,6 @@ Module Mutators
     Fixpoint spath_bind {A B Σ} (pc : PathCondition Σ) (ma : SPath A Σ) (f : forall Σ', Sub Σ Σ' -> PathCondition Σ' -> A Σ' -> SPath B Σ') {struct ma} : SPath B Σ :=
       match ma with
       | spath_pure a                   => f Σ (sub_id Σ) pc a
-      | @spath_angelic _ _ I0 os     => spath_angelic (fun i : I0 => spath_bind pc (os i) f)
       | spath_angelic_binary o1 o2     => spath_angelic_binary (spath_bind pc o1 f) (spath_bind pc o2 f)
       | spath_demonic_binary o1 o2     => spath_demonic_binary (spath_bind pc o1 f) (spath_bind pc o2 f)
       | spath_fail msg                 => spath_fail msg
@@ -419,7 +417,6 @@ Module Mutators
     Fixpoint spath_wp {AT A Σ} `{Inst AT A} (o : SPath AT Σ) (ι : SymInstance Σ) (POST : A -> Prop) : Prop :=
       match o with
       | spath_pure a                               => POST (inst ι a)
-      | spath_angelic os                           => exists i, spath_wp (os i) ι POST
       | spath_angelic_binary o1 o2                 => (spath_wp o1 ι POST) \/ (spath_wp o2 ι POST)
       | spath_demonic_binary o1 o2                 => (spath_wp o1 ι POST) /\ (spath_wp o2 ι POST)
       | spath_fail msg                             => Error msg
@@ -445,7 +442,6 @@ Module Mutators
     Proof.
       unfold spath_wp'.
       induction o; cbn; auto.
-      - split; intros [i HYP]; exists i; revert HYP; apply H0.
       - specialize (IHo1 ι). specialize (IHo2 ι). intuition.
       - specialize (IHo1 ι). specialize (IHo2 ι). intuition.
       - split; intros [].
@@ -496,7 +492,6 @@ Module Mutators
               inst ι (f Σ (sub_id Σ) (lift (inst ι a)))) as ->; auto.
       cbv [new_spath_mapping_dcl lr LRBox LRImpl] in f_dcl.
       admit.
-    - split; intros [i HYP]; exists i; revert HYP; rewrite H6; eauto.
     - rewrite IHma1, IHma2; eauto.
     - rewrite IHma1, IHma2; eauto.
     - rewrite IHma; auto.
@@ -544,7 +539,6 @@ Module Mutators
       cbv [subst SubstSPath]. revert Σ2 ι ζ12.
       induction o; cbn; intros.
       - now rewrite inst_subst.
-      - split; intros [i HYP]; exists i; revert HYP; apply (H3 i Σ2 ι ζ12).
       - now rewrite IHo1, IHo2.
       - now rewrite IHo1, IHo2.
       - split; intros [].
@@ -588,8 +582,6 @@ Module Mutators
     Fixpoint spath_safe {AT Σ} (ι : SymInstance Σ) (o : SPath AT Σ) {struct o} : Prop :=
       match o with
       | spath_pure a => True
-      | spath_angelic os => exists i, spath_safe ι (os i)
-      (* | spath_demonic os => forall i, spath_safe ι (os i) POST *)
       | spath_angelic_binary o1 o2 => spath_safe ι o1 \/ spath_safe ι o2
       | spath_demonic_binary o1 o2 => spath_safe ι o1 /\ spath_safe ι o2
       | spath_fail msg => False
@@ -631,6 +623,21 @@ Module Mutators
           exists ιΔ, v. apply Hwp.
     Qed.
 
+    Lemma spath_wp_angelic {AT A} `{InstLaws AT A} {Σ0} {x : option 𝑺} {σ : Ty}
+          (k : forall Σ1 : LCtx, Sub Σ0 Σ1 -> PathCondition Σ1 -> Term Σ1 σ -> SPath AT Σ1) (k_dcl : spath_arrow_dcl k)
+          (pc0 : PathCondition Σ0)
+          (ι0 : SymInstance Σ0) (POST : A -> Prop) :
+      instpc ι0 pc0 ->
+      spath_wp (spath_angelic x σ k pc0) ι0 POST <->
+      exists v : Lit σ, spath_wp (k _ (sub_id _) pc0 (lift v)) ι0 POST.
+    Proof.
+      cbn. split; intros [v Hwp]; exists v; revert Hwp.
+      - apply (k_dcl _ _ sub_wk1 (sub_id Σ0) _ _ (sub_snoc (sub_id Σ0) (fresh Σ0 x :: σ) (term_lit σ v)));
+          repeat rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc; auto.
+      - apply (k_dcl _ _ (sub_id Σ0) sub_wk1 _ _ sub_wk1);
+          repeat rewrite ?inst_subst, ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc; auto.
+    Qed.
+
     Lemma spath_wp_map {AT A BT B} `{InstLaws AT A, Inst BT B} {Σ} (ma : SPath AT Σ)
       (f : spath_mapping AT BT Σ) (f_dcl : spath_mapping_dcl f) :
       forall (ι : SymInstance Σ) POST,
@@ -641,7 +648,6 @@ Module Mutators
       - assert (inst ι (f Σ (sub_id Σ) a) =
                 inst ι (f Σ (sub_id Σ) (lift (inst ι a)))) as ->; auto.
         eapply f_dcl; eauto; now rewrite ?inst_sub_id, ?inst_lift.
-      - split; intros [i HYP]; exists i; revert HYP; rewrite H4; eauto.
       - rewrite IHma1, IHma2; eauto.
       - rewrite IHma1, IHma2; eauto.
       - rewrite IHma; auto.
@@ -711,7 +717,6 @@ Module Mutators
     Proof.
       intros ι Hpc. induction ma; cbn; intros POST; auto.
       - split; eapply f_dcl with (sub_id _); eauto; rewrite ?inst_sub_id, ?inst_lift; auto.
-      - split; intros [i HYP]; exists i; revert HYP; now rewrite H7.
       - now rewrite IHma1, IHma2.
       - now rewrite IHma1, IHma2.
       - split; (intros [HP Hwp]; split; [exact HP | ]; revert Hwp);
@@ -1007,8 +1012,6 @@ Module Mutators
       | spath_pure a => spath_pure a
       | spath_fail msg => spath_fail msg
       | spath_block => spath_block
-      | spath_angelic os =>
-        spath_angelic (fun i => spath_prune (os i))
       | spath_angelic_binary o1 o2 =>
         spath_angelic_binary_prune (spath_prune o1) (spath_prune o2)
       | spath_demonic_binary o1 o2 =>
@@ -1159,10 +1162,6 @@ Module Mutators
     Definition smut_block {Γ1 Γ2 A Σ} : SMut Γ1 Γ2 A Σ :=
       fun _ _ _ _ _ => spath_block.
 
-    Definition smut_angelic {Γ1 Γ2 I A Σ} (ms : I -> SMut Γ1 Γ2 A Σ) : SMut Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 δ1 h1 => spath_angelic (fun i => ms i Σ1 ζ1 pc1 δ1 h1).
-    (* Definition smut_demonic {Γ1 Γ2 I A Σ} (ms : I -> SMut Γ1 Γ2 A Σ) : SMut Γ1 Γ2 A Σ := *)
-    (*   fun Σ1 ζ1 s1 => spath_demonic (fun i => ms i Σ1 ζ1 s1). *)
     Definition smut_angelic_binary {Γ1 Γ2 A Σ} (m1 m2 : SMut Γ1 Γ2 A Σ) : SMut Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 pc1 δ1 h1 => spath_angelic_binary (m1 Σ1 ζ1 pc1 δ1 h1) (m2 Σ1 ζ1 pc1 δ1 h1).
     Definition smut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : SMut Γ1 Γ2 A Σ) : SMut Γ1 Γ2 A Σ :=
@@ -1210,12 +1209,27 @@ Module Mutators
         let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
         spath_angelicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 δ1) (subst sub_wk1 h1)).
     Global Arguments smut_angelicv {_ _ _ _} _ _ _.
+
     Definition smut_demonicv {Γ1 Γ2 A Σ} x τ (ma : SMut Γ1 Γ2 A (Σ ▻ (x :: τ))) : SMut Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 pc1 δ1 h1 =>
         let x'  := fresh Σ1 (Some x) in
         let ζ1x := sub_snoc (sub_comp ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
         spath_demonicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst sub_wk1 pc1) (subst sub_wk1 δ1) (subst sub_wk1 h1)).
     Global Arguments smut_demonicv {_ _ _ _} _ _ _.
+
+    Definition smut_angelic {AT Γ1 Γ2 Σ0} (x : option 𝑺) σ
+      (k : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 σ -> SMut Γ1 Γ2 AT Σ1) :
+      SMut Γ1 Γ2 AT Σ0 :=
+      fun Σ1 ζ01 pc1 δ1 h1 =>
+        spath_angelic x σ
+          (fun Σ2 ζ12 pc2 t2 =>
+             four k ζ01 ζ12 t2 Σ2
+               (sub_id Σ2)
+               pc2
+               (subst ζ12 δ1)
+               (subst ζ12 h1)) pc1.
+    Global Arguments smut_angelic {_ _ _ _} x σ k.
+
     Definition smut_demonic_termvar {Γ Σ} (x : option 𝑺) σ : SMut Γ Γ (fun Σ => Term Σ σ) Σ :=
       fun Σ1 ζ1 pc1 δ1 h1 =>
         let y := fresh Σ1 x in
@@ -1241,8 +1255,8 @@ Module Mutators
     (* Notation "'⨂' x .. y => F" := *)
     (*   (smut_demonic (fun x => .. (smut_demonic (fun y => F)) .. )) : smut_scope. *)
 
-    Notation "'⨁' x .. y => F" :=
-      (smut_angelic (fun x => .. (smut_angelic (fun y => F)) .. )) : smut_scope.
+    (* Notation "'⨁' x .. y => F" := *)
+    (*   (smut_angelic (fun x => .. (smut_angelic (fun y => F)) .. )) : smut_scope. *)
 
     Infix "⊗" := smut_demonic_binary (at level 40, left associativity) : smut_scope.
     Infix "⊕" := smut_angelic_binary (at level 50, left associativity) : smut_scope.
@@ -1770,16 +1784,19 @@ Module Mutators
       t <- smut_eval_exp e ;;
       smut_exec_match_record t p (smut_exec rhs)
     | stm_read_register reg =>
-      ⨁ t =>
-        smut_consume_chunk (chunk_ptsreg reg t);;
-        smut_produce_chunk (chunk_ptsreg reg t);;
-        smut_pure t
+      smut_angelic None τ
+        (fun _ _ t =>
+           smut_consume_chunk (chunk_ptsreg reg t);;
+           smut_produce_chunk (chunk_ptsreg reg t);;
+           smut_pure t)
     | stm_write_register reg e =>
       tnew <- smut_eval_exp e ;;
-      ⨁ told =>
-        smut_consume_chunk (chunk_ptsreg reg told);;
-        smut_produce_chunk (chunk_ptsreg reg tnew);;
-        smut_pure tnew
+      smut_angelic None τ
+        (fun _ ζ told =>
+           let tnew := subst ζ tnew in
+           smut_consume_chunk (chunk_ptsreg reg told) ;;
+           smut_produce_chunk (chunk_ptsreg reg tnew) ;;
+           smut_pure tnew)
     | stm_bind _ _ =>
       smut_fail "smut_exec" "stm_bind not supported" tt
     | stm_debugk k =>
