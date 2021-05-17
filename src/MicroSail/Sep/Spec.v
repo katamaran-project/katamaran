@@ -242,6 +242,26 @@ Module Assertions
       apply (fold_right_1_10_prop (P := fun fml => inst fml ι)).
     Qed.
 
+    Lemma inst_pathcondition_app {Σ} (ι : SymInstance Σ) (pc1 pc2 : PathCondition Σ) :
+      inst (app pc1 pc2) ι <-> inst pc1 ι /\ inst pc2 ι.
+    Proof.
+      induction pc1; cbn [app].
+      - intuition. constructor.
+      - rewrite ?inst_pathcondition_cons.
+        rewrite IHpc1. intuition.
+    Qed.
+
+    Lemma inst_pathcondition_rev_append {Σ} (ι : SymInstance Σ) (pc1 pc2 : PathCondition Σ) :
+      inst (List.rev_append pc1 pc2) ι <-> inst pc1 ι /\ inst pc2 ι.
+    Proof.
+      revert pc2.
+      induction pc1; cbn [List.rev_append]; intros pc2.
+      - intuition. constructor.
+      - rewrite IHpc1.
+        rewrite ?inst_pathcondition_cons.
+        intuition.
+    Qed.
+
     Lemma inst_formula_eqs {Δ Σ} (ι : SymInstance Σ) (xs ys : SStore Δ Σ) :
       inst (T := PathCondition) (A := Prop) (formula_eqs xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
@@ -310,6 +330,13 @@ Module Assertions
     (*   intros pc1 pc2 pc12 ι. *)
     (*   rewrite ?inst_subst; eauto. *)
     (* Qed. *)
+
+    Lemma proper_subst_entails {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc1 pc2 : PathCondition Σ1) :
+      pc1 ⊢ pc2 -> subst pc1 ζ12 ⊢ subst pc2 ζ12.
+    Proof.
+      intros pc12 ι.
+      rewrite ?inst_subst; eauto.
+    Qed.
 
     Definition entails_eq {AT A} `{Inst AT A} {Σ} (pc : PathCondition Σ) (a0 a1 : AT Σ) : Prop :=
       forall (ι : SymInstance Σ), instpc pc ι -> inst a0 ι = inst a1 ι.
@@ -751,7 +778,7 @@ Module Assertions
   Section Heaps.
 
     Definition SCHeap : Type := list SCChunk.
-    Definition SHeap : LCtx -> Type := List Chunk.
+    Definition SHeap : LCtx -> Type := fun Σ => list (Chunk Σ).
 
     Global Instance inst_heap : Inst SHeap SCHeap :=
       instantiate_list.

@@ -77,11 +77,11 @@ Module Mutators
   Definition TYPE : Type := LCtx -> Type.
   Bind Scope modal with TYPE.
   Definition Valid (A : TYPE) : Type :=
-    forall Σ, A Σ.
+    forall Σ (pc : PathCondition Σ), A Σ.
   Definition Impl (A B : TYPE) : TYPE :=
     fun Σ => A Σ -> B Σ.
   Definition Box (A : TYPE) : TYPE :=
-    fun Σ0 => forall Σ1 (ζ01 : Sub Σ0 Σ1), A Σ1.
+    fun Σ0 => forall Σ1 (ζ01 : Sub Σ0 Σ1), PathCondition Σ1 -> A Σ1.
   Definition Snoc (A : TYPE) (b : 𝑺 * Ty) : TYPE :=
     fun Σ => A (Σ ▻ b).
   Definition Const (A : Type) : TYPE :=
@@ -96,7 +96,7 @@ Module Mutators
     Notation "⊢ A" := (Valid A%modal) (at level 100).
     Notation "A -> B" := (Impl A%modal B%modal) : modal.
     Notation "□ A" := (Box A%modal) (at level 85, format "□ A", right associativity) : modal.
-    Notation "⌜ A ⌝" := (Const A%type) : modal.
+    Notation "⌜ A ⌝" := (fun (_ : LCtx) => A%type) (at level 0, format "⌜ A ⌝") : modal.
     Notation "'∀' x .. y , P " :=
       (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
         (at level 99, x binder, y binder, right associativity)
@@ -108,24 +108,26 @@ Module Mutators
 
   Definition K {A B} :
     ⊢ □(A -> B) -> (□A -> □B) :=
-    fun Σ0 f a Σ1 ζ01 => f Σ1 ζ01 (a Σ1 ζ01).
+    fun Σ0 pc0 f a Σ1 ζ01 pc1 =>
+      f Σ1 ζ01 pc1 (a Σ1 ζ01 pc1).
   Definition T {A} :
     ⊢ □A -> A :=
-    fun Σ0 a => a Σ0 (sub_id Σ0).
+    fun Σ0 pc0 a => a Σ0 (sub_id Σ0) pc0.
   Definition four {A} :
     ⊢ □A -> □□A :=
-    fun Σ0 a Σ1 ζ01 Σ2 ζ12 => a Σ2 (subst ζ01 ζ12).
+    fun Σ0 pc0 a Σ1 ζ01 pc1 Σ2 ζ12 pc2 =>
+      a Σ2 (subst ζ01 ζ12) pc2.
   Global Arguments four : simpl never.
 
   (* faster version of (four _ sub_wk1) *)
   Definition four_wk1 {A} :
     ⊢ □A -> ∀ b, Snoc (□A) b :=
-    fun Σ0 a b Σ1 ζ01 => a Σ1 (env_tail ζ01).
-  Arguments four_wk1 {A Σ0} a b [Σ1] ζ01 : rename.
+    fun Σ0 pc0 a b Σ1 ζ01 => a Σ1 (env_tail ζ01).
+  Arguments four_wk1 {A Σ0} pc0 a b [Σ1] ζ01 : rename.
 
   Definition valid_box {A} :
     (⊢ A) -> (⊢ □A) :=
-    fun a Σ0 Σ1 ζ01 => a Σ1.
+    fun a Σ0 pc0 Σ1 ζ01 pc1 => a Σ1 pc1.
 
   Definition persistent (A : TYPE) : Type :=
     ⊢ A -> □A.
@@ -133,35 +135,124 @@ Module Mutators
   Definition PROP : TYPE :=
     fun _ => Prop.
 
-  Section LogicalRelation.
+  Notation STerm σ := (fun Σ => Term Σ σ).
 
-    Class LR (T : TYPE) : Type :=
-      lr : forall Σ0 Σ1, Sub Σ0 Σ1 -> T Σ0 -> T Σ1 -> Prop.
+  Module LogicalRelation.
+
+    Import Entailment.
+
+    Class LR (A : TYPE) : Type :=
+      lr : forall Σ0 (pc0 : PathCondition Σ0) Σ1,
+        Sub Σ0 Σ1 -> PathCondition Σ1 -> A Σ0 -> A Σ1 -> Prop.
+
+    Class LRRefl (A : TYPE) `{LR A} : Prop :=
+      { lr_refl :
+          forall Σ0 (pc0 : PathCondition Σ0) (a : A Σ0),
+            lr pc0 (sub_id _) pc0 a a;
+      }.
+    Global Arguments LRRefl A {_}.
 
     Global Instance LRPROP : LR PROP :=
-      fun Σ0 Σ1 ζ01 P Q => (P -> Q)%type.
+      fun Σ0 pc0 Σ1 ζ01 pc1 (P : PROP Σ0) (Q : PROP Σ1) => (P -> Q)%type.
+    Global Instance LRReflPROP : LRRefl PROP :=
+      {| lr_refl Σ0 pc0 (P : PROP Σ0) (HP : P) := HP;
+      |}.
 
     Global Instance LRFormula : LR Formula :=
-      fun Σ0 Σ1 ζ01 f0 f1 =>
+      fun Σ0 pc0 Σ1 ζ01 pc1 f0 f1 =>
         forall ι1 : SymInstance Σ1,
-          inst_formula f0 (inst ζ01 ι1) <-> inst_formula f1 ι1.
+          instpc pc1 ι1 ->
+          inst (A := Prop) f0 (inst ζ01 ι1) -> inst (A := Prop) f1 ι1.
+    Global Instance LRReflFormula : LRRefl Formula.
+    Proof.
+      constructor. unfold lr, LRFormula.
+      intros *. now rewrite inst_sub_id.
+    Qed.
 
     Global Instance LRImpl {A B} `{LR A, LR B} : LR (A -> B) :=
-      fun Σ0 Σ1 ζ01 f0 f1 =>
-        forall a0 a1,
-          lr ζ01 a0 a1 -> lr (T := B) ζ01 (f0 a0) (f1 a1).
+      fun Σ0 pc0 Σ1 ζ01 pc1 f0 f1 =>
+           forall a0 a1,
+             lr pc0 ζ01 pc1 a0 a1 ->
+             lr pc0 ζ01 pc1 (f0 a0) (f1 a1).
 
     (* Instance LRPair {A B} `{LR A, LR B} : LR (Pair A B) := *)
-    (*   fun Σ0 ab1 ab2 => *)
+    (*   fun Σ0 pc0 Σ1 ζ01 pc1 ab1 ab2 => *)
     (*     let (a1, b1) := ab1 in *)
     (*     let (a2, b2) := ab2 in *)
-    (*     rel Σ0 a1 a2 /\ rel Σ0 b1 b2. *)
+    (*     lr pc0 ζ01 pc1 a1 a2 /\ lr pc0 ζ01 pc1 b1 b2. *)
 
-    Global Instance LRBox {A} `{LR A} : LR (□ A) :=
-      fun Σ0 Σ1 ζ01 b1 b2 =>
-        forall Σ2 (ζ02 : Sub Σ0 Σ2) (ζ12 : Sub Σ1 Σ2),
-          (* lr ζ12 ζ01 ζ02 -> *)
-          lr ζ12 (b1 _ ζ01) (b2 _ ζ12).
+    Global Instance LRBox {A} `{LR A} : LR (Box A) :=
+      fun Σ0 pc0 Σ1 ζ01 pc1 b1 b2 =>
+        forall Σ2 (ζ12 : Sub Σ1 Σ2) (pc2 : PathCondition Σ2),
+          entails pc2 (subst pc1 ζ12) ->
+          lr pc1 ζ12 pc2 (b1 _ ζ01 pc1) (b2 _ ζ12 pc2).
+
+    Global Instance LRReflBox {A} `{LR A} : LRRefl (Box A).
+    Proof.
+      constructor. unfold lr, LRBox.
+      intros Σ0 pc0 a0 Σ1 ζ01 pc1 Hpc01.
+      (* Downwards close is LRRefl for Box right!? *)
+    Abort.
+
+    Global Instance LRInstance : LR SymInstance :=
+      fun Σ0 pc0 Σ1 ζ01 pc1 ι0 ι1 =>
+        (* instpc ι1 pc1 /\ instpc ι0 pc0 /\ *)
+        ι0 = inst ζ01 ι1.
+
+    Global Instance LRReflInstance : LRRefl SymInstance.
+    Proof.
+      constructor. unfold lr, LRInstance.
+      intros Σ0 pc0 ι0.
+      now rewrite inst_sub_id.
+    Qed.
+
+    Definition dcl {A} `{LR A} : ⊢ □A -> PROP :=
+      fun Σ0 pc0 a =>
+        forall Σ1 (ζ01 : Sub Σ0 Σ1) pc1,
+          entails pc1 (subst pc0 ζ01) ->
+          lr pc0 ζ01 pc1 a (four pc0 a ζ01 pc1).
+
+    Lemma dcl_four {A} `{LR A} {Σ0} (pc0 : PathCondition Σ0) (a : Box A Σ0) (a_dcl : dcl pc0 a) :
+      forall Σ1 (ζ01 : Sub Σ0 Σ1) pc1,
+        entails pc1 (subst pc0 ζ01) ->
+        dcl pc1 (four pc0 a ζ01 pc1).
+    Proof.
+      unfold dcl, four, lr, LRBox in *.
+      intros Σ1 ζ01 pc1 Hpc01.
+      intros Σ2 ζ12 pc2 Hpc12.
+      intros Σ3 ζ23 pc3 Hpc23.
+      rewrite <- sub_comp_assoc.
+      apply a_dcl; auto.
+      rewrite subst_sub_comp.
+      transitivity (subst pc1 ζ12); auto.
+      now apply proper_subst_entails.
+    Qed.
+
+    Lemma dcl_four_wk1 {A} `{LR A} {Σ0} (pc0 : PathCondition Σ0) (a : Box A Σ0) (a_dcl : dcl pc0 a) :
+      forall (b : 𝑺 * Ty),
+        dcl (subst pc0 sub_wk1) (four_wk1 pc0 a b).
+    Proof.
+      unfold dcl, four_wk1, four, lr, LRBox.
+      intros b.
+      intros Σ1 ζ01 pc1 Σ2 ζ12 pc2 Hpc23.
+      rewrite <- ?sub_comp_wk1_tail.
+      rewrite <- sub_comp_assoc.
+      apply a_dcl; auto.
+      now rewrite subst_sub_comp.
+    Qed.
+
+    Lemma dcl_four_cons {A} `{LR A} {Σ} (pc : PathCondition Σ)
+      (fml : Formula Σ) (a : Box A Σ) (a_dcl : dcl pc a) :
+      dcl (cons fml pc) a.
+    Proof.
+      intros Σ1 ζ01 pc1 Hpc01. cbn in Hpc01.
+      apply entails_cons in Hpc01. destruct Hpc01.
+      now apply a_dcl.
+    Qed.
+
+    Global Hint Resolve dcl_four : dcl.
+    Global Hint Resolve dcl_four_wk1 : dcl.
+    Global Hint Resolve dcl_four_cons : dcl.
 
   End LogicalRelation.
 
@@ -172,102 +263,121 @@ Module Mutators
 
   End Obligations.
 
-  Section SymbolicPaths.
+  Module Path.
 
-    Inductive SPath (A : LCtx -> Type) (Σ : LCtx) : Type :=
-    | spath_pure (a: A Σ)
-    | spath_angelic_binary (o1 o2 : SPath A Σ)
-    | spath_demonic_binary (o1 o2 : SPath A Σ)
-    | spath_fail (msg : Message Σ)
-    | spath_block
-    | spath_assertk (P : Formula Σ) (msg : Message Σ) (k : SPath A Σ)
-    | spath_assumek (P : Formula Σ) (k : SPath A Σ)
-    | spath_angelicv b (k : SPath A (Σ ▻ b))
-    | spath_demonicv b (k : SPath A (Σ ▻ b))
-    | spath_assert_vareq x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (msg : Message (Σ - (x,σ))) (k : SPath A (Σ - (x,σ)))
-    | spath_assume_vareq x σ (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ) (k : SPath A (Σ - (x,σ)))
-    | spath_debug {BT B} {subB : Subst BT} {instB : Inst BT B} {occB: OccursCheck BT}
-       (b : BT Σ) (k : SPath A Σ).
+    Inductive SPath (A : TYPE) (Σ : LCtx) : Type :=
+    | pure (a: A Σ)
+    | angelic_binary (o1 o2 : SPath A Σ)
+    | demonic_binary (o1 o2 : SPath A Σ)
+    | error (msg : Message Σ)
+    | block
+    | assertk (P : Formula Σ) (msg : Message Σ) (k : SPath A Σ)
+    | assumek (P : Formula Σ) (k : SPath A Σ)
+    (* Don't use these two directly. Instead, use the HOAS versions 'angelic' *)
+    (* and 'demonic' that will freshen names. *)
+    | angelicv b (k : SPath A (Σ ▻ b))
+    | demonicv b (k : SPath A (Σ ▻ b))
+    | assert_vareq
+        x σ (xIn : x::σ ∈ Σ)
+        (t : Term (Σ - (x::σ)) σ)
+        (msg : Message (Σ - (x::σ)))
+        (k : SPath A (Σ - (x::σ)))
+    | assume_vareq
+        x σ (xIn : (x,σ) ∈ Σ)
+        (t : Term (Σ - (x,σ)) σ)
+        (k : SPath A (Σ - (x,σ)))
+    | debug
+        {BT B} {subB : Subst BT}
+        {instB : Inst BT B}
+        {occB: OccursCheck BT}
+        (b : BT Σ) (k : SPath A Σ).
 
-    Global Arguments spath_pure {_ _} _.
-    Global Arguments spath_fail {_ _} _.
-    Global Arguments spath_block {_ _}.
-    Global Arguments spath_angelicv {_ _} _ _.
-    Global Arguments spath_demonicv {_ _} _ _.
-    Global Arguments spath_assert_vareq {_ _} x {_ _} t msg k.
-    Global Arguments spath_assume_vareq {_ _} x {_ _} t k.
+    Global Arguments pure {_ _} _.
+    Global Arguments error {_ _} _.
+    Global Arguments block {_ _}.
+    Global Arguments angelicv {_ _} _ _.
+    Global Arguments demonicv {_ _} _ _.
+    Global Arguments assert_vareq {_ _} x {_ _} t msg k.
+    Global Arguments assume_vareq {_ _} x {_ _} t k.
 
-    Fixpoint spath_angelicvs {A Σ} Δ : SPath A (Σ ▻▻ Δ) -> SPath A Σ :=
-      match Δ with
-      | ε     => fun k => k
-      | Δ ▻ b => fun k => spath_angelicvs Δ (spath_angelicv b k)
-      end.
+    (* TODO: KILL
+       This doesn't freshen the names in Δ. *)
+    Definition angelicvs {A} :
+      ⊢ ∀ Δ, Cat (SPath A) Δ -> SPath A :=
+      fix angelics {Σ} pc Δ :=
+        match Δ with
+        | ε     => fun k => k
+        | Δ ▻ b => fun k => angelics pc Δ (angelicv b k)
+        end.
+    Global Arguments angelicvs {A Σ} pc Δ : rename.
 
-    Fixpoint spath_demonic_close {A} Σ : SPath A Σ -> SPath A ε :=
-      match Σ with
-      | ctx_nil      => fun k => k
-      | ctx_snoc Σ b => fun k => spath_demonic_close (spath_demonicv b k)
-      end.
+    Definition demonic_close {A} :
+      forall Σ, SPath A Σ -> SPath A ε :=
+      fix close Σ :=
+        match Σ with
+        | ctx_nil      => fun k => k
+        | ctx_snoc Σ b => fun k => close Σ (demonicv b k)
+        end.
 
-    Fixpoint spath_assume_multisub {AT Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : SPath AT Σ2 -> SPath AT Σ1 :=
+    Fixpoint assume_multisub {AT Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : SPath AT Σ2 -> SPath AT Σ1 :=
       match ζ with
       | multisub_id         =>
         fun p => p
       | multisub_cons x t ζ =>
-        fun p => spath_assume_vareq x t (spath_assume_multisub ζ p)
+        fun p => assume_vareq x t (assume_multisub ζ p)
       end.
 
-    Fixpoint spath_assert_multisub {AT Σ1 Σ2} (msg : Message Σ1) (ζ : MultiSub Σ1 Σ2) : (Message Σ2 -> SPath AT Σ2) -> SPath AT Σ1 :=
+    Fixpoint assert_multisub {AT Σ1 Σ2} (msg : Message Σ1) (ζ : MultiSub Σ1 Σ2) : (Message Σ2 -> SPath AT Σ2) -> SPath AT Σ1 :=
       match ζ with
       | multisub_id         =>
         fun p => p msg
       | multisub_cons x t ζ =>
         let msg' := subst msg (sub_single _ t) in
-        fun p => spath_assert_vareq x t msg' (spath_assert_multisub msg' ζ p)
+        fun p => assert_vareq x t msg' (assert_multisub msg' ζ p)
       end.
 
-    Instance SubstSPath {A} `{Subst A} : Subst (SPath A) :=
+    Global Instance SubstSPath {A} `{Subst A} : Subst (SPath A) :=
       fix subst_spath {Σ1} p {Σ2} ζ {struct p} :=
         match p with
-        | spath_pure a => spath_pure (subst a ζ)
-        | spath_angelic_binary p1 p2 => spath_angelic_binary (subst_spath p1 ζ) (subst_spath p2 ζ)
-        | spath_demonic_binary p1 p2 => spath_demonic_binary (subst_spath p1 ζ) (subst_spath p2 ζ)
-        | spath_fail msg => spath_fail (subst msg ζ)
-        | spath_block => spath_block
-        | spath_assertk fml msg p => spath_assertk (subst fml ζ) (subst msg ζ) (subst_spath p ζ)
-        | spath_assumek fml p => spath_assumek (subst fml ζ) (subst_spath p ζ)
-        | spath_angelicv b k => spath_angelicv b (subst_spath k (sub_up1 ζ))
-        | spath_demonicv b k => spath_demonicv b (subst_spath k (sub_up1 ζ))
-        | @spath_assert_vareq _ _ x σ xIn t msg p =>
+        | pure a => pure (subst a ζ)
+        | angelic_binary p1 p2 => angelic_binary (subst_spath p1 ζ) (subst_spath p2 ζ)
+        | demonic_binary p1 p2 => demonic_binary (subst_spath p1 ζ) (subst_spath p2 ζ)
+        | error msg => error (subst msg ζ)
+        | block => block
+        | assertk fml msg p => assertk (subst fml ζ) (subst msg ζ) (subst_spath p ζ)
+        | assumek fml p => assumek (subst fml ζ) (subst_spath p ζ)
+        | angelicv b k => angelicv b (subst_spath k (sub_up1 ζ))
+        | demonicv b k => demonicv b (subst_spath k (sub_up1 ζ))
+        | @assert_vareq _ _ x σ xIn t msg p =>
           let ζ' := subst (sub_shift _) ζ in
-          spath_assertk
+          assertk
             (formula_eq (env_lookup ζ xIn) (subst t ζ'))
             (subst msg ζ')
             (subst_spath p ζ')
-        | @spath_assume_vareq _ _ x σ xIn t p =>
+        | @assume_vareq _ _ x σ xIn t p =>
           let ζ' := subst (sub_shift _) ζ in
-          spath_assumek
+          assumek
             (formula_eq (env_lookup ζ xIn) (subst t ζ'))
             (subst_spath p ζ')
-        | spath_debug d k => spath_debug (subst d ζ) (subst_spath k ζ)
+        | debug d k => debug (subst d ζ) (subst_spath k ζ)
         end.
 
     Fixpoint occurs_check_spath {A} `{OccursCheck A} {Σ x} (xIn : x ∈ Σ) (o : SPath A Σ) :
       option (SPath A (Σ - x)) :=
       match o with
-      | spath_pure a => option_map spath_pure (occurs_check xIn a)
-      | spath_angelic_binary o1 o2 =>
-        option_ap (option_map (spath_angelic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2)
-      | spath_demonic_binary o1 o2 =>
-        option_ap (option_map (spath_demonic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2)
-      | spath_fail msg => option_map spath_fail (occurs_check xIn msg)
-      | spath_block => Some spath_block
-      | spath_assertk P msg o =>
-        option_ap (option_ap (option_map (spath_assertk (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check xIn msg)) (occurs_check_spath xIn o)
-      | spath_assumek P o => option_ap (option_map (spath_assumek (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check_spath xIn o)
-      | spath_angelicv b o => option_map (spath_angelicv b) (occurs_check_spath (inctx_succ xIn) o)
-      | spath_demonicv b o => option_map (spath_demonicv b) (occurs_check_spath (inctx_succ xIn) o)
-      | @spath_assert_vareq _ _ y σ yIn t msg o =>
+      | pure a => option_map pure (occurs_check xIn a)
+      | angelic_binary o1 o2 =>
+        option_ap (option_map (angelic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2)
+      | demonic_binary o1 o2 =>
+        option_ap (option_map (demonic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2)
+      | error msg => option_map error (occurs_check xIn msg)
+      | block => Some block
+      | assertk P msg o =>
+        option_ap (option_ap (option_map (assertk (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check xIn msg)) (occurs_check_spath xIn o)
+      | assumek P o => option_ap (option_map (assumek (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check_spath xIn o)
+      | angelicv b o => option_map (angelicv b) (occurs_check_spath (inctx_succ xIn) o)
+      | demonicv b o => option_map (demonicv b) (occurs_check_spath (inctx_succ xIn) o)
+      | @assert_vareq _ _ y σ yIn t msg o =>
         match occurs_check_view yIn xIn with
         | Same _ => None
         | @Diff _ _ _ _ x xIn =>
@@ -276,7 +386,7 @@ Module Mutators
                (option_map
                   (fun (t' : Term (Σ - (y :: σ) - x) σ) (msg' : Message (Σ - (y :: σ) - x)) (o' : SPath A (Σ - (y :: σ) - x)) =>
                      let e := swap_remove yIn xIn in
-                     spath_assert_vareq
+                     assert_vareq
                        y
                        (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e)
                        (eq_rect (Σ - (y :: σ) - x) Message msg' (Σ - x - (y :: σ)) e)
@@ -285,7 +395,7 @@ Module Mutators
                (occurs_check xIn msg))
             (occurs_check_spath xIn o)
         end
-      | @spath_assume_vareq _ _ y σ yIn t o =>
+      | @assume_vareq _ _ y σ yIn t o =>
         match occurs_check_view yIn xIn with
         | Same _ => Some o
         | @Diff _ _ _ _ x xIn =>
@@ -293,309 +403,477 @@ Module Mutators
             (option_map
                (fun (t' : Term (Σ - (y :: σ) - x) σ) (o' : SPath A (Σ - (y :: σ) - x)) =>
                   let e := swap_remove yIn xIn in
-                  spath_assume_vareq
+                  assume_vareq
                     y
                     (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e)
                     (eq_rect (Σ - (y :: σ) - x) (SPath A) o' (Σ - x - (y :: σ)) e))
                (occurs_check xIn t))
             (occurs_check_spath xIn o)
         end
-      | spath_debug b o => option_ap (option_map (spath_debug (Σ := Σ - x)) (occurs_check xIn b)) (occurs_check_spath xIn o)
+      | debug b o => option_ap (option_map (debug (Σ := Σ - x)) (occurs_check xIn b)) (occurs_check_spath xIn o)
       end.
 
     Fixpoint inst_spath {AT A} `{Inst AT A} {Σ} (o : SPath AT Σ) (ι : SymInstance Σ) : Outcome A :=
       match o with
-      | spath_pure a                   => outcome_pure (inst a ι)
-      | spath_angelic_binary o1 o2     => outcome_angelic_binary (inst_spath o1 ι) (inst_spath o2 ι)
-      | spath_demonic_binary o1 o2     => outcome_demonic_binary (inst_spath o1 ι) (inst_spath o2 ι)
-      | spath_fail msg                 => outcome_fail msg
-      | spath_block                    => outcome_block
-      | spath_assertk fml msg o        => outcome_assertk
-                                           (Obligation msg fml ι)
-                                           (inst_spath o ι)
-      | spath_assumek fml o            => outcome_assumek (inst fml ι) (inst_spath o ι)
-      | spath_angelicv b k             => outcome_angelic (fun v : Lit (snd b) => inst_spath k (env_snoc ι b v))
-      | spath_demonicv b k             => outcome_demonic (fun v : Lit (snd b) => inst_spath k (env_snoc ι b v))
-      | @spath_assert_vareq _ _ x σ xIn t msg k =>
+      | pure a               => outcome_pure (inst a ι)
+      | angelic_binary o1 o2 => outcome_angelic_binary (inst_spath o1 ι) (inst_spath o2 ι)
+      | demonic_binary o1 o2 => outcome_demonic_binary (inst_spath o1 ι) (inst_spath o2 ι)
+      | error msg            => outcome_fail msg
+      | block                => outcome_block
+      | assertk fml msg o    => outcome_assertk
+                                  (Obligation msg fml ι)
+                                  (inst_spath o ι)
+      | assumek fml o        => outcome_assumek (inst fml ι) (inst_spath o ι)
+      | angelicv b k         => outcome_angelic (fun v : Lit (snd b) => inst_spath k (env_snoc ι b v))
+      | demonicv b k         => outcome_demonic (fun v : Lit (snd b) => inst_spath k (env_snoc ι b v))
+      | @assert_vareq _ _ x σ xIn t msg k =>
         let ι' := env_remove' _ ι xIn in
         outcome_assertk
           (env_lookup ι xIn = inst t ι')
           (inst_spath k ι')
-      | @spath_assume_vareq _ _ x σ xIn t k =>
+      | @assume_vareq _ _ x σ xIn t k =>
         let ι' := env_remove' _ ι xIn in
         outcome_assumek
           (env_lookup ι xIn = inst t ι')
           (inst_spath k ι')
-      | spath_debug d k                => outcome_debug (inst d ι) (inst_spath k ι)
+      | debug d k            => outcome_debug (inst d ι) (inst_spath k ι)
       end.
 
-    Definition spath_mapping AT BT Σ : Type :=
-      forall Σ', Sub Σ Σ' -> (* PathCondition Σ' -> *) AT Σ' -> BT Σ'.
-    Definition spath_arrow AT BT Σ : Type :=
-      forall Σ', Sub Σ Σ' -> PathCondition Σ' -> AT Σ' -> SPath BT Σ'.
+    Definition mapping AT BT : TYPE :=
+      □(AT -> BT).
+    Definition arrow AT BT : TYPE :=
+      □(AT -> SPath BT).
 
-    (* Definition spath_arrow_dcl {ET E AT A BT B} `{Subst ET, Subst BT, Inst ET E, Inst AT A, Inst BT B} {Σ} (f : spath_arrow ET AT BT Σ) : Prop := *)
+    (* Definition arrow_dcl {ET E AT A BT B} `{Subst ET, Subst BT, Inst ET E, Inst AT A, Inst BT B} {Σ} (f : arrow ET AT BT Σ) : Prop := *)
     (*   forall Σ1 Σ2 ζ1 ζ2 ζ12 a1 a2, *)
     (*     (forall ι1 ι2, ι1 = inst ι2 ζ12 -> inst ι1 a1 = inst ι2 a2) -> *)
-    (*     spath_geq (subst ζ12 (f Σ1 ζ1 a1)) (f Σ2 ζ2 a2). *)
+    (*     geq (subst ζ12 (f Σ1 ζ1 a1)) (f Σ2 ζ2 a2). *)
 
-    Definition spath_angelic {AT Σ0} (x : option 𝑺) σ
-      (k : forall Σ1, Sub Σ0 Σ1 -> PathCondition Σ1 -> Term Σ1 σ -> SPath AT Σ1)
-      (pc0 : PathCondition Σ0) : SPath AT Σ0 :=
-      let y := fresh Σ0 x in
-      spath_angelicv
-        (y :: σ) (k (Σ0 ▻ (y :: σ)) sub_wk1 (subst pc0 sub_wk1) (@term_var _ y σ inctx_zero)).
-    Global Arguments spath_angelic {_ _} x σ k.
+    Definition angelic {AT} (x : option 𝑺) σ :
+      ⊢ □(STerm σ -> SPath AT) -> SPath AT :=
+      fun Σ pc k =>
+        let y := fresh Σ x in
+        angelicv
+          (y :: σ) (k (Σ ▻ (y :: σ)) sub_wk1 (subst pc sub_wk1) (@term_var _ y σ inctx_zero)).
+    Global Arguments angelic {_} x σ [Σ] pc k.
 
-    Fixpoint spath_map {A B Σ} (f : spath_mapping A B Σ) (ma : SPath A Σ) : SPath B Σ :=
-      match ma with
-      | spath_pure a                   => spath_pure (T f a)
-      | spath_angelic_binary o1 o2     => spath_angelic_binary (spath_map f o1) (spath_map f o2)
-      | spath_demonic_binary o1 o2     => spath_demonic_binary (spath_map f o1) (spath_map f o2)
-      | spath_fail msg                 => spath_fail msg
-      | spath_block                    => spath_block
-      | spath_assertk fml msg k        => spath_assertk fml msg (spath_map f k)
-      | spath_assumek fml k            => spath_assumek fml (spath_map f k)
-      | spath_angelicv b k             => spath_angelicv b (spath_map (four_wk1 f b) k)
-      | spath_demonicv b k             => spath_demonicv b (spath_map (four_wk1 f b) k)
-      | @spath_assert_vareq _ _ x σ xIn t msg k =>
-        let ζ' := sub_single xIn t in
-        spath_assert_vareq x t msg (spath_map (four f ζ') k)
-      | @spath_assume_vareq _ _ x σ xIn t k =>
-        let ζ' := sub_single xIn t in
-        spath_assume_vareq x t (spath_map (four f ζ') k)
-      | spath_debug d k                => spath_debug d (spath_map f k)
-      end.
+    Definition map {A B} :
+      ⊢ □(A -> B) -> SPath A -> SPath B :=
+      fix map {Σ} pc f p :=
+        match p with
+        | pure a                 => pure (T pc f a)
+        | angelic_binary p1 p2   => angelic_binary (map pc f p1) (map pc f p2)
+        | demonic_binary p1 p2   => demonic_binary (map pc f p1) (map pc f p2)
+        | error msg              => error msg
+        | block                  => block
+        | assertk fml msg p      => let pc' := cons fml pc in
+                                    (* assertk fml msg (map pc' (four pc f (sub_id _) pc') p) *)
+                                    assertk fml msg (map pc' f p)
+        | assumek fml p          => let pc' := cons fml pc in
+                                    (* assumek fml (map pc' (four pc f (sub_id _) pc') p) *)
+                                    assumek fml (map pc' f p)
+        | angelicv b p           => let ζ'  := sub_wk1 in
+                                    let pc' := subst pc sub_wk1 in
+                                    angelicv b (map pc' (four pc f ζ' pc') p)
+        | demonicv b p           => let ζ'  := sub_wk1 in
+                                    let pc' := subst pc sub_wk1 in
+                                    demonicv b (map pc' (four pc f ζ' pc') p)
+        | assert_vareq x t msg p => let ζ'  := sub_single _ t in
+                                    let pc' := subst pc ζ' in
+                                    assert_vareq x t msg (map pc' (four pc f ζ' pc') p)
+        | assume_vareq x t p     => let ζ'  := sub_single _ t in
+                                    let pc' := subst pc ζ' in
+                                    assume_vareq x t (map pc' (four pc f ζ' pc') p)
+        | debug d p              => debug d (map pc f p)
+        end.
 
-    Fixpoint spath_bind {A B Σ} (pc : PathCondition Σ) (ma : SPath A Σ) (f : forall Σ', Sub Σ Σ' -> PathCondition Σ' -> A Σ' -> SPath B Σ') {struct ma} : SPath B Σ :=
-      match ma with
-      | spath_pure a                   => T f pc a
-      | spath_angelic_binary o1 o2     => spath_angelic_binary (spath_bind pc o1 f) (spath_bind pc o2 f)
-      | spath_demonic_binary o1 o2     => spath_demonic_binary (spath_bind pc o1 f) (spath_bind pc o2 f)
-      | spath_fail msg                 => spath_fail msg
-      | spath_block                    => spath_block
-      | spath_assertk fml msg k        => spath_assertk fml msg (spath_bind (cons fml pc) k f)
-      | spath_assumek fml k            => spath_assumek fml (spath_bind (cons fml pc) k f)
-      | spath_angelicv b k             => spath_angelicv b (spath_bind (subst pc sub_wk1) k (four_wk1 f b))
-      | spath_demonicv b k             => spath_demonicv b (spath_bind (subst pc sub_wk1) k (four_wk1 f b))
-      | @spath_assert_vareq _ _ x σ xIn t msg k =>
-        let ζ' := sub_single xIn t in
-        spath_assert_vareq x t msg (spath_bind (subst pc ζ') k (four f ζ'))
-      | @spath_assume_vareq _ _ x σ xIn t k =>
-        let ζ' := sub_single xIn t in
-        spath_assume_vareq x t (spath_bind (subst pc ζ') k (four f ζ'))
-      | spath_debug d k                => spath_debug d (spath_bind pc k f)
-      end.
+    Definition bind {A B} :
+      ⊢ SPath A -> □(A -> SPath B) -> SPath B :=
+      fix bind {Σ} pc ma f :=
+        match ma with
+        | pure a                 => T pc f a
+        | angelic_binary p1 p2   => angelic_binary (bind pc p1 f) (bind pc p2 f)
+        | demonic_binary p1 p2   => demonic_binary (bind pc p1 f) (bind pc p2 f)
+        | error msg              => error msg
+        | block                  => block
+        | assertk fml msg p      => let pc' := cons fml pc in
+                                    (* assertk fml msg (bind pc' p (four pc f (sub_id _) pc')) *)
+                                    assertk fml msg (bind pc' p f)
+        | assumek fml p          => let pc' := cons fml pc in
+                                    (* assumek fml (bind pc' p (four pc f (sub_id _) pc')) *)
+                                    assumek fml (bind pc' p f)
+        | angelicv b p           => let ζ'  := sub_wk1 in
+                                    let pc' := subst pc sub_wk1 in
+                                    angelicv b (bind pc' p (four pc f ζ' pc'))
+        | demonicv b p           => let ζ'  := sub_wk1 in
+                                    let pc' := subst pc sub_wk1 in
+                                    demonicv b (bind pc' p (four pc f ζ' pc'))
+        | assert_vareq x t msg p => let ζ'  := sub_single _ t in
+                                    let pc' := subst pc ζ' in
+                                    assert_vareq x t msg (bind pc' p (four pc f ζ' pc'))
+        | assume_vareq x t p     => let ζ'  := sub_single _ t in
+                                    let pc' := subst pc ζ' in
+                                    assume_vareq x t (bind pc' p (four pc f ζ' pc'))
+        | debug d p              => debug d (bind pc p f)
+        end.
 
-    Fixpoint spath_assume_formulas_without_solver {A Σ}
-      (fmls : List Formula Σ) (k : SPath A Σ) {struct fmls} : SPath A Σ :=
-      match fmls with
-      | nil           => k
-      | cons fml fmls =>
-        spath_assumek
-          fml
-          (spath_assume_formulas_without_solver fmls k)
-      end.
+    Definition assume_formulas_without_solver {A} :
+      ⊢ List Formula -> □(SPath A) -> SPath A :=
+      fun Σ =>
+        fix assume pc fmls k :=
+          match fmls with
+          | nil           => T pc k
+          | cons fml fmls =>
+            assumek fml (assume (cons fml pc) fmls k)
+          end.
 
-    Fixpoint spath_assert_formulas_without_solver {A Σ}
-      (msg : Message Σ) (fmls : List Formula Σ) (k : SPath A Σ) {struct fmls} : SPath A Σ :=
-      match fmls with
-      | nil           => k
-      | cons fml fmls =>
-        spath_assertk
-          fml
-          msg
-          (spath_assert_formulas_without_solver msg fmls k)
-      end.
+    Definition assert_formulas_without_solver {A} :
+      ⊢ Message -> List Formula -> □(SPath A) -> SPath A :=
+      fun Σ =>
+        fix asserts pc msg fmls k :=
+        match fmls with
+        | nil           => T pc k
+        | cons fml fmls =>
+          assertk fml msg (asserts (cons fml pc) msg fmls k)
+        end.
 
-    Definition spath_assume_formula {Σ} (fml : Formula Σ) (pc : PathCondition Σ) :
-      SPath Unit Σ :=
-      match solver pc fml with
-      | Some (existT Σ1 (ζ , fmls)) =>
-        (* Assume variable equalities and the residual constraints *)
-        spath_assume_multisub ζ
-          (spath_assume_formulas_without_solver fmls (spath_pure tt))
-      | None =>
-        (* The formula is inconsistent with the path constraints. *)
-        spath_block
-      end.
+    Definition assume_formula :
+      ⊢ Formula -> SPath Unit :=
+      fun Σ0 pc fml =>
+        match solver pc fml with
+        | Some (existT Σ1 (ζ , fmls)) =>
+          (* Assume variable equalities and the residual constraints *)
+          assume_multisub ζ
+            (assume_formulas_without_solver (subst pc (sub_multi ζ)) fmls (fun _ _ _ => pure tt))
+        | None =>
+          (* The formula is inconsistent with the path constraints. *)
+          block
+        end.
 
-    Fixpoint spath_assume_formulas {Σ} (fmls : List Formula Σ) (pc : PathCondition Σ) {struct fmls} :
-      SPath Unit Σ :=
-      match fmls with
-      | nil => spath_pure tt
-      | cons fml fmls =>
-        spath_bind
-          pc
-          (spath_assume_formulas fmls pc)
-          (fun Σ1 ζ01 pc1 _ => spath_assume_formula (subst fml ζ01) pc1)
-      end.
+    Definition assume_formulak {A} :
+      ⊢ Formula -> □(SPath A) -> SPath A :=
+      fun Σ0 pc fml k =>
+        match solver pc fml with
+        | Some (existT Σ1 (ζ , fmls)) =>
+          (* Assume variable equalities and the residual constraints *)
+          let ζ'  := sub_multi ζ in
+          let pc' := subst pc ζ' in
+          assume_multisub ζ
+            (assume_formulas_without_solver pc' fmls (four pc k ζ' pc'))
+        | None =>
+          (* The formula is inconsistent with the path constraints. *)
+          block
+        end.
 
-    Definition spath_assert_formula {Σ} (msg : Message Σ) (pc : PathCondition Σ) (fml : Formula Σ) :
-      SPath Unit Σ :=
-      match solver pc fml with
-      | Some (existT Σ1 (ζ , fmls)) =>
-        (* Assert variable equalities and the residual constraints *)
-        spath_assert_multisub msg ζ
-          (fun msg' => spath_assert_formulas_without_solver msg' fmls (spath_pure tt))
-      | None =>
-        (* The formula is inconsistent with the path constraints. *)
-        spath_fail msg
-      end.
+    Definition assume_formulas :
+      ⊢ List Formula -> SPath Unit :=
+      fix assume_formulas {Σ0} pc fmls {struct fmls} :=
+        match fmls with
+        | nil => pure tt
+        | cons fml fmls =>
+          bind
+            pc
+            (assume_formulas pc fmls)
+            (fun Σ1 ζ01 pc1 _ => assume_formula pc1 (subst fml ζ01))
+        end.
 
-    Fixpoint spath_wp {AT A Σ} `{Inst AT A} (o : SPath AT Σ) (POST : A -> Prop) (ι : SymInstance Σ) : Prop :=
-      match o with
-      | spath_pure a                               => POST (inst a ι)
-      | spath_angelic_binary o1 o2                 => (spath_wp o1 POST ι) \/ (spath_wp o2 POST ι)
-      | spath_demonic_binary o1 o2                 => (spath_wp o1 POST ι) /\ (spath_wp o2 POST ι)
-      | spath_fail msg                             => Error msg
-      | spath_block                                => True
-      | spath_assertk fml msg o                    => inst fml ι /\ spath_wp o POST ι
-      | spath_assumek fml o                        => (inst fml ι : Prop) -> spath_wp o POST ι
-      | spath_angelicv b k                         => exists (v : Lit (snd b)), spath_wp k POST (env_snoc ι b v)
-      | spath_demonicv b k                         => forall (v : Lit (snd b)), spath_wp k POST (env_snoc ι b v)
-      | @spath_assert_vareq _ _ x σ xIn t msg k    =>
-        let ι' := env_remove' _ ι xIn in
-        env_lookup ι xIn = inst t ι' /\ spath_wp k POST ι'
-      | @spath_assume_vareq _ _ x σ xIn t k        =>
-        let ι' := env_remove' _ ι xIn in
-        env_lookup ι xIn = inst t ι' -> spath_wp k POST ι'
-      | spath_debug d k                            => Debug (inst d ι) (spath_wp k POST ι)
-      end.
+    Definition assert_formula :
+      ⊢ Message -> Formula -> SPath Unit :=
+      fun Σ pc msg fml =>
+        match solver pc fml with
+        | Some (existT Σ1 (ζ , fmls)) =>
+          (* Assert variable equalities and the residual constraints *)
+          assert_multisub msg ζ
+            (fun msg' => assert_formulas_without_solver (subst pc (sub_multi ζ)) msg' fmls (fun _ _ _ => pure tt))
+        | None =>
+          (* The formula is inconsistent with the path constraints. *)
+          error msg
+        end.
 
-    Definition spath_wp' {AT A Σ} `{Inst AT A} (o : SPath AT Σ) (POST : A -> Prop) (ι : SymInstance Σ) : Prop :=
-      outcome_satisfy (inst_spath o ι) POST.
+    Definition angelic_list {A} :
+      ⊢ Message -> List A -> SPath A :=
+      fun Σ pc msg =>
+        fix rec xs :=
+        match xs with
+        | nil        => error msg
+        | cons x nil => pure x
+        | cons x xs  => angelic_binary (pure x) (rec xs)
+        end.
 
-    Lemma spath_wp_wp' {AT A Σ} `{Inst AT A} (o : SPath AT Σ) (POST : A -> Prop) (ι : SymInstance Σ) :
-      spath_wp o POST ι <-> spath_wp' o POST ι.
+    Definition angelic_listk {A B} :
+      ⊢ Message -> (A -> SPath B) -> List A -> SPath B :=
+      fun Σ pc msg k =>
+        fix rec xs :=
+        match xs with
+        | nil        => error msg
+        | cons x nil => k x
+        | cons x xs  => angelic_binary (k x) (rec xs)
+        end.
+
+    Definition demonic_list {A} :
+      ⊢ List A -> SPath A :=
+      fun Σ pc =>
+        fix rec xs :=
+        match xs with
+        | nil        => block
+        | cons x nil => pure x
+        | cons x xs  => demonic_binary (pure x) (rec xs)
+        end.
+
+    Definition demonic_listk {A B} :
+      ⊢ (A -> SPath B) -> List A -> SPath B :=
+      fun Σ pc k =>
+        fix rec xs :=
+        match xs with
+        | nil        => block
+        | cons x nil => k x
+        | cons x xs  => demonic_binary (k x) (rec xs)
+        end.
+
+    Definition angelic_finite {A} F `{finite.Finite F} :
+      ⊢ Message -> (⌜F⌝ -> SPath A) -> SPath A :=
+      fun Σ pc msg k => angelic_listk pc msg k (finite.enum F).
+
+    Definition demonic_finite {A} F `{finite.Finite F} :
+      ⊢ (⌜F⌝ -> SPath A) -> SPath A :=
+      fun Σ pc k => demonic_listk pc k (finite.enum F).
+
+    Definition demonic_match_bool_fast {A} :
+      ⊢ STerm ty_bool -> □(SPath A) -> □(SPath A) -> □(SPath A) :=
+      fun Σ pc t pt pf Σ1 ζ01 pc1 =>
+        let t' := subst t ζ01 in
+        match term_get_lit t' with
+        | Some true => pt Σ1 ζ01 pc1
+        | Some false => pf Σ1 ζ01 pc1
+        | None =>
+          demonic_binary
+            (assume_formulak pc1 (formula_bool t')
+               (four pc pt ζ01 pc1))
+            (assume_formulak pc1 (formula_bool (term_not t'))
+               (four pc pt ζ01 pc1))
+        end.
+
+    Definition demonic_match_bool_fast_alt {A} :
+      ⊢ □(STerm ty_bool) -> □(SPath A) -> □(SPath A) -> □(SPath A) :=
+      fun Σ pc t pt pf Σ1 ζ01 pc1 =>
+        let t' := t _ ζ01 pc1 in
+        match term_get_lit t' with
+        | Some true => pt Σ1 ζ01 pc1
+        | Some false => pf Σ1 ζ01 pc1
+        | None =>
+          demonic_binary
+            (assume_formulak pc1 (formula_bool t')
+               (four pc pt ζ01 pc1))
+            (assume_formulak pc1 (formula_bool (term_not t'))
+               (four pc pt ζ01 pc1))
+        end.
+
+    Definition demonic_match_bool {A} :
+      ⊢ STerm ty_bool -> □(SPath A) -> □(SPath A) -> SPath A :=
+      fun Σ pc t pt pf =>
+        match term_get_lit t with
+        | Some true => T pc pt
+        | Some false => T pc pf
+        | None =>
+          demonic_binary
+            (assume_formulak pc (formula_bool t) pt)
+            (assume_formulak pc (formula_bool (term_not t)) pf)
+        end.
+
+    Definition angelic_match_bool {A} :
+      ⊢ Message -> STerm ty_bool -> □(SPath A) -> □(SPath A) -> SPath A :=
+      fun Σ pc msg t pt pf =>
+        match term_get_lit t with
+        | Some true => T pc pt
+        | Some false => T pc pf
+        | None =>
+          angelic_binary
+            (bind pc
+               (assert_formula pc msg (formula_bool t))
+               (fun Σ1 ζ01 pc1 _ => pt Σ1 ζ01 pc1))
+            (bind pc
+               (assert_formula pc msg (formula_bool (term_not t)))
+               (fun Σ1 ζ01 pc1 _ => pf Σ1 ζ01 pc1))
+        end.
+
+    Definition demonic_match_enum {AT E} :
+      ⊢ STerm (ty_enum E) -> (⌜Lit (ty_enum E)⌝ -> □(SPath AT)) -> SPath AT :=
+      fun Σ pc t k =>
+        match term_get_lit t with
+        | Some v => T pc (k v)
+        | None => demonic_finite
+                    pc (fun v => assume_formulak pc (formula_eq t (term_enum E v)) (k v))
+        end.
+
+    Definition wp {AT A} `{Inst AT A} :
+      (* ⊢ SPath AT -> ⌜A -> Prop⌝ -> SymInstance -> PROP *)
+      forall Σ (pc : PathCondition Σ) (o : SPath AT Σ) (POST : A -> Prop) (ι : SymInstance Σ), Prop :=
+      fix wp {Σ} pc o POST ι : Prop :=
+      match o return Prop with
+      | pure a                            => POST (inst a ι)
+      | angelic_binary o1 o2              => (wp pc o1 POST ι) \/ (wp pc o2 POST ι)
+      | demonic_binary o1 o2              => (wp pc o1 POST ι) /\ (wp pc o2 POST ι)
+      | error msg                         => Error msg
+      | block                             => True
+      | assertk fml msg o                 => inst fml ι /\ wp (cons fml pc) o POST ι
+      | assumek fml o                     => (inst (A := Prop) fml ι -> wp (cons fml pc) o POST ι):Prop
+      | angelicv b k                      => exists (v : Lit (snd b)),
+                                             wp (subst pc sub_wk1) k POST (env_snoc ι b v)
+      | demonicv b k                      => forall (v : Lit (snd b)),
+                                             wp (subst pc sub_wk1) k POST (env_snoc ι b v)
+      | @assert_vareq _ _ x σ xIn t msg k => let ι' := env_remove' _ ι xIn in
+                                             env_lookup ι xIn = inst t ι' /\
+                                             wp (subst pc (sub_single xIn t)) k POST ι'
+      | @assume_vareq _ _ x σ xIn t k     => let ι' := env_remove' _ ι xIn in
+                                             env_lookup ι xIn = inst t ι' ->
+                                             wp (subst pc (sub_single xIn t)) k POST ι'
+      | debug d k                         => Debug (inst d ι) (wp pc k POST ι)
+      end%type.
+
+    Definition wp' {AT A} `{Inst AT A} :
+      ⊢ SPath AT -> ⌜A -> Prop⌝ -> SymInstance -> PROP :=
+      fun Σ pc o POST ι => outcome_satisfy (inst_spath o ι) POST.
+
+    Lemma wp_wp' {AT A} `{Inst AT A} {Σ} (pc : PathCondition Σ)
+      (o : SPath AT Σ) (POST : A -> Prop) (ι : SymInstance Σ) :
+      wp pc o POST ι <-> wp' pc o POST ι.
     Proof.
-      unfold spath_wp'.
+      unfold wp'.
       induction o; cbn; auto.
-      - specialize (IHo1 ι). specialize (IHo2 ι). intuition.
-      - specialize (IHo1 ι). specialize (IHo2 ι). intuition.
+      - specialize (IHo1 pc ι). specialize (IHo2 pc ι). intuition.
+      - specialize (IHo1 pc ι). specialize (IHo2 pc ι). intuition.
       - split; intros [].
-      - specialize (IHo ι). intuition.
+      - specialize (IHo (cons P pc) ι). intuition.
         constructor; auto.
-      - specialize (IHo ι). intuition.
-      - split; intros [v HYP]; exists v; specialize (IHo (env_snoc ι b v)); intuition.
-      - split; intros HYP v; specialize (HYP v); specialize (IHo (env_snoc ι b v)); intuition.
-      - specialize (IHo (env_remove' (x :: σ) ι xIn)). intuition.
-      - specialize (IHo (env_remove' (x :: σ) ι xIn)). intuition.
+      - specialize (IHo (cons P pc) ι). intuition.
+      - split; intros [v HYP]; exists v;
+          specialize (IHo (subst pc sub_wk1) (env_snoc ι b v)); intuition.
+      - split; intros HYP v; specialize (HYP v);
+          specialize (IHo (subst pc sub_wk1) (env_snoc ι b v)); intuition.
+      - specialize (IHo (subst pc (sub_single xIn t))
+                        (env_remove' (x :: σ) ι xIn)).
+        intuition.
+      - specialize (IHo (subst pc (sub_single xIn t))
+                        (env_remove' (x :: σ) ι xIn)).
+        intuition.
       - split; intros [HYP]; constructor; revert HYP; apply IHo.
     Qed.
 
-    Lemma spath_wp_monotonic {AT A} `{Inst AT A} {Σ}
+    Lemma wp_monotonic {AT A} `{Inst AT A} {Σ} (pc : PathCondition Σ)
       (o : SPath AT Σ) (P Q : A -> Prop) (PQ : forall a, P a -> Q a)
       (ι : SymInstance Σ) :
-      spath_wp o P ι ->
-      spath_wp o Q ι.
-    Proof. rewrite ?spath_wp_wp'. now apply outcome_satisfy_monotonic. Qed.
+      wp pc o P ι ->
+      wp pc o Q ι.
+    Proof.
+      intros HP. rewrite wp_wp' in *.
+      unfold wp' in *. revert HP.
+      now apply outcome_satisfy_monotonic.
+    Qed.
 
-    Global Instance proper_spath_wp {AT A} `{Inst AT A} {Σ} (o : SPath AT Σ) :
+    Global Instance proper_wp {AT A} `{Inst AT A} {Σ} (pc : PathCondition Σ) (o : SPath AT Σ) :
       Proper
         (pointwise_relation A iff ==> eq ==> iff)
-        (spath_wp o).
+        (wp pc o).
     Proof.
       unfold Proper, respectful, pointwise_relation, Basics.impl.
-      intros P Q PQ ι1 ι2 ->; split; apply spath_wp_monotonic; intuition.
+      intros P Q PQ ι1 ι2 ->; split; apply wp_monotonic; intuition.
     Qed.
 
     Notation instpc ι pc := (@inst _ _ instantiate_pathcondition _ ι pc).
 
-    Global Instance LRSPath {AT A} `{LR AT, Inst AT A} : LR (SPath AT) :=
-      fun Σ0 Σ1 ζ01 o0 o1 =>
-        forall (POST : A -> Prop) (ι1 : SymInstance Σ1),
-          spath_wp o0 POST (inst ζ01 ι1) <-> spath_wp o1 POST ι1.
+    Definition mapping_dcl {AT A BT B} `{Inst AT A, Inst BT B} :
+      ⊢ mapping AT BT -> PROP :=
+      fun Σ0 pc0 f =>
+        forall Σ1 (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1)
+               Σ2 (ζ02 : Sub Σ0 Σ2) (pc2 : PathCondition Σ2)
+               (ζ12 : Sub Σ1 Σ2) (a1 : AT Σ1) (a2 : AT Σ2) ,
+        forall ι1 ι2,
+          ι1 = inst ζ12 ι2 ->
+          inst ζ01 ι1 = inst ζ02 ι2 ->
+          inst a1 ι1 = inst a2 ι2 ->
+          inst (f Σ1 ζ01 pc1 a1) ι1 = inst (f Σ2 ζ02 pc2 a2) ι2.
 
-    Definition new_spath_mapping_dcl {AT BT} `{LR AT, LR BT} {Σ0} (f : (□ (AT -> BT)) Σ0) : Prop :=
-      forall Σ1 (ζ01 : Sub Σ0 Σ1), lr ζ01 f (four f ζ01).
-
-    (* Lemma new_spath_wp_map' {AT A BT B} `{LR AT, LR BT, InstLaws AT A, Inst BT B} {Σ} (ma : SPath AT Σ) *)
-    (*   (f : (□ (AT -> BT)) Σ) (f_dcl : new_spath_mapping_dcl f) : *)
-    (*   forall (ι : SymInstance Σ) POST, *)
-    (*     spath_wp (spath_map f ma) POST ι <-> *)
-    (*     spath_wp ma (fun a => POST (inst (T f (lift a)) ι)) ι. *)
-    (* Proof. *)
-    (* intros ι. induction ma; cbn; intros POST; auto. *)
-    (* - assert (inst (T f a) ι = *)
-    (*           inst (T f (lift (inst a ι))) ι) as ->; auto. *)
-    (*   cbv [new_spath_mapping_dcl lr LRBox LRImpl] in f_dcl. *)
-    (*   admit. *)
-    (* - rewrite IHma1, IHma2; eauto. *)
-    (* - rewrite IHma1, IHma2; eauto. *)
-    (* - rewrite IHma; auto. *)
-    (* - rewrite IHma; auto. *)
-    (* - admit. *)
-    (* - destruct b as [x σ]; cbn. setoid_rewrite IHma. *)
-    (*   split; (intros Hwp v; specialize (Hwp v); revert Hwp; apply spath_wp_monotonic; intros a; *)
-    (*           match goal with | |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto end). *)
-    (* Admitted. *)
-
-    Definition spath_mapping_dcl {AT A BT B} `{Inst AT A, Inst BT B} {Σ0} (f : spath_mapping AT BT Σ0) : Prop :=
-      forall Σ1 Σ2 (ζ01 : Sub Σ0 Σ1) (ζ02 : Sub Σ0 Σ2) (a1 : AT Σ1) (a2 : AT Σ2) (ζ12 : Sub Σ1 Σ2),
-      forall ι1 ι2,
-        ι1 = inst ζ12 ι2 ->
-        inst ζ01 ι1 = inst ζ02 ι2 ->
-        inst a1 ι1 = inst a2 ι2 ->
-        inst (f Σ1 ζ01 a1) ι1 = inst (f Σ2 ζ02 a2) ι2.
-
-    Lemma spath_mapping_dcl_four {AT A BT B} `{Inst AT A, Inst BT B} {Σ0} (f : spath_mapping AT BT Σ0) (f_dcl : spath_mapping_dcl f) :
-      forall Σ1 (ζ01 : Sub Σ0 Σ1),
-        spath_mapping_dcl (four f ζ01).
+    Lemma mapping_dcl_four {AT A BT B} `{Inst AT A, Inst BT B} {Σ0} (pc0 : PathCondition Σ0)
+      (f : mapping AT BT Σ0) (f_dcl : mapping_dcl pc0 f) :
+      forall Σ1 (ζ01 : Sub Σ0 Σ1) pc1,
+        mapping_dcl pc1 (four pc0 f ζ01 pc1).
     Proof.
-      unfold spath_mapping_dcl. intros * Hι Hζ Ha.
+      unfold mapping_dcl. intros * Hι Hζ Ha.
       eapply f_dcl; eauto. rewrite ?inst_subst.
       intuition.
     Qed.
 
-    Lemma spath_mapping_dcl_four_wk1 {AT A BT B} `{Inst AT A, Inst BT B} {Σ0} (f : spath_mapping AT BT Σ0) (f_dcl : spath_mapping_dcl f) :
-      forall (b : 𝑺 * Ty),
-        spath_mapping_dcl (four_wk1 f b).
+    Lemma mapping_dcl_four_wk1 {AT A BT B} `{Inst AT A, Inst BT B} {Σ0} pc0 (b : 𝑺 * Ty)
+      (f : mapping AT BT Σ0) (f_dcl : mapping_dcl pc0 f) :
+      mapping_dcl (subst pc0 sub_wk1) (four_wk1 pc0 f b).
     Proof.
-      unfold spath_mapping_dcl. intros * Hι Hζ Ha.
+      unfold mapping_dcl. intros * Hι Hζ Ha.
       unfold four_wk1. rewrite <- ?sub_comp_wk1_tail.
-      eapply spath_mapping_dcl_four; eauto.
+      eapply f_dcl; eauto. rewrite ?inst_subst.
+      intuition.
     Qed.
 
-    Definition spath_arrow_dcl {AT A BT B} `{Inst AT A, Inst BT B} {Σ} (f : spath_arrow AT BT Σ) : Prop :=
-      forall Σ1 Σ2 ζ1 ζ2 pc1 pc2 ζ12 a1 a2 (P Q : B -> Prop) (PQ : forall b, P b -> Q b),
+    Definition dcl {AT A} `{Inst AT A} :
+      ⊢ □(SPath AT) -> PROP :=
+      fun Σ0 pc0 p =>
+        forall
+          (P Q : A -> Prop) (PQ : forall a, P a -> Q a)
+          Σ1 (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1)
+          Σ2 (ζ02 : Sub Σ0 Σ2) (pc2 : PathCondition Σ2)
+          (ζ12 : Sub Σ1 Σ2),
+        forall ι1 ι2,
+          ι1 = inst ζ12 ι2 ->
+          instpc pc1 ι1 ->
+          instpc pc2 ι2 ->
+          inst ζ01 ι1 = inst ζ02 ι2 ->
+          wp pc1 (p Σ1 ζ01 pc1) P ι1 ->
+          wp pc2 (p Σ2 ζ02 pc2) Q ι2.
+
+    Definition arrow_dcl {AT A BT B} `{Inst AT A, Inst BT B} {Σ0} (pc0 : PathCondition Σ0) (f : arrow AT BT Σ0) : Prop :=
+      forall
+        (P Q : B -> Prop) (PQ : forall b, P b -> Q b)
+        Σ1 (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1)
+        Σ2 (ζ02 : Sub Σ0 Σ2) (pc2 : PathCondition Σ2)
+        (ζ12 : Sub Σ1 Σ2) (a1 : AT Σ1) (a2 : AT Σ2),
        forall (ι1 : SymInstance Σ1) (ι2 : SymInstance Σ2),
          ι1 = inst ζ12 ι2 ->
          instpc pc1 ι1 ->
          instpc pc2 ι2 ->
-         inst ζ1 ι1 = inst ζ2 ι2 ->
+         inst ζ01 ι1 = inst ζ02 ι2 ->
          inst a1 ι1 = inst a2 ι2 ->
-         spath_wp (f Σ1 ζ1 pc1 a1) P ι1 ->
-         spath_wp (f Σ2 ζ2 pc2 a2) Q ι2.
+         wp pc1 (f Σ1 ζ01 pc1 a1) P ι1 ->
+         wp pc2 (f Σ2 ζ02 pc2 a2) Q ι2.
 
-    Lemma spath_arrow_dcl_four {AT A BT B} `{Inst AT A, Inst BT B} {Σ0} (f : spath_arrow AT BT Σ0) (f_dcl : spath_arrow_dcl f) :
-      forall Σ1 (ζ01 : Sub Σ0 Σ1),
-        spath_arrow_dcl (four f ζ01).
+    Lemma arrow_dcl_four {AT A BT B} `{Inst AT A, Inst BT B} {Σ0} pc0 (f : arrow AT BT Σ0) (f_dcl : arrow_dcl pc0 f) :
+      forall Σ1 (ζ01 : Sub Σ0 Σ1) pc1,
+        arrow_dcl pc1 (four pc0 f ζ01 pc1).
     Proof.
-      unfold spath_arrow_dcl. intros * PQ * Hι Hpc1 Hpc2 Hζ Ha.
+      unfold arrow_dcl. intros * PQ * Hι Hpc1 Hpc2 Hζ Ha.
       eapply f_dcl; eauto. rewrite ?inst_subst.
       intuition.
     Qed.
 
-    Lemma spath_arrow_dcl_four_wk1 {AT A BT B} `{Inst AT A, Inst BT B} {Σ0} (f : spath_arrow AT BT Σ0) (f_dcl : spath_arrow_dcl f) :
+    Lemma arrow_dcl_four_wk1 {AT A BT B} `{Inst AT A, Inst BT B} {Σ0} pc0 (f : arrow AT BT Σ0) (f_dcl : arrow_dcl pc0 f) :
       forall (b : 𝑺 * Ty),
-        spath_arrow_dcl (four_wk1 f b).
+        arrow_dcl (subst pc0 sub_wk1) (four_wk1 pc0 f b).
     Proof.
-      unfold spath_arrow_dcl. intros * PQ * Hι Hpc1 Hpc2 Hζ Ha.
+      unfold arrow_dcl. intros * PQ * Hι Hpc1 Hpc2 Hζ Ha.
       unfold four_wk1. rewrite <- ?sub_comp_wk1_tail.
-      eapply spath_arrow_dcl_four; eauto.
+      eapply f_dcl; eauto. rewrite ?inst_subst.
+      intuition.
     Qed.
 
-    Hint Resolve spath_mapping_dcl_four : dcl.
-    Hint Resolve spath_mapping_dcl_four_wk1 : dcl.
-    Hint Resolve spath_arrow_dcl_four : dcl.
-    Hint Resolve spath_arrow_dcl_four_wk1 : dcl.
+    Hint Resolve mapping_dcl_four : dcl.
+    Hint Resolve mapping_dcl_four_wk1 : dcl.
+    Hint Resolve arrow_dcl_four : dcl.
+    Hint Resolve arrow_dcl_four_wk1 : dcl.
 
-    Lemma spath_wp_subst {AT A} `{InstLaws AT A} {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2)
+    Lemma wp_subst {AT A} `{InstLaws AT A} {Σ1 Σ2}
+      (pc1 : PathCondition Σ1) (pc2 : PathCondition Σ2) (ζ12 : Sub Σ1 Σ2)
       (o : SPath AT Σ1) (POST : A -> Prop) (ι2 : SymInstance Σ2) :
-      spath_wp (subst o ζ12) POST ι2 <-> spath_wp o POST (inst ζ12 ι2).
+      wp pc2 (subst o ζ12) POST ι2 <-> wp pc1 o POST (inst ζ12 ι2).
     Proof.
-      revert Σ2 ι2 ζ12.
+      revert Σ2 pc2 ζ12 ι2.
       induction o; cbn; intros.
       - now rewrite inst_subst.
       - now rewrite IHo1, IHo2.
@@ -604,139 +882,161 @@ Module Mutators
       - reflexivity.
       - now rewrite IHo, inst_subst.
       - now rewrite IHo, inst_subst.
-      - split; intros [v HYP]; exists v; revert HYP;
+      - specialize (IHo (subst pc1 sub_wk1)).
+        split; intros [v HYP]; exists v; revert HYP;
           now rewrite IHo, inst_sub_up1.
-      - split; intros HYP v; specialize (HYP v); revert HYP;
+      - specialize (IHo (subst pc1 sub_wk1)).
+        split; intros HYP v; specialize (HYP v); revert HYP;
           now rewrite IHo, inst_sub_up1.
-      - rewrite IHo.
-        now rewrite ?inst_subst, inst_sub_shift, <- inst_lookup.
-      - rewrite IHo.
-        now rewrite ?inst_subst, inst_sub_shift, <- inst_lookup.
+      - specialize (IHo (subst pc1 (sub_single xIn t))).
+        now rewrite IHo, ?inst_subst, inst_sub_shift, <- inst_lookup.
+      - specialize (IHo (subst pc1 (sub_single xIn t))).
+        now rewrite IHo, ?inst_subst, inst_sub_shift, <- inst_lookup.
       - split; intros [HYP]; constructor; revert HYP; apply IHo.
     Qed.
 
-    Definition spath_geq {AT A} `{Inst AT A} {Σ} (o1 o2 : SPath AT Σ) : Prop :=
+    Definition geq {AT A} `{Inst AT A} {Σ} pc (o1 o2 : SPath AT Σ) : Prop :=
       forall (P Q : A -> Prop) (PQ : forall a, P a -> Q a) ι,
-        spath_wp o1 P ι ->
-        spath_wp o2 Q ι.
+        wp pc o1 P ι ->
+        wp pc o2 Q ι.
 
-    Global Instance preorder_spath_geq {AT A} `{Inst AT A} {Σ} : PreOrder (spath_geq (Σ := Σ)).
+    Global Instance preorder_geq {AT A} `{Inst AT A} {Σ} pc : PreOrder (geq (Σ := Σ) pc).
     Proof.
       constructor.
-      - unfold spath_geq; intros o * PQ *.
-        now apply spath_wp_monotonic.
-      - intros x y z. unfold spath_geq.
+      - unfold geq; intros o * PQ *.
+        now apply wp_monotonic.
+      - intros x y z. unfold geq.
         intros Rxy Ryz P Q PQ ι.
         specialize (Rxy P Q PQ ι).
         specialize (Ryz Q Q (fun _ p => p) ι).
         auto.
     Qed.
 
-    Fixpoint spath_safe {AT Σ} (o : SPath AT Σ) (ι : SymInstance Σ) {struct o} : Prop :=
-      match o with
-      | spath_pure a => True
-      | spath_angelic_binary o1 o2 => spath_safe o1 ι \/ spath_safe o2 ι
-      | spath_demonic_binary o1 o2 => spath_safe o1 ι /\ spath_safe o2 ι
-      | spath_fail msg => False
-      | spath_block => True
-      | spath_assertk fml msg o =>
-        Obligation msg fml ι /\ spath_safe o ι
-      | spath_assumek fml o => (inst fml ι : Prop) -> spath_safe o ι
-      | spath_angelicv b k => exists v, spath_safe k (env_snoc ι b v)
-      | spath_demonicv b k => forall v, spath_safe k (env_snoc ι b v)
-      | @spath_assert_vareq _ _ x σ xIn t msg k =>
-        (let ζ := sub_shift xIn in
-        Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
-        (let ι' := env_remove (x,σ) ι xIn in
-        spath_safe k ι')
-      | @spath_assume_vareq _ _ x σ xIn t k =>
-        let ι' := env_remove (x,σ) ι xIn in
-        env_lookup ι xIn = inst t ι' ->
-        spath_safe k ι'
-      | spath_debug d k => Debug (inst d ι) (spath_safe k ι)
-      end.
-    Global Arguments spath_safe {_} Σ o ι.
+    Definition safe {AT} :
+      (* ⊢ SPath AT -> SymInstance -> PROP := *)
+      forall Σ (pc : PathCondition Σ) (o : SPath AT Σ) (ι : SymInstance Σ), Prop :=
+      fix safe {Σ} pc o ι :=
+        match o with
+        | pure a => True
+        | angelic_binary o1 o2 => safe pc o1 ι \/ safe pc o2 ι
+        | demonic_binary o1 o2 => safe pc o1 ι /\ safe pc o2 ι
+        | error msg => False
+        | block => True
+        | assertk fml msg o =>
+          Obligation msg fml ι /\ safe (cons fml pc) o ι
+        | assumek fml o => (inst fml ι : Prop) -> safe (cons fml pc) o ι
+        | angelicv b k => exists v, safe (subst pc sub_wk1) k (env_snoc ι b v)
+        | demonicv b k => forall v, safe (subst pc sub_wk1) k (env_snoc ι b v)
+        | @assert_vareq _ _ x σ xIn t msg k =>
+          (let ζ := sub_shift xIn in
+          Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
+          (let ι' := env_remove (x,σ) ι xIn in
+          safe (subst pc (sub_single xIn t)) k ι')
+        | @assume_vareq _ _ x σ xIn t k =>
+          let ι' := env_remove (x,σ) ι xIn in
+          env_lookup ι xIn = inst t ι' ->
+          safe (subst pc (sub_single xIn t)) k ι'
+        | debug d k => Debug (inst d ι) (safe pc k ι)
+        end%type.
+    Global Arguments safe {_ Σ} pc o ι.
 
-    Lemma spath_wp_angelicvs {AT A} `{Inst AT A} Σ Δ (ma : SPath AT (Σ ▻▻ Δ)) :
+    (* TODO: KILL *)
+    Lemma wp_angelicvs {AT A} `{Inst AT A} Σ pc Δ (ma : SPath AT (Σ ▻▻ Δ)) :
       forall POST (ι : SymInstance Σ),
-        spath_wp (spath_angelicvs Δ ma) POST ι <->
-        exists ιΔ : SymInstance Δ, spath_wp ma POST (env_cat ι ιΔ).
+        wp pc (angelicvs pc Δ ma) POST ι <->
+        exists ιΔ : SymInstance Δ, wp (subst pc (sub_cat_left Δ)) ma POST (env_cat ι ιΔ).
     Proof.
       intros ι POST.
       induction Δ; cbn.
       - split.
-        + intros Hwp. exists env_nil. apply Hwp.
-        + intros [ιΔ Hwp]. destruct (nilView ιΔ). apply Hwp.
+        + intros Hwp. exists env_nil; cbn. (* apply Hwp. *) admit.
+        + intros [ιΔ Hwp]. destruct (nilView ιΔ). (* apply Hwp. *) admit.
       - rewrite IHΔ. cbn.
         split; intros [ιΔ Hwp].
         + destruct Hwp as [v Hwp].
           exists (env_snoc ιΔ _ v).
-          apply Hwp.
+          (* apply Hwp. *)
+          admit.
         + destruct (snocView ιΔ) as [ιΔ v].
-          exists ιΔ, v. apply Hwp.
-    Qed.
+          exists ιΔ, v.
+          (* apply Hwp. *)
+          admit.
+    Admitted.
 
     Ltac rewrite_inst :=
       repeat rewrite <- ?sub_comp_wk1_tail, ?inst_subst,
         ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc,
         ?inst_lift, ?inst_sub_single, ?inst_pathcondition_cons.
 
-    Lemma spath_wp_angelic {AT A} `{InstLaws AT A} {Σ0} {x : option 𝑺} {σ : Ty}
-          (k : forall Σ1 : LCtx, Sub Σ0 Σ1 -> PathCondition Σ1 -> Term Σ1 σ -> SPath AT Σ1) (k_dcl : spath_arrow_dcl k)
-          (pc0 : PathCondition Σ0) (POST : A -> Prop) (ι0 : SymInstance Σ0) :
+    Lemma wp_angelic {AT A} `{InstLaws AT A} {Σ0} pc0 {x : option 𝑺} {σ : Ty}
+          (k : arrow (STerm σ) AT Σ0) (k_dcl : arrow_dcl pc0 k)
+          (POST : A -> Prop) (ι0 : SymInstance Σ0) :
       instpc pc0 ι0 ->
-      spath_wp (spath_angelic x σ k pc0) POST ι0 <->
-      exists v : Lit σ, spath_wp (k _ (sub_id _) pc0 (lift v)) POST ι0.
+      wp pc0 (angelic x σ pc0 k) POST ι0 <->
+      exists v : Lit σ, wp pc0 (k _ (sub_id _) pc0 (lift v)) POST ι0.
     Proof.
       cbn. split; intros [v Hwp]; exists v; revert Hwp.
-      - apply (k_dcl _ _ sub_wk1 (sub_id Σ0) _ _ (sub_snoc (sub_id Σ0) (fresh Σ0 x :: σ) (term_lit σ v)));
+      - apply k_dcl with (sub_snoc (sub_id Σ0) (fresh Σ0 x :: σ) (term_lit σ v));
           rewrite_inst; auto.
-      - apply (k_dcl _ _ (sub_id Σ0) sub_wk1 _ _ sub_wk1);
+      - apply k_dcl with sub_wk1;
           rewrite_inst; auto.
     Qed.
 
-    Lemma spath_wp_map {AT A BT B} `{InstLaws AT A, Inst BT B} {Σ} (ma : SPath AT Σ)
-      (f : spath_mapping AT BT Σ) (f_dcl : spath_mapping_dcl f) :
-      forall POST (ι : SymInstance Σ),
-        spath_wp (spath_map f ma) POST ι <->
-        spath_wp ma (fun a => POST (inst (T f (lift a)) ι)) ι.
+    Lemma wp_map {AT A BT B} `{InstLaws AT A, Inst BT B} {Σ} pc (ma : SPath AT Σ)
+      (f : mapping AT BT Σ) (f_dcl : mapping_dcl pc f) :
+      forall POST (ι : SymInstance Σ) (Hpc : instpc pc ι),
+        wp pc (map pc f ma) POST ι <->
+        wp pc ma (fun a => POST (inst (T pc f (lift a)) ι)) ι.
     Proof.
-      intros POST ι. induction ma; cbn; auto.
-      - assert (inst (T f a) ι =
-                inst (T f (lift (inst a ι))) ι) as ->; auto.
-        eapply f_dcl; rewrite_inst; auto.
+      intros POST ι Hpc. unfold T.
+      induction ma; cbn; auto.
+      - unfold T. rewrite f_dcl; rewrite_inst; auto.
       - rewrite IHma1, IHma2; eauto.
       - rewrite IHma1, IHma2; eauto.
-      - rewrite IHma; auto.
-      - rewrite IHma; auto.
-      - setoid_rewrite IHma; auto with dcl. clear IHma.
-        split; intros [v Hwp]; exists v; revert Hwp; apply spath_wp_monotonic; intros a;
-          match goal with | |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto end.
-        + eapply f_dcl; rewrite_inst; eauto.
-        + eapply f_dcl; rewrite_inst; eauto.
-      - setoid_rewrite IHma; auto with dcl. clear IHma.
-        split; intros Hwp v; specialize (Hwp v); revert Hwp; apply spath_wp_monotonic; intros a;
-          match goal with | |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto end.
-        + eapply f_dcl; rewrite_inst; eauto.
-        + eapply f_dcl; rewrite_inst; eauto.
-      - rewrite IHma; auto with dcl. clear IHma.
-        split; intros [Heq Hwp]; split; auto; revert Hwp; apply spath_wp_monotonic; intros a;
-          match goal with | |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto end.
-        + eapply f_dcl; rewrite_inst; eauto.
-        + eapply f_dcl; rewrite_inst; eauto.
-      - rewrite IHma; auto with dcl. clear IHma.
-        split; intros Hwp Heq; specialize (Hwp Heq); revert Hwp; apply spath_wp_monotonic; intros a;
-          match goal with | |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto end.
-        + eapply f_dcl; rewrite_inst; eauto.
-        + eapply f_dcl; rewrite_inst; eauto.
+      - split; (intros [HP Hwp]; split; [exact HP | ]; revert Hwp);
+          rewrite IHma; rewrite_inst; auto;
+            apply wp_monotonic; intros a;
+              rewrite f_dcl; rewrite_inst; auto; eauto.
+      - split; (intros Hwp HP; specialize (Hwp HP); revert Hwp);
+          rewrite IHma; rewrite_inst; auto;
+            apply wp_monotonic; intros a;
+              rewrite f_dcl; rewrite_inst; auto; eauto.
+      - split; (intros [v Hwp]; exists v; revert Hwp);
+          rewrite IHma; rewrite_inst; auto with dcl;
+            apply wp_monotonic; intros a;
+              match goal with
+                |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto
+              end;
+              eapply f_dcl; rewrite_inst; eauto.
+      - split; intros Hwp v; specialize (Hwp v); revert Hwp;
+          rewrite IHma; rewrite_inst; auto with dcl;
+            apply wp_monotonic; intros a;
+              match goal with
+                |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto
+              end;
+              eapply f_dcl; rewrite_inst; eauto.
+      - split; (intros [Heq Hwp]; split; auto; revert Hwp);
+          rewrite IHma; rewrite_inst; auto with dcl;
+            apply wp_monotonic; intros a;
+              match goal with
+                |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto
+              end;
+              eapply f_dcl; rewrite_inst; eauto.
+      - split; intros Hwp Heq; specialize (Hwp Heq); revert Hwp;
+          rewrite IHma; rewrite_inst; auto with dcl;
+            apply wp_monotonic; intros a;
+              match goal with
+                |- POST ?b1 -> POST ?b2 => assert (b1 = b2) as ->; auto
+              end;
+              eapply f_dcl; rewrite_inst; eauto.
       - split; intros [HYP]; constructor; revert HYP; now apply IHma.
     Qed.
 
-    Lemma spath_wp_bind {AT A BT B} `{InstLaws AT A, InstLaws BT B} {Σ} (pc : PathCondition Σ) (ma : SPath AT Σ)
-      (f : spath_arrow AT BT Σ) (f_dcl : spath_arrow_dcl f) :
-      forall POST (ι : SymInstance Σ) (Hpc : instpc pc ι),
-        spath_wp (spath_bind pc ma f) POST ι <->
-        spath_wp ma (fun a => spath_wp (T f pc (lift a)) POST ι) ι.
+    Lemma wp_bind {AT A BT B} `{InstLaws AT A, Inst BT B} {Σ} (pc : PathCondition Σ) (ma : SPath AT Σ)
+      (f : arrow AT BT Σ) (f_dcl : arrow_dcl pc f) :
+      forall (POST : B -> Prop) (ι : SymInstance Σ) (Hpc : instpc pc ι),
+        wp pc (bind pc ma f) POST ι <->
+        wp pc ma (fun a => wp pc (T pc f (lift a)) POST ι) ι.
     Proof.
       intros POST ι Hpc. induction ma; cbn; auto.
       - split; eapply f_dcl with (sub_id _); eauto; rewrite ?inst_sub_id, ?inst_lift; auto.
@@ -744,101 +1044,103 @@ Module Mutators
       - now rewrite IHma1, IHma2.
       - split; (intros [HP Hwp]; split; [exact HP | ]; revert Hwp);
           rewrite IHma; rewrite_inst; auto;
-            apply spath_wp_monotonic; intros a;
+            apply wp_monotonic; intros a;
               eapply f_dcl; rewrite_inst; auto; eauto.
       - split; (intros Hwp HP; specialize (Hwp HP); revert Hwp);
           rewrite IHma; rewrite_inst; auto;
-            apply spath_wp_monotonic; intros a;
+            apply wp_monotonic; intros a;
               eapply f_dcl; rewrite_inst; auto; eauto.
       - split; (intros [v Hwp]; exists v; revert Hwp);
           rewrite IHma; rewrite_inst; auto with dcl;
-            apply spath_wp_monotonic; intros a;
+            apply wp_monotonic; intros a;
               eapply f_dcl; rewrite_inst; auto.
       - split; intros Hwp v; specialize (Hwp v); revert Hwp;
           rewrite IHma; rewrite_inst; auto with dcl;
-            apply spath_wp_monotonic; intros a;
+            apply wp_monotonic; intros a;
               eapply f_dcl; rewrite_inst; auto; eauto.
       - split; (intros [Heq Hwp]; split; auto; revert Hwp);
           rewrite IHma; rewrite_inst; auto with dcl;
-            apply spath_wp_monotonic; intros a;
+            apply wp_monotonic; intros a;
               eapply f_dcl; rewrite_inst; auto; eauto.
       - split; intros Hwp Heq; specialize (Hwp Heq); revert Hwp;
           rewrite IHma; rewrite_inst; auto with dcl;
-            apply spath_wp_monotonic; intros a;
+            apply wp_monotonic; intros a;
               eapply f_dcl; rewrite_inst; auto; eauto.
       - split; intros [HYP]; constructor; revert HYP; now apply IHma.
     Qed.
 
-    Lemma spath_wp_assumek_subst {AT A} `{InstLaws AT A} {Σ x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ)
+    Lemma wp_assumek_subst {AT A} `{InstLaws AT A} {Σ pc x σ} (xIn : (x,σ) ∈ Σ) (t : Term (Σ - (x,σ)) σ)
           (k : SPath AT Σ) :
-      forall ι POST,
-        spath_wp (spath_assumek (formula_eq (term_var x) (subst (T := fun Σ => Term Σ _) t (sub_shift xIn))) k) ι POST <->
-        spath_wp (spath_assume_vareq x t (subst k (sub_single xIn t))) ι POST.
+      forall POST ι,
+        wp pc (assumek (formula_eq (term_var x) (subst (T := fun Σ => Term Σ _) t (sub_shift xIn))) k) POST ι <->
+        wp pc (assume_vareq x t (subst k (sub_single xIn t))) POST ι.
     Proof.
-      cbn. intros *. rewrite inst_subst. rewrite inst_sub_shift, spath_wp_subst.
+      cbn. intros *. rewrite inst_subst, inst_sub_shift.
+      rewrite (wp_subst (formula_eq (term_var x) (subst t (sub_shift xIn)) :: pc)%list).
       split; intros Hwp HYP; specialize (Hwp HYP); revert Hwp; now rewrite inst_sub_single.
     Qed.
 
-    Lemma spath_wp_assume_multisub {AT A} `{InstLaws AT A} {Σ0 Σ1} (ζ : MultiSub Σ0 Σ1)
+    Lemma wp_assume_multisub {AT A} `{InstLaws AT A} {Σ0 Σ1} pc0 (ζ : MultiSub Σ0 Σ1)
       (o : SPath AT Σ1) (P : A -> Prop) (ι0 : SymInstance Σ0) :
-      spath_wp (spath_assume_multisub ζ o) P ι0 <->
-      (inst_multisub ζ ι0 -> spath_wp o P (inst (sub_multishift ζ) ι0)).
+      wp pc0 (assume_multisub ζ o) P ι0 <->
+      (inst_multisub ζ ι0 -> wp (subst pc0 (sub_multi ζ)) o P (inst (sub_multishift ζ) ι0)).
     Proof.
       induction ζ; cbn in *.
-      - rewrite inst_sub_id. intuition.
+      - rewrite subst_sub_id, inst_sub_id. intuition.
       - rewrite IHζ. clear IHζ.
         rewrite <- inst_sub_shift.
         rewrite inst_subst.
-        intuition.
-    Qed.
-
-    Lemma spath_wp_assert_multisub {AT A} `{InstLaws AT A} {Σ0 Σ1} (msg : Message _) (ζ : MultiSub Σ0 Σ1)
-      (o : Message _ -> SPath AT Σ1) (P : A -> Prop) (ι0 : SymInstance Σ0) :
-      spath_wp (spath_assert_multisub msg ζ o) P ι0 <->
-      (inst_multisub ζ ι0 /\ spath_wp (o (subst msg (sub_multi ζ))) P (inst (sub_multishift ζ) ι0)).
-    Proof.
-      induction ζ; cbn in *.
-      - rewrite inst_sub_id, subst_sub_id. intuition.
-      - rewrite IHζ. clear IHζ.
         rewrite subst_sub_comp.
-        rewrite <- inst_sub_shift.
-        rewrite inst_subst.
         intuition.
     Qed.
 
-    Lemma spath_wp_assume_formulas_without_solver {AT A} `{Inst AT A} {Σ0}
-      (fmls : List Formula Σ0) (o : SPath AT Σ0) (POST : A -> Prop) (ι0 : SymInstance Σ0) :
-      spath_wp (spath_assume_formulas_without_solver fmls o) POST ι0 <->
-      (instpc fmls ι0 -> spath_wp o POST ι0).
+    Lemma wp_assert_multisub {AT A} `{InstLaws AT A} {Σ0 Σ1} pc0 (msg : Message _) (ζ : MultiSub Σ0 Σ1)
+      (o : Message _ -> SPath AT Σ1) (P : A -> Prop) (ι0 : SymInstance Σ0) :
+      wp pc0 (assert_multisub msg ζ o) P ι0 <->
+      (inst_multisub ζ ι0 /\ wp (subst pc0 (sub_multi ζ)) (o (subst msg (sub_multi ζ))) P (inst (sub_multishift ζ) ι0)).
     Proof.
-      induction fmls; cbn.
+      induction ζ; cbn in *.
+      - rewrite inst_sub_id, ?subst_sub_id. intuition.
+      - rewrite IHζ. clear IHζ.
+        rewrite ?subst_sub_comp.
+        rewrite <- inst_sub_shift.
+        rewrite ?inst_subst.
+        intuition.
+    Qed.
+
+    Lemma wp_assume_formulas_without_solver {AT A} `{Inst AT A} {Σ0} pc
+      (fmls : List Formula Σ0) (p : Box (SPath AT) Σ0) (POST : A -> Prop) (ι0 : SymInstance Σ0) :
+      wp pc (assume_formulas_without_solver pc fmls p) POST ι0 <->
+      (instpc fmls ι0 -> wp (rev_append fmls pc) (T (rev_append fmls pc) p) POST ι0).
+    Proof.
+      revert pc. induction fmls as [|fml fmls]; intros pc; cbn.
       - intuition. apply H0. constructor.
       - rewrite inst_pathcondition_cons.
-        intuition.
+        rewrite IHfmls. intuition.
     Qed.
 
-    Lemma spath_wp_assert_formulas_without_solver {AT A} `{Inst AT A} {Σ0}
-      (msg : Message Σ0) (fmls : List Formula Σ0) (o : SPath AT Σ0) (ι0 : SymInstance Σ0) (POST : A -> Prop) :
-      spath_wp (spath_assert_formulas_without_solver msg fmls o) POST ι0 <->
-      (instpc fmls ι0 /\ spath_wp o POST ι0).
+    Lemma wp_assert_formulas_without_solver {AT A} `{Inst AT A} {Σ0} pc
+      (msg : Message Σ0) (fmls : List Formula Σ0) (k : Box (SPath AT) Σ0) (ι0 : SymInstance Σ0) (POST : A -> Prop) :
+      wp pc (assert_formulas_without_solver pc msg fmls k) POST ι0 <->
+      (instpc fmls ι0 /\ wp (rev_append fmls pc) (T (rev_append fmls pc) k) POST ι0).
     Proof.
-      induction fmls; cbn.
+      revert pc. induction fmls as [|fml fmls]; intros pc; cbn.
       - intuition. constructor.
       - rewrite inst_pathcondition_cons.
-        intuition.
+        rewrite IHfmls. intuition.
     Qed.
 
-    Lemma spath_wp_assume_formula {Σ} (pc : PathCondition Σ) (fml : Formula Σ) :
+    Lemma wp_assume_formula {Σ} (pc : PathCondition Σ) (fml : Formula Σ) :
       forall (P : unit -> Prop) (ι : SymInstance Σ),
         instpc pc ι ->
-        spath_wp (spath_assume_formula fml pc) P ι <->
+        wp pc (assume_formula pc fml) P ι <->
         ((inst fml ι : Prop) -> P tt).
     Proof.
-      unfold spath_assume_formula. intros P ι Hpc.
+      unfold assume_formula. intros P ι Hpc.
       destruct (solver_spec pc fml) as [[Σ1 [ζ fmls]]|].
       - specialize (H ι Hpc). destruct H as [Hζ Hfmls].
         specialize (Hfmls (inst (sub_multishift ζ) ι)).
-        rewrite spath_wp_assume_multisub, spath_wp_assume_formulas_without_solver.
+        rewrite wp_assume_multisub, wp_assume_formulas_without_solver.
         cbn. split.
         + intros HP ?. apply HP; auto.
           rewrite inst_multi in Hfmls; auto.
@@ -849,17 +1151,52 @@ Module Mutators
         cbn; intuition.
     Qed.
 
-    Lemma spath_wp_assert_formula {Σ} (msg : Message Σ) (pc : PathCondition Σ) (fml : Formula Σ) :
+    Lemma wp_assume_formulak {AT A} `{InstLaws AT A} {Σ} (pc : PathCondition Σ) (fml : Formula Σ)
+      (k : Box (SPath AT) Σ) (k_dcl : dcl pc k) (POST : A -> Prop) (ι : SymInstance Σ) (Hpc : instpc pc ι) :
+      wp pc (assume_formulak pc fml k) POST ι <->
+      (inst (A:=Prop) fml ι -> wp pc (T pc k) POST ι).
+    Proof.
+      unfold assume_formulak.
+      destruct (solver_spec pc fml) as [[Σ1 [ζ fmls]] Hfml|Hfml].
+      - specialize (Hfml ι Hpc). destruct Hfml as [Hζ Hfmls].
+        specialize (Hfmls (inst (sub_multishift ζ) ι)).
+        rewrite wp_assume_multisub, wp_assume_formulas_without_solver.
+        split.
+        + intros HP Hfml.
+          specialize (Hζ Hfml).
+          rewrite inst_multi in Hfmls; auto.
+          inster Hfmls by reflexivity.
+          apply Hfmls in Hfml.
+          inster HP by auto. revert HP. unfold T.
+          eapply k_dcl; auto.
+          rewrite inst_pathcondition_rev_append.
+          split; auto.
+          now rewrite inst_subst, inst_multi.
+          now rewrite ?inst_subst, ?inst_sub_id, ?inst_multi.
+        + clear Hζ. intros Hwp Hζ Hfml.
+          rewrite inst_multi in Hfmls; auto.
+          destruct Hfmls as [_ Hfmls]; auto.
+          inster Hfmls by auto.
+          inster Hwp by auto.
+          revert Hwp. unfold T.
+          eapply k_dcl; auto. rewrite inst_multi; auto.
+          rewrite inst_pathcondition_rev_append.
+          rewrite inst_subst, inst_multi; auto.
+          now rewrite ?inst_subst, ?inst_sub_id, ?inst_multi.
+      - specialize (Hfml ι Hpc). cbn. intuition.
+    Qed.
+
+    Lemma wp_assert_formula {Σ} (msg : Message Σ) (fml : Formula Σ) (pc : PathCondition Σ) :
       forall (P : unit -> Prop) (ι : SymInstance Σ),
         instpc pc ι ->
-        spath_wp (spath_assert_formula msg pc fml) P ι <->
+        wp pc (assert_formula pc msg fml) P ι <->
         (inst fml ι /\ P tt).
     Proof.
-      unfold spath_assert_formula. intros P ι Hpc.
+      unfold assert_formula. intros P ι Hpc.
       destruct (solver_spec pc fml) as [[Σ1 [ζ fmls]]|].
       - specialize (H ι Hpc). destruct H as [Hζ Hfmls].
         specialize (Hfmls (inst (sub_multishift ζ) ι)).
-        rewrite spath_wp_assert_multisub, spath_wp_assert_formulas_without_solver.
+        rewrite wp_assert_multisub, wp_assert_formulas_without_solver.
         cbn. split.
         + intros [? [? HP]]. split; auto.
           apply Hfmls; auto.
@@ -871,97 +1208,358 @@ Module Mutators
         cbn; intuition.
     Qed.
 
-    Definition spath_angelic_binary_prune {AT Σ} (o1 o2 : SPath AT Σ) : SPath AT Σ :=
-      match o1 , o2 with
-      | spath_block  , _           => spath_block
-      | _           , spath_block  => spath_block
-      | spath_fail _ , _           => o2
-      | _           , spath_fail _ => o1
-      | _           , _           => spath_angelic_binary o1 o2
-      end.
+    Ltac fold_inst_term :=
+      repeat change (@inst_term ?Σ ?σ ?t ?ι)
+      with (@inst (fun Σ => Term Σ σ) (Lit σ) (@instantiate_term σ) Σ t ι) in *.
 
-    Definition spath_demonic_binary_prune {AT Σ} (o1 o2 : SPath AT Σ) : SPath AT Σ :=
-      match o1 , o2 with
-      | spath_block  , _           => o2
-      | _           , spath_block  => o1
-      | spath_fail s , _           => spath_fail s
-      | _           , spath_fail s => spath_fail s
-      | _           , _           => spath_demonic_binary o1 o2
+    Lemma wp_demonic_match_bool {AT A} `{InstLaws AT A} {Σ0} pc0 (t : Term Σ0 ty_bool)
+      (pt pf : Box (SPath AT) Σ0) (pt_dcl : dcl pc0 pt) (pf_dcl : dcl pc0 pf)
+      (POST : A -> Prop) (ι0 : SymInstance Σ0) (Hpc : instpc pc0 ι0) :
+      wp pc0 (demonic_match_bool pc0 t pt pf) POST ι0 <->
+      match inst (T := STerm ty_bool) (A := Lit ty_bool) t ι0 with
+      | true  => wp pc0 (T pc0 pt) POST ι0
+      | false => wp pc0 (T pc0 pf) POST ι0
       end.
+    Proof.
+      unfold demonic_match_bool.
+      destruct (term_get_lit_spec t) as [[] Heq|_]; cbn [wp].
+      - specialize (Heq ι0). rewrite Heq. reflexivity.
+      - specialize (Heq ι0). rewrite Heq. reflexivity.
+      - rewrite ?wp_assume_formulak; auto. cbn. fold_inst_term.
+        destruct (inst t ι0); intuition.
+    Qed.
 
-    Definition spath_assertk_prune {AT Σ} (fml : Formula Σ) (msg : Message Σ) (o : SPath AT Σ) : SPath AT Σ :=
-      match o with
-      | spath_fail s => spath_fail s
-      | _           => spath_assertk fml msg o
-      end.
+    Definition angelic_binary_prune {AT} :
+      ⊢ SPath AT -> SPath AT -> SPath AT :=
+      fun Σ pc o1 o2 =>
+        match o1 , o2 with
+        | block   , _       => block
+        | _       , block   => block
+        | error _ , _       => o2
+        | _       , error _ => o1
+        | _       , _       => angelic_binary o1 o2
+        end.
 
-    Definition spath_assumek_prune {AT Σ} (fml : Formula Σ) (o : SPath AT Σ) : SPath AT Σ :=
-      match o with
-      | spath_block => spath_block
-      | _          => spath_assumek fml o
-      end.
+    Definition demonic_binary_prune {AT} :
+      ⊢ SPath AT -> SPath AT -> SPath AT :=
+      fun Σ pc o1 o2 =>
+        match o1 , o2 with
+        | block   , _       => o2
+        | _       , block   => o1
+        | error s , _       => error s
+        | _       , error s => error s
+        | _       , _       => demonic_binary o1 o2
+        end.
 
-    Definition spath_angelicv_prune {AT} `{OccursCheck AT} {Σ} b (o : SPath AT (Σ ▻ b)) : SPath AT Σ :=
-      match o with
-      (* This is not good *)
-      (* | spath_fail s => spath_fail s *)
-      | _           => spath_angelicv b o
-      end.
+    Definition assertk_prune {AT} :
+      ⊢ Formula -> Message -> SPath AT -> SPath AT :=
+      fun Σ pc fml msg o =>
+        match o with
+        | error s => error s
+        | _       => assertk fml msg o
+        end.
 
-    Definition spath_demonicv_prune {AT} `{OccursCheck AT} {Σ} b (o : SPath AT (Σ ▻ b)) : SPath AT Σ :=
-      match @occurs_check_spath AT _ (Σ ▻ b) b inctx_zero o with
-      | Some o => o
-      | None   => spath_demonicv b o
-      end.
+    Definition assumek_prune {AT} :
+      ⊢ Formula -> SPath AT -> SPath AT :=
+      fun Σ pc fml o =>
+        match o with
+        | block => block
+        | _           => assumek fml o
+        end.
 
-    Definition spath_assert_vareq_prune {AT Σ x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ) (msg : Message (Σ - (x,σ))) (k : SPath AT (Σ - (x,σ))) : SPath AT Σ :=
+    Definition angelicv_prune {AT} (* `{OccursCheck AT} *) b :
+      ⊢ Snoc (SPath AT) b -> SPath AT :=
+      fun Σ pc o =>
+        match o with
+        (* This is not good *)
+        (* | fail s => fail s *)
+        | _           => angelicv b o
+        end.
+
+    Definition demonicv_prune {AT} `{OccursCheck AT} b :
+      ⊢ Snoc (SPath AT) b -> SPath AT :=
+      fun Σ pc o =>
+        match @occurs_check_spath AT _ (Σ ▻ b) b inctx_zero o with
+        | Some o => o
+        | None   => demonicv b o
+        end.
+
+    Definition assert_vareq_prune {AT Σ} (pc : PathCondition Σ)
+      {x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ)
+      (msg : Message (Σ - (x,σ))) (k : SPath AT (Σ - (x,σ))) : SPath AT Σ :=
       match k with
-      (* | spath_fail s => spath_fail s *)
-      | _          => spath_assert_vareq x t msg k
+      (* | fail s => fail s *)
+      | _          => assert_vareq x t msg k
       end.
 
-    Definition spath_assume_vareq_prune {AT Σ x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ) (k : SPath AT (Σ - (x,σ))) : SPath AT Σ :=
+    Definition assume_vareq_prune {AT Σ} (pc : PathCondition Σ)
+      {x σ} {xIn : (x,σ) ∈ Σ} (t : Term (Σ - (x,σ)) σ) (k : SPath AT (Σ - (x,σ))) : SPath AT Σ :=
       match k with
-      | spath_block => spath_block
-      | _          => spath_assume_vareq x t k
+      | block => block
+      | _          => assume_vareq x t k
       end.
 
-    Fixpoint spath_prune {AT} `{OccursCheck AT} {Σ} (o : SPath AT Σ) : SPath AT Σ :=
-      match o with
-      | spath_pure a => spath_pure a
-      | spath_fail msg => spath_fail msg
-      | spath_block => spath_block
-      | spath_angelic_binary o1 o2 =>
-        spath_angelic_binary_prune (spath_prune o1) (spath_prune o2)
-      | spath_demonic_binary o1 o2 =>
-        spath_demonic_binary_prune (spath_prune o1) (spath_prune o2)
-      | spath_assertk P msg o =>
-        spath_assertk_prune P msg (spath_prune o)
-      | spath_assumek P o =>
-        spath_assumek_prune P (spath_prune o)
-      | spath_angelicv b o =>
-        spath_angelicv_prune (spath_prune o)
-      | spath_demonicv b o =>
-        spath_demonicv_prune (spath_prune o)
-      | spath_assert_vareq x t msg k =>
-        spath_assert_vareq_prune t msg (spath_prune k)
-      | spath_assume_vareq x t k =>
-        spath_assume_vareq_prune t (spath_prune k)
-      | spath_debug d k => spath_debug d (spath_prune k)
-      end.
+    Definition prune {AT} `{OccursCheck AT} :
+      ⊢ SPath AT -> SPath AT :=
+      fix prune {Σ} pc o :=
+        match o with
+        | pure a => pure a
+        | error msg => error msg
+        | block => block
+        | angelic_binary o1 o2 =>
+          angelic_binary_prune pc (prune pc o1) (prune pc o2)
+        | demonic_binary o1 o2 =>
+          demonic_binary_prune pc (prune pc o1) (prune pc o2)
+        | assertk P msg o =>
+          assertk_prune pc P msg (prune pc o)
+        | assumek P o =>
+          assumek_prune pc P (prune pc o)
+        | angelicv b o =>
+          let pc' := subst pc (sub_wk1 (b := b)) in
+          angelicv_prune pc (prune pc' o)
+        | demonicv b o =>
+          let pc' := subst pc (sub_wk1 (b := b)) in
+          demonicv_prune pc (prune pc' o)
+        | assert_vareq x t msg k =>
+          let ζ'  := sub_single _ t in
+          let pc' := subst pc ζ' in
+          assert_vareq_prune pc t msg (prune pc' k)
+        | assume_vareq x t k =>
+          let ζ'  := sub_single _ t in
+          let pc' := subst pc ζ' in
+          assume_vareq_prune pc t (prune pc' k)
+        | debug d k =>
+          debug d (prune pc k)
+        end.
 
-    Definition spath_ok {AT} `{OccursCheck AT} {Σ} (o : SPath AT Σ) : bool :=
-      match spath_prune o with
-      | spath_block  => true
-      | _           => false
-      end.
+    Definition ok {AT} `{OccursCheck AT} :
+      ⊢ SPath AT -> ⌜bool⌝ :=
+      fun Σ pc o =>
+        match prune pc o with
+        | block => true
+        | _     => false
+        end.
 
-  End SymbolicPaths.
+    Definition run {AT A} `{OccursCheck AT, Inst AT A} :
+      ⊢ SPath AT -> SymInstance -> ⌜option A⌝ :=
+      fun Σ pc o ι =>
+        match prune pc o with
+        | pure a => Some (inst a ι)
+        | _      => None
+        end.
+
+    Module ModalWP.
+
+      Import LogicalRelation.
+
+      Definition wp {A} :
+        (* ⊢ □(A -> SymInstance -> PROP) -> SPath A -> SymInstance -> PROP := *)
+        forall Σ,  PathCondition Σ -> (Box (A -> SymInstance -> PROP) Σ) -> SPath A Σ -> SymInstance Σ -> Prop :=
+        fix WP {Σ} pc POST o ι :=
+          match o with
+          | pure a                            => T pc POST a ι
+          | angelic_binary o1 o2              => (WP pc POST o1 ι) \/ (WP pc POST o2 ι)
+          | demonic_binary o1 o2              => (WP pc POST o1 ι) /\ (WP pc POST o2 ι)
+          | error msg                         => Error msg
+          | block                             => True
+          | assertk fml msg o                 => let pc' := cons fml pc in
+                                                 (* inst fml ι /\ WP pc' (four pc POST (sub_id _) pc') o ι *)
+                                                 inst fml ι /\ WP pc' POST o ι
+          | assumek fml o                     => let pc' := cons fml pc in
+                                                 (* (inst fml ι : Prop) -> WP pc' (four pc POST (sub_id _) pc') o ι *)
+                                                 (inst fml ι : Prop) -> WP pc' POST o ι
+          | angelicv b k                      => let ζ'  := sub_wk1 in
+                                                 let pc' := subst pc sub_wk1 in
+                                                 exists (v : Lit (snd b)),
+                                                 WP pc' (four pc POST ζ' pc') k (env_snoc ι b v)
+          | demonicv b k                      => let ζ'  := sub_wk1 in
+                                                 let pc' := subst pc sub_wk1 in
+                                                 forall (v : Lit (snd b)),
+                                                 WP pc' (four pc POST ζ' pc') k (env_snoc ι b v)
+          | @assert_vareq _ _ x σ xIn t msg k => let ι'  := env_remove' _ ι xIn in
+                                                 let ζ'  := sub_single xIn t in
+                                                 let pc' := subst pc ζ' in
+                                                 env_lookup ι xIn = inst t ι' /\ WP pc' (four pc POST ζ' pc') k ι'
+          | @assume_vareq _ _ x σ xIn t k     => let ι'  := env_remove' _ ι xIn in
+                                                 let ζ'  := sub_single xIn t in
+                                                 let pc' := subst pc ζ' in
+                                                 env_lookup ι xIn = inst t ι' -> WP pc' (four pc POST ζ' pc') k ι'
+          | debug d k                         => Debug (inst d ι) (WP pc POST k ι)
+          end%type.
+
+      Definition wpbox {A} :
+        ⊢ □(A -> SymInstance -> PROP) -> □(SPath A -> SymInstance -> PROP).
+      Proof.
+        intros Σ0 pc0 POST.
+        refine (K pc0 _ (four pc0 POST)).
+        intros Σ1 ζ01.
+        unfold Box, Impl in *.
+        apply (@wp A).
+      Defined.
+
+      Definition comp {A B C} :
+        ⊢ (B -> C) -> (A -> B) -> (A -> C) :=
+        fun Σ0 pc0 => Basics.compose.
+
+      Definition bcomp {A B C} :
+        ⊢ □(B -> C) -> □(A -> B) -> □(A -> C) :=
+        fun Σ0 pc0 f => K pc0 (K pc0 (valid_box comp pc0) f).
+
+      Definition IPROP : TYPE :=
+        SymInstance -> PROP.
+
+      Definition Dijkstra (A : TYPE) : TYPE :=
+        □(A -> IPROP) -> IPROP.
+
+      Definition wp' {A} :
+        ⊢ SPath A -> Dijkstra A :=
+        fun Σ pc o POST => wp pc POST o.
+
+      Global Instance LRSPath {A} `{LR A} : LR (SPath A) :=
+        fun Σ0 pc0 Σ1 ζ01 pc1 o0 o1 =>
+          forall
+            (POST : Box (A -> SymInstance -> PROP) Σ0)
+            (POST_dcl : dcl pc0 POST)
+            (ι1 : SymInstance Σ1),
+            wp pc0 POST o0 (inst ζ01 ι1) ->
+            wp pc1 (four pc0 POST ζ01 pc1) o1 ι1.
+
+      Lemma wp_monotonic' {A} {Σ0} (pc0 : PathCondition Σ0) (p : SPath A Σ0)
+        (P Q : Box (A -> SymInstance -> PROP) Σ0)
+        (PQ : forall Σ1 (ζ01 : Sub Σ0 Σ1) pc1 a ι,
+            P Σ1 ζ01 pc1 a ι ->
+            Q Σ1 ζ01 pc1 a ι) :
+        forall ι0 : SymInstance Σ0,
+          wp pc0 P p ι0 ->
+          wp pc0 Q p ι0.
+      Proof.
+        induction p; cbn.
+        - apply PQ; auto.
+        - intros ι0 [Hwp|Hwp]; [left|right]; revert Hwp.
+          + now apply IHp1.
+          + now apply IHp2.
+        - intros ι0 [Hwp1 Hwp2]; split;
+            [ revert Hwp1; now apply IHp1
+            | revert Hwp2; now apply IHp2].
+        - auto.
+        - auto.
+        - intros ι0 [Hfml Hwp]. split; auto.
+          revert Hwp. apply IHp. auto.
+        - intros ι0 Hwp Hfml; specialize (Hwp Hfml). revert Hwp.
+          apply IHp. auto.
+        - intros ι0 [v Hwp]; exists v; revert Hwp.
+          apply IHp. intros ? ?. apply PQ.
+        - intros ι0 Hwp v; specialize (Hwp v); revert Hwp.
+          apply IHp. intros ? ?. apply PQ.
+        - intros ι0 [Hfml Hwp]. split; auto.
+          revert Hwp. apply IHp. intros ? ?. apply PQ.
+        - intros ι0 Hwp Hfml; specialize (Hwp Hfml). revert Hwp.
+          apply IHp. intros ? ?. apply PQ.
+        - intros ι0 [Hwp]. constructor. revert Hwp.
+          apply IHp, PQ.
+      Qed.
+
+      Lemma wp_monotonic {A} {subA : Subst A} {lrA : LR A} (* {lrReflA : LRRefl A} *)
+        {Σ0} (pc0 : PathCondition Σ0) (p : SPath A Σ0) :
+        forall Σ1 (ζ01 : Sub Σ0 Σ1) (pc1 : PathCondition Σ1)
+          (Hpc : Entailment.entails pc1 (subst pc0 ζ01))
+          (P : Box (A -> SymInstance -> PROP) Σ0)
+          (Q : Box (A -> SymInstance -> PROP) Σ1)
+            (PQ : lr pc0 ζ01 pc1 P Q)
+            (ι0 : SymInstance Σ0)
+            (ι1 : SymInstance Σ1)
+            (Hι : lr pc0 ζ01 pc1 ι0 ι1),
+            wp pc0 P p ι0 ->
+            wp pc1 Q (subst p ζ01) ι1.
+      Proof.
+      Admitted.
+
+      Global Instance LRReflSPath {A} `{LR A} : LRRefl (SPath A).
+      Proof.
+        constructor.
+        unfold lr, LRSPath.
+        intros * POST_dcl ι0.
+        rewrite inst_sub_id.
+        apply wp_monotonic'.
+        intros Σ1 ζ01 pc1 a1 ι1.
+        unfold four.
+        now rewrite sub_comp_id_left.
+      Qed.
+
+      Lemma wp_map {A B} {Σ0} (pc0 : PathCondition Σ0) (ma : SPath A Σ0)
+        (f : Box (A -> B) Σ0)
+        (POST : Box (B -> SymInstance -> PROP) Σ0) (ι : SymInstance Σ0) :
+        wp pc0 POST (map pc0 f ma) ι <->
+        wp pc0 (bcomp pc0 POST f) ma ι.
+      Proof.
+        induction ma; cbn.
+        - auto.
+        - rewrite IHma1, IHma2; auto.
+        - rewrite IHma1, IHma2; auto.
+        - auto.
+        - auto.
+        - rewrite IHma; auto.
+        - rewrite IHma; auto.
+        - setoid_rewrite IHma; auto.
+        - setoid_rewrite IHma; auto.
+        - rewrite IHma; auto.
+        - rewrite IHma; auto.
+        - split; intros []; constructor; apply IHma; auto.
+      Qed.
+
+      Lemma wp_bind {A B} {Σ0} (pc0 : PathCondition Σ0) (ma : SPath A Σ0)
+        (f : Box (A -> SPath B) Σ0)
+        (POST : Box (B -> SymInstance -> PROP) Σ0)
+        (ι0 : SymInstance Σ0) (Hpc0 : instpc pc0 ι0) :
+        wp pc0 POST (bind pc0 ma f) ι0 <->
+        wp pc0 (bcomp pc0 (wpbox pc0 POST) f) ma ι0.
+      Proof with unfold wpbox, four, bcomp, K, comp, Basics.compose, valid_box;
+            apply wp_monotonic'; intros Σ1 ζ01 pc1 a1 ι1;
+            apply wp_monotonic'; intros Σ2 ζ02 pc2 b2 ι2;
+            now rewrite <- subst_sub_comp.
+        induction ma; cbn.
+        - unfold T, bcomp, wpbox, K, valid_box, comp, Basics.compose.
+          split; apply wp_monotonic'; eauto.
+          + intros Σ1 ζ01 pc1 a1 ι1.
+            unfold four. now rewrite sub_comp_id_left.
+          + intros Σ1 ζ01 pc1 a1 ι1.
+            unfold four. now rewrite sub_comp_id_left.
+        - rewrite IHma1, IHma2; auto.
+        - rewrite IHma1, IHma2; auto.
+        - auto.
+        - auto.
+        - split; intros [Hfml Hwp]; split; auto; revert Hwp;
+            rewrite IHma; auto;
+              now rewrite ?inst_pathcondition_cons.
+        - split; intros Hwp Hfml; specialize (Hwp Hfml); revert Hwp;
+            rewrite IHma; auto;
+              now rewrite ?inst_pathcondition_cons.
+        - rename Σ into Σ0.
+          split; intros [v Hwp]; exists v; revert Hwp;
+            rewrite IHma; clear IHma; auto;
+              rewrite ?inst_subst, ?inst_sub_wk1; auto...
+        - split; intros Hwp v; specialize (Hwp v); revert Hwp;
+            rewrite IHma; auto;
+              rewrite ?inst_subst, ?inst_sub_wk1; auto...
+        - split; intros [Hfml Hwp]; split; auto; revert Hwp;
+            rewrite IHma; auto;
+              rewrite ?inst_subst, ?inst_sub_single; auto...
+        - split; intros Hwp Hfml; specialize (Hwp Hfml); revert Hwp;
+            rewrite IHma; auto;
+              rewrite ?inst_subst, ?inst_sub_single; auto...
+        - split; intros []; constructor; apply IHma; auto.
+      Qed.
+
+    End ModalWP.
+
+  End Path.
+
+  Import Path.
 
   Section VerificationConditions.
 
     Inductive VerificationCondition {AT} (p : SPath AT ctx_nil) : Prop :=
-    | vc (P : spath_safe _ p env_nil).
+    | vc (P : safe nil p env_nil).
 
   End VerificationConditions.
 
@@ -1012,33 +1610,30 @@ Module Mutators
 
   Section SMutator.
 
-    Definition SMut (Γ1 Γ2 : PCtx) (A : LCtx -> Type) (Σ : LCtx) : Type :=
-      forall Σ', Sub Σ Σ' -> PathCondition Σ' -> SStore Γ1 Σ' -> SHeap Σ' -> SPath (SMutResult Γ2 A) Σ'.
+    Definition SMut (Γ1 Γ2 : PCtx) (A : TYPE) : TYPE :=
+      □(SStore Γ1 -> SHeap -> SPath (SMutResult Γ2 A)).
     Bind Scope smut_scope with SMut.
+
+    Definition smut_mapping AT BT : TYPE :=
+      fun Σ0 => forall Σ1, Sub Σ0 Σ1 -> AT Σ1 -> BT Σ1.
+    Definition smut_arrow Γ1 Γ2 AT BT : TYPE :=
+      fun Σ0 => forall Σ1, Sub Σ0 Σ1 -> AT Σ1 -> SMut Γ1 Γ2 BT Σ1.
 
     Definition smut_pure {Γ A} `{Subst A} {Σ} (a : A Σ) : SMut Γ Γ A Σ.
       intros Σ1 ζ1 pc1 δ h.
-      apply spath_pure.
+      apply pure.
       constructor.
       apply (subst a ζ1).
       apply δ.
       apply h.
     Defined.
 
-    Definition smut_bind {Γ1 Γ2 Γ3 A B Σ} (ma : SMut Γ1 Γ2 A Σ) (f : forall Σ', Sub Σ Σ' -> A Σ' -> SMut Γ2 Γ3 B Σ') : SMut Γ1 Γ3 B Σ.
-    Proof.
-      intros Σ1 ζ1 pc1 δ1 h1.
-      apply (spath_bind pc1 (ma Σ1 ζ1 pc1 δ1 h1)).
-      intros Σ2 ζ2 pc2 [a2 δ2 h2].
-      eapply (spath_bind pc2).
-      apply (f Σ2 (subst ζ1 ζ2) a2 _ (sub_id _) pc2 δ2 h2).
-      intros Σ3 ζ3 pc3 [b3 δ3 h3].
-      apply spath_pure.
-      constructor.
-      apply b3.
-      apply δ3.
-      apply h3.
-    Defined.
+    Definition smut_bind {Γ1 Γ2 Γ3 A B Σ0} (ma : SMut Γ1 Γ2 A Σ0) (f : smut_arrow Γ2 Γ3 A B Σ0) : SMut Γ1 Γ3 B Σ0 :=
+      fun Σ1 ζ01 pc1 δ1 h1 =>
+        @bind (SMutResult Γ2 A) (SMutResult Γ3 B) Σ1 pc1
+          (ma Σ1 ζ01 pc1 δ1 h1)
+          (fun Σ2 ζ12 pc2 '(MkSMutResult a2 δ2 h2) =>
+             f Σ2 (subst ζ01 ζ12) a2 Σ2 (sub_id _) pc2 δ2 h2).
     (* Definition smut_join {Γ1 Γ2 Γ3 A Σ} (mm : SMut Γ1 Γ2 (SMut Γ2 Γ3 A) Σ) : *)
     (*   SMut Γ1 Γ3 A Σ := smut_bind mm (fun _ _ m => m). *)
 
@@ -1053,12 +1648,11 @@ Module Mutators
     Definition smut_bind_left {Γ1 Γ2 Γ3 A B} `{Subst A} {Σ} (ma : SMut Γ1 Γ2 A Σ) (mb : SMut Γ2 Γ3 B Σ) : SMut Γ1 Γ3 A Σ :=
       smut_bind ma (fun _ ζ a => smut_bind_right (smut_sub ζ mb) (smut_pure a)) .
     Definition smut_fmap {Γ1 Γ2 Σ A B} `{Subst A, Subst B}
-      (ma : SMut Γ1 Γ2 A Σ)
-      (f : forall Σ', Sub Σ Σ' -> A Σ' -> B Σ') :
+      (ma : SMut Γ1 Γ2 A Σ) (f : smut_mapping A B Σ) :
       SMut Γ1 Γ2 B Σ :=
       fun Σ1 ζ01 pc1 δ1 h1 =>
-        @spath_map (SMutResult Γ2 A) (SMutResult Γ2 B) Σ1
-        (fun Σ2 ζ12 '(MkSMutResult a2 δ2 h2) => MkSMutResult (f Σ2 (subst ζ01 ζ12) a2) δ2 h2)
+        @map (SMutResult Γ2 A) (SMutResult Γ2 B) Σ1 pc1
+        (fun Σ2 ζ12 pc2 '(MkSMutResult a2 δ2 h2) => MkSMutResult (f Σ2 (subst ζ01 ζ12) a2) δ2 h2)
         (ma Σ1 ζ01 pc1 δ1 h1).
     Definition smut_fmap2 {Γ1 Γ2 Γ3 Σ A B C} `{Subst A, Subst B, Subst C}
       (ma : SMut Γ1 Γ2 A Σ) (mb : SMut Γ2 Γ3 B Σ)
@@ -1072,30 +1666,36 @@ Module Mutators
       SMut Γ1 Γ3 (fun Σ => A Σ * B Σ)%type Σ :=
       smut_fmap2 ma mb (fun _ _ => pair).
 
-    Definition smut_fail {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : SMut Γ1 Γ2 A Σ.
+    Definition smut_error {Γ1 Γ2 A Σ D} (func : string) (msg : string) (data:D) : SMut Γ1 Γ2 A Σ.
       intros Σ1 ζ1 pc1 δ1 h1.
-      apply spath_fail.
+      apply error.
       apply (@MkMessage _ func msg Γ1); assumption.
     Defined.
 
     Definition smut_block {Γ1 Γ2 A Σ} : SMut Γ1 Γ2 A Σ :=
-      fun _ _ _ _ _ => spath_block.
+      fun _ _ _ _ _ => block.
 
     Definition smut_angelic_binary {Γ1 Γ2 A Σ} (m1 m2 : SMut Γ1 Γ2 A Σ) : SMut Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 δ1 h1 => spath_angelic_binary (m1 Σ1 ζ1 pc1 δ1 h1) (m2 Σ1 ζ1 pc1 δ1 h1).
+      fun Σ1 ζ1 pc1 δ1 h1 => angelic_binary (m1 Σ1 ζ1 pc1 δ1 h1) (m2 Σ1 ζ1 pc1 δ1 h1).
     Definition smut_demonic_binary {Γ1 Γ2 A Σ} (m1 m2 : SMut Γ1 Γ2 A Σ) : SMut Γ1 Γ2 A Σ :=
-      fun Σ1 ζ1 pc1 δ1 h1 => spath_demonic_binary (m1 Σ1 ζ1 pc1 δ1 h1) (m2 Σ1 ζ1 pc1 δ1 h1).
+      fun Σ1 ζ1 pc1 δ1 h1 => demonic_binary (m1 Σ1 ζ1 pc1 δ1 h1) (m2 Σ1 ζ1 pc1 δ1 h1).
+    (* Definition smut_angelic_list {AT} `{Subst AT} {Γ Σ} (msg : Message Σ) (xs : List AT Σ) : SMut Γ Γ AT Σ := *)
+    (*   fun Σ1 ζ1 pc1 δ1 h1 => *)
+    (*     angelic_listk *)
+    (*       pc1 (subst msg ζ1) *)
+    (*       (fun x => pure (MkSMutResult x δ1 h1)) *)
+    (*       (subst xs ζ1). *)
     Fixpoint smut_angelic_list {AT D} `{Subst AT} {Γ Σ} (func : string) (msg : string) (data:D) (xs : List AT Σ) :
       SMut Γ Γ AT Σ :=
       match xs with
-      | nil        => smut_fail func msg data
+      | nil        => smut_error func msg data
       | cons x nil => smut_pure x
       | cons x xs  => smut_angelic_binary (smut_pure x) (smut_angelic_list func msg data xs)
       end.
     Fixpoint smut_angelic_listk {AT D} {Γ1 Γ2 Σ} (func : string) (msg : string) (data:D) (xs : List AT Σ)
       {BT} (k : AT Σ -> SMut Γ1 Γ2 BT Σ) {struct xs} : SMut Γ1 Γ2 BT Σ :=
       match xs with
-      | nil => smut_fail func msg data
+      | nil => smut_error func msg data
       | cons x nil => k x
       | cons x xs => smut_angelic_binary (k x) (smut_angelic_listk func msg data xs k)
       end.
@@ -1126,34 +1726,31 @@ Module Mutators
       fun Σ1 ζ1 pc1 δ1 h1 =>
         let x'  := fresh Σ1 (Some x) in
         let ζ1x := sub_snoc (subst ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
-        spath_angelicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst pc1 sub_wk1) (subst δ1 sub_wk1) (subst h1 sub_wk1)).
+        angelicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst pc1 sub_wk1) (subst δ1 sub_wk1) (subst h1 sub_wk1)).
     Global Arguments smut_angelicv {_ _ _ _} _ _ _.
 
     Definition smut_demonicv {Γ1 Γ2 A Σ} x τ (ma : SMut Γ1 Γ2 A (Σ ▻ (x :: τ))) : SMut Γ1 Γ2 A Σ :=
       fun Σ1 ζ1 pc1 δ1 h1 =>
         let x'  := fresh Σ1 (Some x) in
         let ζ1x := sub_snoc (subst ζ1 sub_wk1) (x :: τ) (@term_var _ x' τ inctx_zero) in
-        spath_demonicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst pc1 sub_wk1) (subst δ1 sub_wk1) (subst h1 sub_wk1)).
+        demonicv (x' :: τ) (ma (Σ1 ▻ (x' :: τ)) ζ1x (subst pc1 sub_wk1) (subst δ1 sub_wk1) (subst h1 sub_wk1)).
     Global Arguments smut_demonicv {_ _ _ _} _ _ _.
 
     Definition smut_angelic {AT Γ1 Γ2 Σ0} (x : option 𝑺) σ
       (k : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 σ -> SMut Γ1 Γ2 AT Σ1) :
       SMut Γ1 Γ2 AT Σ0 :=
       fun Σ1 ζ01 pc1 δ1 h1 =>
-        spath_angelic x σ
+        angelic x σ pc1
           (fun Σ2 ζ12 pc2 t2 =>
-             four k ζ01 ζ12 t2 Σ2
-               (sub_id Σ2)
-               pc2
-               (subst δ1 ζ12)
-               (subst h1 ζ12)) pc1.
+             k Σ2 (subst ζ01 ζ12) t2
+               Σ2 (sub_id Σ2) pc2 (subst δ1 ζ12) (subst h1 ζ12)).
     Global Arguments smut_angelic {_ _ _ _} x σ k.
 
     Definition smut_demonic_termvar {Γ Σ} (x : option 𝑺) σ : SMut Γ Γ (fun Σ => Term Σ σ) Σ :=
       fun Σ1 ζ1 pc1 δ1 h1 =>
         let y := fresh Σ1 x in
-        spath_demonicv (y :: σ)
-          (spath_pure
+        demonicv (y :: σ)
+          (pure
              {|
                smutres_value := @term_var _ y σ inctx_zero;
                smutres_store := subst δ1 sub_wk1;
@@ -1162,9 +1759,9 @@ Module Mutators
     Global Arguments smut_demonic_termvar {_ _} x σ.
 
     Definition smut_debug {AT DT D} `{Subst DT, Inst DT D, OccursCheck DT} {Σ0 Γ1 Γ2}
-      (d : forall Σ1, Sub Σ0 Σ1 -> PathCondition Σ1 -> SStore Γ1 Σ1 -> SHeap Σ1 -> DT Σ1)
+      (d : Box (SStore Γ1 -> SHeap -> DT) Σ0)
       (m : SMut Γ1 Γ2 AT Σ0) : SMut Γ1 Γ2 AT Σ0 :=
-      fun Σ1 ζ01 pc1 δ1 h1 => spath_debug (d Σ1 ζ01 pc1 δ1 h1) (m Σ1 ζ01 pc1 δ1 h1).
+      fun Σ1 ζ01 pc1 δ1 h1 => debug (d Σ1 ζ01 pc1 δ1 h1) (m Σ1 ζ01 pc1 δ1 h1).
 
   End SMutator.
   Bind Scope smut_scope with SMut.
@@ -1193,7 +1790,7 @@ Module Mutators
   Proof.
     intros Σ1 ζ1 pc1 δ1 h1.
     destruct (f Σ1 ζ1 δ1 h1) as [a δ2 h2].
-    apply spath_pure.
+    apply pure.
     constructor.
     apply a.
     apply δ2.
@@ -1240,16 +1837,19 @@ Module Mutators
   (* Add the provided formula to the path condition. *)
   Definition smut_assume_formula {Γ Σ} (fml : Formula Σ) : SMut Γ Γ Unit Σ :=
     fun Σ1 ζ1 pc1 δ1 h1 =>
-      spath_bind pc1
-        (spath_assume_formula (subst fml ζ1) pc1)
-        (fun Σ2 ζ12 pc2 v => spath_pure (MkSMutResult v (subst δ1 ζ12) (subst h1 ζ12))).
+      bind
+        pc1
+        (assume_formula pc1 (subst fml ζ1))
+        (fun Σ2 ζ12 pc2 v => pure (MkSMutResult v (subst δ1 ζ12) (subst h1 ζ12))).
   Definition smut_assume_formulas {Γ Σ} (fmls : list (Formula Σ)) : SMut Γ Γ Unit Σ :=
     fold_right (fun fml => smut_bind_right (smut_assume_formula fml)) (smut_pure tt) fmls.
 
   Definition smut_assert_formula {Γ Σ} (fml : Formula Σ) : SMut Γ Γ Unit Σ :=
     fun Σ1 ζ1 pc1 δ1 h1 =>
-      spath_bind pc1
-        (spath_assert_formula
+      bind
+        pc1
+        (assert_formula
+           pc1
            {| msg_function        := "smut_assert_formula";
               msg_message         := "Proof obligation";
               msg_program_context := Γ;
@@ -1257,8 +1857,8 @@ Module Mutators
               msg_localstore      := δ1;
               msg_heap            := h1;
            |}
-           pc1 (subst fml ζ1))
-        (fun Σ2 ζ12 pc2 v => spath_pure (MkSMutResult v (subst δ1 ζ12) (subst h1 ζ12))).
+           (subst fml ζ1))
+        (fun Σ2 ζ12 pc2 v => pure (MkSMutResult v (subst δ1 ζ12) (subst h1 ζ12))).
 
   Definition smut_assert_formulas {Γ Σ} (fmls : list (Formula Σ)) : SMut Γ Γ Unit Σ :=
     fold_right (fun fml => smut_bind_right (smut_assert_formula fml)) (smut_pure tt) fmls.
@@ -1282,34 +1882,42 @@ Module Mutators
     smut_get_heap >>= fun _ _ h =>
     match h with
     | nil => smut_pure tt
-    | _   => smut_fail "smut_leakcheck" "Heap leak" h
+    | _   => smut_error "smut_leakcheck" "Heap leak" h
     end.
 
-  Definition smut_demonic_match_bool {AT} {Γ1 Γ2 Σ} (t : Term Σ ty_bool)
-    (dt df : SMut Γ1 Γ2 AT Σ) : SMut Γ1 Γ2 AT Σ :=
-    fun Σ1 ζ01 =>
-      let t' := subst (T := fun Σ => Term Σ _) t ζ01 in
-      match term_get_lit t' with
-      | Some true => dt Σ1 ζ01
-      | Some false => df Σ1 ζ01
-      | None =>
-        ((smut_assume_formula (formula_bool t') ;; smut_sub ζ01 dt) ⊗
-         (smut_assume_formula (formula_bool (term_not t')) ;; smut_sub ζ01 df))
-          (sub_id Σ1)
-      end.
+  Definition smut_make_message {Γ} (func msg : string) {Σ0} : SMut Γ Γ Message Σ0 :=
+    fun Σ1 ζ01 pc1 δ1 h1 =>
+      pure
+        (MkSMutResult
+           {| msg_function        := func;
+              msg_message         := msg;
+              msg_program_context := Γ;
+              msg_localstore      := δ1;
+              msg_heap            := h1;
+              msg_pathcondition   := pc1
+           |} δ1 h1).
+
+  Definition smut_demonic_match_bool {AT} {Γ1 Γ2 Σ0} (t : Term Σ0 ty_bool)
+    (dt df : SMut Γ1 Γ2 AT Σ0) : SMut Γ1 Γ2 AT Σ0 :=
+    fun Σ1 ζ01 pc1 δ1 h1 =>
+      demonic_match_bool pc1 (subst t ζ01)
+        (fun Σ2 ζ12 pc2 => smut_sub ζ01 dt Σ2 ζ12 pc2 (subst δ1 ζ12) (subst h1 ζ12))
+        (fun Σ2 ζ12 pc2 => smut_sub ζ01 df Σ2 ζ12 pc2 (subst δ1 ζ12) (subst h1 ζ12)).
 
   Definition smut_angelic_match_bool {AT} {Γ1 Γ2 Σ} (t : Term Σ ty_bool)
     (dt df : SMut Γ1 Γ2 AT Σ) : SMut Γ1 Γ2 AT Σ :=
-    fun Σ1 ζ01 =>
-      let t' := subst (T := fun Σ => Term Σ _) t ζ01 in
-      match term_get_lit t' with
-      | Some true => dt Σ1 ζ01
-      | Some false => df Σ1 ζ01
-      | None =>
-        ((smut_assert_formula (formula_bool t') ;; smut_sub ζ01 dt) ⊕
-         (smut_assert_formula (formula_bool (term_not t')) ;; smut_sub ζ01 df))
-          (sub_id Σ1)
-      end.
+    fun Σ1 ζ01 pc1 δ1 h1 =>
+      angelic_match_bool pc1
+        {| msg_function        := "smut_angelic_match_bool";
+           msg_message         := "pattern match assertion";
+           msg_program_context := Γ1;
+           msg_localstore      := δ1;
+           msg_heap            := h1;
+           msg_pathcondition   := pc1
+        |}
+        (subst t ζ01)
+        (fun Σ2 ζ12 pc2 => smut_sub ζ01 dt Σ2 ζ12 pc2 (subst δ1 ζ12) (subst h1 ζ12))
+        (fun Σ2 ζ12 pc2 => smut_sub ζ01 df Σ2 ζ12 pc2 (subst δ1 ζ12) (subst h1 ζ12)).
 
   Definition smut_demonic_match_enum {AT E} {Γ1 Γ2 Σ} (t : Term Σ (ty_enum E))
     (d : 𝑬𝑲 E -> SMut Γ1 Γ2 AT Σ) : SMut Γ1 Γ2 AT Σ :=
@@ -1336,6 +1944,14 @@ Module Mutators
          (formula_eq (subst (T := fun Σ => Term Σ _) t ζ12) (term_inr tτ)) ;;
           dinr _ ζ12 tτ).
 
+  Definition smut_mapping_four {AT BT Σ0} (f : smut_mapping AT BT Σ0) {Σ1} (ζ01 : Sub Σ0 Σ1) :
+    smut_mapping AT BT Σ1 :=
+    fun Σ2 ζ12 => f Σ2 (subst ζ01 ζ12).
+
+  Definition smut_arrow_four {AT BT Γ1 Γ2 Σ0} (f : smut_arrow Γ1 Γ2 AT BT Σ0) {Σ1} (ζ01 : Sub Σ0 Σ1) :
+    smut_arrow Γ1 Γ2 AT BT Σ1 :=
+    fun Σ2 ζ12 => f Σ2 (subst ζ01 ζ12).
+
   Definition smut_demonic_match_sum {AT Γ1 Γ2 Σ0} (x y : 𝑺) {σ τ} (t : Term Σ0 (ty_sum σ τ))
     (dinl : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 σ -> SMut Γ1 Γ2 AT Σ1)
     (dinr : forall Σ1, Sub Σ0 Σ1 -> Term Σ1 τ -> SMut Γ1 Γ2 AT Σ1) :
@@ -1345,7 +1961,7 @@ Module Mutators
       match term_get_sum t' with
       | Some (inl tl) => dinl Σ1 ζ01 tl Σ1 (sub_id _)
       | Some (inr tr) => dinr Σ1 ζ01 tr Σ1 (sub_id _)
-      | None => smut_demonic_match_sum' x y t' (four dinl ζ01) (four dinr ζ01) (sub_id _)
+      | None => smut_demonic_match_sum' x y t' (smut_arrow_four dinl ζ01) (smut_arrow_four dinr ζ01) (sub_id _)
       end.
 
   Definition smut_demonic_match_pair {AT} {Γ1 Γ2 Σ} (x y : 𝑺) {σ τ} (s : Term Σ (ty_prod σ τ))
@@ -1388,7 +2004,7 @@ Module Mutators
         let tsΔ := record_pattern_match_env p ts in
         d Σ1 ζ01 tsΔ Σ1 (sub_id _)
       | None =>
-        smut_demonic_match_record' n t' p (four d ζ01) (sub_id _)
+        smut_demonic_match_record' n t' p (smut_arrow_four d ζ01) (sub_id _)
       end.
 
   Definition smut_demonic_match_tuple' {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2 Σ0} {Δ : NCtx N Ty}
@@ -1412,7 +2028,7 @@ Module Mutators
       | Some ts =>
         let tsΔ := tuple_pattern_match_env p ts in
         d Σ1 ζ01 tsΔ Σ1 (sub_id _)
-      | None => smut_demonic_match_tuple' n t' p (four d ζ01) (sub_id _)
+      | None => smut_demonic_match_tuple' n t' p (smut_arrow_four d ζ01) (sub_id _)
       end.
 
   Definition pattern_match_env_reverse {N : Set} {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
@@ -1449,7 +2065,7 @@ Module Mutators
       (fun K =>
          smut_demonic_termvar None (𝑼𝑲_Ty K) >>= fun Σ1 ζ01 t__field =>
          smut_assume_formula (formula_eq (term_union U K t__field) (subst t ζ01)) ;;
-         smut_demonic_match_pattern n t__field (p K) (four (d K) ζ01)).
+         smut_demonic_match_pattern n t__field (p K) (smut_arrow_four (d K) ζ01)).
 
   Definition smut_demonic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U Σ0} {Δ : 𝑼𝑲 U -> NCtx N Ty}
     (t : Term Σ0 (ty_union U)) (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
@@ -1459,9 +2075,9 @@ Module Mutators
       let t' := subst (T := fun Σ => Term Σ _) t ζ01 in
       match term_get_union t' with
       | Some (existT K t__field) =>
-        smut_demonic_match_pattern n t__field (p K) (four (d K) ζ01) (sub_id _)
+        smut_demonic_match_pattern n t__field (p K) (smut_arrow_four (d K) ζ01) (sub_id _)
       | None =>
-        smut_demonic_match_union' n t' p (fun K => four (d K) ζ01) (sub_id _)
+        smut_demonic_match_union' n t' p (fun K => smut_arrow_four (d K) ζ01) (sub_id _)
       end.
 
   Fixpoint smut_produce {Γ Σ} (asn : Assertion Σ) : SMut Γ Γ Unit Σ :=
@@ -1477,7 +2093,7 @@ Module Mutators
         (fun Σ1 ζ01 t => smut_sub (sub_snoc ζ01 (xl :: _) t) (smut_produce alt_inl))
         (fun Σ1 ζ01 t => smut_sub (sub_snoc ζ01 (xr :: _) t) (smut_produce alt_inr))
     | asn_match_list s alt_nil xh xt alt_cons =>
-      smut_fail "smut_produce" "Not implemented" asn
+      smut_error "smut_produce" "Not implemented" asn
     | asn_match_pair s xl xr rhs =>
       smut_demonic_match_pair s (smut_produce rhs)
     | asn_match_tuple s p rhs =>
@@ -1507,9 +2123,9 @@ Module Mutators
       smut_demonic_match_bool b (smut_producek asn1 k) (smut_producek asn2 k)
     | asn_match_enum E k0 alts => smut_demonic_match_enum k0 (fun k1 : 𝑬𝑲 E => smut_producek (alts k1) k)
     | asn_match_sum σ τ s xl asn1 xr asn2 =>
-      smut_fail "smut_produce" "Not implemented" asn
+      smut_error "smut_produce" "Not implemented" asn
     | asn_match_list s alt_nil xh xt alt_cons =>
-      smut_fail "smut_produce" "Not implemented" asn
+      smut_error "smut_produce" "Not implemented" asn
     | asn_match_pair s xl xr asn =>
       smut_demonic_match_pair s (smut_producek asn (smut_sub (sub_cat_left (ε ▻ (xl,_) ▻ (xr,_))) k))
     | asn_match_tuple s p asn =>
@@ -1519,7 +2135,7 @@ Module Mutators
       smut_demonic_match_record id s p
         (fun Σ1 ζ01 ts => smut_sub (env_cat ζ01 ts) (smut_producek asn (smut_sub (sub_cat_left _) k)))
     | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-      smut_fail "smut_produce" "Not implemented" asn
+      smut_error "smut_produce" "Not implemented" asn
     | asn_sep asn1 asn2 => smut_producek asn1 (smut_producek asn2 k)
     | asn_exist ς τ asn => smut_demonicv ς τ (smut_producek asn (smut_sub sub_wk1 k))
     | asn_debug =>
@@ -1546,7 +2162,7 @@ Module Mutators
         (fun Σ1 ζ01 t => smut_sub (sub_snoc ζ01 (xl :: _) t) (smut_consume alt_inl))
         (fun Σ1 ζ01 t => smut_sub (sub_snoc ζ01 (xr :: _) t) (smut_consume alt_inr))
     | asn_match_list s alt_nil xh xt alt_cons =>
-      smut_fail "smut_consume" "Not implemented" asn
+      smut_error "smut_consume" "Not implemented" asn
     | asn_match_pair s xl xr rhs =>
       smut_demonic_match_pair s (smut_consume rhs)
     | asn_match_tuple s p rhs =>
@@ -1554,7 +2170,7 @@ Module Mutators
     | asn_match_record R s p rhs =>
       smut_demonic_match_record id s p (fun Σ1 ζ01 ts => smut_sub (ζ01 ►► ts) (smut_consume rhs))
     | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-      smut_fail  "smut_consume" "Not implemented" asn
+      smut_error  "smut_consume" "Not implemented" asn
     | asn_sep a1 a2   => smut_consume a1 ;; smut_consume a2
     | asn_exist ς τ a =>
       smut_angelicv ς τ (smut_consume a)
@@ -1573,7 +2189,7 @@ Module Mutators
     fun Σ1 ζ01 pc1 δ1 h1 =>
       let ζl   := sub_cat_left Δ in
       let ζ01' := subst ζ01 ζl ►► sub_cat_right Δ in
-      spath_angelicvs Δ (k (Σ1 ▻▻ Δ) ζ01' (subst pc1 ζl) (subst δ1 ζl) (subst h1 ζl)).
+      angelicvs pc1 Δ (k (Σ1 ▻▻ Δ) ζ01' (subst pc1 ζl) (subst δ1 ζl) (subst h1 ζl)).
 
   Definition smut_call {Γ Δ τ Σr} (contract : SepContract Δ τ) (ts : NamedEnv (Term Σr) Δ) : SMut Γ Γ (fun Σ => Term Σ τ) Σr :=
     match contract with
@@ -1640,7 +2256,7 @@ Module Mutators
       ts <- smut_eval_exps es ;;
       match CEnv f with
       | Some c => smut_call c ts
-      | None   => smut_fail "smut_exec" "Function call without contract" (f,ts)
+      | None   => smut_error "smut_exec" "Function call without contract" (f,ts)
       end
     | stm_call_frame δ s =>
       δr <- smut_get_local ;;
@@ -1717,7 +2333,7 @@ Module Mutators
            smut_produce_chunk (chunk_ptsreg reg tnew) ;;
            smut_pure tnew)
     | stm_bind _ _ =>
-      smut_fail "smut_exec" "stm_bind not supported" tt
+      smut_error "smut_exec" "stm_bind not supported" tt
     | stm_debugk k =>
       smut_debug
         (fun Σ1 ζ01 pc1 δ1 h1 =>
@@ -1742,13 +2358,14 @@ Module Mutators
   Definition smut_contract_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
     SPath Unit ε :=
     let δ    := sep_contract_localstore c in
-    spath_demonic_close
-      (spath_map
-         (fun _ _ _ => tt)
+    demonic_close
+      (map
+         nil
+         (fun _ _ _ _ => tt)
          (smut_contract c s (sub_id _) nil δ nil)).
 
   Definition ValidContractNoEvar {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    VerificationCondition (spath_prune (spath_prune (smut_contract_outcome c body))).
+    VerificationCondition (prune nil (prune nil (smut_contract_outcome c body))).
 
   Section CallerContext.
 
@@ -1792,7 +2409,7 @@ Module Mutators
              sub-term of te would already constrain all appearing evars, but
              which can't be fully unified with tr. match_term could be
              augmented to also handle this kind of case. *)
-          smut_fail
+          smut_error
             "smut_assert_term_eq_evar"
             "Uninstantiated evars variable"
             {| evarerror_env := L;
@@ -1813,7 +2430,7 @@ Module Mutators
       | formula_bool b =>
         match eval_term_evar L b with
         | Some b' => smut_assert_term b';; smut_pure L
-        | None    => smut_fail
+        | None    => smut_error
                        "smut_consume_formula_evar"
                        "Uninstantiated evars when consuming formula"
                        {| evarerror_env := L;
@@ -1823,7 +2440,7 @@ Module Mutators
       | formula_prop ζ P =>
         match evarenv_to_option_sub L with
         | Some ζ' => smut_assert_formula (formula_prop (subst ζ ζ') P);; smut_pure L
-        | None   => smut_fail
+        | None   => smut_error
                       "smut_consume_formula_evar"
                       "Uninstantiated evars when consuming formula"
                       {| evarerror_env := L;
@@ -1835,7 +2452,7 @@ Module Mutators
         | Some t1', Some t2' => smut_assert_formula (formula_eq t1' t2') ;; smut_pure L
         | Some t1', None     => smut_assert_term_eq_evar t2 t1' L
         | None    , Some t2' => smut_assert_term_eq_evar t1 t2' L
-        | _       , _        => smut_fail
+        | _       , _        => smut_error
                                   "smut_consume_formula_evar"
                                   "Uninstantiated evars when consuming formula"
                                   {| evarerror_env := L;
@@ -1847,7 +2464,7 @@ Module Mutators
         | Some t1', Some t2' => smut_assert_formula (formula_neq t1' t2') ;; smut_pure L
         (* | Some t1', None     => smut_assert_term_neq_evar t2 t1' L *)
         (* | None    , Some t2' => smut_assert_term_neq_evar t1 t2' L *)
-        | _       , _        => smut_fail
+        | _       , _        => smut_error
                                   "smut_consume_formula_evar"
                                   "Uninstantiated evars when consuming formula"
                                   {| evarerror_env := L;
@@ -1865,7 +2482,7 @@ Module Mutators
         | Some b' => (smut_assert_term b';; smut_consume_evar a1 L)
                        ⊕
                      (smut_assert_term (term_not b');; smut_consume_evar a2 L)
-        | None    => smut_fail
+        | None    => smut_error
                        "smut_consume_evar"
                        "Uninstantiated evars when consuming assertion"
                        {| evarerror_env := L;
@@ -1880,7 +2497,7 @@ Module Mutators
             (fun k2 =>
                smut_assert_formula (formula_eq k1 (term_enum E k2)) ;;
                smut_consume_evar (alts k2) L)
-        | None => smut_fail
+        | None => smut_error
                     "smut_consume_evar"
                     "Uninstantiated evars when consuming assertion"
                     {| evarerror_env := L;
@@ -1910,7 +2527,7 @@ Module Mutators
                     (smut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) s ζ) (term_inl t)) ;;
                      smut_pure L')
                   | (_ , None) =>
-                    smut_fail
+                    smut_error
                       "smut_consume_evar"
                       "Uninstantiated evars when consuming assertion"
                       {| evarerror_env := Lxl;
@@ -1926,7 +2543,7 @@ Module Mutators
                     (smut_assert_formula (formula_eq (subst (T := fun Σ => Term Σ _) s ζ) (term_inr t)) ;;
                      smut_pure L')
                   | (_ , None) =>
-                    smut_fail
+                    smut_error
                       "smut_consume_evar"
                       "Uninstantiated evars when consuming assertion"
                       {| evarerror_env := Lxr;
@@ -1934,7 +2551,7 @@ Module Mutators
                       |}
                   end)
           end
-        | _ => smut_fail
+        | _ => smut_error
                  "smut_consume_evar"
                  "Uninstantiated evars when consuming assertion"
                  {| evarerror_env := L;
@@ -1942,7 +2559,7 @@ Module Mutators
                  |}
         end
       | asn_match_list s alt_nil xh xt alt_cons =>
-        smut_fail "smut_consume_evar" "Not implemented" asn
+        smut_error "smut_consume_evar" "Not implemented" asn
       | asn_match_pair scr xl xr rhs =>
         match eval_term_evar L scr with
         | Some s =>
@@ -1952,9 +2569,9 @@ Module Mutators
             Lrhs' <- smut_consume_evar rhs Lrhs ;;
             smut_pure (env_tail (env_tail Lrhs'))
           | None =>
-            smut_fail "smut_consume_evar" "Not implemented" asn
+            smut_error "smut_consume_evar" "Not implemented" asn
           end
-        | None => smut_fail
+        | None => smut_error
                     "smut_consume_evar"
                     "Uninstantiated evars when consuming assertion"
                     {| evarerror_env := L;
@@ -1962,7 +2579,7 @@ Module Mutators
                     |}
         end
       | asn_match_tuple s p rhs =>
-        smut_fail "smut_consume_evar" "Not implemented" asn
+        smut_error "smut_consume_evar" "Not implemented" asn
       | asn_match_record R scr p rhs =>
         match eval_term_evar L scr with
         | Some s =>
@@ -1973,9 +2590,9 @@ Module Mutators
             LR' <- smut_consume_evar rhs LR ;;
             smut_pure (env_drop _ LR')
           | None =>
-            smut_fail "smut_consume_evar" "Not implemented" asn
+            smut_error "smut_consume_evar" "Not implemented" asn
           end
-        | None => smut_fail
+        | None => smut_error
                     "smut_consume_evar"
                     "Uninstantiated evars when consuming assertion"
                     {| evarerror_env := L;
@@ -1983,7 +2600,7 @@ Module Mutators
                     |}
         end
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-        smut_fail  "smut_consume_evar" "Not implemented" asn
+        smut_error  "smut_consume_evar" "Not implemented" asn
       | asn_sep a1 a2 =>
         smut_consume_evar a1 L >>= fun _ _ => smut_consume_evar a2
       | asn_exist ς τ a =>
@@ -1998,7 +2615,7 @@ Module Mutators
           smut_pure L'
         | (_  , None)   =>
           (* During execution the evar ς was never instantiated, so fail. *)
-          smut_fail
+          smut_error
             "smut_consume_evar"
             "Uninstantiated evars when consuming assertion"
             {| evarerror_env := L;
@@ -2025,7 +2642,7 @@ Module Mutators
        smut_assert_namedenv_eq_evar δ (subst ts ζ1) E1 >>= fun Σr2 ζ2 E2 =>
        match evarenv_to_option_sub E2 with
        | Some ξ => smut_sub ξ (smut_demonicv result τ (smut_produce ens ;; smut_pure (@term_var _ result _ inctx_zero)))
-       | None => smut_fail
+       | None => smut_error
                    "smut_call_evar"
                    "Uninstantiated evars after consuming precondition"
                    {| evarerror_env := E2;
@@ -2042,7 +2659,7 @@ Module Mutators
       fun Σ1 ζ1 pc1 δ1 h1 =>
         let o := smut_call_evar contract ts ζ1 pc1 δ1 h1 in
         if config_debug_function cfg f
-        then spath_debug
+        then debug
                {| sdebug_call_function_parameters    := Δ;
                   sdebug_call_function_result_type   := τ;
                   sdebug_call_function_name          := f;
@@ -2080,7 +2697,7 @@ Module Mutators
         ts <- smut_eval_exps es ;;
         match CEnv f with
         | Some c => smut_call_evar_debug f c ts
-        | None   => smut_fail "smut_exec_evar" "Function call without contract" (f,ts)
+        | None   => smut_error "smut_exec_evar" "Function call without contract" (f,ts)
         end
       | stm_call_frame δ s =>
         δr <- smut_get_local ;;
@@ -2179,7 +2796,7 @@ Module Mutators
         | Some t => smut_produce_chunk (chunk_ptsreg reg t) ;; smut_pure t
         (* Extracting the points to chunk should never fail here. Because there is exactly one binding
            in the ghost environment and the chunk matching will always instantiate it. *)
-        | None => smut_fail "smut_exec_evar" "You have found a unicorn." tt
+        | None => smut_error "smut_exec_evar" "You have found a unicorn." tt
         end
       | stm_write_register reg e =>
         let x := fresh Σ None in
@@ -2188,7 +2805,7 @@ Module Mutators
         smut_produce_chunk (chunk_ptsreg reg tnew) ;;
         smut_pure tnew
       | stm_bind _ _ =>
-        smut_fail "smut_exec_evar" "stm_bind not supported" tt
+        smut_error "smut_exec_evar" "stm_bind not supported" tt
       | stm_debugk k =>
         smut_debug
           (fun Σ1 ζ01 pc1 δ1 h1 =>
@@ -2220,19 +2837,20 @@ Module Mutators
     (*                   smut_consume_evar ens (subst (sub_snoc ζ1 (result::τ) t) (create_evarenv_id _)) ;; *)
     (*                   smut_pure tt (* smut_leakcheck *))%dmut in *)
     (*       let out := mut Σ (sub_id Σ) nil (symbolicstate_initial δ) in *)
-    (*       spath_bind nil out (fun _ _ _ _ => spath_block (A:=Unit)) *)
+    (*       bind nil out (fun _ _ _ _ => block (A:=Unit)) *)
     (*   end. *)
 
     Definition smut_contract_evar_outcome {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) :
       SPath Unit ε :=
       let δ    := sep_contract_localstore c in
-      spath_demonic_close
-        (spath_map
-           (fun _ _ _ => tt)
+      demonic_close
+        (map
+           nil
+           (fun _ _ _ _ => tt)
            (smut_contract_evar c s (sub_id _) nil δ nil)).
 
     Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationCondition (spath_prune (spath_prune (smut_contract_evar_outcome c body))).
+      VerificationCondition (prune nil (prune nil (smut_contract_evar_outcome c body))).
 
   End WithConfig.
 
@@ -2243,13 +2861,13 @@ Module Mutators
   Definition ValidContractDynMut {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
     ValidContract c body.
 
-  Definition spath_ok_opaque {AT} `{OccursCheck AT} {Σ} (o : SPath AT Σ) : Prop :=
-    is_true (spath_ok o).
-  Global Arguments spath_ok_opaque {AT _} Σ o.
-  Global Opaque spath_ok_opaque.
+  Definition ok_opaque {AT} `{OccursCheck AT} {Σ} (o : SPath AT Σ) : Prop :=
+    is_true (ok nil o).
+  Global Arguments ok_opaque {AT _} Σ o.
+  Global Opaque ok_opaque.
 
   Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-    is_true (spath_ok (spath_prune (smut_contract_evar_outcome default_config c body))).
+    is_true (ok nil (prune nil (smut_contract_evar_outcome default_config c body))).
 
   (* Transitional old name. *)
   Definition ValidContractDynMutReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
