@@ -165,7 +165,7 @@ Module SmallStep
   | step_stm_match_tuple
       {Δ σs} (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ) (rhs : Stm (ctx_cat Γ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_tuple e p rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_block (tuple_pattern_match p (eval e δ)) rhs ⟩
+      ⟨ γ , μ , δ , stm_block (tuple_pattern_match_lit p (eval e δ)) rhs ⟩
 
   | step_stm_match_union
       {U : 𝑼} (e : Exp Γ (ty_union U))
@@ -174,13 +174,13 @@ Module SmallStep
       (alt__rhs : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__ctx K) τ) :
       ⟨ γ , μ , δ , stm_match_union U e alt__pat alt__rhs ⟩ --->
       ⟨ γ , μ , δ , let (K , v) := 𝑼_unfold (eval e δ) in
-                stm_block (pattern_match (alt__pat K) v) (alt__rhs K)
+                stm_block (pattern_match_lit (alt__pat K) v) (alt__rhs K)
       ⟩
   | step_stm_match_record
       {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
       (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (ctx_cat Γ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_record R e p rhs ⟩ --->
-      ⟨ γ , μ , δ , stm_block (record_pattern_match p (𝑹_unfold (eval e δ))) rhs ⟩
+      ⟨ γ , μ , δ , stm_block (record_pattern_match_lit p (eval e δ)) rhs ⟩
 
   | step_stm_read_register
       (r : 𝑹𝑬𝑮 τ) :

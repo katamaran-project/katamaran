@@ -1,5 +1,5 @@
 Require Import Coq.Program.Equality.
-Require Import Equations.Equations.
+From Equations Require Import Equations.
 Require Import MicroSail.Context.
 Require Import MicroSail.Notation.
 Require Import MicroSail.Tactics.
@@ -107,6 +107,22 @@ Section WithBinding.
       match EΔ with
       | env_nil => EΓ
       | env_snoc E db => env_snoc (env_cat EΓ E) db
+      end.
+
+    Inductive CatView {Γ Δ} : Env (ctx_cat Γ Δ) -> Set :=
+    | isCat (EΓ : Env Γ) (EΔ : Env Δ) : CatView (env_cat EΓ EΔ).
+
+    Fixpoint catView {Γ Δ} : forall E : Env (ctx_cat Γ Δ), CatView E :=
+      match Δ with
+      | ctx_nil => fun E => isCat E env_nil
+      | ctx_snoc Δ b =>
+        fun E =>
+          match snocView E with
+          | isSnoc E v =>
+            match catView E with
+            | isCat EΓ EΔ => isCat EΓ (env_snoc EΔ v)
+            end
+          end
       end.
 
     Fixpoint env_lookup {Γ} (E : Env Γ) : forall b, InCtx b Γ -> D b :=
@@ -309,6 +325,39 @@ Section WithBinding.
         + now cbn.
         + eapply (IHΓ (fun b bInΓ => g b (inctx_succ bInΓ))).
     Qed.
+
+    Lemma env_remove_remove' {Γ x} (E : Env Γ) (xIn : x ∈ Γ) :
+      env_remove x E xIn = env_remove' x E xIn.
+    Proof.
+      unfold env_remove'. induction E.
+      - destruct (Context.nilView xIn).
+      - destruct (Context.snocView xIn).
+        + apply env_lookup_extensional.
+          intros y yIn. rewrite env_lookup_tabulate.
+          reflexivity.
+        + cbn. f_equal. apply IHE.
+    Qed.
+
+    Section Inversions.
+
+      Lemma inversion_eq_env_snoc {Γ : Ctx B} {b : B} (E1 E2 : Env Γ) (v1 v2 : D b) :
+        env_snoc E1 v1 = env_snoc E2 v2 ->
+        E1 = E2 /\ v1 = v2.
+      Proof. intros H. now dependent elimination H. Qed.
+
+      Lemma inversion_eq_env_cat {Γ Δ : Ctx B} (EΓ1 EΓ2 : Env Γ) (EΔ1 EΔ2 : Env Δ) :
+        env_cat EΓ1 EΔ1 = env_cat EΓ2 EΔ2 ->
+        EΓ1 = EΓ2 /\ EΔ1 = EΔ2.
+      Proof.
+        induction EΔ1; cbn.
+        - destruct (nilView EΔ2); cbn. intuition.
+        - destruct (snocView EΔ2); cbn. intros H.
+          apply inversion_eq_env_snoc in H. destruct H as [H1 H2].
+          apply IHEΔ1 in H1. destruct H1. split; auto.
+          now f_equal.
+      Qed.
+
+    End Inversions.
 
   End WithDom.
 

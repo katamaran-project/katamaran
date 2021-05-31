@@ -31,6 +31,5 @@ stages:
       - "test/*.vo*"
       - "test/.*.aux"
 
-coq-8.11: {<<: *build, image: "skeuchel/coq:8.11"}
 coq-8.12: {<<: *build, image: "skeuchel/coq:8.12"}
 coq-8.13: {<<: *build, image: "skeuchel/coq:8.13"}

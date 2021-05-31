@@ -302,14 +302,14 @@ Module WLP
       WLP (alts v)
     | stm_match_tuple e p rhs =>
       meval e >>= fun v =>
-      pushs (tuple_pattern_match p v) *> WLP rhs <* pops _
+      pushs (tuple_pattern_match_lit p v) *> WLP rhs <* pops _
     | stm_match_union T e alt__pat alt__rhs =>
       meval e !>>= fun v =>
       let (K , tv) := 𝑼_unfold v in
-      pushs (pattern_match (alt__pat K) tv) *> WLP (alt__rhs K) <* pops _
+      pushs (pattern_match_lit (alt__pat K) tv) *> WLP (alt__rhs K) <* pops _
     | stm_match_record R e p rhs =>
       meval e >>= fun v =>
-      pushs (record_pattern_match p (𝑹_unfold v)) *> WLP rhs <* pops _
+      pushs (record_pattern_match_lit p v) *> WLP rhs <* pops _
     | stm_read_register r => get_global >>= (fun γ => pure (read_register γ r))
     | stm_write_register r e => meval e >>=
         (fun v => modify_global (fun γ => write_register γ r v) *> pure v)

@@ -27,6 +27,7 @@ Module Disjoint
        (Import assertkit : AssertionKit termkit progkit)
        (Import contractkit : SymbolicContractKit termkit progkit assertkit).
 
+  Import LogicNotations.
   Open Scope logic.
 
   Definition Heap : Type := forall σ, 𝑹𝑬𝑮 σ -> option (Lit σ).

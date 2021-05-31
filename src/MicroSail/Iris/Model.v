@@ -1044,7 +1044,7 @@ Module IrisSoundness
         {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
         (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-    ⊢ ((semTriple (env_cat δ (tuple_pattern_match p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
+    ⊢ ((semTriple (env_cat δ (tuple_pattern_match_lit p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
        semTriple δ P (stm_match_tuple e p rhs) Q)%I.
   Proof.
     iIntros "triptup P".
@@ -1060,7 +1060,7 @@ Module IrisSoundness
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply (wp_compat_block (tuple_pattern_match p0 (eval e9 δ1))).
+    iApply (wp_compat_block (tuple_pattern_match_lit p0 (eval e9 δ1))).
     by iApply "triptup".
   Qed.
 
@@ -1071,7 +1071,7 @@ Module IrisSoundness
         (alt__r : forall (K : 𝑼𝑲 U), Stm (ctx_cat Γ (alt__Δ K)) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
         ⊢ ((∀ (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
-               semTriple (env_cat δ (pattern_match (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) -∗
+               semTriple (env_cat δ (pattern_match_lit (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) -∗
                semTriple δ P (stm_match_union U e alt__p alt__r) Q
           )%I.
   Proof.
@@ -1090,7 +1090,7 @@ Module IrisSoundness
     iSplitL; [|trivial].
     remember (𝑼_unfold (eval e10 δ1)) as scrutinee.
     destruct scrutinee as [K v].
-    iApply (wp_compat_block (pattern_match (alt__pat K) v)).
+    iApply (wp_compat_block (pattern_match_lit (alt__pat K) v)).
     iSpecialize ("tripunion" $! K v).
     rewrite Heqscrutinee.
     rewrite 𝑼_fold_unfold.
@@ -1102,7 +1102,7 @@ Module IrisSoundness
         {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
-        ⊢ ((semTriple (env_cat δ (record_pattern_match p (𝑹_unfold (eval e δ)))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
+        ⊢ ((semTriple (env_cat δ (record_pattern_match_lit p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
         semTriple δ P (stm_match_record R e p rhs) Q)%I.
   Proof.
     iIntros "triprec P".
@@ -1118,7 +1118,7 @@ Module IrisSoundness
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply (wp_compat_block (record_pattern_match p1 (𝑹_unfold (eval e11 δ1)))).
+    iApply (wp_compat_block (record_pattern_match_lit p1 (eval e11 δ1))).
     by iApply "triprec".
   Qed.
 
@@ -1222,8 +1222,8 @@ Module IrisSoundness
       match cenv σs σ f with
       | Some (MkSepContract _ _ ctxΣ θΔ pre result post) =>
         ∀ (ι : SymInstance ctxΣ),
-          semTriple (inst ι θΔ) (interpret_assertion (L:=iProp Σ) ι pre) (Pi f)
-                    (fun v δ' => interpret_assertion (env_snoc ι (result , σ) v) post)
+          semTriple (inst θΔ ι) (interpret_assertion (L:=iProp Σ) pre ι) (Pi f)
+                    (fun v δ' => interpret_assertion post (env_snoc ι (result , σ) v))
       | None => True
       end)%I.
 
@@ -1301,7 +1301,7 @@ Module IrisSoundness
     iApply wp_compat_call_frame.
     rewrite H0.
     iApply (wp_mono _ _ _ (fun v => frame ∗ match v with
-                                            | MkVal _ _ v => interpret_assertion (env_snoc ι (result,σ) v) ens
+                                            | MkVal _ _ v => interpret_assertion ens (env_snoc ι (result,σ) v)
                                             end)%I).
     - intros [δ' v]; cbn.
       iIntros "[fr ens]".
@@ -1412,9 +1412,9 @@ Module IrisSoundness
       match CEnvEx f with
       | MkSepContract _ _ Σ' θΔ req result ens =>
         forall (ι : SymInstance Σ'),
-        evals es δ = inst ι θΔ ->
-        ⊢ semTriple δ (interpret_assertion ι req) (stm_call_external f es)
-          (fun v δ' => interpret_assertion (env_snoc ι (result :: τ) v) ens ∗ bi_pure (δ' = δ))
+        evals es δ = inst θΔ ι ->
+        ⊢ semTriple δ (interpret_assertion req ι) (stm_call_external f es)
+          (fun v δ' => interpret_assertion ens (env_snoc ι (result :: τ) v) ∗ bi_pure (δ' = δ))
       end.
 
   Lemma iris_rule_stm_call_external
@@ -1432,7 +1432,7 @@ Module IrisSoundness
     dependent elimination ctrip; cbn in extSem.
     iIntros "P".
     iPoseProof (l with "P") as "[frm pre]".
-    iApply (wp_mono _ _ _ (fun v => frame0 ∗ match v with | MkVal _ δ' v => interpret_assertion (env_snoc ι (result :: τ) v) ens ∗ bi_pure (δ' = δ) end)%I).
+    iApply (wp_mono _ _ _ (fun v => frame0 ∗ match v with | MkVal _ δ' v => interpret_assertion ens (env_snoc ι (result :: τ) v) ∗ bi_pure (δ' = δ) end)%I).
     - intros v.
       destruct v.
       iIntros "[frame [pre %]]".
