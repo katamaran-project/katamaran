@@ -1959,14 +1959,21 @@ Module Mutators
       Definition assert_formulas {Γ} :
         ⊢ List Formula -> SMut Γ Γ Unit.
       Proof.
-        refine (fix assert {w0} fmls := _).
-        destruct fmls as [|fml fmls].
-        - apply pure. constructor.
-        - eapply bind_right.
-          apply (assert w0 fmls).
-          intros w1 ω01.
-          apply assert_formula.
-          apply (subst fml ω01).
+        intros w0 fmls POST δ0 h0.
+        eapply dijkstra.
+        apply SDijk.assert_formulas.
+        apply
+          {| msg_function := "smut_assert_formula";
+             msg_message := "Proof obligation";
+             msg_program_context := Γ;
+             msg_localstore := δ0;
+             msg_heap := h0;
+             msg_pathcondition := wco w0
+          |}.
+        apply fmls.
+        apply POST.
+        apply δ0.
+        apply h0.
       Defined.
 
     End AssumeAssert.
@@ -2532,58 +2539,6 @@ Module Mutators
 
     Section State.
 
-    (*   Definition smut_state {Γ1 Γ2 A} : *)
-    (*     ⊢ (SStore Γ1 -> SHeap -> SMutResult Γ2 A) -> SMut Γ1 Γ2 A := *)
-    (*     fun w0 f δ0 h0 => *)
-    (*      pure (f δ0 h0). *)
-
-    (*   Definition smut_bstate {Γ1 Γ2 A} : *)
-    (*     ⊢ □(SStore Γ1 -> SHeap -> SMutResult Γ2 A) -> □(SMut Γ1 Γ2 A) := *)
-    (*     fun w0 f w1 ω01 δ1 h1 => *)
-    (*      pure (f w1 ω01 δ1 h1). *)
-
-    (*   Definition smut_get_local {Γ} : ⊢ □(SMut Γ Γ (SStore Γ)) := *)
-    (*     fun w0 => *)
-    (*       smut_bstate (fun w1 ω01 δ1 h1 => MkSMutResult δ1 δ1 h1). *)
-    (*   (* Definition smut_put_local {Γ Γ' Σ} (δ' : SStore Γ' Σ) : SMut Γ Γ' Unit Σ := *) *)
-    (*   (*   smut_state (fun _ ζ _ h => MkSMutResult tt (subst δ' ζ) h). *) *)
-
-    (*   Definition smutk_pop_local {A Γ1 Γ2 b} : *)
-    (*     ⊢ SMut Γ1 Γ2 A -> SMut (Γ1 ▻ b) Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w k δ h. *)
-    (*     apply k. *)
-    (*     apply (env_tail δ). *)
-    (*     auto. *)
-    (*   Defined. *)
-
-    (*   Definition smutk_pops_local {A Γ1 Γ2 Δ} : *)
-    (*     ⊢ SMut Γ1 Γ2 A -> SMut (Γ1 ▻▻ Δ) Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w k δ h. *)
-    (*     apply k. *)
-    (*     apply (env_drop Δ δ). *)
-    (*     auto. *)
-    (*   Defined. *)
-
-    (*   Definition smutk_push_local {A Γ1 Γ2 x σ} : *)
-    (*     ⊢ STerm σ -> SMut (Γ1 ▻ (x :: σ)) Γ2 A -> SMut Γ1 Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w t k δ h. *)
-    (*     apply k. *)
-    (*     apply (env_snoc δ (x :: σ) t). *)
-    (*     auto. *)
-    (*   Defined. *)
-
-    (*   Definition smutk_pushs_local {A Γ1 Γ2 Δ} : *)
-    (*     ⊢ SStore Δ -> SMut (Γ1 ▻▻ Δ) Γ2 A -> SMut Γ1 Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w δΔ k δ h. *)
-    (*     apply k. *)
-    (*     apply (env_cat δ δΔ). *)
-    (*     auto. *)
-    (*   Defined. *)
-
       Definition pushpop {AT Γ1 Γ2 x σ} :
         ⊢ STerm σ -> SMut (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT -> SMut Γ1 Γ2 AT.
       Proof.
@@ -2610,10 +2565,10 @@ Module Mutators
         apply h.
       Defined.
 
-      (* Definition smut_get_heap {Γ Σ} : SMut Γ Γ SHeap Σ := *)
-      (*   smut_state (fun _ _ δ h => MkSMutResult h δ h). *)
-      (* Definition smut_put_heap {Γ Σ} (h : SHeap Σ) : SMut Γ Γ Unit Σ := *)
-      (*   smut_state (fun _ ζ δ _ => MkSMutResult tt δ (subst h ζ)). *)
+      Definition get_local {Γ} : ⊢ SMut Γ Γ (SStore Γ) :=
+        fun w0 POST δ => T POST δ δ.
+      Definition put_local {Γ1 Γ2} : ⊢ SStore Γ2 -> SMut Γ1 Γ2 Unit :=
+        fun w0 δ POST _ => T POST tt δ.
 
       Definition eval_exp {Γ σ} (e : Exp Γ σ) :
         ⊢ SMut Γ Γ (STerm σ).
@@ -2635,26 +2590,9 @@ Module Mutators
         auto.
       Defined.
 
-    (*   Definition smutk_eval_exp {A Γ1 Γ2 σ} (e : Exp Γ1 σ) : *)
-    (*     ⊢ (STerm σ -> SMut Γ1 Γ2 A) -> SMut Γ1 Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w k δ h. *)
-    (*     apply k. *)
-    (*     apply (seval_exp δ e). *)
-    (*     auto. *)
-    (*     auto. *)
-    (*   Defined. *)
-
-    (*   Definition smutk_eval_exps {A Γ1 Γ2} {σs : PCtx} (es : NamedEnv (Exp Γ1) σs) : *)
-    (*     ⊢ (SStore σs -> SMut Γ1 Γ2 A) -> SMut Γ1 Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w k δ h. *)
-    (*     apply k. *)
-    (*     refine (env_map _ es). *)
-    (*     intros b. apply (seval_exp δ). *)
-    (*     auto. *)
-    (*     auto. *)
-    (*   Defined. *)
+      Definition assign {Γ} x {σ} {xIn : x::σ ∈ Γ} : ⊢ STerm σ -> SMut Γ Γ Unit :=
+        fun w0 t POST δ => T POST tt (δ ⟪ x ↦ t ⟫).
+      Global Arguments assign {Γ} x {σ xIn w} v.
 
     End State.
 
@@ -2922,10 +2860,12 @@ Module Mutators
           apply (exec _ _ s).
         - eapply bind.
           apply (exec _ _ s).
-          intros w1 ω01 t POST δ1 h1.
-          apply POST. apply wrefl. apply t.
-          apply (δ1 ⟪ x ↦ t ⟫)%env.
-          apply h1.
+          intros w1 ω01 t.
+          eapply bind_right.
+          apply (assign x t).
+          intros w2 ω12.
+          apply pure.
+          apply (subst (T := STerm τ) t (wsub ω12)).
         - eapply bind.
           apply (eval_exps es).
           intros w1 ω01 args.
@@ -2933,12 +2873,21 @@ Module Mutators
           + apply (call_contract_debug f c args).
           + apply (error "SMut.exec" "Function call without contract" (f,args)).
         - rename δ into δΔ.
-          intros POST δ0 h0.
+          eapply bind.
+          apply get_local.
+          intros w1 ω01 δ1.
+          eapply bind_right.
+          apply (put_local (lift δΔ)).
+          intros w2 ω12.
+          eapply bind.
           apply (exec _ _ s).
-          intros w1 ω01 t δΔ' h1.
-          apply POST. auto. auto.
-          apply (subst δ0 ω01). auto.
-          apply (lift δΔ). auto.
+          intros w3 ω23 t.
+          eapply bind_right.
+          apply put_local.
+          apply (subst δ1 (wtrans ω12 ω23)).
+          intros w4 ω34.
+          apply pure.
+          apply (subst (T := STerm _) t ω34).
         - eapply bind.
           apply (eval_exps es).
           intros w1 ω01 args.

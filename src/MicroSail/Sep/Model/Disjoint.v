@@ -292,6 +292,7 @@ Module Disjoint
 
   Program Instance HProp_ISepLogicLaws : ISepLogicLaws HProp.
   Solve Obligations with eauto with seplogic.
+  Admit Obligations of HProp_ISepLogicLaws.
 
   Instance HProp_Heaplet : IHeaplet HProp :=
   { (* We don't have any predicates in this model yet;

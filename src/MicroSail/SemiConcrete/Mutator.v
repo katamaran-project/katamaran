@@ -105,20 +105,6 @@ Module SemiConcrete
 
   End ChunkExtraction.
 
-  Section SemiConcreteMutatorResult.
-
-    (* Local Set Primitive Projections. *)
-    Local Set Maximal Implicit Insertion.
-
-    Record CMutResult (Γ : PCtx) (A : Type) : Type :=
-      MkCMutResult {
-          scmutres_value : A;
-          scmutres_store : LocalStore Γ;
-          scmutres_heap  : SCHeap;
-        }.
-
-  End SemiConcreteMutatorResult.
-
   Definition CDijkstra (A : Type) : Type :=
     (A -> Prop) -> Prop.
 
@@ -167,15 +153,25 @@ Module SemiConcrete
         match fmls0 with
         | nil           => pure tt
         | cons fml fmls1 => _
-          (* fun w1 ω01 => *)
-            (* assume_formulak *)
-            (*   (subst fml ω01) *)
-            (*   (four (assumes fmls k) ω01) *)
         end).
       eapply bind.
       apply (assumes fmls1).
       intros _.
       apply assume_formula.
+      apply (inst fml ι).
+    Defined.
+
+    Definition assert_formulas {Σ} (ι : SymInstance Σ) : List Formula Σ -> CDijkstra unit.
+      refine (
+        fix asserts fmls0 :=
+        match fmls0 with
+        | nil           => pure tt
+        | cons fml fmls1 => _
+        end).
+      eapply bind.
+      apply (asserts fmls1).
+      intros _.
+      apply assert_formula.
       apply (inst fml ι).
     Defined.
 
@@ -231,6 +227,34 @@ Module SemiConcrete
         + firstorder. now subst.
         + rewrite IHxs. clear IHxs.
           firstorder. left. now subst.
+    Qed.
+
+    Lemma wp_assume_formulas {Σ} (ι : SymInstance Σ) (fmls : List Formula Σ) :
+      forall POST,
+        assume_formulas ι fmls POST <->
+        (instpc fmls ι -> POST tt).
+    Proof.
+      induction fmls; cbn; cbv [pure bind].
+      - cbv. intuition.
+      - intros POST.
+        rewrite IHfmls.
+        rewrite inst_pathcondition_cons.
+        unfold assume_formula.
+        intuition.
+    Qed.
+
+    Lemma wp_assert_formulas {Σ} (ι : SymInstance Σ) (fmls : List Formula Σ) :
+      forall POST,
+        assert_formulas ι fmls POST <->
+        (instpc fmls ι /\ POST tt).
+    Proof.
+      induction fmls; cbn; cbv [pure bind].
+      - cbv. intuition.
+      - intros POST.
+        rewrite IHfmls.
+        rewrite inst_pathcondition_cons.
+        unfold assert_formula.
+        intuition.
     Qed.
 
   End CDijk.
@@ -320,8 +344,10 @@ Module SemiConcrete
         dijkstra (CDijk.assume_formula fml).
       Definition assert_formula {Γ} (fml : Prop) : CMut Γ Γ unit :=
         dijkstra (CDijk.assert_formula fml).
+      Definition assume_formulas {Γ Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
+        dijkstra (CDijk.assume_formulas ι fmls).
       Definition assert_formulas {Γ Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
-        fun POST δ h => inst fmls ι /\ POST tt δ h.
+        dijkstra (CDijk.assert_formulas ι fmls).
 
     End AssumeAssert.
 
@@ -396,47 +422,31 @@ Module SemiConcrete
 
     Section State.
 
-      Definition state {Γ Γ' A} (f : LocalStore Γ -> SCHeap -> CMutResult Γ' A) : CMut Γ Γ' A :=
-        fun POST δ h =>
-          match f δ h with
-          | MkCMutResult a δ1 h1 => POST a δ1 h1
-          end.
-
-      Definition put_local {Γ Γ'} (δ : LocalStore Γ') : CMut Γ Γ' unit :=
-        state (fun _ h => MkCMutResult tt δ h).
+      Definition pushpop {A Γ1 Γ2 x σ} (v : Lit σ)
+        (d : CMut (Γ1 ▻ (x::σ)) (Γ2 ▻ (x::σ)) A) : CMut Γ1 Γ2 A :=
+        fun POST δ0 => d (fun a δ1 => POST a (env_tail δ1)) (δ0 ► (x::σ ↦ v)).
+      Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : LocalStore Δ)
+        (d : CMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) : CMut Γ1 Γ2 A :=
+        fun POST δ0 => d (fun a δ1 => POST a (env_drop Δ δ1)) (δ0 ►► δΔ).
       Definition get_local {Γ} : CMut Γ Γ (LocalStore Γ) :=
-        state (fun δ h => MkCMutResult δ δ h).
-      Definition pop_local {Γ x σ} : CMut (Γ ▻ (x :: σ)) Γ unit :=
-        state (fun δ h => MkCMutResult () (env_tail δ) h).
-      Definition pops_local {Γ} Δ : CMut (Γ ▻▻ Δ) Γ unit :=
-        state (fun δ h => MkCMutResult () (env_drop Δ δ) h).
-      Definition push_local {Γ x σ} (v : Lit σ) : CMut Γ (Γ ▻ (x :: σ)) unit :=
-        state (fun δ h => MkCMutResult () (env_snoc δ (x :: σ) v) h).
-      Global Arguments push_local {Γ _ _} _.
-      Definition pushs_local {Γ Δ} (δΔ : LocalStore Δ) : CMut Γ (Γ ▻▻ Δ) unit :=
-        state (fun δ h => MkCMutResult () (env_cat δ δΔ) h).
-      Definition pushpop {A} {Γ1 Γ2 x σ} (v : Lit σ) (d : CMut (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) A) :
-        CMut Γ1 Γ2 A :=
-        push_local v ;; bind_left d pop_local.
-      Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : LocalStore Δ) (d : CMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) :
-        CMut Γ1 Γ2 A :=
-        pushs_local δΔ ;; bind_left d (pops_local Δ).
-      Definition get_heap {Γ} : CMut Γ Γ SCHeap :=
-        state (fun δ h => MkCMutResult h δ h).
-      Definition put_heap {Γ} (h : SCHeap) : CMut Γ Γ unit :=
-        state (fun δ _ => MkCMutResult tt δ h).
+        fun POST δ => POST δ δ.
+      Definition put_local {Γ1 Γ2} (δ : LocalStore Γ2) : CMut Γ1 Γ2 unit :=
+        fun POST _ => POST tt δ.
 
       Definition eval_exp {Γ σ} (e : Exp Γ σ) : CMut Γ Γ (Lit σ) :=
-        state (fun δ h => MkCMutResult (eval e δ) δ h).
+        fun POST δ => POST (eval e δ) δ.
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CMut Γ Γ (LocalStore σs) :=
-        state (fun δ h => MkCMutResult (env_map (fun _ e => eval e δ) es) δ h).
+        fun POST δ => POST (env_map (fun _ e => eval e δ) es) δ.
+      Definition assign {Γ} x {σ} {xIn : x::σ ∈ Γ} (v : Lit σ) : CMut Γ Γ unit :=
+        fun POST δ => POST () (δ ⟪ x ↦ v ⟫).
+      Global Arguments assign {Γ} x {σ xIn} v.
 
     End State.
 
     Section ProduceConsume.
 
       Definition produce_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
-        state (fun δ h => MkCMutResult () δ (cons c h)).
+        fun POST δ h => POST tt δ (cons c h).
       Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
         (* "Err [consume_chunk]: empty extraction" *)
         fun POST δ0 h0 => CDijk.angelic_list (extract_scchunk_eqb c h0) (POST tt δ0).
@@ -537,7 +547,7 @@ Module SemiConcrete
         match contract with
         | MkSepContract _ _ Σe δ req result ens =>
           ι <- angelic_ctx Σe ;;
-          assert_formulas ι (formula_eqs δ (lift vs)) ;;
+          assert_formula (inst δ ι = vs) ;;
           consume ι req  ;;
           v <- demonic τ ;;
           produce (env_snoc ι (result::τ) v) ens ;;
@@ -555,7 +565,7 @@ Module SemiConcrete
           pushspops δ (exec k)
         | stm_assign x e =>
           v <- exec e ;;
-          state (fun δ h => MkCMutResult tt (δ ⟪ x ↦ v ⟫)%env h) ;;
+          assign x v ;;
           pure v
         | stm_call f es =>
           args <- eval_exps es ;;
@@ -594,9 +604,9 @@ Module SemiConcrete
           produce_chunk c ;;
           pure v
         | stm_write_register reg e =>
-          v__new <- eval_exp e ;;
           v__old <- angelic τ ;;
           consume_chunk (scchunk_ptsreg reg v__old) ;;
+          v__new <- eval_exp e ;;
           produce_chunk (scchunk_ptsreg reg v__new) ;;
           pure v__new
         | @stm_match_list _ _ σ e s1 xh xt s2 =>
@@ -624,9 +634,7 @@ Module SemiConcrete
                  (exec s))
         | stm_match_tuple e p rhs =>
           v <- eval_exp e ;;
-          pushs_local (tuple_pattern_match_lit p v) ;;
-          exec rhs <*
-          pops_local _
+          pushspops (tuple_pattern_match_lit p v) (exec rhs)
         | stm_match_union U e alt__pat alt__rhs =>
           v <- eval_exp e ;;
           let (K , v) := 𝑼_unfold v in
@@ -641,12 +649,12 @@ Module SemiConcrete
           exec k
         end.
 
-      Definition leakcheck {Γ} : CMut Γ Γ unit :=
-        get_heap >>= fun h =>
-        match h with
-        | nil => pure tt
-        | _   => error "Err [cmut_leakcheck]: heap leak"
-        end.
+      (* Definition leakcheck {Γ} : CMut Γ Γ unit := *)
+      (*   get_heap >>= fun h => *)
+      (*   match h with *)
+      (*   | nil => pure tt *)
+      (*   | _   => error "Err [cmut_leakcheck]: heap leak" *)
+      (*   end. *)
 
     End Exec.
 

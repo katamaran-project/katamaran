@@ -388,6 +388,8 @@ Module IrisInstance
     - iIntros "P".
       by iSplit; iFrame.
   Qed.
+  Next Obligation.
+  Admitted.
 
   Global Instance iris_IHeapLet : IHeaplet (iProp Σ) :=
     { is_ISepLogic := iris_ISepLogic;
