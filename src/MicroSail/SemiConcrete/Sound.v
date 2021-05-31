@@ -165,18 +165,45 @@ Module Soundness
       now apply HYP.
     Qed.
 
-    Opaque assert_formula.
-    Opaque assume_formula.
-    Opaque consume_chunk.
-
-    Lemma consume_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ}
+    Lemma consume_chunk_monotonic {Γ} {c : SCChunk}
       (P Q : unit -> LocalStore Γ -> SCHeap -> Prop)
-      (PQ : forall x δ h, P x δ h -> Q x δ h) :
-      forall δ h,
+      (PQ : forall x δ h, P x δ h -> Q x δ h) δ h :
+      consume_chunk (Γ := Γ) c P δ h ->
+      consume_chunk (Γ := Γ) c Q δ h.
+    Proof.
+      unfold consume_chunk.
+      rewrite ?CDijk.wp_angelic_list.
+      intros [h']; exists h'; intuition.
+    Qed.
+
+    Lemma consume_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} :
+      forall
+        (P Q : unit -> LocalStore Γ -> SCHeap -> Prop)
+        (PQ : forall x δ h, P x δ h -> Q x δ h) δ h,
         consume (Γ := Γ) ι asn P δ h ->
         consume (Γ := Γ) ι asn Q δ h.
     Proof.
-    Admitted.
+      induction asn; cbn.
+      - unfold assert_formula. intuition.
+      - apply consume_chunk_monotonic.
+      - destruct (inst b ι); cbn; eauto.
+      - unfold match_enum. eauto.
+      - destruct (inst s ι); cbn; eauto.
+      - destruct (inst s ι); cbn; eauto.
+      - destruct (inst s ι); cbn; eauto.
+      - eauto.
+      - unfold match_record. eauto.
+      - destruct (𝑼_unfold (inst s ι)); eauto.
+      - intros * PQ *. unfold bind_right, bind.
+        apply IHasn1; eauto.
+      - intros * PQ *. unfold bind, angelic.
+        intros [v ?]; exists v; eauto.
+      - unfold pure; eauto.
+    Qed.
+
+    Opaque assert_formula.
+    Opaque assume_formula.
+    Opaque consume_chunk.
 
     Lemma consume_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
       forall δ h,
