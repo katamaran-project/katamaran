@@ -534,6 +534,11 @@ Module Soundness
       - revert H2. apply Hm2; auto.
     Qed.
 
+    (* Lemma approx_angelic_list {AT A} `{Approx AT A} {Γ} {w : World} (ι : SymInstance w) : *)
+    (*   approx ι (@SMut.angelic_list AT Γ w) (@CMut.angelic_list A Γ). *)
+    (* Proof. *)
+    (* Admitted. *)
+
   End Basics.
 
   Section AssumeAssert.
@@ -567,6 +572,17 @@ Module Soundness
       intros δs δc Hδ hs hc Hh.
       apply approx_dijkstra; auto.
       now apply Dijk.approx_assert_formula.
+    Qed.
+
+    Lemma approx_box_assert_formula {Γ} {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0)
+      (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
+      approx ι0 (@SMut.box_assert_formula Γ w0 fml__s) (CMut.assert_formula fml__c).
+    Proof.
+      unfold SMut.box_assert_formula, map_box.
+      intros w1 ω01 ι1 -> Hpc1.
+      apply approx_assert_formula; auto.
+      unfold persist, persist_subst.
+      now rewrite inst_subst.
     Qed.
 
     Lemma approx_assert_formulas {Γ} {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0)
@@ -756,6 +772,27 @@ Module Soundness
       apply HPOST; wsimpl; auto.
     Qed.
 
+    Lemma approx_get_heap {Γ}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.get_heap Γ w0) (@CMut.get_heap Γ).
+    Proof.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ hs0 hc0 Hh0.
+      unfold SMut.get_heap, CMut.get_heap.
+      apply HPOST; wsimpl; auto.
+    Qed.
+
+    Lemma approx_put_heap {Γ}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.put_heap Γ w0) (@CMut.put_heap Γ).
+    Proof.
+      intros hs hc Hh.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ hs0 hc0 Hh0.
+      unfold SMut.put_heap, CMut.put_heap.
+      apply HPOST; wsimpl; auto.
+    Qed.
+
     Lemma approx_eval_exp {Γ σ} (e : Exp Γ σ)
       {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.eval_exp Γ σ e w0) (@CMut.eval_exp Γ σ e).
@@ -861,10 +898,22 @@ Module Soundness
     approx ι0 (@SMut.consume_chunk Γ w0) (CMut.consume_chunk).
   Proof.
     intros cs cc ->.
-    intros POST__s POST__c HPOST.
-    intros δs δc -> hs hc ->.
     unfold SMut.consume_chunk, CMut.consume_chunk.
-    (* TODO: Reimplement SMut.consume_chunk to use formula_eqs *)
+    apply approx_bind.
+    apply approx_get_heap; auto.
+    intros w1 ω01 ι1 -> Hpc1.
+    intros hs hc ->.
+    apply approx_bind.
+    admit.
+    intros w2 ω12 ι2 -> Hpc2.
+    intros [cs' hs'] [cc' hc'].
+    intros Hch'. inversion Hch'; subst; clear Hch'.
+    apply approx_bind_right.
+    apply approx_assert_formulas; auto.
+    admit.
+    intros w3 ω23 ι3 -> Hpc3.
+    rewrite <- inst_subst.
+    apply approx_put_heap; auto.
   Admitted.
 
   Lemma approx_consume {Γ Σ0 pc0} (asn : Assertion Σ0) :
@@ -875,8 +924,7 @@ Module Soundness
       approx ι0 (@SMut.consume Γ w0 asn) (CMut.consume ι0 asn).
   Proof.
     induction asn; intros w0 * Hpc; cbn.
-    - admit.
-      (* now apply approx_box_assert_formula. *)
+    - now apply approx_box_assert_formula.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_subst.
       now apply approx_consume_chunk.
@@ -922,7 +970,7 @@ Module Soundness
     intros evars__s evars__c Hevars.
     apply approx_bind_right.
     apply approx_assert_formulas; auto.
-    { rewrite inst_formula_eqs.
+    { rewrite inst_formula_eqs_pctx.
       rewrite ?inst_subst.
       rewrite Hargs, Hevars.
       reflexivity.

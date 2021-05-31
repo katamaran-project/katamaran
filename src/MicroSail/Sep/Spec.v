@@ -75,11 +75,17 @@ Module Assertions
   | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
   Arguments formula_bool {_} t.
 
-  Equations(noeqns) formula_eqs {Δ : PCtx} {Σ : LCtx}
+  Equations(noeqns) formula_eqs_ctx {Δ : Ctx Ty} {Σ : LCtx}
+    (δ δ' : Env (Term Σ) Δ) : list (Formula Σ) :=
+    formula_eqs_ctx env_nil          env_nil            := nil;
+    formula_eqs_ctx (env_snoc δ _ t) (env_snoc δ' _ t') :=
+      formula_eq t t' :: formula_eqs_ctx δ δ'.
+
+  Equations(noeqns) formula_eqs_pctx {Δ : PCtx} {Σ : LCtx}
     (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
-    formula_eqs env_nil          env_nil            := nil;
-    formula_eqs (env_snoc δ _ t) (env_snoc δ' _ t') :=
-      formula_eq t t' :: formula_eqs δ δ'.
+    formula_eqs_pctx env_nil          env_nil            := nil;
+    formula_eqs_pctx (env_snoc δ _ t) (env_snoc δ' _ t') :=
+      formula_eq t t' :: formula_eqs_pctx δ δ'.
 
   Instance sub_formula : Subst Formula :=
     fun Σ1 fml Σ2 ζ =>
@@ -262,8 +268,23 @@ Module Assertions
         intuition.
     Qed.
 
-    Lemma inst_formula_eqs {Δ Σ} (ι : SymInstance Σ) (xs ys : SStore Δ Σ) :
-      inst (T := PathCondition) (A := Prop) (formula_eqs xs ys) ι <-> inst xs ι = inst ys ι.
+    Lemma inst_formula_eqs_ctx {Δ Σ} (ι : SymInstance Σ) (xs ys : Env (Term Σ) Δ) :
+      inst (T := PathCondition) (A := Prop) (formula_eqs_ctx xs ys) ι <-> inst xs ι = inst ys ι.
+    Proof.
+      induction xs.
+      - destruct (nilView ys). cbn. intuition. constructor.
+      - destruct (snocView ys). cbn - [inst].
+        rewrite inst_pathcondition_cons, IHxs. clear IHxs.
+        change (inst db ι = inst v ι /\ inst xs ι = inst E ι <->
+                inst xs ι ► (b ↦ inst db ι) = inst E ι ► (b ↦ inst v ι)).
+        split.
+        + intros [Hfml Hpc]; f_equal; auto.
+        + intros Heq. apply noConfusion_inv in Heq. cbn in Heq.
+          inversion Heq. intuition.
+    Qed.
+
+    Lemma inst_formula_eqs_pctx {Δ Σ} (ι : SymInstance Σ) (xs ys : SStore Δ Σ) :
+      inst (T := PathCondition) (A := Prop) (formula_eqs_pctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs.
       - destruct (nilView ys). cbn. intuition. constructor.
@@ -996,77 +1017,6 @@ Module Assertions
   End Contracts.
 
   Arguments interpret_assertion {_ _ _} _ _.
-
-  Section ChunkExtraction.
-    Context {Σ : LCtx}.
-
-    Infix ">=>" := option_comp (at level 80, right associativity).
-
-    Section WithMatchTerm.
-
-      Variable match_term_eqb : forall {σ}, Term Σ σ -> Term Σ σ -> PathCondition Σ -> option (PathCondition Σ).
-
-      Equations(noeqns) match_env_eqb' {σs} (te : Env (Term Σ) σs) (tr : Env (Term Σ) σs) :
-        PathCondition Σ -> option (PathCondition Σ) :=
-        match_env_eqb' env_nil env_nil := Some;
-        match_env_eqb' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_env_eqb' E1 E2 >=> match_term_eqb t1 t2.
-
-    End WithMatchTerm.
-
-    Equations(noeqns) match_term_eqb {σ} (te : Term Σ σ) (tr : Term Σ σ) :
-      PathCondition Σ -> option (PathCondition Σ) :=
-      match_term_eqb (term_lit ?(σ) l1) (term_lit σ l2) :=
-        if Lit_eqb σ l1 l2 then Some else fun _ => None;
-      match_term_eqb (term_inl t1) (term_inl t2) := match_term_eqb t1 t2;
-      match_term_eqb (term_inl t1) (term_lit (inl l2)) := match_term_eqb t1 (term_lit _ l2);
-      match_term_eqb (term_inr t1) (term_inr t2) := match_term_eqb t1 t2;
-      match_term_eqb (term_inr t1) (term_lit (inr l2)) := match_term_eqb t1 (term_lit _ l2);
-      match_term_eqb te tr :=
-        if Term_eqb te tr
-        then Some
-        else fun pc => Some (cons (formula_eq te tr) pc).
-
-    Definition match_env_eqb := @match_env_eqb' (@match_term_eqb).
-
-    Equations(noeqns) match_chunk_eqb (ce : Chunk Σ) (cr : Chunk Σ) :
-      PathCondition Σ -> option (PathCondition Σ) :=
-      match_chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2)
-      with eq_dec p1 p2 => {
-        match_chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := match_env_eqb ts1 ts2;
-        match_chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := fun _ => None
-      };
-      match_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
-      with eq_dec_het r1 r2 => {
-        match_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left eq_refl) := match_term_eqb t1 t2;
-        match_chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := fun _ => None
-      };
-      match_chunk_eqb _ _  := fun _ => None.
-
-    Lemma match_chunk_eqb_spec (ce cr : Chunk Σ) (fmls : List Formula Σ) :
-      OptionSpec
-        (fun fmls2 =>
-           forall ι : SymInstance Σ,
-             instpc fmls2 ι ->
-             inst ce ι = inst cr ι /\ instpc fmls ι)
-        True
-        (match_chunk_eqb ce cr fmls).
-    Proof.
-      destruct ce, cr; cbn; try constructor; auto.
-      - destruct (eq_dec p p0); cbn.
-        + destruct e; cbn. admit.
-        + now constructor.
-      - destruct (eq_dec_het r r0); cbn.
-        + dependent elimination e; cbn. admit.
-        + now constructor.
-    Admitted.
-
-    Definition extract_chunk_eqb (ce : Chunk Σ) (h : SHeap Σ) :
-      List (Pair PathCondition SHeap) Σ :=
-      stdpp.base.omap
-        (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk_eqb ce cr nil))
-        (heap_extractions h).
-
-  End ChunkExtraction.
 
   Section WithEvarEnv.
 

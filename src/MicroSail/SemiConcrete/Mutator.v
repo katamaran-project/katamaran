@@ -63,47 +63,47 @@ Module SemiConcrete
 
   Export symcontractkit.
 
-  Section ChunkExtraction.
+  (* Section ChunkExtraction. *)
 
-    Equations(noeqns) match_scchunk_eqb (ce : SCChunk) (cr : SCChunk) : bool :=
-      match_scchunk_eqb (scchunk_user p1 vs1) (scchunk_user p2 vs2)
-      with eq_dec p1 p2 => {
-        match_scchunk_eqb (scchunk_user p1 vs1) (scchunk_user p2 vs2) (left eq_refl) := env_eqb_hom Lit_eqb vs1 vs2;
-        match_scchunk_eqb (scchunk_user p1 vs1) (scchunk_user p2 vs2) (right _) := false
-      };
-      match_scchunk_eqb (scchunk_ptsreg r1 t1) (scchunk_ptsreg r2 t2)
-      with eq_dec_het r1 r2 => {
-        match_scchunk_eqb (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (left eq_refl) := Lit_eqb _ v1 v2;
-        match_scchunk_eqb (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (right _)      := false
-      };
-      match_scchunk_eqb _ _  := false.
+  (*   Equations(noeqns) match_scchunk (ce : SCChunk) (cr : SCChunk) : Prop := *)
+  (*     match_scchunk (scchunk_user p1 vs1) (scchunk_user p2 vs2) *)
+  (*     with eq_dec p1 p2 => { *)
+  (*       match_scchunk (scchunk_user p1 vs1) (scchunk_user p2 vs2) (left eq_refl) := vs1 = vs2; *)
+  (*       match_scchunk (scchunk_user p1 vs1) (scchunk_user p2 vs2) (right _) := False *)
+  (*     }; *)
+  (*     match_scchunk (scchunk_ptsreg r1 t1) (scchunk_ptsreg r2 t2) *)
+  (*     with eq_dec_het r1 r2 => { *)
+  (*       match_scchunk (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (left eq_refl) := v1 = v2; *)
+  (*       match_scchunk (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (right _)      := False *)
+  (*     }; *)
+  (*     match_scchunk _ _  := False. *)
 
-    Local Set Equations With UIP.
-    Lemma match_scchunk_eqb_spec (c1 c2 : SCChunk) :
-      reflect (c1 = c2) (match_scchunk_eqb c1 c2).
-    Proof.
-      destruct c1 as [p1 vs1|r1], c2 as [p2 vs2|r2]; cbn.
-      - destruct (eq_dec p1 p2); cbn.
-        + dependent elimination e; cbn.
-          destruct (env_eqb_hom_spec _ Lit_eqb_spec vs1 vs2); constructor.
-          * congruence.
-          * intros e. now dependent elimination e.
-        + constructor; intro e.
-          now dependent elimination e.
-      - constructor. discriminate.
-      - constructor. discriminate.
-      - destruct (eq_dec_het r r0); cbn.
-        + dependent elimination e; cbn.
-          apply (ssrbool.iffP (Lit_eqb_spec _ _ _));
-            intro e; now dependent elimination e.
-        + constructor.
-          intro e; now dependent elimination e.
-    Qed.
+  (*   Local Set Equations With UIP. *)
+  (*   Lemma match_scchunk_eqb_spec (c1 c2 : SCChunk) : *)
+  (*     reflect (c1 = c2) (match_scchunk_eqb c1 c2). *)
+  (*   Proof. *)
+  (*     destruct c1 as [p1 vs1|r1], c2 as [p2 vs2|r2]; cbn. *)
+  (*     - destruct (eq_dec p1 p2); cbn. *)
+  (*       + dependent elimination e; cbn. *)
+  (*         destruct (env_eqb_hom_spec _ Lit_eqb_spec vs1 vs2); constructor. *)
+  (*         * congruence. *)
+  (*         * intros e. now dependent elimination e. *)
+  (*       + constructor; intro e. *)
+  (*         now dependent elimination e. *)
+  (*     - constructor. discriminate. *)
+  (*     - constructor. discriminate. *)
+  (*     - destruct (eq_dec_het r r0); cbn. *)
+  (*       + dependent elimination e; cbn. *)
+  (*         apply (ssrbool.iffP (Lit_eqb_spec _ _ _)); *)
+  (*           intro e; now dependent elimination e. *)
+  (*       + constructor. *)
+  (*         intro e; now dependent elimination e. *)
+  (*   Qed. *)
 
-    Definition extract_scchunk_eqb (ce : SCChunk) (h : SCHeap) : list SCHeap :=
-      List.map snd (List.filter (fun '(cr,_) => match_scchunk_eqb ce cr) (heap_extractions h)).
+  (*   Definition extract_scchunk_eqb (ce : SCChunk) (h : SCHeap) : list SCHeap := *)
+  (*     List.map snd (List.filter (fun '(cr,_) => match_scchunk_eqb ce cr) (heap_extractions h)). *)
 
-  End ChunkExtraction.
+  (* End ChunkExtraction. *)
 
   Definition CDijkstra (A : Type) : Type :=
     (A -> Prop) -> Prop.
@@ -313,6 +313,9 @@ Module SemiConcrete
       Defined.
       Global Arguments angelic_ctx {N Γ} Δ.
 
+      Definition angelic_list {A Γ} (xs : list A) : CMut Γ Γ A :=
+        dijkstra (CDijk.angelic_list xs).
+
     End Basic.
 
     Module CMutNotations.
@@ -432,6 +435,10 @@ Module SemiConcrete
         fun POST δ => POST δ δ.
       Definition put_local {Γ1 Γ2} (δ : LocalStore Γ2) : CMut Γ1 Γ2 unit :=
         fun POST _ => POST tt δ.
+      Definition get_heap {Γ} : CMut Γ Γ SCHeap :=
+        fun POST δ h => POST h δ h.
+      Definition put_heap {Γ} (h : SCHeap) : CMut Γ Γ unit :=
+        fun POST δ _ => POST tt δ h.
 
       Definition eval_exp {Γ σ} (e : Exp Γ σ) : CMut Γ Γ (Lit σ) :=
         fun POST δ => POST (eval e δ) δ.
@@ -447,9 +454,19 @@ Module SemiConcrete
 
       Definition produce_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
         fun POST δ h => POST tt δ (cons c h).
-      Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
-        (* "Err [consume_chunk]: empty extraction" *)
-        fun POST δ0 h0 => CDijk.angelic_list (extract_scchunk_eqb c h0) (POST tt δ0).
+      Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit.
+        eapply bind.
+        apply get_heap.
+        intros h.
+        eapply bind.
+        apply (angelic_list (heap_extractions h)).
+        intros [c' h'].
+        eapply bind_right.
+        apply assert_formula.
+        apply (c' = c).
+        apply (put_heap h').
+      Defined.
+
       Global Arguments produce_chunk {Γ} _.
       Global Arguments consume_chunk {Γ} _.
 

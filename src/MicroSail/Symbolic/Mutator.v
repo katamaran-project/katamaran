@@ -1858,6 +1858,10 @@ Module Mutators
         fun w m1 m2 POST δ1 h1 =>
           demonic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
 
+      Definition angelic_list {A Γ} :
+        ⊢ (SStore Γ -> SHeap -> Message) -> WList A -> SMut Γ Γ A :=
+        fun w msg xs POST δ h => dijkstra (SDijk.angelic_list (msg δ h) xs) POST δ h.
+
       Definition angelic_finite {Γ} F `{finite.Finite F} :
         ⊢ (SStore Γ -> SHeap -> Message) -> SMut Γ Γ ⌜F⌝ :=
         fun w msg POST δ h => dijkstra (SDijk.angelic_finite (msg δ h)) POST δ h.
@@ -2569,6 +2573,10 @@ Module Mutators
         fun w0 POST δ => T POST δ δ.
       Definition put_local {Γ1 Γ2} : ⊢ SStore Γ2 -> SMut Γ1 Γ2 Unit :=
         fun w0 δ POST _ => T POST tt δ.
+      Definition get_heap {Γ} : ⊢ SMut Γ Γ SHeap :=
+        fun w0 POST δ h => T POST h δ h.
+      Definition put_heap {Γ} : ⊢ SHeap -> SMut Γ Γ Unit :=
+        fun w0 h POST δ _ => T POST tt δ h.
 
       Definition eval_exp {Γ σ} (e : Exp Γ σ) :
         ⊢ SMut Γ Γ (STerm σ).
@@ -2607,38 +2615,48 @@ Module Mutators
         apply (cons c h).
       Defined.
 
+      Equations(noeqns) match_chunk {w : World} (ce : Chunk w) (cr : Chunk w) : List Formula w :=
+        match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2)
+        with eq_dec p1 p2 => {
+          match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) (left eq_refl) := formula_eqs_ctx vs1 vs2;
+          match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) (right _) :=
+            cons (formula_bool (term_lit ty_bool false)) nil
+        };
+        match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
+        with eq_dec_het r1 r2 => {
+          match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg r2 v2) (left eq_refl) := cons (formula_eq v1 v2) nil;
+          match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg r2 v2) (right _)      :=
+            cons (formula_bool (term_lit ty_bool false)) nil
+        };
+        match_chunk _ _  := cons (formula_bool (term_lit ty_bool false)) nil.
+
       Definition consume_chunk {Γ} :
         ⊢ Chunk -> SMut Γ Γ Unit.
       Proof.
-        intros w0 c POST δ0 h0.
-        refine
-          (@SDijk.angelic_list (fun w => Pair PathCondition SHeap w) w0
-            {| msg_function := "consume_chunk";
-               msg_message := "Empty extraction";
-               msg_program_context := Γ;
-               msg_localstore := δ0;
-               msg_heap := h0;
-               msg_pathcondition := wco w0
-            |} (extract_chunk_eqb c h0) _).
-        intros w1 ω01 [Δpc h1'].
-        apply (@SDijk.assert_formulas w1
-                 {| msg_function := "consume_chunk";
-                    msg_message := "Proof Obligation";
-                    msg_program_context := Γ;
-                    msg_localstore := subst δ0 ω01;
-                    msg_heap := h1';
-                    msg_pathcondition := wco w1
-                 |} Δpc).
-        intros w2 ω12 _.
-        apply (four POST ω01). auto. constructor.
-        apply (subst (subst δ0 ω01) ω12).
-        apply (subst h1' ω12).
+        intros w0 c.
+        eapply bind.
+        apply get_heap.
+        intros w1 ω01 h.
+        eapply bind.
+        apply (angelic_list
+                 (A := Pair Chunk SHeap)
+                 (fun δ h =>
+                    {| msg_function := "consume_chunk";
+                       msg_message := "Empty extraction";
+                       msg_program_context := Γ;
+                       msg_localstore := δ;
+                       msg_heap := h;
+                       msg_pathcondition := wco w1
+                    |})
+                 (heap_extractions h)).
+        intros w2 ω12 [c' h'].
+        eapply bind_right.
+        apply assert_formulas.
+        apply (match_chunk (subst c (wtrans ω01 ω12)) c').
+        intros w3 ω23.
+        apply put_heap.
+        apply (subst h' ω23).
       Defined.
-
-      (* Definition smut_assert_formulak {A Γ1 Γ2 Σ} (fml : Formula Σ) (k : SMut Γ1 Γ2 A Σ) : SMut Γ1 Γ2 A Σ := *)
-      (*   smut_bind_right (smut_assert_formula fml) k. *)
-      (* Definition smut_assert_formulask {A Γ1 Γ2 Σ} (fmls : list (Formula Σ)) (k: SMut Γ1 Γ2 A Σ) : SMut Γ1 Γ2 A Σ := *)
-      (*   fold_right smut_assert_formulak k fmls. *)
 
       (* Definition smut_leakcheck {Γ Σ} : SMut Γ Γ Unit Σ := *)
       (*   smut_get_heap >>= fun _ _ h => *)
@@ -2725,7 +2743,7 @@ Module Mutators
       Proof.
         refine (fix consume w0 asn {struct asn} := _).
         destruct asn.
-        - apply (assert_formula <$> persist fml).
+        - apply (box_assert_formula fml).
         - apply (consume_chunk <$> persist c).
         - apply (angelic_match_bool <$> persist__term b <*> four (consume _ asn1) <*> four (consume _ asn2)).
         - intros w1 ω01.
@@ -2803,7 +2821,7 @@ Module Mutators
                  (*   msg_localstore := subst δ0 ω01; *)
                  (*   msg_heap := subst h0 ω01; *)
                  (*   msg_pathcondition := wco w1; *)
-                 (* |} *) (formula_eqs (subst δe evars) (subst args ω01))).
+                 (* |} *) (formula_eqs_pctx (subst δe evars) (subst args ω01))).
         intros w2 ω12.
         eapply bind_right.
         apply (consume (w := @MkWorld Σe nil) req).

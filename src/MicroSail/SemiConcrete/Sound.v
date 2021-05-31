@@ -111,22 +111,15 @@ Module Soundness
         consume_chunk c (fun _ => liftP POST) δ h ->
         interpret_scheap h ⊢ interpret_scchunk c ✱ POST δ.
     Proof.
+      cbv [bind get_heap consume_chunk angelic_list CDijk.assert_formula
+           dijkstra bind_right assert_formula put_heap].
       intros δ h.
-      unfold consume_chunk.
       rewrite CDijk.wp_angelic_list.
-      intros [h1 [HIn HPOST]].
-      unfold extract_scchunk_eqb in HIn.
-      rewrite List.in_map_iff in HIn.
-      destruct HIn as [[c1 h1'] [Heq HIn]].
-      cbn in Heq. subst h1'.
-      rewrite List.filter_In in HIn.
-      destruct HIn as [HIn Hmatch].
-      apply (Bool.reflect_iff _ _ (match_scchunk_eqb_spec _ _)) in Hmatch.
-      subst c1.
+      intros [[c' h'] [HIn [Heq HPOST]]]. subst c'.
       apply in_heap_extractions in HIn; rewrite HIn; clear HIn.
       apply sepcon_entails.
       apply entails_refl.
-      assumption.
+      apply HPOST.
     Qed.
 
     Lemma assert_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
@@ -171,9 +164,11 @@ Module Soundness
       consume_chunk (Γ := Γ) c P δ h ->
       consume_chunk (Γ := Γ) c Q δ h.
     Proof.
-      unfold consume_chunk.
+      cbv [consume_chunk bind get_heap angelic_list dijkstra
+           bind_right assert_formula put_heap CDijk.assert_formula].
       rewrite ?CDijk.wp_angelic_list.
-      intros [h']; exists h'; intuition.
+      intros [ch' Hwp]; exists ch'; revert Hwp.
+      destruct ch'. intuition.
     Qed.
 
     Lemma consume_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} δ :
