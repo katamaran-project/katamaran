@@ -325,6 +325,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                exp_var "cursor" + exp_var "immediate"
                              ] in
          let: w ∶ ty_word := call read_reg hv in
+         stm_call_external (ghost duplicate_safe) [exp_var w]%arg ;;
          stm_call_external (ghost specialize_safe_to_cap) [exp_var "base_cap"]%arg ;;
          stm_call_external (ghost csafe_move_cursor) [exp_var "base_cap", exp_var "c"]%arg ;;
          stm_call_external (ghost lift_csafe) [exp_var "base_cap"]%arg ;;
