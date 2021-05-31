@@ -432,255 +432,6 @@ Module Assertions
 
   End Entailment.
 
-  Section Solver.
-
-    Definition try_solve_eq {Σ σ} (t1 t2 : Term Σ σ) : option bool :=
-      if Term_eqb t1 t2
-      then Some true
-      else
-        (* If the terms are literals, we can trust the negative result. *)
-        match t1 , t2 with
-        | term_lit _ _ , term_lit _ _ => Some false
-        | term_inr _   , term_inl _   => Some false
-        | term_inl _   , term_inr _   => Some false
-        | _            , _            => None
-        end.
-
-    Lemma try_solve_eq_spec {Σ σ} (t1 t2 : Term Σ σ) :
-      OptionSpec
-        (fun b => forall ι, inst t1 ι = inst t2 ι <-> is_true b)
-        True
-        (try_solve_eq t1 t2).
-    Proof.
-      unfold try_solve_eq.
-      destruct (Term_eqb_spec t1 t2).
-      - constructor. intros. apply reflect_iff.
-        constructor. congruence.
-      - destruct t1; dependent elimination t2; constructor; auto;
-        intros; apply reflect_iff; constructor; cbn; congruence.
-    Qed.
-
-    (* Check if the given formula is always true or always false for any
-       assignments of the logic variables. *)
-    Definition try_solve_formula {Σ} (fml : Formula Σ) : option bool :=
-      match fml with
-      | formula_bool t =>
-        match t in Term _ σ return option (Lit σ)
-        with
-        | term_lit _ b => Some b
-        | _            => None
-        end
-      | formula_prop _ _ => None
-      | formula_eq t1 t2 => try_solve_eq t1 t2
-        (* else Term_eqvb t1 t2 *)
-      | formula_neq t1 t2 => option_map negb (try_solve_eq t1 t2)
-        (* else option_map negb (Term_eqvb t1 t2) *)
-      end.
-
-    Lemma try_solve_formula_spec {Σ} (fml : Formula Σ) :
-      OptionSpec
-        (fun b => forall ι, inst fml ι <-> is_true b)
-        True
-        (try_solve_formula fml).
-    Proof.
-      destruct fml; cbn.
-      - dependent elimination t; constructor; auto.
-      - constructor; auto.
-      - destruct (try_solve_eq_spec t1 t2); now constructor.
-      - destruct (try_solve_eq_spec t1 t2); constructor; auto.
-        intros ι. specialize (H ι). destruct a; intuition.
-    Qed.
-
-    (* Poor man's unification *)
-    Definition try_unify {Σ σ} (t1 t2 : Term Σ σ) :
-      option { Σ' & MultiSub Σ Σ' } :=
-      match t1 with
-      | @term_var _ ς σ ςInΣ =>
-        fun t2 : Term Σ σ =>
-          match occurs_check ςInΣ t2 with
-          | Some t => Some (existT _ (multisub_cons ς t multisub_id))
-          | None => None
-          end
-      | _ => fun _ => None
-      end t2.
-
-    Definition try_propagate {Σ} (fml : Formula Σ) :
-      option { Σ' & MultiSub Σ Σ' } :=
-      match fml with
-      | formula_eq t1 t2 =>
-        match try_unify t1 t2 with
-        | Some r => Some r
-        | None => try_unify t2 t1
-        end
-      | _ => None
-      end.
-
-    Lemma try_unify_spec {Σ σ} (t1 t2 : Term Σ σ) :
-      OptionSpec (fun '(existT Σ' ζ) => forall ι, inst t1 ι = inst t2 ι <-> inst_multisub ζ ι) True (try_unify t1 t2).
-    Proof.
-      unfold try_unify. destruct t1; cbn; try (constructor; auto; fail).
-      destruct (occurs_check ςInΣ t2) eqn:Heq; constructor; auto.
-      apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq. subst.
-      intros ι. rewrite inst_subst, inst_sub_shift.
-      cbn. intuition.
-    Qed.
-
-    Lemma try_propagate_spec {Σ} (fml : Formula Σ) :
-      OptionSpec (fun '(existT Σ' ζ) => forall ι, (inst fml ι : Prop) <-> inst_multisub ζ ι) True (try_propagate fml).
-    Proof.
-      unfold try_propagate; destruct fml; cbn; try (constructor; auto; fail).
-      destruct (try_unify_spec t1 t2) as [[Σ' ζ] HYP|_]. constructor. auto.
-      destruct (try_unify_spec t2 t1) as [[Σ' ζ] HYP|_]. constructor.
-      intros ι. specialize (HYP ι). intuition.
-      now constructor.
-    Qed.
-
-    Open Scope lazy_bool_scope.
-    Equations(noind) formula_eqb {Σ} (f1 f2 : Formula Σ) : bool :=
-      formula_eqb (formula_bool t1) (formula_bool t2) := Term_eqb t1 t2;
-      formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) with eq_dec σ τ => {
-        formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ ?(σ) t21 t22) (left eq_refl) :=
-          Term_eqb t11 t21 &&& Term_eqb t12 t22;
-       formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) (right _) := false
-      };
-      formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ τ t21 t22) with eq_dec σ τ => {
-        formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ ?(σ) t21 t22) (left eq_refl) :=
-          Term_eqb t11 t21 &&& Term_eqb t12 t22;
-        formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ τ t21 t22) (right _) := false
-      };
-      formula_eqb _ _ := false.
-
-    Lemma formula_eqb_spec {Σ} (f1 f2 : Formula Σ) :
-      BoolSpec (f1 = f2) True (formula_eqb f1 f2).
-    Proof.
-      induction f1; dependent elimination f2;
-        simp formula_eqb;
-        try (constructor; auto; fail).
-      - destruct (Term_eqb_spec t t0); constructor; intuition.
-      - destruct (eq_dec σ σ0); cbn.
-        + destruct e.
-          repeat
-            match goal with
-            | |- context[Term_eqb ?t1 ?t2] =>
-              destruct (Term_eqb_spec t1 t2); cbn;
-                try (constructor; intuition; fail)
-            end.
-        + constructor; auto.
-      - destruct (eq_dec σ σ1); cbn.
-        + destruct e.
-          repeat
-            match goal with
-            | |- context[Term_eqb ?t1 ?t2] =>
-              destruct (Term_eqb_spec t1 t2); cbn;
-                try (constructor; intuition; fail)
-            end.
-        + constructor; auto.
-    Qed.
-
-    Fixpoint try_assumption {Σ} (pc : PathCondition Σ) (fml : Formula Σ) {struct pc} : bool :=
-      match pc with
-      | nil       => false
-      | cons f pc => formula_eqb f fml ||| try_assumption pc fml
-      end.
-
-    Lemma try_assumption_spec {Σ} (pc : PathCondition Σ) (fml : Formula Σ) :
-      BoolSpec (forall ι, instpc pc ι -> inst (A := Prop) fml ι) True (try_assumption pc fml).
-    Proof.
-      induction pc; cbn.
-      - constructor; auto.
-      - destruct (formula_eqb_spec a fml).
-        + subst a. constructor. intros ι.
-          rewrite inst_pathcondition_cons.
-          intuition.
-        + destruct IHpc.
-          * constructor. intros ι.
-            rewrite inst_pathcondition_cons.
-            intuition.
-          * constructor; auto.
-    Qed.
-
-    Definition solver {Σ0} (pc : PathCondition Σ0) (fml : Formula Σ0) :
-      option { Σ1 & MultiSub Σ0 Σ1 * List Formula Σ1 }%type :=
-      match try_propagate fml with
-      | Some (existT Σ1 vareqs) => Some (existT Σ1 (vareqs , nil))
-      | None =>
-        match try_solve_formula fml with
-        | Some true => Some (existT Σ0 (multisub_id , nil))
-        | Some false => None
-        | None =>
-          if try_assumption pc fml
-          then Some (existT Σ0 (multisub_id , nil))
-          else Some (existT Σ0 (multisub_id , (cons fml nil)))
-        end
-      end.
-
-    Lemma inst_multisub_inst_sub_multi {Σ0 Σ1} (ζ01 : MultiSub Σ0 Σ1) (ι1 : SymInstance Σ1) :
-      inst_multisub ζ01 (inst (sub_multi ζ01) ι1).
-    Proof.
-        induction ζ01; cbn; auto.
-        rewrite <- inst_sub_shift.
-        rewrite <- ?inst_subst.
-        repeat
-          match goal with
-          | |- context[subst ?ζ1 ?ζ2] =>
-            change (subst ζ1 ζ2) with (sub_comp ζ2 ζ1)
-          end.
-        rewrite <- inst_lookup.
-        rewrite lookup_sub_comp.
-        rewrite lookup_sub_single_eq.
-        rewrite <- subst_sub_comp.
-        rewrite <- sub_comp_assoc.
-        rewrite sub_comp_shift_single.
-        rewrite sub_comp_id_left.
-        split; auto.
-    Qed.
-
-    Lemma solver_spec {Σ0} (pc : PathCondition Σ0) (fml : Formula Σ0) :
-      OptionSpec
-        (fun '(existT Σ1 (ζ, fmls)) =>
-           forall ι0,
-             instpc pc ι0 ->
-             (inst (A:= Prop) fml ι0 -> inst_multisub ζ ι0) /\
-             (forall ι1,
-                 ι0 = inst (sub_multi ζ) ι1 ->
-                 inst fml ι0 <-> inst fmls ι1))
-        (forall ι, instpc pc ι -> inst (A := Prop) fml ι -> False)
-        (solver pc fml).
-    Proof.
-      unfold solver.
-      destruct (try_propagate_spec fml) as [[Σ1 ζ01]|].
-      { constructor. intros ι0 Hpc. specialize (H ι0).
-        split. intuition. intros ι1 ->.
-        change (inst fml (inst (sub_multi ζ01) ι1) <-> True).
-        intuition. clear H. apply H1.
-        apply inst_multisub_inst_sub_multi.
-      }
-      clear H.
-      destruct (try_solve_formula_spec fml) as [b|].
-      { destruct b.
-        - constructor. intros ι0 Hpc. cbn. split; auto.
-          intros ? Hι. rewrite inst_sub_id in Hι. subst ι1.
-          specialize (H ι0). intuition. constructor.
-        - constructor. unfold is_true in H. intuition.
-      }
-      clear H.
-      destruct (try_assumption_spec pc fml).
-      { constructor. intros ι0 Hpc. specialize (H ι0).
-        cbn. split; auto. intros ι1 ->.
-        rewrite inst_sub_id in *. intuition.
-        constructor.
-      }
-      clear H.
-      { constructor. intros ι0 Hpc. split.
-        cbn; auto. intros ι1 ->.
-        rewrite inst_pathcondition_cons.
-        cbn. rewrite inst_sub_id.
-        intuition. constructor.
-      }
-    Qed.
-
-  End Solver.
-
   Section Chunks.
 
     (* Semi-concrete chunks *)
@@ -840,7 +591,7 @@ Module Assertions
   | asn_match_list
       {σ : Ty} (s : Term Σ (ty_list σ)) (alt_nil : Assertion Σ) (xh xt : 𝑺)
       (alt_cons : Assertion (Σ ▻ xh∶σ ▻ xt∶ty_list σ))
-  | asn_match_pair
+  | asn_match_prod
       {σ1 σ2 : Ty} (s : Term Σ (ty_prod σ1 σ2))
       (xl xr : 𝑺) (rhs : Assertion (Σ ▻ xl∶σ1 ▻ xr∶σ2))
   | asn_match_tuple
@@ -860,7 +611,7 @@ Module Assertions
   Arguments asn_match_enum [_] E _ _.
   Arguments asn_match_sum [_] σ τ _ _ _.
   Arguments asn_match_list [_] {σ} s alt_nil xh xt alt_cons.
-  Arguments asn_match_pair [_] {σ1 σ2} s xl xr rhs.
+  Arguments asn_match_prod [_] {σ1 σ2} s xl xr rhs.
   Arguments asn_match_tuple [_] {σs Δ} s p rhs.
   Arguments asn_match_record [_] R {Δ} s p rhs.
   Arguments asn_match_union [_] U s alt__ctx alt__pat alt__rhs.
@@ -873,30 +624,30 @@ Module Assertions
   Notation asn_true := (asn_bool (term_lit ty_bool true)).
   Notation asn_false := (asn_bool (term_lit ty_bool false)).
 
-  (* Instance sub_assertion : Subst Assertion := *)
-  (*   fix sub_assertion {Σ1 Σ2} (ζ : Sub Σ1 Σ2) (a : Assertion Σ1) {struct a} : Assertion Σ2 := *)
-  (*     match a with *)
-  (*     | asn_formula fml => asn_formula (subst ζ fml) *)
-  (*     | asn_chunk c => asn_chunk (subst ζ c) *)
-  (*     | asn_if b a1 a2 => asn_if (subst ζ b) (sub_assertion ζ a1) (sub_assertion ζ a2) *)
-  (*     | asn_match_enum E k alts => *)
-  (*       asn_match_enum E (subst ζ k) (fun z => sub_assertion ζ (alts z)) *)
-  (*     | asn_match_sum σ τ t xl al xr ar => *)
-  (*       asn_match_sum σ τ (subst ζ t) xl (sub_assertion (sub_up1 ζ) al) xr (sub_assertion (sub_up1 ζ) ar) *)
-  (*     | asn_match_list s anil xh xt acons => *)
-  (*       asn_match_list (subst ζ s) (sub_assertion ζ anil) xh xt (sub_assertion (sub_up1 (sub_up1 ζ)) acons) *)
-  (*     | asn_match_pair s xl xr asn => *)
-  (*       asn_match_pair (subst ζ s) xl xr (sub_assertion (sub_up1 (sub_up1 ζ)) asn) *)
-  (*     | asn_match_tuple s p rhs => *)
-  (*       asn_match_tuple (subst ζ s) p (sub_assertion _ rhs) *)
-  (*     | asn_match_record R s p rhs => *)
-  (*       asn_match_record R (subst ζ s) p (sub_assertion _ rhs) *)
-  (*     | asn_match_union U s ctx pat rhs => *)
-  (*       asn_match_union U (subst ζ s) ctx pat (fun K => sub_assertion _ (rhs K)) *)
-  (*     | asn_sep a1 a2 => asn_sep (sub_assertion ζ a1) (sub_assertion ζ a2) *)
-  (*     | asn_exist ς τ a => asn_exist ς τ (sub_assertion (sub_up1 ζ) a) *)
-  (*     | asn_debug => asn_debug *)
-  (*     end. *)
+  Global Instance sub_assertion : Subst Assertion :=
+    fix sub_assertion {Σ1} (a : Assertion Σ1) {Σ2} (ζ : Sub Σ1 Σ2) {struct a} : Assertion Σ2 :=
+      match a with
+      | asn_formula fml => asn_formula (subst fml ζ)
+      | asn_chunk c => asn_chunk (subst c ζ)
+      | asn_if b a1 a2 => asn_if (subst b ζ) (sub_assertion a1 ζ) (sub_assertion a2 ζ)
+      | asn_match_enum E k alts =>
+        asn_match_enum E (subst k ζ) (fun z => sub_assertion (alts z) ζ)
+      | asn_match_sum σ τ t xl al xr ar =>
+        asn_match_sum σ τ (subst t ζ) xl (sub_assertion al (sub_up1 ζ)) xr (sub_assertion ar (sub_up1 ζ))
+      | asn_match_list s anil xh xt acons =>
+        asn_match_list (subst s ζ) (sub_assertion anil ζ) xh xt (sub_assertion acons (sub_up1 (sub_up1 ζ)))
+      | asn_match_prod s xl xr asn =>
+        asn_match_prod (subst s ζ) xl xr (sub_assertion asn (sub_up1 (sub_up1 ζ)))
+      | asn_match_tuple s p rhs =>
+        asn_match_tuple (subst s ζ) p (sub_assertion rhs (sub_up ζ _))
+      | asn_match_record R s p rhs =>
+        asn_match_record R (subst s ζ) p (sub_assertion rhs (sub_up ζ _))
+      | asn_match_union U s ctx pat rhs =>
+        asn_match_union U (subst s ζ) ctx pat (fun K => sub_assertion (rhs K) (sub_up ζ _))
+      | asn_sep a1 a2 => asn_sep (sub_assertion a1 ζ) (sub_assertion a2 ζ)
+      | asn_exist ς τ a => asn_exist ς τ (sub_assertion a (sub_up1 ζ))
+      | asn_debug => asn_debug
+      end.
 
   Global Instance OccursCheckAssertion :
     OccursCheck Assertion :=
@@ -917,7 +668,7 @@ Module Assertions
              (occurs (Σ ▻ (xl :: σ)) b (inctx_succ bIn) alt_inl))
           (occurs (Σ ▻ (xr :: τ)) b (inctx_succ bIn) alt_inr)
       | @asn_match_list _ σ s alt_nil xh xt alt_cons => None (* TODO *)
-      | @asn_match_pair _ σ1 σ2 s xl xr rhs => None (* TODO *)
+      | @asn_match_prod _ σ1 σ2 s xl xr rhs => None (* TODO *)
       | @asn_match_tuple _ σs Δ s p rhs => None (* TODO *)
       | @asn_match_record _ R4 Δ s p rhs => None (* TODO *)
       | asn_match_union U s alt__ctx alt__pat alt__rhs => None (* TODO *)
@@ -1208,7 +959,7 @@ Module Assertions
         | nil        => interpret_assertion alt_nil ι
         | cons vh vt => interpret_assertion alt_cons (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt))
         end
-      | asn_match_pair s xl xr rhs =>
+      | asn_match_prod s xl xr rhs =>
         match inst (T := fun Σ => Term Σ _) s ι with
         | (vl,vr)    => interpret_assertion rhs (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr))
         end

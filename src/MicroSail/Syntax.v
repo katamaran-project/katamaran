@@ -417,7 +417,7 @@ Module Terms (Export termkit : TermKit).
         {σinl σinr : Ty} (e : Exp Γ (ty_sum σinl σinr))
         (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∶σinl) τ)
         (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∶σinr) τ)
-    | stm_match_pair
+    | stm_match_prod
         {σ1 σ2 : Ty} (e : Exp Γ (ty_prod σ1 σ2))
         (xl xr : 𝑿) (rhs : Stm (Γ ▻ xl∶σ1 ▻ xr∶σ2) τ)
     | stm_match_enum
@@ -469,8 +469,8 @@ Module Terms (Export termkit : TermKit).
     (*         P alt_nil -> P alt_cons -> P (stm_match_list e alt_nil alt_cons)). *)
     (*   Hypothesis (P_match_sum : forall (Γ : PCtx) (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr)) (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl ∶ σinl)%ctx) τ) (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr ∶ σinr)%ctx) τ), *)
     (*         P alt_inl -> P alt_inr -> P (stm_match_sum e alt_inl alt_inr)). *)
-    (*   Hypothesis (P_match_pair : forall (Γ : PCtx) (σ1 σ2 τ : Ty) (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿) (rhs : Stm (Γ ▻ (xl ∶ σ1)%ctx ▻ (xr ∶ σ2)%ctx) τ), *)
-    (*         P rhs -> P (stm_match_pair e rhs)). *)
+    (*   Hypothesis (P_match_prod : forall (Γ : PCtx) (σ1 σ2 τ : Ty) (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿) (rhs : Stm (Γ ▻ (xl ∶ σ1)%ctx ▻ (xr ∶ σ2)%ctx) τ), *)
+    (*         P rhs -> P (stm_match_prod e rhs)). *)
     (*   Hypothesis (P_match_enum : forall (Γ : PCtx) (E : 𝑬) (e : Exp Γ (ty_enum E)) (τ : Ty) (alts : 𝑬𝑲 E -> Stm Γ τ), *)
     (*         (forall K : 𝑬𝑲 E, P (alts K)) -> P (stm_match_enum e alts)). *)
     (*   Hypothesis (P_match_tuple : forall (Γ : PCtx) (σs : Ctx Ty) (Δ : PCtx) (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
@@ -503,7 +503,7 @@ Module Terms (Export termkit : TermKit).
     (*     | stm_fail _ _ _          => ltac:(apply P_fail; auto) *)
     (*     | stm_match_list _ _ _    => ltac:(apply P_match_list; auto) *)
     (*     | stm_match_sum _ _ _     => ltac:(apply P_match_sum; auto) *)
-    (*     | stm_match_pair _ _      => ltac:(apply P_match_pair; auto) *)
+    (*     | stm_match_prod _ _      => ltac:(apply P_match_prod; auto) *)
     (*     | stm_match_enum _ _      => ltac:(apply P_match_enum; auto) *)
     (*     | stm_match_tuple _ _ _   => ltac:(apply P_match_tuple; auto) *)
     (*     | stm_match_union _ _ _ _ => ltac:(apply P_match_union; auto) *)
@@ -532,7 +532,7 @@ Module Terms (Export termkit : TermKit).
     Global Arguments stm_fail {Γ} τ s%string.
     Global Arguments stm_match_list {Γ τ _} _ _ _ _ _.
     Global Arguments stm_match_sum {Γ τ _ _} _ _ _ _ _.
-    Global Arguments stm_match_pair {Γ τ _ _} _ _ _ _.
+    Global Arguments stm_match_prod {Γ τ _ _} _ _ _ _.
     Global Arguments stm_match_enum {Γ τ} E e%exp alts%exp.
     Global Arguments stm_match_tuple {Γ τ σs Δ} e%exp p%pat rhs%exp.
     Global Arguments stm_match_union {Γ τ} U e {alt__ctx} alt__pat alt__rhs.
@@ -566,83 +566,6 @@ Module Terms (Export termkit : TermKit).
   Bind Scope pat_scope with Pattern.
   Bind Scope pat_scope with TuplePat.
   Bind Scope pat_scope with RecordPat.
-
-  Section PatternMatching.
-
-    Definition tuple_pattern_match_env {N : Set} {T : Ty -> Set} :
-      forall {σs : Ctx Ty} {Δ : NCtx N Ty},
-        TuplePat σs Δ -> Env T σs -> NamedEnv T Δ :=
-      fix pattern_match {σs} {Δ} p {struct p} :=
-        match p with
-        | tuplepat_nil => fun _ => env_nil
-        | tuplepat_snoc p x =>
-          fun EΔ =>
-            match snocView EΔ with
-            | isSnoc E v => pattern_match p E ► (_ :: _ ↦ v)
-            end
-        end.
-
-    Definition tuple_pattern_match_env_reverse {N : Set} {T : Ty -> Set} :
-      forall {σs : Ctx Ty} {Δ : NCtx N Ty},
-        TuplePat σs Δ -> NamedEnv T Δ -> Env T σs :=
-      fix pattern_match {σs} {Δ} p {struct p} :=
-        match p with
-        | tuplepat_nil => fun _ => env_nil
-        | tuplepat_snoc p x =>
-          fun EΔ =>
-            match snocView EΔ with
-            | isSnoc E v => pattern_match p E ► (_ ↦ v)
-            end
-        end.
-
-    Fixpoint tuple_pattern_match_lit {N : Set} {σs : Ctx Ty} {Δ : NCtx N Ty}
-             (p : TuplePat σs Δ) {struct p} : Lit (ty_tuple σs) -> NamedEnv Lit Δ :=
-      match p with
-      | tuplepat_nil => fun _ => env_nil
-      | tuplepat_snoc p x =>
-        fun lit =>
-          env_snoc
-            (tuple_pattern_match_lit p (fst lit)) (x∶_)%ctx
-            (snd lit)
-      end.
-
-    Fixpoint record_pattern_match_env {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
-             (p : RecordPat rfs Δ) {struct p} : NamedEnv V rfs -> NamedEnv V Δ :=
-      match p with
-      | recordpat_nil => fun _ => env_nil
-      | recordpat_snoc p rf x =>
-        fun E =>
-          env_snoc
-            (record_pattern_match_env p (env_tail E)) (x∶_)
-            (env_lookup E inctx_zero)
-      end.
-
-    Fixpoint record_pattern_match_env_reverse {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
-             (p : RecordPat rfs Δ) {struct p} :  NamedEnv V Δ -> NamedEnv V rfs :=
-      match p with
-      | recordpat_nil => fun _ => env_nil
-      | recordpat_snoc p rf x =>
-        fun E =>
-          env_snoc
-            (record_pattern_match_env_reverse p (env_tail E)) (rf∶_)
-            (env_lookup E inctx_zero)
-      end.
-
-    Definition record_pattern_match_lit {N : Set} {R} {Δ : NCtx N Ty}
-      (p : RecordPat (𝑹𝑭_Ty R) Δ) : Lit (ty_record R) -> NamedEnv Lit Δ :=
-      fun v => record_pattern_match_env p (𝑹_unfold v).
-
-    Definition pattern_match_lit {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
-      Lit σ -> NamedEnv Lit Δ :=
-      match p with
-      | pat_var x => fun v => env_snoc env_nil (x∶_) v
-      | pat_unit => fun _ => env_nil
-      | pat_pair x y => fun '(u , v) => env_snoc (env_snoc env_nil (x∶_) u) (y∶_) v
-      | pat_tuple p => tuple_pattern_match_lit p
-      | pat_record p => record_pattern_match_lit p
-      end.
-
-  End PatternMatching.
 
   (* Record FunDef (Δ : PCtx) (τ : Ty) : Set := *)
   (*   { fun_body : Stm Δ τ }. *)
@@ -978,6 +901,98 @@ Module Terms (Export termkit : TermKit).
   End SymbolicTerms.
   Bind Scope exp_scope with Term.
 
+  Section PatternMatching.
+
+    Definition tuple_pattern_match_env {N : Set} {T : Ty -> Set} :
+      forall {σs : Ctx Ty} {Δ : NCtx N Ty},
+        TuplePat σs Δ -> Env T σs -> NamedEnv T Δ :=
+      fix pattern_match {σs} {Δ} p {struct p} :=
+        match p with
+        | tuplepat_nil => fun _ => env_nil
+        | tuplepat_snoc p x =>
+          fun EΔ =>
+            match snocView EΔ with
+            | isSnoc E v => pattern_match p E ► (_ :: _ ↦ v)
+            end
+        end.
+
+    Definition tuple_pattern_match_env_reverse {N : Set} {T : Ty -> Set} :
+      forall {σs : Ctx Ty} {Δ : NCtx N Ty},
+        TuplePat σs Δ -> NamedEnv T Δ -> Env T σs :=
+      fix pattern_match {σs} {Δ} p {struct p} :=
+        match p with
+        | tuplepat_nil => fun _ => env_nil
+        | tuplepat_snoc p x =>
+          fun EΔ =>
+            match snocView EΔ with
+            | isSnoc E v => pattern_match p E ► (_ ↦ v)
+            end
+        end.
+
+    Fixpoint tuple_pattern_match_lit {N : Set} {σs : Ctx Ty} {Δ : NCtx N Ty}
+             (p : TuplePat σs Δ) {struct p} : Lit (ty_tuple σs) -> NamedEnv Lit Δ :=
+      match p with
+      | tuplepat_nil => fun _ => env_nil
+      | tuplepat_snoc p x =>
+        fun lit =>
+          env_snoc
+            (tuple_pattern_match_lit p (fst lit)) (x∶_)%ctx
+            (snd lit)
+      end.
+
+    Fixpoint record_pattern_match_env {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+             (p : RecordPat rfs Δ) {struct p} : NamedEnv V rfs -> NamedEnv V Δ :=
+      match p with
+      | recordpat_nil => fun _ => env_nil
+      | recordpat_snoc p rf x =>
+        fun E =>
+          env_snoc
+            (record_pattern_match_env p (env_tail E)) (x∶_)
+            (env_lookup E inctx_zero)
+      end.
+
+    Fixpoint record_pattern_match_env_reverse {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+             (p : RecordPat rfs Δ) {struct p} :  NamedEnv V Δ -> NamedEnv V rfs :=
+      match p with
+      | recordpat_nil => fun _ => env_nil
+      | recordpat_snoc p rf x =>
+        fun E =>
+          env_snoc
+            (record_pattern_match_env_reverse p (env_tail E)) (rf∶_)
+            (env_lookup E inctx_zero)
+      end.
+
+    Definition record_pattern_match_lit {N : Set} {R} {Δ : NCtx N Ty}
+      (p : RecordPat (𝑹𝑭_Ty R) Δ) : Lit (ty_record R) -> NamedEnv Lit Δ :=
+      fun v => record_pattern_match_env p (𝑹_unfold v).
+
+    Definition pattern_match_lit {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
+      Lit σ -> NamedEnv Lit Δ :=
+      match p with
+      | pat_var x => fun v => env_snoc env_nil (x∶_) v
+      | pat_unit => fun _ => env_nil
+      | pat_pair x y => fun '(u , v) => env_snoc (env_snoc env_nil (x∶_) u) (y∶_) v
+      | pat_tuple p => tuple_pattern_match_lit p
+      | pat_record p => record_pattern_match_lit p
+      end.
+
+    Definition pattern_match_env_reverse {N : Set} {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
+      NamedEnv (Term Σ) Δ -> Term Σ σ :=
+      match p with
+      | pat_var x    => fun Ex => match snocView Ex with isSnoc _ t => t end
+      | pat_unit     => fun _ => term_lit ty_unit tt
+      | pat_pair x y => fun Exy => match snocView Exy with
+                                     isSnoc Ex ty =>
+                                     match snocView Ex with
+                                       isSnoc _ tx => term_binop binop_pair tx ty
+                                     end
+                                   end
+      | pat_tuple p  => fun EΔ => term_tuple (tuple_pattern_match_env_reverse p EΔ)
+      | pat_record p => fun EΔ => term_record _ (record_pattern_match_env_reverse p EΔ)
+      end.
+
+  End PatternMatching.
+
   Section SymbolicSubstitutions.
 
     Definition Sub (Σ1 Σ2 : LCtx) : Set :=
@@ -1174,15 +1189,16 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma sub_comp_shift {Σ0 Σ1 b} (bIn : b ∈ Σ0) (ζ : Sub Σ0 Σ1) :
-      subst (sub_shift bIn) ζ = env_remove' b ζ bIn.
+      subst (sub_shift bIn) ζ = env_remove b ζ bIn.
     Proof.
+      rewrite env_remove_remove'.
       destruct b as [x σ]. apply env_lookup_extensional. intros [y τ] yIn.
       unfold subst, SubstEnv, sub_shift, env_remove'; cbn.
       now rewrite env_lookup_map, ?env_lookup_tabulate.
     Qed.
 
-    Lemma sub_comp_wk1_comm {Σ0 Σ1 x τ} (ζ : Sub Σ0 Σ1) :
-      subst sub_wk1 (sub_up1 ζ) = subst ζ (sub_wk1 (b:=(x::τ))).
+    Lemma sub_comp_wk1_comm {Σ0 Σ1 b} (ζ : Sub Σ0 Σ1) :
+      subst sub_wk1 (sub_up1 ζ) = subst ζ (sub_wk1 (b:=b)).
     Proof. now rewrite sub_comp_wk1_tail. Qed.
 
     Lemma sub_snoc_comp {Σ1 Σ2 Σ3 x τ v} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) :
@@ -1595,8 +1611,8 @@ Module Terms (Export termkit : TermKit).
       now rewrite env_map_tabulate, env_lookup_tabulate.
     Qed.
 
-    Lemma inst_sub_snoc {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) ς τ (t : Term Σ1 τ) :
-      inst (sub_snoc ζ (ς,τ) t) ι = env_snoc (inst ζ ι) (ς,τ) (inst t ι).
+    Lemma inst_sub_snoc {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) b (t : Term Σ1 (snd b)) :
+      inst (sub_snoc ζ b t) ι = env_snoc (inst ζ ι) b (inst t ι).
     Proof. reflexivity. Qed.
 
     Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : SymInstance Σ2) (v : Lit (snd b)) :
@@ -1607,17 +1623,19 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma inst_sub_shift {Σ} (ι : SymInstance Σ) {b} (bIn : b ∈ Σ) :
-      inst (sub_shift bIn) ι = env_remove' b ι bIn.
+      inst (sub_shift bIn) ι = env_remove b ι bIn.
     Proof.
+      rewrite env_remove_remove'.
       unfold env_remove', sub_shift, inst; cbn.
       apply env_lookup_extensional. intros [y τ] yIn.
       now rewrite env_lookup_map, ?env_lookup_tabulate.
     Qed.
 
     Lemma inst_sub_single {Σ} (ι : SymInstance Σ) {x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
-      inst t (env_remove' _ ι xIn) = env_lookup ι xIn ->
-      inst (sub_single xIn t) (env_remove' _ ι xIn) = ι.
+      inst t (env_remove _ ι xIn) = env_lookup ι xIn ->
+      inst (sub_single xIn t) (env_remove _ ι xIn) = ι.
     Proof.
+      rewrite env_remove_remove'.
       intros HYP. apply env_lookup_extensional. intros [y τ] yIn.
       unfold inst, sub_single; cbn.
       rewrite env_lookup_map, env_lookup_tabulate.
@@ -1648,51 +1666,6 @@ Module Terms (Export termkit : TermKit).
     Global Arguments lift {T A _ Σ} !_.
 
   End Instantiation.
-
-  Section MultiSubs.
-
-    Inductive MultiSub (Σ : LCtx) : LCtx -> Set :=
-    | multisub_id        : MultiSub Σ Σ
-    | multisub_cons {Σ' x σ} (xIn : (x::σ) ∈ Σ) (t : Term (Σ - (x::σ)) σ)
-                    (ζ : MultiSub (Σ - (x::σ)) Σ')
-                    : MultiSub Σ Σ'.
-
-    Global Arguments multisub_id {_}.
-    Global Arguments multisub_cons {_ _} x {_ _} t ζ.
-
-    Fixpoint sub_multi {Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : Sub Σ1 Σ2 :=
-      match ζ with
-      | multisub_id         => sub_id _
-      | multisub_cons x t ζ => subst (sub_single _ t) (sub_multi ζ)
-      end.
-
-    Fixpoint sub_multishift {Σ1 Σ2} (ζ : MultiSub Σ1 Σ2) : Sub Σ2 Σ1 :=
-      match ζ with
-      | multisub_id         => sub_id _
-      | multisub_cons x t ζ => subst (sub_multishift ζ) (sub_shift _)
-      end.
-
-    Fixpoint inst_multisub {Σ0 Σ1} (ζ : MultiSub Σ0 Σ1) (ι : SymInstance Σ0) : Prop :=
-      match ζ with
-      | multisub_id => True
-      | @multisub_cons _ Σ' x σ xIn t ζ0 =>
-        let ι' := env_remove' (x :: σ) ι xIn in
-        env_lookup ι xIn = inst t ι' /\ inst_multisub ζ0 ι'
-      end.
-
-    Lemma inst_multi {Σ1 Σ2} (ι1 : SymInstance Σ1) (ζ : MultiSub Σ1 Σ2) :
-      inst_multisub ζ ι1 ->
-      inst (sub_multi ζ) (inst (sub_multishift ζ) ι1) = ι1.
-    Proof.
-      intros Hζ. induction ζ; cbn.
-      - now rewrite ?inst_sub_id.
-      - cbn in Hζ. destruct Hζ as [? Hζ]. rewrite <- inst_sub_shift in Hζ.
-        rewrite ?inst_subst.
-        rewrite IHζ; auto. rewrite inst_sub_shift.
-        now rewrite inst_sub_single.
-    Qed.
-
-  End MultiSubs.
 
   Section Utils.
 
@@ -2285,7 +2258,7 @@ Module Terms (Export termkit : TermKit).
     (stm_match_sum e p1%string rhs1 p2%string rhs2) (at level 100, only parsing) : exp_scope.
 
   Notation "'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' | '(' fst ',' snd ')' => rhs 'end'" :=
-    (@stm_match_pair _ σ1 σ2 _ e fst%string snd%string rhs)
+    (@stm_match_prod _ σ1 σ2 _ e fst%string snd%string rhs)
     (at level 100, fst pattern, snd pattern, format
      "'[hv' 'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' '/' | '(' fst ',' snd ')' => rhs '/' 'end' ']'"
     ) : exp_scope.

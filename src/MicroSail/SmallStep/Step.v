@@ -151,10 +151,10 @@ Module SmallStep
                 | inr v => stm_block (env_snoc env_nil (xinr::σinr) v) alt_inr
                 end
       ⟩
-  | step_stm_match_pair
+  | step_stm_match_prod
       {σ1 σ2 : Ty} (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿)
       (rhs : Stm (Γ ▻ (xl :: σ1) ▻ (xr :: σ2)) τ) :
-      ⟨ γ , μ , δ , stm_match_pair e xl xr rhs ⟩ --->
+      ⟨ γ , μ , δ , stm_match_prod e xl xr rhs ⟩ --->
       ⟨ γ , μ , δ , let (vl , vr) := eval e δ in
                 stm_block (env_snoc (env_snoc env_nil (xl::σ1) vl) (xr::σ2) vr) rhs
       ⟩
@@ -259,7 +259,7 @@ Module SmallStep
         | @stm_lit            => idtac
         | @stm_match_sum      => idtac
         | @stm_match_list     => idtac
-        | @stm_match_pair     => idtac
+        | @stm_match_prod     => idtac
         | @stm_match_enum     => idtac
         | @stm_match_tuple    => idtac
         | @stm_match_union    => idtac

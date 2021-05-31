@@ -713,6 +713,7 @@ Module MinCapsMutators :=
     MinCapsAssertionKit
     MinCapsSymbolicContractKit.
 Import MinCapsMutators.
+Import SMut.
 
 Local Ltac solve :=
   repeat
@@ -720,14 +721,14 @@ Local Ltac solve :=
        match goal with
        | H: _ /\ _ |- _ => destruct H
        | H: Empty_set |- _ => destruct H
-       | |- forall _, _ => intro
+       | |- forall _, _ => cbn [Lit snd]; intro
        | |- False \/ _ =>  right
        | |- _ \/ False =>  left
        | |- _ /\ _ => constructor
        | |- VerificationCondition _ =>
          constructor;
-         cbv [Path.safe env_remove env_lookup inctx_case_snoc eval_binop is_true
-              inst instantiate_term instantiate_formula inst_term inst_formula];
+         cbv [SPath.safe env_remove env_lookup inctx_case_snoc eval_binop is_true
+              inst instantiate_term instantiate_formula inst_term inst_formula Env_rect];
          cbn
        | |- Obligation _ _ _ => constructor; cbn
        | |- Debug _ _ => constructor
@@ -736,7 +737,7 @@ Local Ltac solve :=
        | |- context[Z.leb ?x ?y] =>
          destruct (Z.leb_spec x y)
        end;
-     cbn [List.length];
+     cbn [List.length andb is_true Lit snd];
      subst; try congruence; try lia;
      auto
     ).
@@ -757,56 +758,56 @@ Local Notation asn_match_cap c p b e a asn :=
     "cap_cursor" a)
     asn).
 
-Lemma valid_contract_read_reg : ValidContractDynMut sep_contract_read_reg fun_read_reg.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_read_reg : ValidContractEvarEnv sep_contract_read_reg fun_read_reg.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_read_reg_cap : ValidContractDynMut sep_contract_read_reg_cap fun_read_reg_cap.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_read_reg_cap : ValidContractEvarEnv sep_contract_read_reg_cap fun_read_reg_cap.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_read_reg_num : ValidContractDynMut sep_contract_read_reg_num fun_read_reg_num.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_read_reg_num : ValidContractEvarEnv sep_contract_read_reg_num fun_read_reg_num.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_write_reg : ValidContractDynMut sep_contract_write_reg fun_write_reg.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_write_reg : ValidContractEvarEnv sep_contract_write_reg fun_write_reg.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_next_pc : ValidContractDynMut sep_contract_next_pc fun_next_pc.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_next_pc : ValidContractEvarEnv sep_contract_next_pc fun_next_pc.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_add_pc : ValidContractDynMut sep_contract_add_pc fun_add_pc.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_add_pc : ValidContractEvarEnv sep_contract_add_pc fun_add_pc.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_update_pc : ValidContractDynMut sep_contract_update_pc fun_update_pc.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_update_pc : ValidContractEvarEnv sep_contract_update_pc fun_update_pc.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_read_mem : ValidContractDynMut sep_contract_read_mem fun_read_mem.
-Proof. compute; solve. Qed.
+Lemma valid_contract_read_mem : ValidContractEvarEnv sep_contract_read_mem fun_read_mem.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_write_mem : ValidContractDynMut sep_contract_write_mem fun_write_mem.
-Proof. compute; solve. Qed.
+Lemma valid_contract_write_mem : ValidContractEvarEnv sep_contract_write_mem fun_write_mem.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_read_allowed : ValidContractDynMut sep_contract_read_allowed fun_read_allowed.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_read_allowed : ValidContractEvarEnv sep_contract_read_allowed fun_read_allowed.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_write_allowed : ValidContractDynMut sep_contract_write_allowed fun_write_allowed.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_write_allowed : ValidContractEvarEnv sep_contract_write_allowed fun_write_allowed.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_upper_bound : ValidContractDynMut sep_contract_upper_bound fun_upper_bound.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_upper_bound : ValidContractEvarEnv sep_contract_upper_bound fun_upper_bound.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_within_bounds : ValidContractDynMut sep_contract_within_bounds fun_within_bounds.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_within_bounds : ValidContractEvarEnv sep_contract_within_bounds fun_within_bounds.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_jr : ValidContractDynMut sep_contract_exec_jr fun_exec_jr.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_jr : ValidContractEvarEnv sep_contract_exec_jr fun_exec_jr.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_j : ValidContractDynMut sep_contract_exec_j fun_exec_j.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_j : ValidContractEvarEnv sep_contract_exec_j fun_exec_j.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_jal : ValidContractDynMut sep_contract_exec_jal fun_exec_jal.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_jal : ValidContractEvarEnv sep_contract_exec_jal fun_exec_jal.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_jalr : ValidContractDynMut sep_contract_exec_jalr fun_exec_jalr.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_jalr : ValidContractEvarEnv sep_contract_exec_jalr fun_exec_jalr.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
 (*
 Ltac debug_satisfy_forget_post :=
@@ -843,29 +844,29 @@ Close Scope exp.
 Close Scope env.
 *)
 
-Lemma valid_contract_exec_bnez : ValidContractDynMut sep_contract_exec_bnez fun_exec_bnez.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_bnez : ValidContractEvarEnv sep_contract_exec_bnez fun_exec_bnez.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_mv : ValidContractDynMut sep_contract_exec_mv fun_exec_mv.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_mv : ValidContractEvarEnv sep_contract_exec_mv fun_exec_mv.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_ld : ValidContractDynMut sep_contract_exec_ld fun_exec_ld.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_ld : ValidContractEvarEnv sep_contract_exec_ld fun_exec_ld.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_sd : ValidContractDynMut sep_contract_exec_sd fun_exec_sd.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_sd : ValidContractEvarEnv sep_contract_exec_sd fun_exec_sd.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_addi : ValidContractDynMut sep_contract_exec_addi fun_exec_addi.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_addi : ValidContractEvarEnv sep_contract_exec_addi fun_exec_addi.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_add : ValidContractDynMut sep_contract_exec_add fun_exec_add.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_add : ValidContractEvarEnv sep_contract_exec_add fun_exec_add.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_ret : ValidContractDynMut sep_contract_exec_ret fun_exec_ret.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_ret : ValidContractEvarEnv sep_contract_exec_ret fun_exec_ret.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_exec_instr : ValidContractDynMut sep_contract_exec_instr fun_exec_instr.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_instr : ValidContractEvarEnv sep_contract_exec_instr fun_exec_instr.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
 Definition debug_config : Config :=
   {| config_debug_function _ _ f :=
@@ -875,8 +876,8 @@ Definition debug_config : Config :=
        end
   |}.
 
-Lemma valid_contract_exec : ValidContractDynMut sep_contract_exec fun_exec.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec : ValidContractEvarEnv sep_contract_exec fun_exec.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
-Lemma valid_contract_loop : ValidContractDynMut sep_contract_loop fun_loop.
-Proof. apply dynmutevarreflect_sound; reflexivity. Qed.
+Lemma valid_contract_loop : ValidContractEvarEnv sep_contract_loop fun_loop.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.

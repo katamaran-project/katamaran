@@ -988,14 +988,14 @@ Module IrisSoundness
       by iFrame.
   Qed.
 
-  Lemma iris_rule_stm_match_pair {Γ} (δ : LocalStore Γ)
+  Lemma iris_rule_stm_match_prod {Γ} (δ : LocalStore Γ)
         {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
         (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl , σ1)) (xr , σ2)) τ)
         (P : iProp Σ) (Q : Lit τ -> LocalStore Γ -> iProp Σ) :
         ⊢ ((∀ vl vr,
             semTriple (env_snoc (env_snoc δ (xl, σ1) vl) (xr, σ2) vr)
               (P ∧ bi_pure (eval e δ = (vl,vr))) rhs (fun v δ' => Q v (env_tail (env_tail δ')))) -∗
-          semTriple δ P (stm_match_pair e xl xr rhs) Q)%I.
+          semTriple δ P (stm_match_prod e xl xr rhs) Q)%I.
   Proof.
     iIntros "trippair P".
     rewrite wp_unfold.
@@ -1492,7 +1492,7 @@ Module IrisSoundness
     - by iApply iris_rule_stm_fail.
     - by iApply iris_rule_stm_match_list.
     - by iApply iris_rule_stm_match_sum.
-    - by iApply iris_rule_stm_match_pair.
+    - by iApply iris_rule_stm_match_prod.
     - by iApply iris_rule_stm_match_enum.
     - by iApply iris_rule_stm_match_tuple.
     - by iApply iris_rule_stm_match_union.

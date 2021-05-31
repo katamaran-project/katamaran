@@ -427,6 +427,7 @@ Module SepContracts.
       ExampleAssertionKit
       ExampleSymbolicContractKit.
   Import ExampleMutators.
+  Import SMut.
 
   Local Ltac solve :=
     repeat
@@ -453,11 +454,11 @@ Module SepContracts.
        auto
       ).
 
-  Lemma valid_contract_length {σ} : ValidContract (@sep_contract_length σ) (Pi length).
+  Lemma valid_contract_length {σ} : ValidContractEvarEnv (@sep_contract_length σ) (Pi length).
   Proof. solve; lia. Qed.
   Hint Resolve valid_contract_length : contracts.
 
-  Lemma valid_contract_cmp : ValidContract sep_contract_cmp (Pi cmp).
+  Lemma valid_contract_cmp : ValidContractEvarEnv sep_contract_cmp (Pi cmp).
   Proof. solve. Qed.
   Hint Resolve valid_contract_cmp : contracts.
 
