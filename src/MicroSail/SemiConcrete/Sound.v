@@ -132,7 +132,7 @@ Module Soundness
     Lemma assert_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
       (POST : LocalStore Γ -> L) :
       forall δ h,
-        assert_formula ι fml
+        assert_formula (inst fml ι)
           (fun _ => liftP POST) δ h ->
       interpret_scheap h ⊢ !! inst fml ι ∧ emp ✱ POST δ.
     Proof.
@@ -183,10 +183,12 @@ Module Soundness
         consume (Γ := Γ) ι asn P δ h ->
         consume (Γ := Γ) ι asn Q δ h.
     Proof.
-      induction asn; cbn.
-      - unfold assert_formula. intuition.
-      - apply consume_chunk_monotonic.
-      - destruct (inst b ι); cbn; eauto.
+      induction asn; cbn; intros * PQ *.
+      - unfold assert_formula, dijkstra, CDijk.assert_formula.
+        intuition.
+      - now apply consume_chunk_monotonic.
+      - rewrite ?wp_angelic_match_bool.
+        destruct (inst b ι); cbn; eauto.
       - unfold match_enum. eauto.
       - destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
@@ -194,9 +196,9 @@ Module Soundness
       - eauto.
       - unfold match_record. eauto.
       - destruct (𝑼_unfold (inst s ι)); eauto.
-      - intros * PQ *. unfold bind_right, bind.
+      - unfold bind_right, bind.
         apply IHasn1; eauto.
-      - intros * PQ *. unfold bind, angelic.
+      - unfold bind, angelic.
         intros [v ?]; exists v; eauto.
       - unfold pure; eauto.
     Qed.
@@ -213,7 +215,8 @@ Module Soundness
       revert POST. induction asn; cbn - [inst inst_term]; intros POST δ1 h1.
       - now apply assert_formula_sound.
       - destruct c; now apply consume_chunk_sound.
-      - destruct (inst b ι); auto.
+      - rewrite wp_angelic_match_bool.
+        destruct (inst b ι); auto.
       - auto.
       - destruct (inst s ι); auto.
       - destruct (inst s ι); auto.

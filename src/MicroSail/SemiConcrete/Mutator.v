@@ -318,27 +318,37 @@ Module SemiConcrete
 
       Definition assume_formula {Γ} (fml : Prop) : CMut Γ Γ unit :=
         dijkstra (CDijk.assume_formula fml).
-      (* Definition assume_term {Γ Σ} (ι : SymInstance Σ) (t : Term Σ ty_bool) : CMut Γ Γ unit := *)
-      (*   assume_formula ι (formula_bool t). *)
-      Definition assert_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : CMut Γ Γ unit :=
-        fun POST δ h => inst fml ι /\ POST tt δ h.
-      Definition assert_formulak {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fml : Formula Σ) (k : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-        fun POST δ h => inst fml ι /\ k POST δ h.
+      Definition assert_formula {Γ} (fml : Prop) : CMut Γ Γ unit :=
+        dijkstra (CDijk.assert_formula fml).
       Definition assert_formulas {Γ Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
         fun POST δ h => inst fmls ι /\ POST tt δ h.
-
-        (* fix assert fmls := *)
-        (*   match fmls with *)
-        (*   | nil => pure tt *)
-        (*   | cons fml fmls => assert fmls ;; assert_formula ι fml *)
-        (*   end. *)
-      Definition assert_formulask {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) (k : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-        fold_right (assert_formulak ι) k fmls.
-
 
     End AssumeAssert.
 
     Section PatternMatching.
+
+      Definition angelic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
+      Proof.
+        apply angelic_binary.
+        - eapply bind_right.
+          apply assert_formula.
+          apply (is_true v).
+          apply kt.
+        - eapply bind_right.
+          apply assert_formula.
+          apply (is_true (negb v)).
+          apply kf.
+      Defined.
+
+      Lemma wp_angelic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) :
+        forall POST δ h,
+          angelic_match_bool v kt kf POST δ h <->
+          if v then kt POST δ h else kf POST δ h.
+      Proof.
+        cbv [angelic_match_bool angelic_binary bind_right bind assert_formula
+             dijkstra CDijk.assert_formula is_true negb].
+        destruct v; intuition; discriminate.
+      Qed.
 
       Definition demonic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
       Proof.
@@ -353,8 +363,15 @@ Module SemiConcrete
           apply kf.
       Defined.
 
-      Definition match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-        if v then kt else kf.
+      Lemma wp_demonic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) :
+        forall POST δ h,
+          demonic_match_bool v kt kf POST δ h <->
+          if v then kt POST δ h else kf POST δ h.
+      Proof.
+        cbv [demonic_match_bool demonic_binary bind_right bind assume_formula
+             dijkstra CDijk.assume_formula is_true negb].
+        destruct v; intuition; discriminate.
+      Qed.
 
       Definition match_sum {A} {Γ1 Γ2 σ τ} (v : Lit σ + Lit τ)
         (sinl : Lit σ -> CMut Γ1 Γ2 A) (sinr : Lit τ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
@@ -471,9 +488,9 @@ Module SemiConcrete
 
       Fixpoint consume {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
         match asn with
-        | asn_formula fml => assert_formula ι fml
+        | asn_formula fml => assert_formula (inst fml ι)
         | asn_chunk c     => consume_chunk (inst c ι)
-        | asn_if b a1 a2  => match_bool (inst b ι) (consume ι a1) (consume ι a2)
+        | asn_if b a1 a2  => angelic_match_bool (inst b ι) (consume ι a1) (consume ι a2)
         | asn_match_enum E k alts =>
           match_enum
             (inst (T := fun Σ => Term Σ _) k ι)
@@ -782,19 +799,6 @@ Module SemiConcrete
   (*     - clear. intuition. constructor. *)
   (*     - rewrite inst_pathcondition_cons, cmut_wp_assert_formulak, IHfmls. *)
   (*       clear. intuition. *)
-  (*   Qed. *)
-
-  (*   Lemma cmut_wp_demonic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : *)
-  (*     forall POST δ h, *)
-  (*       cmut_wp (cmut_demonic_match_bool v kt kf) POST δ h <-> *)
-  (*       if v *)
-  (*       then cmut_wp kt POST δ h *)
-  (*       else cmut_wp kf POST δ h. *)
-  (*   Proof. *)
-  (*     intros. *)
-  (*     cbv [cmut_wp cmut_demonic_match_bool cmut_bind_right cmut_demonic_binary *)
-  (*                  cmut_assume_formula cmut_bind cmut_dijkstra CDijk.assume_formula is_true negb]. *)
-  (*     destruct v; intuition; discriminate. *)
   (*   Qed. *)
 
   (*   Lemma cmut_wp_match_sum {A Γ1 Γ2 σ τ} (v : Lit σ + Lit τ) *)

@@ -1938,11 +1938,6 @@ Module Mutators
         ⊢ Formula -> □(SMut Γ Γ Unit) :=
         fun w0 fml => assume_formula <$> persist fml.
 
-      (* Definition smutk_assume_formula {A Γ1 Γ2} : *)
-      (*   ⊢ Formula -> □(SMut Γ1 Γ2 A) -> SMut Γ1 Γ2 A := *)
-      (*   fun w0 fml m δ0 h0 => *)
-      (*     assume_formulak fml (m <*> persist δ0 <*> persist h0). *)
-
       Definition assert_formula {Γ} :
         ⊢ Formula -> SMut Γ Γ Unit :=
         fun w0 fml POST δ0 h0 =>
@@ -1957,28 +1952,9 @@ Module Mutators
                |} fml)
             POST δ0 h0.
 
-      (* Definition smutk_assert_formula {A Γ1 Γ2} : *)
-      (*   ⊢ Formula -> □(SMut Γ1 Γ2 A) -> SMut Γ1 Γ2 A := *)
-      (*   fun w0 fml m δ0 h0 => *)
-      (*     assert_formulak *)
-      (*       {| msg_function        := "smutk_assert_formula"; *)
-      (*          msg_message         := "Proof obligation"; *)
-      (*          msg_program_context := Γ1; *)
-      (*          msg_pathcondition   := wco w0; *)
-      (*          msg_localstore      := δ0; *)
-      (*          msg_heap            := h0; *)
-      (*       |} *)
-      (*       fml *)
-      (*       (m <*> persist δ0 <*> persist h0). *)
-
-      (* Definition smut_box_assert_formula {Γ} : *)
-      (*   ⊢ Formula -> □(SMut Γ Γ Unit). *)
-      (* (* Proof. *) *)
-      (* (*   intros w0 fml w1 ω01. *) *)
-      (* (*   apply smut_assert_formula. *) *)
-      (* (*   apply (subst fml ω01). *) *)
-      (*   (* Defined. *) *)
-      (* Admitted. *)
+      Definition box_assert_formula {Γ} :
+        ⊢ Formula -> □(SMut Γ Γ Unit) :=
+        fun w0 fml => assert_formula <$> persist fml.
 
       Definition assert_formulas {Γ} :
         ⊢ List Formula -> SMut Γ Γ Unit.
@@ -1997,7 +1973,7 @@ Module Mutators
 
     Section PatternMatching.
 
-      Definition angelic_match_bool {AT} {Γ1 Γ2} :
+      Definition angelic_match_bool' {AT} {Γ1 Γ2} :
         ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t kt kf.
@@ -2027,6 +2003,20 @@ Module Mutators
           apply (formula_bool (term_not t)).
           apply kf.
       Defined.
+
+      Definition angelic_match_bool {AT} {Γ1 Γ2} :
+        ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT :=
+        fun w0 t kt kf =>
+          match term_get_lit t with
+          | Some true => T kt
+          | Some false => T kf
+          | None => angelic_match_bool' t kt kf
+          end.
+
+      Definition box_angelic_match_bool {AT} {Γ1 Γ2} :
+        ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+        fun w0 t kt kf =>
+          angelic_match_bool <$> persist__term t <*> four kt <*> four kf.
 
       Definition demonic_match_bool' {AT} {Γ1 Γ2} :
         ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
