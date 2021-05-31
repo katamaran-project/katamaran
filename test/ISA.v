@@ -592,16 +592,17 @@ Module ISAMutators :=
     ISAAssertionKit
     ISASymbolicContractKit.
 Import ISAMutators.
+Import SMut.
 
-Lemma valid_contract_rX : ValidContractDynMutReflect sep_contract_rX fun_rX.
+Lemma valid_contract_rX : ValidContractEvarEnvReflect sep_contract_rX fun_rX.
 Proof. Time (now compute). Qed.
 Hint Resolve valid_contract_rX : contracts.
 
-Lemma valid_contract_wX : ValidContractDynMutReflect sep_contract_wX fun_wX.
+Lemma valid_contract_wX : ValidContractEvarEnvReflect sep_contract_wX fun_wX.
 Proof. Time (now compute). Qed.
 Hint Resolve valid_contract_wX : contracts.
 
-Lemma valid_contract_swapreg : ValidContractDynMutReflect sep_contract_swapreg fun_swapreg.
+Lemma valid_contract_swapreg : ValidContractEvarEnvReflect sep_contract_swapreg fun_swapreg.
 Proof. Time (now compute). Qed.
 Hint Resolve valid_contract_swapreg : contracts.
 

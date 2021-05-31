@@ -293,7 +293,7 @@ Module WLP
       | inl v => push _ v *> WLP altinl <* pop
       | inr v => push _ v *> WLP altinr <* pop
       end
-    | stm_match_pair e xl xr rhs =>
+    | stm_match_prod e xl xr rhs =>
       meval e !>>= fun v =>
       let (vl , vr) := v in
       push _ vl *> push _ vr *> WLP rhs <* pop <* pop

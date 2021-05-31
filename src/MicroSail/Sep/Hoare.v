@@ -166,14 +166,14 @@ Module ProgramLogic
         (forall (v : Lit σl), env_snoc δ (xl::σl) v ⊢ ⦃ P ∧ !! (eval e δ = inl v) ⦄ alt_inl ⦃ fun v' δ' => Q v' (env_tail δ') ⦄) ->
         (forall (v : Lit σr), env_snoc δ (xr::σr) v ⊢ ⦃ P ∧ !! (eval e δ = inr v) ⦄ alt_inr ⦃ fun v' δ' => Q v' (env_tail δ') ⦄) ->
         δ ⊢ ⦃ P ⦄ stm_match_sum e xl alt_inl xr alt_inr ⦃ Q ⦄
-    | rule_stm_match_pair
+    | rule_stm_match_prod
         {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty_prod σl σr)}
         {rhs : Stm (Γ ▻ (xl::σl) ▻ (xr::σr)) τ}
         {P : L} {Q : Lit τ -> LocalStore Γ -> L} :
         (forall (vl : Lit σl) (vr : Lit σr),
             env_snoc (env_snoc δ (xl::σl) vl) (xr::σr) vr ⊢
               ⦃ P ∧ !! (eval e δ = (vl,vr)) ⦄ rhs ⦃ fun v δ' => Q v (env_tail (env_tail δ')) ⦄) ->
-        δ ⊢ ⦃ P ⦄ stm_match_pair e xl xr rhs ⦃ Q ⦄
+        δ ⊢ ⦃ P ⦄ stm_match_prod e xl xr rhs ⦃ Q ⦄
     | rule_stm_match_enum
         {E : 𝑬} (e : Exp Γ (ty_enum E))
         (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
