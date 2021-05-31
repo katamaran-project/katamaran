@@ -294,38 +294,33 @@ Module Soundness
       call_contract c δΔ (fun a => liftP (POST a)) δΓ h ->
       CTriple δΔ (interpret_scheap h) (fun v => POST v δΓ) c.
     Proof.
-      (* destruct c as [Σe δe req result ens]. *)
-      (* unfold call_contract. unfold bind. rewrite cmut_wp_bind. *)
-      (* rewrite cmut_wp_angelic_ctx. *)
-      (* intros [ι Hwp]; revert Hwp. *)
-      (* rewrite cmut_wp_bind_right. *)
-      (* rewrite cmut_wp_assert_formulas. *)
-      (* intros [Hfmls Hwp]; revert Hwp. *)
-      (* rewrite cmut_wp_bind_right. *)
-      (* pose (fun δ => ∀ v, interpret_assertion ens (env_snoc ι (result,_) v) -✱ POST v δ) as frame. *)
-      (* intros HYP. *)
-      (* assert (interpret_scheap h ⊢ frame δΓ ✱ interpret_assertion req ι ). *)
-      (* { rewrite sepcon_comm. *)
-      (*   apply (cmut_consume_sound frame). *)
-      (*   revert HYP. apply cmut_wp_monotonic. *)
-      (*   intros ? δ2 h2. *)
-      (*   rewrite cmut_wp_bind, cmut_wp_demonic. *)
-      (*   intros HYP. *)
-      (*   apply lall_right; intro v. *)
-      (*   specialize (HYP v). *)
-      (*   rewrite cmut_wp_bind_right in HYP. *)
-      (*   now apply wand_sepcon_adjoint, cmut_produce_sound. *)
-      (* } *)
-      (* constructor 1 with ι (frame δΓ); auto. *)
-      (* - apply inst_formula_eqs in Hfmls. *)
-      (*   now rewrite inst_lift in Hfmls. *)
-      (* - intro v. *)
-      (*   apply wand_sepcon_adjoint. *)
-      (*   apply lall_left with v. *)
-      (*   apply entails_refl. *)
-    Admitted.
-
-    Check @exec.
+      destruct c as [Σe δe req result ens].
+      unfold call_contract. unfold bind_right, bind.
+      unfold angelic_ctx, dijkstra.
+      rewrite CDijk.wp_angelic_ctx.
+      intros [ι Hwp]; revert Hwp.
+      unfold assert_formulas.
+      intros [Hfmls Hwp]; revert Hwp.
+      pose (fun δ => ∀ v, interpret_assertion ens (env_snoc ι (result,_) v) -✱ POST v δ) as frame.
+      intros HYP.
+      assert (interpret_scheap h ⊢ frame δΓ ✱ interpret_assertion req ι ).
+      { rewrite sepcon_comm.
+        apply (consume_sound frame).
+        revert HYP. apply consume_monotonic.
+        intros ? δ2 h2. unfold demonic.
+        intros HYP.
+        apply lall_right; intro v.
+        specialize (HYP v).
+        now apply wand_sepcon_adjoint, produce_sound.
+      }
+      constructor 1 with ι (frame δΓ); auto.
+      - apply inst_formula_eqs in Hfmls.
+        now rewrite inst_lift in Hfmls.
+      - intro v.
+        apply wand_sepcon_adjoint.
+        apply lall_left with v.
+        apply entails_refl.
+    Qed.
 
     Lemma exec_monotonic {Γ τ} (s : Stm Γ τ)
       (P Q : Lit τ -> LocalStore Γ -> SCHeap -> Prop)
@@ -465,20 +460,20 @@ Module Soundness
         eapply rule_consequence_left.
         apply (rule_stm_read_register_backwards (v := v)).
         apply (@consume_chunk_sound Γ (scchunk_ptsreg reg v) (fun δ => _ -✱ POST _ δ)).
-        revert HYP. admit.
-        (* apply cmut_wp_monotonic. intros _ δ2 h2. *)
-        (* unfold cmut_produce_chunk. rewrite cmut_wp_bind, cmut_wp_state, cmut_wp_pure. *)
-        (* unfold liftP; cbn. now rewrite sepcon_comm, wand_sepcon_adjoint. *)
+        revert HYP. apply consume_chunk_monotonic.
+        intros _ δ2 h2.
+        unfold produce_chunk, state, pure, liftP. cbn.
+        now rewrite sepcon_comm, wand_sepcon_adjoint.
 
       - (* stm_write_register *)
         destruct HYP as [v HYP].
         eapply rule_consequence_left.
         apply (rule_stm_write_register_backwards (v := v)).
         apply (@consume_chunk_sound Γ (scchunk_ptsreg reg v) (fun δ => _ -✱ POST _ δ)).
-        revert HYP. admit.
-        (* apply cmut_wp_monotonic. intros _ δ2 h2. *)
-        (* unfold cmut_produce_chunk. rewrite cmut_wp_bind, cmut_wp_state, cmut_wp_pure. *)
-        (* unfold liftP; cbn. now rewrite sepcon_comm, wand_sepcon_adjoint. *)
+        revert HYP. apply consume_chunk_monotonic.
+        intros _ δ2 h2.
+        unfold produce_chunk, state, pure, liftP. cbn.
+        now rewrite sepcon_comm, wand_sepcon_adjoint.
 
       - (* stm_bind *)
         eapply rule_consequence_left.
