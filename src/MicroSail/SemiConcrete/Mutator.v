@@ -179,6 +179,32 @@ Module SemiConcrete
       apply (inst fml ι).
     Defined.
 
+    Definition angelic_list {A} :
+      list A -> CDijkstra A :=
+      fix rec xs POST :=
+        match xs with
+        | nil        => False
+        | cons x nil => POST x
+        | cons x xs  => POST x \/ rec xs POST
+        end.
+
+    Definition demonic_list {A} :
+      list A -> CDijkstra A :=
+      fix rec xs POST :=
+        match xs with
+        | nil        => True
+        | cons x nil => POST x
+        | cons x xs  => POST x /\ rec xs POST
+        end.
+
+    Definition angelic_finite F `{finite.Finite F} :
+      CDijkstra F :=
+      angelic_list (finite.enum F).
+
+    Definition demonic_finite F `{finite.Finite F} :
+      CDijkstra F :=
+      demonic_list (finite.enum F).
+
     Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Lit Δ -> Prop) :
       angelic_ctx Δ POST <-> exists vs : NamedEnv Lit Δ, POST vs.
     Proof.
@@ -193,6 +219,18 @@ Module SemiConcrete
           now exists (env_snoc vs (x :: σ) v).
         + intros [vs Hwp]. destruct (snocView vs) as [vs v].
           exists v. apply IHΔ. now exists vs.
+    Qed.
+
+    Lemma wp_angelic_list {A} (xs : list A) (POST : A -> Prop) :
+      angelic_list xs POST <->
+      exists x : A, List.In x xs /\ POST x.
+    Proof.
+      induction xs; cbn.
+      - firstorder.
+      - destruct xs; cbn in *.
+        + firstorder. now subst.
+        + rewrite IHxs. clear IHxs.
+          firstorder. left. now subst.
     Qed.
 
   End CDijk.
@@ -233,10 +271,6 @@ Module SemiConcrete
         fun POST δ h => m1 POST δ h /\ m2 POST δ h.
       Definition angelic_binary {Γ1 Γ2 A} (m1 m2 : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
         fun POST δ h => m1 POST δ h \/ m2 POST δ h.
-
-      Definition angelick_list {Γ1 Γ2 A B} (msg : string) (xs : list A) (k : A -> CMut Γ1 Γ2 B) : CMut Γ1 Γ2 B.
-        (* fun δ h => outcome_angelick_list msg xs (fun a => k a δ h). *)
-      Admitted.
 
       (* Definition demonic {Γ1 Γ2 I A} (ms : I -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A := *)
       (*   fun POST δ h => forall i : I, ms i POST δ h. *)
@@ -387,11 +421,8 @@ Module SemiConcrete
       Definition produce_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
         state (fun δ h => MkCMutResult () δ (cons c h)).
       Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
-        get_heap >>= fun h =>
-          angelick_list
-          "Err [consume_chunk]: empty extraction"
-          (extract_scchunk_eqb c h)
-          put_heap.
+        (* "Err [consume_chunk]: empty extraction" *)
+        fun POST δ0 h0 => CDijk.angelic_list (extract_scchunk_eqb c h0) (POST tt δ0).
       Global Arguments produce_chunk {Γ} _.
       Global Arguments consume_chunk {Γ} _.
 

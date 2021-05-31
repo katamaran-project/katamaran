@@ -101,15 +101,6 @@ Module Soundness
           apply sepcon_comm.
     Qed.
 
-    (* Lemma cmut_wp_angelick_list {A B Γ1 Γ2} (msg : string) (xs : list A) (k : A -> CMut Γ1 Γ2 B) (POST : B -> SCProp Γ2) : *)
-    (*   forall δ h, *)
-    (*     cmut_wp (cmut_angelick_list msg xs k) POST δ h <-> *)
-    (*     (exists x : A, List.In x xs /\ cmut_wp (k x) POST δ h). *)
-    (* Proof. *)
-    (*   intros δ h. unfold cmut_wp, cmut_angelick_list; cbn. *)
-    (*   rewrite outcome_satisfy_angelick_list. intuition. *)
-    (* Qed. *)
-
     Definition liftP {Γ} (POST : LocalStore Γ -> L) : LocalStore Γ -> SCHeap -> Prop :=
       fun δ h => interpret_scheap h ⊢ POST δ.
 
@@ -120,19 +111,23 @@ Module Soundness
         consume_chunk c (fun _ => liftP POST) δ h ->
         interpret_scheap h ⊢ interpret_scchunk c ✱ POST δ.
     Proof.
-      (* intros δ h. *)
-      (* unfold cmut_consume_chunk, cmut_get_heap. *)
-      (* rewrite cmut_wp_bind, cmut_wp_state, cmut_wp_angelick_list. *)
-      (* intros (hr & H1 & H2). unfold extract_scchunk_eqb in H1. *)
-      (* rewrite List.in_map_iff in H1. destruct H1 as [[c1 h1] [Heq H1]]. *)
-      (* rewrite List.filter_In in H1. destruct H1 as [HIn Hmatch]. *)
-      (* apply (Bool.reflect_iff _ _ (match_scchunk_eqb_spec _ _)) in Hmatch. *)
-      (* cbn in Heq. subst. *)
-      (* apply in_heap_extractions in HIn; rewrite HIn; clear HIn. *)
-      (* apply sepcon_entails. *)
-      (* apply entails_refl. *)
-      (* assumption. *)
-    Admitted.
+      intros δ h.
+      unfold consume_chunk.
+      rewrite CDijk.wp_angelic_list.
+      intros [h1 [HIn HPOST]].
+      unfold extract_scchunk_eqb in HIn.
+      rewrite List.in_map_iff in HIn.
+      destruct HIn as [[c1 h1'] [Heq HIn]].
+      cbn in Heq. subst h1'.
+      rewrite List.filter_In in HIn.
+      destruct HIn as [HIn Hmatch].
+      apply (Bool.reflect_iff _ _ (match_scchunk_eqb_spec _ _)) in Hmatch.
+      subst c1.
+      apply in_heap_extractions in HIn; rewrite HIn; clear HIn.
+      apply sepcon_entails.
+      apply entails_refl.
+      assumption.
+    Qed.
 
     Lemma assert_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
       (POST : LocalStore Γ -> L) :
