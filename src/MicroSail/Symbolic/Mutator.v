@@ -382,7 +382,7 @@ Module Mutators
     Notation "⊢ A" := (Valid A%modal) (at level 100).
     Notation "A -> B" := (Impl A%modal B%modal) : modal.
     Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal.
-    Notation "⌜ A ⌝" := (fun (_ : World) => A%type) (at level 0, format "⌜ A ⌝") : modal.
+    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal.
     Notation "'∀' x .. y , P " :=
       (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
         (at level 99, x binder, y binder, right associativity)

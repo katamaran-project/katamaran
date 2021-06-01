@@ -225,6 +225,16 @@ Module SemiConcrete
         firstorder. left. now subst.
     Qed.
 
+    Lemma wp_demonic_list {A} (xs : list A) (POST : A -> Prop) :
+      demonic_list xs POST <->
+      forall x : A, List.In x xs -> POST x.
+    Proof.
+      induction xs; cbn.
+      - firstorder.
+      - rewrite IHxs; clear IHxs.
+        firstorder. now subst.
+    Qed.
+
     Lemma wp_assume_formulas {Σ} (ι : SymInstance Σ) (fmls : List Formula Σ) :
       forall POST,
         assume_formulas ι fmls POST <->
@@ -312,6 +322,12 @@ Module SemiConcrete
       Definition angelic_list {A Γ} (xs : list A) : CMut Γ Γ A :=
         dijkstra (CDijk.angelic_list xs).
 
+      Definition angelic_finite {Γ} F `{finite.Finite F} : CMut Γ Γ F :=
+        dijkstra (CDijk.angelic_finite (F:=F)).
+
+      Definition demonic_finite {Γ} F `{finite.Finite F} : CMut Γ Γ F :=
+        dijkstra (CDijk.demonic_finite (F:=F)).
+
     End Basic.
 
     Module CMutNotations.
@@ -398,6 +414,56 @@ Module SemiConcrete
         destruct v; intuition; discriminate.
       Qed.
 
+      Definition angelic_match_enum {A E} {Γ1 Γ2} :
+        Lit (ty_enum E) -> (𝑬𝑲 E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v cont.
+        eapply bind.
+        apply (angelic_finite (F := 𝑬𝑲 E)).
+        intros EK.
+        eapply bind_right.
+        apply (assert_formula (v = EK)).
+        apply (cont EK).
+      Defined.
+
+      Definition demonic_match_enum {A E} {Γ1 Γ2} :
+        Lit (ty_enum E) -> (𝑬𝑲 E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v cont.
+        eapply bind.
+        apply (demonic_finite (F := 𝑬𝑲 E)).
+        intros EK.
+        eapply bind_right.
+        apply (assume_formula (v = EK)).
+        apply (cont EK).
+      Defined.
+
+      Lemma wp_angelic_match_enum {A E Γ1 Γ2} (v : Lit (ty_enum E)) (k : 𝑬𝑲 E -> CMut Γ1 Γ2 A) :
+        forall POST δ h,
+          angelic_match_enum v k POST δ h <-> k v POST δ h.
+      Proof.
+        cbv [assert_formula bind bind_right angelic_match_enum angelic_finite
+             dijkstra CDijk.angelic_finite CDijk.assert_formula].
+        intros. rewrite CDijk.wp_angelic_list.
+        split; intros; destruct_conjs; subst; auto.
+        exists v. split; auto.
+        rewrite <- elem_of_list_In.
+        apply finite.elem_of_enum.
+      Qed.
+
+      Lemma wp_demonic_match_enum {A E Γ1 Γ2} (v : Lit (ty_enum E)) (k : 𝑬𝑲 E -> CMut Γ1 Γ2 A) :
+        forall POST δ h,
+          demonic_match_enum v k POST δ h <-> k v POST δ h.
+      Proof.
+        cbv [assume_formula bind bind_right demonic_match_enum demonic_finite
+             dijkstra CDijk.demonic_finite CDijk.assume_formula].
+        intros. rewrite CDijk.wp_demonic_list.
+        split; intros; subst; auto.
+        apply H; auto.
+        rewrite <- elem_of_list_In.
+        apply finite.elem_of_enum.
+      Qed.
+
       Definition match_sum {A} {Γ1 Γ2 σ τ} (v : Lit σ + Lit τ)
         (sinl : Lit σ -> CMut Γ1 Γ2 A) (sinr : Lit τ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
         match v with
@@ -408,10 +474,6 @@ Module SemiConcrete
       Definition match_prod {A} {Γ1 Γ2 σ τ} (v : Lit σ * Lit τ)
         (m : Lit σ -> Lit τ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
         match v with (vl,vr) => m vl vr end.
-
-      Definition match_enum {A E} {Γ1 Γ2} (v : 𝑬𝑲 E)
-        (m : 𝑬𝑲 E -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-        m v.
 
       Definition match_record {A R} {Γ1 Γ2 Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Lit (ty_record R))
         (m : SymInstance Δ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
@@ -472,7 +534,7 @@ Module SemiConcrete
         | asn_chunk c     => produce_chunk (inst c ι)
         | asn_if b a1 a2  => demonic_match_bool (inst b ι) (produce ι a1) (produce ι a2)
         | asn_match_enum E k alts =>
-          match_enum
+          demonic_match_enum
             (inst (T := fun Σ => Term Σ _) k ι)
             (fun K => produce ι (alts K))
         | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
@@ -515,7 +577,7 @@ Module SemiConcrete
         | asn_chunk c     => consume_chunk (inst c ι)
         | asn_if b a1 a2  => angelic_match_bool (inst b ι) (consume ι a1) (consume ι a2)
         | asn_match_enum E k alts =>
-          match_enum
+          angelic_match_enum
             (inst (T := fun Σ => Term Σ _) k ι)
             (fun K => consume ι (alts K))
         | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
@@ -606,10 +668,10 @@ Module SemiConcrete
         | stm_fail _ s =>
           block
         | stm_match_enum E e alts =>
-          K <- eval_exp e ;;
-          match_enum
-            K
-            (fun K => exec (alts K))
+          v <- eval_exp e ;;
+          demonic_match_enum
+            v
+            (fun EK => exec (alts EK))
         | stm_read_register reg =>
           v <- angelic τ ;;
           let c := scchunk_ptsreg reg v in

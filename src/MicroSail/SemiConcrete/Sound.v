@@ -184,7 +184,7 @@ Module Soundness
       - now apply consume_chunk_monotonic.
       - rewrite ?wp_angelic_match_bool.
         destruct (inst b ι); cbn; eauto.
-      - unfold match_enum. eauto.
+      - rewrite ?wp_angelic_match_enum; eauto.
       - destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
@@ -211,7 +211,7 @@ Module Soundness
       - unfold produce_chunk; eauto.
       - rewrite ?wp_demonic_match_bool.
         destruct (inst b ι); cbn; eauto.
-      - unfold match_enum. eauto.
+      - rewrite ?wp_demonic_match_enum; eauto.
       - destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
@@ -234,7 +234,7 @@ Module Soundness
       - destruct c; now apply consume_chunk_sound.
       - rewrite wp_angelic_match_bool.
         destruct (inst b ι); auto.
-      - auto.
+      - rewrite wp_angelic_match_enum; auto.
       - destruct (inst s ι); auto.
       - destruct (inst s ι); auto.
       - destruct (inst s ι); auto.
@@ -265,7 +265,7 @@ Module Soundness
         destruct c; now cbn in *.
       - rewrite wp_demonic_match_bool.
         destruct (inst b ι); auto.
-      - auto.
+      - rewrite wp_demonic_match_enum; auto.
       - destruct (inst s ι); auto.
       - destruct (inst s ι); auto.
       - destruct (inst s ι); auto.
@@ -386,7 +386,7 @@ Module Soundness
         apply IHs2; auto.
       - destruct (eval e δ); cbn.
         apply IHs; auto.
-      - unfold match_enum. eauto.
+      - rewrite ?wp_demonic_match_enum; eauto.
       - apply IHs; auto.
       - destruct (𝑼_unfold (eval e δ)).
         apply H; auto.
@@ -504,6 +504,7 @@ Module Soundness
         now apply IHs.
 
       - (* stm_match_enum *)
+        rewrite wp_demonic_match_enum in HYP.
         now apply rule_stm_match_enum, H.
 
       - (* stm_match_tuple *)

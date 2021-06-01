@@ -102,15 +102,6 @@ Module Soundness
         approx ι ta a ->
         approx ι (fs ta) (fc a).
 
-  Global Instance ApproxInj {A} : Approx (fun _ => A) A :=
-    fun w ι a1 a2 => a1 = a2.
-
-  (* Global Instance ApproxMutResult {AT A} `{Approx AT A} {Γ} : Approx (SMutResult Γ AT) (CMutResult Γ A). *)
-  (* Proof. *)
-  (*   intros w0 ι0 [a0 δ0 h0] [a δ h]. *)
-  (*   refine (approx ι0 a0 a /\ approx ι0 δ0 δ /\ approx ι0 h0 h). *)
-  (* Defined. *)
-
   Global Instance ApproxMut {Γ1 Γ2 AT A} `{instA : Inst AT A} : Approx (SMut Γ1 Γ2 AT) (CMut Γ1 Γ2 A).
   Proof.
     unfold SMut, CMut.
@@ -417,6 +408,41 @@ Module Soundness
         apply HPOST; wsimpl; auto.
     Qed.
 
+    Lemma approx_demonic_list {AT A} `{Inst AT A}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) :
+      approx ι0 (@SDijk.demonic_list AT w0) (@CDijk.demonic_list A).
+    Proof.
+      intros xs ? ->.
+      induction xs; cbn - [inst];
+        intros POST__s POST__c HPOST.
+      - constructor.
+      - cbn.
+        apply Path.approx_demonic_binary; auto.
+        apply HPOST; wsimpl; auto.
+    Qed.
+
+    Lemma approx_angelic_finite {F} `{finite.Finite F}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) msg :
+      approx (AT := SDijkstra (Const F)) ι (@SDijk.angelic_finite F _ _ w msg) (@CDijk.angelic_finite F _ _).
+    Proof.
+      unfold SDijk.angelic_finite, CDijk.angelic_finite.
+      intros POST__s POST__c HPOST.
+      apply approx_angelic_list; eauto.
+      hnf. cbv [inst instantiate_const instantiate_list].
+      now rewrite List.map_id.
+    Qed.
+
+    Lemma approx_demonic_finite {F} `{finite.Finite F}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx (AT := SDijkstra (Const F)) ι (@SDijk.demonic_finite F _ _ w) (@CDijk.demonic_finite F _ _).
+    Proof.
+      unfold SDijk.demonic_finite, CDijk.demonic_finite.
+      intros POST__s POST__c HPOST.
+      apply approx_demonic_list; eauto.
+      hnf. cbv [inst instantiate_const instantiate_list].
+      now rewrite List.map_id.
+    Qed.
+
   End Dijk.
 
   Section Basics.
@@ -581,6 +607,28 @@ Module Soundness
       apply Dijk.approx_angelic_list; auto.
     Qed.
 
+    Lemma approx_angelic_finite {F} `{finite.Finite F} {Γ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) msg :
+      approx (AT := SMut Γ Γ (Const F)) ι (@SMut.angelic_finite Γ F _ _ w msg) (@CMut.angelic_finite Γ F _ _).
+    Proof.
+      unfold SMut.angelic_finite, CMut.angelic_finite.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ0 hs0 hc0 Hh0.
+      eapply approx_dijkstra; eauto.
+      apply Dijk.approx_angelic_finite; auto.
+    Qed.
+
+    Lemma approx_demonic_finite {F} `{finite.Finite F} {Γ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx (AT := SMut Γ Γ (Const F)) ι (@SMut.demonic_finite Γ F _ _ w) (@CMut.demonic_finite Γ F _ _).
+    Proof.
+      unfold SMut.demonic_finite, CMut.demonic_finite.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ0 hs0 hc0 Hh0.
+      eapply approx_dijkstra; eauto.
+      apply Dijk.approx_demonic_finite; auto.
+    Qed.
+
   End Basics.
 
   Section AssumeAssert.
@@ -723,8 +771,8 @@ Module Soundness
       - now apply approx_demonic_match_bool'.
     Qed.
 
-    Lemma approx_box_demonic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2} {w : World}
-      (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+    Lemma approx_box_demonic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2} 
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.box_demonic_match_bool AT Γ1 Γ2 w) (CMut.demonic_match_bool (A := A)).
     Proof.
       unfold SMut.box_demonic_match_bool, map_box, K.
@@ -736,15 +784,41 @@ Module Soundness
       rewrite <- inst_subst. auto.
     Qed.
 
-    Lemma approx_angelic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx} {w : World} (ι : SymInstance w) :
-      approx ι (@SMut.angelic_match_enum AT E Γ1 Γ2 w) (@CMut.match_enum A E Γ1 Γ2).
+    Lemma approx_angelic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.angelic_match_enum AT E Γ1 Γ2 w) (@CMut.angelic_match_enum A E Γ1 Γ2).
     Proof.
-    Admitted.
+      intros t v ->.
+      intros ks kc Hk.
+      unfold SMut.angelic_match_enum, CMut.angelic_match_enum.
+      apply approx_bind.
+      apply approx_angelic_finite; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros EK1 EK2 HEK.
+      apply approx_bind_right.
+      apply approx_assert_formula; cbn; wsimpl; auto.
+      rewrite HEK; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      eapply Hk; wsimpl; auto.
+    Qed.
 
-    Lemma approx_demonic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx} {w : World} (ι : SymInstance w) :
-      approx ι (@SMut.demonic_match_enum AT E Γ1 Γ2 w) (@CMut.match_enum A E Γ1 Γ2).
+    Lemma approx_demonic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_enum AT E Γ1 Γ2 w) (@CMut.demonic_match_enum A E Γ1 Γ2).
     Proof.
-    Admitted.
+      intros t v ->.
+      intros ks kc Hk.
+      unfold SMut.demonic_match_enum, CMut.demonic_match_enum.
+      apply approx_bind.
+      apply approx_demonic_finite; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros EK1 EK2 HEK.
+      apply approx_bind_right.
+      apply approx_assume_formula; cbn; wsimpl; auto.
+      rewrite HEK; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      eapply Hk; wsimpl; auto.
+    Qed.
 
   End PatternMatching.
 
@@ -1136,7 +1210,9 @@ Module Soundness
       apply approx_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      admit.
+      apply approx_demonic_match_enum; auto.
+      intros EK1 EK2 ->.
+      intros w2 ω12 ι2 -> Hpc2; auto.
     - apply approx_bind; auto.
       intros POST__s POST__c HPOST.
       apply approx_eval_exp; auto.
