@@ -147,6 +147,8 @@ Module Soundness
 
   Hint Unfold approx ApproxImpl ApproxBox ApproxInst ApproxPath ApproxMut ApproxTermLit ApproxNamedEnv : core.
 
+  Import ModalNotations.
+  Open Scope modal.
 
   Lemma approx_four {AT A} `{Approx AT A} {w0 : World} (ι0 : SymInstance w0) :
     forall (a0 : Box AT w0) (a : A),
@@ -382,6 +384,12 @@ Module Soundness
       revert Hwp. apply approx_assert_formulas'; auto.
     Qed.
 
+    Lemma approx_angelic_list {AT A} `{Inst AT A}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) msg :
+      approx ι0 (@SDijk.angelic_list AT w0 msg) (@CDijk.angelic_list A).
+    Proof.
+    Admitted.
+
   End Dijk.
 
   Section Basics.
@@ -534,10 +542,17 @@ Module Soundness
       - revert H2. apply Hm2; auto.
     Qed.
 
-    (* Lemma approx_angelic_list {AT A} `{Approx AT A} {Γ} {w : World} (ι : SymInstance w) : *)
-    (*   approx ι (@SMut.angelic_list AT Γ w) (@CMut.angelic_list A Γ). *)
-    (* Proof. *)
-    (* Admitted. *)
+    Lemma approx_angelic_list {AT A} `{Inst AT A} {Γ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) msg :
+      approx ι (@SMut.angelic_list AT Γ w msg) (@CMut.angelic_list A Γ).
+    Proof.
+      intros ls lc Hl.
+      unfold SMut.angelic_list, CMut.angelic_list.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ0 hs0 hc0 Hh0.
+      apply approx_dijkstra; eauto.
+      apply Dijk.approx_angelic_list; auto.
+    Qed.
 
   End Basics.
 
@@ -904,17 +919,24 @@ Module Soundness
     intros w1 ω01 ι1 -> Hpc1.
     intros hs hc ->.
     apply approx_bind.
-    admit.
+    apply approx_angelic_list; eauto.
+    { hnf. unfold inst at 1. cbn.
+      rewrite heap_extractions_map.
+      apply List.map_ext. now intros [].
+    }
     intros w2 ω12 ι2 -> Hpc2.
     intros [cs' hs'] [cc' hc'].
     intros Hch'. inversion Hch'; subst; clear Hch'.
     apply approx_bind_right.
     apply approx_assert_formulas; auto.
-    admit.
+    rewrite SMut.inst_match_chunk. cbn.
+    rewrite ?inst_subst. intuition.
     intros w3 ω23 ι3 -> Hpc3.
     rewrite <- inst_subst.
     apply approx_put_heap; auto.
-  Admitted.
+  Qed.
+
+  (* Print Assumptions approx_consume_chunk. *)
 
   Lemma approx_consume {Γ Σ0 pc0} (asn : Assertion Σ0) :
     let w0 := @MkWorld Σ0 pc0 in

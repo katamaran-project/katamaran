@@ -1429,11 +1429,20 @@ Module Terms (Export termkit : TermKit).
           * destruct (nilView H1). reflexivity.
           * destruct (snocView H1).
             change (es ► (b ↦ db) = subst E (sub_shift xIn) ► (b ↦ subst v (sub_shift xIn))).
-            f_equal. apply IHes; auto. clear - H.
-            admit.
-            apply e0. clear - H.
-            admit.
-    Admitted.
+            cbn in H.
+            apply option.bind_Some in H.
+            destruct H as [E' [HE H]].
+            apply option.bind_Some in H.
+            destruct H as [t' [? Heq]].
+            unfold base.mret in Heq.
+            apply noConfusion_inv in Heq.
+            cbn in Heq.
+            apply inversion_eq_env_snoc in Heq.
+            destruct Heq; subst.
+            f_equal.
+            apply IHes; auto.
+            apply e0; auto.
+    Qed.
 
     Global Instance OccursCheckLawsList {T : LCtx -> Type} `{OccursCheckLaws T} :
       OccursCheckLaws (fun Σ => list (T Σ)).

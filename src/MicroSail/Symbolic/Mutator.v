@@ -1280,7 +1280,7 @@ Module Mutators
     Defined.
 
     Definition angelic_list {A} :
-      ⊢ Message -> WList A -> SDijkstra A :=
+      ⊢ Message -> List A -> SDijkstra A :=
       fun w msg =>
         fix rec xs POST :=
         match xs with
@@ -1289,8 +1289,8 @@ Module Mutators
         | cons x xs  => angelic_binary (T POST x) (rec xs POST)
         end.
 
-    Definition demonic_list {A : TYPE} :
-      ⊢ WList A -> SDijkstra A :=
+    Definition demonic_list {A} :
+      ⊢ List A -> SDijkstra A :=
       fun w =>
         fix rec xs POST :=
         match xs with
@@ -1859,7 +1859,7 @@ Module Mutators
           demonic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
 
       Definition angelic_list {A Γ} :
-        ⊢ (SStore Γ -> SHeap -> Message) -> WList A -> SMut Γ Γ A :=
+        ⊢ (SStore Γ -> SHeap -> Message) -> List A -> SMut Γ Γ A :=
         fun w msg xs POST δ h => dijkstra (SDijk.angelic_list (msg δ h) xs) POST δ h.
 
       Definition angelic_finite {Γ} F `{finite.Finite F} :
@@ -2615,7 +2615,7 @@ Module Mutators
         apply (cons c h).
       Defined.
 
-      Equations(noeqns) match_chunk {w : World} (ce : Chunk w) (cr : Chunk w) : List Formula w :=
+      Equations(noeqns) match_chunk {w : World} (c1 c2 : Chunk w) : List Formula w :=
         match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2)
         with eq_dec p1 p2 => {
           match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) (left eq_refl) := formula_eqs_ctx vs1 vs2;
@@ -2629,6 +2629,11 @@ Module Mutators
             cons (formula_bool (term_lit ty_bool false)) nil
         };
         match_chunk _ _  := cons (formula_bool (term_lit ty_bool false)) nil.
+
+      Lemma inst_match_chunk {w : World} (c1 c2 : Chunk w) (ι : SymInstance w) :
+        instpc (match_chunk c1 c2) ι <-> inst c1 ι = inst c2 ι.
+      Proof.
+      Admitted.
 
       Definition consume_chunk {Γ} :
         ⊢ Chunk -> SMut Γ Γ Unit.
