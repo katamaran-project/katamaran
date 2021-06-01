@@ -201,6 +201,26 @@ Module Soundness
        (*     intros w ι Hpc *)
        (*   end). *)
 
+  Module Path.
+
+    Lemma approx_angelic_binary
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@angelic_binary w) (@or).
+    Proof.
+      intros PS1 PC1 HP1 PS2 PC2 HP2.
+      intros [H1|H2]; [left|right]; auto.
+    Qed.
+
+    Lemma approx_demonic_binary
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@demonic_binary w) (@and).
+    Proof.
+      intros PS1 PC1 HP1 PS2 PC2 HP2.
+      intros [H1 H2]; split; auto.
+    Qed.
+
+  End Path.
+
   Module Dijk.
 
     Lemma approx_pure {AT A} `{Approx AT A} {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
@@ -388,7 +408,14 @@ Module Soundness
       {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) msg :
       approx ι0 (@SDijk.angelic_list AT w0 msg) (@CDijk.angelic_list A).
     Proof.
-    Admitted.
+      intros xs ? ->.
+      induction xs; cbn - [inst];
+        intros POST__s POST__c HPOST.
+      - intros [].
+      - cbn.
+        apply Path.approx_angelic_binary; auto.
+        apply HPOST; wsimpl; auto.
+    Qed.
 
   End Dijk.
 
@@ -935,8 +962,6 @@ Module Soundness
     rewrite <- inst_subst.
     apply approx_put_heap; auto.
   Qed.
-
-  (* Print Assumptions approx_consume_chunk. *)
 
   Lemma approx_consume {Γ Σ0 pc0} (asn : Assertion Σ0) :
     let w0 := @MkWorld Σ0 pc0 in

@@ -180,7 +180,6 @@ Module SemiConcrete
       fix rec xs POST :=
         match xs with
         | nil        => False
-        | cons x nil => POST x
         | cons x xs  => POST x \/ rec xs POST
         end.
 
@@ -189,7 +188,6 @@ Module SemiConcrete
       fix rec xs POST :=
         match xs with
         | nil        => True
-        | cons x nil => POST x
         | cons x xs  => POST x /\ rec xs POST
         end.
 
@@ -223,10 +221,8 @@ Module SemiConcrete
     Proof.
       induction xs; cbn.
       - firstorder.
-      - destruct xs; cbn in *.
-        + firstorder. now subst.
-        + rewrite IHxs. clear IHxs.
-          firstorder. left. now subst.
+      - rewrite IHxs; clear IHxs.
+        firstorder. left. now subst.
     Qed.
 
     Lemma wp_assume_formulas {Σ} (ι : SymInstance Σ) (fmls : List Formula Σ) :

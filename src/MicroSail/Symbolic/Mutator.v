@@ -1285,7 +1285,6 @@ Module Mutators
         fix rec xs POST :=
         match xs with
         | nil        => error msg
-        | cons x nil => T POST x
         | cons x xs  => angelic_binary (T POST x) (rec xs POST)
         end.
 
@@ -1295,7 +1294,6 @@ Module Mutators
         fix rec xs POST :=
         match xs with
         | nil        => block
-        | cons x nil => T POST x
         | cons x xs  => demonic_binary (T POST x) (rec xs POST)
         end.
 
@@ -2633,7 +2631,37 @@ Module Mutators
       Lemma inst_match_chunk {w : World} (c1 c2 : Chunk w) (ι : SymInstance w) :
         instpc (match_chunk c1 c2) ι <-> inst c1 ι = inst c2 ι.
       Proof.
-      Admitted.
+        split.
+        - destruct c1, c2; cbn.
+          + destruct (eq_dec p p0).
+            * destruct e; cbn.
+              rewrite inst_formula_eqs_ctx.
+              intuition.
+            * intros HYP; cbv in HYP. discriminate.
+          + intros HYP; cbv in HYP. discriminate.
+          + intros HYP; cbv in HYP. discriminate.
+          + destruct (eq_dec_het r r0).
+            * dependent elimination e; cbn.
+              rewrite inst_pathcondition_cons.
+              now intros [-> _].
+            * intros HYP; cbv in HYP. discriminate.
+        - destruct c1, c2; cbn; intros Heq.
+          + remember (inst ts ι) as vs1.
+            remember (inst ts0 ι) as vs2.
+            dependent elimination Heq.
+            rewrite EqDec.eq_dec_refl. cbn.
+            rewrite inst_formula_eqs_ctx.
+            subst. auto.
+          + dependent elimination Heq.
+          + dependent elimination Heq.
+          + remember (inst t ι) as v1.
+            remember (inst t0 ι) as v2.
+            dependent elimination Heq.
+            unfold eq_dec_het.
+            rewrite EqDec.eq_dec_refl. cbn.
+            rewrite inst_pathcondition_cons.
+            subst. split; auto. constructor.
+      Qed.
 
       Definition consume_chunk {Γ} :
         ⊢ Chunk -> SMut Γ Γ Unit.
