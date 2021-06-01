@@ -1121,10 +1121,96 @@ Module Mutators
           debug d (prune k)
         end.
 
+    Lemma prune_angelic_binary_sound {w} (p1 p2 : SPath w) (ι : SymInstance w) :
+      safe (angelic_binary_prune p1 p2) ι <-> safe (angelic_binary p1 p2) ι.
+    Proof.
+      destruct p1; cbn; auto.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - intuition.
+      - destruct p2; cbn; auto;
+          rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto;
+          rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+    Qed.
+
+    Lemma prune_demonic_binary_sound {w} (p1 p2 : SPath w) (ι : SymInstance w) :
+      safe (demonic_binary_prune p1 p2) ι <-> safe (demonic_binary p1 p2) ι.
+    Proof.
+      destruct p1; cbn; auto.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - intuition.
+      - destruct p2; cbn; auto;
+          rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto;
+          rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+    Qed.
+
+    Lemma prune_assertk_sound {w} fml msg (p : SPath (wformula w fml)) (ι : SymInstance w) :
+      safe (assertk_prune fml msg p) ι <-> safe (assertk fml msg p) ι.
+    Proof. destruct p; cbn; rewrite ?obligation_equiv; auto; intuition. Qed.
+
+    Lemma prune_assumek_sound {w} fml (p : SPath (wformula w fml)) (ι : SymInstance w) :
+      safe (assumek_prune fml p) ι <-> safe (assumek fml p) ι.
+    Proof. destruct p; cbn; auto; intuition. Qed.
+
+    Lemma prune_angelicv_sound {w b} (p : SPath (wsnoc w b)) (ι : SymInstance w) :
+      safe (angelicv_prune p) ι <-> safe (angelicv b p) ι.
+    Proof. reflexivity. Qed.
+
+    Lemma prune_demonicv_sound {w b} (p : SPath (wsnoc w b)) (ι : SymInstance w) :
+      safe (demonicv_prune p) ι <-> safe (demonicv b p) ι.
+    Proof. destruct p; cbn; auto; intuition. Qed.
+
+    Lemma prune_assert_vareq_sound {w : World} {x σ} {xIn : x :: σ ∈ w}
+      (t : Term (w - (x :: σ)) σ) (msg : Message (w - (x :: σ))) (p : SPath (wsubst w x t)) (ι : SymInstance w) :
+      safe (assert_vareq_prune x t msg p) ι <-> safe (assert_vareq x t msg p) ι.
+    Proof. reflexivity. Qed.
+
+    Lemma prune_assume_vareq_sound {w : World} {x σ} {xIn : x :: σ ∈ w}
+      (t : Term (w - (x :: σ)) σ) (p : SPath (wsubst w x t)) (ι : SymInstance w) :
+      safe (assume_vareq_prune x t p) ι <-> safe (assume_vareq x t p) ι.
+    Proof. destruct p; cbn; auto; intuition. Qed.
+
     Lemma prune_sound {w} (p : SPath w) (ι : SymInstance w) :
       safe (prune p) ι <-> safe p ι.
     Proof.
-    Admitted.
+      induction p; cbn [prune safe].
+      - rewrite prune_angelic_binary_sound; cbn.
+        now rewrite IHp1, IHp2.
+      - rewrite prune_demonic_binary_sound; cbn.
+        now rewrite IHp1, IHp2.
+      - auto.
+      - auto.
+      - rewrite prune_assertk_sound; cbn.
+        now rewrite IHp.
+      - rewrite prune_assumek_sound; cbn.
+        now rewrite IHp.
+      - rewrite prune_angelicv_sound; cbn.
+        apply base.exist_proper; intros.
+        now rewrite IHp.
+      - rewrite prune_demonicv_sound; cbn.
+        apply base.forall_proper; intros.
+        now rewrite IHp.
+      - rewrite prune_assert_vareq_sound; cbn.
+        now rewrite IHp.
+      - rewrite prune_assume_vareq_sound; cbn.
+        now rewrite IHp.
+      - now rewrite ?debug_equiv.
+    Qed.
 
     Definition ok :
       ⊢ SPath -> ⌜bool⌝ :=
