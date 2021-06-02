@@ -251,6 +251,26 @@ Section WithBinding.
         end
     end.
 
+  Inductive CatView {Γ Δ} {b : B} : InCtx b (ctx_cat Γ Δ) -> Set :=
+  | isCatLeft  (bIn : InCtx b Γ) : CatView (inctx_cat_left Δ bIn)
+  | isCatRight (bIn : InCtx b Δ) : CatView (inctx_cat_right bIn).
+
+  Fixpoint catView {Γ Δ} {b : B} {struct Δ} :
+    forall (bIn : InCtx b (ctx_cat Γ Δ)), CatView bIn :=
+    match Δ with
+    | ctx_nil        => fun bIn => isCatLeft bIn
+    | ctx_snoc Δ0 b0 =>
+      fun bIn =>
+        match snocView bIn with
+        | snocViewZero => isCatRight inctx_zero
+        | snocViewSucc bIn =>
+          match catView bIn with
+          | isCatLeft bIn => isCatLeft bIn
+          | isCatRight bIn => isCatRight (inctx_succ bIn)
+          end
+        end
+    end.
+
   (* Custom pattern matching in cases where the context was already refined
      by a different match, i.e. on environments. *)
   Definition inctx_case_nil {b : B} {A : Type} (bIn : InCtx b ctx_nil) : A :=
@@ -263,8 +283,8 @@ Section WithBinding.
     | S n => fun e => dΓ b (MkInCtx n e)
     end e.
 
-  Lemma InCtx_ind (b : B)
-    (P : forall (Γ : Ctx B), InCtx b Γ -> Prop)
+  Definition InCtx_rect (b : B)
+    (P : forall (Γ : Ctx B), InCtx b Γ -> Type)
     (fzero : forall (Γ : Ctx B), P (ctx_snoc Γ b) inctx_zero)
     (fsucc : forall (Γ : Ctx B) (b0 : B) (bIn : InCtx b Γ),
         P Γ bIn -> P (ctx_snoc Γ b0) (inctx_succ bIn)) :
@@ -275,7 +295,15 @@ Section WithBinding.
     - intros bIn. destruct (snocView bIn).
       + apply fzero.
       + now apply fsucc.
-  Qed.
+  Defined.
+
+  Definition InCtx_ind (b : B)
+    (P : forall (Γ : Ctx B), InCtx b Γ -> Prop)
+    (fzero : forall (Γ : Ctx B), P (ctx_snoc Γ b) inctx_zero)
+    (fsucc : forall (Γ : Ctx B) (b0 : B) (bIn : InCtx b Γ),
+        P Γ bIn -> P (ctx_snoc Γ b0) (inctx_succ bIn)) :
+    forall (Γ : Ctx B) (bIn : InCtx b Γ), P Γ bIn :=
+    InCtx_rect P fzero fsucc.
 
   (* Boolean equality of [nat]-fields in [InCtx] implies equality of
      the other field and the binding-index of [InCtx] *)
