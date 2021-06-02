@@ -735,8 +735,16 @@ Module Mutators
     Global Arguments assert_vareq {_} x {_ _} t msg k.
     Global Arguments assume_vareq {_} x {_ _} t k.
 
+    Definition angelic_close0 {Σ0 : LCtx} :
+      forall Σ, SPath (Σ0 ▻▻ Σ) -> SPath Σ0 :=
+      fix close Σ :=
+        match Σ with
+        | ε     => fun p => p
+        | Σ ▻ b => fun p => close Σ (angelicv b p)
+        end.
+
     Definition demonic_close :
-      forall Σ, SPath Σ -> SPath wnil :=
+      forall Σ, SPath Σ -> SPath ε :=
       fix close Σ :=
         match Σ with
         | ctx_nil      => fun k => k
@@ -1220,6 +1228,81 @@ Module Mutators
         | block => true
         | _     => false
         end.
+
+    Module Experimental.
+
+      Fixpoint assert_msgs_formulas {Σ} (mfs : List (Pair Message Formula) Σ) (p : SPath Σ) : SPath Σ :=
+        match mfs with
+        | nil => p
+        | cons (msg,fml) mfs =>
+          assert_msgs_formulas mfs (assertk fml msg p)
+        end.
+
+      Arguments InCtx_rect [_ _].
+      Lemma ctx_remove_inctx_right {B : Set} {Γ Δ : Ctx B} {b : B} (bIn : InCtx b Δ) :
+        @ctx_remove B (@ctx_cat B Γ Δ) b (@inctx_cat_right B b Γ Δ bIn) =
+        @ctx_cat B Γ (@ctx_remove B Δ b bIn).
+      Proof.
+        induction bIn using InCtx_rect; cbn.
+        - reflexivity.
+        - f_equal. auto.
+      Defined.
+
+      Fixpoint solve_evars {Σ} Σe (p : SPath (Σ ▻▻ Σe)) (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) {struct p} : SPath Σ :=
+        match p with
+        | angelic_binary p1 p2 =>
+          angelic_binary
+            (solve_evars Σe p1 mfs)
+            (solve_evars Σe p2 mfs)
+        | demonic_binary p1 p2 =>
+          angelic_close0 Σe
+            (assert_msgs_formulas mfs
+               (demonic_binary (solve_evars ε p1 []) (solve_evars ε p2 [])))
+        | error msg =>
+          angelic_close0 Σe (assert_msgs_formulas mfs (error msg))
+        | block =>
+          angelic_close0 Σe (assert_msgs_formulas mfs block)
+        | assertk fml msg p0 =>
+          solve_evars Σe p0 (cons (msg,fml) mfs)
+        | assumek fml p0 =>
+          angelic_close0 Σe
+            (assert_msgs_formulas mfs (assumek fml (solve_evars ε p0 [])))
+        | angelicv b p0 =>
+          solve_evars (Σe ▻ b) p0 (subst mfs sub_wk1)
+        | demonicv b p0 =>
+          angelic_close0 Σe (assert_msgs_formulas mfs (demonicv b (solve_evars ε p0 [])))
+        | @assert_vareq _ x σ xIn t msg p0 =>
+          match Context.catView xIn with
+          | isCatLeft bIn =>
+            fun t msg p =>
+              angelic_close0 Σe
+                (assert_msgs_formulas mfs
+                   (assert_vareq x t msg (solve_evars ε p [])))
+          | isCatRight bIn =>
+            fun t _ p =>
+              let e := ctx_remove_inctx_right bIn in
+              solve_evars (Σe - (x :: σ))
+                (eq_rect _ SPath p _ e)
+                (subst mfs
+                   (eq_rect _ (Sub (Σ ▻▻ Σe)) (sub_single (inctx_cat_right bIn) t) _ e))
+          end t msg p0
+         | assume_vareq x t p =>
+             angelic_close0 Σe
+               (assert_msgs_formulas mfs (assume_vareq x t (solve_evars ε p [])))
+         | debug b p =>
+             angelic_close0 Σe (assert_msgs_formulas mfs (debug b (solve_evars ε p [])))
+         end.
+
+      Lemma solve_evars_sound {Σ Σe} (p : SPath (Σ ▻▻ Σe))
+        (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) (ι : SymInstance Σ) :
+        safe (solve_evars Σe p mfs) ι <->
+        exists ιe : SymInstance Σe,
+          safe p (env_cat ι ιe) /\
+          instpc (List.map snd mfs) (env_cat ι ιe).
+      Proof.
+      Admitted.
+
+    End Experimental.
 
   End SPath.
   Notation SPath := SPath.SPath.
