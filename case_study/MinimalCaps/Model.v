@@ -604,7 +604,6 @@ Module MinCapsModel.
 
   Ltac destruct_SymInstance :=
     repeat (match goal with
-    | H : SymInstance _ |- _ => unfold SymInstance in H; unfold NamedEnv in H
     | H : Env _ (ctx_snoc _ _) |- _ => destruct (snocView H)
     | H : Env _ ctx_nil |- _ => destruct (nilView H)
     end).
