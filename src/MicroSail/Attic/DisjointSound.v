@@ -10,7 +10,7 @@ Require Import MicroSail.SmallStep.Inversion.
 Require Import MicroSail.Sep.Logic.
 Require Import MicroSail.Sep.Spec.
 Require Import MicroSail.Sep.Hoare.
-Require Import MicroSail.Sep.Model.Disjoint.
+Require Import MicroSail.Attic.Disjoint.
 
 Module HoareSound
        (Import termkit : TermKit)

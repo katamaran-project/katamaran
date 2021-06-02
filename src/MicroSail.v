@@ -27,5 +27,4 @@
 (******************************************************************************)
 
 From MicroSail Require Export
-     Syntax
-     WLP.Spec.
+     Syntax.

@@ -41,7 +41,6 @@ From Equations Require Import
 From MicroSail Require Import
      Symbolic.Mutator
      Sep.Spec
-     WLP.Spec
      Syntax.
 
 Set Implicit Arguments.
@@ -463,77 +462,3 @@ Module SepContracts.
   Hint Resolve valid_contract_cmp : contracts.
 
 End SepContracts.
-
-Module WLPContracts.
-
-  Module ExampleWLPContractKit <: (WLPContractKit ExampleTermKit ExampleProgramKit).
-    Module Export WLPPM := WLPPrograms ExampleTermKit ExampleProgramKit.
-
-    Definition CEnv : ContractEnv :=
-      fun σs τ f =>
-        match f with
-        | abs        => ContractNoFail
-                          ["x" :: ty_int] ty_int
-                          (fun x γ => True)
-                          (fun x r γ => r = Z.abs x)
-        | cmp        => ContractNoFail
-                          ["x" :: ty_int, "y" :: ty_int] (ty_enum ordering)
-                          (fun x y γ => True)
-                          (fun x y r γ =>
-                             match r with
-                             | LT => x < y
-                             | EQ => x = y
-                             | GT => x > y
-                             end
-                          (* (x < y <-> r = LT) /\ *)
-                          (* (x = y <-> r = EQ) /\ *)
-                          (* (x > y <-> r = GT) *)
-                          )
-        | gcd        => ContractNoFail
-                          ["x" :: ty_int, "y" :: ty_int] ty_int
-                          (fun x y γ => True)
-                          (fun x y r γ => r = Z.gcd x y)
-        | gcdloop    => ContractNoFail
-                          ["x" :: ty_int, "y" :: ty_int] ty_int
-                          (fun x y γ => x >= 0 /\ y >= 0)
-                          (fun x y r γ => r = Z.gcd x y)
-        | msum       => ContractNone
-                          [ "x" :: ty_union either, "y" :: ty_union either] (ty_union either)
-        | @length σ  => ContractNoFail
-                          ["xs" :: ty_list σ ] ty_int
-                          (fun (xs : list (Lit σ)) γ => True)
-                          (fun (xs : list (Lit σ)) r γ => r = Z.of_nat (Datatypes.length xs))
-        end.
-
-    Definition CEnvEx : ContractEnvEx :=
-      fun σs τ f => match f with end.
-
-  End ExampleWLPContractKit.
-
-  Module ExampleWLP := WLP ExampleTermKit ExampleProgramKit ExampleWLPContractKit.
-  Import ExampleWLP.
-
-  Lemma gcd_sub_diag_l (n m : Z) : Z.gcd (n - m) m = Z.gcd n m.
-  Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.
-
-  Ltac wlp_cbv :=
-    cbv [Blastable_Finite CEnv Forall ValidContract WLPCall WLP abstract blast
-         blastable_lit blastable_list env_lookup env_map env_update eval evals finite.enum
-         inctx_case_snoc snd uncurry eval_prop_true eval_prop_false eval_binop Datatypes.length
-         EqDecision_from_EqDec 𝑬𝑲_eq_dec 𝑬𝑲_finite Ordering_EqDec Ordering_finite fold_left].
-
-  Ltac validate_solve :=
-    repeat
-      (intros; subst;
-       rewrite ?Z.gcd_diag, ?Z.gcd_abs_l, ?Z.gcd_abs_r, ?Z.gcd_sub_diag_r,
-       ?gcd_sub_diag_l;
-       intuition (try lia)
-      ).
-
-  Lemma validCEnv : ValidContractEnv CEnv.
-  Proof. intros σs τ []; wlp_cbv; validate_solve. Qed.
-
-  Lemma validCEnvEx : ValidContractEnvEx CEnvEx.
-  Proof. intros σs τ []. Qed.
-
-End WLPContracts.
