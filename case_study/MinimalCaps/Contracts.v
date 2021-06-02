@@ -78,7 +78,7 @@ Module Export MinCapsAssertionKit <:
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
     match p with
     | ptsreg => [ty_enum regname, ty_word]
-    | ptsto => [ty_addr, ty_int]
+    | ptsto => [ty_addr, ty_memval]
     | safe => [ty_word]
     | csafe => [ty_cap]
     end.
@@ -220,13 +220,13 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_precondition    := asn_csafe (term_var "c");
        sep_contract_result          := "read_mem_result";
        sep_contract_postcondition   :=
-         asn_csafe (term_var "c") ✱ asn_safe (term_inl (term_var "read_mem_result"))
+         asn_csafe (term_var "c") ✱ asn_safe (term_var "read_mem_result")
     |}.
 
   Definition sep_contract_write_mem : SepContract ["c" ∶ ty_cap, "v" ∶ ty_memval ] ty_unit :=
     {| sep_contract_logic_variables := ["c" ∶ ty_cap, "v" ∶ ty_memval];
        sep_contract_localstore      := [term_var "c", term_var "v"]%arg;
-       sep_contract_precondition    := asn_csafe (term_var "c");
+       sep_contract_precondition    := asn_safe (term_var "v") ✱ asn_csafe (term_var "c");
        sep_contract_result          := "write_mem_result";
        sep_contract_postcondition   :=
          asn_csafe (term_var "c") ✱ asn_eq (term_var "write_mem_result") (term_lit ty_unit tt);
@@ -622,7 +622,7 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_postcondition   := term_enum regname r ↦r term_var "w"
     |}.
 
-  Definition sep_contract_rM : SepContract ["address" ∶ ty_addr] ty_int :=
+  Definition sep_contract_rM : SepContract ["address" ∶ ty_addr] ty_memval :=
     {| sep_contract_logic_variables := ["address" ∶ ty_addr, "p" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr];
        sep_contract_localstore      := [term_var "address"]%arg;
        sep_contract_precondition    :=
@@ -643,23 +643,23 @@ Module MinCapsSymbolicContractKit <:
                              term_var "b",
                              term_var "e",
                              term_var "address"])
-           ✱ asn_safe (term_inl (term_var "rM_result"))
+           ✱ asn_safe (term_var "rM_result")
     |}.
 
   Definition sep_contract_wM : SepContract ["address" ∶ ty_addr, "new_value" ∶ ty_memval] ty_unit :=
     {| sep_contract_logic_variables := ["address" ∶ ty_addr, "new_value" ∶ ty_memval, "p" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr];
        sep_contract_localstore      := [term_var "address", term_var "new_value"]%arg;
        sep_contract_precondition    :=
-         asn_csafe (term_record capability
-                            [term_var "p",
-                             term_var "b",
-                             term_var "e",
-                             term_var "address"]) ✱
-                        (asn_match_enum permission (term_var "p")
-                            (fun p => match p with
-                                    | RW => asn_within_bounds (term_var "address") (term_var "b") (term_var "e")
-                                    | _  => asn_false
-                                    end));
+         asn_safe (term_var "new_value") ✱ asn_csafe (term_record capability
+                                                                  [term_var "p",
+                                                                   term_var "b",
+                                                                   term_var "e",
+                                                                   term_var "address"])
+                  ✱ (asn_match_enum permission (term_var "p")
+                                    (fun p => match p with
+                                           | RW => asn_within_bounds (term_var "address") (term_var "b") (term_var "e")
+                                           | _  => asn_false
+                                           end));
        sep_contract_result          := "wM_result";
        sep_contract_postcondition   :=
          asn_csafe (term_record capability

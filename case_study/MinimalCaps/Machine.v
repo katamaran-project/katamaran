@@ -113,9 +113,9 @@ Module MinCapsTermKit <: TermKit.
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
   (* read memory *)
-  | rM    : FunX ["address" ∶ ty_int] ty_int
+  | rM    : FunX ["address" ∶ ty_int] ty_memval
   (* write memory *)
-  | wM    : FunX ["address" ∶ ty_int, "new_value" ∶ ty_int] ty_unit
+  | wM    : FunX ["address" ∶ ty_int, "new_value" ∶ ty_memval] ty_unit
   | dI    : FunX ["code" ∶ ty_int] ty_instr
   | ghost {Δ} (f : FunGhost Δ): FunX Δ ty_unit
   .
@@ -324,7 +324,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                exp_var "end",
                                exp_var "cursor" + exp_var "immediate"
                              ] in
-         let: w ∶ int := call read_reg_num hv in
+         let: w ∶ ty_word := call read_reg hv in
+         stm_call_external (ghost duplicate_safe) [exp_var w]%arg ;;
          stm_call_external (ghost specialize_safe_to_cap) [exp_var "base_cap"]%arg ;;
          stm_call_external (ghost csafe_move_cursor) [exp_var "base_cap", exp_var "c"]%arg ;;
          stm_call_external (ghost lift_csafe) [exp_var "base_cap"]%arg ;;
@@ -353,7 +354,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
          stm_call_external (ghost lift_csafe) [exp_var "base_cap"]%arg ;;
          let: n ∶ ty_memval := call read_mem c in
          stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
-         call write_reg lv (exp_inl (exp_var n)) ;;
+         call write_reg lv (exp_var n) ;;
          call update_pc ;;
          stm_lit ty_bool true).
 
@@ -493,8 +494,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     Definition fun_exec : Stm ε ty_bool :=
       let: "c" := stm_read_register pc in
       let: n ∶ ty_memval := call read_mem c in
-      let: i ∶ ty_instr := callex dI (exp_var n) in
-      call exec_instr i.
+      match: (exp_var "n") with
+      | inl n => 
+        let: i ∶ ty_instr := callex dI (exp_var n) in
+        call exec_instr i
+      | inr c => fail "Err [exec]: instructions cannot be capabilities"
+      end.
 
     Definition fun_loop : Stm ε ty_unit :=
       let: "r" := call exec in
@@ -547,12 +552,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   Definition write_write := generic_write_write.
 
   (* MEMORY *)
-  Definition Memory := Addr -> Z.
+  Definition Memory := Addr -> (Z + Capability).
 
-  Definition fun_rM (μ : Memory) (addr : Lit ty_int) : Lit ty_int :=
+  Definition fun_rM (μ : Memory) (addr : Lit ty_int) : Lit ty_memval :=
     μ addr.
 
-  Definition fun_wM (μ : Memory) (addr val : Lit ty_int) : Memory :=
+  Definition fun_wM (μ : Memory) (addr : Lit ty_int) (val : Lit ty_memval) : Memory :=
     fun addr' => if Z.eqb addr addr' then val else μ addr'.
 
   Definition ExternalCall {σs σ} (f : 𝑭𝑿 σs σ) :
