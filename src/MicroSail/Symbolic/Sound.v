@@ -820,6 +820,45 @@ Module Soundness
       eapply Hk; wsimpl; auto.
     Qed.
 
+    Lemma approx_angelic_match_sum {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.angelic_match_sum AT Γ1 Γ2 x y σ τ w) (@CMut.angelic_match_sum A Γ1 Γ2 σ τ).
+    Proof.
+    Admitted.
+
+    Lemma approx_demonic_match_sum {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_sum AT Γ1 Γ2 x y σ τ w) (@CMut.demonic_match_sum A Γ1 Γ2 σ τ).
+    Proof.
+    Admitted.
+
+    Lemma approx_angelic_match_prod {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.angelic_match_prod AT Γ1 Γ2 x y σ τ w) (@CMut.match_prod A Γ1 Γ2 σ τ).
+    Proof.
+    Admitted.
+
+    Lemma approx_demonic_match_prod {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_prod AT Γ1 Γ2 x y σ τ w) (@CMut.match_prod A Γ1 Γ2 σ τ).
+    Proof.
+    Admitted.
+
+    (* TODO: generalize *)
+    Lemma approx_angelic_match_record {R AT A} `{Approx AT A} {Γ1 Γ2}
+      {Δ : LCtx} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.angelic_match_record _ id AT R Γ1 Γ2 Δ p w) (@CMut.match_record A R Γ1 Γ2 Δ p).
+    Proof.
+    Admitted.
+
+    Lemma approx_demonic_match_record {R AT A} `{Approx AT A} {Γ1 Γ2}
+      {Δ : LCtx} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_record _ id AT R Γ1 Γ2 Δ p w) (@CMut.match_record A R Γ1 Γ2 Δ p).
+    Proof.
+    Admitted.
+
   End PatternMatching.
 
   Section State.
@@ -967,6 +1006,22 @@ Module Soundness
     apply HPOST; cbn; rewrite ?inst_sub_id; auto.
   Qed.
 
+  Lemma inst_env_cat {T : Set} {AT : LCtx -> T -> Set} {A : T -> Set}
+     {instAT : forall τ : T, Inst (fun Σ : LCtx => AT Σ τ) (A τ)}
+     {Σ : LCtx} {Γ Δ : Ctx T} (EΓ : Env (fun τ => AT Σ τ) Γ) (EΔ : Env (fun τ => AT Σ τ) Δ)
+     (ι : SymInstance Σ) :
+    inst (EΓ ►► EΔ) ι = inst EΓ ι ►► inst EΔ ι.
+  Proof.
+    unfold inst; cbn.
+    now rewrite env_map_cat.
+  Qed.
+
+  Lemma inst_sub_cat {Σ Γ Δ : LCtx} (ζΓ : Sub Γ Σ) (ζΔ : Sub Δ Σ) (ι : SymInstance Σ) :
+    inst (A := SymInstance _) (ζΓ ►► ζΔ) ι = inst ζΓ ι ►► inst ζΔ ι.
+  Proof.
+    apply (@inst_env_cat (𝑺 * Ty) (fun Σ b => Term Σ (snd b))).
+  Qed.
+
   Lemma approx_produce {Γ Σ0 pc0} (asn : Assertion Σ0) :
     let w0 := @MkWorld Σ0 pc0 in
     forall
@@ -989,11 +1044,39 @@ Module Soundness
       eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_subst.
-      admit.
+      apply approx_demonic_match_sum; auto.
+      + intros w2 ω12 ι2 -> Hpc2.
+        intros t v ->.
+        apply IHasn1; cbn - [inst sub_wk1]; wsimpl; auto.
+      + intros w2 ω12 ι2 -> Hpc2.
+        intros t v ->.
+        apply IHasn2; cbn - [inst sub_wk1]; wsimpl; auto.
     - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_demonic_match_prod; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros t1 v1 -> t2 v2 ->.
+      apply IHasn; cbn - [inst sub_wk1]; wsimpl; auto.
     - admit.
-    - admit.
-    - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_demonic_match_record; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs ->.
+      apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
+      { change (Sub Δ (wctx w2)) in ts.
+        rewrite <- ?inst_subst.
+        unfold NamedEnv.
+        fold (@instantiate_sub Δ).
+        fold (Sub Δ).
+        rewrite <- inst_sub_cat.
+        rewrite <- inst_subst.
+        rewrite <- subst_sub_comp.
+        rewrite sub_cat_left_cat.
+        now rewrite ?inst_subst.
+      }
+      now rewrite inst_sub_cat, inst_subst.
     - admit.
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_bind_right; eauto.
@@ -1059,9 +1142,20 @@ Module Soundness
       eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_subst.
-      admit.
+      apply approx_angelic_match_sum; auto.
+      + intros w2 ω12 ι2 -> Hpc2.
+        intros t v ->.
+        apply IHasn1; cbn - [inst sub_wk1]; wsimpl; auto.
+      + intros w2 ω12 ι2 -> Hpc2.
+        intros t v ->.
+        apply IHasn2; cbn - [inst sub_wk1]; wsimpl; auto.
     - admit.
-    - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_angelic_match_prod; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros t1 v1 -> t2 v2 ->.
+      apply IHasn; cbn - [inst sub_wk1]; wsimpl; auto.
     - admit.
     - admit.
     - admit.

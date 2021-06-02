@@ -2787,15 +2787,13 @@ Module Mutators
           apply (demonic_match_enum
                     (persist__term k ω01)
                     (fun EK : 𝑬𝑲 E => four (produce w0 (alts EK)) ω01)).
-        - intros w1 ω01.
-          eapply (demonic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr).
-          apply (persist__term s). auto.
-          + intros w2 ω12 t2.
-            apply (produce (wsnoc w0 (xl :: σ)) asn1).
-            apply (wsnoc_sub (wtrans ω01 ω12) (xl :: σ) t2).
-          + intros w2 ω12 t2.
-            apply (produce (wsnoc w0 (xr :: τ)) asn2).
-            apply (wsnoc_sub (wtrans ω01 ω12) (xr :: τ) t2).
+        - refine (demonic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr <$> persist__term s <*> four _ <*> four _).
+          intros w1 ω01 t1.
+          apply (produce (wsnoc w0 (xl :: σ)) asn1).
+          apply (wsnoc_sub ω01 (xl :: σ) t1).
+          intros w1 ω01 t1.
+          apply (produce (wsnoc w0 (xr :: τ)) asn2).
+          apply (wsnoc_sub ω01 (xr :: τ) t1).
         - apply (smutb_demonic_match_list xh xt s).
           + apply (produce _ asn1).
           + intros w1 ω01 thead ttail.
@@ -2844,15 +2842,13 @@ Module Mutators
           apply (angelic_match_enum
                     (persist__term k ω01)
                     (fun EK : 𝑬𝑲 E => four (consume w0 (alts EK)) ω01)).
-        - intros w1 ω01.
-          eapply (angelic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr).
-          apply (persist__term s). auto.
-          + intros w2 ω12 t2.
-            apply (consume (wsnoc w0 (xl :: σ)) asn1).
-            apply (wsnoc_sub (wtrans ω01 ω12) (xl :: σ) t2).
-          + intros w2 ω12 t2.
-            apply (consume (wsnoc w0 (xr :: τ)) asn2).
-            apply (wsnoc_sub (wtrans ω01 ω12) (xr :: τ) t2).
+        - refine (angelic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr <$> persist__term s <*> four _ <*> four _).
+          intros w1 ω01 t1.
+          apply (consume (wsnoc w0 (xl :: σ)) asn1).
+          apply (wsnoc_sub ω01 (xl :: σ) t1).
+          intros w1 ω01 t1.
+          apply (consume (wsnoc w0 (xr :: τ)) asn2).
+          apply (wsnoc_sub ω01 (xr :: τ) t1).
         - apply (smutb_angelic_match_list xh xt s).
           + apply (consume _ asn1).
           + intros w1 ω01 thead ttail.

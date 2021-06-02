@@ -601,8 +601,7 @@ Module Terms (Export termkit : TermKit).
 
   End NameResolution.
 
-  Definition SymInstance (Σ : LCtx) : Set := NamedEnv Lit Σ.
-  Bind Scope env_scope with SymInstance.
+  Notation SymInstance Σ := (@Env (𝑺 * Ty) (fun xt : 𝑺 * Ty => Lit (@snd 𝑺 Ty xt)) Σ).
 
   Section Symbolic.
 
