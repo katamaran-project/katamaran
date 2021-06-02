@@ -85,51 +85,29 @@ Module Mutators
   Record Acc (w1 w2 : World) : Type :=
     MkAcc
       { wsub :> Sub w1 w2;
-        (* went :  wco w2 ⊢ subst (wco w1) wsub; *)
+        went :  wco w2 ⊢ subst (wco w1) wsub;
       }.
 
   Notation "w1 ⊒ w2" := (Acc w1 w2) (at level 80).
 
-  Definition went {w0 w1} (ω01 : w0 ⊒ w1) : Prop :=
-    wco w1 ⊢ subst (wco w0) (wsub ω01).
-
   Local Obligation Tactic := idtac.
-  Definition wrefl {w} : w ⊒ w :=
+  Program Definition wrefl {w} : w ⊒ w :=
     {| wsub := sub_id w |}.
-  (* Next Obligation. *)
-  (*   intros ?. now rewrite subst_sub_id. *)
-  (* Qed. *)
-
-  Lemma went_wrefl {w} :
-    went (wrefl (w := w)).
-  Proof.
-    intros ι. cbn.
-    now rewrite subst_sub_id.
+  Next Obligation.
+    intros ?. now rewrite subst_sub_id.
   Qed.
 
-  Definition wtrans {w0 w1 w2} : w0 ⊒ w1 -> w1 ⊒ w2 -> w0 ⊒ w2 :=
+  Program Definition wtrans {w0 w1 w2} : w0 ⊒ w1 -> w1 ⊒ w2 -> w0 ⊒ w2 :=
     fun ω01 ω12 => {| wsub := subst (T := Sub _) ω01 ω12 |}.
-  (* Next Obligation. *)
-  (*   intros *. *)
-  (*   rewrite subst_sub_comp. *)
-  (*   intros ι2 Hpc2. *)
-  (*   rewrite inst_subst. *)
-  (*   apply (went ω01 (inst (T := Sub _) ω12 ι2)). *)
-  (*   rewrite <- inst_subst. *)
-  (*   apply (went ω12 ι2 Hpc2). *)
-  (* Defined. *)
-
-  Lemma went_wtrans {w0 w1 w2} {ω01 : w0 ⊒ w1} {ω12 : w1 ⊒ w2} :
-    went ω01 -> went ω12 -> went (wtrans ω01 ω12).
-  Proof.
-    intros Hω01 Hω12. unfold went, wtrans.
-    cbn [wctx wco wsub].
+  Next Obligation.
+    intros *.
     rewrite subst_sub_comp.
-    transitivity (subst (wco w1) ω12).
-    apply Hω12.
-    apply proper_subst_entails.
-    apply Hω01.
-  Qed.
+    intros ι2 Hpc2.
+    rewrite inst_subst.
+    apply (went ω01 (inst (T := Sub _) ω12 ι2)).
+    rewrite <- inst_subst.
+    apply (went ω12 ι2 Hpc2).
+  Defined.
 
   Definition wnil : World := @MkWorld ctx_nil nil.
   Definition wsnoc (w : World) (b : 𝑺 * Ty) : World :=
@@ -145,155 +123,111 @@ Module Mutators
   Defined.
   Global Arguments wsubst w x {σ xIn} t.
 
-  Fixpoint wcat (w : World) (Σ : LCtx) : World :=
-    match Σ with
-    | ctx_nil      => w
-    | ctx_snoc Σ b => wsnoc (wcat w Σ) b
-    end.
-
-  Definition wsnoc_sup {w : World} {b : 𝑺 * Ty} : w ⊒ wsnoc w b :=
-    MkAcc w (wsnoc w b) sub_wk1.
-  (* Next Obligation. *)
-  (* Proof. *)
-  (*   intros w b ι Hpc. apply Hpc. *)
-  (* Qed. *)
-
-  Lemma went_wsnoc_sup {w : World} {b : 𝑺 * Ty} :
-    went (@wsnoc_sup w b).
+  Program Definition wsnoc_sup {w : World} {b : 𝑺 * Ty} : w ⊒ wsnoc w b :=
+    MkAcc w (wsnoc w b) sub_wk1 _.
+  Next Obligation.
   Proof.
-    intros ι Hpc. apply Hpc.
+    intros w b ι Hpc. apply Hpc.
   Qed.
 
-  Definition wsnoc_sub {w1 w2 : World} (ω12 : w1 ⊒ w2) (b : 𝑺 * Ty) (t : Term w2 (snd b)) :
+  Program Definition wsnoc_sub {w1 w2 : World} (ω12 : w1 ⊒ w2) (b : 𝑺 * Ty) (t : Term w2 (snd b)) :
     wsnoc w1 b ⊒ w2 :=
-    MkAcc (wsnoc w1 b) w2 (sub_snoc ω12 b t).
-
-  Lemma went_wsnoc_sub {w1 w2 : World} (ω12 : w1 ⊒ w2) (b : 𝑺 * Ty) (t : Term w2 (snd b)) :
-    went ω12 ->
-    went (@wsnoc_sub w1 w2 ω12 b t).
-  Proof.
-    unfold went, entails. intros Hpc12 ι2 Hpc2.
-    specialize (Hpc12 ι2 Hpc2).
-    rewrite inst_subst in Hpc12.
-    unfold wsnoc, wsnoc_sub. cbn - [subst inst].
+    MkAcc (wsnoc w1 b) w2 (sub_snoc ω12 b t) _.
+  Next Obligation.
+    unfold entails.
+    intros w1 w2 ω12 [x σ] t ι2 Hpc2.
+    cbn - [inst].
     rewrite ?inst_subst.
     rewrite inst_sub_snoc.
     rewrite inst_sub_wk1.
-    apply Hpc12.
+    rewrite <- inst_subst.
+    now apply (went ω12).
   Qed.
 
-  Fixpoint wcat_sub {w1 w2 : World} (ω12 : w1 ⊒ w2) {Δ : LCtx} :
-    Sub Δ w2 ->
-    wcat w1 Δ ⊒ w2.
+  Definition wcat (w : World) (Δ : LCtx) : World :=
+    @MkWorld (wctx w ▻▻ Δ) (subst (wco w) (sub_cat_left Δ)).
+
+  Lemma sub_cat_left_cat {Σ1 Σ2 Σ} (ζ1 : Sub Σ1 Σ) (ζ2 : Sub Σ2 Σ) :
+    subst (sub_cat_left Σ2) (ζ1 ►► ζ2) = ζ1.
   Proof.
-    destruct Δ; cbn [wcat].
-    - intros _. apply ω12.
-    - intros ζ. destruct (snocView ζ).
-      apply wsnoc_sub.
-      apply wcat_sub.
-      auto.
-      auto.
-      auto.
-  Defined.
+    apply env_lookup_extensional. intros [x σ] xIn.
+    unfold sub_cat_left. unfold subst, SubstEnv.
+    rewrite env_lookup_map, env_lookup_tabulate. cbn.
+  Admitted.
 
-  (* Next Obligation. *)
-  (* Proof. *)
-  (* Qed. *)
-
-  Definition wformula_sup {w : World} {f : Formula w} : w ⊒ wformula w f :=
-    MkAcc w (wformula w f) (sub_id (wctx w)).
-  (* Next Obligation. *)
-  (* Proof. *)
-  (*   intros w f ι. *)
-  (*   rewrite subst_sub_id. cbn. *)
-  (*   rewrite inst_pathcondition_cons. *)
-  (*   now intros []. *)
-  (* Qed. *)
-
-  Lemma went_wformula_sup {w f} :
-    went (@wformula_sup w f).
+  Program Definition wcat_sub {w1 w2} (ω12 : w1 ⊒ w2) {Δ : LCtx} (ζ : Sub Δ w2) :
+    wcat w1 Δ ⊒ w2 := {| wsub := wsub ω12 ►► ζ |}.
+  Next Obligation.
   Proof.
-    intros ι.
+    intros * ι Hpc. unfold wcat. cbn.
+    rewrite <- subst_sub_comp.
+    rewrite sub_cat_left_cat.
+    now apply went.
+  Qed.
+
+  Program Definition wformula_sup {w : World} {f : Formula w} : w ⊒ wformula w f :=
+    MkAcc w (wformula w f) (sub_id (wctx w)) _.
+  Next Obligation.
+  Proof.
+    intros w f ι.
     rewrite subst_sub_id. cbn.
     rewrite inst_pathcondition_cons.
     now intros [].
   Qed.
 
-  Definition wformula_sub {w : World} {f : Formula w} : wformula w f ⊒ w :=
-    MkAcc (wformula w f) w (sub_id (wctx w)).
-  (* Next Obligation. *)
-  (* Proof. *)
-  (*   intros w f ι. *)
-  (*   rewrite subst_sub_id. cbn. *)
-  (*   rewrite inst_pathcondition_cons. *)
-  (*   now intros []. *)
-  (* Qed. *)
-
   Definition wformulas (w : World) (fmls : List Formula w) : World :=
     @MkWorld (wctx w) (app fmls (wco w)).
 
-  Definition wformulas_sup (w : World) (fmls : List Formula w) :
-    w ⊒ wformulas w fmls.
+  Program Definition wformulas_sup (w : World) (fmls : List Formula w) :
+    w ⊒ wformulas w fmls :=
+    MkAcc w (wformulas w fmls) (sub_id (wctx w)) _.
+  Next Obligation.
   Proof.
-    constructor.
-    apply (sub_id (wctx w)).
-  Defined.
-
-  Definition wred_sup {w : World} b (t : Term w (snd b)) :
-    wsnoc w b ⊒ w :=
-    MkAcc (wsnoc w b) w (sub_snoc (sub_id w) b t).
-
-  Definition wsubst_sup {w : World} {x σ} {xIn : x :: σ ∈ w} {t : Term (w - (x :: σ)) σ} :
-    w ⊒ wsubst w x t :=
-    MkAcc w (wsubst w x t) (sub_single xIn t).
-  (* Next Obligation. *)
-  (* Proof. *)
-  (*   intros w x σ xIn t ι Hpc. apply Hpc. *)
-  (* Qed. *)
-
-  Definition wacc_snoc {w0 w1 : World} (ω01 : w0 ⊒ w1) (b : 𝑺 * Ty) :
-    wsnoc w0 b ⊒ wsnoc w1 b :=
-    MkAcc (wsnoc w0 b) (wsnoc w1 b) (sub_up1 ω01).
-  (* Next Obligation. *)
-  (*   intros ? ? ? ?. *)
-  (*   unfold wsnoc in *. *)
-  (*   cbn [wco wctx] in *. *)
-  (*   rewrite <- subst_sub_comp. *)
-  (*   rewrite sub_comp_wk1_comm. *)
-  (*   rewrite subst_sub_comp. *)
-  (*   apply proper_subst_entails. *)
-  (*   apply went. *)
-  (* Qed. *)
-
-  Lemma went_wacc_snoc {w0 w1} {ω01 : w0 ⊒ w1} {b : 𝑺 * Ty} :
-    went ω01 ->
-    went (wacc_snoc ω01 b).
-  Proof.
-    unfold wacc_snoc, wsnoc.
-    intros Hω01 ι1 Hpc1. cbn - [inst] in *.
-    specialize (Hω01 (inst sub_wk1 ι1)).
-    rewrite <- subst_sub_comp.
-    rewrite sub_comp_wk1_comm.
-    cbn in *.
-    rewrite inst_subst in Hω01.
-    rewrite ?inst_subst.
-    rewrite ?inst_subst in Hpc1.
-    intuition.
+    intros w fmls ι. cbn. rewrite inst_subst, inst_sub_id.
+    rewrite inst_pathcondition_app; intuition.
   Qed.
 
-  Definition wacc_formula {w0 w1} (ω01 : w0 ⊒ w1) (fml : Formula w0) :
-    wformula w0 fml ⊒ wformula w1 (subst fml ω01) :=
-    MkAcc (MkWorld (cons fml (wco w0))) (MkWorld (cons (subst fml ω01) (wco w1))) ω01.
-
-  Lemma went_wacc_formula {w0 w1} {ω01 : w0 ⊒ w1} {fml : Formula w0} :
-    went ω01 ->
-    went (wacc_formula ω01 fml).
+  Program Definition wred_sup {w : World} b (t : Term w (snd b)) :
+    wsnoc w b ⊒ w :=
+    MkAcc (wsnoc w b) w (sub_snoc (sub_id w) b t) _.
+  Next Obligation.
   Proof.
-    unfold wacc_formula, wformula.
-    intros Hω01 ι1 Hpc1. specialize (Hω01 ι1).
-    cbn - [inst] in *.
-    rewrite ?inst_pathcondition_cons, ?inst_subst in *.
-    intuition.
+    intros w b t ι Hpcι; cbn.
+    now rewrite ?inst_subst, inst_sub_snoc, inst_sub_id, inst_sub_wk1.
+  Qed.
+
+  Program Definition wsubst_sup {w : World} {x σ} {xIn : x :: σ ∈ w} {t : Term (w - (x :: σ)) σ} :
+    w ⊒ wsubst w x t :=
+    MkAcc w (wsubst w x t) (sub_single xIn t) _.
+  Next Obligation.
+  Proof.
+    intros w x σ xIn t ι Hpc. apply Hpc.
+  Qed.
+
+  Program Definition wacc_snoc {w0 w1 : World} (ω01 : w0 ⊒ w1) (b : 𝑺 * Ty) :
+    wsnoc w0 b ⊒ wsnoc w1 b :=
+    MkAcc (wsnoc w0 b) (wsnoc w1 b) (sub_up1 ω01) _.
+  Next Obligation.
+    intros ? ? ? ?.
+    unfold wsnoc in *.
+    cbn [wco wctx] in *.
+    rewrite <- subst_sub_comp.
+    rewrite sub_comp_wk1_comm.
+    rewrite subst_sub_comp.
+    apply proper_subst_entails.
+    apply went.
+  Qed.
+
+  Program Definition wacc_formula {w0 w1} (ω01 : w0 ⊒ w1) (fml : Formula w0) :
+    wformula w0 fml ⊒ wformula w1 (subst fml ω01) :=
+    MkAcc (MkWorld (cons fml (wco w0))) (MkWorld (cons (subst fml ω01) (wco w1))) ω01 _.
+  Next Obligation.
+    intros ? ? ? ? ι.
+    unfold wformula in *.
+    cbn [wco wctx] in *.
+    repeat rewrite ?inst_pathcondition_cons, ?inst_subst.
+    intuition. rewrite <- inst_subst.
+    now apply went.
   Qed.
 
   Notation WList A := (fun w : World => list (A w)).
@@ -327,17 +261,17 @@ Module Mutators
       apply ιvalid.
     Qed.
 
-    Fixpoint winstance_cat {Σ} (ι : WInstance Σ) {Δ} (ιΔ : SymInstance Δ) :
-      WInstance (wcat Σ Δ).
-    Proof.
-      destruct ιΔ; cbn.
-      - apply ι.
-      - apply winstance_snoc.
-        apply winstance_cat.
-        apply ι.
-        apply ιΔ.
-        apply db.
-    Defined.
+    (* Fixpoint winstance_cat {Σ} (ι : WInstance Σ) {Δ} (ιΔ : SymInstance Δ) : *)
+    (*   WInstance (wcat Σ Δ). *)
+    (* Proof. *)
+    (*   destruct ιΔ; cbn. *)
+    (*   - apply ι. *)
+    (*   - apply winstance_snoc. *)
+    (*     apply winstance_cat. *)
+    (*     apply ι. *)
+    (*     apply ιΔ. *)
+    (*     apply db. *)
+    (* Defined. *)
 
     Program Definition winstance_subst {w} (ι : WInstance w) {x σ} {xIn : x :: σ ∈ w}
       (t : Term (w - (x :: σ)) σ) (p : inst t (env_remove (x :: σ) (ιassign ι) xIn) = env_lookup (ιassign ι) xIn) :
@@ -350,13 +284,13 @@ Module Mutators
       apply p.
     Qed.
 
-    Program Definition instacc {w0 w1} (ω01 : w0 ⊒ w1) (Hω01 : went ω01) (ι : WInstance w1) : WInstance w0 :=
+    Program Definition instacc {w0 w1} (ω01 : w0 ⊒ w1) (ι : WInstance w1) : WInstance w0 :=
        {| ιassign := inst (wsub ω01) (ιassign ι) |}.
     Next Obligation.
     Proof.
-      intros w0 w1 ω01 Hω01 ι.
+      intros w0 w1 ω01 ι.
       rewrite <- inst_subst.
-      apply Hω01.
+      apply went.
       apply ιvalid.
     Qed.
 
@@ -799,43 +733,43 @@ Module Mutators
         | ctx_snoc Σ b => fun k => close Σ (@demonicv Σ b k)
         end.
 
-    Global Instance persistent_spath : Persistent SPath :=
-      (* ⊢ SPath -> □SPath := *)
-       fix pers (w0 : World) (p : SPath w0) {w1 : World} ω01 {struct p} : SPath w1 :=
-         match p with
-         | angelic_binary p1 p2 => angelic_binary (pers w0 p1 ω01) (pers w0 p2 ω01)
-         | demonic_binary p1 p2 => demonic_binary (pers w0 p1 ω01) (pers w0 p2 ω01)
-         | error msg            => error (subst msg (wsub ω01))
-         | block                => block
-         | assertk fml msg p0   =>
-             assertk (subst fml (wsub ω01)) (subst msg (wsub ω01))
-               (pers (wformula w0 fml) p0 (wacc_formula ω01 fml))
-         | assumek fml p        =>
-             assumek (subst fml (wsub ω01))
-               (pers (wformula w0 fml) p (wacc_formula ω01 fml))
-         | angelicv b p0        => angelicv b (pers (wsnoc w0 b) p0 (wacc_snoc ω01 b))
-         | demonicv b p0        => demonicv b (pers (wsnoc w0 b) p0 (wacc_snoc ω01 b))
-         | assert_vareq x t msg p =>
-           let ζ := subst (sub_shift _) (wsub ω01) in
-           assertk
-             (formula_eq (env_lookup (wsub ω01) _) (subst t ζ))
-             (subst msg ζ)
-             (pers (wsubst w0 x t) p
-                (MkAcc (MkWorld (subst (wco w0) (sub_single _ t)))
-                   (MkWorld
-                      (cons (formula_eq (env_lookup (wsub ω01) _) (subst t ζ))
-                         (wco w1))) ζ))
-         | assume_vareq x t p =>
-           let ζ := subst (sub_shift _) (wsub ω01) in
-           assumek
-             (formula_eq (env_lookup (wsub ω01) _) (subst t ζ))
-             (pers (wsubst w0 x t) p
-                (MkAcc (MkWorld (subst (wco w0) (sub_single _ t)))
-                   (MkWorld
-                      (cons (formula_eq (env_lookup (wsub ω01) _) (subst t ζ))
-                         (wco w1))) ζ))
-         | debug d p => debug (subst d (wsub ω01)) (pers w0 p ω01)
-         end.
+    (* Global Instance persistent_spath : Persistent SPath := *)
+    (*   (* ⊢ SPath -> □SPath := *) *)
+    (*    fix pers (w0 : World) (p : SPath w0) {w1 : World} ω01 {struct p} : SPath w1 := *)
+    (*      match p with *)
+    (*      | angelic_binary p1 p2 => angelic_binary (pers w0 p1 ω01) (pers w0 p2 ω01) *)
+    (*      | demonic_binary p1 p2 => demonic_binary (pers w0 p1 ω01) (pers w0 p2 ω01) *)
+    (*      | error msg            => error (subst msg (wsub ω01)) *)
+    (*      | block                => block *)
+    (*      | assertk fml msg p0   => *)
+    (*          assertk (subst fml (wsub ω01)) (subst msg (wsub ω01)) *)
+    (*            (pers (wformula w0 fml) p0 (wacc_formula ω01 fml)) *)
+    (*      | assumek fml p        => *)
+    (*          assumek (subst fml (wsub ω01)) *)
+    (*            (pers (wformula w0 fml) p (wacc_formula ω01 fml)) *)
+    (*      | angelicv b p0        => angelicv b (pers (wsnoc w0 b) p0 (wacc_snoc ω01 b)) *)
+    (*      | demonicv b p0        => demonicv b (pers (wsnoc w0 b) p0 (wacc_snoc ω01 b)) *)
+    (*      | assert_vareq x t msg p => *)
+    (*        let ζ := subst (sub_shift _) (wsub ω01) in *)
+    (*        assertk *)
+    (*          (formula_eq (env_lookup (wsub ω01) _) (subst t ζ)) *)
+    (*          (subst msg ζ) *)
+    (*          (pers (wsubst w0 x t) p *)
+    (*             (MkAcc (MkWorld (subst (wco w0) (sub_single _ t))) *)
+    (*                (MkWorld *)
+    (*                   (cons (formula_eq (env_lookup (wsub ω01) _) (subst t ζ)) *)
+    (*                      (wco w1))) ζ)) *)
+    (*      | assume_vareq x t p => *)
+    (*        let ζ := subst (sub_shift _) (wsub ω01) in *)
+    (*        assumek *)
+    (*          (formula_eq (env_lookup (wsub ω01) _) (subst t ζ)) *)
+    (*          (pers (wsubst w0 x t) p *)
+    (*             (MkAcc (MkWorld (subst (wco w0) (sub_single _ t))) *)
+    (*                (MkWorld *)
+    (*                   (cons (formula_eq (env_lookup (wsub ω01) _) (subst t ζ)) *)
+    (*                      (wco w1))) ζ)) *)
+    (*      | debug d p => debug (subst d (wsub ω01)) (pers w0 p ω01) *)
+    (*      end. *)
 
     Fixpoint assume_formulas_without_solver' {Σ}
       (fmls : List Formula Σ) (p : SPath Σ) : SPath Σ :=
@@ -2873,16 +2807,16 @@ Module Mutators
           apply (wsnoc_sub (wsnoc_sub ω01 (xl :: σ1) t1) (xr :: σ2) t2).
         - apply (smutb_demonic_match_tuple id p s).
           intros w1 ω01 ts.
-          apply (produce (MkWorld (subst (wco w0) (sub_cat_left Δ))) asn w1).
-          apply (MkAcc (MkWorld (subst (wco w0) (sub_cat_left Δ))) w1 (wsub ω01 ►► ts)).
+          apply (produce (wcat w0 Δ) asn w1).
+          apply wcat_sub; auto.
         - apply (smutb_demonic_match_record id p s).
           intros w1 ω01 ts.
-          apply (produce (MkWorld (subst (wco w0) (sub_cat_left Δ))) asn w1).
-          apply (MkAcc (MkWorld (subst (wco w0) (sub_cat_left Δ))) w1 (wsub ω01 ►► ts)).
+          apply (produce (wcat w0 Δ) asn w1).
+          apply wcat_sub; auto.
         - apply (smutb_demonic_match_union id alt__pat s).
           intros UK w1 ω01 ts.
-          apply (produce (MkWorld (subst (wco w0) (sub_cat_left (alt__ctx UK)))) (alt__rhs UK) w1).
-          apply (MkAcc (MkWorld (subst (wco w0) (sub_cat_left _))) w1 (wsub ω01 ►► ts)).
+          apply (produce (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1).
+          apply wcat_sub; auto.
         - apply (bind_right <$> produce _ asn1 <*> four (produce _ asn2)).
         - intros w1 ω01.
           eapply bind.
@@ -2930,16 +2864,16 @@ Module Mutators
           apply (wsnoc_sub (wsnoc_sub ω01 (xl :: σ1) t1) (xr :: σ2) t2).
         - apply (smutb_angelic_match_tuple id p s).
           intros w1 ω01 ts.
-          apply (consume (MkWorld (subst (wco w0) (sub_cat_left Δ))) asn w1).
-          apply (MkAcc (MkWorld (subst (wco w0) (sub_cat_left Δ))) w1 (wsub ω01 ►► ts)).
+          apply (consume (wcat w0 Δ) asn w1).
+          apply wcat_sub; auto.
         - apply (smutb_angelic_match_record id p s).
           intros w1 ω01 ts.
-          apply (consume (MkWorld (subst (wco w0) (sub_cat_left Δ))) asn w1).
-          apply (MkAcc (MkWorld (subst (wco w0) (sub_cat_left Δ))) w1 (wsub ω01 ►► ts)).
+          apply (consume (wcat w0 Δ) asn w1).
+          apply wcat_sub; auto.
         - apply (smutb_angelic_match_union id alt__pat s).
           intros UK w1 ω01 ts.
-          apply (consume (MkWorld (subst (wco w0) (sub_cat_left (alt__ctx UK)))) (alt__rhs UK) w1).
-          apply (MkAcc (MkWorld (subst (wco w0) (sub_cat_left _))) w1 (wsub ω01 ►► ts)).
+          apply (consume (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1).
+          apply wcat_sub; auto.
         - apply (bind_right <$> consume _ asn1 <*> four (consume _ asn2)).
         - intros w1 ω01.
           eapply bind.
@@ -2986,7 +2920,7 @@ Module Mutators
         eapply bind_right.
         apply (consume (w := @MkWorld Σe nil) req).
         refine (wtrans _ ω12).
-        constructor. cbn. apply evars.
+        constructor 1 with evars. cbn. constructor.
         intros w3 ω23.
         eapply bind.
         apply (demonic (Some result)).
@@ -2995,11 +2929,8 @@ Module Mutators
         apply (produce
                  (w := @MkWorld (Σe ▻ (result::τ)) nil)
                  ens).
-        constructor. cbn.
-        apply sub_snoc; cbn.
-        apply (subst (T := Sub _) evars).
-        apply (wtrans ω12 (wtrans ω23 ω34)).
-        apply res.
+        constructor 1 with (sub_snoc (subst (T := Sub _) evars (wtrans ω12 (wtrans ω23 ω34))) (result::τ) res).
+        cbn. constructor.
         intros w5 ω45. clear - res ω45.
         apply pure.
         apply (persist__term res ω45).
@@ -3507,10 +3438,8 @@ Module Mutators
             apply (produce
                      (w := @MkWorld (Σe ▻ (result::τ)) nil)
                      ens).
-            constructor. cbn.
-            apply sub_snoc; cbn.
-            apply (subst (T := Sub _) ζ ω23).
-            apply res.
+            constructor 1 with (sub_snoc (subst (T := Sub _) ζ ω23) (result::τ) res).
+            cbn. constructor.
             intros w4 ω34.
             apply pure.
             apply (persist__term res ω34).

@@ -289,7 +289,7 @@ Module Soundness
         specialize (Hwp Hν Hsolver). revert Hwp.
         unfold four, wtrans, persist, persist_subst; cbn.
         wsimpl. apply HPOST; cbn; auto.
-        rewrite inst_multi; auto.
+        wsimpl. rewrite inst_multi; auto.
         rewrite inst_pathcondition_app. split; auto.
         now apply multishift_entails.
       - intuition.
