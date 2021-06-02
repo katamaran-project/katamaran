@@ -45,8 +45,8 @@ Delimit Scope exp_scope with exp.
 Delimit Scope arg_scope with arg.
 
 Reserved Notation "'ε'"            (at level 0).
-Reserved Infix "▻"                 (at level 50, left associativity).
-Reserved Infix "▻▻"                (at level 50, left associativity).
+Reserved Infix "▻"                 (at level 61, left associativity).
+Reserved Infix "▻▻"                (at level 61, left associativity).
 Reserved Infix "∈"                 (at level 70).
 Reserved Notation "x ∶ τ"          (at level 40, no associativity,
   format "x ∶ τ").

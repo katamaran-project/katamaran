@@ -1572,7 +1572,7 @@ Module Adequacy
 
   Lemma steps_to_erased {σ Γ γ μ δ} (s : Stm Γ σ) {γ' μ' δ' s'}:
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    rtc erased_step (cons (MkTm δ s) nil ∶ (γ ∶ μ))%ctx (cons (MkTm δ' s') nil ∶ (γ' ∶ μ'))%ctx.
+    rtc erased_step (cons (MkTm δ s) nil :: (γ :: μ))%ctx (cons (MkTm δ' s') nil :: (γ' :: μ'))%ctx.
   Proof.
     induction 1; first done.
     refine (rtc_l _ _ _ _ _ IHSteps).
@@ -1593,7 +1593,7 @@ Module Adequacy
     ResultOrFail s' Q.
   Proof.
     intros steps fins trips.
-    cut (adequate MaybeStuck (MkTm δ s) (γ ∶ μ)%ctx
+    cut (adequate MaybeStuck (MkTm δ s) (γ,μ)
              (λ (v : val (microsail_lang Γ σ)) (_ : state (microsail_lang Γ σ)),
                 (λ v0 : val (microsail_lang Γ σ), match v0 with
                                                   | MkVal _ _ v' => Q v'

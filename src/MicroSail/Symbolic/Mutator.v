@@ -3284,16 +3284,16 @@ Module Mutators
             | Some s =>
               match term_get_sum s with
               | Some (inl t) =>
-                let Lxl := L ► (xl∶σ ↦ Some t) in
+                let Lxl := L ► (xl::σ ↦ Some t) in
                 Lxl' <- consume_evarenv alt_inl Lxl ;;
                 pure (env_tail Lxl')
               | Some (inr t) =>
-                let Lxr := L ► (xr∶τ ↦ Some t) in
+                let Lxr := L ► (xr::τ ↦ Some t) in
                 Lxr' <- consume_evarenv alt_inr Lxr ;;
                 pure (env_tail Lxr')
               | None =>
                 angelic_binary
-                  (let Lxl := L ► (xl∶σ ↦ None) in
+                  (let Lxl := L ► (xl::σ ↦ None) in
                     consume_evarenv alt_inl Lxl >>= fun _ ζ Lxl' =>
                       match env_unsnoc Lxl' with
                       | (L' , Some t) =>
@@ -3310,7 +3310,7 @@ Module Mutators
                              evarerror_data := alt_inl
                           |}
                       end)
-                  (let Lxr := L ► (xr∶τ ↦ None) in
+                  (let Lxr := L ► (xr::τ ↦ None) in
                     consume_evarenv alt_inr Lxr >>= fun _ ζ Lxr' =>
                       match env_unsnoc Lxr' with
                       | (L' , Some t) =>
@@ -3342,7 +3342,7 @@ Module Mutators
             | Some s =>
               match term_get_pair s with
               | Some (tl, tr) =>
-                let Lrhs := L ► (xl∶_ ↦ Some tl) ► (xr∶_ ↦ Some tr) in
+                let Lrhs := L ► (xl::_ ↦ Some tl) ► (xr::_ ↦ Some tr) in
                 Lrhs' <- consume_evarenv rhs Lrhs ;;
                 pure (env_tail (env_tail Lrhs'))
               | None =>
@@ -3383,7 +3383,7 @@ Module Mutators
             consume_evarenv a1 L >>= fun _ _ => consume_evarenv a2
           | asn_exist ς τ a =>
             (* Dynamically allocate a new evar ς in the EvarEnv. *)
-            let Lς := L ► (ς∶τ ↦ None) in
+            let Lς := L ► (ς::τ ↦ None) in
             consume_evarenv a Lς >>= fun _ _ Lς' =>
             (* Split off the last evar again. *)
             match env_unsnoc Lς' with

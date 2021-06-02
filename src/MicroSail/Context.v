@@ -535,6 +535,9 @@ End WithAB.
 Module CtxNotations.
 
   Notation NCtx Name Data := (Ctx (Name * Data)).
+  (* DEPRECATED *)
+  (* NB: ∶ ≠ : *)
+  (*    To typeset the next notation, use \: *)
   Notation "x ∶ τ" := (x,τ) (only parsing) : ctx_scope.
   Notation "x :: τ" := (x , τ) : ctx_scope.
 
@@ -543,8 +546,6 @@ Module CtxNotations.
   Notation "Γ1 ▻▻ Γ2" := (ctx_cat Γ1%ctx Γ2%ctx) : ctx_scope.
   Notation "b ∈ Γ" := (InCtx b%ctx Γ%ctx) : type_scope.
 
-  (* NB: ∶ ≠ :
-     To typeset the next notation, use \: *)
   Notation "[ x ]" := (ctx_snoc ctx_nil x)  : ctx_scope.
   Notation "[ x , .. , z ]" := (ctx_snoc .. (ctx_snoc ctx_nil x) .. z) : ctx_scope.
   Notation "Γ - x" := (@ctx_remove _ Γ x _) : ctx_scope.
@@ -560,17 +561,17 @@ Section Resolution.
 
   Fixpoint ctx_resolve (Γ : NCtx Name D) (x : Name) {struct Γ} : option D :=
     match Γ with
-    | ε       => None
-    | Γ ▻ y∶d => if Name_eqdec x y then Some d else ctx_resolve Γ x
+    | ε        => None
+    | Γ ▻ y::d => if Name_eqdec x y then Some d else ctx_resolve Γ x
     end.
 
   Fixpoint mk_inctx (Γ : NCtx Name D) (x : Name) {struct Γ} :
-    let m := ctx_resolve Γ x in forall (p : IsSome m), (x∶fromSome m p) ∈ Γ :=
+    let m := ctx_resolve Γ x in forall (p : IsSome m), x::fromSome m p ∈ Γ :=
     match Γ with
     | ε => fun p => match p with end
-    | Γ ▻ y∶d =>
+    | Γ ▻ y::d =>
       match Name_eqdec x y as s return
-        (forall p, (x∶fromSome (if s then Some d else ctx_resolve Γ x) p) ∈ (Γ ▻ y∶d))
+        (forall p, (x::fromSome (if s then Some d else ctx_resolve Γ x) p) ∈ Γ ▻ y::d)
       with
       | left e => fun _ => match e with eq_refl => inctx_zero end
       | right _ => fun p => inctx_succ (mk_inctx Γ x p)
@@ -579,8 +580,8 @@ Section Resolution.
 
   Fixpoint ctx_names (Γ : NCtx Name D) : list Name :=
     match Γ with
-    | ε       => nil
-    | Γ ▻ y∶_ => cons y (ctx_names Γ)
+    | ε          => nil
+    | Γ ▻ (y::_) => cons y (ctx_names Γ)
     end.
 
 End Resolution.
