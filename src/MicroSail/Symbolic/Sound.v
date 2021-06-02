@@ -87,7 +87,7 @@ Module Soundness
   Global Arguments ApproxInst {_ _ _} w ι t v /.
 
   Global Instance ApproxPath : Approx SPath Prop :=
-    fun w ι SP P => safe SP ι -> P.
+    fun w ι SP P => wsafe SP ι -> P.
 
   Global Instance ApproxBox {AT A} `{Approx AT A} : Approx (Box AT) A :=
     fun w0 ι0 a0 a =>
@@ -1287,18 +1287,17 @@ Module Soundness
   Qed.
 
   Definition safe_demonic_close {Σ : LCtx} :
-    let w := {| wctx := Σ; wco := nil |} in
-    forall p : SPath w,
-      @safe wnil (demonic_close p) env_nil ->
-      forall ι : SymInstance w,
-        @safe w p ι.
+    forall p : SPath Σ,
+      safe (demonic_close p) env_nil ->
+      forall ι : SymInstance Σ,
+        safe p ι.
   Proof.
     induction Σ; cbn [demonic_close] in *.
     - intros p Hwp ι.
       destruct (nilView ι). apply Hwp.
     - intros p Hwp ι.
       destruct b as [x σ], (snocView ι).
-      now apply (IHΣ (demonicv (w := {| wctx := Σ; wco := nil |}) (x :: σ) p)).
+      now apply (IHΣ (demonicv (x :: σ) p)).
   Qed.
 
   Lemma symbolic_sound {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
@@ -1307,7 +1306,8 @@ Module Soundness
   Proof.
     unfold SMut.ValidContract, CMut.ValidContract. intros [Hwp] ι.
     unfold SMut.exec_contract_path in Hwp. rewrite prune_sound in Hwp.
-    generalize (@safe_demonic_close (sep_contract_logic_variables c) _ Hwp ι).
+    apply safe_demonic_close with _ ι in Hwp. revert Hwp.
+    rewrite <- (wsafe_safe (w := @MkWorld (sep_contract_logic_variables c) nil)).
     apply approx_exec_contract; auto.
     intros w1 ω01 ι1 -> Hpc1.
     auto.
