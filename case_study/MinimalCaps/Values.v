@@ -50,7 +50,7 @@ Module MinCapsValueKit <: ValueKit.
   Notation ty_rv := (ty_sum (ty_enum regname) ty_int).
   Notation ty_cap := (ty_record capability).
   Notation ty_word := (ty_sum ty_int ty_cap).
-  Notation ty_memval := (ty_int).
+  Notation ty_memval := (ty_word).
   Notation ty_addr := (ty_int).
   Notation ty_perm := (ty_enum permission).
   Notation ty_instr := (ty_union instruction).
