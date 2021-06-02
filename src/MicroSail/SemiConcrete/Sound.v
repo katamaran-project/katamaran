@@ -185,7 +185,8 @@ Module Soundness
       - rewrite ?wp_angelic_match_bool.
         destruct (inst b ι); cbn; eauto.
       - rewrite ?wp_angelic_match_enum; eauto.
-      - destruct (inst s ι); cbn; eauto.
+      - rewrite ?wp_angelic_match_sum.
+        destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
       - eauto.
@@ -212,7 +213,8 @@ Module Soundness
       - rewrite ?wp_demonic_match_bool.
         destruct (inst b ι); cbn; eauto.
       - rewrite ?wp_demonic_match_enum; eauto.
-      - destruct (inst s ι); cbn; eauto.
+      - rewrite ?wp_demonic_match_sum.
+        destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
       - eauto.
@@ -235,7 +237,8 @@ Module Soundness
       - rewrite wp_angelic_match_bool.
         destruct (inst b ι); auto.
       - rewrite wp_angelic_match_enum; auto.
-      - destruct (inst s ι); auto.
+      - rewrite wp_angelic_match_sum.
+        destruct (inst s ι); auto.
       - destruct (inst s ι); auto.
       - destruct (inst s ι); auto.
       - auto.
@@ -266,7 +269,8 @@ Module Soundness
       - rewrite wp_demonic_match_bool.
         destruct (inst b ι); auto.
       - rewrite wp_demonic_match_enum; auto.
-      - destruct (inst s ι); auto.
+      - rewrite wp_demonic_match_sum.
+        destruct (inst s ι); auto.
       - destruct (inst s ι); auto.
       - destruct (inst s ι); auto.
       - auto.
@@ -381,7 +385,8 @@ Module Soundness
       - destruct (eval e δ).
         apply IHs1; auto.
         apply IHs2; auto.
-      - destruct (eval e δ); cbn.
+      - rewrite ?wp_demonic_match_sum.
+        destruct (eval e δ); cbn.
         apply IHs1; auto.
         apply IHs2; auto.
       - destruct (eval e δ); cbn.
@@ -493,6 +498,7 @@ Module Soundness
         + now apply IHs2.
 
       - (* stm_match_sum *)
+        rewrite wp_demonic_match_sum in HYP.
         apply rule_stm_match_sum; cbn; intros;
           apply rule_pull; intro Heval; rewrite Heval in HYP; cbn in HYP.
         + now apply IHs1.

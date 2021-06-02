@@ -464,12 +464,81 @@ Module SemiConcrete
         apply finite.elem_of_enum.
       Qed.
 
-      Definition match_sum {A} {Γ1 Γ2 σ τ} (v : Lit σ + Lit τ)
-        (sinl : Lit σ -> CMut Γ1 Γ2 A) (sinr : Lit τ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
+      Definition angelic_match_sum {A Γ1 Γ2} {σ τ} :
+        Lit (ty_sum σ τ) -> (Lit σ -> CMut Γ1 Γ2 A) -> (Lit τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v kinl kinr.
+        apply angelic_binary.
+        - eapply bind.
+          apply (angelic σ).
+          intros v1.
+          eapply bind_right.
+          apply assert_formula.
+          apply (inl v1 = v).
+          apply kinl. auto.
+        - eapply bind.
+          apply (angelic τ).
+          intros v1.
+          eapply bind_right.
+          apply assert_formula.
+          apply (inr v1 = v).
+          apply kinr. auto.
+      Defined.
+
+      Definition demonic_match_sum {A Γ1 Γ2} {σ τ} :
+        Lit (ty_sum σ τ) -> (Lit σ -> CMut Γ1 Γ2 A) -> (Lit τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v kinl kinr.
+        apply demonic_binary.
+        - eapply bind.
+          apply (demonic σ).
+          intros v1.
+          eapply bind_right.
+          apply assume_formula.
+          apply (inl v1 = v).
+          apply kinl. auto.
+        - eapply bind.
+          apply (demonic τ).
+          intros v1.
+          eapply bind_right.
+          apply assume_formula.
+          apply (inr v1 = v).
+          apply kinr. auto.
+      Defined.
+
+      Lemma wp_angelic_match_sum {A Γ1 Γ2} {σ τ}
+        (v : Lit (ty_sum σ τ)) (kinl : Lit σ -> CMut Γ1 Γ2 A) (kinr : Lit τ -> CMut Γ1 Γ2 A) POST δ h :
+        angelic_match_sum v kinl kinr POST δ h <->
         match v with
-        | inl v => sinl v
-        | inr v => sinr v
+        | inl v => kinl v POST δ h
+        | inr v => kinr v POST δ h
         end.
+      Proof.
+        cbv [angelic_match_sum bind_right bind angelic angelic_binary
+             assert_formula dijkstra CDijk.assert_formula].
+        split.
+        - intros []; destruct_conjs; subst; auto.
+        - destruct v as [v|v]; [left|right]; exists v; intuition.
+      Qed.
+
+      Lemma wp_demonic_match_sum {A Γ1 Γ2} {σ τ}
+        (v : Lit (ty_sum σ τ)) (kinl : Lit σ -> CMut Γ1 Γ2 A) (kinr : Lit τ -> CMut Γ1 Γ2 A) POST δ h :
+        demonic_match_sum v kinl kinr POST δ h <->
+        match v with
+        | inl v => kinl v POST δ h
+        | inr v => kinr v POST δ h
+        end.
+      Proof.
+        cbv [demonic_match_sum bind_right bind demonic demonic_binary
+             assume_formula dijkstra CDijk.assume_formula].
+        split.
+        - destruct v; intuition.
+        - destruct v; intuition; try discriminate;
+            match goal with
+            | H: inl _ = inl _ |- _ => apply noConfusion_inv in H; cbn in H; subst
+            | H: inr _ = inr _ |- _ => apply noConfusion_inv in H; cbn in H; subst
+            end; auto.
+      Qed.
 
       Definition match_prod {A} {Γ1 Γ2 σ τ} (v : Lit σ * Lit τ)
         (m : Lit σ -> Lit τ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
@@ -538,7 +607,7 @@ Module SemiConcrete
             (inst (T := fun Σ => Term Σ _) k ι)
             (fun K => produce ι (alts K))
         | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-          match_sum
+          demonic_match_sum
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun v => produce (env_snoc ι (xl :: σ) v) alt_inl)
             (fun v => produce (env_snoc ι (xr :: τ) v) alt_inr)
@@ -581,7 +650,7 @@ Module SemiConcrete
             (inst (T := fun Σ => Term Σ _) k ι)
             (fun K => consume ι (alts K))
         | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-          match_sum
+          angelic_match_sum
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun v => consume (env_snoc ι (xl :: σ) v) alt_inl)
             (fun v => consume (env_snoc ι (xr :: τ) v) alt_inr)
@@ -695,7 +764,7 @@ Module SemiConcrete
           end
         | stm_match_sum e xinl s1 xinr s2 =>
           v <- eval_exp e ;;
-          match_sum
+          demonic_match_sum
             v
             (fun v => pushpop v (exec s1))
             (fun v => pushpop v (exec s2))

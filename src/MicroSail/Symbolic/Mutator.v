@@ -2185,75 +2185,51 @@ Module Mutators
       Definition angelic_match_sum {AT Γ1 Γ2} (x y : 𝑺) {σ τ} :
         ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SMut Γ1 Γ2 AT) -> □(STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
-        intros w0 t kinl kinr POST δ0 h0.
-        apply SPath.angelic_binary.
-        - apply (SDijk.angelic (Some x) σ).
+        intros w0 t kinl kinr.
+        apply angelic_binary.
+        - eapply bind.
+          apply (angelic (Some x) σ).
           intros w1 ω01 t1.
-          apply SDijk.assert_formula.
-          apply
-            {| msg_function        := "SMut.angelic_match_sum";
-               msg_message         := "pattern match assertion";
-               msg_program_context := Γ1;
-               msg_localstore      := subst δ0 ω01;
-               msg_heap            := subst h0 ω01;
-               msg_pathcondition   := wco w1;
-            |}.
+          eapply bind_right.
+          apply assert_formula.
           apply (formula_eq (term_inl t1) (subst t ω01)).
-          intros w2 ω12 _.
+          intros w2 ω12.
           apply (four kinl ω01). auto.
           apply (persist__term t1 ω12).
-          apply (four (four POST ω01)).
-          auto.
-          apply (subst δ0 (wtrans ω01 ω12)).
-          apply (subst h0 (wtrans ω01 ω12)).
-        - apply (SDijk.angelic (Some y) τ).
+        - eapply bind.
+          apply (angelic (Some y) τ).
           intros w1 ω01 t1.
-          apply SDijk.assert_formula.
-          apply
-            {| msg_function        := "SMut.angelic_match_sum";
-               msg_message         := "pattern match assertion";
-               msg_program_context := Γ1;
-               msg_localstore      := subst δ0 ω01;
-               msg_heap            := subst h0 ω01;
-               msg_pathcondition   := wco w1;
-            |}.
+          eapply bind_right.
+          apply assert_formula.
           apply (formula_eq (term_inr t1) (subst t ω01)).
-          intros w2 ω12 _.
+          intros w2 ω12.
           apply (four kinr ω01). auto.
           apply (persist__term t1 ω12).
-          apply (four (four POST ω01)).
-          auto.
-          apply (subst δ0 (wtrans ω01 ω12)).
-          apply (subst h0 (wtrans ω01 ω12)).
       Defined.
 
       Definition demonic_match_sum {AT Γ1 Γ2} (x y : 𝑺) {σ τ} :
         ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SMut Γ1 Γ2 AT) -> □(STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
-        intros w0 t kinl kinr POST δ0 h0.
-        apply SPath.demonic_binary.
-        - apply (SDijk.demonic (Some x) σ).
+        intros w0 t kinl kinr.
+        apply demonic_binary.
+        - eapply bind.
+          apply (demonic (Some x) σ).
           intros w1 ω01 t1.
-          apply SDijk.assume_formula.
+          eapply bind_right.
+          apply assume_formula.
           apply (formula_eq (term_inl t1) (subst t ω01)).
-          intros w2 ω12 _.
+          intros w2 ω12.
           apply (four kinl ω01). auto.
           apply (persist__term t1 ω12).
-          apply (four (four POST ω01)).
-          auto.
-          apply (subst δ0 (wtrans ω01 ω12)).
-          apply (subst h0 (wtrans ω01 ω12)).
-        - apply (SDijk.demonic (Some y) τ).
+        - eapply bind.
+          apply (demonic (Some y) τ).
           intros w1 ω01 t1.
-          apply SDijk.assume_formula.
+          eapply bind_right.
+          apply assume_formula.
           apply (formula_eq (term_inr t1) (subst t ω01)).
-          intros w2 ω12 _.
+          intros w2 ω12.
           apply (four kinr ω01). auto.
           apply (persist__term t1 ω12).
-          apply (four (four POST ω01)).
-          auto.
-          apply (subst δ0 (wtrans ω01 ω12)).
-          apply (subst h0 (wtrans ω01 ω12)).
       Defined.
 
       Definition demonic_match_sum_lifted {AT Γ1 Γ2} (x y : 𝑺) {σ τ} :
