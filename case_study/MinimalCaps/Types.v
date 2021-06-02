@@ -65,10 +65,10 @@ Inductive Instruction : Set :=
 (* | restrict (lv : LV) (rv : RV) *)
 (* | subseg   (lv : LV) (rv1 rv2 : RV) *)
 (* | isptr    (lv : LV) (rv : RV) *)
-(* | getp     (lv lv' : LV) *)
-(* | getb     (lv lv' : LV) *)
-(* | gete     (lv lv' : LV) *)
-(* | geta     (lv lv' : LV) *)
+| getp     (lv lv' : LV)
+| getb     (lv lv' : LV)
+| gete     (lv lv' : LV)
+| geta     (lv lv' : LV)
 (* | fail *)
 | ret.
 
@@ -90,10 +90,10 @@ Inductive InstructionConstructor : Set :=
 (* | krestrict *)
 (* | ksubseg *)
 (* | kisptr *)
-(* | kgetp *)
-(* | kgetb *)
-(* | kgete *)
-(* | kgeta *)
+| kgetp
+| kgetb
+| kgete
+| kgeta
 (* | kfail *)
 | kret.
 
@@ -176,7 +176,7 @@ Section Finite.
 
   Global Program Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjr;kjalr;kj;kjal;kbnez;kmv;kld;ksd;kaddi;kadd;kret] |}.
+    {| enum := [kjr;kjalr;kj;kjal;kbnez;kmv;kld;ksd;kaddi;kadd;kgetp;kgetb;kgete;kgeta;kret] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.

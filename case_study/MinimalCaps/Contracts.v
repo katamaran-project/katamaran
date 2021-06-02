@@ -407,6 +407,66 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_postcondition   := machInv;
     |}.
 
+  (*
+      @pre true;
+      @post true;
+      int perm_to_bits(p : perm) *)
+  Definition sep_contract_perm_to_bits : SepContract ["p" ∶ ty_perm] ty_int :=
+    {| sep_contract_logic_variables := ["p" ∶ ty_perm];
+       sep_contract_localstore      := [term_var "p"]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := asn_true;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_getp(lv1 : lv, lv2 : lv) *)
+  Definition sep_contract_exec_getp : SepContract ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+    {| sep_contract_logic_variables := ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv];
+       sep_contract_localstore      := [term_var "lv1", term_var "lv2"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_getb(lv1 : lv, lv2 : lv) *)
+  Definition sep_contract_exec_getb : SepContract ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+    {| sep_contract_logic_variables := ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv];
+       sep_contract_localstore      := [term_var "lv1", term_var "lv2"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_gete(lv1 : lv, lv2 : lv) *)
+  Definition sep_contract_exec_gete : SepContract ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+    {| sep_contract_logic_variables := ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv];
+       sep_contract_localstore      := [term_var "lv1", term_var "lv2"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_geta(lv1 : lv, lv2 : lv) *)
+  Definition sep_contract_exec_geta : SepContract ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+    {| sep_contract_logic_variables := ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv];
+       sep_contract_localstore      := [term_var "lv1", term_var "lv2"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
   (* @pre machInv;
      @post machInv;
      bool exec_ret *)
@@ -470,6 +530,7 @@ Module MinCapsSymbolicContractKit <:
       | update_pc     => Some sep_contract_update_pc
       | read_mem      => Some sep_contract_read_mem
       | write_mem     => Some sep_contract_write_mem
+      | perm_to_bits  => Some sep_contract_perm_to_bits
       | exec_jr       => Some sep_contract_exec_jr
       | exec_jalr     => Some sep_contract_exec_jalr
       | exec_j        => Some sep_contract_exec_j
@@ -480,6 +541,10 @@ Module MinCapsSymbolicContractKit <:
       | exec_sd       => Some sep_contract_exec_sd
       | exec_addi     => Some sep_contract_exec_addi
       | exec_add      => Some sep_contract_exec_add
+      | exec_getp     => Some sep_contract_exec_getp
+      | exec_getb     => Some sep_contract_exec_getb
+      | exec_gete     => Some sep_contract_exec_gete
+      | exec_geta     => Some sep_contract_exec_geta
       | exec_ret      => Some sep_contract_exec_ret
       | exec_instr    => Some sep_contract_exec_instr
       | exec          => Some sep_contract_exec
@@ -797,6 +862,9 @@ Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 Lemma valid_contract_within_bounds : ValidContractEvarEnv sep_contract_within_bounds fun_within_bounds.
 Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
+Lemma valid_contract_perm_to_bits : ValidContractEvarEnv sep_contract_perm_to_bits fun_perm_to_bits.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+
 Lemma valid_contract_exec_jr : ValidContractEvarEnv sep_contract_exec_jr fun_exec_jr.
 Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
@@ -860,6 +928,18 @@ Lemma valid_contract_exec_addi : ValidContractEvarEnv sep_contract_exec_addi fun
 Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_add : ValidContractEvarEnv sep_contract_exec_add fun_exec_add.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+
+Lemma valid_contract_exec_getp : ValidContractEvarEnv sep_contract_exec_getp fun_exec_getp.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+
+Lemma valid_contract_exec_getb : ValidContractEvarEnv sep_contract_exec_getb fun_exec_getb.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+
+Lemma valid_contract_exec_gete : ValidContractEvarEnv sep_contract_exec_gete fun_exec_gete.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+
+Lemma valid_contract_exec_geta : ValidContractEvarEnv sep_contract_exec_geta fun_exec_geta.
 Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_ret : ValidContractEvarEnv sep_contract_exec_ret fun_exec_ret.

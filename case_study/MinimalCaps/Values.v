@@ -77,10 +77,10 @@ Module MinCapsValueKit <: ValueKit.
       (* | krestrict => ty_prod ty_lv ty_rv *)
       (* | ksubseg   => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
       (* | kisptr    => ty_prod ty_lv ty_rv *)
-      (* | kgetp     => ty_prod ty_lv ty_lv *)
-      (* | kgetb     => ty_prod ty_lv ty_lv *)
-      (* | kgete     => ty_prod ty_lv ty_lv *)
-      (* | kgeta     => ty_prod ty_lv ty_lv *)
+      | kgetp     => ty_prod ty_lv ty_lv
+      | kgetb     => ty_prod ty_lv ty_lv
+      | kgete     => ty_prod ty_lv ty_lv
+      | kgeta     => ty_prod ty_lv ty_lv
       (* | kfail     => ty_unit *)
       | kret      => ty_unit
       end
@@ -107,10 +107,10 @@ Module MinCapsValueKit <: ValueKit.
       (* | existT krestrict (lv , rv)          => restrict lv rv *)
       (* | existT ksubseg   (lv , (rv1 , rv2)) => subseg lv rv1 rv2 *)
       (* | existT kisptr    (lv , rv)          => isptr lv rv *)
-      (* | existT kgetp     (lv , lv')         => getp lv lv' *)
-      (* | existT kgetb     (lv , lv')         => getb lv lv' *)
-      (* | existT kgete     (lv , lv')         => gete lv lv' *)
-      (* | existT kgeta     (lv , lv')         => geta lv lv' *)
+      | existT kgetp     (lv , lv')         => getp lv lv'
+      | existT kgetb     (lv , lv')         => getb lv lv'
+      | existT kgete     (lv , lv')         => gete lv lv'
+      | existT kgeta     (lv , lv')         => geta lv lv'
       (* | existT kfail     tt                 => fail *)
       | existT kret      tt                 => ret
       end
@@ -136,10 +136,10 @@ Module MinCapsValueKit <: ValueKit.
       (* | restrict lv rv    => existT krestrict (lv , rv) *)
       (* | subseg lv rv1 rv2 => existT ksubseg   (lv , (rv1 , rv2)) *)
       (* | isptr lv rv       => existT kisptr    (lv , rv) *)
-      (* | getp lv lv'       => existT kgetp     (lv , lv') *)
-      (* | getb lv lv'       => existT kgetb     (lv , lv') *)
-      (* | gete lv lv'       => existT kgete     (lv , lv') *)
-      (* | geta lv lv'       => existT kgeta     (lv , lv') *)
+      | getp lv lv'       => existT kgetp     (lv , lv')
+      | getb lv lv'       => existT kgetb     (lv , lv')
+      | gete lv lv'       => existT kgete     (lv , lv')
+      | geta lv lv'       => existT kgeta     (lv , lv')
       (* | fail              => existT kfail     tt *)
       | ret                => existT kret  tt
       end

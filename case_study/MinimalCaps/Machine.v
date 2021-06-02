@@ -85,6 +85,7 @@ Module MinCapsTermKit <: TermKit.
   | within_bounds  : Fun ["c"   ∶ ty_cap ] ty_bool
   | compute_rv     : Fun ["rv" ∶ ty_rv] ty_word
   | compute_rv_num : Fun ["rv" ∶ ty_rv] ty_int
+  | perm_to_bits   : Fun ["p" ∶ ty_perm] ty_int
   | exec_jr        : Fun ["lv" ∶ ty_lv] ty_bool
   | exec_jalr      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv ] ty_bool
   | exec_j         : Fun ["offset" ∶ ty_int] ty_bool
@@ -95,6 +96,10 @@ Module MinCapsTermKit <: TermKit.
   | exec_sd        : Fun ["hv" ∶ ty_hv, "lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
   | exec_addi      : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
   | exec_add       : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool
+  | exec_getp      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
+  | exec_getb      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
+  | exec_gete      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
+  | exec_geta      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
   | exec_ret       : Fun ε ty_bool
   | exec_instr     : Fun ["i" ∶ ty_instr] ty_bool
   | exec           : Fun ε ty_bool
@@ -379,6 +384,78 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       call update_pc ;;
       stm_lit ty_bool true.
 
+    Definition fun_perm_to_bits : Stm ["p" ∶ ty_perm] ty_int :=
+      match: exp_var "p" in permission with
+      | O => stm_lit ty_int 0%Z
+      | R => stm_lit ty_int 1%Z
+      | RW => stm_lit ty_int 2%Z
+      end.
+
+    Definition fun_exec_getp : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+      stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
+      let: c ∶ cap := call read_reg_cap (exp_var "lv2") in
+      stm_match_record
+        capability (exp_var c)
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "perm")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (let: "i" ∶ ty_int := call perm_to_bits (exp_var "perm") in
+         call write_reg (exp_var "lv1") (exp_inl (exp_var "i")) ;;
+         stm_call_external (ghost int_safe) [exp_var "i"]%arg ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
+
+    Definition fun_exec_getb : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+      stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
+      let: c ∶ cap := call read_reg_cap (exp_var "lv2") in
+      stm_match_record
+        capability (exp_var c)
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "perm")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (call write_reg (exp_var "lv1") (exp_inl (exp_var "beg")) ;;
+         stm_call_external (ghost int_safe) [exp_var "beg"]%arg ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
+
+    Definition fun_exec_gete : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+      stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
+      let: c ∶ cap := call read_reg_cap (exp_var "lv2") in
+      stm_match_record
+        capability (exp_var c)
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "perm")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (call write_reg (exp_var "lv1") (exp_inl (exp_var "end")) ;;
+         stm_call_external (ghost int_safe) [exp_var "end"]%arg ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
+
+    Definition fun_exec_geta : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+      stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
+      let: c ∶ cap := call read_reg_cap (exp_var "lv2") in
+      stm_match_record
+        capability (exp_var c)
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "perm")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (call write_reg (exp_var "lv1") (exp_inl (exp_var "cursor")) ;;
+         stm_call_external (ghost int_safe) [exp_var "cursor"]%arg ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
+
     Definition fun_compute_rv : Stm [rv ∶ ty_rv] ty_word :=
       stm_match_sum rv
                     "r" (call read_reg r)
@@ -459,6 +536,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                             (call exec_addi (exp_var lv) (exp_var hv) (exp_var immediate))
            | kadd  => MkAlt (pat_tuple ["lv1" , "lv2" , "lv3"])
                             (call exec_add (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
+           | kgetp => MkAlt (pat_pair lv lv) (call exec_getp lv lv)
+           | kgetb => MkAlt (pat_pair lv lv) (call exec_getb lv lv)
+           | kgete => MkAlt (pat_pair lv lv) (call exec_gete lv lv)
+           | kgeta => MkAlt (pat_pair lv lv) (call exec_geta lv lv)
            | kret  => MkAlt pat_unit (call exec_ret)
            end).
 
@@ -520,6 +601,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     (* | sub_perm       => fun_sub_perm *)
     | upper_bound    => fun_upper_bound
     | within_bounds  => fun_within_bounds
+    | perm_to_bits   => fun_perm_to_bits
     | exec_jr        => fun_exec_jr
     | exec_jalr      => fun_exec_jalr
     | exec_j         => fun_exec_j
@@ -530,6 +612,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     | exec_sd        => fun_exec_sd
     | exec_addi      => fun_exec_addi
     | exec_add       => fun_exec_add
+    | exec_getp      => fun_exec_getp
+    | exec_getb      => fun_exec_getb
+    | exec_gete      => fun_exec_gete
+    | exec_geta      => fun_exec_geta
     | exec_ret       => fun_exec_ret
     | exec_instr     => fun_exec_instr
     | compute_rv     => fun_compute_rv
