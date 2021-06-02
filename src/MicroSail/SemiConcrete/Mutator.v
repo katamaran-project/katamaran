@@ -63,61 +63,47 @@ Module SemiConcrete
 
   Export symcontractkit.
 
-  Section ChunkExtraction.
+  (* Section ChunkExtraction. *)
 
-    Equations(noeqns) match_scchunk_eqb (ce : SCChunk) (cr : SCChunk) : bool :=
-      match_scchunk_eqb (scchunk_user p1 vs1) (scchunk_user p2 vs2)
-      with eq_dec p1 p2 => {
-        match_scchunk_eqb (scchunk_user p1 vs1) (scchunk_user p2 vs2) (left eq_refl) := env_eqb_hom Lit_eqb vs1 vs2;
-        match_scchunk_eqb (scchunk_user p1 vs1) (scchunk_user p2 vs2) (right _) := false
-      };
-      match_scchunk_eqb (scchunk_ptsreg r1 t1) (scchunk_ptsreg r2 t2)
-      with eq_dec_het r1 r2 => {
-        match_scchunk_eqb (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (left eq_refl) := Lit_eqb _ v1 v2;
-        match_scchunk_eqb (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (right _)      := false
-      };
-      match_scchunk_eqb _ _  := false.
+  (*   Equations(noeqns) match_scchunk (ce : SCChunk) (cr : SCChunk) : Prop := *)
+  (*     match_scchunk (scchunk_user p1 vs1) (scchunk_user p2 vs2) *)
+  (*     with eq_dec p1 p2 => { *)
+  (*       match_scchunk (scchunk_user p1 vs1) (scchunk_user p2 vs2) (left eq_refl) := vs1 = vs2; *)
+  (*       match_scchunk (scchunk_user p1 vs1) (scchunk_user p2 vs2) (right _) := False *)
+  (*     }; *)
+  (*     match_scchunk (scchunk_ptsreg r1 t1) (scchunk_ptsreg r2 t2) *)
+  (*     with eq_dec_het r1 r2 => { *)
+  (*       match_scchunk (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (left eq_refl) := v1 = v2; *)
+  (*       match_scchunk (scchunk_ptsreg r1 v1) (scchunk_ptsreg r2 v2) (right _)      := False *)
+  (*     }; *)
+  (*     match_scchunk _ _  := False. *)
 
-    Local Set Equations With UIP.
-    Lemma match_scchunk_eqb_spec (c1 c2 : SCChunk) :
-      reflect (c1 = c2) (match_scchunk_eqb c1 c2).
-    Proof.
-      destruct c1 as [p1 vs1|r1], c2 as [p2 vs2|r2]; cbn.
-      - destruct (eq_dec p1 p2); cbn.
-        + dependent elimination e; cbn.
-          destruct (env_eqb_hom_spec _ Lit_eqb_spec vs1 vs2); constructor.
-          * congruence.
-          * intros e. now dependent elimination e.
-        + constructor; intro e.
-          now dependent elimination e.
-      - constructor. discriminate.
-      - constructor. discriminate.
-      - destruct (eq_dec_het r r0); cbn.
-        + dependent elimination e; cbn.
-          apply (ssrbool.iffP (Lit_eqb_spec _ _ _));
-            intro e; now dependent elimination e.
-        + constructor.
-          intro e; now dependent elimination e.
-    Qed.
+  (*   Local Set Equations With UIP. *)
+  (*   Lemma match_scchunk_eqb_spec (c1 c2 : SCChunk) : *)
+  (*     reflect (c1 = c2) (match_scchunk_eqb c1 c2). *)
+  (*   Proof. *)
+  (*     destruct c1 as [p1 vs1|r1], c2 as [p2 vs2|r2]; cbn. *)
+  (*     - destruct (eq_dec p1 p2); cbn. *)
+  (*       + dependent elimination e; cbn. *)
+  (*         destruct (env_eqb_hom_spec _ Lit_eqb_spec vs1 vs2); constructor. *)
+  (*         * congruence. *)
+  (*         * intros e. now dependent elimination e. *)
+  (*       + constructor; intro e. *)
+  (*         now dependent elimination e. *)
+  (*     - constructor. discriminate. *)
+  (*     - constructor. discriminate. *)
+  (*     - destruct (eq_dec_het r r0); cbn. *)
+  (*       + dependent elimination e; cbn. *)
+  (*         apply (ssrbool.iffP (Lit_eqb_spec _ _ _)); *)
+  (*           intro e; now dependent elimination e. *)
+  (*       + constructor. *)
+  (*         intro e; now dependent elimination e. *)
+  (*   Qed. *)
 
-    Definition extract_scchunk_eqb (ce : SCChunk) (h : SCHeap) : list SCHeap :=
-      List.map snd (List.filter (fun '(cr,_) => match_scchunk_eqb ce cr) (heap_extractions h)).
+  (*   Definition extract_scchunk_eqb (ce : SCChunk) (h : SCHeap) : list SCHeap := *)
+  (*     List.map snd (List.filter (fun '(cr,_) => match_scchunk_eqb ce cr) (heap_extractions h)). *)
 
-  End ChunkExtraction.
-
-  Section SemiConcreteMutatorResult.
-
-    (* Local Set Primitive Projections. *)
-    Local Set Maximal Implicit Insertion.
-
-    Record CMutResult (Γ : PCtx) (A : Type) : Type :=
-      MkCMutResult {
-          scmutres_value : A;
-          scmutres_store : LocalStore Γ;
-          scmutres_heap  : SCHeap;
-        }.
-
-  End SemiConcreteMutatorResult.
+  (* End ChunkExtraction. *)
 
   Definition CDijkstra (A : Type) : Type :=
     (A -> Prop) -> Prop.
@@ -167,10 +153,6 @@ Module SemiConcrete
         match fmls0 with
         | nil           => pure tt
         | cons fml fmls1 => _
-          (* fun w1 ω01 => *)
-            (* assume_formulak *)
-            (*   (subst fml ω01) *)
-            (*   (four (assumes fmls k) ω01) *)
         end).
       eapply bind.
       apply (assumes fmls1).
@@ -178,6 +160,44 @@ Module SemiConcrete
       apply assume_formula.
       apply (inst fml ι).
     Defined.
+
+    Definition assert_formulas {Σ} (ι : SymInstance Σ) : List Formula Σ -> CDijkstra unit.
+      refine (
+        fix asserts fmls0 :=
+        match fmls0 with
+        | nil           => pure tt
+        | cons fml fmls1 => _
+        end).
+      eapply bind.
+      apply (asserts fmls1).
+      intros _.
+      apply assert_formula.
+      apply (inst fml ι).
+    Defined.
+
+    Definition angelic_list {A} :
+      list A -> CDijkstra A :=
+      fix rec xs POST :=
+        match xs with
+        | nil        => False
+        | cons x xs  => POST x \/ rec xs POST
+        end.
+
+    Definition demonic_list {A} :
+      list A -> CDijkstra A :=
+      fix rec xs POST :=
+        match xs with
+        | nil        => True
+        | cons x xs  => POST x /\ rec xs POST
+        end.
+
+    Definition angelic_finite F `{finite.Finite F} :
+      CDijkstra F :=
+      angelic_list (finite.enum F).
+
+    Definition demonic_finite F `{finite.Finite F} :
+      CDijkstra F :=
+      demonic_list (finite.enum F).
 
     Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Lit Δ -> Prop) :
       angelic_ctx Δ POST <-> exists vs : NamedEnv Lit Δ, POST vs.
@@ -193,6 +213,54 @@ Module SemiConcrete
           now exists (env_snoc vs (x :: σ) v).
         + intros [vs Hwp]. destruct (snocView vs) as [vs v].
           exists v. apply IHΔ. now exists vs.
+    Qed.
+
+    Lemma wp_angelic_list {A} (xs : list A) (POST : A -> Prop) :
+      angelic_list xs POST <->
+      exists x : A, List.In x xs /\ POST x.
+    Proof.
+      induction xs; cbn.
+      - firstorder.
+      - rewrite IHxs; clear IHxs.
+        firstorder. left. now subst.
+    Qed.
+
+    Lemma wp_demonic_list {A} (xs : list A) (POST : A -> Prop) :
+      demonic_list xs POST <->
+      forall x : A, List.In x xs -> POST x.
+    Proof.
+      induction xs; cbn.
+      - firstorder.
+      - rewrite IHxs; clear IHxs.
+        firstorder. now subst.
+    Qed.
+
+    Lemma wp_assume_formulas {Σ} (ι : SymInstance Σ) (fmls : List Formula Σ) :
+      forall POST,
+        assume_formulas ι fmls POST <->
+        (instpc fmls ι -> POST tt).
+    Proof.
+      induction fmls; cbn; cbv [pure bind].
+      - cbv. intuition.
+      - intros POST.
+        rewrite IHfmls.
+        rewrite inst_pathcondition_cons.
+        unfold assume_formula.
+        intuition.
+    Qed.
+
+    Lemma wp_assert_formulas {Σ} (ι : SymInstance Σ) (fmls : List Formula Σ) :
+      forall POST,
+        assert_formulas ι fmls POST <->
+        (instpc fmls ι /\ POST tt).
+    Proof.
+      induction fmls; cbn; cbv [pure bind].
+      - cbv. intuition.
+      - intros POST.
+        rewrite IHfmls.
+        rewrite inst_pathcondition_cons.
+        unfold assert_formula.
+        intuition.
     Qed.
 
   End CDijk.
@@ -234,10 +302,6 @@ Module SemiConcrete
       Definition angelic_binary {Γ1 Γ2 A} (m1 m2 : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
         fun POST δ h => m1 POST δ h \/ m2 POST δ h.
 
-      Definition angelick_list {Γ1 Γ2 A B} (msg : string) (xs : list A) (k : A -> CMut Γ1 Γ2 B) : CMut Γ1 Γ2 B.
-        (* fun δ h => outcome_angelick_list msg xs (fun a => k a δ h). *)
-      Admitted.
-
       (* Definition demonic {Γ1 Γ2 I A} (ms : I -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A := *)
       (*   fun POST δ h => forall i : I, ms i POST δ h. *)
       Definition demonic {Γ} (σ : Ty) : CMut Γ Γ (Lit σ) :=
@@ -254,6 +318,15 @@ Module SemiConcrete
         apply (CDijk.angelic_ctx Δ).
       Defined.
       Global Arguments angelic_ctx {N Γ} Δ.
+
+      Definition angelic_list {A Γ} (xs : list A) : CMut Γ Γ A :=
+        dijkstra (CDijk.angelic_list xs).
+
+      Definition angelic_finite {Γ} F `{finite.Finite F} : CMut Γ Γ F :=
+        dijkstra (CDijk.angelic_finite (F:=F)).
+
+      Definition demonic_finite {Γ} F `{finite.Finite F} : CMut Γ Γ F :=
+        dijkstra (CDijk.demonic_finite (F:=F)).
 
     End Basic.
 
@@ -284,27 +357,39 @@ Module SemiConcrete
 
       Definition assume_formula {Γ} (fml : Prop) : CMut Γ Γ unit :=
         dijkstra (CDijk.assume_formula fml).
-      (* Definition assume_term {Γ Σ} (ι : SymInstance Σ) (t : Term Σ ty_bool) : CMut Γ Γ unit := *)
-      (*   assume_formula ι (formula_bool t). *)
-      Definition assert_formula {Γ Σ} (ι : SymInstance Σ) (fml : Formula Σ) : CMut Γ Γ unit :=
-        fun POST δ h => inst fml ι /\ POST tt δ h.
-      Definition assert_formulak {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fml : Formula Σ) (k : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-        fun POST δ h => inst fml ι /\ k POST δ h.
+      Definition assert_formula {Γ} (fml : Prop) : CMut Γ Γ unit :=
+        dijkstra (CDijk.assert_formula fml).
+      Definition assume_formulas {Γ Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
+        dijkstra (CDijk.assume_formulas ι fmls).
       Definition assert_formulas {Γ Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
-        fun POST δ h => inst fmls ι /\ POST tt δ h.
-
-        (* fix assert fmls := *)
-        (*   match fmls with *)
-        (*   | nil => pure tt *)
-        (*   | cons fml fmls => assert fmls ;; assert_formula ι fml *)
-        (*   end. *)
-      Definition assert_formulask {A Γ1 Γ2 Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) (k : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-        fold_right (assert_formulak ι) k fmls.
-
+        dijkstra (CDijk.assert_formulas ι fmls).
 
     End AssumeAssert.
 
     Section PatternMatching.
+
+      Definition angelic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
+      Proof.
+        apply angelic_binary.
+        - eapply bind_right.
+          apply assert_formula.
+          apply (is_true v).
+          apply kt.
+        - eapply bind_right.
+          apply assert_formula.
+          apply (is_true (negb v)).
+          apply kf.
+      Defined.
+
+      Lemma wp_angelic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) :
+        forall POST δ h,
+          angelic_match_bool v kt kf POST δ h <->
+          if v then kt POST δ h else kf POST δ h.
+      Proof.
+        cbv [angelic_match_bool angelic_binary bind_right bind assert_formula
+             dijkstra CDijk.assert_formula is_true negb].
+        destruct v; intuition; discriminate.
+      Qed.
 
       Definition demonic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
       Proof.
@@ -319,8 +404,65 @@ Module SemiConcrete
           apply kf.
       Defined.
 
-      Definition match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-        if v then kt else kf.
+      Lemma wp_demonic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) :
+        forall POST δ h,
+          demonic_match_bool v kt kf POST δ h <->
+          if v then kt POST δ h else kf POST δ h.
+      Proof.
+        cbv [demonic_match_bool demonic_binary bind_right bind assume_formula
+             dijkstra CDijk.assume_formula is_true negb].
+        destruct v; intuition; discriminate.
+      Qed.
+
+      Definition angelic_match_enum {A E} {Γ1 Γ2} :
+        Lit (ty_enum E) -> (𝑬𝑲 E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v cont.
+        eapply bind.
+        apply (angelic_finite (F := 𝑬𝑲 E)).
+        intros EK.
+        eapply bind_right.
+        apply (assert_formula (v = EK)).
+        apply (cont EK).
+      Defined.
+
+      Definition demonic_match_enum {A E} {Γ1 Γ2} :
+        Lit (ty_enum E) -> (𝑬𝑲 E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v cont.
+        eapply bind.
+        apply (demonic_finite (F := 𝑬𝑲 E)).
+        intros EK.
+        eapply bind_right.
+        apply (assume_formula (v = EK)).
+        apply (cont EK).
+      Defined.
+
+      Lemma wp_angelic_match_enum {A E Γ1 Γ2} (v : Lit (ty_enum E)) (k : 𝑬𝑲 E -> CMut Γ1 Γ2 A) :
+        forall POST δ h,
+          angelic_match_enum v k POST δ h <-> k v POST δ h.
+      Proof.
+        cbv [assert_formula bind bind_right angelic_match_enum angelic_finite
+             dijkstra CDijk.angelic_finite CDijk.assert_formula].
+        intros. rewrite CDijk.wp_angelic_list.
+        split; intros; destruct_conjs; subst; auto.
+        exists v. split; auto.
+        rewrite <- elem_of_list_In.
+        apply finite.elem_of_enum.
+      Qed.
+
+      Lemma wp_demonic_match_enum {A E Γ1 Γ2} (v : Lit (ty_enum E)) (k : 𝑬𝑲 E -> CMut Γ1 Γ2 A) :
+        forall POST δ h,
+          demonic_match_enum v k POST δ h <-> k v POST δ h.
+      Proof.
+        cbv [assume_formula bind bind_right demonic_match_enum demonic_finite
+             dijkstra CDijk.demonic_finite CDijk.assume_formula].
+        intros. rewrite CDijk.wp_demonic_list.
+        split; intros; subst; auto.
+        apply H; auto.
+        rewrite <- elem_of_list_In.
+        apply finite.elem_of_enum.
+      Qed.
 
       Definition match_sum {A} {Γ1 Γ2 σ τ} (v : Lit σ + Lit τ)
         (sinl : Lit σ -> CMut Γ1 Γ2 A) (sinr : Lit τ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
@@ -333,10 +475,6 @@ Module SemiConcrete
         (m : Lit σ -> Lit τ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
         match v with (vl,vr) => m vl vr end.
 
-      Definition match_enum {A E} {Γ1 Γ2} (v : 𝑬𝑲 E)
-        (m : 𝑬𝑲 E -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-        m v.
-
       Definition match_record {A R} {Γ1 Γ2 Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Lit (ty_record R))
         (m : SymInstance Δ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
         m (record_pattern_match_lit p t).
@@ -345,53 +483,48 @@ Module SemiConcrete
 
     Section State.
 
-      Definition state {Γ Γ' A} (f : LocalStore Γ -> SCHeap -> CMutResult Γ' A) : CMut Γ Γ' A :=
-        fun POST δ h =>
-          match f δ h with
-          | MkCMutResult a δ1 h1 => POST a δ1 h1
-          end.
-
-      Definition put_local {Γ Γ'} (δ : LocalStore Γ') : CMut Γ Γ' unit :=
-        state (fun _ h => MkCMutResult tt δ h).
+      Definition pushpop {A Γ1 Γ2 x σ} (v : Lit σ)
+        (d : CMut (Γ1 ▻ (x::σ)) (Γ2 ▻ (x::σ)) A) : CMut Γ1 Γ2 A :=
+        fun POST δ0 => d (fun a δ1 => POST a (env_tail δ1)) (δ0 ► (x::σ ↦ v)).
+      Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : LocalStore Δ)
+        (d : CMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) : CMut Γ1 Γ2 A :=
+        fun POST δ0 => d (fun a δ1 => POST a (env_drop Δ δ1)) (δ0 ►► δΔ).
       Definition get_local {Γ} : CMut Γ Γ (LocalStore Γ) :=
-        state (fun δ h => MkCMutResult δ δ h).
-      Definition pop_local {Γ x σ} : CMut (Γ ▻ (x :: σ)) Γ unit :=
-        state (fun δ h => MkCMutResult () (env_tail δ) h).
-      Definition pops_local {Γ} Δ : CMut (Γ ▻▻ Δ) Γ unit :=
-        state (fun δ h => MkCMutResult () (env_drop Δ δ) h).
-      Definition push_local {Γ x σ} (v : Lit σ) : CMut Γ (Γ ▻ (x :: σ)) unit :=
-        state (fun δ h => MkCMutResult () (env_snoc δ (x :: σ) v) h).
-      Global Arguments push_local {Γ _ _} _.
-      Definition pushs_local {Γ Δ} (δΔ : LocalStore Δ) : CMut Γ (Γ ▻▻ Δ) unit :=
-        state (fun δ h => MkCMutResult () (env_cat δ δΔ) h).
-      Definition pushpop {A} {Γ1 Γ2 x σ} (v : Lit σ) (d : CMut (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) A) :
-        CMut Γ1 Γ2 A :=
-        push_local v ;; bind_left d pop_local.
-      Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : LocalStore Δ) (d : CMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) :
-        CMut Γ1 Γ2 A :=
-        pushs_local δΔ ;; bind_left d (pops_local Δ).
+        fun POST δ => POST δ δ.
+      Definition put_local {Γ1 Γ2} (δ : LocalStore Γ2) : CMut Γ1 Γ2 unit :=
+        fun POST _ => POST tt δ.
       Definition get_heap {Γ} : CMut Γ Γ SCHeap :=
-        state (fun δ h => MkCMutResult h δ h).
+        fun POST δ h => POST h δ h.
       Definition put_heap {Γ} (h : SCHeap) : CMut Γ Γ unit :=
-        state (fun δ _ => MkCMutResult tt δ h).
+        fun POST δ _ => POST tt δ h.
 
       Definition eval_exp {Γ σ} (e : Exp Γ σ) : CMut Γ Γ (Lit σ) :=
-        state (fun δ h => MkCMutResult (eval e δ) δ h).
+        fun POST δ => POST (eval e δ) δ.
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CMut Γ Γ (LocalStore σs) :=
-        state (fun δ h => MkCMutResult (env_map (fun _ e => eval e δ) es) δ h).
+        fun POST δ => POST (env_map (fun _ e => eval e δ) es) δ.
+      Definition assign {Γ} x {σ} {xIn : x::σ ∈ Γ} (v : Lit σ) : CMut Γ Γ unit :=
+        fun POST δ => POST () (δ ⟪ x ↦ v ⟫).
+      Global Arguments assign {Γ} x {σ xIn} v.
 
     End State.
 
     Section ProduceConsume.
 
       Definition produce_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
-        state (fun δ h => MkCMutResult () δ (cons c h)).
-      Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
-        get_heap >>= fun h =>
-          angelick_list
-          "Err [consume_chunk]: empty extraction"
-          (extract_scchunk_eqb c h)
-          put_heap.
+        fun POST δ h => POST tt δ (cons c h).
+      Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit.
+        eapply bind.
+        apply get_heap.
+        intros h.
+        eapply bind.
+        apply (angelic_list (heap_extractions h)).
+        intros [c' h'].
+        eapply bind_right.
+        apply assert_formula.
+        apply (c' = c).
+        apply (put_heap h').
+      Defined.
+
       Global Arguments produce_chunk {Γ} _.
       Global Arguments consume_chunk {Γ} _.
 
@@ -401,7 +534,7 @@ Module SemiConcrete
         | asn_chunk c     => produce_chunk (inst c ι)
         | asn_if b a1 a2  => demonic_match_bool (inst b ι) (produce ι a1) (produce ι a2)
         | asn_match_enum E k alts =>
-          match_enum
+          demonic_match_enum
             (inst (T := fun Σ => Term Σ _) k ι)
             (fun K => produce ι (alts K))
         | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
@@ -440,11 +573,11 @@ Module SemiConcrete
 
       Fixpoint consume {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
         match asn with
-        | asn_formula fml => assert_formula ι fml
+        | asn_formula fml => assert_formula (inst fml ι)
         | asn_chunk c     => consume_chunk (inst c ι)
-        | asn_if b a1 a2  => match_bool (inst b ι) (consume ι a1) (consume ι a2)
+        | asn_if b a1 a2  => angelic_match_bool (inst b ι) (consume ι a1) (consume ι a2)
         | asn_match_enum E k alts =>
-          match_enum
+          angelic_match_enum
             (inst (T := fun Σ => Term Σ _) k ι)
             (fun K => consume ι (alts K))
         | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
@@ -489,7 +622,7 @@ Module SemiConcrete
         match contract with
         | MkSepContract _ _ Σe δ req result ens =>
           ι <- angelic_ctx Σe ;;
-          assert_formulas ι (formula_eqs δ (lift vs)) ;;
+          assert_formula (inst δ ι = vs) ;;
           consume ι req  ;;
           v <- demonic τ ;;
           produce (env_snoc ι (result::τ) v) ens ;;
@@ -507,7 +640,7 @@ Module SemiConcrete
           pushspops δ (exec k)
         | stm_assign x e =>
           v <- exec e ;;
-          state (fun δ h => MkCMutResult tt (δ ⟪ x ↦ v ⟫)%env h) ;;
+          assign x v ;;
           pure v
         | stm_call f es =>
           args <- eval_exps es ;;
@@ -535,10 +668,10 @@ Module SemiConcrete
         | stm_fail _ s =>
           block
         | stm_match_enum E e alts =>
-          K <- eval_exp e ;;
-          match_enum
-            K
-            (fun K => exec (alts K))
+          v <- eval_exp e ;;
+          demonic_match_enum
+            v
+            (fun EK => exec (alts EK))
         | stm_read_register reg =>
           v <- angelic τ ;;
           let c := scchunk_ptsreg reg v in
@@ -546,9 +679,9 @@ Module SemiConcrete
           produce_chunk c ;;
           pure v
         | stm_write_register reg e =>
-          v__new <- eval_exp e ;;
           v__old <- angelic τ ;;
           consume_chunk (scchunk_ptsreg reg v__old) ;;
+          v__new <- eval_exp e ;;
           produce_chunk (scchunk_ptsreg reg v__new) ;;
           pure v__new
         | @stm_match_list _ _ σ e s1 xh xt s2 =>
@@ -576,9 +709,7 @@ Module SemiConcrete
                  (exec s))
         | stm_match_tuple e p rhs =>
           v <- eval_exp e ;;
-          pushs_local (tuple_pattern_match_lit p v) ;;
-          exec rhs <*
-          pops_local _
+          pushspops (tuple_pattern_match_lit p v) (exec rhs)
         | stm_match_union U e alt__pat alt__rhs =>
           v <- eval_exp e ;;
           let (K , v) := 𝑼_unfold v in
@@ -593,12 +724,12 @@ Module SemiConcrete
           exec k
         end.
 
-      Definition leakcheck {Γ} : CMut Γ Γ unit :=
-        get_heap >>= fun h =>
-        match h with
-        | nil => pure tt
-        | _   => error "Err [cmut_leakcheck]: heap leak"
-        end.
+      (* Definition leakcheck {Γ} : CMut Γ Γ unit := *)
+      (*   get_heap >>= fun h => *)
+      (*   match h with *)
+      (*   | nil => pure tt *)
+      (*   | _   => error "Err [cmut_leakcheck]: heap leak" *)
+      (*   end. *)
 
     End Exec.
 
@@ -751,19 +882,6 @@ Module SemiConcrete
   (*     - clear. intuition. constructor. *)
   (*     - rewrite inst_pathcondition_cons, cmut_wp_assert_formulak, IHfmls. *)
   (*       clear. intuition. *)
-  (*   Qed. *)
-
-  (*   Lemma cmut_wp_demonic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : *)
-  (*     forall POST δ h, *)
-  (*       cmut_wp (cmut_demonic_match_bool v kt kf) POST δ h <-> *)
-  (*       if v *)
-  (*       then cmut_wp kt POST δ h *)
-  (*       else cmut_wp kf POST δ h. *)
-  (*   Proof. *)
-  (*     intros. *)
-  (*     cbv [cmut_wp cmut_demonic_match_bool cmut_bind_right cmut_demonic_binary *)
-  (*                  cmut_assume_formula cmut_bind cmut_dijkstra CDijk.assume_formula is_true negb]. *)
-  (*     destruct v; intuition; discriminate. *)
   (*   Qed. *)
 
   (*   Lemma cmut_wp_match_sum {A Γ1 Γ2 σ τ} (v : Lit σ + Lit τ) *)

@@ -263,6 +263,7 @@ Class ISepLogicLaws (L : Type) {SL : ISepLogic L} := {
   sepcon_andp_prop: forall (P R : L) (Q : Prop), P ✱ (!!Q ∧ R) ⊣⊢s !!Q ∧ (P ✱ R);
   sepcon_entails: forall P P' Q Q' : L, P ⊢ P' -> Q ⊢ Q' -> P ✱ Q ⊢ P' ✱ Q';
   sepcon_emp: forall P, P ✱ emp ⊣⊢s P;
+  sep_leak: forall P, P ⊢ emp;
 }.
 
 Section SepEquivalence.

@@ -102,15 +102,6 @@ Module Soundness
         approx ι ta a ->
         approx ι (fs ta) (fc a).
 
-  Global Instance ApproxInj {A} : Approx (fun _ => A) A :=
-    fun w ι a1 a2 => a1 = a2.
-
-  (* Global Instance ApproxMutResult {AT A} `{Approx AT A} {Γ} : Approx (SMutResult Γ AT) (CMutResult Γ A). *)
-  (* Proof. *)
-  (*   intros w0 ι0 [a0 δ0 h0] [a δ h]. *)
-  (*   refine (approx ι0 a0 a /\ approx ι0 δ0 δ /\ approx ι0 h0 h). *)
-  (* Defined. *)
-
   Global Instance ApproxMut {Γ1 Γ2 AT A} `{instA : Inst AT A} : Approx (SMut Γ1 Γ2 AT) (CMut Γ1 Γ2 A).
   Proof.
     unfold SMut, CMut.
@@ -147,6 +138,8 @@ Module Soundness
 
   Hint Unfold approx ApproxImpl ApproxBox ApproxInst ApproxPath ApproxMut ApproxTermLit ApproxNamedEnv : core.
 
+  Import ModalNotations.
+  Open Scope modal.
 
   Lemma approx_four {AT A} `{Approx AT A} {w0 : World} (ι0 : SymInstance w0) :
     forall (a0 : Box AT w0) (a : A),
@@ -199,7 +192,27 @@ Module Soundness
        (*     intros w ι Hpc *)
        (*   end). *)
 
-  Module dijk.
+  Module Path.
+
+    Lemma approx_angelic_binary
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@angelic_binary w) (@or).
+    Proof.
+      intros PS1 PC1 HP1 PS2 PC2 HP2.
+      intros [H1|H2]; [left|right]; auto.
+    Qed.
+
+    Lemma approx_demonic_binary
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@demonic_binary w) (@and).
+    Proof.
+      intros PS1 PC1 HP1 PS2 PC2 HP2.
+      intros [H1 H2]; split; auto.
+    Qed.
+
+  End Path.
+
+  Module Dijk.
 
     Lemma approx_pure {AT A} `{Approx AT A} {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
       approx ι (@SDijk.pure AT w) CDijk.pure.
@@ -261,11 +274,11 @@ Module Soundness
         reflexivity.
     Qed.
 
-    Lemma approx_assume_formula {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) (fml : Formula w0) (P : Prop) :
-      (inst fml ι0 <-> P) ->
+    Lemma approx_assume_formula {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
       approx ι0 (@SDijk.assume_formula w0 fml) (@CDijk.assume_formula P).
     Proof.
-      intros Heq POST__s POST__c HPOST. unfold SDijk.assume_formula.
+      intros POST__s POST__c HPOST. unfold SDijk.assume_formula.
       intros Hwp Hfml. apply Heq in Hfml.
       destruct (solver_spec fml) as [[w1 [ζ fmls]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [Hν Hsolver].
@@ -282,7 +295,30 @@ Module Soundness
       - intuition.
     Qed.
 
-    Lemma approx_assume_formulas {w0 : World} (fmls : List Formula w0) (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) :
+    Lemma approx_assert_formula {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (msg : Message w0) (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
+      approx ι0 (@SDijk.assert_formula w0 msg fml) (@CDijk.assert_formula P).
+    Proof.
+      unfold SDijk.assert_formula, CDijk.assert_formula.
+      intros POST__s POST__c HPOST Hwp.
+      destruct (solver_spec fml) as [[w1 [ν fmls]] Hsolver|Hsolver].
+      - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
+        rewrite safe_assert_multisub in Hwp. destruct Hwp as [Hν Hwp].
+        rewrite safe_assert_formulas_without_solver in Hwp.
+        destruct Hwp as [Hfmls Hwp].
+        split.
+        + apply Hsolver in Hfmls; rewrite ?inst_multi; auto.
+          now apply Heq.
+        + revert Hwp. unfold four, wtrans, persist, persist_subst; cbn.
+          apply HPOST; cbn; wsimpl; eauto.
+          rewrite inst_multi; auto.
+          rewrite inst_pathcondition_app. split; auto.
+          now apply multishift_entails.
+      - intuition.
+    Qed.
+
+    Lemma approx_assume_formulas_fail {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (fmls : List Formula w0) :
       approx ι0 (@SDijk.assume_formulas w0 fmls) (@CDijk.assume_formulas _ ι0 fmls).
     Proof.
       induction fmls; cbn.
@@ -296,245 +332,413 @@ Module Soundness
         now rewrite inst_subst.
     Qed.
 
-  End dijk.
+    Lemma approx_assert_formulas_fail {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (msg : Message w0) (fmls : List Formula w0) :
+      approx ι0 (@SDijk.assert_formulas w0 msg fmls) (@CDijk.assert_formulas _ ι0 fmls).
+    Proof.
+      induction fmls; cbn.
+      - apply approx_pure; auto.
+      - apply approx_bind; auto.
+        intros w1 ω01 ι1 -> Hpc1.
+        intros ? ? ?.
+        intros POST__s POST__c HPOST.
+        intros Hwp.
+        eapply approx_assert_formula in Hwp; eauto.
+        now rewrite inst_subst.
+    Qed.
 
-  Lemma approx_dijkstra {Γ AT A} `{Approx AT A}
-    {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) :
-    approx ι0 (@SMut.dijkstra Γ AT w0) (@CMut.dijkstra Γ A).
-  Proof.
-    intros ms mc Hm.
-    intros POST__s POST__c HPOST.
-    intros δs δc Hδ hs hc Hh.
-    unfold SMut.dijkstra, CMut.dijkstra.
-    apply Hm.
-    intros w1 ω01 ι1 -> Hpc1.
-    intros a1 a Ha.
-    apply HPOST; auto.
-    hnf. rewrite inst_subst. apply Hδ.
-    hnf. rewrite inst_subst. apply Hh.
-  Qed.
-  Hint Resolve approx_dijkstra : core.
+    Lemma approx_assume_formulas' {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (fmls : List Formula w0) :
+      approx ι0 (@SDijk.assume_formulas w0 fmls) (@CDijk.assume_formula (instpc fmls ι0)).
+    Proof.
+      intros POST__s POST__c HPOST Hwp Hfmls.
+      revert POST__s POST__c HPOST Hwp.
+      induction fmls; cbn; cbv [SDijk.pure SDijk.bind];
+        intros POST__s POST__c HPOST.
+      - apply HPOST; wsimpl; auto.
+      - rewrite inst_pathcondition_cons in Hfmls. destruct Hfmls as [Hfml Hfmls].
+        apply IHfmls; eauto.
+        intros w1 ω01 ι1 -> Hpc1.
+        intros [] [] _ Hwp.
+        eapply approx_assume_formula in Hwp; eauto.
+        apply Hwp. now rewrite inst_subst.
+    Qed.
 
-  Lemma approx_block {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
-    approx ι (@SMut.block Γ1 Γ2 AT w) CMut.block.
-  Proof. auto. Qed.
+    Lemma approx_assert_formulas' {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (msg : Message w0) (fmls : List Formula w0) :
+      approx ι0 (@SDijk.assert_formulas w0 msg fmls) (@CDijk.assert_formula (instpc fmls ι0)).
+    Proof.
+      intros POST__s POST__c HPOST.
+      hnf. unfold CDijk.assert_formula.
+      revert POST__s POST__c HPOST.
+      induction fmls; cbn; cbv [SDijk.pure SDijk.bind four];
+        intros POST__s POST__c HPOST Hwp.
+      - split. constructor. revert Hwp.
+        apply HPOST; wsimpl; auto.
+      - rewrite inst_pathcondition_cons.
+        apply (IHfmls _ (fun _ => inst a ι0 /\ POST__c tt)) in Hwp.
+        intuition.
+        intros w1 ω01 ι1 -> Hpc1.
+        intros [] [] _ Hfml.
+        eapply approx_assert_formula in Hfml; eauto.
+        now rewrite inst_subst.
+        intros w2 ω12 ι2 -> Hpc2.
+        apply HPOST; wsimpl; auto.
+    Qed.
 
-  Lemma approx_error {AT A D} `{Approx AT A} {Γ1 Γ2} {w : World} {ι: SymInstance w} (func msg : string) (d : D) (cm : CMut Γ1 Γ2 A) :
-    approx ι (@SMut.error Γ1 Γ2 AT D func msg d w) cm.
-  Proof.
-    intros POST__s POST__c HPOST.
-    intros δs δc Hδ hs hc Hh [].
-  Qed.
-  Hint Resolve approx_error : core.
+    Lemma approx_assert_formulas {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (msg : Message w0) (fmls__s : List Formula w0) (fmls__c : Prop) (Hfmls : instpc fmls__s ι0 <-> fmls__c) :
+      approx ι0 (@SDijk.assert_formulas w0 msg fmls__s) (@CDijk.assert_formula fmls__c).
+    Proof.
+      intros POST__s POST__c HPOST Hwp.
+      unfold CDijk.assert_formula. rewrite <- Hfmls.
+      revert Hwp. apply approx_assert_formulas'; auto.
+    Qed.
 
-  Lemma approx_pure {AT A} `{Approx AT A} {Γ} {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-    approx ι (@SMut.pure Γ AT w) CMut.pure.
-  Proof.
-    intros t v tv.
-    intros POST__s POST__c HPOST.
-    unfold SMut.pure, CMut.pure.
-    apply HPOST; auto. cbn.
-    now rewrite inst_sub_id.
-  Qed.
+    Lemma approx_angelic_list {AT A} `{Inst AT A}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) msg :
+      approx ι0 (@SDijk.angelic_list AT w0 msg) (@CDijk.angelic_list A).
+    Proof.
+      intros xs ? ->.
+      induction xs; cbn - [inst];
+        intros POST__s POST__c HPOST.
+      - intros [].
+      - cbn.
+        apply Path.approx_angelic_binary; auto.
+        apply HPOST; wsimpl; auto.
+    Qed.
 
-  Lemma approx_bind {AT A BT B} `{Approx AT A, Approx BT B}
-    {Γ1 Γ2 Γ3} {w0 : World} (ι0 : SymInstance w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
-    approx ι0 (@SMut.bind Γ1 Γ2 Γ3 AT BT w0) (@CMut.bind Γ1 Γ2 Γ3 A B).
-  Proof.
-    (* cbv [approx ApproxBox ApproxImpl ApproxMut ApproxPath ApproxInst]. *)
-    intros ms mc Hm fs fc Hf.
-    intros POST__s POST__c HPOST.
-    intros δs δc -> hs hc ->.
-    unfold SMut.bind, CMut.bind.
-    apply Hm; eauto.
-    intros w1 ω01 ι1 -> Hpc1.
-    intros a1 a Ha.
-    apply Hf; auto.
-    eapply approx_four; eauto.
-  Qed.
+    Lemma approx_demonic_list {AT A} `{Inst AT A}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) :
+      approx ι0 (@SDijk.demonic_list AT w0) (@CDijk.demonic_list A).
+    Proof.
+      intros xs ? ->.
+      induction xs; cbn - [inst];
+        intros POST__s POST__c HPOST.
+      - constructor.
+      - cbn.
+        apply Path.approx_demonic_binary; auto.
+        apply HPOST; wsimpl; auto.
+    Qed.
 
-  Lemma approx_bind_right {AT A BT B} `{Approx AT A, Approx BT B}
-    {Γ1 Γ2 Γ3} {w0 : World} (ι0 : SymInstance w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
-    approx ι0 (@SMut.bind_right Γ1 Γ2 Γ3 AT BT w0) (@CMut.bind_right Γ1 Γ2 Γ3 A B).
-  Proof.
-    intros ms1 mc1 Hm1 ms2 mc2 Hm2.
-    intros POST__s POST__c HPOST.
-    intros δs δc -> hs hc ->.
-    unfold SMut.bind_right, CMut.bind_right, CMut.bind.
-    apply Hm1; eauto.
-    intros w1 ω01 ι1 -> Hpc1.
-    intros a1 a Ha.
-    apply Hm2; auto.
-    eapply approx_four; eauto.
-  Qed.
+    Lemma approx_angelic_finite {F} `{finite.Finite F}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) msg :
+      approx (AT := SDijkstra (Const F)) ι (@SDijk.angelic_finite F _ _ w msg) (@CDijk.angelic_finite F _ _).
+    Proof.
+      unfold SDijk.angelic_finite, CDijk.angelic_finite.
+      intros POST__s POST__c HPOST.
+      apply approx_angelic_list; eauto.
+      hnf. cbv [inst instantiate_const instantiate_list].
+      now rewrite List.map_id.
+    Qed.
 
-  Lemma approx_angelic (x : option 𝑺) (σ : Ty)
-    {Γ : PCtx} {w0 : World} (ι0 : SymInstance w0)
-    (Hpc0 : instpc (wco w0) ι0) :
-    approx ι0 (@SMut.angelic Γ x σ w0) (@CMut.angelic Γ σ).
-  Proof.
-    intros POST__s POST__c HPOST.
-    intros δs δc -> hs hc ->.
-    intros [v Hwp]; exists v; revert Hwp.
-    apply HPOST. cbn. now rewrite inst_sub_wk1.
-    cbn. now rewrite inst_subst, inst_sub_wk1.
-    reflexivity.
-    hnf. cbn. now rewrite inst_subst, ?inst_sub_wk1.
-    hnf. cbn. now rewrite inst_subst, ?inst_sub_wk1.
-  Qed.
-  Hint Resolve approx_angelic : core.
+    Lemma approx_demonic_finite {F} `{finite.Finite F}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx (AT := SDijkstra (Const F)) ι (@SDijk.demonic_finite F _ _ w) (@CDijk.demonic_finite F _ _).
+    Proof.
+      unfold SDijk.demonic_finite, CDijk.demonic_finite.
+      intros POST__s POST__c HPOST.
+      apply approx_demonic_list; eauto.
+      hnf. cbv [inst instantiate_const instantiate_list].
+      now rewrite List.map_id.
+    Qed.
 
-  Lemma approx_demonic (x : option 𝑺) (σ : Ty)
-    {Γ : PCtx} {w0 : World} (ι0 : SymInstance w0)
-    (Hpc0 : instpc (wco w0) ι0) :
-    approx ι0 (@SMut.demonic Γ x σ w0) (@CMut.demonic Γ σ).
-  Proof.
-    intros POST__s POST__c HPOST.
-    intros δs δc -> hs hc ->.
-    intros Hwp v. cbn in Hwp. specialize (Hwp v). revert Hwp.
-    apply HPOST. cbn. now rewrite inst_sub_wk1.
-    cbn. now rewrite inst_subst, inst_sub_wk1.
-    reflexivity.
-    hnf. cbn. now rewrite inst_subst, ?inst_sub_wk1.
-    hnf. cbn. now rewrite inst_subst, ?inst_sub_wk1.
-  Qed.
-  Hint Resolve approx_demonic : core.
+  End Dijk.
 
-  Lemma approx_angelic_ctx {N : Set} (n : N -> 𝑺) {Γ : PCtx} (Δ : NCtx N Ty) :
-    forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
-      approx ι0 (@SMut.angelic_ctx N n Γ w0 Δ) (@CMut.angelic_ctx N Γ Δ).
-  Proof.
-    intros w0 ι0 Hpc0. unfold SMut.angelic_ctx, CMut.angelic_ctx.
-    apply approx_dijkstra; auto.
-    now apply dijk.approx_angelic_ctx.
-  Qed.
+  Section Basics.
 
-  Lemma approx_debug {AT A DT D} `{Approx AT A, Subst DT, Inst DT D, OccursCheck DT} {Γ1 Γ2} {w0 : World} (ι0 : SymInstance w0)
-        (Hpc : instpc (wco w0) ι0) f ms mc :
-    approx ι0 ms mc ->
-    approx ι0 (@SMut.debug AT DT D _ _ _ Γ1 Γ2 w0 f ms) mc.
-  Proof.
-    intros Hap.
-    intros POST__s POST__c HPOST.
-    intros δs0 δc0 -> hs0 hc0 ->.
-    unfold SMut.debug. hnf.
-    cbn. intros [HP]. revert HP.
-    apply Hap; auto.
-  Qed.
+    Lemma approx_dijkstra {Γ AT A} `{Approx AT A}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.dijkstra Γ AT w0) (@CMut.dijkstra Γ A).
+    Proof.
+      intros ms mc Hm.
+      intros POST__s POST__c HPOST.
+      intros δs δc Hδ hs hc Hh.
+      unfold SMut.dijkstra, CMut.dijkstra.
+      apply Hm.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros a1 a Ha.
+      apply HPOST; auto.
+      hnf. rewrite inst_subst. apply Hδ.
+      hnf. rewrite inst_subst. apply Hh.
+    Qed.
+    Hint Resolve approx_dijkstra : core.
 
-  Lemma approx_angelic_binary {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
-    approx ι (@SMut.angelic_binary Γ1 Γ2 AT w) (@CMut.angelic_binary Γ1 Γ2 A).
-  Proof.
-    intros ms1 mc1 Hm1 ms2 mc2 Hm2.
-    intros POST__s POST__c HPOST.
-    intros δs0 δc0 -> hs0 hc0 ->.
-    unfold SMut.angelic_binary, CMut.angelic_binary.
-    intros [HYP|HYP]; [left|right]; revert HYP.
-    - apply Hm1; auto.
-    - apply Hm2; auto.
-  Qed.
+    Lemma approx_block {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
+      approx ι (@SMut.block Γ1 Γ2 AT w) CMut.block.
+    Proof. auto. Qed.
 
-  Lemma approx_demonic_binary {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
-    approx ι (@SMut.demonic_binary Γ1 Γ2 AT w) (@CMut.demonic_binary Γ1 Γ2 A).
-  Proof.
-    intros ms1 mc1 Hm1 ms2 mc2 Hm2.
-    intros POST__s POST__c HPOST.
-    intros δs0 δc0 -> hs0 hc0 ->.
-    unfold SMut.demonic_binary, CMut.demonic_binary.
-    intros [H1 H2]. split.
-    - revert H1. apply Hm1; auto.
-    - revert H2. apply Hm2; auto.
-  Qed.
+    Lemma approx_error {AT A D} `{Approx AT A} {Γ1 Γ2} {w : World} {ι: SymInstance w} (func msg : string) (d : D) (cm : CMut Γ1 Γ2 A) :
+      approx ι (@SMut.error Γ1 Γ2 AT D func msg d w) cm.
+    Proof.
+      intros POST__s POST__c HPOST.
+      intros δs δc Hδ hs hc Hh [].
+    Qed.
+    Hint Resolve approx_error : core.
 
-  Lemma approx_assume_formula {Γ} {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0)
-    (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
-    approx ι0 (@SMut.assume_formula Γ w0 fml__s) (CMut.assume_formula fml__c).
-  Proof.
-    unfold SMut.assume_formula, CMut.assume_formula.
-    apply approx_dijkstra; auto.
-    now apply dijk.approx_assume_formula.
-  Qed.
+    Lemma approx_pure {AT A} `{Approx AT A} {Γ} {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.pure Γ AT w) CMut.pure.
+    Proof.
+      intros t v tv.
+      intros POST__s POST__c HPOST.
+      unfold SMut.pure, CMut.pure.
+      apply HPOST; auto. cbn.
+      now rewrite inst_sub_id.
+    Qed.
 
-  (* Lemma approx_assume_formulak {AT A} `{InstLaws AT A} {Γ1 Γ2} {w0 : World} {fml : Formula w0} *)
-  (*   {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0) : *)
-  (*   approx ι0 (@smutk_assume_formula AT Γ1 Γ2 w0 fml) (@cmut_assume_formulak A Γ1 Γ2 _ ι0 fml). *)
-  (* Proof. *)
-  (*   intros ms mc Hm δt δc Hδ hs hc Hh P Q PQ Hwp Hfml. *)
-  (*   unfold smutk_assume_formula, assume_formulak in Hwp. *)
-  (*   destruct (solver_spec fml) as [[w1 [ζ fmls]] Hsolver|Hsolver]. *)
-  (*   - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [Hν Hsolver]. *)
-  (*     specialize (Hν Hfml). specialize (Hsolver (inst (sub_multishift ζ) ι0)). *)
-  (*     rewrite inst_multi in Hsolver; auto. specialize (Hsolver eq_refl). *)
-  (*     destruct Hsolver as [Hsolver _]. specialize (Hsolver Hfml). *)
-  (*     rewrite wp_assume_multisub, wp_assume_formulas_without_solver in Hwp. *)
-  (*     specialize (Hwp Hν Hsolver). revert Hwp. *)
-  (*     unfold four, smut_bpure, wtrans, persist, persist_subst, K; cbn. *)
-  (*     wsimpl. apply Hm; cbn; wsimpl; auto. *)
-  (*     + rewrite ?inst_multi; auto. *)
-  (*     + rewrite inst_pathcondition_app. split; auto. *)
-  (*       now apply multishift_entails. *)
-  (*     + unfold approx, ApproxInst. cbn. *)
-  (*       now rewrite inst_subst, inst_multi. *)
-  (*     + unfold approx, ApproxInst. cbn. *)
-  (*       now rewrite inst_subst, inst_multi. *)
-  (*   - intuition. *)
-  (* Qed. *)
+    Lemma approx_bind {AT A BT B} `{Approx AT A, Approx BT B}
+      {Γ1 Γ2 Γ3} {w0 : World} (ι0 : SymInstance w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
+      approx ι0 (@SMut.bind Γ1 Γ2 Γ3 AT BT w0) (@CMut.bind Γ1 Γ2 Γ3 A B).
+    Proof.
+      (* cbv [approx ApproxBox ApproxImpl ApproxMut ApproxPath ApproxInst]. *)
+      intros ms mc Hm fs fc Hf.
+      intros POST__s POST__c HPOST.
+      intros δs δc -> hs hc ->.
+      unfold SMut.bind, CMut.bind.
+      apply Hm; eauto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros a1 a Ha.
+      apply Hf; auto.
+      eapply approx_four; eauto.
+    Qed.
 
-  (* Lemma approx_box_assume_formula {Γ} {w0 : World} (ι0 : SymInstance w0) *)
-  (*   (Hpc : instpc (wco w0) ι0) (fml : Formula w0) : *)
-  (*   approx ι0 (@smut_box_assume_formula Γ w0 fml) (cmut_assume_formula ι0 fml). *)
-  (* Proof. *)
-  (*   (* intros w1 ω01 ι1 -> Hpc1 δs δc Hδ hs hc Hh P Q PQ Hwp. *) *)
-  (*   (* eapply approx_assume_formula in Hwp; eauto. revert Hwp. *) *)
-  (*   (* cbn. now rewrite ?inst_subst. *) *)
-  (* Admitted. *)
+    Lemma approx_bind_right {AT A BT B} `{Approx AT A, Approx BT B}
+      {Γ1 Γ2 Γ3} {w0 : World} (ι0 : SymInstance w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
+      approx ι0 (@SMut.bind_right Γ1 Γ2 Γ3 AT BT w0) (@CMut.bind_right Γ1 Γ2 Γ3 A B).
+    Proof.
+      intros ms1 mc1 Hm1 ms2 mc2 Hm2.
+      intros POST__s POST__c HPOST.
+      intros δs δc -> hs hc ->.
+      unfold SMut.bind_right, CMut.bind_right, CMut.bind.
+      apply Hm1; eauto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros a1 a Ha.
+      apply Hm2; auto.
+      eapply approx_four; eauto.
+    Qed.
 
-  Lemma approx_assert_formula {Γ} {w0 : World} (ι0 : SymInstance w0)
-    (Hpc : instpc (wco w0) ι0) (fml : Formula w0) :
-    approx ι0 (@SMut.assert_formula Γ w0 fml) (@CMut.assert_formula Γ w0 ι0 fml).
-  Admitted.
+    Lemma approx_angelic (x : option 𝑺) (σ : Ty)
+      {Γ : PCtx} {w0 : World} (ι0 : SymInstance w0)
+      (Hpc0 : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.angelic Γ x σ w0) (@CMut.angelic Γ σ).
+    Proof.
+      intros POST__s POST__c HPOST.
+      intros δs δc -> hs hc ->.
+      intros [v Hwp]; exists v; revert Hwp.
+      apply HPOST. cbn. now rewrite inst_sub_wk1.
+      cbn. now rewrite inst_subst, inst_sub_wk1.
+      reflexivity.
+      hnf. cbn. now rewrite inst_subst, ?inst_sub_wk1.
+      hnf. cbn. now rewrite inst_subst, ?inst_sub_wk1.
+    Qed.
+    Hint Resolve approx_angelic : core.
 
-  Lemma approx_assert_formulas {Γ} {w0 : World} (ι0 : SymInstance w0)
-        (Hpc : instpc (wco w0) ι0) (fmls : List Formula w0) :
-    approx ι0 (@SMut.assert_formulas Γ w0 fmls) (@CMut.assert_formulas Γ w0 ι0 fmls).
-  Proof.
-    intros POST__s POST__c HPOST.
-    intros δs δc -> hs hc ->.
-    unfold CMut.assert_formulas.
-    hnf.
-    induction fmls as [|fml fmls]; cbn.
-    - unfold SMut.pure. intros Hwp. split.
-      constructor. revert Hwp. apply HPOST; auto.
-      cbn. now rewrite inst_sub_id.
-    - (* unfold smut_bind_right. apply approx_bind_right. *)
-      (* apply IHfmls. *)
-      (* intros w1 ω01 ι1 -> Hpc1. *)
-      (* intros POST__s POST__c HPOST. *)
-      (* intros δs δc -> hs hc ->. *)
-      (* unfold cmut_assert_formula. *)
-      (* rewrite <- inst_subst. *)
-      (* apply approx_assert_formula; auto. *)
+    Lemma approx_demonic (x : option 𝑺) (σ : Ty)
+      {Γ : PCtx} {w0 : World} (ι0 : SymInstance w0)
+      (Hpc0 : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.demonic Γ x σ w0) (@CMut.demonic Γ σ).
+    Proof.
+      intros POST__s POST__c HPOST.
+      intros δs δc -> hs hc ->.
+      intros Hwp v. cbn in Hwp. specialize (Hwp v). revert Hwp.
+      apply HPOST. cbn. now rewrite inst_sub_wk1.
+      cbn. now rewrite inst_subst, inst_sub_wk1.
+      reflexivity.
+      hnf. cbn. now rewrite inst_subst, ?inst_sub_wk1.
+      hnf. cbn. now rewrite inst_subst, ?inst_sub_wk1.
+    Qed.
+    Hint Resolve approx_demonic : core.
 
-    (* induction fmls as [|fml fmls]; cbn. *)
-    (* - now apply approx_pure. *)
-    (* - apply approx_bind_right. *)
-    (*   apply IHfmls. *)
-    (*   intros w1 ω01 ι1 -> Hpc1. *)
-    (*   intros POST__s POST__c HPOST. *)
-    (*   intros δs δc -> hs hc ->. *)
-    (*   unfold cmut_assert_formula. *)
-    (*   rewrite <- inst_subst. *)
-    (*   apply approx_assert_formula; auto. *)
-  Admitted.
+    Lemma approx_angelic_ctx {N : Set} (n : N -> 𝑺) {Γ : PCtx} (Δ : NCtx N Ty) :
+      forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
+        approx ι0 (@SMut.angelic_ctx N n Γ w0 Δ) (@CMut.angelic_ctx N Γ Δ).
+    Proof.
+      intros w0 ι0 Hpc0. unfold SMut.angelic_ctx, CMut.angelic_ctx.
+      apply approx_dijkstra; auto.
+      now apply Dijk.approx_angelic_ctx.
+    Qed.
+
+    Lemma approx_debug {AT A DT D} `{Approx AT A, Subst DT, Inst DT D, OccursCheck DT} {Γ1 Γ2} {w0 : World} (ι0 : SymInstance w0)
+          (Hpc : instpc (wco w0) ι0) f ms mc :
+      approx ι0 ms mc ->
+      approx ι0 (@SMut.debug AT DT D _ _ _ Γ1 Γ2 w0 f ms) mc.
+    Proof.
+      intros Hap.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 -> hs0 hc0 ->.
+      unfold SMut.debug. hnf.
+      cbn. intros [HP]. revert HP.
+      apply Hap; auto.
+    Qed.
+
+    Lemma approx_angelic_binary {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
+      approx ι (@SMut.angelic_binary Γ1 Γ2 AT w) (@CMut.angelic_binary Γ1 Γ2 A).
+    Proof.
+      intros ms1 mc1 Hm1 ms2 mc2 Hm2.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 -> hs0 hc0 ->.
+      unfold SMut.angelic_binary, CMut.angelic_binary.
+      intros [HYP|HYP]; [left|right]; revert HYP.
+      - apply Hm1; auto.
+      - apply Hm2; auto.
+    Qed.
+
+    Lemma approx_demonic_binary {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
+      approx ι (@SMut.demonic_binary Γ1 Γ2 AT w) (@CMut.demonic_binary Γ1 Γ2 A).
+    Proof.
+      intros ms1 mc1 Hm1 ms2 mc2 Hm2.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 -> hs0 hc0 ->.
+      unfold SMut.demonic_binary, CMut.demonic_binary.
+      intros [H1 H2]. split.
+      - revert H1. apply Hm1; auto.
+      - revert H2. apply Hm2; auto.
+    Qed.
+
+    Lemma approx_angelic_list {AT A} `{Inst AT A} {Γ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) msg :
+      approx ι (@SMut.angelic_list AT Γ w msg) (@CMut.angelic_list A Γ).
+    Proof.
+      intros ls lc Hl.
+      unfold SMut.angelic_list, CMut.angelic_list.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ0 hs0 hc0 Hh0.
+      apply approx_dijkstra; eauto.
+      apply Dijk.approx_angelic_list; auto.
+    Qed.
+
+    Lemma approx_angelic_finite {F} `{finite.Finite F} {Γ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) msg :
+      approx (AT := SMut Γ Γ (Const F)) ι (@SMut.angelic_finite Γ F _ _ w msg) (@CMut.angelic_finite Γ F _ _).
+    Proof.
+      unfold SMut.angelic_finite, CMut.angelic_finite.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ0 hs0 hc0 Hh0.
+      eapply approx_dijkstra; eauto.
+      apply Dijk.approx_angelic_finite; auto.
+    Qed.
+
+    Lemma approx_demonic_finite {F} `{finite.Finite F} {Γ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx (AT := SMut Γ Γ (Const F)) ι (@SMut.demonic_finite Γ F _ _ w) (@CMut.demonic_finite Γ F _ _).
+    Proof.
+      unfold SMut.demonic_finite, CMut.demonic_finite.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ0 hs0 hc0 Hh0.
+      eapply approx_dijkstra; eauto.
+      apply Dijk.approx_demonic_finite; auto.
+    Qed.
+
+  End Basics.
+
+  Section AssumeAssert.
+
+    Lemma approx_assume_formula {Γ} {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0)
+      (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
+      approx ι0 (@SMut.assume_formula Γ w0 fml__s) (CMut.assume_formula fml__c).
+    Proof.
+      unfold SMut.assume_formula, CMut.assume_formula.
+      apply approx_dijkstra; auto.
+      now apply Dijk.approx_assume_formula.
+    Qed.
+
+    Lemma approx_box_assume_formula {Γ} {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0)
+      (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
+      approx ι0 (@SMut.box_assume_formula Γ w0 fml__s) (CMut.assume_formula fml__c).
+    Proof.
+      unfold SMut.box_assume_formula, map_box.
+      intros w1 ω01 ι1 -> Hpc1.
+      apply approx_assume_formula; auto.
+      unfold persist, persist_subst.
+      now rewrite inst_subst.
+    Qed.
+
+    Lemma approx_assert_formula {Γ} {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0)
+      (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
+      approx ι0 (@SMut.assert_formula Γ w0 fml__s) (@CMut.assert_formula Γ fml__c).
+    Proof.
+      unfold SMut.assert_formula, CMut.assert_formula.
+      intros POST__s POST__c HPOST.
+      intros δs δc Hδ hs hc Hh.
+      apply approx_dijkstra; auto.
+      now apply Dijk.approx_assert_formula.
+    Qed.
+
+    Lemma approx_box_assert_formula {Γ} {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0)
+      (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
+      approx ι0 (@SMut.box_assert_formula Γ w0 fml__s) (CMut.assert_formula fml__c).
+    Proof.
+      unfold SMut.box_assert_formula, map_box.
+      intros w1 ω01 ι1 -> Hpc1.
+      apply approx_assert_formula; auto.
+      unfold persist, persist_subst.
+      now rewrite inst_subst.
+    Qed.
+
+    Lemma approx_assert_formulas {Γ} {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0)
+      (fmls__s : List Formula w0) (fmls__c : Prop) (Hfmls : fmls__c <-> instpc fmls__s ι0) :
+      approx ι0 (@SMut.assert_formulas Γ w0 fmls__s) (@CMut.assert_formula Γ fmls__c).
+    Proof.
+      intros POST__s POST__c HPOST.
+      intros δs δc -> hs hc ->.
+      unfold SMut.assert_formulas, CMut.assert_formula.
+      apply approx_dijkstra; auto.
+      now apply Dijk.approx_assert_formulas.
+    Qed.
+
+  End AssumeAssert.
 
   Section PatternMatching.
 
-    Lemma approx_angelic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
-      approx ι (@SMut.angelic_match_bool AT Γ1 Γ2 w) (CMut.match_bool (A := A)).
-    Admitted.
+    Lemma approx_angelic_match_bool' {AT A} `{Approx AT A} {Γ1 Γ2}
+      {w : World} (ι : SymInstance w) (Hpc: instpc (wco w) ι) :
+      approx ι (@SMut.angelic_match_bool' AT Γ1 Γ2 w) (CMut.angelic_match_bool (A := A)).
+    Proof.
+      unfold SMut.angelic_match_bool', CMut.angelic_match_bool.
+      intros t v ->.
+      intros kt__s kt__c Hkt.
+      intros kf__s kf__c Hkf.
+      apply approx_angelic_binary; eauto.
+      apply approx_bind_right; eauto.
+      apply approx_assert_formula; eauto.
+      apply approx_bind_right; eauto.
+      apply approx_assert_formula; eauto.
+    Qed.
 
-    Lemma approx_demonic_match_bool' {AT A} `{Approx AT A} {Γ1 Γ2} {w : World}
-      (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+    Lemma approx_angelic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.angelic_match_bool AT Γ1 Γ2 w) (CMut.angelic_match_bool (A := A)).
+    Proof.
+      unfold SMut.angelic_match_bool.
+      intros t v ->.
+      destruct (term_get_lit_spec t).
+      - rewrite H0.
+        intros kt__s kt__c Hkt.
+        intros kf__s kf__c Hkf.
+        intros POST__s POST__c HPOST.
+        intros δs δc Hδ hs hc Hh.
+        hnf. rewrite CMut.wp_angelic_match_bool.
+        destruct a.
+        + apply Hkt; wsimpl; eauto.
+        + apply Hkf; wsimpl; eauto.
+      - now apply approx_angelic_match_bool'.
+    Qed.
+
+    Lemma approx_box_angelic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2}
+      {w : World} (ι : SymInstance w) :
+      approx ι (@SMut.box_angelic_match_bool AT Γ1 Γ2 w) (CMut.angelic_match_bool (A := A)).
+    Proof.
+      unfold SMut.box_angelic_match_bool, map_box, K.
+      intros t v ->.
+      intros kt__s kt__c Hkt.
+      intros kf__s kf__c Hkf.
+      intros w1 ω01 ι1 -> Hpc1.
+      apply approx_angelic_match_bool; wsimpl; eauto.
+      rewrite <- inst_subst. auto.
+    Qed.
+
+    Lemma approx_demonic_match_bool' {AT A} `{Approx AT A} {Γ1 Γ2}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_bool' AT Γ1 Γ2 w) (CMut.demonic_match_bool (A := A)).
     Proof.
       unfold SMut.demonic_match_bool, CMut.demonic_match_bool.
@@ -560,31 +764,153 @@ Module Soundness
         intros kf__s kf__c Hkf.
         intros POST__s POST__c HPOST.
         intros δs δc Hδ hs hc Hh.
-        intros Hwp.
-        (* apply cmut_wp_demonic_match_bool. *)
-        (* revert Hwp. *)
-        (* destruct a. *)
-        (* apply Hkt; wsimpl; auto. *)
-        (* apply Hkf; wsimpl; auto. *)
-        admit.
+        hnf. rewrite CMut.wp_demonic_match_bool.
+        destruct a.
+        + apply Hkt; wsimpl; eauto.
+        + apply Hkf; wsimpl; eauto.
       - now apply approx_demonic_match_bool'.
-    Admitted.
+    Qed.
 
-    Lemma approx_angelic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx} {w : World} (ι : SymInstance w) :
-      approx ι (@SMut.angelic_match_enum AT E Γ1 Γ2 w) (@CMut.match_enum A E Γ1 Γ2).
+    Lemma approx_box_demonic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2} 
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.box_demonic_match_bool AT Γ1 Γ2 w) (CMut.demonic_match_bool (A := A)).
     Proof.
-    Admitted.
+      unfold SMut.box_demonic_match_bool, map_box, K.
+      intros t v ->.
+      intros kt__s kt__c Hkt.
+      intros kf__s kf__c Hkf.
+      intros w1 ω01 ι1 -> Hpc1.
+      apply approx_demonic_match_bool; wsimpl; eauto.
+      rewrite <- inst_subst. auto.
+    Qed.
 
-    Lemma approx_demonic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx} {w : World} (ι : SymInstance w) :
-      approx ι (@SMut.demonic_match_enum AT E Γ1 Γ2 w) (@CMut.match_enum A E Γ1 Γ2).
+    Lemma approx_angelic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.angelic_match_enum AT E Γ1 Γ2 w) (@CMut.angelic_match_enum A E Γ1 Γ2).
     Proof.
-    Admitted.
+      intros t v ->.
+      intros ks kc Hk.
+      unfold SMut.angelic_match_enum, CMut.angelic_match_enum.
+      apply approx_bind.
+      apply approx_angelic_finite; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros EK1 EK2 HEK.
+      apply approx_bind_right.
+      apply approx_assert_formula; cbn; wsimpl; auto.
+      rewrite HEK; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      eapply Hk; wsimpl; auto.
+    Qed.
+
+    Lemma approx_demonic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_enum AT E Γ1 Γ2 w) (@CMut.demonic_match_enum A E Γ1 Γ2).
+    Proof.
+      intros t v ->.
+      intros ks kc Hk.
+      unfold SMut.demonic_match_enum, CMut.demonic_match_enum.
+      apply approx_bind.
+      apply approx_demonic_finite; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros EK1 EK2 HEK.
+      apply approx_bind_right.
+      apply approx_assume_formula; cbn; wsimpl; auto.
+      rewrite HEK; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      eapply Hk; wsimpl; auto.
+    Qed.
+
   End PatternMatching.
 
   Section State.
 
-    Lemma approx_eval_exp {Γ σ} (e : Exp Γ σ) {w0 : World} (ι0 : SymInstance w0)
+    Lemma approx_pushpop {AT A} `{Approx AT A} {Γ1 Γ2 x σ} {w0 : World} (ι0 : SymInstance w0)
           (Hpc : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.pushpop AT Γ1 Γ2 x σ w0) (@CMut.pushpop A Γ1 Γ2 x σ).
+    Proof.
+      intros t v ->.
+      intros ms mc Hm.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 -> hs0 hc0 Hh0.
+      unfold SMut.pushpop, CMut.pushpop.
+      apply Hm; eauto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros a1 a Ha.
+      intros δs1 δc1 -> hs1 hc1 Hh1.
+      apply HPOST; auto.
+      now destruct (snocView δs1).
+    Qed.
+
+    Lemma approx_pushspops {AT A} `{Approx AT A} {Γ1 Γ2 Δ} {w0 : World} (ι0 : SymInstance w0)
+          (Hpc : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.pushspops AT Γ1 Γ2 Δ w0) (@CMut.pushspops A Γ1 Γ2 Δ).
+    Proof.
+      intros δΔ ? ->.
+      intros ms mc Hm.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 -> hs0 hc0 Hh0.
+      unfold SMut.pushspops, CMut.pushspops.
+      apply Hm; auto.
+      - intros w1 ω01 ι1 -> Hpc1.
+        intros a1 a Ha.
+        intros δs1 δc1 -> hs1 hc1 ->.
+        apply HPOST; auto.
+        destruct (catView δs1).
+        hnf.
+        unfold inst at 1; cbn.
+        rewrite <- env_map_drop.
+        rewrite ?env_drop_cat.
+        reflexivity.
+      - hnf.
+        unfold inst at 3; cbn.
+        rewrite env_map_cat.
+        reflexivity.
+    Qed.
+
+    Lemma approx_get_local {Γ}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.get_local Γ w0) (@CMut.get_local Γ).
+    Proof.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ hs0 hc0 Hh0.
+      unfold SMut.get_local, CMut.get_local.
+      apply HPOST; wsimpl; auto.
+    Qed.
+
+    Lemma approx_put_local {Γ1 Γ2}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.put_local Γ1 Γ2 w0) (@CMut.put_local Γ1 Γ2).
+    Proof.
+      intros δs2 δc2 Hδ2.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ hs0 hc0 Hh0.
+      unfold SMut.put_local, CMut.put_local.
+      apply HPOST; wsimpl; auto.
+    Qed.
+
+    Lemma approx_get_heap {Γ}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.get_heap Γ w0) (@CMut.get_heap Γ).
+    Proof.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ hs0 hc0 Hh0.
+      unfold SMut.get_heap, CMut.get_heap.
+      apply HPOST; wsimpl; auto.
+    Qed.
+
+    Lemma approx_put_heap {Γ}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.put_heap Γ w0) (@CMut.put_heap Γ).
+    Proof.
+      intros hs hc Hh.
+      intros POST__s POST__c HPOST.
+      intros δs0 δc0 Hδ hs0 hc0 Hh0.
+      unfold SMut.put_heap, CMut.put_heap.
+      apply HPOST; wsimpl; auto.
+    Qed.
+
+    Lemma approx_eval_exp {Γ σ} (e : Exp Γ σ)
+      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.eval_exp Γ σ e w0) (@CMut.eval_exp Γ σ e).
     Proof.
       intros POST__s POST__c HPOST.
@@ -605,48 +931,17 @@ Module Soundness
       now rewrite eval_exp_inst.
     Qed.
 
-    Lemma approx_pushpop {AT A} `{Approx AT A} {Γ1 Γ2 x σ} {w0 : World} (ι0 : SymInstance w0)
-          (Hpc : instpc (wco w0) ι0) :
-      approx ι0 (@SMut.pushpop AT Γ1 Γ2 x σ w0) (@CMut.pushpop A Γ1 Γ2 x σ).
+    Lemma approx_assign {Γ x σ} {xIn : x::σ ∈ Γ}
+      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.assign Γ x σ xIn w0) (@CMut.assign Γ x σ xIn).
     Proof.
       intros t v ->.
-      intros ms mc Hm.
       intros POST__s POST__c HPOST.
-      intros δs0 δc0 -> hs0 hc0 ->.
-      cbv [SMut.pushpop
-             CMut.pushpop CMut.bind_right CMut.bind CMut.push_local
-             CMut.bind_left CMut.pop_local CMut.state CMut.pure].
-      apply Hm; auto.
-      intros w1 ω01 ι1 -> Hpc1.
-      intros a1 a Ha.
-      intros δs1 δc1 -> hs1 hc1 ->.
-      apply HPOST; auto.
-      now destruct (snocView δs1).
-    Qed.
-
-    Lemma approx_pushspops {AT A} `{Approx AT A} {Γ1 Γ2 Δ} {w0 : World} (ι0 : SymInstance w0)
-          (Hpc : instpc (wco w0) ι0) :
-      approx ι0 (@SMut.pushspops AT Γ1 Γ2 Δ w0) (@CMut.pushspops A Γ1 Γ2 Δ).
-    Proof.
-      intros δΔ ? ->.
-      intros ms mc Hm.
-      intros POST__s POST__c HPOST.
-      intros δs0 δc0 -> hs0 hc0 ->.
-      apply Hm; auto.
-      - intros w1 ω01 ι1 -> Hpc1.
-        intros a1 a Ha.
-        intros δs1 δc1 -> hs1 hc1 ->.
-        apply HPOST; auto.
-        destruct (catView δs1).
-        hnf.
-        unfold inst at 1; cbn.
-        rewrite <- env_map_drop.
-        rewrite ?env_drop_cat.
-        reflexivity.
-      - hnf.
-        unfold inst at 3; cbn.
-        rewrite env_map_cat.
-        reflexivity.
+      intros δs0 δc0 -> hs0 hc0 Hh.
+      unfold SMut.assign, CMut.assign.
+      apply HPOST; wsimpl; eauto.
+      hnf. unfold inst at 3. cbn.
+      now rewrite env_map_update.
     Qed.
 
   End State.
@@ -668,7 +963,7 @@ Module Soundness
     intros cs cc ->.
     intros POST__s POST__c HPOST.
     intros δs δc -> hs hc ->.
-    unfold SMut.produce_chunk, CMut.produce_chunk, CMut.state.
+    unfold SMut.produce_chunk, CMut.produce_chunk.
     apply HPOST; cbn; rewrite ?inst_sub_id; auto.
   Qed.
 
@@ -680,11 +975,7 @@ Module Soundness
       approx ι0 (@SMut.produce Γ w0 asn) (CMut.produce ι0 asn).
   Proof.
     induction asn; intros w0 * Hpc; cbn.
-    - (* unfold smutb_assume_formula. *)
-      (* intros w1 ω01 ι1 -> Hpc1. *)
-      (* rewrite <- inst_subst. *)
-      (* now apply approx_assume_formula. *)
-      admit.
+    - now apply approx_box_assume_formula.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_subst.
       now apply approx_produce_chunk.
@@ -718,12 +1009,74 @@ Module Soundness
       apply approx_pure; auto.
   Admitted.
 
+  Lemma approx_consume_chunk {Γ} {w0 : World} (ι0 : SymInstance w0)
+    (Hpc0 : instpc (wco w0) ι0) :
+    approx ι0 (@SMut.consume_chunk Γ w0) (CMut.consume_chunk).
+  Proof.
+    intros cs cc ->.
+    unfold SMut.consume_chunk, CMut.consume_chunk.
+    apply approx_bind.
+    apply approx_get_heap; auto.
+    intros w1 ω01 ι1 -> Hpc1.
+    intros hs hc ->.
+    apply approx_bind.
+    apply approx_angelic_list; eauto.
+    { hnf. unfold inst at 1. cbn.
+      rewrite heap_extractions_map.
+      apply List.map_ext. now intros [].
+    }
+    intros w2 ω12 ι2 -> Hpc2.
+    intros [cs' hs'] [cc' hc'].
+    intros Hch'. inversion Hch'; subst; clear Hch'.
+    apply approx_bind_right.
+    apply approx_assert_formulas; auto.
+    rewrite SMut.inst_match_chunk. cbn.
+    rewrite ?inst_subst. intuition.
+    intros w3 ω23 ι3 -> Hpc3.
+    rewrite <- inst_subst.
+    apply approx_put_heap; auto.
+  Qed.
+
   Lemma approx_consume {Γ Σ0 pc0} (asn : Assertion Σ0) :
     let w0 := @MkWorld Σ0 pc0 in
     forall
       (ι0 : SymInstance w0)
       (Hpc0 : instpc (wco w0) ι0),
       approx ι0 (@SMut.consume Γ w0 asn) (CMut.consume ι0 asn).
+  Proof.
+    induction asn; intros w0 * Hpc; cbn.
+    - now apply approx_box_assert_formula.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      now apply approx_consume_chunk.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_angelic_match_bool; eauto.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_angelic_match_enum; auto.
+      intros EK1 EK2 HEK. hnf in HEK. subst EK2.
+      eauto.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      apply approx_bind_right; eauto.
+      apply IHasn1; eauto.
+    - intros w1 ω01 ι1 -> Hpc1.
+      apply approx_bind.
+      apply approx_angelic; auto.
+      intros w2 ω02 ι2 -> Hpc2. intros t v ->.
+      apply IHasn; cbn - [inst sub_wk1];
+        rewrite ?inst_sub_snoc, ?inst_subst, ?inst_sub_wk1; eauto.
+    - intros w1 ω01 ι1 -> Hpc1.
+      apply approx_debug; auto.
+      apply approx_pure; auto.
   Admitted.
 
   Lemma approx_call_contract {Γ Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) :
@@ -737,29 +1090,16 @@ Module Soundness
     intros w1 ω01 ι1 -> Hpc1.
     intros evars__s evars__c Hevars.
     apply approx_bind_right.
-    { rewrite Hargs, Hevars.
-      intros POST__s POST__c HPOST.
-      intros δs δc -> hs hc ->.
-      hnf. intros Hwp.
-      eapply approx_assert_formulas in Hwp; eauto.
-      revert Hwp. unfold CMut.assert_formulas.
-      intros [Hfmls Hpost]; split; auto. revert Hfmls.
-      clear.
-      induction args__s.
-      - destruct (nilView sep_contract_localstore0). cbn.
-        intros. constructor.
-      - destruct (snocView sep_contract_localstore0). cbn.
-        rewrite ?inst_pathcondition_cons. cbn.
-        rewrite ?inst_subst, ?inst_lift.
-        intros [? HYP]; split; auto.
+    apply approx_assert_formulas; auto.
+    { rewrite inst_formula_eqs_pctx.
+      rewrite ?inst_subst.
+      rewrite Hargs, Hevars.
+      reflexivity.
     }
     intros w2 ω12 ι2 -> Hpc2.
     apply approx_bind_right.
-    { apply approx_consume; auto.
+    { apply approx_consume; wsimpl; auto.
       constructor.
-      cbn - [subst instantiate_env sub_snoc].
-      rewrite ?inst_subst.
-      now rewrite Hevars.
     }
     intros w3 ω23 ι3 -> Hpc3.
     apply approx_bind.
@@ -794,13 +1134,12 @@ Module Soundness
       apply approx_lift.
     - apply approx_bind; auto.
       intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      intros POST__s POST__c HPOST.
-      intros δs δc -> hs hc ->.
-      unfold CMut.bind_right, CMut.bind, CMut.state, CMut.pure.
-      apply HPOST; wsimpl; auto.
-      hnf. unfold inst; cbn.
-      now rewrite (env_map_update _ _ xInΓ), Htv.
+      intros t v ->.
+      apply approx_bind_right.
+      apply approx_assign; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      rewrite <- inst_subst.
+      apply approx_pure; auto.
     - apply approx_bind.
       apply approx_eval_exps; auto.
       intros w1 ω01 ι1 -> Hpc1.
@@ -812,7 +1151,23 @@ Module Soundness
         apply approx_call_contract; auto.
         apply approx_call_contract; auto.
       + apply approx_error.
-    - admit.
+    - apply approx_bind.
+      apply approx_get_local; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros δs1 δc1 ->.
+      apply approx_bind_right.
+      apply approx_put_local; auto.
+      apply approx_lift.
+      intros w2 ω12 ι2 -> Hpc2.
+      apply approx_bind; auto.
+      intros w3 ω23 ι3 -> Hpc3.
+      intros t v ->.
+      apply approx_bind_right.
+      apply approx_put_local; auto.
+      hnf. rewrite ?inst_subst; auto.
+      intros w4 ω34 ι4 -> Hpc4.
+      rewrite <- inst_subst.
+      apply approx_pure; auto.
     - apply approx_bind.
       apply approx_eval_exps; auto.
       intros w1 ω01 ι1 -> Hpc1.
@@ -855,7 +1210,9 @@ Module Soundness
       apply approx_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      admit.
+      apply approx_demonic_match_enum; auto.
+      intros EK1 EK2 ->.
+      intros w2 ω12 ι2 -> Hpc2; auto.
     - apply approx_bind; auto.
       intros POST__s POST__c HPOST.
       apply approx_eval_exp; auto.
@@ -875,19 +1232,36 @@ Module Soundness
       intros t v Htv.
       admit.
     - apply approx_bind; auto.
+      apply approx_angelic; auto.
       intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
+      intros t v ->.
       apply approx_bind_right; auto.
-      admit.
+      apply approx_consume_chunk; auto.
+      hnf. cbn. now rewrite ?inst_subst, ?inst_sub_id.
       intros w2 ω12 ι2 -> Hpc2.
       apply approx_bind_right; auto.
-      admit.
+      apply approx_produce_chunk; auto.
+      hnf. cbn. now rewrite ?inst_subst, ?inst_sub_id.
       intros w3 ω23 ι3 -> Hpc3.
       apply approx_pure; auto.
       hnf. now rewrite ?inst_subst.
     - apply approx_bind; auto.
-      admit.
-      admit.
+      apply approx_angelic; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros told v ->.
+      apply approx_bind_right; auto.
+      apply approx_consume_chunk; auto.
+      hnf. cbn. now rewrite ?inst_subst, ?inst_sub_id.
+      intros w2 ω12 ι2 -> Hpc2.
+      apply approx_bind; auto.
+      intros w3 ω23 ι3 -> Hpc3.
+      intros tnew v ->.
+      apply approx_bind_right; auto.
+      apply approx_produce_chunk; auto.
+      hnf. cbn. now rewrite ?inst_subst, ?inst_sub_id.
+      intros w4 ω34 ι4 -> Hpc4.
+      apply approx_pure; auto.
+      hnf. now rewrite ?inst_subst.
     - apply approx_error.
     - apply approx_debug; auto.
   Admitted.
@@ -939,6 +1313,6 @@ Module Soundness
     auto.
   Qed.
 
-  Print Assumptions symbolic_sound.
+  (* Print Assumptions symbolic_sound. *)
 
 End Soundness.

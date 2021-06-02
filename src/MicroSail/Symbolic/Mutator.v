@@ -382,7 +382,7 @@ Module Mutators
     Notation "⊢ A" := (Valid A%modal) (at level 100).
     Notation "A -> B" := (Impl A%modal B%modal) : modal.
     Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal.
-    Notation "⌜ A ⌝" := (fun (_ : World) => A%type) (at level 0, format "⌜ A ⌝") : modal.
+    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal.
     Notation "'∀' x .. y , P " :=
       (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
         (at level 99, x binder, y binder, right associativity)
@@ -1121,10 +1121,96 @@ Module Mutators
           debug d (prune k)
         end.
 
+    Lemma prune_angelic_binary_sound {w} (p1 p2 : SPath w) (ι : SymInstance w) :
+      safe (angelic_binary_prune p1 p2) ι <-> safe (angelic_binary p1 p2) ι.
+    Proof.
+      destruct p1; cbn; auto.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - intuition.
+      - destruct p2; cbn; auto;
+          rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto;
+          rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+    Qed.
+
+    Lemma prune_demonic_binary_sound {w} (p1 p2 : SPath w) (ι : SymInstance w) :
+      safe (demonic_binary_prune p1 p2) ι <-> safe (demonic_binary p1 p2) ι.
+    Proof.
+      destruct p1; cbn; auto.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - intuition.
+      - destruct p2; cbn; auto;
+          rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto;
+          rewrite ?obligation_equiv; intuition.
+      - destruct p2; cbn; auto; intuition.
+      - destruct p2; cbn; auto; intuition.
+    Qed.
+
+    Lemma prune_assertk_sound {w} fml msg (p : SPath (wformula w fml)) (ι : SymInstance w) :
+      safe (assertk_prune fml msg p) ι <-> safe (assertk fml msg p) ι.
+    Proof. destruct p; cbn; rewrite ?obligation_equiv; auto; intuition. Qed.
+
+    Lemma prune_assumek_sound {w} fml (p : SPath (wformula w fml)) (ι : SymInstance w) :
+      safe (assumek_prune fml p) ι <-> safe (assumek fml p) ι.
+    Proof. destruct p; cbn; auto; intuition. Qed.
+
+    Lemma prune_angelicv_sound {w b} (p : SPath (wsnoc w b)) (ι : SymInstance w) :
+      safe (angelicv_prune p) ι <-> safe (angelicv b p) ι.
+    Proof. reflexivity. Qed.
+
+    Lemma prune_demonicv_sound {w b} (p : SPath (wsnoc w b)) (ι : SymInstance w) :
+      safe (demonicv_prune p) ι <-> safe (demonicv b p) ι.
+    Proof. destruct p; cbn; auto; intuition. Qed.
+
+    Lemma prune_assert_vareq_sound {w : World} {x σ} {xIn : x :: σ ∈ w}
+      (t : Term (w - (x :: σ)) σ) (msg : Message (w - (x :: σ))) (p : SPath (wsubst w x t)) (ι : SymInstance w) :
+      safe (assert_vareq_prune x t msg p) ι <-> safe (assert_vareq x t msg p) ι.
+    Proof. reflexivity. Qed.
+
+    Lemma prune_assume_vareq_sound {w : World} {x σ} {xIn : x :: σ ∈ w}
+      (t : Term (w - (x :: σ)) σ) (p : SPath (wsubst w x t)) (ι : SymInstance w) :
+      safe (assume_vareq_prune x t p) ι <-> safe (assume_vareq x t p) ι.
+    Proof. destruct p; cbn; auto; intuition. Qed.
+
     Lemma prune_sound {w} (p : SPath w) (ι : SymInstance w) :
       safe (prune p) ι <-> safe p ι.
     Proof.
-    Admitted.
+      induction p; cbn [prune safe].
+      - rewrite prune_angelic_binary_sound; cbn.
+        now rewrite IHp1, IHp2.
+      - rewrite prune_demonic_binary_sound; cbn.
+        now rewrite IHp1, IHp2.
+      - auto.
+      - auto.
+      - rewrite prune_assertk_sound; cbn.
+        now rewrite IHp.
+      - rewrite prune_assumek_sound; cbn.
+        now rewrite IHp.
+      - rewrite prune_angelicv_sound; cbn.
+        apply base.exist_proper; intros.
+        now rewrite IHp.
+      - rewrite prune_demonicv_sound; cbn.
+        apply base.forall_proper; intros.
+        now rewrite IHp.
+      - rewrite prune_assert_vareq_sound; cbn.
+        now rewrite IHp.
+      - rewrite prune_assume_vareq_sound; cbn.
+        now rewrite IHp.
+      - now rewrite ?debug_equiv.
+    Qed.
 
     Definition ok :
       ⊢ SPath -> ⌜bool⌝ :=
@@ -1280,22 +1366,20 @@ Module Mutators
     Defined.
 
     Definition angelic_list {A} :
-      ⊢ Message -> WList A -> SDijkstra A :=
+      ⊢ Message -> List A -> SDijkstra A :=
       fun w msg =>
         fix rec xs POST :=
         match xs with
         | nil        => error msg
-        | cons x nil => T POST x
         | cons x xs  => angelic_binary (T POST x) (rec xs POST)
         end.
 
-    Definition demonic_list {A : TYPE} :
-      ⊢ WList A -> SDijkstra A :=
+    Definition demonic_list {A} :
+      ⊢ List A -> SDijkstra A :=
       fun w =>
         fix rec xs POST :=
         match xs with
         | nil        => block
-        | cons x nil => T POST x
         | cons x xs  => demonic_binary (T POST x) (rec xs POST)
         end.
 
@@ -1858,6 +1942,10 @@ Module Mutators
         fun w m1 m2 POST δ1 h1 =>
           demonic_binary (m1 POST δ1 h1) (m2 POST δ1 h1).
 
+      Definition angelic_list {A Γ} :
+        ⊢ (SStore Γ -> SHeap -> Message) -> List A -> SMut Γ Γ A :=
+        fun w msg xs POST δ h => dijkstra (SDijk.angelic_list (msg δ h) xs) POST δ h.
+
       Definition angelic_finite {Γ} F `{finite.Finite F} :
         ⊢ (SStore Γ -> SHeap -> Message) -> SMut Γ Γ ⌜F⌝ :=
         fun w msg POST δ h => dijkstra (SDijk.angelic_finite (msg δ h)) POST δ h.
@@ -1938,11 +2026,6 @@ Module Mutators
         ⊢ Formula -> □(SMut Γ Γ Unit) :=
         fun w0 fml => assume_formula <$> persist fml.
 
-      (* Definition smutk_assume_formula {A Γ1 Γ2} : *)
-      (*   ⊢ Formula -> □(SMut Γ1 Γ2 A) -> SMut Γ1 Γ2 A := *)
-      (*   fun w0 fml m δ0 h0 => *)
-      (*     assume_formulak fml (m <*> persist δ0 <*> persist h0). *)
-
       Definition assert_formula {Γ} :
         ⊢ Formula -> SMut Γ Γ Unit :=
         fun w0 fml POST δ0 h0 =>
@@ -1957,47 +2040,35 @@ Module Mutators
                |} fml)
             POST δ0 h0.
 
-      (* Definition smutk_assert_formula {A Γ1 Γ2} : *)
-      (*   ⊢ Formula -> □(SMut Γ1 Γ2 A) -> SMut Γ1 Γ2 A := *)
-      (*   fun w0 fml m δ0 h0 => *)
-      (*     assert_formulak *)
-      (*       {| msg_function        := "smutk_assert_formula"; *)
-      (*          msg_message         := "Proof obligation"; *)
-      (*          msg_program_context := Γ1; *)
-      (*          msg_pathcondition   := wco w0; *)
-      (*          msg_localstore      := δ0; *)
-      (*          msg_heap            := h0; *)
-      (*       |} *)
-      (*       fml *)
-      (*       (m <*> persist δ0 <*> persist h0). *)
-
-      (* Definition smut_box_assert_formula {Γ} : *)
-      (*   ⊢ Formula -> □(SMut Γ Γ Unit). *)
-      (* (* Proof. *) *)
-      (* (*   intros w0 fml w1 ω01. *) *)
-      (* (*   apply smut_assert_formula. *) *)
-      (* (*   apply (subst fml ω01). *) *)
-      (*   (* Defined. *) *)
-      (* Admitted. *)
+      Definition box_assert_formula {Γ} :
+        ⊢ Formula -> □(SMut Γ Γ Unit) :=
+        fun w0 fml => assert_formula <$> persist fml.
 
       Definition assert_formulas {Γ} :
         ⊢ List Formula -> SMut Γ Γ Unit.
       Proof.
-        refine (fix assert {w0} fmls := _).
-        destruct fmls as [|fml fmls].
-        - apply pure. constructor.
-        - eapply bind_right.
-          apply (assert w0 fmls).
-          intros w1 ω01.
-          apply assert_formula.
-          apply (subst fml ω01).
+        intros w0 fmls POST δ0 h0.
+        eapply dijkstra.
+        apply SDijk.assert_formulas.
+        apply
+          {| msg_function := "smut_assert_formula";
+             msg_message := "Proof obligation";
+             msg_program_context := Γ;
+             msg_localstore := δ0;
+             msg_heap := h0;
+             msg_pathcondition := wco w0
+          |}.
+        apply fmls.
+        apply POST.
+        apply δ0.
+        apply h0.
       Defined.
 
     End AssumeAssert.
 
     Section PatternMatching.
 
-      Definition angelic_match_bool {AT} {Γ1 Γ2} :
+      Definition angelic_match_bool' {AT} {Γ1 Γ2} :
         ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t kt kf.
@@ -2027,6 +2098,20 @@ Module Mutators
           apply (formula_bool (term_not t)).
           apply kf.
       Defined.
+
+      Definition angelic_match_bool {AT} {Γ1 Γ2} :
+        ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT :=
+        fun w0 t kt kf =>
+          match term_get_lit t with
+          | Some true => T kt
+          | Some false => T kf
+          | None => angelic_match_bool' t kt kf
+          end.
+
+      Definition box_angelic_match_bool {AT} {Γ1 Γ2} :
+        ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+        fun w0 t kt kf =>
+          angelic_match_bool <$> persist__term t <*> four kt <*> four kf.
 
       Definition demonic_match_bool' {AT} {Γ1 Γ2} :
         ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
@@ -2542,58 +2627,6 @@ Module Mutators
 
     Section State.
 
-    (*   Definition smut_state {Γ1 Γ2 A} : *)
-    (*     ⊢ (SStore Γ1 -> SHeap -> SMutResult Γ2 A) -> SMut Γ1 Γ2 A := *)
-    (*     fun w0 f δ0 h0 => *)
-    (*      pure (f δ0 h0). *)
-
-    (*   Definition smut_bstate {Γ1 Γ2 A} : *)
-    (*     ⊢ □(SStore Γ1 -> SHeap -> SMutResult Γ2 A) -> □(SMut Γ1 Γ2 A) := *)
-    (*     fun w0 f w1 ω01 δ1 h1 => *)
-    (*      pure (f w1 ω01 δ1 h1). *)
-
-    (*   Definition smut_get_local {Γ} : ⊢ □(SMut Γ Γ (SStore Γ)) := *)
-    (*     fun w0 => *)
-    (*       smut_bstate (fun w1 ω01 δ1 h1 => MkSMutResult δ1 δ1 h1). *)
-    (*   (* Definition smut_put_local {Γ Γ' Σ} (δ' : SStore Γ' Σ) : SMut Γ Γ' Unit Σ := *) *)
-    (*   (*   smut_state (fun _ ζ _ h => MkSMutResult tt (subst δ' ζ) h). *) *)
-
-    (*   Definition smutk_pop_local {A Γ1 Γ2 b} : *)
-    (*     ⊢ SMut Γ1 Γ2 A -> SMut (Γ1 ▻ b) Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w k δ h. *)
-    (*     apply k. *)
-    (*     apply (env_tail δ). *)
-    (*     auto. *)
-    (*   Defined. *)
-
-    (*   Definition smutk_pops_local {A Γ1 Γ2 Δ} : *)
-    (*     ⊢ SMut Γ1 Γ2 A -> SMut (Γ1 ▻▻ Δ) Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w k δ h. *)
-    (*     apply k. *)
-    (*     apply (env_drop Δ δ). *)
-    (*     auto. *)
-    (*   Defined. *)
-
-    (*   Definition smutk_push_local {A Γ1 Γ2 x σ} : *)
-    (*     ⊢ STerm σ -> SMut (Γ1 ▻ (x :: σ)) Γ2 A -> SMut Γ1 Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w t k δ h. *)
-    (*     apply k. *)
-    (*     apply (env_snoc δ (x :: σ) t). *)
-    (*     auto. *)
-    (*   Defined. *)
-
-    (*   Definition smutk_pushs_local {A Γ1 Γ2 Δ} : *)
-    (*     ⊢ SStore Δ -> SMut (Γ1 ▻▻ Δ) Γ2 A -> SMut Γ1 Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w δΔ k δ h. *)
-    (*     apply k. *)
-    (*     apply (env_cat δ δΔ). *)
-    (*     auto. *)
-    (*   Defined. *)
-
       Definition pushpop {AT Γ1 Γ2 x σ} :
         ⊢ STerm σ -> SMut (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT -> SMut Γ1 Γ2 AT.
       Proof.
@@ -2620,10 +2653,14 @@ Module Mutators
         apply h.
       Defined.
 
-      (* Definition smut_get_heap {Γ Σ} : SMut Γ Γ SHeap Σ := *)
-      (*   smut_state (fun _ _ δ h => MkSMutResult h δ h). *)
-      (* Definition smut_put_heap {Γ Σ} (h : SHeap Σ) : SMut Γ Γ Unit Σ := *)
-      (*   smut_state (fun _ ζ δ _ => MkSMutResult tt δ (subst h ζ)). *)
+      Definition get_local {Γ} : ⊢ SMut Γ Γ (SStore Γ) :=
+        fun w0 POST δ => T POST δ δ.
+      Definition put_local {Γ1 Γ2} : ⊢ SStore Γ2 -> SMut Γ1 Γ2 Unit :=
+        fun w0 δ POST _ => T POST tt δ.
+      Definition get_heap {Γ} : ⊢ SMut Γ Γ SHeap :=
+        fun w0 POST δ h => T POST h δ h.
+      Definition put_heap {Γ} : ⊢ SHeap -> SMut Γ Γ Unit :=
+        fun w0 h POST δ _ => T POST tt δ h.
 
       Definition eval_exp {Γ σ} (e : Exp Γ σ) :
         ⊢ SMut Γ Γ (STerm σ).
@@ -2645,26 +2682,9 @@ Module Mutators
         auto.
       Defined.
 
-    (*   Definition smutk_eval_exp {A Γ1 Γ2 σ} (e : Exp Γ1 σ) : *)
-    (*     ⊢ (STerm σ -> SMut Γ1 Γ2 A) -> SMut Γ1 Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w k δ h. *)
-    (*     apply k. *)
-    (*     apply (seval_exp δ e). *)
-    (*     auto. *)
-    (*     auto. *)
-    (*   Defined. *)
-
-    (*   Definition smutk_eval_exps {A Γ1 Γ2} {σs : PCtx} (es : NamedEnv (Exp Γ1) σs) : *)
-    (*     ⊢ (SStore σs -> SMut Γ1 Γ2 A) -> SMut Γ1 Γ2 A. *)
-    (*   Proof. *)
-    (*     intros w k δ h. *)
-    (*     apply k. *)
-    (*     refine (env_map _ es). *)
-    (*     intros b. apply (seval_exp δ). *)
-    (*     auto. *)
-    (*     auto. *)
-    (*   Defined. *)
+      Definition assign {Γ} x {σ} {xIn : x::σ ∈ Γ} : ⊢ STerm σ -> SMut Γ Γ Unit :=
+        fun w0 t POST δ => T POST tt (δ ⟪ x ↦ t ⟫).
+      Global Arguments assign {Γ} x {σ xIn w} v.
 
     End State.
 
@@ -2679,38 +2699,83 @@ Module Mutators
         apply (cons c h).
       Defined.
 
+      Equations(noeqns) match_chunk {w : World} (c1 c2 : Chunk w) : List Formula w :=
+        match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2)
+        with eq_dec p1 p2 => {
+          match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) (left eq_refl) := formula_eqs_ctx vs1 vs2;
+          match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) (right _) :=
+            cons (formula_bool (term_lit ty_bool false)) nil
+        };
+        match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
+        with eq_dec_het r1 r2 => {
+          match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg r2 v2) (left eq_refl) := cons (formula_eq v1 v2) nil;
+          match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg r2 v2) (right _)      :=
+            cons (formula_bool (term_lit ty_bool false)) nil
+        };
+        match_chunk _ _  := cons (formula_bool (term_lit ty_bool false)) nil.
+
+      Lemma inst_match_chunk {w : World} (c1 c2 : Chunk w) (ι : SymInstance w) :
+        instpc (match_chunk c1 c2) ι <-> inst c1 ι = inst c2 ι.
+      Proof.
+        split.
+        - destruct c1, c2; cbn.
+          + destruct (eq_dec p p0).
+            * destruct e; cbn.
+              rewrite inst_formula_eqs_ctx.
+              intuition.
+            * intros HYP; cbv in HYP. discriminate.
+          + intros HYP; cbv in HYP. discriminate.
+          + intros HYP; cbv in HYP. discriminate.
+          + destruct (eq_dec_het r r0).
+            * dependent elimination e; cbn.
+              rewrite inst_pathcondition_cons.
+              now intros [-> _].
+            * intros HYP; cbv in HYP. discriminate.
+        - destruct c1, c2; cbn; intros Heq.
+          + remember (inst ts ι) as vs1.
+            remember (inst ts0 ι) as vs2.
+            dependent elimination Heq.
+            rewrite EqDec.eq_dec_refl. cbn.
+            rewrite inst_formula_eqs_ctx.
+            subst. auto.
+          + dependent elimination Heq.
+          + dependent elimination Heq.
+          + remember (inst t ι) as v1.
+            remember (inst t0 ι) as v2.
+            dependent elimination Heq.
+            unfold eq_dec_het.
+            rewrite EqDec.eq_dec_refl. cbn.
+            rewrite inst_pathcondition_cons.
+            subst. split; auto. constructor.
+      Qed.
+
       Definition consume_chunk {Γ} :
         ⊢ Chunk -> SMut Γ Γ Unit.
       Proof.
-        intros w0 c POST δ0 h0.
-        refine
-          (@SDijk.angelic_list (fun w => Pair PathCondition SHeap w) w0
-            {| msg_function := "consume_chunk";
-               msg_message := "Empty extraction";
-               msg_program_context := Γ;
-               msg_localstore := δ0;
-               msg_heap := h0;
-               msg_pathcondition := wco w0
-            |} (extract_chunk_eqb c h0) _).
-        intros w1 ω01 [Δpc h1'].
-        apply (@SDijk.assert_formulas w1
-                 {| msg_function := "consume_chunk";
-                    msg_message := "Proof Obligation";
-                    msg_program_context := Γ;
-                    msg_localstore := subst δ0 ω01;
-                    msg_heap := h1';
-                    msg_pathcondition := wco w1
-                 |} Δpc).
-        intros w2 ω12 _.
-        apply (four POST ω01). auto. constructor.
-        apply (subst (subst δ0 ω01) ω12).
-        apply (subst h1' ω12).
+        intros w0 c.
+        eapply bind.
+        apply get_heap.
+        intros w1 ω01 h.
+        eapply bind.
+        apply (angelic_list
+                 (A := Pair Chunk SHeap)
+                 (fun δ h =>
+                    {| msg_function := "consume_chunk";
+                       msg_message := "Empty extraction";
+                       msg_program_context := Γ;
+                       msg_localstore := δ;
+                       msg_heap := h;
+                       msg_pathcondition := wco w1
+                    |})
+                 (heap_extractions h)).
+        intros w2 ω12 [c' h'].
+        eapply bind_right.
+        apply assert_formulas.
+        apply (match_chunk (subst c (wtrans ω01 ω12)) c').
+        intros w3 ω23.
+        apply put_heap.
+        apply (subst h' ω23).
       Defined.
-
-      (* Definition smut_assert_formulak {A Γ1 Γ2 Σ} (fml : Formula Σ) (k : SMut Γ1 Γ2 A Σ) : SMut Γ1 Γ2 A Σ := *)
-      (*   smut_bind_right (smut_assert_formula fml) k. *)
-      (* Definition smut_assert_formulask {A Γ1 Γ2 Σ} (fmls : list (Formula Σ)) (k: SMut Γ1 Γ2 A Σ) : SMut Γ1 Γ2 A Σ := *)
-      (*   fold_right smut_assert_formulak k fmls. *)
 
       (* Definition smut_leakcheck {Γ Σ} : SMut Γ Γ Unit Σ := *)
       (*   smut_get_heap >>= fun _ _ h => *)
@@ -2797,7 +2862,7 @@ Module Mutators
       Proof.
         refine (fix consume w0 asn {struct asn} := _).
         destruct asn.
-        - apply (assert_formula <$> persist fml).
+        - apply (box_assert_formula fml).
         - apply (consume_chunk <$> persist c).
         - apply (angelic_match_bool <$> persist__term b <*> four (consume _ asn1) <*> four (consume _ asn2)).
         - intros w1 ω01.
@@ -2875,7 +2940,7 @@ Module Mutators
                  (*   msg_localstore := subst δ0 ω01; *)
                  (*   msg_heap := subst h0 ω01; *)
                  (*   msg_pathcondition := wco w1; *)
-                 (* |} *) (formula_eqs (subst δe evars) (subst args ω01))).
+                 (* |} *) (formula_eqs_pctx (subst δe evars) (subst args ω01))).
         intros w2 ω12.
         eapply bind_right.
         apply (consume (w := @MkWorld Σe nil) req).
@@ -2932,10 +2997,12 @@ Module Mutators
           apply (exec _ _ s).
         - eapply bind.
           apply (exec _ _ s).
-          intros w1 ω01 t POST δ1 h1.
-          apply POST. apply wrefl. apply t.
-          apply (δ1 ⟪ x ↦ t ⟫)%env.
-          apply h1.
+          intros w1 ω01 t.
+          eapply bind_right.
+          apply (assign x t).
+          intros w2 ω12.
+          apply pure.
+          apply (subst (T := STerm τ) t (wsub ω12)).
         - eapply bind.
           apply (eval_exps es).
           intros w1 ω01 args.
@@ -2943,12 +3010,21 @@ Module Mutators
           + apply (call_contract_debug f c args).
           + apply (error "SMut.exec" "Function call without contract" (f,args)).
         - rename δ into δΔ.
-          intros POST δ0 h0.
+          eapply bind.
+          apply get_local.
+          intros w1 ω01 δ1.
+          eapply bind_right.
+          apply (put_local (lift δΔ)).
+          intros w2 ω12.
+          eapply bind.
           apply (exec _ _ s).
-          intros w1 ω01 t δΔ' h1.
-          apply POST. auto. auto.
-          apply (subst δ0 ω01). auto.
-          apply (lift δΔ). auto.
+          intros w3 ω23 t.
+          eapply bind_right.
+          apply put_local.
+          apply (subst δ1 (wtrans ω12 ω23)).
+          intros w4 ω34.
+          apply pure.
+          apply (subst (T := STerm _) t ω34).
         - eapply bind.
           apply (eval_exps es).
           intros w1 ω01 args.
