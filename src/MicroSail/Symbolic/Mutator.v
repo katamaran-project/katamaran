@@ -2419,7 +2419,7 @@ Module Mutators
         - apply (T k).
           apply (record_pattern_match_env p n0).
         - apply (angelic_match_record' n p t k).
-      Qed.
+      Defined.
 
       Definition smutb_angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
         ⊢ STerm (ty_record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
