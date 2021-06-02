@@ -180,10 +180,11 @@ Module MinCapsModel.
     Qed.
 
     Context {Σ : gFunctors}.
-    Notation D := ((leibnizO MemVal) -n> iPropO Σ).
+    Notation D := ((leibnizO MemVal) -n> iPropO Σ). (* TODO: try -d>, drop leibnizO, might not need λne *)
     Implicit Types w : (leibnizO MemVal).
 
     (* Copied from github.com/logsem/cerise *)
+    (* TODO: include copyright notice =) *)
     Ltac auto_equiv :=
       (* Deal with "pointwise_relation" *)
       repeat lazymatch goal with
@@ -625,48 +626,101 @@ Module MinCapsModel.
         cbn;
         iDestruct "Hp" as "[% _]";
         try (unfold is_true in *; discriminate H).
-      (* rewrite wp_unfold; *)
-      (* unfold is_true in H; *)
-      (* apply andb_prop in H; *)
-      (* destruct H as [Hb He]; *)
-      (* apply Zle_is_le_bool in Hb; *)
-      (* apply Zle_is_le_bool in He; *)
-      (* iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@address) (∃ v, gen_heap.mapsto address (dfrac.DfracOwn 1) _))%I as "Hown". *)
-      (* { iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hcsafe"). } *)
-      (* + iIntros (σ' ks1 ks n) "[Hregs Hmem]". *)
-      (*   iDestruct "Hmem" as (memmap) "[Hmem' %]". *)
-      (*   iInv "Hown" as "Hinv" "Hclose". *)
-      (*   iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver. *)
-      (*   iModIntro. *)
-      (*   iSplitR; first by intuition. *)
-      (*   iIntros (e2 σ'' efs) "%". *)
-      (*   cbn in H. *)
-      (*   dependent elimination H0. *)
-      (*   dependent elimination s. *)
-      (*   rewrite Heq in e1. *)
-      (*   cbn in e1. *)
-      (*   dependent elimination e1. *)
-      (*   do 2 iModIntro. *)
-      (*   iDestruct "Hinv" as (v) "Hav". *)
-      (*   iMod "Hclose2" as "_". *)
-      (*   iAssert (▷ (∃ v0 : Z + Capability, gen_heap.mapsto address (dfrac.DfracOwn 1) v0))%I with "[Hav]" as "Hinv". *)
-      (*   { iModIntro. now iExists v. } *)
-      (*   iMod ("Hclose" with "Hinv") as "_". *)
-      (*   iModIntro. *)
-      (*   cbn. *)
-      (*   iSplitL "Hmem' Hregs". *)
-      (*   iSplitL "Hregs"; first iFrame. *)
-      (*   iExists memmap. *)
-      (*   iSplitL "Hmem'"; first iFrame. *)
-      (*   iPureIntro; assumption. *)
-      (*   iSplitL; trivial. *)
-      (*   iApply wp_value; cbn. *)
-      (*   iSplitL; trivial. *)
-      (*   iSplitL; try iAssumption. *)
-      (*   destruct (fun_rM μ'3 address); cbn; try trivial. *)
-      (*   (* TODO: add safe for all values in mapsto, then this will be provable *) *)
-        admit.
-      + admit. (* TODO: this will be identical to the previous case *)
+      (* TODO: clean this up! *)
+      + rewrite wp_unfold;
+        unfold is_true in H;
+        apply andb_prop in H;
+        destruct H as [Hb He];
+        apply Zle_is_le_bool in Hb;
+        apply Zle_is_le_bool in He;
+        iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@address) (∃ w, gen_heap.mapsto address (dfrac.DfracOwn 1) w ∗ fixpoint (MinCapsIrisHeapKit.MinCaps_safe1) w))%I as "Hown".
+      { rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq; simpl.
+        iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hcsafe"). }
+        iIntros (σ' ks1 ks n) "[Hregs Hmem]".
+        iDestruct "Hmem" as (memmap) "[Hmem' %]".
+        iInv "Hown" as "Hinv" "Hclose".
+        iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+        iModIntro.
+        iSplitR; first by intuition.
+        iIntros (e2 σ'' efs) "%".
+        cbn in H.
+        dependent elimination H0.
+        dependent elimination s.
+        rewrite Heq in e1.
+        cbn in e1.
+        dependent elimination e1.
+        do 2 iModIntro.
+        iDestruct "Hinv" as (v) "Hav".
+        iDestruct "Hav" as "[Hav #Hrec]".
+        iAssert (⌜ memmap !! address = Some v ⌝)%I with "[Hav Hmem']" as "%".
+        { iApply (gen_heap.gen_heap_valid with "Hmem' Hav"). }
+        iMod "Hclose2" as "_".
+        iAssert (▷ (∃ v0 : Z + Capability, gen_heap.mapsto address (dfrac.DfracOwn 1) v0 ∗ fixpoint MinCapsIrisHeapKit.MinCaps_safe1 v0))%I with "[Hav Hrec]" as "Hinv".
+        { iModIntro. iExists v. iSplitL "Hav"; iAssumption. }
+        iMod ("Hclose" with "Hinv") as "_".
+        iModIntro.
+        cbn.
+        iSplitL "Hmem' Hregs".
+        iSplitL "Hregs"; first iFrame.
+        iExists memmap.
+        iSplitL "Hmem'"; first iFrame.
+        iPureIntro; assumption.
+        iSplitL; trivial.
+        iApply wp_value; cbn.
+        iSplitL; trivial.
+        iSplitL; try iAssumption.
+        unfold fun_rM.
+        simpl in H.
+        apply map_Forall_lookup_1 with (i := address) (x := v) in H.
+        rewrite H; iAssumption.
+        assumption.
+      + rewrite wp_unfold;
+        unfold is_true in H;
+        apply andb_prop in H;
+        destruct H as [Hb He];
+        apply Zle_is_le_bool in Hb;
+        apply Zle_is_le_bool in He;
+        iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@address) (∃ w, gen_heap.mapsto address (dfrac.DfracOwn 1) w ∗ fixpoint (MinCapsIrisHeapKit.MinCaps_safe1) w))%I as "Hown".
+      { rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq; simpl.
+        iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hcsafe"). }
+        iIntros (σ' ks1 ks n) "[Hregs Hmem]".
+        iDestruct "Hmem" as (memmap) "[Hmem' %]".
+        iInv "Hown" as "Hinv" "Hclose".
+        iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+        iModIntro.
+        iSplitR; first by intuition.
+        iIntros (e2 σ'' efs) "%".
+        cbn in H.
+        dependent elimination H0.
+        dependent elimination s.
+        rewrite Heq in e1.
+        cbn in e1.
+        dependent elimination e1.
+        do 2 iModIntro.
+        iDestruct "Hinv" as (v) "Hav".
+        iDestruct "Hav" as "[Hav #Hrec]".
+        iAssert (⌜ memmap !! address = Some v ⌝)%I with "[Hav Hmem']" as "%".
+        { iApply (gen_heap.gen_heap_valid with "Hmem' Hav"). }
+        iMod "Hclose2" as "_".
+        iAssert (▷ (∃ v0 : Z + Capability, gen_heap.mapsto address (dfrac.DfracOwn 1) v0 ∗ fixpoint MinCapsIrisHeapKit.MinCaps_safe1 v0))%I with "[Hav Hrec]" as "Hinv".
+        { iModIntro. iExists v. iSplitL "Hav"; iAssumption. }
+        iMod ("Hclose" with "Hinv") as "_".
+        iModIntro.
+        cbn.
+        iSplitL "Hmem' Hregs".
+        iSplitL "Hregs"; first iFrame.
+        iExists memmap.
+        iSplitL "Hmem'"; first iFrame.
+        iPureIntro; assumption.
+        iSplitL; trivial.
+        iApply wp_value; cbn.
+        iSplitL; trivial.
+        iSplitL; try iAssumption.
+        unfold fun_rM.
+        simpl in H.
+        apply map_Forall_lookup_1 with (i := address) (x := v) in H.
+        rewrite H; iAssumption.
+        assumption.
     - (* wM *)
       rename v into e.
       rename v0 into b.
@@ -730,7 +784,7 @@ Module MinCapsModel.
       + iSplitL; trivial.
         iApply wp_value; cbn; trivial;
           repeat (iSplitL; trivial).
-  Admitted.
+  Qed.
 
   (* TODO: fix 
   Lemma rM_sound2 `{sg : sailG Σ} `{invG} {Γ es δ} :
