@@ -41,7 +41,6 @@ From Equations Require Import
      Equations.
 
 From MicroSail Require Import
-     SemiConcrete.Outcome
      Sep.Spec
      Symbolic.Mutator
      Syntax.

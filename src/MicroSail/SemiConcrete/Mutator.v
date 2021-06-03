@@ -40,7 +40,6 @@ From Equations Require Import Equations.
 
 From MicroSail Require Import
      Sep.Spec
-     SemiConcrete.Outcome
      Syntax.
 
 From stdpp Require Import base list option.
@@ -48,7 +47,6 @@ From stdpp Require Import base list option.
 Import CtxNotations.
 Import EnvNotations.
 Import ListNotations.
-Import OutcomeNotations.
 
 Set Implicit Arguments.
 
@@ -293,7 +291,7 @@ Module SemiConcrete
         fun POST => ma (fun a => POST (f a)).
 
       Definition error {Γ1 Γ2 A} (msg : string) : CMut Γ1 Γ2 A :=
-        fun POST δ h => Outcome.Error msg.
+        fun POST δ h => False.
       Definition block {Γ1 Γ2 A} : CMut Γ1 Γ2 A :=
         fun POST δ h => True.
 

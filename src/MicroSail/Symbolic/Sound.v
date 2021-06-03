@@ -52,7 +52,6 @@ From MicroSail Require Import
      Symbolic.Mutator.
 From MicroSail Require Import
      SemiConcrete.Mutator
-     SemiConcrete.Outcome
      SemiConcrete.Sound.
 
 Set Implicit Arguments.

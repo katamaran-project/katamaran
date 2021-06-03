@@ -44,8 +44,7 @@ From MicroSail Require Import
      Sep.Hoare
      Syntax
      Tactics
-     SemiConcrete.Mutator
-     SemiConcrete.Outcome.
+     SemiConcrete.Mutator.
 
 Set Implicit Arguments.
 

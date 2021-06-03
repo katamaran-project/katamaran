@@ -13,7 +13,6 @@ From Equations Require Import
 
 From MicroSail Require Import
      Notation
-     SemiConcrete.Outcome
      Sep.Spec
      SmallStep.Step
      Symbolic.Mutator

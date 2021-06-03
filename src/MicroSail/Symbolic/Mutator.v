@@ -47,7 +47,6 @@ From Equations Require Import Equations.
 
 From MicroSail Require Import
      Sep.Spec
-     SemiConcrete.Outcome
      Syntax.
 
 From stdpp Require
@@ -56,7 +55,6 @@ From stdpp Require
 Import CtxNotations.
 Import EnvNotations.
 Import ListNotations.
-Import OutcomeNotations.
 
 Set Implicit Arguments.
 
@@ -377,6 +375,9 @@ Module Mutators
 
   Notation persist__term t :=
     (@persist (STerm _) (@persist_subst (fun Σ => Term Σ _) (@SubstTerm _)) _ t).
+
+  Inductive Debug {B} (b : B) (P : Prop) : Prop :=
+  | debug (p : P).
 
   Section Obligations.
 
