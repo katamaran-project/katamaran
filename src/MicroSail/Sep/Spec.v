@@ -611,10 +611,10 @@ Module Assertions
   | asn_match_sum (σ τ : Ty) (s : Term Σ (ty_sum σ τ)) (xl : 𝑺) (alt_inl : Assertion (Σ ▻ (xl :: σ))) (xr : 𝑺) (alt_inr : Assertion (Σ ▻ (xr :: τ)))
   | asn_match_list
       {σ : Ty} (s : Term Σ (ty_list σ)) (alt_nil : Assertion Σ) (xh xt : 𝑺)
-      (alt_cons : Assertion (Σ ▻ xh∶σ ▻ xt∶ty_list σ))
+      (alt_cons : Assertion (Σ ▻ (xh::σ) ▻ (xt::ty_list σ)))
   | asn_match_prod
       {σ1 σ2 : Ty} (s : Term Σ (ty_prod σ1 σ2))
-      (xl xr : 𝑺) (rhs : Assertion (Σ ▻ xl∶σ1 ▻ xr∶σ2))
+      (xl xr : 𝑺) (rhs : Assertion (Σ ▻ (xl::σ1) ▻ (xr::σ2)))
   | asn_match_tuple
       {σs : Ctx Ty} {Δ : LCtx} (s : Term Σ (ty_tuple σs))
       (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ))
@@ -998,12 +998,12 @@ Module Assertions
         let ι' := pattern_match_lit (alt__pat K) v in
         interpret_assertion (alt__rhs K) (ι ►► ι')
       | asn_sep a1 a2 => interpret_assertion a1 ι ✱ interpret_assertion a2 ι
-      | asn_exist ς τ a => ∃ (v : Lit τ), interpret_assertion a (ι ► (ς∶τ ↦ v))
+      | asn_exist ς τ a => ∃ (v : Lit τ), interpret_assertion a (ι ► (ς::τ ↦ v))
       | asn_debug => emp
     end%logic.
 
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
-      (ι : SymInstance (sep_contract_logic_variables c)) : LocalStore Δ :=
+      (ι : SymInstance (sep_contract_logic_variables c)) : CStore Δ :=
       inst (sep_contract_localstore c) ι.
 
     Definition interpret_contract_precondition {Δ τ} (c : SepContract Δ τ)

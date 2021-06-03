@@ -191,8 +191,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   Local Notation "'immediate'" := "immediate" : string_scope.
   Local Notation "'offset'" := "offset" : string_scope.
 
+  Notation stm_call_external := stm_foreign.
+
   Notation "'callghost' f" :=
-    (stm_call_external (ghost f) env_nil)
+    (stm_foreign (ghost f) env_nil)
     (at level 10, f at next level) : exp_scope.
 
   Definition fun_read_reg : Stm ["rreg" ∶ ty_enum regname ] ty_word :=
@@ -556,7 +558,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
          stm_assert p (lit_string "Err: [read_mem] no read permission") ;;
          let: q ∶ bool := call within_bounds c in
          stm_assert q (lit_string "Err: [read_mem] out of bounds") ;;
-         callex rM (exp_var "cursor")).
+         foreign rM (exp_var "cursor")).
 
     Definition fun_write_mem : Stm ["c" ∶ ty_cap, "v" ∶ ty_memval ] ty_unit :=
       stm_match_record
@@ -570,14 +572,14 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
          stm_assert p (lit_string "Err: [write_mem] no read permission") ;;
          let: q ∶ bool := call within_bounds c in
          stm_assert q (lit_string "Err: [write_mem] out of bounds") ;;
-         callex wM (exp_var "cursor") (exp_var "v")).
+         foreign wM (exp_var "cursor") (exp_var "v")).
 
     Definition fun_exec : Stm ε ty_bool :=
       let: "c" := stm_read_register pc in
       let: n ∶ ty_memval := call read_mem c in
       match: (exp_var "n") with
       | inl n => 
-        let: i ∶ ty_instr := callex dI (exp_var n) in
+        let: i ∶ ty_instr := foreign dI (exp_var n) in
         call exec_instr i
       | inr c => fail "Err [exec]: instructions cannot be capabilities"
       end.
@@ -646,7 +648,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   Definition fun_wM (μ : Memory) (addr : Lit ty_int) (val : Lit ty_memval) : Memory :=
     fun addr' => if Z.eqb addr addr' then val else μ addr'.
 
-  Definition ExternalCall {σs σ} (f : 𝑭𝑿 σs σ) :
+  Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) :
     forall (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
     match f with
     | rM      => fun args res γ γ' μ μ' =>
@@ -665,8 +667,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                    (γ' , μ' , res) = (γ , μ , inr tt)
     end.
 
-  Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
-    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof.
     destruct f; cbn.
     - repeat depelim args; repeat eexists; constructor.

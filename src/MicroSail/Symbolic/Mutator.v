@@ -690,10 +690,20 @@ Module Mutators
 
   Module SPath.
 
+    Inductive EMessage (Σ : LCtx) : Type :=
+    | EMsgHere (msg : Message Σ)
+    | EMsgThere {b} (msg : EMessage (Σ ▻ b)).
+
+    Fixpoint shift_emsg {Σ b} (bIn : b ∈ Σ) (emsg : EMessage (Σ - b)) : EMessage Σ :=
+      match emsg with
+      | EMsgHere msg   => EMsgHere (subst msg (sub_shift bIn))
+      | EMsgThere emsg => EMsgThere (shift_emsg (inctx_succ bIn) emsg)
+      end.
+
     Inductive SPath (Σ : LCtx) : Type :=
     | angelic_binary (o1 o2 : SPath Σ)
     | demonic_binary (o1 o2 : SPath Σ)
-    | error (msg : Message Σ)
+    | error (msg : EMessage Σ)
     | block
     | assertk (fml : Formula Σ) (msg : Message Σ) (k : SPath Σ)
     | assumek (fml : Formula Σ) (k : SPath Σ)
@@ -725,8 +735,16 @@ Module Mutators
     Global Arguments assert_vareq {_} x {_ _} t msg k.
     Global Arguments assume_vareq {_} x {_ _} t k.
 
+    Definition angelic_close0 {Σ0 : LCtx} :
+      forall Σ, SPath (Σ0 ▻▻ Σ) -> SPath Σ0 :=
+      fix close Σ :=
+        match Σ with
+        | ε     => fun p => p
+        | Σ ▻ b => fun p => close Σ (angelicv b p)
+        end.
+
     Definition demonic_close :
-      forall Σ, SPath Σ -> SPath wnil :=
+      forall Σ, SPath Σ -> SPath ε :=
       fix close Σ :=
         match Σ with
         | ctx_nil      => fun k => k
@@ -975,54 +993,54 @@ Module Mutators
         intuition.
     Qed.
 
-    Fixpoint occurs_check_spath {Σ x} (xIn : x ∈ Σ) (p : SPath Σ) : option (SPath (Σ - x)) :=
-      match p with
-      | angelic_binary o1 o2 =>
-        option_ap (option_map (angelic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2)
-      | demonic_binary o1 o2 =>
-        option_ap (option_map (demonic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2)
-      | error msg => option_map error (occurs_check xIn msg)
-      | block => Some block
-      | assertk P msg o =>
-        option_ap (option_ap (option_map (assertk (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check xIn msg)) (occurs_check_spath xIn o)
-      | assumek P o => option_ap (option_map (assumek (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check_spath xIn o)
-      | angelicv b o => option_map (angelicv b) (occurs_check_spath (inctx_succ xIn) o)
-      | demonicv b o => option_map (demonicv b) (occurs_check_spath (inctx_succ xIn) o)
-      | @assert_vareq _ y σ yIn t msg o =>
-        match occurs_check_view yIn xIn with
-        | Same _ => None
-        | @Diff _ _ _ _ x xIn =>
-          option_ap
-            (option_ap
-               (option_map
-                  (fun (t' : Term (Σ - (y :: σ) - x) σ) (msg' : Message (Σ - (y :: σ) - x)) (o' : SPath (Σ - (y :: σ) - x)) =>
-                     let e := swap_remove yIn xIn in
-                     assert_vareq
-                       y
-                       (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e)
-                       (eq_rect (Σ - (y :: σ) - x) Message msg' (Σ - x - (y :: σ)) e)
-                       (eq_rect (Σ - (y :: σ) - x) SPath o' (Σ - x - (y :: σ)) e))
-                  (occurs_check xIn t))
-               (occurs_check xIn msg))
-            (occurs_check_spath xIn o)
-        end
-      | @assume_vareq _ y σ yIn t o =>
-        match occurs_check_view yIn xIn with
-        | Same _ => Some o
-        | @Diff _ _ _ _ x xIn =>
-          option_ap
-            (option_map
-               (fun (t' : Term (Σ - (y :: σ) - x) σ) (o' : SPath (Σ - (y :: σ) - x)) =>
-                  let e := swap_remove yIn xIn in
-                  assume_vareq
-                    y
-                    (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e)
-                    (eq_rect (Σ - (y :: σ) - x) SPath o' (Σ - x - (y :: σ)) e))
-               (occurs_check xIn t))
-            (occurs_check_spath xIn o)
-        end
-      | debug b o => option_ap (option_map (debug (Σ := Σ - x)) (occurs_check xIn b)) (occurs_check_spath xIn o)
-      end.
+    (* Fixpoint occurs_check_spath {Σ x} (xIn : x ∈ Σ) (p : SPath Σ) : option (SPath (Σ - x)) := *)
+    (*   match p with *)
+    (*   | angelic_binary o1 o2 => *)
+    (*     option_ap (option_map (angelic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2) *)
+    (*   | demonic_binary o1 o2 => *)
+    (*     option_ap (option_map (demonic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2) *)
+    (*   | error msg => option_map error (occurs_check xIn msg) *)
+    (*   | block => Some block *)
+    (*   | assertk P msg o => *)
+    (*     option_ap (option_ap (option_map (assertk (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check xIn msg)) (occurs_check_spath xIn o) *)
+    (*   | assumek P o => option_ap (option_map (assumek (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check_spath xIn o) *)
+    (*   | angelicv b o => option_map (angelicv b) (occurs_check_spath (inctx_succ xIn) o) *)
+    (*   | demonicv b o => option_map (demonicv b) (occurs_check_spath (inctx_succ xIn) o) *)
+    (*   | @assert_vareq _ y σ yIn t msg o => *)
+    (*     match occurs_check_view yIn xIn with *)
+    (*     | Same _ => None *)
+    (*     | @Diff _ _ _ _ x xIn => *)
+    (*       option_ap *)
+    (*         (option_ap *)
+    (*            (option_map *)
+    (*               (fun (t' : Term (Σ - (y :: σ) - x) σ) (msg' : Message (Σ - (y :: σ) - x)) (o' : SPath (Σ - (y :: σ) - x)) => *)
+    (*                  let e := swap_remove yIn xIn in *)
+    (*                  assert_vareq *)
+    (*                    y *)
+    (*                    (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e) *)
+    (*                    (eq_rect (Σ - (y :: σ) - x) Message msg' (Σ - x - (y :: σ)) e) *)
+    (*                    (eq_rect (Σ - (y :: σ) - x) SPath o' (Σ - x - (y :: σ)) e)) *)
+    (*               (occurs_check xIn t)) *)
+    (*            (occurs_check xIn msg)) *)
+    (*         (occurs_check_spath xIn o) *)
+    (*     end *)
+    (*   | @assume_vareq _ y σ yIn t o => *)
+    (*     match occurs_check_view yIn xIn with *)
+    (*     | Same _ => Some o *)
+    (*     | @Diff _ _ _ _ x xIn => *)
+    (*       option_ap *)
+    (*         (option_map *)
+    (*            (fun (t' : Term (Σ - (y :: σ) - x) σ) (o' : SPath (Σ - (y :: σ) - x)) => *)
+    (*               let e := swap_remove yIn xIn in *)
+    (*               assume_vareq *)
+    (*                 y *)
+    (*                 (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e) *)
+    (*                 (eq_rect (Σ - (y :: σ) - x) SPath o' (Σ - x - (y :: σ)) e)) *)
+    (*            (occurs_check xIn t)) *)
+    (*         (occurs_check_spath xIn o) *)
+    (*     end *)
+    (*   | debug b o => option_ap (option_map (debug (Σ := Σ - x)) (occurs_check xIn b)) (occurs_check_spath xIn o) *)
+    (*   end. *)
 
     Definition angelic_binary_prune {Σ} (p1 p2 : SPath Σ) : SPath Σ :=
       match p1 , p2 with
@@ -1057,14 +1075,10 @@ Module Mutators
     Global Arguments assumek_prune {Σ} fml p.
 
     Definition angelicv_prune {Σ} b (p : SPath (Σ ▻ b)) : SPath Σ :=
-      angelicv b p.
-      (* TODO: This does not work because of the message that is included in *)
-      (* the error. We should make it possible to "strengthen" the message by *)
-      (* adding a constructor: Message (Σ ▻ b) -> Message Σ. *)
-      (* match p with *)
-      (* | error s => error s *)
-      (* | _       => angelicv b p *)
-      (* end. *)
+      match p with
+      | error msg => error (EMsgThere msg)
+      | _         => angelicv b p
+      end.
 
     Definition demonicv_prune {Σ} b (p : SPath (Σ ▻ b)) : SPath Σ :=
       (* match @occurs_check_spath AT _ (Σ ▻ b) b inctx_zero o with *)
@@ -1087,8 +1101,7 @@ Module Mutators
     Definition assert_vareq_prune {Σ} {x σ} {xIn : x::σ ∈ Σ}
       (t : Term (Σ - (x::σ)) σ) (msg : Message (Σ - (x::σ))) (k : SPath (Σ - (x::σ))) : SPath Σ :=
       match k with
-      (* TODO: Like for angelicv *)
-      (* | error s => error s *)
+      | error emsg => error (shift_emsg xIn emsg)
       | _          => assert_vareq x t msg k
       end.
     Global Arguments assert_vareq_prune {Σ} x {σ xIn} t msg k.
@@ -1165,7 +1178,7 @@ Module Mutators
 
     Lemma prune_angelicv_sound {Σ b} (p : SPath (Σ ▻ b)) (ι : SymInstance Σ) :
       safe (angelicv_prune p) ι <-> safe (angelicv b p) ι.
-    Proof. reflexivity. Qed.
+    Proof. destruct p; cbn; auto; firstorder. Qed.
 
     Lemma prune_demonicv_sound {Σ b} (p : SPath (Σ ▻ b)) (ι : SymInstance Σ) :
       safe (demonicv_prune p) ι <-> safe (demonicv b p) ι.
@@ -1174,7 +1187,7 @@ Module Mutators
     Lemma prune_assert_vareq_sound {Σ x σ} {xIn : x::σ ∈ Σ}
       (t : Term (Σ - (x::σ)) σ) (msg : Message (Σ - (x::σ))) (p : SPath (Σ - (x::σ))) (ι : SymInstance Σ) :
       safe (assert_vareq_prune x t msg p) ι <-> safe (assert_vareq x t msg p) ι.
-    Proof. reflexivity. Qed.
+    Proof. destruct p; cbn; auto; intuition. Qed.
 
     Lemma prune_assume_vareq_sound {Σ x σ} {xIn : x::σ ∈ Σ}
       (t : Term (Σ - (x::σ)) σ) (p : SPath (Σ - (x::σ))) (ι : SymInstance Σ) :
@@ -1215,6 +1228,81 @@ Module Mutators
         | block => true
         | _     => false
         end.
+
+    Module Experimental.
+
+      Fixpoint assert_msgs_formulas {Σ} (mfs : List (Pair Message Formula) Σ) (p : SPath Σ) : SPath Σ :=
+        match mfs with
+        | nil => p
+        | cons (msg,fml) mfs =>
+          assert_msgs_formulas mfs (assertk fml msg p)
+        end.
+
+      Arguments InCtx_rect [_ _].
+      Lemma ctx_remove_inctx_right {B : Set} {Γ Δ : Ctx B} {b : B} (bIn : InCtx b Δ) :
+        @ctx_remove B (@ctx_cat B Γ Δ) b (@inctx_cat_right B b Γ Δ bIn) =
+        @ctx_cat B Γ (@ctx_remove B Δ b bIn).
+      Proof.
+        induction bIn using InCtx_rect; cbn.
+        - reflexivity.
+        - f_equal. auto.
+      Defined.
+
+      Fixpoint solve_evars {Σ} Σe (p : SPath (Σ ▻▻ Σe)) (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) {struct p} : SPath Σ :=
+        match p with
+        | angelic_binary p1 p2 =>
+          angelic_binary
+            (solve_evars Σe p1 mfs)
+            (solve_evars Σe p2 mfs)
+        | demonic_binary p1 p2 =>
+          angelic_close0 Σe
+            (assert_msgs_formulas mfs
+               (demonic_binary (solve_evars ε p1 []) (solve_evars ε p2 [])))
+        | error msg =>
+          angelic_close0 Σe (assert_msgs_formulas mfs (error msg))
+        | block =>
+          angelic_close0 Σe (assert_msgs_formulas mfs block)
+        | assertk fml msg p0 =>
+          solve_evars Σe p0 (cons (msg,fml) mfs)
+        | assumek fml p0 =>
+          angelic_close0 Σe
+            (assert_msgs_formulas mfs (assumek fml (solve_evars ε p0 [])))
+        | angelicv b p0 =>
+          solve_evars (Σe ▻ b) p0 (subst mfs sub_wk1)
+        | demonicv b p0 =>
+          angelic_close0 Σe (assert_msgs_formulas mfs (demonicv b (solve_evars ε p0 [])))
+        | @assert_vareq _ x σ xIn t msg p0 =>
+          match Context.catView xIn with
+          | isCatLeft bIn =>
+            fun t msg p =>
+              angelic_close0 Σe
+                (assert_msgs_formulas mfs
+                   (assert_vareq x t msg (solve_evars ε p [])))
+          | isCatRight bIn =>
+            fun t _ p =>
+              let e := ctx_remove_inctx_right bIn in
+              solve_evars (Σe - (x :: σ))
+                (eq_rect _ SPath p _ e)
+                (subst mfs
+                   (eq_rect _ (Sub (Σ ▻▻ Σe)) (sub_single (inctx_cat_right bIn) t) _ e))
+          end t msg p0
+         | assume_vareq x t p =>
+             angelic_close0 Σe
+               (assert_msgs_formulas mfs (assume_vareq x t (solve_evars ε p [])))
+         | debug b p =>
+             angelic_close0 Σe (assert_msgs_formulas mfs (debug b (solve_evars ε p [])))
+         end.
+
+      Lemma solve_evars_sound {Σ Σe} (p : SPath (Σ ▻▻ Σe))
+        (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) (ι : SymInstance Σ) :
+        safe (solve_evars Σe p mfs) ι <->
+        exists ιe : SymInstance Σe,
+          safe p (env_cat ι ιe) /\
+          instpc (List.map snd mfs) (env_cat ι ιe).
+      Proof.
+      Admitted.
+
+    End Experimental.
 
   End SPath.
   Notation SPath := SPath.SPath.
@@ -1319,7 +1407,7 @@ Module Mutators
                  (four POST (wmultisub_sup ν) (wformulas_sup w1 fmls) tt))
         | None =>
           (* The formula is inconsistent. *)
-          error msg
+          error (EMsgHere msg)
         end.
 
     Definition assume_formulas :
@@ -1369,7 +1457,7 @@ Module Mutators
       fun w msg =>
         fix rec xs POST :=
         match xs with
-        | nil        => error msg
+        | nil        => error (EMsgHere msg)
         | cons x xs  => angelic_binary (T POST x) (rec xs POST)
         end.
 
@@ -1916,13 +2004,17 @@ Module Mutators
       (*        (ma Σ1 ζ01 pc1 δ1 h1). *)
 
       Definition error {Γ1 Γ2 A D} (func : string) (msg : string) (data:D) :
-        ⊢ SMut Γ1 Γ2 A.
-      Proof.
-        intros w POST δ h.
-        apply error.
-        apply (@MkMessage _ func msg Γ1); auto.
-        apply (wco w).
-      Defined.
+        ⊢ SMut Γ1 Γ2 A :=
+        fun w _ δ h =>
+          error
+            (EMsgHere
+               {| msg_function := func;
+                  msg_message := msg;
+                  msg_program_context := Γ1;
+                  msg_localstore := δ;
+                  msg_heap := h;
+                  msg_pathcondition := wco w
+               |}).
       Global Arguments error {_ _ _ _} func msg data {w} _ _.
 
       Definition block {Γ1 Γ2 A} :
@@ -2410,7 +2502,7 @@ Module Mutators
         - apply (T k).
           apply (record_pattern_match_env p n0).
         - apply (angelic_match_record' n p t k).
-      Qed.
+      Defined.
 
       Definition smutb_angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
         ⊢ STerm (ty_record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
@@ -3284,16 +3376,16 @@ Module Mutators
             | Some s =>
               match term_get_sum s with
               | Some (inl t) =>
-                let Lxl := L ► (xl∶σ ↦ Some t) in
+                let Lxl := L ► (xl::σ ↦ Some t) in
                 Lxl' <- consume_evarenv alt_inl Lxl ;;
                 pure (env_tail Lxl')
               | Some (inr t) =>
-                let Lxr := L ► (xr∶τ ↦ Some t) in
+                let Lxr := L ► (xr::τ ↦ Some t) in
                 Lxr' <- consume_evarenv alt_inr Lxr ;;
                 pure (env_tail Lxr')
               | None =>
                 angelic_binary
-                  (let Lxl := L ► (xl∶σ ↦ None) in
+                  (let Lxl := L ► (xl::σ ↦ None) in
                     consume_evarenv alt_inl Lxl >>= fun _ ζ Lxl' =>
                       match env_unsnoc Lxl' with
                       | (L' , Some t) =>
@@ -3310,7 +3402,7 @@ Module Mutators
                              evarerror_data := alt_inl
                           |}
                       end)
-                  (let Lxr := L ► (xr∶τ ↦ None) in
+                  (let Lxr := L ► (xr::τ ↦ None) in
                     consume_evarenv alt_inr Lxr >>= fun _ ζ Lxr' =>
                       match env_unsnoc Lxr' with
                       | (L' , Some t) =>
@@ -3342,7 +3434,7 @@ Module Mutators
             | Some s =>
               match term_get_pair s with
               | Some (tl, tr) =>
-                let Lrhs := L ► (xl∶_ ↦ Some tl) ► (xr∶_ ↦ Some tr) in
+                let Lrhs := L ► (xl::_ ↦ Some tl) ► (xr::_ ↦ Some tr) in
                 Lrhs' <- consume_evarenv rhs Lrhs ;;
                 pure (env_tail (env_tail Lrhs'))
               | None =>
@@ -3383,7 +3475,7 @@ Module Mutators
             consume_evarenv a1 L >>= fun _ _ => consume_evarenv a2
           | asn_exist ς τ a =>
             (* Dynamically allocate a new evar ς in the EvarEnv. *)
-            let Lς := L ► (ς∶τ ↦ None) in
+            let Lς := L ► (ς::τ ↦ None) in
             consume_evarenv a Lς >>= fun _ _ Lς' =>
             (* Split off the last evar again. *)
             match env_unsnoc Lς' with

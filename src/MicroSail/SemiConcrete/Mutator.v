@@ -266,7 +266,7 @@ Module SemiConcrete
   End CDijk.
 
   Definition CMut (Γ1 Γ2 : PCtx) (A : Type) : Type :=
-    (A -> LocalStore Γ2 -> SCHeap -> Prop) -> LocalStore Γ1 -> SCHeap -> Prop.
+    (A -> CStore Γ2 -> SCHeap -> Prop) -> CStore Γ1 -> SCHeap -> Prop.
   Bind Scope mutator_scope with CMut.
 
   Local Opaque instantiate_env.
@@ -555,12 +555,12 @@ Module SemiConcrete
       Definition pushpop {A Γ1 Γ2 x σ} (v : Lit σ)
         (d : CMut (Γ1 ▻ (x::σ)) (Γ2 ▻ (x::σ)) A) : CMut Γ1 Γ2 A :=
         fun POST δ0 => d (fun a δ1 => POST a (env_tail δ1)) (δ0 ► (x::σ ↦ v)).
-      Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : LocalStore Δ)
+      Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : CStore Δ)
         (d : CMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) : CMut Γ1 Γ2 A :=
         fun POST δ0 => d (fun a δ1 => POST a (env_drop Δ δ1)) (δ0 ►► δΔ).
-      Definition get_local {Γ} : CMut Γ Γ (LocalStore Γ) :=
+      Definition get_local {Γ} : CMut Γ Γ (CStore Γ) :=
         fun POST δ => POST δ δ.
-      Definition put_local {Γ1 Γ2} (δ : LocalStore Γ2) : CMut Γ1 Γ2 unit :=
+      Definition put_local {Γ1 Γ2} (δ : CStore Γ2) : CMut Γ1 Γ2 unit :=
         fun POST _ => POST tt δ.
       Definition get_heap {Γ} : CMut Γ Γ SCHeap :=
         fun POST δ h => POST h δ h.
@@ -569,7 +569,7 @@ Module SemiConcrete
 
       Definition eval_exp {Γ σ} (e : Exp Γ σ) : CMut Γ Γ (Lit σ) :=
         fun POST δ => POST (eval e δ) δ.
-      Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CMut Γ Γ (LocalStore σs) :=
+      Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CMut Γ Γ (CStore σs) :=
         fun POST δ => POST (env_map (fun _ e => eval e δ) es) δ.
       Definition assign {Γ} x {σ} {xIn : x::σ ∈ Γ} (v : Lit σ) : CMut Γ Γ unit :=
         fun POST δ => POST () (δ ⟪ x ↦ v ⟫).
@@ -687,7 +687,7 @@ Module SemiConcrete
 
     Section Exec.
 
-      Definition call_contract {Γ Δ τ} (contract : SepContract Δ τ) (vs : LocalStore Δ) : CMut Γ Γ (Lit τ) :=
+      Definition call_contract {Γ Δ τ} (contract : SepContract Δ τ) (vs : CStore Δ) : CMut Γ Γ (Lit τ) :=
         match contract with
         | MkSepContract _ _ Σe δ req result ens =>
           ι <- angelic_ctx Σe ;;
@@ -717,7 +717,7 @@ Module SemiConcrete
           | Some c => call_contract c args
           | None   => error "Err [cmut_exec]: Function call without contract"
           end
-        | stm_call_external f es =>
+        | stm_foreign f es =>
           eval_exps es >>= call_contract (CEnvEx f)
         | stm_call_frame δ' s =>
           δ <- get_local ;;
@@ -816,7 +816,7 @@ Module SemiConcrete
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       forall ι : SymInstance (sep_contract_logic_variables c),
-        let δΔ : LocalStore Δ := inst (sep_contract_localstore c) ι in
+        let δΔ : CStore Δ := inst (sep_contract_localstore c) ι in
         exec_contract c body ι (fun _ _ _ => True) δΔ nil.
 
   End CMut.
@@ -824,7 +824,7 @@ Module SemiConcrete
   (* Section SemiConcreteWP. *)
 
   (*   Definition SCProp (Γ : PCtx) : Type := *)
-  (*     LocalStore Γ -> SCHeap -> Prop. *)
+  (*     CStore Γ -> SCHeap -> Prop. *)
 
   (*   Definition cmut_wp {Γ1 Γ2 A} (m : CMut Γ1 Γ2 A) (POST : A -> SCProp Γ2) : SCProp Γ1 := *)
   (*     m POST. *)
@@ -889,7 +889,7 @@ Module SemiConcrete
   (*       cmut_wp sm1 POST δ h \/ cmut_wp sm2 POST δ h. *)
   (*   Proof. reflexivity. Qed. *)
 
-  (*   Lemma cmut_wp_state {Γ1 Γ2 A} (f : LocalStore Γ1 -> SCHeap -> CMutResult Γ2 A) (POST : A -> SCProp Γ2) : *)
+  (*   Lemma cmut_wp_state {Γ1 Γ2 A} (f : CStore Γ1 -> SCHeap -> CMutResult Γ2 A) (POST : A -> SCProp Γ2) : *)
   (*     forall δ h, *)
   (*       cmut_wp (cmut_state f) POST δ h <-> *)
   (*       match f δ h with *)

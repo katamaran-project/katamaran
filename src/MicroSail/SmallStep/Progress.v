@@ -39,23 +39,23 @@ Module Progress
        (Import progkit : ProgramKit termkit).
   Module Import SS := SmallStep termkit progkit.
 
-  Lemma can_form_store_cat (Γ Δ : PCtx) (δ : LocalStore (ctx_cat Γ Δ)) :
-    exists (δ1 : LocalStore Γ) (δ2 : LocalStore Δ), δ = env_cat δ1 δ2.
+  Lemma can_form_store_cat (Γ Δ : PCtx) (δ : CStore (ctx_cat Γ Δ)) :
+    exists (δ1 : CStore Γ) (δ2 : CStore Δ), δ = env_cat δ1 δ2.
   Proof. pose (env_cat_split δ); eauto. Qed.
 
-  (* Lemma can_form_store_snoc (Γ : PCtx) (x : 𝑿) (σ : Ty) (δ : LocalStore (Γ ▻ (x , σ))) : *)
-  (*   exists (δ' : LocalStore Γ) (v : Lit σ), δ = env_snoc δ' x σ v. *)
+  (* Lemma can_form_store_snoc (Γ : PCtx) (x : 𝑿) (σ : Ty) (δ : CStore (Γ ▻ (x , σ))) : *)
+  (*   exists (δ' : CStore Γ) (v : Lit σ), δ = env_snoc δ' x σ v. *)
   (* Admitted. *)
 
-  (* Lemma can_form_store_nil (δ : LocalStore ε) : *)
+  (* Lemma can_form_store_nil (δ : CStore ε) : *)
   (*   δ = env_nil. *)
   (* Admitted. *)
 
   Local Ltac progress_can_form :=
     match goal with
-    (* | [ H: LocalStore (ctx_snoc _ _) |- _ ] => pose proof (can_form_store_snoc H) *)
-    (* | [ H: LocalStore ctx_nil |- _ ] => pose proof (can_form_store_nil H) *)
-    | [ H: LocalStore (ctx_cat _ _) |- _ ] => pose proof (can_form_store_cat _ _ H)
+    (* | [ H: CStore (ctx_snoc _ _) |- _ ] => pose proof (can_form_store_snoc H) *)
+    (* | [ H: CStore ctx_nil |- _ ] => pose proof (can_form_store_nil H) *)
+    | [ H: CStore (ctx_cat _ _) |- _ ] => pose proof (can_form_store_cat _ _ H)
     | [ H: Final ?s |- _ ] => destruct s; cbn in H
     end; destruct_conjs; subst; try contradiction.
 
@@ -73,29 +73,29 @@ Module Progress
 
   Local Ltac progress_inst T :=
     match goal with
-    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : LocalStore (ctx_cat ?Γ ?Δ)), _),
-        γ : RegStore, μ : Memory, δ1: LocalStore ?Γ, δ2: LocalStore ?Δ |- _
+    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStore (ctx_cat ?Γ ?Δ)), _),
+        γ : RegStore, μ : Memory, δ1: CStore ?Γ, δ2: CStore ?Δ |- _
       ] => specialize (IH γ μ (env_cat δ1 δ2)); T
-    (* | [ IH: (forall (δ : LocalStore (ctx_snoc ctx_nil (?x , ?σ))), _), *)
+    (* | [ IH: (forall (δ : CStore (ctx_snoc ctx_nil (?x , ?σ))), _), *)
     (*     v: Lit ?σ |- _ *)
     (*   ] => specialize (IH (env_snoc env_nil x σ v)); T *)
-    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : LocalStore ?Γ), _),
-        γ : RegStore, δ: LocalStore ?Γ |- _
+    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStore ?Γ), _),
+        γ : RegStore, δ: CStore ?Γ |- _
       ] => solve [ specialize (IH γ μ δ); T | clear IH; T ]
     end.
 
-  Lemma progress_call_external
+  Lemma progress_foreign
     {Γ Δ : PCtx} {σ : Ty} (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ)
-    (γ : RegStore) (μ : Memory) (δ : LocalStore Γ) :
-    exists (γ' : RegStore) (μ' : Memory) (δ' : LocalStore Γ) (s' : Stm Γ σ),
-      ⟨ γ, μ, δ, stm_call_external f es ⟩ ---> ⟨ γ', μ', δ', s' ⟩.
+    (γ : RegStore) (μ : Memory) (δ : CStore Γ) :
+    exists (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) (s' : Stm Γ σ),
+      ⟨ γ, μ, δ, stm_foreign f es ⟩ ---> ⟨ γ', μ', δ', s' ⟩.
   Proof.
-    destruct (ExternalProgress f (evals es δ) γ μ) as (γ' & μ' & res & p).
+    destruct (ForeignProgress f (evals es δ) γ μ) as (γ' & μ' & res & p).
     exists γ', μ', δ. eexists; constructor; eauto.
   Qed.
 
   Local Ltac progress_tac :=
-    auto using progress_call_external;
+    auto using progress_foreign;
     progress_simpl;
     solve
       [ repeat eexists; constructor; eauto

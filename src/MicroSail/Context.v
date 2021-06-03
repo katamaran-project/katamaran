@@ -251,6 +251,26 @@ Section WithBinding.
         end
     end.
 
+  Inductive CatView {Γ Δ} {b : B} : InCtx b (ctx_cat Γ Δ) -> Set :=
+  | isCatLeft  (bIn : InCtx b Γ) : CatView (inctx_cat_left Δ bIn)
+  | isCatRight (bIn : InCtx b Δ) : CatView (inctx_cat_right bIn).
+
+  Fixpoint catView {Γ Δ} {b : B} {struct Δ} :
+    forall (bIn : InCtx b (ctx_cat Γ Δ)), CatView bIn :=
+    match Δ with
+    | ctx_nil        => fun bIn => isCatLeft bIn
+    | ctx_snoc Δ0 b0 =>
+      fun bIn =>
+        match snocView bIn with
+        | snocViewZero => isCatRight inctx_zero
+        | snocViewSucc bIn =>
+          match catView bIn with
+          | isCatLeft bIn => isCatLeft bIn
+          | isCatRight bIn => isCatRight (inctx_succ bIn)
+          end
+        end
+    end.
+
   (* Custom pattern matching in cases where the context was already refined
      by a different match, i.e. on environments. *)
   Definition inctx_case_nil {b : B} {A : Type} (bIn : InCtx b ctx_nil) : A :=
@@ -263,8 +283,8 @@ Section WithBinding.
     | S n => fun e => dΓ b (MkInCtx n e)
     end e.
 
-  Lemma InCtx_ind (b : B)
-    (P : forall (Γ : Ctx B), InCtx b Γ -> Prop)
+  Definition InCtx_rect (b : B)
+    (P : forall (Γ : Ctx B), InCtx b Γ -> Type)
     (fzero : forall (Γ : Ctx B), P (ctx_snoc Γ b) inctx_zero)
     (fsucc : forall (Γ : Ctx B) (b0 : B) (bIn : InCtx b Γ),
         P Γ bIn -> P (ctx_snoc Γ b0) (inctx_succ bIn)) :
@@ -275,7 +295,15 @@ Section WithBinding.
     - intros bIn. destruct (snocView bIn).
       + apply fzero.
       + now apply fsucc.
-  Qed.
+  Defined.
+
+  Definition InCtx_ind (b : B)
+    (P : forall (Γ : Ctx B), InCtx b Γ -> Prop)
+    (fzero : forall (Γ : Ctx B), P (ctx_snoc Γ b) inctx_zero)
+    (fsucc : forall (Γ : Ctx B) (b0 : B) (bIn : InCtx b Γ),
+        P Γ bIn -> P (ctx_snoc Γ b0) (inctx_succ bIn)) :
+    forall (Γ : Ctx B) (bIn : InCtx b Γ), P Γ bIn :=
+    InCtx_rect P fzero fsucc.
 
   (* Boolean equality of [nat]-fields in [InCtx] implies equality of
      the other field and the binding-index of [InCtx] *)
@@ -535,6 +563,9 @@ End WithAB.
 Module CtxNotations.
 
   Notation NCtx Name Data := (Ctx (Name * Data)).
+  (* DEPRECATED *)
+  (* NB: ∶ ≠ : *)
+  (*    To typeset the next notation, use \: *)
   Notation "x ∶ τ" := (x,τ) (only parsing) : ctx_scope.
   Notation "x :: τ" := (x , τ) : ctx_scope.
 
@@ -543,8 +574,6 @@ Module CtxNotations.
   Notation "Γ1 ▻▻ Γ2" := (ctx_cat Γ1%ctx Γ2%ctx) : ctx_scope.
   Notation "b ∈ Γ" := (InCtx b%ctx Γ%ctx) : type_scope.
 
-  (* NB: ∶ ≠ :
-     To typeset the next notation, use \: *)
   Notation "[ x ]" := (ctx_snoc ctx_nil x)  : ctx_scope.
   Notation "[ x , .. , z ]" := (ctx_snoc .. (ctx_snoc ctx_nil x) .. z) : ctx_scope.
   Notation "Γ - x" := (@ctx_remove _ Γ x _) : ctx_scope.
@@ -560,17 +589,17 @@ Section Resolution.
 
   Fixpoint ctx_resolve (Γ : NCtx Name D) (x : Name) {struct Γ} : option D :=
     match Γ with
-    | ε       => None
-    | Γ ▻ y∶d => if Name_eqdec x y then Some d else ctx_resolve Γ x
+    | ε        => None
+    | Γ ▻ y::d => if Name_eqdec x y then Some d else ctx_resolve Γ x
     end.
 
   Fixpoint mk_inctx (Γ : NCtx Name D) (x : Name) {struct Γ} :
-    let m := ctx_resolve Γ x in forall (p : IsSome m), (x∶fromSome m p) ∈ Γ :=
+    let m := ctx_resolve Γ x in forall (p : IsSome m), x::fromSome m p ∈ Γ :=
     match Γ with
     | ε => fun p => match p with end
-    | Γ ▻ y∶d =>
+    | Γ ▻ y::d =>
       match Name_eqdec x y as s return
-        (forall p, (x∶fromSome (if s then Some d else ctx_resolve Γ x) p) ∈ (Γ ▻ y∶d))
+        (forall p, (x::fromSome (if s then Some d else ctx_resolve Γ x) p) ∈ Γ ▻ y::d)
       with
       | left e => fun _ => match e with eq_refl => inctx_zero end
       | right _ => fun p => inctx_succ (mk_inctx Γ x p)
@@ -579,8 +608,8 @@ Section Resolution.
 
   Fixpoint ctx_names (Γ : NCtx Name D) : list Name :=
     match Γ with
-    | ε       => nil
-    | Γ ▻ y∶_ => cons y (ctx_names Γ)
+    | ε          => nil
+    | Γ ▻ (y::_) => cons y (ctx_names Γ)
     end.
 
 End Resolution.

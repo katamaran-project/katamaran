@@ -10,7 +10,7 @@ Require Import MicroSail.SmallStep.Inversion.
 Require Import MicroSail.Sep.Logic.
 Require Import MicroSail.Sep.Spec.
 Require Import MicroSail.Sep.Hoare.
-Require Import MicroSail.Sep.Model.Disjoint.
+Require Import MicroSail.Attic.Disjoint.
 
 Module HoareSound
        (Import termkit : TermKit)
@@ -127,7 +127,7 @@ Module HoareSound
         match cenv σs σ f with
         | Some (MkSepContract _ _ Σ θΔ pre result post) =>
           forall (ι : SymInstance Σ)
-                 (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore σs) (s' : Stm σs σ),
+                 (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : CStore σs) (s' : Stm σs σ),
             ⟨ γ, μ, δ, Pi f ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
             forall (γframe γfocus : Heap),
               split (heap γ) γframe γfocus ->
@@ -141,9 +141,9 @@ Module HoareSound
     Hypothesis validCEnv : ValidContractEnv' CEnv.
 
     Lemma sound {Γ σ} (s : Stm Γ σ) :
-      forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : LocalStore Γ) (s' : Stm Γ σ),
+      forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : CStore Γ) (s' : Stm Γ σ),
         ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
-        forall (PRE : HProp) (POST : Lit σ -> LocalStore Γ -> HProp)
+        forall (PRE : HProp) (POST : Lit σ -> CStore Γ -> HProp)
                (triple : δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄)
                (γframe γfocus : Heap),
           split (heap γ) γframe γfocus ->
@@ -216,8 +216,8 @@ Module HoareSound
       - sound_solve.
       (* rule_stm_match_union *)
       - sound_solve.
-        destruct (𝑼_unfold (eval e10 δ)) eqn:Heq.
-        assert (𝑼_fold (𝑼_unfold (eval e10 δ)) = 𝑼_fold (existT x l)) as Heq' by now f_equal.
+        destruct (𝑼_unfold (eval e9 δ)) eqn:Heq.
+        assert (𝑼_fold (𝑼_unfold (eval e9 δ)) = 𝑼_fold (existT x l)) as Heq' by now f_equal.
         rewrite 𝑼_fold_unfold in Heq'.
         sound_solve.
       (* rule_stm_match_record *)
@@ -233,7 +233,7 @@ Module HoareSound
         + congruence.
       (* rule_stm_write_register *)
       - sound_solve.
-        rename γ into γ__pre, r1 into reg, v into v__pre, v5 into v__post, τ into σ, e11 into e, δ3 into δ.
+        rename γ into γ__pre, r1 into reg, v into v__pre, v5 into v__post, τ into σ, e10 into e, δ3 into δ.
         exists (write_heap γfocus reg v__post); cbn.
         specialize (write_heap_ptsreg γfocus reg v__post) as Hpost.
         split; auto.

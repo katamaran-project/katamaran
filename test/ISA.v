@@ -228,19 +228,19 @@ Module ISATermKit <: TermKit.
   (* Names are inspired by sail-riscv naming convention *)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
   (* read registers *)
-  | rX  : Fun ["reg_tag" ∶ ty_enum register_tag ] ty_int
+  | rX  : Fun ["reg_tag" :: ty_enum register_tag ] ty_int
   (* write register *)
-  | wX : Fun ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_unit
+  | wX : Fun ["reg_tag" :: ty_enum register_tag, "reg_value" :: ty_int] ty_unit
   (* read flag *)
-  | rF      : Fun ["flag_code" ∶ ty_int] ty_bool
+  | rF      : Fun ["flag_code" :: ty_int] ty_bool
   (* write flag *)
-  | wF     : Fun ["flag_code" ∶ ty_int, "flag_value" ∶ ty_bool] ty_bool
+  | wF     : Fun ["flag_code" :: ty_int, "flag_value" :: ty_bool] ty_bool
   (* check memory bounds *)
-  | in_bounds : Fun ["address" ∶ ty_int] ty_bool
+  | in_bounds : Fun ["address" :: ty_int] ty_bool
   (* semantics of a single instruction *)
-  | semantics : Fun [ "instr" ∶ ty_union instruction] ty_unit
-  | execute_load : Fun [ "dst" ∶ ty_enum register_tag, "src" ∶ ty_enum register_tag ] ty_unit
-  | swapreg : Fun ["r1" ∶ ty_enum register_tag, "r2" ∶ ty_enum register_tag] ty_unit
+  | semantics : Fun [ "instr" :: ty_union instruction] ty_unit
+  | execute_load : Fun [ "dst" :: ty_enum register_tag, "src" :: ty_enum register_tag ] ty_unit
+  | swapreg : Fun ["r1" :: ty_enum register_tag, "r2" :: ty_enum register_tag] ty_unit
   .
 
   Inductive FunGhost : Set :=
@@ -250,9 +250,9 @@ Module ISATermKit <: TermKit.
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
   (* read memory *)
-  | rM    : FunX ["address" ∶ ty_int] ty_int
+  | rM    : FunX ["address" :: ty_int] ty_int
   (* write memory *)
-  | wM                   : FunX ["address" ∶ ty_int, "mem_value" ∶ ty_int] ty_unit
+  | wM                   : FunX ["address" :: ty_int, "mem_value" :: ty_int] ty_unit
   | ghost (f : FunGhost) : FunX ctx_nil ty_unit
   .
 
@@ -305,7 +305,7 @@ Module ISAProgramKit <: (ProgramKit ISATermKit).
   Local Coercion stm_exp : Exp >-> Stm.
 
   Notation "'callghost' f" :=
-    (stm_call_external (ghost f) env_nil)
+    (stm_foreign (ghost f) env_nil)
     (at level 10, f at next level) : exp_scope.
 
   Local Notation "'x'"   := (@exp_var _ "x" _ _) : exp_scope.
@@ -325,7 +325,7 @@ Module ISAProgramKit <: (ProgramKit ISATermKit).
   Definition Memory_lb {Γ} : Exp Γ ty_int := lit_int 0.
   Definition Memory_hb {Γ} : Exp Γ ty_int := lit_int 3.
 
-  Definition fun_rX : Stm ["reg_tag" ∶ ty_enum register_tag] ty_int :=
+  Definition fun_rX : Stm ["reg_tag" :: ty_enum register_tag] ty_int :=
     callghost open_ptstoreg ;;
     match: reg_tag in register_tag with
     | RegTag0 => let: "x" := stm_read_register R0 in callghost (close_ptstoreg RegTag0) ;; stm_exp x
@@ -334,7 +334,7 @@ Module ISAProgramKit <: (ProgramKit ISATermKit).
     | RegTag3 => let: "x" := stm_read_register R3 in callghost (close_ptstoreg RegTag3) ;; stm_exp x
     end.
 
-  Definition fun_wX : Stm ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_unit :=
+  Definition fun_wX : Stm ["reg_tag" :: ty_enum register_tag, "reg_value" :: ty_int] ty_unit :=
     callghost open_ptstoreg ;;
     match: reg_tag in register_tag with
     | RegTag0 => stm_write_register R0 reg_value ;; callghost (close_ptstoreg RegTag0)
@@ -343,7 +343,7 @@ Module ISAProgramKit <: (ProgramKit ISATermKit).
     | RegTag3 => stm_write_register R3 reg_value ;; callghost (close_ptstoreg RegTag3)
     end.
 
-  Definition fun_semantics : Stm ["instr" ∶ ty_union instruction] ty_unit :=
+  Definition fun_semantics : Stm ["instr" :: ty_union instruction] ty_unit :=
     stm_match_union_alt instruction instr
       (fun K => match K with
                 | KHalt => MkAlt (pat_unit)                 (stm_write_register Halted lit_true ;; nop)
@@ -352,17 +352,17 @@ Module ISAProgramKit <: (ProgramKit ISATermKit).
                 | KJump => MkAlt (pat_var "add_args")       (stm_fail _ "not implemented")
                 end).
 
-  Definition fun_execute_load : Stm ["dst" ∶ ty_enum register_tag, "src" ∶ ty_enum register_tag] ty_unit :=
+  Definition fun_execute_load : Stm ["dst" :: ty_enum register_tag, "src" :: ty_enum register_tag] ty_unit :=
     (* TODO: Update PC *)
     let: "addr" := call rX (exp_var "src") in
     let: "safe" := call in_bounds (exp_var "addr") in
     if: exp_var "safe"
-    then (let: "v" := callex rM (exp_var "addr") in
+    then (let: "v" := foreign rM (exp_var "addr") in
           call wX (exp_var "dst") (exp_var "v") ;;
           nop)
     else (stm_write_register OutOfMemory lit_true ;; nop).
 
-  Definition fun_swapreg : Stm ["r1" ∶ ty_enum register_tag, "r2" ∶ ty_enum register_tag] ty_unit :=
+  Definition fun_swapreg : Stm ["r1" :: ty_enum register_tag, "r2" :: ty_enum register_tag] ty_unit :=
     let: "v1" := call rX (exp_var "r1") in
     let: "v2" := call rX (exp_var "r2") in
     call wX (exp_var "r1") (exp_var "v2") ;;
@@ -414,10 +414,10 @@ Module ISAProgramKit <: (ProgramKit ISATermKit).
   | callex_ghost {f γ μ} : CallEx (ghost f) env_nil (inr tt) γ γ μ μ
   .
 
-  Definition ExternalCall := @CallEx.
+  Definition ForeignCall := @CallEx.
 
-  Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
-    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof. destruct f; cbn; repeat depelim args; repeat eexists; constructor. Qed.
 
 End ISAProgramKit.
@@ -432,11 +432,11 @@ Module ExampleStepping.
     forall (Γ : Ctx (𝑿 * Ty))
            (γ : RegStore) (μ : Memory),
       ⟨ γ , μ
-        , env_nil ► ("instr" ∶ ty_union instruction ↦ Halt)
+        , env_nil ► ("instr" :: ty_union instruction ↦ Halt)
         , Pi semantics ⟩
         --->*
         ⟨ write_register γ Halted true , μ
-          , env_nil ► ("instr" ∶ ty_union instruction ↦ Halt)
+          , env_nil ► ("instr" :: ty_union instruction ↦ Halt)
           , stm_lit ty_unit tt ⟩.
   Proof.
     intros; cbn [Pi].
@@ -492,8 +492,8 @@ Module ISASymbolicContractKit <:
   Local Notation "[ x , .. , z ]" :=
     (env_snoc .. (env_snoc env_nil _ x) .. _ z) (at level 0) : env_scope.
 
-  Definition sep_contract_rX : SepContract ["reg_tag" ∶ ty_enum register_tag ] ty_int :=
-    {| sep_contract_logic_variables := ["reg_tag" ∶ ty_enum register_tag,  "v" ∶ ty_int];
+  Definition sep_contract_rX : SepContract ["reg_tag" :: ty_enum register_tag ] ty_int :=
+    {| sep_contract_logic_variables := ["reg_tag" :: ty_enum register_tag,  "v" :: ty_int];
        sep_contract_localstore      := [term_var "reg_tag"]%arg;
        sep_contract_precondition    :=
          asn_chunk (chunk_user ptstoreg [ term_var "reg_tag", term_var "v" ]%env);
@@ -503,8 +503,8 @@ Module ISASymbolicContractKit <:
          asn_chunk (chunk_user ptstoreg [ term_var "reg_tag", term_var "v" ]%env) ;
     |}.
 
-  Definition sep_contract_wX : SepContract ["reg_tag" ∶ ty_enum register_tag, "reg_value" ∶ ty_int] ty_unit :=
-    {| sep_contract_logic_variables := ["r" ∶ ty_enum register_tag, "v_old" ∶ ty_int, "v_new" ∶ ty_int];
+  Definition sep_contract_wX : SepContract ["reg_tag" :: ty_enum register_tag, "reg_value" :: ty_int] ty_unit :=
+    {| sep_contract_logic_variables := ["r" :: ty_enum register_tag, "v_old" :: ty_int, "v_new" :: ty_int];
        sep_contract_localstore      := [term_var "r", term_var "v_new"]%arg;
        sep_contract_precondition    :=
          asn_chunk (chunk_user ptstoreg [ term_var "r", term_var "v_old" ]%env);
@@ -514,8 +514,8 @@ Module ISASymbolicContractKit <:
          asn_chunk (chunk_user ptstoreg [ term_var "r", term_var "v_new" ]%env)
     |}.
 
-  Definition sep_contract_swapreg : SepContract ["r1" ∶ ty_enum register_tag, "r2" ∶ ty_enum register_tag] ty_unit :=
-    {| sep_contract_pun_logic_variables := ["u" ∶ ty_int, "v" ∶ ty_int];
+  Definition sep_contract_swapreg : SepContract ["r1" :: ty_enum register_tag, "r2" :: ty_enum register_tag] ty_unit :=
+    {| sep_contract_pun_logic_variables := ["u" :: ty_int, "v" :: ty_int];
        sep_contract_pun_precondition :=
          asn_chunk (chunk_user ptstoreg [term_var "r1", term_var "u"]) ✱
          asn_chunk (chunk_user ptstoreg [term_var "r2", term_var "v"]);
@@ -536,7 +536,7 @@ Module ISASymbolicContractKit <:
       end.
 
   Definition sep_contract_open_ptstoreg : SepContract ctx_nil ty_unit :=
-    {| sep_contract_logic_variables := ["r" ∶ ty_enum register_tag, "v" ∶ ty_int];
+    {| sep_contract_logic_variables := ["r" :: ty_enum register_tag, "v" :: ty_int];
        sep_contract_localstore      := env_nil;
        sep_contract_precondition    :=
          asn_chunk (chunk_user ptstoreg [term_var "r", term_var "v"]%env);
@@ -562,7 +562,7 @@ Module ISASymbolicContractKit <:
     end.
 
   Definition sep_contract_close_ptstoreg (R : RegisterTag) : SepContract ctx_nil ty_unit :=
-    {| sep_contract_logic_variables := ["v" ∶ ty_int];
+    {| sep_contract_logic_variables := ["v" :: ty_int];
        sep_contract_localstore      := env_nil;
        sep_contract_precondition    := (regtag_to_reg R ↦ term_var "v");
        sep_contract_result          := "result_close_ptsreg";

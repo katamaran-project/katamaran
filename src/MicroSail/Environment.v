@@ -492,11 +492,11 @@ Module EnvNotations.
 
   Notation "δ ► ( x ↦ u )" := (env_snoc δ x u) : env_scope.
   Notation "δ1 '►►' δ2" := (env_cat δ1 δ2) : env_scope.
-  Notation "δ ⟪ x ↦ v ⟫" := (@env_update _ _ _ δ (x∶_)%ctx _ v) : env_scope.
-  Notation "δ ‼ x" := (@env_lookup _ _ _ δ (x∶_)%ctx _) : exp_scope.
-  Notation "[ x ]" := (env_snoc env_nil (_∶_)%ctx x) : env_scope.
+  Notation "δ ⟪ x ↦ v ⟫" := (@env_update _ _ _ δ (x::_)%ctx _ v) : env_scope.
+  Notation "δ ‼ x" := (@env_lookup _ _ _ δ (x::_)%ctx _) : exp_scope.
+  Notation "[ x ]" := (env_snoc env_nil (_::_)%ctx x) : env_scope.
   Notation "[ x , .. , z ]" :=
-    (env_snoc .. (env_snoc env_nil (_∶_) x) .. (_∶_) z) : env_scope.
+    (env_snoc .. (env_snoc env_nil (_::_) x) .. (_::_) z) : env_scope.
 
 End EnvNotations.
 

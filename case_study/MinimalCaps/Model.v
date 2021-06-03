@@ -289,7 +289,7 @@ Module MinCapsModel.
     forall code : Lit ty_int,
     evals es δ = env_snoc env_nil (_ , ty_int) code
     → ⊢ semTriple δ (⌜is_true true⌝ ∧ emp) (stm_call_external dI es)
-          (λ (v : Lit ty_instr) (δ' : LocalStore Γ),
+          (λ (v : Lit ty_instr) (δ' : CStore Γ),
              (⌜is_true true⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (code Heq) "_".
@@ -302,8 +302,8 @@ Module MinCapsModel.
     cbn in H.
     dependent elimination H0.
     dependent elimination s.
-    rewrite Heq in e0.
-    cbn in e0. destruct e0 as [res' e].
+    rewrite Heq in f1.
+    cbn in f1. destruct f1 as [res' e].
     dependent elimination e.
     do 2 iModIntro.
     iMod "Hclose" as "_".
@@ -325,7 +325,7 @@ Module MinCapsModel.
       → ⊢ semTriple δ
           (MinCapsIrisHeapKit.MinCaps_ptsreg reg w)
           (stm_call_external (ghost open_ptsreg) es)
-          (λ (v : ()) (δ' : LocalStore Γ),
+          (λ (v : ()) (δ' : CStore Γ),
              (MinCapsSymbolicContractKit.ASS.interpret_assertion
                   match (ι ‼ "reg")%exp with
                   | R0 =>
@@ -352,9 +352,9 @@ Module MinCapsModel.
     cbn in H.
     dependent elimination H.
     dependent elimination s.
-    rewrite Heq in e0.
-    cbn in e0.
-    dependent elimination e0.
+    rewrite Heq in f1.
+    cbn in f1.
+    dependent elimination f1.
     do 2 iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
@@ -372,7 +372,7 @@ Module MinCapsModel.
           (MinCapsIrisHeapKit.IrisRegs.reg_pointsTo (MinCapsSymbolicContractKit.regtag_to_reg R)
                                                     w)
           (stm_call_external (ghost (close_ptsreg R)) es)
-          (λ (_ : ()) (δ' : LocalStore Γ),
+          (λ (_ : ()) (δ' : CStore Γ),
            MinCapsIrisHeapKit.MinCaps_ptsreg R w
                                              ∗ ⌜δ' = δ⌝).
   Proof.
@@ -388,8 +388,8 @@ Module MinCapsModel.
     cbn in H.
     dependent elimination H.
     dependent elimination s.
-    cbn in e0.
-    dependent elimination e0.
+    cbn in f1.
+    dependent elimination f1.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
@@ -407,7 +407,7 @@ Module MinCapsModel.
       → ⊢ semTriple δ
           (⌜is_true true⌝ ∧ emp)
           (stm_call_external (ghost int_safe) es)
-          (λ (v : ()) (δ' : LocalStore Γ),
+          (λ (v : ()) (δ' : CStore Γ),
            ((⌜v = tt⌝ ∧ emp)
               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inl i))
              ∗ ⌜δ' = δ⌝).
@@ -422,9 +422,9 @@ Module MinCapsModel.
     cbn in H.
     dependent elimination H.
     dependent elimination s.
-    rewrite Heq in e0.
-    cbn in e0.
-    dependent elimination e0.
+    rewrite Heq in f1.
+    cbn in f1.
+    dependent elimination f1.
     do 2 iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
@@ -443,7 +443,7 @@ Module MinCapsModel.
       → ⊢ semTriple δ
           (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inr c))
           (stm_call_external (ghost lift_csafe) es)
-          (λ (v : ()) (δ' : LocalStore Γ),
+          (λ (v : ()) (δ' : CStore Γ),
            ((⌜v = tt⌝ ∧ emp)
              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inr c))
              ∗ ⌜δ' = δ⌝).
@@ -458,9 +458,9 @@ Module MinCapsModel.
     cbn in H.
     dependent elimination H.
     dependent elimination s.
-    rewrite Heq in e0.
-    cbn in e0.
-    dependent elimination e0.
+    rewrite Heq in f1.
+    cbn in f1.
+    dependent elimination f1.
     do 2 iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
@@ -477,7 +477,7 @@ Module MinCapsModel.
       → ⊢ semTriple δ
           (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) w)
           (stm_call_external (ghost duplicate_safe) es)
-          (λ (v : ()) (δ' : LocalStore Γ),
+          (λ (v : ()) (δ' : CStore Γ),
            (((⌜v = tt⌝ ∧ emp)
                ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) w)
               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) w)
@@ -493,9 +493,9 @@ Module MinCapsModel.
     cbn in H.
     dependent elimination H.
     dependent elimination s.
-    rewrite Heq in e0.
-    cbn in e0.
-    dependent elimination e0.
+    rewrite Heq in f1.
+    cbn in f1.
+    dependent elimination f1.
     do 2 iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
@@ -514,7 +514,7 @@ Module MinCapsModel.
       → ⊢ semTriple δ
           (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inr c))
           (stm_call_external (ghost specialize_safe_to_cap) es)
-          (λ (v : ()) (δ' : LocalStore Γ),
+          (λ (v : ()) (δ' : CStore Γ),
            ((⌜v = tt⌝ ∧ emp)
               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inr c))
              ∗ ⌜δ' = δ⌝).
@@ -529,9 +529,9 @@ Module MinCapsModel.
     cbn in H.
     dependent elimination H.
     dependent elimination s.
-    rewrite Heq in e0.
-    cbn in e0.
-    dependent elimination e0.
+    rewrite Heq in f1.
+    cbn in f1.
+    dependent elimination f1.
     do 2 iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
@@ -563,7 +563,7 @@ Module MinCapsModel.
                                               cap_end := e;
                                               cap_cursor := a |}))
           (stm_call_external (ghost csafe_move_cursor) es)
-          (λ (v0 : ()) (δ' : LocalStore Γ),
+          (λ (v0 : ()) (δ' : CStore Γ),
            (((⌜v0 = tt⌝ ∧ emp)
                ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
                (inr {| cap_permission := p;
@@ -586,9 +586,9 @@ Module MinCapsModel.
     cbn in H.
     dependent elimination H.
     dependent elimination s.
-    rewrite Heq in e1.
-    cbn in e1.
-    dependent elimination e1.
+    rewrite Heq in f1.
+    cbn in f1.
+    dependent elimination f1.
     do 2 iModIntro.
     iMod "Hclose" as "_".
     iModIntro.
@@ -608,7 +608,7 @@ Module MinCapsModel.
     | H : Env _ ctx_nil |- _ => destruct (nilView H)
     end).
 
-  Lemma extSem `{sg : sailG Σ} : ExtSem (Σ := Σ).
+  Lemma foreignSem `{sg : sailG Σ} : ForeignSem (Σ := Σ).
     intros Γ τ Δ f es δ.
     destruct f as [_|_|_|Γ' [ | reg | | | | | ] es δ'];
       cbn - [MinCapsIrisHeapKit.MinCaps_safe MinCapsIrisHeapKit.MinCaps_csafe];
@@ -645,9 +645,9 @@ Module MinCapsModel.
         cbn in H.
         dependent elimination H0.
         dependent elimination s.
-        rewrite Heq in e1.
-        cbn in e1.
-        dependent elimination e1.
+        rewrite Heq in f1.
+        cbn in f1.
+        dependent elimination f1.
         do 2 iModIntro.
         iDestruct "Hinv" as (v) "Hav".
         iDestruct "Hav" as "[Hav #Hrec]".
@@ -692,9 +692,9 @@ Module MinCapsModel.
         cbn in H.
         dependent elimination H0.
         dependent elimination s.
-        rewrite Heq in e1.
-        cbn in e1.
-        dependent elimination e1.
+        rewrite Heq in f1.
+        cbn in f1.
+        dependent elimination f1.
         do 2 iModIntro.
         iDestruct "Hinv" as (v) "Hav".
         iDestruct "Hav" as "[Hav #Hrec]".
@@ -750,9 +750,9 @@ Module MinCapsModel.
       cbn in H.
       dependent elimination H.
       dependent elimination s.
-      rewrite Heq in e1.
-      cbn in e1.
-      dependent elimination e1.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
       do 2 iModIntro.
       iDestruct "Hinv" as (v) "Hav".
       iDestruct "Hav" as "[Hav Hrec]".
@@ -805,7 +805,7 @@ Module MinCapsModel.
                            (term_binop binop_le (term_lit ty_addr address) (term_lit ty_addr e)))
            | _  => MinCapsSymbolicContractKit.ASS.asn_false
            end) (stm_call_external rM es)
-        (λ (v3 : Z) (δ' : LocalStore Γ),
+        (λ (v3 : Z) (δ' : CStore Γ),
          (MinCapsIrisHeapKit.MinCaps_csafe (mG := sailG_memG)
            {|
              cap_permission := p;

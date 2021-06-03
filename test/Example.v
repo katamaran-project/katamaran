@@ -41,7 +41,6 @@ From Equations Require Import
 From MicroSail Require Import
      Symbolic.Mutator
      Sep.Spec
-     WLP.Spec
      Syntax.
 
 Set Implicit Arguments.
@@ -229,12 +228,12 @@ Module ExampleTermKit <: TermKit.
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
-  | abs :        Fun [ "x" ∶ ty_int               ] ty_int
-  | cmp :        Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] (ty_enum ordering)
-  | gcd :        Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int
-  | gcdloop :    Fun [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int
-  | msum :       Fun [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
-  | length {σ} : Fun [ "xs" ∶ ty_list σ           ] ty_int
+  | abs :        Fun [ "x" :: ty_int               ] ty_int
+  | cmp :        Fun [ "x" :: ty_int, "y" :: ty_int ] (ty_enum ordering)
+  | gcd :        Fun [ "x" :: ty_int, "y" :: ty_int ] ty_int
+  | gcdloop :    Fun [ "x" :: ty_int, "y" :: ty_int ] ty_int
+  | msum :       Fun [ "x" :: ty_union either, "y" :: ty_union either] (ty_union either)
+  | length {σ} : Fun [ "xs" :: ty_list σ           ] ty_int
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -262,7 +261,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
   Local Notation "'y'"   := (@exp_var _ "y" _ _) : exp_scope.
   Local Notation "'z'"   := (@exp_var _ "z" _ _) : exp_scope.
 
-  Definition fun_msum : Stm ["x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either) :=
+  Definition fun_msum : Stm ["x" :: ty_union either, "y" :: ty_union either] (ty_union either) :=
     stm_match_union_alt either x
      (fun K =>
         match K with
@@ -304,10 +303,10 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
   Definition write_write := generic_write_write.
 
   Definition Memory : Set := unit.
-  Definition ExternalCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs)
+  Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs)
     (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop := False.
-  Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
-    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof. destruct f. Qed.
 
 End ExampleProgramKit.
@@ -337,14 +336,14 @@ Module SepContracts.
     (* Arguments asn_prop [_] & _. *)
     (* Arguments MkSepContractPun [_ _] & _ _ _ _. *)
 
-    Definition sep_contract_abs : SepContract [ "x" ∶ ty_int ] ty_int :=
-      {| sep_contract_logic_variables := ["x" ∶ ty_int];
+    Definition sep_contract_abs : SepContract [ "x" :: ty_int ] ty_int :=
+      {| sep_contract_logic_variables := ["x" :: ty_int];
          sep_contract_localstore      := [term_var "x"]%arg;
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            asn_prop
-             ["x" ∶ ty_int, "result" ∶ ty_int]
+             ["x" :: ty_int, "result" :: ty_int]
              (fun x result => result = Z.abs x)
            (* asn_if *)
            (*   (term_binop binop_lt (term_var "x") (term_lit ty_int 0)) *)
@@ -352,8 +351,8 @@ Module SepContracts.
            (*   (asn_bool (term_binop binop_eq (term_var "result") (term_var "x"))) *)
       |}.
 
-    Definition sep_contract_cmp : SepContract ["x" ∶ ty_int, "y" ∶ ty_int] (ty_enum ordering)  :=
-       {| sep_contract_logic_variables := ["x" ∶ ty_int, "y" ∶ ty_int];
+    Definition sep_contract_cmp : SepContract ["x" :: ty_int, "y" :: ty_int] (ty_enum ordering)  :=
+       {| sep_contract_logic_variables := ["x" :: ty_int, "y" :: ty_int];
           sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
           sep_contract_precondition    := asn_true;
           sep_contract_result          := "result";
@@ -368,19 +367,19 @@ Module SepContracts.
                  end)
        |}.
 
-    Definition sep_contract_gcd : SepContract [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int :=
-      {| sep_contract_logic_variables := ["x" ∶ ty_int, "y" ∶ ty_int];
+    Definition sep_contract_gcd : SepContract [ "x" :: ty_int, "y" :: ty_int ] ty_int :=
+      {| sep_contract_logic_variables := ["x" :: ty_int, "y" :: ty_int];
          sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            @asn_prop
-             ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
+             ["x" :: ty_int, "y" :: ty_int, "result" :: ty_int]
              (fun x y result => result = Z.gcd x y)
       |}.
 
-    Definition sep_contract_gcdloop : SepContract [ "x" ∶ ty_int, "y" ∶ ty_int ] ty_int :=
-      {| sep_contract_logic_variables := ["x" ∶ ty_int, "y" ∶ ty_int];
+    Definition sep_contract_gcdloop : SepContract [ "x" :: ty_int, "y" :: ty_int ] ty_int :=
+      {| sep_contract_logic_variables := ["x" :: ty_int, "y" :: ty_int];
          sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
          sep_contract_precondition    :=
            asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "x")) ✱
@@ -388,18 +387,18 @@ Module SepContracts.
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            @asn_prop
-             ["x" ∶ ty_int, "y" ∶ ty_int, "result" ∶ ty_int]
+             ["x" :: ty_int, "y" :: ty_int, "result" :: ty_int]
              (fun x y result => result = Z.gcd x y)
       |}.
 
-    Definition sep_contract_length {σ} : SepContract [ "xs" ∶ ty_list σ ] ty_int :=
-      {| sep_contract_logic_variables := ["xs" ∶ ty_list σ ];
+    Definition sep_contract_length {σ} : SepContract [ "xs" :: ty_list σ ] ty_int :=
+      {| sep_contract_logic_variables := ["xs" :: ty_list σ ];
          sep_contract_localstore      := [term_var "xs"]%arg;
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            @asn_prop
-             ["xs" ∶ ty_list σ, "result" ∶ ty_int]
+             ["xs" :: ty_list σ, "result" :: ty_int]
              (fun xs result => result = Z.of_nat (Datatypes.length xs))
       |}.
 
@@ -463,77 +462,3 @@ Module SepContracts.
   Hint Resolve valid_contract_cmp : contracts.
 
 End SepContracts.
-
-Module WLPContracts.
-
-  Module ExampleWLPContractKit <: (WLPContractKit ExampleTermKit ExampleProgramKit).
-    Module Export WLPPM := WLPPrograms ExampleTermKit ExampleProgramKit.
-
-    Definition CEnv : ContractEnv :=
-      fun σs τ f =>
-        match f with
-        | abs        => ContractNoFail
-                          ["x" ∶ ty_int] ty_int
-                          (fun x γ => True)
-                          (fun x r γ => r = Z.abs x)
-        | cmp        => ContractNoFail
-                          ["x" ∶ ty_int, "y" ∶ ty_int] (ty_enum ordering)
-                          (fun x y γ => True)
-                          (fun x y r γ =>
-                             match r with
-                             | LT => x < y
-                             | EQ => x = y
-                             | GT => x > y
-                             end
-                          (* (x < y <-> r = LT) /\ *)
-                          (* (x = y <-> r = EQ) /\ *)
-                          (* (x > y <-> r = GT) *)
-                          )
-        | gcd        => ContractNoFail
-                          ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
-                          (fun x y γ => True)
-                          (fun x y r γ => r = Z.gcd x y)
-        | gcdloop    => ContractNoFail
-                          ["x" ∶ ty_int, "y" ∶ ty_int] ty_int
-                          (fun x y γ => x >= 0 /\ y >= 0)
-                          (fun x y r γ => r = Z.gcd x y)
-        | msum       => ContractNone
-                          [ "x" ∶ ty_union either, "y" ∶ ty_union either] (ty_union either)
-        | @length σ  => ContractNoFail
-                          ["xs" ∶ ty_list σ ] ty_int
-                          (fun (xs : list (Lit σ)) γ => True)
-                          (fun (xs : list (Lit σ)) r γ => r = Z.of_nat (Datatypes.length xs))
-        end.
-
-    Definition CEnvEx : ContractEnvEx :=
-      fun σs τ f => match f with end.
-
-  End ExampleWLPContractKit.
-
-  Module ExampleWLP := WLP ExampleTermKit ExampleProgramKit ExampleWLPContractKit.
-  Import ExampleWLP.
-
-  Lemma gcd_sub_diag_l (n m : Z) : Z.gcd (n - m) m = Z.gcd n m.
-  Proof. now rewrite Z.gcd_comm, Z.gcd_sub_diag_r, Z.gcd_comm. Qed.
-
-  Ltac wlp_cbv :=
-    cbv [Blastable_Finite CEnv Forall ValidContract WLPCall WLP abstract blast
-         blastable_lit blastable_list env_lookup env_map env_update eval evals finite.enum
-         inctx_case_snoc snd uncurry eval_prop_true eval_prop_false eval_binop Datatypes.length
-         EqDecision_from_EqDec 𝑬𝑲_eq_dec 𝑬𝑲_finite Ordering_EqDec Ordering_finite fold_left].
-
-  Ltac validate_solve :=
-    repeat
-      (intros; subst;
-       rewrite ?Z.gcd_diag, ?Z.gcd_abs_l, ?Z.gcd_abs_r, ?Z.gcd_sub_diag_r,
-       ?gcd_sub_diag_l;
-       intuition (try lia)
-      ).
-
-  Lemma validCEnv : ValidContractEnv CEnv.
-  Proof. intros σs τ []; wlp_cbv; validate_solve. Qed.
-
-  Lemma validCEnvEx : ValidContractEnvEx CEnvEx.
-  Proof. intros σs τ []. Qed.
-
-End WLPContracts.
