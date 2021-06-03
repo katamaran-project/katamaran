@@ -57,7 +57,8 @@ Inductive Predicate : Set :=
   ptsreg
 | ptsto
 | safe
-| csafe.
+| csafe
+| subperm.
 
 Section TransparentObligations.
   Local Set Transparent Obligations.
@@ -80,6 +81,7 @@ Module Export MinCapsAssertionKit <:
     | ptsto => [ty_addr, ty_memval]
     | safe => [ty_word]
     | csafe => [ty_cap]
+    | subperm => [ty_perm, ty_perm]
     end.
   Instance 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
 End MinCapsAssertionKit.
@@ -98,6 +100,7 @@ Module MinCapsSymbolicContractKit <:
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_safe w := (asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ w)))).
   Local Notation asn_csafe c := (asn_chunk (chunk_user csafe (env_nil ► (ty_cap ↦ c)))).
+  Local Notation asn_subperm p p' := (asn_chunk (chunk_user subperm (env_nil ► (ty_perm ↦ p) ► (ty_perm ↦ p')))).
   Local Notation asn_match_cap c p b e a asn :=
     (asn_match_record
        capability c
@@ -385,6 +388,42 @@ Module MinCapsSymbolicContractKit <:
   (*
       @pre machInv;
       @post machInv;
+      bool exec_lea(lv : lv, hv : ty_hv) *)
+  Definition sep_contract_exec_lea : SepContract ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool :=
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "hv" ∶ ty_hv];
+       sep_contract_localstore      := [term_var "lv", term_var "hv"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_restrict(lv : lv, hv : ty_hv) *)
+  Definition sep_contract_exec_restrict : SepContract ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool :=
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "hv" ∶ ty_hv];
+       sep_contract_localstore      := [term_var "lv", term_var "hv"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
+      bool exec_restricti(lv : lv, immediate : Z) *)
+  Definition sep_contract_exec_restricti : SepContract ["lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool :=
+    {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "immediate" ∶ ty_int];
+       sep_contract_localstore      := [term_var "lv", term_var "immediate"]%arg;
+       sep_contract_precondition    := machInv;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := machInv;
+    |}.
+
+  (*
+      @pre machInv;
+      @post machInv;
       bool exec_addi(lv : lv, hv : hv, immediate : Z) *)
   Definition sep_contract_exec_addi : SepContract ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool :=
     {| sep_contract_logic_variables := ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int];
@@ -418,6 +457,44 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_postcondition   := asn_true;
     |}.
 
+  (*
+      @pre true;
+      @post true;
+      int perm_from_bits(i : Z) *)
+  Definition sep_contract_perm_from_bits : SepContract ["i" ∶ ty_int] ty_perm :=
+    {| sep_contract_logic_variables := ["i" ∶ ty_int];
+       sep_contract_localstore      := [term_var "i"]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result";
+       sep_contract_postcondition   := asn_true;
+    |}.
+
+  (*
+      @pre true;
+      @post if p <= p' then (result = true ✱ p ≤ p') else result = false;
+      int is_sub_perm(p : perm, p' : perm) *)
+  Definition sep_contract_is_sub_perm : SepContract ["p" ∶ ty_perm, "p'" ∶ ty_perm] ty_bool :=
+    {| sep_contract_logic_variables := ["p" ∶ ty_perm, "p'" ∶ ty_perm];
+       sep_contract_localstore      := [term_var "p", term_var "p'"]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_is_sub_perm";
+       sep_contract_postcondition   :=
+         asn_match_enum permission (term_var "p")
+                        (fun p => match p with
+                               | O => asn_eq (term_var "result_is_sub_perm") (term_lit ty_bool true) ✱ asn_subperm (term_var "p") (term_var "p'")
+                               | R => asn_match_enum permission (term_var "p'")
+                                                    (fun p' => match p' with
+                                                            | O => asn_eq (term_var "result_is_sub_perm") (term_lit ty_bool false)
+                                                            | _ => asn_eq (term_var "result_is_sub_perm") (term_lit ty_bool true) ✱ asn_subperm (term_var "p") (term_var "p'")
+                                                            end)
+                               | RW => asn_match_enum permission (term_var "p'")
+                                                    (fun p' => match p' with
+                                                            | RW => asn_eq (term_var "result_is_sub_perm") (term_lit ty_bool true) ✱ asn_subperm (term_var "p") (term_var "p'")
+                                                            | _ => asn_eq (term_var "result_is_sub_perm") (term_lit ty_bool false)
+                                                            end)
+                               end);
+    |}.
+  
   (*
       @pre machInv;
       @post machInv;
@@ -516,39 +593,44 @@ Module MinCapsSymbolicContractKit <:
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
-      | read_allowed  => Some sep_contract_read_allowed
-      | write_allowed => Some sep_contract_write_allowed
-      | upper_bound   => Some sep_contract_upper_bound
-      | within_bounds => Some sep_contract_within_bounds
-      | read_reg      => Some sep_contract_read_reg
-      | read_reg_cap  => Some sep_contract_read_reg_cap
-      | read_reg_num  => Some sep_contract_read_reg_num
-      | write_reg     => Some sep_contract_write_reg
-      | next_pc       => Some sep_contract_next_pc
-      | add_pc        => Some sep_contract_add_pc
-      | update_pc     => Some sep_contract_update_pc
-      | read_mem      => Some sep_contract_read_mem
-      | write_mem     => Some sep_contract_write_mem
-      | perm_to_bits  => Some sep_contract_perm_to_bits
-      | exec_jr       => Some sep_contract_exec_jr
-      | exec_jalr     => Some sep_contract_exec_jalr
-      | exec_j        => Some sep_contract_exec_j
-      | exec_jal      => Some sep_contract_exec_jal
-      | exec_bnez     => Some sep_contract_exec_bnez
-      | exec_mv       => Some sep_contract_exec_mv
-      | exec_ld       => Some sep_contract_exec_ld
-      | exec_sd       => Some sep_contract_exec_sd
-      | exec_addi     => Some sep_contract_exec_addi
-      | exec_add      => Some sep_contract_exec_add
-      | exec_getp     => Some sep_contract_exec_getp
-      | exec_getb     => Some sep_contract_exec_getb
-      | exec_gete     => Some sep_contract_exec_gete
-      | exec_geta     => Some sep_contract_exec_geta
-      | exec_ret      => Some sep_contract_exec_ret
-      | exec_instr    => Some sep_contract_exec_instr
-      | exec          => Some sep_contract_exec
-      | loop          => Some sep_contract_loop
-      | _             => None
+      | read_allowed   => Some sep_contract_read_allowed
+      | write_allowed  => Some sep_contract_write_allowed
+      | upper_bound    => Some sep_contract_upper_bound
+      | within_bounds  => Some sep_contract_within_bounds
+      | read_reg       => Some sep_contract_read_reg
+      | read_reg_cap   => Some sep_contract_read_reg_cap
+      | read_reg_num   => Some sep_contract_read_reg_num
+      | write_reg      => Some sep_contract_write_reg
+      | next_pc        => Some sep_contract_next_pc
+      | add_pc         => Some sep_contract_add_pc
+      | update_pc      => Some sep_contract_update_pc
+      | read_mem       => Some sep_contract_read_mem
+      | write_mem      => Some sep_contract_write_mem
+      | perm_to_bits   => Some sep_contract_perm_to_bits
+      | perm_from_bits => Some sep_contract_perm_from_bits
+      | is_sub_perm    => Some sep_contract_is_sub_perm
+      | exec_jr        => Some sep_contract_exec_jr
+      | exec_jalr      => Some sep_contract_exec_jalr
+      | exec_j         => Some sep_contract_exec_j
+      | exec_jal       => Some sep_contract_exec_jal
+      | exec_bnez      => Some sep_contract_exec_bnez
+      | exec_mv        => Some sep_contract_exec_mv
+      | exec_ld        => Some sep_contract_exec_ld
+      | exec_sd        => Some sep_contract_exec_sd
+      | exec_lea       => Some sep_contract_exec_lea
+      | exec_restrict  => Some sep_contract_exec_restrict
+      | exec_restricti => Some sep_contract_exec_restricti
+      | exec_addi      => Some sep_contract_exec_addi
+      | exec_add       => Some sep_contract_exec_add
+      | exec_getp      => Some sep_contract_exec_getp
+      | exec_getb      => Some sep_contract_exec_getb
+      | exec_gete      => Some sep_contract_exec_gete
+      | exec_geta      => Some sep_contract_exec_geta
+      | exec_ret       => Some sep_contract_exec_ret
+      | exec_instr     => Some sep_contract_exec_instr
+      | exec           => Some sep_contract_exec
+      | loop           => Some sep_contract_loop
+      | _              => None
       end.
 
   Lemma linted_cenv :
@@ -601,29 +683,48 @@ Module MinCapsSymbolicContractKit <:
          asn_csafe (sub_term c' sub_wk1);
     |}.
 
-  (* (* Old contract *)
-  (*   @pre ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ safe(c) ∧ (∃ a′. c′ = mkcap(b,e,a′,p)); *)
-  (*   @post safe(c) ∧ safe(c′) *)
-  (*   unit csafe_move_cursor(c c′ : capability); *)
-  (*  *) *)
-  (* Definition sep_contract_csafe_move_cursor : SepContract ["c" ∶ ty_cap, "c'" ∶ ty_cap] ty_unit := *)
-  (*   {| sep_contract_logic_variables := ["c" ∶ ty_cap, "c'" ∶ ty_cap]; *)
-  (*      sep_contract_localstore      := [term_var "c", term_var "c'"]%arg; *)
-  (*      sep_contract_precondition    := asn_csafe (term_var "c"); *)
-  (*      sep_contract_result          := "result_csafe_move_cursor"; *)
-  (*      sep_contract_postcondition   := *)
-  (*        asn_eq (term_var "result_csafe_move_cursor") (term_lit ty_unit tt) ✱ *)
-  (*               asn_csafe (term_var "c") ✱ *)
-  (*               asn_match_cap (term_var "c") "p" "b" "e" "_" *)
-  (*               (asn_exist "a" ty_addr *)
-  (*                          (asn_eq (term_var "c'") *)
-  (*                                  (term_record capability *)
-  (*                                               [term_var "p", *)
-  (*                                                term_var "b", *)
-  (*                                                term_var "e", *)
-  (*                                                term_var "a"]) ✱ *)
-  (*                                  asn_csafe (term_var "c'"))); *)
-  (*   |}. *)
+  (*
+    @pre c = mkcap(p,b,e,a) ✱ c' = mkcap(p',b,e,a) ✱ csafe(c) ✱ p' ≤ p
+    @post csafe(c) ✱ csafe(c')
+    unit csafe_sub_perm(c : capability, c' : capability);
+   *)
+  Definition sep_contract_csafe_sub_perm : SepContract ["c" ∶ ty_cap, "c'" ∶ ty_cap] ty_unit :=
+    let Σ : LCtx := ["p" ∶ ty_perm, "p'" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr, "a" ∶ ty_addr]%ctx in
+    let c  : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a"] in
+    let c' : Term Σ _ := term_record capability [term_var "p'", term_var "b", term_var "e", term_var "a"] in
+    {| sep_contract_logic_variables := Σ;
+       sep_contract_localstore      := [c, c']%arg;
+       sep_contract_precondition    :=
+         asn_csafe c ✱ asn_subperm (term_var "p'") (term_var "p");
+       sep_contract_result          := "result_csafe_sub_perm";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_csafe_sub_perm") (term_lit ty_unit tt) ✱
+         asn_csafe (sub_term c sub_wk1) ✱
+         asn_csafe (sub_term c' sub_wk1);
+    |}.
+
+  Definition sep_contract_sub_perm : SepContract ["p" ∶ ty_perm, "p'" ∶ ty_perm] ty_unit :=
+    {| sep_contract_logic_variables := ["p" ∶ ty_perm, "p'" ∶ ty_perm];
+       sep_contract_localstore      := [term_var "p", term_var "p'"]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_sub_perm";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_sub_perm") (term_lit ty_unit tt) ✱
+         asn_match_enum permission (term_var "p")
+                        (fun p => match p with
+                               | O => asn_subperm (term_var "p") (term_var "p'")
+                               | R => asn_match_enum permission (term_var "p'")
+                                                    (fun p' => match p' with
+                                                            | O => asn_true
+                                                            | _ => asn_subperm (term_var "p") (term_var "p'")
+                                                            end)
+                               | RW => asn_match_enum permission (term_var "p'")
+                                                    (fun p' => match p' with
+                                                            | RW => asn_subperm (term_var "p") (term_var "p'")
+                                                            | _ => asn_true
+                                                            end)
+                               end);
+    |}.
 
   (*
     @pre csafe(c)
@@ -754,9 +855,11 @@ Module MinCapsSymbolicContractKit <:
         | close_ptsreg r         => sep_contract_close_ptsreg r
         | duplicate_safe         => sep_contract_duplicate_safe
         | csafe_move_cursor      => sep_contract_csafe_move_cursor
+        | csafe_sub_perm         => sep_contract_csafe_sub_perm
         | lift_csafe             => sep_contract_lift_csafe
         | specialize_safe_to_cap => sep_contract_specialize_safe_to_cap
         | int_safe               => sep_contract_int_safe
+        | sub_perm               => sep_contract_sub_perm
         end
       end.
 
@@ -864,6 +967,12 @@ Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 Lemma valid_contract_perm_to_bits : ValidContractEvarEnv sep_contract_perm_to_bits fun_perm_to_bits.
 Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
+Lemma valid_contract_perm_from_bits : ValidContractEvarEnv sep_contract_perm_from_bits fun_perm_from_bits.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+
+Lemma valid_contract_is_sub_perm : ValidContractEvarEnv sep_contract_is_sub_perm fun_is_sub_perm.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+
 Lemma valid_contract_exec_jr : ValidContractEvarEnv sep_contract_exec_jr fun_exec_jr.
 Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
@@ -921,6 +1030,15 @@ Lemma valid_contract_exec_ld : ValidContractEvarEnv sep_contract_exec_ld fun_exe
 Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_sd : ValidContractEvarEnv sep_contract_exec_sd fun_exec_sd.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+
+Lemma valid_contract_exec_lea : ValidContractEvarEnv sep_contract_exec_lea fun_exec_lea.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+
+Lemma valid_contract_exec_restrict : ValidContractEvarEnv sep_contract_exec_restrict fun_exec_restrict.
+Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+
+Lemma valid_contract_exec_restricti : ValidContractEvarEnv sep_contract_exec_restricti fun_exec_restricti.
 Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_exec_addi : ValidContractEvarEnv sep_contract_exec_addi fun_exec_addi.

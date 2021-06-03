@@ -86,6 +86,8 @@ Module MinCapsTermKit <: TermKit.
   | compute_rv     : Fun ["rv" ∶ ty_rv] ty_word
   | compute_rv_num : Fun ["rv" ∶ ty_rv] ty_int
   | perm_to_bits   : Fun ["p" ∶ ty_perm] ty_int
+  | perm_from_bits : Fun ["i" ∶ ty_int] ty_perm
+  | is_sub_perm    : Fun ["p" ∶ ty_perm, "p'" ∶ ty_perm] ty_bool
   | exec_jr        : Fun ["lv" ∶ ty_lv] ty_bool
   | exec_jalr      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv ] ty_bool
   | exec_j         : Fun ["offset" ∶ ty_int] ty_bool
@@ -94,6 +96,9 @@ Module MinCapsTermKit <: TermKit.
   | exec_mv        : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_bool
   | exec_ld        : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
   | exec_sd        : Fun ["hv" ∶ ty_hv, "lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
+  | exec_lea       : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool
+  | exec_restrict  : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool
+  | exec_restricti : Fun ["lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
   | exec_addi      : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
   | exec_add       : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool
   | exec_getp      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
@@ -107,13 +112,15 @@ Module MinCapsTermKit <: TermKit.
   .
 
   Inductive FunGhost : Ctx (𝑿 * Ty) -> Set :=
-  | open_ptsreg : FunGhost ["reg" ∶ ty_enum regname]
+  | open_ptsreg                : FunGhost ["reg" ∶ ty_enum regname]
   | close_ptsreg (R : RegName) : FunGhost ctx_nil
-  | duplicate_safe : FunGhost ["w" ∶ ty_word]
-  | csafe_move_cursor : FunGhost ["c" ∶ ty_cap, "c'" ∶ ty_cap]
-  | lift_csafe : FunGhost ["c" ∶ ty_cap]
-  | specialize_safe_to_cap : FunGhost ["c" ∶ ty_cap]
-  | int_safe : FunGhost ["i" ∶ ty_int]
+  | duplicate_safe             : FunGhost ["w" ∶ ty_word]
+  | csafe_move_cursor          : FunGhost ["c" ∶ ty_cap, "c'" ∶ ty_cap]
+  | csafe_sub_perm             : FunGhost ["c" ∶ ty_cap, "c'" ∶ ty_cap]
+  | lift_csafe                 : FunGhost ["c" ∶ ty_cap]
+  | specialize_safe_to_cap     : FunGhost ["c" ∶ ty_cap]
+  | int_safe                   : FunGhost ["i" ∶ ty_int]
+  | sub_perm                   : FunGhost ["p" ∶ ty_perm, "p'" ∶ ty_perm]
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -270,17 +277,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     stm_lit ty_unit tt.
 
   Definition fun_read_allowed : Stm ["p" ∶ ty_perm] ty_bool :=
-    match: p in permission with
-    | R   => stm_lit ty_bool true
-    | RW  => stm_lit ty_bool true
-    | _   => stm_lit ty_bool false
-    end.
+    call is_sub_perm (exp_lit (ty_enum permission) R) (exp_var "p").
 
   Definition fun_write_allowed : Stm ["p" ∶ ty_perm] ty_bool :=
-    match: p in permission with
-    | RW  => stm_lit ty_bool true
-    | _   => stm_lit ty_bool false
-    end.
+    call is_sub_perm (exp_lit (ty_enum permission) RW) (exp_var "p").
 
   (* Definition fun_sub_perm : Stm ["p1" ∶ ty_perm, "p2" ∶ ty_perm] ty_bool := *)
   (*   match: p1 in permission with *)
@@ -365,6 +365,88 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
          call update_pc ;;
          stm_lit ty_bool true).
 
+    Definition fun_exec_lea : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool :=
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
+      let: "base_cap" ∶ cap  := call read_reg_cap (exp_var "lv") in
+      let: "offset" ∶ ty_int := call read_reg_num (exp_var "hv") in
+      stm_match_record
+        capability (exp_var "base_cap")
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "perm")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (let: "c" ∶ cap := exp_record capability
+                             [ exp_var "perm",
+                               exp_var "beg",
+                               exp_var "end",
+                               exp_var "cursor" + exp_var "offset"
+                             ] in
+         stm_call_external (ghost specialize_safe_to_cap) [exp_var "base_cap"]%arg ;;
+         stm_call_external (ghost csafe_move_cursor) [exp_var "base_cap", exp_var "c"]%arg ;;
+         stm_call_external (ghost lift_csafe) [exp_var "c"]%arg ;;
+         call write_reg (exp_var "lv") (exp_inr (exp_var "c")) ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
+
+    Definition fun_exec_restrict : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool :=
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
+      let: "c" ∶ cap  := call read_reg_cap (exp_var "lv") in
+      let: "n" ∶ ty_int := call read_reg_num (exp_var "hv") in
+      stm_match_record
+        capability (exp_var "c")
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "p")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (let: "p'" ∶ ty_perm := call perm_from_bits (exp_var "n") in
+         let: "le" ∶ ty_bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
+         stm_assert (exp_var "le") (lit_string "Err: [restrict] tried to increase permission") ;;
+         let: "c'" ∶ cap := exp_record capability
+                                      [ exp_var "p'",
+                                        exp_var "beg",
+                                        exp_var "end",
+                                        exp_var "cursor"
+                                      ] in
+         stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
+         stm_call_external (ghost csafe_sub_perm) [exp_var "c", exp_var "c'"]%arg ;;
+         stm_call_external (ghost lift_csafe) [exp_var "c'"]%arg ;;
+         call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
+
+    Definition fun_exec_restricti : Stm ["lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool :=
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+      let: "c" ∶ cap  := call read_reg_cap (exp_var "lv") in
+      let: "n" ∶ ty_int := exp_var "immediate" in
+      stm_match_record
+        capability (exp_var "c")
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+         "cap_permission" "p")
+         "cap_begin" "beg")
+         "cap_end" "end")
+         "cap_cursor" "cursor")
+        (let: "p'" ∶ ty_perm := call perm_from_bits (exp_var "n") in
+         stm_match_enum permission (exp_var "p") (fun _ => stm_lit ty_unit tt) ;;
+         stm_match_enum permission (exp_var "p'") (fun _ => stm_lit ty_unit tt) ;;
+         let: "le" ∶ ty_bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
+         stm_assert (exp_var "le") (lit_string "Err: [restricti] tried to increase permission") ;;
+         let: "c'" ∶ cap := exp_record capability
+                                      [ exp_var "p'",
+                                        exp_var "beg",
+                                        exp_var "end",
+                                        exp_var "cursor"
+                                      ] in
+         stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
+         stm_call_external (ghost csafe_sub_perm) [exp_var "c", exp_var "c'"]%arg ;;
+         stm_call_external (ghost lift_csafe) [exp_var "c'"]%arg ;;
+         call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
+
     Definition fun_exec_addi : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int ] ty_bool :=
       stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
       let: "v" ∶ ty_int := call read_reg_num (exp_var "hv") in
@@ -392,6 +474,32 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       | O => stm_lit ty_int 0%Z
       | R => stm_lit ty_int 1%Z
       | RW => stm_lit ty_int 2%Z
+      end.
+
+    Definition fun_perm_from_bits : Stm ["i" ∶ ty_int] ty_perm :=
+      if: exp_var "i" = (exp_lit ty_int 1%Z)
+      then stm_lit ty_perm R
+      else if: exp_var "i" = (exp_lit ty_int 2%Z)
+           then stm_lit ty_perm RW
+           else stm_lit ty_perm O.
+
+    Definition fun_is_sub_perm : Stm ["p" ∶ ty_perm, "p'" ∶ ty_perm] ty_bool :=
+      match: exp_var "p" in permission with
+      | O =>
+        stm_call_external (ghost sub_perm) [exp_var "p", exp_var "p'"]%arg ;;
+        stm_lit ty_bool true
+      | R => match: exp_var "p'" in permission with
+            | O => stm_lit ty_bool false
+            | _ =>
+              stm_call_external (ghost sub_perm) [exp_var "p", exp_var "p'"]%arg ;;
+              stm_lit ty_bool true
+            end
+      | RW => match: exp_var "p'" in permission with
+             | RW =>
+               stm_call_external (ghost sub_perm) [exp_var "p", exp_var "p'"]%arg ;;
+               stm_lit ty_bool true
+            | _ => stm_lit ty_bool false
+            end
       end.
 
     Definition fun_exec_getp : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
@@ -525,25 +633,28 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
         instruction (exp_var i)
         (fun K =>
            match K with
-           | kjr   => MkAlt (pat_var lv) (call exec_jr lv)
-           | kjalr => MkAlt (pat_pair "lv1" "lv2") (call exec_jalr (exp_var "lv1") (exp_var "lv2"))
-           | kj    => MkAlt (pat_var offset) (call exec_j offset)
-           | kjal  => MkAlt (pat_pair lv offset) (call exec_jal lv offset)
-           | kbnez => MkAlt (pat_pair lv immediate) (call exec_bnez lv immediate)
-           | kmv   => MkAlt (pat_pair lv hv) (call exec_mv lv hv)
-           | kld   => MkAlt (pat_tuple [lv , hv , immediate])
+           | kjr        => MkAlt (pat_var lv) (call exec_jr lv)
+           | kjalr      => MkAlt (pat_pair "lv1" "lv2") (call exec_jalr (exp_var "lv1") (exp_var "lv2"))
+           | kj         => MkAlt (pat_var offset) (call exec_j offset)
+           | kjal       => MkAlt (pat_pair lv offset) (call exec_jal lv offset)
+           | kbnez      => MkAlt (pat_pair lv immediate) (call exec_bnez lv immediate)
+           | kmv        => MkAlt (pat_pair lv hv) (call exec_mv lv hv)
+           | kld        => MkAlt (pat_tuple [lv , hv , immediate])
                             (call exec_ld (exp_var lv) (exp_var hv) (exp_var immediate))
-           | ksd   => MkAlt (pat_tuple [hv , lv , immediate])
+           | ksd        => MkAlt (pat_tuple [hv , lv , immediate])
                             (call exec_sd (exp_var hv) (exp_var lv) (exp_var immediate))
-           | kaddi => MkAlt (pat_tuple [lv , hv , immediate])
+           | klea       => MkAlt (pat_pair lv hv) (call exec_lea lv hv)
+           | krestrict  => MkAlt (pat_pair lv hv) (call exec_restrict lv hv)
+           | krestricti => MkAlt (pat_pair lv immediate) (call exec_restricti lv immediate)
+           | kaddi      => MkAlt (pat_tuple [lv , hv , immediate])
                             (call exec_addi (exp_var lv) (exp_var hv) (exp_var immediate))
-           | kadd  => MkAlt (pat_tuple ["lv1" , "lv2" , "lv3"])
+           | kadd       => MkAlt (pat_tuple ["lv1" , "lv2" , "lv3"])
                             (call exec_add (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
-           | kgetp => MkAlt (pat_pair lv lv) (call exec_getp lv lv)
-           | kgetb => MkAlt (pat_pair lv lv) (call exec_getb lv lv)
-           | kgete => MkAlt (pat_pair lv lv) (call exec_gete lv lv)
-           | kgeta => MkAlt (pat_pair lv lv) (call exec_geta lv lv)
-           | kret  => MkAlt pat_unit (call exec_ret)
+           | kgetp      => MkAlt (pat_pair lv lv) (call exec_getp lv lv)
+           | kgetb      => MkAlt (pat_pair lv lv) (call exec_getb lv lv)
+           | kgete      => MkAlt (pat_pair lv lv) (call exec_gete lv lv)
+           | kgeta      => MkAlt (pat_pair lv lv) (call exec_geta lv lv)
+           | kret       => MkAlt pat_unit (call exec_ret)
            end).
 
     Definition fun_read_mem : Stm ["c" ∶ ty_cap] ty_memval :=
@@ -609,6 +720,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     | upper_bound    => fun_upper_bound
     | within_bounds  => fun_within_bounds
     | perm_to_bits   => fun_perm_to_bits
+    | perm_from_bits => fun_perm_from_bits
+    | is_sub_perm    => fun_is_sub_perm
     | exec_jr        => fun_exec_jr
     | exec_jalr      => fun_exec_jalr
     | exec_j         => fun_exec_j
@@ -617,6 +730,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     | exec_mv        => fun_exec_mv
     | exec_ld        => fun_exec_ld
     | exec_sd        => fun_exec_sd
+    | exec_lea       => fun_exec_lea
+    | exec_restrict  => fun_exec_restrict
+    | exec_restricti => fun_exec_restricti
     | exec_addi      => fun_exec_addi
     | exec_add       => fun_exec_add
     | exec_getp      => fun_exec_getp

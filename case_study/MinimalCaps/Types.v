@@ -48,27 +48,28 @@ Definition HV : Set := RegName.
 Definition RV : Set := LV + Z.
 
 Inductive Instruction : Set :=
-| jr       (lv : LV)
-| jalr     (lv1 : LV) (lv2 : LV)
-| j        (offset : Z)
-| jal      (lv : LV) (offset : Z)
-| bnez     (lv : LV) (immediate : Z)
-| mv       (lv : LV) (hv : HV)
-| ld       (lv : LV) (hv : HV) (immediate : Z)
-| sd       (hv : HV) (lv : LV) (immediate : Z)
-| addi     (lv : LV) (hv : HV) (immediate : Z)
-| add      (lv1 : LV) (lv2 : LV) (lv3 : LV)
+| jr        (lv : LV)
+| jalr      (lv1 : LV) (lv2 : LV)
+| j         (offset : Z)
+| jal       (lv : LV) (offset : Z)
+| bnez      (lv : LV) (immediate : Z)
+| mv        (lv : LV) (hv : HV)
+| ld        (lv : LV) (hv : HV) (immediate : Z)
+| sd        (hv : HV) (lv : LV) (immediate : Z)
+| addi      (lv : LV) (hv : HV) (immediate : Z)
+| add       (lv1 : LV) (lv2 : LV) (lv3 : LV)
 (* | lt       (lv : LV) (rv1 rv2 : RV) *)
 (* | plus     (lv : LV) (rv1 rv2 : RV) *)
 (* | minus    (lv : LV) (rv1 rv2 : RV) *)
-(* | lea      (lv : LV) (rv : RV) *)
-(* | restrict (lv : LV) (rv : RV) *)
+| lea       (lv : LV) (hv : HV)
+| restrict  (lv : LV) (hv : HV)
+| restricti (lv : LV) (immediate : Z)
 (* | subseg   (lv : LV) (rv1 rv2 : RV) *)
 (* | isptr    (lv : LV) (rv : RV) *)
-| getp     (lv lv' : LV)
-| getb     (lv lv' : LV)
-| gete     (lv lv' : LV)
-| geta     (lv lv' : LV)
+| getp      (lv lv' : LV)
+| getb      (lv lv' : LV)
+| gete      (lv lv' : LV)
+| geta      (lv lv' : LV)
 (* | fail *)
 | ret.
 
@@ -86,8 +87,9 @@ Inductive InstructionConstructor : Set :=
 (* | klt *)
 (* | kplus *)
 (* | kminus *)
-(* | klea *)
-(* | krestrict *)
+| klea
+| krestrict
+| krestricti
 (* | ksubseg *)
 (* | kisptr *)
 | kgetp
@@ -176,7 +178,7 @@ Section Finite.
 
   Global Program Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjr;kjalr;kj;kjal;kbnez;kmv;kld;ksd;kaddi;kadd;kgetp;kgetb;kgete;kgeta;kret] |}.
+    {| enum := [kjr;kjalr;kj;kjal;kbnez;kmv;kld;ksd;klea;krestrict;krestricti;kaddi;kadd;kgetp;kgetb;kgete;kgeta;kret] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.

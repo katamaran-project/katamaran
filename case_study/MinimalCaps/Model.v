@@ -264,12 +264,26 @@ Module MinCapsModel.
 
     Import EnvNotations.
 
+    Definition MinCaps_subperm {Σ} (p p' : Permission) : iProp Σ :=
+      match p with
+      | O => True
+      | R => match p' with
+            | O => False
+            | _ => True
+            end
+      | RW => match p' with
+             | RW => True
+             | _ => False
+             end
+      end.
+
     Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
       (match p return Env Lit (MinCapsAssertionKit.𝑷_Ty p) -> iProp Σ with
       | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
       | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head (env_tail ts)) (DfracOwn 1) (env_head ts)
       | safe => fun ts => MinCaps_safe (mG := mG) (env_head ts)
       | csafe => fun ts => MinCaps_safe (mG := mG) (inr (env_head ts))
+      | subperm => fun ts => MinCaps_subperm (env_head (env_tail ts)) (env_head ts) 
       end) ts.
 
     Global Instance MinCaps_safe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (w : leibnizO MemVal) : Persistent (MinCaps_safe (mG := mG) w).
@@ -541,7 +555,7 @@ Module MinCapsModel.
       by iFrame.
   Qed.
 
-  Lemma csafe_move_cursor_safe_sound `{sg : sailG Σ} {Γ es δ} :
+  Lemma csafe_move_cursor_sound `{sg : sailG Σ} {Γ es δ} :
     forall p b e a a',
       evals es δ = env_snoc
                      (env_snoc env_nil (_ , ty_cap)
@@ -601,6 +615,68 @@ Module MinCapsModel.
     destruct p; auto.
   Qed.
 
+  Lemma csafe_sub_perm_sound `{sg : sailG Σ} {Γ es δ} :
+    forall p p' b e a,
+      evals es δ = env_snoc
+                     (env_snoc env_nil (_ , ty_cap)
+                               {| cap_permission := p;
+                                  cap_begin := b;
+                                  cap_end := e;
+                                  cap_cursor := a |})
+                     (_ , ty_cap)
+                     {| cap_permission := p';
+                        cap_begin := b;
+                        cap_end := e;
+                        cap_cursor := a |}
+      → ⊢ semTriple δ
+          (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
+                                            (inr {|
+                                              cap_permission := p;
+                                              cap_begin := b;
+                                              cap_end := e;
+                                              cap_cursor := a |})
+          ∗ MinCapsIrisHeapKit.MinCaps_subperm p' p)
+          (stm_call_external (ghost csafe_sub_perm) es)
+          (λ (v0 : ()) (δ' : LocalStore Γ),
+           (((⌜v0 = tt⌝ ∧ emp)
+               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
+               (inr {| cap_permission := p;
+                  cap_begin := b;
+                  cap_end := e;
+                  cap_cursor := a |}))
+              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
+              (inr {| cap_permission := p';
+                      cap_begin := b;
+                      cap_end := e;
+                      cap_cursor := a |})) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (p p' b e a Heq) "[#Hcsafe Hp]".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in H.
+    dependent elimination H.
+    dependent elimination s.
+    rewrite Heq in e1.
+    cbn in e1.
+    dependent elimination e1.
+    do 2 iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; trivial.
+    iApply wp_value.
+    cbn.
+    iSplitL; trivial.
+    iSplitR "Hp"; trivial.
+    iSplitL; trivial.
+    do 2 rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq.
+    destruct p; destruct p'; trivial.
+  Qed.
+
   Ltac destruct_SymInstance :=
     repeat (match goal with
     | H : Env _ (ctx_snoc _ _) |- _ => destruct (snocView H)
@@ -609,11 +685,11 @@ Module MinCapsModel.
 
   Lemma foreignSem `{sg : sailG Σ} : ForeignSem (Σ := Σ).
     intros Γ τ Δ f es δ.
-    destruct f as [_|_|_|Γ' [ | reg | | | | | ] es δ'];
+    destruct f as [_|_|_|Γ' [ | reg | | | | | | | ] es δ'];
       cbn - [MinCapsIrisHeapKit.MinCaps_safe MinCapsIrisHeapKit.MinCaps_csafe];
       intros ι;
       destruct_SymInstance;
-      eauto using dI_sound, open_ptsreg_sound, close_ptsreg_sound, int_safe_sound, lift_csafe_sound, specialize_safe_to_cap_sound, duplicate_safe_sound, csafe_move_cursor_safe_sound.
+      eauto using dI_sound, open_ptsreg_sound, close_ptsreg_sound, int_safe_sound, lift_csafe_sound, specialize_safe_to_cap_sound, duplicate_safe_sound, csafe_move_cursor_sound, csafe_sub_perm_sound.
     - (* rM *)
       rename v into e.
       rename v0 into b.
@@ -782,6 +858,32 @@ Module MinCapsModel.
       + iSplitL; trivial.
         iApply wp_value; cbn; trivial;
           repeat (iSplitL; trivial).
+    - (* sub_perm *)
+      rename v into p.
+      rename v0 into p'.
+      iIntros (Heq) "_".
+      rewrite wp_unfold.
+      iIntros (σ' ks1 ks n) "Hregs".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; first by intuition.
+      iIntros (e2 σ'' efs) "%".
+      cbn in H.
+      dependent elimination H.
+      dependent elimination s.
+      rewrite Heq in e0.
+      cbn in e0.
+      dependent elimination e0.
+      do 2 iModIntro.
+      iMod "Hclose" as "_".
+      iModIntro.
+      iFrame.
+      iSplitL; trivial.
+      iApply wp_value.
+      cbn.
+      iSplitL; trivial.
+      iSplitL; trivial.
+      destruct p'; destruct p; trivial.
   Qed.
 
   (* TODO: fix 

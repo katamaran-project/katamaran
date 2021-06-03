@@ -60,29 +60,30 @@ Module MinCapsValueKit <: ValueKit.
     match U with
     | instruction => fun K =>
       match K with
-      | kjr       => ty_lv
-      | kjalr     => ty_prod ty_lv ty_lv
-      | kj        => ty_int
-      | kjal      => ty_prod ty_lv ty_int
-      | kbnez     => ty_prod ty_lv ty_int
-      | kmv       => ty_prod ty_lv ty_hv
-      | kld       => ty_tuple [ty_lv, ty_hv, ty_int]
-      | ksd       => ty_tuple [ty_hv, ty_lv, ty_int]
-      | kaddi     => ty_tuple [ty_lv, ty_hv, ty_int]
-      | kadd      => ty_tuple [ty_lv, ty_lv, ty_lv]
+      | kjr        => ty_lv
+      | kjalr      => ty_prod ty_lv ty_lv
+      | kj         => ty_int
+      | kjal       => ty_prod ty_lv ty_int
+      | kbnez      => ty_prod ty_lv ty_int
+      | kmv        => ty_prod ty_lv ty_hv
+      | kld        => ty_tuple [ty_lv, ty_hv, ty_int]
+      | ksd        => ty_tuple [ty_hv, ty_lv, ty_int]
+      | kaddi      => ty_tuple [ty_lv, ty_hv, ty_int]
+      | kadd       => ty_tuple [ty_lv, ty_lv, ty_lv]
       (* | klt       => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
       (* | kplus     => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
       (* | kminus    => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
-      (* | klea      => ty_prod ty_lv ty_rv *)
-      (* | krestrict => ty_prod ty_lv ty_rv *)
+      | klea       => ty_prod ty_lv ty_hv
+      | krestrict  => ty_prod ty_lv ty_hv
+      | krestricti => ty_prod ty_lv ty_int
       (* | ksubseg   => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
       (* | kisptr    => ty_prod ty_lv ty_rv *)
-      | kgetp     => ty_prod ty_lv ty_lv
-      | kgetb     => ty_prod ty_lv ty_lv
-      | kgete     => ty_prod ty_lv ty_lv
-      | kgeta     => ty_prod ty_lv ty_lv
+      | kgetp      => ty_prod ty_lv ty_lv
+      | kgetb      => ty_prod ty_lv ty_lv
+      | kgete      => ty_prod ty_lv ty_lv
+      | kgeta      => ty_prod ty_lv ty_lv
       (* | kfail     => ty_unit *)
-      | kret      => ty_unit
+      | kret       => ty_unit
       end
     end.
 
@@ -103,8 +104,9 @@ Module MinCapsValueKit <: ValueKit.
       (* | existT klt       (lv , (rv1 , rv2)) => lt lv rv1 rv2 *)
       (* | existT kplus     (lv , (rv1 , rv2)) => plus lv rv1 rv2 *)
       (* | existT kminus    (lv , (rv1 , rv2)) => minus lv rv1 rv2 *)
-      (* | existT klea      (lv , rv)          => lea lv rv *)
-      (* | existT krestrict (lv , rv)          => restrict lv rv *)
+      | existT klea      (lv , hv)                  => lea lv hv
+      | existT krestrict (lv , hv)                  => restrict lv hv
+      | existT krestricti (lv , immediate)          => restricti lv immediate
       (* | existT ksubseg   (lv , (rv1 , rv2)) => subseg lv rv1 rv2 *)
       (* | existT kisptr    (lv , rv)          => isptr lv rv *)
       | existT kgetp     (lv , lv')         => getp lv lv'
@@ -119,29 +121,30 @@ Module MinCapsValueKit <: ValueKit.
     match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Lit (𝑼𝑲_Ty u K)}) with
     | instruction => fun Kv =>
       match Kv with
-      | jr  lv             => existT kjr   lv
-      | jalr lv1 lv2       => existT kjalr (lv1 , lv2)
-      | j offset           => existT kj    offset
-      | jal lv offset      => existT kjal  (lv , offset)
-      | bnez lv immediate  => existT kbnez (lv , immediate)
-      | mv lv hv           => existT kmv   (lv , hv)
-      | ld lv hv immediate => existT kld   (tt , lv , hv , immediate)
-      | sd hv lv immediate => existT ksd   (tt , hv , lv , immediate)
-      | addi lv hv immediate => existT kaddi (tt , lv , hv , immediate)
-      | add lv1 lv2 lv3      => existT kadd (tt , lv1 , lv2 , lv3)
+      | jr  lv                   => existT kjr   lv
+      | jalr lv1 lv2             => existT kjalr (lv1 , lv2)
+      | j offset                 => existT kj    offset
+      | jal lv offset            => existT kjal  (lv , offset)
+      | bnez lv immediate        => existT kbnez (lv , immediate)
+      | mv lv hv                 => existT kmv   (lv , hv)
+      | ld lv hv immediate       => existT kld   (tt , lv , hv , immediate)
+      | sd hv lv immediate       => existT ksd   (tt , hv , lv , immediate)
+      | addi lv hv immediate     => existT kaddi (tt , lv , hv , immediate)
+      | add lv1 lv2 lv3          => existT kadd (tt , lv1 , lv2 , lv3)
       (* | lt lv rv1 rv2     => existT klt       (lv , (rv1 , rv2)) *)
       (* | plus lv rv1 rv2   => existT kplus     (lv , (rv1 , rv2)) *)
       (* | minus lv rv1 rv2  => existT kminus    (lv , (rv1 , rv2)) *)
-      (* | lea lv rv         => existT klea      (lv , rv) *)
-      (* | restrict lv rv    => existT krestrict (lv , rv) *)
+      | lea lv hv                => existT klea      (lv , hv)
+      | restrict lv hv           => existT krestrict (lv , hv)
+      | restricti lv immediate   => existT krestricti (lv , immediate)
       (* | subseg lv rv1 rv2 => existT ksubseg   (lv , (rv1 , rv2)) *)
       (* | isptr lv rv       => existT kisptr    (lv , rv) *)
-      | getp lv lv'       => existT kgetp     (lv , lv')
-      | getb lv lv'       => existT kgetb     (lv , lv')
-      | gete lv lv'       => existT kgete     (lv , lv')
-      | geta lv lv'       => existT kgeta     (lv , lv')
+      | getp lv lv'              => existT kgetp     (lv , lv')
+      | getb lv lv'              => existT kgetb     (lv , lv')
+      | gete lv lv'              => existT kgete     (lv , lv')
+      | geta lv lv'              => existT kgeta     (lv , lv')
       (* | fail              => existT kfail     tt *)
-      | ret                => existT kret  tt
+      | ret                      => existT kret  tt
       end
     end.
   Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
