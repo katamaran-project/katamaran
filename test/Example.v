@@ -303,10 +303,10 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
   Definition write_write := generic_write_write.
 
   Definition Memory : Set := unit.
-  Definition ExternalCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs)
+  Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs)
     (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop := False.
-  Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
-    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof. destruct f. Qed.
 
 End ExampleProgramKit.

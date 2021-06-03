@@ -99,8 +99,8 @@ End TermKit.
 
 Module Terms (Export termkit : TermKit).
 
-  Definition LocalStore (Γ : PCtx) : Set := NamedEnv Lit Γ.
-  Bind Scope env_scope with LocalStore.
+  Definition CStore (Γ : PCtx) : Set := NamedEnv Lit Γ.
+  Bind Scope env_scope with CStore.
 
   Section BinaryOperations.
 
@@ -332,7 +332,7 @@ Module Terms (Export termkit : TermKit).
       | binop_bvcons    => fun b bs => Word.WS (Bit_eqb b bitone) bs
       end.
 
-    Fixpoint eval {Γ : PCtx} {σ : Ty} (e : Exp Γ σ) (δ : LocalStore Γ) {struct e} : Lit σ :=
+    Fixpoint eval {Γ : PCtx} {σ : Ty} (e : Exp Γ σ) (δ : CStore Γ) {struct e} : Lit σ :=
       match e in (Exp _ t) return (Lit t) with
       | exp_var x           => δ ‼ x
       | exp_lit _ l         => l
@@ -364,7 +364,7 @@ Module Terms (Export termkit : TermKit).
       (* | exp_projrec e rf    => 𝑹_unfold (eval e δ) ‼ rf *)
       end.
 
-    Definition evals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : LocalStore Γ) : LocalStore Δ :=
+    Definition evals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ) : CStore Δ :=
       env_map (fun xτ e => eval e δ) es.
 
   End Expressions.
@@ -401,11 +401,11 @@ Module Terms (Export termkit : TermKit).
     | stm_lit           (l : Lit τ)
     | stm_exp           (e : Exp Γ τ)
     | stm_let           (x : 𝑿) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (Γ ▻ (x::σ)) τ)
-    | stm_block         (Δ : PCtx) (δ : LocalStore Δ) (s : Stm (Γ ▻▻ Δ) τ)
+    | stm_block         (Δ : PCtx) (δ : CStore Δ) (s : Stm (Γ ▻▻ Δ) τ)
     | stm_assign        (x : 𝑿) {xInΓ : x::τ ∈ Γ} (s : Stm Γ τ)
     | stm_call          {Δ : PCtx} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
-    | stm_call_frame    (Δ : PCtx) (δ : LocalStore Δ) (s : Stm Δ τ)
-    | stm_call_external {Δ : PCtx} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+    | stm_call_frame    (Δ : PCtx) (δ : CStore Δ) (s : Stm Δ τ)
+    | stm_foreign       {Δ : PCtx} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
     | stm_if            (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
     | stm_seq           {σ : Ty} (s : Stm Γ σ) (k : Stm Γ τ)
     | stm_assertk       (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
@@ -456,11 +456,11 @@ Module Terms (Export termkit : TermKit).
     (*   Hypothesis (P_lit   : forall (Γ : PCtx) (τ : Ty) (l : Lit τ), P (stm_lit Γ l)). *)
     (*   Hypothesis (P_exp  : forall (Γ : PCtx) (τ : Ty) (e : Exp Γ τ), P (stm_exp e)). *)
     (*   Hypothesis (P_let  : forall (Γ : PCtx) (x : 𝑿) (τ : Ty) (s : Stm Γ τ) (σ : Ty) (k : Stm (Γ ▻ (x ∶ τ)%ctx) σ), P s -> P k -> P (stm_let s k)). *)
-    (*   Hypothesis (P_block : forall (Γ Δ : PCtx) (δ : LocalStore Δ) (σ : Ty) (k : Stm (Γ ▻▻ Δ) σ), P k -> P (stm_block Γ δ k)). *)
+    (*   Hypothesis (P_block : forall (Γ Δ : PCtx) (δ : CStore Δ) (σ : Ty) (k : Stm (Γ ▻▻ Δ) σ), P k -> P (stm_block Γ δ k)). *)
     (*   Hypothesis (P_assign : forall (Γ : PCtx) (x : 𝑿) (τ : Ty) (xInΓ : (x ∶ τ)%ctx ∈ Γ) (e : Stm Γ τ), P e -> P (stm_assign e)). *)
     (*   Hypothesis (P_call  : forall (Γ Δ : PCtx) (σ : Ty) (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call f es)). *)
-    (*   Hypothesis (P_call_frame  : forall (Γ Δ : PCtx) (δ : LocalStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call_frame Γ δ s)). *)
-    (*   Hypothesis (P_call_external  : forall (Γ Δ : PCtx) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call_external f es)). *)
+    (*   Hypothesis (P_call_frame  : forall (Γ Δ : PCtx) (δ : CStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call_frame Γ δ s)). *)
+    (*   Hypothesis (P_foreign  : forall (Γ Δ : PCtx) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_foreign f es)). *)
     (*   Hypothesis (P_if  : forall (Γ : PCtx) (τ : Ty) (e : Exp Γ ty_bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)). *)
     (*   Hypothesis (P_seq  : forall (Γ : PCtx) (τ : Ty) (e : Stm Γ τ) (σ : Ty) (k : Stm Γ σ), P e -> P k -> P (stm_seq e k)). *)
     (*   Hypothesis (P_assert  : forall (Γ : PCtx) (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string), P (stm_assert e1 e2)). *)
@@ -496,7 +496,7 @@ Module Terms (Export termkit : TermKit).
     (*     | stm_assign _            => ltac:(apply P_assign; auto) *)
     (*     | stm_call _ _            => ltac:(apply P_call; auto) *)
     (*     | stm_call_frame _ _ _    => ltac:(apply P_call_frame; auto) *)
-    (*     | stm_call_external _ _   => ltac:(apply P_call_external; auto) *)
+    (*     | stm_foreign _ _         => ltac:(apply P_foreign; auto) *)
     (*     | stm_if _ _ _            => ltac:(apply P_if; auto) *)
     (*     | stm_seq _ _             => ltac:(apply P_seq; auto) *)
     (*     | stm_assert _ _          => ltac:(apply P_assert; auto) *)
@@ -525,7 +525,7 @@ Module Terms (Export termkit : TermKit).
     Global Arguments stm_assign {Γ τ} x {xInΓ} s%exp.
     Global Arguments stm_call {Γ τ Δ} f _%arg.
     Global Arguments stm_call_frame {Γ τ Δ} δ s%exp.
-    Global Arguments stm_call_external {Γ τ Δ} f _%arg.
+    Global Arguments stm_foreign {Γ τ Δ} f _%arg.
     Global Arguments stm_if {Γ τ} e%exp s1%exp s2%exp.
     Global Arguments stm_seq {Γ τ σ} s%exp k%exp.
     Global Arguments stm_assertk {Γ τ} e1%exp e2%exp k%exp.
@@ -1887,10 +1887,10 @@ Module Terms (Export termkit : TermKit).
       SubstEnv.
     Global Instance substlaws_localstore {Γ} : SubstLaws (SStore Γ) :=
       SubstLawsEnv.
-    Global Program Instance inst_localstore {Γ} : Inst (SStore Γ) (LocalStore Γ) :=
+    Global Program Instance inst_localstore {Γ} : Inst (SStore Γ) (CStore Γ) :=
       instantiate_env.
 
-    Global Instance instlaws_localstore {Γ} : InstLaws (SStore Γ) (LocalStore Γ).
+    Global Instance instlaws_localstore {Γ} : InstLaws (SStore Γ) (CStore Γ).
     Proof. apply instantiatelaws_env. Qed.
 
     Lemma subst_lookup {Γ Σ Σ' x σ} (xInΓ : (x::σ)%ctx ∈ Γ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :
@@ -2278,15 +2278,15 @@ Module Terms (Export termkit : TermKit).
   Notation "'call' f a1 .. an" :=
     (stm_call f (env_snoc .. (env_snoc env_nil (_ :: _) a1%exp) .. (_ :: _) an%exp))
     (at level 10, f global, a1, an at level 9) : exp_scope.
-  Notation "'callex' f a1 .. an" :=
-    (stm_call_external f (env_snoc .. (env_snoc env_nil (_ :: _) a1%exp) .. (_ :: _) an%exp))
+  Notation "'foreign' f a1 .. an" :=
+    (stm_foreign f (env_snoc .. (env_snoc env_nil (_ :: _) a1%exp) .. (_ :: _) an%exp))
     (at level 10, f global, a1, an at level 9) : exp_scope.
 
   Notation "'call' f" :=
     (stm_call f env_nil)
     (at level 10, f global) : exp_scope.
-  Notation "'callex' f" :=
-    (stm_call_external f env_nil)
+  Notation "'foreign' f" :=
+    (stm_foreign f env_nil)
     (at level 10, f global) : exp_scope.
 
   Notation "s1 ;; s2" := (stm_seq s1 s2) : exp_scope.
@@ -2334,16 +2334,16 @@ Module Type ProgramKit (termkit : TermKit).
      with an error message msg (res = inl msg) or a successful computation with
      a result value v (res = inr v).
    *)
-  Parameter ExternalCall :
+  Parameter ForeignCall :
     forall
       {Δ σ} (f : 𝑭𝑿 Δ σ)
-      (args : LocalStore Δ)
+      (args : CStore Δ)
       (res  : string + Lit σ)
       (γ γ' : RegStore)
       (μ μ' : Memory), Prop.
-  Parameter ExternalProgress :
-    forall {Δ σ} (f : 𝑭𝑿 Δ σ) (args : LocalStore Δ) γ μ,
-    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+  Parameter ForeignProgress :
+    forall {Δ σ} (f : 𝑭𝑿 Δ σ) (args : CStore Δ) γ μ,
+    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
 
   (* Bind Scope env_scope with Memory. *)
   (* Parameter read_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹), Lit ty_int. *)

@@ -645,10 +645,10 @@ Module CapProgramKit <: (ProgramKit CapTermKit).
              γ γ μ (fun_wM μ addr val)
   .
 
-  Definition ExternalCall := @CallEx.
+  Definition ForeignCall := @CallEx.
 
-  Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
-    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof. destruct f; cbn; repeat depelim args; repeat eexists; constructor. Qed.
 
 End CapProgramKit.

@@ -48,7 +48,7 @@ Module Inversion
   Section StepInversionFinal.
 
     Lemma step_inversion_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-          {δ1 δ3 : LocalStore Γ}
+          {δ1 δ3 : CStore Γ}
           {s : Stm Γ τ} {k : Stm (ctx_snoc Γ (x :: τ)) σ} {t : Stm Γ σ} (final : Final s)
           (step : ⟨ γ1, μ1, δ1, stm_let x τ s k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\
@@ -63,8 +63,8 @@ Module Inversion
     Qed.
 
     Lemma step_inversion_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-          {δ1 δ3 : LocalStore Γ}
-          {δ : LocalStore Δ} {k : Stm (Γ ▻▻ Δ) σ} {t : Stm Γ σ} (final : Final k)
+          {δ1 δ3 : CStore Γ}
+          {δ : CStore Δ} {k : Stm (Γ ▻▻ Δ) σ} {t : Stm Γ σ} (final : Final k)
           (step : ⟨ γ1, μ1, δ1, stm_block δ k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\
       ((exists msg, k = stm_fail _ msg /\ t = stm_fail _ msg) \/
@@ -79,7 +79,7 @@ Module Inversion
     Qed.
 
     Lemma step_inversion_seq {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-          {δ1 δ3 : LocalStore Γ}
+          {δ1 δ3 : CStore Γ}
           {s1 : Stm Γ τ} {s2 : Stm Γ σ} {t : Stm Γ σ} (final : Final s1)
           (step : ⟨ γ1, μ1, δ1, stm_seq s1 s2 ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ3 = μ1 /\ δ3 = δ1 /\
@@ -93,8 +93,8 @@ Module Inversion
       - intuition. left. eexists. intuition.
     Qed.
 
-    Lemma step_inversion_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
-          (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final k)
+    Lemma step_inversion_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
+          (δΔ : CStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final k)
           (step : ⟨ γ1, μ1, δ1, stm_call_frame δΔ k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ3 = μ1 /\ δ3 = δ1 /\
       ((exists msg, k = stm_fail _ msg /\ t = stm_fail _ msg) \/
@@ -107,7 +107,7 @@ Module Inversion
       - intuition. left. eexists. intuition.
     Qed.
 
-    Lemma step_inversion_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+    Lemma step_inversion_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
           {x : 𝑿} {xInΓ : x :: σ ∈ Γ} {s1 t : Stm Γ σ} (final : Final s1)
           (step : ⟨ γ1, μ1, δ1, stm_assign x s1 ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ3 = μ1 /\
@@ -121,7 +121,7 @@ Module Inversion
       - dependent elimination s13; cbn in *; try contradiction.
     Qed.
 
-    Lemma step_inversion_bind {Γ σ τ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+    Lemma step_inversion_bind {Γ σ τ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
           {s : Stm Γ σ} {k : Lit σ -> Stm Γ τ} {t : Stm Γ τ} (final : Final s)
           (step : ⟨ γ1, μ1, δ1, stm_bind s k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ3 = μ1 /\ δ3 = δ1 /\
@@ -138,7 +138,7 @@ Module Inversion
   End StepInversionFinal.
 
   Lemma steps_inversion_lit {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : LocalStore Γ} {v : Lit σ} (t : Stm Γ σ)
+    {δ1 δ3 : CStore Γ} {v : Lit σ} (t : Stm Γ σ)
     (steps : ⟨ γ1, μ1, δ1, stm_lit σ v ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_lit σ v.
   Proof.
@@ -148,7 +148,7 @@ Module Inversion
   Qed.
 
   Lemma steps_inversion_fail {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : LocalStore Γ} {msg : String.string} (t : Stm Γ σ)
+    {δ1 δ3 : CStore Γ} {msg : String.string} (t : Stm Γ σ)
     (steps : ⟨ γ1, μ1, δ1, stm_fail σ msg ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_fail σ msg.
   Proof.
@@ -158,7 +158,7 @@ Module Inversion
   Qed.
 
   Lemma steps_inversion_exp {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : LocalStore Γ}
+    {δ1 δ3 : CStore Γ}
     {e : Exp Γ σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_exp e ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_lit σ (eval e δ1).
@@ -171,7 +171,7 @@ Module Inversion
   Qed.
 
   Lemma steps_inversion_read_register {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : LocalStore Γ}
+    {δ1 δ3 : CStore Γ}
     {r} {t : Stm Γ σ}
     (step : ⟨ γ1, μ1, δ1, stm_read_register r ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
     γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_lit σ (read_register γ1 r).
@@ -180,7 +180,7 @@ Module Inversion
   Qed.
 
   Lemma steps_inversion_write_register {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : LocalStore Γ}
+    {δ1 δ3 : CStore Γ}
     {r} {t : Stm Γ σ} {e}
     (step : ⟨ γ1, μ1, δ1, stm_write_register r e ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
     γ3 = write_register γ1 r (eval e δ1) /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_lit σ (eval e δ1).
@@ -254,10 +254,10 @@ Module Inversion
       ].
 
   Lemma steps_inversion_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : LocalStore Γ}
+    {δ1 δ3 : CStore Γ}
     {s1 : Stm Γ τ} {s2 : Stm (ctx_snoc Γ (x::τ)) σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_let x τ s1 s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
-    exists (γ2 : RegStore) (μ2 : Memory) (δ2 : LocalStore Γ) (s1' : Stm Γ τ),
+    exists (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s1' : Stm Γ τ),
       ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s1' ⟩ /\ Final s1' /\
       exists (s0 : Stm Γ σ),
           ⟨ γ2, μ2, δ2, stm_let x τ s1' s2 ⟩ ---> ⟨ γ2, μ2, δ2, s0 ⟩ /\
@@ -267,8 +267,8 @@ Module Inversion
     steps_inversion_induction.
   Qed.
 
-  Lemma steps_inversion_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
-    {δΔ : LocalStore Δ} {k : Stm (ctx_cat Γ Δ) σ} {t : Stm Γ σ} (final : Final t)
+  Lemma steps_inversion_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
+    {δΔ : CStore Δ} {k : Stm (ctx_cat Γ Δ) σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_block δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists δΔ' k',
       ⟨ γ1, μ1, env_cat δ1 δΔ , k ⟩ --->* ⟨ γ3, μ3, env_cat δ3 δΔ' , k' ⟩ /\ Final k' /\
@@ -278,7 +278,7 @@ Module Inversion
     steps_inversion_induction.
   Qed.
 
-  Lemma steps_inversion_seq {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+  Lemma steps_inversion_seq {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
     (s1 : Stm Γ τ) (s2 : Stm Γ σ) (t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_seq s1 s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists γ2 μ2 δ2 s1',
@@ -291,8 +291,8 @@ Module Inversion
     steps_inversion_induction.
   Qed.
 
-  Lemma steps_inversion_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
-    (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final t)
+  Lemma steps_inversion_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
+    (δΔ : CStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_call_frame δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists μ2 γ2 δΔ' k',
       ⟨ γ1, μ1, δΔ , k ⟩ --->* ⟨ γ2, μ2, δΔ' , k' ⟩ /\ Final k' /\
@@ -304,7 +304,7 @@ Module Inversion
     steps_inversion_induction.
   Qed.
 
-  Lemma steps_inversion_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+  Lemma steps_inversion_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
     (x : 𝑿) (xInΓ : InCtx (x::σ) Γ) (s1 t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_assign x s1 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists γ2 μ2 δ2 δ2' s1',
@@ -317,7 +317,7 @@ Module Inversion
     steps_inversion_induction.
   Qed.
 
-  Lemma steps_inversion_bind {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+  Lemma steps_inversion_bind {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
     (s1 : Stm Γ τ) (k : Lit τ -> Stm Γ σ) (t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists γ2 μ2 δ2 s1',
@@ -331,7 +331,7 @@ Module Inversion
   Qed.
 
   Lemma steps_inversion_ex_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : LocalStore Γ}
+    {δ1 δ3 : CStore Γ}
     {s1 : Stm Γ τ} {s2 : Stm (ctx_snoc Γ (x:: τ)) σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_let x τ s1 s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists msg,
@@ -350,8 +350,8 @@ Module Inversion
     - right. steps_inversion_solve.
   Qed.
 
-  Lemma steps_inversion_ex_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
-    {δΔ : LocalStore Δ} {k : Stm (ctx_cat Γ Δ) σ} {t : Stm Γ σ} (final : Final t)
+  Lemma steps_inversion_ex_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
+    {δΔ : CStore Δ} {k : Stm (ctx_cat Γ Δ) σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_block δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists δΔ' msg,
         ⟨ γ1, μ1, env_cat δ1 δΔ , k ⟩ --->* ⟨ γ3, μ3, env_cat δ3 δΔ' , stm_fail _ msg ⟩ /\
@@ -368,7 +368,7 @@ Module Inversion
     - right. steps_inversion_solve. auto.
   Qed.
 
-  Lemma steps_inversion_ex_seq {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+  Lemma steps_inversion_ex_seq {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
     {s1 : Stm Γ τ} {s2 : Stm Γ σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_seq s1 s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists msg,
@@ -387,8 +387,8 @@ Module Inversion
     - right. steps_inversion_solve.
   Qed.
 
-  Lemma steps_inversion_ex_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
-    (δΔ : LocalStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final t)
+  Lemma steps_inversion_ex_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
+    (δΔ : CStore Δ) (k : Stm Δ σ) (t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_call_frame δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists δΔ' msg,
         ⟨ γ1, μ1, δΔ, k ⟩ --->* ⟨ γ3, μ3, δΔ', stm_fail _ msg ⟩ /\
@@ -407,7 +407,7 @@ Module Inversion
       right. steps_inversion_solve; auto.
   Qed.
 
-  Lemma steps_inversion_ex_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+  Lemma steps_inversion_ex_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
     (x : 𝑿) (xInΓ : InCtx (x::σ) Γ) (s1 t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_assign x s1 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists msg,
@@ -427,7 +427,7 @@ Module Inversion
       right. steps_inversion_solve; auto.
   Qed.
 
-  Lemma steps_inversion_ex_bind {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : LocalStore Γ}
+  Lemma steps_inversion_ex_bind {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
     (s1 : Stm Γ τ) (k : Lit τ -> Stm Γ σ) (t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_bind s1 k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists msg,
@@ -447,7 +447,7 @@ Module Inversion
   Qed.
 
   Lemma step_inversion_let_lit {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : LocalStore Γ}
+    {δ1 δ3 : CStore Γ}
     {v : Lit τ} {k : Stm (ctx_snoc Γ (x::τ)) σ} {t : Stm Γ σ}
     (steps : ⟨ γ1, μ1, δ1, stm_let x τ (stm_lit τ v) k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
     γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_block (env_snoc env_nil (x::τ) v) k.

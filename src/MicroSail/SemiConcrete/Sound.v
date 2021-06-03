@@ -101,12 +101,12 @@ Module Soundness
           apply sepcon_comm.
     Qed.
 
-    Definition liftP {Γ} (POST : LocalStore Γ -> L) : LocalStore Γ -> SCHeap -> Prop :=
+    Definition liftP {Γ} (POST : CStore Γ -> L) : CStore Γ -> SCHeap -> Prop :=
       fun δ h => interpret_scheap h ⊢ POST δ.
 
     Import CMut.
 
-    Lemma consume_chunk_sound {Γ} (c : SCChunk) (POST : LocalStore Γ -> L) :
+    Lemma consume_chunk_sound {Γ} (c : SCChunk) (POST : CStore Γ -> L) :
       forall δ h,
         consume_chunk c (fun _ => liftP POST) δ h ->
         interpret_scheap h ⊢ interpret_scchunk c ✱ POST δ.
@@ -123,7 +123,7 @@ Module Soundness
     Qed.
 
     Lemma assert_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
-      (POST : LocalStore Γ -> L) :
+      (POST : CStore Γ -> L) :
       forall δ h,
         assert_formula (inst fml ι)
           (fun _ => liftP POST) δ h ->
@@ -139,7 +139,7 @@ Module Soundness
     Qed.
 
     Lemma assume_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
-      (POST : LocalStore Γ -> L) :
+      (POST : CStore Γ -> L) :
       forall δ h,
         assume_formula (inst fml ι)
           (fun _ => liftP POST) δ h ->
@@ -159,7 +159,7 @@ Module Soundness
     Qed.
 
     Lemma consume_chunk_monotonic {Γ} {c : SCChunk} δ
-      (P Q : unit -> LocalStore Γ -> SCHeap -> Prop)
+      (P Q : unit -> CStore Γ -> SCHeap -> Prop)
       (PQ : forall x h, P x δ h -> Q x δ h) h :
       consume_chunk (Γ := Γ) c P δ h ->
       consume_chunk (Γ := Γ) c Q δ h.
@@ -173,7 +173,7 @@ Module Soundness
 
     Lemma consume_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} δ :
       forall
-        (P Q : unit -> LocalStore Γ -> SCHeap -> Prop)
+        (P Q : unit -> CStore Γ -> SCHeap -> Prop)
         (PQ : forall x h, P x δ h -> Q x δ h) h,
         consume (Γ := Γ) ι asn P δ h ->
         consume (Γ := Γ) ι asn Q δ h.
@@ -201,7 +201,7 @@ Module Soundness
 
     Lemma produce_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} δ :
       forall
-        (P Q : unit -> LocalStore Γ -> SCHeap -> Prop)
+        (P Q : unit -> CStore Γ -> SCHeap -> Prop)
         (PQ : forall x h, P x δ h -> Q x δ h) h,
         produce (Γ := Γ) ι asn P δ h ->
         produce (Γ := Γ) ι asn Q δ h.
@@ -226,7 +226,7 @@ Module Soundness
       - unfold pure; eauto.
     Qed.
 
-    Lemma consume_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
+    Lemma consume_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         consume ι asn (fun _ => liftP POST) δ h ->
         interpret_scheap h ⊢ interpret_assertion asn ι ✱ POST δ.
@@ -257,7 +257,7 @@ Module Soundness
       - now rewrite sepcon_comm, sepcon_emp.
     Qed.
 
-    Lemma produce_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
+    Lemma produce_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         produce ι asn (fun _ => liftP POST) δ h ->
         interpret_scheap h ✱ interpret_assertion asn ι ⊢ POST δ.
@@ -293,7 +293,7 @@ Module Soundness
       - now rewrite sepcon_emp.
     Qed.
 
-    Lemma produce_sound' {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : LocalStore Γ -> L) :
+    Lemma produce_sound' {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         produce ι asn (fun _ => liftP POST) δ h ->
         interpret_assertion asn ι ⊢ interpret_scheap h -✱ POST δ.
@@ -302,8 +302,8 @@ Module Soundness
       now apply produce_sound.
     Qed.
 
-    Lemma call_contract_sound {Γ Δ τ} (δΓ : LocalStore Γ) (δΔ : LocalStore Δ)
-          (h : SCHeap) (POST : Lit τ -> LocalStore Γ -> L)
+    Lemma call_contract_sound {Γ Δ τ} (δΓ : CStore Γ) (δΔ : CStore Δ)
+          (h : SCHeap) (POST : Lit τ -> CStore Γ -> L)
           (c : SepContract Δ τ) :
       call_contract c δΔ (fun a => liftP (POST a)) δΓ h ->
       CTriple δΔ (interpret_scheap h) (fun v => POST v δΓ) c.
@@ -337,8 +337,8 @@ Module Soundness
         apply entails_refl.
     Qed.
 
-    Lemma call_contract_monotonic {Γ Δ τ} (c : SepContract Δ τ) (δΔ : LocalStore Δ)
-      (P Q : Lit τ -> LocalStore Γ -> SCHeap -> Prop)
+    Lemma call_contract_monotonic {Γ Δ τ} (c : SepContract Δ τ) (δΔ : CStore Δ)
+      (P Q : Lit τ -> CStore Γ -> SCHeap -> Prop)
       (PQ : forall x δ h, P x δ h -> Q x δ h) δ h :
       call_contract c δΔ P δ h -> call_contract c δΔ Q δ h.
     Proof.
@@ -357,7 +357,7 @@ Module Soundness
 
     Lemma exec_monotonic {Γ τ} (s : Stm Γ τ) :
       forall
-        (P Q : Lit τ -> LocalStore Γ -> SCHeap -> Prop)
+        (P Q : Lit τ -> CStore Γ -> SCHeap -> Prop)
         (PQ : forall x δ h, P x δ h -> Q x δ h) δ h,
         exec s P δ h ->
         exec s Q δ h.
@@ -404,8 +404,8 @@ Module Soundness
       - apply IHs; auto.
     Qed.
 
-    Lemma exec_sound {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> LocalStore Γ -> L) :
-      forall (δ1 : LocalStore Γ) (h1 : SCHeap),
+    Lemma exec_sound {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> CStore Γ -> L) :
+      forall (δ1 : CStore Γ) (h1 : SCHeap),
         exec s (fun v => liftP (POST v)) δ1 h1 ->
         δ1 ⊢ ⦃ interpret_scheap h1 ⦄ s ⦃ POST ⦄.
     Proof.
@@ -455,8 +455,8 @@ Module Soundness
       - (* stm_call_frame *)
         now apply rule_stm_call_frame, IHs.
 
-      - (* stm_call_external *)
-        apply rule_stm_call_external_backwards.
+      - (* stm_foreign *)
+        apply rule_stm_foreign_backwards.
         now apply call_contract_sound.
 
       - (* stm_if *)
@@ -564,7 +564,7 @@ Module Soundness
       - constructor. auto.
     Qed.
 
-    Lemma exec_sound' {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> LocalStore Γ -> L) :
+    Lemma exec_sound' {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> CStore Γ -> L) :
       forall δ1 h1,
         exec s (fun v2 => liftP (POST v2)) δ1 h1 ->
         liftP (WP s POST) δ1 h1.
@@ -590,7 +590,7 @@ Module Soundness
         eapply rule_consequence_left.
         apply rule_wp.
         apply entails_trans with
-            (interpret_scheap nil -✱ WP body (fun (v : Lit τ) (_ : LocalStore Δ) => interpret_assertion ens (env_snoc ι (result,τ) v)) δ).
+            (interpret_scheap nil -✱ WP body (fun (v : Lit τ) (_ : CStore Δ) => interpret_assertion ens (env_snoc ι (result,τ) v)) δ).
         apply produce_sound'.
         2: {
           rewrite <- sepcon_emp.

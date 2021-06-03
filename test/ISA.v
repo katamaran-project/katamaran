@@ -305,7 +305,7 @@ Module ISAProgramKit <: (ProgramKit ISATermKit).
   Local Coercion stm_exp : Exp >-> Stm.
 
   Notation "'callghost' f" :=
-    (stm_call_external (ghost f) env_nil)
+    (stm_foreign (ghost f) env_nil)
     (at level 10, f at next level) : exp_scope.
 
   Local Notation "'x'"   := (@exp_var _ "x" _ _) : exp_scope.
@@ -357,7 +357,7 @@ Module ISAProgramKit <: (ProgramKit ISATermKit).
     let: "addr" := call rX (exp_var "src") in
     let: "safe" := call in_bounds (exp_var "addr") in
     if: exp_var "safe"
-    then (let: "v" := callex rM (exp_var "addr") in
+    then (let: "v" := foreign rM (exp_var "addr") in
           call wX (exp_var "dst") (exp_var "v") ;;
           nop)
     else (stm_write_register OutOfMemory lit_true ;; nop).
@@ -414,10 +414,10 @@ Module ISAProgramKit <: (ProgramKit ISATermKit).
   | callex_ghost {f γ μ} : CallEx (ghost f) env_nil (inr tt) γ γ μ μ
   .
 
-  Definition ExternalCall := @CallEx.
+  Definition ForeignCall := @CallEx.
 
-  Lemma ExternalProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
-    exists γ' μ' res, ExternalCall f args res γ γ' μ μ'.
+  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof. destruct f; cbn; repeat depelim args; repeat eexists; constructor. Qed.
 
 End ISAProgramKit.
