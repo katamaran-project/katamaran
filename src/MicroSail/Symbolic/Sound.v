@@ -856,7 +856,34 @@ Module Soundness
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_sum AT Γ1 Γ2 x y σ τ w) (@CMut.demonic_match_sum A Γ1 Γ2 σ τ).
     Proof.
-    Admitted.
+      intros t v ->.
+      intros kl kl__c Hk__l.
+      intros kr kr__c Hk__r.
+      unfold SMut.demonic_match_sum, CMut.demonic_match_sum.
+      eapply approx_demonic_binary, approx_bind.
+      - eapply approx_bind; try (eapply approx_demonic; assumption).
+        intros w1 r01 ι1 -> Hpc1.
+        intros v1 vc1 ->.
+        eapply approx_bind_right.
+        * eapply approx_assume_formula; try assumption.
+          unfold inst at 4; cbn.
+          now rewrite inst_subst.
+        * intros w2 r12 ι2 -> Hpc2.
+          eapply (approx_four Hk__l); eauto.
+          rewrite <- inst_subst.
+          now unfold persist, persist_subst.
+      - now eapply approx_demonic.
+      - intros w1 r01 ι1 -> Hpc1.
+        intros v1 vc1 ->.
+        eapply approx_bind_right.
+        + eapply approx_assume_formula; try assumption.
+          unfold inst at 4; cbn.
+          now rewrite inst_subst.
+        + intros w2 r12 ι2 -> Hpc2.
+          eapply (approx_four Hk__r); eauto.
+          rewrite <- inst_subst.
+          now unfold persist, persist_subst.
+    Qed.
 
     Lemma approx_angelic_match_prod {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
