@@ -887,15 +887,55 @@ Module Soundness
 
     Lemma approx_angelic_match_prod {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.angelic_match_prod AT Γ1 Γ2 x y σ τ w) (@CMut.match_prod A Γ1 Γ2 σ τ).
+      approx ι (@SMut.angelic_match_prod AT Γ1 Γ2 x y σ τ w) (@CMut.angelic_match_prod A Γ1 Γ2 σ τ).
     Proof.
-    Admitted.
+      intros t v ->.
+      intros k k__c Hk.
+      unfold SMut.angelic_match_prod, CMut.angelic_match_prod.
+      - eapply approx_bind; try (eapply approx_angelic; assumption).
+        intros w1 r01 ι1 -> Hpc1.
+        intros v1 vc1 ->.
+        eapply approx_bind; try (eapply approx_angelic; assumption).
+        intros w2 r12 ι2 -> Hpc2.
+        intros v2 vc2 ->.
+        eapply approx_bind_right.
+        + eapply approx_assert_formula; try assumption.
+          unfold inst at 7; cbn.
+          change (inst_term (subst v1 r12) ι2) with (inst (subst v1 r12) ι2).
+          now rewrite ?inst_subst.
+        + intros w3 r23 ι3 -> Hpc3.
+          eapply (approx_four Hk); eauto.
+          * rewrite <- inst_subst.
+            now unfold persist, persist_subst.
+          * unfold persist, persist_subst, wtrans; cbn.
+            now rewrite <- ?inst_subst, subst_assoc.
+          * rewrite <- inst_subst.
+            now unfold persist, persist_subst.
+    Qed.
 
     Lemma approx_demonic_match_prod {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.demonic_match_prod AT Γ1 Γ2 x y σ τ w) (@CMut.match_prod A Γ1 Γ2 σ τ).
+      approx ι (@SMut.demonic_match_prod AT Γ1 Γ2 x y σ τ w) (@CMut.demonic_match_prod A Γ1 Γ2 σ τ).
     Proof.
-    Admitted.
+      intros t v ->.
+      intros k k__c Hk.
+      unfold SMut.demonic_match_prod, CMut.demonic_match_prod.
+      - eapply approx_bind; try (eapply approx_demonic; assumption).
+        intros w1 r01 ι1 -> Hpc1.
+        intros v1 vc1 ->.
+        eapply approx_bind; try (eapply approx_demonic; assumption).
+        intros w2 r12 ι2 -> Hpc2.
+        intros v2 vc2 ->.
+        eapply approx_bind_right.
+        + eapply approx_assume_formula; try assumption.
+          unfold inst at 7; cbn.
+          change (inst_term (subst v1 r12) ι2) with (inst (subst v1 r12) ι2).
+          now rewrite ?inst_subst.
+        + intros w3 r23 ι3 -> Hpc3.
+          eapply (approx_four Hk); eauto;
+            unfold persist, persist_subst, wtrans; cbn;
+          now rewrite <- ?inst_subst, ?subst_assoc.
+    Qed.
 
     (* TODO: generalize *)
     Lemma approx_angelic_match_record {R AT A} `{Approx AT A} {Γ1 Γ2}
