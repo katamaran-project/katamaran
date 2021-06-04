@@ -27,7 +27,7 @@
 (******************************************************************************)
 
 From MinimalCaps Require Import
-     Machine.
+     Machine Contracts.
 
 From Coq Require Import
      Init.Nat
@@ -63,7 +63,6 @@ Set Implicit Arguments.
 Module gh := iris.base_logic.lib.gen_heap.
 
 Module MinCapsModel.
-  From MinimalCaps Require Import Contracts.
   Import MicroSail.Iris.Model.
 
   Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
@@ -180,7 +179,7 @@ Module MinCapsModel.
 
     Context {Σ : gFunctors}.
     Notation D := ((leibnizO MemVal) -n> iPropO Σ). (* TODO: try -d>, drop leibnizO, might not need λne *)
-    Implicit Types w : (leibnizO MemVal).
+    Implicit Type w : (leibnizO MemVal).
 
     (* Copied from github.com/logsem/cerise *)
     (* TODO: include copyright notice =) *)
@@ -685,7 +684,7 @@ Module MinCapsModel.
 
   Lemma foreignSem `{sg : sailG Σ} : ForeignSem (Σ := Σ).
     intros Γ τ Δ f es δ.
-    destruct f as [_|_|_|Γ' [ | reg | | | | | | | ] es δ'];
+    destruct f as [ | | |Γ' [ | reg | | | | | | | ]];
       cbn - [MinCapsIrisHeapKit.MinCaps_safe MinCapsIrisHeapKit.MinCaps_csafe];
       intros ι;
       destruct_SymInstance;
@@ -847,7 +846,7 @@ Module MinCapsModel.
           intros i x Hl.
           unfold fun_wM.
           cbn in *.
-          destruct (address =? i) eqn:Heqb.
+          destruct (Z.eqb address i) eqn:Heqb.
           * rewrite -> Z.eqb_eq in Heqb.
             subst.
             apply (lookup_insert_rev memmap i); assumption.
