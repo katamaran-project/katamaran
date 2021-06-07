@@ -187,7 +187,8 @@ Module Soundness
       - rewrite ?wp_angelic_match_sum.
         destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
-      - destruct (inst s ι); cbn; eauto.
+      - rewrite ?wp_angelic_match_prod.
+        destruct (inst s ι); cbn; eauto.
       - eauto.
       - unfold match_record. eauto.
       - destruct (𝑼_unfold (inst s ι)); eauto.
@@ -215,7 +216,8 @@ Module Soundness
       - rewrite ?wp_demonic_match_sum.
         destruct (inst s ι); cbn; eauto.
       - destruct (inst s ι); cbn; eauto.
-      - destruct (inst s ι); cbn; eauto.
+      - rewrite ?wp_demonic_match_prod.
+        destruct (inst s ι); cbn; eauto.
       - eauto.
       - unfold match_record. eauto.
       - destruct (𝑼_unfold (inst s ι)); eauto.
@@ -239,7 +241,8 @@ Module Soundness
       - rewrite wp_angelic_match_sum.
         destruct (inst s ι); auto.
       - destruct (inst s ι); auto.
-      - destruct (inst s ι); auto.
+      - rewrite ?wp_angelic_match_prod.
+        destruct (inst s ι); auto.
       - auto.
       - auto.
       - destruct (𝑼_unfold (inst s ι)); auto.
@@ -271,7 +274,8 @@ Module Soundness
       - rewrite wp_demonic_match_sum.
         destruct (inst s ι); auto.
       - destruct (inst s ι); auto.
-      - destruct (inst s ι); auto.
+      - rewrite wp_demonic_match_prod.
+        destruct (inst s ι); auto.
       - auto.
       - auto.
       - destruct (𝑼_unfold (inst s ι)); auto.
@@ -388,7 +392,8 @@ Module Soundness
         destruct (eval e δ); cbn.
         apply IHs1; auto.
         apply IHs2; auto.
-      - destruct (eval e δ); cbn.
+      - rewrite ?wp_demonic_match_prod.
+        destruct (eval e δ); cbn.
         apply IHs; auto.
       - rewrite ?wp_demonic_match_enum; eauto.
       - apply IHs; auto.
@@ -504,6 +509,7 @@ Module Soundness
         + now apply IHs2.
 
       - (* stm_match_prod *)
+        rewrite wp_demonic_match_prod in HYP.
         apply rule_stm_match_prod; cbn; intros;
           apply rule_pull; intro Heval; rewrite Heval in HYP; cbn in HYP.
         now apply IHs.

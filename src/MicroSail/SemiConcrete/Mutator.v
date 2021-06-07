@@ -538,9 +538,49 @@ Module SemiConcrete
             end; auto.
       Qed.
 
-      Definition match_prod {A} {Γ1 Γ2 σ τ} (v : Lit σ * Lit τ)
-        (m : Lit σ -> Lit τ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-        match v with (vl,vr) => m vl vr end.
+      Definition angelic_match_prod {A Γ1 Γ2} {σ τ} :
+        Lit (ty_prod σ τ) -> (Lit σ -> Lit τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
+        fun v k =>
+          v1 <- angelic σ ;;
+          v2 <- angelic τ ;;
+          assert_formula ((v1 :: v2)%ctx = v) ;;
+          k v1 v2.
+
+      Lemma wp_angelic_match_prod {A Γ1 Γ2} {σ τ}
+        (v : Lit (ty_prod σ τ)) (k : Lit σ -> Lit τ -> CMut Γ1 Γ2 A) POST δ h :
+        angelic_match_prod v k POST δ h <->
+        match v with
+        | pair v1 v2 => k v1 v2 POST δ h
+        end.
+      Proof.
+        cbv [angelic_match_prod bind_right bind angelic angelic_binary
+             assert_formula dijkstra CDijk.assert_formula].
+        destruct v; intuition.
+        - destruct H as (v1 & v2 & eq & H).
+          inversion eq; now subst.
+        - now exists l, l0.
+      Qed.
+
+      Definition demonic_match_prod {A Γ1 Γ2} {σ τ} :
+        Lit (ty_prod σ τ) -> (Lit σ -> Lit τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
+        fun v k =>
+          v1 <- demonic σ ;;
+          v2 <- demonic τ ;;
+          assume_formula ((v1 :: v2)%ctx = v) ;;
+          k v1 v2.
+
+      Lemma wp_demonic_match_prod {A Γ1 Γ2} {σ τ}
+        (v : Lit (ty_prod σ τ)) (k : Lit σ -> Lit τ -> CMut Γ1 Γ2 A) POST δ h :
+        demonic_match_prod v k POST δ h <->
+        match v with
+        | pair v1 v2 => k v1 v2 POST δ h
+        end.
+      Proof.
+        cbv [demonic_match_prod bind_right bind demonic demonic_binary
+             assume_formula dijkstra CDijk.assume_formula].
+        destruct v; intuition.
+        now inversion H0.
+      Qed.
 
       Definition match_record {A R} {Γ1 Γ2 Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Lit (ty_record R))
         (m : SymInstance Δ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
@@ -615,7 +655,7 @@ Module SemiConcrete
           | cons vh vt => produce (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
           end
         | asn_match_prod s xl xr rhs =>
-          match_prod
+          demonic_match_prod
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun vl vr => produce (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
         | asn_match_tuple s p rhs =>
@@ -658,7 +698,7 @@ Module SemiConcrete
           | cons vh vt => consume (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
           end
         | asn_match_prod s xl xr rhs =>
-          match_prod
+          angelic_match_prod
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun vl vr => consume (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
         | asn_match_tuple s p rhs =>
@@ -768,7 +808,7 @@ Module SemiConcrete
             (fun v => pushpop v (exec s2))
         | stm_match_prod e xl xr s =>
           v <- eval_exp e ;;
-          match_prod
+          demonic_match_prod
             v
             (fun vl vr =>
                pushspops
