@@ -70,19 +70,22 @@ Module MinCapsValueKit <: ValueKit.
       | ksd        => ty_tuple [ty_hv, ty_lv, ty_int]
       | kaddi      => ty_tuple [ty_lv, ty_hv, ty_int]
       | kadd       => ty_tuple [ty_lv, ty_lv, ty_lv]
-      (* | klt       => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
-      (* | kplus     => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
-      (* | kminus    => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
+      | ksub       => ty_tuple [ty_lv, ty_lv, ty_lv]
+      | kslt       => ty_tuple [ty_lv, ty_lv, ty_lv]
+      | kslti      => ty_tuple [ty_lv, ty_hv, ty_int]
+      | ksltu      => ty_tuple [ty_lv, ty_lv, ty_lv]
+      | ksltiu     => ty_tuple [ty_lv, ty_hv, ty_int]
       | klea       => ty_prod ty_lv ty_hv
       | krestrict  => ty_prod ty_lv ty_hv
       | krestricti => ty_prod ty_lv ty_int
-      (* | ksubseg   => ty_prod ty_lv (ty_prod ty_rv ty_rv) *)
-      (* | kisptr    => ty_prod ty_lv ty_rv *)
+      | ksubseg    => ty_tuple [ty_lv, ty_hv, ty_hv]
+      | ksubsegi   => ty_tuple [ty_lv, ty_hv, ty_int]
+      | kisptr     => ty_prod ty_lv ty_lv
       | kgetp      => ty_prod ty_lv ty_lv
       | kgetb      => ty_prod ty_lv ty_lv
       | kgete      => ty_prod ty_lv ty_lv
       | kgeta      => ty_prod ty_lv ty_lv
-      (* | kfail     => ty_unit *)
+      | kfail      => ty_unit
       | kret       => ty_unit
       end
     end.
@@ -91,60 +94,66 @@ Module MinCapsValueKit <: ValueKit.
     match U with
     | instruction => fun Kv =>
       match Kv with
-      | existT kjr       lv                 => jr lv
-      | existT kjalr     (lv1 , lv2)        => jalr lv1 lv2
-      | existT kj        offset             => j offset
-      | existT kjal      (lv , offset)      => jal lv offset
-      | existT kbnez     (lv , immediate)   => bnez lv immediate
-      | existT kmv       (lv , hv)          => mv lv hv
-      | existT kld       (tt , lv , hv , immediate) => ld lv hv immediate
-      | existT ksd       (tt , hv , lv , immediate) => sd hv lv immediate
-      | existT kaddi     (tt , lv , hv , immediate) => addi lv hv immediate
-      | existT kadd      (tt , lv1 , lv2 , lv3)     => add lv1 lv2 lv3
-      (* | existT klt       (lv , (rv1 , rv2)) => lt lv rv1 rv2 *)
-      (* | existT kplus     (lv , (rv1 , rv2)) => plus lv rv1 rv2 *)
-      (* | existT kminus    (lv , (rv1 , rv2)) => minus lv rv1 rv2 *)
-      | existT klea      (lv , hv)                  => lea lv hv
-      | existT krestrict (lv , hv)                  => restrict lv hv
-      | existT krestricti (lv , immediate)          => restricti lv immediate
-      (* | existT ksubseg   (lv , (rv1 , rv2)) => subseg lv rv1 rv2 *)
-      (* | existT kisptr    (lv , rv)          => isptr lv rv *)
-      | existT kgetp     (lv , lv')         => getp lv lv'
-      | existT kgetb     (lv , lv')         => getb lv lv'
-      | existT kgete     (lv , lv')         => gete lv lv'
-      | existT kgeta     (lv , lv')         => geta lv lv'
-      (* | existT kfail     tt                 => fail *)
-      | existT kret      tt                 => ret
+      | existT kjr       lv                          => jr lv
+      | existT kjalr     (lv1 , lv2)                 => jalr lv1 lv2
+      | existT kj        offset                      => j offset
+      | existT kjal      (lv , offset)               => jal lv offset
+      | existT kbnez     (lv , immediate)            => bnez lv immediate
+      | existT kmv       (lv , hv)                   => mv lv hv
+      | existT kld       (tt , lv , hv , immediate)  => ld lv hv immediate
+      | existT ksd       (tt , hv , lv , immediate)  => sd hv lv immediate
+      | existT kaddi     (tt , lv , hv , immediate)  => addi lv hv immediate
+      | existT kadd      (tt , lv1 , lv2 , lv3)      => add lv1 lv2 lv3
+      | existT ksub      (tt , lv1 , lv2 , lv3)      => sub lv1 lv2 lv3
+      | existT kslt      (tt , lv1 , lv2 , lv3)      => slt lv1 lv2 lv3
+      | existT kslti     (tt , lv , hv , immediate)  => slti lv hv immediate
+      | existT ksltu     (tt , lv1 , lv2 , lv3)      => sltu lv1 lv2 lv3
+      | existT ksltiu    (tt , lv , hv , immediate)  => sltiu lv hv immediate
+      | existT klea      (lv , hv)                   => lea lv hv
+      | existT krestrict (lv , hv)                   => restrict lv hv
+      | existT krestricti (lv , immediate)           => restricti lv immediate
+      | existT ksubseg   (tt , lv , hv1 , hv2)       => subseg lv hv1 hv2
+      | existT ksubsegi  (tt , lv , hv  , immediate) => subsegi lv hv immediate
+      | existT kisptr    (lv , lv')                  => isptr lv lv'
+      | existT kgetp     (lv , lv')                  => getp lv lv'
+      | existT kgetb     (lv , lv')                  => getb lv lv'
+      | existT kgete     (lv , lv')                  => gete lv lv'
+      | existT kgeta     (lv , lv')                  => geta lv lv'
+      | existT kfail     tt                          => fail
+      | existT kret      tt                          => ret
       end
     end.
   Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
     match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Lit (𝑼𝑲_Ty u K)}) with
     | instruction => fun Kv =>
       match Kv with
-      | jr  lv                   => existT kjr   lv
-      | jalr lv1 lv2             => existT kjalr (lv1 , lv2)
-      | j offset                 => existT kj    offset
-      | jal lv offset            => existT kjal  (lv , offset)
-      | bnez lv immediate        => existT kbnez (lv , immediate)
-      | mv lv hv                 => existT kmv   (lv , hv)
-      | ld lv hv immediate       => existT kld   (tt , lv , hv , immediate)
-      | sd hv lv immediate       => existT ksd   (tt , hv , lv , immediate)
-      | addi lv hv immediate     => existT kaddi (tt , lv , hv , immediate)
-      | add lv1 lv2 lv3          => existT kadd (tt , lv1 , lv2 , lv3)
-      (* | lt lv rv1 rv2     => existT klt       (lv , (rv1 , rv2)) *)
-      (* | plus lv rv1 rv2   => existT kplus     (lv , (rv1 , rv2)) *)
-      (* | minus lv rv1 rv2  => existT kminus    (lv , (rv1 , rv2)) *)
-      | lea lv hv                => existT klea      (lv , hv)
-      | restrict lv hv           => existT krestrict (lv , hv)
+      | jr  lv                   => existT kjr        lv
+      | jalr lv1 lv2             => existT kjalr      (lv1 , lv2)
+      | j offset                 => existT kj         offset
+      | jal lv offset            => existT kjal       (lv , offset)
+      | bnez lv immediate        => existT kbnez      (lv , immediate)
+      | mv lv hv                 => existT kmv        (lv , hv)
+      | ld lv hv immediate       => existT kld        (tt , lv , hv , immediate)
+      | sd hv lv immediate       => existT ksd        (tt , hv , lv , immediate)
+      | addi lv hv immediate     => existT kaddi      (tt , lv , hv , immediate)
+      | add lv1 lv2 lv3          => existT kadd       (tt , lv1 , lv2 , lv3)
+      | sub lv1 lv2 lv3          => existT ksub       (tt , lv1 , lv2 , lv3)
+      | slt lv1 lv2 lv3          => existT kslt       (tt , lv1 , lv2 , lv3)
+      | slti lv hv immediate     => existT kslti      (tt , lv , hv , immediate)
+      | sltu lv1 lv2 lv3         => existT ksltu      (tt , lv1 , lv2 , lv3)
+      | sltiu lv hv immediate    => existT ksltiu     (tt , lv , hv , immediate)
+      | lea lv hv                => existT klea       (lv , hv)
+      | restrict lv hv           => existT krestrict  (lv , hv)
       | restricti lv immediate   => existT krestricti (lv , immediate)
-      (* | subseg lv rv1 rv2 => existT ksubseg   (lv , (rv1 , rv2)) *)
-      (* | isptr lv rv       => existT kisptr    (lv , rv) *)
-      | getp lv lv'              => existT kgetp     (lv , lv')
-      | getb lv lv'              => existT kgetb     (lv , lv')
-      | gete lv lv'              => existT kgete     (lv , lv')
-      | geta lv lv'              => existT kgeta     (lv , lv')
-      (* | fail              => existT kfail     tt *)
-      | ret                      => existT kret  tt
+      | subseg lv hv1 hv2        => existT ksubseg    (tt, lv , hv1 , hv2)
+      | subsegi lv hv immediate  => existT ksubsegi   (tt, lv , hv , immediate)
+      | isptr lv lv'             => existT kisptr     (lv , lv')
+      | getp lv lv'              => existT kgetp      (lv , lv')
+      | getb lv lv'              => existT kgetb      (lv , lv')
+      | gete lv lv'              => existT kgete      (lv , lv')
+      | geta lv lv'              => existT kgeta      (lv , lv')
+      | fail                     => existT kfail      tt
+      | ret                      => existT kret       tt
       end
     end.
   Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),

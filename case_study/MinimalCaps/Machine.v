@@ -61,62 +61,75 @@ Module MinCapsTermKit <: TermKit.
 
   (** FUNCTIONS **)
   Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
-  | read_reg       : Fun ["rreg" ∶ ty_enum regname ] ty_word
-  | read_reg_cap   : Fun ["creg" ∶ ty_enum regname ] ty_cap
-  | read_reg_num   : Fun ["nreg" ∶ ty_enum regname ] ty_int
-  | write_reg      : Fun ["wreg" ∶ ty_enum regname,
-                          "w"  ∶ ty_word
-                         ] ty_unit
-  | next_pc        : Fun ctx_nil ty_cap
-  | update_pc      : Fun ctx_nil ty_unit
-  | add_pc         : Fun ["offset" ∶ ty_int] ty_unit
-  | read_mem       : Fun ["c"   ∶ ty_cap ] ty_memval
-  | write_mem      : Fun ["c"   ∶ ty_cap,
-                          "v"   ∶ ty_memval
-                         ] ty_unit
-  | read_allowed   : Fun ["p"   ∶ ty_perm ] ty_bool
-  | write_allowed  : Fun ["p"   ∶ ty_perm ] ty_bool
+  | read_reg        : Fun ["rreg" ∶ ty_enum regname ] ty_word
+  | read_reg_cap    : Fun ["creg" ∶ ty_enum regname ] ty_cap
+  | read_reg_num    : Fun ["nreg" ∶ ty_enum regname ] ty_int
+  | write_reg       : Fun ["wreg" ∶ ty_enum regname,
+                           "w"  ∶ ty_word
+                          ] ty_unit
+  | next_pc         : Fun ctx_nil ty_cap
+  | update_pc       : Fun ctx_nil ty_unit
+  | add_pc          : Fun ["offset" ∶ ty_int] ty_unit
+  | read_mem        : Fun ["c"   ∶ ty_cap ] ty_memval
+  | write_mem       : Fun ["c"   ∶ ty_cap,
+                           "v"   ∶ ty_memval
+                          ] ty_unit
+  | read_allowed    : Fun ["p"   ∶ ty_perm ] ty_bool
+  | write_allowed   : Fun ["p"   ∶ ty_perm ] ty_bool
   (* | sub_perm       : Fun ["p1"  ∶ ty_perm, *)
   (*                         "p2"  ∶ ty_perm *)
   (*                        ] ty_bool *)
-  | upper_bound    : Fun ["a"   ∶ ty_addr,
-                          "e"   ∶ ty_addr
-                         ] ty_bool
-  | within_bounds  : Fun ["c"   ∶ ty_cap ] ty_bool
-  | compute_rv     : Fun ["rv" ∶ ty_rv] ty_word
-  | compute_rv_num : Fun ["rv" ∶ ty_rv] ty_int
-  | perm_to_bits   : Fun ["p" ∶ ty_perm] ty_int
-  | perm_from_bits : Fun ["i" ∶ ty_int] ty_perm
-  | is_sub_perm    : Fun ["p" ∶ ty_perm, "p'" ∶ ty_perm] ty_bool
-  | exec_jr        : Fun ["lv" ∶ ty_lv] ty_bool
-  | exec_jalr      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv ] ty_bool
-  | exec_j         : Fun ["offset" ∶ ty_int] ty_bool
-  | exec_jal       : Fun ["lv" ∶ ty_lv, "offset" ∶ ty_int] ty_bool
-  | exec_bnez      : Fun ["lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
-  | exec_mv        : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_bool
-  | exec_ld        : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
-  | exec_sd        : Fun ["hv" ∶ ty_hv, "lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
-  | exec_lea       : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool
-  | exec_restrict  : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool
-  | exec_restricti : Fun ["lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
-  | exec_addi      : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
-  | exec_add       : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool
-  | exec_getp      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
-  | exec_getb      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
-  | exec_gete      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
-  | exec_geta      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
-  | exec_ret       : Fun ε ty_bool
-  | exec_instr     : Fun ["i" ∶ ty_instr] ty_bool
-  | exec           : Fun ε ty_bool
-  | loop           : Fun ε ty_unit
+  | upper_bound     : Fun ["a"   ∶ ty_addr,
+                           "e"   ∶ ty_addr
+                          ] ty_bool
+  | within_bounds   : Fun ["c"   ∶ ty_cap ] ty_bool
+  | compute_rv      : Fun ["rv" ∶ ty_rv] ty_word
+  | compute_rv_num  : Fun ["rv" ∶ ty_rv] ty_int
+  | perm_to_bits    : Fun ["p" ∶ ty_perm] ty_int
+  | perm_from_bits  : Fun ["i" ∶ ty_int] ty_perm
+  | is_sub_perm     : Fun ["p" ∶ ty_perm, "p'" ∶ ty_perm] ty_bool
+  | is_within_range : Fun ["b'" ∶ ty_addr, "e'" ∶ ty_addr,
+                           "b" ∶ ty_addr, "e" ∶ ty_addr] ty_bool
+  | abs             : Fun ["i" ∶ ty_int] ty_int
+  | exec_jr         : Fun ["lv" ∶ ty_lv] ty_bool
+  | exec_jalr       : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv ] ty_bool
+  | exec_j          : Fun ["offset" ∶ ty_int] ty_bool
+  | exec_jal        : Fun ["lv" ∶ ty_lv, "offset" ∶ ty_int] ty_bool
+  | exec_bnez       : Fun ["lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
+  | exec_mv         : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv ] ty_bool
+  | exec_ld         : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
+  | exec_sd         : Fun ["hv" ∶ ty_hv, "lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
+  | exec_lea        : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool
+  | exec_restrict   : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool
+  | exec_restricti  : Fun ["lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool
+  | exec_subseg     : Fun ["lv" ∶ ty_lv, "hv1" ∶ ty_hv, "hv2" ∶ ty_hv] ty_bool
+  | exec_subsegi    : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
+  | exec_isptr      : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
+  | exec_addi       : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
+  | exec_add        : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool
+  | exec_sub        : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool
+  | exec_slt        : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool
+  | exec_slti       : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
+  | exec_sltu       : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool
+  | exec_sltiu      : Fun ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int] ty_bool
+  | exec_getp       : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
+  | exec_getb       : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
+  | exec_gete       : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
+  | exec_geta       : Fun ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool
+  | exec_fail       : Fun ε ty_bool
+  | exec_ret        : Fun ε ty_bool
+  | exec_instr      : Fun ["i" ∶ ty_instr] ty_bool
+  | exec            : Fun ε ty_bool
+  | loop            : Fun ε ty_unit
   .
 
   Inductive FunGhost : Ctx (𝑿 * Ty) -> Set :=
   | open_ptsreg                : FunGhost ["reg" ∶ ty_enum regname]
   | close_ptsreg (R : RegName) : FunGhost ctx_nil
   | duplicate_safe             : FunGhost ["w" ∶ ty_word]
-  | csafe_move_cursor          : FunGhost ["c" ∶ ty_cap, "c'" ∶ ty_cap]
-  | csafe_sub_perm             : FunGhost ["c" ∶ ty_cap, "c'" ∶ ty_cap]
+  | csafe_move_cursor          : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
+  | csafe_sub_perm             : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
+  | csafe_within_range         : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
   | lift_csafe                 : FunGhost ["c" ∶ ty_cap]
   | specialize_safe_to_cap     : FunGhost ["c" ∶ ty_cap]
   | int_safe                   : FunGhost ["i" ∶ ty_int]
@@ -255,7 +268,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   Definition fun_update_pc : Stm ctx_nil ty_unit :=
     let: "opc" := stm_read_register pc in
     let: "npc" := call next_pc in
-    stm_call_external (ghost csafe_move_cursor) [exp_var "opc", exp_var "npc"]%arg ;;
+    stm_call_external (ghost csafe_move_cursor) [exp_var "npc", exp_var "opc"]%arg ;;
     stm_write_register pc (exp_var "npc") ;;
     stm_lit ty_unit tt.
 
@@ -272,7 +285,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
              exp_var "beg",
              exp_var "end",
              exp_var "cur" + exp_var "offset" ]) in
-       stm_call_external (ghost csafe_move_cursor) [exp_var "opc", exp_var "npc"]%arg ;;
+       stm_call_external (ghost csafe_move_cursor) [exp_var "npc", exp_var "opc"]%arg ;;
        stm_write_register pc (exp_var "npc")) ;;
     stm_lit ty_unit tt.
 
@@ -334,7 +347,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
          let: w ∶ ty_word := call read_reg hv in
          stm_call_external (ghost duplicate_safe) [exp_var w]%arg ;;
          stm_call_external (ghost specialize_safe_to_cap) [exp_var "base_cap"]%arg ;;
-         stm_call_external (ghost csafe_move_cursor) [exp_var "base_cap", exp_var "c"]%arg ;;
+         stm_call_external (ghost csafe_move_cursor) [exp_var "c", exp_var "base_cap"]%arg ;;
          stm_call_external (ghost lift_csafe) [exp_var "base_cap"]%arg ;;
          call write_mem c w ;;
          call update_pc ;;
@@ -357,7 +370,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                exp_var "cursor" + exp_var "immediate"
                              ] in
          stm_call_external (ghost specialize_safe_to_cap) [exp_var "base_cap"]%arg ;;
-         stm_call_external (ghost csafe_move_cursor) [exp_var "base_cap", exp_var "c"]%arg ;;
+         stm_call_external (ghost csafe_move_cursor) [exp_var "c", exp_var "base_cap"]%arg ;;
          stm_call_external (ghost lift_csafe) [exp_var "base_cap"]%arg ;;
          let: n ∶ ty_memval := call read_mem c in
          stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
@@ -384,7 +397,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                exp_var "cursor" + exp_var "offset"
                              ] in
          stm_call_external (ghost specialize_safe_to_cap) [exp_var "base_cap"]%arg ;;
-         stm_call_external (ghost csafe_move_cursor) [exp_var "base_cap", exp_var "c"]%arg ;;
+         stm_call_external (ghost csafe_move_cursor) [exp_var "c", exp_var "base_cap"]%arg ;;
          stm_call_external (ghost lift_csafe) [exp_var "c"]%arg ;;
          call write_reg (exp_var "lv") (exp_inr (exp_var "c")) ;;
          call update_pc ;;
@@ -412,7 +425,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                         exp_var "cursor"
                                       ] in
          stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
-         stm_call_external (ghost csafe_sub_perm) [exp_var "c", exp_var "c'"]%arg ;;
+         stm_call_external (ghost csafe_sub_perm) [exp_var "c'", exp_var "c"]%arg ;;
          stm_call_external (ghost lift_csafe) [exp_var "c'"]%arg ;;
          call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
          call update_pc ;;
@@ -441,7 +454,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                         exp_var "cursor"
                                       ] in
          stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
-         stm_call_external (ghost csafe_sub_perm) [exp_var "c", exp_var "c'"]%arg ;;
+         stm_call_external (ghost csafe_sub_perm) [exp_var "c'", exp_var "c"]%arg ;;
          stm_call_external (ghost lift_csafe) [exp_var "c'"]%arg ;;
          call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
          call update_pc ;;
@@ -466,6 +479,89 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg (exp_var "lv1") (exp_inl (exp_var "res")) ;;
       stm_call_external (ghost int_safe) [exp_var "res"]%arg ;;
+      call update_pc ;;
+      stm_lit ty_bool true.
+
+    Definition fun_exec_sub : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool :=
+      stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "lv3") (fun _ => stm_lit ty_unit tt) ;;
+      let: "v1" ∶ int := call read_reg_num (exp_var "lv2") in
+      let: "v2" ∶ int := call read_reg_num (exp_var "lv3") in
+      let: "res" ∶ int := stm_exp (exp_var "v1" - exp_var "v2") in
+      stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
+      call write_reg (exp_var "lv1") (exp_inl (exp_var "res")) ;;
+      stm_call_external (ghost int_safe) [exp_var "res"]%arg ;;
+      call update_pc ;;
+      stm_lit ty_bool true.
+
+    Definition fun_abs : Stm ["i" ∶ ty_int] ty_int :=
+      if: exp_var "i" < (exp_lit ty_int 0%Z)
+      then exp_var "i" * (exp_lit ty_int (-1)%Z)
+      else exp_var "i".
+
+    Definition fun_exec_slt : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool :=
+      stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "lv3") (fun _ => stm_lit ty_unit tt) ;;
+      let: "v1" ∶ int := call read_reg_num (exp_var "lv2") in
+      let: "v2" ∶ int := call read_reg_num (exp_var "lv3") in
+      stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
+      (if: exp_var "v1" < exp_var "v2"
+       then
+         call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 1%Z)) ;;
+         stm_call_external (ghost int_safe) [exp_lit ty_int 1%Z]%arg
+       else
+         call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 0%Z)) ;;
+         stm_call_external (ghost int_safe) [exp_lit ty_int 0%Z]%arg) ;;
+      call update_pc ;;
+      stm_lit ty_bool true.
+
+    Definition fun_exec_slti : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int ] ty_bool :=
+      stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
+      let: "v1" ∶ int := call read_reg_num (exp_var "hv") in
+      let: "v2" ∶ int := exp_var "immediate" in
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+      (if: exp_var "v1" < exp_var "v2"
+       then
+         call write_reg (exp_var "lv") (exp_inl (exp_lit ty_int 1%Z)) ;;
+         stm_call_external (ghost int_safe) [exp_lit ty_int 1%Z]%arg
+       else
+         call write_reg (exp_var "lv") (exp_inl (exp_lit ty_int 0%Z)) ;;
+         stm_call_external (ghost int_safe) [exp_lit ty_int 0%Z]%arg) ;;
+      call update_pc ;;
+      stm_lit ty_bool true.
+
+    Definition fun_exec_sltu : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv, "lv3" ∶ ty_lv] ty_bool :=
+      stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "lv3") (fun _ => stm_lit ty_unit tt) ;;
+      let: "v1" ∶ int := call read_reg_num (exp_var "lv2") in
+      let: "uv1" ∶ int := call abs (exp_var "v1") in
+      let: "v2" ∶ int := call read_reg_num (exp_var "lv3") in
+      let: "uv2" ∶ int := call abs (exp_var "v2") in
+      stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
+      (if: exp_var "uv1" < exp_var "uv2"
+       then
+         call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 1%Z)) ;;
+         stm_call_external (ghost int_safe) [exp_lit ty_int 1%Z]%arg
+       else
+         call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 0%Z)) ;;
+         stm_call_external (ghost int_safe) [exp_lit ty_int 0%Z]%arg) ;;
+      call update_pc ;;
+      stm_lit ty_bool true.
+
+    Definition fun_exec_sltiu : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int ] ty_bool :=
+      stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
+      let: "v1" ∶ int := call read_reg_num (exp_var "hv") in
+      let: "uv1" ∶ int := call abs (exp_var "v1") in
+      let: "v2" ∶ int := exp_var "immediate" in
+      let: "uv2" ∶ int := call abs (exp_var "v2") in
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+      (if: exp_var "uv1" < exp_var "uv2"
+       then
+         call write_reg (exp_var "lv") (exp_inl (exp_lit ty_int 1%Z)) ;;
+         stm_call_external (ghost int_safe) [exp_lit ty_int 1%Z]%arg
+       else
+         call write_reg (exp_var "lv") (exp_inl (exp_lit ty_int 0%Z)) ;;
+         stm_call_external (ghost int_safe) [exp_lit ty_int 0%Z]%arg) ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
@@ -501,6 +597,84 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
             | _ => stm_lit ty_bool false
             end
       end.
+
+    Definition fun_is_within_range : Stm ["b'" ∶ ty_addr, "e'" ∶ ty_addr,
+                                          "b" ∶ ty_addr, "e" ∶ ty_addr] ty_bool :=
+      (exp_var "b" <= exp_var "b'") && (exp_var "e'" <= exp_var "e").
+
+    Definition fun_exec_subseg : Stm ["lv" ∶ ty_lv, "hv1" ∶ ty_hv, "hv2" ∶ ty_hv]
+                                     ty_bool :=
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "hv1") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "hv2") (fun _ => stm_lit ty_unit tt) ;;
+      let: c ∶ cap := call read_reg_cap (exp_var "lv") in
+      let: "new_begin" ∶ ty_int := call read_reg_num (exp_var "hv1") in
+      let: "new_end" ∶ ty_int := call read_reg_num (exp_var "hv2") in
+      stm_match_record capability (exp_var "c")
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+          "cap_permission" "perm")
+          "cap_begin" "begin")
+          "cap_end" "end")
+          "cap_cursor" "cursor")
+        (let: "b" ∶ ty_bool := call is_within_range (exp_var "new_begin") (exp_var "new_end")
+                                   (exp_var "begin") (exp_var "end") in
+         stm_assert (exp_var "b") (lit_string "Err: [subseg] tried to increase range of authority") ;;
+         let: "c'" ∶ cap := exp_record capability
+                                      [ exp_var "perm",
+                                        exp_var "new_begin",
+                                        exp_var "new_end",
+                                        exp_var "cursor"
+                                      ] in
+         stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
+         stm_call_external (ghost csafe_within_range) [exp_var "c'", exp_var "c"]%arg ;;
+         stm_call_external (ghost lift_csafe) [exp_var "c'"]%arg ;;
+         call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
+
+    Definition fun_exec_subsegi : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int]
+                                      ty_bool :=
+      stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
+      let: c ∶ cap := call read_reg_cap (exp_var "lv") in
+      let: "new_begin" ∶ ty_int := call read_reg_num (exp_var "hv") in
+      let: "new_end" ∶ ty_int := exp_var "immediate" in
+      stm_match_record capability (exp_var "c")
+        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+          "cap_permission" "perm")
+          "cap_begin" "begin")
+          "cap_end" "end")
+          "cap_cursor" "cursor")
+        (let: "b" ∶ ty_bool := call is_within_range (exp_var "new_begin") (exp_var "new_end")
+                                   (exp_var "begin") (exp_var "end") in
+         stm_assert (exp_var "b") (lit_string "Err: [subsegi] tried to increase range of authority") ;;
+         let: "c'" ∶ cap := exp_record capability
+                                      [ exp_var "perm",
+                                        exp_var "new_begin",
+                                        exp_var "new_end",
+                                        exp_var "cursor"
+                                      ] in
+         stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
+         stm_call_external (ghost csafe_within_range) [exp_var "c'", exp_var "c"]%arg ;;
+         stm_call_external (ghost lift_csafe) [exp_var "c'"]%arg ;;
+         call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+         call update_pc ;;
+         stm_lit ty_bool true).
+
+    Definition fun_exec_isptr : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
+      stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
+      stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
+      let: w ∶ ty_word := call read_reg (exp_var "lv2") in
+      match: w with
+      | inl i =>
+        stm_call_external (ghost int_safe) [exp_lit ty_int 0%Z]%arg ;;
+        call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 0%Z))
+      | inr c =>
+        stm_call_external (ghost int_safe) [exp_lit ty_int 1%Z]%arg ;;
+        call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 1%Z))
+      end ;;
+      call update_pc ;;
+      stm_lit ty_bool true.
 
     Definition fun_exec_getp : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
@@ -579,6 +753,9 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       | inr c => fail "Err [read_reg_num]: expect register to hold a number"
       end.
 
+    Definition fun_exec_fail : Stm ε ty_bool :=
+      fail "machine failed".
+
     Definition fun_exec_ret : Stm ε ty_bool :=
       stm_exp lit_false.
 
@@ -602,7 +779,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     Definition fun_exec_jalr : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
-      stm_call_external (ghost csafe_move_cursor) [exp_var "opc", exp_var "npc"]%arg ;;
+      stm_call_external (ghost csafe_move_cursor) [exp_var "npc", exp_var "opc"]%arg ;;
       stm_call_external (ghost lift_csafe) [exp_var "npc"]%arg ;;
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg (exp_var "lv1") (exp_inr (exp_var "npc")) ;;
@@ -615,7 +792,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     Definition fun_exec_jal : Stm [lv ∶ ty_lv, offset ∶ ty_int] ty_bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
-      stm_call_external (ghost csafe_move_cursor) [exp_var "opc", exp_var "npc"]%arg ;;
+      stm_call_external (ghost csafe_move_cursor) [exp_var "npc", exp_var "opc"]%arg ;;
       stm_call_external (ghost lift_csafe) [exp_var "npc"]%arg ;;
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg lv (exp_inr (exp_var "npc")) ;;
@@ -646,14 +823,30 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
            | klea       => MkAlt (pat_pair lv hv) (call exec_lea lv hv)
            | krestrict  => MkAlt (pat_pair lv hv) (call exec_restrict lv hv)
            | krestricti => MkAlt (pat_pair lv immediate) (call exec_restricti lv immediate)
+           | ksubseg    => MkAlt (pat_tuple [lv , "hv1" , "hv2"])
+                            (call exec_subseg (exp_var lv) (exp_var "hv1") (exp_var "hv2"))
+           | ksubsegi   => MkAlt (pat_tuple [lv , hv , immediate])
+                            (call exec_subsegi (exp_var lv) (exp_var hv) (exp_var immediate))
            | kaddi      => MkAlt (pat_tuple [lv , hv , immediate])
                             (call exec_addi (exp_var lv) (exp_var hv) (exp_var immediate))
            | kadd       => MkAlt (pat_tuple ["lv1" , "lv2" , "lv3"])
                             (call exec_add (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
-           | kgetp      => MkAlt (pat_pair lv lv) (call exec_getp lv lv)
-           | kgetb      => MkAlt (pat_pair lv lv) (call exec_getb lv lv)
-           | kgete      => MkAlt (pat_pair lv lv) (call exec_gete lv lv)
-           | kgeta      => MkAlt (pat_pair lv lv) (call exec_geta lv lv)
+           | ksub       => MkAlt (pat_tuple ["lv1" , "lv2" , "lv3"])
+                            (call exec_sub (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
+           | kslt       => MkAlt (pat_tuple ["lv1" , "lv2" , "lv3"])
+                            (call exec_slt (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
+           | kslti      => MkAlt (pat_tuple [lv , hv , immediate])
+                            (call exec_slti (exp_var lv) (exp_var hv) (exp_var immediate))
+           | ksltu      => MkAlt (pat_tuple ["lv1" , "lv2" , "lv3"])
+                            (call exec_sltu (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
+           | ksltiu     => MkAlt (pat_tuple [lv , hv , immediate])
+                            (call exec_sltiu (exp_var lv) (exp_var hv) (exp_var immediate))
+           | kisptr     => MkAlt (pat_pair "lv1" "lv2") (call exec_isptr (exp_var "lv1") (exp_var "lv2"))
+           | kgetp      => MkAlt (pat_pair "lv1" "lv2") (call exec_getp (exp_var "lv1") (exp_var "lv2"))
+           | kgetb      => MkAlt (pat_pair "lv1" "lv2") (call exec_getb (exp_var "lv1") (exp_var "lv2"))
+           | kgete      => MkAlt (pat_pair "lv1" "lv2") (call exec_gete (exp_var "lv1") (exp_var "lv2"))
+           | kgeta      => MkAlt (pat_pair "lv1" "lv2") (call exec_geta (exp_var "lv1") (exp_var "lv2"))
+           | kfail      => MkAlt pat_unit (call exec_fail)
            | kret       => MkAlt pat_unit (call exec_ret)
            end).
 
@@ -705,46 +898,57 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
 
   Program Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
-    | read_reg       => fun_read_reg
-    | read_reg_cap   => fun_read_reg_cap
-    | read_reg_num   => fun_read_reg_num
-    | write_reg      => fun_write_reg
-    | next_pc        => fun_next_pc
-    | update_pc      => fun_update_pc
-    | add_pc         => fun_add_pc
-    | read_mem       => fun_read_mem
-    | write_mem      => fun_write_mem
-    | read_allowed   => fun_read_allowed
-    | write_allowed  => fun_write_allowed
+    | read_reg        => fun_read_reg
+    | read_reg_cap    => fun_read_reg_cap
+    | read_reg_num    => fun_read_reg_num
+    | write_reg       => fun_write_reg
+    | next_pc         => fun_next_pc
+    | update_pc       => fun_update_pc
+    | add_pc          => fun_add_pc
+    | read_mem        => fun_read_mem
+    | write_mem       => fun_write_mem
+    | read_allowed    => fun_read_allowed
+    | write_allowed   => fun_write_allowed
     (* | sub_perm       => fun_sub_perm *)
-    | upper_bound    => fun_upper_bound
-    | within_bounds  => fun_within_bounds
-    | perm_to_bits   => fun_perm_to_bits
-    | perm_from_bits => fun_perm_from_bits
-    | is_sub_perm    => fun_is_sub_perm
-    | exec_jr        => fun_exec_jr
-    | exec_jalr      => fun_exec_jalr
-    | exec_j         => fun_exec_j
-    | exec_jal       => fun_exec_jal
-    | exec_bnez      => fun_exec_bnez
-    | exec_mv        => fun_exec_mv
-    | exec_ld        => fun_exec_ld
-    | exec_sd        => fun_exec_sd
-    | exec_lea       => fun_exec_lea
-    | exec_restrict  => fun_exec_restrict
-    | exec_restricti => fun_exec_restricti
-    | exec_addi      => fun_exec_addi
-    | exec_add       => fun_exec_add
-    | exec_getp      => fun_exec_getp
-    | exec_getb      => fun_exec_getb
-    | exec_gete      => fun_exec_gete
-    | exec_geta      => fun_exec_geta
-    | exec_ret       => fun_exec_ret
-    | exec_instr     => fun_exec_instr
-    | compute_rv     => fun_compute_rv
-    | compute_rv_num => fun_compute_rv_num
-    | exec           => fun_exec
-    | loop           => fun_loop
+    | upper_bound     => fun_upper_bound
+    | within_bounds   => fun_within_bounds
+    | perm_to_bits    => fun_perm_to_bits
+    | perm_from_bits  => fun_perm_from_bits
+    | is_sub_perm     => fun_is_sub_perm
+    | is_within_range => fun_is_within_range
+    | abs             => fun_abs
+    | exec_jr         => fun_exec_jr
+    | exec_jalr       => fun_exec_jalr
+    | exec_j          => fun_exec_j
+    | exec_jal        => fun_exec_jal
+    | exec_bnez       => fun_exec_bnez
+    | exec_mv         => fun_exec_mv
+    | exec_ld         => fun_exec_ld
+    | exec_sd         => fun_exec_sd
+    | exec_lea        => fun_exec_lea
+    | exec_restrict   => fun_exec_restrict
+    | exec_restricti  => fun_exec_restricti
+    | exec_subseg     => fun_exec_subseg
+    | exec_subsegi    => fun_exec_subsegi
+    | exec_addi       => fun_exec_addi
+    | exec_add        => fun_exec_add
+    | exec_sub        => fun_exec_sub
+    | exec_slt        => fun_exec_slt
+    | exec_slti       => fun_exec_slti
+    | exec_sltu       => fun_exec_sltu
+    | exec_sltiu      => fun_exec_sltiu
+    | exec_isptr      => fun_exec_isptr
+    | exec_getp       => fun_exec_getp
+    | exec_getb       => fun_exec_getb
+    | exec_gete       => fun_exec_gete
+    | exec_geta       => fun_exec_geta
+    | exec_fail       => fun_exec_fail
+    | exec_ret        => fun_exec_ret
+    | exec_instr      => fun_exec_instr
+    | compute_rv      => fun_compute_rv
+    | compute_rv_num  => fun_compute_rv_num
+    | exec            => fun_exec
+    | loop            => fun_loop
     end.
 
   Definition RegStore := GenericRegStore.

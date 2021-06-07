@@ -58,19 +58,22 @@ Inductive Instruction : Set :=
 | sd        (hv : HV) (lv : LV) (immediate : Z)
 | addi      (lv : LV) (hv : HV) (immediate : Z)
 | add       (lv1 : LV) (lv2 : LV) (lv3 : LV)
-(* | lt       (lv : LV) (rv1 rv2 : RV) *)
-(* | plus     (lv : LV) (rv1 rv2 : RV) *)
-(* | minus    (lv : LV) (rv1 rv2 : RV) *)
+| sub       (lv1 : LV) (lv2 : LV) (lv3 : LV)
+| slt       (lv1 : LV) (lv2 : LV) (lv3 : LV)
+| slti      (lv : LV) (hv : HV) (immediate : Z)
+| sltu      (lv1 : LV) (lv2 : LV) (lv3 : LV)
+| sltiu     (lv : LV) (hv : HV) (immediate : Z)
 | lea       (lv : LV) (hv : HV)
 | restrict  (lv : LV) (hv : HV)
 | restricti (lv : LV) (immediate : Z)
-(* | subseg   (lv : LV) (rv1 rv2 : RV) *)
-(* | isptr    (lv : LV) (rv : RV) *)
+| subseg    (lv : LV) (hv1 hv2 : HV)
+| subsegi   (lv : LV) (hv : HV) (immediate : Z)
+| isptr     (lv : LV) (lv' : HV)
 | getp      (lv lv' : LV)
 | getb      (lv lv' : LV)
 | gete      (lv lv' : LV)
 | geta      (lv lv' : LV)
-(* | fail *)
+| fail
 | ret.
 
 Inductive InstructionConstructor : Set :=
@@ -84,19 +87,22 @@ Inductive InstructionConstructor : Set :=
 | ksd
 | kaddi
 | kadd
-(* | klt *)
-(* | kplus *)
-(* | kminus *)
+| ksub
+| kslt
+| kslti
+| ksltu
+| ksltiu
 | klea
 | krestrict
 | krestricti
-(* | ksubseg *)
-(* | kisptr *)
+| ksubseg
+| ksubsegi
+| kisptr
 | kgetp
 | kgetb
 | kgete
 | kgeta
-(* | kfail *)
+| kfail
 | kret.
 
 Section Records.
@@ -178,7 +184,7 @@ Section Finite.
 
   Global Program Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjr;kjalr;kj;kjal;kbnez;kmv;kld;ksd;klea;krestrict;krestricti;kaddi;kadd;kgetp;kgetb;kgete;kgeta;kret] |}.
+    {| enum := [kjr;kjalr;kj;kjal;kbnez;kmv;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kgetp;kgetb;kgete;kgeta;kfail;kret] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.

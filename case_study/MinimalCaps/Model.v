@@ -685,7 +685,7 @@ Module MinCapsModel.
 
   Lemma foreignSem `{sg : sailG Σ} : ForeignSem (Σ := Σ).
     intros Γ τ Δ f es δ.
-    destruct f as [_|_|_|Γ' [ | reg | | | | | | | ] es δ'];
+    destruct f as [_|_|_|Γ' [ | reg | | | | | | | | ] es δ'];
       cbn - [MinCapsIrisHeapKit.MinCaps_safe MinCapsIrisHeapKit.MinCaps_csafe];
       intros ι;
       destruct_SymInstance;
@@ -884,7 +884,7 @@ Module MinCapsModel.
       iSplitL; trivial.
       iSplitL; trivial.
       destruct p'; destruct p; trivial.
-  Qed.
+  Admitted.
 
   (* TODO: fix 
   Lemma rM_sound2 `{sg : sailG Σ} `{invG} {Γ es δ} :
