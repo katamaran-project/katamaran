@@ -1393,7 +1393,20 @@ Module Soundness
       intros t1 v1 -> t2 v2 ->.
       apply IHasn; cbn - [inst sub_wk1]; wsimpl; auto.
     - admit.
-    - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_angelic_match_record; auto.
+      eapply approx_four; [|reflexivity].
+      cbn in IHasn.
+      intros w2 w02 ι2 -> Hpc2.
+      intros args argsc Hargs.
+      eapply IHasn.
+      + rewrite inst_subst, Hargs.
+        (* TODO: rewrite and use Hpc2 *)
+        admit.
+      + unfold wcat_sub; cbn.
+        now rewrite inst_sub_cat, Hargs.
+      + assumption.
     - admit.
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_bind_right; eauto.
