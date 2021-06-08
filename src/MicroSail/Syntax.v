@@ -961,6 +961,30 @@ Module Terms (Export termkit : TermKit).
             (env_lookup E inctx_zero)
       end.
 
+    Lemma record_pattern_match_env_inverse_right {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+          (p : RecordPat rfs Δ) (vs : NamedEnv V Δ) :
+      record_pattern_match_env p (record_pattern_match_env_reverse p vs) = vs.
+    Proof.
+      induction p.
+      - now destruct (nilView vs).
+      - destruct (snocView vs) as [vs v].
+        cbn.
+        f_equal.
+        now apply IHp.
+    Qed.
+
+    Lemma record_pattern_match_env_inverse_left {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+          (p : RecordPat rfs Δ) (vs : NamedEnv V rfs) :
+      record_pattern_match_env_reverse p (record_pattern_match_env p vs) = vs.
+    Proof.
+      induction p.
+      - now destruct (nilView vs).
+      - destruct (snocView vs) as [vs v].
+        cbn.
+        f_equal.
+        now apply IHp.
+    Qed.
+
     Definition record_pattern_match_lit {N : Set} {R} {Δ : NCtx N Ty}
       (p : RecordPat (𝑹𝑭_Ty R) Δ) : Lit (ty_record R) -> NamedEnv Lit Δ :=
       fun v => record_pattern_match_env p (𝑹_unfold v).

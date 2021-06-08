@@ -139,6 +139,19 @@ Module SemiConcrete
     Definition demonic σ : CDijkstra (Lit σ) :=
       fun POST => forall v : Lit σ, POST v.
 
+    Definition demonic_ctx {N : Set} :
+      ∀ Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
+      fix rec Δ {struct Δ} :=
+        match Δ with
+        | ctx_nil             => fun k => k env_nil
+        | ctx_snoc Δ (x :: σ) =>
+          fun k =>
+            demonic σ (fun v =>
+              rec Δ (fun EΔ =>
+                k (EΔ ► (x :: σ ↦ v))))
+        end.
+    Arguments demonic_ctx {N} Δ.
+
     Definition assume_formula (fml : Prop) : CDijkstra unit :=
       fun POST => fml -> POST tt.
 
@@ -211,6 +224,23 @@ Module SemiConcrete
           now exists (env_snoc vs (x :: σ) v).
         + intros [vs Hwp]. destruct (snocView vs) as [vs v].
           exists v. apply IHΔ. now exists vs.
+    Qed.
+
+    Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Lit Δ -> Prop) :
+      demonic_ctx Δ POST <-> forall vs : NamedEnv Lit Δ, POST vs.
+    Proof.
+      induction Δ; cbn.
+      - split.
+        + intros ? vs.
+          now destruct (nilView vs).
+        + now intuition.
+      - destruct b as [x σ].
+        unfold demonic. split.
+        + intros Hwp vs.
+          destruct (snocView vs) as [vs v].
+          now eapply (IHΔ (fun vs => POST (env_snoc vs _ v))).
+        + intros HPost v.
+          now eapply (IHΔ (fun vs => POST (env_snoc vs (x , σ) v))).
     Qed.
 
     Lemma wp_angelic_list {A} (xs : list A) (POST : A -> Prop) :
@@ -325,6 +355,14 @@ Module SemiConcrete
 
       Definition demonic_finite {Γ} F `{finite.Finite F} : CMut Γ Γ F :=
         dijkstra (CDijk.demonic_finite (F:=F)).
+
+      Definition demonic_ctx {N : Set} {Γ} :
+        ∀ Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Lit Δ).
+      Proof.
+        intros Δ. apply dijkstra.
+        apply (CDijk.demonic_ctx Δ).
+      Defined.
+      Global Arguments demonic_ctx {N Γ} Δ.
 
     End Basic.
 
@@ -582,10 +620,52 @@ Module SemiConcrete
         now inversion H0.
       Qed.
 
-      Definition match_record {A R} {Γ1 Γ2 Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (t : Lit (ty_record R))
-        (m : SymInstance Δ -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
-        m (record_pattern_match_lit p t).
+      Definition angelic_match_record {A Γ1 Γ2} {Δ R} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
+        (Lit (ty_record R)) ->
+        (SymInstance Δ -> CMut Γ1 Γ2 A) ->
+        CMut Γ1 Γ2 A :=
+        fun v k =>
+          args <- angelic_ctx Δ ;;
+          assert_formula (𝑹_fold (record_pattern_match_env_reverse p args) = v) ;;
+          k args.
 
+      Lemma wp_angelic_match_record {A Γ1 Γ2} {Δ R} (p : RecordPat (𝑹𝑭_Ty R) Δ)
+        (v : Lit (ty_record R))
+        (k : SymInstance Δ -> CMut Γ1 Γ2 A)
+        POST δ h :
+        angelic_match_record p v k POST δ h <->
+        k (record_pattern_match_lit p v) POST δ h.
+      Proof.
+        cbv [angelic_match_record bind_right bind angelic_ctx dijkstra assert_formula CDijk.assert_formula].
+        rewrite CDijk.wp_angelic_ctx; intuition.
+        - destruct H as (vs & <- & H).
+          unfold record_pattern_match_lit.
+          now rewrite 𝑹_unfold_fold, record_pattern_match_env_inverse_right.
+        - exists (record_pattern_match_lit p v).
+          unfold record_pattern_match_lit.
+          now rewrite record_pattern_match_env_inverse_left, 𝑹_fold_unfold.
+      Qed.
+
+      Definition demonic_match_record {A Γ1 Γ2} {Δ R} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
+        (Lit (ty_record R)) ->
+        (SymInstance Δ -> CMut Γ1 Γ2 A) ->
+        CMut Γ1 Γ2 A :=
+        fun v k =>
+          args <- demonic_ctx Δ ;;
+          assume_formula (args = record_pattern_match_lit p v) ;;
+          k args.
+
+      Lemma wp_demonic_match_record {A Γ1 Γ2} {Δ R} (p : RecordPat (𝑹𝑭_Ty R) Δ)
+        (v : Lit (ty_record R))
+        (k : SymInstance Δ -> CMut Γ1 Γ2 A)
+        POST δ h :
+        demonic_match_record p v k POST δ h <->
+        k (record_pattern_match_lit p v) POST δ h.
+      Proof.
+        cbv [demonic_match_record bind_right bind demonic_ctx dijkstra assume_formula CDijk.assume_formula].
+        rewrite CDijk.wp_demonic_ctx; intuition; eauto.
+        now subst.
+      Qed.
     End PatternMatching.
 
     Section State.
@@ -663,7 +743,7 @@ Module SemiConcrete
           let ι' := tuple_pattern_match_lit p t in
           produce (ι ►► ι') rhs
         | asn_match_record R s p rhs =>
-          match_record p
+          demonic_match_record p
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => produce (ι ►► ι') rhs)
         | asn_match_union U s alt__ctx alt__pat alt__rhs =>
@@ -706,7 +786,7 @@ Module SemiConcrete
           let ι' := tuple_pattern_match_lit p t in
           consume (ι ►► ι') rhs
         | asn_match_record R s p rhs =>
-          match_record p
+          angelic_match_record p
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => consume (ι ►► ι') rhs)
         | asn_match_union U s alt__ctx alt__pat alt__rhs =>

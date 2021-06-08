@@ -892,25 +892,25 @@ Module Soundness
       intros t v ->.
       intros k k__c Hk.
       unfold SMut.angelic_match_prod, CMut.angelic_match_prod.
-      - eapply approx_bind; try (eapply approx_angelic; assumption).
-        intros w1 r01 ι1 -> Hpc1.
-        intros v1 vc1 ->.
-        eapply approx_bind; try (eapply approx_angelic; assumption).
-        intros w2 r12 ι2 -> Hpc2.
-        intros v2 vc2 ->.
-        eapply approx_bind_right.
-        + eapply approx_assert_formula; try assumption.
-          unfold inst at 7; cbn.
-          change (inst_term (subst v1 r12) ι2) with (inst (subst v1 r12) ι2).
-          now rewrite ?inst_subst.
-        + intros w3 r23 ι3 -> Hpc3.
-          eapply (approx_four Hk); eauto.
-          * rewrite <- inst_subst.
-            now unfold persist, persist_subst.
-          * unfold persist, persist_subst, wtrans; cbn.
-            now rewrite <- ?inst_subst, subst_assoc.
-          * rewrite <- inst_subst.
-            now unfold persist, persist_subst.
+      eapply approx_bind; try (eapply approx_angelic; assumption).
+      intros w1 r01 ι1 -> Hpc1.
+      intros v1 vc1 ->.
+      eapply approx_bind; try (eapply approx_angelic; assumption).
+      intros w2 r12 ι2 -> Hpc2.
+      intros v2 vc2 ->.
+      eapply approx_bind_right.
+      + eapply approx_assert_formula; try assumption.
+        unfold inst at 7; cbn.
+        change (inst_term (subst v1 r12) ι2) with (inst (subst v1 r12) ι2).
+        now rewrite ?inst_subst.
+      + intros w3 r23 ι3 -> Hpc3.
+        eapply (approx_four Hk); eauto.
+        * rewrite <- inst_subst.
+          now unfold persist, persist_subst.
+        * unfold persist, persist_subst, wtrans; cbn.
+          now rewrite <- ?inst_subst, subst_assoc.
+        * rewrite <- inst_subst.
+          now unfold persist, persist_subst.
     Qed.
 
     Lemma approx_demonic_match_prod {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
@@ -941,14 +941,14 @@ Module Soundness
     Lemma approx_angelic_match_record {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : LCtx} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.angelic_match_record _ id AT R Γ1 Γ2 Δ p w) (@CMut.match_record A R Γ1 Γ2 Δ p).
+      approx ι (@SMut.angelic_match_record _ id AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record A Γ1 Γ2 Δ R p).
     Proof.
     Admitted.
 
     Lemma approx_demonic_match_record {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : LCtx} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.demonic_match_record _ id AT R Γ1 Γ2 Δ p w) (@CMut.match_record A R Γ1 Γ2 Δ p).
+      approx ι (@SMut.demonic_match_record _ id AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record A Γ1 Γ2 Δ R p).
     Proof.
     Admitted.
 

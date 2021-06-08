@@ -190,7 +190,8 @@ Module Soundness
       - rewrite ?wp_angelic_match_prod.
         destruct (inst s ι); cbn; eauto.
       - eauto.
-      - unfold match_record. eauto.
+      - rewrite ?wp_angelic_match_record;
+        eauto.
       - destruct (𝑼_unfold (inst s ι)); eauto.
       - unfold bind_right, bind.
         apply IHasn1; eauto.
@@ -219,7 +220,8 @@ Module Soundness
       - rewrite ?wp_demonic_match_prod.
         destruct (inst s ι); cbn; eauto.
       - eauto.
-      - unfold match_record. eauto.
+      - rewrite ?wp_demonic_match_record;
+        eauto.
       - destruct (𝑼_unfold (inst s ι)); eauto.
       - unfold bind_right, bind.
         apply IHasn1; eauto.
@@ -244,7 +246,8 @@ Module Soundness
       - rewrite ?wp_angelic_match_prod.
         destruct (inst s ι); auto.
       - auto.
-      - auto.
+      - rewrite wp_angelic_match_record.
+        auto.
       - destruct (𝑼_unfold (inst s ι)); auto.
       - unfold bind_right, bind. intros Hwp. rewrite sepcon_assoc.
         apply (IHasn1 ι (fun δ => interpret_assertion asn2 ι ✱ POST δ) δ1 h1); clear IHasn1.
@@ -277,7 +280,7 @@ Module Soundness
       - rewrite wp_demonic_match_prod.
         destruct (inst s ι); auto.
       - auto.
-      - auto.
+      - rewrite wp_demonic_match_record. auto.
       - destruct (𝑼_unfold (inst s ι)); auto.
       - unfold bind_right, bind. intros Hwp.
         rewrite <- sepcon_assoc.
