@@ -213,17 +213,26 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
 
   Notation stm_call_external := stm_foreign.
 
-  Notation "'callghost' f" :=
-    (stm_foreign (ghost f) env_nil)
-    (at level 10, f at next level) : exp_scope.
+  Notation "'use' 'lemma' f args" := (stm_foreign (ghost f) args%arg) (at level 10, f at next level) : exp_scope.
+  Notation "'use' 'lemma' f" := (stm_foreign (ghost f) env_nil) (at level 10, f at next level) : exp_scope.
+
+  (* NOTE: need to wrap s around parentheses when using this notation (not a real let binding!) *)
+  Notation "'let*:' '[' perm ',' beg ',' en ',' cur ']' ':=' cap 'in' s" :=
+    (stm_match_record capability cap
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+       "cap_permission" perm)
+       "cap_begin" beg)
+       "cap_end" en)
+       "cap_cursor" cur)
+    s) (at level 10) : exp_scope.
 
   Definition fun_read_reg : Stm ["rreg" ∶ ty_enum regname ] ty_word :=
-    stm_call_external (ghost open_ptsreg) [exp_var "rreg"]%arg ;;
+    use lemma open_ptsreg [exp_var "rreg"]%arg ;;
     match: exp_var "rreg" in regname with
-    | R0 => let: "x" := stm_read_register reg0 in callghost (close_ptsreg R0) ;; stm_exp x
-    | R1 => let: "x" := stm_read_register reg1 in callghost (close_ptsreg R1) ;; stm_exp x
-    | R2 => let: "x" := stm_read_register reg2 in callghost (close_ptsreg R2) ;; stm_exp x
-    | R3 => let: "x" := stm_read_register reg3 in callghost (close_ptsreg R3) ;; stm_exp x
+    | R0 => let: "x" := stm_read_register reg0 in use lemma (close_ptsreg R0) ;; stm_exp x
+    | R1 => let: "x" := stm_read_register reg1 in use lemma (close_ptsreg R1) ;; stm_exp x
+    | R2 => let: "x" := stm_read_register reg2 in use lemma (close_ptsreg R2) ;; stm_exp x
+    | R3 => let: "x" := stm_read_register reg3 in use lemma (close_ptsreg R3) ;; stm_exp x
     end.
 
   Definition fun_read_reg_cap : Stm ["creg" ∶ ty_enum regname ] ty_cap :=
@@ -243,22 +252,17 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   Definition fun_write_reg : Stm ["wreg" ∶ ty_enum regname,
                                   "w" ∶ ty_word
                                  ] ty_unit :=
-    stm_call_external (ghost open_ptsreg) [exp_var "wreg"]%arg ;;
+    use lemma open_ptsreg [exp_var "wreg"] ;;
     match: exp_var "wreg" in regname with
-    | R0 => let: "x" := stm_write_register reg0 (exp_var "w") in callghost (close_ptsreg R0) ;; stm_exp x
-    | R1 => let: "x" := stm_write_register reg1 (exp_var "w") in callghost (close_ptsreg R1) ;; stm_exp x
-    | R2 => let: "x" := stm_write_register reg2 (exp_var "w") in callghost (close_ptsreg R2) ;; stm_exp x
-    | R3 => let: "x" := stm_write_register reg3 (exp_var "w") in callghost (close_ptsreg R3) ;; stm_exp x
+    | R0 => let: "x" := stm_write_register reg0 (exp_var "w") in use lemma (close_ptsreg R0) ;; stm_exp x
+    | R1 => let: "x" := stm_write_register reg1 (exp_var "w") in use lemma (close_ptsreg R1) ;; stm_exp x
+    | R2 => let: "x" := stm_write_register reg2 (exp_var "w") in use lemma (close_ptsreg R2) ;; stm_exp x
+    | R3 => let: "x" := stm_write_register reg3 (exp_var "w") in use lemma (close_ptsreg R3) ;; stm_exp x
     end ;; stm_lit ty_unit tt.
 
   Definition fun_next_pc : Stm ctx_nil ty_cap :=
     let: "c" := stm_read_register pc in
-    stm_match_record capability (exp_var "c")
-      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-       "cap_permission" "perm")
-       "cap_begin" "beg")
-       "cap_end" "end")
-       "cap_cursor" "cur")
+    let*: ["perm" , "beg" , "end" , "cur"] := (exp_var "c") in
       (exp_record capability
          [ exp_var "perm",
            exp_var "beg",
@@ -268,26 +272,21 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   Definition fun_update_pc : Stm ctx_nil ty_unit :=
     let: "opc" := stm_read_register pc in
     let: "npc" := call next_pc in
-    stm_call_external (ghost csafe_move_cursor) [exp_var "npc", exp_var "opc"]%arg ;;
+    use lemma csafe_move_cursor [exp_var "npc", exp_var "opc"] ;;
     stm_write_register pc (exp_var "npc") ;;
     stm_lit ty_unit tt.
 
   Definition fun_add_pc : Stm ["offset" ∶ ty_int ] ty_unit :=
     let: "opc" := stm_read_register pc in
-    stm_match_record capability (exp_var "opc")
-      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-       "cap_permission" "perm")
-       "cap_begin" "beg")
-       "cap_end" "end")
-       "cap_cursor" "cur")
-      (let: "npc" := (exp_record capability
-           [ exp_var "perm",
-             exp_var "beg",
-             exp_var "end",
-             exp_var "cur" + exp_var "offset" ]) in
-       stm_call_external (ghost csafe_move_cursor) [exp_var "npc", exp_var "opc"]%arg ;;
-       stm_write_register pc (exp_var "npc")) ;;
-    stm_lit ty_unit tt.
+    let*: ["perm", "beg", "end", "cur"] := (exp_var "opc") in
+    (let: "npc" := (exp_record capability
+                               [ exp_var "perm",
+                                 exp_var "beg",
+                                 exp_var "end",
+                                 exp_var "cur" + exp_var "offset" ]) in
+     use lemma csafe_move_cursor [exp_var "npc", exp_var "opc"] ;;
+     stm_write_register pc (exp_var "npc") ;;
+     stm_lit ty_unit tt).
 
   Definition fun_read_allowed : Stm ["p" ∶ ty_perm] ty_bool :=
     call is_sub_perm (exp_lit (ty_enum permission) R) (exp_var "p").
@@ -305,17 +304,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   (*   end. *)
 
   Definition fun_within_bounds : Stm ["c" ∶ ty_cap ] ty_bool :=
-    stm_match_record capability (exp_var "c")
-      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-      "cap_permission" "p")
-      "cap_begin" "b")
-      "cap_end" "e")
-      "cap_cursor" "a")
-      (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
-       stm_exp ((exp_var "b" <= exp_var "a") && exp_var "u")).
+    let*: ["p", "b", "e", "a"] := (exp_var "c") in
+    (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
+     (exp_var "b" <= exp_var "a") && exp_var "u").
 
-  Definition fun_upper_bound : Stm ["a"   ∶ ty_addr, "e"   ∶ ty_addr] ty_bool :=
-    stm_exp (a <= e).
+  Definition fun_upper_bound : Stm ["a" ∶ ty_addr, "e" ∶ ty_addr] ty_bool :=
+    a <= e.
 
   Section ExecStore.
 
@@ -331,134 +325,104 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
       let: "base_cap" ∶ cap  := call read_reg_cap lv in
-      stm_match_record
-        capability (exp_var "base_cap")
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "perm")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-        (let: "c" ∶ cap := exp_record capability
-                             [ exp_var "perm",
-                               exp_var "beg",
-                               exp_var "end",
-                               exp_var "cursor" + exp_var "immediate"
-                             ] in
-         let: w ∶ ty_word := call read_reg hv in
-         stm_call_external (ghost duplicate_safe) [exp_var w]%arg ;;
-         stm_call_external (ghost specialize_safe_to_cap) [exp_var "base_cap"]%arg ;;
-         stm_call_external (ghost csafe_move_cursor) [exp_var "c", exp_var "base_cap"]%arg ;;
-         stm_call_external (ghost lift_csafe) [exp_var "base_cap"]%arg ;;
-         call write_mem c w ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["perm", "beg", "end", "cursor"] := (exp_var "base_cap") in
+      (let: "c" ∶ cap := exp_record capability
+                                    [ exp_var "perm",
+                                      exp_var "beg",
+                                      exp_var "end",
+                                      exp_var "cursor" + exp_var "immediate"
+                                    ] in
+       let: w ∶ ty_word := call read_reg hv in
+       use lemma duplicate_safe [exp_var w] ;;
+       use lemma specialize_safe_to_cap [exp_var "base_cap"] ;;
+       use lemma csafe_move_cursor [exp_var "c", exp_var "base_cap"] ;;
+       use lemma lift_csafe [exp_var "base_cap"] ;;
+       call write_mem c w ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_exec_ld : Stm [lv ∶ ty_lv, hv ∶ ty_hv, "immediate" ∶ ty_int ] ty_bool :=
       stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
       let: "base_cap" ∶ cap  := call read_reg_cap hv in
-      stm_match_record
-        capability (exp_var "base_cap")
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "perm")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-        (let: "c" ∶ cap := exp_record capability
-                             [ exp_var "perm",
-                               exp_var "beg",
-                               exp_var "end",
-                               exp_var "cursor" + exp_var "immediate"
-                             ] in
-         stm_call_external (ghost specialize_safe_to_cap) [exp_var "base_cap"]%arg ;;
-         stm_call_external (ghost csafe_move_cursor) [exp_var "c", exp_var "base_cap"]%arg ;;
-         stm_call_external (ghost lift_csafe) [exp_var "base_cap"]%arg ;;
-         let: n ∶ ty_memval := call read_mem c in
-         stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
-         call write_reg lv (exp_var n) ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["perm", "beg", "end", "cursor"] := (exp_var "base_cap") in
+      (let: "c" ∶ cap := exp_record capability
+                                    [ exp_var "perm",
+                                      exp_var "beg",
+                                      exp_var "end",
+                                      exp_var "cursor" + exp_var "immediate"
+                                    ] in
+       use lemma specialize_safe_to_cap [exp_var "base_cap"] ;;
+       use lemma csafe_move_cursor [exp_var "c", exp_var "base_cap"] ;;
+       use lemma lift_csafe [exp_var "base_cap"] ;;
+       let: n ∶ ty_memval := call read_mem c in
+       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
+       call write_reg lv (exp_var n) ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_exec_lea : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool :=
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
       let: "base_cap" ∶ cap  := call read_reg_cap (exp_var "lv") in
       let: "offset" ∶ ty_int := call read_reg_num (exp_var "hv") in
-      stm_match_record
-        capability (exp_var "base_cap")
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "perm")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-        (let: "c" ∶ cap := exp_record capability
-                             [ exp_var "perm",
-                               exp_var "beg",
-                               exp_var "end",
-                               exp_var "cursor" + exp_var "offset"
-                             ] in
-         stm_call_external (ghost specialize_safe_to_cap) [exp_var "base_cap"]%arg ;;
-         stm_call_external (ghost csafe_move_cursor) [exp_var "c", exp_var "base_cap"]%arg ;;
-         stm_call_external (ghost lift_csafe) [exp_var "c"]%arg ;;
-         call write_reg (exp_var "lv") (exp_inr (exp_var "c")) ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["perm", "beg", "end", "cursor"] := (exp_var "base_cap") in
+      (let: "c" ∶ cap := exp_record capability
+                                    [ exp_var "perm",
+                                      exp_var "beg",
+                                      exp_var "end",
+                                      exp_var "cursor" + exp_var "offset"
+                                    ] in
+       use lemma specialize_safe_to_cap [exp_var "base_cap"] ;;
+       use lemma csafe_move_cursor [exp_var "c", exp_var "base_cap"] ;;
+       use lemma lift_csafe [exp_var "c"] ;;
+       call write_reg (exp_var "lv") (exp_inr (exp_var "c")) ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_exec_restrict : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv] ty_bool :=
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
       let: "c" ∶ cap  := call read_reg_cap (exp_var "lv") in
       let: "n" ∶ ty_int := call read_reg_num (exp_var "hv") in
-      stm_match_record
-        capability (exp_var "c")
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "p")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-        (let: "p'" ∶ ty_perm := call perm_from_bits (exp_var "n") in
-         let: "le" ∶ ty_bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
-         stm_assert (exp_var "le") (lit_string "Err: [restrict] tried to increase permission") ;;
-         let: "c'" ∶ cap := exp_record capability
-                                      [ exp_var "p'",
-                                        exp_var "beg",
-                                        exp_var "end",
-                                        exp_var "cursor"
-                                      ] in
-         stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
-         stm_call_external (ghost csafe_sub_perm) [exp_var "c'", exp_var "c"]%arg ;;
-         stm_call_external (ghost lift_csafe) [exp_var "c'"]%arg ;;
-         call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["p", "beg", "end", "cursor"] := (exp_var "c") in
+      (let: "p'" ∶ ty_perm := call perm_from_bits (exp_var "n") in
+       let: "le" ∶ ty_bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
+       stm_assert (exp_var "le") (lit_string "Err: [restrict] tried to increase permission") ;;
+       let: "c'" ∶ cap := exp_record capability
+                                     [ exp_var "p'",
+                                       exp_var "beg",
+                                       exp_var "end",
+                                       exp_var "cursor"
+                                     ] in
+       use lemma specialize_safe_to_cap [exp_var "c"] ;;
+       use lemma csafe_sub_perm [exp_var "c'", exp_var "c"] ;;
+       use lemma lift_csafe [exp_var "c'"] ;;
+       call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_exec_restricti : Stm ["lv" ∶ ty_lv, "immediate" ∶ ty_int] ty_bool :=
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       let: "c" ∶ cap  := call read_reg_cap (exp_var "lv") in
       let: "n" ∶ ty_int := exp_var "immediate" in
-      stm_match_record
-        capability (exp_var "c")
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "p")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-        (let: "p'" ∶ ty_perm := call perm_from_bits (exp_var "n") in
-         stm_match_enum permission (exp_var "p") (fun _ => stm_lit ty_unit tt) ;;
-         stm_match_enum permission (exp_var "p'") (fun _ => stm_lit ty_unit tt) ;;
-         let: "le" ∶ ty_bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
-         stm_assert (exp_var "le") (lit_string "Err: [restricti] tried to increase permission") ;;
-         let: "c'" ∶ cap := exp_record capability
-                                      [ exp_var "p'",
-                                        exp_var "beg",
-                                        exp_var "end",
-                                        exp_var "cursor"
-                                      ] in
-         stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
-         stm_call_external (ghost csafe_sub_perm) [exp_var "c'", exp_var "c"]%arg ;;
-         stm_call_external (ghost lift_csafe) [exp_var "c'"]%arg ;;
-         call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["p", "beg", "end", "cursor"] := (exp_var "c") in
+      (let: "p'" ∶ ty_perm := call perm_from_bits (exp_var "n") in
+       stm_match_enum permission (exp_var "p") (fun _ => stm_lit ty_unit tt) ;;
+       stm_match_enum permission (exp_var "p'") (fun _ => stm_lit ty_unit tt) ;;
+       let: "le" ∶ ty_bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
+       stm_assert (exp_var "le") (lit_string "Err: [restricti] tried to increase permission") ;;
+       let: "c'" ∶ cap := exp_record capability
+                                     [ exp_var "p'",
+                                       exp_var "beg",
+                                       exp_var "end",
+                                       exp_var "cursor"
+                                     ] in
+       use lemma specialize_safe_to_cap [exp_var "c"] ;;
+       use lemma csafe_sub_perm [exp_var "c'", exp_var "c"] ;;
+       use lemma lift_csafe [exp_var "c'"] ;;
+       call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_exec_addi : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int ] ty_bool :=
       stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
@@ -466,7 +430,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       let: "res" ∶ ty_int := stm_exp (exp_var "v" + exp_var "immediate") in
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg (exp_var "lv") (exp_inl (exp_var "res")) ;;
-      stm_call_external (ghost int_safe) [exp_var "res"]%arg ;;
+      use lemma int_safe [exp_var "res"] ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
@@ -478,7 +442,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       let: "res" ∶ int := stm_exp (exp_var "v1" + exp_var "v2") in
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg (exp_var "lv1") (exp_inl (exp_var "res")) ;;
-      stm_call_external (ghost int_safe) [exp_var "res"]%arg ;;
+      use lemma int_safe [exp_var "res"] ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
@@ -490,7 +454,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       let: "res" ∶ int := stm_exp (exp_var "v1" - exp_var "v2") in
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg (exp_var "lv1") (exp_inl (exp_var "res")) ;;
-      stm_call_external (ghost int_safe) [exp_var "res"]%arg ;;
+      use lemma int_safe [exp_var "res"] ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
@@ -508,10 +472,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       (if: exp_var "v1" < exp_var "v2"
        then
          call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 1%Z)) ;;
-         stm_call_external (ghost int_safe) [exp_lit ty_int 1%Z]%arg
+         use lemma int_safe [exp_lit ty_int 1%Z]
        else
          call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 0%Z)) ;;
-         stm_call_external (ghost int_safe) [exp_lit ty_int 0%Z]%arg) ;;
+         use lemma int_safe [exp_lit ty_int 0%Z]) ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
@@ -523,10 +487,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       (if: exp_var "v1" < exp_var "v2"
        then
          call write_reg (exp_var "lv") (exp_inl (exp_lit ty_int 1%Z)) ;;
-         stm_call_external (ghost int_safe) [exp_lit ty_int 1%Z]%arg
+         use lemma int_safe [exp_lit ty_int 1%Z]
        else
          call write_reg (exp_var "lv") (exp_inl (exp_lit ty_int 0%Z)) ;;
-         stm_call_external (ghost int_safe) [exp_lit ty_int 0%Z]%arg) ;;
+         use lemma int_safe [exp_lit ty_int 0%Z]) ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
@@ -541,10 +505,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       (if: exp_var "uv1" < exp_var "uv2"
        then
          call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 1%Z)) ;;
-         stm_call_external (ghost int_safe) [exp_lit ty_int 1%Z]%arg
+         use lemma int_safe [exp_lit ty_int 1%Z]
        else
          call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 0%Z)) ;;
-         stm_call_external (ghost int_safe) [exp_lit ty_int 0%Z]%arg) ;;
+         use lemma int_safe [exp_lit ty_int 0%Z]) ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
@@ -558,10 +522,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       (if: exp_var "uv1" < exp_var "uv2"
        then
          call write_reg (exp_var "lv") (exp_inl (exp_lit ty_int 1%Z)) ;;
-         stm_call_external (ghost int_safe) [exp_lit ty_int 1%Z]%arg
+         use lemma int_safe [exp_lit ty_int 1%Z]
        else
          call write_reg (exp_var "lv") (exp_inl (exp_lit ty_int 0%Z)) ;;
-         stm_call_external (ghost int_safe) [exp_lit ty_int 0%Z]%arg) ;;
+         use lemma int_safe [exp_lit ty_int 0%Z]) ;;
       call update_pc ;;
       stm_lit ty_bool true.
 
@@ -582,17 +546,17 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     Definition fun_is_sub_perm : Stm ["p" ∶ ty_perm, "p'" ∶ ty_perm] ty_bool :=
       match: exp_var "p" in permission with
       | O =>
-        stm_call_external (ghost sub_perm) [exp_var "p", exp_var "p'"]%arg ;;
+        use lemma sub_perm [exp_var "p", exp_var "p'"] ;;
         stm_lit ty_bool true
       | R => match: exp_var "p'" in permission with
             | O => stm_lit ty_bool false
             | _ =>
-              stm_call_external (ghost sub_perm) [exp_var "p", exp_var "p'"]%arg ;;
+              use lemma sub_perm [exp_var "p", exp_var "p'"] ;;
               stm_lit ty_bool true
             end
       | RW => match: exp_var "p'" in permission with
              | RW =>
-               stm_call_external (ghost sub_perm) [exp_var "p", exp_var "p'"]%arg ;;
+               use lemma sub_perm [exp_var "p", exp_var "p'"] ;;
                stm_lit ty_bool true
             | _ => stm_lit ty_bool false
             end
@@ -610,27 +574,22 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       let: c ∶ cap := call read_reg_cap (exp_var "lv") in
       let: "new_begin" ∶ ty_int := call read_reg_num (exp_var "hv1") in
       let: "new_end" ∶ ty_int := call read_reg_num (exp_var "hv2") in
-      stm_match_record capability (exp_var "c")
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-          "cap_permission" "perm")
-          "cap_begin" "begin")
-          "cap_end" "end")
-          "cap_cursor" "cursor")
-        (let: "b" ∶ ty_bool := call is_within_range (exp_var "new_begin") (exp_var "new_end")
-                                   (exp_var "begin") (exp_var "end") in
-         stm_assert (exp_var "b") (lit_string "Err: [subseg] tried to increase range of authority") ;;
-         let: "c'" ∶ cap := exp_record capability
-                                      [ exp_var "perm",
-                                        exp_var "new_begin",
-                                        exp_var "new_end",
-                                        exp_var "cursor"
-                                      ] in
-         stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
-         stm_call_external (ghost csafe_within_range) [exp_var "c'", exp_var "c"]%arg ;;
-         stm_call_external (ghost lift_csafe) [exp_var "c'"]%arg ;;
-         call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["perm", "begin", "end", "cursor"] := (exp_var "c") in
+      (let: "b" ∶ ty_bool := call is_within_range (exp_var "new_begin") (exp_var "new_end")
+                                  (exp_var "begin") (exp_var "end") in
+       stm_assert (exp_var "b") (lit_string "Err: [subseg] tried to increase range of authority") ;;
+       let: "c'" ∶ cap := exp_record capability
+                                     [ exp_var "perm",
+                                       exp_var "new_begin",
+                                       exp_var "new_end",
+                                       exp_var "cursor"
+                                     ] in
+       use lemma specialize_safe_to_cap [exp_var "c"] ;;
+       use lemma csafe_within_range [exp_var "c'", exp_var "c"] ;;
+       use lemma lift_csafe [exp_var "c'"] ;;
+       call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_exec_subsegi : Stm ["lv" ∶ ty_lv, "hv" ∶ ty_hv, "immediate" ∶ ty_int]
                                       ty_bool :=
@@ -639,27 +598,22 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       let: c ∶ cap := call read_reg_cap (exp_var "lv") in
       let: "new_begin" ∶ ty_int := call read_reg_num (exp_var "hv") in
       let: "new_end" ∶ ty_int := exp_var "immediate" in
-      stm_match_record capability (exp_var "c")
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-          "cap_permission" "perm")
-          "cap_begin" "begin")
-          "cap_end" "end")
-          "cap_cursor" "cursor")
-        (let: "b" ∶ ty_bool := call is_within_range (exp_var "new_begin") (exp_var "new_end")
-                                   (exp_var "begin") (exp_var "end") in
-         stm_assert (exp_var "b") (lit_string "Err: [subsegi] tried to increase range of authority") ;;
-         let: "c'" ∶ cap := exp_record capability
-                                      [ exp_var "perm",
-                                        exp_var "new_begin",
-                                        exp_var "new_end",
-                                        exp_var "cursor"
-                                      ] in
-         stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
-         stm_call_external (ghost csafe_within_range) [exp_var "c'", exp_var "c"]%arg ;;
-         stm_call_external (ghost lift_csafe) [exp_var "c'"]%arg ;;
-         call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["perm", "begin", "end", "cursor"] := (exp_var "c") in
+      (let: "b" ∶ ty_bool := call is_within_range (exp_var "new_begin") (exp_var "new_end")
+                                  (exp_var "begin") (exp_var "end") in
+       stm_assert (exp_var "b") (lit_string "Err: [subsegi] tried to increase range of authority") ;;
+       let: "c'" ∶ cap := exp_record capability
+                                     [ exp_var "perm",
+                                       exp_var "new_begin",
+                                       exp_var "new_end",
+                                       exp_var "cursor"
+                                     ] in
+       use lemma specialize_safe_to_cap [exp_var "c"] ;;
+       use lemma csafe_within_range [exp_var "c'", exp_var "c"] ;;
+       use lemma lift_csafe [exp_var "c'"] ;;
+       call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_exec_isptr : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
@@ -667,10 +621,10 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       let: w ∶ ty_word := call read_reg (exp_var "lv2") in
       match: w with
       | inl i =>
-        stm_call_external (ghost int_safe) [exp_lit ty_int 0%Z]%arg ;;
+        use lemma int_safe [exp_lit ty_int 0%Z] ;;
         call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 0%Z))
       | inr c =>
-        stm_call_external (ghost int_safe) [exp_lit ty_int 1%Z]%arg ;;
+        use lemma int_safe [exp_lit ty_int 1%Z] ;;
         call write_reg (exp_var "lv1") (exp_inl (exp_lit ty_int 1%Z))
       end ;;
       call update_pc ;;
@@ -680,66 +634,42 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
       let: c ∶ cap := call read_reg_cap (exp_var "lv2") in
-      stm_match_record
-        capability (exp_var c)
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "perm")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-        (let: "i" ∶ ty_int := call perm_to_bits (exp_var "perm") in
-         call write_reg (exp_var "lv1") (exp_inl (exp_var "i")) ;;
-         stm_call_external (ghost int_safe) [exp_var "i"]%arg ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
+      (let: "i" ∶ ty_int := call perm_to_bits (exp_var "perm") in
+       call write_reg (exp_var "lv1") (exp_inl (exp_var "i")) ;;
+       use lemma int_safe [exp_var "i"] ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_exec_getb : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
       let: c ∶ cap := call read_reg_cap (exp_var "lv2") in
-      stm_match_record
-        capability (exp_var c)
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "perm")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-        (call write_reg (exp_var "lv1") (exp_inl (exp_var "beg")) ;;
-         stm_call_external (ghost int_safe) [exp_var "beg"]%arg ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
+      (call write_reg (exp_var "lv1") (exp_inl (exp_var "beg")) ;;
+       use lemma int_safe [exp_var "beg"] ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_exec_gete : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
       let: c ∶ cap := call read_reg_cap (exp_var "lv2") in
-      stm_match_record
-        capability (exp_var c)
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "perm")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-        (call write_reg (exp_var "lv1") (exp_inl (exp_var "end")) ;;
-         stm_call_external (ghost int_safe) [exp_var "end"]%arg ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
+      (call write_reg (exp_var "lv1") (exp_inl (exp_var "end")) ;;
+       use lemma int_safe [exp_var "end"] ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_exec_geta : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       stm_match_enum regname (exp_var "lv2") (fun _ => stm_lit ty_unit tt) ;;
       let: c ∶ cap := call read_reg_cap (exp_var "lv2") in
-      stm_match_record
-        capability (exp_var c)
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "perm")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-        (call write_reg (exp_var "lv1") (exp_inl (exp_var "cursor")) ;;
-         stm_call_external (ghost int_safe) [exp_var "cursor"]%arg ;;
-         call update_pc ;;
-         stm_lit ty_bool true).
+      let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
+      (call write_reg (exp_var "lv1") (exp_inl (exp_var "cursor")) ;;
+       use lemma int_safe [exp_var "cursor"] ;;
+       call update_pc ;;
+       stm_lit ty_bool true).
 
     Definition fun_compute_rv : Stm [rv ∶ ty_rv] ty_word :=
       stm_match_sum rv
@@ -763,7 +693,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       let: w ∶ word := call read_reg (exp_var hv) in
-      stm_call_external (ghost duplicate_safe) [exp_var w]%arg ;;
+      use lemma duplicate_safe [exp_var w] ;;
       call write_reg lv (exp_var w) ;;
       call update_pc ;;
       stm_lit ty_bool true.
@@ -772,15 +702,15 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       let: "c" ∶ ty_cap := call read_reg_cap (exp_var "lv") in
       stm_write_register pc (exp_var "c") ;;
-      stm_call_external (ghost duplicate_safe) [exp_inr (exp_var "c")]%arg ;;
-      stm_call_external (ghost specialize_safe_to_cap) [exp_var "c"]%arg ;;
+      use lemma duplicate_safe [exp_inr (exp_var "c")] ;;
+      use lemma specialize_safe_to_cap [exp_var "c"] ;;
       stm_lit ty_bool true.
 
     Definition fun_exec_jalr : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
-      stm_call_external (ghost csafe_move_cursor) [exp_var "npc", exp_var "opc"]%arg ;;
-      stm_call_external (ghost lift_csafe) [exp_var "npc"]%arg ;;
+      use lemma csafe_move_cursor [exp_var "npc", exp_var "opc"] ;;
+      use lemma lift_csafe [exp_var "npc"] ;;
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg (exp_var "lv1") (exp_inr (exp_var "npc")) ;;
       call exec_jr (exp_var "lv2").
@@ -792,8 +722,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     Definition fun_exec_jal : Stm [lv ∶ ty_lv, offset ∶ ty_int] ty_bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
-      stm_call_external (ghost csafe_move_cursor) [exp_var "npc", exp_var "opc"]%arg ;;
-      stm_call_external (ghost lift_csafe) [exp_var "npc"]%arg ;;
+      use lemma csafe_move_cursor [exp_var "npc", exp_var "opc"] ;;
+      use lemma lift_csafe [exp_var "npc"] ;;
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg lv (exp_inr (exp_var "npc")) ;;
       call exec_j offset.
@@ -851,32 +781,20 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
            end).
 
     Definition fun_read_mem : Stm ["c" ∶ ty_cap] ty_memval :=
-      stm_match_record
-        capability (exp_var "c")
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "perm")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-         (let: p ∶ bool := call read_allowed (exp_var "perm") in
-         stm_assert p (lit_string "Err: [read_mem] no read permission") ;;
-         let: q ∶ bool := call within_bounds c in
-         stm_assert q (lit_string "Err: [read_mem] out of bounds") ;;
-         foreign rM (exp_var "cursor")).
+      let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
+      (let: p ∶ bool := call read_allowed (exp_var "perm") in
+       stm_assert p (lit_string "Err: [read_mem] no read permission") ;;
+       let: q ∶ bool := call within_bounds c in
+       stm_assert q (lit_string "Err: [read_mem] out of bounds") ;;
+       foreign rM (exp_var "cursor")).
 
     Definition fun_write_mem : Stm ["c" ∶ ty_cap, "v" ∶ ty_memval ] ty_unit :=
-      stm_match_record
-        capability (exp_var "c")
-        (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-         "cap_permission" "perm")
-         "cap_begin" "beg")
-         "cap_end" "end")
-         "cap_cursor" "cursor")
-         (let: p ∶ bool := call write_allowed (exp_var "perm") in
-         stm_assert p (lit_string "Err: [write_mem] no read permission") ;;
-         let: q ∶ bool := call within_bounds c in
-         stm_assert q (lit_string "Err: [write_mem] out of bounds") ;;
-         foreign wM (exp_var "cursor") (exp_var "v")).
+      let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
+      (let: p ∶ bool := call write_allowed (exp_var "perm") in
+       stm_assert p (lit_string "Err: [write_mem] no read permission") ;;
+       let: q ∶ bool := call within_bounds c in
+       stm_assert q (lit_string "Err: [write_mem] out of bounds") ;;
+       foreign wM (exp_var "cursor") (exp_var "v")).
 
     Definition fun_exec : Stm ε ty_bool :=
       let: "c" := stm_read_register pc in
