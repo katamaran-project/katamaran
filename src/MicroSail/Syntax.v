@@ -1694,6 +1694,18 @@ Module Terms (Export termkit : TermKit).
         f_equal. apply IHp.
     Qed.
 
+    Lemma inst_record_pattern_match_reverse {Δ__R : NCtx 𝑹𝑭 Ty} {Σ Δ : LCtx}
+      (ι : SymInstance Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ) :
+      inst (record_pattern_match_env_reverse p ts) ι =
+      record_pattern_match_env_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
+    Proof.
+      unfold inst at 1; cbn.
+      induction p; cbn.
+      - reflexivity.
+      - destruct (snocView ts); cbn.
+        f_equal. apply IHp.
+    Qed.
+
     Global Arguments inst {T A _ Σ} !_ ι.
     Global Arguments lift {T A _ Σ} !_.
 
