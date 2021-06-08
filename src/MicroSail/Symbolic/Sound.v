@@ -244,7 +244,7 @@ Module Soundness
     Proof.
       intros w0 ι0 Hpc0.
       intros POST__s POST__c HPOST.
-      intros [v Hwp]; exists v; revert Hwp.
+      intros [v Hwp]. exists v. revert Hwp.
       apply HPOST. cbn. now rewrite inst_sub_wk1.
       cbn. now rewrite inst_subst, inst_sub_wk1.
       reflexivity.
@@ -262,6 +262,43 @@ Module Soundness
       - destruct b as [x σ].
         intros w0 ι0 Hpc0 POST__s POST__c HPOST; cbn.
         apply approx_angelic; auto.
+        intros w1 ω01 ι1 -> Hpc1.
+        intros t v tv.
+        apply IHΔ; auto.
+        intros w2 ω12 ι2 -> Hpc2.
+        intros ts vs tvs.
+        apply HPOST; cbn; rewrite ?inst_subst; auto.
+        rewrite tv, tvs. hnf.
+        rewrite <- inst_subst.
+        reflexivity.
+    Qed.
+
+    Lemma approx_demonic (x : option 𝑺) (σ : Ty) :
+      forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
+        approx ι0 (@SDijk.demonic x σ w0) (@CDijk.demonic σ).
+    Proof.
+      intros w0 ι0 Hpc0.
+      intros POST__s POST__c HPOST.
+      intros Hwp v.
+      specialize (Hwp v).
+      revert Hwp.
+      eapply HPOST. cbn. now rewrite inst_sub_wk1.
+      cbn. now rewrite inst_subst, inst_sub_wk1.
+      reflexivity.
+    Qed.
+
+    Lemma approx_demonic_ctx {N : Set} {n : N -> 𝑺} {Δ : NCtx N Ty} :
+      forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
+        approx ι0 (@SDijk.demonic_ctx N n w0 Δ) (@CDijk.demonic_ctx N Δ).
+    Proof.
+      induction Δ.
+      - intros w0 ι0 Hpc0.
+        intros POST__s POST__c HPOST.
+        unfold SDijk.demonic_ctx, CDijk.demonic_ctx, T.
+        apply HPOST; wsimpl; auto.
+      - destruct b as [x σ].
+        intros w0 ι0 Hpc0 POST__s POST__c HPOST; cbn.
+        apply approx_demonic; auto.
         intros w1 ω01 ι1 -> Hpc1.
         intros t v tv.
         apply IHΔ; auto.
@@ -555,6 +592,15 @@ Module Soundness
       intros w0 ι0 Hpc0. unfold SMut.angelic_ctx, CMut.angelic_ctx.
       apply approx_dijkstra; auto.
       now apply Dijk.approx_angelic_ctx.
+    Qed.
+
+    Lemma approx_demonic_ctx {N : Set} (n : N -> 𝑺) {Γ : PCtx} (Δ : NCtx N Ty) :
+      forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
+        approx ι0 (@SMut.demonic_ctx N n Γ w0 Δ) (@CMut.demonic_ctx N Γ Δ).
+    Proof.
+      intros w0 ι0 Hpc0. unfold SMut.demonic_ctx, CMut.demonic_ctx.
+      apply approx_dijkstra; auto.
+      now apply Dijk.approx_demonic_ctx.
     Qed.
 
     Lemma approx_debug {AT A DT D} `{Approx AT A, Subst DT, Inst DT D, OccursCheck DT} {Γ1 Γ2} {w0 : World} (ι0 : SymInstance w0)
@@ -993,12 +1039,61 @@ Module Soundness
           now rewrite 𝑹_unfold_fold.
     Qed.
 
+    Lemma approx_demonic_match_record' {R AT A} `{Approx AT A} {Γ1 Γ2}
+      {Δ : LCtx} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_record' _ id AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record A Γ1 Γ2 Δ R p).
+    Proof.
+      intros t v ->.
+      intros k k__c Hk.
+      unfold SMut.demonic_match_record', CMut.demonic_match_record.
+      eapply approx_bind. try (eapply approx_demonic_ctx; assumption).
+      intros w1 r01 ι1 -> Hpc1.
+      intros v1 vc1 ->.
+      eapply approx_bind_right.
+      - eapply approx_assume_formula; try assumption.
+        unfold record_pattern_match_lit.
+        change (inst (formula_eq (term_record R (record_pattern_match_env_reverse p v1)) (subst t r01)) ι1) with (inst (term_record R (record_pattern_match_env_reverse p v1)) ι1 = inst (subst t r01) ι1).
+        change (inst (term_record R (record_pattern_match_env_reverse p v1)) ι1) with (𝑹_fold (R := R) (inst (record_pattern_match_env_reverse p v1) ι1)).
+        now rewrite inst_subst, inst_record_pattern_match_reverse.
+      - intros w2 r12 ι2 -> Hpc2.
+        eapply (approx_four Hk); eauto.
+        now rewrite <- inst_subst.
+    Qed.
+
     Lemma approx_demonic_match_record {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : LCtx} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_record _ id AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record A Γ1 Γ2 Δ R p).
     Proof.
-    Admitted.
+      intros t v ->.
+      intros c c__c Hc.
+      unfold SMut.angelic_match_record.
+      dependent elimination t; cbn; try eapply approx_demonic_match_record'; eauto.
+      - intros P2 Pc2 HP2.
+        intros c2 cc2 Hc2.
+        intros s2 sc2 Hs2.
+        intros HPost.
+        rewrite CMut.wp_demonic_match_record.
+        eapply Hc; eauto.
+        + unfold wrefl. cbn. now rewrite inst_sub_id.
+        + unfold record_pattern_match_lit.
+          unfold approx, ApproxNamedEnv, ApproxInst.
+          change (inst (T := fun Σ => Env (fun τ => Term Σ _) Δ) (record_pattern_match_env p (lift (𝑹_unfold l))) ι) with (inst (T := fun Σ => NamedEnv (Term Σ) Δ) (A := NamedEnv Lit Δ) (record_pattern_match_env p (lift (𝑹_unfold l))) ι).
+          now rewrite inst_record_pattern_match, inst_lift.
+      - intros P2 Pc2 HP2.
+        intros c2 cc2 Hc2.
+        intros s2 sc2 Hs2.
+        intros HPost.
+        rewrite CMut.wp_demonic_match_record.
+        eapply Hc; eauto.
+        + unfold wrefl. cbn. now rewrite inst_sub_id.
+        + unfold record_pattern_match_lit.
+          unfold approx, ApproxNamedEnv, ApproxInst.
+          change (inst (T := fun Σ => Env (fun τ => Term Σ _) Δ) (record_pattern_match_env p es) ι) with (inst (T := fun Σ => NamedEnv (Term Σ) Δ) (A := NamedEnv Lit Δ) (record_pattern_match_env p es) ι).
+          rewrite inst_record_pattern_match.
+          now rewrite 𝑹_unfold_fold.
+    Qed.
 
   End PatternMatching.
 

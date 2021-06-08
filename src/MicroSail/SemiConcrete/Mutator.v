@@ -652,7 +652,7 @@ Module SemiConcrete
         CMut Γ1 Γ2 A :=
         fun v k =>
           args <- demonic_ctx Δ ;;
-          assume_formula (args = record_pattern_match_lit p v) ;;
+          assume_formula (𝑹_fold (record_pattern_match_env_reverse p args) = v) ;;
           k args.
 
       Lemma wp_demonic_match_record {A Γ1 Γ2} {Δ R} (p : RecordPat (𝑹𝑭_Ty R) Δ)
@@ -664,7 +664,13 @@ Module SemiConcrete
       Proof.
         cbv [demonic_match_record bind_right bind demonic_ctx dijkstra assume_formula CDijk.assume_formula].
         rewrite CDijk.wp_demonic_ctx; intuition; eauto.
-        now subst.
+        eapply H.
+        - unfold record_pattern_match_lit.
+          now rewrite record_pattern_match_env_inverse_left, 𝑹_fold_unfold.
+        - unfold record_pattern_match_lit in H.
+          replace (record_pattern_match_env p (𝑹_unfold v)) with vs in H; [assumption|].
+          subst.
+          now rewrite 𝑹_unfold_fold, record_pattern_match_env_inverse_right.
       Qed.
     End PatternMatching.
 
