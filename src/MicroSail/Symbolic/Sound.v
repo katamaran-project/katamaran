@@ -101,6 +101,12 @@ Module Soundness
         approx ι ta a ->
         approx ι (fs ta) (fc a).
 
+  Global Instance ApproxForall {𝑲 : Set} {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type} {apxA : forall K, Approx (AT K) (A K)} :
+    Approx (@Forall 𝑲 AT) (forall K : 𝑲, A K) :=
+    fun w ι fs fc =>
+      forall K : 𝑲,
+        approx ι (fs K) (fc K).
+
   Global Instance ApproxMut {Γ1 Γ2 AT A} `{instA : Inst AT A} : Approx (SMut Γ1 Γ2 AT) (CMut Γ1 Γ2 A).
   Proof.
     unfold SMut, CMut.
