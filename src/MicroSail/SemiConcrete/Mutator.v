@@ -849,6 +849,151 @@ Module SemiConcrete
         rewrite CDijk.wp_demonic_ctx; intuition; subst; auto.
       Qed.
 
+      Definition angelic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
+        Lit σ -> CMut Γ Γ (NamedEnv Lit Δ).
+      Proof.
+        intros v.
+        eapply bind.
+        apply (angelic_ctx Δ).
+        intros vs.
+        eapply bind_right.
+        apply assert_formula.
+        apply (pattern_match_lit p v = vs).
+        apply pure.
+        apply vs.
+      Defined.
+
+      Lemma wp_angelic_match_pattern {N : Set} {σ Γ} {Δ : NCtx N Ty} (p : Pattern Δ σ)
+        (v : Lit σ)
+        POST δ h :
+        angelic_match_pattern (Γ := Γ) p v POST δ h <->
+        POST (pattern_match_lit p v) δ h.
+      Proof.
+        cbv [angelic_match_pattern bind pure angelic_ctx bind_right assert_formula
+             dijkstra CDijk.assert_formula].
+        rewrite CDijk.wp_angelic_ctx.
+        split.
+        - now intros (vs & <- & H).
+        - intros ?. exists (pattern_match_lit p v).
+          split; auto.
+      Qed.
+
+      Definition demonic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
+        Lit σ -> CMut Γ Γ (NamedEnv Lit Δ).
+      Proof.
+        intros v.
+        eapply bind.
+        apply (demonic_ctx Δ).
+        intros vs.
+        eapply bind_right.
+        apply assume_formula.
+        apply (pattern_match_lit p v = vs).
+        apply pure.
+        apply vs.
+      Defined.
+
+      Lemma wp_demonic_match_pattern {N : Set} {σ Γ} {Δ : NCtx N Ty} (p : Pattern Δ σ)
+        (v : Lit σ)
+        POST δ h :
+        demonic_match_pattern (Γ := Γ) p v POST δ h <->
+        POST (pattern_match_lit p v) δ h.
+      Proof.
+        cbv [demonic_match_pattern bind pure demonic_ctx bind_right assume_formula
+             dijkstra CDijk.assume_formula].
+        rewrite CDijk.wp_demonic_ctx.
+        intuition; subst; auto.
+      Qed.
+
+      Definition angelic_match_union {N : Set} {A Γ1 Γ2 U}
+        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
+        Lit (ty_union U) -> (∀ K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v k.
+        eapply bind.
+        apply (angelic_finite (F := 𝑼𝑲 U)).
+        intros UK.
+        eapply bind.
+        apply (angelic (𝑼𝑲_Ty UK)).
+        intros v__field.
+        eapply bind_right.
+        apply assert_formula.
+        apply (𝑼_fold (existT UK v__field) = v).
+        eapply bind.
+        apply (angelic_match_pattern (p UK)).
+        apply v__field.
+        apply (k UK).
+      Defined.
+
+      Lemma wp_angelic_match_union {N : Set} {A Γ1 Γ2 U}
+        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
+        (v : Lit (ty_union U)) (k : ∀ K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A)
+        POST δ h :
+        angelic_match_union p v k POST δ h <->
+        let (UK , vf) := 𝑼_unfold v in
+        k UK (pattern_match_lit (p UK) vf) POST δ h.
+      Proof.
+        cbv [angelic_match_union bind bind_right angelic_finite assert_formula angelic
+             dijkstra CDijk.angelic_finite CDijk.assert_formula].
+        rewrite CDijk.wp_angelic_list.
+        split.
+        - intros (UK & HIn & vf & Heq & Hwp).
+          rewrite wp_angelic_match_pattern in Hwp.
+          subst v. now rewrite 𝑼_unfold_fold.
+        - destruct (𝑼_unfold v) as [UK vf] eqn:Heq.
+          intros Hwp.
+          exists UK. split.
+          rewrite <- elem_of_list_In.
+          apply finite.elem_of_enum.
+          exists vf. rewrite <- Heq.
+          rewrite wp_angelic_match_pattern.
+          rewrite 𝑼_fold_unfold. split; auto.
+      Qed.
+
+      Definition demonic_match_union {N : Set} {A Γ1 Γ2 U}
+        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
+        Lit (ty_union U) -> (∀ K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v k.
+        eapply bind.
+        apply (demonic_finite (F := 𝑼𝑲 U)).
+        intros UK.
+        eapply bind.
+        apply (demonic (𝑼𝑲_Ty UK)).
+        intros v__field.
+        eapply bind_right.
+        apply assume_formula.
+        apply (𝑼_fold (existT UK v__field) = v).
+        eapply bind.
+        apply (demonic_match_pattern (p UK)).
+        apply v__field.
+        apply (k UK).
+      Defined.
+
+      Lemma wp_demonic_match_union {N : Set} {A Γ1 Γ2 U}
+        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
+        (v : Lit (ty_union U)) (k : ∀ K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A)
+        POST δ h :
+        demonic_match_union p v k POST δ h <->
+        let (UK , vf) := 𝑼_unfold v in
+        k UK (pattern_match_lit (p UK) vf) POST δ h.
+      Proof.
+        cbv [demonic_match_union bind bind_right demonic_finite assume_formula demonic
+             dijkstra CDijk.demonic_finite CDijk.assume_formula].
+        rewrite CDijk.wp_demonic_list.
+        split.
+        - destruct (𝑼_unfold v) as [UK vf] eqn:Heq.
+          intros HYP. specialize (HYP UK).
+          inster HYP by
+              rewrite <- elem_of_list_In; apply finite.elem_of_enum.
+          specialize (HYP vf).
+          rewrite wp_demonic_match_pattern in HYP.
+          apply HYP.
+          now rewrite <- Heq, 𝑼_fold_unfold.
+        - intros HYP UK HIn vf <-.
+          rewrite 𝑼_unfold_fold in HYP.
+          now rewrite wp_demonic_match_pattern.
+      Qed.
+
     End PatternMatching.
 
     Section State.
@@ -930,10 +1075,9 @@ Module SemiConcrete
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => produce (ι ►► ι') rhs)
         | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-          let t := inst (T := fun Σ => Term Σ _) s ι in
-          let (K , v) := 𝑼_unfold t in
-          let ι' := pattern_match_lit (alt__pat K) v in
-          produce (ι ►► ι') (alt__rhs K)
+          demonic_match_union
+            alt__pat (inst (T := fun Σ => Term Σ _) s ι)
+            (fun UK ι' => produce (ι ►► ι') (alt__rhs UK))
         | asn_sep a1 a2   => produce ι a1 *> produce ι a2
         | asn_exist ς τ a =>
           v <- demonic τ ;;
@@ -973,10 +1117,9 @@ Module SemiConcrete
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => consume (ι ►► ι') rhs)
         | asn_match_union U s alt__ctx alt__pat alt__rhs =>
-          let t := inst (T := fun Σ => Term Σ _) s ι in
-          let (K , v) := 𝑼_unfold t in
-          let ι' := pattern_match_lit (alt__pat K) v in
-          consume (ι ►► ι') (alt__rhs K)
+          angelic_match_union
+            alt__pat (inst (T := fun Σ => Term Σ _) s ι)
+            (fun UK ι' => consume (ι ►► ι') (alt__rhs UK))
         | asn_sep a1 a2   => consume ι a1 *> consume ι a2
         | asn_exist ς τ a =>
           v <- angelic τ ;;
@@ -1082,8 +1225,7 @@ Module SemiConcrete
             (fun δΔ => pushspops δΔ (exec rhs))
         | stm_match_union U e alt__pat alt__rhs =>
           v <- eval_exp e ;;
-          let (K , v) := 𝑼_unfold v in
-          pushspops (pattern_match_lit (alt__pat K) v) (exec (alt__rhs K))
+          demonic_match_union alt__pat v (fun UK vs => pushspops vs (exec (alt__rhs UK)))
         | stm_match_record R e p rhs =>
           v <- eval_exp e ;;
           demonic_match_record p v (fun vs => pushspops vs (exec rhs))
