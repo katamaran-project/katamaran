@@ -2267,7 +2267,7 @@ Module Mutators
         apply (four (cont EK)). auto.
       Defined.
 
-      Definition smutb_demonic_match_enum {AT E} {Γ1 Γ2} :
+      Definition box_demonic_match_enum {AT E} {Γ1 Γ2} :
         ⊢ STerm (ty_enum E) -> (⌜𝑬𝑲 E⌝ -> □(SMut Γ1 Γ2 AT)) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k =>
           demonic_match_enum
@@ -2385,7 +2385,7 @@ Module Mutators
           apply (persist__term ttail ω23).
       Defined.
 
-      Definition smutb_angelic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
+      Definition box_angelic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
         ⊢ STerm (ty_list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty_list σ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t knil kcons => angelic_match_list x y <$> persist__term t <*> four knil <*> four kcons.
 
@@ -2414,7 +2414,7 @@ Module Mutators
           apply (persist__term ttail ω23).
       Defined.
 
-      Definition smutb_demonic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
+      Definition box_demonic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
         ⊢ STerm (ty_list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty_list σ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t knil kcons => demonic_match_list x y <$> persist__term t <*> four knil <*> four kcons.
 
@@ -2442,7 +2442,7 @@ Module Mutators
         apply (persist__term tτ ω23).
       Defined.
 
-      Definition smutb_angelic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
+      Definition box_angelic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
         ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_prod x y <$> persist__term t <*> four k.
 
@@ -2463,7 +2463,7 @@ Module Mutators
         apply (persist__term tτ ω23).
       Defined.
 
-      Definition smutb_demonic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
+      Definition box_demonic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
         ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_prod x y <$> persist__term t <*> four k.
 
@@ -2499,7 +2499,7 @@ Module Mutators
         - apply (angelic_match_record' n p t k).
       Defined.
 
-      Definition smutb_angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
+      Definition box_angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
         ⊢ STerm (ty_record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_record n p <$> persist__term t <*> four k.
 
@@ -2528,7 +2528,7 @@ Module Mutators
         - apply (demonic_match_record' n p t k).
       Defined.
 
-      Definition smutb_demonic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
+      Definition box_demonic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
         ⊢ STerm (ty_record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_record n p <$> persist__term t <*> four k.
 
@@ -2554,7 +2554,7 @@ Module Mutators
         apply (subst (T := fun Σ => NamedEnv (Term Σ) Δ) ts (wsub ω12)).
       Defined.
 
-      Definition smutb_angelic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
+      Definition box_angelic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         ⊢ STerm (ty_tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_tuple n p <$> persist__term t <*> four k.
 
@@ -2573,7 +2573,7 @@ Module Mutators
         apply (subst (T := fun Σ => NamedEnv (Term Σ) Δ) ts (wsub ω12)).
       Defined.
 
-      Definition smutb_demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
+      Definition box_demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         ⊢ STerm (ty_tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_tuple n p <$> persist__term t <*> four k.
 
@@ -2647,7 +2647,7 @@ Module Mutators
         apply (wtrans ω01 (wtrans ω12 ω23)).
       Defined.
 
-      Definition smutb_angelic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
+      Definition box_angelic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
         {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
         ⊢ STerm (ty_union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SMut Γ1 Γ2 AT)) -> □(SMut Γ1 Γ2 AT).
       Proof.
@@ -2677,7 +2677,7 @@ Module Mutators
         apply (wtrans ω01 (wtrans ω12 ω23)).
       Defined.
 
-      Definition smutb_demonic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
+      Definition box_demonic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
         {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
         ⊢ STerm (ty_union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SMut Γ1 Γ2 AT)) -> □(SMut Γ1 Γ2 AT).
       Proof.
@@ -2881,24 +2881,24 @@ Module Mutators
           intros w1 ω01 t1.
           apply (produce (wsnoc w0 (xr :: τ)) asn2).
           apply (wsnoc_sub ω01 (xr :: τ) t1).
-        - apply (smutb_demonic_match_list xh xt s).
+        - apply (box_demonic_match_list xh xt s).
           + apply (produce _ asn1).
           + intros w1 ω01 thead ttail.
             apply (produce (wsnoc (wsnoc w0 (xh :: _)) (xt :: _)) asn2 w1).
             apply (wsnoc_sub (wsnoc_sub ω01 (xh :: _) thead) (xt :: _) ttail).
-        - apply (smutb_demonic_match_prod xl xr s).
+        - apply (box_demonic_match_prod xl xr s).
           intros w1 ω01 t1 t2.
           apply (produce (wsnoc (wsnoc w0 (xl :: σ1)) (xr :: σ2)) asn w1).
           apply (wsnoc_sub (wsnoc_sub ω01 (xl :: σ1) t1) (xr :: σ2) t2).
-        - apply (smutb_demonic_match_tuple id p s).
+        - apply (box_demonic_match_tuple id p s).
           intros w1 ω01 ts.
           apply (produce (wcat w0 Δ) asn w1).
           apply wcat_sub; auto.
-        - apply (smutb_demonic_match_record id p s).
+        - apply (box_demonic_match_record id p s).
           intros w1 ω01 ts.
           apply (produce (wcat w0 Δ) asn w1).
           apply wcat_sub; auto.
-        - apply (smutb_demonic_match_union id alt__pat s).
+        - apply (box_demonic_match_union id alt__pat s).
           intros UK w1 ω01 ts.
           apply (produce (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1).
           apply wcat_sub; auto.
@@ -2936,24 +2936,24 @@ Module Mutators
           intros w1 ω01 t1.
           apply (consume (wsnoc w0 (xr :: τ)) asn2).
           apply (wsnoc_sub ω01 (xr :: τ) t1).
-        - apply (smutb_angelic_match_list xh xt s).
+        - apply (box_angelic_match_list xh xt s).
           + apply (consume _ asn1).
           + intros w1 ω01 thead ttail.
             apply (consume (wsnoc (wsnoc w0 (xh :: _)) (xt :: _)) asn2 w1).
             apply (wsnoc_sub (wsnoc_sub ω01 (xh :: _) thead) (xt :: _) ttail).
-        - apply (smutb_angelic_match_prod xl xr s).
+        - apply (box_angelic_match_prod xl xr s).
           intros w1 ω01 t1 t2.
           apply (consume (wsnoc (wsnoc w0 (xl :: σ1)) (xr :: σ2)) asn w1).
           apply (wsnoc_sub (wsnoc_sub ω01 (xl :: σ1) t1) (xr :: σ2) t2).
-        - apply (smutb_angelic_match_tuple id p s).
+        - apply (box_angelic_match_tuple id p s).
           intros w1 ω01 ts.
           apply (consume (wcat w0 Δ) asn w1).
           apply wcat_sub; auto.
-        - apply (smutb_angelic_match_record id p s).
+        - apply (box_angelic_match_record id p s).
           intros w1 ω01 ts.
           apply (consume (wcat w0 Δ) asn w1).
           apply wcat_sub; auto.
-        - apply (smutb_angelic_match_union id alt__pat s).
+        - apply (box_angelic_match_union id alt__pat s).
           intros UK w1 ω01 ts.
           apply (consume (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1).
           apply wcat_sub; auto.
