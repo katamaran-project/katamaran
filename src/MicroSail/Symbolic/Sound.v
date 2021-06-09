@@ -1192,6 +1192,20 @@ Module Soundness
         now rewrite <- inst_subst.
     Admitted.
 
+    Lemma approx_angelic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
+      {Δ : 𝑼𝑲 U -> NCtx N Ty} {p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.angelic_match_union N n AT Γ1 Γ2 U Δ p w) (@CMut.angelic_match_union N A Γ1 Γ2 U Δ p).
+    Proof.
+    Admitted.
+
+    Lemma approx_demonic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
+      {Δ : 𝑼𝑲 U -> NCtx N Ty} {p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_union N n AT Γ1 Γ2 U Δ p w) (@CMut.demonic_match_union N A Γ1 Γ2 U Δ p).
+    Proof.
+    Admitted.
+
   End PatternMatching.
 
   Section State.
@@ -1404,8 +1418,7 @@ Module Soundness
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs ->.
       apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
-      { change (Sub Δ (wctx w2)) in ts.
-        rewrite <- ?inst_subst.
+      { rewrite <- ?inst_subst.
         unfold NamedEnv.
         fold (@instantiate_sub Δ).
         fold (Sub Δ).
@@ -1422,8 +1435,7 @@ Module Soundness
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs ->.
       apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
-      { change (Sub Δ (wctx w2)) in ts.
-        rewrite <- ?inst_subst.
+      { rewrite <- ?inst_subst.
         unfold NamedEnv.
         fold (@instantiate_sub Δ).
         fold (Sub Δ).
@@ -1434,7 +1446,24 @@ Module Soundness
         now rewrite ?inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.
-    - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_demonic_match_union; auto.
+      intros UK.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs ->.
+      apply H; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
+      { rewrite <- ?inst_subst.
+        unfold NamedEnv.
+        fold (@instantiate_sub (alt__ctx UK)).
+        fold (Sub (alt__ctx UK)).
+        rewrite <- inst_sub_cat.
+        rewrite <- inst_subst.
+        rewrite <- subst_sub_comp.
+        rewrite sub_cat_left_cat.
+        now rewrite ?inst_subst.
+      }
+      now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_bind_right; eauto.
       apply IHasn1; eauto.
@@ -1447,7 +1476,7 @@ Module Soundness
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_debug; auto.
       apply approx_pure; auto.
-  Admitted.
+  Qed.
 
   Lemma approx_consume_chunk {Γ} {w0 : World} (ι0 : SymInstance w0)
     (Hpc0 : instpc (wco w0) ι0) :
@@ -1526,8 +1555,7 @@ Module Soundness
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs ->.
       apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
-      { change (Sub Δ (wctx w2)) in ts.
-        rewrite <- ?inst_subst.
+      { rewrite <- ?inst_subst.
         unfold NamedEnv.
         fold (@instantiate_sub Δ).
         fold (Sub Δ).
@@ -1544,8 +1572,7 @@ Module Soundness
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs ->.
       apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
-      { change (Sub Δ (wctx w2)) in ts.
-        rewrite <- ?inst_subst.
+      { rewrite <- ?inst_subst.
         unfold NamedEnv.
         fold (@instantiate_sub Δ).
         fold (Sub Δ).
@@ -1556,7 +1583,24 @@ Module Soundness
         now rewrite ?inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.
-    - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_angelic_match_union; auto.
+      intros UK.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs ->.
+      apply H; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
+      { rewrite <- ?inst_subst.
+        unfold NamedEnv.
+        fold (@instantiate_sub (alt__ctx UK)).
+        fold (Sub (alt__ctx UK)).
+        rewrite <- inst_sub_cat.
+        rewrite <- inst_subst.
+        rewrite <- subst_sub_comp.
+        rewrite sub_cat_left_cat.
+        now rewrite ?inst_subst.
+      }
+      now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_bind_right; eauto.
       apply IHasn1; eauto.
@@ -1569,7 +1613,7 @@ Module Soundness
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_debug; auto.
       apply approx_pure; auto.
-  Admitted.
+  Qed.
 
   Lemma approx_call_contract {Γ Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) :
     forall {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0),
@@ -1733,7 +1777,11 @@ Module Soundness
       apply approx_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      admit.
+      apply approx_demonic_match_union; auto.
+      intros UK.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs Htvs.
+      apply approx_pushspops; auto.
     - apply approx_bind; auto.
       intros POST__s POST__c HPOST.
       apply approx_eval_exp; auto.
