@@ -1150,6 +1150,42 @@ Module Soundness
       - apply approx_demonic_match_record'; auto.
     Qed.
 
+    Lemma approx_angelic_match_tuple {N : Set} (n : N -> 𝑺) {σs AT A} `{Approx AT A} {Γ1 Γ2}
+      {Δ : NCtx N Ty} {p : TuplePat σs Δ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.angelic_match_tuple N n AT σs Γ1 Γ2 Δ p w) (@CMut.angelic_match_tuple N n A σs Γ1 Γ2 Δ p).
+    Proof.
+      intros t v ->.
+      intros k k__c Hk.
+      unfold SMut.angelic_match_tuple, CMut.angelic_match_tuple.
+      eapply approx_bind; try (eapply approx_angelic_ctx; assumption).
+      intros w1 r01 ι1 -> Hpc1.
+      intros v1 vc1 ->.
+      eapply approx_bind_right.
+      - eapply approx_assert_formula; try assumption. admit.
+      - intros w2 r12 ι2 -> Hpc2.
+        eapply (approx_four Hk); eauto.
+        now rewrite <- inst_subst.
+    Admitted.
+
+    Lemma approx_demonic_match_tuple {N : Set} (n : N -> 𝑺) {σs AT A} `{Approx AT A} {Γ1 Γ2}
+      {Δ : NCtx N Ty} {p : TuplePat σs Δ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_tuple N n AT σs Γ1 Γ2 Δ p w) (@CMut.demonic_match_tuple N n A σs Γ1 Γ2 Δ p).
+    Proof.
+      intros t v ->.
+      intros k k__c Hk.
+      unfold SMut.demonic_match_tuple, CMut.demonic_match_tuple.
+      eapply approx_bind; try (eapply approx_demonic_ctx; assumption).
+      intros w1 r01 ι1 -> Hpc1.
+      intros v1 vc1 ->.
+      eapply approx_bind_right.
+      - eapply approx_assume_formula; try assumption. admit.
+      - intros w2 r12 ι2 -> Hpc2.
+        eapply (approx_four Hk); eauto.
+        now rewrite <- inst_subst.
+    Admitted.
+
   End PatternMatching.
 
   Section State.
@@ -1356,7 +1392,24 @@ Module Soundness
       intros w2 ω12 ι2 -> Hpc2.
       intros t1 v1 -> t2 v2 ->.
       apply IHasn; cbn - [inst sub_wk1]; wsimpl; auto.
-    - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_demonic_match_tuple; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs ->.
+      apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
+      { change (Sub Δ (wctx w2)) in ts.
+        rewrite <- ?inst_subst.
+        unfold NamedEnv.
+        fold (@instantiate_sub Δ).
+        fold (Sub Δ).
+        rewrite <- inst_sub_cat.
+        rewrite <- inst_subst.
+        rewrite <- subst_sub_comp.
+        rewrite sub_cat_left_cat.
+        now rewrite ?inst_subst.
+      }
+      now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_subst.
       apply approx_demonic_match_record; auto.
@@ -1461,7 +1514,24 @@ Module Soundness
       intros w2 ω12 ι2 -> Hpc2.
       intros t1 v1 -> t2 v2 ->.
       apply IHasn; cbn - [inst sub_wk1]; wsimpl; auto.
-    - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_angelic_match_tuple; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs ->.
+      apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
+      { change (Sub Δ (wctx w2)) in ts.
+        rewrite <- ?inst_subst.
+        unfold NamedEnv.
+        fold (@instantiate_sub Δ).
+        fold (Sub Δ).
+        rewrite <- inst_sub_cat.
+        rewrite <- inst_subst.
+        rewrite <- subst_sub_comp.
+        rewrite sub_cat_left_cat.
+        now rewrite ?inst_subst.
+      }
+      now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_subst.
       apply approx_angelic_match_record; auto.
@@ -1648,7 +1718,10 @@ Module Soundness
       apply approx_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      admit.
+      apply approx_demonic_match_tuple; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs Htvs.
+      apply approx_pushspops; auto.
     - apply approx_bind; auto.
       intros POST__s POST__c HPOST.
       apply approx_eval_exp; auto.

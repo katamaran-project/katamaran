@@ -190,9 +190,8 @@ Module Soundness
         destruct (inst s ι); cbn; eauto.
       - rewrite ?wp_angelic_match_prod.
         destruct (inst s ι); cbn; eauto.
-      - eauto.
-      - rewrite ?wp_angelic_match_record;
-        eauto.
+      - rewrite ?wp_angelic_match_tuple; eauto.
+      - rewrite ?wp_angelic_match_record; eauto.
       - destruct (𝑼_unfold (inst s ι)); eauto.
       - unfold bind_right, bind.
         apply IHasn1; eauto.
@@ -221,9 +220,8 @@ Module Soundness
         destruct (inst s ι); cbn; eauto.
       - rewrite ?wp_demonic_match_prod.
         destruct (inst s ι); cbn; eauto.
-      - eauto.
-      - rewrite ?wp_demonic_match_record;
-        eauto.
+      - rewrite ?wp_demonic_match_tuple; eauto.
+      - rewrite ?wp_demonic_match_record; eauto.
       - destruct (𝑼_unfold (inst s ι)); eauto.
       - unfold bind_right, bind.
         apply IHasn1; eauto.
@@ -248,9 +246,8 @@ Module Soundness
         destruct (inst s ι); auto.
       - rewrite wp_angelic_match_prod.
         destruct (inst s ι); auto.
-      - auto.
-      - rewrite wp_angelic_match_record.
-        auto.
+      - rewrite wp_angelic_match_tuple; auto.
+      - rewrite wp_angelic_match_record; auto.
       - destruct (𝑼_unfold (inst s ι)); auto.
       - unfold bind_right, bind. intros Hwp. rewrite sepcon_assoc.
         apply (IHasn1 ι (fun δ => interpret_assertion asn2 ι ✱ POST δ) δ1 h1); clear IHasn1.
@@ -283,8 +280,8 @@ Module Soundness
         destruct (inst s ι); auto.
       - rewrite wp_demonic_match_prod.
         destruct (inst s ι); auto.
-      - auto.
-      - rewrite wp_demonic_match_record. auto.
+      - rewrite wp_demonic_match_tuple; auto.
+      - rewrite wp_demonic_match_record; auto.
       - destruct (𝑼_unfold (inst s ι)); auto.
       - unfold bind_right, bind. intros Hwp.
         rewrite <- sepcon_assoc.
@@ -404,7 +401,8 @@ Module Soundness
         destruct (eval e δ); cbn.
         apply IHs; auto.
       - rewrite ?wp_demonic_match_enum; eauto.
-      - apply IHs; auto.
+      - rewrite ?wp_demonic_match_tuple.
+        apply IHs; auto.
       - destruct (𝑼_unfold (eval e δ)).
         apply H; auto.
       - rewrite ?wp_demonic_match_record.
@@ -529,6 +527,7 @@ Module Soundness
         now apply rule_stm_match_enum, H.
 
       - (* stm_match_tuple *)
+        rewrite wp_demonic_match_tuple in HYP.
         now apply rule_stm_match_tuple, IHs.
 
       - (* stm_match_union *)
