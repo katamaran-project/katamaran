@@ -753,7 +753,7 @@ Module SemiConcrete
           now dependent elimination H0.
       Qed.
 
-      Definition angelic_match_record {N : Set} (n : N -> 𝑺) {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
+      Definition angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
         (Lit (ty_record R)) ->
         (NamedEnv Lit Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
@@ -762,11 +762,11 @@ Module SemiConcrete
           assert_formula (𝑹_fold (record_pattern_match_env_reverse p args) = v) ;;
           k args.
 
-      Lemma wp_angelic_match_record {N : Set} (n : N -> 𝑺) {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ)
+      Lemma wp_angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ)
         (v : Lit (ty_record R))
         (k : NamedEnv Lit Δ -> CMut Γ1 Γ2 A)
         POST δ h :
-        angelic_match_record n p v k POST δ h <->
+        angelic_match_record p v k POST δ h <->
         k (record_pattern_match_lit p v) POST δ h.
       Proof.
         cbv [angelic_match_record bind_right bind angelic_ctx dijkstra assert_formula CDijk.assert_formula].
@@ -779,7 +779,7 @@ Module SemiConcrete
           now rewrite record_pattern_match_env_inverse_left, 𝑹_fold_unfold.
       Qed.
 
-      Definition demonic_match_record {N : Set} (n : N -> 𝑺) {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
+      Definition demonic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
         (Lit (ty_record R)) ->
         (NamedEnv Lit Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
@@ -788,11 +788,11 @@ Module SemiConcrete
           assume_formula (𝑹_fold (record_pattern_match_env_reverse p args) = v) ;;
           k args.
 
-      Lemma wp_demonic_match_record {N : Set} (n : N -> 𝑺) {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ)
+      Lemma wp_demonic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ)
         (v : Lit (ty_record R))
         (k : NamedEnv Lit Δ -> CMut Γ1 Γ2 A)
         POST δ h :
-        demonic_match_record n p v k POST δ h <->
+        demonic_match_record p v k POST δ h <->
         k (record_pattern_match_lit p v) POST δ h.
       Proof.
         cbv [demonic_match_record bind_right bind demonic_ctx dijkstra assume_formula CDijk.assume_formula].
@@ -806,7 +806,7 @@ Module SemiConcrete
           now rewrite 𝑹_unfold_fold, record_pattern_match_env_inverse_right.
       Qed.
 
-      Definition angelic_match_tuple {N : Set} (n : N -> 𝑺) {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
+      Definition angelic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         (Lit (ty_tuple σs)) ->
         (NamedEnv Lit Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
@@ -815,11 +815,11 @@ Module SemiConcrete
           assert_formula (tuple_pattern_match_lit p v = args) ;;
           k args.
 
-      Lemma wp_angelic_match_tuple {N : Set} (n : N -> 𝑺) {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ)
+      Lemma wp_angelic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ)
         (v : Lit (ty_tuple σs))
         (k : NamedEnv Lit Δ -> CMut Γ1 Γ2 A)
         POST δ h :
-        angelic_match_tuple n p v k POST δ h <->
+        angelic_match_tuple p v k POST δ h <->
         k (tuple_pattern_match_lit p v) POST δ h.
       Proof.
         cbv [angelic_match_tuple bind_right bind angelic_ctx dijkstra assert_formula CDijk.assert_formula].
@@ -829,7 +829,7 @@ Module SemiConcrete
           split; auto.
       Qed.
 
-      Definition demonic_match_tuple {N : Set} (n : N -> 𝑺) {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
+      Definition demonic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         (Lit (ty_tuple σs)) ->
         (NamedEnv Lit Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
@@ -838,11 +838,11 @@ Module SemiConcrete
           assume_formula (tuple_pattern_match_lit p v = args) ;;
           k args.
 
-      Lemma wp_demonic_match_tuple {N : Set} (n : N -> 𝑺) {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ)
+      Lemma wp_demonic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ)
         (v : Lit (ty_tuple σs))
         (k : NamedEnv Lit Δ -> CMut Γ1 Γ2 A)
         POST δ h :
-        demonic_match_tuple n p v k POST δ h <->
+        demonic_match_tuple p v k POST δ h <->
         k (tuple_pattern_match_lit p v) POST δ h.
       Proof.
         cbv [demonic_match_tuple bind_right bind demonic_ctx dijkstra assume_formula CDijk.assume_formula].
@@ -922,11 +922,11 @@ Module SemiConcrete
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun vl vr => produce (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
         | asn_match_tuple s p rhs =>
-          demonic_match_tuple id p
+          demonic_match_tuple p
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => produce (ι ►► ι') rhs)
         | asn_match_record R s p rhs =>
-          demonic_match_record id p
+          demonic_match_record p
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => produce (ι ►► ι') rhs)
         | asn_match_union U s alt__ctx alt__pat alt__rhs =>
@@ -965,11 +965,11 @@ Module SemiConcrete
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun vl vr => consume (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
         | asn_match_tuple s p rhs =>
-          angelic_match_tuple id p
+          angelic_match_tuple p
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => consume (ι ►► ι') rhs)
         | asn_match_record R s p rhs =>
-          angelic_match_record id p
+          angelic_match_record p
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => consume (ι ►► ι') rhs)
         | asn_match_union U s alt__ctx alt__pat alt__rhs =>
@@ -1078,7 +1078,7 @@ Module SemiConcrete
                  (exec s))
         | stm_match_tuple e p rhs =>
           v <- eval_exp e ;;
-          demonic_match_tuple 𝑿to𝑺 p v
+          demonic_match_tuple p v
             (fun δΔ => pushspops δΔ (exec rhs))
         | stm_match_union U e alt__pat alt__rhs =>
           v <- eval_exp e ;;
@@ -1086,7 +1086,7 @@ Module SemiConcrete
           pushspops (pattern_match_lit (alt__pat K) v) (exec (alt__rhs K))
         | stm_match_record R e p rhs =>
           v <- eval_exp e ;;
-          demonic_match_record 𝑿to𝑺 p v (fun vs => pushspops vs (exec rhs))
+          demonic_match_record p v (fun vs => pushspops vs (exec rhs))
         | stm_bind s k =>
           v <- exec s ;;
           exec (k v)

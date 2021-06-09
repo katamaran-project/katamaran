@@ -1062,7 +1062,7 @@ Module Soundness
     Lemma approx_angelic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.angelic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record N n A R Γ1 Γ2 Δ p).
+      approx ι (@SMut.angelic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
       intros k k__c Hk.
@@ -1083,7 +1083,7 @@ Module Soundness
     Lemma approx_angelic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.angelic_match_record N n AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record N n A R Γ1 Γ2 Δ p).
+      approx ι (@SMut.angelic_match_record N n AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
       intros c c__c Hc.
@@ -1107,7 +1107,7 @@ Module Soundness
     Lemma approx_demonic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.demonic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record N n A R Γ1 Γ2 Δ p).
+      approx ι (@SMut.demonic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
       intros k k__c Hk.
@@ -1129,7 +1129,7 @@ Module Soundness
     Lemma approx_demonic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.demonic_match_record N n AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record N n A R Γ1 Γ2 Δ p).
+      approx ι (@SMut.demonic_match_record N n AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
       intros c c__c Hc.
@@ -1153,7 +1153,7 @@ Module Soundness
     Lemma approx_angelic_match_tuple {N : Set} (n : N -> 𝑺) {σs AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : TuplePat σs Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.angelic_match_tuple N n AT σs Γ1 Γ2 Δ p w) (@CMut.angelic_match_tuple N n A σs Γ1 Γ2 Δ p).
+      approx ι (@SMut.angelic_match_tuple N n AT σs Γ1 Γ2 Δ p w) (@CMut.angelic_match_tuple N A σs Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
       intros k k__c Hk.
@@ -1171,7 +1171,7 @@ Module Soundness
     Lemma approx_demonic_match_tuple {N : Set} (n : N -> 𝑺) {σs AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : TuplePat σs Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.demonic_match_tuple N n AT σs Γ1 Γ2 Δ p w) (@CMut.demonic_match_tuple N n A σs Γ1 Γ2 Δ p).
+      approx ι (@SMut.demonic_match_tuple N n AT σs Γ1 Γ2 Δ p w) (@CMut.demonic_match_tuple N A σs Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
       intros k k__c Hk.
