@@ -390,7 +390,7 @@ Module Soundness
         apply IHs1; auto.
         apply IHs2; auto.
       - apply IHs1. intros ? ? ?. apply IHs2. auto.
-      - destruct (eval e1 δ); auto.
+      - intros HYP Heq. specialize (HYP Heq). revert HYP.
         apply IHs; auto.
       - auto.
       - rewrite ?wp_demonic_match_list.
@@ -500,6 +500,7 @@ Module Soundness
       - (* stm_assert *)
         apply rule_stm_assert, rule_pull;
           intro Heval; rewrite Heval in HYP.
+        specialize (HYP eq_refl). cbn in HYP.
         now apply IHs.
 
       - (* stm_fail *)

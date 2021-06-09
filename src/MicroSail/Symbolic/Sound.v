@@ -1720,8 +1720,11 @@ Module Soundness
       intros POST__s POST__c HPOST.
       apply approx_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
-      intros t v Htv.
-      admit.
+      intros t v ->.
+      apply approx_bind_right.
+      apply approx_assume_formula; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      now apply IHs.
     - apply approx_block.
     - apply approx_bind; auto.
       intros POST__s POST__c HPOST.
@@ -1824,7 +1827,7 @@ Module Soundness
       hnf. now rewrite ?inst_subst.
     - apply approx_error.
     - apply approx_debug; auto.
-  Admitted.
+  Qed.
 
   Lemma approx_exec_contract {cfg : Config} {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) :
     let w0 := {| wctx := sep_contract_logic_variables c; wco := nil |} in

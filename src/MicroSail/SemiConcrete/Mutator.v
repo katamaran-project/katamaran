@@ -1175,9 +1175,8 @@ Module SemiConcrete
         | stm_seq e k => exec e ;; exec k
         | stm_assertk e1 _ k =>
           v <- eval_exp e1 ;;
-          if v
-          then exec k
-          else block
+          assume_formula (v = true) ;;
+          exec k
         | stm_fail _ s =>
           block
         | stm_match_enum E e alts =>
