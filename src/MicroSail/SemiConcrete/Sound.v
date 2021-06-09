@@ -186,7 +186,8 @@ Module Soundness
       - rewrite ?wp_angelic_match_enum; eauto.
       - rewrite ?wp_angelic_match_sum.
         destruct (inst s ι); cbn; eauto.
-      - destruct (inst s ι); cbn; eauto.
+      - rewrite ?wp_angelic_match_list.
+        destruct (inst s ι); cbn; eauto.
       - rewrite ?wp_angelic_match_prod.
         destruct (inst s ι); cbn; eauto.
       - eauto.
@@ -216,7 +217,8 @@ Module Soundness
       - rewrite ?wp_demonic_match_enum; eauto.
       - rewrite ?wp_demonic_match_sum.
         destruct (inst s ι); cbn; eauto.
-      - destruct (inst s ι); cbn; eauto.
+      - rewrite ?wp_demonic_match_list.
+        destruct (inst s ι); cbn; eauto.
       - rewrite ?wp_demonic_match_prod.
         destruct (inst s ι); cbn; eauto.
       - eauto.
@@ -242,8 +244,9 @@ Module Soundness
       - rewrite wp_angelic_match_enum; auto.
       - rewrite wp_angelic_match_sum.
         destruct (inst s ι); auto.
-      - destruct (inst s ι); auto.
-      - rewrite ?wp_angelic_match_prod.
+      - rewrite wp_angelic_match_list.
+        destruct (inst s ι); auto.
+      - rewrite wp_angelic_match_prod.
         destruct (inst s ι); auto.
       - auto.
       - rewrite wp_angelic_match_record.
@@ -276,7 +279,8 @@ Module Soundness
       - rewrite wp_demonic_match_enum; auto.
       - rewrite wp_demonic_match_sum.
         destruct (inst s ι); auto.
-      - destruct (inst s ι); auto.
+      - rewrite wp_demonic_match_list.
+        destruct (inst s ι); auto.
       - rewrite wp_demonic_match_prod.
         destruct (inst s ι); auto.
       - auto.
@@ -388,7 +392,8 @@ Module Soundness
       - destruct (eval e1 δ); auto.
         apply IHs; auto.
       - auto.
-      - destruct (eval e δ).
+      - rewrite ?wp_demonic_match_list.
+        destruct (eval e δ).
         apply IHs1; auto.
         apply IHs2; auto.
       - rewrite ?wp_demonic_match_sum.
@@ -500,6 +505,7 @@ Module Soundness
         apply ltrue_right.
 
       - (* stm_match_list *)
+        rewrite wp_demonic_match_list in HYP.
         apply rule_stm_match_list; cbn; intros;
           apply rule_pull; intro Heval; rewrite Heval in HYP.
         + now apply IHs1.

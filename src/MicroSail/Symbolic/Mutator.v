@@ -2347,45 +2347,42 @@ Module Mutators
       Definition angelic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
         ⊢ STerm (ty_list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty_list σ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
-        intros w0 t knil kcons POST δ0 h0.
-        apply SPath.angelic_binary.
-        - apply SDijk.assert_formula.
-          apply
-            {| msg_function        := "SMut.angelic_match_list";
-               msg_message         := "pattern match assertion";
-               msg_program_context := Γ1;
-               msg_localstore      := δ0;
-               msg_heap            := h0;
-               msg_pathcondition   := wco w0;
-            |}.
+        intros w0 t knil kcons.
+        apply angelic_binary.
+        - eapply bind_right.
+          apply assert_formula.
+          (* apply *)
+          (*   {| msg_function        := "SMut.angelic_match_list"; *)
+          (*      msg_message         := "pattern match assertion"; *)
+          (*      msg_program_context := Γ1; *)
+          (*      msg_localstore      := δ0; *)
+          (*      msg_heap            := h0; *)
+          (*      msg_pathcondition   := wco w0; *)
+          (*   |}. *)
           apply (formula_eq (term_lit (ty_list σ) []) t).
-          intros w1 ω01 _.
+          intros w1 ω01.
           apply knil. auto.
-          apply (four POST).
-          auto.
-          apply (subst δ0 ω01).
-          apply (subst h0 ω01).
-        - apply (SDijk.angelic (Some x) σ).
+        - eapply bind.
+          apply (angelic (Some x) σ).
           intros w1 ω01 thead.
-          apply (SDijk.angelic (Some y) (ty_list σ)).
+          eapply bind.
+          apply (angelic (Some y) (ty_list σ)).
           intros w2 ω12 ttail.
-          apply SDijk.assert_formula.
-          apply
-            {| msg_function        := "SMut.angelic_match_list";
-               msg_message         := "pattern match assertion";
-               msg_program_context := Γ1;
-               msg_localstore      := subst δ0 (wtrans ω01 ω12);
-               msg_heap            := subst h0 (wtrans ω01 ω12);
-               msg_pathcondition   := wco w2;
-            |}.
+          eapply bind_right.
+          apply assert_formula.
+          (* apply *)
+          (*   {| msg_function        := "SMut.angelic_match_list"; *)
+          (*      msg_message         := "pattern match assertion"; *)
+          (*      msg_program_context := Γ1; *)
+          (*      msg_localstore      := subst δ0 (wtrans ω01 ω12); *)
+          (*      msg_heap            := subst h0 (wtrans ω01 ω12); *)
+          (*      msg_pathcondition   := wco w2; *)
+          (*   |}. *)
           apply (formula_eq (term_binop binop_cons (subst thead ω12) ttail) (subst t (wtrans ω01 ω12))).
-          intros w3 ω23 _.
+          intros w3 ω23.
           apply (four kcons (wtrans ω01 ω12)). auto.
           apply (persist__term thead (wtrans ω12 ω23)).
           apply (persist__term ttail ω23).
-          apply (four POST). apply (wtrans ω01 (wtrans ω12 ω23)).
-          apply (subst δ0 (wtrans ω01 (wtrans ω12 ω23))).
-          apply (subst h0 (wtrans ω01 (wtrans ω12 ω23))).
       Defined.
 
       Definition smutb_angelic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
@@ -2395,29 +2392,26 @@ Module Mutators
       Definition demonic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
         ⊢ STerm (ty_list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty_list σ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
-        intros w0 t knil kcons POST δ0 h0.
-        apply SPath.demonic_binary.
-        - apply SDijk.assume_formula.
+        intros w0 t knil kcons.
+        apply demonic_binary.
+        - eapply bind_right.
+          apply assume_formula.
           apply (formula_eq (term_lit (ty_list σ) []) t).
-          intros w1 ω01 _.
+          intros w1 ω01.
           apply knil. auto.
-          apply (four POST).
-          auto.
-          apply (subst δ0 ω01).
-          apply (subst h0 ω01).
-        - apply (SDijk.demonic (Some x) σ).
+        - eapply bind.
+          apply (demonic (Some x) σ).
           intros w1 ω01 thead.
-          apply (SDijk.demonic (Some y) (ty_list σ)).
+          eapply bind.
+          apply (demonic (Some y) (ty_list σ)).
           intros w2 ω12 ttail.
-          apply SDijk.assume_formula.
+          eapply bind_right.
+          apply assume_formula.
           apply (formula_eq (term_binop binop_cons (subst thead ω12) ttail) (subst t (wtrans ω01 ω12))).
-          intros w3 ω23 _.
+          intros w3 ω23.
           apply (four kcons (wtrans ω01 ω12)). auto.
           apply (persist__term thead (wtrans ω12 ω23)).
           apply (persist__term ttail ω23).
-          apply (four POST). apply (wtrans ω01 (wtrans ω12 ω23)).
-          apply (subst δ0 (wtrans ω01 (wtrans ω12 ω23))).
-          apply (subst h0 (wtrans ω01 (wtrans ω12 ω23))).
       Defined.
 
       Definition smutb_demonic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :

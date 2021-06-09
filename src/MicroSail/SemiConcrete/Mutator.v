@@ -620,6 +620,80 @@ Module SemiConcrete
         now inversion H0.
       Qed.
 
+      Definition angelic_match_list {A Γ1 Γ2} {σ} :
+        Lit (ty_list σ) -> (CMut Γ1 Γ2 A) -> (Lit σ -> Lit (ty_list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v knil kcons.
+        apply angelic_binary.
+        - eapply bind_right.
+          apply assert_formula.
+          apply (nil = v).
+          apply knil.
+        - eapply bind.
+          apply (angelic σ).
+          intros vhead.
+          eapply bind.
+          apply (angelic (ty_list σ)).
+          intros vtail.
+          eapply bind_right.
+          apply assert_formula.
+          apply (cons vhead vtail = v).
+          apply (kcons vhead vtail).
+      Defined.
+
+      Lemma wp_angelic_match_list {A Γ1 Γ2} {σ}
+        (v : Lit (ty_list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Lit σ -> Lit (ty_list σ) -> CMut Γ1 Γ2 A) POST δ h :
+        angelic_match_list v knil kcons POST δ h <->
+        match v with
+        | nil => knil POST δ h
+        | cons vh vt => kcons vh vt POST δ h
+        end.
+      Proof.
+        cbv [angelic_match_list bind_right bind angelic angelic_binary
+             assert_formula dijkstra CDijk.assert_formula].
+        split.
+        - intros []; destruct_conjs; subst; auto.
+        - destruct v as [|vh vt]; [left;auto|right].
+          exists vh, vt. auto.
+      Qed.
+
+      Definition demonic_match_list {A Γ1 Γ2} {σ} :
+        Lit (ty_list σ) -> (CMut Γ1 Γ2 A) -> (Lit σ -> Lit (ty_list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v knil kcons.
+        apply demonic_binary.
+        - eapply bind_right.
+          apply assume_formula.
+          apply (nil = v).
+          apply knil.
+        - eapply bind.
+          apply (demonic σ).
+          intros vhead.
+          eapply bind.
+          apply (demonic (ty_list σ)).
+          intros vtail.
+          eapply bind_right.
+          apply assume_formula.
+          apply (cons vhead vtail = v).
+          apply (kcons vhead vtail).
+      Defined.
+
+      Lemma wp_demonic_match_list {A Γ1 Γ2} {σ}
+        (v : Lit (ty_list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Lit σ -> Lit (ty_list σ) -> CMut Γ1 Γ2 A) POST δ h :
+        demonic_match_list v knil kcons POST δ h <->
+        match v with
+        | nil => knil POST δ h
+        | cons vh vt => kcons vh vt POST δ h
+        end.
+      Proof.
+        cbv [demonic_match_list bind_right bind demonic demonic_binary
+             assume_formula dijkstra CDijk.assume_formula].
+        split.
+        - destruct v; intuition.
+        - destruct v; intuition; try discriminate.
+          now dependent elimination H0.
+      Qed.
+
       Definition angelic_match_record {N : Set} (n : N -> 𝑺) {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
         (Lit (ty_record R)) ->
         (NamedEnv Lit Δ -> CMut Γ1 Γ2 A) ->
@@ -736,10 +810,10 @@ Module SemiConcrete
             (fun v => produce (env_snoc ι (xl :: σ) v) alt_inl)
             (fun v => produce (env_snoc ι (xr :: τ) v) alt_inr)
         | asn_match_list s alt_nil xh xt alt_cons =>
-          match inst (T := fun Σ => Term Σ _) s ι with
-          | nil        => produce ι alt_nil
-          | cons vh vt => produce (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
-          end
+          demonic_match_list
+            (inst (T := fun Σ => Term Σ _) s ι)
+            (produce ι alt_nil)
+            (fun vh vt => produce (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons)
         | asn_match_prod s xl xr rhs =>
           demonic_match_prod
             (inst (T := fun Σ => Term Σ _) s ι)
@@ -779,10 +853,10 @@ Module SemiConcrete
             (fun v => consume (env_snoc ι (xl :: σ) v) alt_inl)
             (fun v => consume (env_snoc ι (xr :: τ) v) alt_inr)
         | asn_match_list s alt_nil xh xt alt_cons =>
-          match inst (T := fun Σ => Term Σ _) s ι with
-          | nil        => consume ι alt_nil
-          | cons vh vt => consume (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons
-          end
+          angelic_match_list
+            (inst (T := fun Σ => Term Σ _) s ι)
+            (consume ι alt_nil)
+            (fun vh vt => consume (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons)
         | asn_match_prod s xl xr rhs =>
           angelic_match_prod
             (inst (T := fun Σ => Term Σ _) s ι)
@@ -879,13 +953,12 @@ Module SemiConcrete
           pure v__new
         | @stm_match_list _ _ σ e s1 xh xt s2 =>
           v <- eval_exp e ;;
-          match v : list (Lit σ) with
-          | nil => exec s1
-          | cons h t =>
-            pushspops
-              (env_snoc (env_snoc env_nil (xh :: σ) h) (xt :: ty_list σ) t)
-              (exec s2)
-          end
+          demonic_match_list v
+            (exec s1)
+            (fun h t =>
+               pushspops
+                 (env_snoc (env_snoc env_nil (xh :: σ) h) (xt :: ty_list σ) t)
+                 (exec s2))
         | stm_match_sum e xinl s1 xinr s2 =>
           v <- eval_exp e ;;
           demonic_match_sum

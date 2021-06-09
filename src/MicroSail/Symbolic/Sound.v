@@ -983,6 +983,62 @@ Module Soundness
           now rewrite <- ?inst_subst, ?subst_assoc.
     Qed.
 
+    Lemma approx_angelic_match_list {AT A} `{Approx AT A} {Γ1 Γ2} xhead xtail σ
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.angelic_match_list AT Γ1 Γ2 xhead xtail σ w) (@CMut.angelic_match_list A Γ1 Γ2 σ).
+    Proof.
+      intros t ? ->.
+      intros sknil cknil Hknil.
+      intros skcons ckcons Hkcons.
+      unfold SMut.angelic_match_list, CMut.angelic_match_list.
+      apply approx_angelic_binary.
+      + apply approx_bind_right; auto.
+        apply approx_assert_formula; auto.
+      + apply approx_bind; auto.
+        apply approx_angelic; auto.
+        intros w1 ω01 ι1 -> Hpc1.
+        intros thead vhead ->.
+        apply approx_bind; auto.
+        apply approx_angelic; auto.
+        intros w2 ω12 ι2 -> Hpc2.
+        intros ttail vtail ->.
+        rewrite <- ?inst_subst, <- subst_sub_comp.
+        apply approx_bind_right; auto.
+        apply approx_assert_formula; auto.
+        intros w3 ω23 ι3 -> Hpc3.
+        apply Hkcons; wsimpl; eauto.
+        now rewrite <- ?inst_subst, <- subst_sub_comp.
+        now rewrite <- ?inst_subst.
+    Qed.
+
+    Lemma approx_demonic_match_list {AT A} `{Approx AT A} {Γ1 Γ2} xhead xtail σ
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_list AT Γ1 Γ2 xhead xtail σ w) (@CMut.demonic_match_list A Γ1 Γ2 σ).
+    Proof.
+      intros t ? ->.
+      intros sknil cknil Hknil.
+      intros skcons ckcons Hkcons.
+      unfold SMut.demonic_match_list, CMut.demonic_match_list.
+      apply approx_demonic_binary.
+      + apply approx_bind_right; auto.
+        apply approx_assume_formula; auto.
+      + apply approx_bind; auto.
+        apply approx_demonic; auto.
+        intros w1 ω01 ι1 -> Hpc1.
+        intros thead vhead ->.
+        apply approx_bind; auto.
+        apply approx_demonic; auto.
+        intros w2 ω12 ι2 -> Hpc2.
+        intros ttail vtail ->.
+        rewrite <- ?inst_subst, <- subst_sub_comp.
+        apply approx_bind_right; auto.
+        apply approx_assume_formula; auto.
+        intros w3 ω23 ι3 -> Hpc3.
+        apply Hkcons; wsimpl; eauto.
+        now rewrite <- ?inst_subst, <- subst_sub_comp.
+        now rewrite <- ?inst_subst.
+    Qed.
+
     Lemma approx_angelic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
@@ -1266,7 +1322,14 @@ Module Soundness
       + intros w2 ω12 ι2 -> Hpc2.
         intros t v ->.
         apply IHasn2; cbn - [inst sub_wk1]; wsimpl; auto.
-    - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_demonic_match_list; auto.
+      eapply approx_four; eauto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros thead vhead ->.
+      intros ttail vtail ->.
+      apply IHasn2; cbn - [inst sub_wk1]; wsimpl; auto.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_subst.
       apply approx_demonic_match_prod; auto.
@@ -1364,7 +1427,14 @@ Module Soundness
       + intros w2 ω12 ι2 -> Hpc2.
         intros t v ->.
         apply IHasn2; cbn - [inst sub_wk1]; wsimpl; auto.
-    - admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_subst.
+      apply approx_angelic_match_list; auto.
+      eapply approx_four; eauto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros thead vhead ->.
+      intros ttail vtail ->.
+      apply IHasn2; cbn - [inst sub_wk1]; wsimpl; auto.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_subst.
       apply approx_angelic_match_prod; auto.
@@ -1514,7 +1584,11 @@ Module Soundness
       apply approx_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      admit.
+      apply approx_demonic_match_list; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros thead vhead ->.
+      intros ttail vtail ->.
+      apply approx_pushspops; auto.
     - apply approx_bind; auto.
       intros POST__s POST__c HPOST.
       apply approx_eval_exp; auto.
