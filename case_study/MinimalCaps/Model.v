@@ -208,18 +208,18 @@ Module MinCapsModel.
         (match w with
         | inr (MkCap O b e a) => True%I
         | inr (MkCap R b e a) =>
-          (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
-                               [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (MinCaps_ref_inv (mG := mG) a safe))%I
+          ⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
+                               [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (MinCaps_ref_inv (mG := mG) a safe)
         | inr (MkCap RW b e a) =>
-          (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
-                               [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (MinCaps_ref_inv (mG := mG) a safe))%I
+          ⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
+                               [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (MinCaps_ref_inv (mG := mG) a safe)
         | inl _ => False
         end)%I.
 
     Program Definition MinCaps_safe1 `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (safe : D) : D :=
       λne w,
         (match w with
-        | inl z => True%I
+        | inl z => True
         | inr c => MinCaps_csafe (mG := mG) safe w
         end)%I.
 
@@ -248,6 +248,86 @@ Module MinCapsModel.
 
     Definition MinCaps_safe `{sailRegG Σ} `{invG Σ} {mG : memG Σ} : D :=
       λne w, (fixpoint (MinCaps_safe1 (mG := mG))) w.
+
+    Lemma le_liveAddrs1 (a a' : Addr) :
+      (0 <= a')%Z /\ (a' <= a)%Z /\ a ∈ liveAddrs ->
+      a' ∈ liveAddrs.
+    Proof.
+      intros [H0a' [Hle Hin]].
+      apply elem_of_seqZ in Hin.
+      destruct Hin as [H0 Hm].
+      rewrite elem_of_seqZ.
+      split.
+      - assumption.
+      - eapply Z.le_lt_trans; eassumption.
+    Qed.
+
+    Lemma le_liveAddrs2 (a a' : Addr) :
+      (a' < maxAddr)%Z /\ (a <= a')%Z /\ a ∈ liveAddrs ->
+      a' ∈ liveAddrs.
+    Proof.
+      intros [Ha'm [Hle Hin]].
+      apply elem_of_seqZ in Hin.
+      destruct Hin as [H0 Hm].
+      rewrite elem_of_seqZ.
+      split.
+      - eapply Z.le_trans; eassumption.
+      - rewrite Z.add_comm.
+        rewrite Z.add_0_r.
+        assumption.
+    Qed.
+
+    Lemma region_addrs_submseteq `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (b' e' b e : Addr) :
+      ⊢ ⌜ (b <= b')%Z /\ (e' <= e)%Z ⌝ -∗
+                               ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (∃ w, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) w ∗ fixpoint (MinCaps_safe1 (mG := mG)) w))%I -∗
+                               ([∗ list] a ∈ (region_addrs b' e'), inv (mc_invNs (mcMemG := mG) .@ a) (∃ w, mapsto (hG := mc_ghG (mcMemG := mG)) a (DfracOwn 1) w ∗ fixpoint (MinCaps_safe1 (mG := mG)) w))%I.
+    Proof.
+      iIntros "[% %] Hregion".
+      iApply (big_sepL_submseteq _ _ (region_addrs b e)).
+      unfold region_addrs.
+      induction liveAddrs.
+      - cbn; trivial.
+      - cbn.
+        destruct (decide ((b' ≤ a)%Z ∧ (a ≤ e')%Z));
+          destruct (decide ((b ≤ a)%Z ∧ (a ≤ e)%Z));
+          trivial.
+        + apply submseteq_skip; trivial.
+        + destruct a0 as [Hb' He'].
+          apply (Z.le_trans b _ _) in Hb'; try assumption.
+          apply (Z.le_trans _ _ e) in He'; try assumption.
+          exfalso; apply n; split; assumption.
+        + apply submseteq_cons; trivial.
+      - iAssumption.
+    Qed.
+
+    Lemma safe_sub_range `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (b' e' b e : Addr) :
+      forall p a,
+      ⊢ ⌜ (b <= b')%Z /\ (e' <= e)%Z ⌝ -∗
+                               MinCaps_safe (mG := mG)
+                               (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) -∗
+                               MinCaps_safe (mG := mG)
+                               (inr {| cap_permission := p; cap_begin := b'; cap_end := e'; cap_cursor := a |}).
+    Proof.
+      simpl.
+      iIntros (p a) "[% %] Hsafe".
+      do 2 rewrite fixpoint_MinCaps_safe1_eq.
+      (* the following two asserts are temporary, this information needs to become generally available (A positive, finite addr type would solve this) *)
+      assert (Hb'm: (b' < maxAddr)%Z). admit.
+      assert (H0e': (0 <= e')%Z). admit.
+      destruct p; try by iFrame.
+      - iDestruct "Hsafe" as "[[% %] H]".
+        iSplitR.
+        + iPureIntro; split.
+          eapply le_liveAddrs2; (repeat split); eassumption.
+          eapply le_liveAddrs1; (repeat split); eassumption.
+        + iApply (region_addrs_submseteq $! (conj H1 H2) with "H").
+      - iDestruct "Hsafe" as "[[% %] H]".
+        iSplitR.
+        + iPureIntro; split.
+          eapply le_liveAddrs2; (repeat split); eassumption.
+          eapply le_liveAddrs1; (repeat split); eassumption.
+        + iApply (region_addrs_submseteq $! (conj H1 H2) with "H").
+    Admitted.
 
     Lemma specialize_range `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (b e addr : Addr) :
       ⊢ ⌜ (b <= addr)%Z /\ (addr <= e)%Z ⌝ -∗
@@ -283,6 +363,7 @@ Module MinCapsModel.
       | safe => fun ts => MinCaps_safe (mG := mG) (env_head ts)
       | csafe => fun ts => MinCaps_safe (mG := mG) (inr (env_head ts))
       | subperm => fun ts => MinCaps_subperm (env_head (env_tail ts)) (env_head ts) 
+      | dummy => fun ts => True%I
       end) ts.
 
     Global Instance MinCaps_safe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (w : leibnizO MemVal) : Persistent (MinCaps_safe (mG := mG) w).
@@ -561,12 +642,12 @@ Module MinCapsModel.
                                {| cap_permission := p;
                                   cap_begin := b;
                                   cap_end := e;
-                                  cap_cursor := a |})
+                                  cap_cursor := a' |})
                      (_ , ty_cap)
                      {| cap_permission := p;
                         cap_begin := b;
                         cap_end := e;
-                        cap_cursor := a' |}
+                        cap_cursor := a |}
       → ⊢ semTriple δ
           (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
                                             (inr {|
@@ -618,12 +699,12 @@ Module MinCapsModel.
     forall p p' b e a,
       evals es δ = env_snoc
                      (env_snoc env_nil (_ , ty_cap)
-                               {| cap_permission := p;
+                               {| cap_permission := p';
                                   cap_begin := b;
                                   cap_end := e;
                                   cap_cursor := a |})
                      (_ , ty_cap)
-                     {| cap_permission := p';
+                     {| cap_permission := p;
                         cap_begin := b;
                         cap_end := e;
                         cap_cursor := a |}
@@ -676,6 +757,67 @@ Module MinCapsModel.
     destruct p; destruct p'; trivial.
   Qed.
 
+  Lemma csafe_within_range_sound `{sg : sailG Σ} {Γ es δ} :
+    forall p b b' e e' a,
+      evals es δ = env_snoc
+                     (env_snoc env_nil (_ , ty_cap)
+                               {| cap_permission := p;
+                                  cap_begin := b';
+                                  cap_end := e';
+                                  cap_cursor := a |})
+                     (_ , ty_cap)
+                     {| cap_permission := p;
+                        cap_begin := b;
+                        cap_end := e;
+                        cap_cursor := a |}
+      → ⊢ semTriple δ
+          ((MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
+                                            (inr {|
+                                              cap_permission := p;
+                                              cap_begin := b;
+                                              cap_end := e;
+                                              cap_cursor := a |})
+                                            ∗ True)
+        ∗ ⌜is_true ((b <=? b')%Z && (e' <=? e)%Z)⌝ ∧ emp)
+          (stm_call_external (ghost csafe_move_cursor) es)
+          (λ (v0 : ()) (δ' : CStore Γ),
+           (((⌜v0 = tt⌝ ∧ emp)
+               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
+               (inr {| cap_permission := p;
+                  cap_begin := b;
+                  cap_end := e;
+                  cap_cursor := a |}))
+              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
+              (inr {| cap_permission := p;
+                      cap_begin := b';
+                      cap_end := e';
+                      cap_cursor := a |})) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (p b b' e e' a Heq) "[#Hcsafe %]".
+    rewrite wp_unfold.
+    iIntros (σ' ks1 ks n) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first by intuition.
+    iIntros (e2 σ'' efs) "%".
+    cbn in H.
+    dependent elimination H0.
+    dependent elimination s.
+    rewrite Heq in f1.
+    cbn in f1.
+    dependent elimination f1.
+    do 2 iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iFrame.
+    iSplitL; trivial.
+    iApply wp_value.
+    cbn.
+    iSplitL; trivial.
+    iSplitL; trivial.
+    iSplitL; trivial.
+  Admitted.
+
   Ltac destruct_SymInstance :=
     repeat (match goal with
     | H : Env _ (ctx_snoc _ _) |- _ => destruct (snocView H)
@@ -684,26 +826,24 @@ Module MinCapsModel.
 
   Lemma foreignSem `{sg : sailG Σ} : ForeignSem (Σ := Σ).
     intros Γ τ Δ f es δ.
-    destruct f as [ | | |Γ' [ | reg | | | | | | | | ]];
+    destruct f as [ | | |Γ' [ | reg | | | | | | | | | ]];
       cbn - [MinCapsIrisHeapKit.MinCaps_safe MinCapsIrisHeapKit.MinCaps_csafe];
       intros ι;
       destruct_SymInstance;
-      eauto using dI_sound, open_ptsreg_sound, close_ptsreg_sound, int_safe_sound, lift_csafe_sound, specialize_safe_to_cap_sound, duplicate_safe_sound, csafe_move_cursor_sound, csafe_sub_perm_sound.
+      eauto using dI_sound, open_ptsreg_sound, close_ptsreg_sound, int_safe_sound, lift_csafe_sound, specialize_safe_to_cap_sound, duplicate_safe_sound, csafe_move_cursor_sound, csafe_sub_perm_sound, csafe_within_range_sound.
     - (* rM *)
       rename v into e.
       rename v0 into b.
       rename v1 into p.
       rename v2 into address.
-      iIntros (Heq) "[#Hcsafe Hp]".
       destruct p;
-        cbn;
-        iDestruct "Hp" as "[% _]";
-        try (unfold is_true in *; discriminate H).
+        iIntros (Heq) "[[#Hcsafe %] [% %]]";
+        try contradiction.
       (* TODO: clean this up! *)
       + rewrite wp_unfold;
-        unfold is_true in H;
-        apply andb_prop in H;
-        destruct H as [Hb He];
+        unfold is_true in H0;
+        apply andb_prop in H0;
+        destruct H0 as [Hb He];
         apply Zle_is_le_bool in Hb;
         apply Zle_is_le_bool in He;
         iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@address) (∃ w, gen_heap.mapsto address (dfrac.DfracOwn 1) w ∗ fixpoint (MinCapsIrisHeapKit.MinCaps_safe1) w))%I as "Hown".
@@ -716,8 +856,8 @@ Module MinCapsModel.
         iModIntro.
         iSplitR; first by intuition.
         iIntros (e2 σ'' efs) "%".
-        cbn in H.
-        dependent elimination H0.
+        cbn in H2.
+        dependent elimination H2.
         dependent elimination s.
         rewrite Heq in f1.
         cbn in f1.
@@ -743,14 +883,13 @@ Module MinCapsModel.
         iSplitL; trivial.
         iSplitL; try iAssumption.
         unfold fun_rM.
-        simpl in H.
-        apply map_Forall_lookup_1 with (i := address) (x := v) in H.
-        rewrite H; iAssumption.
+        apply map_Forall_lookup_1 with (i := address) (x := v) in H0.
+        simpl in H0; rewrite H0; iAssumption.
         assumption.
       + rewrite wp_unfold;
-        unfold is_true in H;
-        apply andb_prop in H;
-        destruct H as [Hb He];
+        unfold is_true in H0;
+        apply andb_prop in H0;
+        destruct H0 as [Hb He];
         apply Zle_is_le_bool in Hb;
         apply Zle_is_le_bool in He;
         iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@address) (∃ w, gen_heap.mapsto address (dfrac.DfracOwn 1) w ∗ fixpoint (MinCapsIrisHeapKit.MinCaps_safe1) w))%I as "Hown".
@@ -763,8 +902,8 @@ Module MinCapsModel.
         iModIntro.
         iSplitR; first by intuition.
         iIntros (e2 σ'' efs) "%".
-        cbn in H.
-        dependent elimination H0.
+        cbn in H2.
+        dependent elimination H2.
         dependent elimination s.
         rewrite Heq in f1.
         cbn in f1.
@@ -790,9 +929,8 @@ Module MinCapsModel.
         iSplitL; trivial.
         iSplitL; try iAssumption.
         unfold fun_rM.
-        simpl in H.
-        apply map_Forall_lookup_1 with (i := address) (x := v) in H.
-        rewrite H; iAssumption.
+        apply map_Forall_lookup_1 with (i := address) (x := v) in H0.
+        simpl in H0; rewrite H0; iAssumption.
         assumption.
     - (* wM *)
       rename v into e.
@@ -800,17 +938,16 @@ Module MinCapsModel.
       rename v1 into p.
       rename v2 into w.
       rename v3 into address.
-      iIntros (Heq) "[[#Hwsafe #Hcsafe] Hp]".
       destruct p;
-        cbn;
-        iDestruct "Hp" as "[% _]";
-        try (unfold is_true in *; discriminate H).
+        iIntros (Heq) "[[[#Hwsafe #Hcsafe] %] [% %]]";
+        try contradiction.
+      clear H H1.
       rewrite wp_unfold.
       iIntros (σ' ks1 ks n) "[Hregs Hmem]".
       iDestruct "Hmem" as (memmap) "[Hmem' %]".
-      unfold is_true in H.
-      apply andb_prop in H.
-      destruct H as [Hb He].
+      unfold is_true in H0.
+      apply andb_prop in H0.
+      destruct H0 as [Hb He].
       apply Zle_is_le_bool in Hb.
       apply Zle_is_le_bool in He.
       iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@address) (∃ w, gen_heap.mapsto address (dfrac.DfracOwn 1) w ∗ fixpoint (MinCapsIrisHeapKit.MinCaps_safe1) w))%I as "Hown".
@@ -821,8 +958,8 @@ Module MinCapsModel.
       iModIntro.
       iSplitR; first by intuition.
       iIntros (e2 σ'' efs) "%".
-      cbn in H.
-      dependent elimination H.
+      cbn in H0.
+      dependent elimination H0.
       dependent elimination s.
       rewrite Heq in f1.
       cbn in f1.
@@ -850,13 +987,51 @@ Module MinCapsModel.
           * rewrite -> Z.eqb_eq in Heqb.
             subst.
             apply (lookup_insert_rev memmap i); assumption.
-          * rewrite -> map_Forall_lookup in H0.
+          * rewrite -> map_Forall_lookup in H.
             rewrite -> Z.eqb_neq in Heqb.
             rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in Hl.
-            apply H0; assumption.
+            apply H; assumption.
       + iSplitL; trivial.
         iApply wp_value; cbn; trivial;
           repeat (iSplitL; trivial).
+    - (* csafe_within_range *)
+      iIntros (Heq) "[#[Hcsafe _] [% %]]".
+      clear H0.
+      cbn in H.
+      rename v into a.
+      rename v0 into e'.
+      rename v1 into e.
+      rename v2 into b'.
+      rename v3 into b.
+      rename v4 into p.
+      rewrite wp_unfold.
+      iIntros (σ' ks1 ks n) "Hregs".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; first by intuition.
+      iIntros (e2 σ'' efs) "%".
+      cbn in H.
+      dependent elimination H0.
+      dependent elimination s.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      do 2 iModIntro.
+      iMod "Hclose" as "_".
+      iModIntro.
+      iFrame.
+      iSplitL; trivial.
+      iApply wp_value.
+      cbn.
+      iSplitL; trivial.
+      iSplitL; trivial.
+      iSplitL; trivial.
+      unfold is_true in H;
+        apply andb_prop in H;
+        destruct H as [Hb He];
+        apply Zle_is_le_bool in Hb;
+        apply Zle_is_le_bool in He.
+      iApply (MinCapsIrisHeapKit.safe_sub_range $! (conj Hb He) with "Hcsafe").
     - (* sub_perm *)
       rename v into p.
       rename v0 into p'.

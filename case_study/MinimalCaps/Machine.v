@@ -76,9 +76,6 @@ Module MinCapsTermKit <: TermKit.
                           ] ty_unit
   | read_allowed    : Fun ["p"   ∶ ty_perm ] ty_bool
   | write_allowed   : Fun ["p"   ∶ ty_perm ] ty_bool
-  (* | sub_perm       : Fun ["p1"  ∶ ty_perm, *)
-  (*                         "p2"  ∶ ty_perm *)
-  (*                        ] ty_bool *)
   | upper_bound     : Fun ["a"   ∶ ty_addr,
                            "e"   ∶ ty_addr
                           ] ty_bool
@@ -134,6 +131,7 @@ Module MinCapsTermKit <: TermKit.
   | specialize_safe_to_cap     : FunGhost ["c" ∶ ty_cap]
   | int_safe                   : FunGhost ["i" ∶ ty_int]
   | sub_perm                   : FunGhost ["p" ∶ ty_perm, "p'" ∶ ty_perm]
+  | gen_dummy                  : FunGhost ["c" ∶ ty_cap]
   .
 
   Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
@@ -585,6 +583,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                        exp_var "cursor"
                                      ] in
        use lemma specialize_safe_to_cap [exp_var "c"] ;;
+       use lemma gen_dummy [exp_var "c'"] ;;
        use lemma csafe_within_range [exp_var "c'", exp_var "c"] ;;
        use lemma lift_csafe [exp_var "c'"] ;;
        call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
@@ -609,6 +608,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                        exp_var "cursor"
                                      ] in
        use lemma specialize_safe_to_cap [exp_var "c"] ;;
+       use lemma gen_dummy [exp_var "c'"] ;;
        use lemma csafe_within_range [exp_var "c'", exp_var "c"] ;;
        use lemma lift_csafe [exp_var "c'"] ;;
        call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
@@ -827,7 +827,6 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     | write_mem       => fun_write_mem
     | read_allowed    => fun_read_allowed
     | write_allowed   => fun_write_allowed
-    (* | sub_perm       => fun_sub_perm *)
     | upper_bound     => fun_upper_bound
     | within_bounds   => fun_within_bounds
     | perm_to_bits    => fun_perm_to_bits
