@@ -1682,7 +1682,7 @@ Module Terms (Export termkit : TermKit).
       inst (env_lookup ζ xIn) ι = env_lookup (inst (A := SymInstance Σ0) ζ ι) xIn.
     Proof. cbn. now rewrite env_lookup_map. Qed.
 
-    Lemma inst_record_pattern_match {Δ__R : NCtx 𝑹𝑭 Ty} {Σ Δ : LCtx}
+    Lemma inst_record_pattern_match {N : Set} {Δ__R : NCtx 𝑹𝑭 Ty} {Σ : LCtx} {Δ : NCtx N Ty}
       (ι : SymInstance Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ__R) :
       inst (T := fun Σ => NamedEnv (Term Σ) Δ) (record_pattern_match_env p ts) ι =
       record_pattern_match_env p (inst ts ι).
@@ -1694,7 +1694,7 @@ Module Terms (Export termkit : TermKit).
         f_equal. apply IHp.
     Qed.
 
-    Lemma inst_record_pattern_match_reverse {Δ__R : NCtx 𝑹𝑭 Ty} {Σ Δ : LCtx}
+    Lemma inst_record_pattern_match_reverse {N : Set} {Δ__R : NCtx 𝑹𝑭 Ty} {Σ : LCtx} {Δ : NCtx N Ty}
       (ι : SymInstance Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ) :
       inst (record_pattern_match_env_reverse p ts) ι =
       record_pattern_match_env_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).

@@ -983,11 +983,10 @@ Module Soundness
           now rewrite <- ?inst_subst, ?subst_assoc.
     Qed.
 
-    (* TODO: generalize *)
-    Lemma approx_angelic_match_record' {R AT A} `{Approx AT A} {Γ1 Γ2}
-      {Δ : LCtx} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+    Lemma approx_angelic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
+      {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.angelic_match_record' _ id AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record A Γ1 Γ2 Δ R p).
+      approx ι (@SMut.angelic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record N n A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
       intros k k__c Hk.
@@ -1005,44 +1004,34 @@ Module Soundness
         now rewrite <- inst_subst.
     Qed.
 
-    Lemma approx_angelic_match_record {R AT A} `{Approx AT A} {Γ1 Γ2}
-      {Δ : LCtx} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+    Lemma approx_angelic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
+      {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.angelic_match_record _ id AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record A Γ1 Γ2 Δ R p).
+      approx ι (@SMut.angelic_match_record N n AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record N n A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
       intros c c__c Hc.
       unfold SMut.angelic_match_record.
-      dependent elimination t; cbn; try eapply approx_angelic_match_record'; eauto.
+      destruct (term_get_record_spec t).
       - intros P2 Pc2 HP2.
         intros c2 cc2 Hc2.
         intros s2 sc2 Hs2.
-        intros HPost.
+        hnf.
         rewrite CMut.wp_angelic_match_record.
-        eapply Hc; eauto.
-        + unfold wrefl. cbn. now rewrite inst_sub_id.
-        + unfold record_pattern_match_lit.
-          unfold approx, ApproxNamedEnv, ApproxInst.
-          change (inst (T := fun Σ => Env (fun τ => Term Σ _) Δ) (record_pattern_match_env p (lift (𝑹_unfold l))) ι) with (inst (T := fun Σ => NamedEnv (Term Σ) Δ) (A := NamedEnv Lit Δ) (record_pattern_match_env p (lift (𝑹_unfold l))) ι).
-          now rewrite inst_record_pattern_match, inst_lift.
-      - intros P2 Pc2 HP2.
-        intros c2 cc2 Hc2.
-        intros s2 sc2 Hs2.
-        intros HPost.
-        rewrite CMut.wp_angelic_match_record.
-        eapply Hc; eauto.
-        + unfold wrefl. cbn. now rewrite inst_sub_id.
-        + unfold record_pattern_match_lit.
-          unfold approx, ApproxNamedEnv, ApproxInst.
-          change (inst (T := fun Σ => Env (fun τ => Term Σ _) Δ) (record_pattern_match_env p es) ι) with (inst (T := fun Σ => NamedEnv (Term Σ) Δ) (A := NamedEnv Lit Δ) (record_pattern_match_env p es) ι).
-          rewrite inst_record_pattern_match.
-          now rewrite 𝑹_unfold_fold.
+        apply Hc; wsimpl; eauto.
+        hnf.
+        unfold record_pattern_match_lit.
+        rewrite H0. rewrite 𝑹_unfold_fold.
+        change (fun Σ : LCtx => @Env (N * Ty) (fun τ : N * Ty => Term Σ (@snd N Ty τ)) Δ) with
+            (fun Σ : LCtx => @NamedEnv N Ty (fun τ => Term Σ τ) Δ).
+        now rewrite inst_record_pattern_match.
+      - apply approx_angelic_match_record'; auto.
     Qed.
 
-    Lemma approx_demonic_match_record' {R AT A} `{Approx AT A} {Γ1 Γ2}
-      {Δ : LCtx} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+    Lemma approx_demonic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
+      {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.demonic_match_record' _ id AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record A Γ1 Γ2 Δ R p).
+      approx ι (@SMut.demonic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record N n A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
       intros k k__c Hk.
@@ -1061,38 +1050,28 @@ Module Soundness
         now rewrite <- inst_subst.
     Qed.
 
-    Lemma approx_demonic_match_record {R AT A} `{Approx AT A} {Γ1 Γ2}
-      {Δ : LCtx} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+    Lemma approx_demonic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
+      {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
-      approx ι (@SMut.demonic_match_record _ id AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record A Γ1 Γ2 Δ R p).
+      approx ι (@SMut.demonic_match_record N n AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record N n A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
       intros c c__c Hc.
-      unfold SMut.angelic_match_record.
-      dependent elimination t; cbn; try eapply approx_demonic_match_record'; eauto.
+      unfold SMut.demonic_match_record.
+      destruct (term_get_record_spec t).
       - intros P2 Pc2 HP2.
         intros c2 cc2 Hc2.
         intros s2 sc2 Hs2.
-        intros HPost.
+        hnf.
         rewrite CMut.wp_demonic_match_record.
-        eapply Hc; eauto.
-        + unfold wrefl. cbn. now rewrite inst_sub_id.
-        + unfold record_pattern_match_lit.
-          unfold approx, ApproxNamedEnv, ApproxInst.
-          change (inst (T := fun Σ => Env (fun τ => Term Σ _) Δ) (record_pattern_match_env p (lift (𝑹_unfold l))) ι) with (inst (T := fun Σ => NamedEnv (Term Σ) Δ) (A := NamedEnv Lit Δ) (record_pattern_match_env p (lift (𝑹_unfold l))) ι).
-          now rewrite inst_record_pattern_match, inst_lift.
-      - intros P2 Pc2 HP2.
-        intros c2 cc2 Hc2.
-        intros s2 sc2 Hs2.
-        intros HPost.
-        rewrite CMut.wp_demonic_match_record.
-        eapply Hc; eauto.
-        + unfold wrefl. cbn. now rewrite inst_sub_id.
-        + unfold record_pattern_match_lit.
-          unfold approx, ApproxNamedEnv, ApproxInst.
-          change (inst (T := fun Σ => Env (fun τ => Term Σ _) Δ) (record_pattern_match_env p es) ι) with (inst (T := fun Σ => NamedEnv (Term Σ) Δ) (A := NamedEnv Lit Δ) (record_pattern_match_env p es) ι).
-          rewrite inst_record_pattern_match.
-          now rewrite 𝑹_unfold_fold.
+        apply Hc; wsimpl; eauto.
+        hnf.
+        unfold record_pattern_match_lit.
+        rewrite H0. rewrite 𝑹_unfold_fold.
+        change (fun Σ : LCtx => @Env (N * Ty) (fun τ : N * Ty => Term Σ (@snd N Ty τ)) Δ) with
+            (fun Σ : LCtx => @NamedEnv N Ty (fun τ => Term Σ τ) Δ).
+        now rewrite inst_record_pattern_match.
+      - apply approx_demonic_match_record'; auto.
     Qed.
 
   End PatternMatching.
@@ -1573,7 +1552,10 @@ Module Soundness
       apply approx_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      admit.
+      apply approx_demonic_match_record; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts vs Htvs.
+      apply approx_pushspops; auto.
     - apply approx_bind; auto.
       apply approx_angelic; auto.
       intros w1 ω01 ι1 -> Hpc1.

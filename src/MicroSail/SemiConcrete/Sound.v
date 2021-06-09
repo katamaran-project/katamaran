@@ -402,7 +402,8 @@ Module Soundness
       - apply IHs; auto.
       - destruct (𝑼_unfold (eval e δ)).
         apply H; auto.
-      - apply IHs; auto.
+      - rewrite ?wp_demonic_match_record.
+        apply IHs; auto.
       - intros [v Hwp]; exists v; revert Hwp.
         apply consume_chunk_monotonic. auto.
       - intros [v Hwp]; exists v; revert Hwp.
@@ -530,6 +531,7 @@ Module Soundness
         now apply H.
 
       - (* stm_match_record *)
+        rewrite wp_demonic_match_record in HYP.
         now apply rule_stm_match_record, IHs.
 
       - (* stm_read_register *)
