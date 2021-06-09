@@ -479,6 +479,26 @@ Module Soundness
       now rewrite List.map_id.
     Qed.
 
+    (* Lemma approx_angelic_match_bool {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) *)
+    (*   (msg : Message w) : *)
+    (*   approx ι (@SDijk.angelic_match_bool w msg) (@CDijk.angelic_match_bool). *)
+    (* Proof. *)
+    (*   intros t v ->. *)
+    (*   unfold SDijk.angelic_match_bool. *)
+    (*   destruct (term_get_lit_spec t). *)
+    (*   - apply approx_pure; auto. *)
+    (*   - unfold SDijk.angelic_match_bool'. *)
+    (*     intros POST__s POST__c HPOST. *)
+    (*     cbv [SDijk.angelic_binary SDijk.bind CDijk.pure SDijk.assert_formula]. *)
+    (*     hnf. *)
+    (*     intros δs δc Hδ hs hc Hh. *)
+    (*     hnf. rewrite CMut.wp_angelic_match_bool. *)
+    (*     destruct a. *)
+    (*     + apply Hkt; wsimpl; eauto. *)
+    (*     + apply Hkf; wsimpl; eauto. *)
+    (*   - now apply approx_angelic_match_bool'. *)
+    (* Qed. *)
+
   End Dijk.
 
   Section Basics.
@@ -1594,13 +1614,23 @@ Module Soundness
       apply approx_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      admit.
+      apply approx_demonic_match_sum; auto.
+      + intros w2 ω12 ι2 -> Hpc2.
+        intros tl vl ->.
+        apply approx_pushpop; auto.
+      + intros w2 ω12 ι2 -> Hpc2.
+        intros tr vr ->.
+        apply approx_pushpop; auto.
     - apply approx_bind; auto.
       intros POST__s POST__c HPOST.
       apply approx_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      admit.
+      apply approx_demonic_match_prod; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros t1 v1 ->.
+      intros t2 v2 ->.
+      apply approx_pushspops; auto.
     - apply approx_bind; auto.
       intros POST__s POST__c HPOST.
       apply approx_eval_exp; auto.

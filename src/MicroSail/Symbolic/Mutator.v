@@ -1453,22 +1453,31 @@ Module Mutators
       apply (subst fml ω01).
     Defined.
 
+    Definition angelic_binary {A} :
+      ⊢ SDijkstra A -> SDijkstra A -> SDijkstra A :=
+      fun w m1 m2 POST =>
+        angelic_binary (m1 POST) (m2 POST).
+    Definition demonic_binary {A} :
+      ⊢ SDijkstra A -> SDijkstra A -> SDijkstra A :=
+      fun w m1 m2 POST =>
+        demonic_binary (m1 POST) (m2 POST).
+
     Definition angelic_list {A} :
       ⊢ Message -> List A -> SDijkstra A :=
       fun w msg =>
-        fix rec xs POST :=
+        fix rec xs :=
         match xs with
-        | nil        => error (EMsgHere msg)
-        | cons x xs  => angelic_binary (T POST x) (rec xs POST)
+        | nil        => fun POST => error (EMsgHere msg)
+        | cons x xs  => angelic_binary (pure x) (rec xs)
         end.
 
     Definition demonic_list {A} :
       ⊢ List A -> SDijkstra A :=
       fun w =>
-        fix rec xs POST :=
+        fix rec xs :=
         match xs with
-        | nil        => block
-        | cons x xs  => demonic_binary (T POST x) (rec xs POST)
+        | nil        => fun POST => block
+        | cons x xs  => demonic_binary (pure x) (rec xs)
         end.
 
     Definition angelic_finite F `{finite.Finite F} :
@@ -1479,39 +1488,44 @@ Module Mutators
       ⊢ SDijkstra ⌜F⌝ :=
       fun w => demonic_list (finite.enum F).
 
-    Definition angelic_match_bool {A} :
-      ⊢ Message -> STerm ty_bool -> □(SDijkstra A) -> □(SDijkstra A) -> SDijkstra A.
-      unfold SDijkstra in *.
-      intros w0 msg t pt pf k.
-      apply angelic_binary.
-      - apply assert_formula.
-        auto.
-        apply (formula_bool t).
-        intros w1 ω01 _.
-        apply pt.
-        auto.
-        apply (four k ω01).
-      - apply assert_formula.
-        auto.
-        apply (formula_bool (term_not t)).
-        intros w1 ω01 _.
-        apply pf.
-        auto.
-        apply (four k ω01).
-    Defined.
+    Definition angelic_match_bool' :
+      ⊢ Message -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
+      fun _ msg t =>
+        angelic_binary
+          (bind
+             (assert_formula msg (formula_bool t))
+             (fun _ _ _ => pure true))
+          (bind
+             (assert_formula msg (formula_bool (term_not t)))
+             (fun _ _ _ => pure false)).
 
-    Definition demonic_match_bool {A} :
-      ⊢ STerm ty_bool -> □(SDijkstra A) -> □(SDijkstra A) -> SDijkstra A.
-      (* fun w0 t pt pf => *)
-      (*   match term_get_lit t with *)
-      (*   | Some true => T pt *)
-      (*   | Some false => T pf *)
-      (*   | None => *)
-      (*     demonic_binary *)
-      (*       (assume_formulak (formula_bool t) pt) *)
-      (*       (assume_formulak (formula_bool (term_not t)) pf) *)
-      (*   end. *)
-    Admitted.
+    Definition angelic_match_bool :
+      ⊢ Message -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
+      fun w msg t =>
+        match term_get_lit t with
+        | Some l => pure  l
+        | None   => angelic_match_bool' msg t
+        end.
+
+    Definition demonic_match_bool' :
+      ⊢ STerm ty_bool -> SDijkstra ⌜bool⌝ :=
+      fun _ t =>
+        demonic_binary
+          (bind
+             (assume_formula (formula_bool t))
+             (fun _ _ _ => pure true))
+          (bind
+             (assume_formula (formula_bool (term_not t)))
+             (fun _ _ _ => pure false)).
+
+    Definition demonic_match_bool :
+      ⊢ STerm ty_bool -> SDijkstra ⌜bool⌝ :=
+      fun w t =>
+        match term_get_lit t with
+        | Some l => pure  l
+        | None   => demonic_match_bool' t
+        end.
+
 
     (* Definition angelic_match_enum {AT E} : *)
     (*   ⊢ Message -> STerm (ty_enum E) -> (⌜Lit (ty_enum E)⌝ -> □(SPath AT)) -> SPath AT := *)
@@ -1559,26 +1573,27 @@ Module Mutators
 
     Definition angelic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
       ⊢ Message -> STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A.
-      intros w0 msg t kinl kinr POST.
+    Proof.
+      intros w0 msg t kinl kinr.
       apply angelic_binary.
-      - apply (angelic (Some x) σ).
+      - eapply bind.
+        apply (angelic (Some x) σ).
         intros w1 ω01 t1.
+        eapply bind.
         apply assert_formula. apply (subst msg ω01).
         apply (formula_eq (term_inl t1) (subst t ω01)).
         intros w2 ω12 _.
         apply (four kinl ω01). auto.
         apply (persist__term t1 ω12).
-        apply (four (four POST ω01)).
-        auto.
-      - apply (angelic (Some y) τ).
+      - eapply bind.
+        apply (angelic (Some y) τ).
         intros w1 ω01 t1.
+        eapply bind.
         apply assert_formula. apply (subst msg ω01).
         apply (formula_eq (term_inr t1) (subst t ω01)).
         intros w2 ω12 _.
         apply (four kinr ω01). auto.
         apply (persist__term t1 ω12).
-        apply (four (four POST ω01)).
-        auto.
     Defined.
 
     (* Definition angelic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) : *)
@@ -1595,26 +1610,26 @@ Module Mutators
     Definition demonic_match_sum' {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
       ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A.
     Proof.
-      intros w0 t kinl kinr k.
+      intros w0 t kinl kinr.
       apply demonic_binary.
-      - apply (demonic (Some x) σ).
+      - eapply bind.
+        apply (demonic (Some x) σ).
         intros w1 ω01 t1.
+        eapply bind.
         apply assume_formula.
         apply (formula_eq (term_inl t1) (subst t ω01)).
         intros w2 ω12 _.
         apply (four kinl ω01). auto.
         apply (persist__term t1 ω12).
-        apply (four (four k ω01)).
-        auto.
-      - apply (demonic (Some y) τ).
+      - eapply bind.
+        apply (demonic (Some y) τ).
         intros w1 ω01 t1.
+        eapply bind.
         apply assume_formula.
         apply (formula_eq (term_inr t1) (subst t ω01)).
         intros w2 ω12 _.
         apply (four kinr ω01). auto.
         apply (persist__term t1 ω12).
-        apply (four (four k ω01)).
-        auto.
     Defined.
 
     Definition demonic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
@@ -1629,11 +1644,14 @@ Module Mutators
     Definition angelic_match_prod {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
       ⊢ Message -> STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A.
     Proof.
-      intros w0 msg t k POST.
+      intros w0 msg t k.
+      eapply bind.
       apply (angelic (Some x) σ).
       intros w1 ω01 t1.
+      eapply bind.
       apply (angelic (Some y) τ).
       intros w2 ω12 t2.
+      eapply bind.
       apply assert_formula. apply (subst msg (wtrans ω01 ω12)).
       refine (formula_eq _ (subst t (wtrans ω01 ω12))).
       eapply (term_binop binop_pair).
@@ -1644,8 +1662,6 @@ Module Mutators
       auto.
       apply (persist__term t1 (wtrans ω12 ω23)).
       apply (persist__term t2 ω23).
-      apply (four POST).
-      apply (wtrans ω01 (wtrans ω12 ω23)).
     Defined.
 
     (* Definition angelic_match_prod {AT} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) : *)
@@ -1659,11 +1675,14 @@ Module Mutators
     Definition demonic_match_prod {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
       ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A.
     Proof.
-      intros w0 t k POST.
+      intros w0 t k.
+      eapply bind.
       apply (demonic (Some x) σ).
       intros w1 ω01 t1.
+      eapply bind.
       apply (demonic (Some y) τ).
       intros w2 ω12 t2.
+      eapply bind.
       apply assume_formula.
       refine (formula_eq _ (subst t (wtrans ω01 ω12))).
       eapply (term_binop binop_pair).
@@ -1674,8 +1693,6 @@ Module Mutators
       auto.
       apply (persist__term t1 (wtrans ω12 ω23)).
       apply (persist__term t2 ω23).
-      apply (four POST).
-      apply (wtrans ω01 (wtrans ω12 ω23)).
     Defined.
 
     (* Definition demonic_match_prod {AT} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) : *)
@@ -1967,6 +1984,10 @@ Module Mutators
         apply (four k ω01).
       Defined.
 
+      Definition bind_box {Γ1 Γ2 Γ3 A B} :
+        ⊢ □(SMut Γ1 Γ2 A) -> □(A -> SMut Γ2 Γ3 B) -> □(SMut Γ1 Γ3 B) :=
+        fun w0 m f => bind <$> m <*> four f.
+
       (* Definition strength {Γ1 Γ2 A B Σ} `{Subst A, Subst B} (ma : SMut Γ1 Γ2 A Σ) (b : B Σ) : *)
       (*   SMut Γ1 Γ2 (fun Σ => A Σ * B Σ)%type Σ := *)
       (*   bind ma (fun _ ζ a => pure (a, subst b ζ)). *)
@@ -2159,6 +2180,24 @@ Module Mutators
     End AssumeAssert.
 
     Section PatternMatching.
+
+      (* Definition angelic_match_bool {Γ} : *)
+      (*   ⊢ STerm ty_bool -> SMut Γ Γ ⌜bool⌝ := *)
+      (*   fun w t POST δ h => *)
+      (*     dijkstra *)
+      (*       (SDijk.angelic_match_bool *)
+      (*          {| msg_function := "SMut.angelic_match_bool"; *)
+      (*             msg_message := "pattern match assertion"; *)
+      (*             msg_program_context := Γ; *)
+      (*             msg_localstore := δ; *)
+      (*             msg_heap := h; *)
+      (*             msg_pathcondition := wco w *)
+      (*          |} t) *)
+      (*       POST δ h. *)
+
+      (* Definition demonic_match_bool {Γ} : *)
+      (*   ⊢ STerm ty_bool -> SMut Γ Γ ⌜bool⌝ := *)
+      (*   fun w t => dijkstra (SDijk.demonic_match_bool t). *)
 
       Definition angelic_match_bool' {AT} {Γ1 Γ2} :
         ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.

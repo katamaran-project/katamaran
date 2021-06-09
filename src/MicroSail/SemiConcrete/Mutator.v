@@ -186,20 +186,29 @@ Module SemiConcrete
       apply (inst fml ι).
     Defined.
 
+    Definition angelic_binary {A} :
+      CDijkstra A -> CDijkstra A -> CDijkstra A :=
+      fun m1 m2 POST =>
+        m1 POST \/ m2 POST.
+    Definition demonic_binary {A} :
+      CDijkstra A -> CDijkstra A -> CDijkstra A :=
+      fun m1 m2 POST =>
+        m1 POST /\ m2 POST.
+
     Definition angelic_list {A} :
       list A -> CDijkstra A :=
-      fix rec xs POST :=
+      fix rec xs :=
         match xs with
-        | nil        => False
-        | cons x xs  => POST x \/ rec xs POST
+        | nil        => fun POST => False
+        | cons x xs  => angelic_binary (pure x) (rec xs)
         end.
 
     Definition demonic_list {A} :
       list A -> CDijkstra A :=
-      fix rec xs POST :=
+      fix rec xs :=
         match xs with
-        | nil        => True
-        | cons x xs  => POST x /\ rec xs POST
+        | nil        => fun POST => True
+        | cons x xs  => demonic_binary (pure x) (rec xs)
         end.
 
     Definition angelic_finite F `{finite.Finite F} :
@@ -209,6 +218,28 @@ Module SemiConcrete
     Definition demonic_finite F `{finite.Finite F} :
       CDijkstra F :=
       demonic_list (finite.enum F).
+
+    Definition angelic_match_bool :
+      Lit ty_bool -> CDijkstra bool :=
+      fun v =>
+        angelic_binary
+          (bind
+             (assert_formula (v = true))
+             (fun _ => pure true))
+          (bind
+             (assert_formula (v = false))
+             (fun _ => pure false)).
+
+    Definition demonic_match_bool :
+      Lit ty_bool -> CDijkstra bool :=
+      fun v =>
+        demonic_binary
+          (bind
+             (assume_formula (v = true))
+             (fun _ => pure true))
+          (bind
+             (assume_formula (v = false))
+             (fun _ => pure false)).
 
     Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Lit Δ -> Prop) :
       angelic_ctx Δ POST <-> exists vs : NamedEnv Lit Δ, POST vs.
@@ -249,7 +280,8 @@ Module SemiConcrete
     Proof.
       induction xs; cbn.
       - firstorder.
-      - rewrite IHxs; clear IHxs.
+      - cbv [angelic_binary pure].
+        rewrite IHxs; clear IHxs.
         firstorder. left. now subst.
     Qed.
 
@@ -259,7 +291,8 @@ Module SemiConcrete
     Proof.
       induction xs; cbn.
       - firstorder.
-      - rewrite IHxs; clear IHxs.
+      - cbv [demonic_binary pure].
+        rewrite IHxs; clear IHxs.
         firstorder. now subst.
     Qed.
 
@@ -403,6 +436,32 @@ Module SemiConcrete
     End AssumeAssert.
 
     Section PatternMatching.
+
+      (* Definition angelic_match_bool {Γ} (v : Lit ty_bool) : CMut Γ Γ (Lit ty_bool) := *)
+      (*   dijkstra (CDijk.angelic_match_bool v). *)
+
+      (* Lemma wp_angelic_match_bool {Γ} (v : Lit ty_bool) : *)
+      (*   forall POST (δ : CStore Γ) h, *)
+      (*     angelic_match_bool v POST δ h <-> *)
+      (*     POST v δ h. *)
+      (* Proof. *)
+      (*   cbv [angelic_match_bool dijkstra CDijk.angelic_match_bool CDijk.pure *)
+      (*        CDijk.angelic_binary CDijk.bind CDijk.assert_formula]. *)
+      (*   destruct v; intuition; discriminate. *)
+      (* Qed. *)
+
+      (* Definition demonic_match_bool {Γ} (v : Lit ty_bool) : CMut Γ Γ (Lit ty_bool) := *)
+      (*   dijkstra (CDijk.demonic_match_bool v). *)
+
+      (* Lemma wp_demonic_match_bool {Γ} (v : Lit ty_bool) : *)
+      (*   forall POST (δ : CStore Γ) h, *)
+      (*     demonic_match_bool v POST δ h <-> *)
+      (*     POST v δ h. *)
+      (* Proof. *)
+      (*   cbv [demonic_match_bool dijkstra CDijk.demonic_match_bool CDijk.pure *)
+      (*        CDijk.demonic_binary CDijk.bind CDijk.assume_formula]. *)
+      (*   destruct v; intuition; discriminate. *)
+      (* Qed. *)
 
       Definition angelic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
       Proof.
