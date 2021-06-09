@@ -145,21 +145,13 @@ Module Mutators
   Definition wcat (w : World) (Δ : LCtx) : World :=
     @MkWorld (wctx w ▻▻ Δ) (subst (wco w) (sub_cat_left Δ)).
 
-  Lemma sub_cat_left_cat {Σ1 Σ2 Σ} (ζ1 : Sub Σ1 Σ) (ζ2 : Sub Σ2 Σ) :
-    subst (sub_cat_left Σ2) (ζ1 ►► ζ2) = ζ1.
-  Proof.
-    apply env_lookup_extensional. intros [x σ] xIn.
-    unfold sub_cat_left. unfold subst, SubstEnv.
-    rewrite env_lookup_map, env_lookup_tabulate. cbn.
-  Admitted.
-
   Program Definition wcat_sub {w1 w2} (ω12 : w1 ⊒ w2) {Δ : LCtx} (ζ : Sub Δ w2) :
     wcat w1 Δ ⊒ w2 := {| wsub := wsub ω12 ►► ζ |}.
   Next Obligation.
   Proof.
     intros * ι Hpc. unfold wcat. cbn.
     rewrite <- subst_sub_comp.
-    rewrite sub_cat_left_cat.
+    rewrite sub_comp_cat_left.
     now apply went.
   Qed.
 

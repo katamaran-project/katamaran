@@ -338,6 +338,18 @@ Section WithBinding.
         + cbn. f_equal. apply IHE.
     Qed.
 
+    Lemma env_lookup_cat_left {Γ1 Γ2 x} (xIn : x ∈ Γ1) (E1 : Env Γ1) (E2 : Env Γ2) :
+      env_lookup (env_cat E1 E2) (inctx_cat_left Γ2 xIn) = env_lookup E1 xIn.
+    Proof. induction E2; auto. Qed.
+
+    Lemma env_lookup_cat_right {Γ1 Γ2 x} (xIn : x ∈ Γ2) (E1 : Env Γ1) (E2 : Env Γ2) :
+      env_lookup (env_cat E1 E2) (inctx_cat_right xIn) = env_lookup E2 xIn.
+    Proof.
+      induction E2; cbn.
+      - destruct (Context.nilView xIn).
+      - destruct (Context.snocView xIn); cbn; auto.
+    Qed.
+
     Section Inversions.
 
       Lemma inversion_eq_env_snoc {Γ : Ctx B} {b : B} (E1 E2 : Env Γ) (v1 v2 : D b) :

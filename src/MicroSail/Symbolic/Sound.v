@@ -1425,7 +1425,7 @@ Module Soundness
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
         rewrite <- subst_sub_comp.
-        rewrite sub_cat_left_cat.
+        rewrite sub_comp_cat_left.
         now rewrite ?inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.
@@ -1442,7 +1442,7 @@ Module Soundness
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
         rewrite <- subst_sub_comp.
-        rewrite sub_cat_left_cat.
+        rewrite sub_comp_cat_left.
         now rewrite ?inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.
@@ -1460,7 +1460,7 @@ Module Soundness
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
         rewrite <- subst_sub_comp.
-        rewrite sub_cat_left_cat.
+        rewrite sub_comp_cat_left.
         now rewrite ?inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.
@@ -1562,7 +1562,7 @@ Module Soundness
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
         rewrite <- subst_sub_comp.
-        rewrite sub_cat_left_cat.
+        rewrite sub_comp_cat_left.
         now rewrite ?inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.
@@ -1579,7 +1579,7 @@ Module Soundness
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
         rewrite <- subst_sub_comp.
-        rewrite sub_cat_left_cat.
+        rewrite sub_comp_cat_left.
         now rewrite ?inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.
@@ -1597,7 +1597,7 @@ Module Soundness
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
         rewrite <- subst_sub_comp.
-        rewrite sub_cat_left_cat.
+        rewrite sub_comp_cat_left.
         now rewrite ?inst_subst.
       }
       now rewrite inst_sub_cat, inst_subst.

@@ -1298,7 +1298,20 @@ Module Terms (Export termkit : TermKit).
     Lemma sub_comp_cat_right {Σ1 Σ2 Σ} (ζ1 : Sub Σ1 Σ) (ζ2 : Sub Σ2 Σ) :
       subst (sub_cat_right Σ2) (ζ1 ►► ζ2) = ζ2.
     Proof.
-    Admitted.
+      apply env_lookup_extensional. intros [x σ] xIn.
+      unfold sub_cat_right. unfold subst, SubstEnv.
+      rewrite env_lookup_map, env_lookup_tabulate. cbn.
+      now rewrite env_lookup_cat_right.
+    Qed.
+
+    Lemma sub_comp_cat_left {Σ1 Σ2 Σ} (ζ1 : Sub Σ1 Σ) (ζ2 : Sub Σ2 Σ) :
+      subst (sub_cat_left Σ2) (ζ1 ►► ζ2) = ζ1.
+    Proof.
+      apply env_lookup_extensional. intros [x σ] xIn.
+      unfold sub_cat_left. unfold subst, SubstEnv.
+      rewrite env_lookup_map, env_lookup_tabulate. cbn.
+      now rewrite env_lookup_cat_left.
+    Qed.
 
   End SymbolicSubstitutions.
 
