@@ -389,6 +389,12 @@ Module Mutators
     Global Arguments multisub_id {_}.
     Global Arguments multisub_cons {_ _} x {_ _} t ν.
 
+    Fixpoint multisub_app {w1 w2 w3} (ν12 : MultiSub w1 w2) : MultiSub w2 w3 -> MultiSub w1 w3 :=
+      match ν12 with
+      | multisub_id           => fun ν => ν
+      | multisub_cons x t ν12 => fun ν => multisub_cons x t (multisub_app ν12 ν)
+      end.
+
     Fixpoint wmultisub_sup {w1 w2} (ν : MultiSub w1 w2) : w1 ⊒ w2 :=
       match ν with
       | multisub_id         => wrefl
@@ -422,6 +428,20 @@ Module Mutators
         now rewrite inst_sub_single.
     Qed.
 
+    Lemma inst_multishift_multisub {w1 w2 : World} (ι2 : SymInstance w2) (ν : MultiSub w1 w2) :
+      inst (sub_multishift ν) (inst (wsub (wmultisub_sup ν)) ι2) = ι2.
+    Proof.
+      induction ν; cbn - [subst].
+      - now rewrite ?inst_sub_id.
+      - rewrite <- inst_subst.
+        rewrite sub_comp_assoc.
+        rewrite inst_subst.
+        rewrite <- sub_comp_assoc.
+        rewrite sub_comp_shift_single.
+        rewrite inst_subst, inst_sub_id.
+        apply IHν.
+    Qed.
+
     (* Forward entailment *)
     Lemma multishift_entails {w0 w1} (ν : MultiSub w0 w1) (ι0 : SymInstance w0) :
       inst_multisub ν ι0 ->
@@ -434,6 +454,51 @@ Module Mutators
         rewrite inst_subst, inst_sub_shift.
         apply IHν; cbn; auto.
         rewrite ?inst_subst, ?inst_sub_single; auto.
+    Qed.
+
+    Lemma inst_multisub_inst_sub_multi {w0 w1} (ζ01 : MultiSub w0 w1) (ι1 : SymInstance w1) :
+      inst_multisub ζ01 (inst (wsub (wmultisub_sup ζ01)) ι1).
+    Proof.
+        induction ζ01; cbn - [subst]; auto.
+        rewrite <- inst_sub_shift.
+        rewrite <- ?inst_subst.
+        rewrite <- inst_lookup.
+        rewrite lookup_sub_comp.
+        rewrite lookup_sub_single_eq.
+        rewrite <- subst_sub_comp.
+        rewrite <- sub_comp_assoc.
+        rewrite sub_comp_shift_single.
+        rewrite sub_comp_id_left.
+        split; auto.
+    Qed.
+
+    Lemma inst_multisub_app {w0 w1 w2} (ν01 : MultiSub w0 w1) (ν12 : MultiSub w1 w2) (ι0 : SymInstance w0) :
+      inst_multisub (multisub_app ν01 ν12) ι0 <->
+      inst_multisub ν01 ι0 /\ inst_multisub ν12 (inst (sub_multishift ν01) ι0).
+    Proof.
+      induction ν01; cbn.
+      - rewrite inst_sub_id; intuition.
+      - rewrite ?inst_subst, ?inst_sub_shift. split.
+        + intros (Heq & Hwp). apply IHν01 in Hwp. now destruct Hwp.
+        + intros ([Heq Hν01] & Hwp). split; auto. apply IHν01; auto.
+    Qed.
+
+    Lemma sub_multishift_app {w0 w1 w2} (ν01 : MultiSub w0 w1) (ν12 : MultiSub w1 w2) :
+      sub_multishift (multisub_app ν01 ν12) =
+      subst (sub_multishift ν12) (sub_multishift ν01).
+    Proof.
+      induction ν01; cbn.
+      - now rewrite sub_comp_id_right.
+      - now rewrite IHν01, sub_comp_assoc.
+    Qed.
+
+    Lemma wmultisub_sup_app {w0 w1 w2} (ν01 : MultiSub w0 w1) (ν12 : MultiSub w1 w2) :
+      wsub (wmultisub_sup (multisub_app ν01 ν12)) =
+      subst (wsub (wmultisub_sup ν01)) (wsub (wmultisub_sup ν12)).
+    Proof.
+      induction ν01; cbn - [SubstEnv].
+      - now rewrite sub_comp_id_left.
+      - rewrite <- subst_sub_comp. now f_equal.
     Qed.
 
   End MultiSubs.
@@ -619,22 +684,6 @@ Module Mutators
           else Some (existT w0 (multisub_id , (cons fml nil)))
         end
       end.
-
-    Lemma inst_multisub_inst_sub_multi {w0 w1} (ζ01 : MultiSub w0 w1) (ι1 : SymInstance w1) :
-      inst_multisub ζ01 (inst (wsub (wmultisub_sup ζ01)) ι1).
-    Proof.
-        induction ζ01; cbn - [subst]; auto.
-        rewrite <- inst_sub_shift.
-        rewrite <- ?inst_subst.
-        rewrite <- inst_lookup.
-        rewrite lookup_sub_comp.
-        rewrite lookup_sub_single_eq.
-        rewrite <- subst_sub_comp.
-        rewrite <- sub_comp_assoc.
-        rewrite sub_comp_shift_single.
-        rewrite sub_comp_id_left.
-        split; auto.
-    Qed.
 
     Lemma solver_spec {w0 : World} (fml : Formula w0) :
       OptionSpec
