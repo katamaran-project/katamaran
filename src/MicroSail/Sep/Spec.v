@@ -81,11 +81,11 @@ Module Assertions
     formula_eqs_ctx (env_snoc δ _ t) (env_snoc δ' _ t') :=
       formula_eq t t' :: formula_eqs_ctx δ δ'.
 
-  Equations(noeqns) formula_eqs_pctx {Δ : PCtx} {Σ : LCtx}
+  Equations(noeqns) formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ : LCtx}
     (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
-    formula_eqs_pctx env_nil          env_nil            := nil;
-    formula_eqs_pctx (env_snoc δ _ t) (env_snoc δ' _ t') :=
-      formula_eq t t' :: formula_eqs_pctx δ δ'.
+    formula_eqs_nctx env_nil          env_nil            := nil;
+    formula_eqs_nctx (env_snoc δ _ t) (env_snoc δ' _ t') :=
+      formula_eq t t' :: formula_eqs_nctx δ δ'.
 
   Instance sub_formula : Subst Formula :=
     fun Σ1 fml Σ2 ζ =>
@@ -283,8 +283,8 @@ Module Assertions
           inversion Heq. intuition.
     Qed.
 
-    Lemma inst_formula_eqs_pctx {Δ Σ} (ι : SymInstance Σ) (xs ys : SStore Δ Σ) :
-      inst (T := PathCondition) (A := Prop) (formula_eqs_pctx xs ys) ι <-> inst xs ι = inst ys ι.
+    Lemma inst_formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ} (ι : SymInstance Σ) (xs ys : NamedEnv (Term Σ) Δ) :
+      inst (T := PathCondition) (A := Prop) (formula_eqs_nctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs.
       - destruct (nilView ys). cbn. intuition. constructor.
@@ -294,8 +294,8 @@ Module Assertions
                 inst xs ι ► (b ↦ inst db ι) = inst E ι ► (b ↦ inst v ι)).
         split.
         + intros [Hfml Hpc]; f_equal; auto.
-        + intros Heq. apply noConfusion_inv in Heq. cbn in Heq.
-          inversion Heq. intuition.
+        + intros ?%inversion_eq_env_snoc.
+          intuition.
     Qed.
 
   End PathCondition.

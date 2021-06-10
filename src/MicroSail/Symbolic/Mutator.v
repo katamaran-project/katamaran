@@ -3041,7 +3041,7 @@ Module Mutators
                  (*   msg_localstore := subst δ0 ω01; *)
                  (*   msg_heap := subst h0 ω01; *)
                  (*   msg_pathcondition := wco w1; *)
-                 (* |} *) (formula_eqs_pctx (subst δe evars) (subst args ω01))).
+                 (* |} *) (formula_eqs_nctx (subst δe evars) (subst args ω01))).
         intros w2 ω12.
         eapply bind_right.
         apply (consume (w := @MkWorld Σe nil) req).

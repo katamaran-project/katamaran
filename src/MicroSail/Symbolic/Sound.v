@@ -1629,7 +1629,7 @@ Module Soundness
     intros evars__s evars__c Hevars.
     apply approx_bind_right.
     apply approx_assert_formulas; auto.
-    { rewrite inst_formula_eqs_pctx.
+    { rewrite inst_formula_eqs_nctx.
       rewrite ?inst_subst.
       rewrite Hargs, Hevars.
       reflexivity.
