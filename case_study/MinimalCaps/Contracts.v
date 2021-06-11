@@ -1130,7 +1130,7 @@ Definition fun_to_debug : Stm ["c'" ∶ ty_cap, "c" ∶ ty_cap] ty_unit :=
   stm_lit ty_unit tt.
 
 Lemma valid_contract_to_debug : ValidContractEvarEnv sep_contract_to_debug fun_to_debug.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Proof. (* compute - [SPath.prune]. *) apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
 
 Lemma valid_contract_read_reg : ValidContractEvarEnv sep_contract_read_reg fun_read_reg.
 Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.

@@ -405,8 +405,6 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       let: "n" ∶ ty_int := exp_var "immediate" in
       let*: ["p", "beg", "end", "cursor"] := (exp_var "c") in
       (let: "p'" ∶ ty_perm := call perm_from_bits (exp_var "n") in
-       stm_match_enum permission (exp_var "p") (fun _ => stm_lit ty_unit tt) ;;
-       stm_match_enum permission (exp_var "p'") (fun _ => stm_lit ty_unit tt) ;;
        let: "le" ∶ ty_bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
        stm_assert (exp_var "le") (lit_string "Err: [restricti] tried to increase permission") ;;
        let: "c'" ∶ cap := exp_record capability
