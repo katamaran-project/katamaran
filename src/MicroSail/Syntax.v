@@ -928,16 +928,9 @@ Module Terms (Export termkit : TermKit).
             end
         end.
 
-    Fixpoint tuple_pattern_match_lit {N : Set} {σs : Ctx Ty} {Δ : NCtx N Ty}
-             (p : TuplePat σs Δ) {struct p} : Lit (ty_tuple σs) -> NamedEnv Lit Δ :=
-      match p with
-      | tuplepat_nil => fun _ => env_nil
-      | tuplepat_snoc p x =>
-        fun lit =>
-          env_snoc
-            (tuple_pattern_match_lit p (fst lit)) (x::_)%ctx
-            (snd lit)
-      end.
+    Definition tuple_pattern_match_lit {N : Set} {σs : Ctx Ty} {Δ : NCtx N Ty}
+             (p : TuplePat σs Δ) : Lit (ty_tuple σs) -> NamedEnv Lit Δ :=
+      fun lit => tuple_pattern_match_env p (envrec_to_env σs lit).
 
     Fixpoint record_pattern_match_env {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
              (p : RecordPat rfs Δ) {struct p} : NamedEnv V rfs -> NamedEnv V Δ :=
@@ -984,6 +977,27 @@ Module Terms (Export termkit : TermKit).
         f_equal.
         now apply IHp.
     Qed.
+
+    Lemma tuple_pattern_match_env_inverse_right {N : Set} {T : Ty -> Set}
+      {σs : Ctx Ty} {Δ : NCtx N Ty} (p : TuplePat σs Δ) (ts : NamedEnv T Δ) :
+      tuple_pattern_match_env p (tuple_pattern_match_env_reverse p ts) = ts.
+    Proof.
+      induction p; cbn.
+      - now destruct (nilView ts).
+      - destruct (snocView ts); cbn.
+        now rewrite (IHp E).
+    Qed.
+
+    Lemma tuple_pattern_match_env_inverse_left {N : Set} {T : Ty -> Set}
+          {σs : Ctx Ty} {Δ : NCtx N Ty} (p : TuplePat σs Δ) (ts : Env T σs) :
+      tuple_pattern_match_env_reverse p (tuple_pattern_match_env p ts) = ts.
+    Proof.
+      induction p.
+      - now destruct (nilView ts).
+      - destruct (snocView ts); cbn.
+        now rewrite (IHp E).
+    Qed.
+
 
     Definition record_pattern_match_lit {N : Set} {R} {Δ : NCtx N Ty}
       (p : RecordPat (𝑹𝑭_Ty R) Δ) : Lit (ty_record R) -> NamedEnv Lit Δ :=
@@ -1647,7 +1661,7 @@ Module Terms (Export termkit : TermKit).
       intros [x σ] ?; unfold sub_wk1; cbn.
       now rewrite env_map_tabulate, env_lookup_tabulate.
     Qed.
-    
+
     Lemma inst_sub_id {Σ} (ι : SymInstance Σ) :
       inst (sub_id Σ) ι = ι.
     Proof.
@@ -1695,6 +1709,30 @@ Module Terms (Export termkit : TermKit).
       inst (env_lookup ζ xIn) ι = env_lookup (inst (A := SymInstance Σ0) ζ ι) xIn.
     Proof. cbn. now rewrite env_lookup_map. Qed.
 
+    Lemma inst_tuple_pattern_match {N : Set} {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty}
+      (ι : SymInstance Σ) (p : TuplePat σs Δ) (ts : Env (Term Σ) σs) :
+      inst (tuple_pattern_match_env p ts) ι =
+      tuple_pattern_match_env p (inst (T := fun Σ => Env (Term Σ) σs) ts ι).
+    Proof.
+      unfold inst at 1; cbn.
+      induction p; cbn.
+      - reflexivity.
+      - destruct (snocView ts); cbn.
+        f_equal. apply IHp.
+    Qed.
+
+    Lemma inst_tuple_pattern_match_reverse {N : Set} {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty}
+      (ι : SymInstance Σ) (p : TuplePat σs Δ) (ts : NamedEnv (Term Σ) Δ) :
+      inst (tuple_pattern_match_env_reverse p ts) ι =
+      tuple_pattern_match_env_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
+    Proof.
+      unfold inst at 1; cbn.
+      induction p; cbn.
+      - reflexivity.
+      - destruct (snocView ts); cbn.
+        f_equal. apply IHp.
+    Qed.
+
     Lemma inst_record_pattern_match {N : Set} {Δ__R : NCtx 𝑹𝑭 Ty} {Σ : LCtx} {Δ : NCtx N Ty}
       (ι : SymInstance Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ__R) :
       inst (T := fun Σ => NamedEnv (Term Σ) Δ) (record_pattern_match_env p ts) ι =
@@ -1717,6 +1755,17 @@ Module Terms (Export termkit : TermKit).
       - reflexivity.
       - destruct (snocView ts); cbn.
         f_equal. apply IHp.
+    Qed.
+
+    Lemma inst_term_tuple {Σ σs} {ι : SymInstance Σ} (es : Env (Term Σ) σs) :
+      @eq (EnvRec Lit σs) (inst (Inst := instantiate_term)(term_tuple es) ι)
+          (env_to_envrec (inst es ι)).
+    Proof.
+      induction σs; cbn.
+      - destruct (nilView es); now cbn.
+      - destruct (snocView es); cbn.
+        f_equal.
+        now eapply IHσs.
     Qed.
 
     Global Arguments inst {T A _ Σ} !_ ι.

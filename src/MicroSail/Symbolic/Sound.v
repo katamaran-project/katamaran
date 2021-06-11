@@ -1191,11 +1191,26 @@ Module Soundness
       intros w1 r01 ι1 -> Hpc1.
       intros v1 vc1 ->.
       eapply approx_bind_right.
-      - eapply approx_assume_formula; try assumption. admit.
+      - eapply approx_assume_formula; try assumption.
+        unfold inst at 4; cbn.
+        rewrite inst_subst.
+        unfold tuple_pattern_match_lit.
+        replace (inst (term_tuple (tuple_pattern_match_env_reverse p v1)) ι1)
+          with (env_to_envrec (inst (tuple_pattern_match_env_reverse p v1) ι1))
+          by (symmetry; apply inst_term_tuple).
+        rewrite inst_tuple_pattern_match_reverse.
+        split.
+        + intros eq.
+          apply (f_equal (tuple_pattern_match_env_reverse p)) in eq.
+          rewrite tuple_pattern_match_env_inverse_left in eq.
+          eapply (f_equal (env_to_envrec (σs := σs))) in eq.
+          now rewrite envrec_env_inverse_left in eq.
+        + intros <-.
+          now rewrite envrec_env_inverse_right, tuple_pattern_match_env_inverse_right.
       - intros w2 r12 ι2 -> Hpc2.
         eapply (approx_four Hk); eauto.
         now rewrite <- inst_subst.
-    Admitted.
+    Qed.
 
     Lemma approx_angelic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
       {Δ : 𝑼𝑲 U -> NCtx N Ty} {p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)}

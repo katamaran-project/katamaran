@@ -494,6 +494,33 @@ Section EnvRec.
 
   End WithEqD.
 
+  Fixpoint envrec_to_env (σs : Ctx B) {D : B -> Set} {struct σs} : EnvRec D σs -> Env D σs :=
+    match σs with
+    | ctx_nil => fun _ => env_nil
+    | ctx_snoc σs σ => fun (e : EnvRec D (ctx_snoc σs σ)) => env_snoc (envrec_to_env σs (fst e)) _ (snd e)
+    end.
+
+  Fixpoint env_to_envrec (σs : Ctx B) {D : B -> Set} (e : Env D σs) : EnvRec D σs :=
+    match e with
+    | env_nil => tt
+    | env_snoc E σ v => pair (env_to_envrec E) v
+    end.
+
+  Lemma envrec_env_inverse_right
+        (σs : Ctx B) {D : B -> Set} (e : Env D σs) :
+    envrec_to_env σs (env_to_envrec e) = e.
+  Proof.
+    induction e; cbn; f_equal; eauto.
+  Qed.
+
+  Lemma envrec_env_inverse_left
+        (σs : Ctx B) {D : B -> Set} (e : EnvRec D σs) :
+    env_to_envrec (envrec_to_env σs e) = e.
+  Proof.
+    induction σs; destruct e; cbn; [reflexivity|].
+    f_equal. now eapply IHσs.
+  Qed.
+
 End EnvRec.
 
 Definition NamedEnv {X T : Set} (D : T -> Set) (Γ : NCtx X T) : Set :=
