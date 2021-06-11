@@ -2792,6 +2792,15 @@ Module Mutators
         apply (cons c h).
       Defined.
 
+      Fixpoint try_consume_chunk_exact {Σ} (h : SHeap Σ) (c : Chunk Σ) {struct h} : option (SHeap Σ) :=
+        match h with
+        | nil       => None
+        | cons c' h =>
+          if chunk_eqb c c'
+          then Some h
+          else option_map (cons c') (try_consume_chunk_exact h c)
+        end.
+
       Equations(noeqns) match_chunk {w : World} (c1 c2 : Chunk w) : List Formula w :=
         match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2)
         with eq_dec p1 p2 => {
@@ -2849,25 +2858,28 @@ Module Mutators
         eapply bind.
         apply get_heap.
         intros w1 ω01 h.
-        eapply bind.
-        apply (angelic_list
-                 (A := Pair Chunk SHeap)
-                 (fun δ h =>
-                    {| msg_function := "consume_chunk";
-                       msg_message := "Empty extraction";
-                       msg_program_context := Γ;
-                       msg_localstore := δ;
-                       msg_heap := h;
-                       msg_pathcondition := wco w1
-                    |})
-                 (heap_extractions h)).
-        intros w2 ω12 [c' h'].
-        eapply bind_right.
-        apply assert_formulas.
-        apply (match_chunk (subst c (wtrans ω01 ω12)) c').
-        intros w3 ω23.
-        apply put_heap.
-        apply (subst h' ω23).
+        destruct (try_consume_chunk_exact h (subst c ω01)) as [h'|].
+        - apply put_heap.
+          apply h'.
+        - eapply bind.
+          apply (angelic_list
+                   (A := Pair Chunk SHeap)
+                   (fun δ h =>
+                      {| msg_function := "consume_chunk";
+                         msg_message := "Empty extraction";
+                         msg_program_context := Γ;
+                         msg_localstore := δ;
+                         msg_heap := h;
+                         msg_pathcondition := wco w1
+                      |})
+                   (heap_extractions h)).
+          intros w2 ω12 [c' h'].
+          eapply bind_right.
+          apply assert_formulas.
+          apply (match_chunk (subst c (wtrans ω01 ω12)) c').
+          intros w3 ω23.
+          apply put_heap.
+          apply (subst h' ω23).
       Defined.
 
       (* Definition smut_leakcheck {Γ Σ} : SMut Γ Γ Unit Σ := *)

@@ -1488,23 +1488,25 @@ Module Soundness
     apply approx_get_heap; auto.
     intros w1 ω01 ι1 -> Hpc1.
     intros hs hc ->.
-    apply approx_bind.
-    apply approx_angelic_list; eauto.
-    { hnf. unfold inst at 1. cbn.
-      rewrite heap_extractions_map.
-      apply List.map_ext. now intros [].
-    }
-    intros w2 ω12 ι2 -> Hpc2.
-    intros [cs' hs'] [cc' hc'].
-    intros Hch'. inversion Hch'; subst; clear Hch'.
-    apply approx_bind_right.
-    apply approx_assert_formulas; auto.
-    rewrite SMut.inst_match_chunk. cbn.
-    rewrite ?inst_subst. intuition.
-    intros w3 ω23 ι3 -> Hpc3.
-    rewrite <- inst_subst.
-    apply approx_put_heap; auto.
-  Qed.
+    destruct (SMut.try_consume_chunk_exact hs (subst cs ω01)).
+    - admit.
+    - apply approx_bind.
+      apply approx_angelic_list; eauto.
+      { hnf. unfold inst at 1. cbn.
+        rewrite heap_extractions_map.
+        apply List.map_ext. now intros [].
+      }
+      intros w2 ω12 ι2 -> Hpc2.
+      intros [cs' hs'] [cc' hc'].
+      intros Hch'. inversion Hch'; subst; clear Hch'.
+      apply approx_bind_right.
+      apply approx_assert_formulas; auto.
+      rewrite SMut.inst_match_chunk. cbn.
+      rewrite ?inst_subst. intuition.
+      intros w3 ω23 ι3 -> Hpc3.
+      rewrite <- inst_subst.
+      apply approx_put_heap; auto.
+  Admitted.
 
   Lemma approx_consume {Γ Σ0 pc0} (asn : Assertion Σ0) :
     let w0 := @MkWorld Σ0 pc0 in
