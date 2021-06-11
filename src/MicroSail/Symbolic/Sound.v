@@ -1173,11 +1173,25 @@ Module Soundness
       intros w1 r01 ι1 -> Hpc1.
       intros v1 vc1 ->.
       eapply approx_bind_right.
-      - eapply approx_assert_formula; try assumption. admit.
+      - eapply approx_assert_formula; try assumption.
+        unfold tuple_pattern_match_lit.
+        unfold inst at 4; cbn.
+        replace (inst (term_tuple (tuple_pattern_match_env_reverse p v1)) ι1)
+          with (env_to_envrec (inst (tuple_pattern_match_env_reverse p v1) ι1))
+          by (symmetry; apply inst_term_tuple).
+        rewrite inst_tuple_pattern_match_reverse, inst_subst.
+        split.
+        + intros eq.
+          apply (f_equal (tuple_pattern_match_env_reverse p)) in eq.
+          rewrite tuple_pattern_match_env_inverse_left in eq.
+          eapply (f_equal (env_to_envrec (σs := σs))) in eq.
+          now rewrite envrec_env_inverse_left in eq.
+        + intros <-.
+          now rewrite envrec_env_inverse_right, tuple_pattern_match_env_inverse_right.
       - intros w2 r12 ι2 -> Hpc2.
         eapply (approx_four Hk); eauto.
         now rewrite <- inst_subst.
-    Admitted.
+    Qed.
 
     Lemma approx_demonic_match_tuple {N : Set} (n : N -> 𝑺) {σs AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : TuplePat σs Δ}
@@ -1933,6 +1947,6 @@ Module Soundness
     auto.
   Qed.
 
-  (* Print Assumptions symbolic_sound. *)
+  Print Assumptions symbolic_sound.
 
 End Soundness.
