@@ -34,9 +34,6 @@ From Coq Require Import
      Classes.Morphisms_Relations
      Classes.RelationClasses
      Lists.List
-     Logic.EqdepFacts
-     Program.Equality
-     Program.Tactics
      Relations.Relation_Definitions
      Relations.Relation_Operators
      Strings.String
@@ -730,6 +727,474 @@ Module Mutators
 
   End Solver.
 
+  Module NewSolver.
+
+    Equations(noeqns) simplify_formula_bool {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=
+    | term_var ς                | k := Some (cons (formula_bool (term_var ς)) k);
+    | term_lit _ b              | k := if b then Some k else None;
+    | term_binop op t1 t2       | k := Some (cons (formula_bool (term_binop op t1 t2)) k);
+    | term_not t                | k := Some (cons (formula_bool (term_not t)) k);
+    | @term_projtup _ _ t n _ p | k := Some (cons (formula_bool (@term_projtup _ _ t n _ p)) k).
+
+    Definition simplify_formula_eqb {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) : option (List Formula Σ) :=
+      if Term_eqb t1 t2
+      then Some k
+      else Some (cons (formula_eq t1 t2) k).
+
+    Equations(noeqns) simplify_formula_eq {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) : option (List Formula Σ) :=
+    | term_lit ?(σ) l1     | term_lit σ l2     | k => if Lit_eqb σ l1 l2 then Some k else None;
+    | term_inr _           | term_inl _        | k => None;
+    | term_inl _           | term_inr _        | k => None;
+    | term_inl t1          | term_inl t2       | k => simplify_formula_eq t1 t2 k;
+    | term_inr t1          | term_inr t2       | k => simplify_formula_eq t1 t2 k;
+    | term_record ?(R) ts1 | term_record R ts2 | k => Some (formula_eqs_nctx ts1 ts2 ++ k);
+    | t1                   | t2                | k => simplify_formula_eqb t1 t2 k.
+
+    Definition simplify_formula {Σ} (fml : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
+      match fml with
+      | formula_bool t    => simplify_formula_bool t k
+      | formula_prop ζ P  => Some (cons fml k)
+      | formula_eq t1 t2  => simplify_formula_eq t1 t2 k
+      | formula_neq t1 t2 => Some (cons fml k)
+      end.
+
+    Fixpoint simplify_formulas {Σ} (fmls : List Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
+      match fmls with
+      | nil           => Some k
+      | cons fml fmls =>
+        option_bind (simplify_formula fml) (simplify_formulas fmls k)
+      end.
+
+    Lemma simplify_formula_bool_spec {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) :
+      OptionSpec
+        (fun fmlsk => forall ι, instpc fmlsk ι <-> inst (formula_bool t) ι /\ instpc k ι)
+        (forall ι, ~ inst (formula_bool t) ι)
+        (simplify_formula_bool t k).
+    Proof.
+      dependent elimination t; cbn; try constructor.
+      - intros ι. rewrite inst_pathcondition_cons. reflexivity.
+      - destruct l; constructor; intuition.
+      - intros ι. rewrite inst_pathcondition_cons. reflexivity.
+      - intros ι. rewrite inst_pathcondition_cons. reflexivity.
+      - intros ι. rewrite inst_pathcondition_cons. reflexivity.
+    Qed.
+
+    Lemma simplify_formula_eqb_spec {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) :
+      OptionSpec
+        (fun fmlsk => forall ι, instpc fmlsk ι <-> inst (formula_eq t1 t2) ι /\ instpc k ι)
+        (forall ι, ~ inst (formula_eq t1 t2) ι)
+        (simplify_formula_eqb t1 t2 k).
+    Proof.
+      unfold simplify_formula_eqb.
+      destruct (Term_eqb_spec t1 t2); constructor; intros ι.
+      - subst; intuition.
+      - now rewrite inst_pathcondition_cons.
+    Qed.
+
+    Lemma simplify_formula_eq_spec {Σ σ} (s t : Term Σ σ) (k : List Formula Σ) :
+      OptionSpec
+        (fun fmlsk : List Formula Σ => forall ι, instpc fmlsk ι <-> inst (formula_eq s t) ι /\ instpc k ι)
+        (forall ι, ~ inst (formula_eq s t) ι)
+        (simplify_formula_eq s t k).
+    Proof.
+      induction s; try apply simplify_formula_eqb_spec;
+        dependent elimination t; try (cbn; constructor; intros;
+          rewrite ?inst_pathcondition_cons; auto; fail).
+      - cbn. destruct (Lit_eqb_spec σ1 l l0); constructor; intuition.
+      - specialize (IHs t). revert IHs. apply optionspec_monotonic.
+        + intros fmls HYP ι. specialize (HYP ι). rewrite HYP. cbn.
+          apply and_iff_compat_r. cbn. split; intros Heq.
+          * now f_equal.
+          * apply noConfusion_inv in Heq. apply Heq.
+        + intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
+      - specialize (IHs t0). revert IHs. apply optionspec_monotonic.
+        + intros fmls HYP ι. specialize (HYP ι). rewrite HYP. cbn.
+          apply and_iff_compat_r. cbn. split; intros Heq.
+          * now f_equal.
+          * apply noConfusion_inv in Heq. apply Heq.
+        + intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
+      - cbn - [inst_term]. constructor. intros ι.
+        rewrite inst_pathcondition_app. apply and_iff_compat_r.
+        rewrite inst_formula_eqs_nctx. cbn [inst_term].
+        split; intros Heq.
+        + f_equal. apply Heq.
+        + apply (@f_equal _ _ (@𝑹_unfold R0)) in Heq.
+          rewrite ?𝑹_unfold_fold in Heq. apply Heq.
+    Qed.
+
+    Lemma simplify_formula_spec {Σ} (fml : Formula Σ) (k : List Formula Σ) :
+      OptionSpec
+        (fun fmlsk : List Formula Σ => forall ι, instpc fmlsk ι <-> inst fml ι /\ instpc k ι)
+        (forall ι, ~ inst fml ι)
+        (simplify_formula fml k).
+    Proof.
+      destruct fml; cbn.
+      - apply simplify_formula_bool_spec.
+      - constructor. intros ι. now rewrite inst_pathcondition_cons.
+      - apply simplify_formula_eq_spec.
+      - constructor. intros ι. now rewrite inst_pathcondition_cons.
+    Qed.
+
+    Lemma simplify_formulas_spec {Σ} (fmls k : List Formula Σ) :
+      OptionSpec
+        (fun fmlsk : List Formula Σ => forall ι, instpc fmlsk ι <-> instpc fmls ι /\ instpc k ι)
+        (forall ι, ~ instpc fmls ι)
+        (simplify_formulas fmls k).
+    Proof.
+      induction fmls as [|fml fmls]; cbn.
+      - constructor. intuition. constructor.
+      - apply optionspec_bind. revert IHfmls.
+        apply optionspec_monotonic.
+        + intros fmlsk Hfmls.
+          generalize (simplify_formula_spec fml fmlsk).
+          apply optionspec_monotonic.
+          * intros ? Hfml ι. specialize (Hfmls ι). specialize (Hfml ι).
+            rewrite inst_pathcondition_cons. intuition.
+          * intros Hfml ι. specialize (Hfml ι).
+            rewrite inst_pathcondition_cons. intuition.
+        + intros Hfmls ι. specialize (Hfmls ι).
+          rewrite inst_pathcondition_cons. intuition.
+    Qed.
+
+    Definition occurs_check_lt {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
+      match t with
+      | @term_var _ y σ yIn =>
+        if Nat.ltb (inctx_at xIn) (inctx_at yIn) then occurs_check xIn t else None
+      | _ => occurs_check xIn t
+      end.
+
+    Lemma occurs_check_lt_sound {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) (t' : Term (Σ - x) σ) :
+      occurs_check_lt xIn t = Some t' -> t = subst t' (sub_shift xIn).
+    Proof.
+      unfold occurs_check_lt. intros Heq.
+      refine (occurs_check_sound xIn t (t' := t') _).
+      destruct t; auto.
+      destruct (inctx_at xIn <? inctx_at ςInΣ); auto.
+      discriminate.
+    Qed.
+
+    Equations(noeqns) try_unify_bool {w : World} (t : Term w ty_bool) :
+      option { w' & MultiSub w w' } :=
+      try_unify_bool (@term_var _ x σ xIn) :=
+        Some (existT _ (multisub_cons x (term_lit ty_bool true) multisub_id));
+      try_unify_bool (term_not (@term_var _ x σ xIn)) :=
+        Some (existT _ (multisub_cons x (term_lit ty_bool false) multisub_id));
+      try_unify_bool _ :=
+        None.
+
+    Definition try_unify_eq {w : World} {σ} (t1 t2 : Term w σ) :
+      option { w' & MultiSub w w' } :=
+      match t1 with
+      | @term_var _ ς σ ςInΣ =>
+        fun t2 : Term w σ =>
+          match occurs_check_lt ςInΣ t2 with
+          | Some t => Some (existT _ (multisub_cons ς t multisub_id))
+          | None => None
+          end
+      | _ => fun _ => None
+      end t2.
+
+    Definition try_unify_formula {w : World} (fml : Formula w) :
+      option { w' & MultiSub w w' } :=
+      match fml with
+      | formula_bool t => try_unify_bool t
+      | formula_eq t1 t2 =>
+        match try_unify_eq t1 t2 with
+        | Some r => Some r
+        | None => try_unify_eq t2 t1
+        end
+      | _ => None
+      end.
+
+    Lemma try_unify_bool_spec {w : World} (t : Term w ty_bool) :
+      OptionSpec (fun '(existT w' ν) => forall ι, inst (T := STerm ty_bool) t ι = true <-> inst_multisub ν ι) True (try_unify_bool t).
+    Proof.
+      dependent elimination t; cbn; try constructor; auto.
+      intros ι. cbn. intuition.
+      dependent elimination e0; cbn; try constructor; auto.
+      intros ι. cbn. destruct (ι ‼ ς)%exp; intuition.
+    Qed.
+
+    Lemma try_unify_eq_spec {w : World} {σ} (t1 t2 : Term w σ) :
+      OptionSpec (fun '(existT w' ν) => forall ι, inst t1 ι = inst t2 ι <-> inst_multisub ν ι) True (try_unify_eq t1 t2).
+    Proof.
+      unfold try_unify_eq. destruct t1; cbn; try (constructor; auto; fail).
+      destruct (occurs_check_lt ςInΣ t2) eqn:Heq; constructor; auto.
+      apply occurs_check_lt_sound in Heq. subst.
+      intros ι. rewrite inst_subst, inst_sub_shift.
+      cbn. intuition.
+    Qed.
+
+    Lemma try_unify_formula_spec {w : World} (fml : Formula w) :
+      OptionSpec (fun '(existT w' ν) => forall ι, (inst fml ι : Prop) <-> inst_multisub ν ι) True (try_unify_formula fml).
+    Proof.
+      unfold try_unify_formula; destruct fml; cbn; try (constructor; auto; fail).
+      - apply try_unify_bool_spec.
+      - destruct (try_unify_eq_spec t1 t2) as [[w' ν] HYP|_]. constructor. auto.
+        destruct (try_unify_eq_spec t2 t1) as [[w' ν] HYP|_]. constructor.
+        intros ι. specialize (HYP ι). intuition.
+        now constructor.
+    Qed.
+
+    Definition unify_formula {w0 : World} (fml : Formula w0) :
+      { w1 & MultiSub w0 w1 * List Formula w1 }%type :=
+      match try_unify_formula fml with
+      | Some (existT w1 ν01) => existT w1 (ν01 , nil)
+      | None => existT w0 (multisub_id , cons fml nil)
+      end.
+
+    Lemma unify_formula_spec {w0 : World} (fml : Formula w0) :
+      match unify_formula fml with
+      | existT w1 (ν01 , fmls) =>
+        (forall ι0 : SymInstance w0,
+            inst (A := Prop) fml ι0 ->
+            inst_multisub ν01 ι0 /\
+            instpc fmls (inst (sub_multishift ν01) ι0)) /\
+        (forall ι1 : SymInstance w1,
+            instpc fmls ι1 ->
+            inst (A := Prop) fml (inst (wsub (wmultisub_sup ν01)) ι1))
+      end.
+    Proof.
+      unfold unify_formula.
+      destruct (try_unify_formula_spec fml).
+      - destruct a as [w1 ν01]. split.
+        + intros ι0 Hfml. specialize (H ι0). intuition. constructor.
+        + intros ι1 []. apply H. apply inst_multisub_inst_sub_multi.
+      - split; intros ?; rewrite inst_pathcondition_cons;
+          cbn; rewrite inst_sub_id; intuition.
+    Qed.
+
+    Fixpoint unify_formulas {w0 : World} (fmls : List Formula w0) :
+      { w1 & MultiSub w0 w1 * List Formula w1 }%type.
+    Proof.
+      destruct fmls as [|fml fmls].
+      - exists w0. split. apply multisub_id. apply nil.
+      - destruct (unify_formulas w0 fmls) as (w1 & ν01 & fmls1).
+        clear unify_formulas fmls.
+        destruct (unify_formula (subst fml (wmultisub_sup ν01))) as (w2 & ν12 & fmls2).
+        exists w2. split. apply (multisub_app ν01 ν12).
+        refine (app fmls2 (subst fmls1 (wmultisub_sup ν12))).
+    Defined.
+
+    Lemma unify_formulas_spec {w0 : World} (fmls0 : List Formula w0) :
+      match unify_formulas fmls0 with
+      | existT w1 (ν01 , fmls1) =>
+        (forall ι0 : SymInstance w0,
+            instpc fmls0 ι0 ->
+            inst_multisub ν01 ι0 /\
+            instpc fmls1 (inst (sub_multishift ν01) ι0)) /\
+        (forall ι1 : SymInstance w1,
+            instpc fmls1 ι1 ->
+            instpc fmls0 (inst (wsub (wmultisub_sup ν01)) ι1))
+      end.
+    Proof.
+      induction fmls0 as [|fml0 fmls0]; cbn.
+      - split; intros ι0; rewrite inst_sub_id; intuition.
+      - destruct (unify_formulas fmls0) as (w1 & ν01 & fmls1).
+        pose proof (unify_formula_spec (subst fml0 (wmultisub_sup ν01))) as IHfml.
+        destruct (unify_formula (subst fml0 (wmultisub_sup ν01))) as (w2 & ν12 & fmls2).
+        destruct IHfmls0 as [IHfmls01 IHfmls10].
+        destruct IHfml as [IHfml12 IHfml21].
+        split.
+        + intros ι0. rewrite inst_pathcondition_cons. intros [Hfml Hfmls].
+          specialize (IHfmls01 ι0 Hfmls). destruct IHfmls01 as [Hν01 Hfmls1].
+          specialize (IHfml12 (inst (sub_multishift ν01) ι0)).
+          rewrite inst_subst, inst_multi in IHfml12; auto.
+          specialize (IHfml12 Hfml). destruct IHfml12 as [Hν12 Hfmls2].
+          rewrite inst_pathcondition_app, inst_subst, inst_multisub_app.
+          split; auto. rewrite sub_multishift_app, inst_subst. split; auto.
+          revert Hfmls1. remember (inst (sub_multishift ν01) ι0) as ι1.
+          rewrite <- ?inst_subst, <- subst_sub_comp, ?inst_subst.
+          rewrite inst_multi; auto.
+        + intros ι2. rewrite ?inst_pathcondition_app, ?inst_subst.
+          intros [Hfmls2 Hfmls1].
+          specialize (IHfml21 ι2 Hfmls2). rewrite inst_subst in IHfml21.
+          specialize (IHfmls10 (inst (wsub (wmultisub_sup ν12)) ι2) Hfmls1).
+          rewrite wmultisub_sup_app, inst_subst.
+          rewrite inst_pathcondition_cons. split; auto.
+    Qed.
+
+    Open Scope lazy_bool_scope.
+    Equations(noind) formula_eqb {Σ} (f1 f2 : Formula Σ) : bool :=
+      formula_eqb (formula_bool t1) (formula_bool t2) := Term_eqb t1 t2;
+      formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) with eq_dec σ τ => {
+        formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ ?(σ) t21 t22) (left eq_refl) :=
+          Term_eqb t11 t21 &&& Term_eqb t12 t22;
+       formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) (right _) := false
+      };
+      formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ τ t21 t22) with eq_dec σ τ => {
+        formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ ?(σ) t21 t22) (left eq_refl) :=
+          Term_eqb t11 t21 &&& Term_eqb t12 t22;
+        formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ τ t21 t22) (right _) := false
+      };
+      formula_eqb _ _ := false.
+
+    Lemma formula_eqb_spec {Σ} (f1 f2 : Formula Σ) :
+      BoolSpec (f1 = f2) True (formula_eqb f1 f2).
+    Proof.
+      induction f1; dependent elimination f2;
+        simp formula_eqb;
+        try (constructor; auto; fail).
+      - destruct (Term_eqb_spec t t0); constructor; intuition.
+      - destruct (eq_dec σ σ0); cbn.
+        + destruct e.
+          repeat
+            match goal with
+            | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+                try (constructor; intuition; fail)
+            end.
+        + constructor; auto.
+      - destruct (eq_dec σ σ1); cbn.
+        + destruct e.
+          repeat
+            match goal with
+            | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+                try (constructor; intuition; fail)
+            end.
+        + constructor; auto.
+    Qed.
+
+    Fixpoint assumption_formula {Σ} (pc : PathCondition Σ) (fml : Formula Σ) (k : List Formula Σ) {struct pc} : List Formula Σ :=
+      match pc with
+      | nil       => cons fml k
+      | cons f pc => if formula_eqb f fml
+                     then k
+                     else assumption_formula pc fml k
+      end.
+
+    Fixpoint assumption_formulas {Σ} (pc : PathCondition Σ) (fmls : List Formula Σ) (k : List Formula Σ) {struct fmls} : List Formula Σ :=
+      match fmls with
+      | nil           => k
+      | cons fml fmls => assumption_formula pc fml (assumption_formulas pc fmls k)
+      end.
+
+    Lemma assumption_formula_spec {Σ} (pc : PathCondition Σ) (fml : Formula Σ) (k : List Formula Σ) (ι : SymInstance Σ) :
+      instpc pc ι -> inst (A := Prop) fml ι /\ instpc k ι <-> instpc (assumption_formula pc fml k) ι.
+    Proof.
+      induction pc as [|f pc]; cbn.
+      - now rewrite inst_pathcondition_cons.
+      - rewrite inst_pathcondition_cons.
+        intros [Hf Hpc]. specialize (IHpc Hpc).
+        destruct (formula_eqb_spec f fml);
+          subst; intuition.
+    Qed.
+
+    Lemma assumption_formulas_spec {Σ} (pc : PathCondition Σ) (fmls : List Formula Σ) (k : List Formula Σ) (ι : SymInstance Σ) :
+      instpc pc ι -> instpc fmls ι /\ instpc k ι <-> instpc (assumption_formulas pc fmls k) ι.
+    Proof.
+      intros Hpc. induction fmls as [|fml fmls]; cbn.
+      - intuition. constructor.
+      - rewrite inst_pathcondition_cons.
+        pose proof (assumption_formula_spec pc fml (assumption_formulas pc fmls k) ι Hpc).
+        intuition.
+    Qed.
+
+    Definition round {w0 : World} (fmls0 : List Formula w0) :
+      option { w1 & MultiSub w0 w1 * List Formula w1 }%type.
+    Proof.
+      destruct (simplify_formulas fmls0 nil) as [fmls01|].
+      - apply Some.
+        apply unify_formulas.
+        apply (assumption_formulas (wco w0) fmls01 nil).
+      - apply None.
+    Defined.
+
+    Lemma round_spec {w0 : World} (fmls0 : List Formula w0) :
+      OptionSpec
+        (fun '(existT w1 (ζ, fmls1)) =>
+           forall ι0,
+             instpc (wco w0) ι0 ->
+             (instpc fmls0 ι0 -> inst_multisub ζ ι0) /\
+             (forall ι1,
+                 instpc (wco w1) ι1 ->
+                 ι0 = inst (wsub (wmultisub_sup ζ)) ι1 ->
+                 instpc fmls0 ι0 <-> inst fmls1 ι1))
+        (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
+        (round fmls0).
+    Proof.
+      unfold round.
+      destruct (simplify_formulas_spec fmls0 nil) as [fmls0' Hequiv|].
+      - constructor.
+        pose proof (unify_formulas_spec (assumption_formulas (wco w0) fmls0' [])) as Hunify.
+        destruct (unify_formulas (assumption_formulas (wco w0) fmls0' [])) as (w1 & ν01 & fmls1).
+        intros ι0 Hpc0. specialize (Hequiv ι0).
+        pose proof (assumption_formulas_spec (wco w0) fmls0' [] ι0 Hpc0) as Hassumption.
+        destruct Hassumption as [Hassumption01 Hassumption10].
+        destruct Hunify as [Hunify01 Hunify10]. specialize (Hunify01 ι0).
+        split.
+        + intros Hfmls0. apply Hunify01. apply Hassumption01.
+          split. apply Hequiv. split; auto. constructor.
+          constructor.
+        + intros ι1 Heqι. specialize (Hunify10 ι1).
+          split.
+          * intros Hfmls0. destruct Hequiv as [_ Hequiv].
+            inster Hequiv by split; auto; constructor.
+            inster Hassumption01 by split; auto; constructor.
+            inster Hunify01 by auto. destruct Hunify01 as [Hν01 Hfmls1].
+            revert Hfmls1. subst. now rewrite inst_multishift_multisub.
+          * intros Hfmls1. inster Hunify10 by subst; auto.
+            apply Hequiv. apply Hassumption10. subst; auto.
+      - constructor. intuition.
+    Qed.
+
+    Definition solver {w0 : World} (fmls0 : List Formula w0) :
+      option { w1 & MultiSub w0 w1 * List Formula w1 }%type :=
+      option_bind
+        (fun '(existT w1 (ν01 , fmls1)) =>
+           option_map
+             (fun '(existT w2 (ν12 , fmls2)) =>
+                existT w2 (multisub_app ν01 ν12 , fmls2))
+             (round fmls1)) (round fmls0).
+
+    Lemma solver_spec {w0 : World} (fmls0 : List Formula w0) :
+      OptionSpec
+        (fun '(existT w1 (ζ, fmls1)) =>
+           forall ι0,
+             instpc (wco w0) ι0 ->
+             (instpc fmls0 ι0 -> inst_multisub ζ ι0) /\
+             (forall ι1,
+                 instpc (wco w1) ι1 ->
+                 ι0 = inst (wsub (wmultisub_sup ζ)) ι1 ->
+                 instpc fmls0 ι0 <-> inst fmls1 ι1))
+        (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
+        (solver fmls0).
+    Proof.
+      unfold solver.
+      apply optionspec_bind.
+      generalize (round_spec fmls0).
+      apply optionspec_monotonic; auto.
+      intros (w1 & ν01 & fmls1) H1.
+      apply optionspec_map.
+      generalize (round_spec fmls1).
+      apply optionspec_monotonic; auto.
+      - intros (w2 & ν12 & fmls2) H2. intros ι0 Hpc0.
+        specialize (H1 ι0 Hpc0). destruct H1 as [H01 H10].
+        rewrite inst_multisub_app. split.
+        + intros Hfmls0. split; auto.
+          remember (inst (sub_multishift ν01) ι0) as ι1.
+          assert (instpc (wco w1) ι1) as Hpc1 by
+            (subst; apply multishift_entails; auto).
+          apply H2; auto. apply H10; auto.
+          subst; rewrite inst_multi; auto.
+        + intros ι2 Hpc2 Hι0. rewrite wmultisub_sup_app, inst_subst in Hι0.
+          remember (inst (wsub (wmultisub_sup ν12)) ι2) as ι1.
+          assert (instpc (wco w1) ι1) as Hpc1 by
+            (revert Hpc2; subst; rewrite <- inst_subst; apply went).
+          rewrite H10; eauto. apply H2; auto.
+      - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
+        destruct H1 as [H01 H10]. inster H01 by auto.
+        pose (inst (sub_multishift ν01) ι0) as ι1.
+        assert (instpc (wco w1) ι1) as Hpc1 by
+          (subst; apply multishift_entails; auto).
+        apply (Hfmls1 ι1 Hpc1). revert Hfmls0.
+        apply H10; auto. subst ι1.
+        now rewrite inst_multi.
+    Qed.
+
+  End NewSolver.
+
   Module SPath.
 
     Inductive EMessage (Σ : LCtx) : Type :=
@@ -1419,7 +1884,7 @@ Module Mutators
     Definition assume_formula :
       ⊢ Formula -> SDijkstra Unit :=
       fun w0 fml POST =>
-        match solver fml with
+        match NewSolver.solver (cons fml nil) with
         | Some (existT w1 (ν , fmls)) =>
           (* Assume variable equalities and the residual constraints *)
           assume_multisub ν
@@ -1439,7 +1904,7 @@ Module Mutators
     Definition assert_formula :
       ⊢ Message -> Formula -> SDijkstra Unit :=
       fun w0 msg fml POST =>
-        match solver fml with
+        match NewSolver.solver (cons fml nil) with
         | Some (existT w1 (ν , fmls)) =>
           (* Assert variable equalities and the residual constraints *)
           assert_multisub msg ν
@@ -3302,12 +3767,12 @@ Module Mutators
         demonic_close (exec_contract c s (fun w1 ω01 _ δ1 h1 => SPath.block) (sep_contract_localstore c) nil).
 
       Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-        VerificationCondition (prune (exec_contract_path c body)).
+        VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path c body)) nil)).
 
     End Exec.
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationCondition (prune (exec_contract_path default_config c body)).
+      VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)).
 
     (* Print Assumptions ValidContract. *)
 

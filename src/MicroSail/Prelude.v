@@ -256,6 +256,20 @@ Proof.
     + constructor. now depelim H.
 Qed.
 
+Lemma optionspec_bind {A B : Type} (S : B -> Prop) (N : Prop)
+  (f : A -> option B) (o : option A) :
+  OptionSpec S N (option_bind f o) <->
+  OptionSpec (fun a => OptionSpec S N (f a)) N o.
+Proof.
+  split.
+  - intro H. destruct o.
+    + apply OptionSpecSome. apply H.
+    + apply OptionSpecNone. inversion H. apply H0.
+  - intro H. destruct o.
+    + simpl. inversion H. apply H1.
+    + simpl. apply OptionSpecNone. inversion H. apply H0.
+Qed.
+
 Lemma optionspec_monotonic {A : Type} (S1 S2 : A -> Prop) (N1 N2 : Prop)
       (fS : forall a, S1 a -> S2 a) (fN: N1 -> N2) :
   forall (o : option A),

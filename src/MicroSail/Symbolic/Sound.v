@@ -322,11 +322,15 @@ Module Soundness
     Proof.
       intros POST__s POST__c HPOST. unfold SDijk.assume_formula.
       intros Hwp Hfml. apply Heq in Hfml.
-      destruct (solver_spec fml) as [[w1 [ζ fmls]] Hsolver|Hsolver].
+      destruct (NewSolver.solver_spec (cons fml nil)) as [[w1 [ζ fmls]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [Hν Hsolver].
-        specialize (Hν Hfml). specialize (Hsolver (inst (sub_multishift ζ) ι0)).
-        rewrite inst_multi in Hsolver; auto. specialize (Hsolver eq_refl).
-        destruct Hsolver as [Hsolver _]. specialize (Hsolver Hfml).
+        rewrite inst_pathcondition_cons in Hν. inster Hν by split; auto; constructor.
+        specialize (Hsolver (inst (sub_multishift ζ) ι0)).
+        rewrite inst_multi in Hsolver; auto.
+        inster Hsolver by now try apply multishift_entails.
+        rewrite inst_pathcondition_cons in Hsolver.
+        destruct Hsolver as [Hsolver _].
+        inster Hsolver by split; auto; constructor.
         rewrite safe_assume_multisub, safe_assume_formulas_without_solver in Hwp.
         specialize (Hwp Hν Hsolver). revert Hwp.
         unfold four, wtrans, persist, persist_subst; cbn.
@@ -343,7 +347,7 @@ Module Soundness
     Proof.
       unfold SDijk.assert_formula, CDijk.assert_formula.
       intros POST__s POST__c HPOST Hwp.
-      destruct (solver_spec fml) as [[w1 [ν fmls]] Hsolver|Hsolver].
+      destruct (NewSolver.solver_spec (cons fml nil)) as [[w1 [ζ fmls]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
         rewrite safe_assert_multisub in Hwp. destruct Hwp as [Hν Hwp].
         rewrite safe_assert_formulas_without_solver in Hwp.
@@ -351,6 +355,7 @@ Module Soundness
         split.
         + apply Hsolver in Hfmls; rewrite ?inst_multi; auto.
           now apply Heq.
+          now apply multishift_entails.
         + revert Hwp. unfold four, wtrans, persist, persist_subst; cbn.
           apply HPOST; cbn; wsimpl; eauto.
           rewrite inst_multi; auto.
@@ -1870,7 +1875,12 @@ Module Soundness
     CMut.ValidContract c body.
   Proof.
     unfold SMut.ValidContract, CMut.ValidContract. intros [Hwp] ι.
-    unfold SMut.exec_contract_path in Hwp. rewrite prune_sound in Hwp.
+    unfold SMut.exec_contract_path in Hwp.
+    rewrite prune_sound in Hwp.
+    rewrite Experimental.solve_evars_sound in Hwp.
+    destruct Hwp as [ιe [Hwp _]].
+    destruct (nilView ιe).
+    rewrite prune_sound in Hwp. cbn in Hwp.
     apply safe_demonic_close with _ ι in Hwp. revert Hwp.
     rewrite <- (wsafe_safe (w := @MkWorld (sep_contract_logic_variables c) nil)).
     apply approx_exec_contract; auto.
