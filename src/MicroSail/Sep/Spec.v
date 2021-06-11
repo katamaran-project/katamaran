@@ -181,7 +181,7 @@ Module Assertions
         nil => sing v
       | cons v' vs => cns v (fold_right1 cns sing v' vs)
       end.
-    Fixpoint fold_right10 {A R} (cns : A -> R -> R) (sing : A -> R) (nl : R) (l : list A) : R :=
+    Definition fold_right10 {A R} (cns : A -> R -> R) (sing : A -> R) (nl : R) (l : list A) : R :=
       match l with
         nil => nl
       | cons v vs => fold_right1 cns sing v vs
@@ -461,16 +461,17 @@ Module Assertions
     | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ).
     Global Arguments scchunk_user _ _ : clear implicits.
 
-    Section TransparentObligations.
-      Local Set Transparent Obligations.
-      Derive NoConfusion for SCChunk.
-    End TransparentObligations.
-
     (* Symbolic chunks *)
     Inductive Chunk (Σ : LCtx) : Type :=
     | chunk_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
     | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
     Global Arguments chunk_user [_] _ _.
+
+    Section TransparentObligations.
+      Local Set Transparent Obligations.
+      Derive NoConfusion for SCChunk.
+      Derive NoConfusion for Chunk.
+    End TransparentObligations.
 
     Definition chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
       match c1 , c2 with
@@ -491,6 +492,35 @@ Module Assertions
         end
       | _ , _ => false
       end.
+
+    Local Set Equations With UIP.
+    Lemma chunk_eqb_spec {Σ} (c1 c2 : Chunk Σ) :
+      reflect (c1 = c2) (chunk_eqb c1 c2).
+    Proof.
+      destruct c1 as [p1 ts1|σ1 r1 t1], c2 as [p2 ts2|σ2 r2 t2]; cbn.
+      - destruct (eq_dec p1 p2).
+        + destruct e; cbn.
+          destruct (env_eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) ts1 ts2).
+          * constructor. f_equal; auto.
+          * constructor. intros Heq.
+            dependent elimination Heq.
+            auto.
+        + constructor. intros Heq.
+          dependent elimination Heq.
+          auto.
+      - constructor. discriminate.
+      - constructor. discriminate.
+      - destruct (eq_dec_het r1 r2).
+        + dependent elimination e; cbn.
+          destruct (Term_eqb_spec t1 t2).
+          * constructor. f_equal; auto.
+          * constructor. intros Heq.
+          dependent elimination Heq.
+          auto.
+        + constructor. intros Heq.
+          dependent elimination Heq.
+          auto.
+    Qed.
 
     (* Equations(noeqns) chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool := *)
     (*   chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) *)

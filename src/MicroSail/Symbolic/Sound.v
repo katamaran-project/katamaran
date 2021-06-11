@@ -1483,6 +1483,23 @@ Module Soundness
       apply approx_pure; auto.
   Qed.
 
+  Lemma try_consume_chunk_exact_spec {Σ} (h : SHeap Σ) (c : Chunk Σ) :
+    OptionSpec
+      (fun h' => List.In (c , h') (heap_extractions h))
+      True
+      (SMut.try_consume_chunk_exact h c).
+  Proof.
+    induction h as [|c' h]; cbn.
+    - now constructor.
+    - destruct (chunk_eqb_spec c c').
+      + constructor. left. f_equal; auto.
+      + apply optionspec_map. revert IHh.
+        apply optionspec_monotonic; auto.
+        intros h' HIn. right.
+        rewrite List.in_map_iff.
+        exists (c :: h'). auto.
+  Qed.
+
   Lemma approx_consume_chunk {Γ} {w0 : World} (ι0 : SymInstance w0)
     (Hpc0 : instpc (wco w0) ι0) :
     approx ι0 (@SMut.consume_chunk Γ w0) (CMut.consume_chunk).
@@ -1493,8 +1510,21 @@ Module Soundness
     apply approx_get_heap; auto.
     intros w1 ω01 ι1 -> Hpc1.
     intros hs hc ->.
-    destruct (SMut.try_consume_chunk_exact hs (subst cs ω01)).
-    - admit.
+    destruct (try_consume_chunk_exact_spec hs (subst cs ω01)) as [h' HIn|].
+    - intros POST__s POST__c HPOST.
+      intros δs δc -> hs' hc' ->.
+      unfold approx, ApproxPath. intros Hwp.
+      cbv [SMut.put_heap CMut.bind CMut.put_heap CMut.bind_right CMut.assert_formula
+                         T wrefl CMut.angelic_list CMut.dijkstra].
+      rewrite CDijk.wp_angelic_list.
+      change (SHeap w1) in h'.
+      exists (inst (subst cs ω01) ι1, inst h' ι1).
+      split.
+      + unfold inst at 3. cbn. rewrite heap_extractions_map.
+        rewrite List.in_map_iff. exists (subst cs ω01 , h').
+        split. reflexivity. assumption.
+      + hnf. rewrite inst_subst. split; auto. revert Hwp.
+        apply HPOST; wsimpl; auto.
     - apply approx_bind.
       apply approx_angelic_list; eauto.
       { hnf. unfold inst at 1. cbn.
@@ -1511,7 +1541,7 @@ Module Soundness
       intros w3 ω23 ι3 -> Hpc3.
       rewrite <- inst_subst.
       apply approx_put_heap; auto.
-  Admitted.
+  Qed.
 
   Lemma approx_consume {Γ Σ0 pc0} (asn : Assertion Σ0) :
     let w0 := @MkWorld Σ0 pc0 in
