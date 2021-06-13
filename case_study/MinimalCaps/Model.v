@@ -416,29 +416,14 @@ Module MinCapsModel.
           (λ (v : Lit ty_instr) (δ' : CStore Γ),
              (⌜is_true true⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
-    iIntros (code Heq) "_".
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H.
-    dependent elimination H0.
-    dependent elimination s.
+    intros code Heq.
+    iApply iris_rule_noop; try done.
+    intros s' γ γ' μ μ' δ' step.
+    dependent elimination step.
     rewrite Heq in f1.
     cbn in f1. destruct f1 as [res' e].
     dependent elimination e.
-    do 2 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; trivial.
-    destruct res.
-    - iApply wp_compat_fail.
-    - iApply wp_value.
-      cbn.
-      iSplit; trivial.
+    repeat split; destruct res; eauto.
   Qed.
 
   Lemma open_ptsreg_sound `{sg : sailG Σ} {Γ es δ} :
@@ -467,26 +452,16 @@ Module MinCapsModel.
                   end (ι ► (("result", ty_unit) ↦ v))) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (reg w ι  Heq) "Hpre".
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    do 2 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; trivial.
-    iApply wp_value.
-    cbn.
-    destruct reg; iSplit; trivial.
+    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.MinCaps_ptsreg reg w));
+      try done.
+    - intros s' γ γ' μ μ' δ' step.
+      dependent elimination step.
+      cbn in f1.
+      dependent elimination f1.
+      repeat split; eauto.
+    - iIntros (v) "Hpre".
+      iModIntro.
+      destruct reg; now iSplitL.
   Qed.
 
   Lemma close_ptsreg_sound `{sg : sailG Σ} {Γ R es δ} :
@@ -500,29 +475,18 @@ Module MinCapsModel.
            MinCapsIrisHeapKit.MinCaps_ptsreg R w
                                              ∗ ⌜δ' = δ⌝).
   Proof.
-    iIntros (w eq) "ptsto".
-    destruct (nilView es). clear eq.
-    cbn [env_lookup inctx_case_snoc].
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    cbn in f1.
-    dependent elimination f1.
-    iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; trivial.
-    iApply wp_value.
-    cbn.
-    rewrite MinCapsIrisHeapKit.MinCaps_ptsreg_regtag_to_reg.
-    by iFrame.
+    iIntros (w Heq) "Hpre".
+    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.IrisRegs.reg_pointsTo (MinCapsSymbolicContractKit.regtag_to_reg R) w));
+      try done.
+    - intros s' γ γ' μ μ' δ' step.
+      dependent elimination step.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      repeat split; eauto.
+    - iIntros (v) "Hpre".
+      iModIntro. iSplitL; [|done].
+      now rewrite <-MinCapsIrisHeapKit.MinCaps_ptsreg_regtag_to_reg.
   Qed.
 
   Lemma int_safe_sound `{sg : sailG Σ} {Γ es δ} :
@@ -537,28 +501,18 @@ Module MinCapsModel.
              ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (i Heq) "_".
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    do 2 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; [|cbn; trivial].
-    iApply wp_value.
-    iSimpl.
-    iSplitL; [|cbn; trivial].
-    iSplitL; first (cbn; trivial).
-    rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq; auto.
+    iApply (iris_rule_noop (P := True%I));
+      try done.
+    - intros s' γ γ' μ μ' δ' step.
+      dependent elimination step.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      repeat split; eauto.
+    - iIntros (v) "_".
+      iModIntro. iSplitL; [|done].
+      iSplitR; [now destruct v|].
+      rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq; auto.
   Qed.
 
   Lemma lift_csafe_sound `{sg : sailG Σ} {Γ es δ} :
@@ -573,26 +527,17 @@ Module MinCapsModel.
              ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (c Heq) "Hpre".
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    do 2 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; [|cbn;trivial].
-    iApply wp_value.
-    cbn.
-    by iFrame.
+    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.MinCaps_safe (inr c)));
+      try done.
+    - intros s' γ γ' μ μ' δ' step.
+      dependent elimination step.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      repeat split; eauto.
+    - iIntros (v) "Hpre".
+      iModIntro. iSplitL; [|done].
+      iSplitR; now destruct v.
   Qed.
 
   Lemma duplicate_safe_sound `{sg : sailG Σ} {Γ es δ} :
@@ -607,31 +552,20 @@ Module MinCapsModel.
               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) w)
              ∗ ⌜δ' = δ⌝).
   Proof.
-    iIntros (w Heq) "#Hsafe".
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    do 2 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; [|cbn;trivial].
-    iApply wp_value.
-    cbn.
-    iSplitL; trivial.
-    iSplitL; try iAssumption.
-    iSplitL; trivial; try iAssumption.
+    iIntros (w Heq) "Hsafe".
+    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.MinCaps_safe w));
+      try done.
+    - intros s' γ γ' μ μ' δ' step.
+      dependent elimination step.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      repeat split; eauto.
+    - iIntros (v) "#Hsafe".
+      iModIntro. iSplitL; [|done].
+      destruct v; now repeat iSplit.
   Qed.
-  
+
   Lemma specialize_safe_to_cap_sound `{sg : sailG Σ} {Γ es δ} :
     ∀ c : Lit ty_cap,
       evals es δ = (env_snoc env_nil (_ , ty_cap) c)
@@ -644,26 +578,17 @@ Module MinCapsModel.
              ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (c Heq) "Hsafe".
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    do 2 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; [|cbn;trivial].
-    iApply wp_value.
-    cbn.
-      by iFrame.
+    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.MinCaps_safe (inr c)));
+      try done.
+    - intros s' γ γ' μ μ' δ' step.
+      dependent elimination step.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      repeat split; eauto.
+    - iIntros (v) "#Hsafe".
+      iModIntro. iSplitL; [|done].
+      iSplitL; [destruct v|]; done.
   Qed.
 
   Lemma csafe_move_cursor_sound `{sg : sailG Σ} {Γ es δ} :
@@ -700,30 +625,22 @@ Module MinCapsModel.
                       cap_end := e;
                       cap_cursor := a' |})) ∗ ⌜δ' = δ⌝).
   Proof.
-    iIntros (p b e a a' Heq) "#Hcsafe".
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    do 2 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; trivial.
-    iApply wp_value.
-    cbn.
-    repeat (iSplitL; trivial).
-    do 2 rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq.
-    unfold MinCapsIrisHeapKit.MinCaps_safe1.
-    destruct p; auto.
+    iIntros (p b e a a' Heq) "Hcsafe".
+    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.MinCaps_safe (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |})));
+      try done.
+    - intros s' γ γ' μ μ' δ' step.
+      dependent elimination step.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      repeat split; eauto.
+    - iIntros (v) "#Hsafe".
+      iModIntro. iSplitL; [|done].
+      iSplitL.
+      + iSplitR; [destruct v|]; done.
+      + do 2 rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq.
+        unfold MinCapsIrisHeapKit.MinCaps_safe1.
+        destruct p; auto.
   Qed.
 
   Lemma csafe_sub_perm_sound `{sg : sailG Σ} {Γ es δ} :
@@ -761,31 +678,23 @@ Module MinCapsModel.
                       cap_end := e;
                       cap_cursor := a |})) ∗ ⌜δ' = δ⌝).
   Proof.
-    iIntros (p p' b e a Heq) "[#Hcsafe Hp]".
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    do 2 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; trivial.
-    iApply wp_value.
-    cbn.
-    iSplitL; trivial.
-    iSplitR "Hp"; trivial.
-    iSplitL; trivial.
-    do 2 rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq.
-    destruct p; destruct p'; trivial.
+    iIntros (p p' b e a Heq) "H".
+    iApply (iris_rule_noop (P := (MinCapsIrisHeapKit.MinCaps_safe
+                                   (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |})
+                                   ∗ MinCapsIrisHeapKit.MinCaps_subperm p' p)%I));
+      try done.
+    - intros s' γ γ' μ μ' δ' step.
+      dependent elimination step.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      repeat split; eauto.
+    - iIntros (v) "[#Hsafe Hp]".
+      iModIntro. iSplitL; [|done].
+      iSplitR.
+      + iSplitR; [destruct v|]; done.
+      + do 2 rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq.
+        destruct p; destruct p'; trivial.
   Qed.
 
   Lemma csafe_within_range_sound `{sg : sailG Σ} {Γ es δ} :
@@ -824,36 +733,27 @@ Module MinCapsModel.
                       cap_end := e';
                       cap_cursor := a |})) ∗ ⌜δ' = δ⌝).
   Proof.
-    iIntros (p b b' e e' a Heq) "[#[Hcsafe _] [% %]]".
-    clear H0.
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H.
-    dependent elimination H0.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1.
-    dependent elimination f1.
-    do 2 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; trivial.
-    iApply wp_value.
-    cbn.
-    iSplitL; trivial.
-    iSplitL; trivial.
-    iSplitL; trivial.
-    unfold is_true in H;
-      apply andb_prop in H;
-      destruct H as [Hb He];
-      apply Zle_is_le_bool in Hb;
-      apply Zle_is_le_bool in He.
-    iApply (MinCapsIrisHeapKit.safe_sub_range $! (conj Hb He) with "Hcsafe").
+    iIntros (p b b' e e' a Heq) "[[H _] [% %]]".
+
+    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.MinCaps_safe
+                                   (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |})));
+      try done.
+    - intros s' γ γ' μ μ' δ' step.
+      dependent elimination step.
+      rewrite Heq in f1.
+      cbn in f1.
+      dependent elimination f1.
+      repeat split; eauto.
+    - iIntros (v) "#Hcsafe".
+      iModIntro. iSplitL; [|done].
+      iSplitR.
+      + iSplitR; [destruct v|]; done.
+      + unfold is_true in H;
+          apply andb_prop in H;
+          destruct H as [Hb He];
+          apply Zle_is_le_bool in Hb;
+          apply Zle_is_le_bool in He.
+        iApply (MinCapsIrisHeapKit.safe_sub_range $! (conj Hb He) with "Hcsafe").
   Qed.
 
   Lemma rM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :

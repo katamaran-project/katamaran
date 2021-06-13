@@ -1497,6 +1497,42 @@ Module IrisSoundness
     by iFrame.
   Qed.
 
+  Lemma iris_rule_noop {Γ σ} {δ : CStore Γ}
+        {P} {Q : Lit σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
+    language.to_val (MkTm δ s) = None ->
+    (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
+                            (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
+                            ((exists v, s' = stm_lit _ v) \/ (exists msg, s' = stm_fail _ msg))) ->
+    (∀ v, P ={⊤}=∗ Q v δ) -∗
+                 semTriple δ P s Q.
+  Proof.
+    iIntros (Hnv Hnoop) "HPQ HP".
+    rewrite wp_unfold.
+    unfold wp_pre.
+    rewrite Hnv.
+    iIntros (σ' ks1 ks n) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first done.
+    iIntros (e2 σ'' efs) "%".
+    cbn in H0.
+    dependent elimination H0.
+    destruct (Hnoop _ _ _ _ _ _ s0) as (-> & -> & -> & [[v ->]|[msg ->]]).
+    - do 2 iModIntro.
+      iMod "Hclose" as "_".
+      iMod ("HPQ" with "HP") as "HQ".
+      iModIntro.
+      iFrame.
+      iSplitL; trivial.
+      now iApply wp_value.
+    - do 2 iModIntro.
+      iMod "Hclose" as "_".
+      iModIntro.
+      iFrame.
+      iSplitL; trivial.
+      now iApply wp_compat_fail.
+  Qed.
+
   Lemma sound_stm {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
     forall (PRE : iProp Σ) (POST : Lit τ -> CStore Γ -> iProp Σ),
       ForeignSem ->
