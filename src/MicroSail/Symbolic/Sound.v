@@ -2051,6 +2051,6 @@ Module Soundness
     auto.
   Qed.
 
-  Print Assumptions symbolic_sound.
+  (* Print Assumptions symbolic_sound. *)
 
 End Soundness.
