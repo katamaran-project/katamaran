@@ -1028,6 +1028,52 @@ Module Terms (Export termkit : TermKit).
       | pat_record p => fun EΔ => term_record _ (record_pattern_match_env_reverse p EΔ)
       end.
 
+    Definition pattern_match_env_lit_reverse {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
+      NamedEnv Lit Δ -> Lit σ :=
+      match p with
+      | pat_var x    => fun Ex => match snocView Ex with isSnoc _ t => t end
+      | pat_unit     => fun _ => (tt : Lit ty_unit)
+      | pat_pair x y => fun Exy => match snocView Exy with
+                                     isSnoc Ex ty =>
+                                     match snocView Ex with
+                                       isSnoc _ tx => (pair tx ty : Lit (ty_prod _ _))
+                                     end
+                                   end
+      | pat_tuple p  => fun EΔ => (env_to_envrec (tuple_pattern_match_env_reverse p EΔ) : Lit (ty_tuple _))
+      | pat_record p => fun EΔ => (𝑹_fold (record_pattern_match_env_reverse p EΔ) : Lit (ty_record _))
+      end.
+
+
+    Lemma pattern_match_lit_inverse_left {N : Set} {σ : Ty} {Δ : NCtx N Ty} {p : Pattern Δ σ}
+          (v : Lit σ) :
+      pattern_match_env_lit_reverse p (pattern_match_lit p v) = v.
+    Proof.
+      induction p; cbn; eauto.
+      - now destruct v.
+      - now destruct v.
+      - unfold tuple_pattern_match_lit.
+        now rewrite tuple_pattern_match_env_inverse_left, envrec_env_inverse_left.
+      - unfold record_pattern_match_lit.
+        now rewrite record_pattern_match_env_inverse_left, 𝑹_fold_unfold.
+    Qed.
+
+    Lemma pattern_match_lit_inverse_right {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ)
+      (vs : NamedEnv Lit Δ) :
+      pattern_match_lit p (pattern_match_env_lit_reverse p vs) = vs.
+    Proof.
+      induction p; cbn; eauto.
+      - destruct (snocView vs).
+        now destruct (nilView E).
+      - now destruct (nilView vs).
+      - destruct (snocView vs).
+        destruct (snocView E).
+        now destruct (nilView E).
+      - unfold tuple_pattern_match_lit.
+        now rewrite envrec_env_inverse_right, tuple_pattern_match_env_inverse_right.
+      - unfold record_pattern_match_lit.
+        now rewrite 𝑹_unfold_fold, record_pattern_match_env_inverse_right.
+    Qed.
+
   End PatternMatching.
 
   Section SymbolicSubstitutions.
@@ -1766,6 +1812,24 @@ Module Terms (Export termkit : TermKit).
       - destruct (snocView es); cbn.
         f_equal.
         now eapply IHσs.
+    Qed.
+
+    Lemma inst_pattern_match_env_reverse {N : Set} {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty}
+          (ι : SymInstance Σ) (p : Pattern Δ σ) (ts : NamedEnv (Term Σ) Δ) :
+      inst (Inst := instantiate_term) (pattern_match_env_reverse p ts) ι =
+      pattern_match_env_lit_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
+    Proof.
+      induction p.
+      - now destruct (snocView ts).
+      - reflexivity.
+      - destruct (snocView ts).
+        now destruct (snocView E); cbn.
+      - cbn.
+        change (inst_term (term_tuple (tuple_pattern_match_env_reverse p ts)) ι) with (inst (term_tuple (tuple_pattern_match_env_reverse p ts)) ι).
+        now rewrite inst_term_tuple, inst_tuple_pattern_match_reverse.
+      - cbn.
+        f_equal.
+        eapply inst_record_pattern_match_reverse.
     Qed.
 
     Global Arguments inst {T A _ Σ} !_ ι.

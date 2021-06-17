@@ -1226,19 +1226,123 @@ Module Soundness
         now rewrite <- inst_subst.
     Qed.
 
+    Lemma approx_angelic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty}
+          {p : Pattern Δ σ} {Γ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) {msg} :
+      approx ι (@SMut.angelic_match_pattern N n σ Δ p Γ w msg) (@CMut.angelic_match_pattern N σ Δ p Γ).
+    Proof.
+      intros t v ->.
+      intros k k__c Hk.
+      unfold SMut.angelic_match_pattern, CMut.angelic_match_pattern.
+      eapply approx_bind; try (eapply approx_angelic_ctx; assumption); try assumption.
+      intros w1 r01 ι1 -> Hpc1.
+      intros ts vs ->.
+      eapply approx_bind_right.
+      - eapply approx_assert_formula; try assumption.
+        unfold inst at 4; cbn.
+        rewrite inst_subst.
+        rewrite inst_pattern_match_env_reverse.
+        split.
+        + intros eq.
+          apply (f_equal (pattern_match_env_lit_reverse p)) in eq.
+          now rewrite pattern_match_lit_inverse_left in eq.
+        + intros <-.
+          now rewrite pattern_match_lit_inverse_right.
+      - intros w2 r12 ι2 -> Hpc2.
+        eapply approx_pure; try assumption.
+        now rewrite <- inst_subst.
+    Qed.
+
     Lemma approx_angelic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
       {Δ : 𝑼𝑲 U -> NCtx N Ty} {p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_union N n AT Γ1 Γ2 U Δ p w) (@CMut.angelic_match_union N A Γ1 Γ2 U Δ p).
     Proof.
-    Admitted.
+      intros t v ->.
+      intros k k__c Hk.
+      unfold SMut.angelic_match_union, CMut.angelic_match_union.
+      eapply approx_bind; try (eapply approx_angelic_finite; assumption).
+      intros w1 r01 ι1 -> Hpc1.
+      intros v1 vc1 ->.
+      eapply approx_bind; try (eapply approx_angelic; assumption).
+      intros w2 r12 ι2 -> Hpc2.
+      intros v2 vc2 ->.
+      eapply approx_bind_right.
+      - eapply approx_assert_formula; try assumption.
+        change (inst v1 _) with v1.
+        unfold inst at 5; cbn.
+        unfold persist, persist_subst, wtrans; cbn.
+        now rewrite ?inst_subst.
+      - intros w3 r23 ι3 -> Hpc3.
+        eapply approx_bind.
+        + eapply approx_angelic_match_pattern; try assumption.
+          unfold persist, persist_subst, wtrans; cbn;
+          now rewrite <- ?inst_subst, ?subst_assoc.
+        + change (inst v1 _) with v1.
+          specialize (Hk v1).
+          eapply (approx_four Hk).
+          unfold wtrans;cbn.
+          now rewrite ?inst_subst.
+    Qed.
+
+    Lemma approx_demonic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty}
+          {p : Pattern Δ σ} {Γ}
+      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_pattern N n σ Δ p Γ w) (@CMut.demonic_match_pattern N σ Δ p Γ).
+    Proof.
+      intros t v ->.
+      intros k k__c Hk.
+      unfold SMut.demonic_match_pattern, CMut.demonic_match_pattern.
+      eapply approx_bind; try (eapply approx_demonic_ctx; assumption); try assumption.
+      intros w1 r01 ι1 -> Hpc1.
+      intros ts vs ->.
+      eapply approx_bind_right.
+      - eapply approx_assume_formula; try assumption.
+        unfold inst at 4; cbn.
+        rewrite inst_subst.
+        rewrite inst_pattern_match_env_reverse.
+        split.
+        + intros eq.
+          apply (f_equal (pattern_match_env_lit_reverse p)) in eq.
+          now rewrite pattern_match_lit_inverse_left in eq.
+        + intros <-.
+          now rewrite pattern_match_lit_inverse_right.
+      - intros w2 r12 ι2 -> Hpc2.
+        eapply approx_pure; try assumption.
+        now rewrite <- inst_subst.
+    Qed.
 
     Lemma approx_demonic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
       {Δ : 𝑼𝑲 U -> NCtx N Ty} {p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)}
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_union N n AT Γ1 Γ2 U Δ p w) (@CMut.demonic_match_union N A Γ1 Γ2 U Δ p).
     Proof.
-    Admitted.
+      intros t v ->.
+      intros k k__c Hk.
+      unfold SMut.demonic_match_union, CMut.demonic_match_union.
+      eapply approx_bind; try (eapply approx_demonic_finite; assumption).
+      intros w1 r01 ι1 -> Hpc1.
+      intros v1 vc1 ->.
+      eapply approx_bind; try (eapply approx_demonic; assumption).
+      intros w2 r12 ι2 -> Hpc2.
+      intros v2 vc2 ->.
+      eapply approx_bind_right.
+      - eapply approx_assume_formula; try assumption.
+        change (inst v1 _) with v1.
+        unfold inst at 5; cbn.
+        unfold persist, persist_subst, wtrans; cbn.
+        now rewrite ?inst_subst.
+      - intros w3 r23 ι3 -> Hpc3.
+        eapply approx_bind.
+        + eapply approx_demonic_match_pattern; try assumption.
+          unfold persist, persist_subst, wtrans; cbn;
+          now rewrite <- ?inst_subst, ?subst_assoc.
+        + change (inst v1 _) with v1.
+          specialize (Hk v1).
+          eapply (approx_four Hk).
+          unfold wtrans;cbn.
+          now rewrite ?inst_subst.
+    Qed.
 
   End PatternMatching.
 
