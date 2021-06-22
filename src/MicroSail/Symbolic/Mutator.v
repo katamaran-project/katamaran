@@ -1764,6 +1764,19 @@ Module Mutators
           assert_msgs_formulas mfs (assertk fml msg p)
         end.
 
+      Lemma assert_msgs_formulas_sound {Σ} {mfs : List (Pair Message Formula) Σ} {p : SPath Σ} {ι : SymInstance Σ} :
+        (safe (assert_msgs_formulas mfs p) ι <-> instpc (map snd mfs) ι /\ safe p ι).
+      Proof.
+        revert p.
+        induction mfs; intros p; cbn.
+        - now unfold inst_pathcondition.
+        - rewrite inst_pathcondition_cons.
+          destruct a; cbn.
+          rewrite IHmfs.
+          cbn.
+          now rewrite obligation_equiv.
+      Qed.
+
       Arguments InCtx_rect [_ _].
       Lemma ctx_remove_inctx_right {B : Set} {Γ Δ : Ctx B} {b : B} (bIn : InCtx b Δ) :
         @ctx_remove B (@ctx_cat B Γ Δ) b (@inctx_cat_right B b Γ Δ bIn) =
@@ -1819,6 +1832,220 @@ Module Mutators
              angelic_close0 Σe (assert_msgs_formulas mfs (debug b (solve_evars ε p [])))
          end.
 
+      Lemma solve_evars_sound_angelic_binary {Σ0 Σe} (p1 p2 : SPath (Σ0 ▻▻ Σe))
+            {mfs : List (Pair Message Formula) (Σ0 ▻▻ Σe)}
+            (ι : SymInstance Σ0) :
+            (safe (solve_evars Σe p1 mfs) ι <->
+             (exists ιe : SymInstance Σe, safe p1 (ι ►► ιe) /\ instpc (map snd mfs) (ι ►► ιe))) ->
+            (safe (solve_evars Σe p2 mfs) ι <-> (exists ιe : SymInstance Σe, safe p2 (ι ►► ιe) /\ instpc (map snd mfs) (ι ►► ιe))) ->
+            safe (solve_evars Σe p1 mfs) ι \/ safe (solve_evars Σe p2 mfs) ι <->
+            (exists ιe : SymInstance Σe, (safe (angelic_binary p1 p2) (ι ►► ιe)) /\ instpc (map snd mfs) (ι ►► ιe)).
+      Proof.
+        intros H1 H2.
+        split.
+        + intros [s1|s2];
+            apply proj1 in H1, H2.
+          * destruct (H1 s1) as (ιe & se1 & Hpc).
+            exists ιe. now split; [left|].
+          * destruct (H2 s2) as (ιe & se2 & Hpc).
+            exists ιe. now split; [right|].
+        + intros (ιe & [se1|se2] & Hpc); [left|right];
+            apply proj2 in H1, H2;
+            [eapply H1|eapply H2];
+            now exists ιe.
+      Qed.
+
+      Lemma exists_syminstance_nil {P : SymInstance ε -> Prop} :
+        (exists (ι : SymInstance ε), P ι) <-> P env_nil.
+      Proof.
+        split.
+        - intros (ι & Pι).
+          now destruct (nilView ι).
+        - intros Pn. now exists env_nil.
+      Qed.
+
+      Lemma exists_syminstance_cons {Σ b} {P : SymInstance (Σ ▻ b) -> Prop} :
+        (exists (ι : SymInstance (Σ ▻ b)), P ι) <-> (exists (ι : SymInstance Σ) (v : Lit (snd b)), P (ι ► (b ↦ v))).
+      Proof.
+        split.
+        - intros (ι & Pι).
+          destruct (snocView ι) as (ι & v).
+          now exists ι, v.
+        - intros (ι & v & Pn). now exists (ι ► (b ↦ v)).
+      Qed.
+
+      Lemma solve_evars_sound_demonic_binary {Σ0 Σe} (p1 p2 : SPath (Σ0 ▻▻ Σe))
+            {mfs : List (Pair Message Formula) (Σ0 ▻▻ Σe)}
+            (H2 : forall ι : SymInstance (Σ0 ▻▻ Σe),
+               safe (solve_evars ε p2 []) ι <->
+               (exists ιe : SymInstance ε, safe p2 (ι ►► ιe)))
+            (H1 : forall ι : SymInstance (Σ0 ▻▻ Σe),
+                safe (solve_evars ε p1 []) ι <->
+                (exists ιe : SymInstance ε, safe p1 (ι ►► ιe)))
+            (ι : SymInstance Σ0) :
+        safe (solve_evars Σe (demonic_binary p1 p2) mfs) ι <->
+         (exists ιe : SymInstance Σe, (safe p1 (ι ►► ιe) /\ safe p2 (ι ►► ιe)) /\ instpc (map snd mfs) (ι ►► ιe)).
+      Proof.
+        cbn.
+        rewrite angelic_close0_sound.
+        split.
+        - intros (ι0 & sa).
+          exists ι0.
+          rewrite assert_msgs_formulas_sound in sa.
+          destruct sa as (Hpc & sp1 & sp2).
+          destruct (proj1 (H1 _) sp1) as (ιe1 & s1).
+          destruct (proj1 (H2 _) sp2) as (ιe2 & s2).
+          now destruct (nilView ιe1), (nilView ιe2).
+        - intros (ιe & (s1 & s2) & Hpc).
+          exists ιe.
+          rewrite assert_msgs_formulas_sound.
+          cbn.
+          now rewrite H1, H2, ?exists_syminstance_nil.
+      Qed.
+
+      Lemma solve_evars_sound_assumek {Σ0 Σe} (p : SPath (Σ0 ▻▻ Σe))
+            (Hp : forall ι : SymInstance (Σ0 ▻▻ Σe),
+                safe (solve_evars ε p []) ι <->
+                (exists ιe : SymInstance ε, safe p (ι ►► ιe) /\ inst_pathcondition [] (ι ►► ιe)))
+            {fml : Formula (Σ0 ▻▻ Σe)}
+            {mfs : List (Pair Message Formula) (Σ0 ▻▻ Σe)}
+            (ι : SymInstance Σ0) :
+            safe (solve_evars Σe (assumek fml p) mfs) ι <->
+            (exists ιe : SymInstance Σe, ((inst fml (ι ►► ιe) : Prop) -> safe p (ι ►► ιe)) /\ instpc (map snd mfs) (ι ►► ιe)).
+      Proof.
+        cbn.
+        rewrite angelic_close0_sound.
+        setoid_rewrite exists_syminstance_nil in Hp.
+        setoid_rewrite assert_msgs_formulas_sound.
+        cbn.
+        setoid_rewrite Hp.
+        change (inst_pathcondition [] _) with True.
+        cbn.
+        setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
+        now setoid_rewrite and_comm at 2.
+      Qed.
+
+      Lemma map_snd_subst {Σ Σ' : LCtx} {ζ : Sub Σ Σ'}
+            {mfs : List (Pair Message Formula) Σ} :
+            map snd (subst mfs ζ) = subst (map snd mfs) ζ.
+      Proof.
+        induction mfs.
+        - easy.
+        - cbn.
+          rewrite IHmfs.
+          now destruct a.
+      Qed.
+
+      Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
+        (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
+      Proof.
+        split.
+        - intros (x & px & q).
+          now split; [exists x|].
+        - intros ((x & px) & q).
+          now exists x.
+      Qed.
+
+      Lemma safe_eq_rect {Σ Σ'} (eq : Σ = Σ') (p : SPath Σ) (ι : SymInstance Σ') :
+        safe (eq_rect Σ SPath p Σ' eq) ι = safe p (eq_rect Σ' (fun Σ => SymInstance Σ) ι Σ (eq_sym eq)).
+      Proof.
+        now destruct eq.
+      Qed.
+
+      Lemma solve_evars_sound_help {Σ Σe Σ'} (p : SPath Σ') (HeqΣ' : Σ' = Σ ▻▻ Σe)
+        (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) (ι : SymInstance Σ) :
+        safe (solve_evars Σe (eq_rect Σ' SPath p (Σ ▻▻ Σe) HeqΣ') mfs) ι <->
+        exists ιe : SymInstance Σe,
+          safe (eq_rect Σ' SPath p (Σ ▻▻ Σe) HeqΣ') (env_cat ι ιe) /\
+          instpc (List.map snd mfs) (env_cat ι ιe).
+      Proof.
+        revert Σ Σe HeqΣ' mfs ι.
+        induction p; intros; subst; cbn.
+        - specialize (IHp2 Σ0 Σe eq_refl mfs ι).
+          specialize (IHp1 Σ0 Σe eq_refl mfs ι).
+          now eapply solve_evars_sound_angelic_binary.
+        - specialize (IHp2 (Σ0 ▻▻ Σe) ε eq_refl []).
+          specialize (IHp1 (Σ0 ▻▻ Σe) ε eq_refl []).
+          setoid_rewrite (base.and_True : forall P, P /\ True <-> P) in IHp1.
+          setoid_rewrite (base.and_True : forall P, P /\ True <-> P) in IHp2.
+          eauto using solve_evars_sound_demonic_binary, IHp2, IHp1.
+       - rewrite angelic_close0_sound.
+         setoid_rewrite assert_msgs_formulas_sound.
+         setoid_rewrite (base.and_False : forall P, P /\ False <-> False).
+         now setoid_rewrite (base.False_and : forall P, False /\ P <-> False).
+       - rewrite angelic_close0_sound.
+         setoid_rewrite assert_msgs_formulas_sound.
+         setoid_rewrite (base.True_and : forall P, True /\ P <-> P).
+         now setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
+       - setoid_rewrite obligation_equiv.
+         specialize (IHp Σ0 Σe eq_refl ((msg :: fml)%ctx :: mfs)%list ι).
+         rewrite IHp.
+         setoid_rewrite inst_pathcondition_cons.
+         setoid_rewrite and_comm at 2.
+         setoid_rewrite and_assoc at 1.
+         setoid_rewrite and_comm at 3.
+         now setoid_rewrite <-and_assoc at 1.
+       - specialize (IHp (Σ0 ▻▻ Σe) ε eq_refl []).
+         now eapply solve_evars_sound_assumek.
+       - specialize (IHp Σ0 (Σe ▻ b) eq_refl (subst mfs sub_wk1) ι).
+         cbn in IHp.
+         rewrite IHp, exists_syminstance_cons.
+         setoid_rewrite map_snd_subst.
+         setoid_rewrite inst_subst.
+         setoid_rewrite (inst_sub_wk1 (b := b)).
+         now setoid_rewrite exists_and.
+       - specialize (IHp (Σ0 ▻▻ Σe ▻ b) ε eq_refl []).
+         cbn in IHp.
+         rewrite angelic_close0_sound.
+         setoid_rewrite assert_msgs_formulas_sound.
+         cbn.
+         setoid_rewrite IHp.
+         setoid_rewrite exists_syminstance_nil.
+         change (inst_pathcondition [] _) with True.
+         setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
+         now setoid_rewrite and_comm at 3.
+       - destruct (Context.catView xIn).
+         + specialize (IHp ((Σ0 ▻▻ Σe) - (x :: σ)) ε eq_refl []).
+           rewrite angelic_close0_sound.
+           setoid_rewrite assert_msgs_formulas_sound.
+           cbn.
+           setoid_rewrite obligation_equiv.
+           setoid_rewrite IHp.
+           setoid_rewrite exists_syminstance_nil.
+           cbn.
+           change (inst_pathcondition [] _) with True.
+           setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
+           now setoid_rewrite and_comm at 2.
+         + rewrite IHp.
+           setoid_rewrite obligation_equiv.
+           rewrite map_snd_subst.
+           setoid_rewrite safe_eq_rect.
+           setoid_rewrite inst_subst.
+           admit.
+       - specialize (IHp ((Σ0 ▻▻ Σe) - (x :: σ)) ε eq_refl []).
+         rewrite angelic_close0_sound.
+         setoid_rewrite assert_msgs_formulas_sound.
+         cbn.
+         setoid_rewrite IHp.
+         cbn.
+         setoid_rewrite exists_syminstance_nil.
+         cbn.
+         change (inst_pathcondition [] _) with True.
+         setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
+         now setoid_rewrite and_comm at 2.
+       - specialize (IHp (Σ0 ▻▻ Σe) ε eq_refl []).
+         rewrite angelic_close0_sound.
+         setoid_rewrite assert_msgs_formulas_sound.
+         cbn.
+         setoid_rewrite debug_equiv.
+         setoid_rewrite IHp.
+         setoid_rewrite exists_syminstance_nil.
+         cbn.
+         change (inst_pathcondition [] _) with True.
+         setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
+         now setoid_rewrite and_comm at 2.
+      Admitted.
+
       Lemma solve_evars_sound {Σ Σe} (p : SPath (Σ ▻▻ Σe))
         (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) (ι : SymInstance Σ) :
         safe (solve_evars Σe p mfs) ι <->
@@ -1826,7 +2053,8 @@ Module Mutators
           safe p (env_cat ι ιe) /\
           instpc (List.map snd mfs) (env_cat ι ιe).
       Proof.
-      Admitted.
+        exact (solve_evars_sound_help p eq_refl mfs ι).
+      Qed.
 
     End Experimental.
 
