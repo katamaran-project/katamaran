@@ -1728,6 +1728,25 @@ Module Mutators
       - now rewrite ?debug_equiv.
     Qed.
 
+    Lemma angelic_close0_sound {Σ0 Σ} (p : SPath (Σ0 ▻▻ Σ)) (ι0 : SymInstance Σ0) :
+      safe (angelic_close0 Σ p) ι0 <-> exists (ι : SymInstance Σ), safe p (env_cat ι0 ι).
+    Proof.
+      induction Σ; cbn.
+      - split.
+        + intros s.
+          now exists env_nil.
+        + intros [ι sp].
+          destruct (nilView ι).
+          now cbn in *.
+      - rewrite (IHΣ (angelicv b p)).
+        split.
+        + intros (ι & v & sp).
+          now exists (env_snoc ι b v).
+        + intros (ι & sp).
+          destruct (snocView ι) as (ι & v).
+          now exists ι, v.
+    Qed.
+
     Definition ok :
       ⊢ SPath -> ⌜bool⌝ :=
       fun w o =>
