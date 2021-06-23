@@ -1952,6 +1952,126 @@ Module Mutators
         now destruct eq.
       Qed.
 
+      Fixpoint env_insert {x : 𝑺} {σ : Ty} {Σe : LCtx} (bIn : x :: σ ∈ Σe)
+               (v : Lit σ) (ιe : SymInstance (Σe - (x :: σ))) : SymInstance Σe.
+      Proof.
+        destruct bIn as (n & eq).
+        destruct Σe, n; cbn in *; try contradiction.
+        - refine (env_snoc ιe b _).
+          now subst.
+        - destruct (snocView ιe) as (ιe & v').
+          refine (env_snoc _ b v').
+          exact (env_insert x σ Σe _ v ιe).
+      Defined.
+
+      Lemma env_remove_insert {x : 𝑺} {σ : Ty} {Σe : LCtx} (bIn : x :: σ ∈ Σe)
+            (v : Lit σ) (ιe : SymInstance (Σe - (x :: σ))) :
+        env_remove (x :: σ) (env_insert bIn v ιe) bIn = ιe.
+      Proof.
+        revert bIn ιe.
+        induction Σe; intros bIn ιe.
+        - destruct bIn as (n & eq).
+          destruct n; try contradiction.
+        - destruct bIn as (n & eq).
+          destruct n; [now cbn|].
+          destruct (snocView ιe) as (ιe & v').
+          cbn. f_equal.
+          now eapply IHΣe.
+      Qed.
+
+      (* Lemma env_insert_remove {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} *)
+      (*       (bIn : x :: σ ∈ Σe) : *)
+      (*   env_insert bIn *)
+      (*     (inst t *)
+      (*        (eq_rect (Σ0 ▻▻ Σe - (x :: σ)) (fun Σ : LCtx => SymInstance Σ) (ι ►► env_remove (x :: σ) ιe bIn) *)
+      (*           ((Σ0 ▻▻ Σe) - (x :: σ)) (eq_sym (ctx_remove_inctx_right bIn)))) (env_remove (x :: σ) ιe bIn)) *)
+      Lemma env_insert_lookup {x : 𝑺} {σ : Ty} {Σe : LCtx} (bIn : x :: σ ∈ Σe)
+            (v : Lit σ) (ιe : SymInstance (Σe - (x :: σ))) :
+        ((env_insert bIn v ιe) ‼ x)%exp  = v.
+      Proof.
+        revert bIn ιe.
+        induction Σe; intros (n & eq) ιe; try contradiction.
+        destruct n.
+        - cbn in ιe, eq.
+          now subst.
+        - cbn in ιe, eq.
+          destruct (snocView ιe) as (ιe & v').
+          now eapply IHΣe.
+      Qed.
+
+      Lemma inst_eq_rect `{Inst AT A} {Σ Σ'} (t : AT Σ) (eq : Σ = Σ') (ι : SymInstance Σ'):
+        inst (eq_rect Σ AT t Σ' eq) ι = inst t (eq_rect Σ' (fun Σ => SymInstance Σ) ι Σ (eq_sym eq)).
+      Proof.
+        now subst.
+      Qed.
+
+      Lemma eq_rect_sym1 {A : Type} {P : A -> Type} {a a' : A} (eq : a = a') (v : P a) :
+        eq_rect a' P (eq_rect a P v a' eq) a (eq_sym eq) = v.
+      Proof.
+        now subst.
+      Qed.
+
+      Lemma eq_rect_sym2 {A : Type} {P : A -> Type} {a a' : A} (eq : a' = a) (v : P a) :
+        eq_rect a' P (eq_rect a P v a' (eq_sym eq)) a eq = v.
+      Proof.
+        now subst.
+      Qed.
+
+      Lemma sub_single_zero {Σ : LCtx} {x : 𝑺} {σ : Ty} (t : Term Σ σ) :
+        (sub_single inctx_zero t) = env_snoc (sub_id Σ) (x :: σ) t.
+      Proof.
+        eapply env_lookup_extensional.
+        intros [x' σ'] ([|n] & eq).
+        - cbn in *.
+          now subst.
+        - cbn in *.
+          rewrite env_lookup_tabulate; cbn.
+          now rewrite lookup_sub_id.
+      Qed.
+
+      Lemma inst_sub_single2 {Σ : LCtx} {x : 𝑺} {σ : Ty} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) (ι : SymInstance (Σ - (x :: σ))) :
+        inst (sub_single xIn t) ι = env_insert xIn (inst t ι) ι.
+      Proof.
+        revert xIn ι t.
+        induction Σ; intros (n & eq) ι t;
+        destruct n; try contradiction.
+        - cbn in eq, ι, t.
+          subst.
+          change (sub_single _ _) with (@sub_single (ctx_snoc Σ (x :: σ)) x σ inctx_zero t).
+          rewrite sub_single_zero.
+          refine (eq_trans (inst_env_snoc ι (sub_id Σ) (x :: σ) t) _).
+          cbn.
+          f_equal.
+          eapply inst_sub_id.
+        - cbn in t, ι, eq.
+          destruct (snocView ι) as (ι & v').
+      Admitted.
+
+      Print sub_single.
+
+      Lemma env_insert_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx}
+            (bIn : x :: σ ∈ Σe) (v : Lit σ)
+            {ι : SymInstance Σ0} {ιe : SymInstance (Σe - (x :: σ))} :
+            (ι ►► env_insert bIn v ιe) = env_insert (inctx_cat_right bIn) v (eq_rect (Σ0 ▻▻ Σe - (x :: σ)) (fun Σ => SymInstance Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - (x :: σ)) (eq_sym (ctx_remove_inctx_right bIn))).
+      Proof.
+        revert bIn ιe.
+        induction Σe; intros ([|n] & eq) ιe; try contradiction.
+        - cbn in ιe, eq.
+          now subst.
+        - cbn in ιe, eq.
+          destruct (snocView ιe) as (ιe & v').
+          cbn.
+          f_equal.
+      Admitted.
+
+      Lemma env_remove_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x :: σ ∈ Σe)
+        (ι : SymInstance Σ0) (ιe : SymInstance Σe) :
+        env_remove (x :: σ) (ι ►► ιe) (inctx_cat_right bIn) =
+        eq_rect (Σ0 ▻▻ Σe - (x :: σ)) (fun Σ : LCtx => SymInstance Σ) (ι ►► env_remove (x :: σ) ιe bIn)
+                 ((Σ0 ▻▻ Σe) - (x :: σ)) (eq_sym (ctx_remove_inctx_right bIn)).
+      Proof.
+      Admitted.
+
       Lemma solve_evars_sound_help {Σ Σe Σ'} (p : SPath Σ') (HeqΣ' : Σ' = Σ ▻▻ Σe)
         (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) (ι : SymInstance Σ) :
         safe (solve_evars Σe (eq_rect Σ' SPath p (Σ ▻▻ Σe) HeqΣ') mfs) ι <->
@@ -2018,10 +2138,28 @@ Module Mutators
            now setoid_rewrite and_comm at 2.
          + rewrite IHp.
            setoid_rewrite obligation_equiv.
-           rewrite map_snd_subst.
-           setoid_rewrite safe_eq_rect.
-           setoid_rewrite inst_subst.
-           admit.
+           split.
+           * intros (ιe & sp & Hpc).
+             unfold inst.
+             cbn.
+             exists (env_insert bIn (inst (eq_rect ((Σ0 ▻▻ Σe) - (x :: σ)) (fun Σ => Term Σ σ) t (Σ0 ▻▻ Σe - (x :: σ)) (ctx_remove_inctx_right bIn)) (ι ►► ιe)) ιe).
+             rewrite env_insert_app, env_remove_insert, env_insert_lookup.
+             rewrite inst_subst, inst_sub_shift, env_remove_insert, ?inst_eq_rect.
+             rewrite safe_eq_rect in sp.
+             repeat split; try assumption.
+             rewrite map_snd_subst, inst_subst, inst_eq_rect in Hpc.
+             now rewrite inst_sub_single2 in Hpc.
+           * intros (ιe & (eq & sp) & Hpc).
+             cbn in eq.
+             exists (env_remove (x :: σ) ιe bIn).
+             rewrite map_snd_subst, inst_subst.
+             rewrite safe_eq_rect.
+             rewrite env_remove_app in sp.
+             split; try assumption.
+             rewrite inst_subst, inst_sub_shift in eq.
+             rewrite inst_eq_rect.
+             rewrite <-env_remove_app.
+             now rewrite inst_sub_single.
        - specialize (IHp ((Σ0 ▻▻ Σe) - (x :: σ)) ε eq_refl []).
          rewrite angelic_close0_sound.
          setoid_rewrite assert_msgs_formulas_sound.
@@ -2044,7 +2182,7 @@ Module Mutators
          change (inst_pathcondition [] _) with True.
          setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
          now setoid_rewrite and_comm at 2.
-      Admitted.
+      Qed.
 
       Lemma solve_evars_sound {Σ Σe} (p : SPath (Σ ▻▻ Σe))
         (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) (ι : SymInstance Σ) :
