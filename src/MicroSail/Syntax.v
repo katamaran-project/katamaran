@@ -1751,6 +1751,38 @@ Module Terms (Export termkit : TermKit).
         now rewrite env_lookup_tabulate.
     Qed.
 
+    Lemma sub_single_zero {Σ : LCtx} {x : 𝑺} {σ : Ty} (t : Term Σ σ) :
+      (sub_single inctx_zero t) = env_snoc (sub_id Σ) (x :: σ) t.
+    Proof.
+      eapply env_lookup_extensional.
+      intros [x' σ'] ([|n] & eq).
+      - cbn in *.
+        now subst.
+      - cbn in *.
+        rewrite env_lookup_tabulate; cbn.
+        now rewrite lookup_sub_id.
+    Qed.
+
+    Lemma inst_sub_single2 {Σ : LCtx} {x σ} (xIn : x :: σ ∈ Σ)
+          (t : Term (Σ - (x :: σ)) σ) (ι : SymInstance (Σ - (x :: σ))) :
+      inst (sub_single xIn t) ι = env_insert xIn (inst t ι) ι.
+    Proof.
+      revert xIn ι t.
+      induction Σ; intros (n & eq) ι t;
+      destruct n; try contradiction.
+      - cbn in eq, ι, t.
+        subst.
+        change (sub_single _ _) with (@sub_single (ctx_snoc Σ (x :: σ)) x σ inctx_zero t).
+        rewrite sub_single_zero.
+        refine (eq_trans (inst_env_snoc ι (sub_id Σ) (x :: σ) t) _).
+        cbn.
+        f_equal.
+        eapply inst_sub_id.
+      - cbn in t, ι, eq.
+        destruct (snocView ι) as (ι & v').
+    Admitted.
+
+
     Lemma inst_lookup {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : InCtx (x :: τ) Σ0) :
       inst (env_lookup ζ xIn) ι = env_lookup (inst (A := SymInstance Σ0) ζ ι) xIn.
     Proof. cbn. now rewrite env_lookup_map. Qed.

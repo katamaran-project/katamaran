@@ -228,6 +228,58 @@ Section WithBinding.
       end.
     Global Arguments env_remove {_} b E.
 
+    Fixpoint env_insert {Γ : Ctx B} {b} (bIn : b ∈ Γ)
+             (v : D b) (E : Env (Γ - b)%ctx) : Env Γ.
+    Proof.
+      destruct Γ.
+      - destruct (Context.nilView bIn).
+      - destruct (Context.snocView bIn).
+        + cbn in *.
+          exact (env_snoc E v).
+        + cbn in *.
+          destruct (snocView E) as (E & v').
+          refine (env_snoc _ v').
+          exact (env_insert Γ b i v E).
+    Defined.
+
+    Lemma env_remove_insert {b} {Γ} (bIn : b ∈ Γ)
+          (v : D b) (E : Env (Γ - b)) :
+      env_remove b (env_insert bIn v E) bIn = E.
+    Proof.
+      revert bIn E.
+      induction Γ; intros bIn E.
+      - destruct (Context.nilView bIn).
+      - destruct (Context.snocView bIn) as [|bIn].
+        + now cbn.
+        + cbn in *.
+          destruct (snocView E) as (E & v').
+          cbn. f_equal.
+          now eapply IHΓ.
+    Qed.
+
+    Lemma env_insert_lookup {b Γ} (bIn : b ∈ Γ)
+          (v : D b) (E : Env (Γ - b)) :
+      env_lookup (env_insert bIn v E) bIn = v.
+    Proof.
+      induction Γ.
+      - destruct (Context.nilView bIn).
+      - destruct (Context.snocView bIn).
+        + now cbn.
+        + cbn in *.
+          destruct (snocView E) as (E & v').
+          now eapply IHΓ.
+    Qed.
+
+    Definition env_insert' {Γ : Ctx B} {b} (bIn : b ∈ Γ)
+               (v : D b) (E : Env (Γ - b)%ctx) : Env Γ.
+    Proof.
+      apply env_tabulate.
+      intros x xIn.
+      destruct (occurs_check_var bIn xIn).
+      - now subst.
+      - now eapply (env_lookup E).
+    Defined.
+
     Definition env_remove' {Γ b} (E : Env Γ) : forall (bIn : b ∈ Γ), Env (Γ - b)%ctx.
     Proof.
       intros bIn.

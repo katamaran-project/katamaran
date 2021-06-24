@@ -1952,53 +1952,12 @@ Module Mutators
         now destruct eq.
       Qed.
 
-      Fixpoint env_insert {x : 𝑺} {σ : Ty} {Σe : LCtx} (bIn : x :: σ ∈ Σe)
-               (v : Lit σ) (ιe : SymInstance (Σe - (x :: σ))) : SymInstance Σe.
-      Proof.
-        destruct bIn as (n & eq).
-        destruct Σe, n; cbn in *; try contradiction.
-        - refine (env_snoc ιe b _).
-          now subst.
-        - destruct (snocView ιe) as (ιe & v').
-          refine (env_snoc _ b v').
-          exact (env_insert x σ Σe _ v ιe).
-      Defined.
-
-      Lemma env_remove_insert {x : 𝑺} {σ : Ty} {Σe : LCtx} (bIn : x :: σ ∈ Σe)
-            (v : Lit σ) (ιe : SymInstance (Σe - (x :: σ))) :
-        env_remove (x :: σ) (env_insert bIn v ιe) bIn = ιe.
-      Proof.
-        revert bIn ιe.
-        induction Σe; intros bIn ιe.
-        - destruct bIn as (n & eq).
-          destruct n; try contradiction.
-        - destruct bIn as (n & eq).
-          destruct n; [now cbn|].
-          destruct (snocView ιe) as (ιe & v').
-          cbn. f_equal.
-          now eapply IHΣe.
-      Qed.
-
       (* Lemma env_insert_remove {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} *)
       (*       (bIn : x :: σ ∈ Σe) : *)
       (*   env_insert bIn *)
       (*     (inst t *)
       (*        (eq_rect (Σ0 ▻▻ Σe - (x :: σ)) (fun Σ : LCtx => SymInstance Σ) (ι ►► env_remove (x :: σ) ιe bIn) *)
       (*           ((Σ0 ▻▻ Σe) - (x :: σ)) (eq_sym (ctx_remove_inctx_right bIn)))) (env_remove (x :: σ) ιe bIn)) *)
-      Lemma env_insert_lookup {x : 𝑺} {σ : Ty} {Σe : LCtx} (bIn : x :: σ ∈ Σe)
-            (v : Lit σ) (ιe : SymInstance (Σe - (x :: σ))) :
-        ((env_insert bIn v ιe) ‼ x)%exp  = v.
-      Proof.
-        revert bIn ιe.
-        induction Σe; intros (n & eq) ιe; try contradiction.
-        destruct n.
-        - cbn in ιe, eq.
-          now subst.
-        - cbn in ιe, eq.
-          destruct (snocView ιe) as (ιe & v').
-          now eapply IHΣe.
-      Qed.
-
       Lemma inst_eq_rect `{Inst AT A} {Σ Σ'} (t : AT Σ) (eq : Σ = Σ') (ι : SymInstance Σ'):
         inst (eq_rect Σ AT t Σ' eq) ι = inst t (eq_rect Σ' (fun Σ => SymInstance Σ) ι Σ (eq_sym eq)).
       Proof.
@@ -2016,38 +1975,6 @@ Module Mutators
       Proof.
         now subst.
       Qed.
-
-      Lemma sub_single_zero {Σ : LCtx} {x : 𝑺} {σ : Ty} (t : Term Σ σ) :
-        (sub_single inctx_zero t) = env_snoc (sub_id Σ) (x :: σ) t.
-      Proof.
-        eapply env_lookup_extensional.
-        intros [x' σ'] ([|n] & eq).
-        - cbn in *.
-          now subst.
-        - cbn in *.
-          rewrite env_lookup_tabulate; cbn.
-          now rewrite lookup_sub_id.
-      Qed.
-
-      Lemma inst_sub_single2 {Σ : LCtx} {x : 𝑺} {σ : Ty} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) (ι : SymInstance (Σ - (x :: σ))) :
-        inst (sub_single xIn t) ι = env_insert xIn (inst t ι) ι.
-      Proof.
-        revert xIn ι t.
-        induction Σ; intros (n & eq) ι t;
-        destruct n; try contradiction.
-        - cbn in eq, ι, t.
-          subst.
-          change (sub_single _ _) with (@sub_single (ctx_snoc Σ (x :: σ)) x σ inctx_zero t).
-          rewrite sub_single_zero.
-          refine (eq_trans (inst_env_snoc ι (sub_id Σ) (x :: σ) t) _).
-          cbn.
-          f_equal.
-          eapply inst_sub_id.
-        - cbn in t, ι, eq.
-          destruct (snocView ι) as (ι & v').
-      Admitted.
-
-      Print sub_single.
 
       Lemma env_insert_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx}
             (bIn : x :: σ ∈ Σe) (v : Lit σ)
