@@ -1844,13 +1844,15 @@ Module Mutators
         intros H1 H2.
         split.
         + intros [s1|s2];
-            apply proj1 in H1, H2.
+            apply proj1 in H1;
+            apply proj1 in H2.
           * destruct (H1 s1) as (ιe & se1 & Hpc).
             exists ιe. now split; [left|].
           * destruct (H2 s2) as (ιe & se2 & Hpc).
             exists ιe. now split; [right|].
         + intros (ιe & [se1|se2] & Hpc); [left|right];
-            apply proj2 in H1, H2;
+            apply proj2 in H1;
+            apply proj2 in H2;
             [eapply H1|eapply H2];
             now exists ιe.
       Qed.
