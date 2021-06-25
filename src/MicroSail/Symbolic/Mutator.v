@@ -1978,20 +1978,51 @@ Module Mutators
         now subst.
       Qed.
 
+      Lemma match_snocView_eq_rect {Σ1 Σ2 b} {R : Type} (eq : Σ1 = Σ2) (E : SymInstance (Σ1 ▻ b))
+        (f : SymInstance Σ2 -> Lit (snd b) -> R) :
+        match snocView (eq_rect Σ1 (fun Σ => SymInstance (Σ ▻ b)) E Σ2 eq) with
+        | isSnoc E v => f E v
+        end =
+        match snocView E with
+        | isSnoc E v => f (eq_rect Σ1 (fun Σ => SymInstance Σ) E Σ2 eq) v
+        end.
+      Proof.
+        now destruct eq.
+      Qed.
+
+      Lemma snoc_eq_rect {Σ1 Σ2 b v} (eq : Σ1 = Σ2) (E : SymInstance Σ1) :
+        eq_rect Σ1 (fun Σ => SymInstance Σ) E Σ2 eq ► (b ↦ v) =
+        eq_rect Σ1 (fun Σ => SymInstance (Σ ▻ b)) (E ► (b ↦ v)) Σ2 eq.
+      Proof.
+        now destruct eq.
+      Qed.
+
       Lemma env_insert_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx}
             (bIn : x :: σ ∈ Σe) (v : Lit σ)
             {ι : SymInstance Σ0} {ιe : SymInstance (Σe - (x :: σ))} :
             (ι ►► env_insert bIn v ιe) = env_insert (inctx_cat_right bIn) v (eq_rect (Σ0 ▻▻ Σe - (x :: σ)) (fun Σ => SymInstance Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - (x :: σ)) (eq_sym (ctx_remove_inctx_right bIn))).
       Proof.
         revert bIn ιe.
-        induction Σe; intros ([|n] & eq) ιe; try contradiction.
-        - cbn in ιe, eq.
+        induction Σe; intros bIn ιe;
+          try destruct (Context.nilView bIn).
+        cbn [env_insert ctx_remove_inctx_right].
+        (* can't destruct Contxt.snocView bIn?*)
+        destruct bIn as ([|n] & eq).
+        - cbn in eq.
           now subst.
-        - cbn in ιe, eq.
+        - cbn in ιe.
           destruct (snocView ιe) as (ιe & v').
+          change (ctx_remove_inctx_right {| inctx_at := S n; inctx_valid := eq |})
+                 with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx_snoc (@ctx_remove_inctx_right _ Σ0 Σe _ {| inctx_at := n; inctx_valid := eq |})))).
+          rewrite eq_trans_refl_l.
           cbn.
-          f_equal.
-      Admitted.
+          rewrite (eq_sym_map_distr (fun f : 𝑺 * Ty -> LCtx => f b)).
+          rewrite eq_sym_map_distr.
+          rewrite f_equal_compose.
+          rewrite (map_subst_map (P := fun x => SymInstance (ctx_snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
+          rewrite match_snocView_eq_rect.
+          now rewrite IHΣe.
+      Qed.
 
       Lemma env_remove_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x :: σ ∈ Σe)
         (ι : SymInstance Σ0) (ιe : SymInstance Σe) :
@@ -1999,7 +2030,22 @@ Module Mutators
         eq_rect (Σ0 ▻▻ Σe - (x :: σ)) (fun Σ : LCtx => SymInstance Σ) (ι ►► env_remove (x :: σ) ιe bIn)
                  ((Σ0 ▻▻ Σe) - (x :: σ)) (eq_sym (ctx_remove_inctx_right bIn)).
       Proof.
-      Admitted.
+        revert bIn ιe.
+        induction Σe; intros bIn ιe; try destruct (Context.nilView bIn).
+        destruct (Context.snocView bIn).
+        - now destruct (snocView ιe).
+        - destruct (snocView ιe) as (ιe & v).
+          change (ctx_remove_inctx_right (inctx_succ i))
+                 with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx_snoc (@ctx_remove_inctx_right _ Σ0 Σe _ i)))).
+          rewrite eq_trans_refl_l.
+          cbn.
+          rewrite (eq_sym_map_distr (fun f : 𝑺 * Ty -> LCtx => f b)).
+          rewrite eq_sym_map_distr.
+          rewrite f_equal_compose.
+          rewrite (map_subst_map (P := fun x => SymInstance (ctx_snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
+          rewrite IHΣe.
+          now rewrite snoc_eq_rect.
+      Qed.
 
       Lemma solve_evars_sound_help {Σ Σe Σ'} (p : SPath Σ') (HeqΣ' : Σ' = Σ ▻▻ Σe)
         (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) (ι : SymInstance Σ) :
