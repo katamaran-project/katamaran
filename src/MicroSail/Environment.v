@@ -270,6 +270,23 @@ Section WithBinding.
           now eapply IHΓ.
     Qed.
 
+    Lemma env_insert_lookup_shift {b Γ} {bIn : b ∈ Γ}
+          {E : Env (Γ - b)} {v : D b}
+          (b' : B) (i : b' ∈ Γ - b) :
+      env_lookup (env_insert bIn v E) (shift_var bIn i) = env_lookup E i.
+    Proof.
+      induction Γ.
+      - destruct (Context.nilView bIn).
+      - destruct (Context.snocView bIn).
+        + now cbn.
+        + cbn in *.
+          destruct (snocView E) as (E & v').
+          destruct (Context.snocView i).
+          * now cbn.
+          * cbn.
+            exact (IHΓ _ _ _).
+    Qed.
+
     Definition env_insert' {Γ : Ctx B} {b} (bIn : b ∈ Γ)
                (v : D b) (E : Env (Γ - b)%ctx) : Env Γ.
     Proof.
@@ -388,6 +405,21 @@ Section WithBinding.
           intros y yIn. rewrite env_lookup_tabulate.
           reflexivity.
         + cbn. f_equal. apply IHE.
+    Qed.
+
+    Lemma env_insert_insert' {Γ x} (xIn : x ∈ Γ) (E : Env (Γ - x)%ctx) (v : D x) :
+      env_insert xIn v E = env_insert' xIn v E.
+    Proof.
+      unfold env_insert'.
+      eapply env_lookup_extensional.
+      intros b' bIn.
+      rewrite ?env_lookup_tabulate.
+      assert (ovs := occurs_check_var_spec xIn bIn).
+      destruct (occurs_check_var xIn bIn).
+      - subst.
+        now rewrite env_insert_lookup.
+      - destruct ovs as (-> & neq).
+        now rewrite env_insert_lookup_shift.
     Qed.
 
     Lemma env_lookup_cat_left {Γ1 Γ2 x} (xIn : x ∈ Γ1) (E1 : Env Γ1) (E2 : Env Γ2) :

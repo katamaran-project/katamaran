@@ -1767,21 +1767,16 @@ Module Terms (Export termkit : TermKit).
           (t : Term (Σ - (x :: σ)) σ) (ι : SymInstance (Σ - (x :: σ))) :
       inst (sub_single xIn t) ι = env_insert xIn (inst t ι) ι.
     Proof.
-      revert xIn ι t.
-      induction Σ; intros (n & eq) ι t;
-      destruct n; try contradiction.
-      - cbn in eq, ι, t.
-        subst.
-        change (sub_single _ _) with (@sub_single (ctx_snoc Σ (x :: σ)) x σ inctx_zero t).
-        rewrite sub_single_zero.
-        refine (eq_trans (inst_env_snoc ι (sub_id Σ) (x :: σ) t) _).
-        cbn.
-        f_equal.
-        eapply inst_sub_id.
-      - cbn in t, ι, eq.
-        destruct (snocView ι) as (ι & v').
-    Admitted.
-
+      rewrite env_insert_insert'.
+      unfold env_insert', sub_single, inst; cbn.
+      apply env_lookup_extensional.
+      intros [y τ] yIn.
+      rewrite env_lookup_map, ?env_lookup_tabulate.
+      assert (ovs := occurs_check_var_spec xIn yIn).
+      destruct (occurs_check_var xIn yIn).
+      - now dependent elimination e.
+      - now reflexivity.
+    Qed.
 
     Lemma inst_lookup {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : InCtx (x :: τ) Σ0) :
       inst (env_lookup ζ xIn) ι = env_lookup (inst (A := SymInstance Σ0) ζ ι) xIn.
