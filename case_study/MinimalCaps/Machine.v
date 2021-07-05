@@ -124,11 +124,9 @@ Module MinCapsTermKit <: TermKit.
   | open_ptsreg                : FunGhost ["reg" ∶ ty_enum regname]
   | close_ptsreg (R : RegName) : FunGhost ctx_nil
   | duplicate_safe             : FunGhost ["w" ∶ ty_word]
-  | csafe_move_cursor          : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
-  | csafe_sub_perm             : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
-  | csafe_within_range         : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
-  | lift_csafe                 : FunGhost ["c" ∶ ty_cap]
-  | specialize_safe_to_cap     : FunGhost ["c" ∶ ty_cap]
+  | safe_move_cursor           : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
+  | safe_sub_perm              : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
+  | safe_within_range          : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
   | int_safe                   : FunGhost ["i" ∶ ty_int]
   | sub_perm                   : FunGhost ["p" ∶ ty_perm, "p'" ∶ ty_perm]
   | gen_dummy                  : FunGhost ["c" ∶ ty_cap]
@@ -270,7 +268,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
   Definition fun_update_pc : Stm ctx_nil ty_unit :=
     let: "opc" := stm_read_register pc in
     let: "npc" := call next_pc in
-    use lemma csafe_move_cursor [exp_var "npc", exp_var "opc"] ;;
+    use lemma safe_move_cursor [exp_var "npc", exp_var "opc"] ;;
     stm_write_register pc (exp_var "npc") ;;
     stm_lit ty_unit tt.
 
@@ -282,7 +280,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                  exp_var "beg",
                                  exp_var "end",
                                  exp_var "cur" + exp_var "offset" ]) in
-     use lemma csafe_move_cursor [exp_var "npc", exp_var "opc"] ;;
+     use lemma safe_move_cursor [exp_var "npc", exp_var "opc"] ;;
      stm_write_register pc (exp_var "npc") ;;
      stm_lit ty_unit tt).
 
@@ -332,9 +330,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                     ] in
        let: w ∶ ty_word := call read_reg hv in
        use lemma duplicate_safe [exp_var w] ;;
-       use lemma specialize_safe_to_cap [exp_var "base_cap"] ;;
-       use lemma csafe_move_cursor [exp_var "c", exp_var "base_cap"] ;;
-       use lemma lift_csafe [exp_var "base_cap"] ;;
+       use lemma safe_move_cursor [exp_var "c", exp_var "base_cap"] ;;
        call write_mem c w ;;
        call update_pc ;;
        stm_lit ty_bool true).
@@ -349,9 +345,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                       exp_var "end",
                                       exp_var "cursor" + exp_var "immediate"
                                     ] in
-       use lemma specialize_safe_to_cap [exp_var "base_cap"] ;;
-       use lemma csafe_move_cursor [exp_var "c", exp_var "base_cap"] ;;
-       use lemma lift_csafe [exp_var "base_cap"] ;;
+       use lemma safe_move_cursor [exp_var "c", exp_var "base_cap"] ;;
        let: n ∶ ty_memval := call read_mem c in
        stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
        call write_reg lv (exp_var n) ;;
@@ -370,9 +364,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                       exp_var "end",
                                       exp_var "cursor" + exp_var "offset"
                                     ] in
-       use lemma specialize_safe_to_cap [exp_var "base_cap"] ;;
-       use lemma csafe_move_cursor [exp_var "c", exp_var "base_cap"] ;;
-       use lemma lift_csafe [exp_var "c"] ;;
+       use lemma safe_move_cursor [exp_var "c", exp_var "base_cap"] ;;
        call write_reg (exp_var "lv") (exp_inr (exp_var "c")) ;;
        call update_pc ;;
        stm_lit ty_bool true).
@@ -392,9 +384,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                        exp_var "end",
                                        exp_var "cursor"
                                      ] in
-       use lemma specialize_safe_to_cap [exp_var "c"] ;;
-       use lemma csafe_sub_perm [exp_var "c'", exp_var "c"] ;;
-       use lemma lift_csafe [exp_var "c'"] ;;
+       use lemma safe_sub_perm [exp_var "c'", exp_var "c"] ;;
        call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
        call update_pc ;;
        stm_lit ty_bool true).
@@ -413,9 +403,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                        exp_var "end",
                                        exp_var "cursor"
                                      ] in
-       use lemma specialize_safe_to_cap [exp_var "c"] ;;
-       use lemma csafe_sub_perm [exp_var "c'", exp_var "c"] ;;
-       use lemma lift_csafe [exp_var "c'"] ;;
+       use lemma safe_sub_perm [exp_var "c'", exp_var "c"] ;;
        call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
        call update_pc ;;
        stm_lit ty_bool true).
@@ -580,10 +568,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                        exp_var "new_end",
                                        exp_var "cursor"
                                      ] in
-       use lemma specialize_safe_to_cap [exp_var "c"] ;;
        use lemma gen_dummy [exp_var "c'"] ;;
-       use lemma csafe_within_range [exp_var "c'", exp_var "c"] ;;
-       use lemma lift_csafe [exp_var "c'"] ;;
+       use lemma safe_within_range [exp_var "c'", exp_var "c"] ;;
        call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
        call update_pc ;;
        stm_lit ty_bool true).
@@ -605,10 +591,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                        exp_var "new_end",
                                        exp_var "cursor"
                                      ] in
-       use lemma specialize_safe_to_cap [exp_var "c"] ;;
        use lemma gen_dummy [exp_var "c'"] ;;
-       use lemma csafe_within_range [exp_var "c'", exp_var "c"] ;;
-       use lemma lift_csafe [exp_var "c'"] ;;
+       use lemma safe_within_range [exp_var "c'", exp_var "c"] ;;
        call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
        call update_pc ;;
        stm_lit ty_bool true).
@@ -701,14 +685,12 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       let: "c" ∶ ty_cap := call read_reg_cap (exp_var "lv") in
       stm_write_register pc (exp_var "c") ;;
       use lemma duplicate_safe [exp_inr (exp_var "c")] ;;
-      use lemma specialize_safe_to_cap [exp_var "c"] ;;
       stm_lit ty_bool true.
 
     Definition fun_exec_jalr : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
-      use lemma csafe_move_cursor [exp_var "npc", exp_var "opc"] ;;
-      use lemma lift_csafe [exp_var "npc"] ;;
+      use lemma safe_move_cursor [exp_var "npc", exp_var "opc"] ;;
       stm_match_enum regname (exp_var "lv1") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg (exp_var "lv1") (exp_inr (exp_var "npc")) ;;
       call exec_jr (exp_var "lv2").
@@ -720,8 +702,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     Definition fun_exec_jal : Stm [lv ∶ ty_lv, offset ∶ ty_int] ty_bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
-      use lemma csafe_move_cursor [exp_var "npc", exp_var "opc"] ;;
-      use lemma lift_csafe [exp_var "npc"] ;;
+      use lemma safe_move_cursor [exp_var "npc", exp_var "opc"] ;;
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       call write_reg lv (exp_inr (exp_var "npc")) ;;
       call exec_j offset.

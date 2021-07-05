@@ -57,7 +57,6 @@ Inductive Predicate : Set :=
   ptsreg
 | ptsto
 | safe
-| csafe
 | subperm
 | dummy
 .
@@ -82,7 +81,6 @@ Module Export MinCapsAssertionKit <:
     | ptsreg => [ty_enum regname, ty_word]
     | ptsto => [ty_addr, ty_memval]
     | safe => [ty_word]
-    | csafe => [ty_cap]
     | subperm => [ty_perm, ty_perm]
     | dummy => [ty_cap]
     end.
@@ -103,7 +101,7 @@ Module MinCapsSymbolicContractKit <:
   Local Notation "p '<=ₚ' p'" := (asn_chunk (chunk_user subperm (env_nil ► (ty_perm ↦ p) ► (ty_perm ↦ p')))) (at level 100).
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_safe w := (asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ w)))).
-  Local Notation asn_csafe c := (asn_chunk (chunk_user csafe (env_nil ► (ty_cap ↦ c)))).
+  Local Notation asn_csafe c := (asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_inr c))))).
   Local Notation asn_dummy c := (asn_chunk (chunk_user dummy (env_nil ► (ty_cap ↦ c)))).
   Local Notation asn_match_cap c p b e a asn :=
     (asn_match_record
@@ -808,7 +806,7 @@ Module MinCapsSymbolicContractKit <:
          asn_safe (term_var "w")
     |}.
 
-  Definition sep_contract_csafe_move_cursor : SepContract ["c'" ∶ ty_cap, "c" ∶ ty_cap] ty_unit :=
+  Definition sep_contract_safe_move_cursor : SepContract ["c'" ∶ ty_cap, "c" ∶ ty_cap] ty_unit :=
     let Σ : LCtx := ["p" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr, "a" ∶ ty_addr, "a'" ∶ ty_addr]%ctx in
     let c  : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a"] in
     let c' : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a'"] in
@@ -827,7 +825,7 @@ Module MinCapsSymbolicContractKit <:
     @post csafe(c) ✱ csafe(c')
     unit csafe_sub_perm(c : capability, c' : capability);
    *)
-  Definition sep_contract_csafe_sub_perm : SepContract ["c'" ∶ ty_cap, "c" ∶ ty_cap] ty_unit :=
+  Definition sep_contract_safe_sub_perm : SepContract ["c'" ∶ ty_cap, "c" ∶ ty_cap] ty_unit :=
     let Σ : LCtx := ["p" ∶ ty_perm, "p'" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr, "a" ∶ ty_addr]%ctx in
     let c  : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a"] in
     let c' : Term Σ _ := term_record capability [term_var "p'", term_var "b", term_var "e", term_var "a"] in
@@ -847,7 +845,7 @@ Module MinCapsSymbolicContractKit <:
     @post csafe(c) ✱ csafe(c')
     unit csafe_within_range(c' : capability, c : capability);
    *)
-  Definition sep_contract_csafe_within_range : SepContract ["c'" ∶ ty_cap, "c" ∶ ty_cap] ty_unit :=
+  Definition sep_contract_safe_within_range : SepContract ["c'" ∶ ty_cap, "c" ∶ ty_cap] ty_unit :=
     let Σ : LCtx := ["p" ∶ ty_perm, "b" ∶ ty_addr, "b'" ∶ ty_addr, "e" ∶ ty_addr, "e'" ∶ ty_addr, "a" ∶ ty_addr]%ctx in
     let c  : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a"] in
     let c' : Term Σ _ := term_record capability [term_var "p", term_var "b'", term_var "e'", term_var "a"] in
@@ -889,36 +887,6 @@ Module MinCapsSymbolicContractKit <:
                                                             | _ => asn_true
                                                             end)
                                end);
-    |}.
-
-  (*
-    @pre csafe(c)
-    @post safe(c)
-    unit lift_csafe(c : capability);
-   *)
-  Definition sep_contract_lift_csafe : SepContract ["c" ∶ ty_cap] ty_unit :=
-    {| sep_contract_logic_variables := ["c" ∶ ty_cap];
-       sep_contract_localstore      := [term_var "c"]%arg;
-       sep_contract_precondition    := asn_csafe (term_var "c");
-       sep_contract_result          := "result_lift_csafe";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_lift_csafe") (term_lit ty_unit tt) ✱
-                asn_safe (term_inr (term_var "c"));
-    |}.
-
-  (*
-    @pre safe(c)
-    @post csafe(c)
-    unit specialize_safe_to_cap(c : capability);
-   *)
-  Definition sep_contract_specialize_safe_to_cap : SepContract ["c" ∶ ty_cap] ty_unit :=
-    {| sep_contract_logic_variables := ["c" ∶ ty_cap];
-       sep_contract_localstore      := [term_var "c"]%arg;
-       sep_contract_precondition    := asn_safe (term_inr (term_var "c"));
-       sep_contract_result          := "result_specialize_safe_to_cap";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_specialize_safe_to_cap") (term_lit ty_unit tt) ✱
-                asn_csafe (term_var "c");
     |}.
 
   (*
@@ -1022,11 +990,9 @@ Module MinCapsSymbolicContractKit <:
         | open_ptsreg            => sep_contract_open_ptsreg
         | close_ptsreg r         => sep_contract_close_ptsreg r
         | duplicate_safe         => sep_contract_duplicate_safe
-        | csafe_move_cursor      => sep_contract_csafe_move_cursor
-        | csafe_sub_perm         => sep_contract_csafe_sub_perm
-        | csafe_within_range     => sep_contract_csafe_within_range
-        | lift_csafe             => sep_contract_lift_csafe
-        | specialize_safe_to_cap => sep_contract_specialize_safe_to_cap
+        | safe_move_cursor       => sep_contract_safe_move_cursor
+        | safe_sub_perm          => sep_contract_safe_sub_perm
+        | safe_within_range      => sep_contract_safe_within_range
         | int_safe               => sep_contract_int_safe
         | sub_perm               => sep_contract_sub_perm
         | gen_dummy              => sep_contract_gen_dummy
@@ -1084,7 +1050,7 @@ Local Notation "r '↦r' t" := (chunk_user ptsreg (env_nil ► (ty_enum regname 
 Local Notation "a '↦m' t" := (chunk_user ptsto (env_nil ► (ty_addr ↦ a) ► (ty_int ↦ t))) (at level 100, only printing).
 Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 Local Notation safew w := (chunk_user safe (env_nil ► (ty_word ↦ w))).
-Local Notation asn_csafe c := (asn_chunk (chunk_user csafe (env_nil ► (ty_cap ↦ c)))).
+Local Notation asn_csafe c := (asn_chunk (chunk_user safe (env_nil ► (ty_word ↦ (term_inr c))))).
 Local Notation asn_dummy c := (asn_chunk (chunk_user dummy (env_nil ► (ty_cap ↦ c)))).
 Local Notation asn_match_cap c p b e a asn :=
 (asn_match_record
@@ -1126,7 +1092,7 @@ Definition sep_contract_to_debug : SepContract ["c'" ∶ ty_cap, "c" ∶ ty_cap]
 
 Definition fun_to_debug : Stm ["c'" ∶ ty_cap, "c" ∶ ty_cap] ty_unit :=
   use lemma gen_dummy [exp_var "c'"] ;;
-  use lemma csafe_within_range [exp_var "c'", exp_var "c"] ;;
+  use lemma safe_within_range [exp_var "c'", exp_var "c"] ;;
   stm_lit ty_unit tt.
 
 Lemma valid_contract_to_debug : ValidContractEvarEnv sep_contract_to_debug fun_to_debug.
