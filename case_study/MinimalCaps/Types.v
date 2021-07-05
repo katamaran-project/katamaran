@@ -41,7 +41,7 @@ Inductive Permission : Set :=
   O | R | RW.
 
 Inductive RegName : Set :=
-  R0 | R1 | R2 | R3.
+  R0 | R1 (* | R2 | R3 *).
 
 Definition LV : Set := RegName.
 Definition HV : Set := RegName.
@@ -173,7 +173,7 @@ Section Finite.
   Qed.
 
   Global Program Instance RegName_finite : Finite RegName :=
-    {| enum := [R0;R1;R2;R3] |}.
+    {| enum := [R0;R1(*;R2;R3*)] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.

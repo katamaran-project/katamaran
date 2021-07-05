@@ -144,8 +144,8 @@ Module MinCapsModel.
       match reg with
       | R0 => reg_pointsTo reg0 v
       | R1 => reg_pointsTo reg1 v
-      | R2 => reg_pointsTo reg2 v
-      | R3 => reg_pointsTo reg3 v
+      (* | R2 => reg_pointsTo reg2 v
+      | R3 => reg_pointsTo reg3 v *)
       end.
 
     Lemma MinCaps_ptsreg_regtag_to_reg `{sailRegG Σ} (reg : RegName) (v : Z + Capability) :
@@ -445,12 +445,12 @@ Module MinCapsModel.
                   | R1 =>
                       MinCapsSymbolicContractKit.ASS.asn_chunk
                         (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg1 (term_var "w"))
-                  | R2 =>
+                  (* | R2 =>
                       MinCapsSymbolicContractKit.ASS.asn_chunk
                         (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg2 (term_var "w"))
                   | R3 =>
                       MinCapsSymbolicContractKit.ASS.asn_chunk
-                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg3 (term_var "w"))
+                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg3 (term_var "w")) *)
                   end (ι ► (("result", ty_unit) ↦ v))) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (reg w ι  Heq) "Hpre".

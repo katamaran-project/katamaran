@@ -133,7 +133,8 @@ Module MinCapsSymbolicContractKit <:
 
   (* machInv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * regInvCap(pc) *)
   Definition machInv {Σ} : Assertion Σ :=
-    (regInv R0 "w0") ✱ (regInv R1 "w1") ✱ (regInv R2 "w2") ✱ (regInv R3 "w3") ✱ (regInvCap pc).
+    (regInv R0 "w0") ✱ (regInv R1 "w1") ✱ (regInvCap pc).
+    (* ✱ (regInv R2 "w2") ✱ (regInv R3 "w3") *)
 
   Definition sep_contract_read_reg : SepContract ["rreg" ∶ ty_enum regname ] ty_word :=
     {| sep_contract_logic_variables := ["rreg" ∶ ty_enum regname, "w" ∶ ty_word];
@@ -789,8 +790,8 @@ Module MinCapsSymbolicContractKit <:
            (fun k => match k with
                      | R0 => reg0 ↦ term_var "w"
                      | R1 => reg1 ↦ term_var "w"
-                     | R2 => reg2 ↦ term_var "w"
-                     | R3 => reg3 ↦ term_var "w"
+                     (* | R2 => reg2 ↦ term_var "w"
+                     | R3 => reg3 ↦ term_var "w" *)
                      end)
     |}.
 
@@ -908,8 +909,8 @@ Module MinCapsSymbolicContractKit <:
     match R with
     | R0 => reg0
     | R1 => reg1
-    | R2 => reg2
-    | R3 => reg3
+    (* | R2 => reg2
+    | R3 => reg3 *)
     end.
 
   Definition sep_contract_close_ptsreg (r : RegName) : SepContract ctx_nil ty_unit :=

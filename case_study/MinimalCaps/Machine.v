@@ -227,8 +227,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     match: exp_var "rreg" in regname with
     | R0 => let: "x" := stm_read_register reg0 in use lemma (close_ptsreg R0) ;; stm_exp x
     | R1 => let: "x" := stm_read_register reg1 in use lemma (close_ptsreg R1) ;; stm_exp x
-    | R2 => let: "x" := stm_read_register reg2 in use lemma (close_ptsreg R2) ;; stm_exp x
-    | R3 => let: "x" := stm_read_register reg3 in use lemma (close_ptsreg R3) ;; stm_exp x
+    (* | R2 => let: "x" := stm_read_register reg2 in use lemma (close_ptsreg R2) ;; stm_exp x
+    | R3 => let: "x" := stm_read_register reg3 in use lemma (close_ptsreg R3) ;; stm_exp x *)
     end.
 
   Definition fun_read_reg_cap : Stm ["creg" ∶ ty_enum regname ] ty_cap :=
@@ -252,8 +252,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     match: exp_var "wreg" in regname with
     | R0 => let: "x" := stm_write_register reg0 (exp_var "w") in use lemma (close_ptsreg R0) ;; stm_exp x
     | R1 => let: "x" := stm_write_register reg1 (exp_var "w") in use lemma (close_ptsreg R1) ;; stm_exp x
-    | R2 => let: "x" := stm_write_register reg2 (exp_var "w") in use lemma (close_ptsreg R2) ;; stm_exp x
-    | R3 => let: "x" := stm_write_register reg3 (exp_var "w") in use lemma (close_ptsreg R3) ;; stm_exp x
+    (* | R2 => let: "x" := stm_write_register reg2 (exp_var "w") in use lemma (close_ptsreg R2) ;; stm_exp x *)
+    (* | R3 => let: "x" := stm_write_register reg3 (exp_var "w") in use lemma (close_ptsreg R3) ;; stm_exp x *)
     end ;; stm_lit ty_unit tt.
 
   Definition fun_next_pc : Stm ctx_nil ty_cap :=
