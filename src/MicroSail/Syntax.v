@@ -2045,6 +2045,65 @@ Module Terms (Export termkit : TermKit).
 
   End SymbolicPair.
 
+  Section SymbolicOption.
+
+    Definition Option (A : LCtx -> Type) (Σ : LCtx) : Type :=
+      option (A Σ).
+    Global Instance SubstOption {A} `{Subst A} : Subst (Option A) :=
+      fun _ ma _ ζ => option_map (fun a => subst a ζ) ma.
+
+    Global Instance SubstLawsOption {A} `{SubstLaws A} : SubstLaws (Option A).
+    Proof.
+      constructor.
+      { intros ? [t|]; cbn.
+        - f_equal; apply subst_sub_id.
+        - reflexivity.
+      }
+      { intros ? ? ? ? ? [t|]; cbn.
+        - f_equal; apply subst_sub_comp.
+        - reflexivity.
+      }
+    Qed.
+
+    Global Instance InstOption {AT A} `{Inst AT A} :
+      Inst (Option AT) (option A) :=
+      {| inst Σ ma ι := option_map (fun a => inst a ι) ma;
+         lift Σ ma   := option_map lift ma;
+      |}.
+
+    Global Instance InstLawsOption {AT A} `{InstLaws AT A} :
+      InstLaws (Option AT) (option A).
+    Proof.
+      constructor.
+      { intros ? ? []; cbn; f_equal; apply inst_lift. }
+      { intros ? ? ? ? []; cbn; f_equal; apply inst_subst. }
+    Qed.
+
+    Global Instance OccursCheckOption {AT} `{OccursCheck AT} :
+      OccursCheck (Option AT) :=
+      fun _ _ xIn ma =>
+        match ma with
+        | Some a => option_map Some (occurs_check xIn a)
+        | None   => Some None
+        end.
+
+    Global Instance OccursCheckLawsOption {AT} `{OccursCheckLaws AT} :
+      OccursCheckLaws (Option AT).
+    Proof.
+      constructor.
+      { intros. destruct t as [a|]; cbn.
+        - now rewrite ?occurs_check_shift.
+        - reflexivity.
+      }
+      { intros ? ? ? [a|] mt' Heq; cbn.
+        - apply option_map_eq_some' in Heq. destruct Heq as [t' [Heq <-]].
+          apply occurs_check_sound in Heq. subst. reflexivity.
+        - apply noConfusion_inv in Heq. cbn in Heq. subst. reflexivity.
+      }
+    Qed.
+
+  End SymbolicOption.
+
   Section SymbolicUnit.
 
     Definition Unit : LCtx -> Type := fun _ => unit.
