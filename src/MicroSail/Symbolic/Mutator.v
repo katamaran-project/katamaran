@@ -1520,13 +1520,19 @@ Module Mutators
           now exists ι, v.
     Qed.
 
-    Definition ok :
-      ⊢ SPath -> ⌜bool⌝ :=
-      fun w o =>
-        match prune o with
-        | block => true
-        | _     => false
-        end.
+    Definition ok {Σ} (p : SPath Σ) : bool :=
+      match prune p with
+      | block => true
+      | _     => false
+      end.
+
+    Lemma ok_sound {Σ} (p : SPath Σ) (ι : SymInstance Σ) :
+      is_true (ok p) -> safe p ι.
+    Proof.
+      rewrite <- prune_sound. unfold ok.
+      generalize (prune p) as q. clear. intros q.
+      destruct q; try discriminate; cbn; auto.
+    Qed.
 
     Module Experimental.
 
@@ -3907,7 +3913,16 @@ Module Mutators
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)).
 
-    (* Print Assumptions ValidContract. *)
+    Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      is_true (ok (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil))).
+
+    Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+      ValidContractReflect c body ->
+      ValidContract c body.
+    Proof.
+      unfold ValidContractReflect, ValidContract. intros Hok.
+      apply (ok_sound _ env_nil) in Hok. now constructor.
+    Qed.
 
     Section EvarEnv.
 
