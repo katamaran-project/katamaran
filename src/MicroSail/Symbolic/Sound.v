@@ -322,7 +322,7 @@ Module Soundness
     Proof.
       intros POST__s POST__c HPOST. unfold SDijk.assume_formula.
       intros Hwp Hfml. apply Heq in Hfml.
-      destruct (NewSolver.solver_spec (cons fml nil)) as [[w1 [ζ fmls]] Hsolver|Hsolver].
+      destruct (Solver.solver_spec (cons fml nil)) as [[w1 [ζ fmls]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [Hν Hsolver].
         rewrite inst_pathcondition_cons in Hν. inster Hν by split; auto; constructor.
         specialize (Hsolver (inst (sub_multishift ζ) ι0)).
@@ -347,7 +347,7 @@ Module Soundness
     Proof.
       unfold SDijk.assert_formula, CDijk.assert_formula.
       intros POST__s POST__c HPOST Hwp.
-      destruct (NewSolver.solver_spec (cons fml nil)) as [[w1 [ζ fmls]] Hsolver|Hsolver].
+      destruct (Solver.solver_spec (cons fml nil)) as [[w1 [ζ fmls]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
         rewrite safe_assert_multisub in Hwp. destruct Hwp as [Hν Hwp].
         rewrite safe_assert_formulas_without_solver in Hwp.
