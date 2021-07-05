@@ -168,13 +168,7 @@ Module MinCapsModel.
       apply elem_of_seqZ in Hb.
       apply elem_of_seqZ in He.
       apply elem_of_seqZ.
-      split.
-      - destruct Hb as [Hb _].
-        eapply Z.le_trans; first apply Hb.
-        assumption.
-      - destruct He as [_ He].
-        eapply Z.le_lt_trans; first apply Hae.
-        assumption.
+      lia.
     Qed.
 
     Context {Σ : gFunctors}.
@@ -208,12 +202,17 @@ Module MinCapsModel.
         (match w with
         | inr (MkCap O b e a) => True%I
         | inr (MkCap R b e a) =>
-          (* TODO: easiest: (b ≤ e -> safe ...) ∨ (e < b -> True), check what CHERI does *)
-          ⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
-                               [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (MinCaps_ref_inv (mG := mG) a safe)
+          (⌜ (b <= e)%Z ⌝ →
+            ⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
+                                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (MinCaps_ref_inv (mG := mG) a safe))
+          ∨
+          ⌜ (e < b)%Z ⌝
         | inr (MkCap RW b e a) =>
-          ⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
-                               [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (MinCaps_ref_inv (mG := mG) a safe)
+          (⌜ (b <= e)%Z ⌝ →
+            ⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
+                                [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemG := mG) .@ a) (MinCaps_ref_inv (mG := mG) a safe))
+          ∨
+          ⌜ (e < b)%Z ⌝
         | inl _ => False
         end)%I.
 
@@ -250,32 +249,18 @@ Module MinCapsModel.
     Definition MinCaps_safe `{sailRegG Σ} `{invG Σ} {mG : memG Σ} : D :=
       λne w, (fixpoint (MinCaps_safe1 (mG := mG))) w.
 
-    Lemma le_liveAddrs1 (a a' : Addr) :
-      (0 <= a')%Z /\ (a' <= a)%Z /\ a ∈ liveAddrs ->
-      a' ∈ liveAddrs.
+    Lemma le_liveAddrs (a b e : Addr) :
+      b ∈ liveAddrs ∧ e ∈ liveAddrs ->
+      (b <= a)%Z ∧ (a <= e)%Z ->
+      a ∈ liveAddrs.
     Proof.
-      intros [H0a' [Hle Hin]].
-      apply elem_of_seqZ in Hin.
-      destruct Hin as [H0 Hm].
+      intros [Hb He] [Hba Hae].
+      apply elem_of_seqZ in Hb.
+      apply elem_of_seqZ in He.
+      destruct Hb as [H0b Hbm].
+      destruct He as [H0e Hem].
       rewrite elem_of_seqZ.
-      split.
-      - assumption.
-      - eapply Z.le_lt_trans; eassumption.
-    Qed.
-
-    Lemma le_liveAddrs2 (a a' : Addr) :
-      (a' < maxAddr)%Z /\ (a <= a')%Z /\ a ∈ liveAddrs ->
-      a' ∈ liveAddrs.
-    Proof.
-      intros [Ha'm [Hle Hin]].
-      apply elem_of_seqZ in Hin.
-      destruct Hin as [H0 Hm].
-      rewrite elem_of_seqZ.
-      split.
-      - eapply Z.le_trans; eassumption.
-      - rewrite Z.add_comm.
-        rewrite Z.add_0_r.
-        assumption.
+      split; lia.
     Qed.
 
     Lemma region_addrs_submseteq `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (b' e' b e : Addr) :
@@ -293,10 +278,7 @@ Module MinCapsModel.
           destruct (decide ((b ≤ a)%Z ∧ (a ≤ e)%Z));
           trivial.
         + apply submseteq_skip; trivial.
-        + destruct a0 as [Hb' He'].
-          apply (Z.le_trans b _ _) in Hb'; try assumption.
-          apply (Z.le_trans _ _ e) in He'; try assumption.
-          exfalso; apply n; split; assumption.
+        + destruct a0 as [Hb' He']; lia.
         + apply submseteq_cons; trivial.
       - iAssumption.
     Qed.
@@ -309,26 +291,47 @@ Module MinCapsModel.
                                MinCaps_safe (mG := mG)
                                (inr {| cap_permission := p; cap_begin := b'; cap_end := e'; cap_cursor := a |}).
     Proof.
-      simpl.
-      iIntros (p a) "[% %] Hsafe".
+      iIntros (p a) "/= [% %] Hsafe".
       do 2 rewrite fixpoint_MinCaps_safe1_eq.
-      (* the following two asserts are temporary, this information needs to become generally available (A positive, finite addr type would solve this) *)
-      assert (Hb'm: (b' < maxAddr)%Z). admit. (* TODO: "by lia" all the things *)
-      assert (H0e': (0 <= e')%Z). admit.
-      destruct p; try by iFrame.
-      - iDestruct "Hsafe" as "[[% %] H]".
+      destruct p; try (by iFrame); simpl; iDestruct "Hsafe" as "/= [Hsafe | %]";
+        try (iRight; iPureIntro; lia).
+      - iLeft.
+        iIntros "%".
+        iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
+        { iPureIntro; lia. }
+        iAssert (
+          ⌜b ∈ liveAddrs ∧ e ∈ liveAddrs⌝
+                             ∗ ([∗ list] a0 ∈ region_addrs b e, inv (mc_invNs.@a0)
+                                                                    (∃ w,
+                                                                        mapsto a0 (DfracOwn 1) w
+                                                                               ∗ fixpoint MinCaps_safe1 w))
+        )%I with "[Htmp Hsafe]" as "Hsafe".
+        { iApply ("Hsafe" with "Htmp"). }
+        iDestruct "Hsafe" as "[% H]".
         iSplitR.
         + iPureIntro; split.
-          eapply le_liveAddrs2; (repeat split); eassumption.
-          eapply le_liveAddrs1; (repeat split); eassumption.
+          apply (le_liveAddrs H4 (conj H1 (Z.le_trans b' e' e H3 H2))).
+          apply (le_liveAddrs H4 (conj (Z.le_trans b b' e' H1 H3) H2)).
         + iApply (region_addrs_submseteq $! (conj H1 H2) with "H").
-      - iDestruct "Hsafe" as "[[% %] H]".
+      - iLeft.
+        iIntros "%".
+        iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
+        { iPureIntro; lia. }
+        iAssert (
+          ⌜b ∈ liveAddrs ∧ e ∈ liveAddrs⌝
+                             ∗ ([∗ list] a0 ∈ region_addrs b e, inv (mc_invNs.@a0)
+                                                                    (∃ w,
+                                                                        mapsto a0 (DfracOwn 1) w
+                                                                               ∗ fixpoint MinCaps_safe1 w))
+        )%I with "[Htmp Hsafe]" as "Hsafe".
+        { iApply ("Hsafe" with "Htmp"). }
+        iDestruct "Hsafe" as "[% H]".
         iSplitR.
         + iPureIntro; split.
-          eapply le_liveAddrs2; (repeat split); eassumption.
-          eapply le_liveAddrs1; (repeat split); eassumption.
+          apply (le_liveAddrs H4 (conj H1 (Z.le_trans b' e' e H3 H2))).
+          apply (le_liveAddrs H4 (conj (Z.le_trans b b' e' H1 H3) H2)).
         + iApply (region_addrs_submseteq $! (conj H1 H2) with "H").
-    Admitted.
+    Qed.
 
     Lemma specialize_range `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (b e addr : Addr) :
       ⊢ ⌜ (b <= addr)%Z /\ (addr <= e)%Z ⌝ -∗
@@ -756,6 +759,8 @@ Module MinCapsModel.
         iApply (MinCapsIrisHeapKit.safe_sub_range $! (conj Hb He) with "Hcsafe").
   Qed.
 
+  Import iris.base_logic.lib.gen_heap.
+
   Lemma rM_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
     forall a(p : Lit ty_perm) (b e : Lit ty_addr),
       evals es δ = env_snoc env_nil (_ , ty_addr) a
@@ -791,7 +796,17 @@ Module MinCapsModel.
         apply Zle_is_le_bool in He;
         iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ fixpoint (MinCapsIrisHeapKit.MinCaps_safe1) w))%I as "Hown".
       { rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq; simpl.
-        iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hcsafe"). }
+        iDestruct "Hcsafe" as "[Hcsafe | %]"; try lia.
+        iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
+        { iPureIntro; lia. }
+        iAssert (
+          ⌜b ∈ MinCapsIrisHeapKit.liveAddrs ∧ e ∈ MinCapsIrisHeapKit.liveAddrs⌝
+                             ∗ ([∗ list] a0 ∈ MinCapsIrisHeapKit.region_addrs b e,
+                                inv (MinCapsIrisHeapKit.mc_invNs.@a0) (∃ w, mapsto a0 (DfracOwn 1) w
+                                                        ∗ fixpoint MinCapsIrisHeapKit.MinCaps_safe1 w))
+        )%I with "[Htmp Hcsafe]" as "Hsafe".
+        { iApply ("Hcsafe" with "Htmp"). }
+        iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hsafe"). }
       iIntros (σ' ks1 ks n) "[Hregs Hmem]".
       iDestruct "Hmem" as (memmap) "[Hmem' %]".
       iInv "Hown" as "Hinv" "Hclose".
@@ -837,7 +852,17 @@ Module MinCapsModel.
         apply Zle_is_le_bool in He;
         iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ fixpoint (MinCapsIrisHeapKit.MinCaps_safe1) w))%I as "Hown".
       { rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq; simpl.
-        iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hcsafe"). }
+        iDestruct "Hcsafe" as "[Hcsafe | %]"; try lia.
+        iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
+        { iPureIntro; lia. }
+        iAssert (
+          ⌜b ∈ MinCapsIrisHeapKit.liveAddrs ∧ e ∈ MinCapsIrisHeapKit.liveAddrs⌝
+                             ∗ ([∗ list] a0 ∈ MinCapsIrisHeapKit.region_addrs b e,
+                                inv (MinCapsIrisHeapKit.mc_invNs.@a0) (∃ w, mapsto a0 (DfracOwn 1) w
+                                                        ∗ fixpoint MinCapsIrisHeapKit.MinCaps_safe1 w))
+        )%I with "[Htmp Hcsafe]" as "Hsafe".
+        { iApply ("Hcsafe" with "Htmp"). }
+        iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hsafe"). }
       iIntros (σ' ks1 ks n) "[Hregs Hmem]".
       iDestruct "Hmem" as (memmap) "[Hmem' %]".
       iInv "Hown" as "Hinv" "Hclose".
@@ -916,7 +941,17 @@ Module MinCapsModel.
       apply Zle_is_le_bool in He.
       iAssert (inv (MinCapsIrisHeapKit.mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ fixpoint (MinCapsIrisHeapKit.MinCaps_safe1) w))%I as "Hown".
       { do 2 rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq; simpl.
-        iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hcsafe"). }
+        iDestruct "Hcsafe" as "[Hcsafe | %]"; try lia.
+        iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
+        { iPureIntro; lia. }
+        iAssert (
+          ⌜b ∈ MinCapsIrisHeapKit.liveAddrs ∧ e ∈ MinCapsIrisHeapKit.liveAddrs⌝
+                             ∗ ([∗ list] a0 ∈ MinCapsIrisHeapKit.region_addrs b e,
+                                inv (MinCapsIrisHeapKit.mc_invNs.@a0) (∃ w, mapsto a0 (DfracOwn 1) w
+                                                        ∗ fixpoint MinCapsIrisHeapKit.MinCaps_safe1 w))
+        )%I with "[Htmp Hcsafe]" as "Hsafe".
+        { iApply ("Hcsafe" with "Htmp"). }
+        iApply (MinCapsIrisHeapKit.specialize_range $! (conj Hb He) with "Hsafe"). }
       iInv "Hown" as "Hinv" "Hclose".
       iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
       iModIntro.
