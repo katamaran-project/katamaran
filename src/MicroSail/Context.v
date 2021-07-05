@@ -255,21 +255,35 @@ Section WithBinding.
   | isCatLeft  (bIn : InCtx b Γ) : CatView (inctx_cat_left Δ bIn)
   | isCatRight (bIn : InCtx b Δ) : CatView (inctx_cat_right bIn).
 
-  Fixpoint catView {Γ Δ} {b : B} {struct Δ} :
-    forall (bIn : InCtx b (ctx_cat Γ Δ)), CatView bIn :=
+  Definition catView_succ {Γ Δ b b'} (bIn : InCtx b (ctx_cat Γ Δ)) (bInV : CatView bIn) :
+    @CatView Γ (ctx_snoc Δ b') b (inctx_succ bIn) :=
+    match bInV with
+    | isCatLeft bIn => @isCatLeft Γ (@ctx_snoc B Δ b') b bIn
+    | isCatRight bIn => @isCatRight Γ (@ctx_snoc B Δ b') b (@inctx_succ b Δ b' bIn)
+    end.
+
+  Fixpoint catView_index {Γ Δ} {b : B} {struct Δ} :
+    forall (n : nat) (p : ctx_nth_is (ctx_cat Γ Δ) n b),
+      @CatView Γ Δ b (@MkInCtx b (ctx_cat Γ Δ) n p) :=
     match Δ with
-    | ctx_nil        => fun bIn => isCatLeft bIn
+    | ctx_nil => fun n p => @isCatLeft Γ (@ctx_nil B) b (@MkInCtx b Γ n p)
     | ctx_snoc Δ0 b0 =>
-      fun bIn =>
-        match snocView bIn with
-        | snocViewZero => isCatRight inctx_zero
-        | snocViewSucc bIn =>
-          match catView bIn with
-          | isCatLeft bIn => isCatLeft bIn
-          | isCatRight bIn => isCatRight (inctx_succ bIn)
-          end
+      fun n =>
+        match n with
+        | 0 =>
+          fun p =>
+            match
+              p as e in (_ = y)
+              return (@CatView Γ (@ctx_snoc B Δ0 b0) y (@MkInCtx y (@ctx_snoc B (ctx_cat Γ Δ0) b0) 0 e))
+            with
+            | eq_refl => @isCatRight Γ (@ctx_snoc B Δ0 b0) b0 (@inctx_zero b0 Δ0)
+            end
+        | S n => fun p => catView_succ (catView_index n p)
         end
     end.
+
+  Definition catView {Γ Δ} {b : B} (bIn : InCtx b (ctx_cat Γ Δ)) : CatView bIn :=
+    @catView_index Γ Δ b (@inctx_at _ _ bIn) (@inctx_valid _ _ bIn).
 
   (* Custom pattern matching in cases where the context was already refined
      by a different match, i.e. on environments. *)
