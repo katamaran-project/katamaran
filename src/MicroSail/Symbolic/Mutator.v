@@ -2020,83 +2020,51 @@ Module Mutators
         end.
     Global Arguments demonic_ctx {_} n [w] Δ : rename.
 
-    Definition assume_formula :
-      ⊢ Formula -> SDijkstra Unit :=
-      fun w0 fml POST =>
-        match Solver.solver (cons fml nil) with
-        | Some (existT w1 (ν , fmls)) =>
+    Definition assume_formulas :
+      ⊢ List Formula -> SDijkstra Unit :=
+      fun w0 fmls0 POST =>
+        match Solver.solver fmls0 with
+        | Some (existT w1 (ν , fmls1)) =>
           (* Assume variable equalities and the residual constraints *)
           assume_multisub ν
-            (assume_formulas_without_solver fmls
+            (assume_formulas_without_solver fmls1
                (* Run POST in the world with the variable and residual
                   formulas included. This is a critical piece of code since
                   this is the place where we really meaningfully change the
                   world. We changed the type of assume_formulas_without_solver
                   just to not forget adding the formulas to the path constraints.
                *)
-               (four POST (wmultisub_sup ν) (wformulas_sup w1 fmls) tt))
+               (four POST (wmultisub_sup ν) (wformulas_sup w1 fmls1) tt))
         | None =>
-          (* The formula is inconsistent with the path constraints. *)
+          (* The formulas are inconsistent with the path constraints. *)
           block
+        end.
+
+    Definition assume_formula :
+      ⊢ Formula -> SDijkstra Unit :=
+      fun w0 fml0 =>
+        assume_formulas (cons fml0 nil).
+
+    Definition assert_formulas :
+      ⊢ Message -> List Formula -> SDijkstra Unit :=
+      fun w0 msg fmls0 POST =>
+        match Solver.solver fmls0 with
+        | Some (existT w1 (ν , fmls1)) =>
+          (* Assert variable equalities and the residual constraints *)
+          assert_multisub msg ν
+            (fun msg' =>
+               assert_formulas_without_solver msg' fmls1
+                 (* Critical code. Like for assume_formulas. *)
+                 (four POST (wmultisub_sup ν) (wformulas_sup w1 fmls1) tt))
+        | None =>
+          (* The formulas are inconsistent with the path constraints. *)
+          error (EMsgHere msg)
         end.
 
     Definition assert_formula :
       ⊢ Message -> Formula -> SDijkstra Unit :=
-      fun w0 msg fml POST =>
-        match Solver.solver (cons fml nil) with
-        | Some (existT w1 (ν , fmls)) =>
-          (* Assert variable equalities and the residual constraints *)
-          assert_multisub msg ν
-            (fun msg' =>
-               assert_formulas_without_solver msg' fmls
-                 (* Critical code. Like for assume_formula. *)
-                 (four POST (wmultisub_sup ν) (wformulas_sup w1 fmls) tt))
-        | None =>
-          (* The formula is inconsistent. *)
-          error (EMsgHere msg)
-        end.
-
-    Definition assume_formulas :
-      ⊢ List Formula -> SDijkstra Unit.
-      refine (
-      fun w0 =>
-        fix assumes fmls0 :=
-        match fmls0 with
-        | nil           => pure tt
-        | cons fml fmls1 => _
-          (* fun w1 ω01 => *)
-            (* assume_formulak *)
-            (*   (subst fml ω01) *)
-            (*   (four (assumes fmls k) ω01) *)
-        end).
-      eapply bind.
-      apply (assumes fmls1).
-      intros w1 ω01 _.
-      apply assume_formula.
-      apply (subst fml ω01).
-    Defined.
-
-    Definition assert_formulas :
-      ⊢ Message -> List Formula -> SDijkstra Unit.
-      refine (
-      fun w0 msg =>
-        fix asserts fmls0 :=
-        match fmls0 with
-        | nil           => pure tt
-        | cons fml fmls1 => _
-          (* fun w1 ω01 => _ *)
-            (* assert_formula *)
-            (*   (subst msg ω01) *)
-            (*   (subst fml ω01) *)
-            (*   (four (asserts fmls k) ω01) *)
-        end).
-      eapply bind.
-      apply (asserts fmls1).
-      intros w1 ω01 _.
-      apply assert_formula.
-      apply (subst msg ω01).
-      apply (subst fml ω01).
-    Defined.
+      fun w0 msg fml0 =>
+        assert_formulas msg (cons fml0 nil).
 
     Definition angelic_binary {A} :
       ⊢ SDijkstra A -> SDijkstra A -> SDijkstra A :=
@@ -2137,12 +2105,8 @@ Module Mutators
       ⊢ Message -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
       fun _ msg t =>
         angelic_binary
-          (bind
-             (assert_formula msg (formula_bool t))
-             (fun _ _ _ => pure true))
-          (bind
-             (assert_formula msg (formula_bool (term_not t)))
-             (fun _ _ _ => pure false)).
+          (fun POST => assert_formula msg (formula_bool t) (fun w1 ω01 _ => POST w1 ω01 true))
+          (fun POST => assert_formula msg (formula_bool (term_not t)) (fun w1 ω01 _ => POST w1 ω01 false)).
 
     Definition angelic_match_bool :
       ⊢ Message -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
@@ -2156,12 +2120,8 @@ Module Mutators
       ⊢ STerm ty_bool -> SDijkstra ⌜bool⌝ :=
       fun _ t =>
         demonic_binary
-          (bind
-             (assume_formula (formula_bool t))
-             (fun _ _ _ => pure true))
-          (bind
-             (assume_formula (formula_bool (term_not t)))
-             (fun _ _ _ => pure false)).
+          (fun POST => assume_formula (formula_bool t) (fun w1 ω01 _ => POST w1 ω01 true))
+          (fun POST => assume_formula (formula_bool (term_not t)) (fun w1 ω01 _ => POST w1 ω01 false)).
 
     Definition demonic_match_bool :
       ⊢ STerm ty_bool -> SDijkstra ⌜bool⌝ :=

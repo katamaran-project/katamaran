@@ -316,21 +316,19 @@ Module Soundness
         reflexivity.
     Qed.
 
-    Lemma approx_assume_formula {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
-      (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
-      approx ι0 (@SDijk.assume_formula w0 fml) (@CDijk.assume_formula P).
+    Lemma approx_assume_formulas {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (fmls0 : List Formula w0) (P : Prop) (Heq : instpc fmls0 ι0 <-> P) :
+      approx ι0 (@SDijk.assume_formulas w0 fmls0) (@CDijk.assume_formula P).
     Proof.
-      intros POST__s POST__c HPOST. unfold SDijk.assume_formula.
-      intros Hwp Hfml. apply Heq in Hfml.
-      destruct (Solver.solver_spec (cons fml nil)) as [[w1 [ζ fmls]] Hsolver|Hsolver].
-      - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [Hν Hsolver].
-        rewrite inst_pathcondition_cons in Hν. inster Hν by split; auto; constructor.
+      intros POST__s POST__c HPOST. unfold SDijk.assume_formulas.
+      intros Hwp Hfmls0. apply Heq in Hfmls0.
+      destruct (Solver.solver_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      - specialize (Hsolver ι0 Hpc0).
+        destruct Hsolver as [Hν Hsolver]. inster Hν by auto.
         specialize (Hsolver (inst (sub_multishift ζ) ι0)).
         rewrite inst_multi in Hsolver; auto.
         inster Hsolver by now try apply multishift_entails.
-        rewrite inst_pathcondition_cons in Hsolver.
-        destruct Hsolver as [Hsolver _].
-        inster Hsolver by split; auto; constructor.
+        destruct Hsolver as [Hsolver _]. inster Hsolver by auto.
         rewrite safe_assume_multisub, safe_assume_formulas_without_solver in Hwp.
         specialize (Hwp Hν Hsolver). revert Hwp.
         unfold four, wtrans, persist, persist_subst; cbn.
@@ -341,13 +339,18 @@ Module Soundness
       - intuition.
     Qed.
 
-    Lemma approx_assert_formula {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
-      (msg : Message w0) (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
-      approx ι0 (@SDijk.assert_formula w0 msg fml) (@CDijk.assert_formula P).
+    Lemma approx_assume_formula {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
+      approx ι0 (@SDijk.assume_formula w0 fml) (@CDijk.assume_formula P).
+    Proof. unfold SDijk.assume_formula. now apply approx_assume_formulas. Qed.
+
+    Lemma approx_assert_formulas {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (msg : Message w0) (fmls0 : List Formula w0) (P : Prop) (Heq : instpc fmls0 ι0 <-> P) :
+      approx ι0 (@SDijk.assert_formulas w0 msg fmls0) (@CDijk.assert_formula P).
     Proof.
-      unfold SDijk.assert_formula, CDijk.assert_formula.
+      unfold SDijk.assert_formulas, CDijk.assert_formula.
       intros POST__s POST__c HPOST Hwp.
-      destruct (Solver.solver_spec (cons fml nil)) as [[w1 [ζ fmls]] Hsolver|Hsolver].
+      destruct (Solver.solver_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
         rewrite safe_assert_multisub in Hwp. destruct Hwp as [Hν Hwp].
         rewrite safe_assert_formulas_without_solver in Hwp.
@@ -364,83 +367,10 @@ Module Soundness
       - intuition.
     Qed.
 
-    Lemma approx_assume_formulas_fail {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
-      (fmls : List Formula w0) :
-      approx ι0 (@SDijk.assume_formulas w0 fmls) (@CDijk.assume_formulas _ ι0 fmls).
-    Proof.
-      induction fmls; cbn.
-      - apply approx_pure; auto.
-      - apply approx_bind; auto.
-        intros w1 ω01 ι1 -> Hpc1.
-        intros ? ? ?.
-        intros POST__s POST__c HPOST.
-        intros Hwp.
-        eapply approx_assume_formula in Hwp; eauto.
-        now rewrite inst_subst.
-    Qed.
-
-    Lemma approx_assert_formulas_fail {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
-      (msg : Message w0) (fmls : List Formula w0) :
-      approx ι0 (@SDijk.assert_formulas w0 msg fmls) (@CDijk.assert_formulas _ ι0 fmls).
-    Proof.
-      induction fmls; cbn.
-      - apply approx_pure; auto.
-      - apply approx_bind; auto.
-        intros w1 ω01 ι1 -> Hpc1.
-        intros ? ? ?.
-        intros POST__s POST__c HPOST.
-        intros Hwp.
-        eapply approx_assert_formula in Hwp; eauto.
-        now rewrite inst_subst.
-    Qed.
-
-    Lemma approx_assume_formulas' {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
-      (fmls : List Formula w0) :
-      approx ι0 (@SDijk.assume_formulas w0 fmls) (@CDijk.assume_formula (instpc fmls ι0)).
-    Proof.
-      intros POST__s POST__c HPOST Hwp Hfmls.
-      revert POST__s POST__c HPOST Hwp.
-      induction fmls; cbn; cbv [SDijk.pure SDijk.bind];
-        intros POST__s POST__c HPOST.
-      - apply HPOST; wsimpl; auto.
-      - rewrite inst_pathcondition_cons in Hfmls. destruct Hfmls as [Hfml Hfmls].
-        apply IHfmls; eauto.
-        intros w1 ω01 ι1 -> Hpc1.
-        intros [] [] _ Hwp.
-        eapply approx_assume_formula in Hwp; eauto.
-        apply Hwp. now rewrite inst_subst.
-    Qed.
-
-    Lemma approx_assert_formulas' {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
-      (msg : Message w0) (fmls : List Formula w0) :
-      approx ι0 (@SDijk.assert_formulas w0 msg fmls) (@CDijk.assert_formula (instpc fmls ι0)).
-    Proof.
-      intros POST__s POST__c HPOST.
-      hnf. unfold CDijk.assert_formula.
-      revert POST__s POST__c HPOST.
-      induction fmls; cbn; cbv [SDijk.pure SDijk.bind four];
-        intros POST__s POST__c HPOST Hwp.
-      - split. constructor. revert Hwp.
-        apply HPOST; wsimpl; auto.
-      - rewrite inst_pathcondition_cons.
-        apply (IHfmls _ (fun _ => inst a ι0 /\ POST__c tt)) in Hwp.
-        intuition.
-        intros w1 ω01 ι1 -> Hpc1.
-        intros [] [] _ Hfml.
-        eapply approx_assert_formula in Hfml; eauto.
-        now rewrite inst_subst.
-        intros w2 ω12 ι2 -> Hpc2.
-        apply HPOST; wsimpl; auto.
-    Qed.
-
-    Lemma approx_assert_formulas {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
-      (msg : Message w0) (fmls__s : List Formula w0) (fmls__c : Prop) (Hfmls : instpc fmls__s ι0 <-> fmls__c) :
-      approx ι0 (@SDijk.assert_formulas w0 msg fmls__s) (@CDijk.assert_formula fmls__c).
-    Proof.
-      intros POST__s POST__c HPOST Hwp.
-      unfold CDijk.assert_formula. rewrite <- Hfmls.
-      revert Hwp. apply approx_assert_formulas'; auto.
-    Qed.
+    Lemma approx_assert_formula {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+      (msg : Message w0) (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
+      approx ι0 (@SDijk.assert_formula w0 msg fml) (@CDijk.assert_formula P).
+    Proof. unfold SDijk.assert_formula. now apply approx_assert_formulas. Qed.
 
     Lemma approx_angelic_list {AT A} `{Inst AT A}
       {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) msg :
