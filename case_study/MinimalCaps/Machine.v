@@ -812,7 +812,7 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
 
   End ExecStore.
 
-  Program Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
     | read_reg        => fun_read_reg
     | read_reg_cap    => fun_read_reg_cap
