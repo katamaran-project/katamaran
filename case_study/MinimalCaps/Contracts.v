@@ -1096,74 +1096,74 @@ Definition fun_to_debug : Stm ["c'" ∶ ty_cap, "c" ∶ ty_cap] ty_unit :=
   use lemma safe_within_range [exp_var "c'", exp_var "c"] ;;
   stm_lit ty_unit tt.
 
-Lemma valid_contract_to_debug : ValidContractEvarEnv sep_contract_to_debug fun_to_debug.
-Proof. (* compute - [SPath.prune]. *) apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_to_debug : ValidContractReflect sep_contract_to_debug fun_to_debug.
+Proof. (* compute - [SPath.prune]. *) reflexivity. Qed.
 
-Lemma valid_contract_read_reg : ValidContractEvarEnv sep_contract_read_reg fun_read_reg.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_read_reg : ValidContractReflect sep_contract_read_reg fun_read_reg.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_read_reg_cap : ValidContractEvarEnv sep_contract_read_reg_cap fun_read_reg_cap.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_read_reg_cap : ValidContractReflect sep_contract_read_reg_cap fun_read_reg_cap.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_read_reg_num : ValidContractEvarEnv sep_contract_read_reg_num fun_read_reg_num.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_read_reg_num : ValidContractReflect sep_contract_read_reg_num fun_read_reg_num.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_write_reg : ValidContractEvarEnv sep_contract_write_reg fun_write_reg.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_write_reg : ValidContractReflect sep_contract_write_reg fun_write_reg.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_next_pc : ValidContractEvarEnv sep_contract_next_pc fun_next_pc.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_next_pc : ValidContractReflect sep_contract_next_pc fun_next_pc.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_add_pc : ValidContractEvarEnv sep_contract_add_pc fun_add_pc.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_add_pc : ValidContractReflect sep_contract_add_pc fun_add_pc.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_update_pc : ValidContractEvarEnv sep_contract_update_pc fun_update_pc.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_update_pc : ValidContractReflect sep_contract_update_pc fun_update_pc.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_read_mem : ValidContractEvarEnv sep_contract_read_mem fun_read_mem.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_read_mem : ValidContractReflect sep_contract_read_mem fun_read_mem.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_write_mem : ValidContractEvarEnv sep_contract_write_mem fun_write_mem.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_write_mem : ValidContractReflect sep_contract_write_mem fun_write_mem.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_read_allowed : ValidContractEvarEnv sep_contract_read_allowed fun_read_allowed.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_read_allowed : ValidContractReflect sep_contract_read_allowed fun_read_allowed.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_write_allowed : ValidContractEvarEnv sep_contract_write_allowed fun_write_allowed.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_write_allowed : ValidContractReflect sep_contract_write_allowed fun_write_allowed.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_upper_bound : ValidContractEvarEnv sep_contract_upper_bound fun_upper_bound.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_upper_bound : ValidContractReflect sep_contract_upper_bound fun_upper_bound.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_within_bounds : ValidContractEvarEnv sep_contract_within_bounds fun_within_bounds.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_within_bounds : ValidContractReflect sep_contract_within_bounds fun_within_bounds.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_perm_to_bits : ValidContractEvarEnv sep_contract_perm_to_bits fun_perm_to_bits.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_perm_to_bits : ValidContractReflect sep_contract_perm_to_bits fun_perm_to_bits.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_perm_from_bits : ValidContractEvarEnv sep_contract_perm_from_bits fun_perm_from_bits.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_perm_from_bits : ValidContractReflect sep_contract_perm_from_bits fun_perm_from_bits.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_is_sub_perm : ValidContractEvarEnv sep_contract_is_sub_perm fun_is_sub_perm.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_is_sub_perm : ValidContractReflect sep_contract_is_sub_perm fun_is_sub_perm.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_is_within_range : ValidContractEvarEnv sep_contract_is_within_range fun_is_within_range.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_is_within_range : ValidContractReflect sep_contract_is_within_range fun_is_within_range.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_abs : ValidContractEvarEnv sep_contract_abs fun_abs.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_abs : ValidContractReflect sep_contract_abs fun_abs.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_jr : ValidContractEvarEnv sep_contract_exec_jr fun_exec_jr.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_jr : ValidContractReflect sep_contract_exec_jr fun_exec_jr.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_j : ValidContractEvarEnv sep_contract_exec_j fun_exec_j.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_j : ValidContractReflect sep_contract_exec_j fun_exec_j.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_jal : ValidContractEvarEnv sep_contract_exec_jal fun_exec_jal.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_jal : ValidContractReflect sep_contract_exec_jal fun_exec_jal.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_jalr : ValidContractEvarEnv sep_contract_exec_jalr fun_exec_jalr.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_jalr : ValidContractReflect sep_contract_exec_jalr fun_exec_jalr.
+Proof. Time reflexivity. Qed.
 
 (*
 Ltac debug_satisfy_forget_post :=
@@ -1200,77 +1200,77 @@ Close Scope exp.
 Close Scope env.
 *)
 
-Lemma valid_contract_exec_bnez : ValidContractEvarEnv sep_contract_exec_bnez fun_exec_bnez.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_bnez : ValidContractReflect sep_contract_exec_bnez fun_exec_bnez.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_mv : ValidContractEvarEnv sep_contract_exec_mv fun_exec_mv.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_mv : ValidContractReflect sep_contract_exec_mv fun_exec_mv.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_ld : ValidContractEvarEnv sep_contract_exec_ld fun_exec_ld.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_ld : ValidContractReflect sep_contract_exec_ld fun_exec_ld.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_sd : ValidContractEvarEnv sep_contract_exec_sd fun_exec_sd.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_sd : ValidContractReflect sep_contract_exec_sd fun_exec_sd.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_lea : ValidContractEvarEnv sep_contract_exec_lea fun_exec_lea.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_lea : ValidContractReflect sep_contract_exec_lea fun_exec_lea.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_restrict : ValidContractEvarEnv sep_contract_exec_restrict fun_exec_restrict.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_restrict : ValidContractReflect sep_contract_exec_restrict fun_exec_restrict.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_restricti : ValidContractEvarEnv sep_contract_exec_restricti fun_exec_restricti.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_restricti : ValidContractReflect sep_contract_exec_restricti fun_exec_restricti.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_subseg : ValidContractEvarEnv sep_contract_exec_subseg fun_exec_subseg.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_subseg : ValidContractReflect sep_contract_exec_subseg fun_exec_subseg.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_subsegi : ValidContractEvarEnv sep_contract_exec_subsegi fun_exec_subsegi.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_subsegi : ValidContractReflect sep_contract_exec_subsegi fun_exec_subsegi.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_addi : ValidContractEvarEnv sep_contract_exec_addi fun_exec_addi.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_addi : ValidContractReflect sep_contract_exec_addi fun_exec_addi.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_add : ValidContractEvarEnv sep_contract_exec_add fun_exec_add.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_add : ValidContractReflect sep_contract_exec_add fun_exec_add.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_sub : ValidContractEvarEnv sep_contract_exec_sub fun_exec_sub.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_sub : ValidContractReflect sep_contract_exec_sub fun_exec_sub.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_slt : ValidContractEvarEnv sep_contract_exec_slt fun_exec_slt.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_slt : ValidContractReflect sep_contract_exec_slt fun_exec_slt.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_slti : ValidContractEvarEnv sep_contract_exec_slti fun_exec_slti.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_slti : ValidContractReflect sep_contract_exec_slti fun_exec_slti.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_sltu : ValidContractEvarEnv sep_contract_exec_sltu fun_exec_sltu.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_sltu : ValidContractReflect sep_contract_exec_sltu fun_exec_sltu.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_sltiu : ValidContractEvarEnv sep_contract_exec_sltiu fun_exec_sltiu.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_sltiu : ValidContractReflect sep_contract_exec_sltiu fun_exec_sltiu.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_isptr : ValidContractEvarEnv sep_contract_exec_isptr fun_exec_isptr.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_isptr : ValidContractReflect sep_contract_exec_isptr fun_exec_isptr.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_getp : ValidContractEvarEnv sep_contract_exec_getp fun_exec_getp.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_getp : ValidContractReflect sep_contract_exec_getp fun_exec_getp.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_getb : ValidContractEvarEnv sep_contract_exec_getb fun_exec_getb.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_getb : ValidContractReflect sep_contract_exec_getb fun_exec_getb.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_gete : ValidContractEvarEnv sep_contract_exec_gete fun_exec_gete.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_gete : ValidContractReflect sep_contract_exec_gete fun_exec_gete.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_geta : ValidContractEvarEnv sep_contract_exec_geta fun_exec_geta.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_geta : ValidContractReflect sep_contract_exec_geta fun_exec_geta.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_fail : ValidContractEvarEnv sep_contract_exec_fail fun_exec_fail.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_fail : ValidContractReflect sep_contract_exec_fail fun_exec_fail.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_ret : ValidContractEvarEnv sep_contract_exec_ret fun_exec_ret.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_ret : ValidContractReflect sep_contract_exec_ret fun_exec_ret.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_exec_instr : ValidContractEvarEnv sep_contract_exec_instr fun_exec_instr.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec_instr : ValidContractReflect sep_contract_exec_instr fun_exec_instr.
+Proof. Time reflexivity. Qed.
 
 Definition debug_config : Config :=
   {| config_debug_function _ _ f :=
@@ -1280,8 +1280,8 @@ Definition debug_config : Config :=
        end
   |}.
 
-Lemma valid_contract_exec : ValidContractEvarEnv sep_contract_exec fun_exec.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_exec : ValidContractReflect sep_contract_exec fun_exec.
+Proof. Time reflexivity. Qed.
 
-Lemma valid_contract_loop : ValidContractEvarEnv sep_contract_loop fun_loop.
-Proof. apply validcontract_evarenv_reflect_sound; reflexivity. Qed.
+Lemma valid_contract_loop : ValidContractReflect sep_contract_loop fun_loop.
+Proof. Time reflexivity. Qed.

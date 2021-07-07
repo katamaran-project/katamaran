@@ -593,16 +593,16 @@ Module ISAMutators :=
 Import ISAMutators.
 Import SMut.
 
-Lemma valid_contract_rX : ValidContractEvarEnvReflect sep_contract_rX fun_rX.
-Proof. Time (now compute). Qed.
+Lemma valid_contract_rX : ValidContractReflect sep_contract_rX fun_rX.
+Proof. reflexivity. Qed.
 Hint Resolve valid_contract_rX : contracts.
 
-Lemma valid_contract_wX : ValidContractEvarEnvReflect sep_contract_wX fun_wX.
-Proof. Time (now compute). Qed.
+Lemma valid_contract_wX : ValidContractReflect sep_contract_wX fun_wX.
+Proof. reflexivity. Qed.
 Hint Resolve valid_contract_wX : contracts.
 
-Lemma valid_contract_swapreg : ValidContractEvarEnvReflect sep_contract_swapreg fun_swapreg.
-Proof. Time (now compute). Qed.
+Lemma valid_contract_swapreg : ValidContractReflect sep_contract_swapreg fun_swapreg.
+Proof. reflexivity. Qed.
 Hint Resolve valid_contract_swapreg : contracts.
 
 (* Arguments asn_true {_} /. *)
