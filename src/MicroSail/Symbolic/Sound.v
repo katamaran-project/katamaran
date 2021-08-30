@@ -1381,7 +1381,7 @@ Module Soundness
       intros δs0 δc0 -> hs0 hc0 Hh.
       apply HPOST; auto. cbn. rewrite ?inst_sub_id; auto.
       apply env_lookup_extensional; cbn; intros [x σ] xIn.
-      unfold inst at 2; cbn. rewrite ?env_lookup_map.
+      unfold evals, inst at 2; cbn. rewrite ?env_lookup_map.
       now rewrite eval_exp_inst.
     Qed.
 
@@ -1755,6 +1755,37 @@ Module Soundness
     reflexivity.
   Qed.
 
+  Lemma approx_call_lemma {Γ Δ : PCtx} (lem : Lemma Δ) :
+    forall {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0),
+      approx ι0 (@SMut.call_lemma Γ Δ lem w0) (@CMut.call_lemma Γ Δ lem).
+  Proof.
+    destruct lem; cbv [SMut.call_lemma CMut.call_lemma].
+    intros w0 ι0 Hpc0.
+    intros args__s args__c Hargs.
+    apply approx_bind; auto.
+    intros w1 ω01 ι1 -> Hpc1.
+    intros evars__s evars__c Hevars.
+    apply approx_bind_right.
+    apply approx_assert_formulas; auto.
+    { rewrite inst_formula_eqs_nctx.
+      rewrite ?inst_subst.
+      rewrite Hargs, Hevars.
+      reflexivity.
+    }
+    intros w2 ω12 ι2 -> Hpc2.
+    apply approx_bind_right.
+    { apply approx_consume; wsimpl; auto.
+      constructor.
+    }
+    intros w3 ω23 ι3 -> Hpc3.
+    { apply approx_produce; auto.
+      constructor.
+      cbn - [instantiate_env sub_snoc].
+      rewrite ?inst_subst.
+      now rewrite Hevars.
+    }
+  Qed.
+
   Lemma approx_exec {cfg Γ τ} (s : Stm Γ τ) :
     forall {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0),
       approx ι0 (@SMut.exec cfg Γ τ s w0) (@CMut.exec Γ τ s).
@@ -1809,6 +1840,11 @@ Module Soundness
       intros w1 ω01 ι1 -> Hpc1.
       intros args__s args__c Hargs.
       apply approx_call_contract; auto.
+    - apply approx_bind_right; auto.
+      apply approx_bind.
+      apply approx_eval_exps; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      apply approx_call_lemma; auto.
     - apply approx_bind.
       intros POST__s POST__c HPOST.
       apply approx_eval_exp; auto.

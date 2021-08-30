@@ -3637,10 +3637,7 @@ Module Mutators
       Definition call_contract {Γ Δ τ} (c : SepContract Δ τ) :
         ⊢ SStore Δ -> SMut Γ Γ (STerm τ).
       Proof.
-        refine
-          (match c with
-           | MkSepContract _ _ Σe δe req result ens => _
-           end).
+        destruct c as [Σe δe req result ens].
         intros w0 args.
         eapply bind.
         apply (angelic_ctx id Σe).
@@ -3673,6 +3670,37 @@ Module Mutators
         intros w5 ω45. clear - res ω45.
         apply pure.
         apply (persist__term res ω45).
+      Defined.
+
+      Definition call_lemma {Γ Δ} (lem : Lemma Δ) :
+        ⊢ SStore Δ -> SMut Γ Γ Unit.
+      Proof.
+        destruct lem as [Σe δe req ens].
+        intros w0 args.
+        eapply bind.
+        apply (angelic_ctx id Σe).
+        intros w1 ω01 evars.
+        eapply bind_right.
+        apply (assert_formulas
+                 (* {| *)
+                 (*   msg_function := "SMut.call"; *)
+                 (*   msg_message := "argument pattern match"; *)
+                 (*   msg_program_context := Γ; *)
+                 (*   msg_localstore := subst δ0 ω01; *)
+                 (*   msg_heap := subst h0 ω01; *)
+                 (*   msg_pathcondition := wco w1; *)
+                 (* |} *) (formula_eqs_nctx (subst δe evars) (subst args ω01))).
+        intros w2 ω12.
+        eapply bind_right.
+        apply (consume (w := @MkWorld Σe nil) req).
+        refine (wtrans _ ω12).
+        constructor 1 with evars. cbn. constructor.
+        intros w3 ω23.
+        apply (produce
+                 (w := @MkWorld Σe nil)
+                 ens).
+        constructor 1 with (subst (T := Sub _) evars (wtrans ω12 ω23)).
+        cbn. constructor.
       Defined.
 
       Definition call_contract_debug {Γ Δ τ} (f : 𝑭 Δ τ) (c : SepContract Δ τ) :
@@ -3740,6 +3768,13 @@ Module Mutators
           apply (eval_exps es).
           intros w1 ω01 args.
           apply (call_contract (CEnvEx f) args).
+        - eapply bind_right.
+          eapply bind.
+          apply (eval_exps es).
+          intros w1 ω01 args.
+          apply (call_lemma (LEnv l) args).
+          intros w2 ω12.
+          apply (exec _ _ s).
         - eapply bind. apply (eval_exp e).
           intros w1 ω01 t.
           apply (demonic_match_bool t).

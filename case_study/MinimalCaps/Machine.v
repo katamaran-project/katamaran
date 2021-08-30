@@ -60,7 +60,7 @@ Module MinCapsTermKit <: TermKit.
   Definition fresh := Context.fresh (T := Ty).
 
   (** FUNCTIONS **)
-  Inductive Fun : Ctx (𝑿 * Ty) -> Ty -> Set :=
+  Inductive Fun : PCtx -> Ty -> Set :=
   | read_reg        : Fun ["rreg" ∶ ty_enum regname ] ty_word
   | read_reg_cap    : Fun ["creg" ∶ ty_enum regname ] ty_cap
   | read_reg_num    : Fun ["nreg" ∶ ty_enum regname ] ty_int
@@ -120,29 +120,29 @@ Module MinCapsTermKit <: TermKit.
   | loop            : Fun ε ty_unit
   .
 
-  Inductive FunGhost : Ctx (𝑿 * Ty) -> Set :=
-  | open_ptsreg                : FunGhost ["reg" ∶ ty_enum regname]
-  | close_ptsreg (R : RegName) : FunGhost ctx_nil
-  | duplicate_safe             : FunGhost ["w" ∶ ty_word]
-  | safe_move_cursor           : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
-  | safe_sub_perm              : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
-  | safe_within_range          : FunGhost ["c'" ∶ ty_cap, "c" ∶ ty_cap]
-  | int_safe                   : FunGhost ["i" ∶ ty_int]
-  | sub_perm                   : FunGhost ["p" ∶ ty_perm, "p'" ∶ ty_perm]
-  | gen_dummy                  : FunGhost ["c" ∶ ty_cap]
-  .
-
-  Inductive FunX : Ctx (𝑿 * Ty) -> Ty -> Set :=
+  Inductive FunX : PCtx -> Ty -> Set :=
   (* read memory *)
   | rM    : FunX ["address" ∶ ty_int] ty_memval
   (* write memory *)
   | wM    : FunX ["address" ∶ ty_int, "new_value" ∶ ty_memval] ty_unit
   | dI    : FunX ["code" ∶ ty_int] ty_instr
-  | ghost {Δ} (f : FunGhost Δ): FunX Δ ty_unit
   .
 
-  Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
-  Definition 𝑭𝑿  : Ctx (𝑿 * Ty) -> Ty -> Set := FunX.
+  Inductive Lem : PCtx -> Set :=
+  | open_ptsreg                : Lem ["reg" ∶ ty_enum regname]
+  | close_ptsreg (R : RegName) : Lem ctx_nil
+  | duplicate_safe             : Lem ["w" ∶ ty_word]
+  | safe_move_cursor           : Lem ["c'" ∶ ty_cap, "c" ∶ ty_cap]
+  | safe_sub_perm              : Lem ["c'" ∶ ty_cap, "c" ∶ ty_cap]
+  | safe_within_range          : Lem ["c'" ∶ ty_cap, "c" ∶ ty_cap]
+  | int_safe                   : Lem ["i" ∶ ty_int]
+  | sub_perm                   : Lem ["p" ∶ ty_perm, "p'" ∶ ty_perm]
+  | gen_dummy                  : Lem ["c" ∶ ty_cap]
+  .
+
+  Definition 𝑭  : PCtx -> Ty -> Set := Fun.
+  Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
+  Definition 𝑳  : PCtx -> Set := Lem.
 
   Inductive Reg : Ty -> Set :=
   | pc   : Reg ty_cap
@@ -209,8 +209,8 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
 
   Notation stm_call_external := stm_foreign.
 
-  Notation "'use' 'lemma' f args" := (stm_foreign (ghost f) args%arg) (at level 10, f at next level) : exp_scope.
-  Notation "'use' 'lemma' f" := (stm_foreign (ghost f) env_nil) (at level 10, f at next level) : exp_scope.
+  Notation "'use' 'lemma' f args" := (stm_lemma f args%arg) (at level 10, f at next level) : exp_scope.
+  Notation "'use' 'lemma' f" := (stm_lemma f env_nil) (at level 10, f at next level) : exp_scope.
 
   (* NOTE: need to wrap s around parentheses when using this notation (not a real let binding!) *)
   Notation "'let*:' '[' perm ',' beg ',' en ',' cur ']' ':=' cap 'in' s" :=
@@ -879,8 +879,6 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                    (* Non-deterministically return any possible result *)
                    (exists res' : Lit (ty_sum ty_string ty_instr),
                      (γ' , μ' , res) = (γ , μ , res'))%type
-    | ghost f => fun _ res γ γ' μ μ' =>
-                   (γ' , μ' , res) = (γ , μ , inr tt)
     end.
 
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
@@ -890,7 +888,6 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args. exists γ, μ, (inr ret), (inr ret). reflexivity.
-    - exists γ, μ, (inr tt). reflexivity.
   Qed.
 
 End MinCapsProgramKit.

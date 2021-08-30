@@ -168,8 +168,8 @@ Module MinCapsSymbolicContractKit <:
   Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
     SepContract Δ τ.
 
-  Definition SepContractFunGhost {Δ} (f : FunGhost Δ) : Type :=
-    SepContract Δ ty_unit.
+  Definition SepLemma {Δ} (f : Lem Δ) : Type :=
+    Lemma Δ.
 
   Definition SepContractFunX {Δ τ} (f : FunX Δ τ) : Type :=
     SepContract Δ τ.
@@ -663,12 +663,11 @@ Module MinCapsSymbolicContractKit <:
       end.
   Proof. intros ? ? []; try constructor. Qed.
 
-  Definition sep_contract_open_ptsreg : SepContractFunGhost open_ptsreg :=
-    {| sep_contract_logic_variables := [ "reg" ∶ ty_enum regname, "w" ∶ ty_word];
-       sep_contract_localstore      := [term_var "reg"]%arg;
-       sep_contract_precondition    := term_var "reg" ↦r term_var "w";
-       sep_contract_result          := "result";
-       sep_contract_postcondition   :=
+  Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
+    {| lemma_logic_variables := [ "reg" ∶ ty_enum regname, "w" ∶ ty_word];
+       lemma_patterns        := [term_var "reg"]%arg;
+       lemma_precondition    := term_var "reg" ↦r term_var "w";
+       lemma_postcondition   :=
          asn_match_enum
            regname (term_var "reg")
            (fun k => match k with
@@ -680,29 +679,25 @@ Module MinCapsSymbolicContractKit <:
     |}.
 
   (* TODO: add persistent predicates? *)
-  Definition sep_contract_duplicate_safe : SepContractFunGhost duplicate_safe :=
-    {| sep_contract_logic_variables := ["w" ∶ ty_word];
-       sep_contract_localstore      := [term_var "w"]%arg;
-       sep_contract_precondition    := asn_safe (term_var "w");
-       sep_contract_result          := "result_duplicate_safe";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_duplicate_safe") (term_lit ty_unit tt) ✱
+  Definition lemma_duplicate_safe : SepLemma duplicate_safe :=
+    {| lemma_logic_variables := ["w" ∶ ty_word];
+       lemma_patterns        := [term_var "w"]%arg;
+       lemma_precondition    := asn_safe (term_var "w");
+       lemma_postcondition   :=
          asn_safe (term_var "w") ✱
          asn_safe (term_var "w")
     |}.
 
-  Definition sep_contract_safe_move_cursor : SepContractFunGhost safe_move_cursor :=
+  Definition lemma_safe_move_cursor : SepLemma safe_move_cursor :=
     let Σ : LCtx := ["p" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr, "a" ∶ ty_addr, "a'" ∶ ty_addr]%ctx in
     let c  : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a"] in
     let c' : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a'"] in
-    {| sep_contract_logic_variables := Σ;
-       sep_contract_localstore      := [c', c]%arg;
-       sep_contract_precondition    := asn_csafe c;
-       sep_contract_result          := "result_csafe_move_cursor";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_csafe_move_cursor") (term_lit ty_unit tt) ✱
-         asn_csafe (sub_term c sub_wk1) ✱
-         asn_csafe (sub_term c' sub_wk1);
+    {| lemma_logic_variables := Σ;
+       lemma_patterns        := [c', c]%arg;
+       lemma_precondition    := asn_csafe c;
+       lemma_postcondition   :=
+         asn_csafe c ✱
+         asn_csafe c';
     |}.
 
   (*
@@ -710,19 +705,17 @@ Module MinCapsSymbolicContractKit <:
     @post csafe(c) ✱ csafe(c')
     unit csafe_sub_perm(c : capability, c' : capability);
    *)
-  Definition sep_contract_safe_sub_perm : SepContractFunGhost safe_sub_perm :=
+  Definition lemma_safe_sub_perm : SepLemma safe_sub_perm :=
     let Σ : LCtx := ["p" ∶ ty_perm, "p'" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr, "a" ∶ ty_addr]%ctx in
     let c  : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a"] in
     let c' : Term Σ _ := term_record capability [term_var "p'", term_var "b", term_var "e", term_var "a"] in
-    {| sep_contract_logic_variables := Σ;
-       sep_contract_localstore      := [c', c]%arg;
-       sep_contract_precondition    :=
+    {| lemma_logic_variables := Σ;
+       lemma_patterns        := [c', c]%arg;
+       lemma_precondition    :=
          asn_csafe c ✱ term_var "p'" <=ₚ term_var "p";
-       sep_contract_result          := "result_csafe_sub_perm";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_csafe_sub_perm") (term_lit ty_unit tt) ✱
-         asn_csafe (sub_term c sub_wk1) ✱
-         asn_csafe (sub_term c' sub_wk1);
+       lemma_postcondition   :=
+         asn_csafe c ✱
+         asn_csafe c';
     |}.
 
   (*
@@ -730,13 +723,13 @@ Module MinCapsSymbolicContractKit <:
     @post csafe(c) ✱ csafe(c')
     unit csafe_within_range(c' : capability, c : capability);
    *)
-  Definition sep_contract_safe_within_range : SepContractFunGhost safe_within_range :=
+  Definition lemma_safe_within_range : SepLemma safe_within_range :=
     let Σ : LCtx := ["p" ∶ ty_perm, "b" ∶ ty_addr, "b'" ∶ ty_addr, "e" ∶ ty_addr, "e'" ∶ ty_addr, "a" ∶ ty_addr]%ctx in
     let c  : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a"] in
     let c' : Term Σ _ := term_record capability [term_var "p", term_var "b'", term_var "e'", term_var "a"] in
-    {| sep_contract_logic_variables := Σ;
-       sep_contract_localstore      := [c', c]%arg;
-       sep_contract_precondition    :=
+    {| lemma_logic_variables := Σ;
+       lemma_patterns        := [c', c]%arg;
+       lemma_precondition    :=
          asn_csafe c ✱
          asn_dummy c' ✱
          asn_formula
@@ -744,20 +737,16 @@ Module MinCapsSymbolicContractKit <:
             (term_binop binop_and
                         (term_binop binop_le (term_var "b") (term_var "b'"))
                         (term_binop binop_le (term_var "e'") (term_var "e"))));
-       sep_contract_result          := "result_csafe_within_range";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_csafe_within_range") (term_lit ty_unit tt) ✱
-         asn_csafe (sub_term c sub_wk1) ✱
-         asn_csafe (sub_term c' sub_wk1);
+       lemma_postcondition   :=
+         asn_csafe c ✱
+         asn_csafe c';
     |}.
 
-  Definition sep_contract_sub_perm : SepContractFunGhost sub_perm :=
-    {| sep_contract_logic_variables := ["p" ∶ ty_perm, "p'" ∶ ty_perm];
-       sep_contract_localstore      := [term_var "p", term_var "p'"]%arg;
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_sub_perm";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_sub_perm") (term_lit ty_unit tt) ✱
+  Definition lemma_sub_perm : SepLemma sub_perm :=
+    {| lemma_logic_variables := ["p" ∶ ty_perm, "p'" ∶ ty_perm];
+       lemma_patterns        := [term_var "p", term_var "p'"]%arg;
+       lemma_precondition    := asn_true;
+       lemma_postcondition   :=
          asn_match_enum permission (term_var "p")
                         (fun p => match p with
                                | O => term_var "p" <=ₚ term_var "p'"
@@ -779,14 +768,12 @@ Module MinCapsSymbolicContractKit <:
     @post safe(i)
     unit int_safe(i : int);
    *)
-  Definition sep_contract_int_safe : SepContractFunGhost int_safe :=
-    {| sep_contract_logic_variables := ["i" ∶ ty_int];
-       sep_contract_localstore      := [term_var "i"]%arg;
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_int_safe";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_int_safe") (term_lit ty_unit tt) ✱
-                asn_safe (term_inl (term_var "i"));
+  Definition lemma_int_safe : SepLemma int_safe :=
+    {| lemma_logic_variables := ["i" ∶ ty_int];
+       lemma_patterns        := [term_var "i"]%arg;
+       lemma_precondition    := asn_true;
+       lemma_postcondition   :=
+         asn_safe (term_inl (term_var "i"));
     |}.
 
   Definition regtag_to_reg (R : RegName) : Reg ty_word :=
@@ -797,12 +784,11 @@ Module MinCapsSymbolicContractKit <:
     | R3 => reg3 *)
     end.
 
-  Definition sep_contract_close_ptsreg (r : RegName) : SepContractFunGhost (close_ptsreg r) :=
-    {| sep_contract_logic_variables := ["w" ∶ ty_word];
-       sep_contract_localstore      := env_nil;
-       sep_contract_precondition    := regtag_to_reg r ↦ term_var "w";
-       sep_contract_result          := "_";
-       sep_contract_postcondition   := term_enum regname r ↦r term_var "w"
+  Definition lemma_close_ptsreg (r : RegName) : SepLemma (close_ptsreg r) :=
+    {| lemma_logic_variables := ["w" ∶ ty_word];
+       lemma_patterns        := env_nil;
+       lemma_precondition    := regtag_to_reg r ↦ term_var "w";
+       lemma_postcondition   := term_enum regname r ↦r term_var "w"
     |}.
 
   Definition sep_contract_rM : SepContractFunX rM :=
@@ -856,12 +842,11 @@ Module MinCapsSymbolicContractKit <:
        sep_contract_postcondition   := asn_true;
     |}.
 
-  Definition sep_contract_gen_dummy : SepContractFunGhost gen_dummy :=
-    {| sep_contract_logic_variables := ["c" ∶ ty_cap];
-       sep_contract_localstore      := [term_var "c"]%arg;
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "_";
-       sep_contract_postcondition   := asn_dummy (term_var "c");
+  Definition lemma_gen_dummy : SepLemma gen_dummy :=
+    {| lemma_logic_variables := ["c" ∶ ty_cap];
+       lemma_patterns        := [term_var "c"]%arg;
+       lemma_precondition    := asn_true;
+       lemma_postcondition   := asn_dummy (term_var "c");
     |}.
 
   Definition CEnvEx : SepContractEnvEx :=
@@ -870,18 +855,20 @@ Module MinCapsSymbolicContractKit <:
       | rM => sep_contract_rM
       | wM => sep_contract_wM
       | dI => sep_contract_dI
-      | @ghost _ f =>
-        match f in FunGhost Δ return SepContract Δ ty_unit with
-        | open_ptsreg            => sep_contract_open_ptsreg
-        | close_ptsreg r         => sep_contract_close_ptsreg r
-        | duplicate_safe         => sep_contract_duplicate_safe
-        | safe_move_cursor       => sep_contract_safe_move_cursor
-        | safe_sub_perm          => sep_contract_safe_sub_perm
-        | safe_within_range      => sep_contract_safe_within_range
-        | int_safe               => sep_contract_int_safe
-        | sub_perm               => sep_contract_sub_perm
-        | gen_dummy              => sep_contract_gen_dummy
-        end
+      end.
+
+  Definition LEnv : LemmaEnv :=
+    fun Δ l =>
+      match l with
+        | open_ptsreg            => lemma_open_ptsreg
+        | close_ptsreg r         => lemma_close_ptsreg r
+        | duplicate_safe         => lemma_duplicate_safe
+        | safe_move_cursor       => lemma_safe_move_cursor
+        | safe_sub_perm          => lemma_safe_sub_perm
+        | safe_within_range      => lemma_safe_within_range
+        | int_safe               => lemma_int_safe
+        | sub_perm               => lemma_sub_perm
+        | gen_dummy              => lemma_gen_dummy
       end.
 
   Lemma linted_cenvex :
@@ -889,7 +876,6 @@ Module MinCapsSymbolicContractKit <:
       Linted (CEnvEx f).
   Proof.
     intros ? ? []; try constructor.
-    destruct f; try constructor.
   Qed.
 
 End MinCapsSymbolicContractKit.

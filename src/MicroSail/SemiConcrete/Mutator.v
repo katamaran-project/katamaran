@@ -1016,7 +1016,7 @@ Module SemiConcrete
       Definition eval_exp {Γ σ} (e : Exp Γ σ) : CMut Γ Γ (Lit σ) :=
         fun POST δ => POST (eval e δ) δ.
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CMut Γ Γ (CStore σs) :=
-        fun POST δ => POST (env_map (fun _ e => eval e δ) es) δ.
+        fun POST δ => POST (evals es δ) δ.
       Definition assign {Γ} x {σ} {xIn : x::σ ∈ Γ} (v : Lit σ) : CMut Γ Γ unit :=
         fun POST δ => POST () (δ ⟪ x ↦ v ⟫).
       Global Arguments assign {Γ} x {σ xIn} v.
@@ -1142,6 +1142,15 @@ Module SemiConcrete
           pure v
         end.
 
+      Definition call_lemma {Γ Δ} (lem : Lemma Δ) (vs : CStore Δ) : CMut Γ Γ unit :=
+        match lem with
+        | MkLemma _ Σe δ req ens =>
+          ι <- angelic_ctx Σe ;;
+          assert_formula (inst δ ι = vs) ;;
+          consume ι req ;;
+          produce ι ens
+        end.
+
       Fixpoint exec {Γ τ} (s : Stm Γ τ) : CMut Γ Γ (Lit τ) :=
         match s with
         | stm_lit _ l => pure l
@@ -1163,6 +1172,9 @@ Module SemiConcrete
           end
         | stm_foreign f es =>
           eval_exps es >>= call_contract (CEnvEx f)
+        | stm_lemmak l es k =>
+          eval_exps es >>= call_lemma (LEnv l) ;;
+          exec k
         | stm_call_frame δ' s =>
           δ <- get_local ;;
           put_local δ' ;;

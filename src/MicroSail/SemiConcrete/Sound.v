@@ -366,6 +366,48 @@ Module Soundness
       apply produce_monotonic; auto.
     Qed.
 
+    Lemma call_lemma_sound {Γ Δ} (δΓ : CStore Γ) (δΔ : CStore Δ)
+          (h : SCHeap) (POST : CStore Γ -> L)
+          (lem : Lemma Δ) :
+      call_lemma lem δΔ (fun _ : unit => liftP POST) δΓ h ->
+      LTriple δΔ (interpret_scheap h) (POST δΓ) lem.
+    Proof.
+      destruct lem as [Σe δe req ens].
+      unfold call_lemma. unfold bind_right, bind.
+      unfold angelic_ctx, dijkstra.
+      rewrite CDijk.wp_angelic_ctx.
+      intros [ι Hwp]; revert Hwp.
+      unfold assert_formula, dijkstra, CDijk.assert_formula.
+      intros [Hfmls HYP].
+      pose (fun δ => interpret_assertion ens ι -✱ POST δ) as frame.
+      assert (interpret_scheap h ⊢ frame δΓ ✱ interpret_assertion req ι ).
+      { rewrite sepcon_comm.
+        apply (consume_sound frame).
+        revert HYP. apply consume_monotonic.
+        intros _ h2 HYP. subst frame. unfold liftP.
+        now apply wand_sepcon_adjoint, produce_sound.
+      }
+      constructor 1 with ι (frame δΓ); auto.
+      - apply wand_sepcon_adjoint.
+        apply entails_refl.
+    Qed.
+
+    Lemma call_lemma_monotonic {Γ Δ} (lem : Lemma Δ) (δΔ : CStore Δ)
+      (P Q : unit -> CStore Γ -> SCHeap -> Prop)
+      (PQ : forall x δ h, P x δ h -> Q x δ h) δ h :
+      call_lemma lem δΔ P δ h -> call_lemma lem δΔ Q δ h.
+    Proof.
+      destruct lem;
+        cbv [call_lemma bind_right bind
+             angelic_ctx dijkstra assert_formula
+             CDijk.assert_formula].
+      rewrite ?CDijk.wp_angelic_ctx.
+      intros [ι Hwp]. exists ι. revert Hwp.
+      intros [Hfmls Hwp]; split; auto; revert Hwp.
+      apply consume_monotonic. intros _ ?.
+      apply produce_monotonic; auto.
+    Qed.
+
     Lemma exec_monotonic {Γ τ} (s : Stm Γ τ) :
       forall
         (P Q : Lit τ -> CStore Γ -> SCHeap -> Prop)
@@ -385,6 +427,8 @@ Module Soundness
         apply call_contract_monotonic; auto.
       - apply IHs. auto.
       - apply call_contract_monotonic; auto.
+      - apply call_lemma_monotonic; intros ? ? ?.
+        apply IHs. auto.
       - rewrite ?wp_demonic_match_bool.
         destruct (eval e δ).
         apply IHs1; auto.
@@ -474,6 +518,21 @@ Module Soundness
       - (* stm_foreign *)
         apply rule_stm_foreign_backwards.
         now apply call_contract_sound.
+
+      - (* stm_lemmak *)
+        unfold eval_exps in HYP.
+        eapply rule_stm_lemmak.
+        2: apply rule_wp.
+        eapply call_lemma_sound.
+        revert HYP.
+        eapply call_lemma_monotonic.
+        intros _ δ2 h2 HYP.
+        unfold liftP. unfold WP.
+        apply lex_right with (interpret_scheap h2).
+        apply land_right.
+        apply entails_refl.
+        apply lprop_right.
+        now apply IHs.
 
       - (* stm_if *)
         rewrite wp_demonic_match_bool in HYP.

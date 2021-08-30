@@ -111,6 +111,10 @@ Module SmallStep
                       | inl msg => stm_fail τ msg
                       | inr v__σ  => stm_lit τ v__σ
                       end ⟩
+  | step_stm_lemmak
+      {Δ} {l : 𝑳 Δ} (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ) :
+      ⟨ γ , μ , δ , stm_lemmak l es k ⟩ --->
+      ⟨ γ , μ , δ , k ⟩
 
   | step_stm_assign_value
       (x : 𝑿) {xInΓ : InCtx (x::τ) Γ} (v : Lit τ) :
@@ -252,6 +256,7 @@ Module SmallStep
       | lazymatch head s with
         | @stm_call           => idtac
         | @stm_foreign        => idtac
+        | @stm_lemmak         => idtac
         | @stm_assertk        => idtac
         | @stm_fail           => idtac
         | @stm_exp            => idtac

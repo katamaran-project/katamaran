@@ -83,6 +83,17 @@ Module ProgramLogic
         (forall v, frame ✱ interpret_assertion ens (env_snoc ι (result :: σ) v) ⊢ post v) ->
         CTriple δΔ pre post (MkSepContract _ _ _ θΔ req result ens).
 
+    Inductive LTriple {Δ} (δΔ : CStore Δ) (pre post : L) :
+      Lemma Δ -> Prop :=
+    | rule_ltriple
+        (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : SymInstance Σ)
+        (req ens : Assertion Σ)
+        (frame : L) :
+        δΔ = inst θΔ ι ->
+        pre ⊢ frame ✱ interpret_assertion req ι ->
+        (frame ✱ interpret_assertion ens ι ⊢ post) ->
+        LTriple δΔ pre post (MkLemma _ _ θΔ req ens).
+
     Inductive Triple {Γ : PCtx} (δ : CStore Γ) {τ : Ty} :
       forall (pre : L) (s : Stm Γ τ) (post :  Lit τ -> CStore Γ -> L), Prop :=
     | rule_consequence
@@ -240,6 +251,12 @@ Module ProgramLogic
         (P : L) (Q : Lit τ -> CStore Γ -> L) :
         CTriple (evals es δ) P (fun v => Q v δ) (CEnvEx f) ->
         δ ⊢ ⦃ P ⦄ stm_foreign f es ⦃ Q ⦄
+    | rule_stm_lemmak
+        {Δ} {l : 𝑳 Δ} (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
+        (P Q : L) (R : Lit τ -> CStore Γ -> L) :
+        LTriple (evals es δ) P Q (LEnv l) ->
+        δ ⊢ ⦃ Q ⦄ k ⦃ R ⦄ ->
+        δ ⊢ ⦃ P ⦄ stm_lemmak l es k ⦃ R ⦄
     | rule_stm_bind
         {σ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
         (P : L) (Q : Lit σ -> CStore Γ -> L)

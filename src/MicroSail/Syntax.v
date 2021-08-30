@@ -90,6 +90,8 @@ Module Type TermKit.
   (* Names of functions. *)
   Parameter Inline 𝑭 : PCtx -> Ty -> Set.
   Parameter Inline 𝑭𝑿 : PCtx -> Ty -> Set.
+  (* Names of lemmas. *)
+  Parameter Inline 𝑳 : PCtx -> Set.
 
   (* Names of registers. *)
   Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
@@ -397,7 +399,18 @@ Module Terms (Export termkit : TermKit).
 
     (* Local Unset Elimination Schemes. *)
 
+    (* Inductive Effect (Γ : PCtx) : Type := *)
+    (* | eff_assign (x : 𝑿) {τ} {xInΓ : x::τ ∈ Γ} (e : Stm Γ τ) *)
+    (* | eff_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) *)
+    (* | eff_lemma  {Δ : PCtx} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) *)
+    (* | eff_assert (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) *)
+    (* | eff_debug *)
+    (* | eff_while (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ). *)
+
     Inductive Stm (Γ : PCtx) (τ : Ty) : Type :=
+    (* We avoid defining effects and statements mutually recursively. Instead, *)
+    (* we inline seqe and put up with the boilerplate. *)
+    (* | stm_seqe          (eff : Effect Γ) (k : Stm Γ τ) *)
     | stm_lit           (l : Lit τ)
     | stm_exp           (e : Exp Γ τ)
     | stm_let           (x : 𝑿) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (Γ ▻ (x::σ)) τ)
@@ -406,6 +419,7 @@ Module Terms (Export termkit : TermKit).
     | stm_call          {Δ : PCtx} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
     | stm_call_frame    (Δ : PCtx) (δ : CStore Δ) (s : Stm Δ τ)
     | stm_foreign       {Δ : PCtx} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
+    | stm_lemmak        {Δ : PCtx} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
     | stm_if            (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
     | stm_seq           {σ : Ty} (s : Stm Γ σ) (k : Stm Γ τ)
     | stm_assertk       (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
@@ -526,6 +540,7 @@ Module Terms (Export termkit : TermKit).
     Global Arguments stm_call {Γ τ Δ} f _%arg.
     Global Arguments stm_call_frame {Γ τ Δ} δ s%exp.
     Global Arguments stm_foreign {Γ τ Δ} f _%arg.
+    Global Arguments stm_lemmak {Γ τ Δ} l _%arg k.
     Global Arguments stm_if {Γ τ} e%exp s1%exp s2%exp.
     Global Arguments stm_seq {Γ τ σ} s%exp k%exp.
     Global Arguments stm_assertk {Γ τ} e1%exp e2%exp k%exp.
@@ -555,10 +570,13 @@ Module Terms (Export termkit : TermKit).
 
     Definition stm_assert {Γ} (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) : Stm Γ ty_unit :=
       stm_assertk e1 e2 (stm_lit ty_unit tt).
+    Definition stm_lemma {Γ Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ ty_unit :=
+      stm_lemmak l es (stm_lit ty_unit tt).
 
     Global Arguments MkAlt {_ _ _ _} _ _.
     Global Arguments stm_match_union_alt {_ _} _ _ _.
     Global Arguments stm_assert {Γ} e1%exp e2%exp.
+    Global Arguments stm_lemma {Γ Δ} l es%arg.
 
   End Statements.
 

@@ -739,11 +739,35 @@ Module Assertions
 
   Arguments MkSepContract : clear implicits.
 
+  Record Lemma (Δ : PCtx) : Type :=
+    MkLemma
+      { lemma_logic_variables  : LCtx;
+        lemma_patterns         : SStore Δ lemma_logic_variables;
+        lemma_precondition     : Assertion lemma_logic_variables;
+        lemma_postcondition    : Assertion lemma_logic_variables;
+      }.
+
+  Arguments MkLemma : clear implicits.
+
   Definition lint_contract {Δ σ} (c : SepContract Δ σ) : bool :=
     match c with
     | {| sep_contract_logic_variables := Σ;
          sep_contract_localstore      := δ;
          sep_contract_precondition    := pre
+      |} =>
+      ctx_forallb Σ
+        (fun b bIn =>
+           match occurs_check bIn (δ , pre) with
+           | Some _ => false
+           | None   => true
+           end)
+    end.
+
+  Definition lint_lemma {Δ} (l : Lemma Δ) : bool :=
+    match l with
+    | {| lemma_logic_variables := Σ;
+         lemma_patterns        := δ;
+         lemma_precondition    := pre
       |} =>
       ctx_forallb Σ
         (fun b bIn =>
@@ -760,6 +784,8 @@ Module Assertions
     forall Δ τ (f : 𝑭 Δ τ), option (SepContract Δ τ).
   Definition SepContractEnvEx : Type :=
     forall Δ τ (f : 𝑭𝑿 Δ τ), SepContract Δ τ.
+  Definition LemmaEnv : Type :=
+    forall Δ (l : 𝑳 Δ), Lemma Δ.
 
   Section DebugInfo.
 
@@ -1093,5 +1119,6 @@ Module Type SymbolicContractKit
 
   Parameter Inline CEnv   : SepContractEnv.
   Parameter Inline CEnvEx : SepContractEnvEx.
+  Parameter Inline LEnv   : LemmaEnv.
 
 End SymbolicContractKit.

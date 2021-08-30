@@ -1475,6 +1475,57 @@ Module IrisSoundness
       by iApply (extSem ι e).
   Qed.
 
+  Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
+    match lem with
+      {| lemma_logic_variables := Σ;
+         lemma_patterns        := θΔ;
+         lemma_precondition    := req;
+         lemma_postcondition   := ens;
+      |} =>
+      forall (ι : SymInstance Σ),
+        ⊢ interpret_assertion req ι -∗
+          interpret_assertion ens ι
+    end.
+
+  Definition LemmaSem : Prop :=
+    forall (Δ : NCtx 𝑿 Ty) (l : 𝑳 Δ),
+      ValidLemma (LEnv l).
+
+  Lemma iris_rule_stm_lemmak
+    {Γ} (δ : CStore Γ) {τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
+    (P Q : iProp Σ) (R : Lit τ -> CStore Γ -> iProp Σ) :
+    LemmaSem ->
+    LTriple (evals es δ) P Q (LEnv l) ->
+    ⊢ semTriple δ Q k R -∗
+      semTriple δ P (stm_lemmak l es k) R.
+  Proof.
+    iIntros (lemSem ltrip).
+    specialize (lemSem _ l).
+    revert ltrip lemSem.
+    generalize (LEnv l) as contractL.
+    intros contractL ltrip lemSem.
+    dependent elimination ltrip; cbn in lemSem.
+    specialize (lemSem ι).
+    iIntros "tripk P".
+    rewrite wp_unfold.
+    iIntros (σ ks1 ks n) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e3 σ2 efs) "%".
+    unfold language.prim_step in H0; cbn in H0.
+    dependent elimination H0.
+    dependent elimination s.
+    iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro; iFrame.
+    iSplitL; [|trivial].
+    iApply "tripk".
+    iApply l1.
+    iPoseProof (l0 with "P") as "[frm pre]".
+    iFrame.
+    by iApply lemSem.
+  Qed.
+
   Lemma iris_rule_stm_debugk
     {Γ τ} (δ : CStore Γ) (k : Stm Γ τ)
     (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
@@ -1537,12 +1588,13 @@ Module IrisSoundness
   Lemma sound_stm {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
     forall (PRE : iProp Σ) (POST : Lit τ -> CStore Γ -> iProp Σ),
       ForeignSem ->
+      LemmaSem ->
       δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄ ->
       ⊢ (□ ▷ ValidContractEnvSem CEnv -∗
           semTriple δ PRE s POST)%I.
   Proof.
-    iIntros (PRE POST extSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iIntros (PRE POST extSem lemSem triple) "#vcenv".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -1572,23 +1624,23 @@ Module IrisSoundness
     - by iApply iris_rule_stm_call_inline.
     - by iApply iris_rule_stm_call_frame.
     - by iApply iris_rule_stm_foreign.
+    - by iApply iris_rule_stm_lemmak.
     - by iApply iris_rule_stm_bind.
     - by iApply iris_rule_stm_debugk.
   Qed.
 
-
   Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
-    ForeignSem -> ValidContractEnv CEnv ->
+    ForeignSem -> LemmaSem -> ValidContractEnv CEnv ->
     ⊢ ValidContractEnvSem CEnv.
   Proof.
-    intros extSem vcenv.
+    intros extSem lemSem vcenv.
     iLöb as "IH".
     iIntros (σs σ f).
     specialize (vcenv σs σ f).
     destruct (CEnv f) as [[]|];[|trivial].
     specialize (vcenv _ eq_refl).
     iIntros (ι).
-    iApply (sound_stm extSem); [|trivial].
+    iApply (sound_stm extSem lemSem); [|trivial].
     apply (vcenv ι).
   Qed.
 

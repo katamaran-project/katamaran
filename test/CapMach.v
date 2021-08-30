@@ -426,8 +426,11 @@ Module CapTermKit <: TermKit .
   | wM    : FunX ["address" :: ty_int, "mem_value" :: ty_int] ty_unit
   .
 
+  Inductive Lem : Ctx (𝑿 * Ty) -> Set :=.
+
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
   Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
+  Definition 𝑳  : PCtx -> Set := Lem.
 
   Inductive Reg : Ty -> Set :=
   | pc   : Reg (ty_record capability)

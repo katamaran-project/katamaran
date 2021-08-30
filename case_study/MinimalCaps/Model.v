@@ -54,6 +54,7 @@ From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require Import weakestpre adequacy.
 From iris.proofmode Require Import tactics.
+From iris_string_ident Require Import ltac2_string_ident.
 From stdpp Require namespaces fin_maps.
 
 Require Import Coq.Program.Equality.
@@ -64,6 +65,25 @@ Module gh := iris.base_logic.lib.gen_heap.
 
 Module MinCapsModel.
   Import MicroSail.Iris.Model.
+
+  Ltac destruct_syminstance ι :=
+    repeat
+      match type of ι with
+      | Env _ (ctx_snoc _ (?s, _)) =>
+        let id := string_to_ident s in
+        let fr := fresh id in
+        destruct (snocView ι) as [ι fr];
+        destruct_syminstance ι
+      | Env _ ctx_nil => destruct (nilView ι)
+      | _ => idtac
+      end.
+
+  Ltac destruct_syminstances :=
+    repeat
+      match goal with
+      | ι : Env _ (ctx_snoc _ _) |- _ => destruct_syminstance ι
+      | ι : Env _ ctx_nil        |- _ => destruct_syminstance ι
+      end.
 
   Module MinCapsIrisHeapKit <: IrisHeapKit MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit.
 
@@ -379,37 +399,89 @@ Module MinCapsModel.
   Module Soundness := IrisSoundness MinCapsTermKit MinCapsProgramKit MinCapsAssertionKit MinCapsSymbolicContractKit MinCapsIrisHeapKit.
   Export Soundness.
 
-  Import EnvNotations.
+  Section Lemmas.
+    Context `{sg : sailG Σ}.
 
-  Lemma gen_dummy_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
-    forall c : Lit ty_cap,
-    evals es δ = env_snoc env_nil (_ , ty_cap) c
-    → ⊢ semTriple δ (⌜is_true true⌝ ∧ emp)
-        (use lemma gen_dummy es)
-          (λ (_ : ()) (δ' : CStore Γ),
-             True ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (c Heq) "_".
-    rewrite wp_unfold.
-    iIntros (σ' ks1 ks n) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first by intuition.
-    iIntros (e2 σ'' efs) "%".
-    cbn in H0.
-    dependent elimination H0.
-    dependent elimination s.
-    rewrite Heq in f1.
-    cbn in f1. 
-    dependent elimination f1.
-    do 2 iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro.
-    iFrame.
-    iSplitL; trivial.
-    iApply wp_value.
-    iSimpl; iSplitL; trivial.
-  Qed.
+    Lemma gen_dummy_sound :
+      ValidLemma MinCapsSymbolicContractKit.lemma_gen_dummy.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      auto.
+    Qed.
+
+    Lemma open_ptsreg_sound :
+      ValidLemma MinCapsSymbolicContractKit.lemma_open_ptsreg.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      destruct reg; auto.
+    Qed.
+
+    Lemma close_ptsreg_sound {R} :
+      ValidLemma (MinCapsSymbolicContractKit.lemma_close_ptsreg R).
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      rewrite MinCapsIrisHeapKit.MinCaps_ptsreg_regtag_to_reg; auto.
+    Qed.
+
+    Lemma int_safe_sound :
+      ValidLemma MinCapsSymbolicContractKit.lemma_int_safe.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq; auto.
+    Qed.
+
+    Lemma duplicate_safe_sound :
+      ValidLemma MinCapsSymbolicContractKit.lemma_duplicate_safe.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      iIntros "#Hsafe". now iSplit.
+    Qed.
+
+    Lemma safe_move_cursor_sound :
+      ValidLemma MinCapsSymbolicContractKit.lemma_safe_move_cursor.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      iIntros "#Hsafe".
+      iSplit; [done|].
+      do 2 rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq.
+      unfold MinCapsIrisHeapKit.MinCaps_safe1.
+      destruct p; auto.
+    Qed.
+
+    Lemma safe_sub_perm_sound :
+      ValidLemma MinCapsSymbolicContractKit.lemma_safe_sub_perm.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      iIntros "[#Hsafe Hp]".
+      iSplit; [done|].
+      do 2 rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq.
+      destruct p; destruct p'; trivial.
+    Qed.
+
+    Lemma safe_within_range_sound :
+      ValidLemma MinCapsSymbolicContractKit.lemma_safe_within_range.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      iIntros "[[#Hsafe _] Hp]".
+      iSplit; [done|].
+      iDestruct "Hp" as (H) "_".
+      unfold is_true in H;
+        apply andb_prop in H;
+        destruct H as [Hb He];
+        apply Zle_is_le_bool in Hb;
+        apply Zle_is_le_bool in He.
+      iApply (MinCapsIrisHeapKit.safe_sub_range $! (conj Hb He) with "Hsafe").
+    Qed.
+
+    Lemma sub_perm_sound :
+      ValidLemma MinCapsSymbolicContractKit.lemma_sub_perm.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      iIntros "_".
+      destruct p, p'; cbn; auto.
+    Qed.
+
+  End Lemmas.
 
   Lemma dI_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
     forall code : Lit ty_int,
@@ -426,286 +498,6 @@ Module MinCapsModel.
     cbn in f1. destruct f1 as [res' e].
     dependent elimination e.
     repeat split; destruct res; eauto.
-  Qed.
-
-  Lemma open_ptsreg_sound `{sg : sailG Σ} {Γ es δ} :
-    forall reg w,
-      let ι := env_snoc (env_snoc env_nil (_ , ty_lv) reg)
-                        ("w" , ty_word) w in
-      evals es δ = env_tail ι
-      → ⊢ semTriple δ
-          (MinCapsIrisHeapKit.MinCaps_ptsreg reg w)
-          (stm_call_external (ghost open_ptsreg) es)
-          (λ (v : ()) (δ' : CStore Γ),
-             (MinCapsSymbolicContractKit.ASS.interpret_assertion
-                  match (ι ‼ "reg")%exp with
-                  | R0 =>
-                      MinCapsSymbolicContractKit.ASS.asn_chunk
-                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg0 (term_var "w"))
-                  | R1 =>
-                      MinCapsSymbolicContractKit.ASS.asn_chunk
-                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg1 (term_var "w"))
-                  (* | R2 =>
-                      MinCapsSymbolicContractKit.ASS.asn_chunk
-                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg2 (term_var "w"))
-                  | R3 =>
-                      MinCapsSymbolicContractKit.ASS.asn_chunk
-                        (MinCapsSymbolicContractKit.ASS.chunk_ptsreg reg3 (term_var "w")) *)
-                  end (ι ► (("result", ty_unit) ↦ v))) ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (reg w ι  Heq) "Hpre".
-    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.MinCaps_ptsreg reg w));
-      try done.
-    - intros s' γ γ' μ μ' δ' step.
-      dependent elimination step.
-      cbn in f1.
-      dependent elimination f1.
-      repeat split; eauto.
-    - iIntros (v) "Hpre".
-      iModIntro.
-      destruct reg; now iSplitL.
-  Qed.
-
-  Lemma close_ptsreg_sound `{sg : sailG Σ} {Γ R es δ} :
-    forall w : Lit ty_word,
-      evals es δ = env_nil
-      → ⊢ semTriple δ
-          (MinCapsIrisHeapKit.IrisRegs.reg_pointsTo (MinCapsSymbolicContractKit.regtag_to_reg R)
-                                                    w)
-          (stm_call_external (ghost (close_ptsreg R)) es)
-          (λ (_ : ()) (δ' : CStore Γ),
-           MinCapsIrisHeapKit.MinCaps_ptsreg R w
-                                             ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (w Heq) "Hpre".
-    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.IrisRegs.reg_pointsTo (MinCapsSymbolicContractKit.regtag_to_reg R) w));
-      try done.
-    - intros s' γ γ' μ μ' δ' step.
-      dependent elimination step.
-      rewrite Heq in f1.
-      cbn in f1.
-      dependent elimination f1.
-      repeat split; eauto.
-    - iIntros (v) "Hpre".
-      iModIntro. iSplitL; [|done].
-      now rewrite <-MinCapsIrisHeapKit.MinCaps_ptsreg_regtag_to_reg.
-  Qed.
-
-  Lemma int_safe_sound `{sg : sailG Σ} {Γ es δ} :
-    forall i,
-      evals es δ = env_snoc env_nil (_ , ty_addr) i
-      → ⊢ semTriple δ
-          (⌜is_true true⌝ ∧ emp)
-          (stm_call_external (ghost int_safe) es)
-          (λ (v : ()) (δ' : CStore Γ),
-           ((⌜v = tt⌝ ∧ emp)
-              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) (inl i))
-             ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (i Heq) "_".
-    iApply (iris_rule_noop (P := True%I));
-      try done.
-    - intros s' γ γ' μ μ' δ' step.
-      dependent elimination step.
-      rewrite Heq in f1.
-      cbn in f1.
-      dependent elimination f1.
-      repeat split; eauto.
-    - iIntros (v) "_".
-      iModIntro. iSplitL; [|done].
-      iSplitR; [now destruct v|].
-      rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq; auto.
-  Qed.
-
-  Lemma duplicate_safe_sound `{sg : sailG Σ} {Γ es δ} :
-    forall w,
-      evals es δ = env_snoc env_nil (_ , ty_word) w
-      → ⊢ semTriple δ
-          (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) w)
-          (stm_call_external (ghost duplicate_safe) es)
-          (λ (v : ()) (δ' : CStore Γ),
-           (((⌜v = tt⌝ ∧ emp)
-               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) w)
-              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG) w)
-             ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (w Heq) "Hsafe".
-    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.MinCaps_safe w));
-      try done.
-    - intros s' γ γ' μ μ' δ' step.
-      dependent elimination step.
-      rewrite Heq in f1.
-      cbn in f1.
-      dependent elimination f1.
-      repeat split; eauto.
-    - iIntros (v) "#Hsafe".
-      iModIntro. iSplitL; [|done].
-      destruct v; now repeat iSplit.
-  Qed.
-
-  Lemma safe_move_cursor_sound `{sg : sailG Σ} {Γ es δ} :
-    forall p b e a a',
-      evals es δ = env_snoc
-                     (env_snoc env_nil (_ , ty_cap)
-                               {| cap_permission := p;
-                                  cap_begin := b;
-                                  cap_end := e;
-                                  cap_cursor := a' |})
-                     (_ , ty_cap)
-                     {| cap_permission := p;
-                        cap_begin := b;
-                        cap_end := e;
-                        cap_cursor := a |}
-      → ⊢ semTriple δ
-          (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
-                                            (inr {|
-                                              cap_permission := p;
-                                              cap_begin := b;
-                                              cap_end := e;
-                                              cap_cursor := a |}))
-          (stm_call_external (ghost safe_move_cursor) es)
-          (λ (v0 : ()) (δ' : CStore Γ),
-           (((⌜v0 = tt⌝ ∧ emp)
-               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
-               (inr {| cap_permission := p;
-                  cap_begin := b;
-                  cap_end := e;
-                  cap_cursor := a |}))
-              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
-              (inr {| cap_permission := p;
-                      cap_begin := b;
-                      cap_end := e;
-                      cap_cursor := a' |})) ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (p b e a a' Heq) "Hsafe".
-    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.MinCaps_safe (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |})));
-      try done.
-    - intros s' γ γ' μ μ' δ' step.
-      dependent elimination step.
-      rewrite Heq in f1.
-      cbn in f1.
-      dependent elimination f1.
-      repeat split; eauto.
-    - iIntros (v) "#Hsafe".
-      iModIntro. iSplitL; [|done].
-      iSplitL.
-      + iSplitR; [destruct v|]; done.
-      + do 2 rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq.
-        unfold MinCapsIrisHeapKit.MinCaps_safe1.
-        destruct p; auto.
-  Qed.
-
-  Lemma safe_sub_perm_sound `{sg : sailG Σ} {Γ es δ} :
-    forall p p' b e a,
-      evals es δ = env_snoc
-                     (env_snoc env_nil (_ , ty_cap)
-                               {| cap_permission := p';
-                                  cap_begin := b;
-                                  cap_end := e;
-                                  cap_cursor := a |})
-                     (_ , ty_cap)
-                     {| cap_permission := p;
-                        cap_begin := b;
-                        cap_end := e;
-                        cap_cursor := a |}
-      → ⊢ semTriple δ
-          (MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
-                                            (inr {|
-                                              cap_permission := p;
-                                              cap_begin := b;
-                                              cap_end := e;
-                                              cap_cursor := a |})
-          ∗ MinCapsIrisHeapKit.MinCaps_subperm p' p)
-          (stm_call_external (ghost safe_sub_perm) es)
-          (λ (v0 : ()) (δ' : CStore Γ),
-           (((⌜v0 = tt⌝ ∧ emp)
-               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
-               (inr {| cap_permission := p;
-                  cap_begin := b;
-                  cap_end := e;
-                  cap_cursor := a |}))
-              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
-              (inr {| cap_permission := p';
-                      cap_begin := b;
-                      cap_end := e;
-                      cap_cursor := a |})) ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (p p' b e a Heq) "H".
-    iApply (iris_rule_noop (P := (MinCapsIrisHeapKit.MinCaps_safe
-                                   (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |})
-                                   ∗ MinCapsIrisHeapKit.MinCaps_subperm p' p)%I));
-      try done.
-    - intros s' γ γ' μ μ' δ' step.
-      dependent elimination step.
-      rewrite Heq in f1.
-      cbn in f1.
-      dependent elimination f1.
-      repeat split; eauto.
-    - iIntros (v) "[#Hsafe Hp]".
-      iModIntro. iSplitL; [|done].
-      iSplitR.
-      + iSplitR; [destruct v|]; done.
-      + do 2 rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq.
-        destruct p; destruct p'; trivial.
-  Qed.
-
-  Lemma safe_within_range_sound `{sg : sailG Σ} {Γ es δ} :
-    forall p b b' e e' a,
-      evals es δ = env_snoc
-                     (env_snoc env_nil (_ , ty_cap)
-                               {| cap_permission := p;
-                                  cap_begin := b';
-                                  cap_end := e';
-                                  cap_cursor := a |})
-                     (_ , ty_cap)
-                     {| cap_permission := p;
-                        cap_begin := b;
-                        cap_end := e;
-                        cap_cursor := a |}
-      → ⊢ semTriple δ
-          ((MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
-                                            (inr {|
-                                              cap_permission := p;
-                                              cap_begin := b;
-                                              cap_end := e;
-                                              cap_cursor := a |})
-                                            ∗ True)
-        ∗ ⌜is_true ((b <=? b')%Z && (e' <=? e)%Z)⌝ ∧ emp)
-          (use lemma safe_within_range es)
-          (λ (v0 : ()) (δ' : CStore Γ),
-           (((⌜v0 = tt⌝ ∧ emp)
-               ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
-               (inr {| cap_permission := p;
-                  cap_begin := b;
-                  cap_end := e;
-                  cap_cursor := a |}))
-              ∗ MinCapsIrisHeapKit.MinCaps_safe (mG := sailG_memG)
-              (inr {| cap_permission := p;
-                      cap_begin := b';
-                      cap_end := e';
-                      cap_cursor := a |})) ∗ ⌜δ' = δ⌝).
-  Proof.
-    iIntros (p b b' e e' a Heq) "[[H _] [% %]]".
-
-    iApply (iris_rule_noop (P := MinCapsIrisHeapKit.MinCaps_safe
-                                   (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |})));
-      try done.
-    - intros s' γ γ' μ μ' δ' step.
-      dependent elimination step.
-      rewrite Heq in f1.
-      cbn in f1.
-      dependent elimination f1.
-      repeat split; eauto.
-    - iIntros (v) "#Hsafe".
-      iModIntro. iSplitL; [|done].
-      iSplitR.
-      + iSplitR; [destruct v|]; done.
-      + unfold is_true in H;
-          apply andb_prop in H;
-          destruct H as [Hb He];
-          apply Zle_is_le_bool in Hb;
-          apply Zle_is_le_bool in He.
-        iApply (MinCapsIrisHeapKit.safe_sub_range $! (conj Hb He) with "Hsafe").
   Qed.
 
   Import iris.base_logic.lib.gen_heap.
@@ -944,86 +736,21 @@ Module MinCapsModel.
           repeat (iSplitL; trivial).
     Qed.
 
-  Lemma sub_perm_sound `{sg : sailG Σ} `{invG} {Γ es δ} :
-    forall p p',
-      let ι := env_snoc (env_snoc env_nil (_ , ty_perm) p)
-                            (_ , ty_perm) p' in
-      evals es δ = ι
-      → ⊢ semTriple δ
-          (⌜is_true true⌝ ∧ emp)
-          (use lemma sub_perm es)
-        (λ (v1 : ()) (δ' : CStore Γ),
-         ((⌜v1 = tt⌝ ∧ emp)
-            ∗ MinCapsSymbolicContractKit.ASS.interpret_assertion
-            match p with
-            | O =>
-              MinCapsSymbolicContractKit.ASS.asn_chunk
-                (MinCapsSymbolicContractKit.ASS.chunk_user subperm
-                                                           (env_nil ► (ty_perm ↦ (term_lit ty_perm p)) ► (ty_perm ↦ (term_lit ty_perm p'))))
-            | R =>
-              MinCapsSymbolicContractKit.ASS.asn_match_enum permission 
-                                                            (term_lit ty_perm p')
-                                                            (λ p' : Permission,
-                                                                    match p' with
-                                                                    | O => MinCapsSymbolicContractKit.ASS.asn_true
-                                                                    | _ =>
-                                                                      MinCapsSymbolicContractKit.ASS.asn_chunk
-                                                                        (MinCapsSymbolicContractKit.ASS.chunk_user subperm
-                                                           (env_nil ► (ty_perm ↦ (term_lit ty_perm p)) ► (ty_perm ↦ (term_lit ty_perm p'))))
-                                                                    end)
-            | RW =>
-              MinCapsSymbolicContractKit.ASS.asn_match_enum permission 
-                                                            (term_lit ty_perm p')
-                                                            (λ p' : Permission,
-                                                                    match p' with
-                                                                    | RW =>
-                                                                      MinCapsSymbolicContractKit.ASS.asn_chunk
-                                                                        (MinCapsSymbolicContractKit.ASS.chunk_user subperm
-                                                           (env_nil ► (ty_perm ↦ (term_lit ty_perm p)) ► (ty_perm ↦ (term_lit ty_perm p'))))
-                                                                    | _ => MinCapsSymbolicContractKit.ASS.asn_true
-                                                                    end)
-            end (env_snoc ι ("" , ty_unit) v1)) ∗ ⌜δ' = δ⌝).
-  Admitted.
-
-  Ltac destruct_SymInstance :=
-    repeat (match goal with
-    | H : Env _ (ctx_snoc _ _) |- _ => destruct (snocView H)
-    | H : Env _ ctx_nil |- _ => destruct (nilView H)
-    end).
 
   Lemma foreignSem `{sg : sailG Σ} : ForeignSem (Σ := Σ).
+  Proof.
     intros Γ τ Δ f es δ.
-    destruct f as [ | | |Γ' [ | reg | | | | | | | ]];
-      cbn - [MinCapsIrisHeapKit.MinCaps_safe MinCapsIrisHeapKit.MinCaps_csafe];
-      intros ι;
-      destruct_SymInstance;
-      eauto using dI_sound, open_ptsreg_sound, close_ptsreg_sound, int_safe_sound, duplicate_safe_sound, safe_move_cursor_sound, safe_sub_perm_sound, safe_within_range_sound, gen_dummy_sound, rM_sound, wM_sound.
-    - (* sub_perm *)
-      rename v into p.
-      rename v0 into p'.
-      iIntros (Heq) "_".
-      rewrite wp_unfold.
-      iIntros (σ' ks1 ks n) "Hregs".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iSplitR; first by intuition.
-      iIntros (e2 σ'' efs) "%".
-      cbn in H.
-      dependent elimination H.
-      dependent elimination s.
-      rewrite Heq in f1.
-      cbn in f1.
-      dependent elimination f1.
-      do 2 iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iFrame.
-      iSplitL; trivial.
-      iApply wp_value.
-      cbn.
-      iSplitL; trivial.
-      iSplitL; trivial.
-      destruct p'; destruct p; trivial.
+    destruct f; cbn - [MinCapsIrisHeapKit.MinCaps_safe MinCapsIrisHeapKit.MinCaps_csafe];
+      intros ι; destruct_syminstance ι;
+        eauto using dI_sound, rM_sound, wM_sound.
+  Qed.
+
+  Lemma lemSem `{sg : sailG Σ} : LemmaSem (Σ := Σ).
+  Proof.
+    intros Δ []; eauto using
+      open_ptsreg_sound, close_ptsreg_sound, int_safe_sound,
+      duplicate_safe_sound, safe_move_cursor_sound, safe_sub_perm_sound,
+      safe_within_range_sound, gen_dummy_sound, sub_perm_sound.
   Qed.
 
 End MinCapsModel.

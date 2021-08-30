@@ -243,6 +243,8 @@ Module ExampleTermKit <: TermKit.
   Definition 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮) :=
     fun '(existT _ x) => match x with end.
 
+  Definition 𝑳 : NCtx 𝑿 Ty -> Set := fun _ => Empty_set.
+
 End ExampleTermKit.
 
 (*** PROGRAM ***)
@@ -416,6 +418,10 @@ Module SepContracts.
     Definition CEnvEx : SepContractEnvEx :=
       fun Δ τ f =>
         match f with end.
+
+    Definition LEnv : LemmaEnv :=
+      fun Δ l =>
+        match l with end.
 
   End ExampleSymbolicContractKit.
 
