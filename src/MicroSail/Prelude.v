@@ -276,20 +276,27 @@ Lemma optionspec_monotonic {A : Type} (S1 S2 : A -> Prop) (N1 N2 : Prop)
     OptionSpec S1 N1 o -> OptionSpec S2 N2 o.
 Proof. intros ? []; constructor; auto. Qed.
 
-Fixpoint heap_extractions {C} (h : list C) : list (C * list C) :=
+Class IsDuplicable (T : Type) :=
+  { is_duplicable : T -> bool
+  }.
+
+Fixpoint heap_extractions `{IsDuplicable C} (h : list C) : list (C * list C) :=
   match h with
   | nil      => []
-  | cons c h => cons (pair c h) (map (fun '(pair c' h') => (pair c' (cons c h'))) (heap_extractions h))
+  | cons c h => let ec := if is_duplicable c then pair c (cons c h) else pair c h
+               in cons ec (map (fun '(pair c' h') => (pair c' (cons c h'))) (heap_extractions h))
   end.
 
-Lemma heap_extractions_map {A B} (f : A -> B) (h : list A) :
+Lemma heap_extractions_map `{IsDuplicable A} `{IsDuplicable B} (f : A -> B) (h : list A)
+      (is_dup_map : (forall c, is_duplicable (f c) = is_duplicable c)) :
   heap_extractions (List.map f h) = List.map (base.prod_map f (List.map f)) (heap_extractions h).
 Proof.
   induction h; cbn.
   - reflexivity.
-  - f_equal.
-    rewrite IHh.
-    rewrite ?List.map_map.
-    apply List.map_ext.
-    intros [x xs]. reflexivity.
+  - rewrite is_dup_map.
+    destruct (is_duplicable a); f_equal;
+    rewrite IHh;
+    rewrite ?List.map_map;
+    apply List.map_ext;
+    intros [x xs]; reflexivity.
 Qed.

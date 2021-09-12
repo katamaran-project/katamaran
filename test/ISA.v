@@ -482,6 +482,7 @@ Module ISAAssertionKit <: (AssertionKit ISATermKit ISAProgramKit).
     end.
   Definition 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
 
+  Instance 𝑷_is_dup : IsDuplicable 𝑷 := { is_duplicable := fun p => match p with | ptstoreg => false end }.
 End ISAAssertionKit.
 
 Module ISASymbolicContractKit <:

@@ -245,6 +245,11 @@ Module Type IrisHeapKit
   Parameter Inline mem_inv_init : forall Σ (μ : Memory), memPreG Σ -> ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
 
   Parameter luser_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (p : 𝑷) (ts : Env Lit (𝑷_Ty p)), memG Σ -> iProp Σ.
+
+  Parameter lduplicate_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (p : 𝑷) (ts : Env Lit (𝑷_Ty p))
+      (mG : memG Σ),
+      is_duplicable p = true -> bi_entails (luser_inst (p := p) ts mG) (luser_inst (p := p) ts mG ∗ luser_inst (p := p) ts mG).
+
 End IrisHeapKit.
 
 Module IrisInstance
@@ -424,7 +429,8 @@ Module IrisInstance
     { is_ISepLogic := iris_ISepLogic;
       (* TODO: should be user-defined... *)
       luser p ts := luser_inst ts sailG_memG;
-      lptsreg σ r t := reg_pointsTo r t
+      lptsreg σ r t := reg_pointsTo r t;
+      lduplicate p ts := fun hdup => lduplicate_inst (p := p) ts sailG_memG hdup
     }.
 
   End IrisInstance.

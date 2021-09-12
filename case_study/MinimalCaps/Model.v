@@ -367,7 +367,7 @@ Module MinCapsModel.
 
     Import EnvNotations.
 
-    Definition MinCaps_subperm {Σ} (p p' : Permission) : iProp Σ :=
+    Definition MinCaps_subperm (p p' : Permission) : Prop :=
       match p with
       | O => True
       | R => match p' with
@@ -385,13 +385,24 @@ Module MinCapsModel.
       | ptsreg => fun ts => MinCaps_ptsreg (env_head (env_tail ts)) (env_head ts)
       | ptsto => fun ts => mapsto (hG := mc_ghG (mcMemG := mG)) (env_head (env_tail ts)) (DfracOwn 1) (env_head ts)
       | safe => fun ts => MinCaps_safe (mG := mG) (env_head ts)
-      | subperm => fun ts => MinCaps_subperm (env_head (env_tail ts)) (env_head ts) 
+      | subperm => fun ts => bi_pure (MinCaps_subperm (env_head (env_tail ts)) (env_head ts))
       | dummy => fun ts => True%I
       end) ts.
 
     Global Instance MinCaps_safe_Persistent `{sailRegG Σ} `{invG Σ} {mG : memG Σ} (w : leibnizO MemVal) : Persistent (MinCaps_safe (mG := mG) w).
     Proof. destruct w; simpl; rewrite fixpoint_MinCaps_safe1_eq; simpl; first apply _.
            destruct c; destruct cap_permission; apply _. Qed.
+
+    Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (MinCapsAssertionKit.𝑷_Ty p)) :
+      forall (mG : memG Σ),
+        is_duplicable p = true ->
+        (luser_inst p ts mG) ⊢ (luser_inst p ts mG ∗ luser_inst p ts mG).
+    Proof.
+      iIntros (mG hdup) "H".
+      destruct p; inversion hdup;
+      iDestruct "H" as "#H";
+      auto.
+    Qed.
 
     End WithIrisNotations.
   End MinCapsIrisHeapKit.
@@ -430,12 +441,12 @@ Module MinCapsModel.
       rewrite MinCapsIrisHeapKit.fixpoint_MinCaps_safe1_eq; auto.
     Qed.
 
-    Lemma duplicate_safe_sound :
-      ValidLemma MinCapsSymbolicContractKit.lemma_duplicate_safe.
-    Proof.
-      intros ι. destruct_syminstance ι. cbn.
-      iIntros "#Hsafe". now iSplit.
-    Qed.
+    (* Lemma duplicate_safe_sound : *)
+    (*   ValidLemma MinCapsSymbolicContractKit.lemma_duplicate_safe. *)
+    (* Proof. *)
+    (*   intros ι. destruct_syminstance ι. cbn. *)
+    (*   iIntros "#Hsafe". now iSplit. *)
+    (* Qed. *)
 
     Lemma safe_move_cursor_sound :
       ValidLemma MinCapsSymbolicContractKit.lemma_safe_move_cursor.
@@ -462,7 +473,7 @@ Module MinCapsModel.
       ValidLemma MinCapsSymbolicContractKit.lemma_safe_within_range.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      iIntros "[[#Hsafe _] Hp]".
+      iIntros "[#Hsafe Hp]".
       iSplit; [done|].
       iDestruct "Hp" as (H) "_".
       unfold is_true in H;
@@ -512,7 +523,7 @@ Module MinCapsModel.
                                                cap_begin := b;
                                                cap_end := e;
                                                cap_cursor := a |})
-           ∗ MinCapsIrisHeapKit.MinCaps_subperm R p)
+           ∗ ⌜MinCapsIrisHeapKit.MinCaps_subperm R p⌝)
            ∗ ⌜is_true ((b <=? a)%Z && (a <=? e)%Z)⌝ ∧ emp)
         (stm_call_external rM es)
         (λ (v3 : Z + Capability) (δ' : CStore Γ),
@@ -655,7 +666,7 @@ Module MinCapsModel.
                                                cap_begin := b;
                                                cap_end := e;
                                                cap_cursor := a |}))
-           ∗ MinCapsIrisHeapKit.MinCaps_subperm RW p)
+           ∗ ⌜MinCapsIrisHeapKit.MinCaps_subperm RW p⌝)
            ∗ ⌜is_true ((b <=? a)%Z && (a <=? e)%Z)⌝ ∧ emp)
         (stm_call_external wM es)
         (λ (v3 : ()) (δ' : CStore Γ),
@@ -749,7 +760,7 @@ Module MinCapsModel.
   Proof.
     intros Δ []; eauto using
       open_ptsreg_sound, close_ptsreg_sound, int_safe_sound,
-      duplicate_safe_sound, safe_move_cursor_sound, safe_sub_perm_sound,
+      safe_move_cursor_sound, safe_sub_perm_sound,
       safe_within_range_sound, gen_dummy_sound, sub_perm_sound.
   Qed.
 

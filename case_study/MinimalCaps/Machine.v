@@ -131,7 +131,6 @@ Module MinCapsTermKit <: TermKit.
   Inductive Lem : PCtx -> Set :=
   | open_ptsreg                : Lem ["reg" ∶ ty_enum regname]
   | close_ptsreg (R : RegName) : Lem ctx_nil
-  | duplicate_safe             : Lem ["w" ∶ ty_word]
   | safe_move_cursor           : Lem ["c'" ∶ ty_cap, "c" ∶ ty_cap]
   | safe_sub_perm              : Lem ["c'" ∶ ty_cap, "c" ∶ ty_cap]
   | safe_within_range          : Lem ["c'" ∶ ty_cap, "c" ∶ ty_cap]
@@ -329,7 +328,6 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
                                       exp_var "cursor" + exp_var "immediate"
                                     ] in
        let: w ∶ ty_word := call read_reg hv in
-       use lemma duplicate_safe [exp_var w] ;;
        use lemma safe_move_cursor [exp_var "c", exp_var "base_cap"] ;;
        call write_mem c w ;;
        call update_pc ;;
@@ -675,7 +673,6 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_match_enum regname (exp_var "hv") (fun _ => stm_lit ty_unit tt) ;;
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       let: w ∶ word := call read_reg (exp_var hv) in
-      use lemma duplicate_safe [exp_var w] ;;
       call write_reg lv (exp_var w) ;;
       call update_pc ;;
       stm_lit ty_bool true.
@@ -684,7 +681,6 @@ Module MinCapsProgramKit <: (ProgramKit MinCapsTermKit).
       stm_match_enum regname (exp_var "lv") (fun _ => stm_lit ty_unit tt) ;;
       let: "c" ∶ ty_cap := call read_reg_cap (exp_var "lv") in
       stm_write_register pc (exp_var "c") ;;
-      use lemma duplicate_safe [exp_inr (exp_var "c")] ;;
       stm_lit ty_bool true.
 
     Definition fun_exec_jalr : Stm ["lv1" ∶ ty_lv, "lv2" ∶ ty_lv] ty_bool :=

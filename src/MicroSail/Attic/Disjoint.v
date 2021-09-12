@@ -294,12 +294,16 @@ Module Disjoint
   Solve Obligations with eauto with seplogic.
   Admit Obligations of HProp_ISepLogicLaws.
 
-  Instance HProp_Heaplet : IHeaplet HProp :=
+  Program Instance HProp_Heaplet : IHeaplet HProp :=
   { (* We don't have any predicates in this model yet;
        thus we map the predicate to False *)
     luser (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) := fun γ => False;
-    lptsreg (σ : Ty) (r : 𝑹𝑬𝑮 σ) (t : Lit σ) := fun γ => γ σ r = Some t
+    lptsreg (σ : Ty) (r : 𝑹𝑬𝑮 σ) (t : Lit σ) := fun γ => γ σ r = Some t;
   }.
+  Next Obligation.
+    intros p ts hdup h hyp.
+    contradict hyp.
+  Qed.
 
   Definition write_heap (γ : Heap) {σ} (r : 𝑹𝑬𝑮 σ)
     (v : Lit σ) : Heap :=

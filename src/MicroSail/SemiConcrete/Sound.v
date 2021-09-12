@@ -79,15 +79,36 @@ Module Soundness
       List.fold_right (fun c h => interpret_scchunk c ✱ h) emp.
     Global Arguments interpret_scheap !h.
 
-    Lemma in_heap_extractions {h c1 h1} (hyp : List.In (c1 , h1) (heap_extractions h)) :
+    Lemma scchunk_duplicate (c : SCChunk) :
+      is_duplicable c = true -> interpret_scchunk c ⊢ interpret_scchunk c ✱ interpret_scchunk c.
+    Proof.
+      destruct c; cbn.
+      - eauto using lduplicate.
+      - inversion 1.
+    Qed.
+
+    Lemma in_heap_extractions {h : SCHeap} {c1 h1} (hyp : List.In (c1 , h1) (heap_extractions h)) :
       interpret_scheap h ⊣⊢s interpret_scchunk c1 ✱ interpret_scheap h1.
     Proof.
       revert c1 h1 hyp.
-      induction h; cbn; intros.
+      induction h; cbn -[is_duplicable]; intros.
       - contradict hyp.
       - destruct hyp as [hyp|hyp].
-        + inversion hyp; subst.
-          split; apply entails_refl.
+        + remember (is_duplicable a) as dup.
+          destruct dup;
+          inversion hyp; subst.
+          * split.
+            refine (entails_trans _ _ _ _ _).
+            refine (sepcon_entails _ _ _ _ (scchunk_duplicate c1 (eq_sym Heqdup)) (entails_refl (interpret_scheap h))).
+            refine (proj1 (sepcon_assoc _ _ _)).
+            (* refine (proj2 (sepcon_assoc _ _ _)). *)
+            refine (sepcon_entails _ _ _ _ (entails_refl _) _).
+            refine (entails_trans _ _ _ _ _).
+            refine (sepcon_entails _ _ _ _ (sep_leak _) (entails_refl _)).
+            refine (entails_trans _ _ _ _ _).
+            refine (proj2 (sepcon_comm _ _)).
+            refine (proj1 (sepcon_emp _)).
+          * split; apply entails_refl.
         + cbn in *.
           apply List.in_map_iff in hyp.
           destruct hyp as [[c2 h2] [H1 H2]].

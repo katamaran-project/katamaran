@@ -1552,10 +1552,13 @@ Module Soundness
       True
       (SMut.try_consume_chunk_exact h c).
   Proof.
-    induction h as [|c' h]; cbn.
+    induction h as [|c' h].
     - now constructor.
-    - destruct (chunk_eqb_spec c c').
-      + constructor. left. f_equal; auto.
+    - cbn -[is_duplicable].
+      destruct (chunk_eqb_spec c c').
+      + constructor. left. subst.
+        remember (is_duplicable c') as dup.
+        destruct dup; reflexivity.
       + apply optionspec_map. revert IHh.
         apply optionspec_monotonic; auto.
         intros h' HIn. right.
@@ -1563,6 +1566,13 @@ Module Soundness
         exists (c :: h'). auto.
   Qed.
 
+  Lemma inst_is_duplicable {w : World} (c : Chunk w) (ι : SymInstance w) :
+    is_duplicable (inst c ι) = is_duplicable c.
+  Proof.
+    destruct c; now cbn.
+  Qed.
+
+  
   Lemma approx_consume_chunk {Γ} {w0 : World} (ι0 : SymInstance w0)
     (Hpc0 : instpc (wco w0) ι0) :
     approx ι0 (@SMut.consume_chunk Γ w0) (CMut.consume_chunk).
@@ -1586,6 +1596,7 @@ Module Soundness
       + unfold inst at 3. cbn. rewrite heap_extractions_map.
         rewrite List.in_map_iff. exists (subst cs ω01 , h').
         split. reflexivity. assumption.
+        eauto using inst_is_duplicable.
       + hnf. rewrite inst_subst. split; auto. revert Hwp.
         apply HPOST; wsimpl; auto.
     - apply approx_bind.
@@ -1593,6 +1604,7 @@ Module Soundness
       { hnf. unfold inst at 1. cbn.
         rewrite heap_extractions_map.
         apply List.map_ext. now intros [].
+        eauto using inst_is_duplicable.
       }
       intros w2 ω12 ι2 -> Hpc2.
       intros [cs' hs'] [cc' hc'].

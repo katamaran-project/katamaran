@@ -84,6 +84,16 @@ Module Export MinCapsAssertionKit <:
     | subperm => [ty_perm, ty_perm]
     | dummy => [ty_cap]
     end.
+  Instance 𝑷_is_dup : IsDuplicable Predicate := {
+    is_duplicable p :=
+      match p with
+      | ptsreg => false
+      | ptsto => false
+      | safe => true
+      | subperm => true
+      | dummy => false
+      end
+    }.
   Instance 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
 End MinCapsAssertionKit.
 
@@ -678,16 +688,6 @@ Module MinCapsSymbolicContractKit <:
                      end)
     |}.
 
-  (* TODO: add persistent predicates? *)
-  Definition lemma_duplicate_safe : SepLemma duplicate_safe :=
-    {| lemma_logic_variables := ["w" ∶ ty_word];
-       lemma_patterns        := [term_var "w"]%arg;
-       lemma_precondition    := asn_safe (term_var "w");
-       lemma_postcondition   :=
-         asn_safe (term_var "w") ✱
-         asn_safe (term_var "w")
-    |}.
-
   Definition lemma_safe_move_cursor : SepLemma safe_move_cursor :=
     let Σ : LCtx := ["p" ∶ ty_perm, "b" ∶ ty_addr, "e" ∶ ty_addr, "a" ∶ ty_addr, "a'" ∶ ty_addr]%ctx in
     let c  : Term Σ _ := term_record capability [term_var "p", term_var "b", term_var "e", term_var "a"] in
@@ -862,7 +862,6 @@ Module MinCapsSymbolicContractKit <:
       match l with
         | open_ptsreg            => lemma_open_ptsreg
         | close_ptsreg r         => lemma_close_ptsreg r
-        | duplicate_safe         => lemma_duplicate_safe
         | safe_move_cursor       => lemma_safe_move_cursor
         | safe_sub_perm          => lemma_safe_sub_perm
         | safe_within_range      => lemma_safe_within_range

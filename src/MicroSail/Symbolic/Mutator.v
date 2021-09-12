@@ -3410,7 +3410,7 @@ Module Mutators
         | nil       => None
         | cons c' h =>
           if chunk_eqb c c'
-          then Some h
+          then Some (if is_duplicable c then (cons c h) else h)
           else option_map (cons c') (try_consume_chunk_exact h c)
         end.
 

@@ -59,6 +59,9 @@ Module Type AssertionKit
   Parameter Inline 𝑷  : Set.
   (* Predicate field types. *)
   Parameter Inline 𝑷_Ty : 𝑷 -> Ctx Ty.
+  (* Duplicable? *)
+  Declare Instance 𝑷_is_dup : IsDuplicable 𝑷.
+
   Declare Instance 𝑷_eq_dec : EqDec 𝑷.
 
 End AssertionKit.
@@ -472,6 +475,20 @@ Module Assertions
       Derive NoConfusion for SCChunk.
       Derive NoConfusion for Chunk.
     End TransparentObligations.
+
+    Global Instance scchunk_isdup : IsDuplicable SCChunk := {
+      is_duplicable := fun c => match c with
+                             | scchunk_user p _ => is_duplicable p
+                             | scchunk_ptsreg _ _ => false
+                             end
+      }.
+
+    Global Instance chunk_isdup {Σ} : IsDuplicable (Chunk Σ) := {
+      is_duplicable := fun c => match c with
+                             | chunk_user p _ => is_duplicable p
+                             | chunk_ptsreg _ _ => false
+                             end
+      }.
 
     Definition chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
       match c1 , c2 with
@@ -1002,9 +1019,12 @@ Module Assertions
   End Experimental.
 
   Class IHeaplet (L : Type) := {
-    is_ISepLogic :> ISepLogic L;
-    luser (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L;
-    lptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L
+      is_ISepLogic :> ISepLogic L
+    ; luser (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L
+    ; lptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L
+    ; lduplicate (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) :
+        is_duplicable p = true ->
+        (lentails (luser (p := p) ts) (sepcon (luser (p := p) ts) (luser (p := p) ts)))
   }.
 
   Arguments luser {L _} p ts.
