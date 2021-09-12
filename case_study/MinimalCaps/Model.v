@@ -473,7 +473,7 @@ Module MinCapsModel.
       ValidLemma MinCapsSymbolicContractKit.lemma_safe_within_range.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      iIntros "[#Hsafe Hp]".
+      iIntros "[[#Hsafe _] Hp]".
       iSplit; [done|].
       iDestruct "Hp" as (H) "_".
       unfold is_true in H;
