@@ -94,21 +94,20 @@ Module Soundness
       induction h; cbn -[is_duplicable]; intros.
       - contradict hyp.
       - destruct hyp as [hyp|hyp].
-        + remember (is_duplicable a) as dup.
-          destruct dup;
-          inversion hyp; subst.
-          * split.
-            refine (entails_trans _ _ _ _ _).
-            refine (sepcon_entails _ _ _ _ (scchunk_duplicate c1 (eq_sym Heqdup)) (entails_refl (interpret_scheap h))).
-            refine (proj1 (sepcon_assoc _ _ _)).
-            (* refine (proj2 (sepcon_assoc _ _ _)). *)
-            refine (sepcon_entails _ _ _ _ (entails_refl _) _).
-            refine (entails_trans _ _ _ _ _).
-            refine (sepcon_entails _ _ _ _ (sep_leak _) (entails_refl _)).
-            refine (entails_trans _ _ _ _ _).
-            refine (proj2 (sepcon_comm _ _)).
-            refine (proj1 (sepcon_emp _)).
-          * split; apply entails_refl.
+        + destruct (is_duplicable a) eqn:Heqdup;
+            inversion hyp; subst; clear hyp.
+          { split.
+            - transitivity (interpret_scchunk c1 ✱ interpret_scchunk c1 ✱ interpret_scheap h).
+              apply sepcon_entails; [|reflexivity].
+              apply scchunk_duplicate; assumption.
+              rewrite sepcon_assoc. reflexivity.
+            - apply sepcon_entails; [reflexivity|]. cbn.
+              transitivity (emp ✱ interpret_scheap h).
+              apply sepcon_entails; [|reflexivity].
+              apply sep_leak.
+              now rewrite sepcon_comm, sepcon_emp.
+          }
+          { split; apply entails_refl. }
         + cbn in *.
           apply List.in_map_iff in hyp.
           destruct hyp as [[c2 h2] [H1 H2]].
