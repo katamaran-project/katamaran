@@ -461,13 +461,17 @@ Module Assertions
     (* Semi-concrete chunks *)
     Inductive SCChunk : Type :=
     | scchunk_user   (p : 𝑷) (vs : Env Lit (𝑷_Ty p))
-    | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ).
+    | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ)
+    | scchunk_conj   (c1 c2 : SCChunk)
+    | scchunk_wand   (c1 c2 : SCChunk).
     Global Arguments scchunk_user _ _ : clear implicits.
 
     (* Symbolic chunks *)
     Inductive Chunk (Σ : LCtx) : Type :=
     | chunk_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
-    | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
+    | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ)
+    | chunk_conj   (c1 c2 : Chunk Σ)
+    | chunk_wand   (c1 c2 : Chunk Σ).
     Global Arguments chunk_user [_] _ _.
 
     Section TransparentObligations.
@@ -480,6 +484,8 @@ Module Assertions
       is_duplicable := fun c => match c with
                              | scchunk_user p _ => is_duplicable p
                              | scchunk_ptsreg _ _ => false
+                             | scchunk_conj _ _ => false
+                             | scchunk_wand _ _ => false
                              end
       }.
 
@@ -487,10 +493,14 @@ Module Assertions
       is_duplicable := fun c => match c with
                              | chunk_user p _ => is_duplicable p
                              | chunk_ptsreg _ _ => false
+                             | chunk_conj _ _ => false
+                             | chunk_wand _ _ => false
                              end
       }.
 
-    Definition chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
+    Open Scope lazy_bool_scope.
+
+    Fixpoint chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool :=
       match c1 , c2 with
       | chunk_user p1 ts1, chunk_user p2 ts2 =>
         match eq_dec p1 p2 with
@@ -507,6 +517,10 @@ Module Assertions
                        t2
         | right _ => false
         end
+      | chunk_conj c11 c12 , chunk_conj c21 c22 =>
+        chunk_eqb c11 c21 &&& chunk_eqb c12 c22
+      | chunk_wand c11 c12 , chunk_wand c21 c22 =>
+        chunk_eqb c11 c21 &&& chunk_eqb c12 c22
       | _ , _ => false
       end.
 
@@ -514,7 +528,10 @@ Module Assertions
     Lemma chunk_eqb_spec {Σ} (c1 c2 : Chunk Σ) :
       reflect (c1 = c2) (chunk_eqb c1 c2).
     Proof.
-      destruct c1 as [p1 ts1|σ1 r1 t1], c2 as [p2 ts2|σ2 r2 t2]; cbn.
+      revert c2.
+      induction c1 as [p1 ts1|σ1 r1 t1|c11 IHc11 c12 IHc12|c11 IHc11 c12 IHc12];
+        intros [p2 ts2|σ2 r2 t2|c21 c22|c21 c22];
+        try (constructor; discriminate; fail); cbn.
       - destruct (eq_dec p1 p2).
         + destruct e; cbn.
           destruct (env_eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) ts1 ts2).
@@ -525,8 +542,6 @@ Module Assertions
         + constructor. intros Heq.
           dependent elimination Heq.
           auto.
-      - constructor. discriminate.
-      - constructor. discriminate.
       - destruct (eq_dec_het r1 r2).
         + dependent elimination e; cbn.
           destruct (Term_eqb_spec t1 t2).
@@ -537,6 +552,10 @@ Module Assertions
         + constructor. intros Heq.
           dependent elimination Heq.
           auto.
+      - destruct (IHc11 c21), (IHc12 c22);
+          constructor; intuition; fail.
+      - destruct (IHc11 c21), (IHc12 c22);
+          constructor; intuition; fail.
     Qed.
 
     (* Equations(noeqns) chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool := *)
@@ -552,44 +571,63 @@ Module Assertions
     (*   }; *)
     (*   chunk_eqb _ _  := false. *)
 
-    Global Instance sub_chunk : Subst Chunk :=
-      fun Σ1 c Σ2 ζ =>
-        match c with
-        | chunk_user p ts => chunk_user p (subst ts ζ)
-        | chunk_ptsreg r t => chunk_ptsreg r (subst t ζ)
-        end.
+    Fixpoint sub_chunk {Σ1} (c : Chunk Σ1) {Σ2} (ζ : Sub Σ1 Σ2) {struct c} : Chunk Σ2 :=
+      match c with
+      | chunk_user p ts => chunk_user p (subst ts ζ)
+      | chunk_ptsreg r t => chunk_ptsreg r (subst t ζ)
+      | chunk_conj c1 c2 =>
+        chunk_conj (sub_chunk c1 ζ) (sub_chunk c2 ζ)
+      | chunk_wand c1 c2 =>
+        chunk_wand (sub_chunk c1 ζ) (sub_chunk c2 ζ)
+      end.
+
+    Global Instance SubstChunk : Subst Chunk :=
+      @sub_chunk.
 
     Global Instance substlaws_chunk : SubstLaws Chunk.
     Proof.
       constructor.
-      { intros ? []; cbn; f_equal; apply subst_sub_id. }
-      { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
+      { intros ? c. induction c; cbn; f_equal; auto; apply subst_sub_id. }
+      { intros ? ? ? ? ? c. induction c; cbn; f_equal; auto; apply subst_sub_comp. }
     Qed.
 
-    Global Instance inst_chunk : Inst Chunk SCChunk :=
-      {| inst Σ c ι := match c with
-                       | chunk_user p ts => scchunk_user p (inst ts ι)
-                       | chunk_ptsreg r t => scchunk_ptsreg r (inst t ι)
-                       end;
-         lift Σ c   := match c with
-                       | scchunk_user p vs => chunk_user p (lift vs)
-                       | scchunk_ptsreg r v => chunk_ptsreg r (lift v)
-                       end
+    Fixpoint inst_chunk {Σ} (c : Chunk Σ) (ι : SymInstance Σ) {struct c} : SCChunk :=
+      match c with
+      | chunk_user p ts => scchunk_user p (inst ts ι)
+      | chunk_ptsreg r t => scchunk_ptsreg r (inst t ι)
+      | chunk_conj c1 c2 => scchunk_conj (inst_chunk c1 ι) (inst_chunk c2 ι)
+      | chunk_wand c1 c2 => scchunk_wand (inst_chunk c1 ι) (inst_chunk c2 ι)
+      end.
+
+    Fixpoint lift_chunk {Σ} (c : SCChunk) {struct c} : Chunk Σ :=
+      match c with
+      | scchunk_user p vs => chunk_user p (lift vs)
+      | scchunk_ptsreg r v => chunk_ptsreg r (lift v)
+      | scchunk_conj c1 c2 => chunk_conj (lift_chunk c1) (lift_chunk c2)
+      | scchunk_wand c1 c2 => chunk_wand (lift_chunk c1) (lift_chunk c2)
+      end.
+
+    Global Instance InstChunk : Inst Chunk SCChunk :=
+      {| inst := @inst_chunk;
+         lift := @lift_chunk;
       |}.
 
     Global Instance instlaws_chunk : InstLaws Chunk SCChunk.
     Proof.
       constructor.
-      - intros ? ? []; cbn; f_equal; apply inst_lift.
-      - intros ? ? ζ ι []; cbn; f_equal; apply inst_subst.
+      - intros ? ? c; induction c; cbn; f_equal; auto; apply inst_lift.
+      - intros ? ? ζ ι c; induction c; cbn; f_equal; auto; apply inst_subst.
     Qed.
 
     Global Instance OccursCheckChunk :
       OccursCheck Chunk :=
-      fun Σ b bIn c =>
+      fun Σ b bIn =>
+        fix occurs_check_chunk (c : Chunk Σ) : option (Chunk (Σ - b)) :=
         match c with
         | chunk_user p ts => option_map (chunk_user p) (occurs_check bIn ts)
         | chunk_ptsreg r t => option_map (chunk_ptsreg r) (occurs_check bIn t)
+        | chunk_conj c1 c2 => option_ap (option_map (@chunk_conj _) (occurs_check_chunk c1)) (occurs_check_chunk c2)
+        | chunk_wand c1 c2 => option_ap (option_map (@chunk_wand _) (occurs_check_chunk c1)) (occurs_check_chunk c2)
         end.
 
   End Chunks.
@@ -1034,10 +1072,12 @@ Module Assertions
 
     Import LogicNotations.
 
-    Definition interpret_chunk {Σ} (c : Chunk Σ) (ι : SymInstance Σ) : L :=
+    Fixpoint interpret_chunk {Σ} (c : Chunk Σ) (ι : SymInstance Σ) {struct c} : L :=
       match c with
       | chunk_user p ts => luser p (inst ts ι)
       | chunk_ptsreg r t => lptsreg r (inst t ι)
+      | chunk_conj c1 c2 => sepcon (interpret_chunk c1 ι) (interpret_chunk c2 ι)
+      | chunk_wand c1 c2 => wand (interpret_chunk c1 ι) (interpret_chunk c2 ι)
       end.
 
     Fixpoint interpret_assertion {Σ} (a : Assertion Σ) (ι : SymInstance Σ) : L :=
@@ -1093,40 +1133,6 @@ Module Assertions
   End Contracts.
 
   Arguments interpret_assertion {_ _ _} _ _.
-
-  Section WithEvarEnv.
-
-    Import stdpp.base.
-
-    Context {Σe Σr} (δ : EvarEnv Σe Σr).
-
-    Definition eval_chunk_evar (c : Chunk Σe) : option (Chunk Σr) :=
-      match c with
-      | chunk_user p ts => chunk_user p <$> traverse_env (eval_term_evar δ) ts
-      | chunk_ptsreg r t => chunk_ptsreg r <$> eval_term_evar δ t
-      end.
-
-    Equations(noeqns) match_chunk (ce : Chunk Σe) (cr : Chunk Σr) :
-      EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
-      match_chunk (chunk_user p1 ts1) (chunk_user p2 ts2)
-      with eq_dec p1 p2 => {
-        match_chunk (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := match_env ts1 ts2;
-        match_chunk (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := fun _ => None
-      };
-      match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
-      with eq_dec_het r1 r2 => {
-        match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left eq_refl) := match_term t1 t2;
-        match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := fun _ => None
-      };
-      match_chunk _ _  := fun _ => None.
-
-    Definition extract_chunk (ce : Chunk Σe) (h : SHeap Σr) (L : EvarEnv Σe Σr) :
-      List (Pair (EvarEnv Σe) SHeap) Σr :=
-      omap
-        (fun '(cr,h') => option_map (fun L' => (L',h')) (match_chunk ce cr L))
-        (heap_extractions h).
-
-  End WithEvarEnv.
 
 End Assertions.
 

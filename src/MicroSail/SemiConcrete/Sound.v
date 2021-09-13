@@ -69,10 +69,12 @@ Module Soundness
 
     Context `{HL: IHeaplet L} {SLL: ISepLogicLaws L}.
 
-    Definition interpret_scchunk (c : SCChunk) : L :=
+    Fixpoint interpret_scchunk (c : SCChunk) : L :=
       match c with
       | scchunk_user p vs => luser p vs
       | scchunk_ptsreg r v => lptsreg r v
+      | scchunk_conj c1 c2 => sepcon (interpret_scchunk c1) (interpret_scchunk c2)
+      | scchunk_wand c1 c2 => wand (interpret_scchunk c1) (interpret_scchunk c2)
       end.
 
     Definition interpret_scheap : SCHeap -> L :=
@@ -82,9 +84,8 @@ Module Soundness
     Lemma scchunk_duplicate (c : SCChunk) :
       is_duplicable c = true -> interpret_scchunk c ⊢ interpret_scchunk c ✱ interpret_scchunk c.
     Proof.
-      destruct c; cbn.
-      - eauto using lduplicate.
-      - inversion 1.
+      destruct c; cbn; try discriminate.
+      eauto using lduplicate.
     Qed.
 
     Lemma in_heap_extractions {h : SCHeap} {c1 h1} (hyp : List.In (c1 , h1) (heap_extractions h)) :
@@ -251,6 +252,13 @@ Module Soundness
       - unfold pure; eauto.
     Qed.
 
+    Lemma interpret_scchunk_inst {Σ} (c : Chunk Σ) (ι : SymInstance Σ) :
+      interpret_scchunk (inst c ι) = interpret_chunk c ι.
+    Proof.
+      induction c; cbn [interpret_chunk];
+        try rewrite <- IHc1, <- IHc2; reflexivity.
+    Qed.
+
     Lemma consume_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         consume ι asn (fun _ => liftP POST) δ h ->
@@ -258,7 +266,8 @@ Module Soundness
     Proof.
       revert POST. induction asn; cbn - [inst inst_term]; intros POST δ1 h1.
       - now apply assert_formula_sound.
-      - destruct c; now apply consume_chunk_sound.
+      - intros Hc%consume_chunk_sound.
+        now rewrite interpret_scchunk_inst in Hc.
       - rewrite wp_angelic_match_bool.
         destruct (inst b ι); auto.
       - rewrite wp_angelic_match_enum; auto.
@@ -293,7 +302,8 @@ Module Soundness
       revert POST. induction asn; cbn - [assume_formula]; intros POST δ1 h1.
       - now apply assume_formula_sound.
       - rewrite sepcon_comm.
-        destruct c; now cbn in *.
+        unfold produce_chunk, liftP; cbn.
+        now rewrite interpret_scchunk_inst.
       - rewrite wp_demonic_match_bool.
         destruct (inst b ι); auto.
       - rewrite wp_demonic_match_enum; auto.

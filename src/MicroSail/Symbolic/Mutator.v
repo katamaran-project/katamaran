@@ -34,6 +34,7 @@ From Coq Require Import
      Classes.Morphisms_Relations
      Classes.RelationClasses
      Lists.List
+     Program.Tactics
      Relations.Relation_Definitions
      Relations.Relation_Operators
      Strings.String
@@ -3427,41 +3428,51 @@ Module Mutators
           match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg r2 v2) (right _)      :=
             cons (formula_bool (term_lit ty_bool false)) nil
         };
+        match_chunk (chunk_conj c11 c12) (chunk_conj c21 c22) :=
+          app (match_chunk c11 c21) (match_chunk c12 c22);
+        match_chunk (chunk_wand c11 c12) (chunk_wand c21 c22) :=
+          app (match_chunk c11 c21) (match_chunk c12 c22);
         match_chunk _ _  := cons (formula_bool (term_lit ty_bool false)) nil.
 
       Lemma inst_match_chunk {w : World} (c1 c2 : Chunk w) (ι : SymInstance w) :
         instpc (match_chunk c1 c2) ι <-> inst c1 ι = inst c2 ι.
       Proof.
-        split.
-        - destruct c1, c2; cbn.
-          + destruct (eq_dec p p0).
-            * destruct e; cbn.
-              rewrite inst_formula_eqs_ctx.
-              intuition.
-            * intros HYP; cbv in HYP. discriminate.
-          + intros HYP; cbv in HYP. discriminate.
-          + intros HYP; cbv in HYP. discriminate.
-          + destruct (eq_dec_het r r0).
+        revert c2.
+        induction c1 as [p1 ts1|σ1 r1 t1|c11 IHc11 c12 IHc12|c11 IHc11 c12 IHc12];
+          intros [p2 ts2|σ2 r2 t2|c21 c22|c21 c22]; cbn; rewrite ?inst_pathcondition_cons;
+            try (split; intros Heq; cbn in Heq; destruct_conjs; discriminate);
+            change (inst_chunk ?c ?ι) with (inst c ι).
+        - split.
+          + destruct (eq_dec p1 p2) as [Heqp|Hneqp].
+            * destruct Heqp; cbn. rewrite inst_formula_eqs_ctx. intuition.
+            * intros HYP. cbv in HYP. discriminate.
+          + remember (inst ts1 ι) as vs1.
+            remember (inst ts2 ι) as vs2.
+            intros Heq. dependent elimination Heq.
+            rewrite EqDec.eq_dec_refl. cbn.
+            rewrite inst_formula_eqs_ctx.
+            subst. auto.
+        - split.
+          + destruct (eq_dec_het r1 r2).
             * dependent elimination e; cbn.
               rewrite inst_pathcondition_cons.
               now intros [-> _].
             * intros HYP; cbv in HYP. discriminate.
-        - destruct c1, c2; cbn; intros Heq.
-          + remember (inst ts ι) as vs1.
-            remember (inst ts0 ι) as vs2.
-            dependent elimination Heq.
-            rewrite EqDec.eq_dec_refl. cbn.
-            rewrite inst_formula_eqs_ctx.
-            subst. auto.
-          + dependent elimination Heq.
-          + dependent elimination Heq.
-          + remember (inst t ι) as v1.
-            remember (inst t0 ι) as v2.
-            dependent elimination Heq.
+          + remember (inst t1 ι) as v1.
+            remember (inst t2 ι) as v2.
+            intros Heq. dependent elimination Heq.
             unfold eq_dec_het.
             rewrite EqDec.eq_dec_refl. cbn.
             rewrite inst_pathcondition_cons.
             subst. split; auto. constructor.
+        - rewrite inst_pathcondition_app, IHc11, IHc12.
+          split; [intuition|].
+          generalize (inst c11 ι), (inst c12 ι), (inst c21 ι), (inst c22 ι).
+          clear. intros * Heq. dependent elimination Heq; auto.
+        - rewrite inst_pathcondition_app, IHc11, IHc12.
+          split; [intuition|].
+          generalize (inst c11 ι), (inst c12 ι), (inst c21 ι), (inst c22 ι).
+          clear. intros * Heq. dependent elimination Heq; auto.
       Qed.
 
       Definition consume_chunk {Γ} :
