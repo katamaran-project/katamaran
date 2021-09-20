@@ -28,25 +28,27 @@
 
 From Equations Require Import
      Equations.
-
+From stdpp Require
+     finite.
 From MicroSail Require Import
      Syntax.Types.
 
+(** Enums **)
 Inductive RegIdx : Set :=
 | X1
 | X2
 .
 
-
 Inductive ROP : Set :=
 | RISCV_ADD
 . 
 
-Inductive ROPConstructor : Set :=
-| KRISCV_ADD
+Inductive Enums : Set :=
+| regidx
+| rop
 .
-    
 
+(** Unions **)
 Inductive AST : Set :=
 | RTYPE (rs2 rs1 rd : RegIdx) (rop : ROP)
 .
@@ -54,14 +56,8 @@ Inductive AST : Set :=
 Inductive ASTConstructor : Set :=
 | KRTYPE
 .
-    
-
-Inductive Enums : Set :=
-| regidx
-.
 
 Inductive Unions : Set :=
-| rop
 | ast
 .
 
@@ -72,20 +68,18 @@ Section TransparentObligations.
 
   Derive NoConfusion for Enums.
   Derive NoConfusion for RegIdx.
-  Derive NoConfusion for Unions.
   Derive NoConfusion for ROP.
+  Derive NoConfusion for Unions.
   Derive NoConfusion for AST.
-  Derive NoConfusion for ROPConstructor.
   Derive NoConfusion for ASTConstructor.
   Derive NoConfusion for Records.
 End TransparentObligations.
 
 Derive EqDec for Enums.
 Derive EqDec for RegIdx.
-Derive EqDec for Unions.
 Derive EqDec for ROP.
+Derive EqDec for Unions.
 Derive EqDec for AST.
-Derive EqDec for ROPConstructor.
 Derive EqDec for ASTConstructor.
 Derive EqDec for Records.
 
@@ -101,9 +95,9 @@ Section Finite.
     intros []; apply elem_of_list_In; cbn; intuition.
   Qed.
 
-  Global Program Instance ROPConstructor_finite :
-    Finite ROPConstructor :=
-    {| enum := [KRISCV_ADD] |}.
+  Global Program Instance ROP_finite :
+    Finite ROP :=
+    {| enum := [RISCV_ADD] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -131,6 +125,7 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑬𝑲 (e : 𝑬) : Set :=
     match e with
     | regidx => RegIdx
+    | rop    => ROP
     end.
   Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=
     ltac:(destruct E; auto with typeclass_instances).
@@ -143,7 +138,6 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑼𝑻 (U : 𝑼) : Set :=
     match U with
     | ast => AST
-    | rop => ROP
     end.
   Instance 𝑼𝑻_eq_dec U : EqDec (𝑼𝑻 U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
@@ -151,7 +145,6 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑼𝑲 (U : 𝑼) : Set :=
     match U with
     | ast => ASTConstructor
-    | rop => ROPConstructor
     end.
   Instance 𝑼𝑲_eq_dec U : EqDec (𝑼𝑲 U) :=
     ltac:(destruct U; auto with typeclass_instances).
