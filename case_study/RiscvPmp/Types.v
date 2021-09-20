@@ -26,12 +26,17 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Coq Require Import
+     ZArith.ZArith.
 From Equations Require Import
      Equations.
 From stdpp Require
      finite.
 From MicroSail Require Import
      Syntax.Types.
+
+Definition Addr : Set := Z.
+Definition Word : Set := Z.
 
 (** Enums **)
 Inductive RegIdx : Set :=
