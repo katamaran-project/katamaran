@@ -26,6 +26,10 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Coq Require Import
+     Strings.String
+     ZArith.ZArith.
+
 From MicroSail Require Import
      Notation
      Syntax.Values.
@@ -35,38 +39,73 @@ From RiscvPmp Require Export
 
 Set Implicit Arguments.
 Import CtxNotations.
+Import EnvNotations.
+Local Open Scope string_scope.
 
 Module RiscvPmpValueKit <: ValueKit.
   Module typekit := RiscvPmpTypeKit.
   Module Export TY := Syntax.Types.Types typekit.
 
   Notation ty_regidx := (ty_enum regidx).
-  Notation ty_rop    := (ty_union rop).
+  Notation ty_rop    := (ty_enum rop).
 
+  (** Unions **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
     match U with
-    | rop => fun K =>
-               match K with
-               | KRISCV_ADD => ty_unit
-               end
     | ast => fun K =>
                match K with
                | KRTYPE => ty_tuple [ty_regidx, ty_regidx, ty_regidx, ty_rop]
                end
     end.
 
-  (* TODO: something goes wrong here when using existT in different match clauses? *)
+  Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
+    match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Lit (𝑼𝑲_Ty u K)}) with
+    | ast => fun Kv =>
+               match Kv with
+               | RTYPE rs2 rs1 rd op => existT KRTYPE (tt , rs2 , rs1 , rd , op)
+               end
+    end.
+
   Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
     match U with
-    | rop => fun Kv =>
-               (* match Kv with
-               | existT KRISCV_ADD tt => RISCV_ADD
-               end *)
-               RISCV_ADD
     | ast => fun Kv =>
-               (* match Kv with
-               | existT KRTYPE (rs2 , rs1 , rd , rop) => RTYPE rs2 rs1 rd rop
-               end *)
-               RTYPE X1 X1 X2 RISCV_ADD
+               match Kv with
+               | existT KRTYPE (tt , rs2 , rs1 , rd , op) => RTYPE rs2 rs1 rd op
+               end
     end.
+
+  Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
+      𝑼_fold U (𝑼_unfold U Kv) = Kv.
+  Proof. now intros [] []. Qed.
+  Lemma 𝑼_unfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) }),
+      𝑼_unfold U (𝑼_fold U Kv) = Kv.
+  Proof.
+    intros [] [[] x]; cbn in x;
+      repeat match goal with
+             | x: unit     |- _ => destruct x
+             | x: prod _ _ |- _ => destruct x
+             end; auto.
+  Qed.
+
+  (** Records **)
+  Definition 𝑹𝑭  : Set := string.
+
+  Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty :=
+    match R with
+    end.
+
+  Definition 𝑹_fold (R : 𝑹) : NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R :=
+    match R with
+    end.
+
+  Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) :=
+    match R  with
+    end.
+
+  Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
+      𝑹_fold R (𝑹_unfold R Kv) = Kv.
+  Proof. now intros [] []. Qed.
+  Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
+      𝑹_unfold R (𝑹_fold R Kv) = Kv.
+  Proof. intros []; now apply Forall_forall. Qed.
 End RiscvPmpValueKit.
