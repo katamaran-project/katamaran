@@ -56,10 +56,13 @@ Module RiscvPmpTermKit <: TermKit.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
   Definition fresh := Context.fresh (T := Ty).
 
-  Local Notation "'rs1'" := "rs1" : string_scope.
-  Local Notation "'rs2'" := "rs2" : string_scope.
-  Local Notation "'rd'"  := "rd" : string_scope.
-  Local Notation "'op'"  := "op" : string_scope.
+  Module RiscvPmpVariableNotation.
+    Notation "'rs1'" := "rs1" : string_scope.
+    Notation "'rs2'" := "rs2" : string_scope.
+    Notation "'rd'"  := "rd" : string_scope.
+    Notation "'op'"  := "op" : string_scope.
+  End RiscvPmpVariableNotation.
+  Import RiscvPmpVariableNotation.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
@@ -93,3 +96,41 @@ Module RiscvPmpTermKit <: TermKit.
         ].
   Defined.
 End RiscvPmpTermKit.
+
+Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
+  Module Export TM := Terms RiscvPmpTermKit.
+
+  Import RiscvPmpVariableNotation.
+
+  (** Functions **)
+  Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired := stm_lit ty_retired RETIRE_SUCCESS.
+
+  Definition RegStore := GenericRegStore.
+  Definition read_register := generic_read_register.
+  Definition write_register := generic_write_register.
+  Definition read_write := generic_read_write.
+  Definition read_write_distinct := generic_read_write_distinct.
+  Definition write_read := generic_write_read.
+  Definition write_write := generic_write_write.
+
+  (* Memory *)
+  Definition Memory := Addr -> Word.
+
+  Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) :
+    forall (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
+    match f with
+    end.
+
+  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
+  Proof.
+    destruct f.
+  Qed.
+
+
+  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+    match f with
+    | execute_RTYPE => fun_execute_RTYPE
+    end.
+
+End RiscvPmpProgramKit.
