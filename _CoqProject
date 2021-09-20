@@ -14,6 +14,8 @@ case_study/MinimalCaps/Values.v
 -Q case_study/RiscvPmp RiscvPmp
 case_study/RiscvPmp/Types.v
 case_study/RiscvPmp/Values.v
+case_study/RiscvPmp/Machine.v
+case_study/RiscvPmp/Contracts.v
 -R src/MicroSail MicroSail
 src/MicroSail.v
 src/MicroSail/Attic/Disjoint.v
