@@ -57,15 +57,22 @@ Module RiscvPmpTermKit <: TermKit.
   Definition fresh := Context.fresh (T := Ty).
 
   Module RiscvPmpVariableNotation.
-    Notation "'rs1'" := "rs1" : string_scope.
-    Notation "'rs2'" := "rs2" : string_scope.
-    Notation "'rd'"  := "rd" : string_scope.
-    Notation "'op'"  := "op" : string_scope.
+    Notation "'rs'"      := "rs" : string_scope.
+    Notation "'rs1'"     := "rs1" : string_scope.
+    Notation "'rs1_val'" := "rs1_val" : string_scope.
+    Notation "'rs2'"     := "rs2" : string_scope.
+    Notation "'rs2_val'" := "rs2_val" : string_scope.
+    Notation "'rd'"      := "rd" : string_scope.
+    Notation "'op'"      := "op" : string_scope.
+    Notation "'result'"  := "result" : string_scope.
+    Notation "'v'"       := "v" : string_scope.
   End RiscvPmpVariableNotation.
   Import RiscvPmpVariableNotation.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
+  | rX            : Fun [rs ∶ ty_regidx] ty_word
+  | wX            : Fun [rd ∶ ty_regidx, v ∶ ty_word] ty_unit
   | execute_RTYPE : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired.
 
   Inductive FunX : PCtx -> Ty -> Set :=.
@@ -100,10 +107,44 @@ End RiscvPmpTermKit.
 Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Module Export TM := Terms RiscvPmpTermKit.
 
+  Module RiscvPmpVariableExpVarNotation.
+    Notation "'rs'"      := (@exp_var _ "rs" _ _) : exp_scope.
+    Notation "'rs1'"     := (@exp_var _ "rs1" _ _) : exp_scope.
+    Notation "'rs1_val'" := (@exp_var _ "rs1_val" _ _) : exp_scope.
+    Notation "'rs2'"     := (@exp_var _ "rs2" _ _) : exp_scope.
+    Notation "'rs2_val'" := (@exp_var _ "rs2_val" _ _) : exp_scope.
+    Notation "'rd'"      := (@exp_var _ "rd" _ _) : exp_scope.
+    Notation "'op'"      := (@exp_var _ "op" _ _) : exp_scope.
+    Notation "'result'"  := (@exp_var _ "result" _ _) : exp_scope.
+    Notation "'v'"       := (@exp_var _ "v" _ _) : exp_scope.
+  End RiscvPmpVariableExpVarNotation.
+
+  Import RiscvPmpVariableExpVarNotation.
   Import RiscvPmpVariableNotation.
 
   (** Functions **)
-  Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired := stm_lit ty_retired RETIRE_SUCCESS.
+  Definition fun_rX : Stm [rs ∶ ty_regidx] ty_word :=
+    match: rs in regidx with
+    | X1 => stm_read_register x1
+    | X2 => stm_read_register x2
+    end.
+
+  Definition fun_wX : Stm [rd ∶ ty_regidx, v ∶ ty_word] ty_unit :=
+    match: rd in regidx with
+    | X1 => stm_write_register x1 v
+    | X2 => stm_write_register x2 v
+    end ;;
+    stm_lit ty_unit tt.
+
+  Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
+    let: rs1_val := call rX rs1 in
+    let: (rs2_val)%string := call rX rs2 in (* TODO: why is the string scope annotation required here and on next line but not on previous one? *)
+    let: (result)%string :=
+       match: op in rop with
+       | RISCV_ADD => stm_exp (rs1_val + rs2_val)
+       end in
+     call wX rd result ;;
+     stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition RegStore := GenericRegStore.
   Definition read_register := generic_read_register.
@@ -127,9 +168,10 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     destruct f.
   Qed.
 
-
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
+    | rX            => fun_rX
+    | wX            => fun_wX
     | execute_RTYPE => fun_execute_RTYPE
     end.
 

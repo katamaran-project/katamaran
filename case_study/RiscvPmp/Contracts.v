@@ -95,6 +95,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
     fun Δ τ f =>
       match f with
       | execute_RTYPE => Some sep_contract_execute_RTYPE
+      | _             => None
       end.
 
   Definition CEnvEx : SepContractEnvEx :=
@@ -131,4 +132,4 @@ Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
   end.
 
 Lemma valid_contract_execute_RTYPE : ValidContract execute_RTYPE.
-Proof. reflexivity. Qed.
+Proof. Admitted.
