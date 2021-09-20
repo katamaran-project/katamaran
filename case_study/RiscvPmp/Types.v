@@ -41,11 +41,16 @@ Inductive RegIdx : Set :=
 
 Inductive ROP : Set :=
 | RISCV_ADD
-. 
+.
+
+Inductive Retired : Set :=
+| RETIRE_SUCCESS
+| RETIRE_FAIL.
 
 Inductive Enums : Set :=
 | regidx
 | rop
+| retired
 .
 
 (** Unions **)
@@ -69,6 +74,7 @@ Section TransparentObligations.
   Derive NoConfusion for Enums.
   Derive NoConfusion for RegIdx.
   Derive NoConfusion for ROP.
+  Derive NoConfusion for Retired.
   Derive NoConfusion for Unions.
   Derive NoConfusion for AST.
   Derive NoConfusion for ASTConstructor.
@@ -78,6 +84,7 @@ End TransparentObligations.
 Derive EqDec for Enums.
 Derive EqDec for RegIdx.
 Derive EqDec for ROP.
+Derive EqDec for Retired.
 Derive EqDec for Unions.
 Derive EqDec for AST.
 Derive EqDec for ASTConstructor.
@@ -105,6 +112,16 @@ Section Finite.
     intros []; apply elem_of_list_In; cbn; intuition.
   Qed.
 
+  Global Program Instance Retired_finite :
+    Finite Retired :=
+    {| enum := [RETIRE_SUCCESS; RETIRE_FAIL] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
   Global Program Instance ASTConstructor_finite :
     Finite ASTConstructor :=
     {| enum := [KRTYPE] |}.
@@ -124,8 +141,9 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑬_eq_dec := Enums_eqdec.
   Definition 𝑬𝑲 (e : 𝑬) : Set :=
     match e with
-    | regidx => RegIdx
-    | rop    => ROP
+    | regidx  => RegIdx
+    | rop     => ROP
+    | retired => Retired
     end.
   Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=
     ltac:(destruct E; auto with typeclass_instances).

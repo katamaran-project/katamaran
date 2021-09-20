@@ -46,8 +46,10 @@ Module RiscvPmpValueKit <: ValueKit.
   Module typekit := RiscvPmpTypeKit.
   Module Export TY := Syntax.Types.Types typekit.
 
-  Notation ty_regidx := (ty_enum regidx).
-  Notation ty_rop    := (ty_enum rop).
+  Notation ty_word    := (ty_int).
+  Notation ty_regidx  := (ty_enum regidx).
+  Notation ty_rop     := (ty_enum rop).
+  Notation ty_retired := (ty_enum retired).
 
   (** Unions **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
