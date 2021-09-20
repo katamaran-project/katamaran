@@ -2466,6 +2466,13 @@ Module Terms (Export termkit : TermKit).
     (at level 100, right associativity, x at level 30, τ at next level, s1 at next level, format
      "'let:'  x  ::  τ  :=  s1  'in'  '/' s2"
     ) : exp_scope.
+  Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 'end'" :=
+    (stm_match_enum τ e (fun K => match K with
+                                  | alt1%exp => rhs1%exp
+                                  end))
+    (at level 100, alt1 pattern, format
+     "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' 'end' ']'"
+    ) : exp_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 'end'" :=
     (stm_match_enum τ e (fun K => match K with
                                   | alt1%exp => rhs1%exp
