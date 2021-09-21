@@ -12,6 +12,8 @@ Inline function call expressions get translated into
 	tmp + off
 ```
 
+Currently ommitting alignment related checks and exceptions (bitvector support needed for this).
+
 ## Source
 
 This machine is based on a minimal model of the official RISC-V Sail model.

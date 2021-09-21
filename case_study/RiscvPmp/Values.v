@@ -57,8 +57,9 @@ Module RiscvPmpValueKit <: ValueKit.
     match U with
     | ast => fun K =>
                match K with
-               | KRTYPE => ty_tuple [ty_regidx, ty_regidx, ty_regidx, ty_rop]
-               | KUTYPE => ty_tuple [ty_int, ty_regidx, ty_uop]
+               | KRTYPE     => ty_tuple [ty_regidx, ty_regidx, ty_regidx, ty_rop]
+               | KUTYPE     => ty_tuple [ty_int, ty_regidx, ty_uop]
+               | KRISCV_JAL => ty_tuple [ty_int, ty_regidx]
                end
     end.
 
@@ -67,7 +68,8 @@ Module RiscvPmpValueKit <: ValueKit.
     | ast => fun Kv =>
                match Kv with
                | RTYPE rs2 rs1 rd op => existT KRTYPE (tt , rs2 , rs1 , rd , op)
-               | UTYPE imm rd op => existT KUTYPE (tt , imm , rd , op)
+               | UTYPE imm rd op     => existT KUTYPE (tt , imm , rd , op)
+               | RISCV_JAL imm rd    => existT KRISCV_JAL (tt , imm , rd)
                end
     end.
 
@@ -76,7 +78,8 @@ Module RiscvPmpValueKit <: ValueKit.
     | ast => fun Kv =>
                match Kv with
                | existT KRTYPE (tt , rs2 , rs1 , rd , op) => RTYPE rs2 rs1 rd op
-               | existT KUTYPE (tt , imm , rd , op) => UTYPE imm rd op
+               | existT KUTYPE (tt , imm , rd , op)       => UTYPE imm rd op
+               | existT KRISCV_JAL (tt , imm , rd)        => RISCV_JAL imm rd
                end
     end.
 

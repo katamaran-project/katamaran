@@ -70,6 +70,7 @@ Module RiscvPmpTermKit <: TermKit.
     Notation "'off'"     := "off" : string_scope.
     Notation "'ret'"     := "ret" : string_scope.
     Notation "'tmp'"     := "tmp" : string_scope.
+    Notation "'t'"       := "t" : string_scope.
   End RiscvPmpVariableNotation.
   Import RiscvPmpVariableNotation.
 
@@ -78,8 +79,11 @@ Module RiscvPmpTermKit <: TermKit.
   | rX            : Fun [rs ∶ ty_regidx] ty_word
   | wX            : Fun [rd ∶ ty_regidx, v ∶ ty_word] ty_unit
   | get_arch_pc   : Fun ctx_nil ty_word
+  | get_next_pc   : Fun ctx_nil ty_word
   | execute_RTYPE : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
-  | execute_UTYPE : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired.
+  | execute_UTYPE : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
+  | execute_RISCV_JAL : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
+  .
 
   Inductive FunX : PCtx -> Ty -> Set :=.
 
@@ -90,9 +94,10 @@ Module RiscvPmpTermKit <: TermKit.
   Definition 𝑳  : PCtx -> Set := Lem.
 
   Inductive Reg : Ty -> Set :=
-  | pc : Reg ty_word
-  | x1 : Reg ty_word
-  | x2 : Reg ty_word.
+  | pc     : Reg ty_word
+  | nextpc : Reg ty_word
+  | x1     : Reg ty_word
+  | x2     : Reg ty_word.
 
   Section TransparentObligations.
     Local Set Transparent Obligations.
@@ -127,6 +132,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     Notation "'off'"     := (@exp_var _ "off" _ _) : exp_scope.
     Notation "'ret'"     := (@exp_var _ "ret" _ _) : exp_scope.
     Notation "'tmp'"     := (@exp_var _ "tmp" _ _) : exp_scope.
+    Notation "'t'"       := (@exp_var _ "t" _ _) : exp_scope.
   End RiscvPmpVariableExpVarNotation.
 
   Import RiscvPmpVariableExpVarNotation.
@@ -149,6 +155,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Definition fun_get_arch_pc : Stm ctx_nil ty_word :=
     stm_read_register pc.
 
+  Definition fun_get_next_pc : Stm ctx_nil ty_word :=
+    stm_read_register nextpc.
+
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: (rs2_val)%string := call rX rs2 in (* TODO: why is the string scope annotation required here and on next line but not on previous one? *)
@@ -169,6 +178,14 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
          stm_exp (tmp + off)
        end in
     call wX rd ret ;;
+    stm_lit ty_retired RETIRE_SUCCESS.
+
+    (* NOTE: missing alignment check *)
+  Definition fun_execute_RISCV_JAL : Stm [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired :=
+    let: tmp := stm_read_register pc in
+    let: t%string := stm_exp (tmp + imm) in
+    let: tmp%string := call get_next_pc in
+    call wX rd tmp ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition RegStore := GenericRegStore.
@@ -195,11 +212,13 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
-    | rX            => fun_rX
-    | wX            => fun_wX
-    | get_arch_pc   => fun_get_arch_pc
-    | execute_RTYPE => fun_execute_RTYPE
-    | execute_UTYPE => fun_execute_UTYPE
+    | rX                => fun_rX
+    | wX                => fun_wX
+    | get_arch_pc       => fun_get_arch_pc
+    | get_next_pc       => fun_get_next_pc
+    | execute_RTYPE     => fun_execute_RTYPE
+    | execute_UTYPE     => fun_execute_UTYPE
+    | execute_RISCV_JAL => fun_execute_RISCV_JAL
     end.
 
 End RiscvPmpProgramKit.

@@ -68,11 +68,13 @@ Inductive Enums : Set :=
 Inductive AST : Set :=
 | RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
 | UTYPE (imm : Z) (rd : RegIdx) (op : UOP)
+| RISCV_JAL (imm : Z) (rd : RegIdx)
 .
 
 Inductive ASTConstructor : Set :=
 | KRTYPE
 | KUTYPE
+| KRISCV_JAL
 .
 
 Inductive Unions : Set :=
@@ -149,7 +151,7 @@ Section Finite.
 
   Global Program Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KUTYPE] |}.
+    {| enum := [KRTYPE;KUTYPE;KRISCV_JAL] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
