@@ -13,6 +13,7 @@ Inline function call expressions get translated into
 ```
 
 Currently ommitting alignment related checks and exceptions (bitvector support needed for this).
+-> OR simply check if address is divisible by 4? (currently added empty alignment check function, "address_aligned")
 
 ## Source
 

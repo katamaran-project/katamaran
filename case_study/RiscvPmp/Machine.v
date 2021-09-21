@@ -71,18 +71,22 @@ Module RiscvPmpTermKit <: TermKit.
     Notation "'ret'"     := "ret" : string_scope.
     Notation "'tmp'"     := "tmp" : string_scope.
     Notation "'t'"       := "t" : string_scope.
+    Notation "'addr'"    := "addr" : string_scope.
   End RiscvPmpVariableNotation.
   Import RiscvPmpVariableNotation.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
-  | rX            : Fun [rs ∶ ty_regidx] ty_word
-  | wX            : Fun [rd ∶ ty_regidx, v ∶ ty_word] ty_unit
-  | get_arch_pc   : Fun ctx_nil ty_word
-  | get_next_pc   : Fun ctx_nil ty_word
-  | execute_RTYPE : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
-  | execute_UTYPE : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
-  | execute_RISCV_JAL : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
+  | rX                 : Fun [rs ∶ ty_regidx] ty_word
+  | wX                 : Fun [rd ∶ ty_regidx, v ∶ ty_word] ty_unit
+  | get_arch_pc        : Fun ctx_nil ty_word
+  | get_next_pc        : Fun ctx_nil ty_word
+  | set_next_pc        : Fun [addr ∶ ty_word] ty_unit
+  | address_aligned    : Fun [addr ∶ ty_word] ty_bool
+  | execute_RTYPE      : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
+  | execute_UTYPE      : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
+  | execute_RISCV_JAL  : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
+  | execute_RISCV_JALR : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=.
@@ -133,6 +137,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     Notation "'ret'"     := (@exp_var _ "ret" _ _) : exp_scope.
     Notation "'tmp'"     := (@exp_var _ "tmp" _ _) : exp_scope.
     Notation "'t'"       := (@exp_var _ "t" _ _) : exp_scope.
+    Notation "'addr'"    := (@exp_var _ "addr" _ _) : exp_scope.
   End RiscvPmpVariableExpVarNotation.
 
   Import RiscvPmpVariableExpVarNotation.
@@ -158,6 +163,13 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Definition fun_get_next_pc : Stm ctx_nil ty_word :=
     stm_read_register nextpc.
 
+  Definition fun_set_next_pc : Stm [addr ∶ ty_word] ty_unit :=
+    stm_write_register pc addr ;;
+    stm_lit ty_unit tt.
+
+  Definition fun_address_aligned : Stm [addr ∶ ty_word] ty_bool :=
+    stm_lit ty_bool true.
+
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: (rs2_val)%string := call rX rs2 in (* TODO: why is the string scope annotation required here and on next line but not on previous one? *)
@@ -180,13 +192,32 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     call wX rd ret ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
-    (* NOTE: missing alignment check *)
   Definition fun_execute_RISCV_JAL : Stm [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired :=
     let: tmp := stm_read_register pc in
     let: t%string := stm_exp (tmp + imm) in
-    let: tmp%string := call get_next_pc in
-    call wX rd tmp ;;
-    stm_lit ty_retired RETIRE_SUCCESS.
+    let: tmp%string := call address_aligned t in
+    if: exp_not tmp
+    then
+      (* TODO: handle_mem_exception? *)
+      stm_lit ty_retired RETIRE_FAIL
+    else
+      let: tmp%string := call get_next_pc in
+      call wX rd tmp ;;
+      stm_lit ty_retired RETIRE_SUCCESS.
+
+  Definition fun_execute_RISCV_JALR : Stm [imm ∶ ty_int , rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired :=
+    let: tmp := call rX rs1 in
+    let: t%string := stm_exp (tmp + imm) in
+    let: tmp%string := call address_aligned t in
+    if: exp_not tmp
+    then
+      (* TODO: handle_mem_exception? *)
+      stm_lit ty_retired RETIRE_FAIL
+    else
+      let: tmp%string := call get_next_pc in
+      call wX rd tmp ;;
+      call set_next_pc t ;;
+      stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition RegStore := GenericRegStore.
   Definition read_register := generic_read_register.
@@ -212,13 +243,16 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
-    | rX                => fun_rX
-    | wX                => fun_wX
-    | get_arch_pc       => fun_get_arch_pc
-    | get_next_pc       => fun_get_next_pc
-    | execute_RTYPE     => fun_execute_RTYPE
-    | execute_UTYPE     => fun_execute_UTYPE
-    | execute_RISCV_JAL => fun_execute_RISCV_JAL
+    | rX                 => fun_rX
+    | wX                 => fun_wX
+    | get_arch_pc        => fun_get_arch_pc
+    | get_next_pc        => fun_get_next_pc
+    | set_next_pc        => fun_set_next_pc
+    | address_aligned    => fun_address_aligned
+    | execute_RTYPE      => fun_execute_RTYPE
+    | execute_UTYPE      => fun_execute_UTYPE
+    | execute_RISCV_JAL  => fun_execute_RISCV_JAL
+    | execute_RISCV_JALR => fun_execute_RISCV_JALR
     end.
 
 End RiscvPmpProgramKit.
