@@ -49,6 +49,7 @@ Module RiscvPmpValueKit <: ValueKit.
   Notation ty_word    := (ty_int).
   Notation ty_regidx  := (ty_enum regidx).
   Notation ty_rop     := (ty_enum rop).
+  Notation ty_iop     := (ty_enum iop).
   Notation ty_uop     := (ty_enum uop).
   Notation ty_bop     := (ty_enum bop).
   Notation ty_retired := (ty_enum retired).
@@ -59,6 +60,7 @@ Module RiscvPmpValueKit <: ValueKit.
     | ast => fun K =>
                match K with
                | KRTYPE      => ty_tuple [ty_regidx, ty_regidx, ty_regidx, ty_rop]
+               | KITYPE      => ty_tuple [ty_int, ty_regidx, ty_regidx, ty_iop]
                | KUTYPE      => ty_tuple [ty_int, ty_regidx, ty_uop]
                | KBTYPE      => ty_tuple [ty_int, ty_regidx, ty_regidx, ty_bop]
                | KRISCV_JAL  => ty_tuple [ty_int, ty_regidx]
@@ -71,6 +73,7 @@ Module RiscvPmpValueKit <: ValueKit.
     | ast => fun Kv =>
                match Kv with
                | RTYPE rs2 rs1 rd op   => existT KRTYPE (tt , rs2 , rs1 , rd , op)
+               | ITYPE imm rs1 rd op   => existT KITYPE (tt , imm , rs1 , rd , op)
                | UTYPE imm rd op       => existT KUTYPE (tt , imm , rd , op)
                | BTYPE imm rs2 rs1 op  => existT KBTYPE (tt , imm , rs2 , rs1 , op)
                | RISCV_JAL imm rd      => existT KRISCV_JAL (tt , imm , rd)
@@ -83,6 +86,7 @@ Module RiscvPmpValueKit <: ValueKit.
     | ast => fun Kv =>
                match Kv with
                | existT KRTYPE (tt , rs2 , rs1 , rd , op)  => RTYPE rs2 rs1 rd op
+               | existT KITYPE (tt , imm , rs1 , rd , op)  => ITYPE imm rs1 rd op
                | existT KUTYPE (tt , imm , rd , op)        => UTYPE imm rd op
                | existT KBTYPE (tt , imm , rs2 , rs1 , op) => BTYPE imm rs2 rs1 op
                | existT KRISCV_JAL (tt , imm , rd)         => RISCV_JAL imm rd

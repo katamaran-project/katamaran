@@ -68,6 +68,7 @@ Module RiscvPmpTermKit <: TermKit.
     Notation "'result'"  := "result" : string_scope.
     Notation "'v'"       := "v" : string_scope.
     Notation "'imm'"     := "imm" : string_scope.
+    Notation "'immext'"  := "immext" : string_scope.
     Notation "'off'"     := "off" : string_scope.
     Notation "'ret'"     := "ret" : string_scope.
     Notation "'tmp'"     := "tmp" : string_scope.
@@ -89,6 +90,7 @@ Module RiscvPmpTermKit <: TermKit.
   | address_aligned    : Fun [addr ∶ ty_word] ty_bool
   | abs                : Fun [v ∶ ty_int] ty_int
   | execute_RTYPE      : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
+  | execute_ITYPE      : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
   | execute_UTYPE      : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
   | execute_BTYPE      : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired
   | execute_RISCV_JAL  : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
@@ -141,6 +143,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     Notation "'result'"  := (@exp_var _ "result" _ _) : exp_scope.
     Notation "'v'"       := (@exp_var _ "v" _ _) : exp_scope.
     Notation "'imm'"     := (@exp_var _ "imm" _ _) : exp_scope.
+    Notation "'immext'"  := (@exp_var _ "immext" _ _) : exp_scope.
     Notation "'off'"     := (@exp_var _ "off" _ _) : exp_scope.
     Notation "'ret'"     := (@exp_var _ "ret" _ _) : exp_scope.
     Notation "'tmp'"     := (@exp_var _ "tmp" _ _) : exp_scope.
@@ -188,10 +191,20 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
-    let: (rs2_val)%string := call rX rs2 in (* TODO: why is the string scope annotation required here and on next line but not on previous one? *)
-    let: (result)%string :=
+    let: rs2_val%string := call rX rs2 in (* TODO: why is the string scope annotation required here and on next line but not on previous one? *)
+    let: result%string :=
        match: op in rop with
        | RISCV_ADD => rs1_val + rs2_val
+       end in
+     call wX rd result ;;
+     stm_lit ty_retired RETIRE_SUCCESS.
+
+  Definition fun_execute_ITYPE : Stm [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
+    let: rs1_val := call rX rs1 in
+    let: immext%string := imm in
+    let: result%string :=
+       match: op in rop with
+       | RISCV_ADD => rs1_val + immext
        end in
      call wX rd result ;;
      stm_lit ty_retired RETIRE_SUCCESS.
@@ -300,6 +313,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | address_aligned    => fun_address_aligned
     | abs                => fun_abs
     | execute_RTYPE      => fun_execute_RTYPE
+    | execute_ITYPE      => fun_execute_ITYPE
     | execute_UTYPE      => fun_execute_UTYPE
     | execute_BTYPE      => fun_execute_BTYPE
     | execute_RISCV_JAL  => fun_execute_RISCV_JAL

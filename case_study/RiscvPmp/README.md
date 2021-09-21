@@ -15,6 +15,8 @@ Inline function call expressions get translated into
 Currently ommitting alignment related checks and exceptions (bitvector support needed for this).
 -> OR simply check if address is divisible by 4? (currently added empty alignment check function, "address_aligned")
 
+Ignoring instructions that rely on bitvector operations (like shift operations), this mostly affects the support for RTYPE- and ITYPE-instructions.
+
 ## Source
 
 This machine is based on a minimal model of the official RISC-V Sail model.

@@ -48,6 +48,10 @@ Inductive ROP : Set :=
 | RISCV_ADD
 .
 
+Inductive IOP : Set :=
+| RISCV_ADDI
+.
+
 Inductive UOP : Set :=
 | RISCV_LUI
 | RISCV_AUIPC
@@ -69,6 +73,7 @@ Inductive Retired : Set :=
 Inductive Enums : Set :=
 | regidx
 | rop
+| iop
 | uop
 | bop
 | retired
@@ -77,6 +82,7 @@ Inductive Enums : Set :=
 (** Unions **)
 Inductive AST : Set :=
 | RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
+| ITYPE (imm : Z) (rs1 rd : RegIdx) (op : IOP)
 | UTYPE (imm : Z) (rd : RegIdx) (op : UOP)
 | BTYPE (imm : Z) (rs1 rs2 : RegIdx) (op : BOP)
 | RISCV_JAL (imm : Z) (rd : RegIdx)
@@ -85,6 +91,7 @@ Inductive AST : Set :=
 
 Inductive ASTConstructor : Set :=
 | KRTYPE
+| KITYPE
 | KUTYPE
 | KBTYPE
 | KRISCV_JAL
@@ -103,6 +110,7 @@ Section TransparentObligations.
   Derive NoConfusion for Enums.
   Derive NoConfusion for RegIdx.
   Derive NoConfusion for ROP.
+  Derive NoConfusion for IOP.
   Derive NoConfusion for UOP.
   Derive NoConfusion for BOP.
   Derive NoConfusion for Retired.
@@ -115,6 +123,7 @@ End TransparentObligations.
 Derive EqDec for Enums.
 Derive EqDec for RegIdx.
 Derive EqDec for ROP.
+Derive EqDec for IOP.
 Derive EqDec for UOP.
 Derive EqDec for BOP.
 Derive EqDec for Retired.
@@ -138,6 +147,16 @@ Section Finite.
   Global Program Instance ROP_finite :
     Finite ROP :=
     {| enum := [RISCV_ADD] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance IOP_finite :
+    Finite IOP :=
+    {| enum := [RISCV_ADDI] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -177,7 +196,7 @@ Section Finite.
 
   Global Program Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR] |}.
+    {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -196,6 +215,7 @@ Module RiscvPmpTypeKit <: TypeKit.
     match e with
     | regidx  => RegIdx
     | rop     => ROP
+    | iop     => IOP
     | uop     => UOP
     | bop     => BOP
     | retired => Retired
