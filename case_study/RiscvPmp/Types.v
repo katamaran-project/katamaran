@@ -46,6 +46,7 @@ Inductive RegIdx : Set :=
 
 Inductive ROP : Set :=
 | RISCV_ADD
+| RISCV_SUB
 .
 
 Inductive IOP : Set :=
@@ -146,7 +147,7 @@ Section Finite.
 
   Global Program Instance ROP_finite :
     Finite ROP :=
-    {| enum := [RISCV_ADD] |}.
+    {| enum := [RISCV_ADD;RISCV_SUB] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.

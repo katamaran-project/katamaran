@@ -90,7 +90,7 @@ Module RiscvPmpTermKit <: TermKit.
   | address_aligned    : Fun [addr ∶ ty_word] ty_bool
   | abs                : Fun [v ∶ ty_int] ty_int
   | execute_RTYPE      : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
-  | execute_ITYPE      : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
+  | execute_ITYPE      : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
   | execute_UTYPE      : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
   | execute_BTYPE      : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired
   | execute_RISCV_JAL  : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
@@ -195,16 +195,17 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     let: result%string :=
        match: op in rop with
        | RISCV_ADD => rs1_val + rs2_val
+       | RISCV_SUB => rs1_val - rs2_val
        end in
      call wX rd result ;;
      stm_lit ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_ITYPE : Stm [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
+  Definition fun_execute_ITYPE : Stm [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: immext%string := imm in
     let: result%string :=
-       match: op in rop with
-       | RISCV_ADD => rs1_val + immext
+       match: op in iop with
+       | RISCV_ADDI => rs1_val + immext
        end in
      call wX rd result ;;
      stm_lit ty_retired RETIRE_SUCCESS.
