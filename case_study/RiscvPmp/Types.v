@@ -53,6 +53,15 @@ Inductive UOP : Set :=
 | RISCV_AUIPC
 .
 
+Inductive BOP : Set :=
+| RISCV_BEQ
+| RISCV_BNE
+| RISCV_BLT
+| RISCV_BGE
+| RISCV_BLTU
+| RISCV_BGEU
+.
+
 Inductive Retired : Set :=
 | RETIRE_SUCCESS
 | RETIRE_FAIL.
@@ -61,6 +70,7 @@ Inductive Enums : Set :=
 | regidx
 | rop
 | uop
+| bop
 | retired
 .
 
@@ -68,6 +78,7 @@ Inductive Enums : Set :=
 Inductive AST : Set :=
 | RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
 | UTYPE (imm : Z) (rd : RegIdx) (op : UOP)
+| BTYPE (imm : Z) (rs1 rs2 : RegIdx) (op : BOP)
 | RISCV_JAL (imm : Z) (rd : RegIdx)
 | RISCV_JALR (imm : Z) (rs1 rd : RegIdx)
 .
@@ -75,6 +86,7 @@ Inductive AST : Set :=
 Inductive ASTConstructor : Set :=
 | KRTYPE
 | KUTYPE
+| KBTYPE
 | KRISCV_JAL
 | KRISCV_JALR
 .
@@ -92,6 +104,7 @@ Section TransparentObligations.
   Derive NoConfusion for RegIdx.
   Derive NoConfusion for ROP.
   Derive NoConfusion for UOP.
+  Derive NoConfusion for BOP.
   Derive NoConfusion for Retired.
   Derive NoConfusion for Unions.
   Derive NoConfusion for AST.
@@ -103,6 +116,7 @@ Derive EqDec for Enums.
 Derive EqDec for RegIdx.
 Derive EqDec for ROP.
 Derive EqDec for UOP.
+Derive EqDec for BOP.
 Derive EqDec for Retired.
 Derive EqDec for Unions.
 Derive EqDec for AST.
@@ -141,6 +155,16 @@ Section Finite.
     intros []; apply elem_of_list_In; cbn; intuition.
   Qed.
 
+  Global Program Instance BOP_finite :
+    Finite BOP :=
+    {| enum := [RISCV_BEQ;RISCV_BNE;RISCV_BLT;RISCV_BGE;RISCV_BLTU;RISCV_BGEU] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
   Global Program Instance Retired_finite :
     Finite Retired :=
     {| enum := [RETIRE_SUCCESS; RETIRE_FAIL] |}.
@@ -153,7 +177,7 @@ Section Finite.
 
   Global Program Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KUTYPE;KRISCV_JAL;KRISCV_JALR] |}.
+    {| enum := [KRTYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -173,6 +197,7 @@ Module RiscvPmpTypeKit <: TypeKit.
     | regidx  => RegIdx
     | rop     => ROP
     | uop     => UOP
+    | bop     => BOP
     | retired => Retired
     end.
   Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=

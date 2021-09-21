@@ -27,7 +27,8 @@
 (******************************************************************************)
 
 From Coq Require Import
-     Strings.String.
+     Strings.String
+     ZArith.ZArith.
 From Equations Require Import
      Equations.
 From MicroSail Require Import
@@ -70,8 +71,11 @@ Module RiscvPmpTermKit <: TermKit.
     Notation "'off'"     := "off" : string_scope.
     Notation "'ret'"     := "ret" : string_scope.
     Notation "'tmp'"     := "tmp" : string_scope.
+    Notation "'tmp1'"    := "tmp1" : string_scope.
+    Notation "'tmp2'"    := "tmp2" : string_scope.
     Notation "'t'"       := "t" : string_scope.
     Notation "'addr'"    := "addr" : string_scope.
+    Notation "'taken'"   := "taken" : string_scope.
   End RiscvPmpVariableNotation.
   Import RiscvPmpVariableNotation.
 
@@ -83,8 +87,10 @@ Module RiscvPmpTermKit <: TermKit.
   | get_next_pc        : Fun ctx_nil ty_word
   | set_next_pc        : Fun [addr ∶ ty_word] ty_unit
   | address_aligned    : Fun [addr ∶ ty_word] ty_bool
+  | abs                : Fun [v ∶ ty_int] ty_int
   | execute_RTYPE      : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
   | execute_UTYPE      : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
+  | execute_BTYPE      : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired
   | execute_RISCV_JAL  : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
   | execute_RISCV_JALR : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
   .
@@ -122,6 +128,8 @@ End RiscvPmpTermKit.
 Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Module Export TM := Terms RiscvPmpTermKit.
 
+  Local Coercion stm_exp : Exp >-> Stm.
+
   Module RiscvPmpVariableExpVarNotation.
     Notation "'rs'"      := (@exp_var _ "rs" _ _) : exp_scope.
     Notation "'rs1'"     := (@exp_var _ "rs1" _ _) : exp_scope.
@@ -136,8 +144,11 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     Notation "'off'"     := (@exp_var _ "off" _ _) : exp_scope.
     Notation "'ret'"     := (@exp_var _ "ret" _ _) : exp_scope.
     Notation "'tmp'"     := (@exp_var _ "tmp" _ _) : exp_scope.
+    Notation "'tmp1'"    := (@exp_var _ "tmp1" _ _) : exp_scope.
+    Notation "'tmp2'"    := (@exp_var _ "tmp2" _ _) : exp_scope.
     Notation "'t'"       := (@exp_var _ "t" _ _) : exp_scope.
     Notation "'addr'"    := (@exp_var _ "addr" _ _) : exp_scope.
+    Notation "'taken'"   := (@exp_var _ "taken" _ _) : exp_scope.
   End RiscvPmpVariableExpVarNotation.
 
   Import RiscvPmpVariableExpVarNotation.
@@ -170,31 +181,36 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Definition fun_address_aligned : Stm [addr ∶ ty_word] ty_bool :=
     stm_lit ty_bool true.
 
+  Definition fun_abs : Stm [v ∶ ty_int] ty_int :=
+    if: v < (exp_lit ty_int 0%Z)
+    then v * (exp_lit ty_int (-1)%Z)
+    else v.
+
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: (rs2_val)%string := call rX rs2 in (* TODO: why is the string scope annotation required here and on next line but not on previous one? *)
     let: (result)%string :=
        match: op in rop with
-       | RISCV_ADD => stm_exp (rs1_val + rs2_val)
+       | RISCV_ADD => rs1_val + rs2_val
        end in
      call wX rd result ;;
      stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_UTYPE : Stm [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired :=
-    let: off := stm_exp imm in
+    let: off := imm in
     let: (ret)%string :=
        match: op in uop with
-       | RISCV_LUI   => stm_exp off
+       | RISCV_LUI   => off
        | RISCV_AUIPC =>
          let: tmp%string := call get_arch_pc in
-         stm_exp (tmp + off)
+         tmp + off
        end in
     call wX rd ret ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_RISCV_JAL : Stm [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired :=
     let: tmp := stm_read_register pc in
-    let: t%string := stm_exp (tmp + imm) in
+    let: t%string := tmp + imm in
     let: tmp%string := call address_aligned t in
     if: exp_not tmp
     then
@@ -207,7 +223,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_execute_RISCV_JALR : Stm [imm ∶ ty_int , rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired :=
     let: tmp := call rX rs1 in
-    let: t%string := stm_exp (tmp + imm) in
+    let: t%string := tmp + imm in
     let: tmp%string := call address_aligned t in
     if: exp_not tmp
     then
@@ -217,6 +233,39 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
       let: tmp%string := call get_next_pc in
       call wX rd tmp ;;
       call set_next_pc t ;;
+      stm_lit ty_retired RETIRE_SUCCESS.
+
+  Definition fun_execute_BTYPE : Stm [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired :=
+    let: rs1_val := call rX rs1 in
+    let: rs2_val%string := call rX rs2 in
+    let: taken%string :=
+       match: op in bop with
+       | RISCV_BEQ  => rs1_val = rs2_val
+       | RISCV_BNE  => exp_not (rs1_val = rs2_val)
+       | RISCV_BLT  => rs1_val < rs2_val
+       | RISCV_BGE  => rs2_val <= rs1_val
+       | RISCV_BLTU =>
+         let: tmp1%string := call abs rs1_val in
+         let: tmp2%string := call abs rs2_val in
+         tmp1 < tmp2
+       | RISCV_BGEU =>
+         let: tmp1%string := call abs rs1_val in
+         let: tmp2%string := call abs rs2_val in
+         tmp2 <= tmp1
+       end in
+    let: tmp%string := stm_read_register pc in
+    let: t%string := tmp + imm in
+    if: taken
+    then
+      let: tmp%string := call address_aligned t in
+      if: exp_not tmp
+      then
+        (* TODO: handle_mem_exception? *)
+        stm_lit ty_retired RETIRE_FAIL
+      else
+        (call set_next_pc t ;;
+         stm_lit ty_retired RETIRE_SUCCESS)
+    else
       stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition RegStore := GenericRegStore.
@@ -249,8 +298,10 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | get_next_pc        => fun_get_next_pc
     | set_next_pc        => fun_set_next_pc
     | address_aligned    => fun_address_aligned
+    | abs                => fun_abs
     | execute_RTYPE      => fun_execute_RTYPE
     | execute_UTYPE      => fun_execute_UTYPE
+    | execute_BTYPE      => fun_execute_BTYPE
     | execute_RISCV_JAL  => fun_execute_RISCV_JAL
     | execute_RISCV_JALR => fun_execute_RISCV_JALR
     end.
