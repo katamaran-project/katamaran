@@ -88,6 +88,14 @@ Inductive AST : Set :=
 | BTYPE (imm : Z) (rs1 rs2 : RegIdx) (op : BOP)
 | RISCV_JAL (imm : Z) (rd : RegIdx)
 | RISCV_JALR (imm : Z) (rs1 rd : RegIdx)
+| LOAD (imm : Z) (rs1 rd : RegIdx)
+.
+
+Inductive AccessType : Set :=
+| Read
+| Write
+| ReadWrite
+| Execute
 .
 
 Inductive ASTConstructor : Set :=
@@ -97,10 +105,19 @@ Inductive ASTConstructor : Set :=
 | KBTYPE
 | KRISCV_JAL
 | KRISCV_JALR
+| KLOAD
+.
+
+Inductive AccessTypeConstructor : Set :=
+| KRead
+| KWrite
+| KReadWrite
+| KExecute
 .
 
 Inductive Unions : Set :=
 | ast
+| access_type
 .
 
 Inductive Records : Set :=. 
@@ -118,6 +135,8 @@ Section TransparentObligations.
   Derive NoConfusion for Unions.
   Derive NoConfusion for AST.
   Derive NoConfusion for ASTConstructor.
+  Derive NoConfusion for AccessType.
+  Derive NoConfusion for AccessTypeConstructor.
   Derive NoConfusion for Records.
 End TransparentObligations.
 
@@ -131,6 +150,8 @@ Derive EqDec for Retired.
 Derive EqDec for Unions.
 Derive EqDec for AST.
 Derive EqDec for ASTConstructor.
+Derive EqDec for AccessType.
+Derive EqDec for AccessTypeConstructor.
 Derive EqDec for Records.
 
 Section Finite.
@@ -197,7 +218,17 @@ Section Finite.
 
   Global Program Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR] |}.
+    {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance AccessTypeConstructor_finite :
+    Finite AccessTypeConstructor :=
+    {| enum := [KRead;KWrite;KReadWrite;KExecute] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -231,14 +262,16 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑼_eq_dec := Unions_eqdec.
   Definition 𝑼𝑻 (U : 𝑼) : Set :=
     match U with
-    | ast => AST
+    | ast         => AST
+    | access_type => AccessType
     end.
   Instance 𝑼𝑻_eq_dec U : EqDec (𝑼𝑻 U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
 
   Definition 𝑼𝑲 (U : 𝑼) : Set :=
     match U with
-    | ast => ASTConstructor
+    | ast         => ASTConstructor
+    | access_type => AccessTypeConstructor
     end.
   Instance 𝑼𝑲_eq_dec U : EqDec (𝑼𝑲 U) :=
     ltac:(destruct U; auto with typeclass_instances).

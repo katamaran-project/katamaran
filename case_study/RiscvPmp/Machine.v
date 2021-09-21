@@ -70,13 +70,17 @@ Module RiscvPmpTermKit <: TermKit.
     Notation "'imm'"     := "imm" : string_scope.
     Notation "'immext'"  := "immext" : string_scope.
     Notation "'off'"     := "off" : string_scope.
+    Notation "'offset'"  := "offset" : string_scope.
     Notation "'ret'"     := "ret" : string_scope.
     Notation "'tmp'"     := "tmp" : string_scope.
     Notation "'tmp1'"    := "tmp1" : string_scope.
     Notation "'tmp2'"    := "tmp2" : string_scope.
     Notation "'t'"       := "t" : string_scope.
     Notation "'addr'"    := "addr" : string_scope.
+    Notation "'paddr'"   := "paddr" : string_scope.
     Notation "'taken'"   := "taken" : string_scope.
+    Notation "'typ'"     := "typ" : string_scope.
+    Notation "'value'"   := "value" : string_scope.
   End RiscvPmpVariableNotation.
   Import RiscvPmpVariableNotation.
 
@@ -89,12 +93,15 @@ Module RiscvPmpTermKit <: TermKit.
   | set_next_pc        : Fun [addr ∶ ty_word] ty_unit
   | address_aligned    : Fun [addr ∶ ty_word] ty_bool
   | abs                : Fun [v ∶ ty_int] ty_int
+  | mem_read           : Fun [typ ∶ ty_access_type, paddr ∶ ty_int] ty_word
+  | process_load       : Fun [rd ∶ ty_regidx, value ∶ ty_word] ty_retired
   | execute_RTYPE      : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
   | execute_ITYPE      : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
   | execute_UTYPE      : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
   | execute_BTYPE      : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired
   | execute_RISCV_JAL  : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
   | execute_RISCV_JALR : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
+  | execute_LOAD       : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=.
@@ -145,17 +152,26 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     Notation "'imm'"     := (@exp_var _ "imm" _ _) : exp_scope.
     Notation "'immext'"  := (@exp_var _ "immext" _ _) : exp_scope.
     Notation "'off'"     := (@exp_var _ "off" _ _) : exp_scope.
+    Notation "'offset'"  := (@exp_var _ "offset" _ _) : exp_scope.
     Notation "'ret'"     := (@exp_var _ "ret" _ _) : exp_scope.
     Notation "'tmp'"     := (@exp_var _ "tmp" _ _) : exp_scope.
     Notation "'tmp1'"    := (@exp_var _ "tmp1" _ _) : exp_scope.
     Notation "'tmp2'"    := (@exp_var _ "tmp2" _ _) : exp_scope.
     Notation "'t'"       := (@exp_var _ "t" _ _) : exp_scope.
     Notation "'addr'"    := (@exp_var _ "addr" _ _) : exp_scope.
+    Notation "'paddr'"   := (@exp_var _ "paddr" _ _) : exp_scope.
     Notation "'taken'"   := (@exp_var _ "taken" _ _) : exp_scope.
+    Notation "'typ'"     := (@exp_var _ "typ" _ _) : exp_scope.
+    Notation "'value'"   := (@exp_var _ "value" _ _) : exp_scope.
   End RiscvPmpVariableExpVarNotation.
 
   Import RiscvPmpVariableExpVarNotation.
   Import RiscvPmpVariableNotation.
+
+  Local Notation "'Read'" := (exp_union access_type KRead (exp_lit ty_unit tt)) : exp_scope.
+  Local Notation "'Write'" := (exp_union access_type KWrite (exp_lit ty_unit tt)) : exp_scope.
+  Local Notation "'ReadWrite'" := (exp_union access_type KReadWrite (exp_lit ty_unit tt)) : exp_scope.
+  Local Notation "'Execute'" := (exp_union access_type KExecute (exp_lit ty_unit tt)) : exp_scope.
 
   (** Functions **)
   Definition fun_rX : Stm [rs ∶ ty_regidx] ty_word :=
@@ -188,6 +204,14 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     if: v < (exp_lit ty_int 0%Z)
     then v * (exp_lit ty_int (-1)%Z)
     else v.
+
+  Definition fun_mem_read : Stm [typ ∶ ty_access_type, paddr ∶ ty_int] ty_word :=
+    (* TODO *)
+    stm_lit ty_word 0%Z.
+
+  Definition fun_process_load : Stm [rd ∶ ty_regidx, value ∶ ty_word] ty_retired :=
+    call wX rd value ;;
+    stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
@@ -282,6 +306,14 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     else
       stm_lit ty_retired RETIRE_SUCCESS.
 
+  Definition fun_execute_LOAD : Stm [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired :=
+    let: offset := imm in
+    let: tmp%string := call rX rs1 in
+    let: paddr%string := tmp + offset in
+    let: tmp%string := call mem_read Read paddr in
+    call process_load rd tmp ;;
+    stm_lit ty_retired RETIRE_SUCCESS.
+
   Definition RegStore := GenericRegStore.
   Definition read_register := generic_read_register.
   Definition write_register := generic_write_register.
@@ -313,12 +345,15 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | set_next_pc        => fun_set_next_pc
     | address_aligned    => fun_address_aligned
     | abs                => fun_abs
+    | mem_read           => fun_mem_read
+    | process_load       => fun_process_load
     | execute_RTYPE      => fun_execute_RTYPE
     | execute_ITYPE      => fun_execute_ITYPE
     | execute_UTYPE      => fun_execute_UTYPE
     | execute_BTYPE      => fun_execute_BTYPE
     | execute_RISCV_JAL  => fun_execute_RISCV_JAL
     | execute_RISCV_JALR => fun_execute_RISCV_JALR
+    | execute_LOAD       => fun_execute_LOAD
     end.
 
 End RiscvPmpProgramKit.

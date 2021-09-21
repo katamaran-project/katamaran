@@ -46,13 +46,14 @@ Module RiscvPmpValueKit <: ValueKit.
   Module typekit := RiscvPmpTypeKit.
   Module Export TY := Syntax.Types.Types typekit.
 
-  Notation ty_word    := (ty_int).
-  Notation ty_regidx  := (ty_enum regidx).
-  Notation ty_rop     := (ty_enum rop).
-  Notation ty_iop     := (ty_enum iop).
-  Notation ty_uop     := (ty_enum uop).
-  Notation ty_bop     := (ty_enum bop).
-  Notation ty_retired := (ty_enum retired).
+  Notation ty_word        := (ty_int).
+  Notation ty_regidx      := (ty_enum regidx).
+  Notation ty_rop         := (ty_enum rop).
+  Notation ty_iop         := (ty_enum iop).
+  Notation ty_uop         := (ty_enum uop).
+  Notation ty_bop         := (ty_enum bop).
+  Notation ty_retired     := (ty_enum retired).
+  Notation ty_access_type := (ty_union access_type).
 
   (** Unions **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -65,7 +66,9 @@ Module RiscvPmpValueKit <: ValueKit.
                | KBTYPE      => ty_tuple [ty_int, ty_regidx, ty_regidx, ty_bop]
                | KRISCV_JAL  => ty_tuple [ty_int, ty_regidx]
                | KRISCV_JALR => ty_tuple [ty_int, ty_regidx, ty_regidx]
+               | KLOAD       => ty_tuple [ty_int, ty_regidx, ty_regidx]
                end
+    | access_type => fun K => ty_unit
     end.
 
   Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
@@ -78,7 +81,15 @@ Module RiscvPmpValueKit <: ValueKit.
                | BTYPE imm rs2 rs1 op  => existT KBTYPE (tt , imm , rs2 , rs1 , op)
                | RISCV_JAL imm rd      => existT KRISCV_JAL (tt , imm , rd)
                | RISCV_JALR imm rs1 rd => existT KRISCV_JALR (tt , imm , rs1 , rd)
+               | LOAD imm rs1 rd       => existT KLOAD (tt , imm , rs1 , rd)
                end
+    | access_type => fun Kv =>
+                       match Kv with
+                       | Read      => existT KRead tt
+                       | Write     => existT KWrite tt
+                       | ReadWrite => existT KReadWrite tt
+                       | Execute   => existT KExecute tt
+                       end
     end.
 
   Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
@@ -91,7 +102,15 @@ Module RiscvPmpValueKit <: ValueKit.
                | existT KBTYPE (tt , imm , rs2 , rs1 , op) => BTYPE imm rs2 rs1 op
                | existT KRISCV_JAL (tt , imm , rd)         => RISCV_JAL imm rd
                | existT KRISCV_JALR (tt , imm , rs1 , rd)  => RISCV_JALR imm rs1 rd
+               | existT KLOAD (tt , imm , rs1 , rd)        => LOAD imm rs1 rd
                end
+    | access_type => fun Kv =>
+                       match Kv with
+                       | existT KRead tt      => Read
+                       | existT KWrite tt     => Write
+                       | existT KReadWrite tt => ReadWrite
+                       | existT KExecute tt   => Execute
+                       end
     end.
 
   Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),

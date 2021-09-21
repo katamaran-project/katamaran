@@ -1,6 +1,16 @@
 # Case Study: RISC-V with PMP 
 Case study for (base) RISC-V with Physical Memory Protection (PMP).
 
+Focus is on RV32I, with the PMP extension.
+Remarks/Comments/Info:
+- instructions with "W" suffix are not implemented (these are for RV64 and are variants that operate only on the lower 32 bits of a doubleword)
+- fence instructions not implemented, our model is simple and sequential, updates to registers and memory happen instantly
+- WFI (wait for interrupt) instruction not implemented, focus in this model is on exceptions, not interrupts
+- store & load instructions are simplified (i.e. no size, always word, no sign/zero extension, no aq or rl
+- keep AccessType simple (i.e. no type parameter for extensions, this is ignored in the PMP related code anyway), but still represent it as a *union* (note that we could opt to represent this as an enum, but this way is more faithful to the (simplified) Sail model)
+- not using MemoryOpResult, the exception case doesn't seem relevant for our case study?
+  + this means that "process_load" is simplified (no pattern match on MemoryOpResult)
+
 ## Translation Notes
 Inline function call expressions get translated into
 ```
