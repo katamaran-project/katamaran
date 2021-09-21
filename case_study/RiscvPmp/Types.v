@@ -48,6 +48,11 @@ Inductive ROP : Set :=
 | RISCV_ADD
 .
 
+Inductive UOP : Set :=
+| RISCV_LUI
+| RISCV_AUIPC
+.
+
 Inductive Retired : Set :=
 | RETIRE_SUCCESS
 | RETIRE_FAIL.
@@ -55,16 +60,19 @@ Inductive Retired : Set :=
 Inductive Enums : Set :=
 | regidx
 | rop
+| uop
 | retired
 .
 
 (** Unions **)
 Inductive AST : Set :=
-| RTYPE (rs2 rs1 rd : RegIdx) (rop : ROP)
+| RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
+| UTYPE (imm : Z) (rd : RegIdx) (op : UOP)
 .
 
 Inductive ASTConstructor : Set :=
 | KRTYPE
+| KUTYPE
 .
 
 Inductive Unions : Set :=
@@ -79,6 +87,7 @@ Section TransparentObligations.
   Derive NoConfusion for Enums.
   Derive NoConfusion for RegIdx.
   Derive NoConfusion for ROP.
+  Derive NoConfusion for UOP.
   Derive NoConfusion for Retired.
   Derive NoConfusion for Unions.
   Derive NoConfusion for AST.
@@ -89,6 +98,7 @@ End TransparentObligations.
 Derive EqDec for Enums.
 Derive EqDec for RegIdx.
 Derive EqDec for ROP.
+Derive EqDec for UOP.
 Derive EqDec for Retired.
 Derive EqDec for Unions.
 Derive EqDec for AST.
@@ -117,6 +127,16 @@ Section Finite.
     intros []; apply elem_of_list_In; cbn; intuition.
   Qed.
 
+  Global Program Instance UOP_finite :
+    Finite UOP :=
+    {| enum := [RISCV_LUI;RISCV_AUIPC] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
   Global Program Instance Retired_finite :
     Finite Retired :=
     {| enum := [RETIRE_SUCCESS; RETIRE_FAIL] |}.
@@ -129,7 +149,7 @@ Section Finite.
 
   Global Program Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE] |}.
+    {| enum := [KRTYPE;KUTYPE] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -148,6 +168,7 @@ Module RiscvPmpTypeKit <: TypeKit.
     match e with
     | regidx  => RegIdx
     | rop     => ROP
+    | uop     => UOP
     | retired => Retired
     end.
   Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=

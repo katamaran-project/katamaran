@@ -1,6 +1,17 @@
 # Case Study: RISC-V with PMP 
 Case study for (base) RISC-V with Physical Memory Protection (PMP).
 
+## Translation Notes
+Inline function call expressions get translated into
+```
+# ...
+# | RISCV_AUIPC => get_arch_pc() + off
+# ==>
+| RISCV_AUIPC => 
+	let: tmp := call get_arch_pc in
+	tmp + off
+```
+
 ## Source
 
 This machine is based on a minimal model of the official RISC-V Sail model.

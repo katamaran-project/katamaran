@@ -49,6 +49,7 @@ Module RiscvPmpValueKit <: ValueKit.
   Notation ty_word    := (ty_int).
   Notation ty_regidx  := (ty_enum regidx).
   Notation ty_rop     := (ty_enum rop).
+  Notation ty_uop     := (ty_enum uop).
   Notation ty_retired := (ty_enum retired).
 
   (** Unions **)
@@ -57,6 +58,7 @@ Module RiscvPmpValueKit <: ValueKit.
     | ast => fun K =>
                match K with
                | KRTYPE => ty_tuple [ty_regidx, ty_regidx, ty_regidx, ty_rop]
+               | KUTYPE => ty_tuple [ty_int, ty_regidx, ty_uop]
                end
     end.
 
@@ -65,6 +67,7 @@ Module RiscvPmpValueKit <: ValueKit.
     | ast => fun Kv =>
                match Kv with
                | RTYPE rs2 rs1 rd op => existT KRTYPE (tt , rs2 , rs1 , rd , op)
+               | UTYPE imm rd op => existT KUTYPE (tt , imm , rd , op)
                end
     end.
 
@@ -73,6 +76,7 @@ Module RiscvPmpValueKit <: ValueKit.
     | ast => fun Kv =>
                match Kv with
                | existT KRTYPE (tt , rs2 , rs1 , rd , op) => RTYPE rs2 rs1 rd op
+               | existT KUTYPE (tt , imm , rd , op) => UTYPE imm rd op
                end
     end.
 
