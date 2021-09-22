@@ -31,6 +31,7 @@ From Coq Require Import
      ZArith.ZArith.
 From Equations Require Import
      Equations.
+Require Import Equations.Prop.EqDec.
 From MicroSail Require Import
      Syntax.
 From RiscvPmp Require Export
@@ -115,6 +116,7 @@ Module RiscvPmpTermKit <: TermKit.
   Inductive Reg : Ty -> Set :=
   | pc     : Reg ty_word
   | nextpc : Reg ty_word
+  | x0     : Reg ty_word
   | x1     : Reg ty_word
   | x2     : Reg ty_word.
 
@@ -176,16 +178,17 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   (** Functions **)
   Definition fun_rX : Stm [rs ∶ ty_regidx] ty_word :=
     match: rs in regidx with
+    | X0 => exp_lit ty_word 0%Z
     | X1 => stm_read_register x1
     | X2 => stm_read_register x2
     end.
 
   Definition fun_wX : Stm [rd ∶ ty_regidx, v ∶ ty_word] ty_unit :=
     match: rd in regidx with
-    | X1 => stm_write_register x1 v
-    | X2 => stm_write_register x2 v
-    end ;;
-    stm_lit ty_unit tt.
+    | X0 => stm_lit ty_unit tt
+    | X1 => stm_write_register x1 v ;; stm_lit ty_unit tt
+    | X2 => stm_write_register x2 v ;; stm_lit ty_unit tt
+    end.
 
   Definition fun_get_arch_pc : Stm ctx_nil ty_word :=
     stm_read_register pc.
@@ -315,6 +318,69 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition RegStore := GenericRegStore.
+
+  (* Definition riscv_read_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) : Lit σ := 
+    match r with
+    | x0 => 0%Z
+    | r => generic_read_register γ r
+    end.
+
+  Definition riscv_write_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (val : Lit σ) : RegStore :=
+    match r with
+    | x0 => γ
+    | r => generic_write_register γ r val
+    end.
+
+  Lemma riscv_read_write (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (val : Lit σ) :
+    match r with
+    | x0 => riscv_read_register (riscv_write_register γ r val) x0 = 0%Z
+    | r => riscv_read_register (riscv_write_register γ r val) r = val
+    end.
+  Proof.
+    destruct r; cbn; reflexivity.
+  Qed.
+
+  Lemma riscv_read_write_distinct γ {σ τ} (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (val : Lit σ):
+    existT _ r <> existT _ k ->
+    riscv_read_register (riscv_write_register γ r val) k = riscv_read_register γ k.
+  Proof.
+    intros ?; unfold riscv_read_register, riscv_write_register.
+    destruct k, r;
+      try reflexivity;
+      apply generic_read_write_distinct; assumption.
+  Qed.
+
+  Lemma riscv_write_read γ {σ} (r : 𝑹𝑬𝑮 σ) :
+    forall τ (r' : 𝑹𝑬𝑮 τ),
+      riscv_write_register γ r (riscv_read_register γ r) r' = γ τ r'.
+  Proof.
+    intros ? ?.
+    unfold riscv_write_register, riscv_read_register.
+    destruct r;
+      try reflexivity;
+      apply generic_write_read.
+  Qed.
+
+  Lemma riscv_write_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ) :
+    forall τ (r' : 𝑹𝑬𝑮 τ),
+      riscv_write_register (riscv_write_register γ r v1) r v2 r' =
+      riscv_write_register γ r v2 r'.
+  Proof.
+    intros ? ?.
+    unfold riscv_write_register, riscv_read_register.
+    destruct r;
+      try reflexivity;
+      apply generic_write_write.
+  Qed.
+
+  Definition read_register := riscv_read_register.
+  Definition write_register := riscv_write_register.
+  Definition read_write := riscv_read_write.
+  Definition read_write_distinct := riscv_read_write_distinct.
+  Definition write_read := riscv_write_read.
+  Definition write_write := riscv_write_write.
+  *)
+
   Definition read_register := generic_read_register.
   Definition write_register := generic_write_register.
   Definition read_write := generic_read_write.

@@ -40,6 +40,7 @@ Definition Word : Set := Z.
 
 (** Enums **)
 Inductive RegIdx : Set :=
+| X0
 | X1
 | X2
 .
@@ -158,7 +159,7 @@ Section Finite.
   Import stdpp.finite.
 
   Global Program Instance RegIdx_finite : Finite RegIdx :=
-    {| enum := [X1;X2] |}.
+    {| enum := [X0;X1;X2] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
