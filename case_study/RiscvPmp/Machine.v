@@ -227,8 +227,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     else v.
 
   Definition fun_mem_read : Stm [typ ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
-    let: result := call pmp_mem_read typ paddr in
-    result.
+    call pmp_mem_read typ paddr.
 
   (* TODO: implement *)
   Definition fun_checked_mem_read : Stm [t ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
