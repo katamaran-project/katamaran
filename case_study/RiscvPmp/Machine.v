@@ -95,7 +95,9 @@ Module RiscvPmpTermKit <: TermKit.
   | execute_LOAD       : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
   .
 
-  Inductive FunX : PCtx -> Ty -> Set :=.
+  Inductive FunX : PCtx -> Ty -> Set :=
+  | read_ram : FunX [paddr ∶ ty_int] ty_word
+  .
 
   Inductive Lem : PCtx -> Set :=. 
 
@@ -229,9 +231,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Definition fun_mem_read : Stm [typ ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
     call pmp_mem_read typ paddr.
 
-  (* TODO: implement *)
   Definition fun_checked_mem_read : Stm [t ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
-    MemValue (exp_lit ty_word 0%Z).
+    let: tmp := foreign read_ram paddr in
+    MemValue tmp.
 
   Definition fun_pmp_mem_read : Stm [t∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
     let: tmp ∶ (ty_option ty_exception_type) := call pmpCheck paddr t in
@@ -430,15 +432,22 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   (* Memory *)
   Definition Memory := Addr -> Word.
 
+  Definition fun_read_ram (μ : Memory) (a : Lit ty_int) : Lit ty_word :=
+    μ a.
+
   Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) :
     forall (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
     match f with
+    | read_ram => fun args res γ γ' μ μ' =>
+                    let a := (args ‼ paddr%string)%exp in
+                    (γ' , μ' , res) = (γ , μ , inr (fun_read_ram μ a))
     end.
 
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof.
-    destruct f.
+    destruct f; cbn.
+    repeat depelim args; repeat eexists; constructor.
   Qed.
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=

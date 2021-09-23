@@ -95,11 +95,22 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
     SepContract Δ τ.
 
+  Definition SepContractFunX {Δ τ} (f : FunX Δ τ) : Type :=
+    SepContract Δ τ.
+
   Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
     {| sep_contract_logic_variables := [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop];
        sep_contract_localstore      := [term_var rs2, term_var rs1, term_var rd, term_var op]%arg;
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_execute_RTYPE";
+       sep_contract_postcondition   := asn_true;
+    |}.
+
+  Definition sep_contract_read_ram : SepContractFunX read_ram :=
+    {| sep_contract_logic_variables := [paddr ∶ ty_int];
+       sep_contract_localstore      := [term_var paddr]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_read_ram";
        sep_contract_postcondition   := asn_true;
     |}.
 
@@ -113,6 +124,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
+      | read_ram => sep_contract_read_ram
       end.
 
   Definition LEnv : LemmaEnv :=
