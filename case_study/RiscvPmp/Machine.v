@@ -58,32 +58,19 @@ Module RiscvPmpTermKit <: TermKit.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
   Definition fresh := Context.fresh (T := Ty).
 
-  Module RiscvPmpVariableNotation.
-    Notation "'rs'"      := "rs" : string_scope.
-    Notation "'rs1'"     := "rs1" : string_scope.
-    Notation "'rs1_val'" := "rs1_val" : string_scope.
-    Notation "'rs2'"     := "rs2" : string_scope.
-    Notation "'rs2_val'" := "rs2_val" : string_scope.
-    Notation "'rd'"      := "rd" : string_scope.
-    Notation "'op'"      := "op" : string_scope.
-    Notation "'result'"  := "result" : string_scope.
-    Notation "'v'"       := "v" : string_scope.
-    Notation "'imm'"     := "imm" : string_scope.
-    Notation "'immext'"  := "immext" : string_scope.
-    Notation "'off'"     := "off" : string_scope.
-    Notation "'offset'"  := "offset" : string_scope.
-    Notation "'ret'"     := "ret" : string_scope.
-    Notation "'tmp'"     := "tmp" : string_scope.
-    Notation "'tmp1'"    := "tmp1" : string_scope.
-    Notation "'tmp2'"    := "tmp2" : string_scope.
-    Notation "'t'"       := "t" : string_scope.
-    Notation "'addr'"    := "addr" : string_scope.
-    Notation "'paddr'"   := "paddr" : string_scope.
-    Notation "'taken'"   := "taken" : string_scope.
-    Notation "'typ'"     := "typ" : string_scope.
-    Notation "'value'"   := "value" : string_scope.
-  End RiscvPmpVariableNotation.
-  Import RiscvPmpVariableNotation.
+  Local Notation "'rs'"      := "rs" : string_scope.
+  Local Notation "'rs1'"     := "rs1" : string_scope.
+  Local Notation "'rs2'"     := "rs2" : string_scope.
+  Local Notation "'rd'"      := "rd" : string_scope.
+  Local Notation "'op'"      := "op" : string_scope.
+  Local Notation "'v'"       := "v" : string_scope.
+  Local Notation "'imm'"     := "imm" : string_scope.
+  Local Notation "'t'"       := "t" : string_scope.
+  Local Notation "'addr'"    := "addr" : string_scope.
+  Local Notation "'paddr'"   := "paddr" : string_scope.
+  Local Notation "'typ'"     := "typ" : string_scope.
+  Local Notation "'acc'"     := "acc" : string_scope.
+  Local Notation "'value'"   := "value" : string_scope.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
@@ -94,8 +81,11 @@ Module RiscvPmpTermKit <: TermKit.
   | set_next_pc        : Fun [addr ∶ ty_word] ty_unit
   | address_aligned    : Fun [addr ∶ ty_word] ty_bool
   | abs                : Fun [v ∶ ty_int] ty_int
-  | mem_read           : Fun [typ ∶ ty_access_type, paddr ∶ ty_int] ty_word
-  | process_load       : Fun [rd ∶ ty_regidx, value ∶ ty_word] ty_retired
+  | mem_read           : Fun [typ ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
+  | checked_mem_read   : Fun [t ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
+  | pmp_mem_read       : Fun [t∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
+  | pmpCheck           : Fun [paddr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type)
+  | process_load       : Fun [rd ∶ ty_regidx, value ∶ ty_memory_op_result] ty_retired
   | execute_RTYPE      : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
   | execute_ITYPE      : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
   | execute_UTYPE      : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
@@ -141,39 +131,67 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Local Coercion stm_exp : Exp >-> Stm.
 
-  Module RiscvPmpVariableExpVarNotation.
-    Notation "'rs'"      := (@exp_var _ "rs" _ _) : exp_scope.
-    Notation "'rs1'"     := (@exp_var _ "rs1" _ _) : exp_scope.
-    Notation "'rs1_val'" := (@exp_var _ "rs1_val" _ _) : exp_scope.
-    Notation "'rs2'"     := (@exp_var _ "rs2" _ _) : exp_scope.
-    Notation "'rs2_val'" := (@exp_var _ "rs2_val" _ _) : exp_scope.
-    Notation "'rd'"      := (@exp_var _ "rd" _ _) : exp_scope.
-    Notation "'op'"      := (@exp_var _ "op" _ _) : exp_scope.
-    Notation "'result'"  := (@exp_var _ "result" _ _) : exp_scope.
-    Notation "'v'"       := (@exp_var _ "v" _ _) : exp_scope.
-    Notation "'imm'"     := (@exp_var _ "imm" _ _) : exp_scope.
-    Notation "'immext'"  := (@exp_var _ "immext" _ _) : exp_scope.
-    Notation "'off'"     := (@exp_var _ "off" _ _) : exp_scope.
-    Notation "'offset'"  := (@exp_var _ "offset" _ _) : exp_scope.
-    Notation "'ret'"     := (@exp_var _ "ret" _ _) : exp_scope.
-    Notation "'tmp'"     := (@exp_var _ "tmp" _ _) : exp_scope.
-    Notation "'tmp1'"    := (@exp_var _ "tmp1" _ _) : exp_scope.
-    Notation "'tmp2'"    := (@exp_var _ "tmp2" _ _) : exp_scope.
-    Notation "'t'"       := (@exp_var _ "t" _ _) : exp_scope.
-    Notation "'addr'"    := (@exp_var _ "addr" _ _) : exp_scope.
-    Notation "'paddr'"   := (@exp_var _ "paddr" _ _) : exp_scope.
-    Notation "'taken'"   := (@exp_var _ "taken" _ _) : exp_scope.
-    Notation "'typ'"     := (@exp_var _ "typ" _ _) : exp_scope.
-    Notation "'value'"   := (@exp_var _ "value" _ _) : exp_scope.
-  End RiscvPmpVariableExpVarNotation.
+  Local Notation "'rs'"      := "rs" : string_scope.
+  Local Notation "'rs1'"     := "rs1" : string_scope.
+  Local Notation "'rs1_val'" := "rs1_val" : string_scope.
+  Local Notation "'rs2'"     := "rs2" : string_scope.
+  Local Notation "'rs2_val'" := "rs2_val" : string_scope.
+  Local Notation "'rd'"      := "rd" : string_scope.
+  Local Notation "'op'"      := "op" : string_scope.
+  Local Notation "'result'"  := "result" : string_scope.
+  Local Notation "'v'"       := "v" : string_scope.
+  Local Notation "'imm'"     := "imm" : string_scope.
+  Local Notation "'immext'"  := "immext" : string_scope.
+  Local Notation "'off'"     := "off" : string_scope.
+  Local Notation "'offset'"  := "offset" : string_scope.
+  Local Notation "'ret'"     := "ret" : string_scope.
+  Local Notation "'tmp'"     := "tmp" : string_scope.
+  Local Notation "'tmp1'"    := "tmp1" : string_scope.
+  Local Notation "'tmp2'"    := "tmp2" : string_scope.
+  Local Notation "'t'"       := "t" : string_scope.
+  Local Notation "'e'"       := "e" : string_scope.
+  Local Notation "'addr'"    := "addr" : string_scope.
+  Local Notation "'paddr'"   := "paddr" : string_scope.
+  Local Notation "'taken'"   := "taken" : string_scope.
+  Local Notation "'typ'"     := "typ" : string_scope.
+  Local Notation "'acc'"     := "acc" : string_scope.
+  Local Notation "'value'"   := "value" : string_scope.
 
-  Import RiscvPmpVariableExpVarNotation.
-  Import RiscvPmpVariableNotation.
+  Local Notation "'rs'"      := (@exp_var _ "rs" _ _) : exp_scope.
+  Local Notation "'rs1'"     := (@exp_var _ "rs1" _ _) : exp_scope.
+  Local Notation "'rs1_val'" := (@exp_var _ "rs1_val" _ _) : exp_scope.
+  Local Notation "'rs2'"     := (@exp_var _ "rs2" _ _) : exp_scope.
+  Local Notation "'rs2_val'" := (@exp_var _ "rs2_val" _ _) : exp_scope.
+  Local Notation "'rd'"      := (@exp_var _ "rd" _ _) : exp_scope.
+  Local Notation "'op'"      := (@exp_var _ "op" _ _) : exp_scope.
+  Local Notation "'result'"  := (@exp_var _ "result" _ _) : exp_scope.
+  Local Notation "'v'"       := (@exp_var _ "v" _ _) : exp_scope.
+  Local Notation "'imm'"     := (@exp_var _ "imm" _ _) : exp_scope.
+  Local Notation "'immext'"  := (@exp_var _ "immext" _ _) : exp_scope.
+  Local Notation "'off'"     := (@exp_var _ "off" _ _) : exp_scope.
+  Local Notation "'offset'"  := (@exp_var _ "offset" _ _) : exp_scope.
+  Local Notation "'ret'"     := (@exp_var _ "ret" _ _) : exp_scope.
+  Local Notation "'tmp'"     := (@exp_var _ "tmp" _ _) : exp_scope.
+  Local Notation "'tmp1'"    := (@exp_var _ "tmp1" _ _) : exp_scope.
+  Local Notation "'tmp2'"    := (@exp_var _ "tmp2" _ _) : exp_scope.
+  Local Notation "'t'"       := (@exp_var _ "t" _ _) : exp_scope.
+  Local Notation "'e'"       := (@exp_var _ "e" _ _) : exp_scope.
+  Local Notation "'addr'"    := (@exp_var _ "addr" _ _) : exp_scope.
+  Local Notation "'paddr'"   := (@exp_var _ "paddr" _ _) : exp_scope.
+  Local Notation "'taken'"   := (@exp_var _ "taken" _ _) : exp_scope.
+  Local Notation "'typ'"     := (@exp_var _ "typ" _ _) : exp_scope.
+  Local Notation "'acc'"     := (@exp_var _ "acc" _ _) : exp_scope.
+  Local Notation "'value'"   := (@exp_var _ "value" _ _) : exp_scope.
 
   Local Notation "'Read'" := (exp_union access_type KRead (exp_lit ty_unit tt)) : exp_scope.
   Local Notation "'Write'" := (exp_union access_type KWrite (exp_lit ty_unit tt)) : exp_scope.
   Local Notation "'ReadWrite'" := (exp_union access_type KReadWrite (exp_lit ty_unit tt)) : exp_scope.
   Local Notation "'Execute'" := (exp_union access_type KExecute (exp_lit ty_unit tt)) : exp_scope.
+
+  Local Notation "'None'" := (exp_inr (exp_lit ty_unit tt)) : exp_scope.
+
+  Local Notation "'MemValue' memv" := (exp_union memory_op_result KMemValue memv) (at level 10, memv at next level) : exp_scope.
+  Local Notation "'MemException' meme" := (exp_union memory_op_result KMemException meme) (at level 10, meme at next level) : exp_scope.
 
   (** Functions **)
   Definition fun_rX : Stm [rs ∶ ty_regidx] ty_word :=
@@ -208,13 +226,35 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     then v * (exp_lit ty_int (-1)%Z)
     else v.
 
-  Definition fun_mem_read : Stm [typ ∶ ty_access_type, paddr ∶ ty_int] ty_word :=
-    (* TODO *)
-    stm_lit ty_word 0%Z.
+  Definition fun_mem_read : Stm [typ ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
+    let: result := call pmp_mem_read typ paddr in
+    result.
 
-  Definition fun_process_load : Stm [rd ∶ ty_regidx, value ∶ ty_word] ty_retired :=
-    call wX rd value ;;
-    stm_lit ty_retired RETIRE_SUCCESS.
+  (* TODO: implement *)
+  Definition fun_checked_mem_read : Stm [t ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
+    MemValue (exp_lit ty_word 0%Z).
+
+  Definition fun_pmp_mem_read : Stm [t∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
+    let: tmp ∶ (ty_option ty_exception_type) := call pmpCheck paddr t in
+    match: tmp with
+    | inl e => MemException e
+    | inr v => call checked_mem_read t paddr
+    end.
+
+  Definition fun_pmpCheck : Stm [paddr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type) :=
+    None.
+
+  Definition fun_process_load : Stm [rd ∶ ty_regidx, value ∶ ty_memory_op_result] ty_retired :=
+    stm_match_union_alt memory_op_result value
+                        (fun K =>
+                           match K with
+                           | KMemValue => MkAlt (pat_var result)
+                                                (call wX rd result ;;
+                                                 stm_lit ty_retired RETIRE_SUCCESS)
+                           | KMemException => MkAlt (pat_var e)
+                                                    (* TODO: handle_mem_exception? *)
+                                                    (stm_lit ty_retired RETIRE_FAIL)
+                           end).
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
@@ -412,6 +452,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | address_aligned    => fun_address_aligned
     | abs                => fun_abs
     | mem_read           => fun_mem_read
+    | checked_mem_read   => fun_checked_mem_read
+    | pmp_mem_read       => fun_pmp_mem_read
+    | pmpCheck           => fun_pmpCheck
     | process_load       => fun_process_load
     | execute_RTYPE      => fun_execute_RTYPE
     | execute_ITYPE      => fun_execute_ITYPE

@@ -99,6 +99,17 @@ Inductive AccessType : Set :=
 | Execute
 .
 
+Inductive ExceptionType : Set :=
+| E_FETCH_ACCESS_FAULT
+| E_LOAD_ACCESS_FAULT
+| E_SAMO_ACCESS_FAULT
+.
+
+Inductive MemoryOpResult : Set :=
+| MemValue (v : Word)
+| MemException (e : ExceptionType)
+.
+
 Inductive ASTConstructor : Set :=
 | KRTYPE
 | KITYPE
@@ -116,9 +127,22 @@ Inductive AccessTypeConstructor : Set :=
 | KExecute
 .
 
+Inductive ExceptionTypeConstructor : Set :=
+| KE_FETCH_ACCESS_FAULT
+| KE_LOAD_ACCESS_FAULT
+| KE_SAMO_ACCESS_FAULT
+.
+
+Inductive MemoryOpResultConstructor : Set :=
+| KMemValue
+| KMemException
+.
+
 Inductive Unions : Set :=
 | ast
 | access_type
+| exception_type
+| memory_op_result
 .
 
 Inductive Records : Set :=. 
@@ -138,6 +162,10 @@ Section TransparentObligations.
   Derive NoConfusion for ASTConstructor.
   Derive NoConfusion for AccessType.
   Derive NoConfusion for AccessTypeConstructor.
+  Derive NoConfusion for ExceptionType.
+  Derive NoConfusion for ExceptionTypeConstructor.
+  Derive NoConfusion for MemoryOpResult.
+  Derive NoConfusion for MemoryOpResultConstructor.
   Derive NoConfusion for Records.
 End TransparentObligations.
 
@@ -153,6 +181,10 @@ Derive EqDec for AST.
 Derive EqDec for ASTConstructor.
 Derive EqDec for AccessType.
 Derive EqDec for AccessTypeConstructor.
+Derive EqDec for ExceptionType.
+Derive EqDec for ExceptionTypeConstructor.
+Derive EqDec for MemoryOpResult.
+Derive EqDec for MemoryOpResultConstructor.
 Derive EqDec for Records.
 
 Section Finite.
@@ -236,6 +268,26 @@ Section Finite.
   Next Obligation.
     intros []; apply elem_of_list_In; cbn; intuition.
   Qed.
+
+  Global Program Instance ExceptionTypeConstructor_finite :
+    Finite ExceptionTypeConstructor :=
+    {| enum := [KE_FETCH_ACCESS_FAULT;KE_LOAD_ACCESS_FAULT;KE_SAMO_ACCESS_FAULT] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance MemoryOpResultConstructor_finite :
+    Finite MemoryOpResultConstructor :=
+    {| enum := [KMemValue;KMemException] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
 End Finite.
 
 Module RiscvPmpTypeKit <: TypeKit.
@@ -263,16 +315,20 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑼_eq_dec := Unions_eqdec.
   Definition 𝑼𝑻 (U : 𝑼) : Set :=
     match U with
-    | ast         => AST
-    | access_type => AccessType
+    | ast              => AST
+    | access_type      => AccessType
+    | exception_type   => ExceptionType
+    | memory_op_result => MemoryOpResult
     end.
   Instance 𝑼𝑻_eq_dec U : EqDec (𝑼𝑻 U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
 
   Definition 𝑼𝑲 (U : 𝑼) : Set :=
     match U with
-    | ast         => ASTConstructor
-    | access_type => AccessTypeConstructor
+    | ast              => ASTConstructor
+    | access_type      => AccessTypeConstructor
+    | exception_type   => ExceptionTypeConstructor
+    | memory_op_result => MemoryOpResultConstructor
     end.
   Instance 𝑼𝑲_eq_dec U : EqDec (𝑼𝑲 U) :=
     ltac:(destruct U; auto with typeclass_instances).

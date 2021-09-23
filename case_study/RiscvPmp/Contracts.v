@@ -78,7 +78,19 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
                                   RiscvPmpProgramKit
                                   RiscvPmpAssertionKit.
 
-  Import RiscvPmpVariableNotation.
+  Local Notation "'rs'"      := "rs" : string_scope.
+  Local Notation "'rs1'"     := "rs1" : string_scope.
+  Local Notation "'rs2'"     := "rs2" : string_scope.
+  Local Notation "'rd'"      := "rd" : string_scope.
+  Local Notation "'op'"      := "op" : string_scope.
+  Local Notation "'v'"       := "v" : string_scope.
+  Local Notation "'imm'"     := "imm" : string_scope.
+  Local Notation "'t'"       := "t" : string_scope.
+  Local Notation "'addr'"    := "addr" : string_scope.
+  Local Notation "'paddr'"   := "paddr" : string_scope.
+  Local Notation "'typ'"     := "typ" : string_scope.
+  Local Notation "'acc'"     := "acc" : string_scope.
+  Local Notation "'value'"   := "value" : string_scope.
 
   Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
     SepContract Δ τ.

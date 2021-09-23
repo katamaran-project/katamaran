@@ -8,8 +8,7 @@ Remarks/Comments/Info:
 - WFI (wait for interrupt) instruction not implemented, focus in this model is on exceptions, not interrupts
 - store & load instructions are simplified (i.e. no size, always word, no sign/zero extension, no aq or rl
 - keep AccessType simple (i.e. no type parameter for extensions, this is ignored in the PMP related code anyway), but still represent it as a *union* (note that we could opt to represent this as an enum, but this way is more faithful to the (simplified) Sail model)
-- not using MemoryOpResult, the exception case doesn't seem relevant for our case study?
-  + this means that "process_load" is simplified (no pattern match on MemoryOpResult)
+- MemoryOpResult is simplified and MemValue can only be a Word (no type param in definition of MemoryOpResult, this complicates EqDec...)
 
 ## Translation Notes
 Inline function call expressions get translated into
