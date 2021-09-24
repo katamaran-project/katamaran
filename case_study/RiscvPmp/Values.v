@@ -69,6 +69,7 @@ Module RiscvPmpValueKit <: ValueKit.
                             | KRISCV_JAL  => ty_tuple [ty_int, ty_regidx]
                             | KRISCV_JALR => ty_tuple [ty_int, ty_regidx, ty_regidx]
                             | KLOAD       => ty_tuple [ty_int, ty_regidx, ty_regidx]
+                            | KSTORE      => ty_tuple [ty_int, ty_regidx, ty_regidx]
                             end
     | access_type      => fun _ => ty_unit
     | exception_type   => fun _ => ty_unit
@@ -90,6 +91,7 @@ Module RiscvPmpValueKit <: ValueKit.
                             | RISCV_JAL imm rd      => existT KRISCV_JAL (tt , imm , rd)
                             | RISCV_JALR imm rs1 rd => existT KRISCV_JALR (tt , imm , rs1 , rd)
                             | LOAD imm rs1 rd       => existT KLOAD (tt , imm , rs1 , rd)
+                            | STORE imm rs2 rs1     => existT KSTORE (tt , imm , rs2 , rs1)
                             end
     | access_type      => fun Kv =>
                             match Kv with
@@ -122,6 +124,7 @@ Module RiscvPmpValueKit <: ValueKit.
                             | existT KRISCV_JAL (tt , imm , rd)         => RISCV_JAL imm rd
                             | existT KRISCV_JALR (tt , imm , rs1 , rd)  => RISCV_JALR imm rs1 rd
                             | existT KLOAD (tt , imm , rs1 , rd)        => LOAD imm rs1 rd
+                            | existT KSTORE (tt , imm , rs2 , rs1)      => STORE imm rs2 rs1
                             end
     | access_type      => fun Kv =>
                             match Kv with

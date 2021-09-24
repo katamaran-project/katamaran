@@ -9,6 +9,7 @@ Remarks/Comments/Info:
 - store & load instructions are simplified (i.e. no size, always word, no sign/zero extension, no aq or rl
 - keep AccessType simple (i.e. no type parameter for extensions, this is ignored in the PMP related code anyway), but still represent it as a *union* (note that we could opt to represent this as an enum, but this way is more faithful to the (simplified) Sail model)
 - MemoryOpResult is simplified and MemValue can only be a Word (no type param in definition of MemoryOpResult, this complicates EqDec...)
+- Store instructions involve a function mem_write that returns a MemoryOpResult with a boolean value to indicate failure, to keep things simple (point above), I model this as a ty_word where 0 = false and 1 = true
 
 ## Translation Notes
 Inline function call expressions get translated into

@@ -71,6 +71,7 @@ Module RiscvPmpTermKit <: TermKit.
   Local Notation "'typ'"     := "typ" : string_scope.
   Local Notation "'acc'"     := "acc" : string_scope.
   Local Notation "'value'"   := "value" : string_scope.
+  Local Notation "'data'"    := "data" : string_scope.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
@@ -83,9 +84,12 @@ Module RiscvPmpTermKit <: TermKit.
   | abs                : Fun [v ∶ ty_int] ty_int
   | mem_read           : Fun [typ ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
   | checked_mem_read   : Fun [t ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
+  | checked_mem_write  : Fun [paddr ∶ ty_int, data ∶ ty_word] ty_memory_op_result
   | pmp_mem_read       : Fun [t∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
+  | pmp_mem_write      : Fun [paddr ∶ ty_int, data ∶ ty_word, typ ∶ ty_access_type] ty_memory_op_result
   | pmpCheck           : Fun [paddr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type)
   | process_load       : Fun [rd ∶ ty_regidx, value ∶ ty_memory_op_result] ty_retired
+  | write_mem_value    : Fun [paddr ∶ ty_int, value ∶ ty_word] ty_memory_op_result
   | execute_RTYPE      : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
   | execute_ITYPE      : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
   | execute_UTYPE      : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
@@ -93,10 +97,12 @@ Module RiscvPmpTermKit <: TermKit.
   | execute_RISCV_JAL  : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
   | execute_RISCV_JALR : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
   | execute_LOAD       : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
+  | execute_STORE      : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx] ty_retired
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
-  | read_ram : FunX [paddr ∶ ty_int] ty_word
+  | read_ram  : FunX [paddr ∶ ty_int] ty_word
+  | write_ram : FunX [paddr ∶ ty_int, data ∶ ty_word] ty_word
   .
 
   Inductive Lem : PCtx -> Set :=. 
@@ -131,6 +137,7 @@ End RiscvPmpTermKit.
 Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Module Export TM := Terms RiscvPmpTermKit.
 
+  Section Functions.
   Local Coercion stm_exp : Exp >-> Stm.
 
   Local Notation "'rs'"      := "rs" : string_scope.
@@ -141,6 +148,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'rd'"      := "rd" : string_scope.
   Local Notation "'op'"      := "op" : string_scope.
   Local Notation "'result'"  := "result" : string_scope.
+  Local Notation "'res'"     := "res" : string_scope.
   Local Notation "'v'"       := "v" : string_scope.
   Local Notation "'imm'"     := "imm" : string_scope.
   Local Notation "'immext'"  := "immext" : string_scope.
@@ -158,6 +166,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'typ'"     := "typ" : string_scope.
   Local Notation "'acc'"     := "acc" : string_scope.
   Local Notation "'value'"   := "value" : string_scope.
+  Local Notation "'data'"    := "data" : string_scope.
 
   Local Notation "'rs'"      := (@exp_var _ "rs" _ _) : exp_scope.
   Local Notation "'rs1'"     := (@exp_var _ "rs1" _ _) : exp_scope.
@@ -167,6 +176,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'rd'"      := (@exp_var _ "rd" _ _) : exp_scope.
   Local Notation "'op'"      := (@exp_var _ "op" _ _) : exp_scope.
   Local Notation "'result'"  := (@exp_var _ "result" _ _) : exp_scope.
+  Local Notation "'res'"     := (@exp_var _ "res" _ _) : exp_scope.
   Local Notation "'v'"       := (@exp_var _ "v" _ _) : exp_scope.
   Local Notation "'imm'"     := (@exp_var _ "imm" _ _) : exp_scope.
   Local Notation "'immext'"  := (@exp_var _ "immext" _ _) : exp_scope.
@@ -184,6 +194,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'typ'"     := (@exp_var _ "typ" _ _) : exp_scope.
   Local Notation "'acc'"     := (@exp_var _ "acc" _ _) : exp_scope.
   Local Notation "'value'"   := (@exp_var _ "value" _ _) : exp_scope.
+  Local Notation "'data'"    := (@exp_var _ "data" _ _) : exp_scope.
 
   Local Notation "'Read'" := (exp_union access_type KRead (exp_lit ty_unit tt)) : exp_scope.
   Local Notation "'Write'" := (exp_union access_type KWrite (exp_lit ty_unit tt)) : exp_scope.
@@ -235,11 +246,22 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     let: tmp := foreign read_ram paddr in
     MemValue tmp.
 
+  Definition fun_checked_mem_write : Stm [paddr ∶ ty_int, data ∶ ty_word] ty_memory_op_result :=
+    let: tmp := foreign write_ram paddr data in
+    MemValue tmp.
+
   Definition fun_pmp_mem_read : Stm [t∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
-    let: tmp ∶ (ty_option ty_exception_type) := call pmpCheck paddr t in
+    let: tmp := call pmpCheck paddr t in
     match: tmp with
     | inl e => MemException e
     | inr v => call checked_mem_read t paddr
+    end.
+
+  Definition fun_pmp_mem_write : Stm [paddr ∶ ty_int, data ∶ ty_word, typ ∶ ty_access_type] ty_memory_op_result :=
+    let: tmp := call pmpCheck paddr typ in
+    match: tmp with
+    | inl e => MemException e
+    | inr v => call checked_mem_write paddr data
     end.
 
   Definition fun_pmpCheck : Stm [paddr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type) :=
@@ -256,6 +278,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                     (* TODO: handle_mem_exception? *)
                                                     (stm_lit ty_retired RETIRE_FAIL)
                            end).
+
+  Definition fun_write_mem_value : Stm [paddr ∶ ty_int, value ∶ ty_word] ty_memory_op_result :=
+    call pmp_mem_write paddr value Write.
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
@@ -358,6 +383,26 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     call process_load rd tmp ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
+  Definition fun_execute_STORE : Stm [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx] ty_retired :=
+    let: offset := imm in
+    let: tmp%string := call rX rs1 in
+    let: paddr%string := tmp + offset in
+    let: rs2_val%string := call rX rs2 in
+    let: res%string := call write_mem_value paddr rs2_val in
+    stm_match_union_alt memory_op_result res
+                        (fun K =>
+                           match K with
+                           | KMemValue => MkAlt (pat_var v%string)
+                                                (if: v = (exp_lit ty_int 1%Z)
+                                                 then stm_lit ty_retired RETIRE_SUCCESS
+                                                 else fail "store got false from write_mem_value")
+                           | KMemException => MkAlt (pat_var e%string)
+                                                    (* TODO: handle_mem_exception? *)
+                                                    (stm_lit ty_retired RETIRE_FAIL)
+                           end).
+
+  End Functions.
+
   Definition RegStore := GenericRegStore.
 
   (* Definition riscv_read_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) : Lit σ := 
@@ -432,22 +477,29 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   (* Memory *)
   Definition Memory := Addr -> Word.
 
-  Definition fun_read_ram (μ : Memory) (a : Lit ty_int) : Lit ty_word :=
-    μ a.
+  Definition fun_read_ram (μ : Memory) (addr : Lit ty_int) : Lit ty_word :=
+    μ addr.
+
+  Definition fun_write_ram (μ : Memory) (addr : Lit ty_int) (data : Lit ty_word) : Memory :=
+    fun addr' => if Z.eqb addr addr' then data else μ addr'.
 
   Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) :
     forall (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
     match f with
-    | read_ram => fun args res γ γ' μ μ' =>
-                    let a := (args ‼ paddr%string)%exp in
-                    (γ' , μ' , res) = (γ , μ , inr (fun_read_ram μ a))
+    | read_ram  => fun args res γ γ' μ μ' =>
+                     let addr := (args ‼ "paddr")%exp in
+                     (γ' , μ' , res) = (γ , μ , inr (fun_read_ram μ addr))
+    | write_ram => fun args res γ γ' μ μ' =>
+                     let addr := (args ‼ "paddr")%exp in
+                     let data := (args ‼ "data")%exp in
+                     (γ' , μ' , res) = (γ , fun_write_ram μ addr data , inr 1%Z)
     end.
 
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof.
-    destruct f; cbn.
-    repeat depelim args; repeat eexists; constructor.
+    destruct f; cbn;
+      repeat depelim args; repeat eexists; constructor.
   Qed.
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
@@ -460,8 +512,11 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | address_aligned    => fun_address_aligned
     | abs                => fun_abs
     | mem_read           => fun_mem_read
+    | write_mem_value    => fun_write_mem_value
     | checked_mem_read   => fun_checked_mem_read
+    | checked_mem_write  => fun_checked_mem_write
     | pmp_mem_read       => fun_pmp_mem_read
+    | pmp_mem_write      => fun_pmp_mem_write
     | pmpCheck           => fun_pmpCheck
     | process_load       => fun_process_load
     | execute_RTYPE      => fun_execute_RTYPE
@@ -471,6 +526,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | execute_RISCV_JAL  => fun_execute_RISCV_JAL
     | execute_RISCV_JALR => fun_execute_RISCV_JALR
     | execute_LOAD       => fun_execute_LOAD
+    | execute_STORE      => fun_execute_STORE
     end.
 
 End RiscvPmpProgramKit.

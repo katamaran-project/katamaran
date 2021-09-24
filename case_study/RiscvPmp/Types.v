@@ -86,10 +86,11 @@ Inductive AST : Set :=
 | RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
 | ITYPE (imm : Z) (rs1 rd : RegIdx) (op : IOP)
 | UTYPE (imm : Z) (rd : RegIdx) (op : UOP)
-| BTYPE (imm : Z) (rs1 rs2 : RegIdx) (op : BOP)
+| BTYPE (imm : Z) (rs2 rs1 : RegIdx) (op : BOP)
 | RISCV_JAL (imm : Z) (rd : RegIdx)
 | RISCV_JALR (imm : Z) (rs1 rd : RegIdx)
 | LOAD (imm : Z) (rs1 rd : RegIdx)
+| STORE (imm : Z) (rs2 rs1 : RegIdx)
 .
 
 Inductive AccessType : Set :=
@@ -118,6 +119,7 @@ Inductive ASTConstructor : Set :=
 | KRISCV_JAL
 | KRISCV_JALR
 | KLOAD
+| KSTORE
 .
 
 Inductive AccessTypeConstructor : Set :=
@@ -251,7 +253,7 @@ Section Finite.
 
   Global Program Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD] |}.
+    {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
