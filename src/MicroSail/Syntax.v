@@ -2458,10 +2458,6 @@ Module Terms (Export termkit : TermKit).
     (at level 100, right associativity, x at level 30, s1 at next level, format
      "'let:'  x  :=  s1  'in'  '/' s2"
     ) : exp_scope.
-  Notation "'let:' x ∶ τ := s1 'in' s2" := (stm_let x%string τ s1%exp s2%exp)
-    (at level 100, right associativity, x at level 30, τ at next level, s1 at next level, format
-     "'let:'  x  ∶  τ  :=  s1  'in'  '/' s2", only parsing
-    ) : exp_scope.
   Notation "'let:' x :: τ := s1 'in' s2" := (stm_let x%string τ s1%exp s2%exp)
     (at level 100, right associativity, x at level 30, τ at next level, s1 at next level, format
      "'let:'  x  ::  τ  :=  s1  'in'  '/' s2"
