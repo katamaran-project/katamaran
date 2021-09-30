@@ -2543,7 +2543,7 @@ Module Terms (Export termkit : TermKit).
     (stm_match_sum e p1%string rhs1 p2%string rhs2) (at level 100, only parsing) : exp_scope.
 
   Notation "'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' | '(' fst ',' snd ')' => rhs 'end'" :=
-    (@stm_match_prod _ σ1 σ2 _ e fst%string snd%string rhs)
+    (@stm_match_prod _ _ σ1 σ2 e fst%string snd%string rhs)
     (at level 100, fst pattern, snd pattern, format
      "'[hv' 'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' '/' | '(' fst ',' snd ')' => rhs '/' 'end' ']'"
     ) : exp_scope.
