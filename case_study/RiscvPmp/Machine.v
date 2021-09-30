@@ -434,8 +434,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
-    let: rs2_val%string := call rX rs2 in (* TODO: why is the string scope annotation required here and on next line but not on previous one? *)
-    let: result%string :=
+    let: rs2_val := call rX rs2 in
+    let: result :=
        match: op in rop with
        | RISCV_ADD => rs1_val + rs2_val
        | RISCV_SUB => rs1_val - rs2_val

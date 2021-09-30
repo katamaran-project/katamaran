@@ -2454,7 +2454,7 @@ Module Terms (Export termkit : TermKit).
      "'[hv' 'if:'  e  '/' '[' 'then'  s1  ']' '/' '[' 'else'  s2 ']' ']'"
     ) : exp_scope.
 
-  Notation "'let:' x := s1 'in' s2" := (stm_let x _ s1%exp s2%exp)
+  Notation "'let:' x := s1 'in' s2" := (stm_let x%string _ s1%exp s2%exp)
     (at level 100, right associativity, x at level 30, s1 at next level, format
      "'let:'  x  :=  s1  'in'  '/' s2"
     ) : exp_scope.
