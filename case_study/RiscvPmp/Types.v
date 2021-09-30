@@ -45,6 +45,33 @@ Inductive RegIdx : Set :=
 | X2
 .
 
+(* NOTE: PMP CSRs limited to 1 for now *)
+Inductive PmpCfgIdx : Set :=
+| PMP0CFG
+.
+
+Inductive PmpAddrIdx : Set :=
+| PMPADDR0
+.
+
+(* NOTE: PMP Addr Match Type limited to OFF and TOR for now *)
+Inductive PmpAddrMatchType : Set :=
+| OFF
+| TOR
+.
+
+Inductive PmpMatch : Set :=
+| PMP_Success
+| PMP_Continue
+| PMP_Fail
+.
+
+Inductive PmpAddrMatch : Set :=
+| PMP_NoMatch
+| PMP_PartialMatch
+| PMP_Match
+.
+
 Inductive ROP : Set :=
 | RISCV_ADD
 | RISCV_SUB
@@ -74,6 +101,11 @@ Inductive Retired : Set :=
 
 Inductive Enums : Set :=
 | regidx
+| pmpcfgidx
+| pmpaddridx
+| pmpaddrmatchtype
+| pmpmatch
+| pmpaddrmatch
 | rop
 | iop
 | uop
@@ -101,9 +133,9 @@ Inductive AccessType : Set :=
 .
 
 Inductive ExceptionType : Set :=
-| E_FETCH_ACCESS_FAULT
-| E_LOAD_ACCESS_FAULT
-| E_SAMO_ACCESS_FAULT
+| E_Fetch_Access_Fault
+| E_Load_Access_Fault
+| E_SAMO_Access_Fault
 .
 
 Inductive MemoryOpResult : Set :=
@@ -130,9 +162,9 @@ Inductive AccessTypeConstructor : Set :=
 .
 
 Inductive ExceptionTypeConstructor : Set :=
-| KE_FETCH_ACCESS_FAULT
-| KE_LOAD_ACCESS_FAULT
-| KE_SAMO_ACCESS_FAULT
+| KE_Fetch_Access_Fault
+| KE_Load_Access_Fault
+| KE_SAMO_Access_Fault
 .
 
 Inductive MemoryOpResultConstructor : Set :=
@@ -147,13 +179,29 @@ Inductive Unions : Set :=
 | memory_op_result
 .
 
-Inductive Records : Set :=. 
+Record Pmpcfg_ent : Set :=
+  MkPmpcfg_ent
+    { L : bool;
+      A : PmpAddrMatchType;
+      X : bool;
+      W : bool;
+      R : bool;
+      }.
+
+Inductive Records : Set :=
+| pmpcfg_ent
+.
 
 Section TransparentObligations.
   Local Set Transparent Obligations.
 
   Derive NoConfusion for Enums.
   Derive NoConfusion for RegIdx.
+  Derive NoConfusion for PmpCfgIdx.
+  Derive NoConfusion for PmpAddrIdx.
+  Derive NoConfusion for PmpAddrMatchType.
+  Derive NoConfusion for PmpMatch.
+  Derive NoConfusion for PmpAddrMatch.
   Derive NoConfusion for ROP.
   Derive NoConfusion for IOP.
   Derive NoConfusion for UOP.
@@ -169,10 +217,16 @@ Section TransparentObligations.
   Derive NoConfusion for MemoryOpResult.
   Derive NoConfusion for MemoryOpResultConstructor.
   Derive NoConfusion for Records.
+  Derive NoConfusion for Pmpcfg_ent.
 End TransparentObligations.
 
 Derive EqDec for Enums.
 Derive EqDec for RegIdx.
+Derive EqDec for PmpCfgIdx.
+Derive EqDec for PmpAddrIdx.
+Derive EqDec for PmpAddrMatchType.
+Derive EqDec for PmpMatch.
+Derive EqDec for PmpAddrMatch.
 Derive EqDec for ROP.
 Derive EqDec for IOP.
 Derive EqDec for UOP.
@@ -188,12 +242,58 @@ Derive EqDec for ExceptionTypeConstructor.
 Derive EqDec for MemoryOpResult.
 Derive EqDec for MemoryOpResultConstructor.
 Derive EqDec for Records.
+Derive EqDec for Pmpcfg_ent.
 
 Section Finite.
   Import stdpp.finite.
 
   Global Program Instance RegIdx_finite : Finite RegIdx :=
     {| enum := [X0;X1;X2] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
+    {| enum := [PMP0CFG] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance PmpAddrIdx_finite : Finite PmpAddrIdx :=
+    {| enum := [PMPADDR0] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance PmpAddrMatchType_finite : Finite PmpAddrMatchType :=
+    {| enum := [OFF;TOR] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance PmpMatch_finite : Finite PmpMatch :=
+    {| enum := [PMP_Success;PMP_Continue;PMP_Fail] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance PmpAddrMatch_finite : Finite PmpAddrMatch :=
+    {| enum := [PMP_NoMatch;PMP_PartialMatch;PMP_Match] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -273,7 +373,7 @@ Section Finite.
 
   Global Program Instance ExceptionTypeConstructor_finite :
     Finite ExceptionTypeConstructor :=
-    {| enum := [KE_FETCH_ACCESS_FAULT;KE_LOAD_ACCESS_FAULT;KE_SAMO_ACCESS_FAULT] |}.
+    {| enum := [KE_Fetch_Access_Fault;KE_Load_Access_Fault;KE_SAMO_Access_Fault] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -300,12 +400,17 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑬_eq_dec := Enums_eqdec.
   Definition 𝑬𝑲 (e : 𝑬) : Set :=
     match e with
-    | regidx  => RegIdx
-    | rop     => ROP
-    | iop     => IOP
-    | uop     => UOP
-    | bop     => BOP
-    | retired => Retired
+    | regidx           => RegIdx
+    | pmpcfgidx        => PmpCfgIdx
+    | pmpaddridx       => PmpAddrIdx
+    | pmpaddrmatchtype => PmpAddrMatchType
+    | pmpmatch         => PmpMatch
+    | pmpaddrmatch     => PmpAddrMatch
+    | rop              => ROP
+    | iop              => IOP
+    | uop              => UOP
+    | bop              => BOP
+    | retired          => Retired
     end.
   Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=
     ltac:(destruct E; auto with typeclass_instances).
@@ -342,6 +447,7 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑹_eq_dec := Records_eqdec.
   Definition 𝑹𝑻 (R : 𝑹) : Set :=
     match R with
+    | pmpcfg_ent => Pmpcfg_ent
     end.
   Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
     ltac:(destruct R; auto with typeclass_instances).

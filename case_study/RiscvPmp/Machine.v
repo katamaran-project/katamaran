@@ -58,20 +58,25 @@ Module RiscvPmpTermKit <: TermKit.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
   Definition fresh := Context.fresh (T := Ty).
 
-  Local Notation "'rs'"      := "rs" : string_scope.
-  Local Notation "'rs1'"     := "rs1" : string_scope.
-  Local Notation "'rs2'"     := "rs2" : string_scope.
-  Local Notation "'rd'"      := "rd" : string_scope.
-  Local Notation "'op'"      := "op" : string_scope.
-  Local Notation "'v'"       := "v" : string_scope.
-  Local Notation "'imm'"     := "imm" : string_scope.
-  Local Notation "'t'"       := "t" : string_scope.
-  Local Notation "'addr'"    := "addr" : string_scope.
-  Local Notation "'paddr'"   := "paddr" : string_scope.
-  Local Notation "'typ'"     := "typ" : string_scope.
-  Local Notation "'acc'"     := "acc" : string_scope.
-  Local Notation "'value'"   := "value" : string_scope.
-  Local Notation "'data'"    := "data" : string_scope.
+  Local Notation "'rs'"           := "rs" : string_scope.
+  Local Notation "'rs1'"          := "rs1" : string_scope.
+  Local Notation "'rs2'"          := "rs2" : string_scope.
+  Local Notation "'rd'"           := "rd" : string_scope.
+  Local Notation "'op'"           := "op" : string_scope.
+  Local Notation "'v'"            := "v" : string_scope.
+  Local Notation "'imm'"          := "imm" : string_scope.
+  Local Notation "'t'"            := "t" : string_scope.
+  Local Notation "'addr'"         := "addr" : string_scope.
+  Local Notation "'paddr'"        := "paddr" : string_scope.
+  Local Notation "'typ'"          := "typ" : string_scope.
+  Local Notation "'acc'"          := "acc" : string_scope.
+  Local Notation "'value'"        := "value" : string_scope.
+  Local Notation "'data'"         := "data" : string_scope.
+  Local Notation "'ent'"          := "ent" : string_scope.
+  Local Notation "'pmpaddr'"      := "pmpaddr" : string_scope.
+  Local Notation "'prev_pmpaddr'" := "prev_pmpaddr" : string_scope.
+  Local Notation "'cfg'"          := "cfg" : string_scope.
+  Local Notation "'rng'"          := "rng" : string_scope.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
@@ -87,7 +92,13 @@ Module RiscvPmpTermKit <: TermKit.
   | checked_mem_write  : Fun [paddr ∶ ty_int, data ∶ ty_word] ty_memory_op_result
   | pmp_mem_read       : Fun [t∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
   | pmp_mem_write      : Fun [paddr ∶ ty_int, data ∶ ty_word, typ ∶ ty_access_type] ty_memory_op_result
-  | pmpCheck           : Fun [paddr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type)
+  | pmpLocked          : Fun [cfg ∶ ty_pmpcfg_ent] ty_bool
+  | pmpCheck           : Fun [addr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type)
+  | pmpCheckPerms      : Fun [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool
+  | pmpCheckRWX        : Fun [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool
+  | pmpMatchEntry      : Fun [addr ∶ ty_int, acc ∶ ty_access_type, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmpmatch
+  | pmpAddrRange       : Fun [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmp_addr_range
+  | pmpMatchAddr       : Fun [addr ∶ ty_int, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch
   | process_load       : Fun [rd ∶ ty_regidx, value ∶ ty_memory_op_result] ty_retired
   | write_mem_value    : Fun [paddr ∶ ty_int, value ∶ ty_word] ty_memory_op_result
   | execute_RTYPE      : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
@@ -112,11 +123,14 @@ Module RiscvPmpTermKit <: TermKit.
   Definition 𝑳  : PCtx -> Set := Lem.
 
   Inductive Reg : Ty -> Set :=
-  | pc     : Reg ty_word
-  | nextpc : Reg ty_word
-  | x0     : Reg ty_word
-  | x1     : Reg ty_word
-  | x2     : Reg ty_word.
+  | pc       : Reg ty_word
+  | nextpc   : Reg ty_word
+  | x0       : Reg ty_word
+  | x1       : Reg ty_word
+  | x2       : Reg ty_word
+  | pmp0cfg  : Reg ty_pmpcfg_ent
+  | pmpaddr0 : Reg ty_int
+  .
 
   Section TransparentObligations.
     Local Set Transparent Obligations.
@@ -140,68 +154,101 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Section Functions.
   Local Coercion stm_exp : Exp >-> Stm.
 
-  Local Notation "'rs'"      := "rs" : string_scope.
-  Local Notation "'rs1'"     := "rs1" : string_scope.
-  Local Notation "'rs1_val'" := "rs1_val" : string_scope.
-  Local Notation "'rs2'"     := "rs2" : string_scope.
-  Local Notation "'rs2_val'" := "rs2_val" : string_scope.
-  Local Notation "'rd'"      := "rd" : string_scope.
-  Local Notation "'op'"      := "op" : string_scope.
-  Local Notation "'result'"  := "result" : string_scope.
-  Local Notation "'res'"     := "res" : string_scope.
-  Local Notation "'v'"       := "v" : string_scope.
-  Local Notation "'imm'"     := "imm" : string_scope.
-  Local Notation "'immext'"  := "immext" : string_scope.
-  Local Notation "'off'"     := "off" : string_scope.
-  Local Notation "'offset'"  := "offset" : string_scope.
-  Local Notation "'ret'"     := "ret" : string_scope.
-  Local Notation "'tmp'"     := "tmp" : string_scope.
-  Local Notation "'tmp1'"    := "tmp1" : string_scope.
-  Local Notation "'tmp2'"    := "tmp2" : string_scope.
-  Local Notation "'t'"       := "t" : string_scope.
-  Local Notation "'e'"       := "e" : string_scope.
-  Local Notation "'addr'"    := "addr" : string_scope.
-  Local Notation "'paddr'"   := "paddr" : string_scope.
-  Local Notation "'taken'"   := "taken" : string_scope.
-  Local Notation "'typ'"     := "typ" : string_scope.
-  Local Notation "'acc'"     := "acc" : string_scope.
-  Local Notation "'value'"   := "value" : string_scope.
-  Local Notation "'data'"    := "data" : string_scope.
+  Local Notation "'rs'"           := "rs" : string_scope.
+  Local Notation "'rs1'"          := "rs1" : string_scope.
+  Local Notation "'rs1_val'"      := "rs1_val" : string_scope.
+  Local Notation "'rs2'"          := "rs2" : string_scope.
+  Local Notation "'rs2_val'"      := "rs2_val" : string_scope.
+  Local Notation "'rd'"           := "rd" : string_scope.
+  Local Notation "'op'"           := "op" : string_scope.
+  Local Notation "'result'"       := "result" : string_scope.
+  Local Notation "'res'"          := "res" : string_scope.
+  Local Notation "'v'"            := "v" : string_scope.
+  Local Notation "'imm'"          := "imm" : string_scope.
+  Local Notation "'immext'"       := "immext" : string_scope.
+  Local Notation "'off'"          := "off" : string_scope.
+  Local Notation "'offset'"       := "offset" : string_scope.
+  Local Notation "'ret'"          := "ret" : string_scope.
+  Local Notation "'tmp'"          := "tmp" : string_scope.
+  Local Notation "'tmp1'"         := "tmp1" : string_scope.
+  Local Notation "'tmp2'"         := "tmp2" : string_scope.
+  Local Notation "'tmp3'"         := "tmp3" : string_scope.
+  Local Notation "'t'"            := "t" : string_scope.
+  Local Notation "'e'"            := "e" : string_scope.
+  Local Notation "'addr'"         := "addr" : string_scope.
+  Local Notation "'paddr'"        := "paddr" : string_scope.
+  Local Notation "'taken'"        := "taken" : string_scope.
+  Local Notation "'typ'"          := "typ" : string_scope.
+  Local Notation "'acc'"          := "acc" : string_scope.
+  Local Notation "'value'"        := "value" : string_scope.
+  Local Notation "'data'"         := "data" : string_scope.
+  Local Notation "'check'"        := "check" : string_scope.
+  Local Notation "'ent'"          := "ent" : string_scope.
+  Local Notation "'pmpaddr'"      := "pmpaddr" : string_scope.
+  Local Notation "'prev_pmpaddr'" := "prev_pmpaddr" : string_scope.
+  Local Notation "'rng'"          := "rng" : string_scope.
+  Local Notation "'cfg'"          := "cfg" : string_scope.
+  Local Notation "'L'"            := "L" : string_scope.
+  Local Notation "'A'"            := "A" : string_scope.
+  Local Notation "'X'"            := "X" : string_scope.
+  Local Notation "'W'"            := "W" : string_scope.
+  Local Notation "'R'"            := "R" : string_scope.
+  Local Notation "'lo'"           := "lo" : string_scope.
+  Local Notation "'hi'"           := "hi" : string_scope.
 
-  Local Notation "'rs'"      := (@exp_var _ "rs" _ _) : exp_scope.
-  Local Notation "'rs1'"     := (@exp_var _ "rs1" _ _) : exp_scope.
-  Local Notation "'rs1_val'" := (@exp_var _ "rs1_val" _ _) : exp_scope.
-  Local Notation "'rs2'"     := (@exp_var _ "rs2" _ _) : exp_scope.
-  Local Notation "'rs2_val'" := (@exp_var _ "rs2_val" _ _) : exp_scope.
-  Local Notation "'rd'"      := (@exp_var _ "rd" _ _) : exp_scope.
-  Local Notation "'op'"      := (@exp_var _ "op" _ _) : exp_scope.
-  Local Notation "'result'"  := (@exp_var _ "result" _ _) : exp_scope.
-  Local Notation "'res'"     := (@exp_var _ "res" _ _) : exp_scope.
-  Local Notation "'v'"       := (@exp_var _ "v" _ _) : exp_scope.
-  Local Notation "'imm'"     := (@exp_var _ "imm" _ _) : exp_scope.
-  Local Notation "'immext'"  := (@exp_var _ "immext" _ _) : exp_scope.
-  Local Notation "'off'"     := (@exp_var _ "off" _ _) : exp_scope.
-  Local Notation "'offset'"  := (@exp_var _ "offset" _ _) : exp_scope.
-  Local Notation "'ret'"     := (@exp_var _ "ret" _ _) : exp_scope.
-  Local Notation "'tmp'"     := (@exp_var _ "tmp" _ _) : exp_scope.
-  Local Notation "'tmp1'"    := (@exp_var _ "tmp1" _ _) : exp_scope.
-  Local Notation "'tmp2'"    := (@exp_var _ "tmp2" _ _) : exp_scope.
-  Local Notation "'t'"       := (@exp_var _ "t" _ _) : exp_scope.
-  Local Notation "'e'"       := (@exp_var _ "e" _ _) : exp_scope.
-  Local Notation "'addr'"    := (@exp_var _ "addr" _ _) : exp_scope.
-  Local Notation "'paddr'"   := (@exp_var _ "paddr" _ _) : exp_scope.
-  Local Notation "'taken'"   := (@exp_var _ "taken" _ _) : exp_scope.
-  Local Notation "'typ'"     := (@exp_var _ "typ" _ _) : exp_scope.
-  Local Notation "'acc'"     := (@exp_var _ "acc" _ _) : exp_scope.
-  Local Notation "'value'"   := (@exp_var _ "value" _ _) : exp_scope.
-  Local Notation "'data'"    := (@exp_var _ "data" _ _) : exp_scope.
+  Local Notation "'rs'"           := (@exp_var _ "rs" _ _) : exp_scope.
+  Local Notation "'rs1'"          := (@exp_var _ "rs1" _ _) : exp_scope.
+  Local Notation "'rs1_val'"      := (@exp_var _ "rs1_val" _ _) : exp_scope.
+  Local Notation "'rs2'"          := (@exp_var _ "rs2" _ _) : exp_scope.
+  Local Notation "'rs2_val'"      := (@exp_var _ "rs2_val" _ _) : exp_scope.
+  Local Notation "'rd'"           := (@exp_var _ "rd" _ _) : exp_scope.
+  Local Notation "'op'"           := (@exp_var _ "op" _ _) : exp_scope.
+  Local Notation "'result'"       := (@exp_var _ "result" _ _) : exp_scope.
+  Local Notation "'res'"          := (@exp_var _ "res" _ _) : exp_scope.
+  Local Notation "'v'"            := (@exp_var _ "v" _ _) : exp_scope.
+  Local Notation "'imm'"          := (@exp_var _ "imm" _ _) : exp_scope.
+  Local Notation "'immext'"       := (@exp_var _ "immext" _ _) : exp_scope.
+  Local Notation "'off'"          := (@exp_var _ "off" _ _) : exp_scope.
+  Local Notation "'offset'"       := (@exp_var _ "offset" _ _) : exp_scope.
+  Local Notation "'ret'"          := (@exp_var _ "ret" _ _) : exp_scope.
+  Local Notation "'tmp'"          := (@exp_var _ "tmp" _ _) : exp_scope.
+  Local Notation "'tmp1'"         := (@exp_var _ "tmp1" _ _) : exp_scope.
+  Local Notation "'tmp2'"         := (@exp_var _ "tmp2" _ _) : exp_scope.
+  Local Notation "'tmp3'"         := (@exp_var _ "tmp3" _ _) : exp_scope.
+  Local Notation "'t'"            := (@exp_var _ "t" _ _) : exp_scope.
+  Local Notation "'e'"            := (@exp_var _ "e" _ _) : exp_scope.
+  Local Notation "'addr'"         := (@exp_var _ "addr" _ _) : exp_scope.
+  Local Notation "'paddr'"        := (@exp_var _ "paddr" _ _) : exp_scope.
+  Local Notation "'taken'"        := (@exp_var _ "taken" _ _) : exp_scope.
+  Local Notation "'typ'"          := (@exp_var _ "typ" _ _) : exp_scope.
+  Local Notation "'acc'"          := (@exp_var _ "acc" _ _) : exp_scope.
+  Local Notation "'value'"        := (@exp_var _ "value" _ _) : exp_scope.
+  Local Notation "'data'"         := (@exp_var _ "data" _ _) : exp_scope.
+  Local Notation "'check'"        := (@exp_var _ "check" _ _) : exp_scope.
+  Local Notation "'ent'"          := (@exp_var _ "ent" _ _) : exp_scope.
+  Local Notation "'pmpaddr'"      := (@exp_var _ "pmpaddr" _ _) : exp_scope.
+  Local Notation "'prev_pmpaddr'" := (@exp_var _ "prev_pmpaddr" _ _) : exp_scope.
+  Local Notation "'rng'"          := (@exp_var _ "rng" _ _) : exp_scope.
+  Local Notation "'cfg'"          := (@exp_var _ "cfg" _ _) : exp_scope.
+  Local Notation "'L'"            := (@exp_var _ "L" _ _) : exp_scope.
+  Local Notation "'A'"            := (@exp_var _ "A" _ _) : exp_scope.
+  Local Notation "'X'"            := (@exp_var _ "X" _ _) : exp_scope.
+  Local Notation "'W'"            := (@exp_var _ "W" _ _) : exp_scope.
+  Local Notation "'R'"            := (@exp_var _ "R" _ _) : exp_scope.
+  Local Notation "'lo'"           := (@exp_var _ "lo" _ _) : exp_scope.
+  Local Notation "'hi'"           := (@exp_var _ "hi" _ _) : exp_scope.
 
   Local Notation "'Read'" := (exp_union access_type KRead (exp_lit ty_unit tt)) : exp_scope.
   Local Notation "'Write'" := (exp_union access_type KWrite (exp_lit ty_unit tt)) : exp_scope.
   Local Notation "'ReadWrite'" := (exp_union access_type KReadWrite (exp_lit ty_unit tt)) : exp_scope.
   Local Notation "'Execute'" := (exp_union access_type KExecute (exp_lit ty_unit tt)) : exp_scope.
 
+  Local Notation "'E_Fetch_Access_Fault'" := (exp_union exception_type KE_Fetch_Access_Fault (exp_lit ty_unit tt)) : exp_scope.
+  Local Notation "'E_Load_Access_Fault'" := (exp_union exception_type KE_Load_Access_Fault (exp_lit ty_unit tt)) : exp_scope.
+  Local Notation "'E_SAMO_Access_Fault'" := (exp_union exception_type KE_SAMO_Access_Fault (exp_lit ty_unit tt)) : exp_scope.
+
   Local Notation "'None'" := (exp_inr (exp_lit ty_unit tt)) : exp_scope.
+  Local Notation "'Some' va" := (exp_inl va) (at level 10, va at next level) : exp_scope.
 
   Local Notation "'MemValue' memv" := (exp_union memory_op_result KMemValue memv) (at level 10, memv at next level) : exp_scope.
   Local Notation "'MemException' meme" := (exp_union memory_op_result KMemException meme) (at level 10, meme at next level) : exp_scope.
@@ -264,16 +311,119 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | inr v => call checked_mem_write paddr data
     end.
 
-  Definition fun_pmpCheck : Stm [paddr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type) :=
-    None.
+  Definition fun_pmpLocked : Stm [cfg ∶ ty_pmpcfg_ent] ty_bool :=
+    (stm_match_record pmpcfg_ent cfg
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+       "L" L)
+       "A" A)
+       "X" X)
+       "W" W)
+       "R" R)
+      L).
+
+  Definition fun_pmpCheck : Stm [addr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type) :=
+    let: tmp1 := stm_read_register pmp0cfg in
+    let: tmp2%string := stm_read_register pmpaddr0 in
+    let: tmp3%string := call pmpMatchEntry addr acc tmp1 tmp2 (exp_lit ty_int 0%Z) in
+    let: check%string := match: tmp3 in pmpmatch with
+                  | PMP_Success  => stm_lit ty_bool true
+                  | PMP_Fail     => stm_lit ty_bool false
+                  | PMP_Continue => stm_lit ty_bool true
+                  end in
+           if: check
+           then None
+           else
+             stm_match_union_alt access_type acc
+                                 (fun K =>
+                                    match K with
+                                    | KRead      => MkAlt pat_unit
+                                                     (Some E_Load_Access_Fault)
+                                    | KWrite     => MkAlt pat_unit
+                                                     (Some E_SAMO_Access_Fault)
+                                    | KReadWrite => MkAlt pat_unit
+                                                     (Some E_SAMO_Access_Fault)
+                                    | KExecute   => MkAlt pat_unit
+                                                     (Some E_Fetch_Access_Fault)
+                                    end).
+
+  Definition fun_pmpCheckPerms : Stm [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool :=
+    let: tmp := call pmpLocked ent in
+    if: tmp
+    then let: tmp%string := call pmpCheckRWX ent acc in
+         tmp
+    else stm_lit ty_bool true.
+
+  Definition fun_pmpCheckRWX : Stm [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool :=
+    (stm_match_record pmpcfg_ent ent
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+       "L" L)
+       "A" A)
+       "X" X)
+       "W" W)
+       "R" R)
+      (stm_match_union_alt access_type acc
+                           (fun K =>
+                              match K with
+                              | KRead      => MkAlt pat_unit
+                                                    R
+                              | KWrite     => MkAlt pat_unit
+                                                    W
+                              | KReadWrite => MkAlt pat_unit
+                                                    (R && W)
+                              | KExecute   => MkAlt pat_unit
+                                                    X
+                              end))).
+
+  Definition fun_pmpMatchEntry : Stm [addr ∶ ty_int, acc ∶ ty_access_type, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmpmatch :=
+    let: rng := call pmpAddrRange ent pmpaddr prev_pmpaddr in
+    let: tmp%string := call pmpMatchAddr addr rng in
+    match: tmp in pmpaddrmatch with
+    | PMP_NoMatch      => exp_lit ty_pmpmatch PMP_Continue
+    | PMP_PartialMatch => exp_lit ty_pmpmatch PMP_Fail
+    | PMP_Match        =>
+      let: tmp%string := call pmpCheckPerms ent acc in
+      if: tmp
+      then exp_lit ty_pmpmatch PMP_Success
+      else exp_lit ty_pmpmatch PMP_Fail
+    end.
+
+  Definition fun_pmpAddrRange : Stm [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmp_addr_range :=
+    (stm_match_record pmpcfg_ent cfg
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+       "L" L)
+       "A" A)
+       "X" X)
+       "W" W)
+       "R" R)
+      (match: A in pmpaddrmatchtype with
+       | OFF => None
+       | TOR => Some (exp_binop binop_pair prev_pmpaddr pmpaddr)
+       end)).
+
+  Definition fun_pmpMatchAddr : Stm [addr ∶ ty_int, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch :=
+    match: rng with
+    | inl v =>
+      match: v in (ty_int , ty_int) with
+      | (lo , hi) =>
+        if: hi < lo
+        then exp_lit ty_pmpaddrmatch PMP_NoMatch
+        else
+          if: (addr < lo) || (hi < addr)
+          then exp_lit ty_pmpaddrmatch PMP_NoMatch
+          else if: (lo <= addr) && (addr <= hi)
+               then exp_lit ty_pmpaddrmatch PMP_Match
+               else exp_lit ty_pmpaddrmatch PMP_PartialMatch
+      end
+    | inr v => exp_lit ty_pmpaddrmatch PMP_NoMatch
+    end.
 
   Definition fun_process_load : Stm [rd ∶ ty_regidx, value ∶ ty_memory_op_result] ty_retired :=
     stm_match_union_alt memory_op_result value
                         (fun K =>
                            match K with
-                           | KMemValue => MkAlt (pat_var result)
-                                                (call wX rd result ;;
-                                                 stm_lit ty_retired RETIRE_SUCCESS)
+                           | KMemValue     => MkAlt (pat_var result)
+                                                    (call wX rd result ;;
+                                                     stm_lit ty_retired RETIRE_SUCCESS)
                            | KMemException => MkAlt (pat_var e)
                                                     (* TODO: handle_mem_exception? *)
                                                     (stm_lit ty_retired RETIRE_FAIL)
@@ -404,69 +554,6 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   End Functions.
 
   Definition RegStore := GenericRegStore.
-
-  (* Definition riscv_read_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) : Lit σ := 
-    match r with
-    | x0 => 0%Z
-    | r => generic_read_register γ r
-    end.
-
-  Definition riscv_write_register (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (val : Lit σ) : RegStore :=
-    match r with
-    | x0 => γ
-    | r => generic_write_register γ r val
-    end.
-
-  Lemma riscv_read_write (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (val : Lit σ) :
-    match r with
-    | x0 => riscv_read_register (riscv_write_register γ r val) x0 = 0%Z
-    | r => riscv_read_register (riscv_write_register γ r val) r = val
-    end.
-  Proof.
-    destruct r; cbn; reflexivity.
-  Qed.
-
-  Lemma riscv_read_write_distinct γ {σ τ} (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (val : Lit σ):
-    existT _ r <> existT _ k ->
-    riscv_read_register (riscv_write_register γ r val) k = riscv_read_register γ k.
-  Proof.
-    intros ?; unfold riscv_read_register, riscv_write_register.
-    destruct k, r;
-      try reflexivity;
-      apply generic_read_write_distinct; assumption.
-  Qed.
-
-  Lemma riscv_write_read γ {σ} (r : 𝑹𝑬𝑮 σ) :
-    forall τ (r' : 𝑹𝑬𝑮 τ),
-      riscv_write_register γ r (riscv_read_register γ r) r' = γ τ r'.
-  Proof.
-    intros ? ?.
-    unfold riscv_write_register, riscv_read_register.
-    destruct r;
-      try reflexivity;
-      apply generic_write_read.
-  Qed.
-
-  Lemma riscv_write_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ) :
-    forall τ (r' : 𝑹𝑬𝑮 τ),
-      riscv_write_register (riscv_write_register γ r v1) r v2 r' =
-      riscv_write_register γ r v2 r'.
-  Proof.
-    intros ? ?.
-    unfold riscv_write_register, riscv_read_register.
-    destruct r;
-      try reflexivity;
-      apply generic_write_write.
-  Qed.
-
-  Definition read_register := riscv_read_register.
-  Definition write_register := riscv_write_register.
-  Definition read_write := riscv_read_write.
-  Definition read_write_distinct := riscv_read_write_distinct.
-  Definition write_read := riscv_write_read.
-  Definition write_write := riscv_write_write.
-  *)
-
   Definition read_register := generic_read_register.
   Definition write_register := generic_write_register.
   Definition read_write := generic_read_write.
@@ -517,7 +604,13 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | checked_mem_write  => fun_checked_mem_write
     | pmp_mem_read       => fun_pmp_mem_read
     | pmp_mem_write      => fun_pmp_mem_write
+    | pmpLocked          => fun_pmpLocked
     | pmpCheck           => fun_pmpCheck
+    | pmpCheckPerms      => fun_pmpCheckPerms
+    | pmpCheckRWX        => fun_pmpCheckRWX
+    | pmpMatchEntry      => fun_pmpMatchEntry
+    | pmpAddrRange       => fun_pmpAddrRange
+    | pmpMatchAddr       => fun_pmpMatchAddr
     | process_load       => fun_process_load
     | execute_RTYPE      => fun_execute_RTYPE
     | execute_ITYPE      => fun_execute_ITYPE

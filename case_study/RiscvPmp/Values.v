@@ -48,6 +48,12 @@ Module RiscvPmpValueKit <: ValueKit.
 
   Notation ty_word             := (ty_int).
   Notation ty_regidx           := (ty_enum regidx).
+  Notation ty_pmpcfgidx        := (ty_enum pmpcfgidx).
+  Notation ty_pmpaddridx       := (ty_enum pmpaddridx).
+  Notation ty_pmpaddrmatchtype := (ty_enum pmpaddrmatchtype).
+  Notation ty_pmpmatch         := (ty_enum pmpmatch).
+  Notation ty_pmpaddrmatch     := (ty_enum pmpaddrmatch).
+  Notation ty_pmp_addr_range   := (ty_option (ty_prod ty_int ty_int)).
   Notation ty_rop              := (ty_enum rop).
   Notation ty_iop              := (ty_enum iop).
   Notation ty_uop              := (ty_enum uop).
@@ -56,6 +62,7 @@ Module RiscvPmpValueKit <: ValueKit.
   Notation ty_access_type      := (ty_union access_type).
   Notation ty_exception_type   := (ty_union exception_type).
   Notation ty_memory_op_result := (ty_union memory_op_result).
+  Notation ty_pmpcfg_ent       := (ty_record pmpcfg_ent).
 
   (** Unions **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -102,9 +109,9 @@ Module RiscvPmpValueKit <: ValueKit.
                             end
     | exception_type   => fun Kv =>
                             match Kv with
-                            | E_FETCH_ACCESS_FAULT => existT KE_FETCH_ACCESS_FAULT tt
-                            | E_LOAD_ACCESS_FAULT  => existT KE_LOAD_ACCESS_FAULT tt
-                            | E_SAMO_ACCESS_FAULT  => existT KE_SAMO_ACCESS_FAULT tt
+                            | E_Fetch_Access_Fault => existT KE_Fetch_Access_Fault tt
+                            | E_Load_Access_Fault  => existT KE_Load_Access_Fault tt
+                            | E_SAMO_Access_Fault  => existT KE_SAMO_Access_Fault tt
                             end
     | memory_op_result => fun Kv =>
                             match Kv with
@@ -135,9 +142,9 @@ Module RiscvPmpValueKit <: ValueKit.
                             end
     | exception_type   => fun Kv =>
                             match Kv with
-                            | existT KE_FETCH_ACCESS_FAULT tt => E_FETCH_ACCESS_FAULT
-                            | existT KE_LOAD_ACCESS_FAULT tt  => E_LOAD_ACCESS_FAULT
-                            | existT KE_SAMO_ACCESS_FAULT tt  => E_SAMO_ACCESS_FAULT
+                            | existT KE_Fetch_Access_Fault tt => E_Fetch_Access_Fault
+                            | existT KE_Load_Access_Fault tt  => E_Load_Access_Fault
+                            | existT KE_SAMO_Access_Fault tt  => E_SAMO_Access_Fault
                             end
     | memory_op_result => fun Kv =>
                             match Kv with
@@ -164,15 +171,37 @@ Module RiscvPmpValueKit <: ValueKit.
 
   Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty :=
     match R with
+    | pmpcfg_ent => [ "L" :: ty_bool,
+                      "A" :: ty_pmpaddrmatchtype,
+                      "X" :: ty_bool,
+                      "W" :: ty_bool,
+                      "R" :: ty_bool
+                    ]
     end.
 
   Definition 𝑹_fold (R : 𝑹) : NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R :=
     match R with
-    end.
+    | pmpcfg_ent =>
+      fun fields =>
+        MkPmpcfg_ent
+          (fields ‼ "L")
+          (fields ‼ "A")
+          (fields ‼ "X")
+          (fields ‼ "W")
+          (fields ‼ "R")
+    end%exp.
 
-  Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) :=
-    match R  with
-    end.
+  Definition 𝑹_unfold (Rec : 𝑹) : 𝑹𝑻 Rec -> NamedEnv Lit (𝑹𝑭_Ty Rec) :=
+    match Rec with
+    | pmpcfg_ent =>
+      fun p =>
+        env_nil
+          ► ("L" :: ty_bool             ↦ L p)
+          ► ("A" :: ty_pmpaddrmatchtype ↦ A p)
+          ► ("X" :: ty_bool             ↦ X p)
+          ► ("W" :: ty_bool             ↦ W p)
+          ► ("R" :: ty_bool             ↦ R p)
+    end%env.
 
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold R (𝑹_unfold R Kv) = Kv.
