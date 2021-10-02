@@ -35,6 +35,7 @@ src/MicroSail/Sep/Spec.v
 src/MicroSail/SmallStep/Inversion.v
 src/MicroSail/SmallStep/Progress.v
 src/MicroSail/SmallStep/Step.v
+src/MicroSail/Staging/CommandStep.v
 src/MicroSail/Syntax.v
 src/MicroSail/Syntax/Types.v
 src/MicroSail/Syntax/Values.v

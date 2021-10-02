@@ -2565,6 +2565,32 @@ Module Terms (Export termkit : TermKit).
   Notation "'fail' s" := (stm_fail _ s)
     (at level 10, no associativity) : exp_scope.
 
+  Section Commands.
+
+    Inductive Command (A : Type) : Type :=
+    | cmd_return (a : A)
+    | cmd_fail
+    | cmd_read_register {τ} (reg : 𝑹𝑬𝑮 τ) (c : Lit τ -> Command A)
+    | cmd_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Lit τ) (c : Command A)
+    | cmd_call          {Δ τ} (f : 𝑭 Δ τ) (vs : CStore Δ) (c : Lit τ -> Command A)
+    | cmd_foreign       {Δ τ} (f : 𝑭𝑿 Δ τ) (vs : CStore Δ) (c : Lit τ -> Command A).
+    Global Arguments cmd_fail {A}.
+
+    Fixpoint cmd_bind {A B} (m : Command A) (g : A -> Command B) {struct m} : Command B :=
+      match m with
+      | cmd_return a => g a
+      | cmd_fail     => cmd_fail
+      | cmd_read_register reg k => cmd_read_register reg (fun v => cmd_bind (k v) g)
+      | cmd_write_register reg v c => cmd_write_register reg v (cmd_bind c g)
+      | cmd_call f vs k => cmd_call f vs (fun v => cmd_bind (k v) g)
+      | cmd_foreign f vs k => cmd_foreign f vs (fun v => cmd_bind (k v) g)
+      end.
+
+    Definition cmd_map {A B} (f : A -> B) (ma : Command A) : Command B :=
+      cmd_bind ma (fun v => cmd_return (f v)).
+
+  End Commands.
+
 End Terms.
 
 (******************************************************************************)
