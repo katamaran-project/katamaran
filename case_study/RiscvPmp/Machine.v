@@ -341,8 +341,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_pmpCheck : Stm [addr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type) :=
     let: tmp1 := stm_read_register pmp0cfg in
-    let: tmp2%string := stm_read_register pmpaddr0 in
-    let: tmp3%string := call pmpMatchEntry addr acc tmp1 tmp2 (exp_lit ty_int 0%Z) in
+    let: tmp2 := stm_read_register pmpaddr0 in
+    let: tmp3 := call pmpMatchEntry addr acc tmp1 tmp2 (exp_lit ty_int 0%Z) in
     let: check%string := match: tmp3 in pmpmatch with
                   | PMP_Success  => stm_lit ty_bool true
                   | PMP_Fail     => stm_lit ty_bool false
@@ -367,7 +367,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Definition fun_pmpCheckPerms : Stm [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool :=
     let: tmp := call pmpLocked ent in
     if: tmp
-    then let: tmp%string := call pmpCheckRWX ent acc in
+    then let: tmp := call pmpCheckRWX ent acc in
          tmp
     else stm_lit ty_bool true.
 
@@ -394,12 +394,12 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_pmpMatchEntry : Stm [addr ∶ ty_int, acc ∶ ty_access_type, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmpmatch :=
     let: rng := call pmpAddrRange ent pmpaddr prev_pmpaddr in
-    let: tmp%string := call pmpMatchAddr addr rng in
+    let: tmp := call pmpMatchAddr addr rng in
     match: tmp in pmpaddrmatch with
     | PMP_NoMatch      => exp_lit ty_pmpmatch PMP_Continue
     | PMP_PartialMatch => exp_lit ty_pmpmatch PMP_Fail
     | PMP_Match        =>
-      let: tmp%string := call pmpCheckPerms ent acc in
+      let: tmp := call pmpCheckPerms ent acc in
       if: tmp
       then exp_lit ty_pmpmatch PMP_Success
       else exp_lit ty_pmpmatch PMP_Fail
@@ -464,7 +464,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_fetch : Stm ctx_nil ty_fetch_result :=
     let: tmp1 := stm_read_register pc in
-    let: tmp2%string := call mem_read Execute tmp1 in
+    let: tmp2 := call mem_read Execute tmp1 in
     stm_match_union_alt memory_op_result tmp2
                         (fun K =>
                            match K with
@@ -480,8 +480,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                         (fun K =>
                            match K with
                            | KF_Base  => MkAlt (pat_var w%string)
-                                               (let: ast%string := foreign decode w in
-                                                let: tmp%string := stm_read_register pc in
+                                               (let: ast := foreign decode w in
+                                                let: tmp := stm_read_register pc in
                                                 stm_write_register nextpc (tmp + (exp_lit ty_int 4%Z)) ;;
                                                 stm_lit ty_retired RETIRE_SUCCESS)
                            | KF_Error => MkAlt (pat_var e%string)
@@ -523,8 +523,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_execute_ITYPE : Stm [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired :=
     let: rs1_val := call rX rs1 in
-    let: immext%string := imm in
-    let: result%string :=
+    let: immext := imm in
+    let: result :=
        match: op in iop with
        | RISCV_ADDI => rs1_val + immext
        end in
@@ -533,11 +533,11 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_execute_UTYPE : Stm [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired :=
     let: off := imm in
-    let: (ret)%string :=
+    let: ret :=
        match: op in uop with
        | RISCV_LUI   => off
        | RISCV_AUIPC =>
-         let: tmp%string := call get_arch_pc in
+         let: tmp := call get_arch_pc in
          tmp + off
        end in
     call wX rd ret ;;
@@ -545,54 +545,54 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_execute_RISCV_JAL : Stm [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired :=
     let: tmp := stm_read_register pc in
-    let: t%string := tmp + imm in
-    let: tmp%string := call address_aligned t in
+    let: t := tmp + imm in
+    let: tmp := call address_aligned t in
     if: exp_not tmp
     then
       (* TODO: handle_mem_exception? *)
       stm_lit ty_retired RETIRE_FAIL
     else
-      let: tmp%string := call get_next_pc in
+      let: tmp := call get_next_pc in
       call wX rd tmp ;;
       stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_RISCV_JALR : Stm [imm ∶ ty_int , rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired :=
     let: tmp := call rX rs1 in
-    let: t%string := tmp + imm in
-    let: tmp%string := call address_aligned t in
+    let: t := tmp + imm in
+    let: tmp := call address_aligned t in
     if: exp_not tmp
     then
       (* TODO: handle_mem_exception? *)
       stm_lit ty_retired RETIRE_FAIL
     else
-      let: tmp%string := call get_next_pc in
+      let: tmp := call get_next_pc in
       call wX rd tmp ;;
       call set_next_pc t ;;
       stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_BTYPE : Stm [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired :=
     let: rs1_val := call rX rs1 in
-    let: rs2_val%string := call rX rs2 in
-    let: taken%string :=
+    let: rs2_val := call rX rs2 in
+    let: taken :=
        match: op in bop with
        | RISCV_BEQ  => rs1_val = rs2_val
        | RISCV_BNE  => exp_not (rs1_val = rs2_val)
        | RISCV_BLT  => rs1_val < rs2_val
        | RISCV_BGE  => rs2_val <= rs1_val
        | RISCV_BLTU =>
-         let: tmp1%string := call abs rs1_val in
-         let: tmp2%string := call abs rs2_val in
+         let: tmp1 := call abs rs1_val in
+         let: tmp2 := call abs rs2_val in
          tmp1 < tmp2
        | RISCV_BGEU =>
-         let: tmp1%string := call abs rs1_val in
-         let: tmp2%string := call abs rs2_val in
+         let: tmp1 := call abs rs1_val in
+         let: tmp2 := call abs rs2_val in
          tmp2 <= tmp1
        end in
-    let: tmp%string := stm_read_register pc in
-    let: t%string := tmp + imm in
+    let: tmp := stm_read_register pc in
+    let: t := tmp + imm in
     if: taken
     then
-      let: tmp%string := call address_aligned t in
+      let: tmp := call address_aligned t in
       if: exp_not tmp
       then
         (* TODO: handle_mem_exception? *)
@@ -605,18 +605,18 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_execute_LOAD : Stm [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired :=
     let: offset := imm in
-    let: tmp%string := call rX rs1 in
-    let: paddr%string := tmp + offset in
-    let: tmp%string := call mem_read Read paddr in
+    let: tmp := call rX rs1 in
+    let: paddr := tmp + offset in
+    let: tmp := call mem_read Read paddr in
     call process_load rd tmp ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_STORE : Stm [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx] ty_retired :=
     let: offset := imm in
-    let: tmp%string := call rX rs1 in
-    let: paddr%string := tmp + offset in
-    let: rs2_val%string := call rX rs2 in
-    let: res%string := call write_mem_value paddr rs2_val in
+    let: tmp := call rX rs1 in
+    let: paddr := tmp + offset in
+    let: rs2_val := call rX rs2 in
+    let: res := call write_mem_value paddr rs2_val in
     stm_match_union_alt memory_op_result res
                         (fun K =>
                            match K with
