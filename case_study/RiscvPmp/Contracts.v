@@ -92,6 +92,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Local Notation "'acc'"     := "acc" : string_scope.
   Local Notation "'value'"   := "value" : string_scope.
   Local Notation "'data'"    := "data" : string_scope.
+  Local Notation "'bv'"      := "bv" : string_scope.
 
   Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
     SepContract Δ τ.
@@ -123,6 +124,14 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
        sep_contract_postcondition   := asn_true;
     |}.
 
+  Definition sep_contract_decode    : SepContractFunX decode :=
+    {| sep_contract_logic_variables := [bv ∶ ty_int];
+       sep_contract_localstore      := [term_var bv]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_decode";
+       sep_contract_postcondition   := asn_true;
+    |}.
+
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
@@ -135,6 +144,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
       match f with
       | read_ram  => sep_contract_read_ram
       | write_ram => sep_contract_write_ram
+      | decode    => sep_contract_decode
       end.
 
   Definition LEnv : LemmaEnv :=

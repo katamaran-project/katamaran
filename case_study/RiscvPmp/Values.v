@@ -59,9 +59,11 @@ Module RiscvPmpValueKit <: ValueKit.
   Notation ty_uop              := (ty_enum uop).
   Notation ty_bop              := (ty_enum bop).
   Notation ty_retired          := (ty_enum retired).
+  Notation ty_ast              := (ty_union ast).
   Notation ty_access_type      := (ty_union access_type).
   Notation ty_exception_type   := (ty_union exception_type).
   Notation ty_memory_op_result := (ty_union memory_op_result).
+  Notation ty_fetch_result     := (ty_union fetch_result).
   Notation ty_pmpcfg_ent       := (ty_record pmpcfg_ent).
 
   (** Unions **)
@@ -84,6 +86,11 @@ Module RiscvPmpValueKit <: ValueKit.
                             match K with
                             | KMemValue     => ty_word
                             | KMemException => ty_exception_type
+                            end
+    | fetch_result     => fun K =>
+                            match K with
+                            | KF_Base  => ty_word
+                            | KF_Error => ty_prod ty_exception_type ty_word
                             end
     end.
 
@@ -115,8 +122,13 @@ Module RiscvPmpValueKit <: ValueKit.
                             end
     | memory_op_result => fun Kv =>
                             match Kv with
-                            | MemValue v => existT KMemValue v
+                            | MemValue v     => existT KMemValue v
                             | MemException e => existT KMemException e
+                            end
+    | fetch_result     => fun Kv =>
+                            match Kv with
+                            | F_Base v    => existT KF_Base v
+                            | F_Error e v => existT KF_Error (e , v)
                             end
     end.
 
@@ -148,8 +160,13 @@ Module RiscvPmpValueKit <: ValueKit.
                             end
     | memory_op_result => fun Kv =>
                             match Kv with
-                            | existT KMemValue v => MemValue v
+                            | existT KMemValue v     => MemValue v
                             | existT KMemException e => MemException e
+                            end
+    | fetch_result     => fun Kv =>
+                            match Kv with
+                            | existT KF_Base v        => F_Base v
+                            | existT KF_Error (e , v) => F_Error e v
                             end
     end.
 
