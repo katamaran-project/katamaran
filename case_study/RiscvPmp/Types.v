@@ -143,6 +143,11 @@ Inductive MemoryOpResult : Set :=
 | MemException (e : ExceptionType)
 .
 
+Inductive FetchResult : Set :=
+| F_Base (v : Word)
+| F_Error (e : ExceptionType) (v : Word)
+.
+
 Inductive ASTConstructor : Set :=
 | KRTYPE
 | KITYPE
@@ -172,11 +177,17 @@ Inductive MemoryOpResultConstructor : Set :=
 | KMemException
 .
 
+Inductive FetchResultConstructor : Set :=
+| KF_Base
+| KF_Error
+.
+
 Inductive Unions : Set :=
 | ast
 | access_type
 | exception_type
 | memory_op_result
+| fetch_result
 .
 
 Record Pmpcfg_ent : Set :=
@@ -216,6 +227,8 @@ Section TransparentObligations.
   Derive NoConfusion for ExceptionTypeConstructor.
   Derive NoConfusion for MemoryOpResult.
   Derive NoConfusion for MemoryOpResultConstructor.
+  Derive NoConfusion for FetchResult.
+  Derive NoConfusion for FetchResultConstructor.
   Derive NoConfusion for Records.
   Derive NoConfusion for Pmpcfg_ent.
 End TransparentObligations.
@@ -241,6 +254,8 @@ Derive EqDec for ExceptionType.
 Derive EqDec for ExceptionTypeConstructor.
 Derive EqDec for MemoryOpResult.
 Derive EqDec for MemoryOpResultConstructor.
+Derive EqDec for FetchResult.
+Derive EqDec for FetchResultConstructor.
 Derive EqDec for Records.
 Derive EqDec for Pmpcfg_ent.
 
@@ -390,6 +405,16 @@ Section Finite.
   Next Obligation.
     intros []; apply elem_of_list_In; cbn; intuition.
   Qed.
+
+  Global Program Instance FetchResultConstructor_finite :
+    Finite FetchResultConstructor :=
+    {| enum := [KF_Base;KF_Error] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
 End Finite.
 
 Module RiscvPmpTypeKit <: TypeKit.
@@ -426,6 +451,7 @@ Module RiscvPmpTypeKit <: TypeKit.
     | access_type      => AccessType
     | exception_type   => ExceptionType
     | memory_op_result => MemoryOpResult
+    | fetch_result     => FetchResult
     end.
   Instance 𝑼𝑻_eq_dec U : EqDec (𝑼𝑻 U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
@@ -436,6 +462,7 @@ Module RiscvPmpTypeKit <: TypeKit.
     | access_type      => AccessTypeConstructor
     | exception_type   => ExceptionTypeConstructor
     | memory_op_result => MemoryOpResultConstructor
+    | fetch_result     => FetchResultConstructor
     end.
   Instance 𝑼𝑲_eq_dec U : EqDec (𝑼𝑲 U) :=
     ltac:(destruct U; auto with typeclass_instances).

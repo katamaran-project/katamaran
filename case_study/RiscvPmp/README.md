@@ -12,6 +12,10 @@ Remarks/Comments/Info:
 - Store instructions involve a function mem_write that returns a MemoryOpResult with a boolean value to indicate failure, to keep things simple (point above), I model this as a ty_word where 0 = false and 1 = true
 - the model currently only supports M-mode, so any checks/pattern matches that depend on privileges are simplified to only consider the M-mode case
 - some auxiliary functions that convert bits to enums are dropped, the model uses the enum immediately (example: pmpAddrRange calls a function pmpAddrMatchType_of_bits that converts a bitvector into the corresponding enum value of PmpAddrMatchType)
+- note that the main loop (function "loop") just calls the step function, this is a lot simpler than the one in the actual sail model, which is complicated with tracing, interrupts, ...
+- step function shortened, dropped extension related code, also not doing anything with the "retire" result of an execution (has to do with "minstret", doesn't seem relevant for our case study at this point)
+  + have kept the "stm_lit ty_retire RETIRE_SUCCESS/FAIL" stmts tho, can however drop this? (TODO: consider)
+- the fetch function is simplified, in the sail model it reads 16 bits at a time (to support the compressed extension), in our case we read the entire instruction at once (no support for the compressed extension) (this also means our fetchresult type is simplified)
 
 ## Translation Notes
 Inline function call expressions get translated into

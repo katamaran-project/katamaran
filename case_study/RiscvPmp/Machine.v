@@ -77,6 +77,7 @@ Module RiscvPmpTermKit <: TermKit.
   Local Notation "'prev_pmpaddr'" := "prev_pmpaddr" : string_scope.
   Local Notation "'cfg'"          := "cfg" : string_scope.
   Local Notation "'rng'"          := "rng" : string_scope.
+  Local Notation "'bv'"           := "bv" : string_scope.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
@@ -101,6 +102,13 @@ Module RiscvPmpTermKit <: TermKit.
   | pmpMatchAddr       : Fun [addr ∶ ty_int, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch
   | process_load       : Fun [rd ∶ ty_regidx, value ∶ ty_memory_op_result] ty_retired
   | write_mem_value    : Fun [paddr ∶ ty_int, value ∶ ty_word] ty_memory_op_result
+  | main               : Fun ctx_nil ty_unit
+  | init_model         : Fun ctx_nil ty_unit
+  | loop               : Fun ctx_nil ty_unit
+  | step               : Fun ctx_nil ty_unit
+  | fetch              : Fun ctx_nil ty_fetch_result
+  | init_sys           : Fun ctx_nil ty_unit
+  | init_pmp           : Fun ctx_nil ty_unit
   | execute_RTYPE      : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
   | execute_ITYPE      : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
   | execute_UTYPE      : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
@@ -114,6 +122,7 @@ Module RiscvPmpTermKit <: TermKit.
   Inductive FunX : PCtx -> Ty -> Set :=
   | read_ram  : FunX [paddr ∶ ty_int] ty_word
   | write_ram : FunX [paddr ∶ ty_int, data ∶ ty_word] ty_word
+  | decode    : FunX [bv ∶ ty_int] ty_ast
   .
 
   Inductive Lem : PCtx -> Set :=. 
@@ -195,6 +204,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'R'"            := "R" : string_scope.
   Local Notation "'lo'"           := "lo" : string_scope.
   Local Notation "'hi'"           := "hi" : string_scope.
+  Local Notation "'f'"            := "f" : string_scope.
+  Local Notation "'w'"            := "w" : string_scope.
+  Local Notation "'ast'"          := "ast" : string_scope.
 
   Local Notation "'rs'"           := (@exp_var _ "rs" _ _) : exp_scope.
   Local Notation "'rs1'"          := (@exp_var _ "rs1" _ _) : exp_scope.
@@ -237,6 +249,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'R'"            := (@exp_var _ "R" _ _) : exp_scope.
   Local Notation "'lo'"           := (@exp_var _ "lo" _ _) : exp_scope.
   Local Notation "'hi'"           := (@exp_var _ "hi" _ _) : exp_scope.
+  Local Notation "'f'"            := (@exp_var _ "f" _ _) : exp_scope.
+  Local Notation "'w'"            := (@exp_var _ "w" _ _) : exp_scope.
+  Local Notation "'ast'"          := (@exp_var _ "ast" _ _) : exp_scope.
 
   Local Notation "'Read'" := (exp_union access_type KRead (exp_lit ty_unit tt)) : exp_scope.
   Local Notation "'Write'" := (exp_union access_type KWrite (exp_lit ty_unit tt)) : exp_scope.
@@ -252,6 +267,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Local Notation "'MemValue' memv" := (exp_union memory_op_result KMemValue memv) (at level 10, memv at next level) : exp_scope.
   Local Notation "'MemException' meme" := (exp_union memory_op_result KMemException meme) (at level 10, meme at next level) : exp_scope.
+
+  Local Notation "'F_Base' memv" := (exp_union fetch_result KF_Base memv) (at level 10, memv at next level) : exp_scope.
+  Local Notation "'F_Error' meme memv" := (exp_union fetch_result KF_Error (exp_binop binop_pair meme memv)) (at level 10, meme at next level, memv at next level) : exp_scope.
 
   (** Functions **)
   Definition fun_rX : Stm [rs ∶ ty_regidx] ty_word :=
@@ -432,6 +450,66 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Definition fun_write_mem_value : Stm [paddr ∶ ty_int, value ∶ ty_word] ty_memory_op_result :=
     call pmp_mem_write paddr value Write.
 
+  Definition fun_main : Stm ctx_nil ty_unit :=
+    call init_model ;;
+    call loop.
+
+  (* NOTE: simplified init_model function, just calls init_sys which just calls
+           init_pmp *)
+  Definition fun_init_model : Stm ctx_nil ty_unit :=
+    call init_sys.
+
+  Definition fun_loop : Stm ctx_nil ty_unit :=
+    call step.
+
+  Definition fun_fetch : Stm ctx_nil ty_fetch_result :=
+    let: tmp1 := stm_read_register pc in
+    let: tmp2%string := call mem_read Execute tmp1 in
+    stm_match_union_alt memory_op_result tmp2
+                        (fun K =>
+                           match K with
+                           | KMemValue     => MkAlt (pat_var result%string)
+                                                    (F_Base result)
+                           | KMemException => MkAlt (pat_var e%string)
+                                                    (F_Error e tmp1)
+                           end).
+
+  Definition fun_step : Stm ctx_nil ty_unit :=
+    let: f := call fetch in
+    stm_match_union_alt fetch_result f
+                        (fun K =>
+                           match K with
+                           | KF_Base  => MkAlt (pat_var w%string)
+                                               (let: ast%string := foreign decode w in
+                                                let: tmp%string := stm_read_register pc in
+                                                stm_write_register nextpc (tmp + (exp_lit ty_int 4%Z)) ;;
+                                                stm_lit ty_retired RETIRE_SUCCESS)
+                           | KF_Error => MkAlt (pat_var e%string)
+                                           (* TODO: handle_mem_exception? *)
+                                           (stm_lit ty_retired RETIRE_FAIL)
+                           end) ;;
+    stm_lit ty_unit tt.
+
+  Definition fun_init_sys : Stm ctx_nil ty_unit :=
+    call init_pmp.
+
+  Definition fun_init_pmp : Stm ctx_nil ty_unit :=
+    let: tmp := stm_read_register pmp0cfg in
+    (stm_match_record pmpcfg_ent tmp
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
+       "L" L%string)
+       "A" A%string)
+       "X" X%string)
+       "W" W%string)
+       "R" R%string)
+      (stm_write_register pmp0cfg (exp_record pmpcfg_ent
+                                             [ L,
+                                               exp_lit ty_pmpaddrmatchtype OFF,
+                                               X,
+                                               W,
+                                               R ]) ;;
+       stm_lit ty_unit tt)).
+
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
@@ -580,13 +658,21 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                      let addr := (args ‼ "paddr")%exp in
                      let data := (args ‼ "data")%exp in
                      (γ' , μ' , res) = (γ , fun_write_ram μ addr data , inr 1%Z)
+    | decode    => fun args res γ γ' μ μ' =>
+                     let bv := (args ‼ "bv")%exp in
+                     (exists res' : Lit (ty_sum ty_string ty_ast),
+                         (γ' , μ' , res) = (γ , μ , res'))
     end.
 
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof.
-    destruct f; cbn;
-      repeat depelim args; repeat eexists; constructor.
+    destruct f; cbn.
+    - repeat depelim args; repeat eexists; constructor.
+    - repeat depelim args; repeat eexists; constructor.
+    - repeat depelim args.
+      exists γ, μ, (inr (RTYPE X0 X0 X0 RISCV_ADD)), (inr (RTYPE X0 X0 X0 RISCV_ADD)).
+      reflexivity.
   Qed.
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
@@ -612,6 +698,13 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | pmpAddrRange       => fun_pmpAddrRange
     | pmpMatchAddr       => fun_pmpMatchAddr
     | process_load       => fun_process_load
+    | main               => fun_main
+    | init_model         => fun_init_model
+    | init_sys           => fun_init_sys
+    | init_pmp           => fun_init_pmp
+    | loop               => fun_loop
+    | step               => fun_step
+    | fetch              => fun_fetch
     | execute_RTYPE      => fun_execute_RTYPE
     | execute_ITYPE      => fun_execute_ITYPE
     | execute_UTYPE      => fun_execute_UTYPE
