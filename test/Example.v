@@ -43,6 +43,8 @@ From MicroSail Require Import
      Sep.Spec
      Syntax.
 
+From stdpp Require decidable finite.
+
 Set Implicit Arguments.
 Import CtxNotations.
 Import EnvNotations.
@@ -245,6 +247,22 @@ Module ExampleTermKit <: TermKit.
 
   Definition 𝑳 : NCtx 𝑿 Ty -> Set := fun _ => Empty_set.
 
+  Instance 𝑹𝑬𝑮_eq_decision : base.RelDecision (@eq (sigT 𝑹𝑬𝑮)).
+  Proof.
+    intros xy; eapply 𝑹𝑬𝑮_eq_dec.
+  Defined.
+
+  Program Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮) := {| finite.enum := nil |}.
+  Next Obligation.
+    now eapply (nodup_fixed (H := 𝑹𝑬𝑮_eq_dec)).
+  Defined.
+  Next Obligation.
+    intros x.
+    refine (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _) _).
+    destruct x as [σ r]; now destruct r.
+  Qed.
+
+
 End ExampleTermKit.
 
 (*** PROGRAM ***)
@@ -327,6 +345,7 @@ Module SepContracts.
     Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
     Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
     Instance 𝑷_is_dup : IsDuplicable 𝑷 := { is_duplicable := fun p => match p with end }.
+
   End ExampleAssertionKit.
 
   Module ExampleSymbolicContractKit <:

@@ -36,6 +36,8 @@ From MicroSail Require Import
 From MinimalCaps Require Export
      Values.
 
+From stdpp Require Import finite decidable.
+
 Set Implicit Arguments.
 Import CtxNotations.
 Import EnvNotations.
@@ -164,6 +166,21 @@ Module MinCapsTermKit <: TermKit.
         | right; intros e; dependent elimination e
         ].
   Defined.
+
+  Instance 𝑹𝑬𝑮_eq_decision : EqDecision (sigT Reg).
+  Proof.
+    intros xy; eapply 𝑹𝑬𝑮_eq_dec.
+  Defined.
+
+  Program Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) := {| enum := [ existT _ pc; existT _ reg0; existT _ reg1; existT _ reg2; existT _ reg3 ]%list |}.
+  Next Obligation.
+    now eapply (nodup_fixed (H := 𝑹𝑬𝑮_eq_dec)).
+  Defined.
+  Next Obligation.
+    intros x.
+    refine (@bool_decide_unpack _ (elem_of_list_dec _ _) _).
+    destruct x; now destruct r.
+  Qed.
 
 End MinCapsTermKit.
 

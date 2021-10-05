@@ -11,6 +11,8 @@ From Equations Require Import
      EqDecInstances
      Equations.
 
+From stdpp Require decidable finite.
+
 From MicroSail Require Import
      Notation
      Sep.Spec
@@ -18,9 +20,6 @@ From MicroSail Require Import
      Symbolic.Mutator
      Symbolic.Sound
      Syntax.
-
-From stdpp Require
-     finite.
 
 Set Implicit Arguments.
 Import CtxNotations.
@@ -289,6 +288,26 @@ Module ISATermKit <: TermKit.
         | right; intros e; dependent elimination e
         ].
   Defined.
+  
+  Instance 𝑹𝑬𝑮_eq_decision : base.RelDecision (@eq (sigT 𝑹𝑬𝑮)).
+  Proof.
+    intros xy; eapply 𝑹𝑬𝑮_eq_dec.
+  Defined.
+
+  Section WithListNotation.
+    Import list.
+
+  Program Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮) := {| finite.enum := [ existT _ Halted; existT _ Overflow; existT _ OutOfMemory; existT _ R0; existT _ R1; existT _ R2; existT _ R3 ]%list |}.
+  Next Obligation.
+    now eapply (nodup_fixed (H := 𝑹𝑬𝑮_eq_dec)).
+  Defined.
+  Next Obligation.
+    intros x.
+    refine (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _) _).
+    destruct x as [σ r]; now destruct r.
+  Qed.
+
+  End WithListNotation.
 
 End ISATermKit.
 

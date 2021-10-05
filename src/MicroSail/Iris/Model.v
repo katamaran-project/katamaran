@@ -40,8 +40,11 @@ Require Import Coq.Program.Equality.
 From Equations Require Import Equations Signature.
 Require Import Equations.Prop.EqDec.
 
+From stdpp Require finite gmap list.
+
 From iris.bi Require Import interface.
 From iris.algebra Require Import gmap excl auth.
+From iris.bi Require Import big_op.
 From iris.base_logic Require Import lib.fancy_updates lib.own lib.gen_heap.
 From iris.program_logic Require Import weakestpre adequacy.
 From iris.proofmode Require Import tactics.
@@ -138,17 +141,13 @@ Module ValsAndTerms
   intros; eapply of_to_val; by cbn.
   Defined.
 
-  Inductive SomeReg : Type :=
-  | mkSomeReg {τ} : 𝑹𝑬𝑮 τ -> SomeReg
-  .
-  Inductive SomeLit : Type :=
-  | mkSomeLit {τ} : Lit τ -> SomeLit
-  .
+  Definition SomeReg : Type := sigT 𝑹𝑬𝑮.
+  Definition SomeLit : Type := sigT Lit.
 
   Section TransparentObligations.
     Local Set Transparent Obligations.
-    Derive NoConfusion for SomeReg.
-    Derive NoConfusion for SomeLit.
+    (* Derive NoConfusion for SomeReg. *)
+    (* Derive NoConfusion for SomeLit. *)
     Derive NoConfusion for excl.
   End TransparentObligations.
 
@@ -205,12 +204,12 @@ Module IrisRegisters
                         }.
 
   Definition reg_pointsTo `{sailRegG Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) : iProp Σ :=
-    own reg_gv_name (◯ {[ mkSomeReg r := Excl (mkSomeLit v) ]}).
+    own reg_gv_name (◯ {[ existT _ r := Excl (existT _ v) ]}).
 
   Definition regs_inv `{sailRegG Σ} (regstore : RegStore) : iProp Σ :=
     (∃ regsmap,
         own reg_gv_name (● regsmap) ∗
-        ⌜ map_Forall (fun reg v => match reg with | mkSomeReg reg => Excl (mkSomeLit (read_register regstore reg)) = v end ) regsmap ⌝
+        ⌜ map_Forall (K := SomeReg) (A := excl SomeLit) (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register regstore reg)) = v end ) regsmap ⌝
     )%I.
 
 End IrisRegisters.
@@ -460,37 +459,37 @@ Module IrisSoundness
     iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl regsv]%auth_both_valid.
     iPureIntro.
     specialize (Hl 0).
-    rewrite (singleton_includedN_l 0 regsmap (mkSomeReg r) _) in Hl *.
+    rewrite (singleton_includedN_l 0 regsmap (existT _ r) _) in Hl *.
     destruct 1 as [y [eq1%discrete%leibniz_equiv eq2%cmra_discrete_included_r]];
       auto with typeclass_instances.
-    specialize (regsv (mkSomeReg r)).
+    specialize (regsv (existT _ r)).
     rewrite eq1 in regsv.
     destruct y as [y|]; [|inversion regsv].
     rewrite Excl_included in eq2 *.
     intros <-%leibniz_equiv.
-    specialize (H0 (mkSomeReg r) (Excl (mkSomeLit v)) eq1); cbn in H0.
+    specialize (H0 (existT _ r) (Excl (existT _ v)) eq1); cbn in H0.
     Local Set Equations With UIP.
     by dependent elimination H0.
   Qed.
 
   Lemma regs_inv_update {τ} {r} {v : Lit τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeLit))} {regstore : RegStore} :
-    map_Forall (λ r' v', match r' with
-                         | @mkSomeReg τ r'' => Excl (mkSomeLit (read_register regstore r'')) = v'
+    map_Forall (K := SomeReg) (A := excl SomeLit) (λ r' v', match r' with
+                         | existT τ r'' => Excl (existT _ (read_register regstore r'')) = v'
                          end) regsmap ->
-    (own reg_gv_name (● <[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap)) -∗ regs_inv (write_register regstore r v).
+    (own reg_gv_name (● <[existT _ r:=Excl (existT _ v)]> regsmap)) -∗ regs_inv (write_register regstore r v).
   Proof.
     iIntros (regseq) "Hownregs".
-    iExists (<[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap).
+    iExists (<[existT _ r:=Excl (existT _ v)]> regsmap).
     iFrame.
     iPureIntro.
-    apply (map_Forall_lookup_2 _ (<[mkSomeReg r:=Excl (mkSomeLit v)]> regsmap)).
+    apply (map_Forall_lookup_2 _ (<[existT _ r:=Excl (existT _ v)]> regsmap)).
     intros [τ' r'] x eq1.
     destruct (eq_dec_het r r') as [eq2|neq].
     + dependent elimination eq2.
       rewrite lookup_insert in eq1.
       apply (inj Some) in eq1.
       by rewrite <- eq1, (read_write regstore r v).
-    + assert (mkSomeReg r ≠ mkSomeReg r') as neq2.
+    + assert (existT _ r ≠ existT _ r') as neq2.
       * intros eq2.
         dependent elimination eq2.
         now apply neq.
@@ -506,15 +505,15 @@ Module IrisSoundness
     rewrite /reg_pointsTo.
     iIntros "Hreg".
     iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl%cmra_discrete_included_r regsmapv]%auth_both_valid.
-    rewrite (singleton_included_l regsmap (mkSomeReg r) _) in Hl *.
+    rewrite (singleton_included_l regsmap (existT _ r) _) in Hl *.
     destruct 1 as [y [eq1%leibniz_equiv eq2]].
-    specialize (regsmapv (mkSomeReg r)).
+    specialize (regsmapv (existT _ r)).
     rewrite eq1 in regsmapv.
     destruct y as [y|]; inversion regsmapv.
     iMod (own_update_2 with "Hregs Hreg") as "[Hregs Hreg]".
     {
       eapply auth_update.
-      apply (singleton_local_update regsmap (mkSomeReg r) (Excl y) (Excl (mkSomeLit v1)) (Excl (mkSomeLit v2)) (Excl (mkSomeLit v2)) eq1).
+      apply (singleton_local_update regsmap (existT _ r) (Excl y) (Excl (existT _ v1)) (Excl (existT _ v2)) (Excl (existT _ v2)) eq1).
       by eapply exclusive_local_update.
     }
     iModIntro.
@@ -1687,11 +1686,54 @@ Module Adequacy
     solve_inG.
  Qed.
 
-  Lemma RegStore_to_map (γ : RegStore) :
-    ∃ (regsmap : gmap SomeReg (exclR (leibnizO SomeLit))),
-      map_Forall (fun reg v => match reg with | mkSomeReg reg => Excl (mkSomeLit (read_register γ reg)) = v end) regsmap
-      ∧ (valid regsmap)%I.
-  Admitted.
+  Definition RegStore_to_map (γ : RegStore) : gmap SomeReg (exclR (leibnizO SomeLit)) :=
+    list_to_map (K := SomeReg)
+                (fmap (fun x => match x with
+                              existT _ r =>
+                                pair (existT _ r) (Excl (existT _ (read_register γ r)))
+                            end)
+                     (finite.enum (sigT 𝑹𝑬𝑮))).
+
+  Lemma RegStore_to_map_Forall (γ : RegStore) :
+    map_Forall (K := SomeReg)
+      (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register γ reg)) = v end)
+      (RegStore_to_map γ).
+  Proof.
+    eapply map_Forall_lookup_2.
+    intros [σ r] x eq.
+    unfold RegStore_to_map in eq.
+    remember (list_to_map _ !! _) as o in eq.
+    destruct o; inversion eq; subst.
+    assert (eq' := eq_sym Heqo).
+    rewrite <-elem_of_list_to_map in eq'.
+    - eapply elem_of_list_fmap_2 in eq'.
+      destruct eq' as ([σ' r'] & eq2 & eq3).
+      now inversion eq2.
+    - rewrite <-list_fmap_compose.
+      rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
+          let (x0, r0) := x in (existT x0 r0 :: Excl (existT x0 (read_register γ r0)))%ctx)) id _ _ _ eq_refl).
+      + rewrite list_fmap_id.
+        eapply finite.NoDup_enum.
+      + now intros [σ' r'].
+  Qed.
+
+  Lemma RegStore_to_map_valid (γ : RegStore) :
+    valid (RegStore_to_map γ).
+  Proof.
+    intros i.
+    cut (exists v, RegStore_to_map γ !! i = Some (Excl v)).
+    - intros [v eq].
+      now rewrite eq.
+    - destruct i as [σ r].
+      exists (existT _ (read_register γ r)).
+      eapply elem_of_list_to_map_1'.
+      + intros y eq.
+        eapply elem_of_list_fmap_2 in eq.
+        destruct eq as ([σ2 r2] & eq1 & eq2).
+        now inversion eq1.
+      + refine (elem_of_list_fmap_1 _ _ (existT _ r) _).
+        eapply finite.elem_of_enum.
+  Qed.
 
   Lemma steps_to_erased {σ Γ γ μ δ} (s : Stm Γ σ) {γ' μ' δ' s'}:
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
@@ -1704,6 +1746,35 @@ Module Adequacy
     by eapply mk_prim_step.
   Qed.
 
+  Lemma own_RegStore_to_map_reg_pointsTos `{sailRegG Σ'} {γ : RegStore} {l : list (sigT 𝑹𝑬𝑮)} :
+    NoDup l ->
+    ⊢ own reg_gv_name (◯ list_to_map (K := SomeReg)
+                         (fmap (fun x => match x with existT _ r =>
+                                                     pair (existT _ r) (Excl (existT _ (read_register γ r)))
+                                      end) l)) -∗
+      [∗ list] x ∈ l,
+        let (x0, r) := (x : sigT 𝑹𝑬𝑮) in reg_pointsTo r (read_register γ r).
+    Proof.
+      iIntros (nodups) "Hregs".
+      iInduction l as [|[x r]] "IH".
+      - now iFrame.
+      - cbn.
+        rewrite (insert_singleton_op (A := exclR (leibnizO SomeLit)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ r)))).
+        rewrite auth_frag_op.
+        iPoseProof (own_op with "Hregs") as "[Hreg Hregs]".
+        iFrame.
+        iApply "IH".
+        + iPureIntro.
+          refine (NoDup_cons_1_2 (existT x r) l nodups).
+        + iFrame.
+        + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _].
+          refine (not_elem_of_list_to_map_1 _ (existT x r) _).
+          rewrite <-list_fmap_compose.
+          rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
+                                                  let (x0, r0) := x in (existT x0 r0 :: Excl (existT x0 (read_register γ r0)))%ctx)) id _ _ _ eq_refl).
+          now rewrite list_fmap_id.
+          now intros [σ2 r2].
+    Qed.
 
   Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : Lit σ -> Prop} :
@@ -1711,7 +1782,8 @@ Module Adequacy
     (forall `{sailG Σ'},
         ⊢ semTriple (Σ := Σ') δ
           (mem_res sailG_memG μ ∗
-                   (* TODO: all registers... *) True
+           [∗ list] _ ↦ x ∈ finite.enum (sigT 𝑹𝑬𝑮),
+              match x with | existT _ r => reg_pointsTo r (read_register γ r) end
           )%I s (fun v δ' => bi_pure (Q v)))%I ->
     ResultOrFail s' Q.
   Proof.
@@ -1727,11 +1799,12 @@ Module Adequacy
       by apply steps_to_erased.
     - constructor; last done.
       intros t2 σ2 [δ2 v2] eval.
-      destruct (RegStore_to_map γ) as [regsmap [eq regsmapv]].
+      assert (eq := RegStore_to_map_Forall γ).
+      assert (regsmapv := RegStore_to_map_valid γ).
       pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) MaybeStuck (MkTm δ s) (γ , μ) (fun v => match v with | MkVal _ δ' v' => Q v' end)) as adeq.
       refine (adequate_result _ _ _ _ (adeq _) _ _ _ eval); clear adeq.
       iIntros (Hinv κs) "".
-      iMod (own_alloc ((● regsmap ⋅ ◯ regsmap ) : regUR)) as (spec_name) "[Hs1 Hs2]";
+      iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
         first by apply auth_both_valid.
       pose proof (memΣ_PreG (Σ := sailΣ) _) as mPG.
       iMod (mem_inv_init μ mPG) as (memG) "[Hmem Rmem]".
@@ -1740,12 +1813,16 @@ Module Adequacy
       iExists _.
       iSplitR "Hs2 Rmem".
       * iSplitL "Hs1".
-        + iExists regsmap.
+        + iExists (RegStore_to_map γ).
           by iFrame.
         + iFrame.
-      * iPoseProof (trips sailΣ (SailG Hinv (SailRegG reg_pre_inG spec_name) memG) with "[Rmem]") as "trips'"; [iFrame|].
-        iApply (wp_mono with "trips'").
-        by iIntros ([δ3 v]).
+      * iPoseProof (trips sailΣ (SailG Hinv (SailRegG reg_pre_inG spec_name) memG) with "[Rmem Hs2]") as "trips'".
+        + iFrame.
+          unfold RegStore_to_map.
+          iApply (own_RegStore_to_map_reg_pointsTos (H := SailRegG reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
+          Locate NoDup.
+          eapply finite.NoDup_enum.
+        + iApply (wp_mono with "trips'").
+          by iIntros ([δ3 v]).
   Qed.
-
 End Adequacy.

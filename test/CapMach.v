@@ -36,6 +36,8 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 
+From stdpp Require Import decidable finite.
+
 From MicroSail Require Import
      Sep.Spec
      Syntax.
@@ -453,6 +455,22 @@ Module CapTermKit <: TermKit .
         | right; intros e; dependent elimination e
         ].
   Defined.
+
+  Instance 𝑹𝑬𝑮_eq_decision : EqDecision (sigT 𝑹𝑬𝑮).
+  Proof.
+    intros xy; eapply 𝑹𝑬𝑮_eq_dec.
+  Defined.
+
+  Program Instance 𝑹𝑬𝑮_finite : Finite (sigT 𝑹𝑬𝑮) := {| enum := [ existT _ pc; existT _ reg0; existT _ reg1; existT _ reg2; existT _ reg3 ]%list |}.
+  Next Obligation.
+    now eapply (nodup_fixed (H := 𝑹𝑬𝑮_eq_dec)).
+  Defined.
+  Next Obligation.
+    intros x.
+    refine (@bool_decide_unpack _ (elem_of_list_dec _ _) _).
+    destruct x as [σ r]; now destruct r.
+  Qed.
+
 
 End CapTermKit.
 

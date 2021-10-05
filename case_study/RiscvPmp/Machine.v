@@ -37,6 +37,8 @@ From MicroSail Require Import
 From RiscvPmp Require Export
      Values.
 
+From stdpp Require Import decidable finite.
+
 Set Implicit Arguments.
 Import CtxNotations.
 Import EnvNotations.
@@ -146,6 +148,23 @@ Module RiscvPmpTermKit <: TermKit.
         | right; intros e; dependent elimination e
         ].
   Defined.
+
+  Instance 𝑹𝑬𝑮_eq_decision : EqDecision (sigT Reg).
+  Proof.
+    intros xy; eapply 𝑹𝑬𝑮_eq_dec.
+  Defined.
+
+  Program Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) := {| enum := [ existT _ pc; existT _ nextpc; existT _ x0; existT _ x1; existT _ x2; existT _ pmp0cfg; existT _ pmpaddr0 ]%list |}.
+  Next Obligation.
+    now eapply (nodup_fixed (H := 𝑹𝑬𝑮_eq_dec)).
+  Defined.
+  Next Obligation.
+    intros x.
+    refine (@bool_decide_unpack _ (elem_of_list_dec _ _) _).
+    destruct x; now destruct r.
+  Qed.
+
+
 End RiscvPmpTermKit.
 
 Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
