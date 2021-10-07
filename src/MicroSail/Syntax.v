@@ -1,5 +1,6 @@
 (******************************************************************************)
-(* Copyright (c) 2019 Steven Keuchel, Dominique Devriese                      *)
+(* Copyright (c) 2019 Dominique Devriese, Georgy Lukyanov,                    *)
+(*   Sander Huyghebaert, Steven Keuchel                                       *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
