@@ -177,7 +177,7 @@ Module RiscvPmpTermKit <: TermKit.
     intros xy; eapply 𝑹𝑬𝑮_eq_dec.
   Defined.
 
-  Program Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) := {| enum := [ existT _ pc; existT _ nextpc; existT _ x0; existT _ x1; existT _ x2; existT _ pmp0cfg; existT _ pmpaddr0 ]%list |}.
+  Program Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) := {| enum := [ existT _ pc; existT _ nextpc; existT _ mtvec; existT _ mcause; existT _ mepc; existT _ x0; existT _ x1; existT _ x2; existT _ pmp0cfg; existT _ pmpaddr0 ]%list |}.
   Next Obligation.
     now eapply (nodup_fixed (H := 𝑹𝑬𝑮_eq_dec)).
   Defined.
