@@ -59,11 +59,14 @@ Module RiscvPmpValueKit <: ValueKit.
   Notation ty_uop              := (ty_enum uop).
   Notation ty_bop              := (ty_enum bop).
   Notation ty_retired          := (ty_enum retired).
+  Notation ty_mcause           := (ty_int).
+  Notation ty_exc_code         := (ty_int).
   Notation ty_ast              := (ty_union ast).
   Notation ty_access_type      := (ty_union access_type).
   Notation ty_exception_type   := (ty_union exception_type).
   Notation ty_memory_op_result := (ty_union memory_op_result).
   Notation ty_fetch_result     := (ty_union fetch_result).
+  Notation ty_ctl_result       := (ty_union ctl_result).
   Notation ty_pmpcfg_ent       := (ty_record pmpcfg_ent).
 
   (** Unions **)
@@ -92,6 +95,7 @@ Module RiscvPmpValueKit <: ValueKit.
                             | KF_Base  => ty_word
                             | KF_Error => ty_prod ty_exception_type ty_word
                             end
+    | ctl_result       => fun _ => ty_exception_type
     end.
 
   Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
@@ -130,6 +134,10 @@ Module RiscvPmpValueKit <: ValueKit.
                             | F_Base v    => existT KF_Base v
                             | F_Error e v => existT KF_Error (e , v)
                             end
+    | ctl_result       => fun Kv =>
+                            match Kv with
+                            | CTL_TRAP e => existT KCTL_TRAP e
+                            end
     end.
 
   Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
@@ -167,6 +175,10 @@ Module RiscvPmpValueKit <: ValueKit.
                             match Kv with
                             | existT KF_Base v        => F_Base v
                             | existT KF_Error (e , v) => F_Error e v
+                            end
+    | ctl_result       => fun Kv =>
+                            match Kv with
+                            | existT KCTL_TRAP e => CTL_TRAP e
                             end
     end.
 

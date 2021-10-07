@@ -70,6 +70,7 @@ Module RiscvPmpTermKit <: TermKit.
   Local Notation "'t'"            := "t" : string_scope.
   Local Notation "'addr'"         := "addr" : string_scope.
   Local Notation "'paddr'"        := "paddr" : string_scope.
+  Local Notation "'vaddr'"        := "vaddr" : string_scope.
   Local Notation "'typ'"          := "typ" : string_scope.
   Local Notation "'acc'"          := "acc" : string_scope.
   Local Notation "'value'"        := "value" : string_scope.
@@ -80,45 +81,55 @@ Module RiscvPmpTermKit <: TermKit.
   Local Notation "'cfg'"          := "cfg" : string_scope.
   Local Notation "'rng'"          := "rng" : string_scope.
   Local Notation "'bv'"           := "bv" : string_scope.
+  Local Notation "'e'"            := "e" : string_scope.
+  Local Notation "'ctl'"          := "ctl" : string_scope.
+  Local Notation "'c'"            := "c" : string_scope.
+  Local Notation "'cause'"        := "cause" : string_scope.
+  Local Notation "'m'"            := "m" : string_scope.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
-  | rX                 : Fun [rs ∶ ty_regidx] ty_word
-  | wX                 : Fun [rd ∶ ty_regidx, v ∶ ty_word] ty_unit
-  | get_arch_pc        : Fun ctx_nil ty_word
-  | get_next_pc        : Fun ctx_nil ty_word
-  | set_next_pc        : Fun [addr ∶ ty_word] ty_unit
-  | address_aligned    : Fun [addr ∶ ty_word] ty_bool
-  | abs                : Fun [v ∶ ty_int] ty_int
-  | mem_read           : Fun [typ ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
-  | checked_mem_read   : Fun [t ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
-  | checked_mem_write  : Fun [paddr ∶ ty_int, data ∶ ty_word] ty_memory_op_result
-  | pmp_mem_read       : Fun [t∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
-  | pmp_mem_write      : Fun [paddr ∶ ty_int, data ∶ ty_word, typ ∶ ty_access_type] ty_memory_op_result
-  | pmpLocked          : Fun [cfg ∶ ty_pmpcfg_ent] ty_bool
-  | pmpCheck           : Fun [addr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type)
-  | pmpCheckPerms      : Fun [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool
-  | pmpCheckRWX        : Fun [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool
-  | pmpMatchEntry      : Fun [addr ∶ ty_int, acc ∶ ty_access_type, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmpmatch
-  | pmpAddrRange       : Fun [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmp_addr_range
-  | pmpMatchAddr       : Fun [addr ∶ ty_int, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch
-  | process_load       : Fun [rd ∶ ty_regidx, value ∶ ty_memory_op_result] ty_retired
-  | write_mem_value    : Fun [paddr ∶ ty_int, value ∶ ty_word] ty_memory_op_result
-  | main               : Fun ctx_nil ty_unit
-  | init_model         : Fun ctx_nil ty_unit
-  | loop               : Fun ctx_nil ty_unit
-  | step               : Fun ctx_nil ty_unit
-  | fetch              : Fun ctx_nil ty_fetch_result
-  | init_sys           : Fun ctx_nil ty_unit
-  | init_pmp           : Fun ctx_nil ty_unit
-  | execute_RTYPE      : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
-  | execute_ITYPE      : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
-  | execute_UTYPE      : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
-  | execute_BTYPE      : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired
-  | execute_RISCV_JAL  : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
-  | execute_RISCV_JALR : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
-  | execute_LOAD       : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
-  | execute_STORE      : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx] ty_retired
+  | rX                    : Fun [rs ∶ ty_regidx] ty_word
+  | wX                    : Fun [rd ∶ ty_regidx, v ∶ ty_word] ty_unit
+  | get_arch_pc           : Fun ctx_nil ty_word
+  | get_next_pc           : Fun ctx_nil ty_word
+  | set_next_pc           : Fun [addr ∶ ty_word] ty_unit
+  | abs                   : Fun [v ∶ ty_int] ty_int
+  | mem_read              : Fun [typ ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
+  | checked_mem_read      : Fun [t ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
+  | checked_mem_write     : Fun [paddr ∶ ty_int, data ∶ ty_word] ty_memory_op_result
+  | pmp_mem_read          : Fun [t∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
+  | pmp_mem_write         : Fun [paddr ∶ ty_int, data ∶ ty_word, typ ∶ ty_access_type] ty_memory_op_result
+  | pmpLocked             : Fun [cfg ∶ ty_pmpcfg_ent] ty_bool
+  | pmpCheck              : Fun [addr ∶ ty_int, acc ∶ ty_access_type] (ty_option ty_exception_type)
+  | pmpCheckPerms         : Fun [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool
+  | pmpCheckRWX           : Fun [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool
+  | pmpMatchEntry         : Fun [addr ∶ ty_int, acc ∶ ty_access_type, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmpmatch
+  | pmpAddrRange          : Fun [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmp_addr_range
+  | pmpMatchAddr          : Fun [addr ∶ ty_int, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch
+  | process_load          : Fun [rd ∶ ty_regidx, vaddr ∶ ty_int, value ∶ ty_memory_op_result] ty_retired
+  | write_mem_value       : Fun [paddr ∶ ty_int, value ∶ ty_word] ty_memory_op_result
+  | main                  : Fun ctx_nil ty_unit
+  | init_model            : Fun ctx_nil ty_unit
+  | loop                  : Fun ctx_nil ty_unit
+  | step                  : Fun ctx_nil ty_unit
+  | fetch                 : Fun ctx_nil ty_fetch_result
+  | init_sys              : Fun ctx_nil ty_unit
+  | init_pmp              : Fun ctx_nil ty_unit
+  | exceptionType_to_bits : Fun [e ∶ ty_exception_type] ty_exc_code
+  | handle_mem_exception  : Fun [addr ∶ ty_int, e ∶ ty_exception_type] ty_unit
+  | exception_handler     : Fun [ctl ∶ ty_ctl_result, "pc" ∶ ty_int] ty_int
+  | trap_handler          : Fun [c ∶ ty_exc_code, "pc" ∶ ty_int] ty_int
+  | prepare_trap_vector   : Fun [cause ∶ ty_mcause] ty_int
+  | tvec_addr             : Fun [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_int)
+  | execute_RTYPE         : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
+  | execute_ITYPE         : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
+  | execute_UTYPE         : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
+  | execute_BTYPE         : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired
+  | execute_RISCV_JAL     : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
+  | execute_RISCV_JALR    : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
+  | execute_LOAD          : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
+  | execute_STORE         : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx] ty_retired
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
@@ -136,6 +147,9 @@ Module RiscvPmpTermKit <: TermKit.
   Inductive Reg : Ty -> Set :=
   | pc       : Reg ty_word
   | nextpc   : Reg ty_word
+  | mtvec    : Reg ty_word
+  | mcause   : Reg ty_exc_code
+  | mepc     : Reg ty_word
   | x0       : Reg ty_word
   | x1       : Reg ty_word
   | x2       : Reg ty_word
@@ -154,7 +168,7 @@ Module RiscvPmpTermKit <: TermKit.
     intros [? []] [? []]; cbn;
       first
         [ left; now apply eq_refl
-        | right; intros e; dependent elimination e
+        | right; intros e1; dependent elimination e1
         ].
   Defined.
 
@@ -205,6 +219,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'e'"            := "e" : string_scope.
   Local Notation "'addr'"         := "addr" : string_scope.
   Local Notation "'paddr'"        := "paddr" : string_scope.
+  Local Notation "'vaddr'"        := "vaddr" : string_scope.
   Local Notation "'taken'"        := "taken" : string_scope.
   Local Notation "'typ'"          := "typ" : string_scope.
   Local Notation "'acc'"          := "acc" : string_scope.
@@ -226,6 +241,12 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'f'"            := "f" : string_scope.
   Local Notation "'w'"            := "w" : string_scope.
   Local Notation "'ast'"          := "ast" : string_scope.
+  Local Notation "'ctl'"          := "ctl" : string_scope.
+  Local Notation "'c'"            := "c" : string_scope.
+  Local Notation "'cause'"        := "cause" : string_scope.
+  Local Notation "'tvec'"         := "tvec" : string_scope.
+  Local Notation "'m'"            := "m" : string_scope.
+  Local Notation "'epc'"          := "epc" : string_scope.
 
   Local Notation "'rs'"           := (@exp_var _ "rs" _ _) : exp_scope.
   Local Notation "'rs1'"          := (@exp_var _ "rs1" _ _) : exp_scope.
@@ -250,6 +271,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'e'"            := (@exp_var _ "e" _ _) : exp_scope.
   Local Notation "'addr'"         := (@exp_var _ "addr" _ _) : exp_scope.
   Local Notation "'paddr'"        := (@exp_var _ "paddr" _ _) : exp_scope.
+  Local Notation "'vaddr'"        := (@exp_var _ "vaddr" _ _) : exp_scope.
   Local Notation "'taken'"        := (@exp_var _ "taken" _ _) : exp_scope.
   Local Notation "'typ'"          := (@exp_var _ "typ" _ _) : exp_scope.
   Local Notation "'acc'"          := (@exp_var _ "acc" _ _) : exp_scope.
@@ -271,6 +293,12 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'f'"            := (@exp_var _ "f" _ _) : exp_scope.
   Local Notation "'w'"            := (@exp_var _ "w" _ _) : exp_scope.
   Local Notation "'ast'"          := (@exp_var _ "ast" _ _) : exp_scope.
+  Local Notation "'ctl'"          := (@exp_var _ "ctl" _ _) : exp_scope.
+  Local Notation "'c'"            := (@exp_var _ "c" _ _) : exp_scope.
+  Local Notation "'cause'"        := (@exp_var _ "cause" _ _) : exp_scope.
+  Local Notation "'tvec'"         := (@exp_var _ "tvec" _ _) : exp_scope.
+  Local Notation "'m'"            := (@exp_var _ "m" _ _) : exp_scope.
+  Local Notation "'epc'"          := (@exp_var _ "epc" _ _) : exp_scope.
 
   Local Notation "'Read'" := (exp_union access_type KRead (exp_lit ty_unit tt)) : exp_scope.
   Local Notation "'Write'" := (exp_union access_type KWrite (exp_lit ty_unit tt)) : exp_scope.
@@ -289,6 +317,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Local Notation "'F_Base' memv" := (exp_union fetch_result KF_Base memv) (at level 10, memv at next level) : exp_scope.
   Local Notation "'F_Error' meme memv" := (exp_union fetch_result KF_Error (exp_binop binop_pair meme memv)) (at level 10, meme at next level, memv at next level) : exp_scope.
+
+  Local Notation "'CTL_TRAP' exc" := (exp_union ctl_result KCTL_TRAP exc) (at level 10, exc at next level) : exp_scope.
 
   (** Functions **)
   Definition fun_rX : Stm [rs ∶ ty_regidx] ty_word :=
@@ -312,11 +342,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     stm_read_register nextpc.
 
   Definition fun_set_next_pc : Stm [addr ∶ ty_word] ty_unit :=
-    stm_write_register pc addr ;;
+    stm_write_register nextpc addr ;;
     stm_lit ty_unit tt.
-
-  Definition fun_address_aligned : Stm [addr ∶ ty_word] ty_bool :=
-    stm_lit ty_bool true.
 
   Definition fun_abs : Stm [v ∶ ty_int] ty_int :=
     if: v < (exp_lit ty_int 0%Z)
@@ -454,7 +481,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | inr v => exp_lit ty_pmpaddrmatch PMP_NoMatch
     end.
 
-  Definition fun_process_load : Stm [rd ∶ ty_regidx, value ∶ ty_memory_op_result] ty_retired :=
+  Definition fun_process_load : Stm [rd ∶ ty_regidx, vaddr ∶ ty_int, value ∶ ty_memory_op_result] ty_retired :=
     stm_match_union_alt memory_op_result value
                         (fun K =>
                            match K with
@@ -462,8 +489,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                     (call wX rd result ;;
                                                      stm_lit ty_retired RETIRE_SUCCESS)
                            | KMemException => MkAlt (pat_var e)
-                                                    (* TODO: handle_mem_exception? *)
-                                                    (stm_lit ty_retired RETIRE_FAIL)
+                                                    (call handle_mem_exception vaddr e ;;
+                                                     stm_lit ty_retired RETIRE_FAIL)
                            end).
 
   Definition fun_write_mem_value : Stm [paddr ∶ ty_int, value ∶ ty_word] ty_memory_op_result :=
@@ -503,9 +530,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                 let: tmp := stm_read_register pc in
                                                 stm_write_register nextpc (tmp + (exp_lit ty_int 4%Z)) ;;
                                                 stm_lit ty_retired RETIRE_SUCCESS)
-                           | KF_Error => MkAlt (pat_var e%string)
-                                           (* TODO: handle_mem_exception? *)
-                                           (stm_lit ty_retired RETIRE_FAIL)
+                           | KF_Error => MkAlt (pat_pair e%string addr%string)
+                                               (call handle_mem_exception addr e ;;
+                                                stm_lit ty_retired RETIRE_FAIL)
                            end) ;;
     stm_lit ty_unit tt.
 
@@ -528,6 +555,66 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                W,
                                                R ]) ;;
        stm_lit ty_unit tt)).
+
+  Definition fun_exceptionType_to_bits : Stm [e ∶ ty_exception_type] ty_exc_code :=
+    stm_match_union_alt exception_type e
+                        (fun K =>
+                           match K with
+                           | KE_Fetch_Access_Fault => MkAlt pat_unit
+                                                            (stm_lit ty_exc_code 1%Z)
+                           | KE_Load_Access_Fault  => MkAlt pat_unit
+                                                            (stm_lit ty_exc_code 5%Z)
+                           | KE_SAMO_Access_Fault  => MkAlt pat_unit
+                                                            (stm_lit ty_exc_code 7%Z)
+                           end).
+
+  Definition fun_handle_mem_exception : Stm [addr ∶ ty_int, e ∶ ty_exception_type] ty_unit :=
+    let: tmp1 := stm_read_register pc in
+    let: tmp2 := call exception_handler (CTL_TRAP e) tmp1 in
+    call set_next_pc tmp2.
+
+  Definition fun_exception_handler : Stm [ctl ∶ ty_ctl_result, "pc" ∶ ty_int] ty_int :=
+    stm_match_union_alt ctl_result ctl
+                        (fun K =>
+                           match K with
+                           | KCTL_TRAP => MkAlt (pat_var e%string)
+                                                (let: tmp := call exceptionType_to_bits e in
+                                                  call trap_handler tmp (exp_var "pc"))
+                           end).
+
+  Definition fun_trap_handler : Stm [c ∶ ty_exc_code, "pc" ∶ ty_int] ty_int :=
+    stm_write_register mcause c ;;
+    stm_write_register mepc (exp_var "pc") ;;
+    (* NOTE: the following let can be dropped by just reusing c (the value we are
+             writing into mcause, but this (manual) translation is more faithful to
+             what I expect an automatic translation would produce, i.e. do an 
+             stm_read_register when a register is used as param to a function call,
+             to get the value in the register
+     
+             Also keep into account that the risc-v model trap handler function handles
+             more cases than represented here, i.e. we only have support for M-mode and
+             do not explicitly check for this here. So we could simplify
+             prepare_trap_vector to not take a cause parameter (which it won't use
+             anyway because we only support direct mode for the trap vector, meaning
+             that the trap handler function installed at the memory address denoted
+             by mtvec will need to read the mcause register to dispatch to the
+             corresponding trap handler for the cause). *)
+    let: tmp := stm_read_register mcause in
+    call prepare_trap_vector tmp.
+
+  Definition fun_prepare_trap_vector : Stm [cause ∶ ty_mcause] ty_int :=
+    let: tvec := stm_read_register mtvec in
+    let: tmp := call tvec_addr tvec cause in
+    (* NOTE: tvec_addr will only ever return Some(epc), because we don't support
+             the 2 mode bits and only have direct mode. The None case only arises
+             for the Reserved mode of trap vectors. *)
+    match: tmp with
+    | inl epc => epc
+    | inr e   => fail "Invalid tvec mode"
+    end.
+
+  Definition fun_tvec_addr : Stm [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_int) :=
+    Some m.
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
@@ -565,29 +652,17 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Definition fun_execute_RISCV_JAL : Stm [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired :=
     let: tmp := stm_read_register pc in
     let: t := tmp + imm in
-    let: tmp := call address_aligned t in
-    if: exp_not tmp
-    then
-      (* TODO: handle_mem_exception? *)
-      stm_lit ty_retired RETIRE_FAIL
-    else
-      let: tmp := call get_next_pc in
-      call wX rd tmp ;;
-      stm_lit ty_retired RETIRE_SUCCESS.
+    let: tmp := call get_next_pc in
+    call wX rd tmp ;;
+    stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_RISCV_JALR : Stm [imm ∶ ty_int , rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired :=
     let: tmp := call rX rs1 in
     let: t := tmp + imm in
-    let: tmp := call address_aligned t in
-    if: exp_not tmp
-    then
-      (* TODO: handle_mem_exception? *)
-      stm_lit ty_retired RETIRE_FAIL
-    else
-      let: tmp := call get_next_pc in
-      call wX rd tmp ;;
-      call set_next_pc t ;;
-      stm_lit ty_retired RETIRE_SUCCESS.
+    let: tmp := call get_next_pc in
+    call wX rd tmp ;;
+    call set_next_pc t ;;
+    stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_BTYPE : Stm [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired :=
     let: rs1_val := call rX rs1 in
@@ -611,14 +686,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     let: t := tmp + imm in
     if: taken
     then
-      let: tmp := call address_aligned t in
-      if: exp_not tmp
-      then
-        (* TODO: handle_mem_exception? *)
-        stm_lit ty_retired RETIRE_FAIL
-      else
-        (call set_next_pc t ;;
-         stm_lit ty_retired RETIRE_SUCCESS)
+      call set_next_pc t ;;
+      stm_lit ty_retired RETIRE_SUCCESS
     else
       stm_lit ty_retired RETIRE_SUCCESS.
 
@@ -627,7 +696,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     let: tmp := call rX rs1 in
     let: paddr := tmp + offset in
     let: tmp := call mem_read Read paddr in
-    call process_load rd tmp ;;
+    call process_load rd paddr tmp ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_STORE : Stm [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx] ty_retired :=
@@ -644,8 +713,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                  then stm_lit ty_retired RETIRE_SUCCESS
                                                  else fail "store got false from write_mem_value")
                            | KMemException => MkAlt (pat_var e%string)
-                                                    (* TODO: handle_mem_exception? *)
-                                                    (stm_lit ty_retired RETIRE_FAIL)
+                                                    (call handle_mem_exception paddr e ;;
+                                                     stm_lit ty_retired RETIRE_FAIL)
                            end).
 
   End Functions.
@@ -696,42 +765,47 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
-    | rX                 => fun_rX
-    | wX                 => fun_wX
-    | get_arch_pc        => fun_get_arch_pc
-    | get_next_pc        => fun_get_next_pc
-    | set_next_pc        => fun_set_next_pc
-    | address_aligned    => fun_address_aligned
-    | abs                => fun_abs
-    | mem_read           => fun_mem_read
-    | write_mem_value    => fun_write_mem_value
-    | checked_mem_read   => fun_checked_mem_read
-    | checked_mem_write  => fun_checked_mem_write
-    | pmp_mem_read       => fun_pmp_mem_read
-    | pmp_mem_write      => fun_pmp_mem_write
-    | pmpLocked          => fun_pmpLocked
-    | pmpCheck           => fun_pmpCheck
-    | pmpCheckPerms      => fun_pmpCheckPerms
-    | pmpCheckRWX        => fun_pmpCheckRWX
-    | pmpMatchEntry      => fun_pmpMatchEntry
-    | pmpAddrRange       => fun_pmpAddrRange
-    | pmpMatchAddr       => fun_pmpMatchAddr
-    | process_load       => fun_process_load
-    | main               => fun_main
-    | init_model         => fun_init_model
-    | init_sys           => fun_init_sys
-    | init_pmp           => fun_init_pmp
-    | loop               => fun_loop
-    | step               => fun_step
-    | fetch              => fun_fetch
-    | execute_RTYPE      => fun_execute_RTYPE
-    | execute_ITYPE      => fun_execute_ITYPE
-    | execute_UTYPE      => fun_execute_UTYPE
-    | execute_BTYPE      => fun_execute_BTYPE
-    | execute_RISCV_JAL  => fun_execute_RISCV_JAL
-    | execute_RISCV_JALR => fun_execute_RISCV_JALR
-    | execute_LOAD       => fun_execute_LOAD
-    | execute_STORE      => fun_execute_STORE
+    | rX                    => fun_rX
+    | wX                    => fun_wX
+    | get_arch_pc           => fun_get_arch_pc
+    | get_next_pc           => fun_get_next_pc
+    | set_next_pc           => fun_set_next_pc
+    | abs                   => fun_abs
+    | mem_read              => fun_mem_read
+    | write_mem_value       => fun_write_mem_value
+    | checked_mem_read      => fun_checked_mem_read
+    | checked_mem_write     => fun_checked_mem_write
+    | pmp_mem_read          => fun_pmp_mem_read
+    | pmp_mem_write         => fun_pmp_mem_write
+    | pmpLocked             => fun_pmpLocked
+    | pmpCheck              => fun_pmpCheck
+    | pmpCheckPerms         => fun_pmpCheckPerms
+    | pmpCheckRWX           => fun_pmpCheckRWX
+    | pmpMatchEntry         => fun_pmpMatchEntry
+    | pmpAddrRange          => fun_pmpAddrRange
+    | pmpMatchAddr          => fun_pmpMatchAddr
+    | process_load          => fun_process_load
+    | exceptionType_to_bits => fun_exceptionType_to_bits
+    | main                  => fun_main
+    | init_model            => fun_init_model
+    | init_sys              => fun_init_sys
+    | init_pmp              => fun_init_pmp
+    | loop                  => fun_loop
+    | step                  => fun_step
+    | fetch                 => fun_fetch
+    | handle_mem_exception  => fun_handle_mem_exception
+    | exception_handler     => fun_exception_handler
+    | trap_handler          => fun_trap_handler
+    | prepare_trap_vector   => fun_prepare_trap_vector
+    | tvec_addr             => fun_tvec_addr
+    | execute_RTYPE         => fun_execute_RTYPE
+    | execute_ITYPE         => fun_execute_ITYPE
+    | execute_UTYPE         => fun_execute_UTYPE
+    | execute_BTYPE         => fun_execute_BTYPE
+    | execute_RISCV_JAL     => fun_execute_RISCV_JAL
+    | execute_RISCV_JALR    => fun_execute_RISCV_JALR
+    | execute_LOAD          => fun_execute_LOAD
+    | execute_STORE         => fun_execute_STORE
     end.
 
 End RiscvPmpProgramKit.

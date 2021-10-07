@@ -16,6 +16,9 @@ Remarks/Comments/Info:
 - step function shortened, dropped extension related code, also not doing anything with the "retire" result of an execution (has to do with "minstret", doesn't seem relevant for our case study at this point)
   + have kept the "stm_lit ty_retire RETIRE_SUCCESS/FAIL" stmts tho, can however drop this? (TODO: consider)
 - the fetch function is simplified, in the sail model it reads 16 bits at a time (to support the compressed extension), in our case we read the entire instruction at once (no support for the compressed extension) (this also means our fetchresult type is simplified)
+- trap vector register (mtvec) is limited to only direct mode, i.e. we don't include "mode" bit and take the address in mtvec as is
+- the mcause register is limited to just contain an exception code, this suffices for our purposes
+- No alignment checks
 
 ## Translation Notes
 Inline function call expressions get translated into
@@ -29,7 +32,7 @@ Inline function call expressions get translated into
 ```
 
 Currently ommitting alignment related checks and exceptions (bitvector support needed for this).
--> OR simply check if address is divisible by 4? (currently added empty alignment check function, "address_aligned")
+-> OR simply check if address is divisible by 4?
 
 Ignoring instructions that rely on bitvector operations (like shift operations), this mostly affects the support for RTYPE- and ITYPE-instructions.
 
