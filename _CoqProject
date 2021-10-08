@@ -6,35 +6,35 @@
 -arg "-w -ssr-search-moved"
 -arg "-native-compiler no"
 -Q case_study/RiscvPmp RiscvPmp
+case_study/RiscvPmp/Contracts.v
+case_study/RiscvPmp/Machine.v
+case_study/RiscvPmp/Model.v
 case_study/RiscvPmp/Types.v
 case_study/RiscvPmp/Values.v
-case_study/RiscvPmp/Machine.v
-case_study/RiscvPmp/Contracts.v
-case_study/RiscvPmp/Model.v
--R src/MicroSail MicroSail
-src/MicroSail.v
-src/MicroSail/Attic/Disjoint.v
-src/MicroSail/Attic/DisjointSound.v
-src/MicroSail/Context.v
-src/MicroSail/Environment.v
-src/MicroSail/Notation.v
-src/MicroSail/Prelude.v
-src/MicroSail/SemiConcrete/Mutator.v
-src/MicroSail/SemiConcrete/Sound.v
-src/MicroSail/Sep/Logic.v
-src/MicroSail/Sep/Hoare.v
-src/MicroSail/Symbolic/Mutator.v
-src/MicroSail/Symbolic/Sound.v
-src/MicroSail/Sep/Spec.v
-src/MicroSail/SmallStep/Inversion.v
-src/MicroSail/SmallStep/Progress.v
-src/MicroSail/SmallStep/Step.v
-src/MicroSail/Staging/CommandStep.v
-src/MicroSail/Syntax.v
-src/MicroSail/Syntax/Types.v
-src/MicroSail/Syntax/Values.v
-src/MicroSail/Tactics.v
-src/MicroSail/Iris/Model.v
+-R theories Katamaran
 test/CapMach.v
 test/Example.v
 test/ISA.v
+theories/Attic/Disjoint.v
+theories/Attic/DisjointSound.v
+theories/Context.v
+theories/Environment.v
+theories/Iris/Model.v
+theories/Katamaran.v
+theories/Notation.v
+theories/Prelude.v
+theories/SemiConcrete/Mutator.v
+theories/SemiConcrete/Sound.v
+theories/Sep/Hoare.v
+theories/Sep/Logic.v
+theories/Sep/Spec.v
+theories/SmallStep/Inversion.v
+theories/SmallStep/Progress.v
+theories/SmallStep/Step.v
+theories/Staging/CommandStep.v
+theories/Symbolic/Mutator.v
+theories/Symbolic/Sound.v
+theories/Syntax.v
+theories/Syntax/Types.v
+theories/Syntax/Values.v
+theories/Tactics.v
