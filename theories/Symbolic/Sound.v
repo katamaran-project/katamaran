@@ -43,16 +43,15 @@ From Coq Require Lists.List.
 From Equations Require Import
      Equations.
 
-From MicroSail Require Import
-     Sep.Spec
-     Sep.Logic
-     Sep.Hoare
-     Syntax
-     Tactics
-     Symbolic.Mutator.
-From MicroSail Require Import
+From Katamaran Require Import
      SemiConcrete.Mutator
-     SemiConcrete.Sound.
+     SemiConcrete.Sound
+     Sep.Hoare
+     Sep.Logic
+     Sep.Spec
+     Symbolic.Mutator
+     Syntax
+     Tactics.
 
 Set Implicit Arguments.
 

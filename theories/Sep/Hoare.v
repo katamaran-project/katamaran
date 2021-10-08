@@ -30,10 +30,11 @@ Require Import Coq.Program.Tactics.
 Require Import Coq.Classes.Morphisms.
 Require Import FunctionalExtensionality.
 
-Require Import MicroSail.Syntax.
-Require Import MicroSail.Environment.
-Require Import MicroSail.Sep.Logic.
-Require Import MicroSail.Sep.Spec.
+From Katamaran Require Import
+     Environment
+     Sep.Logic
+     Sep.Spec
+     Syntax.
 
 Module ProgramLogic
   (Import termkit : TermKit)

@@ -39,7 +39,7 @@ From Coq Require Import
      Program.Tactics
      String.
 
-From MicroSail Require Import
+From Katamaran Require Import
      Notation
      Sep.Logic
      Syntax.

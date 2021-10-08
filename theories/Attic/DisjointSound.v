@@ -31,14 +31,9 @@ Require Import Coq.Program.Equality.
 Require Import FunctionalExtensionality.
 From Equations Require Import Equations.
 
-Require Import MicroSail.Syntax.
-Require Import MicroSail.Tactics.
-Require Import MicroSail.Environment.
-Require Import MicroSail.SmallStep.Inversion.
-Require Import MicroSail.Sep.Logic.
-Require Import MicroSail.Sep.Spec.
-Require Import MicroSail.Sep.Hoare.
-Require Import MicroSail.Attic.Disjoint.
+From Katamaran Require Import
+     Attic.Disjoint Environment Sep.Hoare Sep.Logic Sep.Spec
+     SmallStep.Inversion Syntax Tactics.
 
 Module HoareSound
        (Import termkit : TermKit)

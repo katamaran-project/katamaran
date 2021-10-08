@@ -48,7 +48,7 @@ From Equations Require Import
 Require Equations.Prop.DepElim.
 Require Import Equations.Prop.EqDec.
 
-From MicroSail Require Export
+From Katamaran Require Export
      Context
      Notation
      Syntax.Types

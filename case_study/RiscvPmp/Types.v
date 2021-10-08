@@ -32,7 +32,7 @@ From Equations Require Import
      Equations.
 From stdpp Require
      finite.
-From MicroSail Require Import
+From Katamaran Require Import
      Syntax.Types.
 
 Definition Addr : Set := Z.

@@ -32,7 +32,7 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 Require Import Equations.Prop.EqDec.
-From MicroSail Require Import
+From Katamaran Require Import
      Syntax.
 From RiscvPmp Require Export
      Values.

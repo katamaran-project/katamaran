@@ -26,15 +26,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From MicroSail Require Import
-     Notation
-     Syntax
-     Environment
-     Context
-     SmallStep.Step
-     SmallStep.Inversion
-     .
-
 Require Import Coq.Program.Equality.
 
 From Equations Require Import Equations Signature.
@@ -49,11 +40,19 @@ From iris.base_logic Require Import lib.fancy_updates lib.own lib.gen_heap.
 From iris.program_logic Require Import weakestpre adequacy.
 From iris.proofmode Require Import tactics.
 
-Require Import MicroSail.Sep.Spec.
-Require Import MicroSail.Sep.Hoare.
+From Katamaran Require Import
+     Context
+     Environment
+     Notation
+     Sep.Hoare
+     Sep.Spec
+     SmallStep.Inversion
+     SmallStep.Step
+     Syntax.
+
 (* can't import: overlapping notations *)
-Require MicroSail.Sep.Logic.
-Module logic := MicroSail.Sep.Logic.
+Require Katamaran.Sep.Logic.
+Module logic := Katamaran.Sep.Logic.
 
 Set Implicit Arguments.
 

@@ -30,7 +30,7 @@ From Coq Require Import
      Bool.Bool
      ZArith.ZArith.
 
-From MicroSail Require Export
+From Katamaran Require Export
      Syntax.Types.
 
 Import CtxNotations.

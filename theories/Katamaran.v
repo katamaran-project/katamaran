@@ -26,5 +26,5 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From MicroSail Require Export
+From Katamaran Require Export
      Syntax.

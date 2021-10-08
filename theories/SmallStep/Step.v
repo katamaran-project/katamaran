@@ -32,7 +32,7 @@ From Coq Require Import
      Strings.String.
 From Equations Require Import
      Equations.
-From MicroSail Require Import
+From Katamaran Require Import
      Syntax
      Tactics.
 

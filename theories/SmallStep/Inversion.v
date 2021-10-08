@@ -30,7 +30,7 @@ From Coq Require Import
      Program.Tactics.
 From Equations Require Import
      Equations.
-From MicroSail Require Import
+From Katamaran Require Import
      SmallStep.Step
      Syntax.
 

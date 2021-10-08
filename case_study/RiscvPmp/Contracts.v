@@ -30,7 +30,7 @@ From Coq Require Import
      Strings.String.
 From RiscvPmp Require Import
      Machine.
-From MicroSail Require Import
+From Katamaran Require Import
      Symbolic.Mutator
      Sep.Spec
      Syntax.

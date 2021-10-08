@@ -32,7 +32,8 @@ Require Import Relations.
 Require Import Classes.Equivalence.
 Require Import Classes.Morphisms.
 
-Require Import MicroSail.Syntax.
+From Katamaran Require Import
+     Syntax.
 
 (* Abstract logic interface, implemented as a Coq typeclasses
 

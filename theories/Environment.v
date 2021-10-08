@@ -28,10 +28,8 @@
 
 Require Import Coq.Program.Equality.
 From Equations Require Import Equations.
-Require Import MicroSail.Context.
-Require Import MicroSail.Notation.
-Require Import MicroSail.Tactics.
-
+From Katamaran Require Import
+     Context Notation Tactics.
 Local Set Implicit Arguments.
 
 Import CtxNotations.
@@ -417,8 +415,8 @@ Section WithBinding.
         env_lookup (env_tabulate g) bInΓ = g b bInΓ.
     Proof.
       induction Γ; intros b' bInΓ.
-      - destruct (MicroSail.Context.nilView bInΓ).
-      - destruct (MicroSail.Context.snocView bInΓ).
+      - destruct (Context.nilView bInΓ).
+      - destruct (Context.snocView bInΓ).
         + now cbn.
         + eapply (IHΓ (fun b bInΓ => g b (inctx_succ bInΓ))).
     Qed.

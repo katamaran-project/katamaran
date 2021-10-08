@@ -36,7 +36,7 @@ From stdpp Require
      finite.
 From Equations Require Import
      Equations.
-From MicroSail Require Export
+From Katamaran Require Export
      Context
      Environment
      Prelude

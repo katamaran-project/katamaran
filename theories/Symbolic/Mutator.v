@@ -44,7 +44,7 @@ From Coq Require
      Vector.
 From Equations Require Import Equations.
 
-From MicroSail Require Import
+From Katamaran Require Import
      Sep.Spec
      Syntax.
 

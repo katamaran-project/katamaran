@@ -38,7 +38,7 @@ From Equations Require Import
 
 From stdpp Require Import decidable finite.
 
-From MicroSail Require Import
+From Katamaran Require Import
      Sep.Spec
      Syntax.
 

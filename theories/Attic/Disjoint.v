@@ -33,10 +33,8 @@ Require Import Coq.Program.Tactics.
 From Equations Require Import Equations.
 Require Import Equations.Prop.EqDec.
 
-Require Import MicroSail.Syntax.
-Require Import MicroSail.Environment.
-Require Import MicroSail.Sep.Logic.
-Require Import MicroSail.Sep.Spec.
+From Katamaran Require Import
+     Environment Sep.Logic Sep.Spec Syntax.
 (* Require Import MicroSail.Sep.Hoare. *)
 
 (* Simple model (aka Logic Instance) using disjoint register-heaps *)

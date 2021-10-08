@@ -39,8 +39,8 @@ From Coq Require Import
 From Equations Require Import Equations.
 From stdpp Require
      base.
-Require Import MicroSail.Notation.
-Require Import MicroSail.Prelude.
+From Katamaran Require Import
+     Notation Prelude.
 
 Set Implicit Arguments.
 

@@ -13,7 +13,7 @@ From Equations Require Import
 
 From stdpp Require decidable finite.
 
-From MicroSail Require Import
+From Katamaran Require Import
      Notation
      Sep.Spec
      SmallStep.Step

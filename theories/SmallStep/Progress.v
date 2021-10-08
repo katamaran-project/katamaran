@@ -28,7 +28,7 @@
 
 From Coq Require Import
      Program.Tactics.
-From MicroSail Require Import
+From Katamaran Require Import
      SmallStep.Step
      Syntax.
 

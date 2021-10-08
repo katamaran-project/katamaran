@@ -29,7 +29,7 @@
 From RiscvPmp Require Import
      Machine
      Contracts.
-From MicroSail Require Import
+From Katamaran Require Import
      Environment
      Syntax
      Sep.Logic
@@ -48,8 +48,6 @@ Set Implicit Arguments.
 Module gh := iris.base_logic.lib.gen_heap.
 
 Module RiscvPmpModel.
-  Import MicroSail.Iris.Model.
-
   Module RiscvPmpIrisHeapKit <: IrisHeapKit RiscvPmpTermKit RiscvPmpProgramKit RiscvPmpAssertionKit RiscvPmpSymbolicContractKit.
     Module IrisRegs := IrisRegisters RiscvPmpTermKit RiscvPmpProgramKit RiscvPmpAssertionKit RiscvPmpSymbolicContractKit.
     Export IrisRegs.

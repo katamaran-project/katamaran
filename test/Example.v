@@ -38,7 +38,7 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 
-From MicroSail Require Import
+From Katamaran Require Import
      Symbolic.Mutator
      Sep.Spec
      Syntax.
