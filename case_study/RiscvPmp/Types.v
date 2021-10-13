@@ -45,6 +45,11 @@ Inductive RegIdx : Set :=
 | X2
 .
 
+Inductive Privilege : Set :=
+| User
+| Machine
+.
+
 (* NOTE: PMP CSRs limited to 1 for now *)
 Inductive PmpCfgIdx : Set :=
 | PMP0CFG
@@ -101,6 +106,7 @@ Inductive Retired : Set :=
 
 Inductive Enums : Set :=
 | regidx
+| privilege
 | pmpcfgidx
 | pmpaddridx
 | pmpaddrmatchtype
@@ -123,6 +129,8 @@ Inductive AST : Set :=
 | RISCV_JALR (imm : Z) (rs1 rd : RegIdx)
 | LOAD (imm : Z) (rs1 rd : RegIdx)
 | STORE (imm : Z) (rs2 rs1 : RegIdx)
+| ECALL
+| MRET
 .
 
 Inductive AccessType : Set :=
@@ -136,6 +144,9 @@ Inductive ExceptionType : Set :=
 | E_Fetch_Access_Fault
 | E_Load_Access_Fault
 | E_SAMO_Access_Fault
+| E_U_EnvCall
+| E_M_EnvCall
+| E_Illegal_Instr
 .
 
 Inductive MemoryOpResult : Set :=
@@ -152,6 +163,7 @@ Inductive FetchResult : Set :=
          (other constructors are for mret, sret and uret, not considered atm) *)
 Inductive CtlResult : Set :=
 | CTL_TRAP (e : ExceptionType)
+| CTL_MRET
 .
 
 Inductive ASTConstructor : Set :=
@@ -163,6 +175,8 @@ Inductive ASTConstructor : Set :=
 | KRISCV_JALR
 | KLOAD
 | KSTORE
+| KECALL
+| KMRET
 .
 
 Inductive AccessTypeConstructor : Set :=
@@ -176,6 +190,9 @@ Inductive ExceptionTypeConstructor : Set :=
 | KE_Fetch_Access_Fault
 | KE_Load_Access_Fault
 | KE_SAMO_Access_Fault
+| KE_U_EnvCall
+| KE_M_EnvCall
+| KE_Illegal_Instr
 .
 
 Inductive MemoryOpResultConstructor : Set :=
@@ -190,6 +207,7 @@ Inductive FetchResultConstructor : Set :=
 
 Inductive CtlResultConstructor : Set :=
 | KCTL_TRAP
+| KCTL_MRET
 .
 
 Inductive Unions : Set :=
@@ -201,6 +219,7 @@ Inductive Unions : Set :=
 | ctl_result
 .
 
+(* Records *)
 Record Pmpcfg_ent : Set :=
   MkPmpcfg_ent
     { L : bool;
@@ -210,8 +229,14 @@ Record Pmpcfg_ent : Set :=
       R : bool;
       }.
 
+Record Mstatus : Set :=
+  MkMstatus
+    { MPP : Privilege
+    }.
+
 Inductive Records : Set :=
-| pmpcfg_ent
+| rpmpcfg_ent
+| rmstatus
 .
 
 Section TransparentObligations.
@@ -219,6 +244,7 @@ Section TransparentObligations.
 
   Derive NoConfusion for Enums.
   Derive NoConfusion for RegIdx.
+  Derive NoConfusion for Privilege.
   Derive NoConfusion for PmpCfgIdx.
   Derive NoConfusion for PmpAddrIdx.
   Derive NoConfusion for PmpAddrMatchType.
@@ -244,10 +270,12 @@ Section TransparentObligations.
   Derive NoConfusion for CtlResultConstructor.
   Derive NoConfusion for Records.
   Derive NoConfusion for Pmpcfg_ent.
+  Derive NoConfusion for Mstatus.
 End TransparentObligations.
 
 Derive EqDec for Enums.
 Derive EqDec for RegIdx.
+Derive EqDec for Privilege.
 Derive EqDec for PmpCfgIdx.
 Derive EqDec for PmpAddrIdx.
 Derive EqDec for PmpAddrMatchType.
@@ -273,12 +301,22 @@ Derive EqDec for CtlResult.
 Derive EqDec for CtlResultConstructor.
 Derive EqDec for Records.
 Derive EqDec for Pmpcfg_ent.
+Derive EqDec for Mstatus.
 
 Section Finite.
   Import stdpp.finite.
 
   Global Program Instance RegIdx_finite : Finite RegIdx :=
     {| enum := [X0;X1;X2] |}.
+  Next Obligation.
+    now apply nodup_fixed.
+  Qed.
+  Next Obligation.
+    intros []; apply elem_of_list_In; cbn; intuition.
+  Qed.
+
+  Global Program Instance Privilege_finite : Finite Privilege :=
+    {| enum := [User;Machine] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -383,7 +421,7 @@ Section Finite.
 
   Global Program Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE] |}.
+    {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KMRET] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -403,7 +441,7 @@ Section Finite.
 
   Global Program Instance ExceptionTypeConstructor_finite :
     Finite ExceptionTypeConstructor :=
-    {| enum := [KE_Fetch_Access_Fault;KE_Load_Access_Fault;KE_SAMO_Access_Fault] |}.
+    {| enum := [KE_Fetch_Access_Fault;KE_Load_Access_Fault;KE_SAMO_Access_Fault;KE_U_EnvCall;KE_M_EnvCall;KE_Illegal_Instr] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -433,7 +471,7 @@ Section Finite.
 
   Global Program Instance CtlResultConstructor_finite :
     Finite CtlResultConstructor :=
-    {| enum := [KCTL_TRAP] |}.
+    {| enum := [KCTL_TRAP;KCTL_MRET] |}.
   Next Obligation.
     now apply nodup_fixed.
   Qed.
@@ -451,6 +489,7 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑬𝑲 (e : 𝑬) : Set :=
     match e with
     | regidx           => RegIdx
+    | privilege        => Privilege
     | pmpcfgidx        => PmpCfgIdx
     | pmpaddridx       => PmpAddrIdx
     | pmpaddrmatchtype => PmpAddrMatchType
@@ -501,7 +540,8 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑹_eq_dec := Records_eqdec.
   Definition 𝑹𝑻 (R : 𝑹) : Set :=
     match R with
-    | pmpcfg_ent => Pmpcfg_ent
+    | rpmpcfg_ent => Pmpcfg_ent
+    | rmstatus    => Mstatus
     end.
   Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
     ltac:(destruct R; auto with typeclass_instances).

@@ -48,6 +48,7 @@ Module RiscvPmpValueKit <: ValueKit.
 
   Notation ty_word             := (ty_int).
   Notation ty_regidx           := (ty_enum regidx).
+  Notation ty_privilege        := (ty_enum privilege).
   Notation ty_pmpcfgidx        := (ty_enum pmpcfgidx).
   Notation ty_pmpaddridx       := (ty_enum pmpaddridx).
   Notation ty_pmpaddrmatchtype := (ty_enum pmpaddrmatchtype).
@@ -67,7 +68,8 @@ Module RiscvPmpValueKit <: ValueKit.
   Notation ty_memory_op_result := (ty_union memory_op_result).
   Notation ty_fetch_result     := (ty_union fetch_result).
   Notation ty_ctl_result       := (ty_union ctl_result).
-  Notation ty_pmpcfg_ent       := (ty_record pmpcfg_ent).
+  Notation ty_pmpcfg_ent       := (ty_record rpmpcfg_ent).
+  Notation ty_mstatus          := (ty_record rmstatus).
 
   (** Unions **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -82,6 +84,8 @@ Module RiscvPmpValueKit <: ValueKit.
                             | KRISCV_JALR => ty_tuple [ty_int, ty_regidx, ty_regidx]
                             | KLOAD       => ty_tuple [ty_int, ty_regidx, ty_regidx]
                             | KSTORE      => ty_tuple [ty_int, ty_regidx, ty_regidx]
+                            | KECALL      => ty_unit
+                            | KMRET       => ty_unit
                             end
     | access_type      => fun _ => ty_unit
     | exception_type   => fun _ => ty_unit
@@ -95,7 +99,11 @@ Module RiscvPmpValueKit <: ValueKit.
                             | KF_Base  => ty_word
                             | KF_Error => ty_prod ty_exception_type ty_word
                             end
-    | ctl_result       => fun _ => ty_exception_type
+    | ctl_result       => fun K =>
+                            match K with
+                            | KCTL_TRAP => ty_exception_type
+                            | KCTL_MRET => ty_unit
+                            end
     end.
 
   Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
@@ -110,6 +118,8 @@ Module RiscvPmpValueKit <: ValueKit.
                             | RISCV_JALR imm rs1 rd => existT KRISCV_JALR (tt , imm , rs1 , rd)
                             | LOAD imm rs1 rd       => existT KLOAD (tt , imm , rs1 , rd)
                             | STORE imm rs2 rs1     => existT KSTORE (tt , imm , rs2 , rs1)
+                            | ECALL                 => existT KECALL tt
+                            | MRET                  => existT KMRET tt
                             end
     | access_type      => fun Kv =>
                             match Kv with
@@ -123,6 +133,9 @@ Module RiscvPmpValueKit <: ValueKit.
                             | E_Fetch_Access_Fault => existT KE_Fetch_Access_Fault tt
                             | E_Load_Access_Fault  => existT KE_Load_Access_Fault tt
                             | E_SAMO_Access_Fault  => existT KE_SAMO_Access_Fault tt
+                            | E_U_EnvCall          => existT KE_U_EnvCall tt
+                            | E_M_EnvCall          => existT KE_M_EnvCall tt
+                            | E_Illegal_Instr      => existT KE_Illegal_Instr tt
                             end
     | memory_op_result => fun Kv =>
                             match Kv with
@@ -137,6 +150,7 @@ Module RiscvPmpValueKit <: ValueKit.
     | ctl_result       => fun Kv =>
                             match Kv with
                             | CTL_TRAP e => existT KCTL_TRAP e
+                            | CTL_MRET   => existT KCTL_MRET tt
                             end
     end.
 
@@ -152,6 +166,8 @@ Module RiscvPmpValueKit <: ValueKit.
                             | existT KRISCV_JALR (tt , imm , rs1 , rd)  => RISCV_JALR imm rs1 rd
                             | existT KLOAD (tt , imm , rs1 , rd)        => LOAD imm rs1 rd
                             | existT KSTORE (tt , imm , rs2 , rs1)      => STORE imm rs2 rs1
+                            | existT KECALL tt                          => ECALL
+                            | existT KMRET tt                           => MRET
                             end
     | access_type      => fun Kv =>
                             match Kv with
@@ -165,6 +181,9 @@ Module RiscvPmpValueKit <: ValueKit.
                             | existT KE_Fetch_Access_Fault tt => E_Fetch_Access_Fault
                             | existT KE_Load_Access_Fault tt  => E_Load_Access_Fault
                             | existT KE_SAMO_Access_Fault tt  => E_SAMO_Access_Fault
+                            | existT KE_U_EnvCall tt          => E_U_EnvCall
+                            | existT KE_M_EnvCall tt          => E_M_EnvCall
+                            | existT KE_Illegal_Instr tt      => E_Illegal_Instr
                             end
     | memory_op_result => fun Kv =>
                             match Kv with
@@ -178,7 +197,8 @@ Module RiscvPmpValueKit <: ValueKit.
                             end
     | ctl_result       => fun Kv =>
                             match Kv with
-                            | existT KCTL_TRAP e => CTL_TRAP e
+                            | existT KCTL_TRAP e  => CTL_TRAP e
+                            | existT KCTL_MRET tt => CTL_MRET
                             end
     end.
 
@@ -200,17 +220,19 @@ Module RiscvPmpValueKit <: ValueKit.
 
   Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty :=
     match R with
-    | pmpcfg_ent => [ "L" :: ty_bool,
+    | rpmpcfg_ent => [ "L" :: ty_bool,
                       "A" :: ty_pmpaddrmatchtype,
                       "X" :: ty_bool,
                       "W" :: ty_bool,
                       "R" :: ty_bool
                     ]
+    | rmstatus    => ["MPP" :: ty_privilege
+                    ]
     end.
 
   Definition 𝑹_fold (R : 𝑹) : NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R :=
     match R with
-    | pmpcfg_ent =>
+    | rpmpcfg_ent =>
       fun fields =>
         MkPmpcfg_ent
           (fields ‼ "L")
@@ -218,11 +240,15 @@ Module RiscvPmpValueKit <: ValueKit.
           (fields ‼ "X")
           (fields ‼ "W")
           (fields ‼ "R")
+    | rmstatus =>
+      fun fields =>
+        MkMstatus
+          (fields ‼ "MPP")
     end%exp.
 
   Definition 𝑹_unfold (Rec : 𝑹) : 𝑹𝑻 Rec -> NamedEnv Lit (𝑹𝑭_Ty Rec) :=
     match Rec with
-    | pmpcfg_ent =>
+    | rpmpcfg_ent =>
       fun p =>
         env_nil
           ► ("L" :: ty_bool             ↦ L p)
@@ -230,6 +256,10 @@ Module RiscvPmpValueKit <: ValueKit.
           ► ("X" :: ty_bool             ↦ X p)
           ► ("W" :: ty_bool             ↦ W p)
           ► ("R" :: ty_bool             ↦ R p)
+    | rmstatus    =>
+      fun m =>
+        env_nil
+          ► ("MPP" :: ty_privilege ↦ MPP m)
     end%env.
 
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),

@@ -10,7 +10,7 @@ Remarks/Comments/Info:
 - keep AccessType simple (i.e. no type parameter for extensions, this is ignored in the PMP related code anyway), but still represent it as a *union* (note that we could opt to represent this as an enum, but this way is more faithful to the (simplified) Sail model)
 - MemoryOpResult is simplified and MemValue can only be a Word (no type param in definition of MemoryOpResult, this complicates EqDec...)
 - Store instructions involve a function mem_write that returns a MemoryOpResult with a boolean value to indicate failure, to keep things simple (point above), I model this as a ty_word where 0 = false and 1 = true
-- the model currently only supports M-mode, so any checks/pattern matches that depend on privileges are simplified to only consider the M-mode case
+- the model does not support S-mode, so any checks/pattern matches that depend on M-mode and S-mode privileges are simplified to only consider the M-mode case
 - some auxiliary functions that convert bits to enums are dropped, the model uses the enum immediately (example: pmpAddrRange calls a function pmpAddrMatchType_of_bits that converts a bitvector into the corresponding enum value of PmpAddrMatchType)
 - note that the main loop (function "loop") just calls the step function, this is a lot simpler than the one in the actual sail model, which is complicated with tracing, interrupts, ...
 - step function shortened, dropped extension related code, also not doing anything with the "retire" result of an execution (has to do with "minstret", doesn't seem relevant for our case study at this point)
@@ -19,6 +19,9 @@ Remarks/Comments/Info:
 - trap vector register (mtvec) is limited to only direct mode, i.e. we don't include "mode" bit and take the address in mtvec as is
 - the mcause register is limited to just contain an exception code, this suffices for our purposes
 - No alignment checks
+- exception_delegatee is simplified, note that we can never transition to a less-privileged mode, resulting in this function always returning M-mode (we only have M-mode and U-mode support)
+- mem related function are simplified and some auxiliary functions are inlined (see riscv_mem.sail, example: mem_write_value calls mem_write_value_meta, which is inlined in our model)
+- mstatus is limited to those fields we require. The fields themselves are also *NOT* bits but rather the corresponding non-bit representation (for example: MPP is normally a 2-bit field of mstatus but in our model is a field that will contain Privilege enum value), this means that we don't need the conversion functions from/to bits
 
 ## Translation Notes
 Inline function call expressions get translated into
