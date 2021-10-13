@@ -16,3 +16,4 @@ Makefile.coq.conf
 .lia.cache
 .nia.cache
 .coq-native/
+_build/
