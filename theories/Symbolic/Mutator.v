@@ -3419,13 +3419,13 @@ Module Mutators
       Equations(noeqns) match_chunk {w : World} (c1 c2 : Chunk w) : List Formula w :=
         match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2)
         with eq_dec p1 p2 => {
-          match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) (left eq_refl) := formula_eqs_ctx vs1 vs2;
+          match_chunk (chunk_user p1 vs1) (chunk_user ?(p1) vs2) (left eq_refl) := formula_eqs_ctx vs1 vs2;
           match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) (right _) :=
             cons (formula_bool (term_lit ty_bool false)) nil
         };
         match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
         with eq_dec_het r1 r2 => {
-          match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg r2 v2) (left eq_refl) := cons (formula_eq v1 v2) nil;
+          match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg ?(r1) v2) (left eq_refl) := cons (formula_eq v1 v2) nil;
           match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg r2 v2) (right _)      :=
             cons (formula_bool (term_lit ty_bool false)) nil
         };

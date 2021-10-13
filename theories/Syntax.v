@@ -834,7 +834,7 @@ Module Terms (Export termkit : TermKit).
       Term_eqb (term_lit _ l1) (term_lit _ l2) := Lit_eqb _ l1 l2;
       Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
         with binop_eqdep_dec op1 op2 => {
-        Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (left opeq_refl) :=
+        Term_eqb (term_binop op1 x1 y1) (term_binop ?(op1) x2 y2) (left opeq_refl) :=
           Term_eqb x1 x2 && Term_eqb y1 y2;
         Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (right _) := false
       };
@@ -850,7 +850,7 @@ Module Terms (Export termkit : TermKit).
         };
       Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
         with 𝑼𝑲_eq_dec k1 k2 => {
-        Term_eqb (term_union k1 e1) (term_union k2 e2) (left eq_refl) :=
+        Term_eqb (term_union k1 e1) (term_union ?(k1) e2) (left eq_refl) :=
           Term_eqb e1 e2;
         Term_eqb _ _ (right _) := false
       };
@@ -2264,12 +2264,12 @@ Module Terms (Export termkit : TermKit).
       Equations(noeqns) match_env' {σs} (te : Env (Term Σe) σs) (tr : Env (Term Σr) σs) :
         EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
         match_env' env_nil env_nil := Some;
-        match_env' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_env' E1 E2 >=> match_term t1 t2.
+        match_env' (env_snoc E1 ?(b2) t1) (env_snoc E2 b2 t2) := match_env' E1 E2 >=> match_term t1 t2.
 
       Equations(noeqns) match_nenv' {N : Set} {Δ : NCtx N Ty} (te : NamedEnv (Term Σe) Δ) (tr : NamedEnv (Term Σr) Δ) :
         EvarEnv Σe Σr -> option (EvarEnv Σe Σr) :=
         match_nenv' env_nil env_nil := Some;
-        match_nenv' (env_snoc E1 b1 t1) (env_snoc E2 b2 t2) := match_nenv' E1 E2 >=> match_term t1 t2.
+        match_nenv' (env_snoc E1 ?(b2) t1) (env_snoc E2 b2 t2) := match_nenv' E1 E2 >=> match_term t1 t2.
 
     End WithMatchTerm.
 
