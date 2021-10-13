@@ -2,3 +2,4 @@
 .circleci      export-ignore
 .dockerignore  export-ignore
 .dir-locals.el export-ignore
+*.opam         export-ignore
