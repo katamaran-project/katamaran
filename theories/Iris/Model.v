@@ -150,16 +150,8 @@ Module ValsAndTerms
     Derive NoConfusion for excl.
   End TransparentObligations.
 
-  Instance eqDec_SomeReg : EqDec SomeReg.
-  Proof.
-    intros [? r1] [? r2].
-    destruct (eq_dec_het r1 r2).
-    - left. now dependent elimination e.
-    - right. intros e; now dependent elimination e.
-  Defined.
-
-  Instance countable_SomeReg : Countable SomeReg.
-  Admitted.
+  Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
+  Instance countable_SomeReg : Countable SomeReg := finite.finite_countable.
 
   Instance eqDec_SomeLit : EqDecision SomeLit.
   Proof.
