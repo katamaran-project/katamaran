@@ -904,17 +904,6 @@ Module Terms (Export termkit : TermKit).
           microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
         + microsail_solve_eqb_spec.
-      (* - destruct (𝑹_eq_dec R R1); cbn. *)
-      (*   + destruct e. specialize (IHt1 e5). apply reflect_iff in IHt1. *)
-      (*     assert (EqDec_𝑹𝑭 : EqDec 𝑹𝑭) by admit. *)
-      (*     destruct (InCtx_eqb_spec rfInR rfInR0); cbn. *)
-      (*     * apply iff_reflect. rewrite <- IHt1. *)
-      (*       split. *)
-      (*       intros e2. now dependent elimination e2. *)
-      (*       intros e2. subst. now dependent elimination e. *)
-      (*     * constructor. intros e. apply n. *)
-      (*       now dependent elimination e. *)
-          (*   + constructor. congruence. *)
     Qed.
 
   End SymbolicTerms.

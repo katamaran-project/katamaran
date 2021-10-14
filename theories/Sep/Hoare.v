@@ -45,51 +45,6 @@ Module ProgramLogic
   Import CtxNotations.
   Import EnvNotations.
 
-  (* (* Some simple instance that make writing program logic rules more natural by *)
-  (*  avoiding the need to mention the local variable store δ in the pre and post *)
-  (*  conditions that don't affect it *) *)
-  (* Section WithΓ. *)
-  (*   Context (Γ : PCtx). *)
-
-  (*   Instance δ_ILogic (L : Type) (LL : ILogic L) : ILogic (CStore Γ -> L) := *)
-  (*     { lentails P Q := (forall δ, lentails (P δ ) (Q δ)); *)
-  (*       ltrue := (fun _ => ltrue); *)
-  (*       lfalse := (fun _ => lfalse); *)
-  (*       land P Q := (fun δ => (land (P δ) (Q δ))); *)
-  (*       lor P Q := (fun δ => (lor (P δ) (Q δ))); *)
-  (*       limpl P Q := (fun δ => (limpl (P δ) (Q δ))); *)
-  (*       lprop P := fun _ => lprop P; *)
-  (*       lex {T} (F : T -> CStore Γ -> L) := fun δ => lex (fun t => F t δ); *)
-  (*       lall {T} (F : T -> CStore Γ -> L) := fun δ => lall (fun t => F t δ) *)
-  (*     }. *)
-
-  (*   Program Instance δ_ILogicLaws (L : Type) (LL : ILogic L) (LLL : ILogicLaws L LL) : *)
-  (*     ILogicLaws (CStore Γ -> L) (δ_ILogic L LL). *)
-  (*   (* (* Solve the obligations with firstorder take a lot of time. *) *) *)
-  (*   (* Solve Obligations with firstorder. *) *)
-  (*   Admit Obligations. *)
-
-  (*   Instance δ_ISepLogic (L : Type) (SL : ISepLogic L) : ISepLogic (CStore Γ -> L) := *)
-  (*     { emp := fun _ => emp; *)
-  (*       sepcon P Q := fun δ => sepcon (P δ) (Q δ); *)
-  (*       wand P Q := fun δ => wand (P δ) (Q δ) *)
-  (*     }. *)
-
-  (*   Program Instance δ_ISepLogicLaws (L : Type) (LL : ISepLogic L) (LLL : ISepLogicLaws L) : *)
-  (*     ISepLogicLaws (CStore Γ -> L). *)
-  (*   Admit Obligations. *)
-
-  (*   Program Instance δ_IHeaplet (L : Type) (SL : IHeaplet L) : *)
-  (*     IHeaplet (CStore Γ -> L) := *)
-  (*     { pred p ts := fun δ => pred p ts; *)
-  (*       ptsreg σ r v := fun δ => ptsreg r v *)
-  (*     }. *)
-
-  (* End WithΓ. *)
-
-  (* Existing Instance δ_IHeaplet. *)
-
-
   Open Scope logic.
   Import LogicNotations.
 
@@ -142,11 +97,6 @@ Module ProgramLogic
         (s : Stm Γ τ) {A : Type} {P : A -> L} {Q : Lit τ -> CStore Γ -> L} :
         (forall x, δ ⊢ ⦃ P x ⦄ s ⦃ Q ⦄) ->
         δ ⊢ ⦃ ∃ x, P x ⦄ s ⦃ Q ⦄
-    (* | rule_forall *)
-    (*     {s : Stm Γ τ} {A : Type} {P : L} *)
-    (*     {Q : A -> Lit τ -> CStore Γ -> L} *)
-    (*     (hyp : forall x, δ ⊢ ⦃ P ⦄ s ⦃ Q x ⦄) (x : A) : *)
-    (*     δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => ∀ x, Q x v δ' ⦄ *)
     | rule_stm_lit
         {l : Lit τ} {P : L} {Q : Lit τ -> CStore Γ -> L} :
         P ⊢ Q l δ ->

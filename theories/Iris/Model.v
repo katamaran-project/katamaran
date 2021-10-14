@@ -612,15 +612,6 @@ Module IrisSoundness
     by iApply "trips".
   Qed.
 
-  (* (* following rule is dubious, re discussion about conjunction rule *) *)
-  (* Lemma iris_rule_forall {σ Γ} (δ : CStore Γ) *)
-  (*       {s : Stm Γ σ} {A : Type} {P : iProp Σ} *)
-  (*       {Q : A -> Lit σ -> CStore Γ -> iProp Σ} *)
-  (*       (x : A) : *)
-  (*   ⊢ ((∀ x, semTriple δ P s (Q x)) -∗ semTriple δ P s (fun v δ' => ∀ x, Q x v δ'))%I. *)
-  (* Proof. *)
-  (* Admitted. *)
-
   Lemma iris_rule_stm_lit {Γ} (δ : CStore Γ)
         {τ : Ty} {l : Lit τ}
         {P : iProp Σ} {Q : Lit τ -> CStore Γ -> iProp Σ} :

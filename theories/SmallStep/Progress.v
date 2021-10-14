@@ -43,14 +43,6 @@ Module Progress
     exists (δ1 : CStore Γ) (δ2 : CStore Δ), δ = env_cat δ1 δ2.
   Proof. pose (env_cat_split δ); eauto. Qed.
 
-  (* Lemma can_form_store_snoc (Γ : PCtx) (x : 𝑿) (σ : Ty) (δ : CStore (Γ ▻ (x , σ))) : *)
-  (*   exists (δ' : CStore Γ) (v : Lit σ), δ = env_snoc δ' x σ v. *)
-  (* Admitted. *)
-
-  (* Lemma can_form_store_nil (δ : CStore ε) : *)
-  (*   δ = env_nil. *)
-  (* Admitted. *)
-
   Local Ltac progress_can_form :=
     match goal with
     (* | [ H: CStore (ctx_snoc _ _) |- _ ] => pose proof (can_form_store_snoc H) *)
