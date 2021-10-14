@@ -9,27 +9,11 @@ stages:
   cache:
     key: "$CI_JOB_NAME"
     paths:
+      - "**/*.glob"
+      - "**/*.vo*"
+      - "**/.*.aux"
       - ".*.cache"
-
-      - "src/*.glob"
-      - "src/*.vo*"
-      - "src/.*.aux"
-
-      - "src/*/*.glob"
-      - "src/*/*.vo*"
-      - "src/*/.*.aux"
-
-      - "src/*/*/*.glob"
-      - "src/*/*/*.vo*"
-      - "src/*/*/.*.aux"
-
-      - "src/*/*/*/*.glob"
-      - "src/*/*/*/*.vo*"
-      - "src/*/*/*/.*.aux"
-
-      - "test/*.glob"
-      - "test/*.vo*"
-      - "test/.*.aux"
+      - "_build"
 
 coq-8.12: {<<: *build, image: "skeuchel/coq:8.12"}
 coq-8.13: {<<: *build, image: "skeuchel/coq:8.13"}
