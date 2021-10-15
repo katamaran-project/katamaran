@@ -5,18 +5,7 @@
 -arg "-w -omega-is-deprecated"
 -arg "-w -ssr-search-moved"
 -arg "-native-compiler no"
--Q case_study/RiscvPmp RiscvPmp
-case_study/RiscvPmp/Contracts.v
-case_study/RiscvPmp/Machine.v
-case_study/RiscvPmp/Model.v
-case_study/RiscvPmp/Types.v
-case_study/RiscvPmp/Values.v
 -R theories Katamaran
-test/CapMach.v
-test/Example.v
-test/ISA.v
-theories/Attic/Disjoint.v
-theories/Attic/DisjointSound.v
 theories/Context.v
 theories/Environment.v
 theories/Iris/Model.v
