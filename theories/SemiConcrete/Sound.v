@@ -697,6 +697,7 @@ Module Soundness
       unfold inst_contract_localstore.
       unfold exec_contract, bind_right, bind.
       destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
+      rewrite Forall_forall in HYP.
       - specialize (HYP ι). remember (inst δΣ ι) as δ.
         eapply rule_consequence_left.
         apply rule_wp.

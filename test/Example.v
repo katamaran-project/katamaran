@@ -39,11 +39,13 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     SemiConcrete.Mutator
      Symbolic.Mutator
      Sep.Spec
      Syntax.
 
 From stdpp Require decidable finite.
+From iris_string_ident Require Import ltac2_string_ident.
 
 Set Implicit Arguments.
 Import CtxNotations.
@@ -236,6 +238,7 @@ Module ExampleTermKit <: TermKit.
   | gcdloop :    Fun [ "x" :: ty_int, "y" :: ty_int ] ty_int
   | msum :       Fun [ "x" :: ty_union either, "y" :: ty_union either] (ty_union either)
   | length {σ} : Fun [ "xs" :: ty_list σ           ] ty_int
+  | summaxlen :  Fun [ "xs" :: ty_list ty_int      ] (ty_prod (ty_prod ty_int ty_int) ty_int)
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -289,6 +292,21 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
         | Right => MkAlt (pat_var "z") y
         end).
 
+  Definition fun_summaxlen : Stm ["xs" :: ty_list ty_int] (ty_prod (ty_prod ty_int ty_int) ty_int) :=
+    stm_match_list
+      (exp_var "xs")
+      (stm_lit (ty_prod (ty_prod ty_int ty_int) ty_int) (0,0,0))
+      "y" "ys"
+      (let: "sml" := call summaxlen (exp_var "ys") in
+       match: exp_var "sml" in (ty_prod ty_int ty_int , ty_int) with
+       | ("sm","l") =>
+         match: exp_var "sm" in (ty_int,ty_int) with
+         | ("s","m") =>
+           let: "m'" := if: exp_var "m" < y then y else exp_var "m" in
+           exp_binop binop_pair (exp_binop binop_pair (exp_var "s" + y) (exp_var "m'")) (exp_var "l" + lit_int 1)
+         end
+       end).
+
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     Eval compute in
     match f in Fun Δ τ return Stm Δ τ with
@@ -312,6 +330,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
                   (exp_var "xs")
                   (stm_lit ty_int 0)
                   "y" "ys" (let: "n" := call length (exp_var "ys") in lit_int 1 + exp_var "n")
+    | summaxlen => fun_summaxlen
     end.
 
   Definition RegStore := GenericRegStore.
@@ -424,15 +443,31 @@ Module SepContracts.
              (fun xs result => result = Z.of_nat (Datatypes.length xs))
       |}.
 
+    Definition sep_contract_summaxlen : SepContract [ "xs" :: ty_list ty_int ] (ty_prod (ty_prod ty_int ty_int) ty_int) :=
+      {| sep_contract_logic_variables := ["xs" :: ty_list ty_int ];
+         sep_contract_localstore      := [term_var "xs"]%arg;
+         sep_contract_precondition    := asn_true;
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           asn_match_prod
+             (term_var "result") "sm" "l"
+             (asn_match_prod
+                (term_var "sm") "s" "m"
+                (asn_sep
+                   (asn_formula (formula_le (term_var "s") (term_binop binop_times (term_var "m") (term_var "l"))))
+                   (asn_formula (formula_le (term_lit ty_int 0) (term_var "l")))));
+      |}.
+
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
-        | abs     => Some sep_contract_abs
-        | cmp     => Some sep_contract_cmp
-        | gcd     => Some sep_contract_gcd
-        | gcdloop => Some sep_contract_gcdloop
-        | msum    => None
-        | length  => Some sep_contract_length
+        | abs       => Some sep_contract_abs
+        | cmp       => Some sep_contract_cmp
+        | gcd       => Some sep_contract_gcd
+        | gcdloop   => Some sep_contract_gcdloop
+        | msum      => None
+        | length    => Some sep_contract_length
+        | summaxlen => Some sep_contract_summaxlen
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
@@ -444,25 +479,53 @@ Module SepContracts.
         match l with end.
 
   End ExampleSymbolicContractKit.
+  Import ExampleSymbolicContractKit.
 
-  Module ExampleMutators :=
+  Module ExampleCMutators :=
+    SemiConcrete
+      ExampleTermKit
+      ExampleProgramKit
+      ExampleAssertionKit
+      ExampleSymbolicContractKit.
+  Import ExampleCMutators.
+
+  Module ExampleSMutators :=
     Mutators
       ExampleTermKit
       ExampleProgramKit
       ExampleAssertionKit
       ExampleSymbolicContractKit.
-  Import ExampleMutators.
-  Import SMut.
+  Import ExampleSMutators.
+
+  Ltac destruct_syminstance ι :=
+    repeat
+      match type of ι with
+      | Env _ (ctx_snoc _ (?s, _)) =>
+        let id := string_to_ident s in
+        let fr := fresh id in
+        destruct (snocView ι) as [ι fr];
+        destruct_syminstance ι
+      | Env _ ctx_nil => destruct (nilView ι)
+      | _ => idtac
+      end.
 
   Local Ltac solve :=
     repeat
-      (repeat intro;
-       repeat
+      (compute
+       - [Pos.of_succ_nat List.length Pos.succ Lit
+          Z.add Z.compare Z.eqb Z.ge Z.geb Z.gt Z.gtb Z.le Z.leb Z.lt
+          Z.ltb Z.mul Z.of_nat Z.opp Z.pos_sub Z.succ is_true negb
+         ] in *;
+        repeat
          match goal with
          | H: NamedEnv _ _ |- _ => unfold NamedEnv in H
-         | H: Env _ ctx_nil |- _ => dependent destruction H
-         | H: Env _ (ctx_snoc _ _) |- _ => dependent destruction H
+         | ι : Env _ (ctx_snoc _ _) |- _ => destruct_syminstance ι
+         | ι : Env _ ctx_nil        |- _ => destruct_syminstance ι
          | H: _ /\ _ |- _ => destruct H
+         | H: Z.ltb _ _ = true |- _ => apply Z.ltb_lt in H
+         | H : pair _ _ = pair _ _ |- _ => inversion H; subst; clear H
+         | |- forall _, _ => intro
+         | |- exists _, _ => eexists
          | |- Debug _ _ => constructor
          | |- _ /\ _ => constructor
          | |- VerificationCondition _ => constructor; cbn
@@ -470,21 +533,45 @@ Module SepContracts.
          | |- _ \/ False => left
          | |- False \/ _ => right
          end;
-       compute
-       - [Pos.of_succ_nat List.length Pos.succ Z.pos_sub Z.succ Z.of_nat Z.add
-          Z.gtb Z.eqb Z.ltb Lit
-         ] in *;
        cbn [List.length];
        subst; try congruence;
        auto
       ).
 
-  Lemma valid_contract_length {σ} : ValidContract (@sep_contract_length σ) (Pi length).
+  Lemma valid_contract_length {σ} : SMut.ValidContract (@sep_contract_length σ) (Pi length).
   Proof. solve; lia. Qed.
   Hint Resolve valid_contract_length : contracts.
 
-  Lemma valid_contract_cmp : ValidContract sep_contract_cmp (Pi cmp).
+  Lemma valid_contract_cmp : SMut.ValidContract sep_contract_cmp (Pi cmp).
   Proof. solve. Qed.
   Hint Resolve valid_contract_cmp : contracts.
+
+  Notation "( x , y )" := (pair x y).
+
+  Lemma valid_cmut_contract_summaxlen : CMut.ValidContract sep_contract_summaxlen fun_summaxlen.
+  Proof.
+    cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
+    intros xs; revert xs.
+    solve; nia.
+  Time Qed.
+  Hint Resolve valid_cmut_contract_summaxlen : contracts.
+
+  Arguments SPath.assertk {Σ}%ctx_scope _ {_} _.
+
+  Lemma valid_contract_summaxlen : SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
+  Proof.
+    compute. constructor.
+    cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
+    repeat setoid_rewrite SPath.obligation_equiv.
+    cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
+    change
+      (forall (y : Z) (ys : list Z),
+        forall (l s m : Z),
+          s <= m * l -> 0 <= l ->
+          (m < y -> s + y <= y * (l + 1) /\ 0 <= l + 1 /\ True) /\
+          (m >= y -> s + y <= m * (l + 1) /\ 0 <= l + 1 /\ True)).
+    solve; nia.
+  Qed.
+  Hint Resolve valid_contract_summaxlen : contracts.
 
 End SepContracts.

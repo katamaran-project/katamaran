@@ -708,6 +708,7 @@ Module Soundness
       apply approx_assert_formula; eauto.
       apply approx_bind_right; eauto.
       apply approx_assert_formula; eauto.
+      cbn. unfold is_true. now rewrite negb_true_iff.
     Qed.
 
     Lemma approx_angelic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2}
@@ -755,6 +756,7 @@ Module Soundness
       apply approx_assume_formula; eauto.
       apply approx_bind_right; eauto.
       apply approx_assume_formula; eauto.
+      cbn. unfold is_true. now rewrite negb_true_iff.
     Qed.
 
     Lemma approx_demonic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2} {w : World}
@@ -2014,8 +2016,13 @@ Module Soundness
     SMut.ValidContract c body ->
     CMut.ValidContract c body.
   Proof.
-    unfold SMut.ValidContract, CMut.ValidContract. intros [Hwp] ι.
+    unfold SMut.ValidContract, CMut.ValidContract, ForallNamed.
+    rewrite Forall_forall. intros [Hwp] ι.
     unfold SMut.exec_contract_path in Hwp.
+    rewrite prune_sound in Hwp.
+    rewrite Experimental.solve_uvars_sound in Hwp.
+    specialize (Hwp env_nil).
+    inster Hwp by reflexivity.
     rewrite prune_sound in Hwp.
     rewrite Experimental.solve_evars_sound in Hwp.
     destruct Hwp as [ιe [Hwp _]].

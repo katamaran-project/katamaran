@@ -115,6 +115,7 @@ Module Terms (Export termkit : TermKit).
     | binop_eq                : BinOp ty_int ty_int ty_bool
     | binop_le                : BinOp ty_int ty_int ty_bool
     | binop_lt                : BinOp ty_int ty_int ty_bool
+    | binop_ge                : BinOp ty_int ty_int ty_bool
     | binop_gt                : BinOp ty_int ty_int ty_bool
     | binop_and               : BinOp ty_bool ty_bool ty_bool
     | binop_or                : BinOp ty_bool ty_bool ty_bool
@@ -153,6 +154,7 @@ Module Terms (Export termkit : TermKit).
       | binop_eq    , binop_eq     => left eq_refl
       | binop_le    , binop_le     => left eq_refl
       | binop_lt    , binop_lt     => left eq_refl
+      | binop_ge    , binop_ge     => left eq_refl
       | binop_gt    , binop_gt     => left eq_refl
       | binop_and   , binop_and    => left eq_refl
       | binop_or    , binop_or     => left eq_refl
@@ -324,6 +326,7 @@ Module Terms (Export termkit : TermKit).
       | binop_eq        => Z.eqb
       | binop_le        => Z.leb
       | binop_lt        => Z.ltb
+      | binop_ge        => Z.geb
       | binop_gt        => Z.gtb
       | binop_and       => andb
       | binop_or        => fun v1 v2 => orb v1 v2
@@ -744,8 +747,8 @@ Module Terms (Export termkit : TermKit).
       | term_binop op e1 e2  => eval_binop op (inst_term e1 ι) (inst_term e2 ι)
       | term_neg e           => Z.opp (inst_term e ι)
       | term_not e           => negb (inst_term e ι)
-      | term_inl e           => inl (inst_term e ι)
-      | term_inr e           => inr (inst_term e ι)
+      | term_inl e           => @inl (Lit _) (Lit _) (inst_term e ι)
+      | term_inr e           => @inr (Lit _) (Lit _) (inst_term e ι)
       | @term_projtup _ σs e n σ p => tuple_proj σs n σ (inst_term e ι) p
       | @term_union _ U K e     => 𝑼_fold (existT K (inst_term e ι))
       | @term_record _ R es     => 𝑹_fold (Env_rect

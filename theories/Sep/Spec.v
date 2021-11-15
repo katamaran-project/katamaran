@@ -37,7 +37,8 @@ From Coq Require Import
      Classes.Morphisms_Relations
      Program.Basics
      Program.Tactics
-     String.
+     String
+     ZArith.
 
 From Katamaran Require Import
      Notation
@@ -75,6 +76,10 @@ Module Assertions
   Inductive Formula (Σ : LCtx) : Type :=
   | formula_bool (t : Term Σ ty_bool)
   | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Lit Σ' Prop)
+  | formula_ge (t1 t2 : Term Σ ty_int)
+  | formula_gt (t1 t2 : Term Σ ty_int)
+  | formula_le (t1 t2 : Term Σ ty_int)
+  | formula_lt (t1 t2 : Term Σ ty_int)
   | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
   | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
   Arguments formula_bool {_} t.
@@ -96,6 +101,10 @@ Module Assertions
       match fml with
       | formula_bool t    => formula_bool (subst t ζ)
       | formula_prop ζ' P => formula_prop (subst ζ' ζ) P
+      | formula_ge t1 t2  => formula_ge (subst t1 ζ) (subst t2 ζ)
+      | formula_gt t1 t2  => formula_gt (subst t1 ζ) (subst t2 ζ)
+      | formula_le t1 t2  => formula_le (subst t1 ζ) (subst t2 ζ)
+      | formula_lt t1 t2  => formula_lt (subst t1 ζ) (subst t2 ζ)
       | formula_eq t1 t2  => formula_eq (subst t1 ζ) (subst t2 ζ)
       | formula_neq t1 t2 => formula_neq (subst t1 ζ) (subst t2 ζ)
       end.
@@ -111,9 +120,13 @@ Module Assertions
     match fml with
     | formula_bool t    => is_true (inst (A := Lit ty_bool) t ι)
     | formula_prop ζ P  => uncurry_named P (inst ζ ι)
+    | formula_ge t1 t2  => inst (A := Lit ty_int) t1 ι >= inst (A := Lit ty_int) t2 ι
+    | formula_gt t1 t2  => inst (A := Lit ty_int) t1 ι >  inst (A := Lit ty_int) t2 ι
+    | formula_le t1 t2  => inst (A := Lit ty_int) t1 ι <= inst (A := Lit ty_int) t2 ι
+    | formula_lt t1 t2  => inst (A := Lit ty_int) t1 ι <  inst (A := Lit ty_int) t2 ι
     | formula_eq t1 t2  => inst t1 ι =  inst t2 ι
     | formula_neq t1 t2 => inst t1 ι <> inst t2 ι
-    end.
+    end%Z.
 
   Instance instantiate_formula : Inst Formula Prop :=
     {| inst Σ := inst_formula;
@@ -134,6 +147,14 @@ Module Assertions
     - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
       f_equal; eapply inst_subst.
     - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      f_equal; eapply inst_subst.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      f_equal; eapply inst_subst.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      f_equal; eapply inst_subst.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
+      f_equal; eapply inst_subst.
+    - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
       repeat f_equal; eapply inst_subst.
   Qed.
 
@@ -142,6 +163,10 @@ Module Assertions
           match fml with
           | formula_bool t    => option_map formula_bool (occurs_check xIn t)
           | formula_prop ζ P  => option_map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
+          | formula_ge t1 t2  => option_ap (option_map (@formula_ge _) (occurs_check xIn t1)) (occurs_check xIn t2)
+          | formula_gt t1 t2  => option_ap (option_map (@formula_gt _) (occurs_check xIn t1)) (occurs_check xIn t2)
+          | formula_le t1 t2  => option_ap (option_map (@formula_le _) (occurs_check xIn t1)) (occurs_check xIn t2)
+          | formula_lt t1 t2  => option_ap (option_map (@formula_lt _) (occurs_check xIn t1)) (occurs_check xIn t2)
           | formula_eq t1 t2  => option_ap (option_map (@formula_eq _ _) (occurs_check xIn t1)) (occurs_check xIn t2)
           | formula_neq t1 t2 => option_ap (option_map (@formula_neq _ _) (occurs_check xIn t1)) (occurs_check xIn t2)
             end.
@@ -156,6 +181,38 @@ Module Assertions
         f_equal. now apply (occurs_check_sound (T := fun Σ => Term Σ _)).
       + apply option_map_eq_some' in Heq; destruct_conjs; subst; cbn.
         f_equal. now apply occurs_check_sound.
+      + apply option_bind_eq_some in Heq; destruct Heq as (f & Heq1 & Heq2).
+        apply option_bind_eq_some in Heq1; destruct Heq1 as (t1' & Heq11 & Heq12).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq11. subst t1.
+        apply noConfusion_inv in Heq12; cbn in Heq12; subst f; cbn.
+        apply option_bind_eq_some in Heq2; destruct Heq2 as (t2' & Heq21 & Heq22).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq21. subst t2.
+        apply noConfusion_inv in Heq22; cbn in Heq22; subst fml'; cbn.
+        reflexivity.
+      + apply option_bind_eq_some in Heq; destruct Heq as (f & Heq1 & Heq2).
+        apply option_bind_eq_some in Heq1; destruct Heq1 as (t1' & Heq11 & Heq12).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq11. subst t1.
+        apply noConfusion_inv in Heq12; cbn in Heq12; subst f; cbn.
+        apply option_bind_eq_some in Heq2; destruct Heq2 as (t2' & Heq21 & Heq22).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq21. subst t2.
+        apply noConfusion_inv in Heq22; cbn in Heq22; subst fml'; cbn.
+        reflexivity.
+      + apply option_bind_eq_some in Heq; destruct Heq as (f & Heq1 & Heq2).
+        apply option_bind_eq_some in Heq1; destruct Heq1 as (t1' & Heq11 & Heq12).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq11. subst t1.
+        apply noConfusion_inv in Heq12; cbn in Heq12; subst f; cbn.
+        apply option_bind_eq_some in Heq2; destruct Heq2 as (t2' & Heq21 & Heq22).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq21. subst t2.
+        apply noConfusion_inv in Heq22; cbn in Heq22; subst fml'; cbn.
+        reflexivity.
+      + apply option_bind_eq_some in Heq; destruct Heq as (f & Heq1 & Heq2).
+        apply option_bind_eq_some in Heq1; destruct Heq1 as (t1' & Heq11 & Heq12).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq11. subst t1.
+        apply noConfusion_inv in Heq12; cbn in Heq12; subst f; cbn.
+        apply option_bind_eq_some in Heq2; destruct Heq2 as (t2' & Heq21 & Heq22).
+        apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq21. subst t2.
+        apply noConfusion_inv in Heq22; cbn in Heq22; subst fml'; cbn.
+        reflexivity.
       + apply option_bind_eq_some in Heq; destruct Heq as (f & Heq1 & Heq2).
         apply option_bind_eq_some in Heq1; destruct Heq1 as (t1' & Heq11 & Heq12).
         apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq11. subst t1.
@@ -843,7 +900,17 @@ Module Assertions
   Definition LemmaEnv : Type :=
     forall Δ (l : 𝑳 Δ), Lemma Δ.
 
+  Section Obligations.
+
+    Inductive Obligation {Σ} (msg : Message Σ) (fml : Formula Σ) (ι : SymInstance Σ) : Prop :=
+    | obligation (p : inst fml ι : Prop).
+
+  End Obligations.
+
   Section DebugInfo.
+
+    Inductive Debug {B} (b : B) (P : Prop) : Prop :=
+    | debug (p : P).
 
     Record DebugCall : Type :=
       MkDebugCall
