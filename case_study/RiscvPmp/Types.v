@@ -35,6 +35,7 @@ From stdpp Require
 From Katamaran Require Import
      Syntax.Types.
 
+Definition Xlenbits : Set := Z.
 Definition Addr : Set := Z.
 Definition Word : Set := Z.
 
@@ -156,7 +157,7 @@ Inductive MemoryOpResult : Set :=
 
 Inductive FetchResult : Set :=
 | F_Base (v : Word)
-| F_Error (e : ExceptionType) (v : Word)
+| F_Error (e : ExceptionType) (v : Xlenbits)
 .
 
 (* NOTE: simplified to only take the ctl_trap constructor into account

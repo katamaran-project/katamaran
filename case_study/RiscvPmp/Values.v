@@ -46,6 +46,7 @@ Module RiscvPmpValueKit <: ValueKit.
   Module typekit := RiscvPmpTypeKit.
   Module Export TY := Syntax.Types.Types typekit.
 
+  Notation ty_xlenbits         := (ty_int).
   Notation ty_word             := (ty_int).
   Notation ty_regidx           := (ty_enum regidx).
   Notation ty_privilege        := (ty_enum privilege).
@@ -54,13 +55,13 @@ Module RiscvPmpValueKit <: ValueKit.
   Notation ty_pmpaddrmatchtype := (ty_enum pmpaddrmatchtype).
   Notation ty_pmpmatch         := (ty_enum pmpmatch).
   Notation ty_pmpaddrmatch     := (ty_enum pmpaddrmatch).
-  Notation ty_pmp_addr_range   := (ty_option (ty_prod ty_int ty_int)).
+  Notation ty_pmp_addr_range   := (ty_option (ty_prod ty_xlenbits ty_xlenbits)).
   Notation ty_rop              := (ty_enum rop).
   Notation ty_iop              := (ty_enum iop).
   Notation ty_uop              := (ty_enum uop).
   Notation ty_bop              := (ty_enum bop).
   Notation ty_retired          := (ty_enum retired).
-  Notation ty_mcause           := (ty_int).
+  Notation ty_mcause           := (ty_xlenbits).
   Notation ty_exc_code         := (ty_int).
   Notation ty_ast              := (ty_union ast).
   Notation ty_access_type      := (ty_union access_type).

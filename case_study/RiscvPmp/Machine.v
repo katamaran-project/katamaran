@@ -93,26 +93,26 @@ Module RiscvPmpTermKit <: TermKit.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
-  | rX                    : Fun [rs ∶ ty_regidx] ty_word
-  | wX                    : Fun [rd ∶ ty_regidx, v ∶ ty_word] ty_unit
-  | get_arch_pc           : Fun ctx_nil ty_word
-  | get_next_pc           : Fun ctx_nil ty_word
-  | set_next_pc           : Fun [addr ∶ ty_word] ty_unit
+  | rX                    : Fun [rs ∶ ty_regidx] ty_xlenbits
+  | wX                    : Fun [rd ∶ ty_regidx, v ∶ ty_xlenbits] ty_unit
+  | get_arch_pc           : Fun ctx_nil ty_xlenbits
+  | get_next_pc           : Fun ctx_nil ty_xlenbits
+  | set_next_pc           : Fun [addr ∶ ty_xlenbits] ty_unit
   | abs                   : Fun [v ∶ ty_int] ty_int
-  | mem_read              : Fun [typ ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
-  | checked_mem_read      : Fun [t ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result
-  | checked_mem_write     : Fun [paddr ∶ ty_int, data ∶ ty_word] ty_memory_op_result
-  | pmp_mem_read          : Fun [t∶ ty_access_type, p ∶ ty_privilege, paddr ∶ ty_int] ty_memory_op_result
-  | pmp_mem_write         : Fun [paddr ∶ ty_int, data ∶ ty_word, typ ∶ ty_access_type, priv ∶ ty_privilege] ty_memory_op_result
+  | mem_read              : Fun [typ ∶ ty_access_type, paddr ∶ ty_xlenbits] ty_memory_op_result
+  | checked_mem_read      : Fun [t ∶ ty_access_type, paddr ∶ ty_xlenbits] ty_memory_op_result
+  | checked_mem_write     : Fun [paddr ∶ ty_xlenbits, data ∶ ty_int] ty_memory_op_result
+  | pmp_mem_read          : Fun [t∶ ty_access_type, p ∶ ty_privilege, paddr ∶ ty_xlenbits] ty_memory_op_result
+  | pmp_mem_write         : Fun [paddr ∶ ty_xlenbits, data ∶ ty_int, typ ∶ ty_access_type, priv ∶ ty_privilege] ty_memory_op_result
   | pmpLocked             : Fun [cfg ∶ ty_pmpcfg_ent] ty_bool
-  | pmpCheck              : Fun [addr ∶ ty_int, acc ∶ ty_access_type, priv ∶ ty_privilege] (ty_option ty_exception_type)
+  | pmpCheck              : Fun [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege] (ty_option ty_exception_type)
   | pmpCheckPerms         : Fun [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type, priv ∶ ty_privilege] ty_bool
   | pmpCheckRWX           : Fun [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool
-  | pmpMatchEntry         : Fun [addr ∶ ty_int, acc ∶ ty_access_type, priv ∶ ty_privilege, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmpmatch
-  | pmpAddrRange          : Fun [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmp_addr_range
-  | pmpMatchAddr          : Fun [addr ∶ ty_int, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch
-  | process_load          : Fun [rd ∶ ty_regidx, vaddr ∶ ty_int, value ∶ ty_memory_op_result] ty_retired
-  | mem_write_value       : Fun [paddr ∶ ty_int, value ∶ ty_word] ty_memory_op_result
+  | pmpMatchEntry         : Fun [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_xlenbits, prev_pmpaddr ∶ ty_xlenbits] ty_pmpmatch
+  | pmpAddrRange          : Fun [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_xlenbits, prev_pmpaddr ∶ ty_xlenbits] ty_pmp_addr_range
+  | pmpMatchAddr          : Fun [addr ∶ ty_xlenbits, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch
+  | process_load          : Fun [rd ∶ ty_regidx, vaddr ∶ ty_xlenbits, value ∶ ty_memory_op_result] ty_retired
+  | mem_write_value       : Fun [paddr ∶ ty_xlenbits, value ∶ ty_int] ty_memory_op_result
   | main                  : Fun ctx_nil ty_unit
   | init_model            : Fun ctx_nil ty_unit
   | loop                  : Fun ctx_nil ty_unit
@@ -121,12 +121,12 @@ Module RiscvPmpTermKit <: TermKit.
   | init_sys              : Fun ctx_nil ty_unit
   | init_pmp              : Fun ctx_nil ty_unit
   | exceptionType_to_bits : Fun [e ∶ ty_exception_type] ty_exc_code
-  | handle_mem_exception  : Fun [addr ∶ ty_int, e ∶ ty_exception_type] ty_unit
-  | exception_handler     : Fun [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_int] ty_int
+  | handle_mem_exception  : Fun [addr ∶ ty_xlenbits, e ∶ ty_exception_type] ty_unit
+  | exception_handler     : Fun [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_xlenbits] ty_int
   | exception_delegatee   : Fun [p ∶ ty_privilege] ty_privilege
-  | trap_handler          : Fun [del_priv ∶ ty_privilege, c ∶ ty_exc_code, "pc" ∶ ty_int] ty_int
-  | prepare_trap_vector   : Fun [p ∶ ty_privilege, cause ∶ ty_mcause] ty_int
-  | tvec_addr             : Fun [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_int)
+  | trap_handler          : Fun [del_priv ∶ ty_privilege, c ∶ ty_exc_code, "pc" ∶ ty_xlenbits] ty_xlenbits
+  | prepare_trap_vector   : Fun [p ∶ ty_privilege, cause ∶ ty_mcause] ty_xlenbits
+  | tvec_addr             : Fun [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_xlenbits)
   | handle_illegal        : Fun ctx_nil ty_unit
   | execute_RTYPE         : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
   | execute_ITYPE         : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
@@ -153,18 +153,18 @@ Module RiscvPmpTermKit <: TermKit.
   Definition 𝑳  : PCtx -> Set := Lem.
 
   Inductive Reg : Ty -> Set :=
-  | pc            : Reg ty_word
-  | nextpc        : Reg ty_word
+  | pc            : Reg ty_xlenbits
+  | nextpc        : Reg ty_xlenbits
   | mstatus       : Reg ty_mstatus
-  | mtvec         : Reg ty_word
+  | mtvec         : Reg ty_xlenbits
   | mcause        : Reg ty_exc_code
-  | mepc          : Reg ty_word
+  | mepc          : Reg ty_xlenbits
   | cur_privilege : Reg ty_privilege
-  | x0            : Reg ty_word
-  | x1            : Reg ty_word
-  | x2            : Reg ty_word
+  | x0            : Reg ty_xlenbits
+  | x1            : Reg ty_xlenbits
+  | x2            : Reg ty_xlenbits
   | pmp0cfg       : Reg ty_pmpcfg_ent
-  | pmpaddr0      : Reg ty_int
+  | pmpaddr0      : Reg ty_xlenbits
   .
 
   Section TransparentObligations.
@@ -346,27 +346,27 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'CTL_MRET'" := (exp_union ctl_result KCTL_MRET (exp_lit ty_unit tt)) : exp_scope.
 
   (** Functions **)
-  Definition fun_rX : Stm [rs ∶ ty_regidx] ty_word :=
+  Definition fun_rX : Stm [rs ∶ ty_regidx] ty_xlenbits :=
     match: rs in regidx with
-    | X0 => exp_lit ty_word 0%Z
+    | X0 => exp_lit ty_xlenbits 0%Z
     | X1 => stm_read_register x1
     | X2 => stm_read_register x2
     end.
 
-  Definition fun_wX : Stm [rd ∶ ty_regidx, v ∶ ty_word] ty_unit :=
+  Definition fun_wX : Stm [rd ∶ ty_regidx, v ∶ ty_xlenbits] ty_unit :=
     match: rd in regidx with
     | X0 => stm_lit ty_unit tt
     | X1 => stm_write_register x1 v ;; stm_lit ty_unit tt
     | X2 => stm_write_register x2 v ;; stm_lit ty_unit tt
     end.
 
-  Definition fun_get_arch_pc : Stm ctx_nil ty_word :=
+  Definition fun_get_arch_pc : Stm ctx_nil ty_xlenbits :=
     stm_read_register pc.
 
-  Definition fun_get_next_pc : Stm ctx_nil ty_word :=
+  Definition fun_get_next_pc : Stm ctx_nil ty_xlenbits :=
     stm_read_register nextpc.
 
-  Definition fun_set_next_pc : Stm [addr ∶ ty_word] ty_unit :=
+  Definition fun_set_next_pc : Stm [addr ∶ ty_xlenbits] ty_unit :=
     stm_write_register nextpc addr ;;
     stm_lit ty_unit tt.
 
@@ -375,26 +375,26 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     then v * (exp_lit ty_int (-1)%Z)
     else v.
 
-  Definition fun_mem_read : Stm [typ ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
+  Definition fun_mem_read : Stm [typ ∶ ty_access_type, paddr ∶ ty_xlenbits] ty_memory_op_result :=
     let: tmp := stm_read_register cur_privilege in
     call pmp_mem_read typ tmp paddr.
 
-  Definition fun_checked_mem_read : Stm [t ∶ ty_access_type, paddr ∶ ty_int] ty_memory_op_result :=
+  Definition fun_checked_mem_read : Stm [t ∶ ty_access_type, paddr ∶ ty_xlenbits] ty_memory_op_result :=
     let: tmp := foreign read_ram paddr in
     MemValue tmp.
 
-  Definition fun_checked_mem_write : Stm [paddr ∶ ty_int, data ∶ ty_word] ty_memory_op_result :=
+  Definition fun_checked_mem_write : Stm [paddr ∶ ty_xlenbits, data ∶ ty_int] ty_memory_op_result :=
     let: tmp := foreign write_ram paddr data in
     MemValue tmp.
 
-  Definition fun_pmp_mem_read : Stm [t∶ ty_access_type, p ∶ ty_privilege, paddr ∶ ty_int] ty_memory_op_result :=
+  Definition fun_pmp_mem_read : Stm [t∶ ty_access_type, p ∶ ty_privilege, paddr ∶ ty_xlenbits] ty_memory_op_result :=
     let: tmp := call pmpCheck paddr t p in
     match: tmp with
     | inl e => MemException e
     | inr v => call checked_mem_read t paddr
     end.
 
-  Definition fun_pmp_mem_write : Stm [paddr ∶ ty_int, data ∶ ty_word, typ ∶ ty_access_type, priv ∶ ty_privilege] ty_memory_op_result :=
+  Definition fun_pmp_mem_write : Stm [paddr ∶ ty_xlenbits, data ∶ ty_int, typ ∶ ty_access_type, priv ∶ ty_privilege] ty_memory_op_result :=
     let: tmp := call pmpCheck paddr typ priv in
     match: tmp with
     | inl e => MemException e
@@ -411,7 +411,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
        "R" R)
       L).
 
-  Definition fun_pmpCheck : Stm [addr ∶ ty_int, acc ∶ ty_access_type, priv ∶ ty_privilege] (ty_option ty_exception_type) :=
+  Definition fun_pmpCheck : Stm [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege] (ty_option ty_exception_type) :=
     let: tmp1 := stm_read_register pmp0cfg in
     let: tmp2 := stm_read_register pmpaddr0 in
     let: tmp3 := call pmpMatchEntry addr acc priv tmp1 tmp2 (exp_lit ty_int 0%Z) in
@@ -471,7 +471,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                     X
                               end))).
 
-  Definition fun_pmpMatchEntry : Stm [addr ∶ ty_int, acc ∶ ty_access_type, priv ∶ ty_privilege, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmpmatch :=
+  Definition fun_pmpMatchEntry : Stm [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_xlenbits, prev_pmpaddr ∶ ty_xlenbits] ty_pmpmatch :=
     let: rng := call pmpAddrRange ent pmpaddr prev_pmpaddr in
     let: tmp := call pmpMatchAddr addr rng in
     match: tmp in pmpaddrmatch with
@@ -484,7 +484,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
       else exp_lit ty_pmpmatch PMP_Fail
     end.
 
-  Definition fun_pmpAddrRange : Stm [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_int, prev_pmpaddr ∶ ty_int] ty_pmp_addr_range :=
+  Definition fun_pmpAddrRange : Stm [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_xlenbits, prev_pmpaddr ∶ ty_xlenbits] ty_pmp_addr_range :=
     (stm_match_record rpmpcfg_ent cfg
       (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
        "L" L)
@@ -514,7 +514,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | inr v => exp_lit ty_pmpaddrmatch PMP_NoMatch
     end.
 
-  Definition fun_process_load : Stm [rd ∶ ty_regidx, vaddr ∶ ty_int, value ∶ ty_memory_op_result] ty_retired :=
+  Definition fun_process_load : Stm [rd ∶ ty_regidx, vaddr ∶ ty_xlenbits, value ∶ ty_memory_op_result] ty_retired :=
     stm_match_union_alt memory_op_result value
                         (fun K =>
                            match K with
@@ -526,7 +526,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                      stm_lit ty_retired RETIRE_FAIL)
                            end).
 
-  Definition fun_mem_write_value : Stm [paddr ∶ ty_int, value ∶ ty_word] ty_memory_op_result :=
+  Definition fun_mem_write_value : Stm [paddr ∶ ty_xlenbits, value ∶ ty_int] ty_memory_op_result :=
     let: tmp := stm_read_register cur_privilege in
     call pmp_mem_write paddr value Write tmp.
 
@@ -608,13 +608,13 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                             (stm_lit ty_exc_code 11%Z)
                            end).
 
-  Definition fun_handle_mem_exception : Stm [addr ∶ ty_int, e ∶ ty_exception_type] ty_unit :=
+  Definition fun_handle_mem_exception : Stm [addr ∶ ty_xlenbits, e ∶ ty_exception_type] ty_unit :=
     let: tmp1 := stm_read_register pc in
     let: tmp2 := stm_read_register cur_privilege in
     let: tmp3 := call exception_handler tmp2 (CTL_TRAP e) tmp1 in
     call set_next_pc tmp3.
 
-  Definition fun_exception_handler : Stm [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_int] ty_int :=
+  Definition fun_exception_handler : Stm [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_xlenbits] ty_xlenbits :=
     stm_match_union_alt ctl_result ctl
                         (fun K =>
                            match K with
@@ -641,7 +641,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Definition fun_exception_delegatee : Stm [p ∶ ty_privilege] ty_privilege :=
     stm_lit ty_privilege Machine.
 
-  Definition fun_trap_handler : Stm [del_priv ∶ ty_privilege, c ∶ ty_exc_code, "pc" ∶ ty_int] ty_int :=
+  Definition fun_trap_handler : Stm [del_priv ∶ ty_privilege, c ∶ ty_exc_code, "pc" ∶ ty_xlenbits] ty_xlenbits :=
     stm_write_register mcause c ;;
     let: tmp := stm_read_register cur_privilege in
     stm_write_register mstatus (exp_record rmstatus [ tmp ]) ;;
@@ -664,7 +664,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     let: tmp := stm_read_register mcause in
     call prepare_trap_vector del_priv tmp.
 
-  Definition fun_prepare_trap_vector : Stm [p ∶ ty_privilege, cause ∶ ty_mcause] ty_int :=
+  Definition fun_prepare_trap_vector : Stm [p ∶ ty_privilege, cause ∶ ty_mcause] ty_xlenbits :=
     let: tvec := stm_read_register mtvec in
     let: tmp := call tvec_addr tvec cause in
     (* NOTE: tvec_addr will only ever return Some(epc), because we don't support
@@ -678,7 +678,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | inr e   => fail "Invalid tvec mode"
     end.
 
-  Definition fun_tvec_addr : Stm [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_int) :=
+  Definition fun_tvec_addr : Stm [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_xlenbits) :=
     Some m.
 
   Definition fun_handle_illegal : Stm ctx_nil ty_unit :=
