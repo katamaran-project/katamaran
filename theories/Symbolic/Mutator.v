@@ -494,9 +494,47 @@ Module Mutators
 
   Section PartialEvaluation.
 
-    Equations(noeqns) peval_binop {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
+    Equations(noeqns) peval_append {Σ σ} (t1 t2 : Term Σ (ty_list σ)) : Term Σ (ty_list σ) :=
+    | term_lit _ v1                 | term_lit _ v2 := term_lit (ty_list σ) (app v1 v2);
+    (* TODO: recurse over the value instead *)
+    | term_lit _ nil                | t2 := t2;
+    | term_lit _ (cons v vs)        | t2 := term_binop binop_cons (term_lit σ v) (term_binop binop_append (term_lit (ty_list σ) vs) t2);
+    | term_binop binop_cons t11 t12 | t2 := term_binop binop_cons t11 (term_binop binop_append t12 t2);
+    | t1                            | t2 := term_binop binop_append t1 t2.
+
+    Equations(noeqns) peval_binop' {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
     | op | term_lit _ v1 | term_lit _ v2 := term_lit σ (eval_binop op v1 v2);
     | op | t1            | t2            := term_binop op t1 t2.
+
+    Equations(noeqns) peval_binop {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
+    | binop_append | t1 | t2 := peval_append t1 t2;
+    | op           | t1 | t2 := peval_binop' op t1 t2.
+
+    Lemma peval_append_sound {Σ σ} (t1 t2 : Term Σ (ty_list σ)) :
+      forall (ι : SymInstance Σ),
+        inst  (peval_append t1 t2) ι =
+          eval_binop binop_append (inst t1 ι) (inst t2 ι).
+    Proof.
+      intros ι.
+      dependent elimination t1; cbn; auto.
+      - dependent elimination t2; cbn; auto;
+        destruct l; cbn; auto.
+      - dependent elimination op; cbn; auto.
+    Qed.
+
+    Lemma peval_binop'_sound {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
+      forall (ι : SymInstance Σ),
+        inst (peval_binop' op t1 t2) ι = eval_binop op (inst t1 ι) (inst t2 ι).
+    Proof. intros ι. destruct t1, t2; cbn; auto. Qed.
+
+    Lemma peval_binop_sound {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
+      forall (ι : SymInstance Σ),
+        inst (peval_binop op t1 t2) ι = eval_binop op (inst t1 ι) (inst t2 ι).
+    Proof.
+      intros ι.
+      destruct op; cbn [peval_binop];
+        auto using peval_binop'_sound, peval_append_sound.
+    Qed.
 
     Equations(noeqns) peval_neg {Σ} (t : Term Σ ty_int) : Term Σ ty_int :=
     | term_lit _ i := term_lit ty_int (Z.opp i);
@@ -526,11 +564,6 @@ Module Mutators
     | @term_projtup _ _ t n _ p  := @term_projtup _ _ (peval t) n _ p;
     | @term_union _ U K t        := @term_union _ U K (peval t);
     | @term_record _ R ts        := @term_record _ R ts.
-
-    Lemma peval_binop_sound {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
-      forall (ι : SymInstance Σ),
-        inst (peval_binop op t1 t2) ι = inst (term_binop op t1 t2) ι.
-    Proof. destruct t1, t2; cbn; auto. Qed.
 
     Lemma peval_neg_sound {Σ} (t : Term Σ ty_int) :
       forall (ι : SymInstance Σ),
@@ -613,6 +646,8 @@ Module Mutators
       (k : List Formula Σ) : option (List Formula Σ) :=
     | binop_pair | t11 | t12 | binop_pair | t21 | t22 | k :=
       Some (cons (formula_eq t11 t21) (cons (formula_eq t12 t22) k));
+    | binop_cons | t11 | t12 | binop_cons | t21 | t22 | k :=
+      Some (cons (formula_eq t11 t21) (cons (formula_eq t12 t22) k));
     | op1        | t11 | t12 | op2        | t21 | t22 | k :=
       simplify_formula_eqb (term_binop op1 t11 t12) (term_binop op2 t21 t22) k.
 
@@ -621,6 +656,9 @@ Module Mutators
       (k : List Formula Σ) : option (List Formula Σ) :=
     | binop_pair | t1 | t2 | (v1 , v2) | k :=
       Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit _ v2)) k));
+    | binop_cons | t1 | t2 | [] | k := None;
+    | binop_cons | t1 | t2 | cons v1 v2 | k :=
+      Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit (ty_list _) v2)) k));
     | op         | t1 | t2 | v         | k :=
       Some (cons (formula_eq (term_binop op t1 t2) (term_lit _ v)) k).
 
