@@ -98,6 +98,7 @@ Module RiscvPmpTermKit <: TermKit.
   | get_arch_pc           : Fun ctx_nil ty_xlenbits
   | get_next_pc           : Fun ctx_nil ty_xlenbits
   | set_next_pc           : Fun [addr ∶ ty_xlenbits] ty_unit
+  | tick_pc               : Fun ctx_nil ty_unit
   | abs                   : Fun [v ∶ ty_int] ty_int
   | mem_read              : Fun [typ ∶ ty_access_type, paddr ∶ ty_xlenbits] ty_memory_op_result
   | checked_mem_read      : Fun [t ∶ ty_access_type, paddr ∶ ty_xlenbits] ty_memory_op_result
@@ -128,6 +129,7 @@ Module RiscvPmpTermKit <: TermKit.
   | prepare_trap_vector   : Fun [p ∶ ty_privilege, cause ∶ ty_mcause] ty_xlenbits
   | tvec_addr             : Fun [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_xlenbits)
   | handle_illegal        : Fun ctx_nil ty_unit
+  | execute               : Fun ["ast" ∶ ty_ast] ty_retired
   | execute_RTYPE         : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
   | execute_ITYPE         : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
   | execute_UTYPE         : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
@@ -249,7 +251,6 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'hi'"           := "hi" : string_scope.
   Local Notation "'f'"            := "f" : string_scope.
   Local Notation "'w'"            := "w" : string_scope.
-  Local Notation "'ast'"          := "ast" : string_scope.
   Local Notation "'ctl'"          := "ctl" : string_scope.
   Local Notation "'c'"            := "c" : string_scope.
   Local Notation "'cause'"        := "cause" : string_scope.
@@ -307,7 +308,6 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'hi'"           := (@exp_var _ "hi" _ _) : exp_scope.
   Local Notation "'f'"            := (@exp_var _ "f" _ _) : exp_scope.
   Local Notation "'w'"            := (@exp_var _ "w" _ _) : exp_scope.
-  Local Notation "'ast'"          := (@exp_var _ "ast" _ _) : exp_scope.
   Local Notation "'ctl'"          := (@exp_var _ "ctl" _ _) : exp_scope.
   Local Notation "'c'"            := (@exp_var _ "c" _ _) : exp_scope.
   Local Notation "'cause'"        := (@exp_var _ "cause" _ _) : exp_scope.
@@ -368,6 +368,11 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_set_next_pc : Stm [addr ∶ ty_xlenbits] ty_unit :=
     stm_write_register nextpc addr ;;
+    stm_lit ty_unit tt.
+
+  Definition fun_tick_pc : Stm ctx_nil ty_unit :=
+    let: tmp := stm_read_register nextpc in
+    stm_write_register pc tmp ;;
     stm_lit ty_unit tt.
 
   Definition fun_abs : Stm [v ∶ ty_int] ty_int :=
@@ -560,15 +565,15 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                         (fun K =>
                            match K with
                            | KF_Base  => MkAlt (pat_var w%string)
-                                               (let: ast := foreign decode w in
+                                               (let: "ast" := foreign decode w in
                                                 let: tmp := stm_read_register pc in
                                                 stm_write_register nextpc (tmp + (exp_lit ty_int 4%Z)) ;;
-                                                stm_lit ty_retired RETIRE_SUCCESS)
+                                                call execute (exp_var "ast"))
                            | KF_Error => MkAlt (pat_pair e%string addr%string)
                                                (call handle_mem_exception addr e ;;
                                                 stm_lit ty_retired RETIRE_FAIL)
                            end) ;;
-    stm_lit ty_unit tt.
+    call tick_pc.
 
   Definition fun_init_sys : Stm ctx_nil ty_unit :=
     call init_pmp.
@@ -687,6 +692,34 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     let: tmp2 := stm_read_register pc in
     let: tmp3 := call exception_handler tmp1 (CTL_TRAP t) tmp2 in
     call set_next_pc tmp3.
+
+  (* NOTE: normally the definitions of execute_X are inlined and defined as
+           function clauses of execute (a scattered definition) *)
+  Definition fun_execute : Stm ["ast" ∶ ty_ast] ty_retired :=
+    stm_match_union_alt ast (exp_var "ast")
+                        (fun K =>
+                           match K with
+                           | KRTYPE      => MkAlt (pat_tuple [rs2 , rs1 , rd , op])
+                                                  (call execute_RTYPE rs2 rs1 rd op)
+                           | KITYPE      => MkAlt (pat_tuple [imm , rs1 , rd , op])
+                                                  (call execute_ITYPE imm rs1 rd op)
+                           | KUTYPE      => MkAlt (pat_tuple [imm , rd , op])
+                                                  (call execute_UTYPE imm rd op)
+                           | KBTYPE      => MkAlt (pat_tuple [imm , rs2, rs1 , op])
+                                                  (call execute_BTYPE imm rs2 rs1 op)
+                           | KRISCV_JAL  => MkAlt (pat_tuple [imm , rd])
+                                                  (call execute_RISCV_JAL imm rd)
+                           | KRISCV_JALR => MkAlt (pat_tuple [imm , rs1 , rd])
+                                                  (call execute_RISCV_JALR imm rs1 rd)
+                           | KLOAD       => MkAlt (pat_tuple [imm , rs1, rd])
+                                                  (call execute_LOAD imm rs1 rd)
+                           | KSTORE      => MkAlt (pat_tuple [imm , rs2 , rs1])
+                                                  (call execute_STORE imm rs2 rs1)
+                           | KECALL      => MkAlt pat_unit
+                                                  (call execute_ECALL)
+                           | KMRET       => MkAlt pat_unit
+                                                  (call execute_MRET)
+                           end).
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
@@ -866,6 +899,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | get_arch_pc           => fun_get_arch_pc
     | get_next_pc           => fun_get_next_pc
     | set_next_pc           => fun_set_next_pc
+    | tick_pc               => fun_tick_pc
     | abs                   => fun_abs
     | mem_read              => fun_mem_read
     | mem_write_value       => fun_mem_write_value
@@ -896,6 +930,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | prepare_trap_vector   => fun_prepare_trap_vector
     | tvec_addr             => fun_tvec_addr
     | handle_illegal        => fun_handle_illegal
+    | execute               => fun_execute
     | execute_RTYPE         => fun_execute_RTYPE
     | execute_ITYPE         => fun_execute_ITYPE
     | execute_UTYPE         => fun_execute_UTYPE
