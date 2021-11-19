@@ -2019,6 +2019,31 @@ Module Soundness
     unfold SMut.ValidContract, CMut.ValidContract, ForallNamed.
     rewrite Forall_forall. intros [Hwp] ι.
     unfold SMut.exec_contract_path in Hwp.
+    (* rewrite prune_sound in Hwp. *)
+    (* rewrite Experimental.solve_uvars_sound in Hwp. *)
+    (* specialize (Hwp env_nil). *)
+    inster Hwp by reflexivity.
+    rewrite prune_sound in Hwp.
+    rewrite Experimental.solve_evars_sound in Hwp.
+    destruct Hwp as [ιe [Hwp _]].
+    destruct (nilView ιe).
+    rewrite prune_sound in Hwp. cbn in Hwp.
+    apply safe_demonic_close with _ ι in Hwp. revert Hwp.
+    rewrite <- (wsafe_safe (w := @MkWorld (sep_contract_logic_variables c) nil)).
+    apply approx_exec_contract; auto.
+    intros w1 ω01 ι1 -> Hpc1.
+    auto.
+  Qed.
+
+  Print Assumptions symbolic_sound.
+
+  Lemma symbolic_sound_solve_uvars {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
+    SMut.ValidContractSolveUVars c body ->
+    CMut.ValidContract c body.
+  Proof.
+    unfold SMut.ValidContract, CMut.ValidContract, ForallNamed.
+    rewrite Forall_forall. intros [Hwp] ι.
+    unfold SMut.exec_contract_path in Hwp.
     rewrite prune_sound in Hwp.
     rewrite Experimental.solve_uvars_sound in Hwp.
     specialize (Hwp env_nil).
@@ -2034,7 +2059,5 @@ Module Soundness
     intros w1 ω01 ι1 -> Hpc1.
     auto.
   Qed.
-
-  (* Print Assumptions symbolic_sound. *)
 
 End Soundness.

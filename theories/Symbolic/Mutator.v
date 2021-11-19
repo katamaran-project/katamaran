@@ -4246,17 +4246,17 @@ Module Mutators
 
       Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
         (* VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path c body)) nil)). *)
-        VerificationCondition (prune (Experimental.solve_uvars ctx_nil (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path c body)) nil)) nil)).
+        VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path c body)) nil)).
 
     End Exec.
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)). *)
-      VerificationCondition (prune (Experimental.solve_uvars ctx_nil (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)) nil)).
+      VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* is_true (ok (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil))). *)
-      is_true (ok (prune (Experimental.solve_uvars ctx_nil (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)) nil))).
+      is_true (ok (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil))).
 
     Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflect c body ->
@@ -4266,6 +4266,8 @@ Module Mutators
       apply (ok_sound _ env_nil) in Hok. now constructor.
     Qed.
 
+    Definition ValidContractSolveUVars {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      VerificationCondition (prune (Experimental.solve_uvars ctx_nil (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)) nil)).
   End SMut.
 
 End Mutators.
