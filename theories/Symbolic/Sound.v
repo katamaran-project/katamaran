@@ -2035,7 +2035,7 @@ Module Soundness
     auto.
   Qed.
 
-  Print Assumptions symbolic_sound.
+  (* Print Assumptions symbolic_sound. *)
 
   Lemma symbolic_sound_solve_uvars {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
     SMut.ValidContractSolveUVars c body ->
