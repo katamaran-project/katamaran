@@ -696,7 +696,12 @@ Module Mutators
       OptionSpec
         (fun fmlsk => forall ι, instpc fmlsk ι <-> inst (formula_bool t) ι /\ instpc k ι)
         (forall ι, ~ inst (formula_bool t) ι)
-        (simplify_formula_bool t k).
+        (simplify_formula_bool t k)
+    with simplify_formula_bool_neg_spec {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) :
+      OptionSpec
+        (fun fmlsk => forall ι, instpc fmlsk ι <-> ~ inst (formula_bool t) ι /\ instpc k ι)
+        (forall ι, inst (A := Prop) (formula_bool t) ι)
+        (simplify_formula_bool_neg t k).
     Proof.
       (* dependent elimination t; cbn; try constructor. *)
       (* - intros ι. rewrite inst_pathcondition_cons. reflexivity. *)
@@ -971,6 +976,10 @@ Module Mutators
     Open Scope lazy_bool_scope.
     Equations(noind) formula_eqb {Σ} (f1 f2 : Formula Σ) : bool :=
       formula_eqb (formula_bool t1) (formula_bool t2) := Term_eqb t1 t2;
+      formula_eqb (formula_le t11 t12) (formula_le t21 t22) := Term_eqb t11 t21 &&& Term_eqb t12 t22;
+      formula_eqb (formula_lt t11 t12) (formula_lt t21 t22) := Term_eqb t11 t21 &&& Term_eqb t12 t22;
+      formula_eqb (formula_ge t11 t12) (formula_ge t21 t22) := Term_eqb t11 t21 &&& Term_eqb t12 t22;
+      formula_eqb (formula_gt t11 t12) (formula_gt t21 t22) := Term_eqb t11 t21 &&& Term_eqb t12 t22;
       formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) with eq_dec σ τ => {
         formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ ?(σ) t21 t22) (left eq_refl) :=
           Term_eqb t11 t21 &&& Term_eqb t12 t22;
@@ -990,6 +999,30 @@ Module Mutators
         simp formula_eqb;
         try (constructor; auto; fail).
       - destruct (Term_eqb_spec t t0); constructor; intuition.
+      - repeat
+          match goal with
+          | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+              try (constructor; intuition; fail)
+          end.
+      - repeat
+          match goal with
+          | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+              try (constructor; intuition; fail)
+          end.
+      - repeat
+          match goal with
+          | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+              try (constructor; intuition; fail)
+          end.
+      - repeat
+          match goal with
+          | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+              try (constructor; intuition; fail)
+          end.
       - destruct (eq_dec σ σ0); cbn.
         + destruct e.
           repeat
@@ -3703,13 +3736,8 @@ Module Mutators
     Section ProduceConsume.
 
       Definition produce_chunk {Γ} :
-        ⊢ Chunk -> SMut Γ Γ Unit.
-      Proof.
-        intros w0 c k δ h.
-        apply k. apply wrefl.
-        constructor. apply δ.
-        apply (cons c h).
-      Defined.
+        ⊢ Chunk -> SMut Γ Γ Unit :=
+        fun w0 c k δ h => k w0 wrefl tt δ (cons c h).
 
       Fixpoint try_consume_chunk_exact {Σ} (h : SHeap Σ) (c : Chunk Σ) {struct h} : option (SHeap Σ) :=
         match h with
