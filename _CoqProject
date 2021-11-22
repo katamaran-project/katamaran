@@ -12,6 +12,7 @@ case_study/RiscvPmp/Model.v
 case_study/RiscvPmp/Types.v
 case_study/RiscvPmp/Values.v
 -R theories Katamaran
+test/Append.v
 test/CapMach.v
 test/Example.v
 test/ISA.v

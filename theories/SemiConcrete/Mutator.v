@@ -468,11 +468,11 @@ Module SemiConcrete
         apply angelic_binary.
         - eapply bind_right.
           apply assert_formula.
-          apply (is_true v).
+          apply (v = true).
           apply kt.
         - eapply bind_right.
           apply assert_formula.
-          apply (is_true (negb v)).
+          apply (v = false).
           apply kf.
       Defined.
 
@@ -491,11 +491,11 @@ Module SemiConcrete
         apply demonic_binary.
         - eapply bind_right.
           apply assume_formula.
-          apply (is_true v).
+          apply (v = true).
           apply kt.
         - eapply bind_right.
           apply assume_formula.
-          apply (is_true (negb v)).
+          apply (v = false).
           apply kf.
       Defined.
 
@@ -1269,9 +1269,9 @@ Module SemiConcrete
       end%mut.
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      forall ι : SymInstance (sep_contract_logic_variables c),
+      ForallNamed (fun ι : SymInstance (sep_contract_logic_variables c) =>
         let δΔ : CStore Δ := inst (sep_contract_localstore c) ι in
-        exec_contract c body ι (fun _ _ _ => True) δΔ nil.
+        exec_contract c body ι (fun _ _ _ => True) δΔ nil).
 
   End CMut.
 

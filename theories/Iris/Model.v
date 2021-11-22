@@ -43,12 +43,12 @@ From iris.proofmode Require Import tactics.
 From Katamaran Require Import
      Context
      Environment
-     Notation
      Sep.Hoare
      Sep.Spec
      SmallStep.Inversion
      SmallStep.Step
      Syntax.
+Require Import Katamaran.Notation.
 
 (* can't import: overlapping notations *)
 Require Katamaran.Sep.Logic.

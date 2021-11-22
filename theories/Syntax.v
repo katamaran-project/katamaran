@@ -115,11 +115,13 @@ Module Terms (Export termkit : TermKit).
     | binop_eq                : BinOp ty_int ty_int ty_bool
     | binop_le                : BinOp ty_int ty_int ty_bool
     | binop_lt                : BinOp ty_int ty_int ty_bool
+    | binop_ge                : BinOp ty_int ty_int ty_bool
     | binop_gt                : BinOp ty_int ty_int ty_bool
     | binop_and               : BinOp ty_bool ty_bool ty_bool
     | binop_or                : BinOp ty_bool ty_bool ty_bool
     | binop_pair {σ1 σ2 : Ty} : BinOp σ1 σ2 (ty_prod σ1 σ2)
     | binop_cons {σ : Ty}     : BinOp σ (ty_list σ) (ty_list σ)
+    | binop_append {σ : Ty}   : BinOp (ty_list σ) (ty_list σ) (ty_list σ)
     | binop_tuple_snoc {σs σ} : BinOp (ty_tuple σs) σ (ty_tuple (σs ▻ σ))
     | binop_bvplus {n}        : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
     | binop_bvmult {n}        : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
@@ -140,6 +142,8 @@ Module Terms (Export termkit : TermKit).
       ((σ1, σ2, ty_prod σ1 σ2), binop_pair).
     Definition binoptel_cons (σ : Ty) : BinOpTel :=
       ((σ, ty_list σ, ty_list σ), binop_cons).
+    Definition binoptel_append (σ : Ty) : BinOpTel :=
+      ((ty_list σ, ty_list σ, ty_list σ), binop_append).
     Definition binoptel_tuple_snoc (σs : Ctx Ty) (σ : Ty) : BinOpTel :=
       ((ty_tuple σs, σ, ty_tuple (σs ▻ σ)), binop_tuple_snoc).
 
@@ -153,6 +157,7 @@ Module Terms (Export termkit : TermKit).
       | binop_eq    , binop_eq     => left eq_refl
       | binop_le    , binop_le     => left eq_refl
       | binop_lt    , binop_lt     => left eq_refl
+      | binop_ge    , binop_ge     => left eq_refl
       | binop_gt    , binop_gt     => left eq_refl
       | binop_and   , binop_and    => left eq_refl
       | binop_or    , binop_or     => left eq_refl
@@ -160,6 +165,8 @@ Module Terms (Export termkit : TermKit).
         f_equal2_dec binoptel_pair noConfusion_inv (eq_dec σ1 τ1) (eq_dec σ2 τ2)
       | @binop_cons σ  , @binop_cons τ   =>
         f_equal_dec binoptel_cons noConfusion_inv (eq_dec σ τ)
+      | @binop_append σ , @binop_append τ   =>
+        f_equal_dec binoptel_append noConfusion_inv (eq_dec σ τ)
       | @binop_tuple_snoc σs σ , @binop_tuple_snoc τs τ =>
         f_equal2_dec binoptel_tuple_snoc noConfusion_inv (eq_dec σs τs) (eq_dec σ τ)
       | @binop_bvplus m , @binop_bvplus n =>
@@ -324,11 +331,13 @@ Module Terms (Export termkit : TermKit).
       | binop_eq        => Z.eqb
       | binop_le        => Z.leb
       | binop_lt        => Z.ltb
+      | binop_ge        => Z.geb
       | binop_gt        => Z.gtb
       | binop_and       => andb
       | binop_or        => fun v1 v2 => orb v1 v2
       | binop_pair      => pair
       | binop_cons      => cons
+      | binop_append    => app
       | binop_tuple_snoc => pair
       | binop_bvplus    => fun v1 v2 => Word.wplus v1 v2
       | binop_bvmult    => fun v1 v2 => Word.wmult v1 v2
@@ -744,8 +753,8 @@ Module Terms (Export termkit : TermKit).
       | term_binop op e1 e2  => eval_binop op (inst_term e1 ι) (inst_term e2 ι)
       | term_neg e           => Z.opp (inst_term e ι)
       | term_not e           => negb (inst_term e ι)
-      | term_inl e           => inl (inst_term e ι)
-      | term_inr e           => inr (inst_term e ι)
+      | term_inl e           => @inl (Lit _) (Lit _) (inst_term e ι)
+      | term_inr e           => @inr (Lit _) (Lit _) (inst_term e ι)
       | @term_projtup _ σs e n σ p => tuple_proj σs n σ (inst_term e ι) p
       | @term_union _ U K e     => 𝑼_fold (existT K (inst_term e ι))
       | @term_record _ R es     => 𝑹_fold (Env_rect

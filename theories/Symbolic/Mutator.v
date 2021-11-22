@@ -297,8 +297,8 @@ Module Mutators
     fun w => A (wsnoc w b).
   Definition Forall {I : Type} (A : I -> TYPE) : TYPE :=
     fun w => forall i : I, A i w.
-  Definition Cat (A : TYPE) (Δ : LCtx) : TYPE :=
-    fun w => A (wcat w Δ).
+  (* Definition Cat (A : TYPE) (Δ : LCtx) : TYPE := *)
+  (*   fun w => A (wcat w Δ). *)
 
   Module ModalNotations.
 
@@ -366,16 +366,6 @@ Module Mutators
 
   Notation persist__term t :=
     (@persist (STerm _) (@persist_subst (fun Σ => Term Σ _) (@SubstTerm _)) _ t).
-
-  Inductive Debug {B} (b : B) (P : Prop) : Prop :=
-  | debug (p : P).
-
-  Section Obligations.
-
-    Inductive Obligation {Σ} (msg : Message Σ) (fml : Formula Σ) (ι : SymInstance Σ) : Prop :=
-    | obligation (p : inst fml ι : Prop).
-
-  End Obligations.
 
   Section MultiSubs.
 
@@ -502,34 +492,196 @@ Module Mutators
 
   End MultiSubs.
 
+  Section PartialEvaluation.
+
+    Equations(noeqns) peval_append {Σ σ} (t1 t2 : Term Σ (ty_list σ)) : Term Σ (ty_list σ) :=
+    | term_lit _ v1                 | term_lit _ v2 := term_lit (ty_list σ) (app v1 v2);
+    (* TODO: recurse over the value instead *)
+    | term_lit _ nil                | t2 := t2;
+    | term_lit _ (cons v vs)        | t2 := term_binop binop_cons (term_lit σ v) (term_binop binop_append (term_lit (ty_list σ) vs) t2);
+    | term_binop binop_cons t11 t12 | t2 := term_binop binop_cons t11 (term_binop binop_append t12 t2);
+    | t1                            | t2 := term_binop binop_append t1 t2.
+
+    Equations(noeqns) peval_binop' {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
+    | op | term_lit _ v1 | term_lit _ v2 := term_lit σ (eval_binop op v1 v2);
+    | op | t1            | t2            := term_binop op t1 t2.
+
+    Equations(noeqns) peval_binop {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
+    | binop_append | t1 | t2 := peval_append t1 t2;
+    | op           | t1 | t2 := peval_binop' op t1 t2.
+
+    Lemma peval_append_sound {Σ σ} (t1 t2 : Term Σ (ty_list σ)) :
+      forall (ι : SymInstance Σ),
+        inst  (peval_append t1 t2) ι =
+          eval_binop binop_append (inst t1 ι) (inst t2 ι).
+    Proof.
+      intros ι.
+      dependent elimination t1; cbn; auto.
+      - dependent elimination t2; cbn; auto;
+        destruct l; cbn; auto.
+      - dependent elimination op; cbn; auto.
+    Qed.
+
+    Lemma peval_binop'_sound {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
+      forall (ι : SymInstance Σ),
+        inst (peval_binop' op t1 t2) ι = eval_binop op (inst t1 ι) (inst t2 ι).
+    Proof. intros ι. destruct t1, t2; cbn; auto. Qed.
+
+    Lemma peval_binop_sound {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
+      forall (ι : SymInstance Σ),
+        inst (peval_binop op t1 t2) ι = eval_binop op (inst t1 ι) (inst t2 ι).
+    Proof.
+      intros ι.
+      destruct op; cbn [peval_binop];
+        auto using peval_binop'_sound, peval_append_sound.
+    Qed.
+
+    Equations(noeqns) peval_neg {Σ} (t : Term Σ ty_int) : Term Σ ty_int :=
+    | term_lit _ i := term_lit ty_int (Z.opp i);
+    | t            := term_neg t.
+
+    Equations(noeqns) peval_not {Σ} (t : Term Σ ty_bool) : Term Σ ty_bool :=
+    | term_lit _ b := term_lit ty_bool (negb b);
+    | t            := term_not t.
+
+    Equations(noeqns) peval_inl {Σ σ1 σ2} (t : Term Σ σ1) : Term Σ (ty_sum σ1 σ2) :=
+    | term_lit _ v := term_lit (ty_sum _ _) (@inl (Lit _) (Lit _) v);
+    | t            := term_inl t.
+
+    Equations(noeqns) peval_inr {Σ σ1 σ2} (t : Term Σ σ2) : Term Σ (ty_sum σ1 σ2) :=
+    | term_lit _ v := term_lit (ty_sum _ _) (@inr (Lit _) (Lit _) v);
+    | t            := term_inr t.
+
+    Equations(noeqns) peval {Σ σ} (t : Term Σ σ) : Term Σ σ :=
+    | term_var ς                 := term_var ς;
+    | term_lit _ v               := term_lit _ v;
+    | term_binop op t1 t2        := peval_binop op (peval t1) (peval t2);
+    | term_neg t                 := peval_neg (peval t);
+    | term_not t                 := peval_not (peval t);
+    | term_inl t                 := peval_inl (peval t);
+    | term_inr t                 := peval_inr (peval t);
+    (* TODO: Finish the cases below. *)
+    | @term_projtup _ _ t n _ p  := @term_projtup _ _ (peval t) n _ p;
+    | @term_union _ U K t        := @term_union _ U K (peval t);
+    | @term_record _ R ts        := @term_record _ R ts.
+
+    Lemma peval_neg_sound {Σ} (t : Term Σ ty_int) :
+      forall (ι : SymInstance Σ),
+        inst (peval_neg t) ι = inst (term_neg t) ι.
+    Proof. dependent elimination t; cbn; auto. Qed.
+
+    Lemma peval_not_sound {Σ} (t : Term Σ ty_bool) :
+      forall (ι : SymInstance Σ),
+        inst (peval_not t) ι = inst (term_not t) ι.
+    Proof. dependent elimination t; cbn; auto. Qed.
+
+    Lemma peval_inl_sound {Σ σ1 σ2} (t : Term Σ σ1) :
+      forall (ι : SymInstance Σ),
+        inst (peval_inl (σ2 := σ2) t) ι = inst (term_inl t) ι.
+    Proof. destruct t; cbn; auto. Qed.
+
+    Lemma peval_inr_sound {Σ σ1 σ2} (t : Term Σ σ2) :
+      forall (ι : SymInstance Σ),
+        inst (peval_inr (σ1 := σ1) t) ι = inst (term_inr t) ι.
+    Proof. destruct t; cbn; auto. Qed.
+
+    Lemma peval_sound {Σ σ} (t : Term Σ σ) :
+      forall (ι : SymInstance Σ),
+        inst (peval t) ι = inst t ι.
+    Proof.
+      intros ι. symmetry.
+      induction t; cbn;
+        change (inst_term ?t ?ι) with (inst t ι).
+      - reflexivity.
+      - reflexivity.
+      - now rewrite peval_binop_sound, IHt1, IHt2.
+      - now rewrite peval_neg_sound, IHt.
+      - now rewrite peval_not_sound, IHt.
+      - change (Lit σ1 + Lit σ2)%type with (Lit (ty_sum σ1 σ2)).
+        now rewrite peval_inl_sound, IHt.
+      - change (Lit σ1 + Lit σ2)%type with (Lit (ty_sum σ1 σ2)).
+        now rewrite peval_inr_sound, IHt.
+      - now rewrite IHt.
+      - now rewrite IHt.
+      - reflexivity.
+    Qed.
+
+  End PartialEvaluation.
+
   Module Solver.
 
     Equations(noeqns) simplify_formula_bool {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=
-    | term_var ς                | k := Some (cons (formula_bool (term_var ς)) k);
-    | term_lit _ b              | k := if b then Some k else None;
-    | term_binop op t1 t2       | k := Some (cons (formula_bool (term_binop op t1 t2)) k);
-    | term_not t                | k := Some (cons (formula_bool (term_not t)) k);
-    | @term_projtup _ _ t n _ p | k := Some (cons (formula_bool (@term_projtup _ _ t n _ p)) k).
+    | term_var ς                 | k := Some (cons (formula_bool (term_var ς)) k);
+    | term_lit _ b               | k := if b then Some k else None;
+    | term_binop binop_eq t1 t2  | k := Some (cons (formula_eq t1 t2) k);
+    | term_binop binop_le t1 t2  | k := Some (cons (formula_le t1 t2) k);
+    | term_binop binop_lt t1 t2  | k := Some (cons (formula_lt t1 t2) k);
+    | term_binop binop_ge t1 t2  | k := Some (cons (formula_ge t1 t2) k);
+    | term_binop binop_gt t1 t2  | k := Some (cons (formula_gt t1 t2) k);
+    | term_binop binop_and t1 t2 | k := Some (cons (formula_bool t1) (cons (formula_bool t2) k));
+    | term_binop op t1 t2        | k := Some (cons (formula_bool (term_binop op t1 t2)) k);
+    | term_not t                 | k := simplify_formula_bool_neg t k;
+    | @term_projtup _ _ t n _ p  | k := Some (cons (formula_bool (@term_projtup _ _ t n _ p)) k)
+    with simplify_formula_bool_neg {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=
+    | term_var ς                | k := Some (cons (formula_bool (term_not (term_var ς))) k);
+    | term_lit _ b              | k := if b then None else Some k;
+    | term_binop binop_eq t1 t2  | k := Some (cons (formula_neq t1 t2) k);
+    | term_binop binop_le t1 t2  | k := Some (cons (formula_gt t1 t2) k);
+    | term_binop binop_lt t1 t2  | k := Some (cons (formula_ge t1 t2) k);
+    | term_binop binop_ge t1 t2  | k := Some (cons (formula_lt t1 t2) k);
+    | term_binop binop_gt t1 t2  | k := Some (cons (formula_le t1 t2) k);
+    | term_binop binop_or t1 t2 | k := Some (cons (formula_bool (term_not t1)) (cons (formula_bool (term_not t2)) k));
+    | term_binop op t1 t2       | k := Some (cons (formula_bool (term_not (term_binop op t1 t2))) k);
+    | term_not t                | k := simplify_formula_bool t k;
+    | @term_projtup _ _ t n _ p | k := Some (cons (formula_bool (term_not (@term_projtup _ _ t n _ p))) k).
 
     Definition simplify_formula_eqb {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) : option (List Formula Σ) :=
       if Term_eqb t1 t2
       then Some k
       else Some (cons (formula_eq t1 t2) k).
 
+    Equations(noeqns) simplify_formula_binop {Σ σ σ11 σ12 σ21 σ22}
+      (op1 : BinOp σ11 σ12 σ) (t11 : Term Σ σ11) (t12 : Term Σ σ12)
+      (op2 : BinOp σ21 σ22 σ) (t21 : Term Σ σ21) (t22 : Term Σ σ22)
+      (k : List Formula Σ) : option (List Formula Σ) :=
+    | binop_pair | t11 | t12 | binop_pair | t21 | t22 | k :=
+      Some (cons (formula_eq t11 t21) (cons (formula_eq t12 t22) k));
+    | binop_cons | t11 | t12 | binop_cons | t21 | t22 | k :=
+      Some (cons (formula_eq t11 t21) (cons (formula_eq t12 t22) k));
+    | op1        | t11 | t12 | op2        | t21 | t22 | k :=
+      simplify_formula_eqb (term_binop op1 t11 t12) (term_binop op2 t21 t22) k.
+
+    Equations(noeqns) simplify_formula_binop_lit {Σ σ σ1 σ2}
+      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Lit σ)
+      (k : List Formula Σ) : option (List Formula Σ) :=
+    | binop_pair | t1 | t2 | (v1 , v2) | k :=
+      Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit _ v2)) k));
+    | binop_cons | t1 | t2 | [] | k := None;
+    | binop_cons | t1 | t2 | cons v1 v2 | k :=
+      Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit (ty_list _) v2)) k));
+    | op         | t1 | t2 | v         | k :=
+      Some (cons (formula_eq (term_binop op t1 t2) (term_lit _ v)) k).
+
     Equations(noeqns) simplify_formula_eq {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) : option (List Formula Σ) :=
-    | term_lit ?(σ) l1     | term_lit σ l2     | k => if Lit_eqb σ l1 l2 then Some k else None;
-    | term_inr _           | term_inl _        | k => None;
-    | term_inl _           | term_inr _        | k => None;
-    | term_inl t1          | term_inl t2       | k => simplify_formula_eq t1 t2 k;
-    | term_inr t1          | term_inr t2       | k => simplify_formula_eq t1 t2 k;
-    | term_record ?(R) ts1 | term_record R ts2 | k => Some (formula_eqs_nctx ts1 ts2 ++ k);
-    | t1                   | t2                | k => simplify_formula_eqb t1 t2 k.
+    | term_lit ?(σ) l1       | term_lit σ l2          | k => if Lit_eqb σ l1 l2 then Some k else None;
+    | term_inr _             | term_inl _             | k => None;
+    | term_inl _             | term_inr _             | k => None;
+    | term_inl t1            | term_inl t2            | k => simplify_formula_eq t1 t2 k;
+    | term_inr t1            | term_inr t2            | k => simplify_formula_eq t1 t2 k;
+    | term_record ?(R) ts1   | term_record R ts2      | k => Some (formula_eqs_nctx ts1 ts2 ++ k);
+    | term_binop op1 t11 t12 | term_binop op2 t21 t22 | k => simplify_formula_binop op1 t11 t12 op2 t21 t22 k;
+    | term_binop op1 t11 t12 | term_lit _ v           | k => simplify_formula_binop_lit op1 t11 t12 v k;
+    | t1                     | t2                     | k => simplify_formula_eqb t1 t2 k.
 
     Definition simplify_formula {Σ} (fml : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
       match fml with
-      | formula_bool t    => simplify_formula_bool t k
+      | formula_bool t    => simplify_formula_bool (peval t) k
       | formula_prop ζ P  => Some (cons fml k)
-      | formula_eq t1 t2  => simplify_formula_eq t1 t2 k
+      | formula_ge t1 t2  => simplify_formula_bool (peval (term_binop binop_ge t1 t2)) k
+      | formula_gt t1 t2  => simplify_formula_bool (peval (term_binop binop_gt t1 t2)) k
+      | formula_le t1 t2  => simplify_formula_bool (peval (term_binop binop_le t1 t2)) k
+      | formula_lt t1 t2  => simplify_formula_bool (peval (term_binop binop_lt t1 t2)) k
+      | formula_eq t1 t2  => simplify_formula_eq (peval t1) (peval t2) k
       | formula_neq t1 t2 => Some (cons fml k)
       end.
 
@@ -544,15 +696,21 @@ Module Mutators
       OptionSpec
         (fun fmlsk => forall ι, instpc fmlsk ι <-> inst (formula_bool t) ι /\ instpc k ι)
         (forall ι, ~ inst (formula_bool t) ι)
-        (simplify_formula_bool t k).
+        (simplify_formula_bool t k)
+    with simplify_formula_bool_neg_spec {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) :
+      OptionSpec
+        (fun fmlsk => forall ι, instpc fmlsk ι <-> ~ inst (formula_bool t) ι /\ instpc k ι)
+        (forall ι, inst (A := Prop) (formula_bool t) ι)
+        (simplify_formula_bool_neg t k).
     Proof.
-      dependent elimination t; cbn; try constructor.
-      - intros ι. rewrite inst_pathcondition_cons. reflexivity.
-      - destruct l; constructor; intuition.
-      - intros ι. rewrite inst_pathcondition_cons. reflexivity.
-      - intros ι. rewrite inst_pathcondition_cons. reflexivity.
-      - intros ι. rewrite inst_pathcondition_cons. reflexivity.
-    Qed.
+      (* dependent elimination t; cbn; try constructor. *)
+      (* - intros ι. rewrite inst_pathcondition_cons. reflexivity. *)
+      (* - destruct l; constructor; intuition. *)
+      (* - admit. *)
+      (* - intros ι. rewrite inst_pathcondition_cons. reflexivity. *)
+      (* - intros ι. rewrite inst_pathcondition_cons. reflexivity. *)
+      (* - intros ι. rewrite inst_pathcondition_cons. reflexivity. *)
+    Admitted.
 
     Lemma simplify_formula_eqb_spec {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) :
       OptionSpec
@@ -576,6 +734,8 @@ Module Mutators
         dependent elimination t; try (cbn; constructor; intros;
           rewrite ?inst_pathcondition_cons; auto; fail).
       - cbn. destruct (Lit_eqb_spec σ1 l l0); constructor; intuition.
+      - admit.
+      - admit.
       - specialize (IHs t). revert IHs. apply optionspec_monotonic.
         + intros fmls HYP ι. specialize (HYP ι). rewrite HYP. cbn.
           apply and_iff_compat_r. cbn. split; intros Heq.
@@ -595,7 +755,7 @@ Module Mutators
         + f_equal. apply Heq.
         + apply (@f_equal _ _ (@𝑹_unfold R0)) in Heq.
           rewrite ?𝑹_unfold_fold in Heq. apply Heq.
-    Qed.
+    Admitted.
 
     Lemma simplify_formula_spec {Σ} (fml : Formula Σ) (k : List Formula Σ) :
       OptionSpec
@@ -603,10 +763,34 @@ Module Mutators
         (forall ι, ~ inst fml ι)
         (simplify_formula fml k).
     Proof.
-      destruct fml; cbn.
-      - apply simplify_formula_bool_spec.
+      destruct fml; cbn - [peval].
+      - generalize (simplify_formula_bool_spec (peval t) k).
+        apply optionspec_monotonic; cbn; intros; specialize (H ι);
+          now rewrite (peval_sound t) in H.
       - constructor. intros ι. now rewrite inst_pathcondition_cons.
-      - apply simplify_formula_eq_spec.
+      - generalize (simplify_formula_bool_spec (peval (term_binop binop_ge t1 t2)) k).
+        apply optionspec_monotonic; cbn - [peval]; intros; specialize (H ι); revert H;
+          rewrite (peval_sound (term_binop binop_ge t1 t2)); cbn;
+          change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
+          now rewrite Z.geb_le, Z.ge_le_iff.
+      - generalize (simplify_formula_bool_spec (peval (term_binop binop_gt t1 t2)) k).
+        apply optionspec_monotonic; cbn; intros; specialize (H ι); revert H;
+          rewrite (peval_sound (term_binop binop_gt t1 t2)); cbn;
+          change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
+          now rewrite Z.gtb_lt, Z.gt_lt_iff.
+      - generalize (simplify_formula_bool_spec (peval (term_binop binop_le t1 t2)) k).
+        apply optionspec_monotonic; cbn; intros; specialize (H ι); revert H;
+          rewrite (peval_sound (term_binop binop_le t1 t2)); cbn;
+          change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
+          now rewrite Z.leb_le.
+      - generalize (simplify_formula_bool_spec (peval (term_binop binop_lt t1 t2)) k).
+        apply optionspec_monotonic; cbn; intros; specialize (H ι); revert H;
+          rewrite (peval_sound (term_binop binop_lt t1 t2)); cbn;
+          change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
+          now rewrite Z.ltb_lt.
+      - generalize (simplify_formula_eq_spec (peval t1) (peval t2) k).
+        apply optionspec_monotonic; cbn; intros; specialize (H ι);
+          now rewrite (peval_sound t1), (peval_sound t2) in H.
       - constructor. intros ι. now rewrite inst_pathcondition_cons.
     Qed.
 
@@ -792,6 +976,10 @@ Module Mutators
     Open Scope lazy_bool_scope.
     Equations(noind) formula_eqb {Σ} (f1 f2 : Formula Σ) : bool :=
       formula_eqb (formula_bool t1) (formula_bool t2) := Term_eqb t1 t2;
+      formula_eqb (formula_le t11 t12) (formula_le t21 t22) := Term_eqb t11 t21 &&& Term_eqb t12 t22;
+      formula_eqb (formula_lt t11 t12) (formula_lt t21 t22) := Term_eqb t11 t21 &&& Term_eqb t12 t22;
+      formula_eqb (formula_ge t11 t12) (formula_ge t21 t22) := Term_eqb t11 t21 &&& Term_eqb t12 t22;
+      formula_eqb (formula_gt t11 t12) (formula_gt t21 t22) := Term_eqb t11 t21 &&& Term_eqb t12 t22;
       formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) with eq_dec σ τ => {
         formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ ?(σ) t21 t22) (left eq_refl) :=
           Term_eqb t11 t21 &&& Term_eqb t12 t22;
@@ -811,6 +999,30 @@ Module Mutators
         simp formula_eqb;
         try (constructor; auto; fail).
       - destruct (Term_eqb_spec t t0); constructor; intuition.
+      - repeat
+          match goal with
+          | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+              try (constructor; intuition; fail)
+          end.
+      - repeat
+          match goal with
+          | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+              try (constructor; intuition; fail)
+          end.
+      - repeat
+          match goal with
+          | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+              try (constructor; intuition; fail)
+          end.
+      - repeat
+          match goal with
+          | |- context[Term_eqb ?t1 ?t2] =>
+              destruct (Term_eqb_spec t1 t2); cbn;
+              try (constructor; intuition; fail)
+          end.
       - destruct (eq_dec σ σ0); cbn.
         + destruct e.
           repeat
@@ -914,16 +1126,84 @@ Module Mutators
       - constructor. intuition.
     Qed.
 
-    Definition solver {w0 : World} (fmls0 : List Formula w0) :
-      option { w1 & MultiSub w0 w1 * List Formula w1 }%type :=
-      option_bind
-        (fun '(existT w1 (ν01 , fmls1)) =>
-           option_map
-             (fun '(existT w2 (ν12 , fmls2)) =>
-                existT w2 (multisub_app ν01 ν12 , fmls2))
-             (round fmls1)) (round fmls0).
+    Section Rounds.
 
-    Lemma solver_spec {w0 : World} (fmls0 : List Formula w0) :
+      Variable r : forall {w0 : World} (fmls0 : List Formula w0), option { w1 & MultiSub w0 w1 * List Formula w1 }%type.
+      Variable r_spec : forall {w0 : World} (fmls0 : List Formula w0),
+          OptionSpec
+            (fun '(existT w1 (ζ, fmls1)) =>
+               forall ι0,
+                 instpc (wco w0) ι0 ->
+                 (instpc fmls0 ι0 -> inst_multisub ζ ι0) /\
+                 (forall ι1,
+                     instpc (wco w1) ι1 ->
+                     ι0 = inst (wsub (wmultisub_sup ζ)) ι1 ->
+                     instpc fmls0 ι0 <-> inst fmls1 ι1))
+            (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
+            (r fmls0).
+
+      Definition twice {w0 : World} (fmls0 : List Formula w0) :
+        option { w1 & MultiSub w0 w1 * List Formula w1 }%type :=
+        option_bind
+          (fun '(existT w1 (ν01 , fmls1)) =>
+             option_map
+               (fun '(existT w2 (ν12 , fmls2)) =>
+                  existT w2 (multisub_app ν01 ν12 , fmls2))
+               (r fmls1)) (r fmls0).
+
+      Lemma twice_spec {w0 : World} (fmls0 : List Formula w0) :
+        OptionSpec
+          (fun '(existT w1 (ζ, fmls1)) =>
+             forall ι0,
+               instpc (wco w0) ι0 ->
+               (instpc fmls0 ι0 -> inst_multisub ζ ι0) /\
+               (forall ι1,
+                   instpc (wco w1) ι1 ->
+                   ι0 = inst (wsub (wmultisub_sup ζ)) ι1 ->
+                   instpc fmls0 ι0 <-> inst fmls1 ι1))
+          (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
+          (twice fmls0).
+      Proof.
+        unfold twice.
+        apply optionspec_bind.
+        generalize (r_spec fmls0).
+        apply optionspec_monotonic; auto.
+        intros (w1 & ν01 & fmls1) H1.
+        apply optionspec_map.
+        generalize (r_spec fmls1).
+        apply optionspec_monotonic; auto.
+        - intros (w2 & ν12 & fmls2) H2. intros ι0 Hpc0.
+          specialize (H1 ι0 Hpc0). destruct H1 as [H01 H10].
+          rewrite inst_multisub_app. split.
+          + intros Hfmls0. split; auto.
+            remember (inst (sub_multishift ν01) ι0) as ι1.
+            assert (instpc (wco w1) ι1) as Hpc1 by
+              (subst; apply multishift_entails; auto).
+            apply H2; auto. apply H10; auto.
+            subst; rewrite inst_multi; auto.
+          + intros ι2 Hpc2 Hι0. rewrite wmultisub_sup_app, inst_subst in Hι0.
+            remember (inst (wsub (wmultisub_sup ν12)) ι2) as ι1.
+            assert (instpc (wco w1) ι1) as Hpc1 by
+              (revert Hpc2; subst; rewrite <- inst_subst; apply went).
+            rewrite H10; eauto. apply H2; auto.
+        - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
+          destruct H1 as [H01 H10]. inster H01 by auto.
+          pose (inst (sub_multishift ν01) ι0) as ι1.
+          assert (instpc (wco w1) ι1) as Hpc1 by
+            (subst; apply multishift_entails; auto).
+          apply (Hfmls1 ι1 Hpc1). revert Hfmls0.
+          apply H10; auto. subst ι1.
+          now rewrite inst_multi.
+      Qed.
+
+    End Rounds.
+
+
+    Definition solver : forall {w0 : World} (fmls0 : List Formula w0),
+        option { w1 & MultiSub w0 w1 * List Formula w1 }%type :=
+      (@twice (@twice (@round))).
+
+    Lemma solver_spec : forall {w0 : World} (fmls0 : List Formula w0),
       OptionSpec
         (fun '(existT w1 (ζ, fmls1)) =>
            forall ι0,
@@ -936,36 +1216,9 @@ Module Mutators
         (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
         (solver fmls0).
     Proof.
-      unfold solver.
-      apply optionspec_bind.
-      generalize (round_spec fmls0).
-      apply optionspec_monotonic; auto.
-      intros (w1 & ν01 & fmls1) H1.
-      apply optionspec_map.
-      generalize (round_spec fmls1).
-      apply optionspec_monotonic; auto.
-      - intros (w2 & ν12 & fmls2) H2. intros ι0 Hpc0.
-        specialize (H1 ι0 Hpc0). destruct H1 as [H01 H10].
-        rewrite inst_multisub_app. split.
-        + intros Hfmls0. split; auto.
-          remember (inst (sub_multishift ν01) ι0) as ι1.
-          assert (instpc (wco w1) ι1) as Hpc1 by
-            (subst; apply multishift_entails; auto).
-          apply H2; auto. apply H10; auto.
-          subst; rewrite inst_multi; auto.
-        + intros ι2 Hpc2 Hι0. rewrite wmultisub_sup_app, inst_subst in Hι0.
-          remember (inst (wsub (wmultisub_sup ν12)) ι2) as ι1.
-          assert (instpc (wco w1) ι1) as Hpc1 by
-            (revert Hpc2; subst; rewrite <- inst_subst; apply went).
-          rewrite H10; eauto. apply H2; auto.
-      - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
-        destruct H1 as [H01 H10]. inster H01 by auto.
-        pose (inst (sub_multishift ν01) ι0) as ι1.
-        assert (instpc (wco w1) ι1) as Hpc1 by
-          (subst; apply multishift_entails; auto).
-        apply (Hfmls1 ι1 Hpc1). revert Hfmls0.
-        apply H10; auto. subst ι1.
-        now rewrite inst_multi.
+      apply @twice_spec.
+      apply @twice_spec.
+      apply @round_spec.
     Qed.
 
   End Solver.
@@ -1023,6 +1276,14 @@ Module Mutators
         match Σ with
         | ε     => fun p => p
         | Σ ▻ b => fun p => close Σ (angelicv b p)
+        end.
+
+    Definition demonic_close0 {Σ0 : LCtx} :
+      forall Σ, SPath (Σ0 ▻▻ Σ) -> SPath Σ0 :=
+      fix close Σ :=
+        match Σ with
+        | ε     => fun p => p
+        | Σ ▻ b => fun p => close Σ (demonicv b p)
         end.
 
     Definition demonic_close :
@@ -1613,6 +1874,71 @@ Module Mutators
              angelic_close0 Σe (assert_msgs_formulas mfs (debug b (solve_evars ε p [])))
          end.
 
+      Fixpoint assume_formulas {Σ} (fs : List Formula Σ) (p : SPath Σ) : SPath Σ :=
+        match fs with
+        | nil => p
+        | cons fml mfs =>
+          assume_formulas mfs (assumek fml p)
+        end.
+
+      Lemma assume_formulas_sound {Σ} {fs : List Formula Σ} {p : SPath Σ} {ι : SymInstance Σ} :
+        safe (assume_formulas fs p) ι <-> (instpc fs ι -> safe p ι).
+      Proof.
+        revert p.
+        induction fs; intros p; cbn.
+        - unfold inst_pathcondition; cbn; intuition.
+        - rewrite inst_pathcondition_cons.
+          rewrite IHfs. cbn. intuition.
+      Qed.
+
+      Fixpoint solve_uvars {Σ} Σu (p : SPath (Σ ▻▻ Σu)) (fs : List Formula (Σ ▻▻ Σu)) {struct p} : SPath Σ :=
+        match p with
+        | angelic_binary p1 p2 =>
+          demonic_close0 Σu
+            (assume_formulas fs
+               (angelic_binary (solve_uvars ε p1 []) (solve_uvars ε p2 [])))
+        | demonic_binary p1 p2 =>
+          demonic_close0 Σu
+            (assume_formulas fs
+               (demonic_binary (solve_uvars ε p1 []) (solve_uvars ε p2 [])))
+          (* demonic_binary *)
+          (*   (solve_uvars Σu p1 fs) *)
+          (*   (solve_uvars Σu p2 fs) *)
+        | error msg =>
+          demonic_close0 Σu (assume_formulas fs (error msg))
+        | block =>
+          demonic_close0 Σu (assume_formulas fs block)
+        | assertk fml msg p0 =>
+          demonic_close0 Σu
+            (assume_formulas fs (assertk fml msg (solve_uvars ε p0 [])))
+        | assumek fml p0 =>
+          solve_uvars Σu p0 (cons fml fs)
+        | angelicv b p0 =>
+          demonic_close0 Σu (assume_formulas fs (angelicv b (solve_uvars ε p0 [])))
+        | demonicv b p0 =>
+          solve_uvars (Σu ▻ b) p0 (subst fs sub_wk1)
+        | @assert_vareq _ x σ xIn t msg p0 =>
+          demonic_close0 Σu
+            (assume_formulas fs (assert_vareq x t msg (solve_uvars ε p0 [])))
+        | @assume_vareq _ x σ xIn t p0 =>
+          match Context.catView xIn with
+          | isCatLeft bIn =>
+            fun t p =>
+              demonic_close0 Σu
+                (assume_formulas fs
+                   (assume_vareq x t (solve_uvars ε p [])))
+          | isCatRight bIn =>
+            fun t p =>
+              let e := ctx_remove_inctx_right bIn in
+              solve_uvars (Σu - (x :: σ))
+                (eq_rect _ SPath p _ e)
+                (subst fs
+                   (eq_rect _ (Sub (Σ ▻▻ Σu)) (sub_single (inctx_cat_right bIn) t) _ e))
+          end t p0
+         | debug b p =>
+             demonic_close0 Σu (assume_formulas fs (debug b (solve_uvars ε p [])))
+         end.
+
       Lemma solve_evars_sound_angelic_binary {Σ0 Σe} (p1 p2 : SPath (Σ0 ▻▻ Σe))
             {mfs : List (Pair Message Formula) (Σ0 ▻▻ Σe)}
             (ι : SymInstance Σ0) :
@@ -1950,6 +2276,15 @@ Module Mutators
         exact (solve_evars_sound_help p eq_refl mfs ι).
       Qed.
 
+      Lemma solve_uvars_sound {Σ Σu} (p : SPath (Σ ▻▻ Σu))
+        (fs : List Formula (Σ ▻▻ Σu)) (ι : SymInstance Σ) :
+        safe (solve_uvars Σu p fs) ι <->
+        forall ιu : SymInstance Σu,
+          instpc fs (env_cat ι ιu) ->
+          safe p (env_cat ι ιu).
+      Proof.
+      Admitted.
+
     End Experimental.
 
   End SPath.
@@ -2113,9 +2448,10 @@ Module Mutators
     Definition angelic_match_bool :
       ⊢ Message -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
       fun w msg t =>
-        match term_get_lit t with
+        let t' := peval t in
+        match term_get_lit t' with
         | Some l => pure  l
-        | None   => angelic_match_bool' msg t
+        | None   => angelic_match_bool' msg t'
         end.
 
     Definition demonic_match_bool' :
@@ -2128,9 +2464,10 @@ Module Mutators
     Definition demonic_match_bool :
       ⊢ STerm ty_bool -> SDijkstra ⌜bool⌝ :=
       fun w t =>
-        match term_get_lit t with
+        let t' := peval t in
+        match term_get_lit t' with
         | Some l => pure  l
-        | None   => demonic_match_bool' t
+        | None   => demonic_match_bool' t'
         end.
 
 
@@ -3399,13 +3736,8 @@ Module Mutators
     Section ProduceConsume.
 
       Definition produce_chunk {Γ} :
-        ⊢ Chunk -> SMut Γ Γ Unit.
-      Proof.
-        intros w0 c k δ h.
-        apply k. apply wrefl.
-        constructor. apply δ.
-        apply (cons c h).
-      Defined.
+        ⊢ Chunk -> SMut Γ Γ Unit :=
+        fun w0 c k δ h => k w0 wrefl tt δ (cons c h).
 
       Fixpoint try_consume_chunk_exact {Σ} (h : SHeap Σ) (c : Chunk Σ) {struct h} : option (SHeap Σ) :=
         match h with
@@ -3913,14 +4245,17 @@ Module Mutators
         demonic_close (exec_contract c s (fun w1 ω01 _ δ1 h1 => SPath.block) (sep_contract_localstore c) nil).
 
       Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+        (* VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path c body)) nil)). *)
         VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path c body)) nil)).
 
     End Exec.
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      (* VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)). *)
       VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      (* is_true (ok (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil))). *)
       is_true (ok (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil))).
 
     Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
@@ -3931,6 +4266,8 @@ Module Mutators
       apply (ok_sound _ env_nil) in Hok. now constructor.
     Qed.
 
+    Definition ValidContractSolveUVars {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      VerificationCondition (prune (Experimental.solve_uvars ctx_nil (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)) nil)).
   End SMut.
 
 End Mutators.

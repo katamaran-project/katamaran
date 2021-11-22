@@ -13,6 +13,15 @@ verifying these contracts. The goal is to formally specify and verify with
 machine-checked proofs critical security guarantees of instruction sets. For
 more information visit [our website](https://katamaran-project.github.io/).
 
+Dependencies
+------------
+
+>    (coq                   (or (and (>= 8.12) (< 8.14~))))
+>    (coq-bbv               (or (and (>= 1.2)  (< 1.3~))))
+>    (coq-equations         (or (and (>= 1.2)  (< 1.4~))))
+>    (coq-iris              (= 3.4.0))
+>    (coq-iris-string-ident (= 0.1.0))
+>    (coq-stdpp             (= 1.5.0))))
 
 Installation
 ------------

@@ -696,6 +696,26 @@ Section WithB.
         auto.
   Qed.
 
+  Fixpoint Exists (Δ : Ctx B) {struct Δ} : (Env D Δ -> Prop) -> Prop :=
+    match Δ return (Env D Δ -> Prop) -> Prop with
+    | ctx_nil      => fun P => P env_nil
+    | ctx_snoc Δ b => fun P => Exists (fun δ => exists v, P (env_snoc δ _ v))
+    end.
+
+  Lemma Exists_exists (Δ : Ctx B) (P : Env D Δ -> Prop) :
+    (Exists P) <-> (exists E : Env D Δ, P E).
+  Proof.
+    split.
+    - induction Δ; cbn; intros hyp.
+      + exists env_nil; exact hyp.
+      + apply IHΔ in hyp. destruct hyp as (E & v & hyp).
+        exists (env_snoc E _ v); exact hyp.
+    - induction Δ; cbn; intros (E & hyp).
+      + destruct (nilView E). exact hyp.
+      + destruct (snocView E) as [E v].
+        apply IHΔ. exists E. exists v. exact hyp.
+  Qed.
+
   Lemma uncurry_curry (Δ : Ctx B) (r : Type) (f : Env D Δ -> r) :
     forall δ,
       uncurry (curry f) δ = f δ.
