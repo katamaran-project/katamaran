@@ -523,6 +523,7 @@ Module SepContracts.
          | ι : Env _ ctx_nil        |- _ => destruct_syminstance ι
          | H: _ /\ _ |- _ => destruct H
          | H: Z.ltb _ _ = true |- _ => apply Z.ltb_lt in H
+         | H: Z.ltb _ _ = false |- _ => apply Z.ltb_ge in H
          | H : pair _ _ = pair _ _ |- _ => inversion H; subst; clear H
          | |- forall _, _ => intro
          | |- exists _, _ => eexists
@@ -553,10 +554,8 @@ Module SepContracts.
     cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
     intros xs; revert xs.
     solve; nia.
-  Time Qed.
+  Qed.
   Hint Resolve valid_cmut_contract_summaxlen : contracts.
-
-  Arguments SPath.assertk {Σ}%ctx_scope _ {_} _.
 
   Lemma valid_contract_summaxlen : SMut.ValidContractSolveUVars sep_contract_summaxlen fun_summaxlen.
   Proof.
