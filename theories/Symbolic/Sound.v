@@ -75,7 +75,7 @@ Module Soundness
 
   Class Approx (AT : TYPE) (A : Type) : Type :=
     approx :
-      forall (w : World) (ι : SymInstance w),
+      forall (w : World) (ι : SymInstance w), (* instpc (wco w) ι -> *)
         AT w -> A -> Prop.
   Global Arguments approx {_ _ _ w} ι _ _.
 
@@ -106,7 +106,7 @@ Module Soundness
       forall K : 𝑲,
         approx ι (fs K) (fc K).
 
-  Global Instance ApproxMut {Γ1 Γ2 AT A} `{instA : Inst AT A} : Approx (SMut Γ1 Γ2 AT) (CMut Γ1 Γ2 A).
+  Global Instance ApproxMut {Γ1 Γ2 AT A} `{Approx AT A} : Approx (SMut Γ1 Γ2 AT) (CMut Γ1 Γ2 A).
   Proof.
     unfold SMut, CMut.
     eapply ApproxImpl.
@@ -122,8 +122,12 @@ Module Soundness
   Global Instance ApproxTermLit {σ} : Approx (STerm σ) (Lit σ) :=
     ApproxInst (AT := STerm σ).
 
+  Global Instance ApproxStore {Δ : PCtx} :
+    Approx (SStore Δ) (CStore Δ) :=
+    ApproxInst.
+
   Global Instance ApproxNamedEnv {N : Set} {Δ : NCtx N Ty} :
-    Approx (fun w => NamedEnv (Term w) Δ) (NamedEnv Lit Δ) :=
+    Approx (fun w => NamedEnv (Term w) Δ) (NamedEnv Lit Δ) | 1 :=
     ApproxInst.
 
   (* Global Instance ApproxChunk : Approx Chunk SCChunk := *)
@@ -140,7 +144,7 @@ Module Soundness
   Hint Unfold SMut : typeclass_instances.
   Hint Unfold CMut : typeclass_instances.
 
-  Hint Unfold approx ApproxImpl ApproxBox ApproxInst ApproxPath ApproxMut ApproxTermLit ApproxNamedEnv : core.
+  Hint Unfold approx ApproxImpl ApproxBox ApproxInst ApproxPath (* ApproxMut  *)ApproxTermLit (* ApproxNamedEnv *) ApproxStore : core.
 
   Import ModalNotations.
   Open Scope modal.
@@ -263,7 +267,7 @@ Module Soundness
       - intros w0 ι0 Hpc0.
         intros POST__s POST__c HPOST.
         unfold SDijk.angelic_ctx, CDijk.angelic_ctx, T.
-        apply HPOST; wsimpl; auto.
+        apply HPOST; wsimpl; try reflexivity; auto.
       - destruct b as [x σ].
         intros w0 ι0 Hpc0 POST__s POST__c HPOST; cbn.
         apply approx_angelic; auto.
@@ -300,7 +304,7 @@ Module Soundness
       - intros w0 ι0 Hpc0.
         intros POST__s POST__c HPOST.
         unfold SDijk.demonic_ctx, CDijk.demonic_ctx, T.
-        apply HPOST; wsimpl; auto.
+        apply HPOST; wsimpl; try reflexivity; auto.
       - destruct b as [x σ].
         intros w0 ι0 Hpc0 POST__s POST__c HPOST; cbn.
         apply approx_demonic; auto.
@@ -462,7 +466,7 @@ Module Soundness
 
     Lemma approx_block {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
       approx ι (@SMut.block Γ1 Γ2 AT w) CMut.block.
-    Proof. auto. Qed.
+    Proof. unfold approx, ApproxMut, ApproxImpl. auto. Qed.
 
     Lemma approx_error {AT A D} `{Approx AT A} {Γ1 Γ2} {w : World} {ι: SymInstance w} (func msg : string) (d : D) (cm : CMut Γ1 Γ2 A) :
       approx ι (@SMut.error Γ1 Γ2 AT D func msg d w) cm.
@@ -1380,9 +1384,12 @@ Module Soundness
     Proof.
       intros POST__s POST__c HPOST.
       intros δs0 δc0 -> hs0 hc0 Hh.
+      change (@instantiate_env _ _ _ _ ?Γ) with (@inst_localstore Γ).
       apply HPOST; auto. cbn. rewrite ?inst_sub_id; auto.
       apply env_lookup_extensional; cbn; intros [x σ] xIn.
       unfold evals, inst at 2; cbn. rewrite ?env_lookup_map.
+      change (@instantiate_env _ _ _ _ ?Γ) with (@inst_localstore Γ).
+      (* change (fun Σ : LCtx => @Env (𝑿 * Ty) (fun τ : 𝑿 * Ty => Term Σ (@snd 𝑿 Ty τ)) Γ) with (SStore Γ). *)
       now rewrite eval_exp_inst.
     Qed.
 
