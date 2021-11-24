@@ -36,12 +36,9 @@ From Coq Require Import
      Classes.RelationClasses
      Lists.List
      Program.Tactics
-     Relations.Relation_Definitions
-     Relations.Relation_Operators
      Strings.String
-     ZArith.ZArith.
-From Coq Require
-     Vector.
+     ZArith.ZArith
+     micromega.Lia.
 From Equations Require Import Equations.
 
 From Katamaran Require Import
@@ -49,7 +46,7 @@ From Katamaran Require Import
      Syntax.
 
 From stdpp Require
-     base finite list option.
+     base.
 
 Import CtxNotations.
 Import EnvNotations.
@@ -610,28 +607,60 @@ Module Mutators
 
   Module Solver.
 
+    Equations(noeqns) simplify_formula_bool_binop {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) (t1 : STerm σ1 Σ) (t2 : STerm σ2 Σ) (k : List Formula Σ) : List Formula Σ :=
+    | binop_eq  | t1 | t2 | k := cons (formula_eq t1 t2) k;
+    | binop_le  | t1 | t2 | k := cons (formula_le t1 t2) k;
+    | binop_lt  | t1 | t2 | k := cons (formula_lt t1 t2) k;
+    | binop_ge  | t1 | t2 | k := cons (formula_ge t1 t2) k;
+    | binop_gt  | t1 | t2 | k := cons (formula_gt t1 t2) k;
+    | binop_and | t1 | t2 | k := cons (formula_bool t1) (cons (formula_bool t2) k);
+    | op        | t1 | t2 | k := cons (formula_bool (term_binop op t1 t2)) k.
+
+    Equations(noeqns) simplify_formula_bool_binop_neg {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) (t1 : STerm σ1 Σ) (t2 : STerm σ2 Σ) (k : List Formula Σ) : List Formula Σ :=
+    | binop_eq  | t1 | t2 | k := cons (formula_neq t1 t2) k;
+    | binop_le  | t1 | t2 | k := cons (formula_gt t1 t2) k;
+    | binop_lt  | t1 | t2 | k := cons (formula_ge t1 t2) k;
+    | binop_ge  | t1 | t2 | k := cons (formula_lt t1 t2) k;
+    | binop_gt  | t1 | t2 | k := cons (formula_le t1 t2) k;
+    | binop_or  | t1 | t2 | k := cons (formula_bool (term_not t1)) (cons (formula_bool (term_not t2)) k);
+    | op        | t1 | t2 | k := cons (formula_bool (term_not (term_binop op t1 t2))) k.
+
+    Lemma simplify_formula_bool_binop_spec {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) t1 t2 k :
+      forall ι : SymInstance Σ,
+        instpc (simplify_formula_bool_binop op t1 t2 k) ι <->
+          eval_binop op (inst t1 ι) (inst t2 ι) = true /\ instpc k ι.
+    Proof.
+      intros; dependent elimination op; cbn;
+        rewrite ?inst_pathcondition_cons, ?andb_true_iff; cbn;
+        rewrite ?Z.eqb_eq, ?Z.leb_le, ?Z.ltb_lt, ?Z.geb_le, ?Z.ge_le_iff,
+          ?Z.gtb_lt, ?Z.gt_lt_iff, ?and_assoc;
+        try reflexivity.
+    Qed.
+
+    Lemma simplify_formula_bool_binop_neg_spec {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) t1 t2 k :
+      forall ι : SymInstance Σ,
+        instpc (simplify_formula_bool_binop_neg op t1 t2 k) ι <->
+          eval_binop op (inst t1 ι) (inst t2 ι) = false /\ instpc k ι.
+    Proof.
+      intros; dependent elimination op; cbn;
+        rewrite ?inst_pathcondition_cons; cbn;
+        change (inst_term ?t ?ι) with (inst t ι);
+        rewrite ?Z.eqb_neq, ?Z.leb_gt, ?Z.gt_lt_iff, ?Z.ltb_ge, ?Z.ge_le_iff,
+          ?Z.geb_leb, ?Z.leb_gt, ?Z.gtb_ltb, ?Z.ltb_ge,
+          ?orb_false_iff, ?negb_true_iff, ?and_assoc;
+        reflexivity.
+    Qed.
+
     Equations(noeqns) simplify_formula_bool {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_var ς                 | k := Some (cons (formula_bool (term_var ς)) k);
     | term_lit _ b               | k := if b then Some k else None;
-    | term_binop binop_eq t1 t2  | k := Some (cons (formula_eq t1 t2) k);
-    | term_binop binop_le t1 t2  | k := Some (cons (formula_le t1 t2) k);
-    | term_binop binop_lt t1 t2  | k := Some (cons (formula_lt t1 t2) k);
-    | term_binop binop_ge t1 t2  | k := Some (cons (formula_ge t1 t2) k);
-    | term_binop binop_gt t1 t2  | k := Some (cons (formula_gt t1 t2) k);
-    | term_binop binop_and t1 t2 | k := Some (cons (formula_bool t1) (cons (formula_bool t2) k));
-    | term_binop op t1 t2        | k := Some (cons (formula_bool (term_binop op t1 t2)) k);
+    | term_binop op t1 t2        | k := Some (simplify_formula_bool_binop op t1 t2 k);
     | term_not t                 | k := simplify_formula_bool_neg t k;
     | @term_projtup _ _ t n _ p  | k := Some (cons (formula_bool (@term_projtup _ _ t n _ p)) k)
     with simplify_formula_bool_neg {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_var ς                | k := Some (cons (formula_bool (term_not (term_var ς))) k);
     | term_lit _ b              | k := if b then None else Some k;
-    | term_binop binop_eq t1 t2  | k := Some (cons (formula_neq t1 t2) k);
-    | term_binop binop_le t1 t2  | k := Some (cons (formula_gt t1 t2) k);
-    | term_binop binop_lt t1 t2  | k := Some (cons (formula_ge t1 t2) k);
-    | term_binop binop_ge t1 t2  | k := Some (cons (formula_lt t1 t2) k);
-    | term_binop binop_gt t1 t2  | k := Some (cons (formula_le t1 t2) k);
-    | term_binop binop_or t1 t2 | k := Some (cons (formula_bool (term_not t1)) (cons (formula_bool (term_not t2)) k));
-    | term_binop op t1 t2       | k := Some (cons (formula_bool (term_not (term_binop op t1 t2))) k);
+    | term_binop op t1 t2        | k := Some (simplify_formula_bool_binop_neg op t1 t2 k);
     | term_not t                | k := simplify_formula_bool t k;
     | @term_projtup _ _ t n _ p | k := Some (cons (formula_bool (term_not (@term_projtup _ _ t n _ p))) k).
 
@@ -640,7 +669,7 @@ Module Mutators
       then Some k
       else Some (cons (formula_eq t1 t2) k).
 
-    Equations(noeqns) simplify_formula_binop {Σ σ σ11 σ12 σ21 σ22}
+    Equations(noeqns) simplify_formula_eq_binop {Σ σ σ11 σ12 σ21 σ22}
       (op1 : BinOp σ11 σ12 σ) (t11 : Term Σ σ11) (t12 : Term Σ σ12)
       (op2 : BinOp σ21 σ22 σ) (t21 : Term Σ σ21) (t22 : Term Σ σ22)
       (k : List Formula Σ) : option (List Formula Σ) :=
@@ -651,7 +680,7 @@ Module Mutators
     | op1        | t11 | t12 | op2        | t21 | t22 | k :=
       simplify_formula_eqb (term_binop op1 t11 t12) (term_binop op2 t21 t22) k.
 
-    Equations(noeqns) simplify_formula_binop_lit {Σ σ σ1 σ2}
+    Equations(noeqns) simplify_formula_eq_binop_lit {Σ σ σ1 σ2}
       (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Lit σ)
       (k : List Formula Σ) : option (List Formula Σ) :=
     | binop_pair | t1 | t2 | (v1 , v2) | k :=
@@ -669,8 +698,8 @@ Module Mutators
     | term_inl t1            | term_inl t2            | k => simplify_formula_eq t1 t2 k;
     | term_inr t1            | term_inr t2            | k => simplify_formula_eq t1 t2 k;
     | term_record ?(R) ts1   | term_record R ts2      | k => Some (formula_eqs_nctx ts1 ts2 ++ k);
-    | term_binop op1 t11 t12 | term_binop op2 t21 t22 | k => simplify_formula_binop op1 t11 t12 op2 t21 t22 k;
-    | term_binop op1 t11 t12 | term_lit _ v           | k => simplify_formula_binop_lit op1 t11 t12 v k;
+    | term_binop op1 t11 t12 | term_binop op2 t21 t22 | k => simplify_formula_eq_binop op1 t11 t12 op2 t21 t22 k;
+    | term_binop op1 t11 t12 | term_lit _ v           | k => simplify_formula_eq_binop_lit op1 t11 t12 v k;
     | t1                     | t2                     | k => simplify_formula_eqb t1 t2 k.
 
     Definition simplify_formula {Σ} (fml : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
@@ -703,14 +732,34 @@ Module Mutators
         (forall ι, inst (A := Prop) (formula_bool t) ι)
         (simplify_formula_bool_neg t k).
     Proof.
-      (* dependent elimination t; cbn; try constructor. *)
-      (* - intros ι. rewrite inst_pathcondition_cons. reflexivity. *)
-      (* - destruct l; constructor; intuition. *)
-      (* - admit. *)
-      (* - intros ι. rewrite inst_pathcondition_cons. reflexivity. *)
-      (* - intros ι. rewrite inst_pathcondition_cons. reflexivity. *)
-      (* - intros ι. rewrite inst_pathcondition_cons. reflexivity. *)
-    Admitted.
+      { dependent elimination t; cbn; try constructor.
+        - intros ι. rewrite inst_pathcondition_cons. reflexivity.
+        - destruct l; constructor; intuition.
+        - apply simplify_formula_bool_binop_spec.
+        - generalize (simplify_formula_bool_neg_spec Σ e0 k).
+          apply optionspec_monotonic.
+          + intros fmlsk HYP ι; specialize (HYP ι); revert HYP. cbn.
+            unfold is_true. now rewrite negb_true_iff, not_true_iff_false.
+          + intros HYP ι; specialize (HYP ι); revert HYP. cbn.
+            unfold is_true. now rewrite not_true_iff_false, negb_false_iff.
+        - intros ι. rewrite inst_pathcondition_cons. reflexivity.
+      }
+      { dependent elimination t; try constructor.
+        - intros ι. rewrite inst_pathcondition_cons. cbn.
+          unfold is_true. now rewrite negb_true_iff, not_true_iff_false.
+        - destruct l; cbn; constructor; intuition.
+        - intros ι. cbn. rewrite not_true_iff_false.
+          apply simplify_formula_bool_binop_neg_spec.
+        - generalize (simplify_formula_bool_spec Σ e0 k).
+          apply optionspec_monotonic.
+          + intros fmlsk HYP ι; specialize (HYP ι); revert HYP. cbn.
+            unfold is_true. now rewrite not_true_iff_false, negb_false_iff.
+          + intros HYP ι; specialize (HYP ι); revert HYP. cbn.
+            unfold is_true. now rewrite not_true_iff_false, negb_true_iff.
+        - intros ι. rewrite inst_pathcondition_cons. cbn.
+          unfold is_true. now rewrite negb_true_iff, not_true_iff_false.
+      }
+    Qed.
 
     Lemma simplify_formula_eqb_spec {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) :
       OptionSpec
@@ -2024,14 +2073,13 @@ Module Mutators
       Proof.
         cbn.
         rewrite angelic_close0_sound.
-        setoid_rewrite exists_syminstance_nil in Hp.
-        setoid_rewrite assert_msgs_formulas_sound.
-        cbn.
-        setoid_rewrite Hp.
+        apply base.exist_proper. intros ιe.
+        specialize (Hp (ι ►► ιe)).
+        rewrite exists_syminstance_nil in Hp.
+        rewrite assert_msgs_formulas_sound.
+        cbn. rewrite Hp.
         change (inst_pathcondition [] _) with True.
-        cbn.
-        setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
-        now setoid_rewrite and_comm at 2.
+        intuition.
       Qed.
 
       Lemma map_snd_subst {Σ Σ' : LCtx} {ζ : Sub Σ Σ'}
@@ -2047,13 +2095,7 @@ Module Mutators
 
       Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
         (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
-      Proof.
-        split.
-        - intros (x & px & q).
-          now split; [exists x|].
-        - intros ((x & px) & q).
-          now exists x.
-      Qed.
+      Proof. firstorder. Qed.
 
       Lemma safe_eq_rect {Σ Σ'} (eq : Σ = Σ') (p : SPath Σ) (ι : SymInstance Σ') :
         safe (eq_rect Σ SPath p Σ' eq) ι = safe p (eq_rect Σ' (fun Σ => SymInstance Σ) ι Σ (eq_sym eq)).

@@ -118,7 +118,7 @@ Module Assertions
 
   Definition inst_formula {Σ} (fml : Formula Σ) (ι : SymInstance Σ) : Prop :=
     match fml with
-    | formula_bool t    => is_true (inst (A := Lit ty_bool) t ι)
+    | formula_bool t    => inst (A := Lit ty_bool) t ι = true
     | formula_prop ζ P  => uncurry_named P (inst ζ ι)
     | formula_ge t1 t2  => inst (A := Lit ty_int) t1 ι >= inst (A := Lit ty_int) t2 ι
     | formula_gt t1 t2  => inst (A := Lit ty_int) t1 ι >  inst (A := Lit ty_int) t2 ι
@@ -891,7 +891,7 @@ Module Assertions
     end.
 
   Definition Linted {Δ σ} (c : SepContract Δ σ) : Prop :=
-    Bool.Is_true (lint_contract c).
+    lint_contract c = true.
 
   Definition SepContractEnv : Type :=
     forall Δ τ (f : 𝑭 Δ τ), option (SepContract Δ τ).
