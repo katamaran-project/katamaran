@@ -27,13 +27,11 @@
 (******************************************************************************)
 
 Require Import Coq.Program.Tactics.
-Require Import Coq.Program.Equality.
-Require Import FunctionalExtensionality.
 From Equations Require Import Equations.
 
 From Katamaran Require Import
-     Attic.Disjoint Environment Sep.Hoare Sep.Logic Sep.Spec
-     SmallStep.Inversion Syntax Tactics.
+     Attic.Disjoint Sep.Hoare Sep.Spec
+     SmallStep.Inversion Syntax.
 
 Module HoareSound
        (Import termkit : TermKit)
@@ -167,7 +165,7 @@ Module HoareSound
       forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : CStore Γ) (s' : Stm Γ σ),
         ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
         forall (PRE : HProp) (POST : Lit σ -> CStore Γ -> HProp)
-               (triple : δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄)
+               (triple : ⦃ PRE ⦄ s ; δ ⦃ POST ⦄)
                (γframe γfocus : Heap),
           split (heap γ) γframe γfocus ->
           PRE γfocus ->

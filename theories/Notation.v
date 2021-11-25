@@ -34,10 +34,11 @@
    - x = y is at level 70
  *)
 
-(* after 8.10: Declare Scope ctx_scope. *)
-(* after 8.10: Declare Scope env_scope. *)
-(* after 8.10: Declare Scope pat_scope. *)
-(* after 8.10: Declare Scope exp_scope. *)
+Declare Scope ctx_scope.
+Declare Scope env_scope.
+Declare Scope pat_scope.
+Declare Scope exp_scope.
+Declare Scope arg_scope.
 Delimit Scope ctx_scope with ctx.
 Delimit Scope env_scope with env.
 Delimit Scope pat_scope with pat.
@@ -69,5 +70,5 @@ Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> n ⟨ γ2 , μ2 , δ2 , s2 
 Reserved Notation "s1 ;; s2" (at level 100, s2 at level 200, right associativity,
   format "'[' '[hv' '[' s1 ']' ;;  ']' '/' s2 ']'").
 
-Reserved Notation "δ ⊢ ⦃ P ⦄ s ⦃ Q ⦄" (at level 75, no associativity).
+Reserved Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" (at level 75, no associativity).
 Reserved Infix "⊣⊢s"                (at level 50, no associativity).

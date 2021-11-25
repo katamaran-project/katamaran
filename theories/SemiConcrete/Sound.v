@@ -28,22 +28,13 @@
 
 From Coq Require Import
      Program.Equality
-     Program.Tactics
-     ZArith.ZArith
-     Strings.String
-     Classes.Morphisms
-     Classes.Morphisms_Prop
-     Classes.Morphisms_Relations.
-
-From Equations Require Import
-     Equations.
+     ZArith.ZArith.
 
 From Katamaran Require Import
      Sep.Spec
      Sep.Logic
      Sep.Hoare
      Syntax
-     Tactics
      SemiConcrete.Mutator.
 
 Set Implicit Arguments.
@@ -497,7 +488,7 @@ Module Soundness
     Lemma exec_sound {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> CStore Γ -> L) :
       forall (δ1 : CStore Γ) (h1 : SCHeap),
         exec s (fun v => liftP (POST v)) δ1 h1 ->
-        δ1 ⊢ ⦃ interpret_scheap h1 ⦄ s ⦃ POST ⦄.
+        ⦃ interpret_scheap h1 ⦄ s ; δ1 ⦃ POST ⦄.
     Proof.
       induction s; intros ? ?; cbn;
         cbv [pure pushspops pushpop

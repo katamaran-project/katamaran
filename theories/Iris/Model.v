@@ -1576,7 +1576,7 @@ Module IrisSoundness
     forall (PRE : iProp Σ) (POST : Lit τ -> CStore Γ -> iProp Σ),
       ForeignSem ->
       LemmaSem ->
-      δ ⊢ ⦃ PRE ⦄ s ⦃ POST ⦄ ->
+      ⦃ PRE ⦄ s ; δ ⦃ POST ⦄ ->
       ⊢ (□ ▷ ValidContractEnvSem CEnv -∗
           semTriple δ PRE s POST)%I.
   Proof.
@@ -1802,7 +1802,6 @@ Module Adequacy
         + iFrame.
           unfold RegStore_to_map.
           iApply (own_RegStore_to_map_reg_pointsTos (H := SailRegG reg_pre_inG spec_name)(γ := γ) (l := finite.enum (sigT 𝑹𝑬𝑮)) with "Hs2").
-          Locate NoDup.
           eapply finite.NoDup_enum.
         + iApply (wp_mono with "trips'").
           by iIntros ([δ3 v]).
