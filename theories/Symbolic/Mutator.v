@@ -669,6 +669,18 @@ Module Mutators
       then Some k
       else Some (cons (formula_eq t1 t2) k).
 
+    Lemma simplify_formula_eqb_spec {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) :
+      OptionSpec
+        (fun fmlsk => forall ι, instpc fmlsk ι <-> inst (formula_eq t1 t2) ι /\ instpc k ι)
+        (forall ι, ~ inst (formula_eq t1 t2) ι)
+        (simplify_formula_eqb t1 t2 k).
+    Proof.
+      unfold simplify_formula_eqb.
+      destruct (Term_eqb_spec t1 t2); constructor; intros ι.
+      - subst; intuition.
+      - now rewrite inst_pathcondition_cons.
+    Qed.
+
     Equations(noeqns) simplify_formula_eq_binop {Σ σ σ11 σ12 σ21 σ22}
       (op1 : BinOp σ11 σ12 σ) (t11 : Term Σ σ11) (t12 : Term Σ σ12)
       (op2 : BinOp σ21 σ22 σ) (t21 : Term Σ σ21) (t22 : Term Σ σ22)
@@ -680,6 +692,40 @@ Module Mutators
     | op1        | t11 | t12 | op2        | t21 | t22 | k :=
       simplify_formula_eqb (term_binop op1 t11 t12) (term_binop op2 t21 t22) k.
 
+    Lemma simplify_formula_eq_binop_spec {Σ σ σ11 σ12 σ21 σ22}
+      (op1 : BinOp σ11 σ12 σ) (t11 : Term Σ σ11) (t12 : Term Σ σ12)
+      (op2 : BinOp σ21 σ22 σ) (t21 : Term Σ σ21) (t22 : Term Σ σ22)
+      (k : List Formula Σ) :
+      OptionSpec
+        (fun fmlsk : List Formula Σ =>
+           forall ι,
+             instpc fmlsk ι <->
+               eval_binop op1 (inst t11 ι) (inst t12 ι) =
+               eval_binop op2 (inst t21 ι) (inst t22 ι) /\ instpc k ι)
+        (forall ι, eval_binop op1 (inst t11 ι) (inst t12 ι) <>
+                   eval_binop op2 (inst t21 ι) (inst t22 ι))
+        (simplify_formula_eq_binop op1 t11 t12 op2 t21 t22 k).
+    Proof.
+      destruct op1; cbn;
+        try match goal with
+            | |- OptionSpec _ _ (simplify_formula_eqb ?t1 ?t2 ?k) =>
+                generalize (simplify_formula_eqb_spec t1 t2 k);
+                let H := fresh in
+                let ι := fresh "ι" in
+                apply optionspec_monotonic;
+                [ let pc := fresh "pc" in intros pc |];
+                intros H ι; specialize (H ι); auto
+                (* change (inst_term ?t ?ι) with (inst t ι); auto *)
+            end.
+      - dependent elimination op2; cbn. constructor. intros ι.
+        rewrite ?inst_pathcondition_cons. cbn. intuition.
+      - dependent elimination op2; cbn.
+        + constructor. intros ι.
+          rewrite ?inst_pathcondition_cons. cbn. intuition.
+        + constructor. intros ι.
+          rewrite ?inst_pathcondition_cons. cbn. intuition.
+    Qed.
+
     Equations(noeqns) simplify_formula_eq_binop_lit {Σ σ σ1 σ2}
       (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Lit σ)
       (k : List Formula Σ) : option (List Formula Σ) :=
@@ -690,6 +736,23 @@ Module Mutators
       Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit (ty_list _) v2)) k));
     | op         | t1 | t2 | v         | k :=
       Some (cons (formula_eq (term_binop op t1 t2) (term_lit _ v)) k).
+
+    Lemma simplify_formula_eq_binop_lit_spec {Σ σ σ1 σ2}
+      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Lit σ) (k : List Formula Σ) :
+      OptionSpec
+        (fun fmlsk : List Formula Σ =>
+           forall ι, instpc fmlsk ι <-> eval_binop op (inst t1 ι) (inst t2 ι) = v /\ instpc k ι)
+        (forall ι, eval_binop op (inst t1 ι) (inst t2 ι) <> v)
+        (simplify_formula_eq_binop_lit op t1 t2 v k).
+    Proof.
+      destruct op; cbn; try (constructor; intros ι); cbn;
+        rewrite ?inst_pathcondition_cons; cbn; try reflexivity.
+      - destruct v. constructor. intros ι. cbn.
+        rewrite ?inst_pathcondition_cons. cbn. intuition.
+      - destruct v; constructor; intros ι; cbn.
+        + discriminate.
+        + rewrite ?inst_pathcondition_cons. cbn. intuition.
+    Qed.
 
     Equations(noeqns) simplify_formula_eq {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_lit ?(σ) l1       | term_lit σ l2          | k => if Lit_eqb σ l1 l2 then Some k else None;
@@ -761,18 +824,6 @@ Module Mutators
       }
     Qed.
 
-    Lemma simplify_formula_eqb_spec {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) :
-      OptionSpec
-        (fun fmlsk => forall ι, instpc fmlsk ι <-> inst (formula_eq t1 t2) ι /\ instpc k ι)
-        (forall ι, ~ inst (formula_eq t1 t2) ι)
-        (simplify_formula_eqb t1 t2 k).
-    Proof.
-      unfold simplify_formula_eqb.
-      destruct (Term_eqb_spec t1 t2); constructor; intros ι.
-      - subst; intuition.
-      - now rewrite inst_pathcondition_cons.
-    Qed.
-
     Lemma simplify_formula_eq_spec {Σ σ} (s t : Term Σ σ) (k : List Formula Σ) :
       OptionSpec
         (fun fmlsk : List Formula Σ => forall ι, instpc fmlsk ι <-> inst (formula_eq s t) ι /\ instpc k ι)
@@ -783,8 +834,8 @@ Module Mutators
         dependent elimination t; try (cbn; constructor; intros;
           rewrite ?inst_pathcondition_cons; auto; fail).
       - cbn. destruct (Lit_eqb_spec σ1 l l0); constructor; intuition.
-      - admit.
-      - admit.
+      - cbn. apply simplify_formula_eq_binop_lit_spec.
+      - cbn. apply simplify_formula_eq_binop_spec.
       - specialize (IHs t). revert IHs. apply optionspec_monotonic.
         + intros fmls HYP ι. specialize (HYP ι). rewrite HYP. cbn.
           apply and_iff_compat_r. cbn. split; intros Heq.
@@ -804,7 +855,7 @@ Module Mutators
         + f_equal. apply Heq.
         + apply (@f_equal _ _ (@𝑹_unfold R0)) in Heq.
           rewrite ?𝑹_unfold_fold in Heq. apply Heq.
-    Admitted.
+    Qed.
 
     Lemma simplify_formula_spec {Σ} (fml : Formula Σ) (k : List Formula Σ) :
       OptionSpec
