@@ -104,8 +104,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    (* TODO: This is slow. Should be replaced by a reflective proof. *)
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance EitherConstructor_finite : Finite EitherConstructor :=
@@ -114,8 +113,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    (* TODO: This is slow. Should be replaced by a reflective proof. *)
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
 End Finite.

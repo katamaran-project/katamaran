@@ -313,7 +313,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance Privilege_finite : Finite Privilege :=
@@ -322,7 +322,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
@@ -331,7 +331,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance PmpAddrIdx_finite : Finite PmpAddrIdx :=
@@ -340,7 +340,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance PmpAddrMatchType_finite : Finite PmpAddrMatchType :=
@@ -349,7 +349,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance PmpMatch_finite : Finite PmpMatch :=
@@ -358,7 +358,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance PmpAddrMatch_finite : Finite PmpAddrMatch :=
@@ -367,7 +367,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance ROP_finite :
@@ -377,7 +377,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance IOP_finite :
@@ -387,7 +387,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance UOP_finite :
@@ -397,7 +397,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance BOP_finite :
@@ -407,7 +407,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance Retired_finite :
@@ -417,7 +417,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance ASTConstructor_finite :
@@ -427,7 +427,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance AccessTypeConstructor_finite :
@@ -437,7 +437,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance ExceptionTypeConstructor_finite :
@@ -447,7 +447,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance MemoryOpResultConstructor_finite :
@@ -457,7 +457,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance FetchResultConstructor_finite :
@@ -467,7 +467,7 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
 
   Global Program Instance CtlResultConstructor_finite :
@@ -477,8 +477,9 @@ Section Finite.
     now apply nodup_fixed.
   Qed.
   Next Obligation.
-    intros []; apply elem_of_list_In; cbn; intuition.
+    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
   Qed.
+
 End Finite.
 
 Module RiscvPmpTypeKit <: TypeKit.
