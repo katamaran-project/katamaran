@@ -272,6 +272,7 @@ End ExampleTermKit.
 
 Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
   Module Export TM := Terms ExampleTermKit.
+  Import NameResolution.
 
   Local Coercion stm_exp : Exp >-> Stm.
 
@@ -370,6 +371,7 @@ Module SepContracts.
   Module ExampleSymbolicContractKit <:
     SymbolicContractKit ExampleTermKit ExampleProgramKit ExampleAssertionKit.
     Module Export ASS := Assertions ExampleTermKit ExampleProgramKit ExampleAssertionKit.
+    Import NameResolution.
 
     Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
     Local Notation "p '✱' q" := (asn_sep p q) (at level 150).

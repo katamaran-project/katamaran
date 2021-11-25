@@ -203,6 +203,7 @@ End RiscvPmpTermKit.
 
 Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Module Export TM := Terms RiscvPmpTermKit.
+  Import NameResolution.
 
   Section Functions.
   Local Coercion stm_exp : Exp >-> Stm.

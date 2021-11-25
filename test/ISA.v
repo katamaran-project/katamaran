@@ -313,6 +313,7 @@ End ISATermKit.
 
 Module ISAProgramKit <: (ProgramKit ISATermKit).
   Module Export TM := Terms ISATermKit.
+  Import NameResolution.
 
   (* REGISTER STORE *)
   Definition RegStore := GenericRegStore.
@@ -507,6 +508,7 @@ End ISAAssertionKit.
 Module ISASymbolicContractKit <:
   SymbolicContractKit ISATermKit ISAProgramKit ISAAssertionKit.
   Module Export ASS := Assertions ISATermKit ISAProgramKit ISAAssertionKit.
+  Import NameResolution.
 
   Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
   Local Notation "p '✱' q" := (asn_sep p q) (at level 150).

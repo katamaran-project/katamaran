@@ -77,6 +77,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Module Export ASS := Assertions RiscvPmpTermKit
                                   RiscvPmpProgramKit
                                   RiscvPmpAssertionKit.
+  Import NameResolution.
 
   Local Notation "'rs'"      := "rs" : string_scope.
   Local Notation "'rs1'"     := "rs1" : string_scope.

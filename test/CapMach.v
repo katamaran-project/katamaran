@@ -242,6 +242,7 @@ End CapTypeKit.
 Module CapValueKit <: ValueKit .
   Module typekit := CapTypeKit.
   Module Export TY := Types typekit.
+  Import NameResolution.
 
   Notation ty_hv   := (ty_enum regname).
   Notation ty_lv   := (ty_enum regname).
@@ -478,6 +479,7 @@ End CapTermKit.
 
 Module CapProgramKit <: (ProgramKit CapTermKit).
   Module Export TM := Terms CapTermKit.
+  Import NameResolution.
 
   Local Notation "'c'"  := (@exp_var _ "c" _ _) : exp_scope.
   Local Notation "'hv'" := (@exp_var _ "hv" _ _) : exp_scope.
