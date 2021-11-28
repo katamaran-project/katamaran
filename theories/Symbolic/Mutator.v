@@ -364,58 +364,44 @@ Module Mutators
   Notation persist__term t :=
     (@persist (STerm _) (@persist_subst (fun Σ => Term Σ _) (@SubstTerm _)) _ t).
 
-  Section MultiSubs.
+  Section TriangularSubstitutions.
 
-    Inductive MultiSub (w : World) : World -> Type :=
-    | multisub_id        : MultiSub w w
-    | multisub_cons {w' x σ} (xIn : (x::σ) ∈ w) (t : Term (wctx w - (x::σ)) σ)
-                    (ν : MultiSub (wsubst w x t) w')
-                    : MultiSub w w'.
+    Inductive Triangular (w : World) : World -> Type :=
+    | tri_id        : Triangular w w
+    | tri_cons {w' x σ}
+        (xIn : (x::σ) ∈ w) (t : Term (wctx w - (x::σ)) σ)
+        (ν : Triangular (wsubst w x t) w') : Triangular w w'.
+    Global Arguments tri_id {_}.
+    Global Arguments tri_cons {_ _} x {_ _} t ν.
 
-    Global Arguments multisub_id {_}.
-    Global Arguments multisub_cons {_ _} x {_ _} t ν.
-
-    Fixpoint multisub_app {w1 w2 w3} (ν12 : MultiSub w1 w2) : MultiSub w2 w3 -> MultiSub w1 w3 :=
+    Fixpoint tri_comp {w1 w2 w3} (ν12 : Triangular w1 w2) : Triangular w2 w3 -> Triangular w1 w3 :=
       match ν12 with
-      | multisub_id           => fun ν => ν
-      | multisub_cons x t ν12 => fun ν => multisub_cons x t (multisub_app ν12 ν)
+      | tri_id           => fun ν => ν
+      | tri_cons x t ν12 => fun ν => tri_cons x t (tri_comp ν12 ν)
       end.
 
-    Fixpoint wmultisub_sup {w1 w2} (ν : MultiSub w1 w2) : w1 ⊒ w2 :=
+    Fixpoint acc_triangular {w1 w2} (ν : Triangular w1 w2) : w1 ⊒ w2 :=
       match ν with
-      | multisub_id         => wrefl
-      | multisub_cons _ _ ν => wtrans wsubst_sup (wmultisub_sup ν)
+      | tri_id         => wrefl
+      | tri_cons _ _ ν => wtrans wsubst_sup (acc_triangular ν)
       end.
 
-    Fixpoint sub_multishift {w1 w2} (ζ : MultiSub w1 w2) : Sub w2 w1 :=
+    Fixpoint sub_triangular_inv {w1 w2} (ζ : Triangular w1 w2) : Sub w2 w1 :=
       match ζ with
-      | multisub_id         => sub_id _
-      | multisub_cons x t ζ => subst (sub_multishift ζ) (sub_shift _)
+      | tri_id         => sub_id _
+      | tri_cons x t ζ => subst (sub_triangular_inv ζ) (sub_shift _)
       end.
 
-    Fixpoint inst_multisub {w0 w1} (ζ : MultiSub w0 w1) (ι : SymInstance w0) : Prop :=
+    Fixpoint inst_triangular {w0 w1} (ζ : Triangular w0 w1) (ι : SymInstance w0) : Prop :=
       match ζ with
-      | multisub_id => True
-      | @multisub_cons _ Σ' x σ xIn t ζ0 =>
+      | tri_id => True
+      | @tri_cons _ Σ' x σ xIn t ζ0 =>
         let ι' := env_remove (x :: σ) ι xIn in
-        env_lookup ι xIn = inst t ι' /\ inst_multisub ζ0 ι'
+        env_lookup ι xIn = inst t ι' /\ inst_triangular ζ0 ι'
       end.
 
-    Lemma inst_multi {w1 w2 : World} (ι1 : SymInstance w1) (ζ : MultiSub w1 w2) :
-      inst_multisub ζ ι1 ->
-      inst (wsub (wmultisub_sup ζ)) (inst (sub_multishift ζ) ι1) = ι1.
-    Proof.
-      intros Hζ. induction ζ; cbn - [subst].
-      - now rewrite ?inst_sub_id.
-      - cbn in Hζ. destruct Hζ as [? Hζ].
-        rewrite <- inst_sub_shift in Hζ.
-        rewrite ?inst_subst.
-        rewrite IHζ; auto. rewrite inst_sub_shift.
-        now rewrite inst_sub_single.
-    Qed.
-
-    Lemma inst_multishift_multisub {w1 w2 : World} (ι2 : SymInstance w2) (ν : MultiSub w1 w2) :
-      inst (sub_multishift ν) (inst (wsub (wmultisub_sup ν)) ι2) = ι2.
+    Lemma inst_triangular_left_inverse {w1 w2 : World} (ι2 : SymInstance w2) (ν : Triangular w1 w2) :
+      inst (sub_triangular_inv ν) (inst (wsub (acc_triangular ν)) ι2) = ι2.
     Proof.
       induction ν; cbn - [subst].
       - now rewrite ?inst_sub_id.
@@ -428,11 +414,24 @@ Module Mutators
         apply IHν.
     Qed.
 
+    Lemma inst_triangular_right_inverse {w1 w2 : World} (ι1 : SymInstance w1) (ζ : Triangular w1 w2) :
+      inst_triangular ζ ι1 ->
+      inst (wsub (acc_triangular ζ)) (inst (sub_triangular_inv ζ) ι1) = ι1.
+    Proof.
+      intros Hζ. induction ζ; cbn - [subst].
+      - now rewrite ?inst_sub_id.
+      - cbn in Hζ. destruct Hζ as [? Hζ].
+        rewrite <- inst_sub_shift in Hζ.
+        rewrite ?inst_subst.
+        rewrite IHζ; auto. rewrite inst_sub_shift.
+        now rewrite inst_sub_single.
+    Qed.
+
     (* Forward entailment *)
-    Lemma multishift_entails {w0 w1} (ν : MultiSub w0 w1) (ι0 : SymInstance w0) :
-      inst_multisub ν ι0 ->
+    Lemma entails_triangular_inv {w0 w1} (ν : Triangular w0 w1) (ι0 : SymInstance w0) :
+      inst_triangular ν ι0 ->
       instpc (wco w0) ι0 ->
-      instpc (wco w1) (inst (sub_multishift ν) ι0).
+      instpc (wco w1) (inst (sub_triangular_inv ν) ι0).
     Proof.
       induction ν; cbn.
       - cbn. rewrite inst_sub_id. auto.
@@ -442,8 +441,8 @@ Module Mutators
         rewrite ?inst_subst, ?inst_sub_single; auto.
     Qed.
 
-    Lemma inst_multisub_inst_sub_multi {w0 w1} (ζ01 : MultiSub w0 w1) (ι1 : SymInstance w1) :
-      inst_multisub ζ01 (inst (wsub (wmultisub_sup ζ01)) ι1).
+    Lemma inst_triangular_valid {w0 w1} (ζ01 : Triangular w0 w1) (ι1 : SymInstance w1) :
+      inst_triangular ζ01 (inst (wsub (acc_triangular ζ01)) ι1).
     Proof.
         induction ζ01; cbn - [subst]; auto.
         rewrite <- inst_sub_shift.
@@ -458,9 +457,9 @@ Module Mutators
         split; auto.
     Qed.
 
-    Lemma inst_multisub_app {w0 w1 w2} (ν01 : MultiSub w0 w1) (ν12 : MultiSub w1 w2) (ι0 : SymInstance w0) :
-      inst_multisub (multisub_app ν01 ν12) ι0 <->
-      inst_multisub ν01 ι0 /\ inst_multisub ν12 (inst (sub_multishift ν01) ι0).
+    Lemma inst_tri_comp {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) (ι0 : SymInstance w0) :
+      inst_triangular (tri_comp ν01 ν12) ι0 <->
+      inst_triangular ν01 ι0 /\ inst_triangular ν12 (inst (sub_triangular_inv ν01) ι0).
     Proof.
       induction ν01; cbn.
       - rewrite inst_sub_id; intuition.
@@ -469,25 +468,25 @@ Module Mutators
         + intros ([Heq Hν01] & Hwp). split; auto. apply IHν01; auto.
     Qed.
 
-    Lemma sub_multishift_app {w0 w1 w2} (ν01 : MultiSub w0 w1) (ν12 : MultiSub w1 w2) :
-      sub_multishift (multisub_app ν01 ν12) =
-      subst (sub_multishift ν12) (sub_multishift ν01).
+    Lemma sub_triangular_inv_app {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) :
+      sub_triangular_inv (tri_comp ν01 ν12) =
+      subst (sub_triangular_inv ν12) (sub_triangular_inv ν01).
     Proof.
       induction ν01; cbn.
       - now rewrite sub_comp_id_right.
       - now rewrite IHν01, sub_comp_assoc.
     Qed.
 
-    Lemma wmultisub_sup_app {w0 w1 w2} (ν01 : MultiSub w0 w1) (ν12 : MultiSub w1 w2) :
-      wsub (wmultisub_sup (multisub_app ν01 ν12)) =
-      subst (wsub (wmultisub_sup ν01)) (wsub (wmultisub_sup ν12)).
+    Lemma acc_triangular_app {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) :
+      wsub (acc_triangular (tri_comp ν01 ν12)) =
+      subst (wsub (acc_triangular ν01)) (wsub (acc_triangular ν12)).
     Proof.
       induction ν01; cbn - [SubstEnv].
       - now rewrite sub_comp_id_left.
       - rewrite <- subst_sub_comp. now f_equal.
     Qed.
 
-  End MultiSubs.
+  End TriangularSubstitutions.
 
   Section PartialEvaluation.
 
@@ -933,28 +932,28 @@ Module Mutators
     Qed.
 
     Equations(noeqns) try_unify_bool {w : World} (t : Term w ty_bool) :
-      option { w' & MultiSub w w' } :=
+      option { w' & Triangular w w' } :=
       try_unify_bool (@term_var _ x σ xIn) :=
-        Some (existT _ (multisub_cons x (term_lit ty_bool true) multisub_id));
+        Some (existT _ (tri_cons x (term_lit ty_bool true) tri_id));
       try_unify_bool (term_not (@term_var _ x σ xIn)) :=
-        Some (existT _ (multisub_cons x (term_lit ty_bool false) multisub_id));
+        Some (existT _ (tri_cons x (term_lit ty_bool false) tri_id));
       try_unify_bool _ :=
         None.
 
     Definition try_unify_eq {w : World} {σ} (t1 t2 : Term w σ) :
-      option { w' & MultiSub w w' } :=
+      option { w' & Triangular w w' } :=
       match t1 with
       | @term_var _ ς σ ςInΣ =>
         fun t2 : Term w σ =>
           match occurs_check_lt ςInΣ t2 with
-          | Some t => Some (existT _ (multisub_cons ς t multisub_id))
+          | Some t => Some (existT _ (tri_cons ς t tri_id))
           | None => None
           end
       | _ => fun _ => None
       end t2.
 
     Definition try_unify_formula {w : World} (fml : Formula w) :
-      option { w' & MultiSub w w' } :=
+      option { w' & Triangular w w' } :=
       match fml with
       | formula_bool t => try_unify_bool t
       | formula_eq t1 t2 =>
@@ -966,7 +965,7 @@ Module Mutators
       end.
 
     Lemma try_unify_bool_spec {w : World} (t : Term w ty_bool) :
-      OptionSpec (fun '(existT w' ν) => forall ι, inst (T := STerm ty_bool) t ι = true <-> inst_multisub ν ι) True (try_unify_bool t).
+      OptionSpec (fun '(existT w' ν) => forall ι, inst (T := STerm ty_bool) t ι = true <-> inst_triangular ν ι) True (try_unify_bool t).
     Proof.
       dependent elimination t; cbn; try constructor; auto.
       intros ι. cbn. intuition.
@@ -975,7 +974,7 @@ Module Mutators
     Qed.
 
     Lemma try_unify_eq_spec {w : World} {σ} (t1 t2 : Term w σ) :
-      OptionSpec (fun '(existT w' ν) => forall ι, inst t1 ι = inst t2 ι <-> inst_multisub ν ι) True (try_unify_eq t1 t2).
+      OptionSpec (fun '(existT w' ν) => forall ι, inst t1 ι = inst t2 ι <-> inst_triangular ν ι) True (try_unify_eq t1 t2).
     Proof.
       unfold try_unify_eq. destruct t1; cbn; try (constructor; auto; fail).
       destruct (occurs_check_lt ςInΣ t2) eqn:Heq; constructor; auto.
@@ -985,7 +984,7 @@ Module Mutators
     Qed.
 
     Lemma try_unify_formula_spec {w : World} (fml : Formula w) :
-      OptionSpec (fun '(existT w' ν) => forall ι, (inst fml ι : Prop) <-> inst_multisub ν ι) True (try_unify_formula fml).
+      OptionSpec (fun '(existT w' ν) => forall ι, (inst fml ι : Prop) <-> inst_triangular ν ι) True (try_unify_formula fml).
     Proof.
       unfold try_unify_formula; destruct fml; cbn; try (constructor; auto; fail).
       - apply try_unify_bool_spec.
@@ -996,10 +995,10 @@ Module Mutators
     Qed.
 
     Definition unify_formula {w0 : World} (fml : Formula w0) :
-      { w1 & MultiSub w0 w1 * List Formula w1 }%type :=
+      { w1 & Triangular w0 w1 * List Formula w1 }%type :=
       match try_unify_formula fml with
       | Some (existT w1 ν01) => existT w1 (ν01 , nil)
-      | None => existT w0 (multisub_id , cons fml nil)
+      | None => existT w0 (tri_id , cons fml nil)
       end.
 
     Lemma unify_formula_spec {w0 : World} (fml : Formula w0) :
@@ -1007,32 +1006,32 @@ Module Mutators
       | existT w1 (ν01 , fmls) =>
         (forall ι0 : SymInstance w0,
             inst (A := Prop) fml ι0 ->
-            inst_multisub ν01 ι0 /\
-            instpc fmls (inst (sub_multishift ν01) ι0)) /\
+            inst_triangular ν01 ι0 /\
+            instpc fmls (inst (sub_triangular_inv ν01) ι0)) /\
         (forall ι1 : SymInstance w1,
             instpc fmls ι1 ->
-            inst (A := Prop) fml (inst (wsub (wmultisub_sup ν01)) ι1))
+            inst (A := Prop) fml (inst (wsub (acc_triangular ν01)) ι1))
       end.
     Proof.
       unfold unify_formula.
       destruct (try_unify_formula_spec fml).
       - destruct a as [w1 ν01]. split.
         + intros ι0 Hfml. specialize (H ι0). intuition. constructor.
-        + intros ι1 []. apply H. apply inst_multisub_inst_sub_multi.
+        + intros ι1 []. apply H. apply inst_triangular_valid.
       - split; intros ?; rewrite inst_pathcondition_cons;
           cbn; rewrite inst_sub_id; intuition.
     Qed.
 
     Fixpoint unify_formulas {w0 : World} (fmls : List Formula w0) :
-      { w1 & MultiSub w0 w1 * List Formula w1 }%type.
+      { w1 & Triangular w0 w1 * List Formula w1 }%type.
     Proof.
       destruct fmls as [|fml fmls].
-      - exists w0. split. apply multisub_id. apply nil.
+      - exists w0. split. apply tri_id. apply nil.
       - destruct (unify_formulas w0 fmls) as (w1 & ν01 & fmls1).
         clear unify_formulas fmls.
-        destruct (unify_formula (subst fml (wmultisub_sup ν01))) as (w2 & ν12 & fmls2).
-        exists w2. split. apply (multisub_app ν01 ν12).
-        refine (app fmls2 (subst fmls1 (wmultisub_sup ν12))).
+        destruct (unify_formula (subst fml (acc_triangular ν01))) as (w2 & ν12 & fmls2).
+        exists w2. split. apply (tri_comp ν01 ν12).
+        refine (app fmls2 (subst fmls1 (acc_triangular ν12))).
     Defined.
 
     Lemma unify_formulas_spec {w0 : World} (fmls0 : List Formula w0) :
@@ -1040,36 +1039,36 @@ Module Mutators
       | existT w1 (ν01 , fmls1) =>
         (forall ι0 : SymInstance w0,
             instpc fmls0 ι0 ->
-            inst_multisub ν01 ι0 /\
-            instpc fmls1 (inst (sub_multishift ν01) ι0)) /\
+            inst_triangular ν01 ι0 /\
+            instpc fmls1 (inst (sub_triangular_inv ν01) ι0)) /\
         (forall ι1 : SymInstance w1,
             instpc fmls1 ι1 ->
-            instpc fmls0 (inst (wsub (wmultisub_sup ν01)) ι1))
+            instpc fmls0 (inst (wsub (acc_triangular ν01)) ι1))
       end.
     Proof.
       induction fmls0 as [|fml0 fmls0]; cbn.
       - split; intros ι0; rewrite inst_sub_id; intuition.
       - destruct (unify_formulas fmls0) as (w1 & ν01 & fmls1).
-        pose proof (unify_formula_spec (subst fml0 (wmultisub_sup ν01))) as IHfml.
-        destruct (unify_formula (subst fml0 (wmultisub_sup ν01))) as (w2 & ν12 & fmls2).
+        pose proof (unify_formula_spec (subst fml0 (acc_triangular ν01))) as IHfml.
+        destruct (unify_formula (subst fml0 (acc_triangular ν01))) as (w2 & ν12 & fmls2).
         destruct IHfmls0 as [IHfmls01 IHfmls10].
         destruct IHfml as [IHfml12 IHfml21].
         split.
         + intros ι0. rewrite inst_pathcondition_cons. intros [Hfml Hfmls].
           specialize (IHfmls01 ι0 Hfmls). destruct IHfmls01 as [Hν01 Hfmls1].
-          specialize (IHfml12 (inst (sub_multishift ν01) ι0)).
-          rewrite inst_subst, inst_multi in IHfml12; auto.
+          specialize (IHfml12 (inst (sub_triangular_inv ν01) ι0)).
+          rewrite inst_subst, inst_triangular_right_inverse in IHfml12; auto.
           specialize (IHfml12 Hfml). destruct IHfml12 as [Hν12 Hfmls2].
-          rewrite inst_pathcondition_app, inst_subst, inst_multisub_app.
-          split; auto. rewrite sub_multishift_app, inst_subst. split; auto.
-          revert Hfmls1. remember (inst (sub_multishift ν01) ι0) as ι1.
+          rewrite inst_pathcondition_app, inst_subst, inst_tri_comp.
+          split; auto. rewrite sub_triangular_inv_app, inst_subst. split; auto.
+          revert Hfmls1. remember (inst (sub_triangular_inv ν01) ι0) as ι1.
           rewrite <- ?inst_subst, <- subst_sub_comp, ?inst_subst.
-          rewrite inst_multi; auto.
+          rewrite inst_triangular_right_inverse; auto.
         + intros ι2. rewrite ?inst_pathcondition_app, ?inst_subst.
           intros [Hfmls2 Hfmls1].
           specialize (IHfml21 ι2 Hfmls2). rewrite inst_subst in IHfml21.
-          specialize (IHfmls10 (inst (wsub (wmultisub_sup ν12)) ι2) Hfmls1).
-          rewrite wmultisub_sup_app, inst_subst.
+          specialize (IHfmls10 (inst (wsub (acc_triangular ν12)) ι2) Hfmls1).
+          rewrite acc_triangular_app, inst_subst.
           rewrite inst_pathcondition_cons. split; auto.
     Qed.
 
@@ -1179,7 +1178,7 @@ Module Mutators
     Qed.
 
     Definition round {w0 : World} (fmls0 : List Formula w0) :
-      option { w1 & MultiSub w0 w1 * List Formula w1 }%type.
+      option { w1 & Triangular w0 w1 * List Formula w1 }%type.
     Proof.
       destruct (simplify_formulas fmls0 nil) as [fmls01|].
       - apply Some.
@@ -1193,10 +1192,10 @@ Module Mutators
         (fun '(existT w1 (ζ, fmls1)) =>
            forall ι0,
              instpc (wco w0) ι0 ->
-             (instpc fmls0 ι0 -> inst_multisub ζ ι0) /\
+             (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
              (forall ι1,
                  instpc (wco w1) ι1 ->
-                 ι0 = inst (wsub (wmultisub_sup ζ)) ι1 ->
+                 ι0 = inst (wsub (acc_triangular ζ)) ι1 ->
                  instpc fmls0 ι0 <-> inst fmls1 ι1))
         (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
         (round fmls0).
@@ -1220,7 +1219,7 @@ Module Mutators
             inster Hequiv by split; auto; constructor.
             inster Hassumption01 by split; auto; constructor.
             inster Hunify01 by auto. destruct Hunify01 as [Hν01 Hfmls1].
-            revert Hfmls1. subst. now rewrite inst_multishift_multisub.
+            revert Hfmls1. subst. now rewrite inst_triangular_left_inverse.
           * intros Hfmls1. inster Hunify10 by subst; auto.
             apply Hequiv. apply Hassumption10. subst; auto.
       - constructor. intuition.
@@ -1228,27 +1227,27 @@ Module Mutators
 
     Section Rounds.
 
-      Variable r : forall {w0 : World} (fmls0 : List Formula w0), option { w1 & MultiSub w0 w1 * List Formula w1 }%type.
+      Variable r : forall {w0 : World} (fmls0 : List Formula w0), option { w1 & Triangular w0 w1 * List Formula w1 }%type.
       Variable r_spec : forall {w0 : World} (fmls0 : List Formula w0),
           OptionSpec
             (fun '(existT w1 (ζ, fmls1)) =>
                forall ι0,
                  instpc (wco w0) ι0 ->
-                 (instpc fmls0 ι0 -> inst_multisub ζ ι0) /\
+                 (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
                  (forall ι1,
                      instpc (wco w1) ι1 ->
-                     ι0 = inst (wsub (wmultisub_sup ζ)) ι1 ->
+                     ι0 = inst (wsub (acc_triangular ζ)) ι1 ->
                      instpc fmls0 ι0 <-> inst fmls1 ι1))
             (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
             (r fmls0).
 
       Definition twice {w0 : World} (fmls0 : List Formula w0) :
-        option { w1 & MultiSub w0 w1 * List Formula w1 }%type :=
+        option { w1 & Triangular w0 w1 * List Formula w1 }%type :=
         option_bind
           (fun '(existT w1 (ν01 , fmls1)) =>
              option_map
                (fun '(existT w2 (ν12 , fmls2)) =>
-                  existT w2 (multisub_app ν01 ν12 , fmls2))
+                  existT w2 (tri_comp ν01 ν12 , fmls2))
                (r fmls1)) (r fmls0).
 
       Lemma twice_spec {w0 : World} (fmls0 : List Formula w0) :
@@ -1256,10 +1255,10 @@ Module Mutators
           (fun '(existT w1 (ζ, fmls1)) =>
              forall ι0,
                instpc (wco w0) ι0 ->
-               (instpc fmls0 ι0 -> inst_multisub ζ ι0) /\
+               (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
                (forall ι1,
                    instpc (wco w1) ι1 ->
-                   ι0 = inst (wsub (wmultisub_sup ζ)) ι1 ->
+                   ι0 = inst (wsub (acc_triangular ζ)) ι1 ->
                    instpc fmls0 ι0 <-> inst fmls1 ι1))
           (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
           (twice fmls0).
@@ -1274,33 +1273,33 @@ Module Mutators
         apply optionspec_monotonic; auto.
         - intros (w2 & ν12 & fmls2) H2. intros ι0 Hpc0.
           specialize (H1 ι0 Hpc0). destruct H1 as [H01 H10].
-          rewrite inst_multisub_app. split.
+          rewrite inst_tri_comp. split.
           + intros Hfmls0. split; auto.
-            remember (inst (sub_multishift ν01) ι0) as ι1.
+            remember (inst (sub_triangular_inv ν01) ι0) as ι1.
             assert (instpc (wco w1) ι1) as Hpc1 by
-              (subst; apply multishift_entails; auto).
+              (subst; apply entails_triangular_inv; auto).
             apply H2; auto. apply H10; auto.
-            subst; rewrite inst_multi; auto.
-          + intros ι2 Hpc2 Hι0. rewrite wmultisub_sup_app, inst_subst in Hι0.
-            remember (inst (wsub (wmultisub_sup ν12)) ι2) as ι1.
+            subst; rewrite inst_triangular_right_inverse; auto.
+          + intros ι2 Hpc2 Hι0. rewrite acc_triangular_app, inst_subst in Hι0.
+            remember (inst (wsub (acc_triangular ν12)) ι2) as ι1.
             assert (instpc (wco w1) ι1) as Hpc1 by
               (revert Hpc2; subst; rewrite <- inst_subst; apply went).
             rewrite H10; eauto. apply H2; auto.
         - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
           destruct H1 as [H01 H10]. inster H01 by auto.
-          pose (inst (sub_multishift ν01) ι0) as ι1.
+          pose (inst (sub_triangular_inv ν01) ι0) as ι1.
           assert (instpc (wco w1) ι1) as Hpc1 by
-            (subst; apply multishift_entails; auto).
+            (subst; apply entails_triangular_inv; auto).
           apply (Hfmls1 ι1 Hpc1). revert Hfmls0.
           apply H10; auto. subst ι1.
-          now rewrite inst_multi.
+          now rewrite inst_triangular_right_inverse.
       Qed.
 
     End Rounds.
 
 
     Definition solver : forall {w0 : World} (fmls0 : List Formula w0),
-        option { w1 & MultiSub w0 w1 * List Formula w1 }%type :=
+        option { w1 & Triangular w0 w1 * List Formula w1 }%type :=
       (@twice (@twice (@round))).
 
     Lemma solver_spec : forall {w0 : World} (fmls0 : List Formula w0),
@@ -1308,10 +1307,10 @@ Module Mutators
         (fun '(existT w1 (ζ, fmls1)) =>
            forall ι0,
              instpc (wco w0) ι0 ->
-             (instpc fmls0 ι0 -> inst_multisub ζ ι0) /\
+             (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
              (forall ι1,
                  instpc (wco w1) ι1 ->
-                 ι0 = inst (wsub (wmultisub_sup ζ)) ι1 ->
+                 ι0 = inst (wsub (acc_triangular ζ)) ι1 ->
                  instpc fmls0 ι0 <-> inst fmls1 ι1))
         (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
         (solver fmls0).
@@ -1459,23 +1458,23 @@ Module Mutators
       assert_formulas_without_solver' msg fmls p.
     Global Arguments assert_formulas_without_solver {_} msg fmls p.
 
-    Fixpoint assume_multisub {w1 w2} (ν : MultiSub w1 w2) :
+    Fixpoint assume_triangular {w1 w2} (ν : Triangular w1 w2) :
       SPath w2 -> SPath w1.
     Proof.
       destruct ν; intros o; cbn in o.
       - exact o.
       - apply (@assume_vareq w1 x σ xIn t).
-        eapply (assume_multisub _ _ ν o).
+        eapply (assume_triangular _ _ ν o).
     Defined.
 
-    Fixpoint assert_multisub {w1 w2} (msg : Message (wctx w1)) (ζ : MultiSub w1 w2) :
+    Fixpoint assert_triangular {w1 w2} (msg : Message (wctx w1)) (ζ : Triangular w1 w2) :
       (Message w2 -> SPath w2) -> SPath w1.
     Proof.
       destruct ζ; intros o; cbn in o.
       - apply o. apply msg.
       - apply (@assert_vareq w1 x σ xIn t).
         apply (subst msg (sub_single xIn t)).
-        refine (assert_multisub (wsubst w1 x t) _ (subst msg (sub_single xIn t)) ζ o).
+        refine (assert_triangular (wsubst w1 x t) _ (subst msg (sub_single xIn t)) ζ o).
     Defined.
 
     Fixpoint safe {Σ} (p : SPath Σ) (ι : SymInstance Σ) : Prop :=
@@ -1606,10 +1605,10 @@ Module Mutators
           constructor. auto.
     Qed.
 
-    Lemma safe_assume_multisub {w0 w1} (ζ : MultiSub w0 w1)
+    Lemma safe_assume_triangular {w0 w1} (ζ : Triangular w0 w1)
       (o : SPath w1) (ι0 : SymInstance w0) :
-      wsafe (assume_multisub ζ o) ι0 <->
-      (inst_multisub ζ ι0 -> wsafe o (inst (sub_multishift ζ) ι0)).
+      wsafe (assume_triangular ζ o) ι0 <->
+      (inst_triangular ζ ι0 -> wsafe o (inst (sub_triangular_inv ζ) ι0)).
     Proof.
       induction ζ; cbn in *.
       - rewrite inst_sub_id. intuition.
@@ -1619,15 +1618,15 @@ Module Mutators
         intuition.
     Qed.
 
-    Lemma safe_assert_multisub {w0 w1} msg (ζ : MultiSub w0 w1)
+    Lemma safe_assert_triangular {w0 w1} msg (ζ : Triangular w0 w1)
       (o : Message w1 -> SPath w1) (ι0 : SymInstance w0) :
-      wsafe (assert_multisub msg ζ o) ι0 <->
-      (inst_multisub ζ ι0 /\ wsafe (o (subst msg (wmultisub_sup ζ))) (inst (sub_multishift ζ) ι0)).
+      wsafe (assert_triangular msg ζ o) ι0 <->
+      (inst_triangular ζ ι0 /\ wsafe (o (subst msg (acc_triangular ζ))) (inst (sub_triangular_inv ζ) ι0)).
     Proof.
       induction ζ.
       - cbn. rewrite inst_sub_id, subst_sub_id. intuition.
-      - cbn [wsafe assert_multisub inst_multisub
-                  sub_multishift wmultisub_sup wtrans wsub].
+      - cbn [wsafe assert_triangular inst_triangular
+                  sub_triangular_inv acc_triangular wtrans wsub].
         rewrite obligation_equiv.
         rewrite subst_sub_comp. cbn.
         rewrite IHζ. clear IHζ.
@@ -2456,7 +2455,7 @@ Module Mutators
         match Solver.solver fmls0 with
         | Some (existT w1 (ν , fmls1)) =>
           (* Assume variable equalities and the residual constraints *)
-          assume_multisub ν
+          assume_triangular ν
             (assume_formulas_without_solver fmls1
                (* Run POST in the world with the variable and residual
                   formulas included. This is a critical piece of code since
@@ -2464,7 +2463,7 @@ Module Mutators
                   world. We changed the type of assume_formulas_without_solver
                   just to not forget adding the formulas to the path constraints.
                *)
-               (four POST (wmultisub_sup ν) (wformulas_sup w1 fmls1) tt))
+               (four POST (acc_triangular ν) (wformulas_sup w1 fmls1) tt))
         | None =>
           (* The formulas are inconsistent with the path constraints. *)
           block
@@ -2481,11 +2480,11 @@ Module Mutators
         match Solver.solver fmls0 with
         | Some (existT w1 (ν , fmls1)) =>
           (* Assert variable equalities and the residual constraints *)
-          assert_multisub msg ν
+          assert_triangular msg ν
             (fun msg' =>
                assert_formulas_without_solver msg' fmls1
                  (* Critical code. Like for assume_formulas. *)
-                 (four POST (wmultisub_sup ν) (wformulas_sup w1 fmls1) tt))
+                 (four POST (acc_triangular ν) (wformulas_sup w1 fmls1) tt))
         | None =>
           (* The formulas are inconsistent with the path constraints. *)
           error (EMsgHere msg)

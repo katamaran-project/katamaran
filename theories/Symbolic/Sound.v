@@ -328,17 +328,17 @@ Module Soundness
       destruct (Solver.solver_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0).
         destruct Hsolver as [Hν Hsolver]. inster Hν by auto.
-        specialize (Hsolver (inst (sub_multishift ζ) ι0)).
-        rewrite inst_multi in Hsolver; auto.
-        inster Hsolver by now try apply multishift_entails.
+        specialize (Hsolver (inst (sub_triangular_inv ζ) ι0)).
+        rewrite inst_triangular_right_inverse in Hsolver; auto.
+        inster Hsolver by now try apply entails_triangular_inv.
         destruct Hsolver as [Hsolver _]. inster Hsolver by auto.
-        rewrite safe_assume_multisub, safe_assume_formulas_without_solver in Hwp.
+        rewrite safe_assume_triangular, safe_assume_formulas_without_solver in Hwp.
         specialize (Hwp Hν Hsolver). revert Hwp.
         unfold four, wtrans, persist, persist_subst; cbn.
         wsimpl. apply HPOST; cbn; auto.
-        wsimpl. rewrite inst_multi; auto.
+        wsimpl. rewrite inst_triangular_right_inverse; auto.
         rewrite inst_pathcondition_app. split; auto.
-        now apply multishift_entails.
+        now apply entails_triangular_inv.
       - intuition.
     Qed.
 
@@ -355,18 +355,18 @@ Module Soundness
       intros POST__s POST__c HPOST Hwp.
       destruct (Solver.solver_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
-        rewrite safe_assert_multisub in Hwp. destruct Hwp as [Hν Hwp].
+        rewrite safe_assert_triangular in Hwp. destruct Hwp as [Hν Hwp].
         rewrite safe_assert_formulas_without_solver in Hwp.
         destruct Hwp as [Hfmls Hwp].
         split.
-        + apply Hsolver in Hfmls; rewrite ?inst_multi; auto.
+        + apply Hsolver in Hfmls; rewrite ?inst_triangular_right_inverse; auto.
           now apply Heq.
-          now apply multishift_entails.
+          now apply entails_triangular_inv.
         + revert Hwp. unfold four, wtrans, persist, persist_subst; cbn.
           apply HPOST; cbn; wsimpl; eauto.
-          rewrite inst_multi; auto.
+          rewrite inst_triangular_right_inverse; auto.
           rewrite inst_pathcondition_app. split; auto.
-          now apply multishift_entails.
+          now apply entails_triangular_inv.
       - intuition.
     Qed.
 
