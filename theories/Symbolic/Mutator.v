@@ -1177,30 +1177,34 @@ Module Mutators
         intuition.
     Qed.
 
-    Definition round {w0 : World} (fmls0 : List Formula w0) :
-      option { w1 & Triangular w0 w1 * List Formula w1 }%type.
-    Proof.
-      destruct (simplify_formulas fmls0 nil) as [fmls01|].
-      - apply Some.
-        apply unify_formulas.
-        apply (assumption_formulas (wco w0) fmls01 nil).
-      - apply None.
-    Defined.
+    Definition Solver : Type :=
+      forall {w0 : World} (fmls0 : List Formula w0),
+        option { w1 & Triangular w0 w1 * List Formula w1 }%type.
 
-    Lemma round_spec {w0 : World} (fmls0 : List Formula w0) :
-      OptionSpec
-        (fun '(existT w1 (ζ, fmls1)) =>
-           forall ι0,
-             instpc (wco w0) ι0 ->
-             (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
-             (forall ι1,
-                 instpc (wco w1) ι1 ->
-                 ι0 = inst (wsub (acc_triangular ζ)) ι1 ->
-                 instpc fmls0 ι0 <-> inst fmls1 ι1))
-        (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
-        (round fmls0).
+    Definition SolverSpec (s : Solver) : Prop :=
+      forall {w0 : World} (fmls0 : List Formula w0),
+        OptionSpec
+          (fun '(existT w1 (ζ, fmls1)) =>
+             forall ι0,
+               instpc (wco w0) ι0 ->
+               (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
+                 (forall ι1,
+                     instpc (wco w1) ι1 ->
+                     ι0 = inst (wsub (acc_triangular ζ)) ι1 ->
+                     instpc fmls0 ι0 <-> inst fmls1 ι1))
+          (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
+          (s w0 fmls0).
+
+    Definition solver_generic_round : Solver :=
+      fun w0 fmls0 =>
+        match simplify_formulas fmls0 [] with
+        | Some fmls01 => Some (unify_formulas (assumption_formulas (wco w0) fmls01 []))
+        | None => None
+        end.
+
+    Lemma solver_generic_round_spec : SolverSpec solver_generic_round.
     Proof.
-      unfold round.
+      unfold solver_generic_round. intros w0 fmls0.
       destruct (simplify_formulas_spec fmls0 nil) as [fmls0' Hequiv|].
       - constructor.
         pose proof (unify_formulas_spec (assumption_formulas (wco w0) fmls0' [])) as Hunify.
@@ -1225,100 +1229,54 @@ Module Mutators
       - constructor. intuition.
     Qed.
 
-    Section Rounds.
-
-      Variable r : forall {w0 : World} (fmls0 : List Formula w0), option { w1 & Triangular w0 w1 * List Formula w1 }%type.
-      Variable r_spec : forall {w0 : World} (fmls0 : List Formula w0),
-          OptionSpec
-            (fun '(existT w1 (ζ, fmls1)) =>
-               forall ι0,
-                 instpc (wco w0) ι0 ->
-                 (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
-                 (forall ι1,
-                     instpc (wco w1) ι1 ->
-                     ι0 = inst (wsub (acc_triangular ζ)) ι1 ->
-                     instpc fmls0 ι0 <-> inst fmls1 ι1))
-            (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
-            (r fmls0).
-
-      Definition twice {w0 : World} (fmls0 : List Formula w0) :
-        option { w1 & Triangular w0 w1 * List Formula w1 }%type :=
+    Definition solver_compose (s1 s2 : Solver) : Solver :=
+      fun w0 fmls0 =>
         option_bind
           (fun '(existT w1 (ν01 , fmls1)) =>
              option_map
                (fun '(existT w2 (ν12 , fmls2)) =>
                   existT w2 (tri_comp ν01 ν12 , fmls2))
-               (r fmls1)) (r fmls0).
+               (s2 _ fmls1)) (s1 _ fmls0).
 
-      Lemma twice_spec {w0 : World} (fmls0 : List Formula w0) :
-        OptionSpec
-          (fun '(existT w1 (ζ, fmls1)) =>
-             forall ι0,
-               instpc (wco w0) ι0 ->
-               (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
-               (forall ι1,
-                   instpc (wco w1) ι1 ->
-                   ι0 = inst (wsub (acc_triangular ζ)) ι1 ->
-                   instpc fmls0 ι0 <-> inst fmls1 ι1))
-          (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
-          (twice fmls0).
-      Proof.
-        unfold twice.
-        apply optionspec_bind.
-        generalize (r_spec fmls0).
-        apply optionspec_monotonic; auto.
-        intros (w1 & ν01 & fmls1) H1.
-        apply optionspec_map.
-        generalize (r_spec fmls1).
-        apply optionspec_monotonic; auto.
-        - intros (w2 & ν12 & fmls2) H2. intros ι0 Hpc0.
-          specialize (H1 ι0 Hpc0). destruct H1 as [H01 H10].
-          rewrite inst_tri_comp. split.
-          + intros Hfmls0. split; auto.
-            remember (inst (sub_triangular_inv ν01) ι0) as ι1.
-            assert (instpc (wco w1) ι1) as Hpc1 by
-              (subst; apply entails_triangular_inv; auto).
-            apply H2; auto. apply H10; auto.
-            subst; rewrite inst_triangular_right_inverse; auto.
-          + intros ι2 Hpc2 Hι0. rewrite acc_triangular_app, inst_subst in Hι0.
-            remember (inst (wsub (acc_triangular ν12)) ι2) as ι1.
-            assert (instpc (wco w1) ι1) as Hpc1 by
-              (revert Hpc2; subst; rewrite <- inst_subst; apply went).
-            rewrite H10; eauto. apply H2; auto.
-        - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
-          destruct H1 as [H01 H10]. inster H01 by auto.
-          pose (inst (sub_triangular_inv ν01) ι0) as ι1.
-          assert (instpc (wco w1) ι1) as Hpc1 by
-            (subst; apply entails_triangular_inv; auto).
-          apply (Hfmls1 ι1 Hpc1). revert Hfmls0.
-          apply H10; auto. subst ι1.
-          now rewrite inst_triangular_right_inverse.
-      Qed.
-
-    End Rounds.
-
-
-    Definition solver : forall {w0 : World} (fmls0 : List Formula w0),
-        option { w1 & Triangular w0 w1 * List Formula w1 }%type :=
-      (@twice (@twice (@round))).
-
-    Lemma solver_spec : forall {w0 : World} (fmls0 : List Formula w0),
-      OptionSpec
-        (fun '(existT w1 (ζ, fmls1)) =>
-           forall ι0,
-             instpc (wco w0) ι0 ->
-             (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
-             (forall ι1,
-                 instpc (wco w1) ι1 ->
-                 ι0 = inst (wsub (acc_triangular ζ)) ι1 ->
-                 instpc fmls0 ι0 <-> inst fmls1 ι1))
-        (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
-        (solver fmls0).
+    Lemma solver_compose_spec {s1 s2} (spec1 : SolverSpec s1) (spec2 : SolverSpec s2) : SolverSpec (solver_compose s1 s2).
     Proof.
-      apply @twice_spec.
-      apply @twice_spec.
-      apply @round_spec.
+      unfold SolverSpec, solver_compose. intros w0 fmls0.
+      apply optionspec_bind.
+      generalize (spec1 _ fmls0); clear spec1.
+      apply optionspec_monotonic; auto.
+      intros (w1 & ν01 & fmls1) H1.
+      apply optionspec_map.
+      generalize (spec2 _ fmls1); clear spec2.
+      apply optionspec_monotonic; auto.
+      - intros (w2 & ν12 & fmls2) H2. intros ι0 Hpc0.
+        specialize (H1 ι0 Hpc0). destruct H1 as [H01 H10].
+        rewrite inst_tri_comp. split.
+        + intros Hfmls0. split; auto.
+          remember (inst (sub_triangular_inv ν01) ι0) as ι1.
+          assert (instpc (wco w1) ι1) as Hpc1 by
+              (subst; apply entails_triangular_inv; auto).
+          apply H2; auto. apply H10; auto.
+          subst; rewrite inst_triangular_right_inverse; auto.
+        + intros ι2 Hpc2 Hι0. rewrite acc_triangular_app, inst_subst in Hι0.
+          remember (inst (wsub (acc_triangular ν12)) ι2) as ι1.
+          assert (instpc (wco w1) ι1) as Hpc1 by
+              (revert Hpc2; subst; rewrite <- inst_subst; apply went).
+          rewrite H10; eauto. apply H2; auto.
+      - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
+        destruct H1 as [H01 H10]. inster H01 by auto.
+        pose (inst (sub_triangular_inv ν01) ι0) as ι1.
+        assert (instpc (wco w1) ι1) as Hpc1 by
+            (subst; apply entails_triangular_inv; auto).
+        apply (Hfmls1 ι1 Hpc1). revert Hfmls0.
+        apply H10; auto. subst ι1.
+        now rewrite inst_triangular_right_inverse.
     Qed.
+
+    Definition solver : Solver :=
+      solver_compose solver_generic_round solver_generic_round.
+
+    Lemma solver_spec : SolverSpec solver.
+    Proof. apply solver_compose_spec; apply solver_generic_round_spec. Qed.
 
   End Solver.
 
@@ -2452,7 +2410,7 @@ Module Mutators
     Definition assume_formulas :
       ⊢ List Formula -> SDijkstra Unit :=
       fun w0 fmls0 POST =>
-        match Solver.solver fmls0 with
+        match Solver.solver w0 fmls0 with
         | Some (existT w1 (ν , fmls1)) =>
           (* Assume variable equalities and the residual constraints *)
           assume_triangular ν
@@ -2477,7 +2435,7 @@ Module Mutators
     Definition assert_formulas :
       ⊢ Message -> List Formula -> SDijkstra Unit :=
       fun w0 msg fmls0 POST =>
-        match Solver.solver fmls0 with
+        match Solver.solver w0 fmls0 with
         | Some (existT w1 (ν , fmls1)) =>
           (* Assert variable equalities and the residual constraints *)
           assert_triangular msg ν
