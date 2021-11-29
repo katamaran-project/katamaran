@@ -90,7 +90,7 @@ Module Soundness
   Global Instance ApproxBox {AT A} `{Approx AT A} : Approx (Box AT) A :=
     fun w0 ι0 a0 a =>
       forall (w1 : World) (ω01 : w0 ⊒ w1) (ι1 : SymInstance w1),
-        ι0 = inst (wsub ω01) ι1 ->
+        ι0 = inst (sub_acc ω01) ι1 ->
         instpc (wco w1) ι1 ->
         approx ι1 (a0 w1 ω01) a.
 
@@ -153,11 +153,14 @@ Module Soundness
     forall (a0 : Box AT w0) (a : A),
       approx ι0 a0 a ->
       forall w1 (ω01 : w0 ⊒ w1) (ι1 : SymInstance w1),
-        ι0 = inst (wsub ω01) ι1 ->
+        ι0 = inst (sub_acc ω01) ι1 ->
         approx ι1 (four a0 ω01) a.
   Proof.
-    unfold approx, ApproxBox. intros. apply H0; auto.
-    unfold wtrans; cbn. rewrite inst_subst. now subst.
+    unfold approx, ApproxBox.
+    intros * H0 w1 ω01 ι1 ? w2 ω12 ι2 ? Hpc2.
+    apply H0; auto.
+    rewrite sub_acc_trans, inst_subst.
+    now subst.
   Qed.
   Hint Resolve approx_four : core.
 
@@ -171,20 +174,21 @@ Module Soundness
   Ltac wsimpl :=
     repeat
       (try change (wctx (wsnoc ?w ?b)) with (ctx_snoc (wctx w) b);
-       try change (wsub (@wred_sup ?w ?b ?t)) with (sub_snoc (sub_id (wctx w)) b t);
+       (* try change (wsub (@wred_sup ?w ?b ?t)) with (sub_snoc (sub_id (wctx w)) b t); *)
        try change (wco (wsnoc ?w ?b)) with (subst (wco w) (sub_wk1 (b:=b)));
-       try change (wsub (@wrefl ?w)) with (sub_id (wctx w));
-       try change (wsub (@wsnoc_sup ?w ?b)) with (@sub_wk1 (wctx w) b);
+       try change (sub_acc (@acc_refl ?w)) with (sub_id (wctx w));
+       (* try change (wsub (@wsnoc_sup ?w ?b)) with (@sub_wk1 (wctx w) b); *)
        try change (wctx (wformula ?w ?fml)) with (wctx w);
-       try change (wsub (wtrans ?ω1 ?ω2)) with (subst (wsub ω1) (wsub ω2));
-       try change (wsub (@wformula_sup ?w ?fml)) with (sub_id (wctx w));
+       try change (sub_acc (@acc_formula_right ?w ?fml)) with (sub_id (wctx w));
+       try change (sub_acc (@acc_formulas_right ?w ?fmls)) with (sub_id (wctx w));
        try change (wco (wformula ?w ?fml)) with (cons fml (wco w));
        try change (wco (@wsubst ?w _ _ ?xIn ?t)) with (subst (wco w) (sub_single xIn t));
        try change (wctx (@wsubst ?w _ _ ?xIn ?t)) with (ctx_remove xIn);
-       try change (wsub (@wsubst_sup ?w _ _ ?xIn ?t)) with (sub_single xIn t);
+       try change (sub_acc (@acc_subst_right ?w _ _ ?xIn ?t)) with (sub_single xIn t);
        rewrite <- ?sub_comp_wk1_tail, ?inst_subst, ?subst_sub_id,
          ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc,
-         ?inst_lift, ?inst_sub_single, ?inst_pathcondition_cons).
+         ?inst_lift, ?inst_sub_single_shift, ?inst_pathcondition_cons,
+         ?sub_acc_trans, ?sub_acc_triangular, ?inst_triangular_right_inverse).
        (* repeat *)
        (*   match goal with *)
        (*   | |- approx _ (@smut_angelic _ _ _ _ _) (@cmut_angelic _ _ _) => *)
@@ -276,9 +280,9 @@ Module Soundness
         apply IHΔ; auto.
         intros w2 ω12 ι2 -> Hpc2.
         intros ts vs tvs.
-        apply HPOST; cbn; rewrite ?inst_subst; auto.
+        apply HPOST; cbn; wsimpl; auto.
         rewrite tv, tvs. hnf.
-        rewrite <- inst_subst.
+        rewrite <- inst_persist.
         reflexivity.
     Qed.
 
@@ -313,9 +317,9 @@ Module Soundness
         apply IHΔ; auto.
         intros w2 ω12 ι2 -> Hpc2.
         intros ts vs tvs.
-        apply HPOST; cbn; rewrite ?inst_subst; auto.
+        apply HPOST; cbn; wsimpl; auto.
         rewrite tv, tvs. hnf.
-        rewrite <- inst_subst.
+        rewrite <- inst_persist.
         reflexivity.
     Qed.
 
@@ -334,9 +338,7 @@ Module Soundness
         destruct Hsolver as [Hsolver _]. inster Hsolver by auto.
         rewrite safe_assume_triangular, safe_assume_formulas_without_solver in Hwp.
         specialize (Hwp Hν Hsolver). revert Hwp.
-        unfold four, wtrans, persist, persist_subst; cbn.
-        wsimpl. apply HPOST; cbn; auto.
-        wsimpl. rewrite inst_triangular_right_inverse; auto.
+        unfold four. apply HPOST; cbn; wsimpl; auto.
         rewrite inst_pathcondition_app. split; auto.
         now apply entails_triangular_inv.
       - intuition.
@@ -362,9 +364,8 @@ Module Soundness
         + apply Hsolver in Hfmls; rewrite ?inst_triangular_right_inverse; auto.
           now apply Heq.
           now apply entails_triangular_inv.
-        + revert Hwp. unfold four, wtrans, persist, persist_subst; cbn.
+        + revert Hwp. unfold four.
           apply HPOST; cbn; wsimpl; eauto.
-          rewrite inst_triangular_right_inverse; auto.
           rewrite inst_pathcondition_app. split; auto.
           now apply entails_triangular_inv.
       - intuition.
@@ -459,8 +460,8 @@ Module Soundness
       intros w1 ω01 ι1 -> Hpc1.
       intros a1 a Ha.
       apply HPOST; auto.
-      hnf. rewrite inst_subst. apply Hδ.
-      hnf. rewrite inst_subst. apply Hh.
+      hnf. rewrite inst_persist. apply Hδ.
+      hnf. rewrite inst_persist. apply Hh.
     Qed.
     Hint Resolve approx_dijkstra : core.
 
@@ -658,8 +659,7 @@ Module Soundness
       unfold SMut.box_assume_formula, map_box.
       intros w1 ω01 ι1 -> Hpc1.
       apply approx_assume_formula; auto.
-      unfold persist, persist_subst.
-      now rewrite inst_subst.
+      now rewrite inst_persist.
     Qed.
 
     Lemma approx_assert_formula {Γ} {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0)
@@ -680,8 +680,7 @@ Module Soundness
       unfold SMut.box_assert_formula, map_box.
       intros w1 ω01 ι1 -> Hpc1.
       apply approx_assert_formula; auto.
-      unfold persist, persist_subst.
-      now rewrite inst_subst.
+      now rewrite inst_persist.
     Qed.
 
     Lemma approx_assert_formulas {Γ} {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0)
@@ -744,7 +743,7 @@ Module Soundness
       intros kf__s kf__c Hkf.
       intros w1 ω01 ι1 -> Hpc1.
       apply approx_angelic_match_bool; wsimpl; eauto.
-      rewrite <- inst_subst. auto.
+      rewrite <- inst_persist; auto.
     Qed.
 
     Lemma approx_demonic_match_bool' {AT A} `{Approx AT A} {Γ1 Γ2}
@@ -792,7 +791,7 @@ Module Soundness
       intros kf__s kf__c Hkf.
       intros w1 ω01 ι1 -> Hpc1.
       apply approx_demonic_match_bool; wsimpl; eauto.
-      rewrite <- inst_subst. auto.
+      rewrite <- inst_persist. auto.
     Qed.
 
     Lemma approx_angelic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx}
@@ -805,10 +804,10 @@ Module Soundness
       apply approx_bind.
       apply approx_angelic_finite; auto.
       intros w1 ω01 ι1 -> Hpc1.
-      intros EK1 EK2 HEK.
+      intros EK1 EK2 ->.
       apply approx_bind_right.
       apply approx_assert_formula; cbn; wsimpl; auto.
-      rewrite HEK; auto.
+      now rewrite <- inst_persist.
       intros w2 ω12 ι2 -> Hpc2.
       eapply Hk; wsimpl; auto.
     Qed.
@@ -823,10 +822,10 @@ Module Soundness
       apply approx_bind.
       apply approx_demonic_finite; auto.
       intros w1 ω01 ι1 -> Hpc1.
-      intros EK1 EK2 HEK.
+      intros EK1 EK2 ->.
       apply approx_bind_right.
       apply approx_assume_formula; cbn; wsimpl; auto.
-      rewrite HEK; auto.
+      now rewrite <- inst_persist.
       intros w2 ω12 ι2 -> Hpc2.
       eapply Hk; wsimpl; auto.
     Qed.
@@ -844,24 +843,20 @@ Module Soundness
         intros w1 r01 ι1 -> Hpc1.
         intros v1 vc1 ->.
         eapply approx_bind_right.
-        * eapply approx_assert_formula; try assumption.
-          unfold inst at 4; cbn.
-          now rewrite inst_subst.
+        * eapply approx_assert_formula; try assumption. cbn.
+          now rewrite <- inst_persist.
         * intros w2 r12 ι2 -> Hpc2.
           eapply (approx_four Hk__l); eauto.
-          rewrite <- inst_subst.
-          now unfold persist, persist_subst.
+          now rewrite <- inst_persist.
       - now eapply approx_angelic.
       - intros w1 r01 ι1 -> Hpc1.
         intros v1 vc1 ->.
         eapply approx_bind_right.
         + eapply approx_assert_formula; try assumption.
-          unfold inst at 4; cbn.
-          now rewrite inst_subst.
+          now rewrite <- inst_persist.
         + intros w2 r12 ι2 -> Hpc2.
           eapply (approx_four Hk__r); eauto.
-          rewrite <- inst_subst.
-          now unfold persist, persist_subst.
+          now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_demonic_match_sum {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
@@ -878,23 +873,19 @@ Module Soundness
         intros v1 vc1 ->.
         eapply approx_bind_right.
         * eapply approx_assume_formula; try assumption.
-          unfold inst at 4; cbn.
-          now rewrite inst_subst.
+          now rewrite <- inst_persist.
         * intros w2 r12 ι2 -> Hpc2.
           eapply (approx_four Hk__l); eauto.
-          rewrite <- inst_subst.
-          now unfold persist, persist_subst.
+          now rewrite <- inst_persist.
       - now eapply approx_demonic.
       - intros w1 r01 ι1 -> Hpc1.
         intros v1 vc1 ->.
         eapply approx_bind_right.
         + eapply approx_assume_formula; try assumption.
-          unfold inst at 4; cbn.
-          now rewrite inst_subst.
+          now rewrite <- inst_persist.
         + intros w2 r12 ι2 -> Hpc2.
           eapply (approx_four Hk__r); eauto.
-          rewrite <- inst_subst.
-          now unfold persist, persist_subst.
+          now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_angelic_match_prod {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
@@ -911,18 +902,17 @@ Module Soundness
       intros w2 r12 ι2 -> Hpc2.
       intros v2 vc2 ->.
       eapply approx_bind_right.
-      + eapply approx_assert_formula; try assumption.
-        unfold inst at 7; cbn.
-        change (inst_term (subst v1 r12) ι2) with (inst (subst v1 r12) ι2).
-        now rewrite ?inst_subst.
-      + intros w3 r23 ι3 -> Hpc3.
+      - eapply approx_assert_formula; try assumption. cbn - [Lit].
+        change (inst_term ?t ?ι) with (inst t ι).
+        rewrite (inst_persist (AT := STerm _) (A := Lit _)).
+        rewrite (inst_persist (AT := STerm _) (A := Lit _)).
+        now rewrite sub_acc_trans, inst_subst.
+      - intros w3 r23 ι3 -> Hpc3.
         eapply (approx_four Hk); eauto.
-        * rewrite <- inst_subst.
-          now unfold persist, persist_subst.
-        * unfold persist, persist_subst, wtrans; cbn.
-          now rewrite <- ?inst_subst, subst_assoc.
-        * rewrite <- inst_subst.
-          now unfold persist, persist_subst.
+        + now rewrite sub_acc_trans, inst_subst.
+        + rewrite <- ?inst_subst, <- subst_sub_comp.
+          now rewrite <- sub_acc_trans, inst_subst, <- inst_persist.
+        + now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_demonic_match_prod {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
@@ -932,21 +922,24 @@ Module Soundness
       intros t v ->.
       intros k k__c Hk.
       unfold SMut.demonic_match_prod, CMut.demonic_match_prod.
-      - eapply approx_bind; try (eapply approx_demonic; assumption).
-        intros w1 r01 ι1 -> Hpc1.
-        intros v1 vc1 ->.
-        eapply approx_bind; try (eapply approx_demonic; assumption).
-        intros w2 r12 ι2 -> Hpc2.
-        intros v2 vc2 ->.
-        eapply approx_bind_right.
-        + eapply approx_assume_formula; try assumption.
-          unfold inst at 7; cbn.
-          change (inst_term (subst v1 r12) ι2) with (inst (subst v1 r12) ι2).
-          now rewrite ?inst_subst.
-        + intros w3 r23 ι3 -> Hpc3.
-          eapply (approx_four Hk); eauto;
-            unfold persist, persist_subst, wtrans; cbn;
-          now rewrite <- ?inst_subst, ?subst_assoc.
+      apply approx_bind; try (eapply approx_demonic; assumption).
+      intros w1 r01 ι1 -> Hpc1.
+      intros v1 vc1 ->.
+      apply approx_bind; try (eapply approx_demonic; assumption).
+      intros w2 r12 ι2 -> Hpc2.
+      intros v2 vc2 ->.
+      apply approx_bind_right.
+      - apply approx_assume_formula; try assumption. cbn - [Lit].
+        change (inst_term ?t ?ι) with (inst t ι).
+        rewrite (inst_persist (AT := STerm _) (A := Lit _)).
+        rewrite (inst_persist (AT := STerm _) (A := Lit _)).
+        now rewrite sub_acc_trans, inst_subst.
+      - intros w3 r23 ι3 -> Hpc3.
+        eapply (approx_four Hk); eauto.
+        + now rewrite sub_acc_trans, inst_subst.
+        + rewrite <- ?inst_subst, <- subst_sub_comp.
+          now rewrite <- sub_acc_trans, inst_subst, <- inst_persist.
+        + now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_angelic_match_list {AT A} `{Approx AT A} {Γ1 Γ2} xhead xtail σ
@@ -958,9 +951,9 @@ Module Soundness
       intros skcons ckcons Hkcons.
       unfold SMut.angelic_match_list, CMut.angelic_match_list.
       apply approx_angelic_binary.
-      + apply approx_bind_right; auto.
+      - apply approx_bind_right; auto.
         apply approx_assert_formula; auto.
-      + apply approx_bind; auto.
+      - apply approx_bind; auto.
         apply approx_angelic; auto.
         intros w1 ω01 ι1 -> Hpc1.
         intros thead vhead ->.
@@ -968,13 +961,18 @@ Module Soundness
         apply approx_angelic; auto.
         intros w2 ω12 ι2 -> Hpc2.
         intros ttail vtail ->.
-        rewrite <- ?inst_subst, <- subst_sub_comp.
         apply approx_bind_right; auto.
-        apply approx_assert_formula; auto.
-        intros w3 ω23 ι3 -> Hpc3.
-        apply Hkcons; wsimpl; eauto.
-        now rewrite <- ?inst_subst, <- subst_sub_comp.
-        now rewrite <- ?inst_subst.
+        + apply approx_assert_formula; auto.
+          cbn - [Lit].
+          change (inst_term ?t ?ι) with (inst t ι).
+          rewrite (inst_persist (AT := STerm _) (A := Lit _)).
+          rewrite (inst_persist (AT := STerm _) (A := Lit _)).
+          now rewrite sub_acc_trans, inst_subst.
+        + intros w3 ω23 ι3 -> Hpc3.
+          apply Hkcons; wsimpl; eauto.
+          rewrite <- ?inst_subst, <- subst_sub_comp.
+          now rewrite <- sub_acc_trans, inst_subst, <- inst_persist.
+          now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_demonic_match_list {AT A} `{Approx AT A} {Γ1 Γ2} xhead xtail σ
@@ -986,9 +984,9 @@ Module Soundness
       intros skcons ckcons Hkcons.
       unfold SMut.demonic_match_list, CMut.demonic_match_list.
       apply approx_demonic_binary.
-      + apply approx_bind_right; auto.
+      - apply approx_bind_right; auto.
         apply approx_assume_formula; auto.
-      + apply approx_bind; auto.
+      - apply approx_bind; auto.
         apply approx_demonic; auto.
         intros w1 ω01 ι1 -> Hpc1.
         intros thead vhead ->.
@@ -996,13 +994,18 @@ Module Soundness
         apply approx_demonic; auto.
         intros w2 ω12 ι2 -> Hpc2.
         intros ttail vtail ->.
-        rewrite <- ?inst_subst, <- subst_sub_comp.
         apply approx_bind_right; auto.
-        apply approx_assume_formula; auto.
-        intros w3 ω23 ι3 -> Hpc3.
-        apply Hkcons; wsimpl; eauto.
-        now rewrite <- ?inst_subst, <- subst_sub_comp.
-        now rewrite <- ?inst_subst.
+        + apply approx_assume_formula; auto.
+          cbn - [Lit].
+          change (inst_term ?t ?ι) with (inst t ι).
+          rewrite (inst_persist (AT := STerm _) (A := Lit _)).
+          rewrite (inst_persist (AT := STerm _) (A := Lit _)).
+          now rewrite sub_acc_trans, inst_subst.
+        + intros w3 ω23 ι3 -> Hpc3.
+          apply Hkcons; wsimpl; eauto.
+          rewrite <- ?inst_subst, <- subst_sub_comp.
+          now rewrite <- sub_acc_trans, inst_subst, <- inst_persist.
+          now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_angelic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
@@ -1016,14 +1019,12 @@ Module Soundness
       eapply approx_bind; try (eapply approx_angelic_ctx; assumption).
       intros w1 r01 ι1 -> Hpc1.
       intros v1 vc1 ->.
-      eapply approx_bind_right.
-      - eapply approx_assert_formula; try assumption.
-        change (inst (formula_eq (term_record R (record_pattern_match_env_reverse p v1)) (subst t r01)) ι1) with (inst (term_record R (record_pattern_match_env_reverse p v1)) ι1 = inst (subst t r01) ι1).
-        change (inst (term_record R (record_pattern_match_env_reverse p v1)) ι1) with (𝑹_fold (R := R) (inst (record_pattern_match_env_reverse p v1) ι1)).
-        now rewrite inst_subst, inst_record_pattern_match_reverse.
+      apply approx_bind_right.
+      - apply approx_assert_formula; try assumption. cbn - [Lit].
+        now rewrite <- inst_persist, (inst_record_pattern_match_reverse ι1 p).
       - intros w2 r12 ι2 -> Hpc2.
         eapply (approx_four Hk); eauto.
-        now rewrite <- inst_subst.
+        now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_angelic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
@@ -1044,9 +1045,8 @@ Module Soundness
         hnf.
         unfold record_pattern_match_lit.
         rewrite H0. rewrite 𝑹_unfold_fold.
-        change (fun Σ : LCtx => @Env (N * Ty) (fun τ : N * Ty => Term Σ (@snd N Ty τ)) Δ) with
-            (fun Σ : LCtx => @NamedEnv N Ty (fun τ => Term Σ τ) Δ).
-        now rewrite inst_record_pattern_match.
+        symmetry.
+        apply inst_record_pattern_match.
       - apply approx_angelic_match_record'; auto.
     Qed.
 
@@ -1062,14 +1062,11 @@ Module Soundness
       intros w1 r01 ι1 -> Hpc1.
       intros v1 vc1 ->.
       eapply approx_bind_right.
-      - eapply approx_assume_formula; try assumption.
-        unfold record_pattern_match_lit.
-        change (inst (formula_eq (term_record R (record_pattern_match_env_reverse p v1)) (subst t r01)) ι1) with (inst (term_record R (record_pattern_match_env_reverse p v1)) ι1 = inst (subst t r01) ι1).
-        change (inst (term_record R (record_pattern_match_env_reverse p v1)) ι1) with (𝑹_fold (R := R) (inst (record_pattern_match_env_reverse p v1) ι1)).
-        now rewrite inst_subst, inst_record_pattern_match_reverse.
+      - eapply approx_assume_formula; try assumption. cbn - [Lit].
+        now rewrite <- inst_persist, (inst_record_pattern_match_reverse ι1 p).
       - intros w2 r12 ι2 -> Hpc2.
         eapply (approx_four Hk); eauto.
-        now rewrite <- inst_subst.
+        now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_demonic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
@@ -1090,8 +1087,7 @@ Module Soundness
         hnf.
         unfold record_pattern_match_lit.
         rewrite H0. rewrite 𝑹_unfold_fold.
-        change (fun Σ : LCtx => @Env (N * Ty) (fun τ : N * Ty => Term Σ (@snd N Ty τ)) Δ) with
-            (fun Σ : LCtx => @NamedEnv N Ty (fun τ => Term Σ τ) Δ).
+        change (fun Σ => @Env (N * Ty) (fun τ => Term Σ (@snd N Ty τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
         now rewrite inst_record_pattern_match.
       - apply approx_demonic_match_record'; auto.
     Qed.
@@ -1104,28 +1100,22 @@ Module Soundness
       intros t v ->.
       intros k k__c Hk.
       unfold SMut.angelic_match_tuple, CMut.angelic_match_tuple.
-      eapply approx_bind; try (eapply approx_angelic_ctx; assumption).
+      apply approx_bind; try (apply approx_angelic_ctx; assumption).
       intros w1 r01 ι1 -> Hpc1.
       intros v1 vc1 ->.
-      eapply approx_bind_right.
-      - eapply approx_assert_formula; try assumption.
+      change (fun Σ => @Env (N * Ty) (fun τ => Term Σ (@snd N Ty τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
+      apply approx_bind_right.
+      - apply approx_assert_formula; try assumption. cbn - [Lit].
+        rewrite inst_term_tuple.
+        rewrite inst_tuple_pattern_match_reverse.
+        rewrite <- inst_persist.
         unfold tuple_pattern_match_lit.
-        unfold inst at 4; cbn.
-        replace (inst (term_tuple (tuple_pattern_match_env_reverse p v1)) ι1)
-          with (env_to_envrec (inst (tuple_pattern_match_env_reverse p v1) ι1))
-          by (symmetry; apply inst_term_tuple).
-        rewrite inst_tuple_pattern_match_reverse, inst_subst.
-        split.
-        + intros eq.
-          apply (f_equal (tuple_pattern_match_env_reverse p)) in eq.
-          rewrite tuple_pattern_match_env_inverse_left in eq.
-          eapply (f_equal (env_to_envrec (σs := σs))) in eq.
-          now rewrite envrec_env_inverse_left in eq.
-        + intros <-.
-          now rewrite envrec_env_inverse_right, tuple_pattern_match_env_inverse_right.
+        split; intros <-.
+        + now rewrite tuple_pattern_match_env_inverse_left, envrec_env_inverse_left.
+        + now rewrite envrec_env_inverse_right, tuple_pattern_match_env_inverse_right.
       - intros w2 r12 ι2 -> Hpc2.
         eapply (approx_four Hk); eauto.
-        now rewrite <- inst_subst.
+        now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_demonic_match_tuple {N : Set} (n : N -> 𝑺) {σs AT A} `{Approx AT A} {Γ1 Γ2}
@@ -1136,29 +1126,22 @@ Module Soundness
       intros t v ->.
       intros k k__c Hk.
       unfold SMut.demonic_match_tuple, CMut.demonic_match_tuple.
-      eapply approx_bind; try (eapply approx_demonic_ctx; assumption).
+      apply approx_bind; try (apply approx_demonic_ctx; assumption).
       intros w1 r01 ι1 -> Hpc1.
       intros v1 vc1 ->.
-      eapply approx_bind_right.
-      - eapply approx_assume_formula; try assumption.
-        unfold inst at 4; cbn.
-        rewrite inst_subst.
-        unfold tuple_pattern_match_lit.
-        replace (inst (term_tuple (tuple_pattern_match_env_reverse p v1)) ι1)
-          with (env_to_envrec (inst (tuple_pattern_match_env_reverse p v1) ι1))
-          by (symmetry; apply inst_term_tuple).
+      change (fun Σ => @Env (N * Ty) (fun τ => Term Σ (@snd N Ty τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
+      apply approx_bind_right.
+      - apply approx_assume_formula; try assumption. cbn - [Lit].
+        rewrite inst_term_tuple.
         rewrite inst_tuple_pattern_match_reverse.
-        split.
-        + intros eq.
-          apply (f_equal (tuple_pattern_match_env_reverse p)) in eq.
-          rewrite tuple_pattern_match_env_inverse_left in eq.
-          eapply (f_equal (env_to_envrec (σs := σs))) in eq.
-          now rewrite envrec_env_inverse_left in eq.
-        + intros <-.
-          now rewrite envrec_env_inverse_right, tuple_pattern_match_env_inverse_right.
+        rewrite <- inst_persist.
+        unfold tuple_pattern_match_lit.
+        split; intros <-.
+        + now rewrite tuple_pattern_match_env_inverse_left, envrec_env_inverse_left.
+        + now rewrite envrec_env_inverse_right, tuple_pattern_match_env_inverse_right.
       - intros w2 r12 ι2 -> Hpc2.
         eapply (approx_four Hk); eauto.
-        now rewrite <- inst_subst.
+        now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_angelic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty}
@@ -1172,20 +1155,17 @@ Module Soundness
       eapply approx_bind; try (eapply approx_angelic_ctx; assumption); try assumption.
       intros w1 r01 ι1 -> Hpc1.
       intros ts vs ->.
+      change (fun Σ => @Env (N * Ty) (fun τ => Term Σ (@snd N Ty τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
       eapply approx_bind_right.
-      - eapply approx_assert_formula; try assumption.
-        unfold inst at 4; cbn.
-        rewrite inst_subst.
+      - eapply approx_assert_formula; try assumption. cbn - [Lit].
         rewrite inst_pattern_match_env_reverse.
-        split.
-        + intros eq.
-          apply (f_equal (pattern_match_env_lit_reverse p)) in eq.
-          now rewrite pattern_match_lit_inverse_left in eq.
-        + intros <-.
-          now rewrite pattern_match_lit_inverse_right.
+        rewrite <- inst_persist.
+        split; intros <-.
+        + now rewrite pattern_match_lit_inverse_left.
+        + now rewrite pattern_match_lit_inverse_right.
       - intros w2 r12 ι2 -> Hpc2.
         eapply approx_pure; try assumption.
-        now rewrite <- inst_subst.
+        now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_angelic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
@@ -1196,28 +1176,26 @@ Module Soundness
       intros t v ->.
       intros k k__c Hk.
       unfold SMut.angelic_match_union, CMut.angelic_match_union.
-      eapply approx_bind; try (eapply approx_angelic_finite; assumption).
+      apply approx_bind; try (apply approx_angelic_finite; assumption).
       intros w1 r01 ι1 -> Hpc1.
       intros v1 vc1 ->.
-      eapply approx_bind; try (eapply approx_angelic; assumption).
+      apply approx_bind; try (apply approx_angelic; assumption).
       intros w2 r12 ι2 -> Hpc2.
       intros v2 vc2 ->.
       eapply approx_bind_right.
-      - eapply approx_assert_formula; try assumption.
+      - eapply approx_assert_formula; try assumption. cbn - [Lit].
         change (inst v1 _) with v1.
-        unfold inst at 5; cbn.
-        unfold persist, persist_subst, wtrans; cbn.
-        now rewrite ?inst_subst.
+        change (inst_term ?t ?ι) with (inst t ι).
+        rewrite (inst_persist (AT := STerm _) (A := Lit _)).
+        now rewrite sub_acc_trans, inst_subst.
       - intros w3 r23 ι3 -> Hpc3.
         eapply approx_bind.
         + eapply approx_angelic_match_pattern; try assumption.
-          unfold persist, persist_subst, wtrans; cbn;
-          now rewrite <- ?inst_subst, ?subst_assoc.
+          now rewrite <- inst_persist.
         + change (inst v1 _) with v1.
           specialize (Hk v1).
           eapply (approx_four Hk).
-          unfold wtrans;cbn.
-          now rewrite ?inst_subst.
+          now rewrite ?sub_acc_trans, ?inst_subst.
     Qed.
 
     Lemma approx_demonic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty}
@@ -1231,20 +1209,17 @@ Module Soundness
       eapply approx_bind; try (eapply approx_demonic_ctx; assumption); try assumption.
       intros w1 r01 ι1 -> Hpc1.
       intros ts vs ->.
+      change (fun Σ => @Env (N * Ty) (fun τ => Term Σ (@snd N Ty τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
       eapply approx_bind_right.
-      - eapply approx_assume_formula; try assumption.
-        unfold inst at 4; cbn.
-        rewrite inst_subst.
+      - eapply approx_assume_formula; try assumption. cbn - [Lit].
         rewrite inst_pattern_match_env_reverse.
-        split.
-        + intros eq.
-          apply (f_equal (pattern_match_env_lit_reverse p)) in eq.
-          now rewrite pattern_match_lit_inverse_left in eq.
-        + intros <-.
-          now rewrite pattern_match_lit_inverse_right.
+        rewrite <- inst_persist.
+        split; intros <-.
+        + now rewrite pattern_match_lit_inverse_left.
+        + now rewrite pattern_match_lit_inverse_right.
       - intros w2 r12 ι2 -> Hpc2.
         eapply approx_pure; try assumption.
-        now rewrite <- inst_subst.
+        now rewrite <- inst_persist.
     Qed.
 
     Lemma approx_demonic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
@@ -1262,21 +1237,19 @@ Module Soundness
       intros w2 r12 ι2 -> Hpc2.
       intros v2 vc2 ->.
       eapply approx_bind_right.
-      - eapply approx_assume_formula; try assumption.
+      - eapply approx_assume_formula; try assumption. cbn - [Lit].
         change (inst v1 _) with v1.
-        unfold inst at 5; cbn.
-        unfold persist, persist_subst, wtrans; cbn.
-        now rewrite ?inst_subst.
+        change (inst_term ?t ?ι) with (inst t ι).
+        rewrite (inst_persist (AT := STerm _) (A := Lit _)).
+        now rewrite sub_acc_trans, inst_subst.
       - intros w3 r23 ι3 -> Hpc3.
         eapply approx_bind.
         + eapply approx_demonic_match_pattern; try assumption.
-          unfold persist, persist_subst, wtrans; cbn;
-          now rewrite <- ?inst_subst, ?subst_assoc.
+          now rewrite <- inst_persist.
         + change (inst v1 _) with v1.
           specialize (Hk v1).
           eapply (approx_four Hk).
-          unfold wtrans;cbn.
-          now rewrite ?inst_subst.
+          now rewrite ?sub_acc_trans, ?inst_subst.
     Qed.
 
   End PatternMatching.
@@ -1452,21 +1425,21 @@ Module Soundness
       (Hpc0 : instpc (wco w0) ι0),
       approx ι0 (@SMut.produce Γ w0 asn) (CMut.produce ι0 asn).
   Proof.
-    induction asn; intros w0 * Hpc; cbn.
+    induction asn; intros w0 * Hpc; cbn - [wctx Lit].
     - now apply approx_box_assume_formula.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       now apply approx_produce_chunk.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_demonic_match_bool; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_demonic_match_enum; auto.
       intros EK1 EK2 HEK. hnf in HEK. subst EK2.
       eauto.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_demonic_match_sum; auto.
       + intros w2 ω12 ι2 -> Hpc2.
         intros t v ->.
@@ -1475,7 +1448,7 @@ Module Soundness
         intros t v ->.
         apply IHasn2; cbn - [inst sub_wk1]; wsimpl; auto.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_demonic_match_list; auto.
       eapply approx_four; eauto.
       intros w2 ω12 ι2 -> Hpc2.
@@ -1483,13 +1456,13 @@ Module Soundness
       intros ttail vtail ->.
       apply IHasn2; cbn - [inst sub_wk1]; wsimpl; auto.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_demonic_match_prod; auto.
       intros w2 ω12 ι2 -> Hpc2.
       intros t1 v1 -> t2 v2 ->.
       apply IHasn; cbn - [inst sub_wk1]; wsimpl; auto.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_demonic_match_tuple; auto.
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs ->.
@@ -1506,7 +1479,7 @@ Module Soundness
       }
       now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_demonic_match_record; auto.
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs ->.
@@ -1523,7 +1496,7 @@ Module Soundness
       }
       now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_demonic_match_union; auto.
       intros UK.
       intros w2 ω12 ι2 -> Hpc2.
@@ -1548,7 +1521,7 @@ Module Soundness
       apply approx_demonic; auto.
       intros w2 ω02 ι2 -> Hpc2. intros t v ->.
       apply IHasn; cbn - [inst sub_wk1];
-        rewrite ?inst_sub_snoc, ?inst_subst, ?inst_sub_wk1; eauto.
+        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?inst_subst, ?inst_sub_wk1; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_debug; auto.
       apply approx_pure; auto.
@@ -1591,21 +1564,21 @@ Module Soundness
     apply approx_get_heap; auto.
     intros w1 ω01 ι1 -> Hpc1.
     intros hs hc ->.
-    destruct (try_consume_chunk_exact_spec hs (subst cs ω01)) as [h' HIn|].
+    destruct (try_consume_chunk_exact_spec hs (persist cs ω01)) as [h' HIn|].
     - intros POST__s POST__c HPOST.
       intros δs δc -> hs' hc' ->.
       unfold approx, ApproxPath. intros Hwp.
       cbv [SMut.put_heap CMut.bind CMut.put_heap CMut.bind_right CMut.assert_formula
-                         T wrefl CMut.angelic_list CMut.dijkstra].
+                         T CMut.angelic_list CMut.dijkstra].
       rewrite CDijk.wp_angelic_list.
       change (SHeap w1) in h'.
-      exists (inst (subst cs ω01) ι1, inst h' ι1).
+      exists (inst (persist (A := Chunk) cs ω01) ι1, inst h' ι1).
       split.
       + unfold inst at 3. cbn. rewrite heap_extractions_map.
-        rewrite List.in_map_iff. exists (subst cs ω01 , h').
+        rewrite List.in_map_iff. exists (persist (A := Chunk) cs ω01 , h').
         split. reflexivity. assumption.
         eauto using inst_is_duplicable.
-      + hnf. rewrite inst_subst. split; auto. revert Hwp.
+      + hnf. rewrite inst_persist. split; auto. revert Hwp.
         apply HPOST; wsimpl; auto.
     - apply approx_bind.
       apply approx_angelic_list; eauto.
@@ -1619,10 +1592,10 @@ Module Soundness
       intros Hch'. inversion Hch'; subst; clear Hch'.
       apply approx_bind_right.
       apply approx_assert_formulas; auto.
-      rewrite SMut.inst_match_chunk. cbn.
-      rewrite ?inst_subst. intuition.
+      rewrite SMut.inst_match_chunk.
+      rewrite inst_persist, sub_acc_trans, inst_subst. intuition.
       intros w3 ω23 ι3 -> Hpc3.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_put_heap; auto.
   Qed.
 
@@ -1633,21 +1606,21 @@ Module Soundness
       (Hpc0 : instpc (wco w0) ι0),
       approx ι0 (@SMut.consume Γ w0 asn) (CMut.consume ι0 asn).
   Proof.
-    induction asn; intros w0 * Hpc; cbn.
+    induction asn; intros w0 * Hpc; cbn - [wctx Lit].
     - now apply approx_box_assert_formula.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       now apply approx_consume_chunk.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_angelic_match_bool; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_angelic_match_enum; auto.
       intros EK1 EK2 HEK. hnf in HEK. subst EK2.
       eauto.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_angelic_match_sum; auto.
       + intros w2 ω12 ι2 -> Hpc2.
         intros t v ->.
@@ -1656,7 +1629,7 @@ Module Soundness
         intros t v ->.
         apply IHasn2; cbn - [inst sub_wk1]; wsimpl; auto.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_angelic_match_list; auto.
       eapply approx_four; eauto.
       intros w2 ω12 ι2 -> Hpc2.
@@ -1664,13 +1637,13 @@ Module Soundness
       intros ttail vtail ->.
       apply IHasn2; cbn - [inst sub_wk1]; wsimpl; auto.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_angelic_match_prod; auto.
       intros w2 ω12 ι2 -> Hpc2.
       intros t1 v1 -> t2 v2 ->.
       apply IHasn; cbn - [inst sub_wk1]; wsimpl; auto.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_angelic_match_tuple; auto.
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs ->.
@@ -1687,7 +1660,7 @@ Module Soundness
       }
       now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_angelic_match_record; auto.
       intros w2 ω12 ι2 -> Hpc2.
       intros ts vs ->.
@@ -1704,7 +1677,7 @@ Module Soundness
       }
       now rewrite inst_sub_cat, inst_subst.
     - intros w1 ω01 ι1 -> Hpc1.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_angelic_match_union; auto.
       intros UK.
       intros w2 ω12 ι2 -> Hpc2.
@@ -1729,7 +1702,7 @@ Module Soundness
       apply approx_angelic; auto.
       intros w2 ω02 ι2 -> Hpc2. intros t v ->.
       apply IHasn; cbn - [inst sub_wk1];
-        rewrite ?inst_sub_snoc, ?inst_subst, ?inst_sub_wk1; eauto.
+        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?inst_subst, ?inst_sub_wk1; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_debug; auto.
       apply approx_pure; auto.
@@ -1748,7 +1721,7 @@ Module Soundness
     apply approx_bind_right.
     apply approx_assert_formulas; auto.
     { rewrite inst_formula_eqs_nctx.
-      rewrite ?inst_subst.
+      rewrite inst_persist, inst_subst.
       rewrite Hargs, Hevars.
       reflexivity.
     }
@@ -1766,12 +1739,12 @@ Module Soundness
     { apply approx_produce; auto.
       constructor.
       cbn - [instantiate_env sub_snoc].
-      rewrite inst_sub_snoc, ?inst_subst.
+      rewrite inst_sub_snoc, inst_persist, ?sub_acc_trans, ?inst_subst.
       now rewrite Hevars, Hres.
     }
     intros w5 ω45 ι5 -> Hpc5.
     apply approx_pure; auto.
-    rewrite Hres. rewrite <- inst_subst.
+    rewrite Hres. rewrite <- inst_persist.
     reflexivity.
   Qed.
 
@@ -1788,7 +1761,7 @@ Module Soundness
     apply approx_bind_right.
     apply approx_assert_formulas; auto.
     { rewrite inst_formula_eqs_nctx.
-      rewrite ?inst_subst.
+      rewrite inst_persist, inst_subst.
       rewrite Hargs, Hevars.
       reflexivity.
     }
@@ -1801,7 +1774,7 @@ Module Soundness
     { apply approx_produce; auto.
       constructor.
       cbn - [instantiate_env sub_snoc].
-      rewrite ?inst_subst.
+      rewrite inst_persist, sub_acc_trans, inst_subst.
       now rewrite Hevars.
     }
   Qed.
@@ -1851,9 +1824,10 @@ Module Soundness
       intros t v ->.
       apply approx_bind_right.
       apply approx_put_local; auto.
-      hnf. rewrite ?inst_subst; auto.
+      rewrite persist_subst.
+      hnf. rewrite sub_acc_trans, ?inst_subst; auto.
       intros w4 ω34 ι4 -> Hpc4.
-      rewrite <- inst_subst.
+      rewrite <- inst_persist.
       apply approx_pure; auto.
     - apply approx_bind.
       apply approx_eval_exps; auto.
@@ -1956,31 +1930,29 @@ Module Soundness
       intros t v ->.
       apply approx_bind_right; auto.
       apply approx_consume_chunk; auto.
-      hnf. cbn. now rewrite ?inst_subst, ?inst_sub_id.
       intros w2 ω12 ι2 -> Hpc2.
       apply approx_bind_right; auto.
+      rewrite <- inst_persist.
       apply approx_produce_chunk; auto.
-      hnf. cbn. now rewrite ?inst_subst, ?inst_sub_id.
       intros w3 ω23 ι3 -> Hpc3.
-      apply approx_pure; auto.
-      hnf. now rewrite ?inst_subst.
+      apply approx_pure; auto. hnf.
+      rewrite (persist_trans (A := STerm _)).
+      now rewrite <- ?inst_persist.
     - apply approx_bind; auto.
       apply approx_angelic; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros told v ->.
       apply approx_bind_right; auto.
       apply approx_consume_chunk; auto.
-      hnf. cbn. now rewrite ?inst_subst, ?inst_sub_id.
       intros w2 ω12 ι2 -> Hpc2.
       apply approx_bind; auto.
       intros w3 ω23 ι3 -> Hpc3.
       intros tnew v ->.
       apply approx_bind_right; auto.
       apply approx_produce_chunk; auto.
-      hnf. cbn. now rewrite ?inst_subst, ?inst_sub_id.
       intros w4 ω34 ι4 -> Hpc4.
       apply approx_pure; auto.
-      hnf. now rewrite ?inst_subst.
+      now rewrite <- inst_persist.
     - apply approx_error.
     - apply approx_debug; auto.
   Qed.

@@ -746,97 +746,6 @@ Module Terms (Export termkit : TermKit).
     Definition Term_rec Σ (P : forall σ, Term Σ σ -> Set) := Term_rect P.
     Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := Term_rect P.
 
-    Fixpoint inst_term {Σ : LCtx} {σ : Ty} (t : Term Σ σ) (ι : SymInstance Σ) {struct t} : Lit σ :=
-      match t in Term _ σ return Lit σ with
-      | @term_var _ _ _ bIn  => env_lookup ι bIn
-      | term_lit _ l         => l
-      | term_binop op e1 e2  => eval_binop op (inst_term e1 ι) (inst_term e2 ι)
-      | term_neg e           => Z.opp (inst_term e ι)
-      | term_not e           => negb (inst_term e ι)
-      | term_inl e           => @inl (Lit _) (Lit _) (inst_term e ι)
-      | term_inr e           => @inr (Lit _) (Lit _) (inst_term e ι)
-      | @term_projtup _ σs e n σ p => tuple_proj σs n σ (inst_term e ι) p
-      | @term_union _ U K e     => 𝑼_fold (existT K (inst_term e ι))
-      | @term_record _ R es     => 𝑹_fold (Env_rect
-                                             (fun σs _ => NamedEnv Lit σs)
-                                             env_nil
-                                             (fun σs _ vs _ e => env_snoc vs _ (inst_term e ι)) es)
-      (* | @term_projrec _ _ e rf    => 𝑹_unfold (inst_term ι e) ‼ rf *)
-      end.
-
-    Section TermEquivalence.
-
-      Context {Σ : LCtx} {σ : Ty}.
-
-      Definition TermEqv (ι : SymInstance Σ) : relation (Term Σ σ) :=
-        fun t1 t2 => inst_term t1 ι = inst_term t2 ι.
-
-      Global Instance TermEqv_Equiv {ι} : Equivalence (TermEqv ι).
-      Proof. split; congruence. Qed.
-
-    End TermEquivalence.
-
-    Section TermEqvB.
-
-      Context {Σ : LCtx}.
-
-      Fixpoint Term_eqvb {σ τ} (t1 : Term Σ σ) (t2 : Term Σ τ) {struct t1} : option bool :=
-        match t1 , t2 with
-        | @term_var _ _ _ ς1inΣ , @term_var _ _ _ ς2inΣ =>
-          if InCtx_eqb ς1inΣ ς2inΣ
-          then Some true
-          else None
-        | term_lit σ l1 , term_lit τ l2 =>
-          match eq_dec σ τ with
-          | left  p => Some (Lit_eqb τ (eq_rect σ Lit l1 τ p) l2)
-          | right _ => Some false
-          end
-        | term_neg x   , term_neg y   => Term_eqvb x y
-        | term_not x   , term_not y   => Term_eqvb x y
-        | term_inl x   , term_inl y   => Term_eqvb x y
-        | term_inl _   , term_inr _   => Some false
-        | term_inr _   , term_inl _   => Some false
-        | term_inr x   , term_inr y   => Term_eqvb x y
-        | _            , _            => None
-        end.
-
-      Local Set Equations With UIP.
-      Lemma Term_eqvb_spec {σ} (t1 t2 : Term Σ σ) :
-        OptionSpec
-          (fun b : bool => forall ι : SymInstance Σ, TermEqv ι t1 t2 <-> is_true b)
-          True
-          (Term_eqvb t1 t2).
-      Proof.
-        induction t1; dependent elimination t2; cbn; intros; try (solve [ constructor; auto ]).
-        - destruct (InCtx_eqb_spec ςInΣ ςInΣ0); constructor; auto.
-          dependent elimination e.
-          intros ι. apply reflect_iff. constructor. reflexivity.
-        - rewrite eq_dec_refl. cbn. constructor.
-          intros ι. apply reflect_iff, Lit_eqb_spec.
-        - specialize (IHt1 e). revert IHt1.
-          apply optionspec_monotonic; auto.
-          intros ? H ι. specialize (H ι). rewrite <- H.
-          unfold TermEqv; cbn; lia.
-        - specialize (IHt1 e0). revert IHt1.
-          apply optionspec_monotonic; auto.
-          intros ? H ι. specialize (H ι). rewrite <- H.
-          unfold TermEqv; cbn. split.
-          + now intros ?%ssrbool.negb_inj.
-          + congruence.
-        - specialize (IHt1 t). revert IHt1.
-          apply optionspec_monotonic; auto.
-          intros ? H ι. specialize (H ι). rewrite <- H.
-          unfold TermEqv; cbn. split; congruence.
-        - constructor. intros ?. apply reflect_iff. constructor. discriminate.
-        - constructor. intros ?. apply reflect_iff. constructor. discriminate.
-        - specialize (IHt1 t0). revert IHt1.
-          apply optionspec_monotonic; auto.
-          intros ? H ι. specialize (H ι). rewrite <- H.
-          unfold TermEqv; cbn. split; congruence.
-      Qed.
-
-    End TermEqvB.
-
     Equations(noind) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
       Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
         InCtx_eqb ς1inΣ ς2inΣ;
@@ -948,7 +857,7 @@ Module Terms (Export termkit : TermKit).
 
     Definition tuple_pattern_match_lit {N : Set} {σs : Ctx Ty} {Δ : NCtx N Ty}
              (p : TuplePat σs Δ) : Lit (ty_tuple σs) -> NamedEnv Lit Δ :=
-      fun lit => tuple_pattern_match_env p (envrec_to_env σs lit).
+      fun lit => tuple_pattern_match_env p (@envrec_to_env Ty σs Lit lit).
 
     Fixpoint record_pattern_match_env {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
              (p : RecordPat rfs Δ) {struct p} : NamedEnv V rfs -> NamedEnv V Δ :=
@@ -1252,13 +1161,51 @@ Module Terms (Export termkit : TermKit).
       }
     Qed.
 
+  End SymbolicSubstitutions.
+
+  Module SubNotations.
+
+    Notation "a ⟨ ζ ⟩" := (subst a ζ)
+      (at level 8, left associativity,
+        format "a ⟨ ζ ⟩").
+    Notation "ζ1 ∘ ζ2" := (@subst (Sub _) _ _ ζ1 _ ζ2) (at level 60, right associativity).
+
+  End SubNotations.
+
+  Section InfrastructureLemmas.
+
+    Lemma lookup_sub_id {Σ x σ} (xIn : x :: σ ∈ Σ) :
+      env_lookup (sub_id _) xIn = term_var x.
+    Proof. unfold sub_id; now rewrite env_lookup_tabulate. Qed.
+
+    Lemma lookup_sub_comp {Σ0 Σ1 Σ2 x} (xIn : x ∈ Σ0) (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) :
+      env_lookup (subst ζ1 ζ2) xIn = subst (env_lookup ζ1 xIn) ζ2.
+    Proof.
+      unfold subst at 1, SubstEnv.
+      now rewrite env_lookup_map.
+    Qed.
+
+    Lemma lookup_sub_wk1 {Σ x σ b} (xIn : (x :: σ) ∈ Σ) :
+      env_lookup (@sub_wk1 Σ b) xIn = @term_var _ _ _ (inctx_succ xIn).
+    Proof. unfold sub_wk1; now rewrite env_lookup_tabulate. Qed.
+
+    Lemma lookup_sub_shift {Σ x σ b} (bIn : b ∈ Σ) (xIn : (x :: σ) ∈ (Σ - b)) :
+      env_lookup (@sub_shift Σ b bIn) xIn = @term_var Σ x σ (shift_var bIn xIn).
+    Proof. unfold sub_shift; now rewrite env_lookup_tabulate. Qed.
+
+    Lemma lookup_sub_single_eq {Σ x σ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+      env_lookup (sub_single xIn t) xIn = t.
+    Proof. unfold sub_single. now rewrite env_lookup_tabulate, occurs_check_var_refl. Qed.
+
+    Lemma lookup_sub_single_neq {Σ x σ y τ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) (yIn : y :: τ ∈ _) :
+      env_lookup (sub_single xIn t) (shift_var xIn yIn) = term_var y.
+    Proof. unfold sub_single. now rewrite env_lookup_tabulate, occurs_check_shift_var. Qed.
+
     Lemma sub_comp_id_left {Σ0 Σ1} (ζ : Sub Σ0 Σ1) :
       subst (sub_id Σ0) ζ = ζ.
     Proof.
-      unfold subst, SubstEnv, sub_id.
-      apply env_lookup_extensional; cbn.
-      intros [] ?.
-      now rewrite env_lookup_map, env_lookup_tabulate.
+      apply env_lookup_extensional; intros [x σ] *.
+      now rewrite lookup_sub_comp, lookup_sub_id.
     Qed.
 
     Lemma sub_comp_id_right {Σ0 Σ1} (ζ : Sub Σ0 Σ1) :
@@ -1271,31 +1218,20 @@ Module Terms (Export termkit : TermKit).
       subst (subst ζ1 ζ2) ζ3 = subst ζ1 (subst ζ2 ζ3).
     Proof. now rewrite subst_sub_comp. Qed.
 
-    Lemma subst_assoc {Σ1 Σ2 Σ3} `{SubstLaws A} (t1 : A Σ1) (ζ2 : Sub Σ1 Σ2) (ζ3 : Sub Σ2 Σ3) :
-      subst (subst t1 ζ2) ζ3 = subst t1 (subst ζ2 ζ3).
-    Proof.
-      now rewrite subst_sub_comp.
-    Qed.
-
     Lemma sub_comp_wk1_tail {Σ0 Σ1 b} (ζ : Sub (Σ0 ▻ b) Σ1) :
       subst sub_wk1 ζ = env_tail ζ.
     Proof.
-      apply env_lookup_extensional.
-      intros [] ?.
-      unfold subst, SubstEnv, sub_wk1.
-      rewrite env_map_tabulate.
-      rewrite env_lookup_tabulate.
-      dependent elimination ζ.
-      now cbn.
+      apply env_lookup_extensional. intros [x σ] *.
+      rewrite lookup_sub_comp, lookup_sub_wk1.
+      now destruct (snocView ζ) as [ζ t].
     Qed.
 
     Lemma sub_comp_shift {Σ0 Σ1 b} (bIn : b ∈ Σ0) (ζ : Sub Σ0 Σ1) :
       subst (sub_shift bIn) ζ = env_remove b ζ bIn.
     Proof.
-      rewrite env_remove_remove'.
-      destruct b as [x σ]. apply env_lookup_extensional. intros [y τ] yIn.
-      unfold subst, SubstEnv, sub_shift, env_remove'; cbn.
-      now rewrite env_lookup_map, ?env_lookup_tabulate.
+      rewrite env_remove_remove'. unfold env_remove'.
+      apply env_lookup_extensional. intros [x σ] xIn.
+      now rewrite lookup_sub_comp, lookup_sub_shift, env_lookup_tabulate.
     Qed.
 
     Lemma sub_comp_wk1_comm {Σ0 Σ1 b} (ζ : Sub Σ0 Σ1) :
@@ -1320,33 +1256,6 @@ Module Terms (Export termkit : TermKit).
       now rewrite ?sub_comp_assoc, ?sub_comp_wk1_comm.
     Qed.
 
-    Lemma lookup_sub_id {Σ x σ} (xIn : x :: σ ∈ Σ) :
-      env_lookup (sub_id _) xIn = term_var x.
-    Proof. unfold sub_id; now rewrite env_lookup_tabulate. Qed.
-
-    Lemma lookup_sub_wk1 {Σ x σ y τ} (xIn : x :: σ ∈ Σ) :
-      env_lookup (sub_wk1 (b := (y,τ))) xIn = @term_var _ _ _ (inctx_succ xIn).
-    Proof. unfold sub_wk1; now rewrite env_lookup_tabulate. Qed.
-
-    Lemma lookup_sub_comp {Σ0 Σ1 Σ2} (ζ1 : Sub Σ0 Σ1) (ζ2 : Sub Σ1 Σ2) {x σ} (xIn : x :: σ ∈ Σ0) :
-      env_lookup (subst ζ1 ζ2) xIn = subst (env_lookup ζ1 xIn) ζ2.
-    Proof.
-      unfold subst at 1, SubstEnv.
-      now rewrite env_lookup_map.
-    Qed.
-
-    Lemma lookup_sub_shift {Σ x σ y τ} (xIn : x :: σ ∈ Σ) (yIn : y :: τ ∈ Σ - (x :: σ)) :
-      env_lookup (sub_shift xIn) yIn = @term_var _ _ _ (shift_var xIn yIn).
-    Proof. unfold sub_shift; now rewrite env_lookup_tabulate. Qed.
-
-    Lemma lookup_sub_single_eq {Σ x σ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
-      env_lookup (sub_single xIn t) xIn = t.
-    Proof. unfold sub_single. now rewrite env_lookup_tabulate, occurs_check_var_refl. Qed.
-
-    Lemma lookup_sub_single_neq {Σ x σ y τ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) (yIn : y :: τ ∈ _) :
-      env_lookup (sub_single xIn t) (shift_var xIn yIn) = term_var y.
-    Proof. unfold sub_single. now rewrite env_lookup_tabulate, occurs_check_shift_var. Qed.
-
     Lemma sub_comp_shift_single {Σ x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
       subst (sub_shift xIn) (sub_single xIn t) = sub_id _.
     Proof.
@@ -1359,17 +1268,15 @@ Module Terms (Export termkit : TermKit).
       reflexivity.
     Qed.
 
-    Lemma sub_up1_id {Σ x τ} : sub_up1 (b := (x,τ)) (sub_id Σ) = sub_id _.
+    Lemma sub_up1_id {Σ x} : sub_up1 (sub_id Σ) = sub_id (Σ ▻ x).
     Proof.
+      destruct x as [x σ].
       unfold sub_up1.
       rewrite sub_comp_id_left.
-      apply env_lookup_extensional.
-      intros [y τ'] yIn.
-      destruct yIn as [pos eq].
-      destruct pos.
-      - dependent elimination eq; now cbn.
-      - rewrite lookup_sub_id.
-        cbn.
+      apply env_lookup_extensional. intros y yIn.
+      destruct (Context.snocView yIn) as [|[y τ] yIn].
+      - reflexivity.
+      - rewrite lookup_sub_id. cbn.
         now rewrite lookup_sub_wk1.
     Qed.
 
@@ -1391,7 +1298,15 @@ Module Terms (Export termkit : TermKit).
       now rewrite env_lookup_cat_left.
     Qed.
 
-  End SymbolicSubstitutions.
+    Lemma subst_shift_single {AT} `{SubstLaws AT} {Σ x σ} (xIn : (x :: σ) ∈ Σ) (a : AT (Σ - (x :: σ))) (t : Term (Σ - (x :: σ)) σ) :
+      subst (subst a (sub_shift xIn)) (sub_single xIn t) = a.
+    Proof. now rewrite <- subst_sub_comp, sub_comp_shift_single, subst_sub_id. Qed.
+
+    Lemma subst_wk1_snoc {AT} `{SubstLaws AT} {Σ1 Σ2 b} (a : AT _) (t : Term Σ2 (snd b)) (ζ : Sub Σ1 Σ2) :
+      subst (subst a sub_wk1) (sub_snoc ζ b t) = subst a ζ.
+    Proof. now rewrite <- subst_sub_comp, sub_comp_wk1_tail. Qed.
+
+  End InfrastructureLemmas.
 
   Section OccursCheck.
 
@@ -1609,11 +1524,6 @@ Module Terms (Export termkit : TermKit).
         lift {Σ} (a : A) : T Σ;
       }.
 
-    Global Instance instantiate_term {σ} : Inst (fun Σ => Term Σ σ) (Lit σ) :=
-      {| inst Σ t ι := inst_term t ι;
-         lift Σ l   := term_lit σ l;
-      |}.
-
     Global Instance instantiate_list {T : LCtx -> Type} {A : Type} `{Inst T A} :
       Inst (List T) (list A) :=
       {| inst Σ xs ι := List.map (fun x => inst x ι) xs;
@@ -1627,11 +1537,34 @@ Module Terms (Export termkit : TermKit).
       |}.
 
     Global Instance instantiate_env {T : Set} {S : LCtx -> T -> Set}
-           {A : T -> Set} {_ : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)}
+           {A : T -> Set} {InstSA : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)}
            {Γ : Ctx T} :
       Inst (fun Σ => Env (S Σ) Γ) (Env A Γ) :=
       {| inst Σ xs ι := env_map (fun (b : T) (s : S Σ b) => inst s ι) xs;
          lift Σ      := env_map (fun (b : T) (a : A b) => lift a)
+      |}.
+
+    Fixpoint inst_term {σ : Ty} {Σ : LCtx} (t : Term Σ σ) (ι : SymInstance Σ) {struct t} : Lit σ :=
+      match t in Term _ σ return Lit σ with
+      | @term_var _ _ _ bIn  => env_lookup ι bIn
+      | term_lit _ l         => l
+      | term_binop op e1 e2  => eval_binop op (inst_term e1 ι) (inst_term e2 ι)
+      | term_neg e           => Z.opp (inst_term e ι)
+      | term_not e           => negb (inst_term e ι)
+      | term_inl e           => @inl (Lit _) (Lit _) (inst_term e ι)
+      | term_inr e           => @inr (Lit _) (Lit _) (inst_term e ι)
+      | @term_projtup _ σs e n σ p => tuple_proj σs n σ (inst_term e ι) p
+      | @term_union _ U K e     => 𝑼_fold (existT K (inst_term e ι))
+      | @term_record _ R ts     =>
+          let InstTerm :=
+            fun xt : 𝑹𝑭 * Ty => {| inst := @inst_term (@snd 𝑹𝑭 Ty xt);
+                                   lift Σ := @term_lit Σ (@snd 𝑹𝑭 Ty xt) |} in
+          𝑹_fold (inst (Inst := instantiate_env (InstSA := InstTerm)) ts ι)
+      end.
+
+    Global Instance instantiate_term {σ} : Inst (fun Σ => Term Σ σ) (Lit σ) :=
+      {| inst Σ t ι := inst_term t ι;
+         lift Σ l   := term_lit σ l;
       |}.
 
     Global Instance instantiate_sub {Σ} : Inst (Sub Σ) (SymInstance Σ) :=
@@ -1754,10 +1687,11 @@ Module Terms (Export termkit : TermKit).
       now rewrite env_lookup_map, ?env_lookup_tabulate.
     Qed.
 
-    Lemma inst_sub_single {Σ} (ι : SymInstance Σ) {x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
-      inst t (env_remove _ ι xIn) = env_lookup ι xIn ->
-      inst (sub_single xIn t) (env_remove _ ι xIn) = ι.
+    Lemma inst_sub_single_shift {Σ} (ι : SymInstance Σ) {x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+      inst t (inst (sub_shift xIn) ι) = env_lookup ι xIn ->
+      inst (sub_single xIn t) (inst (sub_shift xIn) ι) = ι.
     Proof.
+      rewrite inst_sub_shift.
       rewrite env_remove_remove'.
       intros HYP. apply env_lookup_extensional. intros [y τ] yIn.
       unfold inst, sub_single; cbn.
@@ -1881,6 +1815,79 @@ Module Terms (Export termkit : TermKit).
     Global Arguments lift {T A _ Σ} !_.
 
   End Instantiation.
+
+  (* Section TermEquivalence. *)
+
+  (*   Context {Σ : LCtx} {σ : Ty}. *)
+
+  (*   Definition TermEqv (ι : SymInstance Σ) : relation (Term Σ σ) := *)
+  (*     fun t1 t2 => inst_term t1 ι = inst_term t2 ι. *)
+
+  (*   Global Instance TermEqv_Equiv {ι} : Equivalence (TermEqv ι). *)
+  (*   Proof. split; congruence. Qed. *)
+
+  (* End TermEquivalence. *)
+
+  (* Section TermEqvB. *)
+
+  (*   Context {Σ : LCtx}. *)
+
+  (*   Fixpoint Term_eqvb {σ τ} (t1 : Term Σ σ) (t2 : Term Σ τ) {struct t1} : option bool := *)
+  (*     match t1 , t2 with *)
+  (*     | @term_var _ _ _ ς1inΣ , @term_var _ _ _ ς2inΣ => *)
+  (*       if InCtx_eqb ς1inΣ ς2inΣ *)
+  (*       then Some true *)
+  (*       else None *)
+  (*     | term_lit σ l1 , term_lit τ l2 => *)
+  (*       match eq_dec σ τ with *)
+  (*       | left  p => Some (Lit_eqb τ (eq_rect σ Lit l1 τ p) l2) *)
+  (*       | right _ => Some false *)
+  (*       end *)
+  (*     | term_neg x   , term_neg y   => Term_eqvb x y *)
+  (*     | term_not x   , term_not y   => Term_eqvb x y *)
+  (*     | term_inl x   , term_inl y   => Term_eqvb x y *)
+  (*     | term_inl _   , term_inr _   => Some false *)
+  (*     | term_inr _   , term_inl _   => Some false *)
+  (*     | term_inr x   , term_inr y   => Term_eqvb x y *)
+  (*     | _            , _            => None *)
+  (*     end. *)
+
+  (*   Local Set Equations With UIP. *)
+  (*   Lemma Term_eqvb_spec {σ} (t1 t2 : Term Σ σ) : *)
+  (*     OptionSpec *)
+  (*       (fun b : bool => forall ι : SymInstance Σ, TermEqv ι t1 t2 <-> is_true b) *)
+  (*       True *)
+  (*       (Term_eqvb t1 t2). *)
+  (*   Proof. *)
+  (*     induction t1; dependent elimination t2; cbn; intros; try (solve [ constructor; auto ]). *)
+  (*     - destruct (InCtx_eqb_spec ςInΣ ςInΣ0); constructor; auto. *)
+  (*       dependent elimination e. *)
+  (*       intros ι. apply reflect_iff. constructor. reflexivity. *)
+  (*     - rewrite eq_dec_refl. cbn. constructor. *)
+  (*       intros ι. apply reflect_iff, Lit_eqb_spec. *)
+  (*     - specialize (IHt1 e). revert IHt1. *)
+  (*       apply optionspec_monotonic; auto. *)
+  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
+  (*       unfold TermEqv; cbn; lia. *)
+  (*     - specialize (IHt1 e0). revert IHt1. *)
+  (*       apply optionspec_monotonic; auto. *)
+  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
+  (*       unfold TermEqv; cbn. split. *)
+  (*       + now intros ?%ssrbool.negb_inj. *)
+  (*       + congruence. *)
+  (*     - specialize (IHt1 t). revert IHt1. *)
+  (*       apply optionspec_monotonic; auto. *)
+  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
+  (*       unfold TermEqv; cbn. split; congruence. *)
+  (*     - constructor. intros ?. apply reflect_iff. constructor. discriminate. *)
+  (*     - constructor. intros ?. apply reflect_iff. constructor. discriminate. *)
+  (*     - specialize (IHt1 t0). revert IHt1. *)
+  (*       apply optionspec_monotonic; auto. *)
+  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
+  (*       unfold TermEqv; cbn. split; congruence. *)
+  (*   Qed. *)
+
+  (* End TermEqvB. *)
 
   Section Utils.
 

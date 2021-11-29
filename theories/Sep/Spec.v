@@ -398,13 +398,14 @@ Module Assertions
           destruct pc1f2 as [Hf Hpc2]; auto.
     Qed.
 
+    Definition entails_refl {Σ} : Reflexive (@entails Σ).
+    Proof. now unfold Reflexive, entails. Qed.
+
+    Definition entails_trans {Σ} : Transitive (@entails Σ).
+    Proof. unfold Transitive, entails; eauto. Qed.
+
     Global Instance preorder_entails {Σ} : PreOrder (@entails Σ).
-    Proof.
-      split.
-      - intuition.
-      - intros x y z xy yz ι ιx.
-        eauto.
-    Qed.
+    Proof. split; auto using entails_refl, entails_trans. Qed.
 
     (* Global Instance proper_subst_pc_entails {Σ1 Σ2} : *)
     (*   Proper ((@entails Σ1) ==> eq ==> (@entails Σ2)) (subst (T := PathCondition)) . *)

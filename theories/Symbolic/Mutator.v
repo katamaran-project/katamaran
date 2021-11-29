@@ -39,6 +39,8 @@ From Coq Require Import
      Strings.String
      ZArith.ZArith
      micromega.Lia.
+From Coq Require
+     Classes.CRelationClasses.
 From Equations Require Import Equations.
 
 From Katamaran Require Import
@@ -76,148 +78,221 @@ Module Mutators
         wco  : PathCondition wctx;
       }.
 
-  Record Acc (w1 w2 : World) : Type :=
-    MkAcc
-      { wsub :> Sub w1 w2;
-        went :  wco w2 ⊢ subst (wco w1) wsub;
-      }.
-
-  Notation "w1 ⊒ w2" := (Acc w1 w2) (at level 80).
-
-  Local Obligation Tactic := idtac.
-  Program Definition wrefl {w} : w ⊒ w :=
-    {| wsub := sub_id w |}.
-  Next Obligation.
-    intros ?. now rewrite subst_sub_id.
-  Qed.
-
-  Program Definition wtrans {w0 w1 w2} : w0 ⊒ w1 -> w1 ⊒ w2 -> w0 ⊒ w2 :=
-    fun ω01 ω12 => {| wsub := subst (T := Sub _) ω01 ω12 |}.
-  Next Obligation.
-    intros *.
-    rewrite subst_sub_comp.
-    intros ι2 Hpc2.
-    rewrite inst_subst.
-    apply (went ω01 (inst (T := Sub _) ω12 ι2)).
-    rewrite <- inst_subst.
-    apply (went ω12 ι2 Hpc2).
-  Defined.
-
   Definition wnil : World := @MkWorld ctx_nil nil.
   Definition wsnoc (w : World) (b : 𝑺 * Ty) : World :=
     @MkWorld (wctx w ▻ b) (subst (wco w) sub_wk1).
   Definition wformula (w : World) (f : Formula w) : World :=
     @MkWorld (wctx w) (cons f (wco w)).
-  Definition wsubst (w : World) x {σ} {xIn : x :: σ ∈ w} (t : Term (w - (x :: σ)) σ) : World.
-  Proof.
-    apply (@MkWorld (ctx_remove xIn)).
-    refine (subst (wco w) _).
-    apply sub_single.
-    apply t.
-  Defined.
+  Definition wsubst (w : World) x {σ} {xIn : x :: σ ∈ w} (t : Term (w - (x :: σ)) σ) : World :=
+    {| wctx := wctx w - (x :: σ); wco := subst (wco w) (sub_single xIn t) |}.
   Global Arguments wsubst w x {σ xIn} t.
-
-  Program Definition wsnoc_sup {w : World} {b : 𝑺 * Ty} : w ⊒ wsnoc w b :=
-    MkAcc w (wsnoc w b) sub_wk1 _.
-  Next Obligation.
-  Proof.
-    intros w b ι Hpc. apply Hpc.
-  Qed.
-
-  Program Definition wsnoc_sub {w1 w2 : World} (ω12 : w1 ⊒ w2) (b : 𝑺 * Ty) (t : Term w2 (snd b)) :
-    wsnoc w1 b ⊒ w2 :=
-    MkAcc (wsnoc w1 b) w2 (sub_snoc ω12 b t) _.
-  Next Obligation.
-    unfold entails.
-    intros w1 w2 ω12 [x σ] t ι2 Hpc2.
-    cbn - [inst].
-    rewrite ?inst_subst.
-    rewrite inst_sub_snoc.
-    rewrite inst_sub_wk1.
-    rewrite <- inst_subst.
-    now apply (went ω12).
-  Qed.
-
   Definition wcat (w : World) (Δ : LCtx) : World :=
     @MkWorld (wctx w ▻▻ Δ) (subst (wco w) (sub_cat_left Δ)).
+  Definition wformulas (w : World) (fmls : List Formula w) : World :=
+    @MkWorld (wctx w) (app fmls (wco w)).
 
-  Program Definition wcat_sub {w1 w2} (ω12 : w1 ⊒ w2) {Δ : LCtx} (ζ : Sub Δ w2) :
-    wcat w1 Δ ⊒ w2 := {| wsub := wsub ω12 ►► ζ |}.
+  Inductive Acc (w1 : World) : World -> Type :=
+  | acc_refl : Acc w1 w1
+  | acc_sub {w2 : World} (ζ : Sub w1 w2) (ent : wco w2 ⊢ subst (wco w1) ζ) : Acc w1 w2.
+  Arguments acc_refl {w} : rename.
+  Arguments acc_sub {w1 w2} ζ ent.
+  Notation "w1 ⊒ w2" := (Acc w1 w2) (at level 80).
+
+  Equations(noeqns) acc_trans {w0 w1 w2} (ω01 : w0 ⊒ w1) (ω12 : w1 ⊒ w2) : w0 ⊒ w2 :=
+  | acc_refl         | ω12              := ω12;
+  | ω01              | acc_refl         := ω01;
+  | acc_sub ζ01 ent1 | acc_sub ζ12 ent2 := acc_sub (subst (T := Sub _) ζ01 ζ12) _.
   Next Obligation.
+    intros w0 w1 w2 ζ01 Hpc01 ζ12 Hpc12. transitivity (subst (wco w1) ζ12); auto.
+    rewrite subst_sub_comp. now apply proper_subst_entails.
+  Qed.
+  Arguments acc_trans {w0 w1 w2} !ω01 !ω12.
+
+  Global Instance preorder_acc : CRelationClasses.PreOrder Acc :=
+    CRelationClasses.Build_PreOrder Acc (@acc_refl) (@acc_trans).
+
+  Definition sub_acc {w1 w2} (ω : w1 ⊒ w2) : Sub (wctx w1) (wctx w2) :=
+    match ω with
+    | acc_refl    => sub_id _
+    | acc_sub ζ _ => ζ
+    end.
+
+  Lemma sub_acc_trans {w0 w1 w2} (ω01 : w0 ⊒ w1) (ω12 : w1 ⊒ w2) :
+    sub_acc (acc_trans ω01 ω12) = subst (sub_acc ω01) (sub_acc ω12).
   Proof.
-    intros * ι Hpc. unfold wcat. cbn.
-    rewrite <- subst_sub_comp.
-    rewrite sub_comp_cat_left.
-    now apply went.
+    destruct ω01, ω12; cbn - [subst];
+      now rewrite ?sub_comp_id_left, ?sub_comp_id_right.
   Qed.
 
-  Program Definition wformula_sup {w : World} {f : Formula w} : w ⊒ wformula w f :=
-    MkAcc w (wformula w f) (sub_id (wctx w)) _.
+  Definition TYPE : Type := World -> Type.
+  Bind Scope modal with TYPE.
+  Definition Valid (A : TYPE) : Type :=
+    forall w, A w.
+  Definition Impl (A B : TYPE) : TYPE :=
+    fun w => A w -> B w.
+  Definition Box (A : TYPE) : TYPE :=
+    fun w0 => forall w1, w0 ⊒ w1 -> A w1.
+  Definition Forall {I : Type} (A : I -> TYPE) : TYPE :=
+    fun w => forall i : I, A i w.
+  (* Definition Cat (A : TYPE) (Δ : LCtx) : TYPE := *)
+  (*   fun w => A (wcat w Δ). *)
+  Notation WList A := (fun w : World => list (A w)).
+  Notation STerm σ := (fun Σ => Term Σ σ).
+
+  Module ModalNotations.
+
+    Notation "⊢ A" := (Valid A%modal) (at level 100).
+    Notation "A -> B" := (Impl A%modal B%modal) : modal.
+    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal.
+    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal.
+    Notation "'∀' x .. y , P " :=
+      (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
+        (at level 99, x binder, y binder, right associativity)
+      : modal.
+
+  End ModalNotations.
+  Import ModalNotations.
+  Open Scope modal.
+
+  Definition K {A B} :
+    ⊢ □(A -> B) -> (□A -> □B) :=
+    fun w0 f a w1 ω01 =>
+      f w1 ω01 (a w1 ω01).
+  Definition T {A} :
+    ⊢ □A -> A :=
+    fun w0 a => a w0 acc_refl.
+  Definition four {A} :
+    ⊢ □A -> □□A :=
+    fun w0 a w1 ω01 w2 ω12 =>
+      a w2 (acc_trans ω01 ω12).
+  Global Arguments four : simpl never.
+
+  (* faster version of (four _ sub_wk1) *)
+  (* Definition four_wk1 {A} : *)
+  (*   ⊢ □A -> ∀ b, Snoc (□A) b := *)
+  (*   fun w0 a b w1 ω01 => a w1 (env_tail ω01). *)
+  (* Arguments four_wk1 {A Σ0} pc0 a b [Σ1] ζ01 : rename. *)
+
+  Class Persistent (A : TYPE) (* `{LogicalRelation.LR A} *) : Type :=
+    persist     : ⊢ A -> □A.
+      (* persist_lr  : forall w0 (a : A w0) w1 (ω01 : w0 ⊒ w1), *)
+      (*     LogicalRelation.lr ω01 a (persist a ω01); *)
+      (* persist_dcl : *)
+      (*   forall w (a : A w), *)
+      (*     LogicalRelation.dcl (persist a) *)
+  (* Global Arguments Persistent A {_}. *)
+
+  Global Instance persistent_subst {A} `{Subst A} : Persistent A :=
+    fun w0 x w1 ω01 =>
+      match ω01 with
+      | acc_refl => x
+      | @acc_sub _ w2 ζ _ => subst x ζ
+      end.
+  Notation persist__term t :=
+    (@persist (STerm _) (@persistent_subst (fun Σ => Term Σ _) (@SubstTerm _)) _ t).
+
+  Lemma persist_subst {A} `{SubstLaws A} {w1 w2} {ω : w1 ⊒ w2} {a : A w1} :
+    persist a ω = subst a (sub_acc ω).
+  Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
+
+  Lemma persist_trans {A} `{SubstLaws A} {w0 w1 w2} {ω1 : w0 ⊒ w1} {ω2 : w1 ⊒ w2} {a : A w0} :
+    persist a (acc_trans ω1 ω2) = persist (persist a ω1) ω2.
+  Proof. now rewrite ?persist_subst, sub_acc_trans, subst_sub_comp. Qed.
+
+  Lemma inst_persist  {AT A} `{InstLaws AT A} {w1 w2} (ω : w1 ⊒ w2) :
+    forall (ι : SymInstance w2) (t : AT w1),
+      inst (persist t ω) ι = inst t (inst (sub_acc ω) ι).
+  Proof. intros. now rewrite persist_subst, inst_subst. Qed.
+
+  Lemma ent_acc {w1 w2} (ω : w1 ⊒ w2) :
+    wco w2 ⊢ persist (wco w1) ω.
+  Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
+
+  Lemma ent_acc_sub {w1 w2} (ω : w1 ⊒ w2) :
+    wco w2 ⊢ subst (wco w1) (sub_acc ω).
+  Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
+
+  Definition acc_snoc_right {w} {b : 𝑺 * Ty} : w ⊒ wsnoc w b :=
+    @acc_sub w (wsnoc w b) sub_wk1 (entails_refl (subst (wco w) sub_wk1)).
+
+  Program Definition acc_snoc_left {w1 w2} (ω12 : w1 ⊒ w2) (b : 𝑺 * Ty) (t : Term w2 (snd b)) :
+    wsnoc w1 b ⊒ w2 := acc_sub (sub_snoc (sub_acc ω12) b t) _.
   Next Obligation.
   Proof.
-    intros w f ι.
-    rewrite subst_sub_id. cbn.
+    intros *. unfold wsnoc. cbn [wctx wco].
+    rewrite subst_wk1_snoc.
+    rewrite <- persist_subst.
+    apply ent_acc.
+  Qed.
+
+  Definition acc_snoc_left' {w : World} b (t : Term w (snd b)) :
+    wsnoc w b ⊒ w := acc_snoc_left acc_refl b t.
+
+  Program Definition acc_cat_left {w1 w2} (ω12 : w1 ⊒ w2) {Δ : LCtx} (ζ : Sub Δ w2) :
+    wcat w1 Δ ⊒ w2 := acc_sub (sub_acc ω12 ►► ζ) _.
+  Next Obligation.
+  Proof.
+    intros *. unfold wcat. cbn [wctx wco].
+    rewrite <- subst_sub_comp.
+    rewrite sub_comp_cat_left.
+    apply ent_acc_sub.
+  Qed.
+
+  Program Definition acc_formula_right {w : World} (f : Formula w) : w ⊒ wformula w f :=
+    @acc_sub w (wformula w f) (sub_id (wctx w)) _.
+  Next Obligation.
+  Proof.
+    intros * ι. unfold wformula. cbn.
+    rewrite subst_sub_id.
     rewrite inst_pathcondition_cons.
     now intros [].
   Qed.
 
-  Definition wformulas (w : World) (fmls : List Formula w) : World :=
-    @MkWorld (wctx w) (app fmls (wco w)).
-
-  Program Definition wformulas_sup (w : World) (fmls : List Formula w) :
+  Program Definition acc_formulas_right (w : World) (fmls : List Formula w) :
     w ⊒ wformulas w fmls :=
-    MkAcc w (wformulas w fmls) (sub_id (wctx w)) _.
+    @acc_sub w (wformulas w fmls) (sub_id (wctx w)) _.
   Next Obligation.
   Proof.
-    intros w fmls ι. cbn. rewrite inst_subst, inst_sub_id.
-    rewrite inst_pathcondition_app; intuition.
+    intros w fmls ι. cbn.
+    rewrite subst_sub_id.
+    rewrite inst_pathcondition_app.
+    now intros [].
   Qed.
 
-  Program Definition wred_sup {w : World} b (t : Term w (snd b)) :
-    wsnoc w b ⊒ w :=
-    MkAcc (wsnoc w b) w (sub_snoc (sub_id w) b t) _.
-  Next Obligation.
-  Proof.
-    intros w b t ι Hpcι; cbn.
-    now rewrite ?inst_subst, inst_sub_snoc, inst_sub_id, inst_sub_wk1.
-  Qed.
-
-  Program Definition wsubst_sup {w : World} {x σ} {xIn : x :: σ ∈ w} {t : Term (w - (x :: σ)) σ} :
+  Definition acc_subst_right {w : World} x {σ} {xIn : x :: σ ∈ w} (t : Term (w - (x :: σ)) σ) :
     w ⊒ wsubst w x t :=
-    MkAcc w (wsubst w x t) (sub_single xIn t) _.
+    let ζ  := sub_single xIn t in
+    let w' := {| wctx := w - (x :: σ); wco := subst (wco w) ζ |}  in
+    @acc_sub w w' ζ (entails_refl (wco w')).
+  Arguments acc_subst_right {w} x {σ xIn} t.
+
+  Program Definition acc_snoc {w0 w1} (ω01 : w0 ⊒ w1) (b : 𝑺 * Ty) :
+    wsnoc w0 b ⊒ wsnoc w1 b :=
+    match ω01 in _ ⊒ w return wsnoc w0 b ⊒ wsnoc w b with
+    | acc_refl            => acc_refl
+    | @acc_sub _ w2 ζ ent => @acc_sub _ (wsnoc _ b) (sub_up1 ζ) _
+    end.
   Next Obligation.
   Proof.
-    intros w x σ xIn t ι Hpc. apply Hpc.
-  Qed.
-
-  Program Definition wacc_snoc {w0 w1 : World} (ω01 : w0 ⊒ w1) (b : 𝑺 * Ty) :
-    wsnoc w0 b ⊒ wsnoc w1 b :=
-    MkAcc (wsnoc w0 b) (wsnoc w1 b) (sub_up1 ω01) _.
-  Next Obligation.
-    intros ? ? ? ?.
-    unfold wsnoc in *.
-    cbn [wco wctx] in *.
+    intros. unfold wsnoc; cbn.
     rewrite <- subst_sub_comp.
     rewrite sub_comp_wk1_comm.
     rewrite subst_sub_comp.
-    apply proper_subst_entails.
-    apply went.
+    now apply proper_subst_entails.
   Qed.
 
-  Program Definition wacc_formula {w0 w1} (ω01 : w0 ⊒ w1) (fml : Formula w0) :
-    wformula w0 fml ⊒ wformula w1 (subst fml ω01) :=
-    MkAcc (MkWorld (cons fml (wco w0))) (MkWorld (cons (subst fml ω01) (wco w1))) ω01 _.
+  Program Definition acc_formula {w0 w1} (ω01 : w0 ⊒ w1) (fml : Formula w0) :
+    wformula w0 fml ⊒ wformula w1 (persist fml ω01) :=
+    @acc_sub (MkWorld (cons fml (wco w0))) (MkWorld (cons (persist fml ω01) (wco w1))) (sub_acc ω01) _.
   Next Obligation.
     intros ? ? ? ? ι.
     unfold wformula in *.
-    cbn [wco wctx] in *.
-    repeat rewrite ?inst_pathcondition_cons, ?inst_subst.
-    intuition. rewrite <- inst_subst.
-    now apply went.
+    cbn [wco wctx] in *. cbn.
+    destruct ω01; cbn.
+    - now rewrite ?subst_sub_id.
+    - rewrite ?inst_pathcondition_cons.
+      intuition.
   Qed.
-
-  Notation WList A := (fun w : World => list (A w)).
-  Notation STerm σ := (fun Σ => Term Σ σ).
 
   Module WorldInstance.
 
@@ -264,72 +339,24 @@ Module Mutators
       WInstance (wsubst w x t) :=
       @MkWInstance (wsubst w x t) (env_remove _ (ιassign ι) xIn) _.
     Next Obligation.
-      intros. cbn. rewrite inst_subst.
-      rewrite inst_sub_single.
-      apply ιvalid.
-      apply p.
+      intros * p. cbn. rewrite inst_subst, <- inst_sub_shift in *.
+      rewrite inst_sub_single_shift; auto using ιvalid.
     Qed.
 
-    Program Definition instacc {w0 w1} (ω01 : w0 ⊒ w1) (ι : WInstance w1) : WInstance w0 :=
-       {| ιassign := inst (wsub ω01) (ιassign ι) |}.
+    Program Definition instacc {w0 w1} (ω01 : w0 ⊒ w1) : WInstance w1 -> WInstance w0 :=
+      match ω01 in (_ ⊒ w) return (WInstance w -> WInstance w0) with
+      | acc_refl            => fun ι => ι
+      | @acc_sub _ w1 ζ ent => fun ι1 => {| ιassign := inst ζ ι1; |}
+      end.
     Next Obligation.
     Proof.
-      intros w0 w1 ω01 ι.
+      intros. specialize (ent ι1).
       rewrite <- inst_subst.
-      apply went.
+      apply ent.
       apply ιvalid.
     Qed.
 
   End WorldInstance.
-
-  Definition TYPE : Type := World -> Type.
-  Bind Scope modal with TYPE.
-  Definition Valid (A : TYPE) : Type :=
-    forall w, A w.
-  Definition Impl (A B : TYPE) : TYPE :=
-    fun w => A w -> B w.
-  Definition Box (A : TYPE) : TYPE :=
-    fun w0 => forall w1, w0 ⊒ w1 -> A w1.
-  Definition Snoc (A : TYPE) (b : 𝑺 * Ty) : TYPE :=
-    fun w => A (wsnoc w b).
-  Definition Forall {I : Type} (A : I -> TYPE) : TYPE :=
-    fun w => forall i : I, A i w.
-  (* Definition Cat (A : TYPE) (Δ : LCtx) : TYPE := *)
-  (*   fun w => A (wcat w Δ). *)
-
-  Module ModalNotations.
-
-    Notation "⊢ A" := (Valid A%modal) (at level 100).
-    Notation "A -> B" := (Impl A%modal B%modal) : modal.
-    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal.
-    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal.
-    Notation "'∀' x .. y , P " :=
-      (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
-        (at level 99, x binder, y binder, right associativity)
-      : modal.
-
-  End ModalNotations.
-  Import ModalNotations.
-  Open Scope modal.
-
-  Definition K {A B} :
-    ⊢ □(A -> B) -> (□A -> □B) :=
-    fun w0 f a w1 ω01 =>
-      f w1 ω01 (a w1 ω01).
-  Definition T {A} :
-    ⊢ □A -> A :=
-    fun w0 a => a w0 wrefl.
-  Definition four {A} :
-    ⊢ □A -> □□A :=
-    fun w0 a w1 ω01 w2 ω12 =>
-      a w2 (wtrans ω01 ω12).
-  Global Arguments four : simpl never.
-
-  (* faster version of (four _ sub_wk1) *)
-  (* Definition four_wk1 {A} : *)
-  (*   ⊢ □A -> ∀ b, Snoc (□A) b := *)
-  (*   fun w0 a b w1 ω01 => a w1 (env_tail ω01). *)
-  (* Arguments four_wk1 {A Σ0} pc0 a b [Σ1] ζ01 : rename. *)
 
   Definition valid_box {A} :
     (⊢ A) -> (⊢ □A) :=
@@ -349,22 +376,10 @@ Module Mutators
     ⊢ (B -> C) -> (A -> B) -> (A -> C) :=
     fun w0 => Basics.compose.
 
-  Class Persistent (A : TYPE) (* `{LogicalRelation.LR A} *) : Type :=
-    persist     : ⊢ A -> □A.
-      (* persist_lr  : forall w0 (a : A w0) w1 (ω01 : w0 ⊒ w1), *)
-      (*     LogicalRelation.lr ω01 a (persist a ω01); *)
-      (* persist_dcl : *)
-      (*   forall w (a : A w), *)
-      (*     LogicalRelation.dcl (persist a) *)
-  (* Global Arguments Persistent A {_}. *)
-
-  Global Instance persist_subst {A} `{Subst A} : Persistent A :=
-    fun w0 x w1 ω01 => subst x ω01.
-
-  Notation persist__term t :=
-    (@persist (STerm _) (@persist_subst (fun Σ => Term Σ _) (@SubstTerm _)) _ t).
-
   Section TriangularSubstitutions.
+
+    Ltac rew := rewrite ?subst_sub_comp, ?subst_shift_single, ?subst_sub_id, ?sub_comp_id_right,
+        ?sub_comp_id_left, ?inst_sub_id, ?inst_sub_id.
 
     Inductive Triangular (w : World) : World -> Type :=
     | tri_id        : Triangular w w
@@ -382,15 +397,47 @@ Module Mutators
 
     Fixpoint acc_triangular {w1 w2} (ν : Triangular w1 w2) : w1 ⊒ w2 :=
       match ν with
-      | tri_id         => wrefl
-      | tri_cons _ _ ν => wtrans wsubst_sup (acc_triangular ν)
+      | tri_id         => acc_refl
+      | tri_cons x t ν => acc_trans (acc_subst_right x t) (acc_triangular ν)
       end.
+
+    Fixpoint sub_triangular {w1 w2} (ζ : Triangular w1 w2) : Sub w1 w2 :=
+      match ζ with
+      | tri_id         => sub_id _
+      | tri_cons x t ζ => subst (sub_single _ t) (sub_triangular ζ)
+      end.
+
+    Lemma sub_triangular_comp {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) :
+      sub_triangular (tri_comp ν01 ν12) =
+      subst (sub_triangular ν01) (sub_triangular ν12).
+    Proof.
+      induction ν01; cbn [sub_triangular tri_comp].
+      - now rew.
+      - now rewrite sub_comp_assoc, IHν01.
+    Qed.
+
+    Lemma sub_acc_triangular {w1 w2} (ζ : Triangular w1 w2) :
+      sub_acc (acc_triangular ζ) = sub_triangular ζ.
+    Proof.
+      induction ζ; cbn.
+      - reflexivity.
+      - now rewrite sub_acc_trans, IHζ.
+    Qed.
 
     Fixpoint sub_triangular_inv {w1 w2} (ζ : Triangular w1 w2) : Sub w2 w1 :=
       match ζ with
       | tri_id         => sub_id _
       | tri_cons x t ζ => subst (sub_triangular_inv ζ) (sub_shift _)
       end.
+
+    Lemma sub_triangular_inv_comp {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) :
+      sub_triangular_inv (tri_comp ν01 ν12) =
+      subst (sub_triangular_inv ν12) (sub_triangular_inv ν01).
+    Proof.
+      induction ν01; cbn.
+      - now rew.
+      - now rewrite IHν01, sub_comp_assoc.
+    Qed.
 
     Fixpoint inst_triangular {w0 w1} (ζ : Triangular w0 w1) (ι : SymInstance w0) : Prop :=
       match ζ with
@@ -401,30 +448,17 @@ Module Mutators
       end.
 
     Lemma inst_triangular_left_inverse {w1 w2 : World} (ι2 : SymInstance w2) (ν : Triangular w1 w2) :
-      inst (sub_triangular_inv ν) (inst (wsub (acc_triangular ν)) ι2) = ι2.
-    Proof.
-      induction ν; cbn - [subst].
-      - now rewrite ?inst_sub_id.
-      - rewrite <- inst_subst.
-        rewrite sub_comp_assoc.
-        rewrite inst_subst.
-        rewrite <- sub_comp_assoc.
-        rewrite sub_comp_shift_single.
-        rewrite inst_subst, inst_sub_id.
-        apply IHν.
-    Qed.
+      inst (sub_triangular_inv ν) (inst (sub_triangular ν) ι2) = ι2.
+    Proof. rewrite <- inst_subst. induction ν; cbn - [subst]; now rew. Qed.
 
     Lemma inst_triangular_right_inverse {w1 w2 : World} (ι1 : SymInstance w1) (ζ : Triangular w1 w2) :
       inst_triangular ζ ι1 ->
-      inst (wsub (acc_triangular ζ)) (inst (sub_triangular_inv ζ) ι1) = ι1.
+      inst (sub_triangular ζ) (inst (sub_triangular_inv ζ) ι1) = ι1.
     Proof.
       intros Hζ. induction ζ; cbn - [subst].
-      - now rewrite ?inst_sub_id.
-      - cbn in Hζ. destruct Hζ as [? Hζ].
-        rewrite <- inst_sub_shift in Hζ.
-        rewrite ?inst_subst.
-        rewrite IHζ; auto. rewrite inst_sub_shift.
-        now rewrite inst_sub_single.
+      - now rew.
+      - cbn in Hζ. rewrite <- inst_sub_shift in Hζ. destruct Hζ as [? Hζ].
+        rewrite ?inst_subst, IHζ, inst_sub_single_shift; auto.
     Qed.
 
     (* Forward entailment *)
@@ -435,26 +469,24 @@ Module Mutators
     Proof.
       induction ν; cbn.
       - cbn. rewrite inst_sub_id. auto.
-      - intros [Heqx Heq'] Hpc0.
-        rewrite inst_subst, inst_sub_shift.
+      - rewrite <- inst_sub_shift, inst_subst. intros [Heqx Heq'] Hpc0.
         apply IHν; cbn; auto.
-        rewrite ?inst_subst, ?inst_sub_single; auto.
+        rewrite inst_subst, inst_sub_single_shift; auto.
     Qed.
 
     Lemma inst_triangular_valid {w0 w1} (ζ01 : Triangular w0 w1) (ι1 : SymInstance w1) :
-      inst_triangular ζ01 (inst (wsub (acc_triangular ζ01)) ι1).
+      inst_triangular ζ01 (inst (sub_triangular ζ01) ι1).
     Proof.
-        induction ζ01; cbn - [subst]; auto.
-        rewrite <- inst_sub_shift.
-        rewrite <- ?inst_subst.
-        rewrite <- inst_lookup.
-        rewrite lookup_sub_comp.
-        rewrite lookup_sub_single_eq.
-        rewrite <- subst_sub_comp.
-        rewrite <- sub_comp_assoc.
-        rewrite sub_comp_shift_single.
-        rewrite sub_comp_id_left.
-        split; auto.
+      induction ζ01; cbn; auto.
+      rewrite <- inst_lookup, lookup_sub_comp. rewrite lookup_sub_single_eq.
+      rewrite <- inst_sub_shift. rewrite <- ?inst_subst.
+      rewrite subst_sub_comp.
+      rewrite subst_shift_single.
+      split; auto.
+      rewrite <- ?sub_comp_assoc.
+      rewrite sub_comp_shift_single.
+      rewrite sub_comp_id_left.
+      auto.
     Qed.
 
     Lemma inst_tri_comp {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) (ι0 : SymInstance w0) :
@@ -468,23 +500,14 @@ Module Mutators
         + intros ([Heq Hν01] & Hwp). split; auto. apply IHν01; auto.
     Qed.
 
-    Lemma sub_triangular_inv_app {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) :
-      sub_triangular_inv (tri_comp ν01 ν12) =
-      subst (sub_triangular_inv ν12) (sub_triangular_inv ν01).
-    Proof.
-      induction ν01; cbn.
-      - now rewrite sub_comp_id_right.
-      - now rewrite IHν01, sub_comp_assoc.
-    Qed.
-
-    Lemma acc_triangular_app {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) :
-      wsub (acc_triangular (tri_comp ν01 ν12)) =
-      subst (wsub (acc_triangular ν01)) (wsub (acc_triangular ν12)).
-    Proof.
-      induction ν01; cbn - [SubstEnv].
-      - now rewrite sub_comp_id_left.
-      - rewrite <- subst_sub_comp. now f_equal.
-    Qed.
+    (* Lemma acc_triangular_app {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) : *)
+    (*   wsub (acc_triangular (tri_comp ν01 ν12)) = *)
+    (*   subst (sub_acc (acc_triangular ν01)) (sub_acc (acc_triangular ν12)). *)
+    (* Proof. *)
+    (*   induction ν01; cbn - [SubstEnv]. *)
+    (*   - now rewrite sub_comp_id_left. *)
+    (*   - rewrite <- subst_sub_comp. now f_equal. *)
+    (* Qed. *)
 
   End TriangularSubstitutions.
 
@@ -894,7 +917,7 @@ Module Mutators
             instpc fmls (inst (sub_triangular_inv ν01) ι0)) /\
         (forall ι1 : SymInstance w1,
             instpc fmls ι1 ->
-            inst (A := Prop) fml (inst (wsub (acc_triangular ν01)) ι1))
+            inst (A := Prop) fml (inst (sub_triangular ν01) ι1))
       end.
     Proof.
       unfold unify_formula.
@@ -913,9 +936,9 @@ Module Mutators
       - exists w0. split. apply tri_id. apply nil.
       - destruct (unify_formulas w0 fmls) as (w1 & ν01 & fmls1).
         clear unify_formulas fmls.
-        destruct (unify_formula (subst fml (acc_triangular ν01))) as (w2 & ν12 & fmls2).
+        destruct (unify_formula (persist fml (acc_triangular ν01))) as (w2 & ν12 & fmls2).
         exists w2. split. apply (tri_comp ν01 ν12).
-        refine (app fmls2 (subst fmls1 (acc_triangular ν12))).
+        refine (app fmls2 (persist fmls1 (acc_triangular ν12))).
     Defined.
 
     Lemma unify_formulas_spec {w0 : World} (fmls0 : List Formula w0) :
@@ -927,32 +950,32 @@ Module Mutators
             instpc fmls1 (inst (sub_triangular_inv ν01) ι0)) /\
         (forall ι1 : SymInstance w1,
             instpc fmls1 ι1 ->
-            instpc fmls0 (inst (wsub (acc_triangular ν01)) ι1))
+            instpc fmls0 (inst (sub_triangular ν01) ι1))
       end.
     Proof.
       induction fmls0 as [|fml0 fmls0]; cbn.
       - split; intros ι0; rewrite inst_sub_id; intuition.
       - destruct (unify_formulas fmls0) as (w1 & ν01 & fmls1).
-        pose proof (unify_formula_spec (subst fml0 (acc_triangular ν01))) as IHfml.
-        destruct (unify_formula (subst fml0 (acc_triangular ν01))) as (w2 & ν12 & fmls2).
+        pose proof (unify_formula_spec (persist fml0 (acc_triangular ν01))) as IHfml.
+        destruct (unify_formula (persist fml0 (acc_triangular ν01))) as (w2 & ν12 & fmls2).
         destruct IHfmls0 as [IHfmls01 IHfmls10].
         destruct IHfml as [IHfml12 IHfml21].
         split.
         + intros ι0. rewrite inst_pathcondition_cons. intros [Hfml Hfmls].
           specialize (IHfmls01 ι0 Hfmls). destruct IHfmls01 as [Hν01 Hfmls1].
           specialize (IHfml12 (inst (sub_triangular_inv ν01) ι0)).
-          rewrite inst_subst, inst_triangular_right_inverse in IHfml12; auto.
+          rewrite inst_persist, sub_acc_triangular in IHfml12.
+          rewrite inst_triangular_right_inverse in IHfml12; auto.
           specialize (IHfml12 Hfml). destruct IHfml12 as [Hν12 Hfmls2].
-          rewrite inst_pathcondition_app, inst_subst, inst_tri_comp.
-          split; auto. rewrite sub_triangular_inv_app, inst_subst. split; auto.
+          rewrite inst_pathcondition_app, inst_persist, inst_tri_comp, sub_acc_triangular.
+          split; auto. rewrite sub_triangular_inv_comp, inst_subst. split; auto.
           revert Hfmls1. remember (inst (sub_triangular_inv ν01) ι0) as ι1.
-          rewrite <- ?inst_subst, <- subst_sub_comp, ?inst_subst.
           rewrite inst_triangular_right_inverse; auto.
-        + intros ι2. rewrite ?inst_pathcondition_app, ?inst_subst.
+        + intros ι2. rewrite ?inst_pathcondition_app, inst_persist, sub_acc_triangular.
           intros [Hfmls2 Hfmls1].
-          specialize (IHfml21 ι2 Hfmls2). rewrite inst_subst in IHfml21.
-          specialize (IHfmls10 (inst (wsub (acc_triangular ν12)) ι2) Hfmls1).
-          rewrite acc_triangular_app, inst_subst.
+          specialize (IHfml21 ι2 Hfmls2). rewrite inst_persist, sub_acc_triangular in IHfml21.
+          specialize (IHfmls10 (inst (sub_triangular ν12) ι2) Hfmls1).
+          rewrite sub_triangular_comp, inst_subst.
           rewrite inst_pathcondition_cons. split; auto.
     Qed.
 
@@ -1074,7 +1097,7 @@ Module Mutators
                (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
                  (forall ι1,
                      instpc (wco w1) ι1 ->
-                     ι0 = inst (wsub (acc_triangular ζ)) ι1 ->
+                     ι0 = inst (sub_triangular ζ) ι1 ->
                      instpc fmls0 ι0 <-> inst fmls1 ι1))
           (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
           (s w0 fmls0).
@@ -1141,10 +1164,10 @@ Module Mutators
               (subst; apply entails_triangular_inv; auto).
           apply H2; auto. apply H10; auto.
           subst; rewrite inst_triangular_right_inverse; auto.
-        + intros ι2 Hpc2 Hι0. rewrite acc_triangular_app, inst_subst in Hι0.
-          remember (inst (wsub (acc_triangular ν12)) ι2) as ι1.
+        + intros ι2 Hpc2 Hι0. rewrite sub_triangular_comp, inst_subst in Hι0.
+          remember (inst (sub_triangular ν12) ι2) as ι1.
           assert (instpc (wco w1) ι1) as Hpc1 by
-              (revert Hpc2; subst; rewrite <- inst_subst; apply went).
+              (revert Hpc2; subst; rewrite <- sub_acc_triangular, <- inst_persist; apply ent_acc).
           rewrite H10; eauto. apply H2; auto.
       - intros Hfmls1 ι0 Hpc0 Hfmls0. specialize (H1 ι0 Hpc0).
         destruct H1 as [H01 H10]. inster H01 by auto.
@@ -1241,36 +1264,36 @@ Module Mutators
     (*      match p with *)
     (*      | angelic_binary p1 p2 => angelic_binary (pers w0 p1 ω01) (pers w0 p2 ω01) *)
     (*      | demonic_binary p1 p2 => demonic_binary (pers w0 p1 ω01) (pers w0 p2 ω01) *)
-    (*      | error msg            => error (subst msg (wsub ω01)) *)
+    (*      | error msg            => error (subst msg (sub_acc ω01)) *)
     (*      | block                => block *)
     (*      | assertk fml msg p0   => *)
-    (*          assertk (subst fml (wsub ω01)) (subst msg (wsub ω01)) *)
+    (*          assertk (subst fml (sub_acc ω01)) (subst msg (sub_acc ω01)) *)
     (*            (pers (wformula w0 fml) p0 (wacc_formula ω01 fml)) *)
     (*      | assumek fml p        => *)
-    (*          assumek (subst fml (wsub ω01)) *)
+    (*          assumek (subst fml (sub_acc ω01)) *)
     (*            (pers (wformula w0 fml) p (wacc_formula ω01 fml)) *)
     (*      | angelicv b p0        => angelicv b (pers (wsnoc w0 b) p0 (wacc_snoc ω01 b)) *)
     (*      | demonicv b p0        => demonicv b (pers (wsnoc w0 b) p0 (wacc_snoc ω01 b)) *)
     (*      | assert_vareq x t msg p => *)
-    (*        let ζ := subst (sub_shift _) (wsub ω01) in *)
+    (*        let ζ := subst (sub_shift _) (sub_acc ω01) in *)
     (*        assertk *)
-    (*          (formula_eq (env_lookup (wsub ω01) _) (subst t ζ)) *)
+    (*          (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
     (*          (subst msg ζ) *)
     (*          (pers (wsubst w0 x t) p *)
     (*             (MkAcc (MkWorld (subst (wco w0) (sub_single _ t))) *)
     (*                (MkWorld *)
-    (*                   (cons (formula_eq (env_lookup (wsub ω01) _) (subst t ζ)) *)
+    (*                   (cons (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
     (*                      (wco w1))) ζ)) *)
     (*      | assume_vareq x t p => *)
-    (*        let ζ := subst (sub_shift _) (wsub ω01) in *)
+    (*        let ζ := subst (sub_shift _) (sub_acc ω01) in *)
     (*        assumek *)
-    (*          (formula_eq (env_lookup (wsub ω01) _) (subst t ζ)) *)
+    (*          (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
     (*          (pers (wsubst w0 x t) p *)
     (*             (MkAcc (MkWorld (subst (wco w0) (sub_single _ t))) *)
     (*                (MkWorld *)
-    (*                   (cons (formula_eq (env_lookup (wsub ω01) _) (subst t ζ)) *)
+    (*                   (cons (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
     (*                      (wco w1))) ζ)) *)
-    (*      | debug d p => debug (subst d (wsub ω01)) (pers w0 p ω01) *)
+    (*      | debug d p => debug (subst d (sub_acc ω01)) (pers w0 p ω01) *)
     (*      end. *)
 
     Fixpoint assume_formulas_without_solver' {Σ}
@@ -1463,14 +1486,14 @@ Module Mutators
     Lemma safe_assert_triangular {w0 w1} msg (ζ : Triangular w0 w1)
       (o : Message w1 -> SPath w1) (ι0 : SymInstance w0) :
       wsafe (assert_triangular msg ζ o) ι0 <->
-      (inst_triangular ζ ι0 /\ wsafe (o (subst msg (acc_triangular ζ))) (inst (sub_triangular_inv ζ) ι0)).
+      (inst_triangular ζ ι0 /\ wsafe (o (subst msg (sub_triangular ζ))) (inst (sub_triangular_inv ζ) ι0)).
     Proof.
       induction ζ.
       - cbn. rewrite inst_sub_id, subst_sub_id. intuition.
       - cbn [wsafe assert_triangular inst_triangular
-                  sub_triangular_inv acc_triangular wtrans wsub].
-        rewrite obligation_equiv.
-        rewrite subst_sub_comp. cbn.
+                  sub_triangular_inv acc_triangular acc_trans sub_acc].
+        rewrite obligation_equiv. cbn.
+        rewrite subst_sub_comp.
         rewrite IHζ. clear IHζ.
         rewrite <- inst_sub_shift.
         rewrite ?inst_subst.
@@ -2172,10 +2195,11 @@ Module Mutators
              rewrite safe_eq_rect.
              rewrite env_remove_app in sp.
              split; try assumption.
-             rewrite inst_subst, inst_sub_shift in eq.
+             rewrite inst_subst in eq.
              rewrite inst_eq_rect.
              rewrite <-env_remove_app.
-             now rewrite inst_sub_single.
+             rewrite <-inst_sub_shift.
+             now rewrite inst_sub_single_shift.
        - specialize (IHp ((Σ0 ▻▻ Σe) - (x :: σ)) ε eq_refl []).
          rewrite angelic_close0_sound.
          setoid_rewrite assert_msgs_formulas_sound.
@@ -2254,7 +2278,7 @@ Module Mutators
       fun w k =>
         let y := fresh w x in
         angelicv
-          (y :: σ) (k (wsnoc w (y :: σ)) wsnoc_sup (@term_var _ y σ inctx_zero)).
+          (y :: σ) (k (wsnoc w (y :: σ)) acc_snoc_right (@term_var _ y σ inctx_zero)).
     Global Arguments angelic x σ [w] k.
 
     Definition angelic_ctx {N : Set} (n : N -> 𝑺) :
@@ -2266,7 +2290,7 @@ Module Mutators
           fun k =>
             angelic (Some (n x)) σ (fun w1 ω01 t =>
               rec Δ (fun w2 ω12 EΔ =>
-                k w2 (wtrans ω01 ω12) (EΔ ► (x :: σ ↦ subst t ω12))))
+                k w2 (acc_trans ω01 ω12) (EΔ ► (x :: σ ↦ persist__term t ω12))))
         end.
     Global Arguments angelic_ctx {N} n [w] Δ : rename.
 
@@ -2275,7 +2299,7 @@ Module Mutators
       fun w k =>
         let y := fresh w x in
         demonicv
-          (y :: σ) (k (wsnoc w (y :: σ)) wsnoc_sup (@term_var _ y σ inctx_zero)).
+          (y :: σ) (k (wsnoc w (y :: σ)) acc_snoc_right (@term_var _ y σ inctx_zero)).
     Global Arguments demonic x σ [w] k.
 
     Definition demonic_ctx {N : Set} (n : N -> 𝑺) :
@@ -2287,7 +2311,7 @@ Module Mutators
           fun k =>
             demonic (Some (n x)) σ (fun w1 ω01 t =>
               demonic_ctx Δ (fun w2 ω12 EΔ =>
-                k w2 (wtrans ω01 ω12) (EΔ ► (x :: σ ↦ subst t ω12))))
+                k w2 (acc_trans ω01 ω12) (EΔ ► (x :: σ ↦ persist__term t ω12))))
         end.
     Global Arguments demonic_ctx {_} n [w] Δ : rename.
 
@@ -2305,7 +2329,7 @@ Module Mutators
                   world. We changed the type of assume_formulas_without_solver
                   just to not forget adding the formulas to the path constraints.
                *)
-               (four POST (acc_triangular ν) (wformulas_sup w1 fmls1) tt))
+               (four POST (acc_triangular ν) (acc_formulas_right w1 fmls1) tt))
         | None =>
           (* The formulas are inconsistent with the path constraints. *)
           block
@@ -2326,7 +2350,7 @@ Module Mutators
             (fun msg' =>
                assert_formulas_without_solver msg' fmls1
                  (* Critical code. Like for assume_formulas. *)
-                 (four POST (acc_triangular ν) (wformulas_sup w1 fmls1) tt))
+                 (four POST (acc_triangular ν) (acc_formulas_right w1 fmls1) tt))
         | None =>
           (* The formulas are inconsistent with the path constraints. *)
           error (EMsgHere msg)
@@ -2458,8 +2482,8 @@ Module Mutators
         apply (angelic (Some x) σ).
         intros w1 ω01 t1.
         eapply bind.
-        apply assert_formula. apply (subst msg ω01).
-        apply (formula_eq (term_inl t1) (subst t ω01)).
+        apply assert_formula. apply (persist (A := Message) msg ω01).
+        apply (formula_eq (term_inl t1) (persist__term t ω01)).
         intros w2 ω12 _.
         apply (four kinl ω01). auto.
         apply (persist__term t1 ω12).
@@ -2467,8 +2491,8 @@ Module Mutators
         apply (angelic (Some y) τ).
         intros w1 ω01 t1.
         eapply bind.
-        apply assert_formula. apply (subst msg ω01).
-        apply (formula_eq (term_inr t1) (subst t ω01)).
+        apply assert_formula. apply (persist (A := Message) msg ω01).
+        apply (formula_eq (term_inr t1) (persist__term t ω01)).
         intros w2 ω12 _.
         apply (four kinr ω01). auto.
         apply (persist__term t1 ω12).
@@ -2495,7 +2519,7 @@ Module Mutators
         intros w1 ω01 t1.
         eapply bind.
         apply assume_formula.
-        apply (formula_eq (term_inl t1) (subst t ω01)).
+        apply (formula_eq (term_inl t1) (persist__term t ω01)).
         intros w2 ω12 _.
         apply (four kinl ω01). auto.
         apply (persist__term t1 ω12).
@@ -2504,7 +2528,7 @@ Module Mutators
         intros w1 ω01 t1.
         eapply bind.
         apply assume_formula.
-        apply (formula_eq (term_inr t1) (subst t ω01)).
+        apply (formula_eq (term_inr t1) (persist__term t ω01)).
         intros w2 ω12 _.
         apply (four kinr ω01). auto.
         apply (persist__term t1 ω12).
@@ -2530,15 +2554,15 @@ Module Mutators
       apply (angelic (Some y) τ).
       intros w2 ω12 t2.
       eapply bind.
-      apply assert_formula. apply (subst msg (wtrans ω01 ω12)).
-      refine (formula_eq _ (subst t (wtrans ω01 ω12))).
+      apply assert_formula. apply (persist (A := Message) msg (acc_trans ω01 ω12)).
+      refine (formula_eq _ (persist__term t (acc_trans ω01 ω12))).
       eapply (term_binop binop_pair).
       apply (persist__term t1 ω12).
       apply t2.
       intros w3 ω23 _.
-      apply (four k (wtrans ω01 ω12)).
+      apply (four k (acc_trans ω01 ω12)).
       auto.
-      apply (persist__term t1 (wtrans ω12 ω23)).
+      apply (persist__term t1 (acc_trans ω12 ω23)).
       apply (persist__term t2 ω23).
     Defined.
 
@@ -2562,14 +2586,14 @@ Module Mutators
       intros w2 ω12 t2.
       eapply bind.
       apply assume_formula.
-      refine (formula_eq _ (subst t (wtrans ω01 ω12))).
+      refine (formula_eq _ (persist__term t (acc_trans ω01 ω12))).
       eapply (term_binop binop_pair).
       apply (persist__term t1 ω12).
       apply t2.
       intros w3 ω23 _.
-      apply (four k (wtrans ω01 ω12)).
+      apply (four k (acc_trans ω01 ω12)).
       auto.
-      apply (persist__term t1 (wtrans ω12 ω23)).
+      apply (persist__term t1 (acc_trans ω12 ω23)).
       apply (persist__term t2 ω23).
     Defined.
 
@@ -2592,7 +2616,7 @@ Module Mutators
     (*   apply (formula_eq (subst t ω01)). *)
     (*   apply (term_record R (record_pattern_match_env_reverse p ts)). *)
     (*   intros w2 ω12. *)
-    (*   apply (k w2 (wtrans ω01 ω12) (subst ts ω12)). *)
+    (*   apply (k w2 (acc_trans ω01 ω12) (subst ts ω12)). *)
     (* Defined. *)
 
     (* Definition angelic_match_record {N : Set} (n : N -> 𝑺) {AT R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) : *)
@@ -2615,7 +2639,7 @@ Module Mutators
     (*   apply (formula_eq (subst t ω01)). *)
     (*   apply (term_record R (record_pattern_match_env_reverse p ts)). *)
     (*   intros w2 ω12. *)
-    (*   apply (k w2 (wtrans ω01 ω12) (subst ts ω12)). *)
+    (*   apply (k w2 (acc_trans ω01 ω12) (subst ts ω12)). *)
     (* Defined. *)
 
     (* Definition demonic_match_record {N : Set} (n : N -> 𝑺) {AT R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) : *)
@@ -2639,7 +2663,7 @@ Module Mutators
     (*   apply (formula_eq (subst t ω01)). *)
     (*   apply (term_tuple (tuple_pattern_match_env_reverse p ts)). *)
     (*   intros w2 ω12. *)
-    (*   apply (k w2 (wtrans ω01 ω12) (subst ts ω12)). *)
+    (*   apply (k w2 (acc_trans ω01 ω12) (subst ts ω12)). *)
     (* Defined. *)
 
     (* Definition angelic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs} {Δ : NCtx N Ty} (p : TuplePat σs Δ) : *)
@@ -2662,7 +2686,7 @@ Module Mutators
     (*   apply (formula_eq (subst t ω01)). *)
     (*   apply (term_tuple (tuple_pattern_match_env_reverse p ts)). *)
     (*   intros w2 ω12. *)
-    (*   apply (k w2 (wtrans ω01 ω12) (subst ts ω12)). *)
+    (*   apply (k w2 (acc_trans ω01 ω12) (subst ts ω12)). *)
     (* Defined. *)
 
     (* Definition demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs} {Δ : NCtx N Ty} (p : TuplePat σs Δ) : *)
@@ -2697,7 +2721,7 @@ Module Mutators
     (*     angelic_freshen_ctx n Δ *)
     (*       (fun w1 ω01 (ts : (fun Σ : LCtx => NamedEnv (Term Σ) Δ) w1) => *)
     (*        assert_formulak (subst msg ω01) (formula_eq (subst t ω01) (pattern_match_env_reverse p ts)) *)
-    (*          (fun w2 ω12 => k w2 (wtrans ω01 ω12) (subst ts ω12))). *)
+    (*          (fun w2 ω12 => k w2 (acc_trans ω01 ω12) (subst ts ω12))). *)
 
     (* Definition demonic_match_pattern {N : Set} (n : N -> 𝑺) {AT σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) : *)
     (*   ⊢ STerm σ -> □((fun Σ => NamedEnv (Term Σ) Δ) -> SPath AT) -> SPath AT := *)
@@ -2705,7 +2729,7 @@ Module Mutators
     (*     demonic_ctx n Δ *)
     (*       (fun w1 ω01 (ts : (fun Σ : LCtx => NamedEnv (Term Σ) Δ) w1) => *)
     (*        assume_formulak (formula_eq (subst t ω01) (pattern_match_env_reverse p ts)) *)
-    (*          (fun w2 ω12 => k w2 (wtrans ω01 ω12) (subst ts ω12))). *)
+    (*          (fun w2 ω12 => k w2 (acc_trans ω01 ω12) (subst ts ω12))). *)
 
     (* Definition angelic_match_union' {N : Set} (n : N -> 𝑺) {AT U} {Δ : 𝑼𝑲 U -> NCtx N Ty} *)
     (*   (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) : *)
@@ -2739,7 +2763,7 @@ Module Mutators
     (*          (fun w1 ω01 (t__field : Term w1 (𝑼𝑲_Ty K)) => *)
     (*           assume_formulak (formula_eq (term_union U K t__field) (subst t ω01)) *)
     (*             (fun w2 ω12 => *)
-    (*              demonic_match_pattern n (p K) (subst t__field ω12) (four (k K) (wtrans ω01 ω12))))). *)
+    (*              demonic_match_pattern n (p K) (subst t__field ω12) (four (k K) (acc_trans ω01 ω12))))). *)
 
     (* Definition demonic_match_union {N : Set} (n : N -> 𝑺) {AT U} {Δ : 𝑼𝑲 U -> NCtx N Ty} *)
     (*   (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) : *)
@@ -2768,17 +2792,17 @@ Module Mutators
     (* Ltac wsimpl := *)
     (*   repeat *)
     (*     (try change (wctx (wsnoc ?w ?b)) with (ctx_snoc (wctx w) b); *)
-    (*      try change (wsub (@wred_sup ?w ?b ?t)) with (sub_snoc (sub_id (wctx w)) b t); *)
+    (*      try change (sub_acc (@wred_sup ?w ?b ?t)) with (sub_snoc (sub_id (wctx w)) b t); *)
     (*      try change (wco (wsnoc ?w ?b)) with (subst (wco w) (sub_wk1 (b:=b))); *)
-    (*      try change (wsub (@wrefl ?w)) with (sub_id (wctx w)); *)
-    (*      try change (wsub (@wsnoc_sup ?w ?b)) with (@sub_wk1 (wctx w) b); *)
+    (*      try change (sub_acc (@wrefl ?w)) with (sub_id (wctx w)); *)
+    (*      try change (sub_acc (@wsnoc_sup ?w ?b)) with (@sub_wk1 (wctx w) b); *)
     (*      try change (wctx (wformula ?w ?fml)) with (wctx w); *)
-    (*      try change (wsub (wtrans ?ω1 ?ω2)) with (subst (wsub ω1) (wsub ω2)); *)
-    (*      try change (wsub (@wformula_sup ?w ?fml)) with (sub_id (wctx w)); *)
+    (*      try change (sub_acc (acc_trans ?ω1 ?ω2)) with (subst (sub_acc ω1) (sub_acc ω2)); *)
+    (*      try change (sub_acc (@wformula_sup ?w ?fml)) with (sub_id (wctx w)); *)
     (*      try change (wco (wformula ?w ?fml)) with (cons fml (wco w)); *)
     (*      try change (wco (@wsubst ?w _ _ ?xIn ?t)) with (subst (wco w) (sub_single xIn t)); *)
     (*      try change (wctx (@wsubst ?w _ _ ?xIn ?t)) with (ctx_remove xIn); *)
-    (*      try change (wsub (@wsubst_sup ?w _ _ ?xIn ?t)) with (sub_single xIn t); *)
+    (*      try change (sub_acc (@acc_subst_right ?w _ _ ?xIn ?t)) with (sub_single xIn t); *)
     (*      rewrite <- ?sub_comp_wk1_tail, ?inst_subst, ?subst_sub_id, *)
     (*        ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc, *)
     (*        ?inst_lift, ?inst_sub_single, ?inst_pathcondition_cons; *)
@@ -2840,15 +2864,15 @@ Module Mutators
         apply m.
         intros w1 ω01 a1.
         apply POST; auto.
-        apply (subst δ0 ω01).
-        apply (subst h0 ω01).
+        apply (persist (A := SStore Γ) δ0 ω01).
+        apply (persist (A := SHeap) h0 ω01).
       Defined.
 
       Definition pure {Γ} {A : TYPE} :
         ⊢ A -> SMut Γ Γ A.
       Proof.
         intros w0 a k.
-        apply k; auto. apply wrefl.
+        apply k; auto. apply acc_refl.
       Defined.
 
       Definition bind {Γ1 Γ2 Γ3 A B} :
@@ -3168,7 +3192,7 @@ Module Mutators
             |}.
         intros w1 ω01 EK.
         eapply bind_right.
-        apply (assert_formula (formula_eq (subst t ω01) (term_enum E EK))).
+        apply (assert_formula (formula_eq (persist__term t ω01) (term_enum E EK))).
         apply (four (cont EK)). auto.
       Defined.
 
@@ -3180,7 +3204,7 @@ Module Mutators
         apply (demonic_finite (F := 𝑬𝑲 E)).
         intros w1 ω01 EK.
         eapply bind_right.
-        apply (assume_formula (formula_eq (subst t ω01) (term_enum E EK))).
+        apply (assume_formula (formula_eq (persist__term t ω01) (term_enum E EK))).
         apply (four (cont EK)). auto.
       Defined.
 
@@ -3201,7 +3225,7 @@ Module Mutators
           intros w1 ω01 t1.
           eapply bind_right.
           apply assert_formula.
-          apply (formula_eq (term_inl t1) (subst t ω01)).
+          apply (formula_eq (term_inl t1) (persist__term t ω01)).
           intros w2 ω12.
           apply (four kinl ω01). auto.
           apply (persist__term t1 ω12).
@@ -3210,7 +3234,7 @@ Module Mutators
           intros w1 ω01 t1.
           eapply bind_right.
           apply assert_formula.
-          apply (formula_eq (term_inr t1) (subst t ω01)).
+          apply (formula_eq (term_inr t1) (persist__term t ω01)).
           intros w2 ω12.
           apply (four kinr ω01). auto.
           apply (persist__term t1 ω12).
@@ -3226,7 +3250,7 @@ Module Mutators
           intros w1 ω01 t1.
           eapply bind_right.
           apply assume_formula.
-          apply (formula_eq (term_inl t1) (subst t ω01)).
+          apply (formula_eq (term_inl t1) (persist__term t ω01)).
           intros w2 ω12.
           apply (four kinl ω01). auto.
           apply (persist__term t1 ω12).
@@ -3235,7 +3259,7 @@ Module Mutators
           intros w1 ω01 t1.
           eapply bind_right.
           apply assume_formula.
-          apply (formula_eq (term_inr t1) (subst t ω01)).
+          apply (formula_eq (term_inr t1) (persist__term t ω01)).
           intros w2 ω12.
           apply (four kinr ω01). auto.
           apply (persist__term t1 ω12).
@@ -3250,14 +3274,14 @@ Module Mutators
           apply kinl. auto. auto.
           intros w2 ω12 a2 δ2 h2.
           apply POSTl. auto. auto.
-          apply (subst δ0 ω01).
-          apply (subst h0 ω01).
+          apply (persist (A := SStore _) δ0 ω01).
+          apply (persist (A := SHeap) h0 ω01).
         - intros w1 ω01 t' POSTr.
           apply kinr. auto. auto.
           intros w2 ω12 a2 δ2 h2.
           apply POSTr. auto. auto.
-          apply (subst δ0 ω01).
-          apply (subst h0 ω01).
+          apply (persist (A := SStore _) δ0 ω01).
+          apply (persist (A := SHeap) h0 ω01).
         - intros w1 ω01 [[δ1 h1] a1]. apply POST. auto. auto. auto. auto.
       Defined.
 
@@ -3291,14 +3315,14 @@ Module Mutators
           (*   {| msg_function        := "SMut.angelic_match_list"; *)
           (*      msg_message         := "pattern match assertion"; *)
           (*      msg_program_context := Γ1; *)
-          (*      msg_localstore      := subst δ0 (wtrans ω01 ω12); *)
-          (*      msg_heap            := subst h0 (wtrans ω01 ω12); *)
+          (*      msg_localstore      := subst δ0 (acc_trans ω01 ω12); *)
+          (*      msg_heap            := subst h0 (acc_trans ω01 ω12); *)
           (*      msg_pathcondition   := wco w2; *)
           (*   |}. *)
-          apply (formula_eq (term_binop binop_cons (subst thead ω12) ttail) (subst t (wtrans ω01 ω12))).
+          apply (formula_eq (term_binop binop_cons (persist__term thead ω12) ttail) (persist__term t (acc_trans ω01 ω12))).
           intros w3 ω23.
-          apply (four kcons (wtrans ω01 ω12)). auto.
-          apply (persist__term thead (wtrans ω12 ω23)).
+          apply (four kcons (acc_trans ω01 ω12)). auto.
+          apply (persist__term thead (acc_trans ω12 ω23)).
           apply (persist__term ttail ω23).
       Defined.
 
@@ -3324,10 +3348,10 @@ Module Mutators
           intros w2 ω12 ttail.
           eapply bind_right.
           apply assume_formula.
-          apply (formula_eq (term_binop binop_cons (subst thead ω12) ttail) (subst t (wtrans ω01 ω12))).
+          apply (formula_eq (term_binop binop_cons (persist__term thead ω12) ttail) (persist__term t (acc_trans ω01 ω12))).
           intros w3 ω23.
-          apply (four kcons (wtrans ω01 ω12)). auto.
-          apply (persist__term thead (wtrans ω12 ω23)).
+          apply (four kcons (acc_trans ω01 ω12)). auto.
+          apply (persist__term thead (acc_trans ω12 ω23)).
           apply (persist__term ttail ω23).
       Defined.
 
@@ -3348,14 +3372,14 @@ Module Mutators
           (* {| msg_function        := "SMut.angelic_match_prod"; *)
           (*    msg_message         := "pattern match assertion"; *)
           (*    msg_program_context := Γ1; *)
-          (*    msg_localstore      := subst δ0 (wtrans ω01 ω12); *)
-          (*    msg_heap            := subst h0 (wtrans ω01 ω12); *)
+          (*    msg_localstore      := subst δ0 (acc_trans ω01 ω12); *)
+          (*    msg_heap            := subst h0 (acc_trans ω01 ω12); *)
           (*    msg_pathcondition   := wco w2; *)
           (* |}. *)
-        apply (formula_eq (term_binop binop_pair (subst tσ ω12) tτ) (subst t (wtrans ω01 ω12))).
+        apply (formula_eq (term_binop binop_pair (persist__term tσ ω12) tτ) (persist__term t (acc_trans ω01 ω12))).
         intros w3 ω23.
-        apply (four k (wtrans ω01 ω12)). auto.
-        apply (persist__term tσ (wtrans ω12 ω23)).
+        apply (four k (acc_trans ω01 ω12)). auto.
+        apply (persist__term tσ (acc_trans ω12 ω23)).
         apply (persist__term tτ ω23).
       Defined.
 
@@ -3373,10 +3397,10 @@ Module Mutators
         intros w2 ω12 tτ.
         eapply bind_right.
         apply assume_formula.
-        apply (formula_eq (term_binop binop_pair (subst tσ ω12) tτ) (subst t (wtrans ω01 ω12))).
+        apply (formula_eq (term_binop binop_pair (persist__term tσ ω12) tτ) (persist__term t (acc_trans ω01 ω12))).
         intros w3 ω23.
-        apply (four k (wtrans ω01 ω12)). auto.
-        apply (persist__term tσ (wtrans ω12 ω23)).
+        apply (four k (acc_trans ω01 ω12)). auto.
+        apply (persist__term tσ (acc_trans ω12 ω23)).
         apply (persist__term tτ ω23).
       Defined.
 
@@ -3396,14 +3420,14 @@ Module Mutators
           (* {| msg_function        := "SMut.angelic_match_record"; *)
           (*    msg_message         := "pattern match assertion"; *)
           (*    msg_program_context := Γ1; *)
-          (*    msg_localstore      := subst δ0 (wtrans ω01 ω12); *)
-          (*    msg_heap            := subst h0 (wtrans ω01 ω12); *)
+          (*    msg_localstore      := subst δ0 (acc_trans ω01 ω12); *)
+          (*    msg_heap            := subst h0 (acc_trans ω01 ω12); *)
           (*    msg_pathcondition   := wco w2; *)
           (* |}. *)
-        apply (formula_eq (term_record R (record_pattern_match_env_reverse p ts)) (subst t ω01)).
+        apply (formula_eq (term_record R (record_pattern_match_env_reverse p ts)) (persist__term t ω01)).
         intros w2 ω12.
         apply (four k ω01). auto.
-        apply (subst (T := fun Σ => NamedEnv (Term Σ) Δ) ts (wsub ω12)).
+        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
       Definition angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
@@ -3429,10 +3453,10 @@ Module Mutators
         intros w1 ω01 ts.
         eapply bind_right.
         apply assume_formula.
-        apply (formula_eq (term_record R (record_pattern_match_env_reverse p ts)) (subst t ω01)).
+        apply (formula_eq (term_record R (record_pattern_match_env_reverse p ts)) (persist__term t ω01)).
         intros w2 ω12.
         apply (four k ω01). auto.
-        apply (subst (T := fun Σ => NamedEnv (Term Σ) Δ) ts (wsub ω12)).
+        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
       Definition demonic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
@@ -3461,14 +3485,14 @@ Module Mutators
           (* {| msg_function        := "SMut.angelic_match_tuple"; *)
           (*    msg_message         := "pattern match assertion"; *)
           (*    msg_program_context := Γ1; *)
-          (*    msg_localstore      := subst δ0 (wtrans ω01 ω12); *)
-          (*    msg_heap            := subst h0 (wtrans ω01 ω12); *)
+          (*    msg_localstore      := subst δ0 (acc_trans ω01 ω12); *)
+          (*    msg_heap            := subst h0 (acc_trans ω01 ω12); *)
           (*    msg_pathcondition   := wco w2; *)
         (* |}. *)
-        apply (formula_eq (term_tuple (tuple_pattern_match_env_reverse p ts)) (subst t ω01)).
+        apply (formula_eq (term_tuple (tuple_pattern_match_env_reverse p ts)) (persist__term t ω01)).
         intros w2 ω12.
         apply (four k ω01). auto.
-        apply (subst (T := fun Σ => NamedEnv (Term Σ) Δ) ts (wsub ω12)).
+        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
       Definition box_angelic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
@@ -3484,10 +3508,10 @@ Module Mutators
         intros w1 ω01 ts.
         eapply bind_right.
         apply assume_formula.
-        apply (formula_eq (term_tuple (tuple_pattern_match_env_reverse p ts)) (subst t ω01)).
+        apply (formula_eq (term_tuple (tuple_pattern_match_env_reverse p ts)) (persist__term t ω01)).
         intros w2 ω12.
         apply (four k ω01). auto.
-        apply (subst (T := fun Σ => NamedEnv (Term Σ) Δ) ts (wsub ω12)).
+        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
       Definition box_demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
@@ -3503,10 +3527,10 @@ Module Mutators
         intros w1 ω01 ts.
         eapply (bind_right).
         apply assert_formula.
-        apply (formula_eq (pattern_match_env_reverse p ts) (subst t ω01)).
+        apply (formula_eq (pattern_match_env_reverse p ts) (persist__term t ω01)).
         intros w2 ω12.
         apply pure.
-        apply (subst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ω12).
+        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
       Definition demonic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
@@ -3518,10 +3542,10 @@ Module Mutators
         intros w1 ω01 ts.
         eapply (bind_right).
         apply assume_formula.
-        apply (formula_eq (pattern_match_env_reverse p ts) (subst t ω01)).
+        apply (formula_eq (pattern_match_env_reverse p ts) (persist__term t ω01)).
         intros w2 ω12.
         apply pure.
-        apply (subst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ω12).
+        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
       Definition angelic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
@@ -3546,7 +3570,7 @@ Module Mutators
         intros w2 ω12 t__field.
         eapply bind_right.
         apply assert_formula.
-        apply (formula_eq (term_union U UK t__field) (persist__term t (wtrans ω01 ω12))).
+        apply (formula_eq (term_union U UK t__field) (persist__term t (acc_trans ω01 ω12))).
         intros w3 ω23.
         eapply bind.
         apply (angelic_match_pattern n (p UK)).
@@ -3561,7 +3585,7 @@ Module Mutators
             |}.
         apply (persist__term t__field ω23).
         apply (four (cont UK)).
-        apply (wtrans ω01 (wtrans ω12 ω23)).
+        apply (acc_trans ω01 (acc_trans ω12 ω23)).
       Defined.
 
       Definition box_angelic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
@@ -3585,13 +3609,13 @@ Module Mutators
         intros w2 ω12 t__field.
         eapply bind_right.
         apply assume_formula.
-        apply (formula_eq (term_union U UK t__field) (persist__term t (wtrans ω01 ω12))).
+        apply (formula_eq (term_union U UK t__field) (persist__term t (acc_trans ω01 ω12))).
         intros w3 ω23.
         eapply bind.
         apply (demonic_match_pattern n (p UK)).
         apply (persist__term t__field ω23).
         apply (four (cont UK)).
-        apply (wtrans ω01 (wtrans ω12 ω23)).
+        apply (acc_trans ω01 (acc_trans ω12 ω23)).
       Defined.
 
       Definition box_demonic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
@@ -3644,8 +3668,7 @@ Module Mutators
       Definition eval_exp {Γ σ} (e : Exp Γ σ) :
         ⊢ SMut Γ Γ (STerm σ).
         intros w POST δ h.
-        apply POST.
-        apply wrefl.
+        apply (T POST).
         apply (seval_exp δ e).
         auto.
         auto.
@@ -3654,7 +3677,7 @@ Module Mutators
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) :
         ⊢ SMut Γ Γ (SStore σs).
         intros w POST δ h.
-        apply POST. apply wrefl.
+        apply (T POST).
         refine (env_map _ es).
         intros b. apply (seval_exp δ).
         auto.
@@ -3671,7 +3694,7 @@ Module Mutators
 
       Definition produce_chunk {Γ} :
         ⊢ Chunk -> SMut Γ Γ Unit :=
-        fun w0 c k δ h => k w0 wrefl tt δ (cons c h).
+        fun w0 c k δ h => T k tt δ (cons c h).
 
       Fixpoint try_consume_chunk_exact {Σ} (h : SHeap Σ) (c : Chunk Σ) {struct h} : option (SHeap Σ) :=
         match h with
@@ -3749,7 +3772,7 @@ Module Mutators
         eapply bind.
         apply get_heap.
         intros w1 ω01 h.
-        destruct (try_consume_chunk_exact h (subst c ω01)) as [h'|].
+        destruct (try_consume_chunk_exact h (persist c ω01)) as [h'|].
         - apply put_heap.
           apply h'.
         - eapply bind.
@@ -3767,10 +3790,10 @@ Module Mutators
           intros w2 ω12 [c' h'].
           eapply bind_right.
           apply assert_formulas.
-          apply (match_chunk (subst c (wtrans ω01 ω12)) c').
+          apply (match_chunk (persist c (acc_trans ω01 ω12)) c').
           intros w3 ω23.
           apply put_heap.
-          apply (subst h' ω23).
+          apply (persist (A := SHeap) h' ω23).
       Defined.
 
       (* Definition smut_leakcheck {Γ Σ} : SMut Γ Γ Unit Σ := *)
@@ -3811,38 +3834,38 @@ Module Mutators
         - refine (demonic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr <$> persist__term s <*> four _ <*> four _).
           intros w1 ω01 t1.
           apply (produce (wsnoc w0 (xl :: σ)) asn1).
-          apply (wsnoc_sub ω01 (xl :: σ) t1).
+          apply (acc_snoc_left ω01 (xl :: σ) t1).
           intros w1 ω01 t1.
           apply (produce (wsnoc w0 (xr :: τ)) asn2).
-          apply (wsnoc_sub ω01 (xr :: τ) t1).
+          apply (acc_snoc_left ω01 (xr :: τ) t1).
         - apply (box_demonic_match_list xh xt s).
           + apply (produce _ asn1).
           + intros w1 ω01 thead ttail.
             apply (produce (wsnoc (wsnoc w0 (xh :: _)) (xt :: _)) asn2 w1).
-            apply (wsnoc_sub (wsnoc_sub ω01 (xh :: _) thead) (xt :: _) ttail).
+            apply (acc_snoc_left (acc_snoc_left ω01 (xh :: _) thead) (xt :: _) ttail).
         - apply (box_demonic_match_prod xl xr s).
           intros w1 ω01 t1 t2.
           apply (produce (wsnoc (wsnoc w0 (xl :: σ1)) (xr :: σ2)) asn w1).
-          apply (wsnoc_sub (wsnoc_sub ω01 (xl :: σ1) t1) (xr :: σ2) t2).
+          apply (acc_snoc_left (acc_snoc_left ω01 (xl :: σ1) t1) (xr :: σ2) t2).
         - apply (box_demonic_match_tuple id p s).
           intros w1 ω01 ts.
           apply (produce (wcat w0 Δ) asn w1).
-          apply wcat_sub; auto.
+          apply acc_cat_left; auto.
         - apply (box_demonic_match_record id p s).
           intros w1 ω01 ts.
           apply (produce (wcat w0 Δ) asn w1).
-          apply wcat_sub; auto.
+          apply acc_cat_left; auto.
         - apply (box_demonic_match_union id alt__pat s).
           intros UK w1 ω01 ts.
           apply (produce (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1).
-          apply wcat_sub; auto.
+          apply acc_cat_left; auto.
         - apply (bind_right <$> produce _ asn1 <*> four (produce _ asn2)).
         - intros w1 ω01.
           eapply bind.
           apply (@demonic _ (Some ς) τ).
           intros w2 ω12 t2.
           apply (produce (wsnoc w0 (ς :: τ)) asn w2).
-          apply (wsnoc_sub (wtrans ω01 ω12) (ς :: τ) t2).
+          apply (acc_snoc_left (acc_trans ω01 ω12) (ς :: τ) t2).
         - intros w1 ω01.
           apply debug.
           intros δ h.
@@ -3866,38 +3889,38 @@ Module Mutators
         - refine (angelic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr <$> persist__term s <*> four _ <*> four _).
           intros w1 ω01 t1.
           apply (consume (wsnoc w0 (xl :: σ)) asn1).
-          apply (wsnoc_sub ω01 (xl :: σ) t1).
+          apply (acc_snoc_left ω01 (xl :: σ) t1).
           intros w1 ω01 t1.
           apply (consume (wsnoc w0 (xr :: τ)) asn2).
-          apply (wsnoc_sub ω01 (xr :: τ) t1).
+          apply (acc_snoc_left ω01 (xr :: τ) t1).
         - apply (box_angelic_match_list xh xt s).
           + apply (consume _ asn1).
           + intros w1 ω01 thead ttail.
             apply (consume (wsnoc (wsnoc w0 (xh :: _)) (xt :: _)) asn2 w1).
-            apply (wsnoc_sub (wsnoc_sub ω01 (xh :: _) thead) (xt :: _) ttail).
+            apply (acc_snoc_left (acc_snoc_left ω01 (xh :: _) thead) (xt :: _) ttail).
         - apply (box_angelic_match_prod xl xr s).
           intros w1 ω01 t1 t2.
           apply (consume (wsnoc (wsnoc w0 (xl :: σ1)) (xr :: σ2)) asn w1).
-          apply (wsnoc_sub (wsnoc_sub ω01 (xl :: σ1) t1) (xr :: σ2) t2).
+          apply (acc_snoc_left (acc_snoc_left ω01 (xl :: σ1) t1) (xr :: σ2) t2).
         - apply (box_angelic_match_tuple id p s).
           intros w1 ω01 ts.
           apply (consume (wcat w0 Δ) asn w1).
-          apply wcat_sub; auto.
+          apply acc_cat_left; auto.
         - apply (box_angelic_match_record id p s).
           intros w1 ω01 ts.
           apply (consume (wcat w0 Δ) asn w1).
-          apply wcat_sub; auto.
+          apply acc_cat_left; auto.
         - apply (box_angelic_match_union id alt__pat s).
           intros UK w1 ω01 ts.
           apply (consume (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1).
-          apply wcat_sub; auto.
+          apply acc_cat_left; auto.
         - apply (bind_right <$> consume _ asn1 <*> four (consume _ asn2)).
         - intros w1 ω01.
           eapply bind.
           apply (@angelic _ (Some ς) τ).
           intros w2 ω12 t2.
           apply (consume (wsnoc w0 (ς :: τ)) asn w2).
-          apply (wsnoc_sub (wtrans ω01 ω12) (ς :: τ) t2).
+          apply (acc_snoc_left (acc_trans ω01 ω12) (ς :: τ) t2).
         - intros w1 ω01.
           apply debug.
           intros δ h.
@@ -3929,12 +3952,12 @@ Module Mutators
                  (*   msg_localstore := subst δ0 ω01; *)
                  (*   msg_heap := subst h0 ω01; *)
                  (*   msg_pathcondition := wco w1; *)
-                 (* |} *) (formula_eqs_nctx (subst δe evars) (subst args ω01))).
+                 (* |} *) (formula_eqs_nctx (subst δe evars) (persist args ω01))).
         intros w2 ω12.
         eapply bind_right.
         apply (consume (w := @MkWorld Σe nil) req).
-        refine (wtrans _ ω12).
-        constructor 1 with evars. cbn. constructor.
+        refine (acc_trans _ ω12).
+        constructor 2 with evars. cbn. constructor.
         intros w3 ω23.
         eapply bind.
         apply (demonic (Some result)).
@@ -3943,7 +3966,7 @@ Module Mutators
         apply (produce
                  (w := @MkWorld (Σe ▻ (result::τ)) nil)
                  ens).
-        constructor 1 with (sub_snoc (subst (T := Sub _) evars (wtrans ω12 (wtrans ω23 ω34))) (result::τ) res).
+        constructor 2 with (sub_snoc (persist (A := Sub _) evars (acc_trans ω12 (acc_trans ω23 ω34))) (result::τ) res).
         cbn. constructor.
         intros w5 ω45. clear - res ω45.
         apply pure.
@@ -3967,17 +3990,17 @@ Module Mutators
                  (*   msg_localstore := subst δ0 ω01; *)
                  (*   msg_heap := subst h0 ω01; *)
                  (*   msg_pathcondition := wco w1; *)
-                 (* |} *) (formula_eqs_nctx (subst δe evars) (subst args ω01))).
+                 (* |} *) (formula_eqs_nctx (subst δe evars) (persist args ω01))).
         intros w2 ω12.
         eapply bind_right.
         apply (consume (w := @MkWorld Σe nil) req).
-        refine (wtrans _ ω12).
-        constructor 1 with evars. cbn. constructor.
+        refine (acc_trans _ ω12).
+        constructor 2 with evars. cbn. constructor.
         intros w3 ω23.
         apply (produce
                  (w := @MkWorld Σe nil)
                  ens).
-        constructor 1 with (subst (T := Sub _) evars (wtrans ω12 ω23)).
+        constructor 2 with (persist (A := Sub _) evars (acc_trans ω12 ω23)).
         cbn. constructor.
       Defined.
 
@@ -4019,7 +4042,7 @@ Module Mutators
           apply (assign x t).
           intros w2 ω12.
           apply pure.
-          apply (subst (T := STerm τ) t (wsub ω12)).
+          apply (subst (T := STerm τ) t (sub_acc ω12)).
         - eapply bind.
           apply (eval_exps es).
           intros w1 ω01 args.
@@ -4038,10 +4061,10 @@ Module Mutators
           intros w3 ω23 t.
           eapply bind_right.
           apply put_local.
-          apply (subst δ1 (wtrans ω12 ω23)).
+          apply (persist (A := SStore _) δ1 (acc_trans ω12 ω23)).
           intros w4 ω34.
           apply pure.
-          apply (subst (T := STerm _) t ω34).
+          apply (persist__term t ω34).
         - eapply bind.
           apply (eval_exps es).
           intros w1 ω01 args.
@@ -4132,10 +4155,10 @@ Module Mutators
           apply (T (consume (asn_chunk (chunk_ptsreg reg t)))).
           intros w2 ω12.
           eapply bind_right.
-          apply (T (produce (asn_chunk (chunk_ptsreg reg (subst t ω12))))).
+          apply (T (produce (asn_chunk (chunk_ptsreg reg (persist__term t ω12))))).
           intros w3 ω23.
           apply pure.
-          apply (subst (T := STerm _) t (wtrans ω12 ω23)).
+          apply (persist__term t (acc_trans ω12 ω23)).
         - eapply bind.
           eapply (angelic None τ).
           intros w1 ω01 told.
@@ -4149,7 +4172,7 @@ Module Mutators
           apply (T (produce (asn_chunk (chunk_ptsreg reg tnew)))).
           intros w4 ω34.
           apply pure.
-          apply (subst (T := STerm _) tnew ω34).
+          apply (persist__term tnew ω34).
         - apply (error "SMut.exec" "stm_bind not supported" tt).
         - apply debug.
           intros δ0 h0.
@@ -4167,12 +4190,12 @@ Module Mutators
         SMut Δ Δ Unit {| wctx := sep_contract_logic_variables c; wco := [] |} :=
         match c with
         | MkSepContract _ _ Σ δ req result ens =>
-          produce (w:=@MkWorld _ _) req wrefl >> fun w1 ω01 =>
+          produce (w:=@MkWorld _ _) req acc_refl >> fun w1 ω01 =>
           exec s >>= fun w2 ω12 res =>
           consume
             (w:=wsnoc (@MkWorld _ []) (result :: τ))
             ens
-            (wsnoc_sub (wtrans ω01 ω12) (result :: τ) res)
+            (acc_snoc_left (acc_trans ω01 ω12) (result :: τ) res)
         end.
 
       Definition exec_contract_path {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) : SPath wnil :=
