@@ -2002,11 +2002,9 @@ Module Soundness
     (* rewrite Experimental.solve_uvars_sound in Hwp. *)
     (* specialize (Hwp env_nil). *)
     inster Hwp by reflexivity.
-    rewrite prune_sound in Hwp.
-    rewrite Experimental.solve_evars_sound in Hwp.
-    destruct Hwp as [ιe [Hwp _]].
-    destruct (nilView ιe).
-    rewrite prune_sound in Hwp. cbn in Hwp.
+    rewrite Postprocessing.prune_sound in Hwp.
+    rewrite Postprocessing.solve_evars_sound in Hwp.
+    rewrite Postprocessing.prune_sound in Hwp. cbn in Hwp.
     apply safe_demonic_close with _ ι in Hwp. revert Hwp.
     rewrite <- (wsafe_safe (w := @MkWorld (sep_contract_logic_variables c) nil)).
     apply approx_exec_contract; auto.
@@ -2023,15 +2021,13 @@ Module Soundness
     unfold SMut.ValidContract, CMut.ValidContract, ForallNamed.
     rewrite Forall_forall. intros [Hwp] ι.
     unfold SMut.exec_contract_path in Hwp.
-    rewrite prune_sound in Hwp.
-    rewrite Experimental.solve_uvars_sound in Hwp.
+    rewrite Postprocessing.prune_sound in Hwp.
+    rewrite Postprocessing.SolveUvars.solve_uvars_sound in Hwp.
     specialize (Hwp env_nil).
     inster Hwp by reflexivity.
-    rewrite prune_sound in Hwp.
-    rewrite Experimental.solve_evars_sound in Hwp.
-    destruct Hwp as [ιe [Hwp _]].
-    destruct (nilView ιe).
-    rewrite prune_sound in Hwp. cbn in Hwp.
+    rewrite Postprocessing.prune_sound in Hwp.
+    rewrite Postprocessing.solve_evars_sound in Hwp.
+    rewrite Postprocessing.prune_sound in Hwp.
     apply safe_demonic_close with _ ι in Hwp. revert Hwp.
     rewrite <- (wsafe_safe (w := @MkWorld (sep_contract_logic_variables c) nil)).
     apply approx_exec_contract; auto.

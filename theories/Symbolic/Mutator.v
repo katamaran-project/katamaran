@@ -34,6 +34,7 @@ From Coq Require Import
      Classes.Morphisms_Prop
      Classes.Morphisms_Relations
      Classes.RelationClasses
+     Relations.Relation_Definitions
      Lists.List
      Program.Tactics
      Strings.String
@@ -1500,6 +1501,25 @@ Module Mutators
         intuition.
     Qed.
 
+    Lemma safe_angelic_close0 {Σ0 Σ} (p : SPath (Σ0 ▻▻ Σ)) (ι0 : SymInstance Σ0) :
+      safe (angelic_close0 Σ p) ι0 <-> exists (ι : SymInstance Σ), safe p (env_cat ι0 ι).
+    Proof.
+      induction Σ; cbn.
+      - split.
+        + intros s.
+          now exists env_nil.
+        + intros [ι sp].
+          destruct (nilView ι).
+          now cbn in *.
+      - rewrite (IHΣ (angelicv b p)).
+        split.
+        + intros (ι & v & sp).
+          now exists (env_snoc ι b v).
+        + intros (ι & sp).
+          destruct (snocView ι) as (ι & v).
+          now exists ι, v.
+    Qed.
+
     (* Fixpoint occurs_check_spath {Σ x} (xIn : x ∈ Σ) (p : SPath Σ) : option (SPath (Σ - x)) := *)
     (*   match p with *)
     (*   | angelic_binary o1 o2 => *)
@@ -1548,6 +1568,77 @@ Module Mutators
     (*     end *)
     (*   | debug b o => option_ap (option_map (debug (Σ := Σ - x)) (occurs_check xIn b)) (occurs_check_spath xIn o) *)
     (*   end. *)
+
+    Definition sequiv Σ : relation (SPath Σ) :=
+      fun p q => forall ι, safe p ι <-> safe q ι.
+    Arguments sequiv : clear implicits.
+    Notation "p <=> q" := (sequiv _ p q) (at level 90, no associativity).
+
+    Definition sequiv_refl {Σ} : Reflexive (sequiv Σ).
+    Proof. intros p ι. reflexivity. Qed.
+
+    Definition sequiv_sym {Σ} : Symmetric (sequiv Σ).
+    Proof. intros p q pq ι. now symmetry. Qed.
+
+    Definition sequiv_trans {Σ} : Transitive (sequiv Σ).
+    Proof. intros p q r pq qr ι. now transitivity (safe q ι). Qed.
+
+    Instance sequiv_equivalence {Σ} : Equivalence (sequiv Σ).
+    Proof. split; auto using sequiv_refl, sequiv_sym, sequiv_trans. Qed.
+
+    Instance proper_angelic_close0 {Σ Σe} : Proper (sequiv (Σ ▻▻ Σe) ==> sequiv Σ) (angelic_close0 Σe).
+    Proof. intros p q pq ι. rewrite ?safe_angelic_close0. now apply base.exist_proper. Qed.
+
+    Instance proper_angelic_binary {Σ} : Proper (sequiv Σ ==> sequiv Σ ==> sequiv Σ) (@angelic_binary Σ).
+    Proof.
+      unfold sequiv.
+      intros p1 p2 p12 q1 q2 q12 ι; cbn.
+      now rewrite p12, q12.
+    Qed.
+
+    Instance proper_demonic_binary {Σ} : Proper (sequiv Σ ==> sequiv Σ ==> sequiv Σ) (@demonic_binary Σ).
+    Proof.
+      unfold sequiv.
+      intros p1 p2 p12 q1 q2 q12 ι; cbn.
+      now rewrite p12, q12.
+    Qed.
+
+    Instance proper_assumek {Σ} (fml : Formula Σ) : Proper (sequiv Σ ==> sequiv Σ) (assumek fml).
+    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+
+    Instance proper_assume_vareq {Σ x σ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+      Proper (sequiv (Σ - (x :: σ)) ==> sequiv Σ) (assume_vareq x t).
+    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+
+    Instance proper_assert_vareq {Σ x σ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) (msg : Message (Σ - (x :: σ))) :
+      Proper (sequiv (Σ - (x :: σ)) ==> sequiv Σ) (assert_vareq x t msg).
+    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+
+    Instance proper_angelicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (angelicv b).
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.exist_proper. Qed.
+
+    Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.forall_proper. Qed.
+
+    Instance proper_debug {BT B} `{Subst BT, Inst BT B, OccursCheck BT} {Σ} {bt : BT Σ} :
+      Proper (sequiv Σ ==> sequiv Σ) (debug bt).
+    Proof. unfold sequiv. intros p q pq ι. cbn. now rewrite ?debug_equiv. Qed.
+
+    Lemma angelic_close0_angelic_binary {Σ Σe} (p1 p2 : SPath (Σ ▻▻ Σe)) :
+      angelic_close0 Σe (angelic_binary p1 p2) <=>
+      angelic_binary (angelic_close0 Σe p1) (angelic_close0 Σe p2).
+    Proof.
+      intros ι; cbn. rewrite ?safe_angelic_close0. cbn.
+      split.
+      - intros [ιe [HYP|HYP]]; [left|right]; exists ιe; exact HYP.
+      - intros [[ιe HYP]|[ιe HYP]]; exists ιe; [left|right]; exact HYP.
+    Qed.
+
+  End SPath.
+  Notation SPath := SPath.SPath.
+  Import SPath.
+
+  Module Postprocessing.
 
     Definition angelic_binary_prune {Σ} (p1 p2 : SPath Σ) : SPath Σ :=
       match p1 , p2 with
@@ -1728,60 +1819,7 @@ Module Mutators
       - now rewrite ?debug_equiv.
     Qed.
 
-    Lemma angelic_close0_sound {Σ0 Σ} (p : SPath (Σ0 ▻▻ Σ)) (ι0 : SymInstance Σ0) :
-      safe (angelic_close0 Σ p) ι0 <-> exists (ι : SymInstance Σ), safe p (env_cat ι0 ι).
-    Proof.
-      induction Σ; cbn.
-      - split.
-        + intros s.
-          now exists env_nil.
-        + intros [ι sp].
-          destruct (nilView ι).
-          now cbn in *.
-      - rewrite (IHΣ (angelicv b p)).
-        split.
-        + intros (ι & v & sp).
-          now exists (env_snoc ι b v).
-        + intros (ι & sp).
-          destruct (snocView ι) as (ι & v).
-          now exists ι, v.
-    Qed.
-
-    Definition ok {Σ} (p : SPath Σ) : bool :=
-      match prune p with
-      | block => true
-      | _     => false
-      end.
-
-    Lemma ok_sound {Σ} (p : SPath Σ) (ι : SymInstance Σ) :
-      is_true (ok p) -> safe p ι.
-    Proof.
-      rewrite <- prune_sound. unfold ok.
-      generalize (prune p) as q. clear. intros q.
-      destruct q; try discriminate; cbn; auto.
-    Qed.
-
-    Module Experimental.
-
-      Fixpoint assert_msgs_formulas {Σ} (mfs : List (Pair Message Formula) Σ) (p : SPath Σ) : SPath Σ :=
-        match mfs with
-        | nil => p
-        | cons (msg,fml) mfs =>
-          assert_msgs_formulas mfs (assertk fml msg p)
-        end.
-
-      Lemma assert_msgs_formulas_sound {Σ} {mfs : List (Pair Message Formula) Σ} {p : SPath Σ} {ι : SymInstance Σ} :
-        (safe (assert_msgs_formulas mfs p) ι <-> instpc (map snd mfs) ι /\ safe p ι).
-      Proof.
-        revert p.
-        induction mfs; intros p; cbn.
-        - now unfold inst_pathcondition.
-        - rewrite inst_pathcondition_cons.
-          destruct a; cbn.
-          rewrite IHmfs.
-          cbn.
-          now rewrite obligation_equiv.
-      Qed.
+    Section Util.
 
       Arguments InCtx_rect [_ _].
       Lemma ctx_remove_inctx_right {B : Set} {Γ Δ : Ctx B} {b : B} (bIn : InCtx b Δ) :
@@ -1792,221 +1830,6 @@ Module Mutators
         - reflexivity.
         - f_equal. auto.
       Defined.
-
-      Fixpoint solve_evars {Σ} Σe (p : SPath (Σ ▻▻ Σe)) (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) {struct p} : SPath Σ :=
-        match p with
-        | angelic_binary p1 p2 =>
-          angelic_binary
-            (solve_evars Σe p1 mfs)
-            (solve_evars Σe p2 mfs)
-        | demonic_binary p1 p2 =>
-          angelic_close0 Σe
-            (assert_msgs_formulas mfs
-               (demonic_binary (solve_evars ε p1 []) (solve_evars ε p2 [])))
-        | error msg =>
-          angelic_close0 Σe (assert_msgs_formulas mfs (error msg))
-        | block =>
-          angelic_close0 Σe (assert_msgs_formulas mfs block)
-        | assertk fml msg p0 =>
-          solve_evars Σe p0 (cons (msg,fml) mfs)
-        | assumek fml p0 =>
-          angelic_close0 Σe
-            (assert_msgs_formulas mfs (assumek fml (solve_evars ε p0 [])))
-        | angelicv b p0 =>
-          solve_evars (Σe ▻ b) p0 (subst mfs sub_wk1)
-        | demonicv b p0 =>
-          angelic_close0 Σe (assert_msgs_formulas mfs (demonicv b (solve_evars ε p0 [])))
-        | @assert_vareq _ x σ xIn t msg p0 =>
-          match Context.catView xIn with
-          | isCatLeft bIn =>
-            fun t msg p =>
-              angelic_close0 Σe
-                (assert_msgs_formulas mfs
-                   (assert_vareq x t msg (solve_evars ε p [])))
-          | isCatRight bIn =>
-            fun t _ p =>
-              let e := ctx_remove_inctx_right bIn in
-              solve_evars (Σe - (x :: σ))
-                (eq_rect _ SPath p _ e)
-                (subst mfs
-                   (eq_rect _ (Sub (Σ ▻▻ Σe)) (sub_single (inctx_cat_right bIn) t) _ e))
-          end t msg p0
-         | assume_vareq x t p =>
-             angelic_close0 Σe
-               (assert_msgs_formulas mfs (assume_vareq x t (solve_evars ε p [])))
-         | debug b p =>
-             angelic_close0 Σe (assert_msgs_formulas mfs (debug b (solve_evars ε p [])))
-         end.
-
-      Fixpoint assume_formulas {Σ} (fs : List Formula Σ) (p : SPath Σ) : SPath Σ :=
-        match fs with
-        | nil => p
-        | cons fml mfs =>
-          assume_formulas mfs (assumek fml p)
-        end.
-
-      Lemma assume_formulas_sound {Σ} {fs : List Formula Σ} {p : SPath Σ} {ι : SymInstance Σ} :
-        safe (assume_formulas fs p) ι <-> (instpc fs ι -> safe p ι).
-      Proof.
-        revert p.
-        induction fs; intros p; cbn.
-        - unfold inst_pathcondition; cbn; intuition.
-        - rewrite inst_pathcondition_cons.
-          rewrite IHfs. cbn. intuition.
-      Qed.
-
-      Fixpoint solve_uvars {Σ} Σu (p : SPath (Σ ▻▻ Σu)) (fs : List Formula (Σ ▻▻ Σu)) {struct p} : SPath Σ :=
-        match p with
-        | angelic_binary p1 p2 =>
-          demonic_close0 Σu
-            (assume_formulas fs
-               (angelic_binary (solve_uvars ε p1 []) (solve_uvars ε p2 [])))
-        | demonic_binary p1 p2 =>
-          demonic_close0 Σu
-            (assume_formulas fs
-               (demonic_binary (solve_uvars ε p1 []) (solve_uvars ε p2 [])))
-          (* demonic_binary *)
-          (*   (solve_uvars Σu p1 fs) *)
-          (*   (solve_uvars Σu p2 fs) *)
-        | error msg =>
-          demonic_close0 Σu (assume_formulas fs (error msg))
-        | block =>
-          demonic_close0 Σu (assume_formulas fs block)
-        | assertk fml msg p0 =>
-          demonic_close0 Σu
-            (assume_formulas fs (assertk fml msg (solve_uvars ε p0 [])))
-        | assumek fml p0 =>
-          solve_uvars Σu p0 (cons fml fs)
-        | angelicv b p0 =>
-          demonic_close0 Σu (assume_formulas fs (angelicv b (solve_uvars ε p0 [])))
-        | demonicv b p0 =>
-          solve_uvars (Σu ▻ b) p0 (subst fs sub_wk1)
-        | @assert_vareq _ x σ xIn t msg p0 =>
-          demonic_close0 Σu
-            (assume_formulas fs (assert_vareq x t msg (solve_uvars ε p0 [])))
-        | @assume_vareq _ x σ xIn t p0 =>
-          match Context.catView xIn with
-          | isCatLeft bIn =>
-            fun t p =>
-              demonic_close0 Σu
-                (assume_formulas fs
-                   (assume_vareq x t (solve_uvars ε p [])))
-          | isCatRight bIn =>
-            fun t p =>
-              let e := ctx_remove_inctx_right bIn in
-              solve_uvars (Σu - (x :: σ))
-                (eq_rect _ SPath p _ e)
-                (subst fs
-                   (eq_rect _ (Sub (Σ ▻▻ Σu)) (sub_single (inctx_cat_right bIn) t) _ e))
-          end t p0
-         | debug b p =>
-             demonic_close0 Σu (assume_formulas fs (debug b (solve_uvars ε p [])))
-         end.
-
-      Lemma solve_evars_sound_angelic_binary {Σ0 Σe} (p1 p2 : SPath (Σ0 ▻▻ Σe))
-            {mfs : List (Pair Message Formula) (Σ0 ▻▻ Σe)}
-            (ι : SymInstance Σ0) :
-            (safe (solve_evars Σe p1 mfs) ι <->
-             (exists ιe : SymInstance Σe, safe p1 (ι ►► ιe) /\ instpc (map snd mfs) (ι ►► ιe))) ->
-            (safe (solve_evars Σe p2 mfs) ι <-> (exists ιe : SymInstance Σe, safe p2 (ι ►► ιe) /\ instpc (map snd mfs) (ι ►► ιe))) ->
-            safe (solve_evars Σe p1 mfs) ι \/ safe (solve_evars Σe p2 mfs) ι <->
-            (exists ιe : SymInstance Σe, (safe (angelic_binary p1 p2) (ι ►► ιe)) /\ instpc (map snd mfs) (ι ►► ιe)).
-      Proof.
-        intros H1 H2.
-        split.
-        + intros [s1|s2];
-            apply proj1 in H1;
-            apply proj1 in H2.
-          * destruct (H1 s1) as (ιe & se1 & Hpc).
-            exists ιe. now split; [left|].
-          * destruct (H2 s2) as (ιe & se2 & Hpc).
-            exists ιe. now split; [right|].
-        + intros (ιe & [se1|se2] & Hpc); [left|right];
-            apply proj2 in H1;
-            apply proj2 in H2;
-            [eapply H1|eapply H2];
-            now exists ιe.
-      Qed.
-
-      Lemma exists_syminstance_nil {P : SymInstance ε -> Prop} :
-        (exists (ι : SymInstance ε), P ι) <-> P env_nil.
-      Proof.
-        split.
-        - intros (ι & Pι).
-          now destruct (nilView ι).
-        - intros Pn. now exists env_nil.
-      Qed.
-
-      Lemma exists_syminstance_cons {Σ b} {P : SymInstance (Σ ▻ b) -> Prop} :
-        (exists (ι : SymInstance (Σ ▻ b)), P ι) <-> (exists (ι : SymInstance Σ) (v : Lit (snd b)), P (ι ► (b ↦ v))).
-      Proof.
-        split.
-        - intros (ι & Pι).
-          destruct (snocView ι) as (ι & v).
-          now exists ι, v.
-        - intros (ι & v & Pn). now exists (ι ► (b ↦ v)).
-      Qed.
-
-      Lemma solve_evars_sound_demonic_binary {Σ0 Σe} (p1 p2 : SPath (Σ0 ▻▻ Σe))
-            {mfs : List (Pair Message Formula) (Σ0 ▻▻ Σe)}
-            (H2 : forall ι : SymInstance (Σ0 ▻▻ Σe),
-               safe (solve_evars ε p2 []) ι <->
-               (exists ιe : SymInstance ε, safe p2 (ι ►► ιe)))
-            (H1 : forall ι : SymInstance (Σ0 ▻▻ Σe),
-                safe (solve_evars ε p1 []) ι <->
-                (exists ιe : SymInstance ε, safe p1 (ι ►► ιe)))
-            (ι : SymInstance Σ0) :
-        safe (solve_evars Σe (demonic_binary p1 p2) mfs) ι <->
-         (exists ιe : SymInstance Σe, (safe p1 (ι ►► ιe) /\ safe p2 (ι ►► ιe)) /\ instpc (map snd mfs) (ι ►► ιe)).
-      Proof.
-        cbn.
-        rewrite angelic_close0_sound.
-        split.
-        - intros (ι0 & sa).
-          exists ι0.
-          rewrite assert_msgs_formulas_sound in sa.
-          destruct sa as (Hpc & sp1 & sp2).
-          destruct (proj1 (H1 _) sp1) as (ιe1 & s1).
-          destruct (proj1 (H2 _) sp2) as (ιe2 & s2).
-          now destruct (nilView ιe1), (nilView ιe2).
-        - intros (ιe & (s1 & s2) & Hpc).
-          exists ιe.
-          rewrite assert_msgs_formulas_sound.
-          cbn.
-          now rewrite H1, H2, ?exists_syminstance_nil.
-      Qed.
-
-      Lemma solve_evars_sound_assumek {Σ0 Σe} (p : SPath (Σ0 ▻▻ Σe))
-            (Hp : forall ι : SymInstance (Σ0 ▻▻ Σe),
-                safe (solve_evars ε p []) ι <->
-                (exists ιe : SymInstance ε, safe p (ι ►► ιe) /\ inst_pathcondition [] (ι ►► ιe)))
-            {fml : Formula (Σ0 ▻▻ Σe)}
-            {mfs : List (Pair Message Formula) (Σ0 ▻▻ Σe)}
-            (ι : SymInstance Σ0) :
-            safe (solve_evars Σe (assumek fml p) mfs) ι <->
-            (exists ιe : SymInstance Σe, ((inst fml (ι ►► ιe) : Prop) -> safe p (ι ►► ιe)) /\ instpc (map snd mfs) (ι ►► ιe)).
-      Proof.
-        cbn.
-        rewrite angelic_close0_sound.
-        apply base.exist_proper. intros ιe.
-        specialize (Hp (ι ►► ιe)).
-        rewrite exists_syminstance_nil in Hp.
-        rewrite assert_msgs_formulas_sound.
-        cbn. rewrite Hp.
-        change (inst_pathcondition [] _) with True.
-        intuition.
-      Qed.
-
-      Lemma map_snd_subst {Σ Σ' : LCtx} {ζ : Sub Σ Σ'}
-            {mfs : List (Pair Message Formula) Σ} :
-            map snd (subst mfs ζ) = subst (map snd mfs) ζ.
-      Proof.
-        induction mfs.
-        - easy.
-        - cbn.
-          rewrite IHmfs.
-          now destruct a.
-      Qed.
 
       Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
         (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
@@ -2111,128 +1934,267 @@ Module Mutators
           now rewrite snoc_eq_rect.
       Qed.
 
-      Lemma solve_evars_sound_help {Σ Σe Σ'} (p : SPath Σ') (HeqΣ' : Σ' = Σ ▻▻ Σe)
-        (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) (ι : SymInstance Σ) :
-        safe (solve_evars Σe (eq_rect Σ' SPath p (Σ ▻▻ Σe) HeqΣ') mfs) ι <->
-        exists ιe : SymInstance Σe,
-          safe (eq_rect Σ' SPath p (Σ ▻▻ Σe) HeqΣ') (env_cat ι ιe) /\
-          instpc (List.map snd mfs) (env_cat ι ιe).
+    End Util.
+
+    Module SolveEvars.
+
+      Fixpoint assert_msgs_formulas {Σ} (mfs : List (Pair Message Formula) Σ) (p : SPath Σ) : SPath Σ :=
+        match mfs with
+        | nil => p
+        | cons (msg,fml) mfs =>
+          assert_msgs_formulas mfs (assertk fml msg p)
+        end.
+
+      Lemma safe_assert_msgs_formulas {Σ} {mfs : List (Pair Message Formula) Σ} {p : SPath Σ} {ι : SymInstance Σ} :
+        (safe (assert_msgs_formulas mfs p) ι <-> instpc (map snd mfs) ι /\ safe p ι).
       Proof.
-        revert Σ Σe HeqΣ' mfs ι.
-        induction p; intros; subst; cbn.
-        - specialize (IHp2 Σ0 Σe eq_refl mfs ι).
-          specialize (IHp1 Σ0 Σe eq_refl mfs ι).
-          now eapply solve_evars_sound_angelic_binary.
-        - specialize (IHp2 (Σ0 ▻▻ Σe) ε eq_refl []).
-          specialize (IHp1 (Σ0 ▻▻ Σe) ε eq_refl []).
-          setoid_rewrite (base.and_True : forall P, P /\ True <-> P) in IHp1.
-          setoid_rewrite (base.and_True : forall P, P /\ True <-> P) in IHp2.
-          eauto using solve_evars_sound_demonic_binary, IHp2, IHp1.
-       - rewrite angelic_close0_sound.
-         setoid_rewrite assert_msgs_formulas_sound.
-         setoid_rewrite (base.and_False : forall P, P /\ False <-> False).
-         now setoid_rewrite (base.False_and : forall P, False /\ P <-> False).
-       - rewrite angelic_close0_sound.
-         setoid_rewrite assert_msgs_formulas_sound.
-         setoid_rewrite (base.True_and : forall P, True /\ P <-> P).
-         now setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
-       - setoid_rewrite obligation_equiv.
-         specialize (IHp Σ0 Σe eq_refl ((msg :: fml)%ctx :: mfs)%list ι).
-         rewrite IHp.
-         setoid_rewrite inst_pathcondition_cons.
-         setoid_rewrite and_comm at 2.
-         setoid_rewrite and_assoc at 1.
-         setoid_rewrite and_comm at 3.
-         now setoid_rewrite <-and_assoc at 1.
-       - specialize (IHp (Σ0 ▻▻ Σe) ε eq_refl []).
-         now eapply solve_evars_sound_assumek.
-       - specialize (IHp Σ0 (Σe ▻ b) eq_refl (subst mfs sub_wk1) ι).
-         cbn in IHp.
-         rewrite IHp, exists_syminstance_cons.
-         setoid_rewrite map_snd_subst.
-         setoid_rewrite inst_subst.
-         setoid_rewrite (inst_sub_wk1 (b := b)).
-         now setoid_rewrite exists_and.
-       - specialize (IHp (Σ0 ▻▻ Σe ▻ b) ε eq_refl []).
-         cbn in IHp.
-         rewrite angelic_close0_sound.
-         setoid_rewrite assert_msgs_formulas_sound.
-         cbn.
-         setoid_rewrite IHp.
-         setoid_rewrite exists_syminstance_nil.
-         change (inst_pathcondition [] _) with True.
-         setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
-         now setoid_rewrite and_comm at 3.
-       - destruct (Context.catView xIn).
-         + specialize (IHp ((Σ0 ▻▻ Σe) - (x :: σ)) ε eq_refl []).
-           rewrite angelic_close0_sound.
-           setoid_rewrite assert_msgs_formulas_sound.
-           cbn.
-           setoid_rewrite obligation_equiv.
-           setoid_rewrite IHp.
-           setoid_rewrite exists_syminstance_nil.
-           cbn.
-           change (inst_pathcondition [] _) with True.
-           setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
-           now setoid_rewrite and_comm at 2.
-         + rewrite IHp.
-           setoid_rewrite obligation_equiv.
-           split.
-           * intros (ιe & sp & Hpc).
-             unfold inst.
-             cbn.
-             exists (env_insert bIn (inst (eq_rect ((Σ0 ▻▻ Σe) - (x :: σ)) (fun Σ => Term Σ σ) t (Σ0 ▻▻ Σe - (x :: σ)) (ctx_remove_inctx_right bIn)) (ι ►► ιe)) ιe).
-             rewrite env_insert_app, env_remove_insert, env_insert_lookup.
-             rewrite inst_subst, inst_sub_shift, env_remove_insert, ?inst_eq_rect.
-             rewrite safe_eq_rect in sp.
-             repeat split; try assumption.
-             rewrite map_snd_subst, inst_subst, inst_eq_rect in Hpc.
-             now rewrite inst_sub_single2 in Hpc.
-           * intros (ιe & (eq & sp) & Hpc).
-             cbn in eq.
-             exists (env_remove (x :: σ) ιe bIn).
-             rewrite map_snd_subst, inst_subst.
-             rewrite safe_eq_rect.
-             rewrite env_remove_app in sp.
-             split; try assumption.
-             rewrite inst_subst in eq.
-             rewrite inst_eq_rect.
-             rewrite <-env_remove_app.
-             rewrite <-inst_sub_shift.
-             now rewrite inst_sub_single_shift.
-       - specialize (IHp ((Σ0 ▻▻ Σe) - (x :: σ)) ε eq_refl []).
-         rewrite angelic_close0_sound.
-         setoid_rewrite assert_msgs_formulas_sound.
-         cbn.
-         setoid_rewrite IHp.
-         cbn.
-         setoid_rewrite exists_syminstance_nil.
-         cbn.
-         change (inst_pathcondition [] _) with True.
-         setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
-         now setoid_rewrite and_comm at 2.
-       - specialize (IHp (Σ0 ▻▻ Σe) ε eq_refl []).
-         rewrite angelic_close0_sound.
-         setoid_rewrite assert_msgs_formulas_sound.
-         cbn.
-         setoid_rewrite debug_equiv.
-         setoid_rewrite IHp.
-         setoid_rewrite exists_syminstance_nil.
-         cbn.
-         change (inst_pathcondition [] _) with True.
-         setoid_rewrite (base.and_True : forall P, P /\ True <-> P).
-         now setoid_rewrite and_comm at 2.
+        revert p.
+        induction mfs; intros p; cbn.
+        - now unfold inst_pathcondition.
+        - rewrite inst_pathcondition_cons.
+          destruct a; cbn.
+          rewrite IHmfs.
+          cbn.
+          now rewrite obligation_equiv.
       Qed.
 
-      Lemma solve_evars_sound {Σ Σe} (p : SPath (Σ ▻▻ Σe))
-        (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) (ι : SymInstance Σ) :
-        safe (solve_evars Σe p mfs) ι <->
-        exists ιe : SymInstance Σe,
-          safe p (env_cat ι ιe) /\
-          instpc (List.map snd mfs) (env_cat ι ιe).
+      Inductive ECtx (Σ : LCtx) : LCtx -> Type :=
+      | ectx Σe (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) : ECtx Σ (Σ ▻▻ Σe).
+      Arguments ectx {Σ} Σe mfs.
+
+      Definition ectx_refl {Σ : LCtx} : ECtx Σ Σ := @ectx Σ ctx_nil nil.
+
+      Definition ectx_formula {Σ1 Σ2} (e: ECtx Σ1 Σ2) : Message Σ2 -> Formula Σ2 -> ECtx Σ1 Σ2 :=
+        match e with ectx Σe mfs => fun msg fml => ectx Σe (cons (msg,fml) mfs) end.
+      Definition ectx_snoc {Σ1 Σ2} (e: ECtx Σ1 Σ2) b : ECtx Σ1 (Σ2 ▻ b) :=
+        match e with ectx Σe mfs => ectx (Σe ▻ b) (subst mfs sub_wk1) end.
+      Definition ectx_subst {Σ1 Σ2} (e : ECtx Σ1 Σ2) :
+        forall x σ (xIn : x :: σ ∈ Σ2) (t : Term (Σ2 - (x :: σ)) σ),
+          option (ECtx Σ1 (Σ2 - (x :: σ))) :=
+        match e with
+        | ectx Σe mfs =>
+            fun x σ xIn =>
+              match Context.catView xIn with
+              | isCatLeft bIn  => fun _ => None
+              | isCatRight bIn =>
+                  fun t =>
+                    let e  := ctx_remove_inctx_right bIn in
+                    let ζ  := sub_single (inctx_cat_right bIn) t in
+                    let ζ' := eq_rect _ (Sub (Σ1 ▻▻ Σe)) ζ _ e in
+                    Some (eq_rect_r _ (ectx _ (subst mfs ζ')) e)
+              end
+        end.
+
+      Definition plug {Σ1 Σ2} (e : ECtx Σ1 Σ2) : SPath Σ2 -> SPath Σ1 :=
+        match e with ectx Σe mfs => fun p => angelic_close0 Σe (assert_msgs_formulas mfs p) end.
+
+      Fixpoint push {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (p : SPath Σ2) {struct p} : SPath Σ1 :=
+        match p with
+        | angelic_binary p1 p2   => angelic_binary (push ec p1) (push ec p2)
+        | demonic_binary p1 p2   => plug ec (demonic_binary (push ectx_refl p1) (push ectx_refl p2))
+        | error msg              => plug ec (error msg)
+        | block                  => plug ec block
+        | assertk fml msg p      => push (ectx_formula ec msg fml) p
+        | assumek fml p          => plug ec (assumek fml (push ectx_refl p))
+        | angelicv b p           => push (ectx_snoc ec b) p
+        | demonicv b p           => plug ec (demonicv b (push ectx_refl p))
+        | assert_vareq x t msg p =>
+            match ectx_subst ec _ t with
+            | Some e' => push e' p
+            | None    => plug ec (assert_vareq x t msg (push ectx_refl p))
+            end
+        | assume_vareq x t p     => plug ec (assume_vareq x t (push ectx_refl p))
+        | debug b p              => plug ec (debug b (push ectx_refl p))
+        end.
+
+      Instance proper_assert_msgs_formulas {Σ} (mfs : List (Pair Message Formula) Σ) :
+        Proper (sequiv Σ ==> sequiv Σ) (assert_msgs_formulas mfs).
+      Proof. intros p q pq ι. rewrite ?safe_assert_msgs_formulas. intuition. Qed.
+
+      Instance proper_plug {Σ1 Σ2} (ec : ECtx Σ1 Σ2) :
+        Proper (sequiv Σ2 ==> sequiv Σ1) (plug ec).
       Proof.
-        exact (solve_evars_sound_help p eq_refl mfs ι).
+        intros p q pq. destruct ec; cbn.
+        now apply proper_angelic_close0, proper_assert_msgs_formulas.
       Qed.
+
+      Lemma assert_msgs_formulas_angelic_binary {Σ} (mfs : List (Pair Message Formula) Σ) (p1  p2 : SPath Σ) :
+        assert_msgs_formulas mfs (angelic_binary p1 p2) <=>
+        angelic_binary (assert_msgs_formulas mfs p1) (assert_msgs_formulas mfs p2).
+      Proof.
+        intros ι; cbn.
+        rewrite ?safe_assert_msgs_formulas.
+        cbn. intuition.
+      Qed.
+
+      Lemma map_snd_subst {Σ Σ' : LCtx} {ζ : Sub Σ Σ'}
+            {mfs : List (Pair Message Formula) Σ} :
+            map snd (subst mfs ζ) = subst (map snd mfs) ζ.
+      Proof.
+        induction mfs.
+        - easy.
+        - cbn.
+          rewrite IHmfs.
+          now destruct a.
+      Qed.
+
+      Lemma assert_msgs_formulas_angelicv {b Σ} (mfs : List (Pair Message Formula) Σ) (p : SPath (Σ ▻ b)) :
+        assert_msgs_formulas mfs (angelicv b p) <=>
+        angelicv b (assert_msgs_formulas (subst mfs sub_wk1) p).
+      Proof.
+        intros ι; cbn.
+        rewrite safe_assert_msgs_formulas. cbn.
+        rewrite and_comm, <- exists_and.
+        apply base.exist_proper. intros v.
+        rewrite safe_assert_msgs_formulas.
+        rewrite map_snd_subst.
+        rewrite inst_subst.
+        rewrite inst_sub_wk1.
+        apply and_comm.
+      Qed.
+
+      Lemma plug_eq_rect {Σ1 Σ2 Σ2'} (eq : Σ2 = Σ2') (ec : ECtx Σ1 Σ2) (p : SPath Σ2') :
+        plug (eq_rect Σ2 (ECtx Σ1) ec Σ2' eq) p = plug ec (eq_rect_r (fun Σ3 : LCtx => SPath Σ3) p eq).
+      Proof. now destruct eq. Qed.
+
+      Lemma ectx_subst_spec {Σ1 Σ2} (ec : ECtx Σ1 Σ2) {x σ} (xIn : x :: σ ∈ Σ2) (t : Term (Σ2 - (x :: σ)) σ) (msg : Message _) :
+        OptionSpec
+          (fun e => forall p, plug e p <=> plug ec (assert_vareq x t msg p))
+          True
+          (ectx_subst ec xIn t).
+      Proof.
+        destruct ec; cbn. destruct (Context.catView xIn); constructor; auto.
+        intros p ι. unfold eq_rect_r. rewrite plug_eq_rect. cbn.
+        rewrite ?safe_angelic_close0.
+        split; intros [ιe HYP].
+        - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
+          unfold eq_rect_r in Hp. rewrite safe_eq_rect, eq_sym_involutive in Hp.
+          exists (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σe) - (x :: σ)) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - (x :: σ)) (ctx_remove_inctx_right bIn)) (ι ►► ιe)) ιe).
+          rewrite safe_assert_msgs_formulas. cbn. rewrite obligation_equiv. cbn.
+          rewrite env_insert_app, env_remove_insert, env_insert_lookup.
+          rewrite inst_subst, inst_sub_shift, env_remove_insert, ?inst_eq_rect.
+          split; auto.
+          rewrite map_snd_subst, inst_subst, inst_eq_rect in Hpc.
+          now rewrite inst_sub_single2 in Hpc.
+        - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
+          cbn in Hp. rewrite obligation_equiv in Hp. cbn in Hp. destruct Hp as [Ht Hp].
+          rewrite env_remove_app in Hp.
+          exists (env_remove (x :: σ) ιe bIn).
+          rewrite safe_assert_msgs_formulas.
+          rewrite map_snd_subst, inst_subst.
+          unfold eq_rect_r. rewrite safe_eq_rect.
+          rewrite eq_sym_involutive. split; auto.
+          rewrite inst_subst in Ht.
+          rewrite inst_eq_rect.
+          rewrite <- env_remove_app.
+          rewrite <- inst_sub_shift.
+          now rewrite inst_sub_single_shift.
+      Qed.
+
+      Lemma push_plug {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (p : SPath Σ2) :
+        push ec p <=> plug ec p.
+      Proof.
+        revert Σ1 ec; induction p; cbn; intros Σ1 ec.
+        - rewrite IHp1, IHp2. clear IHp1 IHp2.
+          destruct ec. cbn [plug].
+          rewrite <- angelic_close0_angelic_binary.
+          apply proper_angelic_close0.
+          now rewrite <- assert_msgs_formulas_angelic_binary.
+        - apply proper_plug, proper_demonic_binary;
+           [now rewrite IHp1 | now rewrite IHp2].
+        - reflexivity.
+        - reflexivity.
+        - rewrite IHp. clear IHp.
+          destruct ec; cbn. reflexivity.
+        - apply proper_plug, proper_assumek, IHp.
+        - rewrite IHp. clear IHp.
+          destruct ec; cbn.
+          apply proper_angelic_close0.
+          rewrite assert_msgs_formulas_angelicv.
+          reflexivity.
+        - apply proper_plug, proper_demonicv, IHp.
+        - destruct (ectx_subst_spec ec xIn t msg).
+          + rewrite IHp. rewrite H. reflexivity.
+          + apply proper_plug, proper_assert_vareq, IHp.
+        - apply proper_plug, proper_assume_vareq, IHp.
+        - apply proper_plug, proper_debug, IHp.
+      Qed.
+
+    End SolveEvars.
+
+    Definition solve_evars {Σ} (p : SPath Σ) : SPath Σ :=
+      SolveEvars.push SolveEvars.ectx_refl p.
+
+    Lemma solve_evars_sound {Σ} (p : SPath Σ) :
+      forall ι, safe (solve_evars p) ι <-> safe p ι.
+    Proof. apply (SolveEvars.push_plug SolveEvars.ectx_refl). Qed.
+
+    Module SolveUvars.
+
+      Fixpoint assume_formulas {Σ} (fs : List Formula Σ) (p : SPath Σ) : SPath Σ :=
+        match fs with
+        | nil => p
+        | cons fml mfs =>
+          assume_formulas mfs (assumek fml p)
+        end.
+
+      Lemma assume_formulas_sound {Σ} {fs : List Formula Σ} {p : SPath Σ} {ι : SymInstance Σ} :
+        safe (assume_formulas fs p) ι <-> (instpc fs ι -> safe p ι).
+      Proof.
+        revert p.
+        induction fs; intros p; cbn.
+        - unfold inst_pathcondition; cbn; intuition.
+        - rewrite inst_pathcondition_cons.
+          rewrite IHfs. cbn. intuition.
+      Qed.
+
+      Fixpoint solve_uvars {Σ} Σu (p : SPath (Σ ▻▻ Σu)) (fs : List Formula (Σ ▻▻ Σu)) {struct p} : SPath Σ :=
+        match p with
+        | angelic_binary p1 p2 =>
+          demonic_close0 Σu
+            (assume_formulas fs
+               (angelic_binary (solve_uvars ε p1 []) (solve_uvars ε p2 [])))
+        | demonic_binary p1 p2 =>
+          demonic_close0 Σu
+            (assume_formulas fs
+               (demonic_binary (solve_uvars ε p1 []) (solve_uvars ε p2 [])))
+          (* demonic_binary *)
+          (*   (solve_uvars Σu p1 fs) *)
+          (*   (solve_uvars Σu p2 fs) *)
+        | error msg =>
+          demonic_close0 Σu (assume_formulas fs (error msg))
+        | block =>
+          demonic_close0 Σu (assume_formulas fs block)
+        | assertk fml msg p0 =>
+          demonic_close0 Σu
+            (assume_formulas fs (assertk fml msg (solve_uvars ε p0 [])))
+        | assumek fml p0 =>
+          solve_uvars Σu p0 (cons fml fs)
+        | angelicv b p0 =>
+          demonic_close0 Σu (assume_formulas fs (angelicv b (solve_uvars ε p0 [])))
+        | demonicv b p0 =>
+          solve_uvars (Σu ▻ b) p0 (subst fs sub_wk1)
+        | @assert_vareq _ x σ xIn t msg p0 =>
+          demonic_close0 Σu
+            (assume_formulas fs (assert_vareq x t msg (solve_uvars ε p0 [])))
+        | @assume_vareq _ x σ xIn t p0 =>
+          match Context.catView xIn with
+          | isCatLeft bIn =>
+            fun t p =>
+              demonic_close0 Σu
+                (assume_formulas fs
+                   (assume_vareq x t (solve_uvars ε p [])))
+          | isCatRight bIn =>
+            fun t p =>
+              let e := ctx_remove_inctx_right bIn in
+              solve_uvars (Σu - (x :: σ))
+                (eq_rect _ SPath p _ e)
+                (subst fs
+                   (eq_rect _ (Sub (Σ ▻▻ Σu)) (sub_single (inctx_cat_right bIn) t) _ e))
+          end t p0
+         | debug b p =>
+             demonic_close0 Σu (assume_formulas fs (debug b (solve_uvars ε p [])))
+         end.
 
       Lemma solve_uvars_sound {Σ Σu} (p : SPath (Σ ▻▻ Σu))
         (fs : List Formula (Σ ▻▻ Σu)) (ι : SymInstance Σ) :
@@ -2243,11 +2205,10 @@ Module Mutators
       Proof.
       Admitted.
 
-    End Experimental.
+    End SolveUvars.
 
-  End SPath.
-  Notation SPath := SPath.SPath.
-  Import SPath.
+  End Postprocessing.
+  Import Postprocessing.
 
   Section VerificationConditions.
 
@@ -4203,17 +4164,31 @@ Module Mutators
 
       Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
         (* VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path c body)) nil)). *)
-        VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path c body)) nil)).
+        VerificationCondition (prune (solve_evars (prune (exec_contract_path c body)))).
 
     End Exec.
 
+    Definition ok {Σ} (p : SPath Σ) : bool :=
+      match prune p with
+      | SPath.block => true
+      | _           => false
+      end.
+
+    Lemma ok_sound {Σ} (p : SPath Σ) (ι : SymInstance Σ) :
+      is_true (ok p) -> safe p ι.
+    Proof.
+      rewrite <- prune_sound. unfold ok.
+      generalize (prune p) as q. clear. intros q.
+      destruct q; try discriminate; cbn; auto.
+    Qed.
+
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)). *)
-      VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)).
+      VerificationCondition (prune (solve_evars (prune (exec_contract_path default_config c body)))).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       (* is_true (ok (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil))). *)
-      is_true (ok (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil))).
+      is_true (ok (prune (solve_evars (prune (exec_contract_path default_config c body))))).
 
     Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflect c body ->
@@ -4224,7 +4199,8 @@ Module Mutators
     Qed.
 
     Definition ValidContractSolveUVars {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationCondition (prune (Experimental.solve_uvars ctx_nil (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)) nil)).
+      VerificationCondition (prune (Postprocessing.SolveUvars.solve_uvars ctx_nil (prune (solve_evars (prune (exec_contract_path default_config c body)))) nil)).
+
   End SMut.
 
 End Mutators.
