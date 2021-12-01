@@ -85,7 +85,6 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Module Export ASS := Assertions RiscvPmpTermKit
                                   RiscvPmpProgramKit
                                   RiscvPmpAssertionKit.
-  Import NameResolution.
 
   Local Notation "'rs'"      := "rs" : string_scope.
   Local Notation "'rs1'"     := "rs1" : string_scope.
@@ -120,6 +119,12 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
       fun asn =>
         @asn_exists Σ Γ (asn_exist x τ asn)
     end.
+
+  Definition pmp_entries {Σ} : Term Σ (ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx)) :=
+    term_list (cons (term_binop binop_pair
+                                (term_lit ty_pmpcfgidx PMP0CFG)
+                                (term_lit ty_pmpaddridx PMPADDR0)) nil).
+
                   
   (** Machine Invariant **)
   (*
@@ -132,61 +137,28 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
     @pre ∀ m h i . mode(m) ✱ mtvec(h) ✱ pmp_entries(ents) ✱ pc(i) ✱ mepc(_) ✱ mpp(_)
     @post pmp_entries(ents) ✱ (mode(m) ✱ pc(i)) ∨ (mode(M) ✱ pc(h) ...)
     τ f(Δ...)*)
-  Definition mach_inv_pre {Σ} : Assertion Σ :=
-    asn_exists ["m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits]
-               (cur_privilege ↦ (term_var "m") ✱
-                         mtvec ↦ (term_var "h") ✱
-                         pc ↦ (term_var "i")).
-
-  Definition pmp_entries {Σ} : Term Σ (ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx)) :=
-    term_list (cons (term_binop binop_pair
-                                (term_lit ty_pmpcfgidx PMP0CFG)
-                                (term_lit ty_pmpaddridx PMPADDR0)) nil).
-    
-    (* ∃ m : ty_privilege in
-    ∃ h : ty_xlenbits  in
-    ∃ i : ty_xlenbits  in
-        asn_mode m ✱ asn_mtvec h ✱ asn_pc i .*)
-  (*
   Definition mach_inv_contract {τ Δ} (ls : SStore Δ _) : SepContract Δ τ :=
+    let env := Δ ▻▻ ["m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits] in
+    let result := "result_mach_inv" in
     let entries := pmp_entries in
-    {| sep_contract_logic_variables := Δ ▻▻ ["m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits];
+    {| sep_contract_logic_variables := env;
        sep_contract_localstore      := ls;
        sep_contract_precondition    :=
          cur_privilege ↦ (term_var "m") ✱
                        mtvec ↦ (term_var "h") ✱
                        pc ↦ (term_var "i") ✱
                        asn_pmp_entries entries;
-       sep_contract_result          := "result_mach_inv";
-       (* TODO: postcondition (need disjunction) *)
+       sep_contract_result          := result;
        sep_contract_postcondition   :=
-         asn_pmp_entries entries ✱
+         asn_pmp_entries (sub_term entries (@sub_wk1 env (result :: τ))) ✱
                          asn_or (cur_privilege ↦ (term_var "m") ✱ pc ↦ (term_var "i"))
                          (cur_privilege ↦ (term_lit ty_privilege Machine) ✱
                                         pc ↦ (term_var "h") ✱
                                         mepc ↦ (term_var "i")) (* TODO: add mpp ↦ ...*)
-    |}. *)
+    |}.
 
   Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
-    let env := [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop, "m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits] in
-    let entries := @pmp_entries env in
-    {| sep_contract_logic_variables := env; 
-       sep_contract_localstore      := [term_var rs2, term_var rs1, term_var rd, term_var op]%arg;
-       sep_contract_precondition    :=
-         cur_privilege ↦ (term_var "m") ✱
-                       mtvec ↦ (term_var "h") ✱
-                       pc ↦ (term_var "i") ✱
-                       asn_pmp_entries entries;
-       sep_contract_result          := "result_exec_RTYPE";
-       (* TODO: postcondition (need disjunction) *)
-       sep_contract_postcondition   := asn_true;
-         (* asn_eq (term_var "result_exec_RTYPE") (term_lit ty_retired RETIRE_SUCCESS) ✱
-         asn_pmp_entries entries ✱
-                         asn_or (cur_privilege ↦ (term_var "m") ✱ pc ↦ (term_var "i"))
-                         (cur_privilege ↦ (term_lit ty_privilege Machine) ✱
-                                        pc ↦ (term_var "h") ✱
-                                        mepc ↦ (term_var "i")) *) (* TODO: add mpp ↦ ...*)
-    |}.
+    mach_inv_contract [term_var rs2, term_var rs1, term_var rd, term_var op]%arg.
 
   Definition sep_contract_read_ram : SepContractFunX read_ram :=
     {| sep_contract_logic_variables := [paddr ∶ ty_int];
