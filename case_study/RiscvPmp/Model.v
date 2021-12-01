@@ -84,6 +84,8 @@ Module RiscvPmpModel.
 
       Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
         (match p return Env Lit (RiscvPmpAssertionKit.𝑷_Ty p) -> iProp Σ with
+        (* TODO: give meaning to preds *)
+         | _ => fun ts => True%I
          end) ts.
 
     Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑷_Ty p)) :
