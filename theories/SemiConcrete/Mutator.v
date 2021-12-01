@@ -1079,6 +1079,9 @@ Module SemiConcrete
             alt__pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun UK ι' => produce (ι ►► ι') (alt__rhs UK))
         | asn_sep a1 a2   => produce ι a1 *> produce ι a2
+        | asn_or a1 a2 =>
+          demonic_binary (produce ι a1)
+                         (produce ι a2)
         | asn_exist ς τ a =>
           v <- demonic τ ;;
           produce (env_snoc ι (ς :: τ) v) a
@@ -1121,6 +1124,9 @@ Module SemiConcrete
             alt__pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun UK ι' => consume (ι ►► ι') (alt__rhs UK))
         | asn_sep a1 a2   => consume ι a1 *> consume ι a2
+        | asn_or a1 a2 =>
+          angelic_binary (consume ι a1)
+                         (consume ι a2)
         | asn_exist ς τ a =>
           v <- angelic τ ;;
           consume (env_snoc ι (ς :: τ) v) a

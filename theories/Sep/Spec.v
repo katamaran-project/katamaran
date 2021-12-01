@@ -771,6 +771,7 @@ Module Assertions
       (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
       (alt__rhs : forall (K : 𝑼𝑲 U), Assertion (Σ ▻▻ alt__ctx K))
   | asn_sep  (a1 a2 : Assertion Σ)
+  | asn_or   (a1 a2 : Assertion Σ)
   | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς :: τ)))
   | asn_debug.
   Arguments asn_match_enum [_] E _ _.
@@ -810,6 +811,7 @@ Module Assertions
       | asn_match_union U s ctx pat rhs =>
         asn_match_union U (subst s ζ) ctx pat (fun K => sub_assertion (rhs K) (sub_up ζ _))
       | asn_sep a1 a2 => asn_sep (sub_assertion a1 ζ) (sub_assertion a2 ζ)
+      | asn_or a1 a2  => asn_sep (sub_assertion a1 ζ) (sub_assertion a2 ζ)
       | asn_exist ς τ a => asn_exist ς τ (sub_assertion a (sub_up1 ζ))
       | asn_debug => asn_debug
       end.
@@ -838,6 +840,7 @@ Module Assertions
       | @asn_match_record _ R4 Δ s p rhs => None (* TODO *)
       | asn_match_union U s alt__ctx alt__pat alt__rhs => None (* TODO *)
       | asn_sep a1 a2 => option_ap (option_map (@asn_sep _) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
+      | asn_or a1 a2  => option_ap (option_map (@asn_or _) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
       | asn_exist ς τ a => option_map (@asn_exist _ ς τ) (occurs _ _ (inctx_succ bIn) a)
       | asn_debug => Some asn_debug
       end.
@@ -1183,6 +1186,7 @@ Module Assertions
         let ι' := pattern_match_lit (alt__pat K) v in
         interpret_assertion (alt__rhs K) (ι ►► ι')
       | asn_sep a1 a2 => interpret_assertion a1 ι ✱ interpret_assertion a2 ι
+      | asn_or a1 a2  => interpret_assertion a1 ι ∨ interpret_assertion a2 ι
       | asn_exist ς τ a => ∃ (v : Lit τ), interpret_assertion a (ι ► (ς::τ ↦ v))
       | asn_debug => emp
     end%logic.

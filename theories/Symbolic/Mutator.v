@@ -3821,6 +3821,7 @@ Module Mutators
           apply (produce (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1).
           apply acc_cat_left; auto.
         - apply (bind_right <$> produce _ asn1 <*> four (produce _ asn2)).
+        - apply (demonic_binary <$> produce _ asn1 <*> produce _ asn2).
         - intros w1 ω01.
           eapply bind.
           apply (@demonic _ (Some ς) τ).
@@ -3876,6 +3877,7 @@ Module Mutators
           apply (consume (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1).
           apply acc_cat_left; auto.
         - apply (bind_right <$> consume _ asn1 <*> four (consume _ asn2)).
+        - apply (angelic_binary <$> consume _ asn1 <*> consume _ asn2).
         - intros w1 ω01.
           eapply bind.
           apply (@angelic _ (Some ς) τ).
