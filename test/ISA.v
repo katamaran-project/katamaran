@@ -493,14 +493,14 @@ Derive EqDec for Predicate.
 Module ISAAssertionKit <: (AssertionKit ISATermKit ISAProgramKit).
   Export ISAProgramKit.
 
-  Definition 𝑷 := Predicate.
-  Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
+  Definition 𝑯 := Predicate.
+  Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
     | ptstoreg => [ty_enum register_tag, ty_int]
     end.
-  Definition 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
+  Definition 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
 
-  Instance 𝑷_is_dup : IsDuplicable 𝑷 := { is_duplicable := fun p => match p with | ptstoreg => false end }.
+  Instance 𝑯_is_dup : IsDuplicable 𝑯 := { is_duplicable := fun p => match p with | ptstoreg => false end }.
 End ISAAssertionKit.
 
 Module ISASymbolicContractKit <:

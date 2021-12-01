@@ -354,14 +354,14 @@ Module SepContracts.
     (AssertionKit ExampleTermKit ExampleProgramKit).
     Export ExampleProgramKit.
 
-    Definition 𝑷 := Predicate.
-    Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
+    Definition 𝑯 := Predicate.
+    Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
       match p with
       | ptstocons => [ptr, ty_int, llist]
       | ptstolist => [llist, ty_list ty_int]
       end.
-    Instance 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
-    Instance 𝑷_is_dup : IsDuplicable 𝑷 :=
+    Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
+    Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
       {| is_duplicable p :=
         match p with
         | ptstocons => false

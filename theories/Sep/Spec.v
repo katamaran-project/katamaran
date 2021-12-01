@@ -57,14 +57,15 @@ Module Type AssertionKit
        (termkit : TermKit)
        (Export progkit : ProgramKit termkit).
 
+  (** Heap Predicates *)
   (* Predicate names. *)
-  Parameter Inline 𝑷  : Set.
+  Parameter Inline 𝑯  : Set.
   (* Predicate field types. *)
-  Parameter Inline 𝑷_Ty : 𝑷 -> Ctx Ty.
+  Parameter Inline 𝑯_Ty : 𝑯 -> Ctx Ty.
   (* Duplicable? *)
-  Declare Instance 𝑷_is_dup : IsDuplicable 𝑷.
+  Declare Instance 𝑯_is_dup : IsDuplicable 𝑯.
 
-  Declare Instance 𝑷_eq_dec : EqDec 𝑷.
+  Declare Instance 𝑯_eq_dec : EqDec 𝑯.
 
 End AssertionKit.
 
@@ -519,7 +520,7 @@ Module Assertions
 
     (* Semi-concrete chunks *)
     Inductive SCChunk : Type :=
-    | scchunk_user   (p : 𝑷) (vs : Env Lit (𝑷_Ty p))
+    | scchunk_user   (p : 𝑯) (vs : Env Lit (𝑯_Ty p))
     | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ)
     | scchunk_conj   (c1 c2 : SCChunk)
     | scchunk_wand   (c1 c2 : SCChunk).
@@ -527,7 +528,7 @@ Module Assertions
 
     (* Symbolic chunks *)
     Inductive Chunk (Σ : LCtx) : Type :=
-    | chunk_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
+    | chunk_user   (p : 𝑯) (ts : Env (Term Σ) (𝑯_Ty p))
     | chunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ)
     | chunk_conj   (c1 c2 : Chunk Σ)
     | chunk_wand   (c1 c2 : Chunk Σ).
@@ -565,7 +566,7 @@ Module Assertions
         match eq_dec p1 p2 with
         | left e => env_eqb_hom
                       (@Term_eqb _)
-                      (eq_rect _ (fun p => Env _ (𝑷_Ty p)) ts1 _ e)
+                      (eq_rect _ (fun p => Env _ (𝑯_Ty p)) ts1 _ e)
                       ts2
         | right _ => false
         end
@@ -1130,9 +1131,9 @@ Module Assertions
 
   Class IHeaplet (L : Type) := {
       is_ISepLogic :> ISepLogic L
-    ; luser (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) : L
+    ; luser (p : 𝑯) (ts : Env Lit (𝑯_Ty p)) : L
     ; lptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L
-    ; lduplicate (p : 𝑷) (ts : Env Lit (𝑷_Ty p)) :
+    ; lduplicate (p : 𝑯) (ts : Env Lit (𝑯_Ty p)) :
         is_duplicable p = true ->
         (lentails (luser (p := p) ts) (sepcon (luser (p := p) ts) (luser (p := p) ts)))
   }.

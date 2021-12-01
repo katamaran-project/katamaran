@@ -64,19 +64,19 @@ Derive EqDec for Predicate.
 Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProgramKit).
   Export RiscvPmpProgramKit.
 
-  Definition 𝑷 := Predicate.
-  Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
+  Definition 𝑯 := Predicate.
+  Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
     | pmp_entries => [ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx)]
     end.
 
-  Instance 𝑷_is_dup : IsDuplicable Predicate := {
+  Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
       | pmp_entries => false
       end
     }.
-  Instance 𝑷_eq_dec : EqDec 𝑷 := Predicate_eqdec.
+  Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
 End RiscvPmpAssertionKit.
 
 Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit

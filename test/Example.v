@@ -359,10 +359,10 @@ Module SepContracts.
     (AssertionKit ExampleTermKit ExampleProgramKit).
     Export ExampleProgramKit.
 
-    Definition 𝑷 := Empty_set.
-    Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
-    Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
-    Instance 𝑷_is_dup : IsDuplicable 𝑷 := { is_duplicable := fun p => match p with end }.
+    Definition 𝑯 := Empty_set.
+    Definition 𝑯_Ty : 𝑯 -> Ctx Ty := fun p => match p with end.
+    Instance 𝑯_eq_dec : EqDec 𝑯 := fun p => match p with end.
+    Instance 𝑯_is_dup : IsDuplicable 𝑯 := { is_duplicable := fun p => match p with end }.
 
   End ExampleAssertionKit.
 

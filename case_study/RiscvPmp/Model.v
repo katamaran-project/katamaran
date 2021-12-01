@@ -82,13 +82,13 @@ Module RiscvPmpModel.
                                                   ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
       Admitted.
 
-      Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑷_Ty p)) (mG : memG Σ) : iProp Σ :=
-        (match p return Env Lit (RiscvPmpAssertionKit.𝑷_Ty p) -> iProp Σ with
+      Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑯_Ty p)) (mG : memG Σ) : iProp Σ :=
+        (match p return Env Lit (RiscvPmpAssertionKit.𝑯_Ty p) -> iProp Σ with
         (* TODO: give meaning to preds *)
          | _ => fun ts => True%I
          end) ts.
 
-    Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑷_Ty p)) :
+    Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑯_Ty p)) :
       forall (mG : memG Σ),
         is_duplicable p = true ->
         (luser_inst p ts mG) ⊢ (luser_inst p ts mG ∗ luser_inst p ts mG).
