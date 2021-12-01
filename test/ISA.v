@@ -493,6 +493,11 @@ Derive EqDec for Predicate.
 Module ISAAssertionKit <: (AssertionKit ISATermKit ISAProgramKit).
   Export ISAProgramKit.
 
+  Definition 𝑷 := Empty_set.
+  Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
+  Definition 𝑷_inst (p : 𝑷) : abstract Lit (𝑷_Ty p) Prop := match p with end.
+  Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
+
   Definition 𝑯 := Predicate.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with

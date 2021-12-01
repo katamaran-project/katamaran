@@ -57,6 +57,15 @@ Module Type AssertionKit
        (termkit : TermKit)
        (Export progkit : ProgramKit termkit).
 
+  (** Pure Predicates *)
+  (* Predicate names. *)
+  Parameter Inline 𝑷  : Set.
+  (* Predicate field types. *)
+  Parameter Inline 𝑷_Ty : 𝑷 -> Ctx Ty.
+  Parameter Inline 𝑷_inst : forall p : 𝑷, abstract Lit (𝑷_Ty p) Prop.
+
+  Declare Instance 𝑷_eq_dec : EqDec 𝑷.
+
   (** Heap Predicates *)
   (* Predicate names. *)
   Parameter Inline 𝑯  : Set.
@@ -75,6 +84,7 @@ Module Assertions
        (Export assertkit : AssertionKit termkit progkit).
 
   Inductive Formula (Σ : LCtx) : Type :=
+  | formula_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | formula_bool (t : Term Σ ty_bool)
   | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Lit Σ' Prop)
   | formula_ge (t1 t2 : Term Σ ty_int)
@@ -83,6 +93,7 @@ Module Assertions
   | formula_lt (t1 t2 : Term Σ ty_int)
   | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
   | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
+  Arguments formula_user {_} p ts.
   Arguments formula_bool {_} t.
 
   Equations(noeqns) formula_eqs_ctx {Δ : Ctx Ty} {Σ : LCtx}
@@ -100,6 +111,7 @@ Module Assertions
   Instance sub_formula : Subst Formula :=
     fun Σ1 fml Σ2 ζ =>
       match fml with
+      | formula_user p ts => formula_user p (subst ts ζ)
       | formula_bool t    => formula_bool (subst t ζ)
       | formula_prop ζ' P => formula_prop (subst ζ' ζ) P
       | formula_ge t1 t2  => formula_ge (subst t1 ζ) (subst t2 ζ)
@@ -119,6 +131,7 @@ Module Assertions
 
   Definition inst_formula {Σ} (fml : Formula Σ) (ι : SymInstance Σ) : Prop :=
     match fml with
+    | formula_user p ts => uncurry (𝑷_inst p) (inst ts ι)
     | formula_bool t    => inst (A := Lit ty_bool) t ι = true
     | formula_prop ζ P  => uncurry_named P (inst ζ ι)
     | formula_ge t1 t2  => inst (A := Lit ty_int) t1 ι >= inst (A := Lit ty_int) t2 ι
@@ -139,6 +152,7 @@ Module Assertions
     constructor; auto.
     intros Σ Σ' ζ ι t.
     induction t.
+    - cbn. f_equal. apply inst_subst.
     - unfold subst, sub_formula, inst at 1 2, instantiate_formula, inst_formula.
       f_equal.
       apply inst_subst.
@@ -162,6 +176,7 @@ Module Assertions
   Global Instance OccursCheckFormula : OccursCheck Formula :=
     fun Σ x xIn fml =>
           match fml with
+          | formula_user p ts => option_map (formula_user p) (occurs_check xIn ts)
           | formula_bool t    => option_map formula_bool (occurs_check xIn t)
           | formula_prop ζ P  => option_map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
           | formula_ge t1 t2  => option_ap (option_map (@formula_ge _) (occurs_check xIn t1)) (occurs_check xIn t2)
@@ -178,6 +193,7 @@ Module Assertions
     - intros ? ? ? ? []; cbn;
         now rewrite ?occurs_check_shift.
     - intros ? ? ? [] fml' Heq; cbn in *.
+      + admit.
       + apply option_map_eq_some' in Heq; destruct_conjs; subst; cbn.
         f_equal. now apply (occurs_check_sound (T := fun Σ => Term Σ _)).
       + apply option_map_eq_some' in Heq; destruct_conjs; subst; cbn.
@@ -230,7 +246,7 @@ Module Assertions
         apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq21. subst t2.
         apply noConfusion_inv in Heq22; cbn in Heq22; subst fml'; cbn.
         reflexivity.
-  Qed.
+  Admitted.
 
   (* The path condition expresses a set of constraints on the logic variables
      that encode the path taken during execution. *)
