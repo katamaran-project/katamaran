@@ -218,6 +218,7 @@ Inductive Unions : Set :=
 | memory_op_result
 | fetch_result
 | ctl_result
+(* | pmp_entries *)
 .
 
 (* Records *)
@@ -519,6 +520,7 @@ Module RiscvPmpTypeKit <: TypeKit.
     | memory_op_result => MemoryOpResult
     | fetch_result     => FetchResult
     | ctl_result       => CtlResult
+    (* | pmp_entries      => Coq type in the model for pmp_entries  *)
     end.
   Instance 𝑼𝑻_eq_dec U : EqDec (𝑼𝑻 U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
@@ -531,6 +533,7 @@ Module RiscvPmpTypeKit <: TypeKit.
     | memory_op_result => MemoryOpResultConstructor
     | fetch_result     => FetchResultConstructor
     | ctl_result       => CtlResultConstructor
+    (* | pmp_entries   => PmpEntriesConstructor *)
     end.
   Instance 𝑼𝑲_eq_dec U : EqDec (𝑼𝑲 U) :=
     ltac:(destruct U; auto with typeclass_instances).

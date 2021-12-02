@@ -82,10 +82,17 @@ Module RiscvPmpModel.
                                                   ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
       Admitted.
 
+      Import RiscvPmp.Contracts.RiscvPmpSymbolicContractKit.ASS.
+
       Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑯_Ty p)) (mG : memG Σ) : iProp Σ :=
         (match p return Env Lit (RiscvPmpAssertionKit.𝑯_Ty p) -> iProp Σ with
-        (* TODO: give meaning to preds *)
-         | _ => fun ts => True%I
+         | pmp_entries => fun ts => let entries_lst := env_head ts in
+                                    match entries_lst with
+                                    | (cfg0, addr0) :: [] =>
+                                      (reg_pointsTo pmp0cfg cfg0 ∗
+                                              reg_pointsTo pmpaddr0 addr0)%I
+                                    | _ => False%I
+                                    end
          end) ts.
 
     Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑯_Ty p)) :

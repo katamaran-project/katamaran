@@ -82,7 +82,7 @@ Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProg
   Definition 𝑯 := Predicate.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | pmp_entries => [ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx)]
+    | pmp_entries => [ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits)]
     end.
 
   Instance 𝑯_is_dup : IsDuplicable Predicate := {
@@ -118,8 +118,19 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Local Notation "'bv'"      := "bv" : string_scope.
 
   Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 100).
-  Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
-  Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env_nil ► (ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx) ↦ l)))).
+  Local Notation "p '∗' q" := (asn_sep p q) (at level 150).
+  Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env_nil ► (ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits) ↦ l)))).
+
+  Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
+    ctx_map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
+
+  Definition create_localstore (Δ : PCtx) (Σ : LCtx) : SStore Δ (sep_contract_logvars Δ Σ) :=
+    (env_tabulate (fun '(x::σ) xIn =>
+                     @term_var
+                       (sep_contract_logvars Δ Σ)
+                       x
+                       σ
+                       (inctx_cat_left Σ (inctx_map (fun '(y::τ) => y::τ) xIn)))).
 
   Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
     SepContract Δ τ.
@@ -135,12 +146,13 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
         @asn_exists Σ Γ (asn_exist x τ asn)
     end.
 
+  (* TODO: abstract away the concrete type, look into unions for that *)
+  (* TODO: length of list should be 16, no duplicates *)
   Definition pmp_entries {Σ} : Term Σ (ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx)) :=
     term_list (cons (term_binop binop_pair
-                                (term_lit ty_pmpcfgidx PMP0CFG)
-                                (term_lit ty_pmpaddridx PMPADDR0)) nil).
+                                (term_lit ty_pmpcfgidx PMP0CFG) (* PMP0CFG ↦ ... *)
+                                (term_lit ty_pmpaddridx PMPADDR0)) nil). (* PMPADDR0 ↦ ... *)
 
-                  
   (** Machine Invariant **)
   (*
     TODO: - there should be 2 cases in the @pre, one handling if we execute just fine and one if we end up in the trap (only with these 2 can we prove the @post)
@@ -149,31 +161,29 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
 
 
 
-    @pre ∀ m h i . mode(m) ✱ mtvec(h) ✱ pmp_entries(ents) ✱ pc(i) ✱ mepc(_) ✱ mpp(_)
-    @post pmp_entries(ents) ✱ (mode(m) ✱ pc(i)) ∨ (mode(M) ✱ pc(h) ...)
+    @pre ∀ m h i . mode(m) ∗ mtvec(h) ∗ pmp_entries(ents) ∗ pc(i) ∗ mepc(_) ∗ mpp(_)
+    @post pmp_entries(ents) ∗ (mode(m) ∗ pc(i)) ∨ (mode(M) ∗ pc(h) ...)
     τ f(Δ...)*)
-  Definition mach_inv_contract {τ Δ} (ls : SStore Δ _) : SepContract Δ τ :=
-    let env := Δ ▻▻ ["m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits] in
-    let result := "result_mach_inv" in
-    let entries := pmp_entries in
-    {| sep_contract_logic_variables := env;
-       sep_contract_localstore      := ls;
+  Definition mach_inv_contract {τ Δ} : SepContract Δ τ :=
+    let Σ := ["m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits, "entries" ∶ ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits)] in
+    {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
+       sep_contract_localstore      := create_localstore Δ Σ;
        sep_contract_precondition    :=
-         cur_privilege ↦ (term_var "m") ✱
-                       mtvec ↦ (term_var "h") ✱
-                       pc ↦ (term_var "i") ✱
-                       asn_pmp_entries entries;
-       sep_contract_result          := result;
+         cur_privilege ↦ (term_var "m") ∗
+                       mtvec ↦ (term_var "h") ∗
+                       pc ↦ (term_var "i") ∗
+                       asn_pmp_entries (term_var "entries");
+       sep_contract_result          := "result_mach_inv";
        sep_contract_postcondition   :=
-         asn_pmp_entries (sub_term entries (@sub_wk1 env (result :: τ))) ✱
-                         asn_or (cur_privilege ↦ (term_var "m") ✱ pc ↦ (term_var "i"))
-                         (cur_privilege ↦ (term_lit ty_privilege Machine) ✱
-                                        pc ↦ (term_var "h") ✱
+         asn_pmp_entries (term_var "entries") ∗
+                         asn_or (cur_privilege ↦ (term_var "m") ∗ pc ↦ (term_var "i"))
+                         (cur_privilege ↦ (term_lit ty_privilege Machine) ∗
+                                        pc ↦ (term_var "h") ∗
                                         mepc ↦ (term_var "i")) (* TODO: add mpp ↦ ...*)
     |}.
 
   Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
-    mach_inv_contract [term_var rs2, term_var rs1, term_var rd, term_var op]%arg.
+    mach_inv_contract.
 
   Definition sep_contract_read_ram : SepContractFunX read_ram :=
     {| sep_contract_logic_variables := [paddr ∶ ty_int];
