@@ -193,7 +193,8 @@ Module Assertions
     - intros ? ? ? ? []; cbn;
         now rewrite ?occurs_check_shift.
     - intros ? ? ? [] fml' Heq; cbn in *.
-      + admit.
+      + apply option_map_eq_some' in Heq; destruct_conjs; subst; cbn.
+        f_equal. apply (occurs_check_sound _ _ H).
       + apply option_map_eq_some' in Heq; destruct_conjs; subst; cbn.
         f_equal. now apply (occurs_check_sound (T := fun Σ => Term Σ _)).
       + apply option_map_eq_some' in Heq; destruct_conjs; subst; cbn.
@@ -246,7 +247,7 @@ Module Assertions
         apply (occurs_check_sound (T := fun Σ => Term Σ _)) in Heq21. subst t2.
         apply noConfusion_inv in Heq22; cbn in Heq22; subst fml'; cbn.
         reflexivity.
-  Admitted.
+  Qed.
 
   (* The path condition expresses a set of constraints on the logic variables
      that encode the path taken during execution. *)

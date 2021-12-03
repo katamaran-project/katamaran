@@ -773,7 +773,7 @@ Module Mutators
         (simplify_formula fml k).
     Proof.
       destruct fml; cbn - [peval].
-      - admit.
+      - constructor; intros ι. now rewrite inst_pathcondition_cons.
       - generalize (simplify_formula_bool_spec (peval t) k).
         apply optionspec_monotonic; cbn; intros; specialize (H ι);
           now rewrite (peval_sound t) in H.
@@ -802,7 +802,7 @@ Module Mutators
         apply optionspec_monotonic; cbn; intros; specialize (H ι);
           now rewrite (peval_sound t1), (peval_sound t2) in H.
       - constructor. intros ι. now rewrite inst_pathcondition_cons.
-    Admitted.
+    Qed.
 
     Lemma simplify_formulas_spec {Σ} (fmls k : List Formula Σ) :
       OptionSpec
