@@ -208,11 +208,13 @@ Module Soundness
         destruct (𝑼_unfold (inst s ι)); eauto.
       - unfold bind_right, bind.
         apply IHasn1; eauto.
-      - (* asn_or *) admit.
+      - intros [|].
+        + left. apply IHasn1 with (P := P); assumption.
+        + right. apply IHasn2 with (P := P); assumption.
       - unfold bind, angelic.
         intros [v ?]; exists v; eauto.
       - unfold pure; eauto.
-    Admitted.
+    Qed.
 
     Lemma produce_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} δ :
       forall
@@ -240,10 +242,13 @@ Module Soundness
         destruct (𝑼_unfold (inst s ι)); eauto.
       - unfold bind_right, bind.
         apply IHasn1; eauto.
-      - (* asn_or *) admit.
+      - intros [Hasn1 Hasn2].
+        split.
+        + apply IHasn1 with (P := P); assumption.
+        + apply IHasn2 with (P := P); assumption.
       - unfold bind, demonic. eauto.
       - unfold pure; eauto.
-    Admitted.
+    Qed.
 
     Lemma interpret_scchunk_inst {Σ} (c : Chunk Σ) (ι : SymInstance Σ) :
       interpret_scchunk (inst c ι) = interpret_chunk c ι.

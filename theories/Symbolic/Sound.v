@@ -1516,7 +1516,11 @@ Module Soundness
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_bind_right; eauto.
       apply IHasn1; eauto.
-    - (* asn_or *) admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      apply approx_demonic_binary;
+        try apply IHasn1; try apply IHasn2;
+        cbn - [inst sub_wk1];
+        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?inst_subst, ?inst_sub_wk1; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_bind.
       apply approx_demonic; auto.
@@ -1526,7 +1530,7 @@ Module Soundness
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_debug; auto.
       apply approx_pure; auto.
-  Admitted.
+  Qed.
 
   Lemma try_consume_chunk_exact_spec {Σ} (h : SHeap Σ) (c : Chunk Σ) :
     OptionSpec
@@ -1698,7 +1702,11 @@ Module Soundness
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_bind_right; eauto.
       apply IHasn1; eauto.
-    - (* asn_or *) admit.
+    - intros w1 ω01 ι1 -> Hpc1.
+      apply approx_angelic_binary;
+        try apply IHasn1; try apply IHasn2;
+        cbn - [inst sub_wk1];
+        rewrite ?inst_sub_snoc, ?sub_acc_trans, ?inst_subst, ?inst_sub_wk1; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_bind.
       apply approx_angelic; auto.
@@ -1708,7 +1716,7 @@ Module Soundness
     - intros w1 ω01 ι1 -> Hpc1.
       apply approx_debug; auto.
       apply approx_pure; auto.
-  Admitted.
+  Qed.
 
   Lemma approx_call_contract {Γ Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) :
     forall {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0),
