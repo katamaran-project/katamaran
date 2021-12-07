@@ -2364,6 +2364,47 @@ Module Mutators
       forall ι, safe (solve_uvars p) ι <-> safe p ι.
     Proof. apply (SolveUvars.push_plug SolveUvars.uctx_refl). Qed.
 
+    Module Experimental.
+
+      Definition Ephemeral (Σ1 Σ2 : LCtx) : Type :=
+        SolveEvars.ECtx Σ1 Σ2 + SolveUvars.UCtx Σ1 Σ2.
+
+      Definition EProp : LCtx -> Type :=
+        fun Σ : LCtx => forall Σ0, Ephemeral Σ0 Σ -> SPath Σ0.
+
+      Definition angelic_binary {Σ} (p q : EProp Σ) : EProp Σ :=
+        fun Σ0 eph =>
+          match eph with
+          | inl ec => SPath.angelic_binary (p Σ0 eph) (q Σ0 eph)
+          | inr uc => let eph' : Ephemeral _ _ := inl SolveEvars.ectx_refl in
+                      SolveUvars.plug uc (SPath.angelic_binary (p Σ eph') (q Σ eph'))
+          end.
+
+      Definition angelicv {Σ} (b : 𝑺 * Ty) (p : EProp (Σ ▻ b)) : EProp Σ :=
+        fun Σ0 eph =>
+          match eph with
+          | inl ec => p Σ0 (inl (SolveEvars.ectx_snoc ec b))
+          | inr uc => let eph' : Ephemeral _ _ := inl SolveEvars.ectx_refl in
+                      SolveUvars.plug uc (angelicv b (p (Σ ▻ b) eph'))
+          end.
+
+      Definition demonic_binary {Σ} (p q : EProp Σ) : EProp Σ :=
+        fun Σ0 eph =>
+          match eph with
+          | inl ec => let eph' : Ephemeral _ _ := inr SolveUvars.uctx_refl in
+                      SolveEvars.plug ec (SPath.demonic_binary (p Σ eph') (q Σ eph'))
+          | inr uc => SPath.demonic_binary (p Σ0 eph) (q Σ0 eph)
+          end.
+
+      Definition error {Σ} (msg : EMessage Σ) : EProp Σ :=
+        fun Σ0 eph =>
+          match eph with
+          | inl ec => error (SolveEvars.plug_msg ec msg)
+          | inr uc => SolveUvars.plug uc (error msg)
+          end.
+
+    End Experimental.
+
   End Postprocessing.
   Import Postprocessing.
 
