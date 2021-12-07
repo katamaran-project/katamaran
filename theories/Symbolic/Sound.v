@@ -2032,9 +2032,7 @@ Module Soundness
     rewrite Forall_forall. intros [Hwp] ι.
     unfold SMut.exec_contract_path in Hwp.
     rewrite Postprocessing.prune_sound in Hwp.
-    rewrite Postprocessing.SolveUvars.solve_uvars_sound in Hwp.
-    specialize (Hwp env_nil).
-    inster Hwp by reflexivity.
+    rewrite Postprocessing.solve_uvars_sound in Hwp.
     rewrite Postprocessing.prune_sound in Hwp.
     rewrite Postprocessing.solve_evars_sound in Hwp.
     rewrite Postprocessing.prune_sound in Hwp.
