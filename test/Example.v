@@ -562,7 +562,7 @@ Module SepContracts.
   Qed.
   Hint Resolve valid_cmut_contract_summaxlen : contracts.
 
-  Lemma valid_contract_summaxlen : SMut.ValidContractSolveUVars sep_contract_summaxlen fun_summaxlen.
+  Lemma valid_contract_summaxlen : SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
   Proof.
     compute. constructor.
     cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].

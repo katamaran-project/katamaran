@@ -2268,39 +2268,39 @@ Module Mutators
         reflexivity.
       Qed.
 
+      Lemma plug_eq_rect {Σ1 Σ2 Σ2'} (eq : Σ2 = Σ2') (ec : UCtx Σ1 Σ2) (p : SPath Σ2') :
+        plug (eq_rect Σ2 (UCtx Σ1) ec Σ2' eq) p = plug ec (eq_rect_r (fun Σ3 : LCtx => SPath Σ3) p eq).
+      Proof. now destruct eq. Qed.
+
       Lemma uctx_subst_spec {Σ1 Σ2} (ec : UCtx Σ1 Σ2) {x σ} (xIn : x :: σ ∈ Σ2) (t : Term (Σ2 - (x :: σ)) σ) :
         OptionSpec
           (fun e => forall p, plug e p <=> plug ec (assume_vareq x t p))
           True
           (uctx_subst ec xIn t).
       Proof.
-        (* destruct ec; cbn. destruct (Context.catView xIn); constructor; auto. *)
-        (* intros p ι. unfold eq_rect_r. rewrite plug_eq_rect. cbn. *)
-        (* rewrite ?safe_angelic_close0. *)
-        (* split; intros [ιe HYP]. *)
-        (* - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp]. *)
-        (*   unfold eq_rect_r in Hp. rewrite safe_eq_rect, eq_sym_involutive in Hp. *)
-        (*   exists (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σe) - (x :: σ)) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - (x :: σ)) (ctx_remove_inctx_right bIn)) (ι ►► ιe)) ιe). *)
-        (*   rewrite safe_assert_msgs_formulas. cbn. rewrite obligation_equiv. cbn. *)
-        (*   rewrite env_insert_app, env_remove_insert, env_insert_lookup. *)
-        (*   rewrite inst_subst, inst_sub_shift, env_remove_insert, ?inst_eq_rect. *)
-        (*   split; auto. *)
-        (*   rewrite map_snd_subst, inst_subst, inst_eq_rect in Hpc. *)
-        (*   now rewrite inst_sub_single2 in Hpc. *)
-        (* - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp]. *)
-        (*   cbn in Hp. rewrite obligation_equiv in Hp. cbn in Hp. destruct Hp as [Ht Hp]. *)
-        (*   rewrite env_remove_app in Hp. *)
-        (*   exists (env_remove (x :: σ) ιe bIn). *)
-        (*   rewrite safe_assert_msgs_formulas. *)
-        (*   rewrite map_snd_subst, inst_subst. *)
-        (*   unfold eq_rect_r. rewrite safe_eq_rect. *)
-        (*   rewrite eq_sym_involutive. split; auto. *)
-        (*   rewrite inst_subst in Ht. *)
-        (*   rewrite inst_eq_rect. *)
-        (*   rewrite <- env_remove_app. *)
-        (*   rewrite <- inst_sub_shift. *)
-        (*   now rewrite inst_sub_single_shift. *)
-      Admitted.
+        destruct ec; cbn. destruct (Context.catView xIn); constructor; auto.
+        intros p ι. unfold eq_rect_r. rewrite plug_eq_rect. cbn.
+        rewrite ?safe_demonic_close0.
+        split; intros HYP ιu.
+        - specialize (HYP (env_remove (x :: σ) ιu bIn)).
+          rewrite safe_assume_formulas. intros Hpc Heq.
+          rewrite <- inst_sub_shift in Heq.
+          rewrite safe_assume_formulas in HYP.
+          rewrite inst_subst in HYP.
+          rewrite inst_eq_rect in HYP.
+          unfold eq_rect_r in HYP. rewrite safe_eq_rect, eq_sym_involutive in HYP.
+          rewrite <- env_remove_app in HYP. apply HYP.
+          rewrite <- inst_sub_shift.
+          rewrite inst_sub_single_shift; auto.
+        - specialize (HYP (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σu) - (x :: σ)) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σu - (x :: σ)) (ctx_remove_inctx_right bIn)) (ι ►► ιu)) ιu)).
+          rewrite safe_assume_formulas, inst_subst, inst_eq_rect. intros Hpc.
+          unfold eq_rect_r. rewrite safe_eq_rect, eq_sym_involutive.
+          rewrite safe_assume_formulas in HYP. cbn in HYP.
+          rewrite env_insert_app, env_remove_insert, env_insert_lookup in HYP.
+          rewrite inst_eq_rect in HYP.
+          rewrite inst_sub_single2 in Hpc.
+          now apply HYP.
+      Qed.
 
       Lemma push_plug {Σ1 Σ2} (ec : UCtx Σ1 Σ2) (p : SPath Σ2) :
         push ec p <=> plug ec p.
@@ -4302,8 +4302,7 @@ Module Mutators
         demonic_close (exec_contract c s (fun w1 ω01 _ δ1 h1 => SPath.block) (sep_contract_localstore c) nil).
 
       Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-        (* VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path c body)) nil)). *)
-        VerificationCondition (prune (solve_evars (prune (exec_contract_path c body)))).
+        VerificationCondition (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path c body)))))).
 
     End Exec.
 
@@ -4322,12 +4321,10 @@ Module Mutators
     Qed.
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      (* VerificationCondition (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil)). *)
-      VerificationCondition (prune (solve_evars (prune (exec_contract_path default_config c body)))).
+      VerificationCondition (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config c body)))))).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      (* is_true (ok (prune (Experimental.solve_evars ctx_nil (prune (exec_contract_path default_config c body)) nil))). *)
-      is_true (ok (prune (solve_evars (prune (exec_contract_path default_config c body))))).
+      is_true (ok (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config c body))))))).
 
     Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflect c body ->
@@ -4336,9 +4333,6 @@ Module Mutators
       unfold ValidContractReflect, ValidContract. intros Hok.
       apply (ok_sound _ env_nil) in Hok. now constructor.
     Qed.
-
-    Definition ValidContractSolveUVars {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationCondition (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config c body)))))).
 
   End SMut.
 
