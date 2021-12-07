@@ -1197,6 +1197,12 @@ Module Mutators
     | EMsgHere (msg : Message Σ)
     | EMsgThere {b} (msg : EMessage (Σ ▻ b)).
 
+    Fixpoint emsg_close {Σ ΣΔ} {struct ΣΔ} : EMessage (Σ ▻▻ ΣΔ) -> EMessage Σ :=
+      match ΣΔ with
+      | ε       => fun msg => msg
+      | ΣΔ  ▻ b => fun msg => emsg_close (EMsgThere msg)
+      end.
+
     Fixpoint shift_emsg {Σ b} (bIn : b ∈ Σ) (emsg : EMessage (Σ - b)) : EMessage Σ :=
       match emsg with
       | EMsgHere msg   => EMsgHere (subst msg (sub_shift bIn))
@@ -2020,11 +2026,14 @@ Module Mutators
       Definition plug {Σ1 Σ2} (e : ECtx Σ1 Σ2) : SPath Σ2 -> SPath Σ1 :=
         match e with ectx Σe mfs => fun p => angelic_close0 Σe (assert_msgs_formulas mfs p) end.
 
+      Definition plug_msg {Σ1 Σ2} (ec : ECtx Σ1 Σ2) : EMessage Σ2 -> EMessage Σ1 :=
+        match ec with ectx _ _ => emsg_close end.
+
       Fixpoint push {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (p : SPath Σ2) {struct p} : SPath Σ1 :=
         match p with
         | angelic_binary p1 p2   => angelic_binary (push ec p1) (push ec p2)
         | demonic_binary p1 p2   => plug ec (demonic_binary (push ectx_refl p1) (push ectx_refl p2))
-        | error msg              => plug ec (error msg)
+        | error msg              => error (plug_msg ec msg)
         | block                  => plug ec block
         | assertk fml msg p      => push (ectx_formula ec msg fml) p
         | assumek fml p          => plug ec (assumek fml (push ectx_refl p))
@@ -2123,6 +2132,17 @@ Module Mutators
           now rewrite inst_sub_single_shift.
       Qed.
 
+      Lemma error_plug_msg {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (msg : EMessage Σ2) :
+        error (plug_msg ec msg) <=> plug ec (error msg).
+      Proof.
+        destruct ec; intros ι; cbn.
+        split; try contradiction.
+        rewrite safe_angelic_close0.
+        intros [ιe HYP].
+        rewrite safe_assert_msgs_formulas in HYP.
+        destruct HYP as [? []].
+      Qed.
+
       Lemma push_plug {Σ1 Σ2} (ec : ECtx Σ1 Σ2) (p : SPath Σ2) :
         push ec p <=> plug ec p.
       Proof.
@@ -2134,7 +2154,7 @@ Module Mutators
           now rewrite <- assert_msgs_formulas_angelic_binary.
         - apply proper_plug, proper_demonic_binary;
            [now rewrite IHp1 | now rewrite IHp2].
-        - reflexivity.
+        - apply error_plug_msg.
         - reflexivity.
         - rewrite IHp. clear IHp.
           destruct ec; cbn. reflexivity.
