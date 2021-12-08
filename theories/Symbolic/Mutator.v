@@ -993,12 +993,17 @@ Module Mutators
       formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) with eq_dec σ τ => {
         formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ ?(σ) t21 t22) (left eq_refl) :=
           Term_eqb t11 t21 &&& Term_eqb t12 t22;
-       formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) (right _) := false
+        formula_eqb (@formula_eq _ σ t11 t12) (@formula_eq _ τ t21 t22) (right _) := false
       };
       formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ τ t21 t22) with eq_dec σ τ => {
         formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ ?(σ) t21 t22) (left eq_refl) :=
           Term_eqb t11 t21 &&& Term_eqb t12 t22;
         formula_eqb (@formula_neq _ σ t11 t12) (@formula_neq _ τ t21 t22) (right _) := false
+      };
+      formula_eqb (@formula_user _ p ts1) (@formula_user _ q ts2) with 𝑷_eq_dec p q => {
+        formula_eqb (@formula_user _ p ts1) (@formula_user _ ?(p) ts2) (left eq_refl) :=
+          env_eqb_hom (@Term_eqb _) ts1 ts2;
+        formula_eqb (@formula_user _ p ts1) (@formula_user _ q ts2) (right _) := false
       };
       formula_eqb _ _ := false.
 
@@ -1008,6 +1013,11 @@ Module Mutators
       induction f1; dependent elimination f2;
         simp formula_eqb;
         try (constructor; auto; fail).
+      - destruct 𝑷_eq_dec.
+        + destruct e; cbn.
+          destruct (env_eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) ts ts0);
+            constructor; intuition.
+        + now constructor.
       - destruct (Term_eqb_spec t t0); constructor; intuition.
       - repeat
           match goal with
