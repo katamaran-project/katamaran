@@ -1045,10 +1045,22 @@ Module Mutators
     Qed.
 
     Definition solver : Solver :=
-      solver_compose solver_generic_round solver_generic_round.
+      solver_compose
+        solver_generic_round
+        match solver_user with
+        | Some (exist _ s _) => solver_compose s solver_generic_round
+        | None => solver_generic_round
+        end.
 
     Lemma solver_spec : SolverSpec solver.
-    Proof. apply solver_compose_spec; apply solver_generic_round_spec. Qed.
+    Proof.
+      apply solver_compose_spec.
+      apply solver_generic_round_spec.
+      destruct solver_user as [[]|].
+      - apply solver_compose_spec; auto.
+        apply solver_generic_round_spec.
+      - apply solver_generic_round_spec.
+    Qed.
 
   End Solver.
 

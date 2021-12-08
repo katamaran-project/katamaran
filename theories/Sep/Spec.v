@@ -1393,5 +1393,6 @@ Module Type SymbolicContractKit
   Parameter Inline CEnv   : SepContractEnv.
   Parameter Inline CEnvEx : SepContractEnvEx.
   Parameter Inline LEnv   : LemmaEnv.
+  Parameter solver_user   : option SoundSolver.
 
 End SymbolicContractKit.

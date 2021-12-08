@@ -482,6 +482,8 @@ Module SepContracts.
         | close_nil => sep_lemma_close_nil
         end.
 
+    Definition solver_user : option SoundSolver := None.
+
   End ExampleSymbolicContractKit.
   Import ExampleSymbolicContractKit.
 

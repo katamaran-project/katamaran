@@ -235,6 +235,9 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Proof.
     intros ? ? []; try constructor.
   Qed.
+
+  Definition solver_user : option SoundSolver := None.
+
 End RiscvPmpSymbolicContractKit.
 
 Module RiscvPmpMutators :=

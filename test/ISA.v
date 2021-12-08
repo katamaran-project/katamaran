@@ -611,6 +611,8 @@ Module ISASymbolicContractKit <:
       | close_ptstoreg R => lemma_close_ptstoreg R
       end.
 
+  Definition solver_user : option SoundSolver := None.
+
 End ISASymbolicContractKit.
 Module ISAMutators :=
   Mutators
