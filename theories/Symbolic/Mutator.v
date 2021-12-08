@@ -73,25 +73,6 @@ Module Mutators
 
   Import Entailment.
 
-  Record World : Type :=
-    MkWorld
-      { wctx :> LCtx;
-        wco  : PathCondition wctx;
-      }.
-
-  Definition wnil : World := @MkWorld ctx_nil nil.
-  Definition wsnoc (w : World) (b : 𝑺 * Ty) : World :=
-    @MkWorld (wctx w ▻ b) (subst (wco w) sub_wk1).
-  Definition wformula (w : World) (f : Formula w) : World :=
-    @MkWorld (wctx w) (cons f (wco w)).
-  Definition wsubst (w : World) x {σ} {xIn : x :: σ ∈ w} (t : Term (w - (x :: σ)) σ) : World :=
-    {| wctx := wctx w - (x :: σ); wco := subst (wco w) (sub_single xIn t) |}.
-  Global Arguments wsubst w x {σ xIn} t.
-  Definition wcat (w : World) (Δ : LCtx) : World :=
-    @MkWorld (wctx w ▻▻ Δ) (subst (wco w) (sub_cat_left Δ)).
-  Definition wformulas (w : World) (fmls : List Formula w) : World :=
-    @MkWorld (wctx w) (app fmls (wco w)).
-
   Inductive Acc (w1 : World) : World -> Type :=
   | acc_refl : Acc w1 w1
   | acc_sub {w2 : World} (ζ : Sub w1 w2) (ent : wco w2 ⊢ subst (wco w1) ζ) : Acc w1 w2.
@@ -295,6 +276,29 @@ Module Mutators
       intuition.
   Qed.
 
+  Fixpoint acc_triangular {w1 w2} (ν : Triangular w1 w2) : w1 ⊒ w2 :=
+    match ν with
+    | tri_id         => acc_refl
+    | tri_cons x t ν => acc_trans (acc_subst_right x t) (acc_triangular ν)
+    end.
+
+  Lemma sub_acc_triangular {w1 w2} (ζ : Triangular w1 w2) :
+    sub_acc (acc_triangular ζ) = sub_triangular ζ.
+  Proof.
+    induction ζ; cbn.
+    - reflexivity.
+    - now rewrite sub_acc_trans, IHζ.
+  Qed.
+
+  (* Lemma acc_triangular_app {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) : *)
+  (*   wsub (acc_triangular (tri_comp ν01 ν12)) = *)
+  (*   subst (sub_acc (acc_triangular ν01)) (sub_acc (acc_triangular ν12)). *)
+  (* Proof. *)
+  (*   induction ν01; cbn - [SubstEnv]. *)
+  (*   - now rewrite sub_comp_id_left. *)
+  (*   - rewrite <- subst_sub_comp. now f_equal. *)
+  (* Qed. *)
+
   Module WorldInstance.
 
     Record WInstance (w : World) : Set :=
@@ -376,141 +380,6 @@ Module Mutators
   Definition comp {A B C} :
     ⊢ (B -> C) -> (A -> B) -> (A -> C) :=
     fun w0 => Basics.compose.
-
-  Section TriangularSubstitutions.
-
-    Ltac rew := rewrite ?subst_sub_comp, ?subst_shift_single, ?subst_sub_id, ?sub_comp_id_right,
-        ?sub_comp_id_left, ?inst_sub_id, ?inst_sub_id.
-
-    Inductive Triangular (w : World) : World -> Type :=
-    | tri_id        : Triangular w w
-    | tri_cons {w' x σ}
-        (xIn : (x::σ) ∈ w) (t : Term (wctx w - (x::σ)) σ)
-        (ν : Triangular (wsubst w x t) w') : Triangular w w'.
-    Global Arguments tri_id {_}.
-    Global Arguments tri_cons {_ _} x {_ _} t ν.
-
-    Fixpoint tri_comp {w1 w2 w3} (ν12 : Triangular w1 w2) : Triangular w2 w3 -> Triangular w1 w3 :=
-      match ν12 with
-      | tri_id           => fun ν => ν
-      | tri_cons x t ν12 => fun ν => tri_cons x t (tri_comp ν12 ν)
-      end.
-
-    Fixpoint acc_triangular {w1 w2} (ν : Triangular w1 w2) : w1 ⊒ w2 :=
-      match ν with
-      | tri_id         => acc_refl
-      | tri_cons x t ν => acc_trans (acc_subst_right x t) (acc_triangular ν)
-      end.
-
-    Fixpoint sub_triangular {w1 w2} (ζ : Triangular w1 w2) : Sub w1 w2 :=
-      match ζ with
-      | tri_id         => sub_id _
-      | tri_cons x t ζ => subst (sub_single _ t) (sub_triangular ζ)
-      end.
-
-    Lemma sub_triangular_comp {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) :
-      sub_triangular (tri_comp ν01 ν12) =
-      subst (sub_triangular ν01) (sub_triangular ν12).
-    Proof.
-      induction ν01; cbn [sub_triangular tri_comp].
-      - now rew.
-      - now rewrite sub_comp_assoc, IHν01.
-    Qed.
-
-    Lemma sub_acc_triangular {w1 w2} (ζ : Triangular w1 w2) :
-      sub_acc (acc_triangular ζ) = sub_triangular ζ.
-    Proof.
-      induction ζ; cbn.
-      - reflexivity.
-      - now rewrite sub_acc_trans, IHζ.
-    Qed.
-
-    Fixpoint sub_triangular_inv {w1 w2} (ζ : Triangular w1 w2) : Sub w2 w1 :=
-      match ζ with
-      | tri_id         => sub_id _
-      | tri_cons x t ζ => subst (sub_triangular_inv ζ) (sub_shift _)
-      end.
-
-    Lemma sub_triangular_inv_comp {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) :
-      sub_triangular_inv (tri_comp ν01 ν12) =
-      subst (sub_triangular_inv ν12) (sub_triangular_inv ν01).
-    Proof.
-      induction ν01; cbn.
-      - now rew.
-      - now rewrite IHν01, sub_comp_assoc.
-    Qed.
-
-    Fixpoint inst_triangular {w0 w1} (ζ : Triangular w0 w1) (ι : SymInstance w0) : Prop :=
-      match ζ with
-      | tri_id => True
-      | @tri_cons _ Σ' x σ xIn t ζ0 =>
-        let ι' := env_remove (x :: σ) ι xIn in
-        env_lookup ι xIn = inst t ι' /\ inst_triangular ζ0 ι'
-      end.
-
-    Lemma inst_triangular_left_inverse {w1 w2 : World} (ι2 : SymInstance w2) (ν : Triangular w1 w2) :
-      inst (sub_triangular_inv ν) (inst (sub_triangular ν) ι2) = ι2.
-    Proof. rewrite <- inst_subst. induction ν; cbn - [subst]; now rew. Qed.
-
-    Lemma inst_triangular_right_inverse {w1 w2 : World} (ι1 : SymInstance w1) (ζ : Triangular w1 w2) :
-      inst_triangular ζ ι1 ->
-      inst (sub_triangular ζ) (inst (sub_triangular_inv ζ) ι1) = ι1.
-    Proof.
-      intros Hζ. induction ζ; cbn - [subst].
-      - now rew.
-      - cbn in Hζ. rewrite <- inst_sub_shift in Hζ. destruct Hζ as [? Hζ].
-        rewrite ?inst_subst, IHζ, inst_sub_single_shift; auto.
-    Qed.
-
-    (* Forward entailment *)
-    Lemma entails_triangular_inv {w0 w1} (ν : Triangular w0 w1) (ι0 : SymInstance w0) :
-      inst_triangular ν ι0 ->
-      instpc (wco w0) ι0 ->
-      instpc (wco w1) (inst (sub_triangular_inv ν) ι0).
-    Proof.
-      induction ν; cbn.
-      - cbn. rewrite inst_sub_id. auto.
-      - rewrite <- inst_sub_shift, inst_subst. intros [Heqx Heq'] Hpc0.
-        apply IHν; cbn; auto.
-        rewrite inst_subst, inst_sub_single_shift; auto.
-    Qed.
-
-    Lemma inst_triangular_valid {w0 w1} (ζ01 : Triangular w0 w1) (ι1 : SymInstance w1) :
-      inst_triangular ζ01 (inst (sub_triangular ζ01) ι1).
-    Proof.
-      induction ζ01; cbn; auto.
-      rewrite <- inst_lookup, lookup_sub_comp. rewrite lookup_sub_single_eq.
-      rewrite <- inst_sub_shift. rewrite <- ?inst_subst.
-      rewrite subst_sub_comp.
-      rewrite subst_shift_single.
-      split; auto.
-      rewrite <- ?sub_comp_assoc.
-      rewrite sub_comp_shift_single.
-      rewrite sub_comp_id_left.
-      auto.
-    Qed.
-
-    Lemma inst_tri_comp {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) (ι0 : SymInstance w0) :
-      inst_triangular (tri_comp ν01 ν12) ι0 <->
-      inst_triangular ν01 ι0 /\ inst_triangular ν12 (inst (sub_triangular_inv ν01) ι0).
-    Proof.
-      induction ν01; cbn.
-      - rewrite inst_sub_id; intuition.
-      - rewrite ?inst_subst, ?inst_sub_shift. split.
-        + intros (Heq & Hwp). apply IHν01 in Hwp. now destruct Hwp.
-        + intros ([Heq Hν01] & Hwp). split; auto. apply IHν01; auto.
-    Qed.
-
-    (* Lemma acc_triangular_app {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) : *)
-    (*   wsub (acc_triangular (tri_comp ν01 ν12)) = *)
-    (*   subst (sub_acc (acc_triangular ν01)) (sub_acc (acc_triangular ν12)). *)
-    (* Proof. *)
-    (*   induction ν01; cbn - [SubstEnv]. *)
-    (*   - now rewrite sub_comp_id_left. *)
-    (*   - rewrite <- subst_sub_comp. now f_equal. *)
-    (* Qed. *)
-
-  End TriangularSubstitutions.
 
   Module Solver.
 
@@ -1097,24 +966,6 @@ Module Mutators
         pose proof (assumption_formula_spec pc fml (assumption_formulas pc fmls k) ι Hpc).
         intuition.
     Qed.
-
-    Definition Solver : Type :=
-      forall {w0 : World} (fmls0 : List Formula w0),
-        option { w1 & Triangular w0 w1 * List Formula w1 }%type.
-
-    Definition SolverSpec (s : Solver) : Prop :=
-      forall {w0 : World} (fmls0 : List Formula w0),
-        OptionSpec
-          (fun '(existT w1 (ζ, fmls1)) =>
-             forall ι0,
-               instpc (wco w0) ι0 ->
-               (instpc fmls0 ι0 -> inst_triangular ζ ι0) /\
-                 (forall ι1,
-                     instpc (wco w1) ι1 ->
-                     ι0 = inst (sub_triangular ζ) ι1 ->
-                     instpc fmls0 ι0 <-> inst fmls1 ι1))
-          (forall ι, instpc (wco w0) ι -> ~ instpc fmls0 ι)
-          (s w0 fmls0).
 
     Definition solver_generic_round : Solver :=
       fun w0 fmls0 =>
