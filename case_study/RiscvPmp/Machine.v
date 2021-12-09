@@ -741,8 +741,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                            end).
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
-    stm_match_enum regidx (exp_var rs1) (fun _ => stm_lit ty_unit tt) ;;
-    stm_match_enum regidx (exp_var rs2) (fun _ => stm_lit ty_unit tt) ;;
+    stm_match_enum regidx rs1 (fun _ => stm_lit ty_unit tt) ;;
+    stm_match_enum regidx rs2 (fun _ => stm_lit ty_unit tt) ;;
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: result :=
@@ -750,17 +750,19 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
        | RISCV_ADD => rs1_val + rs2_val
        | RISCV_SUB => rs1_val - rs2_val
        end in
-     stm_match_enum regidx (exp_var rd) (fun _ => stm_lit ty_unit tt) ;;
+     stm_match_enum regidx rd (fun _ => stm_lit ty_unit tt) ;;
      call wX rd result ;;
      stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_ITYPE : Stm [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired :=
+    stm_match_enum regidx rs1 (fun _ => stm_lit ty_unit tt) ;;
     let: rs1_val := call rX rs1 in
     let: immext := imm in
     let: result :=
        match: op in iop with
        | RISCV_ADDI => rs1_val + immext
        end in
+     stm_match_enum regidx rd (fun _ => stm_lit ty_unit tt) ;;
      call wX rd result ;;
      stm_lit ty_retired RETIRE_SUCCESS.
 
@@ -773,6 +775,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
          let: tmp := call get_arch_pc in
          tmp + off
        end in
+    stm_match_enum regidx rd (fun _ => stm_lit ty_unit tt) ;;
     call wX rd ret ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
@@ -780,18 +783,24 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     let: tmp := stm_read_register pc in
     let: t := tmp + imm in
     let: tmp := call get_next_pc in
+    stm_match_enum regidx rd (fun _ => stm_lit ty_unit tt) ;;
     call wX rd tmp ;;
+    call set_next_pc t ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_RISCV_JALR : Stm [imm ∶ ty_int , rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired :=
+    stm_match_enum regidx rs1 (fun _ => stm_lit ty_unit tt) ;;
     let: tmp := call rX rs1 in
     let: t := tmp + imm in
     let: tmp := call get_next_pc in
+    stm_match_enum regidx rd (fun _ => stm_lit ty_unit tt) ;;
     call wX rd tmp ;;
     call set_next_pc t ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
   Definition fun_execute_BTYPE : Stm [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired :=
+    stm_match_enum regidx rs1 (fun _ => stm_lit ty_unit tt) ;;
+    stm_match_enum regidx rs2 (fun _ => stm_lit ty_unit tt) ;;
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: taken :=

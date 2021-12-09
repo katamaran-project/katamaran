@@ -196,6 +196,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
          mtvec ↦ (term_var "h") ∗
          pc ↦ (term_var "i") ∗
          asn_pmp_entries (term_var "entries") ∗
+         asn_exist v ty_xlenbits (nextpc ↦ term_var v) ∗
          asn_regs_ptsto;
        sep_contract_result          := "result_mach_inv";
        sep_contract_postcondition   :=
@@ -210,6 +211,51 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
 
   Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
     mach_inv_contract.
+
+  Definition sep_contract_execute_ITYPE : SepContractFun execute_ITYPE :=
+    mach_inv_contract.
+
+  Definition sep_contract_execute_UTYPE : SepContractFun execute_UTYPE :=
+    mach_inv_contract.
+
+  Definition sep_contract_execute_BTYPE : SepContractFun execute_BTYPE :=
+    mach_inv_contract.
+
+  Definition sep_contract_execute_RISCV_JAL : SepContractFun execute_RISCV_JAL :=
+    mach_inv_contract.
+
+  Definition sep_contract_execute_RISCV_JALR : SepContractFun execute_RISCV_JALR :=
+    mach_inv_contract.
+
+  Definition sep_contract_get_arch_pc : SepContractFun get_arch_pc :=
+    {| sep_contract_logic_variables := [v ∶ ty_xlenbits];
+       sep_contract_localstore      := env_nil;
+       sep_contract_precondition    := pc ↦ term_var v;
+       sep_contract_result          := "result_get_arch_pc";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_get_arch_pc") (term_var v)
+         ∗ pc ↦ term_var v;
+    |}.
+
+  Definition sep_contract_set_next_pc : SepContractFun set_next_pc :=
+    {| sep_contract_logic_variables := [addr ∶ ty_xlenbits];
+       sep_contract_localstore      := [term_var addr]%arg;
+       sep_contract_precondition    := asn_exist v ty_xlenbits (nextpc ↦ term_var v);
+       sep_contract_result          := "result_set_next_pc";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_set_next_pc") (term_lit ty_unit tt)
+         ∗ nextpc ↦ term_var addr;
+    |}.
+
+  Definition sep_contract_get_next_pc : SepContractFun get_next_pc :=
+    {| sep_contract_logic_variables := [v ∶ ty_xlenbits];
+       sep_contract_localstore      := env_nil;
+       sep_contract_precondition    := nextpc ↦ term_var v;
+       sep_contract_result          := "result_get_next_pc";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_get_next_pc") (term_var v)
+         ∗ nextpc ↦ term_var v;
+    |}.
 
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := [rs ∶ ty_regidx, v ∶ ty_xlenbits];
@@ -251,6 +297,14 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
                      | X0 => asn_true
                      | _  => term_var rs ↦r term_var v
                      end);
+    |}.
+
+  Definition sep_contract_abs : SepContractFun abs :=
+    {| sep_contract_logic_variables := [v ∶ ty_int];
+       sep_contract_localstore      := [term_var v]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_abs";
+       sep_contract_postcondition   := asn_true;
     |}.
 
   Definition sep_contract_read_ram : SepContractFunX read_ram :=
@@ -301,10 +355,19 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
-      | execute_RTYPE => Some sep_contract_execute_RTYPE
-      | rX            => Some sep_contract_rX
-      | wX            => Some sep_contract_wX
-      | _             => None
+      | execute_RTYPE      => Some sep_contract_execute_RTYPE
+      | execute_ITYPE      => Some sep_contract_execute_ITYPE
+      | execute_UTYPE      => Some sep_contract_execute_UTYPE
+      | execute_BTYPE      => Some sep_contract_execute_BTYPE
+      | execute_RISCV_JAL  => Some sep_contract_execute_RISCV_JAL
+      | execute_RISCV_JALR => Some sep_contract_execute_RISCV_JALR
+      | get_arch_pc        => Some sep_contract_get_arch_pc
+      | get_next_pc        => Some sep_contract_get_next_pc
+      | set_next_pc        => Some sep_contract_set_next_pc
+      | rX                 => Some sep_contract_rX
+      | wX                 => Some sep_contract_wX
+      | abs                => Some sep_contract_abs
+      | _                  => None
       end.
 
   Definition CEnvEx : SepContractEnvEx :=
@@ -354,13 +417,53 @@ Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
   | None => False
   end.
 
+Lemma valid_contract_get_arch_pc : ValidContract get_arch_pc.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_get_next_pc : ValidContract get_next_pc.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_set_next_pc : ValidContract set_next_pc.
+Proof. reflexivity. Qed.
+
 Lemma valid_contract_rX : ValidContract rX.
 Proof. reflexivity. Qed.
 
 Lemma valid_contract_wX : ValidContract wX.
 Proof. reflexivity. Qed.
 
+Lemma valid_contract_abs : ValidContract abs.
+Proof. reflexivity. Qed.
+
 Lemma valid_contract_execute_RTYPE : ValidContractDebug execute_RTYPE.
 Proof. compute; firstorder. Qed.
 Lemma valid_contract_execute_RTYPE' : ValidContract execute_RTYPE.
 Proof. Admitted. (* reflexivity. Qed. *)
+
+Lemma valid_contract_execute_ITYPE : ValidContractDebug execute_ITYPE.
+Proof. compute; firstorder. Qed.
+
+Lemma valid_contract_execute_UTYPE : ValidContractDebug execute_UTYPE.
+Proof. compute; firstorder. Qed.
+
+Lemma valid_contract_execute_BTYPE : ValidContractDebug execute_BTYPE.
+Proof. compute; firstorder. Qed.
+
+Lemma valid_contract_execute_RISCV_JAL : ValidContractDebug execute_RISCV_JAL.
+Proof. compute; firstorder. Qed.
+
+Lemma valid_contract_execute_RISCV_JALR : ValidContractDebug execute_RISCV_JALR.
+Proof. compute; firstorder. Qed.
+
+(* TODO: this is just to make sure that all contracts defined so far are valid
+         (i.e. ensure no contract was defined and then forgotten to validate it) *)
+Lemma defined_contracts_valid : forall {Δ τ} (f : Fun Δ τ),
+    match CEnv f with
+    | Some c => ValidContract f \/ ValidContractDebug f
+    | None => True
+    end.
+Proof.
+  destruct f; simpl; trivial;
+    try (left; reflexivity);
+    try (right; compute; firstorder).
+Qed.
