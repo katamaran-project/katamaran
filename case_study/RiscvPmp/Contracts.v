@@ -53,6 +53,7 @@ Inductive PurePredicate : Set :=
 
 Inductive Predicate : Set :=
 | pmp_entries
+| ptsreg
 .
 
 Section TransparentObligations.
@@ -83,12 +84,14 @@ Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProg
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
     | pmp_entries => [ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits)]
+    | ptsreg      => [ty_regidx, ty_xlenbits]
     end.
 
   Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
       | pmp_entries => false
+      | ptsreg      => false
       end
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -107,6 +110,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Local Notation "'rd'"      := "rd" : string_scope.
   Local Notation "'op'"      := "op" : string_scope.
   Local Notation "'v'"       := "v" : string_scope.
+  Local Notation "'w'"       := "w" : string_scope.
   Local Notation "'imm'"     := "imm" : string_scope.
   Local Notation "'t'"       := "t" : string_scope.
   Local Notation "'addr'"    := "addr" : string_scope.
@@ -118,6 +122,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Local Notation "'bv'"      := "bv" : string_scope.
 
   Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 100).
+  Local Notation "r '↦r' val" := (asn_chunk (chunk_user ptsreg (env_nil ► (ty_regidx ↦ r) ► (ty_xlenbits ↦ val)))) (at level 100).
   Local Notation "p '∗' q" := (asn_sep p q) (at level 150).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env_nil ► (ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits) ↦ l)))).
 
@@ -138,6 +143,9 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Definition SepContractFunX {Δ τ} (f : FunX Δ τ) : Type :=
     SepContract Δ τ.
 
+  Definition SepLemma {Δ} (f : Lem Δ) : Type :=
+    Lemma Δ.
+
   Fixpoint asn_exists {Σ} (Γ : NCtx string Ty) : Assertion (Σ ▻▻ Γ) -> Assertion Σ :=
     match Γ return Assertion (Σ ▻▻ Γ) -> Assertion Σ with
     | ctx_nil => fun asn => asn
@@ -145,6 +153,21 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
       fun asn =>
         @asn_exists Σ Γ (asn_exist x τ asn)
     end.
+
+  Definition regidx_to_reg (r : RegIdx) : Reg ty_xlenbits :=
+    match r with
+    | X0 => x0
+    | X1 => x1
+    | X2 => x2
+    end.
+
+  Definition asn_and_regs {Σ} (f : RegIdx -> Assertion Σ) : Assertion Σ :=
+    f X0 ∗ f X1 ∗ f X2.
+
+  (* ∀ r : regidx, ∃ w : xlenbits, r ↦r w *)
+  Definition asn_regs_ptsto {Σ} : Assertion Σ :=
+    asn_and_regs
+      (fun r => asn_exist w ty_xlenbits (term_lit ty_regidx r ↦r term_var w)).
 
   (* TODO: abstract away the concrete type, look into unions for that *)
   (* TODO: length of list should be 16, no duplicates *)
@@ -170,20 +193,65 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
        sep_contract_localstore      := create_localstore Δ Σ;
        sep_contract_precondition    :=
          cur_privilege ↦ (term_var "m") ∗
-                       mtvec ↦ (term_var "h") ∗
-                       pc ↦ (term_var "i") ∗
-                       asn_pmp_entries (term_var "entries");
+         mtvec ↦ (term_var "h") ∗
+         pc ↦ (term_var "i") ∗
+         asn_pmp_entries (term_var "entries") ∗
+         asn_regs_ptsto;
        sep_contract_result          := "result_mach_inv";
        sep_contract_postcondition   :=
          asn_pmp_entries (term_var "entries") ∗
-                         asn_or (cur_privilege ↦ (term_var "m") ∗ pc ↦ (term_var "i"))
-                         (cur_privilege ↦ (term_lit ty_privilege Machine) ∗
-                                        pc ↦ (term_var "h") ∗
-                                        mepc ↦ (term_var "i")) (* TODO: add mpp ↦ ...*)
+         asn_regs_ptsto ∗
+         asn_or (cur_privilege ↦ (term_var "m") ∗ pc ↦ (term_var "i"))
+                (cur_privilege ↦ (term_lit ty_privilege Machine) ∗
+                 pc ↦ (term_var "h") ∗
+                 mepc ↦ (term_var "i") ∗
+                 mstatus ↦ (term_record rmstatus [ term_lit ty_privilege User ]))
     |}.
 
   Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
     mach_inv_contract.
+
+  Definition sep_contract_rX : SepContractFun rX :=
+    {| sep_contract_logic_variables := [rs ∶ ty_regidx, v ∶ ty_xlenbits];
+       sep_contract_localstore      := [term_var rs]%arg;
+       sep_contract_precondition    := 
+         asn_match_enum
+           regidx (term_var rs)
+           (fun k => match k with
+                     | X0 => asn_true
+                     | _  => term_var rs ↦r term_var v
+                     end);
+       sep_contract_result          := "result_rX";
+       sep_contract_postcondition   :=
+         asn_match_enum
+           regidx (term_var rs)
+           (fun k => match k with
+                     | X0 => asn_eq (term_var "result_rX") (term_lit ty_int 0%Z)
+                     | _  => asn_eq (term_var "result_rX") (term_var v)
+                             ∗ term_var rs ↦r term_var v 
+                     end)
+    |}.
+
+  Definition sep_contract_wX : SepContractFun wX :=
+    {| sep_contract_logic_variables := [rs ∶ ty_regidx, v ∶ ty_xlenbits];
+       sep_contract_localstore      := [term_var rs, term_var v]%arg;
+       sep_contract_precondition    :=
+         asn_match_enum
+           regidx (term_var rs)
+           (fun k => match k with
+                     | X0 => asn_true
+                     | _  => asn_exist w ty_xlenbits (term_var rs ↦r term_var w)
+                     end);
+       sep_contract_result          := "result_wX";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_wX") (term_lit ty_unit tt)
+         ∗ asn_match_enum
+           regidx (term_var rs)
+           (fun k => match k with
+                     | X0 => asn_true
+                     | _  => term_var rs ↦r term_var v
+                     end);
+    |}.
 
   Definition sep_contract_read_ram : SepContractFunX read_ram :=
     {| sep_contract_logic_variables := [paddr ∶ ty_int];
@@ -209,10 +277,33 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
        sep_contract_postcondition   := asn_true;
     |}.
 
+  Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
+    {| lemma_logic_variables := [ rs ∶ ty_regidx, w ∶ ty_xlenbits];
+       lemma_patterns        := [term_var rs]%arg;
+       lemma_precondition    := term_var rs ↦r term_var w;
+       lemma_postcondition   :=
+         asn_match_enum
+           regidx (term_var rs)
+           (fun k => match k with
+                     | X0 => asn_true
+                     | X1 => x1 ↦ term_var "w"
+                     | X2 => x2 ↦ term_var "w"
+                     end)
+    |}.
+
+  Definition lemma_close_ptsreg (r : RegIdx) : SepLemma (close_ptsreg r) :=
+    {| lemma_logic_variables := [w ∶ ty_xlenbits];
+       lemma_patterns        := env_nil;
+       lemma_precondition    := regidx_to_reg r ↦ term_var w;
+       lemma_postcondition   := term_enum regidx r ↦r term_var w
+    |}.
+
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
       | execute_RTYPE => Some sep_contract_execute_RTYPE
+      | rX            => Some sep_contract_rX
+      | wX            => Some sep_contract_wX
       | _             => None
       end.
 
@@ -227,6 +318,8 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Definition LEnv : LemmaEnv :=
     fun Δ l =>
       match l with
+      | open_ptsreg    => lemma_open_ptsreg
+      | close_ptsreg r => lemma_close_ptsreg r
       end.
 
   Lemma linted_cenvex :
@@ -255,5 +348,19 @@ Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
   | None => False
   end.
 
-Lemma valid_contract_execute_RTYPE : ValidContract execute_RTYPE.
-Proof. Admitted.
+Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
+  match CEnv f with
+  | Some c => SMut.ValidContract c (Pi f)
+  | None => False
+  end.
+
+Lemma valid_contract_rX : ValidContract rX.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_wX : ValidContract wX.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_execute_RTYPE : ValidContractDebug execute_RTYPE.
+Proof. compute; firstorder. Qed.
+Lemma valid_contract_execute_RTYPE' : ValidContract execute_RTYPE.
+Proof. Admitted. (* reflexivity. Qed. *)

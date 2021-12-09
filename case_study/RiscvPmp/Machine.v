@@ -148,7 +148,10 @@ Module RiscvPmpTermKit <: TermKit.
   | decode    : FunX [bv ∶ ty_int] ty_ast
   .
 
-  Inductive Lem : PCtx -> Set :=. 
+  Inductive Lem : PCtx -> Set :=
+  | open_ptsreg               : Lem [rs ∶ ty_regidx]
+  | close_ptsreg (r : RegIdx) : Lem ctx_nil
+  .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
   Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
@@ -346,19 +349,34 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Local Notation "'CTL_TRAP' exc" := (exp_union ctl_result KCTL_TRAP exc) (at level 10, exc at next level) : exp_scope.
   Local Notation "'CTL_MRET'" := (exp_union ctl_result KCTL_MRET (exp_lit ty_unit tt)) : exp_scope.
 
+  Notation "'use' 'lemma' lem args" := (stm_lemma lem args%arg) (at level 10, lem at next level) : exp_scope.
+  Notation "'use' 'lemma' lem" := (stm_lemma lem env_nil) (at level 10, lem at next level) : exp_scope.
+
   (** Functions **)
   Definition fun_rX : Stm [rs ∶ ty_regidx] ty_xlenbits :=
     match: rs in regidx with
     | X0 => exp_lit ty_xlenbits 0%Z
-    | X1 => stm_read_register x1
-    | X2 => stm_read_register x2
+    | X1 => use lemma open_ptsreg [exp_var rs]%arg ;;
+            let: v := stm_read_register x1 in
+            use lemma (close_ptsreg X1) ;;
+            stm_exp v
+    | X2 => use lemma open_ptsreg [exp_var rs]%arg ;;
+            let: v := stm_read_register x2 in
+            use lemma (close_ptsreg X2) ;;
+            stm_exp v
     end.
 
   Definition fun_wX : Stm [rd ∶ ty_regidx, v ∶ ty_xlenbits] ty_unit :=
     match: rd in regidx with
     | X0 => stm_lit ty_unit tt
-    | X1 => stm_write_register x1 v ;; stm_lit ty_unit tt
-    | X2 => stm_write_register x2 v ;; stm_lit ty_unit tt
+    | X1 => use lemma open_ptsreg [exp_var rd] ;;
+            stm_write_register x1 v ;;
+            use lemma (close_ptsreg X1) ;;
+            stm_lit ty_unit tt
+    | X2 => use lemma open_ptsreg [exp_var rd] ;;
+            stm_write_register x2 v ;;
+            use lemma (close_ptsreg X2) ;;
+            stm_lit ty_unit tt
     end.
 
   Definition fun_get_arch_pc : Stm ctx_nil ty_xlenbits :=
@@ -723,6 +741,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                            end).
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
+    stm_match_enum regidx (exp_var rs1) (fun _ => stm_lit ty_unit tt) ;;
+    stm_match_enum regidx (exp_var rs2) (fun _ => stm_lit ty_unit tt) ;;
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: result :=
@@ -730,6 +750,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
        | RISCV_ADD => rs1_val + rs2_val
        | RISCV_SUB => rs1_val - rs2_val
        end in
+     stm_match_enum regidx (exp_var rd) (fun _ => stm_lit ty_unit tt) ;;
      call wX rd result ;;
      stm_lit ty_retired RETIRE_SUCCESS.
 

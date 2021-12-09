@@ -48,6 +48,19 @@ Set Implicit Arguments.
 Module gh := iris.base_logic.lib.gen_heap.
 
 Module RiscvPmpModel.
+
+  Ltac destruct_syminstance ι :=
+    repeat
+      match type of ι with
+      | Env _ (ctx_snoc _ (?s, _)) =>
+        let id := string_to_ident s in
+        let fr := fresh id in
+        destruct (snocView ι) as [ι fr];
+        destruct_syminstance ι
+      | Env _ ctx_nil => destruct (nilView ι)
+      | _ => idtac
+      end.
+
   Module RiscvPmpIrisHeapKit <: IrisHeapKit RiscvPmpTermKit RiscvPmpProgramKit RiscvPmpAssertionKit RiscvPmpSymbolicContractKit.
     Module IrisRegs := IrisRegisters RiscvPmpTermKit RiscvPmpProgramKit RiscvPmpAssertionKit RiscvPmpSymbolicContractKit.
     Export IrisRegs.
@@ -84,6 +97,13 @@ Module RiscvPmpModel.
 
       Import RiscvPmp.Contracts.RiscvPmpSymbolicContractKit.ASS.
 
+      Definition interp_ptsreg `{sailRegG Σ} (r: RegIdx) (v : Z) : iProp Σ :=
+        match r with
+        | X0 => True
+        | X1 => reg_pointsTo x1 v
+        | X2 => reg_pointsTo x2 v
+        end.
+
       Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑯_Ty p)) (mG : memG Σ) : iProp Σ :=
         (match p return Env Lit (RiscvPmpAssertionKit.𝑯_Ty p) -> iProp Σ with
          | pmp_entries => fun ts => let entries_lst := env_head ts in
@@ -93,6 +113,7 @@ Module RiscvPmpModel.
                                               reg_pointsTo pmpaddr0 addr0)%I
                                     | _ => False%I
                                     end
+         | ptsreg => fun ts => interp_ptsreg (env_head (env_tail ts)) (env_head ts)
          end) ts.
 
     Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑯_Ty p)) :
@@ -118,8 +139,27 @@ Module RiscvPmpModel.
     destruct f; cbn.
   Admitted.
 
+  Section Lemmas.
+    Context `{sg : sailG Σ}.
+
+    Lemma open_ptsreg_sound :
+      ValidLemma RiscvPmpSymbolicContractKit.lemma_open_ptsreg.
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      destruct rs; auto.
+    Qed.
+
+    Lemma close_ptsreg_sound {R} :
+      ValidLemma (RiscvPmpSymbolicContractKit.lemma_close_ptsreg R).
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      unfold RiscvPmpSymbolicContractKit.regidx_to_reg; destruct R; auto.
+    Qed.
+  End Lemmas.
+
   Lemma lemSem `{sg : sailG Σ} : LemmaSem (Σ := Σ).
   Proof.
-    intros Δ [].
+    intros Δ [];
+      eauto using open_ptsreg_sound, close_ptsreg_sound.
   Qed.
 End RiscvPmpModel.
