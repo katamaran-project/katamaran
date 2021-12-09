@@ -39,10 +39,11 @@ From Coq Require Import
 From Equations Require Import Equations.
 
 From Katamaran Require Import
+     Sep.Logic
      Sep.Spec
      Syntax.
 
-From stdpp Require Import base list option.
+From stdpp Require base list option.
 
 Import CtxNotations.
 Import EnvNotations.
@@ -124,7 +125,7 @@ Module SemiConcrete
       fun POST => exists v : Lit σ, POST v.
 
     Definition angelic_ctx {N : Set} :
-      ∀ Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
+      forall Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | ctx_nil             => fun k => k env_nil
@@ -140,7 +141,7 @@ Module SemiConcrete
       fun POST => forall v : Lit σ, POST v.
 
     Definition demonic_ctx {N : Set} :
-      ∀ Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
+      forall Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | ctx_nil             => fun k => k env_nil
@@ -373,7 +374,7 @@ Module SemiConcrete
       (*   fun POST δ h => exists i : I, ms i POST δ h. *)
 
       Definition angelic_ctx {N : Set} {Γ} :
-        ∀ Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Lit Δ).
+        forall Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Lit Δ).
       Proof.
         intros Δ. apply dijkstra.
         apply (CDijk.angelic_ctx Δ).
@@ -390,7 +391,7 @@ Module SemiConcrete
         dijkstra (CDijk.demonic_finite (F:=F)).
 
       Definition demonic_ctx {N : Set} {Γ} :
-        ∀ Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Lit Δ).
+        forall Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Lit Δ).
       Proof.
         intros Δ. apply dijkstra.
         apply (CDijk.demonic_ctx Δ).
@@ -410,6 +411,10 @@ Module SemiConcrete
       Infix "⊗" := demonic_binary (at level 40, left associativity) : mutator_scope.
       Infix "⊕" := angelic_binary (at level 50, left associativity) : mutator_scope.
 
+      Notation "' x <- ma ;; mb" :=
+        (bind ma (fun x => mb))
+          (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
+           format "' x  <-  ma  ;;  mb") : mutator_scope.
       Notation "x <- ma ;; mb" :=
         (bind ma (fun x => mb))
           (at level 80, ma at level 90, mb at level 200, right associativity) : mutator_scope.
@@ -542,7 +547,7 @@ Module SemiConcrete
         intros. rewrite CDijk.wp_angelic_list.
         split; intros; destruct_conjs; subst; auto.
         exists v. split; auto.
-        rewrite <- elem_of_list_In.
+        rewrite <- base.elem_of_list_In.
         apply finite.elem_of_enum.
       Qed.
 
@@ -555,7 +560,7 @@ Module SemiConcrete
         intros. rewrite CDijk.wp_demonic_list.
         split; intros; subst; auto.
         apply H; auto.
-        rewrite <- elem_of_list_In.
+        rewrite <- base.elem_of_list_In.
         apply finite.elem_of_enum.
       Qed.
 
@@ -676,7 +681,6 @@ Module SemiConcrete
         cbv [demonic_match_prod bind_right bind demonic demonic_binary
              assume_formula dijkstra CDijk.assume_formula].
         destruct v; intuition.
-        now inversion H0.
       Qed.
 
       Definition angelic_match_list {A Γ1 Γ2} {σ} :
@@ -750,7 +754,6 @@ Module SemiConcrete
         split.
         - destruct v; intuition.
         - destruct v; intuition; try discriminate.
-          now dependent elimination H0.
       Qed.
 
       Definition angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
@@ -906,7 +909,7 @@ Module SemiConcrete
 
       Definition angelic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
-        Lit (ty_union U) -> (∀ K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Lit (ty_union U) -> (forall K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v k.
         eapply bind.
@@ -926,7 +929,7 @@ Module SemiConcrete
 
       Lemma wp_angelic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
-        (v : Lit (ty_union U)) (k : ∀ K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A)
+        (v : Lit (ty_union U)) (k : forall K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A)
         POST δ h :
         angelic_match_union p v k POST δ h <->
         let (UK , vf) := 𝑼_unfold v in
@@ -942,7 +945,7 @@ Module SemiConcrete
         - destruct (𝑼_unfold v) as [UK vf] eqn:Heq.
           intros Hwp.
           exists UK. split.
-          rewrite <- elem_of_list_In.
+          rewrite <- base.elem_of_list_In.
           apply finite.elem_of_enum.
           exists vf. rewrite <- Heq.
           rewrite wp_angelic_match_pattern.
@@ -951,7 +954,7 @@ Module SemiConcrete
 
       Definition demonic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
-        Lit (ty_union U) -> (∀ K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Lit (ty_union U) -> (forall K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v k.
         eapply bind.
@@ -971,7 +974,7 @@ Module SemiConcrete
 
       Lemma wp_demonic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
-        (v : Lit (ty_union U)) (k : ∀ K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A)
+        (v : Lit (ty_union U)) (k : forall K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A)
         POST δ h :
         demonic_match_union p v k POST δ h <->
         let (UK , vf) := 𝑼_unfold v in
@@ -984,7 +987,7 @@ Module SemiConcrete
         - destruct (𝑼_unfold v) as [UK vf] eqn:Heq.
           intros HYP. specialize (HYP UK).
           inster HYP by
-              rewrite <- elem_of_list_In; apply finite.elem_of_enum.
+              rewrite <- base.elem_of_list_In; apply finite.elem_of_enum.
           specialize (HYP vf).
           rewrite wp_demonic_match_pattern in HYP.
           apply HYP.
@@ -1018,27 +1021,63 @@ Module SemiConcrete
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CMut Γ Γ (CStore σs) :=
         fun POST δ => POST (evals es δ) δ.
       Definition assign {Γ} x {σ} {xIn : x::σ ∈ Γ} (v : Lit σ) : CMut Γ Γ unit :=
-        fun POST δ => POST () (δ ⟪ x ↦ v ⟫).
+        fun POST δ => POST tt (δ ⟪ x ↦ v ⟫).
       Global Arguments assign {Γ} x {σ xIn} v.
 
     End State.
+
+    Module NewProduceConsumeChunk.
+
+      Definition angelic_heap {Γ} : CMut Γ Γ SCHeap :=
+        fun POST δ h => exists h', POST h' δ h.
+
+      Definition demonic_heap {Γ} : CMut Γ Γ SCHeap :=
+        fun POST δ h => forall h', POST h' δ h.
+
+      Section WithHeaplet.
+
+        Context `{HL: IHeaplet L}.
+
+        Open Scope logic.
+        Import LogicNotations.
+
+        Fixpoint interpret_scchunk (c : SCChunk) : L :=
+          match c with
+          | scchunk_user p vs => luser p vs
+          | scchunk_ptsreg r v => lptsreg r v
+          | scchunk_conj c1 c2 => sepcon (interpret_scchunk c1) (interpret_scchunk c2)
+          | scchunk_wand c1 c2 => wand (interpret_scchunk c1) (interpret_scchunk c2)
+          end.
+
+        Definition interpret_scheap : SCHeap -> L :=
+          List.fold_right (fun c h => interpret_scchunk c ✱ h) emp.
+        Global Arguments interpret_scheap !h.
+
+        Definition produce_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
+          h  <- get_heap ;;
+          h' <- demonic_heap ;;
+          assume_formula (interpret_scchunk c ✱ interpret_scheap h ⊢ interpret_scheap h') ;;
+          put_heap h'.
+
+        Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
+          h  <- get_heap ;;
+          h' <- angelic_heap ;;
+          assert_formula (interpret_scheap h ⊢ interpret_scchunk c ✱ interpret_scheap h') ;;
+          put_heap h'.
+
+      End WithHeaplet.
+
+    End NewProduceConsumeChunk.
 
     Section ProduceConsume.
 
       Definition produce_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
         fun POST δ h => POST tt δ (cons c h).
-      Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit.
-        eapply bind.
-        apply get_heap.
-        intros h.
-        eapply bind.
-        apply (angelic_list (heap_extractions h)).
-        intros [c' h'].
-        eapply bind_right.
-        apply assert_formula.
-        apply (c' = c).
-        apply (put_heap h').
-      Defined.
+      Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
+        h         <- get_heap ;;
+        '(c', h') <- angelic_list (heap_extractions h) ;;
+        assert_formula (c' = c) ;;
+        put_heap h'.
 
       Global Arguments produce_chunk {Γ} _.
       Global Arguments consume_chunk {Γ} _.
