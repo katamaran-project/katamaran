@@ -44,9 +44,72 @@ Import CtxNotations.
 Import EnvNotations.
 Open Scope string_scope.
 
+Module RiscvNotations.
+  Notation "'rs'"           := "rs" : string_scope.
+  Notation "'rs1'"          := "rs1" : string_scope.
+  Notation "'rs2'"          := "rs2" : string_scope.
+  Notation "'rd'"           := "rd" : string_scope.
+  Notation "'op'"           := "op" : string_scope.
+  Notation "'v'"            := "v" : string_scope.
+  Notation "'imm'"          := "imm" : string_scope.
+  Notation "'t'"            := "t" : string_scope.
+  Notation "'addr'"         := "addr" : string_scope.
+  Notation "'paddr'"        := "paddr" : string_scope.
+  Notation "'vaddr'"        := "vaddr" : string_scope.
+  Notation "'typ'"          := "typ" : string_scope.
+  Notation "'acc'"          := "acc" : string_scope.
+  Notation "'value'"        := "value" : string_scope.
+  Notation "'data'"         := "data" : string_scope.
+  Notation "'ent'"          := "ent" : string_scope.
+  Notation "'pmpaddr'"      := "pmpaddr" : string_scope.
+  Notation "'prev_pmpaddr'" := "prev_pmpaddr" : string_scope.
+  Notation "'cfg'"          := "cfg" : string_scope.
+  Notation "'rng'"          := "rng" : string_scope.
+  Notation "'bv'"           := "bv" : string_scope.
+  Notation "'e'"            := "e" : string_scope.
+  Notation "'ctl'"          := "ctl" : string_scope.
+  Notation "'c'"            := "c" : string_scope.
+  Notation "'cause'"        := "cause" : string_scope.
+  Notation "'m'"            := "m" : string_scope.
+  Notation "'priv'"         := "priv" : string_scope.
+  Notation "'cur_priv'"     := "cur_priv" : string_scope.
+  Notation "'del_priv'"     := "del_priv" : string_scope.
+  Notation "'p'"            := "p" : string_scope.
+  Notation "'rs1_val'"      := "rs1_val" : string_scope.
+  Notation "'rs2_val'"      := "rs2_val" : string_scope.
+  Notation "'op'"           := "op" : string_scope.
+  Notation "'result'"       := "result" : string_scope.
+  Notation "'res'"          := "res" : string_scope.
+  Notation "'immext'"       := "immext" : string_scope.
+  Notation "'off'"          := "off" : string_scope.
+  Notation "'offset'"       := "offset" : string_scope.
+  Notation "'ret'"          := "ret" : string_scope.
+  Notation "'tmp'"          := "tmp" : string_scope.
+  Notation "'tmp1'"         := "tmp1" : string_scope.
+  Notation "'tmp2'"         := "tmp2" : string_scope.
+  Notation "'tmp3'"         := "tmp3" : string_scope.
+  Notation "'taken'"        := "taken" : string_scope.
+  Notation "'check'"        := "check" : string_scope.
+  Notation "'L'"            := "L" : string_scope.
+  Notation "'A'"            := "A" : string_scope.
+  Notation "'X'"            := "X" : string_scope.
+  Notation "'W'"            := "W" : string_scope.
+  Notation "'R'"            := "R" : string_scope.
+  Notation "'lo'"           := "lo" : string_scope.
+  Notation "'hi'"           := "hi" : string_scope.
+  Notation "'f'"            := "f" : string_scope.
+  Notation "'w'"            := "w" : string_scope.
+  Notation "'tvec'"         := "tvec" : string_scope.
+  Notation "'epc'"          := "epc" : string_scope.
+  Notation "'prev_priv'"    := "prev_priv" : string_scope.
+  Notation "'MPP'"          := "MPP" : string_scope.
+End RiscvNotations.
+
 Module RiscvPmpTermKit <: TermKit.
   Module valuekit := RiscvPmpValueKit.
   Module Export VAL := Syntax.Values.Values valuekit.
+
+  Import RiscvNotations.
 
   (** Variables **)
   Definition 𝑿        := string.
@@ -59,37 +122,6 @@ Module RiscvPmpTermKit <: TermKit.
 
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
   Definition fresh := Context.fresh (T := Ty).
-
-  Local Notation "'rs'"           := "rs" : string_scope.
-  Local Notation "'rs1'"          := "rs1" : string_scope.
-  Local Notation "'rs2'"          := "rs2" : string_scope.
-  Local Notation "'rd'"           := "rd" : string_scope.
-  Local Notation "'op'"           := "op" : string_scope.
-  Local Notation "'v'"            := "v" : string_scope.
-  Local Notation "'imm'"          := "imm" : string_scope.
-  Local Notation "'t'"            := "t" : string_scope.
-  Local Notation "'addr'"         := "addr" : string_scope.
-  Local Notation "'paddr'"        := "paddr" : string_scope.
-  Local Notation "'vaddr'"        := "vaddr" : string_scope.
-  Local Notation "'typ'"          := "typ" : string_scope.
-  Local Notation "'acc'"          := "acc" : string_scope.
-  Local Notation "'value'"        := "value" : string_scope.
-  Local Notation "'data'"         := "data" : string_scope.
-  Local Notation "'ent'"          := "ent" : string_scope.
-  Local Notation "'pmpaddr'"      := "pmpaddr" : string_scope.
-  Local Notation "'prev_pmpaddr'" := "prev_pmpaddr" : string_scope.
-  Local Notation "'cfg'"          := "cfg" : string_scope.
-  Local Notation "'rng'"          := "rng" : string_scope.
-  Local Notation "'bv'"           := "bv" : string_scope.
-  Local Notation "'e'"            := "e" : string_scope.
-  Local Notation "'ctl'"          := "ctl" : string_scope.
-  Local Notation "'c'"            := "c" : string_scope.
-  Local Notation "'cause'"        := "cause" : string_scope.
-  Local Notation "'m'"            := "m" : string_scope.
-  Local Notation "'priv'"         := "priv" : string_scope.
-  Local Notation "'cur_priv'"     := "cur_priv" : string_scope.
-  Local Notation "'del_priv'"     := "del_priv" : string_scope.
-  Local Notation "'p'"            := "p" : string_scope.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
@@ -208,146 +240,94 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Module Export TM := Terms RiscvPmpTermKit.
   Import NameResolution.
 
+  Module RiscvμSailNotations.
+    Notation "'rs'"           := (@exp_var _ "rs" _ _) : exp_scope.
+    Notation "'rs1'"          := (@exp_var _ "rs1" _ _) : exp_scope.
+    Notation "'rs1_val'"      := (@exp_var _ "rs1_val" _ _) : exp_scope.
+    Notation "'rs2'"          := (@exp_var _ "rs2" _ _) : exp_scope.
+    Notation "'rs2_val'"      := (@exp_var _ "rs2_val" _ _) : exp_scope.
+    Notation "'rd'"           := (@exp_var _ "rd" _ _) : exp_scope.
+    Notation "'op'"           := (@exp_var _ "op" _ _) : exp_scope.
+    Notation "'result'"       := (@exp_var _ "result" _ _) : exp_scope.
+    Notation "'res'"          := (@exp_var _ "res" _ _) : exp_scope.
+    Notation "'v'"            := (@exp_var _ "v" _ _) : exp_scope.
+    Notation "'imm'"          := (@exp_var _ "imm" _ _) : exp_scope.
+    Notation "'immext'"       := (@exp_var _ "immext" _ _) : exp_scope.
+    Notation "'off'"          := (@exp_var _ "off" _ _) : exp_scope.
+    Notation "'offset'"       := (@exp_var _ "offset" _ _) : exp_scope.
+    Notation "'ret'"          := (@exp_var _ "ret" _ _) : exp_scope.
+    Notation "'tmp'"          := (@exp_var _ "tmp" _ _) : exp_scope.
+    Notation "'tmp1'"         := (@exp_var _ "tmp1" _ _) : exp_scope.
+    Notation "'tmp2'"         := (@exp_var _ "tmp2" _ _) : exp_scope.
+    Notation "'tmp3'"         := (@exp_var _ "tmp3" _ _) : exp_scope.
+    Notation "'t'"            := (@exp_var _ "t" _ _) : exp_scope.
+    Notation "'e'"            := (@exp_var _ "e" _ _) : exp_scope.
+    Notation "'addr'"         := (@exp_var _ "addr" _ _) : exp_scope.
+    Notation "'paddr'"        := (@exp_var _ "paddr" _ _) : exp_scope.
+    Notation "'vaddr'"        := (@exp_var _ "vaddr" _ _) : exp_scope.
+    Notation "'taken'"        := (@exp_var _ "taken" _ _) : exp_scope.
+    Notation "'typ'"          := (@exp_var _ "typ" _ _) : exp_scope.
+    Notation "'acc'"          := (@exp_var _ "acc" _ _) : exp_scope.
+    Notation "'value'"        := (@exp_var _ "value" _ _) : exp_scope.
+    Notation "'data'"         := (@exp_var _ "data" _ _) : exp_scope.
+    Notation "'check'"        := (@exp_var _ "check" _ _) : exp_scope.
+    Notation "'ent'"          := (@exp_var _ "ent" _ _) : exp_scope.
+    Notation "'pmpaddr'"      := (@exp_var _ "pmpaddr" _ _) : exp_scope.
+    Notation "'prev_pmpaddr'" := (@exp_var _ "prev_pmpaddr" _ _) : exp_scope.
+    Notation "'rng'"          := (@exp_var _ "rng" _ _) : exp_scope.
+    Notation "'cfg'"          := (@exp_var _ "cfg" _ _) : exp_scope.
+    Notation "'L'"            := (@exp_var _ "L" _ _) : exp_scope.
+    Notation "'A'"            := (@exp_var _ "A" _ _) : exp_scope.
+    Notation "'X'"            := (@exp_var _ "X" _ _) : exp_scope.
+    Notation "'W'"            := (@exp_var _ "W" _ _) : exp_scope.
+    Notation "'R'"            := (@exp_var _ "R" _ _) : exp_scope.
+    Notation "'lo'"           := (@exp_var _ "lo" _ _) : exp_scope.
+    Notation "'hi'"           := (@exp_var _ "hi" _ _) : exp_scope.
+    Notation "'f'"            := (@exp_var _ "f" _ _) : exp_scope.
+    Notation "'w'"            := (@exp_var _ "w" _ _) : exp_scope.
+    Notation "'ctl'"          := (@exp_var _ "ctl" _ _) : exp_scope.
+    Notation "'c'"            := (@exp_var _ "c" _ _) : exp_scope.
+    Notation "'cause'"        := (@exp_var _ "cause" _ _) : exp_scope.
+    Notation "'tvec'"         := (@exp_var _ "tvec" _ _) : exp_scope.
+    Notation "'m'"            := (@exp_var _ "m" _ _) : exp_scope.
+    Notation "'epc'"          := (@exp_var _ "epc" _ _) : exp_scope.
+    Notation "'priv'"         := (@exp_var _ "priv" _ _) : exp_scope.
+    Notation "'cur_priv'"     := (@exp_var _ "cur_priv" _ _) : exp_scope.
+    Notation "'del_priv'"     := (@exp_var _ "del_priv" _ _) : exp_scope.
+    Notation "'prev_priv'"    := (@exp_var _ "prev_priv" _ _) : exp_scope.
+    Notation "'p'"            := (@exp_var _ "p" _ _) : exp_scope.
+    Notation "'MPP'"          := (@exp_var _ "MPP" _ _) : exp_scope.
+
+    Notation "'Read'" := (exp_union access_type KRead (exp_lit ty_unit tt)) : exp_scope.
+    Notation "'Write'" := (exp_union access_type KWrite (exp_lit ty_unit tt)) : exp_scope.
+    Notation "'ReadWrite'" := (exp_union access_type KReadWrite (exp_lit ty_unit tt)) : exp_scope.
+    Notation "'Execute'" := (exp_union access_type KExecute (exp_lit ty_unit tt)) : exp_scope.
+
+    Notation "'E_Fetch_Access_Fault'" := (exp_union exception_type KE_Fetch_Access_Fault (exp_lit ty_unit tt)) : exp_scope.
+    Notation "'E_Load_Access_Fault'" := (exp_union exception_type KE_Load_Access_Fault (exp_lit ty_unit tt)) : exp_scope.
+    Notation "'E_SAMO_Access_Fault'" := (exp_union exception_type KE_SAMO_Access_Fault (exp_lit ty_unit tt)) : exp_scope.
+    Notation "'E_U_EnvCall'" := (exp_union exception_type KE_U_EnvCall (exp_lit ty_unit tt)) : exp_scope.
+    Notation "'E_M_EnvCall'" := (exp_union exception_type KE_M_EnvCall (exp_lit ty_unit tt)) : exp_scope.
+    Notation "'E_Illegal_Instr'" := (exp_union exception_type KE_Illegal_Instr (exp_lit ty_unit tt)) : exp_scope.
+
+    Notation "'None'" := (exp_inr (exp_lit ty_unit tt)) : exp_scope.
+    Notation "'Some' va" := (exp_inl va) (at level 10, va at next level) : exp_scope.
+
+    Notation "'MemValue' memv" := (exp_union memory_op_result KMemValue memv) (at level 10, memv at next level) : exp_scope.
+    Notation "'MemException' meme" := (exp_union memory_op_result KMemException meme) (at level 10, meme at next level) : exp_scope.
+
+    Notation "'F_Base' memv" := (exp_union fetch_result KF_Base memv) (at level 10, memv at next level) : exp_scope.
+    Notation "'F_Error' meme memv" := (exp_union fetch_result KF_Error (exp_binop binop_pair meme memv)) (at level 10, meme at next level, memv at next level) : exp_scope.
+
+    Notation "'CTL_TRAP' exc" := (exp_union ctl_result KCTL_TRAP exc) (at level 10, exc at next level) : exp_scope.
+    Notation "'CTL_MRET'" := (exp_union ctl_result KCTL_MRET (exp_lit ty_unit tt)) : exp_scope.
+  End RiscvμSailNotations.
+
   Section Functions.
+  Import RiscvNotations.
+  Import RiscvμSailNotations.
   Local Coercion stm_exp : Exp >-> Stm.
 
-  Local Notation "'rs'"           := "rs" : string_scope.
-  Local Notation "'rs1'"          := "rs1" : string_scope.
-  Local Notation "'rs1_val'"      := "rs1_val" : string_scope.
-  Local Notation "'rs2'"          := "rs2" : string_scope.
-  Local Notation "'rs2_val'"      := "rs2_val" : string_scope.
-  Local Notation "'rd'"           := "rd" : string_scope.
-  Local Notation "'op'"           := "op" : string_scope.
-  Local Notation "'result'"       := "result" : string_scope.
-  Local Notation "'res'"          := "res" : string_scope.
-  Local Notation "'v'"            := "v" : string_scope.
-  Local Notation "'imm'"          := "imm" : string_scope.
-  Local Notation "'immext'"       := "immext" : string_scope.
-  Local Notation "'off'"          := "off" : string_scope.
-  Local Notation "'offset'"       := "offset" : string_scope.
-  Local Notation "'ret'"          := "ret" : string_scope.
-  Local Notation "'tmp'"          := "tmp" : string_scope.
-  Local Notation "'tmp1'"         := "tmp1" : string_scope.
-  Local Notation "'tmp2'"         := "tmp2" : string_scope.
-  Local Notation "'tmp3'"         := "tmp3" : string_scope.
-  Local Notation "'t'"            := "t" : string_scope.
-  Local Notation "'e'"            := "e" : string_scope.
-  Local Notation "'addr'"         := "addr" : string_scope.
-  Local Notation "'paddr'"        := "paddr" : string_scope.
-  Local Notation "'vaddr'"        := "vaddr" : string_scope.
-  Local Notation "'taken'"        := "taken" : string_scope.
-  Local Notation "'typ'"          := "typ" : string_scope.
-  Local Notation "'acc'"          := "acc" : string_scope.
-  Local Notation "'value'"        := "value" : string_scope.
-  Local Notation "'data'"         := "data" : string_scope.
-  Local Notation "'check'"        := "check" : string_scope.
-  Local Notation "'ent'"          := "ent" : string_scope.
-  Local Notation "'pmpaddr'"      := "pmpaddr" : string_scope.
-  Local Notation "'prev_pmpaddr'" := "prev_pmpaddr" : string_scope.
-  Local Notation "'rng'"          := "rng" : string_scope.
-  Local Notation "'cfg'"          := "cfg" : string_scope.
-  Local Notation "'L'"            := "L" : string_scope.
-  Local Notation "'A'"            := "A" : string_scope.
-  Local Notation "'X'"            := "X" : string_scope.
-  Local Notation "'W'"            := "W" : string_scope.
-  Local Notation "'R'"            := "R" : string_scope.
-  Local Notation "'lo'"           := "lo" : string_scope.
-  Local Notation "'hi'"           := "hi" : string_scope.
-  Local Notation "'f'"            := "f" : string_scope.
-  Local Notation "'w'"            := "w" : string_scope.
-  Local Notation "'ctl'"          := "ctl" : string_scope.
-  Local Notation "'c'"            := "c" : string_scope.
-  Local Notation "'cause'"        := "cause" : string_scope.
-  Local Notation "'tvec'"         := "tvec" : string_scope.
-  Local Notation "'m'"            := "m" : string_scope.
-  Local Notation "'epc'"          := "epc" : string_scope.
-  Local Notation "'priv'"         := "priv" : string_scope.
-  Local Notation "'cur_priv'"     := "cur_priv" : string_scope.
-  Local Notation "'del_priv'"     := "del_priv" : string_scope.
-  Local Notation "'prev_priv'"    := "prev_priv" : string_scope.
-  Local Notation "'p'"            := "p" : string_scope.
-  Local Notation "'MPP'"          := "MPP" : string_scope.
-
-  Local Notation "'rs'"           := (@exp_var _ "rs" _ _) : exp_scope.
-  Local Notation "'rs1'"          := (@exp_var _ "rs1" _ _) : exp_scope.
-  Local Notation "'rs1_val'"      := (@exp_var _ "rs1_val" _ _) : exp_scope.
-  Local Notation "'rs2'"          := (@exp_var _ "rs2" _ _) : exp_scope.
-  Local Notation "'rs2_val'"      := (@exp_var _ "rs2_val" _ _) : exp_scope.
-  Local Notation "'rd'"           := (@exp_var _ "rd" _ _) : exp_scope.
-  Local Notation "'op'"           := (@exp_var _ "op" _ _) : exp_scope.
-  Local Notation "'result'"       := (@exp_var _ "result" _ _) : exp_scope.
-  Local Notation "'res'"          := (@exp_var _ "res" _ _) : exp_scope.
-  Local Notation "'v'"            := (@exp_var _ "v" _ _) : exp_scope.
-  Local Notation "'imm'"          := (@exp_var _ "imm" _ _) : exp_scope.
-  Local Notation "'immext'"       := (@exp_var _ "immext" _ _) : exp_scope.
-  Local Notation "'off'"          := (@exp_var _ "off" _ _) : exp_scope.
-  Local Notation "'offset'"       := (@exp_var _ "offset" _ _) : exp_scope.
-  Local Notation "'ret'"          := (@exp_var _ "ret" _ _) : exp_scope.
-  Local Notation "'tmp'"          := (@exp_var _ "tmp" _ _) : exp_scope.
-  Local Notation "'tmp1'"         := (@exp_var _ "tmp1" _ _) : exp_scope.
-  Local Notation "'tmp2'"         := (@exp_var _ "tmp2" _ _) : exp_scope.
-  Local Notation "'tmp3'"         := (@exp_var _ "tmp3" _ _) : exp_scope.
-  Local Notation "'t'"            := (@exp_var _ "t" _ _) : exp_scope.
-  Local Notation "'e'"            := (@exp_var _ "e" _ _) : exp_scope.
-  Local Notation "'addr'"         := (@exp_var _ "addr" _ _) : exp_scope.
-  Local Notation "'paddr'"        := (@exp_var _ "paddr" _ _) : exp_scope.
-  Local Notation "'vaddr'"        := (@exp_var _ "vaddr" _ _) : exp_scope.
-  Local Notation "'taken'"        := (@exp_var _ "taken" _ _) : exp_scope.
-  Local Notation "'typ'"          := (@exp_var _ "typ" _ _) : exp_scope.
-  Local Notation "'acc'"          := (@exp_var _ "acc" _ _) : exp_scope.
-  Local Notation "'value'"        := (@exp_var _ "value" _ _) : exp_scope.
-  Local Notation "'data'"         := (@exp_var _ "data" _ _) : exp_scope.
-  Local Notation "'check'"        := (@exp_var _ "check" _ _) : exp_scope.
-  Local Notation "'ent'"          := (@exp_var _ "ent" _ _) : exp_scope.
-  Local Notation "'pmpaddr'"      := (@exp_var _ "pmpaddr" _ _) : exp_scope.
-  Local Notation "'prev_pmpaddr'" := (@exp_var _ "prev_pmpaddr" _ _) : exp_scope.
-  Local Notation "'rng'"          := (@exp_var _ "rng" _ _) : exp_scope.
-  Local Notation "'cfg'"          := (@exp_var _ "cfg" _ _) : exp_scope.
-  Local Notation "'L'"            := (@exp_var _ "L" _ _) : exp_scope.
-  Local Notation "'A'"            := (@exp_var _ "A" _ _) : exp_scope.
-  Local Notation "'X'"            := (@exp_var _ "X" _ _) : exp_scope.
-  Local Notation "'W'"            := (@exp_var _ "W" _ _) : exp_scope.
-  Local Notation "'R'"            := (@exp_var _ "R" _ _) : exp_scope.
-  Local Notation "'lo'"           := (@exp_var _ "lo" _ _) : exp_scope.
-  Local Notation "'hi'"           := (@exp_var _ "hi" _ _) : exp_scope.
-  Local Notation "'f'"            := (@exp_var _ "f" _ _) : exp_scope.
-  Local Notation "'w'"            := (@exp_var _ "w" _ _) : exp_scope.
-  Local Notation "'ctl'"          := (@exp_var _ "ctl" _ _) : exp_scope.
-  Local Notation "'c'"            := (@exp_var _ "c" _ _) : exp_scope.
-  Local Notation "'cause'"        := (@exp_var _ "cause" _ _) : exp_scope.
-  Local Notation "'tvec'"         := (@exp_var _ "tvec" _ _) : exp_scope.
-  Local Notation "'m'"            := (@exp_var _ "m" _ _) : exp_scope.
-  Local Notation "'epc'"          := (@exp_var _ "epc" _ _) : exp_scope.
-  Local Notation "'priv'"         := (@exp_var _ "priv" _ _) : exp_scope.
-  Local Notation "'cur_priv'"     := (@exp_var _ "cur_priv" _ _) : exp_scope.
-  Local Notation "'del_priv'"     := (@exp_var _ "del_priv" _ _) : exp_scope.
-  Local Notation "'prev_priv'"    := (@exp_var _ "prev_priv" _ _) : exp_scope.
-  Local Notation "'p'"            := (@exp_var _ "p" _ _) : exp_scope.
-  Local Notation "'MPP'"          := (@exp_var _ "MPP" _ _) : exp_scope.
-
-  Local Notation "'Read'" := (exp_union access_type KRead (exp_lit ty_unit tt)) : exp_scope.
-  Local Notation "'Write'" := (exp_union access_type KWrite (exp_lit ty_unit tt)) : exp_scope.
-  Local Notation "'ReadWrite'" := (exp_union access_type KReadWrite (exp_lit ty_unit tt)) : exp_scope.
-  Local Notation "'Execute'" := (exp_union access_type KExecute (exp_lit ty_unit tt)) : exp_scope.
-
-  Local Notation "'E_Fetch_Access_Fault'" := (exp_union exception_type KE_Fetch_Access_Fault (exp_lit ty_unit tt)) : exp_scope.
-  Local Notation "'E_Load_Access_Fault'" := (exp_union exception_type KE_Load_Access_Fault (exp_lit ty_unit tt)) : exp_scope.
-  Local Notation "'E_SAMO_Access_Fault'" := (exp_union exception_type KE_SAMO_Access_Fault (exp_lit ty_unit tt)) : exp_scope.
-  Local Notation "'E_U_EnvCall'" := (exp_union exception_type KE_U_EnvCall (exp_lit ty_unit tt)) : exp_scope.
-  Local Notation "'E_M_EnvCall'" := (exp_union exception_type KE_M_EnvCall (exp_lit ty_unit tt)) : exp_scope.
-  Local Notation "'E_Illegal_Instr'" := (exp_union exception_type KE_Illegal_Instr (exp_lit ty_unit tt)) : exp_scope.
-
-  Local Notation "'None'" := (exp_inr (exp_lit ty_unit tt)) : exp_scope.
-  Local Notation "'Some' va" := (exp_inl va) (at level 10, va at next level) : exp_scope.
-
-  Local Notation "'MemValue' memv" := (exp_union memory_op_result KMemValue memv) (at level 10, memv at next level) : exp_scope.
-  Local Notation "'MemException' meme" := (exp_union memory_op_result KMemException meme) (at level 10, meme at next level) : exp_scope.
-
-  Local Notation "'F_Base' memv" := (exp_union fetch_result KF_Base memv) (at level 10, memv at next level) : exp_scope.
-  Local Notation "'F_Error' meme memv" := (exp_union fetch_result KF_Error (exp_binop binop_pair meme memv)) (at level 10, meme at next level, memv at next level) : exp_scope.
-
-  Local Notation "'CTL_TRAP' exc" := (exp_union ctl_result KCTL_TRAP exc) (at level 10, exc at next level) : exp_scope.
-  Local Notation "'CTL_MRET'" := (exp_union ctl_result KCTL_MRET (exp_lit ty_unit tt)) : exp_scope.
 
   Notation "'use' 'lemma' lem args" := (stm_lemma lem args%arg) (at level 10, lem at next level) : exp_scope.
   Notation "'use' 'lemma' lem" := (stm_lemma lem env_nil) (at level 10, lem at next level) : exp_scope.
