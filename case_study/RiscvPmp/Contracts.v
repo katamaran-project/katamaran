@@ -464,6 +464,5 @@ Lemma defined_contracts_valid : forall {Δ τ} (f : Fun Δ τ),
     end.
 Proof.
   destruct f; simpl; trivial;
-    try (left; reflexivity);
-    try (right; compute; firstorder).
+    (left; reflexivity) || (right; compute; firstorder).
 Qed.
