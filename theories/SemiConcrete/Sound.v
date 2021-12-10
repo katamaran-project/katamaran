@@ -283,7 +283,9 @@ Module Soundness
         apply (IHasn1 ι (fun δ => interpret_assertion asn2 ι ✱ POST δ) δ1 h1); clear IHasn1.
         revert Hwp. apply consume_monotonic. intros _ h2.
         now apply (IHasn2 ι POST δ1 h2).
-      - (* asn_or *) admit.
+      - intros []; rewrite sep_disj_distr.
+        + apply lor_right1; apply IHasn1; assumption.
+        + apply lor_right2; apply IHasn2; assumption.
       - intros [v Hwp].
         apply (entails_trans (interpret_scheap h1) (interpret_assertion asn (env_snoc ι (ς , τ) v) ✱ POST δ1)).
         + now apply IHasn.
@@ -291,7 +293,7 @@ Module Soundness
           apply lex_right with v, entails_refl.
           apply entails_refl.
       - now rewrite sepcon_comm, sepcon_emp.
-    Admitted.
+    Qed.
 
     Lemma produce_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
@@ -323,7 +325,12 @@ Module Soundness
         revert Hwp. apply produce_monotonic. intros _ h2 Hwp.
         unfold liftP. apply wand_sepcon_adjoint.
         now apply (IHasn2 ι POST δ1 h2).
-      - (* asn_or *) admit.
+      - intros [].
+        rewrite sepcon_comm.
+        rewrite sep_disj_distr.
+        apply lor_left; rewrite sepcon_comm.
+        + apply IHasn1; assumption.
+        + apply IHasn2; assumption.
       - intros Hwp.
         rewrite sepcon_comm.
         apply wand_sepcon_adjoint.
@@ -332,7 +339,7 @@ Module Soundness
         rewrite sepcon_comm.
         now apply IHasn.
       - now rewrite sepcon_emp.
-    Admitted.
+    Qed.
 
     Lemma produce_sound' {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,

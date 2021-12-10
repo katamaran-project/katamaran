@@ -328,4 +328,20 @@ Section SepEquivalence.
     apply entails_refl.
   Qed.
 
+  Lemma sep_disj_distr {P Q R : L} :
+    ((P ∨ Q) ✱ R) ⊣⊢s ((P ✱ R) ∨ (Q ✱ R)).
+  Proof.
+    split.
+    - rewrite wand_sepcon_adjoint.
+      apply lor_left;
+        rewrite <- wand_sepcon_adjoint;
+        try (apply lor_right1; apply entails_refl);
+        try (apply lor_right2; apply entails_refl).
+    - apply lor_left;
+        apply sepcon_entails;
+        try apply entails_refl;
+        try (apply lor_right1; apply entails_refl);
+        try (apply lor_right2; apply entails_refl).
+  Qed.
+
 End SepEquivalence.
