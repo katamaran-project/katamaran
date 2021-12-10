@@ -682,7 +682,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | inr e   => fail "Invalid tvec mode"
     end.
 
-  Definition fun_tvec_addr : Stm [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_xlenbits) :=
+  Definition fun_tvec_addr : Stm [m ∶ ty_xlenbits, c ∶ ty_mcause] (ty_option ty_xlenbits) :=
     Some m.
 
   Definition fun_handle_illegal : Stm ctx_nil ty_unit :=
