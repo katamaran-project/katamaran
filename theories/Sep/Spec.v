@@ -35,6 +35,7 @@ From Coq Require Import
      Classes.RelationClasses
      Classes.Morphisms_Prop
      Classes.Morphisms_Relations
+     Relations.Relation_Definitions
      Program.Basics
      Program.Tactics
      String
@@ -1266,27 +1267,27 @@ Module Assertions
     Ltac rew := rewrite ?subst_sub_comp, ?subst_shift_single, ?subst_sub_id, ?sub_comp_id_right,
         ?sub_comp_id_left, ?inst_sub_id, ?inst_sub_id.
 
-    Inductive Triangular (w : World) : World -> Type :=
-    | tri_id        : Triangular w w
+    Inductive Tri (w : World) : World -> Type :=
+    | tri_id        : Tri w w
     | tri_cons {w' x σ}
         (xIn : (x::σ) ∈ w) (t : Term (wctx w - (x::σ)) σ)
-        (ν : Triangular (wsubst w x t) w') : Triangular w w'.
+        (ν : Tri (wsubst w x t) w') : Tri w w'.
     Global Arguments tri_id {_}.
     Global Arguments tri_cons {_ _} x {_ _} t ν.
 
-    Fixpoint tri_comp {w1 w2 w3} (ν12 : Triangular w1 w2) : Triangular w2 w3 -> Triangular w1 w3 :=
+    Fixpoint tri_comp {w1 w2 w3} (ν12 : Tri w1 w2) : Tri w2 w3 -> Tri w1 w3 :=
       match ν12 with
       | tri_id           => fun ν => ν
       | tri_cons x t ν12 => fun ν => tri_cons x t (tri_comp ν12 ν)
       end.
 
-    Fixpoint sub_triangular {w1 w2} (ζ : Triangular w1 w2) : Sub w1 w2 :=
+    Fixpoint sub_triangular {w1 w2} (ζ : Tri w1 w2) : Sub w1 w2 :=
       match ζ with
       | tri_id         => sub_id _
       | tri_cons x t ζ => subst (sub_single _ t) (sub_triangular ζ)
       end.
 
-    Lemma sub_triangular_comp {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) :
+    Lemma sub_triangular_comp {w0 w1 w2} (ν01 : Tri w0 w1) (ν12 : Tri w1 w2) :
       sub_triangular (tri_comp ν01 ν12) =
       subst (sub_triangular ν01) (sub_triangular ν12).
     Proof.
@@ -1295,13 +1296,13 @@ Module Assertions
       - now rewrite sub_comp_assoc, IHν01.
     Qed.
 
-    Fixpoint sub_triangular_inv {w1 w2} (ζ : Triangular w1 w2) : Sub w2 w1 :=
+    Fixpoint sub_triangular_inv {w1 w2} (ζ : Tri w1 w2) : Sub w2 w1 :=
       match ζ with
       | tri_id         => sub_id _
       | tri_cons x t ζ => subst (sub_triangular_inv ζ) (sub_shift _)
       end.
 
-    Lemma sub_triangular_inv_comp {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) :
+    Lemma sub_triangular_inv_comp {w0 w1 w2} (ν01 : Tri w0 w1) (ν12 : Tri w1 w2) :
       sub_triangular_inv (tri_comp ν01 ν12) =
       subst (sub_triangular_inv ν12) (sub_triangular_inv ν01).
     Proof.
@@ -1310,7 +1311,7 @@ Module Assertions
       - now rewrite IHν01, sub_comp_assoc.
     Qed.
 
-    Fixpoint inst_triangular {w0 w1} (ζ : Triangular w0 w1) (ι : SymInstance w0) : Prop :=
+    Fixpoint inst_triangular {w0 w1} (ζ : Tri w0 w1) (ι : SymInstance w0) : Prop :=
       match ζ with
       | tri_id => True
       | @tri_cons _ Σ' x σ xIn t ζ0 =>
@@ -1318,11 +1319,11 @@ Module Assertions
         env_lookup ι xIn = inst t ι' /\ inst_triangular ζ0 ι'
       end.
 
-    Lemma inst_triangular_left_inverse {w1 w2 : World} (ι2 : SymInstance w2) (ν : Triangular w1 w2) :
+    Lemma inst_triangular_left_inverse {w1 w2 : World} (ι2 : SymInstance w2) (ν : Tri w1 w2) :
       inst (sub_triangular_inv ν) (inst (sub_triangular ν) ι2) = ι2.
     Proof. rewrite <- inst_subst. induction ν; cbn - [subst]; now rew. Qed.
 
-    Lemma inst_triangular_right_inverse {w1 w2 : World} (ι1 : SymInstance w1) (ζ : Triangular w1 w2) :
+    Lemma inst_triangular_right_inverse {w1 w2 : World} (ι1 : SymInstance w1) (ζ : Tri w1 w2) :
       inst_triangular ζ ι1 ->
       inst (sub_triangular ζ) (inst (sub_triangular_inv ζ) ι1) = ι1.
     Proof.
@@ -1333,7 +1334,7 @@ Module Assertions
     Qed.
 
     (* Forward entailment *)
-    Lemma entails_triangular_inv {w0 w1} (ν : Triangular w0 w1) (ι0 : SymInstance w0) :
+    Lemma entails_triangular_inv {w0 w1} (ν : Tri w0 w1) (ι0 : SymInstance w0) :
       inst_triangular ν ι0 ->
       instpc (wco w0) ι0 ->
       instpc (wco w1) (inst (sub_triangular_inv ν) ι0).
@@ -1345,7 +1346,7 @@ Module Assertions
         rewrite inst_subst, inst_sub_single_shift; auto.
     Qed.
 
-    Lemma inst_triangular_valid {w0 w1} (ζ01 : Triangular w0 w1) (ι1 : SymInstance w1) :
+    Lemma inst_triangular_valid {w0 w1} (ζ01 : Tri w0 w1) (ι1 : SymInstance w1) :
       inst_triangular ζ01 (inst (sub_triangular ζ01) ι1).
     Proof.
       induction ζ01; cbn; auto.
@@ -1360,7 +1361,7 @@ Module Assertions
       auto.
     Qed.
 
-    Lemma inst_tri_comp {w0 w1 w2} (ν01 : Triangular w0 w1) (ν12 : Triangular w1 w2) (ι0 : SymInstance w0) :
+    Lemma inst_tri_comp {w0 w1 w2} (ν01 : Tri w0 w1) (ν12 : Tri w1 w2) (ι0 : SymInstance w0) :
       inst_triangular (tri_comp ν01 ν12) ι0 <->
       inst_triangular ν01 ι0 /\ inst_triangular ν12 (inst (sub_triangular_inv ν01) ι0).
     Proof.
@@ -1375,7 +1376,7 @@ Module Assertions
 
   Definition Solver : Type :=
     forall {w0 : World} (fmls0 : List Formula w0),
-      option { w1 & Triangular w0 w1 * List Formula w1 }%type.
+      option { w1 & Tri w0 w1 * List Formula w1 }%type.
 
   Definition SolverSpec (s : Solver) : Prop :=
     forall {w0 : World} (fmls0 : List Formula w0),
@@ -1473,6 +1474,492 @@ Module Assertions
   (*   ⊢ □A -> ∀ b, Snoc (□A) b := *)
   (*   fun w0 a b w1 ω01 => a w1 (env_tail ω01). *)
   (* Arguments four_wk1 {A Σ0} pc0 a b [Σ1] ζ01 : rename. *)
+
+  Module SymProp.
+
+    Inductive EMessage (Σ : LCtx) : Type :=
+    | EMsgHere (msg : Message Σ)
+    | EMsgThere {b} (msg : EMessage (Σ ▻ b)).
+
+    Fixpoint emsg_close {Σ ΣΔ} {struct ΣΔ} : EMessage (Σ ▻▻ ΣΔ) -> EMessage Σ :=
+      match ΣΔ with
+      | ε       => fun msg => msg
+      | ΣΔ  ▻ b => fun msg => emsg_close (EMsgThere msg)
+      end.
+
+    Fixpoint shift_emsg {Σ b} (bIn : b ∈ Σ) (emsg : EMessage (Σ - b)) : EMessage Σ :=
+      match emsg with
+      | EMsgHere msg   => EMsgHere (subst msg (sub_shift bIn))
+      | EMsgThere emsg => EMsgThere (shift_emsg (inctx_succ bIn) emsg)
+      end.
+
+    Inductive SymProp (Σ : LCtx) : Type :=
+    | angelic_binary (o1 o2 : SymProp Σ)
+    | demonic_binary (o1 o2 : SymProp Σ)
+    | error (msg : EMessage Σ)
+    | block
+    | assertk (fml : Formula Σ) (msg : Message Σ) (k : SymProp Σ)
+    | assumek (fml : Formula Σ) (k : SymProp Σ)
+    (* Don't use these two directly. Instead, use the HOAS versions 'angelic' *)
+    (* and 'demonic' that will freshen names. *)
+    | angelicv b (k : SymProp (Σ ▻ b))
+    | demonicv b (k : SymProp (Σ ▻ b))
+    | assert_vareq
+        x σ (xIn : x::σ ∈ Σ)
+        (t : Term (Σ - (x::σ)) σ)
+        (msg : Message (Σ - (x::σ)))
+        (k : SymProp (Σ - (x::σ)))
+    | assume_vareq
+        x σ (xIn : (x,σ) ∈ Σ)
+        (t : Term (Σ - (x::σ)) σ)
+        (k : SymProp (Σ - (x::σ)))
+    | debug
+        {BT B} {subB : Subst BT}
+        {instB : Inst BT B}
+        {occB: OccursCheck BT}
+        (b : BT Σ) (k : SymProp Σ).
+    Notation 𝕊 := SymProp.
+
+    Global Arguments error {_} _.
+    Global Arguments block {_}.
+    Global Arguments assertk {_} fml msg k.
+    Global Arguments assumek {_} fml k.
+    Global Arguments angelicv {_} _ _.
+    Global Arguments demonicv {_} _ _.
+    Global Arguments assert_vareq {_} x {_ _} t msg k.
+    Global Arguments assume_vareq {_} x {_ _} t k.
+
+    Definition angelic_close0 {Σ0 : LCtx} :
+      forall Σ, 𝕊 (Σ0 ▻▻ Σ) -> 𝕊 Σ0 :=
+      fix close Σ :=
+        match Σ with
+        | ε     => fun p => p
+        | Σ ▻ b => fun p => close Σ (angelicv b p)
+        end.
+
+    Definition demonic_close0 {Σ0 : LCtx} :
+      forall Σ, 𝕊 (Σ0 ▻▻ Σ) -> 𝕊 Σ0 :=
+      fix close Σ :=
+        match Σ with
+        | ε     => fun p => p
+        | Σ ▻ b => fun p => close Σ (demonicv b p)
+        end.
+
+    Definition demonic_close :
+      forall Σ, 𝕊 Σ -> 𝕊 ε :=
+      fix close Σ :=
+        match Σ with
+        | ctx_nil      => fun k => k
+        | ctx_snoc Σ b => fun k => close Σ (@demonicv Σ b k)
+        end.
+
+    (* Global Instance persistent_spath : Persistent 𝕊 := *)
+    (*   (* ⊢ 𝕊 -> □𝕊 := *) *)
+    (*    fix pers (w0 : World) (p : 𝕊 w0) {w1 : World} ω01 {struct p} : 𝕊 w1 := *)
+    (*      match p with *)
+    (*      | angelic_binary p1 p2 => angelic_binary (pers w0 p1 ω01) (pers w0 p2 ω01) *)
+    (*      | demonic_binary p1 p2 => demonic_binary (pers w0 p1 ω01) (pers w0 p2 ω01) *)
+    (*      | error msg            => error (subst msg (sub_acc ω01)) *)
+    (*      | block                => block *)
+    (*      | assertk fml msg p0   => *)
+    (*          assertk (subst fml (sub_acc ω01)) (subst msg (sub_acc ω01)) *)
+    (*            (pers (wformula w0 fml) p0 (wacc_formula ω01 fml)) *)
+    (*      | assumek fml p        => *)
+    (*          assumek (subst fml (sub_acc ω01)) *)
+    (*            (pers (wformula w0 fml) p (wacc_formula ω01 fml)) *)
+    (*      | angelicv b p0        => angelicv b (pers (wsnoc w0 b) p0 (wacc_snoc ω01 b)) *)
+    (*      | demonicv b p0        => demonicv b (pers (wsnoc w0 b) p0 (wacc_snoc ω01 b)) *)
+    (*      | assert_vareq x t msg p => *)
+    (*        let ζ := subst (sub_shift _) (sub_acc ω01) in *)
+    (*        assertk *)
+    (*          (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
+    (*          (subst msg ζ) *)
+    (*          (pers (wsubst w0 x t) p *)
+    (*             (MkAcc (MkWorld (subst (wco w0) (sub_single _ t))) *)
+    (*                (MkWorld *)
+    (*                   (cons (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
+    (*                      (wco w1))) ζ)) *)
+    (*      | assume_vareq x t p => *)
+    (*        let ζ := subst (sub_shift _) (sub_acc ω01) in *)
+    (*        assumek *)
+    (*          (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
+    (*          (pers (wsubst w0 x t) p *)
+    (*             (MkAcc (MkWorld (subst (wco w0) (sub_single _ t))) *)
+    (*                (MkWorld *)
+    (*                   (cons (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
+    (*                      (wco w1))) ζ)) *)
+    (*      | debug d p => debug (subst d (sub_acc ω01)) (pers w0 p ω01) *)
+    (*      end. *)
+
+    Fixpoint assume_formulas_without_solver' {Σ}
+      (fmls : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      match fmls with
+      | nil           => p
+      | cons fml fmls => assume_formulas_without_solver' fmls (assumek fml p)
+      end.
+
+    Fixpoint assert_formulas_without_solver' {Σ}
+      (msg : Message Σ) (fmls : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      match fmls with
+      | nil => p
+      | cons fml fmls =>
+        assert_formulas_without_solver' msg fmls (assertk fml msg p)
+      end.
+
+    (* These versions just add the world indexing. They simply enforces
+       that p should have been computed in the world with fmls added. *)
+    Definition assume_formulas_without_solver {w : World}
+      (fmls : List Formula w) (p : 𝕊 (wformulas w fmls)) : 𝕊 w :=
+      assume_formulas_without_solver' fmls p.
+    Global Arguments assume_formulas_without_solver {_} fmls p.
+
+    Definition assert_formulas_without_solver {w : World} (msg : Message w)
+      (fmls : List Formula w) (p : 𝕊 (wformulas w fmls)) : 𝕊 w :=
+      assert_formulas_without_solver' msg fmls p.
+    Global Arguments assert_formulas_without_solver {_} msg fmls p.
+
+    Fixpoint assume_triangular {w1 w2} (ν : Tri w1 w2) :
+      𝕊 w2 -> 𝕊 w1.
+    Proof.
+      destruct ν; intros o; cbn in o.
+      - exact o.
+      - apply (@assume_vareq w1 x σ xIn t).
+        eapply (assume_triangular _ _ ν o).
+    Defined.
+
+    Fixpoint assert_triangular {w1 w2} (msg : Message (wctx w1)) (ζ : Tri w1 w2) :
+      (Message w2 -> 𝕊 w2) -> 𝕊 w1.
+    Proof.
+      destruct ζ; intros o; cbn in o.
+      - apply o. apply msg.
+      - apply (@assert_vareq w1 x σ xIn t).
+        apply (subst msg (sub_single xIn t)).
+        refine (assert_triangular (wsubst w1 x t) _ (subst msg (sub_single xIn t)) ζ o).
+    Defined.
+
+    Fixpoint safe {Σ} (p : 𝕊 Σ) (ι : SymInstance Σ) : Prop :=
+      (* ⊢ 𝕊 -> SymInstance -> PROP := *)
+        match p with
+        | angelic_binary o1 o2 => safe o1 ι \/ safe o2 ι
+        | demonic_binary o1 o2 => safe o1 ι /\ safe o2 ι
+        | error msg => False
+        | block => True
+        | assertk fml msg o =>
+          Obligation msg fml ι /\ safe o ι
+        | assumek fml o => (inst fml ι : Prop) -> safe o ι
+        | angelicv b k => exists v, safe k (env_snoc ι b v)
+        | demonicv b k => forall v, safe k (env_snoc ι b v)
+        | @assert_vareq _ x σ xIn t msg k =>
+          (let ζ := sub_shift xIn in
+          Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
+          (let ι' := env_remove (x,σ) ι xIn in
+          safe k ι')
+        | @assume_vareq _ x σ xIn t k =>
+          let ι' := env_remove (x,σ) ι xIn in
+          env_lookup ι xIn = inst t ι' ->
+          safe k ι'
+        | debug d k => Debug (inst d ι) (safe k ι)
+        end%type.
+    Global Arguments safe {Σ} p ι.
+
+    (* We use a world indexed version of safe in the soundness proofs, just to make
+       Coq's unifier happy. *)
+    Fixpoint wsafe {w : World} (p : 𝕊 w) (ι : SymInstance w) : Prop :=
+      (* ⊢ 𝕊 -> SymInstance -> PROP := *)
+        match p with
+        | angelic_binary o1 o2 => wsafe o1 ι \/ wsafe o2 ι
+        | demonic_binary o1 o2 => wsafe o1 ι /\ wsafe o2 ι
+        | error msg => False
+        | block => True
+        | assertk fml msg o =>
+          Obligation msg fml ι /\ @wsafe (wformula w fml) o ι
+        | assumek fml o => (inst fml ι : Prop) -> @wsafe (wformula w fml) o ι
+        | angelicv b k => exists v, @wsafe (wsnoc w b) k (env_snoc ι b v)
+        | demonicv b k => forall v, @wsafe (wsnoc w b) k (env_snoc ι b v)
+        | @assert_vareq _ x σ xIn t msg k =>
+          (let ζ := sub_shift xIn in
+          Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
+          (let ι' := env_remove (x,σ) ι xIn in
+          @wsafe (wsubst w x t) k ι')
+        | @assume_vareq _ x σ xIn t k =>
+          let ι' := env_remove (x,σ) ι xIn in
+          env_lookup ι xIn = inst t ι' ->
+          @wsafe (wsubst w x t) k ι'
+        | debug d k => Debug (inst d ι) (wsafe k ι)
+        end%type.
+    Global Arguments wsafe {w} p ι.
+
+    Lemma obligation_equiv {Σ : LCtx} (msg : Message Σ) (fml : Formula Σ) (ι : SymInstance Σ) :
+      Obligation msg fml ι <-> inst fml ι.
+    Proof. split. now intros []. now constructor. Qed.
+
+    Lemma debug_equiv {B : Type} {b : B} {P : Prop} :
+      @Debug B b P <-> P.
+    Proof. split. now intros []. now constructor. Qed.
+
+    Lemma wsafe_safe {w : World} (p : 𝕊 w) (ι : SymInstance w) :
+      wsafe p ι <-> safe p ι.
+    Proof.
+      destruct w as [Σ pc]; cbn in *; revert pc.
+      induction p; cbn; intros pc; rewrite ?debug_equiv; auto;
+        try (intuition; fail).
+      apply base.exist_proper; eauto.
+    Qed.
+
+    (* Lemma safe_persist  {w1 w2 : World} (ω12 : w1 ⊒ w2) *)
+    (*       (o : 𝕊 w1) (ι2 : SymInstance w2) : *)
+    (*   safe (persist (A := 𝕊) o ω12) ι2 <-> *)
+    (*   safe o (inst (T := Sub _) ω12 ι2). *)
+    (* Proof. *)
+    (*   revert w2 ω12 ι2. *)
+    (*   induction o; cbn; intros. *)
+    (*   - now rewrite IHo1, IHo2. *)
+    (*   - now rewrite IHo1, IHo2. *)
+    (*   - split; intros []. *)
+    (*   - reflexivity. *)
+    (*   - rewrite ?obligation_equiv. *)
+    (*     now rewrite IHo, inst_subst. *)
+    (*   - now rewrite IHo, inst_subst. *)
+    (*   - split; intros [v HYP]; exists v; revert HYP; *)
+    (*       rewrite IHo; unfold wacc_snoc, wsnoc; *)
+    (*         cbn [wctx wsub]; now rewrite inst_sub_up1. *)
+    (*   - split; intros HYP v; specialize (HYP v); revert HYP; *)
+    (*       rewrite IHo; unfold wacc_snoc, wsnoc; *)
+    (*         cbn [wctx wsub]; now rewrite inst_sub_up1. *)
+    (*   - rewrite ?obligation_equiv. *)
+    (*     rewrite IHo; unfold wsubst; cbn [wctx wsub]. cbn. *)
+    (*     now rewrite ?inst_subst, ?inst_sub_shift, <- inst_lookup. *)
+    (*   - rewrite IHo; unfold wsubst; cbn [wctx wsub]. *)
+    (*     now rewrite ?inst_subst, ?inst_sub_shift, <- inst_lookup. *)
+    (*   - now rewrite ?debug_equiv. *)
+    (* Qed. *)
+
+    Lemma safe_assume_formulas_without_solver {w0 : World}
+      (fmls : List Formula w0) (p : 𝕊 w0) (ι0 : SymInstance w0) :
+      wsafe (assume_formulas_without_solver fmls p) ι0 <->
+      (instpc fmls ι0 -> @wsafe (wformulas w0 fmls) p ι0).
+    Proof.
+      unfold assume_formulas_without_solver. revert p.
+      induction fmls; cbn in *; intros p.
+      - destruct w0; cbn; split; auto.
+        intros HYP. apply HYP. constructor.
+      - rewrite IHfmls, inst_pathcondition_cons. cbn.
+        intuition.
+    Qed.
+
+    Lemma safe_assert_formulas_without_solver {w0 : World}
+      (msg : Message w0) (fmls : List Formula w0) (p : 𝕊 w0)
+      (ι0 : SymInstance w0) :
+      wsafe (assert_formulas_without_solver msg fmls p) ι0 <->
+      (instpc fmls ι0 /\ @wsafe (wformulas w0 fmls) p ι0).
+    Proof.
+      unfold assert_formulas_without_solver. revert p.
+      induction fmls; cbn in *; intros p.
+      - destruct w0; cbn; split.
+        + intros HYP. split; auto. constructor.
+        + intros []; auto.
+      - rewrite IHfmls, inst_pathcondition_cons; cbn.
+        split; intros []; auto.
+        + destruct H0. destruct H0. auto.
+        + destruct H. split; auto. split; auto.
+          constructor. auto.
+    Qed.
+
+    Lemma safe_assume_triangular {w0 w1} (ζ : Tri w0 w1)
+      (o : 𝕊 w1) (ι0 : SymInstance w0) :
+      wsafe (assume_triangular ζ o) ι0 <->
+      (inst_triangular ζ ι0 -> wsafe o (inst (sub_triangular_inv ζ) ι0)).
+    Proof.
+      induction ζ; cbn in *.
+      - rewrite inst_sub_id. intuition.
+      - rewrite IHζ. clear IHζ.
+        rewrite <- inst_sub_shift.
+        rewrite inst_subst.
+        intuition.
+    Qed.
+
+    Lemma safe_assert_triangular {w0 w1} msg (ζ : Tri w0 w1)
+      (o : Message w1 -> 𝕊 w1) (ι0 : SymInstance w0) :
+      wsafe (assert_triangular msg ζ o) ι0 <->
+      (inst_triangular ζ ι0 /\ wsafe (o (subst msg (sub_triangular ζ))) (inst (sub_triangular_inv ζ) ι0)).
+    Proof.
+      induction ζ.
+      - cbn. rewrite inst_sub_id, subst_sub_id. intuition.
+      - cbn [wsafe assert_triangular inst_triangular].
+        rewrite obligation_equiv. cbn.
+        rewrite subst_sub_comp.
+        rewrite IHζ. clear IHζ.
+        rewrite <- inst_sub_shift.
+        rewrite ?inst_subst.
+        intuition.
+    Qed.
+
+    Lemma safe_angelic_close0 {Σ0 Σ} (p : 𝕊 (Σ0 ▻▻ Σ)) (ι0 : SymInstance Σ0) :
+      safe (angelic_close0 Σ p) ι0 <-> exists (ι : SymInstance Σ), safe p (env_cat ι0 ι).
+    Proof.
+      induction Σ; cbn.
+      - split.
+        + intros s.
+          now exists env_nil.
+        + intros [ι sp].
+          destruct (nilView ι).
+          now cbn in *.
+      - rewrite (IHΣ (angelicv b p)).
+        split.
+        + intros (ι & v & sp).
+          now exists (env_snoc ι b v).
+        + intros (ι & sp).
+          destruct (snocView ι) as (ι & v).
+          now exists ι, v.
+    Qed.
+
+    Lemma safe_demonic_close0 {Σ0 Σ} (p : 𝕊 (Σ0 ▻▻ Σ)) (ι0 : SymInstance Σ0) :
+      safe (demonic_close0 Σ p) ι0 <-> forall (ι : SymInstance Σ), safe p (env_cat ι0 ι).
+    Proof.
+      induction Σ; cbn.
+      - split.
+        + intros s ι. now destruct (nilView ι).
+        + intros s; apply (s env_nil).
+      - rewrite (IHΣ (demonicv b p)); cbn.
+        split.
+        + intros sp ι. destruct (snocView ι) as (ι & v). cbn. auto.
+        + intros sp ι v. apply (sp (env_snoc ι b v)).
+    Qed.
+
+    (* Fixpoint occurs_check_spath {Σ x} (xIn : x ∈ Σ) (p : 𝕊 Σ) : option (𝕊 (Σ - x)) := *)
+    (*   match p with *)
+    (*   | angelic_binary o1 o2 => *)
+    (*     option_ap (option_map (angelic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2) *)
+    (*   | demonic_binary o1 o2 => *)
+    (*     option_ap (option_map (demonic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2) *)
+    (*   | error msg => option_map error (occurs_check xIn msg) *)
+    (*   | block => Some block *)
+    (*   | assertk P msg o => *)
+    (*     option_ap (option_ap (option_map (assertk (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check xIn msg)) (occurs_check_spath xIn o) *)
+    (*   | assumek P o => option_ap (option_map (assumek (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check_spath xIn o) *)
+    (*   | angelicv b o => option_map (angelicv b) (occurs_check_spath (inctx_succ xIn) o) *)
+    (*   | demonicv b o => option_map (demonicv b) (occurs_check_spath (inctx_succ xIn) o) *)
+    (*   | @assert_vareq _ y σ yIn t msg o => *)
+    (*     match occurs_check_view yIn xIn with *)
+    (*     | Same _ => None *)
+    (*     | @Diff _ _ _ _ x xIn => *)
+    (*       option_ap *)
+    (*         (option_ap *)
+    (*            (option_map *)
+    (*               (fun (t' : Term (Σ - (y :: σ) - x) σ) (msg' : Message (Σ - (y :: σ) - x)) (o' : 𝕊 (Σ - (y :: σ) - x)) => *)
+    (*                  let e := swap_remove yIn xIn in *)
+    (*                  assert_vareq *)
+    (*                    y *)
+    (*                    (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e) *)
+    (*                    (eq_rect (Σ - (y :: σ) - x) Message msg' (Σ - x - (y :: σ)) e) *)
+    (*                    (eq_rect (Σ - (y :: σ) - x) 𝕊 o' (Σ - x - (y :: σ)) e)) *)
+    (*               (occurs_check xIn t)) *)
+    (*            (occurs_check xIn msg)) *)
+    (*         (occurs_check_spath xIn o) *)
+    (*     end *)
+    (*   | @assume_vareq _ y σ yIn t o => *)
+    (*     match occurs_check_view yIn xIn with *)
+    (*     | Same _ => Some o *)
+    (*     | @Diff _ _ _ _ x xIn => *)
+    (*       option_ap *)
+    (*         (option_map *)
+    (*            (fun (t' : Term (Σ - (y :: σ) - x) σ) (o' : 𝕊 (Σ - (y :: σ) - x)) => *)
+    (*               let e := swap_remove yIn xIn in *)
+    (*               assume_vareq *)
+    (*                 y *)
+    (*                 (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e) *)
+    (*                 (eq_rect (Σ - (y :: σ) - x) 𝕊 o' (Σ - x - (y :: σ)) e)) *)
+    (*            (occurs_check xIn t)) *)
+    (*         (occurs_check_spath xIn o) *)
+    (*     end *)
+    (*   | debug b o => option_ap (option_map (debug (Σ := Σ - x)) (occurs_check xIn b)) (occurs_check_spath xIn o) *)
+    (*   end. *)
+
+    Definition sequiv Σ : relation (𝕊 Σ) :=
+      fun p q => forall ι, safe p ι <-> safe q ι.
+    Arguments sequiv : clear implicits.
+    Notation "p <=> q" := (sequiv _ p q) (at level 90, no associativity).
+
+    Definition sequiv_refl {Σ} : Reflexive (sequiv Σ).
+    Proof. intros p ι. reflexivity. Qed.
+
+    Definition sequiv_sym {Σ} : Symmetric (sequiv Σ).
+    Proof. intros p q pq ι. now symmetry. Qed.
+
+    Definition sequiv_trans {Σ} : Transitive (sequiv Σ).
+    Proof. intros p q r pq qr ι. now transitivity (safe q ι). Qed.
+
+    Instance sequiv_equivalence {Σ} : Equivalence (sequiv Σ).
+    Proof. split; auto using sequiv_refl, sequiv_sym, sequiv_trans. Qed.
+
+    Instance proper_angelic_close0 {Σ Σe} : Proper (sequiv (Σ ▻▻ Σe) ==> sequiv Σ) (angelic_close0 Σe).
+    Proof. intros p q pq ι. rewrite ?safe_angelic_close0. now apply base.exist_proper. Qed.
+
+    Instance proper_angelic_binary {Σ} : Proper (sequiv Σ ==> sequiv Σ ==> sequiv Σ) (@angelic_binary Σ).
+    Proof.
+      unfold sequiv.
+      intros p1 p2 p12 q1 q2 q12 ι; cbn.
+      now rewrite p12, q12.
+    Qed.
+
+    Instance proper_demonic_close0 {Σ Σu} : Proper (sequiv (Σ ▻▻ Σu) ==> sequiv Σ) (demonic_close0 Σu).
+    Proof. intros p q pq ι. rewrite ?safe_demonic_close0. now apply base.forall_proper. Qed.
+
+    Instance proper_demonic_binary {Σ} : Proper (sequiv Σ ==> sequiv Σ ==> sequiv Σ) (@demonic_binary Σ).
+    Proof.
+      unfold sequiv.
+      intros p1 p2 p12 q1 q2 q12 ι; cbn.
+      now rewrite p12, q12.
+    Qed.
+
+    Instance proper_assumek {Σ} (fml : Formula Σ) : Proper (sequiv Σ ==> sequiv Σ) (assumek fml).
+    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+
+    Instance proper_assertk {Σ} (fml : Formula Σ) (msg : Message Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertk fml msg).
+    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+
+    Instance proper_assume_vareq {Σ x σ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+      Proper (sequiv (Σ - (x :: σ)) ==> sequiv Σ) (assume_vareq x t).
+    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+
+    Instance proper_assert_vareq {Σ x σ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) (msg : Message (Σ - (x :: σ))) :
+      Proper (sequiv (Σ - (x :: σ)) ==> sequiv Σ) (assert_vareq x t msg).
+    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+
+    Instance proper_angelicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (angelicv b).
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.exist_proper. Qed.
+
+    Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
+    Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.forall_proper. Qed.
+
+    Instance proper_debug {BT B} `{Subst BT, Inst BT B, OccursCheck BT} {Σ} {bt : BT Σ} :
+      Proper (sequiv Σ ==> sequiv Σ) (debug bt).
+    Proof. unfold sequiv. intros p q pq ι. cbn. now rewrite ?debug_equiv. Qed.
+
+    Lemma angelic_close0_angelic_binary {Σ Σe} (p1 p2 : 𝕊 (Σ ▻▻ Σe)) :
+      angelic_close0 Σe (angelic_binary p1 p2) <=>
+      angelic_binary (angelic_close0 Σe p1) (angelic_close0 Σe p2).
+    Proof.
+      intros ι; cbn. rewrite ?safe_angelic_close0. cbn.
+      split.
+      - intros [ιe [HYP|HYP]]; [left|right]; exists ιe; exact HYP.
+      - intros [[ιe HYP]|[ιe HYP]]; exists ιe; [left|right]; exact HYP.
+    Qed.
+
+    Lemma demonic_close0_demonic_binary {Σ Σu} (p1 p2 : 𝕊 (Σ ▻▻ Σu)) :
+      demonic_close0 Σu (demonic_binary p1 p2) <=>
+      demonic_binary (demonic_close0 Σu p1) (demonic_close0 Σu p2).
+    Proof.
+      intros ι; cbn. rewrite ?safe_demonic_close0. cbn.
+      split.
+      - intros sp; split; intros ιu; apply (sp ιu).
+      - intros [sp1 sp2] ιu; split; auto.
+    Qed.
+
+  End SymProp.
+  Notation SymProp := SymProp.SymProp.
+  Notation 𝕊 := SymProp.SymProp.
+  Import SymProp.
 
 End Assertions.
 

@@ -568,7 +568,7 @@ Module SepContracts.
   Proof.
     compute. constructor.
     cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
-    repeat setoid_rewrite SPath.obligation_equiv.
+    repeat setoid_rewrite SymProp.obligation_equiv.
     cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
     change
       (forall (y : Z) (ys : list Z),

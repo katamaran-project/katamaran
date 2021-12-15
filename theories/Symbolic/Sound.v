@@ -72,7 +72,7 @@ Module Soundness
   Import SCMUT.MUT.
 
   Import ModalNotations.
-  Import SPath.
+  Import SymProp.
 
   Class Approx (AT : TYPE) (A : Type) : Type :=
     approx :
@@ -85,7 +85,7 @@ Module Soundness
       v = inst t ι.
   Global Arguments ApproxInst {_ _ _} w ι t v /.
 
-  Global Instance ApproxPath : Approx SPath Prop :=
+  Global Instance ApproxPath : Approx 𝕊 Prop :=
     fun w ι SP P => (wsafe SP ι -> P)%type.
 
   Global Instance ApproxBox {AT A} `{Approx AT A} : Approx (Box AT) A :=
@@ -1989,7 +1989,7 @@ Module Soundness
   Qed.
 
   Definition safe_demonic_close {Σ : LCtx} :
-    forall p : SPath Σ,
+    forall p : 𝕊 Σ,
       safe (demonic_close p) env_nil ->
       forall ι : SymInstance Σ,
         safe p ι.
