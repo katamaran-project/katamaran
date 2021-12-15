@@ -67,93 +67,12 @@ Module Mutators
        (symcontractkit : SymbolicContractKit termkit progkit assertkit).
 
   Export symcontractkit.
-
-  Declare Scope modal.
-  Delimit Scope modal with modal.
-
   Import Entailment.
-
-  Inductive Acc (w1 : World) : World -> Type :=
-  | acc_refl : Acc w1 w1
-  | acc_sub {w2 : World} (ζ : Sub w1 w2) (ent : wco w2 ⊢ subst (wco w1) ζ) : Acc w1 w2.
-  Arguments acc_refl {w} : rename.
-  Arguments acc_sub {w1 w2} ζ ent.
-  Notation "w1 ⊒ w2" := (Acc w1 w2) (at level 80).
-
-  Equations(noeqns) acc_trans {w0 w1 w2} (ω01 : w0 ⊒ w1) (ω12 : w1 ⊒ w2) : w0 ⊒ w2 :=
-  | acc_refl         | ω12              := ω12;
-  | ω01              | acc_refl         := ω01;
-  | acc_sub ζ01 ent1 | acc_sub ζ12 ent2 := acc_sub (subst (T := Sub _) ζ01 ζ12) _.
-  Next Obligation.
-    intros w0 w1 w2 ζ01 Hpc01 ζ12 Hpc12. transitivity (subst (wco w1) ζ12); auto.
-    rewrite subst_sub_comp. now apply proper_subst_entails.
-  Qed.
-  Arguments acc_trans {w0 w1 w2} !ω01 !ω12.
-
-  Global Instance preorder_acc : CRelationClasses.PreOrder Acc :=
-    CRelationClasses.Build_PreOrder Acc (@acc_refl) (@acc_trans).
-
-  Definition sub_acc {w1 w2} (ω : w1 ⊒ w2) : Sub (wctx w1) (wctx w2) :=
-    match ω with
-    | acc_refl    => sub_id _
-    | acc_sub ζ _ => ζ
-    end.
-
-  Lemma sub_acc_trans {w0 w1 w2} (ω01 : w0 ⊒ w1) (ω12 : w1 ⊒ w2) :
-    sub_acc (acc_trans ω01 ω12) = subst (sub_acc ω01) (sub_acc ω12).
-  Proof.
-    destruct ω01, ω12; cbn - [subst];
-      now rewrite ?sub_comp_id_left, ?sub_comp_id_right.
-  Qed.
-
-  Definition TYPE : Type := World -> Type.
-  Bind Scope modal with TYPE.
-  Definition Valid (A : TYPE) : Type :=
-    forall w, A w.
-  Definition Impl (A B : TYPE) : TYPE :=
-    fun w => A w -> B w.
-  Definition Box (A : TYPE) : TYPE :=
-    fun w0 => forall w1, w0 ⊒ w1 -> A w1.
-  Definition Forall {I : Type} (A : I -> TYPE) : TYPE :=
-    fun w => forall i : I, A i w.
-  (* Definition Cat (A : TYPE) (Δ : LCtx) : TYPE := *)
-  (*   fun w => A (wcat w Δ). *)
-  Notation WList A := (fun w : World => list (A w)).
-  Notation STerm σ := (fun Σ => Term Σ σ).
-
-  Module ModalNotations.
-
-    Notation "⊢ A" := (Valid A%modal) (at level 100).
-    Notation "A -> B" := (Impl A%modal B%modal) : modal.
-    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal.
-    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal.
-    Notation "'∀' x .. y , P " :=
-      (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
-        (at level 99, x binder, y binder, right associativity)
-      : modal.
-
-  End ModalNotations.
   Import ModalNotations.
   Open Scope modal.
 
-  Definition K {A B} :
-    ⊢ □(A -> B) -> (□A -> □B) :=
-    fun w0 f a w1 ω01 =>
-      f w1 ω01 (a w1 ω01).
-  Definition T {A} :
-    ⊢ □A -> A :=
-    fun w0 a => a w0 acc_refl.
-  Definition four {A} :
-    ⊢ □A -> □□A :=
-    fun w0 a w1 ω01 w2 ω12 =>
-      a w2 (acc_trans ω01 ω12).
-  Global Arguments four : simpl never.
-
-  (* faster version of (four _ sub_wk1) *)
-  (* Definition four_wk1 {A} : *)
-  (*   ⊢ □A -> ∀ b, Snoc (□A) b := *)
-  (*   fun w0 a b w1 ω01 => a w1 (env_tail ω01). *)
-  (* Arguments four_wk1 {A Σ0} pc0 a b [Σ1] ζ01 : rename. *)
+  Notation WList A := (fun w : World => list (A w)).
+  Notation STerm σ := (fun Σ => Term Σ σ).
 
   Class Persistent (A : TYPE) (* `{LogicalRelation.LR A} *) : Type :=
     persist     : ⊢ A -> □A.

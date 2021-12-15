@@ -71,6 +71,7 @@ Module Soundness
   Import SCMUT.
   Import SCMUT.MUT.
 
+  Import ModalNotations.
   Import SPath.
 
   Class Approx (AT : TYPE) (A : Type) : Type :=
@@ -85,7 +86,7 @@ Module Soundness
   Global Arguments ApproxInst {_ _ _} w ι t v /.
 
   Global Instance ApproxPath : Approx SPath Prop :=
-    fun w ι SP P => wsafe SP ι -> P.
+    fun w ι SP P => (wsafe SP ι -> P)%type.
 
   Global Instance ApproxBox {AT A} `{Approx AT A} : Approx (Box AT) A :=
     fun w0 ι0 a0 a =>
