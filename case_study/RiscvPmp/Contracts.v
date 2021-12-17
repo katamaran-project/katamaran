@@ -518,3 +518,135 @@ Proof.
   destruct f; simpl; trivial;
     try reflexivity.
 Admitted.
+
+Module BlockVerification.
+
+  Import ModalNotations.
+
+  Definition M : TYPE -> TYPE :=
+    fun A => □(A -> SHeap -> 𝕊) -> SHeap -> 𝕊.
+
+  Definition pure {A} : ⊢ A -> M A. Admitted.
+  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B. Admitted.
+  Definition angelic {σ} : ⊢ M (STerm σ). Admitted.
+  Definition assert : ⊢ Formula -> M Unit. Admitted.
+  Definition assume : ⊢ Formula -> M Unit. Admitted.
+
+  Axiom produce_chunk : ⊢ Chunk -> M Unit.
+  Axiom consume_chunk : ⊢ Chunk -> M Unit.
+
+  Axiom produce : ⊢ Assertion -> □(M Unit).
+  Axiom consume : ⊢ Assertion -> □(M Unit).
+
+  Notation "r '↦r' val" :=
+    (chunk_user
+       ptsreg
+       (env_nil
+          ► (ty_regidx ↦ term_lit ty_regidx r)
+          ► (ty_xlenbits ↦ val)))
+      (at level 100).
+  Notation "ω ∣ x <- ma ;; mb" :=
+    (bind ma (fun _ ω x => mb))
+      (at level 80, x at next level,
+        ma at next level, mb at level 200,
+        right associativity).
+
+  Definition rX (r : RegIdx) : ⊢ M (STerm ty_xlenbits) :=
+    fun _ =>
+      ω01 ∣ v1 <- @angelic ty_xlenbits _ ;;
+      ω12 ∣ _  <- consume_chunk (r ↦r v1) ;;
+      let v2 := persist__term v1 ω12 in
+      ω23 ∣ _ <- produce_chunk (r ↦r v2) ;;
+      let v3 := persist__term v2 ω23 in
+      pure v3.
+
+  Definition wX (r : RegIdx) : ⊢ STerm ty_xlenbits -> M Unit :=
+    fun _ u0 =>
+      ω01 ∣ v1 <- @angelic ty_xlenbits _ ;;
+      ω12 ∣ _  <- consume_chunk (r ↦r v1) ;;
+      if eq_dec r X0
+      then let v2 := persist__term v1 ω12 in
+           _ ∣ _ <- assume (formula_eq v2 (term_lit ty_xlenbits 0)) ;;
+           produce_chunk (r ↦r term_lit ty_xlenbits 0)
+      else let u2 := persist__term u0 (acc_trans ω01 ω12) in
+           produce_chunk (r ↦r u2).
+
+  Definition exec_rtype (rs2 rs1 rd : RegIdx) (op : ROP) : ⊢ M Unit :=
+    fun _ =>
+      ω01 ∣ v11 <- @rX rs1 _ ;;
+      ω12 ∣ v22 <- @rX rs1 _ ;;
+      let v12 := persist__term v11 ω12 in
+      let bop := match op with
+                 | RISCV_ADD => binop_plus
+                 | RISCV_SUB => binop_minus
+                 end in
+      wX rd (peval_binop bop v12 v22).
+
+  Definition exec_instruction (i : AST) : ⊢ M Unit :=
+    match i with
+    | RTYPE rs2 rs1 rd op => exec_rtype rs2 rs1 rd op
+    | _                   => fun _ => pure tt
+    end.
+
+  (* Ideally, a block should be a list of non-branching
+     instruction plus one final branching instruction *)
+  Fixpoint exec_block (b : list AST) : ⊢ M Unit :=
+    fun _ =>
+      match b with
+      | nil       => pure tt
+      | cons i b' =>
+        _ ∣ _ <- @exec_instruction i _ ;;
+        @exec_block b' _
+      end.
+
+  Definition ADD (rd rs1 rs2 : RegIdx) : AST :=
+    RTYPE rs2 rs1 rd RISCV_ADD.
+  Definition SUB (rd rs1 rs2 : RegIdx) : AST :=
+    RTYPE rs2 rs1 rd RISCV_SUB.
+
+  Definition exec_double {Σ : World}
+    (req : Assertion Σ) (b : list AST) : M Unit Σ :=
+    ω1 ∣ _ <- T (produce req) ;;
+    @exec_block b _.
+
+  Definition exec_triple {Σ : World}
+    (req : Assertion Σ) (b : list AST) (ens : Assertion Σ) : M Unit Σ :=
+    ω ∣ _ <- exec_double req b ;;
+    consume ens ω.
+
+  (* This is a VC for triples, for doubles we probably need to talk
+     about the continuation of a block. *)
+  Definition VC {Σ : LCtx} (req : Assertion Σ) (b : list AST) (ens : Assertion Σ) : 𝕊 Σ :=
+    @exec_triple
+      {| wctx := Σ; wco := nil |}
+      req b ens
+      (* Could include leakcheck here *)
+      (fun _ _ _ h => SymProp.block)
+      [].
+
+  Import ListNotations.
+
+  Example block1 : list AST :=
+    [ ADD X1 X1 X2;
+      SUB X2 X1 X2;
+      SUB X1 X1 X2
+    ].
+
+  Notation "p '∗' q" := (asn_sep p q) (at level 150).
+
+  Let Σ1 : LCtx := ["x" :: ty_exc_code, "y" :: ty_exc_code].
+
+  Example pre1 : Assertion Σ1 :=
+    asn_chunk (X1 ↦r term_var "x") ∗
+    asn_chunk (X2 ↦r term_var "y").
+
+  Example post1 : Assertion Σ1 :=
+    asn_chunk (X1 ↦r term_var "y") ∗
+    asn_chunk (X2 ↦r term_var "x").
+
+  Example VC1 : 𝕊 Σ1 := VC pre1 block1 post1.
+
+  (* After implementing all the functions. *)
+  (* Eval compute in VC1. *)
+
+End BlockVerification.
