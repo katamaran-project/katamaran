@@ -416,7 +416,8 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
     intros ? ? []; try constructor.
   Qed.
 
-  Definition solver_user : option SoundSolver := None.
+  Definition solver_user := Solver.null.
+  Definition solver_user_spec := Solver.null_spec.
 
 End RiscvPmpSymbolicContractKit.
 

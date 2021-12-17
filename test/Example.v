@@ -483,7 +483,8 @@ Module SepContracts.
       fun Δ l =>
         match l with end.
 
-    Definition solver_user : option SoundSolver := None.
+    Definition solver_user := Solver.null.
+    Definition solver_user_spec := Solver.null_spec.
 
   End ExampleSymbolicContractKit.
   Import ExampleSymbolicContractKit.

@@ -330,7 +330,7 @@ Module Soundness
     Proof.
       intros POST__s POST__c HPOST. unfold SDijk.assume_formulas.
       intros Hwp Hfmls0. apply Heq in Hfmls0.
-      destruct (Solver.solver_spec w0 fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      destruct ( Solver.solver_generic_spec solver_user_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0).
         destruct Hsolver as [Hν Hsolver]. inster Hν by auto.
         specialize (Hsolver (inst (sub_triangular_inv ζ) ι0)).
@@ -356,7 +356,7 @@ Module Soundness
     Proof.
       unfold SDijk.assert_formulas, CDijk.assert_formula.
       intros POST__s POST__c HPOST Hwp.
-      destruct (Solver.solver_spec w0 fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      destruct (Solver.solver_generic_spec solver_user_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
         rewrite safe_assert_triangular in Hwp. destruct Hwp as [Hν Hwp].
         rewrite safe_assert_formulas_without_solver in Hwp.
@@ -657,7 +657,7 @@ Module Soundness
       (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
       approx ι0 (@SMut.box_assume_formula Γ w0 fml__s) (CMut.assume_formula fml__c).
     Proof.
-      unfold SMut.box_assume_formula, map_box.
+      unfold SMut.box_assume_formula, fmap_box.
       intros w1 ω01 ι1 -> Hpc1.
       apply approx_assume_formula; auto.
       now rewrite inst_persist.
@@ -678,7 +678,7 @@ Module Soundness
       (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
       approx ι0 (@SMut.box_assert_formula Γ w0 fml__s) (CMut.assert_formula fml__c).
     Proof.
-      unfold SMut.box_assert_formula, map_box.
+      unfold SMut.box_assert_formula, fmap_box.
       intros w1 ω01 ι1 -> Hpc1.
       apply approx_assert_formula; auto.
       now rewrite inst_persist.
@@ -738,7 +738,7 @@ Module Soundness
       {w : World} (ι : SymInstance w) :
       approx ι (@SMut.box_angelic_match_bool AT Γ1 Γ2 w) (CMut.angelic_match_bool (A := A)).
     Proof.
-      unfold SMut.box_angelic_match_bool, map_box, K.
+      unfold SMut.box_angelic_match_bool, fmap_box, K.
       intros t v ->.
       intros kt__s kt__c Hkt.
       intros kf__s kf__c Hkf.
@@ -786,7 +786,7 @@ Module Soundness
       {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.box_demonic_match_bool AT Γ1 Γ2 w) (CMut.demonic_match_bool (A := A)).
     Proof.
-      unfold SMut.box_demonic_match_bool, map_box, K.
+      unfold SMut.box_demonic_match_bool, fmap_box, K.
       intros t v ->.
       intros kt__s kt__c Hkt.
       intros kf__s kf__c Hkf.
