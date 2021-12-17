@@ -624,29 +624,40 @@ Module BlockVerification.
       (fun _ _ _ h => SymProp.block)
       [].
 
-  Import ListNotations.
+  Section Example.
 
-  Example block1 : list AST :=
-    [ ADD X1 X1 X2;
-      SUB X2 X1 X2;
-      SUB X1 X1 X2
-    ].
+    Import ListNotations.
+    Notation "p '∗' q" := (asn_sep p q) (at level 150).
+    Notation "r '↦r' val" :=
+      (asn_chunk
+         (chunk_user
+            ptsreg
+            (env_nil
+               ► (ty_regidx ↦ term_lit ty_regidx r)
+               ► (ty_xlenbits ↦ val))))
+         (at level 100).
 
-  Notation "p '∗' q" := (asn_sep p q) (at level 150).
+    Example block1 : list AST :=
+      [ ADD X1 X1 X2;
+        SUB X2 X1 X2;
+        SUB X1 X1 X2
+      ].
 
-  Let Σ1 : LCtx := ["x" :: ty_exc_code, "y" :: ty_exc_code].
+    Let Σ1 : LCtx := ["x" :: ty_xlenbits, "y" :: ty_xlenbits].
 
-  Example pre1 : Assertion Σ1 :=
-    asn_chunk (X1 ↦r term_var "x") ∗
-    asn_chunk (X2 ↦r term_var "y").
+    Example pre1 : Assertion Σ1 :=
+      X1 ↦r term_var "x" ∗
+      X2 ↦r term_var "y".
 
-  Example post1 : Assertion Σ1 :=
-    asn_chunk (X1 ↦r term_var "y") ∗
-    asn_chunk (X2 ↦r term_var "x").
+    Example post1 : Assertion Σ1 :=
+      X1 ↦r term_var "y" ∗
+      X2 ↦r term_var "x".
 
-  Example VC1 : 𝕊 Σ1 := VC pre1 block1 post1.
+    Example VC1 : 𝕊 Σ1 := VC pre1 block1 post1.
 
-  (* After implementing all the functions. *)
-  (* Eval compute in VC1. *)
+    (* After implementing all the functions. *)
+    (* Eval compute in VC1. *)
+
+  End Example.
 
 End BlockVerification.
