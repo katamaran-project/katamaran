@@ -99,7 +99,7 @@ Module RiscvPmpModel.
 
       Definition interp_ptsreg `{sailRegG Σ} (r: RegIdx) (v : Z) : iProp Σ :=
         match r with
-        | X0 => True
+        | X0 => reg_pointsTo x0 v ∗ ⌜v = 0%Z⌝
         | X1 => reg_pointsTo x1 v
         | X2 => reg_pointsTo x2 v
         end.
@@ -146,7 +146,8 @@ Module RiscvPmpModel.
       ValidLemma RiscvPmpSymbolicContractKit.lemma_open_ptsreg.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      destruct rs; auto.
+      destruct rs; auto. cbn.
+      iIntros "[H1 H2]"; auto.
     Qed.
 
     Lemma close_ptsreg_sound {R} :
@@ -154,6 +155,8 @@ Module RiscvPmpModel.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpSymbolicContractKit.regidx_to_reg; destruct R; auto.
+      cbn.
+      iIntros "[H1 [H21 H22]]"; auto.
     Qed.
   End Lemmas.
 

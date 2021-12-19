@@ -335,7 +335,10 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   (** Functions **)
   Definition fun_rX : Stm [rs ∶ ty_regidx] ty_xlenbits :=
     match: rs in regidx with
-    | X0 => exp_lit ty_xlenbits 0%Z
+    | X0 => use lemma open_ptsreg [exp_var rs]%arg ;;
+            let: v := stm_read_register x0 in
+            use lemma (close_ptsreg X0) ;;
+            stm_exp v
     | X1 => use lemma open_ptsreg [exp_var rs]%arg ;;
             let: v := stm_read_register x1 in
             use lemma (close_ptsreg X1) ;;
@@ -348,7 +351,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition fun_wX : Stm [rd ∶ ty_regidx, v ∶ ty_xlenbits] ty_unit :=
     match: rd in regidx with
-    | X0 => stm_lit ty_unit tt
+    | X0 => use lemma open_ptsreg [exp_var rd] ;;
+            use lemma (close_ptsreg X0) ;;
+            stm_lit ty_unit tt
     | X1 => use lemma open_ptsreg [exp_var rd] ;;
             stm_write_register x1 v ;;
             use lemma (close_ptsreg X1) ;;

@@ -278,43 +278,28 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := [rs ∶ ty_regidx, v ∶ ty_xlenbits];
        sep_contract_localstore      := [term_var rs]%arg;
-       sep_contract_precondition    := 
-         asn_match_enum
-           regidx (term_var rs)
-           (fun k => match k with
-                     | X0 => asn_eq (term_var v) (term_lit ty_int 0%Z)
-                     | _  => term_var rs ↦r term_var v
-                     end);
+       sep_contract_precondition    := term_var rs ↦r term_var v;
        sep_contract_result          := "result_rX";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_rX") (term_var v)
-         ∗ asn_match_enum
-           regidx (term_var rs)
-           (fun k => match k with
-                     | X0 => asn_true
-                     | _  => term_var rs ↦r term_var v
-                     end)
+         ∗ term_var rs ↦r term_var v
     |}.
 
   Definition sep_contract_wX : SepContractFun wX :=
-    {| sep_contract_logic_variables := [rs ∶ ty_regidx, v ∶ ty_xlenbits];
+    {| sep_contract_logic_variables := [rs ∶ ty_regidx, v ∶ ty_xlenbits, "v__old" :: ty_xlenbits];
        sep_contract_localstore      := [term_var rs, term_var v]%arg;
-       sep_contract_precondition    :=
-         asn_match_enum
-           regidx (term_var rs)
-           (fun k => match k with
-                     | X0 => asn_true
-                     | _  => asn_exist w ty_xlenbits (term_var rs ↦r term_var w)
-                     end);
+       sep_contract_precondition    := term_var rs ↦r term_var "v__old";
        sep_contract_result          := "result_wX";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_wX") (term_lit ty_unit tt)
          ∗ asn_match_enum
-           regidx (term_var rs)
-           (fun k => match k with
-                     | X0 => asn_true
-                     | _  => term_var rs ↦r term_var v
-                     end);
+             regidx (term_var rs)
+             (* TODO: This should only binary branching. *)
+             (fun k => match k with
+                       | X0 => asn_eq (term_var "v__old") (term_lit ty_xlenbits 0) ∗
+                               term_var rs ↦r term_lit ty_xlenbits 0
+                       | _  => term_var rs ↦r term_var v
+                       end);
     |}.
 
   Definition sep_contract_abs : SepContractFun abs :=
@@ -357,17 +342,22 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
          asn_match_enum
            regidx (term_var rs)
            (fun k => match k with
-                     | X0 => asn_true
-                     | X1 => x1 ↦ term_var "w"
-                     | X2 => x2 ↦ term_var "w"
+                     | X0 => x0 ↦ term_var w ∗ asn_eq (term_var w) (term_lit ty_xlenbits 0)
+                     | X1 => x1 ↦ term_var w
+                     | X2 => x2 ↦ term_var w
                      end)
     |}.
 
   Definition lemma_close_ptsreg (r : RegIdx) : SepLemma (close_ptsreg r) :=
     {| lemma_logic_variables := [w ∶ ty_xlenbits];
        lemma_patterns        := env_nil;
-       lemma_precondition    := regidx_to_reg r ↦ term_var w;
-       lemma_postcondition   := term_enum regidx r ↦r term_var w
+       lemma_precondition    := match r with
+                                | X0 => x0 ↦ term_var w ∗
+                                        asn_eq (term_var w) (term_lit ty_xlenbits 0)
+                                | X1 => x1 ↦ term_var w
+                                | X2 => x2 ↦ term_var w
+                                end;
+       lemma_postcondition   := term_enum regidx r ↦r term_var w;
     |}.
 
   End Contracts.
@@ -488,6 +478,21 @@ Section Debug.
   Import RiscvNotations.
   Import RiscvμSailNotations.
   Coercion stm_exp : Exp >-> Stm.
+
+  Notation "x" := (@term_var _ x%string _ (@MkInCtx _ (x%string :: _) _ _ _)) (at level 1, only printing).
+  Notation "s = t" := (@formula_eq _ _ s t) (only printing).
+  Notation "' t" := (@formula_bool _ t) (at level 0, only printing, format "' t").
+  Notation "F ∧ P" := (@SymProp.assertk _ F _ P) (at level 80, right associativity, only printing).
+  Notation "F → P" := (@SymProp.assumek _ F P) (at level 99, right associativity, only printing).
+  Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x,σ) P) (at level 200, right associativity, only printing, format "'∃'  x '∷' σ ,  '/' P").
+  Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x,σ) P) (at level 200, right associativity, only printing, format "'∀'  x '∷' σ ,  '/' P").
+  Notation "⊤" := (@SymProp.block _).
+  Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
+  Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
+  Notation "x ↦ t ∧ k" := (@SymProp.assert_vareq _ x _ _ t _ k) (at level 99, right associativity, only printing).
+  Notation "x ↦ t → k" := (@SymProp.assume_vareq _ x _ _ t k) (at level 99, right associativity, only printing).
+  Notation "P ∧ Q" := (@SymProp.demonic_binary _ P Q) (at level 80, right associativity, only printing).
+  Notation "P ∨ Q" := (@SymProp.angelic_binary _ P Q) (at level 85, right associativity, only printing).
 
   Definition fun_execute_ECALL' : Stm ctx_nil ty_retired :=
     let: tmp1 := stm_read_register cur_privilege in
