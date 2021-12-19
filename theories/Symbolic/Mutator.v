@@ -1403,14 +1403,6 @@ Module Mutators
     (*     | None => demonic_match_union' n p t k *)
     (*     end. *)
 
-    Lemma and_iff_compat_l' (A B C : Prop) :
-      (A -> B <-> C) <-> (A /\ B <-> A /\ C).
-    Proof. intuition. Qed.
-
-    Lemma imp_iff_compat_l' (A B C : Prop) :
-      (A -> B <-> C) <-> ((A -> B) <-> (A -> C)).
-    Proof. intuition. Qed.
-
     Global Instance proper_debug {B} : Proper (eq ==> iff ==> iff) (@Debug B).
     Proof.
       unfold Proper, respectful.

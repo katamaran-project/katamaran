@@ -300,3 +300,15 @@ Proof.
     apply List.map_ext;
     intros [x xs]; reflexivity.
 Qed.
+
+Lemma and_iff_compat_r' (A B C : Prop) :
+  (B /\ A <-> C /\ A) <-> (A -> B <-> C).
+Proof. intuition. Qed.
+
+Lemma and_iff_compat_l' (A B C : Prop) :
+  (A /\ B <-> A /\ C) <-> (A -> B <-> C).
+Proof. intuition. Qed.
+
+Lemma imp_iff_compat_l' (A B C : Prop) :
+  ((A -> B) <-> (A -> C)) <-> (A -> B <-> C).
+Proof. intuition. Qed.
