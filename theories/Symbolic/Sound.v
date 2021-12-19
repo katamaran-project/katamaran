@@ -1790,10 +1790,14 @@ Module Soundness
     }
   Qed.
 
-  Lemma approx_exec {cfg Γ τ} (s : Stm Γ τ) :
-    forall {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0),
-      approx ι0 (@SMut.exec cfg Γ τ s w0) (@CMut.exec Γ τ s).
+  Definition ExecApprox (sexec : SMut.Exec) (cexec : CMut.Exec) :=
+    forall {Γ τ} (s : Stm Γ τ) {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0),
+    approx ι0 (@sexec Γ τ s w0) (cexec Γ τ s).
+
+  Lemma approx_exec_aux {cfg} srec crec (HYP : ExecApprox srec crec) :
+    ExecApprox (@SMut.exec_aux cfg srec) (@CMut.exec_aux crec).
   Proof.
+    unfold ExecApprox.
     induction s; cbn; intros * ?.
     - apply approx_pure; auto.
     - now apply approx_eval_exp.
@@ -1821,7 +1825,15 @@ Module Soundness
         apply approx_debug; auto.
         apply approx_call_contract; auto.
         apply approx_call_contract; auto.
-      + apply approx_error.
+      + intros POST__s POST__c HPOST.
+        intros δs1 δc1 ->.
+        apply HYP; auto.
+        intros w2 ω12 ι2 -> Hpc2.
+        intros t v ->.
+        intros _ _ _.
+        apply HPOST; auto.
+        rewrite <- inst_persist.
+        reflexivity.
     - apply approx_bind.
       apply approx_get_local; auto.
       intros w1 ω01 ι1 -> Hpc1.
@@ -1968,10 +1980,21 @@ Module Soundness
     - apply approx_debug; auto.
   Qed.
 
-  Lemma approx_exec_contract {cfg : Config} {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) :
+  Lemma approx_exec {cfg n} :
+    ExecApprox (@SMut.exec cfg n) (@CMut.exec n).
+  Proof.
+    induction n; cbn.
+    - unfold ExecApprox. intros.
+      intros POST__s POST__c HPOST.
+      intros δs1 δc1 Hδ hs1 hc1 Hh.
+      hnf. contradiction.
+    - now apply approx_exec_aux.
+  Qed.
+
+  Lemma approx_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) :
     let w0 := {| wctx := sep_contract_logic_variables c; wco := nil |} in
     forall (ι0 : SymInstance w0),
-      approx (w := w0) ι0 (@SMut.exec_contract cfg Γ τ c s) (@CMut.exec_contract Γ τ c s ι0).
+      approx (w := w0) ι0 (@SMut.exec_contract cfg n Γ τ c s) (@CMut.exec_contract n Γ τ c s ι0).
   Proof.
     unfold SMut.exec_contract, CMut.exec_contract; destruct c as [Σ δ pre result post]; cbn in *.
     intros ι0.
@@ -2004,7 +2027,7 @@ Module Soundness
 
   Lemma symbolic_sound {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
     SMut.ValidContract c body ->
-    CMut.ValidContract c body.
+    CMut.ValidContract 1 c body.
   Proof.
     unfold SMut.ValidContract, CMut.ValidContract, ForallNamed.
     rewrite Forall_forall. intros [Hwp] ι.

@@ -28,6 +28,7 @@
 
 From Coq Require Import
      Program.Equality
+     Strings.String
      ZArith.ZArith.
 
 From Katamaran Require Import
@@ -169,27 +170,33 @@ Module Soundness
       now apply HYP.
     Qed.
 
-    Lemma consume_chunk_monotonic {Γ} {c : SCChunk} δ
-      (P Q : unit -> CStore Γ -> SCHeap -> Prop)
-      (PQ : forall x h, P x δ h -> Q x δ h) h :
-      consume_chunk (Γ := Γ) c P δ h ->
-      consume_chunk (Γ := Γ) c Q δ h.
+    Definition Monotonic {Γ1 Γ2 A} (m : CMut Γ1 Γ2 A) : Prop :=
+      forall
+        (P Q : A -> CStore Γ2 -> SCHeap -> Prop)
+        (PQ : forall x δ h, P x δ h -> Q x δ h),
+        forall δ h, m P δ h -> m Q δ h.
+
+    (* Stronger version for those that do not change the store. *)
+    Definition Monotonic' {Γ A} (m : CMut Γ Γ A) : Prop :=
+      forall δ
+        (P Q : A -> CStore Γ -> SCHeap -> Prop)
+        (PQ : forall x h, P x δ h -> Q x δ h),
+        forall h, m P δ h -> m Q δ h.
+
+    Lemma consume_chunk_monotonic {Γ} {c : SCChunk} :
+      Monotonic' (consume_chunk (Γ := Γ) c).
     Proof.
-      cbv [consume_chunk bind get_heap angelic_list dijkstra
+      cbv [Monotonic' consume_chunk bind get_heap angelic_list dijkstra
            bind_right assert_formula put_heap CDijk.assert_formula].
-      rewrite ?CDijk.wp_angelic_list.
+      intros δ P Q PQ h. rewrite ?CDijk.wp_angelic_list.
       intros [ch' Hwp]; exists ch'; revert Hwp.
       destruct ch'. intuition.
     Qed.
 
-    Lemma consume_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} δ :
-      forall
-        (P Q : unit -> CStore Γ -> SCHeap -> Prop)
-        (PQ : forall x h, P x δ h -> Q x δ h) h,
-        consume (Γ := Γ) ι asn P δ h ->
-        consume (Γ := Γ) ι asn Q δ h.
+    Lemma consume_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} :
+      Monotonic' (consume (Γ := Γ) ι asn).
     Proof.
-      induction asn; cbn; intros * PQ *.
+      intros δ. induction asn; cbn; intros * PQ *.
       - unfold assert_formula, dijkstra, CDijk.assert_formula.
         intuition.
       - now apply consume_chunk_monotonic.
@@ -216,14 +223,10 @@ Module Soundness
       - unfold pure; eauto.
     Qed.
 
-    Lemma produce_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} δ :
-      forall
-        (P Q : unit -> CStore Γ -> SCHeap -> Prop)
-        (PQ : forall x h, P x δ h -> Q x δ h) h,
-        produce (Γ := Γ) ι asn P δ h ->
-        produce (Γ := Γ) ι asn Q δ h.
+    Lemma produce_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} :
+      Monotonic' (produce (Γ := Γ) ι asn).
     Proof.
-      induction asn; cbn; intros * PQ *.
+      intros δ. induction asn; cbn; intros * PQ *.
       - unfold assume_formula, dijkstra, CDijk.assume_formula.
         intuition.
       - unfold produce_chunk; eauto.
@@ -385,12 +388,10 @@ Module Soundness
         apply entails_refl.
     Qed.
 
-    Lemma call_contract_monotonic {Γ Δ τ} (c : SepContract Δ τ) (δΔ : CStore Δ)
-      (P Q : Lit τ -> CStore Γ -> SCHeap -> Prop)
-      (PQ : forall x δ h, P x δ h -> Q x δ h) δ h :
-      call_contract c δΔ P δ h -> call_contract c δΔ Q δ h.
+    Lemma call_contract_monotonic {Γ Δ τ} (c : SepContract Δ τ) (δΔ : CStore Δ) :
+      Monotonic (call_contract (Γ := Γ) c δΔ).
     Proof.
-      destruct c;
+      destruct c; intros P Q PQ δ h;
         cbv [call_contract bind_right bind pure demonic
              angelic_ctx demonic dijkstra assert_formula
              CDijk.assert_formula].
@@ -429,12 +430,10 @@ Module Soundness
         apply entails_refl.
     Qed.
 
-    Lemma call_lemma_monotonic {Γ Δ} (lem : Lemma Δ) (δΔ : CStore Δ)
-      (P Q : unit -> CStore Γ -> SCHeap -> Prop)
-      (PQ : forall x δ h, P x δ h -> Q x δ h) δ h :
-      call_lemma lem δΔ P δ h -> call_lemma lem δΔ Q δ h.
+    Lemma call_lemma_monotonic {Γ Δ} (lem : Lemma Δ) (δΔ : CStore Δ) :
+      Monotonic (call_lemma (Γ := Γ) lem δΔ).
     Proof.
-      destruct lem;
+      destruct lem; intros P Q PQ δ h;
         cbv [call_lemma bind_right bind
              angelic_ctx dijkstra assert_formula
              CDijk.assert_formula].
@@ -445,14 +444,15 @@ Module Soundness
       apply produce_monotonic; auto.
     Qed.
 
-    Lemma exec_monotonic {Γ τ} (s : Stm Γ τ) :
-      forall
-        (P Q : Lit τ -> CStore Γ -> SCHeap -> Prop)
-        (PQ : forall x δ h, P x δ h -> Q x δ h) δ h,
-        exec s P δ h ->
-        exec s Q δ h.
+    Definition MonotonicExec (ex : Exec) : Prop :=
+      forall Γ τ (s : Stm Γ τ),
+        Monotonic (ex _ _ s).
+
+    Lemma exec_aux_monotonic rec (rec_mono : MonotonicExec rec) :
+      MonotonicExec (@exec_aux rec).
     Proof.
-      induction s; cbn; intros * PQ *;
+      unfold MonotonicExec. intros ? ? s.
+      induction s; cbn; intros P Q PQ *;
         cbv [pure bind_right bind angelic pushpop pushspops
              produce_chunk put_local get_local eval_exp eval_exps assign].
       - auto.
@@ -461,7 +461,8 @@ Module Soundness
       - apply IHs. auto.
       - apply IHs. auto.
       - destruct (CEnv f); cbn; auto.
-        apply call_contract_monotonic; auto.
+        + apply call_contract_monotonic; auto.
+        + apply rec_mono; auto.
       - apply IHs. auto.
       - apply call_contract_monotonic; auto.
       - apply call_lemma_monotonic; intros ? ? ?.
@@ -485,7 +486,8 @@ Module Soundness
       - rewrite ?wp_demonic_match_prod.
         destruct (eval e δ); cbn.
         apply IHs; auto.
-      - rewrite ?wp_demonic_match_enum; eauto.
+      - rewrite ?wp_demonic_match_enum.
+        apply H; auto.
       - rewrite ?wp_demonic_match_tuple.
         apply IHs; auto.
       - rewrite ?wp_demonic_match_union.
@@ -497,16 +499,29 @@ Module Soundness
         apply consume_chunk_monotonic. auto.
       - intros [v Hwp]; exists v; revert Hwp.
         apply consume_chunk_monotonic. auto.
-      - apply IHs; eauto.
+      - apply IHs; intros *; apply H; auto.
       - apply IHs; auto.
     Qed.
 
-    Lemma exec_sound {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> CStore Γ -> L) :
-      forall (δ1 : CStore Γ) (h1 : SCHeap),
-        exec s (fun v => liftP (POST v)) δ1 h1 ->
-        ⦃ interpret_scheap h1 ⦄ s ; δ1 ⦃ POST ⦄.
+    Lemma exec_monotonic n : MonotonicExec (@exec n).
     Proof.
-      induction s; intros ? ?; cbn;
+      induction n; cbn.
+      - unfold MonotonicExec, Monotonic; cbn; auto.
+      - now apply exec_aux_monotonic.
+    Qed.
+
+    Definition SoundExec (rec : Exec) :=
+      forall
+        Γ σ (s : Stm Γ σ) (POST : Lit σ -> CStore Γ -> L)
+        (δ1 : CStore Γ) (h1 : SCHeap),
+        rec _ _ s (fun v => liftP (POST v)) δ1 h1 ->
+        ⦃ interpret_scheap h1 ⦄ s ; δ1 ⦃ POST ⦄.
+
+    Lemma exec_aux_sound rec (rec_mono : MonotonicExec rec) (rec_sound : SoundExec rec) :
+      SoundExec (exec_aux rec).
+    Proof.
+      unfold SoundExec. intros ? ? s.
+      induction s; intros ? ? ?; cbn;
         cbv [pure pushspops pushpop
              eval_exp get_local put_local
              bind_right bind_left bind];
@@ -527,7 +542,7 @@ Module Soundness
         apply entails_refl.
         apply lprop_right.
         apply IHs1; clear IHs1.
-        revert HYP. apply exec_monotonic.
+        revert HYP. apply exec_aux_monotonic; auto.
         intros v2 δ2 h2. intros HYP.
         apply lex_right with (interpret_scheap h2).
         apply land_right.
@@ -547,7 +562,17 @@ Module Soundness
         + apply rule_stm_call_backwards with c.
           assumption.
           now apply call_contract_sound.
-        + contradict HYP.
+        + unfold eval_exps in HYP.
+          apply rec_sound in HYP.
+          eapply rule_consequence_right.
+          apply rule_stm_call_inline.
+          apply HYP. cbn. intros v δ.
+          rewrite lprop_float.
+          apply limpl_and_adjoint.
+          apply lprop_left. intros ->.
+          apply limpl_and_adjoint.
+          apply land_left2.
+          apply entails_refl.
 
       - (* stm_call_frame *)
         now apply rule_stm_call_frame, IHs.
@@ -584,7 +609,7 @@ Module Soundness
         apply entails_refl.
         apply lprop_right.
         apply IHs1; clear IHs1.
-        revert HYP; apply exec_monotonic.
+        revert HYP; apply exec_aux_monotonic; auto.
         intros v2 δ2 h2 HYP.
 
         apply lex_right with (interpret_scheap h2).
@@ -671,7 +696,7 @@ Module Soundness
         apply entails_refl.
         apply lprop_right.
         apply IHs; clear IHs.
-        revert HYP. apply exec_monotonic.
+        revert HYP. apply exec_aux_monotonic; auto.
         intros v2 δ2 h2 HYP; cbn.
 
         apply lex_right with (interpret_scheap h2).
@@ -682,9 +707,16 @@ Module Soundness
       - constructor. auto.
     Qed.
 
-    Lemma exec_sound' {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> CStore Γ -> L) :
+    Lemma exec_sound n : SoundExec (@exec n).
+    Proof.
+      induction n; cbn.
+      - unfold SoundExec; cbn; contradiction.
+      - apply exec_aux_sound; auto using exec_monotonic.
+    Qed.
+
+    Lemma exec_sound' n {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> CStore Γ -> L) :
       forall δ1 h1,
-        exec s (fun v2 => liftP (POST v2)) δ1 h1 ->
+        exec n s (fun v2 => liftP (POST v2)) δ1 h1 ->
         liftP (WP s POST) δ1 h1.
     Proof.
       cbn in *; intros.
@@ -696,8 +728,8 @@ Module Soundness
       now apply lprop_right.
     Qed.
 
-    Lemma contract_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
-      CMut.ValidContract c body ->
+    Lemma contract_sound n {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+      CMut.ValidContract n c body ->
       LOG.ValidContract c body.
     Proof.
       unfold CMut.ValidContract, LOG.ValidContract.
@@ -717,7 +749,7 @@ Module Soundness
           apply entails_refl.
         }
         revert HYP. apply produce_monotonic.
-        intros _ h2 HYP. apply exec_sound'.
+        intros _ h2 HYP. apply exec_sound' with n.
         revert HYP. apply exec_monotonic.
         intros v3 δ3 h3 HYP.
         enough (interpret_scheap h3 ⊢ interpret_assertion ens (env_snoc ι (result,τ) v3) ✱ emp)

@@ -1397,7 +1397,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_call_inline
     {Γ} (δ : CStore Γ)
-    {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ) (c : SepContract Δ σ)
+    {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
     (P : iProp Σ) (Q : Lit σ -> iProp Σ) :
     ⊢ semTriple (evals es δ) P (Pi f) (fun v _ => Q v) -∗
       semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')).

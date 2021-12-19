@@ -557,7 +557,7 @@ Module SepContracts.
 
   Notation "( x , y )" := (pair x y).
 
-  Lemma valid_cmut_contract_summaxlen : CMut.ValidContract sep_contract_summaxlen fun_summaxlen.
+  Lemma valid_cmut_contract_summaxlen : CMut.ValidContract 1 sep_contract_summaxlen fun_summaxlen.
   Proof.
     cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
     intros xs; revert xs.

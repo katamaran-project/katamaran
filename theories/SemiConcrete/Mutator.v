@@ -1196,101 +1196,118 @@ Module SemiConcrete
           produce ι ens
         end.
 
-      Fixpoint exec {Γ τ} (s : Stm Γ τ) : CMut Γ Γ (Lit τ) :=
-        match s with
-        | stm_lit _ l => pure l
-        | stm_exp e => eval_exp e
-        | stm_let x σ s k =>
-          v <- exec s ;;
-          pushpop v (exec k)
-        | stm_block δ k =>
-          pushspops δ (exec k)
-        | stm_assign x e =>
-          v <- exec e ;;
-          assign x v ;;
-          pure v
-        | stm_call f es =>
-          args <- eval_exps es ;;
-          match CEnv f with
-          | Some c => call_contract c args
-          | None   => error "Err [cmut_exec]: Function call without contract"
-          end
-        | stm_foreign f es =>
-          eval_exps es >>= call_contract (CEnvEx f)
-        | stm_lemmak l es k =>
-          eval_exps es >>= call_lemma (LEnv l) ;;
-          exec k
-        | stm_call_frame δ' s =>
-          δ <- get_local ;;
-          put_local δ' ;;
-          v <- exec s ;;
-          put_local δ ;;
-          pure v
-        | stm_if e s1 s2 =>
-          v <- eval_exp e ;;
-          demonic_match_bool v (exec s1) (exec s2)
-        | stm_seq e k => exec e ;; exec k
-        | stm_assertk e1 _ k =>
-          v <- eval_exp e1 ;;
-          assume_formula (v = true) ;;
-          exec k
-        | stm_fail _ s =>
-          block
-        | stm_match_enum E e alts =>
-          v <- eval_exp e ;;
-          demonic_match_enum
-            v
-            (fun EK => exec (alts EK))
-        | stm_read_register reg =>
-          v <- angelic τ ;;
-          let c := scchunk_ptsreg reg v in
-          consume_chunk c ;;
-          produce_chunk c ;;
-          pure v
-        | stm_write_register reg e =>
-          v__old <- angelic τ ;;
-          consume_chunk (scchunk_ptsreg reg v__old) ;;
-          v__new <- eval_exp e ;;
-          produce_chunk (scchunk_ptsreg reg v__new) ;;
-          pure v__new
-        | @stm_match_list _ _ σ e s1 xh xt s2 =>
-          v <- eval_exp e ;;
-          demonic_match_list v
-            (exec s1)
-            (fun h t =>
-               pushspops
-                 (env_snoc (env_snoc env_nil (xh :: σ) h) (xt :: ty_list σ) t)
-                 (exec s2))
-        | stm_match_sum e xinl s1 xinr s2 =>
-          v <- eval_exp e ;;
-          demonic_match_sum
-            v
-            (fun v => pushpop v (exec s1))
-            (fun v => pushpop v (exec s2))
-        | stm_match_prod e xl xr s =>
-          v <- eval_exp e ;;
-          demonic_match_prod
-            v
-            (fun vl vr =>
-               pushspops
-                 (env_snoc (env_snoc env_nil (xl :: _) vl) (xr :: _) vr)
-                 (exec s))
-        | stm_match_tuple e p rhs =>
-          v <- eval_exp e ;;
-          demonic_match_tuple p v
-            (fun δΔ => pushspops δΔ (exec rhs))
-        | stm_match_union U e alt__pat alt__rhs =>
-          v <- eval_exp e ;;
-          demonic_match_union alt__pat v (fun UK vs => pushspops vs (exec (alt__rhs UK)))
-        | stm_match_record R e p rhs =>
-          v <- eval_exp e ;;
-          demonic_match_record p v (fun vs => pushspops vs (exec rhs))
-        | stm_bind s k =>
-          v <- exec s ;;
-          exec (k v)
-        | stm_debugk k =>
-          exec k
+      Definition Exec := forall {Γ τ} (s : Stm Γ τ), CMut Γ Γ (Lit τ).
+
+      Section ExecAux.
+
+        Variable rec : Exec.
+
+        Definition exec_aux : Exec :=
+          fix exec_aux {Γ τ} (s : Stm Γ τ) : CMut Γ Γ (Lit τ) :=
+            match s with
+            | stm_lit _ l => pure l
+            | stm_exp e => eval_exp e
+            | stm_let x σ s k =>
+              v <- exec_aux s ;;
+              pushpop v (exec_aux k)
+            | stm_block δ k =>
+              pushspops δ (exec_aux k)
+            | stm_assign x e =>
+              v <- exec_aux e ;;
+              assign x v ;;
+              pure v
+            | stm_call f es =>
+              args <- eval_exps es ;;
+              match CEnv f with
+              | Some c => call_contract c args
+              | None   => fun POST δ => rec (Pi f) (fun v _ => POST v δ) args
+              end
+            | stm_foreign f es =>
+              eval_exps es >>= call_contract (CEnvEx f)
+            | stm_lemmak l es k =>
+              eval_exps es >>= call_lemma (LEnv l) ;;
+              exec_aux k
+            | stm_call_frame δ' s =>
+              δ <- get_local ;;
+              put_local δ' ;;
+              v <- exec_aux s ;;
+              put_local δ ;;
+              pure v
+            | stm_if e s1 s2 =>
+              v <- eval_exp e ;;
+              demonic_match_bool v (exec_aux s1) (exec_aux s2)
+            | stm_seq e k => exec_aux e ;; exec_aux k
+            | stm_assertk e1 _ k =>
+              v <- eval_exp e1 ;;
+              assume_formula (v = true) ;;
+              exec_aux k
+            | stm_fail _ s =>
+              block
+            | stm_match_enum E e alts =>
+              v <- eval_exp e ;;
+              demonic_match_enum
+                v
+                (fun EK => exec_aux (alts EK))
+            | stm_read_register reg =>
+              v <- angelic τ ;;
+              let c := scchunk_ptsreg reg v in
+              consume_chunk c ;;
+              produce_chunk c ;;
+              pure v
+            | stm_write_register reg e =>
+              v__old <- angelic τ ;;
+              consume_chunk (scchunk_ptsreg reg v__old) ;;
+              v__new <- eval_exp e ;;
+              produce_chunk (scchunk_ptsreg reg v__new) ;;
+              pure v__new
+            | @stm_match_list _ _ σ e s1 xh xt s2 =>
+              v <- eval_exp e ;;
+              demonic_match_list v
+                (exec_aux s1)
+                (fun h t =>
+                   pushspops
+                     (env_snoc (env_snoc env_nil (xh :: σ) h) (xt :: ty_list σ) t)
+                     (exec_aux s2))
+            | stm_match_sum e xinl s1 xinr s2 =>
+              v <- eval_exp e ;;
+              demonic_match_sum
+                v
+                (fun v => pushpop v (exec_aux s1))
+                (fun v => pushpop v (exec_aux s2))
+            | stm_match_prod e xl xr s =>
+              v <- eval_exp e ;;
+              demonic_match_prod
+                v
+                (fun vl vr =>
+                   pushspops
+                     (env_snoc (env_snoc env_nil (xl :: _) vl) (xr :: _) vr)
+                     (exec_aux s))
+            | stm_match_tuple e p rhs =>
+              v <- eval_exp e ;;
+              demonic_match_tuple p v
+                (fun δΔ => pushspops δΔ (exec_aux rhs))
+            | stm_match_union U e alt__pat alt__rhs =>
+              v <- eval_exp e ;;
+              demonic_match_union alt__pat v (fun UK vs => pushspops vs (exec_aux (alt__rhs UK)))
+            | stm_match_record R e p rhs =>
+              v <- eval_exp e ;;
+              demonic_match_record p v (fun vs => pushspops vs (exec_aux rhs))
+            | stm_bind s k =>
+              v <- exec_aux s ;;
+              exec_aux (k v)
+            | stm_debugk k =>
+              exec_aux k
+            end.
+
+      End ExecAux.
+
+      Fixpoint exec (inline_fuel : nat) : Exec :=
+        match inline_fuel with
+        | O   => fun _ _ _ => error "CMut.exec: out of fuel for inlining"
+        | S n => @exec_aux (@exec n)
         end.
+      Proof.
+      Global Arguments exec _ {_ _} s _ _ _.
 
       (* Definition leakcheck {Γ} : CMut Γ Γ unit := *)
       (*   get_heap >>= fun h => *)
@@ -1301,22 +1318,28 @@ Module SemiConcrete
 
     End Exec.
 
-    Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
-     SymInstance (sep_contract_logic_variables c) -> CMut Δ Δ unit :=
-      match c with
-      | MkSepContract _ _ Σ δ req result ens =>
-        fun ι =>
-        produce ι req ;;
-        exec s >>= fun v =>
-        consume (env_snoc ι (result::τ) v) ens
-        (* cmut_block *)
-        (* cmut_leakcheck *)
-      end%mut.
+    Section WithFuel.
 
-    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      ForallNamed (fun ι : SymInstance (sep_contract_logic_variables c) =>
-        let δΔ : CStore Δ := inst (sep_contract_localstore c) ι in
-        exec_contract c body ι (fun _ _ _ => True) δΔ nil).
+      Variable inline_fuel : nat.
+
+      Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
+       SymInstance (sep_contract_logic_variables c) -> CMut Δ Δ unit :=
+        match c with
+        | MkSepContract _ _ Σ δ req result ens =>
+          fun ι =>
+          produce ι req ;;
+          exec inline_fuel s >>= fun v =>
+          consume (env_snoc ι (result::τ) v) ens
+          (* cmut_block *)
+          (* cmut_leakcheck *)
+        end%mut.
+
+      Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+        ForallNamed (fun ι : SymInstance (sep_contract_logic_variables c) =>
+          let δΔ : CStore Δ := inst (sep_contract_localstore c) ι in
+          exec_contract c body ι (fun _ _ _ => True) δΔ nil).
+
+    End WithFuel.
 
   End CMut.
 

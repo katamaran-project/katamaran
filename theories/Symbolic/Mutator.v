@@ -2654,175 +2654,194 @@ Module Mutators
               o
           else o.
 
-      Fixpoint exec {Γ τ} (s : Stm Γ τ) {struct s} :
-        ⊢ SMut Γ Γ (STerm τ).
+      Definition Exec := forall {Γ τ} (s : Stm Γ τ), ⊢ SMut Γ Γ (STerm τ).
+
+      Section ExecAux.
+
+        Variable rec : Exec.
+
+        Fixpoint exec_aux {Γ τ} (s : Stm Γ τ) {struct s} :
+          ⊢ SMut Γ Γ (STerm τ).
+        Proof.
+          intros w0; destruct s.
+          - apply pure. apply (term_lit τ l).
+          - apply (eval_exp e).
+          - eapply bind. apply (exec_aux _ _ s1).
+            intros w1 ω01 t1.
+            eapply (pushpop t1).
+            apply (exec_aux _ _ s2).
+          - eapply (pushspops (lift δ)).
+            apply (exec_aux _ _ s).
+          - eapply bind.
+            apply (exec_aux _ _ s).
+            intros w1 ω01 t.
+            eapply bind_right.
+            apply (assign x t).
+            intros w2 ω12.
+            apply pure.
+            apply (subst (T := STerm τ) t (sub_acc ω12)).
+          - eapply bind.
+            apply (eval_exps es).
+            intros w1 ω01 args.
+            destruct (CEnv f) as [c|].
+            + apply (call_contract_debug f c args).
+            + intros POST δΓ. refine (rec (Pi f) _ args).
+              intros w2 ω12 res _. apply POST. apply ω12.
+              apply res. refine (persist δΓ ω12).
+          - rename δ into δΔ.
+            eapply bind.
+            apply get_local.
+            intros w1 ω01 δ1.
+            eapply bind_right.
+            apply (put_local (lift δΔ)).
+            intros w2 ω12.
+            eapply bind.
+            apply (exec_aux _ _ s).
+            intros w3 ω23 t.
+            eapply bind_right.
+            apply put_local.
+            apply (persist (A := SStore _) δ1 (acc_trans ω12 ω23)).
+            intros w4 ω34.
+            apply pure.
+            apply (persist__term t ω34).
+          - eapply bind.
+            apply (eval_exps es).
+            intros w1 ω01 args.
+            apply (call_contract (CEnvEx f) args).
+          - eapply bind_right.
+            eapply bind.
+            apply (eval_exps es).
+            intros w1 ω01 args.
+            apply (call_lemma (LEnv l) args).
+            intros w2 ω12.
+            apply (exec_aux _ _ s).
+          - eapply bind. apply (eval_exp e).
+            intros w1 ω01 t.
+            apply (demonic_match_bool t).
+            + intros w2 ω12.
+              apply (exec_aux _ _ s1).
+            + intros w2 ω12.
+              apply (exec_aux _ _ s2).
+          - eapply bind_right.
+            apply (exec_aux _ _ s1).
+            intros w1 ω01.
+            apply (exec_aux _ _ s2).
+          - eapply bind. apply (eval_exp e1).
+            intros w1 ω01 t.
+            eapply bind_right.
+            apply (assume_formula (formula_bool t)).
+            intros w2 ω12.
+            apply (exec_aux _ _ s).
+          - apply block.
+          - eapply bind.
+            apply (eval_exp e).
+            intros w1 ω01 t.
+            apply (demonic_match_list (𝑿to𝑺 xh) (𝑿to𝑺 xt) t).
+            + intros w2 ω12.
+              apply (exec_aux _ _ s1).
+            + intros w2 ω12 thead ttail.
+              eapply (pushspops (env_snoc (env_snoc env_nil (xh,_) thead) (xt,_) ttail)).
+              apply (exec_aux _ _ s2).
+          - eapply bind.
+            apply (eval_exp e).
+            intros w1 ω01 t.
+            apply (demonic_match_sum (𝑿to𝑺 xinl) (𝑿to𝑺 xinr) t).
+            + intros w2 ω12 tl.
+              eapply (pushpop tl).
+              apply (exec_aux _ _ s1).
+            + intros w2 ω12 tr.
+              eapply (pushpop tr).
+              apply (exec_aux _ _ s2).
+          - eapply bind.
+            apply (eval_exp e).
+            intros w1 ω01 t.
+            apply (demonic_match_prod (𝑿to𝑺 xl) (𝑿to𝑺 xr) t).
+            intros w2 ω12 t1 t2.
+            eapply (pushspops (env_snoc (env_snoc env_nil (_,_) t1) (_,_) t2)).
+            apply (exec_aux _ _ s).
+          - eapply bind.
+            apply (eval_exp e).
+            intros w1 ω01 t.
+            apply (demonic_match_enum t).
+            intros EK.
+            intros w2 ω12.
+            apply (exec_aux _ _ (alts EK)).
+          - eapply bind.
+            apply (eval_exp e).
+            intros w1 ω01 t.
+            apply (demonic_match_tuple 𝑿to𝑺 p t).
+            intros w2 ω12 ts.
+            eapply (pushspops ts).
+            apply (exec_aux _ _ s).
+          - eapply bind.
+            apply (eval_exp e).
+            intros w1 ω01 t.
+            apply (demonic_match_union 𝑿to𝑺 alt__pat t).
+            intros UK w2 ω12 ts.
+            eapply (pushspops ts).
+            apply (exec_aux _ _ (alt__rhs UK)).
+          - eapply bind.
+            apply (eval_exp e).
+            intros w1 ω01 t.
+            apply (demonic_match_record 𝑿to𝑺 p t).
+            intros w2 ω12 ts.
+            eapply (pushspops ts).
+            apply (exec_aux _ _ s).
+          - eapply bind.
+            apply (angelic None τ).
+            intros w1 ω01 t.
+            eapply bind_right.
+            apply (T (consume (asn_chunk (chunk_ptsreg reg t)))).
+            intros w2 ω12.
+            eapply bind_right.
+            apply (T (produce (asn_chunk (chunk_ptsreg reg (persist__term t ω12))))).
+            intros w3 ω23.
+            apply pure.
+            apply (persist__term t (acc_trans ω12 ω23)).
+          - eapply bind.
+            eapply (angelic None τ).
+            intros w1 ω01 told.
+            eapply bind_right.
+            apply (T (consume (asn_chunk (chunk_ptsreg reg told)))).
+            intros w2 ω12.
+            eapply bind.
+            apply (eval_exp e).
+            intros w3 ω23 tnew.
+            eapply bind_right.
+            apply (T (produce (asn_chunk (chunk_ptsreg reg tnew)))).
+            intros w4 ω34.
+            apply pure.
+            apply (persist__term tnew ω34).
+          - apply (error "SMut.exec" "stm_bind not supported" tt).
+          - apply debug.
+            intros δ0 h0.
+            econstructor.
+            apply (wco w0).
+            apply δ0.
+            apply h0.
+            apply (exec_aux _ _ s).
+        Defined.
+
+      End ExecAux.
+
+      Fixpoint exec (inline_fuel : nat) : Exec :=
+        match inline_fuel with
+        | O   => fun _ _ _ _ => error "SMut.exec" "out of fuel for inlining" tt
+        | S n => @exec_aux (@exec n)
+        end.
       Proof.
-        intros w0; destruct s.
-        - apply pure. apply (term_lit τ l).
-        - apply (eval_exp e).
-        - eapply bind. apply (exec _ _ s1).
-          intros w1 ω01 t1.
-          eapply (pushpop t1).
-          apply (exec _ _ s2).
-        - eapply (pushspops (lift δ)).
-          apply (exec _ _ s).
-        - eapply bind.
-          apply (exec _ _ s).
-          intros w1 ω01 t.
-          eapply bind_right.
-          apply (assign x t).
-          intros w2 ω12.
-          apply pure.
-          apply (subst (T := STerm τ) t (sub_acc ω12)).
-        - eapply bind.
-          apply (eval_exps es).
-          intros w1 ω01 args.
-          destruct (CEnv f) as [c|].
-          + apply (call_contract_debug f c args).
-          + apply (error "SMut.exec" "Function call without contract" (f,args)).
-        - rename δ into δΔ.
-          eapply bind.
-          apply get_local.
-          intros w1 ω01 δ1.
-          eapply bind_right.
-          apply (put_local (lift δΔ)).
-          intros w2 ω12.
-          eapply bind.
-          apply (exec _ _ s).
-          intros w3 ω23 t.
-          eapply bind_right.
-          apply put_local.
-          apply (persist (A := SStore _) δ1 (acc_trans ω12 ω23)).
-          intros w4 ω34.
-          apply pure.
-          apply (persist__term t ω34).
-        - eapply bind.
-          apply (eval_exps es).
-          intros w1 ω01 args.
-          apply (call_contract (CEnvEx f) args).
-        - eapply bind_right.
-          eapply bind.
-          apply (eval_exps es).
-          intros w1 ω01 args.
-          apply (call_lemma (LEnv l) args).
-          intros w2 ω12.
-          apply (exec _ _ s).
-        - eapply bind. apply (eval_exp e).
-          intros w1 ω01 t.
-          apply (demonic_match_bool t).
-          + intros w2 ω12.
-            apply (exec _ _ s1).
-          + intros w2 ω12.
-            apply (exec _ _ s2).
-        - eapply bind_right.
-          apply (exec _ _ s1).
-          intros w1 ω01.
-          apply (exec _ _ s2).
-        - eapply bind. apply (eval_exp e1).
-          intros w1 ω01 t.
-          eapply bind_right.
-          apply (assume_formula (formula_bool t)).
-          intros w2 ω12.
-          apply (exec _ _ s).
-        - apply block.
-        - eapply bind.
-          apply (eval_exp e).
-          intros w1 ω01 t.
-          apply (demonic_match_list (𝑿to𝑺 xh) (𝑿to𝑺 xt) t).
-          + intros w2 ω12.
-            apply (exec _ _ s1).
-          + intros w2 ω12 thead ttail.
-            eapply (pushspops (env_snoc (env_snoc env_nil (xh,_) thead) (xt,_) ttail)).
-            apply (exec _ _ s2).
-        - eapply bind.
-          apply (eval_exp e).
-          intros w1 ω01 t.
-          apply (demonic_match_sum (𝑿to𝑺 xinl) (𝑿to𝑺 xinr) t).
-          + intros w2 ω12 tl.
-            eapply (pushpop tl).
-            apply (exec _ _ s1).
-          + intros w2 ω12 tr.
-            eapply (pushpop tr).
-            apply (exec _ _ s2).
-        - eapply bind.
-          apply (eval_exp e).
-          intros w1 ω01 t.
-          apply (demonic_match_prod (𝑿to𝑺 xl) (𝑿to𝑺 xr) t).
-          intros w2 ω12 t1 t2.
-          eapply (pushspops (env_snoc (env_snoc env_nil (_,_) t1) (_,_) t2)).
-          apply (exec _ _ s).
-        - eapply bind.
-          apply (eval_exp e).
-          intros w1 ω01 t.
-          apply (demonic_match_enum t).
-          intros EK.
-          intros w2 ω12.
-          apply (exec _ _ (alts EK)).
-        - eapply bind.
-          apply (eval_exp e).
-          intros w1 ω01 t.
-          apply (demonic_match_tuple 𝑿to𝑺 p t).
-          intros w2 ω12 ts.
-          eapply (pushspops ts).
-          apply (exec _ _ s).
-        - eapply bind.
-          apply (eval_exp e).
-          intros w1 ω01 t.
-          apply (demonic_match_union 𝑿to𝑺 alt__pat t).
-          intros UK w2 ω12 ts.
-          eapply (pushspops ts).
-          apply (exec _ _ (alt__rhs UK)).
-        - eapply bind.
-          apply (eval_exp e).
-          intros w1 ω01 t.
-          apply (demonic_match_record 𝑿to𝑺 p t).
-          intros w2 ω12 ts.
-          eapply (pushspops ts).
-          apply (exec _ _ s).
-        - eapply bind.
-          apply (angelic None τ).
-          intros w1 ω01 t.
-          eapply bind_right.
-          apply (T (consume (asn_chunk (chunk_ptsreg reg t)))).
-          intros w2 ω12.
-          eapply bind_right.
-          apply (T (produce (asn_chunk (chunk_ptsreg reg (persist__term t ω12))))).
-          intros w3 ω23.
-          apply pure.
-          apply (persist__term t (acc_trans ω12 ω23)).
-        - eapply bind.
-          eapply (angelic None τ).
-          intros w1 ω01 told.
-          eapply bind_right.
-          apply (T (consume (asn_chunk (chunk_ptsreg reg told)))).
-          intros w2 ω12.
-          eapply bind.
-          apply (eval_exp e).
-          intros w3 ω23 tnew.
-          eapply bind_right.
-          apply (T (produce (asn_chunk (chunk_ptsreg reg tnew)))).
-          intros w4 ω34.
-          apply pure.
-          apply (persist__term tnew ω34).
-        - apply (error "SMut.exec" "stm_bind not supported" tt).
-        - apply debug.
-          intros δ0 h0.
-          econstructor.
-          apply (wco w0).
-          apply δ0.
-          apply h0.
-          apply (exec _ _ s).
-      Defined.
-      Global Arguments exec {_ _} _ {w} _ _ _.
+      Global Arguments exec _ {_ _} _ {w} _ _ _.
 
       Import Notations.
+
+      Variable inline_fuel : nat.
 
       Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
         SMut Δ Δ Unit {| wctx := sep_contract_logic_variables c; wco := [] |} :=
         match c with
         | MkSepContract _ _ Σ δ req result ens =>
           produce (w:=@MkWorld _ _) req acc_refl >> fun w1 ω01 =>
-          exec s >>= fun w2 ω12 res =>
+          exec inline_fuel s >>= fun w2 ω12 res =>
           consume
             (w:=wsnoc (@MkWorld _ []) (result :: τ))
             ens
@@ -2852,10 +2871,10 @@ Module Mutators
     Qed.
 
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationCondition (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config c body)))))).
+      VerificationCondition (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config 1 c body)))))).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (ok (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config c body))))))).
+      is_true (ok (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config 1 c body))))))).
 
     Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflect c body ->

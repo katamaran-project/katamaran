@@ -223,7 +223,7 @@ Module ProgramLogic
         CTriple (evals es δ) P Q c ->
         ⦃ P ⦄ stm_call f es ; δ ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
     | rule_stm_call_inline
-        {Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ) (c : SepContract Δ τ)
+        {Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
         (P : L) (Q : Lit τ -> L) :
         ⦃ P ⦄ Pi f ; evals es δ ⦃ fun v _ => Q v ⦄ ->
         ⦃ P ⦄ stm_call f es ; δ ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
