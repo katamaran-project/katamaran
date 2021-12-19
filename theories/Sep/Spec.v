@@ -1875,13 +1875,14 @@ Module Assertions
         now rewrite inst_triangular_right_inverse.
     Qed.
 
-    Definition solver_generic (solver_user : Solver) : Solver :=
-      solver_compose solver_generic_round (solver_compose solver_user solver_generic_round).
+    Definition generic (user : Solver) : Solver :=
+      let s := solver_compose solver_generic_round solver_generic_round in
+      solver_compose s (solver_compose user s).
 
-    Lemma solver_generic_spec {solver_user} (H : SolverSpec solver_user) :
-      SolverSpec (solver_generic solver_user).
+    Lemma generic_spec {user} (H : SolverSpec user) :
+      SolverSpec (generic user).
     Proof.
-      unfold solver_generic.
+      unfold generic.
       auto using solver_compose_spec, solver_generic_round_spec.
     Qed.
 

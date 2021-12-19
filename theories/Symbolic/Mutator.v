@@ -947,7 +947,7 @@ Module Mutators
     Definition assume_formulas :
       ⊢ List Formula -> SDijkstra Unit :=
       fun w0 fmls0 POST =>
-        match Solver.solver_generic solver_user fmls0 with
+        match Solver.generic solver_user fmls0 with
         | Some (existT w1 (ν , fmls1)) =>
           (* Assume variable equalities and the residual constraints *)
           assume_triangular ν
@@ -972,7 +972,7 @@ Module Mutators
     Definition assert_formulas :
       ⊢ Message -> List Formula -> SDijkstra Unit :=
       fun w0 msg fmls0 POST =>
-        match Solver.solver_generic solver_user fmls0 with
+        match Solver.generic solver_user fmls0 with
         | Some (existT w1 (ν , fmls1)) =>
           (* Assert variable equalities and the residual constraints *)
           assert_triangular msg ν

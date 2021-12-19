@@ -330,7 +330,7 @@ Module Soundness
     Proof.
       intros POST__s POST__c HPOST. unfold SDijk.assume_formulas.
       intros Hwp Hfmls0. apply Heq in Hfmls0.
-      destruct ( Solver.solver_generic_spec solver_user_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      destruct (Solver.generic_spec solver_user_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0).
         destruct Hsolver as [Hν Hsolver]. inster Hν by auto.
         specialize (Hsolver (inst (sub_triangular_inv ζ) ι0)).
@@ -356,7 +356,7 @@ Module Soundness
     Proof.
       unfold SDijk.assert_formulas, CDijk.assert_formula.
       intros POST__s POST__c HPOST Hwp.
-      destruct (Solver.solver_generic_spec solver_user_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      destruct (Solver.generic_spec solver_user_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
         rewrite safe_assert_triangular in Hwp. destruct Hwp as [Hν Hwp].
         rewrite safe_assert_formulas_without_solver in Hwp.
