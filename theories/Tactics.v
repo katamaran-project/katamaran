@@ -26,9 +26,10 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-Require Import Coq.Bool.Bool.
+From Coq Require Import Bool.Bool PeanoNat.
 From Equations Require Import Equations.
 From stdpp Require base decidable finite list.
+From Katamaran Require Import Context Environment Prelude.
 
 (* Extract the head of a term.
    from http://poleiro.info/posts/2018-10-15-checking-for-constructors.html
@@ -39,11 +40,12 @@ Ltac head t :=
   | _ => t
   end.
 
-Ltac microsail_solve_eqb_spec :=
+Ltac solve_eqb_spec' tac :=
   repeat
     (intros; cbn in *;
      match goal with
      | H: ?x <> ?x |- _ => congruence
+     | |- _ <> _ => intro
      | |- ?x = ?x => reflexivity
      | |- reflect _ true => constructor
      | |- reflect _ false => constructor
@@ -52,17 +54,29 @@ Ltac microsail_solve_eqb_spec :=
        let hy := head y in
        is_constructor hx; is_constructor hy;
        dependent elimination H
-     | |- context[eq_dec ?x ?y] => destruct (eq_dec x y)
-     | |- _ <> _ => intro H; dependent elimination H
+     | |- context[eq_dec ?x ?y] => destruct (eq_dec x y); subst
+     | |- context[eq_dec_het ?x ?y] => destruct (eq_dec_het x y); subst
      | H : forall y, reflect _ (?eq ?x y) |- context[?eq ?x ?y] =>
        destruct (H y)
      | H : forall x y, reflect _ (?eq x y) |- context[?eq ?x ?y] =>
        destruct (H x y)
      | [ H : reflect _ ?b |- context[?b] ] =>
        let H1 := fresh in destruct H as [H1 |]; [dependent elimination H1 | idtac]
-     end);
+     | e : ?x = ?y |- context[eq_rect ?x _ _ ?y ?e] => destruct e; cbn
+     | p: @ctx_nth_is ?B ?Γ ?n ?b, q: @ctx_nth_is ?B ?Γ ?n ?b |- _ =>
+         pose proof (@ctx_nth_is_proof_irrelevance B _ Γ n b p q); subst
+     | |- context[InCtx_eqb ?x ?y] => destruct (InCtx_eqb_spec x y); subst
+     | |- context[Nat.eqb ?x ?y] => destruct (Nat.eqb_spec x y); subst
+     | |- _ => tac; subst; cbn
+     end;
+     rewrite ?andb_true_r, ?andb_false_r);
   cbn in *;
   try congruence.
+
+Ltac solve_eqb_spec := solve_eqb_spec' idtac.
+
+Tactic Notation "solve_eqb_spec" "with" tactic(tac) :=
+  solve_eqb_spec' tac.
 
 Ltac finite_from_eqdec :=
   match goal with

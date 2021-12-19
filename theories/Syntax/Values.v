@@ -90,7 +90,7 @@ Module Values (Export valuekit : ValueKit).
     end.
 
   Lemma Lit_eqb_spec (σ : Ty) (x y : Lit σ) : reflect (x = y) (Lit_eqb σ x y).
-  Proof with microsail_solve_eqb_spec.
+  Proof with solve_eqb_spec.
     induction σ; cbn.
     - apply Z.eqb_spec.
     - apply Bool.eqb_spec.

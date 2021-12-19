@@ -539,51 +539,20 @@ Module Assertions
       end.
 
     Local Set Equations With UIP.
-    Lemma chunk_eqb_spec {Σ} (c1 c2 : Chunk Σ) :
-      reflect (c1 = c2) (chunk_eqb c1 c2).
-    Proof.
-      revert c2.
-      induction c1 as [p1 ts1|σ1 r1 t1|c11 IHc11 c12 IHc12|c11 IHc11 c12 IHc12];
-        intros [p2 ts2|σ2 r2 t2|c21 c22|c21 c22];
-        try (constructor; discriminate; fail); cbn.
-      - destruct (eq_dec p1 p2).
-        + destruct e; cbn.
-          destruct (env_eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) ts1 ts2).
-          * constructor. f_equal; auto.
-          * constructor. intros Heq.
-            dependent elimination Heq.
-            auto.
-        + constructor. intros Heq.
-          dependent elimination Heq.
-          auto.
-      - destruct (eq_dec_het r1 r2).
-        + dependent elimination e; cbn.
-          destruct (Term_eqb_spec t1 t2).
-          * constructor. f_equal; auto.
-          * constructor. intros Heq.
-          dependent elimination Heq.
-          auto.
-        + constructor. intros Heq.
-          dependent elimination Heq.
-          auto.
-      - destruct (IHc11 c21), (IHc12 c22);
-          constructor; intuition; fail.
-      - destruct (IHc11 c21), (IHc12 c22);
-          constructor; intuition; fail.
-    Qed.
 
-    (* Equations(noeqns) chunk_eqb {Σ} (c1 c2 : Chunk Σ) : bool := *)
-    (*   chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) *)
-    (*   with eq_dec p1 p2 => { *)
-    (*     chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (left eq_refl) := env_eqb_hom (@Term_eqb _) ts1 ts2; *)
-    (*     chunk_eqb (chunk_user p1 ts1) (chunk_user p2 ts2) (right _)      := false *)
-    (*   }; *)
-    (*   chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) *)
-    (*   with eq_dec_het r1 r2 => { *)
-    (*     chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (left eq_refl) := Term_eqb t1 t2; *)
-    (*     chunk_eqb (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) (right _)      := false *)
-    (*   }; *)
-    (*   chunk_eqb _ _  := false. *)
+    Lemma chunk_eqb_spec {Σ} :
+      forall (c1 c2 : Chunk Σ),
+        reflect (c1 = c2) (chunk_eqb c1 c2).
+    Proof.
+      induction c1; intros [];
+        solve_eqb_spec with
+        try match goal with
+            | |- reflect _ (env_eqb_hom (@Term_eqb ?Σ) ?x ?y) =>
+                destruct (env_eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) x y)
+            | |- reflect _ (Term_eqb ?x ?y) =>
+                destruct (Term_eqb_spec x y)
+            end.
+    Qed.
 
     Fixpoint sub_chunk {Σ1} (c : Chunk Σ1) {Σ2} (ζ : Sub Σ1 Σ2) {struct c} : Chunk Σ2 :=
       match c with

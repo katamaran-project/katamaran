@@ -767,7 +767,7 @@ Module Terms (Export termkit : TermKit).
         Term_eqb (@term_projtup _ x n _ p) (@term_projtup _ y m _ q) (right _) := false
         };
       Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
-        with 𝑼𝑲_eq_dec k1 k2 => {
+        with eq_dec k1 k2 => {
         Term_eqb (term_union k1 e1) (term_union ?(k1) e2) (left eq_refl) :=
           Term_eqb e1 e2;
         Term_eqb _ _ (right _) := false
@@ -789,39 +789,24 @@ Module Terms (Export termkit : TermKit).
       reflect (t1 = t2) (Term_eqb t1 t2).
     Proof.
       induction t1 using Term_rect; cbn [Term_eqb]; dependent elimination t2;
-        microsail_solve_eqb_spec.
-      - destruct (InCtx_eqb_spec ςInΣ ςInΣ0); constructor.
-        + dependent elimination e. reflexivity.
-        + intros e. apply n.
-          dependent elimination e. reflexivity.
-      - match goal with
-        | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2); cbn
-        end; microsail_solve_eqb_spec.
-      - destruct (binop_eqdep_dec op op0) as [e|ne]; cbn.
-        + dependent elimination e; cbn.
-          microsail_solve_eqb_spec.
-        + constructor; intro e.
-          dependent elimination e.
-          apply ne; constructor.
-      - destruct e.
-        destruct (Nat.eqb_spec n n0); cbn.
-        + subst n0.
-          microsail_solve_eqb_spec.
-          f_equal; auto.
-          apply ctx_nth_is_proof_irrelevance.
-        + microsail_solve_eqb_spec.
-      - destruct (𝑼𝑲_eq_dec K K0); cbn.
-        + destruct e. specialize (IHt1 e4). microsail_solve_eqb_spec.
-        + microsail_solve_eqb_spec.
+        solve_eqb_spec with
+        try match goal with
+            | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2)
+            | |- context[binop_eqdep_dec ?x ?y] =>
+                let e := fresh in
+                destruct (binop_eqdep_dec x y) as [e|];
+                [dependent elimination e|]
+            | H: ~ OpEq ?o ?o |- False => apply H; constructor
+            end.
       - apply (@ssrbool.iffP (es = es0)).
         + revert es0.
-          induction es; intros es0; dependent elimination es0; microsail_solve_eqb_spec.
+          induction es; intros es0; dependent elimination es0; solve_eqb_spec.
           destruct X as [x1 x2].
           specialize (IHes x1 E).
           specialize (x2 db0).
-          microsail_solve_eqb_spec.
-        + microsail_solve_eqb_spec.
-        + microsail_solve_eqb_spec.
+          solve_eqb_spec.
+        + solve_eqb_spec.
+        + solve_eqb_spec.
     Qed.
 
   End SymbolicTerms.

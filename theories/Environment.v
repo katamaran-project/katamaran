@@ -29,7 +29,7 @@
 Require Import Coq.Program.Equality.
 From Equations Require Import Equations.
 From Katamaran Require Import
-     Context Notation Tactics.
+     Context Notation.
 Local Set Implicit Arguments.
 
 Import CtxNotations.
