@@ -227,6 +227,9 @@ Module ExampleTermKit <: TermKit.
   | msum :       Fun [ "x" :: ty_union either, "y" :: ty_union either] (ty_union either)
   | length {σ} : Fun [ "xs" :: ty_list σ           ] ty_int
   | summaxlen :  Fun [ "xs" :: ty_list ty_int      ] (ty_prod (ty_prod ty_int ty_int) ty_int)
+  | fpthree16 :  Fun [ "sign" :: ty_bvec 1 ] (ty_bvec 16)
+  | fpthree32 :  Fun [ "sign" :: ty_bvec 1 ] (ty_bvec 32)
+  | fpthree64 :  Fun [ "sign" :: ty_bvec 1 ] (ty_bvec 64)
   .
 
   Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
@@ -296,6 +299,35 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
          end
        end).
 
+  Definition fun_fpthree' (e f : nat) : Stm [ "sign" :: ty_bvec 1 ] (ty_bvec (1 + e + f)) :=
+    let: "exp" :: ty_bvec e := stm_lit (ty_bvec e) (Word.wone e) in
+    let: "frac" :: ty_bvec f := stm_lit (ty_bvec f) (Word.wone f) in
+    exp_binop
+      (@binop_bvcombine 1 (e + f))
+      (exp_var "sign")
+      (exp_binop
+         (@binop_bvcombine e f)
+         (exp_var "exp")
+         (exp_var "frac")).
+
+  Definition fun_fpthree16 : Stm [ "sign" :: ty_bvec 1 ] (ty_bvec 16) :=
+    (let n:= 16 in
+     let e := 5 in
+     let f := (n - (e + 1)) in
+     fun_fpthree' e f)%nat.
+
+  Definition fun_fpthree32 : Stm [ "sign" :: ty_bvec 1 ] (ty_bvec 32) :=
+    (let n:= 32 in
+     let e := 8 in
+     let f := (n - (e + 1)) in
+     fun_fpthree' e f)%nat.
+
+  Definition fun_fpthree64 : Stm [ "sign" :: ty_bvec 1 ] (ty_bvec 64) :=
+    (let n:= 64 in
+     let e := 11 in
+     let f := (n - (e + 1)) in
+     fun_fpthree' e f)%nat.
+
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     Eval compute in
     match f in Fun Δ τ return Stm Δ τ with
@@ -320,6 +352,9 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
                   (stm_lit ty_int 0)
                   "y" "ys" (let: "n" := call length (exp_var "ys") in lit_int 1 + exp_var "n")
     | summaxlen => fun_summaxlen
+    | fpthree16 => fun_fpthree16
+    | fpthree32 => fun_fpthree32
+    | fpthree64 => fun_fpthree64
     end.
 
   Definition RegStore := GenericRegStore.
@@ -463,6 +498,9 @@ Module SepContracts.
         | msum      => None
         | length    => Some sep_contract_length
         | summaxlen => Some sep_contract_summaxlen
+        | fpthree16 => None
+        | fpthree32 => None
+        | fpthree64 => None
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
