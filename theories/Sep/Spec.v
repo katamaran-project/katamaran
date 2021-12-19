@@ -1245,12 +1245,11 @@ Module Assertions
     Equations(noeqns) simplify_formula_eq_binop_lit {Σ σ σ1 σ2}
       (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Lit σ)
       (k : List Formula Σ) : option (List Formula Σ) :=
-    | binop_pair | t1 | t2 | (v1 , v2) | k :=
-      Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit _ v2)) k));
-    | binop_cons | t1 | t2 | nil | k := None;
-    | binop_cons | t1 | t2 | cons v1 v2 | k :=
-      Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit (ty_list _) v2)) k));
-    | op         | t1 | t2 | v         | k :=
+    | binop_pair       | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit _ v2)) k));
+    | binop_cons       | t1 | t2 | nil        | k := None;
+    | binop_cons       | t1 | t2 | cons v1 v2 | k := Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit (ty_list _) v2)) k));
+    | binop_tuple_snoc | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_lit (ty_tuple _) v1)) (cons (formula_eq t2 (term_lit _ v2)) k));
+    | op               | t1 | t2 | v          | k :=
       Some (cons (formula_eq (term_binop op t1 t2) (term_lit _ v)) k).
 
     Lemma simplify_formula_eq_binop_lit_spec {Σ σ σ1 σ2}
@@ -1268,18 +1267,102 @@ Module Assertions
       - destruct v; constructor; intros ι; cbn.
         + discriminate.
         + rewrite ?inst_pathcondition_cons. cbn. intuition.
+      - destruct v; constructor; intros ι; cbn.
+        rewrite ?inst_pathcondition_cons. cbn. intuition.
     Qed.
 
+    Definition simplify_formula_eq_union {Σ U} {K1 K2 : 𝑼𝑲 U}
+      (t1 : Term Σ (𝑼𝑲_Ty K1)) (t2 : Term Σ (𝑼𝑲_Ty K2)) (k : List Formula Σ) :
+      option (List Formula Σ) :=
+      match 𝑼𝑲_eq_dec K1 K2 with
+      | left e  => let t2' := eq_rec_r (fun K => Term Σ (𝑼𝑲_Ty K)) t2 e in
+                   Some (cons (formula_eq t1 t2') k)
+      | right _ => None
+      end.
+
+    Definition simplify_formula_eq_union_lit {Σ U} {K1 : 𝑼𝑲 U}
+      (t1 : Term Σ (𝑼𝑲_Ty K1)) (v2 : Lit (ty_union U)) (k : List Formula Σ) :
+      option (List Formula Σ) :=
+       let (K2, v2) := 𝑼_unfold v2 in
+       match 𝑼𝑲_eq_dec K1 K2 with
+       | left e  => let v2' := eq_rec_r (fun K1 => Lit (𝑼𝑲_Ty K1)) v2 e in
+                    let t2  := term_lit (𝑼𝑲_Ty K1) v2' in
+                    Some (cons (formula_eq t1 t2) k)
+       | right _ => None
+       end.
+
+    Section WithUIP.
+
+      Local Set Equations With UIP.
+
+      Lemma simplify_formula_eq_union_spec {Σ U} {K1 K2 : 𝑼𝑲 U}
+            (t1 : Term Σ (𝑼𝑲_Ty K1)) (t2 : Term Σ (𝑼𝑲_Ty K2)) (k : List Formula Σ) :
+        OptionSpec
+          (fun fmlsk : List Formula Σ =>
+             forall ι : SymInstance Σ,
+               instpc fmlsk ι <->
+                 existT (P := fun K => Lit (𝑼𝑲_Ty K)) K1 (inst t1 ι) =
+                   existT (P := fun K => Lit (𝑼𝑲_Ty K)) K2 (inst t2 ι)
+                 /\ instpc k ι)
+          (forall ι : SymInstance Σ,
+              existT (P := fun K => Lit (𝑼𝑲_Ty K)) K1 (inst t1 ι) <>
+                existT (P := fun K => Lit (𝑼𝑲_Ty K)) K2 (inst t2 ι))
+          (simplify_formula_eq_union t1 t2 k).
+      Proof.
+        unfold simplify_formula_eq_union.
+        destruct 𝑼𝑲_eq_dec as [e|e]; constructor; intros ι.
+        - rewrite inst_pathcondition_cons. cbn.
+          apply and_iff_compat_r'. intros Hk.
+          destruct e. cbn. split.
+          + intros. now apply f_equal.
+          + generalize (inst t1 ι), (inst t2 ι). clear.
+            intros v1 v2 H. now dependent elimination H.
+        - generalize (inst t1 ι), (inst t2 ι). clear - e.
+          intros v1 v2 H. now dependent elimination H.
+      Qed.
+
+      Lemma simplify_formula_eq_union_lit_spec {Σ U}
+        {K1 : 𝑼𝑲 U} (t1 : Term Σ (𝑼𝑲_Ty K1))
+        (l : Lit (ty_union U)) (k : List Formula Σ) :
+        OptionSpec
+          (fun fmlsk : List Formula Σ =>
+             forall ι : SymInstance Σ,
+               instpc fmlsk ι <-> 𝑼_fold (existT K1 (inst t1 ι)) = l /\ instpc k ι)
+          (forall ι : SymInstance Σ, 𝑼_fold (existT K1 (inst_term t1 ι)) <> l)
+          (simplify_formula_eq_union_lit t1 l k).
+      Proof.
+        unfold simplify_formula_eq_union_lit.
+        destruct 𝑼_unfold as [K2 v2] eqn:?.
+        apply (f_equal (@𝑼_fold U)) in Heqs.
+        rewrite 𝑼_fold_unfold in Heqs. subst.
+        destruct 𝑼𝑲_eq_dec as [e|e]; constructor; intros ι.
+        - rewrite inst_pathcondition_cons. cbn.
+          apply and_iff_compat_r'. intros Hk.
+          destruct e. cbn. split.
+          + now intros <-.
+          + intros.
+            apply (f_equal (@𝑼_unfold U)) in H.
+            rewrite ?𝑼_unfold_fold in H.
+            now dependent elimination H.
+        - intros ?. apply (f_equal (@𝑼_unfold U)) in H.
+          rewrite ?𝑼_unfold_fold in H. apply e.
+            now dependent elimination H.
+      Qed.
+
+    End WithUIP.
+
     Equations(noeqns) simplify_formula_eq {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) : option (List Formula Σ) :=
-    | term_lit ?(σ) l1       | term_lit σ l2          | k => if Lit_eqb σ l1 l2 then Some k else None;
-    | term_inr _             | term_inl _             | k => None;
-    | term_inl _             | term_inr _             | k => None;
-    | term_inl t1            | term_inl t2            | k => simplify_formula_eq t1 t2 k;
-    | term_inr t1            | term_inr t2            | k => simplify_formula_eq t1 t2 k;
-    | term_record ?(R) ts1   | term_record R ts2      | k => Some (app (formula_eqs_nctx ts1 ts2) k);
-    | term_binop op1 t11 t12 | term_binop op2 t21 t22 | k => simplify_formula_eq_binop op1 t11 t12 op2 t21 t22 k;
-    | term_binop op1 t11 t12 | term_lit _ v           | k => simplify_formula_eq_binop_lit op1 t11 t12 v k;
-    | t1                     | t2                     | k => simplify_formula_eqb t1 t2 k.
+    | term_lit ?(σ) l1       | term_lit σ l2            | k => if Lit_eqb σ l1 l2 then Some k else None;
+    | term_inr _             | term_inl _               | k => None;
+    | term_inl _             | term_inr _               | k => None;
+    | term_inl t1            | term_inl t2              | k => simplify_formula_eq t1 t2 k;
+    | term_inr t1            | term_inr t2              | k => simplify_formula_eq t1 t2 k;
+    | term_record ?(R) ts1   | term_record R ts2        | k => Some (app (formula_eqs_nctx ts1 ts2) k);
+    | term_binop op1 t11 t12 | term_binop op2 t21 t22   | k => simplify_formula_eq_binop op1 t11 t12 op2 t21 t22 k;
+    | term_binop op1 t11 t12 | term_lit _ v             | k => simplify_formula_eq_binop_lit op1 t11 t12 v k;
+    | term_union U K t       | term_lit ?(ty_union U) v | k => simplify_formula_eq_union_lit t v k;
+    | term_union ?(U) K1 t1  | term_union U K2 t2       | k => simplify_formula_eq_union t1 t2 k;
+    | t1                     | t2                       | k => simplify_formula_eqb t1 t2 k.
 
     Definition simplify_formula {Σ} (fml : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
       match fml with
@@ -1361,11 +1444,19 @@ Module Assertions
           * apply noConfusion_inv in Heq. apply Heq.
         + intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
       - specialize (IHs t0). revert IHs. apply optionspec_monotonic.
-        + intros fmls HYP ι. specialize (HYP ι). rewrite HYP. cbn.
-          apply and_iff_compat_r. cbn. split; intros Heq.
+        + intros fmls HYP ι. rewrite (HYP ι). cbn.
+          apply and_iff_compat_r'. intros Hpc.
+          split; intros Heq.
           * now f_equal.
           * apply noConfusion_inv in Heq. apply Heq.
         + intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
+      - cbn. apply simplify_formula_eq_union_lit_spec.
+      - cbn. clear. rename e4 into t2, K1 into K2, s into t1, K0 into K1, U0 into U.
+        generalize (simplify_formula_eq_union_spec t1 t2 k). apply optionspec_monotonic.
+        + intros k'. apply base.forall_proper. intros ι.
+          now rewrite 𝑼_fold_inj.
+        + apply base.forall_proper. intros ι.
+          now rewrite 𝑼_fold_inj.
       - cbn - [inst_term]. constructor. intros ι.
         rewrite inst_pathcondition_app. apply and_iff_compat_r.
         rewrite inst_formula_eqs_nctx. cbn [inst_term].

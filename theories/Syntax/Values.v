@@ -113,4 +113,20 @@ Module Values (Export valuekit : ValueKit).
     - destruct (𝑹𝑻_eq_dec x y)...
   Qed.
 
+  Lemma 𝑼_fold_inj {U} (v1 v2 : {K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K)}) :
+    𝑼_fold v1 = 𝑼_fold v2 <-> v1 = v2.
+  Proof.
+    split; try congruence. intros H.
+    apply (f_equal (@𝑼_unfold U)) in H.
+    now rewrite ?𝑼_unfold_fold in H.
+  Qed.
+
+  Lemma 𝑼_unfold_inj {U} (v1 v2 : Lit (ty_union U)) :
+    𝑼_unfold v1 = 𝑼_unfold v2 <-> v1 = v2.
+  Proof.
+    split; try congruence. intros H.
+    apply (f_equal (@𝑼_fold U)) in H.
+    now rewrite ?𝑼_fold_unfold in H.
+  Qed.
+
 End Values.
