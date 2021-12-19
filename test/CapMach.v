@@ -158,33 +158,16 @@ Section Finite.
   Import stdpp.finite.
   Import ListNotations.
 
+  Local Obligation Tactic :=
+    finite_from_eqdec.
+
   Global Program Instance Permission_finite : Finite Permission :=
     {| enum := [O;E;R;RX;RW;RWX] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
-
   Global Program Instance RegName_finite : Finite RegName :=
     {| enum := [R0;R1;R2;R3] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
-
   Global Program Instance InstructionConstructor_finite : Finite InstructionConstructor :=
     {| enum := [kjmp;kjnz;kmove;kload;kstore;klt;kplus;kminus;klea;krestrict;
                ksubseg;kisptr;kgetp;kgetb;kgete;kgeta;kfail;khalt] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
 End Finite.
 

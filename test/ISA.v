@@ -73,23 +73,13 @@ Section Finite.
   Import stdpp.finite.
   Import ListNotations.
 
+  Local Obligation Tactic :=
+    finite_from_eqdec.
+
   Global Program Instance RegisterTag_finite : Finite RegisterTag :=
     {| enum := [RegTag0;RegTag1;RegTag2;RegTag3] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
-
   Global Program Instance InstructionConstructor_finite : Finite InstructionConstructor :=
     {| enum := [KHalt;KLoad;KAdd;KJump] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
 End Finite.
 

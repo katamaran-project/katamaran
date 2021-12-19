@@ -308,178 +308,74 @@ Derive EqDec for Mstatus.
 Section Finite.
   Import stdpp.finite.
 
+  Local Obligation Tactic :=
+    finite_from_eqdec.
+
   Global Program Instance RegIdx_finite : Finite RegIdx :=
     {| enum := [X0;X1;X2] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance Privilege_finite : Finite Privilege :=
     {| enum := [User;Machine] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
     {| enum := [PMP0CFG] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance PmpAddrIdx_finite : Finite PmpAddrIdx :=
     {| enum := [PMPADDR0] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance PmpAddrMatchType_finite : Finite PmpAddrMatchType :=
     {| enum := [OFF;TOR] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance PmpMatch_finite : Finite PmpMatch :=
     {| enum := [PMP_Success;PMP_Continue;PMP_Fail] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance PmpAddrMatch_finite : Finite PmpAddrMatch :=
     {| enum := [PMP_NoMatch;PMP_PartialMatch;PMP_Match] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance ROP_finite :
     Finite ROP :=
     {| enum := [RISCV_ADD;RISCV_SUB] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance IOP_finite :
     Finite IOP :=
     {| enum := [RISCV_ADDI] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance UOP_finite :
     Finite UOP :=
     {| enum := [RISCV_LUI;RISCV_AUIPC] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance BOP_finite :
     Finite BOP :=
     {| enum := [RISCV_BEQ;RISCV_BNE;RISCV_BLT;RISCV_BGE;RISCV_BLTU;RISCV_BGEU] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance Retired_finite :
     Finite Retired :=
     {| enum := [RETIRE_SUCCESS; RETIRE_FAIL] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance ASTConstructor_finite :
     Finite ASTConstructor :=
     {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KMRET] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance AccessTypeConstructor_finite :
     Finite AccessTypeConstructor :=
     {| enum := [KRead;KWrite;KReadWrite;KExecute] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance ExceptionTypeConstructor_finite :
     Finite ExceptionTypeConstructor :=
-    {| enum := [KE_Fetch_Access_Fault;KE_Load_Access_Fault;KE_SAMO_Access_Fault;KE_U_EnvCall;KE_M_EnvCall;KE_Illegal_Instr] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
+    {| enum := [KE_Fetch_Access_Fault;KE_Load_Access_Fault;KE_SAMO_Access_Fault;
+                KE_U_EnvCall;KE_M_EnvCall;KE_Illegal_Instr] |}.
 
   Global Program Instance MemoryOpResultConstructor_finite :
     Finite MemoryOpResultConstructor :=
     {| enum := [KMemValue;KMemException] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance FetchResultConstructor_finite :
     Finite FetchResultConstructor :=
     {| enum := [KF_Base;KF_Error] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
   Global Program Instance CtlResultConstructor_finite :
     Finite CtlResultConstructor :=
     {| enum := [KCTL_TRAP;KCTL_MRET] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
 End Finite.
 

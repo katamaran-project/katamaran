@@ -98,23 +98,13 @@ Section Finite.
   Import stdpp.finite.
   Import ListNotations.
 
+  Local Obligation Tactic :=
+    finite_from_eqdec.
+
   Global Program Instance Ordering_finite : Finite Ordering :=
     {| enum := [LT;EQ;GT] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
-
   Global Program Instance EitherConstructor_finite : Finite EitherConstructor :=
     {| enum := [Left;Right] |}.
-  Next Obligation.
-    now apply nodup_fixed.
-  Qed.
-  Next Obligation.
-    intros []; apply (@bool_decide_unpack _ (elem_of_list_dec _ _)); auto.
-  Qed.
 
 End Finite.
 

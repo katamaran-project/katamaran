@@ -28,6 +28,7 @@
 
 Require Import Coq.Bool.Bool.
 From Equations Require Import Equations.
+From stdpp Require base decidable finite list.
 
 (* Extract the head of a term.
    from http://poleiro.info/posts/2018-10-15-checking-for-constructors.html
@@ -62,6 +63,14 @@ Ltac microsail_solve_eqb_spec :=
      end);
   cbn in *;
   try congruence.
+
+Ltac finite_from_eqdec :=
+  match goal with
+  | |- base.NoDup ?xs =>
+      now apply (@decidable.bool_decide_unpack _ (list.NoDup_dec xs))
+  | |- forall x : _, base.elem_of x _ =>
+      intros []; apply (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _)); auto
+  end.
 
 Ltac destruct_propositional H :=
   lazymatch type of H with
