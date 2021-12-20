@@ -53,13 +53,13 @@ Module SmallStep
       ⟨ γ , μ , δ , (stm_exp e) ⟩ ---> ⟨ γ , μ , δ , stm_lit τ (eval e δ) ⟩
 
   | step_stm_let_value
-      (x : 𝑿) (σ : Ty) (v : Lit σ) (k : Stm (Γ ▻ (x::σ)) τ) :
-      ⟨ γ , μ , δ , stm_let x σ (stm_lit σ v) k ⟩ ---> ⟨ γ , μ , δ , stm_block (env_snoc env_nil (x::σ) v) k ⟩
+      (x : 𝑿) (σ : Ty) (v : Lit σ) (k : Stm (Γ ▻ x∷σ) τ) :
+      ⟨ γ , μ , δ , stm_let x σ (stm_lit σ v) k ⟩ ---> ⟨ γ , μ , δ , stm_block (env_snoc env_nil (x∷σ) v) k ⟩
   | step_stm_let_fail
-      (x : 𝑿) (σ : Ty) (s : string) (k : Stm (Γ ▻ (x::σ)) τ) :
+      (x : 𝑿) (σ : Ty) (s : string) (k : Stm (Γ ▻ x∷σ) τ) :
       ⟨ γ , μ , δ, stm_let x σ (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | step_stm_let_step
-      (x : 𝑿) (σ : Ty) (s s' : Stm Γ σ) (k : Stm (Γ ▻ (x::σ)) τ)
+      (x : 𝑿) (σ : Ty) (s s' : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
       (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) :
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_let x σ s k ⟩ ---> ⟨ γ', μ' , δ' , stm_let x σ s' k ⟩
@@ -117,13 +117,13 @@ Module SmallStep
       ⟨ γ , μ , δ , k ⟩
 
   | step_stm_assign_value
-      (x : 𝑿) {xInΓ : InCtx (x::τ) Γ} (v : Lit τ) :
+      (x : 𝑿) {xInΓ : x∷τ ∈ Γ} (v : Lit τ) :
       ⟨ γ , μ , δ , stm_assign x (stm_lit τ v) ⟩ ---> ⟨ γ , μ , δ ⟪ x ↦ v ⟫ , stm_lit τ v ⟩
   | step_stm_assign_fail
-      (x : 𝑿) {xInΓ : InCtx (x::τ) Γ} (s : string) :
+      (x : 𝑿) {xInΓ : x∷τ ∈ Γ} (s : string) :
       ⟨ γ , μ , δ , stm_assign x (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | step_stm_assign_step
-      (x : 𝑿) {xInΓ : InCtx (x::τ) Γ} (s s' : Stm Γ τ)
+      (x : 𝑿) {xInΓ : x∷τ ∈ Γ} (s s' : Stm Γ τ)
       (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) :
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_assign x s ⟩ ---> ⟨ γ' , μ' , δ' , stm_assign x s' ⟩
@@ -138,29 +138,29 @@ Module SmallStep
 
   | step_stm_match_list
       {σ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
-      (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh :: σ) ▻ (xt :: ty_list σ)) τ) :
+      (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty_list σ) τ) :
       ⟨ γ , μ , δ , stm_match_list e alt_nil xh xt alt_cons ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
                 | nil => alt_nil
-                | cons vh vt => stm_block (env_snoc (env_snoc env_nil (xh::σ) vh) (xt::ty_list σ) vt) alt_cons
+                | cons vh vt => stm_block (env_snoc (env_snoc env_nil (xh∷σ) vh) (xt∷ty_list σ) vt) alt_cons
                 end
       ⟩
   | step_stm_match_sum
       {σinl σinr : Ty} (e : Exp Γ (ty_sum σinl σinr))
-      (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl :: σinl)) τ)
-      (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr :: σinr)) τ) :
+      (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
+      (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ) :
       ⟨ γ , μ , δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
-                | inl v => stm_block (env_snoc env_nil (xinl::σinl) v) alt_inl
-                | inr v => stm_block (env_snoc env_nil (xinr::σinr) v) alt_inr
+                | inl v => stm_block (env_snoc env_nil (xinl∷σinl) v) alt_inl
+                | inr v => stm_block (env_snoc env_nil (xinr∷σinr) v) alt_inr
                 end
       ⟩
   | step_stm_match_prod
       {σ1 σ2 : Ty} (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿)
-      (rhs : Stm (Γ ▻ (xl :: σ1) ▻ (xr :: σ2)) τ) :
+      (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) :
       ⟨ γ , μ , δ , stm_match_prod e xl xr rhs ⟩ --->
       ⟨ γ , μ , δ , let (vl , vr) := eval e δ in
-                stm_block (env_snoc (env_snoc env_nil (xl::σ1) vl) (xr::σ2) vr) rhs
+                stm_block (env_snoc (env_snoc env_nil (xl∷σ1) vl) (xr∷σ2) vr) rhs
       ⟩
   | step_stm_match_enum
       {E : 𝑬} (e : Exp Γ (ty_enum E))

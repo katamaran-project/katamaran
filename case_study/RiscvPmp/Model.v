@@ -52,7 +52,7 @@ Module RiscvPmpModel.
   Ltac destruct_syminstance ι :=
     repeat
       match type of ι with
-      | Env _ (ctx_snoc _ (?s, _)) =>
+      | Env _ (ctx_snoc _ (MkB ?s _)) =>
         let id := string_to_ident s in
         let fr := fresh id in
         destruct (snocView ι) as [ι fr];

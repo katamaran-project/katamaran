@@ -128,12 +128,12 @@ Module SemiConcrete
       forall Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
-        | ctx_nil             => fun k => k env_nil
-        | ctx_snoc Δ (x :: σ) =>
+        | ctx_nil          => fun k => k env_nil
+        | ctx_snoc Δ (x∷σ) =>
           fun k =>
             angelic σ (fun v =>
               rec Δ (fun EΔ =>
-                k (EΔ ► (x :: σ ↦ v))))
+                k (EΔ ► (x∷σ ↦ v))))
         end.
     Arguments angelic_ctx {N} Δ.
 
@@ -144,12 +144,12 @@ Module SemiConcrete
       forall Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
-        | ctx_nil             => fun k => k env_nil
-        | ctx_snoc Δ (x :: σ) =>
+        | ctx_nil          => fun k => k env_nil
+        | ctx_snoc Δ (x∷σ) =>
           fun k =>
             demonic σ (fun v =>
               rec Δ (fun EΔ =>
-                k (EΔ ► (x :: σ ↦ v))))
+                k (EΔ ► (x∷σ ↦ v))))
         end.
     Arguments demonic_ctx {N} Δ.
 
@@ -253,7 +253,7 @@ Module SemiConcrete
         unfold angelic. split.
         + intros [v Hwp]. apply IHΔ in Hwp.
           destruct Hwp as [vs HPOST].
-          now exists (env_snoc vs (x :: σ) v).
+          now exists (env_snoc vs (x∷σ) v).
         + intros [vs Hwp]. destruct (snocView vs) as [vs v].
           exists v. apply IHΔ. now exists vs.
     Qed.
@@ -272,7 +272,7 @@ Module SemiConcrete
           destruct (snocView vs) as [vs v].
           now eapply (IHΔ (fun vs => POST (env_snoc vs _ v))).
         + intros HPost v.
-          now eapply (IHΔ (fun vs => POST (env_snoc vs (x , σ) v))).
+          now eapply (IHΔ (fun vs => POST (env_snoc vs (x∷σ) v))).
     Qed.
 
     Lemma wp_angelic_list {A} (xs : list A) (POST : A -> Prop) :
@@ -645,7 +645,7 @@ Module SemiConcrete
         fun v k =>
           v1 <- angelic σ ;;
           v2 <- angelic τ ;;
-          assert_formula ((v1 :: v2)%ctx = v) ;;
+          assert_formula ((v1,v2) = v) ;;
           k v1 v2.
 
       Lemma wp_angelic_match_prod {A Γ1 Γ2} {σ τ}
@@ -668,7 +668,7 @@ Module SemiConcrete
         fun v k =>
           v1 <- demonic σ ;;
           v2 <- demonic τ ;;
-          assume_formula ((v1 :: v2)%ctx = v) ;;
+          assume_formula ((v1,v2) = v) ;;
           k v1 v2.
 
       Lemma wp_demonic_match_prod {A Γ1 Γ2} {σ τ}
@@ -1002,8 +1002,8 @@ Module SemiConcrete
     Section State.
 
       Definition pushpop {A Γ1 Γ2 x σ} (v : Lit σ)
-        (d : CMut (Γ1 ▻ (x::σ)) (Γ2 ▻ (x::σ)) A) : CMut Γ1 Γ2 A :=
-        fun POST δ0 => d (fun a δ1 => POST a (env_tail δ1)) (δ0 ► (x::σ ↦ v)).
+        (d : CMut (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) A) : CMut Γ1 Γ2 A :=
+        fun POST δ0 => d (fun a δ1 => POST a (env_tail δ1)) (δ0 ► (x∷σ ↦ v)).
       Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : CStore Δ)
         (d : CMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) : CMut Γ1 Γ2 A :=
         fun POST δ0 => d (fun a δ1 => POST a (env_drop Δ δ1)) (δ0 ►► δΔ).
@@ -1020,7 +1020,7 @@ Module SemiConcrete
         fun POST δ => POST (eval e δ) δ.
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CMut Γ Γ (CStore σs) :=
         fun POST δ => POST (evals es δ) δ.
-      Definition assign {Γ} x {σ} {xIn : x::σ ∈ Γ} (v : Lit σ) : CMut Γ Γ unit :=
+      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Lit σ) : CMut Γ Γ unit :=
         fun POST δ => POST tt (δ ⟪ x ↦ v ⟫).
       Global Arguments assign {Γ} x {σ xIn} v.
 
@@ -1094,17 +1094,17 @@ Module SemiConcrete
         | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
           demonic_match_sum
             (inst (T := fun Σ => Term Σ _) s ι)
-            (fun v => produce (env_snoc ι (xl :: σ) v) alt_inl)
-            (fun v => produce (env_snoc ι (xr :: τ) v) alt_inr)
+            (fun v => produce (env_snoc ι (xl∷σ) v) alt_inl)
+            (fun v => produce (env_snoc ι (xr∷τ) v) alt_inr)
         | asn_match_list s alt_nil xh xt alt_cons =>
           demonic_match_list
             (inst (T := fun Σ => Term Σ _) s ι)
             (produce ι alt_nil)
-            (fun vh vt => produce (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons)
+            (fun vh vt => produce (ι ► (xh∷_ ↦ vh) ► (xt∷ty_list _ ↦ vt)) alt_cons)
         | asn_match_prod s xl xr rhs =>
           demonic_match_prod
             (inst (T := fun Σ => Term Σ _) s ι)
-            (fun vl vr => produce (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
+            (fun vl vr => produce (ι ► (xl∷_ ↦ vl) ► (xr∷_ ↦ vr)) rhs)
         | asn_match_tuple s p rhs =>
           demonic_match_tuple p
             (inst (T := fun Σ => Term Σ _) s ι)
@@ -1123,7 +1123,7 @@ Module SemiConcrete
                          (produce ι a2)
         | asn_exist ς τ a =>
           v <- demonic τ ;;
-          produce (env_snoc ι (ς :: τ) v) a
+          produce (env_snoc ι (ς∷τ) v) a
         | asn_debug => pure tt
         end.
 
@@ -1139,17 +1139,17 @@ Module SemiConcrete
         | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
           angelic_match_sum
             (inst (T := fun Σ => Term Σ _) s ι)
-            (fun v => consume (env_snoc ι (xl :: σ) v) alt_inl)
-            (fun v => consume (env_snoc ι (xr :: τ) v) alt_inr)
+            (fun v => consume (env_snoc ι (xl∷σ) v) alt_inl)
+            (fun v => consume (env_snoc ι (xr∷τ) v) alt_inr)
         | asn_match_list s alt_nil xh xt alt_cons =>
           angelic_match_list
             (inst (T := fun Σ => Term Σ _) s ι)
             (consume ι alt_nil)
-            (fun vh vt => consume (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt)) alt_cons)
+            (fun vh vt => consume (ι ► (xh∷_ ↦ vh) ► (xt∷ty_list _ ↦ vt)) alt_cons)
         | asn_match_prod s xl xr rhs =>
           angelic_match_prod
             (inst (T := fun Σ => Term Σ _) s ι)
-            (fun vl vr => consume (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr)) rhs)
+            (fun vl vr => consume (ι ► (xl∷_ ↦ vl) ► (xr∷_ ↦ vr)) rhs)
         | asn_match_tuple s p rhs =>
           angelic_match_tuple p
             (inst (T := fun Σ => Term Σ _) s ι)
@@ -1168,7 +1168,7 @@ Module SemiConcrete
                          (consume ι a2)
         | asn_exist ς τ a =>
           v <- angelic τ ;;
-          consume (env_snoc ι (ς :: τ) v) a
+          consume (env_snoc ι (ς∷τ) v) a
         | asn_debug => pure tt
         end.
 
@@ -1183,7 +1183,7 @@ Module SemiConcrete
           assert_formula (inst δ ι = vs) ;;
           consume ι req  ;;
           v <- demonic τ ;;
-          produce (env_snoc ι (result::τ) v) ens ;;
+          produce (env_snoc ι (result∷τ) v) ens ;;
           pure v
         end.
 
@@ -1266,7 +1266,7 @@ Module SemiConcrete
                 (exec_aux s1)
                 (fun h t =>
                    pushspops
-                     (env_snoc (env_snoc env_nil (xh :: σ) h) (xt :: ty_list σ) t)
+                     (env_snoc (env_snoc env_nil (xh∷σ) h) (xt∷ty_list σ) t)
                      (exec_aux s2))
             | stm_match_sum e xinl s1 xinr s2 =>
               v <- eval_exp e ;;
@@ -1280,7 +1280,7 @@ Module SemiConcrete
                 v
                 (fun vl vr =>
                    pushspops
-                     (env_snoc (env_snoc env_nil (xl :: _) vl) (xr :: _) vr)
+                     (env_snoc (env_snoc env_nil (xl∷_) vl) (xr∷_) vr)
                      (exec_aux s))
             | stm_match_tuple e p rhs =>
               v <- eval_exp e ;;
@@ -1329,7 +1329,7 @@ Module SemiConcrete
           fun ι =>
           produce ι req ;;
           exec inline_fuel s >>= fun v =>
-          consume (env_snoc ι (result::τ) v) ens
+          consume (env_snoc ι (result∷τ) v) ens
           (* cmut_block *)
           (* cmut_leakcheck *)
         end%mut.

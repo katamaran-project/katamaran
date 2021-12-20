@@ -155,7 +155,7 @@ Module HoareSound
               (interpret_assertion (L:=HProp) pre ι) γfocus ->
               exists (γfocus' : Heap),
                 split (heap γ') γframe γfocus' /\
-                ResultOrFail s' (fun v => interpret_assertion post (env_snoc ι (result :: σ) v) γfocus')
+                ResultOrFail s' (fun v => interpret_assertion post (env_snoc ι (result∷σ) v) γfocus')
         | None => False
         end.
 

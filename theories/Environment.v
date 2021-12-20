@@ -241,7 +241,7 @@ Section WithBinding.
       end.
 
 
-    Fixpoint env_remove {Γ b} (E : Env Γ) : forall (bIn : b ∈ Γ), Env (Γ - b)%ctx :=
+    Fixpoint env_remove {Γ b} (E : Env Γ) : forall (bIn : b ∈ Γ), Env (Γ - b) :=
       match E with
       | env_nil => fun '(MkInCtx n e) => match e with end
       | @env_snoc Γ0 E0 b0 db =>
@@ -252,10 +252,10 @@ Section WithBinding.
           | S n => fun e => env_snoc (env_remove E0 (@MkInCtx B b Γ0 n e)) db
           end e
       end.
-    Global Arguments env_remove {_} b E.
+    Global Arguments env_remove {_} b%ctx E.
 
     Fixpoint env_insert {Γ : Ctx B} {b} (bIn : b ∈ Γ)
-             (v : D b) (E : Env (Γ - b)%ctx) : Env Γ.
+             (v : D b) (E : Env (Γ - b)) : Env Γ.
     Proof.
       destruct Γ.
       - destruct (Context.nilView bIn).
@@ -314,7 +314,7 @@ Section WithBinding.
     Qed.
 
     Definition env_insert' {Γ : Ctx B} {b} (bIn : b ∈ Γ)
-               (v : D b) (E : Env (Γ - b)%ctx) : Env Γ.
+               (v : D b) (E : Env (Γ - b)) : Env Γ.
     Proof.
       apply env_tabulate.
       intros x xIn.
@@ -323,7 +323,7 @@ Section WithBinding.
       - now eapply (env_lookup E).
     Defined.
 
-    Definition env_remove' {Γ b} (E : Env Γ) : forall (bIn : b ∈ Γ), Env (Γ - b)%ctx.
+    Definition env_remove' {Γ b} (E : Env Γ) : forall (bIn : b ∈ Γ), Env (Γ - b).
     Proof.
       intros bIn.
       apply env_tabulate.
@@ -433,7 +433,7 @@ Section WithBinding.
         + cbn. f_equal. apply IHE.
     Qed.
 
-    Lemma env_insert_insert' {Γ x} (xIn : x ∈ Γ) (E : Env (Γ - x)%ctx) (v : D x) :
+    Lemma env_insert_insert' {Γ x} (xIn : x ∈ Γ) (E : Env (Γ - x)) (v : D x) :
       env_insert xIn v E = env_insert' xIn v E.
     Proof.
       unfold env_insert'.
@@ -634,18 +634,18 @@ Section EnvRec.
 End EnvRec.
 
 Definition NamedEnv {X T : Set} (D : T -> Set) (Γ : NCtx X T) : Set :=
-  Env (fun xt => D (snd xt)) Γ.
+  Env (fun xt => D (type xt)) Γ.
 Bind Scope env_scope with NamedEnv.
 
 Module EnvNotations.
 
   Notation "δ ► ( x ↦ u )" := (env_snoc δ x u) : env_scope.
   Notation "δ1 '►►' δ2" := (env_cat δ1 δ2) : env_scope.
-  Notation "δ ⟪ x ↦ v ⟫" := (@env_update _ _ _ δ (x::_)%ctx _ v) : env_scope.
-  Notation "δ ‼ x" := (@env_lookup _ _ _ δ (x::_)%ctx _) : exp_scope.
-  Notation "[ x ]" := (env_snoc env_nil (_::_)%ctx x) : env_scope.
+  Notation "δ ⟪ x ↦ v ⟫" := (@env_update _ _ _ δ (x∷_) _ v) : env_scope.
+  Notation "δ ‼ x" := (@env_lookup _ _ _ δ (x∷_) _) : exp_scope.
+  Notation "[ x ]" := (env_snoc env_nil (_∷_) x) : env_scope.
   Notation "[ x , .. , z ]" :=
-    (env_snoc .. (env_snoc env_nil (_::_) x) .. (_::_) z) : env_scope.
+    (env_snoc .. (env_snoc env_nil (_∷_) x) .. (_∷_) z) : env_scope.
 
 End EnvNotations.
 
@@ -728,7 +728,7 @@ Section WithB.
 End WithB.
 
 Definition abstract_named {X T : Set} (D : T -> Set) (Δ : NCtx X T) (r : Type) : Type :=
-  abstract (fun xt => D (snd xt)) Δ r.
+  abstract (fun xt => D (type xt)) Δ r.
 
 Definition uncurry_named {X T : Set} (D : T -> Set) {Δ : NCtx X T} {r : Type} (f : abstract_named D Δ r) (δ : NamedEnv D Δ) : r :=
   uncurry f δ.
@@ -737,7 +737,7 @@ Definition curry_named {X T : Set} (D : T -> Set) {Δ : NCtx X T} {r : Type} (f 
   curry f.
 
 Definition ForallNamed {X T : Set} (D : T -> Set) (Δ : NCtx X T) : (NamedEnv D Δ -> Prop) -> Prop :=
-  @Forall (X * T) (fun xt => D (snd xt)) Δ.
+  @Forall (Binding X T) (fun xt => D (type xt)) Δ.
 
 Section TraverseEnv.
 

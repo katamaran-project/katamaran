@@ -89,7 +89,7 @@ Module Mutators
       apply ιvalid.
     Qed.
 
-    Program Definition winstance_snoc {w} (ι : WInstance w) {b : 𝑺 * Ty} (v : Lit (snd b)) :
+    Program Definition winstance_snoc {w} (ι : WInstance w) {b : 𝑺 ∷ Ty} (v : Lit (type b)) :
       WInstance (wsnoc w b) :=
       {| ιassign := env_snoc (ιassign ι) b v; |}.
     Next Obligation.
@@ -111,8 +111,8 @@ Module Mutators
     (*     apply db. *)
     (* Defined. *)
 
-    Program Definition winstance_subst {w} (ι : WInstance w) {x σ} {xIn : x :: σ ∈ w}
-      (t : Term (w - (x :: σ)) σ) (p : inst t (env_remove (x :: σ) (ιassign ι) xIn) = env_lookup (ιassign ι) xIn) :
+    Program Definition winstance_subst {w} (ι : WInstance w) {x σ} {xIn : x∷σ ∈ w}
+      (t : Term (w - x∷σ) σ) (p : inst t (env_remove (x∷σ) (ιassign ι) xIn) = env_lookup (ιassign ι) xIn) :
       WInstance (wsubst w x t) :=
       @MkWInstance (wsubst w x t) (env_remove _ (ιassign ι) xIn) _.
     Next Obligation.
@@ -196,16 +196,16 @@ Module Mutators
       | _     => demonicv b p
       end.
 
-    Definition assume_vareq_prune {Σ} {x σ} {xIn : x::σ ∈ Σ}
-      (t : Term (Σ - (x::σ)) σ) (k : 𝕊 (Σ - (x::σ))) : 𝕊 Σ :=
+    Definition assume_vareq_prune {Σ} {x σ} {xIn : x∷σ ∈ Σ}
+      (t : Term (Σ - x∷σ) σ) (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
       match k with
       | block => block
       | _     => assume_vareq x t k
       end.
     Global Arguments assume_vareq_prune {Σ} x {σ xIn} t k.
 
-    Definition assert_vareq_prune {Σ} {x σ} {xIn : x::σ ∈ Σ}
-      (t : Term (Σ - (x::σ)) σ) (msg : Message (Σ - (x::σ))) (k : 𝕊 (Σ - (x::σ))) : 𝕊 Σ :=
+    Definition assert_vareq_prune {Σ} {x σ} {xIn : x∷σ ∈ Σ}
+      (t : Term (Σ - x∷σ) σ) (msg : Message (Σ - x∷σ)) (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
       match k with
       | error emsg => error (shift_emsg xIn emsg)
       | _          => assert_vareq x t msg k
@@ -290,13 +290,13 @@ Module Mutators
       safe (demonicv_prune p) ι <-> safe (demonicv b p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
-    Lemma prune_assert_vareq_sound {Σ x σ} {xIn : x::σ ∈ Σ}
-      (t : Term (Σ - (x::σ)) σ) (msg : Message (Σ - (x::σ))) (p : 𝕊 (Σ - (x::σ))) (ι : SymInstance Σ) :
+    Lemma prune_assert_vareq_sound {Σ x σ} {xIn : x∷σ ∈ Σ}
+      (t : Term (Σ - x∷σ) σ) (msg : Message (Σ - x∷σ)) (p : 𝕊 (Σ - x∷σ)) (ι : SymInstance Σ) :
       safe (assert_vareq_prune x t msg p) ι <-> safe (assert_vareq x t msg p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
-    Lemma prune_assume_vareq_sound {Σ x σ} {xIn : x::σ ∈ Σ}
-      (t : Term (Σ - (x::σ)) σ) (p : 𝕊 (Σ - (x::σ))) (ι : SymInstance Σ) :
+    Lemma prune_assume_vareq_sound {Σ x σ} {xIn : x∷σ ∈ Σ}
+      (t : Term (Σ - x∷σ) σ) (p : 𝕊 (Σ - x∷σ)) (ι : SymInstance Σ) :
       safe (assume_vareq_prune x t p) ι <-> safe (assume_vareq x t p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
@@ -374,7 +374,7 @@ Module Mutators
       Qed.
 
       Lemma match_snocView_eq_rect {Σ1 Σ2 b} {R : Type} (eq : Σ1 = Σ2) (E : SymInstance (Σ1 ▻ b))
-        (f : SymInstance Σ2 -> Lit (snd b) -> R) :
+        (f : SymInstance Σ2 -> Lit (type b) -> R) :
         match snocView (eq_rect Σ1 (fun Σ => SymInstance (Σ ▻ b)) E Σ2 eq) with
         | isSnoc E v => f E v
         end =
@@ -393,9 +393,9 @@ Module Mutators
       Qed.
 
       Lemma env_insert_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx}
-            (bIn : x :: σ ∈ Σe) (v : Lit σ)
-            {ι : SymInstance Σ0} {ιe : SymInstance (Σe - (x :: σ))} :
-            (ι ►► env_insert bIn v ιe) = env_insert (inctx_cat_right bIn) v (eq_rect (Σ0 ▻▻ Σe - (x :: σ)) (fun Σ => SymInstance Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - (x :: σ)) (eq_sym (ctx_remove_inctx_right bIn))).
+            (bIn : x∷σ ∈ Σe) (v : Lit σ)
+            {ι : SymInstance Σ0} {ιe : SymInstance (Σe - x∷σ)} :
+            (ι ►► env_insert bIn v ιe) = env_insert (inctx_cat_right bIn) v (eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ => SymInstance Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx_remove_inctx_right bIn))).
       Proof.
         revert bIn ιe.
         induction Σe; intros bIn ιe;
@@ -411,7 +411,7 @@ Module Mutators
                  with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx_snoc (@ctx_remove_inctx_right _ Σ0 Σe _ {| inctx_at := n; inctx_valid := eq |})))).
           rewrite eq_trans_refl_l.
           cbn.
-          rewrite (eq_sym_map_distr (fun f : 𝑺 * Ty -> LCtx => f b)).
+          rewrite (eq_sym_map_distr (fun f : 𝑺 ∷ Ty -> LCtx => f b)).
           rewrite eq_sym_map_distr.
           rewrite f_equal_compose.
           rewrite (map_subst_map (P := fun x => SymInstance (ctx_snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
@@ -419,11 +419,11 @@ Module Mutators
           now rewrite IHΣe.
       Qed.
 
-      Lemma env_remove_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x :: σ ∈ Σe)
+      Lemma env_remove_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x∷σ ∈ Σe)
         (ι : SymInstance Σ0) (ιe : SymInstance Σe) :
-        env_remove (x :: σ) (ι ►► ιe) (inctx_cat_right bIn) =
-        eq_rect (Σ0 ▻▻ Σe - (x :: σ)) (fun Σ : LCtx => SymInstance Σ) (ι ►► env_remove (x :: σ) ιe bIn)
-                 ((Σ0 ▻▻ Σe) - (x :: σ)) (eq_sym (ctx_remove_inctx_right bIn)).
+        env_remove (x∷σ) (ι ►► ιe) (inctx_cat_right bIn) =
+        eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ : LCtx => SymInstance Σ) (ι ►► env_remove (x∷σ) ιe bIn)
+                 ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx_remove_inctx_right bIn)).
       Proof.
         revert bIn ιe.
         induction Σe; intros bIn ιe; try destruct (Context.nilView bIn).
@@ -434,7 +434,7 @@ Module Mutators
                  with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx_snoc (@ctx_remove_inctx_right _ Σ0 Σe _ i)))).
           rewrite eq_trans_refl_l.
           cbn.
-          rewrite (eq_sym_map_distr (fun f : 𝑺 * Ty -> LCtx => f b)).
+          rewrite (eq_sym_map_distr (fun f : 𝑺 ∷ Ty -> LCtx => f b)).
           rewrite eq_sym_map_distr.
           rewrite f_equal_compose.
           rewrite (map_subst_map (P := fun x => SymInstance (ctx_snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
@@ -477,8 +477,8 @@ Module Mutators
       Definition ectx_snoc {Σ1 Σ2} (e: ECtx Σ1 Σ2) b : ECtx Σ1 (Σ2 ▻ b) :=
         match e with ectx Σe mfs => ectx (Σe ▻ b) (subst mfs sub_wk1) end.
       Definition ectx_subst {Σ1 Σ2} (e : ECtx Σ1 Σ2) :
-        forall x σ (xIn : x :: σ ∈ Σ2) (t : Term (Σ2 - (x :: σ)) σ),
-          option (ECtx Σ1 (Σ2 - (x :: σ))) :=
+        forall x σ (xIn : x∷σ ∈ Σ2) (t : Term (Σ2 - x∷σ) σ),
+          option (ECtx Σ1 (Σ2 - x∷σ)) :=
         match e with
         | ectx Σe mfs =>
             fun x σ xIn =>
@@ -568,7 +568,7 @@ Module Mutators
         plug (eq_rect Σ2 (ECtx Σ1) ec Σ2' eq) p = plug ec (eq_rect_r (fun Σ3 : LCtx => 𝕊 Σ3) p eq).
       Proof. now destruct eq. Qed.
 
-      Lemma ectx_subst_spec {Σ1 Σ2} (ec : ECtx Σ1 Σ2) {x σ} (xIn : x :: σ ∈ Σ2) (t : Term (Σ2 - (x :: σ)) σ) (msg : Message _) :
+      Lemma ectx_subst_spec {Σ1 Σ2} (ec : ECtx Σ1 Σ2) {x σ} (xIn : x∷σ ∈ Σ2) (t : Term (Σ2 - x∷σ) σ) (msg : Message _) :
         OptionSpec
           (fun e => forall p, plug e p <=> plug ec (assert_vareq x t msg p))
           True
@@ -580,7 +580,7 @@ Module Mutators
         split; intros [ιe HYP].
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
           unfold eq_rect_r in Hp. rewrite safe_eq_rect, eq_sym_involutive in Hp.
-          exists (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σe) - (x :: σ)) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - (x :: σ)) (ctx_remove_inctx_right bIn)) (ι ►► ιe)) ιe).
+          exists (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σe) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - x∷σ) (ctx_remove_inctx_right bIn)) (ι ►► ιe)) ιe).
           rewrite safe_assert_msgs_formulas. cbn. rewrite obligation_equiv. cbn.
           rewrite env_insert_app, env_remove_insert, env_insert_lookup.
           rewrite inst_subst, inst_sub_shift, env_remove_insert, ?inst_eq_rect.
@@ -590,7 +590,7 @@ Module Mutators
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
           cbn in Hp. rewrite obligation_equiv in Hp. cbn in Hp. destruct Hp as [Ht Hp].
           rewrite env_remove_app in Hp.
-          exists (env_remove (x :: σ) ιe bIn).
+          exists (env_remove (x∷σ) ιe bIn).
           rewrite safe_assert_msgs_formulas.
           rewrite map_snd_subst, inst_subst.
           unfold eq_rect_r. rewrite safe_eq_rect.
@@ -681,8 +681,8 @@ Module Mutators
       Definition uctx_snoc {Σ1 Σ2} (e: UCtx Σ1 Σ2) b : UCtx Σ1 (Σ2 ▻ b) :=
         match e with uctx Σu mfs => uctx (Σu ▻ b) (subst mfs sub_wk1) end.
       Definition uctx_subst {Σ1 Σ2} (e : UCtx Σ1 Σ2) :
-        forall x σ (xIn : x :: σ ∈ Σ2) (t : Term (Σ2 - (x :: σ)) σ),
-          option (UCtx Σ1 (Σ2 - (x :: σ))) :=
+        forall x σ (xIn : x∷σ ∈ Σ2) (t : Term (Σ2 - x∷σ) σ),
+          option (UCtx Σ1 (Σ2 - x∷σ)) :=
         match e with
         | uctx Σu mfs =>
             fun x σ xIn =>
@@ -762,7 +762,7 @@ Module Mutators
         plug (eq_rect Σ2 (UCtx Σ1) ec Σ2' eq) p = plug ec (eq_rect_r (fun Σ3 : LCtx => 𝕊 Σ3) p eq).
       Proof. now destruct eq. Qed.
 
-      Lemma uctx_subst_spec {Σ1 Σ2} (ec : UCtx Σ1 Σ2) {x σ} (xIn : x :: σ ∈ Σ2) (t : Term (Σ2 - (x :: σ)) σ) :
+      Lemma uctx_subst_spec {Σ1 Σ2} (ec : UCtx Σ1 Σ2) {x σ} (xIn : x∷σ ∈ Σ2) (t : Term (Σ2 - x∷σ) σ) :
         OptionSpec
           (fun e => forall p, plug e p <=> plug ec (assume_vareq x t p))
           True
@@ -772,7 +772,7 @@ Module Mutators
         intros p ι. unfold eq_rect_r. rewrite plug_eq_rect. cbn.
         rewrite ?safe_demonic_close0.
         split; intros HYP ιu.
-        - specialize (HYP (env_remove (x :: σ) ιu bIn)).
+        - specialize (HYP (env_remove (x∷σ) ιu bIn)).
           rewrite safe_assume_formulas. intros Hpc Heq.
           rewrite <- inst_sub_shift in Heq.
           rewrite safe_assume_formulas in HYP.
@@ -782,7 +782,7 @@ Module Mutators
           rewrite <- env_remove_app in HYP. apply HYP.
           rewrite <- inst_sub_shift.
           rewrite inst_sub_single_shift; auto.
-        - specialize (HYP (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σu) - (x :: σ)) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σu - (x :: σ)) (ctx_remove_inctx_right bIn)) (ι ►► ιu)) ιu)).
+        - specialize (HYP (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σu) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σu - x∷σ) (ctx_remove_inctx_right bIn)) (ι ►► ιu)) ιu)).
           rewrite safe_assume_formulas, inst_subst, inst_eq_rect. intros Hpc.
           unfold eq_rect_r. rewrite safe_eq_rect, eq_sym_involutive.
           rewrite safe_assume_formulas in HYP. cbn in HYP.
@@ -850,7 +850,7 @@ Module Mutators
                       SolveUvars.plug uc (SymProp.angelic_binary (p Σ eph') (q Σ eph'))
           end.
 
-      Definition angelicv {Σ} (b : 𝑺 * Ty) (p : EProp (Σ ▻ b)) : EProp Σ :=
+      Definition angelicv {Σ} (b : 𝑺 ∷ Ty) (p : EProp (Σ ▻ b)) : EProp Σ :=
         fun Σ0 eph =>
           match eph with
           | inl ec => p Σ0 (inl (SolveEvars.ectx_snoc ec b))
@@ -907,19 +907,19 @@ Module Mutators
       fun w k =>
         let y := fresh w x in
         angelicv
-          (y :: σ) (k (wsnoc w (y :: σ)) acc_snoc_right (@term_var _ y σ inctx_zero)).
+          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ inctx_zero)).
     Global Arguments angelic x σ [w] k.
 
     Definition angelic_ctx {N : Set} (n : N -> 𝑺) :
       ⊢ ∀ Δ : NCtx N Ty, SDijkstra (fun w => NamedEnv (Term w) Δ) :=
       fix rec {w} Δ {struct Δ} :=
         match Δ with
-        | ctx_nil             => fun k => T k env_nil
-        | ctx_snoc Δ (x :: σ) =>
+        | ctx_nil          => fun k => T k env_nil
+        | ctx_snoc Δ (x∷σ) =>
           fun k =>
             angelic (Some (n x)) σ (fun w1 ω01 t =>
               rec Δ (fun w2 ω12 EΔ =>
-                k w2 (acc_trans ω01 ω12) (EΔ ► (x :: σ ↦ persist__term t ω12))))
+                k w2 (acc_trans ω01 ω12) (EΔ ► (x∷σ ↦ persist__term t ω12))))
         end.
     Global Arguments angelic_ctx {N} n [w] Δ : rename.
 
@@ -928,19 +928,19 @@ Module Mutators
       fun w k =>
         let y := fresh w x in
         demonicv
-          (y :: σ) (k (wsnoc w (y :: σ)) acc_snoc_right (@term_var _ y σ inctx_zero)).
+          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ inctx_zero)).
     Global Arguments demonic x σ [w] k.
 
     Definition demonic_ctx {N : Set} (n : N -> 𝑺) :
       ⊢ ∀ Δ : NCtx N Ty, SDijkstra (fun w => NamedEnv (Term w) Δ) :=
       fix demonic_ctx {w} Δ {struct Δ} :=
         match Δ with
-        | ctx_nil             => fun k => T k env_nil
-        | ctx_snoc Δ (x :: σ) =>
+        | ctx_nil          => fun k => T k env_nil
+        | ctx_snoc Δ (x∷σ) =>
           fun k =>
             demonic (Some (n x)) σ (fun w1 ω01 t =>
               demonic_ctx Δ (fun w2 ω12 EΔ =>
-                k w2 (acc_trans ω01 ω12) (EΔ ► (x :: σ ↦ persist__term t ω12))))
+                k w2 (acc_trans ω01 ω12) (EΔ ► (x∷σ ↦ persist__term t ω12))))
         end.
     Global Arguments demonic_ctx {_} n [w] Δ : rename.
 
@@ -2252,7 +2252,7 @@ Module Mutators
     Section State.
 
       Definition pushpop {AT Γ1 Γ2 x σ} :
-        ⊢ STerm σ -> SMut (Γ1 ▻ (x :: σ)) (Γ2 ▻ (x :: σ)) AT -> SMut Γ1 Γ2 AT.
+        ⊢ STerm σ -> SMut (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) AT -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t m POST δ h.
         apply m.
@@ -2305,7 +2305,7 @@ Module Mutators
         auto.
       Defined.
 
-      Definition assign {Γ} x {σ} {xIn : x::σ ∈ Γ} : ⊢ STerm σ -> SMut Γ Γ Unit :=
+      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} : ⊢ STerm σ -> SMut Γ Γ Unit :=
         fun w0 t POST δ => T POST tt (δ ⟪ x ↦ t ⟫).
       Global Arguments assign {Γ} x {σ xIn w} v.
 
@@ -2454,20 +2454,20 @@ Module Mutators
                     (fun EK : 𝑬𝑲 E => four (produce w0 (alts EK)) ω01)).
         - refine (demonic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr <$> persist__term s <*> four _ <*> four _).
           intros w1 ω01 t1.
-          apply (produce (wsnoc w0 (xl :: σ)) asn1).
-          apply (acc_snoc_left ω01 (xl :: σ) t1).
+          apply (produce (wsnoc w0 (xl∷σ)) asn1).
+          apply (acc_snoc_left ω01 (xl∷σ) t1).
           intros w1 ω01 t1.
-          apply (produce (wsnoc w0 (xr :: τ)) asn2).
-          apply (acc_snoc_left ω01 (xr :: τ) t1).
+          apply (produce (wsnoc w0 (xr∷τ)) asn2).
+          apply (acc_snoc_left ω01 (xr∷τ) t1).
         - apply (box_demonic_match_list xh xt s).
           + apply (produce _ asn1).
           + intros w1 ω01 thead ttail.
-            apply (produce (wsnoc (wsnoc w0 (xh :: _)) (xt :: _)) asn2 w1).
-            apply (acc_snoc_left (acc_snoc_left ω01 (xh :: _) thead) (xt :: _) ttail).
+            apply (produce (wsnoc (wsnoc w0 (xh∷_)) (xt∷_)) asn2 w1).
+            apply (acc_snoc_left (acc_snoc_left ω01 (xh∷_) thead) (xt∷_) ttail).
         - apply (box_demonic_match_prod xl xr s).
           intros w1 ω01 t1 t2.
-          apply (produce (wsnoc (wsnoc w0 (xl :: σ1)) (xr :: σ2)) asn w1).
-          apply (acc_snoc_left (acc_snoc_left ω01 (xl :: σ1) t1) (xr :: σ2) t2).
+          apply (produce (wsnoc (wsnoc w0 (xl∷σ1)) (xr∷σ2)) asn w1).
+          apply (acc_snoc_left (acc_snoc_left ω01 (xl∷σ1) t1) (xr∷σ2) t2).
         - apply (box_demonic_match_tuple id p s).
           intros w1 ω01 ts.
           apply (produce (wcat w0 Δ) asn w1).
@@ -2486,8 +2486,8 @@ Module Mutators
           eapply bind.
           apply (@demonic _ (Some ς) τ).
           intros w2 ω12 t2.
-          apply (produce (wsnoc w0 (ς :: τ)) asn w2).
-          apply (acc_snoc_left (acc_trans ω01 ω12) (ς :: τ) t2).
+          apply (produce (wsnoc w0 (ς∷τ)) asn w2).
+          apply (acc_snoc_left (acc_trans ω01 ω12) (ς∷τ) t2).
         - intros w1 ω01.
           apply debug.
           intros δ h.
@@ -2510,20 +2510,20 @@ Module Mutators
                     (fun EK : 𝑬𝑲 E => four (consume w0 (alts EK)) ω01)).
         - refine (angelic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr <$> persist__term s <*> four _ <*> four _).
           intros w1 ω01 t1.
-          apply (consume (wsnoc w0 (xl :: σ)) asn1).
-          apply (acc_snoc_left ω01 (xl :: σ) t1).
+          apply (consume (wsnoc w0 (xl∷σ)) asn1).
+          apply (acc_snoc_left ω01 (xl∷σ) t1).
           intros w1 ω01 t1.
-          apply (consume (wsnoc w0 (xr :: τ)) asn2).
-          apply (acc_snoc_left ω01 (xr :: τ) t1).
+          apply (consume (wsnoc w0 (xr∷τ)) asn2).
+          apply (acc_snoc_left ω01 (xr∷τ) t1).
         - apply (box_angelic_match_list xh xt s).
           + apply (consume _ asn1).
           + intros w1 ω01 thead ttail.
-            apply (consume (wsnoc (wsnoc w0 (xh :: _)) (xt :: _)) asn2 w1).
-            apply (acc_snoc_left (acc_snoc_left ω01 (xh :: _) thead) (xt :: _) ttail).
+            apply (consume (wsnoc (wsnoc w0 (xh∷_)) (xt∷_)) asn2 w1).
+            apply (acc_snoc_left (acc_snoc_left ω01 (xh∷_) thead) (xt∷_) ttail).
         - apply (box_angelic_match_prod xl xr s).
           intros w1 ω01 t1 t2.
-          apply (consume (wsnoc (wsnoc w0 (xl :: σ1)) (xr :: σ2)) asn w1).
-          apply (acc_snoc_left (acc_snoc_left ω01 (xl :: σ1) t1) (xr :: σ2) t2).
+          apply (consume (wsnoc (wsnoc w0 (xl∷σ1)) (xr∷σ2)) asn w1).
+          apply (acc_snoc_left (acc_snoc_left ω01 (xl∷σ1) t1) (xr∷σ2) t2).
         - apply (box_angelic_match_tuple id p s).
           intros w1 ω01 ts.
           apply (consume (wcat w0 Δ) asn w1).
@@ -2542,8 +2542,8 @@ Module Mutators
           eapply bind.
           apply (@angelic _ (Some ς) τ).
           intros w2 ω12 t2.
-          apply (consume (wsnoc w0 (ς :: τ)) asn w2).
-          apply (acc_snoc_left (acc_trans ω01 ω12) (ς :: τ) t2).
+          apply (consume (wsnoc w0 (ς∷τ)) asn w2).
+          apply (acc_snoc_left (acc_trans ω01 ω12) (ς∷τ) t2).
         - intros w1 ω01.
           apply debug.
           intros δ h.
@@ -2587,9 +2587,9 @@ Module Mutators
         intros w4 ω34 res.
         eapply bind_right.
         apply (produce
-                 (w := @MkWorld (Σe ▻ (result::τ)) nil)
+                 (w := @MkWorld (Σe ▻ (result∷τ)) nil)
                  ens).
-        constructor 2 with (sub_snoc (persist (A := Sub _) evars (acc_trans ω12 (acc_trans ω23 ω34))) (result::τ) res).
+        constructor 2 with (sub_snoc (persist (A := Sub _) evars (acc_trans ω12 (acc_trans ω23 ω34))) (result∷τ) res).
         cbn. constructor.
         intros w5 ω45. clear - res ω45.
         apply pure.
@@ -2732,7 +2732,7 @@ Module Mutators
             + intros w2 ω12.
               apply (exec_aux _ _ s1).
             + intros w2 ω12 thead ttail.
-              eapply (pushspops (env_snoc (env_snoc env_nil (xh,_) thead) (xt,_) ttail)).
+              eapply (pushspops (env_snoc (env_snoc env_nil (xh∷_) thead) (xt∷_) ttail)).
               apply (exec_aux _ _ s2).
           - eapply bind.
             apply (eval_exp e).
@@ -2749,7 +2749,7 @@ Module Mutators
             intros w1 ω01 t.
             apply (demonic_match_prod (𝑿to𝑺 xl) (𝑿to𝑺 xr) t).
             intros w2 ω12 t1 t2.
-            eapply (pushspops (env_snoc (env_snoc env_nil (_,_) t1) (_,_) t2)).
+            eapply (pushspops (env_snoc (env_snoc env_nil (_∷_) t1) (_∷_) t2)).
             apply (exec_aux _ _ s).
           - eapply bind.
             apply (eval_exp e).
@@ -2835,9 +2835,9 @@ Module Mutators
           produce (w:=@MkWorld _ _) req acc_refl >> fun w1 ω01 =>
           exec inline_fuel s >>= fun w2 ω12 res =>
           consume
-            (w:=wsnoc (@MkWorld _ []) (result :: τ))
+            (w:=wsnoc (@MkWorld _ []) (result∷τ)%ctx)
             ens
-            (acc_snoc_left (acc_trans ω01 ω12) (result :: τ) res)
+            (acc_snoc_left (acc_trans ω01 ω12) (result∷τ)%ctx res)
         end.
 
       Definition exec_contract_path {Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) (s : Stm Δ τ) : 𝕊 wnil :=

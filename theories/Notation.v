@@ -49,8 +49,14 @@ Reserved Notation "'ε'"            (at level 0).
 Reserved Infix "▻"                 (at level 61, left associativity).
 Reserved Infix "▻▻"                (at level 61, left associativity).
 Reserved Infix "∈"                 (at level 70).
-Reserved Notation "x ∶ τ"          (at level 40, no associativity,
-  format "x ∶ τ").
+(* Notation for bindings and type of bindings defined in the Context module.
+   This is at level 49 because "-" is at level 50. This avoid parens when
+   removing a binding an element from a context, e.g. Γ - x∷σ. *)
+Reserved Notation "x ∷ t"          (at level 49, no associativity, format "x ∷ t").
+  (* DEPRECATED: Use the ∷ notation above. *)
+  (* NB: ∶ ≠ : *)
+  (*    To typeset the next notation, use \: *)
+Reserved Notation "x ∶ τ"          (at level 49, no associativity, format "x ∶ τ").
 
 Reserved Notation "[ x ]"          (at level 0).
 Reserved Notation "[ x , .. , z ]" (at level 0).

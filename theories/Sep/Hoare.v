@@ -58,11 +58,11 @@ Module ProgramLogic
     | rule_sep_contract
         (result : 𝑺)
         (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : SymInstance Σ)
-        (req : Assertion Σ) (ens : Assertion (Σ ▻ (result :: σ)))
+        (req : Assertion Σ) (ens : Assertion (Σ ▻ result∷σ))
         (frame : L) :
         δΔ = inst θΔ ι ->
         pre ⊢ frame ✱ interpret_assertion req ι ->
-        (forall v, frame ✱ interpret_assertion ens (env_snoc ι (result :: σ) v) ⊢ post v) ->
+        (forall v, frame ✱ interpret_assertion ens (env_snoc ι (result∷σ) v) ⊢ post v) ->
         CTriple δΔ pre post (MkSepContract _ _ _ θΔ req result ens).
 
     Inductive LTriple {Δ} (δΔ : CStore Δ) (pre post : L) :
@@ -104,12 +104,12 @@ Module ProgramLogic
         P ⊢ Q (eval e δ) δ ->
         ⦃ P ⦄ stm_exp e ; δ ⦃ Q ⦄
     | rule_stm_let
-        (x : 𝑿) (σ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x :: σ)) τ)
+        (x : 𝑿) (σ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
         (P : L) (Q : Lit σ -> CStore Γ -> L)
         (R : Lit τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
         (forall (v : Lit σ) (δ' : CStore Γ),
-            ⦃ Q v δ' ⦄ k ; env_snoc δ' (x::σ) v ⦃ fun v δ'' => R v (env_tail δ'') ⦄ ) ->
+            ⦃ Q v δ' ⦄ k ; env_snoc δ' (x∷σ) v ⦃ fun v δ'' => R v (env_tail δ'') ⦄ ) ->
         ⦃ P ⦄ let: x := s in k ; δ ⦃ R ⦄
     | rule_stm_block
         (Δ : PCtx) (δΔ : CStore Δ)
@@ -139,29 +139,29 @@ Module ProgramLogic
         ⦃ ⊤ ⦄ stm_fail τ s ; δ ⦃ Q ⦄
     | rule_stm_match_list
         {σ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
-        (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh :: σ)) (xt :: ty_list σ)) τ)
+        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty_list σ) τ)
         (P : L) (Q : Lit τ -> CStore Γ -> L) :
         ⦃ P ∧ !! (eval e δ = nil) ⦄ alt_nil ; δ ⦃ Q ⦄ ->
         (forall (v : Lit σ) (vs : Lit (ty_list σ)),
            ⦃ P ∧ !! (eval e δ = cons v vs) ⦄
-             alt_cons ; env_snoc (env_snoc δ (xh::σ) v) (xt::ty_list σ) vs
+             alt_cons ; env_snoc (env_snoc δ (xh∷σ) v) (xt∷ty_list σ) vs
            ⦃ fun v' δ' => Q v' (env_tail (env_tail δ')) ⦄) ->
         ⦃ P ⦄ stm_match_list e alt_nil xh xt alt_cons ; δ ⦃ Q ⦄
     | rule_stm_match_sum
         {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty_sum σl σr)}
-        {alt_inl : Stm (ctx_snoc Γ (xl :: σl)) τ}
-        {alt_inr : Stm (ctx_snoc Γ (xr :: σr)) τ}
+        {alt_inl : Stm (Γ ▻ xl∷σl) τ}
+        {alt_inr : Stm (Γ ▻ xr∷σr) τ}
         {P : L} {Q : Lit τ -> CStore Γ -> L} :
-        (forall (v : Lit σl), ⦃ P ∧ !! (eval e δ = inl v) ⦄ alt_inl ; env_snoc δ (xl::σl) v ⦃ fun v' δ' => Q v' (env_tail δ') ⦄) ->
-        (forall (v : Lit σr), ⦃ P ∧ !! (eval e δ = inr v) ⦄ alt_inr ; env_snoc δ (xr::σr) v ⦃ fun v' δ' => Q v' (env_tail δ') ⦄) ->
+        (forall (v : Lit σl), ⦃ P ∧ !! (eval e δ = inl v) ⦄ alt_inl ; env_snoc δ (xl∷σl) v ⦃ fun v' δ' => Q v' (env_tail δ') ⦄) ->
+        (forall (v : Lit σr), ⦃ P ∧ !! (eval e δ = inr v) ⦄ alt_inr ; env_snoc δ (xr∷σr) v ⦃ fun v' δ' => Q v' (env_tail δ') ⦄) ->
         ⦃ P ⦄ stm_match_sum e xl alt_inl xr alt_inr ; δ ⦃ Q ⦄
     | rule_stm_match_prod
         {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty_prod σl σr)}
-        {rhs : Stm (Γ ▻ (xl::σl) ▻ (xr::σr)) τ}
+        {rhs : Stm (Γ ▻ xl∷σl ▻ xr∷σr) τ}
         {P : L} {Q : Lit τ -> CStore Γ -> L} :
         (forall (vl : Lit σl) (vr : Lit σr),
            ⦃ P ∧ !! (eval e δ = (vl,vr)) ⦄
-             rhs ; env_snoc (env_snoc δ (xl::σl) vl) (xr::σr) vr
+             rhs ; env_snoc (env_snoc δ (xl∷σl) vl) (xr∷σr) vr
            ⦃ fun v δ' => Q v (env_tail (env_tail δ')) ⦄) ->
         ⦃ P ⦄ stm_match_prod e xl xr rhs ; δ ⦃ Q ⦄
     | rule_stm_match_enum
@@ -205,12 +205,12 @@ Module ProgramLogic
           stm_write_register r w ; δ
         ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ) ∧ lptsreg r v' ⦄
     | rule_stm_assign_backwards
-        (x : 𝑿) (xIn : (x::τ) ∈ Γ) (s : Stm Γ τ)
+        (x : 𝑿) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
         (P : L) (R : Lit τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ fun v δ' => R v (δ' ⟪ x ↦ v ⟫)%env ⦄ ->
         ⦃ P ⦄ stm_assign x s ; δ ⦃ R ⦄
     | rule_stm_assign_forwards
-        (x : 𝑿) (xIn : (x::τ) ∈ Γ) (s : Stm Γ τ)
+        (x : 𝑿) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
         (P : L) (R : Lit τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ R ⦄ ->
         ⦃ P ⦄

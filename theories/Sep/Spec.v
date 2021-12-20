@@ -680,12 +680,12 @@ Module Assertions
         }.
 
     Definition wnil : World := @MkWorld ctx_nil nil.
-    Definition wsnoc (w : World) (b : 𝑺 * Ty) : World :=
+    Definition wsnoc (w : World) (b : 𝑺 ∷ Ty) : World :=
       @MkWorld (wctx w ▻ b) (subst (wco w) sub_wk1).
     Definition wformula (w : World) (f : Formula w) : World :=
       @MkWorld (wctx w) (cons f (wco w)).
-    Definition wsubst (w : World) x {σ} {xIn : x :: σ ∈ w} (t : Term (w - (x :: σ)) σ) : World :=
-      {| wctx := wctx w - (x :: σ); wco := subst (wco w) (sub_single xIn t) |}.
+    Definition wsubst (w : World) x {σ} {xIn : x∷σ ∈ w} (t : Term (w - x∷σ) σ) : World :=
+      {| wctx := wctx w - x∷σ; wco := subst (wco w) (sub_single xIn t) |}.
     Global Arguments wsubst w x {σ xIn} t.
     Definition wcat (w : World) (Δ : LCtx) : World :=
       @MkWorld (wctx w ▻▻ Δ) (subst (wco w) (sub_cat_left Δ)).
@@ -713,7 +713,7 @@ Module Assertions
     Inductive Tri (w : World) : World -> Type :=
     | tri_id        : Tri w w
     | tri_cons {w' x σ}
-        (xIn : (x::σ) ∈ w) (t : Term (wctx w - (x::σ)) σ)
+        (xIn : x∷σ ∈ w) (t : Term (wctx w - x∷σ) σ)
         (ν : Tri (wsubst w x t) w') : Tri w w'.
     Global Arguments tri_id {_}.
     Global Arguments tri_cons {_ _} x {_ _} t ν.
@@ -758,7 +758,7 @@ Module Assertions
       match ζ with
       | tri_id => True
       | @tri_cons _ Σ' x σ xIn t ζ0 =>
-        let ι' := env_remove (x :: σ) ι xIn in
+        let ι' := env_remove (x∷σ) ι xIn in
         env_lookup ι xIn = inst t ι' /\ inst_triangular ζ0 ι'
       end.
 
@@ -858,10 +858,10 @@ Module Assertions
       wco w2 ⊢ subst (wco w1) (sub_acc ω).
     Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
 
-    Definition acc_snoc_right {w} {b : 𝑺 * Ty} : w ⊒ wsnoc w b :=
+    Definition acc_snoc_right {w} {b : 𝑺 ∷ Ty} : w ⊒ wsnoc w b :=
       @acc_sub w (wsnoc w b) sub_wk1 (entails_refl (subst (wco w) sub_wk1)).
 
-    Program Definition acc_snoc_left {w1 w2} (ω12 : w1 ⊒ w2) (b : 𝑺 * Ty) (t : Term w2 (snd b)) :
+    Program Definition acc_snoc_left {w1 w2} (ω12 : w1 ⊒ w2) (b : 𝑺 ∷ Ty) (t : Term w2 (type b)) :
       wsnoc w1 b ⊒ w2 := acc_sub (sub_snoc (sub_acc ω12) b t) _.
     Next Obligation.
     Proof.
@@ -870,7 +870,7 @@ Module Assertions
       apply ent_acc_sub.
     Qed.
 
-    Definition acc_snoc_left' {w : World} b (t : Term w (snd b)) :
+    Definition acc_snoc_left' {w : World} b (t : Term w (type b)) :
       wsnoc w b ⊒ w := acc_snoc_left acc_refl b t.
 
     Program Definition acc_cat_left {w1 w2} (ω12 : w1 ⊒ w2) {Δ : LCtx} (ζ : Sub Δ w2) :
@@ -904,10 +904,10 @@ Module Assertions
       now intros [].
     Qed.
 
-    Definition acc_subst_right {w : World} x {σ} {xIn : x :: σ ∈ w} (t : Term (w - (x :: σ)) σ) :
+    Definition acc_subst_right {w : World} x {σ} {xIn : x∷σ ∈ w} (t : Term (w - x∷σ) σ) :
       w ⊒ wsubst w x t :=
       let ζ  := sub_single xIn t in
-      let w' := {| wctx := w - (x :: σ); wco := subst (wco w) ζ |}  in
+      let w' := {| wctx := w - x∷σ; wco := subst (wco w) ζ |}  in
       @acc_sub w w' ζ (entails_refl (wco w')).
     Arguments acc_subst_right {w} x {σ xIn} t.
 
@@ -1871,13 +1871,13 @@ Module Assertions
   | asn_chunk (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
   | asn_match_enum (E : 𝑬) (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
-  | asn_match_sum (σ τ : Ty) (s : Term Σ (ty_sum σ τ)) (xl : 𝑺) (alt_inl : Assertion (Σ ▻ (xl :: σ))) (xr : 𝑺) (alt_inr : Assertion (Σ ▻ (xr :: τ)))
+  | asn_match_sum (σ τ : Ty) (s : Term Σ (ty_sum σ τ)) (xl : 𝑺) (alt_inl : Assertion (Σ ▻ xl∷σ)) (xr : 𝑺) (alt_inr : Assertion (Σ ▻ xr∷τ))
   | asn_match_list
       {σ : Ty} (s : Term Σ (ty_list σ)) (alt_nil : Assertion Σ) (xh xt : 𝑺)
-      (alt_cons : Assertion (Σ ▻ (xh::σ) ▻ (xt::ty_list σ)))
+      (alt_cons : Assertion (Σ ▻ xh∷σ ▻ xt∷ty_list σ))
   | asn_match_prod
       {σ1 σ2 : Ty} (s : Term Σ (ty_prod σ1 σ2))
-      (xl xr : 𝑺) (rhs : Assertion (Σ ▻ (xl::σ1) ▻ (xr::σ2)))
+      (xl xr : 𝑺) (rhs : Assertion (Σ ▻ xl∷σ1 ▻ xr∷σ2))
   | asn_match_tuple
       {σs : Ctx Ty} {Δ : LCtx} (s : Term Σ (ty_tuple σs))
       (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ))
@@ -1891,7 +1891,7 @@ Module Assertions
       (alt__rhs : forall (K : 𝑼𝑲 U), Assertion (Σ ▻▻ alt__ctx K))
   | asn_sep  (a1 a2 : Assertion Σ)
   | asn_or   (a1 a2 : Assertion Σ)
-  | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ (ς :: τ)))
+  | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ ς∷τ))
   | asn_debug.
   Arguments asn_match_enum [_] E _ _.
   Arguments asn_match_sum [_] σ τ _ _ _.
@@ -1951,8 +1951,8 @@ Module Assertions
                 (fun s' alt_inl' alt_inr' =>
                    asn_match_sum σ τ s' xl alt_inl' xr alt_inr')
                 (occurs_check bIn s))
-             (occurs (Σ ▻ (xl :: σ)) b (inctx_succ bIn) alt_inl))
-          (occurs (Σ ▻ (xr :: τ)) b (inctx_succ bIn) alt_inr)
+             (occurs (Σ ▻ xl∷σ) b (inctx_succ bIn) alt_inl))
+          (occurs (Σ ▻ xr∷τ) b (inctx_succ bIn) alt_inr)
       | @asn_match_list _ σ s alt_nil xh xt alt_cons => None (* TODO *)
       | @asn_match_prod _ σ1 σ2 s xl xr rhs => None (* TODO *)
       | @asn_match_tuple _ σs Δ s p rhs => None (* TODO *)
@@ -1970,7 +1970,7 @@ Module Assertions
         sep_contract_localstore       : SStore Δ sep_contract_logic_variables;
         sep_contract_precondition     : Assertion sep_contract_logic_variables;
         sep_contract_result           : 𝑺;
-        sep_contract_postcondition    : Assertion (sep_contract_logic_variables ▻ (sep_contract_result :: τ));
+        sep_contract_postcondition    : Assertion (sep_contract_logic_variables ▻ sep_contract_result∷τ);
       }.
 
   Arguments MkSepContract : clear implicits.
@@ -2209,7 +2209,7 @@ Module Assertions
   Section Experimental.
 
     Definition sep_contract_pun_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
-      ctx_map (fun '(x::σ) => (𝑿to𝑺 x::σ)) Δ ▻▻ Σ.
+      ctx_map (fun '(x∷σ) => (𝑿to𝑺 x∷σ)) Δ ▻▻ Σ.
 
     Record SepContractPun (Δ : PCtx) (τ : Ty) : Type :=
       MkSepContractPun
@@ -2221,7 +2221,7 @@ Module Assertions
           sep_contract_pun_postcondition     : Assertion
                                                  (sep_contract_pun_logvars Δ
                                                                            sep_contract_pun_logic_variables
-                                                                           ▻ (sep_contract_pun_result :: τ))
+                                                                           ▻ sep_contract_pun_result∷τ)
         }.
 
     Global Arguments MkSepContractPun : clear implicits.
@@ -2234,12 +2234,12 @@ Module Assertions
           MkSepContract
             Δ τ
             (sep_contract_pun_logvars Δ Σ)
-            (env_tabulate (fun '(x::σ) xIn =>
+            (env_tabulate (fun '(x∷σ) xIn =>
                              @term_var
                                (sep_contract_pun_logvars Δ Σ)
                                (𝑿to𝑺 x)
                                σ
-                               (inctx_cat_left Σ (inctx_map (fun '(y::τ) => (𝑿to𝑺 y::τ)) xIn))))
+                               (inctx_cat_left Σ (inctx_map (fun '(y∷τ) => (𝑿to𝑺 y∷τ)) xIn))))
             req result ens
         end.
 
@@ -2279,17 +2279,17 @@ Module Assertions
       | asn_match_enum E k alts => interpret_assertion (alts (inst (T := fun Σ => Term Σ _) k ι)) ι
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match inst (T := fun Σ => Term Σ _) s ι with
-        | inl v => interpret_assertion alt_inl (ι ► (xl :: σ ↦ v))
-        | inr v => interpret_assertion alt_inr (ι ► (xr :: τ ↦ v))
+        | inl v => interpret_assertion alt_inl (ι ► (xl∷σ ↦ v))
+        | inr v => interpret_assertion alt_inr (ι ► (xr∷τ ↦ v))
         end
       | asn_match_list s alt_nil xh xt alt_cons =>
         match inst (T := fun Σ => Term Σ _) s ι with
         | nil        => interpret_assertion alt_nil ι
-        | cons vh vt => interpret_assertion alt_cons (ι ► (xh :: _ ↦ vh) ► (xt :: ty_list _ ↦ vt))
+        | cons vh vt => interpret_assertion alt_cons (ι ► (xh∷_ ↦ vh) ► (xt∷ty_list _ ↦ vt))
         end
       | asn_match_prod s xl xr rhs =>
         match inst (T := fun Σ => Term Σ _) s ι with
-        | (vl,vr)    => interpret_assertion rhs (ι ► (xl :: _ ↦ vl) ► (xr :: _ ↦ vr))
+        | (vl,vr)    => interpret_assertion rhs (ι ► (xl∷_ ↦ vl) ► (xr∷_ ↦ vr))
         end
       | asn_match_tuple s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) s ι in
@@ -2306,7 +2306,7 @@ Module Assertions
         interpret_assertion (alt__rhs K) (ι ►► ι')
       | asn_sep a1 a2 => interpret_assertion a1 ι ✱ interpret_assertion a2 ι
       | asn_or a1 a2  => interpret_assertion a1 ι ∨ interpret_assertion a2 ι
-      | asn_exist ς τ a => ∃ (v : Lit τ), interpret_assertion a (ι ► (ς::τ ↦ v))
+      | asn_exist ς τ a => ∃ (v : Lit τ), interpret_assertion a (ι ► (ς∷τ ↦ v))
       | asn_debug => emp
     end%logic.
 
@@ -2320,7 +2320,7 @@ Module Assertions
 
     Definition interpret_contract_postcondition {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
-        interpret_assertion (sep_contract_postcondition c) (env_snoc ι (sep_contract_result c::τ) result).
+        interpret_assertion (sep_contract_postcondition c) (env_snoc ι (sep_contract_result c ∷ τ) result).
 
   End Contracts.
 
@@ -2359,14 +2359,14 @@ Module Assertions
     | angelicv b (k : SymProp (Σ ▻ b))
     | demonicv b (k : SymProp (Σ ▻ b))
     | assert_vareq
-        x σ (xIn : x::σ ∈ Σ)
-        (t : Term (Σ - (x::σ)) σ)
-        (msg : Message (Σ - (x::σ)))
-        (k : SymProp (Σ - (x::σ)))
+        x σ (xIn : x∷σ ∈ Σ)
+        (t : Term (Σ - x∷σ) σ)
+        (msg : Message (Σ - x∷σ))
+        (k : SymProp (Σ - x∷σ))
     | assume_vareq
-        x σ (xIn : (x,σ) ∈ Σ)
-        (t : Term (Σ - (x::σ)) σ)
-        (k : SymProp (Σ - (x::σ)))
+        x σ (xIn : x∷σ ∈ Σ)
+        (t : Term (Σ - x∷σ) σ)
+        (k : SymProp (Σ - x∷σ))
     | debug
         {BT B} {subB : Subst BT}
         {instB : Inst BT B}
@@ -2506,10 +2506,10 @@ Module Assertions
         | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
           Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
-          (let ι' := env_remove (x,σ) ι xIn in
+          (let ι' := env_remove (x∷σ) ι xIn in
           safe k ι')
         | @assume_vareq _ x σ xIn t k =>
-          let ι' := env_remove (x,σ) ι xIn in
+          let ι' := env_remove (x∷σ) ι xIn in
           env_lookup ι xIn = inst t ι' ->
           safe k ι'
         | debug d k => Debug (inst d ι) (safe k ι)
@@ -2533,10 +2533,10 @@ Module Assertions
         | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
           Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
-          (let ι' := env_remove (x,σ) ι xIn in
+          (let ι' := env_remove (x∷σ) ι xIn in
           @wsafe (wsubst w x t) k ι')
         | @assume_vareq _ x σ xIn t k =>
-          let ι' := env_remove (x,σ) ι xIn in
+          let ι' := env_remove (x∷σ) ι xIn in
           env_lookup ι xIn = inst t ι' ->
           @wsafe (wsubst w x t) k ι'
         | debug d k => Debug (inst d ι) (wsafe k ι)
@@ -2772,12 +2772,12 @@ Module Assertions
     Instance proper_assertk {Σ} (fml : Formula Σ) (msg : Message Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertk fml msg).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_assume_vareq {Σ x σ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
-      Proper (sequiv (Σ - (x :: σ)) ==> sequiv Σ) (assume_vareq x t).
+    Instance proper_assume_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
+      Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assume_vareq x t).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_assert_vareq {Σ x σ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) (msg : Message (Σ - (x :: σ))) :
-      Proper (sequiv (Σ - (x :: σ)) ==> sequiv Σ) (assert_vareq x t msg).
+    Instance proper_assert_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : Message (Σ - x∷σ)) :
+      Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assert_vareq x t msg).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
     Instance proper_angelicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (angelicv b).

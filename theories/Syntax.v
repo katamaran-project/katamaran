@@ -229,7 +229,7 @@ Module Terms (Export termkit : TermKit).
        constructor below and use the type class mechanism to copy these
        locally. *)
     Inductive Exp (Γ : PCtx) : Ty -> Set :=
-    | exp_var     (x : 𝑿) (σ : Ty) {xInΓ : x::σ ∈ Γ} : Exp Γ σ
+    | exp_var     (x : 𝑿) (σ : Ty) {xInΓ : x∷σ ∈ Γ} : Exp Γ σ
     | exp_lit     (σ : Ty) : Lit σ -> Exp Γ σ
     | exp_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ σ3
     | exp_neg     (e : Exp Γ ty_int) : Exp Γ ty_int
@@ -270,7 +270,7 @@ Module Terms (Export termkit : TermKit).
       Let PNE : forall (σs : NCtx 𝑹𝑭 Ty), NamedEnv (Exp Γ) σs -> Type :=
         Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
 
-      Hypothesis (P_var     : forall (x : 𝑿) (σ : Ty) (xInΓ : x::σ ∈ Γ), P σ (exp_var x)).
+      Hypothesis (P_var     : forall (x : 𝑿) (σ : Ty) (xInΓ : x∷σ ∈ Γ), P σ (exp_var x)).
       Hypothesis (P_lit     : forall (σ : Ty) (l : Lit σ), P σ (exp_lit σ l)).
       Hypothesis (P_binop   : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1), P σ1 e1 -> forall e2 : Exp Γ σ2, P σ2 e2 -> P σ3 (exp_binop op e1 e2)).
       Hypothesis (P_neg     : forall e : Exp Γ ty_int, P ty_int e -> P ty_int (exp_neg e)).
@@ -390,7 +390,7 @@ Module Terms (Export termkit : TermKit).
     | tuplepat_snoc
         {σs : Ctx Ty} {Δ : NCtx N Ty}
         (pat : TuplePat σs Δ) {σ : Ty} (x : N) :
-        TuplePat (ctx_snoc σs σ) (ctx_snoc Δ (x::σ)).
+        TuplePat (σs ▻ σ) (Δ ▻ x∷σ).
     Bind Scope pat_scope with TuplePat.
 
     Inductive RecordPat {N : Set} : NCtx 𝑹𝑭 Ty -> NCtx N Ty -> Set :=
@@ -398,13 +398,13 @@ Module Terms (Export termkit : TermKit).
     | recordpat_snoc
         {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
         (pat : RecordPat rfs Δ) (rf : 𝑹𝑭) {τ : Ty} (x : N) :
-        RecordPat (ctx_snoc rfs (rf::τ)) (ctx_snoc Δ (x::τ)).
+        RecordPat (rfs ▻ rf∷τ) (Δ ▻ x∷τ).
     Bind Scope pat_scope with RecordPat.
 
     Inductive Pattern {N : Set} : NCtx N Ty -> Ty -> Set :=
-    | pat_var (x : N) {σ : Ty} : Pattern [ x :: σ ]%ctx σ
+    | pat_var (x : N) {σ : Ty} : Pattern [ x∷σ ] σ
     | pat_unit : Pattern ctx_nil ty_unit
-    | pat_pair (x y : N) {σ τ : Ty} : Pattern [ x :: σ , y :: τ ]%ctx (ty_prod σ τ)
+    | pat_pair (x y : N) {σ τ : Ty} : Pattern [ x∷σ , y∷τ ] (ty_prod σ τ)
     | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty_tuple σs)
     | pat_record {R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) : Pattern Δ (ty_record R).
 
@@ -424,9 +424,9 @@ Module Terms (Export termkit : TermKit).
     (* | stm_seqe          (eff : Effect Γ) (k : Stm Γ τ) *)
     | stm_lit           (l : Lit τ)
     | stm_exp           (e : Exp Γ τ)
-    | stm_let           (x : 𝑿) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (Γ ▻ (x::σ)) τ)
+    | stm_let           (x : 𝑿) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (Γ ▻ x∷σ) τ)
     | stm_block         (Δ : PCtx) (δ : CStore Δ) (s : Stm (Γ ▻▻ Δ) τ)
-    | stm_assign        (x : 𝑿) {xInΓ : x::τ ∈ Γ} (s : Stm Γ τ)
+    | stm_assign        (x : 𝑿) {xInΓ : x∷τ ∈ Γ} (s : Stm Γ τ)
     | stm_call          {Δ : PCtx} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
     | stm_call_frame    (Δ : PCtx) (δ : CStore Δ) (s : Stm Δ τ)
     | stm_foreign       {Δ : PCtx} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
@@ -437,14 +437,14 @@ Module Terms (Export termkit : TermKit).
     | stm_fail          (s : Lit ty_string)
     | stm_match_list
         {σ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿)
-        (alt_cons : Stm (Γ ▻ (xh::σ) ▻ (xt::ty_list σ)) τ)
+        (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty_list σ) τ)
     | stm_match_sum
         {σinl σinr : Ty} (e : Exp Γ (ty_sum σinl σinr))
-        (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl::σinl)) τ)
-        (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr::σinr)) τ)
+        (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
+        (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
     | stm_match_prod
         {σ1 σ2 : Ty} (e : Exp Γ (ty_prod σ1 σ2))
-        (xl xr : 𝑿) (rhs : Stm (Γ ▻ (xl::σ1) ▻ (xr::σ2)) τ)
+        (xl xr : 𝑿) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
     | stm_match_enum
         {E : 𝑬} (e : Exp Γ (ty_enum E))
         (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
@@ -630,7 +630,7 @@ Module Terms (Export termkit : TermKit).
 
   End NameResolution.
 
-  Notation SymInstance Σ := (@Env (𝑺 * Ty) (fun xt : 𝑺 * Ty => Lit (@snd 𝑺 Ty xt)) Σ).
+  Notation SymInstance Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Lit (@type 𝑺 Ty xt)) Σ).
 
   Section Symbolic.
 
@@ -646,7 +646,7 @@ Module Terms (Export termkit : TermKit).
     Local Unset Elimination Schemes.
 
     Inductive Term (Σ : LCtx) : Ty -> Set :=
-    | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : InCtx (ς :: σ) Σ} : Term Σ σ
+    | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : ς∷σ ∈ Σ} : Term Σ σ
     | term_lit     (σ : Ty) : Lit σ -> Term Σ σ
     | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
     | term_neg     (e : Term Σ ty_int) : Term Σ ty_int
@@ -711,7 +711,7 @@ Module Terms (Export termkit : TermKit).
       Let PNE : forall (σs : NCtx 𝑹𝑭 Ty), NamedEnv (Term Σ) σs -> Type :=
         Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type.
 
-      Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : (ς::σ) ∈ Σ), P σ (term_var ς)).
+      Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
       Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit σ l)).
       Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
       Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)).
@@ -773,7 +773,7 @@ Module Terms (Export termkit : TermKit).
         Term_eqb _ _ (right _) := false
       };
       Term_eqb (@term_record ?(r) xs) (@term_record r ys) :=
-         @env_eqb_hom _ (fun b => Term Σ (snd b)) (fun b => @Term_eqb _ (snd b)) _ xs ys;
+         @env_eqb_hom _ (fun b => Term Σ (type b)) (fun b => @Term_eqb _ (type b)) _ xs ys;
       (* Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2) *)
       (*          with (𝑹_eq_dec r1 r2) => { *)
       (* Term_eqb (@term_projrec r e1 _ _ prf1) (@term_projrec ?(r) e2 _ _ prf2) *)
@@ -823,7 +823,7 @@ Module Terms (Export termkit : TermKit).
         | tuplepat_snoc p x =>
           fun EΔ =>
             match snocView EΔ with
-            | isSnoc E v => pattern_match p E ► (_ :: _ ↦ v)
+            | isSnoc E v => pattern_match p E ► (_∷_ ↦ v)
             end
         end.
 
@@ -851,7 +851,7 @@ Module Terms (Export termkit : TermKit).
       | recordpat_snoc p rf x =>
         fun E =>
           env_snoc
-            (record_pattern_match_env p (env_tail E)) (x::_)
+            (record_pattern_match_env p (env_tail E)) (x∷_)
             (env_lookup E inctx_zero)
       end.
 
@@ -862,7 +862,7 @@ Module Terms (Export termkit : TermKit).
       | recordpat_snoc p rf x =>
         fun E =>
           env_snoc
-            (record_pattern_match_env_reverse p (env_tail E)) (rf::_)
+            (record_pattern_match_env_reverse p (env_tail E)) (rf∷_)
             (env_lookup E inctx_zero)
       end.
 
@@ -918,9 +918,9 @@ Module Terms (Export termkit : TermKit).
     Definition pattern_match_lit {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
       Lit σ -> NamedEnv Lit Δ :=
       match p with
-      | pat_var x => fun v => env_snoc env_nil (x::_) v
+      | pat_var x => fun v => env_snoc env_nil (x∷_) v
       | pat_unit => fun _ => env_nil
-      | pat_pair x y => fun '(u , v) => env_snoc (env_snoc env_nil (x::_) u) (y::_) v
+      | pat_pair x y => fun '(u , v) => env_snoc (env_snoc env_nil (x∷_) u) (y∷_) v
       | pat_tuple p => tuple_pattern_match_lit p
       | pat_record p => record_pattern_match_lit p
       end.
@@ -991,7 +991,7 @@ Module Terms (Export termkit : TermKit).
   Section SymbolicSubstitutions.
 
     Definition Sub (Σ1 Σ2 : LCtx) : Set :=
-      Env (fun b => Term Σ2 (snd b)) Σ1.
+      Env (fun b => Term Σ2 (type b)) Σ1.
     (* Hint Unfold Sub. *)
 
     Class Subst (T : LCtx -> Type) : Type :=
@@ -1032,47 +1032,47 @@ Module Terms (Export termkit : TermKit).
       fun Σ1 xs Σ2 ζ => env_map (fun b a => subst (T := fun Σ => A Σ b) a ζ) xs.
 
     Definition sub_id Σ : Sub Σ Σ :=
-      @env_tabulate _ (fun b => Term _ (snd b)) _
-                    (fun '(ς :: σ) ςIn => @term_var Σ ς σ ςIn).
+      @env_tabulate _ (fun b => Term _ (type b)) _
+                    (fun '(ς∷σ) ςIn => @term_var Σ ς σ ςIn).
     Global Arguments sub_id : clear implicits.
 
-    Definition sub_snoc {Σ1 Σ2 : LCtx} (ζ : Sub Σ1 Σ2) b (t : Term Σ2 (snd b)) :
+    Definition sub_snoc {Σ1 Σ2 : LCtx} (ζ : Sub Σ1 Σ2) b (t : Term Σ2 (type b)) :
       Sub (Σ1 ▻ b) Σ2 := env_snoc ζ b t.
     Global Arguments sub_snoc {_ _} _ _ _.
 
     Definition sub_shift {Σ b} (bIn : b ∈ Σ) : Sub (Σ - b) Σ :=
       env_tabulate
-        (D := fun b => Term Σ (snd b))
-        (fun '(x :: τ) xIn => @term_var Σ x τ (shift_var bIn xIn)).
+        (D := fun b => Term Σ (type b))
+        (fun '(x∷τ) xIn => @term_var Σ x τ (shift_var bIn xIn)).
 
     Definition sub_wk1 {Σ b} : Sub Σ (Σ ▻ b) :=
       env_tabulate
-        (D := fun b => Term _ (snd b))
-        (fun '(ς :: σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
+        (D := fun b => Term _ (type b))
+        (fun '(ς∷σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
 
     Definition sub_cat_left {Σ} Δ : Sub Σ (Σ ▻▻ Δ) :=
       env_tabulate
-        (D := fun b => Term _ (snd b))
-        (fun '(ς :: σ) ςIn => @term_var _ ς σ (inctx_cat_left Δ ςIn)).
+        (D := fun b => Term _ (type b))
+        (fun '(ς∷σ) ςIn => @term_var _ ς σ (inctx_cat_left Δ ςIn)).
 
     Definition sub_cat_right {Σ} Δ : Sub Δ (Σ ▻▻ Δ) :=
       env_tabulate
-        (D := fun b => Term _ (snd b))
-        (fun '(ς :: σ) ςIn => @term_var _ ς σ (inctx_cat_right ςIn)).
+        (D := fun b => Term _ (type b))
+        (fun '(ς∷σ) ςIn => @term_var _ ς σ (inctx_cat_right ςIn)).
 
     Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
-      sub_snoc (subst ζ sub_wk1) b (let '(ς :: σ) := b in @term_var _ ς σ inctx_zero).
+      sub_snoc (subst ζ sub_wk1) b (let '(ς∷σ) := b in @term_var _ ς σ inctx_zero).
 
     Definition sub_up {Σ1 Σ2} (ζ : Sub Σ1 Σ2) Δ : Sub (Σ1 ▻▻ Δ) (Σ2 ▻▻ Δ) :=
       subst ζ (sub_cat_left Δ) ►► sub_cat_right Δ.
 
-    Definition sub_single {Σ x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) : Sub Σ (Σ - (x :: σ)) :=
+    Definition sub_single {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) : Sub Σ (Σ - x∷σ) :=
       @env_tabulate
-        _ (fun b => Term _ (snd b)) _
-        (fun '(y :: τ) =>
+        _ (fun b => Term _ (type b)) _
+        (fun '(y∷τ) =>
            fun yIn =>
              match occurs_check_var xIn yIn with
-             | inl e => eq_rect σ (Term (Σ - (x :: σ))) t τ (f_equal snd e)
+             | inl e => eq_rect σ (Term (Σ - x∷σ)) t τ (f_equal type e)
              | inr i => term_var y
              end).
 
@@ -1159,7 +1159,7 @@ Module Terms (Export termkit : TermKit).
 
   Section InfrastructureLemmas.
 
-    Lemma lookup_sub_id {Σ x σ} (xIn : x :: σ ∈ Σ) :
+    Lemma lookup_sub_id {Σ x σ} (xIn : x∷σ ∈ Σ) :
       env_lookup (sub_id _) xIn = term_var x.
     Proof. unfold sub_id; now rewrite env_lookup_tabulate. Qed.
 
@@ -1170,19 +1170,19 @@ Module Terms (Export termkit : TermKit).
       now rewrite env_lookup_map.
     Qed.
 
-    Lemma lookup_sub_wk1 {Σ x σ b} (xIn : (x :: σ) ∈ Σ) :
+    Lemma lookup_sub_wk1 {Σ x σ b} (xIn : x∷σ ∈ Σ) :
       env_lookup (@sub_wk1 Σ b) xIn = @term_var _ _ _ (inctx_succ xIn).
     Proof. unfold sub_wk1; now rewrite env_lookup_tabulate. Qed.
 
-    Lemma lookup_sub_shift {Σ x σ b} (bIn : b ∈ Σ) (xIn : (x :: σ) ∈ (Σ - b)) :
+    Lemma lookup_sub_shift {Σ x σ b} (bIn : b ∈ Σ) (xIn : x∷σ ∈ (Σ - b)) :
       env_lookup (@sub_shift Σ b bIn) xIn = @term_var Σ x σ (shift_var bIn xIn).
     Proof. unfold sub_shift; now rewrite env_lookup_tabulate. Qed.
 
-    Lemma lookup_sub_single_eq {Σ x σ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+    Lemma lookup_sub_single_eq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       env_lookup (sub_single xIn t) xIn = t.
     Proof. unfold sub_single. now rewrite env_lookup_tabulate, occurs_check_var_refl. Qed.
 
-    Lemma lookup_sub_single_neq {Σ x σ y τ} (xIn : x :: σ ∈ Σ) (t : Term (Σ - (x :: σ)) σ) (yIn : y :: τ ∈ _) :
+    Lemma lookup_sub_single_neq {Σ x σ y τ} (xIn : x ∷ σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (yIn : y∷τ ∈ Σ - x∷σ) :
       env_lookup (sub_single xIn t) (shift_var xIn yIn) = term_var y.
     Proof. unfold sub_single. now rewrite env_lookup_tabulate, occurs_check_shift_var. Qed.
 
@@ -1224,8 +1224,8 @@ Module Terms (Export termkit : TermKit).
     Proof. now rewrite sub_comp_wk1_tail. Qed.
 
     Lemma sub_snoc_comp {Σ1 Σ2 Σ3 x τ v} (ζ1 : Sub Σ1 Σ2) (ζ2 : Sub Σ2 Σ3) :
-      subst ζ1 ζ2 ► (x::τ ↦ v) =
-      subst (sub_up1 ζ1) (ζ2 ► (x::τ ↦ v)).
+      subst ζ1 ζ2 ► (x∷τ ↦ v) =
+      subst (sub_up1 ζ1) (ζ2 ► (x∷τ ↦ v)).
     Proof.
       unfold sub_up1, subst, SubstEnv; cbn.
       rewrite env_map_map. f_equal.
@@ -1237,11 +1237,11 @@ Module Terms (Export termkit : TermKit).
       sub_up1 (b:=b) (subst ζ1 ζ2) = subst (sub_up1 ζ1) (sub_up1 ζ2).
     Proof.
       destruct b as [x σ]. DepElim.hnf_eq. f_equal.
-      change (subst (subst ζ1 ζ2) (sub_wk1 (b:=x :: σ)) = subst (subst ζ1 sub_wk1) (sub_up1 ζ2)).
+      change (subst (subst ζ1 ζ2) (sub_wk1 (b:=x∷σ)) = subst (subst ζ1 sub_wk1) (sub_up1 ζ2)).
       now rewrite ?sub_comp_assoc, ?sub_comp_wk1_comm.
     Qed.
 
-    Lemma sub_comp_shift_single {Σ x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+    Lemma sub_comp_shift_single {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       subst (sub_shift xIn) (sub_single xIn t) = sub_id _.
     Proof.
       apply env_lookup_extensional. intros [y τ] yIn.
@@ -1283,11 +1283,11 @@ Module Terms (Export termkit : TermKit).
       now rewrite env_lookup_cat_left.
     Qed.
 
-    Lemma subst_shift_single {AT} `{SubstLaws AT} {Σ x σ} (xIn : (x :: σ) ∈ Σ) (a : AT (Σ - (x :: σ))) (t : Term (Σ - (x :: σ)) σ) :
+    Lemma subst_shift_single {AT} `{SubstLaws AT} {Σ x σ} (xIn : x∷σ ∈ Σ) (a : AT (Σ - x∷σ)) (t : Term (Σ - x∷σ) σ) :
       subst (subst a (sub_shift xIn)) (sub_single xIn t) = a.
     Proof. now rewrite <- subst_sub_comp, sub_comp_shift_single, subst_sub_id. Qed.
 
-    Lemma subst_wk1_snoc {AT} `{SubstLaws AT} {Σ1 Σ2 b} (a : AT _) (t : Term Σ2 (snd b)) (ζ : Sub Σ1 Σ2) :
+    Lemma subst_wk1_snoc {AT} `{SubstLaws AT} {Σ1 Σ2 b} (a : AT _) (t : Term Σ2 (type b)) (ζ : Sub Σ1 Σ2) :
       subst (subst a sub_wk1) (sub_snoc ζ b t) = subst a ζ.
     Proof. now rewrite <- subst_sub_comp, sub_comp_wk1_tail. Qed.
 
@@ -1342,7 +1342,7 @@ Module Terms (Export termkit : TermKit).
   Section OccursCheckLaws.
 
     Class OccursCheckLaws (T : LCtx -> Type) `{Subst T, OccursCheck T} : Prop :=
-      { occurs_check_shift {Σ x σ} (xIn : (x::σ) ∈ Σ) (t : T (Σ - (x::σ))%ctx) :
+      { occurs_check_shift {Σ x σ} (xIn : x∷σ ∈ Σ) (t : T (Σ - x∷σ)) :
           occurs_check xIn (subst t (sub_shift xIn)) = Some t;
         occurs_check_sound {Σ x} (xIn : x ∈ Σ) (t : T Σ) (t' : T (Σ - x)) :
           occurs_check xIn t = Some t' -> t = subst t' (sub_shift xIn);
@@ -1542,8 +1542,8 @@ Module Terms (Export termkit : TermKit).
       | @term_union _ U K e     => 𝑼_fold (existT K (inst_term e ι))
       | @term_record _ R ts     =>
           let InstTerm :=
-            fun xt : 𝑹𝑭 * Ty => {| inst := @inst_term (@snd 𝑹𝑭 Ty xt);
-                                   lift Σ := @term_lit Σ (@snd 𝑹𝑭 Ty xt) |} in
+            fun xt : Binding 𝑹𝑭 Ty => {| inst := @inst_term (@type 𝑹𝑭 Ty xt);
+                                   lift Σ := @term_lit Σ (@type 𝑹𝑭 Ty xt) |} in
           𝑹_fold (inst (Inst := instantiate_env (InstSA := InstTerm)) ts ι)
       end.
 
@@ -1652,11 +1652,11 @@ Module Terms (Export termkit : TermKit).
       now rewrite env_map_tabulate, env_lookup_tabulate.
     Qed.
 
-    Lemma inst_sub_snoc {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) b (t : Term Σ1 (snd b)) :
+    Lemma inst_sub_snoc {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) b (t : Term Σ1 (type b)) :
       inst (sub_snoc ζ b t) ι = env_snoc (inst ζ ι) b (inst t ι).
     Proof. reflexivity. Qed.
 
-    Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : SymInstance Σ2) (v : Lit (snd b)) :
+    Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : SymInstance Σ2) (v : Lit (type b)) :
       inst (sub_up1 ζ12) (ι2 ► (b ↦ v)) = inst ζ12 ι2 ► (b ↦ v).
     Proof.
       destruct b; unfold sub_up1.
@@ -1672,7 +1672,7 @@ Module Terms (Export termkit : TermKit).
       now rewrite env_lookup_map, ?env_lookup_tabulate.
     Qed.
 
-    Lemma inst_sub_single_shift {Σ} (ι : SymInstance Σ) {x σ} (xIn : (x :: σ) ∈ Σ) (t : Term (Σ - (x :: σ)) σ) :
+    Lemma inst_sub_single_shift {Σ} (ι : SymInstance Σ) {x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       inst t (inst (sub_shift xIn) ι) = env_lookup ι xIn ->
       inst (sub_single xIn t) (inst (sub_shift xIn) ι) = ι.
     Proof.
@@ -1689,7 +1689,7 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma sub_single_zero {Σ : LCtx} {x : 𝑺} {σ : Ty} (t : Term Σ σ) :
-      (sub_single inctx_zero t) = env_snoc (sub_id Σ) (x :: σ) t.
+      (sub_single inctx_zero t) = env_snoc (sub_id Σ) (x∷σ) t.
     Proof.
       eapply env_lookup_extensional.
       intros [x' σ'] ([|n] & eq).
@@ -1700,8 +1700,8 @@ Module Terms (Export termkit : TermKit).
         now rewrite lookup_sub_id.
     Qed.
 
-    Lemma inst_sub_single2 {Σ : LCtx} {x σ} (xIn : x :: σ ∈ Σ)
-          (t : Term (Σ - (x :: σ)) σ) (ι : SymInstance (Σ - (x :: σ))) :
+    Lemma inst_sub_single2 {Σ : LCtx} {x σ} (xIn : x∷σ ∈ Σ)
+          (t : Term (Σ - x∷σ) σ) (ι : SymInstance (Σ - x∷σ)) :
       inst (sub_single xIn t) ι = env_insert xIn (inst t ι) ι.
     Proof.
       rewrite env_insert_insert'.
@@ -1715,7 +1715,7 @@ Module Terms (Export termkit : TermKit).
       - now reflexivity.
     Qed.
 
-    Lemma inst_lookup {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : InCtx (x :: τ) Σ0) :
+    Lemma inst_lookup {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : x∷τ ∈ Σ0) :
       inst (env_lookup ζ xIn) ι = env_lookup (inst (A := SymInstance Σ0) ζ ι) xIn.
     Proof. cbn. now rewrite env_lookup_map. Qed.
 
@@ -2151,7 +2151,7 @@ Module Terms (Export termkit : TermKit).
     Global Instance instlaws_localstore {Γ} : InstLaws (SStore Γ) (CStore Γ).
     Proof. apply instantiatelaws_env. Qed.
 
-    Lemma subst_lookup {Γ Σ Σ' x σ} (xInΓ : (x::σ)%ctx ∈ Γ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :
+    Lemma subst_lookup {Γ Σ Σ' x σ} (xInΓ : x∷σ ∈ Γ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :
       (subst (δ ‼ x)%exp ζ = (subst δ ζ ‼ x)%exp).
     Proof.
       unfold subst at 2, subst_localstore, SubstEnv.
@@ -2441,7 +2441,7 @@ Module Terms (Export termkit : TermKit).
   Notation "[ x , .. , z ]" :=
     (tuplepat_snoc .. (tuplepat_snoc tuplepat_nil x) .. z) (at level 0) : pat_scope.
   Notation "[ x , .. , z ]" :=
-    (env_snoc .. (env_snoc env_nil (_ :: _) x) .. (_ :: _) z) (at level 0, only parsing) : arg_scope.
+    (env_snoc .. (env_snoc env_nil (_∷_) x) .. (_∷_) z) (at level 0, only parsing) : arg_scope.
 
   Notation "'if:' e 'then' s1 'else' s2" := (stm_if e%exp s1%exp s2%exp)
     (at level 99, right associativity, format
@@ -2452,9 +2452,13 @@ Module Terms (Export termkit : TermKit).
     (at level 100, right associativity, x at level 30, s1 at next level, format
      "'let:'  x  :=  s1  'in'  '/' s2"
     ) : exp_scope.
+  Notation "'let:' x ∷ τ := s1 'in' s2" := (stm_let x%string τ s1%exp s2%exp)
+    (at level 100, right associativity, x at level 30, τ at next level, s1 at next level, format
+     "'let:'  x  ∷  τ  :=  s1  'in'  '/' s2"
+    ) : exp_scope.
   Notation "'let:' x :: τ := s1 'in' s2" := (stm_let x%string τ s1%exp s2%exp)
     (at level 100, right associativity, x at level 30, τ at next level, s1 at next level, format
-     "'let:'  x  ::  τ  :=  s1  'in'  '/' s2"
+     "'let:'  x  ::  τ  :=  s1  'in'  '/' s2", only parsing
     ) : exp_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 'end'" :=
     (stm_match_enum τ e (fun K => match K with
@@ -2539,10 +2543,10 @@ Module Terms (Export termkit : TermKit).
     ) : exp_scope.
 
   Notation "'call' f a1 .. an" :=
-    (stm_call f (env_snoc .. (env_snoc env_nil (_ :: _) a1%exp) .. (_ :: _) an%exp))
+    (stm_call f (env_snoc .. (env_snoc env_nil (_∷_) a1%exp) .. (_∷_) an%exp))
     (at level 10, f global, a1, an at level 9) : exp_scope.
   Notation "'foreign' f a1 .. an" :=
-    (stm_foreign f (env_snoc .. (env_snoc env_nil (_ :: _) a1%exp) .. (_ :: _) an%exp))
+    (stm_foreign f (env_snoc .. (env_snoc env_nil (_∷_) a1%exp) .. (_∷_) an%exp))
     (at level 10, f global, a1, an at level 9) : exp_scope.
 
   Notation "'call' f" :=

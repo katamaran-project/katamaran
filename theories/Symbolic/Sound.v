@@ -1088,7 +1088,7 @@ Module Soundness
         hnf.
         unfold record_pattern_match_lit.
         rewrite H0. rewrite 𝑹_unfold_fold.
-        change (fun Σ => @Env (N * Ty) (fun τ => Term Σ (@snd N Ty τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
+        change (fun Σ => @Env (N ∷ Ty) (fun τ => Term Σ (type τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
         now rewrite inst_record_pattern_match.
       - apply approx_demonic_match_record'; auto.
     Qed.
@@ -1104,7 +1104,7 @@ Module Soundness
       apply approx_bind; try (apply approx_angelic_ctx; assumption).
       intros w1 r01 ι1 -> Hpc1.
       intros v1 vc1 ->.
-      change (fun Σ => @Env (N * Ty) (fun τ => Term Σ (@snd N Ty τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
+      change (fun Σ => @Env (N ∷ Ty) (fun τ => Term Σ (type τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
       apply approx_bind_right.
       - apply approx_assert_formula; try assumption. cbn - [Lit].
         rewrite inst_term_tuple.
@@ -1130,7 +1130,7 @@ Module Soundness
       apply approx_bind; try (apply approx_demonic_ctx; assumption).
       intros w1 r01 ι1 -> Hpc1.
       intros v1 vc1 ->.
-      change (fun Σ => @Env (N * Ty) (fun τ => Term Σ (@snd N Ty τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
+      change (fun Σ => @Env (N ∷ Ty) (fun τ => Term Σ (type τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
       apply approx_bind_right.
       - apply approx_assume_formula; try assumption. cbn - [Lit].
         rewrite inst_term_tuple.
@@ -1156,7 +1156,7 @@ Module Soundness
       eapply approx_bind; try (eapply approx_angelic_ctx; assumption); try assumption.
       intros w1 r01 ι1 -> Hpc1.
       intros ts vs ->.
-      change (fun Σ => @Env (N * Ty) (fun τ => Term Σ (@snd N Ty τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
+      change (fun Σ => @Env (N ∷ Ty) (fun τ => Term Σ (type τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
       eapply approx_bind_right.
       - eapply approx_assert_formula; try assumption. cbn - [Lit].
         rewrite inst_pattern_match_env_reverse.
@@ -1210,7 +1210,7 @@ Module Soundness
       eapply approx_bind; try (eapply approx_demonic_ctx; assumption); try assumption.
       intros w1 r01 ι1 -> Hpc1.
       intros ts vs ->.
-      change (fun Σ => @Env (N * Ty) (fun τ => Term Σ (@snd N Ty τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
+      change (fun Σ => @Env (N ∷ Ty) (fun τ => Term Σ (type τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
       eapply approx_bind_right.
       - eapply approx_assume_formula; try assumption. cbn - [Lit].
         rewrite inst_pattern_match_env_reverse.
@@ -1367,7 +1367,7 @@ Module Soundness
       now rewrite eval_exp_inst.
     Qed.
 
-    Lemma approx_assign {Γ x σ} {xIn : x::σ ∈ Γ}
+    Lemma approx_assign {Γ x σ} {xIn : x∷σ ∈ Γ}
       {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.assign Γ x σ xIn w0) (@CMut.assign Γ x σ xIn).
     Proof.
@@ -1416,7 +1416,7 @@ Module Soundness
   Lemma inst_sub_cat {Σ Γ Δ : LCtx} (ζΓ : Sub Γ Σ) (ζΔ : Sub Δ Σ) (ι : SymInstance Σ) :
     inst (A := SymInstance _) (ζΓ ►► ζΔ) ι = inst ζΓ ι ►► inst ζΔ ι.
   Proof.
-    apply (@inst_env_cat (𝑺 * Ty) (fun Σ b => Term Σ (snd b))).
+    apply (@inst_env_cat (𝑺 ∷ Ty) (fun Σ b => Term Σ (type b))).
   Qed.
 
   Lemma approx_produce {Γ Σ0 pc0} (asn : Assertion Σ0) :
@@ -1550,7 +1550,7 @@ Module Soundness
         apply optionspec_monotonic; auto.
         intros h' HIn. right.
         rewrite List.in_map_iff.
-        exists (c :: h'). auto.
+        exists (c,h'). auto.
   Qed.
 
   Lemma inst_is_duplicable {w : World} (c : Chunk w) (ι : SymInstance w) :
@@ -2022,7 +2022,7 @@ Module Soundness
       destruct (nilView ι). apply Hwp.
     - intros p Hwp ι.
       destruct b as [x σ], (snocView ι).
-      now apply (IHΣ (demonicv (x :: σ) p)).
+      now apply (IHΣ (demonicv (x∷σ) p)).
   Qed.
 
   Lemma symbolic_sound {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :

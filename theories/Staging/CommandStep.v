@@ -154,11 +154,11 @@ Module SmallStep
       fun δ => cmd_write_register reg v (cmd_return (δ,tt)).
 
     Definition pushpop {A Γ1 Γ2 x σ} (v : Lit σ)
-      (d : Mut (Γ1 ▻ (x::σ)) (Γ2 ▻ (x::σ)) A) : Mut Γ1 Γ2 A :=
-      fun δ1 => cmd_map (fun '(δ2,a) => env_tail δ2 :: a) (d (δ1 ► (x :: σ ↦ v))).
+      (d : Mut (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) A) : Mut Γ1 Γ2 A :=
+      fun δ1 => cmd_map (fun '(δ2,a) => (env_tail δ2 , a)) (d (δ1 ► (x∷σ ↦ v))).
     Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : CStore Δ)
       (d : Mut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) : Mut Γ1 Γ2 A :=
-      fun δ1 => cmd_map (fun '(δ2,a) => env_drop Δ δ2 :: a) (d (δ1 ►► δΔ)).
+      fun δ1 => cmd_map (fun '(δ2,a) => (env_drop Δ δ2 , a)) (d (δ1 ►► δΔ)).
     Definition get_local {Γ} : Mut Γ Γ (CStore Γ) :=
       fun δ => cmd_return (δ,δ).
     Definition put_local {Γ1 Γ2} (δ : CStore Γ2) : Mut Γ1 Γ2 unit :=
@@ -168,7 +168,7 @@ Module SmallStep
       fun δ => cmd_return (δ,eval e δ).
     Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : Mut Γ Γ (CStore σs) :=
       fun δ => cmd_return (δ,evals es δ).
-    Definition assign {Γ} x {σ} {xIn : x::σ ∈ Γ} (v : Lit σ) : Mut Γ Γ unit :=
+    Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Lit σ) : Mut Γ Γ unit :=
       fun δ => cmd_return (δ ⟪ x ↦ v ⟫ , tt).
     Global Arguments assign {Γ} x {σ xIn} v.
 
@@ -231,7 +231,7 @@ Module SmallStep
         | nil      => exec s1
         | cons h t =>
           pushspops
-            (env_snoc (env_snoc env_nil (xh :: σ) h) (xt :: ty_list σ) t)
+            (env_snoc (env_snoc env_nil (xh∷σ) h) (xt∷ty_list σ) t)
             (exec s2)
         end
       | stm_match_sum e xinl s1 xinr s2 =>
@@ -245,7 +245,7 @@ Module SmallStep
         match v with
         | (vl,vr) =>
           pushspops
-            (env_snoc (env_snoc env_nil (xl :: _) vl) (xr :: _) vr)
+            (env_snoc (env_snoc env_nil (xl∷_) vl) (xr∷_) vr)
             (exec s)
         end
       | stm_match_tuple e p rhs =>

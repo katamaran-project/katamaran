@@ -50,6 +50,7 @@ Set Implicit Arguments.
 Import CtxNotations.
 Import EnvNotations.
 Open Scope string_scope.
+Open Scope list_scope.
 Open Scope Z_scope.
 Open Scope ctx_scope.
 
@@ -138,7 +139,7 @@ Module ExampleValueKit <: ValueKit.
 
   (** RECORDS **)
   Definition 𝑹𝑭  : Set := Empty_set.
-  Definition 𝑹𝑭_Ty (R : 𝑹) : Ctx (𝑹𝑭 * Ty) := match R with end.
+  Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty := match R with end.
   Definition 𝑹_fold (R : 𝑹) : NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
   Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) := match R with end.
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
@@ -172,28 +173,28 @@ Module ExampleTermKit <: TermKit.
 
   (** FUNCTIONS **)
   Inductive Fun : PCtx -> Ty -> Set :=
-  | append   : Fun [ "p" :: ptr, "q" :: llist ] ty_unit
+  | append   : Fun [ "p" ∷ ptr, "q" ∷ llist ] ty_unit
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
-  | mkcons : FunX [ "x" :: ty_int, "xs" :: llist ] ptr
-  (* | head    : FunX [ "p" :: ptr ] ty_int *)
-  | snd    : FunX [ "p" :: ptr ] llist
-  (* | sethead : FunX [ "p" :: ptr, "x" :: ty_int ] ty_unit *)
-  | setsnd : FunX [ "p" :: ptr, "xs" :: llist ] ty_unit
+  | mkcons : FunX [ "x" ∷ ty_int, "xs" ∷ llist ] ptr
+  (* | head    : FunX [ "p" ∷ ptr ] ty_int *)
+  | snd    : FunX [ "p" ∷ ptr ] llist
+  (* | sethead : FunX [ "p" ∷ ptr, "x" ∷ ty_int ] ty_unit *)
+  | setsnd : FunX [ "p" ∷ ptr, "xs" ∷ llist ] ty_unit
   .
 
-  Definition 𝑭  : Ctx (𝑿 * Ty) -> Ty -> Set := Fun.
-  Definition 𝑭𝑿 : Ctx (𝑿 * Ty) -> Ty -> Set := FunX.
+  Definition 𝑭  : PCtx -> Ty -> Set := Fun.
+  Definition 𝑭𝑿 : PCtx -> Ty -> Set := FunX.
 
   Definition 𝑹𝑬𝑮 : Ty -> Set := fun _ => Empty_set.
   Definition 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮) :=
     fun '(existT _ x) => match x with end.
 
   Inductive Lem : NCtx 𝑿 Ty -> Set :=
-  | open_cons     : Lem [ "p" :: ptr ]
-  | close_nil     : Lem [ "p" :: ty_unit ]
-  | close_cons    : Lem [ "p" :: ptr ].
+  | open_cons     : Lem [ "p" ∷ ptr ]
+  | close_nil     : Lem [ "p" ∷ ty_unit ]
+  | close_cons    : Lem [ "p" ∷ ptr ].
 
   Definition 𝑳 : NCtx 𝑿 Ty -> Set := Lem.
 
@@ -228,7 +229,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
 
   Notation "'lemma' f args" := (stm_lemma f args%arg) (at level 10, f at next level) : exp_scope.
 
-  Definition fun_append : Stm [ "p" :: ptr, "q" :: llist ] ty_unit :=
+  Definition fun_append : Stm [ "p" ∷ ptr, "q" ∷ llist ] ty_unit :=
     lemma open_cons [exp_var "p"] ;;
     let: "mbn" := foreign snd (exp_var "p") in
     match: (exp_var "mbn") with
@@ -279,7 +280,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
     match f with
     | mkcons => fun args res γ γ' μ μ' =>
                   γ' = γ /\
-                  μ' = (μ ++ (args ‼ "x", args ‼ "xs")%exp :: nil)%list /\
+                  μ' = (μ ++ (args ‼ "x", args ‼ "xs")%exp :: nil) /\
                   res = inr (Zlength μ)
     | snd    => fun args res γ γ' μ μ' =>
                   let n := Z.to_nat (args ‼ "p")%exp in
@@ -297,7 +298,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
                   match suf with
                   | nil                => res = inl "Invalid pointer"
                   | cons (elem,_) suf' => γ' = γ /\
-                                          μ' = (pre ++ (elem, args ‼ "xs")%exp :: suf')%list /\
+                                          μ' = (pre ++ (elem, args ‼ "xs")%exp :: suf') /\
                                           res = inr tt
                   end
     end.
@@ -390,8 +391,8 @@ Module SepContracts.
     Definition asn_append {Σ : LCtx} (xs ys zs : Term Σ (ty_list ty_int)) : Assertion Σ :=
       asn_formula (formula_eq (term_binop binop_append xs ys) zs).
 
-    Definition sep_contract_append : SepContract [ "p" :: ptr, "q" :: llist ] ty_unit :=
-      {| sep_contract_logic_variables := ["p" :: ptr, "q" :: llist, "xs" :: ty_list ty_int, "ys" :: ty_list ty_int];
+    Definition sep_contract_append : SepContract [ "p" ∷ ptr, "q" ∷ llist ] ty_unit :=
+      {| sep_contract_logic_variables := ["p" ∷ ptr, "q" ∷ llist, "xs" ∷ ty_list ty_int, "ys" ∷ ty_list ty_int];
          sep_contract_localstore      := [term_var "p", term_var "q"]%arg;
          sep_contract_precondition    := term_inl (term_var "p") ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
          sep_contract_result          := "result";
@@ -402,16 +403,16 @@ Module SepContracts.
               asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
       |}.
 
-    Definition sep_contract_mkcons : SepContract [ "x" :: ty_int, "xs" :: llist ] ptr :=
-      {| sep_contract_logic_variables := ["x" :: ty_int, "xs" :: llist];
+    Definition sep_contract_mkcons : SepContract [ "x" ∷ ty_int, "xs" ∷ llist ] ptr :=
+      {| sep_contract_logic_variables := ["x" ∷ ty_int, "xs" ∷ llist];
          sep_contract_localstore      := [term_var "x", term_var "xs"]%arg;
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "p";
          sep_contract_postcondition   := term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
 
-    Definition sep_contract_snd : SepContract [ "p" :: ptr ] llist :=
-      {| sep_contract_logic_variables := ["p" :: ty_int, "x" :: ty_int, "xs" :: llist];
+    Definition sep_contract_snd : SepContract [ "p" ∷ ptr ] llist :=
+      {| sep_contract_logic_variables := ["p" ∷ ty_int, "x" ∷ ty_int, "xs" ∷ llist];
          sep_contract_localstore      := [term_var "p"]%arg;
          sep_contract_precondition    := term_var "p" ↦p ( term_var "x" , term_var "xs" );
          sep_contract_result          := "result";
@@ -420,8 +421,8 @@ Module SepContracts.
            term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
 
-    Definition sep_contract_setsnd : SepContract [ "p" :: ptr, "xs" :: llist ] ty_unit :=
-      {| sep_contract_logic_variables := ["p" :: ty_int, "x" :: ty_int, "xs" :: llist];
+    Definition sep_contract_setsnd : SepContract [ "p" ∷ ptr, "xs" ∷ llist ] ty_unit :=
+      {| sep_contract_logic_variables := ["p" ∷ ty_int, "x" ∷ ty_int, "xs" ∷ llist];
          sep_contract_localstore      := [term_var "p", term_var "xs"]%arg;
          sep_contract_precondition    := asn_exist "ys" llist (term_var "p" ↦p ( term_var "x" , term_var "ys"));
          sep_contract_result          := "result";
@@ -430,8 +431,8 @@ Module SepContracts.
          term_var "p" ↦p ( term_var "x" , term_var "xs");
       |}.
 
-    Definition sep_lemma_open_cons : Lemma [ "p" :: ptr ] :=
-      {| lemma_logic_variables := ["p" :: ty_int, "xs" :: ty_list ty_int];
+    Definition sep_lemma_open_cons : Lemma [ "p" ∷ ptr ] :=
+      {| lemma_logic_variables := ["p" ∷ ty_int, "xs" ∷ ty_list ty_int];
          lemma_patterns        := [term_var "p"]%arg;
          lemma_precondition    := term_inl (term_var "p") ↦l term_var "xs";
          lemma_postcondition   :=
@@ -443,16 +444,16 @@ Module SepContracts.
                 term_var "n" ↦l term_var "ys"))
       |}.
 
-    Definition sep_lemma_close_cons : Lemma [ "p" :: ptr ] :=
-      {| lemma_logic_variables := ["p" :: ptr, "x" :: ty_int, "xs" :: ty_list ty_int, "n" :: llist ];
+    Definition sep_lemma_close_cons : Lemma [ "p" ∷ ptr ] :=
+      {| lemma_logic_variables := ["p" ∷ ptr, "x" ∷ ty_int, "xs" ∷ ty_list ty_int, "n" ∷ llist ];
          lemma_patterns        := [term_var "p"]%arg;
          lemma_precondition    := term_var "p" ↦p (term_var "x" , term_var "n") ∗
                                   term_var "n" ↦l term_var "xs";
          lemma_postcondition   := term_inl (term_var "p") ↦l term_binop binop_cons (term_var "x") (term_var "xs")
       |}.
 
-   Definition sep_lemma_close_nil : Lemma [ "p" :: ty_unit ] :=
-      {| lemma_logic_variables := ["p" :: ty_unit, "xs" :: ty_list ty_int ];
+   Definition sep_lemma_close_nil : Lemma [ "p" ∷ ty_unit ] :=
+      {| lemma_logic_variables := ["p" ∷ ty_unit, "xs" ∷ ty_list ty_int ];
          lemma_patterns        := [term_var "p"]%arg;
          lemma_precondition    := term_inr (term_var "p") ↦l term_var "xs";
          lemma_postcondition   :=

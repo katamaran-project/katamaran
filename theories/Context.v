@@ -555,33 +555,39 @@ Section WithAB.
 
 End WithAB.
 
-(* Section Binding. *)
+Module Binding.
 
-(*   Local Set Primitive Projections. *)
-(*   Local Set Transparent Obligations. *)
+  (* Local Set Primitive Projections. *)
+  Local Set Transparent Obligations.
 
-(*   Context (N T : Set) {eqN : EqDec N} {eqT : EqDec T}. *)
+  Section WithNT.
+    Context (N T : Set).
 
-(*   Record Binding : Set := *)
-(*     MkBinding *)
-(*       { name :> N; *)
-(*         type :> T; *)
-(*       }. *)
-(*   Derive NoConfusion EqDec for Binding. *)
+    Record Binding : Set :=
+      MkB { name :> N; type :> T; }.
 
-(* End Binding. *)
-(* Arguments MkBinding {N T} name type. *)
-(* Arguments name {N T} b. *)
-(* Arguments type {N T} b. *)
+    Context {eqN : EqDec N} {eqT : EqDec T}.
+    Derive NoConfusion EqDec for Binding.
+
+  End WithNT.
+
+  Arguments MkB [N T] name type.
+  Arguments name {N T} b.
+  Arguments type {N T} b.
+
+End Binding.
+Export Binding.
+Notation NCtx N T := (Ctx (Binding N T)).
 
 Module CtxNotations.
 
-  Notation NCtx Name Data := (Ctx (Name * Data)).
   (* DEPRECATED *)
   (* NB: ∶ ≠ : *)
   (*    To typeset the next notation, use \: *)
-  Notation "x ∶ τ" := (x,τ) (only parsing) : ctx_scope.
-  Notation "x :: τ" := (x , τ) : ctx_scope.
+  Notation "x ∶ τ" := (MkB x τ) (only parsing) : ctx_scope.
+  Notation "x :: τ" := (MkB x τ) (only parsing) : ctx_scope.
+  Notation "N ∷ T" := (Binding N T) : type_scope.
+  Notation "x ∷ t" := (MkB x t) : ctx_scope.
 
   Notation "'ε'" := ctx_nil : ctx_scope.
   Infix "▻" := ctx_snoc : ctx_scope.
@@ -603,17 +609,17 @@ Section Resolution.
 
   Fixpoint ctx_resolve (Γ : NCtx Name D) (x : Name) {struct Γ} : option D :=
     match Γ with
-    | ε        => None
-    | Γ ▻ y::d => if Name_eqdec x y then Some d else ctx_resolve Γ x
+    | ε       => None
+    | Γ ▻ y∷d => if Name_eqdec x y then Some d else ctx_resolve Γ x
     end.
 
   Fixpoint mk_inctx (Γ : NCtx Name D) (x : Name) {struct Γ} :
-    let m := ctx_resolve Γ x in forall (p : IsSome m), x::fromSome m p ∈ Γ :=
+    let m := ctx_resolve Γ x in forall (p : IsSome m), x∷fromSome m p ∈ Γ :=
     match Γ with
     | ε => fun p => match p with end
-    | Γ ▻ y::d =>
+    | Γ ▻ y∷d =>
       match Name_eqdec x y as s return
-        (forall p, (x::fromSome (if s then Some d else ctx_resolve Γ x) p) ∈ Γ ▻ y::d)
+        (forall p, (x∷fromSome (if s then Some d else ctx_resolve Γ x) p) ∈ Γ ▻ y∷d)
       with
       | left e => fun _ => match e with eq_refl => inctx_zero end
       | right _ => fun p => inctx_succ (mk_inctx Γ x p)
@@ -622,8 +628,8 @@ Section Resolution.
 
   Fixpoint ctx_names (Γ : NCtx Name D) : list Name :=
     match Γ with
-    | ε          => nil
-    | Γ ▻ (y::_) => cons y (ctx_names Γ)
+    | ε         => nil
+    | Γ ▻ (y∷_) => cons y (ctx_names Γ)
     end.
 
 End Resolution.
@@ -632,7 +638,7 @@ Module NameResolution.
 
   (* Hook the reflective procedure for name resolution into the typeclass
      resolution mechanism. *)
-  Hint Extern 10 (InCtx (?x :: _) ?Γ) =>
+  Hint Extern 10 (?x∷_ ∈ ?Γ) =>
     let xInΓ := eval compute in (mk_inctx Γ x tt) in
       exact xInΓ : typeclass_instances.
 
@@ -671,7 +677,7 @@ Section FreshName.
          end)
       xs 0%N.
 
-  Definition fresh {T : Set} (xs : Ctx (string * T)) (x : option string) : string :=
+  Definition fresh {T : Set} (xs : NCtx string T) (x : option string) : string :=
     let xs := ctx_names xs in
     let x := match x with Some x => x | None => "x" end in
     if List.find (String.eqb x) xs
