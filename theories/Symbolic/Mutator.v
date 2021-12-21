@@ -52,7 +52,7 @@ From stdpp Require
      base.
 
 Import ctx.notations.
-Import EnvNotations.
+Import env.notations.
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -91,7 +91,7 @@ Module Mutators
 
     Program Definition winstance_snoc {w} (ι : WInstance w) {b : 𝑺 ∷ Ty} (v : Lit (type b)) :
       WInstance (wsnoc w b) :=
-      {| ιassign := env_snoc (ιassign ι) b v; |}.
+      {| ιassign := env.snoc (ιassign ι) b v; |}.
     Next Obligation.
     Proof.
       intros. unfold wsnoc. cbn [wctx wco].
@@ -112,9 +112,9 @@ Module Mutators
     (* Defined. *)
 
     Program Definition winstance_subst {w} (ι : WInstance w) {x σ} {xIn : x∷σ ∈ w}
-      (t : Term (w - x∷σ) σ) (p : inst t (env_remove (x∷σ) (ιassign ι) xIn) = env_lookup (ιassign ι) xIn) :
+      (t : Term (w - x∷σ) σ) (p : inst t (env.remove (x∷σ) (ιassign ι) xIn) = env.lookup (ιassign ι) xIn) :
       WInstance (wsubst w x t) :=
-      @MkWInstance (wsubst w x t) (env_remove _ (ιassign ι) xIn) _.
+      @MkWInstance (wsubst w x t) (env.remove _ (ιassign ι) xIn) _.
     Next Obligation.
       intros * p. cbn. rewrite inst_subst, <- inst_sub_shift in *.
       rewrite inst_sub_single_shift; auto using ιvalid.
@@ -359,11 +359,11 @@ Module Mutators
 
       Lemma match_snocView_eq_rect {Σ1 Σ2 b} {R : Type} (eq : Σ1 = Σ2) (E : SymInstance (Σ1 ▻ b))
         (f : SymInstance Σ2 -> Lit (type b) -> R) :
-        match snocView (eq_rect Σ1 (fun Σ => SymInstance (Σ ▻ b)) E Σ2 eq) with
-        | isSnoc E v => f E v
+        match env.snocView (eq_rect Σ1 (fun Σ => SymInstance (Σ ▻ b)) E Σ2 eq) with
+        | env.isSnoc E v => f E v
         end =
-        match snocView E with
-        | isSnoc E v => f (eq_rect Σ1 (fun Σ => SymInstance Σ) E Σ2 eq) v
+        match env.snocView E with
+        | env.isSnoc E v => f (eq_rect Σ1 (fun Σ => SymInstance Σ) E Σ2 eq) v
         end.
       Proof.
         now destruct eq.
@@ -379,18 +379,19 @@ Module Mutators
       Lemma env_insert_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx}
             (bIn : x∷σ ∈ Σe) (v : Lit σ)
             {ι : SymInstance Σ0} {ιe : SymInstance (Σe - x∷σ)} :
-            (ι ►► env_insert bIn v ιe) = env_insert (ctx.in_cat_right bIn) v (eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ => SymInstance Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn))).
+            (ι ►► env.insert bIn ιe v) =
+            env.insert (ctx.in_cat_right bIn) (eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ => SymInstance Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn))) v.
       Proof.
         revert bIn ιe.
         induction Σe; intros bIn ιe;
           try destruct (ctx.nilView bIn).
-        cbn [env_insert ctx.remove_in_cat_right].
+        cbn [env.insert ctx.remove_in_cat_right].
         (* can't destruct Contxt.snocView bIn?*)
         destruct bIn as ([|n] & eq).
         - cbn in eq.
           now subst.
         - cbn in ιe.
-          destruct (snocView ιe) as (ιe & v').
+          destruct (env.snocView ιe) as (ιe & v').
           change (ctx.remove_in_cat_right {| ctx.in_at := S n; ctx.in_valid := eq |})
                  with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx.snoc (@ctx.remove_in_cat_right _ Σ0 Σe _ {| ctx.in_at := n; ctx.in_valid := eq |})))).
           rewrite eq_trans_refl_l.
@@ -405,15 +406,15 @@ Module Mutators
 
       Lemma env_remove_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x∷σ ∈ Σe)
         (ι : SymInstance Σ0) (ιe : SymInstance Σe) :
-        env_remove (x∷σ) (ι ►► ιe) (ctx.in_cat_right bIn) =
-        eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ : LCtx => SymInstance Σ) (ι ►► env_remove (x∷σ) ιe bIn)
+        env.remove (x∷σ) (ι ►► ιe) (ctx.in_cat_right bIn) =
+        eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ : LCtx => SymInstance Σ) (ι ►► env.remove (x∷σ) ιe bIn)
                  ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn)).
       Proof.
         revert bIn ιe.
         induction Σe; intros bIn ιe; try destruct (ctx.nilView bIn).
         destruct (ctx.snocView bIn).
-        - now destruct (snocView ιe).
-        - destruct (snocView ιe) as (ιe & v).
+        - now destruct (env.snocView ιe).
+        - destruct (env.snocView ιe) as (ιe & v).
           change (ctx.remove_in_cat_right (ctx.in_succ i))
                  with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx.snoc (@ctx.remove_in_cat_right _ Σ0 Σe _ i)))).
           rewrite eq_trans_refl_l.
@@ -564,17 +565,17 @@ Module Mutators
         split; intros [ιe HYP].
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
           unfold eq_rect_r in Hp. rewrite safe_eq_rect, eq_sym_involutive in Hp.
-          exists (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σe) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιe)) ιe).
+          exists (env.insert bIn ιe (inst (eq_rect ((Σ1 ▻▻ Σe) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιe))).
           rewrite safe_assert_msgs_formulas. cbn. rewrite obligation_equiv. cbn.
-          rewrite env_insert_app, env_remove_insert, env_insert_lookup.
-          rewrite inst_subst, inst_sub_shift, env_remove_insert, ?inst_eq_rect.
+          rewrite env_insert_app, env.remove_insert, env.insert_lookup.
+          rewrite inst_subst, inst_sub_shift, env.remove_insert, ?inst_eq_rect.
           split; auto.
           rewrite map_snd_subst, inst_subst, inst_eq_rect in Hpc.
           now rewrite inst_sub_single2 in Hpc.
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
           cbn in Hp. rewrite obligation_equiv in Hp. cbn in Hp. destruct Hp as [Ht Hp].
           rewrite env_remove_app in Hp.
-          exists (env_remove (x∷σ) ιe bIn).
+          exists (env.remove (x∷σ) ιe bIn).
           rewrite safe_assert_msgs_formulas.
           rewrite map_snd_subst, inst_subst.
           unfold eq_rect_r. rewrite safe_eq_rect.
@@ -756,7 +757,7 @@ Module Mutators
         intros p ι. unfold eq_rect_r. rewrite plug_eq_rect. cbn.
         rewrite ?safe_demonic_close0.
         split; intros HYP ιu.
-        - specialize (HYP (env_remove (x∷σ) ιu bIn)).
+        - specialize (HYP (env.remove (x∷σ) ιu bIn)).
           rewrite safe_assume_formulas. intros Hpc Heq.
           rewrite <- inst_sub_shift in Heq.
           rewrite safe_assume_formulas in HYP.
@@ -766,11 +767,11 @@ Module Mutators
           rewrite <- env_remove_app in HYP. apply HYP.
           rewrite <- inst_sub_shift.
           rewrite inst_sub_single_shift; auto.
-        - specialize (HYP (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σu) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σu - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιu)) ιu)).
+        - specialize (HYP (env.insert bIn ιu (inst (eq_rect ((Σ1 ▻▻ Σu) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σu - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιu)))).
           rewrite safe_assume_formulas, inst_subst, inst_eq_rect. intros Hpc.
           unfold eq_rect_r. rewrite safe_eq_rect, eq_sym_involutive.
           rewrite safe_assume_formulas in HYP. cbn in HYP.
-          rewrite env_insert_app, env_remove_insert, env_insert_lookup in HYP.
+          rewrite env_insert_app, env.remove_insert, env.insert_lookup in HYP.
           rewrite inst_eq_rect in HYP.
           rewrite inst_sub_single2 in Hpc.
           now apply HYP.
@@ -865,7 +866,7 @@ Module Mutators
   Section VerificationConditions.
 
     Inductive VerificationCondition (p : 𝕊 wnil) : Prop :=
-    | vc (P : safe p env_nil).
+    | vc (P : safe p env.nil).
 
   End VerificationConditions.
 
@@ -898,7 +899,7 @@ Module Mutators
       ⊢ ∀ Δ : NCtx N Ty, SDijkstra (fun w => NamedEnv (Term w) Δ) :=
       fix rec {w} Δ {struct Δ} :=
         match Δ with
-        | ε       => fun k => T k env_nil
+        | ε       => fun k => T k env.nil
         | Δ ▻ x∷σ =>
           fun k =>
             angelic (Some (n x)) σ (fun w1 ω01 t =>
@@ -919,7 +920,7 @@ Module Mutators
       ⊢ ∀ Δ : NCtx N Ty, SDijkstra (fun w => NamedEnv (Term w) Δ) :=
       fix demonic_ctx {w} Δ {struct Δ} :=
         match Δ with
-        | ε       => fun k => T k env_nil
+        | ε       => fun k => T k env.nil
         | Δ ▻ x∷σ =>
           fun k =>
             demonic (Some (n x)) σ (fun w1 ω01 t =>
@@ -2241,8 +2242,8 @@ Module Mutators
         intros w0 t m POST δ h.
         apply m.
         intros w1 ω01 a1 δ1 h1.
-        apply POST. auto. auto. apply (env_tail δ1). apply h1.
-        apply env_snoc.
+        apply POST. auto. auto. apply (env.tail δ1). apply h1.
+        apply env.snoc.
         apply δ.
         apply t.
         apply h.
@@ -2254,8 +2255,8 @@ Module Mutators
         intros w0 δΔ m POST δ h.
         apply m.
         intros w1 ω01 a1 δ1 h1.
-        apply POST. auto. auto. apply (env_drop Δ δ1). apply h1.
-        apply env_cat.
+        apply POST. auto. auto. apply (env.drop Δ δ1). apply h1.
+        apply env.cat.
         apply δ.
         apply δΔ.
         apply h.
@@ -2283,7 +2284,7 @@ Module Mutators
         ⊢ SMut Γ Γ (SStore σs).
         intros w POST δ h.
         apply (T POST).
-        refine (env_map _ es).
+        refine (env.map _ es).
         intros b. apply (seval_exp δ).
         auto.
         auto.
@@ -2716,7 +2717,7 @@ Module Mutators
             + intros w2 ω12.
               apply (exec_aux _ _ s1).
             + intros w2 ω12 thead ttail.
-              eapply (pushspops (env_snoc (env_snoc env_nil (xh∷_) thead) (xt∷_) ttail)).
+              eapply (pushspops (env.snoc (env.snoc env.nil (xh∷_) thead) (xt∷_) ttail)).
               apply (exec_aux _ _ s2).
           - eapply bind.
             apply (eval_exp e).
@@ -2733,7 +2734,7 @@ Module Mutators
             intros w1 ω01 t.
             apply (demonic_match_prod (𝑿to𝑺 xl) (𝑿to𝑺 xr) t).
             intros w2 ω12 t1 t2.
-            eapply (pushspops (env_snoc (env_snoc env_nil (_∷_) t1) (_∷_) t2)).
+            eapply (pushspops (env.snoc (env.snoc env.nil (_∷_) t1) (_∷_) t2)).
             apply (exec_aux _ _ s).
           - eapply bind.
             apply (eval_exp e).
@@ -2857,7 +2858,7 @@ Module Mutators
       ValidContract c body.
     Proof.
       unfold ValidContractReflect, ValidContract. intros Hok.
-      apply (ok_sound _ env_nil) in Hok. now constructor.
+      apply (ok_sound _ env.nil) in Hok. now constructor.
     Qed.
 
   End SMut.

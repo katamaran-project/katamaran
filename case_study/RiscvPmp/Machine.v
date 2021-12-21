@@ -42,7 +42,7 @@ From stdpp Require Import decidable finite.
 Set Implicit Arguments.
 Import ctx.notations.
 Import ctx.resolution.
-Import EnvNotations.
+Import env.notations.
 Open Scope string_scope.
 
 Module RiscvNotations.
@@ -330,7 +330,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
 
   Notation "'use' 'lemma' lem args" := (stm_lemma lem args%arg) (at level 10, lem at next level) : exp_scope.
-  Notation "'use' 'lemma' lem" := (stm_lemma lem env_nil) (at level 10, lem at next level) : exp_scope.
+  Notation "'use' 'lemma' lem" := (stm_lemma lem env.nil) (at level 10, lem at next level) : exp_scope.
 
   (** Functions **)
   Definition fun_rX : Stm [rs ∶ ty_regidx] ty_xlenbits :=

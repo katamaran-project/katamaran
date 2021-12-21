@@ -49,7 +49,7 @@ From iris_string_ident Require Import ltac2_string_ident.
 
 Set Implicit Arguments.
 Import ctx.notations.
-Import EnvNotations.
+Import env.notations.
 Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope ctx_scope.
@@ -389,7 +389,7 @@ Module SepContracts.
 
     Definition 𝑷 := Empty_set.
     Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
-    Definition 𝑷_inst (p : 𝑷) : abstract Lit (𝑷_Ty p) Prop := match p with end.
+    Definition 𝑷_inst (p : 𝑷) : env.abstract Lit (𝑷_Ty p) Prop := match p with end.
     Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
 
     Definition 𝑯 := Empty_set.
@@ -542,9 +542,9 @@ Module SepContracts.
       | Env _ (ctx.snoc _ (?s, _)) =>
         let id := string_to_ident s in
         let fr := fresh id in
-        destruct (snocView ι) as [ι fr];
+        destruct (env.snocView ι) as [ι fr];
         destruct_syminstance ι
-      | Env _ ctx.nil => destruct (nilView ι)
+      | Env _ ctx.nil => destruct (env.nilView ι)
       | _ => idtac
       end.
 

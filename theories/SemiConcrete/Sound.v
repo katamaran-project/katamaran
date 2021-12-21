@@ -41,7 +41,7 @@ From Katamaran Require Import
 Set Implicit Arguments.
 
 Import ctx.notations.
-Import EnvNotations.
+Import env.notations.
 
 Module Soundness
        (Import termkit : TermKit)
@@ -290,7 +290,7 @@ Module Soundness
         + apply lor_right1; apply IHasn1; assumption.
         + apply lor_right2; apply IHasn2; assumption.
       - intros [v Hwp].
-        apply (entails_trans (interpret_scheap h1) (interpret_assertion asn (env_snoc ι (ς∷τ) v) ✱ POST δ1)).
+        apply (entails_trans (interpret_scheap h1) (interpret_assertion asn (env.snoc ι (ς∷τ) v) ✱ POST δ1)).
         + now apply IHasn.
         + apply sepcon_entails.
           apply lex_right with v, entails_refl.
@@ -367,7 +367,7 @@ Module Soundness
       unfold assert_formula, dijkstra, CDijk.assert_formula.
       (* rewrite CDijk.wp_assert_formulas. *)
       intros [Hfmls Hwp]; revert Hwp.
-      pose (fun δ => ∀ v, interpret_assertion ens (env_snoc ι (result∷_) v) -✱ POST v δ) as frame.
+      pose (fun δ => ∀ v, interpret_assertion ens (env.snoc ι (result∷_) v) -✱ POST v δ) as frame.
       intros HYP.
       assert (interpret_scheap h ⊢ frame δΓ ✱ interpret_assertion req ι ).
       { rewrite sepcon_comm.
@@ -736,12 +736,12 @@ Module Soundness
       unfold inst_contract_localstore.
       unfold exec_contract, bind_right, bind.
       destruct c as [Σ δΣ req result ens]; cbn; intros HYP ι.
-      rewrite Forall_forall in HYP.
+      rewrite env.Forall_forall in HYP.
       - specialize (HYP ι). remember (inst δΣ ι) as δ.
         eapply rule_consequence_left.
         apply rule_wp.
         apply entails_trans with
-            (interpret_scheap nil -✱ WP body (fun (v : Lit τ) (_ : CStore Δ) => interpret_assertion ens (env_snoc ι (result∷τ) v)) δ).
+            (interpret_scheap nil -✱ WP body (fun (v : Lit τ) (_ : CStore Δ) => interpret_assertion ens (env.snoc ι (result∷τ) v)) δ).
         apply produce_sound'.
         2: {
           rewrite <- sepcon_emp.
@@ -752,7 +752,7 @@ Module Soundness
         intros _ h2 HYP. apply exec_sound' with n.
         revert HYP. apply exec_monotonic.
         intros v3 δ3 h3 HYP.
-        enough (interpret_scheap h3 ⊢ interpret_assertion ens (env_snoc ι (result∷τ) v3) ✱ emp)
+        enough (interpret_scheap h3 ⊢ interpret_assertion ens (env.snoc ι (result∷τ) v3) ✱ emp)
           by now rewrite sepcon_emp in H.
         change emp with ((fun _ => emp) δ3).
         apply (consume_sound (asn := ens)).

@@ -43,7 +43,7 @@ Module SmallStep
   (Import progKit : ProgramKit termkit).
 
   Import ctx.notations.
-  Import EnvNotations.
+  Import env.notations.
 
   Inductive Step {Γ : PCtx} {τ : Ty} (γ : RegStore) (μ : Memory) (δ : CStore Γ) :
     forall (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s1 s2 : Stm Γ τ), Prop :=
@@ -54,7 +54,7 @@ Module SmallStep
 
   | step_stm_let_value
       (x : 𝑿) (σ : Ty) (v : Lit σ) (k : Stm (Γ ▻ x∷σ) τ) :
-      ⟨ γ , μ , δ , stm_let x σ (stm_lit σ v) k ⟩ ---> ⟨ γ , μ , δ , stm_block (env_snoc env_nil (x∷σ) v) k ⟩
+      ⟨ γ , μ , δ , stm_let x σ (stm_lit σ v) k ⟩ ---> ⟨ γ , μ , δ , stm_block (env.snoc env.nil (x∷σ) v) k ⟩
   | step_stm_let_fail
       (x : 𝑿) (σ : Ty) (s : string) (k : Stm (Γ ▻ x∷σ) τ) :
       ⟨ γ , μ , δ, stm_let x σ (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
@@ -142,7 +142,7 @@ Module SmallStep
       ⟨ γ , μ , δ , stm_match_list e alt_nil xh xt alt_cons ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
                 | nil => alt_nil
-                | cons vh vt => stm_block (env_snoc (env_snoc env_nil (xh∷σ) vh) (xt∷ty_list σ) vt) alt_cons
+                | cons vh vt => stm_block (env.snoc (env.snoc env.nil (xh∷σ) vh) (xt∷ty_list σ) vt) alt_cons
                 end
       ⟩
   | step_stm_match_sum
@@ -151,8 +151,8 @@ Module SmallStep
       (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ) :
       ⟨ γ , μ , δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
-                | inl v => stm_block (env_snoc env_nil (xinl∷σinl) v) alt_inl
-                | inr v => stm_block (env_snoc env_nil (xinr∷σinr) v) alt_inr
+                | inl v => stm_block (env.snoc env.nil (xinl∷σinl) v) alt_inl
+                | inr v => stm_block (env.snoc env.nil (xinr∷σinr) v) alt_inr
                 end
       ⟩
   | step_stm_match_prod
@@ -160,7 +160,7 @@ Module SmallStep
       (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) :
       ⟨ γ , μ , δ , stm_match_prod e xl xr rhs ⟩ --->
       ⟨ γ , μ , δ , let (vl , vr) := eval e δ in
-                stm_block (env_snoc (env_snoc env_nil (xl∷σ1) vl) (xr∷σ2) vr) rhs
+                stm_block (env.snoc (env.snoc env.nil (xl∷σ1) vl) (xr∷σ2) vr) rhs
       ⟩
   | step_stm_match_enum
       {E : 𝑬} (e : Exp Γ (ty_enum E))

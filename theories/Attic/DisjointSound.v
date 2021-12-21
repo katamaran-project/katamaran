@@ -34,6 +34,7 @@ From Katamaran Require Import
      SmallStep.Inversion Syntax.
 
 Import ctx.notations.
+Import env.notations.
 
 Module HoareSound
        (Import termkit : TermKit)
@@ -54,7 +55,6 @@ Module HoareSound
   Section Soundness.
 
     Open Scope logic.
-    Import EnvNotations.
 
     Local Ltac sound_inversion :=
       lazymatch goal with
@@ -98,8 +98,8 @@ Module HoareSound
         dependent elimination H
       | [ H: Env _ ε |- _ ] =>
         dependent elimination H
-      | [ H: context[env_drop _ (_ ►► _)]|- _] =>
-        rewrite env_drop_cat in H
+      | [ H: context[env.drop _ (_ ►► _)]|- _] =>
+        rewrite env.drop_cat in H
       | [ _: context[match eval ?e ?δ with _ => _ end] |- _ ] =>
         destruct (eval e δ) eqn:?
       end.
@@ -156,7 +156,7 @@ Module HoareSound
               (interpret_assertion (L:=HProp) pre ι) γfocus ->
               exists (γfocus' : Heap),
                 split (heap γ') γframe γfocus' /\
-                ResultOrFail s' (fun v => interpret_assertion post (env_snoc ι (result∷σ) v) γfocus')
+                ResultOrFail s' (fun v => interpret_assertion post (env.snoc ι (result∷σ) v) γfocus')
         | None => False
         end.
 
@@ -282,7 +282,7 @@ Module HoareSound
       (* rule_stm_assign_forwards *)
       - sound_solve.
         exists (H ‼ x)%exp.
-        now rewrite env_update_update, env_update_lookup, env_lookup_update.
+        now rewrite env.update_update, env.update_lookup, env.lookup_update.
       (* rule_stm_call_forwards *)
       - admit.
       (* rule_stm_call_inline *)

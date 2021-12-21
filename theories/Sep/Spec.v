@@ -50,7 +50,7 @@ From Equations Require Import
      Equations.
 
 Import ctx.notations.
-Import EnvNotations.
+Import env.notations.
 
 Set Implicit Arguments.
 
@@ -63,7 +63,7 @@ Module Type AssertionKit
   Parameter Inline 𝑷  : Set.
   (* Predicate field types. *)
   Parameter Inline 𝑷_Ty : 𝑷 -> Ctx Ty.
-  Parameter Inline 𝑷_inst : forall p : 𝑷, abstract Lit (𝑷_Ty p) Prop.
+  Parameter Inline 𝑷_inst : forall p : 𝑷, env.abstract Lit (𝑷_Ty p) Prop.
 
   Declare Instance 𝑷_eq_dec : EqDec 𝑷.
 
@@ -101,14 +101,14 @@ Module Assertions
 
   Equations(noeqns) formula_eqs_ctx {Δ : Ctx Ty} {Σ : LCtx}
     (δ δ' : Env (Term Σ) Δ) : list (Formula Σ) :=
-    formula_eqs_ctx env_nil          env_nil            := nil;
-    formula_eqs_ctx (env_snoc δ _ t) (env_snoc δ' _ t') :=
+    formula_eqs_ctx env.nil          env.nil            := nil;
+    formula_eqs_ctx (env.snoc δ _ t) (env.snoc δ' _ t') :=
       formula_eq t t' :: formula_eqs_ctx δ δ'.
 
   Equations(noeqns) formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ : LCtx}
     (δ δ' : NamedEnv (Term Σ) Δ) : list (Formula Σ) :=
-    formula_eqs_nctx env_nil          env_nil            := nil;
-    formula_eqs_nctx (env_snoc δ _ t) (env_snoc δ' _ t') :=
+    formula_eqs_nctx env.nil          env.nil            := nil;
+    formula_eqs_nctx (env.snoc δ _ t) (env.snoc δ' _ t') :=
       formula_eq t t' :: formula_eqs_nctx δ δ'.
 
   Instance sub_formula : Subst Formula :=
@@ -134,7 +134,7 @@ Module Assertions
 
   Definition inst_formula {Σ} (fml : Formula Σ) (ι : SymInstance Σ) : Prop :=
     match fml with
-    | formula_user p ts => uncurry (𝑷_inst p) (inst ts ι)
+    | formula_user p ts => env.uncurry (𝑷_inst p) (inst ts ι)
     | formula_bool t    => inst (A := Lit ty_bool) t ι = true
     | formula_prop ζ P  => uncurry_named P (inst ζ ι)
     | formula_ge t1 t2  => inst (A := Lit ty_int) t1 ι >= inst (A := Lit ty_int) t2 ι
@@ -147,7 +147,7 @@ Module Assertions
 
   Instance instantiate_formula : Inst Formula Prop :=
     {| inst Σ := inst_formula;
-       lift Σ P := formula_prop env_nil P
+       lift Σ P := formula_prop env.nil P
     |}.
 
   Instance instantiate_formula_laws : InstLaws Formula Prop.
@@ -288,8 +288,8 @@ Module Assertions
       inst (T := PathCondition) (A := Prop) (formula_eqs_ctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs.
-      - destruct (nilView ys). cbn. intuition. constructor.
-      - destruct (snocView ys). cbn - [inst].
+      - destruct (env.nilView ys). cbn. intuition. constructor.
+      - destruct (env.snocView ys). cbn - [inst].
         rewrite inst_pathcondition_cons, IHxs. clear IHxs.
         change (inst db ι = inst v ι /\ inst xs ι = inst E ι <->
                 inst xs ι ► (b ↦ inst db ι) = inst E ι ► (b ↦ inst v ι)).
@@ -303,14 +303,14 @@ Module Assertions
       inst (T := PathCondition) (A := Prop) (formula_eqs_nctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs.
-      - destruct (nilView ys). cbn. intuition. constructor.
-      - destruct (snocView ys). cbn - [inst].
+      - destruct (env.nilView ys). cbn. intuition. constructor.
+      - destruct (env.snocView ys). cbn - [inst].
         rewrite inst_pathcondition_cons, IHxs. clear IHxs.
         change (inst db ι = inst v ι /\ inst xs ι = inst E ι <->
                 inst xs ι ► (b ↦ inst db ι) = inst E ι ► (b ↦ inst v ι)).
         split.
         + intros [Hfml Hpc]; f_equal; auto.
-        + intros ?%inversion_eq_env_snoc.
+        + intros ?%env.inversion_eq_snoc.
           intuition.
     Qed.
 
@@ -518,7 +518,7 @@ Module Assertions
       match c1 , c2 with
       | chunk_user p1 ts1, chunk_user p2 ts2 =>
         match eq_dec p1 p2 with
-        | left e => env_eqb_hom
+        | left e => env.eqb_hom
                       (@Term_eqb _)
                       (eq_rect _ (fun p => Env _ (𝑯_Ty p)) ts1 _ e)
                       ts2
@@ -547,8 +547,8 @@ Module Assertions
       induction c1; intros [];
         solve_eqb_spec with
         try match goal with
-            | |- reflect _ (env_eqb_hom (@Term_eqb ?Σ) ?x ?y) =>
-                destruct (env_eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) x y)
+            | |- reflect _ (env.eqb_hom (@Term_eqb ?Σ) ?x ?y) =>
+                destruct (env.eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) x y)
             | |- reflect _ (Term_eqb ?x ?y) =>
                 destruct (Term_eqb_spec x y)
             end.
@@ -758,8 +758,8 @@ Module Assertions
       match ζ with
       | tri_id => True
       | @tri_cons _ Σ' x σ xIn t ζ0 =>
-        let ι' := env_remove (x∷σ) ι xIn in
-        env_lookup ι xIn = inst t ι' /\ inst_triangular ζ0 ι'
+        let ι' := env.remove (x∷σ) ι xIn in
+        env.lookup ι xIn = inst t ι' /\ inst_triangular ζ0 ι'
       end.
 
     Lemma inst_triangular_left_inverse {w1 w2 : World} (ι2 : SymInstance w2) (ν : Tri w1 w2) :
@@ -1671,7 +1671,7 @@ Module Assertions
       };
       formula_eqb (@formula_user _ p ts1) (@formula_user _ q ts2) with 𝑷_eq_dec p q => {
         formula_eqb (@formula_user _ p ts1) (@formula_user _ ?(p) ts2) (left eq_refl) :=
-          env_eqb_hom (@Term_eqb _) ts1 ts2;
+          env.eqb_hom (@Term_eqb _) ts1 ts2;
         formula_eqb (@formula_user _ p ts1) (@formula_user _ q ts2) (right _) := false
       };
       formula_eqb _ _ := false.
@@ -1684,7 +1684,7 @@ Module Assertions
         try (constructor; auto; fail).
       - destruct 𝑷_eq_dec.
         + destruct e; cbn.
-          destruct (env_eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) ts ts0);
+          destruct (env.eqb_hom_spec (@Term_eqb Σ) (@Term_eqb_spec Σ) ts ts0);
             constructor; intuition.
         + now constructor.
       - destruct (Term_eqb_spec t t0); constructor; intuition.
@@ -2235,7 +2235,7 @@ Module Assertions
           MkSepContract
             Δ τ
             (sep_contract_pun_logvars Δ Σ)
-            (env_tabulate (fun '(x∷σ) xIn =>
+            (env.tabulate (fun '(x∷σ) xIn =>
                              @term_var
                                (sep_contract_pun_logvars Δ Σ)
                                (𝑿to𝑺 x)
@@ -2321,7 +2321,7 @@ Module Assertions
 
     Definition interpret_contract_postcondition {Δ τ} (c : SepContract Δ τ)
       (ι : SymInstance (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
-        interpret_assertion (sep_contract_postcondition c) (env_snoc ι (sep_contract_result c ∷ τ) result).
+        interpret_assertion (sep_contract_postcondition c) (env.snoc ι (sep_contract_result c ∷ τ) result).
 
   End Contracts.
 
@@ -2502,16 +2502,16 @@ Module Assertions
         | assertk fml msg o =>
           Obligation msg fml ι /\ safe o ι
         | assumek fml o => (inst fml ι : Prop) -> safe o ι
-        | angelicv b k => exists v, safe k (env_snoc ι b v)
-        | demonicv b k => forall v, safe k (env_snoc ι b v)
+        | angelicv b k => exists v, safe k (env.snoc ι b v)
+        | demonicv b k => forall v, safe k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
           Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
-          (let ι' := env_remove (x∷σ) ι xIn in
+          (let ι' := env.remove (x∷σ) ι xIn in
           safe k ι')
         | @assume_vareq _ x σ xIn t k =>
-          let ι' := env_remove (x∷σ) ι xIn in
-          env_lookup ι xIn = inst t ι' ->
+          let ι' := env.remove (x∷σ) ι xIn in
+          env.lookup ι xIn = inst t ι' ->
           safe k ι'
         | debug d k => Debug (inst d ι) (safe k ι)
         end%type.
@@ -2529,16 +2529,16 @@ Module Assertions
         | assertk fml msg o =>
           Obligation msg fml ι /\ @wsafe (wformula w fml) o ι
         | assumek fml o => (inst fml ι : Prop) -> @wsafe (wformula w fml) o ι
-        | angelicv b k => exists v, @wsafe (wsnoc w b) k (env_snoc ι b v)
-        | demonicv b k => forall v, @wsafe (wsnoc w b) k (env_snoc ι b v)
+        | angelicv b k => exists v, @wsafe (wsnoc w b) k (env.snoc ι b v)
+        | demonicv b k => forall v, @wsafe (wsnoc w b) k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
           Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
-          (let ι' := env_remove (x∷σ) ι xIn in
+          (let ι' := env.remove (x∷σ) ι xIn in
           @wsafe (wsubst w x t) k ι')
         | @assume_vareq _ x σ xIn t k =>
-          let ι' := env_remove (x∷σ) ι xIn in
-          env_lookup ι xIn = inst t ι' ->
+          let ι' := env.remove (x∷σ) ι xIn in
+          env.lookup ι xIn = inst t ι' ->
           @wsafe (wsubst w x t) k ι'
         | debug d k => Debug (inst d ι) (wsafe k ι)
         end%type.
@@ -2650,35 +2650,35 @@ Module Assertions
     Qed.
 
     Lemma safe_angelic_close0 {Σ0 Σ} (p : 𝕊 (Σ0 ▻▻ Σ)) (ι0 : SymInstance Σ0) :
-      safe (angelic_close0 Σ p) ι0 <-> exists (ι : SymInstance Σ), safe p (env_cat ι0 ι).
+      safe (angelic_close0 Σ p) ι0 <-> exists (ι : SymInstance Σ), safe p (env.cat ι0 ι).
     Proof.
       induction Σ; cbn.
       - split.
         + intros s.
-          now exists env_nil.
+          now exists env.nil.
         + intros [ι sp].
-          destruct (nilView ι).
+          destruct (env.nilView ι).
           now cbn in *.
       - rewrite (IHΣ (angelicv b p)).
         split.
         + intros (ι & v & sp).
-          now exists (env_snoc ι b v).
+          now exists (env.snoc ι b v).
         + intros (ι & sp).
-          destruct (snocView ι) as (ι & v).
+          destruct (env.snocView ι) as (ι & v).
           now exists ι, v.
     Qed.
 
     Lemma safe_demonic_close0 {Σ0 Σ} (p : 𝕊 (Σ0 ▻▻ Σ)) (ι0 : SymInstance Σ0) :
-      safe (demonic_close0 Σ p) ι0 <-> forall (ι : SymInstance Σ), safe p (env_cat ι0 ι).
+      safe (demonic_close0 Σ p) ι0 <-> forall (ι : SymInstance Σ), safe p (env.cat ι0 ι).
     Proof.
       induction Σ; cbn.
       - split.
-        + intros s ι. now destruct (nilView ι).
-        + intros s; apply (s env_nil).
+        + intros s ι. now destruct (env.nilView ι).
+        + intros s; apply (s env.nil).
       - rewrite (IHΣ (demonicv b p)); cbn.
         split.
-        + intros sp ι. destruct (snocView ι) as (ι & v). cbn. auto.
-        + intros sp ι v. apply (sp (env_snoc ι b v)).
+        + intros sp ι. destruct (env.snocView ι) as (ι & v). cbn. auto.
+        + intros sp ι v. apply (sp (env.snoc ι b v)).
     Qed.
 
     (* Fixpoint occurs_check_spath {Σ x} (xIn : x ∈ Σ) (p : 𝕊 Σ) : option (𝕊 (Σ - x)) := *)

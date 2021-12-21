@@ -43,7 +43,7 @@ From Equations Require Import
 Set Implicit Arguments.
 Import ctx.resolution.
 Import ctx.notations.
-Import EnvNotations.
+Import env.notations.
 Import ListNotations.
 Open Scope string_scope.
 Open Scope ctx_scope.
@@ -75,7 +75,7 @@ Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProg
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
     match p with
     end.
-  Definition 𝑷_inst (p : 𝑷) : abstract Lit (𝑷_Ty p) Prop :=
+  Definition 𝑷_inst (p : 𝑷) : env.abstract Lit (𝑷_Ty p) Prop :=
     match p with
     end.
 
@@ -106,15 +106,15 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
                                   RiscvPmpAssertionKit.
 
   Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 100).
-  Local Notation "r '↦r' val" := (asn_chunk (chunk_user ptsreg (env_nil ► (ty_regidx ↦ r) ► (ty_xlenbits ↦ val)))) (at level 100).
+  Local Notation "r '↦r' val" := (asn_chunk (chunk_user ptsreg (env.nil ► (ty_regidx ↦ r) ► (ty_xlenbits ↦ val)))) (at level 100).
   Local Notation "p '∗' q" := (asn_sep p q) (at level 150).
-  Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env_nil ► (ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits) ↦ l)))).
+  Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env.nil ► (ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits) ↦ l)))).
 
   Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
     ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
 
   Definition create_localstore (Δ : PCtx) (Σ : LCtx) : SStore Δ (sep_contract_logvars Δ Σ) :=
-    (env_tabulate (fun '(x::σ) xIn =>
+    (env.tabulate (fun '(x::σ) xIn =>
                      @term_var
                        (sep_contract_logvars Δ Σ)
                        x
@@ -248,7 +248,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
 
   Definition sep_contract_get_arch_pc : SepContractFun get_arch_pc :=
     {| sep_contract_logic_variables := [v ∶ ty_xlenbits];
-       sep_contract_localstore      := env_nil;
+       sep_contract_localstore      := env.nil;
        sep_contract_precondition    := pc ↦ term_var v;
        sep_contract_result          := "result_get_arch_pc";
        sep_contract_postcondition   :=
@@ -268,7 +268,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
 
   Definition sep_contract_get_next_pc : SepContractFun get_next_pc :=
     {| sep_contract_logic_variables := [v ∶ ty_xlenbits];
-       sep_contract_localstore      := env_nil;
+       sep_contract_localstore      := env.nil;
        sep_contract_precondition    := nextpc ↦ term_var v;
        sep_contract_result          := "result_get_next_pc";
        sep_contract_postcondition   :=
@@ -351,7 +351,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
 
   Definition lemma_close_ptsreg (r : RegIdx) : SepLemma (close_ptsreg r) :=
     {| lemma_logic_variables := [w ∶ ty_xlenbits];
-       lemma_patterns        := env_nil;
+       lemma_patterns        := env.nil;
        lemma_precondition    := match r with
                                 | X0 => x0 ↦ term_var w ∗
                                         asn_eq (term_var w) (term_lit ty_xlenbits 0)
@@ -547,7 +547,7 @@ Module BlockVerification.
   Notation "r '↦r' val" :=
     (chunk_user
        ptsreg
-       (env_nil
+       (env.nil
           ► (ty_regidx ↦ term_lit ty_regidx r)
           ► (ty_xlenbits ↦ val)))
       (at level 100).
@@ -638,7 +638,7 @@ Module BlockVerification.
       (asn_chunk
          (chunk_user
             ptsreg
-            (env_nil
+            (env.nil
                ► (ty_regidx ↦ term_lit ty_regidx r)
                ► (ty_xlenbits ↦ val))))
          (at level 100).

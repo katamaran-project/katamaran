@@ -56,7 +56,7 @@ From Katamaran Require Import
 Set Implicit Arguments.
 
 Import ctx.notations.
-Import EnvNotations.
+Import env.notations.
 
 Module Soundness
        (Import termkit : TermKit)
@@ -1112,8 +1112,8 @@ Module Soundness
         rewrite <- inst_persist.
         unfold tuple_pattern_match_lit.
         split; intros <-.
-        + now rewrite tuple_pattern_match_env_inverse_left, envrec_env_inverse_left.
-        + now rewrite envrec_env_inverse_right, tuple_pattern_match_env_inverse_right.
+        + now rewrite tuple_pattern_match_env_inverse_left, envrec.of_to_env.
+        + now rewrite envrec.to_of_env, tuple_pattern_match_env_inverse_right.
       - intros w2 r12 ι2 -> Hpc2.
         eapply (approx_four Hk); eauto.
         now rewrite <- inst_persist.
@@ -1138,8 +1138,8 @@ Module Soundness
         rewrite <- inst_persist.
         unfold tuple_pattern_match_lit.
         split; intros <-.
-        + now rewrite tuple_pattern_match_env_inverse_left, envrec_env_inverse_left.
-        + now rewrite envrec_env_inverse_right, tuple_pattern_match_env_inverse_right.
+        + now rewrite tuple_pattern_match_env_inverse_left, envrec.of_to_env.
+        + now rewrite envrec.to_of_env, tuple_pattern_match_env_inverse_right.
       - intros w2 r12 ι2 -> Hpc2.
         eapply (approx_four Hk); eauto.
         now rewrite <- inst_persist.
@@ -1271,7 +1271,7 @@ Module Soundness
       intros a1 a Ha.
       intros δs1 δc1 -> hs1 hc1 Hh1.
       apply HPOST; auto.
-      now destruct (snocView δs1).
+      now destruct (env.snocView δs1).
     Qed.
 
     Lemma approx_pushspops {AT A} `{Approx AT A} {Γ1 Γ2 Δ} {w0 : World} (ι0 : SymInstance w0)
@@ -1288,15 +1288,15 @@ Module Soundness
         intros a1 a Ha.
         intros δs1 δc1 -> hs1 hc1 ->.
         apply HPOST; auto.
-        destruct (catView δs1).
+        destruct (env.catView δs1).
         hnf.
         unfold inst at 1; cbn.
-        rewrite <- env_map_drop.
-        rewrite ?env_drop_cat.
+        rewrite <- env.map_drop.
+        rewrite ?env.drop_cat.
         reflexivity.
       - hnf.
         unfold inst at 3; cbn.
-        rewrite env_map_cat.
+        rewrite env.map_cat.
         reflexivity.
     Qed.
 
@@ -1360,8 +1360,8 @@ Module Soundness
       intros δs0 δc0 -> hs0 hc0 Hh.
       change (@instantiate_env _ _ _ _ ?Γ) with (@inst_localstore Γ).
       apply HPOST; auto. cbn. rewrite ?inst_sub_id; auto.
-      apply env_lookup_extensional; cbn; intros [x σ] xIn.
-      unfold evals, inst at 2; cbn. rewrite ?env_lookup_map.
+      apply env.lookup_extensional; cbn; intros [x σ] xIn.
+      unfold evals, inst at 2; cbn. rewrite ?env.lookup_map.
       change (@instantiate_env _ _ _ _ ?Γ) with (@inst_localstore Γ).
       (* change (fun Σ : LCtx => @Env (𝑿 * Ty) (fun τ : 𝑿 * Ty => Term Σ (@snd 𝑿 Ty τ)) Γ) with (SStore Γ). *)
       now rewrite eval_exp_inst.
@@ -1377,7 +1377,7 @@ Module Soundness
       unfold SMut.assign, CMut.assign.
       apply HPOST; wsimpl; eauto.
       hnf. unfold inst at 3. cbn.
-      now rewrite env_map_update.
+      now rewrite env.map_update.
     Qed.
 
   End State.
@@ -1410,7 +1410,7 @@ Module Soundness
     inst (EΓ ►► EΔ) ι = inst EΓ ι ►► inst EΔ ι.
   Proof.
     unfold inst; cbn.
-    now rewrite env_map_cat.
+    now rewrite env.map_cat.
   Qed.
 
   Lemma inst_sub_cat {Σ Γ Δ : LCtx} (ζΓ : Sub Γ Σ) (ζΔ : Sub Δ Σ) (ι : SymInstance Σ) :
@@ -2013,15 +2013,15 @@ Module Soundness
 
   Definition safe_demonic_close {Σ : LCtx} :
     forall p : 𝕊 Σ,
-      safe (demonic_close p) env_nil ->
+      safe (demonic_close p) env.nil ->
       forall ι : SymInstance Σ,
         safe p ι.
   Proof.
     induction Σ; cbn [demonic_close] in *.
     - intros p Hwp ι.
-      destruct (nilView ι). apply Hwp.
+      destruct (env.nilView ι). apply Hwp.
     - intros p Hwp ι.
-      destruct b as [x σ], (snocView ι).
+      destruct b as [x σ], (env.snocView ι).
       now apply (IHΣ (demonicv (x∷σ) p)).
   Qed.
 
@@ -2030,7 +2030,7 @@ Module Soundness
     CMut.ValidContract 1 c body.
   Proof.
     unfold SMut.ValidContract, CMut.ValidContract, ForallNamed.
-    rewrite Forall_forall. intros [Hwp] ι.
+    rewrite env.Forall_forall. intros [Hwp] ι.
     unfold SMut.exec_contract_path in Hwp.
     rewrite Postprocessing.prune_sound in Hwp.
     rewrite Postprocessing.solve_uvars_sound in Hwp.

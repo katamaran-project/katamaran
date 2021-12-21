@@ -37,7 +37,7 @@ From Katamaran Require Import
 Set Implicit Arguments.
 
 Import ctx.notations.
-Import EnvNotations.
+Import env.notations.
 
 Module Inversion
        (Import termkit : TermKit)
@@ -53,7 +53,7 @@ Module Inversion
           (step : ⟨ γ1, μ1, δ1, stm_let x τ s k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\
       ((exists msg, s = stm_fail _ msg /\ t = stm_fail _ msg) \/
-       (exists v,   s = stm_lit τ v    /\ t = stm_block (env_snoc env_nil (x∷τ) v) k)
+       (exists v,   s = stm_lit τ v    /\ t = stm_block (env.snoc env.nil (x∷τ) v) k)
       ).
     Proof.
       dependent elimination step.
@@ -271,7 +271,7 @@ Module Inversion
     {δΔ : CStore Δ} {k : Stm (Γ ▻▻ Δ) σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_block δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists δΔ' k',
-      ⟨ γ1, μ1, env_cat δ1 δΔ , k ⟩ --->* ⟨ γ3, μ3, env_cat δ3 δΔ' , k' ⟩ /\ Final k' /\
+      ⟨ γ1, μ1, env.cat δ1 δΔ , k ⟩ --->* ⟨ γ3, μ3, env.cat δ3 δΔ' , k' ⟩ /\ Final k' /\
       ⟨ γ3, μ3, δ3, stm_block δΔ' k' ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩.
   Proof.
     remember (stm_block δΔ k) as s. revert steps δΔ k Heqs.
@@ -339,7 +339,7 @@ Module Inversion
         t = stm_fail _ msg) \/
     (exists γ2 μ2 δ2 v,
         ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_lit _ v ⟩ /\
-        ⟨ γ2, μ2, δ2, stm_block (env_snoc env_nil (x∷τ) v) s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
+        ⟨ γ2, μ2, δ2, stm_block (env.snoc env.nil (x∷τ) v) s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
   Proof.
     apply (steps_inversion_let final) in steps.
     destruct_propositional steps; subst.
@@ -354,10 +354,10 @@ Module Inversion
     {δΔ : CStore Δ} {k : Stm (Γ ▻▻ Δ) σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_block δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists δΔ' msg,
-        ⟨ γ1, μ1, env_cat δ1 δΔ , k ⟩ --->* ⟨ γ3, μ3, env_cat δ3 δΔ' , stm_fail _ msg ⟩ /\
+        ⟨ γ1, μ1, env.cat δ1 δΔ , k ⟩ --->* ⟨ γ3, μ3, env.cat δ3 δΔ' , stm_fail _ msg ⟩ /\
         t = stm_fail _ msg) \/
     (exists δΔ' v,
-        ⟨ γ1, μ1, env_cat δ1 δΔ, k ⟩ --->* ⟨ γ3, μ3, env_cat δ3 δΔ', stm_lit _ v ⟩ /\
+        ⟨ γ1, μ1, env.cat δ1 δΔ, k ⟩ --->* ⟨ γ3, μ3, env.cat δ3 δΔ', stm_lit _ v ⟩ /\
         t = stm_lit _ v).
   Proof.
     apply (steps_inversion_block final) in steps.
@@ -450,7 +450,7 @@ Module Inversion
     {δ1 δ3 : CStore Γ}
     {v : Lit τ} {k : Stm (Γ ▻ x∷τ) σ} {t : Stm Γ σ}
     (steps : ⟨ γ1, μ1, δ1, stm_let x τ (stm_lit τ v) k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
-    γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_block (env_snoc env_nil (x∷τ) v) k.
+    γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_block (env.snoc env.nil (x∷τ) v) k.
   Proof.
     dependent elimination steps.
     - intuition.

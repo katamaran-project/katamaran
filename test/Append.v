@@ -48,7 +48,7 @@ From iris_string_ident Require Import ltac2_string_ident.
 
 Set Implicit Arguments.
 Import ctx.notations.
-Import EnvNotations.
+Import env.notations.
 Open Scope string_scope.
 Open Scope list_scope.
 Open Scope Z_scope.
@@ -357,7 +357,7 @@ Module SepContracts.
 
     Definition 𝑷 := Empty_set.
     Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
-    Definition 𝑷_inst (p : 𝑷) : abstract Lit (𝑷_Ty p) Prop := match p with end.
+    Definition 𝑷_inst (p : 𝑷) : env.abstract Lit (𝑷_Ty p) Prop := match p with end.
     Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
 
     Definition 𝑯 := Predicate.
@@ -382,9 +382,9 @@ Module SepContracts.
     Module Export ASS := Assertions ExampleTermKit ExampleProgramKit ExampleAssertionKit.
     Import ctx.resolution.
 
-    Local Notation "p '↦l' xs" := (asn_chunk (chunk_user ptstolist (env_nil ► (llist ↦ p) ► (ty_list ty_int ↦ xs)))) (at level 100).
+    Local Notation "p '↦l' xs" := (asn_chunk (chunk_user ptstolist (env.nil ► (llist ↦ p) ► (ty_list ty_int ↦ xs)))) (at level 100).
     Local Notation "p '∗' q" := (asn_sep p q) (at level 150).
-    Local Notation "p '↦p' ( x , xs )" := (asn_chunk (chunk_user ptstocons (env_nil ► (ptr ↦ p) ► (ty_int ↦ x) ► (llist ↦ xs)))) (at level 100).
+    Local Notation "p '↦p' ( x , xs )" := (asn_chunk (chunk_user ptstocons (env.nil ► (ptr ↦ p) ► (ty_int ↦ x) ► (llist ↦ xs)))) (at level 100).
 
     Arguments formula_prop [Σ] Σ' ζ _.
 

@@ -39,7 +39,7 @@ From RiscvPmp Require Export
 
 Set Implicit Arguments.
 Import ctx.notations.
-Import EnvNotations.
+Import env.notations.
 Local Open Scope string_scope.
 
 Module RiscvPmpValueKit <: ValueKit.
@@ -222,13 +222,13 @@ Module RiscvPmpValueKit <: ValueKit.
 
   Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty :=
     match R with
-    | rpmpcfg_ent => [ "L" :: ty_bool,
-                      "A" :: ty_pmpaddrmatchtype,
-                      "X" :: ty_bool,
-                      "W" :: ty_bool,
-                      "R" :: ty_bool
-                    ]
-    | rmstatus    => ["MPP" :: ty_privilege
+    | rpmpcfg_ent => [ "L" ∷ ty_bool,
+                       "A" ∷ ty_pmpaddrmatchtype,
+                       "X" ∷ ty_bool,
+                       "W" ∷ ty_bool,
+                       "R" ∷ ty_bool
+                     ]
+    | rmstatus    => ["MPP" ∷ ty_privilege
                     ]
     end.
 
@@ -252,16 +252,16 @@ Module RiscvPmpValueKit <: ValueKit.
     match Rec with
     | rpmpcfg_ent =>
       fun p =>
-        env_nil
-          ► ("L" :: ty_bool             ↦ L p)
-          ► ("A" :: ty_pmpaddrmatchtype ↦ A p)
-          ► ("X" :: ty_bool             ↦ X p)
-          ► ("W" :: ty_bool             ↦ W p)
-          ► ("R" :: ty_bool             ↦ R p)
+        env.nil
+          ► ("L" ∷ ty_bool             ↦ L p)
+          ► ("A" ∷ ty_pmpaddrmatchtype ↦ A p)
+          ► ("X" ∷ ty_bool             ↦ X p)
+          ► ("W" ∷ ty_bool             ↦ W p)
+          ► ("R" ∷ ty_bool             ↦ R p)
     | rmstatus    =>
       fun m =>
-        env_nil
-          ► ("MPP" :: ty_privilege ↦ MPP m)
+        env.nil
+          ► ("MPP" ∷ ty_privilege ↦ MPP m)
     end%env.
 
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
@@ -269,5 +269,5 @@ Module RiscvPmpValueKit <: ValueKit.
   Proof. now intros [] []. Qed.
   Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
       𝑹_unfold R (𝑹_fold R Kv) = Kv.
-  Proof. intros []; now apply Forall_forall. Qed.
+  Proof. intros []; now apply env.Forall_forall. Qed.
 End RiscvPmpValueKit.

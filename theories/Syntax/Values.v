@@ -84,7 +84,7 @@ Module Values (Export valuekit : ValueKit).
     | ty_unit     => fun _ _ => true
     | ty_enum E   => fun l1 l2 => if 𝑬𝑲_eq_dec l1 l2 then true else false
     | ty_bvec n   => @Word.weqb n
-    | ty_tuple σs => envrec_beq Lit_eqb
+    | ty_tuple σs => envrec.eqb Lit_eqb
     | ty_union U  => fun l1 l2 => if 𝑼𝑻_eq_dec l1 l2 then true else false
     | ty_record R => fun l1 l2 => if 𝑹𝑻_eq_dec l1 l2 then true else false
     end.

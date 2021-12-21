@@ -98,7 +98,7 @@ Module SmallStep
   (Import progKit : ProgramKit termkit).
 
   Import ctx.notations.
-  Import EnvNotations.
+  Import env.notations.
 
   Reserved Notation "⟨ γ1 , μ1 , c1 ⟩ ---> ⟨ γ2 , μ2 , s2 ⟩" (at level 75, no associativity).
 
@@ -155,10 +155,10 @@ Module SmallStep
 
     Definition pushpop {A Γ1 Γ2 x σ} (v : Lit σ)
       (d : Mut (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) A) : Mut Γ1 Γ2 A :=
-      fun δ1 => cmd_map (fun '(δ2,a) => (env_tail δ2 , a)) (d (δ1 ► (x∷σ ↦ v))).
+      fun δ1 => cmd_map (fun '(δ2,a) => (env.tail δ2 , a)) (d (δ1 ► (x∷σ ↦ v))).
     Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : CStore Δ)
       (d : Mut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) : Mut Γ1 Γ2 A :=
-      fun δ1 => cmd_map (fun '(δ2,a) => (env_drop Δ δ2 , a)) (d (δ1 ►► δΔ)).
+      fun δ1 => cmd_map (fun '(δ2,a) => (env.drop Δ δ2 , a)) (d (δ1 ►► δΔ)).
     Definition get_local {Γ} : Mut Γ Γ (CStore Γ) :=
       fun δ => cmd_return (δ,δ).
     Definition put_local {Γ1 Γ2} (δ : CStore Γ2) : Mut Γ1 Γ2 unit :=
@@ -231,7 +231,7 @@ Module SmallStep
         | nil      => exec s1
         | cons h t =>
           pushspops
-            (env_snoc (env_snoc env_nil (xh∷σ) h) (xt∷ty_list σ) t)
+            (env.snoc (env.snoc env.nil (xh∷σ) h) (xt∷ty_list σ) t)
             (exec s2)
         end
       | stm_match_sum e xinl s1 xinr s2 =>
@@ -245,7 +245,7 @@ Module SmallStep
         match v with
         | (vl,vr) =>
           pushspops
-            (env_snoc (env_snoc env_nil (xl∷_) vl) (xr∷_) vr)
+            (env.snoc (env.snoc env.nil (xl∷_) vl) (xr∷_) vr)
             (exec s)
         end
       | stm_match_tuple e p rhs =>

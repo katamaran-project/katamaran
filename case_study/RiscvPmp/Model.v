@@ -55,9 +55,9 @@ Module RiscvPmpModel.
       | Env _ (ctx.snoc _ (MkB ?s _)) =>
         let id := string_to_ident s in
         let fr := fresh id in
-        destruct (snocView ι) as [ι fr];
+        destruct (env.snocView ι) as [ι fr];
         destruct_syminstance ι
-      | Env _ ctx.nil => destruct (nilView ι)
+      | Env _ ctx.nil => destruct (env.nilView ι)
       | _ => idtac
       end.
 
@@ -106,14 +106,14 @@ Module RiscvPmpModel.
 
       Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑯_Ty p)) (mG : memG Σ) : iProp Σ :=
         (match p return Env Lit (RiscvPmpAssertionKit.𝑯_Ty p) -> iProp Σ with
-         | pmp_entries => fun ts => let entries_lst := env_head ts in
+         | pmp_entries => fun ts => let entries_lst := env.head ts in
                                     match entries_lst with
                                     | (cfg0, addr0) :: [] =>
                                       (reg_pointsTo pmp0cfg cfg0 ∗
                                               reg_pointsTo pmpaddr0 addr0)%I
                                     | _ => False%I
                                     end
-         | ptsreg => fun ts => interp_ptsreg (env_head (env_tail ts)) (env_head ts)
+         | ptsreg => fun ts => interp_ptsreg (env.head (env.tail ts)) (env.head ts)
          end) ts.
 
     Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑯_Ty p)) :
