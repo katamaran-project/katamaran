@@ -40,7 +40,7 @@ Module ProgramLogic
   (Import assertkit : AssertionKit termkit progkit)
   (Import contractkit : SymbolicContractKit termkit progkit assertkit).
 
-  Import CtxNotations.
+  Import ctx.notations.
   Import EnvNotations.
 
   Open Scope logic.
@@ -113,7 +113,7 @@ Module ProgramLogic
         ⦃ P ⦄ let: x := s in k ; δ ⦃ R ⦄
     | rule_stm_block
         (Δ : PCtx) (δΔ : CStore Δ)
-        (k : Stm (ctx_cat Γ Δ) τ)
+        (k : Stm (Γ ▻▻ Δ) τ)
         (P : L) (R : Lit τ -> CStore Γ -> L) :
         ⦃ P ⦄ k ; δ ►► δΔ ⦃ fun v δ'' => R v (env_drop Δ δ'') ⦄ ->
         ⦃ P ⦄ stm_block δΔ k ; δ ⦃ R ⦄
@@ -172,7 +172,7 @@ Module ProgramLogic
         ⦃ P ⦄ stm_match_enum E e alts ; δ ⦃ Q ⦄
     | rule_stm_match_tuple
         {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
-        (p : TuplePat σs Δ) (rhs : Stm (ctx_cat Γ Δ) τ)
+        (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
         (P : L) (Q : Lit τ -> CStore Γ -> L) :
         ⦃ P ⦄ rhs ; env_cat δ (tuple_pattern_match_lit p (eval e δ)) ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
         ⦃ P ⦄ stm_match_tuple e p rhs ; δ ⦃ Q ⦄
@@ -189,7 +189,7 @@ Module ProgramLogic
         ⦃ P ⦄ stm_match_union U e alt__p alt__r ; δ ⦃ Q ⦄
     | rule_stm_match_record
         {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
-        (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (ctx_cat Γ Δ) τ)
+        (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
         (P : L) (Q : Lit τ -> CStore Γ -> L) :
         ⦃ P ⦄ rhs ; env_cat δ (record_pattern_match_lit p (eval e δ)) ⦃ fun v δ' => Q v (env_drop Δ δ') ⦄ ->
         ⦃ P ⦄ stm_match_record R e p rhs ; δ ⦃ Q ⦄

@@ -42,7 +42,7 @@ Module SmallStep
   (Import termkit : TermKit)
   (Import progKit : ProgramKit termkit).
 
-  Import CtxNotations.
+  Import ctx.notations.
   Import EnvNotations.
 
   Inductive Step {Γ : PCtx} {τ : Ty} (γ : RegStore) (μ : Memory) (δ : CStore Γ) :
@@ -167,7 +167,7 @@ Module SmallStep
       (alts : forall (K : 𝑬𝑲 E), Stm Γ τ) :
       ⟨ γ , μ , δ , stm_match_enum E e alts ⟩ ---> ⟨ γ , μ , δ , alts (eval e δ) ⟩
   | step_stm_match_tuple
-      {Δ σs} (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ) (rhs : Stm (ctx_cat Γ Δ) τ) :
+      {Δ σs} (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_tuple e p rhs ⟩ --->
       ⟨ γ , μ , δ , stm_block (tuple_pattern_match_lit p (eval e δ)) rhs ⟩
 
@@ -182,7 +182,7 @@ Module SmallStep
       ⟩
   | step_stm_match_record
       {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
-      (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (ctx_cat Γ Δ) τ) :
+      (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_record R e p rhs ⟩ --->
       ⟨ γ , μ , δ , stm_block (record_pattern_match_lit p (eval e δ)) rhs ⟩
 

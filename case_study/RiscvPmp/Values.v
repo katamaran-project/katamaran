@@ -38,14 +38,14 @@ From RiscvPmp Require Export
      Types.
 
 Set Implicit Arguments.
-Import CtxNotations.
+Import ctx.notations.
 Import EnvNotations.
 Local Open Scope string_scope.
 
 Module RiscvPmpValueKit <: ValueKit.
   Module typekit := RiscvPmpTypeKit.
   Module Export TY := Syntax.Types.Types typekit.
-  Import NameResolution.
+  Import ctx.resolution.
 
   Notation ty_xlenbits         := (ty_int).
   Notation ty_word             := (ty_int).

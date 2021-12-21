@@ -41,7 +41,8 @@ From Equations Require Import
      Equations.
 
 Set Implicit Arguments.
-Import CtxNotations.
+Import ctx.resolution.
+Import ctx.notations.
 Import EnvNotations.
 Import ListNotations.
 Open Scope string_scope.
@@ -110,7 +111,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env_nil ► (ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits) ↦ l)))).
 
   Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
-    ctx_map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
+    ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
 
   Definition create_localstore (Δ : PCtx) (Σ : LCtx) : SStore Δ (sep_contract_logvars Δ Σ) :=
     (env_tabulate (fun '(x::σ) xIn =>
@@ -118,7 +119,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
                        (sep_contract_logvars Δ Σ)
                        x
                        σ
-                       (inctx_cat_left Σ (inctx_map (fun '(y::τ) => y::τ) xIn)))).
+                       (ctx.in_cat_left Σ (ctx.in_map (fun '(y::τ) => y::τ) xIn)))).
 
   Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
     SepContract Δ τ.
@@ -131,8 +132,8 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
 
   Fixpoint asn_exists {Σ} (Γ : NCtx string Ty) : Assertion (Σ ▻▻ Γ) -> Assertion Σ :=
     match Γ return Assertion (Σ ▻▻ Γ) -> Assertion Σ with
-    | ctx_nil => fun asn => asn
-    | ctx_snoc Γ (x :: τ) =>
+    | ctx.nil => fun asn => asn
+    | ctx.snoc Γ (x :: τ) =>
       fun asn =>
         @asn_exists Σ Γ (asn_exist x τ asn)
     end.
@@ -479,7 +480,7 @@ Section Debug.
   Import RiscvμSailNotations.
   Coercion stm_exp : Exp >-> Stm.
 
-  Notation "x" := (@term_var _ x%string _ (@MkInCtx _ (x%string :: _) _ _ _)) (at level 1, only printing).
+  Notation "x" := (@term_var _ x%string _ (@ctx.MkIn _ (x%string :: _) _ _ _)) (at level 1, only printing).
   Notation "s = t" := (@formula_eq _ _ s t) (only printing).
   Notation "' t" := (@formula_bool _ t) (at level 0, only printing, format "' t").
   Notation "F ∧ P" := (@SymProp.assertk _ F _ P) (at level 80, right associativity, only printing).
@@ -494,7 +495,7 @@ Section Debug.
   Notation "P ∧ Q" := (@SymProp.demonic_binary _ P Q) (at level 80, right associativity, only printing).
   Notation "P ∨ Q" := (@SymProp.angelic_binary _ P Q) (at level 85, right associativity, only printing).
 
-  Definition fun_execute_ECALL' : Stm ctx_nil ty_retired :=
+  Definition fun_execute_ECALL' : Stm ctx.nil ty_retired :=
     let: tmp1 := stm_read_register cur_privilege in
     let: t := match: tmp1 in privilege with
               | Machine => E_M_EnvCall

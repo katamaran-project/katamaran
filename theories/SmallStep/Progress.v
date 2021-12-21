@@ -39,15 +39,11 @@ Module Progress
        (Import progkit : ProgramKit termkit).
   Module Import SS := SmallStep termkit progkit.
 
-  Lemma can_form_store_cat (Γ Δ : PCtx) (δ : CStore (ctx_cat Γ Δ)) :
-    exists (δ1 : CStore Γ) (δ2 : CStore Δ), δ = env_cat δ1 δ2.
-  Proof. pose (env_cat_split δ); eauto. Qed.
-
   Local Ltac progress_can_form :=
     match goal with
     (* | [ H: CStore (ctx_snoc _ _) |- _ ] => pose proof (can_form_store_snoc H) *)
     (* | [ H: CStore ctx_nil |- _ ] => pose proof (can_form_store_nil H) *)
-    | [ H: CStore (ctx_cat _ _) |- _ ] => pose proof (can_form_store_cat _ _ H)
+    | [ H: CStore (ctx.cat _ _) |- _ ] => destruct (catView H)
     | [ H: Final ?s |- _ ] => destruct s; cbn in H
     end; destruct_conjs; subst; try contradiction.
 
@@ -65,7 +61,7 @@ Module Progress
 
   Local Ltac progress_inst T :=
     match goal with
-    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStore (ctx_cat ?Γ ?Δ)), _),
+    | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStore (ctx.cat ?Γ ?Δ)), _),
         γ : RegStore, μ : Memory, δ1: CStore ?Γ, δ2: CStore ?Δ |- _
       ] => specialize (IH γ μ (env_cat δ1 δ2)); T
     (* | [ IH: (forall (δ : CStore (ctx_snoc ctx_nil (?x , ?σ))), _), *)

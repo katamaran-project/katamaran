@@ -33,7 +33,7 @@ From Coq Require Import
 From Katamaran Require Export
      Syntax.Types.
 
-Import CtxNotations.
+Import ctx.notations.
 
 Local Set Implicit Arguments.
 

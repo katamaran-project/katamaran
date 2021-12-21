@@ -54,7 +54,7 @@ From Katamaran Require Export
      Syntax.Types
      Syntax.Values.
 
-Import CtxNotations.
+Import ctx.notations.
 Import EnvNotations.
 
 Local Set Implicit Arguments.
@@ -241,7 +241,7 @@ Module Terms (Export termkit : TermKit).
     | exp_bvec    {n} (es : Vector.t (Exp Γ ty_bit) n) : Exp Γ (ty_bvec n)
     | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty_tuple σs)
     | exp_projtup {σs : Ctx Ty} (e : Exp Γ (ty_tuple σs)) (n : nat) {σ : Ty}
-                  {p : ctx_nth_is σs n σ} : Exp Γ σ
+                  {p : ctx.nth_is σs n σ} : Exp Γ σ
     | exp_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)) : Exp Γ (ty_union U)
     | exp_record  (R : 𝑹) (es : NamedEnv (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R).
     (* | exp_projrec {R : 𝑹} (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty} *)
@@ -280,7 +280,7 @@ Module Terms (Export termkit : TermKit).
       Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty_list σ) (exp_list es)).
       Hypothesis (P_bvec    : forall (n : nat) (es : Vector.t (Exp Γ ty_bit) n), PV es -> P (ty_bvec n) (exp_bvec es)).
       Hypothesis (P_tuple   : forall (σs : Ctx Ty) (es : Env (Exp Γ) σs), PE es -> P (ty_tuple σs) (exp_tuple es)).
-      Hypothesis (P_projtup : forall (σs : Ctx Ty) (e : Exp Γ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@exp_projtup _ _ e n _ p)).
+      Hypothesis (P_projtup : forall (σs : Ctx Ty) (e : Exp Γ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx.nth_is σs n σ), P σ (@exp_projtup _ _ e n _ p)).
       Hypothesis (P_union   : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (exp_union U K e)).
       Hypothesis (P_record  : forall (R : 𝑹) (es : NamedEnv (Exp Γ) (𝑹𝑭_Ty R)), PNE es -> P (ty_record R) (exp_record R es)).
       (* Hypothesis (P_projrec : forall (R : 𝑹) (e : Exp Γ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (exp_projrec e rf)). *)
@@ -311,16 +311,16 @@ Module Terms (Export termkit : TermKit).
     Import EnvNotations.
 
     Fixpoint tuple_proj (σs : Ctx Ty) (n : nat) (σ : Ty) :
-      Lit (ty_tuple σs) -> ctx_nth_is σs n σ -> Lit σ :=
+      Lit (ty_tuple σs) -> ctx.nth_is σs n σ -> Lit σ :=
       match σs with
-      | ctx_nil       => fun l (p : ctx_nth_is ctx_nil _ _) =>
-                           match p with end
-      | ctx_snoc τs τ => match n with
-                         | 0   => fun (l : Lit (ty_tuple (ctx_snoc _ _)))
-                                      (p : ctx_nth_is _ 0 _) =>
-                                    @eq_rect Ty τ Lit (snd l) σ p
-                         | S m => fun l p => tuple_proj τs m σ (fst l) p
-                         end
+      | ε      => fun l (p : ctx.nth_is ε _ _) =>
+                    match p with end
+      | τs ▻ τ => match n with
+                  | 0   => fun (l : Lit (ty_tuple (_ ▻ _)))
+                               (p : ctx.nth_is _ 0 _) =>
+                             @eq_rect Ty τ Lit (snd l) σ p
+                  | S m => fun l p => tuple_proj τs m σ (fst l) p
+                  end
       end.
 
     Definition eval_binop {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Lit σ1 -> Lit σ2 -> Lit σ3 :=
@@ -386,7 +386,7 @@ Module Terms (Export termkit : TermKit).
   Section Statements.
 
     Inductive TuplePat {N : Set} : Ctx Ty -> (NCtx N Ty) -> Set :=
-    | tuplepat_nil  : TuplePat ctx_nil ctx_nil
+    | tuplepat_nil  : TuplePat ε ε
     | tuplepat_snoc
         {σs : Ctx Ty} {Δ : NCtx N Ty}
         (pat : TuplePat σs Δ) {σ : Ty} (x : N) :
@@ -394,7 +394,7 @@ Module Terms (Export termkit : TermKit).
     Bind Scope pat_scope with TuplePat.
 
     Inductive RecordPat {N : Set} : NCtx 𝑹𝑭 Ty -> NCtx N Ty -> Set :=
-    | recordpat_nil  : RecordPat ctx_nil ctx_nil
+    | recordpat_nil  : RecordPat ε ε
     | recordpat_snoc
         {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
         (pat : RecordPat rfs Δ) (rf : 𝑹𝑭) {τ : Ty} (x : N) :
@@ -403,7 +403,7 @@ Module Terms (Export termkit : TermKit).
 
     Inductive Pattern {N : Set} : NCtx N Ty -> Ty -> Set :=
     | pat_var (x : N) {σ : Ty} : Pattern [ x∷σ ] σ
-    | pat_unit : Pattern ctx_nil ty_unit
+    | pat_unit : Pattern ε ty_unit
     | pat_pair (x y : N) {σ τ : Ty} : Pattern [ x∷σ , y∷τ ] (ty_prod σ τ)
     | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty_tuple σs)
     | pat_record {R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) : Pattern Δ (ty_record R).
@@ -596,36 +596,34 @@ Module Terms (Export termkit : TermKit).
   Bind Scope pat_scope with TuplePat.
   Bind Scope pat_scope with RecordPat.
 
-  (* Record FunDef (Δ : PCtx) (τ : Ty) : Set := *)
-  (*   { fun_body : Stm Δ τ }. *)
-
   Section NameResolution.
 
     (* Ideally the following smart constructors would perform name resolution
        and fill in the de Bruijn index and the type of a variable. Unfortunately,
        they critically rely on the order that type-checking is performed. For
-       instance in context Γ := (ε ▻ ("x", ty_int)) the expression
+       instance in context Γ := (ε ▻ "x"∷ty_int) the expression
        (@exp_smart_var Γ "x" tt) type-checks while the (@exp_smart_var _ "x" tt)
        fails to type-check with error message
 
          The term "tt" has type "unit" while it is expected
-         to have type "IsSome (ctx_resolve ?Γ0 "x")".
+         to have type "IsSome (ctx.resolve ?Γ0 "x")".
 
        So the variable ?Γ0 has not been unified and blocks the evaluation of
-       ctx_resolve. Unfortunately, Coq decides to fail immediately.
+       ctx.resolve. Unfortunately, Coq decides to fail immediately. This can be
+       can be solved using bidirectionality hints, but is brittle.
      *)
-    Definition exp_smart_var {Γ : PCtx} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
-      Exp Γ (fromSome (ctx_resolve Γ x) p) :=
-      @exp_var Γ x (fromSome (ctx_resolve Γ x) p) (mk_inctx Γ x p).
+    Definition exp_smart_var {Γ : PCtx} (x : 𝑿) {p : IsSome (ctx.resolve Γ x)} :
+      Exp Γ (fromSome (ctx.resolve Γ x) p) :=
+      @exp_var Γ x (fromSome (ctx.resolve Γ x) p) (ctx.resolve_mk_in Γ x p).
 
-    Definition stm_smart_assign {Γ : PCtx} (x : 𝑿) {p : IsSome (ctx_resolve Γ x)} :
-      Stm Γ (fromSome (ctx_resolve Γ x) p) -> Stm Γ (fromSome (ctx_resolve Γ x) p) :=
-      @stm_assign Γ (fromSome _ p) x (mk_inctx Γ x p).
+    Definition stm_smart_assign {Γ : PCtx} (x : 𝑿) {p : IsSome (ctx.resolve Γ x)} :
+      Stm Γ (fromSome (ctx.resolve Γ x) p) -> Stm Γ (fromSome (ctx.resolve Γ x) p) :=
+      @stm_assign Γ (fromSome _ p) x (ctx.resolve_mk_in Γ x p).
 
     (* Instead we hook mk_inctx directly into the typeclass resolution mechanism.
        Apparently, the unification of Γ is performed before the resolution so
        evaluation of ctx_resolve and mk_inctx is not blocked. This hook is more
-       generally defined in MicroSail.Context.
+       generally defined in Context.
      *)
 
   End NameResolution.
@@ -655,7 +653,7 @@ Module Terms (Export termkit : TermKit).
     | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2)
     (* Experimental features *)
     | term_projtup {σs : Ctx Ty} (e : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
-                   {p : ctx_nth_is σs n σ} : Term Σ σ
+                   {p : ctx.nth_is σs n σ} : Term Σ σ
     | term_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)) : Term Σ (ty_union U)
     | term_record  (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R).
     (* | term_projrec {R : 𝑹} (e : Term Σ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty} *)
@@ -721,7 +719,7 @@ Module Terms (Export termkit : TermKit).
       Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
       Hypothesis (P_bvec       : forall (n : nat) (es : Vector.t (Term Σ ty_bit) n), PV es -> P (ty_bvec n) (term_bvec es)).
       Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
-      Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx_nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
+      Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx.nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
       Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union U K e)).
       Hypothesis (P_record     : forall (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)), PNE es -> P (ty_record R) (term_record R es)).
       (* Hypothesis (P_projrec    : forall (R : 𝑹) (e : Term Σ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (term_projrec e rf)). *)
@@ -748,7 +746,7 @@ Module Terms (Export termkit : TermKit).
 
     Equations(noind) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
       Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
-        InCtx_eqb ς1inΣ ς2inΣ;
+        ctx.In_eqb ς1inΣ ς2inΣ;
       Term_eqb (term_lit _ l1) (term_lit _ l2) := Lit_eqb _ l1 l2;
       Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
         with binop_eqdep_dec op1 op2 => {
@@ -852,7 +850,7 @@ Module Terms (Export termkit : TermKit).
         fun E =>
           env_snoc
             (record_pattern_match_env p (env_tail E)) (x∷_)
-            (env_lookup E inctx_zero)
+            (env_lookup E ctx.in_zero)
       end.
 
     Fixpoint record_pattern_match_env_reverse {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
@@ -863,7 +861,7 @@ Module Terms (Export termkit : TermKit).
         fun E =>
           env_snoc
             (record_pattern_match_env_reverse p (env_tail E)) (rf∷_)
-            (env_lookup E inctx_zero)
+            (env_lookup E ctx.in_zero)
       end.
 
     Lemma record_pattern_match_env_inverse_right {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
@@ -1043,25 +1041,25 @@ Module Terms (Export termkit : TermKit).
     Definition sub_shift {Σ b} (bIn : b ∈ Σ) : Sub (Σ - b) Σ :=
       env_tabulate
         (D := fun b => Term Σ (type b))
-        (fun '(x∷τ) xIn => @term_var Σ x τ (shift_var bIn xIn)).
+        (fun '(x∷τ) xIn => @term_var Σ x τ (ctx.shift_var bIn xIn)).
 
     Definition sub_wk1 {Σ b} : Sub Σ (Σ ▻ b) :=
       env_tabulate
         (D := fun b => Term _ (type b))
-        (fun '(ς∷σ) ςIn => @term_var _ ς σ (inctx_succ ςIn)).
+        (fun '(ς∷σ) ςIn => @term_var _ ς σ (ctx.in_succ ςIn)).
 
     Definition sub_cat_left {Σ} Δ : Sub Σ (Σ ▻▻ Δ) :=
       env_tabulate
         (D := fun b => Term _ (type b))
-        (fun '(ς∷σ) ςIn => @term_var _ ς σ (inctx_cat_left Δ ςIn)).
+        (fun '(ς∷σ) ςIn => @term_var _ ς σ (ctx.in_cat_left Δ ςIn)).
 
     Definition sub_cat_right {Σ} Δ : Sub Δ (Σ ▻▻ Δ) :=
       env_tabulate
         (D := fun b => Term _ (type b))
-        (fun '(ς∷σ) ςIn => @term_var _ ς σ (inctx_cat_right ςIn)).
+        (fun '(ς∷σ) ςIn => @term_var _ ς σ (ctx.in_cat_right ςIn)).
 
     Definition sub_up1 {Σ1 Σ2} (ζ : Sub Σ1 Σ2) {b} : Sub (Σ1 ▻ b) (Σ2 ▻ b) :=
-      sub_snoc (subst ζ sub_wk1) b (let '(ς∷σ) := b in @term_var _ ς σ inctx_zero).
+      sub_snoc (subst ζ sub_wk1) b (let '(ς∷σ) := b in @term_var _ ς σ ctx.in_zero).
 
     Definition sub_up {Σ1 Σ2} (ζ : Sub Σ1 Σ2) Δ : Sub (Σ1 ▻▻ Δ) (Σ2 ▻▻ Δ) :=
       subst ζ (sub_cat_left Δ) ►► sub_cat_right Δ.
@@ -1071,7 +1069,7 @@ Module Terms (Export termkit : TermKit).
         _ (fun b => Term _ (type b)) _
         (fun '(y∷τ) =>
            fun yIn =>
-             match occurs_check_var xIn yIn with
+             match ctx.occurs_check_var xIn yIn with
              | inl e => eq_rect σ (Term (Σ - x∷σ)) t τ (f_equal type e)
              | inr i => term_var y
              end).
@@ -1171,20 +1169,20 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma lookup_sub_wk1 {Σ x σ b} (xIn : x∷σ ∈ Σ) :
-      env_lookup (@sub_wk1 Σ b) xIn = @term_var _ _ _ (inctx_succ xIn).
+      env_lookup (@sub_wk1 Σ b) xIn = @term_var _ _ _ (ctx.in_succ xIn).
     Proof. unfold sub_wk1; now rewrite env_lookup_tabulate. Qed.
 
     Lemma lookup_sub_shift {Σ x σ b} (bIn : b ∈ Σ) (xIn : x∷σ ∈ (Σ - b)) :
-      env_lookup (@sub_shift Σ b bIn) xIn = @term_var Σ x σ (shift_var bIn xIn).
+      env_lookup (@sub_shift Σ b bIn) xIn = @term_var Σ x σ (ctx.shift_var bIn xIn).
     Proof. unfold sub_shift; now rewrite env_lookup_tabulate. Qed.
 
     Lemma lookup_sub_single_eq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       env_lookup (sub_single xIn t) xIn = t.
-    Proof. unfold sub_single. now rewrite env_lookup_tabulate, occurs_check_var_refl. Qed.
+    Proof. unfold sub_single. now rewrite env_lookup_tabulate, ctx.occurs_check_var_refl. Qed.
 
     Lemma lookup_sub_single_neq {Σ x σ y τ} (xIn : x ∷ σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (yIn : y∷τ ∈ Σ - x∷σ) :
-      env_lookup (sub_single xIn t) (shift_var xIn yIn) = term_var y.
-    Proof. unfold sub_single. now rewrite env_lookup_tabulate, occurs_check_shift_var. Qed.
+      env_lookup (sub_single xIn t) (ctx.shift_var xIn yIn) = term_var y.
+    Proof. unfold sub_single. now rewrite env_lookup_tabulate, ctx.occurs_check_shift_var. Qed.
 
     Lemma sub_comp_id_left {Σ0 Σ1} (ζ : Sub Σ0 Σ1) :
       subst (sub_id Σ0) ζ = ζ.
@@ -1259,7 +1257,7 @@ Module Terms (Export termkit : TermKit).
       unfold sub_up1.
       rewrite sub_comp_id_left.
       apply env_lookup_extensional. intros y yIn.
-      destruct (Context.snocView yIn) as [|[y τ] yIn].
+      destruct (ctx.snocView yIn) as [|[y τ] yIn].
       - reflexivity.
       - rewrite lookup_sub_id. cbn.
         now rewrite lookup_sub_wk1.
@@ -1303,7 +1301,7 @@ Module Terms (Export termkit : TermKit).
     Fixpoint occurs_check_term {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
       match t with
       | @term_var _ ς σ0 ςInΣ =>
-        match occurs_check_var xIn ςInΣ with
+        match ctx.occurs_check_var xIn ςInΣ with
         | inl e     => None
         | inr ςInΣ' => Some (@term_var _ _ _ ςInΣ')
         end
@@ -1407,7 +1405,7 @@ Module Terms (Export termkit : TermKit).
         induction t; cbn.
         + unfold sub_shift. rewrite env_lookup_tabulate.
           cbv [occurs_check_term base.mbind option.option_bind].
-          now rewrite occurs_check_shift_var.
+          now rewrite ctx.occurs_check_shift_var.
         + solve.
         + solve.
         + solve.
@@ -1424,8 +1422,8 @@ Module Terms (Export termkit : TermKit).
       - unfold occurs_check, OccursCheckTerm, subst, SubstTerm.
         intros ? ? ? t t' H1.
         induction t; cbn in H1.
-        + pose proof (occurs_check_var_spec xIn ςInΣ) as H2.
-          destruct (occurs_check_var xIn ςInΣ); apply noConfusion_inv in H1;
+        + pose proof (ctx.occurs_check_var_spec xIn ςInΣ) as H2.
+          destruct (ctx.occurs_check_var xIn ςInΣ); apply noConfusion_inv in H1;
             cbn in H1; try contradiction; subst; cbn.
           destruct H2 as [H2 H3]. subst. unfold sub_shift.
           now rewrite env_lookup_tabulate.
@@ -1681,15 +1679,15 @@ Module Terms (Export termkit : TermKit).
       intros HYP. apply env_lookup_extensional. intros [y τ] yIn.
       unfold inst, sub_single; cbn.
       rewrite env_lookup_map, env_lookup_tabulate.
-      pose proof (occurs_check_var_spec xIn yIn).
-      destruct (occurs_check_var xIn yIn).
+      pose proof (ctx.occurs_check_var_spec xIn yIn).
+      destruct (ctx.occurs_check_var xIn yIn).
       * dependent elimination e. subst yIn. exact HYP.
       * destruct H; subst yIn. cbn. unfold env_remove'.
         now rewrite env_lookup_tabulate.
     Qed.
 
     Lemma sub_single_zero {Σ : LCtx} {x : 𝑺} {σ : Ty} (t : Term Σ σ) :
-      (sub_single inctx_zero t) = env_snoc (sub_id Σ) (x∷σ) t.
+      (sub_single ctx.in_zero t) = env_snoc (sub_id Σ) (x∷σ) t.
     Proof.
       eapply env_lookup_extensional.
       intros [x' σ'] ([|n] & eq).
@@ -1709,8 +1707,8 @@ Module Terms (Export termkit : TermKit).
       apply env_lookup_extensional.
       intros [y τ] yIn.
       rewrite env_lookup_map, ?env_lookup_tabulate.
-      assert (ovs := occurs_check_var_spec xIn yIn).
-      destruct (occurs_check_var xIn yIn).
+      assert (ovs := ctx.occurs_check_var_spec xIn yIn).
+      destruct (ctx.occurs_check_var xIn yIn).
       - now dependent elimination e.
       - now reflexivity.
     Qed.
@@ -2453,12 +2451,12 @@ Module Terms (Export termkit : TermKit).
      "'let:'  x  :=  s1  'in'  '/' s2"
     ) : exp_scope.
   Notation "'let:' x ∷ τ := s1 'in' s2" := (stm_let x%string τ s1%exp s2%exp)
-    (at level 100, right associativity, x at level 30, τ at next level, s1 at next level, format
-     "'let:'  x  ∷  τ  :=  s1  'in'  '/' s2"
+    (at level 100, right associativity, x at level 30, τ at next level, s1 at next level,
+     format "'let:'  x  ∷  τ  :=  s1  'in'  '/' s2"
     ) : exp_scope.
   Notation "'let:' x :: τ := s1 'in' s2" := (stm_let x%string τ s1%exp s2%exp)
-    (at level 100, right associativity, x at level 30, τ at next level, s1 at next level, format
-     "'let:'  x  ::  τ  :=  s1  'in'  '/' s2", only parsing
+    (at level 100, right associativity, x at level 30, τ at next level, s1 at next level,
+    (* format "'let:'  x  ::  τ  :=  s1  'in'  '/' s2", *) only parsing
     ) : exp_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 'end'" :=
     (stm_match_enum τ e (fun K => match K with

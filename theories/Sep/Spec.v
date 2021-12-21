@@ -49,7 +49,7 @@ From Katamaran Require Import
 From Equations Require Import
      Equations.
 
-Import CtxNotations.
+Import ctx.notations.
 Import EnvNotations.
 
 Set Implicit Arguments.
@@ -679,7 +679,7 @@ Module Assertions
           wco  : PathCondition wctx;
         }.
 
-    Definition wnil : World := @MkWorld ctx_nil nil.
+    Definition wnil : World := @MkWorld ctx.nil nil.
     Definition wsnoc (w : World) (b : 𝑺 ∷ Ty) : World :=
       @MkWorld (wctx w ▻ b) (subst (wco w) sub_wk1).
     Definition wformula (w : World) (f : Formula w) : World :=
@@ -1497,7 +1497,7 @@ Module Assertions
     Definition occurs_check_lt {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
       match t with
       | @term_var _ y σ yIn =>
-        if Nat.ltb (inctx_at xIn) (inctx_at yIn) then occurs_check xIn t else None
+        if Nat.ltb (ctx.in_at xIn) (ctx.in_at yIn) then occurs_check xIn t else None
       | _ => occurs_check xIn t
       end.
 
@@ -1507,7 +1507,7 @@ Module Assertions
       unfold occurs_check_lt. intros Heq.
       refine (occurs_check_sound xIn t (t' := t') _).
       destruct t; auto.
-      destruct (inctx_at xIn <? inctx_at ςInΣ); auto.
+      destruct (ctx.in_at xIn <? ctx.in_at ςInΣ); auto.
       discriminate.
     Qed.
 
@@ -1935,6 +1935,7 @@ Module Assertions
       | asn_debug => asn_debug
       end.
 
+  (* This instance is only used for linting contracts. *)
   Global Instance OccursCheckAssertion :
     OccursCheck Assertion :=
     fix occurs Σ b (bIn : b ∈ Σ) (asn : Assertion Σ) : option (Assertion (Σ - b)) :=
@@ -1951,8 +1952,8 @@ Module Assertions
                 (fun s' alt_inl' alt_inr' =>
                    asn_match_sum σ τ s' xl alt_inl' xr alt_inr')
                 (occurs_check bIn s))
-             (occurs (Σ ▻ xl∷σ) b (inctx_succ bIn) alt_inl))
-          (occurs (Σ ▻ xr∷τ) b (inctx_succ bIn) alt_inr)
+             (occurs (Σ ▻ xl∷σ) b (ctx.in_succ bIn) alt_inl))
+          (occurs (Σ ▻ xr∷τ) b (ctx.in_succ bIn) alt_inr)
       | @asn_match_list _ σ s alt_nil xh xt alt_cons => None (* TODO *)
       | @asn_match_prod _ σ1 σ2 s xl xr rhs => None (* TODO *)
       | @asn_match_tuple _ σs Δ s p rhs => None (* TODO *)
@@ -1960,7 +1961,7 @@ Module Assertions
       | asn_match_union U s alt__ctx alt__pat alt__rhs => None (* TODO *)
       | asn_sep a1 a2 => option_ap (option_map (@asn_sep _) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
       | asn_or a1 a2  => option_ap (option_map (@asn_or _) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
-      | asn_exist ς τ a => option_map (@asn_exist _ ς τ) (occurs _ _ (inctx_succ bIn) a)
+      | asn_exist ς τ a => option_map (@asn_exist _ ς τ) (occurs _ _ (ctx.in_succ bIn) a)
       | asn_debug => Some asn_debug
       end.
 
@@ -1991,7 +1992,7 @@ Module Assertions
          sep_contract_localstore      := δ;
          sep_contract_precondition    := pre
       |} =>
-      ctx_forallb Σ
+      ctx.forallb Σ
         (fun b bIn =>
            match occurs_check bIn (δ , pre) with
            | Some _ => false
@@ -2005,7 +2006,7 @@ Module Assertions
          lemma_patterns        := δ;
          lemma_precondition    := pre
       |} =>
-      ctx_forallb Σ
+      ctx.forallb Σ
         (fun b bIn =>
            match occurs_check bIn (δ , pre) with
            | Some _ => false
@@ -2209,7 +2210,7 @@ Module Assertions
   Section Experimental.
 
     Definition sep_contract_pun_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
-      ctx_map (fun '(x∷σ) => (𝑿to𝑺 x∷σ)) Δ ▻▻ Σ.
+      ctx.map (fun '(x∷σ) => (𝑿to𝑺 x∷σ)) Δ ▻▻ Σ.
 
     Record SepContractPun (Δ : PCtx) (τ : Ty) : Type :=
       MkSepContractPun
@@ -2239,7 +2240,7 @@ Module Assertions
                                (sep_contract_pun_logvars Δ Σ)
                                (𝑿to𝑺 x)
                                σ
-                               (inctx_cat_left Σ (inctx_map (fun '(y∷τ) => (𝑿to𝑺 y∷τ)) xIn))))
+                               (ctx.in_cat_left Σ (ctx.in_map (fun '(y∷τ) => (𝑿to𝑺 y∷τ)) xIn))))
             req result ens
         end.
 
@@ -2344,7 +2345,7 @@ Module Assertions
     Fixpoint shift_emsg {Σ b} (bIn : b ∈ Σ) (emsg : EMessage (Σ - b)) : EMessage Σ :=
       match emsg with
       | EMsgHere msg   => EMsgHere (subst msg (sub_shift bIn))
-      | EMsgThere emsg => EMsgThere (shift_emsg (inctx_succ bIn) emsg)
+      | EMsgThere emsg => EMsgThere (shift_emsg (ctx.in_succ bIn) emsg)
       end.
 
     Inductive SymProp (Σ : LCtx) : Type :=
@@ -2403,8 +2404,8 @@ Module Assertions
       forall Σ, 𝕊 Σ -> 𝕊 ε :=
       fix close Σ :=
         match Σ with
-        | ctx_nil      => fun k => k
-        | ctx_snoc Σ b => fun k => close Σ (@demonicv Σ b k)
+        | ε     => fun k => k
+        | Σ ▻ b => fun k => close Σ (@demonicv Σ b k)
         end.
 
     (* Global Instance persistent_spath : Persistent 𝕊 := *)

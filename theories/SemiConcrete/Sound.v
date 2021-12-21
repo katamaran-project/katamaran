@@ -40,7 +40,7 @@ From Katamaran Require Import
 
 Set Implicit Arguments.
 
-Import CtxNotations.
+Import ctx.notations.
 Import EnvNotations.
 
 Module Soundness

@@ -49,6 +49,7 @@ From Katamaran Require Import
      SmallStep.Step
      Syntax.
 Require Import Katamaran.Notation.
+Import ctx.notations.
 
 (* can't import: overlapping notations *)
 Require Katamaran.Sep.Logic.
@@ -178,7 +179,6 @@ Module IrisRegisters
        (Import contractkit : SymbolicContractKit termkit progkit assertkit)
        .
 
-  Import CtxNotations.
   Import EnvNotations.
 
   Module PL := ProgramLogic termkit progkit assertkit contractkit.
@@ -212,7 +212,6 @@ Module Type IrisHeapKit
        (Import contractkit : SymbolicContractKit termkit progkit assertkit)
        .
 
-  Import CtxNotations.
   Import EnvNotations.
 
   Module IrisRegs := IrisRegisters termkit progkit assertkit contractkit.
@@ -249,7 +248,6 @@ Module IrisInstance
        (Import contractkit : SymbolicContractKit termkit progkit assertkit)
        (Import irisheapkit : IrisHeapKit termkit progkit assertkit contractkit).
 
-  Import CtxNotations.
   Import EnvNotations.
 
   Section IrisInstance.
@@ -435,7 +433,6 @@ Module IrisSoundness
 
   Module Inst := IrisInstance termkit progkit assertkit contractkit irisheapkit.
   Export Inst.
-  Import CtxNotations.
   Import EnvNotations.
 
   Section IrisSoundness.
@@ -720,7 +717,7 @@ Module IrisSoundness
   Qed.
 
   Lemma iris_rule_stm_let {Γ} (δ : CStore Γ)
-        (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x∷σ)) τ)
+        (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
         (P : iProp Σ) (Q : Lit σ -> CStore Γ -> iProp Σ)
         (R : Lit τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s Q -∗
@@ -775,7 +772,7 @@ Module IrisSoundness
   Qed.
 
   Lemma iris_rule_stm_let_forwards {Γ} (δ : CStore Γ)
-        (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (ctx_snoc Γ (x∷σ)) τ)
+        (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
         (P : iProp Σ) (Q : Lit σ -> CStore Γ -> iProp Σ)
         (R : Lit τ -> CStore (Γ ▻ x∷σ) -> iProp Σ) :
         ⊢ (semTriple δ P s Q -∗
@@ -796,7 +793,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_block {Γ} (δ : CStore Γ)
         (Δ : PCtx) (δΔ : CStore Δ)
-        (τ : Ty) (k : Stm (ctx_cat Γ Δ) τ)
+        (τ : Ty) (k : Stm (Γ ▻▻ Δ) τ)
         (P : iProp Σ) (R : Lit τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env_drop Δ δ'')) -∗
                    semTriple δ P (stm_block δΔ k) R)%I.
@@ -936,7 +933,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_match_list {Γ} (δ : CStore Γ)
         {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
-        (xh xt : 𝑿) (alt_cons : Stm (ctx_snoc (ctx_snoc Γ (xh∷σ)) (xt∷ty_list σ)) τ)
+        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty_list σ) τ)
         (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ (P ∧ bi_pure (eval e δ = [])) alt_nil (fun v' δ' => Q v' δ') -∗
                      (∀ v vs, semTriple (env_snoc (env_snoc δ (xh∷σ) v) (xt∷ty_list σ) vs) (P ∧ bi_pure (eval e δ = cons v vs)) alt_cons (fun v' δ' => Q v' (env_tail (env_tail δ')))) -∗
@@ -971,8 +968,8 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_match_sum {Γ} (δ : CStore Γ)
         (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr))
-                         (xinl : 𝑿) (alt_inl : Stm (ctx_snoc Γ (xinl∷σinl)) τ)
-                         (xinr : 𝑿) (alt_inr : Stm (ctx_snoc Γ (xinr∷σinr)) τ)
+                         (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
+                         (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
                          (P : iProp Σ)
                          (Q : Lit τ -> CStore Γ -> iProp Σ) :
         ⊢ ((∀ v, semTriple (env_snoc δ (xinl∷σinl) v) (P ∧ ⌜ eval e δ = inl v ⌝) alt_inl (fun v' δ' => Q v' (env_tail δ'))) -∗
@@ -1008,7 +1005,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_match_prod {Γ} (δ : CStore Γ)
         {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
-        (xl xr : 𝑿) (rhs : Stm (ctx_snoc (ctx_snoc Γ (xl∷σ1)) (xr∷σ2)) τ)
+        (xl xr : 𝑿) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
         (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
         ⊢ ((∀ vl vr,
             semTriple (env_snoc (env_snoc δ (xl∷σ1) vl) (xr∷σ2) vr)
@@ -1060,7 +1057,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_match_tuple {Γ} (δ : CStore Γ)
         {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
-        (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
+        (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (Γ ▻▻ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
     ⊢ ((semTriple (env_cat δ (tuple_pattern_match_lit p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
        semTriple δ P (stm_match_tuple e p rhs) Q)%I.
@@ -1086,7 +1083,7 @@ Module IrisSoundness
         {U : 𝑼} (e : Exp Γ (ty_union U)) {σ τ : Ty}
         (alt__Δ : forall (K : 𝑼𝑲 U), PCtx)
         (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
-        (alt__r : forall (K : 𝑼𝑲 U), Stm (ctx_cat Γ (alt__Δ K)) τ)
+        (alt__r : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__Δ K) τ)
         (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
         ⊢ ((∀ (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
                semTriple (env_cat δ (pattern_match_lit (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env_drop (alt__Δ K) δ'))) -∗
@@ -1118,7 +1115,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_match_record {Γ} (δ : CStore Γ)
         {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
-        (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (ctx_cat Γ Δ) τ)
+        (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (Γ ▻▻ Δ) τ)
         (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
         ⊢ ((semTriple (env_cat δ (record_pattern_match_lit p (eval e δ))) P rhs (fun v δ' => Q v (env_drop Δ δ'))) -∗
         semTriple δ P (stm_match_record R e p rhs) Q)%I.
@@ -1641,7 +1638,6 @@ Module Adequacy
        (Import contractkit : SymbolicContractKit termkit progkit assertkit)
        (Import irisheapkit : IrisHeapKit termkit progkit assertkit contractkit).
 
-  Import CtxNotations.
   Import EnvNotations.
 
   Module PL := ProgramLogic termkit progkit assertkit contractkit.

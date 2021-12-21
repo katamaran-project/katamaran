@@ -47,7 +47,7 @@ From stdpp Require decidable finite.
 From iris_string_ident Require Import ltac2_string_ident.
 
 Set Implicit Arguments.
-Import CtxNotations.
+Import ctx.notations.
 Import EnvNotations.
 Open Scope string_scope.
 Open Scope list_scope.
@@ -163,7 +163,7 @@ Module ExampleTermKit <: TermKit.
   Definition 𝑺        := string.
   Definition 𝑺_eq_dec := string_dec.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-  Definition fresh := Context.fresh (T := Ty).
+  Definition fresh := ctx.fresh (T := Ty).
 
   Notation PCtx := (NCtx 𝑿 Ty).
   Notation LCtx := (NCtx 𝑺 Ty).
@@ -219,7 +219,7 @@ End ExampleTermKit.
 
 Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
   Module Export TM := Terms ExampleTermKit.
-  Import NameResolution.
+  Import ctx.resolution.
 
   Local Coercion stm_exp : Exp >-> Stm.
 
@@ -380,7 +380,7 @@ Module SepContracts.
   Module ExampleSymbolicContractKit <:
     SymbolicContractKit ExampleTermKit ExampleProgramKit ExampleAssertionKit.
     Module Export ASS := Assertions ExampleTermKit ExampleProgramKit ExampleAssertionKit.
-    Import NameResolution.
+    Import ctx.resolution.
 
     Local Notation "p '↦l' xs" := (asn_chunk (chunk_user ptstolist (env_nil ► (llist ↦ p) ► (ty_list ty_int ↦ xs)))) (at level 100).
     Local Notation "p '∗' q" := (asn_sep p q) (at level 150).

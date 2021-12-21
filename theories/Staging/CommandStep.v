@@ -97,7 +97,7 @@ Module SmallStep
   (Import termkit : TermKit)
   (Import progKit : ProgramKit termkit).
 
-  Import CtxNotations.
+  Import ctx.notations.
   Import EnvNotations.
 
   Reserved Notation "⟨ γ1 , μ1 , c1 ⟩ ---> ⟨ γ2 , μ2 , s2 ⟩" (at level 75, no associativity).

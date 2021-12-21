@@ -33,6 +33,8 @@ From Katamaran Require Import
      Attic.Disjoint Sep.Hoare Sep.Spec
      SmallStep.Inversion Syntax.
 
+Import ctx.notations.
+
 Module HoareSound
        (Import termkit : TermKit)
        (Import progkit : ProgramKit termkit)
@@ -52,7 +54,6 @@ Module HoareSound
   Section Soundness.
 
     Open Scope logic.
-    Import CtxNotations.
     Import EnvNotations.
 
     Local Ltac sound_inversion :=
@@ -93,9 +94,9 @@ Module HoareSound
       | [ H: ?x = ?x |- _ ] => clear H
       | [ H: True |- _ ] => clear H
       | [ H: False |- _ ] => destruct H
-      | [ H: Env _ (ctx_snoc _ _) |- _ ] =>
+      | [ H: Env _ (_ ▻ _) |- _ ] =>
         dependent elimination H
-      | [ H: Env _ ctx_nil |- _ ] =>
+      | [ H: Env _ ε |- _ ] =>
         dependent elimination H
       | [ H: context[env_drop _ (_ ►► _)]|- _] =>
         rewrite env_drop_cat in H

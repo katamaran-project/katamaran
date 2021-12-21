@@ -128,7 +128,7 @@ Module Disjoint
       end; cbn in *; try congruence; try eauto with seplogic.
 
   Create HintDb seplogic.
-  Hint Unfold bientails : seplogic.
+  Local Hint Unfold bientails : seplogic.
 
   Lemma split_eq {γ1 γ2 γl γr} :
     split γ1 γl γr -> split γ2 γl γr -> γ1 = γ2.
@@ -150,7 +150,7 @@ Module Disjoint
 
   Lemma split_comm : forall γ γ1 γ2, split γ γ1 γ2 -> split γ γ2 γ1.
   Proof. heap_solve_split. Qed.
-  Hint Resolve split_comm : seplogic.
+  Local Hint Resolve split_comm : seplogic.
 
   Lemma split_emp : forall γ γ1, split γ emp γ1 <-> γ = γ1.
   Proof.
@@ -161,7 +161,7 @@ Module Disjoint
       heap_solve_split.
     - heap_solve_split.
   Qed.
-  Hint Resolve split_emp : seplogic.
+  Local Hint Resolve split_emp : seplogic.
 
   Lemma split_assoc_l : forall γ γl γr γll γlr,
     split γ γl γr -> split γl γll γlr ->
@@ -174,7 +174,7 @@ Module Disjoint
                end).
     split; heap_solve_split.
   Qed.
-  Hint Resolve split_assoc_l : seplogic.
+  Local Hint Resolve split_assoc_l : seplogic.
 
   Lemma split_assoc_r : forall γ γl γr γrl γrr,
     split γ γl γr -> split γr γrl γrr ->
@@ -187,7 +187,7 @@ Module Disjoint
                end).
     split; heap_solve_split.
   Qed.
-  Hint Resolve split_assoc_r : seplogic.
+  Local Hint Resolve split_assoc_r : seplogic.
 
   Lemma sepcon_comm : forall (P Q : HProp), P ✱ Q ⊢ Q ✱ P.
   Proof.
@@ -199,7 +199,7 @@ Module Disjoint
     + apply (@split_comm _ _ _ H1).
     + firstorder.
   Qed.
-  Hint Resolve sepcon_comm : seplogic.
+  Local Hint Resolve sepcon_comm : seplogic.
 
   Lemma sepcon_assoc_forward : forall (P Q R : HProp), P ✱ Q ✱ R ⊢ P ✱ (Q ✱ R).
   Proof.
@@ -217,7 +217,7 @@ Module Disjoint
     + exists γr'. exists γr.
       intuition.
   Qed.
-  Hint Resolve sepcon_assoc_forward : seplogic.
+  Local Hint Resolve sepcon_assoc_forward : seplogic.
 
   Lemma sepcon_assoc_backward : forall (P Q R : HProp), P ✱ (Q ✱ R) ⊢ P ✱ Q ✱ R.
   Proof.
@@ -237,7 +237,7 @@ Module Disjoint
         intuition.
       + intuition.
   Qed.
-  Hint Resolve sepcon_assoc_backward : seplogic.
+  Local Hint Resolve sepcon_assoc_backward : seplogic.
 
   Lemma wand_sepcon_adjoint : forall (P Q R : HProp),
       (P ✱ Q ⊢ R) <-> (P ⊢ Q -✱ R).
@@ -257,7 +257,7 @@ Module Disjoint
       destruct H1 as [γll [γlr [H_split [HP HQ]]]].
       exact (H γll HP γl γlr H_split HQ).
   Qed.
-  Hint Resolve wand_sepcon_adjoint : seplogic.
+  Local Hint Resolve wand_sepcon_adjoint : seplogic.
 
   Lemma sepcon_andp_prop_forward : forall (P R : HProp) (Q : Prop),
       (P ✱ (!!Q ∧ R)) ⊢ (!!Q ∧ (P ✱ R)).
@@ -270,7 +270,7 @@ Module Disjoint
       exists γl. exists γr.
       intuition.
   Qed.
-  Hint Resolve sepcon_andp_prop_forward : seplogic.
+  Local Hint Resolve sepcon_andp_prop_forward : seplogic.
 
   Lemma sepcon_andp_prop_backward : forall (P R : HProp) (Q : Prop),
       (!!Q ∧ (P ✱ R)) ⊢ (P ✱ (!!Q ∧ R)).
@@ -281,7 +281,7 @@ Module Disjoint
     exists γl, γr.
     split; intuition.
   Qed.
-  Hint Resolve sepcon_andp_prop_backward : seplogic.
+  Local Hint Resolve sepcon_andp_prop_backward : seplogic.
 
   Lemma sepcon_entails: forall (P P' Q Q' : HProp),
       P ⊢ P' -> Q ⊢ Q' -> P ✱ Q ⊢ P' ✱ Q'.
@@ -292,7 +292,7 @@ Module Disjoint
     exists γl, γr.
     intuition.
   Qed.
-  Hint Resolve sepcon_entails : seplogic.
+  Local Hint Resolve sepcon_entails : seplogic.
 
   Lemma sepcon_emp (P : HProp) : P ✱ Logic.emp ⊣⊢s P.
   Proof.
@@ -314,7 +314,7 @@ Module Disjoint
       assumption.
       reflexivity.
   Qed.
-  Hint Resolve sepcon_emp : seplogic.
+  Local Hint Resolve sepcon_emp : seplogic.
 
   Program Instance HProp_ISepLogicLaws : ISepLogicLaws HProp.
   Solve Obligations with eauto with seplogic.

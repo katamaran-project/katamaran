@@ -45,7 +45,7 @@ From Katamaran Require Import
 
 From stdpp Require base list option.
 
-Import CtxNotations.
+Import ctx.notations.
 Import EnvNotations.
 Import ListNotations.
 
@@ -128,12 +128,9 @@ Module SemiConcrete
       forall Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
-        | ctx_nil          => fun k => k env_nil
-        | ctx_snoc Δ (x∷σ) =>
-          fun k =>
-            angelic σ (fun v =>
-              rec Δ (fun EΔ =>
-                k (EΔ ► (x∷σ ↦ v))))
+        | ε       => fun k => k env_nil
+        | Δ ▻ x∷σ => fun k =>
+            angelic σ (fun v => rec Δ (fun EΔ => k (EΔ ► (x∷σ ↦ v))))
         end.
     Arguments angelic_ctx {N} Δ.
 
@@ -144,12 +141,9 @@ Module SemiConcrete
       forall Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
-        | ctx_nil          => fun k => k env_nil
-        | ctx_snoc Δ (x∷σ) =>
-          fun k =>
-            demonic σ (fun v =>
-              rec Δ (fun EΔ =>
-                k (EΔ ► (x∷σ ↦ v))))
+        | ε       => fun k => k env_nil
+        | Δ ▻ x∷σ => fun k =>
+            demonic σ (fun v => rec Δ (fun EΔ => k (EΔ ► (x∷σ ↦ v))))
         end.
     Arguments demonic_ctx {N} Δ.
 

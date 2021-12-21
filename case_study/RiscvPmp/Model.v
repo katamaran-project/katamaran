@@ -52,12 +52,12 @@ Module RiscvPmpModel.
   Ltac destruct_syminstance ι :=
     repeat
       match type of ι with
-      | Env _ (ctx_snoc _ (MkB ?s _)) =>
+      | Env _ (ctx.snoc _ (MkB ?s _)) =>
         let id := string_to_ident s in
         let fr := fresh id in
         destruct (snocView ι) as [ι fr];
         destruct_syminstance ι
-      | Env _ ctx_nil => destruct (nilView ι)
+      | Env _ ctx.nil => destruct (nilView ι)
       | _ => idtac
       end.
 

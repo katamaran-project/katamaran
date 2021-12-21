@@ -51,7 +51,7 @@ From Katamaran Require Import
 From stdpp Require
      base.
 
-Import CtxNotations.
+Import ctx.notations.
 Import EnvNotations.
 Import ListNotations.
 
@@ -329,16 +329,6 @@ Module Mutators
 
     Section Util.
 
-      Arguments InCtx_rect [_ _].
-      Lemma ctx_remove_inctx_right {B : Set} {Γ Δ : Ctx B} {b : B} (bIn : InCtx b Δ) :
-        @ctx_remove B (@ctx_cat B Γ Δ) b (@inctx_cat_right B b Γ Δ bIn) =
-        @ctx_cat B Γ (@ctx_remove B Δ b bIn).
-      Proof.
-        induction bIn using InCtx_rect; cbn.
-        - reflexivity.
-        - f_equal. auto.
-      Defined.
-
       Lemma exists_and {A : Type} {P : A -> Prop} {Q : Prop} :
         (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
       Proof. firstorder. Qed.
@@ -349,12 +339,6 @@ Module Mutators
         now destruct eq.
       Qed.
 
-      (* Lemma env_insert_remove {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} *)
-      (*       (bIn : x :: σ ∈ Σe) : *)
-      (*   env_insert bIn *)
-      (*     (inst t *)
-      (*        (eq_rect (Σ0 ▻▻ Σe - (x :: σ)) (fun Σ : LCtx => SymInstance Σ) (ι ►► env_remove (x :: σ) ιe bIn) *)
-      (*           ((Σ0 ▻▻ Σe) - (x :: σ)) (eq_sym (ctx_remove_inctx_right bIn)))) (env_remove (x :: σ) ιe bIn)) *)
       Lemma inst_eq_rect `{Inst AT A} {Σ Σ'} (t : AT Σ) (eq : Σ = Σ') (ι : SymInstance Σ'):
         inst (eq_rect Σ AT t Σ' eq) ι = inst t (eq_rect Σ' (fun Σ => SymInstance Σ) ι Σ (eq_sym eq)).
       Proof.
@@ -395,49 +379,49 @@ Module Mutators
       Lemma env_insert_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx}
             (bIn : x∷σ ∈ Σe) (v : Lit σ)
             {ι : SymInstance Σ0} {ιe : SymInstance (Σe - x∷σ)} :
-            (ι ►► env_insert bIn v ιe) = env_insert (inctx_cat_right bIn) v (eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ => SymInstance Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx_remove_inctx_right bIn))).
+            (ι ►► env_insert bIn v ιe) = env_insert (ctx.in_cat_right bIn) v (eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ => SymInstance Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn))).
       Proof.
         revert bIn ιe.
         induction Σe; intros bIn ιe;
-          try destruct (Context.nilView bIn).
-        cbn [env_insert ctx_remove_inctx_right].
+          try destruct (ctx.nilView bIn).
+        cbn [env_insert ctx.remove_in_cat_right].
         (* can't destruct Contxt.snocView bIn?*)
         destruct bIn as ([|n] & eq).
         - cbn in eq.
           now subst.
         - cbn in ιe.
           destruct (snocView ιe) as (ιe & v').
-          change (ctx_remove_inctx_right {| inctx_at := S n; inctx_valid := eq |})
-                 with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx_snoc (@ctx_remove_inctx_right _ Σ0 Σe _ {| inctx_at := n; inctx_valid := eq |})))).
+          change (ctx.remove_in_cat_right {| ctx.in_at := S n; ctx.in_valid := eq |})
+                 with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx.snoc (@ctx.remove_in_cat_right _ Σ0 Σe _ {| ctx.in_at := n; ctx.in_valid := eq |})))).
           rewrite eq_trans_refl_l.
           cbn.
           rewrite (eq_sym_map_distr (fun f : 𝑺 ∷ Ty -> LCtx => f b)).
           rewrite eq_sym_map_distr.
           rewrite f_equal_compose.
-          rewrite (map_subst_map (P := fun x => SymInstance (ctx_snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
+          rewrite (map_subst_map (P := fun x => SymInstance (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
           rewrite match_snocView_eq_rect.
           now rewrite IHΣe.
       Qed.
 
       Lemma env_remove_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x∷σ ∈ Σe)
         (ι : SymInstance Σ0) (ιe : SymInstance Σe) :
-        env_remove (x∷σ) (ι ►► ιe) (inctx_cat_right bIn) =
+        env_remove (x∷σ) (ι ►► ιe) (ctx.in_cat_right bIn) =
         eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ : LCtx => SymInstance Σ) (ι ►► env_remove (x∷σ) ιe bIn)
-                 ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx_remove_inctx_right bIn)).
+                 ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn)).
       Proof.
         revert bIn ιe.
-        induction Σe; intros bIn ιe; try destruct (Context.nilView bIn).
-        destruct (Context.snocView bIn).
+        induction Σe; intros bIn ιe; try destruct (ctx.nilView bIn).
+        destruct (ctx.snocView bIn).
         - now destruct (snocView ιe).
         - destruct (snocView ιe) as (ιe & v).
-          change (ctx_remove_inctx_right (inctx_succ i))
-                 with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx_snoc (@ctx_remove_inctx_right _ Σ0 Σe _ i)))).
+          change (ctx.remove_in_cat_right (ctx.in_succ i))
+                 with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx.snoc (@ctx.remove_in_cat_right _ Σ0 Σe _ i)))).
           rewrite eq_trans_refl_l.
           cbn.
           rewrite (eq_sym_map_distr (fun f : 𝑺 ∷ Ty -> LCtx => f b)).
           rewrite eq_sym_map_distr.
           rewrite f_equal_compose.
-          rewrite (map_subst_map (P := fun x => SymInstance (ctx_snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
+          rewrite (map_subst_map (P := fun x => SymInstance (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
           rewrite IHΣe.
           now rewrite snoc_eq_rect.
       Qed.
@@ -470,7 +454,7 @@ Module Mutators
       | ectx Σe (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) : ECtx Σ (Σ ▻▻ Σe).
       Arguments ectx {Σ} Σe mfs.
 
-      Definition ectx_refl {Σ : LCtx} : ECtx Σ Σ := @ectx Σ ctx_nil nil.
+      Definition ectx_refl {Σ : LCtx} : ECtx Σ Σ := @ectx Σ ctx.nil nil.
 
       Definition ectx_formula {Σ1 Σ2} (e: ECtx Σ1 Σ2) : Message Σ2 -> Formula Σ2 -> ECtx Σ1 Σ2 :=
         match e with ectx Σe mfs => fun msg fml => ectx Σe (cons (msg,fml) mfs) end.
@@ -482,12 +466,12 @@ Module Mutators
         match e with
         | ectx Σe mfs =>
             fun x σ xIn =>
-              match Context.catView xIn with
-              | isCatLeft bIn  => fun _ => None
-              | isCatRight bIn =>
+              match ctx.catView xIn with
+              | ctx.isCatLeft bIn  => fun _ => None
+              | ctx.isCatRight bIn =>
                   fun t =>
-                    let e  := ctx_remove_inctx_right bIn in
-                    let ζ  := sub_single (inctx_cat_right bIn) t in
+                    let e  := ctx.remove_in_cat_right bIn in
+                    let ζ  := sub_single (ctx.in_cat_right bIn) t in
                     let ζ' := eq_rect _ (Sub (Σ1 ▻▻ Σe)) ζ _ e in
                     Some (eq_rect_r _ (ectx _ (subst mfs ζ')) e)
               end
@@ -574,13 +558,13 @@ Module Mutators
           True
           (ectx_subst ec xIn t).
       Proof.
-        destruct ec; cbn. destruct (Context.catView xIn); constructor; auto.
+        destruct ec; cbn. destruct (ctx.catView xIn); constructor; auto.
         intros p ι. unfold eq_rect_r. rewrite plug_eq_rect. cbn.
         rewrite ?safe_angelic_close0.
         split; intros [ιe HYP].
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
           unfold eq_rect_r in Hp. rewrite safe_eq_rect, eq_sym_involutive in Hp.
-          exists (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σe) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - x∷σ) (ctx_remove_inctx_right bIn)) (ι ►► ιe)) ιe).
+          exists (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σe) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιe)) ιe).
           rewrite safe_assert_msgs_formulas. cbn. rewrite obligation_equiv. cbn.
           rewrite env_insert_app, env_remove_insert, env_insert_lookup.
           rewrite inst_subst, inst_sub_shift, env_remove_insert, ?inst_eq_rect.
@@ -674,7 +658,7 @@ Module Mutators
       | uctx Σu (mfs : List Formula (Σ ▻▻ Σu)) : UCtx Σ (Σ ▻▻ Σu).
       Arguments uctx {Σ} Σu mfs.
 
-      Definition uctx_refl {Σ : LCtx} : UCtx Σ Σ := @uctx Σ ctx_nil nil.
+      Definition uctx_refl {Σ : LCtx} : UCtx Σ Σ := @uctx Σ ctx.nil nil.
 
       Definition uctx_formula {Σ1 Σ2} (e : UCtx Σ1 Σ2) : Formula Σ2 -> UCtx Σ1 Σ2 :=
         match e with uctx Σu mfs => fun fml => uctx Σu (cons fml mfs) end.
@@ -686,12 +670,12 @@ Module Mutators
         match e with
         | uctx Σu mfs =>
             fun x σ xIn =>
-              match Context.catView xIn with
-              | isCatLeft bIn  => fun _ => None
-              | isCatRight bIn =>
+              match ctx.catView xIn with
+              | ctx.isCatLeft bIn  => fun _ => None
+              | ctx.isCatRight bIn =>
                   fun t =>
-                    let e  := ctx_remove_inctx_right bIn in
-                    let ζ  := sub_single (inctx_cat_right bIn) t in
+                    let e  := ctx.remove_in_cat_right bIn in
+                    let ζ  := sub_single (ctx.in_cat_right bIn) t in
                     let ζ' := eq_rect _ (Sub (Σ1 ▻▻ Σu)) ζ _ e in
                     Some (eq_rect_r _ (uctx _ (subst mfs ζ')) e)
               end
@@ -768,7 +752,7 @@ Module Mutators
           True
           (uctx_subst ec xIn t).
       Proof.
-        destruct ec; cbn. destruct (Context.catView xIn); constructor; auto.
+        destruct ec; cbn. destruct (ctx.catView xIn); constructor; auto.
         intros p ι. unfold eq_rect_r. rewrite plug_eq_rect. cbn.
         rewrite ?safe_demonic_close0.
         split; intros HYP ιu.
@@ -782,7 +766,7 @@ Module Mutators
           rewrite <- env_remove_app in HYP. apply HYP.
           rewrite <- inst_sub_shift.
           rewrite inst_sub_single_shift; auto.
-        - specialize (HYP (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σu) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σu - x∷σ) (ctx_remove_inctx_right bIn)) (ι ►► ιu)) ιu)).
+        - specialize (HYP (env_insert bIn (inst (eq_rect ((Σ1 ▻▻ Σu) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σu - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιu)) ιu)).
           rewrite safe_assume_formulas, inst_subst, inst_eq_rect. intros Hpc.
           unfold eq_rect_r. rewrite safe_eq_rect, eq_sym_involutive.
           rewrite safe_assume_formulas in HYP. cbn in HYP.
@@ -907,15 +891,15 @@ Module Mutators
       fun w k =>
         let y := fresh w x in
         angelicv
-          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ inctx_zero)).
+          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
     Global Arguments angelic x σ [w] k.
 
     Definition angelic_ctx {N : Set} (n : N -> 𝑺) :
       ⊢ ∀ Δ : NCtx N Ty, SDijkstra (fun w => NamedEnv (Term w) Δ) :=
       fix rec {w} Δ {struct Δ} :=
         match Δ with
-        | ctx_nil          => fun k => T k env_nil
-        | ctx_snoc Δ (x∷σ) =>
+        | ε       => fun k => T k env_nil
+        | Δ ▻ x∷σ =>
           fun k =>
             angelic (Some (n x)) σ (fun w1 ω01 t =>
               rec Δ (fun w2 ω12 EΔ =>
@@ -928,15 +912,15 @@ Module Mutators
       fun w k =>
         let y := fresh w x in
         demonicv
-          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ inctx_zero)).
+          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
     Global Arguments demonic x σ [w] k.
 
     Definition demonic_ctx {N : Set} (n : N -> 𝑺) :
       ⊢ ∀ Δ : NCtx N Ty, SDijkstra (fun w => NamedEnv (Term w) Δ) :=
       fix demonic_ctx {w} Δ {struct Δ} :=
         match Δ with
-        | ctx_nil          => fun k => T k env_nil
-        | ctx_snoc Δ (x∷σ) =>
+        | ε       => fun k => T k env_nil
+        | Δ ▻ x∷σ =>
           fun k =>
             demonic (Some (n x)) σ (fun w1 ω01 t =>
               demonic_ctx Δ (fun w2 ω12 EΔ =>
@@ -2587,7 +2571,7 @@ Module Mutators
         intros w4 ω34 res.
         eapply bind_right.
         apply (produce
-                 (w := @MkWorld (Σe ▻ (result∷τ)) nil)
+                 (w := @MkWorld (Σe ▻ result∷τ) nil)
                  ens).
         constructor 2 with (sub_snoc (persist (A := Sub _) evars (acc_trans ω12 (acc_trans ω23 ω34))) (result∷τ) res).
         cbn. constructor.

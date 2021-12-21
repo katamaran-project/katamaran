@@ -40,7 +40,8 @@ From RiscvPmp Require Export
 From stdpp Require Import decidable finite.
 
 Set Implicit Arguments.
-Import CtxNotations.
+Import ctx.notations.
+Import ctx.resolution.
 Import EnvNotations.
 Open Scope string_scope.
 
@@ -121,16 +122,16 @@ Module RiscvPmpTermKit <: TermKit.
   Notation LCtx := (NCtx 𝑺 Ty).
 
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-  Definition fresh := Context.fresh (T := Ty).
+  Definition fresh := ctx.fresh (T := Ty).
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
   | rX                    : Fun [rs ∶ ty_regidx] ty_xlenbits
   | wX                    : Fun [rd ∶ ty_regidx, v ∶ ty_xlenbits] ty_unit
-  | get_arch_pc           : Fun ctx_nil ty_xlenbits
-  | get_next_pc           : Fun ctx_nil ty_xlenbits
+  | get_arch_pc           : Fun ctx.nil ty_xlenbits
+  | get_next_pc           : Fun ctx.nil ty_xlenbits
   | set_next_pc           : Fun [addr ∶ ty_xlenbits] ty_unit
-  | tick_pc               : Fun ctx_nil ty_unit
+  | tick_pc               : Fun ctx.nil ty_unit
   | abs                   : Fun [v ∶ ty_int] ty_int
   | mem_read              : Fun [typ ∶ ty_access_type, paddr ∶ ty_xlenbits] ty_memory_op_result
   | checked_mem_read      : Fun [t ∶ ty_access_type, paddr ∶ ty_xlenbits] ty_memory_op_result
@@ -146,13 +147,13 @@ Module RiscvPmpTermKit <: TermKit.
   | pmpMatchAddr          : Fun [addr ∶ ty_xlenbits, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch
   | process_load          : Fun [rd ∶ ty_regidx, vaddr ∶ ty_xlenbits, value ∶ ty_memory_op_result] ty_retired
   | mem_write_value       : Fun [paddr ∶ ty_xlenbits, value ∶ ty_int] ty_memory_op_result
-  | main                  : Fun ctx_nil ty_unit
-  | init_model            : Fun ctx_nil ty_unit
-  | loop                  : Fun ctx_nil ty_unit
-  | step                  : Fun ctx_nil ty_unit
-  | fetch                 : Fun ctx_nil ty_fetch_result
-  | init_sys              : Fun ctx_nil ty_unit
-  | init_pmp              : Fun ctx_nil ty_unit
+  | main                  : Fun ctx.nil ty_unit
+  | init_model            : Fun ctx.nil ty_unit
+  | loop                  : Fun ctx.nil ty_unit
+  | step                  : Fun ctx.nil ty_unit
+  | fetch                 : Fun ctx.nil ty_fetch_result
+  | init_sys              : Fun ctx.nil ty_unit
+  | init_pmp              : Fun ctx.nil ty_unit
   | exceptionType_to_bits : Fun [e ∶ ty_exception_type] ty_exc_code
   | handle_mem_exception  : Fun [addr ∶ ty_xlenbits, e ∶ ty_exception_type] ty_unit
   | exception_handler     : Fun [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_xlenbits] ty_int
@@ -160,7 +161,7 @@ Module RiscvPmpTermKit <: TermKit.
   | trap_handler          : Fun [del_priv ∶ ty_privilege, c ∶ ty_exc_code, "pc" ∶ ty_xlenbits] ty_xlenbits
   | prepare_trap_vector   : Fun [p ∶ ty_privilege, cause ∶ ty_mcause] ty_xlenbits
   | tvec_addr             : Fun [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_xlenbits)
-  | handle_illegal        : Fun ctx_nil ty_unit
+  | handle_illegal        : Fun ctx.nil ty_unit
   | execute               : Fun ["ast" ∶ ty_ast] ty_retired
   | execute_RTYPE         : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
   | execute_ITYPE         : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
@@ -170,8 +171,8 @@ Module RiscvPmpTermKit <: TermKit.
   | execute_RISCV_JALR    : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
   | execute_LOAD          : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
   | execute_STORE         : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx] ty_retired
-  | execute_ECALL         : Fun ctx_nil ty_retired
-  | execute_MRET          : Fun ctx_nil ty_retired
+  | execute_ECALL         : Fun ctx.nil ty_retired
+  | execute_MRET          : Fun ctx.nil ty_retired
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
@@ -182,7 +183,7 @@ Module RiscvPmpTermKit <: TermKit.
 
   Inductive Lem : PCtx -> Set :=
   | open_ptsreg               : Lem [rs ∶ ty_regidx]
-  | close_ptsreg (r : RegIdx) : Lem ctx_nil
+  | close_ptsreg (r : RegIdx) : Lem ctx.nil
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -238,7 +239,6 @@ End RiscvPmpTermKit.
 
 Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Module Export TM := Terms RiscvPmpTermKit.
-  Import NameResolution.
 
   Module RiscvμSailNotations.
     Notation "'rs'"           := (@exp_var _ "rs" _ _) : exp_scope.
@@ -364,17 +364,17 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
             stm_lit ty_unit tt
     end.
 
-  Definition fun_get_arch_pc : Stm ctx_nil ty_xlenbits :=
+  Definition fun_get_arch_pc : Stm ctx.nil ty_xlenbits :=
     stm_read_register pc.
 
-  Definition fun_get_next_pc : Stm ctx_nil ty_xlenbits :=
+  Definition fun_get_next_pc : Stm ctx.nil ty_xlenbits :=
     stm_read_register nextpc.
 
   Definition fun_set_next_pc : Stm [addr ∶ ty_xlenbits] ty_unit :=
     stm_write_register nextpc addr ;;
     stm_lit ty_unit tt.
 
-  Definition fun_tick_pc : Stm ctx_nil ty_unit :=
+  Definition fun_tick_pc : Stm ctx.nil ty_unit :=
     let: tmp := stm_read_register nextpc in
     stm_write_register pc tmp ;;
     stm_lit ty_unit tt.
@@ -539,19 +539,19 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     let: tmp := stm_read_register cur_privilege in
     call pmp_mem_write paddr value Write tmp.
 
-  Definition fun_main : Stm ctx_nil ty_unit :=
+  Definition fun_main : Stm ctx.nil ty_unit :=
     call init_model ;;
     call loop.
 
   (* NOTE: simplified init_model function, just calls init_sys which just calls
            init_pmp *)
-  Definition fun_init_model : Stm ctx_nil ty_unit :=
+  Definition fun_init_model : Stm ctx.nil ty_unit :=
     call init_sys.
 
-  Definition fun_loop : Stm ctx_nil ty_unit :=
+  Definition fun_loop : Stm ctx.nil ty_unit :=
     call step.
 
-  Definition fun_fetch : Stm ctx_nil ty_fetch_result :=
+  Definition fun_fetch : Stm ctx.nil ty_fetch_result :=
     let: tmp1 := stm_read_register pc in
     let: tmp2 := call mem_read Execute tmp1 in
     stm_match_union_alt memory_op_result tmp2
@@ -563,7 +563,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                     (F_Error e tmp1)
                            end).
 
-  Definition fun_step : Stm ctx_nil ty_unit :=
+  Definition fun_step : Stm ctx.nil ty_unit :=
     let: f := call fetch in
     stm_match_union_alt fetch_result f
                         (fun K =>
@@ -579,10 +579,10 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                            end) ;;
     call tick_pc.
 
-  Definition fun_init_sys : Stm ctx_nil ty_unit :=
+  Definition fun_init_sys : Stm ctx.nil ty_unit :=
     call init_pmp.
 
-  Definition fun_init_pmp : Stm ctx_nil ty_unit :=
+  Definition fun_init_pmp : Stm ctx.nil ty_unit :=
     let: tmp := stm_read_register pmp0cfg in
     (stm_match_record rpmpcfg_ent tmp
       (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
@@ -690,7 +690,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Definition fun_tvec_addr : Stm [m ∶ ty_xlenbits, c ∶ ty_mcause] (ty_option ty_xlenbits) :=
     Some m.
 
-  Definition fun_handle_illegal : Stm ctx_nil ty_unit :=
+  Definition fun_handle_illegal : Stm ctx.nil ty_unit :=
     let: t := E_Illegal_Instr in
     let: tmp1 := stm_read_register cur_privilege in
     let: tmp2 := stm_read_register pc in
@@ -838,7 +838,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                      stm_lit ty_retired RETIRE_FAIL)
                            end).
 
-  Definition fun_execute_ECALL : Stm ctx_nil ty_retired :=
+  Definition fun_execute_ECALL : Stm ctx.nil ty_retired :=
     let: tmp1 := stm_read_register cur_privilege in
     let: t := match: tmp1 in privilege with
               | Machine => E_M_EnvCall
@@ -849,7 +849,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     call set_next_pc tmp3 ;;
     stm_lit ty_retired RETIRE_FAIL.
 
-  Definition fun_execute_MRET : Stm ctx_nil ty_retired :=
+  Definition fun_execute_MRET : Stm ctx.nil ty_retired :=
     let: tmp1 := stm_read_register cur_privilege in
     match: tmp1 in privilege with
     | Machine =>

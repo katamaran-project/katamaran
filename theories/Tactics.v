@@ -63,9 +63,9 @@ Ltac solve_eqb_spec' tac :=
      | [ H : reflect _ ?b |- context[?b] ] =>
        let H1 := fresh in destruct H as [H1 |]; [dependent elimination H1 | idtac]
      | e : ?x = ?y |- context[eq_rect ?x _ _ ?y ?e] => destruct e; cbn
-     | p: @ctx_nth_is ?B ?Γ ?n ?b, q: @ctx_nth_is ?B ?Γ ?n ?b |- _ =>
-         pose proof (@ctx_nth_is_proof_irrelevance B _ Γ n b p q); subst
-     | |- context[InCtx_eqb ?x ?y] => destruct (InCtx_eqb_spec x y); subst
+     | p: @ctx.nth_is ?B ?Γ ?n ?b, q: @ctx.nth_is ?B ?Γ ?n ?b |- _ =>
+         pose proof (@ctx.proof_irrelevance_nth_is B _ Γ n b p q); subst
+     | |- context[ctx.In_eqb ?x ?y] => destruct (ctx.In_eqb_spec x y); subst
      | |- context[Nat.eqb ?x ?y] => destruct (Nat.eqb_spec x y); subst
      | |- _ => tac; subst; cbn
      end;

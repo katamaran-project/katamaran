@@ -55,7 +55,7 @@ From Katamaran Require Import
 
 Set Implicit Arguments.
 
-Import CtxNotations.
+Import ctx.notations.
 Import EnvNotations.
 
 Module Soundness
@@ -174,7 +174,7 @@ Module Soundness
 
   Ltac wsimpl :=
     repeat
-      (try change (wctx (wsnoc ?w ?b)) with (ctx_snoc (wctx w) b);
+      (try change (wctx (wsnoc ?w ?b)) with (wctx w ▻ b);
        (* try change (wsub (@wred_sup ?w ?b ?t)) with (sub_snoc (sub_id (wctx w)) b t); *)
        try change (wco (wsnoc ?w ?b)) with (subst (wco w) (sub_wk1 (b:=b)));
        try change (sub_acc (@acc_refl ?w)) with (sub_id (wctx w));
@@ -184,7 +184,7 @@ Module Soundness
        try change (sub_acc (@acc_formulas_right ?w ?fmls)) with (sub_id (wctx w));
        try change (wco (wformula ?w ?fml)) with (cons fml (wco w));
        try change (wco (@wsubst ?w _ _ ?xIn ?t)) with (subst (wco w) (sub_single xIn t));
-       try change (wctx (@wsubst ?w _ _ ?xIn ?t)) with (ctx_remove xIn);
+       try change (wctx (@wsubst ?w _ _ ?xIn ?t)) with (ctx.remove xIn);
        try change (sub_acc (@acc_subst_right ?w _ _ ?xIn ?t)) with (sub_single xIn t);
        rewrite <- ?sub_comp_wk1_tail, ?inst_subst, ?subst_sub_id,
          ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc,

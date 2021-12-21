@@ -48,7 +48,7 @@ From stdpp Require decidable finite.
 From iris_string_ident Require Import ltac2_string_ident.
 
 Set Implicit Arguments.
-Import CtxNotations.
+Import ctx.notations.
 Import EnvNotations.
 Open Scope string_scope.
 Open Scope Z_scope.
@@ -216,7 +216,7 @@ Module ExampleTermKit <: TermKit.
   Definition 𝑺        := string.
   Definition 𝑺_eq_dec := string_dec.
   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-  Definition fresh := Context.fresh (T := Ty).
+  Definition fresh := ctx.fresh (T := Ty).
 
   Notation PCtx := (NCtx 𝑿 Ty).
   Notation LCtx := (NCtx 𝑺 Ty).
@@ -266,7 +266,7 @@ End ExampleTermKit.
 
 Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
   Module Export TM := Terms ExampleTermKit.
-  Import NameResolution.
+  Import ctx.resolution.
 
   Local Coercion stm_exp : Exp >-> Stm.
 
@@ -402,7 +402,7 @@ Module SepContracts.
   Module ExampleSymbolicContractKit <:
     SymbolicContractKit ExampleTermKit ExampleProgramKit ExampleAssertionKit.
     Module Export ASS := Assertions ExampleTermKit ExampleProgramKit ExampleAssertionKit.
-    Import NameResolution.
+    Import ctx.resolution.
 
     Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
     Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
@@ -539,12 +539,12 @@ Module SepContracts.
   Ltac destruct_syminstance ι :=
     repeat
       match type of ι with
-      | Env _ (ctx_snoc _ (?s, _)) =>
+      | Env _ (ctx.snoc _ (?s, _)) =>
         let id := string_to_ident s in
         let fr := fresh id in
         destruct (snocView ι) as [ι fr];
         destruct_syminstance ι
-      | Env _ ctx_nil => destruct (nilView ι)
+      | Env _ ctx.nil => destruct (nilView ι)
       | _ => idtac
       end.
 
@@ -558,8 +558,8 @@ Module SepContracts.
         repeat
          match goal with
          | H: NamedEnv _ _ |- _ => unfold NamedEnv in H
-         | ι : Env _ (ctx_snoc _ _) |- _ => destruct_syminstance ι
-         | ι : Env _ ctx_nil        |- _ => destruct_syminstance ι
+         | ι : Env _ (ctx.snoc _ _) |- _ => destruct_syminstance ι
+         | ι : Env _ ctx.nil        |- _ => destruct_syminstance ι
          | H: _ /\ _ |- _ => destruct H
          | H: Z.ltb _ _ = true |- _ => apply Z.ltb_lt in H
          | H: Z.ltb _ _ = false |- _ => apply Z.ltb_ge in H

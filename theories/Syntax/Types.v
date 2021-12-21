@@ -157,7 +157,7 @@ Module Types (Export typekit : TypeKit).
       | ty_unit       , ty_unit       => left eq_refl
       | ty_enum E1    , ty_enum E2    => f_equal_dec ty_enum noConfusion_inv (eq_dec E1 E2)
       | ty_bvec n1    , ty_bvec n2    => f_equal_dec ty_bvec noConfusion_inv (eq_dec n1 n2)
-      | ty_tuple σs   , ty_tuple τs   => f_equal_dec ty_tuple noConfusion_inv (@ctx_eqdec Ty ty_eqdec σs τs)
+      | ty_tuple σs   , ty_tuple τs   => f_equal_dec ty_tuple noConfusion_inv (eq_dec (EqDec := ctx.eq_dec_ctx ty_eqdec) σs τs)
       | ty_union U1   , ty_union U2   => f_equal_dec ty_union noConfusion_inv (eq_dec U1 U2)
       | ty_record R1  , ty_record R2  => f_equal_dec ty_record noConfusion_inv (eq_dec R1 R2)
       | _             , _             => right noConfusion_inv
