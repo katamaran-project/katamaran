@@ -46,20 +46,19 @@ Local Set Implicit Arguments.
 Local Unset Transparent Obligations.
 Obligation Tactic := idtac.
 
-Module Type TypeKit.
-
-  Import stdpp.finite.
-
+Module Type EnumTypeKit.
   (* Names of enum type constructors. *)
   Parameter Inline 𝑬 : Set. (* input: \MIE *)
   Declare Instance 𝑬_eq_dec : EqDec 𝑬.
   (* Names of enum data constructors. *)
   Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
   Declare Instance 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e).
-  Declare Instance 𝑬𝑲_finite : forall E, Finite (𝑬𝑲 E).
+  Declare Instance 𝑬𝑲_finite : forall E, finite.Finite (𝑬𝑲 E).
+End EnumTypeKit.
 
+Module Type UnionTypeKit.
   (* Names of union type constructors. *)
-  Parameter Inline 𝑼   : Set. (* input: \MIT *)
+  Parameter Inline 𝑼   : Set. (* input: \MIU *)
   Declare Instance 𝑼_eq_dec : EqDec 𝑼.
   (* Union types. *)
   Parameter Inline 𝑼𝑻  : 𝑼 -> Set.
@@ -67,16 +66,49 @@ Module Type TypeKit.
   (* Names of union data constructors. *)
   Parameter Inline 𝑼𝑲  : 𝑼 -> Set.
   Declare Instance 𝑼𝑲_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑲 u).
-  Declare Instance 𝑼𝑲_finite : forall U, Finite (𝑼𝑲 U).
+  Declare Instance 𝑼𝑲_finite : forall U, finite.Finite (𝑼𝑲 U).
+End UnionTypeKit.
 
+Module Type RecordTypeKit.
   (* Names of record type constructors. *)
   Parameter Inline 𝑹  : Set. (* input: \MIR *)
   Declare Instance 𝑹_eq_dec : EqDec 𝑹.
   (* Record types. *)
   Parameter Inline 𝑹𝑻  : 𝑹 -> Set.
   Declare Instance 𝑹𝑻_eq_dec : forall (r : 𝑹), EqDec (𝑹𝑻 r).
+End RecordTypeKit.
 
-End TypeKit.
+Module Type TypeKit :=
+  EnumTypeKit <+ UnionTypeKit <+ RecordTypeKit.
+
+Module NoEnums <: EnumTypeKit.
+  Definition 𝑬          := Empty_set.
+  Definition 𝑬𝑲 (E : 𝑬) := Empty_set.
+
+  Instance 𝑬_eq_dec : EqDec 𝑬 := Empty_set_EqDec.
+  Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E)  := Empty_set_EqDec.
+  Instance 𝑬𝑲_finite (E : 𝑬) : finite.Finite (𝑬𝑲 E) := finite.Empty_set_finite.
+End NoEnums.
+
+Module NoUnions <: UnionTypeKit.
+  Definition 𝑼          := Empty_set.
+  Definition 𝑼𝑻 (U : 𝑼) := Empty_set.
+  Definition 𝑼𝑲 (U : 𝑼) := Empty_set.
+
+  Instance 𝑼_eq_dec : EqDec 𝑼 := Empty_set_EqDec.
+  Instance 𝑼𝑻_eq_dec (U : 𝑼) : EqDec (𝑼𝑻 U)  := Empty_set_EqDec.
+  Instance 𝑼𝑲_eq_dec (U : 𝑼) : EqDec (𝑼𝑲 U)  := Empty_set_EqDec.
+  Instance 𝑼𝑲_finite (U : 𝑼) : finite.Finite (𝑼𝑲 U) := finite.Empty_set_finite.
+End NoUnions.
+
+Module NoRecords <: RecordTypeKit.
+  Definition 𝑹          := Empty_set.
+  Definition 𝑹𝑻 (R : 𝑹) := Empty_set.
+  Instance 𝑹_eq_dec : EqDec 𝑹 := Empty_set_EqDec.
+  Instance 𝑹𝑻_eq_dec (R : 𝑹) : EqDec (𝑹𝑻 R) := Empty_set_EqDec.
+End NoRecords.
+
+Module DefaultTypeKit <: TypeKit := NoEnums <+ NoUnions <+ NoRecords.
 
 Module Types (Export typekit : TypeKit).
 
