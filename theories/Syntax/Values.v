@@ -29,7 +29,8 @@
 From Coq Require Import
      Bool.Bool
      ZArith.ZArith.
-
+From Equations Require Import
+     Equations.
 From Katamaran Require Export
      Syntax.Types.
 
@@ -128,5 +129,146 @@ Module Values (Export valuekit : ValueKit).
     apply (f_equal (@𝑼_fold U)) in H.
     now rewrite ?𝑼_fold_unfold in H.
   Qed.
+
+  Fixpoint tuple_proj (σs : Ctx Ty) (n : nat) (σ : Ty) :
+    Lit (ty_tuple σs) -> ctx.nth_is σs n σ -> Lit σ :=
+    match σs with
+    | ε      => fun l (p : ctx.nth_is ε _ _) =>
+                  match p with end
+    | τs ▻ τ => match n with
+                | 0   => fun (l : Lit (ty_tuple (_ ▻ _)))
+                             (p : ctx.nth_is _ 0 _) =>
+                           @eq_rect Ty τ Lit (snd l) σ p
+                | S m => fun l p => tuple_proj τs m σ (fst l) p
+                end
+    end.
+
+  Section BinaryOperations.
+
+    Inductive BinOp : Ty -> Ty -> Ty -> Set :=
+    | binop_plus              : BinOp ty_int ty_int ty_int
+    | binop_times             : BinOp ty_int ty_int ty_int
+    | binop_minus             : BinOp ty_int ty_int ty_int
+    | binop_eq                : BinOp ty_int ty_int ty_bool
+    | binop_le                : BinOp ty_int ty_int ty_bool
+    | binop_lt                : BinOp ty_int ty_int ty_bool
+    | binop_ge                : BinOp ty_int ty_int ty_bool
+    | binop_gt                : BinOp ty_int ty_int ty_bool
+    | binop_and               : BinOp ty_bool ty_bool ty_bool
+    | binop_or                : BinOp ty_bool ty_bool ty_bool
+    | binop_pair {σ1 σ2 : Ty} : BinOp σ1 σ2 (ty_prod σ1 σ2)
+    | binop_cons {σ : Ty}     : BinOp σ (ty_list σ) (ty_list σ)
+    | binop_append {σ : Ty}   : BinOp (ty_list σ) (ty_list σ) (ty_list σ)
+    | binop_tuple_snoc {σs σ} : BinOp (ty_tuple σs) σ (ty_tuple (σs ▻ σ))
+    | binop_bvplus {n}        : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
+    | binop_bvmult {n}        : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
+    | binop_bvcombine {m n}   : BinOp (ty_bvec m) (ty_bvec n) (ty_bvec (m + n))
+    | binop_bvcons {m}        : BinOp (ty_bit) (ty_bvec m) (ty_bvec (S m))
+    .
+
+    Local Set Transparent Obligations.
+    Derive Signature NoConfusion for BinOp.
+    Local Unset Transparent Obligations.
+
+    Import Sigma_Notations.
+
+    Definition BinOpTel : Set :=
+      Σ i : (Σ σ1 σ2 : Ty, Ty), BinOp i.1 (i.2).1 (i.2).2.
+
+    Definition binoptel_pair (σ1 σ2 : Ty) : BinOpTel :=
+      ((σ1, σ2, ty_prod σ1 σ2), binop_pair).
+    Definition binoptel_cons (σ : Ty) : BinOpTel :=
+      ((σ, ty_list σ, ty_list σ), binop_cons).
+    Definition binoptel_append (σ : Ty) : BinOpTel :=
+      ((ty_list σ, ty_list σ, ty_list σ), binop_append).
+    Definition binoptel_tuple_snoc (σs : Ctx Ty) (σ : Ty) : BinOpTel :=
+      ((ty_tuple σs, σ, ty_tuple (σs ▻ σ)), binop_tuple_snoc).
+
+    Definition binoptel_eq_dec {σ1 σ2 σ3 τ1 τ2 τ3}
+      (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
+      dec_eq (A := BinOpTel) ((σ1,σ2,σ3),op1) ((τ1,τ2,τ3),op2) :=
+      match op1 , op2 with
+      | binop_plus  , binop_plus   => left eq_refl
+      | binop_times , binop_times  => left eq_refl
+      | binop_minus , binop_minus  => left eq_refl
+      | binop_eq    , binop_eq     => left eq_refl
+      | binop_le    , binop_le     => left eq_refl
+      | binop_lt    , binop_lt     => left eq_refl
+      | binop_ge    , binop_ge     => left eq_refl
+      | binop_gt    , binop_gt     => left eq_refl
+      | binop_and   , binop_and    => left eq_refl
+      | binop_or    , binop_or     => left eq_refl
+      | @binop_pair σ1 σ2 , @binop_pair τ1 τ2   =>
+        f_equal2_dec binoptel_pair noConfusion_inv (eq_dec σ1 τ1) (eq_dec σ2 τ2)
+      | @binop_cons σ  , @binop_cons τ   =>
+        f_equal_dec binoptel_cons noConfusion_inv (eq_dec σ τ)
+      | @binop_append σ , @binop_append τ   =>
+        f_equal_dec binoptel_append noConfusion_inv (eq_dec σ τ)
+      | @binop_tuple_snoc σs σ , @binop_tuple_snoc τs τ =>
+        f_equal2_dec binoptel_tuple_snoc noConfusion_inv (eq_dec σs τs) (eq_dec σ τ)
+      | @binop_bvplus m , @binop_bvplus n =>
+        f_equal_dec
+          (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvplus))
+          noConfusion_inv (eq_dec m n)
+      | @binop_bvmult m , @binop_bvmult n =>
+        f_equal_dec
+          (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvmult))
+          noConfusion_inv (eq_dec m n)
+      | @binop_bvcombine m1 m2 , @binop_bvcombine n1 n2 =>
+        f_equal2_dec
+          (fun m n => ((ty_bvec m, ty_bvec n, ty_bvec (m+n)), binop_bvcombine))
+          noConfusion_inv (eq_dec m1 n1) (eq_dec m2 n2)
+      | @binop_bvcons m , @binop_bvcons n =>
+        f_equal_dec
+          (fun n => ((ty_bit, ty_bvec n, ty_bvec (S n)), binop_bvcons))
+          noConfusion_inv (eq_dec m n)
+      | _           , _            => right noConfusion_inv
+      end.
+
+    Inductive OpEq {σ1 σ2 σ3} (op1 : BinOp σ1 σ2 σ3) : forall τ1 τ2 τ3, BinOp τ1 τ2 τ3 -> Prop :=
+    | opeq_refl : OpEq op1 op1.
+    Derive Signature for OpEq.
+    Global Arguments opeq_refl {_ _ _ _}.
+
+    Lemma binop_eqdep_dec {σ1 σ2 σ3 τ1 τ2 τ3} (op1 : BinOp σ1 σ2 σ3) (op2 : BinOp τ1 τ2 τ3) :
+      {OpEq op1 op2} + {~ OpEq op1 op2}.
+    Proof.
+      destruct (binoptel_eq_dec op1 op2).
+      - left. dependent elimination e. constructor.
+      - right. intro e. apply n. dependent elimination e. reflexivity.
+    Defined.
+
+    Local Set Equations With UIP.
+    Global Instance binop_eq_dec {σ1 σ2 σ3} : EqDec (BinOp σ1 σ2 σ3).
+    Proof.
+      intros x y.
+      destruct (binoptel_eq_dec x y) as [p|p].
+      - left. dependent elimination p. reflexivity.
+      - right. congruence.
+    Defined.
+
+    Definition eval_binop {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Lit σ1 -> Lit σ2 -> Lit σ3 :=
+      match op with
+      | binop_plus      => Z.add
+      | binop_times     => Z.mul
+      | binop_minus     => Z.sub
+      | binop_eq        => Z.eqb
+      | binop_le        => Z.leb
+      | binop_lt        => Z.ltb
+      | binop_ge        => Z.geb
+      | binop_gt        => Z.gtb
+      | binop_and       => andb
+      | binop_or        => fun v1 v2 => orb v1 v2
+      | binop_pair      => pair
+      | binop_cons      => cons
+      | binop_append    => app
+      | binop_tuple_snoc => pair
+      | binop_bvplus    => fun v1 v2 => Word.wplus v1 v2
+      | binop_bvmult    => fun v1 v2 => Word.wmult v1 v2
+      | binop_bvcombine => fun v1 v2 => Word.combine v1 v2
+      | binop_bvcons    => fun b bs => Word.WS (Bit_eqb b bitone) bs
+      end.
+
+  End BinaryOperations.
 
 End Values.
