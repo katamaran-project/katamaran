@@ -46,7 +46,7 @@ Section WithBinding.
 
     Inductive Env : Ctx B -> Set :=
     | nil                                     : Env ε
-    | snoc {Γ} (E : Env Γ) (b : B) (db : D b) : Env (Γ ▻ b).
+    | snoc {Γ} (E : Env Γ) {b : B} (db : D b) : Env (Γ ▻ b).
 
     Inductive NilView : Env ε -> Set :=
     | isNil : NilView nil.
@@ -162,7 +162,7 @@ Section WithBinding.
 
     Fixpoint lookup {Γ} (E : Env Γ) : forall b, b ∈ Γ -> D b :=
       match E with
-      | nil       => fun _ => ctx.in_case_nil
+      | nil       => ctx.in_case_nil
       | snoc E db => ctx.in_case_snoc D db (lookup E)
       end.
 
@@ -176,7 +176,7 @@ Section WithBinding.
     Fixpoint update {Γ} (E : Env Γ) {struct E} :
       forall {b} (bIn : b ∈ Γ) (new : D b), Env Γ :=
       match E with
-      | nil => fun _ => ctx.in_case_nil
+      | nil => ctx.in_case_nil
       | snoc E bold =>
         ctx.in_case_snoc
           (fun z => D z -> Env _)
@@ -656,7 +656,7 @@ Section WithBinding.
     Fixpoint eqb {Γ : Ctx B} : forall (δ1 δ2 : EnvRec D Γ), bool :=
       match Γ with
       | ε     => fun _ _ => true
-      | Γ ▻ b => fun '(E1,d1) '(E2,d2) => eqd d1 d2 &&& eqb E1 E2
+      | _ ▻ b => fun '(E1,d1) '(E2,d2) => eqd d1 d2 &&& eqb E1 E2
       end.
 
   End WithD.

@@ -241,16 +241,32 @@ Module ctx.
       | S n => fun p => snocViewSucc (MkIn n p)
       end (in_valid i).
 
+    (* Custom pattern matching in cases where the context was already refined
+       by a different match, i.e. on environments. *)
+    Definition in_case_nil {A : B -> Type} [b : B] (bIn : In b nil) : A b :=
+      match nilView bIn with end.
+    (* DEPRECATED *)
+    Definition in_case_snoc (D : B -> Type) (Γ : Ctx B) (b0 : B) (db0 : D b0)
+      (dΓ: forall b, In b Γ -> D b) (b : B) (bIn: In b (snoc Γ b0)) : D b :=
+      let (n, e) := bIn in
+      match n return nth_is (snoc Γ b0) n b -> D b with
+      | 0 => fun e => match e with eq_refl => db0 end
+      | S n => fun e => dΓ b (MkIn n e)
+      end e.
+
     Inductive InView {b : B} : forall Γ, In b Γ -> Set :=
     | inctxViewZero {Γ}                 : @InView b (snoc Γ b) in_zero
     | inctxViewSucc {Γ b'} (i : In b Γ) : @InView b (snoc Γ b') (in_succ i).
 
-    Definition inView {b Γ} (bIn : In b Γ) : InView bIn.
-    Proof.
-      destruct Γ.
-      - destruct (nilView bIn).
-      - destruct (snocView bIn); constructor.
-    Defined.
+    Definition inView {b Γ} : forall bIn : In b Γ, InView bIn :=
+      match Γ with
+      | nil      => fun bIn => match nilView bIn with end
+      | snoc Γ b => fun bIn =>
+        match snocView bIn with
+        | snocViewZero   => inctxViewZero
+        | snocViewSucc i => inctxViewSucc i
+        end
+      end.
 
     Fixpoint in_cat_left {b : B} {Γ : Ctx B} (Δ : Ctx B) (bIn : In b Γ) : In b (cat Γ Δ) :=
       match Δ with
@@ -302,18 +318,6 @@ Module ctx.
 
     Definition catView {Γ Δ} {b : B} (bIn : In b (cat Γ Δ)) : CatView bIn :=
       @catView_index Γ Δ b (@in_at _ _ bIn) (@in_valid _ _ bIn).
-
-    (* Custom pattern matching in cases where the context was already refined
-       by a different match, i.e. on environments. *)
-    Definition in_case_nil {b : B} {A : Type} (bIn : In b nil) : A :=
-      match nilView bIn with end.
-    Definition in_case_snoc (D : B -> Type) (Γ : Ctx B) (b0 : B) (db0 : D b0)
-      (dΓ: forall b, In b Γ -> D b) (b : B) (bIn: In b (snoc Γ b0)) : D b :=
-      let (n, e) := bIn in
-      match n return nth_is (snoc Γ b0) n b -> D b with
-      | 0 => fun e => match e with eq_refl => db0 end
-      | S n => fun e => dΓ b (MkIn n e)
-      end e.
 
     Definition In_rect (b : B)
       (P : forall (Γ : Ctx B), In b Γ -> Type)
@@ -574,16 +578,13 @@ Module ctx.
       | snoc Γ a => snoc (map Γ) (f a)
       end.
 
-    Fixpoint in_map {a : A} {Γ : Ctx A} {struct Γ} : In a Γ -> In (f a) (map Γ) :=
-     match Γ return In a Γ -> In (f a) (map Γ) with
-     | nil => in_case_nil
-     | snoc Γ b =>
-       fun aInΓb  =>
-         match in_at aInΓb as n return nth_is (snoc Γ b) n a -> _ with
-         | 0   => fun p => @MkIn _ _ (snoc _ _) 0 (f_equal f p)
-         | S n => fun p => in_succ (in_map {| in_at := n; in_valid := p |})
-         end (in_valid aInΓb)
-     end.
+    (* This is proof relevant because it's used in the automatic translation
+       of program variables to logic variables. *)
+    Definition in_map {a : A} : forall Γ, In a Γ -> In (f a) (map Γ) :=
+      In_rect
+        (fun Γ _ => In (f a) (map Γ))
+        (fun Γ   => in_zero)
+        (fun Γ _ _ => in_succ).
 
   End WithAB.
 
