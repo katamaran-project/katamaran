@@ -126,8 +126,8 @@ Module RiscvPmpTermKit <: TermKit.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
-  | rX                    : Fun [rs ∶ ty_regidx] ty_xlenbits
-  | wX                    : Fun [rd ∶ ty_regidx, v ∶ ty_xlenbits] ty_unit
+  | rX                    : Fun [rs ∶ ty_regno] ty_xlenbits
+  | wX                    : Fun [rd ∶ ty_regno, v ∶ ty_xlenbits] ty_unit
   | get_arch_pc           : Fun ctx.nil ty_xlenbits
   | get_next_pc           : Fun ctx.nil ty_xlenbits
   | set_next_pc           : Fun [addr ∶ ty_xlenbits] ty_unit
@@ -145,7 +145,7 @@ Module RiscvPmpTermKit <: TermKit.
   | pmpMatchEntry         : Fun [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_xlenbits, prev_pmpaddr ∶ ty_xlenbits] ty_pmpmatch
   | pmpAddrRange          : Fun [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_xlenbits, prev_pmpaddr ∶ ty_xlenbits] ty_pmp_addr_range
   | pmpMatchAddr          : Fun [addr ∶ ty_xlenbits, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch
-  | process_load          : Fun [rd ∶ ty_regidx, vaddr ∶ ty_xlenbits, value ∶ ty_memory_op_result] ty_retired
+  | process_load          : Fun [rd ∶ ty_regno, vaddr ∶ ty_xlenbits, value ∶ ty_memory_op_result] ty_retired
   | mem_write_value       : Fun [paddr ∶ ty_xlenbits, value ∶ ty_int] ty_memory_op_result
   | main                  : Fun ctx.nil ty_unit
   | init_model            : Fun ctx.nil ty_unit
@@ -163,14 +163,14 @@ Module RiscvPmpTermKit <: TermKit.
   | tvec_addr             : Fun [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_xlenbits)
   | handle_illegal        : Fun ctx.nil ty_unit
   | execute               : Fun ["ast" ∶ ty_ast] ty_retired
-  | execute_RTYPE         : Fun [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired
-  | execute_ITYPE         : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired
-  | execute_UTYPE         : Fun [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired
-  | execute_BTYPE         : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired
-  | execute_RISCV_JAL     : Fun [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired
-  | execute_RISCV_JALR    : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
-  | execute_LOAD          : Fun [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired
-  | execute_STORE         : Fun [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx] ty_retired
+  | execute_RTYPE         : Fun [rs2 ∶ ty_regno, rs1 ∶ ty_regno, rd ∶ ty_regno, op ∶ ty_rop] ty_retired
+  | execute_ITYPE         : Fun [imm ∶ ty_int, rs1 ∶ ty_regno, rd ∶ ty_regno, op ∶ ty_iop] ty_retired
+  | execute_UTYPE         : Fun [imm ∶ ty_int, rd ∶ ty_regno, op ∶ ty_uop] ty_retired
+  | execute_BTYPE         : Fun [imm ∶ ty_int, rs2 ∶ ty_regno, rs1 ∶ ty_regno, op ∶ ty_bop] ty_retired
+  | execute_RISCV_JAL     : Fun [imm ∶ ty_int, rd ∶ ty_regno] ty_retired
+  | execute_RISCV_JALR    : Fun [imm ∶ ty_int, rs1 ∶ ty_regno, rd ∶ ty_regno] ty_retired
+  | execute_LOAD          : Fun [imm ∶ ty_int, rs1 ∶ ty_regno, rd ∶ ty_regno] ty_retired
+  | execute_STORE         : Fun [imm ∶ ty_int, rs2 ∶ ty_regno, rs1 ∶ ty_regno] ty_retired
   | execute_ECALL         : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
   .
@@ -182,8 +182,11 @@ Module RiscvPmpTermKit <: TermKit.
   .
 
   Inductive Lem : PCtx -> Set :=
-  | open_ptsreg               : Lem [rs ∶ ty_regidx]
-  | close_ptsreg (r : RegIdx) : Lem ctx.nil
+  | extract_ptsreg : Lem [rs ∶ ty_regno]
+  | return_ptsreg  : Lem [rs ∶ ty_regno]
+  | open_ptsreg    : Lem [rs ∶ ty_regno]
+  | close_ptsreg   : Lem [rs ∶ ty_regno]
+  | valid_reg      : Lem [rs ∶ ty_regno]
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -198,9 +201,9 @@ Module RiscvPmpTermKit <: TermKit.
   | mcause        : Reg ty_exc_code
   | mepc          : Reg ty_xlenbits
   | cur_privilege : Reg ty_privilege
-  | x0            : Reg ty_xlenbits
   | x1            : Reg ty_xlenbits
   | x2            : Reg ty_xlenbits
+  | x3            : Reg ty_xlenbits
   | pmp0cfg       : Reg ty_pmpcfg_ent
   | pmpaddr0      : Reg ty_xlenbits
   .
@@ -225,7 +228,7 @@ Module RiscvPmpTermKit <: TermKit.
     intros xy; eapply 𝑹𝑬𝑮_eq_dec.
   Defined.
 
-  Program Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) := {| enum := [ existT _ pc; existT _ nextpc; existT _ mstatus; existT _ mtvec; existT _ mcause; existT _ mepc; existT _ cur_privilege; existT _ x0; existT _ x1; existT _ x2; existT _ pmp0cfg; existT _ pmpaddr0 ]%list |}.
+  Program Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) := {| enum := [ existT _ pc; existT _ nextpc; existT _ mstatus; existT _ mtvec; existT _ mcause; existT _ mepc; existT _ cur_privilege; existT _ x1; existT _ x2; existT _ x3; existT _ pmp0cfg; existT _ pmpaddr0 ]%list |}.
   Next Obligation.
     now eapply (nodup_fixed (H := 𝑹𝑬𝑮_eq_dec)).
   Defined.
@@ -328,41 +331,77 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Import RiscvμSailNotations.
   Local Coercion stm_exp : Exp >-> Stm.
 
-
   Notation "'use' 'lemma' lem args" := (stm_lemma lem args%arg) (at level 10, lem at next level) : exp_scope.
   Notation "'use' 'lemma' lem" := (stm_lemma lem env.nil) (at level 10, lem at next level) : exp_scope.
 
-  (** Functions **)
-  Definition fun_rX : Stm [rs ∶ ty_regidx] ty_xlenbits :=
-    match: rs in regidx with
-    | X0 => use lemma open_ptsreg [exp_var rs]%arg ;;
-            let: v := stm_read_register x0 in
-            use lemma (close_ptsreg X0) ;;
-            stm_exp v
-    | X1 => use lemma open_ptsreg [exp_var rs]%arg ;;
-            let: v := stm_read_register x1 in
-            use lemma (close_ptsreg X1) ;;
-            stm_exp v
-    | X2 => use lemma open_ptsreg [exp_var rs]%arg ;;
-            let: v := stm_read_register x2 in
-            use lemma (close_ptsreg X2) ;;
-            stm_exp v
-    end.
+  Definition z_exp {Γ} : Z -> Exp Γ ty_int := exp_lit ty_int.
 
-  Definition fun_wX : Stm [rd ∶ ty_regidx, v ∶ ty_xlenbits] ty_unit :=
-    match: rd in regidx with
-    | X0 => use lemma open_ptsreg [exp_var rd] ;;
-            use lemma (close_ptsreg X0) ;;
-            stm_lit ty_unit tt
-    | X1 => use lemma open_ptsreg [exp_var rd] ;;
-            stm_write_register x1 v ;;
-            use lemma (close_ptsreg X1) ;;
-            stm_lit ty_unit tt
-    | X2 => use lemma open_ptsreg [exp_var rd] ;;
-            stm_write_register x2 v ;;
-            use lemma (close_ptsreg X2) ;;
-            stm_lit ty_unit tt
-    end.
+  Definition zero_reg {Γ} : Stm Γ ty_xlenbits := exp_lit ty_int 0%Z.
+
+  (** Functions **)
+  Definition fun_rX : Stm [rs ∶ ty_regno] ty_xlenbits :=
+    if: rs = z_exp 0
+    then zero_reg
+    else if: rs = z_exp 1
+         then
+           use lemma valid_reg [exp_var rs] ;;
+           use lemma extract_ptsreg [exp_var rs] ;;
+           use lemma open_ptsreg [exp_var rs] ;;
+           let: v := stm_read_register x1 in
+           use lemma close_ptsreg [exp_var rs] ;;
+           use lemma return_ptsreg [exp_var rs] ;;
+           stm_exp v
+         else if: rs = z_exp 2
+              then
+                use lemma valid_reg [exp_var rs] ;;
+                use lemma extract_ptsreg [exp_var rs] ;;
+                use lemma open_ptsreg [exp_var rs] ;;
+                let: v := stm_read_register x2 in
+                use lemma close_ptsreg [exp_var rs] ;;
+                use lemma return_ptsreg [exp_var rs] ;;
+                stm_exp v
+              else if: rs = z_exp 3
+                   then
+                     use lemma valid_reg [exp_var rs] ;;
+                     use lemma extract_ptsreg [exp_var rs] ;;
+                     use lemma open_ptsreg [exp_var rs] ;;
+                     let: v := stm_read_register x3 in
+                     use lemma close_ptsreg [exp_var rs] ;;
+                     use lemma return_ptsreg [exp_var rs] ;;
+                     stm_exp v
+                   else fail "invalid register number".
+
+  Definition fun_wX : Stm [rd ∶ ty_regno, v ∶ ty_xlenbits] ty_unit :=
+    if: rd = z_exp 0
+    then stm_lit ty_unit tt
+    else if: rd = z_exp 1
+         then
+           use lemma valid_reg [exp_var rd] ;;
+           use lemma extract_ptsreg [exp_var rd] ;;
+           use lemma open_ptsreg [exp_var rd] ;;
+           stm_write_register x1 v ;;
+           use lemma close_ptsreg [exp_var rd] ;;
+           use lemma return_ptsreg [exp_var rd] ;;
+           stm_lit ty_unit tt
+         else if: rd = z_exp 2
+              then
+                use lemma valid_reg [exp_var rd] ;;
+                use lemma extract_ptsreg [exp_var rd] ;;
+                use lemma open_ptsreg [exp_var rd] ;;
+                stm_write_register x2 v ;;
+                use lemma close_ptsreg [exp_var rd] ;;
+                use lemma return_ptsreg [exp_var rd] ;;
+                stm_lit ty_unit tt
+              else if: rd = z_exp 3
+                   then
+                     use lemma valid_reg [exp_var rd] ;;
+                     use lemma extract_ptsreg [exp_var rd] ;;
+                     use lemma open_ptsreg [exp_var rd] ;;
+                     stm_write_register x3 v ;;
+                     use lemma close_ptsreg [exp_var rd] ;;
+                     use lemma return_ptsreg [exp_var rd] ;;
+                     stm_lit ty_unit tt
+                   else fail "invalid register number".
 
   Definition fun_get_arch_pc : Stm ctx.nil ty_xlenbits :=
     stm_read_register pc.
@@ -380,8 +419,8 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     stm_lit ty_unit tt.
 
   Definition fun_abs : Stm [v ∶ ty_int] ty_int :=
-    if: v < (exp_lit ty_int 0%Z)
-    then v * (exp_lit ty_int (-1)%Z)
+    if: v < z_exp 0
+    then v * z_exp (-1)
     else v.
 
   Definition fun_mem_read : Stm [typ ∶ ty_access_type, paddr ∶ ty_xlenbits] ty_memory_op_result :=
@@ -423,7 +462,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
   Definition fun_pmpCheck : Stm [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege] (ty_option ty_exception_type) :=
     let: tmp1 := stm_read_register pmp0cfg in
     let: tmp2 := stm_read_register pmpaddr0 in
-    let: tmp3 := call pmpMatchEntry addr acc priv tmp1 tmp2 (exp_lit ty_int 0%Z) in
+    let: tmp3 := call pmpMatchEntry addr acc priv tmp1 tmp2 (z_exp 0) in
     let: check%string := match: tmp3 in pmpmatch with
                   | PMP_Success  => stm_lit ty_bool true
                   | PMP_Fail     => stm_lit ty_bool false
@@ -523,7 +562,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | inr v => exp_lit ty_pmpaddrmatch PMP_NoMatch
     end.
 
-  Definition fun_process_load : Stm [rd ∶ ty_regidx, vaddr ∶ ty_xlenbits, value ∶ ty_memory_op_result] ty_retired :=
+  Definition fun_process_load : Stm [rd ∶ ty_regno, vaddr ∶ ty_xlenbits, value ∶ ty_memory_op_result] ty_retired :=
     stm_match_union_alt memory_op_result value
                         (fun K =>
                            match K with
@@ -571,7 +610,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                            | KF_Base  => MkAlt (pat_var w%string)
                                                (let: "ast" := foreign decode w in
                                                 let: tmp := stm_read_register pc in
-                                                stm_write_register nextpc (tmp + (exp_lit ty_int 4%Z)) ;;
+                                                stm_write_register nextpc (tmp + (z_exp 4)) ;;
                                                 call execute (exp_var "ast"))
                            | KF_Error => MkAlt (pat_pair e%string addr%string)
                                                (call handle_mem_exception addr e ;;
@@ -725,9 +764,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                   (call execute_MRET)
                            end).
 
-  Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_rop] ty_retired :=
-    stm_match_enum regidx rs1 (fun _ => stm_lit ty_unit tt) ;;
-    stm_match_enum regidx rs2 (fun _ => stm_lit ty_unit tt) ;;
+  Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regno, rs1 ∶ ty_regno, rd ∶ ty_regno, op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: result :=
@@ -735,23 +772,20 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
        | RISCV_ADD => rs1_val + rs2_val
        | RISCV_SUB => rs1_val - rs2_val
        end in
-     stm_match_enum regidx rd (fun _ => stm_lit ty_unit tt) ;;
      call wX rd result ;;
      stm_lit ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_ITYPE : Stm [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx, op ∶ ty_iop] ty_retired :=
-    stm_match_enum regidx rs1 (fun _ => stm_lit ty_unit tt) ;;
+  Definition fun_execute_ITYPE : Stm [imm ∶ ty_int, rs1 ∶ ty_regno, rd ∶ ty_regno, op ∶ ty_iop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: immext := imm in
     let: result :=
        match: op in iop with
        | RISCV_ADDI => rs1_val + immext
        end in
-     stm_match_enum regidx rd (fun _ => stm_lit ty_unit tt) ;;
      call wX rd result ;;
      stm_lit ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_UTYPE : Stm [imm ∶ ty_int, rd ∶ ty_regidx, op ∶ ty_uop] ty_retired :=
+  Definition fun_execute_UTYPE : Stm [imm ∶ ty_int, rd ∶ ty_regno, op ∶ ty_uop] ty_retired :=
     let: off := imm in
     let: ret :=
        match: op in uop with
@@ -760,32 +794,26 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
          let: tmp := call get_arch_pc in
          tmp + off
        end in
-    stm_match_enum regidx rd (fun _ => stm_lit ty_unit tt) ;;
     call wX rd ret ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_RISCV_JAL : Stm [imm ∶ ty_int, rd ∶ ty_regidx] ty_retired :=
+  Definition fun_execute_RISCV_JAL : Stm [imm ∶ ty_int, rd ∶ ty_regno] ty_retired :=
     let: tmp := stm_read_register pc in
     let: t := tmp + imm in
     let: tmp := call get_next_pc in
-    stm_match_enum regidx rd (fun _ => stm_lit ty_unit tt) ;;
     call wX rd tmp ;;
     call set_next_pc t ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_RISCV_JALR : Stm [imm ∶ ty_int , rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired :=
-    stm_match_enum regidx rs1 (fun _ => stm_lit ty_unit tt) ;;
+  Definition fun_execute_RISCV_JALR : Stm [imm ∶ ty_int , rs1 ∶ ty_regno, rd ∶ ty_regno] ty_retired :=
     let: tmp := call rX rs1 in
     let: t := tmp + imm in
     let: tmp := call get_next_pc in
-    stm_match_enum regidx rd (fun _ => stm_lit ty_unit tt) ;;
     call wX rd tmp ;;
     call set_next_pc t ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_BTYPE : Stm [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx, op ∶ ty_bop] ty_retired :=
-    stm_match_enum regidx rs1 (fun _ => stm_lit ty_unit tt) ;;
-    stm_match_enum regidx rs2 (fun _ => stm_lit ty_unit tt) ;;
+  Definition fun_execute_BTYPE : Stm [imm ∶ ty_int, rs2 ∶ ty_regno, rs1 ∶ ty_regno, op ∶ ty_bop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: taken :=
@@ -812,7 +840,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     else
       stm_lit ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_LOAD : Stm [imm ∶ ty_int, rs1 ∶ ty_regidx, rd ∶ ty_regidx] ty_retired :=
+  Definition fun_execute_LOAD : Stm [imm ∶ ty_int, rs1 ∶ ty_regno, rd ∶ ty_regno] ty_retired :=
     let: offset := imm in
     let: tmp := call rX rs1 in
     let: paddr := tmp + offset in
@@ -820,7 +848,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     call process_load rd paddr tmp ;;
     stm_lit ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_STORE : Stm [imm ∶ ty_int, rs2 ∶ ty_regidx, rs1 ∶ ty_regidx] ty_retired :=
+  Definition fun_execute_STORE : Stm [imm ∶ ty_int, rs2 ∶ ty_regno, rs1 ∶ ty_regno] ty_retired :=
     let: offset := imm in
     let: tmp := call rX rs1 in
     let: paddr := tmp + offset in
@@ -830,7 +858,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                         (fun K =>
                            match K with
                            | KMemValue => MkAlt (pat_var v%string)
-                                                (if: v = (exp_lit ty_int 1%Z)
+                                                (if: v = z_exp 1
                                                  then stm_lit ty_retired RETIRE_SUCCESS
                                                  else fail "store got false from write_mem_value")
                            | KMemException => MkAlt (pat_var e%string)
@@ -904,7 +932,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args.
-      exists γ, μ, (inr (RTYPE X0 X0 X0 RISCV_ADD)), (inr (RTYPE X0 X0 X0 RISCV_ADD)).
+      exists γ, μ, (inr (RTYPE 0 0 0 RISCV_ADD)), (inr (RTYPE 0 0 0 RISCV_ADD)).
       reflexivity.
   Qed.
 

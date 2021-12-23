@@ -49,7 +49,7 @@ Module RiscvPmpValueKit <: ValueKit.
 
   Notation ty_xlenbits         := (ty_int).
   Notation ty_word             := (ty_int).
-  Notation ty_regidx           := (ty_enum regidx).
+  Notation ty_regno            := (ty_int).
   Notation ty_privilege        := (ty_enum privilege).
   Notation ty_pmpcfgidx        := (ty_enum pmpcfgidx).
   Notation ty_pmpaddridx       := (ty_enum pmpaddridx).
@@ -78,14 +78,14 @@ Module RiscvPmpValueKit <: ValueKit.
     match U with
     | ast              => fun K =>
                             match K with
-                            | KRTYPE      => ty_tuple [ty_regidx, ty_regidx, ty_regidx, ty_rop]
-                            | KITYPE      => ty_tuple [ty_int, ty_regidx, ty_regidx, ty_iop]
-                            | KUTYPE      => ty_tuple [ty_int, ty_regidx, ty_uop]
-                            | KBTYPE      => ty_tuple [ty_int, ty_regidx, ty_regidx, ty_bop]
-                            | KRISCV_JAL  => ty_tuple [ty_int, ty_regidx]
-                            | KRISCV_JALR => ty_tuple [ty_int, ty_regidx, ty_regidx]
-                            | KLOAD       => ty_tuple [ty_int, ty_regidx, ty_regidx]
-                            | KSTORE      => ty_tuple [ty_int, ty_regidx, ty_regidx]
+                            | KRTYPE      => ty_tuple [ty_regno, ty_regno, ty_regno, ty_rop]
+                            | KITYPE      => ty_tuple [ty_int, ty_regno, ty_regno, ty_iop]
+                            | KUTYPE      => ty_tuple [ty_int, ty_regno, ty_uop]
+                            | KBTYPE      => ty_tuple [ty_int, ty_regno, ty_regno, ty_bop]
+                            | KRISCV_JAL  => ty_tuple [ty_int, ty_regno]
+                            | KRISCV_JALR => ty_tuple [ty_int, ty_regno, ty_regno]
+                            | KLOAD       => ty_tuple [ty_int, ty_regno, ty_regno]
+                            | KSTORE      => ty_tuple [ty_int, ty_regno, ty_regno]
                             | KECALL      => ty_unit
                             | KMRET       => ty_unit
                             end

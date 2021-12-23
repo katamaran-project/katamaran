@@ -55,6 +55,9 @@ Inductive PurePredicate : Set :=
 Inductive Predicate : Set :=
 | pmp_entries
 | ptsreg
+| gprs
+| gprs_without
+| is_reg
 .
 
 Section TransparentObligations.
@@ -84,15 +87,21 @@ Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProg
   Definition 𝑯 := Predicate.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | pmp_entries => [ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits)]
-    | ptsreg      => [ty_regidx, ty_xlenbits]
+    | pmp_entries  => [ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits)]
+    | ptsreg       => [ty_regno, ty_xlenbits]
+    | gprs         => ctx.nil
+    | gprs_without => [ty_regno]
+    | is_reg       => [ty_regno]
     end.
 
   Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
-      | pmp_entries => false
-      | ptsreg      => false
+      | pmp_entries  => false
+      | ptsreg       => false
+      | gprs         => false
+      | gprs_without => false
+      | is_reg       => true
       end
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -106,9 +115,19 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
                                   RiscvPmpAssertionKit.
 
   Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 100).
-  Local Notation "r '↦r' val" := (asn_chunk (chunk_user ptsreg (env.nil ► (ty_regidx ↦ r) ► (ty_xlenbits ↦ val)))) (at level 100).
+  Local Notation "r '↦r' val" := (asn_chunk (chunk_user ptsreg (env.nil ► (ty_regno ↦ r) ► (ty_xlenbits ↦ val)))) (at level 100).
   Local Notation "p '∗' q" := (asn_sep p q) (at level 150).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env.nil ► (ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits) ↦ l)))).
+  Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
+  Local Notation asn_gprs_without r := (asn_chunk (chunk_user gprs_without (env.nil ► (ty_regno ↦ r)))).
+  Local Notation asn_is_reg r := (asn_chunk (chunk_user is_reg (env.nil ► (ty_regno ↦ r)))).
+
+  Definition term_eqb {Σ} (e1 e2 : Term Σ ty_int) : Term Σ ty_bool :=
+    term_binop binop_eq e1 e2.
+
+  Local Notation "e1 '=?' e2" := (term_eqb e1 e2).
+
+  Definition z_term {Σ} : Z -> Term Σ ty_int := term_lit ty_int.
 
   Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
     ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
@@ -138,20 +157,14 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
         @asn_exists Σ Γ (asn_exist x τ asn)
     end.
 
-  Definition regidx_to_reg (r : RegIdx) : Reg ty_xlenbits :=
-    match r with
-    | X0 => x0
-    | X1 => x1
-    | X2 => x2
-    end.
-
-  Definition asn_and_regs {Σ} (f : RegIdx -> Assertion Σ) : Assertion Σ :=
-    f X0 ∗ f X1 ∗ f X2.
-
-  (* ∀ r : regidx, ∃ w : xlenbits, r ↦r w *)
-  Definition asn_regs_ptsto {Σ} : Assertion Σ :=
-    asn_and_regs
-      (fun r => asn_exist "w" ty_xlenbits (term_lit ty_regidx r ↦r term_var "w")).
+  Definition asn_with_reg {Σ} (r : Term Σ ty_int) (asn : Reg ty_xlenbits -> Assertion Σ) (asn_default : Assertion Σ) : Assertion Σ :=
+    asn_if (r =? z_term 1)
+           (asn x1)
+           (asn_if (r =? z_term 2)
+                   (asn x2)
+                   (asn_if (r =? z_term 3)
+                           (asn x3)
+                           asn_default)).
 
   (* TODO: abstract away the concrete type, look into unions for that *)
   (* TODO: length of list should be 16, no duplicates *)
@@ -184,11 +197,11 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
          pc ↦ (term_var "i") ∗
          asn_pmp_entries (term_var "entries") ∗
          asn_exist v ty_xlenbits (nextpc ↦ term_var v) ∗
-         asn_regs_ptsto;
+         asn_gprs;
        sep_contract_result          := "result_mach_inv";
        sep_contract_postcondition   :=
          asn_pmp_entries (term_var "entries") ∗
-         asn_regs_ptsto ∗
+         asn_gprs ∗
          mtvec ↦ (term_var "h") ∗
          asn_exist v ty_xlenbits (nextpc ↦ term_var v) ∗
          asn_or (cur_privilege ↦ (term_var "m") ∗ pc ↦ (term_var "i"))
@@ -277,30 +290,21 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
     |}.
 
   Definition sep_contract_rX : SepContractFun rX :=
-    {| sep_contract_logic_variables := [rs ∶ ty_regidx, v ∶ ty_xlenbits];
+    {| sep_contract_logic_variables := [rs ∶ ty_regno];
        sep_contract_localstore      := [term_var rs]%arg;
-       sep_contract_precondition    := term_var rs ↦r term_var v;
+       sep_contract_precondition    := asn_gprs;
        sep_contract_result          := "result_rX";
-       sep_contract_postcondition   :=
-         asn_eq (term_var "result_rX") (term_var v)
-         ∗ term_var rs ↦r term_var v
+       sep_contract_postcondition   := asn_gprs;
     |}.
 
   Definition sep_contract_wX : SepContractFun wX :=
-    {| sep_contract_logic_variables := [rs ∶ ty_regidx, v ∶ ty_xlenbits, "v__old" :: ty_xlenbits];
+    {| sep_contract_logic_variables := [rs ∶ ty_regno, v ∶ ty_xlenbits];
        sep_contract_localstore      := [term_var rs, term_var v]%arg;
-       sep_contract_precondition    := term_var rs ↦r term_var "v__old";
+       sep_contract_precondition    := asn_gprs;
        sep_contract_result          := "result_wX";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_wX") (term_lit ty_unit tt)
-         ∗ asn_match_enum
-             regidx (term_var rs)
-             (* TODO: This should only binary branching. *)
-             (fun k => match k with
-                       | X0 => asn_eq (term_var "v__old") (term_lit ty_xlenbits 0) ∗
-                               term_var rs ↦r term_lit ty_xlenbits 0
-                       | _  => term_var rs ↦r term_var v
-                       end);
+         ∗ asn_gprs;
     |}.
 
   Definition sep_contract_abs : SepContractFun abs :=
@@ -335,30 +339,50 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
        sep_contract_postcondition   := asn_true;
     |}.
 
-  Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
-    {| lemma_logic_variables := [ rs ∶ ty_regidx, w ∶ ty_xlenbits];
-       lemma_patterns        := [term_var rs]%arg;
-       lemma_precondition    := term_var rs ↦r term_var w;
+  Definition lemma_extract_ptsreg : SepLemma extract_ptsreg :=
+    {| lemma_logic_variables := [rs ∶ ty_regno];
+       lemma_patterns        := [term_var rs];
+       lemma_precondition    := asn_gprs ∗ asn_is_reg (term_var rs);
        lemma_postcondition   :=
-         asn_match_enum
-           regidx (term_var rs)
-           (fun k => match k with
-                     | X0 => x0 ↦ term_var w ∗ asn_eq (term_var w) (term_lit ty_xlenbits 0)
-                     | X1 => x1 ↦ term_var w
-                     | X2 => x2 ↦ term_var w
-                     end)
+             asn_exist w ty_xlenbits (term_var rs ↦r term_var w)
+             ∗ asn_gprs_without (term_var rs);
     |}.
 
-  Definition lemma_close_ptsreg (r : RegIdx) : SepLemma (close_ptsreg r) :=
-    {| lemma_logic_variables := [w ∶ ty_xlenbits];
-       lemma_patterns        := env.nil;
-       lemma_precondition    := match r with
-                                | X0 => x0 ↦ term_var w ∗
-                                        asn_eq (term_var w) (term_lit ty_xlenbits 0)
-                                | X1 => x1 ↦ term_var w
-                                | X2 => x2 ↦ term_var w
-                                end;
-       lemma_postcondition   := term_enum regidx r ↦r term_var w;
+  Definition lemma_return_ptsreg : SepLemma return_ptsreg :=
+    {| lemma_logic_variables := [rs ∶ ty_regno];
+       lemma_patterns        := [term_var rs];
+       lemma_precondition    :=
+             asn_is_reg (term_var rs) ∗
+             asn_exist w ty_xlenbits (term_var rs ↦r term_var w) ∗
+             asn_gprs_without (term_var rs);
+       lemma_postcondition   := asn_gprs;
+    |}.
+
+  Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
+    {| lemma_logic_variables := [rs ∶ ty_regno, w ∶ ty_xlenbits];
+       lemma_patterns        := [term_var rs];
+       lemma_precondition    := term_var rs ↦r term_var w;
+       lemma_postcondition   := asn_with_reg (term_var rs)
+                                             (fun r => r ↦ term_var w)
+                                             asn_false;
+    |}.
+
+  Definition lemma_close_ptsreg : SepLemma close_ptsreg :=
+    {| lemma_logic_variables := [rs ∶ ty_regno, w ∶ ty_xlenbits];
+       lemma_patterns        := [term_var rs];
+       lemma_precondition    := asn_with_reg (term_var rs)
+                                             (fun r => r ↦ term_var w)
+                                             asn_false;
+       lemma_postcondition   := term_var rs ↦r term_var w
+    |}.
+
+  Definition lemma_valid_reg : SepLemma valid_reg :=
+    {| lemma_logic_variables := [rs ∶ ty_regno];
+       lemma_patterns        := [term_var rs];
+       lemma_precondition    := asn_with_reg (term_var rs)
+                                             (fun r => asn_true)
+                                             asn_false;
+       lemma_postcondition   := asn_is_reg (term_var rs);
     |}.
 
   End Contracts.
@@ -396,8 +420,11 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Definition LEnv : LemmaEnv :=
     fun Δ l =>
       match l with
+      | extract_ptsreg => lemma_extract_ptsreg
+      | return_ptsreg  => lemma_return_ptsreg
       | open_ptsreg    => lemma_open_ptsreg
-      | close_ptsreg r => lemma_close_ptsreg r
+      | close_ptsreg   => lemma_close_ptsreg
+      | valid_reg      => lemma_valid_reg
       end.
 
   Lemma linted_cenvex :
@@ -548,7 +575,7 @@ Module BlockVerification.
     (chunk_user
        ptsreg
        (env.nil
-          ► (ty_regidx ↦ term_lit ty_regidx r)
+          ► (ty_regno ↦ term_lit ty_regno r)
           ► (ty_xlenbits ↦ val)))
       (at level 100).
   Notation "ω ∣ x <- ma ;; mb" :=
@@ -570,12 +597,8 @@ Module BlockVerification.
     fun _ u0 =>
       ω01 ∣ v1 <- @angelic ty_xlenbits _ ;;
       ω12 ∣ _  <- consume_chunk (r ↦r v1) ;;
-      if eq_dec r X0
-      then let v2 := persist__term v1 ω12 in
-           _ ∣ _ <- assume (formula_eq v2 (term_lit ty_xlenbits 0)) ;;
-           produce_chunk (r ↦r term_lit ty_xlenbits 0)
-      else let u2 := persist__term u0 (acc_trans ω01 ω12) in
-           produce_chunk (r ↦r u2).
+      let u2 := persist__term u0 (acc_trans ω01 ω12) in
+      produce_chunk (r ↦r u2).
 
   Definition exec_rtype (rs2 rs1 rd : RegIdx) (op : ROP) : ⊢ M Unit :=
     fun _ =>
@@ -639,25 +662,25 @@ Module BlockVerification.
          (chunk_user
             ptsreg
             (env.nil
-               ► (ty_regidx ↦ term_lit ty_regidx r)
+               ► (ty_regno ↦ term_lit ty_regno r)
                ► (ty_xlenbits ↦ val))))
          (at level 100).
 
     Example block1 : list AST :=
-      [ ADD X1 X1 X2;
-        SUB X2 X1 X2;
-        SUB X1 X1 X2
+      [ ADD 1 1 2;
+        SUB 2 1 2;
+        SUB 1 1 2
       ].
 
     Let Σ1 : LCtx := ["x" :: ty_xlenbits, "y" :: ty_xlenbits].
 
     Example pre1 : Assertion Σ1 :=
-      X1 ↦r term_var "x" ∗
-      X2 ↦r term_var "y".
+      1 ↦r term_var "x" ∗
+      2 ↦r term_var "y".
 
     Example post1 : Assertion Σ1 :=
-      X1 ↦r term_var "y" ∗
-      X2 ↦r term_var "x".
+      1 ↦r term_var "y" ∗
+      2 ↦r term_var "x".
 
     Example VC1 : 𝕊 Σ1 := VC pre1 block1 post1.
 

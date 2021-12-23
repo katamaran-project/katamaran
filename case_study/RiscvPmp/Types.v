@@ -40,12 +40,6 @@ Definition Addr : Set := Z.
 Definition Word : Set := Z.
 
 (** Enums **)
-Inductive RegIdx : Set :=
-| X0
-| X1
-| X2
-.
-
 Inductive Privilege : Set :=
 | User
 | Machine
@@ -106,7 +100,6 @@ Inductive Retired : Set :=
 | RETIRE_FAIL.
 
 Inductive Enums : Set :=
-| regidx
 | privilege
 | pmpcfgidx
 | pmpaddridx
@@ -121,6 +114,8 @@ Inductive Enums : Set :=
 .
 
 (** Unions **)
+Definition RegIdx := Z.
+
 Inductive AST : Set :=
 | RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
 | ITYPE (imm : Z) (rs1 rd : RegIdx) (op : IOP)
@@ -245,7 +240,6 @@ Section TransparentObligations.
   Local Set Transparent Obligations.
 
   Derive NoConfusion for Enums.
-  Derive NoConfusion for RegIdx.
   Derive NoConfusion for Privilege.
   Derive NoConfusion for PmpCfgIdx.
   Derive NoConfusion for PmpAddrIdx.
@@ -276,7 +270,6 @@ Section TransparentObligations.
 End TransparentObligations.
 
 Derive EqDec for Enums.
-Derive EqDec for RegIdx.
 Derive EqDec for Privilege.
 Derive EqDec for PmpCfgIdx.
 Derive EqDec for PmpAddrIdx.
@@ -310,9 +303,6 @@ Section Finite.
 
   Local Obligation Tactic :=
     finite_from_eqdec.
-
-  Global Program Instance RegIdx_finite : Finite RegIdx :=
-    {| enum := [X0;X1;X2] |}.
 
   Global Program Instance Privilege_finite : Finite Privilege :=
     {| enum := [User;Machine] |}.
@@ -387,7 +377,6 @@ Module RiscvPmpTypeKit <: TypeKit.
   Definition 𝑬_eq_dec := Enums_eqdec.
   Definition 𝑬𝑲 (e : 𝑬) : Set :=
     match e with
-    | regidx           => RegIdx
     | privilege        => Privilege
     | pmpcfgidx        => PmpCfgIdx
     | pmpaddridx       => PmpAddrIdx
@@ -447,4 +436,3 @@ Module RiscvPmpTypeKit <: TypeKit.
   Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
     ltac:(destruct R; auto with typeclass_instances).
 End RiscvPmpTypeKit.
-
