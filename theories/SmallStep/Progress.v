@@ -65,7 +65,7 @@ Module Progress
         γ : RegStore, μ : Memory, δ1: CStore ?Γ, δ2: CStore ?Δ |- _
       ] => specialize (IH γ μ (env.cat δ1 δ2)); T
     (* | [ IH: (forall (δ : CStore (ctx_snoc ctx_nil (?x , ?σ))), _), *)
-    (*     v: Lit ?σ |- _ *)
+    (*     v: Val ?σ |- _ *)
     (*   ] => specialize (IH (env.snoc env.nil x σ v)); T *)
     | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStore ?Γ), _),
         γ : RegStore, δ: CStore ?Γ |- _

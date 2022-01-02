@@ -63,7 +63,7 @@ Module Type AssertionKit
   Parameter Inline 𝑷  : Set.
   (* Predicate field types. *)
   Parameter Inline 𝑷_Ty : 𝑷 -> Ctx Ty.
-  Parameter Inline 𝑷_inst : forall p : 𝑷, env.abstract Lit (𝑷_Ty p) Prop.
+  Parameter Inline 𝑷_inst : forall p : 𝑷, env.abstract Val (𝑷_Ty p) Prop.
 
   Declare Instance 𝑷_eq_dec : EqDec 𝑷.
 
@@ -89,7 +89,7 @@ Module Assertions
   Inductive Formula (Σ : LCtx) : Type :=
   | formula_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
   | formula_bool (t : Term Σ ty_bool)
-  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Lit Σ' Prop)
+  | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Val Σ' Prop)
   | formula_ge (t1 t2 : Term Σ ty_int)
   | formula_gt (t1 t2 : Term Σ ty_int)
   | formula_le (t1 t2 : Term Σ ty_int)
@@ -135,12 +135,12 @@ Module Assertions
   Definition inst_formula {Σ} (fml : Formula Σ) (ι : Valuation Σ) : Prop :=
     match fml with
     | formula_user p ts => env.uncurry (𝑷_inst p) (inst ts ι)
-    | formula_bool t    => inst (A := Lit ty_bool) t ι = true
+    | formula_bool t    => inst (A := Val ty_bool) t ι = true
     | formula_prop ζ P  => uncurry_named P (inst ζ ι)
-    | formula_ge t1 t2  => inst (A := Lit ty_int) t1 ι >= inst (A := Lit ty_int) t2 ι
-    | formula_gt t1 t2  => inst (A := Lit ty_int) t1 ι >  inst (A := Lit ty_int) t2 ι
-    | formula_le t1 t2  => inst (A := Lit ty_int) t1 ι <= inst (A := Lit ty_int) t2 ι
-    | formula_lt t1 t2  => inst (A := Lit ty_int) t1 ι <  inst (A := Lit ty_int) t2 ι
+    | formula_ge t1 t2  => inst (A := Val ty_int) t1 ι >= inst (A := Val ty_int) t2 ι
+    | formula_gt t1 t2  => inst (A := Val ty_int) t1 ι >  inst (A := Val ty_int) t2 ι
+    | formula_le t1 t2  => inst (A := Val ty_int) t1 ι <= inst (A := Val ty_int) t2 ι
+    | formula_lt t1 t2  => inst (A := Val ty_int) t1 ι <  inst (A := Val ty_int) t2 ι
     | formula_eq t1 t2  => inst t1 ι =  inst t2 ι
     | formula_neq t1 t2 => inst t1 ι <> inst t2 ι
     end%Z.
@@ -474,8 +474,8 @@ Module Assertions
 
     (* Semi-concrete chunks *)
     Inductive SCChunk : Type :=
-    | scchunk_user   (p : 𝑯) (vs : Env Lit (𝑯_Ty p))
-    | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ)
+    | scchunk_user   (p : 𝑯) (vs : Env Val (𝑯_Ty p))
+    | scchunk_ptsreg {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ)
     | scchunk_conj   (c1 c2 : SCChunk)
     | scchunk_wand   (c1 c2 : SCChunk).
     Global Arguments scchunk_user _ _ : clear implicits.
@@ -1138,13 +1138,13 @@ Module Assertions
 
     Equations(noeqns) simplify_formula_bool {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_var ς                 | k := Some (cons (formula_bool (term_var ς)) k);
-    | term_lit _ b               | k := if b then Some k else None;
+    | term_val _ b               | k := if b then Some k else None;
     | term_binop op t1 t2        | k := Some (simplify_formula_bool_binop op t1 t2 k);
     | term_not t                 | k := simplify_formula_bool_neg t k;
     | @term_projtup _ _ t n _ p  | k := Some (cons (formula_bool (@term_projtup _ _ t n _ p)) k)
     with simplify_formula_bool_neg {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_var ς                | k := Some (cons (formula_bool (term_not (term_var ς))) k);
-    | term_lit _ b              | k := if b then None else Some k;
+    | term_val _ b              | k := if b then None else Some k;
     | term_binop op t1 t2        | k := Some (simplify_formula_bool_binop_neg op t1 t2 k);
     | term_not t                | k := simplify_formula_bool t k;
     | @term_projtup _ _ t n _ p | k := Some (cons (formula_bool (term_not (@term_projtup _ _ t n _ p))) k).
@@ -1211,23 +1211,23 @@ Module Assertions
           rewrite ?inst_pathcondition_cons. cbn. intuition.
     Qed.
 
-    Equations(noeqns) simplify_formula_eq_binop_lit {Σ σ σ1 σ2}
-      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Lit σ)
+    Equations(noeqns) simplify_formula_eq_binop_val {Σ σ σ1 σ2}
+      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ)
       (k : List Formula Σ) : option (List Formula Σ) :=
-    | binop_pair       | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit _ v2)) k));
+    | binop_pair       | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_val _ v1)) (cons (formula_eq t2 (term_val _ v2)) k));
     | binop_cons       | t1 | t2 | nil        | k := None;
-    | binop_cons       | t1 | t2 | cons v1 v2 | k := Some (cons (formula_eq t1 (term_lit _ v1)) (cons (formula_eq t2 (term_lit (ty_list _) v2)) k));
-    | binop_tuple_snoc | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_lit (ty_tuple _) v1)) (cons (formula_eq t2 (term_lit _ v2)) k));
+    | binop_cons       | t1 | t2 | cons v1 v2 | k := Some (cons (formula_eq t1 (term_val _ v1)) (cons (formula_eq t2 (term_val (ty_list _) v2)) k));
+    | binop_tuple_snoc | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_val (ty_tuple _) v1)) (cons (formula_eq t2 (term_val _ v2)) k));
     | op               | t1 | t2 | v          | k :=
-      Some (cons (formula_eq (term_binop op t1 t2) (term_lit _ v)) k).
+      Some (cons (formula_eq (term_binop op t1 t2) (term_val _ v)) k).
 
-    Lemma simplify_formula_eq_binop_lit_spec {Σ σ σ1 σ2}
-      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Lit σ) (k : List Formula Σ) :
+    Lemma simplify_formula_eq_binop_val_spec {Σ σ σ1 σ2}
+      (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ) (k : List Formula Σ) :
       OptionSpec
         (fun fmlsk : List Formula Σ =>
            forall ι, instpc fmlsk ι <-> eval_binop op (inst t1 ι) (inst t2 ι) = v /\ instpc k ι)
         (forall ι, eval_binop op (inst t1 ι) (inst t2 ι) <> v)
-        (simplify_formula_eq_binop_lit op t1 t2 v k).
+        (simplify_formula_eq_binop_val op t1 t2 v k).
     Proof.
       destruct op; cbn; try (constructor; intros ι); cbn;
         rewrite ?inst_pathcondition_cons; cbn; try reflexivity.
@@ -1249,13 +1249,13 @@ Module Assertions
       | right _ => None
       end.
 
-    Definition simplify_formula_eq_union_lit {Σ U} {K1 : 𝑼𝑲 U}
-      (t1 : Term Σ (𝑼𝑲_Ty K1)) (v2 : Lit (ty_union U)) (k : List Formula Σ) :
+    Definition simplify_formula_eq_union_val {Σ U} {K1 : 𝑼𝑲 U}
+      (t1 : Term Σ (𝑼𝑲_Ty K1)) (v2 : Val (ty_union U)) (k : List Formula Σ) :
       option (List Formula Σ) :=
        let (K2, v2) := 𝑼_unfold v2 in
        match 𝑼𝑲_eq_dec K1 K2 with
-       | left e  => let v2' := eq_rec_r (fun K1 => Lit (𝑼𝑲_Ty K1)) v2 e in
-                    let t2  := term_lit (𝑼𝑲_Ty K1) v2' in
+       | left e  => let v2' := eq_rec_r (fun K1 => Val (𝑼𝑲_Ty K1)) v2 e in
+                    let t2  := term_val (𝑼𝑲_Ty K1) v2' in
                     Some (cons (formula_eq t1 t2) k)
        | right _ => None
        end.
@@ -1270,12 +1270,12 @@ Module Assertions
           (fun fmlsk : List Formula Σ =>
              forall ι : Valuation Σ,
                instpc fmlsk ι <->
-                 existT (P := fun K => Lit (𝑼𝑲_Ty K)) K1 (inst t1 ι) =
-                   existT (P := fun K => Lit (𝑼𝑲_Ty K)) K2 (inst t2 ι)
+                 existT (P := fun K => Val (𝑼𝑲_Ty K)) K1 (inst t1 ι) =
+                   existT (P := fun K => Val (𝑼𝑲_Ty K)) K2 (inst t2 ι)
                  /\ instpc k ι)
           (forall ι : Valuation Σ,
-              existT (P := fun K => Lit (𝑼𝑲_Ty K)) K1 (inst t1 ι) <>
-                existT (P := fun K => Lit (𝑼𝑲_Ty K)) K2 (inst t2 ι))
+              existT (P := fun K => Val (𝑼𝑲_Ty K)) K1 (inst t1 ι) <>
+                existT (P := fun K => Val (𝑼𝑲_Ty K)) K2 (inst t2 ι))
           (simplify_formula_eq_union t1 t2 k).
       Proof.
         unfold simplify_formula_eq_union.
@@ -1290,17 +1290,17 @@ Module Assertions
           intros v1 v2 H. now dependent elimination H.
       Qed.
 
-      Lemma simplify_formula_eq_union_lit_spec {Σ U}
+      Lemma simplify_formula_eq_union_val_spec {Σ U}
         {K1 : 𝑼𝑲 U} (t1 : Term Σ (𝑼𝑲_Ty K1))
-        (l : Lit (ty_union U)) (k : List Formula Σ) :
+        (l : Val (ty_union U)) (k : List Formula Σ) :
         OptionSpec
           (fun fmlsk : List Formula Σ =>
              forall ι : Valuation Σ,
                instpc fmlsk ι <-> 𝑼_fold (existT K1 (inst t1 ι)) = l /\ instpc k ι)
           (forall ι : Valuation Σ, 𝑼_fold (existT K1 (inst_term t1 ι)) <> l)
-          (simplify_formula_eq_union_lit t1 l k).
+          (simplify_formula_eq_union_val t1 l k).
       Proof.
-        unfold simplify_formula_eq_union_lit.
+        unfold simplify_formula_eq_union_val.
         destruct 𝑼_unfold as [K2 v2] eqn:?.
         apply (f_equal (@𝑼_fold U)) in Heqs.
         rewrite 𝑼_fold_unfold in Heqs. subst.
@@ -1321,15 +1321,15 @@ Module Assertions
     End WithUIP.
 
     Equations(noeqns) simplify_formula_eq {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) : option (List Formula Σ) :=
-    | term_lit ?(σ) l1       | term_lit σ l2            | k => if Lit_eqb σ l1 l2 then Some k else None;
+    | term_val ?(σ) l1       | term_val σ l2            | k => if Val_eqb σ l1 l2 then Some k else None;
     | term_inr _             | term_inl _               | k => None;
     | term_inl _             | term_inr _               | k => None;
     | term_inl t1            | term_inl t2              | k => simplify_formula_eq t1 t2 k;
     | term_inr t1            | term_inr t2              | k => simplify_formula_eq t1 t2 k;
     | term_record ?(R) ts1   | term_record R ts2        | k => Some (app (formula_eqs_nctx ts1 ts2) k);
     | term_binop op1 t11 t12 | term_binop op2 t21 t22   | k => simplify_formula_eq_binop op1 t11 t12 op2 t21 t22 k;
-    | term_binop op1 t11 t12 | term_lit _ v             | k => simplify_formula_eq_binop_lit op1 t11 t12 v k;
-    | term_union U K t       | term_lit ?(ty_union U) v | k => simplify_formula_eq_union_lit t v k;
+    | term_binop op1 t11 t12 | term_val _ v             | k => simplify_formula_eq_binop_val op1 t11 t12 v k;
+    | term_union U K t       | term_val ?(ty_union U) v | k => simplify_formula_eq_union_val t v k;
     | term_union ?(U) K1 t1  | term_union U K2 t2       | k => simplify_formula_eq_union t1 t2 k;
     | t1                     | t2                       | k => simplify_formula_eqb t1 t2 k.
 
@@ -1367,7 +1367,7 @@ Module Assertions
     Proof.
       { dependent elimination t; cbn; try constructor.
         - intros ι. rewrite inst_pathcondition_cons. reflexivity.
-        - destruct l; constructor; intuition.
+        - destruct v; constructor; intuition.
         - apply simplify_formula_bool_binop_spec.
         - generalize (simplify_formula_bool_neg_spec Σ e0 k).
           apply optionspec_monotonic.
@@ -1380,7 +1380,7 @@ Module Assertions
       { dependent elimination t; try constructor.
         - intros ι. rewrite inst_pathcondition_cons. cbn.
           unfold is_true. now rewrite negb_true_iff, not_true_iff_false.
-        - destruct l; cbn; constructor; intuition.
+        - destruct v; cbn; constructor; intuition.
         - intros ι. cbn. rewrite not_true_iff_false.
           apply simplify_formula_bool_binop_neg_spec.
         - generalize (simplify_formula_bool_spec Σ e0 k).
@@ -1403,8 +1403,8 @@ Module Assertions
       induction s; try apply simplify_formula_eqb_spec;
         dependent elimination t; try (cbn; constructor; intros;
           rewrite ?inst_pathcondition_cons; auto; fail).
-      - cbn. destruct (Lit_eqb_spec σ1 l l0); constructor; intuition.
-      - cbn. apply simplify_formula_eq_binop_lit_spec.
+      - cbn. destruct (Val_eqb_spec σ1 v v0); constructor; intuition.
+      - cbn. apply simplify_formula_eq_binop_val_spec.
       - cbn. apply simplify_formula_eq_binop_spec.
       - specialize (IHs t). revert IHs. apply optionspec_monotonic.
         + intros fmls HYP ι. specialize (HYP ι). rewrite HYP. cbn.
@@ -1419,7 +1419,7 @@ Module Assertions
           * now f_equal.
           * apply noConfusion_inv in Heq. apply Heq.
         + intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
-      - cbn. apply simplify_formula_eq_union_lit_spec.
+      - cbn. apply simplify_formula_eq_union_val_spec.
       - cbn. clear. rename e4 into t2, K1 into K2, s into t1, K0 into K1, U0 into U.
         generalize (simplify_formula_eq_union_spec t1 t2 k). apply optionspec_monotonic.
         + intros k'. apply base.forall_proper. intros ι.
@@ -1514,9 +1514,9 @@ Module Assertions
     Equations(noeqns) try_unify_bool {w : World} (t : Term w ty_bool) :
       option { w' & Tri w w' } :=
       try_unify_bool (@term_var _ x σ xIn) :=
-        Some (existT _ (tri_cons x (term_lit ty_bool true) tri_id));
+        Some (existT _ (tri_cons x (term_val ty_bool true) tri_id));
       try_unify_bool (term_not (@term_var _ x σ xIn)) :=
-        Some (existT _ (tri_cons x (term_lit ty_bool false) tri_id));
+        Some (existT _ (tri_cons x (term_val ty_bool false) tri_id));
       try_unify_bool _ :=
         None.
 
@@ -1906,8 +1906,8 @@ Module Assertions
   Notation asn_bool b := (asn_formula (formula_bool b)).
   Notation asn_prop Σ P := (asn_formula (@formula_prop Σ Σ (sub_id Σ) P)).
   Notation asn_eq t1 t2 := (asn_formula (formula_eq t1 t2)).
-  Notation asn_true := (asn_bool (term_lit ty_bool true)).
-  Notation asn_false := (asn_bool (term_lit ty_bool false)).
+  Notation asn_true := (asn_bool (term_val ty_bool true)).
+  Notation asn_false := (asn_bool (term_val ty_bool false)).
 
   Global Instance sub_assertion : Subst Assertion :=
     fix sub_assertion {Σ1} (a : Assertion Σ1) {Σ2} (ζ : Sub Σ1 Σ2) {struct a} : Assertion Σ2 :=
@@ -2250,9 +2250,9 @@ Module Assertions
 
   Class IHeaplet (L : Type) := {
       is_ISepLogic :> ISepLogic L
-    ; luser (p : 𝑯) (ts : Env Lit (𝑯_Ty p)) : L
-    ; lptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Lit σ) : L
-    ; lduplicate (p : 𝑯) (ts : Env Lit (𝑯_Ty p)) :
+    ; luser (p : 𝑯) (ts : Env Val (𝑯_Ty p)) : L
+    ; lptsreg  {σ : Ty} (r : 𝑹𝑬𝑮 σ) (t : Val σ) : L
+    ; lduplicate (p : 𝑯) (ts : Env Val (𝑯_Ty p)) :
         is_duplicable p = true ->
         (lentails (luser (p := p) ts) (sepcon (luser (p := p) ts) (luser (p := p) ts)))
   }.
@@ -2276,7 +2276,7 @@ Module Assertions
       match a with
       | asn_formula fml => !!(inst fml ι) ∧ emp
       | asn_chunk c => interpret_chunk c ι
-      | asn_if b a1 a2 => if inst (A := Lit ty_bool) b ι then interpret_assertion a1 ι else interpret_assertion a2 ι
+      | asn_if b a1 a2 => if inst (A := Val ty_bool) b ι then interpret_assertion a1 ι else interpret_assertion a2 ι
       | asn_match_enum E k alts => interpret_assertion (alts (inst (T := fun Σ => Term Σ _) k ι)) ι
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match inst (T := fun Σ => Term Σ _) s ι with
@@ -2294,20 +2294,20 @@ Module Assertions
         end
       | asn_match_tuple s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) s ι in
-        let ι' := tuple_pattern_match_lit p t in
+        let ι' := tuple_pattern_match_val p t in
         interpret_assertion rhs (ι ►► ι')
       | asn_match_record R s p rhs =>
         let t := inst (T := fun Σ => Term Σ _) s ι in
-        let ι' := record_pattern_match_lit p t in
+        let ι' := record_pattern_match_val p t in
         interpret_assertion rhs (ι ►► ι')
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
         let t := inst (T := fun Σ => Term Σ _) s ι in
         let (K , v) := 𝑼_unfold t in
-        let ι' := pattern_match_lit (alt__pat K) v in
+        let ι' := pattern_match_val (alt__pat K) v in
         interpret_assertion (alt__rhs K) (ι ►► ι')
       | asn_sep a1 a2 => interpret_assertion a1 ι ✱ interpret_assertion a2 ι
       | asn_or a1 a2  => interpret_assertion a1 ι ∨ interpret_assertion a2 ι
-      | asn_exist ς τ a => ∃ (v : Lit τ), interpret_assertion a (ι ► (ς∷τ ↦ v))
+      | asn_exist ς τ a => ∃ (v : Val τ), interpret_assertion a (ι ► (ς∷τ ↦ v))
       | asn_debug => emp
     end%logic.
 
@@ -2320,7 +2320,7 @@ Module Assertions
       interpret_assertion (sep_contract_precondition c) ι.
 
     Definition interpret_contract_postcondition {Δ τ} (c : SepContract Δ τ)
-      (ι : Valuation (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
+      (ι : Valuation (sep_contract_logic_variables c)) (result : Val τ) :  L :=
         interpret_assertion (sep_contract_postcondition c) (env.snoc ι (sep_contract_result c ∷ τ) result).
 
   End Contracts.

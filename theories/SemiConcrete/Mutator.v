@@ -84,7 +84,7 @@ Module SemiConcrete
   (*     destruct c1 as [p1 vs1|r1], c2 as [p2 vs2|r2]; cbn. *)
   (*     - destruct (eq_dec p1 p2); cbn. *)
   (*       + dependent elimination e; cbn. *)
-  (*         destruct (env_eqb_hom_spec _ Lit_eqb_spec vs1 vs2); constructor. *)
+  (*         destruct (env_eqb_hom_spec _ Val_eqb_spec vs1 vs2); constructor. *)
   (*         * congruence. *)
   (*         * intros e. now dependent elimination e. *)
   (*       + constructor; intro e. *)
@@ -93,7 +93,7 @@ Module SemiConcrete
   (*     - constructor. discriminate. *)
   (*     - destruct (eq_dec_het r r0); cbn. *)
   (*       + dependent elimination e; cbn. *)
-  (*         apply (ssrbool.iffP (Lit_eqb_spec _ _ _)); *)
+  (*         apply (ssrbool.iffP (Val_eqb_spec _ _ _)); *)
   (*           intro e; now dependent elimination e. *)
   (*       + constructor. *)
   (*         intro e; now dependent elimination e. *)
@@ -121,11 +121,11 @@ Module SemiConcrete
       CDijkstra A -> (A -> CDijkstra B) -> CDijkstra B :=
       fun m f POST => m (fun a1 => f a1 POST).
 
-    Definition angelic σ : CDijkstra (Lit σ) :=
-      fun POST => exists v : Lit σ, POST v.
+    Definition angelic σ : CDijkstra (Val σ) :=
+      fun POST => exists v : Val σ, POST v.
 
     Definition angelic_ctx {N : Set} :
-      forall Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
+      forall Δ : NCtx N Ty, CDijkstra (NamedEnv Val Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | ε       => fun k => k env.nil
@@ -134,11 +134,11 @@ Module SemiConcrete
         end.
     Arguments angelic_ctx {N} Δ.
 
-    Definition demonic σ : CDijkstra (Lit σ) :=
-      fun POST => forall v : Lit σ, POST v.
+    Definition demonic σ : CDijkstra (Val σ) :=
+      fun POST => forall v : Val σ, POST v.
 
     Definition demonic_ctx {N : Set} :
-      forall Δ : NCtx N Ty, CDijkstra (NamedEnv Lit Δ) :=
+      forall Δ : NCtx N Ty, CDijkstra (NamedEnv Val Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | ε       => fun k => k env.nil
@@ -215,7 +215,7 @@ Module SemiConcrete
       demonic_list (finite.enum F).
 
     Definition angelic_match_bool :
-      Lit ty_bool -> CDijkstra bool :=
+      Val ty_bool -> CDijkstra bool :=
       fun v =>
         angelic_binary
           (bind
@@ -226,7 +226,7 @@ Module SemiConcrete
              (fun _ => pure false)).
 
     Definition demonic_match_bool :
-      Lit ty_bool -> CDijkstra bool :=
+      Val ty_bool -> CDijkstra bool :=
       fun v =>
         demonic_binary
           (bind
@@ -236,8 +236,8 @@ Module SemiConcrete
              (assume_formula (v = false))
              (fun _ => pure false)).
 
-    Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Lit Δ -> Prop) :
-      angelic_ctx Δ POST <-> exists vs : NamedEnv Lit Δ, POST vs.
+    Lemma wp_angelic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
+      angelic_ctx Δ POST <-> exists vs : NamedEnv Val Δ, POST vs.
     Proof.
       induction Δ; cbn.
       - split.
@@ -252,8 +252,8 @@ Module SemiConcrete
           exists v. apply IHΔ. now exists vs.
     Qed.
 
-    Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Lit Δ -> Prop) :
-      demonic_ctx Δ POST <-> forall vs : NamedEnv Lit Δ, POST vs.
+    Lemma wp_demonic_ctx {N : Set} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> Prop) :
+      demonic_ctx Δ POST <-> forall vs : NamedEnv Val Δ, POST vs.
     Proof.
       induction Δ; cbn.
       - split.
@@ -360,15 +360,15 @@ Module SemiConcrete
 
       (* Definition demonic {Γ1 Γ2 I A} (ms : I -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A := *)
       (*   fun POST δ h => forall i : I, ms i POST δ h. *)
-      Definition demonic {Γ} (σ : Ty) : CMut Γ Γ (Lit σ) :=
-        fun POST δ h => forall v : Lit σ, POST v δ h.
-      Definition angelic {Γ} (σ : Ty) : CMut Γ Γ (Lit σ) :=
-        fun POST δ h => exists v : Lit σ, POST v δ h.
+      Definition demonic {Γ} (σ : Ty) : CMut Γ Γ (Val σ) :=
+        fun POST δ h => forall v : Val σ, POST v δ h.
+      Definition angelic {Γ} (σ : Ty) : CMut Γ Γ (Val σ) :=
+        fun POST δ h => exists v : Val σ, POST v δ h.
       (* Definition angelic {Γ1 Γ2 I A} (ms : I -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A := *)
       (*   fun POST δ h => exists i : I, ms i POST δ h. *)
 
       Definition angelic_ctx {N : Set} {Γ} :
-        forall Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Lit Δ).
+        forall Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Val Δ).
       Proof.
         intros Δ. apply dijkstra.
         apply (CDijk.angelic_ctx Δ).
@@ -385,7 +385,7 @@ Module SemiConcrete
         dijkstra (CDijk.demonic_finite (F:=F)).
 
       Definition demonic_ctx {N : Set} {Γ} :
-        forall Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Lit Δ).
+        forall Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Val Δ).
       Proof.
         intros Δ. apply dijkstra.
         apply (CDijk.demonic_ctx Δ).
@@ -436,10 +436,10 @@ Module SemiConcrete
 
     Section PatternMatching.
 
-      (* Definition angelic_match_bool {Γ} (v : Lit ty_bool) : CMut Γ Γ (Lit ty_bool) := *)
+      (* Definition angelic_match_bool {Γ} (v : Val ty_bool) : CMut Γ Γ (Val ty_bool) := *)
       (*   dijkstra (CDijk.angelic_match_bool v). *)
 
-      (* Lemma wp_angelic_match_bool {Γ} (v : Lit ty_bool) : *)
+      (* Lemma wp_angelic_match_bool {Γ} (v : Val ty_bool) : *)
       (*   forall POST (δ : CStore Γ) h, *)
       (*     angelic_match_bool v POST δ h <-> *)
       (*     POST v δ h. *)
@@ -449,10 +449,10 @@ Module SemiConcrete
       (*   destruct v; intuition; discriminate. *)
       (* Qed. *)
 
-      (* Definition demonic_match_bool {Γ} (v : Lit ty_bool) : CMut Γ Γ (Lit ty_bool) := *)
+      (* Definition demonic_match_bool {Γ} (v : Val ty_bool) : CMut Γ Γ (Val ty_bool) := *)
       (*   dijkstra (CDijk.demonic_match_bool v). *)
 
-      (* Lemma wp_demonic_match_bool {Γ} (v : Lit ty_bool) : *)
+      (* Lemma wp_demonic_match_bool {Γ} (v : Val ty_bool) : *)
       (*   forall POST (δ : CStore Γ) h, *)
       (*     demonic_match_bool v POST δ h <-> *)
       (*     POST v δ h. *)
@@ -462,7 +462,7 @@ Module SemiConcrete
       (*   destruct v; intuition; discriminate. *)
       (* Qed. *)
 
-      Definition angelic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
+      Definition angelic_match_bool {A Γ1 Γ2} (v : Val ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
       Proof.
         apply angelic_binary.
         - eapply bind_right.
@@ -475,7 +475,7 @@ Module SemiConcrete
           apply kf.
       Defined.
 
-      Lemma wp_angelic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) :
+      Lemma wp_angelic_match_bool {A Γ1 Γ2} (v : Val ty_bool) (kt kf : CMut Γ1 Γ2 A) :
         forall POST δ h,
           angelic_match_bool v kt kf POST δ h <->
           if v then kt POST δ h else kf POST δ h.
@@ -485,7 +485,7 @@ Module SemiConcrete
         destruct v; intuition; discriminate.
       Qed.
 
-      Definition demonic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
+      Definition demonic_match_bool {A Γ1 Γ2} (v : Val ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
       Proof.
         apply demonic_binary.
         - eapply bind_right.
@@ -498,7 +498,7 @@ Module SemiConcrete
           apply kf.
       Defined.
 
-      Lemma wp_demonic_match_bool {A Γ1 Γ2} (v : Lit ty_bool) (kt kf : CMut Γ1 Γ2 A) :
+      Lemma wp_demonic_match_bool {A Γ1 Γ2} (v : Val ty_bool) (kt kf : CMut Γ1 Γ2 A) :
         forall POST δ h,
           demonic_match_bool v kt kf POST δ h <->
           if v then kt POST δ h else kf POST δ h.
@@ -509,7 +509,7 @@ Module SemiConcrete
       Qed.
 
       Definition angelic_match_enum {A E} {Γ1 Γ2} :
-        Lit (ty_enum E) -> (𝑬𝑲 E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty_enum E) -> (𝑬𝑲 E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v cont.
         eapply bind.
@@ -521,7 +521,7 @@ Module SemiConcrete
       Defined.
 
       Definition demonic_match_enum {A E} {Γ1 Γ2} :
-        Lit (ty_enum E) -> (𝑬𝑲 E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty_enum E) -> (𝑬𝑲 E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v cont.
         eapply bind.
@@ -532,7 +532,7 @@ Module SemiConcrete
         apply (cont EK).
       Defined.
 
-      Lemma wp_angelic_match_enum {A E Γ1 Γ2} (v : Lit (ty_enum E)) (k : 𝑬𝑲 E -> CMut Γ1 Γ2 A) :
+      Lemma wp_angelic_match_enum {A E Γ1 Γ2} (v : Val (ty_enum E)) (k : 𝑬𝑲 E -> CMut Γ1 Γ2 A) :
         forall POST δ h,
           angelic_match_enum v k POST δ h <-> k v POST δ h.
       Proof.
@@ -545,7 +545,7 @@ Module SemiConcrete
         apply finite.elem_of_enum.
       Qed.
 
-      Lemma wp_demonic_match_enum {A E Γ1 Γ2} (v : Lit (ty_enum E)) (k : 𝑬𝑲 E -> CMut Γ1 Γ2 A) :
+      Lemma wp_demonic_match_enum {A E Γ1 Γ2} (v : Val (ty_enum E)) (k : 𝑬𝑲 E -> CMut Γ1 Γ2 A) :
         forall POST δ h,
           demonic_match_enum v k POST δ h <-> k v POST δ h.
       Proof.
@@ -559,7 +559,7 @@ Module SemiConcrete
       Qed.
 
       Definition angelic_match_sum {A Γ1 Γ2} {σ τ} :
-        Lit (ty_sum σ τ) -> (Lit σ -> CMut Γ1 Γ2 A) -> (Lit τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty_sum σ τ) -> (Val σ -> CMut Γ1 Γ2 A) -> (Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v kinl kinr.
         apply angelic_binary.
@@ -580,7 +580,7 @@ Module SemiConcrete
       Defined.
 
       Definition demonic_match_sum {A Γ1 Γ2} {σ τ} :
-        Lit (ty_sum σ τ) -> (Lit σ -> CMut Γ1 Γ2 A) -> (Lit τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty_sum σ τ) -> (Val σ -> CMut Γ1 Γ2 A) -> (Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v kinl kinr.
         apply demonic_binary.
@@ -601,7 +601,7 @@ Module SemiConcrete
       Defined.
 
       Lemma wp_angelic_match_sum {A Γ1 Γ2} {σ τ}
-        (v : Lit (ty_sum σ τ)) (kinl : Lit σ -> CMut Γ1 Γ2 A) (kinr : Lit τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty_sum σ τ)) (kinl : Val σ -> CMut Γ1 Γ2 A) (kinr : Val τ -> CMut Γ1 Γ2 A) POST δ h :
         angelic_match_sum v kinl kinr POST δ h <->
         match v with
         | inl v => kinl v POST δ h
@@ -616,7 +616,7 @@ Module SemiConcrete
       Qed.
 
       Lemma wp_demonic_match_sum {A Γ1 Γ2} {σ τ}
-        (v : Lit (ty_sum σ τ)) (kinl : Lit σ -> CMut Γ1 Γ2 A) (kinr : Lit τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty_sum σ τ)) (kinl : Val σ -> CMut Γ1 Γ2 A) (kinr : Val τ -> CMut Γ1 Γ2 A) POST δ h :
         demonic_match_sum v kinl kinr POST δ h <->
         match v with
         | inl v => kinl v POST δ h
@@ -635,7 +635,7 @@ Module SemiConcrete
       Qed.
 
       Definition angelic_match_prod {A Γ1 Γ2} {σ τ} :
-        Lit (ty_prod σ τ) -> (Lit σ -> Lit τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
+        Val (ty_prod σ τ) -> (Val σ -> Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
         fun v k =>
           v1 <- angelic σ ;;
           v2 <- angelic τ ;;
@@ -643,7 +643,7 @@ Module SemiConcrete
           k v1 v2.
 
       Lemma wp_angelic_match_prod {A Γ1 Γ2} {σ τ}
-        (v : Lit (ty_prod σ τ)) (k : Lit σ -> Lit τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty_prod σ τ)) (k : Val σ -> Val τ -> CMut Γ1 Γ2 A) POST δ h :
         angelic_match_prod v k POST δ h <->
         match v with
         | pair v1 v2 => k v1 v2 POST δ h
@@ -654,11 +654,11 @@ Module SemiConcrete
         destruct v; intuition.
         - destruct H as (v1 & v2 & eq & H).
           inversion eq; now subst.
-        - now exists l, l0.
+        - now exists v, v0.
       Qed.
 
       Definition demonic_match_prod {A Γ1 Γ2} {σ τ} :
-        Lit (ty_prod σ τ) -> (Lit σ -> Lit τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
+        Val (ty_prod σ τ) -> (Val σ -> Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
         fun v k =>
           v1 <- demonic σ ;;
           v2 <- demonic τ ;;
@@ -666,7 +666,7 @@ Module SemiConcrete
           k v1 v2.
 
       Lemma wp_demonic_match_prod {A Γ1 Γ2} {σ τ}
-        (v : Lit (ty_prod σ τ)) (k : Lit σ -> Lit τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty_prod σ τ)) (k : Val σ -> Val τ -> CMut Γ1 Γ2 A) POST δ h :
         demonic_match_prod v k POST δ h <->
         match v with
         | pair v1 v2 => k v1 v2 POST δ h
@@ -678,7 +678,7 @@ Module SemiConcrete
       Qed.
 
       Definition angelic_match_list {A Γ1 Γ2} {σ} :
-        Lit (ty_list σ) -> (CMut Γ1 Γ2 A) -> (Lit σ -> Lit (ty_list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty_list σ) -> (CMut Γ1 Γ2 A) -> (Val σ -> Val (ty_list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v knil kcons.
         apply angelic_binary.
@@ -699,7 +699,7 @@ Module SemiConcrete
       Defined.
 
       Lemma wp_angelic_match_list {A Γ1 Γ2} {σ}
-        (v : Lit (ty_list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Lit σ -> Lit (ty_list σ) -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty_list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Val σ -> Val (ty_list σ) -> CMut Γ1 Γ2 A) POST δ h :
         angelic_match_list v knil kcons POST δ h <->
         match v with
         | nil => knil POST δ h
@@ -715,7 +715,7 @@ Module SemiConcrete
       Qed.
 
       Definition demonic_match_list {A Γ1 Γ2} {σ} :
-        Lit (ty_list σ) -> (CMut Γ1 Γ2 A) -> (Lit σ -> Lit (ty_list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty_list σ) -> (CMut Γ1 Γ2 A) -> (Val σ -> Val (ty_list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v knil kcons.
         apply demonic_binary.
@@ -736,7 +736,7 @@ Module SemiConcrete
       Defined.
 
       Lemma wp_demonic_match_list {A Γ1 Γ2} {σ}
-        (v : Lit (ty_list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Lit σ -> Lit (ty_list σ) -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty_list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Val σ -> Val (ty_list σ) -> CMut Γ1 Γ2 A) POST δ h :
         demonic_match_list v knil kcons POST δ h <->
         match v with
         | nil => knil POST δ h
@@ -751,8 +751,8 @@ Module SemiConcrete
       Qed.
 
       Definition angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
-        (Lit (ty_record R)) ->
-        (NamedEnv Lit Δ -> CMut Γ1 Γ2 A) ->
+        (Val (ty_record R)) ->
+        (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
         fun v k =>
           args <- angelic_ctx Δ ;;
@@ -760,25 +760,25 @@ Module SemiConcrete
           k args.
 
       Lemma wp_angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ)
-        (v : Lit (ty_record R))
-        (k : NamedEnv Lit Δ -> CMut Γ1 Γ2 A)
+        (v : Val (ty_record R))
+        (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
         POST δ h :
         angelic_match_record p v k POST δ h <->
-        k (record_pattern_match_lit p v) POST δ h.
+        k (record_pattern_match_val p v) POST δ h.
       Proof.
         cbv [angelic_match_record bind_right bind angelic_ctx dijkstra assert_formula CDijk.assert_formula].
         rewrite CDijk.wp_angelic_ctx; intuition.
         - destruct H as (vs & <- & H).
-          unfold record_pattern_match_lit.
+          unfold record_pattern_match_val.
           now rewrite 𝑹_unfold_fold, record_pattern_match_env_inverse_right.
-        - exists (record_pattern_match_lit p v).
-          unfold record_pattern_match_lit.
+        - exists (record_pattern_match_val p v).
+          unfold record_pattern_match_val.
           now rewrite record_pattern_match_env_inverse_left, 𝑹_fold_unfold.
       Qed.
 
       Definition demonic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
-        (Lit (ty_record R)) ->
-        (NamedEnv Lit Δ -> CMut Γ1 Γ2 A) ->
+        (Val (ty_record R)) ->
+        (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
         fun v k =>
           args <- demonic_ctx Δ ;;
@@ -786,68 +786,68 @@ Module SemiConcrete
           k args.
 
       Lemma wp_demonic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ)
-        (v : Lit (ty_record R))
-        (k : NamedEnv Lit Δ -> CMut Γ1 Γ2 A)
+        (v : Val (ty_record R))
+        (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
         POST δ h :
         demonic_match_record p v k POST δ h <->
-        k (record_pattern_match_lit p v) POST δ h.
+        k (record_pattern_match_val p v) POST δ h.
       Proof.
         cbv [demonic_match_record bind_right bind demonic_ctx dijkstra assume_formula CDijk.assume_formula].
         rewrite CDijk.wp_demonic_ctx; intuition; eauto.
         eapply H.
-        - unfold record_pattern_match_lit.
+        - unfold record_pattern_match_val.
           now rewrite record_pattern_match_env_inverse_left, 𝑹_fold_unfold.
-        - unfold record_pattern_match_lit in H.
+        - unfold record_pattern_match_val in H.
           replace (record_pattern_match_env p (𝑹_unfold v)) with vs in H; [assumption|].
           subst.
           now rewrite 𝑹_unfold_fold, record_pattern_match_env_inverse_right.
       Qed.
 
       Definition angelic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        (Lit (ty_tuple σs)) ->
-        (NamedEnv Lit Δ -> CMut Γ1 Γ2 A) ->
+        (Val (ty_tuple σs)) ->
+        (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
         fun v k =>
           args <- angelic_ctx Δ ;;
-          assert_formula (tuple_pattern_match_lit p v = args) ;;
+          assert_formula (tuple_pattern_match_val p v = args) ;;
           k args.
 
       Lemma wp_angelic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ)
-        (v : Lit (ty_tuple σs))
-        (k : NamedEnv Lit Δ -> CMut Γ1 Γ2 A)
+        (v : Val (ty_tuple σs))
+        (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
         POST δ h :
         angelic_match_tuple p v k POST δ h <->
-        k (tuple_pattern_match_lit p v) POST δ h.
+        k (tuple_pattern_match_val p v) POST δ h.
       Proof.
         cbv [angelic_match_tuple bind_right bind angelic_ctx dijkstra assert_formula CDijk.assert_formula].
         rewrite CDijk.wp_angelic_ctx; intuition.
         - now destruct H as (vs & <- & H).
-        - exists (tuple_pattern_match_lit p v).
+        - exists (tuple_pattern_match_val p v).
           split; auto.
       Qed.
 
       Definition demonic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        (Lit (ty_tuple σs)) ->
-        (NamedEnv Lit Δ -> CMut Γ1 Γ2 A) ->
+        (Val (ty_tuple σs)) ->
+        (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
         fun v k =>
           args <- demonic_ctx Δ ;;
-          assume_formula (tuple_pattern_match_lit p v = args) ;;
+          assume_formula (tuple_pattern_match_val p v = args) ;;
           k args.
 
       Lemma wp_demonic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ)
-        (v : Lit (ty_tuple σs))
-        (k : NamedEnv Lit Δ -> CMut Γ1 Γ2 A)
+        (v : Val (ty_tuple σs))
+        (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
         POST δ h :
         demonic_match_tuple p v k POST δ h <->
-        k (tuple_pattern_match_lit p v) POST δ h.
+        k (tuple_pattern_match_val p v) POST δ h.
       Proof.
         cbv [demonic_match_tuple bind_right bind demonic_ctx dijkstra assume_formula CDijk.assume_formula].
         rewrite CDijk.wp_demonic_ctx; intuition; subst; auto.
       Qed.
 
       Definition angelic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
-        Lit σ -> CMut Γ Γ (NamedEnv Lit Δ).
+        Val σ -> CMut Γ Γ (NamedEnv Val Δ).
       Proof.
         intros v.
         eapply bind.
@@ -855,28 +855,28 @@ Module SemiConcrete
         intros vs.
         eapply bind_right.
         apply assert_formula.
-        apply (pattern_match_lit p v = vs).
+        apply (pattern_match_val p v = vs).
         apply pure.
         apply vs.
       Defined.
 
       Lemma wp_angelic_match_pattern {N : Set} {σ Γ} {Δ : NCtx N Ty} (p : Pattern Δ σ)
-        (v : Lit σ)
+        (v : Val σ)
         POST δ h :
         angelic_match_pattern (Γ := Γ) p v POST δ h <->
-        POST (pattern_match_lit p v) δ h.
+        POST (pattern_match_val p v) δ h.
       Proof.
         cbv [angelic_match_pattern bind pure angelic_ctx bind_right assert_formula
              dijkstra CDijk.assert_formula].
         rewrite CDijk.wp_angelic_ctx.
         split.
         - now intros (vs & <- & H).
-        - intros ?. exists (pattern_match_lit p v).
+        - intros ?. exists (pattern_match_val p v).
           split; auto.
       Qed.
 
       Definition demonic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
-        Lit σ -> CMut Γ Γ (NamedEnv Lit Δ).
+        Val σ -> CMut Γ Γ (NamedEnv Val Δ).
       Proof.
         intros v.
         eapply bind.
@@ -884,16 +884,16 @@ Module SemiConcrete
         intros vs.
         eapply bind_right.
         apply assume_formula.
-        apply (pattern_match_lit p v = vs).
+        apply (pattern_match_val p v = vs).
         apply pure.
         apply vs.
       Defined.
 
       Lemma wp_demonic_match_pattern {N : Set} {σ Γ} {Δ : NCtx N Ty} (p : Pattern Δ σ)
-        (v : Lit σ)
+        (v : Val σ)
         POST δ h :
         demonic_match_pattern (Γ := Γ) p v POST δ h <->
-        POST (pattern_match_lit p v) δ h.
+        POST (pattern_match_val p v) δ h.
       Proof.
         cbv [demonic_match_pattern bind pure demonic_ctx bind_right assume_formula
              dijkstra CDijk.assume_formula].
@@ -903,7 +903,7 @@ Module SemiConcrete
 
       Definition angelic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
-        Lit (ty_union U) -> (forall K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty_union U) -> (forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v k.
         eapply bind.
@@ -923,11 +923,11 @@ Module SemiConcrete
 
       Lemma wp_angelic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
-        (v : Lit (ty_union U)) (k : forall K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A)
+        (v : Val (ty_union U)) (k : forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A)
         POST δ h :
         angelic_match_union p v k POST δ h <->
         let (UK , vf) := 𝑼_unfold v in
-        k UK (pattern_match_lit (p UK) vf) POST δ h.
+        k UK (pattern_match_val (p UK) vf) POST δ h.
       Proof.
         cbv [angelic_match_union bind bind_right angelic_finite assert_formula angelic
              dijkstra CDijk.angelic_finite CDijk.assert_formula].
@@ -948,7 +948,7 @@ Module SemiConcrete
 
       Definition demonic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
-        Lit (ty_union U) -> (forall K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty_union U) -> (forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v k.
         eapply bind.
@@ -968,11 +968,11 @@ Module SemiConcrete
 
       Lemma wp_demonic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
-        (v : Lit (ty_union U)) (k : forall K, NamedEnv Lit (Δ K) -> CMut Γ1 Γ2 A)
+        (v : Val (ty_union U)) (k : forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A)
         POST δ h :
         demonic_match_union p v k POST δ h <->
         let (UK , vf) := 𝑼_unfold v in
-        k UK (pattern_match_lit (p UK) vf) POST δ h.
+        k UK (pattern_match_val (p UK) vf) POST δ h.
       Proof.
         cbv [demonic_match_union bind bind_right demonic_finite assume_formula demonic
              dijkstra CDijk.demonic_finite CDijk.assume_formula].
@@ -995,7 +995,7 @@ Module SemiConcrete
 
     Section State.
 
-      Definition pushpop {A Γ1 Γ2 x σ} (v : Lit σ)
+      Definition pushpop {A Γ1 Γ2 x σ} (v : Val σ)
         (d : CMut (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) A) : CMut Γ1 Γ2 A :=
         fun POST δ0 => d (fun a δ1 => POST a (env.tail δ1)) (δ0 ► (x∷σ ↦ v)).
       Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : CStore Δ)
@@ -1010,11 +1010,11 @@ Module SemiConcrete
       Definition put_heap {Γ} (h : SCHeap) : CMut Γ Γ unit :=
         fun POST δ _ => POST tt δ h.
 
-      Definition eval_exp {Γ σ} (e : Exp Γ σ) : CMut Γ Γ (Lit σ) :=
+      Definition eval_exp {Γ σ} (e : Exp Γ σ) : CMut Γ Γ (Val σ) :=
         fun POST δ => POST (eval e δ) δ.
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CMut Γ Γ (CStore σs) :=
         fun POST δ => POST (evals es δ) δ.
-      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Lit σ) : CMut Γ Γ unit :=
+      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Val σ) : CMut Γ Γ unit :=
         fun POST δ => POST tt (δ ⟪ x ↦ v ⟫).
       Global Arguments assign {Γ} x {σ xIn} v.
 
@@ -1170,7 +1170,7 @@ Module SemiConcrete
 
     Section Exec.
 
-      Definition call_contract {Γ Δ τ} (contract : SepContract Δ τ) (vs : CStore Δ) : CMut Γ Γ (Lit τ) :=
+      Definition call_contract {Γ Δ τ} (contract : SepContract Δ τ) (vs : CStore Δ) : CMut Γ Γ (Val τ) :=
         match contract with
         | MkSepContract _ _ Σe δ req result ens =>
           ι <- angelic_ctx Σe ;;
@@ -1190,16 +1190,16 @@ Module SemiConcrete
           produce ι ens
         end.
 
-      Definition Exec := forall {Γ τ} (s : Stm Γ τ), CMut Γ Γ (Lit τ).
+      Definition Exec := forall {Γ τ} (s : Stm Γ τ), CMut Γ Γ (Val τ).
 
       Section ExecAux.
 
         Variable rec : Exec.
 
         Definition exec_aux : Exec :=
-          fix exec_aux {Γ τ} (s : Stm Γ τ) : CMut Γ Γ (Lit τ) :=
+          fix exec_aux {Γ τ} (s : Stm Γ τ) : CMut Γ Γ (Val τ) :=
             match s with
-            | stm_lit _ l => pure l
+            | stm_val _ l => pure l
             | stm_exp e => eval_exp e
             | stm_let x σ s k =>
               v <- exec_aux s ;;
@@ -1374,7 +1374,7 @@ Module SemiConcrete
   (*       cmut_wp ma (fun a => cmut_wp (f a) POST) δ h. *)
   (*   Proof. reflexivity. Qed. *)
 
-  (*   Lemma cmut_wp_demonic {Γ τ} (POST : Lit τ -> SCProp Γ) : *)
+  (*   Lemma cmut_wp_demonic {Γ τ} (POST : Val τ -> SCProp Γ) : *)
   (*     forall δ h, *)
   (*       cmut_wp (cmut_demonic τ) POST δ h <-> forall v, POST v δ h. *)
   (*   Proof. reflexivity. Qed. *)
@@ -1385,14 +1385,14 @@ Module SemiConcrete
   (*       cmut_wp sm1 POST δ h /\ cmut_wp sm2 POST δ h. *)
   (*   Proof. reflexivity. Qed. *)
 
-  (*   Lemma cmut_wp_angelic {Γ τ} (POST : Lit τ -> SCProp Γ) : *)
+  (*   Lemma cmut_wp_angelic {Γ τ} (POST : Val τ -> SCProp Γ) : *)
   (*     forall δ h, *)
   (*       cmut_wp (cmut_angelic τ) POST δ h <-> exists v, POST v δ h. *)
   (*   Proof. reflexivity. Qed. *)
 
-  (*   Lemma cmut_wp_angelic_ctx {N : Set} {Γ : PCtx} {Δ : NCtx N Ty} (POST : NamedEnv Lit Δ -> SCProp Γ) : *)
+  (*   Lemma cmut_wp_angelic_ctx {N : Set} {Γ : PCtx} {Δ : NCtx N Ty} (POST : NamedEnv Val Δ -> SCProp Γ) : *)
   (*     forall δ h, *)
-  (*       cmut_wp (cmut_angelic_ctx Δ) POST δ h <-> exists vs : NamedEnv Lit Δ, POST vs δ h. *)
+  (*       cmut_wp (cmut_angelic_ctx Δ) POST δ h <-> exists vs : NamedEnv Val Δ, POST vs δ h. *)
   (*   Proof. *)
   (*     unfold cmut_wp, cmut_angelic_ctx, cmut_dijkstra. *)
   (*     intros δ h. rewrite CDijk.wp_angelic_ctx. reflexivity. *)
@@ -1468,8 +1468,8 @@ Module SemiConcrete
   (*       clear. intuition. *)
   (*   Qed. *)
 
-  (*   Lemma cmut_wp_match_sum {A Γ1 Γ2 σ τ} (v : Lit σ + Lit τ) *)
-  (*     (kl : Lit σ -> CMut Γ1 Γ2 A) (kr : Lit τ -> CMut Γ1 Γ2 A) : *)
+  (*   Lemma cmut_wp_match_sum {A Γ1 Γ2 σ τ} (v : Val σ + Val τ) *)
+  (*     (kl : Val σ -> CMut Γ1 Γ2 A) (kr : Val τ -> CMut Γ1 Γ2 A) : *)
   (*     forall POST δ h, *)
   (*       cmut_wp (cmut_match_sum v kl kr) POST δ h <-> *)
   (*       match v with *)
@@ -1478,8 +1478,8 @@ Module SemiConcrete
   (*       end. *)
   (*   Proof. destruct v; reflexivity. Qed. *)
 
-  (*   Lemma cmut_wp_match_prod {A Γ1 Γ2 σ τ} (v : Lit σ * Lit τ) *)
-  (*     (k : Lit σ -> Lit τ -> CMut Γ1 Γ2 A) : *)
+  (*   Lemma cmut_wp_match_prod {A Γ1 Γ2 σ τ} (v : Val σ * Val τ) *)
+  (*     (k : Val σ -> Val τ -> CMut Γ1 Γ2 A) : *)
   (*     forall POST δ h, *)
   (*       cmut_wp (cmut_match_prod v k) POST δ h <-> *)
   (*       match v with *)
@@ -1487,18 +1487,18 @@ Module SemiConcrete
   (*       end. *)
   (*   Proof. destruct v; reflexivity. Qed. *)
 
-  (*   Lemma cmut_wp_match_record {A R Γ1 Γ2 Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (v : Lit (ty_record R)) *)
+  (*   Lemma cmut_wp_match_record {A R Γ1 Γ2 Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (v : Val (ty_record R)) *)
   (*         (k : Valuation Δ → CMut Γ1 Γ2 A) : *)
   (*     forall POST δ h, *)
   (*       cmut_wp (cmut_match_record p v k) POST δ h <-> *)
-  (*       forall vs : NamedEnv Lit (𝑹𝑭_Ty R), *)
+  (*       forall vs : NamedEnv Val (𝑹𝑭_Ty R), *)
   (*         v = 𝑹_fold vs -> *)
   (*         cmut_wp (k (record_pattern_match_env p vs)) POST δ h. *)
   (*   Proof. *)
   (*     intros. unfold cmut_match_record. *)
   (*     split; intros Hwp. *)
   (*     - intros vs ->. *)
-  (*       unfold record_pattern_match_lit in Hwp. *)
+  (*       unfold record_pattern_match_val in Hwp. *)
   (*       now rewrite 𝑹_unfold_fold in Hwp. *)
   (*     - specialize (Hwp (𝑹_unfold v)). *)
   (*       rewrite 𝑹_fold_unfold in Hwp. *)

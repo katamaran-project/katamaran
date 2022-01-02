@@ -210,23 +210,23 @@ Module Types (Export typekit : TypeKit).
   Lemma Bit_eqb_spec (b1 b2 : Bit) : reflect (b1 = b2) (Bit_eqb b1 b2).
   Proof. destruct b1, b2; cbn; constructor; congruence. Qed.
 
-  Fixpoint Lit (σ : Ty) : Set :=
+  Fixpoint Val (σ : Ty) : Set :=
     match σ with
     | ty_int => Z
     | ty_bool => bool
     | ty_bit => Bit
     | ty_string => string
-    | ty_list σ' => list (Lit σ')
-    | ty_prod σ1 σ2 => Lit σ1 * Lit σ2
-    | ty_sum σ1 σ2 => Lit σ1 + Lit σ2
+    | ty_list σ' => list (Val σ')
+    | ty_prod σ1 σ2 => Val σ1 * Val σ2
+    | ty_sum σ1 σ2 => Val σ1 + Val σ2
     | ty_unit => unit
     | ty_enum E => 𝑬𝑲 E
     | ty_bvec n => Word.word n
     (* Experimental features *)
-    | ty_tuple σs => EnvRec Lit σs
+    | ty_tuple σs => EnvRec Val σs
     | ty_union U => 𝑼𝑻 U
     | ty_record R => 𝑹𝑻 R
     end%type.
-  Bind Scope exp_scope with Lit.
+  Bind Scope exp_scope with Val.
 
 End Types.

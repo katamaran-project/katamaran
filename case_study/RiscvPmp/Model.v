@@ -116,8 +116,8 @@ Module RiscvPmpModel.
       Definition interp_is_reg `{sailRegG Σ} (r : RegIdx) : iProp Σ :=
         ⌜r ∈ reg_file⌝.
 
-      Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑯_Ty p)) (mG : memG Σ) : iProp Σ :=
-        (match p return Env Lit (RiscvPmpAssertionKit.𝑯_Ty p) -> iProp Σ with
+      Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Val (RiscvPmpAssertionKit.𝑯_Ty p)) (mG : memG Σ) : iProp Σ :=
+        (match p return Env Val (RiscvPmpAssertionKit.𝑯_Ty p) -> iProp Σ with
          | pmp_entries  => fun ts => let entries_lst := env.head ts in
                                     match entries_lst with
                                     | (cfg0, addr0) :: [] =>
@@ -131,7 +131,7 @@ Module RiscvPmpModel.
          | is_reg       => fun ts => interp_is_reg (env.head ts)
          end) ts.
 
-    Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Lit (RiscvPmpAssertionKit.𝑯_Ty p)) :
+    Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Val (RiscvPmpAssertionKit.𝑯_Ty p)) :
       forall (mG : memG Σ),
         is_duplicable p = true ->
         (luser_inst p ts mG) ⊢ (luser_inst p ts mG ∗ luser_inst p ts mG).

@@ -56,7 +56,7 @@ Module Disjoint
   Import LogicNotations.
   Open Scope logic.
 
-  Definition Heap : Type := forall σ, 𝑹𝑬𝑮 σ -> option (Lit σ).
+  Definition Heap : Type := forall σ, 𝑹𝑬𝑮 σ -> option (Val σ).
 
   (* convert a register store into a heap *)
   Definition heap (rs : RegStore) : Heap :=
@@ -323,8 +323,8 @@ Module Disjoint
   Program Instance HProp_Heaplet : IHeaplet HProp :=
   { (* We don't have any predicates in this model yet;
        thus we map the predicate to False *)
-    luser (p : 𝑯) (ts : Env Lit (𝑯_Ty p)) := fun γ => False;
-    lptsreg (σ : Ty) (r : 𝑹𝑬𝑮 σ) (t : Lit σ) := fun γ => γ σ r = Some t;
+    luser (p : 𝑯) (ts : Env Val (𝑯_Ty p)) := fun γ => False;
+    lptsreg (σ : Ty) (r : 𝑹𝑬𝑮 σ) (t : Val σ) := fun γ => γ σ r = Some t;
   }.
   Next Obligation.
     intros p ts hdup h hyp.
@@ -332,15 +332,15 @@ Module Disjoint
   Qed.
 
   Definition write_heap (γ : Heap) {σ} (r : 𝑹𝑬𝑮 σ)
-    (v : Lit σ) : Heap :=
+    (v : Val σ) : Heap :=
     fun τ r' =>
       match eq_dec_het r r' with
-      | left e => Some (eq_rect σ Lit v τ (f_equal projT1 e))
+      | left e => Some (eq_rect σ Val v τ (f_equal projT1 e))
       | right _ => γ τ r'
       end.
 
   (* writing into a heap creates a ptsreg heap chunk *)
-  Lemma write_heap_ptsreg (γ : Heap) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+  Lemma write_heap_ptsreg (γ : Heap) {σ} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
     (write_heap γ r v) σ r = Some v.
   Proof.
     unfold write_heap, eq_dec_het.
@@ -350,7 +350,7 @@ Module Disjoint
   (* writing into a heap preserves the unaffected chunks *)
   Lemma write_heap_distinct (γfocus : Heap) {σ τ}
         (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (prf : existT _ r <> existT _ k)
-        (v0 : option (Lit τ)) (v : Lit σ) :
+        (v0 : option (Val τ)) (v : Val σ) :
     γfocus τ k = v0 -> (write_heap γfocus r v) τ k = v0.
   Proof.
     intros H.
@@ -363,7 +363,7 @@ Module Disjoint
 
   (* writing into a heap preserves totality *)
   Lemma write_heap_preservers_total {σ} :
-    forall (γ : Heap), Total γ -> forall (r : 𝑹𝑬𝑮 σ) (v : Lit σ), Total (write_heap γ r v).
+    forall (γ : Heap), Total γ -> forall (r : 𝑹𝑬𝑮 σ) (v : Val σ), Total (write_heap γ r v).
   Proof.
     intros γ Htotal_γ r v τ k.
     specialize (Htotal_γ τ k); destruct Htotal_γ as [v0 Hpre].
@@ -376,7 +376,7 @@ Module Disjoint
   (* If a value is present in one of the two disjoint subheaps, then
      it must be absent in the other *)
   Lemma split_in_r_then_not_in_l {σ}
-        (γ γl γr : Heap) (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+        (γ γl γr : Heap) (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
         split γ γl γr -> γr σ r = Some v -> γl σ r = None.
   Proof.
     intros Hsplit_γ H.
@@ -404,13 +404,13 @@ Module Disjoint
       destruct_conjs. congruence.
     + rewrite H0 in H1.
       destruct (γl σ r).
-      ++ now exists l.
+      ++ now exists v.
       ++ specialize (Htotal_γ σ r).
          destruct_conjs.
          congruence.
   Qed.
 
-  Lemma write_register_write_heap (rs : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+  Lemma write_register_write_heap (rs : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
     heap (write_register rs r v) = write_heap (heap rs) r v.
   Proof.
     extensionality τ.

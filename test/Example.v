@@ -167,7 +167,7 @@ Module ExampleValueKit <: ValueKit.
                          | Right => ty_int
                          end
     end.
-  Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
+  Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
     match U with
     | either => fun Kv =>
                   match Kv with
@@ -175,8 +175,8 @@ Module ExampleValueKit <: ValueKit.
                   | existT Right v => inr v
                   end
     end.
-  Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
-    match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Lit (𝑼𝑲_Ty u K)}) with
+  Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) } :=
+    match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Val (𝑼𝑲_Ty u K)}) with
     | either => fun Kv =>
                   match Kv with
                   | inl v => existT Left v
@@ -186,19 +186,19 @@ Module ExampleValueKit <: ValueKit.
   Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
       𝑼_fold U (𝑼_unfold U Kv) = Kv.
   Proof. now intros [] []. Qed.
-  Lemma 𝑼_unfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) }),
+  Lemma 𝑼_unfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) }),
       𝑼_unfold U (𝑼_fold U Kv) = Kv.
   Proof. now intros [] [[]]. Qed.
 
   (** RECORDS **)
   Definition 𝑹𝑭  : Set := Empty_set.
   Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty := match R with end.
-  Definition 𝑹_fold (R : 𝑹) : NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
-  Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) := match R with end.
+  Definition 𝑹_fold (R : 𝑹) : NamedEnv Val (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
+  Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Val (𝑹𝑭_Ty R) := match R with end.
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold R (𝑹_unfold R Kv) = Kv.
   Proof. intros []. Qed.
-  Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
+  Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Val (𝑹𝑭_Ty R)),
       𝑹_unfold R (𝑹_fold R Kv) = Kv.
   Proof. intros []. Qed.
 
@@ -270,9 +270,9 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
 
   Local Coercion stm_exp : Exp >-> Stm.
 
-  Local Notation "'`LT'" := (@exp_lit _ (ty_enum ordering) LT).
-  Local Notation "'`GT'" := (@exp_lit _ (ty_enum ordering) GT).
-  Local Notation "'`EQ'" := (@exp_lit _ (ty_enum ordering) EQ).
+  Local Notation "'`LT'" := (@exp_val _ (ty_enum ordering) LT).
+  Local Notation "'`GT'" := (@exp_val _ (ty_enum ordering) GT).
+  Local Notation "'`EQ'" := (@exp_val _ (ty_enum ordering) EQ).
   Local Notation "'`Left' e" := (exp_union either Left e) (at level 10, e at level 9).
   Local Notation "'`Right' e" := (exp_union either Right e) (at level 10, e at level 9).
   Local Notation "'x'"   := (@exp_var _ "x" _ _) : exp_scope.
@@ -290,7 +290,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
   Definition fun_summaxlen : Stm ["xs" ∷ ty_list ty_int] (ty_prod (ty_prod ty_int ty_int) ty_int) :=
     stm_match_list
       (exp_var "xs")
-      (stm_lit (ty_prod (ty_prod ty_int ty_int) ty_int) (0,0,0))
+      (stm_val (ty_prod (ty_prod ty_int ty_int) ty_int) (0,0,0))
       "y" "ys"
       (let: "sml" := call summaxlen (exp_var "ys") in
        match: exp_var "sml" in (ty_prod ty_int ty_int , ty_int) with
@@ -298,13 +298,13 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
          match: exp_var "sm" in (ty_int,ty_int) with
          | ("s","m") =>
            let: "m'" := if: exp_var "m" < y then y else exp_var "m" in
-           exp_binop binop_pair (exp_binop binop_pair (exp_var "s" + y) (exp_var "m'")) (exp_var "l" + lit_int 1)
+           exp_binop binop_pair (exp_binop binop_pair (exp_var "s" + y) (exp_var "m'")) (exp_var "l" + exp_int 1)
          end
        end).
 
   Definition fun_fpthree' (e f : nat) : Stm [ "sign" ∷ ty_bvec 1 ] (ty_bvec (1 + e + f)) :=
-    let: "exp" ∷ ty_bvec e := stm_lit (ty_bvec e) (Word.wone e) in
-    let: "frac" ∷ ty_bvec f := stm_lit (ty_bvec f) (Word.wone f) in
+    let: "exp" ∷ ty_bvec e := stm_val (ty_bvec e) (Word.wone e) in
+    let: "frac" ∷ ty_bvec f := stm_val (ty_bvec f) (Word.wone f) in
     exp_binop
       (@binop_bvcombine 1 (e + f))
       (exp_var "sign")
@@ -334,7 +334,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
   Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     Eval compute in
     match f in Fun Δ τ return Stm Δ τ with
-    | abs => if: lit_int 0 <= x then x else - x
+    | abs => if: exp_int 0 <= x then x else - x
     | cmp => if: x < y then `LT else
              if: x = y then `EQ else
              if: x > y then `GT else
@@ -352,8 +352,8 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
     | msum => fun_msum
     | length => stm_match_list
                   (exp_var "xs")
-                  (stm_lit ty_int 0)
-                  "y" "ys" (let: "n" := call length (exp_var "ys") in lit_int 1 + exp_var "n")
+                  (stm_val ty_int 0)
+                  "y" "ys" (let: "n" := call length (exp_var "ys") in exp_int 1 + exp_var "n")
     | summaxlen => fun_summaxlen
     | fpthree16 => fun_fpthree16
     | fpthree32 => fun_fpthree32
@@ -369,9 +369,9 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
   Definition write_write := generic_write_write.
 
   Definition Memory : Set := unit.
-  Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs)
-    (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop := False.
-  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+  Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
+    (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop := False.
+  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof. destruct f. Qed.
 
@@ -389,7 +389,7 @@ Module SepContracts.
 
     Definition 𝑷 := Empty_set.
     Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
-    Definition 𝑷_inst (p : 𝑷) : env.abstract Lit (𝑷_Ty p) Prop := match p with end.
+    Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop := match p with end.
     Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
 
     Definition 𝑯 := Empty_set.
@@ -420,7 +420,7 @@ Module SepContracts.
              ["x" ∷ ty_int, "result" ∷ ty_int]
              (fun x result => result = Z.abs x)
            (* asn_if *)
-           (*   (term_binop binop_lt (term_var "x") (term_lit ty_int 0)) *)
+           (*   (term_binop binop_lt (term_var "x") (term_val ty_int 0)) *)
            (*   (asn_bool (term_binop binop_eq (term_var "result") (term_neg (term_var "x")))) *)
            (*   (asn_bool (term_binop binop_eq (term_var "result") (term_var "x"))) *)
       |}.
@@ -456,8 +456,8 @@ Module SepContracts.
       {| sep_contract_logic_variables := ["x" ∷ ty_int, "y" ∷ ty_int];
          sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
          sep_contract_precondition    :=
-           asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "x")) ✱
-                    asn_bool (term_binop binop_le (term_lit ty_int 0) (term_var "y"));
+           asn_bool (term_binop binop_le (term_val ty_int 0) (term_var "x")) ✱
+                    asn_bool (term_binop binop_le (term_val ty_int 0) (term_var "y"));
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            @asn_prop
@@ -488,7 +488,7 @@ Module SepContracts.
                 (term_var "sm") "s" "m"
                 (asn_sep
                    (asn_formula (formula_le (term_var "s") (term_binop binop_times (term_var "m") (term_var "l"))))
-                   (asn_formula (formula_le (term_lit ty_int 0) (term_var "l")))));
+                   (asn_formula (formula_le (term_val ty_int 0) (term_var "l")))));
       |}.
 
     Definition CEnv : SepContractEnv :=
@@ -551,7 +551,7 @@ Module SepContracts.
   Local Ltac solve :=
     repeat
       (compute
-       - [Pos.of_succ_nat List.length Pos.succ Lit
+       - [Pos.of_succ_nat List.length Pos.succ Val
           Z.add Z.compare Z.eqb Z.ge Z.geb Z.gt Z.gtb Z.le Z.leb Z.lt
           Z.ltb Z.mul Z.of_nat Z.opp Z.pos_sub Z.succ is_true negb
          ] in *;

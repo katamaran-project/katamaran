@@ -354,7 +354,7 @@ Module Soundness
     Qed.
 
     Lemma call_contract_sound {Γ Δ τ} (δΓ : CStore Γ) (δΔ : CStore Δ)
-          (h : SCHeap) (POST : Lit τ -> CStore Γ -> L)
+          (h : SCHeap) (POST : Val τ -> CStore Γ -> L)
           (c : SepContract Δ τ) :
       call_contract c δΔ (fun a => liftP (POST a)) δΓ h ->
       CTriple δΔ (interpret_scheap h) (fun v => POST v δΓ) c.
@@ -512,7 +512,7 @@ Module Soundness
 
     Definition SoundExec (rec : Exec) :=
       forall
-        Γ σ (s : Stm Γ σ) (POST : Lit σ -> CStore Γ -> L)
+        Γ σ (s : Stm Γ σ) (POST : Val σ -> CStore Γ -> L)
         (δ1 : CStore Γ) (h1 : SCHeap),
         rec _ _ s (fun v => liftP (POST v)) δ1 h1 ->
         ⦃ interpret_scheap h1 ⦄ s ; δ1 ⦃ POST ⦄.
@@ -527,8 +527,8 @@ Module Soundness
              bind_right bind_left bind];
         cbn; intros HYP.
 
-      - (* stm_lit *)
-        now apply rule_stm_lit.
+      - (* stm_val *)
+        now apply rule_stm_val.
 
       - (* stm_exp *)
         now apply rule_stm_exp.
@@ -714,7 +714,7 @@ Module Soundness
       - apply exec_aux_sound; auto using exec_monotonic.
     Qed.
 
-    Lemma exec_sound' n {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> CStore Γ -> L) :
+    Lemma exec_sound' n {Γ σ} (s : Stm Γ σ) (POST : Val σ -> CStore Γ -> L) :
       forall δ1 h1,
         exec n s (fun v2 => liftP (POST v2)) δ1 h1 ->
         liftP (WP s POST) δ1 h1.
@@ -741,7 +741,7 @@ Module Soundness
         eapply rule_consequence_left.
         apply rule_wp.
         apply entails_trans with
-            (interpret_scheap nil -✱ WP body (fun (v : Lit τ) (_ : CStore Δ) => interpret_assertion ens (env.snoc ι (result∷τ) v)) δ).
+            (interpret_scheap nil -✱ WP body (fun (v : Val τ) (_ : CStore Δ) => interpret_assertion ens (env.snoc ι (result∷τ) v)) δ).
         apply produce_sound'.
         2: {
           rewrite <- sepcon_emp.

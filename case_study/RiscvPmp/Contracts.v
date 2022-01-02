@@ -78,7 +78,7 @@ Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProg
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
     match p with
     end.
-  Definition 𝑷_inst (p : 𝑷) : env.abstract Lit (𝑷_Ty p) Prop :=
+  Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
     end.
 
@@ -127,7 +127,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
 
   Local Notation "e1 '=?' e2" := (term_eqb e1 e2).
 
-  Definition z_term {Σ} : Z -> Term Σ ty_int := term_lit ty_int.
+  Definition z_term {Σ} : Z -> Term Σ ty_int := term_val ty_int.
 
   Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
     ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
@@ -170,8 +170,8 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   (* TODO: length of list should be 16, no duplicates *)
   Definition pmp_entries {Σ} : Term Σ (ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx)) :=
     term_list (cons (term_binop binop_pair
-                                (term_lit ty_pmpcfgidx PMP0CFG) (* PMP0CFG ↦ ... *)
-                                (term_lit ty_pmpaddridx PMPADDR0)) nil). (* PMPADDR0 ↦ ... *)
+                                (term_val ty_pmpcfgidx PMP0CFG) (* PMP0CFG ↦ ... *)
+                                (term_val ty_pmpaddridx PMPADDR0)) nil). (* PMPADDR0 ↦ ... *)
 
   Section Contracts.
     Import RiscvNotations.
@@ -205,10 +205,10 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
          mtvec ↦ (term_var "h") ∗
          asn_exist v ty_xlenbits (nextpc ↦ term_var v) ∗
          asn_or (cur_privilege ↦ (term_var "m") ∗ pc ↦ (term_var "i"))
-                (cur_privilege ↦ (term_lit ty_privilege Machine) ∗
+                (cur_privilege ↦ (term_val ty_privilege Machine) ∗
                  pc ↦ (term_var "h") ∗
                  mepc ↦ (term_var "i") ∗
-                 mstatus ↦ (term_record rmstatus [ term_lit ty_privilege User ]))
+                 mstatus ↦ (term_record rmstatus [ term_val ty_privilege User ]))
     |}.
 
   Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
@@ -275,7 +275,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
        sep_contract_precondition    := asn_exist v ty_xlenbits (nextpc ↦ term_var v);
        sep_contract_result          := "result_set_next_pc";
        sep_contract_postcondition   :=
-         asn_eq (term_var "result_set_next_pc") (term_lit ty_unit tt)
+         asn_eq (term_var "result_set_next_pc") (term_val ty_unit tt)
          ∗ nextpc ↦ term_var addr;
     |}.
 
@@ -303,7 +303,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
        sep_contract_precondition    := asn_gprs;
        sep_contract_result          := "result_wX";
        sep_contract_postcondition   :=
-         asn_eq (term_var "result_wX") (term_lit ty_unit tt)
+         asn_eq (term_var "result_wX") (term_val ty_unit tt)
          ∗ asn_gprs;
     |}.
 
@@ -531,7 +531,7 @@ Section Debug.
     let: tmp2 := stm_read_register pc in
     let: tmp3 := stm_debugk (call exception_handler tmp1 (CTL_TRAP t) tmp2) in
     call set_next_pc tmp3 ;;
-    stm_lit ty_retired RETIRE_FAIL.
+    stm_val ty_retired RETIRE_FAIL.
 
   Lemma valid_contract_execute_ECALL : SMut.ValidContract sep_contract_execute_ECALL fun_execute_ECALL'.
   Proof.
@@ -575,7 +575,7 @@ Module BlockVerification.
     (chunk_user
        ptsreg
        (env.nil
-          ► (ty_regno ↦ term_lit ty_regno r)
+          ► (ty_regno ↦ term_val ty_regno r)
           ► (ty_xlenbits ↦ val)))
       (at level 100).
   Notation "ω ∣ x <- ma ;; mb" :=
@@ -662,7 +662,7 @@ Module BlockVerification.
          (chunk_user
             ptsreg
             (env.nil
-               ► (ty_regno ↦ term_lit ty_regno r)
+               ► (ty_regno ↦ term_val ty_regno r)
                ► (ty_xlenbits ↦ val))))
          (at level 100).
 

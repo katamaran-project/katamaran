@@ -65,8 +65,8 @@ Module HoareSound
         microsail_stm_primitive_step s;
         dependent elimination H
 
-      | [ H: ⟨ _, _, _, stm_lit _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ |- _ ] =>
-        apply steps_inversion_lit in H;
+      | [ H: ⟨ _, _, _, stm_val _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ |- _ ] =>
+        apply steps_inversion_val in H;
         destruct_propositional H; subst; cbn in *
       | [ H: ⟨ _, _, _, stm_fail _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ |- _ ] =>
         apply steps_inversion_fail in H;
@@ -104,7 +104,7 @@ Module HoareSound
         destruct (eval e δ) eqn:?
       end.
 
-    Lemma resultorfail_monotonicity {Γ σ} {s : Stm Γ σ} {P Q : Lit σ -> Prop} :
+    Lemma resultorfail_monotonicity {Γ σ} {s : Stm Γ σ} {P Q : Val σ -> Prop} :
       (forall v, P v -> Q v) -> ResultOrFail s P -> ResultOrFail s Q.
     Proof. destruct s; firstorder. Qed.
 
@@ -165,7 +165,7 @@ Module HoareSound
     Lemma sound {Γ σ} (s : Stm Γ σ) :
       forall (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : CStore Γ) (s' : Stm Γ σ),
         ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
-        forall (PRE : HProp) (POST : Lit σ -> CStore Γ -> HProp)
+        forall (PRE : HProp) (POST : Val σ -> CStore Γ -> HProp)
                (triple : ⦃ PRE ⦄ s ; δ ⦃ POST ⦄)
                (γframe γfocus : Heap),
           split (heap γ) γframe γfocus ->
@@ -210,7 +210,7 @@ Module HoareSound
       (*   microsail_insterU (eauto) H3. *)
       (*   destruct_conjs; cbn in *. *)
       (*   pose proof (split_eq_right H1 H4); subst; auto. *)
-      (* rule_stm_lit *)
+      (* rule_stm_val *)
       - sound_solve.
       (* rule_stm_exp *)
       - sound_solve.
@@ -239,7 +239,7 @@ Module HoareSound
       (* rule_stm_match_union *)
       - sound_solve.
         destruct (𝑼_unfold (eval e9 δ)) eqn:Heq.
-        assert (𝑼_fold (𝑼_unfold (eval e9 δ)) = 𝑼_fold (existT x l)) as Heq' by now f_equal.
+        assert (𝑼_fold (𝑼_unfold (eval e9 δ)) = 𝑼_fold (existT x v)) as Heq' by now f_equal.
         rewrite 𝑼_fold_unfold in Heq'.
         sound_solve.
       (* rule_stm_match_record *)

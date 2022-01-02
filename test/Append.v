@@ -124,28 +124,28 @@ Module ExampleValueKit <: ValueKit.
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
     match U with
     end.
-  Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
+  Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
     match U with
     end.
-  Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) } :=
-    match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Lit (𝑼𝑲_Ty u K)}) with
+  Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) } :=
+    match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Val (𝑼𝑲_Ty u K)}) with
     end.
   Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
       𝑼_fold U (𝑼_unfold U Kv) = Kv.
   Proof. now intros [] []. Qed.
-  Lemma 𝑼_unfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty U K) }),
+  Lemma 𝑼_unfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) }),
       𝑼_unfold U (𝑼_fold U Kv) = Kv.
   Proof. now intros [] [[]]. Qed.
 
   (** RECORDS **)
   Definition 𝑹𝑭  : Set := Empty_set.
   Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty := match R with end.
-  Definition 𝑹_fold (R : 𝑹) : NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
-  Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R) := match R with end.
+  Definition 𝑹_fold (R : 𝑹) : NamedEnv Val (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
+  Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Val (𝑹𝑭_Ty R) := match R with end.
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold R (𝑹_unfold R Kv) = Kv.
   Proof. intros []. Qed.
-  Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
+  Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Val (𝑹𝑭_Ty R)),
       𝑹_unfold R (𝑹_fold R Kv) = Kv.
   Proof. intros []. Qed.
 
@@ -276,7 +276,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
   (*   end. *)
 
   Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) :
-    forall (args : NamedEnv Lit σs) (res : string + Lit σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
+    forall (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
     match f with
     | mkcons => fun args res γ γ' μ μ' =>
                   γ' = γ /\
@@ -303,7 +303,7 @@ Module ExampleProgramKit <: (ProgramKit ExampleTermKit).
                   end
     end.
 
-  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Lit σs) γ μ :
+  Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof with
         repeat
@@ -357,7 +357,7 @@ Module SepContracts.
 
     Definition 𝑷 := Empty_set.
     Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
-    Definition 𝑷_inst (p : 𝑷) : env.abstract Lit (𝑷_Ty p) Prop := match p with end.
+    Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop := match p with end.
     Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
 
     Definition 𝑯 := Predicate.
@@ -397,7 +397,7 @@ Module SepContracts.
          sep_contract_precondition    := term_inl (term_var "p") ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn_formula (formula_eq (term_var "result") (term_lit ty_unit tt)) ∗
+           asn_formula (formula_eq (term_var "result") (term_val ty_unit tt)) ∗
            asn_exist "zs" (ty_list ty_int)
              (term_inl (term_var "p") ↦l term_var "zs" ∗
               asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
@@ -427,7 +427,7 @@ Module SepContracts.
          sep_contract_precondition    := asn_exist "ys" llist (term_var "p" ↦p ( term_var "x" , term_var "ys"));
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-         asn_formula (formula_eq (term_var "result") (term_lit ty_unit tt)) ∗
+         asn_formula (formula_eq (term_var "result") (term_val ty_unit tt)) ∗
          term_var "p" ↦p ( term_var "x" , term_var "xs");
       |}.
 
@@ -457,8 +457,8 @@ Module SepContracts.
          lemma_patterns        := [term_var "p"]%arg;
          lemma_precondition    := term_inr (term_var "p") ↦l term_var "xs";
          lemma_postcondition   :=
-           asn_formula (formula_eq (term_var "p") (term_lit ty_unit tt)) ∗
-           asn_formula (formula_eq (term_var "xs") (term_lit (ty_list ty_int) nil))
+           asn_formula (formula_eq (term_var "p") (term_val ty_unit tt)) ∗
+           asn_formula (formula_eq (term_var "xs") (term_val (ty_list ty_int) nil))
       |}.
 
     Definition CEnv : SepContractEnv :=

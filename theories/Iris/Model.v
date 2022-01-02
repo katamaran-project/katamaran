@@ -80,18 +80,18 @@ Module MicroSailLanguage
      essentially to validate of_to_val. *)
   Record ValConf (Γ : PCtx) τ : Type :=
     MkValConf
-      { valconf_val   : Lit τ;
+      { valconf_val   : Val τ;
         valconf_store : CStore Γ
       }.
 
   Definition of_val {Γ} {τ} (v : ValConf Γ τ) : Conf Γ τ :=
     match v with
-      MkValConf _ v δ => MkConf (stm_lit _ v) δ
+      MkValConf _ v δ => MkConf (stm_val _ v) δ
     end.
 
   Definition to_val {Γ} {τ} (t : Conf Γ τ) : option (ValConf Γ τ) :=
     match t with
-    | MkConf (stm_lit _ v) δ => Some (MkValConf _ v δ)
+    | MkConf (stm_val _ v) δ => Some (MkValConf _ v δ)
     | _                      => None
     end.
 
@@ -144,29 +144,29 @@ Module MicroSailLanguage
 
   Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-  Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_lit _ v) δ) (MkValConf _ v δ).
+  Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf _ v δ).
   intros; eapply of_to_val; by cbn.
   Defined.
 
   Definition SomeReg : Type := sigT 𝑹𝑬𝑮.
-  Definition SomeLit : Type := sigT Lit.
+  Definition SomeVal : Type := sigT Val.
 
   Section TransparentObligations.
     Local Set Transparent Obligations.
     (* Derive NoConfusion for SomeReg. *)
-    (* Derive NoConfusion for SomeLit. *)
+    (* Derive NoConfusion for SomeVal. *)
     Derive NoConfusion for excl.
   End TransparentObligations.
 
   Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
   Instance countable_SomeReg : Countable SomeReg := finite.finite_countable.
 
-  Instance eqDec_SomeLit : EqDecision SomeLit.
+  Instance eqDec_SomeVal : EqDecision SomeVal.
   Proof.
     intros [τ1 v1] [τ2 v2].
     destruct (Ty_eq_dec τ1 τ2).
     - subst.
-      destruct (Lit_eqb_spec _ v1 v2).
+      destruct (Val_eqb_spec _ v1 v2).
       + left. congruence.
       + right. intros H.
         Local Set Equations With UIP.
@@ -175,7 +175,7 @@ Module MicroSailLanguage
       by dependent elimination H.
   Qed.
 
-  Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeLit))).
+  Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeVal))).
 
 End MicroSailLanguage.
 
@@ -198,13 +198,13 @@ Module IrisRegisters
                           reg_gv_name : gname;
                         }.
 
-  Definition reg_pointsTo `{sailRegG Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) : iProp Σ :=
+  Definition reg_pointsTo `{sailRegG Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) : iProp Σ :=
     own reg_gv_name (◯ {[ existT _ r := Excl (existT _ v) ]}).
 
   Definition regs_inv `{sailRegG Σ} (regstore : RegStore) : iProp Σ :=
     (∃ regsmap,
         own reg_gv_name (● regsmap) ∗
-        ⌜ map_Forall (K := SomeReg) (A := excl SomeLit) (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register regstore reg)) = v end ) regsmap ⌝
+        ⌜ map_Forall (K := SomeReg) (A := excl SomeVal) (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register regstore reg)) = v end ) regsmap ⌝
     )%I.
 
 End IrisRegisters.
@@ -235,9 +235,9 @@ Module Type IrisHeapKit
 
   Parameter Inline mem_inv_init : forall Σ (μ : Memory), memPreG Σ -> ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
 
-  Parameter luser_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (p : 𝑯) (ts : Env Lit (𝑯_Ty p)), memG Σ -> iProp Σ.
+  Parameter luser_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p)), memG Σ -> iProp Σ.
 
-  Parameter lduplicate_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (p : 𝑯) (ts : Env Lit (𝑯_Ty p))
+  Parameter lduplicate_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p))
       (mG : memG Σ),
       is_duplicable p = true -> bi_entails (luser_inst (p := p) ts mG) (luser_inst (p := p) ts mG ∗ luser_inst (p := p) ts mG).
 
@@ -438,7 +438,7 @@ Module IrisSoundness
 
   Context `{sailG Σ}.
 
-  Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) :
+  Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
     ⊢ (regs_inv regstore -∗ reg_pointsTo r v -∗ ⌜read_register regstore r = v⌝)%I.
   Proof.
     iDestruct 1 as (regsmap) "[Hregs %]".
@@ -459,8 +459,8 @@ Module IrisSoundness
     by dependent elimination H0.
   Qed.
 
-  Lemma regs_inv_update {τ} {r} {v : Lit τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeLit))} {regstore : RegStore} :
-    map_Forall (K := SomeReg) (A := excl SomeLit) (λ r' v', match r' with
+  Lemma regs_inv_update {τ} {r} {v : Val τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeVal))} {regstore : RegStore} :
+    map_Forall (K := SomeReg) (A := excl SomeVal) (λ r' v', match r' with
                          | existT τ r'' => Excl (existT _ (read_register regstore r'')) = v'
                          end) regsmap ->
     (own reg_gv_name (● <[existT _ r:=Excl (existT _ v)]> regsmap)) -∗ regs_inv (write_register regstore r v).
@@ -485,7 +485,7 @@ Module IrisSoundness
         apply (map_Forall_lookup_1 _ _ _ _ regseq eq1).
   Qed.
 
-  Lemma reg_update regstore {τ} r (v1 v2 : Lit τ) :
+  Lemma reg_update regstore {τ} r (v1 v2 : Val τ) :
     regs_inv regstore -∗ reg_pointsTo r v1 ==∗ regs_inv (write_register regstore r v2) ∗ reg_pointsTo r v2.
   Proof.
     iDestruct 1 as (regsmap) "[Hregs %]".
@@ -508,7 +508,7 @@ Module IrisSoundness
     iApply (regs_inv_update H0); iFrame.
   Qed.
 
-  Lemma rule_stm_read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) {δ : CStore Γ} :
+  Lemma rule_stm_read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) {δ : CStore Γ} :
     ⊢ (reg_pointsTo r v -∗
                     WP (MkConf (stm_read_register r) δ) ?{{ w, reg_pointsTo r v ∗ ⌜ w = MkValConf _ v δ ⌝ }}
       )%I.
@@ -530,7 +530,7 @@ Module IrisSoundness
     by iApply wp_value.
   Qed.
 
-  Lemma rule_stm_write_register {Γ} {τ} (r : 𝑹𝑬𝑮 τ) (δ : CStore Γ) (v : Lit τ) e :
+  Lemma rule_stm_write_register {Γ} {τ} (r : 𝑹𝑬𝑮 τ) (δ : CStore Γ) (v : Val τ) e :
     ⊢ (reg_pointsTo r v -∗
                     WP (MkConf (stm_write_register r e) δ : expr (microsail_lang Γ τ)) ?{{ w, reg_pointsTo r (eval e δ) ∗ bi_pure (w = MkValConf _ (eval e δ) δ) }}
     )%I.
@@ -551,12 +551,12 @@ Module IrisSoundness
   Qed.
 
   Definition semTriple {Γ τ} (δ : CStore Γ)
-             (PRE : iProp Σ) (s : Stm Γ τ) (POST : Lit τ -> CStore Γ -> iProp Σ) : iProp Σ :=
+             (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
     PRE -∗ WP (MkConf s δ : expr (microsail_lang Γ τ)) ?{{ v, match v with MkValConf _ v δ' => POST v δ' end }}.
   (* always modality needed? perhaps not because sail not higher-order? *)
 
   Lemma iris_rule_consequence {Γ σ} {δ : CStore Γ}
-        {P P'} {Q Q' : Lit σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
+        {P P'} {Q Q' : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
         (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') ->
         semTriple δ P' s Q' -∗ semTriple δ P s Q.
   Proof.
@@ -569,7 +569,7 @@ Module IrisSoundness
   Qed.
 
   Lemma iris_rule_frame {Γ σ} {δ : CStore Γ}
-        (R P : iProp Σ) (Q : Lit σ -> CStore Γ -> iProp Σ) (s : Stm Γ σ) :
+        (R P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) (s : Stm Γ σ) :
         (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
   Proof.
     iIntros "trips [HR HP]".
@@ -583,7 +583,7 @@ Module IrisSoundness
   Qed.
 
   Lemma iris_rule_pull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ)
-        (P : iProp Σ) (Q : Prop) (R : Lit σ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : Prop) (R : Val σ -> CStore Γ -> iProp Σ) :
         (⊢ (⌜ Q ⌝ → semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R)%I.
   Proof.
     iIntros "QP [P %]".
@@ -592,7 +592,7 @@ Module IrisSoundness
 
   Lemma iris_rule_exist {σ Γ} (δ : CStore Γ)
         (s : Stm Γ σ) {A : Type} {P : A -> iProp Σ}
-        {Q :  Lit σ -> CStore Γ -> iProp Σ} :
+        {Q :  Val σ -> CStore Γ -> iProp Σ} :
         ⊢ ((∀ x, semTriple δ (P x) s Q) -∗ semTriple δ (∃ x, P x) s Q)%I.
   Proof.
     iIntros "trips Px".
@@ -600,10 +600,10 @@ Module IrisSoundness
     by iApply "trips".
   Qed.
 
-  Lemma iris_rule_stm_lit {Γ} (δ : CStore Γ)
-        {τ : Ty} {l : Lit τ}
-        {P : iProp Σ} {Q : Lit τ -> CStore Γ -> iProp Σ} :
-        ⊢ ((P -∗ Q l δ)%I -∗ semTriple δ P (stm_lit τ l) Q)%I.
+  Lemma iris_rule_stm_val {Γ} (δ : CStore Γ)
+        {τ : Ty} {v : Val τ}
+        {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
+        ⊢ ((P -∗ Q v δ)%I -∗ semTriple δ P (stm_val τ v) Q)%I.
   Proof.
     iIntros "PQ P".
     iApply wp_value.
@@ -612,7 +612,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_exp {Γ} (δ : CStore Γ)
         {τ : Ty} {e : Exp Γ τ}
-        {P : iProp Σ} {Q : Lit τ -> CStore Γ -> iProp Σ} :
+        {P : iProp Σ} {Q : Val τ -> CStore Γ -> iProp Σ} :
         ⊢ ((P -∗ Q (eval e δ) δ) -∗ semTriple δ P (stm_exp e) Q)%I.
   Proof.
     iIntros "PQ P".
@@ -629,7 +629,7 @@ Module IrisSoundness
     iModIntro. iModIntro. iModIntro.
     iFrame.
     iSplitL; cbn; trivial.
-    iApply (wp_value _ _ (fun v => match v with | MkValConf _ v' δ' => Q v' δ' end) (MkConf (stm_lit _ (eval e0 δ1)) δ1)).
+    iApply (wp_value _ _ (fun v => match v with | MkValConf _ v' δ' => Q v' δ' end) (MkConf (stm_val _ (eval e0 δ1)) δ1)).
     by iApply "PQ".
   Qed.
 
@@ -712,10 +712,10 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_let {Γ} (δ : CStore Γ)
         (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
-        (P : iProp Σ) (Q : Lit σ -> CStore Γ -> iProp Σ)
-        (R : Lit τ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
+        (R : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s Q -∗
-                     (∀ (v : Lit σ) (δ' : CStore Γ),
+                     (∀ (v : Val σ) (δ' : CStore Γ),
                          semTriple (env.snoc δ' (x∷σ) v) (Q v δ') k (fun v δ'' => R v (env.tail δ'')) ) -∗
                      semTriple δ P (let: x := s in k) R).
   Proof.
@@ -767,10 +767,10 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_let_forwards {Γ} (δ : CStore Γ)
         (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
-        (P : iProp Σ) (Q : Lit σ -> CStore Γ -> iProp Σ)
-        (R : Lit τ -> CStore (Γ ▻ x∷σ) -> iProp Σ) :
+        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
+        (R : Val τ -> CStore (Γ ▻ x∷σ) -> iProp Σ) :
         ⊢ (semTriple δ P s Q -∗
-                     (∀ (v : Lit σ) (δ' : CStore Γ), semTriple (env.snoc δ' (x∷σ) v) (Q v δ') k R ) -∗
+                     (∀ (v : Val σ) (δ' : CStore Γ), semTriple (env.snoc δ' (x∷σ) v) (Q v δ') k R ) -∗
                      semTriple δ P (let: x := s in k) (fun v δ' => ∃ v__let, R v (env.snoc δ' (x∷σ) v__let)))%I.
   Proof.
     (* proof should be generalizable beyond Iris model? *)
@@ -788,7 +788,7 @@ Module IrisSoundness
   Lemma iris_rule_stm_block {Γ} (δ : CStore Γ)
         (Δ : PCtx) (δΔ : CStore Δ)
         (τ : Ty) (k : Stm (Γ ▻▻ Δ) τ)
-        (P : iProp Σ) (R : Lit τ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env.drop Δ δ'')) -∗
                    semTriple δ P (stm_block δΔ k) R)%I.
   Proof.
@@ -799,7 +799,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_if {Γ} (δ : CStore Γ)
         (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
-        (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ (P ∧ ⌜ eval e δ = true ⌝) s1 Q -∗
                    semTriple δ (P ∧ ⌜ eval e δ = false ⌝) s2 Q -∗
                    semTriple δ P (stm_if e s1 s2) Q)%I.
@@ -826,7 +826,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_if_backwards {Γ} (δ : CStore Γ)
         (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
-        (P1 P2 : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
+        (P1 P2 : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P1 s1 Q -∗ semTriple δ P2 s2 Q -∗
         semTriple δ (bi_impl (⌜ eval e δ = true ⌝) P1 ∧
                      bi_impl (⌜ eval e δ = false ⌝) P2)%I
@@ -846,7 +846,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_seq {Γ} (δ : CStore Γ)
         (τ : Ty) (s1 : Stm Γ τ) (σ : Ty) (s2 : Stm Γ σ)
-        (P : iProp Σ) (Q : CStore Γ -> iProp Σ) (R : Lit σ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : CStore Γ -> iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
     ⊢ (semTriple δ P s1 (fun _ => Q) -∗
                  (∀ δ', semTriple δ' (Q δ') s2 R) -∗
                  semTriple δ P (s1 ;; s2) R)%I.
@@ -893,7 +893,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
         (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
-                      (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
+                      (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
     ⊢ (semTriple δ (P ∧ ⌜ eval e1 δ = true ⌝) k Q -∗
        semTriple δ P (stm_assertk e1 e2 k) Q)%I.
   Proof.
@@ -917,8 +917,8 @@ Module IrisSoundness
   Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
-        (τ : Ty) (s : Lit ty_string) :
-        forall (Q : Lit τ -> CStore Γ -> iProp Σ),
+        (τ : Ty) (s : Val ty_string) :
+        forall (Q : Val τ -> CStore Γ -> iProp Σ),
           ⊢ semTriple δ True%I (stm_fail τ s) Q.
   Proof.
     iIntros (Q) "_".
@@ -928,7 +928,7 @@ Module IrisSoundness
   Lemma iris_rule_stm_match_list {Γ} (δ : CStore Γ)
         {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
         (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty_list σ) τ)
-        (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ (P ∧ bi_pure (eval e δ = [])) alt_nil (fun v' δ' => Q v' δ') -∗
                      (∀ v vs, semTriple (env.snoc (env.snoc δ (xh∷σ) v) (xt∷ty_list σ) vs) (P ∧ bi_pure (eval e δ = cons v vs)) alt_cons (fun v' δ' => Q v' (env.tail (env.tail δ')))) -∗
                      semTriple δ P (stm_match_list e alt_nil xh xt alt_cons) Q)%I.
@@ -965,7 +965,7 @@ Module IrisSoundness
                          (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
                          (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
                          (P : iProp Σ)
-                         (Q : Lit τ -> CStore Γ -> iProp Σ) :
+                         (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ ((∀ v, semTriple (env.snoc δ (xinl∷σinl) v) (P ∧ ⌜ eval e δ = inl v ⌝) alt_inl (fun v' δ' => Q v' (env.tail δ'))) -∗
            (∀ v, semTriple (env.snoc δ (xinr∷σinr) v) (P ∧ ⌜ eval e δ = inr v ⌝) alt_inr (fun v' δ' => Q v' (env.tail δ'))) -∗
         semTriple δ P (stm_match_sum e xinl alt_inl xinr alt_inr) Q)%I.
@@ -1000,7 +1000,7 @@ Module IrisSoundness
   Lemma iris_rule_stm_match_prod {Γ} (δ : CStore Γ)
         {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
         (xl xr : 𝑿) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
-        (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ ((∀ vl vr,
             semTriple (env.snoc (env.snoc δ (xl∷σ1) vl) (xr∷σ2) vr)
               (P ∧ bi_pure (eval e δ = (vl,vr))) rhs (fun v δ' => Q v (env.tail (env.tail δ')))) -∗
@@ -1029,7 +1029,7 @@ Module IrisSoundness
   Lemma iris_rule_stm_match_enum {Γ} (δ : CStore Γ)
         {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
         (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
-        (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P (alts (eval e δ)) Q -∗
           semTriple δ P (stm_match_enum E e alts) Q)%I.
   Proof.
@@ -1052,8 +1052,8 @@ Module IrisSoundness
   Lemma iris_rule_stm_match_tuple {Γ} (δ : CStore Γ)
         {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
         (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (Γ ▻▻ Δ) τ)
-        (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
-    ⊢ ((semTriple (env.cat δ (tuple_pattern_match_lit p (eval e δ))) P rhs (fun v δ' => Q v (env.drop Δ δ'))) -∗
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+    ⊢ ((semTriple (env.cat δ (tuple_pattern_match_val p (eval e δ))) P rhs (fun v δ' => Q v (env.drop Δ δ'))) -∗
        semTriple δ P (stm_match_tuple e p rhs) Q)%I.
   Proof.
     iIntros "triptup P".
@@ -1069,7 +1069,7 @@ Module IrisSoundness
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply (wp_compat_block (tuple_pattern_match_lit p0 (eval e8 δ1))).
+    iApply (wp_compat_block (tuple_pattern_match_val p0 (eval e8 δ1))).
     by iApply "triptup".
   Qed.
 
@@ -1078,9 +1078,9 @@ Module IrisSoundness
         (alt__Δ : forall (K : 𝑼𝑲 U), PCtx)
         (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
         (alt__r : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__Δ K) τ)
-        (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
-        ⊢ ((∀ (K : 𝑼𝑲 U) (v : Lit (𝑼𝑲_Ty K)),
-               semTriple (env.cat δ (pattern_match_lit (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env.drop (alt__Δ K) δ'))) -∗
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+        ⊢ ((∀ (K : 𝑼𝑲 U) (v : Val (𝑼𝑲_Ty K)),
+               semTriple (env.cat δ (pattern_match_val (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env.drop (alt__Δ K) δ'))) -∗
                semTriple δ P (stm_match_union U e alt__p alt__r) Q
           )%I.
   Proof.
@@ -1099,7 +1099,7 @@ Module IrisSoundness
     iSplitL; [|trivial].
     remember (𝑼_unfold (eval e9 δ1)) as scrutinee.
     destruct scrutinee as [K v].
-    iApply (wp_compat_block (pattern_match_lit (alt__pat K) v)).
+    iApply (wp_compat_block (pattern_match_val (alt__pat K) v)).
     iSpecialize ("tripunion" $! K v).
     rewrite Heqscrutinee.
     rewrite 𝑼_fold_unfold.
@@ -1110,8 +1110,8 @@ Module IrisSoundness
   Lemma iris_rule_stm_match_record {Γ} (δ : CStore Γ)
         {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
         (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (Γ ▻▻ Δ) τ)
-        (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
-        ⊢ ((semTriple (env.cat δ (record_pattern_match_lit p (eval e δ))) P rhs (fun v δ' => Q v (env.drop Δ δ'))) -∗
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+        ⊢ ((semTriple (env.cat δ (record_pattern_match_val p (eval e δ))) P rhs (fun v δ' => Q v (env.drop Δ δ'))) -∗
         semTriple δ P (stm_match_record R e p rhs) Q)%I.
   Proof.
     iIntros "triprec P".
@@ -1127,12 +1127,12 @@ Module IrisSoundness
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply (wp_compat_block (record_pattern_match_lit p1 (eval e10 δ1))).
+    iApply (wp_compat_block (record_pattern_match_val p1 (eval e10 δ1))).
     by iApply "triprec".
   Qed.
 
   Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
-        {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+        {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
         ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => (⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝) ∧ lptsreg r v))%I.
   Proof.
     iIntros "Hreg".
@@ -1144,8 +1144,8 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_write_register {Γ} (δ : CStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (w : Exp Γ σ)
-                              (Q : Lit σ -> CStore Γ -> iProp Σ)
-                              (v : Lit σ) :
+                              (Q : Val σ -> CStore Γ -> iProp Σ)
+                              (v : Val σ) :
         ⊢ semTriple δ (lptsreg r v) (stm_write_register r w)
                   (fun v' δ' => (bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ)) ∧ lptsreg r v')%I.
   Proof.
@@ -1158,7 +1158,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_assign_forwards {Γ} (δ : CStore Γ)
         (x : 𝑿) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
-        (P : iProp Σ) (R : Lit σ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s R -∗
                      semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (@env.update _ _ _ δ' (x∷_)  _ v__old) ∧ bi_pure (env.lookup δ' xIn = v__new)))%I.
   Proof.
@@ -1212,7 +1212,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_assign_backwards {Γ} (δ : CStore Γ)
         (x : 𝑿) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
-        (P : iProp Σ) (R : Lit σ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s (fun v δ' => R v (@env.update _ _ _ δ' (x∷_) _ v)) -∗
            semTriple δ P (stm_assign x s) R)%I.
   Proof.
@@ -1284,7 +1284,7 @@ Module IrisSoundness
   Lemma iris_rule_stm_call_forwards {Γ} (δ : CStore Γ)
         {Δ σ} (f : 𝑭 Δ σ) (c : SepContract Δ σ) (es : NamedEnv (Exp Γ) Δ)
         (P : iProp Σ)
-        (Q : Lit σ -> iProp Σ) :
+        (Q : Val σ -> iProp Σ) :
         CEnv f = Some c ->
         CTriple (evals es δ) P Q c ->
         (⊢ ▷ ValidContractEnvSem CEnv -∗
@@ -1326,7 +1326,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_call_frame {Γ} (δ : CStore Γ)
         (Δ : PCtx) (δΔ : CStore Δ) (τ : Ty) (s : Stm Δ τ)
-        (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δΔ P s (fun v _ => Q v δ) -∗
            semTriple δ P (stm_call_frame δΔ s) Q)%I.
   Proof.
@@ -1336,11 +1336,11 @@ Module IrisSoundness
   Qed.
 
   Lemma iris_rule_stm_bind {Γ} (δ : CStore Γ)
-        {σ τ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
-        (P : iProp Σ) (Q : Lit σ -> CStore Γ -> iProp Σ)
-        (R : Lit τ -> CStore Γ -> iProp Σ) :
+        {σ τ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
+        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
+        (R : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s Q -∗
-           (∀ (v__σ : Lit σ) (δ' : CStore Γ),
+           (∀ (v__σ : Val σ) (δ' : CStore Γ),
                semTriple δ' (Q v__σ δ') (k v__σ) R) -∗
            semTriple δ P (stm_bind s k) R)%I.
   Proof.
@@ -1389,7 +1389,7 @@ Module IrisSoundness
   Lemma iris_rule_stm_call_inline
     {Γ} (δ : CStore Γ)
     {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
-    (P : iProp Σ) (Q : Lit σ -> iProp Σ) :
+    (P : iProp Σ) (Q : Val σ -> iProp Σ) :
     ⊢ semTriple (evals es δ) P (Pi f) (fun v _ => Q v) -∗
       semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')).
   Proof.
@@ -1428,9 +1428,9 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_foreign
     {Γ} (δ : CStore Γ) {τ} {Δ} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
-    (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
+    (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
     ForeignSem ->
-    CTriple (evals es δ) P (λ v : Lit τ, Q v δ) (CEnvEx f) ->
+    CTriple (evals es δ) P (λ v : Val τ, Q v δ) (CEnvEx f) ->
     ⊢ semTriple δ P (stm_foreign f es) Q.
   Proof.
     iIntros (extSem ctrip).
@@ -1471,7 +1471,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_lemmak
     {Γ} (δ : CStore Γ) {τ} {Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
-    (P Q : iProp Σ) (R : Lit τ -> CStore Γ -> iProp Σ) :
+    (P Q : iProp Σ) (R : Val τ -> CStore Γ -> iProp Σ) :
     LemmaSem ->
     LTriple (evals es δ) P Q (LEnv l) ->
     ⊢ semTriple δ Q k R -∗
@@ -1506,7 +1506,7 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_debugk
     {Γ τ} (δ : CStore Γ) (k : Stm Γ τ)
-    (P : iProp Σ) (Q : Lit τ -> CStore Γ -> iProp Σ) :
+    (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
     ⊢ (semTriple δ P k Q -∗
        semTriple δ P (stm_debugk k) Q)%I.
   Proof.
@@ -1528,11 +1528,11 @@ Module IrisSoundness
   Qed.
 
   Lemma iris_rule_noop {Γ σ} {δ : CStore Γ}
-        {P} {Q : Lit σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
+        {P} {Q : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
     language.to_val (MkConf s δ) = None ->
     (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
                             (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
-                            ((exists v, s' = stm_lit _ v) \/ (exists msg, s' = stm_fail _ msg))) ->
+                            ((exists v, s' = stm_val _ v) \/ (exists msg, s' = stm_fail _ msg))) ->
     (∀ v, P ={⊤}=∗ Q v δ) -∗
                  semTriple δ P s Q.
   Proof.
@@ -1564,7 +1564,7 @@ Module IrisSoundness
   Qed.
 
   Lemma sound_stm {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
-    forall (PRE : iProp Σ) (POST : Lit τ -> CStore Γ -> iProp Σ),
+    forall (PRE : iProp Σ) (POST : Val τ -> CStore Γ -> iProp Σ),
       ForeignSem ->
       LemmaSem ->
       ⦃ PRE ⦄ s ; δ ⦃ POST ⦄ ->
@@ -1577,7 +1577,7 @@ Module IrisSoundness
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
     - by iApply iris_rule_exist.
-    - iApply iris_rule_stm_lit.
+    - iApply iris_rule_stm_val.
       by iApply H0.
     - iApply iris_rule_stm_exp.
       by iApply H0.
@@ -1656,7 +1656,7 @@ Module Adequacy
     solve_inG.
  Qed.
 
-  Definition RegStore_to_map (γ : RegStore) : gmap SomeReg (exclR (leibnizO SomeLit)) :=
+  Definition RegStore_to_map (γ : RegStore) : gmap SomeReg (exclR (leibnizO SomeVal)) :=
     list_to_map (K := SomeReg)
                 (fmap (fun x => match x with
                               existT _ r =>
@@ -1729,7 +1729,7 @@ Module Adequacy
       iInduction l as [|[x r]] "IH".
       - now iFrame.
       - cbn.
-        rewrite (insert_singleton_op (A := exclR (leibnizO SomeLit)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ r)))).
+        rewrite (insert_singleton_op (A := exclR (leibnizO SomeVal)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ r)))).
         rewrite auth_frag_op.
         iPoseProof (own_op with "Hregs") as "[Hreg Hregs]".
         iFrame.
@@ -1747,7 +1747,7 @@ Module Adequacy
     Qed.
 
   Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
-        {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : Lit σ -> Prop} :
+        {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : Val σ -> Prop} :
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
     (forall `{sailG Σ'},
         ⊢ semTriple (Σ := Σ') δ
@@ -1765,7 +1765,7 @@ Module Adequacy
                                                   end) v)).
     - destruct s'; cbn in fins; destruct fins; last done.
       intros adeq.
-      apply (adequate_result MaybeStuck (MkConf s δ) (γ , μ) (fun v _ => match v with | MkValConf _ v' δ' => Q v' end) adeq nil (γ' , μ') (MkValConf _ l δ')).
+      apply (adequate_result MaybeStuck (MkConf s δ) (γ , μ) (fun v _ => match v with | MkValConf _ v' δ' => Q v' end) adeq nil (γ' , μ') (MkValConf _ v δ')).
       by apply steps_to_erased.
     - constructor; last done.
       intros t2 σ2 [v2 δ2] eval.

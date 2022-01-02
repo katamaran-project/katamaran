@@ -89,7 +89,7 @@ Module Mutators
       apply ιvalid.
     Qed.
 
-    Program Definition winstance_snoc {w} (ι : WInstance w) {b : 𝑺 ∷ Ty} (v : Lit (type b)) :
+    Program Definition winstance_snoc {w} (ι : WInstance w) {b : 𝑺 ∷ Ty} (v : Val (type b)) :
       WInstance (wsnoc w b) :=
       {| ιassign := env.snoc (ιassign ι) b v; |}.
     Next Obligation.
@@ -358,7 +358,7 @@ Module Mutators
       Qed.
 
       Lemma match_snocView_eq_rect {Σ1 Σ2 b} {R : Type} (eq : Σ1 = Σ2) (E : Valuation (Σ1 ▻ b))
-        (f : Valuation Σ2 -> Lit (type b) -> R) :
+        (f : Valuation Σ2 -> Val (type b) -> R) :
         match env.snocView (eq_rect Σ1 (fun Σ => Valuation (Σ ▻ b)) E Σ2 eq) with
         | env.isSnoc E v => f E v
         end =
@@ -377,7 +377,7 @@ Module Mutators
       Qed.
 
       Lemma env_insert_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx}
-            (bIn : x∷σ ∈ Σe) (v : Lit σ)
+            (bIn : x∷σ ∈ Σe) (v : Val σ)
             {ι : Valuation Σ0} {ιe : Valuation (Σe - x∷σ)} :
             (ι ►► env.insert bIn ιe v) =
             env.insert (ctx.in_cat_right bIn) (eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ => Valuation Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn))) v.
@@ -1021,7 +1021,7 @@ Module Mutators
       ⊢ Message -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
       fun w msg t =>
         let t' := peval t in
-        match term_get_lit t' with
+        match term_get_val t' with
         | Some l => pure  l
         | None   => angelic_match_bool' msg t'
         end.
@@ -1037,25 +1037,25 @@ Module Mutators
       ⊢ STerm ty_bool -> SDijkstra ⌜bool⌝ :=
       fun w t =>
         let t' := peval t in
-        match term_get_lit t' with
+        match term_get_val t' with
         | Some l => pure  l
         | None   => demonic_match_bool' t'
         end.
 
 
     (* Definition angelic_match_enum {AT E} : *)
-    (*   ⊢ Message -> STerm (ty_enum E) -> (⌜Lit (ty_enum E)⌝ -> □(𝕊 AT)) -> 𝕊 AT := *)
+    (*   ⊢ Message -> STerm (ty_enum E) -> (⌜Val (ty_enum E)⌝ -> □(𝕊 AT)) -> 𝕊 AT := *)
     (*   fun w msg t k => *)
-    (*     match term_get_lit t with *)
+    (*     match term_get_val t with *)
     (*     | Some v => T (k v) *)
     (*     | None => angelic_finite *)
     (*                 msg (fun v => assert_formulak msg (formula_eq t (term_enum E v)) (k v)) *)
     (*     end. *)
 
     (* Definition demonic_match_enum {AT E} : *)
-    (*   ⊢ STerm (ty_enum E) -> (⌜Lit (ty_enum E)⌝ -> □(𝕊 AT)) -> 𝕊 AT := *)
+    (*   ⊢ STerm (ty_enum E) -> (⌜Val (ty_enum E)⌝ -> □(𝕊 AT)) -> 𝕊 AT := *)
     (*   fun w t k => *)
-    (*     match term_get_lit t with *)
+    (*     match term_get_val t with *)
     (*     | Some v => T (k v) *)
     (*     | None => demonic_finite *)
     (*                 (fun v => assume_formulak (formula_eq t (term_enum E v)) (k v)) *)
@@ -1064,7 +1064,7 @@ Module Mutators
     (* Definition angelic_match_list {AT} (x y : 𝑺) (σ : Ty) : *)
     (*   ⊢ Message -> STerm (ty_list σ) -> □(𝕊 AT) -> □(STerm σ -> STerm (ty_list σ) -> 𝕊 AT) -> 𝕊 AT := *)
     (*   fun w0 msg t knil kcons => *)
-    (*     angelic_binary (assert_formulak msg (formula_eq (term_lit (ty_list σ) []) t) knil) *)
+    (*     angelic_binary (assert_formulak msg (formula_eq (term_val (ty_list σ) []) t) knil) *)
     (*       (angelic x σ *)
     (*          (fun w1 ω01 (th : Term w1 σ) => *)
     (*           angelic y (ty_list σ) *)
@@ -1077,7 +1077,7 @@ Module Mutators
     (* Definition demonic_match_list {AT} (x y : 𝑺) (σ : Ty) : *)
     (*   ⊢ STerm (ty_list σ) -> □(𝕊 AT) -> □(STerm σ -> STerm (ty_list σ) -> 𝕊 AT) -> 𝕊 AT := *)
     (*   fun w0 t knil kcons => *)
-    (*     demonic_binary (assume_formulak (formula_eq (term_lit (ty_list σ) []) t) knil) *)
+    (*     demonic_binary (assume_formulak (formula_eq (term_val (ty_list σ) []) t) knil) *)
     (*       (demonic x σ *)
     (*          (fun w1 ω01 (th : Term w1 σ) => *)
     (*           demonic y (ty_list σ) *)
@@ -1318,7 +1318,7 @@ Module Mutators
     (*   NamedEnv (Term Σ) Δ -> Term Σ σ := *)
     (*   match p with *)
     (*   | pat_var x    => fun Ex => match snocView Ex with isSnoc _ t => t end *)
-    (*   | pat_unit     => fun _ => term_lit ty_unit tt *)
+    (*   | pat_unit     => fun _ => term_val ty_unit tt *)
     (*   | pat_pair x y => fun Exy => match snocView Exy with *)
     (*                                  isSnoc Ex ty => *)
     (*                                  match snocView Ex with *)
@@ -1741,7 +1741,7 @@ Module Mutators
       Definition angelic_match_bool {AT} {Γ1 Γ2} :
         ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT :=
         fun w0 t kt kf =>
-          match term_get_lit t with
+          match term_get_val t with
           | Some true => T kt
           | Some false => T kf
           | None => angelic_match_bool' t kt kf
@@ -1770,7 +1770,7 @@ Module Mutators
       Definition demonic_match_bool {AT} {Γ1 Γ2} :
         ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT :=
         fun w0 t kt kf =>
-          match term_get_lit t with
+          match term_get_val t with
           | Some true => T kt
           | Some false => T kf
           | None => demonic_match_bool' t kt kf
@@ -1906,7 +1906,7 @@ Module Mutators
           (*      msg_heap            := h0; *)
           (*      msg_pathcondition   := wco w0; *)
           (*   |}. *)
-          apply (formula_eq (term_lit (ty_list σ) []) t).
+          apply (formula_eq (term_val (ty_list σ) []) t).
           intros w1 ω01.
           apply knil. auto.
         - eapply bind.
@@ -1943,7 +1943,7 @@ Module Mutators
         apply demonic_binary.
         - eapply bind_right.
           apply assume_formula.
-          apply (formula_eq (term_lit (ty_list σ) []) t).
+          apply (formula_eq (term_val (ty_list σ) []) t).
           intros w1 ω01.
           apply knil. auto.
         - eapply bind.
@@ -2316,19 +2316,19 @@ Module Mutators
         with eq_dec p1 p2 => {
           match_chunk (chunk_user p1 vs1) (chunk_user ?(p1) vs2) (left eq_refl) := formula_eqs_ctx vs1 vs2;
           match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) (right _) :=
-            cons (formula_bool (term_lit ty_bool false)) nil
+            cons (formula_bool (term_val ty_bool false)) nil
         };
         match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
         with eq_dec_het r1 r2 => {
           match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg ?(r1) v2) (left eq_refl) := cons (formula_eq v1 v2) nil;
           match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg r2 v2) (right _)      :=
-            cons (formula_bool (term_lit ty_bool false)) nil
+            cons (formula_bool (term_val ty_bool false)) nil
         };
         match_chunk (chunk_conj c11 c12) (chunk_conj c21 c22) :=
           app (match_chunk c11 c21) (match_chunk c12 c22);
         match_chunk (chunk_wand c11 c12) (chunk_wand c21 c22) :=
           app (match_chunk c11 c21) (match_chunk c12 c22);
-        match_chunk _ _  := cons (formula_bool (term_lit ty_bool false)) nil.
+        match_chunk _ _  := cons (formula_bool (term_val ty_bool false)) nil.
 
       Lemma inst_match_chunk {w : World} (c1 c2 : Chunk w) (ι : Valuation w) :
         instpc (match_chunk c1 c2) ι <-> inst c1 ι = inst c2 ι.
@@ -2641,7 +2641,7 @@ Module Mutators
           ⊢ SMut Γ Γ (STerm τ).
         Proof.
           intros w0; destruct s.
-          - apply pure. apply (term_lit τ l).
+          - apply pure. apply (term_val τ v).
           - apply (eval_exp e).
           - eapply bind. apply (exec_aux _ _ s1).
             intros w1 ω01 t1.

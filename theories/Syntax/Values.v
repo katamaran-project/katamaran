@@ -47,50 +47,50 @@ Module Type ValueKit.
 
   (* Union data constructor field type *)
   Parameter Inline 𝑼𝑲_Ty : forall (U : 𝑼), 𝑼𝑲 U -> Ty.
-  Parameter Inline 𝑼_fold   : forall (U : 𝑼), { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K) } -> 𝑼𝑻 U.
-  Parameter Inline 𝑼_unfold : forall (U : 𝑼), 𝑼𝑻 U -> { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K) }.
+  Parameter Inline 𝑼_fold   : forall (U : 𝑼), { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K) } -> 𝑼𝑻 U.
+  Parameter Inline 𝑼_unfold : forall (U : 𝑼), 𝑼𝑻 U -> { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K) }.
   Parameter Inline 𝑼_fold_unfold :
     forall (U : 𝑼) (Kv: 𝑼𝑻 U),
       𝑼_fold (𝑼_unfold Kv) = Kv.
   Parameter Inline 𝑼_unfold_fold :
-    forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K) }),
+    forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K) }),
       𝑼_unfold (𝑼_fold Kv) = Kv.
 
   (* Record field names. *)
   Parameter Inline 𝑹𝑭  : Set.
   (* Record field types. *)
   Parameter Inline 𝑹𝑭_Ty : 𝑹 -> NCtx 𝑹𝑭 Ty.
-  Parameter Inline 𝑹_fold   : forall (R : 𝑹), NamedEnv Lit (𝑹𝑭_Ty R) -> 𝑹𝑻 R.
-  Parameter Inline 𝑹_unfold : forall (R : 𝑹), 𝑹𝑻 R -> NamedEnv Lit (𝑹𝑭_Ty R).
+  Parameter Inline 𝑹_fold   : forall (R : 𝑹), NamedEnv Val (𝑹𝑭_Ty R) -> 𝑹𝑻 R.
+  Parameter Inline 𝑹_unfold : forall (R : 𝑹), 𝑹𝑻 R -> NamedEnv Val (𝑹𝑭_Ty R).
   Parameter Inline 𝑹_fold_unfold :
     forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold (𝑹_unfold Kv) = Kv.
   Parameter Inline 𝑹_unfold_fold :
-    forall (R : 𝑹) (Kv: NamedEnv Lit (𝑹𝑭_Ty R)),
+    forall (R : 𝑹) (Kv: NamedEnv Val (𝑹𝑭_Ty R)),
       𝑹_unfold (𝑹_fold Kv) = Kv.
 
 End ValueKit.
 
 Module Values (Export valuekit : ValueKit).
 
-  Fixpoint Lit_eqb (σ : Ty) : forall (l1 l2 : Lit σ), bool :=
+  Fixpoint Val_eqb (σ : Ty) : forall (l1 l2 : Val σ), bool :=
     match σ with
     | ty_int      => Z.eqb
     | ty_bool     => Bool.eqb
     | ty_bit      => Bit_eqb
     | ty_string   => String.eqb
-    | ty_list σ   => list_beq (Lit_eqb σ)
-    | ty_prod σ τ => prod_beq (Lit_eqb σ) (Lit_eqb τ)
-    | ty_sum σ τ  => sum_beq (Lit_eqb σ) (Lit_eqb τ)
+    | ty_list σ   => list_beq (Val_eqb σ)
+    | ty_prod σ τ => prod_beq (Val_eqb σ) (Val_eqb τ)
+    | ty_sum σ τ  => sum_beq (Val_eqb σ) (Val_eqb τ)
     | ty_unit     => fun _ _ => true
     | ty_enum E   => fun l1 l2 => if 𝑬𝑲_eq_dec l1 l2 then true else false
     | ty_bvec n   => @Word.weqb n
-    | ty_tuple σs => envrec.eqb Lit_eqb
+    | ty_tuple σs => envrec.eqb Val_eqb
     | ty_union U  => fun l1 l2 => if 𝑼𝑻_eq_dec l1 l2 then true else false
     | ty_record R => fun l1 l2 => if 𝑹𝑻_eq_dec l1 l2 then true else false
     end.
 
-  Lemma Lit_eqb_spec (σ : Ty) (x y : Lit σ) : reflect (x = y) (Lit_eqb σ x y).
+  Lemma Val_eqb_spec (σ : Ty) (x y : Val σ) : reflect (x = y) (Val_eqb σ x y).
   Proof with solve_eqb_spec.
     induction σ; cbn.
     - apply Z.eqb_spec.
@@ -114,7 +114,7 @@ Module Values (Export valuekit : ValueKit).
     - destruct (𝑹𝑻_eq_dec x y)...
   Qed.
 
-  Lemma 𝑼_fold_inj {U} (v1 v2 : {K : 𝑼𝑲 U & Lit (𝑼𝑲_Ty K)}) :
+  Lemma 𝑼_fold_inj {U} (v1 v2 : {K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K)}) :
     𝑼_fold v1 = 𝑼_fold v2 <-> v1 = v2.
   Proof.
     split; try congruence. intros H.
@@ -122,7 +122,7 @@ Module Values (Export valuekit : ValueKit).
     now rewrite ?𝑼_unfold_fold in H.
   Qed.
 
-  Lemma 𝑼_unfold_inj {U} (v1 v2 : Lit (ty_union U)) :
+  Lemma 𝑼_unfold_inj {U} (v1 v2 : Val (ty_union U)) :
     𝑼_unfold v1 = 𝑼_unfold v2 <-> v1 = v2.
   Proof.
     split; try congruence. intros H.
@@ -131,14 +131,14 @@ Module Values (Export valuekit : ValueKit).
   Qed.
 
   Fixpoint tuple_proj (σs : Ctx Ty) (n : nat) (σ : Ty) :
-    Lit (ty_tuple σs) -> ctx.nth_is σs n σ -> Lit σ :=
+    Val (ty_tuple σs) -> ctx.nth_is σs n σ -> Val σ :=
     match σs with
     | ε      => fun l (p : ctx.nth_is ε _ _) =>
                   match p with end
     | τs ▻ τ => match n with
-                | 0   => fun (l : Lit (ty_tuple (_ ▻ _)))
+                | 0   => fun (l : Val (ty_tuple (_ ▻ _)))
                              (p : ctx.nth_is _ 0 _) =>
-                           @eq_rect Ty τ Lit (snd l) σ p
+                           @eq_rect Ty τ Val (snd l) σ p
                 | S m => fun l p => tuple_proj τs m σ (fst l) p
                 end
     end.
@@ -247,7 +247,7 @@ Module Values (Export valuekit : ValueKit).
       - right. congruence.
     Defined.
 
-    Definition eval_binop {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Lit σ1 -> Lit σ2 -> Lit σ3 :=
+    Definition eval_binop {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Val σ1 -> Val σ2 -> Val σ3 :=
       match op with
       | binop_plus      => Z.add
       | binop_times     => Z.mul

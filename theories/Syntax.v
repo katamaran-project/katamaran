@@ -103,7 +103,7 @@ End TermKit.
 
 Module Terms (Export termkit : TermKit).
 
-  Definition CStore (Γ : PCtx) : Set := NamedEnv Lit Γ.
+  Definition CStore (Γ : PCtx) : Set := NamedEnv Val Γ.
   Bind Scope env_scope with CStore.
 
   Section Expressions.
@@ -124,7 +124,7 @@ Module Terms (Export termkit : TermKit).
        locally. *)
     Inductive Exp (Γ : PCtx) : Ty -> Set :=
     | exp_var     (x : 𝑿) (σ : Ty) {xInΓ : x∷σ ∈ Γ} : Exp Γ σ
-    | exp_lit     (σ : Ty) : Lit σ -> Exp Γ σ
+    | exp_val     (σ : Ty) : Val σ -> Exp Γ σ
     | exp_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ σ3
     | exp_neg     (e : Exp Γ ty_int) : Exp Γ ty_int
     | exp_not     (e : Exp Γ ty_bool) : Exp Γ ty_bool
@@ -143,7 +143,7 @@ Module Terms (Export termkit : TermKit).
     Bind Scope exp_scope with Exp.
 
     Global Arguments exp_var {_} _ {_ _}.
-    Global Arguments exp_lit {_} _ _.
+    Global Arguments exp_val {_} _ _.
     Global Arguments exp_tuple {_ _} _.
     Global Arguments exp_union {_} _ _.
     Global Arguments exp_record {_} _ _.
@@ -165,7 +165,7 @@ Module Terms (Export termkit : TermKit).
         env.Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
 
       Hypothesis (P_var     : forall (x : 𝑿) (σ : Ty) (xInΓ : x∷σ ∈ Γ), P σ (exp_var x)).
-      Hypothesis (P_lit     : forall (σ : Ty) (l : Lit σ), P σ (exp_lit σ l)).
+      Hypothesis (P_val     : forall (σ : Ty) (l : Val σ), P σ (exp_val σ l)).
       Hypothesis (P_binop   : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1), P σ1 e1 -> forall e2 : Exp Γ σ2, P σ2 e2 -> P σ3 (exp_binop op e1 e2)).
       Hypothesis (P_neg     : forall e : Exp Γ ty_int, P ty_int e -> P ty_int (exp_neg e)).
       Hypothesis (P_not     : forall e : Exp Γ ty_bool, P ty_bool e -> P ty_bool (exp_not e)).
@@ -182,7 +182,7 @@ Module Terms (Export termkit : TermKit).
       Fixpoint Exp_rect {τ : Ty} (e : Exp Γ τ) {struct e} : P τ e :=
         match e with
         | exp_var x                 => ltac:(apply P_var; auto)
-        | exp_lit _ l               => ltac:(apply P_lit; auto)
+        | exp_val _ l               => ltac:(apply P_val; auto)
         | exp_binop op e1 e2        => ltac:(apply P_binop; auto)
         | exp_neg e                 => ltac:(apply P_neg; auto)
         | exp_not e                 => ltac:(apply P_not; auto)
@@ -202,10 +202,10 @@ Module Terms (Export termkit : TermKit).
     Definition Exp_rec {Γ} (P : forall σ, Exp Γ σ -> Set) := Exp_rect P.
     Definition Exp_ind {Γ} (P : forall σ, Exp Γ σ -> Prop) := Exp_rect P.
 
-    Fixpoint eval {Γ : PCtx} {σ : Ty} (e : Exp Γ σ) (δ : CStore Γ) {struct e} : Lit σ :=
-      match e in (Exp _ t) return (Lit t) with
+    Fixpoint eval {Γ : PCtx} {σ : Ty} (e : Exp Γ σ) (δ : CStore Γ) {struct e} : Val σ :=
+      match e in (Exp _ t) return (Val t) with
       | exp_var x           => δ ‼ x
-      | exp_lit _ l         => l
+      | exp_val _ l         => l
       | exp_binop op e1 e2  => eval_binop op (eval e1 δ) (eval e2 δ)
       | exp_neg e           => Z.opp (eval e δ)
       | exp_not e           => negb (eval e δ)
@@ -221,14 +221,14 @@ Module Terms (Export termkit : TermKit).
                                             end)
                                  _ es
       | exp_tuple es        => env.Env_rect
-                                 (fun σs _ => Lit (ty_tuple σs))
+                                 (fun σs _ => Val (ty_tuple σs))
                                  tt
-                                 (fun σs _ (vs : Lit (ty_tuple σs)) σ e => (vs, eval e δ))
+                                 (fun σs _ (vs : Val (ty_tuple σs)) σ e => (vs, eval e δ))
                                  es
       | @exp_projtup _ σs e n σ p => tuple_proj σs n σ (eval e δ) p
       | exp_union U K e     => 𝑼_fold (existT K (eval e δ))
       | exp_record R es     => 𝑹_fold (env.Env_rect
-                                         (fun σs _ => NamedEnv Lit σs)
+                                         (fun σs _ => NamedEnv Val σs)
                                          env.nil
                                          (fun σs _ vs _ e => env.snoc vs _ (eval e δ)) es)
       (* | exp_projrec e rf    => 𝑹_unfold (eval e δ) ‼ rf *)
@@ -279,7 +279,7 @@ Module Terms (Export termkit : TermKit).
     (* We avoid defining effects and statements mutually recursively. Instead, *)
     (* we inline seqe and put up with the boilerplate. *)
     (* | stm_seqe          (eff : Effect Γ) (k : Stm Γ τ) *)
-    | stm_lit           (l : Lit τ)
+    | stm_val           (v : Val τ)
     | stm_exp           (e : Exp Γ τ)
     | stm_let           (x : 𝑿) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (Γ ▻ x∷σ) τ)
     | stm_block         (Δ : PCtx) (δ : CStore Δ) (s : Stm (Γ ▻▻ Δ) τ)
@@ -291,7 +291,7 @@ Module Terms (Export termkit : TermKit).
     | stm_if            (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
     | stm_seq           {σ : Ty} (s : Stm Γ σ) (k : Stm Γ τ)
     | stm_assertk       (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
-    | stm_fail          (s : Lit ty_string)
+    | stm_fail          (s : Val ty_string)
     | stm_match_list
         {σ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿)
         (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty_list σ) τ)
@@ -320,7 +320,7 @@ Module Terms (Export termkit : TermKit).
     | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
     (* EXPERIMENTAL *)
     (* | stm_while  (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) : Stm Γ ty_unit *)
-    | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ)
+    | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
     | stm_debugk (k : Stm Γ τ).
 
     Section TransparentObligations.
@@ -335,7 +335,7 @@ Module Terms (Export termkit : TermKit).
 
     (*   Variable (P : forall (Γ : PCtx) (t : Ty), Stm Γ t -> Type). *)
 
-    (*   Hypothesis (P_lit   : forall (Γ : PCtx) (τ : Ty) (l : Lit τ), P (stm_lit Γ l)). *)
+    (*   Hypothesis (P_val   : forall (Γ : PCtx) (τ : Ty) (v : Val τ), P (stm_val Γ v)). *)
     (*   Hypothesis (P_exp  : forall (Γ : PCtx) (τ : Ty) (e : Exp Γ τ), P (stm_exp e)). *)
     (*   Hypothesis (P_let  : forall (Γ : PCtx) (x : 𝑿) (τ : Ty) (s : Stm Γ τ) (σ : Ty) (k : Stm (Γ ▻ (x ∶ τ)%ctx) σ), P s -> P k -> P (stm_let s k)). *)
     (*   Hypothesis (P_block : forall (Γ Δ : PCtx) (δ : CStore Δ) (σ : Ty) (k : Stm (Γ ▻▻ Δ) σ), P k -> P (stm_block Γ δ k)). *)
@@ -346,7 +346,7 @@ Module Terms (Export termkit : TermKit).
     (*   Hypothesis (P_if  : forall (Γ : PCtx) (τ : Ty) (e : Exp Γ ty_bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)). *)
     (*   Hypothesis (P_seq  : forall (Γ : PCtx) (τ : Ty) (e : Stm Γ τ) (σ : Ty) (k : Stm Γ σ), P e -> P k -> P (stm_seq e k)). *)
     (*   Hypothesis (P_assert  : forall (Γ : PCtx) (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string), P (stm_assert e1 e2)). *)
-    (*   Hypothesis (P_fail  : forall (Γ : PCtx) (τ : Ty) (s : Lit ty_string), P (stm_fail Γ τ s)). *)
+    (*   Hypothesis (P_fail  : forall (Γ : PCtx) (τ : Ty) (s : Val ty_string), P (stm_fail Γ τ s)). *)
     (*   Hypothesis (P_match_list : forall (Γ : PCtx) (σ τ : Ty) (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh ∶ σ)%ctx ▻ (xt ∶ ty_list σ)%ctx) τ), *)
     (*         P alt_nil -> P alt_cons -> P (stm_match_list e alt_nil alt_cons)). *)
     (*   Hypothesis (P_match_sum : forall (Γ : PCtx) (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr)) (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl ∶ σinl)%ctx) τ) (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr ∶ σinr)%ctx) τ), *)
@@ -366,12 +366,12 @@ Module Terms (Export termkit : TermKit).
     (*         P (stm_read_register Γ reg)). *)
     (*   Hypothesis (P_write_register : forall (Γ : PCtx) (τ : Ty) (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ), *)
     (*         P (stm_write_register reg e)). *)
-    (*   Hypothesis (P_bind : forall (Γ : PCtx) (σ τ : Ty) (s : Stm Γ σ) (k : Lit σ -> Stm Γ τ), *)
-    (*         P s -> (forall l : Lit σ, P (k l)) -> P (stm_bind s k)). *)
+    (*   Hypothesis (P_bind : forall (Γ : PCtx) (σ τ : Ty) (s : Stm Γ σ) (k : Val σ -> Stm Γ τ), *)
+    (*         P s -> (forall l : Val σ, P (k l)) -> P (stm_bind s k)). *)
 
     (*   Fixpoint Stm_rect {Γ : PCtx} {τ : Ty} (s : Stm Γ τ) {struct s} : P s := *)
     (*     match s with *)
-    (*     | stm_lit _ _             => ltac:(apply P_lit; auto) *)
+    (*     | stm_val _ _             => ltac:(apply P_val; auto) *)
     (*     | stm_exp _               => ltac:(apply P_exp; auto) *)
     (*     | stm_let _ _             => ltac:(apply P_let; auto) *)
     (*     | stm_block _ _ _         => ltac:(apply P_block; auto) *)
@@ -400,7 +400,7 @@ Module Terms (Export termkit : TermKit).
     (* Definition Stm_rec (P : forall Γ σ, Stm Γ σ -> Set) := Stm_rect P. *)
     (* Definition Stm_ind (P : forall Γ σ, Stm Γ σ -> Prop) := Stm_rect P. *)
 
-    Global Arguments stm_lit {Γ} τ l.
+    Global Arguments stm_val {Γ} τ v.
     Global Arguments stm_exp {Γ τ} e%exp.
     Global Arguments stm_let {Γ τ} x σ s__σ%exp s__τ%exp.
     Global Arguments stm_block {Γ τ Δ} δ s%exp.
@@ -437,9 +437,9 @@ Module Terms (Export termkit : TermKit).
         (fun K => alt_rhs (alts K)).
 
     Definition stm_assert {Γ} (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) : Stm Γ ty_unit :=
-      stm_assertk e1 e2 (stm_lit ty_unit tt).
+      stm_assertk e1 e2 (stm_val ty_unit tt).
     Definition stm_lemma {Γ Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ ty_unit :=
-      stm_lemmak l es (stm_lit ty_unit tt).
+      stm_lemmak l es (stm_val ty_unit tt).
 
     Global Arguments MkAlt {_ _ _ _} _ _.
     Global Arguments stm_match_union_alt {_ _} _ _ _.
@@ -485,7 +485,7 @@ Module Terms (Export termkit : TermKit).
 
   End NameResolution.
 
-  Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Lit (@type 𝑺 Ty xt)) Σ).
+  Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Val (@type 𝑺 Ty xt)) Σ).
 
   Section Symbolic.
 
@@ -502,7 +502,7 @@ Module Terms (Export termkit : TermKit).
 
     Inductive Term (Σ : LCtx) : Ty -> Set :=
     | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : ς∷σ ∈ Σ} : Term Σ σ
-    | term_lit     (σ : Ty) : Lit σ -> Term Σ σ
+    | term_val     (σ : Ty) : Val σ -> Term Σ σ
     | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
     | term_neg     (e : Term Σ ty_int) : Term Σ ty_int
     | term_not     (e : Term Σ ty_bool) : Term Σ ty_bool
@@ -519,7 +519,7 @@ Module Terms (Export termkit : TermKit).
     Derive NoConfusion Signature for Term.
 
     Global Arguments term_var {_} _ {_ _}.
-    Global Arguments term_lit {_} _ _.
+    Global Arguments term_val {_} _ _.
     Global Arguments term_neg {_} _.
     Global Arguments term_not {_} _.
     Global Arguments term_inl {_ _ _} _.
@@ -530,24 +530,24 @@ Module Terms (Export termkit : TermKit).
     (* Global Arguments term_projrec {_ _} _ _ {_ _}. *)
 
     Definition term_enum {Σ} (E : 𝑬) (k : 𝑬𝑲 E) : Term Σ (ty_enum E) :=
-      term_lit (ty_enum E) k.
+      term_val (ty_enum E) k.
     Global Arguments term_enum {_} _ _.
 
     Fixpoint term_list {Σ σ} (ts : list (Term Σ σ)) : Term Σ (ty_list σ) :=
       match ts with
-      | nil       => term_lit (ty_list σ) nil
+      | nil       => term_val (ty_list σ) nil
       | cons t ts => term_binop binop_cons t (term_list ts)
       end.
 
     Fixpoint term_tuple {Σ σs} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs) :=
       match es with
-      | env.nil         => term_lit (ty_tuple ε) tt
+      | env.nil         => term_val (ty_tuple ε) tt
       | env.snoc es _ e => term_binop binop_tuple_snoc (term_tuple es) e
       end.
 
     Fixpoint term_bvec {Σ n} (es : Vector.t (Term Σ ty_bit) n) : Term Σ (ty_bvec n) :=
       match es with
-      | Vector.nil       => term_lit (ty_bvec 0) Word.WO
+      | Vector.nil       => term_val (ty_bvec 0) Word.WO
       | Vector.cons e es => term_binop binop_bvcons e (term_bvec es)
       end.
 
@@ -567,7 +567,7 @@ Module Terms (Export termkit : TermKit).
         env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type.
 
       Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
-      Hypothesis (P_lit        : forall (σ : Ty) (l : Lit σ), P σ (term_lit σ l)).
+      Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
       Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
       Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)).
       Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)).
@@ -584,7 +584,7 @@ Module Terms (Export termkit : TermKit).
       Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) : P σ t :=
         match t with
         | @term_var _ ς σ ςInΣ           => ltac:(eapply P_var; eauto)
-        | @term_lit _ σ x                => ltac:(eapply P_lit; eauto)
+        | @term_val _ σ x                => ltac:(eapply P_val; eauto)
         | term_binop op e1 e2            => ltac:(eapply P_binop; eauto)
         | @term_neg _ e                  => ltac:(eapply P_neg; eauto)
         | @term_not _ e                  => ltac:(eapply P_not; eauto)
@@ -604,7 +604,7 @@ Module Terms (Export termkit : TermKit).
     Equations(noind) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
       Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
         ctx.In_eqb ς1inΣ ς2inΣ;
-      Term_eqb (term_lit _ l1) (term_lit _ l2) := Lit_eqb _ l1 l2;
+      Term_eqb (term_val _ v1) (term_val _ v2) := Val_eqb _ v1 v2;
       Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
         with binop_eqdep_dec op1 op2 => {
         Term_eqb (term_binop op1 x1 y1) (term_binop ?(op1) x2 y2) (left opeq_refl) :=
@@ -646,7 +646,7 @@ Module Terms (Export termkit : TermKit).
       induction t1 using Term_rect; cbn [Term_eqb]; dependent elimination t2;
         solve_eqb_spec with
         try match goal with
-            | |- context[Lit_eqb _ ?l1 ?l2] => destruct (Lit_eqb_spec _ l1 l2)
+            | |- context[Val_eqb _ ?l1 ?l2] => destruct (Val_eqb_spec _ l1 l2)
             | |- context[binop_eqdep_dec ?x ?y] =>
                 let e := fresh in
                 destruct (binop_eqdep_dec x y) as [e|];
@@ -695,9 +695,9 @@ Module Terms (Export termkit : TermKit).
             end
         end.
 
-    Definition tuple_pattern_match_lit {N : Set} {σs : Ctx Ty} {Δ : NCtx N Ty}
-             (p : TuplePat σs Δ) : Lit (ty_tuple σs) -> NamedEnv Lit Δ :=
-      fun lit => tuple_pattern_match_env p (@envrec.to_env Ty Lit σs lit).
+    Definition tuple_pattern_match_val {N : Set} {σs : Ctx Ty} {Δ : NCtx N Ty}
+             (p : TuplePat σs Δ) : Val (ty_tuple σs) -> NamedEnv Val Δ :=
+      fun lit => tuple_pattern_match_env p (@envrec.to_env Ty Val σs lit).
 
     Fixpoint record_pattern_match_env {N : Set} {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
              (p : RecordPat rfs Δ) {struct p} : NamedEnv V rfs -> NamedEnv V Δ :=
@@ -761,25 +761,25 @@ Module Terms (Export termkit : TermKit).
         now rewrite (IHp E).
     Qed.
 
-    Definition record_pattern_match_lit {N : Set} {R} {Δ : NCtx N Ty}
-      (p : RecordPat (𝑹𝑭_Ty R) Δ) : Lit (ty_record R) -> NamedEnv Lit Δ :=
+    Definition record_pattern_match_val {N : Set} {R} {Δ : NCtx N Ty}
+      (p : RecordPat (𝑹𝑭_Ty R) Δ) : Val (ty_record R) -> NamedEnv Val Δ :=
       fun v => record_pattern_match_env p (𝑹_unfold v).
 
-    Definition pattern_match_lit {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
-      Lit σ -> NamedEnv Lit Δ :=
+    Definition pattern_match_val {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
+      Val σ -> NamedEnv Val Δ :=
       match p with
       | pat_var x => fun v => env.snoc env.nil (x∷_) v
       | pat_unit => fun _ => env.nil
       | pat_pair x y => fun '(u , v) => env.snoc (env.snoc env.nil (x∷_) u) (y∷_) v
-      | pat_tuple p => tuple_pattern_match_lit p
-      | pat_record p => record_pattern_match_lit p
+      | pat_tuple p => tuple_pattern_match_val p
+      | pat_record p => record_pattern_match_val p
       end.
 
     Definition pattern_match_env_reverse {N : Set} {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
       NamedEnv (Term Σ) Δ -> Term Σ σ :=
       match p with
       | pat_var x    => fun Ex => match env.snocView Ex with env.isSnoc _ t => t end
-      | pat_unit     => fun _ => term_lit ty_unit tt
+      | pat_unit     => fun _ => term_val ty_unit tt
       | pat_pair x y => fun Exy => match env.snocView Exy with
                                      env.isSnoc Ex ty =>
                                      match env.snocView Ex with
@@ -790,38 +790,38 @@ Module Terms (Export termkit : TermKit).
       | pat_record p => fun EΔ => term_record _ (record_pattern_match_env_reverse p EΔ)
       end.
 
-    Definition pattern_match_env_lit_reverse {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
-      NamedEnv Lit Δ -> Lit σ :=
+    Definition pattern_match_env_val_reverse {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
+      NamedEnv Val Δ -> Val σ :=
       match p with
       | pat_var x    => fun Ex => match env.snocView Ex with env.isSnoc _ t => t end
-      | pat_unit     => fun _ => (tt : Lit ty_unit)
+      | pat_unit     => fun _ => (tt : Val ty_unit)
       | pat_pair x y => fun Exy => match env.snocView Exy with
                                      env.isSnoc Ex ty =>
                                      match env.snocView Ex with
-                                       env.isSnoc _ tx => (pair tx ty : Lit (ty_prod _ _))
+                                       env.isSnoc _ tx => (pair tx ty : Val (ty_prod _ _))
                                      end
                                    end
-      | pat_tuple p  => fun EΔ => (envrec.of_env (tuple_pattern_match_env_reverse p EΔ) : Lit (ty_tuple _))
-      | pat_record p => fun EΔ => (𝑹_fold (record_pattern_match_env_reverse p EΔ) : Lit (ty_record _))
+      | pat_tuple p  => fun EΔ => (envrec.of_env (tuple_pattern_match_env_reverse p EΔ) : Val (ty_tuple _))
+      | pat_record p => fun EΔ => (𝑹_fold (record_pattern_match_env_reverse p EΔ) : Val (ty_record _))
       end.
 
 
-    Lemma pattern_match_lit_inverse_left {N : Set} {σ : Ty} {Δ : NCtx N Ty} {p : Pattern Δ σ}
-          (v : Lit σ) :
-      pattern_match_env_lit_reverse p (pattern_match_lit p v) = v.
+    Lemma pattern_match_val_inverse_left {N : Set} {σ : Ty} {Δ : NCtx N Ty} {p : Pattern Δ σ}
+          (v : Val σ) :
+      pattern_match_env_val_reverse p (pattern_match_val p v) = v.
     Proof.
       induction p; cbn; eauto.
       - now destruct v.
       - now destruct v.
-      - unfold tuple_pattern_match_lit.
+      - unfold tuple_pattern_match_val.
         now rewrite tuple_pattern_match_env_inverse_left, envrec.of_to_env.
-      - unfold record_pattern_match_lit.
+      - unfold record_pattern_match_val.
         now rewrite record_pattern_match_env_inverse_left, 𝑹_fold_unfold.
     Qed.
 
-    Lemma pattern_match_lit_inverse_right {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ)
-      (vs : NamedEnv Lit Δ) :
-      pattern_match_lit p (pattern_match_env_lit_reverse p vs) = vs.
+    Lemma pattern_match_val_inverse_right {N : Set} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ)
+      (vs : NamedEnv Val Δ) :
+      pattern_match_val p (pattern_match_env_val_reverse p vs) = vs.
     Proof.
       induction p; cbn; eauto.
       - destruct (env.snocView vs).
@@ -830,9 +830,9 @@ Module Terms (Export termkit : TermKit).
       - destruct (env.snocView vs).
         destruct (env.snocView E).
         now destruct (env.nilView E).
-      - unfold tuple_pattern_match_lit.
+      - unfold tuple_pattern_match_val.
         now rewrite envrec.to_of_env, tuple_pattern_match_env_inverse_right.
-      - unfold record_pattern_match_lit.
+      - unfold record_pattern_match_val.
         now rewrite 𝑹_unfold_fold, record_pattern_match_env_inverse_right.
     Qed.
 
@@ -851,7 +851,7 @@ Module Terms (Export termkit : TermKit).
     Fixpoint sub_term {σ Σ1} (t : Term Σ1 σ) {Σ2} (ζ : Sub Σ1 Σ2) {struct t} : Term Σ2 σ :=
       match t with
       | term_var ς                => ζ ‼ ς
-      | term_lit σ l              => term_lit σ l
+      | term_val σ v              => term_val σ v
       | term_binop op t1 t2       => term_binop op (sub_term t1 ζ) (sub_term t2 ζ)
       | term_neg t0               => term_neg (sub_term t0 ζ)
       | term_not t0               => term_not (sub_term t0 ζ)
@@ -1157,7 +1157,7 @@ Module Terms (Export termkit : TermKit).
         | inl e     => None
         | inr ςInΣ' => Some (@term_var _ _ _ ςInΣ')
         end
-      | term_lit σ0 l => Some (term_lit σ0 l)
+      | term_val σ0 v => Some (term_val σ0 v)
       | term_binop op t1 t2 =>
         t1' ← occurs_check_term xIn t1; t2' ← occurs_check_term xIn t2; Some (term_binop op t1' t2')
       | term_neg t => option_map term_neg (occurs_check_term xIn t)
@@ -1379,27 +1379,27 @@ Module Terms (Export termkit : TermKit).
          lift Σ      := env.map (fun (b : T) (a : A b) => lift a)
       |}.
 
-    Fixpoint inst_term {σ : Ty} {Σ : LCtx} (t : Term Σ σ) (ι : Valuation Σ) {struct t} : Lit σ :=
-      match t in Term _ σ return Lit σ with
+    Fixpoint inst_term {σ : Ty} {Σ : LCtx} (t : Term Σ σ) (ι : Valuation Σ) {struct t} : Val σ :=
+      match t in Term _ σ return Val σ with
       | @term_var _ _ _ bIn  => env.lookup ι bIn
-      | term_lit _ l         => l
+      | term_val _ v         => v
       | term_binop op e1 e2  => eval_binop op (inst_term e1 ι) (inst_term e2 ι)
       | term_neg e           => Z.opp (inst_term e ι)
       | term_not e           => negb (inst_term e ι)
-      | term_inl e           => @inl (Lit _) (Lit _) (inst_term e ι)
-      | term_inr e           => @inr (Lit _) (Lit _) (inst_term e ι)
+      | term_inl e           => @inl (Val _) (Val _) (inst_term e ι)
+      | term_inr e           => @inr (Val _) (Val _) (inst_term e ι)
       | @term_projtup _ σs e n σ p => tuple_proj σs n σ (inst_term e ι) p
       | @term_union _ U K e     => 𝑼_fold (existT K (inst_term e ι))
       | @term_record _ R ts     =>
           let InstTerm :=
             fun xt : Binding 𝑹𝑭 Ty => {| inst := @inst_term (@type 𝑹𝑭 Ty xt);
-                                   lift Σ := @term_lit Σ (@type 𝑹𝑭 Ty xt) |} in
+                                   lift Σ := @term_val Σ (@type 𝑹𝑭 Ty xt) |} in
           𝑹_fold (inst (Inst := instantiate_env (InstSA := InstTerm)) ts ι)
       end.
 
-    Global Instance instantiate_term {σ} : Inst (fun Σ => Term Σ σ) (Lit σ) :=
+    Global Instance instantiate_term {σ} : Inst (fun Σ => Term Σ σ) (Val σ) :=
       {| inst Σ t ι := inst_term t ι;
-         lift Σ l   := term_lit σ l;
+         lift Σ v   := term_val σ v;
       |}.
 
     Global Instance instantiate_sub {Σ} : Inst (Sub Σ) (Valuation Σ) :=
@@ -1414,7 +1414,7 @@ Module Terms (Export termkit : TermKit).
 
     Global Arguments InstLaws T A {_ _ _}.
 
-    Global Instance instantiatelaws_term {σ} : InstLaws (fun Σ => Term Σ σ) (Lit σ).
+    Global Instance instantiatelaws_term {σ} : InstLaws (fun Σ => Term Σ σ) (Val σ).
     Proof.
       constructor.
       { reflexivity. }
@@ -1506,7 +1506,7 @@ Module Terms (Export termkit : TermKit).
       inst (sub_snoc ζ b t) ι = env.snoc (inst ζ ι) b (inst t ι).
     Proof. reflexivity. Qed.
 
-    Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : Valuation Σ2) (v : Lit (type b)) :
+    Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : Valuation Σ2) (v : Val (type b)) :
       inst (sub_up1 ζ12) (ι2 ► (b ↦ v)) = inst ζ12 ι2 ► (b ↦ v).
     Proof.
       destruct b; unfold sub_up1.
@@ -1618,7 +1618,7 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma inst_term_tuple {Σ σs} {ι : Valuation Σ} (es : Env (Term Σ) σs) :
-      @eq (EnvRec Lit σs) (inst (Inst := instantiate_term)(term_tuple es) ι)
+      @eq (EnvRec Val σs) (inst (Inst := instantiate_term)(term_tuple es) ι)
           (envrec.of_env (inst es ι)).
     Proof.
       induction σs; cbn.
@@ -1630,7 +1630,7 @@ Module Terms (Export termkit : TermKit).
     Lemma inst_pattern_match_env_reverse {N : Set} {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty}
           (ι : Valuation Σ) (p : Pattern Δ σ) (ts : NamedEnv (Term Σ) Δ) :
       inst (Inst := instantiate_term) (pattern_match_env_reverse p ts) ι =
-      pattern_match_env_lit_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
+      pattern_match_env_val_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
     Proof.
       induction p.
       - now destruct (env.snocView ts).
@@ -1672,9 +1672,9 @@ Module Terms (Export termkit : TermKit).
   (*       if InCtx_eqb ς1inΣ ς2inΣ *)
   (*       then Some true *)
   (*       else None *)
-  (*     | term_lit σ l1 , term_lit τ l2 => *)
+  (*     | term_val σ v1 , term_val τ v2 => *)
   (*       match eq_dec σ τ with *)
-  (*       | left  p => Some (Lit_eqb τ (eq_rect σ Lit l1 τ p) l2) *)
+  (*       | left  p => Some (Val_eqb τ (eq_rect σ Val v1 τ p) v2) *)
   (*       | right _ => Some false *)
   (*       end *)
   (*     | term_neg x   , term_neg y   => Term_eqvb x y *)
@@ -1698,7 +1698,7 @@ Module Terms (Export termkit : TermKit).
   (*       dependent elimination e. *)
   (*       intros ι. apply reflect_iff. constructor. reflexivity. *)
   (*     - rewrite eq_dec_refl. cbn. constructor. *)
-  (*       intros ι. apply reflect_iff, Lit_eqb_spec. *)
+  (*       intros ι. apply reflect_iff, Val_eqb_spec. *)
   (*     - specialize (IHt1 e). revert IHt1. *)
   (*       apply optionspec_monotonic; auto. *)
   (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
@@ -1725,24 +1725,24 @@ Module Terms (Export termkit : TermKit).
 
   Section Utils.
 
-    Definition term_get_lit {Σ σ} (t : Term Σ σ) : option (Lit σ) :=
+    Definition term_get_val {Σ σ} (t : Term Σ σ) : option (Val σ) :=
       match t with
-      | term_lit _ l => Some l
+      | term_val _ v => Some v
       | _            => None
       end.
 
-    Lemma term_get_lit_spec {Σ σ} (s : Term Σ σ) :
+    Lemma term_get_val_spec {Σ σ} (s : Term Σ σ) :
       OptionSpec
-        (fun l => forall ι : Valuation Σ, inst s ι = l)
+        (fun v => forall ι : Valuation Σ, inst s ι = v)
         True
-        (term_get_lit s).
+        (term_get_val s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.
     Qed
 .
     Equations(noeqns) term_get_pair {Σ σ1 σ2} (t : Term Σ (ty_prod σ1 σ2)) :
       option (Term Σ σ1 * Term Σ σ2) :=
-      term_get_pair (term_lit _ (t1,t2))          := Some (term_lit _ t1, term_lit _ t2);
+      term_get_pair (term_val _ (v1,v2))          := Some (term_val _ v1, term_val _ v2);
       term_get_pair (term_binop binop_pair t1 t2) := Some (t1, t2);
       term_get_pair _ := None.
 
@@ -1750,20 +1750,20 @@ Module Terms (Export termkit : TermKit).
       OptionSpec
         (fun '(t1,t2) =>
            forall ι : Valuation Σ,
-             inst (T := fun Σ => Term Σ (ty_prod σ1 σ2)) (A := Lit σ1 * Lit σ2) s ι =
-             (inst (A := Lit σ1) t1 ι, inst (A := Lit σ2) t2 ι))
+             inst (T := fun Σ => Term Σ (ty_prod σ1 σ2)) (A := Val σ1 * Val σ2) s ι =
+             (inst (A := Val σ1) t1 ι, inst (A := Val σ2) t2 ι))
         True
         (term_get_pair s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.
-      - destruct l; constructor; auto.
+      - destruct v; constructor; auto.
       - dependent elimination op. constructor. reflexivity.
     Qed.
 
     Equations(noeqns) term_get_sum {Σ σ1 σ2} (t : Term Σ (ty_sum σ1 σ2)) :
       option (Term Σ σ1 + Term Σ σ2) :=
-      term_get_sum (term_lit _ (inl l)) := Some (inl (term_lit _ l));
-      term_get_sum (term_lit _ (inr l)) := Some (inr (term_lit _ l));
+      term_get_sum (term_val _ (inl v)) := Some (inl (term_val _ v));
+      term_get_sum (term_val _ (inr v)) := Some (inr (term_val _ v));
       term_get_sum (term_inl t)         := Some (inl t);
       term_get_sum (term_inr t)         := Some (inr t);
       term_get_sum _ := None.
@@ -1772,23 +1772,23 @@ Module Terms (Export termkit : TermKit).
       OptionSpec
         (fun s' => match s' with
                    | inl t => forall ι : Valuation Σ,
-                       inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Lit σ1 + Lit σ2) s ι =
-                       @inl (Lit σ1) (Lit σ2) (inst t ι)
+                       inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Val σ1 + Val σ2) s ι =
+                       @inl (Val σ1) (Val σ2) (inst t ι)
                    | inr t => forall ι : Valuation Σ,
-                       inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Lit σ1 + Lit σ2) s ι =
-                       @inr (Lit σ1) (Lit σ2) (inst t ι)
+                       inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Val σ1 + Val σ2) s ι =
+                       @inr (Val σ1) (Val σ2) (inst t ι)
                    end)
         True
         (term_get_sum s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.
-      destruct l; constructor; auto.
+      destruct v; constructor; auto.
     Qed.
 
     Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty_union U)) :
       option { K : 𝑼𝑲 U & Term Σ (𝑼𝑲_Ty K) } :=
-      term_get_union (term_lit _ l)   :=
-        Some (let (K, p) := 𝑼_unfold l in existT K (term_lit _ p));
+      term_get_union (term_val _ v)   :=
+        Some (let (K, p) := 𝑼_unfold v in existT K (term_val _ p));
       term_get_union (term_union K t) := Some (existT K t);
       term_get_union _ := None.
 
@@ -1799,19 +1799,19 @@ Module Terms (Export termkit : TermKit).
            | existT K t =>
              forall ι : Valuation Σ,
                inst (T := fun Σ => Term Σ (ty_union U)) (A := 𝑼𝑻 U) s ι =
-               𝑼_fold (@existT (𝑼𝑲 U) (fun K => Lit (𝑼𝑲_Ty K)) K (inst t ι)) :> Lit (ty_union U)
+               𝑼_fold (@existT (𝑼𝑲 U) (fun K => Val (𝑼𝑲_Ty K)) K (inst t ι)) :> Val (ty_union U)
            end)
         True
         (term_get_union s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.
-      destruct (𝑼_unfold l) eqn:?. intros. cbn.
+      destruct (𝑼_unfold v) eqn:?. intros. cbn.
       now rewrite <- Heqs, 𝑼_fold_unfold.
     Qed.
 
     Equations(noeqns) term_get_record {R Σ} (t : Term Σ (ty_record R)) :
       option (NamedEnv (Term Σ) (𝑹𝑭_Ty R)) :=
-      term_get_record (term_lit _ v)        := Some (lift (𝑹_unfold v));
+      term_get_record (term_val _ v)        := Some (lift (𝑹_unfold v));
       term_get_record (@term_record _ R ts) := Some ts;
       term_get_record _ := None.
 
@@ -1820,7 +1820,7 @@ Module Terms (Export termkit : TermKit).
         (fun ts =>
            forall ι : Valuation Σ,
              inst (T := fun Σ => Term Σ (ty_record R)) (A := 𝑹𝑻 R) s ι =
-             𝑹_fold (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (𝑹𝑭_Ty R)) (A := NamedEnv Lit (𝑹𝑭_Ty R)) ts ι))
+             𝑹_fold (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (𝑹𝑭_Ty R)) (A := NamedEnv Val (𝑹𝑭_Ty R)) ts ι))
         True
         (term_get_record s).
     Proof.
@@ -1830,7 +1830,7 @@ Module Terms (Export termkit : TermKit).
 
     Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty_tuple σs)) :
       option (Env (Term Σ) σs) :=
-      (* term_get_tuple (term_lit _ v)       := Some _; *)
+      (* term_get_tuple (term_val _ v)       := Some _; *)
       (* term_get_tuple (@term_tuple _ _ ts) := Some ts; *)
       term_get_tuple _ := None.
 
@@ -1838,7 +1838,7 @@ Module Terms (Export termkit : TermKit).
       OptionSpec
         (fun ts =>
            forall ι : Valuation Σ,
-             inst (T := fun Σ => Term Σ (ty_tuple σs)) (A := Lit (ty_tuple σs)) s ι =
+             inst (T := fun Σ => Term Σ (ty_tuple σs)) (A := Val (ty_tuple σs)) s ι =
              inst (term_tuple ts) ι)
         True
         (term_get_tuple s).
@@ -2013,15 +2013,15 @@ Module Terms (Export termkit : TermKit).
   Section PartialEvaluation.
 
     Equations(noeqns) peval_append {Σ σ} (t1 t2 : Term Σ (ty_list σ)) : Term Σ (ty_list σ) :=
-    | term_lit _ v1                 | term_lit _ v2 := term_lit (ty_list σ) (app v1 v2);
+    | term_val _ v1                 | term_val _ v2 := term_val (ty_list σ) (app v1 v2);
     (* TODO: recurse over the value instead *)
-    | term_lit _ nil                | t2 := t2;
-    | term_lit _ (cons v vs)        | t2 := term_binop binop_cons (term_lit σ v) (term_binop binop_append (term_lit (ty_list σ) vs) t2);
+    | term_val _ nil                | t2 := t2;
+    | term_val _ (cons v vs)        | t2 := term_binop binop_cons (term_val σ v) (term_binop binop_append (term_val (ty_list σ) vs) t2);
     | term_binop binop_cons t11 t12 | t2 := term_binop binop_cons t11 (term_binop binop_append t12 t2);
     | t1                            | t2 := term_binop binop_append t1 t2.
 
     Equations(noeqns) peval_binop' {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
-    | op | term_lit _ v1 | term_lit _ v2 := term_lit σ (eval_binop op v1 v2);
+    | op | term_val _ v1 | term_val _ v2 := term_val σ (eval_binop op v1 v2);
     | op | t1            | t2            := term_binop op t1 t2.
 
     Equations(noeqns) peval_binop {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
@@ -2036,7 +2036,7 @@ Module Terms (Export termkit : TermKit).
       intros ι.
       dependent elimination t1; cbn; auto.
       - dependent elimination t2; cbn; auto;
-        destruct l; cbn; auto.
+        destruct v; cbn; auto.
       - dependent elimination op; cbn; auto.
     Qed.
 
@@ -2055,24 +2055,24 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Equations(noeqns) peval_neg {Σ} (t : Term Σ ty_int) : Term Σ ty_int :=
-    | term_lit _ i := term_lit ty_int (Z.opp i);
+    | term_val _ v := term_val ty_int (Z.opp v);
     | t            := term_neg t.
 
     Equations(noeqns) peval_not {Σ} (t : Term Σ ty_bool) : Term Σ ty_bool :=
-    | term_lit _ b := term_lit ty_bool (negb b);
+    | term_val _ v := term_val ty_bool (negb v);
     | t            := term_not t.
 
     Equations(noeqns) peval_inl {Σ σ1 σ2} (t : Term Σ σ1) : Term Σ (ty_sum σ1 σ2) :=
-    | term_lit _ v := term_lit (ty_sum _ _) (@inl (Lit _) (Lit _) v);
+    | term_val _ v := term_val (ty_sum _ _) (@inl (Val _) (Val _) v);
     | t            := term_inl t.
 
     Equations(noeqns) peval_inr {Σ σ1 σ2} (t : Term Σ σ2) : Term Σ (ty_sum σ1 σ2) :=
-    | term_lit _ v := term_lit (ty_sum _ _) (@inr (Lit _) (Lit _) v);
+    | term_val _ v := term_val (ty_sum _ _) (@inr (Val _) (Val _) v);
     | t            := term_inr t.
 
     Equations(noeqns) peval {Σ σ} (t : Term Σ σ) : Term Σ σ :=
     | term_var ς                 := term_var ς;
-    | term_lit _ v               := term_lit _ v;
+    | term_val _ v               := term_val _ v;
     | term_binop op t1 t2        := peval_binop op (peval t1) (peval t2);
     | term_neg t                 := peval_neg (peval t);
     | term_not t                 := peval_not (peval t);
@@ -2115,9 +2115,9 @@ Module Terms (Export termkit : TermKit).
       - now rewrite peval_binop_sound, IHt1, IHt2.
       - now rewrite peval_neg_sound, IHt.
       - now rewrite peval_not_sound, IHt.
-      - change (Lit σ1 + Lit σ2)%type with (Lit (ty_sum σ1 σ2)).
+      - change (Val σ1 + Val σ2)%type with (Val (ty_sum σ1 σ2)).
         now rewrite peval_inl_sound, IHt.
-      - change (Lit σ1 + Lit σ2)%type with (Lit (ty_sum σ1 σ2)).
+      - change (Val σ1 + Val σ2)%type with (Val (ty_sum σ1 σ2)).
         now rewrite peval_inr_sound, IHt.
       - now rewrite IHt.
       - now rewrite IHt.
@@ -2131,7 +2131,7 @@ Module Terms (Export termkit : TermKit).
     fix seval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
       match e with
       | exp_var ς                => δ ‼ ς
-      | exp_lit σ l              => term_lit σ l
+      | exp_val σ v              => term_val σ v
       | exp_binop op e1 e2       => term_binop op (seval_exp e1) (seval_exp e2)
       | exp_neg e                => term_neg (seval_exp e)
       | exp_not e                => term_not (seval_exp e)
@@ -2177,22 +2177,22 @@ Module Terms (Export termkit : TermKit).
 
     Definition Final {Γ σ} (s : Stm Γ σ) : Prop :=
       match s with
-      | stm_lit _ _   => True
+      | stm_val _ _   => True
       | stm_fail _ _ => True
       | _ => False
       end.
 
     Definition ResultOrFail {Γ σ} (s : Stm Γ σ) :
-      forall (POST : Lit σ -> Prop), Prop :=
+      forall (POST : Val σ -> Prop), Prop :=
       match s with
-      | stm_lit _ v => fun POST => POST v
+      | stm_val _ v => fun POST => POST v
       | stm_fail _ _ => fun _ => True
       | _ => fun _ => False
       end.
 
-    Lemma result_or_fail_inversion {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> Prop) :
+    Lemma result_or_fail_inversion {Γ σ} (s : Stm Γ σ) (POST : Val σ -> Prop) :
       ResultOrFail s POST -> (exists msg, s = stm_fail _ msg)
-                          \/ (exists v, s = stm_lit _ v /\ POST v).
+                          \/ (exists v, s = stm_val _ v /\ POST v).
     Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
 
     (* This predicate encodes that the statement s is a finished computation and
@@ -2200,41 +2200,41 @@ Module Terms (Export termkit : TermKit).
        better suited for the goal and the inversion below is better suited for
        a hypothesis. *)
     Definition ResultNoFail {Γ σ} (s : Stm Γ σ) :
-      forall (POST : Lit σ -> Prop), Prop :=
+      forall (POST : Val σ -> Prop), Prop :=
       match s with
-      | stm_lit _ v => fun POST => POST v
+      | stm_val _ v => fun POST => POST v
       | _ => fun _ => False
       end.
 
-    Lemma result_no_fail_inversion {Γ σ} (s : Stm Γ σ) (POST : Lit σ -> Prop) :
-      ResultNoFail s POST -> exists v, s = stm_lit _ v /\ POST v.
+    Lemma result_no_fail_inversion {Γ σ} (s : Stm Γ σ) (POST : Val σ -> Prop) :
+      ResultNoFail s POST -> exists v, s = stm_val _ v /\ POST v.
     Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
 
   End Contracts.
 
   Section GenericRegStore.
 
-    Definition GenericRegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Lit σ.
+    Definition GenericRegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Val σ.
 
     Definition generic_write_register (γ : GenericRegStore) {σ} (r : 𝑹𝑬𝑮 σ)
-      (v : Lit σ) : GenericRegStore :=
+      (v : Val σ) : GenericRegStore :=
       fun τ r' =>
         match eq_dec_het r r' with
-        | left eqt => eq_rect σ Lit v τ (f_equal projT1 eqt)
+        | left eqt => eq_rect σ Val v τ (f_equal projT1 eqt)
         | right _ => γ τ r'
         end.
 
     Definition generic_read_register (γ : GenericRegStore) {σ} (r : 𝑹𝑬𝑮 σ) :
-      Lit σ := γ _ r.
+      Val σ := γ _ r.
 
-    Lemma generic_read_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ) :
+    Lemma generic_read_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
       generic_read_register (generic_write_register γ r v) r = v.
     Proof.
       unfold generic_read_register, generic_write_register.
       unfold eq_dec_het. now rewrite eq_dec_refl.
     Qed.
 
-    Lemma generic_read_write_distinct γ {σ τ} (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (v : Lit σ):
+    Lemma generic_read_write_distinct γ {σ τ} (r : 𝑹𝑬𝑮 σ) (k : 𝑹𝑬𝑮 τ) (v : Val σ):
       existT _ r <> existT _ k ->
       generic_read_register (generic_write_register γ r v) k = generic_read_register γ k.
     Proof.
@@ -2255,7 +2255,7 @@ Module Terms (Export termkit : TermKit).
       - reflexivity.
     Qed.
 
-    Lemma generic_write_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ) :
+    Lemma generic_write_write γ {σ} (r : 𝑹𝑬𝑮 σ) (v1 v2 : Val σ) :
       forall τ (r' : 𝑹𝑬𝑮 τ),
         generic_write_register (generic_write_register γ r v1) r v2 r' =
         generic_write_register γ r v2 r'.
@@ -2267,11 +2267,11 @@ Module Terms (Export termkit : TermKit).
 
   End GenericRegStore.
 
-  Notation lit_int l := (@exp_lit _ ty_int l%Z).
-  Notation lit_bool l := (@exp_lit _ ty_bool l).
-  Notation lit_true   := (@exp_lit _ ty_bool true).
-  Notation lit_false  := (@exp_lit _ ty_bool false).
-  Notation lit_string s := (@exp_lit _ ty_string s%string).
+  Notation exp_int l := (@exp_val _ ty_int l%Z).
+  Notation exp_bool l := (@exp_val _ ty_bool l).
+  Notation exp_true   := (@exp_val _ ty_bool true).
+  Notation exp_false  := (@exp_val _ ty_bool false).
+  Notation exp_string s := (@exp_val _ ty_string s%string).
   Notation "e1 && e2" := (exp_binop binop_and e1 e2) : exp_scope.
   Notation "e1 || e2" := (exp_binop binop_or e1 e2) : exp_scope.
   Notation "e1 + e2" := (exp_binop binop_plus e1 e2) : exp_scope.
@@ -2416,10 +2416,10 @@ Module Terms (Export termkit : TermKit).
     Inductive Command (A : Type) : Type :=
     | cmd_return (a : A)
     | cmd_fail
-    | cmd_read_register {τ} (reg : 𝑹𝑬𝑮 τ) (c : Lit τ -> Command A)
-    | cmd_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Lit τ) (c : Command A)
-    | cmd_call          {Δ τ} (f : 𝑭 Δ τ) (vs : CStore Δ) (c : Lit τ -> Command A)
-    | cmd_foreign       {Δ τ} (f : 𝑭𝑿 Δ τ) (vs : CStore Δ) (c : Lit τ -> Command A).
+    | cmd_read_register {τ} (reg : 𝑹𝑬𝑮 τ) (c : Val τ -> Command A)
+    | cmd_write_register {τ} (reg : 𝑹𝑬𝑮 τ) (v : Val τ) (c : Command A)
+    | cmd_call          {Δ τ} (f : 𝑭 Δ τ) (vs : CStore Δ) (c : Val τ -> Command A)
+    | cmd_foreign       {Δ τ} (f : 𝑭𝑿 Δ τ) (vs : CStore Δ) (c : Val τ -> Command A).
     Global Arguments cmd_fail {A}.
 
     Fixpoint cmd_bind {A B} (m : Command A) (g : A -> Command B) {struct m} : Command B :=
@@ -2449,15 +2449,15 @@ Module Type ProgramKit (termkit : TermKit).
      instantiate it with their own data structure and [read_regsiter]/[write_register]
      functions *)
   Parameter RegStore : Type.
-  (* Definition RegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Lit σ. *)
-  Parameter read_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ), Lit σ.
-  Parameter write_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Lit σ), RegStore.
+  (* Definition RegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Val σ. *)
+  Parameter read_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ), Val σ.
+  Parameter write_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Val σ), RegStore.
 
-  Parameter read_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : Lit σ),
+  Parameter read_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v : Val σ),
             read_register (write_register γ r v) r = v.
 
   Parameter read_write_distinct :
-    forall (γ : RegStore) {σ τ} (r__σ : 𝑹𝑬𝑮 σ) (r__τ : 𝑹𝑬𝑮 τ) (v__σ : Lit σ),
+    forall (γ : RegStore) {σ τ} (r__σ : 𝑹𝑬𝑮 σ) (r__τ : 𝑹𝑬𝑮 τ) (v__σ : Val σ),
       existT _ r__σ <> existT _ r__τ ->
       read_register (write_register γ r__σ v__σ) r__τ = read_register γ r__τ.
 
@@ -2466,7 +2466,7 @@ Module Type ProgramKit (termkit : TermKit).
   (*     read_register (write_register γ r (read_register γ r)) r__τ = *)
   (*     read_register γ r__τ. *)
 
-  (* Parameter write_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Lit σ), *)
+  (* Parameter write_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Val σ), *)
   (*     write_register (write_register γ r v1) r v2 = write_register γ r v2. *)
 
   (* Memory model *)
@@ -2480,7 +2480,7 @@ Module Type ProgramKit (termkit : TermKit).
     forall
       {Δ σ} (f : 𝑭𝑿 Δ σ)
       (args : CStore Δ)
-      (res  : string + Lit σ)
+      (res  : string + Val σ)
       (γ γ' : RegStore)
       (μ μ' : Memory), Prop.
   Parameter ForeignProgress :
@@ -2488,8 +2488,8 @@ Module Type ProgramKit (termkit : TermKit).
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
 
   (* Bind Scope env_scope with Memory. *)
-  (* Parameter read_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹), Lit ty_int. *)
-  (* Parameter write_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Lit ty_int), Memory. *)
+  (* Parameter read_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹), Val ty_int. *)
+  (* Parameter write_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Val ty_int), Memory. *)
 
   (* Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ. *)
   Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.
