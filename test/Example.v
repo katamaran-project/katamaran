@@ -156,8 +156,7 @@ End ExampleTypeKit.
 (*** VALUES ***)
 
 Module ExampleValueKit <: ValueKit.
-  Module typekit := ExampleTypeKit.
-  Module Export TY := Types typekit.
+  Module Export TY := MakeTypes DefaultVarKit ExampleTypeKit.
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -210,17 +209,6 @@ Module ExampleTermKit <: TermKit.
   Module valuekit := ExampleValueKit.
   Module Export VAL := Values valuekit.
 
-  (* VARIABLES *)
-  Definition 𝑿        := string.
-  Definition 𝑿_eq_dec := string_dec.
-  Definition 𝑺        := string.
-  Definition 𝑺_eq_dec := string_dec.
-  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-  Definition fresh := ctx.fresh (T := Ty).
-
-  Notation PCtx := (NCtx 𝑿 Ty).
-  Notation LCtx := (NCtx 𝑺 Ty).
-
   (** FUNCTIONS **)
   Inductive Fun : PCtx -> Ty -> Set :=
   | abs :        Fun [ "x" ∷ ty_int               ] ty_int
@@ -258,7 +246,6 @@ Module ExampleTermKit <: TermKit.
     refine (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _) _).
     destruct x as [σ r]; now destruct r.
   Qed.
-
 
 End ExampleTermKit.
 

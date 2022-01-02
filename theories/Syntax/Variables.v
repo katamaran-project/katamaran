@@ -1,5 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2019 Steven Keuchel                                          *)
+(* Copyright (c) 2021 Steven Keuchel                                          *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -27,65 +27,45 @@
 (******************************************************************************)
 
 From Coq Require Import
-     Bool.Bool
-     ZArith.ZArith.
+     Strings.String.
+
 From Equations Require Import
      Equations.
-From Katamaran Require Export
-     Syntax.Types.
 
-Import ctx.notations.
+From Katamaran Require Export
+     Context.
 
 Local Set Implicit Arguments.
 
-(******************************************************************************)
+Module Type VarKit.
+  (* Names of expression variables. These represent mutable variables appearing
+     in programs. *)
+  Parameter Inline 𝑿 : Set. (* input: \MIX *)
+  (* For name resolution we rely on decidable equality of expression
+     variables. The functions in this module resolve to the closest binding
+     of an equal name and fill in the de Bruijn index automatically from
+     a successful resolution.
+  *)
+  Declare Instance 𝑿_eq_dec : EqDec 𝑿.
 
-Module Type ValueKit.
+  (* Names of logic variables. These represent immutable variables standing for
+     concrete value. *)
+  Parameter Inline 𝑺 : Set. (* input: \MIS *)
+  Declare Instance 𝑺_eq_dec : EqDec 𝑺.
 
-  Declare Module Export TY : Types.
+  (* Conversion of program variables to logic variables. *)
+  Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
+  Parameter fresh : forall T, NCtx 𝑺 T -> option 𝑺 -> 𝑺.
 
-  (* Union data constructor field type *)
-  Parameter Inline 𝑼𝑲_Ty : forall (U : 𝑼), 𝑼𝑲 U -> Ty.
-  Parameter Inline 𝑼_fold   : forall (U : 𝑼), { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K) } -> 𝑼𝑻 U.
-  Parameter Inline 𝑼_unfold : forall (U : 𝑼), 𝑼𝑻 U -> { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K) }.
-  Parameter Inline 𝑼_fold_unfold :
-    forall (U : 𝑼) (Kv: 𝑼𝑻 U),
-      𝑼_fold (𝑼_unfold Kv) = Kv.
-  Parameter Inline 𝑼_unfold_fold :
-    forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K) }),
-      𝑼_unfold (𝑼_fold Kv) = Kv.
+End VarKit.
 
-  (* Record field names. *)
-  Parameter Inline 𝑹𝑭  : Set.
-  (* Record field types. *)
-  Parameter Inline 𝑹𝑭_Ty : 𝑹 -> NCtx 𝑹𝑭 Ty.
-  Parameter Inline 𝑹_fold   : forall (R : 𝑹), NamedEnv Val (𝑹𝑭_Ty R) -> 𝑹𝑻 R.
-  Parameter Inline 𝑹_unfold : forall (R : 𝑹), 𝑹𝑻 R -> NamedEnv Val (𝑹𝑭_Ty R).
-  Parameter Inline 𝑹_fold_unfold :
-    forall (R : 𝑹) (Kv: 𝑹𝑻 R),
-      𝑹_fold (𝑹_unfold Kv) = Kv.
-  Parameter Inline 𝑹_unfold_fold :
-    forall (R : 𝑹) (Kv: NamedEnv Val (𝑹𝑭_Ty R)),
-      𝑹_unfold (𝑹_fold Kv) = Kv.
+Module DefaultVarKit <: VarKit.
+  (** Variables **)
+  Definition 𝑿        := string.
+  Definition 𝑿_eq_dec := string_dec.
+  Definition 𝑺        := string.
+  Definition 𝑺_eq_dec := string_dec.
 
-End ValueKit.
-
-Module Values (Export valuekit : ValueKit).
-
-  Lemma 𝑼_fold_inj {U} (v1 v2 : {K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K)}) :
-    𝑼_fold v1 = 𝑼_fold v2 <-> v1 = v2.
-  Proof.
-    split; try congruence. intros H.
-    apply (f_equal (@𝑼_unfold U)) in H.
-    now rewrite ?𝑼_unfold_fold in H.
-  Qed.
-
-  Lemma 𝑼_unfold_inj {U} (v1 v2 : Val (ty_union U)) :
-    𝑼_unfold v1 = 𝑼_unfold v2 <-> v1 = v2.
-  Proof.
-    split; try congruence. intros H.
-    apply (f_equal (@𝑼_fold U)) in H.
-    now rewrite ?𝑼_fold_unfold in H.
-  Qed.
-
-End Values.
+  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
+  Definition fresh := ctx.fresh.
+End DefaultVarKit.

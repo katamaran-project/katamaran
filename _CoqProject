@@ -34,6 +34,8 @@ theories/Staging/CommandStep.v
 theories/Symbolic/Mutator.v
 theories/Symbolic/Sound.v
 theories/Syntax.v
+theories/Syntax/TypeKit.v
 theories/Syntax/Types.v
 theories/Syntax/Values.v
+theories/Syntax/Variables.v
 theories/Tactics.v

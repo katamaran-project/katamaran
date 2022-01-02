@@ -33,7 +33,7 @@ From Equations Require Import
 From stdpp Require
      finite.
 From Katamaran Require Import
-     Syntax.Types.
+     Syntax.TypeKit.
 
 Definition Xlenbits : Set := Z.
 Definition Addr : Set := Z.

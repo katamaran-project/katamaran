@@ -689,7 +689,7 @@ Module ctx.
            end)
         xs 0%N.
 
-    Definition fresh {T : Set} (xs : NCtx string T) (x : option string) : string :=
+    Definition fresh [T : Set] (xs : NCtx string T) (x : option string) : string :=
       let xs := names xs in
       let x := match x with Some x => x | None => "x" end in
       if List.find (String.eqb x) xs

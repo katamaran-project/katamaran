@@ -1243,7 +1243,7 @@ Module Assertions
     Definition simplify_formula_eq_union {Σ U} {K1 K2 : 𝑼𝑲 U}
       (t1 : Term Σ (𝑼𝑲_Ty K1)) (t2 : Term Σ (𝑼𝑲_Ty K2)) (k : List Formula Σ) :
       option (List Formula Σ) :=
-      match 𝑼𝑲_eq_dec K1 K2 with
+      match eq_dec K1 K2 with
       | left e  => let t2' := eq_rec_r (fun K => Term Σ (𝑼𝑲_Ty K)) t2 e in
                    Some (cons (formula_eq t1 t2') k)
       | right _ => None
@@ -1253,7 +1253,7 @@ Module Assertions
       (t1 : Term Σ (𝑼𝑲_Ty K1)) (v2 : Val (ty_union U)) (k : List Formula Σ) :
       option (List Formula Σ) :=
        let (K2, v2) := 𝑼_unfold v2 in
-       match 𝑼𝑲_eq_dec K1 K2 with
+       match eq_dec K1 K2 with
        | left e  => let v2' := eq_rec_r (fun K1 => Val (𝑼𝑲_Ty K1)) v2 e in
                     let t2  := term_val (𝑼𝑲_Ty K1) v2' in
                     Some (cons (formula_eq t1 t2) k)
@@ -1279,7 +1279,7 @@ Module Assertions
           (simplify_formula_eq_union t1 t2 k).
       Proof.
         unfold simplify_formula_eq_union.
-        destruct 𝑼𝑲_eq_dec as [e|e]; constructor; intros ι.
+        destruct eq_dec as [e|e]; constructor; intros ι.
         - rewrite inst_pathcondition_cons. cbn.
           apply and_iff_compat_r'. intros Hk.
           destruct e. cbn. split.
@@ -1304,7 +1304,7 @@ Module Assertions
         destruct 𝑼_unfold as [K2 v2] eqn:?.
         apply (f_equal (@𝑼_fold U)) in Heqs.
         rewrite 𝑼_fold_unfold in Heqs. subst.
-        destruct 𝑼𝑲_eq_dec as [e|e]; constructor; intros ι.
+        destruct eq_dec as [e|e]; constructor; intros ι.
         - rewrite inst_pathcondition_cons. cbn.
           apply and_iff_compat_r'. intros Hk.
           destruct e. cbn. split.

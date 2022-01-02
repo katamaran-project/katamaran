@@ -32,7 +32,8 @@ From Coq Require Import
 
 From Katamaran Require Import
      Notation
-     Syntax.Values.
+     Syntax.Values
+     Syntax.Variables.
 
 From RiscvPmp Require Export
      Types.
@@ -43,8 +44,7 @@ Import env.notations.
 Local Open Scope string_scope.
 
 Module RiscvPmpValueKit <: ValueKit.
-  Module typekit := RiscvPmpTypeKit.
-  Module Export TY := Syntax.Types.Types typekit.
+  Module Export TY := MakeTypes DefaultVarKit RiscvPmpTypeKit.
   Import ctx.resolution.
 
   Notation ty_xlenbits         := (ty_int).

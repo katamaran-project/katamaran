@@ -112,18 +112,6 @@ Module RiscvPmpTermKit <: TermKit.
 
   Import RiscvNotations.
 
-  (** Variables **)
-  Definition 𝑿        := string.
-  Definition 𝑿_eq_dec := string_dec.
-  Definition 𝑺        := string.
-  Definition 𝑺_eq_dec := string_dec.
-
-  Notation PCtx := (NCtx 𝑿 Ty).
-  Notation LCtx := (NCtx 𝑺 Ty).
-
-  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-  Definition fresh := ctx.fresh (T := Ty).
-
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
   | rX                    : Fun [rs ∶ ty_regno] ty_xlenbits

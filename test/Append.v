@@ -117,8 +117,7 @@ End ExampleTypeKit.
 (*** VALUES ***)
 
 Module ExampleValueKit <: ValueKit.
-  Module typekit := ExampleTypeKit.
-  Module Export TY := Types typekit.
+  Module Export TY := MakeTypes DefaultVarKit ExampleTypeKit.
 
   (** UNIONS **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -156,17 +155,6 @@ End ExampleValueKit.
 Module ExampleTermKit <: TermKit.
   Module valuekit := ExampleValueKit.
   Module Export VAL := Values valuekit.
-
-  (* VARIABLES *)
-  Definition 𝑿        := string.
-  Definition 𝑿_eq_dec := string_dec.
-  Definition 𝑺        := string.
-  Definition 𝑺_eq_dec := string_dec.
-  Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x.
-  Definition fresh := ctx.fresh (T := Ty).
-
-  Notation PCtx := (NCtx 𝑿 Ty).
-  Notation LCtx := (NCtx 𝑺 Ty).
 
   Notation ptr   := ty_int.
   Notation llist := (ty_option ptr).

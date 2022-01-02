@@ -66,28 +66,6 @@ Module Type TermKit.
   Declare Module valuekit : ValueKit.
   Module Export VAL := Values valuekit.
 
-  (* Names of expression variables. These represent mutable variables appearing
-     in programs. *)
-  Parameter Inline 𝑿 : Set. (* input: \MIX *)
-  (* For name resolution we rely on decidable equality of expression
-     variables. The functions in this module resolve to the closest binding
-     of an equal name and fill in the de Bruijn index automatically from
-     a successful resolution.
-  *)
-  Declare Instance 𝑿_eq_dec : EqDec 𝑿.
-
-  (* Names of logical variables. These represent immutable variables
-     standing for concrete literals in assertions. *)
-  Parameter Inline 𝑺 : Set. (* input: \MIS *)
-  Declare Instance 𝑺_eq_dec : EqDec 𝑺.
-
-  Notation PCtx := (NCtx 𝑿 Ty).
-  Notation LCtx := (NCtx 𝑺 Ty).
-
-  (* Punning of program variables with logical variables. *)
-  Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺.
-  Parameter fresh : LCtx -> option 𝑺 -> 𝑺.
-
   (* Names of functions. *)
   Parameter Inline 𝑭 : PCtx -> Ty -> Set.
   Parameter Inline 𝑭𝑿 : PCtx -> Ty -> Set.
