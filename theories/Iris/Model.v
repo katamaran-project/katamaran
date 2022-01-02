@@ -58,55 +58,61 @@ Module logic := Katamaran.Sep.Logic.
 
 Set Implicit Arguments.
 
-Module ValsAndTerms
+Module MicroSailLanguage
        (Import termkit : TermKit)
        (Import progkit : ProgramKit termkit).
 
-  Inductive Tm (Γ : PCtx) τ : Type :=
-  | MkTm (δ : CStore Γ) (s : Stm Γ τ) : Tm Γ τ.
+  (* The "expressions" of the LanguageMixin are configurations consisting of a
+     statement and a local variable store. *)
+  Record Conf (Γ : PCtx) τ : Type :=
+    MkConf
+      { conf_stm   : Stm Γ τ;
+        conf_store : CStore Γ
+      }.
 
   Section TransparentObligations.
     Local Set Transparent Obligations.
-    Derive NoConfusion for Tm.
+    Derive NoConfusion for Conf.
   End TransparentObligations.
 
-  Inductive Val (Γ : PCtx) τ : Type :=
-    (* we only keep the store around for technical reasons, essentially to validate of_to_val. *)
-  | MkVal (δ : CStore Γ) (v : Lit τ) : Val Γ τ.
+  (* The "values" of the LanguageMixin are final configurations consisting of a
+     value and a store. We only keep the store around for technical reasons,
+     essentially to validate of_to_val. *)
+  Record ValConf (Γ : PCtx) τ : Type :=
+    MkValConf
+      { valconf_val   : Lit τ;
+        valconf_store : CStore Γ
+      }.
 
-  Definition val_to_lit {Γ} {τ} : Val Γ τ -> Lit τ := fun v => match v with | MkVal _ _ v' => v' end.
-
-  Definition of_val {Γ} {τ} (v : Val Γ τ) : Tm Γ τ :=
+  Definition of_val {Γ} {τ} (v : ValConf Γ τ) : Conf Γ τ :=
     match v with
-      MkVal _ δ v => MkTm δ (stm_lit _ v)
+      MkValConf _ v δ => MkConf (stm_lit _ v) δ
     end.
 
-  Definition to_val {Γ} {τ} (t : Tm Γ τ) : option (Val Γ τ) :=
+  Definition to_val {Γ} {τ} (t : Conf Γ τ) : option (ValConf Γ τ) :=
     match t with
-    | MkTm δ s => match s with
-                   stm_lit _ l => Some (MkVal _ δ l)
-                 | _ => None
-                 end
+    | MkConf (stm_lit _ v) δ => Some (MkValConf _ v δ)
+    | _                      => None
     end.
 
-  Lemma to_of_val {Γ} {τ} (v : Val Γ τ) : to_val (of_val v) = Some v.
+  Lemma to_of_val {Γ} {τ} (v : ValConf Γ τ) : to_val (of_val v) = Some v.
   Proof.
-    by induction v.
+    by destruct v.
   Qed.
 
-  Lemma of_to_val {Γ} {τ} (e : Tm Γ τ) v : to_val e = Some v → of_val v = e.
+  Lemma of_to_val {Γ} {τ} (s : Conf Γ τ) v : to_val s = Some v → of_val v = s.
   Proof.
-    induction e.
-    induction s; try done.
+    destruct s as [s δ]; destruct s; try done.
     by intros [= <-].
   Qed.
 
+  (* TODO: This module should not be created here. *)
   Module Inv := Inversion termkit progkit.
   Export Inv.
   Export SS.
 
   Lemma val_head_stuck_step {τ} {Γ : PCtx} γ1 γ2 μ1 μ2 (δ1 : CStore Γ) δ2 (s1 : Stm Γ τ) s2 :
-    ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> to_val (MkTm δ1 s1) = None.
+    ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> to_val (MkConf s1 δ1) = None.
   Proof.
     by induction 1.
   Qed.
@@ -115,30 +121,30 @@ Module ValsAndTerms
 
   Definition State := prod RegStore Memory.
 
-  Inductive prim_step {Γ τ} : Tm Γ τ -> State -> Tm Γ τ -> State -> list (Tm Γ τ) -> Prop :=
+  Inductive prim_step {Γ τ} : Conf Γ τ -> State -> Conf Γ τ -> State -> list (Conf Γ τ) -> Prop :=
   | mk_prim_step γ1 γ2 μ1 μ2 (δ1 : CStore Γ) (δ2 : CStore Γ) s1 s2 :
       ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
-      prim_step (MkTm δ1 s1) (γ1 , μ1) (MkTm δ2 s2) (γ2 , μ2) nil
+      prim_step (MkConf s1 δ1) (γ1 , μ1) (MkConf s2 δ2) (γ2 , μ2) nil
   .
 
-  Lemma val_head_stuck {Γ τ} (e1 : Tm Γ τ) s1 e2 s2 {ks} : prim_step e1 s1 e2 s2 ks → to_val e1 = None.
+  Lemma val_head_stuck {Γ τ} (e1 : Conf Γ τ) s1 e2 s2 {ks} : prim_step e1 s1 e2 s2 ks → to_val e1 = None.
   Proof.
     induction 1.
     by eapply val_head_stuck_step.
   Qed.
 
-  Lemma microsail_lang_mixin Γ τ : @LanguageMixin (Tm Γ τ) (Val Γ τ) State Empty_set of_val to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2 ks).
+  Lemma microsail_lang_mixin Γ τ : @LanguageMixin (Conf Γ τ) (ValConf Γ τ) State Empty_set of_val to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2 ks).
   Proof.
     split; eauto using to_of_val, of_to_val, val_head_stuck.
   Qed.
 
   Canonical Structure stateO := leibnizO State.
-  Canonical Structure valO {Γ τ} := leibnizO (Val Γ τ).
-  Canonical Structure exprO {Γ τ} := leibnizO (Tm Γ τ).
+  Canonical Structure valO {Γ τ} := leibnizO (ValConf Γ τ).
+  Canonical Structure exprO {Γ τ} := leibnizO (Conf Γ τ).
 
   Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-  Instance intoVal_lit {Γ τ δ l} : IntoVal (MkTm (Γ := Γ) (τ := τ) δ (stm_lit _ l)) (MkVal _ δ l).
+  Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_lit _ v) δ) (MkValConf _ v δ).
   intros; eapply of_to_val; by cbn.
   Defined.
 
@@ -171,7 +177,7 @@ Module ValsAndTerms
 
   Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeLit))).
 
-End ValsAndTerms.
+End MicroSailLanguage.
 
 Module IrisRegisters
        (Import termkit : TermKit)
@@ -183,9 +189,8 @@ Module IrisRegisters
   Module PL := ProgramLogic termkit progkit assertkit contractkit.
   Export PL.
 
-  Module VT := ValsAndTerms termkit progkit.
-  Export VT.
-
+  Module ML := MicroSailLanguage termkit progkit.
+  Export ML.
 
   Class sailRegG Σ := SailRegG {
                           (* ghost variable for tracking state of registers *)
@@ -505,7 +510,7 @@ Module IrisSoundness
 
   Lemma rule_stm_read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Lit τ) {δ : CStore Γ} :
     ⊢ (reg_pointsTo r v -∗
-                    WP (VT.MkTm δ (stm_read_register r)) ?{{ w, reg_pointsTo r v ∗ ⌜ w = VT.MkVal _ δ v ⌝ }}
+                    WP (MkConf (stm_read_register r) δ) ?{{ w, reg_pointsTo r v ∗ ⌜ w = MkValConf _ v δ ⌝ }}
       )%I.
   Proof.
     iIntros "Hreg".
@@ -516,7 +521,7 @@ Module IrisSoundness
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
-    remember (VT.MkTm δ (stm_read_register r)) as t.
+    remember (MkConf (stm_read_register r) δ) as t.
     destruct H0 as [γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
     dependent elimination Heqt.
     destruct (steps_inversion_read_register step) as [<- [<- [<- ->]]].
@@ -527,7 +532,7 @@ Module IrisSoundness
 
   Lemma rule_stm_write_register {Γ} {τ} (r : 𝑹𝑬𝑮 τ) (δ : CStore Γ) (v : Lit τ) e :
     ⊢ (reg_pointsTo r v -∗
-                    WP (VT.MkTm δ (stm_write_register r e) : expr (microsail_lang Γ τ)) ?{{ w, reg_pointsTo r (eval e δ) ∗ bi_pure (w = VT.MkVal _ δ (eval e δ)) }}
+                    WP (MkConf (stm_write_register r e) δ : expr (microsail_lang Γ τ)) ?{{ w, reg_pointsTo r (eval e δ) ∗ bi_pure (w = MkValConf _ (eval e δ) δ) }}
     )%I.
   Proof.
     iIntros "Hreg".
@@ -547,7 +552,7 @@ Module IrisSoundness
 
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Lit τ -> CStore Γ -> iProp Σ) : iProp Σ :=
-    PRE -∗ WP (MkTm δ s : expr (microsail_lang Γ τ)) ?{{ v, match v with MkVal _ δ' v => POST v δ' end }}.
+    PRE -∗ WP (MkConf s δ : expr (microsail_lang Γ τ)) ?{{ v, match v with MkValConf _ v δ' => POST v δ' end }}.
   (* always modality needed? perhaps not because sail not higher-order? *)
 
   Lemma iris_rule_consequence {Γ σ} {δ : CStore Γ}
@@ -556,8 +561,8 @@ Module IrisSoundness
         semTriple δ P' s Q' -∗ semTriple δ P s Q.
   Proof.
     iIntros (PP QQ) "trips P".
-    iApply (wp_mono _ _ _ (fun v => match v with MkVal _ δ' v => Q' v δ' end)).
-    + intros [δ' v]; cbn.
+    iApply (wp_mono _ _ _ (fun v => match v with MkValConf _ v δ' => Q' v δ' end)).
+    + intros [v δ']; cbn.
       apply QQ.
     + iApply "trips".
       iApply PP; iFrame.
@@ -568,11 +573,11 @@ Module IrisSoundness
         (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
   Proof.
     iIntros "trips [HR HP]".
-    iApply (wp_mono _ _ _ (fun v => R ∗ match v with MkVal _ δ' v => Q v δ' end)%I).
+    iApply (wp_mono _ _ _ (fun v => R ∗ match v with MkValConf _ v δ' => Q v δ' end)%I).
     - iIntros (v) "[R Q]".
       destruct v.
       by iFrame.
-    - iApply (wp_frame_l _ _ (MkTm δ s) (fun v => match v with MkVal _ δ' v => Q v δ' end) R).
+    - iApply (wp_frame_l _ _ (MkConf s δ) (fun v => match v with MkValConf _ v δ' => Q v δ' end) R).
       iFrame.
       by iApply "trips".
   Qed.
@@ -617,19 +622,19 @@ Module IrisSoundness
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
-    remember (MkTm δ (stm_exp e)) as t.
+    remember (MkConf (stm_exp e) δ) as t.
     destruct H0.
     dependent elimination Heqt.
     dependent elimination H0.
     iModIntro. iModIntro. iModIntro.
     iFrame.
     iSplitL; cbn; trivial.
-    iApply (wp_value _ _ (fun v => match v with | MkVal _ δ' v' => Q v' δ' end) (MkTm δ1 (stm_lit _ (eval e0 δ1)))).
+    iApply (wp_value _ _ (fun v => match v with | MkValConf _ v' δ' => Q v' δ' end) (MkConf (stm_lit _ (eval e0 δ1)) δ1)).
     by iApply "PQ".
   Qed.
 
-  Lemma wp_compat_fail {Γ τ} {s} {δ} {Q : Val Γ τ -> iProp Σ} :
-    (⊢ WP (MkTm δ (stm_fail _ s)) ?{{ v, Q v }})%I.
+  Lemma wp_compat_fail {Γ τ} {s} {δ} {Q : ValConf Γ τ -> iProp Σ} :
+    (⊢ WP (MkConf (stm_fail _ s) δ) ?{{ v, Q v }})%I.
   Proof.
     rewrite wp_unfold.
     iIntros (σ ks1 ks n) "Hregs".
@@ -637,16 +642,16 @@ Module IrisSoundness
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
-    remember (MkTm δ (fail s)) as s1.
+    remember (MkConf (fail s) δ) as s1.
     destruct H0.
-    inversion Heqs1.
-    destruct H0; inversion H3.
+    inversion Heqs1. subst.
+    inversion H0.
   Qed.
 
   Lemma wp_compat_block {Γ Δ} {τ : Ty} {δ : CStore Γ}
-        (δΔ : CStore Δ) (k : Stm (Γ ▻▻ Δ) τ) (Q : Val Γ τ -> iProp Σ) :
-    ⊢ (WP (MkTm (δ ►► δΔ) k) ?{{ v, match v with MkVal _ δ' v => Q (MkVal _ (env.drop Δ δ') v) end }} -∗
-          WP (MkTm δ (stm_block δΔ k)) ?{{ v, Q v }})%I.
+        (δΔ : CStore Δ) (k : Stm (Γ ▻▻ Δ) τ) (Q : ValConf Γ τ -> iProp Σ) :
+    ⊢ (WP (MkConf k (δ ►► δΔ)) ?{{ v, match v with MkValConf _ v δ' => Q (MkValConf _ v (env.drop Δ δ')) end }} -∗
+          WP (MkConf (stm_block δΔ k) δ) ?{{ v, Q v }})%I.
   Proof.
     iRevert (δ δΔ k Q).
     iLöb as "IH".
@@ -654,14 +659,13 @@ Module IrisSoundness
     rewrite ?wp_unfold.
     cbn.
     iIntros (σ ks1 ks n) "state_inv".
-    remember (language.to_val (MkTm (δ ►► δΔ) k)) as kval.
+    remember (language.to_val (MkConf k (δ ►► δΔ))) as kval.
     destruct kval.
     - rewrite /wp_pre.
       rewrite <- Heqkval.
-      destruct v.
-      assert (eqk := of_to_val _ (eq_sym Heqkval)).
-      inversion eqk.
-      rewrite <-?H2 in *; clear H2.
+      destruct v as [v δ0].
+      pose proof (eqk := of_to_val _ (eq_sym Heqkval)).
+      inversion eqk. subst. clear Heqkval eqk.
       iMod "wpk" as "H".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iSplitR; [trivial|].
@@ -672,16 +676,12 @@ Module IrisSoundness
       iDestruct "e" as "_".
       iModIntro.
       dependent elimination H0.
-      dependent elimination s; subst δ0.
+      dependent elimination s.
       + rewrite env.drop_cat.
         iFrame.
         iSplitL; [|trivial].
         by iApply wp_value.
-      + revert s4.
-        generalize (δ1 ►► δΔ2) as δ1'.
-        generalize (δ'0 ►► δΔ') as δ0'.
-        intros δ0' δ1' step.
-        dependent elimination step.
+      + inversion s4.
     - rewrite /wp_pre.
       rewrite <-Heqkval.
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -690,7 +690,7 @@ Module IrisSoundness
       iIntros (e2 σ2 efs2) "%".
       dependent elimination H0.
       dependent elimination s.
-      + inversion Heqkval.
+      + discriminate Heqkval.
       + iModIntro. iModIntro.
         iMod "Hclose" as "_".
         iFrame.
@@ -724,7 +724,7 @@ Module IrisSoundness
     iRevert (s δ) "wpv".
     iLöb as "IH".
     iIntros (s δ) "wpv".
-    rewrite (wp_unfold _ _ (MkTm _ (stm_let _ _ _ k))).
+    rewrite (wp_unfold _ _ (MkConf (stm_let _ _ _ k) _)).
     iIntros ([regs μ] ks1 ks n) "state_inv".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
@@ -741,7 +741,7 @@ Module IrisSoundness
       iPoseProof ("tripk" $! v _ with "wpv") as "wpk".
       iModIntro.
       iFrame; iSplitL; auto.
-      by iApply (wp_compat_block (env.snoc env.nil (x0∷σ0) v) _ (fun v0 => match v0 with | MkVal _ δ' v1 => R v1 δ' end )).
+      by iApply (wp_compat_block (env.snoc env.nil (x0∷σ0) v) _ (fun v0 => match v0 with | MkValConf _ v1 δ' => R v1 δ' end )).
     + iModIntro. iModIntro.
       iMod "Hclose" as "_".
       cbn.
@@ -750,11 +750,11 @@ Module IrisSoundness
     + cbn.
       rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ1 s1) _ [] _ _ [] (mk_prim_step s3)).
+      rewrite (val_stuck (MkConf s1 δ1) _ [] _ _ [] (mk_prim_step s3)).
       iSpecialize ("wpv" $! (γ1 , μ1) nil nil n with "state_inv").
       iMod "Hclose" as "_".
       iMod "wpv" as "[_ wpv]".
-      iSpecialize ("wpv" $! (MkTm δ' s') _ nil (mk_prim_step s3)).
+      iSpecialize ("wpv" $! (MkConf s' δ') _ nil (mk_prim_step s3)).
       iMod "wpv" as "wpv".
       iModIntro. iModIntro.
       iMod "wpv" as "[Hregs [wps _]]".
@@ -780,7 +780,7 @@ Module IrisSoundness
     iPoseProof ("tripk" with "Qv") as "wpk".
     iApply (wp_mono with "wpk").
     iIntros (v') "Rv".
-    destruct v'.
+    destruct v' as [v0 δ0].
     iExists (env.head δ0).
     by dependent elimination δ0.
   Qed.
@@ -794,7 +794,7 @@ Module IrisSoundness
   Proof.
     iIntros "tripk P".
     iPoseProof ("tripk" with "P") as "wpk".
-    by iApply (wp_compat_block δΔ k (fun v => match v with | MkVal _ δ' v' => R v' δ' end) with "wpk").
+    by iApply (wp_compat_block δΔ k (fun v => match v with | MkValConf _ v' δ' => R v' δ' end) with "wpk").
   Qed.
 
   Lemma iris_rule_stm_if {Γ} (δ : CStore Γ)
@@ -856,7 +856,7 @@ Module IrisSoundness
     iRevert (s1 δ) "wps1".
     iLöb as "IH".
     iIntros (s1 δ) "wps1".
-    rewrite (wp_unfold _ _ (MkTm _ (stm_seq _ _))).
+    rewrite (wp_unfold _ _ (MkConf (stm_seq _ _) _)).
     iIntros ([regs μ] ks1 ks n) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
@@ -867,11 +867,11 @@ Module IrisSoundness
     dependent elimination s; cbn.
     + rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ1 s7) (γ1 , μ1) [] _ _ [] (mk_prim_step s8)).
+      rewrite (val_stuck (MkConf s7 δ1) (γ1 , μ1) [] _ _ [] (mk_prim_step s8)).
       iSpecialize ("wps1" $! (γ1 , μ1) nil nil n with "Hregs").
       iMod "Hclose" as "_".
       iMod "wps1" as "[_ wps1]".
-      iMod ("wps1" $! (MkTm δ'1 s'0) _ nil (mk_prim_step s8))  as "wps1".
+      iMod ("wps1" $! (MkConf s'0 δ'1) _ nil (mk_prim_step s8))  as "wps1".
       iModIntro. iModIntro.
       iMod "wps1" as "[Hregs [wps' _]]".
       iFrame.
@@ -1167,7 +1167,7 @@ Module IrisSoundness
     iRevert (s δ) "wpv".
     iLöb as "IH".
     iIntros (s δ) "wpv".
-    rewrite (wp_unfold _ _ (MkTm _ (stm_assign _ s))).
+    rewrite (wp_unfold _ _ (MkConf (stm_assign _ s) _)).
     iIntros ([regs μ] ks1 ks n) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
@@ -1196,7 +1196,7 @@ Module IrisSoundness
       by iApply wp_compat_fail.
     + rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ1 s13) _ [] _ _ [] (mk_prim_step s14)).
+      rewrite (val_stuck (MkConf s13 δ1) _ [] _ _ [] (mk_prim_step s14)).
       iSpecialize ("wpv" $! _ nil nil n with "Hregs").
       iMod "Hclose".
       iMod "wpv" as "[_ wpv]".
@@ -1219,7 +1219,7 @@ Module IrisSoundness
     iIntros "trips P".
     iPoseProof (iris_rule_stm_assign_forwards _ with "trips P") as "wpas".
     iApply (wp_mono with "wpas").
-    iIntros ([δ' v']) "Rv".
+    iIntros ([v' δ']) "Rv".
     iDestruct "Rv" as (v__old) "[Rv %]".
     rewrite <-H0.
     by rewrite env.update_update env.update_lookup.
@@ -1237,9 +1237,9 @@ Module IrisSoundness
       end)%I.
 
   Lemma wp_compat_call_frame {Γ Δ} {τ : Ty} {δ : CStore Γ}
-        (δΔ : CStore Δ) (s : Stm Δ τ) (Q : Val Γ τ -> iProp Σ) :
-    ⊢ (WP (MkTm δΔ s) ?{{ v, match v with MkVal _ δ' v => Q (MkVal _ δ v) end }} -∗
-          WP (MkTm δ (stm_call_frame δΔ s)) ?{{ v, Q v }})%I.
+        (δΔ : CStore Δ) (s : Stm Δ τ) (Q : ValConf Γ τ -> iProp Σ) :
+    ⊢ (WP (MkConf s δΔ) ?{{ v, match v with MkValConf _ v δ' => Q (MkValConf _ v δ) end }} -∗
+          WP (MkConf (stm_call_frame δΔ s) δ) ?{{ v, Q v }})%I.
   Proof.
     iRevert (δ δΔ s Q).
     iLöb as "IH".
@@ -1255,7 +1255,7 @@ Module IrisSoundness
     dependent elimination s0.
     - iMod "Hclose" as "_".
       rewrite {1}/wp_pre.
-      rewrite (val_stuck (MkTm δΔ3 s9) (γ1 , μ1) [] _ _ [] (mk_prim_step s10)).
+      rewrite (val_stuck (MkConf s9 δΔ3) (γ1 , μ1) [] _ _ [] (mk_prim_step s10)).
       iMod ("wpk" $! (γ1 , μ1) ks1 ks n with "Hregs") as "[% wpk]".
       iMod ("wpk" $! _ _ _ (mk_prim_step s10)) as "wpk".
       iModIntro. iModIntro.
@@ -1310,9 +1310,9 @@ Module IrisSoundness
     iApply wp_compat_call_frame.
     rewrite H0.
     iApply (wp_mono _ _ _ (fun v => frame ∗ match v with
-                                            | MkVal _ _ v => interpret_assertion ens (env.snoc ι (result∷σ) v)
+                                            | MkValConf _ v _ => interpret_assertion ens (env.snoc ι (result∷σ) v)
                                             end)%I).
-    - intros [δ' v]; cbn.
+    - intros [v δ']; cbn.
       iIntros "[fr ens]".
       iSplitL; [|trivial].
       iApply (H2 v).
@@ -1349,7 +1349,7 @@ Module IrisSoundness
     iRevert (s δ) "wpv".
     iLöb as "IH".
     iIntros (s δ) "wpv".
-    rewrite (wp_unfold _ _ (MkTm _ (stm_bind _ k))).
+    rewrite (wp_unfold _ _ (MkConf (stm_bind _ k) _)).
     iIntros ([regs μ] ks1 ks n) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
@@ -1361,7 +1361,7 @@ Module IrisSoundness
     cbn.
     + rewrite wp_unfold.
       unfold wp_pre.
-      rewrite (val_stuck (MkTm δ1 s17) (γ1 , μ1) [] _ _ [] (mk_prim_step s18)).
+      rewrite (val_stuck (MkConf s17 δ1) (γ1 , μ1) [] _ _ [] (mk_prim_step s18)).
       iSpecialize ("wpv" $! (γ1 , μ1) nil nil n with "Hregs").
       iMod "Hclose".
       iMod "wpv" as "[_ wpv]".
@@ -1407,7 +1407,7 @@ Module IrisSoundness
     iModIntro. iFrame.
     iSplitL; [|trivial].
     iApply wp_compat_call_frame.
-    iApply (wp_mono _ _ _ (fun v => match v with MkVal _ _ v0 => Q v0 end)).
+    iApply (wp_mono _ _ _ (fun v => match v with MkValConf _ v0 _ => Q v0 end)).
     {
       iIntros ([σ' v]) "Qv".
       by iFrame.
@@ -1441,7 +1441,7 @@ Module IrisSoundness
     dependent elimination ctrip; cbn in extSem.
     iIntros "P".
     iPoseProof (l with "P") as "[frm pre]".
-    iApply (wp_mono _ _ _ (fun v => frame0 ∗ match v with | MkVal _ δ' v => interpret_assertion ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ) end)%I).
+    iApply (wp_mono _ _ _ (fun v => frame0 ∗ match v with | MkValConf _ v δ' => interpret_assertion ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ) end)%I).
     - intros v.
       destruct v.
       iIntros "[frame [pre %]]".
@@ -1529,7 +1529,7 @@ Module IrisSoundness
 
   Lemma iris_rule_noop {Γ σ} {δ : CStore Γ}
         {P} {Q : Lit σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
-    language.to_val (MkTm δ s) = None ->
+    language.to_val (MkConf s δ) = None ->
     (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ ->
                             (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\
                             ((exists v, s' = stm_lit _ v) \/ (exists msg, s' = stm_fail _ msg))) ->
@@ -1707,7 +1707,7 @@ Module Adequacy
 
   Lemma steps_to_erased {σ Γ γ μ δ} (s : Stm Γ σ) {γ' μ' δ' s'}:
     ⟨ γ, μ, δ, s ⟩ --->* ⟨ γ', μ', δ', s' ⟩ ->
-    rtc erased_step (cons (MkTm δ s) nil, (γ,μ)) (cons (MkTm δ' s') nil, (γ',μ')).
+    rtc erased_step (cons (MkConf s δ) nil, (γ,μ)) (cons (MkConf s' δ') nil, (γ',μ')).
   Proof.
     induction 1; first done.
     refine (rtc_l _ _ _ _ _ IHSteps).
@@ -1758,20 +1758,20 @@ Module Adequacy
     ResultOrFail s' Q.
   Proof.
     intros steps fins trips.
-    cut (adequate MaybeStuck (MkTm δ s) (γ,μ)
+    cut (adequate MaybeStuck (MkConf s δ) (γ,μ)
              (λ (v : val (microsail_lang Γ σ)) (_ : state (microsail_lang Γ σ)),
                 (λ v0 : val (microsail_lang Γ σ), match v0 with
-                                                  | MkVal _ _ v' => Q v'
+                                                  | MkValConf _ v' _ => Q v'
                                                   end) v)).
     - destruct s'; cbn in fins; destruct fins; last done.
       intros adeq.
-      apply (adequate_result MaybeStuck (MkTm δ s) (γ , μ) (fun v _ => match v with | MkVal _ δ' v' => Q v' end) adeq nil (γ' , μ') (MkVal _ δ' l)).
+      apply (adequate_result MaybeStuck (MkConf s δ) (γ , μ) (fun v _ => match v with | MkValConf _ v' δ' => Q v' end) adeq nil (γ' , μ') (MkValConf _ l δ')).
       by apply steps_to_erased.
     - constructor; last done.
-      intros t2 σ2 [δ2 v2] eval.
+      intros t2 σ2 [v2 δ2] eval.
       assert (eq := RegStore_to_map_Forall γ).
       assert (regsmapv := RegStore_to_map_valid γ).
-      pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) MaybeStuck (MkTm δ s) (γ , μ) (fun v => match v with | MkVal _ δ' v' => Q v' end)) as adeq.
+      pose proof (wp_adequacy sailΣ (microsail_lang Γ σ) MaybeStuck (MkConf s δ) (γ , μ) (fun v => match v with | MkValConf _ v' δ' => Q v' end)) as adeq.
       refine (adequate_result _ _ _ _ (adeq _) _ _ _ eval); clear adeq.
       iIntros (Hinv κs) "".
       iMod (own_alloc ((● RegStore_to_map γ ⋅ ◯ RegStore_to_map γ ) : regUR)) as (spec_name) "[Hs1 Hs2]";
