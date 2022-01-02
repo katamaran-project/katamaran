@@ -485,7 +485,7 @@ Module Terms (Export termkit : TermKit).
 
   End NameResolution.
 
-  Notation SymInstance Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Lit (@type 𝑺 Ty xt)) Σ).
+  Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Lit (@type 𝑺 Ty xt)) Σ).
 
   Section Symbolic.
 
@@ -1355,7 +1355,7 @@ Module Terms (Export termkit : TermKit).
        all logic variables in a symbolic value to obtain the concrete value and
        'lift' injects the concrete type into the symbolic one. *)
     Class Inst (T : LCtx -> Type) (A : Type) : Type :=
-      { inst {Σ} (t : T Σ) (ι : SymInstance Σ) : A;
+      { inst {Σ} (t : T Σ) (ι : Valuation Σ) : A;
         lift {Σ} (a : A) : T Σ;
       }.
 
@@ -1379,7 +1379,7 @@ Module Terms (Export termkit : TermKit).
          lift Σ      := env.map (fun (b : T) (a : A b) => lift a)
       |}.
 
-    Fixpoint inst_term {σ : Ty} {Σ : LCtx} (t : Term Σ σ) (ι : SymInstance Σ) {struct t} : Lit σ :=
+    Fixpoint inst_term {σ : Ty} {Σ : LCtx} (t : Term Σ σ) (ι : Valuation Σ) {struct t} : Lit σ :=
       match t in Term _ σ return Lit σ with
       | @term_var _ _ _ bIn  => env.lookup ι bIn
       | term_lit _ l         => l
@@ -1402,13 +1402,13 @@ Module Terms (Export termkit : TermKit).
          lift Σ l   := term_lit σ l;
       |}.
 
-    Global Instance instantiate_sub {Σ} : Inst (Sub Σ) (SymInstance Σ) :=
+    Global Instance instantiate_sub {Σ} : Inst (Sub Σ) (Valuation Σ) :=
       instantiate_env.
 
     Class InstLaws (T : LCtx -> Type) (A : Type) `{SubstLaws T, Inst T A} : Prop :=
-      { inst_lift {Σ} (ι : SymInstance Σ) (a : A) :
+      { inst_lift {Σ} (ι : Valuation Σ) (a : A) :
           inst (lift a) ι = a;
-        inst_subst {Σ Σ'} (ζ : Sub Σ Σ') (ι : SymInstance Σ') (t : T Σ) :
+        inst_subst {Σ Σ'} (ζ : Sub Σ Σ') (ι : Valuation Σ') (t : T Σ) :
           inst (subst t ζ) ι = inst t (inst ζ ι)
       }.
 
@@ -1477,16 +1477,16 @@ Module Terms (Export termkit : TermKit).
       }
     Qed.
 
-    Global Instance instantiatelaws_sub {Σ} : InstLaws (Sub Σ) (SymInstance Σ).
+    Global Instance instantiatelaws_sub {Σ} : InstLaws (Sub Σ) (Valuation Σ).
     Proof. apply instantiatelaws_env. Qed.
 
     Lemma inst_env_snoc {B : Set} {AT : LCtx -> B -> Set}
            {A : B -> Set} {_ : forall b : B, Inst (fun Σ => AT Σ b) (A b)}
-           {Γ : Ctx B} {Σ} (ι : SymInstance Σ) (E : Env (AT Σ) Γ) (b : B) (a : AT Σ b) :
+           {Γ : Ctx B} {Σ} (ι : Valuation Σ) (E : Env (AT Σ) Γ) (b : B) (a : AT Σ b) :
       inst (env.snoc E b a) ι = env.snoc (inst E ι) b (inst a ι).
     Proof. reflexivity. Qed.
 
-    Lemma inst_sub_wk1 {Σ b v} (ι : SymInstance Σ) :
+    Lemma inst_sub_wk1 {Σ b v} (ι : Valuation Σ) :
       inst sub_wk1 (ι ► (b ↦ v)) = ι.
     Proof.
       apply env.lookup_extensional.
@@ -1494,7 +1494,7 @@ Module Terms (Export termkit : TermKit).
       now rewrite env.map_tabulate, env.lookup_tabulate.
     Qed.
 
-    Lemma inst_sub_id {Σ} (ι : SymInstance Σ) :
+    Lemma inst_sub_id {Σ} (ι : Valuation Σ) :
       inst (sub_id Σ) ι = ι.
     Proof.
       apply env.lookup_extensional.
@@ -1502,18 +1502,18 @@ Module Terms (Export termkit : TermKit).
       now rewrite env.map_tabulate, env.lookup_tabulate.
     Qed.
 
-    Lemma inst_sub_snoc {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) b (t : Term Σ1 (type b)) :
+    Lemma inst_sub_snoc {Σ0 Σ1} (ι : Valuation Σ1) (ζ : Sub Σ0 Σ1) b (t : Term Σ1 (type b)) :
       inst (sub_snoc ζ b t) ι = env.snoc (inst ζ ι) b (inst t ι).
     Proof. reflexivity. Qed.
 
-    Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : SymInstance Σ2) (v : Lit (type b)) :
+    Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : Valuation Σ2) (v : Lit (type b)) :
       inst (sub_up1 ζ12) (ι2 ► (b ↦ v)) = inst ζ12 ι2 ► (b ↦ v).
     Proof.
       destruct b; unfold sub_up1.
       now rewrite inst_sub_snoc, inst_subst, inst_sub_wk1.
     Qed.
 
-    Lemma inst_sub_shift {Σ} (ι : SymInstance Σ) {b} (bIn : b ∈ Σ) :
+    Lemma inst_sub_shift {Σ} (ι : Valuation Σ) {b} (bIn : b ∈ Σ) :
       inst (sub_shift bIn) ι = env.remove b ι bIn.
     Proof.
       rewrite env.remove_remove'.
@@ -1522,7 +1522,7 @@ Module Terms (Export termkit : TermKit).
       now rewrite env.lookup_map, ?env.lookup_tabulate.
     Qed.
 
-    Lemma inst_sub_single_shift {Σ} (ι : SymInstance Σ) {x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
+    Lemma inst_sub_single_shift {Σ} (ι : Valuation Σ) {x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       inst t (inst (sub_shift xIn) ι) = env.lookup ι xIn ->
       inst (sub_single xIn t) (inst (sub_shift xIn) ι) = ι.
     Proof.
@@ -1551,7 +1551,7 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma inst_sub_single2 {Σ : LCtx} {x σ} (xIn : x∷σ ∈ Σ)
-          (t : Term (Σ - x∷σ) σ) (ι : SymInstance (Σ - x∷σ)) :
+          (t : Term (Σ - x∷σ) σ) (ι : Valuation (Σ - x∷σ)) :
       inst (sub_single xIn t) ι = env.insert xIn ι (inst t ι).
     Proof.
       rewrite env.insert_insert'.
@@ -1565,12 +1565,12 @@ Module Terms (Export termkit : TermKit).
       - now reflexivity.
     Qed.
 
-    Lemma inst_lookup {Σ0 Σ1} (ι : SymInstance Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : x∷τ ∈ Σ0) :
-      inst (env.lookup ζ xIn) ι = env.lookup (inst (A := SymInstance Σ0) ζ ι) xIn.
+    Lemma inst_lookup {Σ0 Σ1} (ι : Valuation Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : x∷τ ∈ Σ0) :
+      inst (env.lookup ζ xIn) ι = env.lookup (inst (A := Valuation Σ0) ζ ι) xIn.
     Proof. cbn. now rewrite env.lookup_map. Qed.
 
     Lemma inst_tuple_pattern_match {N : Set} {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty}
-      (ι : SymInstance Σ) (p : TuplePat σs Δ) (ts : Env (Term Σ) σs) :
+      (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : Env (Term Σ) σs) :
       inst (tuple_pattern_match_env p ts) ι =
       tuple_pattern_match_env p (inst (T := fun Σ => Env (Term Σ) σs) ts ι).
     Proof.
@@ -1582,7 +1582,7 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma inst_tuple_pattern_match_reverse {N : Set} {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty}
-      (ι : SymInstance Σ) (p : TuplePat σs Δ) (ts : NamedEnv (Term Σ) Δ) :
+      (ι : Valuation Σ) (p : TuplePat σs Δ) (ts : NamedEnv (Term Σ) Δ) :
       inst (tuple_pattern_match_env_reverse p ts) ι =
       tuple_pattern_match_env_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
     Proof.
@@ -1594,7 +1594,7 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma inst_record_pattern_match {N : Set} {Δ__R : NCtx 𝑹𝑭 Ty} {Σ : LCtx} {Δ : NCtx N Ty}
-      (ι : SymInstance Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ__R) :
+      (ι : Valuation Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ__R) :
       inst (T := fun Σ => NamedEnv (Term Σ) Δ) (record_pattern_match_env p ts) ι =
       record_pattern_match_env p (inst ts ι).
     Proof.
@@ -1606,7 +1606,7 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma inst_record_pattern_match_reverse {N : Set} {Δ__R : NCtx 𝑹𝑭 Ty} {Σ : LCtx} {Δ : NCtx N Ty}
-      (ι : SymInstance Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ) :
+      (ι : Valuation Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ) :
       inst (record_pattern_match_env_reverse p ts) ι =
       record_pattern_match_env_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
     Proof.
@@ -1617,7 +1617,7 @@ Module Terms (Export termkit : TermKit).
         f_equal. apply IHp.
     Qed.
 
-    Lemma inst_term_tuple {Σ σs} {ι : SymInstance Σ} (es : Env (Term Σ) σs) :
+    Lemma inst_term_tuple {Σ σs} {ι : Valuation Σ} (es : Env (Term Σ) σs) :
       @eq (EnvRec Lit σs) (inst (Inst := instantiate_term)(term_tuple es) ι)
           (envrec.of_env (inst es ι)).
     Proof.
@@ -1628,7 +1628,7 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma inst_pattern_match_env_reverse {N : Set} {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty}
-          (ι : SymInstance Σ) (p : Pattern Δ σ) (ts : NamedEnv (Term Σ) Δ) :
+          (ι : Valuation Σ) (p : Pattern Δ σ) (ts : NamedEnv (Term Σ) Δ) :
       inst (Inst := instantiate_term) (pattern_match_env_reverse p ts) ι =
       pattern_match_env_lit_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
     Proof.
@@ -1654,7 +1654,7 @@ Module Terms (Export termkit : TermKit).
 
   (*   Context {Σ : LCtx} {σ : Ty}. *)
 
-  (*   Definition TermEqv (ι : SymInstance Σ) : relation (Term Σ σ) := *)
+  (*   Definition TermEqv (ι : Valuation Σ) : relation (Term Σ σ) := *)
   (*     fun t1 t2 => inst_term t1 ι = inst_term t2 ι. *)
 
   (*   Global Instance TermEqv_Equiv {ι} : Equivalence (TermEqv ι). *)
@@ -1689,7 +1689,7 @@ Module Terms (Export termkit : TermKit).
   (*   Local Set Equations With UIP. *)
   (*   Lemma Term_eqvb_spec {σ} (t1 t2 : Term Σ σ) : *)
   (*     OptionSpec *)
-  (*       (fun b : bool => forall ι : SymInstance Σ, TermEqv ι t1 t2 <-> is_true b) *)
+  (*       (fun b : bool => forall ι : Valuation Σ, TermEqv ι t1 t2 <-> is_true b) *)
   (*       True *)
   (*       (Term_eqvb t1 t2). *)
   (*   Proof. *)
@@ -1733,7 +1733,7 @@ Module Terms (Export termkit : TermKit).
 
     Lemma term_get_lit_spec {Σ σ} (s : Term Σ σ) :
       OptionSpec
-        (fun l => forall ι : SymInstance Σ, inst s ι = l)
+        (fun l => forall ι : Valuation Σ, inst s ι = l)
         True
         (term_get_lit s).
     Proof.
@@ -1749,7 +1749,7 @@ Module Terms (Export termkit : TermKit).
     Lemma term_get_pair_spec {Σ σ1 σ2} (s : Term Σ (ty_prod σ1 σ2)) :
       OptionSpec
         (fun '(t1,t2) =>
-           forall ι : SymInstance Σ,
+           forall ι : Valuation Σ,
              inst (T := fun Σ => Term Σ (ty_prod σ1 σ2)) (A := Lit σ1 * Lit σ2) s ι =
              (inst (A := Lit σ1) t1 ι, inst (A := Lit σ2) t2 ι))
         True
@@ -1771,10 +1771,10 @@ Module Terms (Export termkit : TermKit).
     Lemma term_get_sum_spec {Σ σ1 σ2} (s : Term Σ (ty_sum σ1 σ2)) :
       OptionSpec
         (fun s' => match s' with
-                   | inl t => forall ι : SymInstance Σ,
+                   | inl t => forall ι : Valuation Σ,
                        inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Lit σ1 + Lit σ2) s ι =
                        @inl (Lit σ1) (Lit σ2) (inst t ι)
-                   | inr t => forall ι : SymInstance Σ,
+                   | inr t => forall ι : Valuation Σ,
                        inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Lit σ1 + Lit σ2) s ι =
                        @inr (Lit σ1) (Lit σ2) (inst t ι)
                    end)
@@ -1797,7 +1797,7 @@ Module Terms (Export termkit : TermKit).
         (fun x : {K : 𝑼𝑲 U & Term Σ (𝑼𝑲_Ty K)} =>
            match x with
            | existT K t =>
-             forall ι : SymInstance Σ,
+             forall ι : Valuation Σ,
                inst (T := fun Σ => Term Σ (ty_union U)) (A := 𝑼𝑻 U) s ι =
                𝑼_fold (@existT (𝑼𝑲 U) (fun K => Lit (𝑼𝑲_Ty K)) K (inst t ι)) :> Lit (ty_union U)
            end)
@@ -1818,7 +1818,7 @@ Module Terms (Export termkit : TermKit).
     Lemma term_get_record_spec {Σ R} (s : Term Σ (ty_record R)) :
       OptionSpec
         (fun ts =>
-           forall ι : SymInstance Σ,
+           forall ι : Valuation Σ,
              inst (T := fun Σ => Term Σ (ty_record R)) (A := 𝑹𝑻 R) s ι =
              𝑹_fold (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (𝑹𝑭_Ty R)) (A := NamedEnv Lit (𝑹𝑭_Ty R)) ts ι))
         True
@@ -1837,7 +1837,7 @@ Module Terms (Export termkit : TermKit).
     Lemma term_get_tuple_spec {Σ σs} (s : Term Σ (ty_tuple σs)) :
       OptionSpec
         (fun ts =>
-           forall ι : SymInstance Σ,
+           forall ι : Valuation Σ,
              inst (T := fun Σ => Term Σ (ty_tuple σs)) (A := Lit (ty_tuple σs)) s ι =
              inst (term_tuple ts) ι)
         True
@@ -2029,7 +2029,7 @@ Module Terms (Export termkit : TermKit).
     | op           | t1 | t2 := peval_binop' op t1 t2.
 
     Lemma peval_append_sound {Σ σ} (t1 t2 : Term Σ (ty_list σ)) :
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         inst  (peval_append t1 t2) ι =
           eval_binop binop_append (inst t1 ι) (inst t2 ι).
     Proof.
@@ -2041,12 +2041,12 @@ Module Terms (Export termkit : TermKit).
     Qed.
 
     Lemma peval_binop'_sound {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         inst (peval_binop' op t1 t2) ι = eval_binop op (inst t1 ι) (inst t2 ι).
     Proof. intros ι. destruct t1, t2; cbn; auto. Qed.
 
     Lemma peval_binop_sound {Σ σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         inst (peval_binop op t1 t2) ι = eval_binop op (inst t1 ι) (inst t2 ι).
     Proof.
       intros ι.
@@ -2084,27 +2084,27 @@ Module Terms (Export termkit : TermKit).
     | @term_record _ R ts        := @term_record _ R ts.
 
     Lemma peval_neg_sound {Σ} (t : Term Σ ty_int) :
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         inst (peval_neg t) ι = inst (term_neg t) ι.
     Proof. dependent elimination t; cbn; auto. Qed.
 
     Lemma peval_not_sound {Σ} (t : Term Σ ty_bool) :
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         inst (peval_not t) ι = inst (term_not t) ι.
     Proof. dependent elimination t; cbn; auto. Qed.
 
     Lemma peval_inl_sound {Σ σ1 σ2} (t : Term Σ σ1) :
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         inst (peval_inl (σ2 := σ2) t) ι = inst (term_inl t) ι.
     Proof. destruct t; cbn; auto. Qed.
 
     Lemma peval_inr_sound {Σ σ1 σ2} (t : Term Σ σ2) :
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         inst (peval_inr (σ1 := σ1) t) ι = inst (term_inr t) ι.
     Proof. destruct t; cbn; auto. Qed.
 
     Lemma peval_sound {Σ σ} (t : Term Σ σ) :
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         inst (peval t) ι = inst t ι.
     Proof.
       intros ι. symmetry.
@@ -2146,7 +2146,7 @@ Module Terms (Export termkit : TermKit).
       (* | exp_projrec e rf         => term_projrec (seval_exp e) rf *)
       end%exp.
 
-  Lemma eval_exp_inst {Γ Σ τ} (ι : SymInstance Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
+  Lemma eval_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
     eval e (inst δΓΣ ι) = inst (seval_exp δΓΣ e) ι.
   Proof.
     induction e; cbn; repeat f_equal; auto.

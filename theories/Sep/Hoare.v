@@ -57,7 +57,7 @@ Module ProgramLogic
       SepContract Δ σ -> Prop :=
     | rule_sep_contract
         (result : 𝑺)
-        (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : SymInstance Σ)
+        (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : Valuation Σ)
         (req : Assertion Σ) (ens : Assertion (Σ ▻ result∷σ))
         (frame : L) :
         δΔ = inst θΔ ι ->
@@ -68,7 +68,7 @@ Module ProgramLogic
     Inductive LTriple {Δ} (δΔ : CStore Δ) (pre post : L) :
       Lemma Δ -> Prop :=
     | rule_ltriple
-        (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : SymInstance Σ)
+        (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : Valuation Σ)
         (req ens : Assertion Σ)
         (frame : L) :
         δΔ = inst θΔ ι ->
@@ -450,7 +450,7 @@ Module ProgramLogic
     Qed.
 
     Definition ValidContract {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) : Prop :=
-      forall (ι : SymInstance (sep_contract_logic_variables c)),
+      forall (ι : Valuation (sep_contract_logic_variables c)),
         ⦃ interpret_contract_precondition c ι ⦄
           body ; inst_contract_localstore c ι
         ⦃ fun v _ => interpret_contract_postcondition c ι v ⦄.

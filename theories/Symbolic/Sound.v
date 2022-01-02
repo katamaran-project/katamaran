@@ -76,7 +76,7 @@ Module Soundness
 
   Class Approx (AT : TYPE) (A : Type) : Type :=
     approx :
-      forall (w : World) (ι : SymInstance w), (* instpc (wco w) ι -> *)
+      forall (w : World) (ι : Valuation w), (* instpc (wco w) ι -> *)
         AT w -> A -> Prop.
   Global Arguments approx {_ _ _ w} ι _ _.
 
@@ -90,7 +90,7 @@ Module Soundness
 
   Global Instance ApproxBox {AT A} `{Approx AT A} : Approx (Box AT) A :=
     fun w0 ι0 a0 a =>
-      forall (w1 : World) (ω01 : w0 ⊒ w1) (ι1 : SymInstance w1),
+      forall (w1 : World) (ω01 : w0 ⊒ w1) (ι1 : Valuation w1),
         ι0 = inst (sub_acc ω01) ι1 ->
         instpc (wco w1) ι1 ->
         approx ι1 (a0 w1 ω01) a.
@@ -150,10 +150,10 @@ Module Soundness
   Import ModalNotations.
   Open Scope modal.
 
-  Lemma approx_four {AT A} `{Approx AT A} {w0 : World} (ι0 : SymInstance w0) :
+  Lemma approx_four {AT A} `{Approx AT A} {w0 : World} (ι0 : Valuation w0) :
     forall (a0 : Box AT w0) (a : A),
       approx ι0 a0 a ->
-      forall w1 (ω01 : w0 ⊒ w1) (ι1 : SymInstance w1),
+      forall w1 (ω01 : w0 ⊒ w1) (ι1 : Valuation w1),
         ι0 = inst (sub_acc ω01) ι1 ->
         approx ι1 (four a0 ω01) a.
   Proof.
@@ -165,7 +165,7 @@ Module Soundness
   Qed.
   Hint Resolve approx_four : core.
 
-  Lemma approx_lift {AT A} `{InstLaws AT A} {w0 : World} (ι0 : SymInstance w0) (a : A) :
+  Lemma approx_lift {AT A} `{InstLaws AT A} {w0 : World} (ι0 : Valuation w0) (a : A) :
     approx ι0 (lift (T := AT) a) a.
   Proof.
     hnf. now rewrite inst_lift.
@@ -198,7 +198,7 @@ Module Soundness
        (*     apply approx_pure; auto *)
        (*   | |- approx _ (smut_bind _ _) (cmut_bind _ _) => *)
        (*     apply approx_bind; auto *)
-       (*   | |- forall (_ : World) (_ : SymInstance _), instpc (wco _) _ -> _ => *)
+       (*   | |- forall (_ : World) (_ : Valuation _), instpc (wco _) _ -> _ => *)
        (*     let w := fresh "w" in *)
        (*     let ι := fresh "ι" in *)
        (*     let Hpc := fresh "Hpc" in *)
@@ -208,7 +208,7 @@ Module Soundness
   Module Path.
 
     Lemma approx_angelic_binary
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@angelic_binary w) (@or).
     Proof.
       intros PS1 PC1 HP1 PS2 PC2 HP2.
@@ -216,7 +216,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_binary
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@demonic_binary w) (@and).
     Proof.
       intros PS1 PC1 HP1 PS2 PC2 HP2.
@@ -227,7 +227,7 @@ Module Soundness
 
   Module Dijk.
 
-    Lemma approx_pure {AT A} `{Approx AT A} {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+    Lemma approx_pure {AT A} `{Approx AT A} {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SDijk.pure AT w) CDijk.pure.
     Proof.
       intros t v tv.
@@ -238,7 +238,7 @@ Module Soundness
     Qed.
 
     Lemma approx_bind {AT A BT B} `{Approx AT A, Approx BT B}
-          {w0 : World} (ι0 : SymInstance w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
+          {w0 : World} (ι0 : Valuation w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
       approx ι0 (@SDijk.bind AT BT w0) (@CDijk.bind A B).
     Proof.
       (* cbv [approx ApproxBox ApproxImpl ApproxMut ApproxPath ApproxInst]. *)
@@ -253,7 +253,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic (x : option 𝑺) (σ : Ty) :
-      forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
+      forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         approx ι0 (@SDijk.angelic x σ w0) (@CDijk.angelic σ).
     Proof.
       intros w0 ι0 Hpc0.
@@ -265,7 +265,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_ctx {N : Set} {n : N -> 𝑺} {Δ : NCtx N Ty} :
-      forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
+      forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         approx ι0 (@SDijk.angelic_ctx N n w0 Δ) (@CDijk.angelic_ctx N Δ).
     Proof.
       induction Δ.
@@ -288,7 +288,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic (x : option 𝑺) (σ : Ty) :
-      forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
+      forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         approx ι0 (@SDijk.demonic x σ w0) (@CDijk.demonic σ).
     Proof.
       intros w0 ι0 Hpc0.
@@ -302,7 +302,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_ctx {N : Set} {n : N -> 𝑺} {Δ : NCtx N Ty} :
-      forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
+      forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         approx ι0 (@SDijk.demonic_ctx N n w0 Δ) (@CDijk.demonic_ctx N Δ).
     Proof.
       induction Δ.
@@ -324,7 +324,7 @@ Module Soundness
         reflexivity.
     Qed.
 
-    Lemma approx_assume_formulas {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+    Lemma approx_assume_formulas {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0)
       (fmls0 : List Formula w0) (P : Prop) (Heq : instpc fmls0 ι0 <-> P) :
       approx ι0 (@SDijk.assume_formulas w0 fmls0) (@CDijk.assume_formula P).
     Proof.
@@ -345,12 +345,12 @@ Module Soundness
       - intuition.
     Qed.
 
-    Lemma approx_assume_formula {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+    Lemma approx_assume_formula {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0)
       (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
       approx ι0 (@SDijk.assume_formula w0 fml) (@CDijk.assume_formula P).
     Proof. unfold SDijk.assume_formula. now apply approx_assume_formulas. Qed.
 
-    Lemma approx_assert_formulas {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+    Lemma approx_assert_formulas {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0)
       (msg : Message w0) (fmls0 : List Formula w0) (P : Prop) (Heq : instpc fmls0 ι0 <-> P) :
       approx ι0 (@SDijk.assert_formulas w0 msg fmls0) (@CDijk.assert_formula P).
     Proof.
@@ -372,13 +372,13 @@ Module Soundness
       - intuition.
     Qed.
 
-    Lemma approx_assert_formula {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0)
+    Lemma approx_assert_formula {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0)
       (msg : Message w0) (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
       approx ι0 (@SDijk.assert_formula w0 msg fml) (@CDijk.assert_formula P).
     Proof. unfold SDijk.assert_formula. now apply approx_assert_formulas. Qed.
 
     Lemma approx_angelic_list {AT A} `{Inst AT A}
-      {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) msg :
+      {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) msg :
       approx ι0 (@SDijk.angelic_list AT w0 msg) (@CDijk.angelic_list A).
     Proof.
       intros xs ? ->.
@@ -391,7 +391,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_list {AT A} `{Inst AT A}
-      {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) :
+      {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) :
       approx ι0 (@SDijk.demonic_list AT w0) (@CDijk.demonic_list A).
     Proof.
       intros xs ? ->.
@@ -404,7 +404,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_finite {F} `{finite.Finite F}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) msg :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) msg :
       approx (AT := SDijkstra (Const F)) ι (@SDijk.angelic_finite F _ _ w msg) (@CDijk.angelic_finite F _ _).
     Proof.
       unfold SDijk.angelic_finite, CDijk.angelic_finite.
@@ -415,7 +415,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_finite {F} `{finite.Finite F}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx (AT := SDijkstra (Const F)) ι (@SDijk.demonic_finite F _ _ w) (@CDijk.demonic_finite F _ _).
     Proof.
       unfold SDijk.demonic_finite, CDijk.demonic_finite.
@@ -425,7 +425,7 @@ Module Soundness
       now rewrite List.map_id.
     Qed.
 
-    (* Lemma approx_angelic_match_bool {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) *)
+    (* Lemma approx_angelic_match_bool {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) *)
     (*   (msg : Message w) : *)
     (*   approx ι (@SDijk.angelic_match_bool w msg) (@CDijk.angelic_match_bool). *)
     (* Proof. *)
@@ -450,7 +450,7 @@ Module Soundness
   Section Basics.
 
     Lemma approx_dijkstra {Γ AT A} `{Approx AT A}
-      {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0) :
+      {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) :
       approx ι0 (@SMut.dijkstra Γ AT w0) (@CMut.dijkstra Γ A).
     Proof.
       intros ms mc Hm.
@@ -466,11 +466,11 @@ Module Soundness
     Qed.
     Hint Resolve approx_dijkstra : core.
 
-    Lemma approx_block {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
+    Lemma approx_block {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : Valuation w) :
       approx ι (@SMut.block Γ1 Γ2 AT w) CMut.block.
     Proof. unfold approx, ApproxMut, ApproxImpl. auto. Qed.
 
-    Lemma approx_error {AT A D} `{Approx AT A} {Γ1 Γ2} {w : World} {ι: SymInstance w} (func msg : string) (d : D) (cm : CMut Γ1 Γ2 A) :
+    Lemma approx_error {AT A D} `{Approx AT A} {Γ1 Γ2} {w : World} {ι: Valuation w} (func msg : string) (d : D) (cm : CMut Γ1 Γ2 A) :
       approx ι (@SMut.error Γ1 Γ2 AT D func msg d w) cm.
     Proof.
       intros POST__s POST__c HPOST.
@@ -478,7 +478,7 @@ Module Soundness
     Qed.
     Hint Resolve approx_error : core.
 
-    Lemma approx_pure {AT A} `{Approx AT A} {Γ} {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+    Lemma approx_pure {AT A} `{Approx AT A} {Γ} {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.pure Γ AT w) CMut.pure.
     Proof.
       intros t v tv.
@@ -489,7 +489,7 @@ Module Soundness
     Qed.
 
     Lemma approx_bind {AT A BT B} `{Approx AT A, Approx BT B}
-      {Γ1 Γ2 Γ3} {w0 : World} (ι0 : SymInstance w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
+      {Γ1 Γ2 Γ3} {w0 : World} (ι0 : Valuation w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
       approx ι0 (@SMut.bind Γ1 Γ2 Γ3 AT BT w0) (@CMut.bind Γ1 Γ2 Γ3 A B).
     Proof.
       (* cbv [approx ApproxBox ApproxImpl ApproxMut ApproxPath ApproxInst]. *)
@@ -505,7 +505,7 @@ Module Soundness
     Qed.
 
     Lemma approx_bind_right {AT A BT B} `{Approx AT A, Approx BT B}
-      {Γ1 Γ2 Γ3} {w0 : World} (ι0 : SymInstance w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
+      {Γ1 Γ2 Γ3} {w0 : World} (ι0 : Valuation w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
       approx ι0 (@SMut.bind_right Γ1 Γ2 Γ3 AT BT w0) (@CMut.bind_right Γ1 Γ2 Γ3 A B).
     Proof.
       intros ms1 mc1 Hm1 ms2 mc2 Hm2.
@@ -520,7 +520,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic (x : option 𝑺) (σ : Ty)
-      {Γ : PCtx} {w0 : World} (ι0 : SymInstance w0)
+      {Γ : PCtx} {w0 : World} (ι0 : Valuation w0)
       (Hpc0 : instpc (wco w0) ι0) :
       approx ι0 (@SMut.angelic Γ x σ w0) (@CMut.angelic Γ σ).
     Proof.
@@ -536,7 +536,7 @@ Module Soundness
     Hint Resolve approx_angelic : core.
 
     Lemma approx_demonic (x : option 𝑺) (σ : Ty)
-      {Γ : PCtx} {w0 : World} (ι0 : SymInstance w0)
+      {Γ : PCtx} {w0 : World} (ι0 : Valuation w0)
       (Hpc0 : instpc (wco w0) ι0) :
       approx ι0 (@SMut.demonic Γ x σ w0) (@CMut.demonic Γ σ).
     Proof.
@@ -552,7 +552,7 @@ Module Soundness
     Hint Resolve approx_demonic : core.
 
     Lemma approx_angelic_ctx {N : Set} (n : N -> 𝑺) {Γ : PCtx} (Δ : NCtx N Ty) :
-      forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
+      forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         approx ι0 (@SMut.angelic_ctx N n Γ w0 Δ) (@CMut.angelic_ctx N Γ Δ).
     Proof.
       intros w0 ι0 Hpc0. unfold SMut.angelic_ctx, CMut.angelic_ctx.
@@ -561,7 +561,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_ctx {N : Set} (n : N -> 𝑺) {Γ : PCtx} (Δ : NCtx N Ty) :
-      forall {w0 : World} (ι0 : SymInstance w0) (Hpc0 : instpc (wco w0) ι0),
+      forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         approx ι0 (@SMut.demonic_ctx N n Γ w0 Δ) (@CMut.demonic_ctx N Γ Δ).
     Proof.
       intros w0 ι0 Hpc0. unfold SMut.demonic_ctx, CMut.demonic_ctx.
@@ -569,7 +569,7 @@ Module Soundness
       now apply Dijk.approx_demonic_ctx.
     Qed.
 
-    Lemma approx_debug {AT A DT D} `{Approx AT A, Subst DT, Inst DT D, OccursCheck DT} {Γ1 Γ2} {w0 : World} (ι0 : SymInstance w0)
+    Lemma approx_debug {AT A DT D} `{Approx AT A, Subst DT, Inst DT D, OccursCheck DT} {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0)
           (Hpc : instpc (wco w0) ι0) f ms mc :
       approx ι0 ms mc ->
       approx ι0 (@SMut.debug AT DT D _ _ _ Γ1 Γ2 w0 f ms) mc.
@@ -582,7 +582,7 @@ Module Soundness
       apply Hap; auto.
     Qed.
 
-    Lemma approx_angelic_binary {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
+    Lemma approx_angelic_binary {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : Valuation w) :
       approx ι (@SMut.angelic_binary Γ1 Γ2 AT w) (@CMut.angelic_binary Γ1 Γ2 A).
     Proof.
       intros ms1 mc1 Hm1 ms2 mc2 Hm2.
@@ -594,7 +594,7 @@ Module Soundness
       - apply Hm2; auto.
     Qed.
 
-    Lemma approx_demonic_binary {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : SymInstance w) :
+    Lemma approx_demonic_binary {AT A} `{Approx AT A} {Γ1 Γ2} {w : World} (ι : Valuation w) :
       approx ι (@SMut.demonic_binary Γ1 Γ2 AT w) (@CMut.demonic_binary Γ1 Γ2 A).
     Proof.
       intros ms1 mc1 Hm1 ms2 mc2 Hm2.
@@ -607,7 +607,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_list {AT A} `{Inst AT A} {Γ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) msg :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) msg :
       approx ι (@SMut.angelic_list AT Γ w msg) (@CMut.angelic_list A Γ).
     Proof.
       intros ls lc Hl.
@@ -619,7 +619,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_finite {F} `{finite.Finite F} {Γ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) msg :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) msg :
       approx (AT := SMut Γ Γ (Const F)) ι (@SMut.angelic_finite Γ F _ _ w msg) (@CMut.angelic_finite Γ F _ _).
     Proof.
       unfold SMut.angelic_finite, CMut.angelic_finite.
@@ -630,7 +630,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_finite {F} `{finite.Finite F} {Γ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx (AT := SMut Γ Γ (Const F)) ι (@SMut.demonic_finite Γ F _ _ w) (@CMut.demonic_finite Γ F _ _).
     Proof.
       unfold SMut.demonic_finite, CMut.demonic_finite.
@@ -644,7 +644,7 @@ Module Soundness
 
   Section AssumeAssert.
 
-    Lemma approx_assume_formula {Γ} {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0)
+    Lemma approx_assume_formula {Γ} {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0)
       (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
       approx ι0 (@SMut.assume_formula Γ w0 fml__s) (CMut.assume_formula fml__c).
     Proof.
@@ -653,7 +653,7 @@ Module Soundness
       now apply Dijk.approx_assume_formula.
     Qed.
 
-    Lemma approx_box_assume_formula {Γ} {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0)
+    Lemma approx_box_assume_formula {Γ} {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0)
       (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
       approx ι0 (@SMut.box_assume_formula Γ w0 fml__s) (CMut.assume_formula fml__c).
     Proof.
@@ -663,7 +663,7 @@ Module Soundness
       now rewrite inst_persist.
     Qed.
 
-    Lemma approx_assert_formula {Γ} {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0)
+    Lemma approx_assert_formula {Γ} {w0 : World} (ι0 : Valuation w0) (Hpc : instpc (wco w0) ι0)
       (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
       approx ι0 (@SMut.assert_formula Γ w0 fml__s) (@CMut.assert_formula Γ fml__c).
     Proof.
@@ -674,7 +674,7 @@ Module Soundness
       now apply Dijk.approx_assert_formula.
     Qed.
 
-    Lemma approx_box_assert_formula {Γ} {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0)
+    Lemma approx_box_assert_formula {Γ} {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0)
       (fml__s : Formula w0) (fml__c : Prop) (Hfml : fml__c <-> inst fml__s ι0) :
       approx ι0 (@SMut.box_assert_formula Γ w0 fml__s) (CMut.assert_formula fml__c).
     Proof.
@@ -684,7 +684,7 @@ Module Soundness
       now rewrite inst_persist.
     Qed.
 
-    Lemma approx_assert_formulas {Γ} {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0)
+    Lemma approx_assert_formulas {Γ} {w0 : World} (ι0 : Valuation w0) (Hpc : instpc (wco w0) ι0)
       (fmls__s : List Formula w0) (fmls__c : Prop) (Hfmls : fmls__c <-> instpc fmls__s ι0) :
       approx ι0 (@SMut.assert_formulas Γ w0 fmls__s) (@CMut.assert_formula Γ fmls__c).
     Proof.
@@ -700,7 +700,7 @@ Module Soundness
   Section PatternMatching.
 
     Lemma approx_angelic_match_bool' {AT A} `{Approx AT A} {Γ1 Γ2}
-      {w : World} (ι : SymInstance w) (Hpc: instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc: instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_bool' AT Γ1 Γ2 w) (CMut.angelic_match_bool (A := A)).
     Proof.
       unfold SMut.angelic_match_bool', CMut.angelic_match_bool.
@@ -716,7 +716,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_bool AT Γ1 Γ2 w) (CMut.angelic_match_bool (A := A)).
     Proof.
       unfold SMut.angelic_match_bool.
@@ -735,7 +735,7 @@ Module Soundness
     Qed.
 
     Lemma approx_box_angelic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2}
-      {w : World} (ι : SymInstance w) :
+      {w : World} (ι : Valuation w) :
       approx ι (@SMut.box_angelic_match_bool AT Γ1 Γ2 w) (CMut.angelic_match_bool (A := A)).
     Proof.
       unfold SMut.box_angelic_match_bool, fmap_box, K.
@@ -748,7 +748,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_match_bool' {AT A} `{Approx AT A} {Γ1 Γ2}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_bool' AT Γ1 Γ2 w) (CMut.demonic_match_bool (A := A)).
     Proof.
       unfold SMut.demonic_match_bool, CMut.demonic_match_bool.
@@ -764,7 +764,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2} {w : World}
-      (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_bool AT Γ1 Γ2 w) (CMut.demonic_match_bool (A := A)).
     Proof.
       unfold SMut.demonic_match_bool.
@@ -783,7 +783,7 @@ Module Soundness
     Qed.
 
     Lemma approx_box_demonic_match_bool {AT A} `{Approx AT A} {Γ1 Γ2} 
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.box_demonic_match_bool AT Γ1 Γ2 w) (CMut.demonic_match_bool (A := A)).
     Proof.
       unfold SMut.box_demonic_match_bool, fmap_box, K.
@@ -796,7 +796,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_enum AT E Γ1 Γ2 w) (@CMut.angelic_match_enum A E Γ1 Γ2).
     Proof.
       intros t v ->.
@@ -814,7 +814,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_enum AT E Γ1 Γ2 w) (@CMut.demonic_match_enum A E Γ1 Γ2).
     Proof.
       intros t v ->.
@@ -832,7 +832,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_match_sum {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_sum AT Γ1 Γ2 x y σ τ w) (@CMut.angelic_match_sum A Γ1 Γ2 σ τ).
     Proof.
       intros t v ->.
@@ -861,7 +861,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_match_sum {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_sum AT Γ1 Γ2 x y σ τ w) (@CMut.demonic_match_sum A Γ1 Γ2 σ τ).
     Proof.
       intros t v ->.
@@ -890,7 +890,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_match_prod {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_prod AT Γ1 Γ2 x y σ τ w) (@CMut.angelic_match_prod A Γ1 Γ2 σ τ).
     Proof.
       intros t v ->.
@@ -917,7 +917,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_match_prod {AT A} `{Approx AT A} {Γ1 Γ2} x y σ τ
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_prod AT Γ1 Γ2 x y σ τ w) (@CMut.demonic_match_prod A Γ1 Γ2 σ τ).
     Proof.
       intros t v ->.
@@ -944,7 +944,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_match_list {AT A} `{Approx AT A} {Γ1 Γ2} xhead xtail σ
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_list AT Γ1 Γ2 xhead xtail σ w) (@CMut.angelic_match_list A Γ1 Γ2 σ).
     Proof.
       intros t ? ->.
@@ -977,7 +977,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_match_list {AT A} `{Approx AT A} {Γ1 Γ2} xhead xtail σ
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_list AT Γ1 Γ2 xhead xtail σ w) (@CMut.demonic_match_list A Γ1 Γ2 σ).
     Proof.
       intros t ? ->.
@@ -1011,7 +1011,7 @@ Module Soundness
 
     Lemma approx_angelic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
@@ -1030,7 +1030,7 @@ Module Soundness
 
     Lemma approx_angelic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_record N n AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
@@ -1053,7 +1053,7 @@ Module Soundness
 
     Lemma approx_demonic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
@@ -1072,7 +1072,7 @@ Module Soundness
 
     Lemma approx_demonic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_record N n AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
@@ -1095,7 +1095,7 @@ Module Soundness
 
     Lemma approx_angelic_match_tuple {N : Set} (n : N -> 𝑺) {σs AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : TuplePat σs Δ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_tuple N n AT σs Γ1 Γ2 Δ p w) (@CMut.angelic_match_tuple N A σs Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
@@ -1121,7 +1121,7 @@ Module Soundness
 
     Lemma approx_demonic_match_tuple {N : Set} (n : N -> 𝑺) {σs AT A} `{Approx AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : TuplePat σs Δ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_tuple N n AT σs Γ1 Γ2 Δ p w) (@CMut.demonic_match_tuple N A σs Γ1 Γ2 Δ p).
     Proof.
       intros t v ->.
@@ -1147,7 +1147,7 @@ Module Soundness
 
     Lemma approx_angelic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty}
           {p : Pattern Δ σ} {Γ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) {msg} :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) {msg} :
       approx ι (@SMut.angelic_match_pattern N n σ Δ p Γ w msg) (@CMut.angelic_match_pattern N σ Δ p Γ).
     Proof.
       intros t v ->.
@@ -1171,7 +1171,7 @@ Module Soundness
 
     Lemma approx_angelic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
       {Δ : 𝑼𝑲 U -> NCtx N Ty} {p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_union N n AT Γ1 Γ2 U Δ p w) (@CMut.angelic_match_union N A Γ1 Γ2 U Δ p).
     Proof.
       intros t v ->.
@@ -1201,7 +1201,7 @@ Module Soundness
 
     Lemma approx_demonic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty}
           {p : Pattern Δ σ} {Γ}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_pattern N n σ Δ p Γ w) (@CMut.demonic_match_pattern N σ Δ p Γ).
     Proof.
       intros t v ->.
@@ -1225,7 +1225,7 @@ Module Soundness
 
     Lemma approx_demonic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
       {Δ : 𝑼𝑲 U -> NCtx N Ty} {p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)}
-      {w : World} (ι : SymInstance w) (Hpc : instpc (wco w) ι) :
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_union N n AT Γ1 Γ2 U Δ p w) (@CMut.demonic_match_union N A Γ1 Γ2 U Δ p).
     Proof.
       intros t v ->.
@@ -1257,7 +1257,7 @@ Module Soundness
 
   Section State.
 
-    Lemma approx_pushpop {AT A} `{Approx AT A} {Γ1 Γ2 x σ} {w0 : World} (ι0 : SymInstance w0)
+    Lemma approx_pushpop {AT A} `{Approx AT A} {Γ1 Γ2 x σ} {w0 : World} (ι0 : Valuation w0)
           (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.pushpop AT Γ1 Γ2 x σ w0) (@CMut.pushpop A Γ1 Γ2 x σ).
     Proof.
@@ -1274,7 +1274,7 @@ Module Soundness
       now destruct (env.snocView δs1).
     Qed.
 
-    Lemma approx_pushspops {AT A} `{Approx AT A} {Γ1 Γ2 Δ} {w0 : World} (ι0 : SymInstance w0)
+    Lemma approx_pushspops {AT A} `{Approx AT A} {Γ1 Γ2 Δ} {w0 : World} (ι0 : Valuation w0)
           (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.pushspops AT Γ1 Γ2 Δ w0) (@CMut.pushspops A Γ1 Γ2 Δ).
     Proof.
@@ -1301,7 +1301,7 @@ Module Soundness
     Qed.
 
     Lemma approx_get_local {Γ}
-      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      {w0 : World} (ι0 : Valuation w0) (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.get_local Γ w0) (@CMut.get_local Γ).
     Proof.
       intros POST__s POST__c HPOST.
@@ -1311,7 +1311,7 @@ Module Soundness
     Qed.
 
     Lemma approx_put_local {Γ1 Γ2}
-      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      {w0 : World} (ι0 : Valuation w0) (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.put_local Γ1 Γ2 w0) (@CMut.put_local Γ1 Γ2).
     Proof.
       intros δs2 δc2 Hδ2.
@@ -1322,7 +1322,7 @@ Module Soundness
     Qed.
 
     Lemma approx_get_heap {Γ}
-      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      {w0 : World} (ι0 : Valuation w0) (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.get_heap Γ w0) (@CMut.get_heap Γ).
     Proof.
       intros POST__s POST__c HPOST.
@@ -1332,7 +1332,7 @@ Module Soundness
     Qed.
 
     Lemma approx_put_heap {Γ}
-      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      {w0 : World} (ι0 : Valuation w0) (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.put_heap Γ w0) (@CMut.put_heap Γ).
     Proof.
       intros hs hc Hh.
@@ -1343,7 +1343,7 @@ Module Soundness
     Qed.
 
     Lemma approx_eval_exp {Γ σ} (e : Exp Γ σ)
-      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      {w0 : World} (ι0 : Valuation w0) (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.eval_exp Γ σ e w0) (@CMut.eval_exp Γ σ e).
     Proof.
       intros POST__s POST__c HPOST.
@@ -1352,7 +1352,7 @@ Module Soundness
       hnf. now rewrite <- eval_exp_inst.
     Qed.
 
-    Lemma approx_eval_exps {Γ Δ} (es : NamedEnv (Exp Γ) Δ) {w0 : World} (ι0 : SymInstance w0)
+    Lemma approx_eval_exps {Γ Δ} (es : NamedEnv (Exp Γ) Δ) {w0 : World} (ι0 : Valuation w0)
           (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.eval_exps Γ Δ es w0) (@CMut.eval_exps Γ Δ es).
     Proof.
@@ -1368,7 +1368,7 @@ Module Soundness
     Qed.
 
     Lemma approx_assign {Γ x σ} {xIn : x∷σ ∈ Γ}
-      {w0 : World} (ι0 : SymInstance w0) (Hpc : instpc (wco w0) ι0) :
+      {w0 : World} (ι0 : Valuation w0) (Hpc : instpc (wco w0) ι0) :
       approx ι0 (@SMut.assign Γ x σ xIn w0) (@CMut.assign Γ x σ xIn).
     Proof.
       intros t v ->.
@@ -1392,7 +1392,7 @@ Module Soundness
   Hint Resolve approx_angelic_ctx : core.
   Hint Resolve approx_bind_right : core.
 
-  Lemma approx_produce_chunk {Γ} {w0 : World} (ι0 : SymInstance w0)
+  Lemma approx_produce_chunk {Γ} {w0 : World} (ι0 : Valuation w0)
     (Hpc0 : instpc (wco w0) ι0) :
     approx ι0 (@SMut.produce_chunk Γ w0) (CMut.produce_chunk).
   Proof.
@@ -1406,15 +1406,15 @@ Module Soundness
   Lemma inst_env_cat {T : Set} {AT : LCtx -> T -> Set} {A : T -> Set}
      {instAT : forall τ : T, Inst (fun Σ : LCtx => AT Σ τ) (A τ)}
      {Σ : LCtx} {Γ Δ : Ctx T} (EΓ : Env (fun τ => AT Σ τ) Γ) (EΔ : Env (fun τ => AT Σ τ) Δ)
-     (ι : SymInstance Σ) :
+     (ι : Valuation Σ) :
     inst (EΓ ►► EΔ) ι = inst EΓ ι ►► inst EΔ ι.
   Proof.
     unfold inst; cbn.
     now rewrite env.map_cat.
   Qed.
 
-  Lemma inst_sub_cat {Σ Γ Δ : LCtx} (ζΓ : Sub Γ Σ) (ζΔ : Sub Δ Σ) (ι : SymInstance Σ) :
-    inst (A := SymInstance _) (ζΓ ►► ζΔ) ι = inst ζΓ ι ►► inst ζΔ ι.
+  Lemma inst_sub_cat {Σ Γ Δ : LCtx} (ζΓ : Sub Γ Σ) (ζΔ : Sub Δ Σ) (ι : Valuation Σ) :
+    inst (A := Valuation _) (ζΓ ►► ζΔ) ι = inst ζΓ ι ►► inst ζΔ ι.
   Proof.
     apply (@inst_env_cat (𝑺 ∷ Ty) (fun Σ b => Term Σ (type b))).
   Qed.
@@ -1422,7 +1422,7 @@ Module Soundness
   Lemma approx_produce {Γ Σ0 pc0} (asn : Assertion Σ0) :
     let w0 := @MkWorld Σ0 pc0 in
     forall
-      (ι0 : SymInstance w0)
+      (ι0 : Valuation w0)
       (Hpc0 : instpc (wco w0) ι0),
       approx ι0 (@SMut.produce Γ w0 asn) (CMut.produce ι0 asn).
   Proof.
@@ -1553,14 +1553,14 @@ Module Soundness
         exists (c,h'). auto.
   Qed.
 
-  Lemma inst_is_duplicable {w : World} (c : Chunk w) (ι : SymInstance w) :
+  Lemma inst_is_duplicable {w : World} (c : Chunk w) (ι : Valuation w) :
     is_duplicable (inst c ι) = is_duplicable c.
   Proof.
     destruct c; now cbn.
   Qed.
 
   
-  Lemma approx_consume_chunk {Γ} {w0 : World} (ι0 : SymInstance w0)
+  Lemma approx_consume_chunk {Γ} {w0 : World} (ι0 : Valuation w0)
     (Hpc0 : instpc (wco w0) ι0) :
     approx ι0 (@SMut.consume_chunk Γ w0) (CMut.consume_chunk).
   Proof.
@@ -1608,7 +1608,7 @@ Module Soundness
   Lemma approx_consume {Γ Σ0 pc0} (asn : Assertion Σ0) :
     let w0 := @MkWorld Σ0 pc0 in
     forall
-      (ι0 : SymInstance w0)
+      (ι0 : Valuation w0)
       (Hpc0 : instpc (wco w0) ι0),
       approx ι0 (@SMut.consume Γ w0 asn) (CMut.consume ι0 asn).
   Proof.
@@ -1720,7 +1720,7 @@ Module Soundness
   Qed.
 
   Lemma approx_call_contract {Γ Δ : PCtx} {τ : Ty} (c : SepContract Δ τ) :
-    forall {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0),
+    forall {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0),
       approx ι0 (@SMut.call_contract Γ Δ τ c w0) (@CMut.call_contract Γ Δ τ c).
   Proof.
     destruct c; cbv [SMut.call_contract CMut.call_contract].
@@ -1760,7 +1760,7 @@ Module Soundness
   Qed.
 
   Lemma approx_call_lemma {Γ Δ : PCtx} (lem : Lemma Δ) :
-    forall {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0),
+    forall {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0),
       approx ι0 (@SMut.call_lemma Γ Δ lem w0) (@CMut.call_lemma Γ Δ lem).
   Proof.
     destruct lem; cbv [SMut.call_lemma CMut.call_lemma].
@@ -1791,7 +1791,7 @@ Module Soundness
   Qed.
 
   Definition ExecApprox (sexec : SMut.Exec) (cexec : CMut.Exec) :=
-    forall {Γ τ} (s : Stm Γ τ) {w0 : World} {ι0 : SymInstance w0} (Hpc0 : instpc (wco w0) ι0),
+    forall {Γ τ} (s : Stm Γ τ) {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0),
     approx ι0 (@sexec Γ τ s w0) (cexec Γ τ s).
 
   Lemma approx_exec_aux {cfg} srec crec (HYP : ExecApprox srec crec) :
@@ -1993,7 +1993,7 @@ Module Soundness
 
   Lemma approx_exec_contract {cfg : Config} n {Γ τ} (c : SepContract Γ τ) (s : Stm Γ τ) :
     let w0 := {| wctx := sep_contract_logic_variables c; wco := nil |} in
-    forall (ι0 : SymInstance w0),
+    forall (ι0 : Valuation w0),
       approx (w := w0) ι0 (@SMut.exec_contract cfg n Γ τ c s) (@CMut.exec_contract n Γ τ c s ι0).
   Proof.
     unfold SMut.exec_contract, CMut.exec_contract; destruct c as [Σ δ pre result post]; cbn in *.
@@ -2014,7 +2014,7 @@ Module Soundness
   Definition safe_demonic_close {Σ : LCtx} :
     forall p : 𝕊 Σ,
       safe (demonic_close p) env.nil ->
-      forall ι : SymInstance Σ,
+      forall ι : Valuation Σ,
         safe p ι.
   Proof.
     induction Σ; cbn [demonic_close] in *.

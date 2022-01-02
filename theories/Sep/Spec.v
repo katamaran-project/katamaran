@@ -132,7 +132,7 @@ Module Assertions
     { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
   Qed.
 
-  Definition inst_formula {Σ} (fml : Formula Σ) (ι : SymInstance Σ) : Prop :=
+  Definition inst_formula {Σ} (fml : Formula Σ) (ι : Valuation Σ) : Prop :=
     match fml with
     | formula_user p ts => env.uncurry (𝑷_inst p) (inst ts ι)
     | formula_bool t    => inst (A := Lit ty_bool) t ι = true
@@ -220,11 +220,11 @@ Module Assertions
     Qed.
 
     (* Note: we use fold_right10 instead of fold_right to make inst_lift hold. *)
-    Definition inst_pathcondition {Σ} (pc : PathCondition Σ) (ι : SymInstance Σ) : Prop :=
+    Definition inst_pathcondition {Σ} (pc : PathCondition Σ) (ι : Valuation Σ) : Prop :=
       fold_right10 (fun fml pc => inst fml ι /\ pc) (fun fml => inst fml ι) True pc.
     Global Arguments inst_pathcondition : simpl never.
 
-    Lemma inst_subst1 {Σ Σ' } (ζ : Sub Σ Σ') (ι : SymInstance Σ') (f : Formula Σ) (pc : list (Formula Σ)) :
+    Lemma inst_subst1 {Σ Σ' } (ζ : Sub Σ Σ') (ι : Valuation Σ') (f : Formula Σ) (pc : list (Formula Σ)) :
       fold_right1 (fun fml pc => inst fml ι /\ pc) (fun fml => inst fml ι) (subst f ζ) (subst pc ζ) =
       fold_right1 (fun fml pc => inst fml (inst ζ ι) /\ pc) (fun fml => inst fml (inst ζ ι)) f pc.
     Proof.
@@ -236,7 +236,7 @@ Module Assertions
         + apply IHpc.
     Qed.
 
-    Lemma inst_subst10 {Σ Σ' } (ζ : Sub Σ Σ') (ι : SymInstance Σ') (pc : list (Formula Σ)) :
+    Lemma inst_subst10 {Σ Σ' } (ζ : Sub Σ Σ') (ι : Valuation Σ') (pc : list (Formula Σ)) :
       fold_right10 (fun fml pc => inst fml ι /\ pc) (fun fml => inst fml ι) True (subst pc ζ) =
       fold_right10 (fun fml pc => inst fml (inst ζ ι) /\ pc) (fun fml => inst fml (inst ζ ι)) True pc.
     Proof.
@@ -258,13 +258,13 @@ Module Assertions
         eapply inst_subst10.
     Qed.
 
-    Lemma inst_pathcondition_cons {Σ} (ι : SymInstance Σ) (f : Formula Σ) (pc : PathCondition Σ) :
+    Lemma inst_pathcondition_cons {Σ} (ι : Valuation Σ) (f : Formula Σ) (pc : PathCondition Σ) :
       inst (cons f pc) ι <-> inst f ι /\ inst pc ι.
     Proof.
       apply (fold_right_1_10_prop (P := fun fml => inst fml ι)).
     Qed.
 
-    Lemma inst_pathcondition_app {Σ} (ι : SymInstance Σ) (pc1 pc2 : PathCondition Σ) :
+    Lemma inst_pathcondition_app {Σ} (ι : Valuation Σ) (pc1 pc2 : PathCondition Σ) :
       inst (app pc1 pc2) ι <-> inst pc1 ι /\ inst pc2 ι.
     Proof.
       induction pc1; cbn [app].
@@ -273,7 +273,7 @@ Module Assertions
         rewrite IHpc1. intuition.
     Qed.
 
-    Lemma inst_pathcondition_rev_append {Σ} (ι : SymInstance Σ) (pc1 pc2 : PathCondition Σ) :
+    Lemma inst_pathcondition_rev_append {Σ} (ι : Valuation Σ) (pc1 pc2 : PathCondition Σ) :
       inst (List.rev_append pc1 pc2) ι <-> inst pc1 ι /\ inst pc2 ι.
     Proof.
       revert pc2.
@@ -284,7 +284,7 @@ Module Assertions
         intuition.
     Qed.
 
-    Lemma inst_formula_eqs_ctx {Δ Σ} (ι : SymInstance Σ) (xs ys : Env (Term Σ) Δ) :
+    Lemma inst_formula_eqs_ctx {Δ Σ} (ι : Valuation Σ) (xs ys : Env (Term Σ) Δ) :
       inst (T := PathCondition) (A := Prop) (formula_eqs_ctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs.
@@ -299,7 +299,7 @@ Module Assertions
           inversion Heq. intuition.
     Qed.
 
-    Lemma inst_formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ} (ι : SymInstance Σ) (xs ys : NamedEnv (Term Σ) Δ) :
+    Lemma inst_formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ} (ι : Valuation Σ) (xs ys : NamedEnv (Term Σ) Δ) :
       inst (T := PathCondition) (A := Prop) (formula_eqs_nctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs.
@@ -325,14 +325,14 @@ Module Assertions
        longer symbolic execution path (or that it's the same path, but with
        potentially some constraints substituted away). *)
     Definition entails {Σ} (pc1 pc0 : PathCondition Σ) : Prop :=
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         instpc pc1 ι ->
         instpc pc0 ι.
     Infix "⊢" := (@entails _) (at level 80, no associativity).
 
     Definition entails_formula {Σ}
                (pc : PathCondition Σ) (f : Formula Σ) : Prop :=
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         instpc pc ι -> (inst f ι : Prop).
     Infix "⊢f" := (@entails_formula _) (at level 80, no associativity).
 
@@ -377,7 +377,7 @@ Module Assertions
     Qed.
 
     Definition entails_eq {AT A} `{Inst AT A} {Σ} (pc : PathCondition Σ) (a0 a1 : AT Σ) : Prop :=
-      forall (ι : SymInstance Σ), instpc pc ι -> inst a0 ι = inst a1 ι.
+      forall (ι : Valuation Σ), instpc pc ι -> inst a0 ι = inst a1 ι.
     Notation "pc ⊢ a0 == a1" :=
       (entails_eq pc a0 a1)
       (at level 80, a0 at next level, no associativity).
@@ -574,7 +574,7 @@ Module Assertions
       { intros ? ? ? ? ? c. induction c; cbn; f_equal; auto; apply subst_sub_comp. }
     Qed.
 
-    Fixpoint inst_chunk {Σ} (c : Chunk Σ) (ι : SymInstance Σ) {struct c} : SCChunk :=
+    Fixpoint inst_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : SCChunk :=
       match c with
       | chunk_user p ts => scchunk_user p (inst ts ι)
       | chunk_ptsreg r t => scchunk_ptsreg r (inst t ι)
@@ -754,7 +754,7 @@ Module Assertions
       - now rewrite IHν01, sub_comp_assoc.
     Qed.
 
-    Fixpoint inst_triangular {w0 w1} (ζ : Tri w0 w1) (ι : SymInstance w0) : Prop :=
+    Fixpoint inst_triangular {w0 w1} (ζ : Tri w0 w1) (ι : Valuation w0) : Prop :=
       match ζ with
       | tri_id => True
       | @tri_cons _ Σ' x σ xIn t ζ0 =>
@@ -762,11 +762,11 @@ Module Assertions
         env.lookup ι xIn = inst t ι' /\ inst_triangular ζ0 ι'
       end.
 
-    Lemma inst_triangular_left_inverse {w1 w2 : World} (ι2 : SymInstance w2) (ν : Tri w1 w2) :
+    Lemma inst_triangular_left_inverse {w1 w2 : World} (ι2 : Valuation w2) (ν : Tri w1 w2) :
       inst (sub_triangular_inv ν) (inst (sub_triangular ν) ι2) = ι2.
     Proof. rewrite <- inst_subst. induction ν; cbn - [subst]; now rew. Qed.
 
-    Lemma inst_triangular_right_inverse {w1 w2 : World} (ι1 : SymInstance w1) (ζ : Tri w1 w2) :
+    Lemma inst_triangular_right_inverse {w1 w2 : World} (ι1 : Valuation w1) (ζ : Tri w1 w2) :
       inst_triangular ζ ι1 ->
       inst (sub_triangular ζ) (inst (sub_triangular_inv ζ) ι1) = ι1.
     Proof.
@@ -777,7 +777,7 @@ Module Assertions
     Qed.
 
     (* Forward entailment *)
-    Lemma entails_triangular_inv {w0 w1} (ν : Tri w0 w1) (ι0 : SymInstance w0) :
+    Lemma entails_triangular_inv {w0 w1} (ν : Tri w0 w1) (ι0 : Valuation w0) :
       inst_triangular ν ι0 ->
       instpc (wco w0) ι0 ->
       instpc (wco w1) (inst (sub_triangular_inv ν) ι0).
@@ -789,7 +789,7 @@ Module Assertions
         rewrite inst_subst, inst_sub_single_shift; auto.
     Qed.
 
-    Lemma inst_triangular_valid {w0 w1} (ζ01 : Tri w0 w1) (ι1 : SymInstance w1) :
+    Lemma inst_triangular_valid {w0 w1} (ζ01 : Tri w0 w1) (ι1 : Valuation w1) :
       inst_triangular ζ01 (inst (sub_triangular ζ01) ι1).
     Proof.
       induction ζ01; cbn; auto.
@@ -804,7 +804,7 @@ Module Assertions
       auto.
     Qed.
 
-    Lemma inst_tri_comp {w0 w1 w2} (ν01 : Tri w0 w1) (ν12 : Tri w1 w2) (ι0 : SymInstance w0) :
+    Lemma inst_tri_comp {w0 w1 w2} (ν01 : Tri w0 w1) (ν12 : Tri w1 w2) (ι0 : Valuation w0) :
       inst_triangular (tri_comp ν01 ν12) ι0 <->
       inst_triangular ν01 ι0 /\ inst_triangular ν12 (inst (sub_triangular_inv ν01) ι0).
     Proof.
@@ -1024,7 +1024,7 @@ Module Assertions
     Proof. now rewrite ?persist_subst, sub_acc_trans, subst_sub_comp. Qed.
 
     Lemma inst_persist  {AT A} `{InstLaws AT A} {w1 w2} (ω : w1 ⊒ w2) :
-      forall (ι : SymInstance w2) (t : AT w1),
+      forall (ι : Valuation w2) (t : AT w1),
         inst (persist t ω) ι = inst t (inst (sub_acc ω) ι).
     Proof. intros. now rewrite persist_subst, inst_subst. Qed.
 
@@ -1111,7 +1111,7 @@ Module Assertions
     | op        | t1 | t2 | k := cons (formula_bool (term_not (term_binop op t1 t2))) k.
 
     Lemma simplify_formula_bool_binop_spec {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) t1 t2 (k : List Formula Σ) :
-      forall ι : SymInstance Σ,
+      forall ι : Valuation Σ,
         instpc (simplify_formula_bool_binop op t1 t2 k) ι <->
           eval_binop op (inst t1 ι) (inst t2 ι) = true /\ instpc k ι.
     Proof.
@@ -1123,7 +1123,7 @@ Module Assertions
     Qed.
 
     Lemma simplify_formula_bool_binop_neg_spec {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) t1 t2 k :
-      forall ι : SymInstance Σ,
+      forall ι : Valuation Σ,
         instpc (simplify_formula_bool_binop_neg op t1 t2 k) ι <->
           eval_binop op (inst t1 ι) (inst t2 ι) = false /\ instpc k ι.
     Proof.
@@ -1268,12 +1268,12 @@ Module Assertions
             (t1 : Term Σ (𝑼𝑲_Ty K1)) (t2 : Term Σ (𝑼𝑲_Ty K2)) (k : List Formula Σ) :
         OptionSpec
           (fun fmlsk : List Formula Σ =>
-             forall ι : SymInstance Σ,
+             forall ι : Valuation Σ,
                instpc fmlsk ι <->
                  existT (P := fun K => Lit (𝑼𝑲_Ty K)) K1 (inst t1 ι) =
                    existT (P := fun K => Lit (𝑼𝑲_Ty K)) K2 (inst t2 ι)
                  /\ instpc k ι)
-          (forall ι : SymInstance Σ,
+          (forall ι : Valuation Σ,
               existT (P := fun K => Lit (𝑼𝑲_Ty K)) K1 (inst t1 ι) <>
                 existT (P := fun K => Lit (𝑼𝑲_Ty K)) K2 (inst t2 ι))
           (simplify_formula_eq_union t1 t2 k).
@@ -1295,9 +1295,9 @@ Module Assertions
         (l : Lit (ty_union U)) (k : List Formula Σ) :
         OptionSpec
           (fun fmlsk : List Formula Σ =>
-             forall ι : SymInstance Σ,
+             forall ι : Valuation Σ,
                instpc fmlsk ι <-> 𝑼_fold (existT K1 (inst t1 ι)) = l /\ instpc k ι)
-          (forall ι : SymInstance Σ, 𝑼_fold (existT K1 (inst_term t1 ι)) <> l)
+          (forall ι : Valuation Σ, 𝑼_fold (existT K1 (inst_term t1 ι)) <> l)
           (simplify_formula_eq_union_lit t1 l k).
       Proof.
         unfold simplify_formula_eq_union_lit.
@@ -1584,11 +1584,11 @@ Module Assertions
     Lemma unify_formula_spec {w0 : World} (fml : Formula w0) :
       match unify_formula fml with
       | existT w1 (ν01 , fmls) =>
-        (forall ι0 : SymInstance w0,
+        (forall ι0 : Valuation w0,
             inst (A := Prop) fml ι0 ->
             inst_triangular ν01 ι0 /\
             instpc fmls (inst (sub_triangular_inv ν01) ι0)) /\
-        (forall ι1 : SymInstance w1,
+        (forall ι1 : Valuation w1,
             instpc fmls ι1 ->
             inst (A := Prop) fml (inst (sub_triangular ν01) ι1))
       end.
@@ -1617,11 +1617,11 @@ Module Assertions
     Lemma unify_formulas_spec {w0 : World} (fmls0 : List Formula w0) :
       match unify_formulas fmls0 with
       | existT w1 (ν01 , fmls1) =>
-        (forall ι0 : SymInstance w0,
+        (forall ι0 : Valuation w0,
             instpc fmls0 ι0 ->
             inst_triangular ν01 ι0 /\
             instpc fmls1 (inst (sub_triangular_inv ν01) ι0)) /\
-        (forall ι1 : SymInstance w1,
+        (forall ι1 : Valuation w1,
             instpc fmls1 ι1 ->
             instpc fmls0 (inst (sub_triangular ν01) ι1))
       end.
@@ -1746,7 +1746,7 @@ Module Assertions
       | cons fml fmls => assumption_formula pc fml (assumption_formulas pc fmls k)
       end.
 
-    Lemma assumption_formula_spec {Σ} (pc : PathCondition Σ) (fml : Formula Σ) (k : List Formula Σ) (ι : SymInstance Σ) :
+    Lemma assumption_formula_spec {Σ} (pc : PathCondition Σ) (fml : Formula Σ) (k : List Formula Σ) (ι : Valuation Σ) :
       instpc pc ι -> inst (A := Prop) fml ι /\ instpc k ι <-> instpc (assumption_formula pc fml k) ι.
     Proof.
       induction pc as [|f pc]; cbn.
@@ -1757,7 +1757,7 @@ Module Assertions
           subst; intuition.
     Qed.
 
-    Lemma assumption_formulas_spec {Σ} (pc : PathCondition Σ) (fmls : List Formula Σ) (k : List Formula Σ) (ι : SymInstance Σ) :
+    Lemma assumption_formulas_spec {Σ} (pc : PathCondition Σ) (fmls : List Formula Σ) (k : List Formula Σ) (ι : Valuation Σ) :
       instpc pc ι -> instpc fmls ι /\ instpc k ι <-> instpc (assumption_formulas pc fmls k) ι.
     Proof.
       intros Hpc. induction fmls as [|fml fmls]; cbn.
@@ -2026,7 +2026,7 @@ Module Assertions
 
   Section Obligations.
 
-    Inductive Obligation {Σ} (msg : Message Σ) (fml : Formula Σ) (ι : SymInstance Σ) : Prop :=
+    Inductive Obligation {Σ} (msg : Message Σ) (fml : Formula Σ) (ι : Valuation Σ) : Prop :=
     | obligation (p : inst fml ι : Prop).
 
   End Obligations.
@@ -2039,7 +2039,7 @@ Module Assertions
     Record DebugCall : Type :=
       MkDebugCall
         { debug_call_logic_context          : LCtx;
-          debug_call_instance               : SymInstance debug_call_logic_context;
+          debug_call_instance               : Valuation debug_call_logic_context;
           debug_call_function_parameters    : PCtx;
           debug_call_function_result_type   : Ty;
           debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
@@ -2057,7 +2057,7 @@ Module Assertions
           debug_stm_statement_type         : Ty;
           debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
           debug_stm_logic_context          : LCtx;
-          debug_stm_instance               : SymInstance debug_stm_logic_context;
+          debug_stm_instance               : Valuation debug_stm_logic_context;
           debug_stm_pathcondition          : PathCondition debug_stm_logic_context;
           debug_stm_localstore             : SStore debug_stm_program_context debug_stm_logic_context;
           debug_stm_heap                   : SHeap debug_stm_logic_context;
@@ -2066,7 +2066,7 @@ Module Assertions
     Record DebugAsn : Type :=
       MkDebugAsn
         { debug_asn_logic_context          : LCtx;
-          debug_asn_instance               : SymInstance debug_asn_logic_context;
+          debug_asn_instance               : Valuation debug_asn_logic_context;
           debug_asn_pathcondition          : PathCondition debug_asn_logic_context;
           debug_asn_program_context        : PCtx;
           debug_asn_localstore             : SStore debug_asn_program_context debug_asn_logic_context;
@@ -2264,7 +2264,7 @@ Module Assertions
 
     Import LogicNotations.
 
-    Fixpoint interpret_chunk {Σ} (c : Chunk Σ) (ι : SymInstance Σ) {struct c} : L :=
+    Fixpoint interpret_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : L :=
       match c with
       | chunk_user p ts => luser p (inst ts ι)
       | chunk_ptsreg r t => lptsreg r (inst t ι)
@@ -2272,7 +2272,7 @@ Module Assertions
       | chunk_wand c1 c2 => wand (interpret_chunk c1 ι) (interpret_chunk c2 ι)
       end.
 
-    Fixpoint interpret_assertion {Σ} (a : Assertion Σ) (ι : SymInstance Σ) : L :=
+    Fixpoint interpret_assertion {Σ} (a : Assertion Σ) (ι : Valuation Σ) : L :=
       match a with
       | asn_formula fml => !!(inst fml ι) ∧ emp
       | asn_chunk c => interpret_chunk c ι
@@ -2312,15 +2312,15 @@ Module Assertions
     end%logic.
 
     Definition inst_contract_localstore {Δ τ} (c : SepContract Δ τ)
-      (ι : SymInstance (sep_contract_logic_variables c)) : CStore Δ :=
+      (ι : Valuation (sep_contract_logic_variables c)) : CStore Δ :=
       inst (sep_contract_localstore c) ι.
 
     Definition interpret_contract_precondition {Δ τ} (c : SepContract Δ τ)
-      (ι : SymInstance (sep_contract_logic_variables c)) : L :=
+      (ι : Valuation (sep_contract_logic_variables c)) : L :=
       interpret_assertion (sep_contract_precondition c) ι.
 
     Definition interpret_contract_postcondition {Δ τ} (c : SepContract Δ τ)
-      (ι : SymInstance (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
+      (ι : Valuation (sep_contract_logic_variables c)) (result : Lit τ) :  L :=
         interpret_assertion (sep_contract_postcondition c) (env.snoc ι (sep_contract_result c ∷ τ) result).
 
   End Contracts.
@@ -2492,8 +2492,8 @@ Module Assertions
         refine (assert_triangular (wsubst w1 x t) _ (subst msg (sub_single xIn t)) ζ o).
     Defined.
 
-    Fixpoint safe {Σ} (p : 𝕊 Σ) (ι : SymInstance Σ) : Prop :=
-      (* ⊢ 𝕊 -> SymInstance -> PROP := *)
+    Fixpoint safe {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) : Prop :=
+      (* ⊢ 𝕊 -> Valuation -> PROP := *)
         match p with
         | angelic_binary o1 o2 => safe o1 ι \/ safe o2 ι
         | demonic_binary o1 o2 => safe o1 ι /\ safe o2 ι
@@ -2519,8 +2519,8 @@ Module Assertions
 
     (* We use a world indexed version of safe in the soundness proofs, just to make
        Coq's unifier happy. *)
-    Fixpoint wsafe {w : World} (p : 𝕊 w) (ι : SymInstance w) : Prop :=
-      (* ⊢ 𝕊 -> SymInstance -> PROP := *)
+    Fixpoint wsafe {w : World} (p : 𝕊 w) (ι : Valuation w) : Prop :=
+      (* ⊢ 𝕊 -> Valuation -> PROP := *)
         match p with
         | angelic_binary o1 o2 => wsafe o1 ι \/ wsafe o2 ι
         | demonic_binary o1 o2 => wsafe o1 ι /\ wsafe o2 ι
@@ -2544,7 +2544,7 @@ Module Assertions
         end%type.
     Global Arguments wsafe {w} p ι.
 
-    Lemma obligation_equiv {Σ : LCtx} (msg : Message Σ) (fml : Formula Σ) (ι : SymInstance Σ) :
+    Lemma obligation_equiv {Σ : LCtx} (msg : Message Σ) (fml : Formula Σ) (ι : Valuation Σ) :
       Obligation msg fml ι <-> inst fml ι.
     Proof. split. now intros []. now constructor. Qed.
 
@@ -2552,7 +2552,7 @@ Module Assertions
       @Debug B b P <-> P.
     Proof. split. now intros []. now constructor. Qed.
 
-    Lemma wsafe_safe {w : World} (p : 𝕊 w) (ι : SymInstance w) :
+    Lemma wsafe_safe {w : World} (p : 𝕊 w) (ι : Valuation w) :
       wsafe p ι <-> safe p ι.
     Proof.
       destruct w as [Σ pc]; cbn in *; revert pc.
@@ -2562,7 +2562,7 @@ Module Assertions
     Qed.
 
     (* Lemma safe_persist  {w1 w2 : World} (ω12 : w1 ⊒ w2) *)
-    (*       (o : 𝕊 w1) (ι2 : SymInstance w2) : *)
+    (*       (o : 𝕊 w1) (ι2 : Valuation w2) : *)
     (*   safe (persist (A := 𝕊) o ω12) ι2 <-> *)
     (*   safe o (inst (T := Sub _) ω12 ι2). *)
     (* Proof. *)
@@ -2590,7 +2590,7 @@ Module Assertions
     (* Qed. *)
 
     Lemma safe_assume_formulas_without_solver {w0 : World}
-      (fmls : List Formula w0) (p : 𝕊 w0) (ι0 : SymInstance w0) :
+      (fmls : List Formula w0) (p : 𝕊 w0) (ι0 : Valuation w0) :
       wsafe (assume_formulas_without_solver fmls p) ι0 <->
       (instpc fmls ι0 -> @wsafe (wformulas w0 fmls) p ι0).
     Proof.
@@ -2604,7 +2604,7 @@ Module Assertions
 
     Lemma safe_assert_formulas_without_solver {w0 : World}
       (msg : Message w0) (fmls : List Formula w0) (p : 𝕊 w0)
-      (ι0 : SymInstance w0) :
+      (ι0 : Valuation w0) :
       wsafe (assert_formulas_without_solver msg fmls p) ι0 <->
       (instpc fmls ι0 /\ @wsafe (wformulas w0 fmls) p ι0).
     Proof.
@@ -2621,7 +2621,7 @@ Module Assertions
     Qed.
 
     Lemma safe_assume_triangular {w0 w1} (ζ : Tri w0 w1)
-      (o : 𝕊 w1) (ι0 : SymInstance w0) :
+      (o : 𝕊 w1) (ι0 : Valuation w0) :
       wsafe (assume_triangular ζ o) ι0 <->
       (inst_triangular ζ ι0 -> wsafe o (inst (sub_triangular_inv ζ) ι0)).
     Proof.
@@ -2634,7 +2634,7 @@ Module Assertions
     Qed.
 
     Lemma safe_assert_triangular {w0 w1} msg (ζ : Tri w0 w1)
-      (o : Message w1 -> 𝕊 w1) (ι0 : SymInstance w0) :
+      (o : Message w1 -> 𝕊 w1) (ι0 : Valuation w0) :
       wsafe (assert_triangular msg ζ o) ι0 <->
       (inst_triangular ζ ι0 /\ wsafe (o (subst msg (sub_triangular ζ))) (inst (sub_triangular_inv ζ) ι0)).
     Proof.
@@ -2649,8 +2649,8 @@ Module Assertions
         intuition.
     Qed.
 
-    Lemma safe_angelic_close0 {Σ0 Σ} (p : 𝕊 (Σ0 ▻▻ Σ)) (ι0 : SymInstance Σ0) :
-      safe (angelic_close0 Σ p) ι0 <-> exists (ι : SymInstance Σ), safe p (env.cat ι0 ι).
+    Lemma safe_angelic_close0 {Σ0 Σ} (p : 𝕊 (Σ0 ▻▻ Σ)) (ι0 : Valuation Σ0) :
+      safe (angelic_close0 Σ p) ι0 <-> exists (ι : Valuation Σ), safe p (env.cat ι0 ι).
     Proof.
       induction Σ; cbn.
       - split.
@@ -2668,8 +2668,8 @@ Module Assertions
           now exists ι, v.
     Qed.
 
-    Lemma safe_demonic_close0 {Σ0 Σ} (p : 𝕊 (Σ0 ▻▻ Σ)) (ι0 : SymInstance Σ0) :
-      safe (demonic_close0 Σ p) ι0 <-> forall (ι : SymInstance Σ), safe p (env.cat ι0 ι).
+    Lemma safe_demonic_close0 {Σ0 Σ} (p : 𝕊 (Σ0 ▻▻ Σ)) (ι0 : Valuation Σ0) :
+      safe (demonic_close0 Σ p) ι0 <-> forall (ι : Valuation Σ), safe p (env.cat ι0 ι).
     Proof.
       induction Σ; cbn.
       - split.

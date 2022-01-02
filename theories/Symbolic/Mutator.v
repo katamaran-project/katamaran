@@ -75,7 +75,7 @@ Module Mutators
 
     Record WInstance (w : World) : Set :=
       MkWInstance
-        { ιassign :> SymInstance w;
+        { ιassign :> Valuation w;
           ιvalid  : instpc (wco w) ιassign;
         }.
 
@@ -99,7 +99,7 @@ Module Mutators
       apply ιvalid.
     Qed.
 
-    (* Fixpoint winstance_cat {Σ} (ι : WInstance Σ) {Δ} (ιΔ : SymInstance Δ) : *)
+    (* Fixpoint winstance_cat {Σ} (ι : WInstance Σ) {Δ} (ιΔ : Valuation Δ) : *)
     (*   WInstance (wcat Σ Δ). *)
     (* Proof. *)
     (*   destruct ιΔ; cbn. *)
@@ -236,7 +236,7 @@ Module Mutators
         debug d (prune k)
       end.
 
-    Lemma prune_angelic_binary_sound {Σ} (p1 p2 : 𝕊 Σ) (ι : SymInstance Σ) :
+    Lemma prune_angelic_binary_sound {Σ} (p1 p2 : 𝕊 Σ) (ι : Valuation Σ) :
       safe (angelic_binary_prune p1 p2) ι <-> safe (angelic_binary p1 p2) ι.
     Proof.
       destruct p1; cbn; auto.
@@ -255,7 +255,7 @@ Module Mutators
       - destruct p2; cbn; auto; intuition.
     Qed.
 
-    Lemma prune_demonic_binary_sound {Σ} (p1 p2 : 𝕊 Σ) (ι : SymInstance Σ) :
+    Lemma prune_demonic_binary_sound {Σ} (p1 p2 : 𝕊 Σ) (ι : Valuation Σ) :
       safe (demonic_binary_prune p1 p2) ι <-> safe (demonic_binary p1 p2) ι.
     Proof.
       destruct p1; cbn; auto.
@@ -274,33 +274,33 @@ Module Mutators
       - destruct p2; cbn; auto; intuition.
     Qed.
 
-    Lemma prune_assertk_sound {Σ} fml msg (p : 𝕊 Σ) (ι : SymInstance Σ) :
+    Lemma prune_assertk_sound {Σ} fml msg (p : 𝕊 Σ) (ι : Valuation Σ) :
       safe (assertk_prune fml msg p) ι <-> safe (assertk fml msg p) ι.
     Proof. destruct p; cbn; rewrite ?obligation_equiv; auto; intuition. Qed.
 
-    Lemma prune_assumek_sound {Σ} fml (p : 𝕊 Σ) (ι : SymInstance Σ) :
+    Lemma prune_assumek_sound {Σ} fml (p : 𝕊 Σ) (ι : Valuation Σ) :
       safe (assumek_prune fml p) ι <-> safe (assumek fml p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
-    Lemma prune_angelicv_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : SymInstance Σ) :
+    Lemma prune_angelicv_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
       safe (angelicv_prune p) ι <-> safe (angelicv b p) ι.
     Proof. destruct p; cbn; auto; firstorder. Qed.
 
-    Lemma prune_demonicv_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : SymInstance Σ) :
+    Lemma prune_demonicv_sound {Σ b} (p : 𝕊 (Σ ▻ b)) (ι : Valuation Σ) :
       safe (demonicv_prune p) ι <-> safe (demonicv b p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
     Lemma prune_assert_vareq_sound {Σ x σ} {xIn : x∷σ ∈ Σ}
-      (t : Term (Σ - x∷σ) σ) (msg : Message (Σ - x∷σ)) (p : 𝕊 (Σ - x∷σ)) (ι : SymInstance Σ) :
+      (t : Term (Σ - x∷σ) σ) (msg : Message (Σ - x∷σ)) (p : 𝕊 (Σ - x∷σ)) (ι : Valuation Σ) :
       safe (assert_vareq_prune x t msg p) ι <-> safe (assert_vareq x t msg p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
     Lemma prune_assume_vareq_sound {Σ x σ} {xIn : x∷σ ∈ Σ}
-      (t : Term (Σ - x∷σ) σ) (p : 𝕊 (Σ - x∷σ)) (ι : SymInstance Σ) :
+      (t : Term (Σ - x∷σ) σ) (p : 𝕊 (Σ - x∷σ)) (ι : Valuation Σ) :
       safe (assume_vareq_prune x t p) ι <-> safe (assume_vareq x t p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
-    Lemma prune_sound {Σ} (p : 𝕊 Σ) (ι : SymInstance Σ) :
+    Lemma prune_sound {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
       safe (prune p) ι <-> safe p ι.
     Proof.
       induction p; cbn [prune safe].
@@ -333,14 +333,14 @@ Module Mutators
         (exists (x : A), P x /\ Q) <-> ((exists (x : A), P x) /\ Q).
       Proof. firstorder. Qed.
 
-      Lemma safe_eq_rect {Σ Σ'} (eq : Σ = Σ') (p : 𝕊 Σ) (ι : SymInstance Σ') :
-        safe (eq_rect Σ 𝕊 p Σ' eq) ι = safe p (eq_rect Σ' (fun Σ => SymInstance Σ) ι Σ (eq_sym eq)).
+      Lemma safe_eq_rect {Σ Σ'} (eq : Σ = Σ') (p : 𝕊 Σ) (ι : Valuation Σ') :
+        safe (eq_rect Σ 𝕊 p Σ' eq) ι = safe p (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
       Proof.
         now destruct eq.
       Qed.
 
-      Lemma inst_eq_rect `{Inst AT A} {Σ Σ'} (t : AT Σ) (eq : Σ = Σ') (ι : SymInstance Σ'):
-        inst (eq_rect Σ AT t Σ' eq) ι = inst t (eq_rect Σ' (fun Σ => SymInstance Σ) ι Σ (eq_sym eq)).
+      Lemma inst_eq_rect `{Inst AT A} {Σ Σ'} (t : AT Σ) (eq : Σ = Σ') (ι : Valuation Σ'):
+        inst (eq_rect Σ AT t Σ' eq) ι = inst t (eq_rect Σ' (fun Σ => Valuation Σ) ι Σ (eq_sym eq)).
       Proof.
         now subst.
       Qed.
@@ -357,30 +357,30 @@ Module Mutators
         now subst.
       Qed.
 
-      Lemma match_snocView_eq_rect {Σ1 Σ2 b} {R : Type} (eq : Σ1 = Σ2) (E : SymInstance (Σ1 ▻ b))
-        (f : SymInstance Σ2 -> Lit (type b) -> R) :
-        match env.snocView (eq_rect Σ1 (fun Σ => SymInstance (Σ ▻ b)) E Σ2 eq) with
+      Lemma match_snocView_eq_rect {Σ1 Σ2 b} {R : Type} (eq : Σ1 = Σ2) (E : Valuation (Σ1 ▻ b))
+        (f : Valuation Σ2 -> Lit (type b) -> R) :
+        match env.snocView (eq_rect Σ1 (fun Σ => Valuation (Σ ▻ b)) E Σ2 eq) with
         | env.isSnoc E v => f E v
         end =
         match env.snocView E with
-        | env.isSnoc E v => f (eq_rect Σ1 (fun Σ => SymInstance Σ) E Σ2 eq) v
+        | env.isSnoc E v => f (eq_rect Σ1 (fun Σ => Valuation Σ) E Σ2 eq) v
         end.
       Proof.
         now destruct eq.
       Qed.
 
-      Lemma snoc_eq_rect {Σ1 Σ2 b v} (eq : Σ1 = Σ2) (E : SymInstance Σ1) :
-        eq_rect Σ1 (fun Σ => SymInstance Σ) E Σ2 eq ► (b ↦ v) =
-        eq_rect Σ1 (fun Σ => SymInstance (Σ ▻ b)) (E ► (b ↦ v)) Σ2 eq.
+      Lemma snoc_eq_rect {Σ1 Σ2 b v} (eq : Σ1 = Σ2) (E : Valuation Σ1) :
+        eq_rect Σ1 (fun Σ => Valuation Σ) E Σ2 eq ► (b ↦ v) =
+        eq_rect Σ1 (fun Σ => Valuation (Σ ▻ b)) (E ► (b ↦ v)) Σ2 eq.
       Proof.
         now destruct eq.
       Qed.
 
       Lemma env_insert_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx}
             (bIn : x∷σ ∈ Σe) (v : Lit σ)
-            {ι : SymInstance Σ0} {ιe : SymInstance (Σe - x∷σ)} :
+            {ι : Valuation Σ0} {ιe : Valuation (Σe - x∷σ)} :
             (ι ►► env.insert bIn ιe v) =
-            env.insert (ctx.in_cat_right bIn) (eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ => SymInstance Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn))) v.
+            env.insert (ctx.in_cat_right bIn) (eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ => Valuation Σ) (ι ►► ιe) ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn))) v.
       Proof.
         revert bIn ιe.
         induction Σe; intros bIn ιe;
@@ -399,15 +399,15 @@ Module Mutators
           rewrite (eq_sym_map_distr (fun f : 𝑺 ∷ Ty -> LCtx => f b)).
           rewrite eq_sym_map_distr.
           rewrite f_equal_compose.
-          rewrite (map_subst_map (P := fun x => SymInstance (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
+          rewrite (map_subst_map (P := fun x => Valuation (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
           rewrite match_snocView_eq_rect.
           now rewrite IHΣe.
       Qed.
 
       Lemma env_remove_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x∷σ ∈ Σe)
-        (ι : SymInstance Σ0) (ιe : SymInstance Σe) :
+        (ι : Valuation Σ0) (ιe : Valuation Σe) :
         env.remove (x∷σ) (ι ►► ιe) (ctx.in_cat_right bIn) =
-        eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ : LCtx => SymInstance Σ) (ι ►► env.remove (x∷σ) ιe bIn)
+        eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ : LCtx => Valuation Σ) (ι ►► env.remove (x∷σ) ιe bIn)
                  ((Σ0 ▻▻ Σe) - x∷σ) (eq_sym (ctx.remove_in_cat_right bIn)).
       Proof.
         revert bIn ιe.
@@ -422,7 +422,7 @@ Module Mutators
           rewrite (eq_sym_map_distr (fun f : 𝑺 ∷ Ty -> LCtx => f b)).
           rewrite eq_sym_map_distr.
           rewrite f_equal_compose.
-          rewrite (map_subst_map (P := fun x => SymInstance (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
+          rewrite (map_subst_map (P := fun x => Valuation (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
           rewrite IHΣe.
           now rewrite snoc_eq_rect.
       Qed.
@@ -438,7 +438,7 @@ Module Mutators
           assert_msgs_formulas mfs (assertk fml msg p)
         end.
 
-      Lemma safe_assert_msgs_formulas {Σ} {mfs : List (Pair Message Formula) Σ} {p : 𝕊 Σ} {ι : SymInstance Σ} :
+      Lemma safe_assert_msgs_formulas {Σ} {mfs : List (Pair Message Formula) Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
         (safe (assert_msgs_formulas mfs p) ι <-> instpc (map snd mfs) ι /\ safe p ι).
       Proof.
         revert p.
@@ -645,7 +645,7 @@ Module Mutators
           assume_formulas mfs (assumek fml p)
         end.
 
-      Lemma safe_assume_formulas {Σ} {fs : List Formula Σ} {p : 𝕊 Σ} {ι : SymInstance Σ} :
+      Lemma safe_assume_formulas {Σ} {fs : List Formula Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
         safe (assume_formulas fs p) ι <-> (instpc fs ι -> safe p ι).
       Proof.
         revert p.
@@ -2330,7 +2330,7 @@ Module Mutators
           app (match_chunk c11 c21) (match_chunk c12 c22);
         match_chunk _ _  := cons (formula_bool (term_lit ty_bool false)) nil.
 
-      Lemma inst_match_chunk {w : World} (c1 c2 : Chunk w) (ι : SymInstance w) :
+      Lemma inst_match_chunk {w : World} (c1 c2 : Chunk w) (ι : Valuation w) :
         instpc (match_chunk c1 c2) ι <-> inst c1 ι = inst c2 ι.
       Proof.
         revert c2.
@@ -2839,7 +2839,7 @@ Module Mutators
       | _           => false
       end.
 
-    Lemma ok_sound {Σ} (p : 𝕊 Σ) (ι : SymInstance Σ) :
+    Lemma ok_sound {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
       is_true (ok p) -> safe p ι.
     Proof.
       rewrite <- prune_sound. unfold ok.

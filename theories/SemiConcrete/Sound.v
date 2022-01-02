@@ -134,7 +134,7 @@ Module Soundness
       apply HPOST.
     Qed.
 
-    Lemma assert_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
+    Lemma assert_formula_sound {Γ Σ} {ι : Valuation Σ} {fml : Formula Σ}
       (POST : CStore Γ -> L) :
       forall δ h,
         assert_formula (inst fml ι)
@@ -150,7 +150,7 @@ Module Soundness
       apply entails_refl.
     Qed.
 
-    Lemma assume_formula_sound {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ}
+    Lemma assume_formula_sound {Γ Σ} {ι : Valuation Σ} {fml : Formula Σ}
       (POST : CStore Γ -> L) :
       forall δ h,
         assume_formula (inst fml ι)
@@ -193,7 +193,7 @@ Module Soundness
       destruct ch'. intuition.
     Qed.
 
-    Lemma consume_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} :
+    Lemma consume_monotonic {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
       Monotonic' (consume (Γ := Γ) ι asn).
     Proof.
       intros δ. induction asn; cbn; intros * PQ *.
@@ -223,7 +223,7 @@ Module Soundness
       - unfold pure; eauto.
     Qed.
 
-    Lemma produce_monotonic {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} :
+    Lemma produce_monotonic {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} :
       Monotonic' (produce (Γ := Γ) ι asn).
     Proof.
       intros δ. induction asn; cbn; intros * PQ *.
@@ -253,14 +253,14 @@ Module Soundness
       - unfold pure; eauto.
     Qed.
 
-    Lemma interpret_scchunk_inst {Σ} (c : Chunk Σ) (ι : SymInstance Σ) :
+    Lemma interpret_scchunk_inst {Σ} (c : Chunk Σ) (ι : Valuation Σ) :
       interpret_scchunk (inst c ι) = interpret_chunk c ι.
     Proof.
       induction c; cbn [interpret_chunk];
         try rewrite <- IHc1, <- IHc2; reflexivity.
     Qed.
 
-    Lemma consume_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
+    Lemma consume_sound {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         consume ι asn (fun _ => liftP POST) δ h ->
         interpret_scheap h ⊢ interpret_assertion asn ι ✱ POST δ.
@@ -298,7 +298,7 @@ Module Soundness
       - now rewrite sepcon_comm, sepcon_emp.
     Qed.
 
-    Lemma produce_sound {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
+    Lemma produce_sound {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         produce ι asn (fun _ => liftP POST) δ h ->
         interpret_scheap h ✱ interpret_assertion asn ι ⊢ POST δ.
@@ -344,7 +344,7 @@ Module Soundness
       - now rewrite sepcon_emp.
     Qed.
 
-    Lemma produce_sound' {Γ Σ} {ι : SymInstance Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
+    Lemma produce_sound' {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         produce ι asn (fun _ => liftP POST) δ h ->
         interpret_assertion asn ι ⊢ interpret_scheap h -✱ POST δ.

@@ -1230,7 +1230,7 @@ Module IrisSoundness
     (∀ σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
       | Some (MkSepContract _ _ ctxΣ θΔ pre result post) =>
-        ∀ (ι : SymInstance ctxΣ),
+        ∀ (ι : Valuation ctxΣ),
           semTriple (inst θΔ ι) (interpret_assertion (L:=iProp Σ) pre ι) (Pi f)
                     (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v))
       | None => True
@@ -1420,7 +1420,7 @@ Module IrisSoundness
       (Δ : NCtx 𝑿 Ty) f (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
       match CEnvEx f with
       | MkSepContract _ _ Σ' θΔ req result ens =>
-        forall (ι : SymInstance Σ'),
+        forall (ι : Valuation Σ'),
         evals es δ = inst θΔ ι ->
         ⊢ semTriple δ (interpret_assertion req ι) (stm_foreign f es)
           (fun v δ' => interpret_assertion ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
@@ -1460,7 +1460,7 @@ Module IrisSoundness
          lemma_precondition    := req;
          lemma_postcondition   := ens;
       |} =>
-      forall (ι : SymInstance Σ),
+      forall (ι : Valuation Σ),
         ⊢ interpret_assertion req ι -∗
           interpret_assertion ens ι
     end.

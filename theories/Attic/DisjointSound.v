@@ -148,7 +148,7 @@ Module HoareSound
       forall σs σ (f : 𝑭 σs σ),
         match cenv σs σ f with
         | Some (MkSepContract _ _ Σ θΔ pre result post) =>
-          forall (ι : SymInstance Σ)
+          forall (ι : Valuation Σ)
                  (γ γ' : RegStore) (μ μ' : Memory) (δ δ' : CStore σs) (s' : Stm σs σ),
             ⟨ γ, μ, δ, Pi f ⟩ --->* ⟨ γ', μ', δ', s' ⟩ -> Final s' ->
             forall (γframe γfocus : Heap),

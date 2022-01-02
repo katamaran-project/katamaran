@@ -153,7 +153,7 @@ Module SemiConcrete
     Definition assert_formula (fml : Prop) : CDijkstra unit :=
       fun POST => fml /\ POST tt.
 
-    Definition assume_formulas {Σ} (ι : SymInstance Σ) : List Formula Σ -> CDijkstra unit.
+    Definition assume_formulas {Σ} (ι : Valuation Σ) : List Formula Σ -> CDijkstra unit.
       refine (
         fix assumes fmls0 :=
         match fmls0 with
@@ -167,7 +167,7 @@ Module SemiConcrete
       apply (inst fml ι).
     Defined.
 
-    Definition assert_formulas {Σ} (ι : SymInstance Σ) : List Formula Σ -> CDijkstra unit.
+    Definition assert_formulas {Σ} (ι : Valuation Σ) : List Formula Σ -> CDijkstra unit.
       refine (
         fix asserts fmls0 :=
         match fmls0 with
@@ -291,7 +291,7 @@ Module SemiConcrete
         firstorder. now subst.
     Qed.
 
-    Lemma wp_assume_formulas {Σ} (ι : SymInstance Σ) (fmls : List Formula Σ) :
+    Lemma wp_assume_formulas {Σ} (ι : Valuation Σ) (fmls : List Formula Σ) :
       forall POST,
         assume_formulas ι fmls POST <->
         (instpc fmls ι -> POST tt).
@@ -305,7 +305,7 @@ Module SemiConcrete
         intuition.
     Qed.
 
-    Lemma wp_assert_formulas {Σ} (ι : SymInstance Σ) (fmls : List Formula Σ) :
+    Lemma wp_assert_formulas {Σ} (ι : Valuation Σ) (fmls : List Formula Σ) :
       forall POST,
         assert_formulas ι fmls POST <->
         (instpc fmls ι /\ POST tt).
@@ -427,9 +427,9 @@ Module SemiConcrete
         dijkstra (CDijk.assume_formula fml).
       Definition assert_formula {Γ} (fml : Prop) : CMut Γ Γ unit :=
         dijkstra (CDijk.assert_formula fml).
-      Definition assume_formulas {Γ Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
+      Definition assume_formulas {Γ Σ} (ι : Valuation Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
         dijkstra (CDijk.assume_formulas ι fmls).
-      Definition assert_formulas {Γ Σ} (ι : SymInstance Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
+      Definition assert_formulas {Γ Σ} (ι : Valuation Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
         dijkstra (CDijk.assert_formulas ι fmls).
 
     End AssumeAssert.
@@ -1076,7 +1076,7 @@ Module SemiConcrete
       Global Arguments produce_chunk {Γ} _.
       Global Arguments consume_chunk {Γ} _.
 
-      Fixpoint produce {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
+      Fixpoint produce {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
         match asn with
         | asn_formula fml => assume_formula (inst fml ι)
         | asn_chunk c     => produce_chunk (inst c ι)
@@ -1121,7 +1121,7 @@ Module SemiConcrete
         | asn_debug => pure tt
         end.
 
-      Fixpoint consume {Γ Σ} (ι : SymInstance Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
+      Fixpoint consume {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
         match asn with
         | asn_formula fml => assert_formula (inst fml ι)
         | asn_chunk c     => consume_chunk (inst c ι)
@@ -1317,7 +1317,7 @@ Module SemiConcrete
       Variable inline_fuel : nat.
 
       Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
-       SymInstance (sep_contract_logic_variables c) -> CMut Δ Δ unit :=
+       Valuation (sep_contract_logic_variables c) -> CMut Δ Δ unit :=
         match c with
         | MkSepContract _ _ Σ δ req result ens =>
           fun ι =>
@@ -1329,7 +1329,7 @@ Module SemiConcrete
         end%mut.
 
       Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-        ForallNamed (fun ι : SymInstance (sep_contract_logic_variables c) =>
+        ForallNamed (fun ι : Valuation (sep_contract_logic_variables c) =>
           let δΔ : CStore Δ := inst (sep_contract_localstore c) ι in
           exec_contract c body ι (fun _ _ _ => True) δΔ nil).
 
@@ -1419,28 +1419,28 @@ Module SemiConcrete
   (*       cmut_wp ma (fun _ => cmut_wp mb POST) δ h. *)
   (*   Proof. reflexivity. Qed. *)
 
-  (*   Lemma cmut_wp_assert_formula {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ} *)
+  (*   Lemma cmut_wp_assert_formula {Γ Σ} {ι : Valuation Σ} {fml : Formula Σ} *)
   (*     (POST : unit -> SCProp Γ ) : *)
   (*     forall δ h, *)
   (*       cmut_wp (cmut_assert_formula ι fml) POST δ h <-> *)
   (*       inst fml ι /\ POST tt δ h. *)
   (*   Proof. reflexivity. Qed. *)
 
-  (*   Lemma cmut_wp_assume_formula {Γ Σ} {ι : SymInstance Σ} {fml : Formula Σ} *)
+  (*   Lemma cmut_wp_assume_formula {Γ Σ} {ι : Valuation Σ} {fml : Formula Σ} *)
   (*     (POST : unit -> SCProp Γ ) : *)
   (*     forall δ h, *)
   (*       cmut_wp (cmut_assume_formula (inst fml ι)) POST δ h <-> *)
   (*       (inst (A := Prop) fml ι -> POST tt δ h). *)
   (*   Proof. reflexivity. Qed. *)
 
-  (*   Lemma cmut_wp_assert_formulak {A Γ1 Γ2 Σ} {ι : SymInstance Σ} {fml : Formula Σ} *)
+  (*   Lemma cmut_wp_assert_formulak {A Γ1 Γ2 Σ} {ι : Valuation Σ} {fml : Formula Σ} *)
   (*     {k : CMut Γ1 Γ2 A} (POST : A -> SCProp Γ2) : *)
   (*     forall δ h, *)
   (*       cmut_wp (cmut_assert_formulak ι fml k) POST δ h <-> *)
   (*       inst fml ι /\ cmut_wp k POST δ h. *)
   (*   Proof. reflexivity. Qed. *)
 
-  (*   Lemma cmut_wp_assert_formulas {Γ Σ} {ι : SymInstance Σ} {fmls : list (Formula Σ)} *)
+  (*   Lemma cmut_wp_assert_formulas {Γ Σ} {ι : Valuation Σ} {fmls : list (Formula Σ)} *)
   (*     (POST : unit -> SCProp Γ) : *)
   (*     forall δ h, *)
   (*       cmut_wp (cmut_assert_formulas ι fmls) POST δ h <-> *)
@@ -1455,7 +1455,7 @@ Module SemiConcrete
   (*     (*   intuition. *) *)
   (*   Qed. *)
 
-  (*   Lemma cmut_wp_assert_formulask {A Γ1 Γ2 Σ} {ι : SymInstance Σ} {fmls : list (Formula Σ)} *)
+  (*   Lemma cmut_wp_assert_formulask {A Γ1 Γ2 Σ} {ι : Valuation Σ} {fmls : list (Formula Σ)} *)
   (*     {k : CMut Γ1 Γ2 A} (POST : A -> SCProp Γ2) : *)
   (*     forall δ h, *)
   (*       cmut_wp (cmut_assert_formulask ι fmls k) POST δ h <-> *)
@@ -1488,7 +1488,7 @@ Module SemiConcrete
   (*   Proof. destruct v; reflexivity. Qed. *)
 
   (*   Lemma cmut_wp_match_record {A R Γ1 Γ2 Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) (v : Lit (ty_record R)) *)
-  (*         (k : SymInstance Δ → CMut Γ1 Γ2 A) : *)
+  (*         (k : Valuation Δ → CMut Γ1 Γ2 A) : *)
   (*     forall POST δ h, *)
   (*       cmut_wp (cmut_match_record p v k) POST δ h <-> *)
   (*       forall vs : NamedEnv Lit (𝑹𝑭_Ty R), *)
