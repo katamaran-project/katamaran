@@ -26,15 +26,15 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Coq Require Export
+     Numbers.BinNums.
 From Coq Require Import
      Bool.Bool
      Lists.List
-     Logic.FinFun
      Strings.String
-     ZArith.ZArith.
+     ZArith.BinInt.
 
 From Coq Require
-     Vector
      ssr.ssrbool.
 
 From Equations Require Import
@@ -46,9 +46,7 @@ From Equations Require Import
 From stdpp Require
      base countable finite list option vector.
 
-Import ListNotations.
-
-Set Implicit Arguments.
+Local Set Implicit Arguments.
 
 Scheme Equality for list.
 Scheme Equality for prod.
@@ -276,31 +274,6 @@ Lemma optionspec_monotonic {A : Type} (S1 S2 : A -> Prop) (N1 N2 : Prop)
     OptionSpec S1 N1 o -> OptionSpec S2 N2 o.
 Proof. intros ? []; constructor; auto. Qed.
 
-Class IsDuplicable (T : Type) :=
-  { is_duplicable : T -> bool
-  }.
-
-Fixpoint heap_extractions `{IsDuplicable C} (h : list C) : list (C * list C) :=
-  match h with
-  | nil      => []
-  | cons c h => let ec := if is_duplicable c then pair c (cons c h) else pair c h
-               in cons ec (map (fun '(pair c' h') => (pair c' (cons c h'))) (heap_extractions h))
-  end.
-
-Lemma heap_extractions_map `{IsDuplicable A} `{IsDuplicable B} (f : A -> B) (h : list A)
-      (is_dup_map : (forall c, is_duplicable (f c) = is_duplicable c)) :
-  heap_extractions (List.map f h) = List.map (base.prod_map f (List.map f)) (heap_extractions h).
-Proof.
-  induction h; cbn.
-  - reflexivity.
-  - rewrite is_dup_map.
-    destruct (is_duplicable a); f_equal;
-    rewrite IHh;
-    rewrite ?List.map_map;
-    apply List.map_ext;
-    intros [x xs]; reflexivity.
-Qed.
-
 Lemma and_iff_compat_r' (A B C : Prop) :
   (B /\ A <-> C /\ A) <-> (A -> B <-> C).
 Proof. intuition. Qed.
@@ -312,3 +285,16 @@ Proof. intuition. Qed.
 Lemma imp_iff_compat_l' (A B C : Prop) :
   ((A -> B) <-> (A -> C)) <-> (A -> B <-> C).
 Proof. intuition. Qed.
+
+Declare Scope arg_scope.
+Declare Scope asn_scope.
+Declare Scope exp_scope.
+Declare Scope modal_scope.
+Declare Scope mut_scope.
+Declare Scope pat_scope.
+Delimit Scope arg_scope with arg.
+Delimit Scope asn_scope with asn.
+Delimit Scope exp_scope with exp.
+Delimit Scope modal_scope with modal.
+Delimit Scope mut_scope with mut.
+Delimit Scope pat_scope with pat.

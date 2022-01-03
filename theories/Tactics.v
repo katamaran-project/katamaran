@@ -82,8 +82,13 @@ Ltac finite_from_eqdec :=
   match goal with
   | |- base.NoDup ?xs =>
       now apply (@decidable.bool_decide_unpack _ (list.NoDup_dec xs))
-  | |- forall x : _, base.elem_of x _ =>
-      intros []; apply (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _)); auto
+  | |- forall x : ?T, base.elem_of x _ =>
+      lazymatch T with
+      | sigT _ => intros [? []]
+      | _      => intros []
+      end;
+      apply (@decidable.bool_decide_unpack _ (list.elem_of_list_dec _ _));
+      auto
   end.
 
 Ltac destruct_propositional H :=

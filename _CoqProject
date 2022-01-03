@@ -1,41 +1,58 @@
 -arg "-w all"
--arg "-w -undeclared-scope"
+-arg "-w -deprecated-attribute-syntax"
 -arg "-w -disj-pattern-notation"
--arg "-w -convert_concl_no_check"
--arg "-w -omega-is-deprecated"
--arg "-w -ssr-search-moved"
 -arg "-native-compiler no"
 -Q case_study/RiscvPmp RiscvPmp
+case_study/RiscvPmp/Base.v
 case_study/RiscvPmp/Contracts.v
 case_study/RiscvPmp/Machine.v
 case_study/RiscvPmp/Model.v
-case_study/RiscvPmp/Types.v
-case_study/RiscvPmp/Values.v
 -R theories Katamaran
 test/Append.v
 test/Example.v
 theories/Attic/Disjoint.v
 theories/Attic/DisjointSound.v
+theories/Base.v
 theories/Context.v
 theories/Environment.v
 theories/Iris/Model.v
 theories/Katamaran.v
 theories/Notation.v
 theories/Prelude.v
+theories/Program.v
+theories/Semantics.v
+theories/Semantics/Registers.v
 theories/SemiConcrete/Mutator.v
 theories/SemiConcrete/Sound.v
 theories/Sep/Hoare.v
 theories/Sep/Logic.v
-theories/Sep/Spec.v
 theories/SmallStep/Inversion.v
 theories/SmallStep/Progress.v
 theories/SmallStep/Step.v
+theories/Specification.v
 theories/Staging/CommandStep.v
+theories/Symbolic/Instantiation.v
 theories/Symbolic/Mutator.v
+theories/Symbolic/OccursCheck.v
+theories/Symbolic/PartialEvaluation.v
+theories/Symbolic/Propositions.v
+theories/Symbolic/Solver.v
 theories/Symbolic/Sound.v
-theories/Syntax.v
-theories/Syntax/TypeKit.v
-theories/Syntax/Types.v
-theories/Syntax/Values.v
+theories/Symbolic/Worlds.v
+theories/Syntax/Assertions.v
+theories/Syntax/BinOps.v
+theories/Syntax/Chunks.v
+theories/Syntax/ContractDecl.v
+theories/Syntax/Expressions.v
+theories/Syntax/Formulas.v
+theories/Syntax/FunDecl.v
+theories/Syntax/FunDef.v
+theories/Syntax/Patterns.v
+theories/Syntax/Predicates.v
+theories/Syntax/Registers.v
+theories/Syntax/Statements.v
+theories/Syntax/Terms.v
+theories/Syntax/TypeDecl.v
+theories/Syntax/TypeDef.v
 theories/Syntax/Variables.v
 theories/Tactics.v

@@ -1,5 +1,6 @@
 (******************************************************************************)
-(* Copyright (c) 2019 Steven Keuchel                                          *)
+(* Copyright (c) 2019 Dominique Devriese, Georgy Lukyanov,                    *)
+(*   Sander Huyghebaert, Steven Keuchel                                       *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -27,4 +28,16 @@
 (******************************************************************************)
 
 From Katamaran Require Export
-     Base Program.
+     Syntax.FunDecl
+     Syntax.FunDef
+     Syntax.Statements
+     Base.
+
+Module Type FunDeclMixin (B : Base) :=
+  StatementsOn B.
+
+Module Type ProgramMixin (B : Base) :=
+  Equalities.Nop.
+
+Module Type Program (B : Base) :=
+  FunDeclKit B <+ FunDeclMixin B <+ FunDefKit B <+ ProgramMixin B.

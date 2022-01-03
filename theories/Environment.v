@@ -36,6 +36,9 @@ Import ctx.notations.
 Local Set Implicit Arguments.
 Local Open Scope lazy_bool_scope.
 
+Declare Scope env_scope.
+Delimit Scope env_scope with env.
+
 Module env.
 
 Section WithBinding.

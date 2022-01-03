@@ -34,20 +34,10 @@
    - x = y is at level 70
  *)
 
-Declare Scope ctx_scope.
-Declare Scope env_scope.
-Declare Scope pat_scope.
-Declare Scope exp_scope.
-Declare Scope arg_scope.
-Delimit Scope ctx_scope with ctx.
-Delimit Scope env_scope with env.
-Delimit Scope pat_scope with pat.
-Delimit Scope exp_scope with exp.
-Delimit Scope arg_scope with arg.
-
 Reserved Notation "'ε'"            (at level 0).
 Reserved Infix "▻"                 (at level 61, left associativity).
 Reserved Infix "▻▻"                (at level 61, left associativity).
+(* stdpp defines this at level 70 *)
 Reserved Infix "∈"                 (at level 70).
 (* Notation for bindings and type of bindings defined in the Context module.
    This is at level 49 because "-" is at level 50. This avoid parens when
@@ -61,7 +51,12 @@ Reserved Notation "x ∶ τ"          (at level 49, no associativity, format "x 
 Reserved Notation "[ x ]"          (at level 0).
 Reserved Notation "[ x , .. , z ]" (at level 0).
 
-Reserved Notation "δ ► ( x ↦ v )"  (at level 50, x at level 99, left associativity,
+(* We use the character ↦ as an infix notation for points-to predicates in the
+   case-studies. This should bind tighter than ∗ which is at level 80. Hence
+   x in this notation has to bind at least tighter than that. Also it should
+   allow for x being a typed binding (y ∷ t) which is at level 49, so looser
+   than that. *)
+Reserved Notation "δ ► ( x ↦ v )"  (at level 50, x at level 50, left associativity,
  format "δ  ►  ( x  ↦  v )").
 Reserved Notation "δ1 ►► δ2"       (at level 50, left associativity).
 Reserved Notation "δ ⟪ x ↦ v ⟫"    (at level 90, x at level 0, v at level 0, left associativity).
@@ -69,12 +64,25 @@ Reserved Notation "δ ‼ x"          (at level 56, no associativity).
 
 Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> ⟨ γ2 , μ2 , δ2 , s2 ⟩" (at level 75, no associativity).
 Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 ⟩" (at level 75, no associativity).
-Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ ---> n ⟨ γ2 , μ2 , δ2 , s2 ⟩" (at level 75, no associativity).
 (* Notation "( x , y , .. , z )" := *)
-(*   (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z) : pat_scope. *)
+(*   (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z). *)
 
 Reserved Notation "s1 ;; s2" (at level 100, s2 at level 200, right associativity,
   format "'[' '[hv' '[' s1 ']' ;;  ']' '/' s2 ']'").
 
 Reserved Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" (at level 75, no associativity).
-Reserved Infix "⊣⊢s"                (at level 50, no associativity).
+
+(* Logic notations. These were chosen to be compatible with Coq.Unicode.Utf8, stdpp and iris. *)
+Reserved Notation "P ⊢ Q" (at level 99, Q at level 200, right associativity).
+Reserved Notation "P '⊢@{' L } Q" (at level 99, Q at level 200, right associativity).
+Reserved Notation "P ⊢f f" (at level 99, f at level 200, no associativity).
+Reserved Notation "P ⊣⊢ Q" (at level 95, no associativity).
+Reserved Notation "P '⊣⊢@{' L } Q" (at level 95, no associativity).
+Reserved Infix "∧" (at level 80, right associativity).
+Reserved Infix "∨" (at level 85, right associativity).
+Reserved Notation "x → y" (at level 99, y at level 200, right associativity).
+Reserved Notation "'!!' e" (at level 25).
+Reserved Notation "P ∗ Q" (at level 80, right associativity).
+Reserved Notation "P -∗ Q"
+  (at level 99, Q at level 200, right associativity,
+   format "'[' P  '/' -∗  Q ']'").

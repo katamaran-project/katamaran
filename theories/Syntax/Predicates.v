@@ -1,5 +1,6 @@
 (******************************************************************************)
-(* Copyright (c) 2019 Steven Keuchel                                          *)
+(* Copyright (c) 2020 Dominique Devriese, Georgy Lukyanov,                    *)
+(*   Sander Huyghebaert, Steven Keuchel                                       *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -26,5 +27,64 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Katamaran Require Export
-     Base Program.
+From Katamaran Require Import
+     Context
+     Environment
+     Prelude
+     Base.
+
+From Equations Require Import
+     Equations.
+
+Class IsDuplicable (T : Type) :=
+  { is_duplicable : T -> bool
+  }.
+
+Module Type PurePredicateKit (Import B : Base).
+  (** Pure Predicates *)
+  (* Predicate names. *)
+  Parameter Inline 𝑷  : Set.
+  (* Predicate field types. *)
+  Parameter Inline 𝑷_Ty : 𝑷 -> Ctx Ty.
+  Parameter Inline 𝑷_inst : forall p : 𝑷, env.abstract Val (𝑷_Ty p) Prop.
+
+  Declare Instance 𝑷_eq_dec : EqDec 𝑷.
+
+End PurePredicateKit.
+
+Module Type HeapPredicateKit (Import B : Base).
+  (** Heap Predicates *)
+  (* Predicate names. *)
+  Parameter Inline 𝑯  : Set.
+  (* Predicate field types. *)
+  Parameter Inline 𝑯_Ty : 𝑯 -> Ctx Ty.
+  (* Duplicable? *)
+  Declare Instance 𝑯_is_dup : IsDuplicable 𝑯.
+
+  Declare Instance 𝑯_eq_dec : EqDec 𝑯.
+
+End HeapPredicateKit.
+
+Module Type PredicateKit (B : Base) :=
+  PurePredicateKit B <+ HeapPredicateKit B.
+
+Module DefaultPurePredicateKit (Import B : Base) <: PurePredicateKit B.
+
+  Definition 𝑷 := Empty_set.
+  Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
+  Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop := match p with end.
+  Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
+
+End DefaultPurePredicateKit.
+
+Module DefaultHeapPredicateKit (Import B : Base) <: HeapPredicateKit B.
+
+  Definition 𝑯 := Empty_set.
+  Definition 𝑯_Ty : 𝑯 -> Ctx Ty := fun p => match p with end.
+  Instance 𝑯_eq_dec : EqDec 𝑯 := fun p => match p with end.
+  Instance 𝑯_is_dup : IsDuplicable 𝑯 := { is_duplicable := fun p => match p with end }.
+
+End DefaultHeapPredicateKit.
+
+Module DefaultPredicateKit (B : Base) :=
+  DefaultPurePredicateKit B <+ DefaultHeapPredicateKit B.

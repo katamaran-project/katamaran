@@ -33,7 +33,7 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Export
-     Context.
+     Context Prelude.
 
 Local Set Implicit Arguments.
 

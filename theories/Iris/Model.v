@@ -26,41 +26,100 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-Require Import Coq.Program.Equality.
-
-From Equations Require Import Equations Signature.
+From Equations Require Import
+     Equations Signature.
 Require Import Equations.Prop.EqDec.
 
 From stdpp Require finite gmap list.
 
-From iris.bi Require Import interface.
-From iris.algebra Require Import gmap excl auth.
-From iris.bi Require Import big_op.
-From iris.base_logic Require Import lib.fancy_updates lib.own lib.gen_heap.
-From iris.program_logic Require Import weakestpre adequacy.
-From iris.proofmode Require Import tactics.
+From iris Require Import
+     algebra.auth
+     algebra.excl
+     algebra.gmap
+     base_logic.lib.fancy_updates
+     base_logic.lib.gen_heap
+     base_logic.lib.own
+     bi.big_op
+     bi.interface
+     program_logic.adequacy
+     program_logic.weakestpre
+     proofmode.tactics.
 
 From Katamaran Require Import
-     Context
-     Environment
-     Sep.Hoare
-     Sep.Spec
-     SmallStep.Inversion
+     Notation
      SmallStep.Step
-     Syntax.
-Require Import Katamaran.Notation.
+     SmallStep.Inversion
+     Sep.Logic
+     Sep.Hoare
+     Specification
+     Semantics
+     Prelude.
+
 Import ctx.notations.
 Import env.notations.
 
-(* can't import: overlapping notations *)
-Require Import Katamaran.Sep.Logic.
-Module logic := Katamaran.Sep.Logic.
-
 Set Implicit Arguments.
 
-Module MicroSailLanguage
-       (Import termkit : TermKit)
-       (Import progkit : ProgramKit termkit).
+Section TransparentObligations.
+  Local Set Transparent Obligations.
+  (* Derive NoConfusion for SomeReg. *)
+  (* Derive NoConfusion for SomeVal. *)
+  Derive NoConfusion for iris.algebra.excl.excl.
+End TransparentObligations.
+
+Program Definition IProp Σ : SepLogic :=
+  {| lcar              := iProp Σ;
+     lentails          := bi_entails;
+     sep.land          := bi_and;
+     sep.lor           := bi_or;
+     limpl             := bi_impl;
+     lprop             := bi_pure;
+     lex               := @bi_exist _;
+     lall              := @bi_forall _;
+     lemp              := bi_emp;
+     lsep              := bi_sep;
+     lwand             := bi_wand;
+     lentails_preorder := bi.entails_po;
+     land_right        := bi.and_intro;
+     land_left1        := bi.and_elim_l';
+     land_left2        := bi.and_elim_r';
+     lor_left          := bi.or_elim;
+     lor_right1        := bi.or_intro_l';
+     lor_right2        := bi.or_intro_r';
+     lex_right         := fun B x P Q => @bi.exist_intro' _ B P Q x;
+     lex_left          := @bi.exist_elim _;
+     lall_left         := fun B x P Q => transitivity (bi.forall_elim x);
+     lall_right        := fun B => bi.forall_intro;
+     limpl_and_adjoint := fun P Q R => conj (bi.impl_intro_r P Q R) (bi.impl_elim_l' P Q R);
+     lprop_left        := bi.pure_elim';
+     lprop_right       := bi.pure_intro;
+     lsep_assoc        := fun P Q R => proj1 (bi.equiv_entails _ _) (bi.sep_assoc P Q R);
+     lsep_comm         := fun P Q => proj1 (bi.equiv_entails _ _) (bi.sep_comm P Q);
+     lwand_sep_adjoint := fun P Q R => conj (bi.wand_intro_r P Q R) (bi.wand_elim_l' P Q R);
+     lsep_andp_prop    := _;
+     lsep_entails      := fun P P' Q Q' => bi.sep_mono P Q P' Q';
+     lsep_emp          := fun P => proj1 (bi.equiv_entails _ _) (bi.sep_emp P);
+     lsep_leak         := _;
+  |}.
+Next Obligation.
+  intros Σ P R Q. split.
+  - iIntros "[P [% R]]".
+    by iSplit; iFrame.
+  - iIntros "[% [P R]]".
+    by iFrame.
+Qed.
+Next Obligation.
+  now iIntros (Σ P) "HP".
+Qed.
+Canonical IProp.
+
+Module Iris
+  (Import B    : Base)
+  (Import SPEC : Specification B)
+  (Import SEM  : Semantics B SPEC.PROG)
+  (Import PLOG : ProgramLogicOn B SPEC).
+
+Section Language.
 
   (* The "expressions" of the LanguageMixin are configurations consisting of a
      statement and a local variable store. *)
@@ -106,11 +165,6 @@ Module MicroSailLanguage
     by intros [= <-].
   Qed.
 
-  (* TODO: This module should not be created here. *)
-  Module Inv := Inversion termkit progkit.
-  Export Inv.
-  Export SS.
-
   Lemma val_head_stuck_step {τ} {Γ : PCtx} γ1 γ2 μ1 μ2 (δ1 : CStore Γ) δ2 (s1 : Stm Γ τ) s2 :
     ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> to_val (MkConf s1 δ1) = None.
   Proof.
@@ -121,47 +175,38 @@ Module MicroSailLanguage
 
   Definition State := prod RegStore Memory.
 
-  Inductive prim_step {Γ τ} : Conf Γ τ -> State -> Conf Γ τ -> State -> list (Conf Γ τ) -> Prop :=
+  Inductive prim_step {Γ τ} : Conf Γ τ -> State -> list Empty_set -> Conf Γ τ -> State -> list (Conf Γ τ) -> Prop :=
   | mk_prim_step γ1 γ2 μ1 μ2 (δ1 : CStore Γ) (δ2 : CStore Γ) s1 s2 :
       ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
-      prim_step (MkConf s1 δ1) (γ1 , μ1) (MkConf s2 δ2) (γ2 , μ2) nil
+      prim_step (MkConf s1 δ1) (γ1 , μ1) nil (MkConf s2 δ2) (γ2 , μ2) nil
   .
 
-  Lemma val_head_stuck {Γ τ} (e1 : Conf Γ τ) s1 e2 s2 {ks} : prim_step e1 s1 e2 s2 ks → to_val e1 = None.
+  Lemma val_head_stuck {Γ τ} (e1 : Conf Γ τ) s1 ls e2 s2 {ks} : prim_step e1 s1 ls e2 s2 ks → to_val e1 = None.
   Proof.
     induction 1.
     by eapply val_head_stuck_step.
   Qed.
 
-  Lemma microsail_lang_mixin Γ τ : @LanguageMixin (Conf Γ τ) (ValConf Γ τ) State Empty_set of_val to_val (fun e1 s1 ls e2 s2 ks => prim_step e1 s1 e2 s2 ks).
-  Proof.
-    split; eauto using to_of_val, of_to_val, val_head_stuck.
-  Qed.
-
-  Canonical Structure stateO := leibnizO State.
-  Canonical Structure valO {Γ τ} := leibnizO (ValConf Γ τ).
-  Canonical Structure exprO {Γ τ} := leibnizO (Conf Γ τ).
+  Lemma microsail_lang_mixin Γ τ : LanguageMixin of_val to_val (@prim_step Γ τ).
+  Proof. split; eauto using to_of_val, of_to_val, val_head_stuck. Qed.
 
   Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-  Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf _ v δ).
-  intros; eapply of_to_val; by cbn.
+  Global Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf _ v δ).
+    intros; eapply of_to_val; by cbn.
   Defined.
+
+End Language.
+
+Section Registers.
 
   Definition SomeReg : Type := sigT 𝑹𝑬𝑮.
   Definition SomeVal : Type := sigT Val.
 
-  Section TransparentObligations.
-    Local Set Transparent Obligations.
-    (* Derive NoConfusion for SomeReg. *)
-    (* Derive NoConfusion for SomeVal. *)
-    Derive NoConfusion for excl.
-  End TransparentObligations.
+  Global Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
+  Global Instance countable_SomeReg : countable.Countable SomeReg := finite.finite_countable.
 
-  Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
-  Instance countable_SomeReg : Countable SomeReg := finite.finite_countable.
-
-  Instance eqDec_SomeVal : EqDecision SomeVal.
+  Global Instance eqDec_SomeVal : EqDec SomeVal.
   Proof.
     intros [τ1 v1] [τ2 v2].
     destruct (Ty_eq_dec τ1 τ2).
@@ -176,21 +221,9 @@ Module MicroSailLanguage
   Qed.
 
   Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeVal))).
-
-End MicroSailLanguage.
-
-Module IrisRegisters
-       (Import termkit : TermKit)
-       (Import progkit : ProgramKit termkit)
-       (Import assertkit : AssertionKit termkit progkit)
-       (Import contractkit : SymbolicContractKit termkit progkit assertkit)
-       .
-
-  Module PL := ProgramLogic termkit progkit assertkit contractkit.
-  Export PL.
-
-  Module ML := MicroSailLanguage termkit progkit.
-  Export ML.
+  (* Definition regUR' : cmra := *)
+  (*   authR (discrete_funUR (A := SomeReg) *)
+  (*            (fun '(existT σ r) => excl_auth.excl_authUR (leibnizO (Val σ)))). *)
 
   Class sailRegG Σ := SailRegG {
                           (* ghost variable for tracking state of registers *)
@@ -207,18 +240,9 @@ Module IrisRegisters
         ⌜ map_Forall (K := SomeReg) (A := excl SomeVal) (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register regstore reg)) = v end ) regsmap ⌝
     )%I.
 
-End IrisRegisters.
+End Registers.
 
-Module Type IrisHeapKit
-       (Import termkit : TermKit)
-       (Import progkit : ProgramKit termkit)
-       (Import assertkit : AssertionKit termkit progkit)
-       (Import contractkit : SymbolicContractKit termkit progkit assertkit)
-       .
-
-  Module IrisRegs := IrisRegisters termkit progkit assertkit contractkit.
-  Export IrisRegs.
-
+Module Type IrisHeapKit.
   Parameter Inline memPreG : gFunctors -> Set.
   Parameter Inline memG : gFunctors -> Set.
   Parameter Inline memΣ : gFunctors.
@@ -235,22 +259,18 @@ Module Type IrisHeapKit
 
   Parameter Inline mem_inv_init : forall Σ (μ : Memory), memPreG Σ -> ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
 
-  Parameter luser_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p)), memG Σ -> iProp Σ.
+  Parameter luser_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (mG : memG Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
 
-  Parameter lduplicate_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (p : 𝑯) (ts : Env Val (𝑯_Ty p))
-      (mG : memG Σ),
-      is_duplicable p = true -> bi_entails (luser_inst (p := p) ts mG) (luser_inst (p := p) ts mG ∗ luser_inst (p := p) ts mG).
+  Parameter lduplicate_inst : forall `{sRG : sailRegG Σ} `{invG Σ} (mG : memG Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+      is_duplicable p = true -> bi_entails (luser_inst mG ts) (luser_inst mG ts ∗ luser_inst mG ts).
 
 End IrisHeapKit.
 
-Module IrisInstance
-       (Import termkit : TermKit)
-       (Import progkit : ProgramKit termkit)
-       (Import assertkit : AssertionKit termkit progkit)
-       (Import contractkit : SymbolicContractKit termkit progkit assertkit)
-       (Import irisheapkit : IrisHeapKit termkit progkit assertkit contractkit).
+Module IrisInstance (Import K : IrisHeapKit).
+Section Soundness.
 
-  Section IrisInstance.
+  Existing Class memPreG.
+  Existing Class memG.
 
   Class sailPreG Σ := SailPreG { (* resources for the implementation side *)
                        sailG_invPreG :> invPreG Σ; (* for fancy updates, invariants... *)
@@ -276,167 +296,13 @@ Module IrisInstance
                                                                                 }.
   Global Opaque iris_invG.
 
-  Context `{sailG Σ}.
+  Context {Σ} {sG : sailG Σ}.
 
-  Instance iris_ILogic : logic.ILogic (iProp Σ) :=
-  { land := bi_and;
-    lor  := bi_or;
-    (* existential quantification *)
-    lex := fun _ => bi_exist;
-    (* universal quantification *)
-    lall := fun _ => bi_forall;
-    limpl := bi_impl;
-
-    (* Prop embedding *)
-    lprop := bi_pure;
-    (* P ⊢ Q *)
-    lentails := bi_entails;
-  }.
-
-  Global Program Instance iProp_ILogicLaws : @logic.ILogicLaws (iProp Σ) iris_ILogic.
-  Next Obligation.
-    iIntros; iFrame.
-  Qed.
-  Next Obligation.
-    eapply (PreOrder_Transitive (R := bi_entails)); eauto.
-  Qed.
-  Next Obligation.
-    iIntros (X P Q XP XQ).
-    apply bi.and_intro; auto.
-  Qed.
-  Next Obligation.
-    iIntros (P Q R PR) "PQ".
-    iApply PR.
-    iApply bi.and_elim_l.
-    iFrame.
-  Qed.
-  Next Obligation.
-    iIntros (P Q R QR) "PQ".
-    iApply QR.
-    iApply bi.and_elim_r.
-    iFrame.
-  Qed.
-  Next Obligation.
-    iIntros (P Q R PR QR) "PQ".
-    iApply bi.or_elim.
-    - iApply PR.
-    - iApply QR.
-    - iFrame.
-  Qed.
-  Next Obligation.
-    iIntros (P Q R PQ) "P".
-    iApply bi.or_intro_l.
-    iApply PQ; iFrame.
-  Qed.
-  Next Obligation.
-    iIntros (P Q R PR) "P".
-    iApply bi.or_intro_r.
-    iApply PR; iFrame.
-  Qed.
-  Next Obligation.
-    iIntros (B x P Q PQ) "P".
-    iExists x.
-    iApply (PQ with "P").
-  Qed.
-  Next Obligation.
-    iIntros (B P Q M).
-    apply bi.exist_elim.
-    iIntros (a) "Pa".
-    iApply (M a); iFrame.
-  Qed.
-  Next Obligation.
-    iIntros (B P x Q PxQ) "AP".
-    iApply PxQ.
-    iApply bi.forall_elim; iFrame.
-  Qed.
-  Next Obligation.
-    iIntros (B P Q APQ).
-    apply bi.forall_intro; auto.
-  Qed.
-  Next Obligation.
-    intros P Q R.
-    split.
-    - apply bi.impl_intro_r.
-    - apply bi.impl_elim_l'.
-  Qed.
-  Next Obligation.
-    iIntros (P Q PTQ) "%".
-    by iApply PTQ.
-  Qed.
-  Next Obligation.
-    iIntros (P Q p) "Q".
-    by iPureIntro.
-  Qed.
-
-  Global Program Instance iris_ISepLogic : logic.ISepLogic (iProp Σ) :=
-  { logic.emp := emp%I;
-    logic.sepcon P Q := (P ∗ Q)%I;
-    logic.wand P Q := (P -∗ Q)%I
-  }.
-
-  Global Program Instance iProp_ISepLogicLaws : @logic.ISepLogicLaws (iProp Σ) iris_ISepLogic.
-  Next Obligation.
-    intros P Q R. split.
-    - eapply bi.sep_assoc'.
-    - iIntros "[P [Q R]]".
-      iFrame.
-  Qed.
-  Next Obligation.
-    intros P Q. split; eapply bi.sep_comm'.
-  Qed.
-  Next Obligation.
-    intros P Q R. split.
-    - eapply bi.wand_intro_r.
-    - eapply bi.wand_elim_l'.
-  Qed.
-  Next Obligation.
-    intros P R Q. split.
-    - iIntros "[P [% R]]".
-      by iSplit; iFrame.
-    - iIntros "[% [P R]]".
-      by iFrame.
-  Qed.
-  Next Obligation.
-    iIntros (P P' Q Q' PP QQ) "[P Q]".
-    iSplitL "P".
-    - by iApply PP.
-    - by iApply QQ.
-  Qed.
-  Next Obligation.
-    intros P. split.
-    - iIntros "[P _]".
-      iFrame.
-    - iIntros "P".
-      by iSplit; iFrame.
-  Qed.
-  Next Obligation.
-    now iIntros (P) "HP".
-  Qed.
-
-  Global Instance iris_IHeapLet : IHeaplet (iProp Σ) :=
-    { is_ISepLogic := iris_ISepLogic;
-      (* TODO: should be user-defined... *)
-      luser p ts := luser_inst ts sailG_memG;
-      lptsreg σ r t := reg_pointsTo r t;
-      lduplicate p ts := fun hdup => lduplicate_inst (p := p) ts sailG_memG hdup
-    }.
-
-  End IrisInstance.
-End IrisInstance.
-
-Module IrisSoundness
-       (Import termkit : TermKit)
-       (Import progkit : ProgramKit termkit)
-       (Import assertkit : AssertionKit termkit progkit)
-       (Import contractkit : SymbolicContractKit termkit progkit assertkit)
-       (Import irisheapkit : IrisHeapKit termkit progkit assertkit contractkit).
-
-  Module Inst := IrisInstance termkit progkit assertkit contractkit irisheapkit.
-  Export Inst.
-
-  Section IrisSoundness.
-
-  Context `{sailG Σ}.
+  Global Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
+    {| lptsreg σ r v        := reg_pointsTo r v;
+       luser p ts           := luser_inst sailG_memG ts;
+       lduplicate p ts Hdup := lduplicate_inst sailG_memG ts Hdup
+    |}.
 
   Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
     ⊢ (regs_inv regstore -∗ reg_pointsTo r v -∗ ⌜read_register regstore r = v⌝)%I.
@@ -454,9 +320,11 @@ Module IrisSoundness
     destruct y as [y|]; [|inversion regsv].
     rewrite Excl_included in eq2 *.
     intros <-%leibniz_equiv.
-    specialize (H0 (existT _ r) (Excl (existT _ v)) eq1); cbn in H0.
+    specialize (H (existT _ r) (Excl (existT _ v)) eq1); cbn in H.
+    inversion H.
+    apply noConfusion_inv in H. cbn in H.
     Local Set Equations With UIP.
-    by dependent elimination H0.
+    by dependent elimination H.
   Qed.
 
   Lemma regs_inv_update {τ} {r} {v : Val τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeVal))} {regstore : RegStore} :
@@ -505,24 +373,24 @@ Module IrisSoundness
     }
     iModIntro.
     iFrame.
-    iApply (regs_inv_update H0); iFrame.
+    iApply (regs_inv_update H); iFrame.
   Qed.
 
   Lemma rule_stm_read_register {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) {δ : CStore Γ} :
-    ⊢ (reg_pointsTo r v -∗
-                    WP (MkConf (stm_read_register r) δ) ?{{ w, reg_pointsTo r v ∗ ⌜ w = MkValConf _ v δ ⌝ }}
+    ⊢ (lptsreg r v -∗
+                    WP (MkConf (stm_read_register r) δ) ?{{ w, lptsreg r v ∗ ⌜ w = MkValConf _ v δ ⌝ }}
       )%I.
   Proof.
     iIntros "Hreg".
     iApply (wp_mask_mono _ empty); auto.
     rewrite wp_unfold; cbn.
-    iIntros (σ _ _ n) "[Hregs Hmem]".
+    iIntros (σ ls _ n) "[Hregs Hmem]".
     iDestruct (@reg_valid with "Hregs Hreg") as %<-.
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
     remember (MkConf (stm_read_register r) δ) as t.
-    destruct H0 as [γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
+    destruct H as [γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
     dependent elimination Heqt.
     destruct (steps_inversion_read_register step) as [<- [<- [<- ->]]].
     iModIntro. iModIntro. iModIntro.
@@ -538,12 +406,12 @@ Module IrisSoundness
     iIntros "Hreg".
     iApply (wp_mask_mono _ empty); auto.
     rewrite wp_unfold; cbn.
-    iIntros (σ _ _ n) "[Hregs Hmem]".
+    iIntros (σ ls _ n) "[Hregs Hmem]".
     iMod (reg_update σ.1 r v (eval e δ) with "Hregs Hreg") as "[Hregs Hreg]".
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
-    dependent elimination H0.
+    dependent elimination H.
     destruct (steps_inversion_write_register s) as [-> [<- [<- ->]]].
     iModIntro. iModIntro. iModIntro.
     iFrame. iSplitR; auto.
@@ -623,9 +491,9 @@ Module IrisSoundness
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
     remember (MkConf (stm_exp e) δ) as t.
-    destruct H0.
+    destruct H.
     dependent elimination Heqt.
-    dependent elimination H0.
+    dependent elimination H.
     iModIntro. iModIntro. iModIntro.
     iFrame.
     iSplitL; cbn; trivial.
@@ -643,9 +511,9 @@ Module IrisSoundness
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
     remember (MkConf (fail s) δ) as s1.
-    destruct H0.
+    destruct H.
     inversion Heqs1. subst.
-    inversion H0.
+    inversion H.
   Qed.
 
   Lemma wp_compat_block {Γ Δ} {τ : Ty} {δ : CStore Γ}
@@ -659,13 +527,11 @@ Module IrisSoundness
     rewrite ?wp_unfold.
     cbn.
     iIntros (σ ks1 ks n) "state_inv".
-    remember (language.to_val (MkConf k (δ ►► δΔ))) as kval.
-    destruct kval.
-    - rewrite /wp_pre.
-      rewrite <- Heqkval.
-      destruct v as [v δ0].
-      pose proof (eqk := of_to_val _ (eq_sym Heqkval)).
-      inversion eqk. subst. clear Heqkval eqk.
+    rewrite /wp_pre.
+    destruct (language.to_val (MkConf k (δ ►► δΔ))) eqn:Heqkval.
+    - destruct v as [v δ0]. apply language.of_to_val in Heqkval.
+      inversion Heqkval. subst. clear Heqkval.
+      rewrite env.drop_cat.
       iMod "wpk" as "H".
       iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iSplitR; [trivial|].
@@ -675,20 +541,17 @@ Module IrisSoundness
       iMod "Hclose" as "e".
       iDestruct "e" as "_".
       iModIntro.
-      dependent elimination H0.
+      dependent elimination H.
       dependent elimination s.
-      + rewrite env.drop_cat.
-        iFrame.
+      + iFrame.
         iSplitL; [|trivial].
         by iApply wp_value.
       + inversion s4.
-    - rewrite /wp_pre.
-      rewrite <-Heqkval.
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    - iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
       iModIntro.
       iSplitR; [trivial|].
       iIntros (e2 σ2 efs2) "%".
-      dependent elimination H0.
+      dependent elimination H.
       dependent elimination s.
       + discriminate Heqkval.
       + iModIntro. iModIntro.
@@ -699,7 +562,7 @@ Module IrisSoundness
         iApply wp_compat_fail.
       + iMod "Hclose" as "_".
         cbn.
-        iMod ("wpk" $! (γ1 , μ1) ks1 ks n with "state_inv") as "[% wpk]".
+        iMod ("wpk" $! (γ1 , μ1) nil ks n with "state_inv") as "[% wpk]".
         iMod ("wpk" $! _ _ _ (mk_prim_step s4)) as "wpk".
         iModIntro. iModIntro.
         iMod "wpk" as "[Hregs [wpk' _]]".
@@ -730,8 +593,8 @@ Module IrisSoundness
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s0.
     cbn.
     + rewrite wp_unfold. cbn.
@@ -810,8 +673,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -862,8 +725,8 @@ Module IrisSoundness
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s; cbn.
     + rewrite wp_unfold.
       unfold wp_pre.
@@ -903,8 +766,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e3 σ2 efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -939,8 +802,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e3 σ2 efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     remember (eval e4 δ1) as scrutinee.
     destruct scrutinee as [|l ls].
@@ -976,8 +839,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     remember (eval e5 δ1) as scrutinee.
     destruct scrutinee as [v1|v2].
@@ -1012,8 +875,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ' efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     remember (eval e6 δ1) as scrutinee.
     destruct scrutinee as [v1 v2].
@@ -1039,8 +902,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ' efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1062,8 +925,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ' efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1090,8 +953,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1120,8 +983,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ2 efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1133,12 +996,12 @@ Module IrisSoundness
 
   Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
-        ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => (⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝) ∧ lptsreg r v))%I.
+        ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v))%I.
   Proof.
     iIntros "Hreg".
     iApply wp_mono; [| iApply (rule_stm_read_register with "Hreg") ].
     iIntros ([δ' v']) "[Hreg %]".
-    inversion H0.
+    inversion H.
     by iFrame.
   Qed.
 
@@ -1147,12 +1010,12 @@ Module IrisSoundness
                               (Q : Val σ -> CStore Γ -> iProp Σ)
                               (v : Val σ) :
         ⊢ semTriple δ (lptsreg r v) (stm_write_register r w)
-                  (fun v' δ' => (bi_pure (δ' = δ) ∧ bi_pure (v' = eval w δ)) ∧ lptsreg r v')%I.
+                  (fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v')%I.
   Proof.
     iIntros "Hreg".
     iApply wp_mono; [|iApply (rule_stm_write_register with "Hreg")].
     iIntros (v') "[Hreg %]".
-    rewrite H0.
+    rewrite H.
     by iFrame.
   Qed.
 
@@ -1173,8 +1036,8 @@ Module IrisSoundness
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s0.
     cbn.
     + rewrite wp_unfold; cbn.
@@ -1221,17 +1084,16 @@ Module IrisSoundness
     iApply (wp_mono with "wpas").
     iIntros ([v' δ']) "Rv".
     iDestruct "Rv" as (v__old) "[Rv %]".
-    rewrite <-H0.
+    rewrite <-H.
     by rewrite env.update_update env.update_lookup.
   Qed.
-
 
   Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
     (∀ σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
       | Some (MkSepContract _ _ ctxΣ θΔ pre result post) =>
         ∀ (ι : Valuation ctxΣ),
-          semTriple (inst θΔ ι) (interpret_assertion (L:=iProp Σ) pre ι) (Pi f)
+          semTriple (inst θΔ ι) (interpret_assertion pre ι) (FunDef f)
                     (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v))
       | None => True
       end)%I.
@@ -1251,12 +1113,12 @@ Module IrisSoundness
     iModIntro.
     iSplitR; first trivial.
     iIntros (e2 σ2 efs) "%".
-    dependent elimination H0.
+    dependent elimination H.
     dependent elimination s0.
     - iMod "Hclose" as "_".
       rewrite {1}/wp_pre.
       rewrite (val_stuck (MkConf s9 δΔ3) (γ1 , μ1) [] _ _ [] (mk_prim_step s10)).
-      iMod ("wpk" $! (γ1 , μ1) ks1 ks n with "Hregs") as "[% wpk]".
+      iMod ("wpk" $! (γ1 , μ1) nil ks n with "Hregs") as "[% wpk]".
       iMod ("wpk" $! _ _ _ (mk_prim_step s10)) as "wpk".
       iModIntro. iModIntro.
       iMod "wpk" as "[Hregs [wpk' _]]".
@@ -1297,8 +1159,8 @@ Module IrisSoundness
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1306,16 +1168,16 @@ Module IrisSoundness
     iFrame.
     iSplitL; [|trivial].
     destruct ctrip.
-    iPoseProof (H1 with "P") as "[fr req]".
+    iPoseProof (H0 with "P") as "[fr req]".
     iApply wp_compat_call_frame.
-    rewrite H0.
+    rewrite H.
     iApply (wp_mono _ _ _ (fun v => frame ∗ match v with
                                             | MkValConf _ v _ => interpret_assertion ens (env.snoc ι (result∷σ) v)
                                             end)%I).
     - intros [v δ']; cbn.
       iIntros "[fr ens]".
       iSplitL; [|trivial].
-      iApply (H2 v).
+      iApply (H1 v).
       by iFrame.
     - iSpecialize ("cenv" $! _ _ f0).
       rewrite ceq.
@@ -1355,8 +1217,8 @@ Module IrisSoundness
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s0.
     cbn.
     + rewrite wp_unfold.
@@ -1390,7 +1252,7 @@ Module IrisSoundness
     {Γ} (δ : CStore Γ)
     {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
     (P : iProp Σ) (Q : Val σ -> iProp Σ) :
-    ⊢ semTriple (evals es δ) P (Pi f) (fun v _ => Q v) -∗
+    ⊢ semTriple (evals es δ) P (FunDef f) (fun v _ => Q v) -∗
       semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')).
   Proof.
     iIntros "tripbody P".
@@ -1399,8 +1261,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ'' efs) "%".
-    cbn in H0.
-    dependent elimination H0.
+    cbn in H.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1438,19 +1300,19 @@ Module IrisSoundness
     revert ctrip extSem.
     generalize (CEnvEx f) as contractF.
     intros contractF ctrip extSem.
-    dependent elimination ctrip; cbn in extSem.
+    destruct ctrip; cbn in extSem.
     iIntros "P".
-    iPoseProof (l with "P") as "[frm pre]".
-    iApply (wp_mono _ _ _ (fun v => frame0 ∗ match v with | MkValConf _ v δ' => interpret_assertion ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ) end)%I).
+    iPoseProof (H0 with "P") as "[frm pre]".
+    iApply (wp_mono _ _ _ (fun v => frame ∗ match v with MkValConf _ v δ' => interpret_assertion (HProp := IProp Σ) ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ) end)%I).
     - intros v.
       destruct v.
       iIntros "[frame [pre %]]".
       subst.
-      iApply l0.
+      iApply H1.
       by iFrame.
     - iApply wp_frame_l.
       iFrame.
-      by iApply (extSem ι e).
+      by iApply (extSem ι H).
   Qed.
 
   Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
@@ -1490,8 +1352,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e3 σ2 efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1516,8 +1378,8 @@ Module IrisSoundness
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e3 σ2 efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
-    dependent elimination H0.
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1545,8 +1407,8 @@ Module IrisSoundness
     iModIntro.
     iSplitR; first done.
     iIntros (e2 σ'' efs) "%".
-    cbn in H0.
-    dependent elimination H0.
+    cbn in H.
+    dependent elimination H.
     destruct (Hnoop _ _ _ _ _ _ s0) as (-> & -> & -> & [[v ->]|[msg ->]]).
     - do 2 iModIntro.
       iMod "Hclose" as "_".
@@ -1578,9 +1440,9 @@ Module IrisSoundness
     - by iApply iris_rule_pull.
     - by iApply iris_rule_exist.
     - iApply iris_rule_stm_val.
-      by iApply H0.
+      by iApply H.
     - iApply iris_rule_stm_exp.
-      by iApply H0.
+      by iApply H.
     - by iApply iris_rule_stm_let.
     - by iApply iris_rule_stm_block.
     - by iApply iris_rule_stm_if.
@@ -1608,7 +1470,7 @@ Module IrisSoundness
   Qed.
 
   Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
-    ForeignSem -> LemmaSem -> ValidContractEnv CEnv ->
+    ForeignSem -> LemmaSem -> ValidContractCEnv ->
     ⊢ ValidContractEnvSem CEnv.
   Proof.
     intros extSem lemSem vcenv.
@@ -1622,24 +1484,9 @@ Module IrisSoundness
     apply (vcenv ι).
   Qed.
 
-  End IrisSoundness.
-End IrisSoundness.
+End Soundness.
 
-Module Adequacy
-       (Import termkit : TermKit)
-       (Import progkit : ProgramKit termkit)
-       (Import assertkit : AssertionKit termkit progkit)
-       (Import contractkit : SymbolicContractKit termkit progkit assertkit)
-       (Import irisheapkit : IrisHeapKit termkit progkit assertkit contractkit).
-
-  Module PL := ProgramLogic termkit progkit assertkit contractkit.
-  Import PL.
-
-  (* Module IrisRegs := IrisRegisters typekit termkit progkit assertkit contractkit. *)
-  (* Import IrisRegs. *)
-
-  Module Snd := IrisSoundness termkit progkit assertkit contractkit irisheapkit.
-  Import Snd.
+Section Adequacy.
 
   Definition sailΣ : gFunctors := #[ memΣ ; invΣ ; GFunctor regUR].
 
@@ -1795,3 +1642,5 @@ Module Adequacy
           by iIntros ([δ3 v]).
   Qed.
 End Adequacy.
+End IrisInstance.
+End Iris.

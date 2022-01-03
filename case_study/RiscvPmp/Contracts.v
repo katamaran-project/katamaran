@@ -33,12 +33,17 @@ From Coq Require Import
 From RiscvPmp Require Import
      Machine.
 From Katamaran Require Import
-     Symbolic.Mutator
+     Notation
      SemiConcrete.Mutator
-     Sep.Spec
-     Syntax.
+     Specification
+     Symbolic.Mutator
+     Symbolic.Solver
+     Symbolic.Propositions
+     Symbolic.Worlds.
 From Equations Require Import
      Equations.
+
+Import RiscvPmpProgram.
 
 Set Implicit Arguments.
 Import ctx.resolution.
@@ -69,8 +74,10 @@ End TransparentObligations.
 Derive EqDec for PurePredicate.
 Derive EqDec for Predicate.
 
-Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProgramKit).
-  Export RiscvPmpProgramKit.
+Module Import RiscvPmpSpecification <: Specification RiscvPmpBase.
+Module PROG := RiscvPmpProgram.
+
+Section PredicateKit.
 
   Definition 𝑷 := PurePredicate.
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
@@ -90,7 +97,7 @@ Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProg
     | gprs         => ctx.nil
     end.
 
-  Instance 𝑯_is_dup : IsDuplicable Predicate := {
+  Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
       | pmp_entries  => false
@@ -99,18 +106,16 @@ Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProg
       end
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
-End RiscvPmpAssertionKit.
 
-Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
-                                                           RiscvPmpProgramKit
-                                                           RiscvPmpAssertionKit).
-  Module Export ASS := Assertions RiscvPmpTermKit
-                                  RiscvPmpProgramKit
-                                  RiscvPmpAssertionKit.
+End PredicateKit.
 
-  Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 100).
-  Local Notation "r '↦r' val" := (asn_chunk (chunk_user ptsreg (env.nil ► (ty_regno ↦ r) ► (ty_xlenbits ↦ val)))) (at level 100).
-  Local Notation "p '∗' q" := (asn_sep p q) (at level 150).
+Include ContractDeclMixin RiscvPmpBase RiscvPmpProgram.
+
+Section ContractDefKit.
+
+  Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
+  Local Notation "r '↦r' val" := (asn_chunk (chunk_user ptsreg (env.nil ► (ty_regno ↦ r) ► (ty_xlenbits ↦ val)))) (at level 79).
+  Local Notation "p '∗' q" := (asn_sep p q).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env.nil ► (ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits) ↦ l)))).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
 
@@ -532,29 +537,28 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
     intros ? ? []; try constructor.
   Qed.
 
-  Definition solver_user := Solver.null.
-  Definition solver_user_spec := Solver.null_spec.
+End ContractDefKit.
 
-End RiscvPmpSymbolicContractKit.
+Include SpecificationMixin RiscvPmpBase RiscvPmpProgram.
 
-Module RiscvPmpMutators :=
-  Mutators
-    RiscvPmpTermKit
-    RiscvPmpProgramKit
-    RiscvPmpAssertionKit
-    RiscvPmpSymbolicContractKit.
-Import RiscvPmpMutators.
+End RiscvPmpSpecification.
+
+Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSpecification.
+Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSpecification RiscvPmpSolverKit.
+
+Module Import RiscvPmpExecutor :=
+  MakeExecutor RiscvPmpBase RiscvPmpSpecification RiscvPmpSolver.
 Import SMut.
 
 Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
   match CEnv f with
-  | Some c => ValidContractReflect c (Pi f)
+  | Some c => ValidContractReflect c (FunDef f)
   | None => False
   end.
 
 Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
   match CEnv f with
-  | Some c => SMut.ValidContract c (Pi f)
+  | Some c => SMut.ValidContract c (FunDef f)
   | None => False
   end.
 
@@ -624,22 +628,8 @@ Proof. reflexivity. Qed.
 Section Debug.
   Import RiscvNotations.
   Import RiscvμSailNotations.
+  Import SymProp.notations.
   Coercion stm_exp : Exp >-> Stm.
-
-  Notation "x" := (@term_var _ x%string _ (@ctx.MkIn _ (x%string :: _) _ _ _)) (at level 1, only printing).
-  Notation "s = t" := (@formula_eq _ _ s t) (only printing).
-  Notation "' t" := (@formula_bool _ t) (at level 0, only printing, format "' t").
-  Notation "F ∧ P" := (@SymProp.assertk _ F _ P) (at level 80, right associativity, only printing).
-  Notation "F → P" := (@SymProp.assumek _ F P) (at level 99, right associativity, only printing).
-  Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x,σ) P) (at level 200, right associativity, only printing, format "'∃'  x '∷' σ ,  '/' P").
-  Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x,σ) P) (at level 200, right associativity, only printing, format "'∀'  x '∷' σ ,  '/' P").
-  Notation "⊤" := (@SymProp.block _).
-  Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
-  Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
-  Notation "x ↦ t ∧ k" := (@SymProp.assert_vareq _ x _ _ t _ k) (at level 99, right associativity, only printing).
-  Notation "x ↦ t → k" := (@SymProp.assume_vareq _ x _ _ t k) (at level 99, right associativity, only printing).
-  Notation "P ∧ Q" := (@SymProp.demonic_binary _ P Q) (at level 80, right associativity, only printing).
-  Notation "P ∨ Q" := (@SymProp.angelic_binary _ P Q) (at level 85, right associativity, only printing).
 End Debug.
 
 (* TODO: this is just to make sure that all contracts defined so far are valid
@@ -679,7 +669,7 @@ Module BlockVerification.
        (env.nil
           ► (ty_regno ↦ term_val ty_regno r)
           ► (ty_xlenbits ↦ val)))
-      (at level 100).
+      (at level 79).
   Notation "ω ∣ x <- ma ;; mb" :=
     (bind ma (fun _ ω x => mb))
       (at level 80, x at next level,
@@ -758,7 +748,7 @@ Module BlockVerification.
   Section Example.
 
     Import ListNotations.
-    Notation "p '∗' q" := (asn_sep p q) (at level 150).
+    Notation "p '∗' q" := (asn_sep p q).
     Notation "r '↦r' val" :=
       (asn_chunk
          (chunk_user
@@ -766,7 +756,7 @@ Module BlockVerification.
             (env.nil
                ► (ty_regno ↦ term_val ty_regno r)
                ► (ty_xlenbits ↦ val))))
-         (at level 100).
+         (at level 79).
 
     Example block1 : list AST :=
       [ ADD 1 1 2;

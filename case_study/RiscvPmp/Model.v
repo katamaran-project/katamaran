@@ -31,8 +31,11 @@ From RiscvPmp Require Import
      Contracts.
 From Katamaran Require Import
      Environment
-     Syntax
+     Program
+     Specification
+     Sep.Hoare
      Sep.Logic
+     Semantics
      Iris.Model.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
@@ -47,7 +50,15 @@ Set Implicit Arguments.
 
 Module gh := iris.base_logic.lib.gen_heap.
 
+Module RiscvPmpSemantics <: Semantics RiscvPmpBase RiscvPmpProgram :=
+  MakeSemantics RiscvPmpBase RiscvPmpProgram.
+
 Module RiscvPmpModel.
+  Import RiscvPmpProgram.
+  Import RiscvPmpSpecification.
+
+  Include ProgramLogicOn RiscvPmpBase RiscvPmpSpecification.
+  Include Iris RiscvPmpBase RiscvPmpSpecification RiscvPmpSemantics.
 
   Ltac destruct_syminstance ι :=
     repeat
@@ -61,9 +72,7 @@ Module RiscvPmpModel.
       | _ => idtac
       end.
 
-  Module RiscvPmpIrisHeapKit <: IrisHeapKit RiscvPmpTermKit RiscvPmpProgramKit RiscvPmpAssertionKit RiscvPmpSymbolicContractKit.
-    Module IrisRegs := IrisRegisters RiscvPmpTermKit RiscvPmpProgramKit RiscvPmpAssertionKit RiscvPmpSymbolicContractKit.
-    Export IrisRegs.
+  Module RiscvPmpIrisHeapKit <: IrisHeapKit.
 
     Section WithIrisNotations.
       Import iris.bi.interface.
@@ -95,7 +104,7 @@ Module RiscvPmpModel.
                                                   ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
       Admitted.
 
-      Import RiscvPmp.Contracts.RiscvPmpSymbolicContractKit.ASS.
+      Import Contracts.
 
       Definition interp_ptsreg `{sailRegG Σ} (r: RegIdx) (v : Z) : iProp Σ :=
         match r with
@@ -115,25 +124,25 @@ Module RiscvPmpModel.
       Definition interp_gprs `{sailRegG Σ} : iProp Σ :=
         [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
 
-      Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Val (RiscvPmpAssertionKit.𝑯_Ty p)) (mG : memG Σ) : iProp Σ :=
-        (match p return Env Val (RiscvPmpAssertionKit.𝑯_Ty p) -> iProp Σ with
-         | pmp_entries  => fun ts => let entries_lst := env.head ts in
+      Definition luser_inst `{sailRegG Σ} `{invG Σ} (mG : memG Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
+        match p return Env Val (𝑯_Ty p) -> iProp Σ with
+        | pmp_entries  => fun ts => let entries_lst := env.head ts in
                                     match entries_lst with
                                     | (cfg0, addr0) :: [] =>
                                       (reg_pointsTo pmp0cfg cfg0 ∗
                                               reg_pointsTo pmpaddr0 addr0)%I
                                     | _ => False%I
                                     end
-         | ptsreg       => fun ts => interp_ptsreg (env.head (env.tail ts)) (env.head ts)
-         | gprs         => fun _  => interp_gprs
-         end) ts.
+        | ptsreg       => fun ts => interp_ptsreg (env.head (env.tail ts)) (env.head ts)
+        | gprs         => fun _  => interp_gprs
+        end.
 
-    Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Val (RiscvPmpAssertionKit.𝑯_Ty p)) :
-      forall (mG : memG Σ),
+    Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (mG : memG Σ) :
+      forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
-        (luser_inst p ts mG) ⊢ (luser_inst p ts mG ∗ luser_inst p ts mG).
+        (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
     Proof.
-      iIntros (mG hdup) "H".
+      iIntros (p ts hdup) "H".
       destruct p; inversion hdup;
       iDestruct "H" as "#H";
       auto.
@@ -142,8 +151,7 @@ Module RiscvPmpModel.
     End WithIrisNotations.
   End RiscvPmpIrisHeapKit.
 
-  Module Soundness := IrisSoundness RiscvPmpTermKit RiscvPmpProgramKit RiscvPmpAssertionKit RiscvPmpSymbolicContractKit RiscvPmpIrisHeapKit.
-  Export Soundness.
+  Module Import RiscvPmpIrisInstance := IrisInstance RiscvPmpIrisHeapKit.
 
   Lemma foreignSem `{sg : sailG Σ} : ForeignSem (Σ := Σ).
   Proof.
@@ -155,7 +163,7 @@ Module RiscvPmpModel.
     Context `{sg : sailG Σ}.
 
     Lemma open_ptsreg_sound :
-      ValidLemma RiscvPmpSymbolicContractKit.lemma_open_ptsreg.
+      ValidLemma RiscvPmpSpecification.lemma_open_ptsreg.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpIrisHeapKit.interp_ptsreg.
@@ -164,7 +172,7 @@ Module RiscvPmpModel.
     Qed.
 
     Lemma close_ptsreg_sound :
-      ValidLemma RiscvPmpSymbolicContractKit.lemma_close_ptsreg.
+      ValidLemma RiscvPmpSpecification.lemma_close_ptsreg.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       destruct rs; cbn; iFrame; try (iIntros "[%H _]"; inversion H).
@@ -174,23 +182,23 @@ Module RiscvPmpModel.
     Qed.
 
     Lemma open_gprs_sound :
-      ValidLemma RiscvPmpSymbolicContractKit.lemma_open_gprs.
+      ValidLemma RiscvPmpSpecification.lemma_open_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.reg_file.
       rewrite big_sepS_list_to_set; [|apply NoDup_seqZ].
       rewrite RiscvPmpIrisHeapKit.seqZ_list; cbn.
       iIntros "[Hx1 [Hx2 [Hx3 _]]]".
-      iSplitR "Hx3"; [|iAssumption].
-      iSplitR "Hx2"; iAssumption.
+      iSplitL "Hx1"; [iAssumption|].
+      iSplitL "Hx2"; iAssumption.
     Qed.
 
     Lemma close_gprs_sound :
-      ValidLemma RiscvPmpSymbolicContractKit.lemma_close_gprs.
+      ValidLemma RiscvPmpSpecification.lemma_close_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.reg_file.
-      iIntros "[[Hx1 Hx2] Hx3]".
+      iIntros "[Hx1 [Hx2 Hx3]]".
       iApply big_sepS_list_to_set; [apply NoDup_seqZ|].
       rewrite RiscvPmpIrisHeapKit.seqZ_list; cbn; iFrame.
     Qed.

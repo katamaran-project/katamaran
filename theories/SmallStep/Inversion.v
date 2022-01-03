@@ -32,18 +32,14 @@ From Equations Require Import
      Equations.
 From Katamaran Require Import
      SmallStep.Step
-     Syntax.
+     Program.
 
 Set Implicit Arguments.
 
 Import ctx.notations.
 Import env.notations.
 
-Module Inversion
-       (Import termkit : TermKit)
-       (Import progkit : ProgramKit termkit).
-
-  Module Import SS := SmallStep termkit progkit.
+Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : SmallStepOn B P).
 
   Section StepInversionFinal.
 
@@ -457,4 +453,4 @@ Module Inversion
     - dependent elimination s1.
   Qed.
 
-End Inversion.
+End InversionOn.

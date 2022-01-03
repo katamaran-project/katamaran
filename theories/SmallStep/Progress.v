@@ -30,14 +30,9 @@ From Coq Require Import
      Program.Tactics.
 From Katamaran Require Import
      SmallStep.Step
-     Syntax.
+     Program.
 
-Set Implicit Arguments.
-
-Module Progress
-       (Import termkit : TermKit)
-       (Import progkit : ProgramKit termkit).
-  Module Import SS := SmallStep termkit progkit.
+Module ProgressOn (Import B : Base) (Import P : Program B) (Import STEP : SmallStepOn B P).
 
   Local Ltac progress_can_form :=
     match goal with
@@ -94,4 +89,4 @@ Module Progress
     Final s \/ forall γ μ δ, exists γ' μ' δ' s', ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩.
   Proof. induction s; intros; try progress_tac. Qed.
 
-End Progress.
+End ProgressOn.

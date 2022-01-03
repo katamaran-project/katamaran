@@ -1,5 +1,6 @@
 (******************************************************************************)
-(* Copyright (c) 2019 Steven Keuchel                                          *)
+(* Copyright (c) 2019 Dominique Devriese, Georgy Lukyanov,                    *)
+(*   Sander Huyghebaert, Steven Keuchel                                       *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -26,5 +27,18 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Katamaran Require Export
-     Base Program.
+From Katamaran Require Import
+     Context
+     Syntax.TypeDef.
+
+Module Type FunDeclKit (Import T : Types).
+
+  Local Notation PCtx := (NCtx 𝑿 Ty).
+
+  (* Names of functions. *)
+  Parameter Inline 𝑭 : PCtx -> Ty -> Set.
+  Parameter Inline 𝑭𝑿 : PCtx -> Ty -> Set.
+  (* Names of lemmas. *)
+  Parameter Inline 𝑳 : PCtx -> Set.
+
+End FunDeclKit.

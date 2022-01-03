@@ -27,20 +27,19 @@
 (******************************************************************************)
 
 From Coq Require Import
-     Program.Equality
      Program.Tactics
-     Strings.String.
+     Strings.String
+     ZArith.BinInt.
 From Equations Require Import
      Equations.
 From Katamaran Require Import
-     Syntax
+     Notation
+     Program
      Tactics.
 
 Set Implicit Arguments.
 
-Module SmallStep
-  (Import termkit : TermKit)
-  (Import progKit : ProgramKit termkit).
+Module Type SmallStepOn (Import B : Base) (Import P : Program B).
 
   Import ctx.notations.
   Import env.notations.
@@ -90,7 +89,7 @@ Module SmallStep
   | step_stm_call
       {Δ} {f : 𝑭 Δ τ} (es : NamedEnv (Exp Γ) Δ) :
       ⟨ γ , μ , δ , stm_call f es ⟩ --->
-      ⟨ γ , μ , δ , stm_call_frame (evals es δ) (Pi f) ⟩
+      ⟨ γ , μ , δ , stm_call_frame (evals es δ) (FunDef f) ⟩
   | step_stm_call_frame_step
       (Δ : PCtx) {δΔ δΔ' : CStore Δ} (s s' : Stm Δ τ)
       (γ' : RegStore) (μ' : Memory) :
@@ -293,4 +292,39 @@ Module SmallStep
       end; fail.
     Abort.
 
-End SmallStep.
+  Definition Final {Γ σ} (s : Stm Γ σ) : Prop :=
+    match s with
+    | stm_val _ _   => True
+    | stm_fail _ _ => True
+    | _ => False
+    end.
+
+  Definition ResultOrFail {Γ σ} (s : Stm Γ σ) :
+    forall (POST : Val σ -> Prop), Prop :=
+    match s with
+    | stm_val _ v => fun POST => POST v
+    | stm_fail _ _ => fun _ => True
+    | _ => fun _ => False
+    end.
+
+  Lemma result_or_fail_inversion {Γ σ} (s : Stm Γ σ) (POST : Val σ -> Prop) :
+    ResultOrFail s POST -> (exists msg, s = stm_fail _ msg)
+                        \/ (exists v, s = stm_val _ v /\ POST v).
+  Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
+
+  (* This predicate encodes that the statement s is a finished computation and
+     that the result is not a failure. This is a computational version that is
+     better suited for the goal and the inversion below is better suited for
+     a hypothesis. *)
+  Definition ResultNoFail {Γ σ} (s : Stm Γ σ) :
+    forall (POST : Val σ -> Prop), Prop :=
+    match s with
+    | stm_val _ v => fun POST => POST v
+    | _ => fun _ => False
+    end.
+
+  Lemma result_no_fail_inversion {Γ σ} (s : Stm Γ σ) (POST : Val σ -> Prop) :
+    ResultNoFail s POST -> exists v, s = stm_val _ v /\ POST v.
+  Proof. destruct s; cbn in *; try contradiction; eauto. Qed.
+
+End SmallStepOn.

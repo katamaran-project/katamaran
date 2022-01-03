@@ -26,5 +26,57 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Coq Require Export
+     Numbers.BinNums.
+
 From Katamaran Require Export
-     Base Program.
+     Context
+     Environment
+     Prelude
+     Syntax.Registers
+     Syntax.TypeDecl
+     Syntax.TypeDef
+     Syntax.Variables
+     Tactics.
+From Katamaran Require Import
+     Syntax.BinOps
+     Syntax.Expressions
+     Syntax.Patterns
+     Syntax.Terms
+     Symbolic.Instantiation
+     Symbolic.OccursCheck
+     Symbolic.PartialEvaluation.
+
+Module Type BaseMixin (Import TY : Types).
+  Include
+    BinOpsOn TY <+ ExpressionsOn TY <+
+    TermsOn TY <+ PatternsOn TY <+
+    OccursCheckOn TY <+ InstantiationOn TY <+
+    PartialEvaluationOn TY.
+
+  Lemma 𝑼_fold_inj {U} (v1 v2 : {K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K)}) :
+    𝑼_fold v1 = 𝑼_fold v2 <-> v1 = v2.
+  Proof.
+    split; try congruence. intros H.
+    apply (f_equal (@𝑼_unfold U)) in H.
+    now rewrite ?𝑼_unfold_fold in H.
+  Qed.
+
+  Lemma 𝑼_unfold_inj {U} (v1 v2 : Val (ty_union U)) :
+    𝑼_unfold v1 = 𝑼_unfold v2 <-> v1 = v2.
+  Proof.
+    split; try congruence. intros H.
+    apply (f_equal (@𝑼_fold U)) in H.
+    now rewrite ?𝑼_fold_unfold in H.
+  Qed.
+
+  Notation PCtx := (NCtx 𝑿 Ty).
+  Notation LCtx := (NCtx 𝑺 Ty).
+  Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Val (@type 𝑺 Ty xt)) Σ).
+  Notation CStore := (@NamedEnv 𝑿 Ty Val).
+End BaseMixin.
+
+Module Type Base := Types <+ RegDeclKit <+ BaseMixin.
+
+Module DefaultBase <: Base :=
+  DefaultVarKit <+ DefaultTypeDecl <+ DefaultTypeDefKit <+ DefaultRegDeclKit <+ BaseMixin.

@@ -28,7 +28,6 @@
 
 From Coq Require Import
      Bool.Bool
-     Program.Equality
      Program.Tactics
      ZArith.ZArith
      Strings.String
@@ -45,12 +44,13 @@ From Equations Require Import
 
 From Katamaran Require Import
      SemiConcrete.Mutator
-     SemiConcrete.Sound
-     Sep.Hoare
-     Sep.Logic
-     Sep.Spec
+     Specification
      Symbolic.Mutator
-     Syntax
+     Symbolic.Solver
+     Symbolic.Worlds
+     Symbolic.Propositions
+     Syntax.ContractDecl
+     Program
      Tactics.
 
 Set Implicit Arguments.
@@ -59,17 +59,11 @@ Import ctx.notations.
 Import env.notations.
 
 Module Soundness
-       (Import termkit : TermKit)
-       (Import progkit : ProgramKit termkit)
-       (Import assertkit : AssertionKit termkit progkit)
-       (Import contractkit : SymbolicContractKit termkit progkit assertkit).
-  Module MUT := Mutators termkit progkit assertkit contractkit.
-  Import MUT.
-  Module LOG := ProgramLogic termkit progkit assertkit contractkit.
-  Import LOG.
-  Module SCMUT := SemiConcrete.Sound.Soundness termkit progkit assertkit contractkit.
-  Import SCMUT.
-  Import SCMUT.MUT.
+  (Import B    : Base)
+  (Import SPEC : Specification B)
+  (Import SOLV : SolverKit B SPEC)
+  (Import SEMI : SemiConcrete B SPEC)
+  (Import SYMB : MutatorsOn B SPEC SOLV).
 
   Import ModalNotations.
   Import SymProp.
@@ -139,13 +133,13 @@ Module Soundness
   (*   fun w ι t v => *)
   (*     v = inst t ι. *)
 
-  Hint Unfold SMut : core.
-  Hint Unfold CMut : core.
+  Local Hint Unfold SMut : core.
+  Local Hint Unfold CMut : core.
 
-  Hint Unfold SMut : typeclass_instances.
-  Hint Unfold CMut : typeclass_instances.
+  Local Hint Unfold SMut : typeclass_instances.
+  Local Hint Unfold CMut : typeclass_instances.
 
-  Hint Unfold approx ApproxImpl ApproxBox ApproxInst ApproxPath (* ApproxMut  *)ApproxTermVal (* ApproxNamedEnv *) ApproxStore : core.
+  Local Hint Unfold approx ApproxImpl ApproxBox ApproxInst ApproxPath (* ApproxMut  *)ApproxTermVal (* ApproxNamedEnv *) ApproxStore : core.
 
   Import ModalNotations.
   Open Scope modal.
@@ -163,14 +157,14 @@ Module Soundness
     rewrite sub_acc_trans, inst_subst.
     now subst.
   Qed.
-  Hint Resolve approx_four : core.
+  Local Hint Resolve approx_four : core.
 
   Lemma approx_lift {AT A} `{InstLaws AT A} {w0 : World} (ι0 : Valuation w0) (a : A) :
     approx ι0 (lift (T := AT) a) a.
   Proof.
     hnf. now rewrite inst_lift.
   Qed.
-  Hint Resolve approx_lift : core.
+  Local Hint Resolve approx_lift : core.
 
   Ltac wsimpl :=
     repeat
@@ -330,7 +324,7 @@ Module Soundness
     Proof.
       intros POST__s POST__c HPOST. unfold SDijk.assume_formulas.
       intros Hwp Hfmls0. apply Heq in Hfmls0.
-      destruct (Solver.generic_spec solver_user_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      destruct (solver_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0).
         destruct Hsolver as [Hν Hsolver]. inster Hν by auto.
         specialize (Hsolver (inst (sub_triangular_inv ζ) ι0)).
@@ -356,7 +350,7 @@ Module Soundness
     Proof.
       unfold SDijk.assert_formulas, CDijk.assert_formula.
       intros POST__s POST__c HPOST Hwp.
-      destruct (Solver.generic_spec solver_user_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
+      destruct (solver_spec fmls0) as [[w1 [ζ fmls1]] Hsolver|Hsolver].
       - specialize (Hsolver ι0 Hpc0). destruct Hsolver as [_ Hsolver].
         rewrite safe_assert_triangular in Hwp. destruct Hwp as [Hν Hwp].
         rewrite safe_assert_formulas_without_solver in Hwp.
@@ -377,9 +371,9 @@ Module Soundness
       approx ι0 (@SDijk.assert_formula w0 msg fml) (@CDijk.assert_formula P).
     Proof. unfold SDijk.assert_formula. now apply approx_assert_formulas. Qed.
 
-    Lemma approx_angelic_list {AT A} `{Inst AT A}
-      {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) msg :
-      approx ι0 (@SDijk.angelic_list AT w0 msg) (@CDijk.angelic_list A).
+    Lemma approx_angelic_list {M} `{Subst M, OccursCheck M} {AT A} `{Inst AT A}
+      {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) (msg : M w0) :
+      approx ι0 (SDijk.angelic_list (A := AT) msg) (CDijk.angelic_list (A := A)).
     Proof.
       intros xs ? ->.
       induction xs; cbn - [inst];
@@ -408,8 +402,7 @@ Module Soundness
       approx (AT := SDijkstra (Const F)) ι (@SDijk.angelic_finite F _ _ w msg) (@CDijk.angelic_finite F _ _).
     Proof.
       unfold SDijk.angelic_finite, CDijk.angelic_finite.
-      intros POST__s POST__c HPOST.
-      apply approx_angelic_list; eauto.
+      apply approx_angelic_list; auto.
       hnf. cbv [inst instantiate_const instantiate_list].
       now rewrite List.map_id.
     Qed.
@@ -608,7 +601,7 @@ Module Soundness
 
     Lemma approx_angelic_list {AT A} `{Inst AT A} {Γ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) msg :
-      approx ι (@SMut.angelic_list AT Γ w msg) (@CMut.angelic_list A Γ).
+      approx ι (SMut.angelic_list (A := AT) msg) (@CMut.angelic_list A Γ).
     Proof.
       intros ls lc Hl.
       unfold SMut.angelic_list, CMut.angelic_list.
@@ -1381,16 +1374,16 @@ Module Soundness
     Qed.
 
   End State.
-  Hint Resolve approx_eval_exp : core.
-  Hint Resolve approx_eval_exps : core.
-  Hint Resolve approx_pushpop : core.
-  Hint Resolve approx_pushspops : core.
-  Hint Resolve approx_debug : core.
+  Local Hint Resolve approx_eval_exp : core.
+  Local Hint Resolve approx_eval_exps : core.
+  Local Hint Resolve approx_pushpop : core.
+  Local Hint Resolve approx_pushspops : core.
+  Local Hint Resolve approx_debug : core.
 
-  Hint Resolve approx_demonic : core.
-  Hint Resolve approx_bind : core.
-  Hint Resolve approx_angelic_ctx : core.
-  Hint Resolve approx_bind_right : core.
+  Local Hint Resolve approx_demonic : core.
+  Local Hint Resolve approx_bind : core.
+  Local Hint Resolve approx_angelic_ctx : core.
+  Local Hint Resolve approx_bind_right : core.
 
   Lemma approx_produce_chunk {Γ} {w0 : World} (ι0 : Valuation w0)
     (Hpc0 : instpc (wco w0) ι0) :
@@ -1791,7 +1784,7 @@ Module Soundness
   Qed.
 
   Definition ExecApprox (sexec : SMut.Exec) (cexec : CMut.Exec) :=
-    forall {Γ τ} (s : Stm Γ τ) {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0),
+    forall Γ τ (s : Stm Γ τ) (w0 : World) (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
     approx ι0 (@sexec Γ τ s w0) (cexec Γ τ s).
 
   Lemma approx_exec_aux {cfg} srec crec (HYP : ExecApprox srec crec) :

@@ -1,5 +1,6 @@
 (******************************************************************************)
-(* Copyright (c) 2019 Steven Keuchel                                          *)
+(* Copyright (c) 2019 Dominique Devriese, Georgy Lukyanov,                    *)
+(*   Sander Huyghebaert, Steven Keuchel                                       *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -26,5 +27,40 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Katamaran Require Export
-     Base Program.
+From Coq Require Import
+     Strings.String.
+From Katamaran Require Import
+     Base
+     Semantics.Registers
+     Syntax.FunDecl
+     Syntax.Statements.
+
+Module Type FunDefKit (Import B : Base) (Import F : FunDecl B).
+  Include RegStoreKit B.
+
+  (* Memory model *)
+  Parameter Memory : Type.
+  (* Step relation for calling an external function. The complete function call
+     is done in one step. The result of an external call is either a failure
+     with an error message msg (res = inl msg) or a successful computation with
+     a result value v (res = inr v).
+   *)
+  Parameter ForeignCall :
+    forall
+      {Δ σ} (f : 𝑭𝑿 Δ σ)
+      (args : CStore Δ)
+      (res  : string + Val σ)
+      (γ γ' : RegStore)
+      (μ μ' : Memory), Prop.
+  Parameter ForeignProgress :
+    forall {Δ σ} (f : 𝑭𝑿 Δ σ) (args : CStore Δ) γ μ,
+    exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
+
+  (* Bind Scope env_scope with Memory. *)
+  (* Parameter read_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹), Val ty_int. *)
+  (* Parameter write_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Val ty_int), Memory. *)
+
+  (* Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ. *)
+  Parameter Inline FunDef : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.
+
+End FunDefKit.

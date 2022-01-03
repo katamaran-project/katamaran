@@ -26,30 +26,27 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-Require Import Coq.Classes.Morphisms.
+From Coq Require Import
+     Classes.Morphisms.
 
 From Katamaran Require Import
+     Context
      Environment
+     Notation
      Sep.Logic
-     Sep.Spec
-     Syntax.
+     Specification
+     Syntax.ContractDecl
+     Base.
 
-Module ProgramLogic
-  (Import termkit : TermKit)
-  (Import progkit : ProgramKit termkit)
-  (Import assertkit : AssertionKit termkit progkit)
-  (Import contractkit : SymbolicContractKit termkit progkit assertkit).
+Import ctx.notations.
+Import env.notations.
 
-  Import ctx.notations.
-  Import env.notations.
-
-  Open Scope logic.
-  Import LogicNotations.
+Module Type ProgramLogicOn (Import B : Base) (Import SPEC : Specification B).
 
   Section Triples.
 
-    Context {L : Type}.
-    Context {LL : IHeaplet L}.
+    Import sep.notations.
+    Context {L : SepLogic} {PI : PredicateDef L}.
 
     (* Hoare triples for SepContract *)
 
@@ -61,8 +58,8 @@ Module ProgramLogic
         (req : Assertion Σ) (ens : Assertion (Σ ▻ result∷σ))
         (frame : L) :
         δΔ = inst θΔ ι ->
-        pre ⊢ frame ✱ interpret_assertion req ι ->
-        (forall v, frame ✱ interpret_assertion ens (env.snoc ι (result∷σ) v) ⊢ post v) ->
+        (pre ⊢ frame ∗ interpret_assertion req ι) ->
+        (forall v, frame ∗ interpret_assertion ens (env.snoc ι (result∷σ) v) ⊢ post v) ->
         CTriple δΔ pre post (MkSepContract _ _ _ θΔ req result ens).
 
     Inductive LTriple {Δ} (δΔ : CStore Δ) (pre post : L) :
@@ -72,8 +69,8 @@ Module ProgramLogic
         (req ens : Assertion Σ)
         (frame : L) :
         δΔ = inst θΔ ι ->
-        pre ⊢ frame ✱ interpret_assertion req ι ->
-        (frame ✱ interpret_assertion ens ι ⊢ post) ->
+        (pre ⊢ frame ∗ interpret_assertion req ι) ->
+        (frame ∗ interpret_assertion ens ι ⊢ post) ->
         LTriple δΔ pre post (MkLemma _ _ θΔ req ens).
 
     Inductive Triple {Γ : PCtx} (δ : CStore Γ) {τ : Ty} :
@@ -86,7 +83,7 @@ Module ProgramLogic
     | rule_frame
         (s : Stm Γ τ) (R P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
-        ⦃ R ✱ P ⦄ s ; δ ⦃ fun v δ' => R ✱ Q v δ' ⦄
+        ⦃ R ∗ P ⦄ s ; δ ⦃ fun v δ' => R ∗ Q v δ' ⦄
     | rule_pull
         (s : Stm Γ τ) (P : L) (Q : Prop) (R : Val τ -> CStore Γ -> L) :
         (Q -> ⦃ P ⦄ s ; δ ⦃ R ⦄) ->
@@ -97,11 +94,11 @@ Module ProgramLogic
         ⦃ ∃ x, P x ⦄ s ; δ ⦃ Q ⦄
     | rule_stm_val
         {l : Val τ} {P : L} {Q : Val τ -> CStore Γ -> L} :
-        P ⊢ Q l δ ->
+        (P ⊢ Q l δ) ->
         ⦃ P ⦄ stm_val τ l ; δ ⦃ Q ⦄
     | rule_stm_exp
         {e : Exp Γ τ} {P : L} {Q : Val τ -> CStore Γ -> L} :
-        P ⊢ Q (eval e δ) δ ->
+        (P ⊢ Q (eval e δ) δ) ->
         ⦃ P ⦄ stm_exp e ; δ ⦃ Q ⦄
     | rule_stm_let
         (x : 𝑿) (σ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
@@ -225,7 +222,7 @@ Module ProgramLogic
     | rule_stm_call_inline
         {Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
         (P : L) (Q : Val τ -> L) :
-        ⦃ P ⦄ Pi f ; evals es δ ⦃ fun v _ => Q v ⦄ ->
+        ⦃ P ⦄ FunDef f ; evals es δ ⦃ fun v _ => Q v ⦄ ->
         ⦃ P ⦄ stm_call f es ; δ ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
     | rule_stm_call_frame
         (Δ : PCtx) (δΔ : CStore Δ) (s : Stm Δ τ)
@@ -260,20 +257,18 @@ Module ProgramLogic
 
     Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ δ _ P s Q).
 
-    Context {SLL : ISepLogicLaws L}.
     Lemma rule_consequence_left {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
       (P1 : L) {P2 : L} {Q : Val σ -> CStore Γ -> L} :
-      ⦃ P1 ⦄ s ; δ ⦃ Q ⦄ -> P2 ⊢ P1 -> ⦃ P2 ⦄ s ; δ ⦃ Q ⦄.
+      ⦃ P1 ⦄ s ; δ ⦃ Q ⦄ -> (P2 ⊢ P1) -> ⦃ P2 ⦄ s ; δ ⦃ Q ⦄.
     Proof.
-      intros H hyp. refine (rule_consequence δ hyp _ H).
-      intros; apply entails_refl.
+      intros H hyp. exact (rule_consequence δ hyp (fun _ _ => reflexivity _) H).
     Qed.
 
     Lemma rule_consequence_right {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
       {P : L} Q {Q'} :
       ⦃ P ⦄ s ; δ ⦃ Q ⦄ -> (forall v δ, Q v δ ⊢ Q' v δ) -> ⦃ P ⦄ s ; δ ⦃ Q' ⦄.
     Proof.
-      intros H hyp. exact (rule_consequence δ (entails_refl P) hyp H).
+      intros H hyp. exact (rule_consequence δ (reflexivity P) hyp H).
     Qed.
 
     Lemma rule_exist' {Γ : PCtx} {δ : CStore Γ} {A : Type} {σ : Ty} (s : Stm Γ σ)
@@ -286,8 +281,7 @@ Module ProgramLogic
       intros x.
       apply (rule_consequence_right (Q x) (hyp x)).
       intros.
-      apply lex_right with x.
-      apply entails_refl.
+      now apply lex_right with x.
     Qed.
 
     Lemma rule_disj {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
@@ -299,8 +293,8 @@ Module ProgramLogic
       apply (rule_consequence_left (∃ b : bool, if b then P else Q)).
       - apply rule_exist; intros []; assumption.
       - apply lor_left.
-        + apply lex_right with true, entails_refl.
-        + apply lex_right with false, entails_refl.
+        + now apply lex_right with true.
+        + now apply lex_right with false.
     Qed.
 
     Lemma rule_disj' {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
@@ -311,16 +305,16 @@ Module ProgramLogic
       intros H1 H2.
       apply rule_disj.
       - apply (rule_consequence_right _ H1).
-        intros. apply lor_right1, entails_refl.
+        intros. now apply lor_right1.
       - apply (rule_consequence_right _ H2).
-        intros. apply lor_right2, entails_refl.
+        intros. now apply lor_right2.
     Qed.
 
     Lemma rule_false {Γ σ} {δ : CStore Γ} {s : Stm Γ σ}
       {Q : Val σ -> CStore Γ -> L} :
-      ⦃ lfalse ⦄ s ; δ ⦃ Q ⦄.
+      ⦃ ⊥ ⦄ s ; δ ⦃ Q ⦄.
     Proof.
-      apply (rule_consequence_left (∃ (x : Empty_set), ltrue)).
+      apply (rule_consequence_left (∃ (x : Empty_set), ⊤)).
       - apply rule_exist; intros [].
       - apply lfalse_left.
     Qed.
@@ -371,63 +365,65 @@ Module ProgramLogic
     (* Qed. *)
 
     Definition WP {Γ τ} (s : Stm Γ τ) (POST :  Val τ -> CStore Γ -> L) : CStore Γ -> L :=
-      fun δ => ∃ (P : L), P ∧ !! (⦃ P ⦄ s ; δ ⦃ POST ⦄).
+      fun δ => ∃ (P : L), P ∧ !! (⦃ P ⦄ s; δ ⦃ POST ⦄).
 
     Lemma rule_wp {Γ σ} (s : Stm Γ σ) (POST :  Val σ -> CStore Γ -> L) (δ : CStore Γ) :
       ⦃ WP s POST δ ⦄ s ; δ ⦃ POST ⦄.
     Proof. apply rule_exist; intros P; now apply rule_pull. Qed.
 
     Global Instance proper_triple {Γ δ τ} :
-      Proper (bientails ==> eq ==> pointwise_relation _ (pointwise_relation _ bientails) ==> iff) (@Triple Γ δ τ).
+      Proper (lequiv ==> eq ==> pointwise_relation _ (pointwise_relation _ lequiv) ==> iff) (@Triple Γ δ τ).
     Proof.
       intros P Q pq s s' eq__s R S rs; subst s'.
       split; intro H; (eapply rule_consequence; [apply pq | apply rs | exact H ]).
     Qed.
 
     Lemma rule_stm_read_register_backwards {Γ δ σ r v} (Q : Val σ -> CStore Γ -> L) :
-      ⦃ lptsreg r v ✱ (lptsreg r v -✱ Q v δ) ⦄
+      ⦃ lptsreg r v ∗ (lptsreg r v -∗ Q v δ) ⦄
         stm_read_register r ; δ
       ⦃ Q ⦄.
     Proof.
-      rewrite sepcon_comm.
+      rewrite lsep_comm.
       eapply rule_consequence_right.
       apply rule_frame, rule_stm_read_register.
       cbn; intros.
-      rewrite sepcon_comm.
-      apply wand_sepcon_adjoint.
+      rewrite lsep_comm.
+      apply lwand_sep_adjoint.
+      rewrite <- land_assoc.
+      rewrite lprop_and_distr.
       apply limpl_and_adjoint.
-      rewrite lprop_land_distr.
       apply lprop_left; intros []; subst.
       apply limpl_and_adjoint.
       apply land_left2.
-      apply wand_sepcon_adjoint.
-      rewrite sepcon_comm.
-      apply wand_sepcon_adjoint.
-      apply entails_refl.
+      apply lwand_sep_adjoint.
+      rewrite lsep_comm.
+      apply lwand_sep_adjoint.
+      reflexivity.
     Qed.
 
     Lemma rule_stm_write_register_backwards {Γ δ σ r v} {e : Exp Γ σ}
       (Q : Val σ -> CStore Γ -> L) :
-      ⦃ lptsreg r v ✱ (lptsreg r (eval e δ) -✱ Q (eval e δ) δ) ⦄
+      ⦃ lptsreg r v ∗ (lptsreg r (eval e δ) -∗ Q (eval e δ) δ) ⦄
         stm_write_register r e ; δ
       ⦃ Q ⦄.
     Proof.
-      rewrite sepcon_comm.
+      rewrite lsep_comm.
       eapply rule_consequence_right.
       apply rule_frame, rule_stm_write_register.
       apply Q.
       cbn; intros.
-      rewrite sepcon_comm.
-      apply wand_sepcon_adjoint.
+      rewrite lsep_comm.
+      apply lwand_sep_adjoint.
+      rewrite <- land_assoc.
+      rewrite lprop_and_distr.
       apply limpl_and_adjoint.
-      rewrite lprop_land_distr.
       apply lprop_left; intros []; subst.
       apply limpl_and_adjoint.
       apply land_left2.
-      apply wand_sepcon_adjoint.
-      rewrite sepcon_comm.
-      apply wand_sepcon_adjoint.
-      apply entails_refl.
+      apply lwand_sep_adjoint.
+      rewrite lsep_comm.
+      apply lwand_sep_adjoint.
+      reflexivity.
     Qed.
 
     Lemma rule_stm_call_backwards {Γ δ Δ σ} {f : 𝑭 Δ σ} {es : NamedEnv (Exp Γ) Δ}
@@ -446,7 +442,7 @@ Module ProgramLogic
       apply limpl_and_adjoint.
       apply lprop_left. intro. subst δ1.
       apply limpl_and_adjoint.
-      apply land_left2, entails_refl.
+      now apply land_left2.
     Qed.
 
     Definition ValidContract {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) : Prop :=
@@ -455,13 +451,13 @@ Module ProgramLogic
           body ; inst_contract_localstore c ι
         ⦃ fun v _ => interpret_contract_postcondition c ι v ⦄.
 
-    Definition ValidContractEnv (cenv : SepContractEnv) : Prop :=
+    Definition ValidContractCEnv : Prop :=
       forall (Δ : PCtx) (τ : Ty) (f : 𝑭 Δ τ) (c : SepContract Δ τ),
-        cenv Δ τ f = Some c ->
-        ValidContract c (Pi f).
+        CEnv f = Some c ->
+        ValidContract c (FunDef f).
 
   End Triples.
 
   Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ _ _ δ _ P s Q).
 
-End ProgramLogic.
+End ProgramLogicOn.

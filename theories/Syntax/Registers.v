@@ -1,5 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2019 Steven Keuchel                                          *)
+(* Copyright (c) 2021 Steven Keuchel                                          *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -26,66 +26,30 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Coq Require Import
-     Bool.Bool
-     ZArith.ZArith.
 From Equations Require Import
      Equations.
-From Katamaran Require Export
-     Syntax.Types.
-
-Import ctx.notations.
+From Katamaran Require Import
+     Prelude
+     Tactics
+     Syntax.TypeDecl.
 
 Local Set Implicit Arguments.
 
-(******************************************************************************)
+Module Type RegDeclKit (Import T : TypeDecl).
+  (* Names of registers. *)
+  Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
+  Declare Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮).
+  Declare Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮).
+End RegDeclKit.
 
-Module Type ValueKit.
+Module DefaultRegDeclKit (Import T : TypeDecl) <: RegDeclKit T.
+  Definition 𝑹𝑬𝑮 : Ty -> Set := fun _ => Empty_set.
+  Definition 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮) := sigma_eqdec _ _.
 
-  Declare Module Export TY : Types.
+  Local Obligation Tactic :=
+    finite_from_eqdec.
 
-  (* Union data constructor field type *)
-  Parameter Inline 𝑼𝑲_Ty : forall (U : 𝑼), 𝑼𝑲 U -> Ty.
-  Parameter Inline 𝑼_fold   : forall (U : 𝑼), { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K) } -> 𝑼𝑻 U.
-  Parameter Inline 𝑼_unfold : forall (U : 𝑼), 𝑼𝑻 U -> { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K) }.
-  Parameter Inline 𝑼_fold_unfold :
-    forall (U : 𝑼) (Kv: 𝑼𝑻 U),
-      𝑼_fold (𝑼_unfold Kv) = Kv.
-  Parameter Inline 𝑼_unfold_fold :
-    forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K) }),
-      𝑼_unfold (𝑼_fold Kv) = Kv.
+  Program Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮) :=
+    {| finite.enum := nil |}.
 
-  (* Record field names. *)
-  Parameter Inline 𝑹𝑭  : Set.
-  (* Record field types. *)
-  Parameter Inline 𝑹𝑭_Ty : 𝑹 -> NCtx 𝑹𝑭 Ty.
-  Parameter Inline 𝑹_fold   : forall (R : 𝑹), NamedEnv Val (𝑹𝑭_Ty R) -> 𝑹𝑻 R.
-  Parameter Inline 𝑹_unfold : forall (R : 𝑹), 𝑹𝑻 R -> NamedEnv Val (𝑹𝑭_Ty R).
-  Parameter Inline 𝑹_fold_unfold :
-    forall (R : 𝑹) (Kv: 𝑹𝑻 R),
-      𝑹_fold (𝑹_unfold Kv) = Kv.
-  Parameter Inline 𝑹_unfold_fold :
-    forall (R : 𝑹) (Kv: NamedEnv Val (𝑹𝑭_Ty R)),
-      𝑹_unfold (𝑹_fold Kv) = Kv.
-
-End ValueKit.
-
-Module Values (Export valuekit : ValueKit).
-
-  Lemma 𝑼_fold_inj {U} (v1 v2 : {K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K)}) :
-    𝑼_fold v1 = 𝑼_fold v2 <-> v1 = v2.
-  Proof.
-    split; try congruence. intros H.
-    apply (f_equal (@𝑼_unfold U)) in H.
-    now rewrite ?𝑼_unfold_fold in H.
-  Qed.
-
-  Lemma 𝑼_unfold_inj {U} (v1 v2 : Val (ty_union U)) :
-    𝑼_unfold v1 = 𝑼_unfold v2 <-> v1 = v2.
-  Proof.
-    split; try congruence. intros H.
-    apply (f_equal (@𝑼_fold U)) in H.
-    now rewrite ?𝑼_fold_unfold in H.
-  Qed.
-
-End Values.
+End DefaultRegDeclKit.

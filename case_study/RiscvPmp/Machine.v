@@ -33,9 +33,10 @@ From Equations Require Import
      Equations.
 Require Import Equations.Prop.EqDec.
 From Katamaran Require Import
-     Syntax.
+     Semantics.Registers
+     Program.
 From RiscvPmp Require Export
-     Values.
+     Base.
 
 From stdpp Require Import decidable finite.
 
@@ -106,10 +107,9 @@ Module RiscvNotations.
   Notation "'MPP'"          := "MPP" : string_scope.
 End RiscvNotations.
 
-Module RiscvPmpTermKit <: TermKit.
-  Module valuekit := RiscvPmpValueKit.
-  Module Export VAL := Syntax.Values.Values valuekit.
+Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
+  Section FunDeclKit.
   Import RiscvNotations.
 
   (** Functions **)
@@ -179,56 +179,9 @@ Module RiscvPmpTermKit <: TermKit.
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
   Definition 𝑭𝑿  : PCtx -> Ty -> Set := FunX.
   Definition 𝑳  : PCtx -> Set := Lem.
+  End FunDeclKit.
 
-  Inductive Reg : Ty -> Set :=
-  | pc            : Reg ty_xlenbits
-  | nextpc        : Reg ty_xlenbits
-  | mstatus       : Reg ty_mstatus
-  | mtvec         : Reg ty_xlenbits
-  | mcause        : Reg ty_exc_code
-  | mepc          : Reg ty_xlenbits
-  | cur_privilege : Reg ty_privilege
-  | x1            : Reg ty_xlenbits
-  | x2            : Reg ty_xlenbits
-  | x3            : Reg ty_xlenbits
-  | pmp0cfg       : Reg ty_pmpcfg_ent
-  | pmpaddr0      : Reg ty_xlenbits
-  .
-
-  Section TransparentObligations.
-    Local Set Transparent Obligations.
-    Derive Signature NoConfusion for Reg.
-  End TransparentObligations.
-
-  Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
-  Definition 𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg).
-  Proof.
-    intros [? []] [? []]; cbn;
-      first
-        [ left; now apply eq_refl
-        | right; intros e1; dependent elimination e1
-        ].
-  Defined.
-
-  Instance 𝑹𝑬𝑮_eq_decision : EqDecision (sigT Reg).
-  Proof.
-    intros xy; eapply 𝑹𝑬𝑮_eq_dec.
-  Defined.
-
-  Program Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) := {| enum := [ existT _ pc; existT _ nextpc; existT _ mstatus; existT _ mtvec; existT _ mcause; existT _ mepc; existT _ cur_privilege; existT _ x1; existT _ x2; existT _ x3; existT _ pmp0cfg; existT _ pmpaddr0 ]%list |}.
-  Next Obligation.
-    now eapply (nodup_fixed (H := 𝑹𝑬𝑮_eq_dec)).
-  Defined.
-  Next Obligation.
-    intros x.
-    refine (@bool_decide_unpack _ (elem_of_list_dec _ _) _).
-    destruct x; now destruct r.
-  Qed.
-
-End RiscvPmpTermKit.
-
-Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
-  Module Export TM := Terms RiscvPmpTermKit.
+  Include FunDeclMixin RiscvPmpBase.
 
   Module RiscvμSailNotations.
     Notation "'rs'"           := (@exp_var _ "rs" _ _) : exp_scope.
@@ -313,7 +266,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     Notation "'CTL_MRET'" := (exp_union ctl_result KCTL_MRET (exp_val ty_unit tt)) : exp_scope.
   End RiscvμSailNotations.
 
-  Section Functions.
+  Section FunDefKit.
   Import RiscvNotations.
   Import RiscvμSailNotations.
   Local Coercion stm_exp : Exp >-> Stm.
@@ -866,16 +819,11 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
       stm_val ty_retired RETIRE_FAIL
     end.
 
-  End Functions.
+  End FunDefKit.
 
-  Definition RegStore := GenericRegStore.
-  Definition read_register := generic_read_register.
-  Definition write_register := generic_write_register.
-  Definition read_write := generic_read_write.
-  Definition read_write_distinct := generic_read_write_distinct.
-  Definition write_read := generic_write_read.
-  Definition write_write := generic_write_write.
+  Include DefaultRegStoreKit RiscvPmpBase.
 
+  Section ForeignKit.
   (* Memory *)
   Definition Memory := Addr -> Word.
 
@@ -911,8 +859,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
       exists γ, μ, (inr (RTYPE 0 0 0 RISCV_ADD)), (inr (RTYPE 0 0 0 RISCV_ADD)).
       reflexivity.
   Qed.
+  End ForeignKit.
 
-  Definition Pi {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
+  Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
     | rX                    => fun_rX
     | wX                    => fun_wX
@@ -963,4 +912,6 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     | execute_MRET          => fun_execute_MRET
     end.
 
-End RiscvPmpProgramKit.
+  Include ProgramMixin RiscvPmpBase.
+
+End RiscvPmpProgram.

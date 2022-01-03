@@ -27,8 +27,8 @@
 (******************************************************************************)
 
 From Coq Require Import
-     NArith.BinNat
      Bool.Bool
+     NArith.BinNat
      Numbers.DecimalString
      Strings.Ascii
      Strings.String.
@@ -38,6 +38,9 @@ From Katamaran Require Import
      Notation Prelude.
 
 Local Set Implicit Arguments.
+
+Declare Scope ctx_scope.
+Delimit Scope ctx_scope with ctx.
 
 Module Binding.
 

@@ -1,5 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2019 Steven Keuchel                                          *)
+(* Copyright (c) 2022 Steven Keuchel                                          *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -27,4 +27,15 @@
 (******************************************************************************)
 
 From Katamaran Require Export
-     Base Program.
+     Base
+     Program
+     SmallStep.Step
+     SmallStep.Inversion
+     SmallStep.Progress.
+
+Module Type SemanticsMixin (B : Base) (P : Program B) :=
+  SmallStepOn B P <+ InversionOn B P <+ ProgressOn B P.
+Module Type Semantics (B : Base) (P : Program B) :=
+  Equalities.Nop <+ SemanticsMixin B P.
+Module MakeSemantics (B : Base) (P : Program B) <: Semantics B P :=
+  Equalities.Nop <+ SemanticsMixin B P.

@@ -26,15 +26,21 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-Require Import FunctionalExtensionality.
-Require Import Coq.Program.Equality.
-Require Import Coq.Program.Tactics.
+From Coq Require Import
+     Classes.RelationClasses
+     FunctionalExtensionality
+     Program.Tactics.
 
 From Equations Require Import Equations.
 Require Import Equations.Prop.EqDec.
 
 From Katamaran Require Import
-     Environment Sep.Logic Sep.Spec Syntax.
+     Prelude
+     Environment
+     Sep.Logic
+     Specification
+     Syntax.ContractDecl
+     Program.
 (* Require Import MicroSail.Sep.Hoare. *)
 
 (* Simple model (aka Logic Instance) using disjoint register-heaps *)
@@ -46,48 +52,11 @@ From Katamaran Require Import
    The logic typelcasses we adopted from VST are tailored towards pred ext; thus, perhaps,
    we will need to look into other interfaces or adopt pred ext. *)
 
-
-Module Disjoint
-       (Import termkit : TermKit)
-       (Import progkit : ProgramKit termkit)
-       (Import assertkit : AssertionKit termkit progkit)
-       (Import contractkit : SymbolicContractKit termkit progkit assertkit).
-
-  Import LogicNotations.
-  Open Scope logic.
+Module Type DisjointModel
+  (Import B : Base)
+  (Import SPEC : Specification B).
 
   Definition Heap : Type := forall σ, 𝑹𝑬𝑮 σ -> option (Val σ).
-
-  (* convert a register store into a heap *)
-  Definition heap (rs : RegStore) : Heap :=
-    fun _ r => Some (read_register rs r).
-
-  Definition emp : Heap := fun _ _ => None.
-
-  (* A heap is total if every register points to a Some *)
-  Definition Total (h : Heap) : Prop :=
-    forall σ r, exists v, h σ r = Some v.
-
-  Definition HProp : Type := Heap -> Prop.
-
-  Instance HProp_ILogic : ILogic HProp :=
-  { land := (fun P Q => (fun γ => P γ /\ Q γ));
-    lor  := (fun P Q => (fun γ => P γ \/ Q γ));
-    (* existential quantification *)
-    lex := (fun {T : Type} (P : T -> HProp) => (fun γ => exists x, P x γ));
-    (* universal quantification *)
-    lall := (fun {T : Type} (P : T -> HProp) => (fun γ => forall x, P x γ));
-    limpl := (fun P Q => (fun γ => P γ -> Q γ));
-
-    (* Prop embedding *)
-    lprop := (fun (p : Prop) => (fun _ => p));
-    (* P ⊢ Q *)
-    lentails := (fun P Q => forall γ, P γ -> Q γ);
-  }.
-
-  Program Instance HProp_ILogicLaws : @ILogicLaws HProp HProp_ILogic.
-  Solve Obligations with firstorder.
-
   (* Check if two heaps are disjoint,
      Peter O'Hearn's Marktoberdorf notes call this '#'. *)
   Definition split (γ γl γr : Heap) : Prop :=
@@ -97,6 +66,16 @@ Module Disjoint
                                      | Some x => Some x
                                      end.
 
+  (* convert a register store into a heap *)
+  Definition heap (rs : RegStore) : Heap :=
+    fun _ r => Some (read_register rs r).
+
+  Definition empty : Heap := fun _ _ => None.
+
+  (* A heap is total if every register points to a Some *)
+  Definition Total (h : Heap) : Prop :=
+    forall σ r, exists v, h σ r = Some v.
+
   Definition disjoint (γl γr : Heap) : Prop :=
     forall σ (r : 𝑹𝑬𝑮 σ), γl σ r <> None -> γr σ r <> None -> False.
 
@@ -105,12 +84,6 @@ Module Disjoint
             | None => γr σ r
             | Some v => Some v
             end.
-
-  Program Instance HProp_ISepLogic : ISepLogic HProp :=
-  { emp := fun γ => forall σ r, γ σ r = None;
-    sepcon P Q := fun γ => exists γl γr, split γ γl γr /\ P γl /\ Q γr;
-    wand P Q := fun γl => forall γ γr, split γ γl γr -> P γr -> Q γ
-  }.
 
   (* Solve a heap partitioning goal of form 'split γ γl γr' *)
   Ltac heap_solve_split :=
@@ -125,43 +98,19 @@ Module Disjoint
       | [ H : Some ?l1 = Some ?l2 |- _ ] => rewrite H
       | [ |- _ /\ _ ] => split
       | [ |- _ \/ _ ] => auto
+      | [ |- @eq Heap _ _ ] =>
+          let σ := fresh "σ" in
+          let r := fresh "r" in
+          extensionality σ; extensionality r
       end; cbn in *; try congruence; try eauto with seplogic.
-
-  Create HintDb seplogic.
-  Local Hint Unfold bientails : seplogic.
 
   Lemma split_eq {γ1 γ2 γl γr} :
     split γ1 γl γr -> split γ2 γl γr -> γ1 = γ2.
-  Proof.
-    intros.
-    extensionality σ.
-    extensionality r.
-    heap_solve_split.
-  Qed.
+  Proof. heap_solve_split. Qed.
 
   Lemma split_eq_right {γ γl γr1 γr2} :
     split γ γl γr1 -> split γ γl γr2 -> γr1 = γr2.
-  Proof.
-    intros.
-    extensionality σ.
-    extensionality r.
-    heap_solve_split.
-  Qed.
-
-  Lemma split_comm : forall γ γ1 γ2, split γ γ1 γ2 -> split γ γ2 γ1.
   Proof. heap_solve_split. Qed.
-  Local Hint Resolve split_comm : seplogic.
-
-  Lemma split_emp : forall γ γ1, split γ emp γ1 <-> γ = γ1.
-  Proof.
-    intros γ γ1.
-    split.
-    - intros H.
-      extensionality σ. extensionality r.
-      heap_solve_split.
-    - heap_solve_split.
-  Qed.
-  Local Hint Resolve split_emp : seplogic.
 
   Lemma split_assoc_l : forall γ γl γr γll γlr,
     split γ γl γr -> split γl γll γlr ->
@@ -189,147 +138,118 @@ Module Disjoint
   Qed.
   Local Hint Resolve split_assoc_r : seplogic.
 
-  Lemma sepcon_comm : forall (P Q : HProp), P ✱ Q ⊢ Q ✱ P.
-  Proof.
-    intros P Q γ H.
-    destruct H as [γl [γr H]].
-    exists γr. exists γl.
-    destruct H as [H1 [H2 H3]].
-    split.
-    + apply (@split_comm _ _ _ H1).
-    + firstorder.
-  Qed.
-  Local Hint Resolve sepcon_comm : seplogic.
+  Lemma split_comm : forall γ γ1 γ2, split γ γ1 γ2 -> split γ γ2 γ1.
+  Proof. heap_solve_split. Qed.
+  Local Hint Resolve split_comm : seplogic.
 
-  Lemma sepcon_assoc_forward : forall (P Q R : HProp), P ✱ Q ✱ R ⊢ P ✱ (Q ✱ R).
-  Proof.
-    cbn.
-    intros P Q R γ H.
-    destruct H as [γl [γr [H_split_1 [H HR]]]].
-    destruct H as [γl' [γr' [H_split_2 [HP HQ]]]].
-    specialize (split_assoc_l γ γl γr γl' γr' H_split_1 H_split_2) as H_split_3.
-    inversion H_split_3 as [γcomp H_split_comp].
-    exists γl'. exists γcomp.
-    split.
-    * apply H_split_comp.
-    * split.
-    + apply HP.
-    + exists γr'. exists γr.
-      intuition.
-  Qed.
-  Local Hint Resolve sepcon_assoc_forward : seplogic.
+  Lemma split_empty : forall γ γ1, split γ empty γ1 <-> γ = γ1.
+  Proof. split; heap_solve_split. Qed.
+  Local Hint Resolve split_empty : seplogic.
 
-  Lemma sepcon_assoc_backward : forall (P Q R : HProp), P ✱ (Q ✱ R) ⊢ P ✱ Q ✱ R.
+  Lemma lsep_assoc' (P Q R : Heap -> Prop) :
+    (forall γ : Heap,
+     (exists γl γr : Heap, split γ γl γr /\ P γl /\ (exists γl0 γr0 : Heap, split γr γl0 γr0 /\ Q γl0 /\ R γr0)) ->
+     exists γl γr : Heap, split γ γl γr /\ (exists γl0 γr0 : Heap, split γl γl0 γr0 /\ P γl0 /\ Q γr0) /\ R γr) /\
+    (forall γ : Heap,
+     (exists γl γr : Heap, split γ γl γr /\ (exists γl0 γr0 : Heap, split γl γl0 γr0 /\ P γl0 /\ Q γr0) /\ R γr) ->
+     exists γl γr : Heap, split γ γl γr /\ P γl /\ (exists γl0 γr0 : Heap, split γr γl0 γr0 /\ Q γl0 /\ R γr0)).
   Proof.
-    intros P Q R γ H.
-    cbn in *.
-    destruct H as [γl [γr [H_split_1 [HP H]]]].
-    destruct H as [γrl [γrr [H_split_2 [HQ HR]]]].
-    specialize (split_comm _ _ _ H_split_1) as H_split_1'.
-    specialize (split_comm _ _ _ H_split_2) as H_split_2'.
-    specialize (split_assoc_l γ γr γl γrr γrl H_split_1' H_split_2') as H_split_3.
-    destruct H_split_3 as [γcomp H_split_comp].
-    exists γcomp, γrr.
     split.
-    - intuition.
-    - split.
-      + exists γl, γrl.
-        intuition.
+    - intros γ H.
+      cbn in *.
+      destruct H as [γl [γr [H_split_1 [HP H]]]].
+      destruct H as [γrl [γrr [H_split_2 [HQ HR]]]].
+      specialize (split_comm _ _ _ H_split_1) as H_split_1'.
+      specialize (split_comm _ _ _ H_split_2) as H_split_2'.
+      specialize (split_assoc_l γ γr γl γrr γrl H_split_1' H_split_2') as H_split_3.
+      destruct H_split_3 as [γcomp H_split_comp].
+      exists γcomp, γrr.
+      split.
       + intuition.
+      + split.
+        * exists γl, γrl.
+          intuition.
+        * intuition.
+    - intros γ H.
+      destruct H as [γl [γr [H_split_1 [H HR]]]].
+      destruct H as [γl' [γr' [H_split_2 [HP HQ]]]].
+      specialize (split_assoc_l γ γl γr γl' γr' H_split_1 H_split_2) as H_split_3.
+      inversion H_split_3 as [γcomp H_split_comp].
+      exists γl'. exists γcomp.
+      split.
+      + apply H_split_comp.
+      + split.
+        * apply HP.
+        * exists γr'. exists γr.
+          intuition.
   Qed.
-  Local Hint Resolve sepcon_assoc_backward : seplogic.
 
-  Lemma wand_sepcon_adjoint : forall (P Q R : HProp),
-      (P ✱ Q ⊢ R) <-> (P ⊢ Q -✱ R).
+  Lemma lsep_comm' (P Q : Heap -> Prop) (γ : Heap) :
+    (exists γl γr : Heap, split γ γl γr /\ P γl /\ Q γr) ->
+    (exists γl γr : Heap, split γ γl γr /\ Q γl /\ P γr).
   Proof.
-    intros P Q R.
-    split.
-    - intros H.
-      cbn in *.
-      intros γl HP γ γr H_split HQ.
-      specialize (H γ).
-      apply H.
-      exists γl. exists γr.
-      intuition.
-    - intros H.
-      cbn in *.
-      intros γl H1.
-      destruct H1 as [γll [γlr [H_split [HP HQ]]]].
-      exact (H γll HP γl γlr H_split HQ).
+    intros (γl & γr & HS & HP & HQ).
+    exists γr, γl. auto using split_comm.
   Qed.
-  Local Hint Resolve wand_sepcon_adjoint : seplogic.
 
-  Lemma sepcon_andp_prop_forward : forall (P R : HProp) (Q : Prop),
-      (P ✱ (!!Q ∧ R)) ⊢ (!!Q ∧ (P ✱ R)).
-  Proof.
-    intros P R Q γ H.
-    destruct H as [γl [γr [H_split [HP [HQ HR]]]]].
-    split.
-    - intuition.
-    - cbn.
-      exists γl. exists γr.
-      intuition.
-  Qed.
-  Local Hint Resolve sepcon_andp_prop_forward : seplogic.
-
-  Lemma sepcon_andp_prop_backward : forall (P R : HProp) (Q : Prop),
-      (!!Q ∧ (P ✱ R)) ⊢ (P ✱ (!!Q ∧ R)).
-  Proof.
-    intros P R Q γ H.
-    cbn in *.
-    destruct H as [HQ [γl [γr [H_split [HP HR]]]]].
-    exists γl, γr.
-    split; intuition.
-  Qed.
-  Local Hint Resolve sepcon_andp_prop_backward : seplogic.
-
-  Lemma sepcon_entails: forall (P P' Q Q' : HProp),
-      P ⊢ P' -> Q ⊢ Q' -> P ✱ Q ⊢ P' ✱ Q'.
-  Proof.
-    intros P P' Q Q' H1 H2 γ H3.
-    cbn in *.
-    destruct H3 as [γl [γr [H_split [HP HQ]]]].
-    exists γl, γr.
-    intuition.
-  Qed.
-  Local Hint Resolve sepcon_entails : seplogic.
-
-  Lemma sepcon_emp (P : HProp) : P ✱ Logic.emp ⊣⊢s P.
+  Lemma lsep_emp' (P : Heap -> Prop) :
+    (forall γ : Heap, (exists γl γr : Heap, split γ γl γr /\ P γl /\ (forall (σ : Ty) (r : 𝑹𝑬𝑮 σ), γr σ r = None)) -> P γ) /\
+    (forall γ : Heap, P γ -> exists γl γr : Heap, split γ γl γr /\ P γl /\ (forall (σ : Ty) (r : 𝑹𝑬𝑮 σ), γr σ r = None)).
   Proof.
     split.
     - intros γ (γl & γr & H1 & H2 & H3).
-      assert (γr = emp).
+      assert (γr = empty).
       { extensionality σ.
         extensionality r.
         apply H3.
       }
       subst γr.
-      apply split_comm, split_emp in H1.
+      apply split_comm, split_empty in H1.
       now subst γl.
     - intros γ H1. cbn.
-      exists γ, emp.
+      exists γ, empty.
       split.
-      apply split_comm, split_emp; reflexivity.
+      apply split_comm, split_empty; reflexivity.
       split.
       assumption.
-      reflexivity.
+      now intro.
   Qed.
-  Local Hint Resolve sepcon_emp : seplogic.
 
-  Program Instance HProp_ISepLogicLaws : ISepLogicLaws HProp.
-  Solve Obligations with eauto with seplogic.
-  Admit Obligations of HProp_ISepLogicLaws.
+  Import sep.notations.
 
-  Program Instance HProp_Heaplet : IHeaplet HProp :=
-  { (* We don't have any predicates in this model yet;
-       thus we map the predicate to False *)
-    luser (p : 𝑯) (ts : Env Val (𝑯_Ty p)) := fun γ => False;
-    lptsreg (σ : Ty) (r : 𝑹𝑬𝑮 σ) (t : Val σ) := fun γ => γ σ r = Some t;
-  }.
+  Local Obligation Tactic :=
+    first
+      [ apply lsep_assoc'
+      | split; apply lsep_comm'
+      | apply lsep_emp'
+      | firstorder; fail
+      | cbn
+      ].
+
+  Program Definition HProp : SepLogic :=
+    {| lcar         := Heap -> Prop;
+       lentails P Q := forall γ, P γ -> Q γ;
+       land P Q     := fun γ => P γ /\ Q γ;
+       lor P Q      := fun γ => P γ \/ Q γ;
+       limpl P Q    := fun γ => P γ -> Q γ;
+       lprop P      := fun _ => P;
+       lex T P      := fun γ => exists x, P x γ;
+       lall T P     := fun γ => forall x, P x γ;
+       lemp         := fun γ => forall σ r, γ σ r = None;
+       lsep P Q     := fun γ => exists γl γr, split γ γl γr /\ P γl /\ Q γr;
+       lwand P Q    := fun γl => forall γ γr, split γ γl γr -> P γr -> Q γ;
+    |}.
   Next Obligation.
-    intros p ts hdup h hyp.
-    contradict hyp.
-  Qed.
+    (* lsep_leak *)
+  Admitted.
+
+  (* This should be constructed from a parameter of the model. *)
+  Program Instance pi_hprop : PredicateDef HProp :=
+    {| lptsreg σ r t := fun γ => γ σ r = Some t;
+       (* We don't have any predicates in this model yet;
+          thus we map the predicate to False *)
+       luser p ts    := fun _ => False;
+    |}.
 
   Definition write_heap (γ : Heap) {σ} (r : 𝑹𝑬𝑮 σ)
     (v : Val σ) : Heap :=
@@ -423,4 +343,4 @@ Module Disjoint
     - now rewrite read_write_distinct.
   Qed.
 
-End Disjoint.
+End DisjointModel.
