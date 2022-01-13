@@ -326,6 +326,9 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition zero_reg {Γ} : Stm Γ ty_xlenbits := exp_val ty_int 0%Z.
 
+  (* TODO: remove gprs_without -> open_gprs ∧ close_gprs *)
+  (* close_gprs \ { r ↦ v } ∗ (r ↦ _ -∗ gprs) |-> gprs *)
+
   (** Functions **)
   Definition fun_rX : Stm [rs ∶ ty_regno] ty_xlenbits :=
     if: rs = z_exp 0
@@ -665,8 +668,7 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
                                                          we drop the alignment mask and inline prepare_xret_target,
                                                          which just calls get_xret_target, which returns (for M-mode)
                                                          the value of mepc *)
-                                                (let: prev_priv := stm_read_register cur_privilege in
-                                                 let: tmp1 := stm_read_register mstatus in
+                                                (let: tmp1 := stm_read_register mstatus in
                                                  (stm_match_record rmstatus tmp1
                                                                    (recordpat_snoc recordpat_nil "MPP" MPP%string)
                                                                    (stm_write_register cur_privilege MPP ;;
@@ -701,7 +703,10 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
     call prepare_trap_vector del_priv tmp.
 
   Definition fun_prepare_trap_vector : Stm [p ∶ ty_privilege, cause ∶ ty_mcause] ty_xlenbits :=
-    let: tvec := stm_read_register mtvec in
+    let: tvec := match: p in privilege with
+    | Machine => stm_read_register mtvec
+    | User => fail "N extension (user-level interrupts) not supported"
+    end in
     let: tmp := call tvec_addr tvec cause in
     (* NOTE: tvec_addr will only ever return Some(epc), because we don't support
              the 2 mode bits and only have direct mode. The None case only arises

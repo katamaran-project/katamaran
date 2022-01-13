@@ -188,7 +188,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
     @post pmp_entries(ents) ∗ (mode(m) ∗ pc(i)) ∨ (mode(M) ∗ pc(h) ...)
     τ f(Δ...)*)
   Definition mach_inv_contract {τ Δ} : SepContract Δ τ :=
-    let Σ := ["m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits, "entries" ∶ ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits)] in
+    let Σ := ["m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits, "entries" ∶ ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits), "mpp" ∶ ty_privilege, "mepc" ∶ ty_xlenbits] in
     {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
        sep_contract_localstore      := create_localstore Δ Σ;
        sep_contract_precondition    :=
@@ -197,18 +197,25 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
          pc ↦ (term_var "i") ∗
          asn_pmp_entries (term_var "entries") ∗
          asn_exist v ty_xlenbits (nextpc ↦ term_var v) ∗
+         asn_exist "mcause" ty_exc_code (mcause ↦ (term_var "mcause")) ∗
+         mepc ↦ (term_var "mepc") ∗
+         mstatus ↦ (term_record rmstatus [ term_var "mpp" ]) ∗
          asn_gprs;
        sep_contract_result          := "result_mach_inv";
        sep_contract_postcondition   :=
          asn_pmp_entries (term_var "entries") ∗
          asn_gprs ∗
          mtvec ↦ (term_var "h") ∗
-         asn_exist v ty_xlenbits (nextpc ↦ term_var v) ∗
-         asn_or (cur_privilege ↦ (term_var "m") ∗ pc ↦ (term_var "i"))
+         pc ↦ (term_var "i") ∗
+         asn_exist "mcause" ty_exc_code (mcause ↦ (term_var "mcause")) ∗
+         asn_or (cur_privilege ↦ (term_var "m") ∗
+                 asn_exist v ty_xlenbits (nextpc ↦ (term_var v)) ∗
+                 mstatus ↦ (term_record rmstatus [ term_var "mpp" ]) ∗
+                 mepc ↦ (term_var "mepc"))
                 (cur_privilege ↦ (term_val ty_privilege Machine) ∗
-                 pc ↦ (term_var "h") ∗
-                 mepc ↦ (term_var "i") ∗
-                 mstatus ↦ (term_record rmstatus [ term_val ty_privilege User ]))
+                 nextpc ↦ (term_var "h") ∗
+                 mstatus ↦ (term_record rmstatus [ term_var "m" ]) ∗
+                 mepc ↦ (term_var "i"))
     |}.
 
   Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
@@ -233,11 +240,60 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
     mach_inv_contract.
 
   Definition sep_contract_exception_handler : SepContractFun exception_handler :=
-    {| sep_contract_logic_variables := [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_xlenbits];
+    {| sep_contract_logic_variables := [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_xlenbits, "mpp" ∶ ty_privilege, "mepc" ∶ ty_xlenbits, tvec ∶ ty_xlenbits, p ∶ ty_privilege];
        sep_contract_localstore      := [term_var cur_priv, term_var ctl, term_var "pc"]%arg;
-       sep_contract_precondition    := asn_true;
+       sep_contract_precondition    :=
+         cur_privilege ↦ (term_var p)
+         ∗ asn_exist "mcause" ty_exc_code  (mcause        ↦ (term_var "mcause"))
+         ∗                                  mstatus       ↦ (term_record rmstatus [ term_var "mpp" ])
+         ∗                                  mtvec         ↦ (term_var tvec)
+         ∗                                  mepc          ↦ (term_var "mepc");
        sep_contract_result          := "result_exception_handler";
-       sep_contract_postcondition   := asn_true;
+       sep_contract_postcondition   := asn_match_union ctl_result (term_var ctl)
+        (fun K => match K with
+                | KCTL_TRAP => ctx.snoc ε (e ∷ ty_exception_type)
+                | KCTL_MRET => ε
+                end)
+        (fun K => match K with
+                | KCTL_TRAP => pat_var e
+                | KCTL_MRET => pat_unit
+                end)
+        (fun K => match K with
+                | KCTL_TRAP =>
+                    asn_eq (term_var "result_exception_handler") (term_var tvec)
+                    ∗ cur_privilege ↦ (term_val ty_privilege Machine)
+                    ∗ asn_exist "mcause" ty_exc_code (mcause ↦ (term_var "mcause"))
+                    ∗ mstatus ↦ (term_record rmstatus [ term_var p ])
+                    ∗ mepc ↦ (term_var "pc")
+                    ∗ mtvec ↦ (term_var tvec)
+                | KCTL_MRET =>
+                    asn_eq (term_var "result_exception_handler") (term_var "mepc")
+                    ∗ cur_privilege ↦ (term_var "mpp")
+                    ∗ asn_exist "mcause" ty_exc_code (mcause ↦ (term_var "mcause"))
+                    ∗ mstatus ↦ (term_record rmstatus [ term_val ty_privilege User ])
+                    ∗ mtvec ↦ (term_var tvec)
+                    ∗ mepc ↦ (term_var "mepc")
+                end);
+    |}.
+
+  Definition sep_contract_trap_handler : SepContractFun trap_handler :=
+    {| sep_contract_logic_variables := [del_priv ∶ ty_privilege, c ∶ ty_exc_code, "pc" ∶ ty_xlenbits, p ∶ ty_privilege, tvec ∶ ty_xlenbits];
+       sep_contract_localstore      := [term_var del_priv, term_var c, term_var "pc"]%arg;
+       sep_contract_precondition    :=
+         cur_privilege ↦ (term_var p)
+         ∗ asn_exist "mcause_val"  ty_exc_code (mcause  ↦ (term_var "mcause_val"))
+         ∗ asn_exist "mstatus_val" ty_mstatus  (mstatus ↦ (term_var "mstatus_val"))
+         ∗ asn_exist "mepc_val"    ty_xlenbits (mepc    ↦ (term_var "mepc_val"))
+         ∗ mtvec ↦ (term_var tvec);
+       sep_contract_result          := "result_trap_handler";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_trap_handler") (term_var tvec)
+         ∗ asn_eq (term_var del_priv) (term_val ty_privilege Machine)
+         ∗ cur_privilege ↦ (term_var del_priv)
+         ∗ mcause        ↦ (term_var c)
+         ∗ mstatus       ↦ (term_record rmstatus [ term_var p ])
+         ∗ mepc          ↦ (term_var "pc")
+         ∗ mtvec         ↦ (term_var tvec);
     |}.
 
   Definition sep_contract_prepare_trap_vector : SepContractFun prepare_trap_vector :=
@@ -247,6 +303,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
        sep_contract_result          := "result_prepare_trap_vector";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_prepare_trap_vector") (term_var tvec)
+         ∗ asn_eq (term_var p) (term_val ty_privilege Machine)
          ∗ mtvec ↦ (term_var tvec);
     |}.
 
@@ -257,6 +314,25 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
        sep_contract_result          := "result_tvec_addr";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_tvec_addr") (term_inl (term_var m));
+    |}.
+
+  Definition sep_contract_exceptionType_to_bits : SepContractFun exceptionType_to_bits :=
+    {| sep_contract_logic_variables := [e ∶ ty_exception_type];
+       sep_contract_localstore      := [term_var e]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_exceptionType_to_bits";
+       sep_contract_postcondition   :=
+        asn_exist result ty_exc_code
+                  (asn_eq (term_var "result_exceptionType_to_bits") (term_var result))
+    |}.
+
+  Definition sep_contract_exception_delegatee : SepContractFun exception_delegatee :=
+    {| sep_contract_logic_variables := [p ∶ ty_privilege];
+       sep_contract_localstore      := [term_var p]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_exception_delegatee";
+       sep_contract_postcondition   :=
+        asn_eq (term_var "result_exception_delegatee") (term_val ty_privilege Machine)
     |}.
 
   Definition sep_contract_get_arch_pc : SepContractFun get_arch_pc :=
@@ -390,23 +466,26 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
-      | execute_RTYPE       => Some sep_contract_execute_RTYPE
-      | execute_ITYPE       => Some sep_contract_execute_ITYPE
-      | execute_UTYPE       => Some sep_contract_execute_UTYPE
-      | execute_BTYPE       => Some sep_contract_execute_BTYPE
-      | execute_RISCV_JAL   => Some sep_contract_execute_RISCV_JAL
-      | execute_RISCV_JALR  => Some sep_contract_execute_RISCV_JALR
-      | execute_ECALL       => Some sep_contract_execute_ECALL
-      | get_arch_pc         => Some sep_contract_get_arch_pc
-      | get_next_pc         => Some sep_contract_get_next_pc
-      | set_next_pc         => Some sep_contract_set_next_pc
-      | exception_handler   => Some sep_contract_exception_handler
-      | prepare_trap_vector => Some sep_contract_prepare_trap_vector
-      | tvec_addr           => Some sep_contract_tvec_addr
-      | rX                  => Some sep_contract_rX
-      | wX                  => Some sep_contract_wX
-      | abs                 => Some sep_contract_abs
-      | _                   => None
+      | execute_RTYPE         => Some sep_contract_execute_RTYPE
+      | execute_ITYPE         => Some sep_contract_execute_ITYPE
+      | execute_UTYPE         => Some sep_contract_execute_UTYPE
+      | execute_BTYPE         => Some sep_contract_execute_BTYPE
+      | execute_RISCV_JAL     => Some sep_contract_execute_RISCV_JAL
+      | execute_RISCV_JALR    => Some sep_contract_execute_RISCV_JALR
+      | execute_ECALL         => Some sep_contract_execute_ECALL
+      | get_arch_pc           => Some sep_contract_get_arch_pc
+      | get_next_pc           => Some sep_contract_get_next_pc
+      | set_next_pc           => Some sep_contract_set_next_pc
+      | exception_handler     => Some sep_contract_exception_handler
+      | trap_handler          => Some sep_contract_trap_handler
+      | prepare_trap_vector   => Some sep_contract_prepare_trap_vector
+      | tvec_addr             => Some sep_contract_tvec_addr
+      | exceptionType_to_bits => Some sep_contract_exceptionType_to_bits
+      | exception_delegatee   => Some sep_contract_exception_delegatee
+      | rX                    => Some sep_contract_rX
+      | wX                    => Some sep_contract_wX
+      | abs                   => Some sep_contract_abs
+      | _                     => None
       end.
 
   Definition CEnvEx : SepContractEnvEx :=
@@ -460,10 +539,22 @@ Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
   | None => False
   end.
 
+Lemma valid_contract_exception_handler : ValidContract exception_handler.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_trap_handler : ValidContract trap_handler.
+Proof. reflexivity. Qed.
+
 Lemma valid_contract_prepare_trap_vector : ValidContract prepare_trap_vector.
 Proof. reflexivity. Qed.
 
 Lemma valid_contract_tvec_addr : ValidContract tvec_addr.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_exceptionType_to_bits : ValidContract exceptionType_to_bits.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_exception_delegatee : ValidContract exception_delegatee.
 Proof. reflexivity. Qed.
 
 Lemma valid_contract_get_arch_pc : ValidContract get_arch_pc.
@@ -502,6 +593,9 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_execute_RISCV_JALR : ValidContract execute_RISCV_JALR.
 Proof. reflexivity. Qed.
 
+Lemma valid_contract_execute_ECALL : ValidContract execute_ECALL.
+Proof. reflexivity. Qed.
+
 Section Debug.
   Import RiscvNotations.
   Import RiscvμSailNotations.
@@ -522,22 +616,6 @@ Section Debug.
   Notation "P ∧ Q" := (@SymProp.demonic_binary _ P Q) (at level 80, right associativity, only printing).
   Notation "P ∨ Q" := (@SymProp.angelic_binary _ P Q) (at level 85, right associativity, only printing).
 
-  Definition fun_execute_ECALL' : Stm ctx.nil ty_retired :=
-    let: tmp1 := stm_read_register cur_privilege in
-    let: t := match: tmp1 in privilege with
-              | Machine => E_M_EnvCall
-              | User    => E_U_EnvCall
-              end in
-    let: tmp2 := stm_read_register pc in
-    let: tmp3 := stm_debugk (call exception_handler tmp1 (CTL_TRAP t) tmp2) in
-    call set_next_pc tmp3 ;;
-    stm_val ty_retired RETIRE_FAIL.
-
-  Lemma valid_contract_execute_ECALL : SMut.ValidContract sep_contract_execute_ECALL fun_execute_ECALL'.
-  Proof.
-    compute.
-  Admitted.
-  (* firstorder. Qed. *)
 End Debug.
 
 (* TODO: this is just to make sure that all contracts defined so far are valid
