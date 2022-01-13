@@ -208,14 +208,21 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
          mtvec ↦ (term_var "h") ∗
          pc ↦ (term_var "i") ∗
          asn_exist "mcause" ty_exc_code (mcause ↦ (term_var "mcause")) ∗
-         asn_or (cur_privilege ↦ (term_var "m") ∗
+         asn_or ((* Executing normally *)
+                 cur_privilege ↦ (term_var "m") ∗
                  asn_exist v ty_xlenbits (nextpc ↦ (term_var v)) ∗
                  mstatus ↦ (term_record rmstatus [ term_var "mpp" ]) ∗
                  mepc ↦ (term_var "mepc"))
-                (cur_privilege ↦ (term_val ty_privilege Machine) ∗
-                 nextpc ↦ (term_var "h") ∗
-                 mstatus ↦ (term_record rmstatus [ term_var "m" ]) ∗
-                 mepc ↦ (term_var "i"))
+                (asn_or ((* Trap occured -> Go into M-mode *)
+                         cur_privilege ↦ (term_val ty_privilege Machine) ∗
+                         nextpc ↦ (term_var "h") ∗
+                         mstatus ↦ (term_record rmstatus [ term_var "m" ]) ∗
+                         mepc ↦ (term_var "i"))
+                        ((* MRET = Recover *)
+                         cur_privilege ↦ (term_var "mpp") ∗
+                         nextpc ↦ (term_var "mepc") ∗
+                         mstatus ↦ (term_record rmstatus [ term_val ty_privilege User ]) ∗
+                         mepc ↦ (term_var "mepc")))
     |}.
 
   Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
@@ -237,6 +244,9 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
     mach_inv_contract.
 
   Definition sep_contract_execute_ECALL : SepContractFun execute_ECALL :=
+    mach_inv_contract.
+
+  Definition sep_contract_execute_MRET : SepContractFun execute_MRET :=
     mach_inv_contract.
 
   Definition sep_contract_exception_handler : SepContractFun exception_handler :=
@@ -274,6 +284,29 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
                     ∗ mtvec ↦ (term_var tvec)
                     ∗ mepc ↦ (term_var "mepc")
                 end);
+    |}.
+
+  Definition sep_contract_handle_illegal : SepContractFun handle_illegal :=
+    {| sep_contract_logic_variables := [p ∶ ty_privilege, "pc" ∶ ty_xlenbits, tvec ∶ ty_xlenbits];
+       sep_contract_localstore      := env.nil%arg;
+       sep_contract_precondition    :=
+         cur_privilege ↦ (term_var p)
+         ∗ pc ↦ (term_var "pc")
+         ∗ asn_exist "mcause_val"  ty_exc_code (mcause  ↦ (term_var "mcause_val"))
+         ∗ asn_exist "mpp" ty_privilege  (mstatus ↦ (term_record rmstatus [term_var "mpp"]))
+         ∗ asn_exist "mepc_val"    ty_xlenbits (mepc    ↦ (term_var "mepc_val"))
+         ∗ mtvec ↦ (term_var tvec)
+         ∗ asn_exist v ty_xlenbits (nextpc ↦ term_var v);
+       sep_contract_result          := "result_handle_illegal";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_handle_illegal") (term_val ty_unit tt)
+         ∗ cur_privilege ↦ (term_val ty_privilege Machine)
+         ∗ pc ↦ (term_var "pc")
+         ∗ asn_exist "mcause" ty_exc_code (mcause ↦ (term_var "mcause"))
+         ∗ mstatus ↦ (term_record rmstatus [ term_var p ])
+         ∗ mepc ↦ (term_var "pc")
+         ∗ mtvec ↦ (term_var tvec)
+         ∗ nextpc ↦ (term_var tvec)
     |}.
 
   Definition sep_contract_trap_handler : SepContractFun trap_handler :=
@@ -473,10 +506,12 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
       | execute_RISCV_JAL     => Some sep_contract_execute_RISCV_JAL
       | execute_RISCV_JALR    => Some sep_contract_execute_RISCV_JALR
       | execute_ECALL         => Some sep_contract_execute_ECALL
+      | execute_MRET          => Some sep_contract_execute_MRET
       | get_arch_pc           => Some sep_contract_get_arch_pc
       | get_next_pc           => Some sep_contract_get_next_pc
       | set_next_pc           => Some sep_contract_set_next_pc
       | exception_handler     => Some sep_contract_exception_handler
+      | handle_illegal        => Some sep_contract_handle_illegal
       | trap_handler          => Some sep_contract_trap_handler
       | prepare_trap_vector   => Some sep_contract_prepare_trap_vector
       | tvec_addr             => Some sep_contract_tvec_addr
@@ -542,6 +577,9 @@ Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
 Lemma valid_contract_exception_handler : ValidContract exception_handler.
 Proof. reflexivity. Qed.
 
+Lemma valid_contract_handle_illegal : ValidContract handle_illegal.
+Proof. reflexivity. Qed.
+
 Lemma valid_contract_trap_handler : ValidContract trap_handler.
 Proof. reflexivity. Qed.
 
@@ -596,6 +634,9 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_execute_ECALL : ValidContract execute_ECALL.
 Proof. reflexivity. Qed.
 
+Lemma valid_contract_execute_MRET : ValidContract execute_MRET.
+Proof. reflexivity. Qed.
+
 Section Debug.
   Import RiscvNotations.
   Import RiscvμSailNotations.
@@ -615,7 +656,6 @@ Section Debug.
   Notation "x ↦ t → k" := (@SymProp.assume_vareq _ x _ _ t k) (at level 99, right associativity, only printing).
   Notation "P ∧ Q" := (@SymProp.demonic_binary _ P Q) (at level 80, right associativity, only printing).
   Notation "P ∨ Q" := (@SymProp.angelic_binary _ P Q) (at level 85, right associativity, only printing).
-
 End Debug.
 
 (* TODO: this is just to make sure that all contracts defined so far are valid
