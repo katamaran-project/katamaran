@@ -107,14 +107,13 @@ Module RiscvPmpModel.
 
       Definition reg_file : gset RegIdx := list_to_set (seqZ 1 3).
 
+      Lemma seqZ_list : seqZ 1 3 = [1;2;3]%Z.
+      Proof.
+        unfold seqZ; now cbv.
+      Qed.
+
       Definition interp_gprs `{sailRegG Σ} : iProp Σ :=
         [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
-
-      Definition interp_gprs_without `{sailRegG Σ} (x : RegIdx) : iProp Σ :=
-        [∗ set] r ∈ reg_file ∖ {[ x ]}, (∃ v, interp_ptsreg r v)%I.
-
-      Definition interp_is_reg `{sailRegG Σ} (r : RegIdx) : iProp Σ :=
-        ⌜r ∈ reg_file⌝.
 
       Definition luser_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Val (RiscvPmpAssertionKit.𝑯_Ty p)) (mG : memG Σ) : iProp Σ :=
         (match p return Env Val (RiscvPmpAssertionKit.𝑯_Ty p) -> iProp Σ with
@@ -127,8 +126,6 @@ Module RiscvPmpModel.
                                     end
          | ptsreg       => fun ts => interp_ptsreg (env.head (env.tail ts)) (env.head ts)
          | gprs         => fun _  => interp_gprs
-         | gprs_without => fun ts => interp_gprs_without (env.head ts)
-         | is_reg       => fun ts => interp_is_reg (env.head ts)
          end) ts.
 
     Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (p : Predicate) (ts : Env Val (RiscvPmpAssertionKit.𝑯_Ty p)) :
@@ -157,40 +154,6 @@ Module RiscvPmpModel.
   Section Lemmas.
     Context `{sg : sailG Σ}.
 
-    Lemma valid_reg_sound :
-      ValidLemma RiscvPmpSymbolicContractKit.lemma_valid_reg.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      unfold RiscvPmpIrisHeapKit.interp_is_reg, RiscvPmpIrisHeapKit.reg_file.
-      rewrite elem_of_list_to_set.
-      iFrame; destruct rs eqn:Ers; cbn;
-        try (iIntros "%H"; destruct H as [H _]; inversion H).
-      repeat (destruct p;
-              try (iIntros "%H"; destruct H as [H _]; inversion H);
-              try (iPureIntro; apply elem_of_seqZ; lia)).
-    Qed.
-
-    Lemma extract_ptsreg_sound :
-      ValidLemma RiscvPmpSymbolicContractKit.lemma_extract_ptsreg.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.interp_gprs_without,
-        RiscvPmpIrisHeapKit.interp_is_reg.
-      iFrame; iIntros "[Hgprs %Hin]".
-      rewrite big_sepS_delete; try apply Hin.
-      iFrame; iIntros; iAccu.
-    Qed.
-
-    Lemma return_ptsreg_sound :
-      ValidLemma RiscvPmpSymbolicContractKit.lemma_return_ptsreg.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.interp_is_reg.
-      iFrame; iIntros "[[%Hin Hrs] Hrest]".
-      rewrite big_sepS_delete; try apply Hin.
-      unfold RiscvPmpIrisHeapKit.interp_gprs_without; iAccu.
-    Qed.
-
     Lemma open_ptsreg_sound :
       ValidLemma RiscvPmpSymbolicContractKit.lemma_open_ptsreg.
     Proof.
@@ -209,12 +172,34 @@ Module RiscvPmpModel.
               try (iIntros "[%H _]"; inversion H);
               try (iIntros; iAccu)).
     Qed.
+
+    Lemma open_gprs_sound :
+      ValidLemma RiscvPmpSymbolicContractKit.lemma_open_gprs.
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.reg_file.
+      rewrite big_sepS_list_to_set; [|apply NoDup_seqZ].
+      rewrite RiscvPmpIrisHeapKit.seqZ_list; cbn.
+      iIntros "[Hx1 [Hx2 [Hx3 _]]]".
+      iSplitR "Hx3"; [|iAssumption].
+      iSplitR "Hx2"; iAssumption.
+    Qed.
+
+    Lemma close_gprs_sound :
+      ValidLemma RiscvPmpSymbolicContractKit.lemma_close_gprs.
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.reg_file.
+      iIntros "[[Hx1 Hx2] Hx3]".
+      iApply big_sepS_list_to_set; [apply NoDup_seqZ|].
+      rewrite RiscvPmpIrisHeapKit.seqZ_list; cbn; iFrame.
+    Qed.
   End Lemmas.
 
   Lemma lemSem `{sg : sailG Σ} : LemmaSem (Σ := Σ).
   Proof.
     intros Δ [];
-      eauto using valid_reg_sound, extract_ptsreg_sound, return_ptsreg_sound,
-                  open_ptsreg_sound, close_ptsreg_sound.
+      eauto using open_ptsreg_sound, close_ptsreg_sound, open_gprs_sound,
+                  close_gprs_sound.
   Qed.
 End RiscvPmpModel.

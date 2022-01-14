@@ -56,8 +56,6 @@ Inductive Predicate : Set :=
 | pmp_entries
 | ptsreg
 | gprs
-| gprs_without
-| is_reg
 .
 
 Section TransparentObligations.
@@ -90,8 +88,6 @@ Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProg
     | pmp_entries  => [ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits)]
     | ptsreg       => [ty_regno, ty_xlenbits]
     | gprs         => ctx.nil
-    | gprs_without => [ty_regno]
-    | is_reg       => [ty_regno]
     end.
 
   Instance 𝑯_is_dup : IsDuplicable Predicate := {
@@ -100,8 +96,6 @@ Module Export RiscvPmpAssertionKit <: (AssertionKit RiscvPmpTermKit RiscvPmpProg
       | pmp_entries  => false
       | ptsreg       => false
       | gprs         => false
-      | gprs_without => false
-      | is_reg       => true
       end
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -119,8 +113,6 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Local Notation "p '∗' q" := (asn_sep p q) (at level 150).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env.nil ► (ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits) ↦ l)))).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
-  Local Notation asn_gprs_without r := (asn_chunk (chunk_user gprs_without (env.nil ► (ty_regno ↦ r)))).
-  Local Notation asn_is_reg r := (asn_chunk (chunk_user is_reg (env.nil ► (ty_regno ↦ r)))).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_int) : Term Σ ty_bool :=
     term_binop binop_eq e1 e2.
@@ -166,6 +158,13 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
                            (asn x3)
                            asn_default)).
 
+  Definition asn_and_regs {Σ Σ'} (f : Term Σ' ty_regno -> Assertion Σ) : Assertion Σ :=
+    f (z_term 1) ∗ f (z_term 2) ∗ f (z_term 3).
+
+  Definition asn_regs_ptsto {Σ} : Assertion Σ :=
+    asn_and_regs
+      (fun r => asn_exist "w" ty_xlenbits (r ↦r term_var "w")).
+
   (* TODO: abstract away the concrete type, look into unions for that *)
   (* TODO: length of list should be 16, no duplicates *)
   Definition pmp_entries {Σ} : Term Σ (ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx)) :=
@@ -187,7 +186,7 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
     @pre ∀ m h i . mode(m) ∗ mtvec(h) ∗ pmp_entries(ents) ∗ pc(i) ∗ mepc(_) ∗ mpp(_)
     @post pmp_entries(ents) ∗ (mode(m) ∗ pc(i)) ∨ (mode(M) ∗ pc(h) ...)
     τ f(Δ...)*)
-  Definition mach_inv_contract {τ Δ} : SepContract Δ τ :=
+  Definition instr_exec_contract {τ Δ} : SepContract Δ τ :=
     let Σ := ["m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits, "entries" ∶ ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits), "mpp" ∶ ty_privilege, "mepc" ∶ ty_xlenbits] in
     {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
        sep_contract_localstore      := create_localstore Δ Σ;
@@ -226,28 +225,28 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
     |}.
 
   Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
-    mach_inv_contract.
+    instr_exec_contract.
 
   Definition sep_contract_execute_ITYPE : SepContractFun execute_ITYPE :=
-    mach_inv_contract.
+    instr_exec_contract.
 
   Definition sep_contract_execute_UTYPE : SepContractFun execute_UTYPE :=
-    mach_inv_contract.
+    instr_exec_contract.
 
   Definition sep_contract_execute_BTYPE : SepContractFun execute_BTYPE :=
-    mach_inv_contract.
+    instr_exec_contract.
 
   Definition sep_contract_execute_RISCV_JAL : SepContractFun execute_RISCV_JAL :=
-    mach_inv_contract.
+    instr_exec_contract.
 
   Definition sep_contract_execute_RISCV_JALR : SepContractFun execute_RISCV_JALR :=
-    mach_inv_contract.
+    instr_exec_contract.
 
   Definition sep_contract_execute_ECALL : SepContractFun execute_ECALL :=
-    mach_inv_contract.
+    instr_exec_contract.
 
   Definition sep_contract_execute_MRET : SepContractFun execute_MRET :=
-    mach_inv_contract.
+    instr_exec_contract.
 
   Definition sep_contract_exception_handler : SepContractFun exception_handler :=
     {| sep_contract_logic_variables := [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_xlenbits, "mpp" ∶ ty_privilege, "mepc" ∶ ty_xlenbits, tvec ∶ ty_xlenbits, p ∶ ty_privilege];
@@ -448,25 +447,6 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
        sep_contract_postcondition   := asn_true;
     |}.
 
-  Definition lemma_extract_ptsreg : SepLemma extract_ptsreg :=
-    {| lemma_logic_variables := [rs ∶ ty_regno];
-       lemma_patterns        := [term_var rs];
-       lemma_precondition    := asn_gprs ∗ asn_is_reg (term_var rs);
-       lemma_postcondition   :=
-             asn_exist w ty_xlenbits (term_var rs ↦r term_var w)
-             ∗ asn_gprs_without (term_var rs);
-    |}.
-
-  Definition lemma_return_ptsreg : SepLemma return_ptsreg :=
-    {| lemma_logic_variables := [rs ∶ ty_regno];
-       lemma_patterns        := [term_var rs];
-       lemma_precondition    :=
-             asn_is_reg (term_var rs) ∗
-             asn_exist w ty_xlenbits (term_var rs ↦r term_var w) ∗
-             asn_gprs_without (term_var rs);
-       lemma_postcondition   := asn_gprs;
-    |}.
-
   Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
     {| lemma_logic_variables := [rs ∶ ty_regno, w ∶ ty_xlenbits];
        lemma_patterns        := [term_var rs];
@@ -482,16 +462,21 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
        lemma_precondition    := asn_with_reg (term_var rs)
                                              (fun r => r ↦ term_var w)
                                              asn_false;
-       lemma_postcondition   := term_var rs ↦r term_var w
+       lemma_postcondition   := term_var rs ↦r term_var w;
     |}.
 
-  Definition lemma_valid_reg : SepLemma valid_reg :=
-    {| lemma_logic_variables := [rs ∶ ty_regno];
-       lemma_patterns        := [term_var rs];
-       lemma_precondition    := asn_with_reg (term_var rs)
-                                             (fun r => asn_true)
-                                             asn_false;
-       lemma_postcondition   := asn_is_reg (term_var rs);
+  Definition lemma_open_gprs : SepLemma open_gprs :=
+    {| lemma_logic_variables := ctx.nil;
+       lemma_patterns        := env.nil;
+       lemma_precondition    := asn_gprs;
+       lemma_postcondition   := asn_regs_ptsto;
+    |}.
+
+  Definition lemma_close_gprs : SepLemma close_gprs :=
+    {| lemma_logic_variables := ctx.nil;
+       lemma_patterns        := env.nil;
+       lemma_precondition    := asn_regs_ptsto;
+       lemma_postcondition   := asn_gprs;
     |}.
 
   End Contracts.
@@ -534,11 +519,10 @@ Module RiscvPmpSymbolicContractKit <: (SymbolicContractKit RiscvPmpTermKit
   Definition LEnv : LemmaEnv :=
     fun Δ l =>
       match l with
-      | extract_ptsreg => lemma_extract_ptsreg
-      | return_ptsreg  => lemma_return_ptsreg
       | open_ptsreg    => lemma_open_ptsreg
       | close_ptsreg   => lemma_close_ptsreg
-      | valid_reg      => lemma_valid_reg
+      | open_gprs      => lemma_open_gprs
+      | close_gprs     => lemma_close_gprs
       end.
 
   Lemma linted_cenvex :

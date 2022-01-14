@@ -170,11 +170,10 @@ Module RiscvPmpTermKit <: TermKit.
   .
 
   Inductive Lem : PCtx -> Set :=
-  | extract_ptsreg : Lem [rs ∶ ty_regno]
-  | return_ptsreg  : Lem [rs ∶ ty_regno]
   | open_ptsreg    : Lem [rs ∶ ty_regno]
   | close_ptsreg   : Lem [rs ∶ ty_regno]
-  | valid_reg      : Lem [rs ∶ ty_regno]
+  | open_gprs      : Lem ctx.nil
+  | close_gprs     : Lem ctx.nil
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -326,73 +325,57 @@ Module RiscvPmpProgramKit <: (ProgramKit RiscvPmpTermKit).
 
   Definition zero_reg {Γ} : Stm Γ ty_xlenbits := exp_val ty_int 0%Z.
 
-  (* TODO: remove gprs_without -> open_gprs ∧ close_gprs *)
-  (* close_gprs \ { r ↦ v } ∗ (r ↦ _ -∗ gprs) |-> gprs *)
-
   (** Functions **)
   Definition fun_rX : Stm [rs ∶ ty_regno] ty_xlenbits :=
     if: rs = z_exp 0
     then zero_reg
-    else if: rs = z_exp 1
-         then
-           use lemma valid_reg [exp_var rs] ;;
-           use lemma extract_ptsreg [exp_var rs] ;;
-           use lemma open_ptsreg [exp_var rs] ;;
-           let: v := stm_read_register x1 in
-           use lemma close_ptsreg [exp_var rs] ;;
-           use lemma return_ptsreg [exp_var rs] ;;
-           stm_exp v
-         else if: rs = z_exp 2
-              then
-                use lemma valid_reg [exp_var rs] ;;
-                use lemma extract_ptsreg [exp_var rs] ;;
-                use lemma open_ptsreg [exp_var rs] ;;
-                let: v := stm_read_register x2 in
-                use lemma close_ptsreg [exp_var rs] ;;
-                use lemma return_ptsreg [exp_var rs] ;;
-                stm_exp v
-              else if: rs = z_exp 3
-                   then
-                     use lemma valid_reg [exp_var rs] ;;
-                     use lemma extract_ptsreg [exp_var rs] ;;
-                     use lemma open_ptsreg [exp_var rs] ;;
-                     let: v := stm_read_register x3 in
-                     use lemma close_ptsreg [exp_var rs] ;;
-                     use lemma return_ptsreg [exp_var rs] ;;
-                     stm_exp v
-                   else fail "invalid register number".
+    else
+      (use lemma open_gprs ;;
+       if: rs = z_exp 1
+       then
+         use lemma open_ptsreg [exp_var rs] ;;
+         let: v := stm_read_register x1 in
+         use lemma close_ptsreg [exp_var rs] ;;
+         use lemma close_gprs ;;
+         stm_exp v
+       else if: rs = z_exp 2
+            then
+              use lemma open_ptsreg [exp_var rs] ;;
+              let: v := stm_read_register x2 in
+              use lemma close_ptsreg [exp_var rs] ;;
+              use lemma close_gprs ;;
+              stm_exp v
+            else if: rs = z_exp 3
+                 then
+                   use lemma open_ptsreg [exp_var rs] ;;
+                   let: v := stm_read_register x3 in
+                   use lemma close_ptsreg [exp_var rs] ;;
+                   use lemma close_gprs ;;
+                   stm_exp v
+                 else fail "invalid register number").
 
   Definition fun_wX : Stm [rd ∶ ty_regno, v ∶ ty_xlenbits] ty_unit :=
     if: rd = z_exp 0
     then stm_val ty_unit tt
-    else if: rd = z_exp 1
-         then
-           use lemma valid_reg [exp_var rd] ;;
-           use lemma extract_ptsreg [exp_var rd] ;;
-           use lemma open_ptsreg [exp_var rd] ;;
-           stm_write_register x1 v ;;
-           use lemma close_ptsreg [exp_var rd] ;;
-           use lemma return_ptsreg [exp_var rd] ;;
-           stm_val ty_unit tt
-         else if: rd = z_exp 2
-              then
-                use lemma valid_reg [exp_var rd] ;;
-                use lemma extract_ptsreg [exp_var rd] ;;
-                use lemma open_ptsreg [exp_var rd] ;;
-                stm_write_register x2 v ;;
-                use lemma close_ptsreg [exp_var rd] ;;
-                use lemma return_ptsreg [exp_var rd] ;;
-                stm_val ty_unit tt
-              else if: rd = z_exp 3
-                   then
-                     use lemma valid_reg [exp_var rd] ;;
-                     use lemma extract_ptsreg [exp_var rd] ;;
-                     use lemma open_ptsreg [exp_var rd] ;;
-                     stm_write_register x3 v ;;
-                     use lemma close_ptsreg [exp_var rd] ;;
-                     use lemma return_ptsreg [exp_var rd] ;;
-                     stm_val ty_unit tt
-                   else fail "invalid register number".
+    else
+      (use lemma open_gprs ;;
+       (if: rd = z_exp 1
+        then
+          use lemma open_ptsreg [exp_var rd] ;;
+          stm_write_register x1 v ;;
+          use lemma close_ptsreg [exp_var rd]
+        else if: rd = z_exp 2
+             then
+               use lemma open_ptsreg [exp_var rd] ;;
+               stm_write_register x2 v ;;
+               use lemma close_ptsreg [exp_var rd]
+             else if: rd = z_exp 3
+                  then
+                    use lemma open_ptsreg [exp_var rd] ;;
+                    stm_write_register x3 v ;;
+                    use lemma close_ptsreg [exp_var rd]
+                  else fail "invalid register number") ;;
+       use lemma close_gprs).
 
   Definition fun_get_arch_pc : Stm ctx.nil ty_xlenbits :=
     stm_read_register pc.
