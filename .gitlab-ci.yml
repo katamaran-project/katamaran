@@ -5,7 +5,8 @@ stages:
   stage: build
   script:
     - opam list | grep coq
-    - make -j$(nproc)
+    - make Makefile.coq
+    - make -j$(nproc) -f Makefile.coq pretty-timed
   cache:
     key: "$CI_JOB_NAME"
     paths:
