@@ -278,13 +278,13 @@ Module Import ExampleProgram <: Program ExampleBase.
          end).
 
     Definition fun_fpthree' (e f : nat) : Stm [ "sign" ∷ ty_bvec 1 ] (ty_bvec (1 + e + f)) :=
-      let: "exp" ∷ ty_bvec e := stm_val (ty_bvec e) (Word.wone e) in
-      let: "frac" ∷ ty_bvec f := stm_val (ty_bvec f) (Word.wone f) in
+      let: "exp" ∷ ty_bvec e := stm_val (ty_bvec e) (bv.one e) in
+      let: "frac" ∷ ty_bvec f := stm_val (ty_bvec f) (bv.one f) in
       exp_binop
-        (@binop_bvcombine 1 (e + f))
+        (@binop_bvapp 1 (e + f))
         (exp_var "sign")
         (exp_binop
-           (@binop_bvcombine e f)
+           (@binop_bvapp e f)
            (exp_var "exp")
            (exp_var "frac")).
 

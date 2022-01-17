@@ -100,7 +100,7 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
 
   Fixpoint term_bvec {Σ n} (es : Vector.t (Term Σ ty_bit) n) : Term Σ (ty_bvec n) :=
     match es with
-    | Vector.nil       => term_val (ty_bvec 0) Word.WO
+    | Vector.nil       => term_val (ty_bvec 0) bv.nil
     | Vector.cons e es => term_binop binop_bvcons e (term_bvec es)
     end.
 
@@ -127,7 +127,7 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
     Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
     Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
     Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
-    Hypothesis (P_bvec       : forall (n : nat) (es : Vector.t (Term Σ ty_bit) n), PV es -> P (ty_bvec n) (term_bvec es)).
+    (* Hypothesis (P_bv         : forall (n : nat) (es : Vector.t (Term Σ ty_bit) n), PV es -> P (ty_bv n) (term_bv es)). *)
     Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
     Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx.nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
     Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union U K e)).
