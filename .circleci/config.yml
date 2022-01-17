@@ -10,8 +10,11 @@ defaults: &defaults
   resource_class: medium+
 
 jobs:
-  coq-8-12: {<<: *defaults, docker: [{image: "skeuchel/coq:8.12"}]}
-  coq-8-13: {<<: *defaults, docker: [{image: "skeuchel/coq:8.13"}]}
+  coq-8-12: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.12.2_iris-3.4.0_equations-1.2.4"}]}
+  coq-8-13: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.13.2_iris-3.4.0_equations-1.3"}]}
+  # coq-8-12: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.12.2_iris-3.5.0_equations-1.2.4"}]}
+  # coq-8-13: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.13.2_iris-3.5.0_equations-1.3"}]}
+  # coq-8-14: {<<: *defaults, docker: [{image: "ghcr.io/katamaran-project/coq:8.14.1_iris-3.5.0_equations-1.3"}]}
 
 workflows:
   version: 2
@@ -19,3 +22,4 @@ workflows:
     jobs:
       - "coq-8-12"
       - "coq-8-13"
+      # - "coq-8-14"
