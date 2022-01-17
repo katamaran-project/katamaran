@@ -47,6 +47,14 @@ Inductive Privilege : Set :=
 | Machine
 .
 
+(* Enum for available CRSs' *)
+Inductive CSRIdx : Set :=
+| MStatus
+| MTvec
+| MCause
+| MEpc
+.
+
 (* NOTE: PMP CSRs limited to 1 for now *)
 Inductive PmpCfgIdx : Set :=
 | PMP0CFG
@@ -97,12 +105,18 @@ Inductive BOP : Set :=
 | RISCV_BGEU
 .
 
+(* Zicsr extension, only support for Read-Write (no set or clear) *)
+Inductive CSROP : Set :=
+| CSRRW
+.
+
 Inductive Retired : Set :=
 | RETIRE_SUCCESS
 | RETIRE_FAIL.
 
 Inductive Enums : Set :=
 | privilege
+| csridx
 | pmpcfgidx
 | pmpaddridx
 | pmpaddrmatchtype
@@ -112,6 +126,7 @@ Inductive Enums : Set :=
 | iop
 | uop
 | bop
+| csrop
 | retired
 .
 
@@ -129,6 +144,8 @@ Inductive AST : Set :=
 | STORE (imm : Z) (rs2 rs1 : RegIdx)
 | ECALL
 | MRET
+(* Ziscr extension, excluding immediate variants *)
+| CSR (csr : CSRIdx) (rs1 rd : RegIdx) (csrop : CSROP)
 .
 
 Inductive AccessType : Set :=
@@ -175,6 +192,7 @@ Inductive ASTConstructor : Set :=
 | KSTORE
 | KECALL
 | KMRET
+| KCSR
 .
 
 Inductive AccessTypeConstructor : Set :=
@@ -243,6 +261,7 @@ Section TransparentObligations.
 
   Derive NoConfusion for Enums.
   Derive NoConfusion for Privilege.
+  Derive NoConfusion for CSRIdx.
   Derive NoConfusion for PmpCfgIdx.
   Derive NoConfusion for PmpAddrIdx.
   Derive NoConfusion for PmpAddrMatchType.
@@ -252,6 +271,7 @@ Section TransparentObligations.
   Derive NoConfusion for IOP.
   Derive NoConfusion for UOP.
   Derive NoConfusion for BOP.
+  Derive NoConfusion for CSROP.
   Derive NoConfusion for Retired.
   Derive NoConfusion for Unions.
   Derive NoConfusion for AST.
@@ -273,6 +293,7 @@ End TransparentObligations.
 
 Derive EqDec for Enums.
 Derive EqDec for Privilege.
+Derive EqDec for CSRIdx.
 Derive EqDec for PmpCfgIdx.
 Derive EqDec for PmpAddrIdx.
 Derive EqDec for PmpAddrMatchType.
@@ -282,6 +303,7 @@ Derive EqDec for ROP.
 Derive EqDec for IOP.
 Derive EqDec for UOP.
 Derive EqDec for BOP.
+Derive EqDec for CSROP.
 Derive EqDec for Retired.
 Derive EqDec for Unions.
 Derive EqDec for AST.
@@ -308,6 +330,9 @@ Section Finite.
 
   Global Program Instance Privilege_finite : Finite Privilege :=
     {| enum := [User;Machine] |}.
+
+  Global Program Instance CSRIdx_finite : Finite CSRIdx :=
+    {| enum := [MStatus;MTvec;MCause;MEpc] |}.
 
   Global Program Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
     {| enum := [PMP0CFG] |}.
@@ -340,13 +365,17 @@ Section Finite.
     Finite BOP :=
     {| enum := [RISCV_BEQ;RISCV_BNE;RISCV_BLT;RISCV_BGE;RISCV_BLTU;RISCV_BGEU] |}.
 
+  Global Program Instance CSROP_finite :
+    Finite CSROP :=
+    {| enum := [CSRRW] |}.
+
   Global Program Instance Retired_finite :
     Finite Retired :=
     {| enum := [RETIRE_SUCCESS; RETIRE_FAIL] |}.
 
   Global Program Instance ASTConstructor_finite :
     Finite ASTConstructor :=
-    {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KMRET] |}.
+    {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KMRET;KCSR] |}.
 
   Global Program Instance AccessTypeConstructor_finite :
     Finite AccessTypeConstructor :=
@@ -388,6 +417,7 @@ Section TypeDeclKit.
   Definition 𝑬𝑲 (e : 𝑬) : Set :=
     match e with
     | privilege        => Privilege
+    | csridx           => CSRIdx
     | pmpcfgidx        => PmpCfgIdx
     | pmpaddridx       => PmpAddrIdx
     | pmpaddrmatchtype => PmpAddrMatchType
@@ -397,6 +427,7 @@ Section TypeDeclKit.
     | iop              => IOP
     | uop              => UOP
     | bop              => BOP
+    | csrop            => CSROP
     | retired          => Retired
     end.
   Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=
@@ -458,6 +489,7 @@ Notation ty_xlenbits         := (ty_int).
 Notation ty_word             := (ty_int).
 Notation ty_regno            := (ty_int).
 Notation ty_privilege        := (ty_enum privilege).
+Notation ty_csridx           := (ty_enum csridx).
 Notation ty_pmpcfgidx        := (ty_enum pmpcfgidx).
 Notation ty_pmpaddridx       := (ty_enum pmpaddridx).
 Notation ty_pmpaddrmatchtype := (ty_enum pmpaddrmatchtype).
@@ -468,6 +500,7 @@ Notation ty_rop              := (ty_enum rop).
 Notation ty_iop              := (ty_enum iop).
 Notation ty_uop              := (ty_enum uop).
 Notation ty_bop              := (ty_enum bop).
+Notation ty_csrop            := (ty_enum csrop).
 Notation ty_retired          := (ty_enum retired).
 Notation ty_mcause           := (ty_xlenbits).
 Notation ty_exc_code         := (ty_int).
@@ -497,6 +530,7 @@ Section TypeDefKit.
                             | KSTORE      => ty_tuple [ty_int, ty_regno, ty_regno]
                             | KECALL      => ty_unit
                             | KMRET       => ty_unit
+                            | KCSR        => ty_tuple [ty_csridx, ty_regno, ty_regno, ty_csrop]
                             end
     | access_type      => fun _ => ty_unit
     | exception_type   => fun _ => ty_unit
@@ -531,6 +565,7 @@ Section TypeDefKit.
                             | STORE imm rs2 rs1     => existT KSTORE (tt , imm , rs2 , rs1)
                             | ECALL                 => existT KECALL tt
                             | MRET                  => existT KMRET tt
+                            | CSR csr rs1 rd op     => existT KCSR (tt , csr , rs1 , rd , op)
                             end
     | access_type      => fun Kv =>
                             match Kv with
@@ -579,6 +614,7 @@ Section TypeDefKit.
                             | existT KSTORE (tt , imm , rs2 , rs1)      => STORE imm rs2 rs1
                             | existT KECALL tt                          => ECALL
                             | existT KMRET tt                           => MRET
+                            | existT KCSR (tt , csr , rs1 , rd , op)    => CSR csr rs1 rd op
                             end
     | access_type      => fun Kv =>
                             match Kv with

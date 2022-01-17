@@ -79,6 +79,7 @@ Module RiscvNotations.
   Notation "'p'"            := "p" : string_scope.
   Notation "'rs1_val'"      := "rs1_val" : string_scope.
   Notation "'rs2_val'"      := "rs2_val" : string_scope.
+  Notation "'csr_val'"      := "csr_val" : string_scope.
   Notation "'op'"           := "op" : string_scope.
   Notation "'result'"       := "result" : string_scope.
   Notation "'res'"          := "res" : string_scope.
@@ -105,6 +106,9 @@ Module RiscvNotations.
   Notation "'epc'"          := "epc" : string_scope.
   Notation "'prev_priv'"    := "prev_priv" : string_scope.
   Notation "'MPP'"          := "MPP" : string_scope.
+  Notation "'csr'"          := "csr" : string_scope.
+  Notation "'csrrw'"        := "csrrw" : string_scope.
+  Notation "'csrpr'"        := "csrpr" : string_scope.
 End RiscvNotations.
 
 Module Import RiscvPmpProgram <: Program RiscvPmpBase.
@@ -143,6 +147,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | init_sys              : Fun ctx.nil ty_unit
   | init_pmp              : Fun ctx.nil ty_unit
   | exceptionType_to_bits : Fun [e ∶ ty_exception_type] ty_exc_code
+  | privLevel_to_bits     : Fun [p ∶ ty_privilege] ty_xlenbits
+  | mstatus_to_bits       : Fun [value ∶ ty_mstatus] ty_xlenbits
+  | mstatus_from_bits     : Fun [value ∶ ty_xlenbits] ty_mstatus
   | handle_mem_exception  : Fun [addr ∶ ty_xlenbits, e ∶ ty_exception_type] ty_unit
   | exception_handler     : Fun [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_xlenbits] ty_int
   | exception_delegatee   : Fun [p ∶ ty_privilege] ty_privilege
@@ -150,6 +157,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | prepare_trap_vector   : Fun [p ∶ ty_privilege, cause ∶ ty_mcause] ty_xlenbits
   | tvec_addr             : Fun [m ∶ ty_int, c ∶ ty_mcause] (ty_option ty_xlenbits)
   | handle_illegal        : Fun ctx.nil ty_unit
+  | check_CSR             : Fun [csr ∶ ty_csridx, p ∶ ty_privilege] ty_bool
+  | is_CSR_defined        : Fun [csr ∶ ty_csridx, p ∶ ty_privilege] ty_bool
+  | csrAccess             : Fun [csr ∶ ty_csridx] ty_access_type
+  | csrPriv               : Fun [csr ∶ ty_csridx] ty_privilege
+  | check_CSR_access      : Fun [csrrw ∶ ty_access_type, csrpr ∶ ty_privilege, p ∶ ty_privilege] ty_bool
+  | readCSR               : Fun [csr ∶ ty_csridx] ty_xlenbits
+  | writeCSR              : Fun [csr ∶ ty_csridx, value ∶ ty_xlenbits] ty_unit
   | execute               : Fun ["ast" ∶ ty_ast] ty_retired
   | execute_RTYPE         : Fun [rs2 ∶ ty_regno, rs1 ∶ ty_regno, rd ∶ ty_regno, op ∶ ty_rop] ty_retired
   | execute_ITYPE         : Fun [imm ∶ ty_int, rs1 ∶ ty_regno, rd ∶ ty_regno, op ∶ ty_iop] ty_retired
@@ -161,6 +175,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | execute_STORE         : Fun [imm ∶ ty_int, rs2 ∶ ty_regno, rs1 ∶ ty_regno] ty_retired
   | execute_ECALL         : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
+  | execute_CSR           : Fun [csr ∶ ty_csridx, rs1 ∶ ty_regno, rd ∶ ty_regno, op ∶ ty_csrop] ty_retired
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
@@ -189,6 +204,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'rs1_val'"      := (@exp_var _ "rs1_val" _ _) : exp_scope.
     Notation "'rs2'"          := (@exp_var _ "rs2" _ _) : exp_scope.
     Notation "'rs2_val'"      := (@exp_var _ "rs2_val" _ _) : exp_scope.
+    Notation "'csr_val'"      := (@exp_var _ "csr_val" _ _) : exp_scope.
     Notation "'rd'"           := (@exp_var _ "rd" _ _) : exp_scope.
     Notation "'op'"           := (@exp_var _ "op" _ _) : exp_scope.
     Notation "'result'"       := (@exp_var _ "result" _ _) : exp_scope.
@@ -240,6 +256,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'prev_priv'"    := (@exp_var _ "prev_priv" _ _) : exp_scope.
     Notation "'p'"            := (@exp_var _ "p" _ _) : exp_scope.
     Notation "'MPP'"          := (@exp_var _ "MPP" _ _) : exp_scope.
+    Notation "'csr'"          := (@exp_var _ "csr" _ _) : exp_scope.
+    Notation "'csrrw'"        := (@exp_var _ "csrrw" _ _) : exp_scope.
+    Notation "'csrpr'"        := (@exp_var _ "csrpr" _ _) : exp_scope.
 
     Notation "'Read'" := (exp_union access_type KRead (exp_val ty_unit tt)) : exp_scope.
     Notation "'Write'" := (exp_union access_type KWrite (exp_val ty_unit tt)) : exp_scope.
@@ -665,6 +684,87 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp3 := call exception_handler tmp1 (CTL_TRAP t) tmp2 in
     call set_next_pc tmp3.
 
+  Definition fun_check_CSR : Stm [csr ∶ ty_csridx, p ∶ ty_privilege] ty_bool :=
+    let: tmp1 := call is_CSR_defined csr p in
+    let: tmp2 := call csrAccess csr in
+    let: tmp3 := call csrPriv csr in
+    let: tmp := call check_CSR_access tmp2 tmp3 p in
+    tmp1 && tmp.
+
+  Definition fun_is_CSR_defined : Stm [csr ∶ ty_csridx, p ∶ ty_privilege] ty_bool :=
+    match: csr in csridx with
+    | MStatus => match: p in privilege with
+                 | Machine => stm_val ty_bool true
+                 | _ => stm_val ty_bool false
+                 end
+    | MTvec => match: p in privilege with
+                 | Machine => stm_val ty_bool true
+                 | _ => stm_val ty_bool false
+                 end
+    | MCause => match: p in privilege with
+                 | Machine => stm_val ty_bool true
+                 | _ => stm_val ty_bool false
+                 end
+    | MEpc => match: p in privilege with
+                 | Machine => stm_val ty_bool true
+                 | _ => stm_val ty_bool false
+                 end
+    end.
+
+  (* NOTE: - normally this information is part of the CSR bitpattern,
+             we are reusing our existing access_type
+           - all CSRs we currently support are MRW (= Machine, ReadWrite) *)
+  Definition fun_csrAccess : Stm [csr ∶ ty_csridx] ty_access_type :=
+    ReadWrite.
+  Definition fun_csrPriv : Stm [csr ∶ ty_csridx] ty_privilege :=
+    stm_val ty_privilege Machine.
+
+  Definition fun_check_CSR_access : Stm [csrrw ∶ ty_access_type, csrpr ∶ ty_privilege, p ∶ ty_privilege] ty_bool :=
+    let: tmp1 := call privLevel_to_bits csrpr in
+    let: tmp2 := call privLevel_to_bits p in
+    tmp1 <= tmp2.
+
+  Definition fun_privLevel_to_bits : Stm [p ∶ ty_privilege] ty_int :=
+    match: p in privilege with
+    | Machine => stm_val ty_int 3%Z
+    | User => stm_val ty_int 0%Z
+    end.
+
+  (* NOTE: not part of Sail model, added these to make readCSR/writeCSR easier to implement *)
+  Definition fun_mstatus_to_bits : Stm [value ∶ ty_mstatus] ty_xlenbits :=
+    stm_match_record rmstatus value
+                     (recordpat_snoc recordpat_nil "MPP" MPP%string)
+                     (call privLevel_to_bits MPP).
+  Definition fun_mstatus_from_bits : Stm [value ∶ ty_xlenbits] ty_mstatus :=
+    let: p := if: value = z_exp 0
+              then stm_val ty_privilege User
+              else if: value = z_exp 3
+                   then stm_val ty_privilege Machine
+                   else stm_val ty_privilege User in
+    exp_record rmstatus [ p ].
+
+  Definition fun_readCSR : Stm [csr ∶ ty_csridx] ty_xlenbits :=
+    match: csr in csridx with
+    | MStatus => let: tmp := stm_read_register mstatus in
+                 call mstatus_to_bits tmp
+    | MTvec =>   stm_read_register mtvec
+    | MCause =>  stm_read_register mcause
+    | MEpc =>    stm_read_register mepc
+    end.
+
+  Definition fun_writeCSR : Stm [csr ∶ ty_csridx, value ∶ ty_xlenbits] ty_unit :=
+    match: csr in csridx with
+    | MStatus => let: tmp := call mstatus_from_bits value in
+                 stm_write_register mstatus tmp ;;
+                 stm_val ty_unit tt
+    | MTvec =>   stm_write_register mtvec value ;;
+                 stm_val ty_unit tt
+    | MCause =>  stm_write_register mcause value ;;
+                 stm_val ty_unit tt
+    | MEpc =>    stm_write_register mepc value ;;
+                 stm_val ty_unit tt
+    end.
+
   (* NOTE: normally the definitions of execute_X are inlined and defined as
            function clauses of execute (a scattered definition) *)
   Definition fun_execute : Stm ["ast" ∶ ty_ast] ty_retired :=
@@ -691,6 +791,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                                                   (call execute_ECALL)
                            | KMRET       => MkAlt pat_unit
                                                   (call execute_MRET)
+                           | KCSR        => MkAlt (pat_tuple [csr , rs1 , rd , op])
+                                                  (call execute_CSR csr rs1 rd op)
                            end).
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regno, rs1 ∶ ty_regno, rd ∶ ty_regno, op ∶ ty_rop] ty_retired :=
@@ -819,6 +921,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       stm_val ty_retired RETIRE_FAIL
     end.
 
+  Definition fun_execute_CSR : Stm [csr ∶ ty_csridx, rs1 ∶ ty_regno, rd ∶ ty_regno, op ∶ ty_csrop] ty_retired :=
+    let: rs1_val := call rX rs1 in
+    let: tmp1 := stm_read_register cur_privilege in
+    let: tmp2 := call check_CSR csr tmp1 in
+    if: tmp2 (* then and else branch switched, Sail model uses a not here *)
+    then
+      (let: csr_val := call readCSR csr in
+       call writeCSR csr rs1_val ;;
+       call wX rd csr_val ;;
+       stm_val ty_retired RETIRE_SUCCESS)
+    else (call handle_illegal ;;
+          stm_val ty_retired RETIRE_FAIL).
+
   End FunDefKit.
 
   Include DefaultRegStoreKit RiscvPmpBase.
@@ -885,6 +1000,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | pmpMatchAddr          => fun_pmpMatchAddr
     | process_load          => fun_process_load
     | exceptionType_to_bits => fun_exceptionType_to_bits
+    | privLevel_to_bits     => fun_privLevel_to_bits
+    | mstatus_to_bits       => fun_mstatus_to_bits
+    | mstatus_from_bits     => fun_mstatus_from_bits
     | main                  => fun_main
     | init_model            => fun_init_model
     | init_sys              => fun_init_sys
@@ -899,6 +1017,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | prepare_trap_vector   => fun_prepare_trap_vector
     | tvec_addr             => fun_tvec_addr
     | handle_illegal        => fun_handle_illegal
+    | check_CSR             => fun_check_CSR
+    | is_CSR_defined        => fun_is_CSR_defined
+    | csrAccess             => fun_csrAccess
+    | csrPriv               => fun_csrPriv
+    | check_CSR_access      => fun_check_CSR_access
+    | readCSR               => fun_readCSR
+    | writeCSR              => fun_writeCSR
     | execute               => fun_execute
     | execute_RTYPE         => fun_execute_RTYPE
     | execute_ITYPE         => fun_execute_ITYPE
@@ -910,6 +1035,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | execute_STORE         => fun_execute_STORE
     | execute_ECALL         => fun_execute_ECALL
     | execute_MRET          => fun_execute_MRET
+    | execute_CSR           => fun_execute_CSR
     end.
 
   Include ProgramMixin RiscvPmpBase.
