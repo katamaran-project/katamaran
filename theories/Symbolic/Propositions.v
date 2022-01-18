@@ -35,7 +35,7 @@ From Coq Require Import
 
 From Katamaran Require Import
      Base
-     Notation
+     Notations
      Prelude
      Symbolic.Worlds
      Syntax.Chunks

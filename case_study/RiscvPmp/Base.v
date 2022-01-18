@@ -132,6 +132,7 @@ Inductive Enums : Set :=
 
 (** Unions **)
 Definition RegIdx := Z.
+Bind Scope Z_scope with RegIdx.
 
 Inductive AST : Set :=
 | RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)

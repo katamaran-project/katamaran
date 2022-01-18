@@ -36,7 +36,7 @@ From Equations Require Import
      Equations.
 From Katamaran Require Import
      Environment
-     Notation
+     Notations
      Prelude
      Syntax.BinOps
      Syntax.Terms

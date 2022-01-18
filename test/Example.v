@@ -50,7 +50,6 @@ From Katamaran Require Import
      Syntax.ContractDecl.
 
 From stdpp Require decidable finite.
-From iris_string_ident Require Import ltac2_string_ident.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -482,17 +481,17 @@ Module ExampleSolver := MakeSolver ExampleBase ExampleSpecification ExampleSolve
 Module Import ExampleExecutor :=
   MakeExecutor ExampleBase ExampleSpecification ExampleSolver.
 
-Ltac destruct_syminstance ι :=
-  repeat
-    match type of ι with
-    | Env _ (ctx.snoc _ (?s, _)) =>
-      let id := string_to_ident s in
-      let fr := fresh id in
-      destruct (env.snocView ι) as [ι fr];
-      destruct_syminstance ι
-    | Env _ ctx.nil => destruct (env.nilView ι)
-    | _ => idtac
-    end.
+(* Ltac destruct_syminstance ι := *)
+(*   repeat *)
+(*     match type of ι with *)
+(*     | Env _ (ctx.snoc _ (?s, _)) => *)
+(*       let id := string_to_ident s in *)
+(*       let fr := fresh id in *)
+(*       destruct (env.snocView ι) as [ι fr]; *)
+(*       destruct_syminstance ι *)
+(*     | Env _ ctx.nil => destruct (env.nilView ι) *)
+(*     | _ => idtac *)
+(*     end. *)
 
 Local Ltac solve :=
   repeat
@@ -504,8 +503,8 @@ Local Ltac solve :=
       repeat
        match goal with
        | H: NamedEnv _ _ |- _ => unfold NamedEnv in H
-       | ι : Env _ (ctx.snoc _ _) |- _ => destruct_syminstance ι
-       | ι : Env _ ctx.nil        |- _ => destruct_syminstance ι
+       (* | ι : Env _ (ctx.snoc _ _) |- _ => destruct_syminstance ι *)
+       (* | ι : Env _ ctx.nil        |- _ => destruct_syminstance ι *)
        | H: _ /\ _ |- _ => destruct H
        | H: Z.ltb _ _ = true |- _ => apply Z.ltb_lt in H
        | H: Z.ltb _ _ = false |- _ => apply Z.ltb_ge in H

@@ -18,7 +18,7 @@ theories/Context.v
 theories/Environment.v
 theories/Iris/Model.v
 theories/Katamaran.v
-theories/Notation.v
+theories/Notations.v
 theories/Prelude.v
 theories/Program.v
 theories/Semantics.v

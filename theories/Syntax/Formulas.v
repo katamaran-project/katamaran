@@ -36,7 +36,7 @@ From Coq Require Import
 
 From Katamaran Require Import
      Prelude
-     Notation
+     Notations
      Syntax.Predicates
      Base.
 

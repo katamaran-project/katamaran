@@ -35,7 +35,7 @@ From Coq Require Import
 
 From Equations Require Import Equations.
 From Katamaran Require Import
-     Notation Prelude.
+     Notations Prelude.
 
 Local Set Implicit Arguments.
 

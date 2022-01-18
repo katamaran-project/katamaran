@@ -33,7 +33,7 @@ From Coq Require Import
 From Katamaran Require Import
      Context
      Environment
-     Notation
+     Notations
      Prelude
      Syntax.BinOps
      Syntax.TypeDecl
