@@ -212,7 +212,7 @@ Section ContractDefKit.
          pc ↦ (term_var "i") ∗
          asn_exist "mcause" ty_exc_code (mcause ↦ (term_var "mcause")) ∗
          asn_or ((* Executing normally *)
-                 cur_privilege ↦ term_var "m"
+                 cur_privilege ↦ term_var "m" ∗
                  asn_exist v ty_xlenbits (nextpc ↦ (term_var v)) ∗
                  mtvec ↦ (term_var "h") ∗
                  mstatus ↦ (term_record rmstatus [ term_var "mpp" ]) ∗
