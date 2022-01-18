@@ -192,7 +192,7 @@ Section ContractDefKit.
     @post pmp_entries(ents) ∗ (mode(m) ∗ pc(i)) ∨ (mode(M) ∗ pc(h) ...)
     τ f(Δ...)*)
   Definition instr_exec_contract {τ Δ} : SepContract Δ τ :=
-    let Σ := ["m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits, "entries" ∶ ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits), "mpp" ∶ ty_privilege, "mepc" ∶ ty_xlenbits] in
+    let Σ := ["m" ∶ ty_privilege, "h" ∶ ty_xlenbits, "i" ∶ ty_xlenbits, "entries" ∶ ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits), "mpp" ∶ ty_privilege, "mepc" ∶ ty_xlenbits, "npc" ∶ ty_xlenbits] in
     {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
        sep_contract_localstore      := create_localstore Δ Σ;
        sep_contract_precondition    :=
@@ -200,7 +200,7 @@ Section ContractDefKit.
          mtvec ↦ (term_var "h") ∗
          pc ↦ (term_var "i") ∗
          asn_pmp_entries (term_var "entries") ∗
-         asn_exist v ty_xlenbits (nextpc ↦ term_var v) ∗
+         nextpc ↦ term_var "npc" ∗
          asn_exist "mcause" ty_exc_code (mcause ↦ (term_var "mcause")) ∗
          mepc ↦ (term_var "mepc") ∗
          mstatus ↦ (term_record rmstatus [ term_var "mpp" ]) ∗
@@ -209,24 +209,32 @@ Section ContractDefKit.
        sep_contract_postcondition   :=
          asn_pmp_entries (term_var "entries") ∗
          asn_gprs ∗
-         mtvec ↦ (term_var "h") ∗
          pc ↦ (term_var "i") ∗
          asn_exist "mcause" ty_exc_code (mcause ↦ (term_var "mcause")) ∗
          asn_or ((* Executing normally *)
-                 cur_privilege ↦ (term_var "m") ∗
+                 cur_privilege ↦ term_var "m"
                  asn_exist v ty_xlenbits (nextpc ↦ (term_var v)) ∗
+                 mtvec ↦ (term_var "h") ∗
                  mstatus ↦ (term_record rmstatus [ term_var "mpp" ]) ∗
                  mepc ↦ (term_var "mepc"))
-                (asn_or ((* Trap occured -> Go into M-mode *)
+                (asn_or ((* Modified CSRs, requires Machine mode *)
                          cur_privilege ↦ (term_val ty_privilege Machine) ∗
-                         nextpc ↦ (term_var "h") ∗
-                         mstatus ↦ (term_record rmstatus [ term_var "m" ]) ∗
-                         mepc ↦ (term_var "i"))
-                        ((* MRET = Recover *)
-                         cur_privilege ↦ (term_var "mpp") ∗
-                         nextpc ↦ (term_var "mepc") ∗
-                         mstatus ↦ (term_record rmstatus [ term_val ty_privilege User ]) ∗
-                         mepc ↦ (term_var "mepc")))
+                         nextpc ↦ (term_var "npc") ∗
+                         asn_exist "new_mtvec" ty_xlenbits (mtvec ↦ (term_var "new_mtvec")) ∗
+                         asn_exist "new_mpp" ty_privilege (mstatus ↦ (term_record rmstatus [ term_var "new_mpp" ])) ∗
+                         asn_exist "new_mepc" ty_xlenbits (mepc ↦ (term_var "new_mepc")))
+                        (asn_or ((* Trap occured -> Go into M-mode *)
+                                 cur_privilege ↦ (term_val ty_privilege Machine) ∗
+                                 nextpc ↦ (term_var "h") ∗
+                                 mtvec ↦ (term_var "h") ∗
+                                 mstatus ↦ (term_record rmstatus [ term_var "m" ]) ∗
+                                 mepc ↦ (term_var "i"))
+                                ((* MRET = Recover *)
+                                 cur_privilege ↦ (term_var "mpp") ∗
+                                 nextpc ↦ (term_var "mepc") ∗
+                                 mtvec ↦ (term_var "h") ∗
+                                 mstatus ↦ (term_record rmstatus [ term_val ty_privilege User ]) ∗
+                                 mepc ↦ (term_var "mepc"))))
     |}.
 
   Definition sep_contract_execute_RTYPE : SepContractFun execute_RTYPE :=
@@ -252,6 +260,152 @@ Section ContractDefKit.
 
   Definition sep_contract_execute_MRET : SepContractFun execute_MRET :=
     instr_exec_contract.
+
+  Definition sep_contract_execute_CSR : SepContractFun execute_CSR :=
+    instr_exec_contract.
+
+  Definition sep_contract_readCSR : SepContractFun readCSR :=
+    {| sep_contract_logic_variables := [csr ∶ ty_csridx, "mpp" ∶ ty_privilege,
+                                        "mtvec" ∶ ty_xlenbits, "mcause" ∶ ty_exc_code,
+                                        "mepc" ∶ ty_xlenbits];
+       sep_contract_localstore      := [term_var csr]%arg;
+       sep_contract_precondition    :=
+         mstatus ↦ term_record rmstatus [term_var "mpp"]
+         ∗ mtvec ↦ term_var "mtvec"
+         ∗ mcause ↦ term_var "mcause"
+         ∗ mepc ↦ term_var "mepc";
+       sep_contract_result          := "result_readCSR";
+       sep_contract_postcondition   :=
+         asn_exist "result" ty_xlenbits (asn_eq (term_var "result_readCSR") (term_var "result"))
+         ∗ mstatus ↦ term_record rmstatus [term_var "mpp"]
+         ∗ mtvec ↦ term_var "mtvec"
+         ∗ mcause ↦ term_var "mcause"
+         ∗ mepc ↦ term_var "mepc";
+    |}.
+
+  Definition sep_contract_writeCSR : SepContractFun writeCSR :=
+    {| sep_contract_logic_variables := [csr ∶ ty_csridx, value ∶ ty_xlenbits];
+       sep_contract_localstore      := [term_var csr, term_var value]%arg;
+       sep_contract_precondition    :=
+         asn_exist "mpp" ty_privilege (mstatus ↦ term_record rmstatus [term_var "mpp"])
+         ∗ asn_exist "mtvec" ty_xlenbits (mtvec ↦ term_var "mtvec")
+         ∗ asn_exist "mcause" ty_exc_code (mcause ↦ term_var "mcause")
+         ∗ asn_exist "mepc" ty_xlenbits (mepc ↦ term_var "mepc");
+       sep_contract_result          := "result_writeCSR";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_writeCSR") (term_val ty_unit tt)
+         ∗ asn_exist "mpp" ty_privilege (mstatus ↦ term_record rmstatus [term_var "mpp"])
+         ∗ asn_exist "mtvec" ty_xlenbits (mtvec ↦ term_var "mtvec")
+         ∗ asn_exist "mcause" ty_exc_code (mcause ↦ term_var "mcause")
+         ∗ asn_exist "mepc" ty_xlenbits (mepc ↦ term_var "mepc");
+    |}.
+
+  Definition sep_contract_check_CSR : SepContractFun check_CSR :=
+    {| sep_contract_logic_variables := [csr ∶ ty_csridx, p ∶ ty_privilege];
+       sep_contract_localstore      := [term_var csr, term_var p]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_check_CSR";
+       sep_contract_postcondition   :=
+         asn_match_enum privilege (term_var p)
+                        (fun K => match K with
+                                  | Machine => asn_eq (term_var "result_check_CSR") (term_val ty_bool true)
+                                  | User    => asn_eq (term_var "result_check_CSR") (term_val ty_bool false)
+                                  end)
+    |}.
+
+  Definition sep_contract_is_CSR_defined : SepContractFun is_CSR_defined :=
+    {| sep_contract_logic_variables := [csr ∶ ty_csridx, p ∶ ty_privilege];
+       sep_contract_localstore      := [term_var csr, term_var p]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_is_CSR_defined";
+       sep_contract_postcondition   :=
+         asn_match_enum privilege (term_var p)
+                        (fun K => match K with
+                                  | Machine => asn_eq (term_var "result_is_CSR_defined")
+                                                      (term_val ty_bool true)
+                                  | User =>    asn_eq (term_var "result_is_CSR_defined")
+                                                      (term_val ty_bool false)
+                                  end);
+    |}.
+
+  Definition sep_contract_check_CSR_access : SepContractFun check_CSR_access :=
+    {| sep_contract_logic_variables := [csrrw ∶ ty_access_type, csrpr ∶ ty_privilege, p ∶ ty_privilege];
+       sep_contract_localstore      := [term_var csrrw, term_var csrpr, term_var p]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_check_CSR_access";
+       sep_contract_postcondition   :=
+         asn_match_enum privilege (term_var csrpr)
+                        (fun K => match K with
+                                  | Machine =>
+                                      asn_match_enum privilege (term_var p)
+                                                     (fun K => match K with
+                                                               | Machine =>    asn_eq (term_var "result_check_CSR_access")
+                                                                                   (term_val ty_bool true)
+                                                               | User =>    asn_eq (term_var "result_check_CSR_access")
+                                                                                   (term_val ty_bool false)
+                                                               end)
+                                  | User =>
+                                      asn_match_enum privilege (term_var p)
+                                                     (fun K => match K with
+                                                               | Machine => asn_eq (term_var "result_check_CSR_access")
+                                                                                   (term_val ty_bool true)
+                                                               | User =>    asn_eq (term_var "result_check_CSR_access")
+                                                                                   (term_val ty_bool true)
+                                                               end)
+                                  end);
+    |}.
+
+  Definition sep_contract_privLevel_to_bits : SepContractFun privLevel_to_bits :=
+    {| sep_contract_logic_variables := [p ∶ ty_privilege];
+       sep_contract_localstore      := [term_var p]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_privLevel_to_bits";
+       sep_contract_postcondition   :=
+         asn_match_enum privilege (term_var p)
+                        (fun K => match K with
+                                  | Machine => asn_eq (term_var "result_privLevel_to_bits")
+                                                      (term_val ty_xlenbits 3%Z)
+                                  | User =>    asn_eq (term_var "result_privLevel_to_bits")
+                                                      (term_val ty_xlenbits 0%Z)
+                                  end);
+    |}.
+
+  Definition sep_contract_mstatus_to_bits : SepContractFun mstatus_to_bits :=
+    {| sep_contract_logic_variables := [value ∶ ty_mstatus];
+       sep_contract_localstore      := [term_var value]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_mstatus_to_bits";
+       sep_contract_postcondition   := asn_exist "result" ty_xlenbits
+                                                 (asn_eq (term_var "result_mstatus_to_bits") (term_var "result"));
+    |}.
+
+  Definition sep_contract_mstatus_from_bits : SepContractFun mstatus_from_bits :=
+    {| sep_contract_logic_variables := [value ∶ ty_xlenbits];
+       sep_contract_localstore      := [term_var value]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_mstatus_from_bits";
+       sep_contract_postcondition   :=
+         asn_exist "MPP" ty_privilege (asn_eq (term_var "result_mstatus_from_bits")
+                                              (term_record rmstatus [ term_var "MPP" ]));
+    |}.
+
+  Definition sep_contract_csrAccess : SepContractFun csrAccess :=
+    {| sep_contract_logic_variables := [csr ∶ ty_csridx];
+       sep_contract_localstore      := [term_var csr]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_csrAccess";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_csrAccess") (term_val ty_access_type ReadWrite);
+    |}.
+
+  Definition sep_contract_csrPriv : SepContractFun csrPriv :=
+    {| sep_contract_logic_variables := [csr ∶ ty_csridx];
+       sep_contract_localstore      := [term_var csr]%arg;
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_csrPriv";
+       sep_contract_postcondition   :=
+         asn_eq (term_var "result_csrPriv") (term_val ty_privilege Machine);
+    |}.
 
   Definition sep_contract_exception_handler : SepContractFun exception_handler :=
     {| sep_contract_logic_variables := [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_xlenbits, "mpp" ∶ ty_privilege, "mepc" ∶ ty_xlenbits, tvec ∶ ty_xlenbits, p ∶ ty_privilege];
@@ -497,6 +651,7 @@ Section ContractDefKit.
       | execute_RISCV_JALR    => Some sep_contract_execute_RISCV_JALR
       | execute_ECALL         => Some sep_contract_execute_ECALL
       | execute_MRET          => Some sep_contract_execute_MRET
+      | execute_CSR           => Some sep_contract_execute_CSR
       | get_arch_pc           => Some sep_contract_get_arch_pc
       | get_next_pc           => Some sep_contract_get_next_pc
       | set_next_pc           => Some sep_contract_set_next_pc
@@ -510,6 +665,16 @@ Section ContractDefKit.
       | rX                    => Some sep_contract_rX
       | wX                    => Some sep_contract_wX
       | abs                   => Some sep_contract_abs
+      | readCSR               => Some sep_contract_readCSR
+      | writeCSR              => Some sep_contract_writeCSR
+      | check_CSR             => Some sep_contract_check_CSR
+      | is_CSR_defined        => Some sep_contract_is_CSR_defined
+      | check_CSR_access      => Some sep_contract_check_CSR_access
+      | privLevel_to_bits     => Some sep_contract_privLevel_to_bits
+      | mstatus_to_bits       => Some sep_contract_mstatus_to_bits
+      | mstatus_from_bits     => Some sep_contract_mstatus_from_bits
+      | csrAccess             => Some sep_contract_csrAccess
+      | csrPriv               => Some sep_contract_csrPriv
       | _                     => None
       end.
 
@@ -550,6 +715,8 @@ Module Import RiscvPmpExecutor :=
   MakeExecutor RiscvPmpBase RiscvPmpSpecification RiscvPmpSolver.
 Import SMut.
 
+Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
+
 Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
   match CEnv f with
   | Some c => ValidContractReflect c (FunDef f)
@@ -561,6 +728,36 @@ Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
   | Some c => SMut.ValidContract c (FunDef f)
   | None => False
   end.
+
+Lemma valid_contract_readCSR : ValidContract readCSR.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_writeCSR : ValidContract writeCSR.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_check_CSR : ValidContract check_CSR.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_is_CSR_defined : ValidContract is_CSR_defined.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_check_CSR_access : ValidContract check_CSR_access.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_csrAccess : ValidContract csrAccess.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_csrPriv : ValidContract csrPriv.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_privLevel_to_bits : ValidContract privLevel_to_bits.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_mstatus_to_bits : ValidContract mstatus_to_bits.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_mstatus_from_bits : ValidContract mstatus_from_bits.
+Proof. reflexivity. Qed.
 
 Lemma valid_contract_exception_handler : ValidContract exception_handler.
 Proof. reflexivity. Qed.
@@ -625,6 +822,9 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_execute_MRET : ValidContract execute_MRET.
 Proof. reflexivity. Qed.
 
+Lemma valid_execute_CSR : ValidContract execute_CSR.
+Proof. reflexivity. Qed.
+
 Section Debug.
   Import RiscvNotations.
   Import RiscvμSailNotations.
@@ -642,7 +842,7 @@ Lemma defined_contracts_valid : forall {Δ τ} (f : Fun Δ τ),
 Proof.
   destruct f; simpl; trivial;
     try reflexivity.
-Admitted.
+Qed.
 
 Module BlockVerification.
 

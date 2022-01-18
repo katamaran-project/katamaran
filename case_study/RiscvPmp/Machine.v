@@ -724,7 +724,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp2 := call privLevel_to_bits p in
     tmp1 <= tmp2.
 
-  Definition fun_privLevel_to_bits : Stm [p ∶ ty_privilege] ty_int :=
+  Definition fun_privLevel_to_bits : Stm [p ∶ ty_privilege] ty_xlenbits :=
     match: p in privilege with
     | Machine => stm_val ty_int 3%Z
     | User => stm_val ty_int 0%Z
