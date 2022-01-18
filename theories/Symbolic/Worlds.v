@@ -29,7 +29,7 @@
 
 From Katamaran Require Import
      Prelude
-     Notation
+     Notations
      Syntax.Formulas
      Syntax.Predicates
      Base.

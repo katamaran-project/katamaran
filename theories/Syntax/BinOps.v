@@ -30,11 +30,10 @@ From Coq Require Import
      Bool.Bool
      Strings.String
      ZArith.BinInt.
-From bbv Require
-     Word.
 From Equations Require Import
      Equations.
 From Katamaran Require Import
+     Bitvector
      Context
      Prelude
      Syntax.TypeDecl.
@@ -62,9 +61,13 @@ Module Type BinOpsOn (Import TD : TypeDecl).
   | binop_cons {σ : Ty}     : BinOp σ (ty_list σ) (ty_list σ)
   | binop_append {σ : Ty}   : BinOp (ty_list σ) (ty_list σ) (ty_list σ)
   | binop_tuple_snoc {σs σ} : BinOp (ty_tuple σs) σ (ty_tuple (σs ▻ σ))
-  | binop_bvplus {n}        : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
-  | binop_bvmult {n}        : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
-  | binop_bvcombine {m n}   : BinOp (ty_bvec m) (ty_bvec n) (ty_bvec (m + n))
+  | binop_bvadd {n}         : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
+  | binop_bvsub {n}         : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
+  | binop_bvmul {n}         : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
+  | binop_bvand {n}         : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
+  | binop_bvor {n}          : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
+  | binop_bvxor {n}         : BinOp (ty_bvec n) (ty_bvec n) (ty_bvec n)
+  | binop_bvapp {m n}       : BinOp (ty_bvec m) (ty_bvec n) (ty_bvec (m + n))
   | binop_bvcons {m}        : BinOp (ty_bit) (ty_bvec m) (ty_bvec (S m))
   .
 
@@ -106,17 +109,33 @@ Module Type BinOpsOn (Import TD : TypeDecl).
       f_equal_dec binoptel_append noConfusion_inv (eq_dec σ τ)
     | @binop_tuple_snoc σs σ , @binop_tuple_snoc τs τ =>
       f_equal2_dec binoptel_tuple_snoc noConfusion_inv (eq_dec σs τs) (eq_dec σ τ)
-    | @binop_bvplus m , @binop_bvplus n =>
+    | @binop_bvadd m , @binop_bvadd n =>
       f_equal_dec
-        (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvplus))
+        (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvadd))
         noConfusion_inv (eq_dec m n)
-    | @binop_bvmult m , @binop_bvmult n =>
+    | @binop_bvsub m , @binop_bvsub n =>
       f_equal_dec
-        (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvmult))
+        (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvsub))
         noConfusion_inv (eq_dec m n)
-    | @binop_bvcombine m1 m2 , @binop_bvcombine n1 n2 =>
+    | @binop_bvmul m , @binop_bvmul n =>
+      f_equal_dec
+        (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvmul))
+        noConfusion_inv (eq_dec m n)
+    | @binop_bvand m , @binop_bvand n =>
+      f_equal_dec
+        (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvand))
+        noConfusion_inv (eq_dec m n)
+    | @binop_bvor m , @binop_bvor n =>
+      f_equal_dec
+        (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvor))
+        noConfusion_inv (eq_dec m n)
+    | @binop_bvxor m , @binop_bvxor n =>
+      f_equal_dec
+        (fun n => ((ty_bvec n, ty_bvec n, ty_bvec n), binop_bvxor))
+        noConfusion_inv (eq_dec m n)
+    | @binop_bvapp m1 m2 , @binop_bvapp n1 n2 =>
       f_equal2_dec
-        (fun m n => ((ty_bvec m, ty_bvec n, ty_bvec (m+n)), binop_bvcombine))
+        (fun m n => ((ty_bvec m, ty_bvec n, ty_bvec (m+n)), binop_bvapp))
         noConfusion_inv (eq_dec m1 n1) (eq_dec m2 n2)
     | @binop_bvcons m , @binop_bvcons n =>
       f_equal_dec
@@ -163,10 +182,14 @@ Module Type BinOpsOn (Import TD : TypeDecl).
     | binop_cons       => cons
     | binop_append     => app
     | binop_tuple_snoc => pair
-    | binop_bvplus     => fun v1 v2 => Word.wplus v1 v2
-    | binop_bvmult     => fun v1 v2 => Word.wmult v1 v2
-    | binop_bvcombine  => fun v1 v2 => Word.combine v1 v2
-    | binop_bvcons     => fun b bs => Word.WS (Bit_eqb b bitone) bs
+    | binop_bvadd      => fun v1 v2 => bv.add v1 v2
+    | binop_bvsub      => fun v1 v2 => bv.sub v1 v2
+    | binop_bvmul      => fun v1 v2 => bv.mul v1 v2
+    | binop_bvand      => fun v1 v2 => bv.land v1 v2
+    | binop_bvor       => fun v1 v2 => bv.lor v1 v2
+    | binop_bvxor      => fun v1 v2 => bv.lxor v1 v2
+    | binop_bvapp      => fun v1 v2 => bv.app v1 v2
+    | binop_bvcons     => fun b bs => bv.cons (Bit_eqb b bitone) bs
     end.
 
 End BinOpsOn.

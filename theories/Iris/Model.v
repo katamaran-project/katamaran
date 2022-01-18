@@ -46,7 +46,6 @@ From iris Require Import
      proofmode.tactics.
 
 From Katamaran Require Import
-     Notation
      SmallStep.Step
      SmallStep.Inversion
      Sep.Logic

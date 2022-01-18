@@ -30,12 +30,12 @@ From Coq Require Import
      Bool.Bool
      Strings.String
      ZArith.BinInt.
-From bbv Require
-     Word.
 From Equations Require Import
      Equations.
 From stdpp Require
      finite.
+From Katamaran Require Export
+     Bitvector.
 From Katamaran Require Import
      Prelude
      Context
@@ -231,7 +231,7 @@ Module Type TypeDenoteMixin (Import TK : TypeDeclKit) (Import TC : TypeCodeMixin
     | ty_sum σ1 σ2 => Val σ1 + Val σ2
     | ty_unit => unit
     | ty_enum E => 𝑬𝑲 E
-    | ty_bvec n => Word.word n
+    | ty_bvec n => bv n
     | ty_tuple σs => EnvRec Val σs
     | ty_union U => 𝑼𝑻 U
     | ty_record R => 𝑹𝑻 R
@@ -249,7 +249,7 @@ Module Type TypeDenoteMixin (Import TK : TypeDeclKit) (Import TC : TypeCodeMixin
     | ty_sum σ τ  => sum_beq (Val_eqb σ) (Val_eqb τ)
     | ty_unit     => fun _ _ => true
     | ty_enum E   => fun v1 v2 => if eq_dec v1 v2 then true else false
-    | ty_bvec n   => @Word.weqb n
+    | ty_bvec n   => @bv.eqb n
     | ty_tuple σs => envrec.eqb Val_eqb
     | ty_union U  => fun v1 v2 => if eq_dec v1 v2 then true else false
     | ty_record R => fun v1 v2 => if eq_dec v1 v2 then true else false
@@ -267,8 +267,7 @@ Module Type TypeDenoteMixin (Import TK : TypeDeclKit) (Import TC : TypeCodeMixin
     - destruct x as [x1|x2]; destruct y as [y1|y2]...
     - destruct x. destruct y...
     - destruct (eq_dec x y)...
-    - apply iff_reflect. symmetry.
-      apply (Word.weqb_true_iff x y).
+    - apply bv.eqb_spec.
     - induction σs; cbn in *.
       + constructor. now destruct x, y.
       + destruct x as [xs x]; destruct y as [ys y].

@@ -38,7 +38,7 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
-     Notation
+     Notations
      Semantics.Registers
      Symbolic.Mutator
      Symbolic.Solver
@@ -48,7 +48,6 @@ From Katamaran Require Import
      Program.
 
 From stdpp Require decidable finite.
-From iris_string_ident Require Import ltac2_string_ident.
 
 Set Implicit Arguments.
 Import ctx.notations.

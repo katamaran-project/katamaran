@@ -33,7 +33,7 @@ From Coq Require Import
 From RiscvPmp Require Import
      Machine.
 From Katamaran Require Import
-     Notation
+     Notations
      SemiConcrete.Mutator
      Specification
      Symbolic.Mutator

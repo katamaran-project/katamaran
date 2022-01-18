@@ -33,7 +33,7 @@ From Coq Require Import
 From Katamaran Require Import
      Context
      Environment
-     Notation
+     Notations
      Prelude
      Syntax.BinOps
      Syntax.TypeDecl
@@ -154,11 +154,11 @@ Module Type ExpressionsOn (Import TY : Types) (Import BOP : BinOpsOn TY).
     | exp_inr e           => inr (eval e δ)
     | exp_list es         => List.map (fun e => eval e δ) es
     | exp_bvec es         => Vector.t_rect
-                               _ (fun m (_ : Vector.t (Exp Γ ty_bit) m) => Word.word m)
-                               Word.WO (fun eb m _ (vs : Word.word m) =>
+                               _ (fun m (_ : Vector.t (Exp Γ ty_bit) m) => bv m)
+                               bv.nil (fun eb m _ (vs : bv m) =>
                                           match eval eb δ with
-                                          | bitzero => Word.WS false vs
-                                          | bitone => Word.WS true vs
+                                          | bitzero => bv.cons false vs
+                                          | bitone => bv.cons true vs
                                           end)
                                _ es
     | exp_tuple es        => env.Env_rect

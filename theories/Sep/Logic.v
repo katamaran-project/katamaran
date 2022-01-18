@@ -32,7 +32,7 @@ From Coq Require Import
      Setoid.
 
 From Katamaran Require Import
-     Notation.
+     Notations.
 
 Local Set Implicit Arguments.
 

@@ -32,7 +32,7 @@ From Coq Require Import
 From Katamaran Require Import
      Context
      Environment
-     Notation
+     Notations
      Sep.Logic
      Specification
      Syntax.ContractDecl

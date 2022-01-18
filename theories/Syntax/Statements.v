@@ -33,7 +33,7 @@ From Katamaran Require Import
      Base
      Context
      Environment
-     Notation Prelude
+     Notations Prelude
      Syntax.FunDecl.
 
 Import ctx.notations.
