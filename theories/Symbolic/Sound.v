@@ -1394,6 +1394,7 @@ Module Soundness
     intros δs δc -> hs hc ->.
     unfold SMut.produce_chunk, CMut.produce_chunk.
     apply HPOST; cbn; rewrite ?inst_sub_id; auto.
+    hnf. cbn. now rewrite peval_chunk_sound.
   Qed.
 
   Lemma inst_env_cat {T : Set} {AT : LCtx -> T -> Set} {A : T -> Set}
@@ -1609,7 +1610,7 @@ Module Soundness
     apply approx_get_heap; auto.
     intros w1 ω01 ι1 -> Hpc1.
     intros hs hc ->.
-    remember (persist cs ω01) as c1. cbn in c1.
+    remember (peval_chunk (persist cs ω01)) as c1.
     destruct (try_consume_chunk_exact_spec hs c1) as [h' HIn|].
     { intros POST__s POST__c HPOST.
       intros δs δc -> hs' hc' ->.
@@ -1624,8 +1625,8 @@ Module Soundness
         rewrite List.in_map_iff. exists (c1 , h').
         split. reflexivity. assumption.
         eauto using inst_is_duplicable.
-      - hnf. subst. rewrite inst_persist. split; auto. revert Hwp.
-        apply HPOST; wsimpl; auto.
+      - hnf. subst. rewrite peval_chunk_sound, inst_persist.
+        split; auto. revert Hwp. apply HPOST; wsimpl; auto.
     }
     destruct (SMut.try_consume_chunk_precise hs c1) as [[h' eqs]|] eqn:?.
     { intros POST__s POST__c HPOST.
@@ -1642,10 +1643,11 @@ Module Soundness
       destruct (env.catView ts') as [tsI tsO].
       destruct (find_chunk_precise_spec prec tsI tsO hs) as [[h'' eqs''] HIn|];
         inversion Heqo; subst; clear Heqo.
-      specialize (HIn ι1 Heqs). cbn in HIn. rewrite Heqts' in HIn.
-      rewrite rew_opp_l in HIn. eexists; split; eauto. clear HIn.
-      hnf. split; auto.
-      now rewrite <- inst_persist, <- Heqc1.
+      specialize (HIn ι1 Heqs). rewrite Heqts' in HIn.
+      rewrite rew_opp_l in HIn. rewrite Heqc1 in HIn.
+      rewrite peval_chunk_sound in HIn.
+      eexists; split; eauto. clear HIn.
+      hnf. split; auto. now rewrite <- inst_persist.
     }
     { apply approx_bind.
       apply approx_angelic_list; eauto.
@@ -1658,12 +1660,12 @@ Module Soundness
       intros [cs' hs'] [cc' hc'].
       intros Hch'. inversion Hch'; subst; clear Hch'.
       apply approx_bind_right.
-      apply approx_assert_formulas; auto.
-      rewrite SMut.inst_match_chunk.
-      rewrite ?inst_persist, ?inst_subst; intuition.
-      intros w3 ω23 ι3 -> Hpc3.
-      rewrite <- inst_persist.
-      apply approx_put_heap; auto.
+      - apply approx_assert_formulas; auto.
+        rewrite SMut.inst_match_chunk.
+        now rewrite inst_persist, peval_chunk_sound, inst_persist.
+      - intros w3 ω23 ι3 -> Hpc3.
+        rewrite <- inst_persist.
+        apply approx_put_heap; auto.
     }
   Qed.
 

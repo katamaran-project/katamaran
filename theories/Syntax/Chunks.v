@@ -228,4 +228,21 @@ Module Type ChunksOn
   Global Instance instlaws_heap : InstLaws SHeap SCHeap.
   Proof. apply instantiatelaws_list. Qed.
 
+  Fixpoint peval_chunk {Σ} (c : Chunk Σ) : Chunk Σ :=
+    match c with
+    | chunk_user p ts => chunk_user p (env.map peval ts)
+    | @chunk_ptsreg _ σ r t => chunk_ptsreg r (peval t)
+    | chunk_conj c1 c2 => chunk_conj (peval_chunk c1) (peval_chunk c2)
+    | chunk_wand c1 c2 => chunk_wand (peval_chunk c1) (peval_chunk c2)
+    end.
+
+  Lemma peval_chunk_sound {Σ} (c : Chunk Σ) :
+    forall (ι : Valuation Σ),
+      inst (peval_chunk c) ι = inst c ι.
+  Proof.
+    induction c; cbn; intros ι; f_equal; auto using peval_sound.
+    unfold inst; cbn. rewrite env.map_map. apply env.map_ext.
+    auto using peval_sound.
+  Qed.
+
 End ChunksOn.

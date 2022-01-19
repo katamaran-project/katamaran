@@ -1785,7 +1785,7 @@ Module Type MutatorsOn
 
       Definition produce_chunk {Γ} :
         ⊢ Chunk -> SMut Γ Γ Unit :=
-        fun w0 c k δ h => T k tt δ (cons c h).
+        fun w0 c k δ h => T k tt δ (cons (peval_chunk c) h).
 
       Fixpoint try_consume_chunk_exact {Σ} (h : SHeap Σ) (c : Chunk Σ) {struct h} : option (SHeap Σ) :=
         match h with
@@ -1913,7 +1913,7 @@ Module Type MutatorsOn
         eapply bind.
         apply get_heap.
         intros w1 ω01 h.
-        pose proof (persist c ω01) as c1. cbn in c1. clear c.
+        pose proof (peval_chunk (persist c ω01)) as c1. clear c.
         destruct (try_consume_chunk_exact h c1) as [h'|].
         { apply put_heap. apply h'. }
         destruct (try_consume_chunk_precise h c1) as [[h' eqs]|].
