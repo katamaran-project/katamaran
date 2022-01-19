@@ -107,6 +107,12 @@ Section PredicateKit.
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
 
+  Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
+    match p with
+    | ptsreg => Some (exist _ ([ty_regno], [ty_xlenbits]) eq_refl)
+    | _ => None
+    end.
+
 End PredicateKit.
 
 Include ContractDeclMixin RiscvPmpBase RiscvPmpProgram.

@@ -28,7 +28,6 @@
 
 From Coq Require Export
      Numbers.BinNums.
-
 From Katamaran Require Export
      Context
      Environment
@@ -74,6 +73,11 @@ Module Type BaseMixin (Import TY : Types).
   Notation LCtx := (NCtx 𝑺 Ty).
   Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Val (@type 𝑺 Ty xt)) Σ).
   Notation CStore := (@NamedEnv 𝑿 Ty Val).
+
+  (* Preciseness for spatial predicates *)
+  Definition Precise {P : Set} (F : P -> Ctx Ty) (p : P) : Set :=
+    { inout : Ctx Ty * Ctx Ty | F p = prod_curry ctx.cat inout }.
+
 End BaseMixin.
 
 Module Type Base := Types <+ RegDeclKit <+ BaseMixin.

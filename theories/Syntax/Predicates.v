@@ -63,6 +63,8 @@ Module Type HeapPredicateKit (Import B : Base).
 
   Declare Instance 𝑯_eq_dec : EqDec 𝑯.
 
+  Parameter 𝑯_precise : forall p : 𝑯, option (Precise 𝑯_Ty p).
+
 End HeapPredicateKit.
 
 Module Type PredicateKit (B : Base) :=
@@ -83,6 +85,7 @@ Module DefaultHeapPredicateKit (Import B : Base) <: HeapPredicateKit B.
   Definition 𝑯_Ty : 𝑯 -> Ctx Ty := fun p => match p with end.
   Instance 𝑯_eq_dec : EqDec 𝑯 := fun p => match p with end.
   Instance 𝑯_is_dup : IsDuplicable 𝑯 := { is_duplicable := fun p => match p with end }.
+  Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) := None.
 
 End DefaultHeapPredicateKit.
 

@@ -345,8 +345,11 @@ Module Type MutatorsOn
 
   Section VerificationConditions.
 
-    Inductive VerificationCondition (p : 𝕊 wnil) : Prop :=
+    Inductive VerificationCondition (p : 𝕊 ctx.nil) : Prop :=
     | vc (P : safe p env.nil).
+
+    Global Instance proper_vc : Proper (sequiv ctx.nil ==> iff) VerificationCondition.
+    Proof. intros p q pq. split; intros []; constructor; now apply pq. Qed.
 
   End VerificationConditions.
 
@@ -1755,6 +1758,7 @@ Module Type MutatorsOn
         ⊢ SMut Γ Γ (STerm σ).
         intros w POST δ h.
         apply (T POST).
+        apply peval.
         apply (seval_exp δ e).
         auto.
         auto.
@@ -1765,7 +1769,7 @@ Module Type MutatorsOn
         intros w POST δ h.
         apply (T POST).
         refine (env.map _ es).
-        intros b. apply (seval_exp δ).
+        intros b e. apply peval. apply (seval_exp δ e).
         auto.
         auto.
       Defined.
@@ -1777,6 +1781,7 @@ Module Type MutatorsOn
     End State.
 
     Section ProduceConsume.
+      Import EqNotations.
 
       Definition produce_chunk {Γ} :
         ⊢ Chunk -> SMut Γ Γ Unit :=
@@ -1791,7 +1796,7 @@ Module Type MutatorsOn
           else option_map (cons c') (try_consume_chunk_exact h c)
         end.
 
-      Equations(noeqns) match_chunk {w : World} (c1 c2 : Chunk w) : List Formula w :=
+      Equations(noeqns) match_chunk {Σ : LCtx} (c1 c2 : Chunk Σ) : List Formula Σ :=
         match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2)
         with eq_dec p1 p2 => {
           match_chunk (chunk_user p1 vs1) (chunk_user ?(p1) vs2) (left eq_refl) := formula_eqs_ctx vs1 vs2;
@@ -1810,7 +1815,7 @@ Module Type MutatorsOn
           app (match_chunk c11 c21) (match_chunk c12 c22);
         match_chunk _ _  := cons (formula_bool (term_val ty_bool false)) nil.
 
-      Lemma inst_match_chunk {w : World} (c1 c2 : Chunk w) (ι : Valuation w) :
+      Lemma inst_match_chunk {Σ : LCtx} (c1 c2 : Chunk Σ) (ι : Valuation Σ) :
         instpc (match_chunk c1 c2) ι <-> inst c1 ι = inst c2 ι.
       Proof.
         revert c2.
@@ -1851,6 +1856,56 @@ Module Type MutatorsOn
           clear. intros * Heq. dependent elimination Heq; auto.
       Qed.
 
+      Section ConsumePrecise.
+
+        Context {Σ} (p : 𝑯) {ΔI ΔO : Ctx Ty} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO).
+
+        Definition match_args_precise (ts : Env (Term Σ) (𝑯_Ty p)) : option (List Formula Σ) :=
+          let ts' := rew prec in ts in
+          match env.catView ts' with
+          | env.isCat tsI' tsO' =>
+              if env.eqb_hom Term_eqb tsI tsI'
+              then Some (formula_eqs_ctx tsO tsO')
+              else None
+          end.
+
+        Equations(noeqns) match_chunk_precise (c : Chunk Σ) : option (List Formula Σ) :=
+        match_chunk_precise (chunk_user p' ts')
+        with eq_dec p p' => {
+          match_chunk_precise (chunk_user ?(p) ts') (left eq_refl) := match_args_precise ts';
+          match_chunk_precise (chunk_user p' ts') (right _) := None
+        };
+        match_chunk_precise _ := None.
+
+        Fixpoint find_chunk_precise (h : SHeap Σ) : option (SHeap Σ * List Formula Σ) :=
+          match h with
+          | nil => None
+          | cons c h' =>
+              match match_chunk_precise c with
+              | Some eqs => Some (if is_duplicable p then cons c h' else h', eqs)
+              | None => option_map (base.prod_map (cons c) id) (find_chunk_precise h')
+              end
+          end.
+
+      End ConsumePrecise.
+
+      Definition try_consume_chunk_precise {Σ} (h : SHeap Σ) (c : Chunk Σ) : option (SHeap Σ * List Formula Σ) :=
+        match c with
+        | chunk_user p ts =>
+            match 𝑯_precise p with
+            | Some (exist _ ΔIO prec) =>
+                match ΔIO return 𝑯_Ty p = prod_curry ctx.cat ΔIO -> _ with
+                | (ΔI,ΔO) =>
+                    fun prec  =>
+                      match env.catView (rew prec in ts) with
+                      | env.isCat tsI tsO => find_chunk_precise prec tsI tsO h
+                      end
+                end prec
+            | None => None
+            end
+        | _ => None
+        end.
+
       Definition consume_chunk {Γ} :
         ⊢ Chunk -> SMut Γ Γ Unit.
       Proof.
@@ -1858,10 +1913,17 @@ Module Type MutatorsOn
         eapply bind.
         apply get_heap.
         intros w1 ω01 h.
-        destruct (try_consume_chunk_exact h (persist c ω01)) as [h'|].
-        - apply put_heap.
-          apply h'.
-        - eapply bind.
+        pose proof (persist c ω01) as c1. cbn in c1. clear c.
+        destruct (try_consume_chunk_exact h c1) as [h'|].
+        { apply put_heap. apply h'. }
+        destruct (try_consume_chunk_precise h c1) as [[h' eqs]|].
+        { eapply bind_right.
+          apply put_heap. apply h'.
+          intros w2 ω12.
+          apply assert_formulas.
+          apply (persist (A := List Formula) eqs ω12).
+        }
+        { eapply bind.
           refine (angelic_list
                     (A := Pair Chunk SHeap)
                     (fun δ h =>
@@ -1869,16 +1931,17 @@ Module Type MutatorsOn
                           sdebug_consume_chunk_pathcondition := wco w1;
                           sdebug_consume_chunk_localstore := δ;
                           sdebug_consume_chunk_heap := h;
-                          sdebug_consume_chunk_chunk := persist c ω01
+                          sdebug_consume_chunk_chunk := c1
                         |})
                     (heap_extractions h)).
           intros w2 ω12 [c' h'].
           eapply bind_right.
           apply assert_formulas.
-          apply (match_chunk (persist c (acc_trans ω01 ω12)) c').
+          apply (match_chunk (persist c1 ω12) c').
           intros w3 ω23.
           apply put_heap.
           apply (persist (A := SHeap) h' ω23).
+        }
       Defined.
 
       (* Definition smut_leakcheck {Γ Σ} : SMut Γ Γ Unit Σ := *)

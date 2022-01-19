@@ -244,6 +244,12 @@ Module Import ExampleSpecification <: Specification DefaultBase.
         end
       |}.
 
+    Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
+      match p with
+      | ptstocons => Some (exist _ ([ptr], [ptr, llist]) eq_refl)
+      | ptstolist => Some (exist _ ([llist], [ty_list ptr]) eq_refl)
+      end.
+
   End HeapPredicateDeclKit.
 
   Include ContractDeclMixin DefaultBase ExampleProgram.

@@ -54,8 +54,9 @@ Local Set Implicit Arguments.
 Fixpoint heap_extractions `{IsDuplicable C} (h : list C) : list (C * list C) :=
   match h with
   | nil      => nil
-  | cons c h => let ec := if is_duplicable c then pair c (cons c h) else pair c h
-                in cons ec (map (fun '(pair c' h') => (pair c' (cons c h'))) (heap_extractions h))
+  | cons c h => let h' := if is_duplicable c then cons c h else h in
+                let ec := pair c h' in
+                cons ec (map (base.prod_map id (cons c)) (heap_extractions h))
   end.
 
 Lemma heap_extractions_map `{IsDuplicable A} `{IsDuplicable B} (f : A -> B) (h : list A)
@@ -64,12 +65,14 @@ Lemma heap_extractions_map `{IsDuplicable A} `{IsDuplicable B} (f : A -> B) (h :
 Proof.
   induction h; cbn.
   - reflexivity.
-  - rewrite is_dup_map.
-    destruct (is_duplicable a); f_equal;
-    rewrite IHh;
-    rewrite ?List.map_map;
-    apply List.map_ext;
-    intros [x xs]; reflexivity.
+  - f_equal.
+    + unfold base.prod_map; cbn. f_equal.
+      rewrite is_dup_map.
+      now destruct is_duplicable.
+    + rewrite IHh.
+      rewrite ?List.map_map.
+      apply List.map_ext.
+      intros [x xs]; reflexivity.
 Qed.
 
 Module Type ChunksOn
