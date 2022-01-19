@@ -154,7 +154,7 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
   Definition Term_rec Σ (P : forall σ, Term Σ σ -> Set) := Term_rect P.
   Definition Term_ind Σ (P : forall σ, Term Σ σ -> Prop) := Term_rect P.
 
-  Equations(noeqns) Term_eqb {Σ} {σ : Ty} (t1 t2 : Term Σ σ) : bool :=
+  Equations(noeqns) Term_eqb {Σ} [σ : Ty] (t1 t2 : Term Σ σ) : bool :=
     Term_eqb (@term_var _ _ ς1inΣ) (@term_var _ _ ς2inΣ) :=
       ctx.In_eqb ς1inΣ ς2inΣ;
     Term_eqb (term_val _ v1) (term_val _ v2) := Val_eqb _ v1 v2;
