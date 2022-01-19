@@ -224,6 +224,7 @@ Section ContractDefKit.
                  mstatus ↦ (term_record rmstatus [ term_var "mpp" ]) ∗
                  mepc ↦ (term_var "mepc"))
                 (asn_or ((* Modified CSRs, requires Machine mode *)
+                         asn_eq (term_var "m") (term_val ty_privilege Machine) ∗
                          cur_privilege ↦ (term_val ty_privilege Machine) ∗
                          nextpc ↦ (term_var "npc") ∗
                          asn_exist "new_mtvec" ty_xlenbits (mtvec ↦ (term_var "new_mtvec")) ∗
@@ -236,6 +237,7 @@ Section ContractDefKit.
                                  mstatus ↦ (term_record rmstatus [ term_var "m" ]) ∗
                                  mepc ↦ (term_var "i"))
                                 ((* MRET = Recover *)
+                                 asn_eq (term_var "m") (term_val ty_privilege Machine) ∗
                                  cur_privilege ↦ (term_var "mpp") ∗
                                  nextpc ↦ (term_var "mepc") ∗
                                  mtvec ↦ (term_var "h") ∗
