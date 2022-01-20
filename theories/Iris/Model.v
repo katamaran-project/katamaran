@@ -311,17 +311,15 @@ Section Soundness.
     iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl regsv]%auth_both_valid.
     iPureIntro.
     specialize (Hl 0).
-    rewrite (singleton_includedN_l 0 regsmap (existT _ r) _) in Hl *.
-    destruct 1 as [y [eq1%discrete%leibniz_equiv eq2%cmra_discrete_included_r]];
+    setoid_rewrite (singleton_includedN_l 0 regsmap (existT _ r) _) in Hl.
+    destruct Hl as [y [eq1%discrete%leibniz_equiv eq2%cmra_discrete_included_r]];
       auto with typeclass_instances.
     specialize (regsv (existT _ r)).
     rewrite eq1 in regsv.
     destruct y as [y|]; [|inversion regsv].
-    rewrite Excl_included in eq2 *.
-    intros <-%leibniz_equiv.
+    setoid_rewrite Excl_included in eq2.
+    apply leibniz_equiv in eq2. subst.
     specialize (H (existT _ r) (Excl (existT _ v)) eq1); cbn in H.
-    inversion H.
-    apply noConfusion_inv in H. cbn in H.
     Local Set Equations With UIP.
     by dependent elimination H.
   Qed.
@@ -359,8 +357,8 @@ Section Soundness.
     rewrite /reg_pointsTo.
     iIntros "Hreg".
     iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl%cmra_discrete_included_r regsmapv]%auth_both_valid.
-    rewrite (singleton_included_l regsmap (existT _ r) _) in Hl *.
-    destruct 1 as [y [eq1%leibniz_equiv eq2]].
+    setoid_rewrite (singleton_included_l regsmap (existT _ r) _) in Hl.
+    destruct Hl as [y [eq1%leibniz_equiv eq2]].
     specialize (regsmapv (existT _ r)).
     rewrite eq1 in regsmapv.
     destruct y as [y|]; inversion regsmapv.
