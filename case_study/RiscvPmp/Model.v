@@ -43,8 +43,7 @@ From iris.base_logic Require Export invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require Import weakestpre adequacy.
-From iris.proofmode Require Import tactics.
-From iris_string_ident Require Import ltac2_string_ident.
+From iris.proofmode Require Import string_ident tactics.
 
 Set Implicit Arguments.
 
@@ -82,31 +81,33 @@ Module RiscvPmpModel.
 
       Definition MemVal : Set := Word.
 
-      Class mcMemG Σ := McMemG {
-                            (* ghost variable for tracking state of registers *)
-                            mc_ghG :> gh.gen_heapG Addr MemVal Σ;
-                            mc_invNs : namespace
-                          }.
+      Class mcMemGS Σ :=
+        McMemGS {
+            (* ghost variable for tracking state of registers *)
+            mc_ghGS :> gh.gen_heapGS Addr MemVal Σ;
+            mc_invNs : namespace
+          }.
 
-      Definition memPreG : gFunctors -> Set := fun Σ => gh.gen_heapPreG Z MemVal Σ.
-      Definition memG : gFunctors -> Set := mcMemG.
+      Definition memGpreS : gFunctors -> Set := fun Σ => gh.gen_heapGpreS Z MemVal Σ.
+      Definition memGS : gFunctors -> Set := mcMemGS.
       Definition memΣ : gFunctors := gh.gen_heapΣ Addr MemVal.
 
-      Definition memΣ_PreG : forall {Σ}, subG memΣ Σ -> memPreG Σ := fun {Σ} => gh.subG_gen_heapPreG (Σ := Σ) (L := Addr) (V := MemVal).
+      Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
+        fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal).
 
-      Definition mem_inv : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
-        fun {Σ} hG μ => (True)%I.
+      Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+        fun {Σ} mG μ => (True)%I.
 
-      Definition mem_res : forall {Σ}, memG Σ -> Memory -> iProp Σ :=
-        fun {Σ} hG μ => (True)%I.
+      Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+        fun {Σ} mG μ => (True)%I.
 
-      Lemma mem_inv_init : forall Σ (μ : Memory), memPreG Σ ->
-                                                  ⊢ |==> ∃ memG : memG Σ, (mem_inv memG μ ∗ mem_res memG μ)%I.
+      Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+        ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
       Admitted.
 
       Import Contracts.
 
-      Definition interp_ptsreg `{sailRegG Σ} (r: RegIdx) (v : Z) : iProp Σ :=
+      Definition interp_ptsreg `{sailRegGS Σ} (r: RegIdx) (v : Z) : iProp Σ :=
         match r with
         | 1%Z => reg_pointsTo x1 v
         | 2%Z => reg_pointsTo x2 v
@@ -121,10 +122,10 @@ Module RiscvPmpModel.
         unfold seqZ; now cbv.
       Qed.
 
-      Definition interp_gprs `{sailRegG Σ} : iProp Σ :=
+      Definition interp_gprs `{sailRegGS Σ} : iProp Σ :=
         [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
 
-      Definition luser_inst `{sailRegG Σ} `{invG Σ} (mG : memG Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
+      Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
         match p return Env Val (𝑯_Ty p) -> iProp Σ with
         | pmp_entries  => fun ts => let entries_lst := env.head ts in
                                     match entries_lst with
@@ -137,7 +138,7 @@ Module RiscvPmpModel.
         | gprs         => fun _  => interp_gprs
         end.
 
-    Definition lduplicate_inst `{sailRegG Σ} `{invG Σ} (mG : memG Σ) :
+    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
         (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
@@ -153,14 +154,14 @@ Module RiscvPmpModel.
 
   Module Import RiscvPmpIrisInstance := IrisInstance RiscvPmpIrisHeapKit.
 
-  Lemma foreignSem `{sg : sailG Σ} : ForeignSem (Σ := Σ).
+  Lemma foreignSem `{sg : sailGS Σ} : ForeignSem (Σ := Σ).
   Proof.
     intros Γ τ Δ f es δ.
     destruct f; cbn.
   Admitted.
 
   Section Lemmas.
-    Context `{sg : sailG Σ}.
+    Context `{sg : sailGS Σ}.
 
     Lemma open_ptsreg_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_ptsreg.
@@ -204,7 +205,7 @@ Module RiscvPmpModel.
     Qed.
   End Lemmas.
 
-  Lemma lemSem `{sg : sailG Σ} : LemmaSem (Σ := Σ).
+  Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
   Proof.
     intros Δ [];
       eauto using open_ptsreg_sound, close_ptsreg_sound, open_gprs_sound,

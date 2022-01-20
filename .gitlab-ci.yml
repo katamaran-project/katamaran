@@ -16,14 +16,6 @@ stages:
       - ".*.cache"
       - "_build"
 
-8.13.2_iris-3.4.0_equations-1.3:   {<<: *build, image: "ghcr.io/katamaran-project/coq:8.13.2_iris-3.4.0_equations-1.3"}
-8.13.2_iris-3.4.0_equations-1.2.4: {<<: *build, image: "ghcr.io/katamaran-project/coq:8.13.2_iris-3.4.0_equations-1.2.4"}
-8.13.2_iris-3.4.0_equations-1.2.3: {<<: *build, image: "ghcr.io/katamaran-project/coq:8.13.2_iris-3.4.0_equations-1.2.3"}
-8.12.2_iris-3.4.0_equations-1.2.4: {<<: *build, image: "ghcr.io/katamaran-project/coq:8.12.2_iris-3.4.0_equations-1.2.4"}
-8.12.2_iris-3.4.0_equations-1.2.3: {<<: *build, image: "ghcr.io/katamaran-project/coq:8.12.2_iris-3.4.0_equations-1.2.3"}
-
-# 8.13.2_iris-3.5.0_equations-1.3:   {<<: *build, image: "ghcr.io/katamaran-project/coq:8.13.2_iris-3.5.0_equations-1.3"}
-# 8.13.2_iris-3.5.0_equations-1.2.4: {<<: *build, image: "ghcr.io/katamaran-project/coq:8.13.2_iris-3.5.0_equations-1.2.4"}
-# 8.13.2_iris-3.5.0_equations-1.2.3: {<<: *build, image: "ghcr.io/katamaran-project/coq:8.13.2_iris-3.5.0_equations-1.2.3"}
-# 8.12.2_iris-3.5.0_equations-1.2.4: {<<: *build, image: "ghcr.io/katamaran-project/coq:8.12.2_iris-3.5.0_equations-1.2.4"}
-# 8.12.2_iris-3.5.0_equations-1.2.3: {<<: *build, image: "ghcr.io/katamaran-project/coq:8.12.2_iris-3.5.0_equations-1.2.3"}
+8.14.1_iris-3.5.0_equations-1.3:   {<<: *build, image: "ghcr.io/katamaran-project/coq:8.14.1_iris-3.5.0_equations-1.3"}
+8.13.2_iris-3.5.0_equations-1.3:   {<<: *build, image: "ghcr.io/katamaran-project/coq:8.13.2_iris-3.5.0_equations-1.3"}
+8.12.2_iris-3.5.0_equations-1.2.4: {<<: *build, image: "ghcr.io/katamaran-project/coq:8.12.2_iris-3.5.0_equations-1.2.3"}
