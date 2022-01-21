@@ -26,6 +26,8 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Coq Require Import
+     Lists.List.
 From RiscvPmp Require Import
      Machine
      Contracts.
@@ -46,6 +48,7 @@ From iris.program_logic Require Import weakestpre adequacy.
 From iris.proofmode Require Import string_ident tactics.
 
 Set Implicit Arguments.
+Import ListNotations.
 
 Module gh := iris.base_logic.lib.gen_heap.
 
@@ -107,15 +110,13 @@ Module RiscvPmpModel.
 
       Import Contracts.
 
-      Definition interp_ptsreg `{sailRegGS Σ} (r: RegIdx) (v : Z) : iProp Σ :=
-        match r with
-        | 1%Z => reg_pointsTo x1 v
-        | 2%Z => reg_pointsTo x2 v
-        | 3%Z => reg_pointsTo x3 v
-        | _   => False
-        end.
+      Definition reg_file : gset Z := list_to_set (seqZ 1 3).
 
-      Definition reg_file : gset RegIdx := list_to_set (seqZ 1 3).
+      Definition interp_ptsreg `{sailRegGS Σ} (r : RegIdx) (v : Z) : iProp Σ :=
+        match reg_convert r with
+        | Some x => reg_pointsTo x v
+        | None => True
+        end.
 
       Lemma seqZ_list : seqZ 1 3 = [1;2;3]%Z.
       Proof.
@@ -134,7 +135,6 @@ Module RiscvPmpModel.
                                               reg_pointsTo pmpaddr0 addr0)%I
                                     | _ => False%I
                                     end
-        | ptsreg       => fun ts => interp_ptsreg (env.head (env.tail ts)) (env.head ts)
         | gprs         => fun _  => interp_gprs
         end.
 
@@ -163,25 +163,6 @@ Module RiscvPmpModel.
   Section Lemmas.
     Context `{sg : sailGS Σ}.
 
-    Lemma open_ptsreg_sound :
-      ValidLemma RiscvPmpSpecification.lemma_open_ptsreg.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      unfold RiscvPmpIrisHeapKit.interp_ptsreg.
-      destruct rs; auto.
-      repeat (destruct p; auto).
-    Qed.
-
-    Lemma close_ptsreg_sound :
-      ValidLemma RiscvPmpSpecification.lemma_close_ptsreg.
-    Proof.
-      intros ι; destruct_syminstance ι; cbn.
-      destruct rs; cbn; iFrame; try (iIntros "[%H _]"; inversion H).
-      repeat (destruct p;
-              try (iIntros "[%H _]"; inversion H);
-              try (iIntros; iAccu)).
-    Qed.
-
     Lemma open_gprs_sound :
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.
     Proof.
@@ -208,7 +189,6 @@ Module RiscvPmpModel.
   Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
   Proof.
     intros Δ [];
-      eauto using open_ptsreg_sound, close_ptsreg_sound, open_gprs_sound,
-                  close_gprs_sound.
+      eauto using open_gprs_sound, close_gprs_sound.
   Qed.
 End RiscvPmpModel.

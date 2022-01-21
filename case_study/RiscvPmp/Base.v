@@ -736,6 +736,14 @@ Section RegDeclKit.
   | pmpaddr0      : Reg ty_xlenbits
   .
 
+  Definition reg_convert (idx : RegIdx) : option (Reg ty_xlenbits) :=
+    match idx with
+    | 1 => Some x1
+    | 2 => Some x2
+    | 3 => Some x3
+    | _ => None
+    end%Z.
+
   Section TransparentObligations.
     Local Set Transparent Obligations.
     Derive Signature NoConfusion NoConfusionHom EqDec for Reg.

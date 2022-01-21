@@ -59,7 +59,6 @@ Inductive PurePredicate : Set :=
 
 Inductive Predicate : Set :=
 | pmp_entries
-| ptsreg
 | gprs
 .
 
@@ -93,7 +92,6 @@ Section PredicateKit.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
     | pmp_entries  => [ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits)]
-    | ptsreg       => [ty_regno, ty_xlenbits]
     | gprs         => ctx.nil
     end.
 
@@ -101,7 +99,6 @@ Section PredicateKit.
     is_duplicable p :=
       match p with
       | pmp_entries  => false
-      | ptsreg       => false
       | gprs         => false
       end
     }.
@@ -109,7 +106,6 @@ Section PredicateKit.
 
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
-    | ptsreg => Some (exist _ ([ty_regno], [ty_xlenbits]) eq_refl)
     | _ => None
     end.
 
@@ -120,7 +116,6 @@ Include ContractDeclMixin RiscvPmpBase RiscvPmpProgram.
 Section ContractDefKit.
 
   Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
-  Local Notation "r '↦r' val" := (asn_chunk (chunk_user ptsreg (env.nil ► (ty_regno ↦ r) ► (ty_xlenbits ↦ val)))) (at level 79).
   Local Notation "p '∗' q" := (asn_sep p q).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env.nil ► (ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits) ↦ l)))).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
@@ -169,12 +164,12 @@ Section ContractDefKit.
                            (asn x3)
                            asn_default)).
 
-  Definition asn_and_regs {Σ Σ'} (f : Term Σ' ty_regno -> Assertion Σ) : Assertion Σ :=
-    f (z_term 1) ∗ f (z_term 2) ∗ f (z_term 3).
+  Definition asn_and_regs {Σ} (f : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
+    f x1 ∗ f x2 ∗ f x3.
 
   Definition asn_regs_ptsto {Σ} : Assertion Σ :=
     asn_and_regs
-      (fun r => asn_exist "w" ty_xlenbits (r ↦r term_var "w")).
+      (fun r => asn_exist "w" ty_xlenbits (r ↦ term_var "w")).
 
   (* TODO: abstract away the concrete type, look into unions for that *)
   (* TODO: length of list should be 16, no duplicates *)
@@ -614,24 +609,6 @@ Section ContractDefKit.
        sep_contract_postcondition   := asn_true;
     |}.
 
-  Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
-    {| lemma_logic_variables := [rs ∶ ty_regno, w ∶ ty_xlenbits];
-       lemma_patterns        := [term_var rs];
-       lemma_precondition    := term_var rs ↦r term_var w;
-       lemma_postcondition   := asn_with_reg (term_var rs)
-                                             (fun r => r ↦ term_var w)
-                                             asn_false;
-    |}.
-
-  Definition lemma_close_ptsreg : SepLemma close_ptsreg :=
-    {| lemma_logic_variables := [rs ∶ ty_regno, w ∶ ty_xlenbits];
-       lemma_patterns        := [term_var rs];
-       lemma_precondition    := asn_with_reg (term_var rs)
-                                             (fun r => r ↦ term_var w)
-                                             asn_false;
-       lemma_postcondition   := term_var rs ↦r term_var w;
-    |}.
-
   Definition lemma_open_gprs : SepLemma open_gprs :=
     {| lemma_logic_variables := ctx.nil;
        lemma_patterns        := env.nil;
@@ -697,8 +674,6 @@ Section ContractDefKit.
   Definition LEnv : LemmaEnv :=
     fun Δ l =>
       match l with
-      | open_ptsreg    => lemma_open_ptsreg
-      | close_ptsreg   => lemma_close_ptsreg
       | open_gprs      => lemma_open_gprs
       | close_gprs     => lemma_close_gprs
       end.
@@ -871,36 +846,29 @@ Module BlockVerification.
   Axiom produce : ⊢ Assertion -> □(M Unit).
   Axiom consume : ⊢ Assertion -> □(M Unit).
 
-  Notation "r '↦r' val" :=
-    (chunk_user
-       ptsreg
-       (env.nil
-          ► (ty_regno ↦ term_val ty_regno r)
-          ► (ty_xlenbits ↦ val)))
-      (at level 79).
   Notation "ω ∣ x <- ma ;; mb" :=
     (bind ma (fun _ ω x => mb))
       (at level 80, x at next level,
         ma at next level, mb at level 200,
         right associativity).
 
-  Definition rX (r : RegIdx) : ⊢ M (STerm ty_xlenbits) :=
+  Definition rX (r : Reg ty_xlenbits) : ⊢ M (STerm ty_xlenbits) :=
     fun _ =>
       ω01 ∣ v1 <- @angelic ty_xlenbits _ ;;
-      ω12 ∣ _  <- consume_chunk (r ↦r v1) ;;
+      ω12 ∣ _  <- consume_chunk (r ↦ v1) ;;
       let v2 := persist__term v1 ω12 in
-      ω23 ∣ _ <- produce_chunk (r ↦r v2) ;;
+      ω23 ∣ _ <- produce_chunk (r ↦ v2) ;;
       let v3 := persist__term v2 ω23 in
       pure v3.
 
-  Definition wX (r : RegIdx) : ⊢ STerm ty_xlenbits -> M Unit :=
+  Definition wX (r : Reg ty_xlenbits) : ⊢ STerm ty_xlenbits -> M Unit :=
     fun _ u0 =>
       ω01 ∣ v1 <- @angelic ty_xlenbits _ ;;
-      ω12 ∣ _  <- consume_chunk (r ↦r v1) ;;
+      ω12 ∣ _  <- consume_chunk (r ↦ v1) ;;
       let u2 := persist__term u0 (acc_trans ω01 ω12) in
-      produce_chunk (r ↦r u2).
+      produce_chunk (r ↦ u2).
 
-  Definition exec_rtype (rs2 rs1 rd : RegIdx) (op : ROP) : ⊢ M Unit :=
+  Definition exec_rtype (rs2 rs1 rd : Reg ty_xlenbits) (op : ROP) : ⊢ M Unit :=
     fun _ =>
       ω01 ∣ v11 <- @rX rs1 _ ;;
       ω12 ∣ v22 <- @rX rs1 _ ;;
@@ -913,7 +881,11 @@ Module BlockVerification.
 
   Definition exec_instruction (i : AST) : ⊢ M Unit :=
     match i with
-    | RTYPE rs2 rs1 rd op => exec_rtype rs2 rs1 rd op
+    | RTYPE rs2 rs1 rd op =>
+        match reg_convert rs2, reg_convert rs1, reg_convert rd with
+        | Some rs2, Some rs1, Some rd => exec_rtype rs2 rs1 rd op
+        | _, _, _ => fun _ => pure tt
+        end
     | _                   => fun _ => pure tt
     end.
 
@@ -957,14 +929,6 @@ Module BlockVerification.
 
     Import ListNotations.
     Notation "p '∗' q" := (asn_sep p q).
-    Notation "r '↦r' val" :=
-      (asn_chunk
-         (chunk_user
-            ptsreg
-            (env.nil
-               ► (ty_regno ↦ term_val ty_regno r)
-               ► (ty_xlenbits ↦ val))))
-         (at level 79).
 
     Example block1 : list AST :=
       [ ADD 1 1 2;
@@ -974,13 +938,15 @@ Module BlockVerification.
 
     Let Σ1 : LCtx := ["x" :: ty_xlenbits, "y" :: ty_xlenbits].
 
+    Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
+
     Example pre1 : Assertion Σ1 :=
-      1 ↦r term_var "x" ∗
-      2 ↦r term_var "y".
+      x1 ↦ term_var "x" ∗
+      x2 ↦ term_var "y".
 
     Example post1 : Assertion Σ1 :=
-      1 ↦r term_var "y" ∗
-      2 ↦r term_var "x".
+      x1 ↦ term_var "y" ∗
+      x2 ↦ term_var "x".
 
     Example VC1 : 𝕊 Σ1 := VC pre1 block1 post1.
 
