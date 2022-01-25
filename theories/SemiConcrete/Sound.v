@@ -182,6 +182,7 @@ Module Type Soundness
       - unfold assert_formula, dijkstra, CDijk.assert_formula.
         intuition.
       - now apply consume_chunk_monotonic.
+      - now apply consume_chunk_monotonic.
       - rewrite ?wp_angelic_match_bool.
         destruct (inst b ι); cbn; eauto.
       - rewrite ?wp_angelic_match_enum; eauto.
@@ -211,6 +212,7 @@ Module Type Soundness
       intros δ. induction asn; cbn; intros * PQ *.
       - unfold assume_formula, dijkstra, CDijk.assume_formula.
         intuition.
+      - unfold produce_chunk; eauto.
       - unfold produce_chunk; eauto.
       - rewrite ?wp_demonic_match_bool.
         destruct (inst b ι); cbn; eauto.
@@ -251,6 +253,8 @@ Module Type Soundness
       - now apply assert_formula_sound.
       - intros Hc%consume_chunk_sound.
         now rewrite interpret_scchunk_inst in Hc.
+      - intros Hc%consume_chunk_sound.
+        now rewrite interpret_scchunk_inst in Hc.
       - rewrite wp_angelic_match_bool.
         destruct (inst b ι); auto.
       - rewrite wp_angelic_match_enum; auto.
@@ -288,6 +292,9 @@ Module Type Soundness
     Proof.
       revert POST. induction asn; cbn - [assume_formula]; intros POST δ1 h1.
       - now apply assume_formula_sound.
+      - rewrite lsep_comm.
+        unfold produce_chunk, liftP; cbn.
+        now rewrite interpret_scchunk_inst.
       - rewrite lsep_comm.
         unfold produce_chunk, liftP; cbn.
         now rewrite interpret_scchunk_inst.

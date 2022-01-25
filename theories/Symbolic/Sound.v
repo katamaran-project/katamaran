@@ -1427,6 +1427,9 @@ Module Soundness
       now apply approx_produce_chunk.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
+      now apply approx_produce_chunk.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_persist.
       apply approx_demonic_match_bool; eauto.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
@@ -1566,7 +1569,7 @@ Module Soundness
       inst (eq_rect_r (fun i => T i Σ) t e) ι = eq_rect_r A (inst t ι) e.
   Proof. now destruct e. Qed.
 
-  Lemma find_chunk_precise_spec {Σ p ΔI ΔO} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO) (h : SHeap Σ) :
+  Lemma find_chunk_user_precise_spec {Σ p ΔI ΔO} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO) (h : SHeap Σ) :
     OptionSpec
       (fun '(h', eqs) =>
          forall ι : Valuation Σ, instpc eqs ι ->
@@ -1574,14 +1577,13 @@ Module Soundness
              (inst (chunk_user p (eq_rect_r (fun c : Ctx Ty => Env (Term Σ) c) (tsI ►► tsO) prec)) ι, inst h' ι)
              (heap_extractions (inst h ι)))
       True
-      (SMut.find_chunk_precise prec tsI tsO h).
+      (SMut.find_chunk_user_precise prec tsI tsO h).
   Proof.
-    induction h as [|c h]; [now constructor|]. cbn [SMut.find_chunk_precise].
-    destruct SMut.match_chunk_precise as [eqs|] eqn:?.
+    induction h as [|c h]; [now constructor|]. cbn [SMut.find_chunk_user_precise].
+    destruct SMut.match_chunk_user_precise as [eqs|] eqn:?.
     - clear IHh. constructor. intros ι Heqs. left.
       destruct c; try discriminate Heqo. cbn in *.
       destruct (eq_dec p p0); cbn in Heqo; try discriminate Heqo. destruct e.
-      unfold SMut.match_args_precise in Heqo.
       remember (eq_rect (𝑯_Ty p) (Env (Term Σ)) ts (ΔI ▻▻ ΔO) prec) as ts'.
       destruct (env.catView ts') as [tsI' tsO'].
       destruct (env.eqb_hom_spec Term_eqb (@Term_eqb_spec Σ) tsI tsI'); try discriminate.
@@ -1596,6 +1598,32 @@ Module Soundness
       intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
       remember (inst (chunk_user p (eq_rect_r (fun c0 : Ctx Ty => Env (Term Σ) c0) (tsI ►► tsO) prec)) ι) as c'.
       change (inst (cons c h) ι) with (cons (inst c ι) (inst h ι)).
+      cbn [fst heap_extractions]. right. apply List.in_map_iff.
+      eexists (c', inst h' ι); auto.
+  Qed.
+
+  Lemma find_chunk_ptsreg_precise_spec {Σ σ} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ) (h : SHeap Σ) :
+    OptionSpec
+      (fun '(h', eqs) =>
+         forall ι : Valuation Σ, instpc eqs ι ->
+           List.In
+             (inst (chunk_ptsreg r t) ι, inst h' ι)
+             (heap_extractions (inst h ι)))
+      True
+      (SMut.find_chunk_ptsreg_precise r t h).
+  Proof.
+    induction h; cbn [SMut.find_chunk_ptsreg_precise]; [now constructor|].
+    destruct SMut.match_chunk_ptsreg_precise eqn:?.
+    - constructor. intros ι. rewrite inst_pathcondition_cons. intros [Hf Hpc].
+      clear IHh. destruct a; cbn in Heqo; try discriminate Heqo.
+      destruct (eq_dec_het r r0); try discriminate Heqo.
+      dependent elimination e. cbn in Heqo. dependent elimination Heqo.
+      change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
+      cbn. left. f_equal. f_equal. symmetry. exact Hf.
+    - apply optionspec_map. revert IHh. apply optionspec_monotonic; auto.
+      intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
+      remember (inst (chunk_ptsreg r t) ι) as c'.
+      change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
       cbn [fst heap_extractions]. right. apply List.in_map_iff.
       eexists (c', inst h' ι); auto.
   Qed.
@@ -1637,17 +1665,83 @@ Module Soundness
       cbv [CMut.bind CMut.put_heap CMut.bind_right CMut.assert_formula
            T CMut.angelic_list CMut.dijkstra].
       rewrite CDijk.wp_angelic_list.
-      destruct c1; cbn in Heqo; try discriminate Heqo. cbn.
-      destruct (𝑯_precise p) as [[[ΔI ΔO] prec]|]; try discriminate Heqo.
-      remember (eq_rect (𝑯_Ty p) (Env (Term w1)) ts (ΔI ▻▻ ΔO) prec) as ts'.
-      destruct (env.catView ts') as [tsI tsO].
-      destruct (find_chunk_precise_spec prec tsI tsO hs) as [[h'' eqs''] HIn|];
-        inversion Heqo; subst; clear Heqo.
-      specialize (HIn ι1 Heqs). rewrite Heqts' in HIn.
-      rewrite rew_opp_l in HIn. rewrite Heqc1 in HIn.
-      rewrite peval_chunk_sound in HIn.
-      eexists; split; eauto. clear HIn.
-      hnf. split; auto. now rewrite <- inst_persist.
+      destruct c1; cbn in Heqo; try discriminate Heqo; cbn.
+      - destruct (𝑯_precise p) as [[[ΔI ΔO] prec]|]; try discriminate Heqo.
+        remember (eq_rect (𝑯_Ty p) (Env (Term w1)) ts (ΔI ▻▻ ΔO) prec) as ts'.
+        destruct (env.catView ts') as [tsI tsO].
+        destruct (find_chunk_user_precise_spec prec tsI tsO hs) as [[h'' eqs''] HIn|];
+          inversion Heqo; subst; clear Heqo.
+        specialize (HIn ι1 Heqs). rewrite Heqts' in HIn.
+        rewrite rew_opp_l in HIn. rewrite Heqc1 in HIn.
+        rewrite peval_chunk_sound in HIn.
+        eexists; split; eauto. clear HIn.
+        hnf. split; auto. now rewrite <- inst_persist.
+      - destruct (find_chunk_ptsreg_precise_spec r t hs) as [[h'' eqs''] HIn|];
+          inversion Heqo; subst; clear Heqo.
+        specialize (HIn ι1 Heqs). rewrite Heqc1 in HIn.
+        rewrite peval_chunk_sound in HIn.
+        eexists; split; eauto. clear HIn.
+        hnf. split; auto. now rewrite <- inst_persist.
+    }
+    { intros POST__s POST__c HPOST.
+      intros δs δc ? hs' hc' ? [].
+    }
+  Qed.
+
+  Lemma approx_consume_chunk_angelic {Γ} {w0 : World} (ι0 : Valuation w0)
+    (Hpc0 : instpc (wco w0) ι0) :
+    approx ι0 (@SMut.consume_chunk_angelic Γ w0) (CMut.consume_chunk).
+  Proof.
+    intros cs cc ->.
+    unfold SMut.consume_chunk_angelic, CMut.consume_chunk.
+    apply approx_bind.
+    apply approx_get_heap; auto.
+    intros w1 ω01 ι1 -> Hpc1.
+    intros hs hc ->.
+    remember (peval_chunk (persist cs ω01)) as c1.
+    destruct (try_consume_chunk_exact_spec hs c1) as [h' HIn|].
+    { intros POST__s POST__c HPOST.
+      intros δs δc -> hs' hc' ->.
+      unfold approx, ApproxPath. intros Hwp.
+      cbv [SMut.put_heap CMut.bind CMut.put_heap CMut.bind_right CMut.assert_formula
+                         T CMut.angelic_list CMut.dijkstra].
+      rewrite CDijk.wp_angelic_list.
+      change (SHeap w1) in h'.
+      exists (inst c1 ι1, inst h' ι1).
+      split.
+      - unfold inst at 3. cbn. rewrite heap_extractions_map.
+        rewrite List.in_map_iff. exists (c1 , h').
+        split. reflexivity. assumption.
+        eauto using inst_is_duplicable.
+      - hnf. subst. rewrite peval_chunk_sound, inst_persist.
+        split; auto. revert Hwp. apply HPOST; wsimpl; auto.
+    }
+    destruct (SMut.try_consume_chunk_precise hs c1) as [[h' eqs]|] eqn:?.
+    { intros POST__s POST__c HPOST.
+      intros δs δc -> hs' hc' ->.
+      unfold approx, ApproxPath.
+      cbv [SMut.put_heap SMut.bind_right T]. cbn. intros Hwp.
+      eapply (approx_assert_formulas Hpc1 eqs) in Hwp; eauto. destruct Hwp as [Heqs HPOST1].
+      cbv [CMut.bind CMut.put_heap CMut.bind_right CMut.assert_formula
+           T CMut.angelic_list CMut.dijkstra].
+      rewrite CDijk.wp_angelic_list.
+      destruct c1; cbn in Heqo; try discriminate Heqo; cbn.
+      - destruct (𝑯_precise p) as [[[ΔI ΔO] prec]|]; try discriminate Heqo.
+        remember (eq_rect (𝑯_Ty p) (Env (Term w1)) ts (ΔI ▻▻ ΔO) prec) as ts'.
+        destruct (env.catView ts') as [tsI tsO].
+        destruct (find_chunk_user_precise_spec prec tsI tsO hs) as [[h'' eqs''] HIn|];
+          inversion Heqo; subst; clear Heqo.
+        specialize (HIn ι1 Heqs). rewrite Heqts' in HIn.
+        rewrite rew_opp_l in HIn. rewrite Heqc1 in HIn.
+        rewrite peval_chunk_sound in HIn.
+        eexists; split; eauto. clear HIn.
+        hnf. split; auto. now rewrite <- inst_persist.
+      - destruct (find_chunk_ptsreg_precise_spec r t hs) as [[h'' eqs''] HIn|];
+          inversion Heqo; subst; clear Heqo.
+        specialize (HIn ι1 Heqs). rewrite Heqc1 in HIn.
+        rewrite peval_chunk_sound in HIn.
+        eexists; split; eauto. clear HIn.
+        hnf. split; auto. now rewrite <- inst_persist.
     }
     { apply approx_bind.
       apply approx_angelic_list; eauto.
@@ -1681,6 +1775,9 @@ Module Soundness
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
       now apply approx_consume_chunk.
+    - intros w1 ω01 ι1 -> Hpc1.
+      rewrite <- inst_persist.
+      now apply approx_consume_chunk_angelic.
     - intros w1 ω01 ι1 -> Hpc1.
       rewrite <- inst_persist.
       apply approx_angelic_match_bool; eauto.

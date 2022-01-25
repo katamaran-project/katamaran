@@ -1856,38 +1856,59 @@ Module Type MutatorsOn
           clear. intros * Heq. dependent elimination Heq; auto.
       Qed.
 
-      Section ConsumePrecise.
+      Section ConsumePreciseUser.
 
         Context {Σ} (p : 𝑯) {ΔI ΔO : Ctx Ty} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO).
 
-        Definition match_args_precise (ts : Env (Term Σ) (𝑯_Ty p)) : option (List Formula Σ) :=
-          let ts' := rew prec in ts in
-          match env.catView ts' with
-          | env.isCat tsI' tsO' =>
-              if env.eqb_hom Term_eqb tsI tsI'
-              then Some (formula_eqs_ctx tsO tsO')
-              else None
-          end.
-
-        Equations(noeqns) match_chunk_precise (c : Chunk Σ) : option (List Formula Σ) :=
-        match_chunk_precise (chunk_user p' ts')
+        Equations(noeqns) match_chunk_user_precise (c : Chunk Σ) : option (List Formula Σ) :=
+        match_chunk_user_precise (chunk_user p' ts')
         with eq_dec p p' => {
-          match_chunk_precise (chunk_user ?(p) ts') (left eq_refl) := match_args_precise ts';
-          match_chunk_precise (chunk_user p' ts') (right _) := None
+          match_chunk_user_precise (chunk_user ?(p) ts') (left eq_refl) :=
+            match env.catView (rew prec in ts') with
+            | env.isCat tsI' tsO' =>
+                if env.eqb_hom Term_eqb tsI tsI'
+                then Some (formula_eqs_ctx tsO tsO')
+                else None
+            end;
+          match_chunk_user_precise (chunk_user p' ts') (right _) := None
         };
-        match_chunk_precise _ := None.
+        match_chunk_user_precise _ := None.
 
-        Fixpoint find_chunk_precise (h : SHeap Σ) : option (SHeap Σ * List Formula Σ) :=
+        Fixpoint find_chunk_user_precise (h : SHeap Σ) : option (SHeap Σ * List Formula Σ) :=
           match h with
           | nil => None
           | cons c h' =>
-              match match_chunk_precise c with
+              match match_chunk_user_precise c with
               | Some eqs => Some (if is_duplicable p then cons c h' else h', eqs)
-              | None => option_map (base.prod_map (cons c) id) (find_chunk_precise h')
+              | None => option_map (base.prod_map (cons c) id) (find_chunk_user_precise h')
               end
           end.
 
-      End ConsumePrecise.
+      End ConsumePreciseUser.
+
+      Section ConsumePrecisePtsreg.
+
+        Context {Σ σ} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ).
+
+        Equations(noeqns) match_chunk_ptsreg_precise (c : Chunk Σ) : option (Formula Σ) :=
+        match_chunk_ptsreg_precise (chunk_ptsreg r' t')
+        with eq_dec_het r r' => {
+          match_chunk_ptsreg_precise (chunk_ptsreg ?(r) t') (left eq_refl) := Some (formula_eq t t');
+          match_chunk_ptsreg_precise (chunk_ptsreg r' t') (right _) := None
+        };
+        match_chunk_ptsreg_precise _ := None.
+
+        Fixpoint find_chunk_ptsreg_precise (h : SHeap Σ) : option (SHeap Σ * List Formula Σ) :=
+          match h with
+          | nil => None
+          | cons c h' =>
+              match match_chunk_ptsreg_precise c with
+              | Some fml => Some (h', cons fml nil)
+              | None => option_map (base.prod_map (cons c) id) (find_chunk_ptsreg_precise h')
+              end
+          end.
+
+      End ConsumePrecisePtsreg.
 
       Definition try_consume_chunk_precise {Σ} (h : SHeap Σ) (c : Chunk Σ) : option (SHeap Σ * List Formula Σ) :=
         match c with
@@ -1898,15 +1919,46 @@ Module Type MutatorsOn
                 | (ΔI,ΔO) =>
                     fun prec  =>
                       match env.catView (rew prec in ts) with
-                      | env.isCat tsI tsO => find_chunk_precise prec tsI tsO h
+                      | env.isCat tsI tsO => find_chunk_user_precise prec tsI tsO h
                       end
                 end prec
             | None => None
             end
+        | chunk_ptsreg r t => find_chunk_ptsreg_precise r t h
         | _ => None
         end.
 
       Definition consume_chunk {Γ} :
+        ⊢ Chunk -> SMut Γ Γ Unit.
+      Proof.
+        intros w0 c.
+        eapply bind.
+        apply get_heap.
+        intros w1 ω01 h.
+        pose proof (peval_chunk (persist c ω01)) as c1. clear c.
+        destruct (try_consume_chunk_exact h c1) as [h'|].
+        { apply put_heap. apply h'. }
+        destruct (try_consume_chunk_precise h c1) as [[h' eqs]|].
+        { eapply bind_right.
+          apply put_heap. apply h'.
+          intros w2 ω12.
+          apply assert_formulas.
+          apply (persist (A := List Formula) eqs ω12).
+        }
+        { intros _ δ1 h1.
+          apply
+            (SymProp.error
+               (EMsgHere
+                  {| sdebug_consume_chunk_program_context := Γ;
+                    sdebug_consume_chunk_pathcondition := wco w1;
+                    sdebug_consume_chunk_localstore := δ1;
+                    sdebug_consume_chunk_heap := h1;
+                    sdebug_consume_chunk_chunk := c1
+                  |})).
+        }
+      Defined.
+
+      Definition consume_chunk_angelic {Γ} :
         ⊢ Chunk -> SMut Γ Γ Unit.
       Proof.
         intros w0 c.
@@ -1951,28 +2003,13 @@ Module Type MutatorsOn
       (*   | _   => smut_error "SMut.leakcheck" "Heap leak" h *)
       (*   end. *)
 
-      Definition produce_fail_recursion {Γ} :
-        ⊢ Assertion -> SMut Γ Γ Unit.
-      Proof.
-        refine
-          (fix produce w0 asn {struct asn} :=
-             match asn with
-             | asn_sep asn1 asn2 =>
-               bind_right
-                 (produce w0 asn1)
-                 (* Recursive call to produce has principal argument equal to "persist asn2 ω01" *)
-                 (* instead of one of the following variables: "asn1" "asn2". *)
-                 (produce <$> persist asn2)
-             | _ => @block _ _ _ _
-             end).
-      Abort.
-
       Definition produce {Γ} :
         ⊢ Assertion -> □(SMut Γ Γ Unit).
       Proof.
         refine (fix produce w0 asn {struct asn} := _).
         destruct asn.
         - apply (box_assume_formula fml).
+        - apply (produce_chunk <$> persist c).
         - apply (produce_chunk <$> persist c).
         - apply (demonic_match_bool <$> persist__term b <*> four (produce _ asn1) <*> four (produce _ asn2)).
         - intros w1 ω01.
@@ -2030,6 +2067,7 @@ Module Type MutatorsOn
         destruct asn.
         - apply (box_assert_formula fml).
         - apply (consume_chunk <$> persist c).
+        - apply (consume_chunk_angelic <$> persist c).
         - apply (angelic_match_bool <$> persist__term b <*> four (consume _ asn1) <*> four (consume _ asn2)).
         - intros w1 ω01.
           apply (angelic_match_enum

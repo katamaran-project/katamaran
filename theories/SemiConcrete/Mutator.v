@@ -999,6 +999,7 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
         match asn with
         | asn_formula fml => assume_formula (inst fml ι)
         | asn_chunk c     => produce_chunk (inst c ι)
+        | asn_chunk_angelic c => produce_chunk (inst c ι)
         | asn_if b a1 a2  => demonic_match_bool (inst b ι) (produce ι a1) (produce ι a2)
         | asn_match_enum E k alts =>
           demonic_match_enum
@@ -1044,6 +1045,7 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
         match asn with
         | asn_formula fml => assert_formula (inst fml ι)
         | asn_chunk c     => consume_chunk (inst c ι)
+        | asn_chunk_angelic c     => consume_chunk (inst c ι)
         | asn_if b a1 a2  => angelic_match_bool (inst b ι) (consume ι a1) (consume ι a2)
         | asn_match_enum E k alts =>
           angelic_match_enum

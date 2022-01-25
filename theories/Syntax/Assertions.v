@@ -51,6 +51,7 @@ Module Type AssertionsOn
   Inductive Assertion (Σ : LCtx) : Type :=
   | asn_formula (fml : Formula Σ)
   | asn_chunk (c : Chunk Σ)
+  | asn_chunk_angelic (c : Chunk Σ)
   | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
   | asn_match_enum (E : 𝑬) (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
   | asn_match_sum (σ τ : Ty) (s : Term Σ (ty_sum σ τ)) (xl : 𝑺) (alt_inl : Assertion (Σ ▻ xl∷σ)) (xr : 𝑺) (alt_inr : Assertion (Σ ▻ xr∷τ))
@@ -98,6 +99,7 @@ Module Type AssertionsOn
       match a with
       | asn_formula fml => asn_formula (subst fml ζ)
       | asn_chunk c => asn_chunk (subst c ζ)
+      | asn_chunk_angelic c => asn_chunk_angelic (subst c ζ)
       | asn_if b a1 a2 => asn_if (subst b ζ) (sub_assertion a1 ζ) (sub_assertion a2 ζ)
       | asn_match_enum E k alts =>
         asn_match_enum E (subst k ζ) (fun z => sub_assertion (alts z) ζ)
@@ -126,6 +128,7 @@ Module Type AssertionsOn
       match asn with
       | asn_formula fml => option_map (@asn_formula _) (occurs_check bIn fml)
       | asn_chunk c     => option_map (@asn_chunk _) (occurs_check bIn c)
+      | asn_chunk_angelic c => option_map (@asn_chunk_angelic _) (occurs_check bIn c)
       | asn_if b a1 a2  =>
         option_ap (option_ap (option_map (@asn_if _) (occurs_check bIn b)) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
       | asn_match_enum E k alts => None (* TODO *)
@@ -289,6 +292,7 @@ Module Type AssertionsOn
       match a with
       | asn_formula fml => !!(inst fml ι) ∧ lemp
       | asn_chunk c => interpret_chunk c ι
+      | asn_chunk_angelic c => interpret_chunk c ι
       | asn_if b a1 a2 => if inst (A := Val ty_bool) b ι then interpret_assertion a1 ι else interpret_assertion a2 ι
       | asn_match_enum E k alts => interpret_assertion (alts (inst (T := fun Σ => Term Σ _) k ι)) ι
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
