@@ -1219,7 +1219,6 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
         | O   => fun _ _ _ => error "CMut.exec: out of fuel for inlining"
         | S n => @exec_aux (@exec n)
         end.
-      Proof.
       Global Arguments exec _ {_ _} s _ _ _.
 
       (* Definition leakcheck {Γ} : CMut Γ Γ unit := *)

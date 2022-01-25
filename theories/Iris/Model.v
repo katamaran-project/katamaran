@@ -1572,27 +1572,27 @@ Section Adequacy.
                                       end) l)) -∗
       [∗ list] x ∈ l,
         let (x0, r) := (x : sigT 𝑹𝑬𝑮) in reg_pointsTo r (read_register γ r).
-    Proof.
-      iIntros (nodups) "Hregs".
-      iInduction l as [|[x r]] "IH".
-      - now iFrame.
-      - cbn.
-        rewrite (insert_singleton_op (A := exclR (leibnizO SomeVal)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ r)))).
-        rewrite auth_frag_op.
-        iPoseProof (own_op with "Hregs") as "[Hreg Hregs]".
-        iFrame.
-        iApply "IH".
-        + iPureIntro.
-          refine (NoDup_cons_1_2 (existT x r) l nodups).
-        + iFrame.
-        + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _].
-          refine (not_elem_of_list_to_map_1 _ (existT x r) _).
-          rewrite <-list_fmap_compose.
-          rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
-            let (x0, r0) := x in (existT x0 r0, Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl).
-          now rewrite list_fmap_id.
-          now intros [σ2 r2].
-    Qed.
+  Proof.
+    iIntros (nodups) "Hregs".
+    iInduction l as [|[x r]] "IH".
+    - now iFrame.
+    - rewrite big_sepL_cons. cbn.
+      rewrite (insert_singleton_op (A := exclR (leibnizO SomeVal)) (list_to_map (_ <$> l))  (existT x r) (Excl (existT _ (read_register γ r)))).
+      rewrite auth_frag_op.
+      iPoseProof (own_op with "Hregs") as "[Hreg Hregs]".
+      iFrame.
+      iApply "IH".
+      + iPureIntro.
+        refine (NoDup_cons_1_2 (existT x r) l nodups).
+      + iFrame.
+      + destruct (proj1 (NoDup_cons (existT x r) _) nodups) as [notin _].
+        refine (not_elem_of_list_to_map_1 _ (existT x r) _).
+        rewrite <-list_fmap_compose.
+        rewrite (list_fmap_ext (compose fst (λ x : {H : Ty & 𝑹𝑬𝑮 H},
+          let (x0, r0) := x in (existT x0 r0, Excl (existT x0 (read_register γ r0))))) id _ _ _ eq_refl).
+        now rewrite list_fmap_id.
+        now intros [σ2 r2].
+  Qed.
 
   Lemma adequacy {Γ σ} (s : Stm Γ σ) {γ γ'} {μ μ'}
         {δ δ' : CStore Γ} {s' : Stm Γ σ} {Q : Val σ -> Prop} :

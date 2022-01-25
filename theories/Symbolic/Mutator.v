@@ -2348,7 +2348,6 @@ Module Type MutatorsOn
         | O   => fun _ _ _ _ => error "SMut.exec" "out of fuel for inlining" tt
         | S n => @exec_aux (@exec n)
         end.
-      Proof.
       Global Arguments exec _ {_ _} _ {w} _ _ _.
 
       Import Notations.

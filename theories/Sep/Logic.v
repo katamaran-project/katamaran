@@ -57,30 +57,29 @@ Module sep.
 
       lequiv (P Q : lcar) : Prop := (P ⊢ Q) /\ (Q ⊢ P) where "P ⊣⊢ Q" := (lequiv P Q);
 
-      (* Replace canonical(false) with canonical=no after moving to Coq 8.13. *)
-      #[canonical(false)] lentails_preorder  : PreOrder lentails;
+      #[canonical=no] lentails_preorder  : PreOrder lentails;
 
-      #[canonical(false)] land_right X P Q         : (X ⊢ P) -> (X ⊢ Q) -> (X ⊢ P ∧ Q);
-      #[canonical(false)] land_left1 P Q R         : (P ⊢ R) -> (P ∧ Q ⊢ R);
-      #[canonical(false)] land_left2 P Q R         : (Q ⊢ R) -> (P ∧ Q ⊢ R);
-      #[canonical(false)] lor_left P Q R           : (P ⊢ R) -> (Q ⊢ R) -> (P ∨ Q ⊢ R);
-      #[canonical(false)] lor_right1 P Q R         : (P ⊢ Q) -> (P ⊢ Q ∨ R);
-      #[canonical(false)] lor_right2 P Q R         : (P ⊢ R) -> (P ⊢ Q ∨ R);
-      #[canonical(false)] lex_right B x P Q        : (P ⊢ Q x) -> (P ⊢ @lex B Q);
-      #[canonical(false)] lex_left B P Q           : (forall x, P x ⊢ Q) -> (@lex B P ⊢ Q);
-      #[canonical(false)] lall_left B x P Q        : (P x ⊢ Q) -> (@lall B P ⊢ Q);
-      #[canonical(false)] lall_right B P Q         : (forall v, P ⊢ Q v) -> (P ⊢ @lall B Q);
-      #[canonical(false)] limpl_and_adjoint P Q R  : (P ∧ Q ⊢ R) <-> (P ⊢ Q → R);
-      #[canonical(false)] lprop_left (P : Prop) Q  : (P -> (!!True ⊢ Q)) -> (!!P ⊢ Q);
-      #[canonical(false)] lprop_right (P : Prop) Q : P -> (Q ⊢ !!P);
+      #[canonical=no] land_right X P Q         : (X ⊢ P) -> (X ⊢ Q) -> (X ⊢ P ∧ Q);
+      #[canonical=no] land_left1 P Q R         : (P ⊢ R) -> (P ∧ Q ⊢ R);
+      #[canonical=no] land_left2 P Q R         : (Q ⊢ R) -> (P ∧ Q ⊢ R);
+      #[canonical=no] lor_left P Q R           : (P ⊢ R) -> (Q ⊢ R) -> (P ∨ Q ⊢ R);
+      #[canonical=no] lor_right1 P Q R         : (P ⊢ Q) -> (P ⊢ Q ∨ R);
+      #[canonical=no] lor_right2 P Q R         : (P ⊢ R) -> (P ⊢ Q ∨ R);
+      #[canonical=no] lex_right B x P Q        : (P ⊢ Q x) -> (P ⊢ @lex B Q);
+      #[canonical=no] lex_left B P Q           : (forall x, P x ⊢ Q) -> (@lex B P ⊢ Q);
+      #[canonical=no] lall_left B x P Q        : (P x ⊢ Q) -> (@lall B P ⊢ Q);
+      #[canonical=no] lall_right B P Q         : (forall v, P ⊢ Q v) -> (P ⊢ @lall B Q);
+      #[canonical=no] limpl_and_adjoint P Q R  : (P ∧ Q ⊢ R) <-> (P ⊢ Q → R);
+      #[canonical=no] lprop_left (P : Prop) Q  : (P -> (!!True ⊢ Q)) -> (!!P ⊢ Q);
+      #[canonical=no] lprop_right (P : Prop) Q : P -> (Q ⊢ !!P);
 
-      #[canonical(false)] lsep_assoc P Q R        : P ∗ (Q ∗ R) ⊣⊢ (P ∗ Q) ∗ R;
-      #[canonical(false)] lsep_comm P Q           : P ∗ Q ⊣⊢ Q ∗ P;
-      #[canonical(false)] lwand_sep_adjoint P Q R : (P ∗ Q ⊢ R) <-> (P ⊢ Q -∗ R);
-      #[canonical(false)] lsep_andp_prop P Q R    : P ∗ (!!Q ∧ R) ⊣⊢ !!Q ∧ (P ∗ R);
-      #[canonical(false)] lsep_entails P P' Q Q'  : (P ⊢ P') -> (Q ⊢ Q') -> (P ∗ Q ⊢ P' ∗ Q');
-      #[canonical(false)] lsep_emp P              : P ∗ lemp ⊣⊢ P;
-      #[canonical(false)] lsep_leak P             : P ⊢ lemp;
+      #[canonical=no] lsep_assoc P Q R        : P ∗ (Q ∗ R) ⊣⊢ (P ∗ Q) ∗ R;
+      #[canonical=no] lsep_comm P Q           : P ∗ Q ⊣⊢ Q ∗ P;
+      #[canonical=no] lwand_sep_adjoint P Q R : (P ∗ Q ⊢ R) <-> (P ⊢ Q -∗ R);
+      #[canonical=no] lsep_andp_prop P Q R    : P ∗ (!!Q ∧ R) ⊣⊢ !!Q ∧ (P ∗ R);
+      #[canonical=no] lsep_entails P P' Q Q'  : (P ⊢ P') -> (Q ⊢ Q') -> (P ∗ Q ⊢ P' ∗ Q');
+      #[canonical=no] lsep_emp P              : P ∗ lemp ⊣⊢ P;
+      #[canonical=no] lsep_leak P             : P ⊢ lemp;
     }.
 
   Arguments lequiv {_} _ _.
