@@ -44,10 +44,15 @@ From Katamaran Require Import
      Symbolic.Solver
      Symbolic.Worlds
      Symbolic.Propositions
+     Program
      Specification
-     Program.
+     Sep.Hoare
+     Sep.Logic
+     Semantics
+     Iris.Model.
 
-From stdpp Require decidable finite.
+From stdpp Require decidable finite list fin_maps.
+From iris.proofmode Require Import string_ident tactics.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -236,13 +241,8 @@ Module Import ExampleSpecification <: Specification DefaultBase.
       | ptstolist => [llist, ty_list ty_int]
       end.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
-    Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
-      {| is_duplicable p :=
-        match p with
-        | ptstocons => false
-        | ptstolist => false
-        end
-      |}.
+    Global Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
+      {| is_duplicable p := false |}.
 
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
@@ -373,3 +373,199 @@ Module Import ExampleExecutor :=
 
 Lemma valid_contract_append : SMut.ValidContractReflect sep_contract_append fun_append.
 Proof. Time reflexivity. Qed.
+
+Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
+  MakeSemantics DefaultBase ExampleProgram.
+
+Module ExampleModel.
+  Import ExampleProgram.
+  Import ExampleSpecification.
+
+  Include ProgramLogicOn DefaultBase ExampleSpecification.
+  Include Iris DefaultBase ExampleSpecification ExampleSemantics.
+
+  Module ExampleIrisHeapKit <: IrisHeapKit.
+    Section WithIrisNotations.
+      Import iris.bi.interface.
+      Import iris.bi.big_op.
+      Import iris.base_logic.lib.iprop.
+      Import iris.base_logic.lib.gen_heap.
+
+      Class mcMemGS Σ :=
+        McMemGS {
+            (* ghost variable for tracking state of registers *)
+            mc_ghGS :> gen_heapGS nat (Z * (Z + unit)) Σ;
+            mc_invNs : namespace
+          }.
+ 
+      Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS nat (Z * (Z + unit)) Σ.
+      Definition memGS : gFunctors -> Set := mcMemGS.
+      Definition memΣ : gFunctors := gen_heapΣ nat (Z * (Z + unit)).
+
+      Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
+        fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := nat) (V := (Z * (Z + unit))).
+
+      Definition memToGmap (μ : Memory) : gmap nat (Z * (Z + unit)) :=
+        list_to_map (imap pair μ).
+
+      Lemma memToGmap_app (μ : Memory) (v : Z * (Z + unit)) :
+        memToGmap (μ ++ cons v nil) = <[length μ:=v]> (memToGmap μ).
+      Admitted.
+
+      Lemma memToGmap_lookup_length (μ : Memory) :
+        memToGmap μ !! length μ = None.
+      Admitted.
+
+      Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+        fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) (memToGmap μ))%I.
+
+      Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+        fun {Σ} hG μ => ([∗ map] l↦v ∈ memToGmap μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
+
+      Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+        ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+      Proof.
+        iIntros (Σ μ gHP).
+        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := nat) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
+
+        pose (memmap := memToGmap μ).
+        iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
+        iModIntro.
+        rewrite (right_id empty union memmap).
+
+        iExists (McMemGS gH (nroot .@ "mem_inv")).
+        iFrame.
+      Qed.
+
+      Definition ptstocons_interp `{mG : memGS Σ} (p : Z) (v : Z) (n : Z + unit) : iProp Σ :=
+        (∃ p', ⌜p = Z.of_nat p'⌝ ∗
+              mapsto (hG := mc_ghGS (mcMemGS := mG)) p' (DfracOwn 1) (pair v n))%I.
+
+      Fixpoint ptstolist_interp `{mG : memGS Σ} (p : Z + unit) (vs : list Z) : iProp Σ :=
+        match vs with
+        | nil => ⌜p = inr tt⌝
+        | v :: vs => (∃ p' pn, ⌜p = inl p'⌝ ∗ ptstocons_interp (mG := mG) p' v pn ∗ ptstolist_interp (mG := mG) pn vs)%I
+      end.
+
+    Definition luser_inst `{sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
+      (match p return Env Val (𝑯_Ty p) -> iProp Σ with
+      | ptstocons => fun ts => ptstocons_interp (mG := mG) (env.head (env.tail (env.tail ts))) (env.head (env.tail ts)) (env.head ts)
+      | ptstolist => fun ts => ptstolist_interp (mG := mG) (env.head (env.tail ts)) (env.head ts)
+       end) ts.
+
+    Definition lduplicate_inst `{sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) :
+      forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
+      is_duplicable p = true -> luser_inst mG p ts -∗ luser_inst mG p ts ∗ luser_inst mG p ts.
+    Proof.
+      destruct p; now cbn.
+    Qed.
+
+    Unset Printing Notations.
+    Set Printing Implicit.
+    End WithIrisNotations.
+  End ExampleIrisHeapKit.
+
+  Import ExampleIrisHeapKit.
+
+  Module Import RiscvPmpIrisInstance := IrisInstance ExampleIrisHeapKit.
+
+  Section WithIrisNotations.
+    Import iris.bi.interface.
+    Import iris.bi.big_op.
+    Import iris.base_logic.lib.iprop.
+    Import iris.program_logic.weakestpre.
+    Import iris.base_logic.lib.gen_heap.
+
+    Ltac destruct_syminstance ι :=
+      repeat
+        match type of ι with
+        | Env _ (ctx.snoc _ (MkB ?s _)) =>
+            let id := string_to_ident s in
+            let fr := fresh id in
+            destruct (env.snocView ι) as [ι fr];
+            destruct_syminstance ι
+        | Env _ ctx.nil => destruct (env.nilView ι)
+        | _ => idtac
+        end.
+
+    Lemma mkcons_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
+      forall (x : Val ptr) (l : Val llist),
+        evals es δ = env.snoc (env.snoc env.nil (MkB _ ptr) x) (MkB _ llist) l
+        → ⊢ semTriple δ (⌜true = true⌝ ∧ emp) (stm_foreign mkcons es)
+            (λ (v : Val ptr) (δ' : CStore Γ),
+              ptstocons_interp v x l ∗ ⌜δ' = δ⌝).
+    Proof.
+      intros x l Heq.
+      iIntros "_".
+      rewrite wp_unfold. cbn.
+      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+      unfold mem_inv.
+      iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+      iModIntro.
+      iSplitR; first by intuition.
+      iIntros (e2 σ'' efs) "%".
+      dependent elimination H0.
+      dependent elimination s.
+      cbn in f1.
+      destruct_conjs; subst.
+      do 3 iModIntro.
+      rewrite Heq.
+      cbn -[memToGmap].
+      rewrite memToGmap_app.
+      iMod "Hclose2" as "_".
+      iMod (gen_heap_alloc (memToGmap μ1) (length μ1) (x,l) with "Hmem") as "[Hmem [Hres _]]".
+      { now eapply memToGmap_lookup_length. }
+      iModIntro.
+      iFrame.
+      iSplitL; last done.
+      iApply wp_value.
+      cbn.
+      iSplitL; last done.
+      iExists (length μ1); iSplitR.
+      {iPureIntro; eauto using Zlength_correct.}
+      done.
+    Qed.
+
+    Lemma snd_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
+      forall (xs : Val llist)
+        (x p : Val ptr),
+        evals es δ = env.snoc env.nil (MkB _ ptr) p ->
+        ⊢ semTriple δ
+          (ptstocons_interp p x xs)
+          (stm_foreign snd es)
+          (λ (v : Z + ()) (δ' : CStore Γ),
+            ((⌜v = xs⌝ ∧ emp) ∗ ptstocons_interp p x xs) ∗ ⌜ δ' = δ⌝).
+    Proof.
+    Admitted.
+
+    Lemma setsnd_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
+      forall (xs : Val llist) (x p : Val ptr),
+        evals es δ = env.snoc (env.snoc env.nil (MkB _ ptr) p) (MkB _ llist) xs →
+        ⊢ semTriple δ
+        (∃ v : Z + (), ptstocons_interp p x v)
+        (stm_foreign setsnd es)
+        (λ (v : ()) (δ' : CStore Γ),
+           ((⌜v = tt⌝ ∧ emp) ∗ ptstocons_interp p x xs) ∗ ⌜
+           δ' = δ⌝).
+    Proof.
+    Admitted.
+
+    Lemma foreignSem `{sg : sailGS Σ} : ForeignSem (Σ := Σ).
+    Proof.
+      intros Γ τ Δ f es δ.
+      destruct f; cbn;
+        intros ι; destruct_syminstance ι;
+        eauto using mkcons_sound, snd_sound, setsnd_sound.
+    Qed.
+
+    Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
+    Proof.
+      intros Δ []; eauto using
+                         open_ptsreg_sound, close_ptsreg_sound,
+        open_gprs_sound, close_gprs_sound, int_safe_sound,
+        safe_move_cursor_sound, safe_sub_perm_sound,
+        safe_within_range_sound, gen_dummy_sound.
+    Qed.
+
+  End WithIrisNotations.
+End ExampleModel.
