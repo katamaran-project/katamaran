@@ -521,9 +521,9 @@ Module ExampleModel.
       iApply wp_value.
       cbn.
       iSplitL; last done.
-      iExists (length μ1); iSplitR.
-      {iPureIntro; eauto using Zlength_correct.}
-      done.
+      iExists (length μ1); iFrame.
+      iPureIntro.
+      eapply Zlength_correct.
     Qed.
 
     Lemma snd_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
