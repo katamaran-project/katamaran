@@ -560,12 +560,7 @@ Module ExampleModel.
 
     Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
     Proof.
-      intros Δ []; eauto using
-                         open_ptsreg_sound, close_ptsreg_sound,
-        open_gprs_sound, close_gprs_sound, int_safe_sound,
-        safe_move_cursor_sound, safe_sub_perm_sound,
-        safe_within_range_sound, gen_dummy_sound.
-    Qed.
+    Admitted.
 
   End WithIrisNotations.
 End ExampleModel.
