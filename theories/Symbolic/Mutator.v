@@ -1835,14 +1835,10 @@ Module Type MutatorsOn
         match c with
         | chunk_user p ts =>
             match 𝑯_precise p with
-            | Some (exist _ ΔIO prec) =>
-                match ΔIO return 𝑯_Ty p = prod_curry ctx.cat ΔIO -> _ with
-                | (ΔI,ΔO) =>
-                    fun prec  =>
-                      match env.catView (rew prec in ts) with
-                      | env.isCat tsI tsO => find_chunk_user_precise prec tsI tsO h
-                      end
-                end prec
+            | Some (MkPrecise ΔI ΔO Δeq) =>
+                match env.catView (rew Δeq in ts) with
+                | env.isCat tsI tsO => find_chunk_user_precise Δeq tsI tsO h
+                end
             | None => None
             end
         | chunk_ptsreg r t => find_chunk_ptsreg_precise r t h

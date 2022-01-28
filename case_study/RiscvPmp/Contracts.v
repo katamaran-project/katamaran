@@ -104,6 +104,7 @@ Section PredicateKit.
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
 
+  Local Arguments Some {_} &.
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
     | _ => None

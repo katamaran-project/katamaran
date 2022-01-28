@@ -244,10 +244,11 @@ Module Import ExampleSpecification <: Specification DefaultBase.
     Global Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
       {| is_duplicable p := false |}.
 
+    Local Arguments Some {_} &.
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
-      | ptstocons => Some (exist _ ([ptr], [ptr, llist]) eq_refl)
-      | ptstolist => Some (exist _ ([llist], [ty_list ptr]) eq_refl)
+      | ptstocons => Some (MkPrecise [ptr] [ptr, llist] eq_refl)
+      | ptstolist => Some (MkPrecise [llist] [ty_list ptr] eq_refl)
       end.
 
   End HeapPredicateDeclKit.

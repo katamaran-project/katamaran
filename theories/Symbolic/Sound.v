@@ -1663,7 +1663,7 @@ Module Soundness
            T CMut.angelic_list CMut.dijkstra].
       rewrite CDijk.wp_angelic_list.
       destruct c1; cbn in Heqo; try discriminate Heqo; cbn.
-      - destruct (𝑯_precise p) as [[[ΔI ΔO] prec]|]; try discriminate Heqo.
+      - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; try discriminate Heqo.
         remember (eq_rect (𝑯_Ty p) (Env (Term w1)) ts (ΔI ▻▻ ΔO) prec) as ts'.
         destruct (env.catView ts') as [tsI tsO].
         destruct (find_chunk_user_precise_spec prec tsI tsO hs) as [[h'' eqs''] HIn|];
@@ -1723,7 +1723,7 @@ Module Soundness
            T CMut.angelic_list CMut.dijkstra].
       rewrite CDijk.wp_angelic_list.
       destruct c1; cbn in Heqo; try discriminate Heqo; cbn.
-      - destruct (𝑯_precise p) as [[[ΔI ΔO] prec]|]; try discriminate Heqo.
+      - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; try discriminate Heqo.
         remember (eq_rect (𝑯_Ty p) (Env (Term w1)) ts (ΔI ▻▻ ΔO) prec) as ts'.
         destruct (env.catView ts') as [tsI tsO].
         destruct (find_chunk_user_precise_spec prec tsI tsO hs) as [[h'' eqs''] HIn|];
