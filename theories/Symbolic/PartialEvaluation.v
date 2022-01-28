@@ -155,17 +155,15 @@ Module Type PartialEvaluationOn
         inst (peval t) ι = inst t ι.
     Proof.
       intros ι. symmetry.
-      induction t; cbn;
+      induction t; cbn - [Val];
         change (inst_term ?t ?ι) with (inst t ι).
       - reflexivity.
       - reflexivity.
       - now rewrite peval_binop_sound, IHt1, IHt2.
       - now rewrite peval_neg_sound, IHt.
       - now rewrite peval_not_sound, IHt.
-      - change (Val σ1 + Val σ2)%type with (Val (ty_sum σ1 σ2)).
-        now rewrite peval_inl_sound, IHt.
-      - change (Val σ1 + Val σ2)%type with (Val (ty_sum σ1 σ2)).
-        now rewrite peval_inr_sound, IHt.
+      - now rewrite peval_inl_sound, IHt.
+      - now rewrite peval_inr_sound, IHt.
       - now rewrite IHt.
       - now rewrite IHt.
       - reflexivity.

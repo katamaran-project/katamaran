@@ -372,9 +372,7 @@ Module Type SymPropOn
       unfold assume_formulas_without_solver. revert p.
       induction fmls; cbn in *; intros p.
       - destruct w0; cbn; split; auto.
-        intros HYP. apply HYP. constructor.
-      - rewrite IHfmls, inst_pathcondition_cons. cbn.
-        intuition.
+      - rewrite IHfmls. cbn. intuition.
     Qed.
 
     Lemma safe_assert_formulas_without_solver {w0 : World}
@@ -386,9 +384,9 @@ Module Type SymPropOn
       unfold assert_formulas_without_solver. revert p.
       induction fmls; cbn in *; intros p.
       - destruct w0; cbn; split.
-        + intros HYP. split; auto. constructor.
+        + intros HYP. split; auto.
         + intros []; auto.
-      - rewrite IHfmls, inst_pathcondition_cons; cbn.
+      - rewrite IHfmls; cbn.
         split; intros []; auto.
         + destruct H0. destruct H0. auto.
         + destruct H. split; auto. split; auto.
@@ -911,11 +909,8 @@ Module Type SymPropOn
       Proof.
         revert p.
         induction mfs; intros p; cbn.
-        - now unfold inst_pathcondition.
-        - rewrite inst_pathcondition_cons.
-          destruct a; cbn.
-          rewrite IHmfs.
-          cbn.
+        - intuition.
+        - destruct a. rewrite IHmfs. cbn.
           now rewrite obligation_equiv.
       Qed.
 
@@ -1118,9 +1113,8 @@ Module Type SymPropOn
       Proof.
         revert p.
         induction fs; intros p; cbn.
-        - unfold inst_pathcondition; cbn; intuition.
-        - rewrite inst_pathcondition_cons.
-          rewrite IHfs. cbn. intuition.
+        - intuition.
+        - rewrite IHfs. cbn. intuition.
       Qed.
 
       Inductive UCtx (Σ : LCtx) : LCtx -> Type :=

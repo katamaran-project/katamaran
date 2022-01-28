@@ -100,43 +100,45 @@ Module Type FormulasOn
     { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
   Qed.
 
-  Definition inst_formula {Σ} (fml : Formula Σ) (ι : Valuation Σ) : Prop :=
-    match fml with
-    | formula_user p ts => env.uncurry (𝑷_inst p) (inst ts ι)
-    | formula_bool t    => inst (A := Val ty_bool) t ι = true
-    | formula_prop ζ P  => uncurry_named P (inst ζ ι)
-    | formula_ge t1 t2  => inst (A := Val ty_int) t1 ι >= inst (A := Val ty_int) t2 ι
-    | formula_gt t1 t2  => inst (A := Val ty_int) t1 ι >  inst (A := Val ty_int) t2 ι
-    | formula_le t1 t2  => inst (A := Val ty_int) t1 ι <= inst (A := Val ty_int) t2 ι
-    | formula_lt t1 t2  => inst (A := Val ty_int) t1 ι <  inst (A := Val ty_int) t2 ι
-    | formula_eq t1 t2  => inst t1 ι =  inst t2 ι
-    | formula_neq t1 t2 => inst t1 ι <> inst t2 ι
-    end%Z.
+  Instance inst_formula : Inst Formula Prop :=
+    fun {Σ} (fml : Formula Σ) (ι : Valuation Σ) =>
+      match fml with
+      | formula_user p ts => env.uncurry (𝑷_inst p) (inst ts ι)
+      | formula_bool t    => inst (A := Val ty_bool) t ι = true
+      | formula_prop ζ P  => uncurry_named P (inst ζ ι)
+      | formula_ge t1 t2  => inst (A := Val ty_int) t1 ι >= inst (A := Val ty_int) t2 ι
+      | formula_gt t1 t2  => inst (A := Val ty_int) t1 ι >  inst (A := Val ty_int) t2 ι
+      | formula_le t1 t2  => inst (A := Val ty_int) t1 ι <= inst (A := Val ty_int) t2 ι
+      | formula_lt t1 t2  => inst (A := Val ty_int) t1 ι <  inst (A := Val ty_int) t2 ι
+      | formula_eq t1 t2  => inst t1 ι =  inst t2 ι
+      | formula_neq t1 t2 => inst t1 ι <> inst t2 ι
+      end%Z.
 
-  Instance instantiate_formula : Inst Formula Prop :=
-    {| inst Σ := inst_formula;
-       lift Σ P := formula_prop env.nil P
-    |}.
+  (* Instance lift_formula : Lift Formula Prop := *)
+  (*   fun Σ P => formula_prop env.nil P. *)
 
-  Instance instantiate_formula_laws : InstLaws Formula Prop.
+  Instance inst_subst_formula : InstSubst Formula Prop.
   Proof.
-    constructor; auto. intros Σ Σ' ζ ι t.
-    induction t; cbn; repeat f_equal; apply inst_subst.
+    intros ? ? ? ? f.
+    induction f; cbn; repeat f_equal; apply inst_subst.
   Qed.
+
+  (* Instance inst_lift_formula : InstLift Formula Prop. *)
+  (* Proof. red. reflexivity. Qed. *)
 
   Global Instance OccursCheckFormula : OccursCheck Formula :=
     fun Σ x xIn fml =>
-          match fml with
-          | formula_user p ts => option_map (formula_user p) (occurs_check xIn ts)
-          | formula_bool t    => option_map formula_bool (occurs_check xIn t)
-          | formula_prop ζ P  => option_map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
-          | formula_ge t1 t2  => option_ap (option_map (@formula_ge _) (occurs_check xIn t1)) (occurs_check xIn t2)
-          | formula_gt t1 t2  => option_ap (option_map (@formula_gt _) (occurs_check xIn t1)) (occurs_check xIn t2)
-          | formula_le t1 t2  => option_ap (option_map (@formula_le _) (occurs_check xIn t1)) (occurs_check xIn t2)
-          | formula_lt t1 t2  => option_ap (option_map (@formula_lt _) (occurs_check xIn t1)) (occurs_check xIn t2)
-          | formula_eq t1 t2  => option_ap (option_map (@formula_eq _ _) (occurs_check xIn t1)) (occurs_check xIn t2)
-          | formula_neq t1 t2 => option_ap (option_map (@formula_neq _ _) (occurs_check xIn t1)) (occurs_check xIn t2)
-            end.
+      match fml with
+      | formula_user p ts => option_map (formula_user p) (occurs_check xIn ts)
+      | formula_bool t    => option_map formula_bool (occurs_check xIn t)
+      | formula_prop ζ P  => option_map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
+      | formula_ge t1 t2  => option_ap (option_map (@formula_ge _) (occurs_check xIn t1)) (occurs_check xIn t2)
+      | formula_gt t1 t2  => option_ap (option_map (@formula_gt _) (occurs_check xIn t1)) (occurs_check xIn t2)
+      | formula_le t1 t2  => option_ap (option_map (@formula_le _) (occurs_check xIn t1)) (occurs_check xIn t2)
+      | formula_lt t1 t2  => option_ap (option_map (@formula_lt _) (occurs_check xIn t1)) (occurs_check xIn t2)
+      | formula_eq t1 t2  => option_ap (option_map (@formula_eq _ _) (occurs_check xIn t1)) (occurs_check xIn t2)
+      | formula_neq t1 t2 => option_ap (option_map (@formula_neq _ _) (occurs_check xIn t1)) (occurs_check xIn t2)
+      end.
 
   Global Instance OccursCheckLawsFormula : OccursCheckLaws Formula.
   Proof.
@@ -160,132 +162,73 @@ Module Type FormulasOn
 
     Definition PathCondition (Σ : LCtx) : Type :=
       list (Formula Σ).
-    Fixpoint fold_right1 {A R} (cns : A -> R -> R) (sing : A -> R) (v : A) (l : list A) : R :=
-      match l with
-        nil => sing v
-      | cons v' vs => cns v (fold_right1 cns sing v' vs)
-      end.
-    Definition fold_right10 {A R} (cns : A -> R -> R) (sing : A -> R) (nl : R) (l : list A) : R :=
-      match l with
-        nil => nl
-      | cons v vs => fold_right1 cns sing v vs
-      end.
 
-    Lemma fold_right_1_10 {A} {cns : A -> Prop -> Prop} {sing : A -> Prop} {nl : Prop}
-          (consNilIffSing : forall v, sing v <-> cns v nl)
-          (v : A) (l : list A) :
-          fold_right1 cns sing v l <-> cns v (fold_right10 cns sing nl l).
+    Global Instance inst_pathcondition : Inst PathCondition Prop :=
+      fix inst_pc {Σ} (pc : list (Formula Σ)) (ι : Valuation Σ) : Prop :=
+        match pc with
+        | nil => True
+        | cons f pc => inst f ι /\ inst_pc pc ι
+        end.
+
+    Global Instance inst_subst_pathcondition : InstSubst PathCondition Prop.
     Proof.
-      induction l; cbn; auto.
-    Qed.
-
-    Lemma fold_right_1_10_prop {A} {P : A -> Prop}
-          (v : A) (l : list A) :
-          fold_right1 (fun v acc => P v /\ acc) P v l <-> P v /\ (fold_right10 (fun v acc => P v /\ acc) P True l).
-    Proof.
-      refine (fold_right_1_10 _ v l).
-      intuition.
-    Qed.
-
-    (* Note: we use fold_right10 instead of fold_right to make inst_lift hold. *)
-    Definition inst_pathcondition {Σ} (pc : PathCondition Σ) (ι : Valuation Σ) : Prop :=
-      fold_right10 (fun fml pc => inst fml ι /\ pc) (fun fml => inst fml ι) True pc.
-    Global Arguments inst_pathcondition : simpl never.
-
-    Lemma inst_subst1 {Σ Σ' } (ζ : Sub Σ Σ') (ι : Valuation Σ') (f : Formula Σ) (pc : list (Formula Σ)) :
-      fold_right1 (fun fml pc => inst fml ι /\ pc) (fun fml => inst fml ι) (subst f ζ) (subst pc ζ) =
-      fold_right1 (fun fml pc => inst fml (inst ζ ι) /\ pc) (fun fml => inst fml (inst ζ ι)) f pc.
-    Proof.
-      revert f.
-      induction pc; intros f; cbn.
-      - apply inst_subst.
-      - f_equal.
-        + apply inst_subst.
-        + apply IHpc.
-    Qed.
-
-    Lemma inst_subst10 {Σ Σ' } (ζ : Sub Σ Σ') (ι : Valuation Σ') (pc : list (Formula Σ)) :
-      fold_right10 (fun fml pc => inst fml ι /\ pc) (fun fml => inst fml ι) True (subst pc ζ) =
-      fold_right10 (fun fml pc => inst fml (inst ζ ι) /\ pc) (fun fml => inst fml (inst ζ ι)) True pc.
-    Proof.
-      destruct pc.
-      - reflexivity.
-      - apply inst_subst1.
-    Qed.
-
-    Global Instance instantiate_pathcondition : Inst PathCondition Prop :=
-      {| inst Σ := inst_pathcondition;
-         lift Σ P := cons (lift P : Formula Σ) nil
-      |}.
-
-    Global Instance instantiate_pathcondition_laws : InstLaws PathCondition Prop.
-    Proof.
-      constructor.
-      - reflexivity.
-      - intros Σ Σ' ζ ι pc.
-        eapply inst_subst10.
+      intros Σ Σ' ζ ι pc.
+      induction pc; cbn; f_equal; auto using inst_subst.
     Qed.
 
     Lemma inst_pathcondition_cons {Σ} (ι : Valuation Σ) (f : Formula Σ) (pc : PathCondition Σ) :
       inst (cons f pc) ι <-> inst f ι /\ inst pc ι.
-    Proof.
-      apply (fold_right_1_10_prop (P := fun fml => inst fml ι)).
-    Qed.
+    Proof. reflexivity. Qed.
 
     Lemma inst_pathcondition_app {Σ} (ι : Valuation Σ) (pc1 pc2 : PathCondition Σ) :
       inst (app pc1 pc2) ι <-> inst pc1 ι /\ inst pc2 ι.
     Proof.
-      induction pc1; cbn [app].
-      - intuition. constructor.
-      - rewrite ?inst_pathcondition_cons.
-        rewrite IHpc1. intuition.
+      induction pc1; cbn.
+      - intuition.
+      - rewrite IHpc1. clear IHpc1. intuition.
     Qed.
 
     Lemma inst_pathcondition_rev_append {Σ} (ι : Valuation Σ) (pc1 pc2 : PathCondition Σ) :
       inst (List.rev_append pc1 pc2) ι <-> inst pc1 ι /\ inst pc2 ι.
     Proof.
       revert pc2.
-      induction pc1; cbn [List.rev_append]; intros pc2.
-      - intuition. constructor.
-      - rewrite IHpc1.
-        rewrite ?inst_pathcondition_cons.
-        intuition.
+      induction pc1; cbn; intros pc2.
+      - intuition.
+      - rewrite IHpc1. clear IHpc1. cbn. intuition.
     Qed.
 
     Lemma inst_formula_eqs_ctx {Δ Σ} (ι : Valuation Σ) (xs ys : Env (Term Σ) Δ) :
       inst (T := PathCondition) (A := Prop) (formula_eqs_ctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs.
-      - destruct (env.nilView ys). cbn. intuition. constructor.
-      - destruct (env.snocView ys). cbn - [inst].
-        rewrite inst_pathcondition_cons, IHxs. clear IHxs.
+      - destruct (env.nilView ys). cbn. intuition.
+      - destruct (env.snocView ys). cbn.
+        rewrite IHxs. clear IHxs.
         change (inst db ι = inst v ι /\ inst xs ι = inst E ι <->
                 inst xs ι ► (b ↦ inst db ι) = inst E ι ► (b ↦ inst v ι)).
         split.
-        + intros [Hfml Hpc]; f_equal; auto.
-        + intros Heq. apply noConfusion_inv in Heq. cbn in Heq.
-          inversion Heq. intuition.
+        + now intros []; f_equal.
+        + now intros []%env.inversion_eq_snoc.
     Qed.
 
     Lemma inst_formula_eqs_nctx {N : Set} {Δ : NCtx N Ty} {Σ} (ι : Valuation Σ) (xs ys : NamedEnv (Term Σ) Δ) :
       inst (T := PathCondition) (A := Prop) (formula_eqs_nctx xs ys) ι <-> inst xs ι = inst ys ι.
     Proof.
       induction xs.
-      - destruct (env.nilView ys). cbn. intuition. constructor.
-      - destruct (env.snocView ys). cbn - [inst].
-        rewrite inst_pathcondition_cons, IHxs. clear IHxs.
+      - destruct (env.nilView ys). cbn. intuition.
+      - destruct (env.snocView ys). cbn.
+        rewrite IHxs. clear IHxs.
         change (inst db ι = inst v ι /\ inst xs ι = inst E ι <->
                 inst xs ι ► (b ↦ inst db ι) = inst E ι ► (b ↦ inst v ι)).
         split.
-        + intros [Hfml Hpc]; f_equal; auto.
-        + intros ?%env.inversion_eq_snoc.
-          intuition.
+        + now intros []; f_equal.
+        + now intros []%env.inversion_eq_snoc.
     Qed.
 
   End PathCondition.
 
   (* Avoid some Prop <-> Type confusion. *)
-  Notation instpc ι pc := (@inst _ _ instantiate_pathcondition _ ι pc).
+  Notation instpc pc ι := (@inst _ _ inst_pathcondition _ pc ι).
 
   Module Entailment.
 
@@ -306,20 +249,7 @@ Module Type FormulasOn
 
     Lemma entails_cons {Σ} (pc1 pc2 : PathCondition Σ) (f : Formula Σ) :
       (pc1 ⊢ pc2) /\ (pc1 ⊢f f) <-> (pc1 ⊢ (f :: pc2)%list).
-    Proof.
-      split.
-      - intros (pc12 & pc1f).
-        intros ι ιpc1. cbn.
-        unfold inst, inst_pathcondition. cbn.
-        rewrite fold_right_1_10_prop.
-        intuition.
-      - intros pc1f2.
-        split; intros ι ιpc1;
-          specialize (pc1f2 ι ιpc1); cbn in pc1f2;
-          unfold inst, inst_pathcondition in pc1f2; cbn in pc1f2;
-          rewrite fold_right_1_10_prop in pc1f2;
-          destruct pc1f2 as [Hf Hpc2]; auto.
-    Qed.
+    Proof. unfold entails, entails_formula. cbn. intuition. Qed.
 
     Definition entails_refl {Σ} : Reflexive (@entails Σ).
     Proof. now unfold Reflexive, entails. Qed.

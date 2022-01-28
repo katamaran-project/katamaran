@@ -1749,7 +1749,7 @@ Module Type MutatorsOn
         - split.
           + destruct (eq_dec p1 p2) as [Heqp|Hneqp].
             * destruct Heqp; cbn. rewrite inst_formula_eqs_ctx. intuition.
-            * intros HYP. cbv in HYP. discriminate.
+            * cbn. intros []. discriminate.
           + remember (inst ts1 ι) as vs1.
             remember (inst ts2 ι) as vs2.
             intros Heq. dependent elimination Heq.
@@ -1759,16 +1759,14 @@ Module Type MutatorsOn
         - split.
           + destruct (eq_dec_het r1 r2).
             * dependent elimination e; cbn.
-              rewrite inst_pathcondition_cons.
               now intros [-> _].
-            * intros HYP; cbv in HYP. discriminate.
+            * cbn. intros []. discriminate.
           + remember (inst t1 ι) as v1.
             remember (inst t2 ι) as v2.
             intros Heq. dependent elimination Heq.
             unfold eq_dec_het.
             rewrite EqDec.eq_dec_refl. cbn.
-            rewrite inst_pathcondition_cons.
-            subst. split; auto. constructor.
+            subst. split; auto.
         - rewrite inst_pathcondition_app, IHc11, IHc12.
           split; [intuition|].
           generalize (inst c11 ι), (inst c12 ι), (inst c21 ι), (inst c22 ι).

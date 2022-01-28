@@ -64,31 +64,39 @@ Module Type InstantiationOn
      all logic variables in a symbolic value to obtain the concrete value and
      'lift' injects the concrete type into the symbolic one. *)
   Class Inst (T : LCtx -> Type) (A : Type) : Type :=
-    { inst {Σ} (t : T Σ) (ι : Valuation Σ) : A;
-      lift {Σ} (a : A) : T Σ;
-    }.
+    inst : forall {Σ}, T Σ -> Valuation Σ -> A.
+  Class Lift (T : LCtx -> Type) (A : Type) : Type :=
+    lift : forall {Σ}, A -> T Σ.
 
-  Global Instance instantiate_list {T : LCtx -> Type} {A : Type} `{Inst T A} :
-    Inst (List T) (list A) :=
-    {| inst Σ xs ι := List.map (fun x => inst x ι) xs;
-       lift Σ      := List.map lift;
-    |}.
+  Instance inst_list {T : LCtx -> Type} {A : Type} `{Inst T A} :
+    Inst (List T) (list A) := fun Σ xs ι => List.map (fun x => inst x ι) xs.
+  Instance lift_list {T : LCtx -> Type} {A : Type} `{Lift T A} :
+    Lift (List T) (list A) := fun Σ => List.map lift.
 
-  Global Instance instantiate_const {A} `{finite.Finite A} :
-    Inst (Const A) A :=
-    {| inst Σ x ι := x;
-       lift Σ x   := x;
-    |}.
+  Instance inst_const {A} `{finite.Finite A} :
+    Inst (Const A) A := fun Σ x ι => x.
+  Instance lift_const {A} `{finite.Finite A} :
+    Lift (Const A) A := fun Σ x => x.
 
-  Global Instance instantiate_env {T : Set} {S : LCtx -> T -> Set}
+  Instance inst_env {T : Set} {S : LCtx -> T -> Set}
          {A : T -> Set} {InstSA : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)}
          {Γ : Ctx T} :
     Inst (fun Σ => Env (S Σ) Γ) (Env A Γ) :=
-    {| inst Σ xs ι := env.map (fun (b : T) (s : S Σ b) => inst s ι) xs;
-       lift Σ      := env.map (fun (b : T) (a : A b) => lift a)
-    |}.
+    fun Σ xs ι => env.map (fun (b : T) (s : S Σ b) => inst s ι) xs.
+  Instance lift_env {T : Set} {S : LCtx -> T -> Set}
+         {A : T -> Set} {InstSA : forall τ : T, Lift (fun Σ => S Σ τ) (A τ)}
+         {Γ : Ctx T} :
+    Lift (fun Σ => Env (S Σ) Γ) (Env A Γ) :=
+    fun Σ => env.map (fun (b : T) (a : A b) => lift a).
 
-  Fixpoint inst_term {σ : Ty} {Σ : LCtx} (t : Term Σ σ) (ι : Valuation Σ) {struct t} : Val σ :=
+  Lemma inst_env_snoc {B : Set} {AT : LCtx -> B -> Set}
+         {A : B -> Set} {_ : forall b : B, Inst (fun Σ => AT Σ b) (A b)}
+         {Γ : Ctx B} {Σ} (ι : Valuation Σ) (E : Env (AT Σ) Γ) (b : B) (a : AT Σ b) :
+    inst (env.snoc E b a) ι = env.snoc (inst E ι) b (inst a ι).
+  Proof. reflexivity. Qed.
+
+  Instance inst_term : forall {σ}, Inst (fun Σ => Term Σ σ) (Val σ) :=
+    fix inst_term {σ : Ty} {Σ : LCtx} (t : Term Σ σ) (ι : Valuation Σ) {struct t} : Val σ :=
     match t in Term _ σ return Val σ with
     | @term_var _ _ _ bIn  => env.lookup ι bIn
     | term_val _ v         => v
@@ -100,114 +108,119 @@ Module Type InstantiationOn
     | @term_projtup _ σs e n σ p => tuple_proj σs n σ (inst_term e ι) p
     | @term_union _ U K e     => 𝑼_fold (existT K (inst_term e ι))
     | @term_record _ R ts     =>
-        let InstTerm :=
-          fun xt : Binding 𝑹𝑭 Ty => {| inst := @inst_term (@type 𝑹𝑭 Ty xt);
-                                 lift Σ := @term_val Σ (@type 𝑹𝑭 Ty xt) |} in
-        𝑹_fold (inst (Inst := instantiate_env (InstSA := InstTerm)) ts ι)
+        let InstTerm xt := @inst_term (@type 𝑹𝑭 Ty xt) in
+        𝑹_fold (inst (Inst := inst_env (InstSA := InstTerm)) ts ι)
     end.
+  Instance lift_term {σ} : Lift (fun Σ => Term Σ σ) (Val σ) :=
+    fun Σ v => term_val σ v.
 
-  Global Instance instantiate_term {σ} : Inst (fun Σ => Term Σ σ) (Val σ) :=
-    {| inst Σ t ι := inst_term t ι;
-       lift Σ v   := term_val σ v;
-    |}.
+  Instance inst_sub {Σ} : Inst (Sub Σ) (Valuation Σ) :=
+    inst_env.
 
-  Global Instance instantiate_sub {Σ} : Inst (Sub Σ) (Valuation Σ) :=
-    instantiate_env.
+  Class InstSubst (T : LCtx -> Type) (A : Type) `{Inst T A, Subst T} : Prop :=
+    inst_subst : forall {Σ Σ'} (ζ : Sub Σ Σ') (ι : Valuation Σ') (t : T Σ),
+        inst (subst t ζ) ι = inst t (inst ζ ι).
+  Class InstLift (T : LCtx -> Type) (A : Type) `{Inst T A, Lift T A} : Prop :=
+    inst_lift : forall {Σ} (ι : Valuation Σ) (a : A),
+        inst (lift a) ι = a.
 
-  Class InstLaws (T : LCtx -> Type) (A : Type) `{SubstLaws T, Inst T A} : Prop :=
-    { inst_lift {Σ} (ι : Valuation Σ) (a : A) :
-        inst (lift a) ι = a;
-      inst_subst {Σ Σ'} (ζ : Sub Σ Σ') (ι : Valuation Σ') (t : T Σ) :
-        inst (subst t ζ) ι = inst t (inst ζ ι)
-    }.
+  Arguments InstSubst T A {_ _}.
+  Arguments InstLift T A {_ _}.
 
-  Global Arguments InstLaws T A {_ _ _}.
-
-  Global Instance instantiatelaws_term {σ} : InstLaws (fun Σ => Term Σ σ) (Val σ).
+  Instance inst_subst_list {T : LCtx -> Set} {A : Set} `{InstSubst T A} :
+    InstSubst (List T) (list A).
   Proof.
-    constructor.
-    { reflexivity. }
-    { induction t; cbn; try (f_equal; auto; fail).
-      - now rewrite env.lookup_map.
-      - f_equal.
-        f_equal.
-        apply IHt.
-      - f_equal.
-        induction es; cbn in *.
-        + reflexivity.
-        + f_equal.
-          * apply IHes, X.
-          * apply X.
-      (* - f_equal. *)
-      (*   f_equal. *)
-      (*   apply IHt. *)
-    }
+    intros ? ? ζ ι xs.
+    rewrite substlist_is_map_subst.
+    unfold inst, inst_list at 1.
+    rewrite List.map_map.
+    apply List.map_ext, inst_subst.
   Qed.
 
-  Global Instance instantiatelaws_list {T : LCtx -> Set} {A : Set} `{InstLaws T A} :
-    InstLaws (List T) (list A).
+  Instance inst_lift_list {T : LCtx -> Set} {A : Set} `{InstLift T A} :
+    InstLift (List T) (list A).
   Proof.
-    constructor.
-    { intros; cbn.
-      rewrite List.map_map, <- List.map_id.
-      apply List.map_ext, inst_lift.
-    }
-    { intros ? ? ζ ι xs; cbn.
-      rewrite substlist_is_map_subst.
-      rewrite List.map_map.
-      apply List.map_ext, inst_subst.
-    }
+    intros Σ ι a. unfold inst, inst_list, lift, lift_list.
+    rewrite List.map_map, <- List.map_id.
+    apply List.map_ext, inst_lift.
   Qed.
 
-  Global Instance instantiatelaws_const {A} `{finite.Finite A} :
-    InstLaws (Const A) A.
-  Proof. constructor; reflexivity. Qed.
+  Instance inst_subst_const {A} `{finite.Finite A} :
+    InstSubst (Const A) A.
+  Proof. intros ? ? ζ ι t. reflexivity. Qed.
 
-  Global Instance instantiatelaws_env {T : Set} {S : LCtx -> T -> Set} {A : T -> Set}
-         {_ : forall τ : T, Subst (fun Σ => S Σ τ)}
-         {_ : forall τ : T, SubstLaws (fun Σ => S Σ τ)}
+  Instance inst_lift_const {A} `{finite.Finite A} :
+    InstLift (Const A) A.
+  Proof. intros ? ι a. reflexivity. Qed.
+
+  Instance inst_subst_env {T : Set} {S : LCtx -> T -> Set} {A : T -> Set}
          {_ : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)}
-         {_ : forall τ : T, InstLaws (fun Σ => S Σ τ) (A τ)}
+         {_ : forall τ : T, Subst (fun Σ => S Σ τ)}
+         {_ : forall τ : T, InstSubst (fun Σ => S Σ τ) (A τ)}
          {Γ : Ctx T} :
-    InstLaws (fun Σ => Env (S Σ) Γ) (Env A Γ).
+    InstSubst (fun Σ => Env (S Σ) Γ) (Env A Γ).
   Proof.
-    constructor.
-    { intros; cbn.
-      rewrite env.map_map.
-      apply env.map_id_eq.
-      intros; apply inst_lift.
-    }
-    { intros ? ? ζ ι E; cbn.
-      unfold subst, SubstEnv.
-      rewrite env.map_map.
-      apply env.map_ext.
-      intros b s.
-      now rewrite inst_subst.
-    }
+    intros ? ? ζ ι E.
+    unfold inst, inst_env, subst, SubstEnv at 1.
+    rewrite env.map_map. apply env.map_ext.
+    intros b s; apply inst_subst.
   Qed.
 
-  Global Instance instantiatelaws_sub {Σ} : InstLaws (Sub Σ) (Valuation Σ).
-  Proof. apply instantiatelaws_env. Qed.
+  Instance inst_lift_env {T : Set} {S : LCtx -> T -> Set} {A : T -> Set}
+         {_ : forall τ : T, Inst (fun Σ => S Σ τ) (A τ)}
+         {_ : forall τ : T, Lift (fun Σ => S Σ τ) (A τ)}
+         {_ : forall τ : T, InstLift (fun Σ => S Σ τ) (A τ)}
+         {Γ : Ctx T} :
+    InstLift (fun Σ => Env (S Σ) Γ) (Env A Γ).
+  Proof.
+    intros ? ι E.
+    unfold inst, inst_env, lift, lift_env.
+    rewrite env.map_map. apply env.map_id_eq.
+    intros; apply inst_lift.
+  Qed.
 
-  Lemma inst_env_snoc {B : Set} {AT : LCtx -> B -> Set}
-         {A : B -> Set} {_ : forall b : B, Inst (fun Σ => AT Σ b) (A b)}
-         {Γ : Ctx B} {Σ} (ι : Valuation Σ) (E : Env (AT Σ) Γ) (b : B) (a : AT Σ b) :
-    inst (env.snoc E b a) ι = env.snoc (inst E ι) b (inst a ι).
-  Proof. reflexivity. Qed.
+  Instance inst_subst_term {σ} : InstSubst (fun Σ => Term Σ σ) (Val σ).
+  Proof.
+    unfold InstSubst.
+    induction t; cbn; try (f_equal; auto; fail).
+    - unfold inst, inst_sub, inst_env.
+      now rewrite env.lookup_map.
+    - f_equal.
+      f_equal.
+      apply IHt.
+    - f_equal.
+      induction es; cbn in *.
+      + reflexivity.
+      + f_equal.
+        * apply IHes, X.
+        * apply X.
+    (* - f_equal. *)
+    (*   f_equal. *)
+    (*   apply IHt. *)
+  Qed.
+
+  Instance inst_lift_term {σ} : InstLift (fun Σ => Term Σ σ) (Val σ).
+  Proof. red. reflexivity. Qed.
+
+  Instance inst_subst_sub {Σ} : InstSubst (Sub Σ) (Valuation Σ).
+  Proof. apply inst_subst_env. Qed.
+
+  Instance inst_lift_sub {Σ} : InstLift (Sub Σ) (Valuation Σ).
+  Proof. apply inst_lift_env. Qed.
 
   Lemma inst_sub_wk1 {Σ b v} (ι : Valuation Σ) :
     inst sub_wk1 (ι ► (b ↦ v)) = ι.
   Proof.
-    apply env.lookup_extensional.
-    intros [x σ] ?; unfold sub_wk1; cbn.
+    apply env.lookup_extensional. intros [x σ] ?.
+    unfold inst, inst_sub, inst_env, sub_wk1.
     now rewrite env.map_tabulate, env.lookup_tabulate.
   Qed.
 
   Lemma inst_sub_id {Σ} (ι : Valuation Σ) :
     inst (sub_id Σ) ι = ι.
   Proof.
-    apply env.lookup_extensional.
-    intros [x τ] ?; unfold sub_id; cbn.
+    apply env.lookup_extensional. intros [x τ] ?.
+    unfold inst, inst_sub, inst_env, sub_id.
     now rewrite env.map_tabulate, env.lookup_tabulate.
   Qed.
 
@@ -226,8 +239,8 @@ Module Type InstantiationOn
     inst (sub_shift bIn) ι = env.remove b ι bIn.
   Proof.
     rewrite env.remove_remove'.
-    unfold env.remove', sub_shift, inst; cbn.
     apply env.lookup_extensional. intros [y τ] yIn.
+    unfold env.remove', sub_shift, inst, inst_sub, inst_env.
     now rewrite env.lookup_map, ?env.lookup_tabulate.
   Qed.
 
@@ -235,10 +248,9 @@ Module Type InstantiationOn
     inst t (inst (sub_shift xIn) ι) = env.lookup ι xIn ->
     inst (sub_single xIn t) (inst (sub_shift xIn) ι) = ι.
   Proof.
-    rewrite inst_sub_shift.
-    rewrite env.remove_remove'.
-    intros HYP. apply env.lookup_extensional. intros [y τ] yIn.
-    unfold inst, sub_single; cbn.
+    rewrite inst_sub_shift, env.remove_remove'. intros HYP.
+    apply env.lookup_extensional. intros [y τ] yIn.
+    unfold inst, inst_sub, inst_env, sub_single; cbn.
     rewrite env.lookup_map, env.lookup_tabulate.
     pose proof (ctx.occurs_check_var_spec xIn yIn).
     destruct (ctx.occurs_check_var xIn yIn).
@@ -264,11 +276,10 @@ Module Type InstantiationOn
     inst (sub_single xIn t) ι = env.insert xIn ι (inst t ι).
   Proof.
     rewrite env.insert_insert'.
-    unfold env.insert', sub_single, inst; cbn.
-    apply env.lookup_extensional.
-    intros [y τ] yIn.
+    apply env.lookup_extensional. intros [y τ] yIn.
+    unfold env.insert', sub_single, inst, inst_sub, inst_env; cbn.
     rewrite env.lookup_map, ?env.lookup_tabulate.
-    assert (ovs := ctx.occurs_check_var_spec xIn yIn).
+    pose proof (ctx.occurs_check_var_spec xIn yIn).
     destruct (ctx.occurs_check_var xIn yIn).
     - now dependent elimination e.
     - now reflexivity.
@@ -276,10 +287,10 @@ Module Type InstantiationOn
 
   Lemma inst_lookup {Σ0 Σ1} (ι : Valuation Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : x∷τ ∈ Σ0) :
     inst (env.lookup ζ xIn) ι = env.lookup (inst (A := Valuation Σ0) ζ ι) xIn.
-  Proof. cbn. now rewrite env.lookup_map. Qed.
+  Proof. unfold inst, inst_sub, inst_env. now rewrite env.lookup_map. Qed.
 
   Lemma inst_term_tuple {Σ σs} {ι : Valuation Σ} (es : Env (Term Σ) σs) :
-    @eq (EnvRec Val σs) (inst (Inst := instantiate_term)(term_tuple es) ι)
+    @eq (EnvRec Val σs) (inst (Inst := inst_term) (term_tuple es) ι)
         (envrec.of_env (inst es ι)).
   Proof.
     induction σs; cbn.
@@ -291,44 +302,49 @@ Module Type InstantiationOn
   Global Arguments inst {T A _ Σ} !_ ι.
   Global Arguments lift {T A _ Σ} !_.
 
-  Global Instance InstUnit : Inst Unit unit :=
-    @Build_Inst Unit unit (fun _ x ι => x) (fun _ x => x).
-  Global Instance InstLawsUnit : InstLaws Unit unit.
-  Proof. constructor; reflexivity. Qed.
+  Instance inst_unit : Inst Unit unit :=
+    fun _ x ι => x.
+  Instance lift_unit : Lift Unit unit :=
+    fun _ x => x.
 
-  Global Instance InstPair {AT BT A B} `{Inst AT A, Inst BT B} :
+  Instance inst_subst_unit : InstSubst Unit unit.
+  Proof. red. reflexivity. Qed.
+  Instance inst_lift_unit : InstLift Unit unit.
+  Proof. red. reflexivity. Qed.
+
+  Instance inst_pair {AT BT A B} `{Inst AT A, Inst BT B} :
     Inst (Pair AT BT) (A * B) :=
-    {| inst Σ '(a , b) ι := (inst a ι, inst b ι);
-       lift Σ '(a, b)    := (lift a , lift b);
-    |}.
+    fun Σ '(a , b) ι => (inst a ι, inst b ι).
+  Instance lift_pair {AT BT A B} `{Lift AT A, Lift BT B} :
+    Lift (Pair AT BT) (A * B) :=
+    fun Σ '(a, b) => (lift a , lift b).
 
-  Global Instance InstLawsPair {AT BT A B} `{InstLaws AT A, InstLaws BT B} :
-    InstLaws (Pair AT BT) (A * B).
-  Proof.
-    constructor.
-    { intros ? ? []; cbn; f_equal; apply inst_lift. }
-    { intros ? ? ? ? []; cbn; f_equal; apply inst_subst. }
-  Qed.
+  Instance inst_subst_pair {AT BT A B} `{InstSubst AT A, InstSubst BT B} :
+    InstSubst (Pair AT BT) (A * B).
+  Proof. intros ? ? ? ? []; cbn; f_equal; apply inst_subst. Qed.
 
-  Global Instance InstOption {AT A} `{Inst AT A} :
-    Inst (Option AT) (option A) :=
-    {| inst Σ ma ι := option_map (fun a => inst a ι) ma;
-       lift Σ ma   := option_map lift ma;
-    |}.
+  Instance inst_lift_pair {AT BT A B} `{InstLift AT A, InstLift BT B} :
+    InstLift (Pair AT BT) (A * B).
+  Proof. intros ? ? []; cbn; f_equal; apply inst_lift. Qed.
 
-  Global Instance InstLawsOption {AT A} `{InstLaws AT A} :
-    InstLaws (Option AT) (option A).
-  Proof.
-    constructor.
-    { intros ? ? []; cbn; f_equal; apply inst_lift. }
-    { intros ? ? ? ? []; cbn; f_equal; apply inst_subst. }
-  Qed.
+  Instance inst_option {AT A} `{Inst AT A} : Inst (Option AT) (option A) :=
+    fun Σ ma ι => option_map (fun a => inst a ι) ma.
+  Instance lift_option {AT A} `{Lift AT A} : Lift (Option AT) (option A) :=
+    fun Σ ma => option_map lift ma.
 
-  Global Program Instance inst_localstore {Γ} : Inst (SStore Γ) (CStore Γ) :=
-    instantiate_env.
+  Instance inst_subst_option {AT A} `{InstSubst AT A} :
+    InstSubst (Option AT) (option A).
+  Proof. intros ? ? ? ? []; cbn; f_equal; apply inst_subst. Qed.
+  Instance inst_lift_option {AT A} `{InstLift AT A} :
+    InstLift (Option AT) (option A).
+  Proof. intros ? ? []; cbn; f_equal; apply inst_lift. Qed.
 
-  Global Instance instlaws_localstore {Γ} : InstLaws (SStore Γ) (CStore Γ).
-  Proof. apply instantiatelaws_env. Qed.
+  Instance inst_store {Γ} : Inst (SStore Γ) (CStore Γ) :=
+    inst_env.
+  Instance inst_subst_store {Γ} : InstSubst (SStore Γ) (CStore Γ).
+  Proof. apply inst_subst_env. Qed.
+  Instance inst_lift_store {Γ} : InstLift (SStore Γ) (CStore Γ).
+  Proof. apply inst_lift_env. Qed.
 
   Section Utils.
 
