@@ -562,10 +562,10 @@ Module Soundness
       now apply Dijk.approx_demonic_ctx.
     Qed.
 
-    Lemma approx_debug {AT A DT D} `{Approx AT A, Subst DT, Inst DT D, OccursCheck DT} {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0)
+    Lemma approx_debug {AT A D} `{Approx AT A, Subst D, OccursCheck D} {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0)
           (Hpc : instpc (wco w0) ι0) f ms mc :
       approx ι0 ms mc ->
-      approx ι0 (@SMut.debug AT DT D _ _ _ Γ1 Γ2 w0 f ms) mc.
+      approx ι0 (@SMut.debug AT D _ _ Γ1 Γ2 w0 f ms) mc.
     Proof.
       intros Hap.
       intros POST__s POST__c HPOST.

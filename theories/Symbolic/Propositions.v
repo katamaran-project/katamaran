@@ -103,7 +103,7 @@ Module Type SymPropOn
   Inductive Obligation {Σ} (msg : Message Σ) (fml : Formula Σ) (ι : Valuation Σ) : Prop :=
   | obligation (p : inst fml ι : Prop).
 
-  Inductive Debug {B} (b : B) (P : Prop) : Prop :=
+  Inductive Debug {B : LCtx -> Type} {Σ : LCtx} (b : B Σ) (P : Prop) : Prop :=
   | debug (p : P).
 
   Module SymProp.
@@ -146,9 +146,7 @@ Module Type SymPropOn
         (t : Term (Σ - x∷σ) σ)
         (k : SymProp (Σ - x∷σ))
     | debug
-        {BT B} {subB : Subst BT}
-        {instB : Inst BT B}
-        {occB: OccursCheck BT}
+        {BT} {subB : Subst BT} {occB: OccursCheck BT}
         (b : BT Σ) (k : SymProp Σ).
     Notation 𝕊 := SymProp.
 
@@ -290,7 +288,7 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           safe k ι'
-        | debug d k => Debug (inst d ι) (safe k ι)
+        | debug d k => Debug d (safe k ι)
         end%type.
     Global Arguments safe {Σ} p ι.
 
@@ -317,7 +315,7 @@ Module Type SymPropOn
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           @wsafe (wsubst w x t) k ι'
-        | debug d k => Debug (inst d ι) (wsafe k ι)
+        | debug d k => Debug d (wsafe k ι)
         end%type.
     Global Arguments wsafe {w} p ι.
 
@@ -325,8 +323,8 @@ Module Type SymPropOn
       Obligation msg fml ι <-> inst fml ι.
     Proof. split. now intros []. now constructor. Qed.
 
-    Lemma debug_equiv {B : Type} {b : B} {P : Prop} :
-      @Debug B b P <-> P.
+    Lemma debug_equiv {B : LCtx -> Type} {Σ} {b : B Σ} {P : Prop} :
+      @Debug B _ b P <-> P.
     Proof. split. now intros []. now constructor. Qed.
 
     Lemma wsafe_safe {w : World} (p : 𝕊 w) (ι : Valuation w) :
@@ -564,7 +562,7 @@ Module Type SymPropOn
     Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.forall_proper. Qed.
 
-    Instance proper_debug {BT B} `{Subst BT, Inst BT B, OccursCheck BT} {Σ} {bt : BT Σ} :
+    Instance proper_debug {BT} `{Subst BT, OccursCheck BT} {Σ} {bt : BT Σ} :
       Proper (sequiv Σ ==> sequiv Σ) (debug bt).
     Proof. unfold sequiv. intros p q pq ι. cbn. now rewrite ?debug_equiv. Qed.
 
