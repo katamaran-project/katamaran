@@ -76,7 +76,7 @@ Module Type BaseMixin (Import TY : Types).
 
   (* Preciseness for spatial predicates *)
   Definition Precise {P : Set} (F : P -> Ctx Ty) (p : P) : Set :=
-    { inout : Ctx Ty * Ctx Ty | F p = prod_curry ctx.cat inout }.
+    { inout : Ctx Ty * Ctx Ty | F p = uncurry ctx.cat inout }.
 
 End BaseMixin.
 

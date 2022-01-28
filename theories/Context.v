@@ -704,8 +704,7 @@ Module ctx.
   End FreshName.
 
 End ctx.
-Import ctx.
-Notation Ctx := ctx.Ctx.
+Export ctx (Ctx).
 Notation NCtx N T := (Ctx (Binding N T)).
 Bind Scope ctx_scope with Ctx.
 Bind Scope ctx_scope with NCtx.
