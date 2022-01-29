@@ -409,13 +409,24 @@ Module ExampleModel.
       Definition memToGmap (μ : Memory) : gmap nat (Z * (Z + unit)) :=
         list_to_map (imap pair μ).
 
-      Lemma memToGmap_app (μ : Memory) (v : Z * (Z + unit)) :
-        memToGmap (μ ++ cons v nil) = <[length μ:=v]> (memToGmap μ).
-      Admitted.
-
       Lemma memToGmap_lookup_length (μ : Memory) :
         memToGmap μ !! length μ = None.
       Admitted.
+
+      Lemma memToGmap_app (μ : Memory) (v : Z * (Z + unit)) :
+        memToGmap (μ ++ cons v nil) = <[length μ:=v]> (memToGmap μ).
+      Proof.
+        unfold memToGmap.
+        rewrite imap_app.
+        rewrite list_to_map_app; cbn.
+        rewrite <- list_to_map_nil.
+        rewrite <- list_to_map_cons.
+        rewrite <- list_to_map_app.
+        rewrite Nat.add_0_r.
+        rewrite list_to_map_snoc; first reflexivity.
+        rewrite not_elem_of_list_to_map.
+        apply memToGmap_lookup_length.
+      Qed.
 
       Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
         fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) (memToGmap μ))%I.
