@@ -643,7 +643,7 @@ Module ExampleModel.
       destruct l; cbn; intros ι; destruct_syminstance ι; cbn.
       - iIntros "Hres".
         destruct xs; cbn.
-        { iDestruct "Hres" as "%"; inversion H.}
+        { iDestruct "Hres" as "%"; inversion H. }
         iDestruct "Hres" as (p' pn) "[% [Hp' Hpn]]".
         inversion H; subst.
         iExists pn.
