@@ -284,7 +284,6 @@ Module Type WorldsOn
     Proof.
       intros * ι. unfold wformula. cbn.
       rewrite subst_sub_id.
-      rewrite inst_pathcondition_cons.
       now intros [].
     Qed.
 
@@ -423,7 +422,7 @@ Module Type WorldsOn
       persist a (acc_trans ω1 ω2) = persist (persist a ω1) ω2.
     Proof. now rewrite ?persist_subst, sub_acc_trans, subst_sub_comp. Qed.
 
-    Lemma inst_persist  {AT A} `{InstLaws AT A} {w1 w2} (ω : w1 ⊒ w2) :
+    Lemma inst_persist {AT A} `{InstSubst AT A} `{@SubstLaws AT _} {w1 w2} (ω : w1 ⊒ w2) :
       forall (ι : Valuation w2) (t : AT w1),
         inst (persist t ω) ι = inst t (inst (sub_acc ω) ι).
     Proof. intros. now rewrite persist_subst, inst_subst. Qed.

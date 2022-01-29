@@ -75,8 +75,13 @@ Module Type BaseMixin (Import TY : Types).
   Notation CStore := (@NamedEnv 𝑿 Ty Val).
 
   (* Preciseness for spatial predicates *)
-  Definition Precise {P : Set} (F : P -> Ctx Ty) (p : P) : Set :=
-    { inout : Ctx Ty * Ctx Ty | F p = prod_curry ctx.cat inout }.
+  Record Precise {P : Set} (F : P -> Ctx Ty) (p : P) : Set :=
+    MkPrecise
+      { prec_input  : Ctx Ty;
+        prec_output : Ctx Ty;
+        prec_inout  : F p = ctx.cat prec_input prec_output;
+      }.
+  Arguments MkPrecise {_ _ _} & _ _ _.
 
 End BaseMixin.
 

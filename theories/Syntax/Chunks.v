@@ -101,7 +101,7 @@ Module Type ChunksOn
     Derive NoConfusion for Chunk.
   End TransparentObligations.
 
-  Global Instance scchunk_isdup : IsDuplicable SCChunk := {
+  Instance scchunk_isdup : IsDuplicable SCChunk := {
     is_duplicable := fun c => match c with
                            | scchunk_user p _ => is_duplicable p
                            | scchunk_ptsreg _ _ => false
@@ -110,7 +110,7 @@ Module Type ChunksOn
                            end
     }.
 
-  Global Instance chunk_isdup {Σ} : IsDuplicable (Chunk Σ) := {
+  Instance chunk_isdup {Σ} : IsDuplicable (Chunk Σ) := {
     is_duplicable := fun c => match c with
                            | chunk_user p _ => is_duplicable p
                            | chunk_ptsreg _ _ => false
@@ -161,27 +161,26 @@ Module Type ChunksOn
           end.
   Qed.
 
-  Fixpoint sub_chunk {Σ1} (c : Chunk Σ1) {Σ2} (ζ : Sub Σ1 Σ2) {struct c} : Chunk Σ2 :=
-    match c with
-    | chunk_user p ts => chunk_user p (subst ts ζ)
-    | chunk_ptsreg r t => chunk_ptsreg r (subst t ζ)
-    | chunk_conj c1 c2 =>
-      chunk_conj (sub_chunk c1 ζ) (sub_chunk c2 ζ)
-    | chunk_wand c1 c2 =>
-      chunk_wand (sub_chunk c1 ζ) (sub_chunk c2 ζ)
-    end.
+  Instance SubstChunk : Subst Chunk :=
+    fix sub_chunk {Σ1} (c : Chunk Σ1) {Σ2} (ζ : Sub Σ1 Σ2) {struct c} : Chunk Σ2 :=
+      match c with
+      | chunk_user p ts => chunk_user p (subst ts ζ)
+      | chunk_ptsreg r t => chunk_ptsreg r (subst t ζ)
+      | chunk_conj c1 c2 =>
+        chunk_conj (sub_chunk c1 ζ) (sub_chunk c2 ζ)
+      | chunk_wand c1 c2 =>
+        chunk_wand (sub_chunk c1 ζ) (sub_chunk c2 ζ)
+      end.
 
-  Global Instance SubstChunk : Subst Chunk :=
-    @sub_chunk.
-
-  Global Instance substlaws_chunk : SubstLaws Chunk.
+  Instance substlaws_chunk : SubstLaws Chunk.
   Proof.
     constructor.
     { intros ? c. induction c; cbn; f_equal; auto; apply subst_sub_id. }
     { intros ? ? ? ? ? c. induction c; cbn; f_equal; auto; apply subst_sub_comp. }
   Qed.
 
-  Fixpoint inst_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : SCChunk :=
+  Instance inst_chunk : Inst Chunk SCChunk :=
+    fix inst_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : SCChunk :=
     match c with
     | chunk_user p ts => scchunk_user p (inst ts ι)
     | chunk_ptsreg r t => scchunk_ptsreg r (inst t ι)
@@ -189,27 +188,26 @@ Module Type ChunksOn
     | chunk_wand c1 c2 => scchunk_wand (inst_chunk c1 ι) (inst_chunk c2 ι)
     end.
 
-  Fixpoint lift_chunk {Σ} (c : SCChunk) {struct c} : Chunk Σ :=
-    match c with
-    | scchunk_user p vs => chunk_user p (lift vs)
-    | scchunk_ptsreg r v => chunk_ptsreg r (lift v)
-    | scchunk_conj c1 c2 => chunk_conj (lift_chunk c1) (lift_chunk c2)
-    | scchunk_wand c1 c2 => chunk_wand (lift_chunk c1) (lift_chunk c2)
-    end.
+  (* Instance lift_chunk : Lift Chunk SCChunk := *)
+  (*   fix lift_chunk {Σ} (c : SCChunk) {struct c} : Chunk Σ := *)
+  (*   match c with *)
+  (*   | scchunk_user p vs => chunk_user p (lift vs) *)
+  (*   | scchunk_ptsreg r v => chunk_ptsreg r (lift v) *)
+  (*   | scchunk_conj c1 c2 => chunk_conj (lift_chunk c1) (lift_chunk c2) *)
+  (*   | scchunk_wand c1 c2 => chunk_wand (lift_chunk c1) (lift_chunk c2) *)
+  (*   end. *)
 
-  Global Instance InstChunk : Inst Chunk SCChunk :=
-    {| inst := @inst_chunk;
-       lift := @lift_chunk;
-    |}.
-
-  Global Instance instlaws_chunk : InstLaws Chunk SCChunk.
+  Instance inst_subst_chunk : InstSubst Chunk SCChunk.
   Proof.
-    constructor.
-    - intros ? ? c; induction c; cbn; f_equal; auto; apply inst_lift.
-    - intros ? ? ζ ι c; induction c; cbn; f_equal; auto; apply inst_subst.
+    intros ? ? ζ ι c; induction c; cbn; f_equal; auto; apply inst_subst.
   Qed.
 
-  Global Instance OccursCheckChunk :
+  (* Instance inst_lift_chunk : InstLift Chunk SCChunk. *)
+  (* Proof. *)
+  (*   intros ? ? c; induction c; cbn; f_equal; auto; apply inst_lift. *)
+  (* Qed. *)
+
+  Instance OccursCheckChunk :
     OccursCheck Chunk :=
     fun Σ b bIn =>
       fix occurs_check_chunk (c : Chunk Σ) : option (Chunk (Σ - b)) :=
@@ -223,10 +221,10 @@ Module Type ChunksOn
   Definition SCHeap : Type := list SCChunk.
   Definition SHeap : LCtx -> Type := fun Σ => list (Chunk Σ).
 
-  Global Instance inst_heap : Inst SHeap SCHeap :=
-    instantiate_list.
-  Global Instance instlaws_heap : InstLaws SHeap SCHeap.
-  Proof. apply instantiatelaws_list. Qed.
+  Instance inst_heap : Inst SHeap SCHeap :=
+    inst_list.
+  Instance inst_subst_heap : InstSubst SHeap SCHeap.
+  Proof. apply inst_subst_list. Qed.
 
   Fixpoint peval_chunk {Σ} (c : Chunk Σ) : Chunk Σ :=
     match c with
@@ -241,8 +239,8 @@ Module Type ChunksOn
       inst (peval_chunk c) ι = inst c ι.
   Proof.
     induction c; cbn; intros ι; f_equal; auto using peval_sound.
-    unfold inst; cbn. rewrite env.map_map. apply env.map_ext.
-    auto using peval_sound.
+    unfold inst, inst_env. rewrite env.map_map.
+    apply env.map_ext. auto using peval_sound.
   Qed.
 
 End ChunksOn.

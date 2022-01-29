@@ -71,200 +71,124 @@ Module Type MutatorsOn
 
   Section DebugInfo.
 
-    Record DebugCall : Type :=
+    Record DebugCall (Σ : LCtx) : Type :=
       MkDebugCall
-        { debug_call_logic_context          : LCtx;
-          debug_call_instance               : Valuation debug_call_logic_context;
-          debug_call_function_parameters    : PCtx;
+        { debug_call_function_parameters    : PCtx;
           debug_call_function_result_type   : Ty;
           debug_call_function_name          : 𝑭 debug_call_function_parameters debug_call_function_result_type;
           debug_call_function_contract      : SepContract debug_call_function_parameters debug_call_function_result_type;
-          debug_call_function_arguments     : SStore debug_call_function_parameters debug_call_logic_context;
-          debug_call_pathcondition          : PathCondition debug_call_logic_context;
+          debug_call_function_arguments     : SStore debug_call_function_parameters Σ;
           debug_call_program_context        : PCtx;
-          debug_call_localstore             : SStore debug_call_program_context debug_call_logic_context;
-          debug_call_heap                   : SHeap debug_call_logic_context;
+          debug_call_pathcondition          : PathCondition Σ;
+          debug_call_localstore             : SStore debug_call_program_context Σ;
+          debug_call_heap                   : SHeap Σ;
         }.
 
-    Record DebugStm : Type :=
+    Record DebugStm (Σ : LCtx) : Type :=
       MkDebugStm
         { debug_stm_program_context        : PCtx;
           debug_stm_statement_type         : Ty;
           debug_stm_statement              : Stm debug_stm_program_context debug_stm_statement_type;
-          debug_stm_logic_context          : LCtx;
-          debug_stm_instance               : Valuation debug_stm_logic_context;
-          debug_stm_pathcondition          : PathCondition debug_stm_logic_context;
-          debug_stm_localstore             : SStore debug_stm_program_context debug_stm_logic_context;
-          debug_stm_heap                   : SHeap debug_stm_logic_context;
+          debug_stm_pathcondition          : PathCondition Σ;
+          debug_stm_localstore             : SStore debug_stm_program_context Σ;
+          debug_stm_heap                   : SHeap Σ;
         }.
 
-    Record DebugAsn : Type :=
+    Record DebugAsn (Σ : LCtx) : Type :=
       MkDebugAsn
-        { debug_asn_logic_context          : LCtx;
-          debug_asn_instance               : Valuation debug_asn_logic_context;
-          debug_asn_pathcondition          : PathCondition debug_asn_logic_context;
-          debug_asn_program_context        : PCtx;
-          debug_asn_localstore             : SStore debug_asn_program_context debug_asn_logic_context;
-          debug_asn_heap                   : SHeap debug_asn_logic_context;
+        { debug_asn_program_context        : PCtx;
+          debug_asn_pathcondition          : PathCondition Σ;
+          debug_asn_localstore             : SStore debug_asn_program_context Σ;
+          debug_asn_heap                   : SHeap Σ;
         }.
 
-    Record SDebugCall (Σ : LCtx) : Type :=
-      MkSDebugCall
-        { sdebug_call_function_parameters    : PCtx;
-          sdebug_call_function_result_type   : Ty;
-          sdebug_call_function_name          : 𝑭 sdebug_call_function_parameters sdebug_call_function_result_type;
-          sdebug_call_function_contract      : SepContract sdebug_call_function_parameters sdebug_call_function_result_type;
-          sdebug_call_function_arguments     : SStore sdebug_call_function_parameters Σ;
-          sdebug_call_program_context        : PCtx;
-          sdebug_call_pathcondition          : PathCondition Σ;
-          sdebug_call_localstore             : SStore sdebug_call_program_context Σ;
-          sdebug_call_heap                   : SHeap Σ;
+    Record DebugConsumeChunk (Σ : LCtx) : Type :=
+      MkDebugConsumeChunk
+        { debug_consume_chunk_program_context        : PCtx;
+          debug_consume_chunk_pathcondition          : PathCondition Σ;
+          debug_consume_chunk_localstore             : SStore debug_consume_chunk_program_context Σ;
+          debug_consume_chunk_heap                   : SHeap Σ;
+          debug_consume_chunk_chunk                  : Chunk Σ;
         }.
 
-    Record SDebugStm (Σ : LCtx) : Type :=
-      MkSDebugStm
-        { sdebug_stm_program_context        : PCtx;
-          sdebug_stm_statement_type         : Ty;
-          sdebug_stm_statement              : Stm sdebug_stm_program_context sdebug_stm_statement_type;
-          sdebug_stm_pathcondition          : PathCondition Σ;
-          sdebug_stm_localstore             : SStore sdebug_stm_program_context Σ;
-          sdebug_stm_heap                   : SHeap Σ;
-        }.
-
-    Record SDebugAsn (Σ : LCtx) : Type :=
-      MkSDebugAsn
-        { sdebug_asn_program_context        : PCtx;
-          sdebug_asn_pathcondition          : PathCondition Σ;
-          sdebug_asn_localstore             : SStore sdebug_asn_program_context Σ;
-          sdebug_asn_heap                   : SHeap Σ;
-        }.
-
-    Record SDebugConsumeChunk (Σ : LCtx) : Type :=
-      MkSDebugConsumeChunk
-        { sdebug_consume_chunk_program_context        : PCtx;
-          sdebug_consume_chunk_pathcondition          : PathCondition Σ;
-          sdebug_consume_chunk_localstore             : SStore sdebug_consume_chunk_program_context Σ;
-          sdebug_consume_chunk_heap                   : SHeap Σ;
-          sdebug_consume_chunk_chunk                  : Chunk Σ;
-        }.
-
-    Global Instance SubstDebugCall : Subst SDebugCall :=
+    Global Instance SubstDebugCall : Subst DebugCall :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
-        | MkSDebugCall f c ts pc δ h =>
-          MkSDebugCall f c (subst ts ζ01) (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
+        | MkDebugCall f c ts pc δ h =>
+          MkDebugCall f c (subst ts ζ01) (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
-    Global Instance InstDebugCall : Inst SDebugCall DebugCall :=
-      {| inst Σ d ι :=
-           match d with
-           | MkSDebugCall f c ts pc δ h =>
-             MkDebugCall ι f c ts pc δ h
-           end;
-         lift Σ d :=
-           match d with
-           | MkDebugCall ι f c ts pc δ h =>
-             MkSDebugCall f c (lift (inst ts ι)) (lift (inst pc ι)) (lift (inst δ ι)) (lift (inst h ι))
-           end;
-      |}.
-
-    Global Instance OccursCheckDebugCall : OccursCheck SDebugCall :=
+    Global Instance OccursCheckDebugCall : OccursCheck DebugCall :=
       fun Σ x xIn d =>
         match d with
-        | MkSDebugCall f c ts pc δ h =>
+        | MkDebugCall f c ts pc δ h =>
           option_ap
             (option_ap
                (option_ap
                   (option_map
-                     (fun ts' => @MkSDebugCall _ _ _ f c ts' _)
+                     (fun ts' => @MkDebugCall _ _ _ f c ts' _)
                      (occurs_check xIn ts))
                   (occurs_check xIn pc))
                (occurs_check xIn δ))
             (occurs_check xIn h)
         end.
 
-    Global Instance SubstDebugStm : Subst SDebugStm :=
+    Global Instance SubstDebugStm : Subst DebugStm :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
-        | MkSDebugStm s pc δ h =>
-          MkSDebugStm s (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
+        | MkDebugStm s pc δ h =>
+          MkDebugStm s (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
-    Global Instance InstDebugStm : Inst SDebugStm DebugStm :=
-      {| inst Σ d ι :=
-           match d with
-           | MkSDebugStm s pc δ h =>
-             MkDebugStm s ι pc δ h
-           end;
-         lift Σ d :=
-           match d with
-           | MkDebugStm s ι pc δ h =>
-             MkSDebugStm s (lift (inst pc ι)) (lift (inst δ ι)) (lift (inst h ι))
-           end
-      |}.
-
-    Global Instance OccursCheckDebugStm : OccursCheck SDebugStm :=
+    Global Instance OccursCheckDebugStm : OccursCheck DebugStm :=
       fun Σ x xIn d =>
         match d with
-        | MkSDebugStm s pc δ h =>
+        | MkDebugStm s pc δ h =>
           option_ap
             (option_ap
                (option_map
-                  (MkSDebugStm s)
+                  (MkDebugStm s)
                   (occurs_check xIn pc))
                (occurs_check xIn δ))
             (occurs_check xIn h)
         end.
 
-    Global Instance SubstDebugAsn : Subst SDebugAsn :=
+    Global Instance SubstDebugAsn : Subst DebugAsn :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
-        | MkSDebugAsn pc δ h =>
-          MkSDebugAsn (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
+        | MkDebugAsn pc δ h =>
+          MkDebugAsn (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
-    Global Instance InstDebugAsn : Inst SDebugAsn DebugAsn :=
-      {| inst Σ d ι :=
-           match d with
-           | MkSDebugAsn pc δ h =>
-             MkDebugAsn ι pc δ h
-           end;
-         lift Σ d :=
-           match d with
-           | MkDebugAsn ι pc δ h =>
-             MkSDebugAsn (lift (inst pc ι)) (lift (inst δ ι)) (lift (inst h ι))
-           end
-      |}.
-
-    Global Instance OccursCheckDebugAsn : OccursCheck SDebugAsn :=
+    Global Instance OccursCheckDebugAsn : OccursCheck DebugAsn :=
       fun Σ x xIn d =>
         match d with
-        | MkSDebugAsn pc δ h =>
+        | MkDebugAsn pc δ h =>
           option_ap
             (option_ap
                (option_map
-                  (@MkSDebugAsn _ _)
+                  (@MkDebugAsn _ _)
                   (occurs_check xIn pc))
                (occurs_check xIn δ))
             (occurs_check xIn h)
         end.
 
-    Global Instance SubstDebugConsumeChunk : Subst SDebugConsumeChunk :=
+    Global Instance SubstDebugConsumeChunk : Subst DebugConsumeChunk :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
-        | MkSDebugConsumeChunk pc δ h c =>
-          MkSDebugConsumeChunk (subst pc ζ01) (subst δ ζ01) (subst h ζ01) (subst c ζ01)
+        | MkDebugConsumeChunk pc δ h c =>
+          MkDebugConsumeChunk (subst pc ζ01) (subst δ ζ01) (subst h ζ01) (subst c ζ01)
         end.
 
-    Global Instance OccursCheckDebugConsumeChunk : OccursCheck SDebugConsumeChunk :=
+    Global Instance OccursCheckDebugConsumeChunk : OccursCheck DebugConsumeChunk :=
       fun Σ x xIn d =>
         match d with
-        | MkSDebugConsumeChunk pc δ h c =>
+        | MkDebugConsumeChunk pc δ h c =>
           option_ap
             (option_ap
                (option_ap
                   (option_map
-                     (@MkSDebugConsumeChunk _ _)
+                     (@MkDebugConsumeChunk _ _)
                      (occurs_check xIn pc))
                   (occurs_check xIn δ))
                (occurs_check xIn h))
@@ -871,10 +795,9 @@ Module Type MutatorsOn
     (*     | None => demonic_match_union' n p t k *)
     (*     end. *)
 
-    Global Instance proper_debug {B} : Proper (eq ==> iff ==> iff) (@Debug B).
+    Global Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
     Proof.
-      unfold Proper, respectful.
-      intros ? ? -> P Q PQ.
+      intros P Q PQ.
       split; intros []; constructor; intuition.
     Qed.
 
@@ -1068,7 +991,7 @@ Module Type MutatorsOn
         fun w => dijkstra (SDijk.demonic x σ (w:=w)).
       Global Arguments demonic {Γ} x σ {w}.
 
-      Definition debug {AT DT D} `{Subst DT, Inst DT D, OccursCheck DT} {Γ1 Γ2} :
+      Definition debug {AT DT} `{Subst DT, OccursCheck DT} {Γ1 Γ2} :
         ⊢ (SStore Γ1 -> SHeap -> DT) -> (SMut Γ1 Γ2 AT) -> (SMut Γ1 Γ2 AT).
       Proof.
         intros w0 d m POST δ h.
@@ -1826,7 +1749,7 @@ Module Type MutatorsOn
         - split.
           + destruct (eq_dec p1 p2) as [Heqp|Hneqp].
             * destruct Heqp; cbn. rewrite inst_formula_eqs_ctx. intuition.
-            * intros HYP. cbv in HYP. discriminate.
+            * cbn. intros []. discriminate.
           + remember (inst ts1 ι) as vs1.
             remember (inst ts2 ι) as vs2.
             intros Heq. dependent elimination Heq.
@@ -1836,16 +1759,14 @@ Module Type MutatorsOn
         - split.
           + destruct (eq_dec_het r1 r2).
             * dependent elimination e; cbn.
-              rewrite inst_pathcondition_cons.
               now intros [-> _].
-            * intros HYP; cbv in HYP. discriminate.
+            * cbn. intros []. discriminate.
           + remember (inst t1 ι) as v1.
             remember (inst t2 ι) as v2.
             intros Heq. dependent elimination Heq.
             unfold eq_dec_het.
             rewrite EqDec.eq_dec_refl. cbn.
-            rewrite inst_pathcondition_cons.
-            subst. split; auto. constructor.
+            subst. split; auto.
         - rewrite inst_pathcondition_app, IHc11, IHc12.
           split; [intuition|].
           generalize (inst c11 ι), (inst c12 ι), (inst c21 ι), (inst c22 ι).
@@ -1914,14 +1835,10 @@ Module Type MutatorsOn
         match c with
         | chunk_user p ts =>
             match 𝑯_precise p with
-            | Some (exist _ ΔIO prec) =>
-                match ΔIO return 𝑯_Ty p = prod_curry ctx.cat ΔIO -> _ with
-                | (ΔI,ΔO) =>
-                    fun prec  =>
-                      match env.catView (rew prec in ts) with
-                      | env.isCat tsI tsO => find_chunk_user_precise prec tsI tsO h
-                      end
-                end prec
+            | Some (MkPrecise ΔI ΔO Δeq) =>
+                match env.catView (rew Δeq in ts) with
+                | env.isCat tsI tsO => find_chunk_user_precise Δeq tsI tsO h
+                end
             | None => None
             end
         | chunk_ptsreg r t => find_chunk_ptsreg_precise r t h
@@ -1949,11 +1866,11 @@ Module Type MutatorsOn
           apply
             (SymProp.error
                (EMsgHere
-                  {| sdebug_consume_chunk_program_context := Γ;
-                    sdebug_consume_chunk_pathcondition := wco w1;
-                    sdebug_consume_chunk_localstore := δ1;
-                    sdebug_consume_chunk_heap := h1;
-                    sdebug_consume_chunk_chunk := c1
+                  {| debug_consume_chunk_program_context := Γ;
+                     debug_consume_chunk_pathcondition := wco w1;
+                     debug_consume_chunk_localstore := δ1;
+                     debug_consume_chunk_heap := h1;
+                     debug_consume_chunk_chunk := c1
                   |})).
         }
       Defined.
@@ -1979,11 +1896,11 @@ Module Type MutatorsOn
           refine (angelic_list
                     (A := Pair Chunk SHeap)
                     (fun δ h =>
-                       {| sdebug_consume_chunk_program_context := Γ;
-                          sdebug_consume_chunk_pathcondition := wco w1;
-                          sdebug_consume_chunk_localstore := δ;
-                          sdebug_consume_chunk_heap := h;
-                          sdebug_consume_chunk_chunk := c1
+                       {| debug_consume_chunk_program_context := Γ;
+                          debug_consume_chunk_pathcondition := wco w1;
+                          debug_consume_chunk_localstore := δ;
+                          debug_consume_chunk_heap := h;
+                          debug_consume_chunk_chunk := c1
                         |})
                     (heap_extractions h)).
           intros w2 ω12 [c' h'].
@@ -2053,9 +1970,9 @@ Module Type MutatorsOn
           apply (produce (wsnoc w0 (ς∷τ)) asn w2).
           apply (acc_snoc_left (acc_trans ω01 ω12) (ς∷τ) t2).
         - intros w1 ω01.
-          apply debug.
+          apply (debug (DT := DebugAsn)).
           intros δ h.
-          apply (MkSDebugAsn (wco w1) δ h).
+          apply (MkDebugAsn (wco w1) δ h).
           apply pure.
           constructor.
       Defined.
@@ -2110,9 +2027,9 @@ Module Type MutatorsOn
           apply (consume (wsnoc w0 (ς∷τ)) asn w2).
           apply (acc_snoc_left (acc_trans ω01 ω12) (ς∷τ) t2).
         - intros w1 ω01.
-          apply debug.
+          apply (debug (DT := DebugAsn)).
           intros δ h.
-          apply (MkSDebugAsn (wco w1) δ h).
+          apply (MkDebugAsn (wco w1) δ h).
           apply pure.
           constructor.
       Defined.
@@ -2199,15 +2116,15 @@ Module Type MutatorsOn
           if config_debug_function cfg f
           then
             debug
-              (fun δ h => {| sdebug_call_function_parameters := Δ;
-                             sdebug_call_function_result_type := τ;
-                             sdebug_call_function_name := f;
-                             sdebug_call_function_contract := c;
-                             sdebug_call_function_arguments := δΔ;
-                             sdebug_call_program_context := Γ;
-                             sdebug_call_pathcondition := wco w0;
-                             sdebug_call_localstore := δ;
-                             sdebug_call_heap := h|})
+              (fun δ h => {| debug_call_function_parameters := Δ;
+                             debug_call_function_result_type := τ;
+                             debug_call_function_name := f;
+                             debug_call_function_contract := c;
+                             debug_call_function_arguments := δΔ;
+                             debug_call_program_context := Γ;
+                             debug_call_pathcondition := wco w0;
+                             debug_call_localstore := δ;
+                             debug_call_heap := h|})
               o
           else o.
 
@@ -2370,9 +2287,10 @@ Module Type MutatorsOn
             apply pure.
             apply (persist__term tnew ω34).
           - apply (error "SMut.exec" "stm_bind not supported" tt).
-          - apply debug.
+          - apply (debug (DT := DebugStm)).
             intros δ0 h0.
             econstructor.
+            apply s.
             apply (wco w0).
             apply δ0.
             apply h0.

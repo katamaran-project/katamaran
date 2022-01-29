@@ -242,10 +242,9 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
         (instpc fmls ι -> POST tt).
     Proof.
       induction fmls; cbn; cbv [pure bind].
-      - cbv. intuition.
+      - intuition.
       - intros POST.
         rewrite IHfmls.
-        rewrite inst_pathcondition_cons.
         unfold assume_formula.
         intuition.
     Qed.
@@ -259,7 +258,6 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
       - cbv. intuition.
       - intros POST.
         rewrite IHfmls.
-        rewrite inst_pathcondition_cons.
         unfold assert_formula.
         intuition.
     Qed.
@@ -270,8 +268,6 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
     (A -> CStore Γ2 -> SCHeap -> Prop) -> CStore Γ1 -> SCHeap -> Prop.
   Bind Scope mut_scope with CMut.
 
-  Local Opaque instantiate_env.
-  Local Opaque instantiate_term.
   Local Open Scope mut_scope.
 
   Module CMut.

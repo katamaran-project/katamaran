@@ -159,7 +159,7 @@ Module Soundness
   Qed.
   Local Hint Resolve approx_four : core.
 
-  Lemma approx_lift {AT A} `{InstLaws AT A} {w0 : World} (ι0 : Valuation w0) (a : A) :
+  Lemma approx_lift {AT A} `{InstLift AT A} {w0 : World} (ι0 : Valuation w0) (a : A) :
     approx ι0 (lift (T := AT) a) a.
   Proof.
     hnf. now rewrite inst_lift.
@@ -342,7 +342,7 @@ Module Soundness
     Lemma approx_assume_formula {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0)
       (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
       approx ι0 (@SDijk.assume_formula w0 fml) (@CDijk.assume_formula P).
-    Proof. unfold SDijk.assume_formula. now apply approx_assume_formulas. Qed.
+    Proof. unfold SDijk.assume_formula. apply approx_assume_formulas; cbn; intuition. Qed.
 
     Lemma approx_assert_formulas {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0)
       (msg : Message w0) (fmls0 : List Formula w0) (P : Prop) (Heq : instpc fmls0 ι0 <-> P) :
@@ -369,7 +369,7 @@ Module Soundness
     Lemma approx_assert_formula {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0)
       (msg : Message w0) (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
       approx ι0 (@SDijk.assert_formula w0 msg fml) (@CDijk.assert_formula P).
-    Proof. unfold SDijk.assert_formula. now apply approx_assert_formulas. Qed.
+    Proof. unfold SDijk.assert_formula. apply approx_assert_formulas; cbn; intuition. Qed.
 
     Lemma approx_angelic_list {M} `{Subst M, OccursCheck M} {AT A} `{Inst AT A}
       {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) (msg : M w0) :
@@ -403,7 +403,7 @@ Module Soundness
     Proof.
       unfold SDijk.angelic_finite, CDijk.angelic_finite.
       apply approx_angelic_list; auto.
-      hnf. cbv [inst instantiate_const instantiate_list].
+      hnf. unfold inst, inst_const, inst_list.
       now rewrite List.map_id.
     Qed.
 
@@ -414,7 +414,7 @@ Module Soundness
       unfold SDijk.demonic_finite, CDijk.demonic_finite.
       intros POST__s POST__c HPOST.
       apply approx_demonic_list; eauto.
-      hnf. cbv [inst instantiate_const instantiate_list].
+      hnf. unfold inst, inst_const, inst_list.
       now rewrite List.map_id.
     Qed.
 
@@ -562,10 +562,10 @@ Module Soundness
       now apply Dijk.approx_demonic_ctx.
     Qed.
 
-    Lemma approx_debug {AT A DT D} `{Approx AT A, Subst DT, Inst DT D, OccursCheck DT} {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0)
+    Lemma approx_debug {AT A D} `{Approx AT A, Subst D, OccursCheck D} {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0)
           (Hpc : instpc (wco w0) ι0) f ms mc :
       approx ι0 ms mc ->
-      approx ι0 (@SMut.debug AT DT D _ _ _ Γ1 Γ2 w0 f ms) mc.
+      approx ι0 (@SMut.debug AT D _ _ Γ1 Γ2 w0 f ms) mc.
     Proof.
       intros Hap.
       intros POST__s POST__c HPOST.
@@ -1283,12 +1283,12 @@ Module Soundness
         apply HPOST; auto.
         destruct (env.catView δs1).
         hnf.
-        unfold inst at 1; cbn.
+        unfold inst, inst_store, inst_env at 1.
         rewrite <- env.map_drop.
         rewrite ?env.drop_cat.
         reflexivity.
       - hnf.
-        unfold inst at 3; cbn.
+        unfold inst, inst_store, inst_env at 3.
         rewrite env.map_cat.
         reflexivity.
     Qed.
@@ -1351,13 +1351,10 @@ Module Soundness
     Proof.
       intros POST__s POST__c HPOST.
       intros δs0 δc0 -> hs0 hc0 Hh.
-      change (@instantiate_env _ _ _ _ ?Γ) with (@inst_localstore Γ).
       apply HPOST; auto. cbn. rewrite ?inst_sub_id; auto.
       apply env.lookup_extensional; cbn; intros [x σ] xIn.
-      unfold evals, inst at 2; cbn. rewrite ?env.lookup_map.
-      change (@instantiate_env _ _ _ _ ?Γ) with (@inst_localstore Γ).
-      (* change (fun Σ : LCtx => @Env (𝑿 * Ty) (fun τ : 𝑿 * Ty => Term Σ (@snd 𝑿 Ty τ)) Γ) with (SStore Γ). *)
-      now rewrite peval_sound, eval_exp_inst.
+      unfold evals, inst, inst_store, inst_env. rewrite ?env.lookup_map.
+      now rewrite peval_sound, <- eval_exp_inst.
     Qed.
 
     Lemma approx_assign {Γ x σ} {xIn : x∷σ ∈ Γ}
@@ -1369,7 +1366,7 @@ Module Soundness
       intros δs0 δc0 -> hs0 hc0 Hh.
       unfold SMut.assign, CMut.assign.
       apply HPOST; wsimpl; eauto.
-      hnf. unfold inst at 3. cbn.
+      hnf. unfold inst, inst_store, inst_env.
       now rewrite env.map_update.
     Qed.
 
@@ -1403,7 +1400,7 @@ Module Soundness
      (ι : Valuation Σ) :
     inst (EΓ ►► EΔ) ι = inst EΓ ι ►► inst EΔ ι.
   Proof.
-    unfold inst; cbn.
+    unfold inst, inst_env; cbn.
     now rewrite env.map_cat.
   Qed.
 
@@ -1467,7 +1464,7 @@ Module Soundness
       apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
       { rewrite <- ?inst_subst.
         unfold NamedEnv.
-        fold (@instantiate_sub Δ).
+        fold (@inst_sub Δ).
         fold (Sub Δ).
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
@@ -1484,7 +1481,7 @@ Module Soundness
       apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
       { rewrite <- ?inst_subst.
         unfold NamedEnv.
-        fold (@instantiate_sub Δ).
+        fold (@inst_sub Δ).
         fold (Sub Δ).
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
@@ -1502,7 +1499,7 @@ Module Soundness
       apply H; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
       { rewrite <- ?inst_subst.
         unfold NamedEnv.
-        fold (@instantiate_sub (alt__ctx UK)).
+        fold (@inst_sub (alt__ctx UK)).
         fold (Sub (alt__ctx UK)).
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
@@ -1649,10 +1646,10 @@ Module Soundness
       change (SHeap w1) in h'.
       exists (inst c1 ι1, inst h' ι1).
       split.
-      - unfold inst at 3. cbn. rewrite heap_extractions_map.
-        rewrite List.in_map_iff. exists (c1 , h').
-        split. reflexivity. assumption.
-        eauto using inst_is_duplicable.
+      - unfold inst at 3, inst_heap, inst_list.
+        rewrite heap_extractions_map, List.in_map_iff.
+        + exists (c1 , h'). split. reflexivity. assumption.
+        + eauto using inst_is_duplicable.
       - hnf. subst. rewrite peval_chunk_sound, inst_persist.
         split; auto. revert Hwp. apply HPOST; wsimpl; auto.
     }
@@ -1666,7 +1663,7 @@ Module Soundness
            T CMut.angelic_list CMut.dijkstra].
       rewrite CDijk.wp_angelic_list.
       destruct c1; cbn in Heqo; try discriminate Heqo; cbn.
-      - destruct (𝑯_precise p) as [[[ΔI ΔO] prec]|]; try discriminate Heqo.
+      - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; try discriminate Heqo.
         remember (eq_rect (𝑯_Ty p) (Env (Term w1)) ts (ΔI ▻▻ ΔO) prec) as ts'.
         destruct (env.catView ts') as [tsI tsO].
         destruct (find_chunk_user_precise_spec prec tsI tsO hs) as [[h'' eqs''] HIn|];
@@ -1709,10 +1706,10 @@ Module Soundness
       change (SHeap w1) in h'.
       exists (inst c1 ι1, inst h' ι1).
       split.
-      - unfold inst at 3. cbn. rewrite heap_extractions_map.
-        rewrite List.in_map_iff. exists (c1 , h').
-        split. reflexivity. assumption.
-        eauto using inst_is_duplicable.
+      - unfold inst at 3, inst_heap, inst_list.
+        rewrite heap_extractions_map, List.in_map_iff.
+        + exists (c1 , h'). split. reflexivity. assumption.
+        + eauto using inst_is_duplicable.
       - hnf. subst. rewrite peval_chunk_sound, inst_persist.
         split; auto. revert Hwp. apply HPOST; wsimpl; auto.
     }
@@ -1726,7 +1723,7 @@ Module Soundness
            T CMut.angelic_list CMut.dijkstra].
       rewrite CDijk.wp_angelic_list.
       destruct c1; cbn in Heqo; try discriminate Heqo; cbn.
-      - destruct (𝑯_precise p) as [[[ΔI ΔO] prec]|]; try discriminate Heqo.
+      - destruct (𝑯_precise p) as [[ΔI ΔO prec]|]; try discriminate Heqo.
         remember (eq_rect (𝑯_Ty p) (Env (Term w1)) ts (ΔI ▻▻ ΔO) prec) as ts'.
         destruct (env.catView ts') as [tsI tsO].
         destruct (find_chunk_user_precise_spec prec tsI tsO hs) as [[h'' eqs''] HIn|];
@@ -1745,7 +1742,7 @@ Module Soundness
     }
     { apply approx_bind.
       apply approx_angelic_list; eauto.
-      { hnf. unfold inst at 1. cbn.
+      { hnf. unfold inst at 1, inst_heap, inst_list.
         rewrite heap_extractions_map.
         apply List.map_ext. now intros [].
         eauto using inst_is_duplicable.
@@ -1817,7 +1814,7 @@ Module Soundness
       apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
       { rewrite <- ?inst_subst.
         unfold NamedEnv.
-        fold (@instantiate_sub Δ).
+        fold (@inst_sub Δ).
         fold (Sub Δ).
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
@@ -1834,7 +1831,7 @@ Module Soundness
       apply IHasn; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
       { rewrite <- ?inst_subst.
         unfold NamedEnv.
-        fold (@instantiate_sub Δ).
+        fold (@inst_sub Δ).
         fold (Sub Δ).
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
@@ -1852,7 +1849,7 @@ Module Soundness
       apply H; cbn - [Sub inst sub_wk1 sub_id sub_cat_left]; wsimpl; auto.
       { rewrite <- ?inst_subst.
         unfold NamedEnv.
-        fold (@instantiate_sub (alt__ctx UK)).
+        fold (@inst_sub (alt__ctx UK)).
         fold (Sub (alt__ctx UK)).
         rewrite <- inst_sub_cat.
         rewrite <- inst_subst.
@@ -1910,7 +1907,7 @@ Module Soundness
     apply approx_bind_right.
     { apply approx_produce; auto.
       constructor.
-      cbn - [instantiate_env sub_snoc].
+      cbn - [inst_env sub_snoc].
       rewrite inst_sub_snoc, inst_persist, ?sub_acc_trans, ?inst_subst.
       now rewrite Hevars, Hres.
     }
@@ -1945,7 +1942,7 @@ Module Soundness
     intros w3 ω23 ι3 -> Hpc3.
     { apply approx_produce; auto.
       constructor.
-      cbn - [instantiate_env sub_snoc].
+      cbn - [inst_env sub_snoc].
       rewrite inst_persist, sub_acc_trans, inst_subst.
       now rewrite Hevars.
     }
@@ -2161,7 +2158,6 @@ Module Soundness
     intros ι0.
     apply approx_bind_right.
     apply approx_produce; wsimpl; cbn; auto.
-    constructor. constructor.
     intros w1 ω01 ι1 -> Hpc1.
     apply approx_bind.
     apply approx_exec; auto.

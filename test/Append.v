@@ -241,10 +241,11 @@ Module Import ExampleSpecification <: Specification DefaultBase.
     Global Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
       {| is_duplicable p := false |}.
 
+    Local Arguments Some {_} &.
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
-      | ptstocons => Some (exist _ ([ptr], [ptr, llist]) eq_refl)
-      | ptstolist => Some (exist _ ([llist], [ty_list ptr]) eq_refl)
+      | ptstocons => Some (MkPrecise [ptr] [ptr, llist] eq_refl)
+      | ptstolist => Some (MkPrecise [llist] [ty_list ptr] eq_refl)
       end.
 
   End HeapPredicateDeclKit.
@@ -405,13 +406,24 @@ Module ExampleModel.
       Definition memToGmap (μ : Memory) : gmap nat (Z * (Z + unit)) :=
         list_to_map (imap pair μ).
 
-      Lemma memToGmap_app (μ : Memory) (v : Z * (Z + unit)) :
-        memToGmap (μ ++ cons v nil) = <[length μ:=v]> (memToGmap μ).
-      Admitted.
-
       Lemma memToGmap_lookup_length (μ : Memory) :
         memToGmap μ !! length μ = None.
       Admitted.
+
+      Lemma memToGmap_app (μ : Memory) (v : Z * (Z + unit)) :
+        memToGmap (μ ++ cons v nil) = <[length μ:=v]> (memToGmap μ).
+      Proof.
+        unfold memToGmap.
+        rewrite imap_app.
+        rewrite list_to_map_app; cbn.
+        rewrite <- list_to_map_nil.
+        rewrite <- list_to_map_cons.
+        rewrite <- list_to_map_app.
+        rewrite Nat.add_0_r.
+        rewrite list_to_map_snoc; first reflexivity.
+        rewrite not_elem_of_list_to_map.
+        apply memToGmap_lookup_length.
+      Qed.
 
       Lemma memToGmap_lookup (μ : Memory) (x : nat) (e : Z * (Z + unit)) :
         memToGmap μ !! x = Some e ->

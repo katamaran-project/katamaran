@@ -387,9 +387,9 @@ Module Type SolverOn
           now rewrite 𝑼_fold_inj.
         + apply base.forall_proper. intros ι.
           now rewrite 𝑼_fold_inj.
-      - cbn - [inst_term]. constructor. intros ι.
-        rewrite inst_pathcondition_app. apply and_iff_compat_r.
-        rewrite inst_formula_eqs_nctx. cbn [inst_term].
+      - cbn. constructor. intros ι.
+        rewrite inst_pathcondition_app, inst_formula_eqs_nctx.
+        apply and_iff_compat_r.
         split; intros Heq.
         + f_equal. apply Heq.
         + apply (@f_equal _ _ (@𝑹_unfold R0)) in Heq.
@@ -441,18 +441,18 @@ Module Type SolverOn
         (simplify_formulas fmls k).
     Proof.
       induction fmls as [|fml fmls]; cbn.
-      - constructor. intuition. constructor.
+      - constructor. intuition.
       - apply optionspec_bind. revert IHfmls.
         apply optionspec_monotonic.
         + intros fmlsk Hfmls.
           generalize (simplify_formula_spec fml fmlsk).
           apply optionspec_monotonic.
           * intros ? Hfml ι. specialize (Hfmls ι). specialize (Hfml ι).
-            rewrite inst_pathcondition_cons. intuition.
+            intuition.
           * intros Hfml ι. specialize (Hfml ι).
-            rewrite inst_pathcondition_cons. intuition.
+            intuition.
         + intros Hfmls ι. specialize (Hfmls ι).
-          rewrite inst_pathcondition_cons. intuition.
+          intuition.
     Qed.
 
     Definition occurs_check_lt {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) : option (Term (Σ - x) σ) :=
@@ -588,14 +588,14 @@ Module Type SolverOn
       end.
     Proof.
       induction fmls0 as [|fml0 fmls0]; cbn.
-      - split; intros ι0; rewrite inst_sub_id; intuition.
+      - intuition.
       - destruct (unify_formulas fmls0) as (w1 & ν01 & fmls1).
         pose proof (unify_formula_spec (persist fml0 (acc_triangular ν01))) as IHfml.
         destruct (unify_formula (persist fml0 (acc_triangular ν01))) as (w2 & ν12 & fmls2).
         destruct IHfmls0 as [IHfmls01 IHfmls10].
         destruct IHfml as [IHfml12 IHfml21].
         split.
-        + intros ι0. rewrite inst_pathcondition_cons. intros [Hfml Hfmls].
+        + intros ι0. intros [Hfml Hfmls].
           specialize (IHfmls01 ι0 Hfmls). destruct IHfmls01 as [Hν01 Hfmls1].
           specialize (IHfml12 (inst (sub_triangular_inv ν01) ι0)).
           rewrite inst_persist, sub_acc_triangular in IHfml12.
@@ -610,7 +610,7 @@ Module Type SolverOn
           specialize (IHfml21 ι2 Hfmls2). rewrite inst_persist, sub_acc_triangular in IHfml21.
           specialize (IHfmls10 (inst (sub_triangular ν12) ι2) Hfmls1).
           rewrite sub_triangular_comp, inst_subst.
-          rewrite inst_pathcondition_cons. split; auto.
+          split; auto.
     Qed.
 
     Open Scope lazy_bool_scope.
@@ -710,21 +710,18 @@ Module Type SolverOn
     Lemma assumption_formula_spec {Σ} (pc : PathCondition Σ) (fml : Formula Σ) (k : List Formula Σ) (ι : Valuation Σ) :
       instpc pc ι -> inst (A := Prop) fml ι /\ instpc k ι <-> instpc (assumption_formula pc fml k) ι.
     Proof.
-      induction pc as [|f pc]; cbn.
-      - now rewrite inst_pathcondition_cons.
-      - rewrite inst_pathcondition_cons.
-        intros [Hf Hpc]. specialize (IHpc Hpc).
-        destruct (formula_eqb_spec f fml);
-          subst; intuition.
+      induction pc as [|f pc]; cbn; auto.
+      intros [Hf Hpc]. specialize (IHpc Hpc).
+      destruct (formula_eqb_spec f fml);
+        subst; intuition.
     Qed.
 
     Lemma assumption_formulas_spec {Σ} (pc : PathCondition Σ) (fmls : List Formula Σ) (k : List Formula Σ) (ι : Valuation Σ) :
       instpc pc ι -> instpc fmls ι /\ instpc k ι <-> instpc (assumption_formulas pc fmls k) ι.
     Proof.
       intros Hpc. induction fmls as [|fml fmls]; cbn.
-      - intuition. constructor.
-      - rewrite inst_pathcondition_cons.
-        pose proof (assumption_formula_spec pc fml (assumption_formulas pc fmls k) ι Hpc).
+      - intuition.
+      - pose proof (assumption_formula_spec pc fml (assumption_formulas pc fmls k) ι Hpc).
         intuition.
     Qed.
 

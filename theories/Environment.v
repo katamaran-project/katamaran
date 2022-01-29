@@ -614,9 +614,9 @@ Section Traverse.
 End Traverse.
 
 End env.
-Import env.
-Notation Env := env.Env.
+Export env (Env).
 Bind Scope env_scope with Env.
+Import env.
 
 Module envrec.
 Section WithBinding.

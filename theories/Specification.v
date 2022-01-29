@@ -126,7 +126,7 @@ Module Type ProgSpecMixinOn (Import B : Base) (Import P : Program B).
 
     Lemma inst_pattern_match_env_reverse {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty}
           (ι : Valuation Σ) (p : Pattern Δ σ) (ts : NamedEnv (Term Σ) Δ) :
-      inst (Inst := instantiate_term) (pattern_match_env_reverse p ts) ι =
+      inst (Inst := inst_term) (pattern_match_env_reverse p ts) ι =
       pattern_match_env_val_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).
     Proof.
       induction p.
@@ -167,7 +167,9 @@ Module Type ProgSpecMixinOn (Import B : Base) (Import P : Program B).
     eval e (inst δΓΣ ι) = inst (seval_exp δΓΣ e) ι.
   Proof.
     induction e; cbn; repeat f_equal; auto.
-    { unfold inst; cbn. now rewrite env.lookup_map. }
+    { unfold inst, inst_store, inst_env at 1; cbn.
+      now rewrite env.lookup_map.
+    }
     2: {
       induction es as [|eb n es IHes]; cbn in *.
       { reflexivity. }
