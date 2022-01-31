@@ -48,6 +48,7 @@ Module DisjointSound
   (Import SEM  : Semantics B SPEC.PROG)
   (Import MDL  : DisjointModel B SPEC).
 
+  Import SmallStepNotations.
   Include ProgramLogicOn B SPEC.
 
   Local Ltac sound_inversion :=

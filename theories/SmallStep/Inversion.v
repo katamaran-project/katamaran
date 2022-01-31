@@ -41,6 +41,8 @@ Import env.notations.
 
 Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : SmallStepOn B P).
 
+  Import SmallStepNotations.
+
   Section StepInversionFinal.
 
     Lemma step_inversion_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}

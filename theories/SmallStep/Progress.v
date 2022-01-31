@@ -29,6 +29,7 @@
 From Coq Require Import
      Program.Tactics.
 From Katamaran Require Import
+     Notations
      SmallStep.Step
      Program.
 

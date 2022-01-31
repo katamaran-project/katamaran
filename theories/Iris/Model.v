@@ -118,6 +118,8 @@ Module Iris
   (Import SEM  : Semantics B SPEC.PROG)
   (Import PLOG : ProgramLogicOn B SPEC).
 
+Import SmallStepNotations.
+
 Section Language.
 
   (* The "expressions" of the LanguageMixin are configurations consisting of a
