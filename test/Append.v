@@ -406,9 +406,36 @@ Module ExampleModel.
       Definition memToGmap (μ : Memory) : gmap nat (Z * (Z + unit)) :=
         list_to_map (imap pair μ).
 
+      Lemma fst_pair_id2 : forall {A} {B},
+          (λ (x : A) (y : B), (fst ∘ pair x) y) = (λ (x : A) (y : B), x).
+      Proof.
+        intros; reflexivity.
+      Qed.
+
+      Lemma imap_pair_fst_seq {A} (l : list A) :
+        (imap pair l).*1 = seq 0 (length l).
+      Proof.
+        rewrite fmap_imap.
+        rewrite fst_pair_id2.
+        rewrite imap_seq_0.
+        rewrite list_fmap_id; reflexivity.
+      Qed.
+
       Lemma memToGmap_lookup_length (μ : Memory) :
         memToGmap μ !! length μ = None.
-      Admitted.
+      Proof.
+        unfold memToGmap.
+        rewrite <- imap_length with (f := pair).
+        unfold list_to_map.
+        apply not_elem_of_list_to_map.
+        rewrite imap_pair_fst_seq.
+        rewrite imap_length.
+        unfold not; intros Hcontra.
+        apply elem_of_seq in Hcontra.
+        cbn in Hcontra.
+        inversion Hcontra as [_ H].
+        apply Nat.lt_irrefl in H; contradiction.
+      Qed.
 
       Lemma memToGmap_app (μ : Memory) (v : Z * (Z + unit)) :
         memToGmap (μ ++ cons v nil) = <[length μ:=v]> (memToGmap μ).
@@ -429,7 +456,17 @@ Module ExampleModel.
         memToGmap μ !! x = Some e ->
         exists μ', skipn x μ = (e :: μ').
       Proof.
-      Admitted.
+        intros.
+        exists (drop (S x) μ).
+        apply drop_S.
+        unfold memToGmap in H.
+        apply elem_of_list_to_map in H.
+        apply elem_of_lookup_imap in H.
+        destruct H as [i [y [Hp Hl]]].
+        inversion Hp; subst; assumption.
+        rewrite imap_pair_fst_seq.
+        apply NoDup_seq.
+      Qed.
 
       Lemma memToGmap_update (μ : Memory) (x : nat) (e : Z * (Z + unit)) :
         memToGmap (take x μ ++ e :: drop (S x) μ) = <[x := e]> (memToGmap μ).
