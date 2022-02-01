@@ -296,34 +296,27 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition zero_reg {Γ} : Stm Γ ty_xlenbits := exp_val ty_int 0%Z.
 
   (** Functions **)
+  Import Bitvector.bv.notations.
   Definition fun_rX : Stm [rs ∶ ty_regno] ty_xlenbits :=
-    if: rs = z_exp 0
-    then zero_reg
-    else
-      (use lemma open_gprs ;;
-       let: v := if: rs = z_exp 1
-                 then stm_read_register x1
-                 else if: rs = z_exp 2
-                 then stm_read_register x2
-                 else if: rs = z_exp 3
-                 then stm_read_register x3
-                 else fail "invalid register number" in
-       use lemma close_gprs ;;
-       v).
+    use lemma open_gprs ;;
+    let: v := match: rs in bvec 2 with
+              | 00 => z_exp 0
+              | 01 => stm_read_register x1
+              | 10 => stm_read_register x2
+              | 11 => stm_read_register x3
+              end in
+    use lemma close_gprs ;;
+    v.
 
   Definition fun_wX : Stm [rd ∶ ty_regno, v ∶ ty_xlenbits] ty_unit :=
-    if: rd = z_exp 0
-    then stm_val ty_unit tt
-    else
-      (use lemma open_gprs ;;
-      (if: rd = z_exp 1
-       then stm_write_register x1 v
-       else if: rd = z_exp 2
-       then stm_write_register x2 v
-       else if: rd = z_exp 3
-       then stm_write_register x3 v
-       else fail "invalid register number") ;;
-       use lemma close_gprs).
+    use lemma open_gprs ;;
+    match: rd in bvec 2 with
+    | 00 => z_exp 0
+    | 01 => stm_write_register x1 v
+    | 10 => stm_write_register x2 v
+    | 11 => stm_write_register x3 v
+    end ;;
+    use lemma close_gprs.
 
   Definition fun_get_arch_pc : Stm ctx.nil ty_xlenbits :=
     stm_read_register pc.
@@ -940,6 +933,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                          (γ' , μ' , res) = (γ , μ , res'))
     end.
 
+  Import bv.notations.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
   Proof.
@@ -947,8 +941,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args.
-      exists γ, μ, (inr (RTYPE 0 0 0 RISCV_ADD)), (inr (RTYPE 0 0 0 RISCV_ADD)).
-      reflexivity.
+      exists γ, μ, (inr (RTYPE [bv 0] [bv 0] [bv 0] RISCV_ADD)).
+      eexists. reflexivity.
   Qed.
   End ForeignKit.
 

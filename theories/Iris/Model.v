@@ -997,6 +997,29 @@ Section Soundness.
     by iApply "triprec".
   Qed.
 
+  Lemma iris_rule_stm_match_bvec {Γ} (δ : CStore Γ)
+        {n : nat} (e : Exp Γ (ty_bvec n)) {τ : Ty}
+        (rhs : forall (v : bv n), Stm Γ τ)
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+        ⊢ (semTriple δ P (rhs (eval e δ)) Q -∗
+          semTriple δ P (stm_match_bvec n e rhs) Q)%I.
+  Proof.
+    iIntros "triprhs P".
+    rewrite wp_unfold. cbn.
+    iIntros (σ _ ks1 ks nt) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e2 σ' efs) "%".
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
+    dependent elimination s.
+    iModIntro. iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro. iFrame.
+    iSplitL; [|trivial].
+    by iApply "triprhs".
+  Qed.
+
   Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
         ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v))%I.
@@ -1437,7 +1460,7 @@ Section Soundness.
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -1459,6 +1482,7 @@ Section Soundness.
     - by iApply iris_rule_stm_match_tuple.
     - by iApply iris_rule_stm_match_union.
     - by iApply iris_rule_stm_match_record.
+    - by iApply iris_rule_stm_match_bvec.
     - by iApply iris_rule_stm_read_register.
     - by iApply iris_rule_stm_write_register.
     - by iApply iris_rule_stm_assign_backwards.

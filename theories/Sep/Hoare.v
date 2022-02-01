@@ -190,6 +190,12 @@ Module Type ProgramLogicOn (Import B : Base) (Import SPEC : Specification B).
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ rhs ; env.cat δ (record_pattern_match_val p (eval e δ)) ⦃ fun v δ' => Q v (env.drop Δ δ') ⦄ ->
         ⦃ P ⦄ stm_match_record R e p rhs ; δ ⦃ Q ⦄
+    | rule_stm_match_bvec
+        {n : nat} (e : Exp Γ (ty_bvec n))
+        (rhs : bv n -> Stm Γ τ)
+        (P : L) (Q : Val τ -> CStore Γ -> L) :
+        ⦃ P ⦄ rhs (eval e δ) ; δ ⦃ Q ⦄ ->
+        ⦃ P ⦄ stm_match_bvec n e rhs ; δ ⦃ Q ⦄
     | rule_stm_read_register
         (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
         ⦃ lptsreg r v ⦄

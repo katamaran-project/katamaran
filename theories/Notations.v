@@ -68,7 +68,7 @@ Reserved Notation "⟨ γ1 , μ1 , δ1 , s1 ⟩ --->* ⟨ γ2 , μ2 , δ2 , s2 �
 (*   (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z). *)
 
 Reserved Notation "s1 ;; s2" (at level 100, s2 at level 200, right associativity,
-  format "'[' '[hv' '[' s1 ']' ;;  ']' '/' s2 ']'").
+  format "'[v' s1 ;; '/' s2 ']'").
 
 Reserved Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" (at level 75, no associativity).
 

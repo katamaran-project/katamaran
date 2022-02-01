@@ -185,6 +185,11 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , stm_match_record R e p rhs ⟩ --->
       ⟨ γ , μ , δ , stm_block (record_pattern_match_val p (eval e δ)) rhs ⟩
 
+  | step_stm_match_bvec
+      {n : nat} (e : Exp Γ (ty_bvec n)) (rhs : bv n -> Stm Γ τ) :
+      ⟨ γ , μ , δ , stm_match_bvec n e rhs ⟩ --->
+      ⟨ γ , μ , δ , rhs (eval e δ) ⟩
+
   | step_stm_read_register
       (r : 𝑹𝑬𝑮 τ) :
       ⟨ γ, μ , δ, stm_read_register r ⟩ ---> ⟨ γ, μ , δ, stm_val τ (read_register γ r) ⟩
@@ -270,6 +275,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         | @stm_match_tuple    => idtac
         | @stm_match_union    => idtac
         | @stm_match_record   => idtac
+        | @stm_match_bvec     => idtac
         | @stm_read_register  => idtac
         | @stm_write_register => idtac
         | @stm_debugk         => idtac

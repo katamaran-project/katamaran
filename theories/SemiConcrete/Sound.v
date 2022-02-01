@@ -485,6 +485,8 @@ Module Type Soundness
         apply H; auto.
       - rewrite ?wp_demonic_match_record.
         apply IHs; auto.
+      - rewrite ?wp_demonic_match_bvec.
+        apply H; auto.
       - intros [v Hwp]; exists v; revert Hwp.
         apply consume_chunk_monotonic. auto.
       - intros [v Hwp]; exists v; revert Hwp.
@@ -656,6 +658,10 @@ Module Type Soundness
       - (* stm_match_record *)
         rewrite wp_demonic_match_record in HYP.
         now apply rule_stm_match_record, IHs.
+
+      - (* stm_match_bvec *)
+        rewrite wp_demonic_match_bvec in HYP.
+        now apply rule_stm_match_bvec, H.
 
       - (* stm_read_register *)
         destruct HYP as [v HYP].

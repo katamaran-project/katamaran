@@ -256,6 +256,9 @@ Module CInterpreter (Import B : Base)
     | stm_match_record R e p rhs =>
       v <- eval_exp e ;;
       pushspops (record_pattern_match_val p v) (exec rhs)
+    | stm_match_bvec n e rhs =>
+      v <- eval_exp e ;;
+      exec (rhs v)
     | stm_bind s k =>
       v <- exec s ;;
       exec (k v)

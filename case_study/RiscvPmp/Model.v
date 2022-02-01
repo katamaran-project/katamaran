@@ -32,6 +32,7 @@ From RiscvPmp Require Import
      Machine
      Contracts.
 From Katamaran Require Import
+     Bitvector
      Environment
      Program
      Specification
@@ -110,18 +111,14 @@ Module RiscvPmpModel.
 
       Import Contracts.
 
-      Definition reg_file : gset Z := list_to_set (seqZ 1 3).
+      Definition reg_file : gset (bv 2) :=
+        list_to_set (finite.enum (bv 2)).
 
       Definition interp_ptsreg `{sailRegGS Σ} (r : RegIdx) (v : Z) : iProp Σ :=
         match reg_convert r with
         | Some x => reg_pointsTo x v
         | None => True
         end.
-
-      Lemma seqZ_list : seqZ 1 3 = [1;2;3]%Z.
-      Proof.
-        unfold seqZ; now cbv.
-      Qed.
 
       Definition interp_gprs `{sailRegGS Σ} : iProp Σ :=
         [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
@@ -168,11 +165,8 @@ Module RiscvPmpModel.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.reg_file.
-      rewrite big_sepS_list_to_set; [|apply NoDup_seqZ].
-      rewrite RiscvPmpIrisHeapKit.seqZ_list; cbn.
-      iIntros "[Hx1 [Hx2 [Hx3 _]]]".
-      iSplitL "Hx1"; [iAssumption|].
-      iSplitL "Hx2"; iAssumption.
+      rewrite big_sepS_list_to_set; [|apply finite.NoDup_enum]; cbn.
+      iIntros "[_ [Hx1 [Hx2 [Hx3 _]]]]". iFrame.
     Qed.
 
     Lemma close_gprs_sound :
@@ -181,8 +175,8 @@ Module RiscvPmpModel.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.reg_file.
       iIntros "[Hx1 [Hx2 Hx3]]".
-      iApply big_sepS_list_to_set; [apply NoDup_seqZ|].
-      rewrite RiscvPmpIrisHeapKit.seqZ_list; cbn; iFrame.
+      iApply big_sepS_list_to_set; [apply finite.NoDup_enum|].
+      cbn; iFrame. eauto using 0%Z.
     Qed.
   End Lemmas.
 

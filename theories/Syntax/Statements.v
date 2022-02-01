@@ -31,6 +31,7 @@ From Coq Require Import
      Strings.String.
 From Katamaran Require Import
      Base
+     Bitvector
      Context
      Environment
      Notations Prelude
@@ -94,6 +95,8 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   | stm_match_record
       {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
       (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
+  | stm_match_bvec
+      {n} (e : Exp Γ (ty_bvec n)) (rhs : bv n -> Stm Γ τ)
   | stm_read_register (reg : 𝑹𝑬𝑮 τ)
   | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
   (* EXPERIMENTAL *)
@@ -192,6 +195,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_match_tuple {Γ τ σs Δ} e%exp p%pat rhs%exp.
   Arguments stm_match_union {Γ τ} U e {alt__ctx} alt__pat alt__rhs.
   Arguments stm_match_record {Γ τ} R {Δ} e%exp p%pat rhs%exp.
+  Arguments stm_match_bvec {Γ τ} n%nat_scope e%exp rhs%exp.
   Arguments stm_read_register {Γ τ} reg.
   Arguments stm_write_register {Γ τ} reg e%exp.
   Bind Scope exp_scope with Stm.
@@ -264,7 +268,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   (* The infix operators ∷ is at level 49, so all of the notations have to bind tighter. *)
   Notation "'let:' x := s1 'in' s2" := (stm_let x%string _ s1%exp s2%exp)
     (at level 200, x at level 48, format
-     "'let:'  x  :=  s1  'in'  '/' s2"
+     "'[hv' 'let:'  x  :=  s1  'in'  '/' s2 ']'"
     ) : exp_scope.
   Notation "'let:' x :: τ := s1 'in' s2" := (stm_let x%string τ s1%exp s2%exp)
     (at level 200, x at level 48,
@@ -272,13 +276,13 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
     ) : exp_scope.
   Notation "'let:' x ∷ τ := s1 'in' s2" := (stm_let x%string τ s1%exp s2%exp)
     (at level 200, x at level 48,
-     format "'let:'  x  ∷  τ  :=  s1  'in'  '/' s2"
+     format "'[hv' 'let:'  x  ∷  τ  :=  s1  'in'  '/' s2 ']'"
     ) : exp_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 'end'" :=
     (stm_match_enum τ e (fun K => match K with
                                   | alt1%exp => rhs1%exp
                                   end))
-    (at level 200, alt1 pattern, format
+    (at level 0, alt1 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' 'end' ']'"
     ) : exp_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 'end'" :=
@@ -286,7 +290,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
                                   | alt1%exp => rhs1%exp
                                   | alt2%exp => rhs2%exp
                                   end))
-    (at level 200, alt1 pattern, alt2 pattern, format
+    (at level 0, alt1 pattern, alt2 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' 'end' ']'"
     ) : exp_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 'end'" :=
@@ -295,7 +299,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
                                   | alt2 => rhs2%exp
                                   | alt3 => rhs3%exp
                                   end))
-    (at level 200, alt1 pattern, alt2 pattern, alt3 pattern, format
+    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' 'end' ']'"
     ) : exp_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 'end'" :=
@@ -305,7 +309,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
                                   | alt3 => rhs3%exp
                                   | alt4 => rhs4%exp
                                   end))
-    (at level 200, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, format
+    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' 'end' ']'"
     ) : exp_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 'end'" :=
@@ -316,7 +320,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
                                   | alt4 => rhs4%exp
                                   | alt5 => rhs5%exp
                                   end))
-    (at level 200, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, format
+    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' 'end' ']'"
     ) : exp_scope.
   Notation "'match:' e 'in' τ 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 | alt5 => rhs5 | alt6 => rhs6 'end'" :=
@@ -328,7 +332,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
                                   | alt5 => rhs5%exp
                                   | alt6 => rhs6%exp
                                   end))
-    (at level 200, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, format
+    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' 'end' ']'"
     ) : exp_scope.
 
@@ -343,17 +347,40 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   (*               | alt2%exp => rhs2%exp *)
   (*               end) *)
   (*   ) *)
-  (*   (at level 200, alt1 pattern, alt2 pattern, format *)
+  (*   (at level 0, alt1 pattern, alt2 pattern, format *)
   (*    "'[hv' 'match:'  e  'in'  U  'with'  '/' |  alt1  x1  =>  rhs1  '/' |  alt2  x2  =>  rhs2  '/' 'end' ']'" *)
   (*     ) : exp_scope. *)
 
   Notation "'match:' e 'with' | 'inl' p1 => rhs1 | 'inr' p2 => rhs2 'end'" :=
-    (stm_match_sum e p1%string rhs1 p2%string rhs2) (at level 200, only parsing) : exp_scope.
+    (stm_match_sum e p1%string rhs1 p2%string rhs2) (at level 0, only parsing) : exp_scope.
 
   Notation "'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' | '(' fst ',' snd ')' => rhs 'end'" :=
     (@stm_match_prod _ _ σ1 σ2 e fst%string snd%string rhs)
-    (at level 200, fst pattern, snd pattern, format
+    (at level 0, fst pattern, snd pattern, format
      "'[hv' 'match:' e 'in' '(' σ1 ',' σ2 ')' 'with' '/' | '(' fst ',' snd ')' => rhs '/' 'end' ']'"
+    ) : exp_scope.
+
+  Notation "'match:' e 'in' 'bvec' 1 'with' | alt1 => rhs1 | alt2 => rhs2 'end'" :=
+    (@stm_match_bvec _ _ 1 e
+       (fun (x : bv 1) =>
+          match bv.to_bitstring x with
+          | alt1 => rhs1%exp
+          | alt2 => rhs2%exp
+          end))
+    (at level 0, alt1 pattern, alt2 pattern, format
+     "'[hv' 'match:'  e  'in'  'bvec'  1  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' 'end' ']'"
+    ) : exp_scope.
+  Notation "'match:' e 'in' 'bvec' 2 'with' | alt1 => rhs1 | alt2 => rhs2 | alt3 => rhs3 | alt4 => rhs4 'end'" :=
+    (@stm_match_bvec _ _ 2 e
+       (fun (x : bv 2) =>
+          match bv.to_bitstring x with
+          | alt1 => rhs1%exp
+          | alt2 => rhs2%exp
+          | alt3 => rhs3%exp
+          | alt4 => rhs4%exp
+          end))
+    (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, format
+     "'[hv' 'match:'  e  'in'  'bvec'  2  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' 'end' ']'"
     ) : exp_scope.
 
   Notation "'call' f a1 .. an" :=

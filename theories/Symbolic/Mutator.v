@@ -980,6 +980,7 @@ Module Type MutatorsOn
       Definition demonic_finite {Γ} F `{finite.Finite F} :
         ⊢ SMut Γ Γ ⌜F⌝ :=
         fun w => dijkstra (SDijk.demonic_finite (w:=w)).
+      Global Arguments demonic_finite {Γ} [_] {_ _} {w}.
 
       Definition angelic {Γ} (x : option 𝑺) σ :
         ⊢ SMut Γ Γ (STerm σ) :=
@@ -1031,9 +1032,15 @@ Module Type MutatorsOn
       (* Infix "⊕" := smut_angelic_binary (at level 50, left associativity) : mut_scope. *)
 
       Notation "x <- ma ;; mb" := (bind ma (fun _ _ x => mb)) (at level 80, ma at level 90, mb at level 200, right associativity) : mut_scope.
-      Notation "ma >>= f" := (bind ma f) (at level 50, left associativity) : mut_scope.
-      Notation "ma >> mb" := (bind_right ma mb) (at level 50, left associativity) : mut_scope.
+      Notation "ma >>= f" := (bind ma f) (at level 50, left associativity, only parsing) : mut_scope.
+      Notation "ma >> mb" := (bind_right ma mb) (at level 50, left associativity, only parsing) : mut_scope.
       (* Notation "m1 ;; m2" := (smut_bind_right m1 m2) : mut_scope. *)
+
+      Notation "⟨ ω ⟩ x <- ma ;; mb" :=
+        (bind ma (fun _ ω x => mb))
+          (at level 80, x at next level,
+            ma at next level, mb at level 200,
+            right associativity) : mut_scope.
 
     End SMutNotations.
     Import SMutNotations.
@@ -1637,6 +1644,47 @@ Module Type MutatorsOn
         refine (fun w0 t k => demonic_match_union n p <$> persist__term t <*> _).
         intros w1 ω01 UK. apply (four (k UK) ω01).
       Defined.
+
+      Definition angelic_match_bvec' {AT n} {Γ1 Γ2} :
+        ⊢ STerm (ty_bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ b <- angelic_finite
+                        (fun (δ : SStore Γ1 w0) (h : SHeap w0) =>
+                           {| msg_function := "SMut.angelic_match_bvec";
+                              msg_message := "pattern match assertion";
+                              msg_program_context := Γ1;
+                              msg_localstore := δ;
+                              msg_heap := h;
+                              msg_pathcondition := wco w0
+                           |}) ;;
+          let t1 := persist__term t ω1 in
+          ⟨ ω2 ⟩ _ <- assert_formula (formula_eq t1 (term_val (ty_bvec n) b)) ;;
+          four (k b) ω1 ω2.
+
+      Definition angelic_match_bvec {AT n} {Γ1 Γ2} :
+        ⊢ STerm (ty_bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
+        fun w0 t k =>
+          match term_get_val t with
+          | Some b => T (k b)
+          | None   => angelic_match_bvec' t k
+          end.
+
+      Definition demonic_match_bvec' {AT n} {Γ1 Γ2} :
+        ⊢ STerm (ty_bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ b <- demonic_finite (F := bv n) ;;
+          let s1 := term_val (ty_bvec n) b in
+          let t1 := persist__term t ω1 in
+          ⟨ ω2 ⟩ _ <- assume_formula (formula_eq s1 t1) ;;
+          four (k b) ω1 ω2.
+
+      Definition demonic_match_bvec {AT n} {Γ1 Γ2} :
+        ⊢ STerm (ty_bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
+        fun w0 t k =>
+          match term_get_val t with
+          | Some b => T (k b)
+          | None   => demonic_match_bvec' t k
+          end.
 
     End PatternMatching.
 
@@ -2261,6 +2309,12 @@ Module Type MutatorsOn
             intros w2 ω12 ts.
             eapply (pushspops ts).
             apply (exec_aux _ _ s).
+          - eapply bind.
+            apply (eval_exp e).
+            intros w1 ω01 t.
+            apply (demonic_match_bvec t).
+            intros bs w2 ω12.
+            apply (exec_aux _ _ (rhs bs)).
           - eapply bind.
             apply (angelic None τ).
             intros w1 ω01 t.

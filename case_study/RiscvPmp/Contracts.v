@@ -929,12 +929,13 @@ Module BlockVerification.
   Section Example.
 
     Import ListNotations.
+    Import bv.notations.
     Notation "p '∗' q" := (asn_sep p q).
 
     Example block1 : list AST :=
-      [ ADD 1 1 2;
-        SUB 2 1 2;
-        SUB 1 1 2
+      [ ADD [bv 1] [bv 1] [bv 2];
+        SUB [bv 2] [bv 1] [bv 2];
+        SUB [bv 1] [bv 1] [bv 2]
       ].
 
     Let Σ1 : LCtx := ["x" :: ty_xlenbits, "y" :: ty_xlenbits].

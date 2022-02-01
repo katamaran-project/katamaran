@@ -131,8 +131,8 @@ Inductive Enums : Set :=
 .
 
 (** Unions **)
-Definition RegIdx := Z.
-Bind Scope Z_scope with RegIdx.
+Definition RegIdx := bv 2.
+Bind Scope bv_scope with RegIdx.
 
 Inductive AST : Set :=
 | RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
@@ -488,7 +488,7 @@ Notation "δ ‼ x" := (@env.lookup _ _ _ δ (x%string∷_) _) : exp_scope.
 
 Notation ty_xlenbits         := (ty_int).
 Notation ty_word             := (ty_int).
-Notation ty_regno            := (ty_int).
+Notation ty_regno            := (ty_bvec 2).
 Notation ty_privilege        := (ty_enum privilege).
 Notation ty_csridx           := (ty_enum csridx).
 Notation ty_pmpcfgidx        := (ty_enum pmpcfgidx).
@@ -736,13 +736,14 @@ Section RegDeclKit.
   | pmpaddr0      : Reg ty_xlenbits
   .
 
+  Import bv.notations.
   Definition reg_convert (idx : RegIdx) : option (Reg ty_xlenbits) :=
-    match idx with
-    | 1 => Some x1
-    | 2 => Some x2
-    | 3 => Some x3
-    | _ => None
-    end%Z.
+    match bv.to_bitstring idx with
+    | 00 => None
+    | 01 => Some x1
+    | 10 => Some x2
+    | 11 => Some x3
+    end.
 
   Section TransparentObligations.
     Local Set Transparent Obligations.

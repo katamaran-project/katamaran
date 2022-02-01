@@ -1246,6 +1246,42 @@ Module Soundness
           now rewrite ?sub_acc_trans, ?inst_subst.
     Qed.
 
+    Lemma approx_demonic_match_bvec' {AT A} `{Approx AT A} {n : nat} {Γ1 Γ2 : PCtx}
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_bvec' AT n Γ1 Γ2 w) (@CMut.demonic_match_bvec A n Γ1 Γ2).
+    Proof.
+      intros t v ->.
+      intros ks kc Hk.
+      unfold SMut.demonic_match_bvec', CMut.demonic_match_bvec.
+      apply approx_bind.
+      apply approx_demonic_finite; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros EK1 EK2 ->. unfold CMut.bind_right.
+      apply approx_bind.
+      apply approx_assume_formula; cbn; wsimpl; auto.
+      now rewrite <- inst_persist.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros _ _ _.
+      eapply Hk; wsimpl; auto.
+    Qed.
+
+    Lemma approx_demonic_match_bvec {AT A} `{Approx AT A} {n : nat} {Γ1 Γ2 : PCtx}
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
+      approx ι (@SMut.demonic_match_bvec AT n Γ1 Γ2 w) (@CMut.demonic_match_bvec A n Γ1 Γ2).
+    Proof.
+      intros t v ->.
+      intros c c__c Hc.
+      unfold SMut.demonic_match_bvec.
+      destruct (term_get_val_spec t).
+      - intros P2 Pc2 HP2.
+        intros c2 cc2 Hc2.
+        intros s2 sc2 Hs2.
+        hnf.
+        rewrite CMut.wp_demonic_match_bvec.
+        apply Hc; wsimpl; eauto.
+      - apply approx_demonic_match_bvec'; auto.
+    Qed.
+
   End PatternMatching.
 
   Section State.
@@ -2106,6 +2142,12 @@ Module Soundness
       intros ts vs Htvs.
       apply approx_pushspops; auto.
     - apply approx_bind; auto.
+      intros POST__s POST__c HPOST.
+      apply approx_eval_exp; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros t v Htv.
+      admit.
+    - apply approx_bind; auto.
       apply approx_angelic; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v ->.
@@ -2136,7 +2178,7 @@ Module Soundness
       now rewrite <- inst_persist.
     - apply approx_error.
     - apply approx_debug; auto.
-  Qed.
+  Admitted.
 
   Lemma approx_exec {cfg n} :
     ExecApprox (@SMut.exec cfg n) (@CMut.exec n).

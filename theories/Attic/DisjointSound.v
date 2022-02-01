@@ -238,6 +238,8 @@ Module DisjointSound
       sound_solve.
     (* rule_stm_match_record *)
     - sound_solve.
+    (* rule_stm_match_bvec *)
+    - sound_solve.
     (* rule_stm_read_register *)
     - sound_solve.
       repeat (split; auto).
@@ -249,7 +251,7 @@ Module DisjointSound
       + congruence.
     (* rule_stm_write_register *)
     - sound_solve.
-      rename γ into γ__pre, r1 into reg, v into v__pre, v5 into v__post, τ into σ, e10 into e, δ3 into δ.
+      rename γ into γ__pre, r1 into reg, v into v__pre, v5 into v__post, τ into σ, e11 into e, δ3 into δ.
       exists (write_heap γfocus reg v__post); cbn.
       specialize (write_heap_ptsreg γfocus reg v__post) as Hpost.
       split; auto.

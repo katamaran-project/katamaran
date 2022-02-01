@@ -906,6 +906,32 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
           now rewrite wp_demonic_match_pattern.
       Qed.
 
+      Definition demonic_match_bvec {A n} {Γ1 Γ2} :
+        Val (ty_bvec n) -> (bv n -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+      Proof.
+        intros v cont.
+        eapply bind.
+        apply (demonic_finite (F := bv n)).
+        intros u.
+        eapply bind_right.
+        apply (assume_formula (v = u)).
+        apply (cont u).
+      Defined.
+      Global Arguments demonic_match_bvec : simpl never.
+
+      Lemma wp_demonic_match_bvec {A n Γ1 Γ2} (v : Val (ty_bvec n)) (k : bv n -> CMut Γ1 Γ2 A) :
+        forall POST δ h,
+          demonic_match_bvec v k POST δ h <-> k v POST δ h.
+      Proof.
+        cbv [assume_formula bind bind_right demonic_match_bvec demonic_finite
+             dijkstra CDijk.demonic_finite CDijk.assume_formula].
+        intros. rewrite CDijk.wp_demonic_list.
+        split; intros; subst; auto.
+        apply H; auto.
+        rewrite <- base.elem_of_list_In.
+        apply finite.elem_of_enum.
+      Qed.
+
     End PatternMatching.
 
     Section State.
@@ -1203,6 +1229,11 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
             | stm_match_record R e p rhs =>
               v <- eval_exp e ;;
               demonic_match_record p v (fun vs => pushspops vs (exec_aux rhs))
+            | stm_match_bvec n e rhs =>
+              v <- eval_exp e ;;
+              demonic_match_bvec
+                v
+                (fun u => exec_aux (rhs u))
             | stm_bind s k =>
               v <- exec_aux s ;;
               exec_aux (k v)
