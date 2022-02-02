@@ -132,49 +132,27 @@ Module Import ExampleProgram <: Program DefaultBase.
 
   Section ForeignKit.
 
-    Definition Memory : Set := list (Z * (Z + unit)).
-
-    Definition fun_mkcons (elem : Z) (next : Z + unit) (μ : Memory) : Z * Memory :=
-      (Zlength μ, app μ (cons (elem,next) nil)).
-    (* Definition fun_snd (p : Z) (μ : Memory) : option (option Z) := *)
-    (*   let n   := Z.to_nat p in *)
-    (*   (* let pre := firstn n μ in *) *)
-    (*   let suf := skipn n μ in *)
-    (*   match suf with *)
-    (*   | nil             => None *)
-    (*   | cons (_,next) _ => Some next *)
-    (*   end. *)
-    (* Definition fun_setsnd (p : Z) (next : option Z) (μ : Memory) : option Memory := *)
-    (*   let n   := Z.to_nat p in *)
-    (*   let pre := firstn n μ in *)
-    (*   let suf := skipn n μ in *)
-    (*   match suf with *)
-    (*   | nil                => None *)
-    (*   | cons (elem,_) suf' => Some (app pre (cons (elem,next) suf')) *)
-    (*   end. *)
+    Definition Memory : Set := gmap Z (Z * (Z + unit)).
 
     Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) :
       forall (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
       match f with
       | mkcons => fun args res γ γ' μ μ' =>
+                    let next := infinite_fresh (A := Z) (elements (dom (gset Z) μ)) in
                     γ' = γ /\
-                    μ' = (μ ++ (args ‼ "x", args ‼ "xs")%exp :: nil) /\
-                    res = inr (Zlength μ)
+                    μ' = (<[next := (args ‼ "x", args ‼ "xs")%exp]> μ) /\
+                    res = inr next
       | snd    => fun args res γ γ' μ μ' =>
-                    let n := Z.to_nat (args ‼ "p")%exp in
-                    match drop n μ with
-                    | nil             => res = inl "Invalid pointer"
-                    | (cons (_,next) _) => γ' = γ /\ μ' = μ /\ res = inr next
+                    let z := (args ‼ "p")%exp in
+                    match μ !! z with
+                    | None             => res = inl "Invalid pointer"
+                    | Some (_,next) => γ' = γ /\ μ' = μ /\ res = inr next
                     end
       | setsnd => fun args res γ γ' μ μ' =>
-                    let n := Z.to_nat (args ‼ "p")%exp in
-                    let pre := firstn n μ in
-                    let suf := drop n μ in
-                    match suf with
-                    | nil                => res = inl "Invalid pointer"
-                    | cons (elem,_) suf' => γ' = γ /\
-                                            μ' = (pre ++ (elem, args ‼ "xs")%exp :: suf') /\
-                                            res = inr tt
+                    let z := (args ‼ "p")%exp in
+                    match (μ !! z) with
+                    | None => res = inl "Invalid pointer"
+                    | Some (elem, _) => γ' = γ /\  μ' = <[z := (elem, (args ‼ "xs")%exp)]> μ /\ res = inr tt
                     end
       end.
 
@@ -193,14 +171,14 @@ Module Import ExampleProgram <: Program DefaultBase.
         | |- context[match ?disc with _ => _ end] =>
             destruct disc eqn:?
         end.
-        + idtac...
         + destruct p...
+        + idtac...
       - match goal with
         | |- context[match ?disc with _ => _ end] =>
             destruct disc eqn:?
         end.
-        + idtac...
         + destruct p...
+        + idtac...
     Qed.
 
   End ForeignKit.
@@ -392,19 +370,18 @@ Module ExampleModel.
       Class mcMemGS Σ :=
         McMemGS {
             (* ghost variable for tracking state of registers *)
-            mc_ghGS :> gen_heapGS nat (Z * (Z + unit)) Σ;
+            mc_ghGS :> gen_heapGS Z (Z * (Z + unit)) Σ;
             mc_invNs : namespace
           }.
  
-      Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS nat (Z * (Z + unit)) Σ.
+      Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
       Definition memGS : gFunctors -> Set := mcMemGS.
-      Definition memΣ : gFunctors := gen_heapΣ nat (Z * (Z + unit)).
+      Definition memΣ : gFunctors := gen_heapΣ Z (Z * (Z + unit)).
 
       Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
-        fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := nat) (V := (Z * (Z + unit))).
+        fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := (Z * (Z + unit))).
 
-      Definition memToGmap (μ : Memory) : gmap nat (Z * (Z + unit)) :=
-        list_to_map (imap pair μ).
+      Definition memToGmap (μ : Memory) : gmap Z (Z * (Z + unit)) := μ.
 
       Lemma fst_pair_id2 : forall {A} {B},
           (λ (x : A) (y : B), (fst ∘ pair x) y) = (λ (x : A) (y : B), x).
@@ -421,59 +398,6 @@ Module ExampleModel.
         rewrite list_fmap_id; reflexivity.
       Qed.
 
-      Lemma memToGmap_lookup_length (μ : Memory) :
-        memToGmap μ !! length μ = None.
-      Proof.
-        unfold memToGmap.
-        rewrite <- imap_length with (f := pair).
-        unfold list_to_map.
-        apply not_elem_of_list_to_map.
-        rewrite imap_pair_fst_seq.
-        rewrite imap_length.
-        unfold not; intros Hcontra.
-        apply elem_of_seq in Hcontra.
-        cbn in Hcontra.
-        inversion Hcontra as [_ H].
-        apply Nat.lt_irrefl in H; contradiction.
-      Qed.
-
-      Lemma memToGmap_app (μ : Memory) (v : Z * (Z + unit)) :
-        memToGmap (μ ++ cons v nil) = <[length μ:=v]> (memToGmap μ).
-      Proof.
-        unfold memToGmap.
-        rewrite imap_app.
-        rewrite list_to_map_app; cbn.
-        rewrite <- list_to_map_nil.
-        rewrite <- list_to_map_cons.
-        rewrite <- list_to_map_app.
-        rewrite Nat.add_0_r.
-        rewrite list_to_map_snoc; first reflexivity.
-        rewrite not_elem_of_list_to_map.
-        apply memToGmap_lookup_length.
-      Qed.
-
-      Lemma memToGmap_lookup (μ : Memory) (x : nat) (e : Z * (Z + unit)) :
-        memToGmap μ !! x = Some e ->
-        exists μ', skipn x μ = (e :: μ').
-      Proof.
-        intros.
-        exists (drop (S x) μ).
-        apply drop_S.
-        unfold memToGmap in H.
-        apply elem_of_list_to_map in H.
-        apply elem_of_lookup_imap in H.
-        destruct H as [i [y [Hp Hl]]].
-        inversion Hp; subst; assumption.
-        rewrite imap_pair_fst_seq.
-        apply NoDup_seq.
-      Qed.
-
-      Lemma memToGmap_update (μ : Memory) (x : nat) (e : Z * (Z + unit)) :
-        memToGmap (take x μ ++ e :: drop (S x) μ) = <[x := e]> (memToGmap μ).
-      Proof.
-        (* take_drop_middle: ∀ (A : Type) (l : list A) (i : nat) (x : A), l !! i = Some x → take i l ++ x :: drop (S i) l = l *)
-      Admitted.
-
       Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
         fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) (memToGmap μ))%I.
 
@@ -484,7 +408,7 @@ Module ExampleModel.
         ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
       Proof.
         iIntros (Σ μ gHP).
-        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := nat) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
+        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
 
         pose (memmap := memToGmap μ).
         iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
@@ -496,8 +420,7 @@ Module ExampleModel.
       Qed.
 
       Definition ptstocons_interp `{mG : memGS Σ} (p : Z) (v : Z) (n : Z + unit) : iProp Σ :=
-        (∃ p', ⌜p = Z.of_nat p'⌝ ∗
-              mapsto (hG := mc_ghGS (mcMemGS := mG)) p' (DfracOwn 1) (pair v n))%I.
+        (mapsto (hG := mc_ghGS (mcMemGS := mG)) p (DfracOwn 1) (pair v n))%I.
 
       Fixpoint ptstolist_interp `{mG : memGS Σ} (p : Z + unit) (vs : list Z) : iProp Σ :=
         match vs with
@@ -567,19 +490,18 @@ Module ExampleModel.
       destruct_conjs; subst.
       do 3 iModIntro.
       rewrite Heq.
-      cbn -[memToGmap].
-      rewrite memToGmap_app.
+      cbn.
       iMod "Hclose2" as "_".
-      iMod (gen_heap_alloc (memToGmap μ1) (length μ1) (x,l) with "Hmem") as "[Hmem [Hres _]]".
-      { now eapply memToGmap_lookup_length. }
+      iMod (gen_heap_alloc (memToGmap μ1) (infinite_fresh (A := Z) (elements (dom (gset Z) μ1))) (x,l) with "Hmem") as "[Hmem [Hres _]]".
+      { unfold memToGmap.
+        rewrite <-not_elem_of_dom, <-elem_of_elements.
+        now eapply infinite_is_fresh.
+      }
       iModIntro.
       iFrame.
       iSplitL; last done.
       iApply wp_value.
-      cbn.
-      iSplitL; last done.
-      iExists (length μ1); iFrame.
-      iPureIntro; eauto using Zlength_correct.
+      now iFrame.
     Qed.
 
     Lemma snd_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
@@ -593,33 +515,28 @@ Module ExampleModel.
             ((⌜v = xs⌝ ∧ emp) ∗ ptstocons_interp p x xs) ∗ ⌜ δ' = δ⌝).
     Proof.
       iIntros (xs x p Heq) "Hres".
-      iDestruct "Hres" as (p' eq) "Hres"; subst.
       rewrite wp_unfold.
       iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
       iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
       iModIntro.
-      iSplitR; first by intuition.
+      iSplitR; first done.
       iIntros (e2 σ'' efs) "%".
-      dependent elimination H0. cbn.
+      dependent elimination H0.
       dependent elimination s.
       rewrite Heq in f1.
       cbn in f1.
       unfold mem_inv.
       do 3 iModIntro.
       iMod "Hclose2" as "_".
-      iPoseProof (gen_heap_valid (memToGmap μ1) p' (DfracOwn 1) (x,xs) with "Hmem Hres") as "%".
-      rewrite Nat2Z.id in f1.
-      destruct (memToGmap_lookup _ _ H0) as (μ' & eq).
-      rewrite eq in f1.
+      iPoseProof (gen_heap_valid (memToGmap μ1) p (DfracOwn 1) (x,xs) with "Hmem Hres") as "%".
+      unfold memToGmap in *.
+      rewrite H0 in f1.
       destruct_conjs; subst.
       iModIntro.
       iFrame.
       iSplitL; last done.
       iApply wp_value.
-      cbn.
-      iSplitL; last done.
-      iSplitR; first done.
-      iExists p'; now iSplitR.
+      now iFrame.
     Qed.
 
     Lemma setsnd_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
@@ -633,7 +550,7 @@ Module ExampleModel.
            δ' = δ⌝).
     Proof.
       iIntros (xs x p Heq) "Hres".
-      iDestruct "Hres" as (x' p' eq) "Hres"; subst.
+      iDestruct "Hres" as (x') "Hres"; subst.
       rewrite wp_unfold.
       iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
       iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
@@ -647,23 +564,16 @@ Module ExampleModel.
       unfold mem_inv.
       do 3 iModIntro.
       iMod "Hclose2" as "_".
-      iPoseProof (gen_heap_valid (memToGmap μ1) p' (DfracOwn 1) (x,x') with "Hmem Hres") as "%".
-      rewrite Nat2Z.id in f1.
-      destruct (memToGmap_lookup _ _ H0) as (μ' & eq).
-      rewrite eq in f1.
+      iPoseProof (gen_heap_valid (memToGmap μ1) p (DfracOwn 1) (x,x') with "Hmem Hres") as "%".
+      unfold memToGmap in *.
+      rewrite H0 in f1.
       destruct_conjs; subst.
-      replace μ' with (drop (S p') μ1) by
-        (rewrite <-Nat.add_1_r,<-drop_drop, eq; now cbn).
-      rewrite memToGmap_update.
-      iMod (gen_heap_update (memToGmap μ1) p' (x,x') (x,xs) with "Hmem Hres") as "[Hmem Hres]".
+      iMod (gen_heap_update (memToGmap μ1) p (x,x') (x,xs) with "Hmem Hres") as "[Hmem Hres]".
       iModIntro.
       iFrame.
       iSplitL; last done.
       iApply wp_value.
-      cbn.
-      iSplitL; last done.
-      iSplitR; first done.
-      iExists p'; now iSplitR.
+      now iFrame.
     Qed.
 
     Lemma foreignSem `{sg : sailGS Σ} : ForeignSem (Σ := Σ).
