@@ -51,7 +51,7 @@ From Katamaran Require Import
      Semantics
      Iris.Model.
 
-From stdpp Require decidable finite list fin_maps.
+From stdpp Require decidable finite list fin_maps infinite.
 From iris.proofmode Require Import string_ident tactics.
 
 Set Implicit Arguments.
