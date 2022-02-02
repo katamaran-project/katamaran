@@ -381,8 +381,6 @@ Module ExampleModel.
       Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
         fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := (Z * (Z + unit))).
 
-      Definition memToGmap (μ : Memory) : gmap Z (Z * (Z + unit)) := μ.
-
       Lemma fst_pair_id2 : forall {A} {B},
           (λ (x : A) (y : B), (fst ∘ pair x) y) = (λ (x : A) (y : B), x).
       Proof.
@@ -399,10 +397,10 @@ Module ExampleModel.
       Qed.
 
       Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-        fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) (memToGmap μ))%I.
+        fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) μ)%I.
 
       Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-        fun {Σ} hG μ => ([∗ map] l↦v ∈ memToGmap μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
+        fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
 
       Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
         ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
@@ -410,10 +408,9 @@ Module ExampleModel.
         iIntros (Σ μ gHP).
         iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
 
-        pose (memmap := memToGmap μ).
-        iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
+        iMod (gen_heap_alloc_big empty μ (map_disjoint_empty_r μ) with "inv") as "(inv & res & _)".
         iModIntro.
-        rewrite (right_id empty union memmap).
+        rewrite (right_id empty union μ).
 
         iExists (McMemGS gH (nroot .@ "mem_inv")).
         iFrame.
@@ -492,9 +489,8 @@ Module ExampleModel.
       rewrite Heq.
       cbn.
       iMod "Hclose2" as "_".
-      iMod (gen_heap_alloc (memToGmap μ1) (infinite_fresh (A := Z) (elements (dom (gset Z) μ1))) (x,l) with "Hmem") as "[Hmem [Hres _]]".
-      { unfold memToGmap.
-        rewrite <-not_elem_of_dom, <-elem_of_elements.
+      iMod (gen_heap_alloc μ1 (infinite_fresh (A := Z) (elements (dom (gset Z) μ1))) (x,l) with "Hmem") as "[Hmem [Hres _]]".
+      { rewrite <-not_elem_of_dom, <-elem_of_elements.
         now eapply infinite_is_fresh.
       }
       iModIntro.
@@ -528,8 +524,7 @@ Module ExampleModel.
       unfold mem_inv.
       do 3 iModIntro.
       iMod "Hclose2" as "_".
-      iPoseProof (gen_heap_valid (memToGmap μ1) p (DfracOwn 1) (x,xs) with "Hmem Hres") as "%".
-      unfold memToGmap in *.
+      iPoseProof (gen_heap_valid μ1 p (DfracOwn 1) (x,xs) with "Hmem Hres") as "%".
       rewrite H0 in f1.
       destruct_conjs; subst.
       iModIntro.
@@ -564,11 +559,10 @@ Module ExampleModel.
       unfold mem_inv.
       do 3 iModIntro.
       iMod "Hclose2" as "_".
-      iPoseProof (gen_heap_valid (memToGmap μ1) p (DfracOwn 1) (x,x') with "Hmem Hres") as "%".
-      unfold memToGmap in *.
+      iPoseProof (gen_heap_valid μ1 p (DfracOwn 1) (x,x') with "Hmem Hres") as "%".
       rewrite H0 in f1.
       destruct_conjs; subst.
-      iMod (gen_heap_update (memToGmap μ1) p (x,x') (x,xs) with "Hmem Hres") as "[Hmem Hres]".
+      iMod (gen_heap_update μ1 p (x,x') (x,xs) with "Hmem Hres") as "[Hmem Hres]".
       iModIntro.
       iFrame.
       iSplitL; last done.
