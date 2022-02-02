@@ -140,19 +140,19 @@ Module Import ExampleProgram <: Program DefaultBase.
       | mkcons => fun args res γ γ' μ μ' =>
                     let next := infinite_fresh (A := Z) (elements (dom (gset Z) μ)) in
                     γ' = γ /\
-                    μ' = (<[next := (args ‼ "x", args ‼ "xs")%exp]> μ) /\
+                    μ' = (<[next := (args.[?"x"∷ptr], args.[?"xs"∷llist])]> μ) /\
                     res = inr next
       | snd    => fun args res γ γ' μ μ' =>
-                    let z := (args ‼ "p")%exp in
+                    let z := args.[?"p"∷ptr] in
                     match μ !! z with
                     | None             => res = inl "Invalid pointer"
                     | Some (_,next) => γ' = γ /\ μ' = μ /\ res = inr next
                     end
       | setsnd => fun args res γ γ' μ μ' =>
-                    let z := (args ‼ "p")%exp in
+                    let z := args.[?"p"∷ptr] in
                     match (μ !! z) with
                     | None => res = inl "Invalid pointer"
-                    | Some (elem, _) => γ' = γ /\  μ' = <[z := (elem, (args ‼ "xs")%exp)]> μ /\ res = inr tt
+                    | Some (elem, _) => γ' = γ /\  μ' = <[z := (elem, args.[?"xs"∷llist])]> μ /\ res = inr tt
                     end
       end.
 
