@@ -138,17 +138,38 @@ Module Import ExampleProgram <: Program DefaultBase.
       forall (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
       match f with
       | mkcons => fun args res γ γ' μ μ' =>
+                    (* depmatchenv args with *)
+                    (*   [env x;xs] => *)
+                    (*     let next := infinite_fresh (A := Z) (elements (dom (gset Z) μ)) in *)
+                    (*     γ' = γ /\ *)
+                    (*     μ' = (<[next := (x, xs)]> μ) /\ *)
+                    (*     res = inr next *)
+                    (* end *)
                     let next := infinite_fresh (A := Z) (elements (dom (gset Z) μ)) in
                     γ' = γ /\
                     μ' = (<[next := (args.[?"x"∷ptr], args.[?"xs"∷llist])]> μ) /\
                     res = inr next
       | snd    => fun args res γ γ' μ μ' =>
+                    (* depmatchenv args with *)
+                    (*   [env z] => *)
+                    (*     match μ !! z with *)
+                    (*     | None             => res = inl "Invalid pointer" *)
+                    (*     | Some (_,next) => γ' = γ /\ μ' = μ /\ res = inr next *)
+                    (*     end *)
+                    (* end *)
                     let z := args.[?"p"∷ptr] in
                     match μ !! z with
                     | None             => res = inl "Invalid pointer"
                     | Some (_,next) => γ' = γ /\ μ' = μ /\ res = inr next
                     end
       | setsnd => fun args res γ γ' μ μ' =>
+                    (* depmatchenv args with *)
+                    (*   [env z;xs] => *)
+                    (*      match (μ !! z) with *)
+                    (*      | None => res = inl "Invalid pointer" *)
+                    (*      | Some (elem, _) => γ' = γ /\  μ' = <[z := (elem, xs)]> μ /\ res = inr tt *)
+                    (*      end *)
+                    (* end *)
                     let z := args.[?"p"∷ptr] in
                     match (μ !! z) with
                     | None => res = inl "Invalid pointer"
@@ -158,27 +179,26 @@ Module Import ExampleProgram <: Program DefaultBase.
 
     Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
       exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
-    Proof with
-          repeat
+    Proof.
+      destruct f; unfold ForeignCall; cbn;
+        repeat
           match goal with
+          | |- context[match ?disc with _ => _ end] =>
+              lazymatch disc with
+              (* Destruct the arguments first before creating the evars using eexists. *)
+              | env.snocView _ => destruct disc; cbn
+              | env.nilView _ => destruct disc; cbn
+              (* Same goes for looking up a location in memory. We're also
+                 splitting up the cons cell into [elem] and []next]. *)
+              | lookup _ _ => destruct disc as [[elem next]|] eqn:?
+              end
+          end;
+        repeat
+          lazymatch goal with
           | |- _ = _ => reflexivity
           | |- _ /\ _ => split
           | |- exists _, _ => eexists
           end; auto.
-      destruct f; unfold ForeignCall.
-      - idtac...
-      - match goal with
-        | |- context[match ?disc with _ => _ end] =>
-            destruct disc eqn:?
-        end.
-        + destruct p...
-        + idtac...
-      - match goal with
-        | |- context[match ?disc with _ => _ end] =>
-            destruct disc eqn:?
-        end.
-        + destruct p...
-        + idtac...
     Qed.
 
   End ForeignKit.
