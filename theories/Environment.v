@@ -38,6 +38,8 @@ Local Open Scope lazy_bool_scope.
 
 Declare Scope env_scope.
 Delimit Scope env_scope with env.
+Declare Scope dep_pattern_scope.
+Delimit Scope dep_pattern_scope with dep_pattern.
 
 Module env.
 
@@ -62,6 +64,25 @@ Section WithBinding.
 
     Equations(noeqns) snocView {Γ b} (E : Env (Γ ▻ b)) : SnocView E :=
     | snoc E v := isSnoc E v.
+
+    Inductive DeepSnocView {Γ b} (V : Env  Γ -> Set) : Env (Γ ▻ b) -> Set :=
+    | dsnoc {E : Env Γ} (vE : V E) (v : D b) : DeepSnocView V (snoc E v).
+
+    Fixpoint View (Γ : Ctx B) : Env Γ -> Set :=
+      match Γ with
+      | ctx.nil      => NilView
+      | ctx.snoc Γ b => DeepSnocView (@View Γ)
+      end.
+
+    Fixpoint view {Γ} : forall E : Env Γ, View E :=
+      match Γ with
+      | ctx.nil      => nilView
+      | ctx.snoc Γ b =>
+          fun E =>
+            match snocView E with
+            | isSnoc E v => dsnoc (@View Γ) (@view Γ E) v
+            end
+      end.
 
     Fixpoint cat {Γ Δ} (EΓ : Env Γ) (EΔ : Env Δ) : Env (Γ ▻▻ Δ) :=
       match EΔ with
@@ -585,6 +606,7 @@ Arguments abstract {B} D.
 
 Module notations.
 
+  Open Scope dep_pattern_scope.
   Open Scope env_scope.
 
   Notation "δ ► ( x ↦ u )" := (snoc δ x u) : env_scope.
@@ -606,6 +628,14 @@ Module notations.
   Notation "[ x ]" := (snoc nil (_∷_) x) : env_scope.
   Notation "[ x , .. , z ]" :=
     (snoc .. (snoc nil (_∷_) x) .. (_∷_) z) : env_scope.
+
+  Notation "'depmatchenv' e 'with' p => rhs 'end'" :=
+    (match view e with p%dep_pattern => rhs end)
+    (at level 0, p pattern, format
+     "'[hv' 'depmatchenv'  e  'with'  '/  ' p  =>  '/    ' rhs  '/' 'end' ']'").
+  Notation "[ 'env' x ; .. ; z ]" :=
+    (dsnoc _ .. (dsnoc _ isNil x) .. z)
+    (at level 0, format "[ 'env'  x ;  .. ;  z ]") : dep_pattern_scope.
 
 End notations.
 Import notations.
