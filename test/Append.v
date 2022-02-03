@@ -40,10 +40,13 @@ From Equations Require Import
 From Katamaran Require Import
      Notations
      Semantics.Registers
+     SemiConcrete.Mutator
+     SemiConcrete.Sound
      Symbolic.Mutator
      Symbolic.Solver
      Symbolic.Worlds
      Symbolic.Propositions
+     Symbolic.Sound
      Program
      Specification
      Sep.Hoare
@@ -373,7 +376,7 @@ Module ExampleModel.
             mc_ghGS :> gen_heapGS Z (Z * (Z + unit)) Σ;
             mc_invNs : namespace
           }.
- 
+
       Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
       Definition memGS : gFunctors -> Set := mcMemGS.
       Definition memΣ : gFunctors := gen_heapΣ Z (Z * (Z + unit)).
@@ -445,7 +448,7 @@ Module ExampleModel.
 
   Import ExampleIrisHeapKit.
 
-  Module Import RiscvPmpIrisInstance := IrisInstance ExampleIrisHeapKit.
+  Module Import ExampleIrisInstance := IrisInstance ExampleIrisHeapKit.
 
   Section WithIrisNotations.
     Import iris.bi.interface.
@@ -601,4 +604,33 @@ Module ExampleModel.
     Qed.
 
   End WithIrisNotations.
+
+  (* Include Soundness DefaultBase ExampleSpecification ExampleSolverKit. *)
+
+  Include SemiConcrete DefaultBase ExampleSpecification.
+  Include Katamaran.SemiConcrete.Sound.Soundness DefaultBase ExampleSpecification.
+  Include MutatorsOn DefaultBase ExampleSpecification ExampleSolver.
+  Include Soundness DefaultBase ExampleSpecification ExampleSolver.
+
+  Section WithIrisNotations.
+    Import iris.bi.interface.
+    Import iris.bi.big_op.
+    Import iris.base_logic.lib.iprop.
+    Import iris.program_logic.weakestpre.
+    Import iris.base_logic.lib.gen_heap.
+
+  Lemma appendSound `{sG : sailGS Σ} : ⊢ ValidContractEnvSem (sG := sG) CEnv.
+  Proof.
+    eapply (ExampleIrisInstance.sound foreignSem lemSem).
+    intros Γ τ f c.
+    destruct f; inversion 1; subst.
+    eapply (contract_sound 1).
+    eapply symbolic_sound.
+    eapply SMut.validcontract_reflect_sound.
+    eapply valid_contract_append.
+  Qed.
+
+  End WithIrisNotations.
 End ExampleModel.
+
+
