@@ -237,7 +237,7 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
 
     Fixpoint sub_term {σ Σ1} (t : Term Σ1 σ) {Σ2} (ζ : Sub Σ1 Σ2) {struct t} : Term Σ2 σ :=
       match t with
-      | term_var ς                => ζ ‼ ς
+      | term_var ς                => ζ.[??ς]
       | term_val σ v              => term_val σ v
       | term_binop op t1 t2       => term_binop op (sub_term t1 ζ) (sub_term t2 ζ)
       | term_neg t0               => term_neg (sub_term t0 ζ)
@@ -667,7 +667,7 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
       SubstLawsEnv.
 
     Lemma subst_lookup {Γ Σ Σ' x σ} (xInΓ : x∷σ ∈ Γ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :
-      (subst (δ ‼ x)%exp ζ = (subst δ ζ ‼ x)%exp).
+      subst δ.[?? x] ζ = (subst δ ζ).[?? x].
     Proof.
       unfold subst at 2, subst_localstore, SubstEnv.
       now rewrite env.lookup_map.

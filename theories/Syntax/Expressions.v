@@ -145,7 +145,7 @@ Module Type ExpressionsOn (Import TY : Types) (Import BOP : BinOpsOn TY).
 
   Fixpoint eval {Γ σ} (e : Exp Γ σ) (δ : CStore Γ) {struct e} : Val σ :=
     match e in (Exp _ t) return (Val t) with
-    | exp_var x           => δ ‼ x
+    | exp_var x           => δ.[??x]
     | exp_val _ l         => l
     | exp_binop op e1 e2  => eval_binop op (eval e1 δ) (eval e2 δ)
     | exp_neg e           => Z.opp (eval e δ)

@@ -147,7 +147,7 @@ Module Type ProgSpecMixinOn (Import B : Base) (Import P : Program B).
     forall {σ} (e : Exp Γ σ), Term Σ σ :=
     fix seval_exp {σ} (e : Exp Γ σ) : Term Σ σ :=
       match e with
-      | exp_var ς                => δ ‼ ς
+      | exp_var ς                => δ.[??ς]
       | exp_val σ v              => term_val σ v
       | exp_binop op e1 e2       => term_binop op (seval_exp e1) (seval_exp e2)
       | exp_neg e                => term_neg (seval_exp e)

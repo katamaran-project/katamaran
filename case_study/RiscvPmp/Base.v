@@ -484,7 +484,6 @@ Include TypeDeclMixin.
 
 (* Override notations of bindigns to put the variable x into string_scope. *)
 Notation "x ∷ t" := (MkB x%string t) : ctx_scope.
-Notation "δ ‼ x" := (@env.lookup _ _ _ δ (x%string∷_) _) : exp_scope.
 
 Notation ty_xlenbits         := (ty_int).
 Notation ty_word             := (ty_int).
@@ -515,6 +514,8 @@ Notation ty_pmpcfg_ent       := (ty_record rpmpcfg_ent).
 Notation ty_mstatus          := (ty_record rmstatus).
 
 Section TypeDefKit.
+
+  Open Scope string_scope.
 
   (** Unions **)
   Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
@@ -683,15 +684,15 @@ Section TypeDefKit.
     | rpmpcfg_ent =>
       fun fields =>
         MkPmpcfg_ent
-          (fields ‼ "L")
-          (fields ‼ "A")
-          (fields ‼ "X")
-          (fields ‼ "W")
-          (fields ‼ "R")
+          fields.[??"L"]
+          fields.[??"A"]
+          fields.[??"X"]
+          fields.[??"W"]
+          fields.[??"R"]
     | rmstatus =>
       fun fields =>
         MkMstatus
-          (fields ‼ "MPP")
+          fields.[??"MPP"]
     end%exp.
 
   Definition 𝑹_unfold (Rec : 𝑹) : 𝑹𝑻 Rec -> NamedEnv Val (𝑹𝑭_Ty Rec) :=

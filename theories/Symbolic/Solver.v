@@ -511,7 +511,7 @@ Module Type SolverOn
       dependent elimination t; cbn; try constructor; auto.
       intros ι. cbn. intuition.
       dependent elimination e0; cbn; try constructor; auto.
-      intros ι. cbn. destruct (ι ‼ ς)%exp; intuition.
+      intros ι. cbn. destruct ι.[??ς]; intuition.
     Qed.
 
     Lemma try_unify_eq_spec {w : World} {σ} (t1 t2 : Term w σ) :

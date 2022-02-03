@@ -277,7 +277,7 @@ Module DisjointSound
     - sound_solve.
     (* rule_stm_assign_forwards *)
     - sound_solve.
-      exists (H ‼ x)%exp.
+      exists H.[??x].
       now rewrite env.update_update, env.update_lookup, env.lookup_update.
     (* rule_stm_call_forwards *)
     - admit.

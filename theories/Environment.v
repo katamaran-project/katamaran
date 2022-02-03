@@ -612,9 +612,6 @@ Module notations.
   Notation "δ ► ( x ↦ u )" := (snoc δ x u) : env_scope.
   Notation "δ1 '►►' δ2" := (cat δ1 δ2) : env_scope.
   Notation "δ ⟪ x ↦ v ⟫" := (@update _ _ _ δ (x∷_) _ v) : env_scope.
-  #[deprecated(since="20220202", note="Use the e.[?x∷σ] or e.[??x] notation instead.")]
-  Notation "δ ‼ x" := (@lookup _ _ _ δ (x∷_) _) : exp_scope.
-
   (* Based on and compatible with ssrnotations, also used in math-comp finmap.  *)
   Notation "e .[ i ]" := (@lookup _ _ _ e _ i)
     (at level 2, left associativity, format "e .[ i ]").
