@@ -917,21 +917,15 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_write_ram (μ : Memory) (addr : Val ty_int) (data : Val ty_word) : Memory :=
     fun addr' => if Z.eqb addr addr' then data else μ addr'.
 
-  Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) :
-    forall (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
-    match f with
-    | read_ram  => fun args res γ γ' μ μ' =>
-                     let addr := (args ‼ "paddr")%exp in
-                     (γ' , μ' , res) = (γ , μ , inr (fun_read_ram μ addr))
-    | write_ram => fun args res γ γ' μ μ' =>
-                     let addr := (args ‼ "paddr")%exp in
-                     let data := (args ‼ "data")%exp in
-                     (γ' , μ' , res) = (γ , fun_write_ram μ addr data , inr 1%Z)
-    | decode    => fun args res γ γ' μ μ' =>
-                     let bv := (args ‼ "bv")%exp in
-                     (exists res' : Val (ty_sum ty_string ty_ast),
-                         (γ' , μ' , res) = (γ , μ , res'))
-    end.
+  #[derive(equations=no)]
+  Equations ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
+    ForeignCall read_ram (env.snoc env.nil _ addr) res γ γ' μ μ' :=
+      (γ' , μ' , res) = (γ , μ , inr (fun_read_ram μ addr));
+    ForeignCall write_ram (env.snoc (env.snoc env.nil _ addr) _ data) res γ γ' μ μ' :=
+      (γ' , μ' , res) = (γ , fun_write_ram μ addr data , inr 1%Z);
+    ForeignCall decode (env.snoc env.nil _ bv) res γ γ' μ μ' :=
+      exists res' : Val (ty_sum ty_string ty_ast),
+        (γ' , μ' , res) = (γ , μ , res').
 
   Import bv.notations.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
