@@ -137,65 +137,34 @@ Module Import ExampleProgram <: Program DefaultBase.
 
     Definition Memory : Set := gmap Z (Z * (Z + unit)).
 
-    Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) :
-      forall (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory), Prop :=
-      match f with
-      | mkcons => fun args res γ γ' μ μ' =>
-                    (* depmatchenv args with *)
-                    (*   [env x;xs] => *)
-                    (*     let next := infinite_fresh (A := Z) (elements (dom (gset Z) μ)) in *)
-                    (*     γ' = γ /\ *)
-                    (*     μ' = (<[next := (x, xs)]> μ) /\ *)
-                    (*     res = inr next *)
-                    (* end *)
-                    let next := infinite_fresh (A := Z) (elements (dom (gset Z) μ)) in
-                    γ' = γ /\
-                    μ' = (<[next := (args.[?"x"∷ptr], args.[?"xs"∷llist])]> μ) /\
-                    res = inr next
-      | snd    => fun args res γ γ' μ μ' =>
-                    (* depmatchenv args with *)
-                    (*   [env z] => *)
-                    (*     match μ !! z with *)
-                    (*     | None             => res = inl "Invalid pointer" *)
-                    (*     | Some (_,next) => γ' = γ /\ μ' = μ /\ res = inr next *)
-                    (*     end *)
-                    (* end *)
-                    let z := args.[?"p"∷ptr] in
-                    match μ !! z with
-                    | None             => res = inl "Invalid pointer"
-                    | Some (_,next) => γ' = γ /\ μ' = μ /\ res = inr next
-                    end
-      | setsnd => fun args res γ γ' μ μ' =>
-                    (* depmatchenv args with *)
-                    (*   [env z;xs] => *)
-                    (*      match (μ !! z) with *)
-                    (*      | None => res = inl "Invalid pointer" *)
-                    (*      | Some (elem, _) => γ' = γ /\  μ' = <[z := (elem, xs)]> μ /\ res = inr tt *)
-                    (*      end *)
-                    (* end *)
-                    let z := args.[?"p"∷ptr] in
-                    match (μ !! z) with
-                    | None => res = inl "Invalid pointer"
-                    | Some (elem, _) => γ' = γ /\  μ' = <[z := (elem, args.[?"xs"∷llist])]> μ /\ res = inr tt
-                    end
-      end.
+    Equations(noeqns) ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
+      ForeignCall mkcons (env.snoc (env.snoc env.nil _ x) _ xs) res γ γ' μ μ' :=
+        let next := infinite_fresh (elements (dom (gset Z) μ)) in
+        γ' = γ /\
+        μ' = (<[next := (x, xs)]> μ) /\
+        res = inr next;
+      ForeignCall snd (env.snoc env.nil _ z) res γ γ' μ μ' :=
+        match μ !! z with
+        | None          => res = inl "Invalid pointer"
+        | Some (_,next) => γ' = γ /\ μ' = μ /\ res = inr next
+        end;
+      ForeignCall setsnd (env.snoc (env.snoc env.nil _ z) _ xs) res γ γ' μ μ' :=
+        match (μ !! z) with
+        | None => res = inl "Invalid pointer"
+        | Some (elem, _) => γ' = γ /\  μ' = <[z := (elem, xs)]> μ /\ res = inr tt
+        end.
 
     Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
       exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
     Proof.
-      destruct f; unfold ForeignCall; cbn;
-        repeat
-          match goal with
-          | |- context[match ?disc with _ => _ end] =>
-              lazymatch disc with
-              (* Destruct the arguments first before creating the evars using eexists. *)
-              | env.snocView _ => destruct disc; cbn
-              | env.nilView _ => destruct disc; cbn
-              (* Same goes for looking up a location in memory. We're also
-                 splitting up the cons cell into [elem] and []next]. *)
-              | lookup _ _ => destruct disc as [[elem next]|] eqn:?
-              end
-          end;
+      destruct f; env.destroy args; cbn;
+        try match goal with
+            | |- context[match ?disc with _ => _ end] =>
+                lazymatch disc with
+                (* Destruct the lookup first before creating the evars using eexists. *)
+                | lookup _ _ => destruct disc as [[elem next]|] eqn:?
+                end
+            end;
         repeat
           lazymatch goal with
           | |- _ = _ => reflexivity
@@ -477,6 +446,9 @@ Module ExampleModel.
     Import iris.program_logic.weakestpre.
     Import iris.base_logic.lib.gen_heap.
 
+    (* Import PROG to reset the access path of notations. *)
+    Import PROG.
+
     Ltac destruct_syminstance ι :=
       repeat
         match type of ι with
@@ -489,14 +461,13 @@ Module ExampleModel.
         | _ => idtac
         end.
 
-    Lemma mkcons_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
-      forall (x : Val ptr) (l : Val llist),
-        evals es δ = env.snoc (env.snoc env.nil (MkB _ ptr) x) (MkB _ llist) l
-        → ⊢ semTriple δ (⌜true = true⌝ ∧ emp) (stm_foreign mkcons es)
-            (λ (v : Val ptr) (δ' : CStore Γ),
-              ptstocons_interp v x l ∗ ⌜δ' = δ⌝).
+    Lemma mkcons_sound `{sg : sailGS Σ} `{invGS} {Γ δ} :
+      forall (x : Exp Γ ptr) (xs : Exp Γ llist),
+        ⊢ semTriple δ (⌜true = true⌝ ∧ emp) (foreign mkcons x xs)
+          (λ (v : Val ptr) (δ' : CStore Γ),
+            ptstocons_interp v (eval x δ) (eval xs δ) ∗ ⌜δ' = δ⌝).
     Proof.
-      iIntros (x l Heq) "_".
+      iIntros (x xs) "_".
       rewrite wp_unfold. cbn.
       iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
       unfold mem_inv.
@@ -509,10 +480,9 @@ Module ExampleModel.
       cbn in f1.
       destruct_conjs; subst.
       do 3 iModIntro.
-      rewrite Heq.
       cbn.
       iMod "Hclose2" as "_".
-      iMod (gen_heap_alloc μ1 (infinite_fresh (A := Z) (elements (dom (gset Z) μ1))) (x,l) with "Hmem") as "[Hmem [Hres _]]".
+      iMod (gen_heap_alloc μ1 (infinite_fresh (A := Z) (elements (dom (gset Z) μ1))) (eval x δ1, eval xs δ1) with "Hmem") as "[Hmem [Hres _]]".
       { rewrite <-not_elem_of_dom, <-elem_of_elements.
         now eapply infinite_is_fresh.
       }
@@ -523,17 +493,16 @@ Module ExampleModel.
       now iFrame.
     Qed.
 
-    Lemma snd_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
-      forall (xs : Val llist)
-        (x p : Val ptr),
-        evals es δ = env.snoc env.nil (MkB _ ptr) p ->
+    Lemma snd_sound `{sg : sailGS Σ} `{invGS} {Γ δ} :
+      forall (ep : Exp Γ ptr) (vx : Val ptr) (vxs : Val llist),
+        let vp := eval ep δ in
         ⊢ semTriple δ
-          (ptstocons_interp p x xs)
-          (stm_foreign snd es)
+          (ptstocons_interp vp vx vxs)
+          (foreign snd ep)
           (λ (v : Z + ()) (δ' : CStore Γ),
-            ((⌜v = xs⌝ ∧ emp) ∗ ptstocons_interp p x xs) ∗ ⌜ δ' = δ⌝).
+            ((⌜v = vxs⌝ ∧ emp) ∗ ptstocons_interp vp vx vxs) ∗ ⌜ δ' = δ⌝).
     Proof.
-      iIntros (xs x p Heq) "Hres".
+      iIntros (ep vx vxs vp) "Hres".
       rewrite wp_unfold.
       iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
       iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
@@ -542,12 +511,11 @@ Module ExampleModel.
       iIntros (e2 σ'' efs) "%".
       dependent elimination H0.
       dependent elimination s.
-      rewrite Heq in f1.
       cbn in f1.
       unfold mem_inv.
       do 3 iModIntro.
       iMod "Hclose2" as "_".
-      iPoseProof (gen_heap_valid μ1 p (DfracOwn 1) (x,xs) with "Hmem Hres") as "%".
+      iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs) with "Hmem Hres") as "%".
       rewrite H0 in f1.
       destruct_conjs; subst.
       iModIntro.
@@ -557,18 +525,17 @@ Module ExampleModel.
       now iFrame.
     Qed.
 
-    Lemma setsnd_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
-      forall (xs : Val llist) (x p : Val ptr),
-        evals es δ = env.snoc (env.snoc env.nil (MkB _ ptr) p) (MkB _ llist) xs →
+    Lemma setsnd_sound `{sg : sailGS Σ} `{invGS} {Γ δ} :
+      forall (ep : Exp Γ ptr) (exs : Exp Γ llist) (vx : Val ptr),
+        let vp := eval ep δ in let vxs := eval exs δ in
         ⊢ semTriple δ
-        (∃ v : Z + (), ptstocons_interp p x v)
-        (stm_foreign setsnd es)
+        (∃ v : Z + (), ptstocons_interp vp vx v)
+        (foreign setsnd ep exs)
         (λ (v : ()) (δ' : CStore Γ),
-           ((⌜v = tt⌝ ∧ emp) ∗ ptstocons_interp p x xs) ∗ ⌜
-           δ' = δ⌝).
+           ((⌜v = tt⌝ ∧ emp) ∗ ptstocons_interp vp vx vxs) ∗ ⌜δ' = δ⌝).
     Proof.
-      iIntros (xs x p Heq) "Hres".
-      iDestruct "Hres" as (x') "Hres"; subst.
+      iIntros (ep exs vx vp vxs) "Hres".
+      iDestruct "Hres" as (vxs__old) "Hres".
       rewrite wp_unfold.
       iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
       iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
@@ -577,15 +544,14 @@ Module ExampleModel.
       iIntros (e2 σ'' efs) "%".
       dependent elimination H0. cbn.
       dependent elimination s.
-      rewrite Heq in f1.
       cbn in f1.
       unfold mem_inv.
       do 3 iModIntro.
       iMod "Hclose2" as "_".
-      iPoseProof (gen_heap_valid μ1 p (DfracOwn 1) (x,x') with "Hmem Hres") as "%".
+      iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs__old) with "Hmem Hres") as "%".
       rewrite H0 in f1.
       destruct_conjs; subst.
-      iMod (gen_heap_update μ1 p (x,x') (x,xs) with "Hmem Hres") as "[Hmem Hres]".
+      iMod (gen_heap_update μ1 vp (vx,vxs__old) (vx,vxs) with "Hmem Hres") as "[Hmem Hres]".
       iModIntro.
       iFrame.
       iSplitL; last done.
@@ -595,9 +561,8 @@ Module ExampleModel.
 
     Lemma foreignSem `{sg : sailGS Σ} : ForeignSem (Σ := Σ).
     Proof.
-      intros Γ τ Δ f es δ.
-      destruct f; cbn;
-        intros ι; destruct_syminstance ι;
+      intros Γ τ Δ f es δ; destruct f; env.destroy es;
+        intros ι; env.destroy ι; cbn; intros Heq; env.destroy Heq; subst;
         eauto using mkcons_sound, snd_sound, setsnd_sound.
     Qed.
 

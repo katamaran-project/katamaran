@@ -655,6 +655,35 @@ Section Traverse.
 
 End Traverse.
 
+Local Ltac destroy_env_eq H :=
+  lazymatch type of H with
+  | @eq (Env _ (ctx.snoc _ _)) _ _ =>
+      apply env.inversion_eq_snoc in H;
+      let H1 := fresh in
+      let H2 := fresh in
+      destruct H as [H1 H2];
+      destroy_env_eq H1
+  | @eq (Env _ ctx.nil) env.nil env.nil => clear H
+  | @eq (Env _ ctx.nil) _ _ => idtac
+  end.
+
+Ltac destroy x :=
+  try (progress hnf in x);
+  lazymatch type of x with
+  | Env _ ε        => destruct (nilView x)
+  | Env _ (_ ▻ _)  => destruct (snocView x) as [x]; destroy x
+  | Env _ (_ ▻▻ _) => let E1 := fresh in
+                      let E2 := fresh in
+                      destruct (catView x) as [E1 E2];
+                      destroy E1; destroy E2
+  | _ ∈ ε          => destruct (ctx.nilView x)
+  | _ ∈ _ ▻ _      => destruct (ctx.snocView x)
+  | @eq ?A ?y ?z   => let A := eval hnf in A in
+                        change_no_check (@eq A y z) in x;
+                        destroy_env_eq x
+  | _              => idtac
+  end.
+
 End env.
 Export env (Env).
 Bind Scope env_scope with Env.
