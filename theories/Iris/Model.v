@@ -1472,7 +1472,7 @@ Section Soundness.
     - by iApply iris_rule_stm_debugk.
   Qed.
 
-  Lemma sound {Γ} {τ} (s : Stm Γ τ) {δ : CStore Γ}:
+  Lemma sound :
     ForeignSem -> LemmaSem -> ValidContractCEnv ->
     ⊢ ValidContractEnvSem CEnv.
   Proof.
