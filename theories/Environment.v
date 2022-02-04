@@ -510,6 +510,11 @@ Section WithBinding.
       now rewrite IHδ.
     Qed.
 
+    Definition kvsnoc {Γ} (E : Env Γ) (kv : sigT D) : Env (Γ ▻ projT1 kv) :=
+      match kv with
+      | existT k v => @snoc Γ E k v
+      end.
+
   End WithDom.
 
   Arguments Env : clear implicits.
@@ -628,6 +633,9 @@ Module notations.
   Notation "[ x , y , .. , z ]" :=
     (snoc .. (snoc (snoc nil _ x) _ y) .. _ z)
     (only parsing) : env_scope.
+  Notation "[ E & x ; y ; .. ; z ]" :=
+    (snoc .. (snoc (snoc E _ x) _ y) .. _ z)
+    (format "[ '['  E  &  x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope.
   Notation "[ x ; y ; .. ; z ]" :=
     (snoc .. (snoc (snoc nil _ x) _ y) .. _ z)
     (format "[ '[' x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope.
@@ -639,6 +647,16 @@ Module notations.
     (snoc .. (snoc (snoc nil (_∷_) x) (_∷_) y) .. (_∷_) z)
     (only parsing) : env_scope.
     (* (format "[ 'nenv'  '[' x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope. *)
+
+  (* Sometimes it is necessary to specify both, the element of the context and
+     of the environment in cases where the type-checker would otherwise be
+     blocked on a higher-order unification problem. The list-like notations
+     below allow the user to do so sigma types. *)
+  Notation "[ 'kv' x ]" := (kvsnoc env.nil x)
+    (format "[ 'kv'  x ]") : env_scope.
+  Notation "[ 'kv' x ; y ; .. ; z ]" :=
+    (kvsnoc .. (kvsnoc (kvsnoc env.nil x) y) .. z)
+    (format "[ 'kv'  '[' x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope.
 
   (* Notation "'depmatchenv' e 'with' p => rhs 'end'" := *)
   (*   (match view e with p%dep_pattern => rhs end) *)

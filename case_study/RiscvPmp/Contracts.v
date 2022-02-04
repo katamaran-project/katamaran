@@ -118,7 +118,7 @@ Section ContractDefKit.
 
   Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
   Local Notation "p '∗' q" := (asn_sep p q).
-  Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries (env.nil ► (ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits) ↦ l)))).
+  Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_int) : Term Σ ty_bool :=

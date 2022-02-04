@@ -365,14 +365,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end.
 
   Definition fun_pmpLocked : Stm [cfg ∶ ty_pmpcfg_ent] ty_bool :=
-    (stm_match_record rpmpcfg_ent cfg
-      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-       "L" L)
-       "A" A)
-       "X" X)
-       "W" W)
-       "R" R)
-      L).
+    match: cfg in rpmpcfg_ent with [L; A; X; W; R] => L end.
 
   Definition fun_pmpCheck : Stm [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege] (ty_option ty_exception_type) :=
     let: tmp1 := stm_read_register pmp0cfg in
@@ -414,25 +407,18 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end.
 
   Definition fun_pmpCheckRWX : Stm [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool :=
-    (stm_match_record rpmpcfg_ent ent
-      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-       "L" L)
-       "A" A)
-       "X" X)
-       "W" W)
-       "R" R)
-      (stm_match_union_alt access_type acc
-                           (fun K =>
-                              match K with
-                              | KRead      => MkAlt pat_unit
-                                                    R
-                              | KWrite     => MkAlt pat_unit
-                                                    W
-                              | KReadWrite => MkAlt pat_unit
-                                                    (R && W)
-                              | KExecute   => MkAlt pat_unit
-                                                    X
-                              end))).
+    match: ent in rpmpcfg_ent with
+      [L; A; X; W; R] =>
+        stm_match_union_alt
+          access_type acc
+          (fun K =>
+             match K with
+             | KRead      => MkAlt pat_unit R
+             | KWrite     => MkAlt pat_unit W
+             | KReadWrite => MkAlt pat_unit (R && W)
+             | KExecute   => MkAlt pat_unit X
+             end)
+    end.
 
   Definition fun_pmpMatchEntry : Stm [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_xlenbits, prev_pmpaddr ∶ ty_xlenbits] ty_pmpmatch :=
     let: rng := call pmpAddrRange ent pmpaddr prev_pmpaddr in
@@ -448,17 +434,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end.
 
   Definition fun_pmpAddrRange : Stm [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_xlenbits, prev_pmpaddr ∶ ty_xlenbits] ty_pmp_addr_range :=
-    (stm_match_record rpmpcfg_ent cfg
-      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-       "L" L)
-       "A" A)
-       "X" X)
-       "W" W)
-       "R" R)
-      (match: A in pmpaddrmatchtype with
-       | OFF => None
-       | TOR => Some (exp_binop binop_pair prev_pmpaddr pmpaddr)
-       end)).
+    match: cfg in rpmpcfg_ent with
+      [L; A; X; W; R] =>
+        match: A in pmpaddrmatchtype with
+        | OFF => None
+        | TOR => Some (exp_binop binop_pair prev_pmpaddr pmpaddr)
+        end
+    end.
 
   Definition fun_pmpMatchAddr : Stm [addr ∶ ty_int, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch :=
     match: rng with
@@ -538,20 +520,17 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_init_pmp : Stm ctx.nil ty_unit :=
     let: tmp := stm_read_register pmp0cfg in
-    (stm_match_record rpmpcfg_ent tmp
-      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil
-       "L" L%string)
-       "A" A%string)
-       "X" X%string)
-       "W" W%string)
-       "R" R%string)
-      (stm_write_register pmp0cfg (exp_record rpmpcfg_ent
-                                             [nenv L;
-                                               exp_val ty_pmpaddrmatchtype OFF;
-                                               X;
-                                               W;
-                                               R ]) ;;
-       stm_val ty_unit tt)).
+    match: tmp in rpmpcfg_ent with
+      ["L"; "A"; "X"; "W"; "R"] =>
+        stm_write_register
+          pmp0cfg (exp_record rpmpcfg_ent
+                              [nenv L;
+                               exp_val ty_pmpaddrmatchtype OFF;
+                               X;
+                               W;
+                               R ]) ;;
+        stm_val ty_unit tt
+    end.
 
   Definition fun_exceptionType_to_bits : Stm [e ∶ ty_exception_type] ty_exc_code :=
     stm_match_union_alt exception_type e
@@ -701,9 +680,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   (* NOTE: not part of Sail model, added these to make readCSR/writeCSR easier to implement *)
   Definition fun_mstatus_to_bits : Stm [value ∶ ty_mstatus] ty_xlenbits :=
-    stm_match_record rmstatus value
-                     (recordpat_snoc recordpat_nil "MPP" MPP%string)
-                     (call privLevel_to_bits MPP).
+    match: value in rmstatus with [MPP] => call privLevel_to_bits MPP end.
+
   Definition fun_mstatus_from_bits : Stm [value ∶ ty_xlenbits] ty_mstatus :=
     let: p := if: value = z_exp 0
               then stm_val ty_privilege User

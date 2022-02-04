@@ -35,7 +35,11 @@ From stdpp Require
 From Katamaran Require Import
      Base.
 
+Local Unset Equations Derive Equations.
 Local Set Implicit Arguments.
+
+(* Taken from Coq >= 8.15 SigTNotations *)
+Local Notation "( x ; y )" := (existT x y) (only parsing).
 
 Definition Xlenbits : Set := Z.
 Definition Addr : Set := Z.
@@ -679,37 +683,17 @@ Section TypeDefKit.
                     ]
     end.
 
-  Definition 𝑹_fold (R : 𝑹) : NamedEnv Val (𝑹𝑭_Ty R) -> 𝑹𝑻 R :=
-    match R with
-    | rpmpcfg_ent =>
-      fun fields =>
-        MkPmpcfg_ent
-          fields.[??"L"]
-          fields.[??"A"]
-          fields.[??"X"]
-          fields.[??"W"]
-          fields.[??"R"]
-    | rmstatus =>
-      fun fields =>
-        MkMstatus
-          fields.[??"MPP"]
-    end%exp.
+  Equations 𝑹_fold (R : 𝑹) : NamedEnv Val (𝑹𝑭_Ty R) -> 𝑹𝑻 R :=
+  | rpmpcfg_ent | [l;a;x;w;r]%env := MkPmpcfg_ent l a x w r
+  | rmstatus    | [mpp]%env       := MkMstatus mpp.
 
-  Definition 𝑹_unfold (Rec : 𝑹) : 𝑹𝑻 Rec -> NamedEnv Val (𝑹𝑭_Ty Rec) :=
-    match Rec with
-    | rpmpcfg_ent =>
-      fun p =>
-        env.nil
-          ► ("L" ∷ ty_bool             ↦ L p)
-          ► ("A" ∷ ty_pmpaddrmatchtype ↦ A p)
-          ► ("X" ∷ ty_bool             ↦ X p)
-          ► ("W" ∷ ty_bool             ↦ W p)
-          ► ("R" ∷ ty_bool             ↦ R p)
-    | rmstatus    =>
-      fun m =>
-        env.nil
-          ► ("MPP" ∷ ty_privilege ↦ MPP m)
-    end%env.
+  Equations 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Val (𝑹𝑭_Ty R) :=
+  | rpmpcfg_ent | p => [kv (_ ∷ ty_bool             ; L p);
+                           (_ ∷ ty_pmpaddrmatchtype ; A p);
+                           (_ ∷ ty_bool             ; X p);
+                           (_ ∷ ty_bool             ; W p);
+                           (_ ∷ ty_bool             ; R p) ];
+  | rmstatus    | m => [kv ("MPP" ∷ ty_privilege; MPP m) ].
 
   Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
       𝑹_fold R (𝑹_unfold R Kv) = Kv.

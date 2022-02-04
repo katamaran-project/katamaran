@@ -385,6 +385,18 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
      "'[hv' 'match:'  e  'in'  'bvec'  2  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' 'end' ']'"
     ) : exp_scope.
 
+  Notation "'match:' e 'in' R 'with' [ x ] => rhs 'end'" :=
+    (stm_match_record R e%exp
+      (recordpat_snoc recordpat_nil _ x)
+      rhs%exp)
+    (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ]  =>  '/    ' rhs  '/' 'end' ']'") : exp_scope.
+
+  Notation "'match:' e 'in' R 'with' [ x ; y ; .. ; z ] => rhs 'end'" :=
+    (stm_match_record R e%exp
+      (recordpat_snoc .. (recordpat_snoc (recordpat_snoc recordpat_nil _ x) _ y) .. _ z)
+      rhs%exp)
+    (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : exp_scope.
+
   Notation "'call' f a1 .. an" :=
     (stm_call f (env.snoc .. (env.snoc env.nil (_∷_) a1%exp) .. (_∷_) an%exp))
     (at level 10, f global, a1, an at level 9) : exp_scope.
