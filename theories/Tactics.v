@@ -42,7 +42,7 @@ Ltac head t :=
 
 Ltac solve_eqb_spec' tac :=
   repeat
-    (intros; cbn in *;
+    (intros; try progress cbn in *;
      match goal with
      | H: ?x <> ?x |- _ => congruence
      | |- _ <> _ => intro
@@ -70,7 +70,7 @@ Ltac solve_eqb_spec' tac :=
      | |- _ => tac; subst; cbn
      end;
      rewrite ?andb_true_r, ?andb_false_r);
-  cbn in *;
+  try progress cbn in *;
   try congruence.
 
 Ltac solve_eqb_spec := solve_eqb_spec' idtac.
