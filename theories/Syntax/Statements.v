@@ -180,10 +180,10 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_let {Γ τ} x σ s__σ%exp s__τ%exp.
   Arguments stm_block {Γ τ Δ} δ s%exp.
   Arguments stm_assign {Γ τ} x {xInΓ} s%exp.
-  Arguments stm_call {Γ τ Δ} f _%arg.
+  Arguments stm_call {Γ τ Δ} f & _%env.
   Arguments stm_call_frame {Γ τ Δ} δ s%exp.
-  Arguments stm_foreign {Γ τ Δ} f _%arg.
-  Arguments stm_lemmak {Γ τ Δ} l _%arg k.
+  Arguments stm_foreign {Γ τ Δ} f & _%env.
+  Arguments stm_lemmak {Γ τ Δ} l & _%env k.
   Arguments stm_if {Γ τ} e%exp s1%exp s2%exp.
   Arguments stm_seq {Γ τ σ} s%exp k%exp.
   Arguments stm_assertk {Γ τ} e1%exp e2%exp k%exp.
@@ -194,7 +194,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_match_enum {Γ τ} E e%exp alts%exp.
   Arguments stm_match_tuple {Γ τ σs Δ} e%exp p%pat rhs%exp.
   Arguments stm_match_union {Γ τ} U e {alt__ctx} alt__pat alt__rhs.
-  Arguments stm_match_record {Γ τ} R {Δ} e%exp p%pat rhs%exp.
+  Arguments stm_match_record {Γ%ctx τ} R {Δ%ctx} e%exp p%pat rhs%exp.
   Arguments stm_match_bvec {Γ τ} n%nat_scope e%exp rhs%exp.
   Arguments stm_read_register {Γ τ} reg.
   Arguments stm_write_register {Γ τ} reg e%exp.
@@ -221,7 +221,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments MkAlt {_ _ _ _} _ _.
   Arguments stm_match_union_alt {_ _} _ _ _.
   Arguments stm_assert {Γ} e1%exp e2%exp.
-  Arguments stm_lemma {Γ Δ} l es%arg.
+  Arguments stm_lemma {Γ Δ} l es%env.
 
   Section NameResolution.
 
@@ -255,10 +255,12 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
 
   End NameResolution.
 
-  Notation "[ x , .. , z ]" :=
-    (tuplepat_snoc .. (tuplepat_snoc tuplepat_nil x) .. z) (at level 0) : pat_scope.
-  Notation "[ x , .. , z ]" :=
-    (env.snoc .. (env.snoc env.nil (_∷_) x) .. (_∷_) z) (at level 0, only parsing) : arg_scope.
+  #[deprecated(since="20220204", note="Use the tuple compatible ( x , .. , z ) notation instead.")]
+  Notation "[ x , y , .. , z ]" :=
+    (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z)
+    (at level 0, only parsing) : pat_scope.
+  Notation "( x , y , .. , z )" :=
+    (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z) (at level 0) : pat_scope.
 
   Notation "'if:' e 'then' s1 'else' s2" := (stm_if e%exp s1%exp s2%exp)
     (at level 200, format

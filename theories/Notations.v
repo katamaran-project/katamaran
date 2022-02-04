@@ -34,7 +34,6 @@
    - x = y is at level 70
  *)
 
-Reserved Notation "'ε'"            (at level 0).
 Reserved Infix "▻"                 (at level 61, left associativity).
 Reserved Infix "▻▻"                (at level 61, left associativity).
 (* stdpp defines this at level 70 *)
@@ -48,8 +47,9 @@ Reserved Notation "x ∷ t"          (at level 49, no associativity, format "x �
   (*    To typeset the next notation, use \: *)
 Reserved Notation "x ∶ τ"          (at level 49, no associativity, format "x ∶ τ").
 
-Reserved Notation "[ x ]"          (at level 0).
-Reserved Notation "[ x , .. , z ]" (at level 0).
+Reserved Notation "[ ]" (format "[ ]").
+Reserved Notation "[ x ]".
+Reserved Notation "[ x ; y ; .. ; z ]".
 
 (* We use the character ↦ as an infix notation for points-to predicates in the
    case-studies. This should bind tighter than ∗ which is at level 80. Hence

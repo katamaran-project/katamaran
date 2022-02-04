@@ -286,13 +286,11 @@ Lemma imp_iff_compat_l' (A B C : Prop) :
   ((A -> B) <-> (A -> C)) <-> (A -> B <-> C).
 Proof. intuition. Qed.
 
-Declare Scope arg_scope.
 Declare Scope asn_scope.
 Declare Scope exp_scope.
 Declare Scope modal_scope.
 Declare Scope mut_scope.
 Declare Scope pat_scope.
-Delimit Scope arg_scope with arg.
 Delimit Scope asn_scope with asn.
 Delimit Scope exp_scope with exp.
 Delimit Scope modal_scope with modal.

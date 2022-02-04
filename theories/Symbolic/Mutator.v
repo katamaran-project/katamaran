@@ -67,7 +67,7 @@ Module Type MutatorsOn
 
   Import Entailment.
   Import ModalNotations.
-  Open Scope modal.
+  Local Open Scope modal.
 
   Section DebugInfo.
 
@@ -306,13 +306,13 @@ Module Type MutatorsOn
       ⊢ ∀ Δ : NCtx N Ty, SDijkstra (fun w => NamedEnv (Term w) Δ) :=
       fix rec {w} Δ {struct Δ} :=
         match Δ with
-        | ε       => fun k => T k env.nil
+        | []      => fun k => T k env.nil
         | Δ ▻ x∷σ =>
           fun k =>
             angelic (Some (n x)) σ (fun w1 ω01 t =>
               rec Δ (fun w2 ω12 EΔ =>
                 k w2 (acc_trans ω01 ω12) (EΔ ► (x∷σ ↦ persist__term t ω12))))
-        end.
+        end%ctx.
     Global Arguments angelic_ctx {N} n [w] Δ : rename.
 
     Definition demonic (x : option 𝑺) σ :
@@ -327,13 +327,13 @@ Module Type MutatorsOn
       ⊢ ∀ Δ : NCtx N Ty, SDijkstra (fun w => NamedEnv (Term w) Δ) :=
       fix demonic_ctx {w} Δ {struct Δ} :=
         match Δ with
-        | ε       => fun k => T k env.nil
+        | []      => fun k => T k env.nil
         | Δ ▻ x∷σ =>
           fun k =>
             demonic (Some (n x)) σ (fun w1 ω01 t =>
               demonic_ctx Δ (fun w2 ω12 EΔ =>
                 k w2 (acc_trans ω01 ω12) (EΔ ► (x∷σ ↦ persist__term t ω12))))
-        end.
+        end%ctx.
     Global Arguments demonic_ctx {_} n [w] Δ : rename.
 
     Definition assume_formulas :
@@ -1319,7 +1319,7 @@ Module Type MutatorsOn
           (*      msg_heap            := h0; *)
           (*      msg_pathcondition   := wco w0; *)
           (*   |}. *)
-          apply (formula_eq (term_val (ty_list σ) []) t).
+          apply (formula_eq (term_val (ty_list σ) []%list) t).
           intros w1 ω01.
           apply knil. auto.
         - eapply bind.
@@ -1356,7 +1356,7 @@ Module Type MutatorsOn
         apply demonic_binary.
         - eapply bind_right.
           apply assume_formula.
-          apply (formula_eq (term_val (ty_list σ) []) t).
+          apply (formula_eq (term_val (ty_list σ) []%list) t).
           intros w1 ω01.
           apply knil. auto.
         - eapply bind.

@@ -54,6 +54,7 @@ Module Type WorldsOn
         { wctx :> LCtx;
           wco  : PathCondition wctx;
         }.
+    Global Arguments MkWorld _ _%list_scope : clear implicits.
 
     (* The empty world without logic variables and constraints. *)
     Definition wnil : World := @MkWorld ctx.nil nil.

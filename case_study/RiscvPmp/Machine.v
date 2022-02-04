@@ -288,7 +288,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Import RiscvμSailNotations.
   Local Coercion stm_exp : Exp >-> Stm.
 
-  Notation "'use' 'lemma' lem args" := (stm_lemma lem args%arg) (at level 10, lem at next level) : exp_scope.
+  Notation "'use' 'lemma' lem args" := (stm_lemma lem args%env) (at level 10, lem at next level) : exp_scope.
   Notation "'use' 'lemma' lem" := (stm_lemma lem env.nil) (at level 10, lem at next level) : exp_scope.
 
   Definition z_exp {Γ} : Z -> Exp Γ ty_int := exp_val ty_int.
@@ -546,10 +546,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
        "W" W%string)
        "R" R%string)
       (stm_write_register pmp0cfg (exp_record rpmpcfg_ent
-                                             [ L,
-                                               exp_val ty_pmpaddrmatchtype OFF,
-                                               X,
-                                               W,
+                                             [nenv L;
+                                               exp_val ty_pmpaddrmatchtype OFF;
+                                               X;
+                                               W;
                                                R ]) ;;
        stm_val ty_unit tt)).
 

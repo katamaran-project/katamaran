@@ -84,9 +84,9 @@ Module Type ExpressionsOn (Import TY : Types) (Import BOP : BinOpsOn TY).
   (*               {rfInR : rf∶σ ∈ 𝑹𝑭_Ty R} : Exp Γ σ. *)
   Arguments exp_var {_} _ {_ _}.
   Arguments exp_val {_} _ _.
-  Arguments exp_tuple {_ _} _.
-  Arguments exp_union {_} _ _.
-  Arguments exp_record {_} _ _.
+  Arguments exp_tuple {_ σs} & es.
+  Arguments exp_union {_} U K & e.
+  Arguments exp_record {_} R & es.
   (* Arguments exp_projrec {_ _} _ _ {_ _}. *)
   Bind Scope exp_scope with Exp.
 

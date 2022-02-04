@@ -272,7 +272,7 @@ Section ContractDefKit.
     {| sep_contract_logic_variables := [csr ∶ ty_csridx, "mpp" ∶ ty_privilege,
                                         "mtvec" ∶ ty_xlenbits, "mcause" ∶ ty_exc_code,
                                         "mepc" ∶ ty_xlenbits];
-       sep_contract_localstore      := [term_var csr]%arg;
+       sep_contract_localstore      := [term_var csr];
        sep_contract_precondition    :=
          mstatus ↦ term_record rmstatus [term_var "mpp"]
          ∗ mtvec ↦ term_var "mtvec"
@@ -289,7 +289,7 @@ Section ContractDefKit.
 
   Definition sep_contract_writeCSR : SepContractFun writeCSR :=
     {| sep_contract_logic_variables := [csr ∶ ty_csridx, value ∶ ty_xlenbits];
-       sep_contract_localstore      := [term_var csr, term_var value]%arg;
+       sep_contract_localstore      := [term_var csr, term_var value];
        sep_contract_precondition    :=
          asn_exist "mpp" ty_privilege (mstatus ↦ term_record rmstatus [term_var "mpp"])
          ∗ asn_exist "mtvec" ty_xlenbits (mtvec ↦ term_var "mtvec")
@@ -306,7 +306,7 @@ Section ContractDefKit.
 
   Definition sep_contract_check_CSR : SepContractFun check_CSR :=
     {| sep_contract_logic_variables := [csr ∶ ty_csridx, p ∶ ty_privilege];
-       sep_contract_localstore      := [term_var csr, term_var p]%arg;
+       sep_contract_localstore      := [term_var csr, term_var p];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_check_CSR";
        sep_contract_postcondition   :=
@@ -319,7 +319,7 @@ Section ContractDefKit.
 
   Definition sep_contract_is_CSR_defined : SepContractFun is_CSR_defined :=
     {| sep_contract_logic_variables := [csr ∶ ty_csridx, p ∶ ty_privilege];
-       sep_contract_localstore      := [term_var csr, term_var p]%arg;
+       sep_contract_localstore      := [term_var csr, term_var p];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_is_CSR_defined";
        sep_contract_postcondition   :=
@@ -334,7 +334,7 @@ Section ContractDefKit.
 
   Definition sep_contract_check_CSR_access : SepContractFun check_CSR_access :=
     {| sep_contract_logic_variables := [csrrw ∶ ty_access_type, csrpr ∶ ty_privilege, p ∶ ty_privilege];
-       sep_contract_localstore      := [term_var csrrw, term_var csrpr, term_var p]%arg;
+       sep_contract_localstore      := [term_var csrrw, term_var csrpr, term_var p];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_check_CSR_access";
        sep_contract_postcondition   :=
@@ -361,7 +361,7 @@ Section ContractDefKit.
 
   Definition sep_contract_privLevel_to_bits : SepContractFun privLevel_to_bits :=
     {| sep_contract_logic_variables := [p ∶ ty_privilege];
-       sep_contract_localstore      := [term_var p]%arg;
+       sep_contract_localstore      := [term_var p];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_privLevel_to_bits";
        sep_contract_postcondition   :=
@@ -376,7 +376,7 @@ Section ContractDefKit.
 
   Definition sep_contract_mstatus_to_bits : SepContractFun mstatus_to_bits :=
     {| sep_contract_logic_variables := [value ∶ ty_mstatus];
-       sep_contract_localstore      := [term_var value]%arg;
+       sep_contract_localstore      := [term_var value];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_mstatus_to_bits";
        sep_contract_postcondition   := asn_exist "result" ty_xlenbits
@@ -385,7 +385,7 @@ Section ContractDefKit.
 
   Definition sep_contract_mstatus_from_bits : SepContractFun mstatus_from_bits :=
     {| sep_contract_logic_variables := [value ∶ ty_xlenbits];
-       sep_contract_localstore      := [term_var value]%arg;
+       sep_contract_localstore      := [term_var value];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_mstatus_from_bits";
        sep_contract_postcondition   :=
@@ -395,7 +395,7 @@ Section ContractDefKit.
 
   Definition sep_contract_csrAccess : SepContractFun csrAccess :=
     {| sep_contract_logic_variables := [csr ∶ ty_csridx];
-       sep_contract_localstore      := [term_var csr]%arg;
+       sep_contract_localstore      := [term_var csr];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_csrAccess";
        sep_contract_postcondition   :=
@@ -404,7 +404,7 @@ Section ContractDefKit.
 
   Definition sep_contract_csrPriv : SepContractFun csrPriv :=
     {| sep_contract_logic_variables := [csr ∶ ty_csridx];
-       sep_contract_localstore      := [term_var csr]%arg;
+       sep_contract_localstore      := [term_var csr];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_csrPriv";
        sep_contract_postcondition   :=
@@ -413,7 +413,7 @@ Section ContractDefKit.
 
   Definition sep_contract_exception_handler : SepContractFun exception_handler :=
     {| sep_contract_logic_variables := [cur_priv ∶ ty_privilege, ctl ∶ ty_ctl_result, "pc" ∶ ty_xlenbits, "mpp" ∶ ty_privilege, "mepc" ∶ ty_xlenbits, tvec ∶ ty_xlenbits, p ∶ ty_privilege];
-       sep_contract_localstore      := [term_var cur_priv, term_var ctl, term_var "pc"]%arg;
+       sep_contract_localstore      := [term_var cur_priv, term_var ctl, term_var "pc"];
        sep_contract_precondition    :=
          cur_privilege ↦ (term_var p)
          ∗ asn_exist "mcause" ty_exc_code  (mcause        ↦ (term_var "mcause"))
@@ -450,7 +450,7 @@ Section ContractDefKit.
 
   Definition sep_contract_handle_illegal : SepContractFun handle_illegal :=
     {| sep_contract_logic_variables := [p ∶ ty_privilege, "pc" ∶ ty_xlenbits, tvec ∶ ty_xlenbits];
-       sep_contract_localstore      := env.nil%arg;
+       sep_contract_localstore      := env.nil;
        sep_contract_precondition    :=
          cur_privilege ↦ (term_var p)
          ∗ pc ↦ (term_var "pc")
@@ -473,7 +473,7 @@ Section ContractDefKit.
 
   Definition sep_contract_trap_handler : SepContractFun trap_handler :=
     {| sep_contract_logic_variables := [del_priv ∶ ty_privilege, c ∶ ty_exc_code, "pc" ∶ ty_xlenbits, p ∶ ty_privilege, tvec ∶ ty_xlenbits];
-       sep_contract_localstore      := [term_var del_priv, term_var c, term_var "pc"]%arg;
+       sep_contract_localstore      := [term_var del_priv, term_var c, term_var "pc"];
        sep_contract_precondition    :=
          cur_privilege ↦ (term_var p)
          ∗ asn_exist "mcause_val"  ty_exc_code (mcause  ↦ (term_var "mcause_val"))
@@ -493,7 +493,7 @@ Section ContractDefKit.
 
   Definition sep_contract_prepare_trap_vector : SepContractFun prepare_trap_vector :=
     {| sep_contract_logic_variables := [p ∶ ty_privilege, cause ∶ ty_mcause, tvec ∶ ty_xlenbits];
-       sep_contract_localstore      := [term_var p, term_var cause]%arg;
+       sep_contract_localstore      := [term_var p, term_var cause];
        sep_contract_precondition    := mtvec ↦ (term_var tvec);
        sep_contract_result          := "result_prepare_trap_vector";
        sep_contract_postcondition   :=
@@ -504,7 +504,7 @@ Section ContractDefKit.
 
   Definition sep_contract_tvec_addr : SepContractFun tvec_addr :=
     {| sep_contract_logic_variables := [m ∶ ty_xlenbits, c ∶ ty_mcause];
-       sep_contract_localstore      := [term_var m, term_var c]%arg;
+       sep_contract_localstore      := [term_var m, term_var c];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_tvec_addr";
        sep_contract_postcondition   :=
@@ -513,7 +513,7 @@ Section ContractDefKit.
 
   Definition sep_contract_exceptionType_to_bits : SepContractFun exceptionType_to_bits :=
     {| sep_contract_logic_variables := [e ∶ ty_exception_type];
-       sep_contract_localstore      := [term_var e]%arg;
+       sep_contract_localstore      := [term_var e];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_exceptionType_to_bits";
        sep_contract_postcondition   :=
@@ -523,7 +523,7 @@ Section ContractDefKit.
 
   Definition sep_contract_exception_delegatee : SepContractFun exception_delegatee :=
     {| sep_contract_logic_variables := [p ∶ ty_privilege];
-       sep_contract_localstore      := [term_var p]%arg;
+       sep_contract_localstore      := [term_var p];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_exception_delegatee";
        sep_contract_postcondition   :=
@@ -542,7 +542,7 @@ Section ContractDefKit.
 
   Definition sep_contract_set_next_pc : SepContractFun set_next_pc :=
     {| sep_contract_logic_variables := [addr ∶ ty_xlenbits];
-       sep_contract_localstore      := [term_var addr]%arg;
+       sep_contract_localstore      := [term_var addr];
        sep_contract_precondition    := asn_exist v ty_xlenbits (nextpc ↦ term_var v);
        sep_contract_result          := "result_set_next_pc";
        sep_contract_postcondition   :=
@@ -562,7 +562,7 @@ Section ContractDefKit.
 
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := [rs ∶ ty_regno];
-       sep_contract_localstore      := [term_var rs]%arg;
+       sep_contract_localstore      := [term_var rs];
        sep_contract_precondition    := asn_gprs;
        sep_contract_result          := "result_rX";
        sep_contract_postcondition   := asn_gprs;
@@ -570,7 +570,7 @@ Section ContractDefKit.
 
   Definition sep_contract_wX : SepContractFun wX :=
     {| sep_contract_logic_variables := [rs ∶ ty_regno, v ∶ ty_xlenbits];
-       sep_contract_localstore      := [term_var rs, term_var v]%arg;
+       sep_contract_localstore      := [term_var rs, term_var v];
        sep_contract_precondition    := asn_gprs;
        sep_contract_result          := "result_wX";
        sep_contract_postcondition   :=
@@ -580,7 +580,7 @@ Section ContractDefKit.
 
   Definition sep_contract_abs : SepContractFun abs :=
     {| sep_contract_logic_variables := [v ∶ ty_int];
-       sep_contract_localstore      := [term_var v]%arg;
+       sep_contract_localstore      := [term_var v];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_abs";
        sep_contract_postcondition   := asn_true;
@@ -588,7 +588,7 @@ Section ContractDefKit.
 
   Definition sep_contract_read_ram : SepContractFunX read_ram :=
     {| sep_contract_logic_variables := [paddr ∶ ty_int];
-       sep_contract_localstore      := [term_var paddr]%arg;
+       sep_contract_localstore      := [term_var paddr];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_read_ram";
        sep_contract_postcondition   := asn_true;
@@ -596,7 +596,7 @@ Section ContractDefKit.
 
   Definition sep_contract_write_ram : SepContractFunX write_ram :=
     {| sep_contract_logic_variables := [paddr ∶ ty_int, data ∶ ty_word];
-       sep_contract_localstore      := [term_var paddr, term_var data]%arg;
+       sep_contract_localstore      := [term_var paddr, term_var data];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_write_ram";
        sep_contract_postcondition   := asn_true;
@@ -604,7 +604,7 @@ Section ContractDefKit.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
     {| sep_contract_logic_variables := [bv ∶ ty_int];
-       sep_contract_localstore      := [term_var bv]%arg;
+       sep_contract_localstore      := [term_var bv];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_decode";
        sep_contract_postcondition   := asn_true;
@@ -924,7 +924,7 @@ Module BlockVerification.
       req b ens
       (* Could include leakcheck here *)
       (fun _ _ _ h => SymProp.block)
-      [].
+      []%list.
 
   Section Example.
 

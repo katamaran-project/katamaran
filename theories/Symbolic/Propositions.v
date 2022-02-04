@@ -115,9 +115,9 @@ Module Type SymPropOn
 
     Fixpoint emsg_close {Σ ΣΔ} {struct ΣΔ} : EMessage (Σ ▻▻ ΣΔ) -> EMessage Σ :=
       match ΣΔ with
-      | ε       => fun msg => msg
+      | []      => fun msg => msg
       | ΣΔ  ▻ b => fun msg => emsg_close (EMsgThere msg)
-      end.
+      end%ctx.
 
     Fixpoint shift_emsg {Σ b} (bIn : b ∈ Σ) (emsg : EMessage (Σ - b)) : EMessage Σ :=
       match emsg with
@@ -163,25 +163,25 @@ Module Type SymPropOn
       forall Σ, 𝕊 (Σ0 ▻▻ Σ) -> 𝕊 Σ0 :=
       fix close Σ :=
         match Σ with
-        | ε     => fun p => p
+        | []    => fun p => p
         | Σ ▻ b => fun p => close Σ (angelicv b p)
-        end.
+        end%ctx.
 
     Definition demonic_close0 {Σ0 : LCtx} :
       forall Σ, 𝕊 (Σ0 ▻▻ Σ) -> 𝕊 Σ0 :=
       fix close Σ :=
         match Σ with
-        | ε     => fun p => p
+        | []    => fun p => p
         | Σ ▻ b => fun p => close Σ (demonicv b p)
-        end.
+        end%ctx.
 
     Definition demonic_close :
-      forall Σ, 𝕊 Σ -> 𝕊 ε :=
+      forall Σ, 𝕊 Σ -> 𝕊 [] :=
       fix close Σ :=
         match Σ with
-        | ε     => fun k => k
+        | []    => fun k => k
         | Σ ▻ b => fun k => close Σ (@demonicv Σ b k)
-        end.
+        end%ctx.
 
     (* Global Instance persistent_spath : Persistent 𝕊 := *)
     (*   (* ⊢ 𝕊 -> □𝕊 := *) *)

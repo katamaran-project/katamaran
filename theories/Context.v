@@ -603,13 +603,20 @@ Module ctx.
     Notation "N ∷ T" := (Binding N T) : type_scope.
     Notation "x ∷ t" := (MkB x t) : ctx_scope.
 
-    Notation "'ε'" := nil : ctx_scope.
+    Notation "'ε'" := nil (only parsing) : ctx_scope.
     Infix "▻" := snoc : ctx_scope.
     Notation "Γ1 ▻▻ Γ2" := (cat Γ1%ctx Γ2%ctx) : ctx_scope.
     Notation "b ∈ Γ" := (In b%ctx Γ%ctx) : type_scope.
 
-    Notation "[ x ]" := (snoc nil x)  : ctx_scope.
-    Notation "[ x , .. , z ]" := (snoc .. (snoc nil x) .. z) : ctx_scope.
+    (* Use the same notations as in ListNotations. *)
+    Notation "[ ]" := (nil) : ctx_scope.
+    Notation "[ x ]" := (snoc nil x) : ctx_scope.
+    #[deprecated(since="20220204", note="Use the list compatible [ x ; .. ; z ] notation instead.")]
+    Notation "[ x , y , .. , z ]" :=
+      (snoc .. (snoc (snoc nil x) y) .. z)
+      (only parsing) : ctx_scope.
+    Notation "[ x ; y ; .. ; z ]" :=
+      (snoc .. (snoc (snoc nil x) y) .. z) : ctx_scope.
     Notation "Γ - x" := (@remove _ Γ x _) : ctx_scope.
 
   End notations.
@@ -623,14 +630,14 @@ Module ctx.
 
     Fixpoint resolve (Γ : NCtx Name D) (x : Name) {struct Γ} : option D :=
       match Γ with
-      | ε       => None
+      | []      => None
       | Γ ▻ y∷d => if Name_eqdec x y then Some d else resolve Γ x
       end.
 
     Fixpoint resolve_mk_in (Γ : NCtx Name D) (x : Name) {struct Γ} :
       let m := resolve Γ x in forall (p : IsSome m), x∷fromSome m p ∈ Γ :=
       match Γ with
-      | ε => fun p => match p with end
+      | [] => fun p => match p with end
       | Γ ▻ y∷d =>
         match Name_eqdec x y as s return
           (forall p, (x∷fromSome (if s then Some d else resolve Γ x) p) ∈ Γ ▻ y∷d)
@@ -642,7 +649,7 @@ Module ctx.
 
     Fixpoint names (Γ : NCtx Name D) : list Name :=
       match Γ with
-      | ε       => List.nil
+      | []      => List.nil
       | Γ ▻ y∷_ => cons y (names Γ)
       end.
 

@@ -73,7 +73,7 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
       forall Δ : NCtx N Ty, CDijkstra (NamedEnv Val Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
-        | ε       => fun k => k env.nil
+        | []%ctx   => fun k => k env.nil
         | Δ ▻ x∷σ => fun k =>
             angelic σ (fun v => rec Δ (fun EΔ => k (EΔ ► (x∷σ ↦ v))))
         end.
@@ -86,10 +86,10 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
       forall Δ : NCtx N Ty, CDijkstra (NamedEnv Val Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
-        | ε       => fun k => k env.nil
+        | []      => fun k => k env.nil
         | Δ ▻ x∷σ => fun k =>
             demonic σ (fun v => rec Δ (fun EΔ => k (EΔ ► (x∷σ ↦ v))))
-        end.
+        end%ctx.
     Arguments demonic_ctx {N} Δ.
 
     Definition assume_formula (fml : Prop) : CDijkstra unit :=

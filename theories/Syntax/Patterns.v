@@ -45,14 +45,14 @@ Module Type PatternsOn (Import TY : Types).
     Context {N : Set}.
 
     Inductive TuplePat : Ctx Ty -> NCtx N Ty -> Set :=
-    | tuplepat_nil  : TuplePat ε ε
+    | tuplepat_nil  : TuplePat [] []
     | tuplepat_snoc
         {σs : Ctx Ty} {Δ : NCtx N Ty}
         (pat : TuplePat σs Δ) {σ : Ty} (x : N) :
         TuplePat (σs ▻ σ) (Δ ▻ x∷σ).
 
     Inductive RecordPat : NCtx 𝑹𝑭 Ty -> NCtx N Ty -> Set :=
-    | recordpat_nil  : RecordPat ε ε
+    | recordpat_nil  : RecordPat [] []
     | recordpat_snoc
         {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
         (pat : RecordPat rfs Δ) (rf : 𝑹𝑭) {τ : Ty} (x : N) :
@@ -60,8 +60,8 @@ Module Type PatternsOn (Import TY : Types).
 
     Inductive Pattern : NCtx N Ty -> Ty -> Set :=
     | pat_var (x : N) {σ : Ty} : Pattern [ x∷σ ] σ
-    | pat_unit : Pattern ε ty_unit
-    | pat_pair (x y : N) {σ τ : Ty} : Pattern [ x∷σ , y∷τ ] (ty_prod σ τ)
+    | pat_unit : Pattern [] ty_unit
+    | pat_pair (x y : N) {σ τ : Ty} : Pattern [ x∷σ; y∷τ ] (ty_prod σ τ)
     | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty_tuple σs)
     | pat_record {R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) : Pattern Δ (ty_record R).
 
@@ -70,11 +70,11 @@ Module Type PatternsOn (Import TY : Types).
         TuplePat σs Δ -> Env T σs -> NamedEnv T Δ :=
       fix pattern_match {σs} {Δ} p {struct p} :=
         match p with
-        | tuplepat_nil => fun _ => env.nil
+        | tuplepat_nil => fun _ => []
         | tuplepat_snoc p x =>
           fun EΔ =>
             match env.snocView EΔ with
-            | env.isSnoc E v => pattern_match p E ► (_∷_ ↦ v)
+            | env.isSnoc E v => pattern_match p E ► (_ ↦ v)
             end
         end.
 
@@ -83,7 +83,7 @@ Module Type PatternsOn (Import TY : Types).
         TuplePat σs Δ -> NamedEnv T Δ -> Env T σs :=
       fix pattern_match {σs} {Δ} p {struct p} :=
         match p with
-        | tuplepat_nil => fun _ => env.nil
+        | tuplepat_nil => fun _ => []
         | tuplepat_snoc p x =>
           fun EΔ =>
             match env.snocView EΔ with
@@ -98,7 +98,7 @@ Module Type PatternsOn (Import TY : Types).
     Fixpoint record_pattern_match_env {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
              (p : RecordPat rfs Δ) {struct p} : NamedEnv V rfs -> NamedEnv V Δ :=
       match p with
-      | recordpat_nil => fun _ => env.nil
+      | recordpat_nil => fun _ => []
       | recordpat_snoc p rf x =>
         fun E =>
           env.snoc
@@ -164,9 +164,9 @@ Module Type PatternsOn (Import TY : Types).
     Definition pattern_match_val {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
       Val σ -> NamedEnv Val Δ :=
       match p with
-      | pat_var x => fun v => env.snoc env.nil (x∷_) v
-      | pat_unit => fun _ => env.nil
-      | pat_pair x y => fun '(u , v) => env.snoc (env.snoc env.nil (x∷_) u) (y∷_) v
+      | pat_var x => fun v => [v]
+      | pat_unit => fun _ => []
+      | pat_pair x y => fun '(u , v) => [nenv u;v]
       | pat_tuple p => tuple_pattern_match_val p
       | pat_record p => record_pattern_match_val p
       end.
@@ -175,15 +175,15 @@ Module Type PatternsOn (Import TY : Types).
       NamedEnv Val Δ -> Val σ :=
       match p with
       | pat_var x    => fun Ex => match env.snocView Ex with env.isSnoc _ t => t end
-      | pat_unit     => fun _ => (tt : Val ty_unit)
+      | pat_unit     => fun _ => tt
       | pat_pair x y => fun Exy => match env.snocView Exy with
                                      env.isSnoc Ex ty =>
                                      match env.snocView Ex with
-                                       env.isSnoc _ tx => (pair tx ty : Val (ty_prod _ _))
+                                       env.isSnoc _ tx => (tx, ty)
                                      end
                                    end
-      | pat_tuple p  => fun EΔ => (envrec.of_env (tuple_pattern_match_env_reverse p EΔ) : Val (ty_tuple _))
-      | pat_record p => fun EΔ => (𝑹_fold (record_pattern_match_env_reverse p EΔ) : Val (ty_record _))
+      | pat_tuple p  => fun EΔ => envrec.of_env (tuple_pattern_match_env_reverse p EΔ)
+      | pat_record p => fun EΔ => 𝑹_fold (record_pattern_match_env_reverse p EΔ)
       end.
 
     Lemma pattern_match_val_inverse_left {σ : Ty} {Δ : NCtx N Ty} {p : Pattern Δ σ}

@@ -50,13 +50,13 @@ Section WithBinding.
     Context {D : B -> Set}.
 
     Inductive Env : Ctx B -> Set :=
-    | nil                                     : Env ε
+    | nil                                     : Env []
     | snoc {Γ} (E : Env Γ) {b : B} (db : D b) : Env (Γ ▻ b).
 
-    Inductive NilView : Env ε -> Set :=
+    Inductive NilView : Env [] -> Set :=
     | isNil : NilView nil.
 
-    Equations(noeqns) nilView (E : Env ε) : NilView E :=
+    Equations(noeqns) nilView (E : Env []) : NilView E :=
     | nil := isNil.
 
     Inductive SnocView {Γ b} : Env (Γ ▻ b) -> Set :=
@@ -95,7 +95,7 @@ Section WithBinding.
 
     Fixpoint catView {Γ Δ} : forall E : Env (Γ ▻▻ Δ), CatView E :=
       match Δ with
-      | ε     => fun E => isCat E nil
+      | []    => fun E => isCat E nil
       | Δ ▻ b => fun E => match snocView E with
                             isSnoc E v =>
                               match catView E with
@@ -105,15 +105,15 @@ Section WithBinding.
       end.
 
     Ltac destroy x :=
-      cbn in x;
+      try (progress cbn in x);
       lazymatch type of x with
-      | Env ε        => destruct (nilView x)
+      | Env []       => destruct (nilView x)
       | Env (_ ▻ _)  => destruct (snocView x) as [x]; destroy x
       | Env (_ ▻▻ _) => let E1 := fresh in
                         let E2 := fresh in
                         destruct (catView x) as [E1 E2];
                         destroy E1; destroy E2
-      | _ ∈ ε        => destruct (ctx.nilView x)
+      | _ ∈ []       => destruct (ctx.nilView x)
       | _ ∈ _ ▻ _    => destruct (ctx.snocView x)
       | _            => idtac
       end.
@@ -146,7 +146,7 @@ Section WithBinding.
       Proof.
         induction δ1; destroy δ2; cbn.
         - constructor. reflexivity.
-        - destruct (eqb_spec db v); cbn in *.
+        - destruct (eqb_spec db v).
           + eapply (ssrbool.iffP (IHδ1 _)); intros Heq;
               dependent elimination Heq; congruence.
           + constructor; intros e; dependent elimination e; congruence.
@@ -175,7 +175,7 @@ Section WithBinding.
         - constructor. reflexivity.
         - constructor. intro e; dependent elimination e.
         - constructor. intro e; dependent elimination e.
-        - destruct (eqb_spec db db0); cbn in *.
+        - destruct (eqb_spec db db0).
           + apply (ssrbool.iffP (IHδ1 _ E)); intros Heq; dependent elimination Heq.
             * dependent elimination e; reflexivity.
             * reflexivity.
@@ -192,7 +192,7 @@ Section WithBinding.
 
     Fixpoint tabulate {Γ} : (forall b, b ∈ Γ -> D b) -> Env Γ :=
       match Γ with
-      | ε     => fun _ => nil
+      | []    => fun _ => nil
       | Γ ▻ b => fun EΓb =>
         snoc (tabulate (fun y yIn => EΓb y (ctx.in_succ yIn))) (EΓb _ ctx.in_zero)
       end.
@@ -211,7 +211,7 @@ Section WithBinding.
     Definition head {Γ b} (E : Env (Γ ▻ b)) : D b :=
       match E in Env Γb
       return match Γb with
-             | ε     => unit
+             | []    => unit
              | Γ ▻ b => D b
              end
       with
@@ -222,7 +222,7 @@ Section WithBinding.
     Definition tail {Γ b} (E : Env (Γ ▻ b)) : Env Γ :=
       match E in Env Γb
       return match Γb with
-             | ε     => unit
+             | []    => unit
              | Γ ▻ _ => Env Γ
              end
       with
@@ -232,14 +232,14 @@ Section WithBinding.
 
     Fixpoint take {Γ} Δ (E : Env (Γ ▻▻ Δ)) : Env Δ :=
       match Δ , E with
-      | ε     , E => nil
+      | []    , E => nil
       | Δ ▻ b , E => snoc (take Δ (tail E)) (head E)
       end.
 
     Definition unsnoc {Γ b} (E : Env (Γ ▻ b)) : Env Γ * D b:=
       match E in Env Γb
       return match Γb with
-             | ε     => unit
+             | []    => unit
              | Γ ▻ b => Env Γ * D b
              end
       with
@@ -249,17 +249,17 @@ Section WithBinding.
 
     Fixpoint drop {Γ} Δ (E : Env (Γ ▻▻ Δ)) : Env Γ :=
       match Δ , E with
-      | ε     , E => E
+      | []    , E => E
       | Δ ▻ _ , E => drop Δ (tail E)
       end.
 
     Fixpoint split {Γ} Δ (E : Env (Γ ▻▻ Δ)) : Env Γ * Env Δ :=
       match Δ , E with
-      | ε     , E => (E , nil)
+      | []    , E => (E , nil)
       | Δ ▻ b , E =>
         match E in Env ΓΔb
         return match ΓΔb with
-               | ε      => unit
+               | []     => unit
                | ΓΔ ▻ b => (Env ΓΔ -> Env Γ * Env Δ) ->
                            Env Γ * Env (Δ ▻ b)
                end
@@ -286,7 +286,7 @@ Section WithBinding.
     Fixpoint insert {Γ : Ctx B} {b} {struct Γ} :
       forall (bIn : b ∈ Γ) (E : Env (Γ - b)) (v : D b), Env Γ :=
       match Γ with
-      | ε      => fun bIn => match ctx.nilView bIn with end
+      | []     => fun bIn => match ctx.nilView bIn with end
       | Γ ▻ b' => fun bIn =>
         match ctx.snocView bIn with
         | ctx.snocViewZero   => fun E v => snoc E v
@@ -451,7 +451,7 @@ Section WithBinding.
 
     Fixpoint abstract (Δ : Ctx B) (r : Type) {struct Δ} : Type :=
       match Δ with
-      | ε     => r
+      | []    => r
       | Δ ▻ σ => abstract Δ (D σ -> r)
       end.
 
@@ -463,13 +463,13 @@ Section WithBinding.
 
     Fixpoint curry {Δ : Ctx B} {r : Type} (f : Env Δ -> r) {struct Δ} : abstract Δ r :=
       match Δ return forall r : Type, (Env Δ -> r) -> abstract Δ r with
-      | ε     => fun r f => f nil
+      | []    => fun r f => f nil
       | Δ ▻ σ => fun r f => @curry Δ (D σ -> r) (fun E d => f (snoc E d))
       end r f.
 
     Fixpoint Forall (Δ : Ctx B) {struct Δ} : (Env Δ -> Prop) -> Prop :=
       match Δ return (Env Δ -> Prop) -> Prop with
-      | ε     => fun P => P nil
+      | []    => fun P => P nil
       | Δ ▻ b => fun P => Forall (fun δ => forall v, P (snoc δ v))
       end.
 
@@ -486,7 +486,7 @@ Section WithBinding.
 
     Fixpoint Exists (Δ : Ctx B) {struct Δ} : (Env Δ -> Prop) -> Prop :=
       match Δ return (Env Δ -> Prop) -> Prop with
-      | ε     => fun P => P nil
+      | []    => fun P => P nil
       | Δ ▻ b => fun P => Exists (fun δ => exists v, P (snoc δ v))
       end.
 
@@ -597,7 +597,7 @@ End WithBinding.
 
 Arguments Env {B} D Γ.
 Arguments nil {B D}.
-Arguments snoc {B%type D%function Γ%ctx} E%env b%ctx db.
+Arguments snoc {B%type D%function Γ%ctx} E%env b%ctx & db.
 Arguments lookup {B D Γ} E%env [_] x%ctx.
 Arguments update {B}%type {D}%function {Γ}%ctx E%env {b}%ctx.
 (* Arguments tabulate {_ _} _. *)
@@ -622,17 +622,31 @@ Module notations.
   Notation "e .[?? x ]" := (@lookup _ _ _ e (x∷_) _)
     (at level 2, x at level 200, only parsing).
 
-  Notation "[ x ]" := (snoc nil (_∷_) x) : env_scope.
-  Notation "[ x , .. , z ]" :=
-    (snoc .. (snoc nil (_∷_) x) .. (_∷_) z) : env_scope.
+  Notation "[ ]" := nil : env_scope.
+  Notation "[ x ]" := (snoc nil _ x) : env_scope.
+  #[deprecated(since="20220204", note="Use the list compatible [ x ; .. ; z ] notation instead.")]
+  Notation "[ x , y , .. , z ]" :=
+    (snoc .. (snoc (snoc nil _ x) _ y) .. _ z)
+    (only parsing) : env_scope.
+  Notation "[ x ; y ; .. ; z ]" :=
+    (snoc .. (snoc (snoc nil _ x) _ y) .. _ z)
+    (format "[ '[' x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope.
+  Notation "[ 'env' x ; y ; .. ; z ]" :=
+    (snoc .. (snoc (snoc nil _ x) _ y) .. _ z)
+    (only parsing) : env_scope.
+    (* (format "[ 'env'  '[' x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope. *)
+  Notation "[ 'nenv' x ; y ; .. ; z ]" :=
+    (snoc .. (snoc (snoc nil (_∷_) x) (_∷_) y) .. (_∷_) z)
+    (only parsing) : env_scope.
+    (* (format "[ 'nenv'  '[' x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope. *)
 
-  Notation "'depmatchenv' e 'with' p => rhs 'end'" :=
-    (match view e with p%dep_pattern => rhs end)
-    (at level 0, p pattern, format
-     "'[hv' 'depmatchenv'  e  'with'  '/  ' p  =>  '/    ' rhs  '/' 'end' ']'").
-  Notation "[ 'env' x ; .. ; z ]" :=
-    (dsnoc _ .. (dsnoc _ isNil x) .. z)
-    (at level 0, format "[ 'env'  x ;  .. ;  z ]") : dep_pattern_scope.
+  (* Notation "'depmatchenv' e 'with' p => rhs 'end'" := *)
+  (*   (match view e with p%dep_pattern => rhs end) *)
+  (*   (at level 0, p pattern, format *)
+  (*    "'[hv' 'depmatchenv'  e  'with'  '/  ' p  =>  '/    ' rhs  '/' 'end' ']'"). *)
+  (* Notation "[ 'env' x ; .. ; z ]" := *)
+  (*   (dsnoc _ .. (dsnoc _ isNil x) .. z) *)
+  (*   (at level 0, format "[ 'env'  x ;  .. ;  z ]") : dep_pattern_scope. *)
 
 End notations.
 Import notations.
@@ -667,13 +681,13 @@ Local Ltac destroy_env_eq H :=
 Ltac destroy x :=
   try (progress hnf in x);
   lazymatch type of x with
-  | Env _ ε        => destruct (nilView x)
+  | Env _ []       => destruct (nilView x)
   | Env _ (_ ▻ _)  => destruct (snocView x) as [x]; destroy x
   | Env _ (_ ▻▻ _) => let E1 := fresh in
                       let E2 := fresh in
                       destruct (catView x) as [E1 E2];
                       destroy E1; destroy E2
-  | _ ∈ ε          => destruct (ctx.nilView x)
+  | _ ∈ []         => destruct (ctx.nilView x)
   | _ ∈ _ ▻ _      => destruct (ctx.snocView x)
   | @eq ?A ?y ?z   => let A := eval hnf in A in
                         change_no_check (@eq A y z) in x;
@@ -695,7 +709,7 @@ Section WithBinding.
   Definition EnvRec (D : B -> Type) : Ctx B -> Type :=
     fix EnvRec (σs : Ctx B) {struct σs} : Type :=
       match σs with
-      | ε      => unit
+      | []     => unit
       | σs ▻ σ => EnvRec σs * D σ
       end%type.
 
@@ -705,7 +719,7 @@ Section WithBinding.
 
     Fixpoint to_env (σs : Ctx B) {struct σs} : EnvRec D σs -> Env D σs :=
       match σs with
-      | ε      => fun _ => nil
+      | []     => fun _ => nil
       | σs ▻ σ => fun e => snoc (to_env σs (fst e)) _ (snd e)
       end.
 
@@ -726,7 +740,7 @@ Section WithBinding.
     Variable eqd : forall b, D b -> D b -> bool.
     Fixpoint eqb {Γ : Ctx B} : forall (δ1 δ2 : EnvRec D Γ), bool :=
       match Γ with
-      | ε     => fun _ _ => true
+      | []    => fun _ _ => true
       | _ ▻ b => fun '(E1,d1) '(E2,d2) => eqd d1 d2 &&& eqb E1 E2
       end.
 

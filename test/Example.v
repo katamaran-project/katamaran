@@ -220,10 +220,10 @@ Module Import ExampleProgram <: Program ExampleBase.
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
     | abs :        Fun [ "x" ∷ ty_int               ] ty_int
-    | cmp :        Fun [ "x" ∷ ty_int, "y" ∷ ty_int ] (ty_enum ordering)
-    | gcd :        Fun [ "x" ∷ ty_int, "y" ∷ ty_int ] ty_int
-    | gcdloop :    Fun [ "x" ∷ ty_int, "y" ∷ ty_int ] ty_int
-    | msum :       Fun [ "x" ∷ ty_union either, "y" ∷ ty_union either] (ty_union either)
+    | cmp :        Fun [ "x" ∷ ty_int; "y" ∷ ty_int ] (ty_enum ordering)
+    | gcd :        Fun [ "x" ∷ ty_int; "y" ∷ ty_int ] ty_int
+    | gcdloop :    Fun [ "x" ∷ ty_int; "y" ∷ ty_int ] ty_int
+    | msum :       Fun [ "x" ∷ ty_union either; "y" ∷ ty_union either] (ty_union either)
     | length {σ} : Fun [ "xs" ∷ ty_list σ           ] ty_int
     | summaxlen :  Fun [ "xs" ∷ ty_list ty_int      ] (ty_prod (ty_prod ty_int ty_int) ty_int)
     | fpthree16 :  Fun [ "sign" ∷ ty_bvec 1 ] (ty_bvec 16)
@@ -253,7 +253,7 @@ Module Import ExampleProgram <: Program ExampleBase.
     Local Notation "'y'"   := (@exp_var _ "y" _ _) : exp_scope.
     Local Notation "'z'"   := (@exp_var _ "z" _ _) : exp_scope.
 
-    Definition fun_msum : Stm ["x" ∷ ty_union either, "y" ∷ ty_union either] (ty_union either) :=
+    Definition fun_msum : Stm ["x" ∷ ty_union either; "y" ∷ ty_union either] (ty_union either) :=
       stm_match_union_alt either x
        (fun K =>
           match K with
@@ -367,12 +367,12 @@ Module Import ExampleSpecification <: Specification ExampleBase.
 
     Definition sep_contract_abs : SepContract [ "x" ∷ ty_int ] ty_int :=
       {| sep_contract_logic_variables := ["x" ∷ ty_int];
-         sep_contract_localstore      := [term_var "x"]%arg;
+         sep_contract_localstore      := [term_var "x"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            asn_prop
-             ["x" ∷ ty_int, "result" ∷ ty_int]
+             ["x" ∷ ty_int; "result" ∷ ty_int]
              (fun x result => result = Z.abs x)
            (* asn_if *)
            (*   (term_binop binop_lt (term_var "x") (term_val ty_int 0)) *)
@@ -380,9 +380,9 @@ Module Import ExampleSpecification <: Specification ExampleBase.
            (*   (asn_bool (term_binop binop_eq (term_var "result") (term_var "x"))) *)
       |}.
 
-    Definition sep_contract_cmp : SepContract ["x" ∷ ty_int, "y" ∷ ty_int] (ty_enum ordering)  :=
-       {| sep_contract_logic_variables := ["x" ∷ ty_int, "y" ∷ ty_int];
-          sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
+    Definition sep_contract_cmp : SepContract ["x" ∷ ty_int; "y" ∷ ty_int] (ty_enum ordering)  :=
+       {| sep_contract_logic_variables := ["x" ∷ ty_int; "y" ∷ ty_int];
+          sep_contract_localstore      := [term_var "x"; term_var "y"];
           sep_contract_precondition    := asn_true;
           sep_contract_result          := "result";
           sep_contract_postcondition   :=
@@ -396,44 +396,44 @@ Module Import ExampleSpecification <: Specification ExampleBase.
                  end)
        |}.
 
-    Definition sep_contract_gcd : SepContract [ "x" ∷ ty_int, "y" ∷ ty_int ] ty_int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty_int, "y" ∷ ty_int];
-         sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
+    Definition sep_contract_gcd : SepContract [ "x" ∷ ty_int; "y" ∷ ty_int ] ty_int :=
+      {| sep_contract_logic_variables := ["x" ∷ ty_int; "y" ∷ ty_int];
+         sep_contract_localstore      := [term_var "x"; term_var "y"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            @asn_prop
-             ["x" ∷ ty_int, "y" ∷ ty_int, "result" ∷ ty_int]
+             ["x" ∷ ty_int; "y" ∷ ty_int; "result" ∷ ty_int]
              (fun x y result => result = Z.gcd x y)
       |}.
 
-    Definition sep_contract_gcdloop : SepContract [ "x" ∷ ty_int, "y" ∷ ty_int ] ty_int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty_int, "y" ∷ ty_int];
-         sep_contract_localstore      := [term_var "x", term_var "y"]%arg;
+    Definition sep_contract_gcdloop : SepContract [ "x" ∷ ty_int; "y" ∷ ty_int ] ty_int :=
+      {| sep_contract_logic_variables := ["x" ∷ ty_int; "y" ∷ ty_int];
+         sep_contract_localstore      := [term_var "x"; term_var "y"];
          sep_contract_precondition    :=
            asn_bool (term_binop binop_le (term_val ty_int 0) (term_var "x")) ✱
                     asn_bool (term_binop binop_le (term_val ty_int 0) (term_var "y"));
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            @asn_prop
-             ["x" ∷ ty_int, "y" ∷ ty_int, "result" ∷ ty_int]
+             ["x" ∷ ty_int; "y" ∷ ty_int; "result" ∷ ty_int]
              (fun x y result => result = Z.gcd x y)
       |}.
 
     Definition sep_contract_length {σ} : SepContract [ "xs" ∷ ty_list σ ] ty_int :=
       {| sep_contract_logic_variables := ["xs" ∷ ty_list σ ];
-         sep_contract_localstore      := [term_var "xs"]%arg;
+         sep_contract_localstore      := [term_var "xs"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            @asn_prop
-             ["xs" ∷ ty_list σ, "result" ∷ ty_int]
+             ["xs" ∷ ty_list σ; "result" ∷ ty_int]
              (fun xs result => result = Z.of_nat (Datatypes.length xs))
       |}.
 
     Definition sep_contract_summaxlen : SepContract [ "xs" ∷ ty_list ty_int ] (ty_prod (ty_prod ty_int ty_int) ty_int) :=
       {| sep_contract_logic_variables := ["xs" ∷ ty_list ty_int ];
-         sep_contract_localstore      := [term_var "xs"]%arg;
+         sep_contract_localstore      := [term_var "xs"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=

@@ -94,7 +94,7 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
 
   Fixpoint term_tuple {Σ σs} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs) :=
     match es with
-    | env.nil         => term_val (ty_tuple ε) tt
+    | env.nil         => term_val (ty_tuple []) tt
     | env.snoc es _ e => term_binop binop_tuple_snoc (term_tuple es) e
     end.
 
