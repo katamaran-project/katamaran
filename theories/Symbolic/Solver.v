@@ -116,7 +116,7 @@ Module Type SolverOn
       else Some (cons (formula_eq t1 t2) k).
 
     Lemma simplify_formula_eqb_spec {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) :
-      OptionSpec
+      option.spec
         (fun fmlsk => forall ι, instpc fmlsk ι <-> inst (formula_eq t1 t2) ι /\ instpc k ι)
         (forall ι, ~ inst (formula_eq t1 t2) ι)
         (simplify_formula_eqb t1 t2 k).
@@ -142,7 +142,7 @@ Module Type SolverOn
       (op1 : BinOp σ11 σ12 σ) (t11 : Term Σ σ11) (t12 : Term Σ σ12)
       (op2 : BinOp σ21 σ22 σ) (t21 : Term Σ σ21) (t22 : Term Σ σ22)
       (k : List Formula Σ) :
-      OptionSpec
+      option.spec
         (fun fmlsk : List Formula Σ =>
            forall ι,
              instpc fmlsk ι <->
@@ -154,11 +154,11 @@ Module Type SolverOn
     Proof.
       destruct op1; cbn;
         try match goal with
-            | |- OptionSpec _ _ (simplify_formula_eqb ?t1 ?t2 ?k) =>
+            | |- option.spec _ _ (simplify_formula_eqb ?t1 ?t2 ?k) =>
                 generalize (simplify_formula_eqb_spec t1 t2 k);
                 let H := fresh in
                 let ι := fresh "ι" in
-                apply optionspec_monotonic;
+                apply option.spec_monotonic;
                 [ let pc := fresh "pc" in intros pc |];
                 intros H ι; specialize (H ι); auto
                 (* change (inst_term ?t ?ι) with (inst t ι); auto *)
@@ -184,7 +184,7 @@ Module Type SolverOn
 
     Lemma simplify_formula_eq_binop_val_spec {Σ σ σ1 σ2}
       (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ) (k : List Formula Σ) :
-      OptionSpec
+      option.spec
         (fun fmlsk : List Formula Σ =>
            forall ι, instpc fmlsk ι <-> eval_binop op (inst t1 ι) (inst t2 ι) = v /\ instpc k ι)
         (forall ι, eval_binop op (inst t1 ι) (inst t2 ι) <> v)
@@ -227,7 +227,7 @@ Module Type SolverOn
 
       Lemma simplify_formula_eq_union_spec {Σ U} {K1 K2 : 𝑼𝑲 U}
             (t1 : Term Σ (𝑼𝑲_Ty K1)) (t2 : Term Σ (𝑼𝑲_Ty K2)) (k : List Formula Σ) :
-        OptionSpec
+        option.spec
           (fun fmlsk : List Formula Σ =>
              forall ι : Valuation Σ,
                instpc fmlsk ι <->
@@ -254,7 +254,7 @@ Module Type SolverOn
       Lemma simplify_formula_eq_union_val_spec {Σ U}
         {K1 : 𝑼𝑲 U} (t1 : Term Σ (𝑼𝑲_Ty K1))
         (l : Val (ty_union U)) (k : List Formula Σ) :
-        OptionSpec
+        option.spec
           (fun fmlsk : List Formula Σ =>
              forall ι : Valuation Σ,
                instpc fmlsk ι <-> 𝑼_fold (existT K1 (inst t1 ι)) = l /\ instpc k ι)
@@ -312,16 +312,16 @@ Module Type SolverOn
       match fmls with
       | nil           => Some k
       | cons fml fmls =>
-        option_bind (simplify_formula fml) (simplify_formulas fmls k)
+        option.bind (simplify_formulas fmls k) (simplify_formula fml)
       end.
 
     Lemma simplify_formula_bool_spec {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) :
-      OptionSpec
+      option.spec
         (fun fmlsk => forall ι, instpc fmlsk ι <-> inst (formula_bool t) ι /\ instpc k ι)
         (forall ι, ~ inst (formula_bool t) ι)
         (simplify_formula_bool t k)
     with simplify_formula_bool_neg_spec {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) :
-      OptionSpec
+      option.spec
         (fun fmlsk => forall ι, instpc fmlsk ι <-> ~ inst (formula_bool t) ι /\ instpc k ι)
         (forall ι, inst (A := Prop) (formula_bool t) ι)
         (simplify_formula_bool_neg t k).
@@ -331,7 +331,7 @@ Module Type SolverOn
         - destruct v; constructor; intuition.
         - apply simplify_formula_bool_binop_spec.
         - generalize (simplify_formula_bool_neg_spec Σ e0 k).
-          apply optionspec_monotonic.
+          apply option.spec_monotonic.
           + intros fmlsk HYP ι; specialize (HYP ι); revert HYP. cbn.
             unfold is_true. now rewrite negb_true_iff, not_true_iff_false.
           + intros HYP ι; specialize (HYP ι); revert HYP. cbn.
@@ -345,7 +345,7 @@ Module Type SolverOn
         - intros ι. cbn. rewrite not_true_iff_false.
           apply simplify_formula_bool_binop_neg_spec.
         - generalize (simplify_formula_bool_spec Σ e0 k).
-          apply optionspec_monotonic.
+          apply option.spec_monotonic.
           + intros fmlsk HYP ι; specialize (HYP ι); revert HYP. cbn.
             unfold is_true. now rewrite not_true_iff_false, negb_false_iff.
           + intros HYP ι; specialize (HYP ι); revert HYP. cbn.
@@ -356,7 +356,7 @@ Module Type SolverOn
     Qed.
 
     Lemma simplify_formula_eq_spec {Σ σ} (s t : Term Σ σ) (k : List Formula Σ) :
-      OptionSpec
+      option.spec
         (fun fmlsk : List Formula Σ => forall ι, instpc fmlsk ι <-> inst (formula_eq s t) ι /\ instpc k ι)
         (forall ι, ~ inst (formula_eq s t) ι)
         (simplify_formula_eq s t k).
@@ -367,13 +367,13 @@ Module Type SolverOn
       - cbn. destruct (Val_eqb_spec σ1 v v0); constructor; intuition.
       - cbn. apply simplify_formula_eq_binop_val_spec.
       - cbn. apply simplify_formula_eq_binop_spec.
-      - specialize (IHs t). revert IHs. apply optionspec_monotonic.
+      - specialize (IHs t). revert IHs. apply option.spec_monotonic.
         + intros fmls HYP ι. specialize (HYP ι). rewrite HYP. cbn.
           apply and_iff_compat_r. cbn. split; intros Heq.
           * now f_equal.
           * apply noConfusion_inv in Heq. apply Heq.
         + intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
-      - specialize (IHs t0). revert IHs. apply optionspec_monotonic.
+      - specialize (IHs t0). revert IHs. apply option.spec_monotonic.
         + intros fmls HYP ι. rewrite (HYP ι). cbn.
           apply and_iff_compat_r'. intros Hpc.
           split; intros Heq.
@@ -382,7 +382,7 @@ Module Type SolverOn
         + intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
       - cbn. apply simplify_formula_eq_union_val_spec.
       - cbn. clear. rename e4 into t2, K1 into K2, s into t1, K0 into K1, U0 into U.
-        generalize (simplify_formula_eq_union_spec t1 t2 k). apply optionspec_monotonic.
+        generalize (simplify_formula_eq_union_spec t1 t2 k). apply option.spec_monotonic.
         + intros k'. apply base.forall_proper. intros ι.
           now rewrite 𝑼_fold_inj.
         + apply base.forall_proper. intros ι.
@@ -397,7 +397,7 @@ Module Type SolverOn
     Qed.
 
     Lemma simplify_formula_spec {Σ} (fml : Formula Σ) (k : List Formula Σ) :
-      OptionSpec
+      option.spec
         (fun fmlsk : List Formula Σ => forall ι, instpc fmlsk ι <-> inst fml ι /\ instpc k ι)
         (forall ι, ~ inst fml ι)
         (simplify_formula fml k).
@@ -405,48 +405,48 @@ Module Type SolverOn
       destruct fml; cbn - [peval].
       - constructor; intros ι. now rewrite inst_pathcondition_cons.
       - generalize (simplify_formula_bool_spec (peval t) k).
-        apply optionspec_monotonic; cbn; intros; specialize (H ι);
+        apply option.spec_monotonic; cbn; intros; specialize (H ι);
           now rewrite (peval_sound t) in H.
       - constructor. intros ι. now rewrite inst_pathcondition_cons.
       - generalize (simplify_formula_bool_spec (peval (term_binop binop_ge t1 t2)) k).
-        apply optionspec_monotonic; cbn - [peval]; intros; specialize (H ι); revert H;
+        apply option.spec_monotonic; cbn - [peval]; intros; specialize (H ι); revert H;
           rewrite (peval_sound (term_binop binop_ge t1 t2)); cbn;
           change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
           now rewrite Z.geb_le, Z.ge_le_iff.
       - generalize (simplify_formula_bool_spec (peval (term_binop binop_gt t1 t2)) k).
-        apply optionspec_monotonic; cbn; intros; specialize (H ι); revert H;
+        apply option.spec_monotonic; cbn; intros; specialize (H ι); revert H;
           rewrite (peval_sound (term_binop binop_gt t1 t2)); cbn;
           change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
           now rewrite Z.gtb_lt, Z.gt_lt_iff.
       - generalize (simplify_formula_bool_spec (peval (term_binop binop_le t1 t2)) k).
-        apply optionspec_monotonic; cbn; intros; specialize (H ι); revert H;
+        apply option.spec_monotonic; cbn; intros; specialize (H ι); revert H;
           rewrite (peval_sound (term_binop binop_le t1 t2)); cbn;
           change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
           now rewrite Z.leb_le.
       - generalize (simplify_formula_bool_spec (peval (term_binop binop_lt t1 t2)) k).
-        apply optionspec_monotonic; cbn; intros; specialize (H ι); revert H;
+        apply option.spec_monotonic; cbn; intros; specialize (H ι); revert H;
           rewrite (peval_sound (term_binop binop_lt t1 t2)); cbn;
           change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
           now rewrite Z.ltb_lt.
       - generalize (simplify_formula_eq_spec (peval t1) (peval t2) k).
-        apply optionspec_monotonic; cbn; intros; specialize (H ι);
+        apply option.spec_monotonic; cbn; intros; specialize (H ι);
           now rewrite (peval_sound t1), (peval_sound t2) in H.
       - constructor. intros ι. now rewrite inst_pathcondition_cons.
     Qed.
 
     Lemma simplify_formulas_spec {Σ} (fmls k : List Formula Σ) :
-      OptionSpec
+      option.spec
         (fun fmlsk : List Formula Σ => forall ι, instpc fmlsk ι <-> instpc fmls ι /\ instpc k ι)
         (forall ι, ~ instpc fmls ι)
         (simplify_formulas fmls k).
     Proof.
       induction fmls as [|fml fmls]; cbn.
       - constructor. intuition.
-      - apply optionspec_bind. revert IHfmls.
-        apply optionspec_monotonic.
+      - apply option.spec_bind. revert IHfmls.
+        apply option.spec_monotonic.
         + intros fmlsk Hfmls.
           generalize (simplify_formula_spec fml fmlsk).
-          apply optionspec_monotonic.
+          apply option.spec_monotonic.
           * intros ? Hfml ι. specialize (Hfmls ι). specialize (Hfml ι).
             intuition.
           * intros Hfml ι. specialize (Hfml ι).
@@ -465,10 +465,11 @@ Module Type SolverOn
     Lemma occurs_check_lt_sound {Σ x} (xIn : x ∈ Σ) {σ} (t : Term Σ σ) (t' : Term (Σ - x) σ) :
       occurs_check_lt xIn t = Some t' -> t = subst t' (sub_shift xIn).
     Proof.
-      unfold occurs_check_lt. intros Heq.
-      refine (occurs_check_sound xIn t (t' := t') _).
-      destruct t; auto.
-      destruct (Nat.ltb _ _); auto.
+      unfold occurs_check_lt. intros Hwlp.
+      pose proof (occurs_check_sound xIn t) as H.
+      unfold OccursCheckSoundPoint in H.
+      rewrite option.wlp_forall in H. apply H. clear H.
+      destruct t; auto. destruct (Nat.ltb _ _); auto.
       discriminate.
     Qed.
 
@@ -506,7 +507,7 @@ Module Type SolverOn
       end.
 
     Lemma try_unify_bool_spec {w : World} (t : Term w ty_bool) :
-      OptionSpec (fun '(existT w' ν) => forall ι, inst (T := STerm ty_bool) t ι = true <-> inst_triangular ν ι) True (try_unify_bool t).
+      option.wlp (fun '(existT w' ν) => forall ι, inst (T := STerm ty_bool) t ι = true <-> inst_triangular ν ι) (try_unify_bool t).
     Proof.
       dependent elimination t; cbn; try constructor; auto.
       intros ι. cbn. intuition.
@@ -515,7 +516,7 @@ Module Type SolverOn
     Qed.
 
     Lemma try_unify_eq_spec {w : World} {σ} (t1 t2 : Term w σ) :
-      OptionSpec (fun '(existT w' ν) => forall ι, inst t1 ι = inst t2 ι <-> inst_triangular ν ι) True (try_unify_eq t1 t2).
+      option.wlp (fun '(existT w' ν) => forall ι, inst t1 ι = inst t2 ι <-> inst_triangular ν ι) (try_unify_eq t1 t2).
     Proof.
       unfold try_unify_eq. destruct t1; cbn; try (constructor; auto; fail).
       destruct (occurs_check_lt ςInΣ t2) eqn:Heq; constructor; auto.
@@ -525,7 +526,7 @@ Module Type SolverOn
     Qed.
 
     Lemma try_unify_formula_spec {w : World} (fml : Formula w) :
-      OptionSpec (fun '(existT w' ν) => forall ι, (inst fml ι : Prop) <-> inst_triangular ν ι) True (try_unify_formula fml).
+      option.wlp (fun '(existT w' ν) => forall ι, (inst fml ι : Prop) <-> inst_triangular ν ι) (try_unify_formula fml).
     Proof.
       unfold try_unify_formula; destruct fml; cbn; try (constructor; auto; fail).
       - apply try_unify_bool_spec.
@@ -761,23 +762,24 @@ Module Type SolverOn
 
     Definition solver_compose (s1 s2 : Solver) : Solver :=
       fun w0 fmls0 =>
-        option_bind
+        option.bind
+          (s1 _ fmls0)
           (fun '(existT w1 (ν01 , fmls1)) =>
-             option_map
+             option.map
                (fun '(existT w2 (ν12 , fmls2)) =>
                   existT w2 (tri_comp ν01 ν12 , fmls2))
-               (s2 _ fmls1)) (s1 _ fmls0).
+               (s2 _ fmls1)).
 
     Lemma solver_compose_spec {s1 s2} (spec1 : SolverSpec s1) (spec2 : SolverSpec s2) : SolverSpec (solver_compose s1 s2).
     Proof.
       unfold SolverSpec, solver_compose. intros w0 fmls0.
-      apply optionspec_bind.
+      apply option.spec_bind.
       generalize (spec1 _ fmls0); clear spec1.
-      apply optionspec_monotonic; auto.
+      apply option.spec_monotonic; auto.
       intros (w1 & ν01 & fmls1) H1.
-      apply optionspec_map.
+      apply option.spec_map.
       generalize (spec2 _ fmls1); clear spec2.
-      apply optionspec_monotonic; auto.
+      apply option.spec_monotonic; auto.
       - intros (w2 & ν12 & fmls2) H2. intros ι0 Hpc0.
         specialize (H1 ι0 Hpc0). destruct H1 as [H01 H10].
         rewrite inst_tri_comp. split.

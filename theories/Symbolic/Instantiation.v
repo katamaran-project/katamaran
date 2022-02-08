@@ -182,21 +182,10 @@ Module Type InstantiationOn
   Instance inst_subst_term {σ} : InstSubst (fun Σ => Term Σ σ) (Val σ).
   Proof.
     unfold InstSubst.
-    induction t; cbn; try (f_equal; auto; fail).
+    induction t; cbn; try (repeat f_equal; auto; fail).
     - unfold inst, inst_sub, inst_env.
       now rewrite env.lookup_map.
-    - f_equal.
-      f_equal.
-      apply IHt.
-    - f_equal.
-      induction es; cbn in *.
-      + reflexivity.
-      + f_equal.
-        * apply IHes, X.
-        * apply X.
-    (* - f_equal. *)
-    (*   f_equal. *)
-    (*   apply IHt. *)
+    - f_equal. induction IH; cbn; now f_equal.
   Qed.
 
   Instance inst_lift_term {σ} : InstLift (fun Σ => Term Σ σ) (Val σ).
@@ -355,13 +344,10 @@ Module Type InstantiationOn
       end.
 
     Lemma term_get_val_spec {Σ σ} (s : Term Σ σ) :
-      OptionSpec
+      option.wlp
         (fun v => forall ι : Valuation Σ, inst s ι = v)
-        True
         (term_get_val s).
-    Proof.
-      dependent elimination s; cbn; try constructor; auto.
-    Qed.
+    Proof. destruct s; constructor; auto. Qed.
 
     Equations(noeqns) term_get_pair {Σ σ1 σ2} (t : Term Σ (ty_prod σ1 σ2)) :
       option (Term Σ σ1 * Term Σ σ2) :=
@@ -370,12 +356,11 @@ Module Type InstantiationOn
       term_get_pair _ := None.
 
     Lemma term_get_pair_spec {Σ σ1 σ2} (s : Term Σ (ty_prod σ1 σ2)) :
-      OptionSpec
+      option.wlp
         (fun '(t1,t2) =>
            forall ι : Valuation Σ,
              inst (T := fun Σ => Term Σ (ty_prod σ1 σ2)) (A := Val σ1 * Val σ2) s ι =
              (inst (A := Val σ1) t1 ι, inst (A := Val σ2) t2 ι))
-        True
         (term_get_pair s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.
@@ -392,7 +377,7 @@ Module Type InstantiationOn
       term_get_sum _ := None.
 
     Lemma term_get_sum_spec {Σ σ1 σ2} (s : Term Σ (ty_sum σ1 σ2)) :
-      OptionSpec
+      option.wlp
         (fun s' => match s' with
                    | inl t => forall ι : Valuation Σ,
                        inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Val σ1 + Val σ2) s ι =
@@ -401,7 +386,6 @@ Module Type InstantiationOn
                        inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Val σ1 + Val σ2) s ι =
                        @inr (Val σ1) (Val σ2) (inst t ι)
                    end)
-        True
         (term_get_sum s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.
@@ -416,7 +400,7 @@ Module Type InstantiationOn
       term_get_union _ := None.
 
     Lemma term_get_union_spec {Σ U} (s : Term Σ (ty_union U)) :
-      OptionSpec
+      option.wlp
         (fun x : {K : 𝑼𝑲 U & Term Σ (𝑼𝑲_Ty K)} =>
            match x with
            | existT K t =>
@@ -424,7 +408,6 @@ Module Type InstantiationOn
                inst (T := fun Σ => Term Σ (ty_union U)) (A := 𝑼𝑻 U) s ι =
                𝑼_fold (@existT (𝑼𝑲 U) (fun K => Val (𝑼𝑲_Ty K)) K (inst t ι)) :> Val (ty_union U)
            end)
-        True
         (term_get_union s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.
@@ -439,12 +422,11 @@ Module Type InstantiationOn
       term_get_record _ := None.
 
     Lemma term_get_record_spec {Σ R} (s : Term Σ (ty_record R)) :
-      OptionSpec
+      option.wlp
         (fun ts =>
            forall ι : Valuation Σ,
              inst (T := fun Σ => Term Σ (ty_record R)) (A := 𝑹𝑻 R) s ι =
              𝑹_fold (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (𝑹𝑭_Ty R)) (A := NamedEnv Val (𝑹𝑭_Ty R)) ts ι))
-        True
         (term_get_record s).
     Proof.
       dependent elimination s; try constructor; auto.
@@ -458,12 +440,11 @@ Module Type InstantiationOn
       term_get_tuple _ := None.
 
     Lemma term_get_tuple_spec {Σ σs} (s : Term Σ (ty_tuple σs)) :
-      OptionSpec
+      option.wlp
         (fun ts =>
            forall ι : Valuation Σ,
              inst (T := fun Σ => Term Σ (ty_tuple σs)) (A := Val (ty_tuple σs)) s ι =
              inst (term_tuple ts) ι)
-        True
         (term_get_tuple s).
     Proof.
       now constructor.

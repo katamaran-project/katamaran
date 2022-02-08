@@ -30,6 +30,7 @@ From Coq Require Export
      Numbers.BinNums.
 From Coq Require Import
      Bool.Bool
+     Logic.StrictProp
      Lists.List
      Strings.String
      ZArith.BinInt.
@@ -101,6 +102,9 @@ Proof.
 Qed.
 
 Section Equality.
+
+  Definition EqbSpecPoint {A} (eqb : A -> A -> bool) (x : A) : Type :=
+    forall y, reflect (x = y) (eqb x y).
 
   Definition f_equal_dec {A B : Type} (f : A -> B) {x y : A} (inj : f x = f y -> x = y)
              (hyp : dec_eq x y) : dec_eq (f x) (f y) :=
@@ -195,84 +199,267 @@ Section Countable.
 
 End Countable.
 
-Section Traverse.
+Definition IsTrue (b : bool) : SProp :=
+  if b then sUnit else sEmpty.
 
-  Local Set Universe Polymorphism.
-  Import stdpp.base.
+Module option.
 
-  Context `{MRet M, MBind M} {A B : Type} (f : A -> M B).
+  Definition isSome {A} (m : option A) : bool :=
+    match m with Some _ => true | None => false end.
+  Definition isNone {A} (m : option A) : bool :=
+    match m with Some _ => false | None => true end.
 
-  Fixpoint traverse_list (xs : list A) : M (list B) :=
-    match xs with
-    | nil       => mret nil
-    | cons x xs => b ← f x ; bs ← traverse_list xs ; mret (cons b bs)
-    end.
+  Definition IsSome {A} (m : option A) : SProp :=
+    IsTrue (isSome m).
 
-  Fixpoint traverse_vector {n} (xs : Vector.t A n) : M (Vector.t B n) :=
-    match xs with
-    | Vector.nil => mret Vector.nil
-    | Vector.cons x xs =>
-      b ← f x ; bs ← traverse_vector xs ; mret (Vector.cons b bs)
-    end.
+  Definition fromSome {A} (m : option A) : IsSome m -> A :=
+    match m with Some a => fun _ => a | None => fun p => match p with end end.
 
-End Traverse.
+  Definition map {A B} (f : A -> B) (o : option A) : option B :=
+    match o with Some a => Some (f a) | None => None end.
+  Definition bind {A B} (a : option A) (f : A -> option B) : option B :=
+    match a with Some x => f x | None => None end.
+  Definition comp {A B C : Type} (f : A -> option B) (g : B -> option C) :=
+    fun a => bind (f a) g.
 
-Inductive OptionSpec {A} (S : A -> Prop) (N : Prop) : option A -> Prop :=
-| OptionSpecSome {a : A} : S a -> OptionSpec S N (Some a)
-| OptionSpecNone  : N -> OptionSpec S N None.
+  Arguments map {A B} f !o.
+  Arguments bind {A B} !a f.
 
-Derive Signature for OptionSpec.
+  (* Easy eq patterns *)
+  Lemma map_eq_some {A B} (f : A -> B) (o : option A) (a : A) :
+    o = Some a ->
+    map f o = Some (f a).
+  Proof. now intros ->. Qed.
 
-Definition option_ap {A B : Type} (f : option (A -> B)) (a : option A) : option B :=
-  match f with
-  | Some f => option_map f a
-  | None => None
-  end.
+  Lemma bind_eq_some {A B} (f : A -> option B) (o : option A) (b : B) :
+    (exists a, o = Some a /\ f a = Some b) <->
+    bind o f = Some b.
+  Proof.
+    split.
+    - now intros (a & -> & <-).
+    - destruct o as [a|]; [ now exists a | discriminate ].
+  Qed.
 
-Definition option_bind {A B : Type} (f : A -> option B) (a : option A) : option B :=
-  base.mbind f a.
-Definition option_comp {A B C : Type} (f : A -> option B) (g : B -> option C) :=
-  fun a => option_bind g (f a).
+  (* (* Not lazy in (a : option A). Avoid! *) *)
+  (* Definition ap {A B} (f : option (A -> B)) (a : option A) : option B := *)
+  (*   match f with *)
+  (*   | Some f => map f a *)
+  (*   | None => None *)
+  (*   end. *)
 
-Lemma optionspec_map {A B : Type} (S : B -> Prop) (N : Prop)
-      (f : A -> B) (o : option A) :
-  OptionSpec S N (option_map f o) <->
-  OptionSpec (fun a => S (f a)) N o.
-Proof. split; intro H; destruct o; depelim H; now constructor. Qed.
+  (* Local Notation aplazy f a := *)
+  (*   (match f with *)
+  (*    | Some g => map g a *)
+  (*    | None   => None *)
+  (*    end). *)
 
-Lemma optionspec_ap {A B : Type} (S : B -> Prop) (N : Prop)
-      (f : option (A -> B)) (o : option A) :
-  OptionSpec S N (option_ap f o) <->
-  OptionSpec (fun f => OptionSpec (fun a => S (f a)) N o) N f.
-Proof.
-  split.
-  - intro H. destruct f; cbn in *.
-    + constructor. revert H. apply optionspec_map.
-    + constructor. now depelim H.
-  - intro H. destruct f; cbn in *.
-    + depelim H. revert H. apply optionspec_map.
-    + constructor. now depelim H.
-Qed.
+  (* Variant of Bool.reflect and BoolSpec for options, i.e.
+     a weakest pre without effect observation. *)
+  Inductive spec {A} (S : A -> Prop) (N : Prop) : option A -> Prop :=
+  | specSome {a : A} : S a -> spec S N (Some a)
+  | specNone         : N -> spec S N None.
 
-Lemma optionspec_bind {A B : Type} (S : B -> Prop) (N : Prop)
-  (f : A -> option B) (o : option A) :
-  OptionSpec S N (option_bind f o) <->
-  OptionSpec (fun a => OptionSpec S N (f a)) N o.
-Proof.
-  split.
-  - intro H. destruct o.
-    + apply OptionSpecSome. apply H.
-    + apply OptionSpecNone. inversion H. apply H0.
-  - intro H. destruct o.
-    + simpl. inversion H. apply H1.
-    + simpl. apply OptionSpecNone. inversion H. apply H0.
-Qed.
+  (* Total correctness weakest pre for option. Arguments are inversed. *)
+  Inductive wp {A} (S : A -> Prop) : option A -> Prop :=
+  | wpSome {a : A} : S a -> wp S (Some a).
 
-Lemma optionspec_monotonic {A : Type} (S1 S2 : A -> Prop) (N1 N2 : Prop)
-      (fS : forall a, S1 a -> S2 a) (fN: N1 -> N2) :
-  forall (o : option A),
-    OptionSpec S1 N1 o -> OptionSpec S2 N2 o.
-Proof. intros ? []; constructor; auto. Qed.
+  (* Partial correctness weakest pre for option. Arguments are inversed. *)
+  Inductive wlp {A} (S : A -> Prop) : option A -> Prop :=
+  | wlpSome {a : A} : S a -> wlp S (Some a)
+  | wlpNone         : wlp S None.
+
+  (* We define equivalent formulations using pattern matches and
+     logical connectives plus constructors. *)
+  Lemma spec_match {A S N} (o : option A) :
+    spec S N o <-> match o with
+                   | Some a => S a
+                   | None   => N
+                   end.
+  Proof.
+    split.
+    - intros []; auto.
+    - destruct o; now constructor.
+  Qed.
+
+  Lemma wp_match {A S} (o : option A) :
+    wp S o <-> match o with
+               | Some a => S a
+               | None   => False
+               end.
+  Proof.
+    split.
+    - intros []; auto.
+    - destruct o; [apply wpSome|contradiction].
+  Qed.
+
+  Lemma wp_exists {A} (Q : A -> Prop) (o : option A) :
+    wp Q o <-> exists a, o = Some a /\ Q a.
+  Proof.
+    rewrite wp_match. split.
+    - destruct o; eauto; contradiction.
+    - now intros [a [-> HQ]].
+  Qed.
+
+  Lemma wlp_match {A S} (o : option A) :
+    wlp S o <-> match o with
+               | Some a => S a
+               | None   => True
+               end.
+  Proof.
+    split.
+    - intros []; auto.
+    - destruct o; auto using wlpSome, wlpNone.
+  Qed.
+
+  Lemma wlp_forall {A} (Q : A -> Prop) (o : option A) :
+    wlp Q o <-> forall a, o = Some a -> Q a.
+  Proof.
+    rewrite wlp_match. split.
+    - intros; subst; auto.
+    - destruct o; auto.
+  Qed.
+
+  Section Bind.
+
+    Context {A B} {S : B -> Prop} {N : Prop} (f : A -> option B) (o : option A).
+
+    Local Ltac proof :=
+      destruct o; rewrite ?spec_match, ?wp_match, ?wlp_match; auto.
+
+    Lemma spec_bind : spec S N (bind o f) <-> spec (fun a => spec S N (f a)) N o.
+    Proof. proof. Qed.
+    Definition spec_bind_elim := proj1 spec_bind.
+    Definition spec_bind_intro := proj2 spec_bind.
+
+    Lemma wp_bind : wp S (bind o f) <-> wp (fun a => wp S (f a)) o.
+    Proof. proof. Qed.
+    Definition wp_bind_elim := proj1 wp_bind.
+    Definition wp_bind_intro := proj2 wp_bind.
+
+    Lemma wlp_bind : wlp S (bind o f) <-> wlp (fun a => wlp S (f a)) o.
+    Proof. proof. Qed.
+
+    Definition wlp_bind_elim := proj1 wlp_bind.
+    Definition wlp_bind_intro := proj2 wlp_bind.
+
+  End Bind.
+
+  Lemma spec_map {A B S N} (f : A -> B) (o : option A) :
+    spec S N (map f o) <-> spec (fun a => S (f a)) N o.
+  Proof. do 2 rewrite spec_match; now destruct o. Qed.
+
+  (* Lemma spec_ap {A B S N} (f : option (A -> B)) (o : option A) : *)
+  (*   spec S N (ap f o) <-> *)
+  (*   spec (fun f => spec (fun a => S (f a)) N o) N f. *)
+  (* Proof. *)
+  (*   do 2 rewrite spec_match. destruct f; auto. *)
+  (*   rewrite spec_match; now destruct o. *)
+  (* Qed. *)
+
+  (* Lemma spec_aplazy {A B S N} (f : option (A -> B)) (o : option A) : *)
+  (*   spec S N (aplazy f o) <-> *)
+  (*   spec (fun f => spec (fun a => S (f a)) N o) N f. *)
+  (* Proof. apply spec_ap. Qed. *)
+
+  Lemma spec_monotonic {A} (S1 S2 : A -> Prop) (N1 N2 : Prop)
+    (fS : forall a, S1 a -> S2 a) (fN: N1 -> N2) :
+    forall (o : option A),
+      spec S1 N1 o -> spec S2 N2 o.
+  Proof. intros ? []; constructor; auto. Qed.
+
+  Lemma wp_map {A B S} (f : A -> B) (o : option A) :
+    wp S (map f o) <-> wp (fun a => S (f a)) o.
+  Proof. do 2 rewrite wp_match; now destruct o. Qed.
+
+  (* Lemma wp_ap {A B S} (f : option (A -> B)) (o : option A) : *)
+  (*   wp S (ap f o) <-> *)
+  (*   wp (fun f => wp (fun a => S (f a)) o) f. *)
+  (* Proof. *)
+  (*   do 2 rewrite wp_match. destruct f; auto. *)
+  (*   rewrite wp_match; now destruct o. *)
+  (* Qed. *)
+
+  (* Lemma wp_aplazy {A B S} (f : option (A -> B)) (o : option A) : *)
+  (*   wp S (aplazy f o) <-> *)
+  (*   wp (fun f => wp (fun a => S (f a)) o) f. *)
+  (* Proof. apply wp_ap. Qed. *)
+
+  Lemma wp_monotonic {A} (S1 S2 : A -> Prop) (fS : forall a, S1 a -> S2 a)  :
+    forall (o : option A), wp S1 o -> wp S2 o.
+  Proof. intros ? []; constructor; auto. Qed.
+
+  Lemma wlp_map {A B S} (f : A -> B) (o : option A) :
+    wlp S (map f o) <-> wlp (fun a => S (f a)) o.
+  Proof. do 2 rewrite wlp_match; now destruct o. Qed.
+
+  (* Lemma wlp_ap {A B S} (f : option (A -> B)) (o : option A) : *)
+  (*   wlp S (ap f o) <-> *)
+  (*   wlp (fun f => wlp (fun a => S (f a)) o) f. *)
+  (* Proof. *)
+  (*   do 2 rewrite wlp_match. destruct f; auto. *)
+  (*   rewrite wlp_match; now destruct o. *)
+  (* Qed. *)
+
+  (* Lemma wlp_aplazy {A B S} (f : option (A -> B)) (o : option A) : *)
+  (*   wlp S (aplazy f o) <-> *)
+  (*   wlp (fun f => wlp (fun a => S (f a)) o) f. *)
+  (* Proof. *)
+  (*   do 2 rewrite wlp_match. destruct f; auto. *)
+  (*   rewrite wlp_match; now destruct o. *)
+  (* Qed. *)
+
+  Lemma wlp_monotonic {A} (S1 S2 : A -> Prop) (fS : forall a, S1 a -> S2 a)  :
+    forall (o : option A), wlp S1 o -> wlp S2 o.
+  Proof. intros ? []; constructor; auto. Qed.
+
+  Module Import notations.
+
+    Notation "' x <- ma ;; mb" :=
+      (bind ma (fun x => mb))
+        (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
+          format "' x  <-  ma  ;;  mb").
+    Notation "x <- ma ;; mb" :=
+      (bind ma (fun x => mb))
+        (at level 80, ma at next level, mb at level 200, right associativity).
+    Notation "f <$> a" := (map f a) (at level 40, left associativity).
+    (* Notation "f <*> a" := (ap f a) (at level 40, left associativity). *)
+
+  End notations.
+
+  Module tactics.
+
+    Ltac mixin :=
+      lazymatch goal with
+      | |- wp _ (Some _) => constructor
+      | |- wp _ (map _ _) => apply wp_map
+      | |- wp _ (bind _ _) => apply wp_bind_intro
+      | |- wlp _ (Some _) => constructor
+      | |- wlp _ (map _ _) => apply wlp_map
+      | |- wlp _ (bind _ _) => apply wlp_bind_intro
+      | H: wp _ ?x |- wp _ ?x => revert H; apply wp_monotonic; intros
+      | H: wlp _ ?x |- wlp _ ?x => revert H; apply wlp_monotonic; intros
+      end.
+
+  End tactics.
+
+  Section Traverse.
+    Context {A B} (f : A -> option B).
+
+    Fixpoint traverse_list (xs : list A) : option (list B) :=
+      match xs with
+      | nil       => Some nil
+      | cons x xs => b <- f x ;; bs <- traverse_list xs ;; Some (cons b bs)
+      end.
+
+    Fixpoint traverse_vector {n} (xs : Vector.t A n) : option (Vector.t B n) :=
+      match xs with
+      | Vector.nil       => Some Vector.nil
+      | Vector.cons x xs => b <- f x ;; bs <- traverse_vector xs ;; Some (Vector.cons b bs)
+      end.
+
+  End Traverse.
+
+End option.
 
 Lemma and_iff_compat_r' (A B C : Prop) :
   (B /\ A <-> C /\ A) <-> (A -> B <-> C).
@@ -286,13 +473,27 @@ Lemma imp_iff_compat_l' (A B C : Prop) :
   ((A -> B) <-> (A -> C)) <-> (A -> B <-> C).
 Proof. intuition. Qed.
 
+Declare Scope alt_scope.
 Declare Scope asn_scope.
 Declare Scope exp_scope.
 Declare Scope modal_scope.
 Declare Scope mut_scope.
 Declare Scope pat_scope.
+Delimit Scope alt_scope with alt.
 Delimit Scope asn_scope with asn.
 Delimit Scope exp_scope with exp.
 Delimit Scope modal_scope with modal.
 Delimit Scope mut_scope with mut.
 Delimit Scope pat_scope with pat.
+
+Definition findAD {A} {B : A -> Type} {eqA: EqDec A} (a : A) :
+  list (sigT B) -> option (B a) :=
+  fix find (xs : list (sigT B)) : option (B a) :=
+    match xs with
+    | nil                   => None
+    | cons (existT a' b) xs =>
+        match eq_dec a a' with
+        | left e  => Some (eq_rect_r B b e)
+        | right _ => find xs
+        end
+    end.

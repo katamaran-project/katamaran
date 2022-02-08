@@ -118,19 +118,16 @@ Module Type MutatorsOn
           MkDebugCall f c (subst ts ζ01) (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
+    Import option.notations.
     Global Instance OccursCheckDebugCall : OccursCheck DebugCall :=
       fun Σ x xIn d =>
         match d with
         | MkDebugCall f c ts pc δ h =>
-          option_ap
-            (option_ap
-               (option_ap
-                  (option_map
-                     (fun ts' => @MkDebugCall _ _ _ f c ts' _)
-                     (occurs_check xIn ts))
-                  (occurs_check xIn pc))
-               (occurs_check xIn δ))
-            (occurs_check xIn h)
+            ts' <- occurs_check xIn ts ;;
+            pc' <- occurs_check xIn pc ;;
+            δ'  <- occurs_check xIn δ ;;
+            h'  <- occurs_check xIn h ;;
+            Some (MkDebugCall f c ts' pc' δ' h')
         end.
 
     Global Instance SubstDebugStm : Subst DebugStm :=
@@ -144,13 +141,10 @@ Module Type MutatorsOn
       fun Σ x xIn d =>
         match d with
         | MkDebugStm s pc δ h =>
-          option_ap
-            (option_ap
-               (option_map
-                  (MkDebugStm s)
-                  (occurs_check xIn pc))
-               (occurs_check xIn δ))
-            (occurs_check xIn h)
+            pc' <- occurs_check xIn pc ;;
+            δ'  <- occurs_check xIn δ ;;
+            h'  <- occurs_check xIn h ;;
+            Some (MkDebugStm s pc' δ' h')
         end.
 
     Global Instance SubstDebugAsn : Subst DebugAsn :=
@@ -164,13 +158,10 @@ Module Type MutatorsOn
       fun Σ x xIn d =>
         match d with
         | MkDebugAsn pc δ h =>
-          option_ap
-            (option_ap
-               (option_map
-                  (@MkDebugAsn _ _)
-                  (occurs_check xIn pc))
-               (occurs_check xIn δ))
-            (occurs_check xIn h)
+            pc' <- occurs_check xIn pc ;;
+            δ'  <- occurs_check xIn δ ;;
+            h'  <- occurs_check xIn h ;;
+            Some (MkDebugAsn pc' δ' h')
         end.
 
     Global Instance SubstDebugConsumeChunk : Subst DebugConsumeChunk :=
@@ -184,15 +175,11 @@ Module Type MutatorsOn
       fun Σ x xIn d =>
         match d with
         | MkDebugConsumeChunk pc δ h c =>
-          option_ap
-            (option_ap
-               (option_ap
-                  (option_map
-                     (@MkDebugConsumeChunk _ _)
-                     (occurs_check xIn pc))
-                  (occurs_check xIn δ))
-               (occurs_check xIn h))
-            (occurs_check xIn c)
+            pc' <- occurs_check xIn pc ;;
+            δ'  <- occurs_check xIn δ ;;
+            h'  <- occurs_check xIn h ;;
+            c'  <- occurs_check xIn c ;;
+            Some (MkDebugConsumeChunk pc' δ' h'  c')
         end.
 
   End DebugInfo.
@@ -1301,7 +1288,7 @@ Module Type MutatorsOn
           apply POSTr. auto. auto.
           apply (persist (A := SStore _) δ0 ω01).
           apply (persist (A := SHeap) h0 ω01).
-        - intros w1 ω01 [[δ1 h1] a1]. apply POST. auto. auto. auto. auto.
+        - intros w1 ω01 [ [δ1 h1] a1]. apply POST. auto. auto. auto. auto.
       Defined.
 
       Definition angelic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :

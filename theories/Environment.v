@@ -30,7 +30,7 @@ From Coq Require Import
      Bool.Bool.
 From Equations Require Import Equations.
 From Katamaran Require Import
-     Context Notations.
+     Context Notations Prelude.
 Import ctx.notations.
 
 Local Set Implicit Arguments.
@@ -130,27 +130,85 @@ Section WithBinding.
 
     End TransparentObligations.
 
+    Section Inversions.
+
+      Lemma inversion_eq_snoc {Γ : Ctx B} {b : B} (E1 E2 : Env Γ) (v1 v2 : D b) :
+        snoc E1 v1 = snoc E2 v2 <->
+        E1 = E2 /\ v1 = v2.
+      Proof.
+        split.
+        - intros H. now dependent elimination H.
+        - intros []; congruence.
+      Qed.
+
+      Lemma inversion_eq_cat {Γ Δ : Ctx B} (EΓ1 EΓ2 : Env Γ) (EΔ1 EΔ2 : Env Δ) :
+        cat EΓ1 EΔ1 = cat EΓ2 EΔ2 <->
+        EΓ1 = EΓ2 /\ EΔ1 = EΔ2.
+      Proof.
+        induction EΔ1; destroy EΔ2; cbn; [easy|].
+        rewrite ?inversion_eq_snoc. intuition.
+      Qed.
+
+    End Inversions.
+
+    Fixpoint lookup {Γ} (E : Env Γ) : forall b, b ∈ Γ -> D b :=
+      match E with
+      | nil       => ctx.in_case_nil
+      | snoc E db => ctx.in_case_snoc D db (lookup E)
+      end.
+
+    Inductive All (Q : forall b, D b -> Type) : forall {Γ}, Env Γ -> Type :=
+    | all_nil : All Q nil
+    | all_snoc {Γ E b d} : @All Q Γ E -> Q b d -> All Q (snoc E d).
+
+    #[derive(equations=no)]
+    Equations all_snoc_inv_1 {Q : forall b, D b -> Type} {Γ b} {E : Env Γ} {d : D b} :
+      All Q (snoc E d) -> All Q E := | all_snoc QE _ => QE.
+
+    #[derive(equations=no)]
+    Equations all_snoc_inv_2 {Q : forall b, D b -> Type} {Γ b} {E : Env Γ} {d : D b} :
+      All Q (snoc E d) -> Q b d := | all_snoc _ Qd => Qd.
+
+    Lemma all_intro {Q : forall [b], D b -> Type} (HQ : forall b (d : D b), Q d) :
+      forall Γ (E : Env Γ), All Q E.
+    Proof. intros ? E. induction E; constructor; auto. Defined.
+
+    Lemma all_elim {Q : forall [b], D b -> Type} {Γ} {E : Env Γ} (HE : All Q E) :
+      forall b (bIn : b ∈ Γ), Q (lookup E bIn).
+    Proof.
+      induction HE; intros x xIn.
+      - destruct (ctx.nilView xIn).
+      - destruct (ctx.snocView xIn); cbn; auto.
+    Defined.
+
     Section HomEquality.
 
-      Variable eqb : forall b, D b -> D b -> bool.
+      Variable eqb : forall [b], D b -> D b -> bool.
 
       Equations(noeqns) eqb_hom {Γ} (δ1 δ2 : Env Γ) : bool :=
       | nil         | nil         := true;
       | snoc δ1 db1 | snoc δ2 db2 := eqb db1 db2 &&& eqb_hom δ1 δ2.
 
+      Lemma eqb_hom_spec_point (Γ : Ctx B) (xs : Env Γ)
+        (HYP : All (fun b => EqbSpecPoint (@eqb b)) xs) :
+        EqbSpecPoint eqb_hom xs.
+      Proof.
+        induction xs; intros ys; destroy ys; cbn.
+        - do 2 constructor.
+        - specialize (IHxs (all_snoc_inv_1 HYP)). pose proof (all_snoc_inv_2 HYP) as IHb.
+          destruct (IHb v); subst.
+          + destruct IHxs with ys; constructor.
+            * subst; auto.
+            * intros ?%inversion_eq_snoc. intuition.
+          + constructor. intros ?%inversion_eq_snoc. intuition.
+      Qed.
+
       Variable eqb_spec : forall b (x y : D b),
-          reflect (x = y) (eqb x y).
+        reflect (x = y) (eqb x y).
 
       Lemma eqb_hom_spec {Γ} (δ1 δ2 : Env Γ) :
         reflect (δ1 = δ2) (eqb_hom δ1 δ2).
-      Proof.
-        induction δ1; destroy δ2; cbn.
-        - constructor. reflexivity.
-        - destruct (eqb_spec db v).
-          + eapply (ssrbool.iffP (IHδ1 _)); intros Heq;
-              dependent elimination Heq; congruence.
-          + constructor; intros e; dependent elimination e; congruence.
-      Qed.
+      Proof. apply eqb_hom_spec_point, all_intro; auto. Qed.
 
     End HomEquality.
 
@@ -183,12 +241,6 @@ Section WithBinding.
       Qed.
 
     End HetEquality.
-
-    Fixpoint lookup {Γ} (E : Env Γ) : forall b, b ∈ Γ -> D b :=
-      match E with
-      | nil       => ctx.in_case_nil
-      | snoc E db => ctx.in_case_snoc D db (lookup E)
-      end.
 
     Fixpoint tabulate {Γ} : (forall b, b ∈ Γ -> D b) -> Env Γ :=
       match Γ with
@@ -428,27 +480,6 @@ Section WithBinding.
       lookup (cat E1 E2) (ctx.in_cat_right xIn) = lookup E2 xIn.
     Proof. induction E2; destroy xIn; cbn; auto. Qed.
 
-    Section Inversions.
-
-      Lemma inversion_eq_snoc {Γ : Ctx B} {b : B} (E1 E2 : Env Γ) (v1 v2 : D b) :
-        snoc E1 v1 = snoc E2 v2 <->
-        E1 = E2 /\ v1 = v2.
-      Proof.
-        split.
-        - intros H. now dependent elimination H.
-        - intros []; congruence.
-      Qed.
-
-      Lemma inversion_eq_cat {Γ Δ : Ctx B} (EΓ1 EΓ2 : Env Γ) (EΔ1 EΔ2 : Env Δ) :
-        cat EΓ1 EΔ1 = cat EΓ2 EΔ2 <->
-        EΓ1 = EΓ2 /\ EΔ1 = EΔ2.
-      Proof.
-        induction EΔ1; destroy EΔ2; cbn; [easy|].
-        rewrite ?inversion_eq_snoc. intuition.
-      Qed.
-
-    End Inversions.
-
     Fixpoint abstract (Δ : Ctx B) (r : Type) {struct Δ} : Type :=
       match Δ with
       | []    => r
@@ -667,19 +698,16 @@ Module notations.
   (*   (at level 0, format "[ 'env'  x ;  .. ;  z ]") : dep_pattern_scope. *)
 
 End notations.
-Import notations.
 
 Section Traverse.
 
-  Import stdpp.base.
+  Import option.notations.
+  Context {I : Set} {A B : I -> Set} (f : forall i : I, A i -> option (B i)).
 
-  Context M {MRetM : MRet M} {MBindM : MBind M}.
-  Context {I : Set} {A B : I -> Set} (f : forall i : I, A i -> M (B i)).
-
-  Fixpoint traverse {Γ : Ctx I} (xs : Env A Γ) : M (Env B Γ) :=
+  Fixpoint traverse {Γ : Ctx I} (xs : Env A Γ) : option (Env B Γ) :=
     match xs with
-    | env.nil      => mret (env.nil)
-    | Ea ► (i ↦ a) => Eb ← traverse Ea; b ← f a; mret (Eb ► (i ↦ b))
+    | nil         => Some nil
+    | snoc Ea i a => Eb <- traverse Ea;; b <- f a;; Some (snoc Eb i b)
     end.
 
 End Traverse.

@@ -1564,9 +1564,8 @@ Module Soundness
   Qed.
 
   Lemma try_consume_chunk_exact_spec {Σ} (h : SHeap Σ) (c : Chunk Σ) :
-    OptionSpec
+    option.wlp
       (fun h' => List.In (c , h') (heap_extractions h))
-      True
       (SMut.try_consume_chunk_exact h c).
   Proof.
     induction h as [|c' h].
@@ -1576,8 +1575,8 @@ Module Soundness
       + constructor. left. subst.
         remember (is_duplicable c') as dup.
         destruct dup; reflexivity.
-      + apply optionspec_map. revert IHh.
-        apply optionspec_monotonic; auto.
+      + apply option.wlp_map. revert IHh.
+        apply option.wlp_monotonic; auto.
         intros h' HIn. right.
         rewrite List.in_map_iff.
         exists (c,h'). auto.
@@ -1603,13 +1602,12 @@ Module Soundness
   Proof. now destruct e. Qed.
 
   Lemma find_chunk_user_precise_spec {Σ p ΔI ΔO} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO) (h : SHeap Σ) :
-    OptionSpec
+    option.wlp
       (fun '(h', eqs) =>
          forall ι : Valuation Σ, instpc eqs ι ->
            List.In
              (inst (chunk_user p (eq_rect_r (fun c : Ctx Ty => Env (Term Σ) c) (tsI ►► tsO) prec)) ι, inst h' ι)
              (heap_extractions (inst h ι)))
-      True
       (SMut.find_chunk_user_precise prec tsI tsO h).
   Proof.
     induction h as [|c h]; [now constructor|]. cbn [SMut.find_chunk_user_precise].
@@ -1627,7 +1625,7 @@ Module Soundness
       change (env.cat ?A ?B) with (env.cat A B). rewrite Heqts'.
       rewrite (@inst_eq_rect (Ctx Ty) (fun Δ Σ => Env (Term Σ) Δ) (Env Val)).
       rewrite rew_opp_l. now destruct is_duplicable.
-    - apply optionspec_map. revert IHh. apply optionspec_monotonic; auto.
+    - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
       intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
       remember (inst (chunk_user p (eq_rect_r (fun c0 : Ctx Ty => Env (Term Σ) c0) (tsI ►► tsO) prec)) ι) as c'.
       change (inst (cons c h) ι) with (cons (inst c ι) (inst h ι)).
@@ -1636,13 +1634,12 @@ Module Soundness
   Qed.
 
   Lemma find_chunk_ptsreg_precise_spec {Σ σ} (r : 𝑹𝑬𝑮 σ) (t : Term Σ σ) (h : SHeap Σ) :
-    OptionSpec
+    option.wlp
       (fun '(h', eqs) =>
          forall ι : Valuation Σ, instpc eqs ι ->
            List.In
              (inst (chunk_ptsreg r t) ι, inst h' ι)
              (heap_extractions (inst h ι)))
-      True
       (SMut.find_chunk_ptsreg_precise r t h).
   Proof.
     induction h; cbn [SMut.find_chunk_ptsreg_precise]; [now constructor|].
@@ -1653,7 +1650,7 @@ Module Soundness
       dependent elimination e. cbn in Heqo. dependent elimination Heqo.
       change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).
       cbn. left. f_equal. f_equal. symmetry. exact Hf.
-    - apply optionspec_map. revert IHh. apply optionspec_monotonic; auto.
+    - apply option.wlp_map. revert IHh. apply option.wlp_monotonic; auto.
       intros [h' eqs] HYP ι Heqs. specialize (HYP ι Heqs).
       remember (inst (chunk_ptsreg r t) ι) as c'.
       change (inst (cons ?c ?h) ι) with (cons (inst c ι) (inst h ι)).

@@ -28,7 +28,10 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Logic.Decidable
      Strings.String.
+From Equations Require Import
+     Equations.
 From Katamaran Require Import
      Base
      Bitvector
@@ -223,6 +226,46 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_assert {Γ} e1%exp e2%exp.
   Arguments stm_lemma {Γ Δ} l es%env.
 
+
+  Definition UnionAlt (U : 𝑼) (Γ : PCtx) (τ : Ty) (K : 𝑼𝑲 U) : Set :=
+    Alternative Γ (𝑼𝑲_Ty K) τ.
+  Arguments UnionAlt : clear implicits.
+
+  Definition UnionAlts (U : 𝑼) (Γ : PCtx) (τ : Ty) : Set :=
+    list (sigT (@UnionAlt U Γ τ)).
+
+  Definition findUnionAlt {U : 𝑼} {Γ : PCtx} {τ : Ty} (K : 𝑼𝑲 U) :
+    UnionAlts U Γ τ -> option (@UnionAlt U Γ τ K) := findAD K.
+
+  (* The well-formedness property for lists of alternatives captures the
+     exhaustiveness of pattern-matching. We currently don't rule out redundancy.
+     The find function will always return the first alternative matching a given
+     union constructor. *)
+  Definition UnionAltsWf {U Γ τ} (alts : UnionAlts U Γ τ) : SProp :=
+    IsTrue (List.forallb (fun K => option.isSome (findUnionAlt K alts)) (finite.enum (𝑼𝑲 U))).
+
+  Lemma union_alts_wf' {U Γ τ} (alts : UnionAlts U Γ τ) (alts_wf : UnionAltsWf alts) :
+    forall (K : 𝑼𝑲 U), findUnionAlt K alts <> None.
+  Proof.
+    intros K. unfold UnionAltsWf in alts_wf.
+    destruct List.forallb eqn:Hwf; [|easy].
+    rewrite List.forallb_forall in Hwf.
+    specialize (Hwf K).
+    rewrite <- base.elem_of_list_In in Hwf.
+    inster Hwf by apply finite.elem_of_enum.
+    now destruct (findUnionAlt K alts).
+  Qed.
+
+  Definition stm_match_union_alt_list {Γ τ} U (e : Exp Γ (ty_union U))
+    (alts : UnionAlts U Γ τ) (alts_wf : UnionAltsWf alts) : Stm Γ τ :=
+    stm_match_union_alt U e
+      (fun K =>
+         match findUnionAlt K alts as o return findUnionAlt K alts = o -> _ with
+         | Some alt => fun _   => alt
+         | None     => fun Heq => False_rec _ (union_alts_wf' alts alts_wf Heq)
+         end eq_refl).
+  Arguments stm_match_union_alt_list {_ _} U e alts _.
+
   Section NameResolution.
 
     (* Ideally the following smart constructors would perform name resolution
@@ -396,6 +439,13 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
       (recordpat_snoc .. (recordpat_snoc (recordpat_snoc recordpat_nil _ x) _ y) .. _ z)
       rhs%exp)
     (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : exp_scope.
+
+  (* Notation "'match:' ee 'in' 'union' U 'with' | x | y | .. | z 'end'" := *)
+  (*   (stm_match_union_alt_list U ee (cons x%alt (cons y%alt .. (cons z%alt nil) ..)) stt) *)
+  (*   (format "'[hv' 'match:'  ee  'in'  'union'  U  'with'  '/' |  x  '/' |  y  '/' | ..  '/' | z  '/' 'end' ']'") : exp_scope. *)
+
+  (* Notation "[[ KK pat => rhs ]]" := (existT KK (MkAlt pat rhs)) *)
+  (*   (KK global, pat at level 9, format "[[ KK  pat  =>  rhs ]]") : alt_scope. *)
 
   Notation "'call' f a1 .. an" :=
     (stm_call f (env.snoc .. (env.snoc env.nil (_∷_) a1%exp) .. (_∷_) an%exp))

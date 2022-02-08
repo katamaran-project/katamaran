@@ -478,7 +478,7 @@ Module Type WorldsOn
 
   Definition SolverSpec (s : Solver) : Prop :=
     forall w0 (fmls0 : WList Formula w0),
-      OptionSpec
+      option.spec
         (fun '(existT w1 (ζ, fmls1)) =>
            forall ι0,
              instpc (wco w0) ι0 ->

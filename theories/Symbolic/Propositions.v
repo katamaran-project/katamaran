@@ -83,17 +83,15 @@ Module Type SymPropOn
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
+    Import option.notations.
     Global Instance OccursCheckMessage : OccursCheck Message :=
       fun Σ x xIn msg =>
         match msg with
         | MkMessage f m Γ δ h pc =>
-          option_ap
-            (option_ap
-               (option_map
-                  (MkMessage f m Γ)
-                  (occurs_check xIn δ))
-               (occurs_check xIn h))
-            (occurs_check xIn pc)
+            δ'  <- occurs_check xIn δ;;
+            h'  <- occurs_check xIn h;;
+            pc' <- occurs_check xIn pc;;
+            Some (MkMessage f m Γ δ' h' pc')
         end.
 
     Inductive Error (Σ : LCtx) (msg : Message Σ) : Prop :=.
@@ -1017,9 +1015,8 @@ Module Type SymPropOn
       Proof. now destruct eq. Qed.
 
       Lemma ectx_subst_spec {Σ1 Σ2} (ec : ECtx Σ1 Σ2) {x σ} (xIn : x∷σ ∈ Σ2) (t : Term (Σ2 - x∷σ) σ) (msg : Message _) :
-        OptionSpec
+        option.wlp
           (fun e => forall p, plug e p <=> plug ec (assert_vareq x t msg p))
-          True
           (ectx_subst ec xIn t).
       Proof.
         destruct ec; cbn. destruct (ctx.catView xIn); constructor; auto.
@@ -1210,9 +1207,8 @@ Module Type SymPropOn
       Proof. now destruct eq. Qed.
 
       Lemma uctx_subst_spec {Σ1 Σ2} (ec : UCtx Σ1 Σ2) {x σ} (xIn : x∷σ ∈ Σ2) (t : Term (Σ2 - x∷σ) σ) :
-        OptionSpec
+        option.wlp
           (fun e => forall p, plug e p <=> plug ec (assume_vareq x t p))
-          True
           (uctx_subst ec xIn t).
       Proof.
         destruct ec; cbn. destruct (ctx.catView xIn); constructor; auto.

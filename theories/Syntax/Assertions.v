@@ -122,32 +122,38 @@ Module Type AssertionsOn
       end.
 
   (* This instance is only used for linting contracts. *)
-  Global Instance OccursCheckAssertion :
+  Import option.notations.
+  #[export] Instance OccursCheckAssertion :
     OccursCheck Assertion :=
     fix occurs Σ b (bIn : b ∈ Σ) (asn : Assertion Σ) : option (Assertion (Σ - b)) :=
       match asn with
-      | asn_formula fml => option_map (@asn_formula _) (occurs_check bIn fml)
-      | asn_chunk c     => option_map (@asn_chunk _) (occurs_check bIn c)
-      | asn_chunk_angelic c => option_map (@asn_chunk_angelic _) (occurs_check bIn c)
+      | asn_formula fml => option.map (@asn_formula _) (occurs_check bIn fml)
+      | asn_chunk c     => option.map (@asn_chunk _) (occurs_check bIn c)
+      | asn_chunk_angelic c => option.map (@asn_chunk_angelic _) (occurs_check bIn c)
       | asn_if b a1 a2  =>
-        option_ap (option_ap (option_map (@asn_if _) (occurs_check bIn b)) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
+          b'  <- occurs_check bIn b;;
+          a1' <- occurs _ _ bIn a1 ;;
+          a2' <- occurs _ _ bIn a2 ;;
+          Some (asn_if b' a1' a2')
       | asn_match_enum E k alts => None (* TODO *)
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
-        option_ap
-          (option_ap
-             (option_map
-                (fun s' alt_inl' alt_inr' =>
-                   asn_match_sum σ τ s' xl alt_inl' xr alt_inr')
-                (occurs_check bIn s))
-             (occurs (Σ ▻ xl∷σ) b (ctx.in_succ bIn) alt_inl))
-          (occurs (Σ ▻ xr∷τ) b (ctx.in_succ bIn) alt_inr)
+          s'   <- occurs_check bIn s ;;
+          inl' <- occurs (Σ ▻ xl∷σ) b (ctx.in_succ bIn) alt_inl ;;
+          inr' <- occurs (Σ ▻ xr∷τ) b (ctx.in_succ bIn) alt_inr ;;
+          Some (asn_match_sum σ τ s' xl inl' xr inr')
       | @asn_match_list _ σ s alt_nil xh xt alt_cons => None (* TODO *)
       | @asn_match_prod _ σ1 σ2 s xl xr rhs => None (* TODO *)
       | @asn_match_tuple _ σs Δ s p rhs => None (* TODO *)
       | @asn_match_record _ R4 Δ s p rhs => None (* TODO *)
       | asn_match_union U s alt__ctx alt__pat alt__rhs => None (* TODO *)
-      | asn_sep a1 a2 => option_ap (option_map (@asn_sep _) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
-      | asn_or a1 a2  => option_ap (option_map (@asn_or _) (occurs _ _ bIn a1)) (occurs _ _ bIn a2)
+      | asn_sep a1 a2 =>
+          a1' <- occurs _ _ bIn a1 ;;
+          a2' <- occurs _ _ bIn a2 ;;
+          Some (asn_sep a1' a2')
+      | asn_or a1 a2  =>
+          a1' <- occurs _ _ bIn a1 ;;
+          a2' <- occurs _ _ bIn a2 ;;
+          Some (asn_or a1' a2')
       | asn_exist ς τ a => option_map (@asn_exist _ ς τ) (occurs _ _ (ctx.in_succ bIn) a)
       | asn_debug => Some asn_debug
       end.

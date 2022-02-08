@@ -79,7 +79,7 @@ Module Type FormulasOn
     formula_eqs_nctx (env.snoc δ _ t) (env.snoc δ' _ t') :=
       formula_eq t t' :: formula_eqs_nctx δ δ'.
 
-  Instance sub_formula : Subst Formula :=
+  Global Instance sub_formula : Subst Formula :=
     fun Σ1 fml Σ2 ζ =>
       match fml with
       | formula_user p ts => formula_user p (subst ts ζ)
@@ -93,14 +93,14 @@ Module Type FormulasOn
       | formula_neq t1 t2 => formula_neq (subst t1 ζ) (subst t2 ζ)
       end.
 
-  Instance substlaws_formula : SubstLaws Formula.
+  Global Instance substlaws_formula : SubstLaws Formula.
   Proof.
     constructor.
     { intros ? []; cbn; f_equal; apply subst_sub_id. }
     { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
   Qed.
 
-  Instance inst_formula : Inst Formula Prop :=
+  Global Instance inst_formula : Inst Formula Prop :=
     fun {Σ} (fml : Formula Σ) (ι : Valuation Σ) =>
       match fml with
       | formula_user p ts => env.uncurry (𝑷_inst p) (inst ts ι)
@@ -117,7 +117,7 @@ Module Type FormulasOn
   (* Instance lift_formula : Lift Formula Prop := *)
   (*   fun Σ P => formula_prop env.nil P. *)
 
-  Instance inst_subst_formula : InstSubst Formula Prop.
+  Global Instance inst_subst_formula : InstSubst Formula Prop.
   Proof.
     intros ? ? ? ? f.
     induction f; cbn; repeat f_equal; apply inst_subst.
@@ -126,35 +126,23 @@ Module Type FormulasOn
   (* Instance inst_lift_formula : InstLift Formula Prop. *)
   (* Proof. red. reflexivity. Qed. *)
 
+  Import option.notations.
   Global Instance OccursCheckFormula : OccursCheck Formula :=
     fun Σ x xIn fml =>
       match fml with
-      | formula_user p ts => option_map (formula_user p) (occurs_check xIn ts)
-      | formula_bool t    => option_map formula_bool (occurs_check xIn t)
-      | formula_prop ζ P  => option_map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
-      | formula_ge t1 t2  => option_ap (option_map (@formula_ge _) (occurs_check xIn t1)) (occurs_check xIn t2)
-      | formula_gt t1 t2  => option_ap (option_map (@formula_gt _) (occurs_check xIn t1)) (occurs_check xIn t2)
-      | formula_le t1 t2  => option_ap (option_map (@formula_le _) (occurs_check xIn t1)) (occurs_check xIn t2)
-      | formula_lt t1 t2  => option_ap (option_map (@formula_lt _) (occurs_check xIn t1)) (occurs_check xIn t2)
-      | formula_eq t1 t2  => option_ap (option_map (@formula_eq _ _) (occurs_check xIn t1)) (occurs_check xIn t2)
-      | formula_neq t1 t2 => option_ap (option_map (@formula_neq _ _) (occurs_check xIn t1)) (occurs_check xIn t2)
+      | formula_user p ts => option.map (formula_user p) (occurs_check xIn ts)
+      | formula_bool t    => option.map formula_bool (occurs_check xIn t)
+      | formula_prop ζ P  => option.map (fun ζ' => formula_prop ζ' P) (occurs_check xIn ζ)
+      | formula_ge t1 t2  => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_ge t1' t2')
+      | formula_gt t1 t2  => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_gt t1' t2')
+      | formula_le t1 t2  => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_le t1' t2')
+      | formula_lt t1 t2  => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_lt t1' t2')
+      | formula_eq t1 t2  => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_eq t1' t2')
+      | formula_neq t1 t2 => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_neq t1' t2')
       end.
 
-  Global Instance OccursCheckLawsFormula : OccursCheckLaws Formula.
-  Proof.
-    constructor.
-    - intros ? ? ? ? []; cbn; now rewrite ?occurs_check_shift.
-    - intros ? ? ? [] fml' Heq; cbn in *;
-        repeat
-          lazymatch goal with
-          | H: option_map _ _ = Some _ |- _ =>
-              apply option_map_eq_some' in H; destruct_conjs; subst; cbn
-          | H: option_ap _ _ = Some _ |- _ =>
-              apply option_bind_eq_some in H; destruct_conjs; subst; cbn
-          | H: @occurs_check ?T ?OC ?Σ ?b ?bIn ?t = Some ?t' |- _ =>
-              apply (@occurs_check_sound T _ OC _ Σ b bIn t t') in H; subst
-          end; auto.
-  Qed.
+  Global Instance occurs_check_laws_formula : OccursCheckLaws Formula.
+  Proof. occurs_check_derive. Qed.
 
   (* The path condition expresses a set of constraints on the logic variables
      that encode the path taken during execution. *)

@@ -207,15 +207,22 @@ Module Type ChunksOn
   (*   intros ? ? c; induction c; cbn; f_equal; auto; apply inst_lift. *)
   (* Qed. *)
 
+  Import option.notations.
   Instance OccursCheckChunk :
     OccursCheck Chunk :=
     fun Σ b bIn =>
       fix occurs_check_chunk (c : Chunk Σ) : option (Chunk (Σ - b)) :=
       match c with
-      | chunk_user p ts => option_map (chunk_user p) (occurs_check bIn ts)
-      | chunk_ptsreg r t => option_map (chunk_ptsreg r) (occurs_check bIn t)
-      | chunk_conj c1 c2 => option_ap (option_map (@chunk_conj _) (occurs_check_chunk c1)) (occurs_check_chunk c2)
-      | chunk_wand c1 c2 => option_ap (option_map (@chunk_wand _) (occurs_check_chunk c1)) (occurs_check_chunk c2)
+      | chunk_user p ts => option.map (chunk_user p) (occurs_check bIn ts)
+      | chunk_ptsreg r t => option.map (chunk_ptsreg r) (occurs_check bIn t)
+      | chunk_conj c1 c2 =>
+          c1' <- occurs_check_chunk c1 ;;
+          c2' <- occurs_check_chunk c2 ;;
+          Some (chunk_conj c1' c2')
+      | chunk_wand c1 c2 =>
+          c1' <- occurs_check_chunk c1 ;;
+          c2' <- occurs_check_chunk c2 ;;
+          Some (chunk_wand c1' c2')
       end.
 
   Definition SCHeap : Type := list SCChunk.

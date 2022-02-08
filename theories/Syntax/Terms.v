@@ -110,14 +110,16 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
     Variable (P  : forall t : Ty, Term Σ t -> Type).
     Arguments P _ _ : clear implicits.
 
-    Let PL (σ : Ty) : list (Term Σ σ) -> Type :=
-      List.fold_right (fun t ts => P _ t * ts)%type unit.
-    Let PV (n : nat) (es : Vector.t (Term Σ ty_bit) n) : Type :=
-      Vector.fold_right (fun e ps => P _ e * ps)%type es unit.
-    Let PE : forall σs, Env (Term Σ) σs -> Type :=
-      env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type.
+    (* Let PL (σ : Ty) : list (Term Σ σ) -> Type := *)
+    (*   List.fold_right (fun t ts => P _ t * ts)%type unit. *)
+    (* Let PV (n : nat) (es : Vector.t (Term Σ ty_bit) n) : Type := *)
+    (*   Vector.fold_right (fun e ps => P _ e * ps)%type es unit. *)
+    (* Let PE : forall σs, Env (Term Σ) σs -> Type := *)
+    (*   env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type. *)
     Let PNE : forall (σs : NCtx 𝑹𝑭 Ty), NamedEnv (Term Σ) σs -> Type :=
-      env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type.
+      fun σs es => env.All (fun b t => P (type b) t) es.
+      (* forall rt (rIn : rt ∈ σs), P (type rt) (env.lookup es rIn). *)
+      (* env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type. *)
 
     Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
     Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
@@ -126,15 +128,17 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
     Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)).
     Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
     Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
-    Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)).
+    (* Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)). *)
     (* Hypothesis (P_bv         : forall (n : nat) (es : Vector.t (Term Σ ty_bit) n), PV es -> P (ty_bv n) (term_bv es)). *)
-    Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)).
+    (* Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)). *)
     Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx.nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
     Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union U K e)).
-    Hypothesis (P_record     : forall (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)), PNE es -> P (ty_record R) (term_record R es)).
+    (* Hypothesis (P_tuple  : forall σs (IH : forall σ, ctx.In σ σs -> P σ), P (ty_tuple σs)). *)
+
+    Hypothesis (P_record     : forall (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) (IH : PNE es), P (ty_record R) (term_record R es)).
     (* Hypothesis (P_projrec    : forall (R : 𝑹) (e : Term Σ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (term_projrec e rf)). *)
 
-    Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) : P σ t :=
+    Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) {struct t} : P σ t :=
       match t with
       | @term_var _ ς σ ςInΣ           => ltac:(eapply P_var; eauto)
       | @term_val _ σ x                => ltac:(eapply P_val; eauto)
@@ -145,7 +149,7 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
       | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
       | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
       | @term_union _ U K e            => ltac:(eapply P_union; eauto)
-      | @term_record _ R es            => ltac:(eapply P_record; induction es; cbn; eauto using unit)
+      | @term_record _ R es            => ltac:(eapply P_record, env.all_intro; eauto)
       (* | @term_projrec _ R e rf σ rfInR => ltac:(eapply P_projrec; eauto) *)
       end.
 
@@ -205,15 +209,8 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
               [dependent elimination e|]
           | H: ~ OpEq ?o ?o |- False => apply H; constructor
           end.
-    - apply (@ssrbool.iffP (es = es0)).
-      + revert es0.
-        induction es; intros es0; dependent elimination es0; solve_eqb_spec.
-        destruct X as [x1 x2].
-        specialize (IHes x1 E).
-        specialize (x2 db0).
-        solve_eqb_spec.
-      + solve_eqb_spec.
-      + solve_eqb_spec.
+    - apply (@ssrbool.iffP (es = es0)); solve_eqb_spec.
+      apply env.eqb_hom_spec_point, IH.
   Qed.
 
   Section Symbolic.
@@ -327,23 +324,13 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
       constructor.
       { intros ? t.
         induction t; cbn; f_equal; try assumption.
-        - unfold sub_id.
-          now rewrite env.lookup_tabulate.
-        - induction es; cbn in *.
-          + reflexivity.
-          + f_equal.
-            * apply IHes, X.
-            * apply X.
+        - unfold sub_id. now rewrite env.lookup_tabulate.
+        - induction IH; cbn; f_equal; auto.
       }
       { intros ? ? ? ? ? t.
         induction t; cbn; f_equal; try assumption.
-        - unfold subst at 1, SubstEnv.
-          now rewrite env.lookup_map.
-        - induction es; cbn in *.
-          + reflexivity.
-          + f_equal.
-            * apply IHes, X.
-            * apply X.
+        - unfold subst at 1, SubstEnv. now rewrite env.lookup_map.
+        - induction IH; cbn; f_equal; auto.
       }
     Qed.
 
