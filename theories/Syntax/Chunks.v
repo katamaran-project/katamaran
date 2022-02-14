@@ -236,7 +236,7 @@ Module Type ChunksOn
   Fixpoint peval_chunk {Σ} (c : Chunk Σ) : Chunk Σ :=
     match c with
     | chunk_user p ts => chunk_user p (env.map peval ts)
-    | @chunk_ptsreg _ σ r t => chunk_ptsreg r (peval t)
+    | chunk_ptsreg r t => chunk_ptsreg r (peval t)
     | chunk_conj c1 c2 => chunk_conj (peval_chunk c1) (peval_chunk c2)
     | chunk_wand c1 c2 => chunk_wand (peval_chunk c1) (peval_chunk c2)
     end.

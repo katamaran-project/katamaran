@@ -473,6 +473,15 @@ Lemma imp_iff_compat_l' (A B C : Prop) :
   ((A -> B) <-> (A -> C)) <-> (A -> B <-> C).
 Proof. intuition. Qed.
 
+Lemma exists_or_compat {A} (P Q : A -> Prop):
+  (exists a, P a \/ Q a) <-> (exists a, P a) \/ (exists a, Q a).
+Proof. firstorder. Qed.
+
+Lemma forall_and_compat {A} (P Q : A -> Prop):
+  (forall a, P a /\ Q a) <-> (forall a, P a) /\ (forall a, Q a).
+Proof. firstorder. Qed.
+
+
 Declare Scope alt_scope.
 Declare Scope asn_scope.
 Declare Scope exp_scope.

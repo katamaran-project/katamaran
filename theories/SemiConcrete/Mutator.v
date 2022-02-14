@@ -66,6 +66,10 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
       CDijkstra A -> (A -> CDijkstra B) -> CDijkstra B :=
       fun m f POST => m (fun a1 => f a1 POST).
 
+    Local Notation "x <- ma ;; mb" :=
+      (bind ma (fun x => mb))
+        (at level 80, ma at level 90, mb at level 200, right associativity).
+
     Definition angelic σ : CDijkstra (Val σ) :=
       fun POST => exists v : Val σ, POST v.
 
@@ -73,9 +77,10 @@ Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
       forall Δ : NCtx N Ty, CDijkstra (NamedEnv Val Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
-        | []%ctx   => fun k => k env.nil
-        | Δ ▻ x∷σ => fun k =>
-            angelic σ (fun v => rec Δ (fun EΔ => k (EΔ ► (x∷σ ↦ v))))
+        | []%ctx  => pure []
+        | Δ ▻ x∷σ => v  <- angelic σ;;
+                     vs <- rec Δ;;
+                     pure (vs ► (x∷σ ↦ v))
         end.
     Arguments angelic_ctx {N} Δ.
 

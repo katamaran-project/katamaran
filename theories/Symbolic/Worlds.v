@@ -390,7 +390,7 @@ Module Type WorldsOn
     Notation "w1 ⊒ w2" := (Acc w1 w2) (at level 80).
     Notation "f <$> a" := (fmap_box f a) (at level 40, left associativity).
     Notation "f <*> a" := (K f a) (at level 40, left associativity).
-
+    Notation "ω1 ∘ ω2" := (acc_trans ω1 ω2) (at level 40, left associativity).
   End ModalNotations.
   Open Scope modal.
 
@@ -407,6 +407,8 @@ Module Type WorldsOn
         (*   forall w (a : A w), *)
         (*     LogicalRelation.dcl (persist a) *)
     (* Global Arguments Persistent A {_}. *)
+
+    Global Instance persistent_box {A} : Persistent □A := four.
 
     Global Instance persistent_subst {A} `{Subst A} : Persistent A :=
       fun w0 x w1 ω01 =>

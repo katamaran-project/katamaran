@@ -262,21 +262,18 @@ Module Soundness
       forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         approx ι0 (@SDijk.angelic_ctx N n w0 Δ) (@CDijk.angelic_ctx N Δ).
     Proof.
-      induction Δ.
+      induction Δ; cbn [SDijk.angelic_ctx CDijk.angelic_ctx].
       - intros w0 ι0 Hpc0.
-        intros POST__s POST__c HPOST.
-        unfold SDijk.angelic_ctx, CDijk.angelic_ctx, T.
-        apply HPOST; wsimpl; try reflexivity; auto.
+        now apply approx_pure.
       - destruct b as [x σ].
-        intros w0 ι0 Hpc0 POST__s POST__c HPOST; cbn.
+        intros w0 ι0 Hpc0.
+        apply approx_bind; [|intros w1 ω01 ι1 -> Hpc1].
         apply approx_angelic; auto.
-        intros w1 ω01 ι1 -> Hpc1.
-        intros t v tv.
+        intros t v ->.
+        apply approx_bind; [|intros w2 ω12 ι2 -> Hpc2].
         apply IHΔ; auto.
-        intros w2 ω12 ι2 -> Hpc2.
-        intros ts vs tvs.
-        apply HPOST; cbn; wsimpl; auto.
-        rewrite tv, tvs. hnf.
+        intros ts vs ->.
+        apply approx_pure; auto.
         rewrite <- inst_persist.
         reflexivity.
     Qed.

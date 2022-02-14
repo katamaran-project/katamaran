@@ -287,19 +287,34 @@ Module Type MutatorsOn
         let y := fresh w x in
         angelicv
           (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
-    Global Arguments angelic x σ [w] k.
+    Global Arguments angelic x σ {w} k.
+
+    Local Notation "⟨ ω ⟩ x <- ma ;; mb" :=
+      (bind ma (fun _ ω x => mb))
+        (at level 80, x at next level,
+          ma at next level, mb at level 200,
+          right associativity).
+
+    Local Notation "⟨ w , ω ⟩ x <- ma ;; mb" :=
+      (bind ma (fun w ω x => mb))
+        (at level 80, x at next level,
+          ma at next level, mb at level 200,
+          right associativity, only printing).
+                               (*  *)
+    Notation "x ⟨ ω ⟩" := (persist x ω) (at level 9, format "x ⟨ ω ⟩").
+
+    Local Hint Extern 2 (Persistent (WTerm ?σ)) =>
+      refine (@persistent_subst (STerm σ) (@SubstTerm σ)) : typeclass_instances.
 
     Definition angelic_ctx {N : Set} (n : N -> 𝑺) :
       ⊢ ∀ Δ : NCtx N Ty, SDijkstra (fun w => NamedEnv (Term w) Δ) :=
       fix rec {w} Δ {struct Δ} :=
         match Δ with
-        | []      => fun k => T k env.nil
-        | Δ ▻ x∷σ =>
-          fun k =>
-            angelic (Some (n x)) σ (fun w1 ω01 t =>
-              rec Δ (fun w2 ω12 EΔ =>
-                k w2 (acc_trans ω01 ω12) (EΔ ► (x∷σ ↦ persist__term t ω12))))
-        end%ctx.
+         | []%ctx => pure []
+         | Γ ▻ x∷σ => ⟨ _  ⟩ tσ <- angelic (Some (n x)) σ;;
+                      ⟨ ω2 ⟩ tΔ <- rec Γ;;
+                      pure (tΔ ► (x∷σ ↦ tσ⟨ω2⟩))
+         end.
     Global Arguments angelic_ctx {N} n [w] Δ : rename.
 
     Definition demonic (x : option 𝑺) σ :
@@ -308,7 +323,7 @@ Module Type MutatorsOn
         let y := fresh w x in
         demonicv
           (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
-    Global Arguments demonic x σ [w] k.
+    Global Arguments demonic x σ {w} k.
 
     Definition demonic_ctx {N : Set} (n : N -> 𝑺) :
       ⊢ ∀ Δ : NCtx N Ty, SDijkstra (fun w => NamedEnv (Term w) Δ) :=
@@ -408,8 +423,10 @@ Module Type MutatorsOn
       ⊢ Message -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
       fun _ msg t =>
         angelic_binary
-          (fun POST => assert_formula msg (formula_bool t) (fun w1 ω01 _ => POST w1 ω01 true))
-          (fun POST => assert_formula msg (formula_bool (term_not t)) (fun w1 ω01 _ => POST w1 ω01 false)).
+          (⟨_⟩ _ <- assert_formula msg (formula_bool t) ;;
+                    pure true)
+          (⟨_⟩ _ <- assert_formula msg (formula_bool (term_not t)) ;;
+                    pure false).
 
     Definition angelic_match_bool :
       ⊢ Message -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
@@ -424,8 +441,10 @@ Module Type MutatorsOn
       ⊢ STerm ty_bool -> SDijkstra ⌜bool⌝ :=
       fun _ t =>
         demonic_binary
-          (fun POST => assume_formula (formula_bool t) (fun w1 ω01 _ => POST w1 ω01 true))
-          (fun POST => assume_formula (formula_bool (term_not t)) (fun w1 ω01 _ => POST w1 ω01 false)).
+          (⟨_⟩ _ <- assume_formula (formula_bool t) ;;
+                    pure true)
+          (⟨_⟩ _ <- assume_formula (formula_bool (term_not t)) ;;
+                    pure false).
 
     Definition demonic_match_bool :
       ⊢ STerm ty_bool -> SDijkstra ⌜bool⌝ :=
@@ -481,66 +500,37 @@ Module Type MutatorsOn
     (*                (fun w3 ω23 => *)
     (*                 four kcons (wtrans ω01 ω12) ω23 (subst th (wtrans ω12 ω23)) (subst tt ω23))))). *)
 
-    Definition angelic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ Message -> STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A.
-    Proof.
-      intros w0 msg t kinl kinr.
-      apply angelic_binary.
-      - eapply bind.
-        apply (angelic (Some x) σ).
-        intros w1 ω01 t1.
-        eapply bind.
-        apply assert_formula. apply (persist (A := Message) msg ω01).
-        apply (formula_eq (term_inl t1) (persist__term t ω01)).
-        intros w2 ω12 _.
-        apply (four kinl ω01). auto.
-        apply (persist__term t1 ω12).
-      - eapply bind.
-        apply (angelic (Some y) τ).
-        intros w1 ω01 t1.
-        eapply bind.
-        apply assert_formula. apply (persist (A := Message) msg ω01).
-        apply (formula_eq (term_inr t1) (persist__term t ω01)).
-        intros w2 ω12 _.
-        apply (four kinr ω01). auto.
-        apply (persist__term t1 ω12).
-    Defined.
+    Definition angelic_match_sum' {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
+      ⊢ Message -> STerm (ty_sum σ τ) ->
+        □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
+      fun _ msg t kinl kinr =>
+        angelic_binary
+          (⟨ω1⟩ tl <- angelic (Some x) σ;;
+           ⟨ω2⟩ _  <- assert_formula msg⟨ω1⟩ (formula_eq (term_inl tl) t⟨ω1⟩) ;;
+                     T kinl⟨ω1∘ω2⟩ tl⟨ω2⟩)
+          (⟨ω1⟩ tr <- angelic (Some y) τ;;
+           ⟨ω2⟩ _  <- assert_formula msg⟨ω1⟩ (formula_eq (term_inr tr) t⟨ω1⟩);;
+                     T kinr⟨ω1∘ω2⟩ tr⟨ω2⟩).
 
-    (* Definition angelic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) : *)
-    (*   ⊢ Message -> STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A. *)
-    (* Proof. *)
-    (*   intros w0. *)
-    (*   fun w0 msg t kinl kinr => *)
-    (*     match term_get_sum t with *)
-    (*     | Some (inl tσ) => T kinl tσ *)
-    (*     | Some (inr tτ) => T kinr tτ *)
-    (*     | None => angelic_match_sum' x y msg t kinl kinr *)
-    (*     end. *)
+    Definition angelic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
+      ⊢ Message -> STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
+      fun w0 msg t kinl kinr =>
+        match term_get_sum t with
+        | Some (inl tσ) => T kinl tσ
+        | Some (inr tτ) => T kinr tτ
+        | None => angelic_match_sum' x y msg t kinl kinr
+        end.
 
     Definition demonic_match_sum' {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A.
-    Proof.
-      intros w0 t kinl kinr.
-      apply demonic_binary.
-      - eapply bind.
-        apply (demonic (Some x) σ).
-        intros w1 ω01 t1.
-        eapply bind.
-        apply assume_formula.
-        apply (formula_eq (term_inl t1) (persist__term t ω01)).
-        intros w2 ω12 _.
-        apply (four kinl ω01). auto.
-        apply (persist__term t1 ω12).
-      - eapply bind.
-        apply (demonic (Some y) τ).
-        intros w1 ω01 t1.
-        eapply bind.
-        apply assume_formula.
-        apply (formula_eq (term_inr t1) (persist__term t ω01)).
-        intros w2 ω12 _.
-        apply (four kinr ω01). auto.
-        apply (persist__term t1 ω12).
-    Defined.
+      ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
+      fun w0 t kinl kinr =>
+       demonic_binary
+         (⟨ω1⟩ t1 <- demonic (Some x) σ;;
+          ⟨ω2⟩ _  <- assume_formula (formula_eq (term_inl t1) t⟨ω1⟩);;
+                    T kinl⟨ω1∘ω2⟩ t1⟨ω2⟩)
+         (⟨ω1⟩ t1 <- demonic (Some y) τ;;
+          ⟨ω2⟩ _  <- assume_formula (formula_eq (term_inr t1) t⟨ω1⟩);;
+                    T kinr⟨ω1∘ω2⟩ t1⟨ω2⟩).
 
     Definition demonic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
       ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
@@ -552,27 +542,14 @@ Module Type MutatorsOn
         end.
 
     Definition angelic_match_prod {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ Message -> STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A.
-    Proof.
-      intros w0 msg t k.
-      eapply bind.
-      apply (angelic (Some x) σ).
-      intros w1 ω01 t1.
-      eapply bind.
-      apply (angelic (Some y) τ).
-      intros w2 ω12 t2.
-      eapply bind.
-      apply assert_formula. apply (persist (A := Message) msg (acc_trans ω01 ω12)).
-      refine (formula_eq _ (persist__term t (acc_trans ω01 ω12))).
-      eapply (term_binop binop_pair).
-      apply (persist__term t1 ω12).
-      apply t2.
-      intros w3 ω23 _.
-      apply (four k (acc_trans ω01 ω12)).
-      auto.
-      apply (persist__term t1 (acc_trans ω12 ω23)).
-      apply (persist__term t2 ω23).
-    Defined.
+      ⊢ Message -> STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A :=
+      fun _ msg t k =>
+        ⟨ω1⟩ t1 <- angelic (Some x) σ;;
+        ⟨ω2⟩ t2 <- angelic (Some y) τ;;
+                  let ω12 := ω1 ∘ ω2 in
+                  let fml := formula_eq (term_binop binop_pair t1⟨ω2⟩ t2) t⟨ω12⟩ in
+        ⟨ω3⟩ _  <- assert_formula msg⟨ω12⟩ fml;;
+                  T k⟨ω12∘ω3⟩ t1⟨ω2∘ω3⟩ t2⟨ω3⟩.
 
     (* Definition angelic_match_prod {AT} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) : *)
     (*   ⊢ Message -> STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> 𝕊 AT) -> 𝕊 AT := *)
@@ -583,27 +560,14 @@ Module Type MutatorsOn
     (*     end. *)
 
     Definition demonic_match_prod {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A.
-    Proof.
-      intros w0 t k.
-      eapply bind.
-      apply (demonic (Some x) σ).
-      intros w1 ω01 t1.
-      eapply bind.
-      apply (demonic (Some y) τ).
-      intros w2 ω12 t2.
-      eapply bind.
-      apply assume_formula.
-      refine (formula_eq _ (persist__term t (acc_trans ω01 ω12))).
-      eapply (term_binop binop_pair).
-      apply (persist__term t1 ω12).
-      apply t2.
-      intros w3 ω23 _.
-      apply (four k (acc_trans ω01 ω12)).
-      auto.
-      apply (persist__term t1 (acc_trans ω12 ω23)).
-      apply (persist__term t2 ω23).
-    Defined.
+      ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A :=
+      fun _ t k =>
+        ⟨ω1⟩ t1 <- demonic (Some x) σ;;
+        ⟨ω2⟩ t2 <- demonic (Some y) τ;;
+                  let ω12 := ω1 ∘ ω2 in
+                  let fml := formula_eq (term_binop binop_pair t1⟨ω2⟩ t2) t⟨ω12⟩ in
+       ⟨ω3⟩ _   <- assume_formula fml;;
+                  T k⟨ω12∘ω3⟩ t1⟨ω2∘ω3⟩ t2⟨ω3⟩.
 
     (* Definition demonic_match_prod {AT} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) : *)
     (*   ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> 𝕊 AT) -> 𝕊 AT := *)
@@ -857,52 +821,24 @@ Module Type MutatorsOn
     Section Basic.
 
       Definition dijkstra {Γ} {A : TYPE} :
-        ⊢ SDijkstra A -> SMut Γ Γ A.
-      Proof.
-        intros w0 m POST δ0 h0.
-        apply m.
-        intros w1 ω01 a1.
-        apply POST; auto.
-        apply (persist (A := SStore Γ) δ0 ω01).
-        apply (persist (A := SHeap) h0 ω01).
-      Defined.
+        ⊢ SDijkstra A -> SMut Γ Γ A :=
+        fun w0 m POST δ0 h0 =>
+          m (fun w1 ω01 a1 => POST w1 ω01 a1 (persist δ0 ω01) (persist h0 ω01)).
 
       Definition pure {Γ} {A : TYPE} :
-        ⊢ A -> SMut Γ Γ A.
-      Proof.
-        intros w0 a k.
-        apply k; auto. apply acc_refl.
-      Defined.
+        ⊢ A -> SMut Γ Γ A := fun _ a k => T k a.
 
       Definition bind {Γ1 Γ2 Γ3 A B} :
-        ⊢ SMut Γ1 Γ2 A -> □(A -> SMut Γ2 Γ3 B) -> SMut Γ1 Γ3 B.
-      Proof.
-        intros w0 ma f k.
-        unfold SMut, Impl, Box in *.
-        apply ma; auto.
-        intros w1 ω01 a1.
-        apply f; auto.
-        apply (four k ω01).
-      Defined.
+        ⊢ SMut Γ1 Γ2 A -> □(A -> SMut Γ2 Γ3 B) -> SMut Γ1 Γ3 B :=
+        fun w0 ma f k => ma (fun w1 ω01 a1 => f w1 ω01 a1 (four k ω01)).
 
       Definition bind_box {Γ1 Γ2 Γ3 A B} :
         ⊢ □(SMut Γ1 Γ2 A) -> □(A -> SMut Γ2 Γ3 B) -> □(SMut Γ1 Γ3 B) :=
         fun w0 m f => bind <$> m <*> four f.
 
-      (* Definition strength {Γ1 Γ2 A B Σ} `{Subst A, Subst B} (ma : SMut Γ1 Γ2 A Σ) (b : B Σ) : *)
-      (*   SMut Γ1 Γ2 (fun Σ => A Σ * B Σ)%type Σ := *)
-      (*   bind ma (fun _ ζ a => pure (a, subst b ζ)). *)
-
       Definition bind_right {Γ1 Γ2 Γ3 A B} :
-        ⊢ SMut Γ1 Γ2 A -> □(SMut Γ2 Γ3 B) -> SMut Γ1 Γ3 B.
-      Proof.
-        intros w0 m k POST.
-        apply m.
-        intros w1 ω01 a1.
-        apply k. auto.
-        intros w2 ω12 b2.
-        apply (four POST ω01); auto.
-      Defined.
+        ⊢ SMut Γ1 Γ2 A -> □(SMut Γ2 Γ3 B) -> SMut Γ1 Γ3 B :=
+        fun _ m k POST => m (fun _ ω1 _ => k _ ω1 (four POST ω1)).
 
       (* Definition bind_left {Γ1 Γ2 Γ3 A B} `{Subst A} : *)
       (*   ⊢ □(SMut Γ1 Γ2 A) -> □(SMut Γ2 Γ3 B) -> □(SMut Γ1 Γ3 A). *)
@@ -941,11 +877,7 @@ Module Type MutatorsOn
       Global Arguments error {_ _ _ _} func msg data {w} _ _.
 
       Definition block {Γ1 Γ2 A} :
-        ⊢ SMut Γ1 Γ2 A.
-      Proof.
-        intros w0 POST δ h.
-        apply block.
-      Defined.
+        ⊢ SMut Γ1 Γ2 A := fun _ POST δ h => block.
 
       Definition angelic_binary {Γ1 Γ2 A} :
         ⊢ SMut Γ1 Γ2 A -> SMut Γ1 Γ2 A -> SMut Γ1 Γ2 A :=
@@ -980,29 +912,17 @@ Module Type MutatorsOn
       Global Arguments demonic {Γ} x σ {w}.
 
       Definition debug {AT DT} `{Subst DT, OccursCheck DT} {Γ1 Γ2} :
-        ⊢ (SStore Γ1 -> SHeap -> DT) -> (SMut Γ1 Γ2 AT) -> (SMut Γ1 Γ2 AT).
-      Proof.
-        intros w0 d m POST δ h.
-        eapply debug. eauto.
-        eauto. eauto.
-        apply d. auto. auto.
-        apply m; auto.
-      Defined.
+        ⊢ (SStore Γ1 -> SHeap -> DT) -> (SMut Γ1 Γ2 AT) -> (SMut Γ1 Γ2 AT) :=
+        fun _ d m POST δ h => SymProp.debug (d δ h) (m POST δ h).
 
       Definition angelic_ctx {N : Set} (n : N -> 𝑺) {Γ} :
-        ⊢ ∀ Δ : NCtx N Ty, SMut Γ Γ (fun w => NamedEnv (Term w) Δ).
-      Proof.
-        intros w0 Δ. apply dijkstra.
-        apply (SDijk.angelic_ctx n Δ).
-      Defined.
+        ⊢ ∀ Δ : NCtx N Ty, SMut Γ Γ (fun w => NamedEnv (Term w) Δ) :=
+        fun w0 Δ => dijkstra (SDijk.angelic_ctx n Δ).
       Global Arguments angelic_ctx {N} n {Γ} [w] Δ : rename.
 
       Definition demonic_ctx {N : Set} (n : N -> 𝑺) {Γ} :
-        ⊢ ∀ Δ : NCtx N Ty, SMut Γ Γ (fun w => NamedEnv (Term w) Δ).
-      Proof.
-        intros w0 Δ. apply dijkstra.
-        apply (SDijk.demonic_ctx n Δ).
-      Defined.
+        ⊢ ∀ Δ : NCtx N Ty, SMut Γ Γ (fun w => NamedEnv (Term w) Δ) :=
+        fun w0 Δ => dijkstra (SDijk.demonic_ctx n Δ).
       Global Arguments demonic_ctx {N} n {Γ} [w] Δ : rename.
 
     End Basic.

@@ -699,19 +699,6 @@ Module notations.
 
 End notations.
 
-Section Traverse.
-
-  Import option.notations.
-  Context {I : Set} {A B : I -> Set} (f : forall i : I, A i -> option (B i)).
-
-  Fixpoint traverse {Γ : Ctx I} (xs : Env A Γ) : option (Env B Γ) :=
-    match xs with
-    | nil         => Some nil
-    | snoc Ea i a => Eb <- traverse Ea;; b <- f a;; Some (snoc Eb i b)
-    end.
-
-End Traverse.
-
 Local Ltac destroy_env_eq H :=
   lazymatch type of H with
   | @eq (Env _ (ctx.snoc _ _)) _ _ =>
