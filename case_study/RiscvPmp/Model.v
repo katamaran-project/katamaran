@@ -107,6 +107,14 @@ Module RiscvPmpModel.
 
       Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
         ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+      Proof.
+        iIntros (Σ μ gHP).
+        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal)) as (gH) "[inv _]".
+        Unshelve.
+        iModIntro.
+        iExists (McMemGS gH (nroot .@ "addr_inv")).
+        unfold mem_inv, mem_res.
+        done.
       Admitted.
 
       Import Contracts.
@@ -123,15 +131,19 @@ Module RiscvPmpModel.
       Definition interp_gprs `{sailRegGS Σ} : iProp Σ :=
         [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
 
+      Definition interp_pmp_entries `{sailRegGS Σ} (entries : list (Pmpcfg_ent * Xlenbits)) : iProp Σ :=
+        match entries with
+        | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
+            reg_pointsTo pmp0cfg cfg0 ∗
+            reg_pointsTo pmpaddr0 addr0 ∗
+            reg_pointsTo pmp1cfg cfg1 ∗
+            reg_pointsTo pmpaddr1 addr1
+        | _ => False
+        end.
+
       Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
         match p return Env Val (𝑯_Ty p) -> iProp Σ with
-        | pmp_entries  => fun ts => let entries_lst := env.head ts in
-                                    match entries_lst with
-                                    | (cfg0, addr0) :: [] =>
-                                      (reg_pointsTo pmp0cfg cfg0 ∗
-                                              reg_pointsTo pmpaddr0 addr0)%I
-                                    | _ => False%I
-                                    end
+        | pmp_entries  => fun ts => interp_pmp_entries (env.head ts)
         | gprs         => fun _  => interp_gprs
         end.
 

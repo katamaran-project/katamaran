@@ -62,10 +62,12 @@ Inductive CSRIdx : Set :=
 (* NOTE: PMP CSRs limited to 1 for now *)
 Inductive PmpCfgIdx : Set :=
 | PMP0CFG
+| PMP1CFG
 .
 
 Inductive PmpAddrIdx : Set :=
 | PMPADDR0
+| PMPADDR1
 .
 
 (* NOTE: PMP Addr Match Type limited to OFF and TOR for now *)
@@ -340,10 +342,10 @@ Section Finite.
     {| enum := [MStatus;MTvec;MCause;MEpc] |}.
 
   Global Program Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
-    {| enum := [PMP0CFG] |}.
+    {| enum := [PMP0CFG;PMP1CFG] |}.
 
   Global Program Instance PmpAddrIdx_finite : Finite PmpAddrIdx :=
-    {| enum := [PMPADDR0] |}.
+    {| enum := [PMPADDR0;PMPADDR1] |}.
 
   Global Program Instance PmpAddrMatchType_finite : Finite PmpAddrMatchType :=
     {| enum := [OFF;TOR] |}.
@@ -718,7 +720,9 @@ Section RegDeclKit.
   | x2            : Reg ty_xlenbits
   | x3            : Reg ty_xlenbits
   | pmp0cfg       : Reg ty_pmpcfg_ent
+  | pmp1cfg       : Reg ty_pmpcfg_ent
   | pmpaddr0      : Reg ty_xlenbits
+  | pmpaddr1      : Reg ty_xlenbits
   .
 
   Import bv.notations.
@@ -755,7 +759,9 @@ Section RegDeclKit.
          existT _ x2;
          existT _ x3;
          existT _ pmp0cfg;
-         existT _ pmpaddr0
+         existT _ pmp1cfg;
+         existT _ pmpaddr0;
+         existT _ pmpaddr1
        ]%list
     |}.
 
