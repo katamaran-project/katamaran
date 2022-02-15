@@ -368,32 +368,44 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     match: cfg in rpmpcfg_ent with [L; A; X; W; R] => L end.
 
   Definition fun_pmpCheck : Stm [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege] (ty_option ty_exception_type) :=
-    let: tmp1 := stm_read_register pmp0cfg in
-    let: tmp2 := stm_read_register pmpaddr0 in
-    let: tmp3 := call pmpMatchEntry addr acc priv tmp1 tmp2 (z_exp 0) in
-    let: check%string := match: tmp3 in pmpmatch with
-                  | PMP_Success  => stm_val ty_bool true
-                  | PMP_Fail     => stm_val ty_bool false
-                  | PMP_Continue => match: priv in privilege with
-                                    | Machine => stm_val ty_bool true
-                                    | User    => stm_val ty_bool false
-                                    end
-                  end in
-           if: check
-           then None
-           else
-             stm_match_union_alt access_type acc
-                                 (fun K =>
-                                    match K with
-                                    | KRead      => MkAlt pat_unit
+    let: check%string :=
+      let: tmp1 := stm_read_register pmp0cfg in
+      let: tmp2 := stm_read_register pmpaddr0 in
+      let: tmp3 := z_exp 0 in
+      let: tmp := call pmpMatchEntry addr acc priv tmp1 tmp2 tmp3 in
+      match: tmp in pmpmatch with
+      | PMP_Success  => stm_val ty_bool true
+      | PMP_Fail     => stm_val ty_bool false
+      | PMP_Continue =>
+      let: tmp1 := stm_read_register pmp1cfg in
+      let: tmp2 := stm_read_register pmpaddr1 in
+      let: tmp3 := stm_read_register pmpaddr0 in
+      let: tmp := call pmpMatchEntry addr acc priv tmp1 tmp2 tmp3 in
+      match: tmp in pmpmatch with
+      | PMP_Success  => stm_val ty_bool true
+      | PMP_Fail     => stm_val ty_bool false
+      | PMP_CONTINUE =>
+          match: priv in privilege with
+          | Machine => stm_val ty_bool true
+          | User    => stm_val ty_bool false
+          end
+      end
+      end in
+      if: check
+      then None
+      else
+        stm_match_union_alt access_type acc
+                            (fun K =>
+                               match K with
+                               | KRead      => MkAlt pat_unit
                                                      (Some E_Load_Access_Fault)
-                                    | KWrite     => MkAlt pat_unit
+                               | KWrite     => MkAlt pat_unit
                                                      (Some E_SAMO_Access_Fault)
-                                    | KReadWrite => MkAlt pat_unit
+                               | KReadWrite => MkAlt pat_unit
                                                      (Some E_SAMO_Access_Fault)
-                                    | KExecute   => MkAlt pat_unit
+                               | KExecute   => MkAlt pat_unit
                                                      (Some E_Fetch_Access_Fault)
-                                    end).
+                               end).
 
   Definition fun_pmpCheckPerms : Stm [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type, priv ∶ ty_privilege] ty_bool :=
     match: priv in privilege with
@@ -524,6 +536,18 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       ["L"; "A"; "X"; "W"; "R"] =>
         stm_write_register
           pmp0cfg (exp_record rpmpcfg_ent
+                              [nenv L;
+                               exp_val ty_pmpaddrmatchtype OFF;
+                               X;
+                               W;
+                               R ]) ;;
+        stm_val ty_unit tt
+    end ;;
+    let: tmp := stm_read_register pmp1cfg in
+    match: tmp in rpmpcfg_ent with
+      ["L"; "A"; "X"; "W"; "R"] =>
+        stm_write_register
+          pmp1cfg (exp_record rpmpcfg_ent
                               [nenv L;
                                exp_val ty_pmpaddrmatchtype OFF;
                                X;

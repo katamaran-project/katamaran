@@ -59,6 +59,7 @@ Inductive PurePredicate : Set :=
 
 Inductive Predicate : Set :=
 | pmp_entries
+| pmp_addr_access
 | gprs
 .
 
@@ -88,18 +89,22 @@ Section PredicateKit.
 
   Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
 
+  Definition pmp_entry_cfg := ty_prod ty_pmpcfg_ent ty_xlenbits.
+
   Definition 𝑯 := Predicate.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | pmp_entries  => [ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits)]
-    | gprs         => ctx.nil
+    | pmp_entries     => [ty_list pmp_entry_cfg]
+    | pmp_addr_access => [ty_list pmp_entry_cfg, ty_privilege]
+    | gprs            => ctx.nil
     end.
 
   Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
-      | pmp_entries  => false
-      | gprs         => false
+      | pmp_entries     => false
+      | pmp_addr_access => false
+      | gprs            => false
       end
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -119,6 +124,7 @@ Section ContractDefKit.
   Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
   Local Notation "p '∗' q" := (asn_sep p q).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
+  Local Notation asn_pmp_addr_access l m := (asn_chunk (chunk_user pmp_addr_access [l m])).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_int) : Term Σ ty_bool :=
@@ -172,24 +178,26 @@ Section ContractDefKit.
     asn_and_regs
       (fun r => asn_exist "w" ty_xlenbits (r ↦ term_var "w")).
 
+  Local Notation "e1 ',ₜ' e2" := (term_binop binop_pair e1 e2) (at level 100).
+
   (* TODO: abstract away the concrete type, look into unions for that *)
   (* TODO: length of list should be 16, no duplicates *)
   Definition pmp_entries {Σ} : Term Σ (ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx)) :=
-    term_list (cons (term_binop binop_pair
-                                (term_val ty_pmpcfgidx PMP0CFG) (* PMP0CFG ↦ ... *)
-                                (term_val ty_pmpaddridx PMPADDR0)) nil). (* PMPADDR0 ↦ ... *)
+    term_list
+      (cons (term_val ty_pmpcfgidx PMP0CFG ,ₜ term_val ty_pmpaddridx PMPADDR0)
+            (cons (term_val ty_pmpcfgidx PMP1CFG ,ₜ term_val ty_pmpaddridx PMPADDR1) nil)).
 
   Section Contracts.
     Import RiscvNotations.
 
   (** Machine Invariant **)
   (*
-    TODO: - there should be 2 cases in the @pre, one handling if we execute just fine and one if we end up in the trap (only with these 2 can we prove the @post)
-          - this should work for the execute{,_/x/} functions, but step and loop will update 
+    TODO: - this should work for the execute{,_/x/} functions, but step and loop will update 
             the pc, so this should be reflected in their contract (2nd pc(i) -> pc(i + 4)?)
 
 
 
+    TODO: short notation out of sync with actual contract
     @pre ∀ m h i . mode(m) ∗ mtvec(h) ∗ pmp_entries(ents) ∗ pc(i) ∗ mepc(_) ∗ mpp(_)
     @post pmp_entries(ents) ∗ (mode(m) ∗ pc(i)) ∨ (mode(M) ∗ pc(h) ...)
     τ f(Δ...)*)

@@ -131,7 +131,9 @@ Module RiscvPmpModel.
       Definition interp_gprs `{sailRegGS Σ} : iProp Σ :=
         [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
 
-      Definition interp_pmp_entries `{sailRegGS Σ} (entries : list (Pmpcfg_ent * Xlenbits)) : iProp Σ :=
+      Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
+
+      Definition interp_pmp_entries `{sailRegGS Σ} (entries : list PmpEntryCfg) : iProp Σ :=
         match entries with
         | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
             reg_pointsTo pmp0cfg cfg0 ∗
@@ -141,10 +143,22 @@ Module RiscvPmpModel.
         | _ => False
         end.
 
+      (* Need to implement same algo as pmpCheck:
+         - Check by priority (first match, starting from 0)
+         Current limitations for first version:
+         - No perm checks (this means we can just give access to all addr) *)
+      (* Sketch: (see paper notes tho)
+         For PMP Entry 0: 
+         ∃ addr . ⌜0 < addr ∧ addr < pmpaddr0⌝ ∗ (∀ a ∈ [0, pmpaddr0] . ∃ w . a ↦ w)
+       *)
+      Definition interp_pmp_addr_access `{sailRegGS Σ} (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+        True.
+
       Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
         match p return Env Val (𝑯_Ty p) -> iProp Σ with
-        | pmp_entries  => fun ts => interp_pmp_entries (env.head ts)
-        | gprs         => fun _  => interp_gprs
+        | pmp_entries     => fun ts => interp_pmp_entries (env.head ts)
+        | pmp_addr_access => fun ts => interp_pmp_addr_access (env.head (env.tail ts)) (env.head ts)
+        | gprs            => fun _  => interp_gprs
         end.
 
     Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
