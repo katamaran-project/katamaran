@@ -342,20 +342,31 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp := stm_read_register cur_privilege in
     call pmp_mem_read typ tmp paddr.
 
+  (* TODO *)
+  (* LV: w : Xlenbits *)
+  (* pre: paddr ↦ w *)
   Definition fun_checked_mem_read : Stm [t ∶ ty_access_type, paddr ∶ ty_xlenbits] ty_memory_op_result :=
     let: tmp := foreign read_ram paddr in
     MemValue tmp.
+  (* post: result . result = MemValue w *)
 
   Definition fun_checked_mem_write : Stm [paddr ∶ ty_xlenbits, data ∶ ty_int] ty_memory_op_result :=
     let: tmp := foreign write_ram paddr data in
     MemValue tmp.
 
+  (* TODO *)
+  (* pre: pmp_entries(?entries) ∗ pmp_addr_access(?entries, ?mode) *)
   Definition fun_pmp_mem_read : Stm [t∶ ty_access_type, p ∶ ty_privilege, paddr ∶ ty_xlenbits] ty_memory_op_result :=
     let: tmp := call pmpCheck paddr t p in
     match: tmp with
     | inl e => MemException e
     | inr v => call checked_mem_read t paddr
     end.
+  (* post: result .
+     match tmp with
+     | Some e => result = MemException e
+     | None   => ∃ w . result = MemValue w (* can probably just drop the MemValue here *)
+     end *)
 
   Definition fun_pmp_mem_write : Stm [paddr ∶ ty_xlenbits, data ∶ ty_int, typ ∶ ty_access_type, priv ∶ ty_privilege] ty_memory_op_result :=
     let: tmp := call pmpCheck paddr typ priv in
@@ -364,9 +375,15 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | inr v => call checked_mem_write paddr data
     end.
 
+  (* TODO *)
+  (* LS: cfg = [L; A; X; W; R] *)
+  (* pre: ⊤ *)
   Definition fun_pmpLocked : Stm [cfg ∶ ty_pmpcfg_ent] ty_bool :=
     match: cfg in rpmpcfg_ent with [L; A; X; W; R] => L end.
+  (* post: result . result = L *)
 
+  (* TODO *)
+  (* pre: pmp_entries(?entries) ∗ pmp_addr_access(?entries, ?mode) *)
   Definition fun_pmpCheck : Stm [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege] (ty_option ty_exception_type) :=
     let: check%string :=
       let: tmp1 := stm_read_register pmp0cfg in
@@ -406,7 +423,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                                | KExecute   => MkAlt pat_unit
                                                      (Some E_Fetch_Access_Fault)
                                end).
+  (* post: result .
+     if check then result = None ∗ ∃ w . addr ↦ w ∗ ((∃ w' . addr ↦ w') -∗ pmp_addr_access(?entries, ?mode)) (* magic wand: with predicate or add support to Katamaran *)
+     else    ∃ e . result = Some e *)
 
+  (* TODO *)
+  (* pre: ⊤ *)
   Definition fun_pmpCheckPerms : Stm [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type, priv ∶ ty_privilege] ty_bool :=
     match: priv in privilege with
     | Machine =>
@@ -417,7 +439,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | User =>
       call pmpCheckRWX ent acc
     end.
+  (* post: result . ∃ b . result = b *) (* might need to pm on priv? *)
 
+  (* TODO *)
+  (* LS: ent = [L; A; X; W; R] *)
+  (* pre: ⊤ *)
   Definition fun_pmpCheckRWX : Stm [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool :=
     match: ent in rpmpcfg_ent with
       [L; A; X; W; R] =>
@@ -431,20 +457,38 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
              | KExecute   => MkAlt pat_unit X
              end)
     end.
+  (* post: result .
+     match acc with
+     | Read      => result = R
+     | Write     => result = W
+     | ReadWrite => result = R && W
+     | Execute   => result = X
+     end *)
 
+  (* TODO *)
+  (* pre: ⊤ *)
   Definition fun_pmpMatchEntry : Stm [addr ∶ ty_xlenbits, acc ∶ ty_access_type, priv ∶ ty_privilege, ent ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_xlenbits, prev_pmpaddr ∶ ty_xlenbits] ty_pmpmatch :=
     let: rng := call pmpAddrRange ent pmpaddr prev_pmpaddr in
     let: tmp := call pmpMatchAddr addr rng in
     match: tmp in pmpaddrmatch with
     | PMP_NoMatch      => exp_val ty_pmpmatch PMP_Continue
     | PMP_PartialMatch => exp_val ty_pmpmatch PMP_Fail
-    | PMP_Match        =>
+    | PMP_Match        => (* TODO: rename next tmp to tmp1 so it can be used in contract *)
       let: tmp := call pmpCheckPerms ent acc priv in
       if: tmp
       then exp_val ty_pmpmatch PMP_Success
       else exp_val ty_pmpmatch PMP_Fail
     end.
+  (* post: result .
+     match tmp with
+     | PMP_NoMatch      => result = PMP_Continue
+     | PMP_PartialMatch => result = PMP_Fail
+     | PMP_Match        => if tmp1 then result = PMP_Success ∗ prev_pmpaddr <= addr ∗ addr <= pmpaddr
+                           else         result = PMP_Fail
+     end *)
 
+  (* TODO *)
+  (* pre: ⊤ *)
   Definition fun_pmpAddrRange : Stm [cfg ∶ ty_pmpcfg_ent, pmpaddr ∶ ty_xlenbits, prev_pmpaddr ∶ ty_xlenbits] ty_pmp_addr_range :=
     match: cfg in rpmpcfg_ent with
       [L; A; X; W; R] =>
@@ -453,7 +497,14 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         | TOR => Some (exp_binop binop_pair prev_pmpaddr pmpaddr)
         end
     end.
+  (* post: result .
+     match cfg.A with
+     | OFF => result = None
+     | TOR => result = (prev_pmpaddr , pmpaddr)
+     end *)
 
+  (* TODO *)
+  (* pre: ⊤ *)
   Definition fun_pmpMatchAddr : Stm [addr ∶ ty_int, rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch :=
     match: rng with
     | inl v =>
@@ -470,6 +521,15 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       end
     | inr v => exp_val ty_pmpaddrmatch PMP_NoMatch
     end.
+  (* post: result .
+     match rng in option with
+     | Some (lo , hi) => 
+       if hi < lo then                           result = PMP_NoMatch
+       else if (addr < lo) || (hi < addr) then   result = PMP_NoMatch
+       else if (lo <= addr) && (addr <= hi) then result = PMP_Match ∗ (lo <= addr) ∗ (addr <= hi)
+       else                                      result = PMP_PartialMatch ∗ (lo <= addr ∨ addr <= hi)
+     | None =>                                   result = PMP_NoMatch
+     end *)
 
   Definition fun_process_load : Stm [rd ∶ ty_regno, vaddr ∶ ty_xlenbits, value ∶ ty_memory_op_result] ty_retired :=
     stm_match_union_alt memory_op_result value

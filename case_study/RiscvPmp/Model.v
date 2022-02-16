@@ -143,6 +143,34 @@ Module RiscvPmpModel.
         | _ => False
         end.
 
+
+      (* pmp_addr_access(?entries, ?mode) 
+         - mode is only useful if L is set, then we check perms for M-mode as well
+
+         Machine-mode: L set? Yes -> check perms of the pmp entry, No -> Full access
+
+         ∀ a ∈ [pmpaddr_i-1, pmpaddr_i] . ∃ w . a ↦ w ∗ Perm(RWLX, a, mode)
+         ^ Troublesome
+
+        TODO:
+         check_access(addr, entries) : option Perm
+         Options: - ∀ a ∈ Mem, p : Perm . check_access(a, entries, mode) = Some p -> ∃ w . a ↦ w ∗ perm_access(a, p)
+                  - Base on pmpCheck function, instead of bool -> pred
+
+RO: half of ↦
+RW: full
+---
+X: use ghost state of gen_heap? (ghost state should mention if ℓ is executable)
+pc ↦ a (γ(a) = X)
+
+TODO: Cerise paper: readonly access to ℓ
+
+*)
+
+
+
+
+
       (* Need to implement same algo as pmpCheck:
          - Check by priority (first match, starting from 0)
          Current limitations for first version:
