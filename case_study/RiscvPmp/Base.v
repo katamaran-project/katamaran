@@ -528,17 +528,17 @@ Section TypeDefKit.
     match U with
     | ast              => fun K =>
                             match K with
-                            | KRTYPE      => ty_tuple [ty_regno, ty_regno, ty_regno, ty_rop]
-                            | KITYPE      => ty_tuple [ty_int, ty_regno, ty_regno, ty_iop]
-                            | KUTYPE      => ty_tuple [ty_int, ty_regno, ty_uop]
-                            | KBTYPE      => ty_tuple [ty_int, ty_regno, ty_regno, ty_bop]
-                            | KRISCV_JAL  => ty_tuple [ty_int, ty_regno]
-                            | KRISCV_JALR => ty_tuple [ty_int, ty_regno, ty_regno]
-                            | KLOAD       => ty_tuple [ty_int, ty_regno, ty_regno]
-                            | KSTORE      => ty_tuple [ty_int, ty_regno, ty_regno]
+                            | KRTYPE      => ty_tuple [ty_regno; ty_regno; ty_regno; ty_rop]
+                            | KITYPE      => ty_tuple [ty_int; ty_regno; ty_regno; ty_iop]
+                            | KUTYPE      => ty_tuple [ty_int; ty_regno; ty_uop]
+                            | KBTYPE      => ty_tuple [ty_int; ty_regno; ty_regno; ty_bop]
+                            | KRISCV_JAL  => ty_tuple [ty_int; ty_regno]
+                            | KRISCV_JALR => ty_tuple [ty_int; ty_regno; ty_regno]
+                            | KLOAD       => ty_tuple [ty_int; ty_regno; ty_regno]
+                            | KSTORE      => ty_tuple [ty_int; ty_regno; ty_regno]
                             | KECALL      => ty_unit
                             | KMRET       => ty_unit
-                            | KCSR        => ty_tuple [ty_csridx, ty_regno, ty_regno, ty_csrop]
+                            | KCSR        => ty_tuple [ty_csridx; ty_regno; ty_regno; ty_csrop]
                             end
     | access_type      => fun _ => ty_unit
     | exception_type   => fun _ => ty_unit
@@ -675,10 +675,10 @@ Section TypeDefKit.
 
   Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty :=
     match R with
-    | rpmpcfg_ent => [ "L" ∷ ty_bool,
-                       "A" ∷ ty_pmpaddrmatchtype,
-                       "X" ∷ ty_bool,
-                       "W" ∷ ty_bool,
+    | rpmpcfg_ent => [ "L" ∷ ty_bool;
+                       "A" ∷ ty_pmpaddrmatchtype;
+                       "X" ∷ ty_bool;
+                       "W" ∷ ty_bool;
                        "R" ∷ ty_bool
                      ]
     | rmstatus    => ["MPP" ∷ ty_privilege
