@@ -245,6 +245,7 @@ Module RiscvPmpModel.
         | pmp_entries     => fun ts => interp_pmp_entries (env.head ts)
         | pmp_addr_access => fun ts => interp_pmp_addr_access (mG := mG) (env.head (env.tail ts)) (env.head ts)
         | gprs            => fun _  => interp_gprs
+        | ptsto           => fun _  => True%I (* TODO: interp_ptst *)
         end.
 
     Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
