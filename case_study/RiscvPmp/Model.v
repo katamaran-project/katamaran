@@ -76,6 +76,7 @@ Module RiscvPmpModel.
       end.
 
   Module RiscvPmpIrisHeapKit <: IrisHeapKit.
+    Variable maxAddr : nat.
 
     Section WithIrisNotations.
       Import iris.bi.interface.
@@ -105,6 +106,23 @@ Module RiscvPmpModel.
       Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
         fun {Σ} mG μ => (True)%I.
 
+      Definition liveAddrs := seqZ 0 maxAddr.
+      Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
+
+      Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
+      Proof.
+        unfold initMemMap.
+        rewrite map_Forall_to_list.
+        rewrite Forall_forall.
+        intros (a , v).
+        rewrite elem_of_map_to_list.
+        intros el.
+        apply elem_of_list_to_map_2 in el.
+        apply elem_of_list_In in el.
+        apply in_map_iff in el.
+        by destruct el as (a' & <- & _).
+      Qed.
+
       Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
         ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
       Proof.
@@ -115,7 +133,8 @@ Module RiscvPmpModel.
         iExists (McMemGS gH (nroot .@ "addr_inv")).
         unfold mem_inv, mem_res.
         done.
-      Admitted.
+        apply initMemMap; auto.
+      Qed.
 
       Import Contracts.
 
@@ -143,49 +162,88 @@ Module RiscvPmpModel.
         | _ => False
         end.
 
+      Definition PmpAddrRange := option (Xlenbits * Xlenbits).
 
+      Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange :=
+        match A cfg with
+        | OFF => None
+        | TOR => Some (lo , hi)
+        end.
+
+      Definition pmp_match_addr (a : Addr) (rng : PmpAddrRange) : PmpAddrMatch :=
+        match rng with
+        | Some (lo, hi) =>
+            if hi <? lo
+            then PMP_NoMatch
+            else if (a<? lo) || (hi <? a)
+                 then PMP_NoMatch
+                 else if (lo <=? a) && (a <=? hi)
+                      then PMP_Match
+                      else PMP_PartialMatch
+        | None          => PMP_NoMatch
+        end.
+
+      (* Ignore execute perm for now *)
+      Inductive Permission : Set :=
+      | O
+      | R
+      | W
+      | RW.
+
+      Definition translate_perm_from_cfg (cfg : Pmpcfg_ent) : Permission :=
+        match Base.R cfg, Base.W cfg with
+        | false, false => O
+        | true, false  => R
+        | false, true  => W
+        | true, true   => RW
+        end.
+
+      Definition pmp_permission (m : Privilege) (cfg : Pmpcfg_ent) : Permission :=
+        let p := translate_perm_from_cfg cfg in
+        match m, L cfg with
+        | User,    _    => p
+        | Machine, true => p (* only restrict Machine mode if PMP entry is locked *)
+        | Machine, _    => RW
+        end.
+
+      Definition pmp_match_entry (a : Addr) (m : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits) : PmpMatch * Permission :=
+        let rng := pmp_addr_range cfg hi lo in
+        match pmp_match_addr a rng with
+        | PMP_NoMatch      => (PMP_Continue , O)
+        | PMP_PartialMatch => (PMP_Fail, O)
+        | PMP_Match        => (PMP_Success, pmp_permission m cfg)
+        end.
+
+      Fixpoint pmp_check (a : Addr) (entries : list PmpEntryCfg) (prev : Addr) (m : Privilege) : option Permission :=
+        match entries with
+        | [] => None
+        | (cfg , addr) :: entries =>
+            match pmp_match_entry a m cfg prev addr with
+            | (PMP_Success , p) => Some p
+            | (PMP_Fail, _)     => None
+            | (PMP_Continue, _) => pmp_check a entries addr m
+            end
+        end.
+
+      (* check_access is based on the pmpCheck algorithm, main difference
+         is that we can define it less cumbersome because entries will contain
+         the PMP entries in highest-priority order. *)
+      Definition check_access (a : Addr) (entries : list PmpEntryCfg) (m : Privilege) : option Permission :=
+        pmp_check a entries 0 m.
+
+      (* TODO: add perm_access predicate *)
       (* pmp_addr_access(?entries, ?mode) 
-         - mode is only useful if L is set, then we check perms for M-mode as well
-
-         Machine-mode: L set? Yes -> check perms of the pmp entry, No -> Full access
-
-         ∀ a ∈ [pmpaddr_i-1, pmpaddr_i] . ∃ w . a ↦ w ∗ Perm(RWLX, a, mode)
-         ^ Troublesome
-
-        TODO:
-         check_access(addr, entries) : option Perm
-         Options: - ∀ a ∈ Mem, p : Perm . check_access(a, entries, mode) = Some p -> ∃ w . a ↦ w ∗ perm_access(a, p)
-                  - Base on pmpCheck function, instead of bool -> pred
-
-RO: half of ↦
-RW: full
----
-X: use ghost state of gen_heap? (ghost state should mention if ℓ is executable)
-pc ↦ a (γ(a) = X)
-
-TODO: Cerise paper: readonly access to ℓ
-
-*)
-
-
-
-
-
-      (* Need to implement same algo as pmpCheck:
-         - Check by priority (first match, starting from 0)
-         Current limitations for first version:
-         - No perm checks (this means we can just give access to all addr) *)
-      (* Sketch: (see paper notes tho)
-         For PMP Entry 0: 
-         ∃ addr . ⌜0 < addr ∧ addr < pmpaddr0⌝ ∗ (∀ a ∈ [0, pmpaddr0] . ∃ w . a ↦ w)
-       *)
-      Definition interp_pmp_addr_access `{sailRegGS Σ} (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-        True.
+         ∀ a ∈ Mem, p : Perm . check_access(a, entries, mode) = Some p -> 
+                               ∃ w . a ↦ w ∗ perm_access(a, p) *)
+      Definition interp_pmp_addr_access `{sailRegGS Σ} `{invGS Σ} {mG : memGS Σ} (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+        [∗ list] a ∈ liveAddrs,
+          (⌜∃ p, check_access a entries m = Some p⌝ -∗
+            (∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) a (DfracOwn 1) w))%I.
 
       Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
         match p return Env Val (𝑯_Ty p) -> iProp Σ with
         | pmp_entries     => fun ts => interp_pmp_entries (env.head ts)
-        | pmp_addr_access => fun ts => interp_pmp_addr_access (env.head (env.tail ts)) (env.head ts)
+        | pmp_addr_access => fun ts => interp_pmp_addr_access (mG := mG) (env.head (env.tail ts)) (env.head ts)
         | gprs            => fun _  => interp_gprs
         end.
 
