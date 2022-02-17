@@ -411,18 +411,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       if: check
       then None
       else
-        stm_match_union_alt access_type acc
-                            (fun K =>
-                               match K with
-                               | KRead      => MkAlt pat_unit
-                                                     (Some E_Load_Access_Fault)
-                               | KWrite     => MkAlt pat_unit
-                                                     (Some E_SAMO_Access_Fault)
-                               | KReadWrite => MkAlt pat_unit
-                                                     (Some E_SAMO_Access_Fault)
-                               | KExecute   => MkAlt pat_unit
-                                                     (Some E_Fetch_Access_Fault)
-                               end).
+        match: acc in union access_type with
+        |> KRead pat_unit      => Some E_Load_Access_Fault
+        |> KWrite pat_unit     => Some E_SAMO_Access_Fault
+        |> KReadWrite pat_unit => Some E_SAMO_Access_Fault
+        |> KExecute pat_unit   => Some E_Fetch_Access_Fault
+        end.
+
   (* post: result .
      if check then result = None ∗ ∃ w . addr ↦ w ∗ ((∃ w' . addr ↦ w') -∗ pmp_addr_access(?entries, ?mode)) (* magic wand: with predicate or add support to Katamaran *)
      else    ∃ e . result = Some e *)
@@ -555,29 +550,21 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_fetch : Stm ctx.nil ty_fetch_result :=
     let: tmp1 := stm_read_register pc in
     let: tmp2 := call mem_read Execute tmp1 in
-    stm_match_union_alt memory_op_result tmp2
-                        (fun K =>
-                           match K with
-                           | KMemValue     => MkAlt (pat_var result%string)
-                                                    (F_Base result)
-                           | KMemException => MkAlt (pat_var e%string)
-                                                    (F_Error e tmp1)
-                           end).
+    match: tmp2 in union memory_op_result with
+    |> KMemValue (pat_var "result") => F_Base result
+    |> KMemException (pat_var "e")  => F_Error e tmp1
+    end.
 
   Definition fun_step : Stm ctx.nil ty_unit :=
     let: f := call fetch in
-    stm_match_union_alt fetch_result f
-                        (fun K =>
-                           match K with
-                           | KF_Base  => MkAlt (pat_var w%string)
-                                               (let: "ast" := foreign decode w in
-                                                let: tmp := stm_read_register pc in
-                                                stm_write_register nextpc (tmp + (z_exp 4)) ;;
-                                                call execute (exp_var "ast"))
-                           | KF_Error => MkAlt (pat_pair e%string addr%string)
-                                               (call handle_mem_exception addr e ;;
-                                                stm_val ty_retired RETIRE_FAIL)
-                           end) ;;
+    match: f in union fetch_result with
+    |> KF_Base (pat_var "w") =>  let: "ast" := foreign decode w in
+                                 let: tmp := stm_read_register pc in
+                                 stm_write_register nextpc (tmp + (z_exp 4)) ;;
+                                 call execute (exp_var "ast")
+    |> KF_Error (pat_pair "e" "addr") => call handle_mem_exception addr e ;;
+                                         stm_val ty_retired RETIRE_FAIL
+    end ;;
     call tick_pc.
 
   Definition fun_init_sys : Stm ctx.nil ty_unit :=
@@ -610,22 +597,14 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     end.
 
   Definition fun_exceptionType_to_bits : Stm [e ∶ ty_exception_type] ty_exc_code :=
-    stm_match_union_alt exception_type e
-                        (fun K =>
-                           match K with
-                           | KE_Fetch_Access_Fault => MkAlt pat_unit
-                                                            (stm_val ty_exc_code 1%Z)
-                           | KE_Illegal_Instr      => MkAlt pat_unit
-                                                            (stm_val ty_exc_code 2%Z)
-                           | KE_Load_Access_Fault  => MkAlt pat_unit
-                                                            (stm_val ty_exc_code 5%Z)
-                           | KE_SAMO_Access_Fault  => MkAlt pat_unit
-                                                            (stm_val ty_exc_code 7%Z)
-                           | KE_U_EnvCall          => MkAlt pat_unit
-                                                            (stm_val ty_exc_code 8%Z)
-                           | KE_M_EnvCall          => MkAlt pat_unit
-                                                            (stm_val ty_exc_code 11%Z)
-                           end).
+    match: e in union exception_type with
+      |> KE_Fetch_Access_Fault pat_unit => stm_val ty_exc_code 1%Z
+      |> KE_Illegal_Instr      pat_unit => stm_val ty_exc_code 2%Z
+      |> KE_Load_Access_Fault  pat_unit => stm_val ty_exc_code 5%Z
+      |> KE_SAMO_Access_Fault  pat_unit => stm_val ty_exc_code 7%Z
+      |> KE_U_EnvCall          pat_unit => stm_val ty_exc_code 8%Z
+      |> KE_M_EnvCall          pat_unit => stm_val ty_exc_code 11%Z
+    end.
 
   Definition fun_handle_mem_exception : Stm [addr ∶ ty_xlenbits; e ∶ ty_exception_type] ty_unit :=
     let: tmp1 := stm_read_register pc in
@@ -634,27 +613,23 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call set_next_pc tmp3.
 
   Definition fun_exception_handler : Stm [cur_priv ∶ ty_privilege; ctl ∶ ty_ctl_result; "pc" ∶ ty_xlenbits] ty_xlenbits :=
-    stm_match_union_alt ctl_result ctl
-                        (fun K =>
-                           match K with
-                           | KCTL_TRAP => MkAlt (pat_var e%string)
-                                                (let: del_priv := call exception_delegatee cur_priv in
-                                                 let: tmp := call exceptionType_to_bits e in
-                                                 call trap_handler del_priv tmp (exp_var "pc"))
-                           | KCTL_MRET => MkAlt pat_unit
-                                                (* NOTE: normally the return address is computed with:
-                                                         prepare_xret_target(Machine) & pc_alignment_mask()
-                                                         
-                                                         we drop the alignment mask and inline prepare_xret_target,
-                                                         which just calls get_xret_target, which returns (for M-mode)
-                                                         the value of mepc *)
-                                                (let: tmp1 := stm_read_register mstatus in
-                                                 (stm_match_record rmstatus tmp1
-                                                                   (recordpat_snoc recordpat_nil "MPP" MPP%string)
-                                                                   (stm_write_register cur_privilege MPP ;;
-                                                                    stm_write_register mstatus (exp_record rmstatus [ exp_val ty_privilege User ]) ;;
-                                                                    stm_read_register mepc)))
-                           end).
+    match: ctl in union ctl_result with
+    |> KCTL_TRAP (pat_var "e") => let: del_priv := call exception_delegatee cur_priv in
+                                  let: tmp := call exceptionType_to_bits e in
+                                  call trap_handler del_priv tmp (exp_var "pc")
+    |> KCTL_MRET pat_unit      =>
+      (* NOTE: normally the return address is computed with:
+               prepare_xret_target(Machine) & pc_alignment_mask()
+               we drop the alignment mask and inline prepare_xret_target,
+               which just calls get_xret_target, which returns (for M-mode)
+               the value of mepc *)
+      let: tmp1 := stm_read_register mstatus in
+      (stm_match_record rmstatus tmp1
+                        (recordpat_snoc recordpat_nil "MPP" MPP%string)
+                        (stm_write_register cur_privilege MPP ;;
+                         stm_write_register mstatus (exp_record rmstatus [ exp_val ty_privilege User ]) ;;
+                         stm_read_register mepc))
+    end.
 
   Definition fun_exception_delegatee : Stm [p ∶ ty_privilege] ty_privilege :=
     stm_val ty_privilege Machine.
@@ -792,32 +767,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   (* NOTE: normally the definitions of execute_X are inlined and defined as
            function clauses of execute (a scattered definition) *)
   Definition fun_execute : Stm ["ast" ∶ ty_ast] ty_retired :=
-    stm_match_union_alt ast (exp_var "ast")
-                        (fun K =>
-                           match K with
-                           | KRTYPE      => MkAlt (pat_tuple (rs2 , rs1 , rd , op))
-                                                  (call execute_RTYPE rs2 rs1 rd op)
-                           | KITYPE      => MkAlt (pat_tuple (imm , rs1 , rd , op))
-                                                  (call execute_ITYPE imm rs1 rd op)
-                           | KUTYPE      => MkAlt (pat_tuple (imm , rd , op))
-                                                  (call execute_UTYPE imm rd op)
-                           | KBTYPE      => MkAlt (pat_tuple (imm , rs2, rs1 , op))
-                                                  (call execute_BTYPE imm rs2 rs1 op)
-                           | KRISCV_JAL  => MkAlt (pat_tuple (imm , rd))
-                                                  (call execute_RISCV_JAL imm rd)
-                           | KRISCV_JALR => MkAlt (pat_tuple (imm , rs1 , rd))
-                                                  (call execute_RISCV_JALR imm rs1 rd)
-                           | KLOAD       => MkAlt (pat_tuple (imm , rs1, rd))
-                                                  (call execute_LOAD imm rs1 rd)
-                           | KSTORE      => MkAlt (pat_tuple (imm , rs2 , rs1))
-                                                  (call execute_STORE imm rs2 rs1)
-                           | KECALL      => MkAlt pat_unit
-                                                  (call execute_ECALL)
-                           | KMRET       => MkAlt pat_unit
-                                                  (call execute_MRET)
-                           | KCSR        => MkAlt (pat_tuple (csr , rs1 , rd , op))
-                                                  (call execute_CSR csr rs1 rd op)
-                           end).
+    match: exp_var "ast" in union ast with
+    |> KRTYPE (pat_tuple (rs2 , rs1 , rd , op)) => call execute_RTYPE rs2 rs1 rd op
+    |> KITYPE (pat_tuple (imm , rs1 , rd , op)) => call execute_ITYPE imm rs1 rd op
+    |> KUTYPE (pat_tuple (imm , rd , op))       => call execute_UTYPE imm rd op
+    |> KBTYPE (pat_tuple (imm , rs2, rs1 , op)) => call execute_BTYPE imm rs2 rs1 op
+    |> KRISCV_JAL (pat_tuple (imm , rd))        => call execute_RISCV_JAL imm rd
+    |> KRISCV_JALR (pat_tuple (imm , rs1 , rd)) => call execute_RISCV_JALR imm rs1 rd
+    |> KLOAD (pat_tuple (imm , rs1, rd))        => call execute_LOAD imm rs1 rd
+    |> KSTORE (pat_tuple (imm , rs2 , rs1))     => call execute_STORE imm rs2 rs1
+    |> KECALL pat_unit                          => call execute_ECALL
+    |> KMRET pat_unit                           => call execute_MRET
+    |> KCSR (pat_tuple (csr , rs1 , rd , op))   => call execute_CSR csr rs1 rd op
+    end.
 
   Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regno; rs1 ∶ ty_regno; rd ∶ ty_regno; op ∶ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
@@ -909,17 +871,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: paddr := tmp + offset in
     let: rs2_val := call rX rs2 in
     let: res := call mem_write_value paddr rs2_val in
-    stm_match_union_alt memory_op_result res
-                        (fun K =>
-                           match K with
-                           | KMemValue => MkAlt (pat_var v%string)
-                                                (if: v = z_exp 1
-                                                 then stm_val ty_retired RETIRE_SUCCESS
-                                                 else fail "store got false from write_mem_value")
-                           | KMemException => MkAlt (pat_var e%string)
-                                                    (call handle_mem_exception paddr e ;;
-                                                     stm_val ty_retired RETIRE_FAIL)
-                           end).
+    match: res in union memory_op_result with
+    |> KMemValue (pat_var "v") => if: v = z_exp 1
+                                  then stm_val ty_retired RETIRE_SUCCESS
+                                  else fail "store got false from write_mem_value"
+    |> KMemException (pat_var "e") => call handle_mem_exception paddr e ;;
+                                      stm_val ty_retired RETIRE_FAIL
+    end.
 
   Definition fun_execute_ECALL : Stm ctx.nil ty_retired :=
     let: tmp1 := stm_read_register cur_privilege in
