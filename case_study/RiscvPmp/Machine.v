@@ -444,18 +444,15 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   (* TODO *)
   (* LS: ent = [L; A; X; W; R] *)
   (* pre: ⊤ *)
-  Definition fun_pmpCheckRWX : Stm [ent ∶ ty_pmpcfg_ent, acc ∶ ty_access_type] ty_bool :=
+  Definition fun_pmpCheckRWX : Stm [ent ∶ ty_pmpcfg_ent; acc ∶ ty_access_type] ty_bool :=
     match: ent in rpmpcfg_ent with
       [L; A; X; W; R] =>
-        stm_match_union_alt
-          access_type acc
-          (fun K =>
-             match K with
-             | KRead      => MkAlt pat_unit R
-             | KWrite     => MkAlt pat_unit W
-             | KReadWrite => MkAlt pat_unit (R && W)
-             | KExecute   => MkAlt pat_unit X
-             end)
+        match: acc in union access_type with
+        |> KRead pat_unit      => R
+        |> KWrite pat_unit     => W
+        |> KReadWrite pat_unit => R && W
+        |> KExecute pat_unit   => X
+        end
     end.
   (* post: result .
      match acc with
@@ -532,16 +529,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
      end *)
 
   Definition fun_process_load : Stm [rd ∶ ty_regno, vaddr ∶ ty_xlenbits, value ∶ ty_memory_op_result] ty_retired :=
-    stm_match_union_alt memory_op_result value
-                        (fun K =>
-                           match K with
-                           | KMemValue     => MkAlt (pat_var result)
-                                                    (call wX rd result ;;
-                                                     stm_val ty_retired RETIRE_SUCCESS)
-                           | KMemException => MkAlt (pat_var e)
-                                                    (call handle_mem_exception vaddr e ;;
-                                                     stm_val ty_retired RETIRE_FAIL)
-                           end).
+    match: value in union memory_op_result with
+    |> KMemValue (pat_var "result") => call wX rd result;;
+                                       stm_val ty_retired RETIRE_SUCCESS
+    |> KMemException (pat_var "e")  => call handle_mem_exception vaddr e;;
+                                       stm_val ty_retired RETIRE_FAIL
+    end.
 
   Definition fun_mem_write_value : Stm [paddr ∶ ty_xlenbits, value ∶ ty_int] ty_memory_op_result :=
     let: tmp := stm_read_register cur_privilege in

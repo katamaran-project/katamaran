@@ -440,12 +440,12 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
       rhs%exp)
     (format "'[hv' 'match:'  e  'in'  R  'with'  '/  ' [ x ; y ; .. ; z ]  =>  '/    ' rhs  '/' 'end' ']'") : exp_scope.
 
-  (* Notation "'match:' ee 'in' 'union' U 'with' | x | y | .. | z 'end'" := *)
-  (*   (stm_match_union_alt_list U ee (cons x%alt (cons y%alt .. (cons z%alt nil) ..)) stt) *)
-  (*   (format "'[hv' 'match:'  ee  'in'  'union'  U  'with'  '/' |  x  '/' |  y  '/' | ..  '/' | z  '/' 'end' ']'") : exp_scope. *)
+  Notation "'match:' e 'in' 'union' U 'with' | x | y | .. | z 'end'" :=
+    (stm_match_union_alt_list U e (cons x%alt (cons y%alt .. (cons z%alt nil) ..)) StrictProp.stt)
+    (format "'[hv' 'match:'  e  'in'  'union'  U  'with'  '/' | x  '/' | y  '/' | ..  '/' | z  '/' 'end' ']'") : exp_scope.
 
-  (* Notation "[[ KK pat => rhs ]]" := (existT KK (MkAlt pat rhs)) *)
-  (*   (KK global, pat at level 9, format "[[ KK  pat  =>  rhs ]]") : alt_scope. *)
+  Notation "'>' K pat => rhs" := (existT K (MkAlt pat rhs))
+    (K global, at level 200, pat at level 9, format ">  K  pat  =>  rhs") : alt_scope.
 
   Notation "'call' f a1 .. an" :=
     (stm_call f (env.snoc .. (env.snoc env.nil (_∷_) a1%exp) .. (_∷_) an%exp))
