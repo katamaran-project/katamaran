@@ -1013,20 +1013,19 @@ Module BlockVerification.
 
   Import ModalNotations.
 
-  Definition M : TYPE -> TYPE :=
-    fun A => □(A -> SHeap -> 𝕊) -> SHeap -> 𝕊.
+  Definition M : TYPE -> TYPE := SMut [] [].
 
-  Definition pure {A} : ⊢ A -> M A. Admitted.
-  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B. Admitted.
-  Definition angelic {σ} : ⊢ M (STerm σ). Admitted.
-  Definition assert : ⊢ Formula -> M Unit. Admitted.
-  Definition assume : ⊢ Formula -> M Unit. Admitted.
+  Definition pure {A} : ⊢ A -> M A := SMut.pure.
+  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SMut.bind.
+  Definition angelic {σ} : ⊢ M (STerm σ) := @SMut.angelic [] None σ.
+  Definition assert : ⊢ Formula -> M Unit := SMut.assert_formula.
+  Definition assume : ⊢ Formula -> M Unit := SMut.assume_formula.
 
-  Axiom produce_chunk : ⊢ Chunk -> M Unit.
-  Axiom consume_chunk : ⊢ Chunk -> M Unit.
+  Definition produce_chunk : ⊢ Chunk -> M Unit := SMut.produce_chunk.
+  Definition consume_chunk : ⊢ Chunk -> M Unit := SMut.consume_chunk.
 
-  Axiom produce : ⊢ Assertion -> □(M Unit).
-  Axiom consume : ⊢ Assertion -> □(M Unit).
+  Definition produce : ⊢ Assertion -> □(M Unit) := SMut.produce.
+  Definition consume : ⊢ Assertion -> □(M Unit) := SMut.consume.
 
   Notation "ω ∣ x <- ma ;; mb" :=
     (bind ma (fun _ ω x => mb))
@@ -1053,7 +1052,7 @@ Module BlockVerification.
   Definition exec_rtype (rs2 rs1 rd : Reg ty_xlenbits) (op : ROP) : ⊢ M Unit :=
     fun _ =>
       ω01 ∣ v11 <- @rX rs1 _ ;;
-      ω12 ∣ v22 <- @rX rs1 _ ;;
+      ω12 ∣ v22 <- @rX rs2 _ ;;
       let v12 := persist__term v11 ω12 in
       let bop := match op with
                  | RISCV_ADD => binop_plus
@@ -1097,15 +1096,17 @@ Module BlockVerification.
     ω ∣ _ <- exec_double req b ;;
     consume ens ω.
 
+  Module Post := Postprocessing.
   (* This is a VC for triples, for doubles we probably need to talk
      about the continuation of a block. *)
   Definition VC {Σ : LCtx} (req : Assertion Σ) (b : list AST) (ens : Assertion Σ) : 𝕊 Σ :=
-    @exec_triple
-      {| wctx := Σ; wco := nil |}
-      req b ens
-      (* Could include leakcheck here *)
-      (fun _ _ _ h => SymProp.block)
-      []%list.
+    Post.prune (Post.solve_uvars (Post.prune (Post.solve_evars (Post.prune
+      (@exec_triple
+        {| wctx := Σ; wco := nil |}
+        req b ens
+        (* Could include leakcheck here *)
+        (fun _ _ _ _ h => SymProp.block)
+        []%env []%list))))).
 
   Section Example.
 
@@ -1114,9 +1115,9 @@ Module BlockVerification.
     Notation "p '∗' q" := (asn_sep p q).
 
     Example block1 : list AST :=
-      [ ADD [bv 1] [bv 1] [bv 2];
-        SUB [bv 2] [bv 1] [bv 2];
-        SUB [bv 1] [bv 1] [bv 2]
+      [ ADD [bv 1] [bv 1] [bv 2]
+      ; SUB [bv 2] [bv 1] [bv 2]
+      ; SUB [bv 1] [bv 1] [bv 2]
       ].
 
     Let Σ1 : LCtx := ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
@@ -1133,8 +1134,7 @@ Module BlockVerification.
 
     Example VC1 : 𝕊 Σ1 := VC pre1 block1 post1.
 
-    (* After implementing all the functions. *)
-    (* Eval compute in VC1. *)
+    Eval compute in VC1.
 
   End Example.
 
