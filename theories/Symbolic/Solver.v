@@ -78,9 +78,10 @@ Module Type SolverOn
     Proof.
       intros; dependent elimination op; cbn;
         rewrite ?inst_pathcondition_cons, ?andb_true_iff; cbn;
-        rewrite ?Z.eqb_eq, ?Z.leb_le, ?Z.ltb_lt, ?Z.geb_le, ?Z.ge_le_iff,
+        rewrite ?Z.leb_le, ?Z.ltb_lt, ?Z.geb_le, ?Z.ge_le_iff,
           ?Z.gtb_lt, ?Z.gt_lt_iff, ?and_assoc;
         try reflexivity.
+      now destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)).
     Qed.
 
     Lemma simplify_formula_bool_binop_neg_spec {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) t1 t2 k :
@@ -94,7 +95,8 @@ Module Type SolverOn
         rewrite ?Z.eqb_neq, ?Z.leb_gt, ?Z.gt_lt_iff, ?Z.ltb_ge, ?Z.ge_le_iff,
           ?Z.geb_leb, ?Z.leb_gt, ?Z.gtb_ltb, ?Z.ltb_ge,
           ?orb_false_iff, ?negb_true_iff, ?and_assoc;
-        reflexivity.
+        try reflexivity.
+      now destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)).
     Qed.
 
     Equations(noeqns) simplify_formula_bool {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=

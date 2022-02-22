@@ -50,7 +50,7 @@ Module Type BinOpsOn (Import TD : TypeDecl).
   | binop_plus              : BinOp ty_int ty_int ty_int
   | binop_times             : BinOp ty_int ty_int ty_int
   | binop_minus             : BinOp ty_int ty_int ty_int
-  | binop_eq                : BinOp ty_int ty_int ty_bool
+  | binop_eq {σ}            : BinOp σ σ ty_bool
   | binop_le                : BinOp ty_int ty_int ty_bool
   | binop_lt                : BinOp ty_int ty_int ty_bool
   | binop_ge                : BinOp ty_int ty_int ty_bool
@@ -94,7 +94,7 @@ Module Type BinOpsOn (Import TD : TypeDecl).
     | binop_plus  , binop_plus   => left eq_refl
     | binop_times , binop_times  => left eq_refl
     | binop_minus , binop_minus  => left eq_refl
-    | binop_eq    , binop_eq     => left eq_refl
+    | @binop_eq σ , @binop_eq τ  => f_equal_dec (fun σ => ((σ , σ , ty_bool) , binop_eq)) noConfusion_inv (eq_dec σ τ)
     | binop_le    , binop_le     => left eq_refl
     | binop_lt    , binop_lt     => left eq_refl
     | binop_ge    , binop_ge     => left eq_refl
@@ -167,11 +167,11 @@ Module Type BinOpsOn (Import TD : TypeDecl).
   Defined.
 
   Definition eval_binop {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) : Val σ1 -> Val σ2 -> Val σ3 :=
-    match op with
+    match op in BinOp σ1 σ2 σ3 return Val σ1 -> Val σ2 -> Val σ3 with
     | binop_plus       => Z.add
     | binop_times      => Z.mul
     | binop_minus      => Z.sub
-    | binop_eq         => Z.eqb
+    | binop_eq         => Val_eqb _
     | binop_le         => Z.leb
     | binop_lt         => Z.ltb
     | binop_ge         => Z.geb
