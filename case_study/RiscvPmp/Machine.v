@@ -185,8 +185,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   .
 
   Inductive Lem : PCtx -> Set :=
-  | open_gprs      : Lem ctx.nil
-  | close_gprs     : Lem ctx.nil
+  | open_gprs         : Lem ctx.nil
+  | close_gprs        : Lem ctx.nil
+  | open_pmp_entries  : Lem ctx.nil
+  | close_pmp_entries : Lem ctx.nil
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -377,6 +379,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   (* TODO *)
   (* pre: pmp_entries(?entries) ∗ pmp_addr_access(?entries, ?mode) *)
   Definition fun_pmpCheck : Stm [addr ∶ ty_xlenbits; acc ∶ ty_access_type; priv ∶ ty_privilege] (ty_option ty_exception_type) :=
+    use lemma open_pmp_entries ;;
     let: check%string :=
       let: tmp1 := stm_read_register pmp0cfg in
       let: tmp2 := stm_read_register pmpaddr0 in
@@ -400,6 +403,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
           end
       end
       end in
+      use lemma close_pmp_entries ;;
       if: check
       then None
       else

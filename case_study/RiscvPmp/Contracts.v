@@ -113,6 +113,7 @@ Section PredicateKit.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
 
   Local Arguments Some {_} &.
+
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
     | ptsto => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
@@ -136,7 +137,7 @@ Section ContractDefKit.
   Local Notation "a &&ₜ b" := (term_binop binop_and a b) (at level 80).
   Local Notation "a ||ₜ b" := (term_binop binop_or a b) (at level 85).
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
-  Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
+  Local Notation asn_pmp_entries l := (asn_chunk_angelic (chunk_user pmp_entries [l])).
   Local Notation asn_pmp_addr_access l m := (asn_chunk (chunk_user pmp_addr_access [l; m])).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
 
@@ -191,6 +192,11 @@ Section ContractDefKit.
   Definition asn_regs_ptsto {Σ} : Assertion Σ :=
     asn_and_regs
       (fun r => ∃ "w", r ↦ term_var "w").
+
+  Definition asn_pmp_ptsto {Σ} : Assertion Σ :=
+    let ptsto := fun {T} (r : Reg T) => ∃ "w", r ↦ term_var "w" in
+    ptsto pmp0cfg ∗ ptsto pmpaddr0 ∗
+    ptsto pmp1cfg ∗ ptsto pmpaddr1.
 
   Local Notation "e1 ',ₜ' e2" := (term_binop binop_pair e1 e2) (at level 100).
 
@@ -638,7 +644,11 @@ Section ContractDefKit.
          asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var priv);
        sep_contract_result          := "result_pmpCheck";
-       sep_contract_postcondition   := (* TODO *) asn_true;
+       sep_contract_postcondition   := 
+         asn_match_option
+           _ (term_var "result_pmpCheck") e
+           asn_true
+           (∃ "w", term_var addr ↦ₘ term_var "w");
     |}.
 
   Definition sep_contract_pmpCheckPerms : SepContractFun pmpCheckPerms :=
@@ -768,6 +778,20 @@ Section ContractDefKit.
        lemma_postcondition   := asn_gprs;
     |}.
 
+  Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
+    {| lemma_logic_variables := ctx.nil;
+       lemma_patterns        := env.nil;
+       lemma_precondition    := ∃ "entries", asn_pmp_entries (term_var "entries");
+       lemma_postcondition   := asn_pmp_ptsto;
+    |}.
+
+  Definition lemma_close_pmp_entries : SepLemma close_pmp_entries :=
+    {| lemma_logic_variables := ctx.nil;
+       lemma_patterns        := env.nil;
+       lemma_precondition    := asn_pmp_ptsto;
+       lemma_postcondition   := ∃ "entries", asn_pmp_entries (term_var "entries");
+    |}.
+
   End Contracts.
 
   Definition CEnv : SepContractEnv :=
@@ -828,8 +852,10 @@ Section ContractDefKit.
   Definition LEnv : LemmaEnv :=
     fun Δ l =>
       match l with
-      | open_gprs      => lemma_open_gprs
-      | close_gprs     => lemma_close_gprs
+      | open_gprs        => lemma_open_gprs
+      | close_gprs       => lemma_close_gprs
+      | open_pmp_entries => lemma_open_pmp_entries
+      | close_pmpentries => lemma_close_pmp_entries
       end.
 
   Lemma linted_cenvex :
@@ -873,8 +899,10 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_pmp_mem_read : ValidContract pmp_mem_read.
 Proof. Admitted.
 
-Lemma valid_contract_pmpCheck : ValidContract pmpCheck.
-Proof. Admitted.
+Lemma valid_contract_pmpCheck : ValidContractDebug pmpCheck.
+Proof.
+  compute.
+Admitted.
 
 Lemma valid_contract_pmpCheckPerms : ValidContract pmpCheckPerms.
 Proof. reflexivity. Qed.
@@ -991,10 +1019,65 @@ Lemma valid_execute_CSR : ValidContract execute_CSR.
 Proof. reflexivity. Qed.
 
 Section Debug.
-  Import RiscvNotations.
-  Import RiscvμSailNotations.
-  Import SymProp.notations.
   Coercion stm_exp : Exp >-> Stm.
+  Local Notation "'use' 'lemma' lem args" := (stm_lemma lem args%env) (at level 10, lem at next level) : exp_scope.
+  Local Notation "'use' 'lemma' lem" := (stm_lemma lem env.nil) (at level 10, lem at next level) : exp_scope.
+  Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
+  Local Notation "p '∗' q" := (asn_sep p q).
+  Local Notation "a '=' b" := (asn_eq a b).
+  Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+
+  (* Import RiscvNotations. *)
+  (* Import RiscvμSailNotations. *)
+  Import SymProp.notations.
+
+  Definition fun_pmpCheck' : Stm ["addr" ∶ ty_xlenbits; "acc" ∶ ty_access_type; "priv" ∶ ty_privilege] (ty_option ty_exception_type) :=
+    use lemma open_pmp_entries ;;
+    let: "check" :=
+      let: "tmp1" := stm_read_register pmp0cfg in
+      let: "tmp2" := stm_read_register pmpaddr0 in
+      let: "tmp3" := z_exp 0 in
+      let: "tmp" := call pmpMatchEntry (exp_var "addr") (exp_var "acc") (exp_var "priv") (exp_var "tmp1") (exp_var "tmp2") (exp_var "tmp3") in
+      match: exp_var "tmp" in pmpmatch with
+      | PMP_Success  => stm_val ty_bool true
+      | PMP_Fail     => stm_val ty_bool false
+      | PMP_Continue =>
+      let: "tmp1" := stm_read_register pmp1cfg in
+      let: "tmp2" := stm_read_register pmpaddr1 in
+      let: "tmp3" := stm_read_register pmpaddr0 in
+      let: "tmp" := call pmpMatchEntry (exp_var "addr") (exp_var "acc") (exp_var "priv") (exp_var "tmp1") (exp_var "tmp2") (exp_var "tmp3") in
+      match: exp_var "tmp" in pmpmatch with
+      | PMP_Success  => stm_val ty_bool true
+      | PMP_Fail     => stm_val ty_bool false
+      | PMP_CONTINUE =>
+          match: exp_var "priv" in privilege with
+          | Machine => stm_val ty_bool true
+          | User    => stm_val ty_bool false
+          end
+      end
+      end in
+      if: exp_var "check"
+      then stm_debugk (exp_inr (exp_val ty_unit tt))
+      else
+        match: exp_var "acc" in union access_type with
+        |> KRead pat_unit      => exp_inl (exp_union exception_type KE_Load_Access_Fault (exp_val ty_unit tt))
+        |> KWrite pat_unit     => exp_inl (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty_unit tt))
+        |> KReadWrite pat_unit => exp_inl (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty_unit tt))
+        |> KExecute pat_unit   => exp_inl (exp_union exception_type KE_Fetch_Access_Fault (exp_val ty_unit tt))
+        end.
+
+      Lemma valid_contract_pmpCheck' : SMut.ValidContract sep_contract_pmpCheck fun_pmpCheck'.
+      Proof.
+        compute.
+        constructor.
+        cbv.
+        intros.
+        destruct v3.
+        destruct v5.
+        (* exists R, W, X, A, L. *)
+        intros.
+        repeat eexists.
+      Admitted.
 End Debug.
 
 (* TODO: this is just to make sure that all contracts defined so far are valid

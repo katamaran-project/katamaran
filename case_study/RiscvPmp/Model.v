@@ -291,11 +291,38 @@ Module RiscvPmpModel.
       iApply big_sepS_list_to_set; [apply finite.NoDup_enum|].
       cbn; iFrame. eauto using 0%Z.
     Qed.
+
+    Lemma open_pmp_entries_sound :
+      ValidLemma RiscvPmpSpecification.lemma_open_pmp_entries.
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      unfold RiscvPmpIrisHeapKit.interp_pmp_entries.
+      iIntros "[%v H]".
+      destruct v; try done.
+      destruct v; try done.
+      destruct p; try done.
+      destruct p as [cfg0 addr0]; destruct p0 as [cfg1 addr1].
+      destruct v; try done.
+      iDestruct "H" as "[Hcfg0 [Haddr0 [Hcfg1 Haddr1]]]".
+      iSplitL "Hcfg0"; eauto.
+      iSplitL "Haddr0"; eauto.
+      iSplitL "Hcfg1"; eauto.
+    Qed.
+
+    Lemma close_pmp_entries_sound :
+      ValidLemma RiscvPmpSpecification.lemma_close_pmp_entries.
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      unfold RiscvPmpIrisHeapKit.interp_pmp_entries.
+      iIntros "[[%cfg0 Hcfg0] [[%addr0 Haddr0] [[%cfg1 Hcfg1] [%addr1 Haddr1]]]]".
+      iExists [(cfg0, addr0); (cfg1, addr1)]; iAccu.
+    Qed.
   End Lemmas.
 
   Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
   Proof.
     intros Δ [];
-      eauto using open_gprs_sound, close_gprs_sound.
+      eauto using open_gprs_sound, close_gprs_sound, open_pmp_entries_sound,
+      close_pmp_entries_sound.
   Qed.
 End RiscvPmpModel.
