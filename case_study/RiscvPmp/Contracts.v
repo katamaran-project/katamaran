@@ -1068,15 +1068,15 @@ Section Debug.
 
       Lemma valid_contract_pmpCheck' : SMut.ValidContract sep_contract_pmpCheck fun_pmpCheck'.
       Proof.
-        compute.
+        (* compute.
         constructor.
         cbv.
         intros.
         destruct v3.
-        destruct v5.
+        destruct v5. *)
         (* exists R, W, X, A, L. *)
-        intros.
-        repeat eexists.
+        (* intros.
+        repeat eexists. *)
       Admitted.
 End Debug.
 
