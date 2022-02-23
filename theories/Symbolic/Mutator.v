@@ -111,6 +111,15 @@ Module Type MutatorsOn
           debug_consume_chunk_chunk                  : Chunk Σ;
         }.
 
+    Record DebugAssertFormula (Σ : LCtx) : Type :=
+      MkDebugAssertFormula
+        { debug_assert_formula_program_context : PCtx;
+          debug_assert_formula_pathcondition   : PathCondition Σ;
+          debug_assert_formula_localstore      : SStore debug_assert_formula_program_context Σ;
+          debug_assert_formula_heap            : SHeap Σ;
+          debug_assert_formula_formula         : Formula Σ;
+        }.
+
     Global Instance SubstDebugCall : Subst DebugCall :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
@@ -201,6 +210,31 @@ Module Type MutatorsOn
             h'  <- occurs_check xIn h ;;
             c'  <- occurs_check xIn c ;;
             Some (MkDebugConsumeChunk pc' δ' h'  c')
+        end.
+
+    Global Instance SubstDebugAssertFormula : Subst DebugAssertFormula :=
+      fun Σ0 d Σ1 ζ01 =>
+        match d with
+        | MkDebugAssertFormula pc δ h fml =>
+          MkDebugAssertFormula (subst pc ζ01) (subst δ ζ01) (subst h ζ01) (subst fml ζ01)
+        end.
+
+    Global Instance SubstLawsDebugAssertFormula : SubstLaws DebugAssertFormula.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    Global Instance OccursCheckDebugAssertFormula : OccursCheck DebugAssertFormula :=
+      fun Σ x xIn d =>
+        match d with
+        | MkDebugAssertFormula pc δ h fml =>
+            pc' <- occurs_check xIn pc ;;
+            δ'  <- occurs_check xIn δ ;;
+            h'  <- occurs_check xIn h ;;
+            fml'  <- occurs_check xIn fml ;;
+            Some (MkDebugAssertFormula pc' δ' h' fml')
         end.
 
   End DebugInfo.
@@ -993,13 +1027,7 @@ Module Type MutatorsOn
         fun w0 fml POST δ0 h0 =>
           dijkstra
             (SDijk.assert_formula
-               (MkAMessage _ {| msg_function := "smut_assert_formula";
-                  msg_message := "Proof obligation";
-                  msg_program_context := Γ;
-                  msg_localstore := δ0;
-                  msg_heap := h0;
-                  msg_pathcondition := wco w0
-               |}) fml)
+               (MkAMessage _ (MkDebugAssertFormula (wco w0) δ0 h0 fml)) fml)
             POST δ0 h0.
 
       Definition box_assert_formula {Γ} :

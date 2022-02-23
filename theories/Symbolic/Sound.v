@@ -596,8 +596,9 @@ Module Soundness
       - revert H2. apply Hm2; auto.
     Qed.
 
-    Lemma approx_angelic_list {AT A} `{Inst AT A} {Γ}
-      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) msg :
+    Lemma approx_angelic_list {M} {subM : Subst M} {occM : OccursCheck M} {AT A} `{Inst AT A} {Γ}
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι)
+      (msg : SStore Γ w -> SHeap w -> M w) :
       approx ι (SMut.angelic_list (A := AT) msg) (@CMut.angelic_list A Γ).
     Proof.
       intros ls lc Hl.
@@ -1771,7 +1772,7 @@ Module Soundness
         hnf. split; auto. now rewrite <- inst_persist.
     }
     { apply approx_bind.
-      apply approx_angelic_list; eauto.
+      eapply approx_angelic_list; eauto.
       { hnf. unfold inst at 1, inst_heap, inst_list.
         rewrite heap_extractions_map.
         apply List.map_ext. now intros [].
