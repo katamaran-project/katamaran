@@ -33,16 +33,29 @@ From Coq Require Import
      Strings.String.
 From RiscvPmp Require Import
      Machine.
+From RiscvPmp Require
+     Model.
 From Katamaran Require Import
+     Iris.Model
      Notations
      SemiConcrete.Mutator
+     SemiConcrete.Sound
+     Sep.Hoare
+     Sep.Logic
+     Semantics
      Specification
      Symbolic.Mutator
      Symbolic.Solver
+     Symbolic.Sound
      Symbolic.Propositions
      Symbolic.Worlds.
 From Equations Require Import
      Equations.
+From iris.base_logic Require lib.gen_heap lib.iprop invariants.
+From iris.bi Require interface big_op.
+From iris.algebra Require dfrac.
+From iris.program_logic Require weakestpre adequacy.
+From iris.proofmode Require string_ident tactics.
 
 Import RiscvPmpProgram.
 
@@ -590,3 +603,155 @@ Module BlockVerificationDerived.
   End Example.
 
 End BlockVerificationDerived.
+
+Module BlockVerificationDerivedSem.
+  Import RiscvPmpSpec.
+  Import weakestpre.
+  Import tactics.
+  Import BlockVerificationDerived.
+  Import Katamaran.SemiConcrete.Mutator.
+  Include ProgramLogicOn RiscvPmpBase RiscvPmpSpec.
+  Include Iris RiscvPmpBase RiscvPmpSpec Model.RiscvPmpSemantics.
+
+  Module RiscvPmpIrisHeapKit <: IrisHeapKit.
+    Variable maxAddr : nat.
+
+    Section WithIrisNotations.
+      Import iris.bi.interface.
+      Import iris.bi.big_op.
+      Import iris.base_logic.lib.iprop.
+      Import iris.base_logic.lib.gen_heap.
+
+      Definition MemVal : Set := Word.
+
+      Class mcMemGS Σ :=
+        McMemGS {
+            (* ghost variable for tracking state of registers *)
+            mc_ghGS :> gen_heapGS Addr MemVal Σ;
+            mc_invNs : namespace
+          }.
+
+      Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z MemVal Σ.
+      Definition memGS : gFunctors -> Set := mcMemGS.
+      Definition memΣ : gFunctors := gen_heapΣ Addr MemVal.
+
+      Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
+        fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal).
+
+      Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+        fun {Σ} mG μ => (True)%I.
+
+      Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+        fun {Σ} mG μ => (True)%I.
+
+      Definition liveAddrs := seqZ 0 maxAddr.
+      Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
+
+      Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
+      Proof.
+        unfold initMemMap.
+        rewrite map_Forall_to_list.
+        rewrite Forall_forall.
+        intros (a , v).
+        rewrite elem_of_map_to_list.
+        intros el.
+        apply elem_of_list_to_map_2 in el.
+        apply elem_of_list_In in el.
+        apply in_map_iff in el.
+        by destruct el as (a' & <- & _).
+      Qed.
+
+      Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+        ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+      Proof.
+        iIntros (Σ μ gHP).
+        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal)) as (gH) "[inv _]".
+        Unshelve.
+        iModIntro.
+        iExists (McMemGS gH (nroot .@ "addr_inv")).
+        unfold mem_inv, mem_res.
+        done.
+        apply initMemMap; auto.
+      Qed.
+
+      Definition reg_file : gset (bv 2) :=
+        list_to_set (finite.enum (bv 2)).
+
+      Definition interp_ptsreg `{sailRegGS Σ} (r : RegIdx) (v : Z) : iProp Σ :=
+        match reg_convert r with
+        | Some x => reg_pointsTo x v
+        | None => True
+        end.
+
+      Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
+        match p return Env Val (𝑯_Ty p) -> iProp Σ with
+        | ptsto           => fun _  => True%I (* TODO: interp_ptst *)
+        | pmp_entries     => fun ts => True%I (* interp_pmp_entries (env.head ts) *)
+        end.
+
+    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
+      forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
+        is_duplicable p = true ->
+        (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
+    Proof.
+      iIntros (p ts hdup) "H".
+      destruct p; inversion hdup;
+      iDestruct "H" as "#H";
+      auto.
+    Qed.
+
+    End WithIrisNotations.
+  End RiscvPmpIrisHeapKit.
+
+  Module Import RiscvPmpIrisInstance := IrisInstance RiscvPmpIrisHeapKit.
+  Lemma foreignSem `{sg : sailGS Σ} : ForeignSem (Σ := Σ).
+  Proof.
+    intros Γ τ Δ f es δ.
+    destruct f; cbn.
+  Admitted.
+
+  Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
+  Proof.
+    intros Δ [].
+    - intros ι. now iIntros "_".
+    - intros ι. now iIntros "_".
+    - intros ι. now iIntros "_".
+    - intros ι. now iIntros "_".
+  Qed.
+
+  Include SemiConcrete RiscvPmpBase RiscvPmpSpec.
+  Include Katamaran.SemiConcrete.Sound.Soundness RiscvPmpBase RiscvPmpSpec.
+  Include RiscvPmpExecutor.
+  Include Katamaran.Symbolic.Sound.Soundness RiscvPmpBase RiscvPmpSpec RiscvPmpSolver.
+  Import ctx.resolution.
+  Import ctx.notations.
+  Import env.notations.
+
+  Definition semTripleOneInstr `{sailGS Σ} (PRE : iProp Σ) (a : AST) (POST : iProp Σ) : iProp Σ :=
+    semTriple [a : Val (type ("ast" :: ty_ast))]%env PRE (FunDef execute) (fun ret _ => ⌜ret = RETIRE_SUCCESS⌝ ∗ POST)%I.
+
+  Lemma sound_exec_triple `{sailGS Σ} {ast} :
+    SymProp.safe (exec_instruction (w := wnil) ast (fun _ _ res _ h => SymProp.assertk (formula_eq res (term_val ty_retired RETIRE_SUCCESS)) (MkAMessage (BT := RiscvPmpBase.Unit)_ tt) SymProp.block) env.nil []%list) env.nil ->
+    ⊢ semTripleOneInstr True%I ast True%I.
+  Proof.
+    unfold exec_instruction.
+    iIntros (safe_exec) "".
+    iApply (sound_stm foreignSem lemSem).
+    - refine (exec_sound 3 _ _ _ []%list _).
+      rewrite <-SymProp.wsafe_safe in safe_exec.
+      refine (approx_exec _ _ _ _ _ safe_exec); cbn; try trivial; try reflexivity.
+      intros w ω ι _ Hpc tr _ -> δ _ -> h _ -> hyp.
+      rewrite SymProp.wsafe_safe in hyp.
+      cbn in hyp.
+      destruct hyp as [[eq] _].
+      cbn in eq; cbn.
+      iIntros "_".
+      iPureIntro; now split.
+    - do 2 iModIntro.
+      iIntros (σs σ f).
+      destruct f; try done; cbn.
+      admit.
+      admit.
+  Admitted.
+
+End BlockVerificationDerivedSem.
