@@ -118,6 +118,13 @@ Module Type MutatorsOn
           MkDebugCall f c (subst ts ζ01) (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
+    Global Instance SubstLawsDebugCall : SubstLaws DebugCall.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
     Import option.notations.
     Global Instance OccursCheckDebugCall : OccursCheck DebugCall :=
       fun Σ x xIn d =>
@@ -137,6 +144,13 @@ Module Type MutatorsOn
           MkDebugStm s (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
+    Global Instance SubstLawsDebugStm : SubstLaws DebugStm.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
     Global Instance OccursCheckDebugStm : OccursCheck DebugStm :=
       fun Σ x xIn d =>
         match d with
@@ -153,6 +167,13 @@ Module Type MutatorsOn
         | MkDebugAsn pc δ h =>
           MkDebugAsn (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
+
+    Global Instance SubstLawsDebugAsn : SubstLaws DebugAsn.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
 
     Global Instance OccursCheckDebugAsn : OccursCheck DebugAsn :=
       fun Σ x xIn d =>
@@ -364,7 +385,7 @@ Module Type MutatorsOn
         assume_formulas (cons fml0 nil).
 
     Definition assert_formulas :
-      ⊢ Message -> List Formula -> SDijkstra Unit :=
+      ⊢ AMessage -> List Formula -> SDijkstra Unit :=
       fun w0 msg fmls0 POST =>
         match solver fmls0 with
         | Some (existT w1 (ν , fmls1)) =>
@@ -380,7 +401,7 @@ Module Type MutatorsOn
         end.
 
     Definition assert_formula :
-      ⊢ Message -> Formula -> SDijkstra Unit :=
+      ⊢ AMessage -> Formula -> SDijkstra Unit :=
       fun w0 msg fml0 =>
         assert_formulas msg (cons fml0 nil).
 
@@ -412,7 +433,7 @@ Module Type MutatorsOn
         end.
 
     Definition angelic_finite F `{finite.Finite F} :
-      ⊢ Message -> SDijkstra ⌜F⌝ :=
+      ⊢ AMessage -> SDijkstra ⌜F⌝ :=
       fun w msg => angelic_list msg (finite.enum F).
 
     Definition demonic_finite F `{finite.Finite F} :
@@ -420,7 +441,7 @@ Module Type MutatorsOn
       fun w => demonic_list (finite.enum F).
 
     Definition angelic_match_bool' :
-      ⊢ Message -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
+      ⊢ AMessage -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
       fun _ msg t =>
         angelic_binary
           (⟨_⟩ _ <- assert_formula msg (formula_bool t) ;;
@@ -429,7 +450,7 @@ Module Type MutatorsOn
                     pure false).
 
     Definition angelic_match_bool :
-      ⊢ Message -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
+      ⊢ AMessage -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
       fun w msg t =>
         let t' := peval t in
         match term_get_val t' with
@@ -501,7 +522,7 @@ Module Type MutatorsOn
     (*                 four kcons (wtrans ω01 ω12) ω23 (subst th (wtrans ω12 ω23)) (subst tt ω23))))). *)
 
     Definition angelic_match_sum' {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ Message -> STerm (ty_sum σ τ) ->
+      ⊢ AMessage -> STerm (ty_sum σ τ) ->
         □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
       fun _ msg t kinl kinr =>
         angelic_binary
@@ -513,7 +534,7 @@ Module Type MutatorsOn
                      T kinr⟨ω1∘ω2⟩ tr⟨ω2⟩).
 
     Definition angelic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ Message -> STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
+      ⊢ AMessage -> STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
       fun w0 msg t kinl kinr =>
         match term_get_sum t with
         | Some (inl tσ) => T kinl tσ
@@ -542,7 +563,7 @@ Module Type MutatorsOn
         end.
 
     Definition angelic_match_prod {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ Message -> STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A :=
+      ⊢ AMessage -> STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A :=
       fun _ msg t k =>
         ⟨ω1⟩ t1 <- angelic (Some x) σ;;
         ⟨ω2⟩ t2 <- angelic (Some y) τ;;
@@ -893,7 +914,7 @@ Module Type MutatorsOn
         fun w msg xs POST δ h => dijkstra (SDijk.angelic_list (msg δ h) xs) POST δ h.
 
       Definition angelic_finite {Γ} F `{finite.Finite F} :
-        ⊢ (SStore Γ -> SHeap -> Message) -> SMut Γ Γ ⌜F⌝ :=
+        ⊢ (SStore Γ -> SHeap -> AMessage) -> SMut Γ Γ ⌜F⌝ :=
         fun w msg POST δ h => dijkstra (SDijk.angelic_finite (msg δ h)) POST δ h.
 
       Definition demonic_finite {Γ} F `{finite.Finite F} :
@@ -911,9 +932,9 @@ Module Type MutatorsOn
         fun w => dijkstra (SDijk.demonic x σ (w:=w)).
       Global Arguments demonic {Γ} x σ {w}.
 
-      Definition debug {AT DT} `{Subst DT, OccursCheck DT} {Γ1 Γ2} :
+      Definition debug {AT DT} `{Subst DT, SubstLaws DT, OccursCheck DT} {Γ1 Γ2} :
         ⊢ (SStore Γ1 -> SHeap -> DT) -> (SMut Γ1 Γ2 AT) -> (SMut Γ1 Γ2 AT) :=
-        fun _ d m POST δ h => SymProp.debug (d δ h) (m POST δ h).
+        fun _ d m POST δ h => SymProp.debug (MkAMessage _ (d δ h)) (m POST δ h).
 
       Definition angelic_ctx {N : Set} (n : N -> 𝑺) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SMut Γ Γ (fun w => NamedEnv (Term w) Δ) :=
@@ -972,13 +993,13 @@ Module Type MutatorsOn
         fun w0 fml POST δ0 h0 =>
           dijkstra
             (SDijk.assert_formula
-               {| msg_function := "smut_assert_formula";
+               (MkAMessage _ {| msg_function := "smut_assert_formula";
                   msg_message := "Proof obligation";
                   msg_program_context := Γ;
                   msg_localstore := δ0;
                   msg_heap := h0;
                   msg_pathcondition := wco w0
-               |} fml)
+               |}) fml)
             POST δ0 h0.
 
       Definition box_assert_formula {Γ} :
@@ -991,6 +1012,7 @@ Module Type MutatorsOn
         intros w0 fmls POST δ0 h0.
         eapply dijkstra.
         apply SDijk.assert_formulas.
+        apply (MkAMessage _ (BT := Message)).
         apply
           {| msg_function := "smut_assert_formula";
              msg_message := "Proof obligation";
@@ -1108,6 +1130,7 @@ Module Type MutatorsOn
         eapply bind.
         apply (angelic_finite (F := 𝑬𝑲 E)).
         intros δ h.
+        apply (MkAMessage _ (BT := Message)).
         apply
             {| msg_function        := "SMut.angelic_match_enum";
                msg_message         := "pattern match assertion";
@@ -1445,7 +1468,7 @@ Module Type MutatorsOn
         fun w0 t k => demonic_match_tuple n p <$> persist__term t <*> four k.
 
       Definition angelic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
-        ⊢ (SStore Γ -> SHeap -> Message) -> STerm σ -> SMut Γ Γ (fun w => NamedEnv (Term w) Δ).
+        ⊢ (SStore Γ -> SHeap -> AMessage) -> STerm σ -> SMut Γ Γ (fun w => NamedEnv (Term w) Δ).
       Proof.
         intros w0 msg t.
         eapply (bind).
@@ -1482,6 +1505,7 @@ Module Type MutatorsOn
         eapply bind.
         apply (angelic_finite (F := 𝑼𝑲 U)).
         intros δ h.
+        apply (MkAMessage _ (BT := Message)).
         apply
             {| msg_function        := "SMut.angelic_match_union";
                msg_message         := "pattern match assertion";
@@ -1501,6 +1525,7 @@ Module Type MutatorsOn
         eapply bind.
         apply (angelic_match_pattern n (p UK)).
         intros δ h.
+        apply (MkAMessage _ (BT := Message)).
         apply
             {| msg_function        := "SMut.angelic_match_union";
                msg_message         := "pattern match assertion";
@@ -1557,13 +1582,13 @@ Module Type MutatorsOn
         fun w0 t k =>
           ⟨ ω1 ⟩ b <- angelic_finite
                         (fun (δ : SStore Γ1 w0) (h : SHeap w0) =>
-                           {| msg_function := "SMut.angelic_match_bvec";
+                           (MkAMessage _ {| msg_function := "SMut.angelic_match_bvec";
                               msg_message := "pattern match assertion";
                               msg_program_context := Γ1;
                               msg_localstore := δ;
                               msg_heap := h;
                               msg_pathcondition := wco w0
-                           |}) ;;
+                           |})) ;;
           let t1 := persist__term t ω1 in
           ⟨ ω2 ⟩ _ <- assert_formula (formula_eq t1 (term_val (ty_bvec n) b)) ;;
           four (k b) ω1 ω2.
@@ -1925,7 +1950,7 @@ Module Type MutatorsOn
           apply (produce (wsnoc w0 (ς∷τ)) asn w2).
           apply (acc_snoc_left (acc_trans ω01 ω12) (ς∷τ) t2).
         - intros w1 ω01.
-          apply (debug (DT := DebugAsn)).
+          eapply (debug (DT := DebugAsn)).
           intros δ h.
           apply (MkDebugAsn (wco w1) δ h).
           apply pure.

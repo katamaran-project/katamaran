@@ -342,7 +342,7 @@ Module Soundness
     Proof. unfold SDijk.assume_formula. apply approx_assume_formulas; cbn; intuition. Qed.
 
     Lemma approx_assert_formulas {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0)
-      (msg : Message w0) (fmls0 : List Formula w0) (P : Prop) (Heq : instpc fmls0 ι0 <-> P) :
+      (msg : AMessage w0) (fmls0 : List Formula w0) (P : Prop) (Heq : instpc fmls0 ι0 <-> P) :
       approx ι0 (@SDijk.assert_formulas w0 msg fmls0) (@CDijk.assert_formula P).
     Proof.
       unfold SDijk.assert_formulas, CDijk.assert_formula.
@@ -364,7 +364,7 @@ Module Soundness
     Qed.
 
     Lemma approx_assert_formula {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0)
-      (msg : Message w0) (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
+      (msg : AMessage w0) (fml : Formula w0) (P : Prop) (Heq : inst fml ι0 <-> P) :
       approx ι0 (@SDijk.assert_formula w0 msg fml) (@CDijk.assert_formula P).
     Proof. unfold SDijk.assert_formula. apply approx_assert_formulas; cbn; intuition. Qed.
 
@@ -559,10 +559,10 @@ Module Soundness
       now apply Dijk.approx_demonic_ctx.
     Qed.
 
-    Lemma approx_debug {AT A D} `{Approx AT A, Subst D, OccursCheck D} {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0)
+    Lemma approx_debug {AT A D} `{Approx AT A, Subst D, SubstLaws D, OccursCheck D} {Γ1 Γ2} {w0 : World} (ι0 : Valuation w0)
           (Hpc : instpc (wco w0) ι0) f ms mc :
       approx ι0 ms mc ->
-      approx ι0 (@SMut.debug AT D _ _ Γ1 Γ2 w0 f ms) mc.
+      approx ι0 (@SMut.debug AT D _ _ _ _ Γ1 Γ2 w0 f ms) mc.
     Proof.
       intros Hap.
       intros POST__s POST__c HPOST.

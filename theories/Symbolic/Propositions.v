@@ -96,9 +96,34 @@ Module Type SymPropOn
 
     Inductive Error (Σ : LCtx) (msg : Message Σ) : Prop :=.
 
+    Inductive AMessage (Σ : LCtx) : Type :=
+    | MkAMessage {BT} {subB : Subst BT} {sublawsB : SubstLaws BT} {occB: OccursCheck BT} : BT Σ -> AMessage Σ
+    .
+
+    Global Instance SubstAMessage : Subst AMessage :=
+      fun Σ1 msg Σ2 ζ12 =>
+        match msg with
+        | @MkAMessage _ BT subB sublB occB msg => MkAMessage _ (subst msg ζ12)
+        end.
+
+    Global Instance SubstLawsAMessage : SubstLaws AMessage.
+    Proof.
+      constructor.
+      - intros ? []; cbn; now rewrite ?subst_sub_id.
+      - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
+    Qed.
+
+    Global Instance OccursCheckAMessage : OccursCheck AMessage :=
+      fun Σ x xIn msg =>
+        match msg with
+        | MkAMessage _ msg =>
+            msg' <- occurs_check xIn msg;;
+            Some (MkAMessage _ msg')
+        end.
+
   End Messages.
 
-  Inductive Obligation {Σ} (msg : Message Σ) (fml : Formula Σ) (ι : Valuation Σ) : Prop :=
+  Inductive Obligation {Σ} (msg : AMessage Σ) (fml : Formula Σ) (ι : Valuation Σ) : Prop :=
   | obligation (p : inst fml ι : Prop).
 
   Inductive Debug {B : LCtx -> Type} {Σ : LCtx} (b : B Σ) (P : Prop) : Prop :=
@@ -128,7 +153,7 @@ Module Type SymPropOn
     | demonic_binary (o1 o2 : SymProp Σ)
     | error (msg : EMessage Σ)
     | block
-    | assertk (fml : Formula Σ) (msg : Message Σ) (k : SymProp Σ)
+    | assertk (fml : Formula Σ) (msg : AMessage Σ) (k : SymProp Σ)
     | assumek (fml : Formula Σ) (k : SymProp Σ)
     (* Don't use these two directly. Instead, use the HOAS versions 'angelic' *)
     (* and 'demonic' that will freshen names. *)
@@ -137,15 +162,14 @@ Module Type SymPropOn
     | assert_vareq
         x σ (xIn : x∷σ ∈ Σ)
         (t : Term (Σ - x∷σ) σ)
-        (msg : Message (Σ - x∷σ))
+        (msg : AMessage (Σ - x∷σ))
         (k : SymProp (Σ - x∷σ))
     | assume_vareq
         x σ (xIn : x∷σ ∈ Σ)
         (t : Term (Σ - x∷σ) σ)
         (k : SymProp (Σ - x∷σ))
     | debug
-        {BT} {subB : Subst BT} {occB: OccursCheck BT}
-        (b : BT Σ) (k : SymProp Σ).
+        (b : AMessage Σ) (k : SymProp Σ).
     Notation 𝕊 := SymProp.
 
     Global Arguments error {_} _.
@@ -227,7 +251,7 @@ Module Type SymPropOn
       end.
 
     Fixpoint assert_formulas_without_solver' {Σ}
-      (msg : Message Σ) (fmls : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      (msg : AMessage Σ) (fmls : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
       match fmls with
       | nil => p
       | cons fml fmls =>
@@ -241,7 +265,7 @@ Module Type SymPropOn
       assume_formulas_without_solver' fmls p.
     Global Arguments assume_formulas_without_solver {_} fmls p.
 
-    Definition assert_formulas_without_solver {w : World} (msg : Message w)
+    Definition assert_formulas_without_solver {w : World} (msg : AMessage w)
       (fmls : List Formula w) (p : 𝕊 (wformulas w fmls)) : 𝕊 w :=
       assert_formulas_without_solver' msg fmls p.
     Global Arguments assert_formulas_without_solver {_} msg fmls p.
@@ -255,8 +279,8 @@ Module Type SymPropOn
         eapply (assume_triangular _ _ ν o).
     Defined.
 
-    Fixpoint assert_triangular {w1 w2} (msg : Message (wctx w1)) (ζ : Tri w1 w2) :
-      (Message w2 -> 𝕊 w2) -> 𝕊 w1.
+    Fixpoint assert_triangular {w1 w2} (msg : AMessage (wctx w1)) (ζ : Tri w1 w2) :
+      (AMessage w2 -> 𝕊 w2) -> 𝕊 w1.
     Proof.
       destruct ζ; intros o; cbn in o.
       - apply o. apply msg.
@@ -317,7 +341,7 @@ Module Type SymPropOn
         end%type.
     Global Arguments wsafe {w} p ι.
 
-    Lemma obligation_equiv {Σ : LCtx} (msg : Message Σ) (fml : Formula Σ) (ι : Valuation Σ) :
+    Lemma obligation_equiv {Σ : LCtx} (msg : AMessage Σ) (fml : Formula Σ) (ι : Valuation Σ) :
       Obligation msg fml ι <-> inst fml ι.
     Proof. split. now intros []. now constructor. Qed.
 
@@ -374,7 +398,7 @@ Module Type SymPropOn
     Qed.
 
     Lemma safe_assert_formulas_without_solver {w0 : World}
-      (msg : Message w0) (fmls : List Formula w0) (p : 𝕊 w0)
+      (msg : AMessage w0) (fmls : List Formula w0) (p : 𝕊 w0)
       (ι0 : Valuation w0) :
       wsafe (assert_formulas_without_solver msg fmls p) ι0 <->
       (instpc fmls ι0 /\ @wsafe (wformulas w0 fmls) p ι0).
@@ -405,7 +429,7 @@ Module Type SymPropOn
     Qed.
 
     Lemma safe_assert_triangular {w0 w1} msg (ζ : Tri w0 w1)
-      (o : Message w1 -> 𝕊 w1) (ι0 : Valuation w0) :
+      (o : AMessage w1 -> 𝕊 w1) (ι0 : Valuation w0) :
       wsafe (assert_triangular msg ζ o) ι0 <->
       (inst_triangular ζ ι0 /\ wsafe (o (subst msg (sub_triangular ζ))) (inst (sub_triangular_inv ζ) ι0)).
     Proof.
@@ -541,14 +565,14 @@ Module Type SymPropOn
     Instance proper_assumek {Σ} (fml : Formula Σ) : Proper (sequiv Σ ==> sequiv Σ) (assumek fml).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_assertk {Σ} (fml : Formula Σ) (msg : Message Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertk fml msg).
+    Instance proper_assertk {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertk fml msg).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
     Instance proper_assume_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assume_vareq x t).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_assert_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : Message (Σ - x∷σ)) :
+    Instance proper_assert_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assert_vareq x t msg).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
@@ -558,7 +582,7 @@ Module Type SymPropOn
     Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.forall_proper. Qed.
 
-    Instance proper_debug {BT} `{Subst BT, OccursCheck BT} {Σ} {bt : BT Σ} :
+    Instance proper_debug {Σ} {bt : AMessage Σ} :
       Proper (sequiv Σ ==> sequiv Σ) (debug bt).
     Proof. unfold sequiv. intros p q pq ι. cbn. now rewrite ?debug_equiv. Qed.
 
@@ -630,7 +654,7 @@ Module Type SymPropOn
       | _       , _       => demonic_binary p1 p2
       end.
 
-    Definition assertk_prune {Σ} (fml : Formula Σ) (msg : Message Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+    Definition assertk_prune {Σ} (fml : Formula Σ) (msg : AMessage Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
       match p with
       | error s => @error Σ s
       | _       => assertk fml msg p
@@ -669,7 +693,7 @@ Module Type SymPropOn
     Global Arguments assume_vareq_prune {Σ} x {σ xIn} t k.
 
     Definition assert_vareq_prune {Σ} {x σ} {xIn : x∷σ ∈ Σ}
-      (t : Term (Σ - x∷σ) σ) (msg : Message (Σ - x∷σ)) (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
+      (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) (k : 𝕊 (Σ - x∷σ)) : 𝕊 Σ :=
       match k with
       | error emsg => error (shift_emsg xIn emsg)
       | _          => assert_vareq x t msg k
@@ -755,7 +779,7 @@ Module Type SymPropOn
     Proof. destruct p; cbn; auto; intuition. Qed.
 
     Lemma prune_assert_vareq_sound {Σ x σ} {xIn : x∷σ ∈ Σ}
-      (t : Term (Σ - x∷σ) σ) (msg : Message (Σ - x∷σ)) (p : 𝕊 (Σ - x∷σ)) (ι : Valuation Σ) :
+      (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) (p : 𝕊 (Σ - x∷σ)) (ι : Valuation Σ) :
       safe (assert_vareq_prune x t msg p) ι <-> safe (assert_vareq x t msg p) ι.
     Proof. destruct p; cbn; auto; intuition. Qed.
 
@@ -895,14 +919,14 @@ Module Type SymPropOn
 
     Module SolveEvars.
 
-      Fixpoint assert_msgs_formulas {Σ} (mfs : List (Pair Message Formula) Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
+      Fixpoint assert_msgs_formulas {Σ} (mfs : List (Pair AMessage Formula) Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
         match mfs with
         | nil => p
         | cons (msg,fml) mfs =>
           assert_msgs_formulas mfs (assertk fml msg p)
         end.
 
-      Lemma safe_assert_msgs_formulas {Σ} {mfs : List (Pair Message Formula) Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
+      Lemma safe_assert_msgs_formulas {Σ} {mfs : List (Pair AMessage Formula) Σ} {p : 𝕊 Σ} {ι : Valuation Σ} :
         (safe (assert_msgs_formulas mfs p) ι <-> instpc (map snd mfs) ι /\ safe p ι).
       Proof.
         revert p.
@@ -913,12 +937,12 @@ Module Type SymPropOn
       Qed.
 
       Inductive ECtx (Σ : LCtx) : LCtx -> Type :=
-      | ectx Σe (mfs : List (Pair Message Formula) (Σ ▻▻ Σe)) : ECtx Σ (Σ ▻▻ Σe).
+      | ectx Σe (mfs : List (Pair AMessage Formula) (Σ ▻▻ Σe)) : ECtx Σ (Σ ▻▻ Σe).
       Arguments ectx {Σ} Σe mfs.
 
       Definition ectx_refl {Σ : LCtx} : ECtx Σ Σ := @ectx Σ ctx.nil nil.
 
-      Definition ectx_formula {Σ1 Σ2} (e: ECtx Σ1 Σ2) : Message Σ2 -> Formula Σ2 -> ECtx Σ1 Σ2 :=
+      Definition ectx_formula {Σ1 Σ2} (e: ECtx Σ1 Σ2) : AMessage Σ2 -> Formula Σ2 -> ECtx Σ1 Σ2 :=
         match e with ectx Σe mfs => fun msg fml => ectx Σe (cons (msg,fml) mfs) end.
       Definition ectx_snoc {Σ1 Σ2} (e: ECtx Σ1 Σ2) b : ECtx Σ1 (Σ2 ▻ b) :=
         match e with ectx Σe mfs => ectx (Σe ▻ b) (subst mfs sub_wk1) end.
@@ -964,7 +988,7 @@ Module Type SymPropOn
         | debug b p              => plug ec (debug b (push ectx_refl p))
         end.
 
-      Instance proper_assert_msgs_formulas {Σ} (mfs : List (Pair Message Formula) Σ) :
+      Instance proper_assert_msgs_formulas {Σ} (mfs : List (Pair AMessage Formula) Σ) :
         Proper (sequiv Σ ==> sequiv Σ) (assert_msgs_formulas mfs).
       Proof. intros p q pq ι. rewrite ?safe_assert_msgs_formulas. intuition. Qed.
 
@@ -975,7 +999,7 @@ Module Type SymPropOn
         now apply proper_angelic_close0, proper_assert_msgs_formulas.
       Qed.
 
-      Lemma assert_msgs_formulas_angelic_binary {Σ} (mfs : List (Pair Message Formula) Σ) (p1  p2 : 𝕊 Σ) :
+      Lemma assert_msgs_formulas_angelic_binary {Σ} (mfs : List (Pair AMessage Formula) Σ) (p1  p2 : 𝕊 Σ) :
         assert_msgs_formulas mfs (angelic_binary p1 p2) <=>
         angelic_binary (assert_msgs_formulas mfs p1) (assert_msgs_formulas mfs p2).
       Proof.
@@ -985,7 +1009,7 @@ Module Type SymPropOn
       Qed.
 
       Lemma map_snd_subst {Σ Σ' : LCtx} {ζ : Sub Σ Σ'}
-            {mfs : List (Pair Message Formula) Σ} :
+            {mfs : List (Pair AMessage Formula) Σ} :
             map snd (subst mfs ζ) = subst (map snd mfs) ζ.
       Proof.
         induction mfs.
@@ -995,7 +1019,7 @@ Module Type SymPropOn
           now destruct a.
       Qed.
 
-      Lemma assert_msgs_formulas_angelicv {b Σ} (mfs : List (Pair Message Formula) Σ) (p : 𝕊 (Σ ▻ b)) :
+      Lemma assert_msgs_formulas_angelicv {b Σ} (mfs : List (Pair AMessage Formula) Σ) (p : 𝕊 (Σ ▻ b)) :
         assert_msgs_formulas mfs (angelicv b p) <=>
         angelicv b (assert_msgs_formulas (subst mfs sub_wk1) p).
       Proof.
@@ -1014,7 +1038,7 @@ Module Type SymPropOn
         plug (eq_rect Σ2 (ECtx Σ1) ec Σ2' eq) p = plug ec (eq_rect_r (fun Σ3 : LCtx => 𝕊 Σ3) p eq).
       Proof. now destruct eq. Qed.
 
-      Lemma ectx_subst_spec {Σ1 Σ2} (ec : ECtx Σ1 Σ2) {x σ} (xIn : x∷σ ∈ Σ2) (t : Term (Σ2 - x∷σ) σ) (msg : Message _) :
+      Lemma ectx_subst_spec {Σ1 Σ2} (ec : ECtx Σ1 Σ2) {x σ} (xIn : x∷σ ∈ Σ2) (t : Term (Σ2 - x∷σ) σ) (msg : AMessage _) :
         option.wlp
           (fun e => forall p, plug e p <=> plug ec (assert_vareq x t msg p))
           (ectx_subst ec xIn t).

@@ -215,7 +215,7 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
 
   Section Symbolic.
 
-    Definition List (A : LCtx -> Type) (Σ : LCtx) : Type :=
+    Polymorphic Definition List (A : LCtx -> Type) (Σ : LCtx) : Type :=
       list (A Σ).
     Definition Const (A : Type) (Σ : LCtx) : Type :=
       A.
@@ -248,7 +248,7 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
 
     Global Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=
       @sub_term σ.
-    Global Instance SubstList {A} `{Subst A} : Subst (List A) :=
+    Global Polymorphic Instance SubstList {A} `{Subst A} : Subst (List A) :=
       fix substlist {Σ1} xs {Σ2} ζ :=
         match xs with
         | nil => nil
@@ -334,7 +334,7 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
       }
     Qed.
 
-    Global Instance SubstLawsList {A} `{SubstLaws A} : SubstLaws (List A).
+    Global Polymorphic Instance SubstLawsList {A} `{SubstLaws A} : SubstLaws (List A).
     Proof.
       constructor.
       { intros ? t.
