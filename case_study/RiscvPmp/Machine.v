@@ -509,7 +509,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call init_sys.
 
   Definition fun_loop : Stm ctx.nil ty_unit :=
-    call step.
+    call step ;; call loop.
 
   Definition fun_fetch : Stm ctx.nil ty_fetch_result :=
     let: tmp1 := stm_read_register pc in
