@@ -1217,7 +1217,7 @@ Module BlockVerification.
 
     Example VC1 : 𝕊 Σ1 := VC pre1 block1 post1.
 
-    Eval compute in VC1.
+    (* Eval compute in VC1. *)
 
   End Example.
 
