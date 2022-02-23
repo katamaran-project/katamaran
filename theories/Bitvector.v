@@ -84,7 +84,7 @@ Module bv.
       | S n => match p with
                 | xI p => N.succ_double (trunc n p)
                 | xO p => N.double (trunc n p)
-                | xH   => N0
+                | xH   => 1%N
                 end
       end.
 
