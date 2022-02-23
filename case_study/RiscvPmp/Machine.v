@@ -396,7 +396,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       match: tmp in pmpmatch with
       | PMP_Success  => stm_val ty_bool true
       | PMP_Fail     => stm_val ty_bool false
-      | PMP_CONTINUE =>
+      | PMP_Continue =>
           match: priv in privilege with
           | Machine => stm_val ty_bool true
           | User    => stm_val ty_bool false

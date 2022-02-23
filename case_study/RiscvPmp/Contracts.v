@@ -778,6 +778,8 @@ Section ContractDefKit.
        lemma_postcondition   := asn_gprs;
     |}.
 
+  (* TODO: specify that the ptsto regs should be in ?entries (same for close) *)
+  (* (cfg0, addr0) ∈ ?entries ... *)
   Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
     {| lemma_logic_variables := ctx.nil;
        lemma_patterns        := env.nil;
@@ -1049,7 +1051,7 @@ Section Debug.
       match: exp_var "tmp" in pmpmatch with
       | PMP_Success  => stm_val ty_bool true
       | PMP_Fail     => stm_val ty_bool false
-      | PMP_CONTINUE =>
+      | PMP_Continue =>
           match: exp_var "priv" in privilege with
           | Machine => stm_val ty_bool true
           | User    => stm_val ty_bool false
