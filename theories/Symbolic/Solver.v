@@ -285,6 +285,10 @@ Module Type SolverOn
 
     Equations(noeqns) simplify_formula_eq {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_val ?(σ) l1       | term_val σ l2            | k => if Val_eqb σ l1 l2 then Some k else None;
+    | term_inr _             | term_val _ (inl _)       | k => None;
+    | term_inl _             | term_val _ (inr _)       | k => None;
+    | term_inl t1            | term_val _ (inl v2)      | k => simplify_formula_eq t1 (term_val _ v2) k;
+    | term_inr t1            | term_val _ (inr v2)      | k => simplify_formula_eq t1 (term_val _ v2) k;
     | term_inr _             | term_inl _               | k => None;
     | term_inl _             | term_inr _               | k => None;
     | term_inl t1            | term_inl t2              | k => simplify_formula_eq t1 t2 k;
@@ -369,12 +373,30 @@ Module Type SolverOn
       - cbn. destruct (Val_eqb_spec σ1 v v0); constructor; intuition.
       - cbn. apply simplify_formula_eq_binop_val_spec.
       - cbn. apply simplify_formula_eq_binop_spec.
+      - cbn. destruct v.
+        + specialize (IHs (term_val _ v)). revert IHs.
+          apply option.spec_monotonic.
+          * intros fmls HYP ι. specialize (HYP ι). rewrite HYP. cbn.
+            apply and_iff_compat_r. cbn. split; intros Heq.
+            -- now f_equal.
+            -- apply noConfusion_inv in Heq. apply Heq.
+          * intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
+        + constructor. discriminate.
       - specialize (IHs t). revert IHs. apply option.spec_monotonic.
         + intros fmls HYP ι. specialize (HYP ι). rewrite HYP. cbn.
           apply and_iff_compat_r. cbn. split; intros Heq.
           * now f_equal.
           * apply noConfusion_inv in Heq. apply Heq.
         + intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
+      - cbn. destruct v.
+        + constructor. discriminate.
+        + specialize (IHs (term_val _ v)). revert IHs.
+          apply option.spec_monotonic.
+          * intros fmls HYP ι. specialize (HYP ι). rewrite HYP. cbn.
+            apply and_iff_compat_r. cbn. split; intros Heq.
+            -- now f_equal.
+            -- apply noConfusion_inv in Heq. apply Heq.
+          * intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
       - specialize (IHs t0). revert IHs. apply option.spec_monotonic.
         + intros fmls HYP ι. rewrite (HYP ι). cbn.
           apply and_iff_compat_r'. intros Hpc.
