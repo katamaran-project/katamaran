@@ -321,6 +321,45 @@ Section ContractDefKit.
   Include SpecificationMixin RiscvPmpBase RiscvPmpProgram.
 End RiscvPmpSpec.
 
+Module RiscvPmpSpecVerif.
+
+  Import RiscvPmpSpec.
+  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSpec.
+  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSpec RiscvPmpSolverKit.
+
+  Module Import RiscvPmpExecutor :=
+    MakeExecutor RiscvPmpBase RiscvPmpSpec RiscvPmpSolver.
+  Import SMut.
+  Import SMut.SMutNotations.
+
+  Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
+
+  Import ModalNotations.
+
+  Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => ValidContractReflect c (FunDef f)
+    | None => False
+    end.
+
+  Lemma valid_execute_rX : ValidContract rX.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_execute_wX : ValidContract wX.
+  Proof. reflexivity. Qed.
+
+
+  Lemma defined_contracts_valid : forall {Δ τ} (f : Fun Δ τ),
+      match CEnv f with
+      | Some c => ValidContract f
+      | None => True
+      end.
+  Proof.
+    destruct f; now cbv.
+  Qed.
+
+End RiscvPmpSpecVerif.
+
 Module BlockVerification.
 
   Import RiscvPmpSpec.
@@ -498,13 +537,18 @@ Module BlockVerificationDerived.
         ma at next level, mb at level 200,
         right associativity).
 
-  Definition exec_instruction (i : AST) : ⊢ M (STerm ty_retired) :=
+  Definition exec_instruction' (i : AST) : ⊢ M (STerm ty_retired) :=
     let inline_fuel := 3%nat in
     fun w0 POST _ =>
       exec
         default_config inline_fuel (FunDef execute)
         (fun w1 ω01 res _ => POST w1 ω01 res []%env)
         [term_val (type ("ast" :: ty_ast)) i]%env.
+
+  Definition exec_instruction (i : AST) : ⊢ M Unit :=
+    fun _ =>
+      _ ∣ msg <- @exec_instruction' i _ ;;
+      assert (formula_eq msg (term_val ty_retired RETIRE_SUCCESS)).
 
   (* Ideally, a block should be a list of non-branching
      instruction plus one final branching instruction *)
@@ -730,28 +774,48 @@ Module BlockVerificationDerivedSem.
   Definition semTripleOneInstr `{sailGS Σ} (PRE : iProp Σ) (a : AST) (POST : iProp Σ) : iProp Σ :=
     semTriple [a : Val (type ("ast" :: ty_ast))]%env PRE (FunDef execute) (fun ret _ => ⌜ret = RETIRE_SUCCESS⌝ ∗ POST)%I.
 
-  Lemma sound_exec_triple `{sailGS Σ} {ast} :
-    SymProp.safe (exec_instruction (w := wnil) ast (fun _ _ res _ h => SymProp.assertk (formula_eq res (term_val ty_retired RETIRE_SUCCESS)) (MkAMessage (BT := RiscvPmpBase.Unit)_ tt) SymProp.block) env.nil []%list) env.nil ->
-    ⊢ semTripleOneInstr True%I ast True%I.
+  Lemma contractsVerified `{sG : sailGS Σ} : ValidContractCEnv (PI := PredicateDefIProp (sG := sG)).
+  Proof.
+    intros Γ τ f.
+    destruct f; intros c eq; inversion eq; subst; clear eq.
+    - eapply contract_sound.
+      eapply symbolic_sound.
+      eapply SMut.validcontract_reflect_sound.
+      eapply RiscvPmpSpecVerif.valid_execute_rX.
+    - eapply contract_sound.
+      eapply symbolic_sound.
+      eapply SMut.validcontract_reflect_sound.
+      eapply RiscvPmpSpecVerif.valid_execute_wX.
+  Qed.
+
+  Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
+  Proof.
+    eauto using sound, foreignSem, lemSem, contractsVerified.
+  Qed.
+
+  Lemma sound_exec_instruction `{sailGS Σ} {ast} :
+    SymProp.safe (exec_instruction (w := wnil) ast (fun _ _ res _ h => SymProp.block) env.nil []%list) env.nil ->
+    ⊢ semTripleOneInstr emp%I ast emp%I.
   Proof.
     unfold exec_instruction.
     iIntros (safe_exec) "".
+    rewrite <-SymProp.wsafe_safe in safe_exec.
     iApply (sound_stm foreignSem lemSem).
     - refine (exec_sound 3 _ _ _ []%list _).
-      rewrite <-SymProp.wsafe_safe in safe_exec.
-      refine (approx_exec _ _ _ _ _ safe_exec); cbn; try trivial; try reflexivity.
-      intros w ω ι _ Hpc tr _ -> δ _ -> h _ -> hyp.
-      rewrite SymProp.wsafe_safe in hyp.
-      cbn in hyp.
-      destruct hyp as [[eq] _].
-      cbn in eq; cbn.
-      iIntros "_".
-      iPureIntro; now split.
+      enough (CMut.bind (CMut.exec 3 (FunDef execute)) (fun v => CMut.assert_formula (v = RETIRE_SUCCESS)) (fun _ _ _ => True) [ast] []%list).
+      + unfold CMut.bind, CMut.assert_formula, CMut.dijkstra, CDijk.assert_formula in H0.
+        refine (exec_monotonic _ _ _ _ _ _ _ H0).
+        intros ret δ h [-> _]; cbn.
+        iIntros "_". iPureIntro. now split.
+      + unfold exec_instruction' in safe_exec.
+        refine (approx_exec _ _ _ _ _ safe_exec); cbn; try trivial; try reflexivity.
+        intros w ω ι _ Hpc tr _ -> δ _ -> h _ -> hyp.
+        unfold assert, RiscvPmpExecutor.SMut.assert_formula, RiscvPmpExecutor.SMut.dijkstra in hyp.
+        refine (Dijk.approx_assert_formula _ _ _ _ _ hyp); try assumption.
+        * now cbn.
+        * now intros w2 ω2 ι2 -> Hpc2 v _ -> _.
     - do 2 iModIntro.
-      iIntros (σs σ f).
-      destruct f; try done; cbn.
-      admit.
-      admit.
-  Admitted.
+      iApply contractsSound.
+  Qed.
 
 End BlockVerificationDerivedSem.
