@@ -797,7 +797,7 @@ Module BlockVerificationDerivedSem.
     SymProp.safe (exec_instruction (w := wnil) ast (fun _ _ res _ h => SymProp.block) env.nil []%list) env.nil ->
     ⊢ semTripleOneInstr emp%I ast emp%I.
   Proof.
-    unfold exec_instruction.
+    unfold exec_instruction, exec_instruction', assert.
     iIntros (safe_exec) "".
     rewrite <-SymProp.wsafe_safe in safe_exec.
     iApply (sound_stm foreignSem lemSem).
@@ -807,15 +807,15 @@ Module BlockVerificationDerivedSem.
         refine (exec_monotonic _ _ _ _ _ _ _ H0).
         intros ret δ h [-> _]; cbn.
         iIntros "_". iPureIntro. now split.
-      + unfold exec_instruction' in safe_exec.
-        refine (approx_exec _ _ _ _ _ safe_exec); cbn; try trivial; try reflexivity.
+      + refine (approx_exec _ _ _ _ _ safe_exec); cbn; try trivial; try reflexivity.
         intros w ω ι _ Hpc tr _ -> δ _ -> h _ -> hyp.
-        unfold assert, RiscvPmpExecutor.SMut.assert_formula, RiscvPmpExecutor.SMut.dijkstra in hyp.
-        refine (Dijk.approx_assert_formula _ _ _ _ _ hyp); try assumption.
-        * now cbn.
-        * now intros w2 ω2 ι2 -> Hpc2 v _ -> _.
+        refine (approx_assert_formula _ _ _ (a := fun _ _ _ => True) _ _ _ hyp);
+          try assumption; try reflexivity.
+        now intros w2 ω2 ι2 -> Hpc2 v x -> y.
     - do 2 iModIntro.
       iApply contractsSound.
   Qed.
+
+
 
 End BlockVerificationDerivedSem.
