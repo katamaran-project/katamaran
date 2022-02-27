@@ -473,6 +473,14 @@ Lemma imp_iff_compat_l' (A B C : Prop) :
   ((A -> B) <-> (A -> C)) <-> (A -> B <-> C).
 Proof. intuition. Qed.
 
+Lemma rightid_and_true (A : Prop) :
+  A /\ True <-> A.
+Proof. intuition. Qed.
+
+Lemma leftid_true_and (A : Prop) :
+  True /\ A <-> A.
+Proof. intuition. Qed.
+
 Lemma exists_or_compat {A} (P Q : A -> Prop):
   (exists a, P a \/ Q a) <-> (exists a, P a) \/ (exists a, Q a).
 Proof. firstorder. Qed.

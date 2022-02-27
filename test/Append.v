@@ -55,12 +55,13 @@ From Katamaran Require Import
      Iris.Model.
 
 From stdpp Require decidable finite list fin_maps infinite.
-From iris.proofmode Require Import string_ident tactics.
+From iris.proofmode Require string_ident tactics.
 
 Set Implicit Arguments.
 Import ctx.notations.
 Import ctx.resolution.
 Import env.notations.
+Local Open Scope string_scope.
 
 (*** TERMS ***)
 
@@ -73,14 +74,17 @@ Module Import ExampleProgram <: Program DefaultBase.
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
-    | append   : Fun [ "p" ∷ ptr; "q" ∷ llist ] ty_unit
+    | append     : Fun [ "p" ∷ llist; "q" ∷ llist ] llist
+    | appendloop : Fun [ "p" ∷ ptr; "q" ∷ llist ] ty_unit
+    | length     : Fun [ "p" ∷ llist ] ty_int
+    | copy       : Fun [ "p" ∷ llist ] llist
     .
 
     Inductive FunX : PCtx -> Ty -> Set :=
     | mkcons : FunX [ "x" ∷ ty_int; "xs" ∷ llist ] ptr
-    (* | head    : FunX [ "p" ∷ ptr ] ty_int *)
+    | fst    : FunX [ "p" ∷ ptr ] ty_int
     | snd    : FunX [ "p" ∷ ptr ] llist
-    (* | sethead : FunX [ "p" ∷ ptr, "x" ∷ ty_int ] ty_unit *)
+    (* | setfst : FunX [ "p" ∷ ptr, "x" ∷ ty_int ] ty_unit *)
     | setsnd : FunX [ "p" ∷ ptr; "xs" ∷ llist ] ty_unit
     .
 
@@ -88,6 +92,7 @@ Module Import ExampleProgram <: Program DefaultBase.
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := FunX.
 
     Inductive Lem : NCtx 𝑿 Ty -> Set :=
+    | open_nil      : Lem [ ]
     | open_cons     : Lem [ "p" ∷ ptr ]
     | close_nil     : Lem [ "p" ∷ ty_unit ]
     | close_cons    : Lem [ "p" ∷ ptr ].
@@ -108,21 +113,66 @@ Module Import ExampleProgram <: Program DefaultBase.
 
     Notation "'lemma' f args" := (stm_lemma f args%env) (at level 10, f at next level) : exp_scope.
 
-    Definition fun_append : Stm [ "p" ∷ ptr; "q" ∷ llist ] ty_unit :=
+    Definition fun_append : Stm [ "p" ∷ llist; "q" ∷ llist ] llist :=
+      match: exp_var "p" with
+      | inl "x" =>
+        call appendloop (exp_var "x") (exp_var "q") ;;
+        exp_var "p"
+      | inr "tt" =>
+        lemma close_nil [exp_var "tt"] ;;
+        exp_var "q"
+      end.
+
+    Definition fun_appendloop : Stm [ "p" ∷ ptr; "q" ∷ llist ] ty_unit :=
       lemma open_cons [exp_var "p"] ;;
       let: "mbn" := foreign snd (exp_var "p") in
       match: (exp_var "mbn") with
-      | inl "x" => call append (exp_var "x") (exp_var "q")
+      | inl "x" => call appendloop (exp_var "x") (exp_var "q")
       | inr "tt" =>
           lemma close_nil [exp_var "tt"] ;;
           foreign setsnd (exp_var "p") (exp_var "q")
       end;;
       lemma close_cons [exp_var "p"].
 
+    Definition fun_length : Stm [ "p" ∷ llist ] ty_int :=
+      match: exp_var "p" with
+      | inl "x" =>
+        lemma open_cons [exp_var "x"] ;;
+        let: "t" := foreign snd (exp_var "x") in
+        let: "r" := call length (exp_var "t") in
+        lemma close_cons [exp_var "x"] ;;
+        exp_binop binop_plus (exp_val ty_int 1%Z) (exp_var "r")
+      | inr "tt" =>
+        lemma close_nil [exp_var "tt"] ;;
+        lemma open_nil [] ;;
+        stm_val ty_int 0%Z
+      end.
+
+    Definition fun_copy : Stm [ "p" ∷ llist ] llist :=
+      match: exp_var "p" with
+      | inl "x" =>
+        lemma open_cons [exp_var "x"] ;;
+        let: "h"  := foreign fst (exp_var "x") in
+        let: "t"  := foreign snd (exp_var "x") in
+        let: "t'" := call copy (exp_var "t") in
+        let: "x'" := foreign mkcons (exp_var "h") (exp_var "t'") in
+        lemma close_cons [exp_var "x"] ;;
+        lemma close_cons [exp_var "x'"] ;;
+        exp_inl (exp_var "x'")
+      | inr "tt" =>
+        lemma close_nil [exp_var "tt"] ;;
+        lemma open_nil [] ;;
+        lemma open_nil [] ;;
+        exp_val llist (inr tt)
+      end.
+
     Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       Eval compute in
       match f in Fun Δ τ return Stm Δ τ with
-      | append => fun_append
+      | append     => fun_append
+      | appendloop => fun_appendloop
+      | length     => fun_length
+      | copy       => fun_copy
       end.
 
   End FunDefKit.
@@ -131,6 +181,7 @@ Module Import ExampleProgram <: Program DefaultBase.
 
   Section ForeignKit.
 
+    Import iris.proofmode.tactics.
     Definition Memory : Set := gmap Z (Z * (Z + unit)).
 
     Equations(noeqns) ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
@@ -139,6 +190,11 @@ Module Import ExampleProgram <: Program DefaultBase.
         γ' = γ /\
         μ' = (<[next := (x, xs)]> μ) /\
         res = inr next;
+      ForeignCall fst (env.snoc env.nil _ z) res γ γ' μ μ' :=
+        match μ !! z with
+        | None          => res = inl "Invalid pointer"
+        | Some (head,_) => γ' = γ /\ μ' = μ /\ res = inr head
+        end;
       ForeignCall snd (env.snoc env.nil _ z) res γ γ' μ μ' :=
         match μ !! z with
         | None          => res = inl "Invalid pointer"
@@ -175,6 +231,10 @@ Module Import ExampleProgram <: Program DefaultBase.
 
 End ExampleProgram.
 
+Inductive PurePredicate : Set :=
+| plength
+.
+
 Inductive Predicate : Set :=
 | ptstocons
 | ptstolist
@@ -183,17 +243,29 @@ Inductive Predicate : Set :=
 Section TransparentObligations.
   Local Set Transparent Obligations.
 
+  Derive NoConfusion for PurePredicate.
   Derive NoConfusion for Predicate.
 
 End TransparentObligations.
 
+Derive EqDec for PurePredicate.
 Derive EqDec for Predicate.
 
 Module Import ExampleSpecification <: Specification DefaultBase.
   Module PROG := ExampleProgram.
   Import DefaultBase.
 
-  Include DefaultPurePredicateKit DefaultBase.
+  Definition 𝑷 := PurePredicate.
+  Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
+    match p with
+    | subperm => [ty_list ty_int; ty_int]
+    end.
+  Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
+    match p with
+    | plength => fun xs l => Z.of_nat (Datatypes.length xs) = l
+    end.
+
+  Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
 
   Section HeapPredicateDeclKit.
 
@@ -231,7 +303,18 @@ Module Import ExampleSpecification <: Specification DefaultBase.
     Definition asn_append {Σ : LCtx} (xs ys zs : Term Σ (ty_list ty_int)) : Assertion Σ :=
       asn_formula (formula_eq (term_binop binop_append xs ys) zs).
 
-    Definition sep_contract_append : SepContract [ "p" ∷ ptr; "q" ∷ llist ] ty_unit :=
+    Definition sep_contract_append : SepContract [ "p" ∷ llist; "q" ∷ llist ] llist :=
+      {| sep_contract_logic_variables := ["p" ∷ llist; "q" ∷ llist; "xs" ∷ ty_list ty_int; "ys" ∷ ty_list ty_int];
+         sep_contract_localstore      := [term_var "p"; term_var "q"];
+         sep_contract_precondition    := term_var "p" ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           asn_exist "zs" (ty_list ty_int)
+             (term_var "result" ↦l term_var "zs" ∗
+              asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
+      |}.
+
+    Definition sep_contract_appendloop : SepContract [ "p" ∷ ptr; "q" ∷ llist ] ty_unit :=
       {| sep_contract_logic_variables := ["p" ∷ ptr; "q" ∷ llist; "xs" ∷ ty_list ty_int; "ys" ∷ ty_list ty_int];
          sep_contract_localstore      := [term_var "p"; term_var "q"];
          sep_contract_precondition    := term_inl (term_var "p") ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
@@ -243,12 +326,42 @@ Module Import ExampleSpecification <: Specification DefaultBase.
               asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
       |}.
 
+    Definition sep_contract_length : SepContract [ "p" ∷ llist ] ty_int :=
+      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty_list ty_int];
+         sep_contract_localstore      := [term_var "p"];
+         sep_contract_precondition    := term_var "p" ↦l term_var "xs";
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           asn_formula (formula_user plength [term_var "xs"; term_var "result"]) ∗
+           term_var "p" ↦l term_var "xs"
+      |}.
+
+    Definition sep_contract_copy : SepContract [ "p" ∷ llist ] llist :=
+      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty_list ty_int];
+         sep_contract_localstore      := [term_var "p"];
+         sep_contract_precondition    := term_var "p" ↦l term_var "xs";
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           term_var "p" ↦l term_var "xs" ∗
+           term_var "result" ↦l term_var "xs"
+      |}.
+
     Definition sep_contract_mkcons : SepContract [ "x" ∷ ty_int; "xs" ∷ llist ] ptr :=
       {| sep_contract_logic_variables := ["x" ∷ ty_int; "xs" ∷ llist];
          sep_contract_localstore      := [term_var "x"; term_var "xs"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "p";
          sep_contract_postcondition   := term_var "p" ↦p ( term_var "x" , term_var "xs" );
+      |}.
+
+    Definition sep_contract_fst : SepContract [ "p" ∷ ptr ] ty_int :=
+      {| sep_contract_logic_variables := ["p" ∷ ty_int; "x" ∷ ty_int; "xs" ∷ llist];
+         sep_contract_localstore      := [term_var "p"];
+         sep_contract_precondition    := term_var "p" ↦p ( term_var "x" , term_var "xs" );
+         sep_contract_result          := "result";
+         sep_contract_postcondition   :=
+           asn_formula (formula_eq (term_var "result") (term_var "x")) ∗
+           term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
 
     Definition sep_contract_snd : SepContract [ "p" ∷ ptr ] llist :=
@@ -269,6 +382,13 @@ Module Import ExampleSpecification <: Specification DefaultBase.
          sep_contract_postcondition   :=
          asn_formula (formula_eq (term_var "result") (term_val ty_unit tt)) ∗
          term_var "p" ↦p ( term_var "x" , term_var "xs");
+      |}.
+
+    Definition sep_lemma_open_nil : Lemma [ ] :=
+      {| lemma_logic_variables := [];
+         lemma_patterns        := [];
+         lemma_precondition    := asn_true;
+         lemma_postcondition   := term_val llist (inr tt) ↦l term_val (ty_list ty_int) nil;
       |}.
 
     Definition sep_lemma_open_cons : Lemma [ "p" ∷ ptr ] :=
@@ -304,13 +424,17 @@ Module Import ExampleSpecification <: Specification DefaultBase.
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
-        | append => Some (sep_contract_append)
+        | append     => Some (sep_contract_append)
+        | appendloop => Some (sep_contract_appendloop)
+        | length     => Some (sep_contract_length)
+        | copy       => Some (sep_contract_copy)
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
       fun Δ τ f =>
         match f with
         | mkcons => sep_contract_mkcons
+        | fst => sep_contract_fst
         | snd => sep_contract_snd
         | setsnd => sep_contract_setsnd
         end.
@@ -318,6 +442,7 @@ Module Import ExampleSpecification <: Specification DefaultBase.
     Definition LEnv : LemmaEnv :=
       fun Δ l =>
         match l with
+        | open_nil => sep_lemma_open_nil
         | open_cons => sep_lemma_open_cons
         | close_cons => sep_lemma_close_cons
         | close_nil => sep_lemma_close_nil
@@ -329,13 +454,158 @@ Module Import ExampleSpecification <: Specification DefaultBase.
 
 End ExampleSpecification.
 
-Module ExampleSolverKit := DefaultSolverKit DefaultBase ExampleSpecification.
+Module ExampleSolverKit <: SolverKit DefaultBase ExampleSpecification.
+
+  Local Unset Implicit Arguments.
+  Set Equations Transparent.
+  Import ListNotations.
+
+  Equations simplify_plength {Σ} (xs : Term Σ (ty_list ty_int)) (n : Term Σ ty_int) : option (List Formula Σ) :=
+  | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty_int) 1%Z) n :=
+    Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty_int ↦ n))]%list;
+  | term_val ?(ty_list ty_int) nil | term_val ?(ty_int) 0%Z := Some nil;
+  | xs          | n          :=
+    Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty_int ↦ n))]%list.
+
+  Goal True. idtac "simplify_plength_spec -- before". Abort.
+  Lemma simplify_plength_spec {Σ} (xs : Term Σ (ty_list ty_int)) (n : Term Σ ty_int) :
+    let f := formula_user plength (env.nil ► (_ ↦ xs) ► (ty_int ↦ n)) in
+    option.spec
+      (fun r : List Formula Σ =>
+         forall ι : Valuation Σ,
+           inst f ι <-> instpc r ι)
+      (forall ι : Valuation Σ, ~ inst f ι)
+      (simplify_plength xs n).
+  Proof.
+    pattern (simplify_plength xs n).
+    apply_funelim (simplify_plength xs n);
+      try (constructor; intros; cbn; now rewrite rightid_and_true);
+      intros; constructor; intros ι; cbn.
+    - split; auto.
+    - now rewrite rightid_and_true, Nat2Z.inj_succ, Z.add_1_l, Z.succ_inj_wd.
+  Qed.
+  Goal True. idtac "simplify_plength_spec -- after". Abort.
+
+  Definition simplify_user {Σ} (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ) :=
+    match p with
+    | plength => fun ts =>
+                   let (ts,n)  := env.snocView ts in
+                   let (ts,xs) := env.snocView ts in
+                   simplify_plength xs n
+    end.
+
+  Lemma simplify_user_spec {Σ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) :
+    option.spec
+      (fun r : List Formula Σ =>
+         forall ι : Valuation Σ,
+           inst (formula_user p ts) ι <-> instpc r ι)
+      (forall ι : Valuation Σ, ~ inst (formula_user p ts) ι)
+      (simplify_user p ts).
+  Proof.
+    destruct p; cbv in ts; env.destroy ts.
+    - apply simplify_plength_spec.
+  Qed.
+
+  (* TODO: Move the rest of this module to the library. *)
+  Equations(noeqns) simplify_formula {Σ} : Formula Σ -> List Formula Σ -> option (List Formula Σ) :=
+  | formula_user p ts | k => option.map (fun r => app r k) (simplify_user p ts);
+  | f                 | k => Some (cons f k).
+
+  Lemma simplify_formula_spec {Σ} (f : Formula Σ) (k : List Formula Σ) :
+    option.spec
+      (fun r : List Formula Σ =>
+         forall ι : Valuation Σ,
+           instpc (cons f k)%list ι <-> instpc r ι)
+      (forall ι : Valuation Σ, ~ inst f ι)
+      (simplify_formula f k).
+  Proof.
+    destruct f; try (constructor; reflexivity).
+    cbn [simplify_formula]. apply option.spec_map.
+    generalize (simplify_user_spec p ts).
+    apply option.spec_monotonic.
+    destruct p.
+    - intros ? H ?. rewrite inst_pathcondition_app.
+      apply and_iff_compat_r'. intros ?. apply H.
+    - auto.
+  Qed.
+
+  Section SimplifyAll.
+
+    Import option.notations.
+    Context {Σ} (g : Formula Σ -> List Formula Σ -> option (List Formula Σ)).
+
+    Definition simplify_all {Σ} (g : Formula Σ -> List Formula Σ -> option (List Formula Σ)) :=
+      fix simplify_all (fmls k : List Formula Σ) {struct fmls} : option (List Formula Σ) :=
+        match fmls with
+        | nil => Some k
+        | cons fml0 fmls =>
+          k' <- simplify_all fmls k ;;
+          g fml0 k'
+        end.
+
+    Context (g_spec : forall f k,
+                option.spec
+                  (fun r : List Formula Σ =>
+                     forall ι : Valuation Σ,
+                       instpc (cons f k)%list ι <-> instpc r ι)
+                  (forall ι : Valuation Σ, ~ inst f ι)
+                  (g f k)).
+
+    Lemma simplify_all_spec (fmls k : List Formula Σ) :
+      option.spec
+        (fun r : List Formula Σ =>
+           forall ι : Valuation Σ,
+             instpc (fmls ++ k)%list ι <-> instpc r ι)
+        (forall ι : Valuation Σ, ~ instpc fmls ι)
+        (simplify_all g fmls k).
+    Proof.
+      induction fmls; cbn; [constructor; reflexivity|].
+      apply option.spec_bind. revert IHfmls.
+      apply option.spec_monotonic.
+      - intros tmp Htmp. specialize (g_spec a tmp). revert g_spec.
+        apply option.spec_monotonic.
+        + intros res Hres ι. rewrite (Htmp ι). apply (Hres ι).
+        + intros Hna ι [Ha ?]. now apply (Hna ι).
+      - intros Hnfmls ι [Ha Hfmls]. now apply (Hnfmls ι).
+    Qed.
+
+  End SimplifyAll.
+
+  Definition solver : Solver :=
+    fun w fmls =>
+      option_map
+        (fun l => existT w (tri_id, l))
+        (simplify_all simplify_formula fmls nil).
+
+  Lemma solver_spec : SolverSpec solver.
+  Proof.
+    intros w0 fmls. unfold solver.
+    apply option.spec_map.
+    generalize (simplify_all_spec simplify_formula simplify_formula_spec fmls nil).
+    apply option.spec_monotonic.
+    - intros r H ι Hpc. split; [constructor|].
+      specialize (H ι). rewrite inst_pathcondition_app in H.
+      cbn in H. rewrite rightid_and_true in H.
+      intros ι' Hpc'. cbn. rewrite inst_sub_id. intros. now subst.
+    - intros Hnf ι Hpc. apply Hnf.
+  Qed.
+
+End ExampleSolverKit.
 Module ExampleSolver := MakeSolver DefaultBase ExampleSpecification ExampleSolverKit.
 
 Module Import ExampleExecutor :=
   MakeExecutor DefaultBase ExampleSpecification ExampleSolver.
 
 Lemma valid_contract_append : SMut.ValidContractReflect sep_contract_append fun_append.
+Proof. Time reflexivity. Qed.
+
+Lemma valid_contract_appendloop : SMut.ValidContractReflect sep_contract_appendloop fun_appendloop.
+Proof. Time reflexivity. Qed.
+
+Lemma valid_contract_length : SMut.ValidContractReflect sep_contract_length fun_length.
+Proof. Time reflexivity. Qed.
+
+Lemma valid_contract_copy : SMut.ValidContractReflect sep_contract_copy fun_copy.
 Proof. Time reflexivity. Qed.
 
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
@@ -354,6 +624,7 @@ Module ExampleModel.
       Import iris.bi.big_op.
       Import iris.base_logic.lib.iprop.
       Import iris.base_logic.lib.gen_heap.
+      Import iris.proofmode.tactics.
 
       Class mcMemGS Σ :=
         McMemGS {
@@ -370,7 +641,7 @@ Module ExampleModel.
         fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := (Z * (Z + unit))).
 
       Lemma fst_pair_id2 : forall {A} {B},
-          (λ (x : A) (y : B), (fst ∘ pair x) y) = (λ (x : A) (y : B), x).
+          (λ (x : A) (y : B), (Datatypes.fst ∘ pair x) y) = (λ (x : A) (y : B), x).
       Proof.
         intros; reflexivity.
       Qed.
@@ -441,6 +712,8 @@ Module ExampleModel.
     Import iris.base_logic.lib.iprop.
     Import iris.program_logic.weakestpre.
     Import iris.base_logic.lib.gen_heap.
+    Import iris.proofmode.string_ident.
+    Import iris.proofmode.tactics.
 
     (* Import PROG to reset the access path of notations. *)
     Import PROG.
@@ -482,6 +755,38 @@ Module ExampleModel.
       { rewrite <-not_elem_of_dom, <-elem_of_elements.
         now eapply infinite_is_fresh.
       }
+      iModIntro.
+      iFrame.
+      iSplitL; last done.
+      iApply wp_value.
+      now iFrame.
+    Qed.
+
+    Lemma fst_sound `{sg : sailGS Σ} `{invGS} {Γ δ} :
+      forall (ep : Exp Γ ptr) (vx : Val ty_int) (vxs : Val llist),
+        let vp := eval ep δ in
+        ⊢ semTriple δ
+          (ptstocons_interp vp vx vxs)
+          (foreign fst ep)
+          (λ (v : Z) (δ' : CStore Γ),
+            ((⌜v = vx⌝ ∧ emp) ∗ ptstocons_interp vp vx vxs) ∗ ⌜ δ' = δ⌝).
+    Proof.
+      iIntros (ep vx vxs vp) "Hres".
+      rewrite wp_unfold.
+      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+      iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+      iModIntro.
+      iSplitR; first done.
+      iIntros (e2 σ'' efs) "%".
+      dependent elimination H0.
+      dependent elimination s.
+      cbn in f1.
+      unfold mem_inv.
+      do 3 iModIntro.
+      iMod "Hclose2" as "_".
+      iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs) with "Hmem Hres") as "%".
+      rewrite H0 in f1.
+      destruct_conjs; subst.
       iModIntro.
       iFrame.
       iSplitL; last done.
@@ -559,13 +864,14 @@ Module ExampleModel.
     Proof.
       intros Γ τ Δ f es δ; destruct f; env.destroy es;
         intros ι; env.destroy ι; cbn; intros Heq; env.destroy Heq; subst;
-        eauto using mkcons_sound, snd_sound, setsnd_sound.
+        eauto using mkcons_sound, fst_sound, snd_sound, setsnd_sound.
     Qed.
 
     Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
     Proof.
       intros Γ l.
       destruct l; cbn; intros ι; destruct_syminstance ι; cbn.
+      - auto.
       - iIntros "Hres".
         destruct xs; cbn.
         { iDestruct "Hres" as "%"; inversion H. }
@@ -604,11 +910,14 @@ Module ExampleModel.
   Proof.
     eapply (ExampleIrisInstance.sound foreignSem lemSem).
     intros Γ τ f c.
-    destruct f; inversion 1; subst.
-    eapply (contract_sound 1).
-    eapply symbolic_sound.
+    destruct f; inversion 1; subst;
+    eapply (contract_sound 1);
+    eapply symbolic_sound;
     eapply SMut.validcontract_reflect_sound.
     eapply valid_contract_append.
+    eapply valid_contract_appendloop.
+    eapply valid_contract_length.
+    eapply valid_contract_copy.
   Qed.
 
   End WithIrisNotations.
