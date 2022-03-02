@@ -314,6 +314,11 @@ Module Type MutatorsOn
     Inductive VerificationCondition (p : 𝕊 ctx.nil) : Prop :=
     | vc (P : safe p env.nil).
 
+    Lemma vc_debug (p : 𝕊 ctx.nil) (H : safe_debug p env.nil) : VerificationCondition p.
+    Proof.
+      constructor; now rewrite safe_debug_safe in H.
+    Qed.
+
     Global Instance proper_vc : Proper (sequiv ctx.nil ==> iff) VerificationCondition.
     Proof. intros p q pq. split; intros []; constructor; now apply pq. Qed.
 
