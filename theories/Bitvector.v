@@ -76,6 +76,15 @@ Module bv.
   Arguments mk {n} _ &.
   Set Transparent Obligations.
 
+  Definition bin_inj {n} (x y : bv n) : bin x = bin y -> x = y :=
+      match x , y with
+      | mk x p , mk y q =>
+          fun e : x = y =>
+            match e in _ = y return forall q : is_wf n y, mk x p = mk y q with
+            | eq_refl => fun q => eq_refl
+            end q
+      end.
+
   Section Conversion.
 
     Fixpoint trunc (n : nat) (p : positive) : N :=
@@ -146,16 +155,7 @@ Module bv.
       bin x = bin y.
 
     Definition noConfusion_bv {n} (x y : bv n) : NoConfusion_bv x y -> x = y :=
-      match x with
-      | mk x p =>
-          match y with
-          | mk y q =>
-              fun e : x = y =>
-                match e in _ = y return forall q : is_wf n y, mk x p = mk y q with
-                | eq_refl => fun q => eq_refl
-                end q
-          end
-      end.
+      bin_inj x y.
 
     Definition noConfusion_inv_bv {n} (x y : bv n) : x = y -> NoConfusion_bv x y :=
       fun e => match e with
@@ -193,24 +193,12 @@ Module bv.
       - now intros p%(f_equal (@bin _)).
     Qed.
 
-    Program Instance eqdec_bv {n : nat} : EqDec (bv n) :=
+    Instance eqdec_bv {n : nat} : EqDec (bv n) :=
       fun x y =>
         match N.eq_dec (bin x) (bin y) with
-        | left eq => left _
-        | right neq => right _
+        | left a  => left (bin_inj x y a)
+        | right n => right (fun e => n (f_equal (@bin _) e))
         end.
-    Next Obligation.
-      intros n [x xwf] [y ywf] dec eq eqdec.
-      cbn in eq.
-      now destruct eq.
-    Defined.
-    Next Obligation.
-      intros n [x xwf] [y ywf] dec eq _ eq2.
-      inversion eq2; subst.
-      cbn in eq.
-      now contradiction eq.
-    Defined.
-
 
   End Equality.
   Local Existing Instance eqdec_bv.
