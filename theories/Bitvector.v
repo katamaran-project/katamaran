@@ -193,12 +193,24 @@ Module bv.
       - now intros p%(f_equal (@bin _)).
     Qed.
 
-    Instance eqdec_bv {n : nat} : EqDec (bv n) :=
+    Program Instance eqdec_bv {n : nat} : EqDec (bv n) :=
       fun x y =>
-        match eqb_spec x y with
-        | ReflectT _ e => left e
-        | ReflectF _ n => right n
+        match N.eq_dec (bin x) (bin y) with
+        | left eq => left _
+        | right neq => right _
         end.
+    Next Obligation.
+      intros n [x xwf] [y ywf] dec eq eqdec.
+      cbn in eq.
+      now destruct eq.
+    Defined.
+    Next Obligation.
+      intros n [x xwf] [y ywf] dec eq _ eq2.
+      inversion eq2; subst.
+      cbn in eq.
+      now contradiction eq.
+    Defined.
+
 
   End Equality.
   Local Existing Instance eqdec_bv.
