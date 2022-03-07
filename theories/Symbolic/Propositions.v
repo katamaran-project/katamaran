@@ -297,22 +297,47 @@ Module Type SymPropOn
         | error msg => False
         | block => True
         | assertk fml msg o =>
-          Obligation msg fml ι /\ safe o ι
+          inst fml ι /\ safe o ι
         | assumek fml o => (inst fml ι : Prop) -> safe o ι
         | angelicv b k => exists v, safe k (env.snoc ι b v)
         | demonicv b k => forall v, safe k (env.snoc ι b v)
         | @assert_vareq _ x σ xIn t msg k =>
           (let ζ := sub_shift xIn in
-          Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
-          (let ι' := env.remove (x∷σ) ι xIn in
+          inst (formula_eq (term_var x) (subst t ζ)) ι /\
+          let ι' := env.remove (x∷σ) ι xIn in
           safe k ι')
         | @assume_vareq _ x σ xIn t k =>
           let ι' := env.remove (x∷σ) ι xIn in
           env.lookup ι xIn = inst t ι' ->
           safe k ι'
-        | debug d k => Debug d (safe k ι)
+        | debug d k => safe k ι
         end%type.
     Global Arguments safe {Σ} p ι.
+
+    Fixpoint safe_debug {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) : Prop :=
+      (* ⊢ 𝕊 -> Valuation -> PROP := *)
+        match p with
+        | angelic_binary o1 o2 => safe_debug o1 ι \/ safe_debug o2 ι
+        | demonic_binary o1 o2 => safe_debug o1 ι /\ safe_debug o2 ι
+        | error msg => False
+        | block => True
+        | assertk fml msg o =>
+          Obligation msg fml ι /\ safe_debug o ι
+        | assumek fml o => (inst fml ι : Prop) -> safe_debug o ι
+        | angelicv b k => exists v, safe_debug k (env.snoc ι b v)
+        | demonicv b k => forall v, safe_debug k (env.snoc ι b v)
+        | @assert_vareq _ x σ xIn t msg k =>
+          (let ζ := sub_shift xIn in
+          Obligation (subst msg ζ) (formula_eq (term_var x) (subst t ζ))) ι /\
+          (let ι' := env.remove (x∷σ) ι xIn in
+          safe_debug k ι')
+        | @assume_vareq _ x σ xIn t k =>
+          let ι' := env.remove (x∷σ) ι xIn in
+          env.lookup ι xIn = inst t ι' ->
+          safe_debug k ι'
+        | debug d k => Debug d (safe_debug k ι)
+        end%type.
+    Global Arguments safe_debug {Σ} p ι.
 
     (* We use a world indexed version of safe in the soundness proofs, just to make *)
 (*        Coq's unifier happy. *)
@@ -350,10 +375,18 @@ Module Type SymPropOn
     Proof. split. now intros []. now constructor. Qed.
 
     Lemma wsafe_safe {w : World} (p : 𝕊 w) (ι : Valuation w) :
-      wsafe p ι <-> safe p ι.
+      wsafe p ι <-> safe_debug p ι.
     Proof.
       destruct w as [Σ pc]; cbn in *; revert pc.
       induction p; cbn; intros pc; rewrite ?debug_equiv; auto;
+        try (intuition; fail).
+      apply base.exist_proper; eauto.
+    Qed.
+
+    Lemma safe_debug_safe {Σ : LCtx} (p : 𝕊 Σ) (ι : Valuation Σ) :
+      safe_debug p ι <-> safe p ι.
+    Proof.
+      induction p; cbn; rewrite ?debug_equiv, ?obligation_equiv; auto;
         try (intuition; fail).
       apply base.exist_proper; eauto.
     Qed.
@@ -932,8 +965,7 @@ Module Type SymPropOn
         revert p.
         induction mfs; intros p; cbn.
         - intuition.
-        - destruct a. rewrite IHmfs. cbn.
-          now rewrite obligation_equiv.
+        - destruct a. rewrite IHmfs. now cbn.
       Qed.
 
       Inductive ECtx (Σ : LCtx) : LCtx -> Type :=
@@ -1050,14 +1082,14 @@ Module Type SymPropOn
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
           unfold eq_rect_r in Hp. rewrite safe_eq_rect, eq_sym_involutive in Hp.
           exists (env.insert bIn ιe (inst (eq_rect ((Σ1 ▻▻ Σe) - x∷σ) (fun Σ => Term Σ σ) t (Σ1 ▻▻ Σe - x∷σ) (ctx.remove_in_cat_right bIn)) (ι ►► ιe))).
-          rewrite safe_assert_msgs_formulas. cbn. rewrite obligation_equiv. cbn.
+          rewrite safe_assert_msgs_formulas. cbn.
           rewrite env_insert_app, env.remove_insert, env.insert_lookup.
           rewrite inst_subst, inst_sub_shift, env.remove_insert, ?inst_eq_rect.
           split; auto.
           rewrite map_snd_subst, inst_subst, inst_eq_rect in Hpc.
           now rewrite inst_sub_single2 in Hpc.
         - rewrite safe_assert_msgs_formulas in HYP. destruct HYP as [Hpc Hp].
-          cbn in Hp. rewrite obligation_equiv in Hp. cbn in Hp. destruct Hp as [Ht Hp].
+          cbn in Hp. cbn in Hp. destruct Hp as [Ht Hp].
           rewrite env_remove_app in Hp.
           exists (env.remove (x∷σ) ιe bIn).
           rewrite safe_assert_msgs_formulas.

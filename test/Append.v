@@ -74,10 +74,12 @@ Module Import ExampleProgram <: Program DefaultBase.
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
-    | append     : Fun [ "p" ∷ llist; "q" ∷ llist ] llist
-    | appendloop : Fun [ "p" ∷ ptr; "q" ∷ llist ] ty_unit
-    | length     : Fun [ "p" ∷ llist ] ty_int
-    | copy       : Fun [ "p" ∷ llist ] llist
+    | append      : Fun [ "p" ∷ llist; "q" ∷ llist ] llist
+    | appendloop  : Fun [ "p" ∷ ptr; "q" ∷ llist ] ty_unit
+    | length      : Fun [ "p" ∷ llist ] ty_int
+    | copy        : Fun [ "p" ∷ llist ] llist
+    | reverse     : Fun [ "p" ∷ llist ] llist
+    | reverseloop : Fun [ "p" ∷ llist; "q" ∷ llist ] llist
     .
 
     Inductive FunX : PCtx -> Ty -> Set :=
@@ -166,6 +168,23 @@ Module Import ExampleProgram <: Program DefaultBase.
         exp_val llist (inr tt)
       end.
 
+    Definition fun_reverse : Stm [ "p" ∷ llist ] llist :=
+      lemma open_nil [] ;;
+      call reverseloop (exp_var "p") (exp_val llist (inr tt)).
+
+    Definition fun_reverseloop : Stm [ "p" ∷ llist; "q" ∷ llist ] llist :=
+      match: exp_var "p" with
+      | inl "x" =>
+        lemma open_cons [exp_var "x"] ;;
+        let: "n"  := foreign snd (exp_var "x") in
+        foreign setsnd (exp_var "x") (exp_var "q");;
+        lemma close_cons [exp_var "x"] ;;
+        call reverseloop (exp_var "n") (exp_inl (exp_var "x"))
+      | inr "tt" =>
+        lemma close_nil [exp_var "tt"] ;;
+        exp_var "q"
+      end.
+
     Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       Eval compute in
       match f in Fun Δ τ return Stm Δ τ with
@@ -173,6 +192,8 @@ Module Import ExampleProgram <: Program DefaultBase.
       | appendloop => fun_appendloop
       | length     => fun_length
       | copy       => fun_copy
+      | reverse     => fun_reverse
+      | reverseloop => fun_reverseloop
       end.
 
   End FunDefKit.
@@ -233,6 +254,8 @@ End ExampleProgram.
 
 Inductive PurePredicate : Set :=
 | plength
+| preverse
+| preverseappend
 .
 
 Inductive Predicate : Set :=
@@ -258,11 +281,15 @@ Module Import ExampleSpecification <: Specification DefaultBase.
   Definition 𝑷 := PurePredicate.
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
     match p with
-    | subperm => [ty_list ty_int; ty_int]
+    | plength => [ty_list ty_int; ty_int]
+    | preverse => [ty_list ty_int; ty_list ty_int]
+    | preverseappend => [ty_list ty_int; ty_list ty_int; ty_list ty_int]
     end.
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
     | plength => fun xs l => Z.of_nat (Datatypes.length xs) = l
+    | preverse => fun xs ys => ys = rev xs
+    | preverseappend => fun xs ys zs => zs = rev_append xs ys
     end.
 
   Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -344,6 +371,28 @@ Module Import ExampleSpecification <: Specification DefaultBase.
          sep_contract_postcondition   :=
            term_var "p" ↦l term_var "xs" ∗
            term_var "result" ↦l term_var "xs"
+      |}.
+
+    Definition sep_contract_reverse : SepContract [ "p" ∷ llist ] llist :=
+      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty_list ty_int];
+         sep_contract_localstore      := [term_var "p"];
+         sep_contract_precondition    := term_var "p" ↦l term_var "xs";
+         sep_contract_result          := "r";
+         sep_contract_postcondition   :=
+           asn_exist "zs" (ty_list ty_int)
+             (term_var "r" ↦l term_var "zs" ∗
+              asn_formula (formula_user preverse [term_var "xs"; term_var "zs"]));
+      |}.
+
+    Definition sep_contract_reverseloop : SepContract [ "p" ∷ llist; "q" ∷ llist ] llist :=
+      {| sep_contract_logic_variables := ["p" ∷ llist; "q" ∷ llist; "xs" ∷ ty_list ty_int; "ys" ∷ ty_list ty_int];
+         sep_contract_localstore      := [term_var "p"; term_var "q"];
+         sep_contract_precondition    := term_var "p" ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
+         sep_contract_result          := "r";
+         sep_contract_postcondition   :=
+           asn_exist "zs" (ty_list ty_int)
+             (term_var "r" ↦l term_var "zs" ∗
+              asn_formula (formula_user preverseappend [term_var "xs"; term_var "ys"; term_var "zs"]));
       |}.
 
     Definition sep_contract_mkcons : SepContract [ "x" ∷ ty_int; "xs" ∷ llist ] ptr :=
@@ -428,6 +477,8 @@ Module Import ExampleSpecification <: Specification DefaultBase.
         | appendloop => Some (sep_contract_appendloop)
         | length     => Some (sep_contract_length)
         | copy       => Some (sep_contract_copy)
+        | reverse    => Some (sep_contract_reverse)
+        | reverseloop => Some (sep_contract_reverseloop)
         end.
 
     Definition CEnvEx : SepContractEnvEx :=
@@ -467,7 +518,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSpecification.
   | xs          | n          :=
     Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty_int ↦ n))]%list.
 
-  Goal True. idtac "simplify_plength_spec -- before". Abort.
+  Goal True. idtac "Timing -- simplify_plength_spec -- before". Abort.
   Lemma simplify_plength_spec {Σ} (xs : Term Σ (ty_list ty_int)) (n : Term Σ ty_int) :
     let f := formula_user plength (env.nil ► (_ ↦ xs) ► (ty_int ↦ n)) in
     option.spec
@@ -484,7 +535,37 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSpecification.
     - split; auto.
     - now rewrite rightid_and_true, Nat2Z.inj_succ, Z.add_1_l, Z.succ_inj_wd.
   Qed.
-  Goal True. idtac "simplify_plength_spec -- after". Abort.
+  Goal True. idtac "Timing -- simplify_plength_spec -- after". Abort.
+
+  Equations simplify_preverseappend {Σ} (xs ys zs: Term Σ (ty_list ty_int)) : option (List Formula Σ) :=
+  (* | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty_int) 1%Z) n := *)
+  (*   Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty_int ↦ n))]%list; *)
+  | term_val ?(ty_list ty_int) nil | ys | zs := Some [formula_eq ys zs]%list;
+  | xs | term_val ?(ty_list ty_int) nil | zs := Some [formula_user preverse (env.nil ► (_ ↦ xs) ► (_ ↦ zs))]%list;
+  | term_binop binop_cons x xs | ys | zs := Some [formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_  ↦ term_binop binop_cons x ys) ► (_  ↦ zs))]%list;
+  | xs | ys | zs          :=
+    Some [formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_  ↦ ys) ► (_  ↦ zs))]%list.
+
+  Goal True. idtac "Timing -- simplify_preverseappend_spec -- before". Abort.
+  Lemma simplify_preverseappend_spec {Σ} (xs ys zs : Term Σ (ty_list ty_int)) :
+    let f := formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_ ↦ ys) ► (_ ↦ zs)) in
+    option.spec
+      (fun r : List Formula Σ =>
+         forall ι : Valuation Σ,
+           inst f ι <-> instpc r ι)
+      (forall ι : Valuation Σ, ~ inst f ι)
+      (simplify_preverseappend xs ys zs).
+  Proof.
+    pattern (simplify_preverseappend xs ys zs).
+    apply_funelim (simplify_preverseappend xs ys zs);
+      try (constructor; intros; cbn; now rewrite rightid_and_true);
+      intros; constructor; intros ι; cbn; rewrite ?rightid_and_true.
+    - now rewrite rev_alt.
+    - now rewrite rev_append_rev.
+    - now rewrite rev_alt.
+    - now rewrite rev_alt.
+  Qed.
+  Goal True. idtac "Timing -- simplify_preverseappend_spec -- after". Abort.
 
   Definition simplify_user {Σ} (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ) :=
     match p with
@@ -492,6 +573,13 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSpecification.
                    let (ts,n)  := env.snocView ts in
                    let (ts,xs) := env.snocView ts in
                    simplify_plength xs n
+    | preverse => fun ts => Some (cons (formula_user preverse ts) nil)
+    | preverseappend =>
+        fun ts =>
+          let (ts,zs) := env.snocView ts in
+          let (ts,ys) := env.snocView ts in
+          let (ts,xs) := env.snocView ts in
+          simplify_preverseappend xs ys zs
     end.
 
   Lemma simplify_user_spec {Σ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) :
@@ -504,6 +592,9 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSpecification.
   Proof.
     destruct p; cbv in ts; env.destroy ts.
     - apply simplify_plength_spec.
+    - constructor; intros ?; cbn.
+      now rewrite rightid_and_true.
+    - apply simplify_preverseappend_spec.
   Qed.
 
   (* TODO: Move the rest of this module to the library. *)
@@ -523,7 +614,6 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSpecification.
     cbn [simplify_formula]. apply option.spec_map.
     generalize (simplify_user_spec p ts).
     apply option.spec_monotonic.
-    destruct p.
     - intros ? H ?. rewrite inst_pathcondition_app.
       apply and_iff_compat_r'. intros ?. apply H.
     - auto.
@@ -596,17 +686,35 @@ Module ExampleSolver := MakeSolver DefaultBase ExampleSpecification ExampleSolve
 Module Import ExampleExecutor :=
   MakeExecutor DefaultBase ExampleSpecification ExampleSolver.
 
+Goal True. idtac "Timing -- valid_contract_append -- before". Abort.
 Lemma valid_contract_append : SMut.ValidContractReflect sep_contract_append fun_append.
-Proof. Time reflexivity. Qed.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing -- valid_contract_append -- after". Abort.
 
+Goal True. idtac "Timing -- valid_contract_appendloop -- before". Abort.
 Lemma valid_contract_appendloop : SMut.ValidContractReflect sep_contract_appendloop fun_appendloop.
-Proof. Time reflexivity. Qed.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing -- valid_contract_appendloop -- after".  Abort.
 
+Goal True. idtac "Timing -- valid_contract_length -- before". Abort.
 Lemma valid_contract_length : SMut.ValidContractReflect sep_contract_length fun_length.
-Proof. Time reflexivity. Qed.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing -- valid_contract_length -- after". Abort.
 
+Goal True. idtac "Timing -- valid_contract_copy -- before". Abort.
 Lemma valid_contract_copy : SMut.ValidContractReflect sep_contract_copy fun_copy.
-Proof. Time reflexivity. Qed.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing -- valid_contract_copy -- after". Abort.
+
+Goal True. idtac "Timing -- valid_contract_reverse -- before". Abort.
+Lemma valid_contract_reverse : SMut.ValidContractReflect sep_contract_reverse fun_reverse.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing -- valid_contract_reverse -- after". Abort.
+
+Goal True. idtac "Timing -- valid_contract_reverseloop -- before". Abort.
+Lemma valid_contract_reverseloop : SMut.ValidContractReflect sep_contract_reverseloop fun_reverseloop.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing -- valid_contract_reverseloop -- after". Abort.
 
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
   MakeSemantics DefaultBase ExampleProgram.
@@ -867,6 +975,7 @@ Module ExampleModel.
         eauto using mkcons_sound, fst_sound, snd_sound, setsnd_sound.
     Qed.
 
+    Goal True. idtac "Timing -- lemmas -- before". Abort.
     Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
     Proof.
       intros Γ l.
@@ -889,6 +998,7 @@ Module ExampleModel.
         iExists n.
         now iFrame.
     Qed.
+    Goal True. idtac "Timing -- lemmas -- after". Abort.
 
   End WithIrisNotations.
 
@@ -908,16 +1018,18 @@ Module ExampleModel.
 
   Lemma appendSound `{sG : sailGS Σ} : ⊢ ValidContractEnvSem (sG := sG) CEnv.
   Proof.
-    eapply (ExampleIrisInstance.sound foreignSem lemSem).
+    apply (ExampleIrisInstance.sound foreignSem lemSem).
     intros Γ τ f c.
     destruct f; inversion 1; subst;
-    eapply (contract_sound 1);
-    eapply symbolic_sound;
-    eapply SMut.validcontract_reflect_sound.
-    eapply valid_contract_append.
-    eapply valid_contract_appendloop.
-    eapply valid_contract_length.
-    eapply valid_contract_copy.
+    apply (contract_sound 1);
+    apply symbolic_sound;
+    apply SMut.validcontract_reflect_sound.
+    apply valid_contract_append.
+    apply valid_contract_appendloop.
+    apply valid_contract_length.
+    apply valid_contract_copy.
+    apply valid_contract_reverse.
+    apply valid_contract_reverseloop.
   Qed.
 
   End WithIrisNotations.

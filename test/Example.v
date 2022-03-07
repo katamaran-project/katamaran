@@ -420,15 +420,14 @@ Module Import ExampleSpecification <: Specification ExampleBase.
              (fun x y result => result = Z.gcd x y)
       |}.
 
+    Definition length_post {σ} (xs : list (Val σ)) (result : Val ty_int) :=
+      result = Z.of_nat (@Datatypes.length (Val σ) xs).
     Definition sep_contract_length {σ} : SepContract [ "xs" ∷ ty_list σ ] ty_int :=
       {| sep_contract_logic_variables := ["xs" ∷ ty_list σ ];
          sep_contract_localstore      := [term_var "xs"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           @asn_prop
-             ["xs" ∷ ty_list σ; "result" ∷ ty_int]
-             (fun xs result => result = Z.of_nat (Datatypes.length xs))
+         sep_contract_postcondition   := asn_prop ["xs"∷ty_list σ; "result"∷ty_int] length_post
       |}.
 
     Definition sep_contract_summaxlen : SepContract [ "xs" ∷ ty_list ty_int ] (ty_prod (ty_prod ty_int ty_int) ty_int) :=
@@ -524,35 +523,41 @@ Local Ltac solve :=
     ).
 
 Lemma valid_contract_length {σ} : SMut.ValidContract (@sep_contract_length σ) (FunDef length).
-Proof. solve; lia. Qed.
+Proof. compute - [length_post]. solve; lia. Qed.
 Local Hint Resolve valid_contract_length : contracts.
 
 Lemma valid_contract_cmp : SMut.ValidContract sep_contract_cmp (FunDef cmp).
 Proof. solve. Qed.
 Local Hint Resolve valid_contract_cmp : contracts.
 
+(* Module MakeShallowExecutor *)
+(*   (Import B    : Base) *)
+(*   (Import SPEC : Specification B). *)
+
+(*   Include SemiConcrete B SPEC. *)
+(* End MakeShallowExecutor. *)
+(* Module Import ExampleCMut := MakeShallowExecutor ExampleBase ExampleSpecification. *)
+(* Import CMut. *)
+
+(* Goal True. idtac "Timing -- valid_cmut_contract_summaxlen -- before". Abort. *)
 (* Lemma valid_cmut_contract_summaxlen : CMut.ValidContract 1 sep_contract_summaxlen fun_summaxlen. *)
 (* Proof. *)
 (*   cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge]. *)
-(*   intros xs; revert xs. *)
 (*   solve; nia. *)
 (* Qed. *)
+(* Goal True. idtac "Timing -- valid_cmut_contract_summaxlen -- after". Abort. *)
 (* Hint Resolve valid_cmut_contract_summaxlen : contracts. *)
 
 Import SymProp.notations.
 
+Goal True. idtac "Timing -- valid_contract_summaxlen -- before". Abort.
 Lemma valid_contract_summaxlen : SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
 Proof.
-  compute. constructor.
-  cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
-  repeat setoid_rewrite SymProp.obligation_equiv.
-  cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
-  change
-    (forall (y : Z) (ys : list Z),
-      forall (l s m : Z),
-        s <= m * l -> 0 <= l ->
-        (m < y -> s + y <= y * (l + 1) /\ 0 <= l + 1 /\ True) /\
-        (m >= y -> s + y <= m * (l + 1) /\ 0 <= l + 1 /\ True)).
+  constructor.
+  compute - [SymProp.safe].
+  compute - [Z.mul Z.add Z.le Z.ge Z.lt].
   solve; nia.
-Qed.
+Time Qed.
+Goal True. idtac "Timing -- valid_contract_summaxlen -- after". Abort.
 Local Hint Resolve valid_contract_summaxlen : contracts.
+

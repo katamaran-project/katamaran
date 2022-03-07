@@ -2141,7 +2141,10 @@ Module Soundness
       apply approx_eval_exp; auto.
       intros w1 ω01 ι1 -> Hpc1.
       intros t v Htv.
-      admit.
+      apply approx_demonic_match_bvec; auto.
+      intros v1 v2 ->.
+      intros w2 ω12 ι2 -> Hpc2.
+      auto.
     - apply approx_bind; auto.
       apply approx_angelic; auto.
       intros w1 ω01 ι1 -> Hpc1.
@@ -2173,7 +2176,7 @@ Module Soundness
       now rewrite <- inst_persist.
     - apply approx_error.
     - apply approx_debug; auto.
-  Admitted.
+  Qed.
 
   Lemma approx_exec {cfg n} :
     ExecApprox (@SMut.exec cfg n) (@CMut.exec n).
@@ -2232,6 +2235,7 @@ Module Soundness
     rewrite Postprocessing.solve_evars_sound in Hwp.
     rewrite Postprocessing.prune_sound in Hwp. cbn in Hwp.
     apply safe_demonic_close with _ ι in Hwp. revert Hwp.
+    rewrite <- safe_debug_safe.
     rewrite <- (wsafe_safe (w := @MkWorld (sep_contract_logic_variables c) nil)).
     apply approx_exec_contract; auto.
     intros w1 ω01 ι1 -> Hpc1.
