@@ -1,0 +1,10 @@
+image:
+  file: .gitpod.Dockerfile
+tasks:
+  - command: |
+      ocaml -version
+      coq -version
+
+vscode:
+  extensions:
+    - maximedenes.vscoq
