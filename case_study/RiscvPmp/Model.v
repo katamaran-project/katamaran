@@ -214,6 +214,7 @@ Module RiscvPmpModel.
         | PMP_Match        => (PMP_Success, pmp_permission m cfg)
         end.
 
+      (* TODO: if nothing matches we should check m and give full perm if m is M-mode *)
       Fixpoint pmp_check (a : Addr) (entries : list PmpEntryCfg) (prev : Addr) (m : Privilege) : option Permission :=
         match entries with
         | [] => None

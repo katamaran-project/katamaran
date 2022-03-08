@@ -779,7 +779,10 @@ Section ContractDefKit.
     |}.
 
   (* TODO: specify that the ptsto regs should be in ?entries (same for close) *)
-  (* (cfg0, addr0) ∈ ?entries ... *)
+  (* for open: part of postcond *)
+  (* for close: part of precond *)
+  (* either for each pair: (cfg0, addr0) ∈ ?entries ... *)
+  (* OR eq: ?entries = [(cfg0, addr0), ...] *)
   Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
     {| lemma_logic_variables := ctx.nil;
        lemma_patterns        := env.nil;
@@ -1059,7 +1062,7 @@ Section Debug.
       end
       end in
       if: exp_var "check"
-      then stm_debugk (exp_inr (exp_val ty_unit tt))
+      then exp_inr (exp_val ty_unit tt)
       else
         match: exp_var "acc" in union access_type with
         |> KRead pat_unit      => exp_inl (exp_union exception_type KE_Load_Access_Fault (exp_val ty_unit tt))
@@ -1070,15 +1073,7 @@ Section Debug.
 
       Lemma valid_contract_pmpCheck' : SMut.ValidContract sep_contract_pmpCheck fun_pmpCheck'.
       Proof.
-        (* compute.
-        constructor.
-        cbv.
-        intros.
-        destruct v3.
-        destruct v5. *)
-        (* exists R, W, X, A, L. *)
-        (* intros.
-        repeat eexists. *)
+        compute.
       Admitted.
 End Debug.
 
