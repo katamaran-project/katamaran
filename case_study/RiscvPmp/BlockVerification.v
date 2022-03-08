@@ -74,6 +74,7 @@ Inductive PurePredicate : Set :=
 Inductive Predicate : Set :=
 | pmp_entries
 | ptsto
+| encodes_instr
 (* | reg_ptsto *)
 .
 
@@ -110,6 +111,7 @@ Section PredicateKit.
     match p with
     | pmp_entries => [ty_list pmp_entry_cfg]
     | ptsto       => [ty_xlenbits; ty_xlenbits]
+    | encodes_instr => [ty_int; ty_ast]
     (* | reg_ptsto   => [ty_regno; ty_xlenbits] *)
     end.
 
@@ -118,6 +120,7 @@ Section PredicateKit.
       match p with
       | pmp_entries => false
       | ptsto       => false
+      | encodes_instr       => true
       (* | reg_ptsto   => false *)
       end
     }.
@@ -127,6 +130,7 @@ Section PredicateKit.
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
     | ptsto => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
+    | encodes_instr => Some (MkPrecise [ty_int] [ty_ast] eq_refl)
     (* | reg_ptsto => Some (MkPrecise [ty_regno] [ty_word] eq_refl) *)
     | _ => None
     end.
@@ -241,11 +245,46 @@ Section ContractDefKit.
          term_var "result_wX" = term_val ty_unit tt;
     |}.
 
+  Definition sep_contract_fetch : SepContractFun fetch :=
+    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "w" :: ty_int];
+       sep_contract_localstore      := [];
+       sep_contract_precondition    := asn_chunk (chunk_ptsreg pc (term_var "a")) ∗
+                                                 term_var "a" ↦ₘ term_var "w";
+       sep_contract_result          := "result_fetch";
+       sep_contract_postcondition   := asn_chunk (chunk_ptsreg pc (term_var "a")) ∗
+                                                 term_var "a" ↦ₘ term_var "w" ∗
+                                                 term_var "result_fetch" = term_union fetch_result KF_Base (term_var "w");
+    |}.
+
+  Definition sep_contract_mem_read : SepContractFun mem_read :=
+    {| sep_contract_logic_variables := ["typ" :: ty_access_type; "paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
+       sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
+       sep_contract_precondition    := term_var "paddr" ↦ₘ term_var "w";
+       sep_contract_result          := "result_mem_read";
+       sep_contract_postcondition   :=
+      term_var "result_mem_read" = term_union memory_op_result KMemValue (term_var "w") ∗
+                                              term_var "paddr" ↦ₘ term_var "w";
+    |}.
+
+  Definition sep_contract_tick_pc : SepContractFun tick_pc :=
+    {| sep_contract_logic_variables := ["ao" :: ty_xlenbits; "an" :: ty_xlenbits];
+       sep_contract_localstore      := [];
+       sep_contract_precondition    := asn_chunk (chunk_ptsreg pc (term_var "ao")) ∗
+                                                 asn_chunk (chunk_ptsreg nextpc (term_var "an"));
+       sep_contract_result          := "result_tick_pc";
+       sep_contract_postcondition   := asn_chunk (chunk_ptsreg pc (term_var "an")) ∗
+                                                 asn_chunk (chunk_ptsreg nextpc (term_var "an")) ∗
+                                                 term_var "result_tick_pc" = term_val ty_unit tt;
+    |}.
+
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
       | rX                    => Some sep_contract_rX
       | wX                    => Some sep_contract_wX
+      | fetch                 => Some sep_contract_fetch
+      | mem_read              => Some sep_contract_mem_read
+      | tick_pc               => Some sep_contract_tick_pc
       | _                     => None
       end.
 
@@ -266,11 +305,11 @@ Section ContractDefKit.
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
-    {| sep_contract_logic_variables := ["bv" :: ty_int];
-       sep_contract_localstore      := [term_var "bv"];
-       sep_contract_precondition    := asn_true;
+    {| sep_contract_logic_variables := ["code" :: ty_int; "instr" :: ty_ast];
+       sep_contract_localstore      := [term_var "code"];
+       sep_contract_precondition    := asn_chunk (chunk_user encodes_instr [term_var "code"; term_var "instr"]);
        sep_contract_result          := "result_decode";
-       sep_contract_postcondition   := asn_true;
+       sep_contract_postcondition   := term_var "result_decode" = term_var "instr";
     |}.
 
   Definition CEnvEx : SepContractEnvEx :=
@@ -348,6 +387,11 @@ Module RiscvPmpSpecVerif.
   Lemma valid_execute_wX : ValidContract wX.
   Proof. reflexivity. Qed.
 
+  Lemma valid_execute_fetch : ValidContract fetch.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_execute_tick_pc : ValidContract tick_pc.
+  Proof. reflexivity. Qed.
 
   Lemma defined_contracts_valid : forall {Δ τ} (f : Fun Δ τ),
       match CEnv f with
@@ -355,8 +399,8 @@ Module RiscvPmpSpecVerif.
       | None => True
       end.
   Proof.
-    destruct f; now cbv.
-  Qed.
+    destruct f; try now cbv.
+  Admitted.
 
 End RiscvPmpSpecVerif.
 
@@ -522,6 +566,7 @@ Module BlockVerificationDerived.
   Definition pure {A} : ⊢ A -> M A := SMut.pure.
   Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SMut.bind.
   Definition angelic {σ} : ⊢ M (STerm σ) := @SMut.angelic [] None σ.
+  Definition demonic {σ} : ⊢ M (STerm σ) := @SMut.demonic [] None σ.
   Definition assert : ⊢ Formula -> M Unit := SMut.assert_formula.
   Definition assume : ⊢ Formula -> M Unit := SMut.assume_formula.
 
@@ -550,6 +595,22 @@ Module BlockVerificationDerived.
       _ ∣ msg <- @exec_instruction' i _ ;;
       assert (formula_eq msg (term_val ty_retired RETIRE_SUCCESS)).
 
+  Definition exec_instruction2 (i : AST) : ⊢ M Unit :=
+    let inline_fuel := 3%nat in
+    fun _ =>
+      ω1 ∣ a <- @demonic _ _ ;;
+      ω2 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg pc a))) ;;
+      ω3 ∣ code <- @demonic _ _ ;;
+      ω4 ∣ _ <- T (produce (asn_chunk (chunk_user ptsto [persist__term a (ω2 ∘ ω3); code]))) ;;
+      ω5 ∣ _ <- T (produce (asn_chunk (chunk_user encodes_instr [ persist__term code ω4 ; term_val ty_ast i]))) ;;
+      ω6 ∣ an <- @demonic _ _ ;;
+      ω7 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg nextpc an))) ;;
+      ω8 ∣ _ <- exec default_config inline_fuel (FunDef step) ;;
+      ω9 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg pc (term_binop binop_plus (persist__term a (ω2 ∘ ω3 ∘ ω4 ∘ ω5 ∘ ω6 ∘ ω7 ∘ ω8)) (term_val ty_exc_code 4))))) ;;
+      ω10 ∣ _ <- T (consume (asn_chunk (chunk_user ptsto [persist__term a (ω2 ∘ ω3 ∘ ω4 ∘ ω5 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9); persist__term code (ω4 ∘ ω5 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9)]))) ;;
+      ω11 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc (term_binop binop_plus (persist__term a (ω2 ∘ ω3 ∘ ω4 ∘ ω5 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9 ∘ ω10)) (term_val ty_exc_code 4))))) ;;
+      pure tt.
+
   (* Ideally, a block should be a list of non-branching
      instruction plus one final branching instruction *)
   Fixpoint exec_block (b : list AST) : ⊢ M Unit :=
@@ -557,7 +618,7 @@ Module BlockVerificationDerived.
       match b with
       | nil       => pure tt
       | cons i b' =>
-        _ ∣ _ <- @exec_instruction i _ ;;
+        _ ∣ _ <- @exec_instruction2 i _ ;;
         @exec_block b' _
       end.
 
@@ -619,7 +680,7 @@ Module BlockVerificationDerived.
     End Contract.
 
     Time Example vc1 : 𝕊 ε :=
-      Eval cbv in
+      Eval compute in
       let vc1 := BlockVerificationDerived.VC pre1 block1 post1 in
       let vc2 := Postprocessing.prune vc1 in
       let vc3 := Postprocessing.solve_evars vc2 in
@@ -639,9 +700,8 @@ Module BlockVerificationDerived.
 
     Lemma sat_vc : SymProp.safe vc1 env.nil.
     Proof.
-      unfold vc1.
-      repeat constructor;
-        cbn; lia.
+      cbn.
+      repeat constructor; lia.
     Qed.
 
   End Example.
@@ -786,7 +846,7 @@ Module BlockVerificationDerivedSem.
       eapply symbolic_sound.
       eapply SMut.validcontract_reflect_sound.
       eapply RiscvPmpSpecVerif.valid_execute_wX.
-  Qed.
+  Admitted.
 
   Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
   Proof.

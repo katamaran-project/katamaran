@@ -111,6 +111,9 @@ Module RiscvNotations.
   Notation "'csrpr'"        := "csrpr" : string_scope.
 End RiscvNotations.
 
+(* We postulate a pure decode function and assume that that's what the decode primitive implements. *)
+Axiom pure_decode : Z -> string + AST.
+
 Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Section FunDeclKit.
@@ -900,9 +903,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       (γ' , μ' , res) = (γ , μ , inr (fun_read_ram μ addr));
     ForeignCall write_ram (env.snoc (env.snoc env.nil _ addr) _ data) res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , fun_write_ram μ addr data , inr 1%Z);
-    ForeignCall decode (env.snoc env.nil _ bv) res γ γ' μ μ' :=
-      exists res' : Val (ty_sum ty_string ty_ast),
-        (γ' , μ' , res) = (γ , μ , res').
+    ForeignCall decode (env.snoc env.nil _ code) res γ γ' μ μ' :=
+        (γ' , μ' , res) = (γ , μ , pure_decode code).
 
   Import bv.notations.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
@@ -912,8 +914,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args.
-      exists γ, μ, (inr (RTYPE [bv 0] [bv 0] [bv 0] RISCV_ADD)).
-      eexists. reflexivity.
+      exists γ, μ. eexists. reflexivity.
   Qed.
   End ForeignKit.
 
