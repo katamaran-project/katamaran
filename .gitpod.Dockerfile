@@ -16,7 +16,7 @@ RUN sudo add-apt-repository -y ppa:avsm/ppa \
 # Install common packages
 ## Use bare init to work around https://github.com/ocaml/opam/issues/4838
 RUN set -x \
-&& opam init --auto-setup --yes --disable-sandboxing --bare \
+&& opam init --auto-setup --yes --disable-sandboxing --bare --dot-profile=~/.bashrc \
 && opam switch -vyj$(nproc) create 4.13.1 --package=ocaml-variants.4.13.1+options,ocaml-option-flambda \
 && opam repo add --all-switches --set-default coq-released https://coq.inria.fr/opam/released \
 && opam install -vyj$(nproc) dune num ocamlfind zarith conf-findutils conf-gmp opam-depext \
