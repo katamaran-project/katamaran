@@ -366,6 +366,21 @@ Module ctx.
       - subst. f_equal. assumption.
     Qed.
 
+    Section All.
+
+      Inductive All (P : B -> Type) : Ctx B -> Type :=
+      | all_nil : All P nil
+      | all_snoc {Γ b} : @All P Γ -> P b -> All P (snoc Γ b).
+
+      Definition all_intro {P} (HP : forall b, P b) : forall Γ, All P Γ :=
+        fix all_intro Γ :=
+          match Γ with
+          | nil      => all_nil P
+          | snoc Γ b => all_snoc (all_intro Γ) (HP b)
+          end.
+
+    End All.
+
     Fixpoint remove (Γ : Ctx B) {b : B} : In b Γ -> Ctx B :=
       match Γ with
       | nil =>

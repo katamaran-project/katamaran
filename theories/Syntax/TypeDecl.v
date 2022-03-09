@@ -138,6 +138,7 @@ Module Type TypeCodeMixin (Import TK : TypeDeclKit).
   Derive NoConfusion for Ty.
 
   Section Ty_rect.
+    Local Unset Implicit Arguments.
     Variable P  : Ty -> Type.
 
     Hypothesis (P_int    : P ty_int).
@@ -150,7 +151,7 @@ Module Type TypeCodeMixin (Import TK : TypeDeclKit).
     Hypothesis (P_unit   : P ty_unit).
     Hypothesis (P_enum   : forall E, P (ty_enum E)).
     Hypothesis (P_bvec   : forall n, P (ty_bvec n)).
-    Hypothesis (P_tuple  : forall σs (IH : forall σ, ctx.In σ σs -> P σ), P (ty_tuple σs)).
+    Hypothesis (P_tuple  : forall σs (IH : ctx.All P σs), P (ty_tuple σs)).
     Hypothesis (P_union  : forall U, P (ty_union U)).
     Hypothesis (P_record : forall R, P (ty_record R)).
 
@@ -166,10 +167,7 @@ Module Type TypeCodeMixin (Import TK : TypeDeclKit).
       | ty_unit     => ltac:(apply P_unit; auto)
       | ty_enum E   => ltac:(apply P_enum; auto)
       | ty_bvec n   => ltac:(apply P_bvec; auto)
-      | ty_tuple σs => ltac:(apply P_tuple;
-                             induction σs; cbn; intros ? xIn;
-                             [ destruct (ctx.nilView xIn) | destruct (ctx.snocView xIn) ];
-                             [ apply Ty_rect | apply IHσs; auto ])
+      | ty_tuple σs => ltac:(apply P_tuple, ctx.all_intro, Ty_rect)
       | ty_union U  => ltac:(apply P_union; auto)
       | ty_record R => ltac:(apply P_record; auto)
       end.
@@ -268,13 +266,9 @@ Module Type TypeDenoteMixin (Import TK : TypeDeclKit) (Import TC : TypeCodeMixin
     - destruct x. destruct y...
     - destruct (eq_dec x y)...
     - apply bv.eqb_spec.
-    - induction σs; cbn in *.
-      + constructor. now destruct x, y.
-      + destruct x as [xs x]; destruct y as [ys y].
-        assert (forall σ : Ty, σ ∈ σs -> forall x y : Val σ, reflect (x = y) (Val_eqb σ x y)) as IH'
-            by (intros ? ?; now apply IH, ctx.in_succ).
-        specialize (IH _ ctx.in_zero x y).
-        specialize (IHσs IH' xs ys)...
+    - induction IH...
+      + now destruct x, y.
+      + destruct x as [xs x], y as [ys y]; destruct (p x y)...
     - destruct (eq_dec x y)...
     - destruct (eq_dec x y)...
   Qed.
