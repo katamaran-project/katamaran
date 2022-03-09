@@ -193,11 +193,6 @@ Section ContractDefKit.
     asn_and_regs
       (fun r => ∃ "w", r ↦ term_var "w").
 
-  Definition asn_pmp_ptsto {Σ} : Assertion Σ :=
-    let ptsto := fun {T} (r : Reg T) => ∃ "w", r ↦ term_var "w" in
-    ptsto pmp0cfg ∗ ptsto pmpaddr0 ∗
-    ptsto pmp1cfg ∗ ptsto pmpaddr1.
-
   Local Notation "e1 ',ₜ' e2" := (term_binop binop_pair e1 e2) (at level 100).
 
   (* TODO: abstract away the concrete type, look into unions for that *)
@@ -778,23 +773,26 @@ Section ContractDefKit.
        lemma_postcondition   := asn_gprs;
     |}.
 
-  (* TODO: specify that the ptsto regs should be in ?entries (same for close) *)
-  (* for open: part of postcond *)
-  (* for close: part of precond *)
-  (* either for each pair: (cfg0, addr0) ∈ ?entries ... *)
-  (* OR eq: ?entries = [(cfg0, addr0), ...] *)
   Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
-    {| lemma_logic_variables := ctx.nil;
+    {| lemma_logic_variables := ["entries" :: ty_list pmp_entry_cfg];
        lemma_patterns        := env.nil;
-       lemma_precondition    := ∃ "entries", asn_pmp_entries (term_var "entries");
-       lemma_postcondition   := asn_pmp_ptsto;
+       lemma_precondition    := asn_pmp_entries (term_var "entries");
+       lemma_postcondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
+         (pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
+          pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+          term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
+                                          (term_var "cfg1" ,ₜ term_var "addr1")]);
     |}.
 
   Definition lemma_close_pmp_entries : SepLemma close_pmp_entries :=
-    {| lemma_logic_variables := ctx.nil;
+    {| lemma_logic_variables := ["entries" :: ty_list pmp_entry_cfg];
        lemma_patterns        := env.nil;
-       lemma_precondition    := asn_pmp_ptsto;
-       lemma_postcondition   := ∃ "entries", asn_pmp_entries (term_var "entries");
+       lemma_precondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
+         (pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
+          pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+          term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
+                                          (term_var "cfg1" ,ₜ term_var "addr1")]);
+       lemma_postcondition   := asn_pmp_entries (term_var "entries");
     |}.
 
   End Contracts.

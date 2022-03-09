@@ -298,12 +298,16 @@ Module RiscvPmpModel.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpIrisHeapKit.interp_pmp_entries.
-      iIntros "[%v H]".
-      destruct v; try done.
-      destruct v; try done.
-      destruct p; try done.
-      destruct p as [cfg0 addr0]; destruct p0 as [cfg1 addr1].
-      destruct v; try done.
+      iIntros "H".
+      destruct entries; try done.
+      destruct v as [cfg0 addr0].
+      destruct entries; try done.
+      destruct v as [cfg1 addr1].
+      destruct entries; try done.
+      iExists cfg0.
+      iExists addr0.
+      iExists cfg1.
+      iExists addr1.
       iDestruct "H" as "[Hcfg0 [Haddr0 [Hcfg1 Haddr1]]]".
       iSplitL "Hcfg0"; eauto.
       iSplitL "Haddr0"; eauto.
@@ -315,8 +319,15 @@ Module RiscvPmpModel.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpIrisHeapKit.interp_pmp_entries.
-      iIntros "[[%cfg0 Hcfg0] [[%addr0 Haddr0] [[%cfg1 Hcfg1] [%addr1 Haddr1]]]]".
-      iExists [(cfg0, addr0); (cfg1, addr1)]; iAccu.
+      iIntros "[%cfg0 [%addr0 [%cfg1 [%addr1 [Hcfg0 [Haddr0 [Hcfg1 [Haddr1 %H]]]]]]]]".
+      destruct H as [H _].
+      destruct entries; try discriminate.
+      destruct v as [cfg0' addr0'].
+      destruct entries; try discriminate.
+      destruct v as [cfg1' addr1'].
+      destruct entries; try discriminate.
+      inversion H; subst.
+      iAccu.
     Qed.
   End Lemmas.
 
