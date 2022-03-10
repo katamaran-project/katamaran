@@ -137,7 +137,7 @@ Inductive Enums : Set :=
 .
 
 (** Unions **)
-Definition RegIdx := bv 2.
+Definition RegIdx := bv 3.
 Bind Scope bv_scope with RegIdx.
 
 Inductive AST : Set :=
@@ -493,7 +493,7 @@ Notation "x ∷ t" := (MkB x%string t) : ctx_scope.
 
 Notation ty_xlenbits         := (ty_int).
 Notation ty_word             := (ty_int).
-Notation ty_regno            := (ty_bvec 2).
+Notation ty_regno            := (ty_bvec 3).
 Notation ty_privilege        := (ty_enum privilege).
 Notation ty_csridx           := (ty_enum csridx).
 Notation ty_pmpcfgidx        := (ty_enum pmpcfgidx).
@@ -719,6 +719,10 @@ Section RegDeclKit.
   | x1            : Reg ty_xlenbits
   | x2            : Reg ty_xlenbits
   | x3            : Reg ty_xlenbits
+  | x4            : Reg ty_xlenbits
+  | x5            : Reg ty_xlenbits
+  | x6            : Reg ty_xlenbits
+  | x7            : Reg ty_xlenbits
   | pmp0cfg       : Reg ty_pmpcfg_ent
   | pmp1cfg       : Reg ty_pmpcfg_ent
   | pmpaddr0      : Reg ty_xlenbits
@@ -728,10 +732,14 @@ Section RegDeclKit.
   Import bv.notations.
   Definition reg_convert (idx : RegIdx) : option (Reg ty_xlenbits) :=
     match bv.to_bitstring idx with
-    | 00 => None
-    | 01 => Some x1
-    | 10 => Some x2
-    | 11 => Some x3
+    | 000 => None
+    | 001 => Some x1
+    | 010 => Some x2
+    | 011 => Some x3
+    | 100 => Some x4
+    | 101 => Some x5
+    | 110 => Some x6
+    | 111 => Some x7
     end.
 
   Section TransparentObligations.
@@ -758,6 +766,10 @@ Section RegDeclKit.
          existT _ x1;
          existT _ x2;
          existT _ x3;
+         existT _ x4;
+         existT _ x5;
+         existT _ x6;
+         existT _ x7;
          existT _ pmp0cfg;
          existT _ pmp1cfg;
          existT _ pmpaddr0;

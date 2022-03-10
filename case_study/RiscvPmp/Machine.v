@@ -304,22 +304,30 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Import Bitvector.bv.notations.
   Definition fun_rX : Stm [rs ∶ ty_regno] ty_xlenbits :=
     use lemma open_gprs ;;
-    let: v := match: rs in bvec 2 with
-              | 00 => z_exp 0
-              | 01 => stm_read_register x1
-              | 10 => stm_read_register x2
-              | 11 => stm_read_register x3
+    let: v := match: rs in bvec 3 with
+              | 000 => z_exp 0
+              | 001 => stm_read_register x1
+              | 010 => stm_read_register x2
+              | 011 => stm_read_register x3
+              | 100 => stm_read_register x4
+              | 101 => stm_read_register x5
+              | 110 => stm_read_register x6
+              | 111 => stm_read_register x7
               end in
     use lemma close_gprs ;;
     v.
 
   Definition fun_wX : Stm [rd ∶ ty_regno; v ∶ ty_xlenbits] ty_unit :=
     use lemma open_gprs ;;
-    match: rd in bvec 2 with
-    | 00 => z_exp 0
-    | 01 => stm_write_register x1 v
-    | 10 => stm_write_register x2 v
-    | 11 => stm_write_register x3 v
+    match: rd in bvec 3 with
+    | 000 => z_exp 0
+    | 001 => stm_write_register x1 v
+    | 010 => stm_write_register x2 v
+    | 011 => stm_write_register x3 v
+    | 100 => stm_write_register x4 v
+    | 101 => stm_write_register x5 v
+    | 110 => stm_write_register x6 v
+    | 111 => stm_write_register x7 v
     end ;;
     use lemma close_gprs.
 

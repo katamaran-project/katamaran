@@ -187,7 +187,7 @@ Section ContractDefKit.
                            asn_default)).
 
   Definition asn_and_regs {Σ} (f : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
-    f x1 ∗ f x2 ∗ f x3.
+    f x1 ∗ f x2 ∗ f x3 ∗ f x4 ∗ f x5 ∗ f x6 ∗ f x7.
 
   Definition asn_regs_ptsto {Σ} : Assertion Σ :=
     asn_and_regs

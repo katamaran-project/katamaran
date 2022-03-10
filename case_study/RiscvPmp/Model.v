@@ -138,8 +138,8 @@ Module RiscvPmpModel.
 
       Import Contracts.
 
-      Definition reg_file : gset (bv 2) :=
-        list_to_set (finite.enum (bv 2)).
+      Definition reg_file : gset (bv 3) :=
+        list_to_set (finite.enum (bv 3)).
 
       Definition interp_ptsreg `{sailRegGS Σ} (r : RegIdx) (v : Z) : iProp Σ :=
         match reg_convert r with
@@ -280,7 +280,7 @@ Module RiscvPmpModel.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.reg_file.
       rewrite big_sepS_list_to_set; [|apply finite.NoDup_enum]; cbn.
-      iIntros "[_ [Hx1 [Hx2 [Hx3 _]]]]". iFrame.
+      iIntros "[_ [Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 [Hx7 _]]]]]]]]". iFrame.
     Qed.
 
     Lemma close_gprs_sound :
@@ -288,7 +288,7 @@ Module RiscvPmpModel.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.reg_file.
-      iIntros "[Hx1 [Hx2 Hx3]]".
+      iIntros "[Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 Hx7]]]]]]".
       iApply big_sepS_list_to_set; [apply finite.NoDup_enum|].
       cbn; iFrame. eauto using 0%Z.
     Qed.
