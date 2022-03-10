@@ -75,6 +75,7 @@ Inductive Predicate : Set :=
 | pmp_entries
 | ptsto
 | encodes_instr
+| ptstomem
 (* | reg_ptsto *)
 .
 
@@ -112,6 +113,7 @@ Section PredicateKit.
     | pmp_entries => [ty_list pmp_entry_cfg]
     | ptsto       => [ty_xlenbits; ty_xlenbits]
     | encodes_instr => [ty_int; ty_ast]
+    | ptstomem    => [ty_xlenbits; ty_int; ty_list ty_word]
     (* | reg_ptsto   => [ty_regno; ty_xlenbits] *)
     end.
 
@@ -121,6 +123,7 @@ Section PredicateKit.
       | pmp_entries => false
       | ptsto       => false
       | encodes_instr       => true
+      | ptstomem    => false
       (* | reg_ptsto   => false *)
       end
     }.
@@ -132,6 +135,7 @@ Section PredicateKit.
     | ptsto => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
     | encodes_instr => Some (MkPrecise [ty_int] [ty_ast] eq_refl)
     (* | reg_ptsto => Some (MkPrecise [ty_regno] [ty_word] eq_refl) *)
+    | ptstomem    => Some (MkPrecise [ty_xlenbits; ty_int] [ty_list ty_word] eq_refl)
     | _ => None
     end.
 
@@ -559,7 +563,17 @@ Module BlockVerification.
     Import ListNotations.
     Open Scope hex_Z_scope.
 
-    (* ASSEMBLY SOURCE *)
+    (* C SOURCE *)
+    (* #include <stdlib.h> *)
+    (* void mcpy(char* dst, char* src, size_t size) { *)
+    (*     for (; size != 0; --size) { *)
+    (*         *dst = *src; *)
+    (*         ++dst; *)
+    (*         ++src; *)
+    (*     } *)
+    (* } *)
+
+    (* ASSEMBLY SOURCE (modified) *)
     (* mcpy: *)
     (*   beq a2,zero,.L2 *)
     (* .L1: *)
@@ -591,11 +605,16 @@ Module BlockVerification.
     Definition a1 : RegIdx := [bv 3].
     Definition a2 : RegIdx := [bv 4].
     Definition a3 : RegIdx := [bv 5].
+    Definition rra := x1.
+    Definition ra0 := x2.
+    Definition ra1 := x3.
+    Definition ra2 := x4.
+    Definition ra3 := x5.
 
     Example memcpy : list AST :=
       [ BEQ a2 zero 0x1c
       ; LOAD 0 a1 a3
-      ; STORE 0 a3 a1
+      ; STORE 0 a3 a0
       ; ADDI a0 a0 1
       ; ADDI a1 a1 1
       ; ADDI a2 a2 (-1)
@@ -603,6 +622,42 @@ Module BlockVerification.
       ; RET
       ].
 
+    Let Σ1 : LCtx :=
+          ["dst" :: ty_xlenbits; "src" :: ty_xlenbits; "size" :: ty_int;
+           "srcval" :: ty_list ty_word; "ret" :: ty_xlenbits].
+
+    Local Notation "p '∗' q" := (asn_sep p q).
+    Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
+    Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
+    Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+
+    Example memcpy_pre : Assertion Σ1 :=
+      pc  ↦ term_val ty_xlenbits 0%Z ∗
+      rra ↦ term_var "ret" ∗
+      ra0 ↦ term_var "dst" ∗
+      ra1 ↦ term_var "src" ∗
+      ra2 ↦ term_var "size" ∗
+      term_var "src" ↦[ term_var "size" ] term_var "srcval" ∗
+      (∃ "dstval", term_var "dst" ↦[ term_var "size" ] term_var "dstval").
+
+    Example memcpy_post : Assertion Σ1 :=
+      pc ↦ term_var "ret" ∗
+      rra ↦ term_var "ret" ∗
+      (∃ "v", ra0 ↦ term_var "v") ∗
+      (∃ "v", ra1 ↦ term_var "v") ∗
+      (∃ "v", ra2 ↦ term_var "v") ∗
+      term_var "src" ↦[ term_var "size" ] term_var "srcval" ∗
+      term_var "dst" ↦[ term_var "size" ] term_var "srcval".
+
+    Example memcpy_loop : Assertion Σ1 :=
+      pc  ↦ term_val ty_xlenbits 0%Z ∗
+      rra ↦ term_var "ret" ∗
+      ra0 ↦ term_var "dst" ∗
+      ra1 ↦ term_var "src" ∗
+      ra2 ↦ term_var "size" ∗
+      asn_formula (formula_neq (term_var "size") (term_val ty_int 0)) ∗
+      term_var "src" ↦[ term_var "size" ] term_var "srcval" ∗
+      (∃ "dstval", term_var "dst" ↦[ term_var "size" ] term_var "dstval").
 
   End MemCopy.
 
@@ -852,7 +907,9 @@ Module BlockVerificationDerivedSem.
       Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
         match p return Env Val (𝑯_Ty p) -> iProp Σ with
         | ptsto           => fun _  => True%I (* TODO: interp_ptst *)
-        | pmp_entries     => fun ts => True%I (* interp_pmp_entries (env.head ts) *)
+        | BlockVerification.pmp_entries     => fun ts => True%I (* interp_pmp_entries (env.head ts) *)
+        | encodes_instr   => fun _ => True%I
+        | ptstomem        => fun _ => True%I
         end.
 
     Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
