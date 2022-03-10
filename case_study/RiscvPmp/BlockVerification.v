@@ -418,6 +418,7 @@ Module BlockVerification.
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
   Import ModalNotations.
+  Import bv.notations.
 
   Definition M : TYPE -> TYPE := SMut [] [].
 
@@ -491,6 +492,16 @@ Module BlockVerification.
     RTYPE rs2 rs1 rd RISCV_ADD.
   Definition SUB (rd rs1 rs2 : RegIdx) : AST :=
     RTYPE rs2 rs1 rd RISCV_SUB.
+  Definition BEQ (rs1 rs2 : RegIdx) (imm : Z) : AST :=
+    BTYPE imm rs2 rs1 RISCV_BEQ.
+  Definition BNE (rs1 rs2 : RegIdx) (imm : Z) : AST :=
+    BTYPE imm rs2 rs1 RISCV_BNE.
+  Definition ADDI (rd rs1 : RegIdx) (imm : Z) : AST :=
+    ITYPE imm rs1 rd RISCV_ADDI.
+  Definition JALR (rd rs1 : RegIdx) (imm : Z) : AST :=
+    RISCV_JALR imm rs1 rd.
+  Definition RET : AST :=
+    JALR [bv 0] [bv 1] 0%Z.
 
   Definition exec_double {Σ : World}
     (req : Assertion Σ) (b : list AST) : M Unit Σ :=
@@ -517,7 +528,6 @@ Module BlockVerification.
   Section Example.
 
     Import ListNotations.
-    Import bv.notations.
     Notation "p '∗' q" := (asn_sep p q).
 
     Example block1 : list AST :=
@@ -543,6 +553,58 @@ Module BlockVerification.
     Eval compute in VC1.
 
   End Example.
+
+  Section MemCopy.
+
+    Import ListNotations.
+    Open Scope hex_Z_scope.
+
+    (* ASSEMBLY SOURCE *)
+    (* mcpy: *)
+    (*   beq a2,zero,.L2 *)
+    (* .L1: *)
+    (*   lb a3,0(a1) *)
+    (*   sb a3,0(a0) *)
+    (*   addi a0,a0,1 *)
+    (*   addi a1,a1,1 *)
+    (*   addi a2,a2,-1 *)
+    (*   bne a2,zero,.L1 *)
+    (* .L2: *)
+    (*   ret *)
+
+    (* DISASSEMBLY *)
+    (* 0000000000000000 <mcpy>: *)
+    (*    0:	00060e63          	beqz	a2,1c <.L2> *)
+    (* 0000000000000004 <.L1>: *)
+    (*    4:	00058683          	lb	a3,0(a1) *)
+    (*    8:	00d50023          	sb	a3,0(a0) *)
+    (*    c:	00150513          	addi	a0,a0,1 *)
+    (*   10:	00158593          	addi	a1,a1,1 *)
+    (*   14:	fff60613          	addi	a2,a2,-1 *)
+    (*   18:	fe0616e3          	bnez	a2,4 <.L1> *)
+    (* 000000000000001c <.L2>: *)
+    (*   1c:	00008067          	ret *)
+
+    Definition zero : RegIdx := [bv 0].
+    Definition ra : RegIdx := [bv 1].
+    Definition a0 : RegIdx := [bv 2].
+    Definition a1 : RegIdx := [bv 3].
+    Definition a2 : RegIdx := [bv 4].
+    Definition a3 : RegIdx := [bv 5].
+
+    Example memcpy : list AST :=
+      [ BEQ a2 zero 0x1c
+      ; LOAD 0 a1 a3
+      ; STORE 0 a3 a1
+      ; ADDI a0 a0 1
+      ; ADDI a1 a1 1
+      ; ADDI a2 a2 (-1)
+      ; BNE a2 zero (-0x14)
+      ; RET
+      ].
+
+
+  End MemCopy.
 
 End BlockVerification.
 
@@ -859,6 +921,7 @@ Module BlockVerificationDerivedSem.
   Proof.
     unfold exec_instruction, exec_instruction', assert.
     iIntros (safe_exec) "".
+    rewrite <-SymProp.safe_debug_safe in safe_exec.
     rewrite <-SymProp.wsafe_safe in safe_exec.
     iApply (sound_stm foreignSem lemSem).
     - refine (exec_sound 3 _ _ _ []%list _).
@@ -868,10 +931,10 @@ Module BlockVerificationDerivedSem.
         intros ret δ h [-> _]; cbn.
         iIntros "_". iPureIntro. now split.
       + refine (approx_exec _ _ _ _ _ safe_exec); cbn; try trivial; try reflexivity.
-        intros w ω ι _ Hpc tr _ -> δ _ -> h _ -> hyp.
-        refine (approx_assert_formula _ _ _ (a := fun _ _ _ => True) _ _ _ hyp);
+        intros w ω ι _ Hpc tr ? -> δ δ' Hδ h h' Hh.
+        refine (approx_assert_formula _ _ _ (a := fun _ _ _ => True) _ _ _);
           try assumption; try reflexivity.
-        now intros w2 ω2 ι2 -> Hpc2 v x -> y.
+        constructor.
     - do 2 iModIntro.
       iApply contractsSound.
   Qed.
