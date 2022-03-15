@@ -188,10 +188,12 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   .
 
   Inductive Lem : PCtx -> Set :=
-  | open_gprs         : Lem ctx.nil
-  | close_gprs        : Lem ctx.nil
-  | open_pmp_entries  : Lem ctx.nil
-  | close_pmp_entries : Lem ctx.nil
+  | open_gprs             : Lem ctx.nil
+  | close_gprs            : Lem ctx.nil
+  | open_pmp_entries      : Lem ctx.nil
+  | close_pmp_entries     : Lem ctx.nil
+  | extract_pmp_ptsto     : Lem [paddr ∶ ty_xlenbits]
+  | gen_addr_matching_cfg : Lem [paddr :: ty_xlenbits; "cfgidx" :: ty_pmpcfgidx; cfg :: ty_pmpcfg_ent; "prev_addr" :: ty_xlenbits; addr :: ty_xlenbits]
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -489,9 +491,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         if: hi < lo
         then exp_val ty_pmpaddrmatch PMP_NoMatch
         else
-          if: (addr < lo) || (hi < addr) (* NOTE: this only makes sense when using a "width" (see Sail impl), having this without the width means the PartialMatch case will never occur *)
+          if: (addr < lo) || (hi <= addr) (* NOTE: this only makes sense when using a "width" (see Sail impl), having this without the width means the PartialMatch case will never occur *)
           then exp_val ty_pmpaddrmatch PMP_NoMatch
-          else if: (lo <= addr) && (addr <= hi)
+          else if: (lo <= addr) && (addr < hi) (* NOTE: small difference with actual model due to lack of width, but more correct with respect to the manual (y matches TOR if pmpaddrᵢ₋₁ <= y < pmpaddrᵢ) *)
                then exp_val ty_pmpaddrmatch PMP_Match
                else exp_val ty_pmpaddrmatch PMP_PartialMatch
       end

@@ -518,6 +518,7 @@ Notation ty_fetch_result     := (ty_union fetch_result).
 Notation ty_ctl_result       := (ty_union ctl_result).
 Notation ty_pmpcfg_ent       := (ty_record rpmpcfg_ent).
 Notation ty_mstatus          := (ty_record rmstatus).
+Notation ty_pmpentry         := (ty_prod ty_pmpcfg_ent ty_xlenbits).
 
 Section TypeDefKit.
 

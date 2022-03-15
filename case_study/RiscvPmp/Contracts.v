@@ -55,6 +55,10 @@ Open Scope ctx_scope.
 Open Scope Z_scope.
 
 Inductive PurePredicate : Set :=
+| within_cfg
+| not_within_cfg
+| prev_addr
+| in_entries
 .
 
 Inductive Predicate : Set :=
@@ -83,22 +87,89 @@ Section PredicateKit.
   Definition 𝑷 := PurePredicate.
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
     match p with
+    | within_cfg     => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
+    | not_within_cfg => [ty_xlenbits; ty_list ty_pmpentry]
+    | prev_addr      => [ty_pmpcfgidx; ty_list ty_pmpentry; ty_xlenbits]
+    | in_entries     => [ty_pmpcfgidx; ty_pmpentry; ty_list ty_pmpentry]
     end.
+
+  Equations PmpAddrMatchType_eqb (a1 a2 : PmpAddrMatchType) : bool :=
+  | OFF | OFF := true;
+  | TOR | TOR := true;
+  | _   | _   := false.
+
+  Definition pmpcfg_ent_eqb (c1 c2 : Pmpcfg_ent) : bool :=
+    match c1, c2 with
+    | {| L := L1; A := A1; X := X1; W := W1; R := R1 |},
+      {| L := L2; A := A2; X := X2; W := W2; R := R2 |} =>
+        (Bool.eqb L1 L2) && (PmpAddrMatchType_eqb A1 A2) && (Bool.eqb X1 X2)
+        && (Bool.eqb W1 W2) && (Bool.eqb R1 R2)
+    end.
+
+  Definition decide_in_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty_list ty_pmpentry)) : bool :=
+    match es with
+    | cfg0 :: cfg1 :: [] =>
+        let (c, a) := e in
+        let (c', a') := match idx with
+                        | PMP0CFG => cfg0
+                        | PMP1CFG => cfg1
+                        end in
+        (pmpcfg_ent_eqb c c' && (a =? a')%Z)%bool
+    | _ => false
+    end%list.
+
+  Definition In_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty_list ty_pmpentry)) : Prop :=
+    decide_in_entries idx e es = true.
+
+  Definition decide_prev_addr (cfg : Val ty_pmpcfgidx) (entries : Val (ty_list ty_pmpentry)) (prev : Val ty_xlenbits) : bool :=
+    match entries with
+    | (c0 , a0) :: (c1 , a1) :: [] =>
+        match cfg with
+        | PMP0CFG => prev =? 0
+        | PMP1CFG => prev =? a0
+        end
+    | _ => false
+    end%list.
+
+  Definition Prev_addr (cfg : Val ty_pmpcfgidx) (entries : Val (ty_list ty_pmpentry)) (prev : Val ty_xlenbits) : Prop :=
+    decide_prev_addr cfg entries prev = true.
+
+  Definition decide_within_cfg (paddr : Val ty_xlenbits) (cfg : Val ty_pmpcfg_ent) (prev_addr addr : Val ty_xlenbits) : bool :=
+    match A cfg with
+    | OFF => false
+    | TOR => (prev_addr <=? paddr)%Z && (paddr <? addr)%Z
+    end.
+
+  Definition Within_cfg (paddr : Val ty_xlenbits) (cfg : Val ty_pmpcfg_ent) (prev_addr addr : Val ty_xlenbits) : Prop :=
+    decide_within_cfg paddr cfg prev_addr addr = true.
+
+  Definition decide_not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) : bool :=
+    match entries with
+    | (c0 , a0) :: (c1 , a1) :: [] =>
+        (((PmpAddrMatchType_eqb (A c0) OFF) && (PmpAddrMatchType_eqb (A c1) OFF))
+        || ((0 <=? paddr)%Z && (a0 <=? paddr)%Z && (a1 <=? paddr)%Z))%bool
+    | _ => false
+    end%list.
+
+  Definition Not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) : Prop :=
+    decide_not_within_cfg paddr entries = true.
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
+    | within_cfg     => Within_cfg
+    | not_within_cfg => Not_within_cfg
+    | prev_addr      => Prev_addr
+    | in_entries     => In_entries
     end.
 
   Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
 
-  Definition pmp_entry_cfg := ty_prod ty_pmpcfg_ent ty_xlenbits.
-
   Definition 𝑯 := Predicate.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | pmp_entries     => [ty_list pmp_entry_cfg]
-    | pmp_addr_access => [ty_list pmp_entry_cfg; ty_privilege]
-    | gprs            => ctx.nil
-    | ptsto           => [ty_xlenbits; ty_xlenbits]
+    | pmp_entries       => [ty_list ty_pmpentry]
+    | pmp_addr_access   => [ty_list ty_pmpentry; ty_privilege]
+    | gprs              => ctx.nil
+    | ptsto             => [ty_xlenbits; ty_xlenbits]
     end.
 
   Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
@@ -138,9 +209,12 @@ Section ContractDefKit.
   Local Notation "a ||ₜ b" := (term_binop binop_or a b) (at level 85).
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_pmp_entries l := (asn_chunk_angelic (chunk_user pmp_entries [l])).
-  Local Notation asn_pmp_addr_access l m := (asn_chunk (chunk_user pmp_addr_access [l; m])).
+  Local Notation asn_pmp_addr_access l m := (asn_chunk_angelic (chunk_user pmp_addr_access [l; m])).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
-
+  Local Notation asn_within_cfg a cfg prev_addr addr := (asn_formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
+  Local Notation asn_not_within_cfg a es := (asn_formula (formula_user not_within_cfg [a; es])).
+  Local Notation asn_prev_addr cfg es prev := (asn_formula (formula_user prev_addr [cfg; es; prev])).
+  Local Notation asn_in_entries idx e es := (asn_formula (formula_user in_entries [idx; e; es])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_int) : Term Σ ty_bool :=
     term_binop binop_eq e1 e2.
@@ -217,7 +291,7 @@ Section ContractDefKit.
     @post pmp_entries(ents) ∗ (mode(m) ∗ pc(i)) ∨ (mode(M) ∗ pc(h) ...)
     τ f(Δ...)*)
   Definition instr_exec_contract {τ Δ} : SepContract Δ τ :=
-    let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "i" :: ty_xlenbits; "entries" :: ty_list (ty_prod ty_pmpcfg_ent ty_xlenbits); "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits] in
+    let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "i" :: ty_xlenbits; "entries" :: ty_list ty_pmpentry; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits] in
     {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
        sep_contract_localstore      := create_localstore Δ Σ;
        sep_contract_precondition    :=
@@ -623,7 +697,7 @@ Section ContractDefKit.
   (* TODO: post: we should "close" the pmp_addr_access predicate again after
                  extracting a ptsto from it *)
   Definition sep_contract_pmp_mem_read : SepContractFun pmp_mem_read :=
-    {| sep_contract_logic_variables := [t :: ty_access_type; p :: ty_privilege; paddr :: ty_xlenbits; "entries" :: ty_list pmp_entry_cfg];
+    {| sep_contract_logic_variables := [t :: ty_access_type; p :: ty_privilege; paddr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var p; term_var paddr];
        sep_contract_precondition    :=
          asn_pmp_entries (term_var "entries")
@@ -633,7 +707,7 @@ Section ContractDefKit.
     |}.
 
   Definition sep_contract_pmpCheck : SepContractFun pmpCheck :=
-    {| sep_contract_logic_variables := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; "entries" :: ty_list pmp_entry_cfg];
+    {| sep_contract_logic_variables := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var addr; term_var acc; term_var priv];
        sep_contract_precondition    :=
          asn_pmp_entries (term_var "entries")
@@ -705,24 +779,31 @@ Section ContractDefKit.
               (asn_match_enum pmpaddrmatch (term_var "result_pmpMatchAddr")
                 (fun K => match K with
                           | PMP_NoMatch =>
-                              asn_bool (term_var hi <ₜ term_var lo) ∨ asn_bool (term_var addr <ₜ term_var lo ||ₜ term_var hi <ₜ term_var addr)
+                              asn_bool (term_var hi <ₜ term_var lo) ∨ asn_bool (term_var addr <ₜ term_var lo ||ₜ term_var hi <=ₜ term_var addr)
                           | PMP_PartialMatch => asn_bool
                                                   (term_not
-                                                     (term_var lo <=ₜ term_var addr &&ₜ term_var addr <=ₜ term_var hi))
-                          | PMP_Match => asn_formula (formula_bool (term_var lo <=ₜ term_var addr)) ∗ asn_formula (formula_bool (term_var addr <=ₜ term_var hi))
+                                                     (term_var lo <=ₜ term_var addr &&ₜ term_var addr <ₜ term_var hi))
+                          | PMP_Match => asn_formula (formula_bool (term_var lo <=ₜ term_var addr)) ∗ asn_formula (formula_bool (term_var addr <ₜ term_var hi))
                         end)))
               (term_var "result_pmpMatchAddr" = term_val ty_pmpaddrmatch PMP_NoMatch);
     |}.
 
   Definition sep_contract_pmpMatchEntry : SepContractFun pmpMatchEntry :=
-    let Σ : LCtx := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; ent :: ty_pmpcfg_ent; pmpaddr :: ty_xlenbits; prev_pmpaddr :: ty_xlenbits; L :: ty_bool; A :: ty_pmpaddrmatchtype; X :: ty_bool; W :: ty_bool; R :: ty_bool] in
+    let Σ : LCtx := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; ent :: ty_pmpcfg_ent; pmpaddr :: ty_xlenbits; prev_pmpaddr :: ty_xlenbits; L :: ty_bool; A :: ty_pmpaddrmatchtype; X :: ty_bool; W :: ty_bool; R :: ty_bool; "entries" :: ty_list ty_pmpentry] in
     let entry : Term Σ _ := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
     {| sep_contract_logic_variables := Σ;
        sep_contract_localstore      := [nenv term_var addr; term_var acc; term_var priv; entry; term_var pmpaddr; term_var prev_pmpaddr];
-       sep_contract_precondition    := asn_true;
+       sep_contract_precondition    := asn_true; (* TODO: add asn_matching_cfg "idx"? *)
        sep_contract_result          := "result_pmpMatchEntry";
        sep_contract_postcondition   :=
-         ∃ "result", term_var "result_pmpMatchEntry" = term_var "result";
+         asn_match_enum pmpmatch (term_var "result_pmpMatchEntry")
+                        (fun K => match K with
+                                  | PMP_Continue => asn_true
+                                  | PMP_Fail     => asn_true
+                                  | PMP_Success  =>
+                                      let entry := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
+                                      asn_within_cfg (term_var addr) entry (term_var prev_pmpaddr) (term_var pmpaddr)
+                                  end);
     |}.
 
   Definition sep_contract_pmpLocked : SepContractFun pmpLocked :=
@@ -774,7 +855,7 @@ Section ContractDefKit.
     |}.
 
   Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
-    {| lemma_logic_variables := ["entries" :: ty_list pmp_entry_cfg];
+    {| lemma_logic_variables := ["entries" :: ty_list ty_pmpentry];
        lemma_patterns        := env.nil;
        lemma_precondition    := asn_pmp_entries (term_var "entries");
        lemma_postcondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
@@ -785,7 +866,7 @@ Section ContractDefKit.
     |}.
 
   Definition lemma_close_pmp_entries : SepLemma close_pmp_entries :=
-    {| lemma_logic_variables := ["entries" :: ty_list pmp_entry_cfg];
+    {| lemma_logic_variables := ["entries" :: ty_list ty_pmpentry];
        lemma_patterns        := env.nil;
        lemma_precondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
          (pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
@@ -793,6 +874,36 @@ Section ContractDefKit.
           term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
                                           (term_var "cfg1" ,ₜ term_var "addr1")]);
        lemma_postcondition   := asn_pmp_entries (term_var "entries");
+    |}.
+
+  (* TODO: remove *)
+  Definition lemma_gen_addr_matching_cfg : SepLemma gen_addr_matching_cfg :=
+    {| lemma_logic_variables := [paddr :: ty_xlenbits; "cfgidx" :: ty_pmpcfgidx; cfg :: ty_pmpcfg_ent; "prev_addr" :: ty_xlenbits; addr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry];
+       lemma_patterns        := [term_var paddr; term_var "cfgidx"; term_var cfg; term_var "prev_addr"; term_var addr];
+       lemma_precondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
+          (term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
+                                           (term_var "cfg1" ,ₜ term_var "addr1")] ∗
+           asn_prev_addr (term_var "cfgidx") (term_var "entries") (term_var "prev_addr") ∗
+           asn_in_entries (term_var "cfgidx") (term_var cfg ,ₜ term_var addr) (term_var "entries") ∗
+           asn_within_cfg (term_var paddr) (term_var cfg) (term_var "prev_addr") (term_var addr));
+       (* lemma_postcondition   := asn_addr_matching_cfg (term_var paddr) (term_var "cfgidx") (term_var cfg) (term_var "prev_addr") (term_var addr); *)
+       lemma_postcondition   := asn_true;
+    |}.
+
+  Definition lemma_extract_pmp_ptsto : SepLemma extract_pmp_ptsto :=
+    {| lemma_logic_variables := [paddr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry; "cfgidx" :: ty_pmpcfgidx; cfg :: ty_pmpcfg_ent; addr :: ty_xlenbits; "prev_addr" :: ty_xlenbits; p :: ty_privilege];
+       lemma_patterns        := [term_var paddr];
+       lemma_precondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
+         (term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
+                                          (term_var "cfg1" ,ₜ term_var "addr1")] ∗
+          asn_pmp_addr_access (term_var "entries") (term_var p) ∗
+          ((asn_not_within_cfg (term_var paddr) (term_var "entries") ∗
+            term_var p = term_val ty_privilege Machine)
+           ∨
+           (asn_in_entries (term_var "cfgidx") (term_var cfg ,ₜ term_var addr) (term_var "entries") ∗
+            asn_prev_addr (term_var "cfgidx") (term_var "entries") (term_var "prev_addr") ∗
+            asn_within_cfg (term_var paddr) (term_var cfg) (term_var "prev_addr") (term_var addr))));
+       lemma_postcondition   := ∃ "w", term_var paddr ↦ₘ term_var "w"; (* TODO: add some chunk that denotes asn_pmp_addr_acces\{paddr}, so we can "return" it later *)
     |}.
 
   End Contracts.
@@ -855,10 +966,12 @@ Section ContractDefKit.
   Definition LEnv : LemmaEnv :=
     fun Δ l =>
       match l with
-      | open_gprs        => lemma_open_gprs
-      | close_gprs       => lemma_close_gprs
-      | open_pmp_entries => lemma_open_pmp_entries
-      | close_pmpentries => lemma_close_pmp_entries
+      | open_gprs             => lemma_open_gprs
+      | close_gprs            => lemma_close_gprs
+      | open_pmp_entries      => lemma_open_pmp_entries
+      | close_pmp_entries     => lemma_close_pmp_entries
+      | extract_pmp_ptsto     => lemma_extract_pmp_ptsto
+      | gen_addr_matching_cfg => lemma_gen_addr_matching_cfg
       end.
 
   Lemma linted_cenvex :
@@ -874,7 +987,63 @@ Include SpecificationMixin RiscvPmpBase RiscvPmpProgram.
 
 End RiscvPmpSpecification.
 
-Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSpecification.
+Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
+  (* TODO: User predicates can be simplified smarter *)
+  Equations(noeqns) simplify_within_cfg {Σ} (paddr : Term Σ ty_xlenbits) (cfg : Term Σ ty_pmpcfg_ent) (prev_addr addr : Term Σ ty_xlenbits) : option (List Formula Σ) :=
+  | paddr          | cfg          | a          | a'          :=
+    Some (cons (formula_user within_cfg [paddr; cfg; a; a']) nil).
+
+  Equations(noeqns) simplify_prev_addr {Σ} (cfg : Term Σ ty_pmpcfgidx) (entries : Term Σ (ty_list ty_pmpentry)) (prev : Term Σ ty_xlenbits) : option (List Formula Σ) :=
+  | term_val cfg | term_val entries | term_val prev := if decide_prev_addr cfg entries prev then Some nil else None;
+  | cfg          | entries          | prev          :=
+    Some (cons (formula_user prev_addr [cfg; entries; prev]) nil).
+
+  Definition simplify_user {Σ} (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ) :=
+    match p with
+    | within_cfg     => fun ts =>
+                          let (ts,addr) := env.snocView ts in
+                          let (ts,prev_addr)     := env.snocView ts in
+                          let (ts,cfg)     := env.snocView ts in
+                          let (ts,paddr)   := env.snocView ts in
+                          simplify_within_cfg paddr cfg prev_addr addr
+    | not_within_cfg => fun ts =>
+                          let (ts,entries) := env.snocView ts in
+                          let (ts,paddr)   := env.snocView ts in
+                          Some (cons (formula_user not_within_cfg [paddr; entries]) nil)
+    | prev_addr      => fun ts =>
+                          let (ts,prev)    := env.snocView ts in
+                          let (ts,entries) := env.snocView ts in
+                          let (ts,cfg)     := env.snocView ts in
+                          simplify_prev_addr cfg entries prev
+    | in_entries     => fun ts =>
+                          let (ts,prev)    := env.snocView ts in
+                          let (ts,entries) := env.snocView ts in
+                          let (ts,cfg)     := env.snocView ts in
+                          Some (cons (formula_user in_entries [cfg; entries; prev]) nil)
+    end.
+
+  Definition simplify_formula {Σ} (fml : Formula Σ) : option (List Formula Σ) :=
+    match fml with
+    | formula_user p ts => simplify_user p ts
+    | _                 => Some (cons fml nil)
+    end.
+
+  Import base.
+  Definition simplify_all {Σ} (g : Formula Σ -> option (List Formula Σ)) :=
+    fix simplify_all (fmls k : List Formula Σ) {struct fmls} : option (List Formula Σ) :=
+      match fmls with
+      | nil => Some k
+      | cons fml0 fmls =>
+        ks ← simplify_all fmls k ;
+        k0 ← g fml0 ;
+        Some (app k0 ks)
+      end.
+
+  Definition solver : Solver :=
+    fun w fmls => option_map (fun l => existT w (tri_id , l)) (simplify_all simplify_formula fmls nil).
+  Definition solver_spec : SolverSpec solver.
+  Admitted.
+End RiscvPmpSolverKit.
 Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSpecification RiscvPmpSolverKit.
 
 Module Import RiscvPmpExecutor :=
@@ -919,8 +1088,22 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_pmpMatchAddr : ValidContract pmpMatchAddr.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_pmpMatchEntry : ValidContract pmpMatchEntry.
-Proof. Admitted.
+Lemma valid_contract_pmpMatchEntry : ValidContractDebug pmpMatchEntry.
+Proof. (* TODO: go back to reflexivity proof by improving user solver kit? *)
+  compute.
+  constructor.
+  simpl.
+  intros.
+  split; auto.
+  cbn in H.
+  cbn in H0.
+  apply Z.leb_le in H.
+  apply Z.ltb_lt in H0.
+  cbn.
+  unfold Within_cfg, decide_within_cfg; simpl.
+  apply Bool.andb_true_iff.
+  apply (conj H H0).
+Qed.
 
 Lemma valid_contract_pmpLocked : ValidContract pmpLocked.
 Proof. reflexivity. Qed.
@@ -1042,7 +1225,9 @@ Section Debug.
       let: "tmp3" := z_exp 0 in
       let: "tmp" := call pmpMatchEntry (exp_var "addr") (exp_var "acc") (exp_var "priv") (exp_var "tmp1") (exp_var "tmp2") (exp_var "tmp3") in
       match: exp_var "tmp" in pmpmatch with
-      | PMP_Success  => stm_val ty_bool true
+      | PMP_Success  =>
+          use lemma extract_pmp_ptsto [exp_var "addr"] ;;
+          stm_val ty_bool true
       | PMP_Fail     => stm_val ty_bool false
       | PMP_Continue =>
       let: "tmp1" := stm_read_register pmp1cfg in
@@ -1050,11 +1235,15 @@ Section Debug.
       let: "tmp3" := stm_read_register pmpaddr0 in
       let: "tmp" := call pmpMatchEntry (exp_var "addr") (exp_var "acc") (exp_var "priv") (exp_var "tmp1") (exp_var "tmp2") (exp_var "tmp3") in
       match: exp_var "tmp" in pmpmatch with
-      | PMP_Success  => stm_val ty_bool true
+      | PMP_Success  =>
+          use lemma extract_pmp_ptsto [exp_var "addr"] ;;
+          stm_val ty_bool true
       | PMP_Fail     => stm_val ty_bool false
       | PMP_Continue =>
           match: exp_var "priv" in privilege with
-          | Machine => stm_val ty_bool true
+          | Machine => 
+              use lemma extract_pmp_ptsto [exp_var "addr"] ;;
+              stm_val ty_bool true
           | User    => stm_val ty_bool false
           end
       end
@@ -1067,11 +1256,88 @@ Section Debug.
         |> KWrite pat_unit     => exp_inl (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty_unit tt))
         |> KReadWrite pat_unit => exp_inl (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty_unit tt))
         |> KExecute pat_unit   => exp_inl (exp_union exception_type KE_Fetch_Access_Fault (exp_val ty_unit tt))
-        end.
+        end. (* TODO: use lemma close_pmp_entries *)
 
       Lemma valid_contract_pmpCheck' : SMut.ValidContract sep_contract_pmpCheck fun_pmpCheck'.
       Proof.
+        (* Set Printing Depth 100.
         compute.
+        constructor.
+        cbn.
+        intros.
+        exists [(v2,v3);(v4,v5)]%list.
+        remember v2 as cfg0.
+        destruct v2.
+        exists R.
+        exists W.
+        exists X.
+        exists A.
+        exists L.
+        exists 0.
+        exists v3.
+        exists v4.
+        split; auto.
+        split; auto.
+        split; auto.
+        intro res.
+        split.
+        - intros ? H.
+          right.
+          exists 0.
+          exists v3.
+          exists cfg0.
+          exists PMP0CFG.
+          split.
+          + unfold In_entries, decide_in_entries.
+            subst; simpl.
+            simpl.
+            rewrite ?Bool.eqb_reflx.
+            rewrite Z.eqb_refl.
+            destruct A; auto.
+          + split.
+            * unfold Prev_addr, decide_prev_addr.
+              apply Z.eqb_refl.
+            * split; subst; auto.
+        - intros.
+          exists [(cfg0,v3);(v4,v5)]%list.
+          remember v4 as cfg1.
+          destruct v4 as [L1 A1 X1 W1 R1].
+          exists R1.
+          exists W1.
+          exists X1.
+          exists A1.
+          exists L1.
+          exists v3.
+          exists v5.
+          exists cfg1.
+          split; auto.
+          split; auto.
+          split; auto.
+          intro.
+          split.
+          intros ? Hwithin.
+          right.
+          exists v3.
+          exists v5.
+          exists cfg1.
+          exists PMP1CFG.
+          split.
+          + unfold In_entries, decide_in_entries.
+            subst; simpl.
+            simpl.
+            rewrite ?Bool.eqb_reflx.
+            rewrite Z.eqb_refl.
+            destruct A1; auto.
+          + split.
+            * unfold Prev_addr, decide_prev_addr.
+              apply Z.eqb_refl.
+            * split; subst; auto.
+          + intros.
+            left.
+            repeat eexists; auto.
+            constructor.
+            unfold Not_within_cfg, decide_not_within_cfg; simpl. *)
+        (* CONTINUE *)
       Admitted.
 End Debug.
 
