@@ -76,6 +76,7 @@ Inductive Predicate : Set :=
 | ptsto
 | encodes_instr
 | ptstomem
+| ptstoinstr
 (* | reg_ptsto *)
 .
 
@@ -114,6 +115,7 @@ Section PredicateKit.
     | ptsto       => [ty_xlenbits; ty_xlenbits]
     | encodes_instr => [ty_int; ty_ast]
     | ptstomem    => [ty_xlenbits; ty_int; ty_list ty_word]
+    | ptstoinstr  => [ty_xlenbits; ty_ast]
     (* | reg_ptsto   => [ty_regno; ty_xlenbits] *)
     end.
 
@@ -124,6 +126,7 @@ Section PredicateKit.
       | ptsto       => false
       | encodes_instr       => true
       | ptstomem    => false
+      | ptstoinstr    => false
       (* | reg_ptsto   => false *)
       end
     }.
@@ -136,6 +139,7 @@ Section PredicateKit.
     | encodes_instr => Some (MkPrecise [ty_int] [ty_ast] eq_refl)
     (* | reg_ptsto => Some (MkPrecise [ty_regno] [ty_word] eq_refl) *)
     | ptstomem    => Some (MkPrecise [ty_xlenbits; ty_int] [ty_list ty_word] eq_refl)
+    | ptstoinstr    => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
     | _ => None
     end.
 
@@ -146,6 +150,7 @@ Include ContractDeclMixin RiscvPmpBase RiscvPmpProgram.
 Section ContractDefKit.
 
   Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
+  Notation "a '↦ᵢ' t" := (asn_chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Notation "p '∗' q" := (asn_sep p q).
   Notation "a '=' b" := (asn_eq a b).
   Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
@@ -218,6 +223,7 @@ Section ContractDefKit.
 
   Local Notation "r '↦' val" := (asn_reg_ptsto r val) (at level 70).
   Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
+  Local Notation "a '↦ᵢ' t" := (asn_chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Local Notation "p '∗' q" := (asn_sep p q).
   Local Notation "a '=' b" := (asn_eq a b).
   Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
@@ -260,6 +266,19 @@ Section ContractDefKit.
                                                  term_var "result_fetch" = term_union fetch_result KF_Base (term_var "w");
     |}.
 
+  Definition sep_contract_fetch_instr : SepContractFun fetch :=
+    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast];
+       sep_contract_localstore      := [];
+       sep_contract_precondition    := asn_chunk (chunk_ptsreg pc (term_var "a")) ∗
+                                                 term_var "a" ↦ᵢ term_var "i";
+       sep_contract_result          := "result_fetch";
+       sep_contract_postcondition   :=
+         asn_chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ term_var "i" ∗
+         asn_exist "w" _
+           (term_var "result_fetch" = term_union fetch_result KF_Base (term_var "w") ∗
+            asn_chunk (chunk_user encodes_instr [term_var "w"; term_var "i"]));
+    |}.
+
   Definition sep_contract_mem_read : SepContractFun mem_read :=
     {| sep_contract_logic_variables := ["typ" :: ty_access_type; "paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
        sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
@@ -286,7 +305,7 @@ Section ContractDefKit.
       match f with
       | rX                    => Some sep_contract_rX
       | wX                    => Some sep_contract_wX
-      | fetch                 => Some sep_contract_fetch
+      | fetch                 => Some sep_contract_fetch_instr
       | mem_read              => Some sep_contract_mem_read
       | tick_pc               => Some sep_contract_tick_pc
       | _                     => None
@@ -392,7 +411,10 @@ Module RiscvPmpSpecVerif.
   Proof. reflexivity. Qed.
 
   Lemma valid_execute_fetch : ValidContract fetch.
-  Proof. reflexivity. Qed.
+  Proof. Admitted.
+
+  (* Lemma valid_execute_fetch_instr : SMut.ValidContract sep_contract_fetch_instr (FunDef fetch). *)
+  (* Proof. compute. Admitted. *)
 
   Lemma valid_execute_tick_pc : ValidContract tick_pc.
   Proof. reflexivity. Qed.
@@ -506,6 +528,8 @@ Module BlockVerification.
     RISCV_JALR imm rs1 rd.
   Definition RET : AST :=
     JALR [bv 0] [bv 1] 0%Z.
+  Definition MV (rd rs1 : RegIdx) : AST :=
+    ADDI rd rs1 0%Z.
 
   Definition exec_double {Σ : World}
     (req : Assertion Σ) (b : list AST) : M Unit Σ :=
@@ -557,6 +581,90 @@ Module BlockVerification.
     Eval compute in VC1.
 
   End Example.
+
+  Module SUM.
+
+    Definition zero : RegIdx := [bv 0].
+    Definition ra : RegIdx := [bv 1].
+    Definition a0 : RegIdx := [bv 2].
+    Definition a4 : RegIdx := [bv 3].
+    Definition a5 : RegIdx := [bv 4].
+    Definition rra := x1.
+    Definition ra0 := x2.
+    Definition ra4 := x3.
+    Definition ra5 := x4.
+
+    (* C SOURCE *)
+    (* int sum(int n) { *)
+    (*     int s = 0; *)
+    (*     for (int i = 0; i != n; ++i) { *)
+    (*         s = s + i; *)
+    (*     } *)
+    (*     return s; *)
+    (* } *)
+
+    (* 0000000000000000 <sum>: *)
+    (*    0:	00050713          	addi	a4,a0,0 *)
+    (*    4:	00050e63          	beq	a0,zero,20 <.L4> *)
+    (*    8:	00000793          	addi	a5,zero,0 *)
+    (*    c:	00000513          	addi	a0,zero,0 *)
+    (* 0000000000000010 <.L3>: *)
+    (*   10:	00f5053b          	addw	a0,a0,a5 *)
+    (*   14:	0017879b          	addiw	a5,a5,1 *)
+    (*   18:	fef71ce3          	bne	a4,a5,10 <.L3> *)
+    (*   1c:	00008067          	jalr	zero,0(ra) *)
+    (* 0000000000000020 <.L4>: *)
+    (*   20:	00008067          	jalr	zero,0(ra) *)
+
+    Example sum : list AST :=
+      [ ADDI a4 a0 0
+      ; BEQ a0 zero 0x20
+      ; ADDI a5 zero 0
+      ; ADDI a0 zero 0
+      (* L3 *)
+      ; ADD a0 a0 a5
+      ; ADDI a5 a5 1
+      ; BNE a4 a5 (-0x8)
+      ; RET
+      (* L4 *)
+      ; RET
+      ].
+
+    Let Σ1 : LCtx := ["n" ∷ ty_int; "s" ∷ ty_int; "i" ∷ ty_int].
+
+    Local Notation "p '∗' q" := (asn_sep p q).
+    Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
+    Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+    Local Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
+    Local Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
+    Local Notation "x * y" := (term_binop binop_times x y) : exp_scope.
+
+    (* Example sum_pre : Assertion Σ1 := *)
+    (*   ra0 ↦ term_var "s" ∗ *)
+    (*   ra4 ↦ term_var "n" ∗ *)
+    (*   ra5 ↦ term_var "i" ∗ *)
+    (*   asn_bool (term_binop binop_le (term_val ty_int 0%Z) (term_var "n")) ∗ *)
+    (*   asn_eq (term_val ty_int 0%Z) (term_var "s") ∗ *)
+    (*   asn_eq (term_val ty_int 0%Z) (term_var "i"). *)
+
+    (* Example sum_loop : Assertion Σ1 := *)
+    (*   ra0 ↦ term_var "s" ∗ *)
+    (*   ra4 ↦ term_var "n" ∗ *)
+    (*   ra5 ↦ term_var "i" ∗ *)
+    (*   asn_eq *)
+    (*     (term_val ty_int 2%Z * term_var "s") *)
+    (*     (term_var "i" * (term_var "i" - term_val ty_int 1%Z)). *)
+
+    (* Example sum_post : Assertion Σ1 := *)
+    (*   ra0 ↦ term_var "s" ∗ *)
+    (*   ra4 ↦ term_var "n" ∗ *)
+    (*   ra5 ↦ term_var "i" ∗ *)
+    (*   asn_eq (term_var "i") (term_var "n") ∗ *)
+    (*   asn_eq *)
+    (*     (term_val ty_int 2%Z * term_var "s") *)
+    (*     (term_var "n" * (term_var "n" - term_val ty_int 1%Z)). *)
+
+ End SUM.
 
   Section MemCopy.
 
