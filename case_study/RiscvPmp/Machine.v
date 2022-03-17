@@ -37,6 +37,9 @@ From Katamaran Require Import
      Program.
 From RiscvPmp Require Export
      Base.
+Import Enums.
+Import Unions.
+Import Records.
 
 From stdpp Require Import decidable finite.
 

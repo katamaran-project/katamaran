@@ -45,229 +45,245 @@ Definition Xlenbits : Set := Z.
 Definition Addr : Set := Z.
 Definition Word : Set := Z.
 
-(** Enums **)
-Inductive Privilege : Set :=
-| User
-| Machine
-.
+Module Enums.
+  Inductive Privilege : Set :=
+  | User
+  | Machine
+  .
 
-(* Enum for available CRSs' *)
-Inductive CSRIdx : Set :=
-| MStatus
-| MTvec
-| MCause
-| MEpc
-.
+  (* Ignore execute perm for now *)
+  Inductive Permission : Set :=
+  | O
+  | R
+  | W
+  | RW.
 
-(* NOTE: PMP CSRs limited to 1 for now *)
-Inductive PmpCfgIdx : Set :=
-| PMP0CFG
-| PMP1CFG
-.
 
-Inductive PmpAddrIdx : Set :=
-| PMPADDR0
-| PMPADDR1
-.
+  (* Enum for available CRSs' *)
+  Inductive CSRIdx : Set :=
+  | MStatus
+  | MTvec
+  | MCause
+  | MEpc
+  .
 
-(* NOTE: PMP Addr Match Type limited to OFF and TOR for now *)
-Inductive PmpAddrMatchType : Set :=
-| OFF
-| TOR
-.
+  (* NOTE: PMP CSRs limited to 1 for now *)
+  Inductive PmpCfgIdx : Set :=
+  | PMP0CFG
+  | PMP1CFG
+  .
 
-Inductive PmpMatch : Set :=
-| PMP_Success
-| PMP_Continue
-| PMP_Fail
-.
+  Inductive PmpAddrIdx : Set :=
+  | PMPADDR0
+  | PMPADDR1
+  .
 
-Inductive PmpAddrMatch : Set :=
-| PMP_NoMatch
-| PMP_PartialMatch
-| PMP_Match
-.
+  (* NOTE: PMP Addr Match Type limited to OFF and TOR for now *)
+  Inductive PmpAddrMatchType : Set :=
+  | OFF
+  | TOR
+  .
 
-Inductive ROP : Set :=
-| RISCV_ADD
-| RISCV_SUB
-.
+  Inductive PmpMatch : Set :=
+  | PMP_Success
+  | PMP_Continue
+  | PMP_Fail
+  .
 
-Inductive IOP : Set :=
-| RISCV_ADDI
-.
+  Inductive PmpAddrMatch : Set :=
+  | PMP_NoMatch
+  | PMP_PartialMatch
+  | PMP_Match
+  .
 
-Inductive UOP : Set :=
-| RISCV_LUI
-| RISCV_AUIPC
-.
+  Inductive ROP : Set :=
+  | RISCV_ADD
+  | RISCV_SUB
+  .
 
-Inductive BOP : Set :=
-| RISCV_BEQ
-| RISCV_BNE
-| RISCV_BLT
-| RISCV_BGE
-| RISCV_BLTU
-| RISCV_BGEU
-.
+  Inductive IOP : Set :=
+  | RISCV_ADDI
+  .
 
-(* Zicsr extension, only support for Read-Write (no set or clear) *)
-Inductive CSROP : Set :=
-| CSRRW
-.
+  Inductive UOP : Set :=
+  | RISCV_LUI
+  | RISCV_AUIPC
+  .
 
-Inductive Retired : Set :=
-| RETIRE_SUCCESS
-| RETIRE_FAIL.
+  Inductive BOP : Set :=
+  | RISCV_BEQ
+  | RISCV_BNE
+  | RISCV_BLT
+  | RISCV_BGE
+  | RISCV_BLTU
+  | RISCV_BGEU
+  .
 
-Inductive Enums : Set :=
-| privilege
-| csridx
-| pmpcfgidx
-| pmpaddridx
-| pmpaddrmatchtype
-| pmpmatch
-| pmpaddrmatch
-| rop
-| iop
-| uop
-| bop
-| csrop
-| retired
-.
+  (* Zicsr extension, only support for Read-Write (no set or clear) *)
+  Inductive CSROP : Set :=
+  | CSRRW
+  .
 
-(** Unions **)
-Definition RegIdx := bv 3.
-Bind Scope bv_scope with RegIdx.
+  Inductive Retired : Set :=
+  | RETIRE_SUCCESS
+  | RETIRE_FAIL.
 
-Inductive AST : Set :=
-| RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
-| ITYPE (imm : Z) (rs1 rd : RegIdx) (op : IOP)
-| UTYPE (imm : Z) (rd : RegIdx) (op : UOP)
-| BTYPE (imm : Z) (rs2 rs1 : RegIdx) (op : BOP)
-| RISCV_JAL (imm : Z) (rd : RegIdx)
-| RISCV_JALR (imm : Z) (rs1 rd : RegIdx)
-| LOAD (imm : Z) (rs1 rd : RegIdx)
-| STORE (imm : Z) (rs2 rs1 : RegIdx)
-| ECALL
-| MRET
-(* Ziscr extension, excluding immediate variants *)
-| CSR (csr : CSRIdx) (rs1 rd : RegIdx) (csrop : CSROP)
-.
+  Inductive Enums : Set :=
+  | privilege
+  | permission
+  | csridx
+  | pmpcfgidx
+  | pmpaddridx
+  | pmpaddrmatchtype
+  | pmpmatch
+  | pmpaddrmatch
+  | rop
+  | iop
+  | uop
+  | bop
+  | csrop
+  | retired
+  .
+End Enums.
+Import Enums.
 
-Inductive AccessType : Set :=
-| Read
-| Write
-| ReadWrite
-| Execute
-.
+Module Unions.
+  Definition RegIdx := bv 3.
+  Bind Scope bv_scope with RegIdx.
 
-Inductive ExceptionType : Set :=
-| E_Fetch_Access_Fault
-| E_Load_Access_Fault
-| E_SAMO_Access_Fault
-| E_U_EnvCall
-| E_M_EnvCall
-| E_Illegal_Instr
-.
+  Inductive AST : Set :=
+  | RTYPE (rs2 rs1 rd : RegIdx) (op : ROP)
+  | ITYPE (imm : Z) (rs1 rd : RegIdx) (op : IOP)
+  | UTYPE (imm : Z) (rd : RegIdx) (op : UOP)
+  | BTYPE (imm : Z) (rs2 rs1 : RegIdx) (op : BOP)
+  | RISCV_JAL (imm : Z) (rd : RegIdx)
+  | RISCV_JALR (imm : Z) (rs1 rd : RegIdx)
+  | LOAD (imm : Z) (rs1 rd : RegIdx)
+  | STORE (imm : Z) (rs2 rs1 : RegIdx)
+  | ECALL
+  | MRET
+  (* Ziscr extension, excluding immediate variants *)
+  | CSR (csr : CSRIdx) (rs1 rd : RegIdx) (csrop : CSROP)
+  .
 
-Inductive MemoryOpResult : Set :=
-| MemValue (v : Word)
-| MemException (e : ExceptionType)
-.
+  Inductive AccessType : Set :=
+  | Read
+  | Write
+  | ReadWrite
+  | Execute
+  .
 
-Inductive FetchResult : Set :=
-| F_Base (v : Word)
-| F_Error (e : ExceptionType) (v : Xlenbits)
-.
+  Inductive ExceptionType : Set :=
+  | E_Fetch_Access_Fault
+  | E_Load_Access_Fault
+  | E_SAMO_Access_Fault
+  | E_U_EnvCall
+  | E_M_EnvCall
+  | E_Illegal_Instr
+  .
 
-(* NOTE: simplified to only take the ctl_trap constructor into account
+  Inductive MemoryOpResult : Set :=
+  | MemValue (v : Word)
+  | MemException (e : ExceptionType)
+  .
+
+  Inductive FetchResult : Set :=
+  | F_Base (v : Word)
+  | F_Error (e : ExceptionType) (v : Xlenbits)
+  .
+
+  (* NOTE: simplified to only take the ctl_trap constructor into account
          (other constructors are for mret, sret and uret, not considered atm) *)
-Inductive CtlResult : Set :=
-| CTL_TRAP (e : ExceptionType)
-| CTL_MRET
-.
+  Inductive CtlResult : Set :=
+  | CTL_TRAP (e : ExceptionType)
+  | CTL_MRET
+  .
 
-Inductive ASTConstructor : Set :=
-| KRTYPE
-| KITYPE
-| KUTYPE
-| KBTYPE
-| KRISCV_JAL
-| KRISCV_JALR
-| KLOAD
-| KSTORE
-| KECALL
-| KMRET
-| KCSR
-.
+  Inductive ASTConstructor : Set :=
+  | KRTYPE
+  | KITYPE
+  | KUTYPE
+  | KBTYPE
+  | KRISCV_JAL
+  | KRISCV_JALR
+  | KLOAD
+  | KSTORE
+  | KECALL
+  | KMRET
+  | KCSR
+  .
 
-Inductive AccessTypeConstructor : Set :=
-| KRead
-| KWrite
-| KReadWrite
-| KExecute
-.
+  Inductive AccessTypeConstructor : Set :=
+  | KRead
+  | KWrite
+  | KReadWrite
+  | KExecute
+  .
 
-Inductive ExceptionTypeConstructor : Set :=
-| KE_Fetch_Access_Fault
-| KE_Load_Access_Fault
-| KE_SAMO_Access_Fault
-| KE_U_EnvCall
-| KE_M_EnvCall
-| KE_Illegal_Instr
-.
+  Inductive ExceptionTypeConstructor : Set :=
+  | KE_Fetch_Access_Fault
+  | KE_Load_Access_Fault
+  | KE_SAMO_Access_Fault
+  | KE_U_EnvCall
+  | KE_M_EnvCall
+  | KE_Illegal_Instr
+  .
 
-Inductive MemoryOpResultConstructor : Set :=
-| KMemValue
-| KMemException
-.
+  Inductive MemoryOpResultConstructor : Set :=
+  | KMemValue
+  | KMemException
+  .
 
-Inductive FetchResultConstructor : Set :=
-| KF_Base
-| KF_Error
-.
+  Inductive FetchResultConstructor : Set :=
+  | KF_Base
+  | KF_Error
+  .
 
-Inductive CtlResultConstructor : Set :=
-| KCTL_TRAP
-| KCTL_MRET
-.
+  Inductive CtlResultConstructor : Set :=
+  | KCTL_TRAP
+  | KCTL_MRET
+  .
 
-Inductive Unions : Set :=
-| ast
-| access_type
-| exception_type
-| memory_op_result
-| fetch_result
-| ctl_result
-(* | pmp_entries *)
-.
+  Inductive Unions : Set :=
+  | ast
+  | access_type
+  | exception_type
+  | memory_op_result
+  | fetch_result
+  | ctl_result
+  (* | pmp_entries *)
+  .
+End Unions.
+Import Unions.
 
-(* Records *)
-Record Pmpcfg_ent : Set :=
-  MkPmpcfg_ent
-    { L : bool;
-      A : PmpAddrMatchType;
-      X : bool;
-      W : bool;
-      R : bool;
+Module Records.
+  Record Pmpcfg_ent : Set :=
+    MkPmpcfg_ent
+      { L : bool;
+        A : PmpAddrMatchType;
+        X : bool;
+        W : bool;
+        R : bool;
       }.
 
-Record Mstatus : Set :=
-  MkMstatus
-    { MPP : Privilege
-    }.
+  Record Mstatus : Set :=
+    MkMstatus
+      { MPP : Privilege
+      }.
 
-Inductive Records : Set :=
-| rpmpcfg_ent
-| rmstatus
-.
+  Inductive Records : Set :=
+  | rpmpcfg_ent
+  | rmstatus
+  .
+End Records.
+Import Records.
 
 Section TransparentObligations.
   Local Set Transparent Obligations.
 
   Derive NoConfusion for Enums.
   Derive NoConfusion for Privilege.
+  Derive NoConfusion for Permission.
   Derive NoConfusion for CSRIdx.
   Derive NoConfusion for PmpCfgIdx.
   Derive NoConfusion for PmpAddrIdx.
@@ -300,6 +316,7 @@ End TransparentObligations.
 
 Derive EqDec for Enums.
 Derive EqDec for Privilege.
+Derive EqDec for Permission.
 Derive EqDec for CSRIdx.
 Derive EqDec for PmpCfgIdx.
 Derive EqDec for PmpAddrIdx.
@@ -337,6 +354,9 @@ Section Finite.
 
   Global Program Instance Privilege_finite : Finite Privilege :=
     {| enum := [User;Machine] |}.
+
+  Global Program Instance Permission_finite : Finite Permission :=
+    {| enum := [O;Enums.R;Enums.W;RW] |}.
 
   Global Program Instance CSRIdx_finite : Finite CSRIdx :=
     {| enum := [MStatus;MTvec;MCause;MEpc] |}.
@@ -424,6 +444,7 @@ Section TypeDeclKit.
   Definition 𝑬𝑲 (e : 𝑬) : Set :=
     match e with
     | privilege        => Privilege
+    | permission       => Permission
     | csridx           => CSRIdx
     | pmpcfgidx        => PmpCfgIdx
     | pmpaddridx       => PmpAddrIdx
@@ -495,6 +516,7 @@ Notation ty_xlenbits         := (ty_int).
 Notation ty_word             := (ty_int).
 Notation ty_regno            := (ty_bvec 3).
 Notation ty_privilege        := (ty_enum privilege).
+Notation ty_permission       := (ty_enum permission).
 Notation ty_csridx           := (ty_enum csridx).
 Notation ty_pmpcfgidx        := (ty_enum pmpcfgidx).
 Notation ty_pmpaddridx       := (ty_enum pmpaddridx).

@@ -29,8 +29,12 @@
 From Coq Require Import
      Lists.List.
 From RiscvPmp Require Import
+     Base
      Machine
      Contracts.
+Import Enums.
+Import Unions.
+Import Records.
 From Katamaran Require Import
      Bitvector
      Environment
@@ -162,79 +166,80 @@ Module RiscvPmpModel.
         | _ => False
         end.
 
-      Definition PmpAddrRange := option (Xlenbits * Xlenbits).
+      (* Definition PmpAddrRange := option (Xlenbits * Xlenbits). *)
 
-      Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange :=
-        match A cfg with
-        | OFF => None
-        | TOR => Some (lo , hi)
-        end.
+      (* Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange := *)
+      (*   match A cfg with *)
+      (*   | OFF => None *)
+      (*   | TOR => Some (lo , hi) *)
+      (*   end. *)
 
-      Definition pmp_match_addr (a : Addr) (rng : PmpAddrRange) : PmpAddrMatch :=
-        match rng with
-        | Some (lo, hi) =>
-            if hi <? lo
-            then PMP_NoMatch
-            else if (a <? lo) || (hi <=? a)
-                 then PMP_NoMatch
-                 else if (lo <=? a) && (a <? hi)
-                      then PMP_Match
-                      else PMP_PartialMatch
-        | None          => PMP_NoMatch
-        end.
+      (* Definition pmp_match_addr (a : Addr) (rng : PmpAddrRange) : PmpAddrMatch := *)
+      (*   match rng with *)
+      (*   | Some (lo, hi) => *)
+      (*       if hi <? lo *)
+      (*       then PMP_NoMatch *)
+      (*       else if (a <? lo) || (hi <=? a) *)
+      (*            then PMP_NoMatch *)
+      (*            else if (lo <=? a) && (a <? hi) *)
+      (*                 then PMP_Match *)
+      (*                 else PMP_PartialMatch *)
+      (*   | None          => PMP_NoMatch *)
+      (*   end. *)
 
-      (* Ignore execute perm for now *)
-      Inductive Permission : Set :=
-      | O
-      | R
-      | W
-      | RW.
+      (* (* Ignore execute perm for now *) *)
+      (* Inductive Permission : Set := *)
+      (* | O *)
+      (* | R *)
+      (* | W *)
+      (* | RW. *)
 
-      Definition translate_perm_from_cfg (cfg : Pmpcfg_ent) : Permission :=
-        match Base.R cfg, Base.W cfg with
-        | false, false => O
-        | true, false  => R
-        | false, true  => W
-        | true, true   => RW
-        end.
+      (* Definition translate_perm_from_cfg (cfg : Pmpcfg_ent) : Permission := *)
+      (*   match Base.R cfg, Base.W cfg with *)
+      (*   | false, false => O *)
+      (*   | true, false  => R *)
+      (*   | false, true  => W *)
+      (*   | true, true   => RW *)
+      (*   end. *)
 
-      Definition pmp_permission (m : Privilege) (cfg : Pmpcfg_ent) : Permission :=
-        let p := translate_perm_from_cfg cfg in
-        match m, L cfg with
-        | User,    _    => p
-        | Machine, true => p (* only restrict Machine mode if PMP entry is locked *)
-        | Machine, _    => RW
-        end.
+      (* Definition pmp_permission (m : Privilege) (cfg : Pmpcfg_ent) : Permission := *)
+      (*   let p := translate_perm_from_cfg cfg in *)
+      (*   match m, L cfg with *)
+      (*   | User,    _    => p *)
+      (*   | Machine, true => p (* only restrict Machine mode if PMP entry is locked *) *)
+      (*   | Machine, _    => RW *)
+      (*   end. *)
 
-      Definition pmp_match_entry (a : Addr) (m : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits) : PmpMatch * Permission :=
-        let rng := pmp_addr_range cfg hi lo in
-        match pmp_match_addr a rng with
-        | PMP_NoMatch      => (PMP_Continue, O)
-        | PMP_PartialMatch => (PMP_Fail, O)
-        | PMP_Match        => (PMP_Success, pmp_permission m cfg)
-        end.
+      (* Definition pmp_match_entry (a : Addr) (m : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits) : PmpMatch * Permission := *)
+      (*   let rng := pmp_addr_range cfg hi lo in *)
+      (*   match pmp_match_addr a rng with *)
+      (*   | PMP_NoMatch      => (PMP_Continue, O) *)
+      (*   | PMP_PartialMatch => (PMP_Fail, O) *)
+      (*   | PMP_Match        => (PMP_Success, pmp_permission m cfg) *)
+      (*   end. *)
 
-      Fixpoint pmp_check (a : Addr) (entries : list PmpEntryCfg) (prev : Addr) (m : Privilege) : option Permission :=
-        match entries with
-        | [] => match m with
-                | Machine => Some RW
-                | User    => None
-                end
-        | (cfg , addr) :: entries =>
-            match pmp_match_entry a m cfg prev addr with
-            | (PMP_Success, p)  => Some p
-            | (PMP_Fail, _)     => None
-            | (PMP_Continue, _) => pmp_check a entries addr m
-            end
-        end.
+      (* Fixpoint pmp_check (a : Addr) (entries : list PmpEntryCfg) (prev : Addr) (m : Privilege) : option Permission := *)
+      (*   match entries with *)
+      (*   | [] => match m with *)
+      (*           | Machine => Some RW *)
+      (*           | User    => None *)
+      (*           end *)
+      (*   | (cfg , addr) :: entries => *)
+      (*       match pmp_match_entry a m cfg prev addr with *)
+      (*       | (PMP_Success, p)  => Some p *)
+      (*       | (PMP_Fail, _)     => None *)
+      (*       | (PMP_Continue, _) => pmp_check a entries addr m *)
+      (*       end *)
+      (*   end. *)
 
       (* check_access is based on the pmpCheck algorithm, main difference
          is that we can define it less cumbersome because entries will contain
          the PMP entries in highest-priority order. *)
       Definition check_access (a : Addr) (entries : list PmpEntryCfg) (m : Privilege) : option Permission :=
-        pmp_check a entries 0 m.
+        (* pmp_check a entries 0 m. *)
+        Some O.
 
-      Lemma pmp_match_entry_TOR_within_bounds :
+      (* Lemma pmp_match_entry_TOR_within_bounds :
         forall (a : Addr) (m : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits),
           lo <= a ∧ a < hi ->
           A cfg = TOR ->
@@ -248,7 +253,7 @@ Module RiscvPmpModel.
         apply Z.ltb_ge in H; apply Z.ltb_ge in Hlo; apply Z.ltb_lt in Hhi.
         rewrite H Hhi Hlo; simpl.
         rewrite ?Z.leb_antisym Hlo Hhi; simpl; auto.
-      Qed.
+      Qed. *)
 
       (* TODO: add perm_access predicate *)
       (* pmp_addr_access(?entries, ?mode) 
@@ -385,7 +390,7 @@ Module RiscvPmpModel.
         intro H; simpl in H; subst; auto; discriminate.
     Qed.
 
-    Lemma within_cfg_pmp_match_entry (a : Addr) (cfg : Pmpcfg_ent) (prev_addr addr : Addr) (p : Privilege) :
+    (* Lemma within_cfg_pmp_match_entry (a : Addr) (cfg : Pmpcfg_ent) (prev_addr addr : Addr) (p : Privilege) :
         Within_cfg a cfg prev_addr addr ->
         RiscvPmpIrisHeapKit.pmp_match_entry a p cfg prev_addr addr = (PMP_Success, RiscvPmpIrisHeapKit.pmp_permission p cfg).
     Proof.
@@ -402,12 +407,12 @@ Module RiscvPmpModel.
       apply Z.ltb_ge in Hprev as ->.
       apply Z.ltb_lt in Haddr as ->.
       auto.
-    Qed.
+    Qed. *)
 
     Lemma extract_pmp_ptsto_sound :
       ValidLemma RiscvPmpSpecification.lemma_extract_pmp_ptsto.
     Proof.
-      intros ι; destruct_syminstance ι; cbn.
+      (* intros ι; destruct_syminstance ι; cbn.
       iIntros "[%cfg0 [%addr0 [%cfg1 [%addr1 [[%H _] [Hpmp_addr_access [[[%HNot _] [%Hp _]]|[[%HIn _] [[%HPrev _] [%HWithin _]]]]]]]]]]".
       { unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access.
         assert (Hin: paddr ∈ RiscvPmpIrisHeapKit.liveAddrs) by admit.
@@ -517,12 +522,12 @@ Module RiscvPmpModel.
               unfold Prev_addr in HPrev.
               simpl in HPrev.
               apply Z.eqb_eq in HPrev as [= ->].
-              rewrite (within_cfg_pmp_match_entry p HWithin); try assumption.
+              rewrite (within_cfg_pmp_match_entry p HWithin); try assumption. *)
 
               (* TODO: this will not scale well.. if more PMP entries are added,
                      it would be better to have proof that it doesn't match
                      preceding entries! *)
-              unfold RiscvPmpIrisHeapKit.pmp_match_entry,
+              (* unfold RiscvPmpIrisHeapKit.pmp_match_entry,
                 RiscvPmpIrisHeapKit.pmp_match_addr,
                 RiscvPmpIrisHeapKit.pmp_addr_range.
               destruct cfg0 as [? [] ? ? ?]; simpl; auto.
@@ -536,7 +541,7 @@ Module RiscvPmpModel.
           + rewrite big_opL_cons.
             iDestruct "Hpmp_addr_access" as "[_ H]".
             iApply "IH"; try done.
-      }
+      } *)
     Admitted.
 
   End Lemmas.
