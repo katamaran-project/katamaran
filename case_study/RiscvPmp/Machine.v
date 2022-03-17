@@ -448,10 +448,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     match: ent in rpmpcfg_ent with
       [L; A; X; W; R] =>
         match: acc in union access_type with
-        |> KRead pat_unit      => R
-        |> KWrite pat_unit     => W
-        |> KReadWrite pat_unit => R && W
-        |> KExecute pat_unit   => X
+        |> KRead pat_unit      => if: R then stm_val ty_bool true else stm_val ty_bool false
+        |> KWrite pat_unit     => if: W then stm_val ty_bool true else stm_val ty_bool false
+        |> KReadWrite pat_unit => if: R && W then stm_val ty_bool true else stm_val ty_bool false
+        |> KExecute pat_unit   => if: X then stm_val ty_bool true else stm_val ty_bool false
         end
     end.
 

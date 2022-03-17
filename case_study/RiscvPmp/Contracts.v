@@ -61,6 +61,7 @@ Open Scope Z_scope.
 Inductive PurePredicate : Set :=
 | pmp_access
 | pmp_check_perms
+| pmp_check_rwx
 | within_cfg
 | not_within_cfg
 | prev_addr
@@ -94,6 +95,7 @@ Section PredicateKit.
     match p with
     | pmp_access      => [ty_xlenbits; ty_list ty_pmpentry; ty_privilege; ty_option ty_permission]
     | pmp_check_perms => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
+    | pmp_check_rwx   => [ty_pmpcfg_ent; ty_access_type]
     | within_cfg      => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
     | not_within_cfg  => [ty_xlenbits; ty_list ty_pmpentry]
     | prev_addr       => [ty_pmpcfgidx; ty_list ty_pmpentry; ty_xlenbits]
@@ -200,6 +202,9 @@ Section PredicateKit.
   Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
     decide_pmp_check_perms cfg acc p = true.
 
+  Definition Pmp_check_rwx (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) : Prop :=
+    pmp_check_RWX cfg acc = true.
+
   Equations PmpAddrMatchType_eqb (a1 a2 : PmpAddrMatchType) : bool :=
   | OFF | OFF := true;
   | TOR | TOR := true;
@@ -264,6 +269,7 @@ Section PredicateKit.
     match p with
     | pmp_access      => Pmp_access
     | pmp_check_perms => Pmp_check_perms
+    | pmp_check_rwx   => Pmp_check_rwx
     | within_cfg      => Within_cfg
     | not_within_cfg  => Not_within_cfg
     | prev_addr       => Prev_addr
@@ -326,6 +332,7 @@ Section ContractDefKit.
   Local Notation asn_in_entries idx e es := (asn_formula (formula_user in_entries [idx; e; es])).
   Local Notation asn_pmp_access addr es m p := (asn_formula (formula_user pmp_access [addr;es;m;p])).
   Local Notation asn_pmp_check_perms cfg acc p := (asn_formula (formula_user pmp_check_perms [cfg;acc;p])).
+  Local Notation asn_pmp_check_rwx cfg acc := (asn_formula (formula_user pmp_check_rwx [cfg;acc])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_int) : Term Σ ty_bool :=
     term_binop binop_eq e1 e2.
@@ -854,15 +861,10 @@ Section ContractDefKit.
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_pmpCheckRWX";
        sep_contract_postcondition   :=
-         asn_match_union access_type (term_var acc)
-           (fun _ => ε)
-           (fun _ => pat_unit)
-           (fun K => match K with
-                     | KRead      => term_var "result_pmpCheckRWX" = term_var R
-                     | KWrite     => term_var "result_pmpCheckRWX" = term_var W
-                     | KReadWrite => term_var "result_pmpCheckRWX" = term_binop binop_and (term_var R) (term_var W)
-                     | KExecute   => term_var "result_pmpCheckRWX" = term_var X
-                     end);
+         let entry := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
+         asn_if (term_var "result_pmpCheckRWX")
+                (asn_pmp_check_rwx entry (term_var acc))
+                asn_true;
     |}.
 
   Definition sep_contract_pmpAddrRange : SepContractFun pmpAddrRange :=
@@ -1100,9 +1102,26 @@ End RiscvPmpSpecification.
 
 Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
   (* TODO: User predicates can be simplified smarter *)
+  Equations(noeqns) decide_pmp_check_rwx {Σ} (X W R : Term Σ ty_bool) (acc : Term Σ ty_access_type) : bool :=
+  | term_val true | _             | _             | term_union KExecute (term_val tt)   := true;
+  | _             | term_val true | _             | term_union KWrite (term_val tt)     := true;
+  | _             | _             | term_val true | term_union KRead (term_val tt)      := true;
+  | _             | term_val true | term_val true | term_union KReadWrite (term_val tt) := true;
+  | _             | _             | _             | _                                   := false.
+
+  Equations(noeqns) simplify_pmp_check_rwx {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
+  | term_record pmpcfg_ent [_;_;X;W;R] | acc          :=
+    if decide_pmp_check_rwx X W R acc then Some nil else None;
+  | term_val cfg                       | term_val acc :=
+    if pmp_check_RWX cfg acc then Some nil else None;
+  | cfg                                | acc          :=
+    Some (cons (formula_user pmp_check_rwx [cfg;acc]) nil).
+
   Equations(noeqns) simplify_pmp_check_perms {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) (p : Term Σ ty_privilege) : option (List Formula Σ) :=
-  | term_val cfg | term_val acc | term_val p := if decide_pmp_check_perms cfg acc p then Some nil else None;
-  | cfg          | acc          | p          := Some (cons (formula_user pmp_check_perms [cfg;acc;p]) nil).
+  | term_record pmpcfg_ent [term_val false;_;_;_;_] | acc | term_val Machine :=
+    Some nil;
+  | cfg                                             | acc | p                :=
+    simplify_pmp_check_rwx cfg acc.
 
   Equations(noeqns) simplify_within_cfg {Σ} (paddr : Term Σ ty_xlenbits) (cfg : Term Σ ty_pmpcfg_ent) (prev_addr addr : Term Σ ty_xlenbits) : option (List Formula Σ) :=
   | paddr          | cfg          | a          | a'          :=
@@ -1126,6 +1145,10 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
                            let (ts,acc) := env.snocView ts in
                            let (ts,cfg)   := env.snocView ts in
                            simplify_pmp_check_perms cfg acc priv
+    | pmp_check_rwx   => fun ts =>
+                           let (ts,acc) := env.snocView ts in
+                           let (ts,cfg)   := env.snocView ts in
+                           simplify_pmp_check_rwx cfg acc
     | within_cfg      => fun ts =>
                            let (ts,addr) := env.snocView ts in
                            let (ts,prev_addr)     := env.snocView ts in
@@ -1202,15 +1225,10 @@ Proof.
   (* compute. *)
 Admitted.
 
-Lemma valid_contract_pmpCheckPerms : ValidContractDebug pmpCheckPerms.
-Proof.
-  (* compute.
-  constructor; cbn.
-  reflexivity. Qed. *)
-  (* CONTINUE: improve solver, rewrite contract pmpcheckrwx? *)
-Admitted.
-
 Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
+Proof. reflexivity. Qed.
+  
+Lemma valid_contract_pmpCheckPerms : ValidContract pmpCheckPerms.
 Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmpAddrRange : ValidContract pmpAddrRange.
