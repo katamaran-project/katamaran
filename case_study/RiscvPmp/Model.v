@@ -29,12 +29,8 @@
 From Coq Require Import
      Lists.List.
 From RiscvPmp Require Import
-     Base
      Machine
      Contracts.
-Import Enums.
-Import Unions.
-Import Records.
 From Katamaran Require Import
      Bitvector
      Environment
@@ -235,9 +231,9 @@ Module RiscvPmpModel.
       (* check_access is based on the pmpCheck algorithm, main difference
          is that we can define it less cumbersome because entries will contain
          the PMP entries in highest-priority order. *)
-      Definition check_access (a : Addr) (entries : list PmpEntryCfg) (m : Privilege) : option Permission :=
+      Definition check_access (a : Addr) (entries : list PmpEntryCfg) (m : Privilege) : option AccessType :=
         (* pmp_check a entries 0 m. *)
-        Some O.
+        Some ReadWrite.
 
       (* Lemma pmp_match_entry_TOR_within_bounds :
         forall (a : Addr) (m : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits),

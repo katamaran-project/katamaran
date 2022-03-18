@@ -37,9 +37,6 @@ From Katamaran Require Import
      Program.
 From RiscvPmp Require Export
      Base.
-Import Enums.
-Import Unions.
-Import Records.
 
 From stdpp Require Import decidable finite.
 
@@ -195,7 +192,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | close_gprs            : Lem ctx.nil
   | open_pmp_entries      : Lem ctx.nil
   | close_pmp_entries     : Lem ctx.nil
-  | extract_pmp_ptsto     : Lem [paddr ∶ ty_xlenbits]
+  | extract_pmp_ptsto     : Lem [paddr ∶ ty_xlenbits; acc :: ty_access_type]
   | gen_addr_matching_cfg : Lem [paddr :: ty_xlenbits; "cfgidx" :: ty_pmpcfgidx; cfg :: ty_pmpcfg_ent; "prev_addr" :: ty_xlenbits; addr :: ty_xlenbits]
   .
 

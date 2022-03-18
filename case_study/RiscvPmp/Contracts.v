@@ -31,7 +31,6 @@ From Coq Require Import
      Lists.List
      Strings.String.
 From RiscvPmp Require Import
-     Base
      Machine.
 From Katamaran Require Import
      Notations
@@ -44,9 +43,6 @@ From Katamaran Require Import
 From Equations Require Import
      Equations.
 
-Import Enums.
-Import Unions.
-Import Records.
 Import RiscvPmpProgram.
 
 Set Implicit Arguments.
@@ -93,7 +89,7 @@ Section PredicateKit.
   Definition 𝑷 := PurePredicate.
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
     match p with
-    | pmp_access      => [ty_xlenbits; ty_list ty_pmpentry; ty_privilege; ty_option ty_permission]
+    | pmp_access      => [ty_xlenbits; ty_list ty_pmpentry; ty_privilege; ty_access_type]
     | pmp_check_perms => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
     | pmp_check_rwx   => [ty_pmpcfg_ent; ty_access_type]
     | within_cfg      => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
@@ -104,79 +100,6 @@ Section PredicateKit.
 
   Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
   Definition PmpAddrRange := option (Xlenbits * Xlenbits).
-
-  Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange :=
-    match A cfg with
-    | OFF => None
-    | TOR => Some (lo , hi)
-    end.
-
-  Definition pmp_match_addr (a : Val ty_xlenbits) (rng : PmpAddrRange) : Val ty_pmpaddrmatch :=
-    match rng with
-    | Some (lo, hi) =>
-        if hi <? lo
-        then PMP_NoMatch
-        else if ((a <? lo) || (hi <=? a))%bool
-             then PMP_NoMatch
-             else if ((lo <=? a) && (a <? hi))%bool
-                  then PMP_Match
-                  else PMP_PartialMatch
-    | None          => PMP_NoMatch
-    end.
-
-  Definition translate_perm_from_cfg (cfg : Val ty_pmpcfg_ent) : Val ty_permission :=
-    match Records.R cfg, Records.W cfg with
-    | false, false => O
-    | true, false  => Enums.R
-    | false, true  => Enums.W
-    | true, true   => RW
-    end.
-
-  Definition pmp_permission (m : Val ty_privilege) (cfg : Val ty_pmpcfg_ent) : Val ty_permission :=
-    let p := translate_perm_from_cfg cfg in
-    match m, L cfg with
-    | User,    _    => p
-    | Machine, true => p (* only restrict Machine mode if PMP entry is locked *)
-    | Machine, _    => RW
-    end.
-
-  Definition pmp_match_entry (a : Val ty_xlenbits) (m : Val ty_privilege) (cfg : Val ty_pmpcfg_ent) (lo hi : Val ty_xlenbits) : Val ty_pmpmatch :=
-    let rng := pmp_addr_range cfg hi lo in
-    match pmp_match_addr a rng with
-    | PMP_NoMatch      => PMP_Continue
-    | PMP_PartialMatch => PMP_Fail
-    | PMP_Match        => PMP_Success
-    end.
-
-  Equations ty_option_ty_permission_eqb (p1 p2 : Val (ty_option ty_permission)) : bool :=
-  | inl O        | inl O        := true;
-  | inl Enums.R  | inl Enums.R  := true;
-  | inl Enums.W  | inl Enums.W  := true;
-  | inl RW       | inl RW       := true;
-  | _            | _            := false.
-
-  Fixpoint pmp_check (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) (p : Val (ty_option ty_permission)) : bool :=
-    match entries with
-    | [] => match m with
-            | Machine => ty_option_ty_permission_eqb p (inl RW)
-            | User    => ty_option_ty_permission_eqb p (inr tt)
-            end
-    | (cfg , addr) :: entries =>
-        match pmp_match_entry a m cfg prev addr with
-        | PMP_Success  => ty_option_ty_permission_eqb p (inl (pmp_permission m cfg))
-        | PMP_Fail     => ty_option_ty_permission_eqb p (inr tt)
-        | PMP_Continue => pmp_check a entries addr m p
-        end
-    end%list.
-
-  (* check_access is based on the pmpCheck algorithm, main difference
-         is that we can define it less cumbersome because entries will contain
-         the PMP entries in highest-priority order. *)
-  Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (m : Val ty_privilege) (p : Val (ty_option ty_permission)) : bool :=
-    pmp_check a entries 0 m p.
-
-  Definition Pmp_access (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (m : Val ty_privilege) (p : Val (ty_option ty_permission)) : Prop :=
-    decide_pmp_access a entries m p = true.
 
   Definition pmp_check_RWX (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) : bool :=
     match cfg with
@@ -198,6 +121,64 @@ Section PredicateKit.
     | User =>
         pmp_check_RWX cfg acc
     end.
+
+
+  Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange :=
+    match A cfg with
+    | OFF => None
+    | TOR => Some (lo , hi)
+    end.
+
+  Definition pmp_match_addr (a : Val ty_xlenbits) (rng : PmpAddrRange) : Val ty_pmpaddrmatch :=
+    match rng with
+    | Some (lo, hi) =>
+        if hi <? lo
+        then PMP_NoMatch
+        else if ((a <? lo) || (hi <=? a))%bool
+             then PMP_NoMatch
+             else if ((lo <=? a) && (a <? hi))%bool
+                  then PMP_Match
+                  else PMP_PartialMatch
+    | None          => PMP_NoMatch
+    end.
+
+  Definition pmp_match_entry (a : Val ty_xlenbits) (m : Val ty_privilege) (cfg : Val ty_pmpcfg_ent) (lo hi : Val ty_xlenbits) : Val ty_pmpmatch :=
+    let rng := pmp_addr_range cfg hi lo in
+    match pmp_match_addr a rng with
+    | PMP_NoMatch      => PMP_Continue
+    | PMP_PartialMatch => PMP_Fail
+    | PMP_Match        => PMP_Success
+    end.
+
+  Equations ty_access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
+  | Read      | Read      := true;
+  | Write     | Write     := true;
+  | ReadWrite | ReadWrite := true;
+  | Execute   | Execute   := true;
+  | _         | _         := false.
+
+  Fixpoint pmp_check (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) (p : Val ty_access_type) : bool :=
+    match entries with
+    | [] => match m with
+            | Machine => true
+            | User    => false
+            end
+    | (cfg , addr) :: entries =>
+        match pmp_match_entry a m cfg prev addr with
+        | PMP_Success  => decide_pmp_check_perms cfg p m
+        | PMP_Fail     => false
+        | PMP_Continue => pmp_check a entries addr m p
+        end
+    end%list.
+
+  (* check_access is based on the pmpCheck algorithm, main difference
+         is that we can define it less cumbersome because entries will contain
+         the PMP entries in highest-priority order. *)
+  Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : bool :=
+    pmp_check a entries 0 m p.
+
+  Definition Pmp_access (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : Prop :=
+    decide_pmp_access a entries m p = true.
 
   Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
     decide_pmp_check_perms cfg acc p = true.
@@ -828,14 +809,14 @@ Section ContractDefKit.
     {| sep_contract_logic_variables := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var addr; term_var acc; term_var priv];
        sep_contract_precondition    :=
-         asn_pmp_entries (term_var "entries")
-         ∗ asn_pmp_addr_access (term_var "entries") (term_var priv);
+         asn_pmp_entries (term_var "entries");
+         (* ∗ asn_pmp_addr_access (term_var "entries") (term_var priv); *)
        sep_contract_result          := "result_pmpCheck";
        sep_contract_postcondition   := 
          asn_match_option
            _ (term_var "result_pmpCheck") e
            asn_true
-           (∃ "w", term_var addr ↦ₘ term_var "w");
+           (asn_pmp_entries (term_var "entries") ∗ asn_pmp_access (term_var addr) (term_var "entries") (term_var priv) (term_var acc));
     |}.
 
   Definition sep_contract_pmpCheckPerms : SepContractFun pmpCheckPerms :=
@@ -912,6 +893,7 @@ Section ContractDefKit.
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_pmpMatchEntry";
        sep_contract_postcondition   :=
+         let entry := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
          asn_match_enum pmpmatch (term_var "result_pmpMatchEntry")
                         (fun K => match K with
                                   | PMP_Continue =>
@@ -921,7 +903,8 @@ Section ContractDefKit.
                                                               (term_var prev_pmpaddr <=ₜ term_var addr &&ₜ term_var addr <ₜ term_var pmpaddr)) ∨ 
                                       asn_true (* TODO: either we have a partial match, or we don't have the required permissions! *)
                                   | PMP_Success  =>
-                                      asn_bool (term_var prev_pmpaddr <=ₜ term_var addr &&ₜ term_var addr <ₜ term_var pmpaddr)
+                                      asn_bool (term_var prev_pmpaddr <=ₜ term_var addr &&ₜ term_var addr <ₜ term_var pmpaddr) ∗
+                                      asn_pmp_check_perms entry (term_var acc) (term_var priv)
                                   end);
     |}.
 
@@ -1010,13 +993,23 @@ Section ContractDefKit.
     |}.
 
   Definition lemma_extract_pmp_ptsto : SepLemma extract_pmp_ptsto :=
-    {| lemma_logic_variables := [paddr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry; "cfgidx" :: ty_pmpcfgidx; cfg :: ty_pmpcfg_ent; addr :: ty_xlenbits; "prev_addr" :: ty_xlenbits; p :: ty_privilege];
-       lemma_patterns        := [term_var paddr];
-       lemma_precondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
-         (term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
-                                          (term_var "cfg1" ,ₜ term_var "addr1")] ∗
-          ∃ "perm", asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var "perm"));
-       lemma_postcondition   := ∃ "w", term_var paddr ↦ₘ term_var "w"; (* TODO: add some chunk that denotes asn_pmp_addr_acces\{paddr}, so we can "return" it later *)
+    let Σ : LCtx := [paddr :: ty_xlenbits; acc :: ty_access_type; "entries" :: ty_list ty_pmpentry; "cfgidx" :: ty_pmpcfgidx; cfg :: ty_pmpcfg_ent; addr :: ty_xlenbits; "prev_addr" :: ty_xlenbits; p :: ty_privilege; "L0" :: ty_bool; "A0" :: ty_pmpaddrmatchtype; "X0" :: ty_bool; "W0" :: ty_bool; "R0" :: ty_bool; "L1" :: ty_bool; "A1" :: ty_pmpaddrmatchtype; "X1" :: ty_bool; "W1" :: ty_bool; "R1" :: ty_bool] in
+  (*  let entry0 := term_record rpmpcfg_ent [term_var "L0"; term_var "A0"; term_var "X0"; term_var "W0"; term_var "R0"] in *)
+    {| lemma_logic_variables := Σ;
+       lemma_patterns        := [term_var paddr; term_var acc];
+       lemma_precondition   := ∃ "addr0", ∃ "addr1",
+         (let entry0 := term_record rpmpcfg_ent [term_var "L0"; term_var "A0"; term_var "X0"; term_var "W0"; term_var "R0"] in
+          let entry1 := term_record rpmpcfg_ent [term_var "L1"; term_var "A1"; term_var "X1"; term_var "W1"; term_var "R1"] in
+          term_var "entries" = term_list [(entry0 ,ₜ term_var "addr0");
+                                          (entry1 ,ₜ term_var "addr1")] ∗
+         ((asn_not_within_cfg (term_var paddr) (term_var "entries") ∗
+           term_var p = term_val ty_privilege Machine)
+          ∨
+           (asn_in_entries (term_var "cfgidx") (term_var cfg ,ₜ term_var addr) (term_var "entries") ∗
+            asn_pmp_check_perms (term_var cfg) (term_var acc) (term_var p) ∗
+            asn_prev_addr (term_var "cfgidx") (term_var "entries") (term_var "prev_addr") ∗
+            asn_within_cfg (term_var paddr) (term_var cfg) (term_var "prev_addr") (term_var addr))));
+       lemma_postcondition   := asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc); (* TODO: add some chunk that denotes asn_pmp_addr_acces\{paddr}, so we can "return" it later *)
     |}.
 
   End Contracts.
@@ -1124,6 +1117,8 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
     simplify_pmp_check_rwx cfg acc.
 
   Equations(noeqns) simplify_within_cfg {Σ} (paddr : Term Σ ty_xlenbits) (cfg : Term Σ ty_pmpcfg_ent) (prev_addr addr : Term Σ ty_xlenbits) : option (List Formula Σ) :=
+  | term_val paddr | term_val cfg | term_val a | term_val a' :=
+    if decide_within_cfg paddr cfg a a' then Some nil else None;
   | paddr          | cfg          | a          | a'          :=
     Some (cons (formula_user within_cfg [paddr; cfg; a; a']) nil).
 
@@ -1132,6 +1127,12 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
   | cfg          | entries          | prev          :=
     Some (cons (formula_user prev_addr [cfg; entries; prev]) nil).
 
+  Equations(noeqns) simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty_list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
+  | term_val paddr | term_val entries | term_val p | term_val acc :=
+    if decide_pmp_access paddr entries p acc then Some nil else None;
+  | paddr          | entries          | p          | acc          :=
+    Some (cons (formula_user pmp_access [paddr; entries; p; acc]) nil).
+
   Definition simplify_user {Σ} (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ) :=
     match p with
     | pmp_access      => fun ts =>
@@ -1139,7 +1140,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
                            let (ts,priv)    := env.snocView ts in
                            let (ts,entries) := env.snocView ts in
                            let (ts,paddr)   := env.snocView ts in
-                           Some (cons (formula_user pmp_access [paddr; entries;priv;perm]) nil)
+                           simplify_pmp_access paddr entries priv perm
     | pmp_check_perms => fun ts =>
                            let (ts,priv)    := env.snocView ts in
                            let (ts,acc) := env.snocView ts in
@@ -1219,11 +1220,6 @@ Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmp_mem_read : ValidContract pmp_mem_read.
 Proof. Admitted.
-
-Lemma valid_contract_pmpCheck : ValidContractDebug pmpCheck.
-Proof.
-  (* compute. *)
-Admitted.
 
 Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
 Proof. reflexivity. Qed.
@@ -1351,55 +1347,50 @@ Section Debug.
   (* Import RiscvNotations. *)
   (* Import RiscvμSailNotations. *)
   Import SymProp.notations.
-
-  Definition fun_pmpCheck' : Stm ["addr" ∶ ty_xlenbits; "acc" ∶ ty_access_type; "priv" ∶ ty_privilege] (ty_option ty_exception_type) :=
-    use lemma open_pmp_entries ;;
-    let: "check" :=
-      let: "tmp1" := stm_read_register pmp0cfg in
-      let: "tmp2" := stm_read_register pmpaddr0 in
-      let: "tmp3" := z_exp 0 in
-      let: "tmp" := call pmpMatchEntry (exp_var "addr") (exp_var "acc") (exp_var "priv") (exp_var "tmp1") (exp_var "tmp2") (exp_var "tmp3") in
-      match: exp_var "tmp" in pmpmatch with
-      | PMP_Success  =>
-          use lemma extract_pmp_ptsto [exp_var "addr"] ;;
-          stm_val ty_bool true
-      | PMP_Fail     => stm_val ty_bool false
-      | PMP_Continue =>
-      let: "tmp1" := stm_read_register pmp1cfg in
-      let: "tmp2" := stm_read_register pmpaddr1 in
-      let: "tmp3" := stm_read_register pmpaddr0 in
-      let: "tmp" := call pmpMatchEntry (exp_var "addr") (exp_var "acc") (exp_var "priv") (exp_var "tmp1") (exp_var "tmp2") (exp_var "tmp3") in
-      match: exp_var "tmp" in pmpmatch with
-      | PMP_Success  =>
-          use lemma extract_pmp_ptsto [exp_var "addr"] ;;
-          stm_val ty_bool true
-      | PMP_Fail     => stm_val ty_bool false
-      | PMP_Continue =>
-          match: exp_var "priv" in privilege with
-          | Machine => 
-              use lemma extract_pmp_ptsto [exp_var "addr"] ;;
-              stm_val ty_bool true
-          | User    => stm_val ty_bool false
-          end
-      end
-      end in
-      if: exp_var "check"
-      then exp_inr (exp_val ty_unit tt)
-      else
-        match: exp_var "acc" in union access_type with
-        |> KRead pat_unit      => exp_inl (exp_union exception_type KE_Load_Access_Fault (exp_val ty_unit tt))
-        |> KWrite pat_unit     => exp_inl (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty_unit tt))
-        |> KReadWrite pat_unit => exp_inl (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty_unit tt))
-        |> KExecute pat_unit   => exp_inl (exp_union exception_type KE_Fetch_Access_Fault (exp_val ty_unit tt))
-        end. (* TODO: use lemma close_pmp_entries *)
-
-      Lemma valid_contract_pmpCheck' : SMut.ValidContract sep_contract_pmpCheck fun_pmpCheck'.
-      Proof.
-        (* compute.
-        constructor.
-        cbn. *)
-      Admitted.
 End Debug.
+
+(* TODO: the pmpCheck contract requires some manual proof effort in the case
+         that no pmp entry matches (i.e. we end up in the final check of
+         the unrolled loop, more specifically the match on the privilege level,
+         and the Machine case (= the check is true)
+   Ideas:
+   - A lemma capturing the different conditions that can arise that lead to those
+     cases (have the conditions as precond, and asn_pmp_access ... as postcond,
+     we can then proof it sound in the model (which should be equivalent to what        
+     is currently happening in the proof below, but we should be able to define
+     the contract is one that can be proven by reflexivity))
+ *)
+Lemma valid_contract_pmpCheck : ValidContractDebug pmpCheck.
+Proof. (* NOTE: this proof holds, it's just quite slow (the cbn takes a few minutes *)
+  (* compute.
+  constructor.
+
+  unfold SymProp.safe.
+  intros addr acc priv cfg0 addr0 cfg1 addr1.
+  cbn.
+  cbn in *.
+  destruct cfg0 as [L0 A0 X0 W0 R0] eqn:Ecfg0.
+  destruct cfg1 as [L1 A1 X1 W1 R1] eqn:Ecfg1.
+  exists R0, W0, X0, A0, L0, 0, addr0, cfg0.
+
+  firstorder;
+    exists R1, W1, X1, A1, L1, addr0, addr1, cfg1;
+    firstorder;
+    unfold Pmp_access, decide_pmp_access, pmp_check,
+    pmp_match_entry, pmp_match_addr, pmp_addr_range;
+    destruct A0; destruct A1; simpl; auto;
+    repeat match goal with
+           | H: ?x < ?y |- _ =>
+               apply Z.ltb_lt in H as [= ->]
+           | H: (?x || ?y)%bool = true |- _ =>
+               apply Bool.orb_prop in H as [[= ->]|[= ->]]
+           end;
+    rewrite ?Bool.orb_true_r;
+    simpl;
+    auto;
+    destruct (addr1 <? addr0); auto;
+    destruct (addr0 <? 0); auto. *)
+Abort.
 
 (* TODO: this is just to make sure that all contracts defined so far are valid
          (i.e. ensure no contract was defined and then forgotten to validate it) *)
