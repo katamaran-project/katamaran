@@ -45,6 +45,9 @@ Definition Xlenbits : Set := Z.
 Definition Addr : Set := Z.
 Definition Word : Set := Z.
 
+Parameter minAddr : Addr.
+Parameter maxAddr : Addr.
+
 Inductive Privilege : Set :=
 | User
 | Machine

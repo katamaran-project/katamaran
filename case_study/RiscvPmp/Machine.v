@@ -128,6 +128,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | set_next_pc           : Fun [addr ∶ ty_xlenbits] ty_unit
   | tick_pc               : Fun ctx.nil ty_unit
   | abs                   : Fun [v ∶ ty_int] ty_int
+  | within_phys_mem       : Fun [paddr ∶ ty_xlenbits] ty_bool
   | mem_read              : Fun [typ ∶ ty_access_type; paddr ∶ ty_xlenbits] ty_memory_op_result
   | checked_mem_read      : Fun [t ∶ ty_access_type; paddr ∶ ty_xlenbits] ty_memory_op_result
   | checked_mem_write     : Fun [paddr ∶ ty_xlenbits; data ∶ ty_int] ty_memory_op_result
@@ -353,17 +354,34 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     then v * z_exp (-1)
     else v.
 
+  Definition fun_within_phys_mem : Stm [paddr :: ty_xlenbits] ty_bool :=
+    if: (z_exp minAddr <= paddr) && (paddr <= z_exp maxAddr)
+    then stm_val ty_bool true
+    else stm_val ty_bool false.
+
   Definition fun_mem_read : Stm [typ ∶ ty_access_type; paddr ∶ ty_xlenbits] ty_memory_op_result :=
     let: tmp := stm_read_register cur_privilege in
     call pmp_mem_read typ tmp paddr.
 
   Definition fun_checked_mem_read : Stm [t ∶ ty_access_type; paddr ∶ ty_xlenbits] ty_memory_op_result :=
-    let: tmp := foreign read_ram paddr in
-    MemValue tmp.
+    let: tmp := call within_phys_mem paddr in
+    if: tmp
+    then (use lemma extract_pmp_ptsto [paddr; t] ;;
+          let: tmp := foreign read_ram paddr in
+          MemValue tmp)
+    else match: t in union access_type with
+         |> KRead pat_unit      => MemException E_Load_Access_Fault
+         |> KWrite pat_unit     => MemException E_SAMO_Access_Fault
+         |> KReadWrite pat_unit => MemException E_SAMO_Access_Fault
+         |> KExecute pat_unit   => MemException E_Fetch_Access_Fault
+         end.
 
   Definition fun_checked_mem_write : Stm [paddr ∶ ty_xlenbits; data ∶ ty_int] ty_memory_op_result :=
-    let: tmp := foreign write_ram paddr data in
-    MemValue tmp.
+    let: tmp := call within_phys_mem paddr in
+    if: tmp
+    then (let: tmp := foreign write_ram paddr data in
+          MemValue tmp)
+    else MemException E_SAMO_Access_Fault.
 
   (* TODO *)
   (* pre: pmp_entries(?entries) ∗ pmp_addr_access(?entries, ?mode) *)
@@ -937,6 +955,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | set_next_pc           => fun_set_next_pc
     | tick_pc               => fun_tick_pc
     | abs                   => fun_abs
+    | within_phys_mem       => fun_within_phys_mem
     | mem_read              => fun_mem_read
     | mem_write_value       => fun_mem_write_value
     | checked_mem_read      => fun_checked_mem_read

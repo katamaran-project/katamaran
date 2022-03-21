@@ -76,8 +76,6 @@ Module RiscvPmpModel.
       end.
 
   Module RiscvPmpIrisHeapKit <: IrisHeapKit.
-    Variable maxAddr : nat.
-
     Section WithIrisNotations.
       Import iris.bi.interface.
       Import iris.bi.big_op.
@@ -106,7 +104,7 @@ Module RiscvPmpModel.
       Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
         fun {Σ} mG μ => (True)%I.
 
-      Definition liveAddrs := seqZ 0 maxAddr.
+      Definition liveAddrs := seqZ minAddr (maxAddr - minAddr + 1).
       Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
 
       Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
@@ -257,7 +255,7 @@ Module RiscvPmpModel.
                                ∃ w . a ↦ w ∗ perm_access(a, p) *)
       Definition interp_pmp_addr_access `{sailRegGS Σ} `{invGS Σ} {mG : memGS Σ} (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
         [∗ list] a ∈ addrs,
-          (⌜∃ p, check_access a entries m = Some p⌝ -∗
+          (⌜∃ p, Pmp_access a entries m p⌝ -∗
             (∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) a (DfracOwn 1) w))%I.
 
       Definition interp_ptsto `{sailRegGS Σ} `{invGS Σ} {mG : memGS Σ} (addr : Addr) (w : Word) : iProp Σ :=
@@ -349,196 +347,42 @@ Module RiscvPmpModel.
       iAccu.
     Qed.
 
-    Lemma andb_leb_iff : forall (a b c d : Z),
-        (a <=? b)%Z && (c <=? d)%Z = true <-> (a <= b)%Z /\ (c <= d)%Z.
+    Lemma in_liveAddrs : forall (addr : Addr),
+        (minAddr <= addr)%Z ->
+        (addr <= maxAddr)%Z ->
+        addr ∈ RiscvPmpIrisHeapKit.liveAddrs.
     Proof.
-      intros; split; intro H.
-      - apply andb_prop in H as [H1 H2].
-        apply Zle_bool_imp_le in H1.
-        apply Zle_bool_imp_le in H2.
-        apply (conj H1 H2).
-      - destruct H as [H1 H2].
-        apply Zle_imp_le_bool in H1.
-        apply Zle_imp_le_bool in H2.
-        apply andb_true_intro.
-        apply (conj H1 H2).
+      intros addr Hmin Hmax.
+      unfold RiscvPmpIrisHeapKit.liveAddrs.
+      apply elem_of_seqZ.
+      split; auto.
+      rewrite Z.add_assoc.
+      rewrite Zplus_minus.
+      apply Zle_lt_succ; auto.
     Qed.
-
-    Lemma andb_leb_ltb_iff : forall (a b c d : Z),
-        (a <=? b)%Z && (c <? d)%Z = true <-> (a <= b)%Z /\ (c < d)%Z.
-    Proof.
-      intros; split; intro H.
-      - apply andb_prop in H as [H1 H2].
-        apply Zle_bool_imp_le in H1.
-        apply Z.ltb_lt in H2.
-        apply (conj H1 H2).
-      - destruct H as [H1 H2].
-        apply Zle_imp_le_bool in H1.
-        apply Z.ltb_lt in H2.
-        apply andb_true_intro.
-        apply (conj H1 H2).
-    Qed.
-
-    Lemma pmpcfg_ent_eqb_iff : forall cfg cfg',
-      pmpcfg_ent_eqb cfg cfg' = true <-> cfg = cfg'.
-    Proof.
-      intros [[] [] [] [] []] [[] [] [] [] []]; split;
-        intro H; simpl in H; subst; auto; discriminate.
-    Qed.
-
-    (* Lemma within_cfg_pmp_match_entry (a : Addr) (cfg : Pmpcfg_ent) (prev_addr addr : Addr) (p : Privilege) :
-        Within_cfg a cfg prev_addr addr ->
-        RiscvPmpIrisHeapKit.pmp_match_entry a p cfg prev_addr addr = (PMP_Success, RiscvPmpIrisHeapKit.pmp_permission p cfg).
-    Proof.
-      destruct cfg as [? [] ? ? ?]; intro H;
-        unfold Within_cfg, decide_within_cfg in H; simpl in H; try discriminate.
-      unfold RiscvPmpIrisHeapKit.pmp_match_entry,
-        RiscvPmpIrisHeapKit.pmp_match_addr; simpl.
-      apply andb_leb_ltb_iff in H as [Hprev Haddr].
-      assert (Hprevaddr: (prev_addr <= addr)%Z)
-        by (eapply Z.le_trans with (m := a); try assumption;
-            try (apply Z.lt_le_incl; assumption)).
-      simpl; rewrite ?Z.leb_antisym.
-      apply Z.ltb_ge in Hprevaddr as ->.
-      apply Z.ltb_ge in Hprev as ->.
-      apply Z.ltb_lt in Haddr as ->.
-      auto.
-    Qed. *)
 
     Lemma extract_pmp_ptsto_sound :
       ValidLemma RiscvPmpSpecification.lemma_extract_pmp_ptsto.
     Proof.
-      (* intros ι; destruct_syminstance ι; cbn.
-      iIntros "[%cfg0 [%addr0 [%cfg1 [%addr1 [[%H _] [Hpmp_addr_access [[[%HNot _] [%Hp _]]|[[%HIn _] [[%HPrev _] [%HWithin _]]]]]]]]]]".
-      { unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access.
-        assert (Hin: paddr ∈ RiscvPmpIrisHeapKit.liveAddrs) by admit.
-        iInduction RiscvPmpIrisHeapKit.liveAddrs as [|x xs] "IH".
-        - apply elem_of_nil in Hin; contradiction.
-        - apply elem_of_cons in Hin as [Heq|Hin].
-          + rewrite big_opL_cons.
-            iDestruct "Hpmp_addr_access" as "[Haccess _]".
-            unfold RiscvPmpIrisHeapKit.interp_ptsto; subst.
-            iApply "Haccess".
-            iPureIntro.
-            rename x into paddr.
-            eexists.
-            unfold Not_within_cfg, decide_not_within_cfg in HNot.
-            apply orb_prop in HNot as [HNot|HNot].
-            * apply andb_prop in HNot as [Hcfg0 Hcfg1].
-              destruct cfg0 as [? [] ? ? ?];
-                destruct cfg1 as [? [] ? ? ?];
-                simpl in *; auto.
-              (* TODO: the following doesn't seem the right way to do things =) *)
-              rewrite PmpAddrMatchType_eqb_equation_3 in Hcfg1; discriminate.
-              rewrite PmpAddrMatchType_eqb_equation_3 in Hcfg0; discriminate.
-              rewrite PmpAddrMatchType_eqb_equation_3 in Hcfg1; discriminate.
-            * unfold RiscvPmpIrisHeapKit.check_access,
-                RiscvPmpIrisHeapKit.pmp_check,
-                RiscvPmpIrisHeapKit.pmp_match_entry,
-                RiscvPmpIrisHeapKit.pmp_match_addr,
-                RiscvPmpIrisHeapKit.pmp_addr_range.
-              apply andb_prop in HNot as [HNot Haddr1].
-              apply andb_prop in HNot as [H0 Haddr0].
-              destruct cfg0 as [? [] ? ? ?]; simpl;
-                destruct cfg1 as [? [] ? ? ?]; simpl;
-                auto.
-              (* TODO: very bruteforce atm, clean this up *)
-              destruct (addr1 <? addr0)%Z; auto.
-              rewrite (Z.leb_antisym paddr addr1).
-              apply Zle_bool_imp_le in Haddr1.
-              apply Z.ltb_ge in Haddr1 as [= ->]; simpl.
-              rewrite orb_true_r; auto.
-              destruct (addr0 <? 0)%Z; auto.
-              rewrite (Z.leb_antisym paddr addr0).
-              apply Zle_bool_imp_le in Haddr0.
-              apply Z.ltb_ge in Haddr0 as [= ->]; simpl.
-              rewrite orb_true_r; auto.
-              destruct (addr0 <? 0)%Z; auto.
-              destruct (addr1 <? addr0)%Z; auto.
-              rewrite (Z.leb_antisym paddr addr1).
-              apply Zle_bool_imp_le in Haddr1.
-              apply Z.ltb_ge in Haddr1 as [= ->]; simpl.
-              rewrite orb_true_r; auto.
-              destruct (addr0 <? 0)%Z; auto.
-              rewrite (Z.leb_antisym paddr addr0).
-              apply Zle_bool_imp_le in Haddr0.
-              apply Z.ltb_ge in Haddr0 as [= ->]; simpl.
-              rewrite orb_true_r; auto.
-              rewrite (Z.leb_antisym paddr addr1).
-              apply Zle_bool_imp_le in Haddr1.
-              apply Z.ltb_ge in Haddr1 as [= ->]; simpl.
-              destruct (addr1 <? addr0)%Z; auto.
-              rewrite (Z.leb_antisym paddr addr0).
-              apply Zle_bool_imp_le in Haddr0.
-              apply Z.ltb_ge in Haddr0 as [= ->]; simpl.
-              rewrite orb_true_r; auto.
-              rewrite (Z.leb_antisym paddr addr1).
-              apply Zle_bool_imp_le in Haddr1.
-              apply Z.ltb_ge in Haddr1 as [= ->]; simpl.
-              destruct (addr1 <? addr0)%Z; auto.
-          + rewrite big_opL_cons.
-            iDestruct "Hpmp_addr_access" as "[_ H]".
-            iApply "IH"; try done.
-      }
-      { unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access.
-        assert (Hin: paddr ∈ RiscvPmpIrisHeapKit.liveAddrs) by admit.
-        iInduction RiscvPmpIrisHeapKit.liveAddrs as [|x xs] "IH".
-        - apply elem_of_nil in Hin; contradiction.
-        - apply elem_of_cons in Hin as [Heq|Hin].
-          + destruct cfgidx; subst; simpl in *.
-            * iDestruct "Hpmp_addr_access" as "[H _]".
-              iClear "IH".
-              iApply "H".
-              iPureIntro.
-              exists (RiscvPmpIrisHeapKit.pmp_permission p cfg).
-              unfold RiscvPmpIrisHeapKit.check_access,
-                RiscvPmpIrisHeapKit.pmp_check.
-              unfold In_entries in HIn.
-              simpl in HIn.
-              apply andb_true_iff in HIn as [Heq Ha].
-              apply Z.eqb_eq in Ha; subst.
-              apply pmpcfg_ent_eqb_iff in Heq as [= ->].
-              unfold Prev_addr in HPrev.
-              simpl in HPrev.
-              apply Z.eqb_eq in HPrev as [= ->].
-              rewrite within_cfg_pmp_match_entry; try assumption.
-              auto.
-            * iDestruct "Hpmp_addr_access" as "[H _]".
-              iClear "IH".
-              iApply "H".
-              iPureIntro.
-              exists (RiscvPmpIrisHeapKit.pmp_permission p cfg).
-              unfold RiscvPmpIrisHeapKit.check_access,
-                RiscvPmpIrisHeapKit.pmp_check.
-              unfold In_entries in HIn.
-              simpl in HIn.
-              apply andb_true_iff in HIn as [Heq Ha].
-              apply Z.eqb_eq in Ha; subst.
-              apply pmpcfg_ent_eqb_iff in Heq as [= ->].
-              unfold Prev_addr in HPrev.
-              simpl in HPrev.
-              apply Z.eqb_eq in HPrev as [= ->].
-              rewrite (within_cfg_pmp_match_entry p HWithin); try assumption. *)
+      intros ι; destruct_syminstance ι; cbn.
+      iIntros "[Hentries [Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]]";
+        unfold Abstract_le in *.
 
-              (* TODO: this will not scale well.. if more PMP entries are added,
-                     it would be better to have proof that it doesn't match
-                     preceding entries! *)
-              (* unfold RiscvPmpIrisHeapKit.pmp_match_entry,
-                RiscvPmpIrisHeapKit.pmp_match_addr,
-                RiscvPmpIrisHeapKit.pmp_addr_range.
-              destruct cfg0 as [? [] ? ? ?]; simpl; auto.
-              destruct (addr0 <? 0)%Z; auto.
-              unfold Within_cfg, decide_within_cfg in HWithin; simpl in HWithin.
-              destruct cfg1 as [? [] ? ? ?]; simpl in *; auto; try discriminate.
-              apply andb_leb_ltb_iff in HWithin as [H _].
-              rewrite ?Z.leb_antisym.
-              apply Z.ltb_ge in H as ->; simpl.
-              rewrite orb_true_r; auto.
-          + rewrite big_opL_cons.
-            iDestruct "Hpmp_addr_access" as "[_ H]".
-            iApply "IH"; try done.
-      } *)
-    Admitted.
+      unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access.
+      assert (Hin: paddr ∈ RiscvPmpIrisHeapKit.liveAddrs) by (apply (in_liveAddrs Hlemin Hlemax)).
+      iInduction RiscvPmpIrisHeapKit.liveAddrs as [|x xs] "IH".
+      - apply elem_of_nil in Hin; contradiction.
+      - apply elem_of_cons in Hin as [Heq|Hin].
+        + rewrite big_opL_cons.
+          iDestruct "Hmem" as "[Hmem _]".
+          unfold RiscvPmpIrisHeapKit.interp_ptsto; subst.
+          iApply "Hmem".
+          iPureIntro.
+          exists acc; auto.
+        + rewrite big_opL_cons.
+          iDestruct "Hmem" as "[_ Hmem]".
+          iApply ("IH" $! Hin with "Hentries Hmem").
+    Qed.
 
   End Lemmas.
 

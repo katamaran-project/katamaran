@@ -62,6 +62,7 @@ Inductive PurePredicate : Set :=
 | not_within_cfg
 | prev_addr
 | in_entries
+| abstract_le
 .
 
 Inductive Predicate : Set :=
@@ -96,7 +97,11 @@ Section PredicateKit.
     | not_within_cfg  => [ty_xlenbits; ty_list ty_pmpentry]
     | prev_addr       => [ty_pmpcfgidx; ty_list ty_pmpentry; ty_xlenbits]
     | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty_list ty_pmpentry]
+    | abstract_le     => [ty_xlenbits; ty_xlenbits]
     end.
+
+  Definition Abstract_le (a1 a2 : Val ty_xlenbits) : Prop :=
+    a1 <= a2.
 
   Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
   Definition PmpAddrRange := option (Xlenbits * Xlenbits).
@@ -149,13 +154,6 @@ Section PredicateKit.
     | PMP_PartialMatch => PMP_Fail
     | PMP_Match        => PMP_Success
     end.
-
-  Equations ty_access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
-  | Read      | Read      := true;
-  | Write     | Write     := true;
-  | ReadWrite | ReadWrite := true;
-  | Execute   | Execute   := true;
-  | _         | _         := false.
 
   Fixpoint pmp_check (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) (p : Val ty_access_type) : bool :=
     match entries with
@@ -255,6 +253,7 @@ Section PredicateKit.
     | not_within_cfg  => Not_within_cfg
     | prev_addr       => Prev_addr
     | in_entries      => In_entries
+    | abstract_le     => Abstract_le
     end.
 
   Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -283,8 +282,10 @@ Section PredicateKit.
 
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
-    | ptsto => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
-    | _ => None
+    | ptsto           => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
+    | pmp_entries     => Some (MkPrecise [ty_list ty_pmpentry] ε eq_refl)
+    | pmp_addr_access => Some (MkPrecise [ty_list ty_pmpentry; ty_privilege] ε eq_refl)
+    | _               => None
     end.
 
 End PredicateKit.
@@ -304,8 +305,8 @@ Section ContractDefKit.
   Local Notation "a &&ₜ b" := (term_binop binop_and a b) (at level 80).
   Local Notation "a ||ₜ b" := (term_binop binop_or a b) (at level 85).
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
-  Local Notation asn_pmp_entries l := (asn_chunk_angelic (chunk_user pmp_entries [l])).
-  Local Notation asn_pmp_addr_access l m := (asn_chunk_angelic (chunk_user pmp_addr_access [l; m])).
+  Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
+  Local Notation asn_pmp_addr_access l m := (asn_chunk (chunk_user pmp_addr_access [l; m])).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
   Local Notation asn_within_cfg a cfg prev_addr addr := (asn_formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
   Local Notation asn_not_within_cfg a es := (asn_formula (formula_user not_within_cfg [a; es])).
@@ -314,6 +315,7 @@ Section ContractDefKit.
   Local Notation asn_pmp_access addr es m p := (asn_formula (formula_user pmp_access [addr;es;m;p])).
   Local Notation asn_pmp_check_perms cfg acc p := (asn_formula (formula_user pmp_check_perms [cfg;acc;p])).
   Local Notation asn_pmp_check_rwx cfg acc := (asn_formula (formula_user pmp_check_rwx [cfg;acc])).
+  Local Notation asn_abstract_le a1 a2 := (asn_formula (formula_user abstract_le [a1;a2])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_int) : Term Σ ty_bool :=
     term_binop binop_eq e1 e2.
@@ -783,14 +785,30 @@ Section ContractDefKit.
        sep_contract_postcondition   := asn_true;
     |}.
 
+  Definition sep_contract_within_phys_mem : SepContractFun within_phys_mem :=
+    {| sep_contract_logic_variables := [paddr :: ty_xlenbits];
+       sep_contract_localstore      := [term_var paddr];
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_within_phys_mem";
+       sep_contract_postcondition   :=
+         asn_if (term_var "result_within_phys_mem")
+                (asn_abstract_le (term_val ty_xlenbits minAddr) (term_var paddr)
+                 ∗ asn_abstract_le (term_var paddr) (term_val ty_xlenbits maxAddr))
+                asn_true;
+    |}.
+
   (* TODO: read perm in pre: perm_access(paddr, ?p) ∗ R ≤ ?p *)
   Definition sep_contract_checked_mem_read : SepContractFun checked_mem_read :=
-    {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; w :: ty_xlenbits];
+    {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; w :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var paddr];
-       sep_contract_precondition    := term_var paddr ↦ₘ term_var w;
+       sep_contract_precondition    :=
+           asn_pmp_entries (term_var "entries")
+           ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
+           ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t);
        sep_contract_result          := "result_checked_mem_read";
-       sep_contract_postcondition   :=
-         term_var "result_checked_mem_read" = term_union memory_op_result KMemValue (term_var w);
+       sep_contract_postcondition   := asn_true;
+         (* asn_pmp_entries (term_var "entries"); *)
+         (* ∗ asn_pmp_addr_access (term_var "entries") (term_var p); *)
     |}.
 
   (* TODO: post: we should "close" the pmp_addr_access predicate again after
@@ -993,23 +1011,15 @@ Section ContractDefKit.
     |}.
 
   Definition lemma_extract_pmp_ptsto : SepLemma extract_pmp_ptsto :=
-    let Σ : LCtx := [paddr :: ty_xlenbits; acc :: ty_access_type; "entries" :: ty_list ty_pmpentry; "cfgidx" :: ty_pmpcfgidx; cfg :: ty_pmpcfg_ent; addr :: ty_xlenbits; "prev_addr" :: ty_xlenbits; p :: ty_privilege; "L0" :: ty_bool; "A0" :: ty_pmpaddrmatchtype; "X0" :: ty_bool; "W0" :: ty_bool; "R0" :: ty_bool; "L1" :: ty_bool; "A1" :: ty_pmpaddrmatchtype; "X1" :: ty_bool; "W1" :: ty_bool; "R1" :: ty_bool] in
-  (*  let entry0 := term_record rpmpcfg_ent [term_var "L0"; term_var "A0"; term_var "X0"; term_var "W0"; term_var "R0"] in *)
-    {| lemma_logic_variables := Σ;
+    {| lemma_logic_variables := [paddr :: ty_xlenbits; acc :: ty_access_type; "entries" :: ty_list ty_pmpentry; p :: ty_privilege];
        lemma_patterns        := [term_var paddr; term_var acc];
-       lemma_precondition   := ∃ "addr0", ∃ "addr1",
-         (let entry0 := term_record rpmpcfg_ent [term_var "L0"; term_var "A0"; term_var "X0"; term_var "W0"; term_var "R0"] in
-          let entry1 := term_record rpmpcfg_ent [term_var "L1"; term_var "A1"; term_var "X1"; term_var "W1"; term_var "R1"] in
-          term_var "entries" = term_list [(entry0 ,ₜ term_var "addr0");
-                                          (entry1 ,ₜ term_var "addr1")] ∗
-         ((asn_not_within_cfg (term_var paddr) (term_var "entries") ∗
-           term_var p = term_val ty_privilege Machine)
-          ∨
-           (asn_in_entries (term_var "cfgidx") (term_var cfg ,ₜ term_var addr) (term_var "entries") ∗
-            asn_pmp_check_perms (term_var cfg) (term_var acc) (term_var p) ∗
-            asn_prev_addr (term_var "cfgidx") (term_var "entries") (term_var "prev_addr") ∗
-            asn_within_cfg (term_var paddr) (term_var cfg) (term_var "prev_addr") (term_var addr))));
-       lemma_postcondition   := asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc); (* TODO: add some chunk that denotes asn_pmp_addr_acces\{paddr}, so we can "return" it later *)
+       lemma_precondition    :=
+          asn_pmp_entries (term_var "entries")
+          ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
+          ∗ asn_abstract_le (term_val ty_xlenbits minAddr) (term_var paddr)
+          ∗ asn_abstract_le (term_var paddr) (term_val ty_xlenbits maxAddr)
+          ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc);
+       lemma_postcondition   := ∃ "w", term_var paddr ↦ₘ term_var w; (* TODO: add some chunk that denotes asn_pmp_addr_acces\{paddr}, so we can "return" it later *)
     |}.
 
   End Contracts.
@@ -1039,6 +1049,7 @@ Section ContractDefKit.
       | rX                    => Some sep_contract_rX
       | wX                    => Some sep_contract_wX
       | abs                   => Some sep_contract_abs
+      | within_phys_mem       => Some sep_contract_within_phys_mem
       | readCSR               => Some sep_contract_readCSR
       | writeCSR              => Some sep_contract_writeCSR
       | check_CSR             => Some sep_contract_check_CSR
@@ -1170,6 +1181,10 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
                            let (ts,entries) := env.snocView ts in
                            let (ts,cfg)     := env.snocView ts in
                            Some (cons (formula_user in_entries [cfg; entries; prev]) nil)
+    | abstract_le     => fun ts =>
+                           let (ts,a2) := env.snocView ts in
+                           let (ts,a1) := env.snocView ts in
+                           Some (cons (formula_user abstract_le [a1;a2]) nil)
     end.
 
   Definition simplify_formula {Σ} (fml : Formula Σ) : option (List Formula Σ) :=
@@ -1214,9 +1229,6 @@ Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
   | Some c => SMut.ValidContract c (FunDef f)
   | None => False
   end.
-
-Lemma valid_contract_checked_mem_read : ValidContract checked_mem_read.
-Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmp_mem_read : ValidContract pmp_mem_read.
 Proof. Admitted.
@@ -1308,6 +1320,15 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_abs : ValidContract abs.
 Proof. reflexivity. Qed.
 
+Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
+Proof.
+  compute;
+    constructor;
+    cbn;
+    intros;
+    unfold Abstract_le; auto.
+Qed.
+
 Lemma valid_contract_execute_RTYPE : ValidContract execute_RTYPE.
 Proof. reflexivity. Qed. 
 
@@ -1347,6 +1368,32 @@ Section Debug.
   (* Import RiscvNotations. *)
   (* Import RiscvμSailNotations. *)
   Import SymProp.notations.
+  Notation "'MemValue' memv" := (exp_union memory_op_result KMemValue memv) (at level 10, memv at next level) : exp_scope.
+  Notation "'MemException' meme" := (exp_union memory_op_result KMemException meme) (at level 10, meme at next level) : exp_scope.
+  Notation "'E_Fetch_Access_Fault'" := (exp_union exception_type KE_Fetch_Access_Fault (exp_val ty_unit tt)) : exp_scope.
+  Notation "'E_Load_Access_Fault'" := (exp_union exception_type KE_Load_Access_Fault (exp_val ty_unit tt)) : exp_scope.
+  Notation "'E_SAMO_Access_Fault'" := (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty_unit tt)) : exp_scope.
+
+  Definition fun_checked_mem_read' : Stm ["t" ∶ ty_access_type; "paddr" ∶ ty_xlenbits] ty_memory_op_result :=
+    let: "tmp" := call within_phys_mem (exp_var "paddr") in
+    if: exp_var "tmp"
+    then (stm_debugk (use lemma extract_pmp_ptsto [exp_var "paddr"; exp_var "t"]) ;;
+          let: "tmp" := foreign read_ram (exp_var "paddr") in
+          MemValue (exp_var "tmp"))
+    else match: exp_var "t" in union access_type with
+         |> KRead pat_unit      => MemException E_Load_Access_Fault
+         |> KWrite pat_unit     => MemException E_SAMO_Access_Fault
+         |> KReadWrite pat_unit => MemException E_SAMO_Access_Fault
+         |> KExecute pat_unit   => MemException E_Fetch_Access_Fault
+         end.
+
+  Lemma valid_contract_checked_mem_read : SMut.ValidContract sep_contract_checked_mem_read fun_checked_mem_read'.
+  Proof.
+    (* Set Printing Depth 100.
+    compute.
+    constructor. *)
+  Admitted. (* reflexivity. Qed. *)
+
 End Debug.
 
 (* TODO: the pmpCheck contract requires some manual proof effort in the case
