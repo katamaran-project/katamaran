@@ -145,128 +145,50 @@ Module RiscvPmpModel.
         | None => True
         end.
 
-      Definition interp_gprs `{sailRegGS Σ} : iProp Σ :=
-        [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
+      Section WithResources.
+        Context `{sailRegGS Σ} `{invGS Σ} `{mG : memGS Σ}.
 
-      Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
+        Definition interp_gprs : iProp Σ :=
+          [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
 
-      Definition interp_pmp_entries `{sailRegGS Σ} (entries : list PmpEntryCfg) : iProp Σ :=
-        match entries with
-        | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
-            reg_pointsTo pmp0cfg cfg0 ∗
-            reg_pointsTo pmpaddr0 addr0 ∗
-            reg_pointsTo pmp1cfg cfg1 ∗
-            reg_pointsTo pmpaddr1 addr1
-        | _ => False
-        end.
+        Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
 
-      (* Definition PmpAddrRange := option (Xlenbits * Xlenbits). *)
+        Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
+          match entries with
+          | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
+              reg_pointsTo pmp0cfg cfg0 ∗
+                           reg_pointsTo pmpaddr0 addr0 ∗
+                           reg_pointsTo pmp1cfg cfg1 ∗
+                           reg_pointsTo pmpaddr1 addr1
+          | _ => False
+          end.
 
-      (* Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange := *)
-      (*   match A cfg with *)
-      (*   | OFF => None *)
-      (*   | TOR => Some (lo , hi) *)
-      (*   end. *)
-
-      (* Definition pmp_match_addr (a : Addr) (rng : PmpAddrRange) : PmpAddrMatch := *)
-      (*   match rng with *)
-      (*   | Some (lo, hi) => *)
-      (*       if hi <? lo *)
-      (*       then PMP_NoMatch *)
-      (*       else if (a <? lo) || (hi <=? a) *)
-      (*            then PMP_NoMatch *)
-      (*            else if (lo <=? a) && (a <? hi) *)
-      (*                 then PMP_Match *)
-      (*                 else PMP_PartialMatch *)
-      (*   | None          => PMP_NoMatch *)
-      (*   end. *)
-
-      (* (* Ignore execute perm for now *) *)
-      (* Inductive Permission : Set := *)
-      (* | O *)
-      (* | R *)
-      (* | W *)
-      (* | RW. *)
-
-      (* Definition translate_perm_from_cfg (cfg : Pmpcfg_ent) : Permission := *)
-      (*   match Base.R cfg, Base.W cfg with *)
-      (*   | false, false => O *)
-      (*   | true, false  => R *)
-      (*   | false, true  => W *)
-      (*   | true, true   => RW *)
-      (*   end. *)
-
-      (* Definition pmp_permission (m : Privilege) (cfg : Pmpcfg_ent) : Permission := *)
-      (*   let p := translate_perm_from_cfg cfg in *)
-      (*   match m, L cfg with *)
-      (*   | User,    _    => p *)
-      (*   | Machine, true => p (* only restrict Machine mode if PMP entry is locked *) *)
-      (*   | Machine, _    => RW *)
-      (*   end. *)
-
-      (* Definition pmp_match_entry (a : Addr) (m : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits) : PmpMatch * Permission := *)
-      (*   let rng := pmp_addr_range cfg hi lo in *)
-      (*   match pmp_match_addr a rng with *)
-      (*   | PMP_NoMatch      => (PMP_Continue, O) *)
-      (*   | PMP_PartialMatch => (PMP_Fail, O) *)
-      (*   | PMP_Match        => (PMP_Success, pmp_permission m cfg) *)
-      (*   end. *)
-
-      (* Fixpoint pmp_check (a : Addr) (entries : list PmpEntryCfg) (prev : Addr) (m : Privilege) : option Permission := *)
-      (*   match entries with *)
-      (*   | [] => match m with *)
-      (*           | Machine => Some RW *)
-      (*           | User    => None *)
-      (*           end *)
-      (*   | (cfg , addr) :: entries => *)
-      (*       match pmp_match_entry a m cfg prev addr with *)
-      (*       | (PMP_Success, p)  => Some p *)
-      (*       | (PMP_Fail, _)     => None *)
-      (*       | (PMP_Continue, _) => pmp_check a entries addr m *)
-      (*       end *)
-      (*   end. *)
-
-      (* check_access is based on the pmpCheck algorithm, main difference
-         is that we can define it less cumbersome because entries will contain
-         the PMP entries in highest-priority order. *)
-      Definition check_access (a : Addr) (entries : list PmpEntryCfg) (m : Privilege) : option AccessType :=
-        (* pmp_check a entries 0 m. *)
-        Some ReadWrite.
-
-      (* Lemma pmp_match_entry_TOR_within_bounds :
-        forall (a : Addr) (m : Privilege) (cfg : Pmpcfg_ent) (lo hi : Xlenbits),
-          lo <= a ∧ a < hi ->
-          A cfg = TOR ->
-          pmp_match_entry a m cfg lo hi = (PMP_Success, pmp_permission m cfg).
-      Proof.
-        intros a m [] lo hi [Hlo Hhi] [= ->].
-        unfold pmp_match_entry.
-        simpl.
-        assert (H: lo <= hi) by (eapply Z.le_trans with (m := a); try assumption;
-                                 try (apply Z.lt_le_incl; assumption)).
-        apply Z.ltb_ge in H; apply Z.ltb_ge in Hlo; apply Z.ltb_lt in Hhi.
-        rewrite H Hhi Hlo; simpl.
-        rewrite ?Z.leb_antisym Hlo Hhi; simpl; auto.
-      Qed. *)
-
-      (* TODO: add perm_access predicate *)
-      (* pmp_addr_access(?entries, ?mode) 
+        (* TODO: add perm_access predicate *)
+        (* pmp_addr_access(?entries, ?mode) 
          ∀ a ∈ Mem, p : Perm . check_access(a, entries, mode) = Some p -> 
                                ∃ w . a ↦ w ∗ perm_access(a, p) *)
-      Definition interp_pmp_addr_access `{sailRegGS Σ} `{invGS Σ} {mG : memGS Σ} (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-        [∗ list] a ∈ addrs,
-          (⌜∃ p, Pmp_access a entries m p⌝ -∗
-            (∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) a (DfracOwn 1) w))%I.
+        Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+          [∗ list] a ∈ addrs,
+            (⌜∃ p, Pmp_access a entries m p⌝ -∗ (* TODO: if interp_ptsto is updated to include pmp_access, then use interp_ptsto here as well *)
+              (∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) a (DfracOwn 1) w))%I.
 
-      Definition interp_ptsto `{sailRegGS Σ} `{invGS Σ} {mG : memGS Σ} (addr : Addr) (w : Word) : iProp Σ :=
-        mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w. 
+        (* TODO: change to ⌜∃ acc, Pmp_access a entries pacc⌝ -∗ mapsto ...? *)
+        Definition interp_ptsto (addr : Addr) (w : Word) : iProp Σ :=
+          mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w. 
+
+        Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+          (((* ⌜∃ p, Pmp_access addr entries m p⌝ -∗ *) (* TODO: instead of uncommenting this, just use interp_ptsto *)
+              (∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w)) -∗
+                 interp_pmp_addr_access addrs entries m)%I.
+      End WithResources.
 
       Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
         match p return Env Val (𝑯_Ty p) -> iProp Σ with
-        | pmp_entries       => fun ts => interp_pmp_entries (env.head ts)
-        | pmp_addr_access   => fun ts => interp_pmp_addr_access (mG := mG) liveAddrs (env.head (env.tail ts)) (env.head ts)
-        | gprs              => fun _  => interp_gprs
-        | ptsto             => fun ts => interp_ptsto (mG := mG) (env.head (env.tail ts)) (env.head ts)
+        | pmp_entries             => fun ts => interp_pmp_entries (env.head ts)
+        | pmp_addr_access         => fun ts => interp_pmp_addr_access (mG := mG) liveAddrs (env.head (env.tail ts)) (env.head ts)
+        | pmp_addr_access_without => fun ts => interp_pmp_addr_access_without (mG := mG) (env.head (env.tail (env.tail ts))) liveAddrs (env.head (env.tail ts)) (env.head ts)
+        | gprs                    => fun _  => interp_gprs
+        | ptsto                   => fun ts => interp_ptsto (mG := mG) (env.head (env.tail ts)) (env.head ts)
         end.
 
     Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
@@ -367,8 +289,23 @@ Module RiscvPmpModel.
       intros ι; destruct_syminstance ι; cbn.
       iIntros "[Hentries [Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]]";
         unfold Abstract_le in *.
+      iSplitL "Hentries"; try done.
+      unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access_without,
+        RiscvPmpIrisHeapKit.interp_pmp_addr_access,
+        RiscvPmpIrisHeapKit.interp_ptsto,
+        RiscvPmpIrisHeapKit.MemVal, Word.
 
-      unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access.
+      (* TODO: the following  (until the next comment) should be plenty 
+               to prove this lemma, the induction on liveAddrs should exactly
+               not be needed in any case... *)
+      (*
+      Search (?P ∗ (?P -∗ ?Q))%I.
+      Search bi_wand.
+
+      rewrite bi.sep_comm.
+      iApply (big_sepL_lookup_acc with "H1"). *)
+
+      (* unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access.
       assert (Hin: paddr ∈ RiscvPmpIrisHeapKit.liveAddrs) by (apply (in_liveAddrs Hlemin Hlemax)).
       iInduction RiscvPmpIrisHeapKit.liveAddrs as [|x xs] "IH".
       - apply elem_of_nil in Hin; contradiction.
@@ -376,13 +313,19 @@ Module RiscvPmpModel.
         + rewrite big_opL_cons.
           iDestruct "Hmem" as "[Hmem _]".
           unfold RiscvPmpIrisHeapKit.interp_ptsto; subst.
+          iSplitL "Hentries"; try done.
+          iSplitL.
+          unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access_without.
+          iIntros "Hx".
+          unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access.
           iApply "Hmem".
           iPureIntro.
           exists acc; auto.
         + rewrite big_opL_cons.
           iDestruct "Hmem" as "[_ Hmem]".
           iApply ("IH" $! Hin with "Hentries Hmem").
-    Qed.
+    Qed. *)
+    Admitted.
 
   End Lemmas.
 

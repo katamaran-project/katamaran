@@ -68,6 +68,7 @@ Inductive PurePredicate : Set :=
 Inductive Predicate : Set :=
 | pmp_entries
 | pmp_addr_access
+| pmp_addr_access_without
 | gprs
 | ptsto
 .
@@ -261,19 +262,21 @@ Section PredicateKit.
   Definition 𝑯 := Predicate.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | pmp_entries       => [ty_list ty_pmpentry]
-    | pmp_addr_access   => [ty_list ty_pmpentry; ty_privilege]
-    | gprs              => ctx.nil
-    | ptsto             => [ty_xlenbits; ty_xlenbits]
+    | pmp_entries             => [ty_list ty_pmpentry]
+    | pmp_addr_access         => [ty_list ty_pmpentry; ty_privilege]
+    | pmp_addr_access_without => [ty_xlenbits; ty_list ty_pmpentry; ty_privilege]
+    | gprs                    => ctx.nil
+    | ptsto                   => [ty_xlenbits; ty_xlenbits]
     end.
 
   Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
-      | pmp_entries     => false
-      | pmp_addr_access => false
-      | gprs            => false
-      | ptsto           => false
+      | pmp_entries             => false
+      | pmp_addr_access         => false
+      | pmp_addr_access_without => false
+      | gprs                    => false
+      | ptsto                   => false
       end
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -282,10 +285,11 @@ Section PredicateKit.
 
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
-    | ptsto           => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
-    | pmp_entries     => Some (MkPrecise [ty_list ty_pmpentry] ε eq_refl)
-    | pmp_addr_access => Some (MkPrecise [ty_list ty_pmpentry; ty_privilege] ε eq_refl)
-    | _               => None
+    | ptsto                   => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
+    | pmp_entries             => Some (MkPrecise [ty_list ty_pmpentry] ε eq_refl)
+    | pmp_addr_access         => Some (MkPrecise [ty_list ty_pmpentry; ty_privilege] ε eq_refl)
+    | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits; ty_list ty_pmpentry; ty_privilege] ε eq_refl)
+    | _                       => None
     end.
 
 End PredicateKit.
@@ -307,6 +311,7 @@ Section ContractDefKit.
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
   Local Notation asn_pmp_addr_access l m := (asn_chunk (chunk_user pmp_addr_access [l; m])).
+  Local Notation asn_pmp_addr_access_without a l m := (asn_chunk (chunk_user pmp_addr_access_without [a;l; m])).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
   Local Notation asn_within_cfg a cfg prev_addr addr := (asn_formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
   Local Notation asn_not_within_cfg a es := (asn_formula (formula_user not_within_cfg [a; es])).
@@ -1019,7 +1024,10 @@ Section ContractDefKit.
           ∗ asn_abstract_le (term_val ty_xlenbits minAddr) (term_var paddr)
           ∗ asn_abstract_le (term_var paddr) (term_val ty_xlenbits maxAddr)
           ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc);
-       lemma_postcondition   := ∃ "w", term_var paddr ↦ₘ term_var w; (* TODO: add some chunk that denotes asn_pmp_addr_acces\{paddr}, so we can "return" it later *)
+       lemma_postcondition   :=
+          asn_pmp_entries (term_var "entries")
+          ∗ asn_pmp_addr_access_without (term_var paddr) (term_var "entries") (term_var p)
+          ∗ ∃ "w", term_var paddr ↦ₘ term_var w; (* TODO: add some chunk that denotes asn_pmp_addr_acces\{paddr}, so we can "return" it later *)
     |}.
 
   End Contracts.
@@ -1230,6 +1238,47 @@ Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
   | None => False
   end.
 
+Section Debug.
+  Coercion stm_exp : Exp >-> Stm.
+  Local Notation "'use' 'lemma' lem args" := (stm_lemma lem args%env) (at level 10, lem at next level) : exp_scope.
+  Local Notation "'use' 'lemma' lem" := (stm_lemma lem env.nil) (at level 10, lem at next level) : exp_scope.
+  Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
+  Local Notation "p '∗' q" := (asn_sep p q).
+  Local Notation "a '=' b" := (asn_eq a b).
+  Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+
+  (* Import RiscvNotations. *)
+  (* Import RiscvμSailNotations. *)
+  Import SymProp.notations.
+  Notation "'MemValue' memv" := (exp_union memory_op_result KMemValue memv) (at level 10, memv at next level) : exp_scope.
+  Notation "'MemException' meme" := (exp_union memory_op_result KMemException meme) (at level 10, meme at next level) : exp_scope.
+  Notation "'E_Fetch_Access_Fault'" := (exp_union exception_type KE_Fetch_Access_Fault (exp_val ty_unit tt)) : exp_scope.
+  Notation "'E_Load_Access_Fault'" := (exp_union exception_type KE_Load_Access_Fault (exp_val ty_unit tt)) : exp_scope.
+  Notation "'E_SAMO_Access_Fault'" := (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty_unit tt)) : exp_scope.
+
+  Definition fun_checked_mem_read' : Stm ["t" ∶ ty_access_type; "paddr" ∶ ty_xlenbits] ty_memory_op_result :=
+    let: "tmp" := call within_phys_mem (exp_var "paddr") in
+    if: exp_var "tmp"
+    then (stm_debugk (use lemma extract_pmp_ptsto [exp_var "paddr"; exp_var "t"]) ;;
+          let: "tmp" := foreign read_ram (exp_var "paddr") in
+          MemValue (exp_var "tmp"))
+    else match: exp_var "t" in union access_type with
+         |> KRead pat_unit      => MemException E_Load_Access_Fault
+         |> KWrite pat_unit     => MemException E_SAMO_Access_Fault
+         |> KReadWrite pat_unit => MemException E_SAMO_Access_Fault
+         |> KExecute pat_unit   => MemException E_Fetch_Access_Fault
+         end.
+
+  Lemma valid_contract_checked_mem_read : SMut.ValidContract sep_contract_checked_mem_read fun_checked_mem_read'.
+  Proof.
+    Set Printing Depth 100.
+    compute.
+    constructor.
+    cbn.
+  Admitted. (* reflexivity. Qed. *)
+
+End Debug.
+
 Lemma valid_contract_pmp_mem_read : ValidContract pmp_mem_read.
 Proof. Admitted.
 
@@ -1355,46 +1404,6 @@ Proof. reflexivity. Qed.
 
 Lemma valid_execute_CSR : ValidContract execute_CSR.
 Proof. reflexivity. Qed.
-
-Section Debug.
-  Coercion stm_exp : Exp >-> Stm.
-  Local Notation "'use' 'lemma' lem args" := (stm_lemma lem args%env) (at level 10, lem at next level) : exp_scope.
-  Local Notation "'use' 'lemma' lem" := (stm_lemma lem env.nil) (at level 10, lem at next level) : exp_scope.
-  Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
-  Local Notation "p '∗' q" := (asn_sep p q).
-  Local Notation "a '=' b" := (asn_eq a b).
-  Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
-
-  (* Import RiscvNotations. *)
-  (* Import RiscvμSailNotations. *)
-  Import SymProp.notations.
-  Notation "'MemValue' memv" := (exp_union memory_op_result KMemValue memv) (at level 10, memv at next level) : exp_scope.
-  Notation "'MemException' meme" := (exp_union memory_op_result KMemException meme) (at level 10, meme at next level) : exp_scope.
-  Notation "'E_Fetch_Access_Fault'" := (exp_union exception_type KE_Fetch_Access_Fault (exp_val ty_unit tt)) : exp_scope.
-  Notation "'E_Load_Access_Fault'" := (exp_union exception_type KE_Load_Access_Fault (exp_val ty_unit tt)) : exp_scope.
-  Notation "'E_SAMO_Access_Fault'" := (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty_unit tt)) : exp_scope.
-
-  Definition fun_checked_mem_read' : Stm ["t" ∶ ty_access_type; "paddr" ∶ ty_xlenbits] ty_memory_op_result :=
-    let: "tmp" := call within_phys_mem (exp_var "paddr") in
-    if: exp_var "tmp"
-    then (stm_debugk (use lemma extract_pmp_ptsto [exp_var "paddr"; exp_var "t"]) ;;
-          let: "tmp" := foreign read_ram (exp_var "paddr") in
-          MemValue (exp_var "tmp"))
-    else match: exp_var "t" in union access_type with
-         |> KRead pat_unit      => MemException E_Load_Access_Fault
-         |> KWrite pat_unit     => MemException E_SAMO_Access_Fault
-         |> KReadWrite pat_unit => MemException E_SAMO_Access_Fault
-         |> KExecute pat_unit   => MemException E_Fetch_Access_Fault
-         end.
-
-  Lemma valid_contract_checked_mem_read : SMut.ValidContract sep_contract_checked_mem_read fun_checked_mem_read'.
-  Proof.
-    (* Set Printing Depth 100.
-    compute.
-    constructor. *)
-  Admitted. (* reflexivity. Qed. *)
-
-End Debug.
 
 (* TODO: the pmpCheck contract requires some manual proof effort in the case
          that no pmp entry matches (i.e. we end up in the final check of
