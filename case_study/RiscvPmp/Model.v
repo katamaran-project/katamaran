@@ -283,6 +283,23 @@ Module RiscvPmpModel.
       apply Zle_lt_succ; auto.
     Qed.
 
+    Lemma in_liveAddrs_split : forall (addr : Addr),
+        (minAddr <= addr)%Z ->
+        (addr <= maxAddr)%Z ->
+        exists l1 l2, RiscvPmpIrisHeapKit.liveAddrs = l1 ++ ([addr] ++ l2).
+    Proof.
+      intros addr Hmin Hmax.
+      unfold RiscvPmpIrisHeapKit.liveAddrs.
+      exists (seqZ minAddr (addr - minAddr)).
+      exists (seqZ (addr + 1) (maxAddr - addr)).
+      transitivity (seqZ minAddr (addr - minAddr) ++ seqZ (addr) (maxAddr - addr + 1)).
+      refine (eq_trans _ (eq_trans (seqZ_app minAddr (addr - minAddr) (maxAddr - addr + 1) _ _) _));
+        do 2 (f_equal; try lia).
+      f_equal; cbn.
+      refine (eq_trans (seqZ_cons _ _ _) _); try lia.
+      do 2 f_equal; lia.
+    Qed.
+
     Lemma extract_pmp_ptsto_sound :
       ValidLemma RiscvPmpSpecification.lemma_extract_pmp_ptsto.
     Proof.
@@ -295,38 +312,18 @@ Module RiscvPmpModel.
         RiscvPmpIrisHeapKit.interp_ptsto,
         RiscvPmpIrisHeapKit.MemVal, Word.
 
-      (* TODO: the following  (until the next comment) should be plenty 
-               to prove this lemma, the induction on liveAddrs should exactly
-               not be needed in any case... *)
-      (*
-      Search (?P ∗ (?P -∗ ?Q))%I.
-      Search bi_wand.
-
-      rewrite bi.sep_comm.
-      iApply (big_sepL_lookup_acc with "H1"). *)
-
-      (* unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access.
-      assert (Hin: paddr ∈ RiscvPmpIrisHeapKit.liveAddrs) by (apply (in_liveAddrs Hlemin Hlemax)).
-      iInduction RiscvPmpIrisHeapKit.liveAddrs as [|x xs] "IH".
-      - apply elem_of_nil in Hin; contradiction.
-      - apply elem_of_cons in Hin as [Heq|Hin].
-        + rewrite big_opL_cons.
-          iDestruct "Hmem" as "[Hmem _]".
-          unfold RiscvPmpIrisHeapKit.interp_ptsto; subst.
-          iSplitL "Hentries"; try done.
-          iSplitL.
-          unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access_without.
-          iIntros "Hx".
-          unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access.
-          iApply "Hmem".
-          iPureIntro.
-          exists acc; auto.
-        + rewrite big_opL_cons.
-          iDestruct "Hmem" as "[_ Hmem]".
-          iApply ("IH" $! Hin with "Hentries Hmem").
-    Qed. *)
-    Admitted.
-
+      destruct (in_liveAddrs_split Hlemin Hlemax) as (l1 & l2 & eq).
+      rewrite eq.
+      rewrite big_opL_app big_opL_cons.
+      iDestruct "Hmem" as "[Hmem1 [Hpaddr Hmem2]]".
+      iSplitR "Hpaddr".
+      - iIntros "Hpaddr".
+        iFrame.
+        now iIntros "_".
+      - iApply "Hpaddr".
+        iPureIntro.
+        now exists acc.
+    Qed.
   End Lemmas.
 
   Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
