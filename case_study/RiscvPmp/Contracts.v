@@ -283,9 +283,12 @@ Section PredicateKit.
 
   Local Arguments Some {_} &.
 
+  (* TODO: look up precise predicates again, check if below makes sense *)
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
     | ptsto                   => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
+                                      (* TODO: the next one should be fine *)
+    (* | pmp_entries             => Some (MkPrecise ε [ty_list ty_pmpentry] eq_refl) *)
     | pmp_entries             => Some (MkPrecise [ty_list ty_pmpentry] ε eq_refl)
     | pmp_addr_access         => Some (MkPrecise [ty_list ty_pmpentry; ty_privilege] ε eq_refl)
     | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits; ty_list ty_pmpentry; ty_privilege] ε eq_refl)
@@ -310,6 +313,8 @@ Section ContractDefKit.
   Local Notation "a ||ₜ b" := (term_binop binop_or a b) (at level 85).
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
+  (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
+  (* Local Notation asn_pmp_entries l := (asn_chunk_angelic (chunk_user pmp_entries [l])). *)
   Local Notation asn_pmp_addr_access l m := (asn_chunk (chunk_user pmp_addr_access [l; m])).
   Local Notation asn_pmp_addr_access_without a l m := (asn_chunk (chunk_user pmp_addr_access_without [a;l; m])).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
@@ -1271,10 +1276,10 @@ Section Debug.
 
   Lemma valid_contract_checked_mem_read : SMut.ValidContract sep_contract_checked_mem_read fun_checked_mem_read'.
   Proof.
-    Set Printing Depth 100.
+    (* Set Printing Depth 100.
     compute.
     constructor.
-    cbn.
+    cbn. *)
   Admitted. (* reflexivity. Qed. *)
 
 End Debug.
