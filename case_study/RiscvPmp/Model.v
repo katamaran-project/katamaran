@@ -298,9 +298,12 @@ Module RiscvPmpModel.
       (* TODO: the following  (until the next comment) should be plenty 
                to prove this lemma, the induction on liveAddrs should exactly
                not be needed in any case... *)
-      (*
-      Search (?P ∗ (?P -∗ ?Q))%I.
-      Search bi_wand.
+      (* Search (?P ∗ (?P -∗ ?Q))%I. *)
+      (* Q 
+         --- 
+         P ∗ R (R = P -∗ Q) *)
+      (* TODO: pmp_addr_access, move ∃ p0 into universal one (acc : Val ty_access_type) *)
+      (* Search bi_wand.
 
       rewrite bi.sep_comm.
       iApply (big_sepL_lookup_acc with "H1"). *)
