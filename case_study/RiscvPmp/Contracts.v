@@ -825,8 +825,6 @@ Section ContractDefKit.
                                    end);
     |}.
 
-  (* TODO: post: we should "close" the pmp_addr_access predicate again after
-                 extracting a ptsto from it *)
   Definition sep_contract_pmp_mem_read : SepContractFun pmp_mem_read :=
     {| sep_contract_logic_variables := [t :: ty_access_type; p :: ty_privilege; paddr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var p; term_var paddr];
@@ -1026,20 +1024,6 @@ Section ContractDefKit.
        lemma_postcondition   := asn_pmp_entries (term_var "entries");
     |}.
 
-  (* TODO: remove *)
-  Definition lemma_gen_addr_matching_cfg : SepLemma gen_addr_matching_cfg :=
-    {| lemma_logic_variables := [paddr :: ty_xlenbits; "cfgidx" :: ty_pmpcfgidx; cfg :: ty_pmpcfg_ent; "prev_addr" :: ty_xlenbits; addr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry];
-       lemma_patterns        := [term_var paddr; term_var "cfgidx"; term_var cfg; term_var "prev_addr"; term_var addr];
-       lemma_precondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
-          (term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
-                                           (term_var "cfg1" ,ₜ term_var "addr1")] ∗
-           asn_prev_addr (term_var "cfgidx") (term_var "entries") (term_var "prev_addr") ∗
-           asn_in_entries (term_var "cfgidx") (term_var cfg ,ₜ term_var addr) (term_var "entries") ∗
-           asn_within_cfg (term_var paddr) (term_var cfg) (term_var "prev_addr") (term_var addr));
-       (* lemma_postcondition   := asn_addr_matching_cfg (term_var paddr) (term_var "cfgidx") (term_var cfg) (term_var "prev_addr") (term_var addr); *)
-       lemma_postcondition   := asn_true;
-    |}.
-
   Definition lemma_extract_pmp_ptsto : SepLemma extract_pmp_ptsto :=
     {| lemma_logic_variables := [paddr :: ty_xlenbits; acc :: ty_access_type; "entries" :: ty_list ty_pmpentry; p :: ty_privilege];
        lemma_patterns        := [term_var paddr; term_var acc];
@@ -1134,7 +1118,6 @@ Section ContractDefKit.
       | close_pmp_entries     => lemma_close_pmp_entries
       | extract_pmp_ptsto     => lemma_extract_pmp_ptsto
       | return_pmp_ptsto      => lemma_return_pmp_ptsto
-      | gen_addr_matching_cfg => lemma_gen_addr_matching_cfg
       end.
 
   Lemma linted_cenvex :

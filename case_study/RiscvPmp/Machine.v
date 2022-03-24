@@ -195,7 +195,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | close_pmp_entries     : Lem ctx.nil
   | extract_pmp_ptsto     : Lem [paddr :: ty_xlenbits; acc :: ty_access_type]
   | return_pmp_ptsto      : Lem [paddr :: ty_xlenbits]
-  | gen_addr_matching_cfg : Lem [paddr :: ty_xlenbits; "cfgidx" :: ty_pmpcfgidx; cfg :: ty_pmpcfg_ent; "prev_addr" :: ty_xlenbits; addr :: ty_xlenbits]
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.

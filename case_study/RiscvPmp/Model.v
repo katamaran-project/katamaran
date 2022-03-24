@@ -169,16 +169,14 @@ Module RiscvPmpModel.
                                ∃ w . a ↦ w ∗ perm_access(a, p) *)
         Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
           [∗ list] a ∈ addrs,
-            (⌜∃ p, Pmp_access a entries m p⌝ -∗ (* TODO: if interp_ptsto is updated to include pmp_access, then use interp_ptsto here as well *)
+            (⌜∃ p, Pmp_access a entries m p⌝ -∗
               (∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) a (DfracOwn 1) w))%I.
 
-        (* TODO: change to ⌜∃ acc, Pmp_access a entries pacc⌝ -∗ mapsto ...? *)
         Definition interp_ptsto (addr : Addr) (w : Word) : iProp Σ :=
           mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w. 
 
         Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-          (((* ⌜∃ p, Pmp_access addr entries m p⌝ -∗ *) (* TODO: instead of uncommenting this, just use interp_ptsto *)
-              (∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w)) -∗
+          ((∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w) -∗
                  interp_pmp_addr_access addrs entries m)%I.
       End WithResources.
 
@@ -342,5 +340,5 @@ Module RiscvPmpModel.
     intros Δ [];
       eauto using open_gprs_sound, close_gprs_sound, open_pmp_entries_sound,
       close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound.
-  Admitted. (* TODO: back to Qed once the gen_addr_matching_cfg stuff is thrown away *)
+  Qed.
 End RiscvPmpModel.
