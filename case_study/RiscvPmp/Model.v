@@ -304,8 +304,8 @@ Module RiscvPmpModel.
       ValidLemma RiscvPmpSpecification.lemma_extract_pmp_ptsto.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      iIntros "[Hentries [Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]]";
-        unfold Abstract_le in *.
+      rewrite ?Z.leb_le.
+      iIntros "[Hentries [Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]]".
       iSplitL "Hentries"; try done.
       unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access_without,
         RiscvPmpIrisHeapKit.interp_pmp_addr_access,

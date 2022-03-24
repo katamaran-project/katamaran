@@ -62,7 +62,6 @@ Inductive PurePredicate : Set :=
 | not_within_cfg
 | prev_addr
 | in_entries
-| abstract_le
 .
 
 Inductive Predicate : Set :=
@@ -98,11 +97,7 @@ Section PredicateKit.
     | not_within_cfg  => [ty_xlenbits; ty_list ty_pmpentry]
     | prev_addr       => [ty_pmpcfgidx; ty_list ty_pmpentry; ty_xlenbits]
     | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty_list ty_pmpentry]
-    | abstract_le     => [ty_xlenbits; ty_xlenbits]
     end.
-
-  Definition Abstract_le (a1 a2 : Val ty_xlenbits) : Prop :=
-    a1 <= a2.
 
   Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
   Definition PmpAddrRange := option (Xlenbits * Xlenbits).
@@ -254,7 +249,6 @@ Section PredicateKit.
     | not_within_cfg  => Not_within_cfg
     | prev_addr       => Prev_addr
     | in_entries      => In_entries
-    | abstract_le     => Abstract_le
     end.
 
   Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -287,9 +281,7 @@ Section PredicateKit.
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
     | ptsto                   => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
-                                      (* TODO: the next one should be fine *)
-    (* | pmp_entries             => Some (MkPrecise ε [ty_list ty_pmpentry] eq_refl) *)
-    | pmp_entries             => Some (MkPrecise [ty_list ty_pmpentry] ε eq_refl)
+    | pmp_entries             => Some (MkPrecise ε [ty_list ty_pmpentry] eq_refl)
     | pmp_addr_access         => Some (MkPrecise [ty_list ty_pmpentry; ty_privilege] ε eq_refl)
     | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits; ty_list ty_pmpentry; ty_privilege] ε eq_refl)
     | _                       => None
@@ -325,7 +317,6 @@ Section ContractDefKit.
   Local Notation asn_pmp_access addr es m p := (asn_formula (formula_user pmp_access [addr;es;m;p])).
   Local Notation asn_pmp_check_perms cfg acc p := (asn_formula (formula_user pmp_check_perms [cfg;acc;p])).
   Local Notation asn_pmp_check_rwx cfg acc := (asn_formula (formula_user pmp_check_rwx [cfg;acc])).
-  Local Notation asn_abstract_le a1 a2 := (asn_formula (formula_user abstract_le [a1;a2])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_int) : Term Σ ty_bool :=
     term_binop binop_eq e1 e2.
@@ -802,8 +793,8 @@ Section ContractDefKit.
        sep_contract_result          := "result_within_phys_mem";
        sep_contract_postcondition   :=
          asn_if (term_var "result_within_phys_mem")
-                (asn_abstract_le (term_val ty_xlenbits minAddr) (term_var paddr)
-                 ∗ asn_abstract_le (term_var paddr) (term_val ty_xlenbits maxAddr))
+                (asn_bool (term_val ty_xlenbits minAddr <=ₜ term_var paddr)
+                 ∗ asn_bool (term_var paddr <=ₜ term_val ty_xlenbits maxAddr))
                 asn_true;
     |}.
 
@@ -1026,8 +1017,8 @@ Section ContractDefKit.
        lemma_precondition    :=
           asn_pmp_entries (term_var "entries")
           ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
-          ∗ asn_abstract_le (term_val ty_xlenbits minAddr) (term_var paddr)
-          ∗ asn_abstract_le (term_var paddr) (term_val ty_xlenbits maxAddr)
+          ∗ asn_bool (term_val ty_xlenbits minAddr <=ₜ term_var paddr)
+          ∗ asn_bool (term_var paddr <=ₜ term_val ty_xlenbits maxAddr)
           ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc);
        lemma_postcondition   :=
           asn_pmp_entries (term_var "entries")
@@ -1194,10 +1185,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
                            let (ts,entries) := env.snocView ts in
                            let (ts,cfg)     := env.snocView ts in
                            Some (cons (formula_user in_entries [cfg; entries; prev]) nil)
-    | abstract_le     => fun ts =>
-                           let (ts,a2) := env.snocView ts in
-                           let (ts,a1) := env.snocView ts in
-                           Some (cons (formula_user abstract_le [a1;a2]) nil)
     end.
 
   Definition simplify_formula {Σ} (fml : Formula Σ) : option (List Formula Σ) :=
@@ -1374,14 +1361,8 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_abs : ValidContract abs.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_within_phys_mem : ValidContractDebug within_phys_mem.
-Proof.
-  compute;
-    constructor;
-    cbn;
-    intros;
-    unfold Abstract_le; auto.
-Qed.
+Lemma valid_contract_within_phys_mem : ValidContract within_phys_mem.
+Proof. reflexivity. Qed.
 
 Lemma valid_contract_execute_RTYPE : ValidContract execute_RTYPE.
 Proof. reflexivity. Qed. 

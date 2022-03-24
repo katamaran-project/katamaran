@@ -27,7 +27,8 @@
 (******************************************************************************)
 
 From Coq Require Import
-     Strings.String.
+     Strings.String
+     ZArith.ZArith.
 From Equations Require Import
      Equations.
 From stdpp Require
@@ -45,8 +46,10 @@ Definition Xlenbits : Set := Z.
 Definition Addr : Set := Z.
 Definition Word : Set := Z.
 
-Parameter minAddr : Addr.
-Parameter maxAddr : Addr.
+(* Parameter minAddr : Addr. *)
+(* Parameter maxAddr : Addr. *)
+Definition minAddr : Addr := 0%Z.
+Definition maxAddr : Addr := 10%Z.
 
 Inductive Privilege : Set :=
 | User
