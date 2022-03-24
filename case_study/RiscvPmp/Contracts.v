@@ -282,7 +282,7 @@ Section PredicateKit.
     match p with
     | ptsto                   => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
     | pmp_entries             => Some (MkPrecise ε [ty_list ty_pmpentry] eq_refl)
-    | pmp_addr_access         => Some (MkPrecise [ty_list ty_pmpentry; ty_privilege] ε eq_refl)
+    | pmp_addr_access         => Some (MkPrecise ε [ty_list ty_pmpentry; ty_privilege] eq_refl)
     | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits; ty_list ty_pmpentry; ty_privilege] ε eq_refl)
     | _                       => None
     end.
@@ -1242,34 +1242,10 @@ Section Debug.
   (* Import RiscvNotations. *)
   (* Import RiscvμSailNotations. *)
   Import SymProp.notations.
-  Notation "'MemValue' memv" := (exp_union memory_op_result KMemValue memv) (at level 10, memv at next level) : exp_scope.
-  Notation "'MemException' meme" := (exp_union memory_op_result KMemException meme) (at level 10, meme at next level) : exp_scope.
-  Notation "'E_Fetch_Access_Fault'" := (exp_union exception_type KE_Fetch_Access_Fault (exp_val ty_unit tt)) : exp_scope.
-  Notation "'E_Load_Access_Fault'" := (exp_union exception_type KE_Load_Access_Fault (exp_val ty_unit tt)) : exp_scope.
-  Notation "'E_SAMO_Access_Fault'" := (exp_union exception_type KE_SAMO_Access_Fault (exp_val ty_unit tt)) : exp_scope.
-
-  Definition fun_checked_mem_read' : Stm ["t" ∶ ty_access_type; "paddr" ∶ ty_xlenbits] ty_memory_op_result :=
-    let: "tmp" := call within_phys_mem (exp_var "paddr") in
-    if: exp_var "tmp"
-    then (stm_debugk (use lemma extract_pmp_ptsto [exp_var "paddr"; exp_var "t"]) ;;
-          let: "tmp" := foreign read_ram (exp_var "paddr") in
-          MemValue (exp_var "tmp"))
-    else match: exp_var "t" in union access_type with
-         |> KRead pat_unit      => MemException E_Load_Access_Fault
-         |> KWrite pat_unit     => MemException E_SAMO_Access_Fault
-         |> KReadWrite pat_unit => MemException E_SAMO_Access_Fault
-         |> KExecute pat_unit   => MemException E_Fetch_Access_Fault
-         end.
-
-  Lemma valid_contract_checked_mem_read : SMut.ValidContract sep_contract_checked_mem_read fun_checked_mem_read'.
-  Proof.
-    (* Set Printing Depth 100.
-    compute.
-    constructor.
-    cbn. *)
-  Admitted. (* reflexivity. Qed. *)
-
 End Debug.
+
+Lemma valid_contract_checked_mem_read : ValidContract checked_mem_read.
+Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmp_mem_read : ValidContract pmp_mem_read.
 Proof. Admitted.
