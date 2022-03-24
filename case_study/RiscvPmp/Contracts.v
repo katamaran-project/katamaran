@@ -283,7 +283,7 @@ Section PredicateKit.
     | ptsto                   => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
     | pmp_entries             => Some (MkPrecise ε [ty_list ty_pmpentry] eq_refl)
     | pmp_addr_access         => Some (MkPrecise ε [ty_list ty_pmpentry; ty_privilege] eq_refl)
-    | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits; ty_list ty_pmpentry; ty_privilege] ε eq_refl)
+    | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits] [ty_list ty_pmpentry; ty_privilege] eq_refl)
     | _                       => None
     end.
 
@@ -800,16 +800,29 @@ Section ContractDefKit.
 
   (* TODO: read perm in pre: perm_access(paddr, ?p) ∗ R ≤ ?p *)
   Definition sep_contract_checked_mem_read : SepContractFun checked_mem_read :=
-    {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; w :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
+    {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var paddr];
        sep_contract_precondition    :=
            asn_pmp_entries (term_var "entries")
            ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
            ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t);
        sep_contract_result          := "result_checked_mem_read";
-       sep_contract_postcondition   := asn_true;
-         (* asn_pmp_entries (term_var "entries"); *)
-         (* ∗ asn_pmp_addr_access (term_var "entries") (term_var p); *)
+       sep_contract_postcondition   :=
+         asn_match_union memory_op_result (term_var "result_checked_mem_read")
+                         (fun K => match K with
+                                   | KMemValue     => [v :: ty_xlenbits]
+                                   | KMemException => [e :: ty_exception_type]
+                                   end)
+                         (fun K => match K with
+                                   | KMemValue     => pat_var v
+                                   | KMemException => pat_var e
+                                   end)
+                         (fun K => match K with
+                                   | KMemValue     =>
+                                       asn_pmp_entries (term_var "entries")
+                                       ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
+                                   | KMemException => asn_true
+                                   end);
     |}.
 
   (* TODO: post: we should "close" the pmp_addr_access predicate again after
@@ -821,7 +834,22 @@ Section ContractDefKit.
          asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
        sep_contract_result          := "result_pmp_mem_read";
-       sep_contract_postcondition   := (* TODO *) asn_true;
+       sep_contract_postcondition   :=
+         asn_match_union memory_op_result (term_var "result_pmp_mem_read")
+                         (fun K => match K with
+                                   | KMemValue     => [v :: ty_xlenbits]
+                                   | KMemException => [e :: ty_exception_type]
+                                   end)
+                         (fun K => match K with
+                                   | KMemValue     => pat_var v
+                                   | KMemException => pat_var e
+                                   end)
+                         (fun K => match K with
+                                   | KMemValue     =>
+                                       asn_pmp_entries (term_var "entries")
+                                       ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
+                                   | KMemException => asn_true
+                                   end);
     |}.
 
   Definition sep_contract_pmpCheck : SepContractFun pmpCheck :=
@@ -942,7 +970,8 @@ Section ContractDefKit.
        sep_contract_localstore      := [term_var paddr];
        sep_contract_precondition    := term_var paddr ↦ₘ term_var w;
        sep_contract_result          := "result_read_ram";
-       sep_contract_postcondition   := term_var "result_read_ram" = term_var w;
+       sep_contract_postcondition   := term_var "result_read_ram" = term_var w
+        ∗ term_var paddr ↦ₘ term_var w;
     |}.
 
   Definition sep_contract_write_ram : SepContractFunX write_ram :=
@@ -1023,7 +1052,19 @@ Section ContractDefKit.
        lemma_postcondition   :=
           asn_pmp_entries (term_var "entries")
           ∗ asn_pmp_addr_access_without (term_var paddr) (term_var "entries") (term_var p)
-          ∗ ∃ "w", term_var paddr ↦ₘ term_var w; (* TODO: add some chunk that denotes asn_pmp_addr_acces\{paddr}, so we can "return" it later *)
+          ∗ ∃ "w", term_var paddr ↦ₘ term_var w;
+    |}.
+
+  Definition lemma_return_pmp_ptsto : SepLemma return_pmp_ptsto :=
+    {| lemma_logic_variables := [paddr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry; p :: ty_privilege];
+       lemma_patterns        := [term_var paddr];
+       lemma_precondition    :=
+          asn_pmp_entries (term_var "entries")
+          ∗ asn_pmp_addr_access_without (term_var paddr) (term_var "entries") (term_var p)
+          ∗ ∃ "w", term_var paddr ↦ₘ term_var w;
+       lemma_postcondition   :=
+          asn_pmp_entries (term_var "entries")
+          ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
     |}.
 
   End Contracts.
@@ -1092,6 +1133,7 @@ Section ContractDefKit.
       | open_pmp_entries      => lemma_open_pmp_entries
       | close_pmp_entries     => lemma_close_pmp_entries
       | extract_pmp_ptsto     => lemma_extract_pmp_ptsto
+      | return_pmp_ptsto      => lemma_return_pmp_ptsto
       | gen_addr_matching_cfg => lemma_gen_addr_matching_cfg
       end.
 
@@ -1248,7 +1290,7 @@ Lemma valid_contract_checked_mem_read : ValidContract checked_mem_read.
 Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmp_mem_read : ValidContract pmp_mem_read.
-Proof. Admitted.
+Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
 Proof. reflexivity. Qed.

@@ -193,7 +193,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | close_gprs            : Lem ctx.nil
   | open_pmp_entries      : Lem ctx.nil
   | close_pmp_entries     : Lem ctx.nil
-  | extract_pmp_ptsto     : Lem [paddr ∶ ty_xlenbits; acc :: ty_access_type]
+  | extract_pmp_ptsto     : Lem [paddr :: ty_xlenbits; acc :: ty_access_type]
+  | return_pmp_ptsto      : Lem [paddr :: ty_xlenbits]
   | gen_addr_matching_cfg : Lem [paddr :: ty_xlenbits; "cfgidx" :: ty_pmpcfgidx; cfg :: ty_pmpcfg_ent; "prev_addr" :: ty_xlenbits; addr :: ty_xlenbits]
   .
 
@@ -368,6 +369,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     if: tmp
     then (use lemma extract_pmp_ptsto [paddr; t] ;;
           let: tmp := foreign read_ram paddr in
+          use lemma return_pmp_ptsto [paddr] ;;
           MemValue tmp)
     else match: t in union access_type with
          |> KRead pat_unit      => MemException E_Load_Access_Fault

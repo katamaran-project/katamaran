@@ -324,12 +324,23 @@ Module RiscvPmpModel.
         iPureIntro.
         now exists acc.
     Qed.
+
+    Lemma return_pmp_ptsto_sound :
+      ValidLemma RiscvPmpSpecification.lemma_return_pmp_ptsto.
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      iIntros "[Hentries [Hwithout Hptsto]]".
+      iSplitL "Hentries"; first iFrame.
+      unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access_without.
+      iApply ("Hwithout" with "Hptsto").
+    Qed.
+
   End Lemmas.
 
   Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
   Proof.
     intros Δ [];
       eauto using open_gprs_sound, close_gprs_sound, open_pmp_entries_sound,
-      close_pmp_entries_sound, extract_pmp_ptsto_sound.
+      close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound.
   Admitted. (* TODO: back to Qed once the gen_addr_matching_cfg stuff is thrown away *)
 End RiscvPmpModel.
