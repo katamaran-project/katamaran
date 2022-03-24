@@ -958,6 +958,7 @@ Section ContractDefKit.
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
        sep_contract_result          := "result_pmp_mem_write";
        sep_contract_postcondition   :=
+         cur_privilege ↦ term_var p ∗
          asn_match_union memory_op_result (term_var "result_pmp_mem_write")
                          (fun K => match K with
                                    | KMemValue     => [v :: ty_xlenbits]
@@ -969,8 +970,7 @@ Section ContractDefKit.
                                    end)
                          (fun K => match K with
                                    | KMemValue     =>
-                                       cur_privilege ↦ term_var p
-                                       ∗ asn_pmp_entries (term_var "entries")
+                                       asn_pmp_entries (term_var "entries")
                                        ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
                                    | KMemException => asn_true
                                    end);
@@ -985,7 +985,8 @@ Section ContractDefKit.
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
        sep_contract_result          := "result_pmp_mem_write";
        sep_contract_postcondition   :=
-         asn_match_union memory_op_result (term_var "result_pmp_mem_write")
+         cur_privilege ↦ term_var p
+         ∗ asn_match_union memory_op_result (term_var "result_pmp_mem_write")
                          (fun K => match K with
                                    | KMemValue     => [v :: ty_xlenbits]
                                    | KMemException => [e :: ty_exception_type]
@@ -996,8 +997,7 @@ Section ContractDefKit.
                                    end)
                          (fun K => match K with
                                    | KMemValue     =>
-                                       cur_privilege ↦ term_var p
-                                       ∗ asn_pmp_entries (term_var "entries")
+                                       asn_pmp_entries (term_var "entries")
                                        ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
                                    | KMemException => asn_true
                                    end);
