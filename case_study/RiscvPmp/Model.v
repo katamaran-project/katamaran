@@ -267,6 +267,14 @@ Module RiscvPmpModel.
       iAccu.
     Qed.
 
+    Lemma update_pmp_entries_sound :
+      ValidLemma RiscvPmpSpecification.lemma_update_pmp_entries.
+    Proof.
+      intros ι; destruct_syminstance ι; cbn.
+      iIntros "[Hcfg0 [Haddr0 [Hcfg1 [Haddr1 Hpriv]]]]".
+      iFrame.
+    Qed.
+
     Lemma in_liveAddrs : forall (addr : Addr),
         (minAddr <= addr)%Z ->
         (addr <= maxAddr)%Z ->
@@ -339,6 +347,6 @@ Module RiscvPmpModel.
   Proof.
     intros Δ [];
       eauto using open_gprs_sound, close_gprs_sound, open_pmp_entries_sound,
-      close_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound.
+      close_pmp_entries_sound, update_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound.
   Qed.
 End RiscvPmpModel.
