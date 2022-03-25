@@ -371,6 +371,27 @@ Section ContractDefKit.
        lemma_postcondition   := asn_true;
     |}.
 
+  Definition lemma_update_pmp_entries : SepLemma update_pmp_entries :=
+    {| lemma_logic_variables := ctx.nil;
+       lemma_patterns        := env.nil;
+       lemma_precondition    := asn_true;
+       lemma_postcondition   := asn_true;
+    |}.
+
+  Definition lemma_extract_pmp_ptsto : SepLemma extract_pmp_ptsto :=
+    {| lemma_logic_variables := ["paddr" :: ty_xlenbits];
+       lemma_patterns        := [term_var "paddr"];
+       lemma_precondition    := asn_true;
+       lemma_postcondition   := asn_true;
+    |}.
+
+  Definition lemma_return_pmp_ptsto : SepLemma return_pmp_ptsto :=
+    {| lemma_logic_variables := ["paddr" :: ty_xlenbits];
+       lemma_patterns        := [term_var "paddr"];
+       lemma_precondition    := asn_true;
+       lemma_postcondition   := asn_true;
+    |}.
+
   Definition LEnv : LemmaEnv :=
     fun Δ l =>
       match l with
@@ -378,6 +399,9 @@ Section ContractDefKit.
       | close_gprs     => lemma_close_gprs
       | open_pmp_entries => lemma_open_pmp_entries
       | close_pmp_entries => lemma_close_pmp_entries
+      | update_pmp_entries => lemma_update_pmp_entries
+      | extract_pmp_ptsto => lemma_extract_pmp_ptsto
+      | return_pmp_ptsto => lemma_return_pmp_ptsto
       end.
 
   Include SpecificationMixin RiscvPmpBase RiscvPmpProgram.
