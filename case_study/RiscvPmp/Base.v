@@ -62,6 +62,10 @@ Inductive CSRIdx : Set :=
 | MTvec
 | MCause
 | MEpc
+| MPMP0CFG
+| MPMP1CFG
+| MPMPADDR0
+| MPMPADDR1
 .
 
 (* NOTE: PMP CSRs limited to 1 for now *)
@@ -342,7 +346,7 @@ Section Finite.
     {| enum := [User;Machine] |}.
 
   Global Program Instance CSRIdx_finite : Finite CSRIdx :=
-    {| enum := [MStatus;MTvec;MCause;MEpc] |}.
+    {| enum := [MStatus;MTvec;MCause;MEpc;MPMP0CFG;MPMP1CFG;MPMPADDR0;MPMPADDR1] |}.
 
   Global Program Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
     {| enum := [PMP0CFG;PMP1CFG] |}.

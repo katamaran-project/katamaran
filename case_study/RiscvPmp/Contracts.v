@@ -409,12 +409,12 @@ Section ContractDefKit.
                      asn_gprs;
        sep_contract_result          := "result_mach_inv";
        sep_contract_postcondition   :=
-                     asn_pmp_entries (term_var "entries") ∗
                      asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
                      asn_gprs ∗
                      pc     ↦ term_var "i" ∗
          ∃ "mcause", mcause ↦ term_var "mcause" ∗
          (  (* Executing normally *)
+                 asn_pmp_entries (term_var "entries") ∗
                  cur_privilege ↦ term_var "m" ∗
             ∃ v, nextpc        ↦ term_var v ∗
                  mtvec         ↦ term_var "h" ∗
@@ -423,6 +423,7 @@ Section ContractDefKit.
           ∨
             (* Modified CSRs, requires Machine mode *)
                            term_var "m"  =  term_val ty_privilege Machine ∗
+            ∃ "entries",   asn_pmp_entries (term_var "entries") ∗
                            cur_privilege ↦ term_val ty_privilege Machine ∗
                            nextpc        ↦ term_var "npc" ∗
             ∃ "new_mtvec", mtvec         ↦ term_var "new_mtvec" ∗
@@ -430,6 +431,7 @@ Section ContractDefKit.
             ∃ "new_mepc",  mepc          ↦ term_var "new_mepc"
           ∨
             (* Trap occured -> Go into M-mode *)
+            asn_pmp_entries (term_var "entries") ∗
             cur_privilege ↦ (term_val ty_privilege Machine) ∗
             nextpc        ↦ term_var "h" ∗
             mtvec         ↦ term_var "h" ∗
@@ -437,6 +439,7 @@ Section ContractDefKit.
             mepc          ↦ term_var "i"
           ∨
             (* MRET = Recover *)
+            asn_pmp_entries (term_var "entries") ∗
             term_var "m"  =  term_val ty_privilege Machine ∗
             cur_privilege ↦ term_var "mpp" ∗
             nextpc        ↦ term_var "mepc" ∗
@@ -479,17 +482,17 @@ Section ContractDefKit.
     instr_exec_contract.
 
   Definition sep_contract_process_load : SepContractFun process_load :=
-    {| sep_contract_logic_variables := [rd :: ty_regno; vaddr :: ty_xlenbits; value :: ty_memory_op_result; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits];
+    {| sep_contract_logic_variables := [rd :: ty_regno; vaddr :: ty_xlenbits; value :: ty_memory_op_result; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mcause" :: ty_mcause];
        sep_contract_localstore      := [term_var rd; term_var vaddr; term_var value];
        sep_contract_precondition    :=
          asn_gprs
-         ∗             pc            ↦ term_var "i"
-         ∗ ∃ "npc",    nextpc        ↦ term_var "npc"
-         ∗             cur_privilege ↦ term_var p
-         ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-         ∗             mstatus       ↦ term_record rmstatus [ term_var "mpp" ]
-         ∗             mtvec         ↦ term_var tvec
-         ∗             mepc          ↦ term_var "mepc";
+         ∗ pc            ↦ term_var "i"
+         ∗ nextpc        ↦ term_var "npc"
+         ∗ cur_privilege ↦ term_var p
+         ∗ mcause        ↦ term_var "mcause"
+         ∗ mstatus       ↦ term_record rmstatus [ term_var "mpp" ]
+         ∗ mtvec         ↦ term_var tvec
+         ∗ mepc          ↦ term_var "mepc";
        sep_contract_result          := "result_process_load";
        sep_contract_postcondition   :=
          asn_gprs ∗
@@ -505,13 +508,13 @@ Section ContractDefKit.
           (fun K => match K with
                     | KMemValue     =>
                         term_var "result_process_load" = term_val ty_retired RETIRE_SUCCESS
-                        ∗             pc            ↦ term_var "i"
-                        ∗ ∃ "npc",    nextpc        ↦ term_var "npc"
-                        ∗             cur_privilege ↦ term_var p
-                        ∗ ∃ "mcause", mcause        ↦ term_var "mcause"
-                        ∗             mstatus       ↦ term_record rmstatus [ term_var "mpp" ]
-                        ∗             mtvec         ↦ term_var tvec
-                        ∗             mepc          ↦ term_var "mepc"
+                        ∗ pc            ↦ term_var "i"
+                        ∗ nextpc        ↦ term_var "npc"
+                        ∗ cur_privilege ↦ term_var p
+                        ∗ mcause        ↦ term_var "mcause"
+                        ∗ mstatus       ↦ term_record rmstatus [ term_var "mpp" ]
+                        ∗ mtvec         ↦ term_var tvec
+                        ∗ mepc          ↦ term_var "mepc"
                     | KMemException =>
                         term_var "result_process_load" = term_val ty_retired RETIRE_FAIL
                         ∗             pc            ↦ term_var "i"
@@ -527,20 +530,28 @@ Section ContractDefKit.
   Definition sep_contract_readCSR : SepContractFun readCSR :=
     {| sep_contract_logic_variables := [csr :: ty_csridx; "mpp" :: ty_privilege;
                                         "mtvec" :: ty_xlenbits; "mcause" :: ty_exc_code;
-                                        "mepc" :: ty_xlenbits];
+                                        "mepc" :: ty_xlenbits; "cfg0" :: ty_pmpcfg_ent; "cfg1" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "addr1" :: ty_xlenbits];
        sep_contract_localstore      := [term_var csr];
        sep_contract_precondition    :=
          mstatus ↦ term_record rmstatus [term_var "mpp"]
          ∗ mtvec ↦ term_var "mtvec"
          ∗ mcause ↦ term_var "mcause"
-         ∗ mepc ↦ term_var "mepc";
+         ∗ mepc ↦ term_var "mepc"
+         ∗ pmp0cfg ↦ term_var "cfg0"
+         ∗ pmp1cfg ↦ term_var "cfg1"
+         ∗ pmpaddr0 ↦ term_var "addr0"
+         ∗ pmpaddr1 ↦ term_var "addr1";
        sep_contract_result          := "result_readCSR";
        sep_contract_postcondition   :=
          ∃ "result", term_var "result_readCSR" = term_var "result"
          ∗ mstatus ↦ term_record rmstatus [term_var "mpp"]
          ∗ mtvec ↦ term_var "mtvec"
          ∗ mcause ↦ term_var "mcause"
-         ∗ mepc ↦ term_var "mepc";
+         ∗ mepc ↦ term_var "mepc"
+         ∗ pmp0cfg ↦ term_var "cfg0"
+         ∗ pmp1cfg ↦ term_var "cfg1"
+         ∗ pmpaddr0 ↦ term_var "addr0"
+         ∗ pmpaddr1 ↦ term_var "addr1";
     |}.
 
   Definition sep_contract_writeCSR : SepContractFun writeCSR :=
@@ -550,14 +561,22 @@ Section ContractDefKit.
          ∃ "mpp", mstatus ↦ term_record rmstatus [term_var "mpp"]
          ∗ ∃ "mtvec", mtvec ↦ term_var "mtvec"
          ∗ ∃ "mcause", mcause ↦ term_var "mcause"
-         ∗ ∃ "mepc", mepc ↦ term_var "mepc";
+         ∗ ∃ "mepc", mepc ↦ term_var "mepc"
+         ∗ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
+         ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1"
+         ∗ ∃ "addr0", pmpaddr0 ↦ term_var "addr0"
+         ∗ ∃ "addr1", pmpaddr1 ↦ term_var "addr1";
        sep_contract_result          := "result_writeCSR";
        sep_contract_postcondition   :=
          term_var "result_writeCSR" = term_val ty_unit tt
          ∗ ∃ "mpp", mstatus ↦ term_record rmstatus [term_var "mpp"]
          ∗ ∃ "mtvec", mtvec ↦ term_var "mtvec"
          ∗ ∃ "mcause", mcause ↦ term_var "mcause"
-         ∗ ∃ "mepc", mepc ↦ term_var "mepc";
+         ∗ ∃ "mepc", mepc ↦ term_var "mepc"
+         ∗ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
+         ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1"
+         ∗ ∃ "addr0", pmpaddr0 ↦ term_var "addr0"
+         ∗ ∃ "addr1", pmpaddr1 ↦ term_var "addr1";
     |}.
 
   Definition sep_contract_check_CSR : SepContractFun check_CSR :=
@@ -630,7 +649,7 @@ Section ContractDefKit.
                                   end);
     |}.
 
-  Definition sep_contract_mstatus_to_bits : SepContractFun mstatus_to_bits :=
+  Definition sep_contract_mstatus_to_bits : SepContractFunX mstatus_to_bits :=
     {| sep_contract_logic_variables := [value :: ty_mstatus];
        sep_contract_localstore      := [term_var value];
        sep_contract_precondition    := asn_true;
@@ -639,13 +658,31 @@ Section ContractDefKit.
          ∃ "result", term_var "result_mstatus_to_bits" = term_var "result";
     |}.
 
-  Definition sep_contract_mstatus_from_bits : SepContractFun mstatus_from_bits :=
+  Definition sep_contract_mstatus_from_bits : SepContractFunX mstatus_from_bits :=
     {| sep_contract_logic_variables := [value :: ty_xlenbits];
        sep_contract_localstore      := [term_var value];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_mstatus_from_bits";
        sep_contract_postcondition   :=
          ∃ "MPP", term_var "result_mstatus_from_bits" = term_record rmstatus [ term_var "MPP" ];
+    |}.
+
+  Definition sep_contract_pmpcfg_ent_from_bits : SepContractFunX pmpcfg_ent_from_bits :=
+    {| sep_contract_logic_variables := [value :: ty_xlenbits];
+       sep_contract_localstore      := [term_var value];
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_pmpcfg_ent_from_bits";
+       sep_contract_postcondition   :=
+         ∃ "cfg", term_var "result_pmpcfg_ent_from_bits" = term_var "cfg";
+    |}.
+
+  Definition sep_contract_pmpcfg_ent_to_bits : SepContractFunX pmpcfg_ent_to_bits :=
+    {| sep_contract_logic_variables := [value :: ty_pmpcfg_ent];
+       sep_contract_localstore      := [term_var value];
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_pmpcfg_ent_to_bits";
+       sep_contract_postcondition   :=
+         ∃ "cfg", term_var "result_pmpcfg_ent_to_bits" = term_var "cfg";
     |}.
 
   Definition sep_contract_csrAccess : SepContractFun csrAccess :=
@@ -1255,8 +1292,6 @@ Section ContractDefKit.
       | is_CSR_defined        => Some sep_contract_is_CSR_defined
       | check_CSR_access      => Some sep_contract_check_CSR_access
       | privLevel_to_bits     => Some sep_contract_privLevel_to_bits
-      | mstatus_to_bits       => Some sep_contract_mstatus_to_bits
-      | mstatus_from_bits     => Some sep_contract_mstatus_from_bits
       | csrAccess             => Some sep_contract_csrAccess
       | csrPriv               => Some sep_contract_csrPriv
       | checked_mem_read      => Some sep_contract_checked_mem_read
@@ -1281,9 +1316,13 @@ Section ContractDefKit.
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
-      | read_ram  => sep_contract_read_ram
-      | write_ram => sep_contract_write_ram
-      | decode    => sep_contract_decode
+      | read_ram             => sep_contract_read_ram
+      | write_ram            => sep_contract_write_ram
+      | decode               => sep_contract_decode
+      | mstatus_from_bits    => sep_contract_mstatus_from_bits
+      | mstatus_to_bits      => sep_contract_mstatus_to_bits
+      | pmpcfg_ent_from_bits => sep_contract_pmpcfg_ent_from_bits
+      | pmpcfg_ent_to_bits   => sep_contract_pmpcfg_ent_to_bits
       end.
 
   Definition LEnv : LemmaEnv :=
@@ -1548,12 +1587,6 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_privLevel_to_bits : ValidContract privLevel_to_bits.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_mstatus_to_bits : ValidContract mstatus_to_bits.
-Proof. reflexivity. Qed.
-
-Lemma valid_contract_mstatus_from_bits : ValidContract mstatus_from_bits.
-Proof. reflexivity. Qed.
-
 Lemma valid_contract_exception_handler : ValidContract exception_handler.
 Proof. reflexivity. Qed.
 
@@ -1623,14 +1656,20 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_execute_MRET : ValidContract execute_MRET.
 Proof. reflexivity. Qed.
 
-Lemma valid_execute_CSR : ValidContract execute_CSR.
-Proof. reflexivity. Qed.
-
-Lemma valid_execute_STORE : ValidContract execute_STORE.
+Lemma valid_contract_execute_STORE : ValidContract execute_STORE.
 Proof. reflexivity. Qed.
 
 Lemma valid_contract_execute_LOAD : ValidContract execute_LOAD.
 Proof. reflexivity. Qed.
+
+Lemma valid_contract_execute_CSR : ValidContractDebug execute_CSR.
+Proof.
+  compute.
+  constructor.
+  cbn.
+  firstorder;
+    constructor.
+Qed.
 
 (* TODO: the pmpCheck contract requires some manual proof effort in the case
          that no pmp entry matches (i.e. we end up in the final check of

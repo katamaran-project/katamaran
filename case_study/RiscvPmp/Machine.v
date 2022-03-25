@@ -112,7 +112,12 @@ Module RiscvNotations.
 End RiscvNotations.
 
 (* We postulate a pure decode function and assume that that's what the decode primitive implements. *)
+(* Similarly for *_{from,to}_bits functions, ideally we would move to actual bitvectors for values... *)
 Axiom pure_decode : Z -> string + AST.
+Axiom pure_mstatus_from_bits    : Xlenbits -> string + Mstatus.
+Axiom pure_mstatus_to_bits      : Mstatus -> string + Xlenbits.
+Axiom pure_pmpcfg_ent_from_bits : Xlenbits -> string + Pmpcfg_ent.
+Axiom pure_pmpcfg_ent_to_bits   : Pmpcfg_ent -> string +Xlenbits.
 
 Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
@@ -152,8 +157,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | init_pmp              : Fun ctx.nil ty_unit
   | exceptionType_to_bits : Fun [e ∶ ty_exception_type] ty_exc_code
   | privLevel_to_bits     : Fun [p ∶ ty_privilege] ty_xlenbits
-  | mstatus_to_bits       : Fun [value ∶ ty_mstatus] ty_xlenbits
-  | mstatus_from_bits     : Fun [value ∶ ty_xlenbits] ty_mstatus
   | handle_mem_exception  : Fun [addr ∶ ty_xlenbits; e ∶ ty_exception_type] ty_unit
   | exception_handler     : Fun [cur_priv ∶ ty_privilege; ctl ∶ ty_ctl_result; "pc" ∶ ty_xlenbits] ty_int
   | exception_delegatee   : Fun [p ∶ ty_privilege] ty_privilege
@@ -183,9 +186,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
-  | read_ram  : FunX [paddr ∶ ty_int] ty_word
-  | write_ram : FunX [paddr ∶ ty_int; data ∶ ty_word] ty_word
-  | decode    : FunX [bv ∶ ty_int] ty_ast
+  | read_ram             : FunX [paddr ∶ ty_int] ty_word
+  | write_ram            : FunX [paddr ∶ ty_int; data ∶ ty_word] ty_word
+  | decode               : FunX [bv ∶ ty_int] ty_ast
+  | mstatus_from_bits    : FunX [value :: ty_xlenbits] ty_mstatus
+  | mstatus_to_bits      : FunX [value :: ty_mstatus] ty_xlenbits
+  | pmpcfg_ent_from_bits : FunX [value :: ty_xlenbits] ty_pmpcfg_ent
+  | pmpcfg_ent_to_bits   : FunX [value :: ty_pmpcfg_ent] ty_xlenbits
   .
 
   Inductive Lem : PCtx -> Set :=
@@ -690,6 +697,22 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                  | Machine => stm_val ty_bool true
                  | _ => stm_val ty_bool false
                  end
+    | MPMP0CFG => match: p in privilege with
+                  | Machine => stm_val ty_bool true
+                  | _ => stm_val ty_bool false
+                  end
+    | MPMP1CFG => match: p in privilege with
+                  | Machine => stm_val ty_bool true
+                  | _ => stm_val ty_bool false
+                  end
+    | MPMPADDR0 => match: p in privilege with
+                   | Machine => stm_val ty_bool true
+                   | _ => stm_val ty_bool false
+                   end
+    | MPMPADDR1 => match: p in privilege with
+                   | Machine => stm_val ty_bool true
+                   | _ => stm_val ty_bool false
+                   end
     end.
 
   (* NOTE: - normally this information is part of the CSR bitpattern,
@@ -711,38 +734,42 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | User => stm_val ty_int 0%Z
     end.
 
-  (* NOTE: not part of Sail model, added these to make readCSR/writeCSR easier to implement *)
-  Definition fun_mstatus_to_bits : Stm [value ∶ ty_mstatus] ty_xlenbits :=
-    match: value in rmstatus with [MPP] => call privLevel_to_bits MPP end.
-
-  Definition fun_mstatus_from_bits : Stm [value ∶ ty_xlenbits] ty_mstatus :=
-    let: p := if: value = z_exp 0
-              then stm_val ty_privilege User
-              else if: value = z_exp 3
-                   then stm_val ty_privilege Machine
-                   else stm_val ty_privilege User in
-    exp_record rmstatus [ p ].
-
   Definition fun_readCSR : Stm [csr ∶ ty_csridx] ty_xlenbits :=
     match: csr in csridx with
-    | MStatus => let: tmp := stm_read_register mstatus in
-                 call mstatus_to_bits tmp
-    | MTvec =>   stm_read_register mtvec
-    | MCause =>  stm_read_register mcause
-    | MEpc =>    stm_read_register mepc
+    | MStatus   => let: tmp := stm_read_register mstatus in
+                   foreign mstatus_to_bits tmp
+    | MTvec     => stm_read_register mtvec
+    | MCause    => stm_read_register mcause
+    | MEpc      => stm_read_register mepc
+    | MPMP0CFG  => let: tmp := stm_read_register pmp0cfg in
+                   foreign pmpcfg_ent_to_bits tmp
+    | MPMP1CFG  => let: tmp := stm_read_register pmp1cfg in
+                   foreign pmpcfg_ent_to_bits tmp
+    | MPMPADDR0 => stm_read_register pmpaddr0
+    | MPMPADDR1 => stm_read_register pmpaddr1
     end.
 
   Definition fun_writeCSR : Stm [csr ∶ ty_csridx; value ∶ ty_xlenbits] ty_unit :=
     match: csr in csridx with
-    | MStatus => let: tmp := call mstatus_from_bits value in
+    | MStatus => let: tmp := foreign mstatus_from_bits value in
                  stm_write_register mstatus tmp ;;
                  stm_val ty_unit tt
-    | MTvec =>   stm_write_register mtvec value ;;
-                 stm_val ty_unit tt
-    | MCause =>  stm_write_register mcause value ;;
-                 stm_val ty_unit tt
-    | MEpc =>    stm_write_register mepc value ;;
-                 stm_val ty_unit tt
+    | MTvec => stm_write_register mtvec value ;;
+               stm_val ty_unit tt
+    | MCause => stm_write_register mcause value ;;
+                stm_val ty_unit tt
+    | MEpc => stm_write_register mepc value ;;
+              stm_val ty_unit tt
+    | MPMP0CFG => let: tmp := foreign pmpcfg_ent_from_bits value in
+                  stm_write_register pmp0cfg tmp ;;
+                  stm_val ty_unit tt
+    | MPMP1CFG => let: tmp := foreign pmpcfg_ent_from_bits value in
+                  stm_write_register pmp1cfg tmp ;;
+                  stm_val ty_unit tt
+    | MPMPADDR0 => stm_write_register pmpaddr0 value ;;
+                   stm_val ty_unit tt
+    | MPMPADDR1 => stm_write_register pmpaddr1 value ;;
+                   stm_val ty_unit tt
     end.
 
   (* NOTE: normally the definitions of execute_X are inlined and defined as
@@ -890,8 +917,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp2 := call check_CSR csr tmp1 in
     if: tmp2 (* then and else branch switched, Sail model uses a not here *)
     then
-      (let: csr_val := call readCSR csr in
+      (use lemma open_pmp_entries ;;
+       let: csr_val := call readCSR csr in
        call writeCSR csr rs1_val ;;
+       use lemma update_pmp_entries ;;
        call wX rd csr_val ;;
        stm_val ty_retired RETIRE_SUCCESS)
     else (call handle_illegal ;;
@@ -918,7 +947,15 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     ForeignCall write_ram (env.snoc (env.snoc env.nil _ addr) _ data) res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , fun_write_ram μ addr data , inr 1%Z);
     ForeignCall decode (env.snoc env.nil _ code) res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_decode code).
+        (γ' , μ' , res) = (γ , μ , pure_decode code);
+    ForeignCall mstatus_from_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
+        (γ' , μ' , res) = (γ , μ , pure_mstatus_from_bits v);
+    ForeignCall mstatus_to_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
+        (γ' , μ' , res) = (γ , μ , pure_mstatus_to_bits v);
+    ForeignCall pmpcfg_ent_from_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
+        (γ' , μ' , res) = (γ , μ , pure_pmpcfg_ent_from_bits v);
+    ForeignCall pmpcfg_ent_to_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
+        (γ' , μ' , res) = (γ , μ , pure_pmpcfg_ent_to_bits v).
 
   Import bv.notations.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
@@ -927,6 +964,14 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     destruct f; cbn.
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args; repeat eexists; constructor.
+    - repeat depelim args.
+      exists γ, μ. eexists. reflexivity.
+    - repeat depelim args.
+      exists γ, μ. eexists. reflexivity.
+    - repeat depelim args.
+      exists γ, μ. eexists. reflexivity.
+    - repeat depelim args.
+      exists γ, μ. eexists. reflexivity.
     - repeat depelim args.
       exists γ, μ. eexists. reflexivity.
   Qed.
@@ -958,8 +1003,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | process_load          => fun_process_load
     | exceptionType_to_bits => fun_exceptionType_to_bits
     | privLevel_to_bits     => fun_privLevel_to_bits
-    | mstatus_to_bits       => fun_mstatus_to_bits
-    | mstatus_from_bits     => fun_mstatus_from_bits
     | main                  => fun_main
     | init_model            => fun_init_model
     | init_sys              => fun_init_sys
