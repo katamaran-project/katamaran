@@ -109,6 +109,8 @@ Module RiscvNotations.
   Notation "'csr'"          := "csr" : string_scope.
   Notation "'csrrw'"        := "csrrw" : string_scope.
   Notation "'csrpr'"        := "csrpr" : string_scope.
+  Notation "'idx'"          := "idx" : string_scope.
+  Notation "'locked'"       := "locked" : string_scope.
 End RiscvNotations.
 
 (* We postulate a pure decode function and assume that that's what the decode primitive implements. *)
@@ -140,6 +142,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | pmp_mem_read          : Fun [t∶ ty_access_type; p ∶ ty_privilege; paddr ∶ ty_xlenbits] ty_memory_op_result
   | pmp_mem_write         : Fun [paddr ∶ ty_xlenbits; data ∶ ty_int; typ ∶ ty_access_type; priv ∶ ty_privilege] ty_memory_op_result
   | pmpLocked             : Fun [cfg ∶ ty_pmpcfg_ent] ty_bool
+  | pmpWriteCfgReg        : Fun [idx :: ty_pmpcfgidx; value :: ty_xlenbits] ty_unit
+  | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits] ty_pmpcfg_ent
+  | pmpWriteAddr          : Fun [locked :: ty_bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
   | pmpCheck              : Fun [addr ∶ ty_xlenbits; acc ∶ ty_access_type; priv ∶ ty_privilege] (ty_option ty_exception_type)
   | pmpCheckPerms         : Fun [ent ∶ ty_pmpcfg_ent; acc ∶ ty_access_type; priv ∶ ty_privilege] ty_bool
   | pmpCheckRWX           : Fun [ent ∶ ty_pmpcfg_ent; acc ∶ ty_access_type] ty_bool
@@ -273,6 +278,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     Notation "'csr'"          := (@exp_var _ "csr" _ _) : exp_scope.
     Notation "'csrrw'"        := (@exp_var _ "csrrw" _ _) : exp_scope.
     Notation "'csrpr'"        := (@exp_var _ "csrpr" _ _) : exp_scope.
+    Notation "'idx'"          := (@exp_var _ "idx" _ _) : exp_scope.
+    Notation "'locked'"       := (@exp_var _ "locked" _ _) : exp_scope.
 
     Notation "'Read'" := (exp_union access_type KRead (exp_val ty_unit tt)) : exp_scope.
     Notation "'Write'" := (exp_union access_type KWrite (exp_val ty_unit tt)) : exp_scope.
@@ -410,6 +417,25 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_pmpLocked : Stm [cfg ∶ ty_pmpcfg_ent] ty_bool :=
     match: cfg in rpmpcfg_ent with [L; A; X; W; R] => L end.
+
+  Definition fun_pmpWriteCfgReg : Stm [idx :: ty_pmpcfgidx; value :: ty_xlenbits] ty_unit :=
+    match: idx in pmpcfgidx with
+    | PMP0CFG => let: tmp1 := stm_read_register pmp0cfg in
+                 let: tmp2 := call pmpWriteCfg tmp1 value in
+                 stm_write_register pmp0cfg tmp2 ;;
+                 stm_val ty_unit tt
+    | PMP1CFG => let: tmp1 := stm_read_register pmp1cfg in
+                 let: tmp2 := call pmpWriteCfg tmp1 value in
+                 stm_write_register pmp1cfg tmp2 ;;
+                 stm_val ty_unit tt
+    end.
+
+  Definition fun_pmpWriteCfg : Stm [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits] ty_pmpcfg_ent :=
+    let: locked := call pmpLocked cfg in
+    if: locked then cfg else foreign pmpcfg_ent_from_bits value.
+
+  Definition fun_pmpWriteAddr : Stm [locked :: ty_bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits :=
+    if: locked then addr else value.
 
   Definition fun_pmpCheck : Stm [addr ∶ ty_xlenbits; acc ∶ ty_access_type; priv ∶ ty_privilege] (ty_option ty_exception_type) :=
     use lemma open_pmp_entries ;;
@@ -760,15 +786,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                 stm_val ty_unit tt
     | MEpc => stm_write_register mepc value ;;
               stm_val ty_unit tt
-    | MPMP0CFG => let: tmp := foreign pmpcfg_ent_from_bits value in
-                  stm_write_register pmp0cfg tmp ;;
-                  stm_val ty_unit tt
-    | MPMP1CFG => let: tmp := foreign pmpcfg_ent_from_bits value in
-                  stm_write_register pmp1cfg tmp ;;
-                  stm_val ty_unit tt
-    | MPMPADDR0 => stm_write_register pmpaddr0 value ;;
+    | MPMP0CFG => call pmpWriteCfgReg (exp_val ty_pmpcfgidx PMP0CFG) value
+    | MPMP1CFG => call pmpWriteCfgReg (exp_val ty_pmpcfgidx PMP1CFG) value
+    | MPMPADDR0 => let: tmp1 := stm_read_register pmp0cfg in
+                   let: tmp1 := call pmpLocked tmp1 in
+                   let: tmp2 := stm_read_register pmpaddr0 in
+                   let: tmp  := call pmpWriteAddr tmp1 tmp2 value in
+                   stm_write_register pmpaddr0 tmp ;;
                    stm_val ty_unit tt
-    | MPMPADDR1 => stm_write_register pmpaddr1 value ;;
+    | MPMPADDR1 => let: tmp1 := stm_read_register pmp1cfg in
+                   let: tmp1 := call pmpLocked tmp1 in
+                   let: tmp2 := stm_read_register pmpaddr1 in
+                   let: tmp  := call pmpWriteAddr tmp1 tmp2 value in
+                   stm_write_register pmpaddr1 value ;;
                    stm_val ty_unit tt
     end.
 
@@ -994,6 +1024,9 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | pmp_mem_read          => fun_pmp_mem_read
     | pmp_mem_write         => fun_pmp_mem_write
     | pmpLocked             => fun_pmpLocked
+    | pmpWriteCfgReg        => fun_pmpWriteCfgReg
+    | pmpWriteCfg           => fun_pmpWriteCfg
+    | pmpWriteAddr          => fun_pmpWriteAddr
     | pmpCheck              => fun_pmpCheck
     | pmpCheckPerms         => fun_pmpCheckPerms
     | pmpCheckRWX           => fun_pmpCheckRWX

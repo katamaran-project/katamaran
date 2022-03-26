@@ -1152,6 +1152,39 @@ Section ContractDefKit.
        sep_contract_postcondition   := term_var "result_pmpLocked" = term_var L;
     |}.
 
+  Definition sep_contract_pmpWriteCfg : SepContractFun pmpWriteCfg :=
+    {| sep_contract_logic_variables := [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits];
+       sep_contract_localstore      := [term_var cfg; term_var value];
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_pmpWriteCfg";
+       sep_contract_postcondition   :=
+         ∃ "cfg", term_var "result_pmpWriteCfg" = term_var "cfg";
+    |}.
+
+  Definition sep_contract_pmpWriteCfgReg : SepContractFun pmpWriteCfgReg :=
+    {| sep_contract_logic_variables := [idx :: ty_pmpcfgidx; value :: ty_xlenbits];
+       sep_contract_localstore      := [term_var idx; term_var value];
+       sep_contract_precondition    :=
+         ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
+         ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1";
+       sep_contract_result          := "result_pmpWriteCfgReg";
+       sep_contract_postcondition   :=
+         term_var "result_pmpWriteCfgReg" = term_val ty_unit tt
+         ∗ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
+         ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1";
+    |}.
+
+  Definition sep_contract_pmpWriteAddr : SepContractFun pmpWriteAddr :=
+    {| sep_contract_logic_variables := [locked :: ty_bool; addr :: ty_xlenbits; value :: ty_xlenbits];
+       sep_contract_localstore      := [term_var locked; term_var addr; term_var value];
+       sep_contract_precondition    := asn_true;
+       sep_contract_result          := "result_pmpWriteAddr";
+       sep_contract_postcondition   :=
+         asn_if (term_var locked)
+                (term_var "result_pmpWriteAddr" = term_var addr)
+                (term_var "result_pmpWriteAddr" = term_var value);
+    |}.
+
   Definition sep_contract_read_ram : SepContractFunX read_ram :=
     {| sep_contract_logic_variables := [paddr :: ty_xlenbits; w :: ty_xlenbits];
        sep_contract_localstore      := [term_var paddr];
@@ -1305,6 +1338,9 @@ Section ContractDefKit.
       | pmpMatchAddr          => Some sep_contract_pmpMatchAddr
       | pmpMatchEntry         => Some sep_contract_pmpMatchEntry
       | pmpLocked             => Some sep_contract_pmpLocked
+      | pmpWriteCfgReg        => Some sep_contract_pmpWriteCfgReg
+      | pmpWriteCfg           => Some sep_contract_pmpWriteCfg
+      | pmpWriteAddr          => Some sep_contract_pmpWriteAddr
       | mem_write_value       => Some sep_contract_mem_write_value
       | mem_read              => Some sep_contract_mem_read
       | init_model            => Some sep_contract_init_model
@@ -1486,6 +1522,21 @@ Section Debug.
   Import SymProp.notations.
 End Debug.
 
+Lemma valid_contract_pmpWriteCfgReg : ValidContract pmpWriteCfgReg.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_pmpWriteCfg : ValidContractDebug pmpWriteCfg.
+Proof.
+  compute.
+  constructor.
+  cbn.
+  intros [L A X W R] _.
+  exists R, W, X, A, L; auto.
+Qed.
+
+Lemma valid_contract_pmpWriteAddr : ValidContract pmpWriteAddr.
+Proof. reflexivity. Qed.
+
 Lemma valid_contract_init_model : ValidContract init_model.
 Proof. reflexivity. Qed.
 
@@ -1566,8 +1617,16 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_readCSR : ValidContract readCSR.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_writeCSR : ValidContract writeCSR.
-Proof. reflexivity. Qed.
+Lemma valid_contract_writeCSR : ValidContractDebug writeCSR.
+Proof.
+  compute;
+    constructor;
+    cbn.
+  intros idx _ _ _ _ _ [L0 A0 X0 W0 R0] [L1 A1 X1 W1 R1] _ _.
+  split; intros.
+  - exists R0, W0, X0, A0, L0; auto.
+  - exists R1, W1, X1, A1, L1; auto.
+Qed.
 
 Lemma valid_contract_check_CSR : ValidContract check_CSR.
 Proof. reflexivity. Qed.
