@@ -58,6 +58,7 @@ Inductive PurePredicate : Set :=
 | pmp_access
 | pmp_check_perms
 | pmp_check_rwx
+| sub_perm
 | within_cfg
 | not_within_cfg
 | prev_addr
@@ -93,6 +94,7 @@ Section PredicateKit.
     | pmp_access      => [ty_xlenbits; ty_list ty_pmpentry; ty_privilege; ty_access_type]
     | pmp_check_perms => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
     | pmp_check_rwx   => [ty_pmpcfg_ent; ty_access_type]
+    | sub_perm        => [ty_access_type; ty_access_type]
     | within_cfg      => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
     | not_within_cfg  => [ty_xlenbits; ty_list ty_pmpentry]
     | prev_addr       => [ty_pmpcfgidx; ty_list ty_pmpentry; ty_xlenbits]
@@ -193,6 +195,25 @@ Section PredicateKit.
         && (Bool.eqb W1 W2) && (Bool.eqb R1 R2)
     end.
 
+  Equations decide_sub_perm (a1 a2 : Val ty_access_type) : bool :=
+  | Read      | Read      := true;
+  | Write     | Write     := true;
+  | Execute   | Execute   := true;
+  | ReadWrite | ReadWrite := true;
+  | Read      | Execute   := true;
+  | Read      | ReadWrite := true;
+  | Write     | ReadWrite := true;
+  | _         | _         := false.
+
+  Lemma decide_sub_perm_refl (a1 a2 : Val ty_access_type) :
+    a1 = a2 -> decide_sub_perm a1 a2 = true.
+  Proof.
+    intros ->; destruct a2; auto.
+  Qed.
+
+  Definition Sub_perm (a1 a2 : Val ty_access_type) :=
+    decide_sub_perm a1 a2 = true.
+
   Definition decide_in_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty_list ty_pmpentry)) : bool :=
     match es with
     | cfg0 :: cfg1 :: [] =>
@@ -245,6 +266,7 @@ Section PredicateKit.
     | pmp_access      => Pmp_access
     | pmp_check_perms => Pmp_check_perms
     | pmp_check_rwx   => Pmp_check_rwx
+    | sub_perm        => Sub_perm
     | within_cfg      => Within_cfg
     | not_within_cfg  => Not_within_cfg
     | prev_addr       => Prev_addr
@@ -299,6 +321,7 @@ Section ContractDefKit.
   Local Notation "a '=' b" := (asn_eq a b).
   Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
   Local Notation "a '∨' b" := (asn_or a b).
+  Local Notation "p '⊑' q" := (asn_formula (formula_user sub_perm [p;q])) (at level 70).
   Local Notation "a <ₜ b" := (term_binop binop_lt a b) (at level 60).
   Local Notation "a <=ₜ b" := (term_binop binop_le a b) (at level 60).
   Local Notation "a &&ₜ b" := (term_binop binop_and a b) (at level 80).
@@ -960,43 +983,55 @@ Section ContractDefKit.
                 asn_true;
     |}.
 
-  (* TODO: read perm in pre: perm_access(paddr, ?p) ∗ R ≤ ?p *)
   Definition sep_contract_checked_mem_read : SepContractFun checked_mem_read :=
-    {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry; acc :: ty_access_type];
+    {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var paddr];
        sep_contract_precondition    :=
-           asn_pmp_entries (term_var "entries")
+           (term_var t = term_union access_type KRead (term_val ty_unit tt)
+            ∨ term_var t = term_union access_type KReadWrite (term_val ty_unit tt)
+            ∨ term_var t = term_union access_type KExecute (term_val ty_unit tt))
+           ∗ cur_privilege ↦ term_var p
+           ∗ asn_pmp_entries (term_var "entries")
            ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
-           ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc);
+           ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t);
        sep_contract_result          := "result_checked_mem_read";
        sep_contract_postcondition   :=
-         asn_pmp_entries (term_var "entries")
+         cur_privilege ↦ term_var p
+         ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
     |}.
 
-  (* TODO: read perm in pre: perm_access(paddr, ?p) ∗ W ≤ ?p *)
   Definition sep_contract_checked_mem_write : SepContractFun checked_mem_write :=
     {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry; acc :: ty_access_type];
        sep_contract_localstore      := [term_var paddr; term_var data];
        sep_contract_precondition    :=
-           asn_pmp_entries (term_var "entries")
-           ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
-           ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc);
+          (term_var acc = term_union access_type KWrite (term_val ty_unit tt)
+           ∨ term_var acc = term_union access_type KReadWrite (term_val ty_unit tt))
+          ∗ cur_privilege ↦ term_var p
+          ∗ asn_pmp_entries (term_var "entries")
+          ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
+          ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc);
        sep_contract_result          := "result_checked_mem_write";
        sep_contract_postcondition   :=
-         asn_pmp_entries (term_var "entries")
-         ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
+         cur_privilege ↦ term_var p
+         ∗ asn_pmp_entries (term_var "entries")
+         ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
     |}.
 
   Definition sep_contract_pmp_mem_read : SepContractFun pmp_mem_read :=
     {| sep_contract_logic_variables := [t :: ty_access_type; p :: ty_privilege; paddr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var p; term_var paddr];
        sep_contract_precondition    :=
-         asn_pmp_entries (term_var "entries")
+          (term_var t = term_union access_type KRead (term_val ty_unit tt)
+           ∨ term_var t = term_union access_type KReadWrite (term_val ty_unit tt)
+           ∨ term_var t = term_union access_type KExecute (term_val ty_unit tt))
+         ∗ cur_privilege ↦ term_var p
+         ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
        sep_contract_result          := "result_pmp_mem_read";
        sep_contract_postcondition   :=
-         asn_pmp_entries (term_var "entries")
+         cur_privilege ↦ term_var p
+         ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
     |}.
 
@@ -1004,11 +1039,15 @@ Section ContractDefKit.
     {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; typ :: ty_access_type; priv :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var paddr; term_var data; term_var typ; term_var priv];
        sep_contract_precondition    :=
-         asn_pmp_entries (term_var "entries")
+          (term_var typ = term_union access_type KWrite (term_val ty_unit tt)
+           ∨ term_var typ = term_union access_type KReadWrite (term_val ty_unit tt))
+         ∗ cur_privilege ↦ term_var priv
+         ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var priv);
        sep_contract_result          := "result_pmp_mem_write";
        sep_contract_postcondition   :=
-         asn_pmp_entries (term_var "entries")
+         cur_privilege ↦ term_var priv
+         ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var priv);
     |}.
 
@@ -1030,10 +1069,12 @@ Section ContractDefKit.
     {| sep_contract_logic_variables := [typ :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var typ; term_var paddr];
        sep_contract_precondition    :=
-         cur_privilege ↦ term_var p
+          (term_var typ = term_union access_type KRead (term_val ty_unit tt)
+           ∨ term_var typ = term_union access_type KExecute (term_val ty_unit tt))
+         ∗ cur_privilege ↦ term_var p
          ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
-       sep_contract_result          := "result_pmp_mem_write";
+       sep_contract_result          := "result_mem_read";
        sep_contract_postcondition   :=
          cur_privilege ↦ term_var p
          ∗ asn_pmp_entries (term_var "entries")
@@ -1186,20 +1227,35 @@ Section ContractDefKit.
     |}.
 
   Definition sep_contract_read_ram : SepContractFunX read_ram :=
-    {| sep_contract_logic_variables := [paddr :: ty_xlenbits; w :: ty_xlenbits];
+    {| sep_contract_logic_variables := [paddr :: ty_xlenbits; w :: ty_xlenbits; "entries" :: ty_list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
        sep_contract_localstore      := [term_var paddr];
-       sep_contract_precondition    := term_var paddr ↦ₘ term_var w;
+       sep_contract_precondition    :=
+         term_union access_type KRead (term_val ty_unit tt) ⊑ term_var t
+         ∗ cur_privilege ↦ term_var p
+         ∗ asn_pmp_entries (term_var "entries")
+         ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t)
+         ∗ term_var paddr ↦ₘ term_var w;
        sep_contract_result          := "result_read_ram";
        sep_contract_postcondition   := term_var "result_read_ram" = term_var w
-        ∗ term_var paddr ↦ₘ term_var w;
+        ∗ cur_privilege ↦ term_var p
+        ∗ term_var paddr ↦ₘ term_var w
+        ∗ asn_pmp_entries (term_var "entries");
     |}.
 
   Definition sep_contract_write_ram : SepContractFunX write_ram :=
-    {| sep_contract_logic_variables := [paddr :: ty_int; data :: ty_word];
+    {| sep_contract_logic_variables := [paddr :: ty_int; data :: ty_word; "entries" :: ty_list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
        sep_contract_localstore      := [term_var paddr; term_var data];
-       sep_contract_precondition    := ∃ w, term_var paddr ↦ₘ term_var w;
+       sep_contract_precondition    :=
+         term_union access_type KWrite (term_val ty_unit tt) ⊑ term_var t
+         ∗ cur_privilege ↦ term_var p
+         ∗ asn_pmp_entries (term_var "entries")
+         ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t)
+         ∗ ∃ w, term_var paddr ↦ₘ term_var w;
        sep_contract_result          := "result_write_ram";
-       sep_contract_postcondition   := term_var paddr ↦ₘ term_var data;
+       sep_contract_postcondition   :=
+         cur_privilege ↦ term_var p
+         ∗ term_var paddr ↦ₘ term_var data
+         ∗ asn_pmp_entries (term_var "entries");
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
@@ -1395,6 +1451,10 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
   | _             | term_val true | term_val true | term_union KReadWrite (term_val tt) := true;
   | _             | _             | _             | _                                   := false.
 
+  Equations(noeqns) simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (List Formula Σ) :=
+  | term_val a1 | term_val a2 := if decide_sub_perm a1 a2 then Some nil else None;
+  | a1          | a2          := Some (cons (formula_user sub_perm [a1;a2]) nil).
+
   Equations(noeqns) simplify_pmp_check_rwx {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
   | term_record pmpcfg_ent [_;_;X;W;R] | acc          :=
     if decide_pmp_check_rwx X W R acc then Some nil else None;
@@ -1443,6 +1503,10 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
                            let (ts,acc) := env.snocView ts in
                            let (ts,cfg)   := env.snocView ts in
                            simplify_pmp_check_rwx cfg acc
+    | sub_perm        => fun ts =>
+                           let (ts,a2) := env.snocView ts in
+                           let (ts,a1) := env.snocView ts in
+                           simplify_sub_perm a1 a2
     | within_cfg      => fun ts =>
                            let (ts,addr) := env.snocView ts in
                            let (ts,prev_addr)     := env.snocView ts in
@@ -1493,6 +1557,7 @@ Module Import RiscvPmpExecutor :=
   MakeExecutor RiscvPmpBase RiscvPmpSpecification RiscvPmpSolver.
 Import SMut.
 Import SMut.SMutNotations.
+Import Postprocessing.
 
 Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
@@ -1569,7 +1634,14 @@ Proof.
   compute.
   constructor.
   cbn.
-  firstorder.
+  intros acc paddr p entries.
+  repeat split.
+  - intros; subst.
+    exists Read; firstorder.
+  - intros; subst.
+    exists ReadWrite; firstorder.
+  - intros; subst.
+    exists Execute; firstorder.
 Qed.
 
 Lemma valid_contract_checked_mem_write : ValidContractDebug checked_mem_write.
@@ -1577,24 +1649,17 @@ Proof.
   compute.
   constructor.
   cbn.
-  firstorder.
+  intros addr _ p entries acc.
+  repeat split; intros; subst.
+  - exists Write; firstorder.
+  - exists ReadWrite; firstorder.
 Qed.
 
-Lemma valid_contract_pmp_mem_read : ValidContractDebug pmp_mem_read.
-Proof.
-  compute.
-  constructor.
-  cbn.
-  firstorder.
-Qed.
+Lemma valid_contract_pmp_mem_read : ValidContract pmp_mem_read.
+Proof. reflexivity. Qed.
 
-Lemma valid_contract_pmp_mem_write : ValidContractDebug pmp_mem_write.
-Proof.
-  compute.
-  constructor.
-  cbn.
-  firstorder.
-Qed.
+Lemma valid_contract_pmp_mem_write : ValidContract pmp_mem_write.
+Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
 Proof. reflexivity. Qed.

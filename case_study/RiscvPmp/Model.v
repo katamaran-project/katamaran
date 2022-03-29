@@ -163,10 +163,6 @@ Module RiscvPmpModel.
           | _ => False
           end.
 
-        (* TODO: add perm_access predicate *)
-        (* pmp_addr_access(?entries, ?mode) 
-         ∀ a ∈ Mem, p : Perm . check_access(a, entries, mode) = Some p -> 
-                               ∃ w . a ↦ w ∗ perm_access(a, p) *)
         Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
           [∗ list] a ∈ addrs,
             (⌜∃ p, Pmp_access a entries m p⌝ -∗
