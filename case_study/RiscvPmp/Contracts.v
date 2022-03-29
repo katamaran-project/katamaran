@@ -951,7 +951,8 @@ Section ContractDefKit.
            ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
        sep_contract_result          := "result_fetch";
        sep_contract_postcondition   :=
-         cur_privilege ↦ term_var p
+         pc ↦ term_var "i"
+         ∗ cur_privilege ↦ term_var p
          ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
     |}.
