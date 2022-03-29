@@ -255,7 +255,7 @@ Module RiscvPmpModel.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
       unfold RiscvPmpIrisHeapKit.interp_pmp_entries.
-      iIntros "[%cfg0 [%addr0 [%cfg1 [%addr1 [Hcfg0 [Haddr0 [Hcfg1 [Haddr1 [%H _]]]]]]]]]".
+      iIntros "[%cfg0 [%addr0 [%cfg1 [%addr1 [Hcfg0 [Haddr0 [Hcfg1 [Haddr1 [_ [_ [%H _]]]]]]]]]]]".
       destruct entries as [|[cfg0' addr0']]; try discriminate.
       destruct entries as [|[cfg1' addr1']]; try discriminate.
       destruct entries; try discriminate.

@@ -340,6 +340,10 @@ Section ContractDefKit.
   Local Notation asn_pmp_access addr es m p := (asn_formula (formula_user pmp_access [addr;es;m;p])).
   Local Notation asn_pmp_check_perms cfg acc p := (asn_formula (formula_user pmp_check_perms [cfg;acc;p])).
   Local Notation asn_pmp_check_rwx cfg acc := (asn_formula (formula_user pmp_check_rwx [cfg;acc])).
+  Local Notation asn_expand_pmpcfg_ent cfg := (asn_match_record rpmpcfg_ent cfg
+    (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
+    (asn_true)).
+
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_int) : Term Σ ty_bool :=
     term_binop binop_eq e1 e2.
@@ -504,6 +508,9 @@ Section ContractDefKit.
   Definition sep_contract_execute_LOAD : SepContractFun execute_LOAD :=
     instr_exec_contract.
 
+  Definition sep_contract_execute : SepContractFun execute :=
+    instr_exec_contract.
+
   Definition sep_contract_process_load : SepContractFun process_load :=
     {| sep_contract_logic_variables := [rd :: ty_regno; vaddr :: ty_xlenbits; value :: ty_memory_op_result; "i" :: ty_xlenbits; tvec :: ty_xlenbits; p :: ty_privilege; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits; "mcause" :: ty_mcause];
        sep_contract_localstore      := [term_var rd; term_var vaddr; term_var value];
@@ -585,8 +592,8 @@ Section ContractDefKit.
          ∗ ∃ "mtvec", mtvec ↦ term_var "mtvec"
          ∗ ∃ "mcause", mcause ↦ term_var "mcause"
          ∗ ∃ "mepc", mepc ↦ term_var "mepc"
-         ∗ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
-         ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1"
+         ∗ ∃ "cfg0", (pmp0cfg ↦ term_var "cfg0" ∗ asn_expand_pmpcfg_ent (term_var "cfg0"))
+         ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"))
          ∗ ∃ "addr0", pmpaddr0 ↦ term_var "addr0"
          ∗ ∃ "addr1", pmpaddr1 ↦ term_var "addr1";
        sep_contract_result          := "result_writeCSR";
@@ -934,6 +941,21 @@ Section ContractDefKit.
        sep_contract_postcondition   := asn_true;
     |}.
 
+  Definition sep_contract_fetch : SepContractFun fetch :=
+    {| sep_contract_logic_variables := ["i" :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
+       sep_contract_localstore      := env.nil;
+       sep_contract_precondition    :=
+           pc ↦ term_var "i"
+           ∗ cur_privilege ↦ term_var p
+           ∗ asn_pmp_entries (term_var "entries")
+           ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
+       sep_contract_result          := "result_fetch";
+       sep_contract_postcondition   :=
+         cur_privilege ↦ term_var p
+         ∗ asn_pmp_entries (term_var "entries")
+         ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
+    |}.
+
   Definition sep_contract_init_model : SepContractFun init_model :=
     {| sep_contract_logic_variables := ctx.nil;
        sep_contract_localstore      := env.nil;
@@ -1196,7 +1218,7 @@ Section ContractDefKit.
   Definition sep_contract_pmpWriteCfg : SepContractFun pmpWriteCfg :=
     {| sep_contract_logic_variables := [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits];
        sep_contract_localstore      := [term_var cfg; term_var value];
-       sep_contract_precondition    := asn_true;
+       sep_contract_precondition    := asn_expand_pmpcfg_ent (term_var cfg);
        sep_contract_result          := "result_pmpWriteCfg";
        sep_contract_postcondition   :=
          ∃ "cfg", term_var "result_pmpWriteCfg" = term_var "cfg";
@@ -1206,8 +1228,8 @@ Section ContractDefKit.
     {| sep_contract_logic_variables := [idx :: ty_pmpcfgidx; value :: ty_xlenbits];
        sep_contract_localstore      := [term_var idx; term_var value];
        sep_contract_precondition    :=
-         ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
-         ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1";
+         ∃ "cfg0", (pmp0cfg ↦ term_var "cfg0" ∗ asn_expand_pmpcfg_ent (term_var "cfg0"))
+         ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"));
        sep_contract_result          := "result_pmpWriteCfgReg";
        sep_contract_postcondition   :=
          term_var "result_pmpWriteCfgReg" = term_val ty_unit tt
@@ -1287,6 +1309,8 @@ Section ContractDefKit.
        lemma_postcondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
           (pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
            pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+           asn_expand_pmpcfg_ent (term_var "cfg0") ∗
+           asn_expand_pmpcfg_ent (term_var "cfg1") ∗
            term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
                                            (term_var "cfg1" ,ₜ term_var "addr1")]);
     |}.
@@ -1297,6 +1321,8 @@ Section ContractDefKit.
        lemma_precondition    := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
          (pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
           pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+          asn_expand_pmpcfg_ent (term_var "cfg0") ∗
+          asn_expand_pmpcfg_ent (term_var "cfg1") ∗
           term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
                                           (term_var "cfg1" ,ₜ term_var "addr1")]);
        lemma_postcondition   := asn_pmp_entries (term_var "entries");
@@ -1402,6 +1428,8 @@ Section ContractDefKit.
       | init_model            => Some sep_contract_init_model
       | init_sys              => Some sep_contract_init_sys
       | init_pmp              => Some sep_contract_init_pmp
+      | fetch                 => Some sep_contract_fetch
+      | execute               => Some sep_contract_execute
       | _                     => None
       end.
 
@@ -1590,19 +1618,19 @@ End Debug.
 Lemma valid_contract_pmpWriteCfgReg : ValidContract pmpWriteCfgReg.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_pmpWriteCfg : ValidContractDebug pmpWriteCfg.
-Proof.
-  compute.
-  constructor.
-  cbn.
-  intros [L A X W R] _.
-  exists R, W, X, A, L; auto.
-Qed.
+Lemma valid_contract_pmpWriteCfg : ValidContract pmpWriteCfg.
+Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmpWriteAddr : ValidContract pmpWriteAddr.
 Proof. reflexivity. Qed.
 
 Lemma valid_contract_init_model : ValidContract init_model.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_fetch : ValidContract fetch.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_execute : ValidContract execute.
 Proof. reflexivity. Qed.
 
 Lemma valid_contract_init_sys : ValidContractDebug init_sys.
@@ -1682,16 +1710,8 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_readCSR : ValidContract readCSR.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_writeCSR : ValidContractDebug writeCSR.
-Proof.
-  compute;
-    constructor;
-    cbn.
-  intros idx _ _ _ _ _ [L0 A0 X0 W0 R0] [L1 A1 X1 W1 R1] _ _.
-  split; intros.
-  - exists R0, W0, X0, A0, L0; auto.
-  - exists R1, W1, X1, A1, L1; auto.
-Qed.
+Lemma valid_contract_writeCSR : ValidContract writeCSR.
+Proof. reflexivity. Qed.
 
 Lemma valid_contract_check_CSR : ValidContract check_CSR.
 Proof. reflexivity. Qed.
@@ -1812,15 +1832,11 @@ Proof. (* NOTE: this proof holds, it's just quite slow (the cbn takes a few minu
   constructor.
 
   unfold SymProp.safe.
-  intros addr acc priv cfg0 addr0 cfg1 addr1.
+  intros addr acc priv addr0 addr1 R0 W0 X0 A0 L0 R1 W1 X1 A1 L1.
   cbn.
   cbn in *.
-  destruct cfg0 as [L0 A0 X0 W0 R0] eqn:Ecfg0.
-  destruct cfg1 as [L1 A1 X1 W1 R1] eqn:Ecfg1.
-  exists R0, W0, X0, A0, L0, 0, addr0, cfg0.
-
   firstorder;
-    exists R1, W1, X1, A1, L1, addr0, addr1, cfg1;
+    repeat eexists;
     firstorder;
     unfold Pmp_access, decide_pmp_access, pmp_check,
     pmp_match_entry, pmp_match_addr, pmp_addr_range;
@@ -1835,7 +1851,7 @@ Proof. (* NOTE: this proof holds, it's just quite slow (the cbn takes a few minu
     simpl;
     auto;
     destruct (addr1 <? addr0); auto;
-    destruct (addr0 <? 0); auto. *)
+    destruct (addr0 <? 0); auto.  *)
 Abort.
 
 (* TODO: this is just to make sure that all contracts defined so far are valid
