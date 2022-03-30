@@ -1006,6 +1006,7 @@ Section ContractDefKit.
                 asn_true;
     |}.
 
+  (* TODO: can get rid of ∨'s *)
   Definition sep_contract_checked_mem_read : SepContractFun checked_mem_read :=
     {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var paddr];
@@ -1256,7 +1257,7 @@ Section ContractDefKit.
          term_union access_type KRead (term_val ty_unit tt) ⊑ term_var t
          ∗ cur_privilege ↦ term_var p
          ∗ asn_pmp_entries (term_var "entries")
-         ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t)
+         ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t) (* TODO: move predicates that do unification earlier in the precond *)
          ∗ term_var paddr ↦ₘ term_var w;
        sep_contract_result          := "result_read_ram";
        sep_contract_postcondition   := term_var "result_read_ram" = term_var w

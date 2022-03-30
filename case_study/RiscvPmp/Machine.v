@@ -555,6 +555,8 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_init_model : Stm ctx.nil ty_unit :=
     call init_sys.
 
+  (* TODO: specify contract for loop in the Iris Model *)
+  (* TODO: (Katamaran-based solution, but stuck on ▹)introduce missing Iris stuff as abstract predicates (▹, wp loop ⊤) *)
   Definition fun_loop : Stm ctx.nil ty_unit :=
     call step ;; call loop.
 
@@ -566,6 +568,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KMemException (pat_var "e")  => F_Error e tmp1
     end.
 
+  (* TODO: Define contract for step, with addition of pc ↦ ... *)
   Definition fun_step : Stm ctx.nil ty_unit :=
     let: f := call fetch in
     match: f in union fetch_result with
