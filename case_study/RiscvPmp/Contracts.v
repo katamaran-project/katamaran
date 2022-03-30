@@ -329,7 +329,7 @@ Section ContractDefKit.
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
   (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
-  (* Local Notation asn_pmp_entries l := (asn_chunk_angelic (chunk_user pmp_entries [l])). *)
+  (* Local Notation asn_pmp_entries_angelic l := (asn_chunk_angelic (chunk_user pmp_entries [l])). *)
   Local Notation asn_pmp_addr_access l m := (asn_chunk (chunk_user pmp_addr_access [l; m])).
   Local Notation asn_pmp_addr_access_without a l m := (asn_chunk (chunk_user pmp_addr_access_without [a;l; m])).
   Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
@@ -1330,7 +1330,7 @@ Section ContractDefKit.
     |}.
 
   Definition lemma_update_pmp_entries : SepLemma update_pmp_entries :=
-    {| lemma_logic_variables := ["entries" :: ty_list ty_pmpentry; "cfg0" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "cfg1" :: ty_pmpcfg_ent; "addr1" :: ty_xlenbits];
+    {| lemma_logic_variables := ["cfg0" :: ty_pmpcfg_ent; "addr0" :: ty_xlenbits; "cfg1" :: ty_pmpcfg_ent; "addr1" :: ty_xlenbits];
        lemma_patterns        := env.nil;
        lemma_precondition    :=
          pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
@@ -1634,14 +1634,8 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_execute : ValidContract execute.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_init_sys : ValidContractDebug init_sys.
-Proof.
-  compute.
-  constructor.
-  cbn.
-  firstorder;
-    constructor.
-Qed.
+Lemma valid_contract_init_sys : ValidContract init_sys.
+Proof. reflexivity. Qed.
 
 Lemma valid_contract_init_pmp : ValidContract init_pmp.
 Proof. reflexivity. Qed.
@@ -1807,14 +1801,8 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_execute_LOAD : ValidContract execute_LOAD.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_execute_CSR : ValidContractDebug execute_CSR.
-Proof.
-  compute.
-  constructor.
-  cbn.
-  firstorder;
-    constructor.
-Qed.
+Lemma valid_contract_execute_CSR : ValidContract execute_CSR.
+Proof. reflexivity. Qed.
 
 (* TODO: the pmpCheck contract requires some manual proof effort in the case
          that no pmp entry matches (i.e. we end up in the final check of
