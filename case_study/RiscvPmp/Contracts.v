@@ -115,6 +115,17 @@ Section PredicateKit.
         end
     end.
 
+  Definition pmp_get_RWX (cfg : Val ty_pmpcfg_ent) : Val ty_access_type :=
+    match cfg with
+    | {| L := _; A := _; X := X; W := W; R := R |} =>
+        match X, W, R with
+        | false, false, true => Read
+        | false, true, false => Write
+        | true, false, false => Execute
+        | _, _, _ => ReadWrite
+        end
+    end.
+
   Definition decide_pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : bool :=
     match p with
     | Machine =>
@@ -125,6 +136,15 @@ Section PredicateKit.
         pmp_check_RWX cfg acc
     end.
 
+  Definition pmp_get_perms (cfg : Val ty_pmpcfg_ent) (p : Val ty_privilege) : option (Val ty_access_type) :=
+    match p with
+    | Machine =>
+        if L cfg
+        then Some (pmp_get_RWX cfg)
+        else None
+    | User =>
+        Some (pmp_get_RWX cfg)
+    end.
 
   Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange :=
     match A cfg with
@@ -153,28 +173,58 @@ Section PredicateKit.
     | PMP_Match        => PMP_Success
     end.
 
-  Fixpoint pmp_check (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) (p : Val ty_access_type) : bool :=
+  Fixpoint pmp_check (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_access_type)) :=
     match entries with
     | [] => match m with
-            | Machine => true
-            | User    => false
+            | Machine => (true, None)
+            | User    => (false, None)
             end
     | (cfg , addr) :: entries =>
         match pmp_match_entry a m cfg prev addr with
-        | PMP_Success  => decide_pmp_check_perms cfg p m
-        | PMP_Fail     => false
-        | PMP_Continue => pmp_check a entries addr m p
+        | PMP_Success  => (true, pmp_get_perms cfg m)
+        | PMP_Fail     => (false, None)
+        | PMP_Continue => pmp_check a entries addr m
         end
     end%list.
 
   (* check_access is based on the pmpCheck algorithm, main difference
          is that we can define it less cumbersome because entries will contain
          the PMP entries in highest-priority order. *)
-  Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : bool :=
-    pmp_check a entries 0 m p.
+  Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_access_type)) :=
+    pmp_check a entries 0 m.
+
+  Equations access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
+  | Read      | Read      := true;
+  | Write     | Write     := true;
+  | ReadWrite | ReadWrite := true;
+  | Execute   | Execute   := true;
+  | _         | _         := false.
+
+  Equations decide_sub_perm (a1 a2 : Val ty_access_type) : bool :=
+  | Read      | Read      := true;
+  | Write     | Write     := true;
+  | Execute   | Execute   := true;
+  | ReadWrite | ReadWrite := true;
+  | Read      | Execute   := true;
+  | Read      | ReadWrite := true;
+  | Write     | ReadWrite := true;
+  | _         | _         := false.
+
+  Lemma decide_sub_perm_refl (a1 a2 : Val ty_access_type) :
+    a1 = a2 -> decide_sub_perm a1 a2 = true.
+  Proof.
+    intros ->; destruct a2; auto.
+  Qed.
+
+  Definition Sub_perm (a1 a2 : Val ty_access_type) : Prop :=
+    decide_sub_perm a1 a2 = true.
 
   Definition Pmp_access (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : Prop :=
-    decide_pmp_access a entries m p = true.
+    match decide_pmp_access a entries m with
+    | (true, Some acc) => Sub_perm acc p
+    | (true, None)     => True
+    | (false, _)       => False
+    end.
 
   Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
     decide_pmp_check_perms cfg acc p = true.
@@ -194,25 +244,6 @@ Section PredicateKit.
         (Bool.eqb L1 L2) && (PmpAddrMatchType_eqb A1 A2) && (Bool.eqb X1 X2)
         && (Bool.eqb W1 W2) && (Bool.eqb R1 R2)
     end.
-
-  Equations decide_sub_perm (a1 a2 : Val ty_access_type) : bool :=
-  | Read      | Read      := true;
-  | Write     | Write     := true;
-  | Execute   | Execute   := true;
-  | ReadWrite | ReadWrite := true;
-  | Read      | Execute   := true;
-  | Read      | ReadWrite := true;
-  | Write     | ReadWrite := true;
-  | _         | _         := false.
-
-  Lemma decide_sub_perm_refl (a1 a2 : Val ty_access_type) :
-    a1 = a2 -> decide_sub_perm a1 a2 = true.
-  Proof.
-    intros ->; destruct a2; auto.
-  Qed.
-
-  Definition Sub_perm (a1 a2 : Val ty_access_type) :=
-    decide_sub_perm a1 a2 = true.
 
   Definition decide_in_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty_list ty_pmpentry)) : bool :=
     match es with
@@ -1505,8 +1536,12 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
     Some (cons (formula_user prev_addr [cfg; entries; prev]) nil).
 
   Equations(noeqns) simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty_list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
-  | term_val paddr | term_val entries | term_val p | term_val acc :=
-    if decide_pmp_access paddr entries p acc then Some nil else None;
+  | term_val paddr | term_val entries | term_val p | acc :=
+    match decide_pmp_access paddr entries p with
+    | (true, Some typ) => simplify_sub_perm (term_val ty_access_type typ) acc
+    | (true, None)     => Some nil
+    | (false, _)       => None
+    end
   | paddr          | entries          | p          | acc          :=
     Some (cons (formula_user pmp_access [paddr; entries; p; acc]) nil).
 
@@ -1819,23 +1854,21 @@ Proof. (* NOTE: this proof holds, it's just quite slow (the cbn takes a few minu
   intros addr acc priv addr0 addr1 R0 W0 X0 A0 L0 R1 W1 X1 A1 L1.
   cbn.
   cbn in *.
-  firstorder;
-    repeat eexists;
-    firstorder;
+  eexists; try repeat constructor;
     unfold Pmp_access, decide_pmp_access, pmp_check,
-    pmp_match_entry, pmp_match_addr, pmp_addr_range;
+    pmp_match_entry, pmp_match_addr;
     destruct A0; destruct A1; simpl; auto;
     repeat match goal with
            | H: ?x < ?y |- _ =>
                apply Z.ltb_lt in H as [= ->]
            | H: (?x || ?y)%bool = true |- _ =>
                apply Bool.orb_prop in H as [[= ->]|[= ->]]
-           end;
+           end; auto;
     rewrite ?Bool.orb_true_r;
     simpl;
     auto;
     destruct (addr1 <? addr0); auto;
-    destruct (addr0 <? 0); auto.  *)
+    destruct (addr0 <? 0); auto. *)
 Abort.
 
 (* TODO: this is just to make sure that all contracts defined so far are valid
