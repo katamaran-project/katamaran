@@ -972,6 +972,34 @@ Section ContractDefKit.
        sep_contract_postcondition   := asn_true;
     |}.
 
+  Definition sep_contract_step : SepContractFun step :=
+    {| sep_contract_logic_variables := ["m" :: ty_privilege; "entries" :: ty_list ty_pmpentry];
+       sep_contract_localstore      := env.nil;
+       sep_contract_precondition    :=
+                     cur_privilege ↦ term_var "m" ∗
+         ∃ "h",      mtvec         ↦ term_var "h" ∗
+         ∃ "npc",    nextpc        ↦ term_var "npc" ∗
+         ∃ "i",      pc            ↦ term_var "i" ∗
+         ∃ "mcause", mcause        ↦ term_var "mcause" ∗
+         ∃ "mepc",   mepc          ↦ term_var "mepc" ∗
+         ∃ "mpp",    mstatus       ↦ term_record rmstatus [ term_var "mpp" ] ∗
+                     asn_pmp_entries (term_var "entries") ∗
+                     asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+                     asn_gprs ;
+       sep_contract_result          := "result_step";
+       sep_contract_postcondition   := ∃ "p", ∃ "es",
+         (           cur_privilege ↦ term_var "p" ∗
+         ∃ "h",      mtvec         ↦ term_var "h" ∗
+         ∃ "npc",   (nextpc        ↦ term_var "npc" ∗
+                     pc            ↦ term_var "npc") ∗
+         ∃ "mcause", mcause        ↦ term_var "mcause" ∗
+         ∃ "mepc",   mepc          ↦ term_var "mepc" ∗
+         ∃ "mpp",    mstatus       ↦ term_record rmstatus [ term_var "mpp" ] ∗
+                     asn_pmp_entries (term_var "es") ∗
+                     asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+                     asn_gprs);
+    |}.
+
   Definition sep_contract_fetch : SepContractFun fetch :=
     {| sep_contract_logic_variables := ["i" :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := env.nil;
@@ -1457,6 +1485,7 @@ Section ContractDefKit.
       | init_pmp              => Some sep_contract_init_pmp
       | fetch                 => Some sep_contract_fetch
       | execute               => Some sep_contract_execute
+      | step                  => Some sep_contract_step
       | _                     => None
       end.
 
@@ -1644,7 +1673,11 @@ Section Debug.
   (* Import RiscvNotations.
      Import RiscvμSailNotations. *)
   Import SymProp.notations.
+
 End Debug.
+
+Lemma valid_contract_step : ValidContract step.
+Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmpWriteCfgReg : ValidContract pmpWriteCfgReg.
 Proof. reflexivity. Qed.
