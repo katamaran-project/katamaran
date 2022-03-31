@@ -1006,14 +1006,11 @@ Section ContractDefKit.
                 asn_true;
     |}.
 
-  (* TODO: can get rid of ∨'s *)
   Definition sep_contract_checked_mem_read : SepContractFun checked_mem_read :=
     {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var paddr];
        sep_contract_precondition    :=
-           (term_var t = term_union access_type KRead (term_val ty_unit tt)
-            ∨ term_var t = term_union access_type KReadWrite (term_val ty_unit tt)
-            ∨ term_var t = term_union access_type KExecute (term_val ty_unit tt))
+           term_union access_type KRead (term_val ty_unit tt) ⊑ term_var t
            ∗ cur_privilege ↦ term_var p
            ∗ asn_pmp_entries (term_var "entries")
            ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
@@ -1029,8 +1026,7 @@ Section ContractDefKit.
     {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry; acc :: ty_access_type];
        sep_contract_localstore      := [term_var paddr; term_var data];
        sep_contract_precondition    :=
-          (term_var acc = term_union access_type KWrite (term_val ty_unit tt)
-           ∨ term_var acc = term_union access_type KReadWrite (term_val ty_unit tt))
+          term_union access_type KWrite (term_val ty_unit tt) ⊑ term_var acc
           ∗ cur_privilege ↦ term_var p
           ∗ asn_pmp_entries (term_var "entries")
           ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
@@ -1046,9 +1042,7 @@ Section ContractDefKit.
     {| sep_contract_logic_variables := [t :: ty_access_type; p :: ty_privilege; paddr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var p; term_var paddr];
        sep_contract_precondition    :=
-          (term_var t = term_union access_type KRead (term_val ty_unit tt)
-           ∨ term_var t = term_union access_type KReadWrite (term_val ty_unit tt)
-           ∨ term_var t = term_union access_type KExecute (term_val ty_unit tt))
+           term_union access_type KRead (term_val ty_unit tt) ⊑ term_var t
          ∗ cur_privilege ↦ term_var p
          ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
@@ -1062,9 +1056,9 @@ Section ContractDefKit.
   Definition sep_contract_pmp_mem_write : SepContractFun pmp_mem_write :=
     {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; typ :: ty_access_type; priv :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := [term_var paddr; term_var data; term_var typ; term_var priv];
-       sep_contract_precondition    :=
-          (term_var typ = term_union access_type KWrite (term_val ty_unit tt)
-           ∨ term_var typ = term_union access_type KReadWrite (term_val ty_unit tt))
+       sep_contract_precondition    := (* NOTE: only ever called with typ = Write *)
+         (term_var typ = term_union access_type KWrite (term_val ty_unit tt)
+          ∨ term_var typ = term_union access_type KReadWrite (term_val ty_unit tt))
          ∗ cur_privilege ↦ term_var priv
          ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var priv);
@@ -1647,8 +1641,11 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_mem_write_value : ValidContract mem_write_value.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_mem_read : ValidContract mem_read.
-Proof. reflexivity. Qed.
+Lemma valid_contract_mem_read : ValidContractDebug mem_read.
+Proof.
+  compute; constructor; cbn.
+  intros typ paddr p entries; repeat split; auto.
+Qed.
 
 Lemma valid_contract_process_load : ValidContract process_load.
 Proof. reflexivity. Qed.
@@ -1658,14 +1655,8 @@ Proof.
   compute.
   constructor.
   cbn.
-  intros acc paddr p entries.
-  repeat split.
-  - intros; subst.
-    exists Read; firstorder.
-  - intros; subst.
-    exists ReadWrite; firstorder.
-  - intros; subst.
-    exists Execute; firstorder.
+  intros acc paddr p entries Hsub Hacc **.
+  firstorder.
 Qed.
 
 Lemma valid_contract_checked_mem_write : ValidContractDebug checked_mem_write.
@@ -1674,16 +1665,19 @@ Proof.
   constructor.
   cbn.
   intros addr _ p entries acc.
-  repeat split; intros; subst.
-  - exists Write; firstorder.
-  - exists ReadWrite; firstorder.
+  repeat split; firstorder.
 Qed.
 
 Lemma valid_contract_pmp_mem_read : ValidContract pmp_mem_read.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_pmp_mem_write : ValidContract pmp_mem_write.
-Proof. reflexivity. Qed.
+Lemma valid_contract_pmp_mem_write : ValidContractDebug pmp_mem_write.
+Proof.
+  compute.
+  constructor.
+  cbn.
+  firstorder.
+Qed.
 
 Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
 Proof. reflexivity. Qed.
