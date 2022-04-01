@@ -885,15 +885,13 @@ Module BlockVerificationDerived.
     fun _ =>
       ω1 ∣ a <- @demonic _ _ ;;
       ω2 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg pc a))) ;;
-      ω3 ∣ code <- @demonic _ _ ;;
-      ω4 ∣ _ <- T (produce (asn_chunk (chunk_user ptsto [persist__term a (ω2 ∘ ω3); code]))) ;;
-      ω5 ∣ _ <- T (produce (asn_chunk (chunk_user encodes_instr [ persist__term code ω4 ; term_val ty_ast i]))) ;;
+      ω4 ∣ _ <- T (produce (asn_chunk (chunk_user ptstoinstr [persist__term a ω2; term_val ty_ast i]))) ;;
       ω6 ∣ an <- @demonic _ _ ;;
       ω7 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg nextpc an))) ;;
       ω8 ∣ _ <- exec default_config inline_fuel (FunDef step) ;;
-      ω9 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg pc (term_binop binop_plus (persist__term a (ω2 ∘ ω3 ∘ ω4 ∘ ω5 ∘ ω6 ∘ ω7 ∘ ω8)) (term_val ty_exc_code 4))))) ;;
-      ω10 ∣ _ <- T (consume (asn_chunk (chunk_user ptsto [persist__term a (ω2 ∘ ω3 ∘ ω4 ∘ ω5 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9); persist__term code (ω4 ∘ ω5 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9)]))) ;;
-      ω11 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc (term_binop binop_plus (persist__term a (ω2 ∘ ω3 ∘ ω4 ∘ ω5 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9 ∘ ω10)) (term_val ty_exc_code 4))))) ;;
+      ω9 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg pc (term_binop binop_plus (persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8)) (term_val ty_exc_code 4))))) ;;
+      ω10 ∣ _ <- T (consume (asn_chunk (chunk_user ptstoinstr [persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9); term_val ty_ast i]))) ;;
+      ω11 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc (term_binop binop_plus (persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9 ∘ ω10)) (term_val ty_exc_code 4))))) ;;
       pure tt.
 
   (* Ideally, a block should be a list of non-branching
@@ -985,10 +983,8 @@ Module BlockVerificationDerived.
 
     Lemma sat_vc : SymProp.safe vc1 env.nil.
     Proof.
-      cbn.
-    Admitted.
-    (*   repeat constructor; lia. *)
-    (* Qed. *)
+      repeat constructor; cbn; lia.
+    Qed.
 
   End Example.
 
