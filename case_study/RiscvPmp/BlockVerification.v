@@ -880,10 +880,9 @@ Module BlockVerificationDerived.
       _ ∣ msg <- @exec_instruction' i _ ;;
       assert (formula_eq msg (term_val ty_retired RETIRE_SUCCESS)).
 
-  Definition exec_instruction2 (i : AST) : ⊢ M Unit :=
+  Definition exec_instruction2_any (i : AST) : ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
     let inline_fuel := 3%nat in
-    fun _ =>
-      ω1 ∣ a <- @demonic _ _ ;;
+    fun _ a =>
       ω2 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg pc a))) ;;
       ω4 ∣ _ <- T (produce (asn_chunk (chunk_user ptstoinstr [persist__term a ω2; term_val ty_ast i]))) ;;
       ω6 ∣ an <- @demonic _ _ ;;
@@ -891,8 +890,16 @@ Module BlockVerificationDerived.
       ω8 ∣ _ <- exec default_config inline_fuel (FunDef step) ;;
       ω9 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg pc (term_binop binop_plus (persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8)) (term_val ty_exc_code 4))))) ;;
       ω10 ∣ _ <- T (consume (asn_chunk (chunk_user ptstoinstr [persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9); term_val ty_ast i]))) ;;
-      ω11 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc (term_binop binop_plus (persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9 ∘ ω10)) (term_val ty_exc_code 4))))) ;;
-      pure tt.
+      ω11 ∣ na <- @angelic _ _ ;;
+      ω12 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc na))) ;;
+      pure (persist__term na ω12).
+
+  Definition exec_instruction2 (i : AST) : ⊢ M Unit :=
+    let inline_fuel := 3%nat in
+    fun _ =>
+      ω1 ∣ a <- @demonic _ _ ;;
+      ω2 ∣ na <- exec_instruction2_any i a ;;
+      assert (formula_eq na (term_binop binop_plus (persist__term a ω2) (term_val ty_exc_code 4))).
 
   (* Ideally, a block should be a list of non-branching
      instruction plus one final branching instruction *)
@@ -903,6 +910,15 @@ Module BlockVerificationDerived.
       | cons i b' =>
         _ ∣ _ <- @exec_instruction2 i _ ;;
         @exec_block b' _
+      end.
+
+  Fixpoint exec_block_addr (b : list AST) : ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
+    fun _ a =>
+      match b with
+      | nil       => pure a
+      | cons i b' =>
+        ω ∣ a' <- exec_instruction2_any i a ;;
+        @exec_block_addr b' _ a'
       end.
 
   Definition exec_double {Σ : World}
