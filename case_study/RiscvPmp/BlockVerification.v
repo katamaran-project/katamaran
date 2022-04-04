@@ -942,6 +942,32 @@ Module BlockVerificationDerived.
          (fun _ _ _ _ h => SymProp.block)
          []%env []%list).
 
+  Definition exec_double_addr {Σ : World}
+    (req : (□ (STerm ty_xlenbits -> Assertion)) Σ) (b : list AST) : M (STerm ty_xlenbits) Σ :=
+    ω1 ∣ an <- @demonic _ _ ;;
+    ω2 ∣ _ <- T (produce (req _ ω1 an)) ;;
+    @exec_block_addr b _ (persist__term an ω2).
+
+  Definition exec_triple_addr {Σ : World}
+    (req : □ (STerm ty_xlenbits -> Assertion) Σ) (b : list AST)
+    (ens : (□ (STerm ty_xlenbits -> STerm ty_xlenbits -> Assertion)) Σ) : M Unit Σ :=
+    ω1 ∣ a <- @demonic _ _ ;;
+    ω2 ∣ _ <- T (produce (req _ ω1 a)) ;;
+    ω3 ∣ na <- @exec_block_addr b _ (persist__term a ω2) ;;
+    T (consume (ens _ (ω1 ∘ ω2 ∘ ω3) (persist__term a (ω2 ∘ ω3)) na)).
+
+  (* This is a VC for triples, for doubles we probably need to talk
+     about the continuation of a block. *)
+  Definition VC__addr {Σ : LCtx} (req : □ (STerm ty_xlenbits -> Assertion) {| wctx := Σ; wco := nil |}) (b : list AST)
+    (ens : (□ (STerm ty_xlenbits -> STerm ty_xlenbits -> Assertion)) {| wctx := Σ; wco := nil |}) : 𝕊 ε :=
+    SymProp.demonic_close
+      (@exec_triple_addr
+         {| wctx := Σ; wco := nil |}
+         req b ens
+         (* Could include leakcheck here *)
+         (fun _ _ _ _ h => SymProp.block)
+         []%env []%list).
+
   Section Example.
 
     Import ListNotations.
@@ -997,7 +1023,37 @@ Module BlockVerificationDerived.
     Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
     Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
 
-    Lemma sat_vc : SymProp.safe vc1 env.nil.
+    Lemma sat_vc1 : SymProp.safe vc1 env.nil.
+    Proof.
+      repeat constructor; cbn; lia.
+    Qed.
+
+    Section ContractAddr.
+
+      Let Σ1 : LCtx := ["x" :: ty_xlenbits, "y" :: ty_xlenbits].
+
+      Example pre1' : □ (STerm ty_xlenbits -> Assertion)  {| wctx := Σ1 ; wco := nil |} :=
+        fun _ ω a =>
+        persist (A := Assertion) (x1 ↦r term_var "x") ω ∗
+        persist (A := Assertion) (x2 ↦r term_var "y") ω.
+
+      Example post1' : □ (STerm ty_xlenbits -> STerm ty_xlenbits -> Assertion)  {| wctx := Σ1 ; wco := nil |} :=
+        fun _ ω a an =>
+          persist (A := Assertion) (x1 ↦r term_var "y") ω ∗
+          persist (A := Assertion) (x2 ↦r term_var "x") ω ∗
+          asn_formula (formula_eq an (term_binop binop_plus a (term_val _ (Z.of_nat 12 : Val ty_int)))).
+
+    End ContractAddr.
+
+    Time Example vc1' : 𝕊 ε :=
+      Eval compute in
+      let vc1 := BlockVerificationDerived.VC__addr pre1' block1 post1' in
+      let vc2 := Postprocessing.prune vc1 in
+      let vc3 := Postprocessing.solve_evars vc2 in
+      let vc4 := Postprocessing.solve_uvars vc3 in
+      vc4.
+
+    Lemma sat_vc1' : SymProp.safe vc1 env.nil.
     Proof.
       repeat constructor; cbn; lia.
     Qed.
