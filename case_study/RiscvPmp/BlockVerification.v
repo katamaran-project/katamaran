@@ -1141,19 +1141,26 @@ Module BlockVerificationDerivedSem.
         | None => True
         end.
 
-      Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
+      Definition interp_ptsto `{sailRegGS Σ} `{mG : memGS Σ} (addr : Z) (v : Z) : iProp Σ :=
+        mapsto (hG := @mc_ghGS _ mG) addr (DfracOwn 1) v.
+
+      Definition interp_ptsto_instr `{sailRegGS Σ} `{mG : memGS Σ} (addr : Z) (instr : AST) : iProp Σ :=
+        (∃ v, mapsto (hG := @mc_ghGS _ mG) addr (DfracOwn 1) v ∗
+                ⌜ pure_decode v = inr instr ⌝)%I.
+
+      Definition luser_inst `{sailRegGS Σ} `{invGS Σ} `{mG : memGS Σ} (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
         match p return Env Val (𝑯_Ty p) -> iProp Σ with
-        | ptsto           => fun _  => True%I (* TODO: interp_ptst *)
-        | ptstoinstr           => fun _  => True%I (* TODO: interp_ptst *)
-        | BlockVerification.pmp_entries     => fun ts => True%I (* interp_pmp_entries (env.head ts) *)
-        | encodes_instr   => fun _ => True%I
-        | ptstomem        => fun _ => True%I
+        | ptsto                         => fun ts  => interp_ptsto (mG := mG) (env.head (env.tail ts)) (env.head ts)%I
+        | ptstoinstr                    => fun ts  => interp_ptsto_instr (mG := mG) (env.head (env.tail ts)) (env.head ts)%I
+        | BlockVerification.pmp_entries => fun ts => True%I (* interp_pmp_entries (env.head ts) *)
+        | encodes_instr                 => fun _ => True%I
+        | ptstomem                      => fun _ => True%I
         end.
 
-    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
+    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} `{mG : memGS Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
-        (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
+        (luser_inst (mG := mG) p ts) ⊢ (luser_inst (mG := mG) p ts ∗ luser_inst (mG := mG) p ts).
     Proof.
       iIntros (p ts hdup) "H".
       destruct p; inversion hdup;
@@ -1236,6 +1243,12 @@ Module BlockVerificationDerivedSem.
     - do 2 iModIntro.
       iApply contractsSound.
   Qed.
+
+  Definition semTripleOneInstrStep `{sailGS Σ} (PRE : Z -> iProp Σ) (instr : AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
+    ∀ a an,
+    semTriple [] (PRE a ∗ lptsreg pc a ∗ RiscvPmpIrisHeapKit.interp_ptsto_instr a instr)
+      (FunDef RiscvPmpProgram.step)
+      (fun ret _ => lptsreg pc an ∗ RiscvPmpIrisHeapKit.interp_ptsto_instr a instr ∗ POST a an)%I.
 
 
 
