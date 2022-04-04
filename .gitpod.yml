@@ -9,3 +9,4 @@ tasks:
 vscode:
   extensions:
     - maximedenes.vscoq
+    - https://github.com/capt-hb/agda-mode-vscode/raw/master/agda-mode-0.3.7.vsix
