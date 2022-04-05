@@ -972,7 +972,66 @@ Section ContractDefKit.
        sep_contract_postcondition   := asn_true;
     |}.
 
-  Definition sep_contract_step : SepContractFun step :=
+  Definition sep_contract_step {τ Δ} : SepContract Δ τ :=
+    let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "i" :: ty_xlenbits; "entries" :: ty_list ty_pmpentry; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits] in
+    {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
+       sep_contract_localstore      := create_localstore Δ Σ;
+       sep_contract_precondition    :=
+                     cur_privilege ↦ term_var "m" ∗
+                     mtvec         ↦ term_var "h" ∗
+                     pc            ↦ term_var "i" ∗
+                     nextpc        ↦ term_var "npc" ∗
+         ∃ "mcause", mcause        ↦ term_var "mcause" ∗
+                     mepc          ↦ term_var "mepc" ∗
+                     mstatus       ↦ term_record rmstatus [ term_var "mpp" ] ∗
+                     asn_pmp_entries (term_var "entries") ∗
+                     asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+                     asn_gprs;
+       sep_contract_result          := "result_mach_inv";
+       sep_contract_postcondition   :=
+                     asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+                     asn_gprs ∗
+         ∃ "mcause", mcause ↦ term_var "mcause" ∗
+         (  (* Executing normally *)
+                 asn_pmp_entries (term_var "entries") ∗
+                 cur_privilege ↦ term_var "m" ∗
+            ∃ v, (nextpc        ↦ term_var v ∗
+                  pc            ↦ term_var v) ∗
+                 mtvec         ↦ term_var "h" ∗
+                 mstatus       ↦ term_record rmstatus [ term_var "mpp" ] ∗
+                 mepc          ↦ term_var "mepc"
+          ∨
+            (* Modified CSRs, requires Machine mode *)
+                           term_var "m"  =  term_val ty_privilege Machine ∗
+            ∃ "entries",   asn_pmp_entries (term_var "entries") ∗
+                           cur_privilege ↦ term_val ty_privilege Machine ∗
+            ∃ v, (nextpc        ↦ term_var v ∗ (* tick, nextpc + 4 *)
+                  pc            ↦ term_var v) ∗
+            ∃ "new_mtvec", mtvec         ↦ term_var "new_mtvec" ∗
+            ∃ "new_mpp",   mstatus       ↦ term_record rmstatus [ term_var "new_mpp" ] ∗
+            ∃ "new_mepc",  mepc          ↦ term_var "new_mepc"
+          ∨
+            (* Trap occured -> Go into M-mode *)
+            asn_pmp_entries (term_var "entries") ∗
+            cur_privilege ↦ (term_val ty_privilege Machine) ∗
+            nextpc        ↦ term_var "h" ∗
+            pc            ↦ term_var "h" ∗
+            mtvec         ↦ term_var "h" ∗
+            mstatus       ↦ term_record rmstatus [ term_var "m" ] ∗
+            mepc          ↦ term_var "i"
+          ∨
+            (* MRET = Recover *)
+            asn_pmp_entries (term_var "entries") ∗
+            term_var "m"  =  term_val ty_privilege Machine ∗
+            cur_privilege ↦ term_var "mpp" ∗
+            nextpc        ↦ term_var "mepc" ∗
+            pc            ↦ term_var "mepc" ∗
+            mtvec         ↦ term_var "h" ∗
+            mstatus       ↦ term_record rmstatus [ term_val ty_privilege User ] ∗
+            mepc          ↦ term_var "mepc")
+    |}.
+
+  Definition sep_contract_step' : SepContractFun step :=
     {| sep_contract_logic_variables := ["m" :: ty_privilege; "entries" :: ty_list ty_pmpentry];
        sep_contract_localstore      := env.nil;
        sep_contract_precondition    :=
