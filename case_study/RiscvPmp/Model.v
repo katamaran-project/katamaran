@@ -345,4 +345,13 @@ Module RiscvPmpModel.
       eauto using open_gprs_sound, close_gprs_sound, open_pmp_entries_sound,
       close_pmp_entries_sound, update_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound.
   Qed.
+
+  (* Print fun_step. *)
+  (* semTriple: expressions are a *conf*, i.e., an expression paired with a local variable store δ *)
+  (* Check semTriple _ True (FunDef loop) (fun v δ' => True)%I.
+  Check wp.
+  Print wp.
+  Locate wp.
+  Print option.wp. *)
+
 End RiscvPmpModel.
