@@ -1115,13 +1115,18 @@ Section Soundness.
     by rewrite env.update_update env.update_lookup.
   Qed.
 
+  Definition ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
+    match contract with
+    | MkSepContract _ _ ctxΣ θΔ pre result post =>
+      ∀ (ι : Valuation ctxΣ),
+        semTriple (inst θΔ ι) (interpret_assertion pre ι) body
+                  (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v))
+    end%I.
+
   Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
     (∀ σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
-      | Some (MkSepContract _ _ ctxΣ θΔ pre result post) =>
-        ∀ (ι : Valuation ctxΣ),
-          semTriple (inst θΔ ι) (interpret_assertion pre ι) (FunDef f)
-                    (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v))
+      | Some c => ValidContractSem (FunDef f) c
       | None => True
       end)%I.
 
