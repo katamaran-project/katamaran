@@ -1115,6 +1115,20 @@ Section Soundness.
     by rewrite env.update_update env.update_lookup.
   Qed.
 
+  Fixpoint Forall {Δ : LCtx} {struct Δ} : (Valuation Δ -> iProp Σ) -> iProp Σ :=
+    match Δ return (Valuation Δ -> iProp Σ) -> iProp Σ with
+    | ctx.nil      => fun P => P env.nil
+    | ctx.snoc Δ b => fun P => Forall (fun δ => ∀ (v : Val (type b)), P (env.snoc δ b v))
+    end%I.
+
+  Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
+    match contract with
+    | MkSepContract _ _ ctxΣ θΔ pre result post =>
+      Forall (fun (ι : Valuation ctxΣ) =>
+        semTriple (inst θΔ ι) (interpret_assertion pre ι) body
+                  (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v)))
+    end%I.
+
   Definition ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
     match contract with
     | MkSepContract _ _ ctxΣ θΔ pre result post =>
