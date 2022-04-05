@@ -1278,11 +1278,11 @@ Section Soundness.
       by iApply wp_compat_fail.
   Qed.
 
-  Lemma iris_rule_stm_call_inline
+  Lemma iris_rule_stm_call_inline_later
     {Γ} (δ : CStore Γ)
     {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
     (P : iProp Σ) (Q : Val σ -> iProp Σ) :
-    ⊢ semTriple (evals es δ) P (FunDef f) (fun v _ => Q v) -∗
+    ⊢ ▷ semTriple (evals es δ) P (FunDef f) (fun v _ => Q v) -∗
       semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')).
   Proof.
     iIntros "tripbody P".
@@ -1304,6 +1304,17 @@ Section Soundness.
       by iFrame.
     }
     iApply ("tripbody" with "P").
+  Qed.
+
+  Lemma iris_rule_stm_call_inline
+    {Γ} (δ : CStore Γ)
+    {Δ σ} (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ)
+    (P : iProp Σ) (Q : Val σ -> iProp Σ) :
+    ⊢ semTriple (evals es δ) P (FunDef f) (fun v _ => Q v) -∗
+      semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')).
+  Proof.
+    iIntros "Hdef".
+    iApply (iris_rule_stm_call_inline_later with "Hdef").
   Qed.
 
   Definition ForeignSem :=
