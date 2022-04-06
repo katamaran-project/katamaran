@@ -128,37 +128,41 @@ Section Loop.
        iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) (P m h i entries mpp mepc_v npc)) with "[] [HP₁] HP").
        Check (iris_rule_stm_call_inline env.nil step env.nil).
        iApply (iris_rule_stm_call_inline env.nil step env.nil _ (fun _ => _)).
-       (* iPoseProof step_iprop as "Hs". *)
        iApply step_iprop. 
        iIntros.
        Search "iris_".
        Check iris_rule_consequence.
        iApply iris_rule_consequence.
-       - destruct (env.nilView δ').
+       1: {
+         destruct (env.nilView δ').
          iIntros "[Hstep _]".
          iExact "Hstep".
-       - admit. (* reflexivity. *)
-       - destruct (env.nilView δ').
+       }
+       2: {
+         destruct (env.nilView δ').
          Check (iris_rule_stm_call_inline_later env.nil loop env.nil _ _).
          Search "iris_rule".
          iApply (iris_rule_stm_call_inline_later env.nil loop env.nil _ (fun _ => True%I)).
          iModIntro.
          cbn.
          unfold semTriple_loop.
-         iSpecialize ("H" $! m h i entries mpp mepc_v npc).
          unfold loop_pre, step_post.
          unfold semTriple.
          iIntros "[Hinterp [Hgprs HP]]".
          cbn.
+         iDestruct "HP" as "[Hpac [Hig [Hmcause [Hie [Hcur [[% [Hnpc Hpc]] [Hmtvec [Hmstatus Hmepc]]]]]]]]".
+         iSpecialize ("H" $! m h npc0 entries mpp mepc_v npc0).
          iApply "H".
-         iSplitL "HP".
-         + unfold P, P₁.
-           iDestruct "HP" as "[Hpac [Hig [Hmcause [Hie [Hcur [[% [Hnpc Hpc]] [Hmtvec [Hmstatus Hmepc]]]]]]]]".
+         iSplitR "HP₁".
+         + unfold P.
            iFrame.
-           iExists npc0; iFrame.
-           iExists npc0; iFrame.
+           iApply "Hmcause".
          + iModIntro.
            unfold fun_loop.
            iApply "HP₁".
+       }
+       simpl.
+       now iIntros (_ δ) "_".
+     Qed.
 
 End Loop.
