@@ -63,75 +63,148 @@ Section Loop.
      Definition step_sem_contract := 
        Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
 
-     Print step_sem_contract.
+     (* TODO: added some parameters because the interp_pmp_addr_access predicate can get
+              "out of sync" with the current state of the machine.
 
-     Definition P₁ (m : Privilege) (h i : Z) (entries : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
-          (interp_pmp_addr_access liveAddrs entries m ∗ interp_gprs ∗ (∃ mc : Z, reg_pointsTo mcause mc) ∗
-        (interp_pmp_entries entries ∗ reg_pointsTo cur_privilege m ∗ (∃ npc : Z, reg_pointsTo nextpc npc ∗ reg_pointsTo pc npc) ∗ reg_pointsTo mtvec h ∗
-         reg_pointsTo mstatus {| MPP := mpp |} ∗ reg_pointsTo mepc mepc_v))%I.
+              Might sound odd, but for a given configuration and privilege mode we will
+              still have that pmp_addr_access holds, however, it won't match up with
+              the current live config (represented by interp_pmp_entries) and so
+              contracts regarding PMP checks will have an unsatisfiable precondition
+              (i.e., we will not be granted access with an "out of sync" pmp_addr_access
+               predicate).
 
-     Definition P (m : Privilege) (h i : Z) (entries : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
-                    (reg_pointsTo cur_privilege m ∗
+              Maybe sketch a situation that showcases this? *)
+
+     (* TODO: rename P{,ᵢ} *)
+     (* P₁ = Executing normally *)
+     Definition P₁ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
+       (            interp_pmp_addr_access liveAddrs entries m ∗
+                    interp_gprs ∗
+        (∃ mc : Z,  reg_pointsTo mcause mc) ∗
+                    interp_pmp_entries es ∗
+                    reg_pointsTo cur_privilege cp ∗
+        (∃ npc : Z, reg_pointsTo nextpc npc ∗
+                    reg_pointsTo pc npc) ∗
+                    reg_pointsTo mtvec h ∗
+                    reg_pointsTo mstatus {| MPP := mpp |} ∗
+                    reg_pointsTo mepc mepc_v)%I.
+
+     (* P₂ = Modified CSRs, requires Machine mode *)
+     Definition P₂ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
+       (                               interp_pmp_addr_access liveAddrs entries m ∗
+                                       interp_gprs ∗
+                                       (⌜m = Machine⌝ ∧ emp) ∗
+        (∃ es : list (Pmpcfg_ent * Z), interp_pmp_entries es) ∗
+                                       reg_pointsTo cur_privilege Machine ∗
+        (∃ mc : Z,                     reg_pointsTo mcause mc) ∗
+        (∃ npc : Z,                    reg_pointsTo nextpc npc ∗
+                                       reg_pointsTo pc npc) ∗
+        (∃ h : Z,                      reg_pointsTo mtvec h) ∗
+        (∃ mpp : Privilege,            reg_pointsTo mstatus {| MPP := mpp |}) ∗
+        (∃ epc : Z,                    reg_pointsTo mepc epc))%I.
+
+     (* P₃ = Trap occured -> Go into M-mode *)
+     Definition P₃ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
+       (interp_pmp_addr_access liveAddrs entries m ∗
+        interp_gprs ∗
+        interp_pmp_entries es ∗
+        reg_pointsTo cur_privilege Machine ∗
+        (∃ mc : Z, reg_pointsTo mcause mc) ∗
+        reg_pointsTo nextpc h ∗
+        reg_pointsTo pc h ∗
+        reg_pointsTo mtvec h ∗
+        reg_pointsTo mstatus {| MPP := m |} ∗
+        reg_pointsTo mepc i)%I.
+
+     (* P₄ = MRET = Recover *)
+     Definition P₄ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
+       (interp_pmp_addr_access liveAddrs entries m ∗
+        interp_gprs ∗ 
+        interp_pmp_entries es ∗
+        (⌜m = Machine⌝ ∧ emp) ∗
+        reg_pointsTo cur_privilege Machine ∗
+        (∃ mc : Z, reg_pointsTo mcause mc) ∗
+        reg_pointsTo nextpc mepc_v ∗
+        reg_pointsTo pc mepc_v ∗
+        reg_pointsTo mtvec h ∗
+        reg_pointsTo mstatus {| MPP := User |} ∗
+        reg_pointsTo mepc mepc_v)%I.
+
+     Definition P (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
+                    (reg_pointsTo cur_privilege cp ∗
                      reg_pointsTo mtvec         h ∗
                      reg_pointsTo pc            i ∗
                      reg_pointsTo nextpc        npc ∗
          ∃ mc,       reg_pointsTo mcause        mc ∗
                      reg_pointsTo mepc          mepc_v ∗
                      reg_pointsTo mstatus       {| MPP := mpp |} ∗
-                     interp_pmp_entries entries ∗
+                     interp_pmp_entries es ∗
                      interp_pmp_addr_access liveAddrs entries m ∗
                      interp_gprs)%I.
 
-     Definition step_post (m : Privilege) (h i : Z) (entries : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
-                     (interp_pmp_addr_access liveAddrs entries m ∗
-                     interp_gprs ∗
-                     P₁ m h i entries mpp mepc_v npc)%I.
+     (* TODO: should be disjunctions =) *)
+     Definition step_post (m : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
+       (* (interp_pmp_addr_access liveAddrs entries m ∗
+        interp_gprs ∗ *)
+        (P₁ m m h i entries es mpp mepc_v npc ∨
+         P₂ m m h i entries es mpp mepc_v npc ∨
+         P₃ m m h i entries es mpp mepc_v npc ∨
+         P₄ m m h i entries es mpp mepc_v npc)%I.
 
      Definition semTriple_step : iProp Σ :=
-      (∀ (m : Privilege) (h i : Z) (entries : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z),
-          semTriple env.nil (P m h i entries mpp mepc_v npc) (FunDef step) (fun _ _ => step_post m h i entries mpp mepc_v npc))%I.
+       (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z),
+           semTriple env.nil (P m cp h i entries es mpp mepc_v npc) (FunDef step) (fun _ _ => step_post m h i entries es mpp mepc_v npc))%I.
+
+     Definition semTriple_init_model : iProp Σ :=
+       semTriple env.nil
+                 ((∃ p, reg_pointsTo cur_privilege p) ∗ (∃ es, interp_pmp_entries es))%I
+                 (FunDef init_model)
+                 (fun _ _ => reg_pointsTo cur_privilege Machine ∗ (∃ es, interp_pmp_entries es))%I.
 
      Axiom step_iprop : ⊢ semTriple_step.
+     Axiom init_model_iprop : ⊢ semTriple_init_model.
 
-     Definition loop_pre (m : Privilege) (h i : Z) (entries : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
+     Definition WP_loop : iProp Σ :=
+       (WP (MkConf (FunDef loop) env.nil) ?{{ w, True }})%I.
+
+     (* TODO: go over this precondition again, introduced existentials but not confident
+              that this makes sense. Current reasoning is that *later* we should have
+              that Pᵢ holds for the new values, not the ones from *now*.
+
+              This becomes apparent in the proof below, if we end up in Pᵢ, then the
+              values m, cp, h, i, ... can/will have been updated in a certain way...*)
+     Definition loop_pre (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
          (
-           P m h i entries mpp mepc_v npc ∗
-          ▷ (P₁ m h i entries mpp mepc_v npc -∗ WP (MkConf (FunDef loop) env.nil) ?{{ w, True }})
-         (* ∨
-           (⌜m = Machine⌝ ∧ emp) ∗ (∃ es : list (Pmpcfg_ent * Z), interp_pmp_entries es) ∗ reg_pointsTo cur_privilege Machine ∗
-           (∃ npc : Z, reg_pointsTo nextpc npc ∗ reg_pointsTo pc npc) ∗ (∃ h : Z, reg_pointsTo mtvec h) ∗ (∃ mpp : Privilege, reg_pointsTo mstatus {| MPP := mpp |}) ∗
-           (∃ mepc_v : Z, reg_pointsTo mepc mepc_v)
-         ∨
-           interp_pmp_entries entries ∗ reg_pointsTo cur_privilege Machine ∗ reg_pointsTo nextpc v0 ∗ reg_pointsTo pc v0 ∗ reg_pointsTo mtvec v0 ∗ reg_pointsTo mstatus {| MPP := v |} ∗
-                                reg_pointsTo mepc mepc_v
-         ∨
-           interp_pmp_entries entries ∗ (⌜m = Machine⌝ ∧ emp) ∗ reg_pointsTo cur_privilege mpp ∗ reg_pointsTo nextpc mepc_v ∗ reg_pointsTo pc mepc_v ∗
-             reg_pointsTo mtvec h ∗ reg_pointsTo mstatus {| MPP := User |} ∗ reg_pointsTo mepc mepc_v)))%I
-       )%I. *)
+          P m cp h i entries es mpp mepc_v npc ∗
+          ▷ (∃ m cp h i entries es mpp mepc_v npc, P₁ m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
+          ▷ (∃ m cp h i entries es mpp mepc_v npc, P₂ m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
+          ▷ (∃ m cp h i entries es mpp mepc_v npc, P₃ m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
+          ▷ (∃ m cp h i entries es mpp mepc_v npc, P₄ m cp h i entries es mpp mepc_v npc -∗ WP_loop)
+          (* ▷ (P₁ m h i entries es mpp mepc_v npc -∗ WP_loop) ∗
+          ▷ (P₂ m h i entries es mpp mepc_v npc -∗ WP_loop) ∗
+          ▷ (P₃ m h i entries es mpp mepc_v npc -∗ WP_loop) *)
           )%I.
 
      Definition semTriple_loop : iProp Σ :=
-      (∀ (m : Privilege) (h i : Z) (entries : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z),
-          semTriple env.nil (loop_pre m h i entries mpp mepc_v npc) (FunDef loop) (fun _ _ => True))%I.
+      (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z),
+          semTriple env.nil (loop_pre m cp h i entries es mpp mepc_v npc) (FunDef loop) (fun _ _ => True))%I.
+
+     Definition semTriple_main : iProp Σ :=
+      (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z),
+          semTriple env.nil (P m cp h i entries es mpp mepc_v npc) (FunDef main) (fun _ _ => True))%I.
 
      Lemma valid_semTriple_loop :
        ⊢ semTriple_loop.
      Proof.
        iIntros.
        iLöb as "H".
-       iIntros (m h i entries mpp mepc_v npc) "[HP HP₁]".
+       iIntros (m cp h i entries es mpp mepc_v npc) "[HP HPwp]".
        cbn.
        unfold fun_loop.
-       Check iris_rule_stm_seq.
-       About iris_rule_stm_seq.
-       Check ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) (P m h i entries mpp mepc_v npc))).
-       iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) (P m h i entries mpp mepc_v npc)) with "[] [HP₁] HP").
-       Check (iris_rule_stm_call_inline env.nil step env.nil).
+       iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) _) with "[] [HPwp] HP").
        iApply (iris_rule_stm_call_inline env.nil step env.nil _ (fun _ => _)).
        iApply step_iprop. 
        iIntros.
-       Search "iris_".
-       Check iris_rule_consequence.
        iApply iris_rule_consequence.
        1: {
          destruct (env.nilView δ').
@@ -140,29 +213,75 @@ Section Loop.
        }
        2: {
          destruct (env.nilView δ').
-         Check (iris_rule_stm_call_inline_later env.nil loop env.nil _ _).
-         Search "iris_rule".
          iApply (iris_rule_stm_call_inline_later env.nil loop env.nil _ (fun _ => True%I)).
          iModIntro.
          cbn.
          unfold semTriple_loop.
          unfold loop_pre, step_post.
          unfold semTriple.
-         iIntros "[Hinterp [Hgprs HP]]".
          cbn.
-         iDestruct "HP" as "[Hpac [Hig [Hmcause [Hie [Hcur [[% [Hnpc Hpc]] [Hmtvec [Hmstatus Hmepc]]]]]]]]".
-         iSpecialize ("H" $! m h npc0 entries mpp mepc_v npc0).
-         iApply "H".
-         iSplitR "HP₁".
-         + unfold P.
-           iFrame.
-           iApply "Hmcause".
-         + iModIntro.
-           unfold fun_loop.
-           iApply "HP₁".
+         iIntros "[HP₁|[HP₂|[HP₃|HP₄]]]".
+         - iDestruct "HP₁" as "[Hpac [Hig [Hmcause [Hie [Hcur [[% [Hnpc Hpc]] [Hmtvec [Hmstatus Hmepc]]]]]]]]".
+           iSpecialize ("H" $! m m h npc0 entries es mpp mepc_v npc0).
+           iApply "H".
+           iSplitR "HPwp". 
+           + iFrame.
+             iApply "Hmcause".
+           + iDestruct "HPwp" as "[HP₁ [HP₂ [HP₃ HP₄]]]".
+             iFrame.
+         - iDestruct "HP₂" as "[Hpaa [Hig [[-> _] [[%es' Hipe] [Hcur [Hmcause [[%npc0 [Hnextpc Hpc]] [[%h0 Hmtvec] [[%mpp0 Hmstatus] [%epc Hmepc]]]]]]]]]]".
+           iSpecialize ("H" $! Machine Machine h0 npc0 entries es' mpp0 epc npc0).
+           iApply "H".
+           iSplitR "HPwp". 
+           + iFrame.
+             iApply "Hmcause".
+           + iDestruct "HPwp" as "[HP₁ [HP₂ [HP₃ HP₄]]]".
+             iFrame.
+         - iDestruct "HP₃" as "[Hpaa [Hig [Hipe [Hcur [Hmcause [Hnextpc [Hpc [Hmtvec [Hmstatus Hmepc]]]]]]]]]".
+           iSpecialize ("H" $! m Machine h h entries es m i h).
+           iApply "H".
+           iSplitR "HPwp". 
+           + iFrame.
+             iApply "Hmcause".
+           + iDestruct "HPwp" as "[HP₁ [HP₂ [HP₃ HP₄]]]".
+             iFrame.
+         - iDestruct "HP₄" as "[Hpaa [Hig [Hipe [[-> _] [Hcur [Hmcause [Hnextpc [Hpc [Hmtvec [Hmstatus Hmepc]]]]]]]]]]".
+           iSpecialize ("H" $! Machine Machine h mepc_v entries es User mepc_v mepc_v).
+           iApply "H".
+           iSplitR "HPwp". 
+           + iFrame.
+             iApply "Hmcause".
+           + iDestruct "HPwp" as "[HP₁ [HP₂ [HP₃ HP₄]]]".
+             iFrame.
        }
        simpl.
        now iIntros (_ δ) "_".
      Qed.
 
+     Lemma valid_semTriple_main :
+       ⊢ semTriple_main.
+     Proof.
+       iIntros.
+       iIntros (m cp h i entries es mpp mepc_v npc) "[Hcp [Hmtvec [Hpc [Hnextpc [%mc [Hmcause [Hmepc [Hmstatus [Hipe [Hpaa Hg]]]]]]]]]]".
+       cbn.
+       unfold fun_main.
+       iApply ((iris_rule_stm_seq env.nil (stm_call init_model _) (stm_call loop _) _) with "[] [-Hcp Hipe] [Hcp Hipe]").
+       iApply (iris_rule_stm_call_inline env.nil init_model env.nil _ (fun _ => _)).
+       iApply init_model_iprop. 
+       2: {
+         iSplitL "Hcp".
+         - iExists cp; iFrame.
+         - iExists es; iFrame.
+       }
+       iIntros (δ).
+       Check iris_rule_consequence. (* TODO: not sure how I can pass spat hypotheses for P -∗ P'? *)
+       iApply (iris_rule_consequence with "[]").
+       3: {
+         destruct (env.nilView δ).
+         iApply (iris_rule_stm_call_inline env.nil loop env.nil _ (fun _ => True%I)).
+         cbn.
+         iApply valid_semTriple_loop.
+       }
+       2: now iIntros.
+     Admitted.
 End Loop.

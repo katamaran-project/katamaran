@@ -989,19 +989,21 @@ Section ContractDefKit.
                      asn_gprs;
        sep_contract_result          := "result_mach_inv";
        sep_contract_postcondition   :=
-                     asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
-                     asn_gprs ∗
-         ∃ "mcause", mcause ↦ term_var "mcause" ∗
          (  (* Executing normally *)
-                 asn_pmp_entries (term_var "entries") ∗
-                 cur_privilege ↦ term_var "m" ∗
-            ∃ v, (nextpc        ↦ term_var v ∗
-                  pc            ↦ term_var v) ∗
-                 mtvec         ↦ term_var "h" ∗
-                 mstatus       ↦ term_record rmstatus [ term_var "mpp" ] ∗
-                 mepc          ↦ term_var "mepc"
+                        asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+                        asn_gprs ∗
+            ∃ "mcause", mcause ↦ term_var "mcause" ∗
+                        asn_pmp_entries (term_var "entries") ∗
+                        cur_privilege ↦ term_var "m" ∗
+            ∃ v,       (nextpc        ↦ term_var v ∗
+                        pc            ↦ term_var v) ∗
+                        mtvec         ↦ term_var "h" ∗
+                        mstatus       ↦ term_record rmstatus [ term_var "mpp" ] ∗
+                        mepc          ↦ term_var "mepc"
           ∨
             (* Modified CSRs, requires Machine mode *)
+                           asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+                           asn_gprs ∗
                            term_var "m"  =  term_val ty_privilege Machine ∗
             ∃ "entries",   asn_pmp_entries (term_var "entries") ∗
                            cur_privilege ↦ term_val ty_privilege Machine ∗
@@ -1012,6 +1014,8 @@ Section ContractDefKit.
             ∃ "new_mepc",  mepc          ↦ term_var "new_mepc"
           ∨
             (* Trap occured -> Go into M-mode *)
+            asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+            asn_gprs ∗
             asn_pmp_entries (term_var "entries") ∗
             cur_privilege ↦ (term_val ty_privilege Machine) ∗
             nextpc        ↦ term_var "h" ∗
@@ -1021,6 +1025,8 @@ Section ContractDefKit.
             mepc          ↦ term_var "i"
           ∨
             (* MRET = Recover *)
+            asn_pmp_addr_access (term_var "entries") (term_var "m") ∗
+            asn_gprs ∗
             asn_pmp_entries (term_var "entries") ∗
             term_var "m"  =  term_val ty_privilege Machine ∗
             cur_privilege ↦ term_var "mpp" ∗
