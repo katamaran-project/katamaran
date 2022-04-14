@@ -963,7 +963,6 @@ Module ExampleModel.
       iMod (gen_heap_update μ1 vp (vx,vxs__old) (vx,vxs) with "Hmem Hres") as "[Hmem Hres]".
       iModIntro.
       iFrame.
-      iSplitL; last done.
       iApply wp_value.
       now iFrame.
     Qed.
