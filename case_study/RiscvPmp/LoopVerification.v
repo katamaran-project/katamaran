@@ -125,7 +125,7 @@ Section Loop.
         interp_gprs ∗ 
         interp_pmp_entries es ∗
         (⌜m = Machine⌝ ∧ emp) ∗
-        reg_pointsTo cur_privilege Machine ∗
+        reg_pointsTo cur_privilege mpp ∗
         (∃ mc : Z, reg_pointsTo mcause mc) ∗
         reg_pointsTo nextpc mepc_v ∗
         reg_pointsTo pc mepc_v ∗
@@ -145,17 +145,17 @@ Section Loop.
                      interp_pmp_addr_access liveAddrs entries m ∗
                      interp_gprs)%I.
 
-     Definition step_post (m : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
+     Definition step_post (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
        (* (interp_pmp_addr_access liveAddrs entries m ∗
         interp_gprs ∗ *)
-        (P₁ m m h i entries es mpp mepc_v npc ∨
-         P₂ m m h i entries es mpp mepc_v npc ∨
-         P₃ m m h i entries es mpp mepc_v npc ∨
-         P₄ m m h i entries es mpp mepc_v npc)%I.
+        (P₁ m cp h i entries es mpp mepc_v npc ∨
+         P₂ m cp h i entries es mpp mepc_v npc ∨
+         P₃ m cp h i entries es mpp mepc_v npc ∨
+         P₄ m cp h i entries es mpp mepc_v npc)%I.
 
      Definition semTriple_step : iProp Σ :=
        (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z),
-           semTriple env.nil (P m cp h i entries es mpp mepc_v npc) (FunDef step) (fun _ _ => step_post m h i entries es mpp mepc_v npc))%I.
+           semTriple env.nil (P m cp h i entries es mpp mepc_v npc) (FunDef step) (fun _ _ => step_post m cp h i entries es mpp mepc_v npc))%I.
 
      Definition semTriple_init_model : iProp Σ :=
        semTriple env.nil
@@ -166,10 +166,10 @@ Section Loop.
      Axiom step_iprop : ⊢ semTriple_step.
      Axiom init_model_iprop : ⊢ semTriple_init_model.
 
-     Definition WP_loop : iProp Σ :=
-       (WP (MkConf (FunDef loop) env.nil) ?{{ w, True }})%I.
+     Print ValConf.
 
-     Print PtstosPred.
+     Definition WP_loop : iProp Σ :=
+       (wp NotStuck top (MkConf (FunDef loop) env.nil) (fun (v : ValConf ctx.nil ty_unit) => match v with | {| valconf_val := tt |} => True end))%I.
 
      Definition loop_cond (P : PtstosPred) : iProp Σ :=
        (∃ m cp h i entries es mpp mepc_v npc, P m cp h i entries es mpp mepc_v npc -∗ WP_loop).
@@ -186,11 +186,11 @@ Section Loop.
      Definition loop_pre (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
          (
           P m cp h i entries es mpp mepc_v npc ∗
-            loop_later
-          (* ▷ (∃ m cp h i entries es mpp mepc_v npc, P₁ m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
-          ▷ (∃ m cp h i entries es mpp mepc_v npc, P₂ m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
-          ▷ (∃ m cp h i entries es mpp mepc_v npc, P₃ m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
-          ▷ (∃ m cp h i entries es mpp mepc_v npc, P₄ m cp h i entries es mpp mepc_v npc -∗ WP_loop) *)
+            (* loop_later *)
+          ▷ (P₁ m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
+          ▷ (P₂ m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
+          ▷ (P₃ m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
+          ▷ (P₄ m cp h i entries es mpp mepc_v npc -∗ WP_loop)
           (* ▷ (P₁ m h i entries es mpp mepc_v npc -∗ WP_loop) ∗
           ▷ (P₂ m h i entries es mpp mepc_v npc -∗ WP_loop) ∗
           ▷ (P₃ m h i entries es mpp mepc_v npc -∗ WP_loop) *)
@@ -213,7 +213,8 @@ Section Loop.
        iIntros (m cp h i entries es mpp mepc_v npc) "[HP HPwp]".
        cbn.
        unfold fun_loop.
-       iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) _) with "[] [HPwp] HP").
+       About iris_rule_stm_seq.
+       iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) _ _ (fun _ _ => True%I)) with "[] [HPwp] HP").
        iApply (iris_rule_stm_call_inline env.nil step env.nil _ (fun _ => _)).
        iApply step_iprop. 
        iIntros.
@@ -233,14 +234,24 @@ Section Loop.
          unfold semTriple.
          cbn.
          iIntros "[HP₁|[HP₂|[HP₃|HP₄]]]".
+         iDestruct "HPwp" as "(H1 & H2 & H3 & H4)".
+         Unset Printing Records.
+         cbn.
+         About ValConf.
+         About ctx.In.
+         unfold WP_loop.
+         Print WP_loop.
+         iApply ("H1" with "HP₁").
          - iDestruct "HP₁" as "[Hpac [Hig [Hmcause [Hie [Hcur [[% [Hnpc Hpc]] [Hmtvec [Hmstatus Hmepc]]]]]]]]".
-           iSpecialize ("H" $! m m h npc0 entries es mpp mepc_v npc0).
+           iSpecialize ("H" $! m cp h i entries es mpp mepc_v npc)
            iApply "H".
            iSplitR "HPwp". 
            + iFrame.
              iApply "Hmcause".
            + iDestruct "HPwp" as "[HP₁ [HP₂ [HP₃ HP₄]]]".
              iFrame.
+             iSplitL "HP₁"; iModIntro.
+
          - iDestruct "HP₂" as "[Hpaa [Hig [[-> _] [[%es' Hipe] [Hcur [Hmcause [[%npc0 [Hnextpc Hpc]] [[%h0 Hmtvec] [[%mpp0 Hmstatus] [%epc Hmepc]]]]]]]]]]".
            iSpecialize ("H" $! Machine Machine h0 npc0 entries es' mpp0 epc npc0).
            iApply "H".

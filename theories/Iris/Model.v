@@ -138,11 +138,15 @@ Section Language.
   (* The "values" of the LanguageMixin are final configurations consisting of a
      value and a store. We only keep the store around for technical reasons,
      essentially to validate of_to_val. *)
-  Record ValConf (Γ : PCtx) τ : Type :=
-    MkValConf
-      { valconf_val   : Val τ;
-        valconf_store : CStore Γ
-      }.
+  Section ValConf.
+    (* TODO: try to get stuff to work with primitive projections, or modify semTriple, but might run into similar/more problems then... *)
+    (* Local Set Primitive Projections. *)
+    Record ValConf (Γ : PCtx) τ : Type :=
+      MkValConf
+        { valconf_val   : Val τ;
+          valconf_store : CStore Γ
+        }.
+  End ValConf.
 
   Definition of_val {Γ} {τ} (v : ValConf Γ τ) : Conf Γ τ :=
     match v with
