@@ -139,8 +139,7 @@ Section Language.
      value and a store. We only keep the store around for technical reasons,
      essentially to validate of_to_val. *)
   Section ValConf.
-    (* TODO: try to get stuff to work with primitive projections, or modify semTriple, but might run into similar/more problems then... *)
-    (* Local Set Primitive Projections. *)
+    Local Set Primitive Projections.
     Record ValConf (Γ : PCtx) τ : Type :=
       MkValConf
         { valconf_val   : Val τ;

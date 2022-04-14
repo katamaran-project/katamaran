@@ -166,10 +166,8 @@ Section Loop.
      Axiom step_iprop : ⊢ semTriple_step.
      Axiom init_model_iprop : ⊢ semTriple_init_model.
 
-     Print ValConf.
-
      Definition WP_loop : iProp Σ :=
-       (wp NotStuck top (MkConf (FunDef loop) env.nil) (fun (v : ValConf ctx.nil ty_unit) => match v with | {| valconf_val := tt |} => True end))%I.
+       (WP (MkConf (FunDef loop) env.nil) ?{{_, True}})%I.
 
      Definition loop_cond (P : PtstosPred) : iProp Σ :=
        (∃ m cp h i entries es mpp mepc_v npc, P m cp h i entries es mpp mepc_v npc -∗ WP_loop).
@@ -213,9 +211,8 @@ Section Loop.
        iIntros (m cp h i entries es mpp mepc_v npc) "[HP HPwp]".
        cbn.
        unfold fun_loop.
-       About iris_rule_stm_seq.
-       iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) _ _ (fun _ _ => True%I)) with "[] [HPwp] HP").
-       iApply (iris_rule_stm_call_inline env.nil step env.nil _ (fun _ => _)).
+       iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) _ (fun δ => step_post m cp h i entries es mpp mepc_v npc ∧ ⌜env.nil = δ⌝)%I (fun _ _ => True%I)) with "[] [HPwp] HP").
+       iApply (iris_rule_stm_call_inline env.nil step env.nil (P m cp h i entries es mpp mepc_v npc) (fun _ => step_post m cp h i entries es mpp mepc_v npc)).
        iApply step_iprop. 
        iIntros.
        iApply iris_rule_consequence.
@@ -233,49 +230,12 @@ Section Loop.
          unfold loop_pre, step_post.
          unfold semTriple.
          cbn.
-         iIntros "[HP₁|[HP₂|[HP₃|HP₄]]]".
          iDestruct "HPwp" as "(H1 & H2 & H3 & H4)".
-         Unset Printing Records.
-         cbn.
-         About ValConf.
-         About ctx.In.
-         unfold WP_loop.
-         Print WP_loop.
-         iApply ("H1" with "HP₁").
-         - iDestruct "HP₁" as "[Hpac [Hig [Hmcause [Hie [Hcur [[% [Hnpc Hpc]] [Hmtvec [Hmstatus Hmepc]]]]]]]]".
-           iSpecialize ("H" $! m cp h i entries es mpp mepc_v npc)
-           iApply "H".
-           iSplitR "HPwp". 
-           + iFrame.
-             iApply "Hmcause".
-           + iDestruct "HPwp" as "[HP₁ [HP₂ [HP₃ HP₄]]]".
-             iFrame.
-             iSplitL "HP₁"; iModIntro.
-
-         - iDestruct "HP₂" as "[Hpaa [Hig [[-> _] [[%es' Hipe] [Hcur [Hmcause [[%npc0 [Hnextpc Hpc]] [[%h0 Hmtvec] [[%mpp0 Hmstatus] [%epc Hmepc]]]]]]]]]]".
-           iSpecialize ("H" $! Machine Machine h0 npc0 entries es' mpp0 epc npc0).
-           iApply "H".
-           iSplitR "HPwp". 
-           + iFrame.
-             iApply "Hmcause".
-           + iDestruct "HPwp" as "[HP₁ [HP₂ [HP₃ HP₄]]]".
-             iFrame.
-         - iDestruct "HP₃" as "[Hpaa [Hig [Hipe [Hcur [Hmcause [Hnextpc [Hpc [Hmtvec [Hmstatus Hmepc]]]]]]]]]".
-           iSpecialize ("H" $! m Machine h h entries es m i h).
-           iApply "H".
-           iSplitR "HPwp". 
-           + iFrame.
-             iApply "Hmcause".
-           + iDestruct "HPwp" as "[HP₁ [HP₂ [HP₃ HP₄]]]".
-             iFrame.
-         - iDestruct "HP₄" as "[Hpaa [Hig [Hipe [[-> _] [Hcur [Hmcause [Hnextpc [Hpc [Hmtvec [Hmstatus Hmepc]]]]]]]]]]".
-           iSpecialize ("H" $! Machine Machine h mepc_v entries es User mepc_v mepc_v).
-           iApply "H".
-           iSplitR "HPwp". 
-           + iFrame.
-             iApply "Hmcause".
-           + iDestruct "HPwp" as "[HP₁ [HP₂ [HP₃ HP₄]]]".
-             iFrame.
+         iIntros "[HP|[HP|[HP|HP]]]".
+         iApply ("H1" with "HP").
+         iApply ("H2" with "HP").
+         iApply ("H3" with "HP").
+         iApply ("H4" with "HP").
        }
        simpl.
        now iIntros (_ δ) "_".
