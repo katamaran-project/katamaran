@@ -221,8 +221,9 @@ Section Loop.
      (* NOTE/TODO: this is quite an ugly and overly explicit proof...
                    I had trouble rewriting sep logic rules (commutativity of ∗)
                    and just "abused" the consequence rules to apply it instead of rewriting *)
+     (* TODO: Alternative: contract for loop specified with Katamaran, verify main in Katamaran *)
      Lemma valid_semTriple_main :
-       ⊢ semTriple_main.
+       ⊢ semTriple_main. (* main := init_model() ;; loop() *)
      Proof.
        iIntros (m cp h i entries es mpp mepc_v npc) "Hloop_pre".
        cbn.
@@ -258,7 +259,7 @@ Section Loop.
                                                                                                          reg_pointsTo mstatus {| MPP := mpp |} ∗ 
                                                                                                          interp_pmp_addr_access liveAddrs entries m ∗ interp_gprs)) ∗ 
                                                                                                                                                                     (reg_pointsTo cur_privilege cp ∗ interp_pmp_entries es)) _ _ _).
-         iIntros "(Hcp & Hmt & Hpc & Hnpc & % & Hmc & Hmepc & Hms & Hes & Hacc & Hgprs)".
+         iIntros "(Hes & Hacc & Hgprs & Hcp & Hmt & Hpc & Hnpc & % & Hmc & Hmepc & Hms)".
          iFrame.
          now iExists mc.
          2: {
