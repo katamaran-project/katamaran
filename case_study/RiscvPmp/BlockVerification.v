@@ -880,27 +880,6 @@ Module BlockVerificationDerived.
       _ ∣ msg <- @exec_instruction' i _ ;;
       assert (formula_eq msg (term_val ty_retired RETIRE_SUCCESS)).
 
-  Definition exec_instruction2_any (i : AST) : ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
-    let inline_fuel := 3%nat in
-    fun _ a =>
-      ω2 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg pc a))) ;;
-      ω4 ∣ _ <- T (produce (asn_chunk (chunk_user ptstoinstr [persist__term a ω2; term_val ty_ast i]))) ;;
-      ω6 ∣ an <- @demonic _ _ ;;
-      ω7 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg nextpc an))) ;;
-      ω8 ∣ _ <- exec default_config inline_fuel (FunDef step) ;;
-      ω9 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg pc (term_binop binop_plus (persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8)) (term_val ty_exc_code 4))))) ;;
-      ω10 ∣ _ <- T (consume (asn_chunk (chunk_user ptstoinstr [persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9); term_val ty_ast i]))) ;;
-      ω11 ∣ na <- @angelic _ _ ;;
-      ω12 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc na))) ;;
-      pure (persist__term na ω12).
-
-  Definition exec_instruction2 (i : AST) : ⊢ M Unit :=
-    let inline_fuel := 3%nat in
-    fun _ =>
-      ω1 ∣ a <- @demonic _ _ ;;
-      ω2 ∣ na <- exec_instruction2_any i a ;;
-      assert (formula_eq na (term_binop binop_plus (persist__term a ω2) (term_val ty_exc_code 4))).
-
   (* Ideally, a block should be a list of non-branching
      instruction plus one final branching instruction *)
   Fixpoint exec_block (b : list AST) : ⊢ M Unit :=
@@ -908,18 +887,10 @@ Module BlockVerificationDerived.
       match b with
       | nil       => pure tt
       | cons i b' =>
-        _ ∣ _ <- @exec_instruction2 i _ ;;
+        _ ∣ _ <- @exec_instruction i _ ;;
         @exec_block b' _
       end.
 
-  Fixpoint exec_block_addr (b : list AST) : ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
-    fun _ a =>
-      match b with
-      | nil       => pure a
-      | cons i b' =>
-        ω ∣ a' <- exec_instruction2_any i a ;;
-        @exec_block_addr b' _ a'
-      end.
 
   Definition exec_double {Σ : World}
     (req : Assertion Σ) (b : list AST) : M Unit Σ :=
@@ -941,6 +912,133 @@ Module BlockVerificationDerived.
          (* Could include leakcheck here *)
          (fun _ _ _ _ h => SymProp.block)
          []%env []%list).
+  Section Example.
+
+    Import ListNotations.
+    Import bv.notations.
+
+    Notation "p '∗' q" := (asn_sep p q).
+    Notation "r '↦r' val" :=
+      (asn_chunk
+         (chunk_ptsreg r val))
+         (at level 79).
+
+    Definition ADD (rd rs1 rs2 : RegIdx) : AST :=
+      RTYPE rs2 rs1 rd RISCV_ADD.
+    Definition SUB (rd rs1 rs2 : RegIdx) : AST :=
+      RTYPE rs2 rs1 rd RISCV_SUB.
+
+    Example block1 : list AST :=
+      [ ADD [bv 1] [bv 1] [bv 2]
+      ; SUB [bv 2] [bv 1] [bv 2]
+      ; SUB [bv 1] [bv 1] [bv 2]
+      ].
+
+    Section Contract.
+
+      Let Σ1 : LCtx := ["x" :: ty_xlenbits, "y" :: ty_xlenbits].
+
+      Example pre1 : Assertion Σ1 :=
+        x1 ↦r term_var "x" ∗
+        x2 ↦r term_var "y".
+
+      Example post1 : Assertion Σ1 :=
+        x1 ↦r term_var "y" ∗
+        x2 ↦r term_var "x".
+
+    End Contract.
+
+    Time Example vc1 : 𝕊 ε :=
+      Eval compute in
+      let vc1 := BlockVerificationDerived.VC pre1 block1 post1 in
+      let vc2 := Postprocessing.prune vc1 in
+      let vc3 := Postprocessing.solve_evars vc2 in
+      let vc4 := Postprocessing.solve_uvars vc3 in
+      vc4.
+
+    Notation "x" := (@term_var _ x%string _ (@ctx.MkIn _ (x%string :: _) _ _ _)) (at level 1, only printing).
+    Notation "s = t" := (@formula_eq _ _ s t) (only printing).
+    Notation "' t" := (@formula_bool _ t) (at level 0, only printing, format "' t").
+    Notation "F ∧ P" := (@SymProp.assertk _ F _ P) (at level 80, right associativity, only printing).
+    (* Notation "F → P" := (@SymProp.assumek _ F P) (at level 99, right associativity, only printing). *)
+    Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x,σ) P) (at level 200, right associativity, only printing, format "'∃'  x '∷' σ ,  '/' P").
+    Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x,σ) P) (at level 200, right associativity, only printing, format "'∀'  x '∷' σ ,  '/' P").
+    Notation "⊤" := (@SymProp.block _).
+    Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
+    Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
+
+    Lemma sat_vc1 : SymProp.safe vc1 env.nil.
+    Proof.
+      repeat constructor; cbn; lia.
+    Qed.
+  End Example.
+
+End BlockVerificationDerived.
+
+Module BlockVerificationDerived2.
+
+  Import RiscvPmpSpec.
+
+  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSpec.
+  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSpec RiscvPmpSolverKit.
+
+  Module Import RiscvPmpExecutor :=
+    MakeExecutor RiscvPmpBase RiscvPmpSpec RiscvPmpSolver.
+  Import SMut.
+  Import SMut.SMutNotations.
+
+  Import ModalNotations.
+
+  Definition M : TYPE -> TYPE := SMut [] [].
+
+  Definition pure {A} : ⊢ A -> M A := SMut.pure.
+  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SMut.bind.
+  Definition angelic {σ} : ⊢ M (STerm σ) := @SMut.angelic [] None σ.
+  Definition demonic {σ} : ⊢ M (STerm σ) := @SMut.demonic [] None σ.
+  Definition assert : ⊢ Formula -> M Unit := SMut.assert_formula.
+  Definition assume : ⊢ Formula -> M Unit := SMut.assume_formula.
+
+  Definition produce_chunk : ⊢ Chunk -> M Unit := SMut.produce_chunk.
+  Definition consume_chunk : ⊢ Chunk -> M Unit := SMut.consume_chunk.
+
+  Definition produce : ⊢ Assertion -> □(M Unit) := SMut.produce.
+  Definition consume : ⊢ Assertion -> □(M Unit) := SMut.consume.
+
+  Notation "ω ∣ x <- ma ;; mb" :=
+    (bind ma (fun _ ω x => mb))
+      (at level 80, x at next level,
+        ma at next level, mb at level 200,
+        right associativity).
+
+  Definition exec_instruction_any (i : AST) : ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
+    let inline_fuel := 3%nat in
+    fun _ a =>
+      ω2 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg pc a))) ;;
+      ω4 ∣ _ <- T (produce (asn_chunk (chunk_user ptstoinstr [persist__term a ω2; term_val ty_ast i]))) ;;
+      ω6 ∣ an <- @demonic _ _ ;;
+      ω7 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg nextpc an))) ;;
+      ω8 ∣ _ <- exec default_config inline_fuel (FunDef step) ;;
+      ω9 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg pc (term_binop binop_plus (persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8)) (term_val ty_exc_code 4))))) ;;
+      ω10 ∣ _ <- T (consume (asn_chunk (chunk_user ptstoinstr [persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9); term_val ty_ast i]))) ;;
+      ω11 ∣ na <- @angelic _ _ ;;
+      ω12 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc na))) ;;
+      pure (persist__term na ω12).
+
+  Definition exec_instruction (i : AST) : ⊢ M Unit :=
+    let inline_fuel := 3%nat in
+    fun _ =>
+      ω1 ∣ a <- @demonic _ _ ;;
+      ω2 ∣ na <- exec_instruction_any i a ;;
+      assert (formula_eq na (term_binop binop_plus (persist__term a ω2) (term_val ty_exc_code 4))).
+
+  Fixpoint exec_block_addr (b : list AST) : ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
+    fun _ a =>
+      match b with
+      | nil       => pure a
+      | cons i b' =>
+        ω ∣ a' <- exec_instruction_any i a ;;
+        @exec_block_addr b' _ a'
+      end.
 
   Definition exec_double_addr {Σ : World}
     (req : (□ (STerm ty_xlenbits -> Assertion)) Σ) (b : list AST) : M (STerm ty_xlenbits) Σ :=
@@ -1004,14 +1102,6 @@ Module BlockVerificationDerived.
 
     End Contract.
 
-    Time Example vc1 : 𝕊 ε :=
-      Eval compute in
-      let vc1 := BlockVerificationDerived.VC pre1 block1 post1 in
-      let vc2 := Postprocessing.prune vc1 in
-      let vc3 := Postprocessing.solve_evars vc2 in
-      let vc4 := Postprocessing.solve_uvars vc3 in
-      vc4.
-
     Notation "x" := (@term_var _ x%string _ (@ctx.MkIn _ (x%string :: _) _ _ _)) (at level 1, only printing).
     Notation "s = t" := (@formula_eq _ _ s t) (only printing).
     Notation "' t" := (@formula_bool _ t) (at level 0, only printing, format "' t").
@@ -1022,11 +1112,6 @@ Module BlockVerificationDerived.
     Notation "⊤" := (@SymProp.block _).
     Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
     Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
-
-    Lemma sat_vc1 : SymProp.safe vc1 env.nil.
-    Proof.
-      repeat constructor; cbn; lia.
-    Qed.
 
     Section ContractAddr.
 
@@ -1045,9 +1130,9 @@ Module BlockVerificationDerived.
 
     End ContractAddr.
 
-    Time Example vc1' : 𝕊 ε :=
+    Time Example vc1 : 𝕊 ε :=
       Eval compute in
-      let vc1 := BlockVerificationDerived.VC__addr pre1' block1 post1' in
+      let vc1 := BlockVerificationDerived2.VC__addr pre1' block1 post1' in
       let vc2 := Postprocessing.prune vc1 in
       let vc3 := Postprocessing.solve_evars vc2 in
       let vc4 := Postprocessing.solve_uvars vc3 in
@@ -1060,7 +1145,7 @@ Module BlockVerificationDerived.
 
   End Example.
 
-End BlockVerificationDerived.
+End BlockVerificationDerived2.
 
 Module BlockVerificationDerivedSem.
   Import RiscvPmpSpec.
@@ -1244,12 +1329,87 @@ Module BlockVerificationDerivedSem.
       iApply contractsSound.
   Qed.
 
+End BlockVerificationDerivedSem.
+
+Module BlockVerificationDerived2Concrete.
+  Include SemiConcrete RiscvPmpBase RiscvPmpSpec.
+  Import RiscvPmpSpec.
+
+  Definition M : Type -> Type := CMut [] [].
+
+  Definition pure {A} : A -> M A := CMut.pure.
+  Definition bind {A B} : M A -> (A -> M B) -> M B := CMut.bind.
+  Definition angelic {σ} : M (Val σ) := @CMut.angelic [] σ.
+  Definition demonic {σ} : M (Val σ) := @CMut.demonic [] σ.
+  Definition assert : Prop -> M unit := CMut.assert_formula.
+  Definition assume : Prop -> M unit := CMut.assume_formula.
+
+  Definition produce_chunk : SCChunk -> M unit := CMut.produce_chunk.
+  Definition consume_chunk : SCChunk -> M unit := CMut.consume_chunk.
+
+  Definition produce {Σ} : Valuation Σ -> Assertion Σ -> M unit := CMut.produce.
+  Definition consume {Σ} : Valuation Σ -> Assertion Σ -> M unit := CMut.consume.
+
+  Local Notation "x <- ma ;; mb" :=
+    (bind ma (fun x => mb))
+      (at level 80, ma at level 90, mb at level 200, right associativity).
+
+  Print SCChunk.
+
+  Definition exec_instruction_any__c (i : AST) : Val ty_xlenbits -> M (Val ty_xlenbits) :=
+    let inline_fuel := 3%nat in
+    fun a =>
+      _ <- produce_chunk (scchunk_ptsreg pc a) ;;
+      _ <- produce_chunk (scchunk_user ptstoinstr [a; i]) ;;
+      an <- @demonic _ ;;
+      _ <- produce_chunk (scchunk_ptsreg nextpc an) ;;
+      _ <- CMut.exec inline_fuel (FunDef step) ;;
+      _ <- consume_chunk (scchunk_ptsreg pc a) ;; (* TODO: a + 4! *)
+      _ <- consume_chunk (scchunk_user ptstoinstr [a ; i]) ;;
+      na <- @angelic _ ;;
+      _ <- consume_chunk (scchunk_ptsreg nextpc na) ;;
+      pure na.
+
+  Fixpoint exec_block_addr__c (b : list AST) : Val ty_xlenbits -> M (Val ty_xlenbits) :=
+    fun a =>
+      match b with
+      | nil       => pure a
+      | cons i b' =>
+        a' <- exec_instruction_any__c i a ;;
+        @exec_block_addr__c b' a'
+      end.
+
+  (* Definition exec_double_addr__c *)
+  (*   (req : (Val ty_xlenbits -> Prop)) (b : list AST) : M (Val ty_xlenbits) := *)
+  (*   an <- @demonic _ ;; *)
+  (*   _ <- produce (req an) ;; *)
+  (*   @exec_block_addr__c b _ an. *)
+
+End BlockVerificationDerived2Concrete.
+
+Module BlockVerificationDerived2Sem.
+  Import BlockVerificationDerivedSem.
+  Import RiscvPmpSpec.
+  Import weakestpre.
+  Import tactics.
+  Import BlockVerificationDerived.
+  Import Katamaran.SemiConcrete.Mutator.
+  Import ctx.resolution.
+  Import ctx.notations.
+  Import env.notations.
+  Import RiscvPmpIrisInstance.
+
   Definition semTripleOneInstrStep `{sailGS Σ} (PRE : Z -> iProp Σ) (instr : AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
     ∀ a an,
     semTriple [] (PRE a ∗ lptsreg pc a ∗ RiscvPmpIrisHeapKit.interp_ptsto_instr a instr)
       (FunDef RiscvPmpProgram.step)
       (fun ret _ => lptsreg pc an ∗ RiscvPmpIrisHeapKit.interp_ptsto_instr a instr ∗ POST a an)%I.
 
+  Lemma sound_exec_instruction2 `{sailGS Σ} {instr} :
+    SymProp.safe (exec_instruction (w := wnil) instr (fun _ _ res _ h => SymProp.block) env.nil []%list) env.nil ->
+    ⊢ semTripleOneInstrStep (fun _ => emp)%I instr (fun _ _ => emp)%I.
+  Proof.
+  Admitted.
 
 
-End BlockVerificationDerivedSem.
+End BlockVerificationDerived2Sem.
