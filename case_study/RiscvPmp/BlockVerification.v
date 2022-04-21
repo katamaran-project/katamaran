@@ -829,6 +829,44 @@ Module BlockVerification.
 
   End MemCopy.
 
+  Section FemtoKernel.
+    Import ListNotations.
+    Open Scope hex_Z_scope.
+
+(*     MAX := 2^30; *)
+(* (*     assembly source: *) *)
+(* CODE:   UTYPE (ADV - #HERE) ra RISCV_AUIPC *)
+(*         CSR pmpaddr0 ra r0 CSRRW; *)
+(*         UTYPE MAX ra RISCV_LUI; *)
+(*         CSR pmpaddr1 ra r0 CSRRW; *)
+(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := OFF; X := false; W := false; R := false }) ra RISCV_LUI; *)
+(*         CSR pmp0cfg ra r0 CSRRW; *)
+(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := TOR; X := true; W := true; R := true }) ra RISCV_LUI; *)
+(*         CSR pmp1cfg ra r0 CSRRW; *)
+(*         UTYPE (ADV - #HERE) ra RISCV_AUIPC *)
+(*         CSR epc ra r0 CSRRW; *)
+(*         UTYPE (IH - #HERE) ra RISCV_AUIPC *)
+(*         CSR Tvec ra r0 CSRRW; *)
+(*         UTYPE (pure_mstatus_to_bits { MPP := User }) ra RISCV_LUI; *)
+(*         CSR Mstatus ra r0 CSRRW; *)
+(*     IH: load (#HERE - DATA) pc ra; *)
+(*         MRET *)
+(* DATA:   42 *)
+(* ADV:    ... (anything) *)
+(*     } *)
+
+    Example femtokernel : list AST :=
+      [
+      ].
+
+    Local Notation "p '∗' q" := (asn_sep p q).
+    Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
+    Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
+    Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+
+
+  End FemtoKernel.
+
 End BlockVerification.
 
 
