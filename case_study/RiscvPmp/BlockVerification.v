@@ -835,28 +835,51 @@ Module BlockVerification.
 
 (*     MAX := 2^30; *)
 (* (*     assembly source: *) *)
-(* CODE:   UTYPE (ADV - #HERE) ra RISCV_AUIPC *)
-(*         CSR pmpaddr0 ra r0 CSRRW; *)
-(*         UTYPE MAX ra RISCV_LUI; *)
-(*         CSR pmpaddr1 ra r0 CSRRW; *)
-(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := OFF; X := false; W := false; R := false }) ra RISCV_LUI; *)
-(*         CSR pmp0cfg ra r0 CSRRW; *)
-(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := TOR; X := true; W := true; R := true }) ra RISCV_LUI; *)
-(*         CSR pmp1cfg ra r0 CSRRW; *)
-(*         UTYPE (ADV - #HERE) ra RISCV_AUIPC *)
-(*         CSR epc ra r0 CSRRW; *)
-(*         UTYPE (IH - #HERE) ra RISCV_AUIPC *)
-(*         CSR Tvec ra r0 CSRRW; *)
-(*         UTYPE (pure_mstatus_to_bits { MPP := User }) ra RISCV_LUI; *)
-(*         CSR Mstatus ra r0 CSRRW; *)
-(*     IH: load (#HERE - DATA) pc ra; *)
-(*         MRET *)
-(* DATA:   42 *)
-(* ADV:    ... (anything) *)
+(* CODE:   UTYPE (ADV - #HERE) ra RISCV_AUIPC *) (* 0 *)
+(*         CSR pmpaddr0 ra r0 CSRRW; *) (* 4 *)
+(*         UTYPE MAX ra RISCV_LUI; *) (* 8 *)
+(*         CSR pmpaddr1 ra r0 CSRRW; *) (* 12 *)
+(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := OFF; X := false; W := false; R := false }) ra RISCV_LUI; *) (* 16 *)
+(*         CSR pmp0cfg ra r0 CSRRW; *) (* 20 *)
+(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := TOR; X := true; W := true; R := true }) ra RISCV_LUI; *) (* 24 *)
+(*         CSR pmp1cfg ra r0 CSRRW; *) (* 28 *)
+(*         UTYPE (ADV - #HERE) ra RISCV_AUIPC *) (* 32 *)
+(*         CSR epc ra r0 CSRRW; *) (* 36 *)
+(*         UTYPE (IH - #HERE) ra RISCV_AUIPC *) (* 40 *)
+(*         CSR Tvec ra r0 CSRRW; *) (* 44 *)
+(*         UTYPE (pure_mstatus_to_bits { MPP := User }) ra RISCV_LUI; *) (* 48 *)
+(*         CSR Mstatus ra r0 CSRRW; *) (* 52 *)
+(*     IH: UTYPE 0 ra RISCV_AUIPC *) (* 56 *)
+(*         load (#HERE - 4 - DATA) ra ra; *) (* 60 *)
+(*         MRET *) (* 64 *)
+(* DATA:   42 *) (* 68 *)
+(* ADV:    ... (anything) *) (* 72 *)
 (*     } *)
+
+    Definition max := 2^30.
+    Definition femto_pmpcfg_ent0 := pure_pmpcfg_ent_to_bits (MkPmpcfg_ent false OFF false false false).
+    Definition femto_pmpcfg_ent1 := pure_pmpcfg_ent_to_bits (MkPmpcfg_ent false TOR true true true).
+    Definition femto_mstatus := pure_mstatus_to_bits (MkMstatus User ).
 
     Example femtokernel : list AST :=
       [
+        UTYPE 68 ra RISCV_AUIPC
+      ; CSR MPMPADDR0 ra zero CSRRW
+      ; UTYPE max ra RISCV_LUI
+      ; CSR MPMPADDR1 ra zero CSRRW
+      ; UTYPE femto_pmpcfg_ent0 ra RISCV_LUI
+      ; CSR MPMP0CFG ra zero CSRRW
+      ; UTYPE femto_pmpcfg_ent1 ra RISCV_LUI
+      ; CSR MPMP1CFG ra zero CSRRW
+      ; UTYPE 40 ra RISCV_AUIPC
+      ; CSR MEpc ra zero CSRRW
+      ; UTYPE 16 ra RISCV_AUIPC
+      ; CSR MTvec ra zero CSRRW
+      ; UTYPE femto_mstatus ra RISCV_LUI
+      ; CSR MStatus ra zero CSRRW
+      ; UTYPE 0 ra RISCV_AUIPC
+      ; LOAD 12 ra ra
+      ; MRET
       ].
 
     Local Notation "p '∗' q" := (asn_sep p q).
