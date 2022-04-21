@@ -849,35 +849,43 @@ Module BlockVerification.
 (*         CSR Tvec ra r0 CSRRW; *) (* 44 *)
 (*         UTYPE (pure_mstatus_to_bits { MPP := User }) ra RISCV_LUI; *) (* 48 *)
 (*         CSR Mstatus ra r0 CSRRW; *) (* 52 *)
-(*     IH: UTYPE 0 ra RISCV_AUIPC *) (* 56 *)
-(*         load (#HERE - 4 - DATA) ra ra; *) (* 60 *)
-(*         MRET *) (* 64 *)
-(* DATA:   42 *) (* 68 *)
-(* ADV:    ... (anything) *) (* 72 *)
+(*         MRET *) (* 56 *)
+
+(*     IH: UTYPE 0 ra RISCV_AUIPC *) (* 60 *)
+(*         load (#HERE - 4 - DATA) ra ra; *) (* 64 *)
+(*         MRET *) (* 68 *)
+(* DATA:   42 *) (* 72 *)
+(* ADV:    ... (anything) *) (* 76 *)
 (*     } *)
 
-    Definition max := 2^30.
-    Definition femto_pmpcfg_ent0 := pure_pmpcfg_ent_to_bits (MkPmpcfg_ent false OFF false false false).
-    Definition femto_pmpcfg_ent1 := pure_pmpcfg_ent_to_bits (MkPmpcfg_ent false TOR true true true).
+    Definition femto_address_max := 2^30.
+    Definition femto_pmpcfg_ent0 : Pmpcfg_ent := MkPmpcfg_ent false OFF false false false.
+    Definition femto_pmpcfg_ent0_bits : Val ty_xlenbits := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
+    Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
+    Definition femto_pmpcfg_ent1_bits : Val ty_xlenbits := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
     Definition femto_mstatus := pure_mstatus_to_bits (MkMstatus User ).
 
-    Example femtokernel : list AST :=
+    Example femtokernel_init : list AST :=
       [
-        UTYPE 68 ra RISCV_AUIPC
+        UTYPE 76 ra RISCV_AUIPC
       ; CSR MPMPADDR0 ra zero CSRRW
-      ; UTYPE max ra RISCV_LUI
+      ; UTYPE femto_address_max ra RISCV_LUI
       ; CSR MPMPADDR1 ra zero CSRRW
-      ; UTYPE femto_pmpcfg_ent0 ra RISCV_LUI
+      ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI
       ; CSR MPMP0CFG ra zero CSRRW
-      ; UTYPE femto_pmpcfg_ent1 ra RISCV_LUI
+      ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI
       ; CSR MPMP1CFG ra zero CSRRW
-      ; UTYPE 40 ra RISCV_AUIPC
+      ; UTYPE 44 ra RISCV_AUIPC
       ; CSR MEpc ra zero CSRRW
-      ; UTYPE 16 ra RISCV_AUIPC
+      ; UTYPE 20 ra RISCV_AUIPC
       ; CSR MTvec ra zero CSRRW
       ; UTYPE femto_mstatus ra RISCV_LUI
       ; CSR MStatus ra zero CSRRW
-      ; UTYPE 0 ra RISCV_AUIPC
+      ; MRET
+      ].
+
+    Example femtokernel_handler : list AST :=
+      [ UTYPE 0 ra RISCV_AUIPC
       ; LOAD 12 ra ra
       ; MRET
       ].
@@ -885,8 +893,51 @@ Module BlockVerification.
     Local Notation "p '∗' q" := (asn_sep p q).
     Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
     Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
+    Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
     Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+    Local Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
 
+    Let Σ__femto : LCtx := [].
+
+    Example femtokernel_init_pre (a : Term Σ__femto ty_xlenbits) : Assertion Σ__femto :=
+      (∃ "v", mstatus ↦ term_var "v") ∗
+      (∃ "v", mtvec ↦ term_var "v") ∗
+      (∃ "v", mcause ↦ term_var "v") ∗
+      (∃ "v", mepc ↦ term_var "v") ∗
+      cur_privilege ↦ term_val ty_privilege Machine ∗
+      (∃ "v", x1 ↦ term_var "v") ∗
+      (∃ "v", x2 ↦ term_var "v") ∗
+      (∃ "v", x3 ↦ term_var "v") ∗
+      (∃ "v", x4 ↦ term_var "v") ∗
+      (∃ "v", x5 ↦ term_var "v") ∗
+      (∃ "v", x6 ↦ term_var "v") ∗
+      (∃ "v", x7 ↦ term_var "v") ∗
+      (∃ "v", pmp0cfg ↦ term_var "v") ∗
+      (∃ "v", pmp1cfg ↦ term_var "v") ∗
+      (∃ "v", pmpaddr0 ↦ term_var "v") ∗
+      (∃ "v", pmpaddr1 ↦ term_var "v") ∗
+      (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42)%exp.
+
+    Example femtokernel_init_post (a na : Term Σ__femto ty_xlenbits) : Assertion Σ__femto :=
+      (
+        (∃ "v", mstatus ↦ term_var "v") ∗
+          (mtvec ↦ (a + term_val ty_xlenbits 60)) ∗
+          (∃ "v", mcause ↦ term_var "v") ∗
+          (∃ "v", mepc ↦ term_var "v") ∗
+          cur_privilege ↦ term_val ty_privilege Machine ∗
+          (∃ "v", x1 ↦ term_var "v") ∗
+          (∃ "v", x2 ↦ term_var "v") ∗
+          (∃ "v", x3 ↦ term_var "v") ∗
+          (∃ "v", x4 ↦ term_var "v") ∗
+          (∃ "v", x5 ↦ term_var "v") ∗
+          (∃ "v", x6 ↦ term_var "v") ∗
+          (∃ "v", x7 ↦ term_var "v") ∗
+          (pmp0cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
+          (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
+          (pmpaddr0 ↦ a) ∗
+          (pmpaddr1 ↦ a + term_val ty_xlenbits 76) ∗
+          (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42)
+      )%exp.
 
   End FemtoKernel.
 
