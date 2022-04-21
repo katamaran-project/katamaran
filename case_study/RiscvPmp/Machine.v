@@ -117,9 +117,9 @@ End RiscvNotations.
 (* Similarly for *_{from,to}_bits functions, ideally we would move to actual bitvectors for values... *)
 Axiom pure_decode : Z -> string + AST.
 Axiom pure_mstatus_from_bits    : Xlenbits -> string + Mstatus.
-Axiom pure_mstatus_to_bits      : Mstatus -> string + Xlenbits.
+Axiom pure_mstatus_to_bits      : Mstatus -> Xlenbits.
 Axiom pure_pmpcfg_ent_from_bits : Xlenbits -> string + Pmpcfg_ent.
-Axiom pure_pmpcfg_ent_to_bits   : Pmpcfg_ent -> string +Xlenbits.
+Axiom pure_pmpcfg_ent_to_bits   : Pmpcfg_ent -> Xlenbits.
 
 Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
@@ -984,11 +984,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     ForeignCall mstatus_from_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
         (γ' , μ' , res) = (γ , μ , pure_mstatus_from_bits v);
     ForeignCall mstatus_to_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_mstatus_to_bits v);
+        (γ' , μ' , res) = (γ , μ , inr (pure_mstatus_to_bits v));
     ForeignCall pmpcfg_ent_from_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
         (γ' , μ' , res) = (γ , μ , pure_pmpcfg_ent_from_bits v);
     ForeignCall pmpcfg_ent_to_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_pmpcfg_ent_to_bits v).
+        (γ' , μ' , res) = (γ , μ , inr (pure_pmpcfg_ent_to_bits v)).
 
   Import bv.notations.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
