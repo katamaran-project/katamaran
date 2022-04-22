@@ -1198,19 +1198,19 @@ Module BlockVerificationDerived2.
       [
         UTYPE 76 ra RISCV_AUIPC
       ; CSR MPMPADDR0 ra zero CSRRW
-      (* ; UTYPE femto_address_max ra RISCV_LUI *)
-      (* ; CSR MPMPADDR1 ra zero CSRRW *)
-      (* ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI *)
-      (* ; CSR MPMP0CFG ra zero CSRRW *)
-      (* ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI *)
-      (* ; CSR MPMP1CFG ra zero CSRRW *)
-      (* ; UTYPE 44 ra RISCV_AUIPC *)
-      (* ; CSR MEpc ra zero CSRRW *)
-      (* ; UTYPE 20 ra RISCV_AUIPC *)
-      (* ; CSR MTvec ra zero CSRRW *)
-      (* ; UTYPE femto_mstatus ra RISCV_LUI *)
-      (* ; CSR MStatus ra zero CSRRW *)
-      (* ; MRET *)
+      ; UTYPE femto_address_max ra RISCV_LUI
+      ; CSR MPMPADDR1 ra zero CSRRW
+      ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI
+      ; CSR MPMP0CFG ra zero CSRRW
+      ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI
+      ; CSR MPMP1CFG ra zero CSRRW
+      ; UTYPE 44 ra RISCV_AUIPC
+      ; CSR MEpc ra zero CSRRW
+      ; UTYPE 20 ra RISCV_AUIPC
+      ; CSR MTvec ra zero CSRRW
+      ; UTYPE femto_mstatus ra RISCV_LUI
+      ; CSR MStatus ra zero CSRRW
+      ; MRET
       ].
 
     Example femtokernel_handler : list AST :=
@@ -1296,7 +1296,7 @@ Module BlockVerificationDerived2.
 
     Example vc__femto : 𝕊 Σ__femto :=
       Eval compute in
-      let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_posttest in
+      let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in
       let vc2 := Postprocessing.prune vc1 in
       let vc3 := Postprocessing.solve_evars vc2 in
       let vc4 := Postprocessing.solve_uvars vc3 in
