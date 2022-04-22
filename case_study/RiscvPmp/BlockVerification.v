@@ -829,120 +829,6 @@ Module BlockVerification.
 
   End MemCopy.
 
-  Section FemtoKernel.
-    Import ListNotations.
-    Open Scope hex_Z_scope.
-
-(*     MAX := 2^30; *)
-(* (*     assembly source: *) *)
-(* CODE:   UTYPE (ADV - #HERE) ra RISCV_AUIPC *) (* 0 *)
-(*         CSR pmpaddr0 ra r0 CSRRW; *) (* 4 *)
-(*         UTYPE MAX ra RISCV_LUI; *) (* 8 *)
-(*         CSR pmpaddr1 ra r0 CSRRW; *) (* 12 *)
-(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := OFF; X := false; W := false; R := false }) ra RISCV_LUI; *) (* 16 *)
-(*         CSR pmp0cfg ra r0 CSRRW; *) (* 20 *)
-(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := TOR; X := true; W := true; R := true }) ra RISCV_LUI; *) (* 24 *)
-(*         CSR pmp1cfg ra r0 CSRRW; *) (* 28 *)
-(*         UTYPE (ADV - #HERE) ra RISCV_AUIPC *) (* 32 *)
-(*         CSR epc ra r0 CSRRW; *) (* 36 *)
-(*         UTYPE (IH - #HERE) ra RISCV_AUIPC *) (* 40 *)
-(*         CSR Tvec ra r0 CSRRW; *) (* 44 *)
-(*         UTYPE (pure_mstatus_to_bits { MPP := User }) ra RISCV_LUI; *) (* 48 *)
-(*         CSR Mstatus ra r0 CSRRW; *) (* 52 *)
-(*         MRET *) (* 56 *)
-
-(*     IH: UTYPE 0 ra RISCV_AUIPC *) (* 60 *)
-(*         load (#HERE - 4 - DATA) ra ra; *) (* 64 *)
-(*         MRET *) (* 68 *)
-(* DATA:   42 *) (* 72 *)
-(* ADV:    ... (anything) *) (* 76 *)
-(*     } *)
-
-    Definition femto_address_max := 2^30.
-    Definition femto_pmpcfg_ent0 : Pmpcfg_ent := MkPmpcfg_ent false OFF false false false.
-    Definition femto_pmpcfg_ent0_bits : Val ty_xlenbits := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
-    Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
-    Definition femto_pmpcfg_ent1_bits : Val ty_xlenbits := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
-    Definition femto_mstatus := pure_mstatus_to_bits (MkMstatus User ).
-
-    Example femtokernel_init : list AST :=
-      [
-        UTYPE 76 ra RISCV_AUIPC
-      ; CSR MPMPADDR0 ra zero CSRRW
-      ; UTYPE femto_address_max ra RISCV_LUI
-      ; CSR MPMPADDR1 ra zero CSRRW
-      ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI
-      ; CSR MPMP0CFG ra zero CSRRW
-      ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI
-      ; CSR MPMP1CFG ra zero CSRRW
-      ; UTYPE 44 ra RISCV_AUIPC
-      ; CSR MEpc ra zero CSRRW
-      ; UTYPE 20 ra RISCV_AUIPC
-      ; CSR MTvec ra zero CSRRW
-      ; UTYPE femto_mstatus ra RISCV_LUI
-      ; CSR MStatus ra zero CSRRW
-      ; MRET
-      ].
-
-    Example femtokernel_handler : list AST :=
-      [ UTYPE 0 ra RISCV_AUIPC
-      ; LOAD 12 ra ra
-      ; MRET
-      ].
-
-    Local Notation "p '∗' q" := (asn_sep p q).
-    Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
-    Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
-    Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
-    Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
-    Local Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
-
-    Let Σ__femto : LCtx := [].
-
-    Example femtokernel_init_pre (a : Term Σ__femto ty_xlenbits) : Assertion Σ__femto :=
-      (∃ "v", mstatus ↦ term_var "v") ∗
-      (∃ "v", mtvec ↦ term_var "v") ∗
-      (∃ "v", mcause ↦ term_var "v") ∗
-      (∃ "v", mepc ↦ term_var "v") ∗
-      cur_privilege ↦ term_val ty_privilege Machine ∗
-      (∃ "v", x1 ↦ term_var "v") ∗
-      (∃ "v", x2 ↦ term_var "v") ∗
-      (∃ "v", x3 ↦ term_var "v") ∗
-      (∃ "v", x4 ↦ term_var "v") ∗
-      (∃ "v", x5 ↦ term_var "v") ∗
-      (∃ "v", x6 ↦ term_var "v") ∗
-      (∃ "v", x7 ↦ term_var "v") ∗
-      (∃ "v", pmp0cfg ↦ term_var "v") ∗
-      (∃ "v", pmp1cfg ↦ term_var "v") ∗
-      (∃ "v", pmpaddr0 ↦ term_var "v") ∗
-      (∃ "v", pmpaddr1 ↦ term_var "v") ∗
-      (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42)%exp.
-
-    Example femtokernel_init_post (a na : Term Σ__femto ty_xlenbits) : Assertion Σ__femto :=
-      (
-        (∃ "v",mstatus ↦ term_var "v") ∗
-          (mtvec ↦ (a + term_val ty_xlenbits 60)) ∗
-          (∃ "v", mcause ↦ term_var "v") ∗
-          (∃ "v", mepc ↦ term_var "v") ∗
-          cur_privilege ↦ term_val ty_privilege User ∗
-          (∃ "v", x1 ↦ term_var "v") ∗
-          (∃ "v", x2 ↦ term_var "v") ∗
-          (∃ "v", x3 ↦ term_var "v") ∗
-          (∃ "v", x4 ↦ term_var "v") ∗
-          (∃ "v", x5 ↦ term_var "v") ∗
-          (∃ "v", x6 ↦ term_var "v") ∗
-          (∃ "v", x7 ↦ term_var "v") ∗
-          (pmp0cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
-          (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
-          (pmpaddr0 ↦ a) ∗
-          (pmpaddr1 ↦ a + term_val ty_xlenbits 76) ∗
-          (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42) ∗
-          asn_formula (formula_eq na (a + term_val ty_xlenbits 76))
-      )%exp.
-
-    
-  End FemtoKernel.
-
 End BlockVerification.
 
 
@@ -1258,6 +1144,138 @@ Module BlockVerificationDerived2.
     Qed.
 
   End Example.
+
+  Section FemtoKernel.
+    Import bv.notations.
+    Import ListNotations.
+    Open Scope hex_Z_scope.
+
+    Definition zero : RegIdx := [bv 0].
+    Definition ra : RegIdx := [bv 1].
+(*     MAX := 2^30; *)
+(* (*     assembly source: *) *)
+(* CODE:   UTYPE (ADV - #HERE) ra RISCV_AUIPC *) (* 0 *)
+(*         CSR pmpaddr0 ra r0 CSRRW; *) (* 4 *)
+(*         UTYPE MAX ra RISCV_LUI; *) (* 8 *)
+(*         CSR pmpaddr1 ra r0 CSRRW; *) (* 12 *)
+(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := OFF; X := false; W := false; R := false }) ra RISCV_LUI; *) (* 16 *)
+(*         CSR pmp0cfg ra r0 CSRRW; *) (* 20 *)
+(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := TOR; X := true; W := true; R := true }) ra RISCV_LUI; *) (* 24 *)
+(*         CSR pmp1cfg ra r0 CSRRW; *) (* 28 *)
+(*         UTYPE (ADV - #HERE) ra RISCV_AUIPC *) (* 32 *)
+(*         CSR epc ra r0 CSRRW; *) (* 36 *)
+(*         UTYPE (IH - #HERE) ra RISCV_AUIPC *) (* 40 *)
+(*         CSR Tvec ra r0 CSRRW; *) (* 44 *)
+(*         UTYPE (pure_mstatus_to_bits { MPP := User }) ra RISCV_LUI; *) (* 48 *)
+(*         CSR Mstatus ra r0 CSRRW; *) (* 52 *)
+(*         MRET *) (* 56 *)
+
+(*     IH: UTYPE 0 ra RISCV_AUIPC *) (* 60 *)
+(*         load (#HERE - 4 - DATA) ra ra; *) (* 64 *)
+(*         MRET *) (* 68 *)
+(* DATA:   42 *) (* 72 *)
+(* ADV:    ... (anything) *) (* 76 *)
+(*     } *)
+
+    Definition femto_address_max := 2^30.
+    Definition femto_pmpcfg_ent0 : Pmpcfg_ent := MkPmpcfg_ent false OFF false false false.
+    Definition femto_pmpcfg_ent0_bits : Val ty_xlenbits := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
+    Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
+    Definition femto_pmpcfg_ent1_bits : Val ty_xlenbits := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
+    Definition femto_mstatus := pure_mstatus_to_bits (MkMstatus User ).
+
+    Example femtokernel_init : list AST :=
+      [
+        UTYPE 76 ra RISCV_AUIPC
+      ; CSR MPMPADDR0 ra zero CSRRW
+      ; UTYPE femto_address_max ra RISCV_LUI
+      ; CSR MPMPADDR1 ra zero CSRRW
+      ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI
+      ; CSR MPMP0CFG ra zero CSRRW
+      ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI
+      ; CSR MPMP1CFG ra zero CSRRW
+      ; UTYPE 44 ra RISCV_AUIPC
+      ; CSR MEpc ra zero CSRRW
+      ; UTYPE 20 ra RISCV_AUIPC
+      ; CSR MTvec ra zero CSRRW
+      ; UTYPE femto_mstatus ra RISCV_LUI
+      ; CSR MStatus ra zero CSRRW
+      ; MRET
+      ].
+
+    Example femtokernel_handler : list AST :=
+      [ UTYPE 0 ra RISCV_AUIPC
+      ; LOAD 12 ra ra
+      ; MRET
+      ].
+
+    Local Notation "p '∗' q" := (asn_sep p q).
+    Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
+    Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
+    Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
+    Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+    Local Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
+
+    Let Σ__femto : LCtx := [].
+    Let W__femto : World := MkWorld Σ__femto [].
+
+    Example femtokernel_init_pre : □ (WTerm ty_xlenbits -> Assertion) W__femto :=
+      fun _ _ a =>
+      (∃ "v", mstatus ↦ term_var "v") ∗
+      (∃ "v", mtvec ↦ term_var "v") ∗
+      (∃ "v", mcause ↦ term_var "v") ∗
+      (∃ "v", mepc ↦ term_var "v") ∗
+      cur_privilege ↦ term_val ty_privilege Machine ∗
+      (∃ "v", x1 ↦ term_var "v") ∗
+      (∃ "v", x2 ↦ term_var "v") ∗
+      (∃ "v", x3 ↦ term_var "v") ∗
+      (∃ "v", x4 ↦ term_var "v") ∗
+      (∃ "v", x5 ↦ term_var "v") ∗
+      (∃ "v", x6 ↦ term_var "v") ∗
+      (∃ "v", x7 ↦ term_var "v") ∗
+      (∃ "v", pmp0cfg ↦ term_var "v") ∗
+      (∃ "v", pmp1cfg ↦ term_var "v") ∗
+      (∃ "v", pmpaddr0 ↦ term_var "v") ∗
+      (∃ "v", pmpaddr1 ↦ term_var "v") ∗
+      (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42)%exp.
+
+    Example femtokernel_init_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femto :=
+      fun _ _ a na =>
+      (
+        (∃ "v",mstatus ↦ term_var "v") ∗
+          (mtvec ↦ (a + term_val ty_xlenbits 60)) ∗
+          (∃ "v", mcause ↦ term_var "v") ∗
+          (∃ "v", mepc ↦ term_var "v") ∗
+          cur_privilege ↦ term_val ty_privilege User ∗
+          (∃ "v", x1 ↦ term_var "v") ∗
+          (∃ "v", x2 ↦ term_var "v") ∗
+          (∃ "v", x3 ↦ term_var "v") ∗
+          (∃ "v", x4 ↦ term_var "v") ∗
+          (∃ "v", x5 ↦ term_var "v") ∗
+          (∃ "v", x6 ↦ term_var "v") ∗
+          (∃ "v", x7 ↦ term_var "v") ∗
+          (pmp0cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
+          (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
+          (pmpaddr0 ↦ a) ∗
+          (pmpaddr1 ↦ a + term_val ty_xlenbits 76) ∗
+          (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42) ∗
+          asn_formula (formula_eq na (a + term_val ty_xlenbits 76))
+      )%exp.
+
+    Example vc__femto : 𝕊 Σ__femto :=
+      Eval compute in
+      let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in
+      let vc2 := Postprocessing.prune vc1 in
+      let vc3 := Postprocessing.solve_evars vc2 in
+      let vc4 := Postprocessing.solve_uvars vc3 in
+      vc4.
+
+    Lemma sat__femto : SymProp.safe vc__femto env.nil.
+    Proof.
+        repeat constructor; cbn.
+    Qed.
+
+  End FemtoKernel.
 
 End BlockVerificationDerived2.
 
