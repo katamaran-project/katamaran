@@ -897,10 +897,10 @@ Module BlockVerification.
     Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
     Local Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
 
-    Let Σ__femto : LCtx := [].
+    Let Σ__femto : LCtx := [ "old_priv" :: ty_privilege ].
 
     Example femtokernel_init_pre (a : Term Σ__femto ty_xlenbits) : Assertion Σ__femto :=
-      (∃ "v", mstatus ↦ term_var "v") ∗
+      (mstatus ↦ term_record rmstatus [ term_var "old_priv"]) ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       (∃ "v", mepc ↦ term_var "v") ∗
@@ -920,11 +920,11 @@ Module BlockVerification.
 
     Example femtokernel_init_post (a na : Term Σ__femto ty_xlenbits) : Assertion Σ__femto :=
       (
-        (∃ "v", mstatus ↦ term_var "v") ∗
+        (mstatus ↦ term_record rmstatus [ term_var "old_priv" ]) ∗
           (mtvec ↦ (a + term_val ty_xlenbits 60)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
-          cur_privilege ↦ term_val ty_privilege Machine ∗
+          cur_privilege ↦ term_var "old_priv" ∗
           (∃ "v", x1 ↦ term_var "v") ∗
           (∃ "v", x2 ↦ term_var "v") ∗
           (∃ "v", x3 ↦ term_var "v") ∗
@@ -936,9 +936,11 @@ Module BlockVerification.
           (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
           (pmpaddr0 ↦ a) ∗
           (pmpaddr1 ↦ a + term_val ty_xlenbits 76) ∗
-          (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42)
+          (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42) ∗
+          asn_formula (formula_eq na (a + term_val ty_xlenbits 76))
       )%exp.
 
+    
   End FemtoKernel.
 
 End BlockVerification.
