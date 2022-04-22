@@ -235,24 +235,33 @@ Section ContractDefKit.
   Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
   Local Notation "e1 ',ₜ' e2" := (term_binop binop_pair e1 e2) (at level 100).
+  Import bv.notations.
 
 
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "w" :: ty_word];
        sep_contract_localstore      := [term_var "rs"];
-       sep_contract_precondition    := term_var "rs" ↦ term_var "w";
+       sep_contract_precondition    :=
+        asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0])) asn_true (term_var "rs" ↦ term_var "w");
        sep_contract_result          := "result_rX";
-       sep_contract_postcondition   := term_var "rs" ↦ term_var "w" ∗
-                                                term_var "result_rX" = term_var "w"
+       sep_contract_postcondition   :=
+        asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0]))
+          (term_var "result_rX" = term_val ty_int 0%Z)
+          (term_var "rs" ↦ term_var "w" ∗
+             term_var "result_rX" = term_var "w")
     |}.
 
   Definition sep_contract_wX : SepContractFun wX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "v" :: ty_xlenbits; "w" :: ty_xlenbits];
        sep_contract_localstore      := [term_var "rs"; term_var "v"];
-       sep_contract_precondition    := term_var "rs" ↦ term_var "w";
+       sep_contract_precondition    :=
+        asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0])) asn_true (term_var "rs" ↦ term_var "w");
        sep_contract_result          := "result_wX";
-       sep_contract_postcondition   := term_var "rs" ↦ term_var "v" ∗
-         term_var "result_wX" = term_val ty_unit tt;
+       sep_contract_postcondition   :=
+        asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0]))
+          (term_var "result_wX" = term_val ty_unit tt)
+          (term_var "rs" ↦ term_var "v" ∗
+             term_var "result_wX" = term_val ty_unit tt);
     |}.
 
   Definition sep_contract_fetch : SepContractFun fetch :=
@@ -1011,7 +1020,7 @@ Module BlockVerificationDerived2.
         right associativity).
 
   Definition exec_instruction_any (i : AST) : ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
-    let inline_fuel := 3%nat in
+    let inline_fuel := 10%nat in
     fun _ a =>
       ω2 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg pc a))) ;;
       ω4 ∣ _ <- T (produce (asn_chunk (chunk_user ptstoinstr [persist__term a ω2; term_val ty_ast i]))) ;;
@@ -1025,7 +1034,7 @@ Module BlockVerificationDerived2.
       pure (persist__term na ω12).
 
   Definition exec_instruction (i : AST) : ⊢ M Unit :=
-    let inline_fuel := 3%nat in
+    let inline_fuel := 10%nat in
     fun _ =>
       ω1 ∣ a <- @demonic _ _ ;;
       ω2 ∣ na <- exec_instruction_any i a ;;
@@ -1037,6 +1046,7 @@ Module BlockVerificationDerived2.
       | nil       => pure a
       | cons i b' =>
         ω ∣ a' <- exec_instruction_any i a ;;
+        (* TODO: assert that a' = a + 4 *)
         @exec_block_addr b' _ a'
       end.
 
@@ -1188,19 +1198,19 @@ Module BlockVerificationDerived2.
       [
         UTYPE 76 ra RISCV_AUIPC
       ; CSR MPMPADDR0 ra zero CSRRW
-      ; UTYPE femto_address_max ra RISCV_LUI
-      ; CSR MPMPADDR1 ra zero CSRRW
-      ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI
-      ; CSR MPMP0CFG ra zero CSRRW
-      ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI
-      ; CSR MPMP1CFG ra zero CSRRW
-      ; UTYPE 44 ra RISCV_AUIPC
-      ; CSR MEpc ra zero CSRRW
-      ; UTYPE 20 ra RISCV_AUIPC
-      ; CSR MTvec ra zero CSRRW
-      ; UTYPE femto_mstatus ra RISCV_LUI
-      ; CSR MStatus ra zero CSRRW
-      ; MRET
+      (* ; UTYPE femto_address_max ra RISCV_LUI *)
+      (* ; CSR MPMPADDR1 ra zero CSRRW *)
+      (* ; UTYPE femto_pmpcfg_ent0_bits ra RISCV_LUI *)
+      (* ; CSR MPMP0CFG ra zero CSRRW *)
+      (* ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI *)
+      (* ; CSR MPMP1CFG ra zero CSRRW *)
+      (* ; UTYPE 44 ra RISCV_AUIPC *)
+      (* ; CSR MEpc ra zero CSRRW *)
+      (* ; UTYPE 20 ra RISCV_AUIPC *)
+      (* ; CSR MTvec ra zero CSRRW *)
+      (* ; UTYPE femto_mstatus ra RISCV_LUI *)
+      (* ; CSR MStatus ra zero CSRRW *)
+      (* ; MRET *)
       ].
 
     Example femtokernel_handler : list AST :=
@@ -1239,10 +1249,32 @@ Module BlockVerificationDerived2.
       (∃ "v", pmpaddr1 ↦ term_var "v") ∗
       (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42)%exp.
 
+    Example femtokernel_init_posttest : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femto :=
+      fun _ _ a na =>
+      (∃ "v", mstatus ↦ term_var "v") ∗
+      (∃ "v", mtvec ↦ term_var "v") ∗
+      (∃ "v", mcause ↦ term_var "v") ∗
+      (∃ "v", mepc ↦ term_var "v") ∗
+      cur_privilege ↦ term_val ty_privilege Machine ∗
+      (∃ "v", x1 ↦ term_var "v") ∗
+      (∃ "v", x2 ↦ term_var "v") ∗
+      (∃ "v", x3 ↦ term_var "v") ∗
+      (∃ "v", x4 ↦ term_var "v") ∗
+      (∃ "v", x5 ↦ term_var "v") ∗
+      (∃ "v", x6 ↦ term_var "v") ∗
+      (∃ "v", x7 ↦ term_var "v") ∗
+      (∃ "v", pmp0cfg ↦ term_var "v") ∗
+      (∃ "v", pmp1cfg ↦ term_var "v") ∗
+      (∃ "v", pmpaddr0 ↦ term_var "v") ∗
+      (∃ "v", pmpaddr1 ↦ term_var "v") ∗
+      (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42 ∗
+             asn_formula (formula_eq na (a + term_val ty_xlenbits 8))
+)%exp.
+
     Example femtokernel_init_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femto :=
       fun _ _ a na =>
       (
-        (∃ "v",mstatus ↦ term_var "v") ∗
+        (∃ "v", mstatus ↦ term_var "v") ∗
           (mtvec ↦ (a + term_val ty_xlenbits 60)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
@@ -1264,7 +1296,7 @@ Module BlockVerificationDerived2.
 
     Example vc__femto : 𝕊 Σ__femto :=
       Eval compute in
-      let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in
+      let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_posttest in
       let vc2 := Postprocessing.prune vc1 in
       let vc3 := Postprocessing.solve_evars vc2 in
       let vc4 := Postprocessing.solve_uvars vc3 in
