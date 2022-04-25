@@ -116,10 +116,36 @@ End RiscvNotations.
 (* We postulate a pure decode function and assume that that's what the decode primitive implements. *)
 (* Similarly for *_{from,to}_bits functions, ideally we would move to actual bitvectors for values... *)
 Axiom pure_decode : Z -> string + AST.
-Axiom pure_mstatus_from_bits    : Xlenbits -> string + Mstatus.
-Axiom pure_mstatus_to_bits      : Mstatus -> Xlenbits.
+
+Definition pure_pmpAddrMatchType_to_bits : PmpAddrMatchType -> Z:=
+  fun mt => match mt with
+            | OFF => 0%Z
+            | TOR => 1%Z
+            end.
+Definition pure_privilege_to_bits : Privilege -> Xlenbits :=
+  fun p => match p with | Machine => 3%Z | User => 0%Z end.
+
+Definition pure_mstatus_to_bits : Mstatus -> Xlenbits :=
+  fun '(MkMstatus mpp) => Z.shiftl (pure_privilege_to_bits mpp) 11.
+Definition pure_mstatus_from_bits : Xlenbits -> string + Mstatus :=
+  fun b => match Z.shiftr b 11 with
+           | 0%Z => inr (MkMstatus User)
+           | 3%Z => inr (MkMstatus Machine)
+           | _ => inl ""
+           end.
+
 Axiom pure_pmpcfg_ent_from_bits : Xlenbits -> string + Pmpcfg_ent.
-Axiom pure_pmpcfg_ent_to_bits   : Pmpcfg_ent -> Xlenbits.
+Definition pure_pmpcfg_ent_to_bits : Pmpcfg_ent -> Xlenbits :=
+  fun ent =>
+    match ent with
+    | MkPmpcfg_ent L A X W R =>
+        let l := (if L then 1 else 0) ≪ 7 in
+        let a := pure_pmpAddrMatchType_to_bits A ≪ 3 in
+        let x := (if X then 1 else 0) ≪ 2 in
+        let w := (if W then 1 else 0) ≪ 1 in
+        let r := (if R then 1 else 0) in
+        Z.lor l (Z.lor a (Z.lor x (Z.lor w r)))
+    end%Z.
 
 Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
