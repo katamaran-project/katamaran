@@ -1038,11 +1038,11 @@ Module BlockVerificationDerived2.
       ω6 ∣ an <- @demonic _ _ ;;
       ω7 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg nextpc an))) ;;
       ω8 ∣ _ <- exec default_config inline_fuel (FunDef step) ;;
-      ω9 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg pc (term_binop binop_plus (persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8)) (term_val ty_exc_code 4))))) ;;
-      ω10 ∣ _ <- T (consume (asn_chunk (chunk_user ptstoinstr [persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8 ∘ ω9); term_val ty_ast i]))) ;;
-      ω11 ∣ na <- @angelic _ _ ;;
-      ω12 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc na))) ;;
-      pure (persist__term na ω12).
+      ω9 ∣ _ <- T (consume (asn_chunk (chunk_user ptstoinstr [persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8); term_val ty_ast i]))) ;;
+      ω10 ∣ na <- @angelic _ _ ;;
+      ω11 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc na))) ;;
+      ω12 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg pc (persist__term na ω11)))) ;;
+      pure (persist__term na (ω11 ∘ ω12)).
 
   Definition exec_instruction (i : AST) : ⊢ M Unit :=
     let inline_fuel := 10%nat in
@@ -1236,6 +1236,7 @@ Module BlockVerificationDerived2.
     Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
     Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
     Local Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
+    Local Notation "a '=' b" := (asn_eq a b).
 
     Let Σ__femto : LCtx := [].
     Let W__femto : World := MkWorld Σ__femto [].
@@ -1245,6 +1246,7 @@ Module BlockVerificationDerived2.
 
     Example femtokernel_init_pre : □ (WTerm ty_xlenbits -> Assertion) W__femto :=
       fun _ _ a =>
+        (a = term_val ty_word 0) ∗
       (∃ "v", mstatus ↦ term_var "v") ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
       (∃ "v", mcause ↦ term_var "v") ∗
@@ -1263,28 +1265,6 @@ Module BlockVerificationDerived2.
       (∃ "v", pmpaddr1 ↦ term_var "v") ∗
       (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42)%exp.
 
-    Example femtokernel_init_posttest : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femto :=
-      fun _ _ a na =>
-      (∃ "v", mstatus ↦ term_var "v") ∗
-      (∃ "v", mtvec ↦ term_var "v") ∗
-      (∃ "v", mcause ↦ term_var "v") ∗
-      (∃ "v", mepc ↦ term_var "v") ∗
-      cur_privilege ↦ term_val ty_privilege Machine ∗
-      (∃ "v", x1 ↦ term_var "v") ∗
-      (∃ "v", x2 ↦ term_var "v") ∗
-      (∃ "v", x3 ↦ term_var "v") ∗
-      (∃ "v", x4 ↦ term_var "v") ∗
-      (∃ "v", x5 ↦ term_var "v") ∗
-      (∃ "v", x6 ↦ term_var "v") ∗
-      (∃ "v", x7 ↦ term_var "v") ∗
-      (∃ "v", pmp0cfg ↦ term_var "v") ∗
-      (∃ "v", pmp1cfg ↦ term_var "v") ∗
-      (∃ "v", pmpaddr0 ↦ term_var "v") ∗
-      (∃ "v", pmpaddr1 ↦ term_var "v") ∗
-      (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42 ∗
-             asn_formula (formula_eq na (a + term_val ty_xlenbits 8))
-)%exp.
-
     Example femtokernel_init_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femto :=
       fun _ _ a na =>
       (
@@ -1302,8 +1282,8 @@ Module BlockVerificationDerived2.
           (∃ "v", x7 ↦ term_var "v") ∗
           (pmp0cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
           (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
-          (pmpaddr0 ↦ a) ∗
-          (pmpaddr1 ↦ a + term_val ty_xlenbits 76) ∗
+          (pmpaddr0 ↦ a + term_val ty_xlenbits 76) ∗
+          (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
           (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42) ∗
           asn_formula (formula_eq na (a + term_val ty_xlenbits 76))
       )%exp.
@@ -1315,6 +1295,9 @@ Module BlockVerificationDerived2.
       let vc3 := Postprocessing.solve_evars vc2 in
       let vc4 := Postprocessing.solve_uvars vc3 in
       vc4.
+    Import SymProp.notations.
+    Set Printing Depth 200.
+    Print vc__femto.
 
     Lemma sat__femto : SymProp.safe vc__femto env.nil.
     Proof.
