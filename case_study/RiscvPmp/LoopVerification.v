@@ -81,6 +81,7 @@ Section Loop.
               Maybe sketch a situation that showcases this? *)
 
      (* Executing normally *)
+     (* TODO: this should be the same as Start of iteration (P), drop one of them *)
      Definition Execution (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
        (            interp_pmp_addr_access liveAddrs entries m ∗
                     interp_gprs ∗
