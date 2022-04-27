@@ -198,16 +198,18 @@ Section ContractDefKit.
     end.
 
   Definition asn_with_reg {Σ} (r : Term Σ ty_regno) (asn : Reg ty_xlenbits -> Assertion Σ) (asn_default : Assertion Σ) : Assertion Σ :=
-    asn_if (r =? term_val ty_regno (bv.of_N 1))
-           (asn x1)
-           (asn_if (r =? term_val ty_regno (bv.of_N 2))
-                   (asn x2)
-                   (asn_if (r =? term_val ty_regno (bv.of_N 3))
-                           (asn x3)
-                           asn_default)).
+     asn_if (r =? term_val ty_regno (bv.of_N 0)) (asn_default)
+    (asn_if (r =? term_val ty_regno (bv.of_N 1)) (asn x1)
+    (asn_if (r =? term_val ty_regno (bv.of_N 2)) (asn x2)
+    (asn_if (r =? term_val ty_regno (bv.of_N 3)) (asn x3)
+    (asn_if (r =? term_val ty_regno (bv.of_N 4)) (asn x4)
+    (asn_if (r =? term_val ty_regno (bv.of_N 5)) (asn x5)
+    (asn_if (r =? term_val ty_regno (bv.of_N 6)) (asn x6)
+    (asn_if (r =? term_val ty_regno (bv.of_N 7)) (asn x7)
+     asn_false))))))).
 
   Definition asn_reg_ptsto {Σ} (r : Term Σ ty_regno) (w : Term Σ ty_word) : Assertion Σ :=
-    asn_with_reg r (fun r => asn_chunk (chunk_ptsreg r w)) asn_false.
+    asn_with_reg r (fun r => asn_chunk (chunk_ptsreg r w)) (asn_eq w (term_val ty_int 0%Z)).
 
   Local Notation "e1 ',ₜ' e2" := (term_binop binop_pair e1 e2) (at level 100).
 
@@ -241,27 +243,21 @@ Section ContractDefKit.
   Definition sep_contract_rX : SepContractFun rX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "w" :: ty_word];
        sep_contract_localstore      := [term_var "rs"];
-       sep_contract_precondition    :=
-        asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0])) asn_true (term_var "rs" ↦ term_var "w");
+       sep_contract_precondition    := term_var "rs" ↦ term_var "w";
        sep_contract_result          := "result_rX";
-       sep_contract_postcondition   :=
-        asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0]))
-          (term_var "result_rX" = term_val ty_int 0%Z)
-          (term_var "rs" ↦ term_var "w" ∗
-             term_var "result_rX" = term_var "w")
+       sep_contract_postcondition   := term_var "result_rX" = term_var "w" ∗
+                                       term_var "rs" ↦ term_var "w";
     |}.
 
   Definition sep_contract_wX : SepContractFun wX :=
     {| sep_contract_logic_variables := ["rs" :: ty_regno; "v" :: ty_xlenbits; "w" :: ty_xlenbits];
        sep_contract_localstore      := [term_var "rs"; term_var "v"];
-       sep_contract_precondition    :=
-        asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0])) asn_true (term_var "rs" ↦ term_var "w");
+       sep_contract_precondition    := term_var "rs" ↦ term_var "w";
        sep_contract_result          := "result_wX";
-       sep_contract_postcondition   :=
-        asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0]))
-          (term_var "result_wX" = term_val ty_unit tt)
-          (term_var "rs" ↦ term_var "v" ∗
-             term_var "result_wX" = term_val ty_unit tt);
+       sep_contract_postcondition   := term_var "result_wX" = term_val ty_unit tt ∗
+                                       asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0]))
+                                         (term_var "rs" ↦ term_val ty_int 0%Z)
+                                         (term_var "rs" ↦ term_var "v")
     |}.
 
   Definition sep_contract_fetch : SepContractFun fetch :=
@@ -319,6 +315,14 @@ Section ContractDefKit.
       | tick_pc               => Some sep_contract_tick_pc
       | _                     => None
       end.
+
+  Lemma linted_cenv :
+    forall Δ τ (f : Fun Δ τ),
+      match CEnv f with
+      | Some c => Linted c
+      | None   => True
+      end.
+  Proof. intros ? ? []; try constructor. Qed.
 
   Definition sep_contract_read_ram : SepContractFunX read_ram :=
     {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
@@ -387,6 +391,13 @@ Section ContractDefKit.
       | pmpcfg_ent_from_bits    => sep_contract_pmpcfg_ent_from_bits
       | pmpcfg_ent_to_bits    => sep_contract_pmpcfg_ent_to_bits
       end.
+
+  Lemma linted_cenvex :
+    forall Δ τ (f : FunX Δ τ),
+      Linted (CEnvEx f).
+  Proof.
+    intros ? ? []; try constructor.
+  Qed.
 
   Definition lemma_open_gprs : SepLemma open_gprs :=
     {| lemma_logic_variables := ctx.nil;
@@ -1229,6 +1240,9 @@ Module BlockVerificationDerived2.
     Let Σ__femto : LCtx := [].
     Let W__femto : World := MkWorld Σ__femto [].
 
+    Example femtokernel_default_pmpcfg : Pmpcfg_ent :=
+      {| L := false; A := OFF; X := false; W := false; R := false |}.
+
     Example femtokernel_init_pre : □ (WTerm ty_xlenbits -> Assertion) W__femto :=
       fun _ _ a =>
       (∃ "v", mstatus ↦ term_var "v") ∗
@@ -1243,8 +1257,8 @@ Module BlockVerificationDerived2.
       (∃ "v", x5 ↦ term_var "v") ∗
       (∃ "v", x6 ↦ term_var "v") ∗
       (∃ "v", x7 ↦ term_var "v") ∗
-      (∃ "v", pmp0cfg ↦ term_var "v") ∗
-      (∃ "v", pmp1cfg ↦ term_var "v") ∗
+      (pmp0cfg ↦ term_val ty_pmpcfg_ent femtokernel_default_pmpcfg)  ∗
+      (pmp1cfg ↦ term_val ty_pmpcfg_ent femtokernel_default_pmpcfg)  ∗
       (∃ "v", pmpaddr0 ↦ term_var "v") ∗
       (∃ "v", pmpaddr1 ↦ term_var "v") ∗
       (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42)%exp.
@@ -1294,8 +1308,8 @@ Module BlockVerificationDerived2.
           asn_formula (formula_eq na (a + term_val ty_xlenbits 76))
       )%exp.
 
-    Example vc__femto : 𝕊 Σ__femto :=
-      Eval compute in
+    Time Example vc__femto : 𝕊 Σ__femto :=
+      Eval vm_compute in
       let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in
       let vc2 := Postprocessing.prune vc1 in
       let vc3 := Postprocessing.solve_evars vc2 in
