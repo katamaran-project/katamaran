@@ -1436,16 +1436,17 @@ Section ContractDefKit.
     |}.
 
   Definition lemma_close_pmp_entries : SepLemma close_pmp_entries :=
-    {| lemma_logic_variables := ["entries" :: ty_list ty_pmpentry];
+    {| lemma_logic_variables := ["cfg0" :: ty_pmpcfg_ent; "addr0" :: _;
+                                 "cfg1" :: ty_pmpcfg_ent; "addr1" :: _];
        lemma_patterns        := env.nil;
-       lemma_precondition    := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
-         (pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
-          pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
-          asn_expand_pmpcfg_ent (term_var "cfg0") ∗
-          asn_expand_pmpcfg_ent (term_var "cfg1") ∗
-          term_var "entries" = term_list [(term_var "cfg0" ,ₜ term_var "addr0");
-                                          (term_var "cfg1" ,ₜ term_var "addr1")]);
-       lemma_postcondition   := asn_pmp_entries (term_var "entries");
+       lemma_precondition    :=
+         pmp0cfg ↦ term_var "cfg0" ∗ pmpaddr0 ↦ term_var "addr0" ∗
+         pmp1cfg ↦ term_var "cfg1" ∗ pmpaddr1 ↦ term_var "addr1" ∗
+         asn_expand_pmpcfg_ent (term_var "cfg0") ∗
+         asn_expand_pmpcfg_ent (term_var "cfg1");
+       lemma_postcondition   :=
+         asn_pmp_entries (term_list [(term_var "cfg0" ,ₜ term_var "addr0");
+                                     (term_var "cfg1" ,ₜ term_var "addr1")]);
     |}.
 
   Definition lemma_update_pmp_entries : SepLemma update_pmp_entries :=
