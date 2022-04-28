@@ -50,6 +50,7 @@ Module Type BinOpsOn (Import TD : TypeDecl).
   | binop_plus              : BinOp ty_int ty_int ty_int
   | binop_times             : BinOp ty_int ty_int ty_int
   | binop_minus             : BinOp ty_int ty_int ty_int
+  | binop_land              : BinOp ty_int ty_int ty_int
   | binop_eq {σ}            : BinOp σ σ ty_bool
   | binop_le                : BinOp ty_int ty_int ty_bool
   | binop_lt                : BinOp ty_int ty_int ty_bool
@@ -94,6 +95,7 @@ Module Type BinOpsOn (Import TD : TypeDecl).
     | binop_plus  , binop_plus   => left eq_refl
     | binop_times , binop_times  => left eq_refl
     | binop_minus , binop_minus  => left eq_refl
+    | binop_land  , binop_land   => left eq_refl
     | @binop_eq σ , @binop_eq τ  => f_equal_dec (fun σ => ((σ , σ , ty_bool) , binop_eq)) noConfusion_inv (eq_dec σ τ)
     | binop_le    , binop_le     => left eq_refl
     | binop_lt    , binop_lt     => left eq_refl
@@ -171,6 +173,7 @@ Module Type BinOpsOn (Import TD : TypeDecl).
     | binop_plus       => Z.add
     | binop_times      => Z.mul
     | binop_minus      => Z.sub
+    | binop_land       => Z.land
     | binop_eq         => Val_eqb _
     | binop_le         => Z.leb
     | binop_lt         => Z.ltb
