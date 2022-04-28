@@ -117,36 +117,6 @@ End RiscvNotations.
 (* Similarly for *_{from,to}_bits functions, ideally we would move to actual bitvectors for values... *)
 Axiom pure_decode : Z -> string + AST.
 
-Definition pure_pmpAddrMatchType_to_bits : PmpAddrMatchType -> Z:=
-  fun mt => match mt with
-            | OFF => 0%Z
-            | TOR => 1%Z
-            end.
-Definition pure_privilege_to_bits : Privilege -> Xlenbits :=
-  fun p => match p with | Machine => 3%Z | User => 0%Z end.
-
-Definition pure_mstatus_to_bits : Mstatus -> Xlenbits :=
-  fun '(MkMstatus mpp) => Z.shiftl (pure_privilege_to_bits mpp) 11.
-Definition pure_mstatus_from_bits : Xlenbits -> string + Mstatus :=
-  fun b => match Z.shiftr b 11 with
-           | 0%Z => inr (MkMstatus User)
-           | 3%Z => inr (MkMstatus Machine)
-           | _ => inl ""
-           end.
-
-Axiom pure_pmpcfg_ent_from_bits : Xlenbits -> string + Pmpcfg_ent.
-Definition pure_pmpcfg_ent_to_bits : Pmpcfg_ent -> Xlenbits :=
-  fun ent =>
-    match ent with
-    | MkPmpcfg_ent L A X W R =>
-        let l := (if L then 1 else 0) ≪ 7 in
-        let a := pure_pmpAddrMatchType_to_bits A ≪ 3 in
-        let x := (if X then 1 else 0) ≪ 2 in
-        let w := (if W then 1 else 0) ≪ 1 in
-        let r := (if R then 1 else 0) in
-        Z.lor l (Z.lor a (Z.lor x (Z.lor w r)))
-    end%Z.
-
 Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Section FunDeclKit.
@@ -220,10 +190,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | read_ram             : FunX [paddr ∶ ty_int] ty_word
   | write_ram            : FunX [paddr ∶ ty_int; data ∶ ty_word] ty_word
   | decode               : FunX [bv ∶ ty_int] ty_ast
-  | mstatus_from_bits    : FunX [value :: ty_xlenbits] ty_mstatus
-  | mstatus_to_bits      : FunX [value :: ty_mstatus] ty_xlenbits
-  | pmpcfg_ent_from_bits : FunX [value :: ty_xlenbits] ty_pmpcfg_ent
-  | pmpcfg_ent_to_bits   : FunX [value :: ty_pmpcfg_ent] ty_xlenbits
   .
 
   Inductive Lem : PCtx -> Set :=
@@ -344,6 +310,60 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition zero_reg {Γ} : Stm Γ ty_xlenbits := exp_val ty_int 0%Z.
 
+  (** Pure inlined functions **)
+  Definition stm_mstatus_from_bits {Γ} (b : Stm Γ ty_xlenbits) : Stm Γ ty_mstatus :=
+    let: "b"   := b in
+    let: "mpp" := let: "mstatus_mpp" := exp_binop binop_land (exp_var "b") (exp_int (Z.shiftl 3 11)) in
+                  if: exp_var "mstatus_mpp" = exp_int (Z.shiftl 0 11) then stm_val ty_privilege User else
+                  (* if: exp_var "mstatus_mpp" = exp_int (Z.shiftl 1 11) then stm_val ty_privilege Supervisor else *)
+                  if: exp_var "mstatus_mpp" = exp_int (Z.shiftl 3 11) then stm_val ty_privilege Machine else
+                  stm_fail ty_privilege "mstatus_from_bits"
+    in stm_exp (exp_record rmstatus [ exp_var "mpp" ]).
+
+  Definition stm_mstatus_to_bits {Γ} (mst : Stm Γ ty_mstatus) : Stm Γ ty_xlenbits :=
+    let: "mst" := mst in
+    match: exp_var "mst" in rmstatus with
+      ["mpp"] => let: "mppb" := match: exp_var "mpp" in privilege with
+                                | User    => stm_val ty_exc_code (Z.shiftl 0 11)
+                                | Machine => stm_val ty_exc_code (Z.shiftl 0 11)
+                                end
+                 in exp_var "mppb"
+    end.
+
+  Definition exp_testbit {Γ} (eb : Exp Γ ty_xlenbits) (i : Z) : Exp Γ ty_bool :=
+    let em := exp_int (Z.shiftl 1 i) in
+    exp_binop binop_eq (exp_binop binop_land eb em) em.
+
+  Definition stm_pmpcfg_ent_from_bits {Γ} (b : Stm Γ ty_xlenbits) : Stm Γ ty_pmpcfg_ent :=
+    let: "b" := b in
+    let: "L" := exp_testbit (exp_var "b") 7 in
+    let: "A" := if: exp_testbit (exp_var "b") 4
+                then if: exp_testbit (exp_var "b") 3
+                     then stm_fail ty_pmpaddrmatchtype "stm_pmpcfg_ent_from_bits NAPOT"
+                     else stm_fail ty_pmpaddrmatchtype "stm_pmpcfg_ent_from_bits NA4"
+                else if: exp_testbit (exp_var "b") 3
+                     then exp_val ty_pmpaddrmatchtype TOR
+                     else exp_val ty_pmpaddrmatchtype OFF in
+    let: "X" := exp_testbit (exp_var "b") 2 in
+    let: "W" := exp_testbit (exp_var "b") 1 in
+    let: "R" := exp_testbit (exp_var "b") 0 in
+    exp_record rpmpcfg_ent [L; A; X; W; R].
+
+  Definition stm_pmpcfg_ent_to_bits {Γ} (cfgent : Stm Γ ty_pmpcfg_ent) : Stm Γ ty_xlenbits :=
+    let: "cfgent" := cfgent in
+    match: exp_var "cfgent" in rpmpcfg_ent with
+      ["L";"A";"X";"W";"R"] =>
+      let: "L'" := if: exp_var "L" then exp_int (Z.shiftl 1 7) else exp_int 0 in
+      let: "A'" := match: A in pmpaddrmatchtype with
+                   | OFF => exp_int (Z.shiftl 0 3)
+                   | TOR => exp_int (Z.shiftl 1 3)
+                   end in
+      let: "X'" := if: exp_var "X" then exp_int (Z.shiftl 1 2) else exp_int 0 in
+      let: "W'" := if: exp_var "W" then exp_int (Z.shiftl 1 1) else exp_int 0 in
+      let: "R'" := if: exp_var "R" then exp_int (Z.shiftl 1 0) else exp_int 0 in
+      exp_var "L'" + exp_var "A'" + exp_var "X'" + exp_var "W'" + exp_var "R'"
+    end.
+
   (** Functions **)
   Import Bitvector.bv.notations.
   Definition fun_rX : Stm [rs ∶ ty_regno] ty_xlenbits :=
@@ -458,7 +478,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_pmpWriteCfg : Stm [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits] ty_pmpcfg_ent :=
     let: locked := call pmpLocked cfg in
-    if: locked then cfg else foreign pmpcfg_ent_from_bits value.
+    if: locked then cfg else stm_pmpcfg_ent_from_bits value.
 
   Definition fun_pmpWriteAddr : Stm [locked :: ty_bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits :=
     if: locked then addr else value.
@@ -791,22 +811,19 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   Definition fun_readCSR : Stm [csr ∶ ty_csridx] ty_xlenbits :=
     match: csr in csridx with
-    | MStatus   => let: tmp := stm_read_register mstatus in
-                   foreign mstatus_to_bits tmp
+    | MStatus   => stm_mstatus_to_bits (stm_read_register mstatus)
     | MTvec     => stm_read_register mtvec
     | MCause    => stm_read_register mcause
     | MEpc      => stm_read_register mepc
-    | MPMP0CFG  => let: tmp := stm_read_register pmp0cfg in
-                   foreign pmpcfg_ent_to_bits tmp
-    | MPMP1CFG  => let: tmp := stm_read_register pmp1cfg in
-                   foreign pmpcfg_ent_to_bits tmp
+    | MPMP0CFG  => stm_pmpcfg_ent_to_bits (stm_read_register pmp0cfg)
+    | MPMP1CFG  => stm_pmpcfg_ent_to_bits (stm_read_register pmp1cfg)
     | MPMPADDR0 => stm_read_register pmpaddr0
     | MPMPADDR1 => stm_read_register pmpaddr1
     end.
 
   Definition fun_writeCSR : Stm [csr ∶ ty_csridx; value ∶ ty_xlenbits] ty_unit :=
     match: csr in csridx with
-    | MStatus => let: tmp := foreign mstatus_from_bits value in
+    | MStatus => let: tmp := stm_mstatus_from_bits (exp_var value) in
                  stm_write_register mstatus tmp ;;
                  stm_val ty_unit tt
     | MTvec => stm_write_register mtvec value ;;
@@ -1006,15 +1023,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     ForeignCall write_ram (env.snoc (env.snoc env.nil _ addr) _ data) res γ γ' μ μ' :=
       (γ' , μ' , res) = (γ , fun_write_ram μ addr data , inr 1%Z);
     ForeignCall decode (env.snoc env.nil _ code) res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_decode code);
-    ForeignCall mstatus_from_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_mstatus_from_bits v);
-    ForeignCall mstatus_to_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , inr (pure_mstatus_to_bits v));
-    ForeignCall pmpcfg_ent_from_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , pure_pmpcfg_ent_from_bits v);
-    ForeignCall pmpcfg_ent_to_bits (env.snoc env.nil _ v) res γ γ' μ μ' :=
-        (γ' , μ' , res) = (γ , μ , inr (pure_pmpcfg_ent_to_bits v)).
+        (γ' , μ' , res) = (γ , μ , pure_decode code).
 
   Import bv.notations.
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
@@ -1023,14 +1032,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     destruct f; cbn.
     - repeat depelim args; repeat eexists; constructor.
     - repeat depelim args; repeat eexists; constructor.
-    - repeat depelim args.
-      exists γ, μ. eexists. reflexivity.
-    - repeat depelim args.
-      exists γ, μ. eexists. reflexivity.
-    - repeat depelim args.
-      exists γ, μ. eexists. reflexivity.
-    - repeat depelim args.
-      exists γ, μ. eexists. reflexivity.
     - repeat depelim args.
       exists γ, μ. eexists. reflexivity.
   Qed.

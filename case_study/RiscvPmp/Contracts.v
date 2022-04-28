@@ -710,42 +710,6 @@ Section ContractDefKit.
                                   end);
     |}.
 
-  Definition sep_contract_mstatus_to_bits : SepContractFunX mstatus_to_bits :=
-    {| sep_contract_logic_variables := [value :: ty_mstatus];
-       sep_contract_localstore      := [term_var value];
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_mstatus_to_bits";
-       sep_contract_postcondition   :=
-         ∃ "result", term_var "result_mstatus_to_bits" = term_var "result";
-    |}.
-
-  Definition sep_contract_mstatus_from_bits : SepContractFunX mstatus_from_bits :=
-    {| sep_contract_logic_variables := [value :: ty_xlenbits];
-       sep_contract_localstore      := [term_var value];
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_mstatus_from_bits";
-       sep_contract_postcondition   :=
-         ∃ "MPP", term_var "result_mstatus_from_bits" = term_record rmstatus [ term_var "MPP" ];
-    |}.
-
-  Definition sep_contract_pmpcfg_ent_from_bits : SepContractFunX pmpcfg_ent_from_bits :=
-    {| sep_contract_logic_variables := [value :: ty_xlenbits];
-       sep_contract_localstore      := [term_var value];
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_pmpcfg_ent_from_bits";
-       sep_contract_postcondition   :=
-         ∃ "cfg", term_var "result_pmpcfg_ent_from_bits" = term_var "cfg";
-    |}.
-
-  Definition sep_contract_pmpcfg_ent_to_bits : SepContractFunX pmpcfg_ent_to_bits :=
-    {| sep_contract_logic_variables := [value :: ty_pmpcfg_ent];
-       sep_contract_localstore      := [term_var value];
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_pmpcfg_ent_to_bits";
-       sep_contract_postcondition   :=
-         ∃ "cfg", term_var "result_pmpcfg_ent_to_bits" = term_var "cfg";
-    |}.
-
   Definition sep_contract_csrAccess : SepContractFun csrAccess :=
     {| sep_contract_logic_variables := [csr :: ty_csridx];
        sep_contract_localstore      := [term_var csr];
@@ -1569,10 +1533,6 @@ Section ContractDefKit.
       | read_ram             => sep_contract_read_ram
       | write_ram            => sep_contract_write_ram
       | decode               => sep_contract_decode
-      | mstatus_from_bits    => sep_contract_mstatus_from_bits
-      | mstatus_to_bits      => sep_contract_mstatus_to_bits
-      | pmpcfg_ent_from_bits => sep_contract_pmpcfg_ent_from_bits
-      | pmpcfg_ent_to_bits   => sep_contract_pmpcfg_ent_to_bits
       end.
 
   Definition LEnv : LemmaEnv :=

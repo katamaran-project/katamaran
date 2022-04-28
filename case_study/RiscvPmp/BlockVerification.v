@@ -348,48 +348,12 @@ Section ContractDefKit.
        sep_contract_postcondition   := term_var "result_decode" = term_var "instr";
     |}.
 
-  Definition sep_contract_mstatus_from_bits : SepContractFunX mstatus_from_bits :=
-    {| sep_contract_logic_variables := ["value" :: ty_xlenbits];
-       sep_contract_localstore      := [term_var "value"];
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_mstatus_from_bits";
-       sep_contract_postcondition   := asn_true;
-    |}.
-
-  Definition sep_contract_mstatus_to_bits : SepContractFunX mstatus_to_bits :=
-    {| sep_contract_logic_variables := ["value" :: ty_mstatus];
-       sep_contract_localstore      := [term_var "value"];
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_mstatus_to_bits";
-       sep_contract_postcondition   := asn_true;
-    |}.
-
-  Definition sep_contract_pmpcfg_ent_from_bits : SepContractFunX pmpcfg_ent_from_bits :=
-    {| sep_contract_logic_variables := ["value" :: ty_xlenbits];
-       sep_contract_localstore      := [term_var "value"];
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_pmpcfg_ent_from_bits";
-       sep_contract_postcondition   := asn_true;
-    |}.
-
-  Definition sep_contract_pmpcfg_ent_to_bits : SepContractFunX pmpcfg_ent_to_bits :=
-    {| sep_contract_logic_variables := ["value" :: ty_pmpcfg_ent];
-       sep_contract_localstore      := [term_var "value"];
-       sep_contract_precondition    := asn_true;
-       sep_contract_result          := "result_pmpcfg_ent_to_bits";
-       sep_contract_postcondition   := asn_true;
-    |}.
-
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
       | read_ram  => sep_contract_read_ram
       | write_ram => sep_contract_write_ram
       | decode    => sep_contract_decode
-      | mstatus_from_bits    => sep_contract_mstatus_from_bits
-      | mstatus_to_bits    => sep_contract_mstatus_to_bits
-      | pmpcfg_ent_from_bits    => sep_contract_pmpcfg_ent_from_bits
-      | pmpcfg_ent_to_bits    => sep_contract_pmpcfg_ent_to_bits
       end.
 
   Lemma linted_cenvex :
@@ -1198,6 +1162,30 @@ Module BlockVerificationDerived2.
 (* ADV:    ... (anything) *) (* 76 *)
 (*     } *)
 
+    Definition pure_privilege_to_bits : Privilege -> Xlenbits :=
+      fun p => match p with | Machine => 3%Z | User => 0%Z end.
+
+    Definition pure_mstatus_to_bits : Mstatus -> Xlenbits :=
+      fun '(MkMstatus mpp) => Z.shiftl (pure_privilege_to_bits mpp) 11.
+
+    Definition pure_pmpAddrMatchType_to_bits : PmpAddrMatchType -> Z:=
+      fun mt => match mt with
+                | OFF => 0%Z
+                | TOR => 1%Z
+                end.
+
+    Definition pure_pmpcfg_ent_to_bits : Pmpcfg_ent -> Xlenbits :=
+      fun ent =>
+        match ent with
+        | MkPmpcfg_ent L A X W R =>
+            let l := Z.shiftl (if L then 1 else 0) 7 in
+            let a := Z.shiftl (pure_pmpAddrMatchType_to_bits A) 3 in
+            let x := Z.shiftl (if X then 1 else 0) 2 in
+            let w := Z.shiftl (if W then 1 else 0) 1 in
+            let r := Z.shiftl (if R then 1 else 0) 0 in
+            Z.lor l (Z.lor a (Z.lor x (Z.lor w r)))
+        end%Z.
+
     Definition femto_address_max := 2^30.
     Definition femto_pmpcfg_ent0 : Pmpcfg_ent := MkPmpcfg_ent false OFF false false false.
     Definition femto_pmpcfg_ent0_bits : Val ty_xlenbits := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
@@ -1301,7 +1289,7 @@ Module BlockVerificationDerived2.
 
     Lemma sat__femto : SymProp.safe vc__femto env.nil.
     Proof.
-        repeat constructor; cbn.
+      vm_compute; auto.
     Qed.
 
   End FemtoKernel.
