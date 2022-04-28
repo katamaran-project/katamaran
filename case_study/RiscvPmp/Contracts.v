@@ -1303,7 +1303,7 @@ Section ContractDefKit.
     |}.
 
   Definition sep_contract_pmpMatchEntry : SepContractFun pmpMatchEntry :=
-    let Σ : LCtx := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; ent :: ty_pmpcfg_ent; pmpaddr :: ty_xlenbits; prev_pmpaddr :: ty_xlenbits; L :: ty_bool; A :: ty_pmpaddrmatchtype; X :: ty_bool; W :: ty_bool; R :: ty_bool] in
+    let Σ : LCtx := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; pmpaddr :: ty_xlenbits; prev_pmpaddr :: ty_xlenbits; L :: ty_bool; A :: ty_pmpaddrmatchtype; X :: ty_bool; W :: ty_bool; R :: ty_bool] in
     let entry : Term Σ _ := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
     {| sep_contract_logic_variables := Σ;
        sep_contract_localstore      := [nenv term_var addr; term_var acc; term_var priv; entry; term_var pmpaddr; term_var prev_pmpaddr];
@@ -1553,6 +1553,14 @@ Section ContractDefKit.
       | step                  => Some sep_contract_step
       | _                     => None
       end.
+
+  Lemma linted_cenv :
+    forall Δ τ (f : Fun Δ τ),
+      match CEnv f with
+      | Some c => Linted c
+      | None   => True
+      end.
+  Proof. intros ? ? []; try constructor. Qed.
 
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
@@ -1944,30 +1952,33 @@ Proof. reflexivity. Qed.
      the contract is one that can be proven by reflexivity))
  *)
 Lemma valid_contract_pmpCheck : ValidContractDebug pmpCheck.
-Proof. (* NOTE: this proof holds, it's just quite slow (the cbn takes a few minutes *)
-  (* compute.
+Proof.
+  vm_compute.
   constructor.
-
-  unfold SymProp.safe.
-  intros addr acc priv addr0 addr1 R0 W0 X0 A0 L0 R1 W1 X1 A1 L1.
-  cbn.
-  cbn in *.
-  eexists; try repeat constructor;
-    unfold Pmp_access, decide_pmp_access, pmp_check,
-    pmp_match_entry, pmp_match_addr;
-    destruct A0; destruct A1; simpl; auto;
-    repeat match goal with
-           | H: ?x < ?y |- _ =>
-               apply Z.ltb_lt in H as [= ->]
-           | H: (?x || ?y)%bool = true |- _ =>
-               apply Bool.orb_prop in H as [[= ->]|[= ->]]
-           end; auto;
-    rewrite ?Bool.orb_true_r;
-    simpl;
-    auto;
-    destruct (addr1 <? addr0); auto;
-    destruct (addr0 <? 0); auto. *)
-Abort.
+  cbv - [Z.gt Z.gtb Z.lt Z.ltb Z.le Z.leb andb orb];
+  intros addr acc priv addr0 addr1 R0 W0 X0 A0 L0 R1 W1 X1 A1 L1;
+  repeat
+    match goal with
+    | |- _ /\ _ => split; intros; subst
+    end;
+    try progress cbn; auto;
+    cbv [Pmp_access decide_pmp_access pmp_check pmp_match_entry pmp_match_addr pmp_addr_range A];
+    repeat
+      match goal with
+      | |- context[if ?b then ?x else ?x] => rewrite (Tauto.if_same b x)
+      | |- context[(?b || true)%bool]=> rewrite (Bool.orb_true_r b)
+      | |- context[match ?amt in PmpAddrMatchType with | _ => _ end] =>
+          destruct amt; try progress cbn
+      | H: ?x < ?y |- context[?x <? ?y] =>
+          rewrite (proj2 (Z.ltb_lt _ _) H);
+          try progress cbn
+      | H: (?x || ?y)%bool = true |- _ =>
+          apply Bool.orb_prop in H as [[= ->]|[= ->]];
+          try progress cbn
+      end; cbn; auto.
+(* NOTE: this Qed holds, it's just quite slow *)
+(* Qed. *)
+Admitted.
 
 (* TODO: this is just to make sure that all contracts defined so far are valid
          (i.e. ensure no contract was defined and then forgotten to validate it) *)
