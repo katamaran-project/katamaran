@@ -135,18 +135,6 @@ Section Loop.
                    mstatus       ↦ {| MPP := User |} ∗
                    mepc          ↦ mepc_v)%I.
 
-     Definition P (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
-                    (interp_pmp_entries es ∗
-                     interp_pmp_addr_access liveAddrs entries m ∗
-                     interp_gprs ∗
-                     cur_privilege ↦ cp ∗
-                     mtvec         ↦ h ∗
-                     pc            ↦ i ∗
-                     nextpc        ↦ npc ∗
-         ∃ mc,       mcause        ↦ mc ∗
-                     mepc          ↦ mepc_v ∗
-                     mstatus       ↦ {| MPP := mpp |})%I.
-
      Definition step_post (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
         (Execution m cp h i entries es mpp mepc_v npc ∨
          CSRMod    m cp h i entries es mpp mepc_v npc ∨
@@ -155,7 +143,7 @@ Section Loop.
 
      Definition semTriple_step : iProp Σ :=
        (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z),
-           semTriple env.nil (P m cp h i entries es mpp mepc_v npc) (FunDef step) (fun _ _ => step_post m cp h i entries es mpp mepc_v npc))%I.
+           semTriple env.nil (Execution m cp h i entries es mpp mepc_v npc) (FunDef step) (fun _ _ => step_post m cp h i entries es mpp mepc_v npc))%I.
 
      Definition semTriple_init_model : iProp Σ :=
        semTriple env.nil
@@ -171,8 +159,7 @@ Section Loop.
 
      Definition loop_pre (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
          (
-          P m cp h i entries es mpp mepc_v npc ∗
-          ▷ (Execution m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
+          Execution m cp h i entries es mpp mepc_v npc ∗
           ▷ (CSRMod    m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
           ▷ (Trap      m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
           ▷ (Recover   m cp h i entries es mpp mepc_v npc -∗ WP_loop))%I.
@@ -194,7 +181,7 @@ Section Loop.
        cbn.
        unfold fun_loop.
        iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) _ (fun δ => step_post m cp h i entries es mpp mepc_v npc ∧ ⌜env.nil = δ⌝)%I (fun _ _ => True%I)) with "[] [HPwp] HP").
-       iApply (iris_rule_stm_call_inline env.nil step env.nil (P m cp h i entries es mpp mepc_v npc) (fun _ => step_post m cp h i entries es mpp mepc_v npc)).
+       iApply (iris_rule_stm_call_inline env.nil step env.nil (Execution m cp h i entries es mpp mepc_v npc) (fun _ => step_post m cp h i entries es mpp mepc_v npc)).
        iApply step_iprop. 
        iIntros.
        iApply iris_rule_consequence.
@@ -209,9 +196,12 @@ Section Loop.
          unfold loop_pre, step_post.
          unfold semTriple.
          cbn.
-         iDestruct "HPwp" as "(H1 & H2 & H3 & H4)".
+         iDestruct "HPwp" as "(H2 & H3 & H4)".
          iIntros "[HP|[HP|[HP|HP]]]".
-         iApply ("H1" with "HP").
+         iApply "H".
+         iSplitL "HP"; try iAssumption.
+         iSplitL "H2"; try (iModIntro; iAssumption).
+         iSplitL "H3"; iModIntro; iAssumption.
          iApply ("H2" with "HP").
          iApply ("H3" with "HP").
          iApply ("H4" with "HP").
