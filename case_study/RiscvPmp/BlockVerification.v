@@ -1226,13 +1226,13 @@ Module BlockVerificationDerived2.
     Local Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
     Local Notation "a '=' b" := (asn_eq a b).
 
-    Let Σ__femto : LCtx := [].
-    Let W__femto : World := MkWorld Σ__femto [].
+    Let Σ__femtoinit : LCtx := [].
+    Let W__femtoinit : World := MkWorld Σ__femtoinit [].
 
     Example femtokernel_default_pmpcfg : Pmpcfg_ent :=
       {| L := false; A := OFF; X := false; W := false; R := false |}.
 
-    Example femtokernel_init_pre : □ (WTerm ty_xlenbits -> Assertion) W__femto :=
+    Example femtokernel_init_pre : □ (WTerm ty_xlenbits -> Assertion) W__femtoinit :=
       fun _ _ a =>
         (a = term_val ty_word 0) ∗
       (∃ "v", mstatus ↦ term_var "v") ∗
@@ -1253,7 +1253,7 @@ Module BlockVerificationDerived2.
       (∃ "v", pmpaddr1 ↦ term_var "v") ∗
       (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42)%exp.
 
-    Example femtokernel_init_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femto :=
+    Example femtokernel_init_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femtoinit :=
       fun _ _ a na =>
       (
         (∃ "v", mstatus ↦ term_var "v") ∗
@@ -1276,7 +1276,7 @@ Module BlockVerificationDerived2.
           asn_formula (formula_eq na (a + term_val ty_xlenbits 76))
       )%exp.
 
-    Time Example vc__femto : 𝕊 Σ__femto :=
+    Time Example vc__femtoinit : 𝕊 Σ__femtoinit :=
       Eval vm_compute in
       let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in
       let vc2 := Postprocessing.prune vc1 in
@@ -1285,9 +1285,72 @@ Module BlockVerificationDerived2.
       vc4.
     Import SymProp.notations.
     Set Printing Depth 200.
-    Print vc__femto.
+    Print vc__femtoinit.
 
-    Lemma sat__femto : SymProp.safe vc__femto env.nil.
+    Lemma sat__femtoinit : SymProp.safe vc__femtoinit env.nil.
+    Proof.
+      vm_compute; auto.
+    Qed.
+
+    Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code, "mpp"::ty_privilege].
+    Let W__femtohandler : World := MkWorld Σ__femtohandler [].
+
+    Example femtokernel_handler_pre : □ (WTerm ty_xlenbits -> Assertion) W__femtohandler :=
+      fun _ ω a =>
+        (asn_eq a (term_val ty_word 60)) ∗
+      (mstatus ↦ term_record rmstatus [ persist__term (term_var "mpp") ω ]) ∗
+      (mtvec ↦ term_val ty_word 60) ∗
+      (∃ "v", mcause ↦ term_var "v") ∗
+      (mepc ↦ persist__term (term_var "epc") ω) ∗
+      cur_privilege ↦ term_val ty_privilege Machine ∗
+      (∃ "v", x1 ↦ term_var "v") ∗
+      (∃ "v", x2 ↦ term_var "v") ∗
+      (∃ "v", x3 ↦ term_var "v") ∗
+      (∃ "v", x4 ↦ term_var "v") ∗
+      (∃ "v", x5 ↦ term_var "v") ∗
+      (∃ "v", x6 ↦ term_var "v") ∗
+      (∃ "v", x7 ↦ term_var "v") ∗
+      (pmp0cfg ↦ term_val ty_pmpcfg_ent femtokernel_default_pmpcfg)  ∗
+      (pmp1cfg ↦ term_val ty_pmpcfg_ent femtokernel_default_pmpcfg)  ∗
+      (pmpaddr0 ↦ a + term_val ty_xlenbits 16) ∗
+      (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
+      (a + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42)%exp.
+
+    Example femtokernel_handler_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femtohandler :=
+      fun _ ω a na =>
+      (
+        (mstatus ↦ term_record rmstatus [ persist__term (term_var "mpp") ω ]) ∗
+          (mtvec ↦ term_val ty_word 60) ∗
+          (∃ "v", mcause ↦ term_var "v") ∗
+          (mepc ↦ persist__term (term_var "epc") ω) ∗
+          cur_privilege ↦ persist__term (term_var "mpp") ω ∗
+          (∃ "v", x1 ↦ term_var "v") ∗
+          (∃ "v", x2 ↦ term_var "v") ∗
+          (∃ "v", x3 ↦ term_var "v") ∗
+          (∃ "v", x4 ↦ term_var "v") ∗
+          (∃ "v", x5 ↦ term_var "v") ∗
+          (∃ "v", x6 ↦ term_var "v") ∗
+          (∃ "v", x7 ↦ term_var "v") ∗
+          (pmp0cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
+          (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
+          (pmpaddr0 ↦ a + term_val ty_xlenbits 16) ∗
+          (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
+          (a + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42) ∗
+          asn_formula (formula_eq na (persist__term (term_var "epc") ω))
+      )%exp.
+
+    Time Example vc__femtohandler : 𝕊 [] :=
+      Eval vm_compute in
+      let vc1 := VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post in
+      let vc2 := Postprocessing.prune vc1 in
+      let vc3 := Postprocessing.solve_evars vc1 in
+      let vc4 := Postprocessing.solve_uvars vc3 in
+      vc4.
+    Import SymProp.notations.
+    Set Printing Depth 200.
+    Print vc__femtohandler.
+
+    Lemma sat__femtohandler : SymProp.safe vc__femtohandler env.nil.
     Proof.
       vm_compute; auto.
     Qed.
