@@ -1282,7 +1282,8 @@ Module BlockVerificationDerived2.
       let vc2 := Postprocessing.prune vc1 in
       let vc3 := Postprocessing.solve_evars vc2 in
       let vc4 := Postprocessing.solve_uvars vc3 in
-      vc4.
+      let vc5 := Postprocessing.prune vc4 in
+      vc5.
     Import SymProp.notations.
     Set Printing Depth 200.
     Print vc__femtoinit.
@@ -1310,8 +1311,8 @@ Module BlockVerificationDerived2.
       (∃ "v", x5 ↦ term_var "v") ∗
       (∃ "v", x6 ↦ term_var "v") ∗
       (∃ "v", x7 ↦ term_var "v") ∗
-      (pmp0cfg ↦ term_val ty_pmpcfg_ent femtokernel_default_pmpcfg)  ∗
-      (pmp1cfg ↦ term_val ty_pmpcfg_ent femtokernel_default_pmpcfg)  ∗
+      (pmp0cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
+      (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
       (pmpaddr0 ↦ a + term_val ty_xlenbits 16) ∗
       (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
       (a + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42)%exp.
@@ -1343,9 +1344,10 @@ Module BlockVerificationDerived2.
       Eval vm_compute in
       let vc1 := VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post in
       let vc2 := Postprocessing.prune vc1 in
-      let vc3 := Postprocessing.solve_evars vc1 in
+      let vc3 := Postprocessing.solve_evars vc2 in
       let vc4 := Postprocessing.solve_uvars vc3 in
-      vc4.
+      let vc5 := Postprocessing.prune vc4 in
+      vc5.
     Import SymProp.notations.
     Set Printing Depth 200.
     Print vc__femtohandler.
