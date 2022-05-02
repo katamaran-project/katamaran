@@ -1320,7 +1320,7 @@ Module BlockVerificationDerived2.
     Example femtokernel_handler_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femtohandler :=
       fun _ ω a na =>
       (
-        (mstatus ↦ term_record rmstatus [ persist__term (term_var "mpp") ω ]) ∗
+          (mstatus ↦ term_val (ty_record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word 60) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (mepc ↦ persist__term (term_var "epc") ω) ∗
