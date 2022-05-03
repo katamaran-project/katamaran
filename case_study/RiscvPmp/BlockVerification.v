@@ -1139,27 +1139,30 @@ Module BlockVerificationDerived2.
     Definition ra : RegIdx := [bv 1].
 (*     MAX := 2^30; *)
 (* (*     assembly source: *) *)
-(* CODE:   UTYPE (ADV - #HERE) ra RISCV_AUIPC *) (* 0 *)
-(*         CSR pmpaddr0 ra r0 CSRRW; *) (* 4 *)
-(*         UTYPE MAX ra RISCV_LUI; *) (* 8 *)
-(*         CSR pmpaddr1 ra r0 CSRRW; *) (* 12 *)
-(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := OFF; X := false; W := false; R := false }) ra RISCV_LUI; *) (* 16 *)
-(*         CSR pmp0cfg ra r0 CSRRW; *) (* 20 *)
-(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := TOR; X := true; W := true; R := true }) ra RISCV_LUI; *) (* 24 *)
-(*         CSR pmp1cfg ra r0 CSRRW; *) (* 28 *)
-(*         UTYPE (ADV - #HERE) ra RISCV_AUIPC *) (* 32 *)
-(*         CSR epc ra r0 CSRRW; *) (* 36 *)
-(*         UTYPE (IH - #HERE) ra RISCV_AUIPC *) (* 40 *)
-(*         CSR Tvec ra r0 CSRRW; *) (* 44 *)
-(*         UTYPE (pure_mstatus_to_bits { MPP := User }) ra RISCV_LUI; *) (* 48 *)
-(*         CSR Mstatus ra r0 CSRRW; *) (* 52 *)
-(*         MRET *) (* 56 *)
-
-(*     IH: UTYPE 0 ra RISCV_AUIPC *) (* 60 *)
-(*         load (#HERE - 4 - DATA) ra ra; *) (* 64 *)
+(* CODE:   UTYPE #HERE ra RISCV_AUIPC *) (* 0 *)
+(*         ADDI RA, RA, (ADV - #PREVHERE) *) (* 4 *)
+(*         CSR pmpaddr0 ra r0 CSRRW; *) (* 8 *)
+(*         UTYPE MAX ra RISCV_LUI; *) (* 12 *)
+(*         CSR pmpaddr1 ra r0 CSRRW; *) (* 16 *)
+(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := OFF; X := false; W := false; R := false }) ra RISCV_LUI; *) (* 20 *)
+(*         CSR pmp0cfg ra r0 CSRRW; *) (* 24 *)
+(*         UTYPE (pure_pmpcfg_ent_to_bits { L := false; A := TOR; X := true; W := true; R := true }) ra RISCV_LUI; *) (* 28 *)
+(*         CSR pmp1cfg ra r0 CSRRW; *) (* 32 *)
+(*         UTYPE #HERE ra RISCV_AUIPC *) (* 36 *)
+(*         ADDI RA, RA, (ADV - #PREVHERE) *) (* 40 *)
+(*         CSR epc ra r0 CSRRW; *) (* 44 *)
+(*         UTYPE #HERE ra RISCV_AUIPC *) (* 48 *)
+(*         ADDI RA, RA, (IH - #PREVHERE) *) (* 52 *)
+(*         CSR Tvec ra r0 CSRRW; *) (* 56 *)
+(*         UTYPE (pure_mstatus_to_bits { MPP := User }) ra RISCV_LUI; *) (* 60 *)
+(*         CSR Mstatus ra r0 CSRRW; *) (* 64 *)
 (*         MRET *) (* 68 *)
-(* DATA:   42 *) (* 72 *)
-(* ADV:    ... (anything) *) (* 76 *)
+
+(*     IH: UTYPE 0 ra RISCV_AUIPC *) (* 72 *)
+(*         load (#HERE - 4 - DATA) ra ra; *) (* 76 *)
+(*         MRET *) (* 80 *)
+(* DATA:   42 *) (* 84 *)
+(* ADV:    ... (anything) *) (* 88 *)
 (*     } *)
 
     Definition pure_privilege_to_bits : Privilege -> Xlenbits :=
@@ -1195,7 +1198,8 @@ Module BlockVerificationDerived2.
 
     Example femtokernel_init : list AST :=
       [
-        UTYPE 76 ra RISCV_AUIPC
+        UTYPE 0 ra RISCV_AUIPC
+      ; ITYPE 88 ra ra RISCV_ADDI
       ; CSR MPMPADDR0 ra zero CSRRW
       ; UTYPE femto_address_max ra RISCV_LUI
       ; CSR MPMPADDR1 ra zero CSRRW
@@ -1203,9 +1207,11 @@ Module BlockVerificationDerived2.
       ; CSR MPMP0CFG ra zero CSRRW
       ; UTYPE femto_pmpcfg_ent1_bits ra RISCV_LUI
       ; CSR MPMP1CFG ra zero CSRRW
-      ; UTYPE 44 ra RISCV_AUIPC
+      ; UTYPE 0 ra RISCV_AUIPC
+      ; ITYPE 52 ra ra RISCV_ADDI
       ; CSR MEpc ra zero CSRRW
-      ; UTYPE 20 ra RISCV_AUIPC
+      ; UTYPE 0 ra RISCV_AUIPC
+      ; ITYPE 24 ra ra RISCV_ADDI
       ; CSR MTvec ra zero CSRRW
       ; UTYPE femto_mstatus ra RISCV_LUI
       ; CSR MStatus ra zero CSRRW
@@ -1251,13 +1257,13 @@ Module BlockVerificationDerived2.
       (pmp1cfg ↦ term_val ty_pmpcfg_ent femtokernel_default_pmpcfg)  ∗
       (∃ "v", pmpaddr0 ↦ term_var "v") ∗
       (∃ "v", pmpaddr1 ↦ term_var "v") ∗
-      (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42)%exp.
+      (a + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42)%exp.
 
     Example femtokernel_init_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femtoinit :=
       fun _ _ a na =>
       (
         (∃ "v", mstatus ↦ term_var "v") ∗
-          (mtvec ↦ (a + term_val ty_xlenbits 60)) ∗
+          (mtvec ↦ (a + term_val ty_xlenbits 72)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
@@ -1270,10 +1276,10 @@ Module BlockVerificationDerived2.
           (∃ "v", x7 ↦ term_var "v") ∗
           (pmp0cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
           (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
-          (pmpaddr0 ↦ a + term_val ty_xlenbits 76) ∗
+          (pmpaddr0 ↦ a + term_val ty_xlenbits 88) ∗
           (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
-          (a + (term_val ty_xlenbits 72) ↦ₘ term_val ty_xlenbits 42) ∗
-          asn_formula (formula_eq na (a + term_val ty_xlenbits 76))
+          (a + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42) ∗
+          asn_formula (formula_eq na (a + term_val ty_xlenbits 88))
       )%exp.
 
     Time Example vc__femtoinit : 𝕊 Σ__femtoinit :=
@@ -1298,9 +1304,9 @@ Module BlockVerificationDerived2.
 
     Example femtokernel_handler_pre : □ (WTerm ty_xlenbits -> Assertion) W__femtohandler :=
       fun _ ω a =>
-        (asn_eq a (term_val ty_word 60)) ∗
+        (asn_eq a (term_val ty_word 72)) ∗
       (mstatus ↦ term_record rmstatus [ persist__term (term_var "mpp") ω ]) ∗
-      (mtvec ↦ term_val ty_word 60) ∗
+      (mtvec ↦ term_val ty_word 72) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       (mepc ↦ persist__term (term_var "epc") ω) ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
@@ -1321,7 +1327,7 @@ Module BlockVerificationDerived2.
       fun _ ω a na =>
       (
           (mstatus ↦ term_val (ty_record rmstatus) {| MPP := User |}) ∗
-          (mtvec ↦ term_val ty_word 60) ∗
+          (mtvec ↦ term_val ty_word 72) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (mepc ↦ persist__term (term_var "epc") ω) ∗
           cur_privilege ↦ persist__term (term_var "mpp") ω ∗
