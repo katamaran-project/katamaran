@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Coq Require Import
+     Program.Tactics
      Lists.List.
 From RiscvPmp Require Import
      Machine
@@ -40,6 +41,8 @@ From Katamaran Require Import
      Sep.Logic
      Semantics
      Iris.Model.
+From Equations Require Import
+     Equations.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.
@@ -95,17 +98,21 @@ Module RiscvPmpModel.
       Definition memGS : gFunctors -> Set := mcMemGS.
       Definition memΣ : gFunctors := gh.gen_heapΣ Addr MemVal.
 
+      Definition liveAddrs := seqZ minAddr (maxAddr - minAddr + 1).
+      Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
+
       Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
         fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal).
 
       Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-        fun {Σ} mG μ => (True)%I.
+        fun {Σ} hG μ =>
+          (∃ memmap, gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) memmap ∗
+                                     ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
+          )%I.
 
       Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-        fun {Σ} mG μ => (True)%I.
-
-      Definition liveAddrs := seqZ minAddr (maxAddr - minAddr + 1).
-      Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
+        fun {Σ} hG μ =>
+          ([∗ map] l↦v ∈ initMemMap μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v) %I.
 
       Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
       Proof.
@@ -125,13 +132,20 @@ Module RiscvPmpModel.
         ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
       Proof.
         iIntros (Σ μ gHP).
-        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal)) as (gH) "[inv _]".
-        Unshelve.
+
+        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
+        pose (memmap := initMemMap μ).
+        iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
         iModIntro.
+
+        rewrite (right_id empty union memmap).
+
         iExists (McMemGS gH (nroot .@ "addr_inv")).
-        unfold mem_inv, mem_res.
-        done.
-        apply initMemMap; auto.
+        iFrame.
+        iExists memmap.
+        iFrame.
+        iPureIntro.
+        apply initMemMap_works.
       Qed.
 
       Import Contracts.
@@ -200,12 +214,153 @@ Module RiscvPmpModel.
   End RiscvPmpIrisHeapKit.
 
   Module Import RiscvPmpIrisInstance := IrisInstance RiscvPmpIrisHeapKit.
+  Import PROG.
+
+  Lemma read_ram_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
+    forall paddr w t entries p,
+  evals es δ = env.snoc env.nil ("paddr"∷ty_exc_code) paddr
+  → ⊢ semTriple δ
+        ((⌜Sub_perm Read t⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
+         RiscvPmpIrisHeapKit.interp_pmp_entries entries ∗
+         (⌜Pmp_access paddr entries p t⌝ ∧ emp) ∗ RiscvPmpIrisHeapKit.interp_ptsto paddr w)
+        (stm_foreign read_ram es)
+        (λ (v : Z) (δ' : CStore Γ),
+           ((⌜v = w⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
+            RiscvPmpIrisHeapKit.interp_ptsto paddr w ∗
+            RiscvPmpIrisHeapKit.interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (paddr w t entries p Heq) "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
+    rewrite wp_unfold.
+    cbn.
+    iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first auto.
+    iIntros.
+    iModIntro.
+    iModIntro.
+    iModIntro.
+    dependent elimination H0.
+    dependent elimination s.
+    rewrite Heq in f1.
+    cbn in f1.
+    dependent elimination f1.
+    cbn.
+    iMod "Hclose" as "_".
+    iModIntro.
+    cbn.
+    iAssert (⌜ memmap !! paddr = Some w ⌝)%I with "[H Hmem]" as "%".
+    { iApply (gen_heap.gen_heap_valid with "Hmem H"). }
+    iSplitL "Hregs Hmem".
+    iSplitL "Hregs"; first iFrame.
+    iExists memmap; iFrame.
+    iPureIntro; assumption.
+    iSplitL; [|auto].
+    iApply wp_value; cbn.
+    iSplitL; [|auto].
+    iSplitR.
+    apply map_Forall_lookup_1 with (i := paddr) (x := w) in Hmap; auto.
+    iFrame.
+  Qed.
+
+
+  Lemma write_ram_sound `{sg : sailGS Σ} `{HGS: invGS} {Γ es δ} :
+    forall paddr data t entries p,
+      evals es δ =
+        env.snoc (env.snoc env.nil ("paddr"∷ty_exc_code) paddr) ("data"∷ty_exc_code) data
+      → ⊢ semTriple δ
+          ((⌜Sub_perm Write t⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
+                                      RiscvPmpIrisHeapKit.interp_pmp_entries entries ∗
+                                      (⌜Pmp_access paddr entries p t⌝ ∧ emp) ∗
+                                      (∃ v : Z, RiscvPmpIrisHeapKit.interp_ptsto paddr v)) (stm_foreign write_ram es)
+          (λ (_ : Z) (δ' : CStore Γ),
+            (reg_pointsTo cur_privilege p ∗ RiscvPmpIrisHeapKit.interp_ptsto paddr data ∗
+                          RiscvPmpIrisHeapKit.interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (paddr data t entries p Heq) "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
+    rewrite wp_unfold.
+    cbn.
+    iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first auto.
+    iIntros.
+    iModIntro.
+    iModIntro.
+    iModIntro.
+    dependent elimination H.
+    dependent elimination s.
+    rewrite Heq in f1.
+    cbn in f1.
+    dependent elimination f1.
+    cbn.
+    iDestruct "H" as "(%w & H)".
+    iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem H") as "[Hmem H]".
+    iMod "Hclose" as "_".
+    iModIntro.
+    cbn.
+    iSplitL "Hregs Hmem".
+    - iSplitL "Hregs"; first iFrame.
+      iExists (<[paddr:=data]> memmap); iFrame.
+      unfold fun_write_ram; iPureIntro.
+      apply map_Forall_lookup.
+      intros i x H.
+      destruct (Z.eqb paddr i) eqn:Heqb.
+      + rewrite -> Z.eqb_eq in Heqb.
+        subst.
+        apply (lookup_insert_rev memmap i); assumption.
+      + rewrite -> map_Forall_lookup in Hmap.
+        rewrite -> Z.eqb_neq in Heqb.
+        rewrite -> (lookup_insert_ne _ _ _ _ Heqb) in H.
+        apply Hmap; assumption.
+    - iSplitL; trivial; iApply wp_value; cbn.
+      iSplitL; now iFrame.
+  Qed.
+
+  Lemma decode_sound `{sg : sailGS Σ} `{HGS: invGS} {Γ es δ} :
+    forall bv,
+      evals es δ = env.snoc env.nil ("bv"∷ty_exc_code) bv
+      → ⊢ semTriple δ (⌜true = true⌝ ∧ emp) (stm_foreign decode es)
+          (λ (_ : AST) (δ' : CStore Γ), (⌜true = true⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (bv Heq) "%_".
+    iApply wp_unfold.
+    cbn.
+    iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first auto.
+    iIntros.
+    iModIntro.
+    iModIntro.
+    iModIntro.
+    dependent elimination H.
+    dependent elimination s.
+    rewrite Heq in f1.
+    cbn in f1.
+    dependent elimination f1.
+    cbn.
+    iMod "Hclose" as "_".
+    iModIntro.
+    cbn.
+    iSplitL "Hregs Hmem".
+    iSplitL "Hregs"; first iFrame.
+    iExists memmap; iFrame.
+    iPureIntro; assumption.
+    iSplitL; trivial.
+    destruct (pure_decode bv) eqn:Ed.
+    iApply wp_compat_fail.
+    iApply wp_value.
+    iSplitL; first iPureIntro; auto.
+  Qed.
 
   Lemma foreignSem `{sg : sailGS Σ} : ForeignSem (Σ := Σ).
   Proof.
     intros Γ τ Δ f es δ.
-    destruct f; cbn.
-  Admitted.
+    destruct f; cbn;
+      intros ι; destruct_syminstance ι; cbn in *;
+      eauto using read_ram_sound, write_ram_sound, decode_sound.
+  Qed.
 
   Section Lemmas.
     Context `{sg : sailGS Σ}.
@@ -341,13 +496,4 @@ Module RiscvPmpModel.
       eauto using open_gprs_sound, close_gprs_sound, open_pmp_entries_sound,
       close_pmp_entries_sound, update_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound.
   Qed.
-
-  (* Print fun_step. *)
-  (* semTriple: expressions are a *conf*, i.e., an expression paired with a local variable store δ *)
-  (* Check semTriple _ True (FunDef loop) (fun v δ' => True)%I.
-  Check wp.
-  Print wp.
-  Locate wp.
-  Print option.wp. *)
-
 End RiscvPmpModel.
