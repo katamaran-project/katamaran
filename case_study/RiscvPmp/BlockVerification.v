@@ -1618,6 +1618,7 @@ Module BlockVerificationDerived2Sem.
   Import ctx.notations.
   Import env.notations.
   Import RiscvPmpIrisInstance.
+  Import RiscvPmpIrisHeapKit.
 
   Definition semTripleOneInstrStep `{sailGS Σ} (PRE : Z -> iProp Σ) (instr : AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
     ∀ a an,
@@ -1629,6 +1630,44 @@ Module BlockVerificationDerived2Sem.
     SymProp.safe (exec_instruction (w := wnil) instr (fun _ _ res _ h => SymProp.block) env.nil []%list) env.nil ->
     ⊢ semTripleOneInstrStep (fun _ => emp)%I instr (fun _ _ => emp)%I.
   Proof.
+  Admitted.
+
+  Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 70).
+  Local Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 70).
+
+  Fixpoint ptsto_instrs `{memGS Σ, sailGS Σ} (a : Z) (instrs : list AST) : iProp Σ :=
+    match instrs with
+    | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (a + 4) insts)%I
+    | nil => True%I
+    end.
+
+
+  (* This lemma transforms the postcondition of femtokernel_init into the precondition of the universal contract, so that we can use the UC to verify the invocation of untrusted code.
+   *)
+  Lemma femtokernel_manualStep1 `{na_invΣ Σ, sailGS Σ} :
+    ((∃ v, mstatus ↦ v) ∗
+         (mtvec ↦ 72) ∗
+          (∃ v, mcause ↦ v) ∗
+          (∃ v, mepc ↦ v) ∗
+          cur_privilege ↦ User ∗
+          (∃ v, x1 ↦ v) ∗
+          (∃ v, x2 ↦ v) ∗
+          (∃ v, x3 ↦ v) ∗
+          (∃ v, x4 ↦ v) ∗
+          (∃ v, x5 ↦ v) ∗
+          (∃ v, x6 ↦ v) ∗
+          (∃ v, x7 ↦ v) ∗
+          (pmp0cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent0) ∗
+          (pmp1cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent1) ∗
+          (pmpaddr0 ↦ 88) ∗
+          (pmpaddr1 ↦ BlockVerificationDerived2.femto_address_max) ∗
+          (84 ↦ₘ 42) ∗
+          (pc ↦ 88) ∗
+          (∃ v, nextpc ↦ v) ∗
+          (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
+          ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler
+        ⊢ True (* TODO :) *)
+    )%I.
   Admitted.
 
 
