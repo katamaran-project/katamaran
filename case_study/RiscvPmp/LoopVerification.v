@@ -82,7 +82,7 @@ Section Loop.
 
      (* Executing normally *)
      (* TODO: this should be the same as Start of iteration (P), drop one of them *)
-     Definition Execution (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
+     Definition Execution (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
        (            interp_pmp_addr_access liveAddrs entries m ∗
                     interp_gprs ∗
                     interp_pmp_entries es ∗
@@ -95,7 +95,7 @@ Section Loop.
                     mepc          ↦ mepc_v)%I.
 
      (* Modified CSRs, requires Machine mode *)
-     Definition CSRMod (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
+     Definition CSRMod (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
        (                               interp_pmp_addr_access liveAddrs entries m ∗
                                        interp_gprs ∗
         (∃ es : list (Pmpcfg_ent * Z), interp_pmp_entries es) ∗
@@ -109,7 +109,7 @@ Section Loop.
         (∃ epc : Z,                    mepc          ↦ epc))%I.
 
      (* Trap occured -> Go into M-mode *)
-     Definition Trap (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
+     Definition Trap (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
                   (interp_pmp_addr_access liveAddrs entries m ∗
                    interp_gprs ∗
                    interp_pmp_entries es ∗
@@ -122,7 +122,7 @@ Section Loop.
                    mepc          ↦ i)%I.
 
      (* MRET = Recover *)
-     Definition Recover (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) :=
+     Definition Recover (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
                   (interp_pmp_addr_access liveAddrs entries m ∗
                    interp_gprs ∗ 
                    interp_pmp_entries es ∗
@@ -135,15 +135,15 @@ Section Loop.
                    mstatus       ↦ {| MPP := User |} ∗
                    mepc          ↦ mepc_v)%I.
 
-     Definition step_post (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
-        (Execution m cp h i entries es mpp mepc_v npc ∨
-         CSRMod    m cp h i entries es mpp mepc_v npc ∨
-         Trap      m cp h i entries es mpp mepc_v npc ∨
-         Recover   m cp h i entries es mpp mepc_v npc)%I.
+     Definition step_post (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) : iProp Σ :=
+        (Execution m cp h i entries es mpp mepc_v ∨
+         CSRMod    m cp h i entries es mpp mepc_v ∨
+         Trap      m cp h i entries es mpp mepc_v ∨
+         Recover   m cp h i entries es mpp mepc_v)%I.
 
      Definition semTriple_step : iProp Σ :=
-       (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z),
-           semTriple env.nil (Execution m cp h i entries es mpp mepc_v npc) (FunDef step) (fun _ _ => step_post m cp h i entries es mpp mepc_v npc))%I.
+       (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z),
+           semTriple env.nil (Execution m cp h i entries es mpp mepc_v) (FunDef step) (fun _ _ => step_post m cp h i entries es mpp mepc_v))%I.
 
      Definition semTriple_init_model : iProp Σ :=
        semTriple env.nil
@@ -157,31 +157,31 @@ Section Loop.
      Definition WP_loop : iProp Σ :=
        (WP (MkConf (FunDef loop) env.nil) ?{{_, True}})%I.
 
-     Definition loop_pre (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z) : iProp Σ :=
+     Definition loop_pre (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) : iProp Σ :=
          (
-          Execution m cp h i entries es mpp mepc_v npc ∗
-          ▷ (CSRMod    m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
-          ▷ (Trap      m cp h i entries es mpp mepc_v npc -∗ WP_loop) ∗
-          ▷ (Recover   m cp h i entries es mpp mepc_v npc -∗ WP_loop))%I.
+          Execution m cp h i entries es mpp mepc_v ∗
+          ▷ (CSRMod    m cp h i entries es mpp mepc_v -∗ WP_loop) ∗
+          ▷ (Trap      m cp h i entries es mpp mepc_v -∗ WP_loop) ∗
+          ▷ (Recover   m cp h i entries es mpp mepc_v -∗ WP_loop))%I.
 
      Definition semTriple_loop : iProp Σ :=
-      (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z),
-          semTriple env.nil (loop_pre m cp h i entries es mpp mepc_v npc) (FunDef loop) (fun _ _ => True))%I.
+      (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z),
+          semTriple env.nil (loop_pre m cp h i entries es mpp mepc_v) (FunDef loop) (fun _ _ => True))%I.
 
      Definition semTriple_main : iProp Σ :=
-      (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v npc : Z),
-          semTriple env.nil (loop_pre m cp h i entries es mpp mepc_v npc) (FunDef main) (fun _ _ => True))%I.
+      (∀ (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z),
+          semTriple env.nil (loop_pre m cp h i entries es mpp mepc_v) (FunDef main) (fun _ _ => True))%I.
 
      Lemma valid_semTriple_loop :
        ⊢ semTriple_loop.
      Proof.
        iIntros.
        iLöb as "H".
-       iIntros (m cp h i entries es mpp mepc_v npc) "[HP HPwp]".
+       iIntros (m cp h i entries es mpp mepc_v) "[HP HPwp]".
        cbn.
        unfold fun_loop.
-       iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) _ (fun δ => step_post m cp h i entries es mpp mepc_v npc ∧ ⌜env.nil = δ⌝)%I (fun _ _ => True%I)) with "[] [HPwp] HP").
-       iApply (iris_rule_stm_call_inline env.nil step env.nil (Execution m cp h i entries es mpp mepc_v npc) (fun _ => step_post m cp h i entries es mpp mepc_v npc)).
+       iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) _ (fun δ => step_post m cp h i entries es mpp mepc_v ∧ ⌜env.nil = δ⌝)%I (fun _ _ => True%I)) with "[] [HPwp] HP").
+       iApply (iris_rule_stm_call_inline env.nil step env.nil (Execution m cp h i entries es mpp mepc_v) (fun _ => step_post m cp h i entries es mpp mepc_v)).
        iApply step_iprop. 
        iIntros.
        iApply iris_rule_consequence.
@@ -226,10 +226,10 @@ Section Loop.
      Lemma valid_semTriple_main :
        ⊢ semTriple_main. (* main := init_model() ;; loop() *)
      Proof.
-       iIntros (m cp h i entries es mpp mepc_v npc) "Hloop_pre".
+       iIntros (m cp h i entries es mpp mepc_v) "Hloop_pre".
        cbn.
        unfold fun_main.
-       iApply ((iris_rule_stm_seq env.nil (stm_call init_model _) (stm_call loop _) (loop_pre m cp h i entries es mpp mepc_v npc) (fun _ => ∃ es, loop_pre m Machine h i entries es mpp mepc_v npc)%I (fun _ _ => True%I)) with "[] [] Hloop_pre").
+       iApply ((iris_rule_stm_seq env.nil (stm_call init_model _) (stm_call loop _) (loop_pre m cp h i entries es mpp mepc_v) (fun _ => ∃ es, loop_pre m Machine h i entries es mpp mepc_v)%I (fun _ _ => True%I)) with "[] [] Hloop_pre").
 
 
        2: {
@@ -238,8 +238,8 @@ Section Loop.
          unfold semTriple.
          iIntros "[%es' H]".
          iRevert "H".
-         fold (semTriple env.nil (loop_pre m Machine h i entries es' mpp mepc_v npc) (call loop) (fun _ _ => True)%I).
-         iApply (@iris_rule_consequence _ _ _ _ _ _ (loop_pre m Machine h i entries es' mpp mepc_v npc) _ _ _).
+         fold (semTriple env.nil (loop_pre m Machine h i entries es' mpp mepc_v) (call loop) (fun _ _ => True)%I).
+         iApply (@iris_rule_consequence _ _ _ _ _ _ (loop_pre m Machine h i entries es' mpp mepc_v) _ _ _).
          3: {
            iApply (iris_rule_stm_call_inline env.nil loop env.nil _ (fun _ => True%I)).
            iApply valid_semTriple_loop.
@@ -253,16 +253,16 @@ Section Loop.
        About iris_rule_consequence.
        iApply (@iris_rule_consequence _ _ _ _ _ _
                                       (
-       ∃ es0 : list (Pmpcfg_ent * Z), Execution m cp h i entries es0 mpp mepc_v npc ∗
-         ▷ (CSRMod m cp h i entries es0 mpp mepc_v npc -∗ WP_loop) ∗
-         ▷ (Trap m cp h i entries es0 mpp mepc_v npc -∗ WP_loop) ∗
-         ▷ (Recover m cp h i entries es0 mpp mepc_v npc -∗ WP_loop))%I
+       ∃ es0 : list (Pmpcfg_ent * Z), Execution m cp h i entries es0 mpp mepc_v ∗
+         ▷ (CSRMod m cp h i entries es0 mpp mepc_v -∗ WP_loop) ∗
+         ▷ (Trap m cp h i entries es0 mpp mepc_v -∗ WP_loop) ∗
+         ▷ (Recover m cp h i entries es0 mpp mepc_v -∗ WP_loop))%I
                                       _
                                       (fun _ _ =>
-       ∃ es0 : list (Pmpcfg_ent * Z), Execution m Machine h i entries es0 mpp mepc_v npc ∗
-         ▷ (CSRMod m Machine h i entries es0 mpp mepc_v npc -∗ WP_loop) ∗
-         ▷ (Trap m Machine h i entries es0 mpp mepc_v npc -∗ WP_loop) ∗
-         ▷ (Recover m Machine h i entries es0 mpp mepc_v npc -∗ WP_loop))%I _).
+       ∃ es0 : list (Pmpcfg_ent * Z), Execution m Machine h i entries es0 mpp mepc_v ∗
+         ▷ (CSRMod m Machine h i entries es0 mpp mepc_v -∗ WP_loop) ∗
+         ▷ (Trap m Machine h i entries es0 mpp mepc_v -∗ WP_loop) ∗
+         ▷ (Recover m Machine h i entries es0 mpp mepc_v -∗ WP_loop))%I _).
        iIntros "H".
        iExists es; iFrame.
        now iIntros.
@@ -270,19 +270,19 @@ Section Loop.
        iIntros "[%es' H]".
        iRevert "H".
        fold (semTriple env.nil
-        (Execution m cp h i entries es' mpp mepc_v npc ∗
-         ▷ (CSRMod m cp h i entries es' mpp mepc_v npc -∗ WP_loop) ∗
-         ▷ (Trap m cp h i entries es' mpp mepc_v npc -∗ WP_loop) ∗
-         ▷ (Recover m cp h i entries es' mpp mepc_v npc -∗ WP_loop))%I (call init_model)
-        (fun _ _ => ∃ es0 : list (Pmpcfg_ent * Z), Execution m Machine h i entries es0 mpp mepc_v npc ∗
-         ▷ (CSRMod m Machine h i entries es0 mpp mepc_v npc -∗ WP_loop) ∗
-         ▷ (Trap m Machine h i entries es0 mpp mepc_v npc -∗ WP_loop) ∗
-         ▷ (Recover m Machine h i entries es0 mpp mepc_v npc -∗ WP_loop))%I).
+        (Execution m cp h i entries es' mpp mepc_v ∗
+         ▷ (CSRMod m cp h i entries es' mpp mepc_v -∗ WP_loop) ∗
+         ▷ (Trap m cp h i entries es' mpp mepc_v -∗ WP_loop) ∗
+         ▷ (Recover m cp h i entries es' mpp mepc_v -∗ WP_loop))%I (call init_model)
+        (fun _ _ => ∃ es0 : list (Pmpcfg_ent * Z), Execution m Machine h i entries es0 mpp mepc_v ∗
+         ▷ (CSRMod m Machine h i entries es0 mpp mepc_v -∗ WP_loop) ∗
+         ▷ (Trap m Machine h i entries es0 mpp mepc_v -∗ WP_loop) ∗
+         ▷ (Recover m Machine h i entries es0 mpp mepc_v -∗ WP_loop))%I).
        iApply (@iris_rule_consequence _ _ _ _ _ _ _ _ (fun _ _ =>
-         Execution m Machine h i entries es' mpp mepc_v npc ∗
-         ▷ (CSRMod m Machine h i entries es' mpp mepc_v npc -∗ WP_loop) ∗
-         ▷ (Trap m Machine h i entries es' mpp mepc_v npc -∗ WP_loop) ∗
-         ▷ (Recover m Machine h i entries es' mpp mepc_v npc -∗ WP_loop))%I _).
+         Execution m Machine h i entries es' mpp mepc_v ∗
+         ▷ (CSRMod m Machine h i entries es' mpp mepc_v -∗ WP_loop) ∗
+         ▷ (Trap m Machine h i entries es' mpp mepc_v -∗ WP_loop) ∗
+         ▷ (Recover m Machine h i entries es' mpp mepc_v -∗ WP_loop))%I _).
        iIntros "H"; iExact "H".
        iIntros (_ _) "H".
        iExists es'; iFrame.
@@ -291,13 +291,13 @@ Section Loop.
        iIntros "H".
        iApply (bi.sep_comm with "H").
        2: {
-         iApply (iris_rule_frame _ _ (fun _ _ => Execution m Machine h i entries es' mpp mepc_v npc)%I _).
-         iApply (@iris_rule_consequence _ _ _ _ _ _ _ _ (fun _ _ => ∃ es, Execution m Machine h i entries es mpp mepc_v npc)%I _).
+         iApply (iris_rule_frame _ _ (fun _ _ => Execution m Machine h i entries es' mpp mepc_v)%I _).
+         iApply (@iris_rule_consequence _ _ _ _ _ _ _ _ (fun _ _ => ∃ es, Execution m Machine h i entries es mpp mepc_v)%I _).
          iIntros "H"; iExact "H".
          (* STUCK *)
          (* unfold Execution. *)
-         (* iApply (@iris_rule_consequence _ _ _ _ _ _ ((reg_pointsTo mtvec h ∗ (∃ npc, reg_pointsTo pc npc ∗ *)
-         (*                                                           reg_pointsTo nextpc npc) ∗ *)
+         (* iApply (@iris_rule_consequence _ _ _ _ _ _ ((reg_pointsTo mtvec h ∗ (∃, reg_pointsTo pc ∗ *)
+         (*                                                           reg_pointsTo nextpc) ∗ *)
          (*                                                           (∃ mc : Val ty_exc_code, reg_pointsTo mcause mc ∗ reg_pointsTo mepc mepc_v ∗ *)
          (*                                                                                                 reg_pointsTo mstatus {| MPP := mpp |} ∗  *)
          (*                                                                                                 interp_pmp_addr_access liveAddrs entries m ∗ interp_gprs)) ∗  *)
@@ -306,7 +306,7 @@ Section Loop.
          (* iFrame. *)
          (* iSplitR "Hes". *)
          (* iSplitL "Hnpc Hpc". *)
-         (* iExists npc0; iFrame. *)
+         (* iExists0; iFrame. *)
          (* now iExists mc. *)
          (* now iExists es'. *)
          (* 2: { *)
@@ -328,7 +328,7 @@ Section Loop.
          (* iExists es0; iFrame. *)
          (* iSplitL "Hmc". *)
          (* iExists mc; iFrame. *)
-         (* iExists npc0; iFrame. *)
+         (* iExists0; iFrame. *)
          admit.
          admit.
        }
@@ -345,8 +345,8 @@ Section Loop.
 
      (*     iIntros "[%es' H]". *)
      (*     iRevert "H". *)
-     (*     fold (semTriple env.nil (loop_pre m Machine h i entries es' mpp mepc_v npc) (call loop) (fun _ _ => True)%I). *)
-     (*     iApply (@iris_rule_consequence _ _ _ _ _ _ (loop_pre m Machine h i entries es' mpp mepc_v npc) _ _ _). *)
+     (*     fold (semTriple env.nil (loop_pre m Machine h i entries es' mpp mepc_v) (call loop) (fun _ _ => True)%I). *)
+     (*     iApply (@iris_rule_consequence _ _ _ _ _ _ (loop_pre m Machine h i entries es' mpp mepc_v) _ _ _). *)
      (*     3: { *)
      (*       iApply (iris_rule_stm_call_inline env.nil loop env.nil _ (fun _ => True%I)). *)
      (*       iApply valid_semTriple_loop. *)
