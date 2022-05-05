@@ -295,61 +295,64 @@ Section Loop.
          iApply (@iris_rule_consequence _ _ _ _ _ _ _ _ (fun _ _ => ∃ es, Execution m Machine h i entries es mpp mepc_v npc)%I _).
          iIntros "H"; iExact "H".
          (* STUCK *)
-         unfold Execution.
-         iApply (@iris_rule_consequence _ _ _ _ _ _ ((reg_pointsTo mtvec h ∗ (∃ npc, reg_pointsTo pc npc ∗
-                                                                   reg_pointsTo nextpc npc) ∗
-                                                                   (∃ mc : Val ty_exc_code, reg_pointsTo mcause mc ∗ reg_pointsTo mepc mepc_v ∗
-                                                                                                         reg_pointsTo mstatus {| MPP := mpp |} ∗ 
-                                                                                                         interp_pmp_addr_access liveAddrs entries m ∗ interp_gprs)) ∗ 
-                                                                                                                                                                    (reg_pointsTo cur_privilege cp ∗ ∃ es, interp_pmp_entries es)) _ _ _).
-         iIntros "(Hacc & Hgprs & Hes & (% & Hmc) & Hmepc & (% & Hnpc & Hpc) & Hmt & Hms & Hme)".
-         iFrame.
-         iSplitR "Hes".
-         iSplitL "Hnpc Hpc".
-         iExists npc0; iFrame.
-         now iExists mc.
-         now iExists es'.
-         2: {
-           iApply (iris_rule_frame _ _ (fun _ _ => reg_pointsTo cur_privilege Machine ∗ ∃ es, interp_pmp_entries es)%I _).
-           iApply iris_rule_consequence.
-           3: {
-             iApply (iris_rule_stm_call_inline env.nil init_model env.nil _ (fun _ => _)).
-             iApply init_model_iprop.
-           }
-           iIntros "(HP & Hes)".
-           iSplitL "HP".
-           iExists cp; iFrame.
-           iExact "Hes".
-           iIntros (_ δ) "((Hcp & Hes) & %)".
-           iFrame.
-         }
-         iIntros (v δ) "((Hmt & (% & Hpc & Hnpc) & % & Hmc & Hmepc & Hms &Hacc & Hgprs) & (Hcp & [% Hes]))".
-         iFrame.
-         iExists es0; iFrame.
-         iSplitL "Hmc".
-         iExists mc; iFrame.
-         iExists npc0; iFrame.
-       } *)
-       iIntros (v δ) "[Hloop [% HP]]".
-       iExists es; iFrame.
-       - iIntros.
-         destruct (env.nilView δ).
-         unfold semTriple.
-         iDestruct "Hloop" as "(HCSRMod & HTrap & HRecover)".
-         iSplitL "HCSRMod".
-         unfold CSRMod.
-         iFrame.
-         (* pmp_entries es ≠ pmp_entries es0 *)
+         (* unfold Execution. *)
+         (* iApply (@iris_rule_consequence _ _ _ _ _ _ ((reg_pointsTo mtvec h ∗ (∃ npc, reg_pointsTo pc npc ∗ *)
+         (*                                                           reg_pointsTo nextpc npc) ∗ *)
+         (*                                                           (∃ mc : Val ty_exc_code, reg_pointsTo mcause mc ∗ reg_pointsTo mepc mepc_v ∗ *)
+         (*                                                                                                 reg_pointsTo mstatus {| MPP := mpp |} ∗  *)
+         (*                                                                                                 interp_pmp_addr_access liveAddrs entries m ∗ interp_gprs)) ∗  *)
+         (*                                                                                                                                                            (reg_pointsTo cur_privilege cp ∗ ∃ es, interp_pmp_entries es)) _ _ _). *)
+         (* iIntros "(Hacc & Hgprs & Hes & (% & Hmc) & Hmepc & (% & Hnpc & Hpc) & Hmt & Hms & Hme)". *)
+         (* iFrame. *)
+         (* iSplitR "Hes". *)
+         (* iSplitL "Hnpc Hpc". *)
+         (* iExists npc0; iFrame. *)
+         (* now iExists mc. *)
+         (* now iExists es'. *)
+         (* 2: { *)
+         (*   iApply (iris_rule_frame _ _ (fun _ _ => reg_pointsTo cur_privilege Machine ∗ ∃ es, interp_pmp_entries es)%I _). *)
+         (*   iApply iris_rule_consequence. *)
+         (*   3: { *)
+         (*     iApply (iris_rule_stm_call_inline env.nil init_model env.nil _ (fun _ => _)). *)
+         (*     iApply init_model_iprop. *)
+         (*   } *)
+         (*   iIntros "(HP & Hes)". *)
+         (*   iSplitL "HP". *)
+         (*   iExists cp; iFrame. *)
+         (*   iExact "Hes". *)
+         (*   iIntros (_ δ) "((Hcp & Hes) & %)". *)
+         (*   iFrame. *)
+         (* } *)
+         (* iIntros (v δ) "((Hmt & (% & Hpc & Hnpc) & % & Hmc & Hmepc & Hms &Hacc & Hgprs) & (Hcp & [% Hes]))". *)
+         (* iFrame. *)
+         (* iExists es0; iFrame. *)
+         (* iSplitL "Hmc". *)
+         (* iExists mc; iFrame. *)
+         (* iExists npc0; iFrame. *)
+         admit.
+         admit.
+       }
+     (*   iIntros (v δ) "[Hloop [% HP]]". *)
+     (*   iExists es; iFrame. *)
+     (*   - iIntros. *)
+     (*     destruct (env.nilView δ). *)
+     (*     unfold semTriple. *)
+     (*     iDestruct "Hloop" as "(HCSRMod & HTrap & HRecover)". *)
+     (*     iSplitL "HCSRMod". *)
+     (*     unfold CSRMod. *)
+     (*     iFrame. *)
+     (*     (* pmp_entries es ≠ pmp_entries es0 *) *)
 
-         iIntros "[%es' H]".
-         iRevert "H".
-         fold (semTriple env.nil (loop_pre m Machine h i entries es' mpp mepc_v npc) (call loop) (fun _ _ => True)%I).
-         iApply (@iris_rule_consequence _ _ _ _ _ _ (loop_pre m Machine h i entries es' mpp mepc_v npc) _ _ _).
-         3: {
-           iApply (iris_rule_stm_call_inline env.nil loop env.nil _ (fun _ => True%I)).
-           iApply valid_semTriple_loop.
-         }
-         now iIntros.
-         now iIntros.
-     Qed.
+     (*     iIntros "[%es' H]". *)
+     (*     iRevert "H". *)
+     (*     fold (semTriple env.nil (loop_pre m Machine h i entries es' mpp mepc_v npc) (call loop) (fun _ _ => True)%I). *)
+     (*     iApply (@iris_rule_consequence _ _ _ _ _ _ (loop_pre m Machine h i entries es' mpp mepc_v npc) _ _ _). *)
+     (*     3: { *)
+     (*       iApply (iris_rule_stm_call_inline env.nil loop env.nil _ (fun _ => True%I)). *)
+     (*       iApply valid_semTriple_loop. *)
+     (*     } *)
+     (*     now iIntros. *)
+     (*     now iIntros. *)
+     (* Qed. *)
+     Admitted.
 End Loop.
