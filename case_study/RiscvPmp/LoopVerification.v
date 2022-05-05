@@ -209,6 +209,16 @@ Section Loop.
        now iIntros (_ δ) "_".
      Qed.
 
+     (* DOMI: some comments:
+        - I think a universal contract for main doesn't make sense.
+          I don't see when this would ever be used.
+          I believe the only UC we need in practice is the one for loop.
+          I would propose dropping this?
+        - semTriple_main quantifies over two arbitrary pmp configs: one which is currently set in the pmp configuration registers and one for which authority is available.
+          However, main will start by setting a third one in the registers.
+          I think the contract needs to be adapted to take this into account, by updating at least the pmp configuration that will be set in the contracts for the continuations (i.e. CSRMod, Trap, Recover).
+          I suspect this is the problem you're hitting in the (STUCK) case.
+     *)
      (* NOTE/TODO: this is quite an ugly and overly explicit proof...
                    I had trouble rewriting sep logic rules (commutativity of ∗)
                    and just "abused" the consequence rules to apply it instead of rewriting *)
