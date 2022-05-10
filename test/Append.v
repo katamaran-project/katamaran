@@ -563,7 +563,6 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSpecification.
     - now rewrite rev_alt.
     - now rewrite rev_append_rev.
     - now rewrite rev_alt.
-    - now rewrite rev_alt.
   Qed.
   Goal True. idtac "Timing -- simplify_preverseappend_spec -- after". Abort.
 

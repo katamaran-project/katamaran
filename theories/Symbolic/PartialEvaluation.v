@@ -126,7 +126,6 @@ Module Type PartialEvaluationOn
     | term_inl t                 := peval_inl (peval t);
     | term_inr t                 := peval_inr (peval t);
     (* TODO: Finish the cases below. *)
-    | @term_projtup _ _ t n _ p  := @term_projtup _ _ (peval t) n _ p;
     | @term_union _ U K t        := @term_union _ U K (peval t);
     | @term_record _ R ts        := @term_record _ R ts.
 
@@ -164,7 +163,6 @@ Module Type PartialEvaluationOn
       - now rewrite peval_not_sound, IHt.
       - now rewrite peval_inl_sound, IHt.
       - now rewrite peval_inr_sound, IHt.
-      - now rewrite IHt.
       - now rewrite IHt.
       - reflexivity.
     Qed.

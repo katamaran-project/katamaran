@@ -63,22 +63,16 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
   | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty_sum σ1 σ2)
   | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2)
   (* Experimental features *)
-  | term_projtup {σs : Ctx Ty} (e : Term Σ (ty_tuple σs)) (n : nat) {σ : Ty}
-                 {p : ctx.nth_is σs n σ} : Term Σ σ
   | term_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)) : Term Σ (ty_union U)
   | term_record  (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R).
-  (* | term_projrec {R : 𝑹} (e : Term Σ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty} *)
-  (*                {rfInR : InCtx (rf ∶ σ) (𝑹𝑭_Ty R)} : Term Σ σ. *)
   Global Arguments term_var {_} _ {_ _}.
   Global Arguments term_val {_} _ _.
   Global Arguments term_neg {_} _.
   Global Arguments term_not {_} _.
   Global Arguments term_inl {_ _ _} _.
   Global Arguments term_inr {_ _ _} _.
-  Global Arguments term_projtup {_ _} _%exp _ {_ _}.
   Global Arguments term_union {_} _ _.
   Global Arguments term_record {_} _ _.
-  (* Global Arguments term_projrec {_ _} _ _ {_ _}. *)
   Bind Scope exp_scope with Term.
   Derive NoConfusion Signature for Term.
 
@@ -131,12 +125,9 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
     (* Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)). *)
     (* Hypothesis (P_bv         : forall (n : nat) (es : Vector.t (Term Σ ty_bit) n), PV es -> P (ty_bv n) (term_bv es)). *)
     (* Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)). *)
-    Hypothesis (P_projtup    : forall (σs : Ctx Ty) (e : Term Σ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx.nth_is σs n σ), P σ (@term_projtup _ _ e n _ p)).
     Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union U K e)).
     (* Hypothesis (P_tuple  : forall σs (IH : forall σ, ctx.In σ σs -> P σ), P (ty_tuple σs)). *)
-
     Hypothesis (P_record     : forall (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) (IH : PNE es), P (ty_record R) (term_record R es)).
-    (* Hypothesis (P_projrec    : forall (R : 𝑹) (e : Term Σ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (term_projrec e rf)). *)
 
     Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) {struct t} : P σ t :=
       match t with
@@ -147,10 +138,8 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
       | @term_not _ e                  => ltac:(eapply P_not; eauto)
       | @term_inl _ σ1 σ2 x            => ltac:(eapply P_inl; eauto)
       | @term_inr _ σ1 σ2 x            => ltac:(eapply P_inr; eauto)
-      | @term_projtup _ σs e n σ p     => ltac:(eapply P_projtup; eauto)
       | @term_union _ U K e            => ltac:(eapply P_union; eauto)
       | @term_record _ R es            => ltac:(eapply P_record, env.all_intro; eauto)
-      (* | @term_projrec _ R e rf σ rfInR => ltac:(eapply P_projrec; eauto) *)
       end.
 
   End Term_rect.
@@ -172,12 +161,6 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
     Term_eqb (term_not x) (term_not y) := Term_eqb x y;
     Term_eqb (term_inl x) (term_inl y) := Term_eqb x y;
     Term_eqb (term_inr x) (term_inr y) := Term_eqb x y;
-    Term_eqb (@term_projtup σs x n _ p) (@term_projtup τs y m _ q)
-      with eq_dec σs τs => {
-      Term_eqb (@term_projtup σs x n _ p) (@term_projtup ?(σs) y m _ q) (left eq_refl) :=
-        (Nat.eqb n m) && Term_eqb x y;
-      Term_eqb (@term_projtup _ x n _ p) (@term_projtup _ y m _ q) (right _) := false
-      };
     Term_eqb (@term_union ?(u) _ k1 e1) (@term_union u _ k2 e2)
       with eq_dec k1 k2 => {
       Term_eqb (term_union k1 e1) (term_union ?(k1) e2) (left eq_refl) :=
@@ -186,13 +169,6 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
     };
     Term_eqb (@term_record ?(r) xs) (@term_record r ys) :=
        @env.eqb_hom _ (fun b => Term Σ (type b)) (fun b => @Term_eqb _ (type b)) _ xs ys;
-    (* Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2) *)
-    (*          with (𝑹_eq_dec r1 r2) => { *)
-    (* Term_eqb (@term_projrec r e1 _ _ prf1) (@term_projrec ?(r) e2 _ _ prf2) *)
-    (*   (left eq_refl) := InCtx_eqb prf1 prf2 && Term_eqb e1 e2; *)
-    (* Term_eqb (@term_projrec r1 e1 _ _ prf1) (@term_projrec r2 e2 _ _ prf2) *)
-    (*   (right _) := false }; *)
-
     Term_eqb _ _ := false.
 
   Local Set Equations With UIP.
@@ -241,7 +217,6 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
       | term_not t0               => term_not (sub_term t0 ζ)
       | @term_inl _ σ1 σ2 t0      => term_inl (sub_term t0 ζ)
       | @term_inr _ σ1 σ2 t0      => term_inr (sub_term t0 ζ)
-      | @term_projtup _ _ t n σ p => term_projtup (sub_term t ζ) n (p := p)
       | term_union U K t          => term_union U K (sub_term t ζ)
       | term_record R ts          => term_record R (env.map (fun _ t => sub_term t ζ) ts)
       end.

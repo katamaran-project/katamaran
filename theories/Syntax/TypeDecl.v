@@ -273,22 +273,6 @@ Module Type TypeDenoteMixin (Import TK : TypeDeclKit) (Import TC : TypeCodeMixin
     - destruct (eq_dec x y)...
   Qed.
 
-  (* TODO: deprecate tuple projections *)
-  Fixpoint tuple_proj (σs : Ctx Ty) (n : nat) (σ : Ty) :
-    Val (ty_tuple σs) -> ctx.nth_is σs n σ -> Val σ :=
-    match σs with
-    | ctx.nil =>
-        fun l (p : ctx.nth_is ctx.nil _ _) =>
-          match p with end
-    | ctx.snoc τs τ =>
-        match n with
-        | 0   => fun (l : Val (ty_tuple (ctx.snoc _ _)))
-                     (p : ctx.nth_is _ 0 _) =>
-                   @eq_rect Ty τ Val (snd l) σ p
-        | S m => fun l p => tuple_proj τs m σ (fst l) p
-        end
-    end.
-
 End TypeDenoteMixin.
 
 Module Type TypeDeclMixin (TK : TypeDeclKit) :=

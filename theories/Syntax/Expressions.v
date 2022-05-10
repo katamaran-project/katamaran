@@ -76,18 +76,13 @@ Module Type ExpressionsOn (Import TY : Types) (Import BOP : BinOpsOn TY).
   (* Experimental features *)
   | exp_bvec    {n} (es : Vector.t (Exp Γ ty_bit) n) : Exp Γ (ty_bvec n)
   | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty_tuple σs)
-  | exp_projtup {σs : Ctx Ty} (e : Exp Γ (ty_tuple σs)) (n : nat) {σ : Ty}
-                {p : ctx.nth_is σs n σ} : Exp Γ σ
   | exp_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)) : Exp Γ (ty_union U)
   | exp_record  (R : 𝑹) (es : NamedEnv (Exp Γ) (𝑹𝑭_Ty R)) : Exp Γ (ty_record R).
-  (* | exp_projrec {R : 𝑹} (e : Exp Γ (ty_record R)) (rf : 𝑹𝑭) {σ : Ty} *)
-  (*               {rfInR : rf∶σ ∈ 𝑹𝑭_Ty R} : Exp Γ σ. *)
   Arguments exp_var {_} _ {_ _}.
   Arguments exp_val {_} _ _.
   Arguments exp_tuple {_ σs} & es.
   Arguments exp_union {_} U K & e.
   Arguments exp_record {_} R & es.
-  (* Arguments exp_projrec {_ _} _ _ {_ _}. *)
   Bind Scope exp_scope with Exp.
 
   Section ExpElimination.
@@ -115,10 +110,8 @@ Module Type ExpressionsOn (Import TY : Types) (Import BOP : BinOpsOn TY).
     Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty_list σ) (exp_list es)).
     Hypothesis (P_bvec    : forall (n : nat) (es : Vector.t (Exp Γ ty_bit) n), PV es -> P (ty_bvec n) (exp_bvec es)).
     Hypothesis (P_tuple   : forall (σs : Ctx Ty) (es : Env (Exp Γ) σs), PE es -> P (ty_tuple σs) (exp_tuple es)).
-    Hypothesis (P_projtup : forall (σs : Ctx Ty) (e : Exp Γ (ty_tuple σs)), P (ty_tuple σs) e -> forall (n : nat) (σ : Ty) (p : ctx.nth_is σs n σ), P σ (@exp_projtup _ _ e n _ p)).
     Hypothesis (P_union   : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Exp Γ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (exp_union U K e)).
     Hypothesis (P_record  : forall (R : 𝑹) (es : NamedEnv (Exp Γ) (𝑹𝑭_Ty R)), PNE es -> P (ty_record R) (exp_record R es)).
-    (* Hypothesis (P_projrec : forall (R : 𝑹) (e : Exp Γ (ty_record R)), P (ty_record R) e -> forall (rf : 𝑹𝑭) (σ : Ty) (rfInR : (rf ∶ σ)%ctx ∈ 𝑹𝑭_Ty R), P σ (exp_projrec e rf)). *)
 
     Fixpoint Exp_rect {τ : Ty} (e : Exp Γ τ) {struct e} : P τ e :=
       match e with
@@ -132,10 +125,8 @@ Module Type ExpressionsOn (Import TY : Types) (Import BOP : BinOpsOn TY).
       | exp_list es               => ltac:(apply P_list; induction es; cbn; auto using unit)
       | exp_bvec es               => ltac:(apply P_bvec; induction es; cbn; auto using unit)
       | exp_tuple es              => ltac:(apply P_tuple; induction es; cbn; auto using unit)
-      | @exp_projtup _ σs e n σ p => ltac:(apply P_projtup; auto)
       | exp_union U K e           => ltac:(apply P_union; auto)
       | exp_record R es           => ltac:(apply P_record; induction es; cbn; auto using unit)
-      (* | exp_projrec e rf          => ltac:(apply P_projrec; auto) *)
       end.
 
   End ExpElimination.
@@ -166,10 +157,8 @@ Module Type ExpressionsOn (Import TY : Types) (Import BOP : BinOpsOn TY).
                                tt
                                (fun σs _ (vs : Val (ty_tuple σs)) σ e => (vs, eval e δ))
                                es
-    | @exp_projtup _ σs e n σ p => tuple_proj σs n σ (eval e δ) p
     | exp_union U K e     => 𝑼_fold (existT K (eval e δ))
     | exp_record R es     => 𝑹_fold (env.map (fun xτ e => eval e δ) es)
-    (* | exp_projrec e rf    => 𝑹_unfold (eval e δ) ‼ rf *)
     end.
 
   Definition evals {Γ Δ} (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ) : CStore Δ :=
@@ -190,9 +179,5 @@ Module Type ExpressionsOn (Import TY : Types) (Import BOP : BinOpsOn TY).
   Notation "e1 <= e2" := (exp_binop binop_le e1 e2) : exp_scope.
   Notation "e1 = e2" := (exp_binop binop_eq e1 e2) : exp_scope.
   Notation "- e" := (exp_neg e) : exp_scope.
-  (* Notation "e ․ f" := (* Using Unicode Character “․” (U+2024) *) *)
-  (*     (@exp_projrec _ _ e f%string _ _) *)
-  (*       (at level 9, no associativity, format *)
-  (*        "e ․ f") : exp_scope. *)
 
 End ExpressionsOn.

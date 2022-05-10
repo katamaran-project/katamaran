@@ -104,13 +104,11 @@ Module Type SolverOn
     | term_val _ b               | k := if b then Some k else None;
     | term_binop op t1 t2        | k := Some (simplify_formula_bool_binop op t1 t2 k);
     | term_not t                 | k := simplify_formula_bool_neg t k;
-    | @term_projtup _ _ t n _ p  | k := Some (cons (formula_bool (@term_projtup _ _ t n _ p)) k)
     with simplify_formula_bool_neg {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_var ς                | k := Some (cons (formula_bool (term_not (term_var ς))) k);
     | term_val _ b              | k := if b then None else Some k;
     | term_binop op t1 t2        | k := Some (simplify_formula_bool_binop_neg op t1 t2 k);
-    | term_not t                | k := simplify_formula_bool t k;
-    | @term_projtup _ _ t n _ p | k := Some (cons (formula_bool (term_not (@term_projtup _ _ t n _ p))) k).
+    | term_not t                | k := simplify_formula_bool t k.
 
     Definition simplify_formula_eqb {Σ σ} (t1 t2 : Term Σ σ) (k : List Formula Σ) : option (List Formula Σ) :=
       if Term_eqb t1 t2
@@ -342,7 +340,6 @@ Module Type SolverOn
             unfold is_true. now rewrite negb_true_iff, not_true_iff_false.
           + intros HYP ι; specialize (HYP ι); revert HYP. cbn.
             unfold is_true. now rewrite not_true_iff_false, negb_false_iff.
-        - intros ι. rewrite inst_pathcondition_cons. reflexivity.
       }
       { dependent elimination t; try constructor.
         - intros ι. rewrite inst_pathcondition_cons. cbn.
@@ -356,8 +353,6 @@ Module Type SolverOn
             unfold is_true. now rewrite not_true_iff_false, negb_false_iff.
           + intros HYP ι; specialize (HYP ι); revert HYP. cbn.
             unfold is_true. now rewrite not_true_iff_false, negb_true_iff.
-        - intros ι. rewrite inst_pathcondition_cons. cbn.
-          unfold is_true. now rewrite negb_true_iff, not_true_iff_false.
       }
     Qed.
 
@@ -405,7 +400,7 @@ Module Type SolverOn
           * apply noConfusion_inv in Heq. apply Heq.
         + intros HYP ι Heq. apply noConfusion_inv in Heq. apply (HYP ι Heq).
       - cbn. apply simplify_formula_eq_union_val_spec.
-      - cbn. clear. rename e4 into t2, K1 into K2, s into t1, K0 into K1, U0 into U.
+      - cbn. clear. rename e3 into t2, K1 into K2, s into t1, K0 into K1, U0 into U.
         generalize (simplify_formula_eq_union_spec t1 t2 k). apply option.spec_monotonic.
         + intros k'. apply base.forall_proper. intros ι.
           now rewrite 𝑼_fold_inj.

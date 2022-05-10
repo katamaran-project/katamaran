@@ -105,7 +105,6 @@ Module Type InstantiationOn
     | term_not e           => negb (inst_term e ι)
     | term_inl e           => @inl (Val _) (Val _) (inst_term e ι)
     | term_inr e           => @inr (Val _) (Val _) (inst_term e ι)
-    | @term_projtup _ σs e n σ p => tuple_proj σs n σ (inst_term e ι) p
     | @term_union _ U K e     => 𝑼_fold (existT K (inst_term e ι))
     | @term_record _ R ts     =>
         let InstTerm xt := @inst_term (@type 𝑹𝑭 Ty xt) in

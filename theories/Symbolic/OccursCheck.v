@@ -84,8 +84,6 @@ Module Type OccursCheckOn
       | term_not t => term_not <$> occurs_check_term xIn t
       | term_inl t => term_inl <$> occurs_check_term xIn t
       | term_inr t => term_inr <$> occurs_check_term xIn t
-      | @term_projtup _ σs t n σ p =>
-        option.map (fun t' => @term_projtup _ _ t' n _ p) (occurs_check_term xIn t)
       | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0
       | term_record R ts =>
         let OCTerm xt := @occurs_check_term (@type 𝑹𝑭 Ty xt) in

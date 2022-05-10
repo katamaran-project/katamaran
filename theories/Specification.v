@@ -157,10 +157,8 @@ Module Type ProgSpecMixinOn (Import B : Base) (Import P : Program B).
       | exp_list es              => term_list (List.map seval_exp es)
       | exp_bvec es              => term_bvec (Vector.map seval_exp es)
       | exp_tuple es             => term_tuple (env.map (@seval_exp) es)
-      | @exp_projtup _ _ e n _ p => term_projtup (seval_exp e) n (p := p)
       | exp_union E K e          => term_union E K (seval_exp e)
       | exp_record R es          => term_record R (env.map (fun _ => seval_exp) es)
-      (* | exp_projrec e rf         => term_projrec (seval_exp e) rf *)
       end%exp.
 
   Lemma eval_exp_inst {Γ Σ τ} (ι : Valuation Σ) (δΓΣ : SStore Γ Σ) (e : Exp Γ τ) :
