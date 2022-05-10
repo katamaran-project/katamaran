@@ -660,21 +660,25 @@ Module BlockVerification.
     (* 0000000000000020 <.L4>: *)
     (*   20:	00008067          	jalr	zero,0(ra) *)
 
-    Example sum : list AST :=
+    Example block_sum : list AST :=
       [ ADDI a4 a0 0
       ; BEQ a0 zero 0x20
       ; ADDI a5 zero 0
       ; ADDI a0 zero 0
-      (* L3 *)
-      ; ADD a0 a0 a5
-      ; ADDI a5 a5 1
-      ; BNE a4 a5 (-0x8)
-      ; RET
-      (* L4 *)
-      ; RET
       ].
 
-    Let Σ1 : LCtx := ["n" ∷ ty_int; "s" ∷ ty_int; "i" ∷ ty_int].
+    Example block_l3 : list AST :=
+      [ ADD a0 a0 a5
+      ; ADDI a5 a5 1
+      ; BNE a4 a5 (-0x8)
+      ].
+
+    Example block_l4 : list AST :=
+      [ RET
+      ].
+
+    Example sum : list AST :=
+      block_sum ++ block_l3 ++ block_l4.
 
     Local Notation "p '∗' q" := (asn_sep p q).
     Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
@@ -682,6 +686,31 @@ Module BlockVerification.
     Local Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
     Local Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
     Local Notation "x * y" := (term_binop binop_times x y) : exp_scope.
+
+    Section BlockSum.
+
+      Let Σ1 : LCtx := ["n" ∷ ty_int].
+
+      Example sum_pre : Assertion Σ1 :=
+        asn_exist "s" _ (ra0 ↦ term_var "s") ∗
+        ra4 ↦ term_var "n" ∗
+        asn_exist "i" _ (ra5 ↦ term_var "i") ∗
+        asn_bool (term_binop binop_le (term_val ty_int 0%Z) (term_var "n")).
+
+      Example sum_post : Assertion Σ1 :=
+        ra0 ↦ term_val ty_int 0%Z ∗
+        ra4 ↦ term_var "n" ∗
+        ra5 ↦ term_val ty_int 0%Z ∗
+        asn_bool (term_binop binop_le (term_val ty_int 0%Z) (term_var "n")).
+
+      Example vc_sum : 𝕊 Σ1 :=
+        VC sum_pre block_sum sum_post.
+
+      Eval compute in vc_sum.
+
+    End BlockSum.
+
+    Let Σ1 : LCtx := ["n" ∷ ty_int; "s" ∷ ty_int; "i" ∷ ty_int].
 
     (* Example sum_pre : Assertion Σ1 := *)
     (*   ra0 ↦ term_var "s" ∗ *)
