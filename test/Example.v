@@ -550,6 +550,31 @@ Local Hint Resolve valid_contract_cmp : contracts.
 
 Import SymProp.notations.
 
+Fixpoint size {Σ} (s : SymProp Σ) : N :=
+   match s with
+   | SymProp.angelic_binary o1 o2 => 1 + size o1 + size o2
+   | SymProp.demonic_binary o1 o2 => 1 + size o1 + size o2
+   | SymProp.error msg => 0
+   | SymProp.block => 0
+   | SymProp.assertk fml msg k => 1 + size k
+   | SymProp.assumek fml k => 1 + size k
+   | SymProp.angelicv b k => 1 + size k
+   | SymProp.demonicv b k => 1 + size k
+   | @SymProp.assert_vareq _ x σ xIn t msg k => 1 + size k
+   | @SymProp.assume_vareq _ x σ xIn t k => 1 + size k
+   | SymProp.debug b k => 1 + size k
+   end.
+
+Definition vc_summaxlen : SymProp [] :=
+  Postprocessing.prune
+    (Postprocessing.solve_uvars
+        (Postprocessing.prune
+           (Postprocessing.solve_evars
+              (Postprocessing.prune (SMut.exec_contract_path default_config 1 sep_contract_summaxlen fun_summaxlen))))).
+
+Time Eval compute in (size vc_summaxlen).
+Time Eval compute in vc_summaxlen.
+
 Goal True. idtac "Timing -- valid_contract_summaxlen -- before". Abort.
 Lemma valid_contract_summaxlen : SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
 Proof.
