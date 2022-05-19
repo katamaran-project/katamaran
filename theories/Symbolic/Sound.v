@@ -60,10 +60,11 @@ Import env.notations.
 
 Module Soundness
   (Import B    : Base)
-  (Import SPEC : Specification B)
-  (Import SOLV : SolverKit B SPEC)
-  (Import SEMI : SemiConcrete B SPEC)
-  (Import SYMB : MutatorsOn B SPEC SOLV).
+  (Import SIG : ProgramLogicSignature B)
+  (Import SPEC : Specification B SIG)
+  (Import SOLV : SolverKit B SIG SPEC)
+  (Import SEMI : SemiConcrete B SIG SPEC)
+  (Import SYMB : MutatorsOn B SIG SPEC SOLV).
 
   Import ModalNotations.
   Import SymProp.

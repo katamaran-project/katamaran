@@ -193,22 +193,25 @@ End ProgSpecMixinOn.
 Module Type SpecificationMixin (B : Base) (P : Program B) (CD : ContractDecl B P) :=
   ProgSpecMixinOn B P <+ WorldsOn B CD CD <+ SymPropOn B CD CD CD.
 
-Module Type Specification (B : Base).
+Module Type ProgramLogicSignature (B : Base).
   Declare Module Export PROG : Program B.
   Include PredicateKit B.
   Include ContractDeclMixin B PROG.
-  Include ContractDefKit B PROG.
   Include SpecificationMixin B PROG.
+End ProgramLogicSignature.
+
+Module Type Specification (B : Base) (Import SIG : ProgramLogicSignature B).
+  Include ContractDefKit B PROG SIG.
 End Specification.
 
-Module Type SolverKit (B : Base) (Import SPEC : Specification B).
+Module Type SolverKit (B : Base) (Import SIG : ProgramLogicSignature B) (Import SPEC : Specification B SIG).
 
   Parameter solver      : Solver.
   Parameter solver_spec : SolverSpec solver.
 
 End SolverKit.
 
-Module DefaultSolverKit (B : Base) (Import SPEC : Specification B) <: SolverKit B SPEC.
+Module DefaultSolverKit (B : Base) (Import SIG : ProgramLogicSignature B) (Import SPEC : Specification B SIG) <: SolverKit B SIG SPEC.
 
   Definition solver : Solver := solver_null.
   Definition solver_spec : SolverSpec solver := solver_null_spec.

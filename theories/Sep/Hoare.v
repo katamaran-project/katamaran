@@ -41,7 +41,7 @@ From Katamaran Require Import
 Import ctx.notations.
 Import env.notations.
 
-Module Type ProgramLogicOn (Import B : Base) (Import SPEC : Specification B).
+Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature B) (Import SPEC : Specification B SIG).
 
   Section Triples.
 

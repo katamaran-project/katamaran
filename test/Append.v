@@ -274,7 +274,7 @@ End TransparentObligations.
 Derive EqDec for PurePredicate.
 Derive EqDec for Predicate.
 
-Module Import ExampleSpecification <: Specification DefaultBase.
+Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
   Module PROG := ExampleProgram.
   Import DefaultBase.
 
@@ -316,7 +316,10 @@ Module Import ExampleSpecification <: Specification DefaultBase.
   End HeapPredicateDeclKit.
 
   Include ContractDeclMixin DefaultBase ExampleProgram.
+  Include SpecificationMixin DefaultBase ExampleProgram.
+End ExampleSignature.
 
+Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature.
   Section ContractDefKit.
 
     Import ctx.resolution.
@@ -501,11 +504,9 @@ Module Import ExampleSpecification <: Specification DefaultBase.
 
   End ContractDefKit.
 
-  Include SpecificationMixin DefaultBase ExampleProgram.
-
 End ExampleSpecification.
 
-Module ExampleSolverKit <: SolverKit DefaultBase ExampleSpecification.
+Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecification.
 
   Local Unset Implicit Arguments.
   Set Equations Transparent.
@@ -680,10 +681,10 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSpecification.
   Qed.
 
 End ExampleSolverKit.
-Module ExampleSolver := MakeSolver DefaultBase ExampleSpecification ExampleSolverKit.
+Module ExampleSolver := MakeSolver DefaultBase ExampleSignature ExampleSpecification ExampleSolverKit.
 
 Module Import ExampleExecutor :=
-  MakeExecutor DefaultBase ExampleSpecification ExampleSolver.
+  MakeExecutor DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
 
 Goal True. idtac "Timing -- valid_contract_append -- before". Abort.
 Lemma valid_contract_append : SMut.ValidContractReflect sep_contract_append fun_append.
@@ -722,10 +723,8 @@ Module ExampleModel.
   Import ExampleProgram.
   Import ExampleSpecification.
 
-  Include ProgramLogicOn DefaultBase ExampleSpecification.
-  Include Iris DefaultBase ExampleSpecification ExampleSemantics.
-
-  Module ExampleIrisHeapKit <: IrisHeapKit.
+  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
+    Include IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
     Section WithIrisNotations.
       Import iris.bi.interface.
       Import iris.bi.big_op.
@@ -791,27 +790,27 @@ Module ExampleModel.
         | v :: vs => (∃ p' pn, ⌜p = inl p'⌝ ∗ ptstocons_interp (mG := mG) p' v pn ∗ ptstolist_interp (mG := mG) pn vs)%I
       end.
 
-    Definition luser_inst `{sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
+    Definition luser_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
       (match p return Env Val (𝑯_Ty p) -> iProp Σ with
       | ptstocons => fun ts => ptstocons_interp (mG := mG) (env.head (env.tail (env.tail ts))) (env.head (env.tail ts)) (env.head ts)
       | ptstolist => fun ts => ptstolist_interp (mG := mG) (env.head (env.tail ts)) (env.head ts)
        end) ts.
 
-    Definition lduplicate_inst `{sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) :
+    Definition lduplicate_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
       is_duplicable p = true -> luser_inst mG p ts -∗ luser_inst mG p ts ∗ luser_inst mG p ts.
     Proof.
       destruct p; now cbn.
     Qed.
 
-    Unset Printing Notations.
-    Set Printing Implicit.
     End WithIrisNotations.
-  End ExampleIrisHeapKit.
+  End ExampleIrisParameters.
 
-  Import ExampleIrisHeapKit.
+  Import ExampleIrisParameters.
 
-  Module Import ExampleIrisInstance := IrisInstance ExampleIrisHeapKit.
+  Include IrisInstance DefaultBase ExampleSignature ExampleSemantics ExampleIrisParameters.
+  Include ProgramLogicOn DefaultBase ExampleSignature ExampleSpecification.
+  Include IrisInstanceWithContracts DefaultBase ExampleSignature ExampleSpecification ExampleSemantics ExampleIrisParameters.
 
   Section WithIrisNotations.
     Import iris.bi.interface.
@@ -837,11 +836,11 @@ Module ExampleModel.
         | _ => idtac
         end.
 
-    Lemma mkcons_sound `{sg : sailGS Σ} `{invGS} {Γ δ} :
+    Lemma mkcons_sound {Γ δ} :
       forall (x : Exp Γ ptr) (xs : Exp Γ llist),
         ⊢ semTriple δ (⌜true = true⌝ ∧ emp) (foreign mkcons x xs)
           (λ (v : Val ptr) (δ' : CStore Γ),
-            ptstocons_interp v (eval x δ) (eval xs δ) ∗ ⌜δ' = δ⌝).
+            ptstocons_interp (mG := sailGS_memGS) v (eval x δ) (eval xs δ) ∗ ⌜δ' = δ⌝).
     Proof.
       iIntros (x xs) "_".
       rewrite wp_unfold. cbn.
@@ -869,14 +868,14 @@ Module ExampleModel.
       now iFrame.
     Qed.
 
-    Lemma fst_sound `{sg : sailGS Σ} `{invGS} {Γ δ} :
+    Lemma fst_sound {Γ δ} :
       forall (ep : Exp Γ ptr) (vx : Val ty_int) (vxs : Val llist),
         let vp := eval ep δ in
         ⊢ semTriple δ
-          (ptstocons_interp vp vx vxs)
+          (ptstocons_interp (mG := sailGS_memGS) vp vx vxs)
           (foreign fst ep)
           (λ (v : Z) (δ' : CStore Γ),
-            ((⌜v = vx⌝ ∧ emp) ∗ ptstocons_interp vp vx vxs) ∗ ⌜ δ' = δ⌝).
+            ((⌜v = vx⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜ δ' = δ⌝).
     Proof.
       iIntros (ep vx vxs vp) "Hres".
       rewrite wp_unfold.
@@ -901,14 +900,14 @@ Module ExampleModel.
       now iFrame.
     Qed.
 
-    Lemma snd_sound `{sg : sailGS Σ} `{invGS} {Γ δ} :
+    Lemma snd_sound {Γ δ} :
       forall (ep : Exp Γ ptr) (vx : Val ptr) (vxs : Val llist),
         let vp := eval ep δ in
         ⊢ semTriple δ
-          (ptstocons_interp vp vx vxs)
+          (ptstocons_interp (mG := sailGS_memGS) vp vx vxs)
           (foreign snd ep)
           (λ (v : Z + ()) (δ' : CStore Γ),
-            ((⌜v = vxs⌝ ∧ emp) ∗ ptstocons_interp vp vx vxs) ∗ ⌜ δ' = δ⌝).
+            ((⌜v = vxs⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜ δ' = δ⌝).
     Proof.
       iIntros (ep vx vxs vp) "Hres".
       rewrite wp_unfold.
@@ -933,14 +932,14 @@ Module ExampleModel.
       now iFrame.
     Qed.
 
-    Lemma setsnd_sound `{sg : sailGS Σ} `{invGS} {Γ δ} :
+    Lemma setsnd_sound {Γ δ} :
       forall (ep : Exp Γ ptr) (exs : Exp Γ llist) (vx : Val ptr),
         let vp := eval ep δ in let vxs := eval exs δ in
         ⊢ semTriple δ
-        (∃ v : Z + (), ptstocons_interp vp vx v)
+        (∃ v : Z + (), ptstocons_interp (mG := sailGS_memGS) vp vx v)
         (foreign setsnd ep exs)
         (λ (v : ()) (δ' : CStore Γ),
-           ((⌜v = tt⌝ ∧ emp) ∗ ptstocons_interp vp vx vxs) ∗ ⌜δ' = δ⌝).
+           ((⌜v = tt⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜δ' = δ⌝).
     Proof.
       iIntros (ep exs vx vp vxs) "Hres".
       iDestruct "Hres" as (vxs__old) "Hres".
@@ -966,7 +965,7 @@ Module ExampleModel.
       now iFrame.
     Qed.
 
-    Lemma foreignSem `{sg : sailGS Σ} : ForeignSem (Σ := Σ).
+    Lemma foreignSem : ForeignSem.
     Proof.
       intros Γ τ Δ f es δ; destruct f; env.destroy es;
         intros ι; env.destroy ι; cbn; intros Heq; env.destroy Heq; subst;
@@ -974,23 +973,23 @@ Module ExampleModel.
     Qed.
 
     Goal True. idtac "Timing -- lemmas -- before". Abort.
-    Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
+    Lemma lemSem : LemmaSem.
     Proof.
       intros Γ l.
       destruct l; cbn; intros ι; destruct_syminstance ι; cbn.
       - auto.
       - iIntros "Hres".
         destruct xs; cbn.
-        { iDestruct "Hres" as "%"; inversion H. }
+        { iDestruct "Hres" as "%". inversion H0. }
         iDestruct "Hres" as (p' pn) "[% [Hp' Hpn]]".
-        inversion H; subst.
+        inversion H0; subst.
         iExists pn.
         iFrame.
       - iIntros "Hres".
         destruct xs; cbn.
         + now destruct p.
         + iDestruct "Hres" as (p' pn) "[% _]".
-          inversion H.
+          inversion H0.
       - iIntros "[Hp Hn]".
         iExists p.
         iExists n.
@@ -1002,10 +1001,10 @@ Module ExampleModel.
 
   (* Include Soundness DefaultBase ExampleSpecification ExampleSolverKit. *)
 
-  Include SemiConcrete DefaultBase ExampleSpecification.
-  Include Katamaran.SemiConcrete.Sound.Soundness DefaultBase ExampleSpecification.
-  Include MutatorsOn DefaultBase ExampleSpecification ExampleSolver.
-  Include Soundness DefaultBase ExampleSpecification ExampleSolver.
+  Include SemiConcrete DefaultBase ExampleSignature ExampleSpecification.
+  Include Katamaran.SemiConcrete.Sound.Soundness DefaultBase ExampleSignature ExampleSpecification.
+  Include MutatorsOn DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
+  Include Soundness DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
 
   Section WithIrisNotations.
     Import iris.bi.interface.
@@ -1014,9 +1013,9 @@ Module ExampleModel.
     Import iris.program_logic.weakestpre.
     Import iris.base_logic.lib.gen_heap.
 
-  Lemma appendSound `{sG : sailGS Σ} : ⊢ ValidContractEnvSem (sG := sG) CEnv.
+  Lemma appendSound : ⊢ ValidContractEnvSem CEnv.
   Proof.
-    apply (ExampleIrisInstance.sound foreignSem lemSem).
+    apply (sound foreignSem lemSem).
     intros Γ τ f c.
     destruct f; inversion 1; subst;
     apply (contract_sound 1);

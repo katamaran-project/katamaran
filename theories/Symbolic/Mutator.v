@@ -62,8 +62,9 @@ Set Implicit Arguments.
 
 Module Type MutatorsOn
   (Import B : Base)
-  (Import SPEC : Specification B)
-  (Import SOLV : SolverKit B SPEC).
+  (Import SIG : ProgramLogicSignature B)
+  (Import SPEC : Specification B SIG)
+  (Import SOLV : SolverKit B SIG SPEC).
 
   Import Entailment.
   Import ModalNotations.
@@ -2383,9 +2384,10 @@ End MutatorsOn.
 
 Module MakeExecutor
   (Import B    : Base)
-  (Import SPEC : Specification B)
-  (Import SOLV : SolverKit B SPEC).
+  (Import SIG : ProgramLogicSignature B)
+  (Import SPEC : Specification B SIG)
+  (Import SOLV : SolverKit B SIG SPEC).
 
-  Include MutatorsOn B SPEC SOLV.
+  Include MutatorsOn B SIG SPEC SOLV.
 
 End MakeExecutor.

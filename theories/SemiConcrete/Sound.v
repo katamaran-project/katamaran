@@ -45,9 +45,10 @@ Import env.notations.
 
 Module Type Soundness
   (Import B : Base)
-  (Import SPEC : Specification B)
-  (Import EXEC : SemiConcrete B SPEC)
-  (Import HOAR : ProgramLogicOn B SPEC).
+  (Import SIG : ProgramLogicSignature B)
+  (Import SPEC : Specification B SIG)
+  (Import EXEC : SemiConcrete B SIG SPEC)
+  (Import HOAR : ProgramLogicOn B SIG SPEC).
 
   Import sep.notations.
 

@@ -54,7 +54,8 @@ From Katamaran Require Import
 
 Module Type DisjointModel
   (Import B : Base)
-  (Import SPEC : Specification B).
+  (Import SIG : ProgramLogicSignature B)
+  (Import SPEC : Specification B SIG).
 
   Definition Heap : Type := forall σ, 𝑹𝑬𝑮 σ -> option (Val σ).
   (* Check if two heaps are disjoint,

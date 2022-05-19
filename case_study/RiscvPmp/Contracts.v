@@ -71,6 +71,9 @@ Inductive Predicate : Set :=
 | pmp_addr_access_without
 | gprs
 | ptsto
+| encodes_instr
+| ptstomem
+| ptstoinstr
 .
 
 Section TransparentObligations.
@@ -84,7 +87,7 @@ End TransparentObligations.
 Derive EqDec for PurePredicate.
 Derive EqDec for Predicate.
 
-Module Import RiscvPmpSpecification <: Specification RiscvPmpBase.
+Module Import RiscvPmpSignature <: ProgramLogicSignature RiscvPmpBase.
 Module PROG := RiscvPmpProgram.
 
 Section PredicateKit.
@@ -314,6 +317,9 @@ Section PredicateKit.
     | pmp_addr_access_without => [ty_xlenbits; ty_list ty_pmpentry; ty_privilege]
     | gprs                    => ctx.nil
     | ptsto                   => [ty_xlenbits; ty_xlenbits]
+    | encodes_instr           => [ty_int; ty_ast]
+    | ptstomem                => [ty_xlenbits; ty_int; ty_list ty_word]
+    | ptstoinstr              => [ty_xlenbits; ty_ast]
     end.
 
   Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
@@ -324,6 +330,9 @@ Section PredicateKit.
       | pmp_addr_access_without => false
       | gprs                    => false
       | ptsto                   => false
+      | encodes_instr           => true
+      | ptstomem                => false
+      | ptstoinstr              => false
       end
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -337,6 +346,8 @@ Section PredicateKit.
     | pmp_entries             => Some (MkPrecise ε [ty_list ty_pmpentry] eq_refl)
     | pmp_addr_access         => Some (MkPrecise ε [ty_list ty_pmpentry; ty_privilege] eq_refl)
     | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits] [ty_list ty_pmpentry; ty_privilege] eq_refl)
+    | ptstomem                => Some (MkPrecise [ty_xlenbits; ty_int] [ty_list ty_word] eq_refl)
+    | ptstoinstr              => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
     | _                       => None
     end.
 
@@ -436,9 +447,47 @@ Section ContractDefKit.
       (cons (term_val ty_pmpcfgidx PMP0CFG ,ₜ term_val ty_pmpaddridx PMPADDR0)
             (cons (term_val ty_pmpcfgidx PMP1CFG ,ₜ term_val ty_pmpaddridx PMPADDR1) nil)).
 
-  Section Contracts.
-    Import RiscvNotations.
+  End ContractDefKit.
+  Include SpecificationMixin RiscvPmpBase RiscvPmpProgram.
+End RiscvPmpSignature.
 
+Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignature.
+  Section Contracts.
+
+  Section ContractDefKit.
+
+    Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 70).
+    Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
+    Local Notation "p '∗' q" := (asn_sep p q).
+    Local Notation "a '=' b" := (asn_eq a b).
+    Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+    Local Notation "a '∨' b" := (asn_or a b).
+    Local Notation "p '⊑' q" := (asn_formula (formula_user sub_perm [p;q])) (at level 70).
+    Local Notation "a <ₜ b" := (term_binop binop_lt a b) (at level 60).
+    Local Notation "a <=ₜ b" := (term_binop binop_le a b) (at level 60).
+    Local Notation "a &&ₜ b" := (term_binop binop_and a b) (at level 80).
+    Local Notation "a ||ₜ b" := (term_binop binop_or a b) (at level 85).
+    Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
+    Local Notation asn_pmp_entries l := (asn_chunk (chunk_user Contracts.pmp_entries [l])).
+    (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
+    (* Local Notation asn_pmp_entries_angelic l := (asn_chunk_angelic (chunk_user pmp_entries [l])). *)
+    Local Notation asn_pmp_addr_access l m := (asn_chunk (chunk_user pmp_addr_access [l; m])).
+    Local Notation asn_pmp_addr_access_without a l m := (asn_chunk (chunk_user pmp_addr_access_without [a;l; m])).
+    Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
+    Local Notation asn_within_cfg a cfg prev_addr addr := (asn_formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
+    Local Notation asn_not_within_cfg a es := (asn_formula (formula_user not_within_cfg [a; es])).
+    Local Notation asn_prev_addr cfg es prev := (asn_formula (formula_user prev_addr [cfg; es; prev])).
+    Local Notation asn_in_entries idx e es := (asn_formula (formula_user in_entries [idx; e; es])).
+    Local Notation asn_pmp_access addr es m p := (asn_formula (formula_user pmp_access [addr;es;m;p])).
+    Local Notation asn_pmp_check_perms cfg acc p := (asn_formula (formula_user pmp_check_perms [cfg;acc;p])).
+    Local Notation asn_pmp_check_rwx cfg acc := (asn_formula (formula_user pmp_check_rwx [cfg;acc])).
+    Local Notation asn_expand_pmpcfg_ent cfg := (asn_match_record rpmpcfg_ent cfg
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
+      (asn_true)).
+
+    Local Notation "e1 ',ₜ' e2" := (term_binop binop_pair e1 e2) (at level 100).
+
+    Import RiscvNotations.
   (** Machine Invariant **)
   (*
     TODO: - this should work for the execute{,_/x/} functions, but step and loop will update 
@@ -459,7 +508,7 @@ Section ContractDefKit.
                      mtvec         ↦ term_var "h" ∗
                      pc            ↦ term_var "i" ∗
                      nextpc        ↦ term_var "npc" ∗
-         ∃ "mcause", mcause        ↦ term_var "mcause" ∗
+                     ∃ "mcause", mcause        ↦ term_var "mcause" ∗
                      mepc          ↦ term_var "mepc" ∗
                      mstatus       ↦ term_record rmstatus [ term_var "mpp" ] ∗
                      asn_pmp_entries (term_var "entries") ∗
@@ -1453,7 +1502,7 @@ Section ContractDefKit.
           ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
     |}.
 
-  End Contracts.
+  End ContractDefKit.
 
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
@@ -1554,13 +1603,11 @@ Section ContractDefKit.
     intros ? ? []; try constructor.
   Qed.
 
-End ContractDefKit.
-
-Include SpecificationMixin RiscvPmpBase RiscvPmpProgram.
+  End Contracts.
 
 End RiscvPmpSpecification.
 
-Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
+Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification.
   (* TODO: User predicates can be simplified smarter *)
   Equations(noeqns) decide_pmp_check_rwx {Σ} (X W R : Term Σ ty_bool) (acc : Term Σ ty_access_type) : bool :=
   | term_val true | _             | _             | term_union KExecute (term_val tt)   := true;
@@ -1673,10 +1720,10 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSpecification.
   Definition solver_spec : SolverSpec solver.
   Admitted.
 End RiscvPmpSolverKit.
-Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSpecification RiscvPmpSolverKit.
+Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolverKit.
 
 Module Import RiscvPmpExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSpecification RiscvPmpSolver.
+  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolver.
 Import SMut.
 Import SMut.SMutNotations.
 Import Postprocessing.

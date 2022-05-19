@@ -54,12 +54,11 @@ Import ListNotations.
 Import RiscvPmpSpecification.
 Import RiscvPmpProgram.
 Import RiscvPmpModel.
-Import RiscvPmpIrisHeapKit.
-Import RiscvPmpIrisInstance.
+Import RiscvPmpIrisParams.
+Import RiscvPmpModel2.
 
 Section Loop. 
      Context `{sg : sailGS Σ}.
-     Context `{mG : memGS Σ}.
      Definition step_sem_contract := 
        Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
 
@@ -83,7 +82,7 @@ Section Loop.
      (* Executing normally *)
      (* TODO: this should be the same as Start of iteration (P), drop one of them *)
      Definition Execution (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
-       (            interp_pmp_addr_access liveAddrs entries m ∗
+       (            interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
                     interp_gprs ∗
                     interp_pmp_entries es ∗
         (∃ mc : Z,  mcause        ↦ mc) ∗
@@ -96,7 +95,7 @@ Section Loop.
 
      (* Modified CSRs, requires Machine mode *)
      Definition CSRMod (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
-       (                               interp_pmp_addr_access liveAddrs entries m ∗
+       (                               interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
                                        interp_gprs ∗
         (∃ es : list (Pmpcfg_ent * Z), interp_pmp_entries es) ∗
                                        ⌜m = Machine⌝ ∗
@@ -110,7 +109,7 @@ Section Loop.
 
      (* Trap occured -> Go into M-mode *)
      Definition Trap (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
-                  (interp_pmp_addr_access liveAddrs entries m ∗
+                  (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
                    interp_gprs ∗
                    interp_pmp_entries es ∗
         (∃ mc : Z, mcause        ↦ mc) ∗
@@ -123,7 +122,7 @@ Section Loop.
 
      (* MRET = Recover *)
      Definition Recover (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) :=
-                  (interp_pmp_addr_access liveAddrs entries m ∗
+                  (interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs entries m ∗
                    interp_gprs ∗ 
                    interp_pmp_entries es ∗
                    ⌜m = Machine⌝ ∗

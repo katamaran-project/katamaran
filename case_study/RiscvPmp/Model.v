@@ -61,11 +61,12 @@ Module RiscvPmpSemantics <: Semantics RiscvPmpBase RiscvPmpProgram :=
 
 Module RiscvPmpModel.
   Import RiscvPmpProgram.
+  Import RiscvPmpSignature.
   Import RiscvPmpSpecification.
 
-  Include ProgramLogicOn RiscvPmpBase RiscvPmpSpecification.
-  Include Iris RiscvPmpBase RiscvPmpSpecification RiscvPmpSemantics.
+  Module RiscvPmpIrisParams <: IrisParameters RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSemantics.
 
+    Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSemantics.
   Ltac destruct_syminstance ι :=
     repeat
       match type of ι with
@@ -78,156 +79,171 @@ Module RiscvPmpModel.
       | _ => idtac
       end.
 
-  Module RiscvPmpIrisHeapKit <: IrisHeapKit.
-    Section WithIrisNotations.
-      Import iris.bi.interface.
-      Import iris.bi.big_op.
-      Import iris.base_logic.lib.iprop.
-      Import iris.base_logic.lib.gen_heap.
+  Section WithIrisNotations.
+    Import iris.bi.interface.
+    Import iris.bi.big_op.
+    Import iris.base_logic.lib.iprop.
+    Import iris.base_logic.lib.gen_heap.
 
-      Definition MemVal : Set := Word.
+    Definition MemVal : Set := Word.
 
-      Class mcMemGS Σ :=
-        McMemGS {
-            (* ghost variable for tracking state of registers *)
-            mc_ghGS :> gh.gen_heapGS Addr MemVal Σ;
-            mc_invNs : namespace
-          }.
+    Class mcMemGS Σ :=
+      McMemGS {
+          (* ghost variable for tracking state of registers *)
+          mc_ghGS :> gh.gen_heapGS Addr MemVal Σ;
+          mc_invNs : namespace
+        }.
 
-      Definition memGpreS : gFunctors -> Set := fun Σ => gh.gen_heapGpreS Z MemVal Σ.
-      Definition memGS : gFunctors -> Set := mcMemGS.
-      Definition memΣ : gFunctors := gh.gen_heapΣ Addr MemVal.
+    Definition memGpreS : gFunctors -> Set := fun Σ => gh.gen_heapGpreS Z MemVal Σ.
+    Definition memGS : gFunctors -> Set := mcMemGS.
+    Definition memΣ : gFunctors := gh.gen_heapΣ Addr MemVal.
 
-      Definition liveAddrs := seqZ minAddr (maxAddr - minAddr + 1).
-      Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
+    Definition liveAddrs := seqZ minAddr (maxAddr - minAddr + 1).
+    Definition initMemMap μ := (list_to_map (map (fun a => (a , μ a)) liveAddrs) : gmap Addr MemVal).
 
-      Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
-        fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal).
+    Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
+      fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal).
 
-      Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-        fun {Σ} hG μ =>
-          (∃ memmap, gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) memmap ∗
-                                     ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
-          )%I.
+    Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+      fun {Σ} hG μ =>
+        (∃ memmap, gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) memmap ∗
+                                   ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
+        )%I.
 
-      Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-        fun {Σ} hG μ =>
-          ([∗ map] l↦v ∈ initMemMap μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v) %I.
+    Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+      fun {Σ} hG μ =>
+        ([∗ map] l↦v ∈ initMemMap μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v) %I.
 
-      Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
-      Proof.
-        unfold initMemMap.
-        rewrite map_Forall_to_list.
-        rewrite Forall_forall.
-        intros (a , v).
-        rewrite elem_of_map_to_list.
-        intros el.
-        apply elem_of_list_to_map_2 in el.
-        apply elem_of_list_In in el.
-        apply in_map_iff in el.
-        by destruct el as (a' & <- & _).
-      Qed.
-
-      Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-        ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
-      Proof.
-        iIntros (Σ μ gHP).
-
-        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
-        pose (memmap := initMemMap μ).
-        iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
-        iModIntro.
-
-        rewrite (right_id empty union memmap).
-
-        iExists (McMemGS gH (nroot .@ "addr_inv")).
-        iFrame.
-        iExists memmap.
-        iFrame.
-        iPureIntro.
-        apply initMemMap_works.
-      Qed.
-
-      Import Contracts.
-
-      Definition reg_file : gset (bv 3) :=
-        list_to_set (finite.enum (bv 3)).
-
-      Definition interp_ptsreg `{sailRegGS Σ} (r : RegIdx) (v : Z) : iProp Σ :=
-        match reg_convert r with
-        | Some x => reg_pointsTo x v
-        | None => True
-        end.
-
-      Section WithResources.
-        Context `{sailRegGS Σ} `{invGS Σ} `{mG : memGS Σ}.
-
-        Definition interp_gprs : iProp Σ :=
-          [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
-
-        Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
-
-        Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
-          match entries with
-          | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
-              reg_pointsTo pmp0cfg cfg0 ∗
-                           reg_pointsTo pmpaddr0 addr0 ∗
-                           reg_pointsTo pmp1cfg cfg1 ∗
-                           reg_pointsTo pmpaddr1 addr1
-          | _ => False
-          end.
-
-        Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-          [∗ list] a ∈ addrs,
-            (⌜∃ p, Pmp_access a entries m p⌝ -∗
-              (∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) a (DfracOwn 1) w))%I.
-
-        Definition interp_ptsto (addr : Addr) (w : Word) : iProp Σ :=
-          mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w. 
-
-        Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-          ((∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w) -∗
-                 interp_pmp_addr_access addrs entries m)%I.
-      End WithResources.
-
-      Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
-        match p return Env Val (𝑯_Ty p) -> iProp Σ with
-        | pmp_entries             => fun ts => interp_pmp_entries (env.head ts)
-        | pmp_addr_access         => fun ts => interp_pmp_addr_access (mG := mG) liveAddrs (env.head (env.tail ts)) (env.head ts)
-        | pmp_addr_access_without => fun ts => interp_pmp_addr_access_without (mG := mG) (env.head (env.tail (env.tail ts))) liveAddrs (env.head (env.tail ts)) (env.head ts)
-        | gprs                    => fun _  => interp_gprs
-        | ptsto                   => fun ts => interp_ptsto (mG := mG) (env.head (env.tail ts)) (env.head ts)
-        end.
-
-    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
-      forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
-        is_duplicable p = true ->
-        (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
+    Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
     Proof.
-      iIntros (p ts hdup) "H".
-      destruct p; inversion hdup;
-      iDestruct "H" as "#H";
-      auto.
+      unfold initMemMap.
+      rewrite map_Forall_to_list.
+      rewrite Forall_forall.
+      intros (a , v).
+      rewrite elem_of_map_to_list.
+      intros el.
+      apply elem_of_list_to_map_2 in el.
+      apply elem_of_list_In in el.
+      apply in_map_iff in el.
+      by destruct el as (a' & <- & _).
     Qed.
 
-    End WithIrisNotations.
-  End RiscvPmpIrisHeapKit.
+    Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+      ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+    Proof.
+      iIntros (Σ μ gHP).
 
-  Module Import RiscvPmpIrisInstance := IrisInstance RiscvPmpIrisHeapKit.
-  Import PROG.
+      iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
+      pose (memmap := initMemMap μ).
+      iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
+      iModIntro.
+
+      rewrite (right_id empty union memmap).
+
+      iExists (McMemGS gH (nroot .@ "addr_inv")).
+      iFrame.
+      iExists memmap.
+      iFrame.
+      iPureIntro.
+      apply initMemMap_works.
+    Qed.
+
+    Import Contracts.
+
+    Definition reg_file : gset (bv 3) :=
+      list_to_set (finite.enum (bv 3)).
+
+    Definition interp_ptsreg `{sailRegGS Σ} (r : RegIdx) (v : Z) : iProp Σ :=
+      match reg_convert r with
+      | Some x => reg_pointsTo x v
+      | None => True
+      end.
+
+    Section WithResources.
+      Context `{sailRegGS Σ} `{invGS Σ} `{mG : memGS Σ}.
+
+      Definition interp_gprs : iProp Σ :=
+        [∗ set] r ∈ reg_file, (∃ v, interp_ptsreg r v)%I.
+
+      Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
+
+      Definition interp_pmp_entries (entries : list PmpEntryCfg) : iProp Σ :=
+        match entries with
+        | (cfg0, addr0) :: (cfg1, addr1) :: [] =>
+            reg_pointsTo pmp0cfg cfg0 ∗
+                         reg_pointsTo pmpaddr0 addr0 ∗
+                         reg_pointsTo pmp1cfg cfg1 ∗
+                         reg_pointsTo pmpaddr1 addr1
+        | _ => False
+        end.
+
+      Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+        [∗ list] a ∈ addrs,
+          (⌜∃ p, Pmp_access a entries m p⌝ -∗
+            (∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) a (DfracOwn 1) w))%I.
+
+      Definition interp_ptsto (addr : Addr) (w : Word) : iProp Σ :=
+        mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w. 
+
+      Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+        ((∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w) -∗
+               interp_pmp_addr_access addrs entries m)%I.
+    End WithResources.
+
+    Definition interp_ptsto_instr `{sailRegGS Σ} `{mG : memGS Σ} (addr : Z) (instr : AST) : iProp Σ :=
+      (∃ v, mapsto (hG := @mc_ghGS _ mG) addr (DfracOwn 1) v ∗
+              ⌜ pure_decode v = inr instr ⌝)%I.
+
+    Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
+      match p return Env Val (𝑯_Ty p) -> iProp Σ with
+      | pmp_entries                   => fun ts => interp_pmp_entries (env.head ts)
+      | pmp_addr_access               => fun ts => interp_pmp_addr_access (mG := mG) liveAddrs (env.head (env.tail ts)) (env.head ts)
+      | pmp_addr_access_without       => fun ts => interp_pmp_addr_access_without (mG := mG) (env.head (env.tail (env.tail ts))) liveAddrs (env.head (env.tail ts)) (env.head ts)
+      | gprs                          => fun _  => interp_gprs
+      | ptsto                         => fun ts => interp_ptsto (mG := mG) (env.head (env.tail ts)) (env.head ts)
+      | encodes_instr                 => fun _ => True%I
+      | ptstomem                      => fun _ => True%I
+      | ptstoinstr                    => fun ts  => interp_ptsto_instr (mG := mG) (env.head (env.tail ts)) (env.head ts)%I
+      end.
+
+  Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
+    forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
+      is_duplicable p = true ->
+      (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
+  Proof.
+    iIntros (p ts hdup) "H".
+    destruct p; inversion hdup;
+    iDestruct "H" as "#H";
+    auto.
+  Qed.
+
+  End WithIrisNotations.
+  End RiscvPmpIrisParams.
+  Include IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpSemantics RiscvPmpIrisParams.
+  Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification.
+
+End RiscvPmpModel.
+
+Module RiscvPmpModel2.
+  Import RiscvPmpModel.
+  Import RiscvPmpSignature.
+  Import RiscvPmpSpecification.
+  Import RiscvPmpProgram.
+  Import RiscvPmpIrisParams.
+  Module Import RiscvPmpIrisModel := IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification RiscvPmpSemantics RiscvPmpIrisParams RiscvPmpModel RiscvPmpModel.
 
   Lemma read_ram_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
     forall paddr w t entries p,
   evals es δ = env.snoc env.nil ("paddr"∷ty_exc_code) paddr
   → ⊢ semTriple δ
         ((⌜Sub_perm Read t⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
-         RiscvPmpIrisHeapKit.interp_pmp_entries entries ∗
-         (⌜Pmp_access paddr entries p t⌝ ∧ emp) ∗ RiscvPmpIrisHeapKit.interp_ptsto paddr w)
+         interp_pmp_entries entries ∗
+         (⌜Pmp_access paddr entries p t⌝ ∧ emp) ∗ interp_ptsto (mG := sailGS_memGS) paddr w)
         (stm_foreign read_ram es)
         (λ (v : Z) (δ' : CStore Γ),
            ((⌜v = w⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
-            RiscvPmpIrisHeapKit.interp_ptsto paddr w ∗
-            RiscvPmpIrisHeapKit.interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
+            interp_ptsto (mG := sailGS_memGS) paddr w ∗
+            interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (paddr w t entries p Heq) "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
     rewrite wp_unfold.
@@ -270,12 +286,12 @@ Module RiscvPmpModel.
         env.snoc (env.snoc env.nil ("paddr"∷ty_exc_code) paddr) ("data"∷ty_exc_code) data
       → ⊢ semTriple δ
           ((⌜Sub_perm Write t⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
-                                      RiscvPmpIrisHeapKit.interp_pmp_entries entries ∗
+                                      interp_pmp_entries entries ∗
                                       (⌜Pmp_access paddr entries p t⌝ ∧ emp) ∗
-                                      (∃ v : Z, RiscvPmpIrisHeapKit.interp_ptsto paddr v)) (stm_foreign write_ram es)
+                                      (∃ v : Z, interp_ptsto (mG := sailGS_memGS) paddr v)) (stm_foreign write_ram es)
           (λ (_ : Z) (δ' : CStore Γ),
-            (reg_pointsTo cur_privilege p ∗ RiscvPmpIrisHeapKit.interp_ptsto paddr data ∗
-                          RiscvPmpIrisHeapKit.interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
+            (reg_pointsTo cur_privilege p ∗ interp_ptsto (mG := sailGS_memGS) paddr data ∗
+                          interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (paddr data t entries p Heq) "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
     rewrite wp_unfold.
@@ -354,7 +370,7 @@ Module RiscvPmpModel.
     iSplitL; first iPureIntro; auto.
   Qed.
 
-  Lemma foreignSem `{sg : sailGS Σ} : ForeignSem (Σ := Σ).
+  Lemma foreignSem : ForeignSem.
   Proof.
     intros Γ τ Δ f es δ.
     destruct f; cbn;
@@ -369,7 +385,7 @@ Module RiscvPmpModel.
       ValidLemma RiscvPmpSpecification.lemma_open_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.reg_file.
+      unfold interp_gprs, reg_file.
       rewrite big_sepS_list_to_set; [|apply finite.NoDup_enum]; cbn.
       iIntros "[_ [Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 [Hx7 _]]]]]]]]". iFrame.
     Qed.
@@ -378,7 +394,7 @@ Module RiscvPmpModel.
       ValidLemma RiscvPmpSpecification.lemma_close_gprs.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      unfold RiscvPmpIrisHeapKit.interp_gprs, RiscvPmpIrisHeapKit.reg_file.
+      unfold interp_gprs, reg_file.
       iIntros "[Hx1 [Hx2 [Hx3 [Hx4 [Hx5 [Hx6 Hx7]]]]]]".
       iApply big_sepS_list_to_set; [apply finite.NoDup_enum|].
       cbn; iFrame. eauto using 0%Z.
@@ -388,7 +404,7 @@ Module RiscvPmpModel.
       ValidLemma RiscvPmpSpecification.lemma_open_pmp_entries.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      unfold RiscvPmpIrisHeapKit.interp_pmp_entries.
+      unfold interp_pmp_entries.
       iIntros "H".
       destruct entries; try done.
       destruct v as [cfg0 addr0].
@@ -409,7 +425,7 @@ Module RiscvPmpModel.
       ValidLemma RiscvPmpSpecification.lemma_close_pmp_entries.
     Proof.
       intros ι; destruct_syminstance ι; cbn.
-      unfold RiscvPmpIrisHeapKit.interp_pmp_entries.
+      unfold interp_pmp_entries.
       iIntros "[Hcfg0 [Haddr0 [Hcfg1 [Haddr1 _]]]]".
       iAccu.
     Qed.
@@ -425,10 +441,10 @@ Module RiscvPmpModel.
     Lemma in_liveAddrs : forall (addr : Addr),
         (minAddr <= addr)%Z ->
         (addr <= maxAddr)%Z ->
-        addr ∈ RiscvPmpIrisHeapKit.liveAddrs.
+        addr ∈ liveAddrs.
     Proof.
       intros addr Hmin Hmax.
-      unfold RiscvPmpIrisHeapKit.liveAddrs.
+      unfold liveAddrs.
       apply elem_of_seqZ.
       split; auto.
       rewrite Z.add_assoc.
@@ -439,10 +455,10 @@ Module RiscvPmpModel.
     Lemma in_liveAddrs_split : forall (addr : Addr),
         (minAddr <= addr)%Z ->
         (addr <= maxAddr)%Z ->
-        exists l1 l2, RiscvPmpIrisHeapKit.liveAddrs = l1 ++ ([addr] ++ l2).
+        exists l1 l2, liveAddrs = l1 ++ ([addr] ++ l2).
     Proof.
       intros addr Hmin Hmax.
-      unfold RiscvPmpIrisHeapKit.liveAddrs.
+      unfold liveAddrs.
       exists (seqZ minAddr (addr - minAddr)).
       exists (seqZ (addr + 1) (maxAddr - addr)).
       transitivity (seqZ minAddr (addr - minAddr) ++ seqZ (addr) (maxAddr - addr + 1)).
@@ -460,10 +476,10 @@ Module RiscvPmpModel.
       rewrite ?Z.leb_le.
       iIntros "[Hentries [Hmem [[%Hlemin _] [[%Hlemax _] [%Hpmp _]]]]]".
       iSplitL "Hentries"; try done.
-      unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access_without,
-        RiscvPmpIrisHeapKit.interp_pmp_addr_access,
-        RiscvPmpIrisHeapKit.interp_ptsto,
-        RiscvPmpIrisHeapKit.MemVal, Word.
+      unfold interp_pmp_addr_access_without,
+        interp_pmp_addr_access,
+        interp_ptsto,
+        MemVal, Word.
 
       destruct (in_liveAddrs_split Hlemin Hlemax) as (l1 & l2 & eq).
       rewrite eq.
@@ -484,16 +500,16 @@ Module RiscvPmpModel.
       intros ι; destruct_syminstance ι; cbn.
       iIntros "[Hentries [Hwithout Hptsto]]".
       iSplitL "Hentries"; first iFrame.
-      unfold RiscvPmpIrisHeapKit.interp_pmp_addr_access_without.
+      unfold interp_pmp_addr_access_without.
       iApply ("Hwithout" with "Hptsto").
     Qed.
 
   End Lemmas.
 
-  Lemma lemSem `{sg : sailGS Σ} : LemmaSem (Σ := Σ).
+  Lemma lemSem : LemmaSem.
   Proof.
     intros Δ [];
       eauto using open_gprs_sound, close_gprs_sound, open_pmp_entries_sound,
       close_pmp_entries_sound, update_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound.
   Qed.
-End RiscvPmpModel.
+End RiscvPmpModel2.

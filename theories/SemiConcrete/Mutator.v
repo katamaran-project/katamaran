@@ -47,7 +47,7 @@ Import ListNotations.
 
 Set Implicit Arguments.
 
-Module Type SemiConcrete (Import B : Base) (Import SPEC : Specification B).
+Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B) (Import SPEC : Specification B SIG).
 
   Definition CDijkstra (A : Type) : Type :=
     (A -> Prop) -> Prop.

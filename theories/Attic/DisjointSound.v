@@ -44,12 +44,13 @@ Import env.notations.
 
 Module DisjointSound
   (Import B    : Base)
-  (Import SPEC : Specification B)
-  (Import SEM  : Semantics B SPEC.PROG)
-  (Import MDL  : DisjointModel B SPEC).
+  (Import SIG  : ProgramLogicSignature B)
+  (Import SPEC : Specification B SIG)
+  (Import SEM  : Semantics B SIG.PROG)
+  (Import MDL  : DisjointModel B SIG SPEC).
 
   Import SmallStepNotations.
-  Include ProgramLogicOn B SPEC.
+  Include ProgramLogicOn B SIG SPEC.
 
   Local Ltac sound_inversion :=
     lazymatch goal with

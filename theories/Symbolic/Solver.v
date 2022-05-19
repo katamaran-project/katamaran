@@ -840,11 +840,12 @@ End SolverOn.
 
 Module MakeSolver
   (B : Base)
-  (Import SPEC : Specification B)
-  (SOLV : SolverKit B SPEC)
-  <: SolverKit B SPEC.
+  (Import SIG : ProgramLogicSignature B)
+  (Import SPEC : Specification B SIG)
+  (SOLV : SolverKit B SIG SPEC)
+  <: SolverKit B SIG SPEC.
 
-  Include SolverOn B SPEC SPEC SPEC.
+  Include SolverOn B SIG SIG SIG.
 
   Definition solver : Solver :=
     Solver.generic SOLV.solver.

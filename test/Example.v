@@ -350,13 +350,18 @@ Module Import ExampleProgram <: Program ExampleBase.
 
 End ExampleProgram.
 
-Module Import ExampleSpecification <: Specification ExampleBase.
+Module Import ExampleSig <: ProgramLogicSignature ExampleBase.
   Module PROG := ExampleProgram.
   Import ctx.resolution.
 
   Include DefaultPredicateKit ExampleBase.
   Include ContractDeclMixin ExampleBase ExampleProgram.
+  Include SpecificationMixin ExampleBase ExampleProgram.
+End ExampleSig.
 
+Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
+  Include ExampleSig.
+  Import ctx.resolution.
   Section ContractDefKit.
 
     Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
@@ -470,15 +475,13 @@ Module Import ExampleSpecification <: Specification ExampleBase.
 
   End ContractDefKit.
 
-  Include SpecificationMixin ExampleBase ExampleProgram.
-
 End ExampleSpecification.
 
-Module ExampleSolverKit := DefaultSolverKit ExampleBase ExampleSpecification.
-Module ExampleSolver := MakeSolver ExampleBase ExampleSpecification ExampleSolverKit.
+Module ExampleSolverKit := DefaultSolverKit ExampleBase ExampleSig ExampleSpecification.
+Module ExampleSolver := MakeSolver ExampleBase ExampleSig ExampleSpecification ExampleSolverKit.
 
 Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleSpecification ExampleSolver.
+  MakeExecutor ExampleBase ExampleSig ExampleSpecification ExampleSolver.
 
 (* Ltac destruct_syminstance ι := *)
 (*   repeat *)
