@@ -1089,7 +1089,7 @@ Module BlockVerificationDerived2.
     Lemma sat_vc1' : SymProp.safe vc1 env.nil.
     Proof.
       repeat constructor; cbn; try lia.
-    Admitted.
+    Qed.
 
   End Example.
 

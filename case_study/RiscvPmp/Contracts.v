@@ -348,6 +348,7 @@ Section PredicateKit.
     | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits] [ty_list ty_pmpentry; ty_privilege] eq_refl)
     | ptstomem                => Some (MkPrecise [ty_xlenbits; ty_int] [ty_list ty_word] eq_refl)
     | ptstoinstr              => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
+    | encodes_instr           => Some (MkPrecise [ty_int] [ty_ast] eq_refl)
     | _                       => None
     end.
 
