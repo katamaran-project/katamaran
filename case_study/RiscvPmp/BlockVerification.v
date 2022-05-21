@@ -35,7 +35,9 @@ From RiscvPmp Require Import
      Machine.
 From RiscvPmp Require
      Model
-     Contracts.
+     Contracts
+     LoopVerification
+     .
 From Katamaran Require Import
      Iris.Model
      Notations
@@ -1157,6 +1159,8 @@ Module BlockVerificationDerived2.
     Definition femto_pmpcfg_ent0_bits : Val ty_xlenbits := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
     Definition femto_pmpcfg_ent1_bits : Val ty_xlenbits := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent1.
+    Definition femto_pmpentries : list PmpEntryCfg := [(femto_pmpcfg_ent0, 88); (femto_pmpcfg_ent1, femto_address_max)]%list.
+
     Definition femto_mstatus := pure_mstatus_to_bits (MkMstatus User ).
 
     Example femtokernel_init : list AST :=
@@ -1525,29 +1529,61 @@ Module BlockVerificationDerived2Sem.
   (* This lemma transforms the postcondition of femtokernel_init into the precondition of the universal contract, so that we can use the UC to verify the invocation of untrusted code.
    *)
   Lemma femtokernel_manualStep1 `{na_invΣ Σ, sailGS Σ} :
-    ((∃ v, mstatus ↦ v) ∗
-         (mtvec ↦ 72) ∗
-          (∃ v, mcause ↦ v) ∗
-          (∃ v, mepc ↦ v) ∗
-          cur_privilege ↦ User ∗
-          (∃ v, x1 ↦ v) ∗
-          (∃ v, x2 ↦ v) ∗
-          (∃ v, x3 ↦ v) ∗
-          (∃ v, x4 ↦ v) ∗
-          (∃ v, x5 ↦ v) ∗
-          (∃ v, x6 ↦ v) ∗
-          (∃ v, x7 ↦ v) ∗
-          (pmp0cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent0) ∗
-          (pmp1cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent1) ∗
-          (pmpaddr0 ↦ 88) ∗
-          (pmpaddr1 ↦ BlockVerificationDerived2.femto_address_max) ∗
-          (interp_ptsto (mG := sailGS_memGS) 84 42) ∗
-          (pc ↦ 88) ∗
-          (∃ v, nextpc ↦ v) ∗
-          (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
-          ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler
-        ⊢ True (* TODO :) *)
+    (mstatus ↦ {| MPP := Machine |} ∗
+       (mtvec ↦ 72) ∗
+        (∃ v, mcause ↦ v) ∗
+        (∃ v, mepc ↦ v) ∗
+        cur_privilege ↦ User ∗
+        (∃ v, x1 ↦ v) ∗
+        (∃ v, x2 ↦ v) ∗
+        (∃ v, x3 ↦ v) ∗
+        (∃ v, x4 ↦ v) ∗
+        (∃ v, x5 ↦ v) ∗
+        (∃ v, x6 ↦ v) ∗
+        (∃ v, x7 ↦ v) ∗
+        (pmp0cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent0) ∗
+        (pmp1cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent1) ∗
+        (pmpaddr0 ↦ 88) ∗
+        (pmpaddr1 ↦ BlockVerificationDerived2.femto_address_max) ∗
+        (interp_ptsto (mG := sailGS_memGS) 84 42) ∗
+        (pc ↦ 88) ∗
+        (∃ v, nextpc ↦ v) ∗
+        (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
+        ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler ∗
+        True  (* memory ownership missing *)
+        ⊢
+        ∃ mepcv, LoopVerification.loop_pre User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries Machine mepcv
     )%I.
+  Proof.
+    iIntros "(Hmst & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo & Hpc & Hnpc & Hhandler)".
+    iExists mepc.
+    unfold LoopVerification.loop_pre, LoopVerification.Execution, interp_gprs.
+    rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
+    iFrame.
+    iSplitL "Hmcause Hpc Hnpc".
+    iSplitL "".
+    admit. (* memory *)
+    iSplitL "". unfold interp_ptsreg. now iExists 0.
+    iSplitL "Hmcause".
+    now iExists mcause.
+    iExists 88; iFrame;
+      admit. (* TODO: existentially quantify over npc *)
+
+    iSplitL "".
+    iModIntro.
+    unfold LoopVerification.CSRMod.
+    iIntros "(_ & _ & _ & %eq & _)".
+    inversion eq.
+
+    iSplitL.
+
+    admit.
+
+    iModIntro.
+    unfold LoopVerification.Recover.
+    iIntros "(_ & _ & _ & %eq & _)".
+    inversion eq.
+
   Admitted.
 
 

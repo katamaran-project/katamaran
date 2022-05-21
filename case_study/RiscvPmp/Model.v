@@ -150,8 +150,7 @@ Module RiscvPmpModel.
 
     Import Contracts.
 
-    Definition reg_file : gset (bv 3) :=
-      list_to_set (finite.enum (bv 3)).
+    Definition reg_file : gset (bv 3) := list_to_set (finite.enum (bv 3)).
 
     Definition interp_ptsreg `{sailRegGS Σ} (r : RegIdx) (v : Z) : iProp Σ :=
       match reg_convert r with
