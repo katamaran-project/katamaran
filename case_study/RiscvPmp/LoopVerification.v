@@ -87,8 +87,8 @@ Section Loop.
                     interp_pmp_entries es ∗
         (∃ mc : Z,  mcause        ↦ mc) ∗
                     cur_privilege ↦ cp ∗
-        (∃ npc : Z, nextpc        ↦ npc ∗
-                    pc            ↦ npc) ∗
+        (∃ npc : Z, nextpc        ↦ npc) ∗
+        (∃ cpc : Z, pc            ↦ cpc) ∗
                     mtvec         ↦ h ∗
                     mstatus       ↦ {| MPP := mpp |} ∗
                     mepc          ↦ mepc_v)%I.

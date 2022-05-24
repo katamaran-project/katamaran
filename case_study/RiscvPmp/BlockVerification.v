@@ -1560,14 +1560,13 @@ Module BlockVerificationDerived2Sem.
     unfold LoopVerification.loop_pre, LoopVerification.Execution, interp_gprs.
     rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
     iFrame.
-    iSplitL "Hmcause Hpc Hnpc".
+    iSplitL "Hmcause Hpc".
     iSplitL "".
     admit. (* memory *)
     iSplitL "". unfold interp_ptsreg. now iExists 0.
     iSplitL "Hmcause".
     now iExists mcause.
-    iExists 88; iFrame;
-      admit. (* TODO: existentially quantify over npc *)
+    iExists 88; iFrame.
 
     iSplitL "".
     iModIntro.
@@ -1583,7 +1582,6 @@ Module BlockVerificationDerived2Sem.
     unfold LoopVerification.Recover.
     iIntros "(_ & _ & _ & %eq & _)".
     inversion eq.
-
   Admitted.
 
 
