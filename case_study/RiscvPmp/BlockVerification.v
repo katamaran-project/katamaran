@@ -59,6 +59,7 @@ From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
 From iris.program_logic Require weakestpre adequacy.
 From iris.proofmode Require string_ident tactics.
+From stdpp Require namespaces.
 
 Import RiscvPmpProgram.
 
@@ -70,6 +71,8 @@ Import ListNotations.
 Open Scope string_scope.
 Open Scope ctx_scope.
 Open Scope Z_scope.
+
+Module ns := stdpp.namespaces.
 
 (*   Definition pmp_entry_cfg := ty_prod ty_pmpcfg_ent ty_xlenbits. *)
 
@@ -1525,11 +1528,44 @@ Module BlockVerificationDerived2Sem.
     | nil => True%I
     end.
 
+  Definition advAddrs := seqZ 88 (maxAddr - 88 + 1).
 
+  Definition ptstoSth `{sailGS Σ} : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto (mG := sailGS_memGS) a w)%I.
+  Definition ptstoSthL `{sailGS Σ} : list Addr -> iProp Σ :=
+    fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
+  Lemma ptstoSthL_app `{sailGS Σ} {l1 l2} : (ptstoSthL (l1 ++ l2) ⊣⊢ ptstoSthL l1 ∗ ptstoSthL l2)%I.
+  Proof. eapply big_sepL_app. Qed.
+
+  (* Lemma liveAddr_split : liveAddrs = seqZ minAddr 88 ++ advAddrs. *)
+  (* Proof. *)
+  (*   unfold liveAddrs. *)
+  (*   change 88%Z with (minAddr + 88)%Z at 2. *)
+  (*   replace (maxAddr - minAddr + 1)%Z with (88 + (maxAddr - 88 - minAddr + 1))%Z by lia. *)
+  (*   eapply seqZ_app; unfold minAddr, maxAddr; lia. *)
+  (* Qed. *)
+
+  (* Lemma liveAddr_filter : filter (fun x => x >= 88)%Z liveAddrs = seqZ 88 (maxAddr - 88 - minAddr + 1). *)
+  (* Proof. now compute. (* brute-force *)Qed. *)
+
+  (* (* Lemma big_sepL_filter `{BiAffine PROP2} {A : Type} {l : list A} *) *)
+  (* (*     (φ : A → Prop) `{∀ x, Decision (φ x)} Φ l : *) *)
+  (* (*   ([∗ list] i ↦ x ∈ filter φ l, Φ i x) ⊣⊢ *) *)
+  (* (*   ([∗ list] i ↦ x ∈ l, ⌜φ x⌝ → Φ i x). *) *)
+  (* (* Proof. setoid_rewrite <-decide_emp. apply big_sepM_filter'. Qed. *) *)
+
+  Lemma memAdv_pmpPolicy `{sailGS Σ} :
+    (ptstoSthL advAddrs ⊢
+      interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs BlockVerificationDerived2.femto_pmpentries User)%I.
+  Proof.
+  Admitted.
+
+  Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "femto_inv_ns").
+
+  Import iris.base_logic.lib.invariants.
   (* This lemma transforms the postcondition of femtokernel_init into the precondition of the universal contract, so that we can use the UC to verify the invocation of untrusted code.
    *)
   Lemma femtokernel_manualStep1 `{na_invΣ Σ, sailGS Σ} :
-    (mstatus ↦ {| MPP := Machine |} ∗
+    (⊢ mstatus ↦ {| MPP := Machine |} ∗
        (mtvec ↦ 72) ∗
         (∃ v, mcause ↦ v) ∗
         (∃ v, mepc ↦ v) ∗
@@ -1550,19 +1586,25 @@ Module BlockVerificationDerived2Sem.
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
         ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler ∗
-        True  (* memory ownership missing *)
-        ⊢
-        ∃ mepcv, LoopVerification.loop_pre User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries Machine mepcv
+        ptstoSthL advAddrs
+        ={⊤}=∗
+        ∃ mepcv, LoopVerification.loop_pre User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries Machine mepcv ∗
+        inv femto_inv_ns (interp_ptsto (mG := sailGS_memGS) 84 42)
     )%I.
   Proof.
-    iIntros "(Hmst & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo & Hpc & Hnpc & Hhandler)".
+    iIntros "(Hmst & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
     iExists mepc.
     unfold LoopVerification.loop_pre, LoopVerification.Execution, interp_gprs.
     rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
     iFrame.
-    iSplitL "Hmcause Hpc".
-    iSplitL "".
-    admit. (* memory *)
+
+    iMod (inv_alloc femto_inv_ns ⊤ (interp_ptsto (mG := sailGS_memGS) 84 42) with "Hfortytwo") as "#Hinv".
+    iModIntro.
+
+    iSplitR "".
+    iSplitL "Hmcause Hpc Hmemadv".
+    iSplitL "Hmemadv".
+    now iApply memAdv_pmpPolicy.
     iSplitL "". unfold interp_ptsreg. now iExists 0.
     iSplitL "Hmcause".
     now iExists mcause.
@@ -1582,6 +1624,8 @@ Module BlockVerificationDerived2Sem.
     unfold LoopVerification.Recover.
     iIntros "(_ & _ & _ & %eq & _)".
     inversion eq.
+
+    done.
   Admitted.
 
 
