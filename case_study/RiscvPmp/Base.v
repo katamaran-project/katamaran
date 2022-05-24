@@ -49,7 +49,7 @@ Definition Word : Set := Z.
 (* Parameter minAddr : Addr. *)
 (* Parameter maxAddr : Addr. *)
 Definition minAddr : Addr := 0%Z.
-Definition maxAddr : Addr := 200%Z.
+Definition maxAddr : Addr := 120%Z.
 
 Inductive Privilege : Set :=
 | User
