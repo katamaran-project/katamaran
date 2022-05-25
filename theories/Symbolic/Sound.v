@@ -2223,24 +2223,64 @@ Module Soundness
       now apply (IHΣ (demonicv (x∷σ) p)).
   Qed.
 
+  Lemma approx_postprocessing_prune {w : World} (ι : Valuation w) (P : 𝕊 w) (p : Prop) :
+    approx ι P p ->
+    approx ι (Postprocessing.prune P) p.
+  Proof.
+    unfold approx, ApproxPath.
+    now rewrite ?wsafe_safe, ?safe_debug_safe, Postprocessing.prune_sound.
+  Qed.
+
+  Lemma approx_postprocessing_solve_evars {w : World} (ι : Valuation w) (P : 𝕊 w) (p : Prop) :
+    approx ι P p ->
+    approx ι (Postprocessing.solve_evars P) p.
+  Proof.
+    unfold approx, ApproxPath.
+    now rewrite ?wsafe_safe, ?safe_debug_safe, Postprocessing.solve_evars_sound.
+  Qed.
+
+  Lemma approx_postprocessing_solve_uvars {w : World} (ι : Valuation w) (P : 𝕊 w) (p : Prop) :
+    approx ι P p ->
+    approx ι (Postprocessing.solve_uvars P) p.
+  Proof.
+    unfold approx, ApproxPath.
+    now rewrite ?wsafe_safe, ?safe_debug_safe, Postprocessing.solve_uvars_sound.
+  Qed.
+
+  Lemma approx_demonic_close {w : World} (P : 𝕊 w) (p : Valuation w -> Prop) :
+    (forall (ι : Valuation w), approx ι P (p ι)) ->
+    approx (w := wnil) env.nil (demonic_close P) (ForallNamed p).
+  Proof.
+    unfold approx, ApproxPath, ForallNamed. intros HYP Hwp.
+    rewrite env.Forall_forall. intros ι.
+    apply HYP. revert Hwp. clear.
+    rewrite ?wsafe_safe, ?safe_debug_safe.
+    intros Hwp. now apply safe_demonic_close.
+  Qed.
+
+  Lemma approx_vcgen {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
+    approx (w := wnil) env.nil (SMut.VcGen c body) (CMut.ValidContract 1 c body).
+  Proof.
+    unfold SMut.VcGen.
+    apply approx_postprocessing_prune.
+    apply approx_postprocessing_solve_uvars.
+    apply approx_postprocessing_prune.
+    apply approx_postprocessing_solve_evars.
+    apply approx_postprocessing_prune.
+    unfold SMut.exec_contract_path, CMut.ValidContract.
+    apply (approx_demonic_close
+             (w := {| wctx := sep_contract_logic_variables c; wco := nil |})).
+    intros ι.
+    apply approx_exec_contract; auto.
+    now intros w1 ω01 ι1 -> Hpc1.
+  Qed.
+
   Lemma symbolic_sound {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
     SMut.ValidContract c body ->
     CMut.ValidContract 1 c body.
   Proof.
-    unfold SMut.ValidContract, CMut.ValidContract, ForallNamed.
-    rewrite env.Forall_forall. intros [Hwp] ι.
-    unfold SMut.exec_contract_path in Hwp.
-    rewrite Postprocessing.prune_sound in Hwp.
-    rewrite Postprocessing.solve_uvars_sound in Hwp.
-    rewrite Postprocessing.prune_sound in Hwp.
-    rewrite Postprocessing.solve_evars_sound in Hwp.
-    rewrite Postprocessing.prune_sound in Hwp. cbn in Hwp.
-    apply safe_demonic_close with _ ι in Hwp. revert Hwp.
-    rewrite <- safe_debug_safe.
-    rewrite <- (wsafe_safe (w := @MkWorld (sep_contract_logic_variables c) nil)).
-    apply approx_exec_contract; auto.
-    intros w1 ω01 ι1 -> Hpc1.
-    auto.
+    unfold SMut.ValidContract. intros [Hwp].
+    apply approx_vcgen. now rewrite wsafe_safe, safe_debug_safe.
   Qed.
 
   (* Print Assumptions symbolic_sound. *)

@@ -578,14 +578,23 @@ Definition vc_summaxlen : SymProp [] :=
 Time Eval compute in (size vc_summaxlen).
 Time Eval compute in vc_summaxlen.
 
-Goal True. idtac "Timing -- valid_contract_summaxlen -- before". Abort.
-Lemma valid_contract_summaxlen : SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
+(* Goal True. idtac "Timing -- valid_contract_summaxlen_slow -- before". Abort. *)
+(* Lemma valid_contract_summaxlen_slow : SMut.ValidContract sep_contract_summaxlen fun_summaxlen. *)
+(* Proof. *)
+(*   compute. constructor. *)
+(*   compute - [Z.mul Z.add Z.le Z.ge Z.lt]. *)
+(*   solve; nia. *)
+(* Time Qed. *)
+(* Goal True. idtac "Timing -- valid_contract_summaxlen_slow -- after". Abort. *)
+(* Local Hint Resolve valid_contract_summaxlen_slow : contracts. *)
+
+Goal True. idtac "Timing -- valid_contract_summaxlen_fast -- before". Abort.
+Lemma valid_contract_summaxlen_fast : SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
 Proof.
-  constructor.
-  compute - [SymProp.safe].
+  apply SMut.validcontract_with_erasure_sound.
+  compute. constructor.
   compute - [Z.mul Z.add Z.le Z.ge Z.lt].
   solve; nia.
 Time Qed.
-Goal True. idtac "Timing -- valid_contract_summaxlen -- after". Abort.
-Local Hint Resolve valid_contract_summaxlen : contracts.
-
+Goal True. idtac "Timing -- valid_contract_summaxlen_fast -- after". Abort.
+Local Hint Resolve valid_contract_summaxlen_fast : contracts.

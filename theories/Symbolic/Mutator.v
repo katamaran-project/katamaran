@@ -323,6 +323,9 @@ Module Type MutatorsOn
     Global Instance proper_vc : Proper (sequiv ctx.nil ==> iff) VerificationCondition.
     Proof. intros p q pq. split; intros []; constructor; now apply pq. Qed.
 
+    Inductive VerificationConditionWithErasure (p : Erasure.ESymProp) : Prop :=
+    | vce (P : Erasure.inst_symprop nil p).
+
   End VerificationConditions.
 
   Definition SDijkstra (A : TYPE) : TYPE :=
@@ -2364,11 +2367,14 @@ Module Type MutatorsOn
       destruct q; try discriminate; cbn; auto.
     Qed.
 
+    Definition VcGen {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : 𝕊 [] :=
+      prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config 1 c body))))).
+
     Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationCondition (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config 1 c body)))))).
+      VerificationCondition (VcGen c body).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      is_true (ok (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config 1 c body))))))).
+      is_true (ok (VcGen c body)).
 
     Lemma validcontract_reflect_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       ValidContractReflect c body ->
@@ -2376,6 +2382,20 @@ Module Type MutatorsOn
     Proof.
       unfold ValidContractReflect, ValidContract. intros Hok.
       apply (ok_sound _ env.nil) in Hok. now constructor.
+    Qed.
+
+    Definition VcGenErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Erasure.ESymProp :=
+      Erasure.erase_symprop (VcGen c body).
+
+    Definition ValidContractWithErasure {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      VerificationConditionWithErasure (VcGenErasure c body).
+
+    Lemma validcontract_with_erasure_sound {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+      ValidContractWithErasure c body ->
+      ValidContract c body.
+    Proof.
+      unfold ValidContractWithErasure, VcGenErasure, ValidContract. intros [H].
+      constructor. now rewrite <- Erasure.erase_safe.
     Qed.
 
   End SMut.
