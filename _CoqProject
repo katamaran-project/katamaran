@@ -3,6 +3,10 @@
 -arg "-w -deprecated-native-compiler-option"
 -arg "-w -disj-pattern-notation"
 -arg "-native-compiler no"
+-Q case_study/MinimalCaps MinimalCaps
+case_study/MinimalCaps/Base.v
+case_study/MinimalCaps/Contracts.v
+case_study/MinimalCaps/Machine.v
 -Q case_study/RiscvPmp RiscvPmp
 case_study/RiscvPmp/Base.v
 case_study/RiscvPmp/Contracts.v
