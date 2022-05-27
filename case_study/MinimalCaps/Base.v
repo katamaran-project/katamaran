@@ -190,15 +190,15 @@ Module Export MinCapsBase <: Base.
        recordi := Records;
     |}.
 
-  Notation ty_hv := (ty.enum regname).
-  Notation ty_lv := (ty.enum regname).
-  Notation ty_rv := (ty.sum (ty.enum regname) ty.int).
-  Notation ty_cap := (ty.record capability).
-  Notation ty_word := (ty.sum ty.int ty_cap).
-  Notation ty_memval := (ty_word).
-  Notation ty_addr := (ty.int).
-  Notation ty_perm := (ty.enum permission).
-  Notation ty_instr := (ty.union instruction).
+  Notation "ty.hv" := (ty.enum regname).
+  Notation "ty.lv" := (ty.enum regname).
+  Notation "ty.rv" := (ty.sum (ty.enum regname) ty.int).
+  Notation "ty.cap" := (ty.record capability).
+  Notation "ty.word" := (ty.sum ty.int ty.cap).
+  Notation "ty.memval" := (ty.word).
+  Notation "ty.addr" := (ty.int).
+  Notation "ty.perm" := (ty.enum permission).
+  Notation "ty.instr" := (ty.union instruction).
 
   Definition enum_denote (e : Enums) : Set :=
     match e with
@@ -231,31 +231,31 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun K =>
       match K with
-      | kjr        => ty_lv
-      | kjalr      => ty.prod ty_lv ty_lv
+      | kjr        => ty.lv
+      | kjalr      => ty.prod ty.lv ty.lv
       | kj         => ty.int
-      | kjal       => ty.prod ty_lv ty.int
-      | kbnez      => ty.prod ty_lv ty.int
-      | kmv        => ty.prod ty_lv ty_hv
-      | kld        => ty.tuple [ty_lv; ty_hv; ty.int]
-      | ksd        => ty.tuple [ty_hv; ty_lv; ty.int]
-      | kaddi      => ty.tuple [ty_lv; ty_hv; ty.int]
-      | kadd       => ty.tuple [ty_lv; ty_lv; ty_lv]
-      | ksub       => ty.tuple [ty_lv; ty_lv; ty_lv]
-      | kslt       => ty.tuple [ty_lv; ty_lv; ty_lv]
-      | kslti      => ty.tuple [ty_lv; ty_hv; ty.int]
-      | ksltu      => ty.tuple [ty_lv; ty_lv; ty_lv]
-      | ksltiu     => ty.tuple [ty_lv; ty_hv; ty.int]
-      | klea       => ty.prod ty_lv ty_hv
-      | krestrict  => ty.prod ty_lv ty_hv
-      | krestricti => ty.prod ty_lv ty.int
-      | ksubseg    => ty.tuple [ty_lv; ty_hv; ty_hv]
-      | ksubsegi   => ty.tuple [ty_lv; ty_hv; ty.int]
-      | kisptr     => ty.prod ty_lv ty_lv
-      | kgetp      => ty.prod ty_lv ty_lv
-      | kgetb      => ty.prod ty_lv ty_lv
-      | kgete      => ty.prod ty_lv ty_lv
-      | kgeta      => ty.prod ty_lv ty_lv
+      | kjal       => ty.prod ty.lv ty.int
+      | kbnez      => ty.prod ty.lv ty.int
+      | kmv        => ty.prod ty.lv ty.hv
+      | kld        => ty.tuple [ty.lv; ty.hv; ty.int]
+      | ksd        => ty.tuple [ty.hv; ty.lv; ty.int]
+      | kaddi      => ty.tuple [ty.lv; ty.hv; ty.int]
+      | kadd       => ty.tuple [ty.lv; ty.lv; ty.lv]
+      | ksub       => ty.tuple [ty.lv; ty.lv; ty.lv]
+      | kslt       => ty.tuple [ty.lv; ty.lv; ty.lv]
+      | kslti      => ty.tuple [ty.lv; ty.hv; ty.int]
+      | ksltu      => ty.tuple [ty.lv; ty.lv; ty.lv]
+      | ksltiu     => ty.tuple [ty.lv; ty.hv; ty.int]
+      | klea       => ty.prod ty.lv ty.hv
+      | krestrict  => ty.prod ty.lv ty.hv
+      | krestricti => ty.prod ty.lv ty.int
+      | ksubseg    => ty.tuple [ty.lv; ty.hv; ty.hv]
+      | ksubsegi   => ty.tuple [ty.lv; ty.hv; ty.int]
+      | kisptr     => ty.prod ty.lv ty.lv
+      | kgetp      => ty.prod ty.lv ty.lv
+      | kgetb      => ty.prod ty.lv ty.lv
+      | kgete      => ty.prod ty.lv ty.lv
+      | kgeta      => ty.prod ty.lv ty.lv
       | kfail      => ty.unit
       | kret       => ty.unit
       end
@@ -344,10 +344,10 @@ Module Export MinCapsBase <: Base.
 
   Definition record_field_type (R : recordi) : NCtx string Ty :=
     match R with
-    | capability => [ "cap_permission" ∷ ty_perm;
-                      "cap_begin"      ∷ ty_addr;
-                      "cap_end"        ∷ ty_addr;
-                      "cap_cursor"     ∷ ty_addr
+    | capability => [ "cap_permission" ∷ ty.perm;
+                      "cap_begin"      ∷ ty.addr;
+                      "cap_end"        ∷ ty.addr;
+                      "cap_cursor"     ∷ ty.addr
                     ]
     end.
 
@@ -367,10 +367,10 @@ Module Export MinCapsBase <: Base.
     | capability =>
       fun c=>
         env.nil
-          ► ("cap_permission" ∷ ty_perm ↦ cap_permission c)
-          ► ("cap_begin"      ∷ ty_addr ↦ cap_begin c)
-          ► ("cap_end"        ∷ ty_addr ↦ cap_end c)
-          ► ("cap_cursor"     ∷ ty_addr ↦ cap_cursor c)
+          ► ("cap_permission" ∷ ty.perm ↦ cap_permission c)
+          ► ("cap_begin"      ∷ ty.addr ↦ cap_begin c)
+          ► ("cap_end"        ∷ ty.addr ↦ cap_end c)
+          ► ("cap_cursor"     ∷ ty.addr ↦ cap_cursor c)
     end%env.
 
   #[refine] Instance typedefkit : TypeDefKit typedenotekit :=
@@ -404,11 +404,11 @@ Module Export MinCapsBase <: Base.
   Section RegDeclKit.
 
     Inductive Reg : Ty -> Set :=
-    | pc   : Reg ty_cap
-    | reg0 : Reg ty_word
-    | reg1 : Reg ty_word
-    | reg2 : Reg ty_word
-    | reg3 : Reg ty_word.
+    | pc   : Reg ty.cap
+    | reg0 : Reg ty.word
+    | reg1 : Reg ty.word
+    | reg2 : Reg ty.word
+    | reg3 : Reg ty.word.
 
     Section TransparentObligations.
       Local Set Transparent Obligations.

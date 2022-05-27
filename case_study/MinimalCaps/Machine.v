@@ -53,69 +53,69 @@ Module Export MinCapsProgram <: Program MinCapsBase.
 
 Section FunDeclKit.
   Inductive Fun : PCtx -> Ty -> Set :=
-  | read_reg        : Fun ["rreg" ∶ ty.enum regname ] ty_word
-  | read_reg_cap    : Fun ["creg" ∶ ty.enum regname ] ty_cap
+  | read_reg        : Fun ["rreg" ∶ ty.enum regname ] ty.word
+  | read_reg_cap    : Fun ["creg" ∶ ty.enum regname ] ty.cap
   | read_reg_num    : Fun ["nreg" ∶ ty.enum regname ] ty.int
   | write_reg       : Fun ["wreg" ∶ ty.enum regname;
-                           "w"  ∶ ty_word
+                           "w"  ∶ ty.word
                           ] ty.unit
-  | next_pc         : Fun [] ty_cap
+  | next_pc         : Fun [] ty.cap
   | update_pc       : Fun [] ty.unit
   | add_pc          : Fun ["offset" ∶ ty.int] ty.unit
-  | read_mem        : Fun ["c"   ∶ ty_cap ] ty_memval
-  | write_mem       : Fun ["c"   ∶ ty_cap;
-                           "v"   ∶ ty_memval
+  | read_mem        : Fun ["c"   ∶ ty.cap ] ty.memval
+  | write_mem       : Fun ["c"   ∶ ty.cap;
+                           "v"   ∶ ty.memval
                           ] ty.unit
-  | read_allowed    : Fun ["p"   ∶ ty_perm ] ty.bool
-  | write_allowed   : Fun ["p"   ∶ ty_perm ] ty.bool
-  | upper_bound     : Fun ["a"   ∶ ty_addr;
-                           "e"   ∶ ty_addr
+  | read_allowed    : Fun ["p"   ∶ ty.perm ] ty.bool
+  | write_allowed   : Fun ["p"   ∶ ty.perm ] ty.bool
+  | upper_bound     : Fun ["a"   ∶ ty.addr;
+                           "e"   ∶ ty.addr
                           ] ty.bool
-  | within_bounds   : Fun ["c"   ∶ ty_cap ] ty.bool
-  | perm_to_bits    : Fun ["p" ∶ ty_perm] ty.int
-  | perm_from_bits  : Fun ["i" ∶ ty.int] ty_perm
-  | is_sub_perm     : Fun ["p" ∶ ty_perm; "p'" ∶ ty_perm] ty.bool
-  | is_within_range : Fun ["b'" ∶ ty_addr; "e'" ∶ ty_addr;
-                           "b" ∶ ty_addr; "e" ∶ ty_addr] ty.bool
+  | within_bounds   : Fun ["c"   ∶ ty.cap ] ty.bool
+  | perm_to_bits    : Fun ["p" ∶ ty.perm] ty.int
+  | perm_from_bits  : Fun ["i" ∶ ty.int] ty.perm
+  | is_sub_perm     : Fun ["p" ∶ ty.perm; "p'" ∶ ty.perm] ty.bool
+  | is_within_range : Fun ["b'" ∶ ty.addr; "e'" ∶ ty.addr;
+                           "b" ∶ ty.addr; "e" ∶ ty.addr] ty.bool
   | abs             : Fun ["i" ∶ ty.int] ty.int
-  | exec_jr         : Fun ["lv" ∶ ty_lv] ty.bool
-  | exec_jalr       : Fun ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv ] ty.bool
+  | exec_jr         : Fun ["lv" ∶ ty.lv] ty.bool
+  | exec_jalr       : Fun ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv ] ty.bool
   | exec_j          : Fun ["offset" ∶ ty.int] ty.bool
-  | exec_jal        : Fun ["lv" ∶ ty_lv; "offset" ∶ ty.int] ty.bool
-  | exec_bnez       : Fun ["lv" ∶ ty_lv; "immediate" ∶ ty.int] ty.bool
-  | exec_mv         : Fun ["lv" ∶ ty_lv; "hv" ∶ ty_hv ] ty.bool
-  | exec_ld         : Fun ["lv" ∶ ty_lv; "hv" ∶ ty_hv; "immediate" ∶ ty.int] ty.bool
-  | exec_sd         : Fun ["hv" ∶ ty_hv; "lv" ∶ ty_lv; "immediate" ∶ ty.int] ty.bool
-  | exec_lea        : Fun ["lv" ∶ ty_lv; "hv" ∶ ty_hv] ty.bool
-  | exec_restrict   : Fun ["lv" ∶ ty_lv; "hv" ∶ ty_hv] ty.bool
-  | exec_restricti  : Fun ["lv" ∶ ty_lv; "immediate" ∶ ty.int] ty.bool
-  | exec_subseg     : Fun ["lv" ∶ ty_lv; "hv1" ∶ ty_hv; "hv2" ∶ ty_hv] ty.bool
-  | exec_subsegi    : Fun ["lv" ∶ ty_lv; "hv" ∶ ty_hv; "immediate" ∶ ty.int] ty.bool
-  | exec_isptr      : Fun ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool
-  | exec_addi       : Fun ["lv" ∶ ty_lv; "hv" ∶ ty_hv; "immediate" ∶ ty.int] ty.bool
-  | exec_add        : Fun ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv; "lv3" ∶ ty_lv] ty.bool
-  | exec_sub        : Fun ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv; "lv3" ∶ ty_lv] ty.bool
-  | exec_slt        : Fun ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv; "lv3" ∶ ty_lv] ty.bool
-  | exec_slti       : Fun ["lv" ∶ ty_lv; "hv" ∶ ty_hv; "immediate" ∶ ty.int] ty.bool
-  | exec_sltu       : Fun ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv; "lv3" ∶ ty_lv] ty.bool
-  | exec_sltiu      : Fun ["lv" ∶ ty_lv; "hv" ∶ ty_hv; "immediate" ∶ ty.int] ty.bool
-  | exec_getp       : Fun ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool
-  | exec_getb       : Fun ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool
-  | exec_gete       : Fun ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool
-  | exec_geta       : Fun ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool
+  | exec_jal        : Fun ["lv" ∶ ty.lv; "offset" ∶ ty.int] ty.bool
+  | exec_bnez       : Fun ["lv" ∶ ty.lv; "immediate" ∶ ty.int] ty.bool
+  | exec_mv         : Fun ["lv" ∶ ty.lv; "hv" ∶ ty.hv ] ty.bool
+  | exec_ld         : Fun ["lv" ∶ ty.lv; "hv" ∶ ty.hv; "immediate" ∶ ty.int] ty.bool
+  | exec_sd         : Fun ["hv" ∶ ty.hv; "lv" ∶ ty.lv; "immediate" ∶ ty.int] ty.bool
+  | exec_lea        : Fun ["lv" ∶ ty.lv; "hv" ∶ ty.hv] ty.bool
+  | exec_restrict   : Fun ["lv" ∶ ty.lv; "hv" ∶ ty.hv] ty.bool
+  | exec_restricti  : Fun ["lv" ∶ ty.lv; "immediate" ∶ ty.int] ty.bool
+  | exec_subseg     : Fun ["lv" ∶ ty.lv; "hv1" ∶ ty.hv; "hv2" ∶ ty.hv] ty.bool
+  | exec_subsegi    : Fun ["lv" ∶ ty.lv; "hv" ∶ ty.hv; "immediate" ∶ ty.int] ty.bool
+  | exec_isptr      : Fun ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool
+  | exec_addi       : Fun ["lv" ∶ ty.lv; "hv" ∶ ty.hv; "immediate" ∶ ty.int] ty.bool
+  | exec_add        : Fun ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv; "lv3" ∶ ty.lv] ty.bool
+  | exec_sub        : Fun ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv; "lv3" ∶ ty.lv] ty.bool
+  | exec_slt        : Fun ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv; "lv3" ∶ ty.lv] ty.bool
+  | exec_slti       : Fun ["lv" ∶ ty.lv; "hv" ∶ ty.hv; "immediate" ∶ ty.int] ty.bool
+  | exec_sltu       : Fun ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv; "lv3" ∶ ty.lv] ty.bool
+  | exec_sltiu      : Fun ["lv" ∶ ty.lv; "hv" ∶ ty.hv; "immediate" ∶ ty.int] ty.bool
+  | exec_getp       : Fun ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool
+  | exec_getb       : Fun ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool
+  | exec_gete       : Fun ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool
+  | exec_geta       : Fun ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool
   | exec_fail       : Fun [] ty.bool
   | exec_ret        : Fun [] ty.bool
-  | exec_instr      : Fun ["i" ∶ ty_instr] ty.bool
+  | exec_instr      : Fun ["i" ∶ ty.instr] ty.bool
   | exec            : Fun [] ty.bool
   | loop            : Fun [] ty.unit
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
   (* read memory *)
-  | rM    : FunX ["address" ∶ ty.int] ty_memval
+  | rM    : FunX ["address" ∶ ty.int] ty.memval
   (* write memory *)
-  | wM    : FunX ["address" ∶ ty.int; "new_value" ∶ ty_memval] ty.unit
-  | dI    : FunX ["code" ∶ ty.int] ty_instr
+  | wM    : FunX ["address" ∶ ty.int; "new_value" ∶ ty.memval] ty.unit
+  | dI    : FunX ["code" ∶ ty.int] ty.instr
   .
 
   Inductive Lem : PCtx -> Set :=
@@ -123,11 +123,11 @@ Section FunDeclKit.
   | close_ptsreg (R : RegName) : Lem []
   | open_gprs                  : Lem []
   | close_gprs                 : Lem []
-  | safe_move_cursor           : Lem ["c'" ∶ ty_cap; "c" ∶ ty_cap]
-  | safe_sub_perm              : Lem ["c'" ∶ ty_cap; "c" ∶ ty_cap]
-  | safe_within_range          : Lem ["c'" ∶ ty_cap; "c" ∶ ty_cap]
+  | safe_move_cursor           : Lem ["c'" ∶ ty.cap; "c" ∶ ty.cap]
+  | safe_sub_perm              : Lem ["c'" ∶ ty.cap; "c" ∶ ty.cap]
+  | safe_within_range          : Lem ["c'" ∶ ty.cap; "c" ∶ ty.cap]
   | int_safe                   : Lem ["i" ∶ ty.int]
-  | gen_dummy                  : Lem ["c" ∶ ty_cap]
+  | gen_dummy                  : Lem ["c" ∶ ty.cap]
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -187,7 +187,7 @@ Section FunDefKit.
        "cap_cursor" cur)
     s) (at level 10) : exp_scope.
 
-  Definition fun_read_reg : Stm ["rreg" ∶ ty.enum regname] ty_word :=
+  Definition fun_read_reg : Stm ["rreg" ∶ ty.enum regname] ty.word :=
     use lemma open_gprs ;;
     let: "x" := match: exp_var "rreg" in regname with
                 | R0 => stm_read_register reg0
@@ -198,7 +198,7 @@ Section FunDefKit.
     use lemma close_gprs ;;
     stm_exp x.
 
-  Definition fun_read_reg_cap : Stm ["creg" ∶ ty.enum regname] ty_cap :=
+  Definition fun_read_reg_cap : Stm ["creg" ∶ ty.enum regname] ty.cap :=
     let: w := call read_reg (exp_var "creg") in
     match: w with
     | inl i => fail "Err [read_reg_cap]: expect register to hold a capability"
@@ -212,7 +212,7 @@ Section FunDefKit.
     | inr c => fail "Err [read_reg_num]: expect register to hold a number"
     end.
 
-  Definition fun_write_reg : Stm ["wreg" ∶ ty.enum regname; "w" ∶ ty_word] ty.unit :=
+  Definition fun_write_reg : Stm ["wreg" ∶ ty.enum regname; "w" ∶ ty.word] ty.unit :=
     use lemma open_gprs ;;
     match: exp_var "wreg" in regname with
     | R0 => stm_write_register reg0 (exp_var "w")
@@ -222,7 +222,7 @@ Section FunDefKit.
     end ;;
     use lemma close_gprs.
 
-  Definition fun_next_pc : Stm [] ty_cap :=
+  Definition fun_next_pc : Stm [] ty.cap :=
     let: "c" := stm_read_register pc in
     let*: ["perm" , "beg" , "end" , "cur"] := (exp_var "c") in
       (exp_record capability
@@ -250,13 +250,13 @@ Section FunDefKit.
      stm_write_register pc (exp_var "npc") ;;
      stm_val ty.unit tt).
 
-  Definition fun_read_allowed : Stm ["p" ∶ ty_perm] ty.bool :=
+  Definition fun_read_allowed : Stm ["p" ∶ ty.perm] ty.bool :=
     call is_sub_perm (exp_val (ty.enum permission) R) (exp_var "p").
 
-  Definition fun_write_allowed : Stm ["p" ∶ ty_perm] ty.bool :=
+  Definition fun_write_allowed : Stm ["p" ∶ ty.perm] ty.bool :=
     call is_sub_perm (exp_val (ty.enum permission) RW) (exp_var "p").
 
-  (* Definition fun_sub_perm : Stm ["p1" ∶ ty_perm; "p2" ∶ ty_perm] ty.bool := *)
+  (* Definition fun_sub_perm : Stm ["p1" ∶ ty.perm; "p2" ∶ ty.perm] ty.bool := *)
   (*   match: p1 in permission with *)
   (*   | O   => stm_val ty.bool true *)
   (*   | R   => call read_allowed p2 *)
@@ -265,12 +265,12 @@ Section FunDefKit.
   (*            stm_exp (exp_var "r" && exp_var "w") *)
   (*   end. *)
 
-  Definition fun_within_bounds : Stm ["c" ∶ ty_cap] ty.bool :=
+  Definition fun_within_bounds : Stm ["c" ∶ ty.cap] ty.bool :=
     let*: ["p", "b", "e", "a"] := (exp_var "c") in
     (let: "u" := call upper_bound (exp_var "a") (exp_var "e") in
      (exp_var "b" <= exp_var "a") && exp_var "u").
 
-  Definition fun_upper_bound : Stm ["a" ∶ ty_addr; "e" ∶ ty_addr] ty.bool :=
+  Definition fun_upper_bound : Stm ["a" ∶ ty.addr; "e" ∶ ty.addr] ty.bool :=
     a <= e.
 
   Section ExecStore.
@@ -278,12 +278,12 @@ Section FunDefKit.
     Local Notation "'perm'"   := "cap_permission" : string_scope.
     Local Notation "'cursor'" := "cap_cursor" : string_scope.
 
-    Let cap : Ty := ty_cap.
+    Let cap : Ty := ty.cap.
     Let bool : Ty := ty.bool.
     Let int : Ty := ty.int.
-    Let word : Ty := ty_word.
+    Let word : Ty := ty.word.
 
-    Definition fun_exec_sd : Stm [hv ∶ ty_hv; lv ∶ ty_lv; "immediate" ∶ ty.int] ty.bool :=
+    Definition fun_exec_sd : Stm [hv ∶ ty.hv; lv ∶ ty.lv; "immediate" ∶ ty.int] ty.bool :=
       let: "base_cap" :: cap  := call read_reg_cap lv in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "base_cap") in
       (let: "c" :: cap := exp_record capability
@@ -292,13 +292,13 @@ Section FunDefKit.
                                        exp_var "end";
                                        exp_var "cursor" + exp_var "immediate"
                                      ] in
-       let: w :: ty_word := call read_reg hv in
+       let: w :: ty.word := call read_reg hv in
        use lemma safe_move_cursor [exp_var "c"; exp_var "base_cap"] ;;
        call write_mem c w ;;
        call update_pc ;;
        stm_val ty.bool true).
 
-    Definition fun_exec_ld : Stm [lv ∶ ty_lv; hv ∶ ty_hv; "immediate" ∶ ty.int] ty.bool :=
+    Definition fun_exec_ld : Stm [lv ∶ ty.lv; hv ∶ ty.hv; "immediate" ∶ ty.int] ty.bool :=
       let: "base_cap" :: cap  := call read_reg_cap hv in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "base_cap") in
       (let: "c" :: cap := exp_record capability
@@ -308,12 +308,12 @@ Section FunDefKit.
                                        exp_var "cursor" + exp_var "immediate"
                                      ] in
        use lemma safe_move_cursor [exp_var "c"; exp_var "base_cap"] ;;
-       let: n :: ty_memval := call read_mem c in
+       let: n :: ty.memval := call read_mem c in
        call write_reg lv n ;;
        call update_pc ;;
        stm_val ty.bool true).
 
-    Definition fun_exec_lea : Stm ["lv" ∶ ty_lv; "hv" ∶ ty_hv] ty.bool :=
+    Definition fun_exec_lea : Stm ["lv" ∶ ty.lv; "hv" ∶ ty.hv] ty.bool :=
       let: "base_cap" :: cap  := call read_reg_cap (exp_var "lv") in
       let: "offset" :: ty.int := call read_reg_num (exp_var "hv") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "base_cap") in
@@ -328,11 +328,11 @@ Section FunDefKit.
        call update_pc ;;
        stm_val ty.bool true).
 
-    Definition fun_exec_restrict : Stm ["lv" ∶ ty_lv; "hv" ∶ ty_hv] ty.bool :=
+    Definition fun_exec_restrict : Stm ["lv" ∶ ty.lv; "hv" ∶ ty.hv] ty.bool :=
       let: "c" :: cap  := call read_reg_cap (exp_var "lv") in
       let: "n" :: ty.int := call read_reg_num (exp_var "hv") in
       let*: ["p", "beg", "end", "cursor"] := (exp_var "c") in
-      (let: "p'" :: ty_perm := call perm_from_bits (exp_var "n") in
+      (let: "p'" :: ty.perm := call perm_from_bits (exp_var "n") in
        let: "le" :: ty.bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
        stm_assert (exp_var "le") (exp_string "Err: [restrict] tried to increase permission") ;;
        let: "c'" :: cap := exp_record capability
@@ -346,11 +346,11 @@ Section FunDefKit.
        call update_pc ;;
        stm_val ty.bool true).
 
-    Definition fun_exec_restricti : Stm ["lv" ∶ ty_lv; "immediate" ∶ ty.int] ty.bool :=
+    Definition fun_exec_restricti : Stm ["lv" ∶ ty.lv; "immediate" ∶ ty.int] ty.bool :=
       let: "c" :: cap  := call read_reg_cap (exp_var "lv") in
       let: "n" :: ty.int := exp_var "immediate" in
       let*: ["p", "beg", "end", "cursor"] := (exp_var "c") in
-      (let: "p'" :: ty_perm := call perm_from_bits (exp_var "n") in
+      (let: "p'" :: ty.perm := call perm_from_bits (exp_var "n") in
        let: "le" :: ty.bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
        stm_assert (exp_var "le") (exp_string "Err: [restricti] tried to increase permission") ;;
        let: "c'" :: cap := exp_record capability
@@ -364,7 +364,7 @@ Section FunDefKit.
        call update_pc ;;
        stm_val ty.bool true).
 
-    Definition fun_exec_addi : Stm ["lv" ∶ ty_lv; "hv" ∶ ty_hv; "immediate" ∶ ty.int] ty.bool :=
+    Definition fun_exec_addi : Stm ["lv" ∶ ty.lv; "hv" ∶ ty.hv; "immediate" ∶ ty.int] ty.bool :=
       let: "v" :: ty.int := call read_reg_num (exp_var "hv") in
       let: "res" :: ty.int := stm_exp (exp_var "v" + exp_var "immediate") in
       use lemma int_safe [exp_var "res"] ;;
@@ -372,7 +372,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_add : Stm ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv; "lv3" ∶ ty_lv] ty.bool :=
+    Definition fun_exec_add : Stm ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv; "lv3" ∶ ty.lv] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "lv2") in
       let: "v2" :: int := call read_reg_num (exp_var "lv3") in
       let: "res" :: int := stm_exp (exp_var "v1" + exp_var "v2") in
@@ -381,7 +381,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_sub : Stm ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv; "lv3" ∶ ty_lv] ty.bool :=
+    Definition fun_exec_sub : Stm ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv; "lv3" ∶ ty.lv] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "lv2") in
       let: "v2" :: int := call read_reg_num (exp_var "lv3") in
       let: "res" :: int := stm_exp (exp_var "v1" - exp_var "v2") in
@@ -395,7 +395,7 @@ Section FunDefKit.
       then exp_var "i" * (exp_val ty.int (-1)%Z)
       else exp_var "i".
 
-    Definition fun_exec_slt : Stm ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv; "lv3" ∶ ty_lv] ty.bool :=
+    Definition fun_exec_slt : Stm ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv; "lv3" ∶ ty.lv] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "lv2") in
       let: "v2" :: int := call read_reg_num (exp_var "lv3") in
       (if: exp_var "v1" < exp_var "v2"
@@ -408,7 +408,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_slti : Stm ["lv" ∶ ty_lv; "hv" ∶ ty_hv; "immediate" ∶ ty.int] ty.bool :=
+    Definition fun_exec_slti : Stm ["lv" ∶ ty.lv; "hv" ∶ ty.hv; "immediate" ∶ ty.int] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "hv") in
       let: "v2" :: int := exp_var "immediate" in
       (if: exp_var "v1" < exp_var "v2"
@@ -421,7 +421,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_sltu : Stm ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv; "lv3" ∶ ty_lv] ty.bool :=
+    Definition fun_exec_sltu : Stm ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv; "lv3" ∶ ty.lv] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "lv2") in
       let: "uv1" :: int := call abs (exp_var "v1") in
       let: "v2" :: int := call read_reg_num (exp_var "lv3") in
@@ -436,7 +436,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_sltiu : Stm ["lv" ∶ ty_lv; "hv" ∶ ty_hv; "immediate" ∶ ty.int] ty.bool :=
+    Definition fun_exec_sltiu : Stm ["lv" ∶ ty.lv; "hv" ∶ ty.hv; "immediate" ∶ ty.int] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "hv") in
       let: "uv1" :: int := call abs (exp_var "v1") in
       let: "v2" :: int := exp_var "immediate" in
@@ -451,7 +451,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_perm_to_bits : Stm ["p" ∶ ty_perm] ty.int :=
+    Definition fun_perm_to_bits : Stm ["p" ∶ ty.perm] ty.int :=
       match: exp_var "p" in permission with
       | O  => stm_val ty.int 0%Z
       | R  => stm_val ty.int 1%Z
@@ -459,14 +459,14 @@ Section FunDefKit.
       | E  => stm_val ty.int 3%Z
       end.
 
-    Definition fun_perm_from_bits : Stm ["i" ∶ ty.int] ty_perm :=
+    Definition fun_perm_from_bits : Stm ["i" ∶ ty.int] ty.perm :=
       if: exp_var "i" = (exp_val ty.int 1%Z)
-      then stm_val ty_perm R
+      then stm_val ty.perm R
       else if: exp_var "i" = (exp_val ty.int 2%Z)
-           then stm_val ty_perm RW
-           else stm_val ty_perm O.
+           then stm_val ty.perm RW
+           else stm_val ty.perm O.
 
-    Definition fun_is_sub_perm : Stm ["p" ∶ ty_perm; "p'" ∶ ty_perm] ty.bool :=
+    Definition fun_is_sub_perm : Stm ["p" ∶ ty.perm; "p'" ∶ ty.perm] ty.bool :=
       match: exp_var "p" in permission with
       | O =>
         stm_val ty.bool true
@@ -486,11 +486,11 @@ Section FunDefKit.
             end
       end.
 
-    Definition fun_is_within_range : Stm ["b'" ∶ ty_addr; "e'" ∶ ty_addr;
-                                          "b" ∶ ty_addr; "e" ∶ ty_addr] ty.bool :=
+    Definition fun_is_within_range : Stm ["b'" ∶ ty.addr; "e'" ∶ ty.addr;
+                                          "b" ∶ ty.addr; "e" ∶ ty.addr] ty.bool :=
       (exp_var "b" <= exp_var "b'") && (exp_var "e'" <= exp_var "e").
 
-    Definition fun_exec_subseg : Stm ["lv" ∶ ty_lv; "hv1" ∶ ty_hv; "hv2" ∶ ty_hv]
+    Definition fun_exec_subseg : Stm ["lv" ∶ ty.lv; "hv1" ∶ ty.hv; "hv2" ∶ ty.hv]
                                      ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "lv") in
       let: "new_begin" :: ty.int := call read_reg_num (exp_var "hv1") in
@@ -511,7 +511,7 @@ Section FunDefKit.
        call update_pc ;;
        stm_val ty.bool true).
 
-    Definition fun_exec_subsegi : Stm ["lv" ∶ ty_lv; "hv" ∶ ty_hv; "immediate" ∶ ty.int]
+    Definition fun_exec_subsegi : Stm ["lv" ∶ ty.lv; "hv" ∶ ty.hv; "immediate" ∶ ty.int]
                                       ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "lv") in
       let: "new_begin" :: ty.int := call read_reg_num (exp_var "hv") in
@@ -532,8 +532,8 @@ Section FunDefKit.
        call update_pc ;;
        stm_val ty.bool true).
 
-    Definition fun_exec_isptr : Stm ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool :=
-      let: w :: ty_word := call read_reg (exp_var "lv2") in
+    Definition fun_exec_isptr : Stm ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool :=
+      let: w :: ty.word := call read_reg (exp_var "lv2") in
       match: w with
       | inl i =>
         use lemma int_safe [exp_val ty.int 0%Z] ;;
@@ -545,7 +545,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_getp : Stm ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool :=
+    Definition fun_exec_getp : Stm ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "lv2") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       let: "i" :: ty.int := call perm_to_bits (exp_var "perm") in
@@ -554,7 +554,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_getb : Stm ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool :=
+    Definition fun_exec_getb : Stm ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "lv2") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       use lemma int_safe [exp_var "beg"] ;;
@@ -562,7 +562,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_gete : Stm ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool :=
+    Definition fun_exec_gete : Stm ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "lv2") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       use lemma int_safe [exp_var "end"] ;;
@@ -570,7 +570,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_geta : Stm ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool :=
+    Definition fun_exec_geta : Stm ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "lv2") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       use lemma int_safe [exp_var "cursor"] ;;
@@ -584,18 +584,18 @@ Section FunDefKit.
     Definition fun_exec_ret : Stm [] ty.bool :=
       stm_exp exp_false.
 
-    Definition fun_exec_mv : Stm [lv ∶ ty_lv; hv ∶ ty_hv] ty.bool :=
+    Definition fun_exec_mv : Stm [lv ∶ ty.lv; hv ∶ ty.hv] ty.bool :=
       let: w :: word := call read_reg hv in
       call write_reg lv w ;;
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_jr : Stm ["lv" ∶ ty_lv] ty.bool :=
-      let: "c" :: ty_cap := call read_reg_cap (exp_var "lv") in
+    Definition fun_exec_jr : Stm ["lv" ∶ ty.lv] ty.bool :=
+      let: "c" :: ty.cap := call read_reg_cap (exp_var "lv") in
       stm_write_register pc (exp_var "c") ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_jalr : Stm ["lv1" ∶ ty_lv; "lv2" ∶ ty_lv] ty.bool :=
+    Definition fun_exec_jalr : Stm ["lv1" ∶ ty.lv; "lv2" ∶ ty.lv] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
       use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
@@ -606,20 +606,20 @@ Section FunDefKit.
       call add_pc (exp_binop bop.times offset (exp_int 2)) ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_jal : Stm [lv ∶ ty_lv; offset ∶ ty.int] ty.bool :=
+    Definition fun_exec_jal : Stm [lv ∶ ty.lv; offset ∶ ty.int] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
       use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
       call write_reg lv (exp_inr (exp_var "npc")) ;;
       call exec_j offset.
 
-    Definition fun_exec_bnez : Stm ["lv" ∶ ty_lv; "immediate" ∶ ty.int] ty.bool :=
+    Definition fun_exec_bnez : Stm ["lv" ∶ ty.lv; "immediate" ∶ ty.int] ty.bool :=
       let: "c" :: ty.int := call read_reg_num (exp_var "lv") in
       stm_if (exp_binop bop.eq (exp_var "c") (exp_int 0))
              (call update_pc ;; stm_val ty.bool true)
              (call add_pc (exp_var "immediate") ;; stm_val ty.bool true).
 
-    Definition fun_exec_instr : Stm [i ∶ ty_instr] ty.bool :=
+    Definition fun_exec_instr : Stm [i ∶ ty.instr] ty.bool :=
       stm_match_union_alt
         instruction (exp_var i)
         (fun K =>
@@ -664,7 +664,7 @@ Section FunDefKit.
            | kret       => MkAlt pat_unit (call exec_ret)
            end).
 
-    Definition fun_read_mem : Stm ["c" ∶ ty_cap] ty_memval :=
+    Definition fun_read_mem : Stm ["c" ∶ ty.cap] ty.memval :=
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       (let: p :: bool := call read_allowed (exp_var "perm") in
        stm_assert p (exp_string "Err: [read_mem] no read permission") ;;
@@ -672,7 +672,7 @@ Section FunDefKit.
        stm_assert q (exp_string "Err: [read_mem] out of bounds") ;;
        foreign rM (exp_var "cursor")).
 
-    Definition fun_write_mem : Stm ["c" ∶ ty_cap; "v" ∶ ty_memval] ty.unit :=
+    Definition fun_write_mem : Stm ["c" ∶ ty.cap; "v" ∶ ty.memval] ty.unit :=
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       (let: p :: bool := call write_allowed (exp_var "perm") in
        stm_assert p (exp_string "Err: [write_mem] no read permission") ;;
@@ -682,10 +682,10 @@ Section FunDefKit.
 
     Definition fun_exec : Stm [] ty.bool :=
       let: "c" := stm_read_register pc in
-      let: n :: ty_memval := call read_mem c in
+      let: n :: ty.memval := call read_mem c in
       match: n with
       | inl n => 
-        let: i :: ty_instr := foreign dI n in
+        let: i :: ty.instr := foreign dI n in
         call exec_instr i
       | inr c => fail "Err [exec]: instructions cannot be capabilities"
       end.
@@ -757,10 +757,10 @@ Include DefaultRegStoreKit MinCapsBase.
 Section ForeignKit.
   Definition Memory := Addr -> (Z + Capability).
 
-  Definition fun_rM (μ : Memory) (addr : Val ty.int) : Val ty_memval :=
+  Definition fun_rM (μ : Memory) (addr : Val ty.int) : Val ty.memval :=
     μ addr.
 
-  Definition fun_wM (μ : Memory) (addr : Val ty.int) (val : Val ty_memval) : Memory :=
+  Definition fun_wM (μ : Memory) (addr : Val ty.int) (val : Val ty.memval) : Memory :=
     fun addr' => if Z.eqb addr addr' then val else μ addr'.
 
   #[derive(equations=no)]
@@ -771,7 +771,7 @@ Section ForeignKit.
       (γ' , μ' , res) = (γ , fun_wM μ addr val , inr tt);
     ForeignCall dI [code] res γ γ' μ μ' :=
       (* Non-deterministically return any possible result *)
-      exists res' : Val (ty.sum ty.string ty_instr),
+      exists res' : Val (ty.sum ty.string ty.instr),
         (γ' , μ' , res) = (γ , μ , res').
 
   Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :

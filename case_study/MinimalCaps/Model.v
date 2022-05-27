@@ -520,10 +520,10 @@ Module MinCapsModel2.
   End Lemmas.
 
   Lemma dI_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
-    forall code : Val ty_int,
-    evals es δ = env.snoc env.nil (MkB _ ty_int) code
+    forall code : Val ty.int,
+    evals es δ = env.snoc env.nil (MkB _ ty.int) code
     → ⊢ semTriple δ (⌜is_true true⌝ ∧ emp) (stm_foreign dI es)
-          (λ (v : Val ty_instr) (δ' : CStore Γ),
+          (λ (v : Val ty.instr) (δ' : CStore Γ),
              (⌜is_true true⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
     intros code Heq.
@@ -539,8 +539,8 @@ Module MinCapsModel2.
   Import iris.base_logic.lib.gen_heap.
 
   Lemma rM_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
-    forall a (p : Val ty_perm) (b e : Val ty_addr),
-      evals es δ = env.snoc env.nil (MkB _ ty_addr) a ->
+    forall a (p : Val ty.perm) (b e : Val ty.addr),
+      evals es δ = env.snoc env.nil (MkB _ ty.addr) a ->
     ⊢ semTriple δ
         (MinCaps_safe (mG := sailGS_memGS)
            (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |})
@@ -654,9 +654,9 @@ Module MinCapsModel2.
   Qed.
 
   Lemma wM_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
-    forall a w (p : Val ty_perm) (b e : Val ty_addr),
-      evals es δ = env.snoc (env.snoc env.nil (MkB _ ty_addr) a)
-                            (MkB _ ty_memval) w
+    forall a w (p : Val ty.perm) (b e : Val ty.addr),
+      evals es δ = env.snoc (env.snoc env.nil (MkB _ ty.addr) a)
+                            (MkB _ ty.memval) w
     → ⊢ semTriple δ
         (MinCaps_safe (mG := sailGS_memGS) w
          ∗ MinCaps_safe (mG := sailGS_memGS)
