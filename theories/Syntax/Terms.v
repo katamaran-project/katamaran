@@ -38,7 +38,6 @@ From Katamaran Require Import
      Prelude
      Syntax.BinOps
      Syntax.TypeDecl
-     Syntax.TypeDef
      Syntax.Variables
      Tactics.
 
@@ -49,7 +48,7 @@ Local Set Implicit Arguments.
 Local Set Transparent Obligations.
 Local Unset Elimination Schemes.
 
-Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
+Module Type TermsOn (Import TY : Types).
 
   Local Notation PCtx := (NCtx 𝑿 Ty).
   Local Notation LCtx := (NCtx 𝑺 Ty).
@@ -58,13 +57,13 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
   | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : ς∷σ ∈ Σ} : Term Σ σ
   | term_val     (σ : Ty) : Val σ -> Term Σ σ
   | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
-  | term_neg     (e : Term Σ ty_int) : Term Σ ty_int
-  | term_not     (e : Term Σ ty_bool) : Term Σ ty_bool
-  | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty_sum σ1 σ2)
-  | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty_sum σ1 σ2)
+  | term_neg     (e : Term Σ ty.int) : Term Σ ty.int
+  | term_not     (e : Term Σ ty.bool) : Term Σ ty.bool
+  | term_inl     {σ1 σ2 : Ty} : Term Σ σ1 -> Term Σ (ty.sum σ1 σ2)
+  | term_inr     {σ1 σ2 : Ty} : Term Σ σ2 -> Term Σ (ty.sum σ1 σ2)
   (* Experimental features *)
-  | term_union   {U : 𝑼} (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)) : Term Σ (ty_union U)
-  | term_record  (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) : Term Σ (ty_record R).
+  | term_union   {U : unioni} (K : unionk U) (e : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
+  | term_record  (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
   Global Arguments term_var {_} _ {_ _}.
   Global Arguments term_val {_} _ _.
   Global Arguments term_neg {_} _.
@@ -76,26 +75,26 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
   Bind Scope exp_scope with Term.
   Derive NoConfusion Signature for Term.
 
-  Definition term_enum {Σ} (E : 𝑬) (k : 𝑬𝑲 E) : Term Σ (ty_enum E) :=
-    term_val (ty_enum E) k.
+  Definition term_enum {Σ} (E : enumi) (k : enumt E) : Term Σ (ty.enum E) :=
+    term_val (ty.enum E) k.
   Global Arguments term_enum {_} _ _.
 
-  Fixpoint term_list {Σ σ} (ts : list (Term Σ σ)) : Term Σ (ty_list σ) :=
+  Fixpoint term_list {Σ σ} (ts : list (Term Σ σ)) : Term Σ (ty.list σ) :=
     match ts with
-    | nil       => term_val (ty_list σ) nil
-    | cons t ts => term_binop binop_cons t (term_list ts)
+    | nil       => term_val (ty.list σ) nil
+    | cons t ts => term_binop bop.cons t (term_list ts)
     end.
 
-  Fixpoint term_tuple {Σ σs} (es : Env (Term Σ) σs) : Term Σ (ty_tuple σs) :=
+  Fixpoint term_tuple {Σ σs} (es : Env (Term Σ) σs) : Term Σ (ty.tuple σs) :=
     match es with
-    | env.nil         => term_val (ty_tuple []) tt
-    | env.snoc es _ e => term_binop binop_tuple_snoc (term_tuple es) e
+    | env.nil         => term_val (ty.tuple []) tt
+    | env.snoc es _ e => term_binop bop.tuple_snoc (term_tuple es) e
     end.
 
-  Fixpoint term_bvec {Σ n} (es : Vector.t (Term Σ ty_bit) n) : Term Σ (ty_bvec n) :=
+  Fixpoint term_bvec {Σ n} (es : Vector.t (Term Σ ty.bit) n) : Term Σ (ty.bvec n) :=
     match es with
-    | Vector.nil       => term_val (ty_bvec 0) bv.nil
-    | Vector.cons e es => term_binop binop_bvcons e (term_bvec es)
+    | Vector.nil       => term_val (ty.bvec 0) bv.nil
+    | Vector.cons e es => term_binop bop.bvcons e (term_bvec es)
     end.
 
   Section Term_rect.
@@ -106,11 +105,11 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
 
     (* Let PL (σ : Ty) : list (Term Σ σ) -> Type := *)
     (*   List.fold_right (fun t ts => P _ t * ts)%type unit. *)
-    (* Let PV (n : nat) (es : Vector.t (Term Σ ty_bit) n) : Type := *)
+    (* Let PV (n : nat) (es : Vector.t (Term Σ ty.bit) n) : Type := *)
     (*   Vector.fold_right (fun e ps => P _ e * ps)%type es unit. *)
     (* Let PE : forall σs, Env (Term Σ) σs -> Type := *)
     (*   env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type. *)
-    Let PNE : forall (σs : NCtx 𝑹𝑭 Ty), NamedEnv (Term Σ) σs -> Type :=
+    Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Term Σ) σs -> Type :=
       fun σs es => env.All (fun b t => P (type b) t) es.
       (* forall rt (rIn : rt ∈ σs), P (type rt) (env.lookup es rIn). *)
       (* env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type. *)
@@ -118,16 +117,16 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
     Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
     Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
     Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
-    Hypothesis (P_neg        : forall e : Term Σ ty_int, P ty_int e -> P ty_int (term_neg e)).
-    Hypothesis (P_not        : forall e : Term Σ ty_bool, P ty_bool e -> P ty_bool (term_not e)).
-    Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty_sum σ1 σ2) (term_inl t)).
-    Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty_sum σ1 σ2) (term_inr t)).
-    (* Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty_list σ) (term_list es)). *)
-    (* Hypothesis (P_bv         : forall (n : nat) (es : Vector.t (Term Σ ty_bit) n), PV es -> P (ty_bv n) (term_bv es)). *)
-    (* Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty_tuple σs) (term_tuple es)). *)
-    Hypothesis (P_union      : forall (U : 𝑼) (K : 𝑼𝑲 U) (e : Term Σ (𝑼𝑲_Ty K)), P (𝑼𝑲_Ty K) e -> P (ty_union U) (term_union U K e)).
-    (* Hypothesis (P_tuple  : forall σs (IH : forall σ, ctx.In σ σs -> P σ), P (ty_tuple σs)). *)
-    Hypothesis (P_record     : forall (R : 𝑹) (es : NamedEnv (Term Σ) (𝑹𝑭_Ty R)) (IH : PNE es), P (ty_record R) (term_record R es)).
+    Hypothesis (P_neg        : forall e : Term Σ ty.int, P ty.int e -> P ty.int (term_neg e)).
+    Hypothesis (P_not        : forall e : Term Σ ty.bool, P ty.bool e -> P ty.bool (term_not e)).
+    Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty.sum σ1 σ2) (term_inl t)).
+    Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty.sum σ1 σ2) (term_inr t)).
+    (* Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty.list σ) (term_list es)). *)
+    (* Hypothesis (P_bv         : forall (n : nat) (es : Vector.t (Term Σ ty.bit) n), PV es -> P (ty.bv n) (term_bv es)). *)
+    (* Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty.tuple σs) (term_tuple es)). *)
+    Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)).
+    (* Hypothesis (P_tuple  : forall σs (IH : forall σ, ctx.In σ σs -> P σ), P (ty.tuple σs)). *)
+    Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)).
 
     Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) {struct t} : P σ t :=
       match t with
@@ -152,8 +151,8 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
       ctx.In_eqb ς1inΣ ς2inΣ;
     Term_eqb (term_val _ v1) (term_val _ v2) := Val_eqb _ v1 v2;
     Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2)
-      with binop_eqdep_dec op1 op2 => {
-      Term_eqb (term_binop op1 x1 y1) (term_binop ?(op1) x2 y2) (left opeq_refl) :=
+      with bop.eqdep_dec op1 op2 => {
+      Term_eqb (term_binop op1 x1 y1) (term_binop ?(op1) x2 y2) (left bop.opeq_refl) :=
         Term_eqb x1 x2 && Term_eqb y1 y2;
       Term_eqb (term_binop op1 x1 y1) (term_binop op2 x2 y2) (right _) := false
     };
@@ -179,11 +178,11 @@ Module Type TermsOn (Import TY : Types) (Import BO : BinOpsOn TY).
       solve_eqb_spec with
       try match goal with
           | |- context[Val_eqb _ ?l1 ?l2] => destruct (Val_eqb_spec _ l1 l2)
-          | |- context[binop_eqdep_dec ?x ?y] =>
+          | |- context[bop.eqdep_dec ?x ?y] =>
               let e := fresh in
-              destruct (binop_eqdep_dec x y) as [e|];
+              destruct (bop.eqdep_dec x y) as [e|];
               [dependent elimination e|]
-          | H: ~ OpEq ?o ?o |- False => apply H; constructor
+          | H: ~ bop.OpEq ?o ?o |- False => apply H; constructor
           end.
     - apply (@ssrbool.iffP (es = es0)); solve_eqb_spec.
       apply env.eqb_hom_spec_point, IH.

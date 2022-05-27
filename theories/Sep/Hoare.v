@@ -115,7 +115,7 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
         ⦃ P ⦄ k ; δ ►► δΔ ⦃ fun v δ'' => R v (env.drop Δ δ'') ⦄ ->
         ⦃ P ⦄ stm_block δΔ k ; δ ⦃ R ⦄
     | rule_stm_if
-        {e : Exp Γ ty_bool} {s1 s2 : Stm Γ τ}
+        {e : Exp Γ ty.bool} {s1 s2 : Stm Γ τ}
         {P : L} {Q : Val τ -> CStore Γ -> L} :
         ⦃ P ∧ !!(eval e δ = true) ⦄ s1 ; δ ⦃ Q ⦄ ->
         ⦃ P ∧ !!(eval e δ = false) ⦄ s2 ; δ ⦃ Q ⦄ ->
@@ -127,25 +127,25 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
         (forall δ', ⦃ Q δ' ⦄ s2 ; δ' ⦃ R ⦄) ->
         ⦃ P ⦄ s1 ;; s2 ; δ ⦃ R ⦄
     | rule_stm_assert
-        (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
+        (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ∧ !! (eval e1 δ = true) ⦄ k ; δ ⦃ Q ⦄ ->
         ⦃ P ⦄ stm_assertk e1 e2 k ; δ ⦃ Q ⦄
     | rule_stm_fail
-        (s : Val ty_string) (Q : Val τ -> CStore Γ -> L) :
+        (s : Val ty.string) (Q : Val τ -> CStore Γ -> L) :
         ⦃ ⊤ ⦄ stm_fail τ s ; δ ⦃ Q ⦄
     | rule_stm_match_list
-        {σ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
-        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty_list σ) τ)
+        {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
+        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ∧ !! (eval e δ = nil) ⦄ alt_nil ; δ ⦃ Q ⦄ ->
-        (forall (v : Val σ) (vs : Val (ty_list σ)),
+        (forall (v : Val σ) (vs : Val (ty.list σ)),
            ⦃ P ∧ !! (eval e δ = cons v vs) ⦄
-             alt_cons ; env.snoc (env.snoc δ (xh∷σ) v) (xt∷ty_list σ) vs
+             alt_cons ; env.snoc (env.snoc δ (xh∷σ) v) (xt∷ty.list σ) vs
            ⦃ fun v' δ' => Q v' (env.tail (env.tail δ')) ⦄) ->
         ⦃ P ⦄ stm_match_list e alt_nil xh xt alt_cons ; δ ⦃ Q ⦄
     | rule_stm_match_sum
-        {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty_sum σl σr)}
+        {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty.sum σl σr)}
         {alt_inl : Stm (Γ ▻ xl∷σl) τ}
         {alt_inr : Stm (Γ ▻ xr∷σr) τ}
         {P : L} {Q : Val τ -> CStore Γ -> L} :
@@ -153,7 +153,7 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
         (forall (v : Val σr), ⦃ P ∧ !! (eval e δ = inr v) ⦄ alt_inr ; env.snoc δ (xr∷σr) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
         ⦃ P ⦄ stm_match_sum e xl alt_inl xr alt_inr ; δ ⦃ Q ⦄
     | rule_stm_match_prod
-        {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty_prod σl σr)}
+        {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty.prod σl σr)}
         {rhs : Stm (Γ ▻ xl∷σl ▻ xr∷σr) τ}
         {P : L} {Q : Val τ -> CStore Γ -> L} :
         (forall (vl : Val σl) (vr : Val σr),
@@ -162,36 +162,36 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
            ⦃ fun v δ' => Q v (env.tail (env.tail δ')) ⦄) ->
         ⦃ P ⦄ stm_match_prod e xl xr rhs ; δ ⦃ Q ⦄
     | rule_stm_match_enum
-        {E : 𝑬} (e : Exp Γ (ty_enum E))
-        (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
+        {E : enumi} (e : Exp Γ (ty.enum E))
+        (alts : forall (K : enumt E), Stm Γ τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ alts (eval e δ) ; δ ⦃ Q ⦄ ->
         ⦃ P ⦄ stm_match_enum E e alts ; δ ⦃ Q ⦄
     | rule_stm_match_tuple
-        {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
+        {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty.tuple σs))
         (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ rhs ; env.cat δ (tuple_pattern_match_val p (eval e δ)) ⦃ fun v δ' => Q v (env.drop Δ δ') ⦄ ->
         ⦃ P ⦄ stm_match_tuple e p rhs ; δ ⦃ Q ⦄
     | rule_stm_match_union
-        {U : 𝑼} (e : Exp Γ (ty_union U))
-        (alt__Δ : forall (K : 𝑼𝑲 U), PCtx)
-        (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
-        (alt__r : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__Δ K) τ)
+        {U : unioni} (e : Exp Γ (ty.union U))
+        (alt__Δ : forall (K : unionk U), PCtx)
+        (alt__p : forall (K : unionk U), Pattern (alt__Δ K) (unionk_ty U K))
+        (alt__r : forall (K : unionk U), Stm (Γ ▻▻ alt__Δ K) τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
-        (forall (K : 𝑼𝑲 U) (v : Val (𝑼𝑲_Ty K)),
-           ⦃ P ∧ !! (eval e δ = 𝑼_fold (existT K v)) ⦄
+        (forall (K : unionk U) (v : Val (unionk_ty U K)),
+           ⦃ P ∧ !! (eval e δ = unionv_fold U (existT K v)) ⦄
              alt__r K ; env.cat δ (pattern_match_val (alt__p K) v)
            ⦃ fun v δ' => Q v (env.drop (alt__Δ K) δ') ⦄) ->
         ⦃ P ⦄ stm_match_union U e alt__p alt__r ; δ ⦃ Q ⦄
     | rule_stm_match_record
-        {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
-        (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
+        {R : recordi} {Δ : PCtx} (e : Exp Γ (ty.record R))
+        (p : RecordPat (recordf_ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ rhs ; env.cat δ (record_pattern_match_val p (eval e δ)) ⦃ fun v δ' => Q v (env.drop Δ δ') ⦄ ->
         ⦃ P ⦄ stm_match_record R e p rhs ; δ ⦃ Q ⦄
     | rule_stm_match_bvec
-        {n : nat} (e : Exp Γ (ty_bvec n))
+        {n : nat} (e : Exp Γ (ty.bvec n))
         (rhs : bv n -> Stm Γ τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ rhs (eval e δ) ; δ ⦃ Q ⦄ ->

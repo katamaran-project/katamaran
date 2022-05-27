@@ -52,26 +52,26 @@ Module Type AssertionsOn
   | asn_formula (fml : Formula Σ)
   | asn_chunk (c : Chunk Σ)
   | asn_chunk_angelic (c : Chunk Σ)
-  | asn_if   (b : Term Σ ty_bool) (a1 a2 : Assertion Σ)
-  | asn_match_enum (E : 𝑬) (k : Term Σ (ty_enum E)) (alts : forall (K : 𝑬𝑲 E), Assertion Σ)
-  | asn_match_sum (σ τ : Ty) (s : Term Σ (ty_sum σ τ)) (xl : 𝑺) (alt_inl : Assertion (Σ ▻ xl∷σ)) (xr : 𝑺) (alt_inr : Assertion (Σ ▻ xr∷τ))
+  | asn_if   (b : Term Σ ty.bool) (a1 a2 : Assertion Σ)
+  | asn_match_enum (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ)
+  | asn_match_sum (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : 𝑺) (alt_inl : Assertion (Σ ▻ xl∷σ)) (xr : 𝑺) (alt_inr : Assertion (Σ ▻ xr∷τ))
   | asn_match_list
-      {σ : Ty} (s : Term Σ (ty_list σ)) (alt_nil : Assertion Σ) (xh xt : 𝑺)
-      (alt_cons : Assertion (Σ ▻ xh∷σ ▻ xt∷ty_list σ))
+      {σ : Ty} (s : Term Σ (ty.list σ)) (alt_nil : Assertion Σ) (xh xt : 𝑺)
+      (alt_cons : Assertion (Σ ▻ xh∷σ ▻ xt∷ty.list σ))
   | asn_match_prod
-      {σ1 σ2 : Ty} (s : Term Σ (ty_prod σ1 σ2))
+      {σ1 σ2 : Ty} (s : Term Σ (ty.prod σ1 σ2))
       (xl xr : 𝑺) (rhs : Assertion (Σ ▻ xl∷σ1 ▻ xr∷σ2))
   | asn_match_tuple
-      {σs : Ctx Ty} {Δ : LCtx} (s : Term Σ (ty_tuple σs))
+      {σs : Ctx Ty} {Δ : LCtx} (s : Term Σ (ty.tuple σs))
       (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ))
   | asn_match_record
-      {R : 𝑹} {Δ : LCtx} (s : Term Σ (ty_record R))
-      (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ))
+      {R : recordi} {Δ : LCtx} (s : Term Σ (ty.record R))
+      (p : RecordPat (recordf_ty R) Δ) (rhs : Assertion (Σ ▻▻ Δ))
   | asn_match_union
-      {U : 𝑼} (s : Term Σ (ty_union U))
-      (alt__ctx : forall (K : 𝑼𝑲 U), LCtx)
-      (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
-      (alt__rhs : forall (K : 𝑼𝑲 U), Assertion (Σ ▻▻ alt__ctx K))
+      {U : unioni} (s : Term Σ (ty.union U))
+      (alt__ctx : forall (K : unionk U), LCtx)
+      (alt__pat : forall (K : unionk U), Pattern (alt__ctx K) (unionk_ty U K))
+      (alt__rhs : forall (K : unionk U), Assertion (Σ ▻▻ alt__ctx K))
   | asn_sep  (a1 a2 : Assertion Σ)
   | asn_or   (a1 a2 : Assertion Σ)
   | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ ς∷τ))
@@ -91,8 +91,8 @@ Module Type AssertionsOn
   Notation asn_bool b := (asn_formula (formula_bool b)).
   Notation asn_prop Σ P := (asn_formula (@formula_prop Σ Σ (sub_id Σ) P)).
   Notation asn_eq t1 t2 := (asn_formula (formula_eq t1 t2)).
-  Notation asn_true := (asn_bool (term_val ty_bool true)).
-  Notation asn_false := (asn_bool (term_val ty_bool false)).
+  Notation asn_true := (asn_bool (term_val ty.bool true)).
+  Notation asn_false := (asn_bool (term_val ty.bool false)).
 
   Global Instance sub_assertion : Subst Assertion :=
     fix sub_assertion {Σ1} (a : Assertion Σ1) {Σ2} (ζ : Sub Σ1 Σ2) {struct a} : Assertion Σ2 :=
@@ -299,7 +299,7 @@ Module Type AssertionsOn
       | asn_formula fml => !!(inst fml ι) ∧ lemp
       | asn_chunk c => interpret_chunk c ι
       | asn_chunk_angelic c => interpret_chunk c ι
-      | asn_if b a1 a2 => if inst (A := Val ty_bool) b ι then interpret_assertion a1 ι else interpret_assertion a2 ι
+      | asn_if b a1 a2 => if inst (A := Val ty.bool) b ι then interpret_assertion a1 ι else interpret_assertion a2 ι
       | asn_match_enum E k alts => interpret_assertion (alts (inst (T := fun Σ => Term Σ _) k ι)) ι
       | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
         match inst (T := fun Σ => Term Σ _) s ι with
@@ -309,7 +309,7 @@ Module Type AssertionsOn
       | asn_match_list s alt_nil xh xt alt_cons =>
         match inst (T := fun Σ => Term Σ _) s ι with
         | nil        => interpret_assertion alt_nil ι
-        | cons vh vt => interpret_assertion alt_cons (ι ► (xh∷_ ↦ vh) ► (xt∷ty_list _ ↦ vt))
+        | cons vh vt => interpret_assertion alt_cons (ι ► (xh∷_ ↦ vh) ► (xt∷ty.list _ ↦ vt))
         end
       | asn_match_prod s xl xr rhs =>
         match inst (T := fun Σ => Term Σ _) s ι with
@@ -325,7 +325,7 @@ Module Type AssertionsOn
         interpret_assertion rhs (ι ►► ι')
       | asn_match_union U s alt__ctx alt__pat alt__rhs =>
         let t := inst (T := fun Σ => Term Σ _) s ι in
-        let (K , v) := 𝑼_unfold t in
+        let (K , v) := unionv_unfold U t in
         let ι' := pattern_match_val (alt__pat K) v in
         interpret_assertion (alt__rhs K) (ι ►► ι')
       | asn_sep a1 a2 => interpret_assertion a1 ι ∗ interpret_assertion a2 ι

@@ -40,6 +40,7 @@ From Katamaran Require Export
      Base
      Program
      Syntax.Assertions
+     Syntax.BinOps
      Syntax.Chunks
      Syntax.Formulas
      Syntax.Predicates
@@ -65,11 +66,11 @@ Module Type ProgSpecMixinOn (Import B : Base) (Import P : Program B).
       NamedEnv (Term Σ) Δ -> Term Σ σ :=
       match p with
       | pat_var x    => fun Ex => match env.snocView Ex with env.isSnoc _ t => t end
-      | pat_unit     => fun _ => term_val ty_unit tt
+      | pat_unit     => fun _ => term_val ty.unit tt
       | pat_pair x y => fun Exy => match env.snocView Exy with
                                      env.isSnoc Ex ty =>
                                      match env.snocView Ex with
-                                       env.isSnoc _ tx => term_binop binop_pair tx ty
+                                       env.isSnoc _ tx => term_binop bop.pair tx ty
                                      end
                                    end
       | pat_tuple p  => fun EΔ => term_tuple (tuple_pattern_match_env_reverse p EΔ)
@@ -100,7 +101,7 @@ Module Type ProgSpecMixinOn (Import B : Base) (Import P : Program B).
         f_equal. apply IHp.
     Qed.
 
-    Lemma inst_record_pattern_match {Δ__R : NCtx 𝑹𝑭 Ty} {Σ : LCtx} {Δ : NCtx N Ty}
+    Lemma inst_record_pattern_match {Δ__R : NCtx recordf Ty} {Σ : LCtx} {Δ : NCtx N Ty}
       (ι : Valuation Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ__R) :
       inst (T := fun Σ => NamedEnv (Term Σ) Δ) (record_pattern_match_env p ts) ι =
       record_pattern_match_env p (inst ts ι).
@@ -112,7 +113,7 @@ Module Type ProgSpecMixinOn (Import B : Base) (Import P : Program B).
         f_equal. apply IHp.
     Qed.
 
-    Lemma inst_record_pattern_match_reverse {Δ__R : NCtx 𝑹𝑭 Ty} {Σ : LCtx} {Δ : NCtx N Ty}
+    Lemma inst_record_pattern_match_reverse {Δ__R : NCtx recordf Ty} {Σ : LCtx} {Δ : NCtx N Ty}
       (ι : Valuation Σ) (p : RecordPat Δ__R Δ) (ts : NamedEnv (Term Σ) Δ) :
       inst (record_pattern_match_env_reverse p ts) ι =
       record_pattern_match_env_reverse p (inst (T := fun Σ => NamedEnv (Term Σ) Δ) ts ι).

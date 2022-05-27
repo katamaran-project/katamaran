@@ -52,8 +52,7 @@ Local Set Implicit Arguments.
 
 Module Type InstantiationOn
   (Import TY : Types)
-  (Import BO : BinOpsOn TY)
-  (Import TM : TermsOn TY BO).
+  (Import TM : TermsOn TY).
 
   Local Notation LCtx := (NCtx 𝑺 Ty).
   Local Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Val (@type 𝑺 Ty xt)) Σ).
@@ -100,15 +99,15 @@ Module Type InstantiationOn
     match t in Term _ σ return Val σ with
     | @term_var _ _ _ bIn  => env.lookup ι bIn
     | term_val _ v         => v
-    | term_binop op e1 e2  => eval_binop op (inst_term e1 ι) (inst_term e2 ι)
+    | term_binop op e1 e2  => bop.eval op (inst_term e1 ι) (inst_term e2 ι)
     | term_neg e           => Z.opp (inst_term e ι)
     | term_not e           => negb (inst_term e ι)
     | term_inl e           => @inl (Val _) (Val _) (inst_term e ι)
     | term_inr e           => @inr (Val _) (Val _) (inst_term e ι)
-    | @term_union _ U K e     => 𝑼_fold (existT K (inst_term e ι))
+    | @term_union _ U K e     => unionv_fold U (existT K (inst_term e ι))
     | @term_record _ R ts     =>
-        let InstTerm xt := @inst_term (@type 𝑹𝑭 Ty xt) in
-        𝑹_fold (inst (Inst := inst_env (InstSA := InstTerm)) ts ι)
+        let InstTerm xt := @inst_term (@type recordf Ty xt) in
+        recordv_fold R (inst (Inst := inst_env (InstSA := InstTerm)) ts ι)
     end.
   Instance lift_term {σ} : Lift (fun Σ => Term Σ σ) (Val σ) :=
     fun Σ v => term_val σ v.
@@ -348,17 +347,17 @@ Module Type InstantiationOn
         (term_get_val s).
     Proof. destruct s; constructor; auto. Qed.
 
-    Equations(noeqns) term_get_pair {Σ σ1 σ2} (t : Term Σ (ty_prod σ1 σ2)) :
+    Equations(noeqns) term_get_pair {Σ σ1 σ2} (t : Term Σ (ty.prod σ1 σ2)) :
       option (Term Σ σ1 * Term Σ σ2) :=
-      term_get_pair (term_val _ (v1,v2))          := Some (term_val _ v1, term_val _ v2);
-      term_get_pair (term_binop binop_pair t1 t2) := Some (t1, t2);
+      term_get_pair (term_val _ (v1,v2))        := Some (term_val _ v1, term_val _ v2);
+      term_get_pair (term_binop bop.pair t1 t2) := Some (t1, t2);
       term_get_pair _ := None.
 
-    Lemma term_get_pair_spec {Σ σ1 σ2} (s : Term Σ (ty_prod σ1 σ2)) :
+    Lemma term_get_pair_spec {Σ σ1 σ2} (s : Term Σ (ty.prod σ1 σ2)) :
       option.wlp
         (fun '(t1,t2) =>
            forall ι : Valuation Σ,
-             inst (T := fun Σ => Term Σ (ty_prod σ1 σ2)) (A := Val σ1 * Val σ2) s ι =
+             inst (T := fun Σ => Term Σ (ty.prod σ1 σ2)) (A := Val σ1 * Val σ2) s ι =
              (inst (A := Val σ1) t1 ι, inst (A := Val σ2) t2 ι))
         (term_get_pair s).
     Proof.
@@ -367,7 +366,7 @@ Module Type InstantiationOn
       - dependent elimination op. constructor. reflexivity.
     Qed.
 
-    Equations(noeqns) term_get_sum {Σ σ1 σ2} (t : Term Σ (ty_sum σ1 σ2)) :
+    Equations(noeqns) term_get_sum {Σ σ1 σ2} (t : Term Σ (ty.sum σ1 σ2)) :
       option (Term Σ σ1 + Term Σ σ2) :=
       term_get_sum (term_val _ (inl v)) := Some (inl (term_val _ v));
       term_get_sum (term_val _ (inr v)) := Some (inr (term_val _ v));
@@ -375,14 +374,14 @@ Module Type InstantiationOn
       term_get_sum (term_inr t)         := Some (inr t);
       term_get_sum _ := None.
 
-    Lemma term_get_sum_spec {Σ σ1 σ2} (s : Term Σ (ty_sum σ1 σ2)) :
+    Lemma term_get_sum_spec {Σ σ1 σ2} (s : Term Σ (ty.sum σ1 σ2)) :
       option.wlp
         (fun s' => match s' with
                    | inl t => forall ι : Valuation Σ,
-                       inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Val σ1 + Val σ2) s ι =
+                       inst (T := fun Σ => Term Σ (ty.sum σ1 σ2)) (A := Val σ1 + Val σ2) s ι =
                        @inl (Val σ1) (Val σ2) (inst t ι)
                    | inr t => forall ι : Valuation Σ,
-                       inst (T := fun Σ => Term Σ (ty_sum σ1 σ2)) (A := Val σ1 + Val σ2) s ι =
+                       inst (T := fun Σ => Term Σ (ty.sum σ1 σ2)) (A := Val σ1 + Val σ2) s ι =
                        @inr (Val σ1) (Val σ2) (inst t ι)
                    end)
         (term_get_sum s).
@@ -391,58 +390,58 @@ Module Type InstantiationOn
       destruct v; constructor; auto.
     Qed.
 
-    Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty_union U)) :
-      option { K : 𝑼𝑲 U & Term Σ (𝑼𝑲_Ty K) } :=
+    Equations(noeqns) term_get_union {Σ U} (t : Term Σ (ty.union U)) :
+      option { K : unionk U & Term Σ (unionk_ty U K) } :=
       term_get_union (term_val _ v)   :=
-        Some (let (K, p) := 𝑼_unfold v in existT K (term_val _ p));
+        Some (let (K, p) := unionv_unfold U v in existT K (term_val _ p));
       term_get_union (term_union K t) := Some (existT K t);
       term_get_union _ := None.
 
-    Lemma term_get_union_spec {Σ U} (s : Term Σ (ty_union U)) :
+    Lemma term_get_union_spec {Σ U} (s : Term Σ (ty.union U)) :
       option.wlp
-        (fun x : {K : 𝑼𝑲 U & Term Σ (𝑼𝑲_Ty K)} =>
+        (fun x : {K : unionk U & Term Σ (unionk_ty U K)} =>
            match x with
            | existT K t =>
              forall ι : Valuation Σ,
-               inst (T := fun Σ => Term Σ (ty_union U)) (A := 𝑼𝑻 U) s ι =
-               𝑼_fold (@existT (𝑼𝑲 U) (fun K => Val (𝑼𝑲_Ty K)) K (inst t ι)) :> Val (ty_union U)
+               inst (T := fun Σ => Term Σ (ty.union U)) (A := uniont U) s ι =
+               unionv_fold U (@existT (unionk U) (fun K => Val (unionk_ty U K)) K (inst t ι)) :> Val (ty.union U)
            end)
         (term_get_union s).
     Proof.
       dependent elimination s; cbn; try constructor; auto.
-      destruct (𝑼_unfold v) eqn:?. intros. cbn.
-      now rewrite <- Heqs, 𝑼_fold_unfold.
+      destruct (unionv_unfold U v) eqn:?. intros. cbn.
+      now rewrite <- Heqs, unionv_fold_unfold.
     Qed.
 
-    Equations(noeqns) term_get_record {R Σ} (t : Term Σ (ty_record R)) :
-      option (NamedEnv (Term Σ) (𝑹𝑭_Ty R)) :=
-      term_get_record (term_val _ v)        := Some (lift (𝑹_unfold v));
+    Equations(noeqns) term_get_record {R Σ} (t : Term Σ (ty.record R)) :
+      option (NamedEnv (Term Σ) (recordf_ty R)) :=
+      term_get_record (term_val _ v)        := Some (lift (recordv_unfold R v));
       term_get_record (@term_record _ R ts) := Some ts;
       term_get_record _ := None.
 
-    Lemma term_get_record_spec {Σ R} (s : Term Σ (ty_record R)) :
+    Lemma term_get_record_spec {Σ R} (s : Term Σ (ty.record R)) :
       option.wlp
         (fun ts =>
            forall ι : Valuation Σ,
-             inst (T := fun Σ => Term Σ (ty_record R)) (A := 𝑹𝑻 R) s ι =
-             𝑹_fold (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (𝑹𝑭_Ty R)) (A := NamedEnv Val (𝑹𝑭_Ty R)) ts ι))
+             inst (T := fun Σ => Term Σ (ty.record R)) (A := recordt R) s ι =
+             recordv_fold R (inst (T := fun Σ => NamedEnv (fun τ => Term Σ τ) (recordf_ty R)) (A := NamedEnv Val (recordf_ty R)) ts ι))
         (term_get_record s).
     Proof.
       dependent elimination s; try constructor; auto.
-      intros ι. now rewrite inst_lift, 𝑹_fold_unfold.
+      intros ι. now rewrite inst_lift, recordv_fold_unfold.
     Qed.
 
-    Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty_tuple σs)) :
+    Equations(noeqns) term_get_tuple {σs Σ} (t : Term Σ (ty.tuple σs)) :
       option (Env (Term Σ) σs) :=
       (* term_get_tuple (term_val _ v)       := Some _; *)
       (* term_get_tuple (@term_tuple _ _ ts) := Some ts; *)
       term_get_tuple _ := None.
 
-    Lemma term_get_tuple_spec {Σ σs} (s : Term Σ (ty_tuple σs)) :
+    Lemma term_get_tuple_spec {Σ σs} (s : Term Σ (ty.tuple σs)) :
       option.wlp
         (fun ts =>
            forall ι : Valuation Σ,
-             inst (T := fun Σ => Term Σ (ty_tuple σs)) (A := Val (ty_tuple σs)) s ι =
+             inst (T := fun Σ => Term Σ (ty.tuple σs)) (A := Val (ty.tuple σs)) s ι =
              inst (term_tuple ts) ι)
         (term_get_tuple s).
     Proof.

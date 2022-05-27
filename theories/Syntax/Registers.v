@@ -35,14 +35,14 @@ From Katamaran Require Import
 
 Local Set Implicit Arguments.
 
-Module Type RegDeclKit (Import T : TypeDecl).
+Module Type RegDeclKit (Import T : Types).
   (* Names of registers. *)
   Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
   Declare Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮).
   Declare Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮).
 End RegDeclKit.
 
-Module DefaultRegDeclKit (Import T : TypeDecl) <: RegDeclKit T.
+Module DefaultRegDeclKit (Import T : Types) <: RegDeclKit T.
   Definition 𝑹𝑬𝑮 : Ty -> Set := fun _ => Empty_set.
   Definition 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮) := sigma_eqdec _ _.
 

@@ -165,7 +165,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       demonic_list (finite.enum F).
 
     Definition angelic_match_bool :
-      Val ty_bool -> CDijkstra bool :=
+      Val ty.bool -> CDijkstra bool :=
       fun v =>
         angelic_binary
           (bind
@@ -176,7 +176,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
              (fun _ => pure false)).
 
     Definition demonic_match_bool :
-      Val ty_bool -> CDijkstra bool :=
+      Val ty.bool -> CDijkstra bool :=
       fun v =>
         demonic_binary
           (bind
@@ -382,7 +382,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
 
     Section PatternMatching.
 
-      Definition angelic_match_bool {A Γ1 Γ2} (v : Val ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
+      Definition angelic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
       Proof.
         apply angelic_binary.
         - eapply bind_right.
@@ -395,7 +395,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
           apply kf.
       Defined.
 
-      Lemma wp_angelic_match_bool {A Γ1 Γ2} (v : Val ty_bool) (kt kf : CMut Γ1 Γ2 A) :
+      Lemma wp_angelic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CMut Γ1 Γ2 A) :
         forall POST δ h,
           angelic_match_bool v kt kf POST δ h <->
           if v then kt POST δ h else kf POST δ h.
@@ -405,7 +405,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
         destruct v; intuition; discriminate.
       Qed.
 
-      Definition demonic_match_bool {A Γ1 Γ2} (v : Val ty_bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
+      Definition demonic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
       Proof.
         apply demonic_binary.
         - eapply bind_right.
@@ -418,7 +418,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
           apply kf.
       Defined.
 
-      Lemma wp_demonic_match_bool {A Γ1 Γ2} (v : Val ty_bool) (kt kf : CMut Γ1 Γ2 A) :
+      Lemma wp_demonic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CMut Γ1 Γ2 A) :
         forall POST δ h,
           demonic_match_bool v kt kf POST δ h <->
           if v then kt POST δ h else kf POST δ h.
@@ -429,11 +429,11 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Qed.
 
       Definition angelic_match_enum {A E} {Γ1 Γ2} :
-        Val (ty_enum E) -> (𝑬𝑲 E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty.enum E) -> (enumt E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v cont.
         eapply bind.
-        apply (angelic_finite (F := 𝑬𝑲 E)).
+        apply (angelic_finite (F := enumt E)).
         intros EK.
         eapply bind_right.
         apply (assert_formula (v = EK)).
@@ -441,18 +441,18 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Defined.
 
       Definition demonic_match_enum {A E} {Γ1 Γ2} :
-        Val (ty_enum E) -> (𝑬𝑲 E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty.enum E) -> (enumt E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v cont.
         eapply bind.
-        apply (demonic_finite (F := 𝑬𝑲 E)).
+        apply (demonic_finite (F := enumt E)).
         intros EK.
         eapply bind_right.
         apply (assume_formula (v = EK)).
         apply (cont EK).
       Defined.
 
-      Lemma wp_angelic_match_enum {A E Γ1 Γ2} (v : Val (ty_enum E)) (k : 𝑬𝑲 E -> CMut Γ1 Γ2 A) :
+      Lemma wp_angelic_match_enum {A E Γ1 Γ2} (v : Val (ty.enum E)) (k : enumt E -> CMut Γ1 Γ2 A) :
         forall POST δ h,
           angelic_match_enum v k POST δ h <-> k v POST δ h.
       Proof.
@@ -465,7 +465,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
         apply finite.elem_of_enum.
       Qed.
 
-      Lemma wp_demonic_match_enum {A E Γ1 Γ2} (v : Val (ty_enum E)) (k : 𝑬𝑲 E -> CMut Γ1 Γ2 A) :
+      Lemma wp_demonic_match_enum {A E Γ1 Γ2} (v : Val (ty.enum E)) (k : enumt E -> CMut Γ1 Γ2 A) :
         forall POST δ h,
           demonic_match_enum v k POST δ h <-> k v POST δ h.
       Proof.
@@ -479,7 +479,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Qed.
 
       Definition angelic_match_sum {A Γ1 Γ2} {σ τ} :
-        Val (ty_sum σ τ) -> (Val σ -> CMut Γ1 Γ2 A) -> (Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty.sum σ τ) -> (Val σ -> CMut Γ1 Γ2 A) -> (Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v kinl kinr.
         apply angelic_binary.
@@ -500,7 +500,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Defined.
 
       Definition demonic_match_sum {A Γ1 Γ2} {σ τ} :
-        Val (ty_sum σ τ) -> (Val σ -> CMut Γ1 Γ2 A) -> (Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty.sum σ τ) -> (Val σ -> CMut Γ1 Γ2 A) -> (Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v kinl kinr.
         apply demonic_binary.
@@ -521,7 +521,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Defined.
 
       Lemma wp_angelic_match_sum {A Γ1 Γ2} {σ τ}
-        (v : Val (ty_sum σ τ)) (kinl : Val σ -> CMut Γ1 Γ2 A) (kinr : Val τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.sum σ τ)) (kinl : Val σ -> CMut Γ1 Γ2 A) (kinr : Val τ -> CMut Γ1 Γ2 A) POST δ h :
         angelic_match_sum v kinl kinr POST δ h <->
         match v with
         | inl v => kinl v POST δ h
@@ -536,7 +536,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Qed.
 
       Lemma wp_demonic_match_sum {A Γ1 Γ2} {σ τ}
-        (v : Val (ty_sum σ τ)) (kinl : Val σ -> CMut Γ1 Γ2 A) (kinr : Val τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.sum σ τ)) (kinl : Val σ -> CMut Γ1 Γ2 A) (kinr : Val τ -> CMut Γ1 Γ2 A) POST δ h :
         demonic_match_sum v kinl kinr POST δ h <->
         match v with
         | inl v => kinl v POST δ h
@@ -555,7 +555,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Qed.
 
       Definition angelic_match_prod {A Γ1 Γ2} {σ τ} :
-        Val (ty_prod σ τ) -> (Val σ -> Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
+        Val (ty.prod σ τ) -> (Val σ -> Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
         fun v k =>
           v1 <- angelic σ ;;
           v2 <- angelic τ ;;
@@ -563,7 +563,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
           k v1 v2.
 
       Lemma wp_angelic_match_prod {A Γ1 Γ2} {σ τ}
-        (v : Val (ty_prod σ τ)) (k : Val σ -> Val τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.prod σ τ)) (k : Val σ -> Val τ -> CMut Γ1 Γ2 A) POST δ h :
         angelic_match_prod v k POST δ h <->
         match v with
         | pair v1 v2 => k v1 v2 POST δ h
@@ -578,7 +578,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Qed.
 
       Definition demonic_match_prod {A Γ1 Γ2} {σ τ} :
-        Val (ty_prod σ τ) -> (Val σ -> Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
+        Val (ty.prod σ τ) -> (Val σ -> Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
         fun v k =>
           v1 <- demonic σ ;;
           v2 <- demonic τ ;;
@@ -586,7 +586,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
           k v1 v2.
 
       Lemma wp_demonic_match_prod {A Γ1 Γ2} {σ τ}
-        (v : Val (ty_prod σ τ)) (k : Val σ -> Val τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.prod σ τ)) (k : Val σ -> Val τ -> CMut Γ1 Γ2 A) POST δ h :
         demonic_match_prod v k POST δ h <->
         match v with
         | pair v1 v2 => k v1 v2 POST δ h
@@ -598,7 +598,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Qed.
 
       Definition angelic_match_list {A Γ1 Γ2} {σ} :
-        Val (ty_list σ) -> (CMut Γ1 Γ2 A) -> (Val σ -> Val (ty_list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty.list σ) -> (CMut Γ1 Γ2 A) -> (Val σ -> Val (ty.list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v knil kcons.
         apply angelic_binary.
@@ -610,7 +610,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
           apply (angelic σ).
           intros vhead.
           eapply bind.
-          apply (angelic (ty_list σ)).
+          apply (angelic (ty.list σ)).
           intros vtail.
           eapply bind_right.
           apply assert_formula.
@@ -619,7 +619,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Defined.
 
       Lemma wp_angelic_match_list {A Γ1 Γ2} {σ}
-        (v : Val (ty_list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Val σ -> Val (ty_list σ) -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Val σ -> Val (ty.list σ) -> CMut Γ1 Γ2 A) POST δ h :
         angelic_match_list v knil kcons POST δ h <->
         match v with
         | nil => knil POST δ h
@@ -635,7 +635,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Qed.
 
       Definition demonic_match_list {A Γ1 Γ2} {σ} :
-        Val (ty_list σ) -> (CMut Γ1 Γ2 A) -> (Val σ -> Val (ty_list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty.list σ) -> (CMut Γ1 Γ2 A) -> (Val σ -> Val (ty.list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v knil kcons.
         apply demonic_binary.
@@ -647,7 +647,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
           apply (demonic σ).
           intros vhead.
           eapply bind.
-          apply (demonic (ty_list σ)).
+          apply (demonic (ty.list σ)).
           intros vtail.
           eapply bind_right.
           apply assume_formula.
@@ -656,7 +656,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Defined.
 
       Lemma wp_demonic_match_list {A Γ1 Γ2} {σ}
-        (v : Val (ty_list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Val σ -> Val (ty_list σ) -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Val σ -> Val (ty.list σ) -> CMut Γ1 Γ2 A) POST δ h :
         demonic_match_list v knil kcons POST δ h <->
         match v with
         | nil => knil POST δ h
@@ -670,17 +670,17 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
         - destruct v; intuition; try discriminate.
       Qed.
 
-      Definition angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
-        (Val (ty_record R)) ->
+      Definition angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+        (Val (ty.record R)) ->
         (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
         fun v k =>
           args <- angelic_ctx Δ ;;
-          assert_formula (𝑹_fold (record_pattern_match_env_reverse p args) = v) ;;
+          assert_formula (recordv_fold R (record_pattern_match_env_reverse p args) = v) ;;
           k args.
 
-      Lemma wp_angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ)
-        (v : Val (ty_record R))
+      Lemma wp_angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ)
+        (v : Val (ty.record R))
         (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
         POST δ h :
         angelic_match_record p v k POST δ h <->
@@ -690,23 +690,23 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
         rewrite CDijk.wp_angelic_ctx; intuition.
         - destruct H as (vs & <- & H).
           unfold record_pattern_match_val.
-          now rewrite 𝑹_unfold_fold, record_pattern_match_env_inverse_right.
+          now rewrite recordv_unfold_fold, record_pattern_match_env_inverse_right.
         - exists (record_pattern_match_val p v).
           unfold record_pattern_match_val.
-          now rewrite record_pattern_match_env_inverse_left, 𝑹_fold_unfold.
+          now rewrite record_pattern_match_env_inverse_left, recordv_fold_unfold.
       Qed.
 
-      Definition demonic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
-        (Val (ty_record R)) ->
+      Definition demonic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+        (Val (ty.record R)) ->
         (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
         fun v k =>
           args <- demonic_ctx Δ ;;
-          assume_formula (𝑹_fold (record_pattern_match_env_reverse p args) = v) ;;
+          assume_formula (recordv_fold R (record_pattern_match_env_reverse p args) = v) ;;
           k args.
 
-      Lemma wp_demonic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ)
-        (v : Val (ty_record R))
+      Lemma wp_demonic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ)
+        (v : Val (ty.record R))
         (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
         POST δ h :
         demonic_match_record p v k POST δ h <->
@@ -716,15 +716,15 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
         rewrite CDijk.wp_demonic_ctx; intuition; eauto.
         eapply H.
         - unfold record_pattern_match_val.
-          now rewrite record_pattern_match_env_inverse_left, 𝑹_fold_unfold.
+          now rewrite record_pattern_match_env_inverse_left, recordv_fold_unfold.
         - unfold record_pattern_match_val in H.
-          replace (record_pattern_match_env p (𝑹_unfold v)) with vs in H; [assumption|].
+          replace (record_pattern_match_env p (recordv_unfold R v)) with vs in H; [assumption|].
           subst.
-          now rewrite 𝑹_unfold_fold, record_pattern_match_env_inverse_right.
+          now rewrite recordv_unfold_fold, record_pattern_match_env_inverse_right.
       Qed.
 
       Definition angelic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        (Val (ty_tuple σs)) ->
+        (Val (ty.tuple σs)) ->
         (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
         fun v k =>
@@ -733,7 +733,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
           k args.
 
       Lemma wp_angelic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ)
-        (v : Val (ty_tuple σs))
+        (v : Val (ty.tuple σs))
         (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
         POST δ h :
         angelic_match_tuple p v k POST δ h <->
@@ -747,7 +747,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Qed.
 
       Definition demonic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        (Val (ty_tuple σs)) ->
+        (Val (ty.tuple σs)) ->
         (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
         CMut Γ1 Γ2 A :=
         fun v k =>
@@ -756,7 +756,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
           k args.
 
       Lemma wp_demonic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ)
-        (v : Val (ty_tuple σs))
+        (v : Val (ty.tuple σs))
         (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
         POST δ h :
         demonic_match_tuple p v k POST δ h <->
@@ -822,19 +822,19 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Qed.
 
       Definition angelic_match_union {N : Set} {A Γ1 Γ2 U}
-        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
-        Val (ty_union U) -> (forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
+        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v k.
         eapply bind.
-        apply (angelic_finite (F := 𝑼𝑲 U)).
+        apply (angelic_finite (F := unionk U)).
         intros UK.
         eapply bind.
-        apply (angelic (𝑼𝑲_Ty UK)).
+        apply (angelic (unionk_ty U UK)).
         intros v__field.
         eapply bind_right.
         apply assert_formula.
-        apply (𝑼_fold (existT UK v__field) = v).
+        apply (unionv_fold U (existT UK v__field) = v).
         eapply bind.
         apply (angelic_match_pattern (p UK)).
         apply v__field.
@@ -842,11 +842,11 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Defined.
 
       Lemma wp_angelic_match_union {N : Set} {A Γ1 Γ2 U}
-        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
-        (v : Val (ty_union U)) (k : forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A)
+        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K))
+        (v : Val (ty.union U)) (k : forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A)
         POST δ h :
         angelic_match_union p v k POST δ h <->
-        let (UK , vf) := 𝑼_unfold v in
+        let (UK , vf) := unionv_unfold U v in
         k UK (pattern_match_val (p UK) vf) POST δ h.
       Proof.
         cbv [angelic_match_union bind bind_right angelic_finite assert_formula angelic
@@ -855,31 +855,31 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
         split.
         - intros (UK & HIn & vf & Heq & Hwp).
           rewrite wp_angelic_match_pattern in Hwp.
-          subst v. now rewrite 𝑼_unfold_fold.
-        - destruct (𝑼_unfold v) as [UK vf] eqn:Heq.
+          subst v. now rewrite unionv_unfold_fold.
+        - destruct (unionv_unfold U v) as [UK vf] eqn:Heq.
           intros Hwp.
           exists UK. split.
           rewrite <- base.elem_of_list_In.
           apply finite.elem_of_enum.
           exists vf. rewrite <- Heq.
           rewrite wp_angelic_match_pattern.
-          rewrite 𝑼_fold_unfold. split; auto.
+          rewrite unionv_fold_unfold. split; auto.
       Qed.
 
       Definition demonic_match_union {N : Set} {A Γ1 Γ2 U}
-        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
-        Val (ty_union U) -> (forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
+        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v k.
         eapply bind.
-        apply (demonic_finite (F := 𝑼𝑲 U)).
+        apply (demonic_finite (F := unionk U)).
         intros UK.
         eapply bind.
-        apply (demonic (𝑼𝑲_Ty UK)).
+        apply (demonic (unionk_ty U UK)).
         intros v__field.
         eapply bind_right.
         apply assume_formula.
-        apply (𝑼_fold (existT UK v__field) = v).
+        apply (unionv_fold U (existT UK v__field) = v).
         eapply bind.
         apply (demonic_match_pattern (p UK)).
         apply v__field.
@@ -887,32 +887,32 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Defined.
 
       Lemma wp_demonic_match_union {N : Set} {A Γ1 Γ2 U}
-        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K))
-        (v : Val (ty_union U)) (k : forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A)
+        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K))
+        (v : Val (ty.union U)) (k : forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A)
         POST δ h :
         demonic_match_union p v k POST δ h <->
-        let (UK , vf) := 𝑼_unfold v in
+        let (UK , vf) := unionv_unfold U v in
         k UK (pattern_match_val (p UK) vf) POST δ h.
       Proof.
         cbv [demonic_match_union bind bind_right demonic_finite assume_formula demonic
              dijkstra CDijk.demonic_finite CDijk.assume_formula].
         rewrite CDijk.wp_demonic_list.
         split.
-        - destruct (𝑼_unfold v) as [UK vf] eqn:Heq.
+        - destruct (unionv_unfold U v) as [UK vf] eqn:Heq.
           intros HYP. specialize (HYP UK).
           inster HYP by
               rewrite <- base.elem_of_list_In; apply finite.elem_of_enum.
           specialize (HYP vf).
           rewrite wp_demonic_match_pattern in HYP.
           apply HYP.
-          now rewrite <- Heq, 𝑼_fold_unfold.
+          now rewrite <- Heq, unionv_fold_unfold.
         - intros HYP UK HIn vf <-.
-          rewrite 𝑼_unfold_fold in HYP.
+          rewrite unionv_unfold_fold in HYP.
           now rewrite wp_demonic_match_pattern.
       Qed.
 
       Definition demonic_match_bvec {A n} {Γ1 Γ2} :
-        Val (ty_bvec n) -> (bv n -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty.bvec n) -> (bv n -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
       Proof.
         intros v cont.
         eapply bind.
@@ -924,7 +924,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
       Defined.
       Global Arguments demonic_match_bvec : simpl never.
 
-      Lemma wp_demonic_match_bvec {A n Γ1 Γ2} (v : Val (ty_bvec n)) (k : bv n -> CMut Γ1 Γ2 A) :
+      Lemma wp_demonic_match_bvec {A n Γ1 Γ2} (v : Val (ty.bvec n)) (k : bv n -> CMut Γ1 Γ2 A) :
         forall POST δ h,
           demonic_match_bvec v k POST δ h <-> k v POST δ h.
       Proof.
@@ -1041,7 +1041,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
           demonic_match_list
             (inst (T := fun Σ => Term Σ _) s ι)
             (produce ι alt_nil)
-            (fun vh vt => produce (ι ► (xh∷_ ↦ vh) ► (xt∷ty_list _ ↦ vt)) alt_cons)
+            (fun vh vt => produce (ι ► (xh∷_ ↦ vh) ► (xt∷ty.list _ ↦ vt)) alt_cons)
         | asn_match_prod s xl xr rhs =>
           demonic_match_prod
             (inst (T := fun Σ => Term Σ _) s ι)
@@ -1087,7 +1087,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
           angelic_match_list
             (inst (T := fun Σ => Term Σ _) s ι)
             (consume ι alt_nil)
-            (fun vh vt => consume (ι ► (xh∷_ ↦ vh) ► (xt∷ty_list _ ↦ vt)) alt_cons)
+            (fun vh vt => consume (ι ► (xh∷_ ↦ vh) ► (xt∷ty.list _ ↦ vt)) alt_cons)
         | asn_match_prod s xl xr rhs =>
           angelic_match_prod
             (inst (T := fun Σ => Term Σ _) s ι)
@@ -1208,7 +1208,7 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
                 (exec_aux s1)
                 (fun h t =>
                    pushspops
-                     (env.snoc (env.snoc env.nil (xh∷σ) h) (xt∷ty_list σ) t)
+                     (env.snoc (env.snoc env.nil (xh∷σ) h) (xt∷ty.list σ) t)
                      (exec_aux s2))
             | stm_match_sum e xinl s1 xinr s2 =>
               v <- eval_exp e ;;

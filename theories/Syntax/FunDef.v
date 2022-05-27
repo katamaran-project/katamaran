@@ -57,8 +57,8 @@ Module Type FunDefKit (Import B : Base) (Import F : FunDecl B).
     exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
 
   (* Bind Scope env_scope with Memory. *)
-  (* Parameter read_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹), Val ty_int. *)
-  (* Parameter write_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Val ty_int), Memory. *)
+  (* Parameter read_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹), Val ty.int. *)
+  (* Parameter write_memory : forall (μ : Memory) (addr : 𝑨𝑫𝑫𝑹) (v : Val ty.int), Memory. *)
 
   (* Parameter Inline Pi : forall {Δ τ} (f : 𝑭 Δ τ), FunDef Δ τ. *)
   Parameter Inline FunDef : forall {Δ τ} (f : 𝑭 Δ τ), Stm Δ τ.

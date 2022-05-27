@@ -233,9 +233,9 @@ Module DisjointSound
     - sound_solve.
     (* rule_stm_match_union *)
     - sound_solve.
-      destruct (𝑼_unfold (eval e9 δ)) eqn:Heq.
-      assert (𝑼_fold (𝑼_unfold (eval e9 δ)) = 𝑼_fold (existT x v)) as Heq' by now f_equal.
-      rewrite 𝑼_fold_unfold in Heq'.
+      destruct (unionv_unfold U0 (eval e9 δ)) eqn:Heq.
+      assert (unionv_fold U0 (unionv_unfold U0 (eval e9 δ)) = unionv_fold U0 (existT x v)) as Heq' by now f_equal.
+      rewrite unionv_fold_unfold in Heq'.
       sound_solve.
     (* rule_stm_match_record *)
     - sound_solve.

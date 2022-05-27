@@ -34,7 +34,8 @@ From Equations Require Import
 From stdpp Require
      finite.
 From Katamaran Require Import
-     Base.
+     Base
+     Syntax.TypeDecl.
 
 Local Unset Equations Derive Equations.
 Local Set Implicit Arguments.
@@ -421,202 +422,193 @@ Module Export RiscvPmpBase <: Base.
   Import env.notations.
   Import stdpp.finite.
 
-  Include DefaultVarKit.
-
-  Section TypeDeclKit.
-
-    (** Enums **)
-    Definition 𝑬        := Enums.
-    Definition 𝑬_eq_dec := Enums_eqdec.
-    Definition 𝑬𝑲 (e : 𝑬) : Set :=
-      match e with
-      | privilege        => Privilege
-      | csridx           => CSRIdx
-      | pmpcfgidx        => PmpCfgIdx
-      | pmpaddridx       => PmpAddrIdx
-      | pmpaddrmatchtype => PmpAddrMatchType
-      | pmpmatch         => PmpMatch
-      | pmpaddrmatch     => PmpAddrMatch
-      | rop              => ROP
-      | iop              => IOP
-      | uop              => UOP
-      | bop              => BOP
-      | csrop            => CSROP
-      | retired          => Retired
-      end.
-    Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=
-      ltac:(destruct E; auto with typeclass_instances).
-    Instance 𝑬𝑲_finite (E : 𝑬) : Finite (𝑬𝑲 E) :=
-      ltac:(destruct E; auto with typeclass_instances).
-
-    (** Unions **)
-    Definition 𝑼        := Unions.
-    Definition 𝑼_eq_dec := Unions_eqdec.
-    Definition 𝑼𝑻 (U : 𝑼) : Set :=
-      match U with
-      | ast              => AST
-      | access_type      => AccessType
-      | exception_type   => ExceptionType
-      | memory_op_result => MemoryOpResult
-      | fetch_result     => FetchResult
-      | ctl_result       => CtlResult
-                              (* | pmp_entries      => Coq type in the model for pmp_entries  *)
-      end.
-    Instance 𝑼𝑻_eq_dec U : EqDec (𝑼𝑻 U) :=
-      ltac:(destruct U; cbn; auto with typeclass_instances).
-
-    Definition 𝑼𝑲 (U : 𝑼) : Set :=
-      match U with
-      | ast              => ASTConstructor
-      | access_type      => AccessTypeConstructor
-      | exception_type   => ExceptionTypeConstructor
-      | memory_op_result => MemoryOpResultConstructor
-      | fetch_result     => FetchResultConstructor
-      | ctl_result       => CtlResultConstructor
-                              (* | pmp_entries   => PmpEntriesConstructor *)
-      end.
-    Instance 𝑼𝑲_eq_dec U : EqDec (𝑼𝑲 U) :=
-      ltac:(destruct U; auto with typeclass_instances).
-    Instance 𝑼𝑲_finite U : Finite (𝑼𝑲 U) :=
-      ltac:(destruct U; auto with typeclass_instances).
-
-    (** Records **)
-    Definition 𝑹        := Records.
-    Definition 𝑹_eq_dec := Records_eqdec.
-    Definition 𝑹𝑻 (R : 𝑹) : Set :=
-      match R with
-      | rpmpcfg_ent => Pmpcfg_ent
-      | rmstatus    => Mstatus
-      end.
-    Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
-      ltac:(destruct R; auto with typeclass_instances).
-
-  End TypeDeclKit.
-
-  Include TypeDeclMixin.
+  Instance typedeclkit : TypeDeclKit :=
+    {| enumi := Enums;
+       unioni := Unions;
+       recordi := Records;
+    |}.
 
   (* Override notations of bindigns to put the variable x into string_scope. *)
   Notation "x ∷ t" := (MkB x%string t) : ctx_scope.
 
-  Notation ty_xlenbits         := (ty_int).
-  Notation ty_word             := (ty_int).
-  Notation ty_regno            := (ty_bvec 3).
-  Notation ty_privilege        := (ty_enum privilege).
-  Notation ty_csridx           := (ty_enum csridx).
-  Notation ty_pmpcfgidx        := (ty_enum pmpcfgidx).
-  Notation ty_pmpaddridx       := (ty_enum pmpaddridx).
-  Notation ty_pmpaddrmatchtype := (ty_enum pmpaddrmatchtype).
-  Notation ty_pmpmatch         := (ty_enum pmpmatch).
-  Notation ty_pmpaddrmatch     := (ty_enum pmpaddrmatch).
-  Notation ty_pmp_addr_range   := (ty_option (ty_prod ty_xlenbits ty_xlenbits)).
-  Notation ty_rop              := (ty_enum rop).
-  Notation ty_iop              := (ty_enum iop).
-  Notation ty_uop              := (ty_enum uop).
-  Notation ty_bop              := (ty_enum bop).
-  Notation ty_csrop            := (ty_enum csrop).
-  Notation ty_retired          := (ty_enum retired).
+  Notation ty_xlenbits         := (ty.int).
+  Notation ty_word             := (ty.int).
+  Notation ty_regno            := (ty.bvec 3).
+  Notation ty_privilege        := (ty.enum privilege).
+  Notation ty_csridx           := (ty.enum csridx).
+  Notation ty_pmpcfgidx        := (ty.enum pmpcfgidx).
+  Notation ty_pmpaddridx       := (ty.enum pmpaddridx).
+  Notation ty_pmpaddrmatchtype := (ty.enum pmpaddrmatchtype).
+  Notation ty_pmpmatch         := (ty.enum pmpmatch).
+  Notation ty_pmpaddrmatch     := (ty.enum pmpaddrmatch).
+  Notation ty_pmp_addr_range   := (ty.option (ty.prod ty_xlenbits ty_xlenbits)).
+  Notation ty_rop              := (ty.enum rop).
+  Notation ty_iop              := (ty.enum iop).
+  Notation ty_uop              := (ty.enum uop).
+  Notation ty_bop              := (ty.enum bop).
+  Notation ty_csrop            := (ty.enum csrop).
+  Notation ty_retired          := (ty.enum retired).
   Notation ty_mcause           := (ty_xlenbits).
-  Notation ty_exc_code         := (ty_int).
-  Notation ty_ast              := (ty_union ast).
-  Notation ty_access_type      := (ty_union access_type).
-  Notation ty_exception_type   := (ty_union exception_type).
-  Notation ty_memory_op_result := (ty_union memory_op_result).
-  Notation ty_fetch_result     := (ty_union fetch_result).
-  Notation ty_ctl_result       := (ty_union ctl_result).
-  Notation ty_pmpcfg_ent       := (ty_record rpmpcfg_ent).
-  Notation ty_mstatus          := (ty_record rmstatus).
-  Notation ty_pmpentry         := (ty_prod ty_pmpcfg_ent ty_xlenbits).
+  Notation ty_exc_code         := (ty.int).
+  Notation ty_ast              := (ty.union ast).
+  Notation ty_access_type      := (ty.union access_type).
+  Notation ty_exception_type   := (ty.union exception_type).
+  Notation ty_memory_op_result := (ty.union memory_op_result).
+  Notation ty_fetch_result     := (ty.union fetch_result).
+  Notation ty_ctl_result       := (ty.union ctl_result).
+  Notation ty_pmpcfg_ent       := (ty.record rpmpcfg_ent).
+  Notation ty_mstatus          := (ty.record rmstatus).
+  Notation ty_pmpentry         := (ty.prod ty_pmpcfg_ent ty_xlenbits).
 
-  Section TypeDefKit.
+  Definition enum_denote (e : Enums) : Set :=
+    match e with
+    | privilege        => Privilege
+    | csridx           => CSRIdx
+    | pmpcfgidx        => PmpCfgIdx
+    | pmpaddridx       => PmpAddrIdx
+    | pmpaddrmatchtype => PmpAddrMatchType
+    | pmpmatch         => PmpMatch
+    | pmpaddrmatch     => PmpAddrMatch
+    | rop              => ROP
+    | iop              => IOP
+    | uop              => UOP
+    | bop              => BOP
+    | csrop            => CSROP
+    | retired          => Retired
+    end.
 
-    Open Scope string_scope.
+  Definition union_denote (U : Unions) : Set :=
+    match U with
+    | ast              => AST
+    | access_type      => AccessType
+    | exception_type   => ExceptionType
+    | memory_op_result => MemoryOpResult
+    | fetch_result     => FetchResult
+    | ctl_result       => CtlResult
+    (* | pmp_entries      => Coq type in the model for pmp_entries  *)
+    end.
 
-    (** Unions **)
-    Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
-      match U with
-      | ast              => fun K =>
-                              match K with
-                              | KRTYPE      => ty_tuple [ty_regno; ty_regno; ty_regno; ty_rop]
-                              | KITYPE      => ty_tuple [ty_int; ty_regno; ty_regno; ty_iop]
-                              | KUTYPE      => ty_tuple [ty_int; ty_regno; ty_uop]
-                              | KBTYPE      => ty_tuple [ty_int; ty_regno; ty_regno; ty_bop]
-                              | KRISCV_JAL  => ty_tuple [ty_int; ty_regno]
-                              | KRISCV_JALR => ty_tuple [ty_int; ty_regno; ty_regno]
-                              | KLOAD       => ty_tuple [ty_int; ty_regno; ty_regno]
-                              | KSTORE      => ty_tuple [ty_int; ty_regno; ty_regno]
-                              | KECALL      => ty_unit
-                              | KMRET       => ty_unit
-                              | KCSR        => ty_tuple [ty_csridx; ty_regno; ty_regno; ty_csrop]
-                              end
-      | access_type      => fun _ => ty_unit
-      | exception_type   => fun _ => ty_unit
-      | memory_op_result => fun K =>
-                              match K with
-                              | KMemValue     => ty_word
-                              | KMemException => ty_exception_type
-                              end
-      | fetch_result     => fun K =>
-                              match K with
-                              | KF_Base  => ty_word
-                              | KF_Error => ty_prod ty_exception_type ty_word
-                              end
-      | ctl_result       => fun K =>
-                              match K with
-                              | KCTL_TRAP => ty_exception_type
-                              | KCTL_MRET => ty_unit
-                              end
-      end.
+  Definition record_denote (R : Records) : Set :=
+    match R with
+    | rpmpcfg_ent => Pmpcfg_ent
+    | rmstatus    => Mstatus
+    end.
 
-    Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) } :=
-      match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Val (𝑼𝑲_Ty u K)}) with
-      | ast              => fun Kv =>
-                              match Kv with
-                              | RTYPE rs2 rs1 rd op   => existT KRTYPE (tt , rs2 , rs1 , rd , op)
-                              | ITYPE imm rs1 rd op   => existT KITYPE (tt , imm , rs1 , rd , op)
-                              | UTYPE imm rd op       => existT KUTYPE (tt , imm , rd , op)
-                              | BTYPE imm rs2 rs1 op  => existT KBTYPE (tt , imm , rs2 , rs1 , op)
-                              | RISCV_JAL imm rd      => existT KRISCV_JAL (tt , imm , rd)
-                              | RISCV_JALR imm rs1 rd => existT KRISCV_JALR (tt , imm , rs1 , rd)
-                              | LOAD imm rs1 rd       => existT KLOAD (tt , imm , rs1 , rd)
-                              | STORE imm rs2 rs1     => existT KSTORE (tt , imm , rs2 , rs1)
-                              | ECALL                 => existT KECALL tt
-                              | MRET                  => existT KMRET tt
-                              | CSR csr rs1 rd op     => existT KCSR (tt , csr , rs1 , rd , op)
-                              end
-      | access_type      => fun Kv =>
-                              match Kv with
-                              | Read      => existT KRead tt
-                              | Write     => existT KWrite tt
-                              | ReadWrite => existT KReadWrite tt
-                              | Execute   => existT KExecute tt
-                              end
-      | exception_type   => fun Kv =>
-                              match Kv with
-                              | E_Fetch_Access_Fault => existT KE_Fetch_Access_Fault tt
-                              | E_Load_Access_Fault  => existT KE_Load_Access_Fault tt
-                              | E_SAMO_Access_Fault  => existT KE_SAMO_Access_Fault tt
-                              | E_U_EnvCall          => existT KE_U_EnvCall tt
-                              | E_M_EnvCall          => existT KE_M_EnvCall tt
-                              | E_Illegal_Instr      => existT KE_Illegal_Instr tt
-                              end
-      | memory_op_result => fun Kv =>
-                              match Kv with
-                              | MemValue v     => existT KMemValue v
-                              | MemException e => existT KMemException e
-                              end
-      | fetch_result     => fun Kv =>
-                              match Kv with
-                              | F_Base v    => existT KF_Base v
-                              | F_Error e v => existT KF_Error (e , v)
-                              end
-      | ctl_result       => fun Kv =>
-                              match Kv with
-                              | CTL_TRAP e => existT KCTL_TRAP e
-                              | CTL_MRET   => existT KCTL_MRET tt
-                              end
-      end.
+  #[export] Instance typedenotekit : TypeDenoteKit typedeclkit :=
+    {| enumt := enum_denote;
+       uniont := union_denote;
+       recordt := record_denote;
+    |}.
 
-    Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
+  Definition union_constructor (U : Unions) : Set :=
+    match U with
+    | ast              => ASTConstructor
+    | access_type      => AccessTypeConstructor
+    | exception_type   => ExceptionTypeConstructor
+    | memory_op_result => MemoryOpResultConstructor
+    | fetch_result     => FetchResultConstructor
+    | ctl_result       => CtlResultConstructor
+    (* | pmp_entries   => PmpEntriesConstructor *)
+    end.
+
+  Definition union_constructor_type (U : Unions) : union_constructor U -> Ty :=
+    match U with
+    | ast              => fun K =>
+                            match K with
+                            | KRTYPE      => ty.tuple [ty_regno; ty_regno; ty_regno; ty_rop]
+                            | KITYPE      => ty.tuple [ty.int; ty_regno; ty_regno; ty_iop]
+                            | KUTYPE      => ty.tuple [ty.int; ty_regno; ty_uop]
+                            | KBTYPE      => ty.tuple [ty.int; ty_regno; ty_regno; ty_bop]
+                            | KRISCV_JAL  => ty.tuple [ty.int; ty_regno]
+                            | KRISCV_JALR => ty.tuple [ty.int; ty_regno; ty_regno]
+                            | KLOAD       => ty.tuple [ty.int; ty_regno; ty_regno]
+                            | KSTORE      => ty.tuple [ty.int; ty_regno; ty_regno]
+                            | KECALL      => ty.unit
+                            | KMRET       => ty.unit
+                            | KCSR        => ty.tuple [ty_csridx; ty_regno; ty_regno; ty_csrop]
+                            end
+    | access_type      => fun _ => ty.unit
+    | exception_type   => fun _ => ty.unit
+    | memory_op_result => fun K =>
+                            match K with
+                            | KMemValue     => ty_word
+                            | KMemException => ty_exception_type
+                            end
+    | fetch_result     => fun K =>
+                            match K with
+                            | KF_Base  => ty_word
+                            | KF_Error => ty.prod ty_exception_type ty_word
+                            end
+    | ctl_result       => fun K =>
+                            match K with
+                            | KCTL_TRAP => ty_exception_type
+                            | KCTL_MRET => ty.unit
+                            end
+    end.
+
+  Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
+    ltac:(destruct E; auto with typeclass_instances).
+  Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
+    ltac:(destruct E; auto with typeclass_instances).
+  Instance eqdec_union_denote U : EqDec (union_denote U) :=
+    ltac:(destruct U; cbn; auto with typeclass_instances).
+  Instance eqdec_union_constructor U : EqDec (union_constructor U) :=
+    ltac:(destruct U; cbn; auto with typeclass_instances).
+  Instance finite_union_constructor U : finite.Finite (union_constructor U) :=
+    ltac:(destruct U; cbn; auto with typeclass_instances).
+  Instance eqdec_record_denote R : EqDec (record_denote R) :=
+    ltac:(destruct R; auto with typeclass_instances).
+
+  Definition union_unfold (U : unioni) : uniont U -> { K & Val (union_constructor_type U K) } :=
+    match U with
+    | ast              => fun Kv =>
+                            match Kv with
+                            | RTYPE rs2 rs1 rd op   => existT KRTYPE (tt , rs2 , rs1 , rd , op)
+                            | ITYPE imm rs1 rd op   => existT KITYPE (tt , imm , rs1 , rd , op)
+                            | UTYPE imm rd op       => existT KUTYPE (tt , imm , rd , op)
+                            | BTYPE imm rs2 rs1 op  => existT KBTYPE (tt , imm , rs2 , rs1 , op)
+                            | RISCV_JAL imm rd      => existT KRISCV_JAL (tt , imm , rd)
+                            | RISCV_JALR imm rs1 rd => existT KRISCV_JALR (tt , imm , rs1 , rd)
+                            | LOAD imm rs1 rd       => existT KLOAD (tt , imm , rs1 , rd)
+                            | STORE imm rs2 rs1     => existT KSTORE (tt , imm , rs2 , rs1)
+                            | ECALL                 => existT KECALL tt
+                            | MRET                  => existT KMRET tt
+                            | CSR csr rs1 rd op     => existT KCSR (tt , csr , rs1 , rd , op)
+                            end
+    | access_type      => fun Kv =>
+                            match Kv with
+                            | Read      => existT KRead tt
+                            | Write     => existT KWrite tt
+                            | ReadWrite => existT KReadWrite tt
+                            | Execute   => existT KExecute tt
+                            end
+    | exception_type   => fun Kv =>
+                            match Kv with
+                            | E_Fetch_Access_Fault => existT KE_Fetch_Access_Fault tt
+                            | E_Load_Access_Fault  => existT KE_Load_Access_Fault tt
+                            | E_SAMO_Access_Fault  => existT KE_SAMO_Access_Fault tt
+                            | E_U_EnvCall          => existT KE_U_EnvCall tt
+                            | E_M_EnvCall          => existT KE_M_EnvCall tt
+                            | E_Illegal_Instr      => existT KE_Illegal_Instr tt
+                            end
+    | memory_op_result => fun Kv =>
+                            match Kv with
+                            | MemValue v     => existT KMemValue v
+                            | MemException e => existT KMemException e
+                            end
+    | fetch_result     => fun Kv =>
+                            match Kv with
+                            | F_Base v    => existT KF_Base v
+                            | F_Error e v => existT KF_Error (e , v)
+                            end
+    | ctl_result       => fun Kv =>
+                            match Kv with
+                            | CTL_TRAP e => existT KCTL_TRAP e
+                            | CTL_MRET   => existT KCTL_MRET tt
+                            end
+    end.
+
+  Definition union_fold (U : unioni) : { K & Val (union_constructor_type U K) } -> uniont U :=
       match U with
       | ast              => fun Kv =>
                               match Kv with
@@ -665,54 +657,57 @@ Module Export RiscvPmpBase <: Base.
                               end
       end.
 
-    Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
-        𝑼_fold U (𝑼_unfold U Kv) = Kv.
-    Proof. now intros [] []. Qed.
-    Lemma 𝑼_unfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) }),
-        𝑼_unfold U (𝑼_fold U Kv) = Kv.
-    Proof.
-      intros [] [[] x]; cbn in x;
-        repeat match goal with
-               | x: unit     |- _ => destruct x
-               | x: prod _ _ |- _ => destruct x
-               end; auto.
-    Qed.
+  Definition record_field_type (R : recordi) : NCtx string Ty :=
+    match R with
+    | rpmpcfg_ent => [ "L" ∷ ty.bool;
+                       "A" ∷ ty_pmpaddrmatchtype;
+                       "X" ∷ ty.bool;
+                       "W" ∷ ty.bool;
+                       "R" ∷ ty.bool
+      ]
+    | rmstatus    => ["MPP" ∷ ty_privilege
+      ]
+    end.
 
-    (** Records **)
-    Definition 𝑹𝑭  : Set := string.
+  Equations record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R :=
+  | rpmpcfg_ent | [l;a;x;w;r]%env := MkPmpcfg_ent l a x w r
+  | rmstatus    | [mpp]%env       := MkMstatus mpp.
 
-    Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty :=
-      match R with
-      | rpmpcfg_ent => [ "L" ∷ ty_bool;
-                         "A" ∷ ty_pmpaddrmatchtype;
-                         "X" ∷ ty_bool;
-                         "W" ∷ ty_bool;
-                         "R" ∷ ty_bool
-        ]
-      | rmstatus    => ["MPP" ∷ ty_privilege
-        ]
-      end.
+  Equations record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) :=
+  | rpmpcfg_ent | p => [kv (_ ∷ ty.bool             ; L p);
+                           (_ ∷ ty_pmpaddrmatchtype ; A p);
+                           (_ ∷ ty.bool             ; X p);
+                           (_ ∷ ty.bool             ; W p);
+                           (_ ∷ ty.bool             ; R p) ];
+  | rmstatus    | m => [kv ("MPP" ∷ ty_privilege; MPP m) ].
 
-    Equations 𝑹_fold (R : 𝑹) : NamedEnv Val (𝑹𝑭_Ty R) -> 𝑹𝑻 R :=
-    | rpmpcfg_ent | [l;a;x;w;r]%env := MkPmpcfg_ent l a x w r
-    | rmstatus    | [mpp]%env       := MkMstatus mpp.
+  #[refine] Instance typedefkit : TypeDefKit typedenotekit :=
+    {| unionk           := union_constructor;
+       unionk_ty        := union_constructor_type;
+       recordf          := string;
+       recordf_ty       := record_field_type;
+       unionv_fold      := union_fold;
+       unionv_unfold    := union_unfold;
+       recordv_fold     := record_fold;
+       recordv_unfold   := record_unfold;
+    |}.
+  Proof.
+    - abstract (now intros [] []).
+    - abstract (intros [] [[] x]; cbn in x;
+                repeat
+                  match goal with
+                  | x: unit     |- _ => destruct x
+                  | x: prod _ _ |- _ => destruct x
+                  end; auto).
+    - abstract (now intros [] []).
+    - abstract (intros []; now apply env.Forall_forall).
+  Defined.
 
-    Equations 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Val (𝑹𝑭_Ty R) :=
-    | rpmpcfg_ent | p => [kv (_ ∷ ty_bool             ; L p);
-                          (_ ∷ ty_pmpaddrmatchtype ; A p);
-                          (_ ∷ ty_bool             ; X p);
-                          (_ ∷ ty_bool             ; W p);
-                          (_ ∷ ty_bool             ; R p) ];
-    | rmstatus    | m => [kv ("MPP" ∷ ty_privilege; MPP m) ].
+  Canonical typedeclkit.
+  Canonical typedenotekit.
+  Canonical typedefkit.
 
-    Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
-        𝑹_fold R (𝑹_unfold R Kv) = Kv.
-    Proof. now intros [] []. Qed.
-    Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Val (𝑹𝑭_Ty R)),
-        𝑹_unfold R (𝑹_fold R Kv) = Kv.
-    Proof. intros []; now apply env.Forall_forall. Qed.
-
-  End TypeDefKit.
+  Instance varkit : VarKit := DefaultVarKit.
 
   Section RegDeclKit.
 
@@ -756,6 +751,7 @@ Module Export RiscvPmpBase <: Base.
     End TransparentObligations.
 
     Definition 𝑹𝑬𝑮 : Ty -> Set := Reg.
+
     Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT Reg) :=
       sigma_eqdec _ _.
 

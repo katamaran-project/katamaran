@@ -787,7 +787,7 @@ Module Soundness
       rewrite <- inst_persist. auto.
     Qed.
 
-    Lemma approx_angelic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx}
+    Lemma approx_angelic_match_enum {AT A} `{Approx AT A} {E : enumi} {Γ1 Γ2 : PCtx}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_enum AT E Γ1 Γ2 w) (@CMut.angelic_match_enum A E Γ1 Γ2).
     Proof.
@@ -805,7 +805,7 @@ Module Soundness
       eapply Hk; wsimpl; auto.
     Qed.
 
-    Lemma approx_demonic_match_enum {AT A} `{Approx AT A} {E : 𝑬} {Γ1 Γ2 : PCtx}
+    Lemma approx_demonic_match_enum {AT A} `{Approx AT A} {E : enumi} {Γ1 Γ2 : PCtx}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_enum AT E Γ1 Γ2 w) (@CMut.demonic_match_enum A E Γ1 Γ2).
     Proof.
@@ -1002,7 +1002,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
-      {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+      {Δ : NCtx N Ty} {p : RecordPat (recordf_ty R) Δ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
@@ -1021,7 +1021,7 @@ Module Soundness
     Qed.
 
     Lemma approx_angelic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
-      {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+      {Δ : NCtx N Ty} {p : RecordPat (recordf_ty R) Δ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_record N n AT R Γ1 Γ2 Δ p w) (@CMut.angelic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
@@ -1037,14 +1037,14 @@ Module Soundness
         apply Hc; wsimpl; eauto.
         hnf.
         unfold record_pattern_match_val.
-        rewrite H0. rewrite 𝑹_unfold_fold.
+        rewrite H0. rewrite recordv_unfold_fold.
         symmetry.
         apply inst_record_pattern_match.
       - apply approx_angelic_match_record'; auto.
     Qed.
 
     Lemma approx_demonic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
-      {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+      {Δ : NCtx N Ty} {p : RecordPat (recordf_ty R) Δ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
@@ -1063,7 +1063,7 @@ Module Soundness
     Qed.
 
     Lemma approx_demonic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Approx AT A} {Γ1 Γ2}
-      {Δ : NCtx N Ty} {p : RecordPat (𝑹𝑭_Ty R) Δ}
+      {Δ : NCtx N Ty} {p : RecordPat (recordf_ty R) Δ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_record N n AT R Γ1 Γ2 Δ p w) (@CMut.demonic_match_record N A R Γ1 Γ2 Δ p).
     Proof.
@@ -1079,7 +1079,7 @@ Module Soundness
         apply Hc; wsimpl; eauto.
         hnf.
         unfold record_pattern_match_val.
-        rewrite H0. rewrite 𝑹_unfold_fold.
+        rewrite H0. rewrite recordv_unfold_fold.
         change (fun Σ => @Env (N ∷ Ty) (fun τ => Term Σ (type τ)) Δ) with (fun Σ => @NamedEnv N Ty (Term Σ) Δ).
         now rewrite inst_record_pattern_match.
       - apply approx_demonic_match_record'; auto.
@@ -1161,8 +1161,8 @@ Module Soundness
         now rewrite <- inst_persist.
     Qed.
 
-    Lemma approx_angelic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
-      {Δ : 𝑼𝑲 U -> NCtx N Ty} {p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)}
+    Lemma approx_angelic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : unioni}
+      {Δ : unionk U -> NCtx N Ty} {p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.angelic_match_union N n AT Γ1 Γ2 U Δ p w) (@CMut.angelic_match_union N A Γ1 Γ2 U Δ p).
     Proof.
@@ -1215,8 +1215,8 @@ Module Soundness
         now rewrite <- inst_persist.
     Qed.
 
-    Lemma approx_demonic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : 𝑼}
-      {Δ : 𝑼𝑲 U -> NCtx N Ty} {p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)}
+    Lemma approx_demonic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Approx AT A} {Γ1 Γ2 : PCtx} {U : unioni}
+      {Δ : unionk U -> NCtx N Ty} {p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       approx ι (@SMut.demonic_match_union N n AT Γ1 Γ2 U Δ p w) (@CMut.demonic_match_union N A Γ1 Γ2 U Δ p).
     Proof.

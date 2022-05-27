@@ -677,7 +677,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_if {Γ} (δ : CStore Γ)
-        (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
+        (τ : Ty) (e : Exp Γ ty.bool) (s1 s2 : Stm Γ τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ (P ∧ ⌜ eval e δ = true ⌝) s1 Q -∗
                    semTriple δ (P ∧ ⌜ eval e δ = false ⌝) s2 Q -∗
@@ -704,7 +704,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_if_backwards {Γ} (δ : CStore Γ)
-        (τ : Ty) (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
+        (τ : Ty) (e : Exp Γ ty.bool) (s1 s2 : Stm Γ τ)
         (P1 P2 : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P1 s1 Q -∗ semTriple δ P2 s2 Q -∗
         semTriple δ (bi_impl (⌜ eval e δ = true ⌝) P1 ∧
@@ -772,7 +772,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
-        (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
+        (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
                       (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
     ⊢ (semTriple δ (P ∧ ⌜ eval e1 δ = true ⌝) k Q -∗
        semTriple δ P (stm_assertk e1 e2 k) Q)%I.
@@ -797,7 +797,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
-        (τ : Ty) (s : Val ty_string) :
+        (τ : Ty) (s : Val ty.string) :
         forall (Q : Val τ -> CStore Γ -> iProp Σ),
           ⊢ semTriple δ True%I (stm_fail τ s) Q.
   Proof.
@@ -806,11 +806,11 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_match_list {Γ} (δ : CStore Γ)
-        {σ τ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
-        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty_list σ) τ)
+        {σ τ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
+        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ (P ∧ bi_pure (eval e δ = []%list)) alt_nil (fun v' δ' => Q v' δ') -∗
-                     (∀ v vs, semTriple (env.snoc (env.snoc δ (xh∷σ) v) (xt∷ty_list σ) vs) (P ∧ bi_pure (eval e δ = cons v vs)) alt_cons (fun v' δ' => Q v' (env.tail (env.tail δ')))) -∗
+                     (∀ v vs, semTriple (env.snoc (env.snoc δ (xh∷σ) v) (xt∷ty.list σ) vs) (P ∧ bi_pure (eval e δ = cons v vs)) alt_cons (fun v' δ' => Q v' (env.tail (env.tail δ')))) -∗
                      semTriple δ P (stm_match_list e alt_nil xh xt alt_cons) Q)%I.
   Proof.
     iIntros "tripnil tripcons P".
@@ -835,13 +835,13 @@ Section Soundness.
       iModIntro.
       iFrame.
       iSplitL; [|trivial].
-      iApply (wp_compat_block (env.snoc (env.snoc env.nil (xh0∷σ6) l) (xt0∷ty_list σ6) ls)).
+      iApply (wp_compat_block (env.snoc (env.snoc env.nil (xh0∷σ6) l) (xt0∷ty.list σ6) ls)).
       iApply "tripcons".
       by iFrame.
   Qed.
 
   Lemma iris_rule_stm_match_sum {Γ} (δ : CStore Γ)
-        (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr))
+        (σinl σinr τ : Ty) (e : Exp Γ (ty.sum σinl σinr))
                          (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
                          (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
                          (P : iProp Σ)
@@ -878,7 +878,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_match_prod {Γ} (δ : CStore Γ)
-        {σ1 σ2 τ : Ty} (e : Exp Γ (ty_prod σ1 σ2))
+        {σ1 σ2 τ : Ty} (e : Exp Γ (ty.prod σ1 σ2))
         (xl xr : 𝑿) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ ((∀ vl vr,
@@ -907,8 +907,8 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_match_enum {Γ} (δ : CStore Γ)
-        {E : 𝑬} (e : Exp Γ (ty_enum E)) {τ : Ty}
-        (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
+        {E : enumi} (e : Exp Γ (ty.enum E)) {τ : Ty}
+        (alts : forall (K : enumt E), Stm Γ τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P (alts (eval e δ)) Q -∗
           semTriple δ P (stm_match_enum E e alts) Q)%I.
@@ -930,7 +930,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_match_tuple {Γ} (δ : CStore Γ)
-        {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
+        {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty.tuple σs))
         (p : TuplePat σs Δ) {τ : Ty} (rhs : Stm (Γ ▻▻ Δ) τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
     ⊢ ((semTriple (env.cat δ (tuple_pattern_match_val p (eval e δ))) P rhs (fun v δ' => Q v (env.drop Δ δ'))) -∗
@@ -954,13 +954,13 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_match_union {Γ} (δ : CStore Γ)
-        {U : 𝑼} (e : Exp Γ (ty_union U)) {σ τ : Ty}
-        (alt__Δ : forall (K : 𝑼𝑲 U), PCtx)
-        (alt__p : forall (K : 𝑼𝑲 U), Pattern (alt__Δ K) (𝑼𝑲_Ty K))
-        (alt__r : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__Δ K) τ)
+        {U : unioni} (e : Exp Γ (ty.union U)) {σ τ : Ty}
+        (alt__Δ : forall (K : unionk U), PCtx)
+        (alt__p : forall (K : unionk U), Pattern (alt__Δ K) (unionk_ty U K))
+        (alt__r : forall (K : unionk U), Stm (Γ ▻▻ alt__Δ K) τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
-        ⊢ ((∀ (K : 𝑼𝑲 U) (v : Val (𝑼𝑲_Ty K)),
-               semTriple (env.cat δ (pattern_match_val (alt__p K) v)) (P ∧ bi_pure (eval e δ = 𝑼_fold (existT K v))) (alt__r K) (fun v δ' => Q v (env.drop (alt__Δ K) δ'))) -∗
+        ⊢ ((∀ (K : unionk U) (v : Val (unionk_ty U K)),
+               semTriple (env.cat δ (pattern_match_val (alt__p K) v)) (P ∧ bi_pure (eval e δ = unionv_fold U (existT K v))) (alt__r K) (fun v δ' => Q v (env.drop (alt__Δ K) δ'))) -∗
                semTriple δ P (stm_match_union U e alt__p alt__r) Q
           )%I.
   Proof.
@@ -977,19 +977,19 @@ Section Soundness.
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    remember (𝑼_unfold (eval e9 δ1)) as scrutinee.
+    remember (unionv_unfold U0 (eval e9 δ1)) as scrutinee.
     destruct scrutinee as [K v].
     iApply (wp_compat_block (pattern_match_val (alt__pat K) v)).
     iSpecialize ("tripunion" $! K v).
     rewrite Heqscrutinee.
-    rewrite 𝑼_fold_unfold.
+    rewrite unionv_fold_unfold.
     iApply "tripunion".
     by iFrame.
   Qed.
 
   Lemma iris_rule_stm_match_record {Γ} (δ : CStore Γ)
-        {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
-        (p : RecordPat (𝑹𝑭_Ty R) Δ) {τ : Ty} (rhs : Stm (Γ ▻▻ Δ) τ)
+        {R : recordi} {Δ : PCtx} (e : Exp Γ (ty.record R))
+        (p : RecordPat (recordf_ty R) Δ) {τ : Ty} (rhs : Stm (Γ ▻▻ Δ) τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ ((semTriple (env.cat δ (record_pattern_match_val p (eval e δ))) P rhs (fun v δ' => Q v (env.drop Δ δ'))) -∗
         semTriple δ P (stm_match_record R e p rhs) Q)%I.
@@ -1012,7 +1012,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_match_bvec {Γ} (δ : CStore Γ)
-        {n : nat} (e : Exp Γ (ty_bvec n)) {τ : Ty}
+        {n : nat} (e : Exp Γ (ty.bvec n)) {τ : Ty}
         (rhs : forall (v : bv n), Stm Γ τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P (rhs (eval e δ)) Q -∗

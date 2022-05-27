@@ -36,7 +36,9 @@ From Katamaran Require Import
      Prelude
      Syntax.BinOps
      Syntax.Terms
+     Syntax.TypeDecl
      Syntax.TypeDef
+     Syntax.Variables
      Tactics.
 
 Import ctx.notations.
@@ -48,8 +50,7 @@ Local Set Implicit Arguments.
 
 Module Type OccursCheckOn
   (Import TY : Types)
-  (Import BO : BinOpsOn TY)
-  (Import TM : TermsOn TY BO).
+  (Import TM : TermsOn TY).
 
   Local Notation LCtx := (NCtx 𝑺 Ty).
 
@@ -86,7 +87,7 @@ Module Type OccursCheckOn
       | term_inr t => term_inr <$> occurs_check_term xIn t
       | term_union U K t0 => term_union U K <$> occurs_check_term xIn t0
       | term_record R ts =>
-        let OCTerm xt := @occurs_check_term (@type 𝑹𝑭 Ty xt) in
+        let OCTerm xt := @occurs_check_term (@type recordf Ty xt) in
         term_record R <$> occurs_check (OccursCheck := occurs_check_env (OCT := OCTerm)) xIn ts
       end.
 

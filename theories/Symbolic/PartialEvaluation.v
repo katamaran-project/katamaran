@@ -38,7 +38,8 @@ From Katamaran Require Import
      Syntax.BinOps
      Syntax.Terms
      Syntax.TypeDecl
-     Syntax.TypeDef.
+     Syntax.TypeDef
+     Syntax.Variables.
 
 Import ctx.notations.
 Import env.notations.
@@ -49,9 +50,8 @@ Local Unset Elimination Schemes.
 
 Module Type PartialEvaluationOn
   (Import TY : Types)
-  (Import BO : BinOpsOn TY)
-  (Import TM : TermsOn TY BO)
-  (Import IN : InstantiationOn TY BO TM).
+  (Import TM : TermsOn TY)
+  (Import IN : InstantiationOn TY TM).
 
   Local Notation LCtx := (NCtx 𝑺 Ty).
   Local Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Val (@type 𝑺 Ty xt)) Σ).
@@ -59,26 +59,26 @@ Module Type PartialEvaluationOn
   Section WithLCtx.
     Context {Σ : LCtx}.
 
-    Equations(noeqns) peval_append {σ} (t1 t2 : Term Σ (ty_list σ)) : Term Σ (ty_list σ) :=
-    | term_val _ v1                 | term_val _ v2 := term_val (ty_list σ) (app v1 v2);
+    Equations(noeqns) peval_append {σ} (t1 t2 : Term Σ (ty.list σ)) : Term Σ (ty.list σ) :=
+    | term_val _ v1                 | term_val _ v2 := term_val (ty.list σ) (app v1 v2);
     (* TODO: recurse over the value instead *)
     | term_val _ nil                | t2 := t2;
-    | term_val _ (cons v vs)        | t2 := term_binop binop_cons (term_val σ v) (term_binop binop_append (term_val (ty_list σ) vs) t2);
-    | term_binop binop_cons t11 t12 | t2 := term_binop binop_cons t11 (term_binop binop_append t12 t2);
-    | t1                            | t2 := term_binop binop_append t1 t2.
+    | term_val _ (cons v vs)        | t2 := term_binop bop.cons (term_val σ v) (term_binop bop.append (term_val (ty.list σ) vs) t2);
+    | term_binop bop.cons t11 t12 | t2 := term_binop bop.cons t11 (term_binop bop.append t12 t2);
+    | t1                            | t2 := term_binop bop.append t1 t2.
 
     Equations(noeqns) peval_binop' {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
-    | op | term_val _ v1 | term_val _ v2 := term_val σ (eval_binop op v1 v2);
+    | op | term_val _ v1 | term_val _ v2 := term_val σ (bop.eval op v1 v2);
     | op | t1            | t2            := term_binop op t1 t2.
 
     Equations(noeqns) peval_binop {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) : Term Σ σ :=
-    | binop_append | t1 | t2 := peval_append t1 t2;
+    | bop.append | t1 | t2 := peval_append t1 t2;
     | op           | t1 | t2 := peval_binop' op t1 t2.
 
-    Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty_list σ)) :
+    Lemma peval_append_sound {σ} (t1 t2 : Term Σ (ty.list σ)) :
       forall (ι : Valuation Σ),
         inst  (peval_append t1 t2) ι =
-          eval_binop binop_append (inst t1 ι) (inst t2 ι).
+          bop.eval bop.append (inst t1 ι) (inst t2 ι).
     Proof.
       intros ι.
       dependent elimination t1; cbn; auto.
@@ -89,32 +89,32 @@ Module Type PartialEvaluationOn
 
     Lemma peval_binop'_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
       forall (ι : Valuation Σ),
-        inst (peval_binop' op t1 t2) ι = eval_binop op (inst t1 ι) (inst t2 ι).
+        inst (peval_binop' op t1 t2) ι = bop.eval op (inst t1 ι) (inst t2 ι).
     Proof. intros ι. destruct t1, t2; cbn; auto. Qed.
 
     Lemma peval_binop_sound {σ1 σ2 σ} (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) :
       forall (ι : Valuation Σ),
-        inst (peval_binop op t1 t2) ι = eval_binop op (inst t1 ι) (inst t2 ι).
+        inst (peval_binop op t1 t2) ι = bop.eval op (inst t1 ι) (inst t2 ι).
     Proof.
       intros ι.
       destruct op; cbn [peval_binop];
         auto using peval_binop'_sound, peval_append_sound.
     Qed.
 
-    Equations(noeqns) peval_neg (t : Term Σ ty_int) : Term Σ ty_int :=
-    | term_val _ v := term_val ty_int (Z.opp v);
+    Equations(noeqns) peval_neg (t : Term Σ ty.int) : Term Σ ty.int :=
+    | term_val _ v := term_val ty.int (Z.opp v);
     | t            := term_neg t.
 
-    Equations(noeqns) peval_not (t : Term Σ ty_bool) : Term Σ ty_bool :=
-    | term_val _ v := term_val ty_bool (negb v);
+    Equations(noeqns) peval_not (t : Term Σ ty.bool) : Term Σ ty.bool :=
+    | term_val _ v := term_val ty.bool (negb v);
     | t            := term_not t.
 
-    Equations(noeqns) peval_inl {σ1 σ2} (t : Term Σ σ1) : Term Σ (ty_sum σ1 σ2) :=
-    | term_val _ v := term_val (ty_sum _ _) (@inl (Val _) (Val _) v);
+    Equations(noeqns) peval_inl {σ1 σ2} (t : Term Σ σ1) : Term Σ (ty.sum σ1 σ2) :=
+    | term_val _ v := term_val (ty.sum _ _) (@inl (Val _) (Val _) v);
     | t            := term_inl t.
 
-    Equations(noeqns) peval_inr {σ1 σ2} (t : Term Σ σ2) : Term Σ (ty_sum σ1 σ2) :=
-    | term_val _ v := term_val (ty_sum _ _) (@inr (Val _) (Val _) v);
+    Equations(noeqns) peval_inr {σ1 σ2} (t : Term Σ σ2) : Term Σ (ty.sum σ1 σ2) :=
+    | term_val _ v := term_val (ty.sum _ _) (@inr (Val _) (Val _) v);
     | t            := term_inr t.
 
     Equations(noeqns) peval [σ] (t : Term Σ σ) : Term Σ σ :=
@@ -129,12 +129,12 @@ Module Type PartialEvaluationOn
     | @term_union _ U K t        := @term_union _ U K (peval t);
     | @term_record _ R ts        := @term_record _ R ts.
 
-    Lemma peval_neg_sound (t : Term Σ ty_int) :
+    Lemma peval_neg_sound (t : Term Σ ty.int) :
       forall (ι : Valuation Σ),
         inst (peval_neg t) ι = inst (term_neg t) ι.
     Proof. dependent elimination t; cbn; auto. Qed.
 
-    Lemma peval_not_sound (t : Term Σ ty_bool) :
+    Lemma peval_not_sound (t : Term Σ ty.bool) :
       forall (ι : Valuation Σ),
         inst (peval_not t) ι = inst (term_not t) ι.
     Proof. dependent elimination t; cbn; auto. Qed.

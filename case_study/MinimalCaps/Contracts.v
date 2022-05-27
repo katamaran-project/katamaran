@@ -117,7 +117,7 @@ Section PredicateKit.
   Definition 𝑯 := Predicate.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | ptsreg => [ty_enum regname; ty_word]
+    | ptsreg => [ty.enum regname; ty_word]
     | ptsto  => [ty_addr; ty_memval]
     | safe   => [ty_word]
     | expr   => [ty_cap]
@@ -140,7 +140,7 @@ Section PredicateKit.
   Local Arguments Some {_} &.
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
-    | ptsreg => Some (MkPrecise [ty_enum regname] [ty_word] eq_refl)
+    | ptsreg => Some (MkPrecise [ty.enum regname] [ty_word] eq_refl)
     | ptsto => Some (MkPrecise [ty_addr] [ty_memval] eq_refl)
     | _ => None
     end.
@@ -157,9 +157,9 @@ End PredicateKit.
 
     Notation "p '<=ₚ' p'" := (asn_formula (formula_user subperm (env.nil ► (ty_perm ↦ p) ► (ty_perm ↦ p')))) (at level 70).
 
-    Notation "r '↦r' t" := (asn_chunk (chunk_user ptsreg (env.nil ► (ty_enum regname ↦ r) ► (ty_word ↦ t)))) (at level 70).
-    Notation "a '↦m' t" := (asn_chunk (chunk_user ptsto (env.nil ► (ty_addr ↦ a) ► (ty_int ↦ t)))) (at level 70).
-    Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
+    Notation "r '↦r' t" := (asn_chunk (chunk_user ptsreg (env.nil ► (ty.enum regname ↦ r) ► (ty_word ↦ t)))) (at level 70).
+    Notation "a '↦m' t" := (asn_chunk (chunk_user ptsto (env.nil ► (ty_addr ↦ a) ► (ty.int ↦ t)))) (at level 70).
+    Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty.unit opt xl alt_inl "_" alt_inr).
     Notation asn_safe w := (asn_chunk (chunk_user safe (env.nil ► (ty_word ↦ w)))).
     Notation asn_csafe c := (asn_chunk (chunk_user safe (env.nil ► (ty_word ↦ (term_inr c))))).
     Notation asn_csafe_angelic c := (asn_chunk_angelic (chunk_user safe (env.nil ► (ty_word ↦ (term_inr c))))).
@@ -175,9 +175,9 @@ End PredicateKit.
                          "cap_cursor" a)
          asn).
     Notation asn_within_bounds a b e :=
-      (asn_formula (formula_bool (term_binop binop_and
-                                             (term_binop binop_le b a)
-                                             (term_binop binop_le a e)))).
+      (asn_formula (formula_bool (term_binop bop.and
+                                             (term_binop bop.le b a)
+                                             (term_binop bop.le a e)))).
   End MinCapsContractNotations.
 
 Section ContractDefKit.
@@ -250,7 +250,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
     SepContract Δ τ.
 
   Definition sep_contract_read_reg : SepContractFun read_reg :=
-    {| sep_contract_logic_variables := ["rreg" ∶ ty_enum regname];
+    {| sep_contract_logic_variables := ["rreg" ∶ ty.enum regname];
        sep_contract_localstore      := [term_var "rreg"];
        sep_contract_precondition    := asn_gprs;
        sep_contract_result          := "result_read_reg";
@@ -258,7 +258,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
     |}.
 
   Definition sep_contract_read_reg_cap : SepContractFun read_reg_cap :=
-    {| sep_contract_logic_variables := ["creg" ∶ ty_enum regname];
+    {| sep_contract_logic_variables := ["creg" ∶ ty.enum regname];
        sep_contract_localstore      := [term_var "creg"];
        sep_contract_precondition    := asn_gprs;
        sep_contract_result          := "result_read_reg_cap";
@@ -266,19 +266,19 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
     |}.
 
   Definition sep_contract_read_reg_num : SepContractFun read_reg_num :=
-    {| sep_contract_logic_variables := ["nreg" ∶ ty_enum regname];
+    {| sep_contract_logic_variables := ["nreg" ∶ ty.enum regname];
        sep_contract_localstore      := [term_var "nreg"];
        sep_contract_precondition    := asn_gprs;
        sep_contract_result          := "result_read_reg_num";
        sep_contract_postcondition   := asn_gprs ∗ asn_safe (term_inl (term_var "result_read_reg_num"))
     |}.
 
-  Definition sep_contract_write_reg : SepContract ["wreg" ∶ ty_enum regname; "w" ∶ ty_word] ty_unit :=
-    {| sep_contract_logic_variables := ["wreg" ∶ ty_enum regname; "w" ∶ ty_word];
+  Definition sep_contract_write_reg : SepContract ["wreg" ∶ ty.enum regname; "w" ∶ ty_word] ty.unit :=
+    {| sep_contract_logic_variables := ["wreg" ∶ ty.enum regname; "w" ∶ ty_word];
        sep_contract_localstore      := [term_var "wreg"; term_var "w"];
        sep_contract_precondition    := asn_gprs ∗ asn_safe (term_var "w");
        sep_contract_result          := "result_write_reg";
-       sep_contract_postcondition   := asn_eq (term_var "result_write_reg") (term_val ty_unit tt) ∗ asn_gprs
+       sep_contract_postcondition   := asn_eq (term_var "result_write_reg") (term_val ty.unit tt) ∗ asn_gprs
     |}.
 
   Definition sep_contract_next_pc : SepContract [] ty_cap :=
@@ -295,27 +295,27 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
                             [term_var "perm";
                              term_var "beg";
                              term_var "end";
-                             term_binop binop_plus (term_var "cur") (term_val ty_addr 1)]))
+                             term_binop bop.plus (term_var "cur") (term_val ty_addr 1)]))
     |}.
 
-  Definition sep_contract_update_pc : SepContract [] ty_unit :=
+  Definition sep_contract_update_pc : SepContract [] ty.unit :=
     {| sep_contract_logic_variables := ["opc" ∶ ty_cap];
        sep_contract_localstore      := [];
        sep_contract_precondition    := pc ↦ term_var "opc" ∗ asn_csafe (term_var "opc");
        sep_contract_result          := "result_update_pc";
        sep_contract_postcondition   :=
-         asn_eq (term_var "result_update_pc") (term_val ty_unit tt) ∗
+         asn_eq (term_var "result_update_pc") (term_val ty.unit tt) ∗
                 asn_exist "npc" ty_cap
                 (pc ↦ term_var "npc" ∗ asn_csafe (term_var "npc"));
     |}.
 
-  Definition sep_contract_add_pc : SepContract ["offset" ∶ ty_int] ty_unit :=
-    {| sep_contract_logic_variables := ["opc" ∶ ty_cap; "offset" ∶ ty_int];
+  Definition sep_contract_add_pc : SepContract ["offset" ∶ ty.int] ty.unit :=
+    {| sep_contract_logic_variables := ["opc" ∶ ty_cap; "offset" ∶ ty.int];
        sep_contract_localstore      := [term_var "offset"];
        sep_contract_precondition    := pc ↦ term_var "opc" ∗ asn_csafe (term_var "opc");
        sep_contract_result          := "result_add_pc";
        sep_contract_postcondition   :=
-         asn_eq (term_var "result_add_pc") (term_val ty_unit tt) ∗
+         asn_eq (term_var "result_add_pc") (term_val ty.unit tt) ∗
                 asn_exist "npc" ty_cap
                 (pc ↦ term_var "npc" ∗ asn_csafe (term_var "npc"));
     |}.
@@ -328,16 +328,16 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
        sep_contract_postcondition   := asn_safe (term_var "read_mem_result")
     |}.
 
-  Definition sep_contract_write_mem : SepContract ["c" ∶ ty_cap; "v" ∶ ty_memval ] ty_unit :=
+  Definition sep_contract_write_mem : SepContract ["c" ∶ ty_cap; "v" ∶ ty_memval ] ty.unit :=
     {| sep_contract_logic_variables := ["c" ∶ ty_cap; "v" ∶ ty_memval];
        sep_contract_localstore      := [term_var "c"; term_var "v"];
        sep_contract_precondition    := asn_safe (term_var "v") ∗ asn_csafe (term_var "c");
        sep_contract_result          := "write_mem_result";
        sep_contract_postcondition   :=
-         asn_csafe (term_var "c") ∗ asn_eq (term_var "write_mem_result") (term_val ty_unit tt);
+         asn_csafe (term_var "c") ∗ asn_eq (term_var "write_mem_result") (term_val ty.unit tt);
     |}.
 
-  Definition sep_contract_read_allowed : SepContract ["p" ∶ ty_perm ] ty_bool :=
+  Definition sep_contract_read_allowed : SepContract ["p" ∶ ty_perm ] ty.bool :=
     {| sep_contract_logic_variables := ["p" ∶ ty_perm];
        sep_contract_localstore      := [term_var "p"];
        sep_contract_precondition    := asn_true;
@@ -345,10 +345,10 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
        sep_contract_postcondition   := 
          asn_if (term_var "result_read_allowed")
                 (term_val ty_perm R <=ₚ term_var "p")
-                (asn_eq (term_var "result_read_allowed") (term_val ty_bool false));
+                (asn_eq (term_var "result_read_allowed") (term_val ty.bool false));
     |}.
 
-  Definition sep_contract_write_allowed : SepContract ["p" ∶ ty_perm ] ty_bool :=
+  Definition sep_contract_write_allowed : SepContract ["p" ∶ ty_perm ] ty.bool :=
     {| sep_contract_logic_variables := ["p" ∶ ty_perm];
        sep_contract_localstore      := [term_var "p"];
        sep_contract_precondition    := asn_true;
@@ -356,17 +356,17 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
        sep_contract_postcondition   :=
          asn_if (term_var "result_write_allowed")
                 (term_val ty_perm RW <=ₚ term_var "p")
-                (asn_eq (term_var "result_write_allowed") (term_val ty_bool false));
+                (asn_eq (term_var "result_write_allowed") (term_val ty.bool false));
     |}.
 
-  Definition sep_contract_upper_bound : SepContract ["a" ∶ ty_addr; "e" ∶ ty_addr ] ty_bool :=
+  Definition sep_contract_upper_bound : SepContract ["a" ∶ ty_addr; "e" ∶ ty_addr ] ty.bool :=
     {| sep_contract_logic_variables := ["a" ∶ ty_addr; "e" ∶ ty_addr ];
        sep_contract_localstore      := [term_var "a"; term_var "e"];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_upper_bound";
        sep_contract_postcondition   := 
          (asn_eq (term_var "result_upper_bound")
-                 (term_binop binop_le (term_var "a") (term_var "e")));
+                 (term_binop bop.le (term_var "a") (term_var "e")));
     |}.
 
   (* 
@@ -374,7 +374,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
       @post ∃ b,e,a,p. c = mkcap(b,e,a,p) ∧ result = (a >= b && (e = none ∨ e = inl e' ∧ e' >= a));
       bool within_bounds(c : capability);
    *)
-  Definition sep_contract_within_bounds : SepContract ["c" ∶ ty_cap] ty_bool := 
+  Definition sep_contract_within_bounds : SepContract ["c" ∶ ty_cap] ty.bool :=
     {| sep_contract_logic_variables := ["c" ∶ ty_cap];
        sep_contract_localstore      := [term_var "c"];
        sep_contract_precondition    := asn_true;
@@ -382,9 +382,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
        sep_contract_postcondition   :=
          asn_match_cap (term_var "c") "perm" "b" "e" "a"
                        (asn_eq (term_var "result_within_bounds")
-                               (term_binop binop_and
-                                           (term_binop binop_le (term_var "b") (term_var "a"))
-                                           (term_binop binop_le (term_var "a") (term_var "e"))));
+                               (term_binop bop.and
+                                           (term_binop bop.le (term_var "b") (term_var "a"))
+                                           (term_binop bop.le (term_var "a") (term_var "e"))));
     |}.
 
   (*
@@ -544,7 +544,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
       @post true;
       int perm_from_bits(i : Z) *)
   Definition sep_contract_perm_from_bits : SepContractFun perm_from_bits :=
-    {| sep_contract_logic_variables := ["i" ∶ ty_int];
+    {| sep_contract_logic_variables := ["i" ∶ ty.int];
        sep_contract_localstore      := [term_var "i"];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result";
@@ -556,7 +556,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
       @post true;
       int abs(i : int) *)
   Definition sep_contract_abs : SepContractFun abs :=
-    {| sep_contract_logic_variables := ["i" ∶ ty_int];
+    {| sep_contract_logic_variables := ["i" ∶ ty.int];
        sep_contract_localstore      := [term_var "i"];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result";
@@ -575,7 +575,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
        sep_contract_postcondition   :=
          asn_if (term_var "result_is_sub_perm")
                 (term_var "p" <=ₚ term_var "p'")
-                (asn_eq (term_var "result_is_sub_perm") (term_val ty_bool false));
+                (asn_eq (term_var "result_is_sub_perm") (term_val ty.bool false));
     |}.
 
   (*
@@ -590,9 +590,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
        sep_contract_result          := "result_is_within_range";
        sep_contract_postcondition   :=
          asn_eq (term_var "result_is_within_range")
-                (term_binop binop_and
-                            (term_binop binop_le (term_var "b") (term_var "b'"))
-                            (term_binop binop_le (term_var "e'") (term_var "e")))
+                (term_binop bop.and
+                            (term_binop bop.le (term_var "b") (term_var "b'"))
+                            (term_binop bop.le (term_var "e'") (term_var "e")))
     |}.
   
   (*
@@ -725,7 +725,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
   Proof. intros ? ? []; try constructor. Qed.
 
   Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
-    {| lemma_logic_variables := [ "reg" ∶ ty_enum regname; "w" ∶ ty_word];
+    {| lemma_logic_variables := [ "reg" ∶ ty.enum regname; "w" ∶ ty_word];
        lemma_patterns        := [term_var "reg"];
        lemma_precondition    := term_var "reg" ↦r term_var "w";
        lemma_postcondition   :=
@@ -799,9 +799,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
          asn_dummy c' ∗
          asn_formula
          (formula_bool
-            (term_binop binop_and
-                        (term_binop binop_le (term_var "b") (term_var "b'"))
-                        (term_binop binop_le (term_var "e'") (term_var "e"))));
+            (term_binop bop.and
+                        (term_binop bop.le (term_var "b") (term_var "b'"))
+                        (term_binop bop.le (term_var "e'") (term_var "e"))));
        lemma_postcondition   :=
          asn_csafe c ∗
          asn_csafe c';
@@ -813,7 +813,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
     unit int_safe(i : int);
    *)
   Definition lemma_int_safe : SepLemma int_safe :=
-    {| lemma_logic_variables := ["i" ∶ ty_int];
+    {| lemma_logic_variables := ["i" ∶ ty.int];
        lemma_patterns        := [term_var "i"];
        lemma_precondition    := asn_true;
        lemma_postcondition   :=
@@ -865,11 +865,11 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature
                   ∗ asn_within_bounds (term_var "address") (term_var "b") (term_var "e");
        sep_contract_result          := "wM_result";
        sep_contract_postcondition   :=
-         asn_eq (term_var "wM_result") (term_val ty_unit tt)
+         asn_eq (term_var "wM_result") (term_val ty.unit tt)
     |}.
 
   Definition sep_contract_dI : SepContractFunX dI :=
-    {| sep_contract_logic_variables := ["code" ∶ ty_int];
+    {| sep_contract_logic_variables := ["code" ∶ ty.int];
        sep_contract_localstore      := [term_var "code"];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "_";
@@ -982,7 +982,7 @@ Local Ltac solve :=
        | |- _ /\ _ => constructor
        | |- VerificationCondition _ =>
          constructor;
-         cbv [SymProp.safe env.remove env.lookup ctx.in_case_snoc eval_binop is_true
+         cbv [SymProp.safe env.remove env.lookup ctx.in_case_snoc bop.eval is_true
               inst inst_term inst_formula env.Env_rect];
          cbn
        | |- Obligation _ _ _ => constructor; cbn

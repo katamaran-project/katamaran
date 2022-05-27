@@ -29,11 +29,12 @@
 
 From Katamaran Require Import
      Context
-     Syntax.TypeDef.
+     Syntax.TypeDecl
+     Syntax.Variables.
 
 Module Type FunDeclKit (Import T : Types).
 
-  Local Notation PCtx := (NCtx 𝑿 Ty).
+  Local Notation PCtx := (NCtx 𝑿 ty.Ty).
 
   (* Names of functions. *)
   Parameter Inline 𝑭 : PCtx -> Ty -> Set.

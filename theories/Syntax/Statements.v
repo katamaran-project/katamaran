@@ -53,9 +53,9 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   (* | eff_assign (x : 𝑿) {τ} {xInΓ : x::τ ∈ Γ} (e : Stm Γ τ) *)
   (* | eff_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) *)
   (* | eff_lemma  {Δ : PCtx} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) *)
-  (* | eff_assert (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) *)
+  (* | eff_assert (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) *)
   (* | eff_debug *)
-  (* | eff_while (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ). *)
+  (* | eff_while (e : Exp Γ ty.bool) {σ : Ty} (s : Stm Γ σ). *)
 
   Inductive Stm (Γ : PCtx) (τ : Ty) : Type :=
   (* We avoid defining effects and statements mutually recursively. Instead, *)
@@ -70,40 +70,40 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   | stm_call_frame    (Δ : PCtx) (δ : CStore Δ) (s : Stm Δ τ)
   | stm_foreign       {Δ : PCtx} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
   | stm_lemmak        {Δ : PCtx} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
-  | stm_if            (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ)
+  | stm_if            (e : Exp Γ ty.bool) (s1 s2 : Stm Γ τ)
   | stm_seq           {σ : Ty} (s : Stm Γ σ) (k : Stm Γ τ)
-  | stm_assertk       (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ)
-  | stm_fail          (s : Val ty_string)
+  | stm_assertk       (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
+  | stm_fail          (s : Val ty.string)
   | stm_match_list
-      {σ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿)
-      (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty_list σ) τ)
+      {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿)
+      (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
   | stm_match_sum
-      {σinl σinr : Ty} (e : Exp Γ (ty_sum σinl σinr))
+      {σinl σinr : Ty} (e : Exp Γ (ty.sum σinl σinr))
       (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
       (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
   | stm_match_prod
-      {σ1 σ2 : Ty} (e : Exp Γ (ty_prod σ1 σ2))
+      {σ1 σ2 : Ty} (e : Exp Γ (ty.prod σ1 σ2))
       (xl xr : 𝑿) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
   | stm_match_enum
-      {E : 𝑬} (e : Exp Γ (ty_enum E))
-      (alts : forall (K : 𝑬𝑲 E), Stm Γ τ)
+      {E : enumi} (e : Exp Γ (ty.enum E))
+      (alts : forall (K : enumt E), Stm Γ τ)
   | stm_match_tuple
-      {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty_tuple σs))
+      {σs : Ctx Ty} {Δ : PCtx} (e : Exp Γ (ty.tuple σs))
       (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
   | stm_match_union
-      {U : 𝑼} (e : Exp Γ (ty_union U))
-      (alt__ctx : forall (K : 𝑼𝑲 U), PCtx)
-      (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
-      (alt__rhs : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__ctx K) τ)
+      {U : unioni} (e : Exp Γ (ty.union U))
+      (alt__ctx : forall (K : unionk U), PCtx)
+      (alt__pat : forall (K : unionk U), Pattern (alt__ctx K) (unionk_ty U K))
+      (alt__rhs : forall (K : unionk U), Stm (Γ ▻▻ alt__ctx K) τ)
   | stm_match_record
-      {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
-      (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
+      {R : recordi} {Δ : PCtx} (e : Exp Γ (ty.record R))
+      (p : RecordPat (recordf_ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
   | stm_match_bvec
-      {n} (e : Exp Γ (ty_bvec n)) (rhs : bv n -> Stm Γ τ)
+      {n} (e : Exp Γ (ty.bvec n)) (rhs : bv n -> Stm Γ τ)
   | stm_read_register (reg : 𝑹𝑬𝑮 τ)
   | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
   (* EXPERIMENTAL *)
-  (* | stm_while  (e : Exp Γ ty_bool) {σ : Ty} (s : Stm Γ σ) : Stm Γ ty_unit *)
+  (* | stm_while  (e : Exp Γ ty.bool) {σ : Ty} (s : Stm Γ σ) : Stm Γ ty.unit *)
   | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
   | stm_debugk (k : Stm Γ τ).
 
@@ -121,24 +121,24 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   (*   Hypothesis (P_call  : forall (Γ Δ : PCtx) (σ : Ty) (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call f es)). *)
   (*   Hypothesis (P_call_frame  : forall (Γ Δ : PCtx) (δ : CStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call_frame Γ δ s)). *)
   (*   Hypothesis (P_foreign  : forall (Γ Δ : PCtx) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_foreign f es)). *)
-  (*   Hypothesis (P_if  : forall (Γ : PCtx) (τ : Ty) (e : Exp Γ ty_bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)). *)
+  (*   Hypothesis (P_if  : forall (Γ : PCtx) (τ : Ty) (e : Exp Γ ty.bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)). *)
   (*   Hypothesis (P_seq  : forall (Γ : PCtx) (τ : Ty) (e : Stm Γ τ) (σ : Ty) (k : Stm Γ σ), P e -> P k -> P (stm_seq e k)). *)
-  (*   Hypothesis (P_assert  : forall (Γ : PCtx) (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string), P (stm_assert e1 e2)). *)
-  (*   Hypothesis (P_fail  : forall (Γ : PCtx) (τ : Ty) (s : Val ty_string), P (stm_fail Γ τ s)). *)
-  (*   Hypothesis (P_match_list : forall (Γ : PCtx) (σ τ : Ty) (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh ∶ σ)%ctx ▻ (xt ∶ ty_list σ)%ctx) τ), *)
+  (*   Hypothesis (P_assert  : forall (Γ : PCtx) (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string), P (stm_assert e1 e2)). *)
+  (*   Hypothesis (P_fail  : forall (Γ : PCtx) (τ : Ty) (s : Val ty.string), P (stm_fail Γ τ s)). *)
+  (*   Hypothesis (P_match_list : forall (Γ : PCtx) (σ τ : Ty) (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh ∶ σ)%ctx ▻ (xt ∶ ty.list σ)%ctx) τ), *)
   (*         P alt_nil -> P alt_cons -> P (stm_match_list e alt_nil alt_cons)). *)
-  (*   Hypothesis (P_match_sum : forall (Γ : PCtx) (σinl σinr τ : Ty) (e : Exp Γ (ty_sum σinl σinr)) (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl ∶ σinl)%ctx) τ) (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr ∶ σinr)%ctx) τ), *)
+  (*   Hypothesis (P_match_sum : forall (Γ : PCtx) (σinl σinr τ : Ty) (e : Exp Γ (ty.sum σinl σinr)) (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl ∶ σinl)%ctx) τ) (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr ∶ σinr)%ctx) τ), *)
   (*         P alt_inl -> P alt_inr -> P (stm_match_sum e alt_inl alt_inr)). *)
-  (*   Hypothesis (P_match_prod : forall (Γ : PCtx) (σ1 σ2 τ : Ty) (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿) (rhs : Stm (Γ ▻ (xl ∶ σ1)%ctx ▻ (xr ∶ σ2)%ctx) τ), *)
+  (*   Hypothesis (P_match_prod : forall (Γ : PCtx) (σ1 σ2 τ : Ty) (e : Exp Γ (ty.prod σ1 σ2)) (xl xr : 𝑿) (rhs : Stm (Γ ▻ (xl ∶ σ1)%ctx ▻ (xr ∶ σ2)%ctx) τ), *)
   (*         P rhs -> P (stm_match_prod e rhs)). *)
-  (*   Hypothesis (P_match_enum : forall (Γ : PCtx) (E : 𝑬) (e : Exp Γ (ty_enum E)) (τ : Ty) (alts : 𝑬𝑲 E -> Stm Γ τ), *)
+  (*   Hypothesis (P_match_enum : forall (Γ : PCtx) (E : 𝑬) (e : Exp Γ (ty.enum E)) (τ : Ty) (alts : 𝑬𝑲 E -> Stm Γ τ), *)
   (*         (forall K : 𝑬𝑲 E, P (alts K)) -> P (stm_match_enum e alts)). *)
-  (*   Hypothesis (P_match_tuple : forall (Γ : PCtx) (σs : Ctx Ty) (Δ : PCtx) (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
+  (*   Hypothesis (P_match_tuple : forall (Γ : PCtx) (σs : Ctx Ty) (Δ : PCtx) (e : Exp Γ (ty.tuple σs)) (p : TuplePat σs Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
   (*         P rhs -> P (stm_match_tuple e p rhs)). *)
-  (*   Hypothesis (P_match_union : forall (Γ : PCtx) (U : 𝑼) (e : Exp Γ (ty_union U)) (τ : Ty) (alt__ctx : 𝑼𝑲 U -> PCtx) *)
-  (*         (alt__pat : forall K : 𝑼𝑲 U, Pattern (alt__ctx K) (𝑼𝑲_Ty K)) (alt__rhs : forall K : 𝑼𝑲 U, Stm (Γ ▻▻ alt__ctx K) τ), *)
-  (*         (forall K : 𝑼𝑲 U, P (alt__rhs K)) -> P (stm_match_union e alt__ctx alt__pat alt__rhs)). *)
-  (*   Hypothesis (P_match_record : forall (Γ : PCtx) (R : 𝑹) (Δ : PCtx) (e : Exp Γ (ty_record R)) (p : RecordPat (𝑹𝑭_Ty R) Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
+  (*   Hypothesis (P_match_union : forall (Γ : PCtx) (U : 𝑼) (e : Exp Γ (ty.union U)) (τ : Ty) (alt__ctx : unionk U -> PCtx) *)
+  (*         (alt__pat : forall K : unionk U, Pattern (alt__ctx K) (unionk_ty U K)) (alt__rhs : forall K : unionk U, Stm (Γ ▻▻ alt__ctx K) τ), *)
+  (*         (forall K : unionk U, P (alt__rhs K)) -> P (stm_match_union e alt__ctx alt__pat alt__rhs)). *)
+  (*   Hypothesis (P_match_record : forall (Γ : PCtx) (R : 𝑹) (Δ : PCtx) (e : Exp Γ (ty.record R)) (p : RecordPat (recordf_ty R) Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
   (*         P rhs -> P (stm_match_record e p rhs)). *)
   (*   Hypothesis (P_read_register : forall (Γ : PCtx) (τ : Ty) (reg : 𝑹𝑬𝑮 τ), *)
   (*         P (stm_read_register Γ reg)). *)
@@ -210,16 +210,16 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
         alt_rhs : Stm (Γ ▻▻ alt_ctx) τ;
       }.
 
-  Definition stm_match_union_alt {Γ τ} U (e : Exp Γ (ty_union U))
-    (alts : forall (K : 𝑼𝑲 U), Alternative Γ (𝑼𝑲_Ty K) τ) : Stm Γ τ :=
+  Definition stm_match_union_alt {Γ τ} U (e : Exp Γ (ty.union U))
+    (alts : forall (K : unionk U), Alternative Γ (unionk_ty U K) τ) : Stm Γ τ :=
     stm_match_union U e
       (fun K => alt_pat (alts K))
       (fun K => alt_rhs (alts K)).
 
-  Definition stm_assert {Γ} (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) : Stm Γ ty_unit :=
-    stm_assertk e1 e2 (stm_val ty_unit tt).
-  Definition stm_lemma {Γ Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ ty_unit :=
-    stm_lemmak l es (stm_val ty_unit tt).
+  Definition stm_assert {Γ} (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) : Stm Γ ty.unit :=
+    stm_assertk e1 e2 (stm_val ty.unit tt).
+  Definition stm_lemma {Γ Δ} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) : Stm Γ ty.unit :=
+    stm_lemmak l es (stm_val ty.unit tt).
 
   Arguments MkAlt {_ _ _ _} _ _.
   Arguments stm_match_union_alt {_ _} _ _ _.
@@ -227,14 +227,14 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_lemma {Γ Δ} l es%env.
 
 
-  Definition UnionAlt (U : 𝑼) (Γ : PCtx) (τ : Ty) (K : 𝑼𝑲 U) : Set :=
-    Alternative Γ (𝑼𝑲_Ty K) τ.
+  Definition UnionAlt (U : unioni) (Γ : PCtx) (τ : Ty) (K : unionk U) : Set :=
+    Alternative Γ (unionk_ty U K) τ.
   Arguments UnionAlt : clear implicits.
 
-  Definition UnionAlts (U : 𝑼) (Γ : PCtx) (τ : Ty) : Set :=
+  Definition UnionAlts (U : unioni) (Γ : PCtx) (τ : Ty) : Set :=
     list (sigT (@UnionAlt U Γ τ)).
 
-  Definition findUnionAlt {U : 𝑼} {Γ : PCtx} {τ : Ty} (K : 𝑼𝑲 U) :
+  Definition findUnionAlt {U : unioni} {Γ : PCtx} {τ : Ty} (K : unionk U) :
     UnionAlts U Γ τ -> option (@UnionAlt U Γ τ K) := findAD K.
 
   (* The well-formedness property for lists of alternatives captures the
@@ -242,10 +242,10 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
      The find function will always return the first alternative matching a given
      union constructor. *)
   Definition UnionAltsWf {U Γ τ} (alts : UnionAlts U Γ τ) : SProp :=
-    IsTrue (List.forallb (fun K => option.isSome (findUnionAlt K alts)) (finite.enum (𝑼𝑲 U))).
+    IsTrue (List.forallb (fun K => option.isSome (findUnionAlt K alts)) (finite.enum (unionk U))).
 
   Lemma union_alts_wf' {U Γ τ} (alts : UnionAlts U Γ τ) (alts_wf : UnionAltsWf alts) :
-    forall (K : 𝑼𝑲 U), findUnionAlt K alts <> None.
+    forall (K : unionk U), findUnionAlt K alts <> None.
   Proof.
     intros K. unfold UnionAltsWf in alts_wf.
     destruct List.forallb eqn:Hwf; [|easy].
@@ -256,7 +256,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
     now destruct (findUnionAlt K alts).
   Qed.
 
-  Definition stm_match_union_alt_list {Γ τ} U (e : Exp Γ (ty_union U))
+  Definition stm_match_union_alt_list {Γ τ} U (e : Exp Γ (ty.union U))
     (alts : UnionAlts U Γ τ) (alts_wf : UnionAltsWf alts) : Stm Γ τ :=
     stm_match_union_alt U e
       (fun K =>
@@ -271,7 +271,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
     (* Ideally the following smart constructors would perform name resolution
        and fill in the de Bruijn index and the type of a variable. Unfortunately,
        they critically rely on the order that type-checking is performed. For
-       instance in context Γ := (ε ▻ "x"∷ty_int) the expression
+       instance in context Γ := (ε ▻ "x"∷ty.int) the expression
        (@exp_smart_var Γ "x" tt) type-checks while the (@exp_smart_var _ "x" tt)
        fails to type-check with error message
 

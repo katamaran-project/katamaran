@@ -227,7 +227,7 @@ Module CInterpreter (Import B : Base)
       | nil      => exec s1
       | cons h t =>
         pushspops
-          (env.snoc (env.snoc env.nil (xh∷σ) h) (xt∷ty_list σ) t)
+          (env.snoc (env.snoc env.nil (xh∷σ) h) (xt∷ty.list σ) t)
           (exec s2)
       end
     | stm_match_sum e xinl s1 xinr s2 =>
@@ -249,7 +249,7 @@ Module CInterpreter (Import B : Base)
       pushspops (tuple_pattern_match_val p v) (exec rhs)
     | stm_match_union U e alt__pat alt__rhs =>
       v <- eval_exp e ;;
-      match 𝑼_unfold v with
+      match unionv_unfold U v with
       | existT K v =>
         pushspops (pattern_match_val (alt__pat K) v) (exec (alt__rhs K))
       end

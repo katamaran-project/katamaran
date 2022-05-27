@@ -69,25 +69,25 @@ Import DefaultBase.
 
 Module Import ExampleProgram <: Program DefaultBase.
 
-  Notation ptr   := ty_int.
-  Notation llist := (ty_option ptr).
+  Notation ptr   := ty.int.
+  Notation llist := (ty.option ptr).
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
     | append      : Fun [ "p" ∷ llist; "q" ∷ llist ] llist
-    | appendloop  : Fun [ "p" ∷ ptr; "q" ∷ llist ] ty_unit
-    | length      : Fun [ "p" ∷ llist ] ty_int
+    | appendloop  : Fun [ "p" ∷ ptr; "q" ∷ llist ] ty.unit
+    | length      : Fun [ "p" ∷ llist ] ty.int
     | copy        : Fun [ "p" ∷ llist ] llist
     | reverse     : Fun [ "p" ∷ llist ] llist
     | reverseloop : Fun [ "p" ∷ llist; "q" ∷ llist ] llist
     .
 
     Inductive FunX : PCtx -> Ty -> Set :=
-    | mkcons : FunX [ "x" ∷ ty_int; "xs" ∷ llist ] ptr
-    | fst    : FunX [ "p" ∷ ptr ] ty_int
+    | mkcons : FunX [ "x" ∷ ty.int; "xs" ∷ llist ] ptr
+    | fst    : FunX [ "p" ∷ ptr ] ty.int
     | snd    : FunX [ "p" ∷ ptr ] llist
-    (* | setfst : FunX [ "p" ∷ ptr, "x" ∷ ty_int ] ty_unit *)
-    | setsnd : FunX [ "p" ∷ ptr; "xs" ∷ llist ] ty_unit
+    (* | setfst : FunX [ "p" ∷ ptr, "x" ∷ ty.int ] ty.unit *)
+    | setsnd : FunX [ "p" ∷ ptr; "xs" ∷ llist ] ty.unit
     .
 
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -96,7 +96,7 @@ Module Import ExampleProgram <: Program DefaultBase.
     Inductive Lem : NCtx 𝑿 Ty -> Set :=
     | open_nil      : Lem [ ]
     | open_cons     : Lem [ "p" ∷ ptr ]
-    | close_nil     : Lem [ "p" ∷ ty_unit ]
+    | close_nil     : Lem [ "p" ∷ ty.unit ]
     | close_cons    : Lem [ "p" ∷ ptr ].
 
     Definition 𝑳 : NCtx 𝑿 Ty -> Set := Lem.
@@ -125,7 +125,7 @@ Module Import ExampleProgram <: Program DefaultBase.
         exp_var "q"
       end.
 
-    Definition fun_appendloop : Stm [ "p" ∷ ptr; "q" ∷ llist ] ty_unit :=
+    Definition fun_appendloop : Stm [ "p" ∷ ptr; "q" ∷ llist ] ty.unit :=
       lemma open_cons [exp_var "p"] ;;
       let: "mbn" := foreign snd (exp_var "p") in
       match: (exp_var "mbn") with
@@ -136,18 +136,18 @@ Module Import ExampleProgram <: Program DefaultBase.
       end;;
       lemma close_cons [exp_var "p"].
 
-    Definition fun_length : Stm [ "p" ∷ llist ] ty_int :=
+    Definition fun_length : Stm [ "p" ∷ llist ] ty.int :=
       match: exp_var "p" with
       | inl "x" =>
         lemma open_cons [exp_var "x"] ;;
         let: "t" := foreign snd (exp_var "x") in
         let: "r" := call length (exp_var "t") in
         lemma close_cons [exp_var "x"] ;;
-        exp_binop binop_plus (exp_val ty_int 1%Z) (exp_var "r")
+        exp_binop bop.plus (exp_val ty.int 1%Z) (exp_var "r")
       | inr "tt" =>
         lemma close_nil [exp_var "tt"] ;;
         lemma open_nil [] ;;
-        stm_val ty_int 0%Z
+        stm_val ty.int 0%Z
       end.
 
     Definition fun_copy : Stm [ "p" ∷ llist ] llist :=
@@ -281,9 +281,9 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
   Definition 𝑷 := PurePredicate.
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
     match p with
-    | plength => [ty_list ty_int; ty_int]
-    | preverse => [ty_list ty_int; ty_list ty_int]
-    | preverseappend => [ty_list ty_int; ty_list ty_int; ty_list ty_int]
+    | plength => [ty.list ty.int; ty.int]
+    | preverse => [ty.list ty.int; ty.list ty.int]
+    | preverseappend => [ty.list ty.int; ty.list ty.int; ty.list ty.int]
     end.
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
@@ -299,8 +299,8 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
     Definition 𝑯 := Predicate.
     Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
       match p with
-      | ptstocons => [ptr; ty_int; llist]
-      | ptstolist => [llist; ty_list ty_int]
+      | ptstocons => [ptr; ty.int; llist]
+      | ptstolist => [llist; ty.list ty.int]
       end.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
     Global Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
@@ -310,7 +310,7 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
       | ptstocons => Some (MkPrecise [ptr] [ptr; llist] eq_refl)
-      | ptstolist => Some (MkPrecise [llist] [ty_list ptr] eq_refl)
+      | ptstolist => Some (MkPrecise [llist] [ty.list ptr] eq_refl)
       end.
 
   End HeapPredicateDeclKit.
@@ -324,40 +324,40 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
 
     Import ctx.resolution.
 
-    Local Notation "p '↦l' xs" := (asn_chunk (chunk_user ptstolist (env.nil ► (llist ↦ p) ► (ty_list ty_int ↦ xs)))) (at level 70).
+    Local Notation "p '↦l' xs" := (asn_chunk (chunk_user ptstolist (env.nil ► (llist ↦ p) ► (ty.list ty.int ↦ xs)))) (at level 70).
     Local Notation "p '∗' q" := (asn_sep p q).
-    Local Notation "p '↦p' ( x , xs )" := (asn_chunk (chunk_user ptstocons (env.nil ► (ptr ↦ p) ► (ty_int ↦ x) ► (llist ↦ xs)))) (at level 70).
+    Local Notation "p '↦p' ( x , xs )" := (asn_chunk (chunk_user ptstocons (env.nil ► (ptr ↦ p) ► (ty.int ↦ x) ► (llist ↦ xs)))) (at level 70).
 
     Arguments formula_prop [Σ] Σ' ζ _.
 
-    Definition asn_append {Σ : LCtx} (xs ys zs : Term Σ (ty_list ty_int)) : Assertion Σ :=
-      asn_formula (formula_eq (term_binop binop_append xs ys) zs).
+    Definition asn_append {Σ : LCtx} (xs ys zs : Term Σ (ty.list ty.int)) : Assertion Σ :=
+      asn_formula (formula_eq (term_binop bop.append xs ys) zs).
 
     Definition sep_contract_append : SepContract [ "p" ∷ llist; "q" ∷ llist ] llist :=
-      {| sep_contract_logic_variables := ["p" ∷ llist; "q" ∷ llist; "xs" ∷ ty_list ty_int; "ys" ∷ ty_list ty_int];
+      {| sep_contract_logic_variables := ["p" ∷ llist; "q" ∷ llist; "xs" ∷ ty.list ty.int; "ys" ∷ ty.list ty.int];
          sep_contract_localstore      := [term_var "p"; term_var "q"];
          sep_contract_precondition    := term_var "p" ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn_exist "zs" (ty_list ty_int)
+           asn_exist "zs" (ty.list ty.int)
              (term_var "result" ↦l term_var "zs" ∗
               asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
       |}.
 
-    Definition sep_contract_appendloop : SepContract [ "p" ∷ ptr; "q" ∷ llist ] ty_unit :=
-      {| sep_contract_logic_variables := ["p" ∷ ptr; "q" ∷ llist; "xs" ∷ ty_list ty_int; "ys" ∷ ty_list ty_int];
+    Definition sep_contract_appendloop : SepContract [ "p" ∷ ptr; "q" ∷ llist ] ty.unit :=
+      {| sep_contract_logic_variables := ["p" ∷ ptr; "q" ∷ llist; "xs" ∷ ty.list ty.int; "ys" ∷ ty.list ty.int];
          sep_contract_localstore      := [term_var "p"; term_var "q"];
          sep_contract_precondition    := term_inl (term_var "p") ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn_formula (formula_eq (term_var "result") (term_val ty_unit tt)) ∗
-           asn_exist "zs" (ty_list ty_int)
+           asn_formula (formula_eq (term_var "result") (term_val ty.unit tt)) ∗
+           asn_exist "zs" (ty.list ty.int)
              (term_inl (term_var "p") ↦l term_var "zs" ∗
               asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
       |}.
 
-    Definition sep_contract_length : SepContract [ "p" ∷ llist ] ty_int :=
-      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty_list ty_int];
+    Definition sep_contract_length : SepContract [ "p" ∷ llist ] ty.int :=
+      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty.list ty.int];
          sep_contract_localstore      := [term_var "p"];
          sep_contract_precondition    := term_var "p" ↦l term_var "xs";
          sep_contract_result          := "result";
@@ -367,7 +367,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
       |}.
 
     Definition sep_contract_copy : SepContract [ "p" ∷ llist ] llist :=
-      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty_list ty_int];
+      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty.list ty.int];
          sep_contract_localstore      := [term_var "p"];
          sep_contract_precondition    := term_var "p" ↦l term_var "xs";
          sep_contract_result          := "result";
@@ -377,37 +377,37 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
       |}.
 
     Definition sep_contract_reverse : SepContract [ "p" ∷ llist ] llist :=
-      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty_list ty_int];
+      {| sep_contract_logic_variables := ["p" ∷ llist; "xs" ∷ ty.list ty.int];
          sep_contract_localstore      := [term_var "p"];
          sep_contract_precondition    := term_var "p" ↦l term_var "xs";
          sep_contract_result          := "r";
          sep_contract_postcondition   :=
-           asn_exist "zs" (ty_list ty_int)
+           asn_exist "zs" (ty.list ty.int)
              (term_var "r" ↦l term_var "zs" ∗
               asn_formula (formula_user preverse [term_var "xs"; term_var "zs"]));
       |}.
 
     Definition sep_contract_reverseloop : SepContract [ "p" ∷ llist; "q" ∷ llist ] llist :=
-      {| sep_contract_logic_variables := ["p" ∷ llist; "q" ∷ llist; "xs" ∷ ty_list ty_int; "ys" ∷ ty_list ty_int];
+      {| sep_contract_logic_variables := ["p" ∷ llist; "q" ∷ llist; "xs" ∷ ty.list ty.int; "ys" ∷ ty.list ty.int];
          sep_contract_localstore      := [term_var "p"; term_var "q"];
          sep_contract_precondition    := term_var "p" ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
          sep_contract_result          := "r";
          sep_contract_postcondition   :=
-           asn_exist "zs" (ty_list ty_int)
+           asn_exist "zs" (ty.list ty.int)
              (term_var "r" ↦l term_var "zs" ∗
               asn_formula (formula_user preverseappend [term_var "xs"; term_var "ys"; term_var "zs"]));
       |}.
 
-    Definition sep_contract_mkcons : SepContract [ "x" ∷ ty_int; "xs" ∷ llist ] ptr :=
-      {| sep_contract_logic_variables := ["x" ∷ ty_int; "xs" ∷ llist];
+    Definition sep_contract_mkcons : SepContract [ "x" ∷ ty.int; "xs" ∷ llist ] ptr :=
+      {| sep_contract_logic_variables := ["x" ∷ ty.int; "xs" ∷ llist];
          sep_contract_localstore      := [term_var "x"; term_var "xs"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "p";
          sep_contract_postcondition   := term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
 
-    Definition sep_contract_fst : SepContract [ "p" ∷ ptr ] ty_int :=
-      {| sep_contract_logic_variables := ["p" ∷ ty_int; "x" ∷ ty_int; "xs" ∷ llist];
+    Definition sep_contract_fst : SepContract [ "p" ∷ ptr ] ty.int :=
+      {| sep_contract_logic_variables := ["p" ∷ ty.int; "x" ∷ ty.int; "xs" ∷ llist];
          sep_contract_localstore      := [term_var "p"];
          sep_contract_precondition    := term_var "p" ↦p ( term_var "x" , term_var "xs" );
          sep_contract_result          := "result";
@@ -417,7 +417,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
       |}.
 
     Definition sep_contract_snd : SepContract [ "p" ∷ ptr ] llist :=
-      {| sep_contract_logic_variables := ["p" ∷ ty_int; "x" ∷ ty_int; "xs" ∷ llist];
+      {| sep_contract_logic_variables := ["p" ∷ ty.int; "x" ∷ ty.int; "xs" ∷ llist];
          sep_contract_localstore      := [term_var "p"];
          sep_contract_precondition    := term_var "p" ↦p ( term_var "x" , term_var "xs" );
          sep_contract_result          := "result";
@@ -426,13 +426,13 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
            term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
 
-    Definition sep_contract_setsnd : SepContract [ "p" ∷ ptr; "xs" ∷ llist ] ty_unit :=
-      {| sep_contract_logic_variables := ["p" ∷ ty_int; "x" ∷ ty_int; "xs" ∷ llist];
+    Definition sep_contract_setsnd : SepContract [ "p" ∷ ptr; "xs" ∷ llist ] ty.unit :=
+      {| sep_contract_logic_variables := ["p" ∷ ty.int; "x" ∷ ty.int; "xs" ∷ llist];
          sep_contract_localstore      := [term_var "p"; term_var "xs"];
          sep_contract_precondition    := asn_exist "ys" llist (term_var "p" ↦p ( term_var "x" , term_var "ys"));
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-         asn_formula (formula_eq (term_var "result") (term_val ty_unit tt)) ∗
+         asn_formula (formula_eq (term_var "result") (term_val ty.unit tt)) ∗
          term_var "p" ↦p ( term_var "x" , term_var "xs");
       |}.
 
@@ -440,11 +440,11 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
       {| lemma_logic_variables := [];
          lemma_patterns        := [];
          lemma_precondition    := asn_true;
-         lemma_postcondition   := term_val llist (inr tt) ↦l term_val (ty_list ty_int) nil;
+         lemma_postcondition   := term_val llist (inr tt) ↦l term_val (ty.list ty.int) nil;
       |}.
 
     Definition sep_lemma_open_cons : Lemma [ "p" ∷ ptr ] :=
-      {| lemma_logic_variables := ["p" ∷ ty_int; "xs" ∷ ty_list ty_int];
+      {| lemma_logic_variables := ["p" ∷ ty.int; "xs" ∷ ty.list ty.int];
          lemma_patterns        := [term_var "p"];
          lemma_precondition    := term_inl (term_var "p") ↦l term_var "xs";
          lemma_postcondition   :=
@@ -457,20 +457,20 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
       |}.
 
     Definition sep_lemma_close_cons : Lemma [ "p" ∷ ptr ] :=
-      {| lemma_logic_variables := ["p" ∷ ptr; "x" ∷ ty_int; "xs" ∷ ty_list ty_int; "n" ∷ llist ];
+      {| lemma_logic_variables := ["p" ∷ ptr; "x" ∷ ty.int; "xs" ∷ ty.list ty.int; "n" ∷ llist ];
          lemma_patterns        := [term_var "p"];
          lemma_precondition    := term_var "p" ↦p (term_var "x" , term_var "n") ∗
                                   term_var "n" ↦l term_var "xs";
-         lemma_postcondition   := term_inl (term_var "p") ↦l term_binop binop_cons (term_var "x") (term_var "xs")
+         lemma_postcondition   := term_inl (term_var "p") ↦l term_binop bop.cons (term_var "x") (term_var "xs")
       |}.
 
-    Definition sep_lemma_close_nil : Lemma [ "p" ∷ ty_unit ] :=
-      {| lemma_logic_variables := ["p" ∷ ty_unit; "xs" ∷ ty_list ty_int ];
+    Definition sep_lemma_close_nil : Lemma [ "p" ∷ ty.unit ] :=
+      {| lemma_logic_variables := ["p" ∷ ty.unit; "xs" ∷ ty.list ty.int ];
          lemma_patterns        := [term_var "p"];
          lemma_precondition    := term_inr (term_var "p") ↦l term_var "xs";
          lemma_postcondition   :=
-           asn_formula (formula_eq (term_var "p") (term_val ty_unit tt)) ∗
-           asn_formula (formula_eq (term_var "xs") (term_val (ty_list ty_int) nil))
+           asn_formula (formula_eq (term_var "p") (term_val ty.unit tt)) ∗
+           asn_formula (formula_eq (term_var "xs") (term_val (ty.list ty.int) nil))
       |}.
 
     Definition CEnv : SepContractEnv :=
@@ -512,16 +512,16 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecifi
   Set Equations Transparent.
   Import ListNotations.
 
-  Equations simplify_plength {Σ} (xs : Term Σ (ty_list ty_int)) (n : Term Σ ty_int) : option (List Formula Σ) :=
-  | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty_int) 1%Z) n :=
-    Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty_int ↦ n))]%list;
-  | term_val ?(ty_list ty_int) nil | term_val ?(ty_int) 0%Z := Some nil;
+  Equations simplify_plength {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) : option (List Formula Σ) :=
+  | term_binop bop.cons x xs | term_binop bop.plus (term_val ?(ty.int) 1%Z) n :=
+    Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list;
+  | term_val ?(ty.list ty.int) nil | term_val ?(ty.int) 0%Z := Some nil;
   | xs          | n          :=
-    Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty_int ↦ n))]%list.
+    Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list.
 
   Goal True. idtac "Timing -- simplify_plength_spec -- before". Abort.
-  Lemma simplify_plength_spec {Σ} (xs : Term Σ (ty_list ty_int)) (n : Term Σ ty_int) :
-    let f := formula_user plength (env.nil ► (_ ↦ xs) ► (ty_int ↦ n)) in
+  Lemma simplify_plength_spec {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) :
+    let f := formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n)) in
     option.spec
       (fun r : List Formula Σ =>
          forall ι : Valuation Σ,
@@ -538,17 +538,17 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecifi
   Qed.
   Goal True. idtac "Timing -- simplify_plength_spec -- after". Abort.
 
-  Equations simplify_preverseappend {Σ} (xs ys zs: Term Σ (ty_list ty_int)) : option (List Formula Σ) :=
-  (* | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty_int) 1%Z) n := *)
-  (*   Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty_int ↦ n))]%list; *)
-  | term_val ?(ty_list ty_int) nil | ys | zs := Some [formula_eq ys zs]%list;
-  | xs | term_val ?(ty_list ty_int) nil | zs := Some [formula_user preverse (env.nil ► (_ ↦ xs) ► (_ ↦ zs))]%list;
-  | term_binop binop_cons x xs | ys | zs := Some [formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_  ↦ term_binop binop_cons x ys) ► (_  ↦ zs))]%list;
+  Equations simplify_preverseappend {Σ} (xs ys zs: Term Σ (ty.list ty.int)) : option (List Formula Σ) :=
+  (* | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty.int) 1%Z) n := *)
+  (*   Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list; *)
+  | term_val ?(ty.list ty.int) nil | ys | zs := Some [formula_eq ys zs]%list;
+  | xs | term_val ?(ty.list ty.int) nil | zs := Some [formula_user preverse (env.nil ► (_ ↦ xs) ► (_ ↦ zs))]%list;
+  | term_binop bop.cons x xs | ys | zs := Some [formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_  ↦ term_binop bop.cons x ys) ► (_  ↦ zs))]%list;
   | xs | ys | zs          :=
     Some [formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_  ↦ ys) ► (_  ↦ zs))]%list.
 
   Goal True. idtac "Timing -- simplify_preverseappend_spec -- before". Abort.
-  Lemma simplify_preverseappend_spec {Σ} (xs ys zs : Term Σ (ty_list ty_int)) :
+  Lemma simplify_preverseappend_spec {Σ} (xs ys zs : Term Σ (ty.list ty.int)) :
     let f := formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_ ↦ ys) ► (_ ↦ zs)) in
     option.spec
       (fun r : List Formula Σ =>
@@ -869,7 +869,7 @@ Module ExampleModel.
     Qed.
 
     Lemma fst_sound {Γ δ} :
-      forall (ep : Exp Γ ptr) (vx : Val ty_int) (vxs : Val llist),
+      forall (ep : Exp Γ ptr) (vx : Val ty.int) (vxs : Val llist),
         let vp := eval ep δ in
         ⊢ semTriple δ
           (ptstocons_interp (mG := sailGS_memGS) vp vx vxs)

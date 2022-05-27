@@ -38,6 +38,7 @@ From Katamaran Require Import
      Notations
      Prelude
      Symbolic.Worlds
+     Syntax.BinOps
      Syntax.Chunks
      Syntax.Formulas
      Syntax.Predicates
@@ -649,9 +650,9 @@ Module Type SymPropOn
       Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'∃'  x '∷' σ ,  '/' P").
       Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x ∷ σ) P) (at level 200, right associativity, only printing, format "'∀'  x '∷' σ ,  '/' P").
       Notation "⊤" := (@SymProp.block _).
-      Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
-      Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
-      Notation "x * y" := (term_binop binop_times x y) : exp_scope.
+      Notation "x - y" := (term_binop bop.minus x y) : exp_scope.
+      Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
+      Notation "x * y" := (term_binop bop.times x y) : exp_scope.
       Notation "x ↦ t ∧ k" := (@SymProp.assert_vareq _ x _ _ t _ k) (at level 99, right associativity, only printing).
       Notation "x ↦ t → k" := (@SymProp.assume_vareq _ x _ _ t k) (at level 99, right associativity, only printing).
       Notation "P ∧ Q" := (@SymProp.demonic_binary _ P Q) (at level 80, right associativity, only printing).
@@ -1390,8 +1391,8 @@ Module Type SymPropOn
     | eterm_not     (t : ETerm)
     | eterm_inl     (t : ETerm)
     | eterm_inr     (t : ETerm)
-    | eterm_union   {U : 𝑼} (K : 𝑼𝑲 U) (t : ETerm)
-    | eterm_record  (R : 𝑹) (ts : NamedEnv (fun _ => ETerm) (𝑹𝑭_Ty R)).
+    | eterm_union   {U : unioni} (K : unionk U) (t : ETerm)
+    | eterm_record  (R : recordi) (ts : NamedEnv (fun _ => ETerm) (recordf_ty R)).
 
     Inductive EFormula : Type :=
     | eformula_user (p : 𝑷) (ts : Env (fun _ => ETerm) (𝑷_Ty p))
@@ -1437,7 +1438,7 @@ Module Type SymPropOn
         | term_inl t => eterm_inl (erase t)
         | term_inr t => eterm_inr (erase t)
         | term_union U K t => eterm_union K (erase t)
-        | term_record R ts => eterm_record (env.map (fun _ => erase) ts)
+        | term_record R ts => eterm_record R (env.map (fun _ => erase) ts)
         end.
 
     Definition erase_formula {Σ} : Formula Σ -> EFormula :=
@@ -1507,49 +1508,49 @@ Module Type SymPropOn
             | left e =>
                 v1 <- inst_eterm t1 σ1;;
                 v2 <- inst_eterm t2 σ2;;
-                Some (eq_rect σ3 Val (eval_binop op v1 v2) τ e)
+                Some (eq_rect σ3 Val (bop.eval op v1 v2) τ e)
             | right _ => None
             end
         | eterm_neg t0 =>
-            match Classes.eq_dec ty_int τ with
-            | left e => v <- inst_eterm t0 ty_int;;
-                        Some (eq_rect ty_int Val (BinInt.Z.opp v) τ e)
+            match Classes.eq_dec ty.int τ with
+            | left e => v <- inst_eterm t0 ty.int;;
+                        Some (eq_rect ty.int Val (BinInt.Z.opp v) τ e)
             | right _ => None
             end
         | eterm_not t0 =>
-            match Classes.eq_dec ty_bool τ with
-            | left e => v <- inst_eterm t0 ty_bool;;
-                        Some (eq_rect ty_bool Val (negb v) τ e)
+            match Classes.eq_dec ty.bool τ with
+            | left e => v <- inst_eterm t0 ty.bool;;
+                        Some (eq_rect ty.bool Val (negb v) τ e)
             | right _ => None
             end
         | eterm_inl t0 =>
             match τ with
-            | ty_sum τ1 τ2 => v <- inst_eterm t0 τ1 ;; Some (inl v)
+            | ty.sum τ1 τ2 => v <- inst_eterm t0 τ1 ;; Some (inl v)
             | _ => None
             end
         | eterm_inr t0 =>
             match τ with
-            | ty_sum τ1 τ2 => v <- inst_eterm t0 τ2 ;; Some (inr v)
+            | ty.sum τ1 τ2 => v <- inst_eterm t0 τ2 ;; Some (inr v)
             | _ => None
             end
         | @eterm_union U K t0 =>
             match τ with
-            | ty_union U' =>
+            | ty.union U' =>
                 match Classes.eq_dec U U' with
                 | left e =>
-                    v <- inst_eterm t0 (𝑼𝑲_Ty K);;
-                    Some (eq_rect U 𝑼𝑻 (𝑼_fold (existT K v)) U' e)
+                    v <- inst_eterm t0 (unionk_ty U K);;
+                    Some (eq_rect U uniont (unionv_fold U (existT K v)) U' e)
                 | right _ => None
                 end
             | _ => None
             end
         | @eterm_record R ts =>
             match τ with
-            | ty_record R' =>
+            | ty.record R' =>
                 match Classes.eq_dec R R' with
                 | left e =>
                     v <- inst_namedenv' ι inst_eterm ts;;
-                    Some (eq_rect R 𝑹𝑻 (𝑹_fold v) R' e)
+                    Some (eq_rect R recordt (recordv_fold R v) R' e)
                 | right _ => None
                 end
             | _ => None
@@ -1574,16 +1575,16 @@ Module Type SymPropOn
     Definition inst_eformula (ι : list { σ : Ty & Val σ}) (f : EFormula) : Prop :=
       match f with
       | @eformula_user p ts => option_rect (fun _ => Prop) (env.uncurry (𝑷_inst p)) False (inst_env ι ts)
-      | eformula_bool t => option_rect (fun _ => Prop) (fun b => b = true) False (inst_eterm ι t ty_bool)
+      | eformula_bool t => option_rect (fun _ => Prop) (fun b => b = true) False (inst_eterm ι t ty.bool)
       | @eformula_prop Σ' ζ P => option_rect (fun _ => Prop) (uncurry_named P) False (inst_namedenv ι ζ)
       | eformula_ge t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.ge v1 v2) False
-                               (v1 <- inst_eterm ι t1 ty_int;; v2 <- inst_eterm ι t2 ty_int;; Some (v1, v2))
+                               (v1 <- inst_eterm ι t1 ty.int;; v2 <- inst_eterm ι t2 ty.int;; Some (v1, v2))
       | eformula_gt t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.gt v1 v2) False
-                               (v1 <- inst_eterm ι t1 ty_int;; v2 <- inst_eterm ι t2 ty_int;; Some (v1, v2))
+                               (v1 <- inst_eterm ι t1 ty.int;; v2 <- inst_eterm ι t2 ty.int;; Some (v1, v2))
       | eformula_le t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.le v1 v2) False
-                               (v1 <- inst_eterm ι t1 ty_int;; v2 <- inst_eterm ι t2 ty_int;; Some (v1, v2))
+                               (v1 <- inst_eterm ι t1 ty.int;; v2 <- inst_eterm ι t2 ty.int;; Some (v1, v2))
       | eformula_lt t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => BinInt.Z.lt v1 v2) False
-                               (v1 <- inst_eterm ι t1 ty_int;; v2 <- inst_eterm ι t2 ty_int;; Some (v1, v2))
+                               (v1 <- inst_eterm ι t1 ty.int;; v2 <- inst_eterm ι t2 ty.int;; Some (v1, v2))
       | eformula_eq σ t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => v1 = v2) False
                                  (v1 <- inst_eterm ι t1 σ;; v2 <- inst_eterm ι t2 σ;; Some (v1, v2))
       | eformula_neq σ t1 t2 => option_rect (fun _ => Prop) (fun '(v1,v2) => v1 <> v2) False
@@ -1658,7 +1659,7 @@ Module Type SymPropOn
         assert (inst_namedenv'
                   (erase_valuation ι)
                   (inst_eterm (erase_valuation ι))
-                  (env.map (fun b : 𝑹𝑭∷Ty => erase_term) es) =
+                  (env.map (fun b : recordf∷Ty => erase_term) es) =
                   Some (inst
                     (* (T := fun Σ => @NamedEnv 𝑹𝑭 Ty (Term Σ) (𝑹𝑭_Ty R)) *)
                     (* (A := @NamedEnv 𝑹𝑭 Ty Val (𝑹𝑭_Ty R)) *)

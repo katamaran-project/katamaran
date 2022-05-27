@@ -53,28 +53,28 @@ Module Type SolverOn
 
   Module Solver.
 
-    Equations(noeqns) simplify_formula_bool_binop {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) (t1 : STerm σ1 Σ) (t2 : STerm σ2 Σ) (k : List Formula Σ) : List Formula Σ :=
-    | binop_eq  | t1 | t2 | k := cons (formula_eq t1 t2) k;
-    | binop_le  | t1 | t2 | k := cons (formula_le t1 t2) k;
-    | binop_lt  | t1 | t2 | k := cons (formula_lt t1 t2) k;
-    | binop_ge  | t1 | t2 | k := cons (formula_ge t1 t2) k;
-    | binop_gt  | t1 | t2 | k := cons (formula_gt t1 t2) k;
-    | binop_and | t1 | t2 | k := cons (formula_bool t1) (cons (formula_bool t2) k);
-    | op        | t1 | t2 | k := cons (formula_bool (term_binop op t1 t2)) k.
+    Equations(noeqns) simplify_formula_bool_binop {Σ σ1 σ2} (op : BinOp σ1 σ2 ty.bool) (t1 : STerm σ1 Σ) (t2 : STerm σ2 Σ) (k : List Formula Σ) : List Formula Σ :=
+    | bop.eq  | t1 | t2 | k := cons (formula_eq t1 t2) k;
+    | bop.le  | t1 | t2 | k := cons (formula_le t1 t2) k;
+    | bop.lt  | t1 | t2 | k := cons (formula_lt t1 t2) k;
+    | bop.ge  | t1 | t2 | k := cons (formula_ge t1 t2) k;
+    | bop.gt  | t1 | t2 | k := cons (formula_gt t1 t2) k;
+    | bop.and | t1 | t2 | k := cons (formula_bool t1) (cons (formula_bool t2) k);
+    | op      | t1 | t2 | k := cons (formula_bool (term_binop op t1 t2)) k.
 
-    Equations(noeqns) simplify_formula_bool_binop_neg {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) (t1 : STerm σ1 Σ) (t2 : STerm σ2 Σ) (k : List Formula Σ) : List Formula Σ :=
-    | binop_eq  | t1 | t2 | k := cons (formula_neq t1 t2) k;
-    | binop_le  | t1 | t2 | k := cons (formula_gt t1 t2) k;
-    | binop_lt  | t1 | t2 | k := cons (formula_ge t1 t2) k;
-    | binop_ge  | t1 | t2 | k := cons (formula_lt t1 t2) k;
-    | binop_gt  | t1 | t2 | k := cons (formula_le t1 t2) k;
-    | binop_or  | t1 | t2 | k := cons (formula_bool (term_not t1)) (cons (formula_bool (term_not t2)) k);
-    | op        | t1 | t2 | k := cons (formula_bool (term_not (term_binop op t1 t2))) k.
+    Equations(noeqns) simplify_formula_bool_binop_neg {Σ σ1 σ2} (op : BinOp σ1 σ2 ty.bool) (t1 : STerm σ1 Σ) (t2 : STerm σ2 Σ) (k : List Formula Σ) : List Formula Σ :=
+    | bop.eq  | t1 | t2 | k := cons (formula_neq t1 t2) k;
+    | bop.le  | t1 | t2 | k := cons (formula_gt t1 t2) k;
+    | bop.lt  | t1 | t2 | k := cons (formula_ge t1 t2) k;
+    | bop.ge  | t1 | t2 | k := cons (formula_lt t1 t2) k;
+    | bop.gt  | t1 | t2 | k := cons (formula_le t1 t2) k;
+    | bop.or  | t1 | t2 | k := cons (formula_bool (term_not t1)) (cons (formula_bool (term_not t2)) k);
+    | op      | t1 | t2 | k := cons (formula_bool (term_not (term_binop op t1 t2))) k.
 
-    Lemma simplify_formula_bool_binop_spec {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) t1 t2 (k : List Formula Σ) :
+    Lemma simplify_formula_bool_binop_spec {Σ σ1 σ2} (op : BinOp σ1 σ2 ty.bool) t1 t2 (k : List Formula Σ) :
       forall ι : Valuation Σ,
         instpc (simplify_formula_bool_binop op t1 t2 k) ι <->
-          eval_binop op (inst t1 ι) (inst t2 ι) = true /\ instpc k ι.
+          bop.eval op (inst t1 ι) (inst t2 ι) = true /\ instpc k ι.
     Proof.
       intros; dependent elimination op; cbn;
         rewrite ?inst_pathcondition_cons, ?andb_true_iff; cbn;
@@ -84,10 +84,10 @@ Module Type SolverOn
       now destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)).
     Qed.
 
-    Lemma simplify_formula_bool_binop_neg_spec {Σ σ1 σ2} (op : BinOp σ1 σ2 ty_bool) t1 t2 k :
+    Lemma simplify_formula_bool_binop_neg_spec {Σ σ1 σ2} (op : BinOp σ1 σ2 ty.bool) t1 t2 k :
       forall ι : Valuation Σ,
         instpc (simplify_formula_bool_binop_neg op t1 t2 k) ι <->
-          eval_binop op (inst t1 ι) (inst t2 ι) = false /\ instpc k ι.
+          bop.eval op (inst t1 ι) (inst t2 ι) = false /\ instpc k ι.
     Proof.
       intros; dependent elimination op; cbn;
         rewrite ?inst_pathcondition_cons; cbn;
@@ -99,12 +99,12 @@ Module Type SolverOn
       now destruct (Val_eqb_spec σ (inst t1 ι) (inst t2 ι)).
     Qed.
 
-    Equations(noeqns) simplify_formula_bool {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=
+    Equations(noeqns) simplify_formula_bool {Σ} (t : Term Σ ty.bool) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_var ς                 | k := Some (cons (formula_bool (term_var ς)) k);
     | term_val _ b               | k := if b then Some k else None;
     | term_binop op t1 t2        | k := Some (simplify_formula_bool_binop op t1 t2 k);
     | term_not t                 | k := simplify_formula_bool_neg t k;
-    with simplify_formula_bool_neg {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) : option (List Formula Σ) :=
+    with simplify_formula_bool_neg {Σ} (t : Term Σ ty.bool) (k : List Formula Σ) : option (List Formula Σ) :=
     | term_var ς                | k := Some (cons (formula_bool (term_not (term_var ς))) k);
     | term_val _ b              | k := if b then None else Some k;
     | term_binop op t1 t2        | k := Some (simplify_formula_bool_binop_neg op t1 t2 k);
@@ -131,9 +131,9 @@ Module Type SolverOn
       (op1 : BinOp σ11 σ12 σ) (t11 : Term Σ σ11) (t12 : Term Σ σ12)
       (op2 : BinOp σ21 σ22 σ) (t21 : Term Σ σ21) (t22 : Term Σ σ22)
       (k : List Formula Σ) : option (List Formula Σ) :=
-    | binop_pair | t11 | t12 | binop_pair | t21 | t22 | k :=
+    | bop.pair | t11 | t12 | bop.pair | t21 | t22 | k :=
       Some (cons (formula_eq t11 t21) (cons (formula_eq t12 t22) k));
-    | binop_cons | t11 | t12 | binop_cons | t21 | t22 | k :=
+    | bop.cons | t11 | t12 | bop.cons | t21 | t22 | k :=
       Some (cons (formula_eq t11 t21) (cons (formula_eq t12 t22) k));
     | op1        | t11 | t12 | op2        | t21 | t22 | k :=
       simplify_formula_eqb (term_binop op1 t11 t12) (term_binop op2 t21 t22) k.
@@ -146,10 +146,10 @@ Module Type SolverOn
         (fun fmlsk : List Formula Σ =>
            forall ι,
              instpc fmlsk ι <->
-               eval_binop op1 (inst t11 ι) (inst t12 ι) =
-               eval_binop op2 (inst t21 ι) (inst t22 ι) /\ instpc k ι)
-        (forall ι, eval_binop op1 (inst t11 ι) (inst t12 ι) <>
-                   eval_binop op2 (inst t21 ι) (inst t22 ι))
+               bop.eval op1 (inst t11 ι) (inst t12 ι) =
+               bop.eval op2 (inst t21 ι) (inst t22 ι) /\ instpc k ι)
+        (forall ι, bop.eval op1 (inst t11 ι) (inst t12 ι) <>
+                   bop.eval op2 (inst t21 ι) (inst t22 ι))
         (simplify_formula_eq_binop op1 t11 t12 op2 t21 t22 k).
     Proof.
       destruct op1; cbn;
@@ -175,19 +175,19 @@ Module Type SolverOn
     Equations(noeqns) simplify_formula_eq_binop_val {Σ σ σ1 σ2}
       (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ)
       (k : List Formula Σ) : option (List Formula Σ) :=
-    | binop_pair       | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_val _ v1)) (cons (formula_eq t2 (term_val _ v2)) k));
-    | binop_cons       | t1 | t2 | nil        | k := None;
-    | binop_cons       | t1 | t2 | cons v1 v2 | k := Some (cons (formula_eq t1 (term_val _ v1)) (cons (formula_eq t2 (term_val (ty_list _) v2)) k));
-    | binop_tuple_snoc | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_val (ty_tuple _) v1)) (cons (formula_eq t2 (term_val _ v2)) k));
-    | op               | t1 | t2 | v          | k :=
+    | bop.pair       | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_val _ v1)) (cons (formula_eq t2 (term_val _ v2)) k));
+    | bop.cons       | t1 | t2 | nil        | k := None;
+    | bop.cons       | t1 | t2 | cons v1 v2 | k := Some (cons (formula_eq t1 (term_val _ v1)) (cons (formula_eq t2 (term_val (ty.list _) v2)) k));
+    | bop.tuple_snoc | t1 | t2 | (v1 , v2)  | k := Some (cons (formula_eq t1 (term_val (ty.tuple _) v1)) (cons (formula_eq t2 (term_val _ v2)) k));
+    | op             | t1 | t2 | v          | k :=
       Some (cons (formula_eq (term_binop op t1 t2) (term_val _ v)) k).
 
     Lemma simplify_formula_eq_binop_val_spec {Σ σ σ1 σ2}
       (op : BinOp σ1 σ2 σ) (t1 : Term Σ σ1) (t2 : Term Σ σ2) (v : Val σ) (k : List Formula Σ) :
       option.spec
         (fun fmlsk : List Formula Σ =>
-           forall ι, instpc fmlsk ι <-> eval_binop op (inst t1 ι) (inst t2 ι) = v /\ instpc k ι)
-        (forall ι, eval_binop op (inst t1 ι) (inst t2 ι) <> v)
+           forall ι, instpc fmlsk ι <-> bop.eval op (inst t1 ι) (inst t2 ι) = v /\ instpc k ι)
+        (forall ι, bop.eval op (inst t1 ι) (inst t2 ι) <> v)
         (simplify_formula_eq_binop_val op t1 t2 v k).
     Proof.
       destruct op; cbn; try (constructor; intros ι); cbn;
@@ -201,22 +201,22 @@ Module Type SolverOn
         rewrite ?inst_pathcondition_cons. cbn. intuition.
     Qed.
 
-    Definition simplify_formula_eq_union {Σ U} {K1 K2 : 𝑼𝑲 U}
-      (t1 : Term Σ (𝑼𝑲_Ty K1)) (t2 : Term Σ (𝑼𝑲_Ty K2)) (k : List Formula Σ) :
+    Definition simplify_formula_eq_union {Σ U} {K1 K2 : unionk U}
+      (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (unionk_ty U K2)) (k : List Formula Σ) :
       option (List Formula Σ) :=
       match eq_dec K1 K2 with
-      | left e  => let t2' := eq_rec_r (fun K => Term Σ (𝑼𝑲_Ty K)) t2 e in
+      | left e  => let t2' := eq_rec_r (fun K => Term Σ (unionk_ty U K)) t2 e in
                    Some (cons (formula_eq t1 t2') k)
       | right _ => None
       end.
 
-    Definition simplify_formula_eq_union_val {Σ U} {K1 : 𝑼𝑲 U}
-      (t1 : Term Σ (𝑼𝑲_Ty K1)) (v2 : Val (ty_union U)) (k : List Formula Σ) :
+    Definition simplify_formula_eq_union_val {Σ U} {K1 : unionk U}
+      (t1 : Term Σ (unionk_ty U K1)) (v2 : Val (ty.union U)) (k : List Formula Σ) :
       option (List Formula Σ) :=
-       let (K2, v2) := 𝑼_unfold v2 in
+       let (K2, v2) := unionv_unfold U v2 in
        match eq_dec K1 K2 with
-       | left e  => let v2' := eq_rec_r (fun K1 => Val (𝑼𝑲_Ty K1)) v2 e in
-                    let t2  := term_val (𝑼𝑲_Ty K1) v2' in
+       | left e  => let v2' := eq_rec_r (fun K1 => Val (unionk_ty U K1)) v2 e in
+                    let t2  := term_val (unionk_ty U K1) v2' in
                     Some (cons (formula_eq t1 t2) k)
        | right _ => None
        end.
@@ -225,18 +225,18 @@ Module Type SolverOn
 
       Local Set Equations With UIP.
 
-      Lemma simplify_formula_eq_union_spec {Σ U} {K1 K2 : 𝑼𝑲 U}
-            (t1 : Term Σ (𝑼𝑲_Ty K1)) (t2 : Term Σ (𝑼𝑲_Ty K2)) (k : List Formula Σ) :
+      Lemma simplify_formula_eq_union_spec {Σ U} {K1 K2 : unionk U}
+            (t1 : Term Σ (unionk_ty U K1)) (t2 : Term Σ (unionk_ty U K2)) (k : List Formula Σ) :
         option.spec
           (fun fmlsk : List Formula Σ =>
              forall ι : Valuation Σ,
                instpc fmlsk ι <->
-                 existT (P := fun K => Val (𝑼𝑲_Ty K)) K1 (inst t1 ι) =
-                   existT (P := fun K => Val (𝑼𝑲_Ty K)) K2 (inst t2 ι)
+                 existT (P := fun K => Val (unionk_ty U K)) K1 (inst t1 ι) =
+                   existT (P := fun K => Val (unionk_ty U K)) K2 (inst t2 ι)
                  /\ instpc k ι)
           (forall ι : Valuation Σ,
-              existT (P := fun K => Val (𝑼𝑲_Ty K)) K1 (inst t1 ι) <>
-                existT (P := fun K => Val (𝑼𝑲_Ty K)) K2 (inst t2 ι))
+              existT (P := fun K => Val (unionk_ty U K)) K1 (inst t1 ι) <>
+                existT (P := fun K => Val (unionk_ty U K)) K2 (inst t2 ι))
           (simplify_formula_eq_union t1 t2 k).
       Proof.
         unfold simplify_formula_eq_union.
@@ -252,31 +252,31 @@ Module Type SolverOn
       Qed.
 
       Lemma simplify_formula_eq_union_val_spec {Σ U}
-        {K1 : 𝑼𝑲 U} (t1 : Term Σ (𝑼𝑲_Ty K1))
-        (l : Val (ty_union U)) (k : List Formula Σ) :
+        {K1 : unionk U} (t1 : Term Σ (unionk_ty U K1))
+        (l : Val (ty.union U)) (k : List Formula Σ) :
         option.spec
           (fun fmlsk : List Formula Σ =>
              forall ι : Valuation Σ,
-               instpc fmlsk ι <-> 𝑼_fold (existT K1 (inst t1 ι)) = l /\ instpc k ι)
-          (forall ι : Valuation Σ, 𝑼_fold (existT K1 (inst_term t1 ι)) <> l)
+               instpc fmlsk ι <-> unionv_fold U (existT K1 (inst t1 ι)) = l /\ instpc k ι)
+          (forall ι : Valuation Σ, unionv_fold U (existT K1 (inst_term t1 ι)) <> l)
           (simplify_formula_eq_union_val t1 l k).
       Proof.
         unfold simplify_formula_eq_union_val.
-        destruct 𝑼_unfold as [K2 v2] eqn:?.
-        apply (f_equal (@𝑼_fold U)) in Heqs.
-        rewrite 𝑼_fold_unfold in Heqs. subst.
+        destruct unionv_unfold as [K2 v2] eqn:?.
+        apply (f_equal (unionv_fold U)) in Heqs.
+        rewrite unionv_fold_unfold in Heqs. subst.
         destruct eq_dec as [e|e]; constructor; intros ι.
         - rewrite inst_pathcondition_cons. cbn.
           apply and_iff_compat_r'. intros Hk.
           destruct e. cbn. split.
           + now intros <-.
           + intros.
-            apply (f_equal (@𝑼_unfold U)) in H.
-            rewrite ?𝑼_unfold_fold in H.
+            apply (f_equal (unionv_unfold U)) in H.
+            rewrite ?unionv_unfold_fold in H.
             now dependent elimination H.
-        - intros ?. apply (f_equal (@𝑼_unfold U)) in H.
-          rewrite ?𝑼_unfold_fold in H. apply e.
-            now dependent elimination H.
+        - intros ?. apply (f_equal (unionv_unfold U)) in H.
+          rewrite ?unionv_unfold_fold in H. apply e.
+          now dependent elimination H.
       Qed.
 
     End WithUIP.
@@ -294,7 +294,7 @@ Module Type SolverOn
     | term_record ?(R) ts1   | term_record R ts2        | k => Some (app (formula_eqs_nctx ts1 ts2) k);
     | term_binop op1 t11 t12 | term_binop op2 t21 t22   | k => simplify_formula_eq_binop op1 t11 t12 op2 t21 t22 k;
     | term_binop op1 t11 t12 | term_val _ v             | k => simplify_formula_eq_binop_val op1 t11 t12 v k;
-    | term_union U K t       | term_val ?(ty_union U) v | k => simplify_formula_eq_union_val t v k;
+    | term_union U K t       | term_val ?(ty.union U) v | k => simplify_formula_eq_union_val t v k;
     | term_union ?(U) K1 t1  | term_union U K2 t2       | k => simplify_formula_eq_union t1 t2 k;
     | t1                     | t2                       | k => simplify_formula_eqb t1 t2 k.
 
@@ -304,10 +304,10 @@ Module Type SolverOn
       | formula_user p ts => Some (cons fml k)
       | formula_bool t    => simplify_formula_bool (peval t) k
       | formula_prop ζ P  => Some (cons fml k)
-      | formula_ge t1 t2  => simplify_formula_bool (peval (term_binop binop_ge t1 t2)) k
-      | formula_gt t1 t2  => simplify_formula_bool (peval (term_binop binop_gt t1 t2)) k
-      | formula_le t1 t2  => simplify_formula_bool (peval (term_binop binop_le t1 t2)) k
-      | formula_lt t1 t2  => simplify_formula_bool (peval (term_binop binop_lt t1 t2)) k
+      | formula_ge t1 t2  => simplify_formula_bool (peval (term_binop bop.ge t1 t2)) k
+      | formula_gt t1 t2  => simplify_formula_bool (peval (term_binop bop.gt t1 t2)) k
+      | formula_le t1 t2  => simplify_formula_bool (peval (term_binop bop.le t1 t2)) k
+      | formula_lt t1 t2  => simplify_formula_bool (peval (term_binop bop.lt t1 t2)) k
       | formula_eq t1 t2  => simplify_formula_eq (peval t1) (peval t2) k
       | formula_neq t1 t2 => Some (cons fml k)
       end.
@@ -319,12 +319,12 @@ Module Type SolverOn
         option.bind (simplify_formulas fmls k) (simplify_formula fml)
       end.
 
-    Lemma simplify_formula_bool_spec {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) :
+    Lemma simplify_formula_bool_spec {Σ} (t : Term Σ ty.bool) (k : List Formula Σ) :
       option.spec
         (fun fmlsk => forall ι, instpc fmlsk ι <-> inst (formula_bool t) ι /\ instpc k ι)
         (forall ι, ~ inst (formula_bool t) ι)
         (simplify_formula_bool t k)
-    with simplify_formula_bool_neg_spec {Σ} (t : Term Σ ty_bool) (k : List Formula Σ) :
+    with simplify_formula_bool_neg_spec {Σ} (t : Term Σ ty.bool) (k : List Formula Σ) :
       option.spec
         (fun fmlsk => forall ι, instpc fmlsk ι <-> ~ inst (formula_bool t) ι /\ instpc k ι)
         (forall ι, inst (A := Prop) (formula_bool t) ι)
@@ -403,16 +403,16 @@ Module Type SolverOn
       - cbn. clear. rename e3 into t2, K1 into K2, s into t1, K0 into K1, U0 into U.
         generalize (simplify_formula_eq_union_spec t1 t2 k). apply option.spec_monotonic.
         + intros k'. apply base.forall_proper. intros ι.
-          now rewrite 𝑼_fold_inj.
+          now rewrite unionv_fold_inj.
         + apply base.forall_proper. intros ι.
-          now rewrite 𝑼_fold_inj.
+          now rewrite unionv_fold_inj.
       - cbn. constructor. intros ι.
         rewrite inst_pathcondition_app, inst_formula_eqs_nctx.
         apply and_iff_compat_r.
         split; intros Heq.
         + f_equal. apply Heq.
-        + apply (@f_equal _ _ (@𝑹_unfold R0)) in Heq.
-          rewrite ?𝑹_unfold_fold in Heq. apply Heq.
+        + apply (@f_equal _ _ (recordv_unfold R0)) in Heq.
+          rewrite ?recordv_unfold_fold in Heq. apply Heq.
     Qed.
 
     Lemma simplify_formula_spec {Σ} (fml : Formula Σ) (k : List Formula Σ) :
@@ -427,24 +427,24 @@ Module Type SolverOn
         apply option.spec_monotonic; cbn; intros; specialize (H ι);
           now rewrite (peval_sound t) in H.
       - constructor. intros ι. now rewrite inst_pathcondition_cons.
-      - generalize (simplify_formula_bool_spec (peval (term_binop binop_ge t1 t2)) k).
+      - generalize (simplify_formula_bool_spec (peval (term_binop bop.ge t1 t2)) k).
         apply option.spec_monotonic; cbn - [peval]; intros; specialize (H ι); revert H;
-          rewrite (peval_sound (term_binop binop_ge t1 t2)); cbn;
+          rewrite (peval_sound (term_binop bop.ge t1 t2)); cbn;
           change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
           now rewrite Z.geb_le, Z.ge_le_iff.
-      - generalize (simplify_formula_bool_spec (peval (term_binop binop_gt t1 t2)) k).
+      - generalize (simplify_formula_bool_spec (peval (term_binop bop.gt t1 t2)) k).
         apply option.spec_monotonic; cbn; intros; specialize (H ι); revert H;
-          rewrite (peval_sound (term_binop binop_gt t1 t2)); cbn;
+          rewrite (peval_sound (term_binop bop.gt t1 t2)); cbn;
           change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
           now rewrite Z.gtb_lt, Z.gt_lt_iff.
-      - generalize (simplify_formula_bool_spec (peval (term_binop binop_le t1 t2)) k).
+      - generalize (simplify_formula_bool_spec (peval (term_binop bop.le t1 t2)) k).
         apply option.spec_monotonic; cbn; intros; specialize (H ι); revert H;
-          rewrite (peval_sound (term_binop binop_le t1 t2)); cbn;
+          rewrite (peval_sound (term_binop bop.le t1 t2)); cbn;
           change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
           now rewrite Z.leb_le.
-      - generalize (simplify_formula_bool_spec (peval (term_binop binop_lt t1 t2)) k).
+      - generalize (simplify_formula_bool_spec (peval (term_binop bop.lt t1 t2)) k).
         apply option.spec_monotonic; cbn; intros; specialize (H ι); revert H;
-          rewrite (peval_sound (term_binop binop_lt t1 t2)); cbn;
+          rewrite (peval_sound (term_binop bop.lt t1 t2)); cbn;
           change (inst_term ?t ?ι) with (inst t ι); unfold is_true;
           now rewrite Z.ltb_lt.
       - generalize (simplify_formula_eq_spec (peval t1) (peval t2) k).
@@ -492,12 +492,12 @@ Module Type SolverOn
       discriminate.
     Qed.
 
-    Equations(noeqns) try_unify_bool {w : World} (t : Term w ty_bool) :
+    Equations(noeqns) try_unify_bool {w : World} (t : Term w ty.bool) :
       option { w' & Tri w w' } :=
       try_unify_bool (@term_var _ x σ xIn) :=
-        Some (existT _ (tri_cons x (term_val ty_bool true) tri_id));
+        Some (existT _ (tri_cons x (term_val ty.bool true) tri_id));
       try_unify_bool (term_not (@term_var _ x σ xIn)) :=
-        Some (existT _ (tri_cons x (term_val ty_bool false) tri_id));
+        Some (existT _ (tri_cons x (term_val ty.bool false) tri_id));
       try_unify_bool _ :=
         None.
 
@@ -525,8 +525,8 @@ Module Type SolverOn
       | _ => None
       end.
 
-    Lemma try_unify_bool_spec {w : World} (t : Term w ty_bool) :
-      option.wlp (fun '(existT w' ν) => forall ι, inst (T := STerm ty_bool) t ι = true <-> inst_triangular ν ι) (try_unify_bool t).
+    Lemma try_unify_bool_spec {w : World} (t : Term w ty.bool) :
+      option.wlp (fun '(existT w' ν) => forall ι, inst (T := STerm ty.bool) t ι = true <-> inst_triangular ν ι) (try_unify_bool t).
     Proof.
       dependent elimination t; cbn; try constructor; auto.
       intros ι. cbn. intuition.

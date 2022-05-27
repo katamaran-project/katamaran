@@ -90,18 +90,19 @@ Derive EqDec for Predicate.
 Module Import RiscvPmpSignature <: ProgramLogicSignature RiscvPmpBase.
 Module PROG := RiscvPmpProgram.
 
+Import RiscvPmpBase.
 Section PredicateKit.
   Definition 𝑷 := PurePredicate.
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
     match p with
-    | pmp_access      => [ty_xlenbits; ty_list ty_pmpentry; ty_privilege; ty_access_type]
+    | pmp_access      => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege; ty_access_type]
     | pmp_check_perms => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
     | pmp_check_rwx   => [ty_pmpcfg_ent; ty_access_type]
     | sub_perm        => [ty_access_type; ty_access_type]
     | within_cfg      => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
-    | not_within_cfg  => [ty_xlenbits; ty_list ty_pmpentry]
-    | prev_addr       => [ty_pmpcfgidx; ty_list ty_pmpentry; ty_xlenbits]
-    | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty_list ty_pmpentry]
+    | not_within_cfg  => [ty_xlenbits; ty.list ty_pmpentry]
+    | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
+    | in_entries      => [ty_pmpcfgidx; ty_pmpentry; ty.list ty_pmpentry]
     end.
 
   Definition PmpEntryCfg : Set := Pmpcfg_ent * Xlenbits.
@@ -176,7 +177,7 @@ Section PredicateKit.
     | PMP_Match        => PMP_Success
     end.
 
-  Fixpoint pmp_check (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_access_type)) :=
+  Fixpoint pmp_check (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_access_type)) :=
     match entries with
     | [] => match m with
             | Machine => (true, None)
@@ -193,7 +194,7 @@ Section PredicateKit.
   (* check_access is based on the pmpCheck algorithm, main difference
          is that we can define it less cumbersome because entries will contain
          the PMP entries in highest-priority order. *)
-  Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_access_type)) :=
+  Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_access_type)) :=
     pmp_check a entries 0 m.
 
   Equations access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
@@ -222,7 +223,7 @@ Section PredicateKit.
   Definition Sub_perm (a1 a2 : Val ty_access_type) : Prop :=
     decide_sub_perm a1 a2 = true.
 
-  Definition Pmp_access (a : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : Prop :=
+  Definition Pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : Prop :=
     match decide_pmp_access a entries m with
     | (true, Some acc) => Sub_perm acc p
     | (true, None)     => True
@@ -248,7 +249,7 @@ Section PredicateKit.
         && (Bool.eqb W1 W2) && (Bool.eqb R1 R2)
     end.
 
-  Definition decide_in_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty_list ty_pmpentry)) : bool :=
+  Definition decide_in_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty.list ty_pmpentry)) : bool :=
     match es with
     | cfg0 :: cfg1 :: [] =>
         let (c, a) := e in
@@ -260,10 +261,10 @@ Section PredicateKit.
     | _ => false
     end%list.
 
-  Definition In_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty_list ty_pmpentry)) : Prop :=
+  Definition In_entries (idx : Val ty_pmpcfgidx) (e : Val ty_pmpentry) (es : Val (ty.list ty_pmpentry)) : Prop :=
     decide_in_entries idx e es = true.
 
-  Definition decide_prev_addr (cfg : Val ty_pmpcfgidx) (entries : Val (ty_list ty_pmpentry)) (prev : Val ty_xlenbits) : bool :=
+  Definition decide_prev_addr (cfg : Val ty_pmpcfgidx) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) : bool :=
     match entries with
     | (c0 , a0) :: (c1 , a1) :: [] =>
         match cfg with
@@ -273,7 +274,7 @@ Section PredicateKit.
     | _ => false
     end%list.
 
-  Definition Prev_addr (cfg : Val ty_pmpcfgidx) (entries : Val (ty_list ty_pmpentry)) (prev : Val ty_xlenbits) : Prop :=
+  Definition Prev_addr (cfg : Val ty_pmpcfgidx) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) : Prop :=
     decide_prev_addr cfg entries prev = true.
 
   Definition decide_within_cfg (paddr : Val ty_xlenbits) (cfg : Val ty_pmpcfg_ent) (prev_addr addr : Val ty_xlenbits) : bool :=
@@ -285,7 +286,7 @@ Section PredicateKit.
   Definition Within_cfg (paddr : Val ty_xlenbits) (cfg : Val ty_pmpcfg_ent) (prev_addr addr : Val ty_xlenbits) : Prop :=
     decide_within_cfg paddr cfg prev_addr addr = true.
 
-  Definition decide_not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) : bool :=
+  Definition decide_not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) : bool :=
     match entries with
     | (c0 , a0) :: (c1 , a1) :: [] =>
         (((PmpAddrMatchType_eqb (A c0) OFF) && (PmpAddrMatchType_eqb (A c1) OFF))
@@ -293,7 +294,7 @@ Section PredicateKit.
     | _ => false
     end%list.
 
-  Definition Not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty_list ty_pmpentry)) : Prop :=
+  Definition Not_within_cfg (paddr : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) : Prop :=
     decide_not_within_cfg paddr entries = true.
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
@@ -312,13 +313,13 @@ Section PredicateKit.
   Definition 𝑯 := Predicate.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | pmp_entries             => [ty_list ty_pmpentry]
-    | pmp_addr_access         => [ty_list ty_pmpentry; ty_privilege]
-    | pmp_addr_access_without => [ty_xlenbits; ty_list ty_pmpentry; ty_privilege]
+    | pmp_entries             => [ty.list ty_pmpentry]
+    | pmp_addr_access         => [ty.list ty_pmpentry; ty_privilege]
+    | pmp_addr_access_without => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege]
     | gprs                    => ctx.nil
     | ptsto                   => [ty_xlenbits; ty_xlenbits]
-    | encodes_instr           => [ty_int; ty_ast]
-    | ptstomem                => [ty_xlenbits; ty_int; ty_list ty_word]
+    | encodes_instr           => [ty.int; ty_ast]
+    | ptstomem                => [ty_xlenbits; ty.int; ty.list ty_word]
     | ptstoinstr              => [ty_xlenbits; ty_ast]
     end.
 
@@ -343,12 +344,12 @@ Section PredicateKit.
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
     match p with
     | ptsto                   => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
-    | pmp_entries             => Some (MkPrecise ε [ty_list ty_pmpentry] eq_refl)
-    | pmp_addr_access         => Some (MkPrecise ε [ty_list ty_pmpentry; ty_privilege] eq_refl)
-    | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits] [ty_list ty_pmpentry; ty_privilege] eq_refl)
-    | ptstomem                => Some (MkPrecise [ty_xlenbits; ty_int] [ty_list ty_word] eq_refl)
+    | pmp_entries             => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
+    | pmp_addr_access         => Some (MkPrecise ε [ty.list ty_pmpentry; ty_privilege] eq_refl)
+    | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)
+    | ptstomem                => Some (MkPrecise [ty_xlenbits; ty.int] [ty.list ty_word] eq_refl)
     | ptstoinstr              => Some (MkPrecise [ty_xlenbits] [ty_ast] eq_refl)
-    | encodes_instr           => Some (MkPrecise [ty_int] [ty_ast] eq_refl)
+    | encodes_instr           => Some (MkPrecise [ty.int] [ty_ast] eq_refl)
     | _                       => None
     end.
 
@@ -365,11 +366,11 @@ Section ContractDefKit.
   Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
   Local Notation "a '∨' b" := (asn_or a b).
   Local Notation "p '⊑' q" := (asn_formula (formula_user sub_perm [p;q])) (at level 70).
-  Local Notation "a <ₜ b" := (term_binop binop_lt a b) (at level 60).
-  Local Notation "a <=ₜ b" := (term_binop binop_le a b) (at level 60).
-  Local Notation "a &&ₜ b" := (term_binop binop_and a b) (at level 80).
-  Local Notation "a ||ₜ b" := (term_binop binop_or a b) (at level 85).
-  Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
+  Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
+  Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
+  Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
+  Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
+  Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
   (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
   (* Local Notation asn_pmp_entries_angelic l := (asn_chunk_angelic (chunk_user pmp_entries [l])). *)
@@ -388,12 +389,12 @@ Section ContractDefKit.
     (asn_true)).
 
 
-  Definition term_eqb {Σ} (e1 e2 : Term Σ ty_int) : Term Σ ty_bool :=
-    term_binop binop_eq e1 e2.
+  Definition term_eqb {Σ} (e1 e2 : Term Σ ty.int) : Term Σ ty.bool :=
+    term_binop bop.eq e1 e2.
 
   Local Notation "e1 '=?' e2" := (term_eqb e1 e2).
 
-  Definition z_term {Σ} : Z -> Term Σ ty_int := term_val ty_int.
+  Definition z_term {Σ} : Z -> Term Σ ty.int := term_val ty.int.
 
   Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
     ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
@@ -423,7 +424,7 @@ Section ContractDefKit.
         @asn_exists Σ Γ (asn_exist x τ asn)
     end.
 
-  Definition asn_with_reg {Σ} (r : Term Σ ty_int) (asn : Reg ty_xlenbits -> Assertion Σ) (asn_default : Assertion Σ) : Assertion Σ :=
+  Definition asn_with_reg {Σ} (r : Term Σ ty.int) (asn : Reg ty_xlenbits -> Assertion Σ) (asn_default : Assertion Σ) : Assertion Σ :=
     asn_if (r =? z_term 1)
            (asn x1)
            (asn_if (r =? z_term 2)
@@ -439,11 +440,11 @@ Section ContractDefKit.
     asn_and_regs
       (fun r => ∃ "w", r ↦ term_var "w").
 
-  Local Notation "e1 ',ₜ' e2" := (term_binop binop_pair e1 e2) (at level 100).
+  Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
   (* TODO: abstract away the concrete type, look into unions for that *)
   (* TODO: length of list should be 16, no duplicates *)
-  Definition pmp_entries {Σ} : Term Σ (ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx)) :=
+  Definition pmp_entries {Σ} : Term Σ (ty.list (ty.prod ty_pmpcfgidx ty_pmpaddridx)) :=
     term_list
       (cons (term_val ty_pmpcfgidx PMP0CFG ,ₜ term_val ty_pmpaddridx PMPADDR0)
             (cons (term_val ty_pmpcfgidx PMP1CFG ,ₜ term_val ty_pmpaddridx PMPADDR1) nil)).
@@ -464,11 +465,11 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
     Local Notation "a '∨' b" := (asn_or a b).
     Local Notation "p '⊑' q" := (asn_formula (formula_user sub_perm [p;q])) (at level 70).
-    Local Notation "a <ₜ b" := (term_binop binop_lt a b) (at level 60).
-    Local Notation "a <=ₜ b" := (term_binop binop_le a b) (at level 60).
-    Local Notation "a &&ₜ b" := (term_binop binop_and a b) (at level 80).
-    Local Notation "a ||ₜ b" := (term_binop binop_or a b) (at level 85).
-    Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
+    Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
+    Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
+    Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
+    Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
+    Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty.unit opt xl alt_inl "_" alt_inr).
     Local Notation asn_pmp_entries l := (asn_chunk (chunk_user Contracts.pmp_entries [l])).
     (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
     (* Local Notation asn_pmp_entries_angelic l := (asn_chunk_angelic (chunk_user pmp_entries [l])). *)
@@ -486,7 +487,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
       (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
       (asn_true)).
 
-    Local Notation "e1 ',ₜ' e2" := (term_binop binop_pair e1 e2) (at level 100).
+    Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
     Import RiscvNotations.
   (** Machine Invariant **)
@@ -501,7 +502,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     @post pmp_entries(ents) ∗ (mode(m) ∗ pc(i)) ∨ (mode(M) ∗ pc(h) ...)
     τ f(Δ...)*)
   Definition instr_exec_contract {τ Δ} : SepContract Δ τ :=
-    let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "i" :: ty_xlenbits; "entries" :: ty_list ty_pmpentry; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits] in
+    let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "i" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "npc" :: ty_xlenbits] in
     {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
        sep_contract_localstore      := create_localstore Δ Σ;
        sep_contract_precondition    :=
@@ -679,7 +680,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
          ∗ ∃ "addr1", pmpaddr1 ↦ term_var "addr1";
        sep_contract_result          := "result_writeCSR";
        sep_contract_postcondition   :=
-         term_var "result_writeCSR" = term_val ty_unit tt
+         term_var "result_writeCSR" = term_val ty.unit tt
          ∗ ∃ "mpp", mstatus ↦ term_record rmstatus [term_var "mpp"]
          ∗ ∃ "mtvec", mtvec ↦ term_var "mtvec"
          ∗ ∃ "mcause", mcause ↦ term_var "mcause"
@@ -698,8 +699,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
        sep_contract_postcondition   :=
          asn_match_enum privilege (term_var p)
                         (fun K => match K with
-                                  | Machine => term_var "result_check_CSR" = term_val ty_bool true
-                                  | User    => term_var "result_check_CSR" = term_val ty_bool false
+                                  | Machine => term_var "result_check_CSR" = term_val ty.bool true
+                                  | User    => term_var "result_check_CSR" = term_val ty.bool false
                                   end)
     |}.
 
@@ -712,9 +713,9 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
          asn_match_enum privilege (term_var p)
                         (fun K => match K with
                                   | Machine => term_var "result_is_CSR_defined" =
-                                                 term_val ty_bool true
+                                                 term_val ty.bool true
                                   | User    =>term_var "result_is_CSR_defined" =
-                                                term_val ty_bool false
+                                                term_val ty.bool false
                                   end);
     |}.
 
@@ -730,17 +731,17 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
                                       asn_match_enum privilege (term_var p)
                                                      (fun K => match K with
                                                                | Machine => term_var "result_check_CSR_access" =
-                                                                              term_val ty_bool true
+                                                                              term_val ty.bool true
                                                                | User    => term_var "result_check_CSR_access" =
-                                                                              term_val ty_bool false
+                                                                              term_val ty.bool false
                                                                end)
                                   | User =>
                                       asn_match_enum privilege (term_var p)
                                                      (fun K => match K with
                                                                | Machine => term_var "result_check_CSR_access" =
-                                                                              term_val ty_bool true
+                                                                              term_val ty.bool true
                                                                | User    => term_var "result_check_CSR_access" =
-                                                                                   term_val ty_bool true
+                                                                                   term_val ty.bool true
                                                                end)
                                   end);
     |}.
@@ -791,7 +792,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
          ∗             mepc          ↦ term_var "mepc";
        sep_contract_result          := "result_handle_mem_exception";
        sep_contract_postcondition   :=
-         term_var "result_handle_mem_exception" = term_val ty_unit tt
+         term_var "result_handle_mem_exception" = term_val ty.unit tt
          ∗             pc            ↦ term_var "i"
          ∗             nextpc        ↦ term_var tvec
          ∗             cur_privilege ↦ term_val ty_privilege Machine
@@ -851,7 +852,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
          ∗ ∃ v, nextpc ↦ term_var v;
        sep_contract_result          := "result_handle_illegal";
        sep_contract_postcondition   :=
-         term_var "result_handle_illegal" = term_val ty_unit tt
+         term_var "result_handle_illegal" = term_val ty.unit tt
          ∗ cur_privilege ↦ term_val ty_privilege Machine
          ∗ pc ↦ term_var "pc"
          ∗ ∃ "mcause", mcause ↦ term_var "mcause"
@@ -935,7 +936,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
        sep_contract_precondition    := ∃ v, nextpc ↦ term_var v;
        sep_contract_result          := "result_set_next_pc";
        sep_contract_postcondition   :=
-         term_var "result_set_next_pc" = term_val ty_unit tt
+         term_var "result_set_next_pc" = term_val ty.unit tt
          ∗ nextpc ↦ term_var addr;
     |}.
 
@@ -955,7 +956,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
        sep_contract_precondition    := nextpc ↦ term_var "npc" ∗ ∃ "i", pc ↦ term_var "i";
        sep_contract_result          := "result_tick_pc";
        sep_contract_postcondition   :=
-         term_var "result_tick_pc" = term_val ty_unit tt
+         term_var "result_tick_pc" = term_val ty.unit tt
          ∗ nextpc ↦ term_var "npc"
          ∗ pc     ↦ term_var "npc";
     |}.
@@ -974,12 +975,12 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
        sep_contract_precondition    := asn_gprs;
        sep_contract_result          := "result_wX";
        sep_contract_postcondition   :=
-         term_var "result_wX" = term_val ty_unit tt
+         term_var "result_wX" = term_val ty.unit tt
          ∗ asn_gprs;
     |}.
 
   Definition sep_contract_abs : SepContractFun abs :=
-    {| sep_contract_logic_variables := [v :: ty_int];
+    {| sep_contract_logic_variables := [v :: ty.int];
        sep_contract_localstore      := [term_var v];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_abs";
@@ -987,7 +988,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_step {τ Δ} : SepContract Δ τ :=
-    let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "entries" :: ty_list ty_pmpentry; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "i" :: ty_xlenbits; "npc" :: ty_xlenbits] in
+    let Σ := ["m" :: ty_privilege; "h" :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; "mpp" :: ty_privilege; "mepc" :: ty_xlenbits; "i" :: ty_xlenbits; "npc" :: ty_xlenbits] in
     {| sep_contract_logic_variables := sep_contract_logvars Δ Σ;
        sep_contract_localstore      := create_localstore Δ Σ;
        sep_contract_precondition    :=
@@ -1052,7 +1053,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_step' : SepContractFun step :=
-    {| sep_contract_logic_variables := ["m" :: ty_privilege; "entries" :: ty_list ty_pmpentry];
+    {| sep_contract_logic_variables := ["m" :: ty_privilege; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := env.nil;
        sep_contract_precondition    :=
                      cur_privilege ↦ term_var "m" ∗
@@ -1080,7 +1081,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_fetch : SepContractFun fetch :=
-    {| sep_contract_logic_variables := ["i" :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
+    {| sep_contract_logic_variables := ["i" :: ty_xlenbits; p :: ty_privilege; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := env.nil;
        sep_contract_precondition    :=
            pc ↦ term_var "i"
@@ -1103,7 +1104,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
          ∗ ∃ "es", asn_pmp_entries (term_var "es");
        sep_contract_result          := "result_init_model";
        sep_contract_postcondition   :=
-         term_var "result_init_model" = term_val ty_unit tt
+         term_var "result_init_model" = term_val ty.unit tt
          ∗ cur_privilege ↦ term_val ty_privilege Machine
          ∗ ∃ "es", asn_pmp_entries (term_var "es");
     |}.
@@ -1116,7 +1117,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
          ∗ ∃ "es", asn_pmp_entries (term_var "es");
        sep_contract_result          := "result_init_sys";
        sep_contract_postcondition   :=
-         term_var "result_init_sys" = term_val ty_unit tt
+         term_var "result_init_sys" = term_val ty.unit tt
          ∗ cur_privilege ↦ term_val ty_privilege Machine
          ∗ ∃ "es", asn_pmp_entries (term_var "es");
     |}.
@@ -1129,7 +1130,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
        sep_contract_result          := "result_init_pmp";
        sep_contract_postcondition   :=
          ∃ "cfg0", pmp0cfg ↦ term_var "cfg0" ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1"
-         ∗ term_var "result_init_pmp" = term_val ty_unit tt;
+         ∗ term_var "result_init_pmp" = term_val ty.unit tt;
     |}.
 
   Definition sep_contract_within_phys_mem : SepContractFun within_phys_mem :=
@@ -1145,10 +1146,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_checked_mem_read : SepContractFun checked_mem_read :=
-    {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
+    {| sep_contract_logic_variables := [t :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var paddr];
        sep_contract_precondition    :=
-           term_union access_type KRead (term_val ty_unit tt) ⊑ term_var t
+           term_union access_type KRead (term_val ty.unit tt) ⊑ term_var t
            ∗ cur_privilege ↦ term_var p
            ∗ asn_pmp_entries (term_var "entries")
            ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
@@ -1161,10 +1162,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_checked_mem_write : SepContractFun checked_mem_write :=
-    {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry; acc :: ty_access_type];
+    {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; p :: ty_privilege; "entries" :: ty.list ty_pmpentry; acc :: ty_access_type];
        sep_contract_localstore      := [term_var paddr; term_var data];
        sep_contract_precondition    :=
-          term_union access_type KWrite (term_val ty_unit tt) ⊑ term_var acc
+          term_union access_type KWrite (term_val ty.unit tt) ⊑ term_var acc
           ∗ cur_privilege ↦ term_var p
           ∗ asn_pmp_entries (term_var "entries")
           ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
@@ -1177,10 +1178,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_pmp_mem_read : SepContractFun pmp_mem_read :=
-    {| sep_contract_logic_variables := [t :: ty_access_type; p :: ty_privilege; paddr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry];
+    {| sep_contract_logic_variables := [t :: ty_access_type; p :: ty_privilege; paddr :: ty_xlenbits; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [term_var t; term_var p; term_var paddr];
        sep_contract_precondition    :=
-           term_union access_type KRead (term_val ty_unit tt) ⊑ term_var t
+           term_union access_type KRead (term_val ty.unit tt) ⊑ term_var t
          ∗ cur_privilege ↦ term_var p
          ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
@@ -1192,11 +1193,11 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_pmp_mem_write : SepContractFun pmp_mem_write :=
-    {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; typ :: ty_access_type; priv :: ty_privilege; "entries" :: ty_list ty_pmpentry];
+    {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; typ :: ty_access_type; priv :: ty_privilege; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [term_var paddr; term_var data; term_var typ; term_var priv];
        sep_contract_precondition    := (* NOTE: only ever called with typ = Write *)
-         (term_var typ = term_union access_type KWrite (term_val ty_unit tt)
-          ∨ term_var typ = term_union access_type KReadWrite (term_val ty_unit tt))
+         (term_var typ = term_union access_type KWrite (term_val ty.unit tt)
+          ∨ term_var typ = term_union access_type KReadWrite (term_val ty.unit tt))
          ∗ cur_privilege ↦ term_var priv
          ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var priv);
@@ -1208,7 +1209,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_mem_write_value : SepContractFun mem_write_value :=
-    {| sep_contract_logic_variables := [paddr :: ty_xlenbits; value :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
+    {| sep_contract_logic_variables := [paddr :: ty_xlenbits; value :: ty_xlenbits; p :: ty_privilege; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [term_var paddr; term_var value];
        sep_contract_precondition    :=
          cur_privilege ↦ term_var p
@@ -1222,11 +1223,11 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_mem_read : SepContractFun mem_read :=
-    {| sep_contract_logic_variables := [typ :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty_list ty_pmpentry];
+    {| sep_contract_logic_variables := [typ :: ty_access_type; paddr :: ty_xlenbits; p :: ty_privilege; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [term_var typ; term_var paddr];
        sep_contract_precondition    :=
-          (term_var typ = term_union access_type KRead (term_val ty_unit tt)
-           ∨ term_var typ = term_union access_type KExecute (term_val ty_unit tt))
+          (term_var typ = term_union access_type KRead (term_val ty.unit tt)
+           ∨ term_var typ = term_union access_type KExecute (term_val ty.unit tt))
          ∗ cur_privilege ↦ term_var p
          ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
@@ -1238,7 +1239,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_pmpCheck : SepContractFun pmpCheck :=
-    {| sep_contract_logic_variables := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; "entries" :: ty_list ty_pmpentry];
+    {| sep_contract_logic_variables := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; "entries" :: ty.list ty_pmpentry];
        sep_contract_localstore      := [term_var addr; term_var acc; term_var priv];
        sep_contract_precondition    :=
          asn_pmp_entries (term_var "entries");
@@ -1251,7 +1252,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_pmpCheckPerms : SepContractFun pmpCheckPerms :=
-    let Σ : LCtx := [acc :: ty_access_type; priv :: ty_privilege; L :: ty_bool; A :: ty_pmpaddrmatchtype; X :: ty_bool; W :: ty_bool; R :: ty_bool] in
+    let Σ : LCtx := [acc :: ty_access_type; priv :: ty_privilege; L :: ty.bool; A :: ty_pmpaddrmatchtype; X :: ty.bool; W :: ty.bool; R :: ty.bool] in
     let entry : Term Σ _ := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
     {| sep_contract_logic_variables := Σ;
        sep_contract_localstore      := [nenv entry; term_var acc; term_var priv];
@@ -1266,7 +1267,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_pmpCheckRWX : SepContractFun pmpCheckRWX :=
-    let Σ : LCtx := [acc :: ty_access_type; L :: ty_bool; A :: ty_pmpaddrmatchtype; X :: ty_bool; W :: ty_bool; R :: ty_bool] in
+    let Σ : LCtx := [acc :: ty_access_type; L :: ty.bool; A :: ty_pmpaddrmatchtype; X :: ty.bool; W :: ty.bool; R :: ty.bool] in
     let entry : Term Σ _ := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
     {| sep_contract_logic_variables := Σ;
        sep_contract_localstore      := [nenv entry; term_var acc];
@@ -1280,7 +1281,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_pmpAddrRange : SepContractFun pmpAddrRange :=
-    let Σ : LCtx := [pmpaddr :: ty_xlenbits; prev_pmpaddr :: ty_xlenbits; L :: ty_bool; A :: ty_pmpaddrmatchtype; X :: ty_bool; W :: ty_bool; R :: ty_bool] in
+    let Σ : LCtx := [pmpaddr :: ty_xlenbits; prev_pmpaddr :: ty_xlenbits; L :: ty.bool; A :: ty_pmpaddrmatchtype; X :: ty.bool; W :: ty.bool; R :: ty.bool] in
     let entry : Term Σ _ := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
     {| sep_contract_logic_variables := Σ;
        sep_contract_localstore      := [nenv entry; term_var pmpaddr; term_var prev_pmpaddr];
@@ -1289,7 +1290,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
        sep_contract_postcondition   :=
          asn_match_enum pmpaddrmatchtype (term_var A)
            (fun K => match K with
-                     | OFF => term_var "result_pmpAddrRange" = term_inr (term_val ty_unit tt)
+                     | OFF => term_var "result_pmpAddrRange" = term_inr (term_val ty.unit tt)
                      | TOR => term_var "result_pmpAddrRange" = term_inl (term_var prev_pmpaddr ,ₜ term_var pmpaddr)
                      end);
     |}.
@@ -1307,7 +1308,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
               (asn_match_enum pmpaddrmatch (term_var "result_pmpMatchAddr")
                 (fun K => match K with
                           | PMP_NoMatch =>
-                              asn_bool (term_var hi <ₜ term_var lo) ∨ asn_bool (term_var addr <ₜ term_var lo ||ₜ term_var hi <=ₜ term_var addr) ∨ term_var rng = term_inr (term_val ty_unit tt)
+                              asn_bool (term_var hi <ₜ term_var lo) ∨ asn_bool (term_var addr <ₜ term_var lo ||ₜ term_var hi <=ₜ term_var addr) ∨ term_var rng = term_inr (term_val ty.unit tt)
                           | PMP_PartialMatch => asn_bool
                                                   (term_not
                                                      (term_var lo <=ₜ term_var addr &&ₜ term_var addr <ₜ term_var hi))
@@ -1317,7 +1318,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_pmpMatchEntry : SepContractFun pmpMatchEntry :=
-    let Σ : LCtx := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; pmpaddr :: ty_xlenbits; prev_pmpaddr :: ty_xlenbits; L :: ty_bool; A :: ty_pmpaddrmatchtype; X :: ty_bool; W :: ty_bool; R :: ty_bool] in
+    let Σ : LCtx := [addr :: ty_xlenbits; acc :: ty_access_type; priv :: ty_privilege; pmpaddr :: ty_xlenbits; prev_pmpaddr :: ty_xlenbits; L :: ty.bool; A :: ty_pmpaddrmatchtype; X :: ty.bool; W :: ty.bool; R :: ty.bool] in
     let entry : Term Σ _ := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
     {| sep_contract_logic_variables := Σ;
        sep_contract_localstore      := [nenv term_var addr; term_var acc; term_var priv; entry; term_var pmpaddr; term_var prev_pmpaddr];
@@ -1340,7 +1341,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_pmpLocked : SepContractFun pmpLocked :=
-    let Σ : LCtx := [L :: ty_bool; A :: ty_pmpaddrmatchtype; X :: ty_bool; W :: ty_bool; R :: ty_bool] in
+    let Σ : LCtx := [L :: ty.bool; A :: ty_pmpaddrmatchtype; X :: ty.bool; W :: ty.bool; R :: ty.bool] in
     let entry : Term Σ _ := term_record rpmpcfg_ent [term_var L; term_var A; term_var X; term_var W; term_var R] in
     {| sep_contract_logic_variables := Σ;
        sep_contract_localstore      := env.snoc env.nil (_::_) entry;
@@ -1366,13 +1367,13 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
          ∗ ∃ "cfg1", (pmp1cfg ↦ term_var "cfg1" ∗ asn_expand_pmpcfg_ent (term_var "cfg1"));
        sep_contract_result          := "result_pmpWriteCfgReg";
        sep_contract_postcondition   :=
-         term_var "result_pmpWriteCfgReg" = term_val ty_unit tt
+         term_var "result_pmpWriteCfgReg" = term_val ty.unit tt
          ∗ ∃ "cfg0", pmp0cfg ↦ term_var "cfg0"
          ∗ ∃ "cfg1", pmp1cfg ↦ term_var "cfg1";
     |}.
 
   Definition sep_contract_pmpWriteAddr : SepContractFun pmpWriteAddr :=
-    {| sep_contract_logic_variables := [locked :: ty_bool; addr :: ty_xlenbits; value :: ty_xlenbits];
+    {| sep_contract_logic_variables := [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits];
        sep_contract_localstore      := [term_var locked; term_var addr; term_var value];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_pmpWriteAddr";
@@ -1383,10 +1384,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_read_ram : SepContractFunX read_ram :=
-    {| sep_contract_logic_variables := [paddr :: ty_xlenbits; w :: ty_xlenbits; "entries" :: ty_list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
+    {| sep_contract_logic_variables := [paddr :: ty_xlenbits; w :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
        sep_contract_localstore      := [term_var paddr];
        sep_contract_precondition    :=
-         term_union access_type KRead (term_val ty_unit tt) ⊑ term_var t
+         term_union access_type KRead (term_val ty.unit tt) ⊑ term_var t
          ∗ cur_privilege ↦ term_var p
          ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t) (* TODO: move predicates that do unification earlier in the precond *)
@@ -1399,10 +1400,10 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_write_ram : SepContractFunX write_ram :=
-    {| sep_contract_logic_variables := [paddr :: ty_int; data :: ty_word; "entries" :: ty_list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
+    {| sep_contract_logic_variables := [paddr :: ty.int; data :: ty_word; "entries" :: ty.list ty_pmpentry; p :: ty_privilege; t :: ty_access_type];
        sep_contract_localstore      := [term_var paddr; term_var data];
        sep_contract_precondition    :=
-         term_union access_type KWrite (term_val ty_unit tt) ⊑ term_var t
+         term_union access_type KWrite (term_val ty.unit tt) ⊑ term_var t
          ∗ cur_privilege ↦ term_var p
          ∗ asn_pmp_entries (term_var "entries")
          ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var t)
@@ -1415,7 +1416,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
-    {| sep_contract_logic_variables := [bv :: ty_int];
+    {| sep_contract_logic_variables := [bv :: ty.int];
        sep_contract_localstore      := [term_var bv];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_decode";
@@ -1437,7 +1438,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
-    {| lemma_logic_variables := ["entries" :: ty_list ty_pmpentry];
+    {| lemma_logic_variables := ["entries" :: ty.list ty_pmpentry];
        lemma_patterns        := env.nil;
        lemma_precondition    := asn_pmp_entries (term_var "entries");
        lemma_postcondition   := ∃ "cfg0", ∃ "addr0", ∃ "cfg1", ∃ "addr1",
@@ -1477,7 +1478,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition lemma_extract_pmp_ptsto : SepLemma extract_pmp_ptsto :=
-    {| lemma_logic_variables := [paddr :: ty_xlenbits; acc :: ty_access_type; "entries" :: ty_list ty_pmpentry; p :: ty_privilege];
+    {| lemma_logic_variables := [paddr :: ty_xlenbits; acc :: ty_access_type; "entries" :: ty.list ty_pmpentry; p :: ty_privilege];
        lemma_patterns        := [term_var paddr];
        lemma_precondition    :=
           asn_pmp_entries (term_var "entries")
@@ -1492,7 +1493,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
     |}.
 
   Definition lemma_return_pmp_ptsto : SepLemma return_pmp_ptsto :=
-    {| lemma_logic_variables := [paddr :: ty_xlenbits; "entries" :: ty_list ty_pmpentry; p :: ty_privilege];
+    {| lemma_logic_variables := [paddr :: ty_xlenbits; "entries" :: ty.list ty_pmpentry; p :: ty_privilege];
        lemma_patterns        := [term_var paddr];
        lemma_precondition    :=
           asn_pmp_entries (term_var "entries")
@@ -1610,7 +1611,7 @@ End RiscvPmpSpecification.
 
 Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification.
   (* TODO: User predicates can be simplified smarter *)
-  Equations(noeqns) decide_pmp_check_rwx {Σ} (X W R : Term Σ ty_bool) (acc : Term Σ ty_access_type) : bool :=
+  Equations(noeqns) decide_pmp_check_rwx {Σ} (X W R : Term Σ ty.bool) (acc : Term Σ ty_access_type) : bool :=
   | term_val true | _             | _             | term_union KExecute (term_val tt)   := true;
   | _             | term_val true | _             | term_union KWrite (term_val tt)     := true;
   | _             | _             | term_val true | term_union KRead (term_val tt)      := true;
@@ -1641,12 +1642,12 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature RiscvPmpSpe
   | paddr          | cfg          | a          | a'          :=
     Some (cons (formula_user within_cfg [paddr; cfg; a; a']) nil).
 
-  Equations(noeqns) simplify_prev_addr {Σ} (cfg : Term Σ ty_pmpcfgidx) (entries : Term Σ (ty_list ty_pmpentry)) (prev : Term Σ ty_xlenbits) : option (List Formula Σ) :=
+  Equations(noeqns) simplify_prev_addr {Σ} (cfg : Term Σ ty_pmpcfgidx) (entries : Term Σ (ty.list ty_pmpentry)) (prev : Term Σ ty_xlenbits) : option (List Formula Σ) :=
   | term_val cfg | term_val entries | term_val prev := if decide_prev_addr cfg entries prev then Some nil else None;
   | cfg          | entries          | prev          :=
     Some (cons (formula_user prev_addr [cfg; entries; prev]) nil).
 
-  Equations(noeqns) simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty_list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
+  Equations(noeqns) simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
   | term_val paddr | term_val entries | term_val p | acc :=
     match decide_pmp_access paddr entries p with
     | (true, Some typ) => simplify_sub_perm (term_val ty_access_type typ) acc
@@ -1793,6 +1794,7 @@ Proof. reflexivity. Qed.
 
 Lemma valid_contract_mem_read : ValidContractDebug mem_read.
 Proof.
+  apply SMut.validcontract_with_erasure_sound.
   compute; constructor; cbn.
   intros typ paddr p entries; repeat split; auto.
 Qed.
@@ -1802,6 +1804,7 @@ Proof. reflexivity. Qed.
 
 Lemma valid_contract_checked_mem_read : ValidContractDebug checked_mem_read.
 Proof.
+  apply SMut.validcontract_with_erasure_sound.
   compute.
   constructor.
   cbn.
@@ -1811,6 +1814,7 @@ Qed.
 
 Lemma valid_contract_checked_mem_write : ValidContractDebug checked_mem_write.
 Proof.
+  apply SMut.validcontract_with_erasure_sound.
   compute.
   constructor.
   cbn.
@@ -1823,6 +1827,7 @@ Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmp_mem_write : ValidContractDebug pmp_mem_write.
 Proof.
+  apply SMut.validcontract_with_erasure_sound.
   compute.
   constructor.
   cbn.
@@ -1962,6 +1967,7 @@ Proof. reflexivity. Qed.
  *)
 Lemma valid_contract_pmpCheck : ValidContractDebug pmpCheck.
 Proof.
+  apply SMut.validcontract_with_erasure_sound.
   vm_compute.
   constructor.
   cbv - [Z.gt Z.gtb Z.lt Z.ltb Z.le Z.leb andb orb];

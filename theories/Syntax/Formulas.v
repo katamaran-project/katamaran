@@ -56,12 +56,12 @@ Module Type FormulasOn
 
   Inductive Formula (Σ : LCtx) : Type :=
   | formula_user   (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p))
-  | formula_bool (t : Term Σ ty_bool)
+  | formula_bool (t : Term Σ ty.bool)
   | formula_prop {Σ'} (ζ : Sub Σ' Σ) (P : abstract_named Val Σ' Prop)
-  | formula_ge (t1 t2 : Term Σ ty_int)
-  | formula_gt (t1 t2 : Term Σ ty_int)
-  | formula_le (t1 t2 : Term Σ ty_int)
-  | formula_lt (t1 t2 : Term Σ ty_int)
+  | formula_ge (t1 t2 : Term Σ ty.int)
+  | formula_gt (t1 t2 : Term Σ ty.int)
+  | formula_le (t1 t2 : Term Σ ty.int)
+  | formula_lt (t1 t2 : Term Σ ty.int)
   | formula_eq (σ : Ty) (t1 t2 : Term Σ σ)
   | formula_neq (σ : Ty) (t1 t2 : Term Σ σ).
   Arguments formula_user {_} p ts.
@@ -104,12 +104,12 @@ Module Type FormulasOn
     fun {Σ} (fml : Formula Σ) (ι : Valuation Σ) =>
       match fml with
       | formula_user p ts => env.uncurry (𝑷_inst p) (inst ts ι)
-      | formula_bool t    => inst (A := Val ty_bool) t ι = true
+      | formula_bool t    => inst (A := Val ty.bool) t ι = true
       | formula_prop ζ P  => uncurry_named P (inst ζ ι)
-      | formula_ge t1 t2  => inst (A := Val ty_int) t1 ι >= inst (A := Val ty_int) t2 ι
-      | formula_gt t1 t2  => inst (A := Val ty_int) t1 ι >  inst (A := Val ty_int) t2 ι
-      | formula_le t1 t2  => inst (A := Val ty_int) t1 ι <= inst (A := Val ty_int) t2 ι
-      | formula_lt t1 t2  => inst (A := Val ty_int) t1 ι <  inst (A := Val ty_int) t2 ι
+      | formula_ge t1 t2  => inst (A := Val ty.int) t1 ι >= inst (A := Val ty.int) t2 ι
+      | formula_gt t1 t2  => inst (A := Val ty.int) t1 ι >  inst (A := Val ty.int) t2 ι
+      | formula_le t1 t2  => inst (A := Val ty.int) t1 ι <= inst (A := Val ty.int) t2 ι
+      | formula_lt t1 t2  => inst (A := Val ty.int) t1 ι <  inst (A := Val ty.int) t2 ι
       | formula_eq t1 t2  => inst t1 ι =  inst t2 ι
       | formula_neq t1 t2 => inst t1 ι <> inst t2 ι
       end%Z.

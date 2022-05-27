@@ -47,6 +47,10 @@ Ltac solve_eqb_spec' tac :=
      | H: ?x <> ?x |- _ => congruence
      | |- _ <> _ => intro
      | |- ?x = ?x => reflexivity
+     | |- @eq Datatypes.unit ?x ?y =>
+         try (is_var x; destruct x);
+         try (is_var y; destruct y);
+         reflexivity
      | |- reflect _ true => constructor
      | |- reflect _ false => constructor
      | H: ?x = ?y |- _ =>

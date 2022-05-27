@@ -40,168 +40,35 @@ From Katamaran Require Import
      Prelude
      Context
      Environment
+     Tactics
+     Syntax.Variables.
+
+From Coq Require Import
+     Bool.Bool
+     Strings.String
+     ZArith.BinInt.
+From Equations Require Import
+     Equations.
+From Katamaran Require Import
+     Bitvector
+     Context
+     Prelude.
+From Coq Require Import
+     Strings.String
+     ZArith.BinInt.
+From Katamaran Require Import
+     Context
+     Environment
+     Notations
+     Prelude
+     Syntax.Variables
      Tactics.
 
-Local Set Implicit Arguments.
-Local Set Transparent Obligations.
+(* Local Set Transparent Obligations. *)
+(* Local Unset Elimination Schemes. *)
 
 Import ctx.notations.
-
-Module Type EnumTypeDeclKit.
-  (* Names of enum type constructors. *)
-  Parameter Inline 𝑬 : Set. (* input: \MIE *)
-  Declare Instance 𝑬_eq_dec : EqDec 𝑬.
-  (* Names of enum data constructors. *)
-  Parameter Inline 𝑬𝑲 : 𝑬 -> Set.
-  Declare Instance 𝑬𝑲_eq_dec : forall (e : 𝑬), EqDec (𝑬𝑲 e).
-  Declare Instance 𝑬𝑲_finite : forall E, finite.Finite (𝑬𝑲 E).
-End EnumTypeDeclKit.
-
-Module Type UnionTypeDeclKit.
-  (* Names of union type constructors. *)
-  Parameter Inline 𝑼   : Set. (* input: \MIU *)
-  Declare Instance 𝑼_eq_dec : EqDec 𝑼.
-  (* Union types. *)
-  Parameter Inline 𝑼𝑻  : 𝑼 -> Set.
-  Declare Instance 𝑼𝑻_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑻 u).
-  (* Names of union data constructors. *)
-  Parameter Inline 𝑼𝑲  : 𝑼 -> Set.
-  Declare Instance 𝑼𝑲_eq_dec : forall (u : 𝑼), EqDec (𝑼𝑲 u).
-  Declare Instance 𝑼𝑲_finite : forall U, finite.Finite (𝑼𝑲 U).
-End UnionTypeDeclKit.
-
-Module Type RecordTypeDeclKit.
-  (* Names of record type constructors. *)
-  Parameter Inline 𝑹  : Set. (* input: \MIR *)
-  Declare Instance 𝑹_eq_dec : EqDec 𝑹.
-  (* Record types. *)
-  Parameter Inline 𝑹𝑻  : 𝑹 -> Set.
-  Declare Instance 𝑹𝑻_eq_dec : forall (r : 𝑹), EqDec (𝑹𝑻 r).
-End RecordTypeDeclKit.
-
-Module Type TypeDeclKit :=
-  EnumTypeDeclKit <+ UnionTypeDeclKit <+ RecordTypeDeclKit.
-
-Module NoEnums <: EnumTypeDeclKit.
-  Definition 𝑬          := Empty_set.
-  Definition 𝑬𝑲 (E : 𝑬) := Empty_set.
-
-  Instance 𝑬_eq_dec : EqDec 𝑬 := Empty_set_EqDec.
-  Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E)  := Empty_set_EqDec.
-  Instance 𝑬𝑲_finite (E : 𝑬) : finite.Finite (𝑬𝑲 E) := finite.Empty_set_finite.
-End NoEnums.
-
-Module NoUnions <: UnionTypeDeclKit.
-  Definition 𝑼          := Empty_set.
-  Definition 𝑼𝑻 (U : 𝑼) := Empty_set.
-  Definition 𝑼𝑲 (U : 𝑼) := Empty_set.
-
-  Instance 𝑼_eq_dec : EqDec 𝑼 := Empty_set_EqDec.
-  Instance 𝑼𝑻_eq_dec (U : 𝑼) : EqDec (𝑼𝑻 U)  := Empty_set_EqDec.
-  Instance 𝑼𝑲_eq_dec (U : 𝑼) : EqDec (𝑼𝑲 U)  := Empty_set_EqDec.
-  Instance 𝑼𝑲_finite (U : 𝑼) : finite.Finite (𝑼𝑲 U) := finite.Empty_set_finite.
-End NoUnions.
-
-Module NoRecords <: RecordTypeDeclKit.
-  Definition 𝑹          := Empty_set.
-  Definition 𝑹𝑻 (R : 𝑹) := Empty_set.
-  Instance 𝑹_eq_dec : EqDec 𝑹 := Empty_set_EqDec.
-  Instance 𝑹𝑻_eq_dec (R : 𝑹) : EqDec (𝑹𝑻 R) := Empty_set_EqDec.
-End NoRecords.
-
-Module DefaultTypeDeclKit <: TypeDeclKit :=
-  NoEnums <+ NoUnions <+ NoRecords.
-
-Module Type TypeCodeMixin (Import TK : TypeDeclKit).
-
-  Local Unset Elimination Schemes.
-
-  Inductive Ty : Set :=
-  | ty_int
-  | ty_bool
-  | ty_bit
-  | ty_string
-  | ty_list (σ : Ty)
-  | ty_prod (σ τ : Ty)
-  | ty_sum  (σ τ : Ty)
-  | ty_unit
-  | ty_enum (E : 𝑬)
-  | ty_bvec (n : nat)
-  | ty_tuple (σs : Ctx Ty)
-  | ty_union (U : 𝑼)
-  | ty_record (R : 𝑹)
-  .
-
-  (* convenience definition. *)
-  Definition ty_option : Ty -> Ty := fun T => ty_sum T ty_unit.
-
-  Derive NoConfusion for Ty.
-
-  Section Ty_rect.
-    Local Unset Implicit Arguments.
-    Variable P  : Ty -> Type.
-
-    Hypothesis (P_int    : P ty_int).
-    Hypothesis (P_bool   : P ty_bool).
-    Hypothesis (P_bit    : P ty_bit).
-    Hypothesis (P_string : P ty_string).
-    Hypothesis (P_list   : forall σ, P σ -> P (ty_list σ)).
-    Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (ty_prod σ τ)).
-    Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)).
-    Hypothesis (P_unit   : P ty_unit).
-    Hypothesis (P_enum   : forall E, P (ty_enum E)).
-    Hypothesis (P_bvec   : forall n, P (ty_bvec n)).
-    Hypothesis (P_tuple  : forall σs (IH : ctx.All P σs), P (ty_tuple σs)).
-    Hypothesis (P_union  : forall U, P (ty_union U)).
-    Hypothesis (P_record : forall R, P (ty_record R)).
-
-    Fixpoint Ty_rect (σ : Ty) : P σ :=
-      match σ with
-      | ty_int      => ltac:(apply P_int)
-      | ty_bool     => ltac:(apply P_bool)
-      | ty_bit      => ltac:(apply P_bit)
-      | ty_string   => ltac:(apply P_string)
-      | ty_list σ   => ltac:(apply P_list; auto)
-      | ty_prod σ τ => ltac:(apply P_prod; auto)
-      | ty_sum σ τ  => ltac:(apply P_sum; auto)
-      | ty_unit     => ltac:(apply P_unit; auto)
-      | ty_enum E   => ltac:(apply P_enum; auto)
-      | ty_bvec n   => ltac:(apply P_bvec; auto)
-      | ty_tuple σs => ltac:(apply P_tuple, ctx.all_intro, Ty_rect)
-      | ty_union U  => ltac:(apply P_union; auto)
-      | ty_record R => ltac:(apply P_record; auto)
-      end.
-
-  End Ty_rect.
-
-  Definition Ty_rec (P : Ty -> Set) := Ty_rect P.
-  Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
-
-  Instance Ty_eq_dec : EqDec Ty :=
-    fix ty_eqdec (σ τ : Ty) {struct σ} : dec_eq σ τ :=
-      match σ , τ with
-      | ty_int        , ty_int        => left eq_refl
-      | ty_bool       , ty_bool       => left eq_refl
-      | ty_bit        , ty_bit        => left eq_refl
-      | ty_string     , ty_string     => left eq_refl
-      | ty_list σ     , ty_list τ     => f_equal_dec ty_list noConfusion_inv (ty_eqdec σ τ)
-      | ty_prod σ1 σ2 , ty_prod τ1 τ2 => f_equal2_dec ty_prod noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
-      | ty_sum σ1 σ2  , ty_sum τ1 τ2  => f_equal2_dec ty_sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
-      | ty_unit       , ty_unit       => left eq_refl
-      | ty_enum E1    , ty_enum E2    => f_equal_dec ty_enum noConfusion_inv (eq_dec E1 E2)
-      | ty_bvec n1    , ty_bvec n2    => f_equal_dec ty_bvec noConfusion_inv (eq_dec n1 n2)
-      | ty_tuple σs   , ty_tuple τs   => f_equal_dec
-                                           ty_tuple noConfusion_inv
-                                           (eq_dec (EqDec := ctx.eq_dec_ctx ty_eqdec) σs τs)
-      | ty_union U1   , ty_union U2   => f_equal_dec ty_union noConfusion_inv (eq_dec U1 U2)
-      | ty_record R1  , ty_record R2  => f_equal_dec ty_record noConfusion_inv (eq_dec R1 R2)
-      | _             , _             => right noConfusion_inv
-      end.
-
-  (* Lemma Ty_K (σ : Ty) (p : σ = σ) : p = eq_refl. *)
-  (* Proof. apply uip. Qed. *)
-
-End TypeCodeMixin.
+Import env.notations.
 
 (* TODO: Move me *)
 Inductive Bit : Set := bitone | bitzero.
@@ -216,276 +83,325 @@ Definition Bit_eqb (b1 : Bit) (b2 : Bit) : bool :=
 Lemma Bit_eqb_spec (b1 b2 : Bit) : reflect (b1 = b2) (Bit_eqb b1 b2).
 Proof. destruct b1, b2; cbn; constructor; congruence. Qed.
 
-Module Type TypeDenoteMixin (Import TK : TypeDeclKit) (Import TC : TypeCodeMixin TK).
+Module ty.
 
-  Fixpoint Val (σ : Ty) : Set :=
-    match σ with
-    | ty_int => Z
-    | ty_bool => bool
-    | ty_bit => Bit
-    | ty_string => string
-    | ty_list σ' => list (Val σ')
-    | ty_prod σ1 σ2 => Val σ1 * Val σ2
-    | ty_sum σ1 σ2 => Val σ1 + Val σ2
-    | ty_unit => unit
-    | ty_enum E => 𝑬𝑲 E
-    | ty_bvec n => bv n
-    | ty_tuple σs => EnvRec Val σs
-    | ty_union U => 𝑼𝑻 U
-    | ty_record R => 𝑹𝑻 R
-    end%type.
-  Bind Scope exp_scope with Val.
+  Class TypeDeclKit : Type :=
+    { (* Type constructor names. *)
+      enumi    : Set;           (* Names of enum type constructors. *)
+      unioni   : Set;           (* Names of union type constructors. *)
+      recordi  : Set;           (* Names of record type constructors. *)
+    }.
 
-  Fixpoint Val_eqb (σ : Ty) : forall (v1 v2 : Val σ), bool :=
-    match σ return Val σ -> Val σ -> bool with
-    | ty_int      => Z.eqb
-    | ty_bool     => Bool.eqb
-    | ty_bit      => Bit_eqb
-    | ty_string   => String.eqb
-    | ty_list σ   => list_beq (Val_eqb σ)
-    | ty_prod σ τ => prod_beq (Val_eqb σ) (Val_eqb τ)
-    | ty_sum σ τ  => sum_beq (Val_eqb σ) (Val_eqb τ)
-    | ty_unit     => fun _ _ => true
-    | ty_enum E   => fun v1 v2 => if eq_dec v1 v2 then true else false
-    | ty_bvec n   => @bv.eqb n
-    | ty_tuple σs => envrec.eqb Val_eqb
-    | ty_union U  => fun v1 v2 => if eq_dec v1 v2 then true else false
-    | ty_record R => fun v1 v2 => if eq_dec v1 v2 then true else false
-    end.
+  Section WithTypeDecl.
 
-  Lemma Val_eqb_spec (σ : Ty) (x y : Val σ) : reflect (x = y) (Val_eqb σ x y).
-  Proof with solve_eqb_spec.
-    induction σ; cbn.
-    - apply Z.eqb_spec.
-    - apply Bool.eqb_spec.
-    - apply Bit_eqb_spec.
-    - apply String.eqb_spec.
-    - apply list_beq_spec; auto.
-    - destruct x as [x1 x2]; destruct y as [y1 y2]...
-    - destruct x as [x1|x2]; destruct y as [y1|y2]...
-    - destruct x. destruct y...
-    - destruct (eq_dec x y)...
-    - apply bv.eqb_spec.
-    - induction IH...
-      + now destruct x, y.
-      + destruct x as [xs x], y as [ys y]; destruct (p x y)...
-    - destruct (eq_dec x y)...
-    - destruct (eq_dec x y)...
-  Qed.
+    Context {TK : TypeDeclKit}.
 
-End TypeDenoteMixin.
+    Local Unset Elimination Schemes.
+    Local Set Transparent Obligations.
 
-Module Type TypeDeclMixin (TK : TypeDeclKit) :=
-  TypeCodeMixin TK <+ TypeDenoteMixin TK.
-Module Type TypeDecl :=
-  TypeDeclKit <+ TypeDeclMixin.
-Module DefaultTypeDecl <: TypeDecl :=
-  DefaultTypeDeclKit <+ TypeDeclMixin.
+    Inductive Ty : Set :=
+    | int
+    | bool
+    | bit
+    | string
+    | list (σ : Ty)
+    | prod (σ τ : Ty)
+    | sum  (σ τ : Ty)
+    | unit
+    | enum (E : enumi)
+    | bvec (n : nat)
+    | tuple (σs : Ctx Ty)
+    | union (U : unioni)
+    | record (R : recordi)
+    .
+    Derive NoConfusion for Ty.
 
-(* Record EnumTypeDeclKit : Type := *)
-(*   { enum               : Set; *)
-(*     enum_eq_dec        : EqDec enum; *)
-(*     unmake              : enum -> Set; *)
-(*     enumk_eq_dec E     : EqDec (enumk E); *)
-(*     enumk_finite E     : finite.Finite (enumk E); *)
-(*   }. *)
+    (* convenience definition. *)
+    Definition option : Ty -> Ty := fun T => sum T unit.
 
-(* Record UnionTypeDeclKit : Type := *)
-(*   { union              : Set; *)
-(*     union_eq_dec       : EqDec union; *)
-(*     uniont             : union -> Set; *)
-(*     uniont_eq_dec U    : EqDec (uniont U); *)
-(*     unionk             : union -> Set; *)
-(*     unionk_eq_dec U    : EqDec (unionk U); *)
-(*     unionk_finite U    : finite.Finite (unionk U); *)
-(*   }. *)
+    Section Ty_rect.
+      Variable P : Ty -> Type.
 
-(* Record RecordTypeDeclKit : Type := *)
-(*   { record             : Set; *)
-(*     record_eq_dec      : EqDec record; *)
-(*     recordt            : record -> Set; *)
-(*     recordt_eq_dec R   : EqDec (recordt R); *)
-(*   }. *)
+      Hypothesis (P_int    : P int).
+      Hypothesis (P_bool   : P bool).
+      Hypothesis (P_bit    : P bit).
+      Hypothesis (P_string : P string).
+      Hypothesis (P_list   : forall σ, P σ -> P (list σ)).
+      Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (prod σ τ)).
+      Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (sum σ τ)).
+      Hypothesis (P_unit   : P unit).
+      Hypothesis (P_enum   : forall E, P (enum E)).
+      Hypothesis (P_bvec   : forall n, P (bvec n)).
+      Hypothesis (P_tuple  : forall σs (IH : ctx.All P σs), P (tuple σs)).
+      Hypothesis (P_union  : forall U, P (union U)).
+      Hypothesis (P_record : forall R, P (record R)).
 
-(* Record TypeDeclKit : Type := *)
-(*   { enumtypekit   :> EnumTypeDeclKit; *)
-(*     uniontypekit  :> UnionTypeDeclKit; *)
-(*     recordtypekit :> RecordTypeDeclKit; *)
-(*   }. *)
+      Fixpoint Ty_rect (σ : Ty) : P σ :=
+        match σ with
+        | int      => ltac:(apply P_int)
+        | bool     => ltac:(apply P_bool)
+        | bit      => ltac:(apply P_bit)
+        | string   => ltac:(apply P_string)
+        | list σ   => ltac:(apply P_list; auto)
+        | prod σ τ => ltac:(apply P_prod; auto)
+        | sum σ τ  => ltac:(apply P_sum; auto)
+        | unit     => ltac:(apply P_unit; auto)
+        | enum E   => ltac:(apply P_enum; auto)
+        | bvec n   => ltac:(apply P_bvec; auto)
+        | tuple σs => ltac:(apply P_tuple, ctx.all_intro, Ty_rect)
+        | union U  => ltac:(apply P_union; auto)
+        | record R => ltac:(apply P_record; auto)
+        end.
 
-(* Existing Instance enum_eq_dec. *)
-(* Existing Instance enumk_eq_dec. *)
-(* Existing Instance union_eq_dec. *)
-(* Existing Instance uniont_eq_dec. *)
-(* Existing Instance unionk_eq_dec. *)
-(* Existing Instance record_eq_dec. *)
-(* Existing Instance recordt_eq_dec. *)
+    End Ty_rect.
 
-(* Inductive Bit : Set := bitzero | bitone. *)
+    Definition Ty_rec (P : Ty -> Set) := Ty_rect P.
+    Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
 
-(* Definition Bit_eqb (b1 : Bit) (b2 : Bit) : bool := *)
-(*   match b1, b2 with *)
-(*   | bitzero, bitzero => true *)
-(*   | bitone , bitone  => true *)
-(*   | _      , _       => false *)
-(*   end. *)
+  End WithTypeDecl.
+  (* #[export] Existing Instance Ty_eq_dec. *)
 
-(* Lemma Bit_eqb_spec (b1 b2 : Bit) : reflect (b1 = b2) (Bit_eqb b1 b2). *)
-(* Proof. destruct b1, b2; cbn; constructor; congruence. Qed. *)
+  Class TypeDenoteKit (TDC : TypeDeclKit) : Type :=
+    { (* Mapping enum type constructor names to enum types *)
+      enumt   : enumi -> Set;
+      (* Mapping union type constructor names to union types *)
+      uniont  : unioni -> Set;
+      (* Mapping record type constructor names to record types *)
+      recordt : recordi -> Set;
+    }.
 
-(* Section Types. *)
-(*   Context {TK : TypeDeclKit}. *)
+  Section WithTypeDenote.
 
-(*   Local Set Transparent Obligations. *)
-(*   Local Unset Elimination Schemes. *)
+    Context {TDC : TypeDeclKit}.
+    Context {TDN : TypeDenoteKit TDC}.
 
-(*   Inductive Ty : Set := *)
-(*   | ty_int *)
-(*   | ty_bool *)
-(*   | ty_bit *)
-(*   | ty_string *)
-(*   | ty_list (σ : Ty) *)
-(*   | ty_prod (σ τ : Ty) *)
-(*   | ty_sum  (σ τ : Ty) *)
-(*   | ty_unit *)
-(*   | ty_enum (E : enum TK) *)
-(*   | ty_bvec (n : nat) *)
-(*   | ty_tuple (σs : Ctx Ty) *)
-(*   | ty_union (U : union TK) *)
-(*   | ty_record (R : record TK) *)
-(*   . *)
+    Fixpoint Val (σ : Ty) : Set :=
+      match σ with
+      | int => Z
+      | bool => Datatypes.bool
+      | bit => Bit
+      | string => String.string
+      | list σ' => Datatypes.list (Val σ')
+      | prod σ1 σ2 => Val σ1 * Val σ2
+      | sum σ1 σ2 => Val σ1 + Val σ2
+      | unit => Datatypes.unit
+      | enum E => enumt E
+      | bvec n => bv n
+      | tuple σs => EnvRec Val σs
+      | union U => uniont U
+      | record R => recordt R
+      end%type.
 
-(*   (* convenience definition. *) *)
-(*   Definition ty_option : Ty -> Ty := fun T => ty_sum T ty_unit. *)
+  End WithTypeDenote.
 
-(*   Derive NoConfusion for Ty. *)
+  Class TypeDefKit {TDC : TypeDeclKit} (TDN : TypeDenoteKit TDC) : Type :=
+    { enum_eqdec   :> EqDec enumi;
+      union_eqdec  :> EqDec unioni;
+      record_eqdec :> EqDec recordi;
 
-(*   Section Ty_rect. *)
-(*     Variable P  : Ty -> Type. *)
+      enumt_eqdec E  :> EqDec (enumt E);
+      enumt_finite E :> finite.Finite (enumt E);
 
-(*     Hypothesis (P_int    : P ty_int). *)
-(*     Hypothesis (P_bool   : P ty_bool). *)
-(*     Hypothesis (P_bit    : P ty_bit). *)
-(*     Hypothesis (P_string : P ty_string). *)
-(*     Hypothesis (P_list   : forall σ, P σ -> P (ty_list σ)). *)
-(*     Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (ty_prod σ τ)). *)
-(*     Hypothesis (P_sum    : forall σ τ, P σ -> P τ -> P (ty_sum σ τ)). *)
-(*     Hypothesis (P_unit   : P ty_unit). *)
-(*     Hypothesis (P_enum   : forall E, P (ty_enum E)). *)
-(*     Hypothesis (P_bvec   : forall n, P (ty_bvec n)). *)
-(*     Hypothesis (P_tuple  : forall σs (IH : forall σ, ctx.In σ σs -> P σ), P (ty_tuple σs)). *)
-(*     Hypothesis (P_union  : forall U, P (ty_union U)). *)
-(*     Hypothesis (P_record : forall R, P (ty_record R)). *)
+      uniont_eqdec U  :> EqDec (uniont U);
+      (* Names of union data constructors. *)
+      unionk          : unioni -> Set;
+      unionk_eqdec U  :> EqDec (unionk U);
+      unionk_finite U :> finite.Finite (unionk U);
+      unionk_ty U     : unionk U -> Ty;
 
-(*     Fixpoint Ty_rect (σ : Ty) : P σ := *)
-(*       match σ with *)
-(*       | ty_int      => ltac:(apply P_int) *)
-(*       | ty_bool     => ltac:(apply P_bool) *)
-(*       | ty_bit      => ltac:(apply P_bit) *)
-(*       | ty_string   => ltac:(apply P_string) *)
-(*       | ty_list σ   => ltac:(apply P_list; auto) *)
-(*       | ty_prod σ τ => ltac:(apply P_prod; auto) *)
-(*       | ty_sum σ τ  => ltac:(apply P_sum; auto) *)
-(*       | ty_unit     => ltac:(apply P_unit; auto) *)
-(*       | ty_enum E   => ltac:(apply P_enum; auto) *)
-(*       | ty_bvec n   => ltac:(apply P_bvec; auto) *)
-(*       | ty_tuple σs => ltac:(apply P_tuple; *)
-(*                              induction σs; cbn; intros ? xIn; *)
-(*                              [ destruct (ctx.nilView xIn) | destruct (ctx.snocView xIn) ]; *)
-(*                              [ apply Ty_rect | apply IHσs; auto ]) *)
-(*       | ty_union U  => ltac:(apply P_union; auto) *)
-(*       | ty_record R => ltac:(apply P_record; auto) *)
-(*       end. *)
+      recordt_eqdec R  :> EqDec (recordt R);
+      (* Record field names. *)
+      recordf          : Set;
+      (* Record field types. *)
+      recordf_ty       : recordi -> NCtx recordf Ty;
 
-(*   End Ty_rect. *)
+      (* Union types. *)
+      (* Union data constructor field type *)
+      unionv_fold U   : { K : unionk U & Val (unionk_ty U K) } -> uniont U;
+      unionv_unfold U : uniont U -> { K : unionk U & Val (unionk_ty U K) };
 
-(*   Definition Ty_rec (P : Ty -> Set) := Ty_rect P. *)
-(*   Definition Ty_ind (P : Ty -> Prop) := Ty_rect P. *)
+      (* Record types. *)
+      recordv_fold R   : NamedEnv Val (recordf_ty R) -> recordt R;
+      recordv_unfold R : recordt R -> NamedEnv Val (recordf_ty R);
 
-(*   Instance Ty_eq_dec : EqDec Ty := *)
-(*     fix ty_eqdec (σ τ : Ty) {struct σ} : dec_eq σ τ := *)
-(*       match σ , τ with *)
-(*       | ty_int        , ty_int        => left eq_refl *)
-(*       | ty_bool       , ty_bool       => left eq_refl *)
-(*       | ty_bit        , ty_bit        => left eq_refl *)
-(*       | ty_string     , ty_string     => left eq_refl *)
-(*       | ty_list σ     , ty_list τ     => f_equal_dec ty_list noConfusion_inv (ty_eqdec σ τ) *)
-(*       | ty_prod σ1 σ2 , ty_prod τ1 τ2 => f_equal2_dec ty_prod noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2) *)
-(*       | ty_sum σ1 σ2  , ty_sum τ1 τ2  => f_equal2_dec ty_sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2) *)
-(*       | ty_unit       , ty_unit       => left eq_refl *)
-(*       | ty_enum E1    , ty_enum E2    => f_equal_dec ty_enum noConfusion_inv (eq_dec E1 E2) *)
-(*       | ty_bvec n1    , ty_bvec n2    => f_equal_dec ty_bvec noConfusion_inv (eq_dec n1 n2) *)
-(*       | ty_tuple σs   , ty_tuple τs   => f_equal_dec *)
-(*                                            ty_tuple noConfusion_inv *)
-(*                                            (eq_dec (EqDec := ctx.eq_dec_ctx ty_eqdec) σs τs) *)
-(*       | ty_union U1   , ty_union U2   => f_equal_dec ty_union noConfusion_inv (eq_dec U1 U2) *)
-(*       | ty_record R1  , ty_record R2  => f_equal_dec ty_record noConfusion_inv (eq_dec R1 R2) *)
-(*       | _             , _             => right noConfusion_inv *)
-(*       end. *)
+      unionv_fold_unfold U K : unionv_fold U (unionv_unfold U K) = K;
+      unionv_unfold_fold U K : unionv_unfold U (unionv_fold U K) = K;
 
-(*   (* Lemma Ty_K (σ : Ty) (p : σ = σ) : p = eq_refl. *) *)
-(*   (* Proof. apply uip. Qed. *) *)
+      recordv_fold_unfold R v : recordv_fold R (recordv_unfold R v) = v;
+      recordv_unfold_fold R v : recordv_unfold R (recordv_fold R v) = v;
+    }.
 
-(*   Fixpoint Val (σ : Ty) : Set := *)
-(*     match σ with *)
-(*     | ty_int => Z *)
-(*     | ty_bool => bool *)
-(*     | ty_bit => Bit *)
-(*     | ty_string => string *)
-(*     | ty_list σ' => list (Val σ') *)
-(*     | ty_prod σ1 σ2 => Val σ1 * Val σ2 *)
-(*     | ty_sum σ1 σ2 => Val σ1 + Val σ2 *)
-(*     | ty_unit => unit *)
-(*     | ty_enum E => enumk _ E *)
-(*     | ty_bvec n => Word.word n *)
-(*     | ty_tuple σs => EnvRec Val σs *)
-(*     | ty_union U => uniont _ U *)
-(*     | ty_record R => recordt _ R *)
-(*     end%type. *)
-(*   Bind Scope exp_scope with Val. *)
+  Section WithTypeDef.
 
-(*   Fixpoint Val_eqb (σ : Ty) : forall (v1 v2 : Val σ), bool := *)
-(*     match σ return Val σ -> Val σ -> bool with *)
-(*     | ty_int      => Z.eqb *)
-(*     | ty_bool     => Bool.eqb *)
-(*     | ty_bit      => Bit_eqb *)
-(*     | ty_string   => String.eqb *)
-(*     | ty_list σ   => list_beq (Val_eqb σ) *)
-(*     | ty_prod σ τ => prod_beq (Val_eqb σ) (Val_eqb τ) *)
-(*     | ty_sum σ τ  => sum_beq (Val_eqb σ) (Val_eqb τ) *)
-(*     | ty_unit     => fun _ _ => true *)
-(*     | ty_enum E   => fun v1 v2 => if eq_dec v1 v2 then true else false *)
-(*     | ty_bvec n   => @Word.weqb n *)
-(*     | ty_tuple σs => envrec.eqb Val_eqb *)
-(*     | ty_union U  => fun v1 v2 => if eq_dec v1 v2 then true else false *)
-(*     | ty_record R => fun v1 v2 => if eq_dec v1 v2 then true else false *)
-(*     end. *)
+    Context {TDC : TypeDeclKit}.
+    Context {TDN : TypeDenoteKit TDC}.
+    Context {TDF : TypeDefKit TDN}.
 
-(*   Import ctx.notations. *)
+    Instance Ty_eq_dec : EqDec Ty :=
+      fix ty_eqdec (σ τ : Ty) {struct σ} : dec_eq σ τ :=
+        match σ , τ with
+        | int        , int        => left eq_refl
+        | bool       , bool       => left eq_refl
+        | bit        , bit        => left eq_refl
+        | string     , string     => left eq_refl
+        | list σ     , list τ     => f_equal_dec list noConfusion_inv (ty_eqdec σ τ)
+        | prod σ1 σ2 , prod τ1 τ2 => f_equal2_dec prod noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
+        | sum σ1 σ2  , sum τ1 τ2  => f_equal2_dec sum noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
+        | unit       , unit       => left eq_refl
+        | enum E1    , enum E2    => f_equal_dec enum noConfusion_inv (eq_dec E1 E2)
+        | bvec n1    , bvec n2    => f_equal_dec bvec noConfusion_inv (eq_dec n1 n2)
+        | tuple σs   , tuple τs   => f_equal_dec
+                                       tuple noConfusion_inv
+                                       (eq_dec (EqDec := ctx.eq_dec_ctx ty_eqdec) σs τs)
+        | union U1   , union U2   => f_equal_dec union noConfusion_inv (eq_dec U1 U2)
+        | record R1  , record R2  => f_equal_dec record noConfusion_inv (eq_dec R1 R2)
+        | _          , _          => right noConfusion_inv
+        end.
 
-(*   Lemma Val_eqb_spec (σ : Ty) (x y : Val σ) : reflect (x = y) (Val_eqb σ x y). *)
-(*   Proof with solve_eqb_spec. *)
-(*     induction σ; cbn. *)
-(*     - apply Z.eqb_spec. *)
-(*     - apply Bool.eqb_spec. *)
-(*     - apply Bit_eqb_spec. *)
-(*     - apply String.eqb_spec. *)
-(*     - apply list_beq_spec; auto. *)
-(*     - destruct x as [x1 x2]; destruct y as [y1 y2]... *)
-(*     - destruct x as [x1|x2]; destruct y as [y1|y2]... *)
-(*     - destruct x. destruct y... *)
-(*     - destruct (eq_dec x y)... *)
-(*     - apply iff_reflect. symmetry. *)
-(*       apply (Word.weqb_true_iff x y). *)
-(*     - induction σs; cbn in *. *)
-(*       + constructor. now destruct x, y. *)
-(*       + destruct x as [xs x]; destruct y as [ys y]. *)
-(*         assert (forall σ : Ty, σ ∈ σs -> forall x y : Val σ, reflect (x = y) (Val_eqb σ x y)) as IH' *)
-(*             by (intros ? ?; now apply IH, ctx.in_succ). *)
-(*         specialize (IH _ ctx.in_zero x y). *)
-(*         specialize (IHσs IH' xs ys)... *)
-(*     - destruct (eq_dec x y)... *)
-(*     - destruct (eq_dec x y)... *)
-(*   Qed. *)
+    Fixpoint Val_eqb (σ : Ty) : forall (v1 v2 : Val σ), Datatypes.bool :=
+      match σ return Val σ -> Val σ -> Datatypes.bool with
+      | int      => Z.eqb
+      | bool     => Bool.eqb
+      | bit      => Bit_eqb
+      | string   => String.eqb
+      | list σ   => list_beq (Val_eqb σ)
+      | prod σ τ => prod_beq (Val_eqb σ) (Val_eqb τ)
+      | sum σ τ  => sum_beq (Val_eqb σ) (Val_eqb τ)
+      | unit     => fun _ _ => true
+      | enum E   => fun v1 v2 => if eq_dec v1 v2 then true else false
+      | bvec n   => @bv.eqb n
+      | tuple σs => envrec.eqb Val_eqb
+      | union U  => fun v1 v2 => if eq_dec v1 v2 then true else false
+      | record R => fun v1 v2 => if eq_dec v1 v2 then true else false
+      end.
 
-(* End Types. *)
+    Lemma Val_eqb_spec (σ : Ty) (x y : Val σ) : reflect (x = y) (Val_eqb σ x y).
+    Proof with solve_eqb_spec.
+      induction σ; cbn.
+      - apply Z.eqb_spec.
+      - apply Bool.eqb_spec.
+      - apply Bit_eqb_spec.
+      - apply String.eqb_spec.
+      - apply list_beq_spec; auto.
+      - destruct x as [x1 x2], y as [y1 y2]...
+      - destruct x as [x1|x2], y as [y1|y2]...
+      - destruct x, y...
+      - destruct (eq_dec x y)...
+      - apply bv.eqb_spec.
+      - induction IH...
+        destruct x as [? x], y as [? y]; destruct (p x y)...
+      - destruct (eq_dec x y)...
+      - destruct (eq_dec x y)...
+    Qed.
+
+    Lemma unionv_fold_inj {U} (v1 v2 : {K : unionk U & Val (unionk_ty U K)}) :
+      unionv_fold U v1 = unionv_fold U v2 <-> v1 = v2.
+    Proof.
+      split; try congruence. intros H.
+      apply (f_equal (unionv_unfold U)) in H.
+      now rewrite ?unionv_unfold_fold in H.
+    Qed.
+
+    Lemma unionv_unfold_inj {U} (v1 v2 : Val (union U)) :
+      unionv_unfold U v1 = unionv_unfold U v2 <-> v1 = v2.
+    Proof.
+      split; try congruence. intros H.
+      apply (f_equal (unionv_fold U)) in H.
+      now rewrite ?unionv_fold_unfold in H.
+    Qed.
+
+    Lemma K (σ : Ty) (p : σ = σ) : p = eq_refl.
+    Proof. apply uip. Qed.
+
+  End WithTypeDef.
+  #[global] Arguments int {TK}.
+  #[global] Arguments bool {TK}.
+  #[global] Arguments bit {TK}.
+  #[global] Arguments string {TK}.
+  #[global] Arguments list {TK} σ.
+  #[global] Arguments prod {TK} σ τ.
+  #[global] Arguments sum {TK} σ τ.
+  #[global] Arguments unit {TK}.
+  #[global] Arguments enum {TK} E.
+  #[global] Arguments bvec {TK} n%nat_scope.
+  #[global] Arguments tuple {TK} σs%ctx_scope.
+  #[global] Arguments union {TK} U.
+  #[global] Arguments record {TK} R.
+  (* #[global] Arguments MkTypeDefKit {TK} &. *)
+
+  (* Record Types : Type := *)
+  (*   { typedecls   : TypeDeclKit; *)
+  (*     typedefs    :> TypeDefKit typedecls; *)
+  (*     typedeflaws :> TypeDefKitLaws typedecls; *)
+  (*   }. *)
+
+
+  (* Module DefaultVarKit <: VarKit. *)
+  (*   (** Variables **) *)
+  (*   Definition 𝑿        := string. *)
+  (*   Definition 𝑿_eq_dec := string_dec. *)
+  (*   Definition 𝑺        := string. *)
+  (*   Definition 𝑺_eq_dec := string_dec. *)
+
+  (*   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x. *)
+  (*   Definition fresh := ctx.fresh. *)
+  (* End DefaultVarKit. *)
+
+End ty.
+Export ty
+  ( TypeDeclKit, enumt, uniont, recordt,
+
+    TypeDenoteKit,
+
+    Ty, Ty_eq_dec, Val, Val_eqb, Val_eqb_spec,
+
+    TypeDefKit, (* MkTypeDefKit, *) enum_eqdec, enumt_eqdec, enumt_finite,
+    enumi,
+    unioni,
+    recordi,
+    union_eqdec, uniont_eqdec, unionk, unionk_eqdec, unionk_finite, unionk_ty,
+    unionv_fold, unionv_unfold, record_eqdec, recordt_eqdec, recordf,
+    recordf_ty, recordv_fold, recordv_unfold,
+
+    (* TypeDefKitLaws, *) unionv_fold_unfold, unionv_unfold_fold,
+    unionv_fold_inj, unionv_unfold_inj,
+    recordv_fold_unfold, recordv_unfold_fold
+
+    (* Types, *) (* typedecls, *) (* typedefs *)
+  ).
+#[export] Existing Instance ty.Ty_eq_dec.
+
+Module Type Types.
+
+  Declare Instance typedeclkit   : TypeDeclKit.
+  Declare Instance typedenotekit : TypeDenoteKit typedeclkit.
+  Declare Instance typedefkit    : TypeDefKit typedenotekit.
+  Declare Instance varkit        : VarKit.
+
+End Types.
+
+Local Instance DefaultTypeDeclKit : TypeDeclKit :=
+  {| enumi := Empty_set;
+     unioni := Empty_set;
+     recordi := Empty_set;
+  |}.
+
+Local Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit :=
+  {| enumt _ := Empty_set;
+     uniont _ := Empty_set;
+     recordt _ := Empty_set;
+  |}.
+
+Local Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit.
+  refine
+    {| unionk _            := Empty_set;
+       unionk_ty _ _       := ty.unit;
+       unionv_fold         := Empty_set_rec _;
+       unionv_unfold       := Empty_set_rec _;
+       recordf             := Empty_set;
+       recordf_ty          := Empty_set_rec _;
+       recordv_fold        := Empty_set_rec _;
+       recordv_unfold      := Empty_set_rec _;
+       (* unionv_fold_unfold  := Empty_set_rec _; *)
+    |}; abstract (intros []).
+Defined.

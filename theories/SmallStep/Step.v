@@ -128,24 +128,24 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , stm_assign x s ⟩ ---> ⟨ γ' , μ' , δ' , stm_assign x s' ⟩
 
   | step_stm_if
-      (e : Exp Γ ty_bool) (s1 s2 : Stm Γ τ) :
+      (e : Exp Γ ty.bool) (s1 s2 : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_if e s1 s2 ⟩ ---> ⟨ γ , μ , δ , if eval e δ then s1 else s2 ⟩
   | step_stm_assertk
-      (e1 : Exp Γ ty_bool) (e2 : Exp Γ ty_string) (k : Stm Γ τ) :
+      (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ) :
       ⟨ γ , μ , δ , stm_assertk e1 e2 k ⟩ --->
       ⟨ γ , μ , δ , if eval e1 δ then k else stm_fail τ (eval e2 δ) ⟩
 
   | step_stm_match_list
-      {σ : Ty} (e : Exp Γ (ty_list σ)) (alt_nil : Stm Γ τ)
-      (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty_list σ) τ) :
+      {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
+      (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ) :
       ⟨ γ , μ , δ , stm_match_list e alt_nil xh xt alt_cons ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
                 | nil => alt_nil
-                | cons vh vt => stm_block (env.snoc (env.snoc env.nil (xh∷σ) vh) (xt∷ty_list σ) vt) alt_cons
+                | cons vh vt => stm_block (env.snoc (env.snoc env.nil (xh∷σ) vh) (xt∷ty.list σ) vt) alt_cons
                 end
       ⟩
   | step_stm_match_sum
-      {σinl σinr : Ty} (e : Exp Γ (ty_sum σinl σinr))
+      {σinl σinr : Ty} (e : Exp Γ (ty.sum σinl σinr))
       (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
       (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ) :
       ⟨ γ , μ , δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
@@ -155,38 +155,38 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
                 end
       ⟩
   | step_stm_match_prod
-      {σ1 σ2 : Ty} (e : Exp Γ (ty_prod σ1 σ2)) (xl xr : 𝑿)
+      {σ1 σ2 : Ty} (e : Exp Γ (ty.prod σ1 σ2)) (xl xr : 𝑿)
       (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) :
       ⟨ γ , μ , δ , stm_match_prod e xl xr rhs ⟩ --->
       ⟨ γ , μ , δ , let (vl , vr) := eval e δ in
                 stm_block (env.snoc (env.snoc env.nil (xl∷σ1) vl) (xr∷σ2) vr) rhs
       ⟩
   | step_stm_match_enum
-      {E : 𝑬} (e : Exp Γ (ty_enum E))
-      (alts : forall (K : 𝑬𝑲 E), Stm Γ τ) :
+      {E : enumi} (e : Exp Γ (ty.enum E))
+      (alts : forall (K : enumt E), Stm Γ τ) :
       ⟨ γ , μ , δ , stm_match_enum E e alts ⟩ ---> ⟨ γ , μ , δ , alts (eval e δ) ⟩
   | step_stm_match_tuple
-      {Δ σs} (e : Exp Γ (ty_tuple σs)) (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ) :
+      {Δ σs} (e : Exp Γ (ty.tuple σs)) (p : TuplePat σs Δ) (rhs : Stm (Γ ▻▻ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_tuple e p rhs ⟩ --->
       ⟨ γ , μ , δ , stm_block (tuple_pattern_match_val p (eval e δ)) rhs ⟩
 
   | step_stm_match_union
-      {U : 𝑼} (e : Exp Γ (ty_union U))
-      (alt__ctx : forall (K : 𝑼𝑲 U), PCtx)
-      (alt__pat : forall (K : 𝑼𝑲 U), Pattern (alt__ctx K) (𝑼𝑲_Ty K))
-      (alt__rhs : forall (K : 𝑼𝑲 U), Stm (Γ ▻▻ alt__ctx K) τ) :
+      {U : unioni} (e : Exp Γ (ty.union U))
+      (alt__ctx : forall (K : unionk U), PCtx)
+      (alt__pat : forall (K : unionk U), Pattern (alt__ctx K) (unionk_ty U K))
+      (alt__rhs : forall (K : unionk U), Stm (Γ ▻▻ alt__ctx K) τ) :
       ⟨ γ , μ , δ , stm_match_union U e alt__pat alt__rhs ⟩ --->
-      ⟨ γ , μ , δ , let (K , v) := 𝑼_unfold (eval e δ) in
+      ⟨ γ , μ , δ , let (K , v) := unionv_unfold U (eval e δ) in
                 stm_block (pattern_match_val (alt__pat K) v) (alt__rhs K)
       ⟩
   | step_stm_match_record
-      {R : 𝑹} {Δ : PCtx} (e : Exp Γ (ty_record R))
-      (p : RecordPat (𝑹𝑭_Ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ) :
+      {R : recordi} {Δ : PCtx} (e : Exp Γ (ty.record R))
+      (p : RecordPat (recordf_ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ) :
       ⟨ γ , μ , δ , stm_match_record R e p rhs ⟩ --->
       ⟨ γ , μ , δ , stm_block (record_pattern_match_val p (eval e δ)) rhs ⟩
 
   | step_stm_match_bvec
-      {n : nat} (e : Exp Γ (ty_bvec n)) (rhs : bv n -> Stm Γ τ) :
+      {n : nat} (e : Exp Γ (ty.bvec n)) (rhs : bv n -> Stm Γ τ) :
       ⟨ γ , μ , δ , stm_match_bvec n e rhs ⟩ --->
       ⟨ γ , μ , δ , rhs (eval e δ) ⟩
 

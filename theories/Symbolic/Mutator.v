@@ -484,7 +484,7 @@ Module Type MutatorsOn
       fun w => demonic_list (finite.enum F).
 
     Definition angelic_match_bool' :
-      ⊢ AMessage -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
+      ⊢ AMessage -> STerm ty.bool -> SDijkstra ⌜bool⌝ :=
       fun _ msg t =>
         angelic_binary
           (⟨_⟩ _ <- assert_formula msg (formula_bool t) ;;
@@ -493,7 +493,7 @@ Module Type MutatorsOn
                     pure false).
 
     Definition angelic_match_bool :
-      ⊢ AMessage -> STerm ty_bool -> SDijkstra ⌜bool⌝ :=
+      ⊢ AMessage -> STerm ty.bool -> SDijkstra ⌜bool⌝ :=
       fun w msg t =>
         let t' := peval t in
         match term_get_val t' with
@@ -502,7 +502,7 @@ Module Type MutatorsOn
         end.
 
     Definition demonic_match_bool' :
-      ⊢ STerm ty_bool -> SDijkstra ⌜bool⌝ :=
+      ⊢ STerm ty.bool -> SDijkstra ⌜bool⌝ :=
       fun _ t =>
         demonic_binary
           (⟨_⟩ _ <- assume_formula (formula_bool t) ;;
@@ -511,7 +511,7 @@ Module Type MutatorsOn
                     pure false).
 
     Definition demonic_match_bool :
-      ⊢ STerm ty_bool -> SDijkstra ⌜bool⌝ :=
+      ⊢ STerm ty.bool -> SDijkstra ⌜bool⌝ :=
       fun w t =>
         let t' := peval t in
         match term_get_val t' with
@@ -521,7 +521,7 @@ Module Type MutatorsOn
 
 
     (* Definition angelic_match_enum {AT E} : *)
-    (*   ⊢ Message -> STerm (ty_enum E) -> (⌜Val (ty_enum E)⌝ -> □(𝕊 AT)) -> 𝕊 AT := *)
+    (*   ⊢ Message -> STerm (ty.enum E) -> (⌜Val (ty.enum E)⌝ -> □(𝕊 AT)) -> 𝕊 AT := *)
     (*   fun w msg t k => *)
     (*     match term_get_val t with *)
     (*     | Some v => T (k v) *)
@@ -530,7 +530,7 @@ Module Type MutatorsOn
     (*     end. *)
 
     (* Definition demonic_match_enum {AT E} : *)
-    (*   ⊢ STerm (ty_enum E) -> (⌜Val (ty_enum E)⌝ -> □(𝕊 AT)) -> 𝕊 AT := *)
+    (*   ⊢ STerm (ty.enum E) -> (⌜Val (ty.enum E)⌝ -> □(𝕊 AT)) -> 𝕊 AT := *)
     (*   fun w t k => *)
     (*     match term_get_val t with *)
     (*     | Some v => T (k v) *)
@@ -539,33 +539,33 @@ Module Type MutatorsOn
     (*     end. *)
 
     (* Definition angelic_match_list {AT} (x y : 𝑺) (σ : Ty) : *)
-    (*   ⊢ Message -> STerm (ty_list σ) -> □(𝕊 AT) -> □(STerm σ -> STerm (ty_list σ) -> 𝕊 AT) -> 𝕊 AT := *)
+    (*   ⊢ Message -> STerm (ty.list σ) -> □(𝕊 AT) -> □(STerm σ -> STerm (ty.list σ) -> 𝕊 AT) -> 𝕊 AT := *)
     (*   fun w0 msg t knil kcons => *)
-    (*     angelic_binary (assert_formulak msg (formula_eq (term_val (ty_list σ) []) t) knil) *)
+    (*     angelic_binary (assert_formulak msg (formula_eq (term_val (ty.list σ) []) t) knil) *)
     (*       (angelic x σ *)
     (*          (fun w1 ω01 (th : Term w1 σ) => *)
-    (*           angelic y (ty_list σ) *)
-    (*             (fun w2 ω12 (tt : Term w2 (ty_list σ)) => *)
+    (*           angelic y (ty.list σ) *)
+    (*             (fun w2 ω12 (tt : Term w2 (ty.list σ)) => *)
     (*              assert_formulak (subst msg (wtrans ω01 ω12)) *)
     (*                (formula_eq (term_binop binop_cons (subst th ω12) tt) (subst t (wtrans ω01 ω12))) *)
     (*                (fun w3 ω23 => *)
     (*                 four kcons (wtrans ω01 ω12) ω23 (subst th (wtrans ω12 ω23)) (subst tt ω23))))). *)
 
     (* Definition demonic_match_list {AT} (x y : 𝑺) (σ : Ty) : *)
-    (*   ⊢ STerm (ty_list σ) -> □(𝕊 AT) -> □(STerm σ -> STerm (ty_list σ) -> 𝕊 AT) -> 𝕊 AT := *)
+    (*   ⊢ STerm (ty.list σ) -> □(𝕊 AT) -> □(STerm σ -> STerm (ty.list σ) -> 𝕊 AT) -> 𝕊 AT := *)
     (*   fun w0 t knil kcons => *)
-    (*     demonic_binary (assume_formulak (formula_eq (term_val (ty_list σ) []) t) knil) *)
+    (*     demonic_binary (assume_formulak (formula_eq (term_val (ty.list σ) []) t) knil) *)
     (*       (demonic x σ *)
     (*          (fun w1 ω01 (th : Term w1 σ) => *)
-    (*           demonic y (ty_list σ) *)
-    (*             (fun w2 ω12 (tt : Term w2 (ty_list σ)) => *)
+    (*           demonic y (ty.list σ) *)
+    (*             (fun w2 ω12 (tt : Term w2 (ty.list σ)) => *)
     (*              assume_formulak *)
     (*                (formula_eq (term_binop binop_cons (subst th ω12) tt) (subst t (wtrans ω01 ω12))) *)
     (*                (fun w3 ω23 => *)
     (*                 four kcons (wtrans ω01 ω12) ω23 (subst th (wtrans ω12 ω23)) (subst tt ω23))))). *)
 
     Definition angelic_match_sum' {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ AMessage -> STerm (ty_sum σ τ) ->
+      ⊢ AMessage -> STerm (ty.sum σ τ) ->
         □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
       fun _ msg t kinl kinr =>
         angelic_binary
@@ -577,7 +577,7 @@ Module Type MutatorsOn
                      T kinr⟨ω1∘ω2⟩ tr⟨ω2⟩).
 
     Definition angelic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ AMessage -> STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
+      ⊢ AMessage -> STerm (ty.sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
       fun w0 msg t kinl kinr =>
         match term_get_sum t with
         | Some (inl tσ) => T kinl tσ
@@ -586,7 +586,7 @@ Module Type MutatorsOn
         end.
 
     Definition demonic_match_sum' {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
+      ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
       fun w0 t kinl kinr =>
        demonic_binary
          (⟨ω1⟩ t1 <- demonic (Some x) σ;;
@@ -597,7 +597,7 @@ Module Type MutatorsOn
                     T kinr⟨ω1∘ω2⟩ t1⟨ω2⟩).
 
     Definition demonic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
+      ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SDijkstra A) -> □(STerm τ -> SDijkstra A) -> SDijkstra A :=
       fun w0 t kinl kinr =>
         match term_get_sum t with
         | Some (inl tσ) => T kinl tσ
@@ -606,17 +606,17 @@ Module Type MutatorsOn
         end.
 
     Definition angelic_match_prod {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ AMessage -> STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A :=
+      ⊢ AMessage -> STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A :=
       fun _ msg t k =>
         ⟨ω1⟩ t1 <- angelic (Some x) σ;;
         ⟨ω2⟩ t2 <- angelic (Some y) τ;;
                   let ω12 := ω1 ∘ ω2 in
-                  let fml := formula_eq (term_binop binop_pair t1⟨ω2⟩ t2) t⟨ω12⟩ in
+                  let fml := formula_eq (term_binop bop.pair t1⟨ω2⟩ t2) t⟨ω12⟩ in
         ⟨ω3⟩ _  <- assert_formula msg⟨ω12⟩ fml;;
                   T k⟨ω12∘ω3⟩ t1⟨ω2∘ω3⟩ t2⟨ω3⟩.
 
     (* Definition angelic_match_prod {AT} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) : *)
-    (*   ⊢ Message -> STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> 𝕊 AT) -> 𝕊 AT := *)
+    (*   ⊢ Message -> STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> 𝕊 AT) -> 𝕊 AT := *)
     (*   fun w0 msg t k => *)
     (*     match term_get_pair t with *)
     (*     | Some (tσ,tτ) => T k tσ tτ *)
@@ -624,17 +624,17 @@ Module Type MutatorsOn
     (*     end. *)
 
     Definition demonic_match_prod {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
-      ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A :=
+      ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SDijkstra A) -> SDijkstra A :=
       fun _ t k =>
         ⟨ω1⟩ t1 <- demonic (Some x) σ;;
         ⟨ω2⟩ t2 <- demonic (Some y) τ;;
                   let ω12 := ω1 ∘ ω2 in
-                  let fml := formula_eq (term_binop binop_pair t1⟨ω2⟩ t2) t⟨ω12⟩ in
+                  let fml := formula_eq (term_binop bop.pair t1⟨ω2⟩ t2) t⟨ω12⟩ in
        ⟨ω3⟩ _   <- assume_formula fml;;
                   T k⟨ω12∘ω3⟩ t1⟨ω2∘ω3⟩ t2⟨ω3⟩.
 
     (* Definition demonic_match_prod {AT} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) : *)
-    (*   ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> 𝕊 AT) -> 𝕊 AT := *)
+    (*   ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> 𝕊 AT) -> 𝕊 AT := *)
     (*   fun w0 t k => *)
     (*     match term_get_pair t with *)
     (*     | Some (tσ,tτ) => T k tσ tτ *)
@@ -642,7 +642,7 @@ Module Type MutatorsOn
     (*     end. *)
 
     (* Definition angelic_match_record' {N : Set} (n : N -> 𝑺) {AT R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) : *)
-    (*   ⊢ Message -> STerm (ty_record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
+    (*   ⊢ Message -> STerm (ty.record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
     (* Proof. *)
     (*   intros w0 msg t k. *)
     (*   apply (angelic_freshen_ctx n Δ). *)
@@ -656,7 +656,7 @@ Module Type MutatorsOn
     (* Defined. *)
 
     (* Definition angelic_match_record {N : Set} (n : N -> 𝑺) {AT R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) : *)
-    (*   ⊢ Message -> STerm (ty_record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
+    (*   ⊢ Message -> STerm (ty.record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
     (* Proof. *)
     (*   intros w0 msg t k. *)
     (*   destruct (term_get_record t). *)
@@ -666,7 +666,7 @@ Module Type MutatorsOn
     (* Defined. *)
 
     (* Definition demonic_match_record' {N : Set} (n : N -> 𝑺) {AT R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) : *)
-    (*   ⊢ STerm (ty_record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
+    (*   ⊢ STerm (ty.record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
     (* Proof. *)
     (*   intros w0 t k. *)
     (*   apply (demonic_ctx n Δ). *)
@@ -679,7 +679,7 @@ Module Type MutatorsOn
     (* Defined. *)
 
     (* Definition demonic_match_record {N : Set} (n : N -> 𝑺) {AT R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) : *)
-    (*   ⊢ STerm (ty_record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
+    (*   ⊢ STerm (ty.record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
     (* Proof. *)
     (*   intros w0 t k. *)
     (*   destruct (term_get_record t). *)
@@ -689,7 +689,7 @@ Module Type MutatorsOn
     (* Defined. *)
 
     (* Definition angelic_match_tuple' {N : Set} (n : N -> 𝑺) {AT σs} {Δ : NCtx N Ty} (p : TuplePat σs Δ) : *)
-    (*   ⊢ Message -> STerm (ty_tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
+    (*   ⊢ Message -> STerm (ty.tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
     (* Proof. *)
     (*   intros w0 msg t k. *)
     (*   apply (angelic_freshen_ctx n Δ). *)
@@ -703,7 +703,7 @@ Module Type MutatorsOn
     (* Defined. *)
 
     (* Definition angelic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs} {Δ : NCtx N Ty} (p : TuplePat σs Δ) : *)
-    (*   ⊢ Message -> STerm (ty_tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
+    (*   ⊢ Message -> STerm (ty.tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
     (* Proof. *)
     (*   intros w0 msg t k. *)
     (*   destruct (term_get_tuple t). *)
@@ -713,7 +713,7 @@ Module Type MutatorsOn
     (* Defined. *)
 
     (* Definition demonic_match_tuple' {N : Set} (n : N -> 𝑺) {AT σs} {Δ : NCtx N Ty} (p : TuplePat σs Δ) : *)
-    (*   ⊢ STerm (ty_tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
+    (*   ⊢ STerm (ty.tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
     (* Proof. *)
     (*   intros w0 t k. *)
     (*   apply (demonic_ctx n Δ). *)
@@ -726,7 +726,7 @@ Module Type MutatorsOn
     (* Defined. *)
 
     (* Definition demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs} {Δ : NCtx N Ty} (p : TuplePat σs Δ) : *)
-    (*   ⊢ STerm (ty_tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
+    (*   ⊢ STerm (ty.tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
     (* Proof. *)
     (*   intros w0 t k. *)
     (*   destruct (term_get_tuple t). *)
@@ -740,11 +740,11 @@ Module Type MutatorsOn
     (*   NamedEnv (Term Σ) Δ -> Term Σ σ := *)
     (*   match p with *)
     (*   | pat_var x    => fun Ex => match snocView Ex with isSnoc _ t => t end *)
-    (*   | pat_unit     => fun _ => term_val ty_unit tt *)
+    (*   | pat_unit     => fun _ => term_val ty.unit tt *)
     (*   | pat_pair x y => fun Exy => match snocView Exy with *)
     (*                                  isSnoc Ex ty => *)
     (*                                  match snocView Ex with *)
-    (*                                    isSnoc _ tx => term_binop binop_pair tx ty *)
+    (*                                    isSnoc _ tx => term_binop bop.pair tx ty *)
     (*                                  end *)
     (*                                end *)
     (*   | pat_tuple p  => fun EΔ => term_tuple (tuple_pattern_match_env_reverse p EΔ) *)
@@ -769,7 +769,7 @@ Module Type MutatorsOn
 
     (* Definition angelic_match_union' {N : Set} (n : N -> 𝑺) {AT U} {Δ : 𝑼𝑲 U -> NCtx N Ty} *)
     (*   (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) : *)
-    (*   ⊢ Message -> STerm (ty_union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
+    (*   ⊢ Message -> STerm (ty.union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
     (*   fun w0 msg t k => *)
     (*     angelic_finite msg *)
     (*       (fun K : 𝑼𝑲 U => *)
@@ -782,7 +782,7 @@ Module Type MutatorsOn
 
     (* Definition angelic_match_union {N : Set} (n : N -> 𝑺) {AT U} {Δ : 𝑼𝑲 U -> NCtx N Ty} *)
     (*   (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) : *)
-    (*   ⊢ Message -> STerm (ty_union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
+    (*   ⊢ Message -> STerm (ty.union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
     (*   fun w0 msg t k => *)
     (*     match term_get_union t with *)
     (*     | Some (existT K t__field) => angelic_match_pattern n (p K) msg t__field (k K) *)
@@ -791,7 +791,7 @@ Module Type MutatorsOn
 
     (* Definition demonic_match_union' {N : Set} (n : N -> 𝑺) {AT U} {Δ : 𝑼𝑲 U -> NCtx N Ty} *)
     (*   (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) : *)
-    (*   ⊢ STerm (ty_union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
+    (*   ⊢ STerm (ty.union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
     (*   fun w0 t k => *)
     (*     demonic_finite *)
     (*       (fun K : 𝑼𝑲 U => *)
@@ -803,7 +803,7 @@ Module Type MutatorsOn
 
     (* Definition demonic_match_union {N : Set} (n : N -> 𝑺) {AT U} {Δ : 𝑼𝑲 U -> NCtx N Ty} *)
     (*   (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) : *)
-    (*   ⊢ STerm (ty_union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
+    (*   ⊢ STerm (ty.union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
     (*   fun w0 t k => *)
     (*     match term_get_union t with *)
     (*     | Some (existT K t__field) => demonic_match_pattern n (p K) t__field (k K) *)
@@ -1069,7 +1069,7 @@ Module Type MutatorsOn
     Section PatternMatching.
 
       (* Definition angelic_match_bool {Γ} : *)
-      (*   ⊢ STerm ty_bool -> SMut Γ Γ ⌜bool⌝ := *)
+      (*   ⊢ STerm ty.bool -> SMut Γ Γ ⌜bool⌝ := *)
       (*   fun w t POST δ h => *)
       (*     dijkstra *)
       (*       (SDijk.angelic_match_bool *)
@@ -1083,11 +1083,11 @@ Module Type MutatorsOn
       (*       POST δ h. *)
 
       (* Definition demonic_match_bool {Γ} : *)
-      (*   ⊢ STerm ty_bool -> SMut Γ Γ ⌜bool⌝ := *)
+      (*   ⊢ STerm ty.bool -> SMut Γ Γ ⌜bool⌝ := *)
       (*   fun w t => dijkstra (SDijk.demonic_match_bool t). *)
 
       Definition angelic_match_bool' {AT} {Γ1 Γ2} :
-        ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm ty.bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t kt kf.
         apply angelic_binary.
@@ -1118,7 +1118,7 @@ Module Type MutatorsOn
       Defined.
 
       Definition angelic_match_bool {AT} {Γ1 Γ2} :
-        ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT :=
+        ⊢ STerm ty.bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT :=
         fun w0 t kt kf =>
           match term_get_val t with
           | Some true => T kt
@@ -1127,12 +1127,12 @@ Module Type MutatorsOn
           end.
 
       Definition box_angelic_match_bool {AT} {Γ1 Γ2} :
-        ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+        ⊢ STerm ty.bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t kt kf =>
           angelic_match_bool <$> persist__term t <*> four kt <*> four kf.
 
       Definition demonic_match_bool' {AT} {Γ1 Γ2} :
-        ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm ty.bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t kt kf.
         apply demonic_binary.
@@ -1147,7 +1147,7 @@ Module Type MutatorsOn
       Defined.
 
       Definition demonic_match_bool {AT} {Γ1 Γ2} :
-        ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT :=
+        ⊢ STerm ty.bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT :=
         fun w0 t kt kf =>
           match term_get_val t with
           | Some true => T kt
@@ -1156,16 +1156,16 @@ Module Type MutatorsOn
           end.
 
       Definition box_demonic_match_bool {AT} {Γ1 Γ2} :
-        ⊢ STerm ty_bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+        ⊢ STerm ty.bool -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t kt kf =>
           demonic_match_bool <$> persist__term t <*> four kt <*> four kf.
 
       Definition angelic_match_enum {AT E} {Γ1 Γ2} :
-        ⊢ STerm (ty_enum E) -> (⌜𝑬𝑲 E⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm (ty.enum E) -> (⌜enumt E⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t cont.
         eapply bind.
-        apply (angelic_finite (F := 𝑬𝑲 E)).
+        apply (angelic_finite (F := enumt E)).
         intros δ h.
         apply (MkAMessage _ (BT := Message)).
         apply
@@ -1183,11 +1183,11 @@ Module Type MutatorsOn
       Defined.
 
       Definition demonic_match_enum {A E} {Γ1 Γ2} :
-        ⊢ STerm (ty_enum E) -> (⌜𝑬𝑲 E⌝ -> □(SMut Γ1 Γ2 A)) -> SMut Γ1 Γ2 A.
+        ⊢ STerm (ty.enum E) -> (⌜enumt E⌝ -> □(SMut Γ1 Γ2 A)) -> SMut Γ1 Γ2 A.
       Proof.
         intros w0 t cont.
         eapply bind.
-        apply (demonic_finite (F := 𝑬𝑲 E)).
+        apply (demonic_finite (F := enumt E)).
         intros w1 ω01 EK.
         eapply bind_right.
         apply (assume_formula (formula_eq (persist__term t ω01) (term_enum E EK))).
@@ -1195,14 +1195,14 @@ Module Type MutatorsOn
       Defined.
 
       Definition box_demonic_match_enum {AT E} {Γ1 Γ2} :
-        ⊢ STerm (ty_enum E) -> (⌜𝑬𝑲 E⌝ -> □(SMut Γ1 Γ2 AT)) -> □(SMut Γ1 Γ2 AT) :=
+        ⊢ STerm (ty.enum E) -> (⌜enumt E⌝ -> □(SMut Γ1 Γ2 AT)) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k =>
           demonic_match_enum
             <$> persist__term t
-            <*> (fun (w1 : World) (ω01 : w0 ⊒ w1) (EK : 𝑬𝑲 E) => four (k EK) ω01).
+            <*> (fun (w1 : World) (ω01 : w0 ⊒ w1) (EK : enumt E) => four (k EK) ω01).
 
       Definition angelic_match_sum {AT Γ1 Γ2} (x y : 𝑺) {σ τ} :
-        ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SMut Γ1 Γ2 AT) -> □(STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SMut Γ1 Γ2 AT) -> □(STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t kinl kinr.
         apply angelic_binary.
@@ -1227,7 +1227,7 @@ Module Type MutatorsOn
       Defined.
 
       Definition demonic_match_sum {AT Γ1 Γ2} (x y : 𝑺) {σ τ} :
-        ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SMut Γ1 Γ2 AT) -> □(STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SMut Γ1 Γ2 AT) -> □(STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t kinl kinr.
         apply demonic_binary.
@@ -1252,7 +1252,7 @@ Module Type MutatorsOn
       Defined.
 
       Definition demonic_match_sum_lifted {AT Γ1 Γ2} (x y : 𝑺) {σ τ} :
-        ⊢ STerm (ty_sum σ τ) -> □(STerm σ -> SMut Γ1 Γ2 AT) -> □(STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SMut Γ1 Γ2 AT) -> □(STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t kinl kinr POST δ0 h0.
         eapply (SDijk.demonic_match_sum (A := fun w => SStore Γ2 w * SHeap w * AT w)%type x _ y _ _ t).
@@ -1272,7 +1272,7 @@ Module Type MutatorsOn
       Defined.
 
       Definition angelic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
-        ⊢ STerm (ty_list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty_list σ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm (ty.list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t knil kcons.
         apply angelic_binary.
@@ -1286,14 +1286,14 @@ Module Type MutatorsOn
           (*      msg_heap            := h0; *)
           (*      msg_pathcondition   := wco w0; *)
           (*   |}. *)
-          apply (formula_eq (term_val (ty_list σ) []%list) t).
+          apply (formula_eq (term_val (ty.list σ) []%list) t).
           intros w1 ω01.
           apply knil. auto.
         - eapply bind.
           apply (angelic (Some x) σ).
           intros w1 ω01 thead.
           eapply bind.
-          apply (angelic (Some y) (ty_list σ)).
+          apply (angelic (Some y) (ty.list σ)).
           intros w2 ω12 ttail.
           eapply bind_right.
           apply assert_formula.
@@ -1305,7 +1305,7 @@ Module Type MutatorsOn
           (*      msg_heap            := subst h0 (acc_trans ω01 ω12); *)
           (*      msg_pathcondition   := wco w2; *)
           (*   |}. *)
-          apply (formula_eq (term_binop binop_cons (persist__term thead ω12) ttail) (persist__term t (acc_trans ω01 ω12))).
+          apply (formula_eq (term_binop bop.cons (persist__term thead ω12) ttail) (persist__term t (acc_trans ω01 ω12))).
           intros w3 ω23.
           apply (four kcons (acc_trans ω01 ω12)). auto.
           apply (persist__term thead (acc_trans ω12 ω23)).
@@ -1313,28 +1313,28 @@ Module Type MutatorsOn
       Defined.
 
       Definition box_angelic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
-        ⊢ STerm (ty_list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty_list σ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+        ⊢ STerm (ty.list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t knil kcons => angelic_match_list x y <$> persist__term t <*> four knil <*> four kcons.
 
       Definition demonic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
-        ⊢ STerm (ty_list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty_list σ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm (ty.list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t knil kcons.
         apply demonic_binary.
         - eapply bind_right.
           apply assume_formula.
-          apply (formula_eq (term_val (ty_list σ) []%list) t).
+          apply (formula_eq (term_val (ty.list σ) []%list) t).
           intros w1 ω01.
           apply knil. auto.
         - eapply bind.
           apply (demonic (Some x) σ).
           intros w1 ω01 thead.
           eapply bind.
-          apply (demonic (Some y) (ty_list σ)).
+          apply (demonic (Some y) (ty.list σ)).
           intros w2 ω12 ttail.
           eapply bind_right.
           apply assume_formula.
-          apply (formula_eq (term_binop binop_cons (persist__term thead ω12) ttail) (persist__term t (acc_trans ω01 ω12))).
+          apply (formula_eq (term_binop bop.cons (persist__term thead ω12) ttail) (persist__term t (acc_trans ω01 ω12))).
           intros w3 ω23.
           apply (four kcons (acc_trans ω01 ω12)). auto.
           apply (persist__term thead (acc_trans ω12 ω23)).
@@ -1342,11 +1342,11 @@ Module Type MutatorsOn
       Defined.
 
       Definition box_demonic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
-        ⊢ STerm (ty_list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty_list σ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+        ⊢ STerm (ty.list σ) -> □(SMut Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t knil kcons => demonic_match_list x y <$> persist__term t <*> four knil <*> four kcons.
 
       Definition angelic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
-        ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
         apply (bind (angelic (Some x) σ)).
@@ -1362,7 +1362,7 @@ Module Type MutatorsOn
           (*    msg_heap            := subst h0 (acc_trans ω01 ω12); *)
           (*    msg_pathcondition   := wco w2; *)
           (* |}. *)
-        apply (formula_eq (term_binop binop_pair (persist__term tσ ω12) tτ) (persist__term t (acc_trans ω01 ω12))).
+        apply (formula_eq (term_binop bop.pair (persist__term tσ ω12) tτ) (persist__term t (acc_trans ω01 ω12))).
         intros w3 ω23.
         apply (four k (acc_trans ω01 ω12)). auto.
         apply (persist__term tσ (acc_trans ω12 ω23)).
@@ -1370,11 +1370,11 @@ Module Type MutatorsOn
       Defined.
 
       Definition box_angelic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
-        ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_prod x y <$> persist__term t <*> four k.
 
       Definition demonic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
-        ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
         apply (bind (demonic (Some x) σ)).
@@ -1383,7 +1383,7 @@ Module Type MutatorsOn
         intros w2 ω12 tτ.
         eapply bind_right.
         apply assume_formula.
-        apply (formula_eq (term_binop binop_pair (persist__term tσ ω12) tτ) (persist__term t (acc_trans ω01 ω12))).
+        apply (formula_eq (term_binop bop.pair (persist__term tσ ω12) tτ) (persist__term t (acc_trans ω01 ω12))).
         intros w3 ω23.
         apply (four k (acc_trans ω01 ω12)). auto.
         apply (persist__term tσ (acc_trans ω12 ω23)).
@@ -1391,11 +1391,11 @@ Module Type MutatorsOn
       Defined.
 
       Definition box_demonic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
-        ⊢ STerm (ty_prod σ τ) -> □(STerm σ -> STerm τ -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_prod x y <$> persist__term t <*> four k.
 
-      Definition angelic_match_record' {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
-        ⊢ STerm (ty_record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+      Definition angelic_match_record' {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
         eapply bind.
@@ -1416,8 +1416,8 @@ Module Type MutatorsOn
         apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
-      Definition angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
-        ⊢ STerm (ty_record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+      Definition angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
         destruct (term_get_record t).
@@ -1426,12 +1426,12 @@ Module Type MutatorsOn
         - apply (angelic_match_record' n p t k).
       Defined.
 
-      Definition box_angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
-        ⊢ STerm (ty_record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+      Definition box_angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_record n p <$> persist__term t <*> four k.
 
-      Definition demonic_match_record' {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
-        ⊢ STerm (ty_record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+      Definition demonic_match_record' {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
         eapply bind.
@@ -1445,8 +1445,8 @@ Module Type MutatorsOn
         apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
-      Definition demonic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
-        ⊢ STerm (ty_record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+      Definition demonic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
         destruct (term_get_record t).
@@ -1455,12 +1455,12 @@ Module Type MutatorsOn
         - apply (demonic_match_record' n p t k).
       Defined.
 
-      Definition box_demonic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) :
-        ⊢ STerm (ty_record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+      Definition box_demonic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_record n p <$> persist__term t <*> four k.
 
       Definition angelic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        ⊢ STerm (ty_tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
         eapply bind.
@@ -1482,11 +1482,11 @@ Module Type MutatorsOn
       Defined.
 
       Definition box_angelic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        ⊢ STerm (ty_tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_tuple n p <$> persist__term t <*> four k.
 
       Definition demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        ⊢ STerm (ty_tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
+        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
         eapply bind.
@@ -1501,7 +1501,7 @@ Module Type MutatorsOn
       Defined.
 
       Definition box_demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        ⊢ STerm (ty_tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
+        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SMut Γ1 Γ2 AT) -> □(SMut Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_tuple n p <$> persist__term t <*> four k.
 
       Definition angelic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
@@ -1535,12 +1535,12 @@ Module Type MutatorsOn
       Defined.
 
       Definition angelic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
-        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
-        ⊢ STerm (ty_union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT.
+        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
+        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t cont.
         eapply bind.
-        apply (angelic_finite (F := 𝑼𝑲 U)).
+        apply (angelic_finite (F := unionk U)).
         intros δ h.
         apply (MkAMessage _ (BT := Message)).
         apply
@@ -1553,7 +1553,7 @@ Module Type MutatorsOn
             |}.
         intros w1 ω01 UK.
         eapply bind.
-        apply (angelic None (𝑼𝑲_Ty UK)).
+        apply (angelic None (unionk_ty U UK)).
         intros w2 ω12 t__field.
         eapply bind_right.
         apply assert_formula.
@@ -1577,23 +1577,23 @@ Module Type MutatorsOn
       Defined.
 
       Definition box_angelic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
-        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
-        ⊢ STerm (ty_union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SMut Γ1 Γ2 AT)) -> □(SMut Γ1 Γ2 AT).
+        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
+        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SMut Γ1 Γ2 AT)) -> □(SMut Γ1 Γ2 AT).
       Proof.
         refine (fun w0 t k => angelic_match_union n p <$> persist__term t <*> _).
         intros w1 ω01 UK. apply (four (k UK) ω01).
       Defined.
 
       Definition demonic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
-        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
-        ⊢ STerm (ty_union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT.
+        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
+        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT.
       Proof.
         intros w0 t cont.
         eapply bind.
-        apply (demonic_finite (F := 𝑼𝑲 U)).
+        apply (demonic_finite (F := unionk U)).
         intros w1 ω01 UK.
         eapply bind.
-        apply (demonic None (𝑼𝑲_Ty UK)).
+        apply (demonic None (unionk_ty U UK)).
         intros w2 ω12 t__field.
         eapply bind_right.
         apply assume_formula.
@@ -1607,15 +1607,15 @@ Module Type MutatorsOn
       Defined.
 
       Definition box_demonic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
-        {Δ : 𝑼𝑲 U -> NCtx N Ty} (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) :
-        ⊢ STerm (ty_union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SMut Γ1 Γ2 AT)) -> □(SMut Γ1 Γ2 AT).
+        {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
+        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SMut Γ1 Γ2 AT)) -> □(SMut Γ1 Γ2 AT).
       Proof.
         refine (fun w0 t k => demonic_match_union n p <$> persist__term t <*> _).
         intros w1 ω01 UK. apply (four (k UK) ω01).
       Defined.
 
       Definition angelic_match_bvec' {AT n} {Γ1 Γ2} :
-        ⊢ STerm (ty_bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
+        ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
         fun w0 t k =>
           ⟨ ω1 ⟩ b <- angelic_finite
                         (fun (δ : SStore Γ1 w0) (h : SHeap w0) =>
@@ -1627,11 +1627,11 @@ Module Type MutatorsOn
                               msg_pathcondition := wco w0
                            |})) ;;
           let t1 := persist__term t ω1 in
-          ⟨ ω2 ⟩ _ <- assert_formula (formula_eq t1 (term_val (ty_bvec n) b)) ;;
+          ⟨ ω2 ⟩ _ <- assert_formula (formula_eq t1 (term_val (ty.bvec n) b)) ;;
           four (k b) ω1 ω2.
 
       Definition angelic_match_bvec {AT n} {Γ1 Γ2} :
-        ⊢ STerm (ty_bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
+        ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
         fun w0 t k =>
           match term_get_val t with
           | Some b => T (k b)
@@ -1639,16 +1639,16 @@ Module Type MutatorsOn
           end.
 
       Definition demonic_match_bvec' {AT n} {Γ1 Γ2} :
-        ⊢ STerm (ty_bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
+        ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
         fun w0 t k =>
           ⟨ ω1 ⟩ b <- demonic_finite (F := bv n) ;;
-          let s1 := term_val (ty_bvec n) b in
+          let s1 := term_val (ty.bvec n) b in
           let t1 := persist__term t ω1 in
           ⟨ ω2 ⟩ _ <- assume_formula (formula_eq s1 t1) ;;
           four (k b) ω1 ω2.
 
       Definition demonic_match_bvec {AT n} {Γ1 Γ2} :
-        ⊢ STerm (ty_bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
+        ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SMut Γ1 Γ2 AT)) -> SMut Γ1 Γ2 AT :=
         fun w0 t k =>
           match term_get_val t with
           | Some b => T (k b)
@@ -1741,19 +1741,19 @@ Module Type MutatorsOn
         with eq_dec p1 p2 => {
           match_chunk (chunk_user p1 vs1) (chunk_user ?(p1) vs2) (left eq_refl) := formula_eqs_ctx vs1 vs2;
           match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) (right _) :=
-            cons (formula_bool (term_val ty_bool false)) nil
+            cons (formula_bool (term_val ty.bool false)) nil
         };
         match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2)
         with eq_dec_het r1 r2 => {
           match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg ?(r1) v2) (left eq_refl) := cons (formula_eq v1 v2) nil;
           match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg r2 v2) (right _)      :=
-            cons (formula_bool (term_val ty_bool false)) nil
+            cons (formula_bool (term_val ty.bool false)) nil
         };
         match_chunk (chunk_conj c11 c12) (chunk_conj c21 c22) :=
           app (match_chunk c11 c21) (match_chunk c12 c22);
         match_chunk (chunk_wand c11 c12) (chunk_wand c21 c22) :=
           app (match_chunk c11 c21) (match_chunk c12 c22);
-        match_chunk _ _  := cons (formula_bool (term_val ty_bool false)) nil.
+        match_chunk _ _  := cons (formula_bool (term_val ty.bool false)) nil.
 
       Lemma inst_match_chunk {Σ : LCtx} (c1 c2 : Chunk Σ) (ι : Valuation Σ) :
         instpc (match_chunk c1 c2) ι <-> inst c1 ι = inst c2 ι.
@@ -1949,7 +1949,7 @@ Module Type MutatorsOn
         - intros w1 ω01.
           apply (demonic_match_enum
                     (persist__term k ω01)
-                    (fun EK : 𝑬𝑲 E => four (produce w0 (alts EK)) ω01)).
+                    (fun EK : enumt E => four (produce w0 (alts EK)) ω01)).
         - refine (demonic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr <$> persist__term s <*> four _ <*> four _).
           intros w1 ω01 t1.
           apply (produce (wsnoc w0 (xl∷σ)) asn1).
@@ -2006,7 +2006,7 @@ Module Type MutatorsOn
         - intros w1 ω01.
           apply (angelic_match_enum
                     (persist__term k ω01)
-                    (fun EK : 𝑬𝑲 E => four (consume w0 (alts EK)) ω01)).
+                    (fun EK : enumt E => four (consume w0 (alts EK)) ω01)).
         - refine (angelic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr <$> persist__term s <*> four _ <*> four _).
           intros w1 ω01 t1.
           apply (consume (wsnoc w0 (xl∷σ)) asn1).

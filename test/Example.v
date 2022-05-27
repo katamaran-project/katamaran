@@ -114,99 +114,102 @@ End Finite.
 
 Module Import ExampleBase <: Base.
   Import stdpp.finite.
-  Include DefaultVarKit.
 
-  Section TypeDeclKit.
+  Instance typedeclkit : TypeDeclKit :=
+    {| enumi := Enums;
+       unioni := Unions;
+       recordi := Records;
+    |}.
 
-    (** ENUMS **)
-    Definition 𝑬        := Enums.
-    Definition 𝑬_eq_dec := Enums_eqdec.
-    Definition 𝑬𝑲 (E : 𝑬) : Set :=
-      match E with
-      | ordering => Ordering
-      end.
-    Instance 𝑬𝑲_eq_dec (E : 𝑬) : EqDec (𝑬𝑲 E) :=
-      ltac:(destruct E; auto with typeclass_instances).
-    Instance 𝑬𝑲_finite (E : 𝑬) : Finite (𝑬𝑲 E) :=
-      ltac:(destruct E; auto with typeclass_instances).
+  Definition enum_denote (E : Enums) : Set :=
+    match E with
+    | ordering => Ordering
+    end.
 
-    (** UNIONS **)
-    Definition 𝑼        := Unions.
-    Definition 𝑼_eq_dec := Unions_eqdec.
-    Definition 𝑼𝑻 (U : 𝑼) : Set :=
-      match U with
-      | either => (string + Z)%type
-      end.
-    Instance 𝑼𝑻_eq_dec U : EqDec (𝑼𝑻 U) :=
-      ltac:(destruct U; cbn; auto with typeclass_instances).
-    Definition 𝑼𝑲 (U : 𝑼) : Set :=
-      match U with
-      | either => EitherConstructor
-      end.
-    Instance 𝑼𝑲_eq_dec U : EqDec (𝑼𝑲 U) :=
-      ltac:(destruct U; auto with typeclass_instances).
-    Instance 𝑼𝑲_finite U : Finite (𝑼𝑲 U) :=
-      ltac:(destruct U; auto with typeclass_instances).
+  Definition union_denote (U : Unions) : Set :=
+    match U with
+    | either => (string + Z)%type
+    end.
 
-    (** RECORDS **)
-    Definition 𝑹        := Records.
-    Definition 𝑹_eq_dec := Records_eqdec.
-    Definition 𝑹𝑻 (R : 𝑹) : Set :=
-      match R with
-      end.
-    Instance 𝑹𝑻_eq_dec R : EqDec (𝑹𝑻 R) :=
-      ltac:(destruct R; auto with typeclass_instances).
+  Definition record_denote (R : Records) : Set :=
+    match R with end.
 
-  End TypeDeclKit.
+  Instance typedenotekit : TypeDenoteKit typedeclkit :=
+    {| enumt := enum_denote;
+       uniont := union_denote;
+       recordt := record_denote;
+    |}.
 
-  Include TypeDeclMixin.
+  Definition union_constructors (U : Unions) : Set :=
+    match U with
+    | either => EitherConstructor
+    end.
 
-  Section TypeDefKit.
+  Definition union_constructor_type (U : Unions) : union_constructors U -> Ty :=
+    match U with
+    | either => fun K => match K with
+                         | Left => ty.string
+                         | Right => ty.int
+                         end
+    end.
 
-    (** UNIONS **)
-    Definition 𝑼𝑲_Ty (U : 𝑼) : 𝑼𝑲 U -> Ty :=
-      match U with
-      | either => fun K => match K with
-                           | Left => ty_string
-                           | Right => ty_int
-                           end
-      end.
-    Definition 𝑼_fold (U : 𝑼) : { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) } -> 𝑼𝑻 U :=
-      match U with
-      | either => fun Kv =>
-                    match Kv with
-                    | existT Left v  => inl v
-                    | existT Right v => inr v
-                    end
-      end.
-    Definition 𝑼_unfold (U : 𝑼) : 𝑼𝑻 U -> { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) } :=
-      match U as u return (𝑼𝑻 u -> {K : 𝑼𝑲 u & Val (𝑼𝑲_Ty u K)}) with
-      | either => fun Kv =>
-                    match Kv with
-                    | inl v => existT Left v
-                    | inr v => existT Right v
-                    end
-      end.
-    Lemma 𝑼_fold_unfold : forall (U : 𝑼) (Kv: 𝑼𝑻 U),
-        𝑼_fold U (𝑼_unfold U Kv) = Kv.
-    Proof. now intros [] []. Qed.
-    Lemma 𝑼_unfold_fold : forall (U : 𝑼) (Kv: { K : 𝑼𝑲 U & Val (𝑼𝑲_Ty U K) }),
-        𝑼_unfold U (𝑼_fold U Kv) = Kv.
-    Proof. now intros [] [[]]. Qed.
+  Definition union_unfold (U : unioni) : uniont U -> { K & Val (union_constructor_type U K) } :=
+    match U with
+    | either => fun Kv =>
+                  match Kv with
+                  | inl v => existT Left v
+                  | inr v => existT Right v
+                  end
+    end.
 
-    (** RECORDS **)
-    Definition 𝑹𝑭  : Set := Empty_set.
-    Definition 𝑹𝑭_Ty (R : 𝑹) : NCtx 𝑹𝑭 Ty := match R with end.
-    Definition 𝑹_fold (R : 𝑹) : NamedEnv Val (𝑹𝑭_Ty R) -> 𝑹𝑻 R := match R with end.
-    Definition 𝑹_unfold (R : 𝑹) : 𝑹𝑻 R -> NamedEnv Val (𝑹𝑭_Ty R) := match R with end.
-    Lemma 𝑹_fold_unfold : forall (R : 𝑹) (Kv: 𝑹𝑻 R),
-        𝑹_fold R (𝑹_unfold R Kv) = Kv.
-    Proof. intros []. Qed.
-    Lemma 𝑹_unfold_fold : forall (R : 𝑹) (Kv: NamedEnv Val (𝑹𝑭_Ty R)),
-        𝑹_unfold R (𝑹_fold R Kv) = Kv.
-    Proof. intros []. Qed.
+  Definition union_fold (U : unioni) : { K & Val (union_constructor_type U K) } -> uniont U :=
+    match U with
+    | either => fun Kv =>
+                  match Kv with
+                  | existT Left v  => inl v
+                  | existT Right v => inr v
+                  end
+    end.
 
-  End TypeDefKit.
+  Definition record_field_type (R : recordi) : NCtx Empty_set Ty :=
+    match R with end.
+
+  Definition record_fold (R : recordi) : NamedEnv Val (record_field_type R) -> recordt R :=
+    match R with end.
+  Definition record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) :=
+    match R with end.
+
+  Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
+    ltac:(destruct E; auto with typeclass_instances).
+  Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
+    ltac:(destruct E; auto with typeclass_instances).
+  Instance eqdec_union_denote U : EqDec (union_denote U) :=
+    ltac:(destruct U; cbn; auto with typeclass_instances).
+  Instance eqdec_union_constructors U : EqDec (union_constructors U) :=
+    ltac:(destruct U; cbn; auto with typeclass_instances).
+  Instance finite_union_constructors U : finite.Finite (union_constructors U) :=
+    ltac:(destruct U; cbn; auto with typeclass_instances).
+  Instance eqdec_record_denote R : EqDec (record_denote R) :=
+    ltac:(destruct R; auto with typeclass_instances).
+
+  #[refine] Instance typedefkit : TypeDefKit typedenotekit :=
+    {| unionk         := union_constructors;
+       unionk_ty      := union_constructor_type;
+       unionv_fold    := union_fold;
+       unionv_unfold  := union_unfold;
+       recordf        := Empty_set;
+       recordf_ty     := record_field_type;
+       recordv_fold   := record_fold;
+       recordv_unfold := record_unfold;
+    |}.
+  Proof.
+    - abstract (now intros [] []).
+    - abstract (now intros [] [[]]).
+    - abstract (intros []).
+    - abstract (intros []).
+  Defined.
+
+  Instance varkit : VarKit := DefaultVarKit.
 
   Include DefaultRegDeclKit.
   Include BaseMixin.
@@ -219,16 +222,16 @@ Module Import ExampleProgram <: Program ExampleBase.
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
-    | abs :        Fun [ "x" ∷ ty_int               ] ty_int
-    | cmp :        Fun [ "x" ∷ ty_int; "y" ∷ ty_int ] (ty_enum ordering)
-    | gcd :        Fun [ "x" ∷ ty_int; "y" ∷ ty_int ] ty_int
-    | gcdloop :    Fun [ "x" ∷ ty_int; "y" ∷ ty_int ] ty_int
-    | msum :       Fun [ "x" ∷ ty_union either; "y" ∷ ty_union either] (ty_union either)
-    | length {σ} : Fun [ "xs" ∷ ty_list σ           ] ty_int
-    | summaxlen :  Fun [ "xs" ∷ ty_list ty_int      ] (ty_prod (ty_prod ty_int ty_int) ty_int)
-    | fpthree16 :  Fun [ "sign" ∷ ty_bvec 1 ] (ty_bvec 16)
-    | fpthree32 :  Fun [ "sign" ∷ ty_bvec 1 ] (ty_bvec 32)
-    | fpthree64 :  Fun [ "sign" ∷ ty_bvec 1 ] (ty_bvec 64)
+    | abs :        Fun [ "x" ∷ ty.int               ] ty.int
+    | cmp :        Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] (ty.enum ordering)
+    | gcd :        Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
+    | gcdloop :    Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
+    | msum :       Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either)
+    | length {σ} : Fun [ "xs" ∷ ty.list σ           ] ty.int
+    | summaxlen :  Fun [ "xs" ∷ ty.list ty.int      ] (ty.prod (ty.prod ty.int ty.int) ty.int)
+    | fpthree16 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
+    | fpthree32 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
+    | fpthree64 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
     .
 
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -244,16 +247,16 @@ Module Import ExampleProgram <: Program ExampleBase.
 
     Local Coercion stm_exp : Exp >-> Stm.
 
-    Local Notation "'`LT'" := (@exp_val _ (ty_enum ordering) LT).
-    Local Notation "'`GT'" := (@exp_val _ (ty_enum ordering) GT).
-    Local Notation "'`EQ'" := (@exp_val _ (ty_enum ordering) EQ).
+    Local Notation "'`LT'" := (@exp_val _ (ty.enum ordering) LT).
+    Local Notation "'`GT'" := (@exp_val _ (ty.enum ordering) GT).
+    Local Notation "'`EQ'" := (@exp_val _ (ty.enum ordering) EQ).
     Local Notation "'`Left' e" := (exp_union either Left e) (at level 10, e at level 9).
     Local Notation "'`Right' e" := (exp_union either Right e) (at level 10, e at level 9).
     Local Notation "'x'"   := (@exp_var _ "x" _ _) : exp_scope.
     Local Notation "'y'"   := (@exp_var _ "y" _ _) : exp_scope.
     Local Notation "'z'"   := (@exp_var _ "z" _ _) : exp_scope.
 
-    Definition fun_msum : Stm ["x" ∷ ty_union either; "y" ∷ ty_union either] (ty_union either) :=
+    Definition fun_msum : Stm ["x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either) :=
       stm_match_union_alt either x
        (fun K =>
           match K with
@@ -261,45 +264,45 @@ Module Import ExampleProgram <: Program ExampleBase.
           | Right => MkAlt (pat_var "z") y
           end).
 
-    Definition fun_summaxlen : Stm ["xs" ∷ ty_list ty_int] (ty_prod (ty_prod ty_int ty_int) ty_int) :=
+    Definition fun_summaxlen : Stm ["xs" ∷ ty.list ty.int] (ty.prod (ty.prod ty.int ty.int) ty.int) :=
       stm_match_list
         (exp_var "xs")
-        (stm_val (ty_prod (ty_prod ty_int ty_int) ty_int) (0,0,0))
+        (stm_val (ty.prod (ty.prod ty.int ty.int) ty.int) (0,0,0))
         "y" "ys"
         (let: "sml" := call summaxlen (exp_var "ys") in
-         match: exp_var "sml" in (ty_prod ty_int ty_int , ty_int) with
+         match: exp_var "sml" in (ty.prod ty.int ty.int , ty.int) with
          | ("sm","l") =>
-           match: exp_var "sm" in (ty_int,ty_int) with
+           match: exp_var "sm" in (ty.int,ty.int) with
            | ("s","m") =>
              let: "m'" := if: exp_var "m" < y then y else exp_var "m" in
-             exp_binop binop_pair (exp_binop binop_pair (exp_var "s" + y) (exp_var "m'")) (exp_var "l" + exp_int 1)
+             exp_binop bop.pair (exp_binop bop.pair (exp_var "s" + y) (exp_var "m'")) (exp_var "l" + exp_int 1)
            end
          end).
 
-    Definition fun_fpthree' (e f : nat) : Stm [ "sign" ∷ ty_bvec 1 ] (ty_bvec (1 + e + f)) :=
-      let: "exp" ∷ ty_bvec e := stm_val (ty_bvec e) (bv.one e) in
-      let: "frac" ∷ ty_bvec f := stm_val (ty_bvec f) (bv.one f) in
+    Definition fun_fpthree' (e f : nat) : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec (1 + e + f)) :=
+      let: "exp" ∷ ty.bvec e := stm_val (ty.bvec e) (bv.one e) in
+      let: "frac" ∷ ty.bvec f := stm_val (ty.bvec f) (bv.one f) in
       exp_binop
-        (@binop_bvapp 1 (e + f))
+        (@bop.bvapp _ 1 (e + f))
         (exp_var "sign")
         (exp_binop
-           (@binop_bvapp e f)
+           (@bop.bvapp _ e f)
            (exp_var "exp")
            (exp_var "frac")).
 
-    Definition fun_fpthree16 : Stm [ "sign" ∷ ty_bvec 1 ] (ty_bvec 16) :=
+    Definition fun_fpthree16 : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16) :=
       (let n := 16 in
        let e := 5 in
        let f := (n - (e + 1)) in
        fun_fpthree' e f)%nat.
 
-    Definition fun_fpthree32 : Stm [ "sign" ∷ ty_bvec 1 ] (ty_bvec 32) :=
+    Definition fun_fpthree32 : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32) :=
       (let n := 32 in
        let e := 8 in
        let f := (n - (e + 1)) in
        fun_fpthree' e f)%nat.
 
-    Definition fun_fpthree64 : Stm [ "sign" ∷ ty_bvec 1 ] (ty_bvec 64) :=
+    Definition fun_fpthree64 : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64) :=
       (let n := 64 in
        let e := 11 in
        let f := (n - (e + 1)) in
@@ -326,7 +329,7 @@ Module Import ExampleProgram <: Program ExampleBase.
       | msum => fun_msum
       | length => stm_match_list
                     (exp_var "xs")
-                    (stm_val ty_int 0)
+                    (stm_val ty.int 0)
                     "y" "ys" (let: "n" := call length (exp_var "ys") in exp_int 1 + exp_var "n")
       | summaxlen => fun_summaxlen
       | fpthree16 => fun_fpthree16
@@ -370,23 +373,23 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
     (* Arguments asn_prop [_] & _. *)
     (* Arguments MkSepContractPun [_ _] & _ _ _ _. *)
 
-    Definition sep_contract_abs : SepContract [ "x" ∷ ty_int ] ty_int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty_int];
+    Definition sep_contract_abs : SepContract [ "x" ∷ ty.int ] ty.int :=
+      {| sep_contract_logic_variables := ["x" ∷ ty.int];
          sep_contract_localstore      := [term_var "x"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            asn_prop
-             ["x" ∷ ty_int; "result" ∷ ty_int]
+             ["x" ∷ ty.int; "result" ∷ ty.int]
              (fun x result => result = Z.abs x)
            (* asn_if *)
-           (*   (term_binop binop_lt (term_var "x") (term_val ty_int 0)) *)
+           (*   (term_binop binop_lt (term_var "x") (term_val ty.int 0)) *)
            (*   (asn_bool (term_binop binop_eq (term_var "result") (term_neg (term_var "x")))) *)
            (*   (asn_bool (term_binop binop_eq (term_var "result") (term_var "x"))) *)
       |}.
 
-    Definition sep_contract_cmp : SepContract ["x" ∷ ty_int; "y" ∷ ty_int] (ty_enum ordering)  :=
-       {| sep_contract_logic_variables := ["x" ∷ ty_int; "y" ∷ ty_int];
+    Definition sep_contract_cmp : SepContract ["x" ∷ ty.int; "y" ∷ ty.int] (ty.enum ordering)  :=
+       {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
           sep_contract_localstore      := [term_var "x"; term_var "y"];
           sep_contract_precondition    := asn_true;
           sep_contract_result          := "result";
@@ -395,48 +398,48 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
               ordering (term_var "result")
               (fun result =>
                  match result with
-                 | LT => asn_bool (term_binop binop_lt (term_var "x") (term_var "y"))
-                 | EQ => asn_bool (term_binop binop_eq (term_var "x") (term_var "y"))
-                 | GT => asn_bool (term_binop binop_gt (term_var "x") (term_var "y"))
+                 | LT => asn_bool (term_binop bop.lt (term_var "x") (term_var "y"))
+                 | EQ => asn_bool (term_binop bop.eq (term_var "x") (term_var "y"))
+                 | GT => asn_bool (term_binop bop.gt (term_var "x") (term_var "y"))
                  end)
        |}.
 
-    Definition sep_contract_gcd : SepContract [ "x" ∷ ty_int; "y" ∷ ty_int ] ty_int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty_int; "y" ∷ ty_int];
+    Definition sep_contract_gcd : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int :=
+      {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
          sep_contract_localstore      := [term_var "x"; term_var "y"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            @asn_prop
-             ["x" ∷ ty_int; "y" ∷ ty_int; "result" ∷ ty_int]
+             ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
              (fun x y result => result = Z.gcd x y)
       |}.
 
-    Definition sep_contract_gcdloop : SepContract [ "x" ∷ ty_int; "y" ∷ ty_int ] ty_int :=
-      {| sep_contract_logic_variables := ["x" ∷ ty_int; "y" ∷ ty_int];
+    Definition sep_contract_gcdloop : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int :=
+      {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
          sep_contract_localstore      := [term_var "x"; term_var "y"];
          sep_contract_precondition    :=
-           asn_bool (term_binop binop_le (term_val ty_int 0) (term_var "x")) ✱
-                    asn_bool (term_binop binop_le (term_val ty_int 0) (term_var "y"));
+           asn_bool (term_binop bop.le (term_val ty.int 0) (term_var "x")) ✱
+                    asn_bool (term_binop bop.le (term_val ty.int 0) (term_var "y"));
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            @asn_prop
-             ["x" ∷ ty_int; "y" ∷ ty_int; "result" ∷ ty_int]
+             ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
              (fun x y result => result = Z.gcd x y)
       |}.
 
-    Definition length_post {σ} (xs : list (Val σ)) (result : Val ty_int) :=
+    Definition length_post {σ} (xs : list (Val σ)) (result : Val ty.int) :=
       result = Z.of_nat (@Datatypes.length (Val σ) xs).
-    Definition sep_contract_length {σ} : SepContract [ "xs" ∷ ty_list σ ] ty_int :=
-      {| sep_contract_logic_variables := ["xs" ∷ ty_list σ ];
+    Definition sep_contract_length {σ} : SepContract [ "xs" ∷ ty.list σ ] ty.int :=
+      {| sep_contract_logic_variables := ["xs" ∷ ty.list σ ];
          sep_contract_localstore      := [term_var "xs"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
-         sep_contract_postcondition   := asn_prop ["xs"∷ty_list σ; "result"∷ty_int] length_post
+         sep_contract_postcondition   := asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post
       |}.
 
-    Definition sep_contract_summaxlen : SepContract [ "xs" ∷ ty_list ty_int ] (ty_prod (ty_prod ty_int ty_int) ty_int) :=
-      {| sep_contract_logic_variables := ["xs" ∷ ty_list ty_int ];
+    Definition sep_contract_summaxlen : SepContract [ "xs" ∷ ty.list ty.int ] (ty.prod (ty.prod ty.int ty.int) ty.int) :=
+      {| sep_contract_logic_variables := ["xs" ∷ ty.list ty.int ];
          sep_contract_localstore      := [term_var "xs"];
          sep_contract_precondition    := asn_true;
          sep_contract_result          := "result";
@@ -446,8 +449,8 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
              (asn_match_prod
                 (term_var "sm") "s" "m"
                 (asn_sep
-                   (asn_formula (formula_le (term_var "s") (term_binop binop_times (term_var "m") (term_var "l"))))
-                   (asn_formula (formula_le (term_val ty_int 0) (term_var "l")))));
+                   (asn_formula (formula_le (term_var "s") (term_binop bop.times (term_var "m") (term_var "l"))))
+                   (asn_formula (formula_le (term_val ty.int 0) (term_var "l")))));
       |}.
 
     Definition CEnv : SepContractEnv :=

@@ -30,7 +30,7 @@ From Katamaran Require Import
      Prelude
      Context
      Environment
-     Syntax.TypeDef.
+     Syntax.TypeDecl.
 
 Import ctx.notations.
 Import env.notations.
@@ -51,19 +51,19 @@ Module Type PatternsOn (Import TY : Types).
         (pat : TuplePat σs Δ) {σ : Ty} (x : N) :
         TuplePat (σs ▻ σ) (Δ ▻ x∷σ).
 
-    Inductive RecordPat : NCtx 𝑹𝑭 Ty -> NCtx N Ty -> Set :=
+    Inductive RecordPat : NCtx recordf Ty -> NCtx N Ty -> Set :=
     | recordpat_nil  : RecordPat [] []
     | recordpat_snoc
-        {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
-        (pat : RecordPat rfs Δ) (rf : 𝑹𝑭) {τ : Ty} (x : N) :
+        {rfs : NCtx recordf Ty} {Δ : NCtx N Ty}
+        (pat : RecordPat rfs Δ) (rf : recordf) {τ : Ty} (x : N) :
         RecordPat (rfs ▻ rf∷τ) (Δ ▻ x∷τ).
 
     Inductive Pattern : NCtx N Ty -> Ty -> Set :=
     | pat_var (x : N) {σ : Ty} : Pattern [ x∷σ ] σ
-    | pat_unit : Pattern [] ty_unit
-    | pat_pair (x y : N) {σ τ : Ty} : Pattern [ x∷σ; y∷τ ] (ty_prod σ τ)
-    | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty_tuple σs)
-    | pat_record {R Δ} (p : RecordPat (𝑹𝑭_Ty R) Δ) : Pattern Δ (ty_record R).
+    | pat_unit : Pattern [] ty.unit
+    | pat_pair (x y : N) {σ τ : Ty} : Pattern [ x∷σ; y∷τ ] (ty.prod σ τ)
+    | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty.tuple σs)
+    | pat_record {R Δ} (p : RecordPat (recordf_ty R) Δ) : Pattern Δ (ty.record R).
 
     Definition tuple_pattern_match_env {T : Ty -> Set} :
       forall {σs : Ctx Ty} {Δ : NCtx N Ty},
@@ -92,10 +92,10 @@ Module Type PatternsOn (Import TY : Types).
         end.
 
     Definition tuple_pattern_match_val {σs : Ctx Ty} {Δ : NCtx N Ty}
-             (p : TuplePat σs Δ) : Val (ty_tuple σs) -> NamedEnv Val Δ :=
+             (p : TuplePat σs Δ) : Val (ty.tuple σs) -> NamedEnv Val Δ :=
       fun lit => tuple_pattern_match_env p (@envrec.to_env Ty Val σs lit).
 
-    Fixpoint record_pattern_match_env {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+    Fixpoint record_pattern_match_env {V : Ty -> Set} {rfs : NCtx recordf Ty} {Δ : NCtx N Ty}
              (p : RecordPat rfs Δ) {struct p} : NamedEnv V rfs -> NamedEnv V Δ :=
       match p with
       | recordpat_nil => fun _ => []
@@ -106,7 +106,7 @@ Module Type PatternsOn (Import TY : Types).
             (env.lookup E ctx.in_zero)
       end.
 
-    Fixpoint record_pattern_match_env_reverse {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+    Fixpoint record_pattern_match_env_reverse {V : Ty -> Set} {rfs : NCtx recordf Ty} {Δ : NCtx N Ty}
              (p : RecordPat rfs Δ) {struct p} :  NamedEnv V Δ -> NamedEnv V rfs :=
       match p with
       | recordpat_nil => fun _ => env.nil
@@ -117,7 +117,7 @@ Module Type PatternsOn (Import TY : Types).
             (env.lookup E ctx.in_zero)
       end.
 
-    Lemma record_pattern_match_env_inverse_right {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+    Lemma record_pattern_match_env_inverse_right {V : Ty -> Set} {rfs : NCtx recordf Ty} {Δ : NCtx N Ty}
           (p : RecordPat rfs Δ) (vs : NamedEnv V Δ) :
       record_pattern_match_env p (record_pattern_match_env_reverse p vs) = vs.
     Proof.
@@ -127,7 +127,7 @@ Module Type PatternsOn (Import TY : Types).
         cbn. f_equal. now apply IHp.
     Qed.
 
-    Lemma record_pattern_match_env_inverse_left {V : Ty -> Set} {rfs : NCtx 𝑹𝑭 Ty} {Δ : NCtx N Ty}
+    Lemma record_pattern_match_env_inverse_left {V : Ty -> Set} {rfs : NCtx recordf Ty} {Δ : NCtx N Ty}
           (p : RecordPat rfs Δ) (vs : NamedEnv V rfs) :
       record_pattern_match_env_reverse p (record_pattern_match_env p vs) = vs.
     Proof.
@@ -158,8 +158,8 @@ Module Type PatternsOn (Import TY : Types).
     Qed.
 
     Definition record_pattern_match_val {R} {Δ : NCtx N Ty}
-      (p : RecordPat (𝑹𝑭_Ty R) Δ) : Val (ty_record R) -> NamedEnv Val Δ :=
-      fun v => record_pattern_match_env p (𝑹_unfold v).
+      (p : RecordPat (recordf_ty R) Δ) : Val (ty.record R) -> NamedEnv Val Δ :=
+      fun v => record_pattern_match_env p (recordv_unfold R v).
 
     Definition pattern_match_val {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
       Val σ -> NamedEnv Val Δ :=
@@ -183,7 +183,7 @@ Module Type PatternsOn (Import TY : Types).
                                      end
                                    end
       | pat_tuple p  => fun EΔ => envrec.of_env (tuple_pattern_match_env_reverse p EΔ)
-      | pat_record p => fun EΔ => 𝑹_fold (record_pattern_match_env_reverse p EΔ)
+      | pat_record p => fun EΔ => recordv_fold _ (record_pattern_match_env_reverse p EΔ)
       end.
 
     Lemma pattern_match_val_inverse_left {σ : Ty} {Δ : NCtx N Ty} {p : Pattern Δ σ}
@@ -196,7 +196,7 @@ Module Type PatternsOn (Import TY : Types).
       - unfold tuple_pattern_match_val.
         now rewrite tuple_pattern_match_env_inverse_left, envrec.of_to_env.
       - unfold record_pattern_match_val.
-        now rewrite record_pattern_match_env_inverse_left, 𝑹_fold_unfold.
+        now rewrite record_pattern_match_env_inverse_left, recordv_fold_unfold.
     Qed.
 
     Lemma pattern_match_val_inverse_right {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ)
@@ -213,7 +213,7 @@ Module Type PatternsOn (Import TY : Types).
       - unfold tuple_pattern_match_val.
         now rewrite envrec.to_of_env, tuple_pattern_match_env_inverse_right.
       - unfold record_pattern_match_val.
-        now rewrite 𝑹_unfold_fold, record_pattern_match_env_inverse_right.
+        now rewrite recordv_unfold_fold, record_pattern_match_env_inverse_right.
     Qed.
 
   End Patterns.

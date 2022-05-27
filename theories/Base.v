@@ -34,7 +34,6 @@ From Katamaran Require Export
      Prelude
      Syntax.Registers
      Syntax.TypeDecl
-     Syntax.TypeDef
      Syntax.Variables
      Tactics.
 From Katamaran Require Import
@@ -48,26 +47,10 @@ From Katamaran Require Import
 
 Module Type BaseMixin (Import TY : Types).
   Include
-    BinOpsOn TY <+ ExpressionsOn TY <+
+    ExpressionsOn TY <+
     TermsOn TY <+ PatternsOn TY <+
     OccursCheckOn TY <+ InstantiationOn TY <+
     PartialEvaluationOn TY.
-
-  Lemma 𝑼_fold_inj {U} (v1 v2 : {K : 𝑼𝑲 U & Val (𝑼𝑲_Ty K)}) :
-    𝑼_fold v1 = 𝑼_fold v2 <-> v1 = v2.
-  Proof.
-    split; try congruence. intros H.
-    apply (f_equal (@𝑼_unfold U)) in H.
-    now rewrite ?𝑼_unfold_fold in H.
-  Qed.
-
-  Lemma 𝑼_unfold_inj {U} (v1 v2 : Val (ty_union U)) :
-    𝑼_unfold v1 = 𝑼_unfold v2 <-> v1 = v2.
-  Proof.
-    split; try congruence. intros H.
-    apply (f_equal (@𝑼_fold U)) in H.
-    now rewrite ?𝑼_fold_unfold in H.
-  Qed.
 
   Notation PCtx := (NCtx 𝑿 Ty).
   Notation LCtx := (NCtx 𝑺 Ty).
@@ -87,5 +70,14 @@ End BaseMixin.
 
 Module Type Base := Types <+ RegDeclKit <+ BaseMixin.
 
-Module DefaultBase <: Base :=
-  DefaultVarKit <+ DefaultTypeDecl <+ DefaultTypeDefKit <+ DefaultRegDeclKit <+ BaseMixin.
+Module DefaultBase <: Base.
+
+  #[export] Instance typedeclkit : TypeDeclKit := DefaultTypeDeclKit.
+  #[export] Instance typedenotekit : TypeDenoteKit typedeclkit := DefaultTypeDenoteKit.
+  #[export] Instance typedefkit : TypeDefKit typedenotekit := DefaultTypeDefKit.
+  #[export] Instance varkit : VarKit := DefaultVarKit.
+
+  Include DefaultRegDeclKit.
+  Include BaseMixin.
+
+End DefaultBase.
