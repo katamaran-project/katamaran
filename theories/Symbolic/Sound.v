@@ -2244,7 +2244,8 @@ Module Soundness
     approx ι (Postprocessing.solve_uvars P) p.
   Proof.
     unfold approx, ApproxPath.
-    now rewrite ?wsafe_safe, ?safe_debug_safe, Postprocessing.solve_uvars_sound.
+    rewrite ?wsafe_safe, ?safe_debug_safe.
+    auto using Postprocessing.solve_uvars_sound.
   Qed.
 
   Lemma approx_demonic_close {w : World} (P : 𝕊 w) (p : Valuation w -> Prop) :

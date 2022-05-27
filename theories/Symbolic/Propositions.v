@@ -577,6 +577,23 @@ Module Type SymPropOn
     Instance sequiv_equivalence {Σ} : Equivalence (sequiv Σ).
     Proof. split; auto using sequiv_refl, sequiv_sym, sequiv_trans. Qed.
 
+    Definition simpl Σ : relation (𝕊 Σ) :=
+      fun p q => forall ι, safe p ι -> safe q ι.
+    Arguments simpl : clear implicits.
+    Notation "p =>> q" := (simpl _ p q) (at level 90, no associativity).
+
+    Definition simpl_refl {Σ} : Reflexive (simpl Σ).
+    Proof. intros p ι. auto. Qed.
+
+    Definition simpl_trans {Σ} : Transitive (simpl Σ).
+    Proof. intros p q r pq qr ι. auto. Qed.
+
+    Instance simpl_preorder {Σ} : PreOrder (simpl Σ).
+    Proof. split; auto using simpl_refl, simpl_trans. Qed.
+
+    Instance simpl_rewriterelation {Σ} : RewriteRelation (sequiv Σ).
+    Defined.
+
     Instance proper_angelic_close0 {Σ Σe} : Proper (sequiv (Σ ▻▻ Σe) ==> sequiv Σ) (angelic_close0 Σe).
     Proof. intros p q pq ι. rewrite ?safe_angelic_close0. now apply base.exist_proper. Qed.
 
@@ -587,8 +604,22 @@ Module Type SymPropOn
       now rewrite p12, q12.
     Qed.
 
+    Instance proper_angelic_binary_impl {Σ} : Proper (simpl Σ ==> simpl Σ ==> simpl Σ) (@angelic_binary Σ).
+    Proof.
+      unfold simpl.
+      intros p1 p2 p12 q1 q2 q12 ι; cbn.
+      intros []; auto.
+    Qed.
+
+
     Instance proper_demonic_close0 {Σ Σu} : Proper (sequiv (Σ ▻▻ Σu) ==> sequiv Σ) (demonic_close0 Σu).
     Proof. intros p q pq ι. rewrite ?safe_demonic_close0. now apply base.forall_proper. Qed.
+
+    Instance proper_demonic_close0_impl {Σ Σu} : Proper (simpl (Σ ▻▻ Σu) ==> simpl Σ) (demonic_close0 Σu).
+    Proof.
+      unfold simpl. intros p q pq ι. rewrite ?safe_demonic_close0.
+      intros HYP ιu. apply pq, HYP.
+    Qed.
 
     Instance proper_demonic_binary {Σ} : Proper (sequiv Σ ==> sequiv Σ ==> sequiv Σ) (@demonic_binary Σ).
     Proof.
@@ -597,22 +628,39 @@ Module Type SymPropOn
       now rewrite p12, q12.
     Qed.
 
+    Instance proper_demonic_binary_impl {Σ} : Proper (simpl Σ ==> simpl Σ ==> simpl Σ) (@demonic_binary Σ).
+    Proof. intros p1 p2 p12 q1 q2 q12 ι. cbn. intuition. Qed.
+
     Instance proper_assumek {Σ} (fml : Formula Σ) : Proper (sequiv Σ ==> sequiv Σ) (assumek fml).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
     Instance proper_assertk {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertk fml msg).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
+    Instance proper_assertk_impl {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (simpl Σ ==> simpl Σ) (assertk fml msg).
+    Proof. unfold simpl. intros p q pq ι. cbn. intuition. Qed.
+
     Instance proper_assume_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assume_vareq x t).
+    Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
+
+    Instance proper_assume_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
+      Proper (simpl (Σ - x∷σ) ==> simpl Σ) (assume_vareq x t).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
     Instance proper_assert_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assert_vareq x t msg).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
+    Instance proper_assert_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
+      Proper (simpl (Σ - x∷σ) ==> simpl Σ) (assert_vareq x t msg).
+    Proof. unfold simpl. intros p q pq ι. cbn. intuition. Qed.
+
     Instance proper_angelicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (angelicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.exist_proper. Qed.
+
+    Instance proper_angelicv_impl {Σ b} : Proper (simpl (Σ ▻ b) ==> simpl Σ) (angelicv b).
+    Proof. unfold simpl. intros p q pq ι [v H]. exists v. now apply pq. Qed.
 
     Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.forall_proper. Qed.
@@ -620,6 +668,10 @@ Module Type SymPropOn
     Instance proper_debug {Σ} {bt : AMessage Σ} :
       Proper (sequiv Σ ==> sequiv Σ) (debug bt).
     Proof. unfold sequiv. intros p q pq ι. cbn. now rewrite ?debug_equiv. Qed.
+
+    Instance proper_debug_impl {Σ} {bt : AMessage Σ} :
+      Proper (simpl Σ ==> simpl Σ) (debug bt).
+    Proof. unfold sequiv. intros p q pq ι. cbn. apply pq. Qed.
 
     Lemma angelic_close0_angelic_binary {Σ Σe} (p1 p2 : 𝕊 (Σ ▻▻ Σe)) :
       angelic_close0 Σe (angelic_binary p1 p2) <=>
@@ -1202,12 +1254,28 @@ Module Type SymPropOn
       Definition plug {Σ1 Σ2} (e : UCtx Σ1 Σ2) : 𝕊 Σ2 -> 𝕊 Σ1 :=
         match e with uctx Σu mfs => fun p => demonic_close0 Σu (assume_formulas mfs p) end.
 
+      Fixpoint close_message {Σ ΣΔ} : EMessage (Σ ▻▻ ΣΔ) -> EMessage Σ :=
+         match ΣΔ as c return (EMessage (Σ ▻▻ c) -> EMessage Σ) with
+         | ctx.nil      => fun msg => msg
+         | ctx.snoc Γ b => fun msg => close_message (EMsgThere msg)
+         end.
+
+      Definition plug_error {Σ1 Σ2} (ec : UCtx Σ1 Σ2) : EMessage Σ2 -> 𝕊 Σ1 :=
+       match ec with
+       | uctx Σu mfs as ec =>
+           fun msg =>
+             match mfs with
+             | List.nil      => error (close_message msg)
+             | List.cons _ _ => plug ec (error msg)
+             end
+       end.
+
       Fixpoint push {Σ1 Σ2} (ec : UCtx Σ1 Σ2) (p : 𝕊 Σ2) {struct p} : 𝕊 Σ1 :=
         match p with
         | angelic_binary p1 p2   => plug ec (angelic_binary (push uctx_refl p1) (push uctx_refl p2))
         | demonic_binary p1 p2   => plug ec (demonic_binary (push uctx_refl p1) (push uctx_refl p2))
             (* demonic_binary (push ec p1) (push ec p2) *)
-        | error msg              => plug ec (error msg)
+        | error msg              => plug_error ec msg
         | block                  => block
         | assertk fml msg p      => plug ec (assertk fml msg (push uctx_refl p))
         | assumek fml p          => push (uctx_formula ec fml) p
@@ -1226,11 +1294,22 @@ Module Type SymPropOn
         Proper (sequiv Σ ==> sequiv Σ) (assume_formulas mfs).
       Proof. intros p q pq ι. rewrite ?safe_assume_formulas. intuition. Qed.
 
+      Instance proper_assume_formulas_impl {Σ} (mfs : List Formula Σ) :
+        Proper (simpl Σ ==> simpl Σ) (assume_formulas mfs).
+      Proof. intros p q pq ι. rewrite ?safe_assume_formulas. intuition. Qed.
+
       Instance proper_plug {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
         Proper (sequiv Σ2 ==> sequiv Σ1) (plug ec).
       Proof.
         intros p q pq. destruct ec; cbn.
         now apply proper_demonic_close0, proper_assume_formulas.
+      Qed.
+
+      Instance proper_plug_impl {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
+        Proper (simpl Σ2 ==> simpl Σ1) (plug ec).
+      Proof.
+        intros p q pq. destruct ec; cbn.
+        now apply proper_demonic_close0_impl, proper_assume_formulas_impl.
       Qed.
 
       Lemma assume_formulas_demonic_binary {Σ} (fmls : List Formula Σ) (p1 p2 : 𝕊 Σ) :
@@ -1294,10 +1373,10 @@ Module Type SymPropOn
       Qed.
 
       Lemma push_plug {Σ1 Σ2} (ec : UCtx Σ1 Σ2) (p : 𝕊 Σ2) :
-        push ec p <=> plug ec p.
+        push ec p =>> plug ec p.
       Proof.
         revert Σ1 ec; induction p; cbn; intros Σ1 ec.
-        - apply proper_plug, proper_angelic_binary;
+        - apply proper_plug_impl, proper_angelic_binary_impl; cbn;
            [now rewrite IHp1 | now rewrite IHp2].
         - rewrite IHp1, IHp2. clear IHp1 IHp2.
           reflexivity.
@@ -1305,25 +1384,24 @@ Module Type SymPropOn
           (* rewrite <- demonic_close0_demonic_binary. *)
           (* apply proper_demonic_close0. *)
           (* now rewrite <- assume_formulas_demonic_binary. *)
-        - reflexivity.
-        - intros ι; cbn; split; auto. intros _.
-          destruct ec; cbn.
+        - now destruct ec as [? []].
+        - intros ι _. destruct ec; cbn.
           rewrite safe_demonic_close0; intros ιu.
           rewrite safe_assume_formulas; cbn; auto.
-        - apply proper_plug, proper_assertk, IHp.
+        - apply proper_plug_impl, proper_assertk_impl, IHp.
         - rewrite IHp. clear IHp.
           destruct ec; cbn. reflexivity.
-        - apply proper_plug, proper_angelicv, IHp.
-        - rewrite IHp. clear IHp.
-          destruct ec; cbn.
-          apply proper_demonic_close0.
-          rewrite assume_formulas_demonicv.
-          reflexivity.
-        - apply proper_plug, proper_assert_vareq, IHp.
+        - apply proper_plug_impl, proper_angelicv_impl, IHp.
+        - rewrite IHp. clear IHp. destruct ec; cbn.
+          apply proper_demonic_close0_impl. intros ι. cbn.
+          rewrite safe_assume_formulas. intros H Mmfs v.
+          specialize (H v). rewrite safe_assume_formulas in H.
+          apply H. now rewrite inst_subst, inst_sub_wk1.
+        - apply proper_plug_impl, proper_assert_vareq_impl, IHp.
         - destruct (uctx_subst_spec ec xIn t).
-          + rewrite IHp. rewrite H. reflexivity.
-          + apply proper_plug, proper_assume_vareq, IHp.
-        - apply proper_plug, proper_debug, IHp.
+          + rewrite IHp. intros ι. apply H.
+          + apply proper_plug_impl, proper_assume_vareq_impl, IHp.
+        - apply proper_plug_impl, proper_debug_impl, IHp.
       Qed.
 
     End SolveUvars.
@@ -1332,7 +1410,7 @@ Module Type SymPropOn
       SolveUvars.push SolveUvars.uctx_refl p.
 
     Lemma solve_uvars_sound {Σ} (p : 𝕊 Σ) :
-      forall ι, safe (solve_uvars p) ι <-> safe p ι.
+      forall ι, safe (solve_uvars p) ι -> safe p ι.
     Proof. apply (SolveUvars.push_plug SolveUvars.uctx_refl). Qed.
 
     Module Experimental.
