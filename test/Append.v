@@ -519,7 +519,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecifi
   | xs          | n          :=
     Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list.
 
-  Goal True. idtac "Timing -- simplify_plength_spec -- before". Abort.
+  Goal True. idtac "Timing before: llist/simplify_plength_spec". Abort.
   Lemma simplify_plength_spec {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) :
     let f := formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n)) in
     option.spec
@@ -536,7 +536,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecifi
     - split; auto.
     - now rewrite rightid_and_true, Nat2Z.inj_succ, Z.add_1_l, Z.succ_inj_wd.
   Qed.
-  Goal True. idtac "Timing -- simplify_plength_spec -- after". Abort.
+  Goal True. idtac "Timing after: llist/simplify_plength_spec". Abort.
 
   Equations simplify_preverseappend {Σ} (xs ys zs: Term Σ (ty.list ty.int)) : option (List Formula Σ) :=
   (* | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty.int) 1%Z) n := *)
@@ -547,7 +547,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecifi
   | xs | ys | zs          :=
     Some [formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_  ↦ ys) ► (_  ↦ zs))]%list.
 
-  Goal True. idtac "Timing -- simplify_preverseappend_spec -- before". Abort.
+  Goal True. idtac "Timing before: llist/simplify_preverseappend_spec". Abort.
   Lemma simplify_preverseappend_spec {Σ} (xs ys zs : Term Σ (ty.list ty.int)) :
     let f := formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_ ↦ ys) ► (_ ↦ zs)) in
     option.spec
@@ -565,7 +565,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecifi
     - now rewrite rev_append_rev.
     - now rewrite rev_alt.
   Qed.
-  Goal True. idtac "Timing -- simplify_preverseappend_spec -- after". Abort.
+  Goal True. idtac "Timing after: llist/simplify_preverseappend_spec". Abort.
 
   Definition simplify_user {Σ} (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ) :=
     match p with
@@ -686,35 +686,35 @@ Module ExampleSolver := MakeSolver DefaultBase ExampleSignature ExampleSpecifica
 Module Import ExampleExecutor :=
   MakeExecutor DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
 
-Goal True. idtac "Timing -- valid_contract_append -- before". Abort.
+Goal True. idtac "Timing before: llist/valid_contract_append". Abort.
 Lemma valid_contract_append : SMut.ValidContractReflect sep_contract_append fun_append.
 Proof. reflexivity. Qed.
-Goal True. idtac "Timing -- valid_contract_append -- after". Abort.
+Goal True. idtac "Timing after: llist/valid_contract_append". Abort.
 
-Goal True. idtac "Timing -- valid_contract_appendloop -- before". Abort.
+Goal True. idtac "Timing before: llist/valid_contract_appendloop". Abort.
 Lemma valid_contract_appendloop : SMut.ValidContractReflect sep_contract_appendloop fun_appendloop.
 Proof. reflexivity. Qed.
-Goal True. idtac "Timing -- valid_contract_appendloop -- after".  Abort.
+Goal True. idtac "Timing after: llist/valid_contract_appendloop". Abort.
 
-Goal True. idtac "Timing -- valid_contract_length -- before". Abort.
+Goal True. idtac "Timing before: llist/valid_contract_length". Abort.
 Lemma valid_contract_length : SMut.ValidContractReflect sep_contract_length fun_length.
 Proof. reflexivity. Qed.
-Goal True. idtac "Timing -- valid_contract_length -- after". Abort.
+Goal True. idtac "Timing after: llist/valid_contract_length". Abort.
 
-Goal True. idtac "Timing -- valid_contract_copy -- before". Abort.
+Goal True. idtac "Timing before: llist/valid_contract_copy". Abort.
 Lemma valid_contract_copy : SMut.ValidContractReflect sep_contract_copy fun_copy.
 Proof. reflexivity. Qed.
-Goal True. idtac "Timing -- valid_contract_copy -- after". Abort.
+Goal True. idtac "Timing after: llist/valid_contract_copy". Abort.
 
-Goal True. idtac "Timing -- valid_contract_reverse -- before". Abort.
+Goal True. idtac "Timing before: llist/valid_contract_reverse". Abort.
 Lemma valid_contract_reverse : SMut.ValidContractReflect sep_contract_reverse fun_reverse.
 Proof. reflexivity. Qed.
-Goal True. idtac "Timing -- valid_contract_reverse -- after". Abort.
+Goal True. idtac "Timing after: llist/valid_contract_reverse". Abort.
 
-Goal True. idtac "Timing -- valid_contract_reverseloop -- before". Abort.
+Goal True. idtac "Timing before: llist/valid_contract_reverseloop". Abort.
 Lemma valid_contract_reverseloop : SMut.ValidContractReflect sep_contract_reverseloop fun_reverseloop.
 Proof. reflexivity. Qed.
-Goal True. idtac "Timing -- valid_contract_reverseloop -- after". Abort.
+Goal True. idtac "Timing after: llist/valid_contract_reverseloop". Abort.
 
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
   MakeSemantics DefaultBase ExampleProgram.
@@ -972,7 +972,7 @@ Module ExampleModel.
         eauto using mkcons_sound, fst_sound, snd_sound, setsnd_sound.
     Qed.
 
-    Goal True. idtac "Timing -- lemmas -- before". Abort.
+    Goal True. idtac "Timing before: llist/lemmas". Abort.
     Lemma lemSem : LemmaSem.
     Proof.
       intros Γ l.
@@ -995,7 +995,7 @@ Module ExampleModel.
         iExists n.
         now iFrame.
     Qed.
-    Goal True. idtac "Timing -- lemmas -- after". Abort.
+    Goal True. idtac "Timing after: llist/lemmas". Abort.
 
   End WithIrisNotations.
 

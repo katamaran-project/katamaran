@@ -1128,13 +1128,13 @@ Compute (Postprocessing.solve_uvars *)
 (* Import List.ListNotations. *)
 (* Import SymProp.notations. *)
 
-Goal True. idtac "Timing -- minimalcaps -- before". Abort.
+Goal True. idtac "Timing before: minimalcaps". Abort.
 Lemma ValidContractsFun : forall {Δ τ} (f : Fun Δ τ),
     ValidContract f.
 Proof.
   destruct f; reflexivity.
 Qed.
-Goal True. idtac "Timing -- minimalcaps -- after". Abort.
+Goal True. idtac "Timing after: minimalcaps". Abort.
 
 (*
 Ltac debug_satisfy_forget_post :=

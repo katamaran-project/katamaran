@@ -528,19 +528,19 @@ Local Ltac solve :=
      auto
     ).
 
-Goal True. idtac "Timing -- test_example_length -- before". Abort.
+Goal True. idtac "Timing before: example/length". Abort.
 Lemma valid_contract_length {σ} : SMut.ValidContract (@sep_contract_length σ) (FunDef length).
 Proof.
   compute - [length_post].
   constructor. cbn.
   solve; lia.
 Qed.
-Goal True. idtac "Timing -- test_example_length -- after". Abort.
+Goal True. idtac "Timing after: example/length". Abort.
 
-Goal True. idtac "Timing -- test_example_cmp -- before". Abort.
+Goal True. idtac "Timing before: example/cmp". Abort.
 Lemma valid_contract_cmp : SMut.ValidContractReflect sep_contract_cmp (FunDef cmp).
 Proof. reflexivity. Qed.
-Goal True. idtac "Timing -- test_example_cmp -- after". Abort.
+Goal True. idtac "Timing after: example/cmp". Abort.
 
 (* Module MakeShallowExecutor *)
 (*   (Import B    : Base) *)
@@ -551,14 +551,13 @@ Goal True. idtac "Timing -- test_example_cmp -- after". Abort.
 (* Module Import ExampleCMut := MakeShallowExecutor ExampleBase ExampleSpecification. *)
 (* Import CMut. *)
 
-(* Goal True. idtac "Timing -- valid_cmut_contract_summaxlen -- before". Abort. *)
-(* Lemma valid_cmut_contract_summaxlen : CMut.ValidContract 1 sep_contract_summaxlen fun_summaxlen. *)
+(* Goal True. idtac "Timing before: example/shallow_summaxlen". Abort. *)
+(* Lemma valid_contract_shallow_summaxlen : CMut.ValidContract 1 sep_contract_summaxlen fun_summaxlen. *)
 (* Proof. *)
 (*   cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge]. *)
 (*   solve; nia. *)
 (* Qed. *)
-(* Goal True. idtac "Timing -- valid_cmut_contract_summaxlen -- after". Abort. *)
-(* Hint Resolve valid_cmut_contract_summaxlen : contracts. *)
+(* Goal True. idtac "Timing after: example/shallow_summaxlen". Abort. *)
 
 Import SymProp.notations.
 
@@ -587,21 +586,21 @@ Definition vc_summaxlen : SymProp [] :=
 (* Time Eval compute in (size vc_summaxlen). *)
 (* Time Eval compute in vc_summaxlen. *)
 
-(* Goal True. idtac "Timing -- test_example_summaxlen_slow -- before". Abort. *)
+(* Goal True. idtac "Timing before: example/summaxlen_slow". Abort. *)
 (* Lemma valid_contract_summaxlen_slow : SMut.ValidContract sep_contract_summaxlen fun_summaxlen. *)
 (* Proof. *)
 (*   compute. constructor. *)
 (*   compute - [Z.mul Z.add Z.le Z.ge Z.lt]. *)
 (*   solve; nia. *)
 (* Time Qed. *)
-(* Goal True. idtac "Timing -- test_example_summaxlen_slow -- after". Abort. *)
+(* Goal True. idtac "Timing after: example/summaxlen_slow". Abort. *)
 
-Goal True. idtac "Timing -- test_example_summaxlen_fast -- before". Abort.
-Lemma valid_contract_summaxlen_fast : SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
+Goal True. idtac "Timing before: example/summaxlen". Abort.
+Lemma valid_contract_summaxlen : SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
 Proof.
   apply SMut.validcontract_with_erasure_sound.
   compute. constructor.
   compute - [Z.mul Z.add Z.le Z.ge Z.lt].
   solve; nia.
 Qed.
-Goal True. idtac "Timing -- test_example_summaxlen_fast -- after". Abort.
+Goal True. idtac "Timing after: example/summaxlen". Abort.
