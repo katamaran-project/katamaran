@@ -43,7 +43,7 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
-     SemiConcrete.Mutator
+     Shallow.Executor
      Specification
      Symbolic.Mutator
      Symbolic.Solver
@@ -63,7 +63,7 @@ Module Soundness
   (Import SIG : ProgramLogicSignature B)
   (Import SPEC : Specification B SIG)
   (Import SOLV : SolverKit B SIG SPEC)
-  (Import SEMI : SemiConcrete B SIG SPEC)
+  (Import SHAL : ShallowExecOn B SIG SPEC)
   (Import SYMB : MutatorsOn B SIG SPEC SOLV).
 
   Import ModalNotations.

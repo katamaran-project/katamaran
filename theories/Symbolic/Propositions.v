@@ -1807,6 +1807,11 @@ Module Type SymPropOn
       - apply IHp.
     Qed.
 
+    Lemma erase_safe' {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) :
+      inst_symprop (erase_valuation ι) (erase_symprop p) ->
+      safe p ι.
+    Proof. apply erase_safe. Qed.
+
   End Erasure.
 
 End SymPropOn.

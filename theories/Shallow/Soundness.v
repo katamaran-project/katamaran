@@ -36,7 +36,7 @@ From Katamaran Require Import
      Prelude
      Program
      Syntax.ContractDecl
-     SemiConcrete.Mutator.
+     Shallow.Executor.
 
 Set Implicit Arguments.
 
@@ -47,7 +47,7 @@ Module Type Soundness
   (Import B : Base)
   (Import SIG : ProgramLogicSignature B)
   (Import SPEC : Specification B SIG)
-  (Import EXEC : SemiConcrete B SIG SPEC)
+  (Import EXEC : ShallowExecOn B SIG SPEC)
   (Import HOAR : ProgramLogicOn B SIG SPEC).
 
   Import sep.notations.

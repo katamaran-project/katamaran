@@ -41,8 +41,8 @@ From Equations Require Import
 From Katamaran Require Import
      Notations
      Specification
+     Shallow.Executor
      Symbolic.Mutator
-     SemiConcrete.Mutator
      Symbolic.Solver.
 
 Set Implicit Arguments.
@@ -960,14 +960,8 @@ Module Import MinCapsExecutor :=
   MakeExecutor MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSolver.
 Import SMut.
 
-(* Module MakeShallowExecutor
-  (Import B    : Base)
-  (Import SPEC : Specification B).
-
-  Include SemiConcrete B SPEC.
-End MakeShallowExecutor.
-Module Import MinCapsCMut := MakeShallowExecutor MinCapsBase MinCapsSpecification.
-Import CMut. *)
+(* Module Import MinCapsCMut := MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsSpecification. *)
+(* Import CMut. *)
 
 Local Ltac solve :=
   repeat
@@ -1073,11 +1067,11 @@ Definition contract_count_leaves {Δ τ} (c : SepContract Δ τ) (body : PROG.St
                              (exec_contract_path default_config 1 c body)
                            ))))) empty_count.
 
-(* Lemma shallow_exec_instr :
-  CMut.ValidContract 1 sep_contract_exec_instr fun_exec_instr.
-Proof.
-  (* compute. *)
-Admitted. *)
+(* Lemma shallow_exec_instr : *)
+(*   CMut.ValidContract 1 sep_contract_exec_instr fun_exec_instr. *)
+(* Proof. *)
+(*   compute. *)
+(* Admitted. *)
 
 Definition extend_postcond_with_debug {Δ τ} (c : SepContract Δ τ) : SepContract Δ τ :=
   match c with

@@ -40,8 +40,8 @@ From Equations Require Import
 From Katamaran Require Import
      Notations
      Semantics.Registers
-     SemiConcrete.Mutator
-     SemiConcrete.Sound
+     Shallow.Executor
+     Shallow.Soundness
      Symbolic.Mutator
      Symbolic.Solver
      Symbolic.Worlds
@@ -1025,8 +1025,8 @@ Module ExampleModel.
 
   (* Include Soundness DefaultBase ExampleSpecification ExampleSolverKit. *)
 
-  Include SemiConcrete DefaultBase ExampleSignature ExampleSpecification.
-  Include Katamaran.SemiConcrete.Sound.Soundness DefaultBase ExampleSignature ExampleSpecification.
+  Include ShallowExecOn DefaultBase ExampleSignature ExampleSpecification.
+  Include Shallow.Soundness.Soundness DefaultBase ExampleSignature ExampleSpecification.
   Include MutatorsOn DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
   Include Soundness DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
 

@@ -39,7 +39,7 @@ From Equations Require Import
 
 From Katamaran Require Import
      Semantics.Registers
-     SemiConcrete.Mutator
+     Shallow.Executor
      Symbolic.Mutator
      Symbolic.Solver
      Symbolic.Worlds
@@ -528,36 +528,30 @@ Local Ltac solve :=
      auto
     ).
 
-Goal True. idtac "Timing before: example/length". Abort.
-Lemma valid_contract_length {σ} : SMut.ValidContract (@sep_contract_length σ) (FunDef length).
-Proof.
-  compute - [length_post].
-  constructor. cbn.
-  solve; lia.
-Qed.
-Goal True. idtac "Timing after: example/length". Abort.
+(* Goal True. idtac "Timing before: example/length". Abort. *)
+(* Lemma valid_contract_length {σ} : SMut.ValidContract (@sep_contract_length σ) (FunDef length). *)
+(* Proof. *)
+(*   compute - [length_post]. *)
+(*   constructor. cbn. *)
+(*   solve; lia. *)
+(* Qed. *)
+(* Goal True. idtac "Timing after: example/length". Abort. *)
 
 Goal True. idtac "Timing before: example/cmp". Abort.
 Lemma valid_contract_cmp : SMut.ValidContractReflect sep_contract_cmp (FunDef cmp).
 Proof. reflexivity. Qed.
 Goal True. idtac "Timing after: example/cmp". Abort.
 
-(* Module MakeShallowExecutor *)
-(*   (Import B    : Base) *)
-(*   (Import SPEC : Specification B). *)
+Module Import ExampleShalExec := MakeShallowExecutor ExampleBase ExampleSig ExampleSpecification.
+Import CMut.
 
-(*   Include SemiConcrete B SPEC. *)
-(* End MakeShallowExecutor. *)
-(* Module Import ExampleCMut := MakeShallowExecutor ExampleBase ExampleSpecification. *)
-(* Import CMut. *)
-
-(* Goal True. idtac "Timing before: example/shallow_summaxlen". Abort. *)
-(* Lemma valid_contract_shallow_summaxlen : CMut.ValidContract 1 sep_contract_summaxlen fun_summaxlen. *)
-(* Proof. *)
-(*   cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge]. *)
-(*   solve; nia. *)
-(* Qed. *)
-(* Goal True. idtac "Timing after: example/shallow_summaxlen". Abort. *)
+Goal True. idtac "Timing before: example/summaxlen_shallow". Abort.
+Lemma valid_contract_summaxlen_shallow : CMut.ValidContract 1 sep_contract_summaxlen fun_summaxlen.
+Proof.
+  cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
+  solve; nia.
+Qed.
+Goal True. idtac "Timing after: example/summaxlen_shallow". Abort.
 
 Import SymProp.notations.
 

@@ -29,8 +29,8 @@ theories/Prelude.v
 theories/Program.v
 theories/Semantics.v
 theories/Semantics/Registers.v
-theories/SemiConcrete/Mutator.v
-theories/SemiConcrete/Sound.v
+theories/Shallow/Executor.v
+theories/Shallow/Soundness.v
 theories/Sep/Hoare.v
 theories/Sep/Logic.v
 theories/SmallStep/Inversion.v

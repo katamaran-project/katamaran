@@ -41,8 +41,8 @@ From RiscvPmp Require
 From Katamaran Require Import
      Iris.Model
      Notations
-     SemiConcrete.Mutator
-     SemiConcrete.Sound
+     Shallow.Executor
+     Shallow.Soundness
      Sep.Hoare
      Sep.Logic
      Semantics
@@ -87,19 +87,19 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase Contracts.RiscvPmpSi
   Notation "a '=' b" := (asn_eq a b).
   Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
   Notation "a '∨' b" := (asn_or a b).
-  Notation "a <ₜ b" := (term_binop binop_lt a b) (at level 60).
-  Notation "a <=ₜ b" := (term_binop binop_le a b) (at level 60).
-  Notation "a &&ₜ b" := (term_binop binop_and a b) (at level 80).
-  Notation "a ||ₜ b" := (term_binop binop_or a b) (at level 85).
-  Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
+  Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
+  Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
+  Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
+  Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
+  Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
 
-  Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty_bool :=
-    term_binop binop_eq e1 e2.
+  Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
+    term_binop bop.eq e1 e2.
 
   Local Notation "e1 '=?' e2" := (term_eqb e1 e2).
 
-  Definition z_term {Σ} : Z -> Term Σ ty_int := term_val ty_int.
+  Definition z_term {Σ} : Z -> Term Σ ty.int := term_val ty.int.
 
   Definition sep_contract_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
     ctx.map (fun '(x::σ) => x::σ) Δ ▻▻ Σ.
@@ -141,14 +141,14 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase Contracts.RiscvPmpSi
      asn_false))))))).
 
   Definition asn_reg_ptsto {Σ} (r : Term Σ ty_regno) (w : Term Σ ty_word) : Assertion Σ :=
-    asn_with_reg r (fun r => asn_chunk (chunk_ptsreg r w)) (asn_eq w (term_val ty_int 0%Z)).
+    asn_with_reg r (fun r => asn_chunk (chunk_ptsreg r w)) (asn_eq w (term_val ty.int 0%Z)).
 
-  Local Notation "e1 ',ₜ' e2" := (term_binop binop_pair e1 e2) (at level 100).
+  Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
   Notation "r '↦' val" := (asn_chunk (asn_reg_ptsto [r; val])) (at level 79).
   (* TODO: abstract away the concrete type, look into unions for that *)
   (* TODO: length of list should be 16, no duplicates *)
-  Definition pmp_entries {Σ} : Term Σ (ty_list (ty_prod ty_pmpcfgidx ty_pmpaddridx)) :=
+  Definition pmp_entries {Σ} : Term Σ (ty.list (ty.prod ty_pmpcfgidx ty_pmpaddridx)) :=
     term_list
       (cons (term_val ty_pmpcfgidx PMP0CFG ,ₜ term_val ty_pmpaddridx PMPADDR0)
             (cons (term_val ty_pmpcfgidx PMP1CFG ,ₜ term_val ty_pmpaddridx PMPADDR1) nil)).
@@ -162,13 +162,13 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase Contracts.RiscvPmpSi
   Local Notation "a '=' b" := (asn_eq a b).
   Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
   Local Notation "a '∨' b" := (asn_or a b).
-  Local Notation "a <ₜ b" := (term_binop binop_lt a b) (at level 60).
-  Local Notation "a <=ₜ b" := (term_binop binop_le a b) (at level 60).
-  Local Notation "a &&ₜ b" := (term_binop binop_and a b) (at level 80).
-  Local Notation "a ||ₜ b" := (term_binop binop_or a b) (at level 85).
-  Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty_unit opt xl alt_inl "_" alt_inr).
+  Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
+  Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
+  Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
+  Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
+  Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty.unit opt xl alt_inl "_" alt_inr).
   Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
-  Local Notation "e1 ',ₜ' e2" := (term_binop binop_pair e1 e2) (at level 100).
+  Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
   Import bv.notations.
 
 
@@ -186,14 +186,14 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase Contracts.RiscvPmpSi
        sep_contract_localstore      := [term_var "rs"; term_var "v"];
        sep_contract_precondition    := term_var "rs" ↦ term_var "w";
        sep_contract_result          := "result_wX";
-       sep_contract_postcondition   := term_var "result_wX" = term_val ty_unit tt ∗
+       sep_contract_postcondition   := term_var "result_wX" = term_val ty.unit tt ∗
                                        asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0]))
-                                         (term_var "rs" ↦ term_val ty_int 0%Z)
+                                         (term_var "rs" ↦ term_val ty.int 0%Z)
                                          (term_var "rs" ↦ term_var "v")
     |}.
 
   Definition sep_contract_fetch : SepContractFun fetch :=
-    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "w" :: ty_int];
+    {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "w" :: ty.int];
        sep_contract_localstore      := [];
        sep_contract_precondition    := asn_chunk (chunk_ptsreg pc (term_var "a")) ∗
                                                  term_var "a" ↦ₘ term_var "w";
@@ -234,7 +234,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase Contracts.RiscvPmpSi
        sep_contract_result          := "result_tick_pc";
        sep_contract_postcondition   := asn_chunk (chunk_ptsreg pc (term_var "an")) ∗
                                                  asn_chunk (chunk_ptsreg nextpc (term_var "an")) ∗
-                                                 term_var "result_tick_pc" = term_val ty_unit tt;
+                                                 term_var "result_tick_pc" = term_val ty.unit tt;
     |}.
 
   Definition CEnv : SepContractEnv :=
@@ -265,7 +265,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase Contracts.RiscvPmpSi
     |}.
 
   Definition sep_contract_write_ram : SepContractFunX write_ram :=
-    {| sep_contract_logic_variables := ["paddr" :: ty_int; "data" :: ty_word];
+    {| sep_contract_logic_variables := ["paddr" :: ty.int; "data" :: ty_word];
        sep_contract_localstore      := [term_var "paddr"; term_var "data"];
        sep_contract_precondition    := asn_true;
        sep_contract_result          := "result_write_ram";
@@ -273,7 +273,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase Contracts.RiscvPmpSi
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
-    {| sep_contract_logic_variables := ["code" :: ty_int; "instr" :: ty_ast];
+    {| sep_contract_logic_variables := ["code" :: ty.int; "instr" :: ty_ast];
        sep_contract_localstore      := [term_var "code"];
        sep_contract_precondition    := asn_chunk (chunk_user encodes_instr [term_var "code"; term_var "instr"]);
        sep_contract_result          := "result_decode";
@@ -467,8 +467,8 @@ Module BlockVerification.
       ω12 ∣ v22 <- @rX rs2 _ ;;
       let v12 := persist__term v11 ω12 in
       let bop := match op with
-                 | RISCV_ADD => binop_plus
-                 | RISCV_SUB => binop_minus
+                 | RISCV_ADD => bop.plus
+                 | RISCV_SUB => bop.minus
                  end in
       wX rd (peval_binop bop v12 v22).
 
@@ -618,25 +618,25 @@ Module BlockVerification.
     Local Notation "p '∗' q" := (asn_sep p q).
     Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
     Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
-    Local Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
-    Local Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
-    Local Notation "x * y" := (term_binop binop_times x y) : exp_scope.
+    Local Notation "x - y" := (term_binop bop.minus x y) : exp_scope.
+    Local Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
+    Local Notation "x * y" := (term_binop bop.times x y) : exp_scope.
 
     Section BlockSum.
 
-      Let Σ1 : LCtx := ["n" ∷ ty_int].
+      Let Σ1 : LCtx := ["n" ∷ ty.int].
 
       Example sum_pre : Assertion Σ1 :=
         asn_exist "s" _ (ra0 ↦ term_var "s") ∗
         ra4 ↦ term_var "n" ∗
         asn_exist "i" _ (ra5 ↦ term_var "i") ∗
-        asn_bool (term_binop binop_le (term_val ty_int 0%Z) (term_var "n")).
+        asn_bool (term_binop bop.le (term_val ty.int 0%Z) (term_var "n")).
 
       Example sum_post : Assertion Σ1 :=
-        ra0 ↦ term_val ty_int 0%Z ∗
+        ra0 ↦ term_val ty.int 0%Z ∗
         ra4 ↦ term_var "n" ∗
-        ra5 ↦ term_val ty_int 0%Z ∗
-        asn_bool (term_binop binop_le (term_val ty_int 0%Z) (term_var "n")).
+        ra5 ↦ term_val ty.int 0%Z ∗
+        asn_bool (term_binop bop.le (term_val ty.int 0%Z) (term_var "n")).
 
       Example vc_sum : 𝕊 Σ1 :=
         VC sum_pre block_sum sum_post.
@@ -645,23 +645,23 @@ Module BlockVerification.
 
     End BlockSum.
 
-    Let Σ1 : LCtx := ["n" ∷ ty_int; "s" ∷ ty_int; "i" ∷ ty_int].
+    Let Σ1 : LCtx := ["n" ∷ ty.int; "s" ∷ ty.int; "i" ∷ ty.int].
 
     (* Example sum_pre : Assertion Σ1 := *)
     (*   ra0 ↦ term_var "s" ∗ *)
     (*   ra4 ↦ term_var "n" ∗ *)
     (*   ra5 ↦ term_var "i" ∗ *)
-    (*   asn_bool (term_binop binop_le (term_val ty_int 0%Z) (term_var "n")) ∗ *)
-    (*   asn_eq (term_val ty_int 0%Z) (term_var "s") ∗ *)
-    (*   asn_eq (term_val ty_int 0%Z) (term_var "i"). *)
+    (*   asn_bool (term_binop bop.le (term_val ty.int 0%Z) (term_var "n")) ∗ *)
+    (*   asn_eq (term_val ty.int 0%Z) (term_var "s") ∗ *)
+    (*   asn_eq (term_val ty.int 0%Z) (term_var "i"). *)
 
     (* Example sum_loop : Assertion Σ1 := *)
     (*   ra0 ↦ term_var "s" ∗ *)
     (*   ra4 ↦ term_var "n" ∗ *)
     (*   ra5 ↦ term_var "i" ∗ *)
     (*   asn_eq *)
-    (*     (term_val ty_int 2%Z * term_var "s") *)
-    (*     (term_var "i" * (term_var "i" - term_val ty_int 1%Z)). *)
+    (*     (term_val ty.int 2%Z * term_var "s") *)
+    (*     (term_var "i" * (term_var "i" - term_val ty.int 1%Z)). *)
 
     (* Example sum_post : Assertion Σ1 := *)
     (*   ra0 ↦ term_var "s" ∗ *)
@@ -669,8 +669,8 @@ Module BlockVerification.
     (*   ra5 ↦ term_var "i" ∗ *)
     (*   asn_eq (term_var "i") (term_var "n") ∗ *)
     (*   asn_eq *)
-    (*     (term_val ty_int 2%Z * term_var "s") *)
-    (*     (term_var "n" * (term_var "n" - term_val ty_int 1%Z)). *)
+    (*     (term_val ty.int 2%Z * term_var "s") *)
+    (*     (term_var "n" * (term_var "n" - term_val ty.int 1%Z)). *)
 
  End SUM.
 
@@ -739,8 +739,8 @@ Module BlockVerification.
       ].
 
     Let Σ1 : LCtx :=
-          ["dst" :: ty_xlenbits; "src" :: ty_xlenbits; "size" :: ty_int;
-           "srcval" :: ty_list ty_word; "ret" :: ty_xlenbits].
+          ["dst" :: ty_xlenbits; "src" :: ty_xlenbits; "size" :: ty.int;
+           "srcval" :: ty.list ty_word; "ret" :: ty_xlenbits].
 
     Local Notation "p '∗' q" := (asn_sep p q).
     Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
@@ -771,7 +771,7 @@ Module BlockVerification.
       ra0 ↦ term_var "dst" ∗
       ra1 ↦ term_var "src" ∗
       ra2 ↦ term_var "size" ∗
-      asn_formula (formula_neq (term_var "size") (term_val ty_int 0)) ∗
+      asn_formula (formula_neq (term_var "size") (term_val ty.int 0)) ∗
       term_var "src" ↦[ term_var "size" ] term_var "srcval" ∗
       (∃ "dstval", term_var "dst" ↦[ term_var "size" ] term_var "dstval").
 
@@ -898,8 +898,7 @@ Module BlockVerificationDerived.
 
     End Contract.
 
-    Time Example vc1 : 𝕊 ε :=
-      Eval compute in
+    Example vc1 : 𝕊 ε :=
       let vc1 := BlockVerificationDerived.VC pre1 block1 post1 in
       let vc2 := Postprocessing.prune vc1 in
       let vc3 := Postprocessing.solve_evars vc2 in
@@ -914,13 +913,14 @@ Module BlockVerificationDerived.
     Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x,σ) P) (at level 200, right associativity, only printing, format "'∃'  x '∷' σ ,  '/' P").
     Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x,σ) P) (at level 200, right associativity, only printing, format "'∀'  x '∷' σ ,  '/' P").
     Notation "⊤" := (@SymProp.block _).
-    Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
-    Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
+    Notation "x - y" := (term_binop bop.minus x y) : exp_scope.
+    Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
 
-    Lemma sat_vc1 : SymProp.safe vc1 env.nil.
+    Lemma sat_vc1 : VerificationConditionWithErasure (Erasure.erase_symprop vc1).
     Proof.
-      repeat constructor; cbn; lia.
+      compute. constructor. cbv - [Z.sub Z.add]. lia.
     Qed.
+
   End Example.
 
 End BlockVerificationDerived.
@@ -981,7 +981,7 @@ Module BlockVerificationDerived2.
     fun _ =>
       ω1 ∣ a <- @demonic _ _ ;;
       ω2 ∣ na <- exec_instruction_any i a ;;
-      assert (formula_eq na (term_binop binop_plus (persist__term a ω2) (term_val ty_exc_code 4))).
+      assert (formula_eq na (term_binop bop.plus (persist__term a ω2) (term_val ty_exc_code 4))).
 
   Fixpoint exec_block_addr (b : list AST) : ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
     fun _ a =>
@@ -1063,8 +1063,8 @@ Module BlockVerificationDerived2.
     Notation "'∃' x '∷' σ , P" := (SymProp.angelicv (x,σ) P) (at level 200, right associativity, only printing, format "'∃'  x '∷' σ ,  '/' P").
     Notation "'∀' x '∷' σ , P" := (SymProp.demonicv (x,σ) P) (at level 200, right associativity, only printing, format "'∀'  x '∷' σ ,  '/' P").
     Notation "⊤" := (@SymProp.block _).
-    Notation "x - y" := (term_binop binop_minus x y) : exp_scope.
-    Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
+    Notation "x - y" := (term_binop bop.minus x y) : exp_scope.
+    Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
 
     Section ContractAddr.
 
@@ -1079,21 +1079,20 @@ Module BlockVerificationDerived2.
         fun _ ω a an =>
           persist (A := Assertion) (x1 ↦r term_var "y") ω ∗
           persist (A := Assertion) (x2 ↦r term_var "x") ω ∗
-          asn_formula (formula_eq an (term_binop binop_plus a (term_val _ (Z.of_nat 12 : Val ty_int)))).
+          asn_formula (formula_eq an (term_binop bop.plus a (term_val _ (Z.of_nat 12 : Val ty.int)))).
 
     End ContractAddr.
 
-    Time Example vc1 : 𝕊 ε :=
-      Eval compute in
+    Example vc1 : 𝕊 ε :=
       let vc1 := BlockVerificationDerived2.VC__addr pre1' block1 post1' in
       let vc2 := Postprocessing.prune vc1 in
       let vc3 := Postprocessing.solve_evars vc2 in
       let vc4 := Postprocessing.solve_uvars vc3 in
       vc4.
 
-    Lemma sat_vc1' : SymProp.safe vc1 env.nil.
+    Lemma sat_vc1' : VerificationConditionWithErasure (Erasure.erase_symprop vc1).
     Proof.
-      repeat constructor; cbn; try lia.
+      compute. constructor. cbv - [Z.sub Z.add]. lia.
     Qed.
 
   End Example.
@@ -1199,7 +1198,7 @@ Module BlockVerificationDerived2.
     Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
     Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
     Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
-    Local Notation "x + y" := (term_binop binop_plus x y) : exp_scope.
+    Local Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
     Local Notation "a '=' b" := (asn_eq a b).
 
     Let Σ__femtoinit : LCtx := [].
@@ -1244,30 +1243,29 @@ Module BlockVerificationDerived2.
           (∃ "v", x5 ↦ term_var "v") ∗
           (∃ "v", x6 ↦ term_var "v") ∗
           (∃ "v", x7 ↦ term_var "v") ∗
-          (pmp0cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
-          (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
+          (pmp0cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
+          (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
           (pmpaddr0 ↦ a + term_val ty_xlenbits 88) ∗
           (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
           (a + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42) ∗
           asn_formula (formula_eq na (a + term_val ty_xlenbits 88))
       )%exp.
 
-    Time Example vc__femtoinit : 𝕊 Σ__femtoinit :=
-      Eval vm_compute in
+    Example vc__femtoinit : 𝕊 Σ__femtoinit :=
       let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in
       let vc2 := Postprocessing.prune vc1 in
       let vc3 := Postprocessing.solve_evars vc2 in
       let vc4 := Postprocessing.solve_uvars vc3 in
       let vc5 := Postprocessing.prune vc4 in
       vc5.
-    Import SymProp.notations.
-    Set Printing Depth 200.
-    Print vc__femtoinit.
+    (* Import SymProp.notations. *)
+    (* Set Printing Depth 200. *)
+    (* Print vc__femtoinit. *)
 
-    Lemma sat__femtoinit : SymProp.safe vc__femtoinit env.nil.
+    Lemma sat__femtoinit : VerificationConditionWithErasure (Erasure.erase_symprop vc__femtoinit).
     Proof.
-      vm_compute; auto.
-    Admitted.
+      vm_compute. constructor. vm_compute. intros. auto.
+    Qed.
 
     Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code, "mpp"::ty_privilege].
     Let W__femtohandler : World := MkWorld Σ__femtohandler [].
@@ -1287,8 +1285,8 @@ Module BlockVerificationDerived2.
       (∃ "v", x5 ↦ term_var "v") ∗
       (∃ "v", x6 ↦ term_var "v") ∗
       (∃ "v", x7 ↦ term_var "v") ∗
-      (pmp0cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
-      (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
+      (pmp0cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
+      (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
       (pmpaddr0 ↦ a + term_val ty_xlenbits 16) ∗
       (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
       (a + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42)%exp.
@@ -1296,7 +1294,7 @@ Module BlockVerificationDerived2.
     Example femtokernel_handler_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femtohandler :=
       fun _ ω a na =>
       (
-          (mstatus ↦ term_val (ty_record rmstatus) {| MPP := User |}) ∗
+          (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word 72) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (mepc ↦ persist__term (term_var "epc") ω) ∗
@@ -1308,8 +1306,8 @@ Module BlockVerificationDerived2.
           (∃ "v", x5 ↦ term_var "v") ∗
           (∃ "v", x6 ↦ term_var "v") ∗
           (∃ "v", x7 ↦ term_var "v") ∗
-          (pmp0cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
-          (pmp1cfg ↦ term_val (ty_record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
+          (pmp0cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
+          (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
           (pmpaddr0 ↦ a + term_val ty_xlenbits 16) ∗
           (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
           (a + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42) ∗
@@ -1343,7 +1341,7 @@ Module BlockVerificationDerivedSem.
   Import weakestpre.
   Import tactics.
   Import BlockVerificationDerived.
-  Import Katamaran.SemiConcrete.Mutator.
+  Import Katamaran.Shallow.Executor.
   Import Model.
   Import RiscvPmpModel.
   Module PLOG <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.

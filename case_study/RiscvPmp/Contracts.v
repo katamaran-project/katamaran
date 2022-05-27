@@ -34,7 +34,7 @@ From RiscvPmp Require Import
      Machine.
 From Katamaran Require Import
      Notations
-     SemiConcrete.Mutator
+     Shallow.Executor
      Specification
      Symbolic.Mutator
      Symbolic.Solver

@@ -47,7 +47,10 @@ Import ListNotations.
 
 Set Implicit Arguments.
 
-Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B) (Import SPEC : Specification B SIG).
+Module Type ShallowExecOn
+  (Import B : Base)
+  (Import SIG : ProgramLogicSignature B)
+  (Import SPEC : Specification B SIG).
 
   Definition CDijkstra (A : Type) : Type :=
     (A -> Prop) -> Prop.
@@ -1289,4 +1292,13 @@ Module Type SemiConcrete (Import B : Base) (Import SIG : ProgramLogicSignature B
 
   End CMut.
 
-End SemiConcrete.
+End ShallowExecOn.
+
+Module MakeShallowExecutor
+  (Import B    : Base)
+  (Import SIG : ProgramLogicSignature B)
+  (Import SPEC : Specification B SIG).
+
+  Include ShallowExecOn B SIG SPEC.
+
+End MakeShallowExecutor.
