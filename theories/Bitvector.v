@@ -28,7 +28,6 @@
 
 From Coq Require Import
      Bool.Bool
-     Logic.StrictProp
      PeanoNat
      NArith.BinNat.
 From Equations Require Import
@@ -54,36 +53,49 @@ Delimit Scope bv_bitstring_scope with bits.
 Module bv.
 
   (* The given [positive] consist of fewer than n bits. *)
-  Fixpoint at_most (n : nat) {struct n} : positive -> SProp :=
+  Fixpoint at_most (n : nat) {struct n} : positive -> bool :=
     match n with
-    | O   => fun _ => sEmpty
+    | O   => fun _ => false
     | S n => fun p =>
                match p with
                | xI p => at_most n p
                | xO p => at_most n p
-               | xH => sUnit
+               | xH => true
                end
     end.
 
-  Definition is_wf (n : nat) (bs : N) : SProp :=
+  Definition is_wf (n : nat) (bs : N) : bool :=
     match bs with
-    | N0     => sUnit
+    | N0     => true
     | Npos p => at_most n p
     end.
 
   Record bv (n : nat) : Set :=
-    mk { bin : N; _ : is_wf n bin }.
+    mk { bin : N; _ : Is_true (is_wf n bin) }.
   Arguments mk {n} _ &.
   Set Transparent Obligations.
 
+  Definition proofirr {b : bool} :
+    forall (p q : Is_true b), p = q :=
+    match b with
+    | true  => fun p q => match p, q with
+                          | I , I => eq_refl
+                          end
+    | false => fun p => False_rect _ p
+    end.
+
   Definition bin_inj {n} (x y : bv n) : bin x = bin y -> x = y :=
-      match x , y with
-      | mk x p , mk y q =>
-          fun e : x = y =>
-            match e in _ = y return forall q : is_wf n y, mk x p = mk y q with
-            | eq_refl => fun q => eq_refl
-            end q
-      end.
+    match x , y with
+    | mk x p , mk y q =>
+        fun e : x = y =>
+          match e in _ = y return forall q, mk x p = mk y q with
+          | eq_refl =>
+              fun q =>
+                match proofirr p q with
+                | eq_refl => eq_refl
+                end
+          end q
+    end.
 
   Section Conversion.
 
@@ -98,33 +110,33 @@ Module bv.
       end.
 
     Definition wf_double (n : nat) (x : N) :
-      is_wf n x -> is_wf (S n) (N.double x) :=
-       match x with
-       | N0     => fun wf => wf
-       | Npos p => fun wf => wf
-       end.
+      Is_true (is_wf n x) -> Is_true (is_wf (S n) (N.double x)) :=
+      match x with
+      | N0     => fun wf => wf
+      | Npos p => fun wf => wf
+      end.
 
     Definition wf_succ_double (n : nat) (x : N) :
-      is_wf n x -> is_wf (S n) (N.succ_double x) :=
+      Is_true (is_wf n x) -> Is_true (is_wf (S n) (N.succ_double x)) :=
        match x with
        | N0     => fun wf => wf
        | Npos p => fun wf => wf
        end.
 
-    Fixpoint wf_trunc n : forall p, is_wf n (trunc n p) :=
+    Fixpoint wf_trunc n : forall p, Is_true (is_wf n (trunc n p)) :=
       match n with
-      | O   => fun _ => stt
+      | O   => fun _ => I
       | S n => fun p =>
                   match p with
                   | xI p => wf_succ_double n (trunc n p) (wf_trunc n p)
                   | xO p => wf_double n (trunc n p) (wf_trunc n p)
-                  | xH   => stt
+                  | xH   => I
                   end
       end.
 
     Definition of_N {n} (bs : N) : bv n :=
       match bs with
-      | N0     => mk N0 stt
+      | N0     => mk N0 I
       | Npos p => mk (trunc n p) (wf_trunc n p)
       end.
 
@@ -140,14 +152,37 @@ Module bv.
 
   Section Constants.
 
-    Definition zero n : bv n := mk 0 stt.
+    Definition zero n : bv n := mk 0 I.
     Definition one n : bv n :=
       match n with
-      | 0   => mk 0 stt
-      | S _ => mk 1 stt
+      | 0   => mk 0 I
+      | S _ => mk 1 I
       end.
 
   End Constants.
+
+  Section Equality.
+
+    Definition eqb {n : nat} (x y : bv n) : bool :=
+      N.eqb (bin x) (bin y).
+
+    Lemma eqb_spec {n : nat} : forall (x y : bv n), reflect (x = y) (eqb x y).
+    Proof.
+      intros [x wfx] [y wfy]. unfold eqb. cbn.
+      destruct (N.eqb_spec x y); constructor.
+      - destruct e. destruct (proofirr wfx wfy). reflexivity.
+      - now intros p%(f_equal (@bin _)).
+    Qed.
+
+    Instance eqdec_bv {n : nat} : EqDec (bv n) :=
+      fun x y =>
+        match N.eq_dec (bin x) (bin y) with
+        | left a  => left (bin_inj x y a)
+        | right n => right (fun e => n (f_equal (@bin _) e))
+        end.
+
+  End Equality.
+  Local Existing Instance eqdec_bv.
 
   Section NoConfusion.
 
@@ -171,37 +206,14 @@ Module bv.
     Next Obligation.
       intros n x y. destruct x as [x p], y as [y q].
       intros e. change_no_check (x = y) in e.
-      destruct e. reflexivity.
+      destruct e. cbn. now destruct proofirr.
     Qed.
     Next Obligation.
-      intros n x y e. destruct e. destruct x. reflexivity.
+      intros n x y e. apply uip.
     Qed.
 
   End NoConfusion.
   Local Existing Instance NoConfusionPackage_bv.
-
-  Section Equality.
-
-    Definition eqb {n : nat} (x y : bv n) : bool :=
-      N.eqb (bin x) (bin y).
-
-    Lemma eqb_spec {n : nat} : forall (x y : bv n), reflect (x = y) (eqb x y).
-    Proof.
-      intros [x wfx] [y wfy]. unfold eqb. cbn.
-      destruct (N.eqb_spec x y); constructor.
-      - now destruct e.
-      - now intros p%(f_equal (@bin _)).
-    Qed.
-
-    Instance eqdec_bv {n : nat} : EqDec (bv n) :=
-      fun x y =>
-        match N.eq_dec (bin x) (bin y) with
-        | left a  => left (bin_inj x y a)
-        | right n => right (fun e => n (f_equal (@bin _) e))
-        end.
-
-  End Equality.
-  Local Existing Instance eqdec_bv.
 
   Section Arithmetic.
 
@@ -232,7 +244,7 @@ Module bv.
   Section ListLike.
 
     Definition nil : bv 0 :=
-      mk N0 stt.
+      mk N0 I.
     Definition cons [n] (b : bool) (xs : bv n) : bv (S n) :=
       match xs with
         mk bs wf =>
@@ -246,9 +258,9 @@ Module bv.
     Definition nilView (xs : bv 0) : NilView xs :=
       match xs with
       | mk bs wf =>
-          match bs return forall wf : is_wf 0 bs, NilView (mk bs wf) with
-          | N0      => fun _ => nvnil
-          | N.pos p => sEmpty_rect _
+          match bs return forall wf : Is_true (is_wf 0 bs), NilView (mk bs wf) with
+          | N0      => fun q => match q with I => nvnil end
+          | N.pos p => fun q => False_rect _ q
           end wf
       end.
 
@@ -257,13 +269,13 @@ Module bv.
     Definition consView {n} (xs : bv (S n)) : ConsView xs :=
       match xs with
       | mk bs wf =>
-          match bs return forall wf : is_wf (S n) bs, ConsView (mk bs wf) with
-          | N0      => fun _ => cvcons false (mk 0 stt)
+          match bs return forall wf : Is_true (is_wf (S n) bs), ConsView (mk bs wf) with
+          | N0      => fun wf => cvcons false (@mk n 0 wf)
           | N.pos p =>
               match p with
               | xI p => fun wf => cvcons true  (mk (N.pos p) wf)
               | xO p => fun wf => cvcons false (mk (N.pos p) wf)
-              | xH   => fun _  => cvcons true  (mk 0 stt)
+              | xH   => fun wf => cvcons true  (mk 0 wf)
               end
           end wf
       end.
@@ -352,16 +364,15 @@ Module bv.
       destruct xs as [xs wfxs], ys as [ys wfys], x, y; intros Heq.
       - split; auto.
         apply noConfusion_inv in Heq.
-        apply N.succ_double_inj in Heq.
-        destruct Heq. reflexivity.
+        apply N.succ_double_inj in Heq. destruct Heq.
+        destruct (proofirr wfxs wfys). reflexivity.
       - exfalso. apply noConfusion_inv in Heq.
         destruct xs, ys; discriminate Heq.
       - exfalso. apply noConfusion_inv in Heq.
         destruct xs, ys; discriminate Heq.
       - split; auto.
-        apply noConfusion_inv in Heq.
-        apply N.double_inj in Heq.
-        destruct Heq. reflexivity.
+        apply noConfusion_inv, N.double_inj in Heq. destruct Heq.
+        destruct (proofirr wfxs wfys). reflexivity.
     Qed.
 
   End ListLike.
@@ -621,8 +632,8 @@ Module bv.
     Notation "[ 'bits' [ 0 ] ]" := (@of_bitstring 0 bitstring.bN)
       (only parsing) : bv_scope.
 
-    Notation "[ 'bv' x ]" := (mk x%xN stt) (format "[ 'bv'  x ]") : bv_scope.
-    Notation "[ 'bv' [ n ] x ]" := (@mk n x%xN stt) (only parsing) : bv_scope.
+    Notation "[ 'bv' x ]" := (mk x%xN I) (format "[ 'bv'  x ]") : bv_scope.
+    Notation "[ 'bv' [ n ] x ]" := (@mk n x%xN I) (only parsing) : bv_scope.
 
   End notations.
 
