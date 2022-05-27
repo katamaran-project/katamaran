@@ -66,11 +66,10 @@ Local Open Scope string_scope.
 (*** TERMS ***)
 
 Import DefaultBase.
+Notation ptr   := ty.int.
+Notation llist := (ty.option ptr).
 
 Module Import ExampleProgram <: Program DefaultBase.
-
-  Notation ptr   := ty.int.
-  Notation llist := (ty.option ptr).
 
   Section FunDeclKit.
     Inductive Fun : PCtx -> Ty -> Set :=
@@ -127,6 +126,17 @@ Module Import ExampleProgram <: Program DefaultBase.
 
     Definition fun_appendloop : Stm [ "p" ∷ ptr; "q" ∷ llist ] ty.unit :=
       lemma open_cons [exp_var "p"] ;;
+      let: "mbn" := foreign snd (exp_var "p") in
+      match: (exp_var "mbn") with
+      | inl "x" => call appendloop (exp_var "x") (exp_var "q")
+      | inr "tt" =>
+          lemma close_nil [exp_var "tt"] ;;
+          foreign setsnd (exp_var "p") (exp_var "q")
+      end;;
+      lemma close_cons [exp_var "p"].
+
+    Definition fun_appendloop_broken : Stm [ "p" ∷ ptr; "q" ∷ llist ] ty.unit :=
+      (* lemma open_cons [exp_var "p"] ;; *)
       let: "mbn" := foreign snd (exp_var "p") in
       match: (exp_var "mbn") with
       | inl "x" => call appendloop (exp_var "x") (exp_var "q")
@@ -715,6 +725,20 @@ Goal True. idtac "Timing before: llist/valid_contract_reverseloop". Abort.
 Lemma valid_contract_reverseloop : SMut.ValidContractReflect sep_contract_reverseloop fun_reverseloop.
 Proof. reflexivity. Qed.
 Goal True. idtac "Timing after: llist/valid_contract_reverseloop". Abort.
+
+Section DebugExample.
+  Import SymProp.notations.
+  Notation "x '∷' σ . P" := (@SymProp.EMsgThere _ (x ∷ σ) P) (at level 200, right associativity, only printing, format "x '∷' σ .  '/' P").
+  Notation "'error' x" := (SymProp.error x) (at level 200, only printing, format "'error'  x").
+  Notation "P" := (SymProp.EMsgHere P) (only printing).
+  Import ListNotations.
+
+  Lemma debug_appendloop_broken : SMut.ValidContract sep_contract_appendloop fun_appendloop_broken.
+  Proof.
+    compute.
+  Abort.
+
+End DebugExample.
 
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
   MakeSemantics DefaultBase ExampleProgram.
