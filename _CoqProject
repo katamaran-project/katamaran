@@ -15,8 +15,8 @@ case_study/RiscvPmp/Machine.v
 case_study/RiscvPmp/Model.v
 case_study/RiscvPmp/LoopVerification.v
 -R theories Katamaran
-test/Append.v
 test/Example.v
+test/LinkedList.v
 test/SumMaxLen.v
 theories/Attic/Disjoint.v
 theories/Attic/DisjointSound.v
@@ -31,10 +31,10 @@ theories/Prelude.v
 theories/Program.v
 theories/Semantics.v
 theories/Semantics/Registers.v
-theories/Shallow/Executor.v
-theories/Shallow/Soundness.v
 theories/Sep/Hoare.v
 theories/Sep/Logic.v
+theories/Shallow/Executor.v
+theories/Shallow/Soundness.v
 theories/SmallStep/Inversion.v
 theories/SmallStep/Progress.v
 theories/SmallStep/Step.v
