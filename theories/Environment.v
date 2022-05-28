@@ -658,12 +658,10 @@ Module notations.
   Notation "e .[?? x ]" := (@lookup _ _ _ e (x∷_) _)
     (at level 2, x at level 200, only parsing).
 
-  Notation "[ ]" := nil : env_scope.
+  (* #[deprecated(since="20220528", note="Use the specific [env] notation instead.")] *)
+  Notation "[ ]" := nil (only parsing) : env_scope.
+  Notation "[env]" := nil : env_scope.
   Notation "[ x ]" := (snoc nil _ x) : env_scope.
-  #[deprecated(since="20220204", note="Use the list compatible [ x ; .. ; z ] notation instead.")]
-  Notation "[ x , y , .. , z ]" :=
-    (snoc .. (snoc (snoc nil _ x) _ y) .. _ z)
-    (only parsing) : env_scope.
   Notation "[ E & x ; y ; .. ; z ]" :=
     (snoc .. (snoc (snoc E _ x) _ y) .. _ z)
     (format "[ '['  E  &  x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope.
@@ -679,10 +677,18 @@ Module notations.
     (only parsing) : env_scope.
     (* (format "[ 'nenv'  '[' x ;  '/' y ;  '/' .. ;  '/' z ']' ]") : env_scope. *)
 
+  (* Notations for NamedEnvs. Unfortunately we cannot (I think) define notations
+     with multiple iterators of a recursive pattern, such as for instance the
+     names of bindings and the value contained in the environment. Instead we
+     define non-recursive notations. *)
+  Notation "E .[ k ↦ v ]" :=
+    (@env.snoc (Binding _ _) _ _ E k v)
+    (at level 2, k at level 50, left associativity, format "E '/' .[ k  ↦  v ]") : env_scope.
+
   (* Sometimes it is necessary to specify both, the element of the context and
      of the environment in cases where the type-checker would otherwise be
      blocked on a higher-order unification problem. The list-like notations
-     below allow the user to do so sigma types. *)
+     below allow the user to do so using sigma types. *)
   Notation "[ 'kv' x ]" := (kvsnoc env.nil x)
     (format "[ 'kv'  x ]") : env_scope.
   Notation "[ 'kv' x ; y ; .. ; z ]" :=

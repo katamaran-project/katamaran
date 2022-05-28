@@ -610,10 +610,6 @@ Module ctx.
 
     Open Scope ctx_scope.
 
-    (* DEPRECATED *)
-    (* NB: ∶ ≠ : *)
-    (*    To typeset the next notation, use \: *)
-    Notation "x ∶ τ" := (MkB x τ) (only parsing) : ctx_scope.
     Notation "x :: τ" := (MkB x τ) (only parsing) : ctx_scope.
     Notation "N ∷ T" := (Binding N T) : type_scope.
     Notation "x ∷ t" := (MkB x t) : ctx_scope.
@@ -625,11 +621,8 @@ Module ctx.
 
     (* Use the same notations as in ListNotations. *)
     Notation "[ ]" := (nil) : ctx_scope.
+    Notation "[ctx]" := (nil) : ctx_scope.
     Notation "[ x ]" := (snoc nil x) : ctx_scope.
-    #[deprecated(since="20220204", note="Use the list compatible [ x ; .. ; z ] notation instead.")]
-    Notation "[ x , y , .. , z ]" :=
-      (snoc .. (snoc (snoc nil x) y) .. z)
-      (only parsing) : ctx_scope.
     Notation "[ x ; y ; .. ; z ]" :=
       (snoc .. (snoc (snoc nil x) y) .. z) : ctx_scope.
     Notation "Γ - x" := (@remove _ Γ x _) : ctx_scope.

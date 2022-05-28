@@ -2,6 +2,7 @@
 -arg "-w -deprecated-instance-without-locality"
 -arg "-w -deprecated-native-compiler-option"
 -arg "-w -disj-pattern-notation"
+-arg "-w -notation-overridden"
 -arg "-native-compiler no"
 -Q case_study/MinimalCaps MinimalCaps
 case_study/MinimalCaps/Base.v

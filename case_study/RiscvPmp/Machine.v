@@ -125,31 +125,31 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   (** Functions **)
   Inductive Fun : PCtx -> Ty -> Set :=
-  | rX                    : Fun [rs ∶ ty_regno] ty_xlenbits
-  | wX                    : Fun [rd ∶ ty_regno; v ∶ ty_xlenbits] ty.unit
+  | rX                    : Fun [rs ∷ ty_regno] ty_xlenbits
+  | wX                    : Fun [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit
   | get_arch_pc           : Fun ctx.nil ty_xlenbits
   | get_next_pc           : Fun ctx.nil ty_xlenbits
-  | set_next_pc           : Fun [addr ∶ ty_xlenbits] ty.unit
+  | set_next_pc           : Fun [addr ∷ ty_xlenbits] ty.unit
   | tick_pc               : Fun ctx.nil ty.unit
-  | abs                   : Fun [v ∶ ty.int] ty.int
-  | within_phys_mem       : Fun [paddr ∶ ty_xlenbits] ty.bool
-  | mem_read              : Fun [typ ∶ ty_access_type; paddr ∶ ty_xlenbits] ty_memory_op_result
-  | checked_mem_read      : Fun [t ∶ ty_access_type; paddr ∶ ty_xlenbits] ty_memory_op_result
-  | checked_mem_write     : Fun [paddr ∶ ty_xlenbits; data ∶ ty.int] ty_memory_op_result
-  | pmp_mem_read          : Fun [t∶ ty_access_type; p ∶ ty_privilege; paddr ∶ ty_xlenbits] ty_memory_op_result
-  | pmp_mem_write         : Fun [paddr ∶ ty_xlenbits; data ∶ ty.int; typ ∶ ty_access_type; priv ∶ ty_privilege] ty_memory_op_result
-  | pmpLocked             : Fun [cfg ∶ ty_pmpcfg_ent] ty.bool
+  | abs                   : Fun [v ∷ ty.int] ty.int
+  | within_phys_mem       : Fun [paddr ∷ ty_xlenbits] ty.bool
+  | mem_read              : Fun [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] ty_memory_op_result
+  | checked_mem_read      : Fun [t ∷ ty_access_type; paddr ∷ ty_xlenbits] ty_memory_op_result
+  | checked_mem_write     : Fun [paddr ∷ ty_xlenbits; data ∷ ty.int] ty_memory_op_result
+  | pmp_mem_read          : Fun [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] ty_memory_op_result
+  | pmp_mem_write         : Fun [paddr ∷ ty_xlenbits; data ∷ ty.int; typ ∷ ty_access_type; priv ∷ ty_privilege] ty_memory_op_result
+  | pmpLocked             : Fun [cfg ∷ ty_pmpcfg_ent] ty.bool
   | pmpWriteCfgReg        : Fun [idx :: ty_pmpcfgidx; value :: ty_xlenbits] ty.unit
   | pmpWriteCfg           : Fun [cfg :: ty_pmpcfg_ent; value :: ty_xlenbits] ty_pmpcfg_ent
   | pmpWriteAddr          : Fun [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits
-  | pmpCheck              : Fun [addr ∶ ty_xlenbits; acc ∶ ty_access_type; priv ∶ ty_privilege] (ty.option ty_exception_type)
-  | pmpCheckPerms         : Fun [ent ∶ ty_pmpcfg_ent; acc ∶ ty_access_type; priv ∶ ty_privilege] ty.bool
-  | pmpCheckRWX           : Fun [ent ∶ ty_pmpcfg_ent; acc ∶ ty_access_type] ty.bool
-  | pmpMatchEntry         : Fun [addr ∶ ty_xlenbits; acc ∶ ty_access_type; priv ∶ ty_privilege; ent ∶ ty_pmpcfg_ent; pmpaddr ∶ ty_xlenbits; prev_pmpaddr ∶ ty_xlenbits] ty_pmpmatch
-  | pmpAddrRange          : Fun [cfg ∶ ty_pmpcfg_ent; pmpaddr ∶ ty_xlenbits; prev_pmpaddr ∶ ty_xlenbits] ty_pmp_addr_range
-  | pmpMatchAddr          : Fun [addr ∶ ty_xlenbits; rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch
-  | process_load          : Fun [rd ∶ ty_regno; vaddr ∶ ty_xlenbits; value ∶ ty_memory_op_result] ty_retired
-  | mem_write_value       : Fun [paddr ∶ ty_xlenbits; value ∶ ty.int] ty_memory_op_result
+  | pmpCheck              : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type)
+  | pmpCheckPerms         : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool
+  | pmpCheckRWX           : Fun [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool
+  | pmpMatchEntry         : Fun [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch
+  | pmpAddrRange          : Fun [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range
+  | pmpMatchAddr          : Fun [addr ∷ ty_xlenbits; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch
+  | process_load          : Fun [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result] ty_retired
+  | mem_write_value       : Fun [paddr ∷ ty_xlenbits; value ∷ ty.int] ty_memory_op_result
   | main                  : Fun ctx.nil ty.unit
   | init_model            : Fun ctx.nil ty.unit
   | loop                  : Fun ctx.nil ty.unit
@@ -157,40 +157,40 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   | fetch                 : Fun ctx.nil ty_fetch_result
   | init_sys              : Fun ctx.nil ty.unit
   | init_pmp              : Fun ctx.nil ty.unit
-  | exceptionType_to_bits : Fun [e ∶ ty_exception_type] ty_exc_code
-  | privLevel_to_bits     : Fun [p ∶ ty_privilege] ty_xlenbits
-  | handle_mem_exception  : Fun [addr ∶ ty_xlenbits; e ∶ ty_exception_type] ty.unit
-  | exception_handler     : Fun [cur_priv ∶ ty_privilege; ctl ∶ ty_ctl_result; "pc" ∶ ty_xlenbits] ty.int
-  | exception_delegatee   : Fun [p ∶ ty_privilege] ty_privilege
-  | trap_handler          : Fun [del_priv ∶ ty_privilege; c ∶ ty_exc_code; "pc" ∶ ty_xlenbits] ty_xlenbits
-  | prepare_trap_vector   : Fun [p ∶ ty_privilege; cause ∶ ty_mcause] ty_xlenbits
-  | tvec_addr             : Fun [m ∶ ty.int; c ∶ ty_mcause] (ty.option ty_xlenbits)
+  | exceptionType_to_bits : Fun [e ∷ ty_exception_type] ty_exc_code
+  | privLevel_to_bits     : Fun [p ∷ ty_privilege] ty_xlenbits
+  | handle_mem_exception  : Fun [addr ∷ ty_xlenbits; e ∷ ty_exception_type] ty.unit
+  | exception_handler     : Fun [cur_priv ∷ ty_privilege; ctl ∷ ty_ctl_result; "pc" ∷ ty_xlenbits] ty.int
+  | exception_delegatee   : Fun [p ∷ ty_privilege] ty_privilege
+  | trap_handler          : Fun [del_priv ∷ ty_privilege; c ∷ ty_exc_code; "pc" ∷ ty_xlenbits] ty_xlenbits
+  | prepare_trap_vector   : Fun [p ∷ ty_privilege; cause ∷ ty_mcause] ty_xlenbits
+  | tvec_addr             : Fun [m ∷ ty.int; c ∷ ty_mcause] (ty.option ty_xlenbits)
   | handle_illegal        : Fun ctx.nil ty.unit
-  | check_CSR             : Fun [csr ∶ ty_csridx; p ∶ ty_privilege] ty.bool
-  | is_CSR_defined        : Fun [csr ∶ ty_csridx; p ∶ ty_privilege] ty.bool
-  | csrAccess             : Fun [csr ∶ ty_csridx] ty_access_type
-  | csrPriv               : Fun [csr ∶ ty_csridx] ty_privilege
-  | check_CSR_access      : Fun [csrrw ∶ ty_access_type; csrpr ∶ ty_privilege; p ∶ ty_privilege] ty.bool
-  | readCSR               : Fun [csr ∶ ty_csridx] ty_xlenbits
-  | writeCSR              : Fun [csr ∶ ty_csridx; value ∶ ty_xlenbits] ty.unit
-  | execute               : Fun ["ast" ∶ ty_ast] ty_retired
-  | execute_RTYPE         : Fun [rs2 ∶ ty_regno; rs1 ∶ ty_regno; rd ∶ ty_regno; op ∶ ty_rop] ty_retired
-  | execute_ITYPE         : Fun [imm ∶ ty.int; rs1 ∶ ty_regno; rd ∶ ty_regno; op ∶ ty_iop] ty_retired
-  | execute_UTYPE         : Fun [imm ∶ ty.int; rd ∶ ty_regno; op ∶ ty_uop] ty_retired
-  | execute_BTYPE         : Fun [imm ∶ ty.int; rs2 ∶ ty_regno; rs1 ∶ ty_regno; op ∶ ty_bop] ty_retired
-  | execute_RISCV_JAL     : Fun [imm ∶ ty.int; rd ∶ ty_regno] ty_retired
-  | execute_RISCV_JALR    : Fun [imm ∶ ty.int; rs1 ∶ ty_regno; rd ∶ ty_regno] ty_retired
-  | execute_LOAD          : Fun [imm ∶ ty.int; rs1 ∶ ty_regno; rd ∶ ty_regno] ty_retired
-  | execute_STORE         : Fun [imm ∶ ty.int; rs2 ∶ ty_regno; rs1 ∶ ty_regno] ty_retired
+  | check_CSR             : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
+  | is_CSR_defined        : Fun [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool
+  | csrAccess             : Fun [csr ∷ ty_csridx] ty_access_type
+  | csrPriv               : Fun [csr ∷ ty_csridx] ty_privilege
+  | check_CSR_access      : Fun [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege] ty.bool
+  | readCSR               : Fun [csr ∷ ty_csridx] ty_xlenbits
+  | writeCSR              : Fun [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit
+  | execute               : Fun ["ast" ∷ ty_ast] ty_retired
+  | execute_RTYPE         : Fun [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired
+  | execute_ITYPE         : Fun [imm ∷ ty.int; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_iop] ty_retired
+  | execute_UTYPE         : Fun [imm ∷ ty.int; rd ∷ ty_regno; op ∷ ty_uop] ty_retired
+  | execute_BTYPE         : Fun [imm ∷ ty.int; rs2 ∷ ty_regno; rs1 ∷ ty_regno; op ∷ ty_bop] ty_retired
+  | execute_RISCV_JAL     : Fun [imm ∷ ty.int; rd ∷ ty_regno] ty_retired
+  | execute_RISCV_JALR    : Fun [imm ∷ ty.int; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired
+  | execute_LOAD          : Fun [imm ∷ ty.int; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired
+  | execute_STORE         : Fun [imm ∷ ty.int; rs2 ∷ ty_regno; rs1 ∷ ty_regno] ty_retired
   | execute_ECALL         : Fun ctx.nil ty_retired
   | execute_MRET          : Fun ctx.nil ty_retired
-  | execute_CSR           : Fun [csr ∶ ty_csridx; rs1 ∶ ty_regno; rd ∶ ty_regno; op ∶ ty_csrop] ty_retired
+  | execute_CSR           : Fun [csr ∷ ty_csridx; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_csrop] ty_retired
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
-  | read_ram             : FunX [paddr ∶ ty.int] ty_word
-  | write_ram            : FunX [paddr ∶ ty.int; data ∶ ty_word] ty_word
-  | decode               : FunX [bv ∶ ty.int] ty_ast
+  | read_ram             : FunX [paddr ∷ ty.int] ty_word
+  | write_ram            : FunX [paddr ∷ ty.int; data ∷ ty_word] ty_word
+  | decode               : FunX [bv ∷ ty.int] ty_ast
   .
 
   Inductive Lem : PCtx -> Set :=
@@ -367,7 +367,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   (** Functions **)
   Import Bitvector.bv.notations.
-  Definition fun_rX : Stm [rs ∶ ty_regno] ty_xlenbits :=
+  Definition fun_rX : Stm [rs ∷ ty_regno] ty_xlenbits :=
     use lemma open_gprs ;;
     let: v := match: rs in bvec 3 with
               | 000 => z_exp 0
@@ -382,7 +382,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     use lemma close_gprs ;;
     v.
 
-  Definition fun_wX : Stm [rd ∶ ty_regno; v ∶ ty_xlenbits] ty.unit :=
+  Definition fun_wX : Stm [rd ∷ ty_regno; v ∷ ty_xlenbits] ty.unit :=
     use lemma open_gprs ;;
     match: rd in bvec 3 with
     | 000 => z_exp 0
@@ -402,7 +402,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_get_next_pc : Stm ctx.nil ty_xlenbits :=
     stm_read_register nextpc.
 
-  Definition fun_set_next_pc : Stm [addr ∶ ty_xlenbits] ty.unit :=
+  Definition fun_set_next_pc : Stm [addr ∷ ty_xlenbits] ty.unit :=
     stm_write_register nextpc addr ;;
     stm_val ty.unit tt.
 
@@ -411,7 +411,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     stm_write_register pc tmp ;;
     stm_val ty.unit tt.
 
-  Definition fun_abs : Stm [v ∶ ty.int] ty.int :=
+  Definition fun_abs : Stm [v ∷ ty.int] ty.int :=
     if: v < z_exp 0
     then v * z_exp (-1)
     else v.
@@ -421,11 +421,11 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     then stm_val ty.bool true
     else stm_val ty.bool false.
 
-  Definition fun_mem_read : Stm [typ ∶ ty_access_type; paddr ∶ ty_xlenbits] ty_memory_op_result :=
+  Definition fun_mem_read : Stm [typ ∷ ty_access_type; paddr ∷ ty_xlenbits] ty_memory_op_result :=
     let: tmp := stm_read_register cur_privilege in
     call pmp_mem_read typ tmp paddr.
 
-  Definition fun_checked_mem_read : Stm [t ∶ ty_access_type; paddr ∶ ty_xlenbits] ty_memory_op_result :=
+  Definition fun_checked_mem_read : Stm [t ∷ ty_access_type; paddr ∷ ty_xlenbits] ty_memory_op_result :=
     let: tmp := call within_phys_mem paddr in
     if: tmp
     then (use lemma extract_pmp_ptsto [paddr] ;;
@@ -439,7 +439,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
          |> KExecute pat_unit   => MemException E_Fetch_Access_Fault
          end.
 
-  Definition fun_checked_mem_write : Stm [paddr ∶ ty_xlenbits; data ∶ ty.int] ty_memory_op_result :=
+  Definition fun_checked_mem_write : Stm [paddr ∷ ty_xlenbits; data ∷ ty.int] ty_memory_op_result :=
     let: tmp := call within_phys_mem paddr in
     if: tmp
     then (use lemma extract_pmp_ptsto [paddr] ;;
@@ -448,21 +448,21 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
           MemValue tmp)
     else MemException E_SAMO_Access_Fault.
 
-  Definition fun_pmp_mem_read : Stm [t∶ ty_access_type; p ∶ ty_privilege; paddr ∶ ty_xlenbits] ty_memory_op_result :=
+  Definition fun_pmp_mem_read : Stm [t∷ ty_access_type; p ∷ ty_privilege; paddr ∷ ty_xlenbits] ty_memory_op_result :=
     let: tmp := call pmpCheck paddr t p in
     match: tmp with
     | inl e => MemException e
     | inr v => call checked_mem_read t paddr
     end.
 
-  Definition fun_pmp_mem_write : Stm [paddr ∶ ty_xlenbits; data ∶ ty.int; typ ∶ ty_access_type; priv ∶ ty_privilege] ty_memory_op_result :=
+  Definition fun_pmp_mem_write : Stm [paddr ∷ ty_xlenbits; data ∷ ty.int; typ ∷ ty_access_type; priv ∷ ty_privilege] ty_memory_op_result :=
     let: tmp := call pmpCheck paddr typ priv in
     match: tmp with
     | inl e => MemException e
     | inr v => call checked_mem_write paddr data
     end.
 
-  Definition fun_pmpLocked : Stm [cfg ∶ ty_pmpcfg_ent] ty.bool :=
+  Definition fun_pmpLocked : Stm [cfg ∷ ty_pmpcfg_ent] ty.bool :=
     match: cfg in rpmpcfg_ent with [L; A; X; W; R] => L end.
 
   Definition fun_pmpWriteCfgReg : Stm [idx :: ty_pmpcfgidx; value :: ty_xlenbits] ty.unit :=
@@ -484,7 +484,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Definition fun_pmpWriteAddr : Stm [locked :: ty.bool; addr :: ty_xlenbits; value :: ty_xlenbits] ty_xlenbits :=
     if: locked then addr else value.
 
-  Definition fun_pmpCheck : Stm [addr ∶ ty_xlenbits; acc ∶ ty_access_type; priv ∶ ty_privilege] (ty.option ty_exception_type) :=
+  Definition fun_pmpCheck : Stm [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege] (ty.option ty_exception_type) :=
     use lemma open_pmp_entries ;;
     let: check%string :=
       let: tmp1 := stm_read_register pmp0cfg in
@@ -520,7 +520,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         |> KExecute pat_unit   => Some E_Fetch_Access_Fault
         end.
 
-  Definition fun_pmpCheckPerms : Stm [ent ∶ ty_pmpcfg_ent; acc ∶ ty_access_type; priv ∶ ty_privilege] ty.bool :=
+  Definition fun_pmpCheckPerms : Stm [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type; priv ∷ ty_privilege] ty.bool :=
     match: priv in privilege with
     | Machine =>
       let: tmp := call pmpLocked ent in
@@ -531,7 +531,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       call pmpCheckRWX ent acc
     end.
 
-  Definition fun_pmpCheckRWX : Stm [ent ∶ ty_pmpcfg_ent; acc ∶ ty_access_type] ty.bool :=
+  Definition fun_pmpCheckRWX : Stm [ent ∷ ty_pmpcfg_ent; acc ∷ ty_access_type] ty.bool :=
     match: ent in rpmpcfg_ent with
       [L; A; X; W; R] =>
         match: acc in union access_type with
@@ -542,7 +542,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         end
     end.
 
-  Definition fun_pmpMatchEntry : Stm [addr ∶ ty_xlenbits; acc ∶ ty_access_type; priv ∶ ty_privilege; ent ∶ ty_pmpcfg_ent; pmpaddr ∶ ty_xlenbits; prev_pmpaddr ∶ ty_xlenbits] ty_pmpmatch :=
+  Definition fun_pmpMatchEntry : Stm [addr ∷ ty_xlenbits; acc ∷ ty_access_type; priv ∷ ty_privilege; ent ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmpmatch :=
     let: rng := call pmpAddrRange ent pmpaddr prev_pmpaddr in
     let: tmp := call pmpMatchAddr addr rng in
     match: tmp in pmpaddrmatch with
@@ -555,7 +555,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       else exp_val ty_pmpmatch PMP_Fail
     end.
 
-  Definition fun_pmpAddrRange : Stm [cfg ∶ ty_pmpcfg_ent; pmpaddr ∶ ty_xlenbits; prev_pmpaddr ∶ ty_xlenbits] ty_pmp_addr_range :=
+  Definition fun_pmpAddrRange : Stm [cfg ∷ ty_pmpcfg_ent; pmpaddr ∷ ty_xlenbits; prev_pmpaddr ∷ ty_xlenbits] ty_pmp_addr_range :=
     match: cfg in rpmpcfg_ent with
       [L; A; X; W; R] =>
         match: A in pmpaddrmatchtype with
@@ -564,7 +564,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         end
     end.
 
-  Definition fun_pmpMatchAddr : Stm [addr ∶ ty.int; rng ∶ ty_pmp_addr_range] ty_pmpaddrmatch :=
+  Definition fun_pmpMatchAddr : Stm [addr ∷ ty.int; rng ∷ ty_pmp_addr_range] ty_pmpaddrmatch :=
     match: rng with
     | inl v =>
       match: v in (ty.int , ty.int) with
@@ -581,7 +581,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | inr v => exp_val ty_pmpaddrmatch PMP_NoMatch
     end.
 
-  Definition fun_process_load : Stm [rd ∶ ty_regno; vaddr ∶ ty_xlenbits; value ∶ ty_memory_op_result] ty_retired :=
+  Definition fun_process_load : Stm [rd ∷ ty_regno; vaddr ∷ ty_xlenbits; value ∷ ty_memory_op_result] ty_retired :=
     match: value in union memory_op_result with
     |> KMemValue (pat_var "result") => call wX rd result;;
                                        stm_val ty_retired RETIRE_SUCCESS
@@ -589,7 +589,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                                        stm_val ty_retired RETIRE_FAIL
     end.
 
-  Definition fun_mem_write_value : Stm [paddr ∶ ty_xlenbits; value ∶ ty.int] ty_memory_op_result :=
+  Definition fun_mem_write_value : Stm [paddr ∷ ty_xlenbits; value ∷ ty.int] ty_memory_op_result :=
     let: tmp := stm_read_register cur_privilege in
     call pmp_mem_write paddr value Write tmp.
 
@@ -660,7 +660,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
         stm_val ty.unit tt
     end.
 
-  Definition fun_exceptionType_to_bits : Stm [e ∶ ty_exception_type] ty_exc_code :=
+  Definition fun_exceptionType_to_bits : Stm [e ∷ ty_exception_type] ty_exc_code :=
     match: e in union exception_type with
       |> KE_Fetch_Access_Fault pat_unit => stm_val ty_exc_code 1%Z
       |> KE_Illegal_Instr      pat_unit => stm_val ty_exc_code 2%Z
@@ -670,13 +670,13 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       |> KE_M_EnvCall          pat_unit => stm_val ty_exc_code 11%Z
     end.
 
-  Definition fun_handle_mem_exception : Stm [addr ∶ ty_xlenbits; e ∶ ty_exception_type] ty.unit :=
+  Definition fun_handle_mem_exception : Stm [addr ∷ ty_xlenbits; e ∷ ty_exception_type] ty.unit :=
     let: tmp1 := stm_read_register pc in
     let: tmp2 := stm_read_register cur_privilege in
     let: tmp3 := call exception_handler tmp2 (CTL_TRAP e) tmp1 in
     call set_next_pc tmp3.
 
-  Definition fun_exception_handler : Stm [cur_priv ∶ ty_privilege; ctl ∶ ty_ctl_result; "pc" ∶ ty_xlenbits] ty_xlenbits :=
+  Definition fun_exception_handler : Stm [cur_priv ∷ ty_privilege; ctl ∷ ty_ctl_result; "pc" ∷ ty_xlenbits] ty_xlenbits :=
     match: ctl in union ctl_result with
     |> KCTL_TRAP (pat_var "e") => let: del_priv := call exception_delegatee cur_priv in
                                   let: tmp := call exceptionType_to_bits e in
@@ -695,10 +695,10 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
                          stm_read_register mepc))
     end.
 
-  Definition fun_exception_delegatee : Stm [p ∶ ty_privilege] ty_privilege :=
+  Definition fun_exception_delegatee : Stm [p ∷ ty_privilege] ty_privilege :=
     stm_val ty_privilege Machine.
 
-  Definition fun_trap_handler : Stm [del_priv ∶ ty_privilege; c ∶ ty_exc_code; "pc" ∶ ty_xlenbits] ty_xlenbits :=
+  Definition fun_trap_handler : Stm [del_priv ∷ ty_privilege; c ∷ ty_exc_code; "pc" ∷ ty_xlenbits] ty_xlenbits :=
     stm_write_register mcause c ;;
     let: tmp := stm_read_register cur_privilege in
     stm_write_register mstatus (exp_record rmstatus [ tmp ]) ;;
@@ -721,7 +721,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp := stm_read_register mcause in
     call prepare_trap_vector del_priv tmp.
 
-  Definition fun_prepare_trap_vector : Stm [p ∶ ty_privilege; cause ∶ ty_mcause] ty_xlenbits :=
+  Definition fun_prepare_trap_vector : Stm [p ∷ ty_privilege; cause ∷ ty_mcause] ty_xlenbits :=
     let: tvec := match: p in privilege with
     | Machine => stm_read_register mtvec
     | User => fail "N extension (user-level interrupts) not supported"
@@ -738,7 +738,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | inr e   => fail "Invalid tvec mode"
     end.
 
-  Definition fun_tvec_addr : Stm [m ∶ ty_xlenbits; c ∶ ty_mcause] (ty.option ty_xlenbits) :=
+  Definition fun_tvec_addr : Stm [m ∷ ty_xlenbits; c ∷ ty_mcause] (ty.option ty_xlenbits) :=
     Some m.
 
   Definition fun_handle_illegal : Stm ctx.nil ty.unit :=
@@ -748,14 +748,14 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     let: tmp3 := call exception_handler tmp1 (CTL_TRAP t) tmp2 in
     call set_next_pc tmp3.
 
-  Definition fun_check_CSR : Stm [csr ∶ ty_csridx; p ∶ ty_privilege] ty.bool :=
+  Definition fun_check_CSR : Stm [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool :=
     let: tmp1 := call is_CSR_defined csr p in
     let: tmp2 := call csrAccess csr in
     let: tmp3 := call csrPriv csr in
     let: tmp := call check_CSR_access tmp2 tmp3 p in
     tmp1 && tmp.
 
-  Definition fun_is_CSR_defined : Stm [csr ∶ ty_csridx; p ∶ ty_privilege] ty.bool :=
+  Definition fun_is_CSR_defined : Stm [csr ∷ ty_csridx; p ∷ ty_privilege] ty.bool :=
     match: csr in csridx with
     | MStatus => match: p in privilege with
                  | Machine => stm_val ty.bool true
@@ -794,23 +794,23 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   (* NOTE: - normally this information is part of the CSR bitpattern,
              we are reusing our existing access_type
            - all CSRs we currently support are MRW (= Machine, ReadWrite) *)
-  Definition fun_csrAccess : Stm [csr ∶ ty_csridx] ty_access_type :=
+  Definition fun_csrAccess : Stm [csr ∷ ty_csridx] ty_access_type :=
     ReadWrite.
-  Definition fun_csrPriv : Stm [csr ∶ ty_csridx] ty_privilege :=
+  Definition fun_csrPriv : Stm [csr ∷ ty_csridx] ty_privilege :=
     stm_val ty_privilege Machine.
 
-  Definition fun_check_CSR_access : Stm [csrrw ∶ ty_access_type; csrpr ∶ ty_privilege; p ∶ ty_privilege] ty.bool :=
+  Definition fun_check_CSR_access : Stm [csrrw ∷ ty_access_type; csrpr ∷ ty_privilege; p ∷ ty_privilege] ty.bool :=
     let: tmp1 := call privLevel_to_bits csrpr in
     let: tmp2 := call privLevel_to_bits p in
     tmp1 <= tmp2.
 
-  Definition fun_privLevel_to_bits : Stm [p ∶ ty_privilege] ty_xlenbits :=
+  Definition fun_privLevel_to_bits : Stm [p ∷ ty_privilege] ty_xlenbits :=
     match: p in privilege with
     | Machine => stm_val ty.int 3%Z
     | User => stm_val ty.int 0%Z
     end.
 
-  Definition fun_readCSR : Stm [csr ∶ ty_csridx] ty_xlenbits :=
+  Definition fun_readCSR : Stm [csr ∷ ty_csridx] ty_xlenbits :=
     match: csr in csridx with
     | MStatus   => stm_mstatus_to_bits (stm_read_register mstatus)
     | MTvec     => stm_read_register mtvec
@@ -822,7 +822,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     | MPMPADDR1 => stm_read_register pmpaddr1
     end.
 
-  Definition fun_writeCSR : Stm [csr ∶ ty_csridx; value ∶ ty_xlenbits] ty.unit :=
+  Definition fun_writeCSR : Stm [csr ∷ ty_csridx; value ∷ ty_xlenbits] ty.unit :=
     match: csr in csridx with
     | MStatus => let: tmp := stm_mstatus_from_bits value in
                  stm_write_register mstatus tmp ;;
@@ -851,7 +851,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
 
   (* NOTE: normally the definitions of execute_X are inlined and defined as
            function clauses of execute (a scattered definition) *)
-  Definition fun_execute : Stm ["ast" ∶ ty_ast] ty_retired :=
+  Definition fun_execute : Stm ["ast" ∷ ty_ast] ty_retired :=
     match: exp_var "ast" in union ast with
     |> KRTYPE (pat_tuple (rs2 , rs1 , rd , op)) => call execute_RTYPE rs2 rs1 rd op
     |> KITYPE (pat_tuple (imm , rs1 , rd , op)) => call execute_ITYPE imm rs1 rd op
@@ -866,7 +866,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     |> KCSR (pat_tuple (csr , rs1 , rd , op))   => call execute_CSR csr rs1 rd op
     end.
 
-  Definition fun_execute_RTYPE : Stm [rs2 ∶ ty_regno; rs1 ∶ ty_regno; rd ∶ ty_regno; op ∶ ty_rop] ty_retired :=
+  Definition fun_execute_RTYPE : Stm [rs2 ∷ ty_regno; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_rop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: result :=
@@ -877,7 +877,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_ITYPE : Stm [imm ∶ ty.int; rs1 ∶ ty_regno; rd ∶ ty_regno; op ∶ ty_iop] ty_retired :=
+  Definition fun_execute_ITYPE : Stm [imm ∷ ty.int; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_iop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: immext := imm in
     let: result :=
@@ -887,7 +887,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
      call wX rd result ;;
      stm_val ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_UTYPE : Stm [imm ∶ ty.int; rd ∶ ty_regno; op ∶ ty_uop] ty_retired :=
+  Definition fun_execute_UTYPE : Stm [imm ∷ ty.int; rd ∷ ty_regno; op ∷ ty_uop] ty_retired :=
     let: off := imm in
     let: ret :=
        match: op in uop with
@@ -899,7 +899,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call wX rd ret ;;
     stm_val ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_RISCV_JAL : Stm [imm ∶ ty.int; rd ∶ ty_regno] ty_retired :=
+  Definition fun_execute_RISCV_JAL : Stm [imm ∷ ty.int; rd ∷ ty_regno] ty_retired :=
     let: tmp := stm_read_register pc in
     let: t := tmp + imm in
     let: tmp := call get_next_pc in
@@ -907,7 +907,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call set_next_pc t ;;
     stm_val ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_RISCV_JALR : Stm [imm ∶ ty.int ; rs1 ∶ ty_regno; rd ∶ ty_regno] ty_retired :=
+  Definition fun_execute_RISCV_JALR : Stm [imm ∷ ty.int ; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired :=
     let: tmp := call rX rs1 in
     let: t := tmp + imm in
     let: tmp := call get_next_pc in
@@ -915,7 +915,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call set_next_pc t ;;
     stm_val ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_BTYPE : Stm [imm ∶ ty.int; rs2 ∶ ty_regno; rs1 ∶ ty_regno; op ∶ ty_bop] ty_retired :=
+  Definition fun_execute_BTYPE : Stm [imm ∷ ty.int; rs2 ∷ ty_regno; rs1 ∷ ty_regno; op ∷ ty_bop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: rs2_val := call rX rs2 in
     let: taken :=
@@ -942,7 +942,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     else
       stm_val ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_LOAD : Stm [imm ∶ ty.int; rs1 ∶ ty_regno; rd ∶ ty_regno] ty_retired :=
+  Definition fun_execute_LOAD : Stm [imm ∷ ty.int; rs1 ∷ ty_regno; rd ∷ ty_regno] ty_retired :=
     let: offset := imm in
     let: tmp := call rX rs1 in
     let: paddr := tmp + offset in
@@ -950,7 +950,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
     call process_load rd paddr tmp ;;
     stm_val ty_retired RETIRE_SUCCESS.
 
-  Definition fun_execute_STORE : Stm [imm ∶ ty.int; rs2 ∶ ty_regno; rs1 ∶ ty_regno] ty_retired :=
+  Definition fun_execute_STORE : Stm [imm ∷ ty.int; rs2 ∷ ty_regno; rs1 ∷ ty_regno] ty_retired :=
     let: offset := imm in
     let: tmp := call rX rs1 in
     let: paddr := tmp + offset in
@@ -988,7 +988,7 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
       stm_val ty_retired RETIRE_FAIL
     end.
 
-  Definition fun_execute_CSR : Stm [csr ∶ ty_csridx; rs1 ∶ ty_regno; rd ∶ ty_regno; op ∶ ty_csrop] ty_retired :=
+  Definition fun_execute_CSR : Stm [csr ∷ ty_csridx; rs1 ∷ ty_regno; rd ∷ ty_regno; op ∷ ty_csrop] ty_retired :=
     let: rs1_val := call rX rs1 in
     let: tmp1 := stm_read_register cur_privilege in
     let: tmp2 := call check_CSR csr tmp1 in
