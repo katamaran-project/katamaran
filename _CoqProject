@@ -17,6 +17,7 @@ case_study/RiscvPmp/LoopVerification.v
 -R theories Katamaran
 test/Append.v
 test/Example.v
+test/SumMaxLen.v
 theories/Attic/Disjoint.v
 theories/Attic/DisjointSound.v
 theories/Base.v

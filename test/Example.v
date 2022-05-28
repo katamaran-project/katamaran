@@ -39,7 +39,6 @@ From Equations Require Import
 
 From Katamaran Require Import
      Semantics.Registers
-     Shallow.Executor
      Symbolic.Mutator
      Symbolic.Solver
      Symbolic.Worlds
@@ -228,7 +227,6 @@ Module Import ExampleProgram <: Program ExampleBase.
     | gcdloop :    Fun [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int
     | msum :       Fun [ "x" ∷ ty.union either; "y" ∷ ty.union either] (ty.union either)
     | length {σ} : Fun [ "xs" ∷ ty.list σ           ] ty.int
-    | summaxlen :  Fun [ "xs" ∷ ty.list ty.int      ] (ty.prod (ty.prod ty.int ty.int) ty.int)
     | fpthree16 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 16)
     | fpthree32 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 32)
     | fpthree64 :  Fun [ "sign" ∷ ty.bvec 1 ] (ty.bvec 64)
@@ -263,21 +261,6 @@ Module Import ExampleProgram <: Program ExampleBase.
           | Left  => MkAlt (pat_var "z") (`Left z)
           | Right => MkAlt (pat_var "z") y
           end).
-
-    Definition fun_summaxlen : Stm ["xs" ∷ ty.list ty.int] (ty.prod (ty.prod ty.int ty.int) ty.int) :=
-      stm_match_list
-        (exp_var "xs")
-        (stm_val (ty.prod (ty.prod ty.int ty.int) ty.int) (0,0,0))
-        "y" "ys"
-        (let: "sml" := call summaxlen (exp_var "ys") in
-         match: exp_var "sml" in (ty.prod ty.int ty.int , ty.int) with
-         | ("sm","l") =>
-           match: exp_var "sm" in (ty.int,ty.int) with
-           | ("s","m") =>
-             let: "m'" := if: exp_var "m" < y then y else exp_var "m" in
-             exp_binop bop.pair (exp_binop bop.pair (exp_var "s" + y) (exp_var "m'")) (exp_var "l" + exp_int 1)
-           end
-         end).
 
     Definition fun_fpthree' (e f : nat) : Stm [ "sign" ∷ ty.bvec 1 ] (ty.bvec (1 + e + f)) :=
       let: "exp" ∷ ty.bvec e := stm_val (ty.bvec e) (bv.one e) in
@@ -331,7 +314,6 @@ Module Import ExampleProgram <: Program ExampleBase.
                     (exp_var "xs")
                     (stm_val ty.int 0)
                     "y" "ys" (let: "n" := call length (exp_var "ys") in exp_int 1 + exp_var "n")
-      | summaxlen => fun_summaxlen
       | fpthree16 => fun_fpthree16
       | fpthree32 => fun_fpthree32
       | fpthree64 => fun_fpthree64
@@ -438,21 +420,6 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
          sep_contract_postcondition   := asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post
       |}.
 
-    Definition sep_contract_summaxlen : SepContract [ "xs" ∷ ty.list ty.int ] (ty.prod (ty.prod ty.int ty.int) ty.int) :=
-      {| sep_contract_logic_variables := ["xs" ∷ ty.list ty.int ];
-         sep_contract_localstore      := [term_var "xs"];
-         sep_contract_precondition    := asn_true;
-         sep_contract_result          := "result";
-         sep_contract_postcondition   :=
-           asn_match_prod
-             (term_var "result") "sm" "l"
-             (asn_match_prod
-                (term_var "sm") "s" "m"
-                (asn_sep
-                   (asn_formula (formula_le (term_var "s") (term_binop bop.times (term_var "m") (term_var "l"))))
-                   (asn_formula (formula_le (term_val ty.int 0) (term_var "l")))));
-      |}.
-
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
@@ -462,7 +429,6 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
         | gcdloop   => Some sep_contract_gcdloop
         | msum      => None
         | length    => Some sep_contract_length
-        | summaxlen => Some sep_contract_summaxlen
         | fpthree16 => None
         | fpthree32 => None
         | fpthree64 => None
@@ -541,60 +507,3 @@ Goal True. idtac "Timing before: example/cmp". Abort.
 Lemma valid_contract_cmp : SMut.ValidContractReflect sep_contract_cmp (FunDef cmp).
 Proof. reflexivity. Qed.
 Goal True. idtac "Timing after: example/cmp". Abort.
-
-Module Import ExampleShalExec := MakeShallowExecutor ExampleBase ExampleSig ExampleSpecification.
-Import CMut.
-
-Goal True. idtac "Timing before: example/summaxlen_shallow". Abort.
-Lemma valid_contract_summaxlen_shallow : CMut.ValidContract 1 sep_contract_summaxlen fun_summaxlen.
-Proof.
-  cbv - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
-  solve; nia.
-Qed.
-Goal True. idtac "Timing after: example/summaxlen_shallow". Abort.
-
-Import SymProp.notations.
-
-Fixpoint size {Σ} (s : SymProp Σ) : N :=
-   match s with
-   | SymProp.angelic_binary o1 o2 => 1 + size o1 + size o2
-   | SymProp.demonic_binary o1 o2 => 1 + size o1 + size o2
-   | SymProp.error msg => 0
-   | SymProp.block => 0
-   | SymProp.assertk fml msg k => 1 + size k
-   | SymProp.assumek fml k => 1 + size k
-   | SymProp.angelicv b k => 1 + size k
-   | SymProp.demonicv b k => 1 + size k
-   | @SymProp.assert_vareq _ x σ xIn t msg k => 1 + size k
-   | @SymProp.assume_vareq _ x σ xIn t k => 1 + size k
-   | SymProp.debug b k => 1 + size k
-   end.
-
-Definition vc_summaxlen : SymProp [] :=
-  Postprocessing.prune
-    (Postprocessing.solve_uvars
-        (Postprocessing.prune
-           (Postprocessing.solve_evars
-              (Postprocessing.prune (SMut.exec_contract_path default_config 1 sep_contract_summaxlen fun_summaxlen))))).
-
-(* Time Eval compute in (size vc_summaxlen). *)
-(* Time Eval compute in vc_summaxlen. *)
-
-(* Goal True. idtac "Timing before: example/summaxlen_slow". Abort. *)
-(* Lemma valid_contract_summaxlen_slow : SMut.ValidContract sep_contract_summaxlen fun_summaxlen. *)
-(* Proof. *)
-(*   compute. constructor. *)
-(*   compute - [Z.mul Z.add Z.le Z.ge Z.lt]. *)
-(*   solve; nia. *)
-(* Time Qed. *)
-(* Goal True. idtac "Timing after: example/summaxlen_slow". Abort. *)
-
-Goal True. idtac "Timing before: example/summaxlen". Abort.
-Lemma valid_contract_summaxlen : SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
-Proof.
-  apply SMut.validcontract_with_erasure_sound.
-  compute. constructor.
-  compute - [Z.mul Z.add Z.le Z.ge Z.lt].
-  solve; nia.
-Qed.
-Goal True. idtac "Timing after: example/summaxlen". Abort.

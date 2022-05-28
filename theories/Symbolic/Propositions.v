@@ -30,6 +30,7 @@ From Coq Require Import
      Classes.Morphisms
      Classes.RelationClasses
      Lists.List
+     NArith.NArith
      Relations.Relation_Definitions
      Strings.String.
 
@@ -715,6 +716,20 @@ Module Type SymPropOn
       Notation "t" := (term_val _ t) (at level 1, only printing).
     End notations.
 
+    Fixpoint size {Σ} (s : SymProp Σ) : N :=
+      match s with
+      | angelic_binary o1 o2 => 1 + size o1 + size o2
+      | demonic_binary o1 o2 => 1 + size o1 + size o2
+      | error msg => 0
+      | block => 0
+      | assertk fml msg k => 1 + size k
+      | assumek fml k => 1 + size k
+      | angelicv b k => 1 + size k
+      | demonicv b k => 1 + size k
+      | @assert_vareq _ x σ xIn t msg k => 1 + size k
+      | @assume_vareq _ x σ xIn t k => 1 + size k
+      | debug b k => 1 + size k
+      end.
   End SymProp.
   Notation SymProp := SymProp.SymProp.
   Notation 𝕊 := SymProp.SymProp.

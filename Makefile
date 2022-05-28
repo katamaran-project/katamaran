@@ -15,7 +15,7 @@ endif
 SRCS := $(shell egrep "^.*\.v$$" _CoqProject)
 AUXS := $(join $(dir $(SRCS)), $(addprefix ., $(notdir $(SRCS:.v=.aux))))
 
-.PHONY: coq clean
+.PHONY: coq clean summaxlen
 
 coq: Makefile.coq
 	$(E) "MAKE Makefile.coq"
@@ -35,3 +35,7 @@ install: Makefile.coq
 
 uninstall: Makefile.coq
 	$(Q)$(MAKE) -f Makefile.coq uninstall
+
+summaxlen: Makefile.coq
+	$(Q)rm -f test/SumMaxLen.vo*
+	$(Q)$(MAKE) -f Makefile.coq test/SumMaxLen.vo
