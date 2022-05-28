@@ -369,6 +369,19 @@ Module Soundness
       approx ι0 (@SDijk.assert_formula w0 msg fml) (@CDijk.assert_formula P).
     Proof. unfold SDijk.assert_formula. apply approx_assert_formulas; cbn; intuition. Qed.
 
+    Lemma approx_assert_eq_nenv {N} {Δ : NCtx N Ty} {w0 : World} {ι0 : Valuation w0} (Hpc : instpc (wco w0) ι0)
+      (msg : AMessage w0) :
+      approx ι0 (@SDijk.assert_eq_nenv N Δ w0 msg) CDijk.assert_eq_nenv.
+    Proof.
+      intros E1 ? -> E2 ? ->.
+      induction E1; [ destruct (env.nilView E2) | destruct (env.snocView E2) as [E2] ]; cbn.
+      - now apply approx_pure.
+      - apply approx_bind. apply IHE1.
+        intros w1 ω01 ι1 -> Hpc1 _ _ _.
+        apply approx_assert_formula; auto. cbn.
+        now do 2 rewrite (inst_persist (AT := STerm (type b))).
+    Qed.
+
     Lemma approx_angelic_list {M} `{Subst M, OccursCheck M} {AT A} `{Inst AT A}
       {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0) (msg : M w0) :
       approx ι0 (SDijk.angelic_list (A := AT) msg) (CDijk.angelic_list (A := A)).
@@ -685,6 +698,15 @@ Module Soundness
       unfold SMut.assert_formulas, CMut.assert_formula.
       apply approx_dijkstra; auto.
       now apply Dijk.approx_assert_formulas.
+    Qed.
+
+    Lemma approx_assert_eq_nenv {N Γ} (Δ : NCtx N Ty) {w0 : World} (ι0 : Valuation w0) (Hpc : instpc (wco w0) ι0) :
+      approx ι0 (@SMut.assert_eq_nenv N Γ Δ w0) (@CMut.assert_eq_nenv N Γ Δ).
+    Proof.
+      intros E1 ? ? E2 ? ? POST__s POST__c HPOST δs δc -> hs hc ->.
+      unfold SMut.assert_eq_nenv, CMut.assert_eq_nenv.
+      apply approx_dijkstra; auto.
+      apply Dijk.approx_assert_eq_nenv; auto.
     Qed.
 
   End AssumeAssert.
@@ -1920,11 +1942,9 @@ Module Soundness
     intros w1 ω01 ι1 -> Hpc1.
     intros evars__s evars__c Hevars.
     apply approx_bind_right.
-    apply approx_assert_formulas; auto.
-    { rewrite inst_formula_eqs_nctx.
-      rewrite inst_persist, inst_subst.
-      rewrite Hargs, Hevars.
-      reflexivity.
+    { apply approx_assert_eq_nenv; auto; hnf.
+      now rewrite Hevars, inst_subst.
+      now rewrite Hargs, inst_persist.
     }
     intros w2 ω12 ι2 -> Hpc2.
     apply approx_bind_right.

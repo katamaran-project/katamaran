@@ -106,33 +106,17 @@ Module Type ShallowExecOn
     Definition assert_formula (fml : Prop) : CDijkstra unit :=
       fun POST => fml /\ POST tt.
 
-    Definition assume_formulas {Σ} (ι : Valuation Σ) : List Formula Σ -> CDijkstra unit.
-      refine (
-        fix assumes fmls0 :=
-        match fmls0 with
-        | nil           => pure tt
-        | cons fml fmls1 => _
-        end).
-      eapply bind.
-      apply (assumes fmls1).
-      intros _.
-      apply assume_formula.
-      apply (inst fml ι).
-    Defined.
+    Equations(noeqns) assert_eq_env {Δ : Ctx Ty}
+      (δ δ' : Env Val Δ) : CDijkstra unit :=
+      assert_eq_env env.nil          env.nil            := pure tt;
+      assert_eq_env (env.snoc δ _ t) (env.snoc δ' _ t') :=
+        bind (assert_eq_env δ δ') (fun _ => assert_formula (t = t')).
 
-    Definition assert_formulas {Σ} (ι : Valuation Σ) : List Formula Σ -> CDijkstra unit.
-      refine (
-        fix asserts fmls0 :=
-        match fmls0 with
-        | nil           => pure tt
-        | cons fml fmls1 => _
-        end).
-      eapply bind.
-      apply (asserts fmls1).
-      intros _.
-      apply assert_formula.
-      apply (inst fml ι).
-    Defined.
+    Equations(noeqns) assert_eq_nenv {N : Set} {Δ : NCtx N Ty}
+      (δ δ' : NamedEnv Val Δ) : CDijkstra unit :=
+      assert_eq_nenv env.nil          env.nil            := pure tt;
+      assert_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
+        bind (assert_eq_nenv δ δ') (fun _ => assert_formula (t = t')).
 
     Definition angelic_binary {A} :
       CDijkstra A -> CDijkstra A -> CDijkstra A :=
@@ -244,30 +228,26 @@ Module Type ShallowExecOn
         firstorder. now subst.
     Qed.
 
-    Lemma wp_assume_formulas {Σ} (ι : Valuation Σ) (fmls : List Formula Σ) :
+    Lemma wp_assert_eq_env {Δ : Ctx Ty} (δ δ' : Env Val Δ) :
       forall POST,
-        assume_formulas ι fmls POST <->
-        (instpc fmls ι -> POST tt).
+        assert_eq_env δ δ' POST <-> δ = δ' /\ POST tt.
     Proof.
-      induction fmls; cbn; cbv [pure bind].
-      - intuition.
-      - intros POST.
-        rewrite IHfmls.
-        unfold assume_formula.
-        intuition.
+      induction δ; intros POST.
+      - destruct (env.nilView δ'). intuition.
+      - destruct (env.snocView δ'); cbn.
+        unfold bind, assert_formula.
+        now rewrite IHδ, env.inversion_eq_snoc.
     Qed.
 
-    Lemma wp_assert_formulas {Σ} (ι : Valuation Σ) (fmls : List Formula Σ) :
+    Lemma wp_assert_eq_nenv {N} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) :
       forall POST,
-        assert_formulas ι fmls POST <->
-        (instpc fmls ι /\ POST tt).
+        assert_eq_nenv δ δ' POST <-> δ = δ' /\ POST tt.
     Proof.
-      induction fmls; cbn; cbv [pure bind].
-      - cbv. intuition.
-      - intros POST.
-        rewrite IHfmls.
-        unfold assert_formula.
-        intuition.
+      induction δ; intros POST.
+      - destruct (env.nilView δ'). intuition.
+      - destruct (env.snocView δ') as [δ']; cbn in *.
+        unfold bind, assert_formula.
+        now rewrite IHδ, (@env.inversion_eq_snoc _ _ _ b δ δ').
     Qed.
 
   End CDijk.
@@ -376,10 +356,10 @@ Module Type ShallowExecOn
         dijkstra (CDijk.assume_formula fml).
       Definition assert_formula {Γ} (fml : Prop) : CMut Γ Γ unit :=
         dijkstra (CDijk.assert_formula fml).
-      Definition assume_formulas {Γ Σ} (ι : Valuation Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
-        dijkstra (CDijk.assume_formulas ι fmls).
-      Definition assert_formulas {Γ Σ} (ι : Valuation Σ) (fmls : list (Formula Σ)) : CMut Γ Γ unit :=
-        dijkstra (CDijk.assert_formulas ι fmls).
+      Definition assert_eq_env {Γ} {Δ : Ctx Ty} (δ δ' : Env Val Δ) : CMut Γ Γ unit :=
+        dijkstra (CDijk.assert_eq_env δ δ').
+      Definition assert_eq_nenv {N Γ} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) : CMut Γ Γ unit :=
+        dijkstra (CDijk.assert_eq_nenv δ δ').
 
     End AssumeAssert.
 
@@ -1121,11 +1101,11 @@ Module Type ShallowExecOn
 
     Section Exec.
 
-      Definition call_contract {Γ Δ τ} (contract : SepContract Δ τ) (vs : CStore Δ) : CMut Γ Γ (Val τ) :=
+      Definition call_contract {Γ Δ τ} (contract : SepContract Δ τ) (args : CStore Δ) : CMut Γ Γ (Val τ) :=
         match contract with
         | MkSepContract _ _ Σe δ req result ens =>
           ι <- angelic_ctx Σe ;;
-          assert_formula (inst δ ι = vs) ;;
+          assert_eq_nenv (inst δ ι) args ;;
           consume ι req  ;;
           v <- demonic τ ;;
           produce (env.snoc ι (result∷τ) v) ens ;;

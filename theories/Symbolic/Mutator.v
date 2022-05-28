@@ -448,6 +448,22 @@ Module Type MutatorsOn
       fun w0 msg fml0 =>
         assert_formulas msg (cons fml0 nil).
 
+    Equations(noeqns) assert_eq_env {Δ : Ctx Ty} :
+      let E := fun w : World => Env (Term w) Δ in
+      ⊢ AMessage -> E -> E -> SDijkstra Unit :=
+      assert_eq_env msg env.nil          env.nil            := pure tt;
+      assert_eq_env msg (env.snoc δ _ t) (env.snoc δ' _ t') :=
+        ⟨ ω ⟩ _ <- assert_eq_env msg δ δ' ;;
+        assert_formula msg⟨ω⟩ (formula_eq t⟨ω⟩ t'⟨ω⟩).
+
+    Equations(noeqns) assert_eq_nenv {N} {Δ : NCtx N Ty} :
+      let E := fun w : World => NamedEnv (Term w) Δ in
+      ⊢ AMessage -> E -> E -> SDijkstra Unit :=
+      assert_eq_nenv msg env.nil          env.nil            := pure tt;
+      assert_eq_nenv msg (env.snoc δ _ t) (env.snoc δ' _ t') :=
+        ⟨ ω ⟩ _ <- assert_eq_nenv msg δ δ' ;;
+        assert_formula msg⟨ω⟩ (formula_eq t⟨ω⟩ t'⟨ω⟩).
+
     Definition angelic_binary {A} :
       ⊢ SDijkstra A -> SDijkstra A -> SDijkstra A :=
       fun w m1 m2 POST =>
@@ -1063,6 +1079,38 @@ Module Type MutatorsOn
         apply δ0.
         apply h0.
       Defined.
+
+      Definition assert_eq_env {Γ} {Δ : Ctx Ty} :
+        let E := fun w : World => Env (Term w) Δ in
+        ⊢ E -> E -> SMut Γ Γ Unit :=
+        fun w0 E1 E2 POST δ0 h0 =>
+          dijkstra
+            (SDijk.assert_eq_env
+               (MkAMessage w0
+                  {| msg_function := "smut/assert_eq_env";
+                     msg_message := "Proof obligation";
+                     msg_program_context := Γ;
+                     msg_localstore := δ0;
+                     msg_heap := h0;
+                     msg_pathcondition := wco w0
+                  |}) E1 E2)
+            POST δ0 h0.
+
+      Definition assert_eq_nenv {N Γ} {Δ : NCtx N Ty} :
+        let E := fun w : World => NamedEnv (Term w) Δ in
+        ⊢ E -> E -> SMut Γ Γ Unit :=
+        fun w0 E1 E2 POST δ0 h0 =>
+          dijkstra
+            (SDijk.assert_eq_nenv
+               (MkAMessage w0
+                  {| msg_function := "smut/assert_eq_env";
+                     msg_message := "Proof obligation";
+                     msg_program_context := Γ;
+                     msg_localstore := δ0;
+                     msg_heap := h0;
+                     msg_pathcondition := wco w0
+                  |}) E1 E2)
+            POST δ0 h0.
 
     End AssumeAssert.
 
@@ -2066,15 +2114,8 @@ Module Type MutatorsOn
         apply (angelic_ctx id Σe).
         intros w1 ω01 evars.
         eapply bind_right.
-        apply (assert_formulas
-                 (* {| *)
-                 (*   msg_function := "SMut.call"; *)
-                 (*   msg_message := "argument pattern match"; *)
-                 (*   msg_program_context := Γ; *)
-                 (*   msg_localstore := subst δ0 ω01; *)
-                 (*   msg_heap := subst h0 ω01; *)
-                 (*   msg_pathcondition := wco w1; *)
-                 (* |} *) (formula_eqs_nctx (subst δe evars) (persist args ω01))).
+        apply (assert_eq_nenv (subst δe evars)).
+        refine (persist args ω01).
         intros w2 ω12.
         eapply bind_right.
         apply (consume (w := @MkWorld Σe nil) req).

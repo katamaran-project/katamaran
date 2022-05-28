@@ -355,8 +355,8 @@ Module Type Soundness
       unfold angelic_ctx, dijkstra.
       rewrite CDijk.wp_angelic_ctx.
       intros [ι Hwp]; revert Hwp.
-      unfold assert_formula, dijkstra, CDijk.assert_formula.
-      (* rewrite CDijk.wp_assert_formulas. *)
+      unfold assert_eq_nenv, dijkstra.
+      rewrite CDijk.wp_assert_eq_nenv.
       intros [Hfmls Hwp]; revert Hwp.
       pose (fun δ => ∀ v, interpret_assertion ens (env.snoc ι (result∷_) v) -∗ POST v δ) as frame.
       intros HYP.
@@ -388,7 +388,8 @@ Module Type Soundness
              CDijk.assert_formula].
       rewrite ?CDijk.wp_angelic_ctx.
       intros [ι Hwp]. exists ι. revert Hwp.
-      (* rewrite ?CDijk.wp_assert_formulas. *)
+      unfold assert_eq_nenv, dijkstra.
+      rewrite ?CDijk.wp_assert_eq_nenv.
       intros [Hfmls Hwp]; split; auto; revert Hwp.
       apply consume_monotonic. intros _ ? Hwp v.
       specialize (Hwp v); revert Hwp.
