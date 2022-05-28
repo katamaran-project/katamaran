@@ -1378,10 +1378,10 @@ Module BlockVerificationDerivedSem.
   Module ValidContractsBlockVerif.
     Import Contracts.
     Import RiscvPmpSignature.
-    Include SemiConcrete RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
+    Include ShallowExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
     Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
     Include MutatorsOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-    Include Katamaran.SemiConcrete.Sound.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
+    Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
     (* Include RiscvPmpExecutor. *)
     Include Katamaran.Symbolic.Sound.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
     Lemma contractsVerified : ValidContractCEnv (PI := PredicateDefIProp).
@@ -1434,7 +1434,7 @@ End BlockVerificationDerivedSem.
 Module BlockVerificationDerived2Concrete.
   Import Contracts.
   Import RiscvPmpSignature.
-  Include SemiConcrete RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  Include ShallowExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifSpec.
 
   Definition M : Type -> Type := CMut [] [].
@@ -1497,7 +1497,7 @@ Module BlockVerificationDerived2Sem.
   Import weakestpre.
   Import tactics.
   Import BlockVerificationDerived.
-  Import Katamaran.SemiConcrete.Mutator.
+  Import Shallow.Executor.
   Import ctx.resolution.
   Import ctx.notations.
   Import env.notations.
