@@ -38,12 +38,17 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     Iris.Model
      Semantics.Registers
+     Sep.Hoare
      Shallow.Executor
+     Shallow.Soundness
      Symbolic.Mutator
      Symbolic.Solver
+     Symbolic.Sound
      Symbolic.Worlds
      Symbolic.Propositions
+     Semantics
      Specification
      Program
      Syntax.Predicates
@@ -279,3 +284,102 @@ Section Debug.
   Abort.
 
 End Debug.
+
+Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
+  MakeSemantics DefaultBase ExampleProgram.
+
+Module ExampleModel.
+  Import ExampleProgram.
+  Import ExampleSpecification.
+
+  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSig ExampleSemantics.
+    Include IrisPrelims DefaultBase ExampleProgram ExampleSig ExampleSemantics.
+    Section WithIrisNotations.
+      Import iris.bi.interface.
+      Import iris.bi.big_op.
+      Import iris.base_logic.lib.iprop.
+      Import iris.base_logic.lib.gen_heap.
+      Import iris.proofmode.tactics.
+
+      Parameter memGpreS : gFunctors -> Set.
+      Parameter memGS : gFunctors -> Set.
+      Existing Class memGS.
+      Parameter memΣ : gFunctors.
+      Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
+      Parameter mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ.
+      Parameter mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ.
+      Parameter mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+          ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+
+      Parameter luser_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
+      Parameter lduplicate_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+        is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG _ ts) (luser_inst (sRG := sRG) mG _ ts ∗ luser_inst (sRG := sRG) mG _ ts).
+
+    End WithIrisNotations.
+  End ExampleIrisParameters.
+
+  Import ExampleIrisParameters.
+
+  Include IrisInstance DefaultBase ExampleSig ExampleSemantics ExampleIrisParameters.
+  Include ProgramLogicOn DefaultBase ExampleSig ExampleSpecification.
+  Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleSpecification ExampleSemantics ExampleIrisParameters.
+
+  Lemma foreignSem : ForeignSem.
+  Proof. intros Γ τ Δ f es δ; destruct f. Qed.
+
+  Lemma lemSem : LemmaSem.
+  Proof. intros Γ l. destruct l. Qed.
+
+  Include Shallow.Soundness.Soundness DefaultBase ExampleSig ExampleSpecification ExampleShalExec.
+  Include Soundness DefaultBase ExampleSig ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
+
+  Section WithIrisNotations.
+    Import iris.bi.interface.
+    Import iris.base_logic.lib.iprop.
+
+    Lemma contracts_sound : ⊢ ValidContractEnvSem CEnv.
+    Proof.
+      apply (sound foreignSem lemSem).
+      intros Γ τ f c.
+      destruct f; inversion 1; subst.
+      apply (contract_sound 1).
+      apply symbolic_sound.
+      apply valid_contract_summaxlen.
+    Qed.
+
+    Import ExampleSemantics.SmallStepNotations.
+
+    Definition adequacy_pure_prop (Δ : PCtx) (σ : Ty) (f : Fun Δ σ) : Prop :=
+      match CEnv f with
+      | Some (MkSepContract _ _ Σ args pre result post) =>
+          is_pure pre -> is_pure post ->
+          forall Γ (δ δ' : CStore Γ) (γ γ' : RegStore) (μ μ' : Memory) ι,
+            interpret_assertion_pure pre ι ->
+            forall v,
+              (* We could make it more general and allow arbitrary expressions
+              as the arguments instead of values. But this is just form
+              demonstration purposes. *)
+              ⟨ γ, μ, δ, stm_call f (env.map (fun _ => exp_val _) (inst args ι)) ⟩
+                --->*
+              ⟨ γ', μ', δ', stm_val σ v ⟩  ->
+              interpret_assertion_pure post ι.[result∷σ ↦ v] /\ δ = δ'
+      | None => True
+      end.
+
+    Lemma adequacy_pure {Δ σ} (f : Fun Δ σ) : adequacy_pure_prop f.
+    Proof.
+    Admitted.
+
+    Corollary summaxlen_adequacy {Γ} (δ : CStore Γ) (γ γ' : RegStore) (μ μ' : Memory) :
+      forall (xs : list Z) (s m l : Z),
+        ⟨ γ, μ, δ, call summaxlen (exp_val (ty.list ty.int) xs) ⟩ --->*
+       ⟨ γ', μ', δ, stm_val (ty.prod (ty.prod ty.int ty.int) ty.int) (s, m, l) ⟩ ->
+        (s ≤ m * l)%Z /\ (0 ≤ l)%Z.
+    Proof.
+      intros xs s m l Hsteps.
+      generalize (adequacy_pure summaxlen I I Γ δ δ γ γ' μ μ' [ xs ]%env eq_refl _ Hsteps).
+      cbn. intuition.
+    Qed.
+
+  End WithIrisNotations.
+End ExampleModel.

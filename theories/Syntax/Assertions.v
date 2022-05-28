@@ -27,6 +27,8 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+From Coq Require Import
+     Bool.Bool.
 From Katamaran Require Import
      Base
      Prelude
@@ -345,6 +347,65 @@ Module Type AssertionsOn
     Definition interpret_contract_postcondition {Δ τ} (c : SepContract Δ τ)
       (ι : Valuation (sep_contract_logic_variables c)) (result : Val τ) : HProp :=
         interpret_assertion (sep_contract_postcondition c) (env.snoc ι (sep_contract_result c ∷ τ) result).
+
+    Fixpoint is_pure {Σ} (a : Assertion Σ) : bool :=
+      match a with
+      | asn_formula fml => true
+      | asn_chunk c => false
+      | asn_chunk_angelic c => false
+      | asn_if b a1 a2 => is_pure a1 && is_pure a2
+      | asn_match_enum E k alts => List.forallb (fun K => is_pure (alts K)) (finite.enum _)
+      | asn_match_sum σ τ s xl alt_inl xr alt_inr => is_pure alt_inl && is_pure alt_inr
+      | asn_match_list s alt_nil xh xt alt_cons => is_pure alt_nil && is_pure alt_cons
+      | asn_match_prod s xl xr rhs => is_pure rhs
+      | asn_match_tuple s p rhs => is_pure rhs
+      | asn_match_record R s p rhs => is_pure rhs
+      | asn_match_union U s alt__ctx alt__pat alt__rhs => List.forallb (fun K => is_pure (alt__rhs K)) (finite.enum _)
+      | asn_sep a1 a2 => is_pure a1 && is_pure a2
+      | asn_or a1 a2  => is_pure a1 && is_pure a2
+      | asn_exist ς τ a => is_pure a
+      | asn_debug => true
+    end.
+
+    Fixpoint interpret_assertion_pure {Σ} (a : Assertion Σ) (ι : Valuation Σ) : Prop :=
+      match a with
+      | asn_formula fml => inst fml ι
+      | asn_chunk c => False
+      | asn_chunk_angelic c => False
+      | asn_if b a1 a2 => if inst (A := Val ty.bool) b ι then interpret_assertion_pure a1 ι else interpret_assertion_pure a2 ι
+      | asn_match_enum E k alts => interpret_assertion_pure (alts (inst (T := fun Σ => Term Σ _) k ι)) ι
+      | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+        match inst (T := fun Σ => Term Σ _) s ι with
+        | inl v => interpret_assertion_pure alt_inl (ι ► (xl∷σ ↦ v))
+        | inr v => interpret_assertion_pure alt_inr (ι ► (xr∷τ ↦ v))
+        end
+      | asn_match_list s alt_nil xh xt alt_cons =>
+        match inst (T := fun Σ => Term Σ _) s ι with
+        | nil        => interpret_assertion_pure alt_nil ι
+        | cons vh vt => interpret_assertion_pure alt_cons (ι ► (xh∷_ ↦ vh) ► (xt∷ty.list _ ↦ vt))
+        end
+      | asn_match_prod s xl xr rhs =>
+        match inst (T := fun Σ => Term Σ _) s ι with
+        | (vl,vr)    => interpret_assertion_pure rhs (ι ► (xl∷_ ↦ vl) ► (xr∷_ ↦ vr))
+        end
+      | asn_match_tuple s p rhs =>
+        let t := inst (T := fun Σ => Term Σ _) s ι in
+        let ι' := tuple_pattern_match_val p t in
+        interpret_assertion_pure rhs (ι ►► ι')
+      | asn_match_record R s p rhs =>
+        let t := inst (T := fun Σ => Term Σ _) s ι in
+        let ι' := record_pattern_match_val p t in
+        interpret_assertion_pure rhs (ι ►► ι')
+      | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+        let t := inst (T := fun Σ => Term Σ _) s ι in
+        let (K , v) := unionv_unfold U t in
+        let ι' := pattern_match_val (alt__pat K) v in
+        interpret_assertion_pure (alt__rhs K) (ι ►► ι')
+      | asn_sep a1 a2 => interpret_assertion_pure a1 ι /\ interpret_assertion_pure a2 ι
+      | asn_or a1 a2  => interpret_assertion_pure a1 ι \/ interpret_assertion_pure a2 ι
+      | asn_exist ς τ a => exists (v : Val τ), interpret_assertion_pure a (ι ► (ς∷τ ↦ v))
+      | asn_debug => True
+    end.
 
   End ContractInt.
 
