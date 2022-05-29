@@ -288,7 +288,7 @@ End Debug.
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
   MakeSemantics DefaultBase ExampleProgram.
 
-Module ExampleModel.
+Module Import ExampleModel.
   Import ExampleProgram.
   Import ExampleSpecification.
 
@@ -342,8 +342,8 @@ Module ExampleModel.
       apply (sound foreignSem lemSem).
       intros Γ τ f c.
       destruct f; inversion 1; subst.
-      apply (contract_sound 1).
-      apply symbolic_sound.
+      apply (shallow_execution_soundness 1).
+      apply symbolic_execution_soundness.
       apply valid_contract_summaxlen.
     Qed.
 
@@ -383,3 +383,10 @@ Module ExampleModel.
 
   End WithIrisNotations.
 End ExampleModel.
+
+Goal True. idtac "Assumptions for symbolic_execution_soundness:". Abort.
+Print Assumptions symbolic_execution_soundness.
+Goal True. idtac "Assumptions for shallow_execution_soundness:". Abort.
+Print Assumptions shallow_execution_soundness.
+Goal True. idtac "Assumptions for summaxlen_adequacy:". Abort.
+Print Assumptions summaxlen_adequacy.

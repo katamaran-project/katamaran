@@ -2296,7 +2296,7 @@ Module Soundness
     now intros w1 ω01 ι1 -> Hpc1.
   Qed.
 
-  Lemma symbolic_sound {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
+  Lemma symbolic_execution_soundness {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) :
     SMut.ValidContract c body ->
     CMut.ValidContract 1 c body.
   Proof.

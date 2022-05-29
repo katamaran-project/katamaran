@@ -726,7 +726,7 @@ Module Type Soundness
       now apply lprop_right.
     Qed.
 
-    Lemma contract_sound n {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
+    Lemma shallow_execution_soundness n {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) :
       CMut.ValidContract n c body ->
       HOAR.ValidContract c body.
     Proof.

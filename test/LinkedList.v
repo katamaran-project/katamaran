@@ -196,7 +196,6 @@ Module Import ExampleProgram <: Program DefaultBase.
       end.
 
     Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
-      Eval compute in
       match f in Fun Δ τ return Stm Δ τ with
       | append     => fun_append
       | appendloop => fun_appendloop
@@ -1042,8 +1041,8 @@ Module ExampleModel.
     apply (sound foreignSem lemSem).
     intros Γ τ f c.
     destruct f; inversion 1; subst;
-    apply (contract_sound 1);
-    apply symbolic_sound;
+    apply (shallow_execution_soundness 1);
+    apply symbolic_execution_soundness;
     apply SMut.validcontract_reflect_sound.
     apply valid_contract_append.
     apply valid_contract_appendloop.
