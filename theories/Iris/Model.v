@@ -1540,6 +1540,7 @@ Module IrisInstanceWithContracts
   (Import II   : IrisInstance B SIG SEM IP)
   (Import PLOG : ProgramLogicOn B SIG SPEC).
 
+  Section WithSailGS.
   Context `{sailGS Σ}.
 
   Definition ForeignSem :=
@@ -1733,4 +1734,5 @@ Module IrisInstanceWithContracts
     apply (vcenv ι).
   Qed.
 
+  End WithSailGS.
 End IrisInstanceWithContracts.

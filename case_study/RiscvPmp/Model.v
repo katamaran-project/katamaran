@@ -369,7 +369,7 @@ Module RiscvPmpModel2.
     iSplitL; first iPureIntro; auto.
   Qed.
 
-  Lemma foreignSem : ForeignSem.
+  Lemma foreignSem `{sailGS Σ} : ForeignSem.
   Proof.
     intros Γ τ Δ f es δ.
     destruct f; cbn;
@@ -505,7 +505,7 @@ Module RiscvPmpModel2.
 
   End Lemmas.
 
-  Lemma lemSem : LemmaSem.
+  Lemma lemSem `{sailGS Σ} : LemmaSem.
   Proof.
     intros Δ [];
       eauto using open_gprs_sound, close_gprs_sound, open_pmp_entries_sound,

@@ -328,10 +328,10 @@ Module Import ExampleModel.
   Include ProgramLogicOn DefaultBase ExampleSig ExampleSpecification.
   Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleSpecification ExampleSemantics ExampleIrisParameters.
 
-  Lemma foreignSem : ForeignSem.
+  Lemma foreignSem `{sailGS Σ} : ForeignSem.
   Proof. intros Γ τ Δ f es δ; destruct f. Qed.
 
-  Lemma lemSem : LemmaSem.
+  Lemma lemSem `{sailGS Σ} : LemmaSem.
   Proof. intros Γ l. destruct l. Qed.
 
   Include Shallow.Soundness.Soundness DefaultBase ExampleSig ExampleSpecification ExampleShalExec.
@@ -343,7 +343,7 @@ Module Import ExampleModel.
     Import iris.base_logic.lib.iprop.
     Import iris.proofmode.tactics.
 
-    Lemma contracts_sound : ⊢ ValidContractEnvSem CEnv.
+    Lemma contracts_sound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
     Proof.
       apply (sound foreignSem lemSem).
       intros Γ τ f c.

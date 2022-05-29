@@ -859,7 +859,7 @@ Module ExampleModel.
         | _ => idtac
         end.
 
-    Lemma mkcons_sound {Γ δ} :
+    Lemma mkcons_sound `{sailGS Σ} {Γ δ} :
       forall (x : Exp Γ ptr) (xs : Exp Γ llist),
         ⊢ semTriple δ (⌜true = true⌝ ∧ emp) (foreign mkcons x xs)
           (λ (v : Val ptr) (δ' : CStore Γ),
@@ -891,7 +891,7 @@ Module ExampleModel.
       now iFrame.
     Qed.
 
-    Lemma fst_sound {Γ δ} :
+    Lemma fst_sound `{sailGS Σ} {Γ δ} :
       forall (ep : Exp Γ ptr) (vx : Val ty.int) (vxs : Val llist),
         let vp := eval ep δ in
         ⊢ semTriple δ
@@ -923,7 +923,7 @@ Module ExampleModel.
       now iFrame.
     Qed.
 
-    Lemma snd_sound {Γ δ} :
+    Lemma snd_sound `{sailGS Σ} {Γ δ} :
       forall (ep : Exp Γ ptr) (vx : Val ptr) (vxs : Val llist),
         let vp := eval ep δ in
         ⊢ semTriple δ
@@ -955,7 +955,7 @@ Module ExampleModel.
       now iFrame.
     Qed.
 
-    Lemma setsnd_sound {Γ δ} :
+    Lemma setsnd_sound`{sailGS Σ}  {Γ δ} :
       forall (ep : Exp Γ ptr) (exs : Exp Γ llist) (vx : Val ptr),
         let vp := eval ep δ in let vxs := eval exs δ in
         ⊢ semTriple δ
@@ -988,7 +988,7 @@ Module ExampleModel.
       now iFrame.
     Qed.
 
-    Lemma foreignSem : ForeignSem.
+    Lemma foreignSem `{sailGS Σ} : ForeignSem.
     Proof.
       intros Γ τ Δ f es δ; destruct f; env.destroy es;
         intros ι; env.destroy ι; cbn; intros Heq; env.destroy Heq; subst;
@@ -996,7 +996,7 @@ Module ExampleModel.
     Qed.
 
     Goal True. idtac "Timing before: llist/lemmas". Abort.
-    Lemma lemSem : LemmaSem.
+    Lemma lemSem `{sailGS Σ} : LemmaSem.
     Proof.
       intros Γ l.
       destruct l; cbn; intros ι; destruct_syminstance ι; cbn.
@@ -1036,7 +1036,7 @@ Module ExampleModel.
     Import iris.program_logic.weakestpre.
     Import iris.base_logic.lib.gen_heap.
 
-  Lemma linked_list_sound : ⊢ ValidContractEnvSem CEnv.
+  Lemma linked_list_sound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
   Proof.
     apply (sound foreignSem lemSem).
     intros Γ τ f c.
