@@ -1036,7 +1036,7 @@ Module ExampleModel.
     Import iris.program_logic.weakestpre.
     Import iris.base_logic.lib.gen_heap.
 
-  Lemma appendSound : ⊢ ValidContractEnvSem CEnv.
+  Lemma linked_list_sound : ⊢ ValidContractEnvSem CEnv.
   Proof.
     apply (sound foreignSem lemSem).
     intros Γ τ f c.
@@ -1051,6 +1051,8 @@ Module ExampleModel.
     apply valid_contract_reverse.
     apply valid_contract_reverseloop.
   Qed.
+
+  Print Assumptions linked_list_sound.
 
   End WithIrisNotations.
 End ExampleModel.
