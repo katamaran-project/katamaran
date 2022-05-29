@@ -301,19 +301,23 @@ Module Import ExampleModel.
       Import iris.base_logic.lib.gen_heap.
       Import iris.proofmode.tactics.
 
-      Parameter memGpreS : gFunctors -> Set.
-      Parameter memGS : gFunctors -> Set.
-      Existing Class memGS.
-      Parameter memΣ : gFunctors.
-      Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
-      Parameter mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ.
-      Parameter mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ.
-      Parameter mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+      Definition memGpreS : gFunctors -> Set := fun Σ => True.
+      Definition memGS : gFunctors -> Set := fun Σ => True.
+      Definition memΣ : gFunctors := gFunctors.nil.
+      Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ := fun _ _ => I.
+      Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
+      Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
+      Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
           ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+      Proof.
+        now iIntros (Σ μ mG) "".
+      Qed.
 
-      Parameter luser_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
-      Parameter lduplicate_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
-        is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG _ ts) (luser_inst (sRG := sRG) mG _ ts ∗ luser_inst (sRG := sRG) mG _ ts).
+      Definition luser_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ :=
+      fun Σ sRG iG mG p ts => match p with end.
+      Definition lduplicate_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+          is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG _ ts) (luser_inst (sRG := sRG) mG _ ts ∗ luser_inst (sRG := sRG) mG _ ts) :=
+        fun Σ sRG iG mG p ts dup => match p with end.
 
     End WithIrisNotations.
   End ExampleIrisParameters.
