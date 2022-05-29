@@ -375,6 +375,7 @@ Module Import ExampleModel.
       | None => True
       end.
 
+    (* domi: lemma is too strong: should use bi_entailment rather than equality and fix the rewrites below *)
     Axiom interpret_assertion_pure_or_not : forall `{sailGS Σ} {Γ} P (ι : Valuation Γ),
       is_pure P ->
       interpret_assertion P ι = (⌜ interpret_assertion_pure P ι ⌝)%I.
