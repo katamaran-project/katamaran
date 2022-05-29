@@ -340,6 +340,8 @@ Module Import ExampleModel.
   Section WithIrisNotations.
     Import iris.bi.interface.
     Import iris.base_logic.lib.iprop.
+    Import iris.base_logic.lib.iprop.
+    From iris.proofmode Require Import tactics.
 
     Lemma contracts_sound : ⊢ ValidContractEnvSem CEnv.
     Proof.
@@ -372,6 +374,16 @@ Module Import ExampleModel.
 
     Lemma adequacy_pure {Δ σ} (f : Fun Δ σ) : adequacy_pure_prop f.
     Proof.
+      unfold adequacy_pure_prop.
+      remember (CEnv f) as contract.
+      destruct contract as [[Σ args pre result post]|]; try now cbn.
+      intros preP postP Γ δ δ' γ γ' μ μ' ι PRE v evals.
+      refine (SumMaxLen.ExampleModel.adequacy
+                (Q := fun v => interpret_assertion_pure post ι.[result∷σ ↦ v] /\ δ = δ') evals I _).
+
+      iIntros (Σ' sG) "[_ _]".
+      (* grr..  here I need to be able to instantiate the Model module with Σ' and sG *)
+      (* iPoseProof(contracts_sound $! f) as "c". *)
     Admitted.
 
     Corollary summaxlen_adequacy {Γ} (δ : CStore Γ) (γ γ' : RegStore) (μ μ' : Memory) :
