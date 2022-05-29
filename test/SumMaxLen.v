@@ -341,7 +341,7 @@ Module Import ExampleModel.
     Import iris.bi.interface.
     Import iris.base_logic.lib.iprop.
     Import iris.base_logic.lib.iprop.
-    From iris.proofmode Require Import tactics.
+    Import iris.proofmode.tactics.
 
     Lemma contracts_sound : ⊢ ValidContractEnvSem CEnv.
     Proof.
@@ -393,7 +393,7 @@ Module Import ExampleModel.
         (s ≤ m * l)%Z /\ (0 ≤ l)%Z.
     Proof.
       intros xs s m l Hsteps.
-      generalize (adequacy_pure summaxlen I I Γ δ δ γ γ' μ μ' [ xs ]%env eq_refl _ Hsteps).
+      generalize (adequacy_pure summaxlen I I Γ δ δ γ γ' μ μ' (env.snoc env.nil _ xs) eq_refl _ Hsteps).
       cbn. intuition.
     Qed.
 
