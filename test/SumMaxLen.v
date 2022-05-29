@@ -50,6 +50,7 @@ From Katamaran Require Import
      Symbolic.Propositions
      Semantics
      Specification
+     Syntax.Terms
      Program
      Syntax.Predicates
      Syntax.ContractDecl.
@@ -368,9 +369,15 @@ Module Import ExampleModel.
               ⟨ γ, μ, δ, stm_call f (env.map (fun _ => exp_val _) (inst args ι)) ⟩
                 --->*
               ⟨ γ', μ', δ', stm_val σ v ⟩  ->
-              interpret_assertion_pure post ι.[result∷σ ↦ v] /\ δ = δ'
+              interpret_assertion_pure post ι.[result∷σ ↦ v]
+                (* removed the following: annoying to express in a contract... *)
+                (* /\ δ = δ' *)
       | None => True
       end.
+
+    Axiom interpret_assertion_pure_or_not : forall `{sailGS Σ} {Γ} P (ι : Valuation Γ),
+      is_pure P ->
+      interpret_assertion P ι = (⌜ interpret_assertion_pure P ι ⌝)%I.
 
     Lemma adequacy_pure {Δ σ} (f : Fun Δ σ) : adequacy_pure_prop f.
     Proof.
@@ -379,12 +386,24 @@ Module Import ExampleModel.
       destruct contract as [[Σ args pre result post]|]; try now cbn.
       intros preP postP Γ δ δ' γ γ' μ μ' ι PRE v evals.
       refine (SumMaxLen.ExampleModel.adequacy
-                (Q := fun v => interpret_assertion_pure post ι.[result∷σ ↦ v] /\ δ = δ') evals I _).
+                (Q := fun v => interpret_assertion_pure post ι.[result∷σ ↦ v]) evals I _).
 
       iIntros (Σ' sG) "[_ _]".
-      (* grr..  here I need to be able to instantiate the Model module with Σ' and sG *)
-      (* iPoseProof(contracts_sound $! f) as "c". *)
-    Admitted.
+      iPoseProof (iris_rule_stm_call_forwards δ (f := f) (c := {| sep_contract_logic_variables := Σ; sep_contract_localstore := args; sep_contract_precondition := pre; sep_contract_result := result; sep_contract_postcondition := post |}) (env.map (fun _ => exp_val _) (inst args ι)) (P := interpret_assertion pre ι) (Q := fun v => interpret_assertion post ι.[result::σ ↦ v]) (eq_sym Heqcontract)) as "c".
+      - eapply rule_sep_contract.
+        + unfold DefaultBase.evals.
+          now rewrite env.map_map env.map_id.
+        + eapply Logic.sep.lsep_true.
+        + cbn. now iIntros (v') "[_ Hpost]".
+      - iPoseProof contracts_sound as "Hcontracts".
+        iSpecialize ("c" with "Hcontracts").
+        rewrite interpret_assertion_pure_or_not.
+        iSpecialize  ("c" $! PRE).
+        iApply (weakestpre.wp_mono' with "c").
+        + iIntros (v') "[Hpost %]".
+          now rewrite interpret_assertion_pure_or_not.
+        + assumption.
+    Qed.
 
     Corollary summaxlen_adequacy {Γ} (δ : CStore Γ) (γ γ' : RegStore) (μ μ' : Memory) :
       forall (xs : list Z) (s m l : Z),
