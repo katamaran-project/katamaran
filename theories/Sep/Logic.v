@@ -301,13 +301,58 @@ Module sep.
         now apply lwand_sep_adjoint.
     Qed.
 
-    Lemma lsep_true {P : L} : P ⊢ ⊤ ∗ P.
+    Lemma lemp_true :
+      lemp ⊣⊢@{L} ⊤.
     Proof.
-      rewrite <- (lsep_emp L P) at 1.
+      split.
+      apply ltrue_right.
+      apply lsep_leak.
+    Qed.
+
+    Lemma lsep_true {P : L} : ⊤ ∗ P ⊣⊢ P.
+    Proof.
+      rewrite <- lemp_true.
       rewrite lsep_comm.
-      apply lsep_entails.
-      now apply lprop_right.
+      rewrite lsep_emp.
       reflexivity.
+    Qed.
+
+    Lemma lprop_sep_distr Q P :
+      !! P ∗ !! Q ⊣⊢@{L} !! (P /\ Q).
+    Proof.
+      split.
+      - apply lwand_sep_adjoint.
+        apply lprop_left. intros HP.
+        apply lwand_sep_adjoint.
+        rewrite lsep_true.
+        apply lprop_left. intros HQ.
+        apply lprop_right; auto.
+      - apply lprop_left. intros [HP HQ].
+        rewrite <- lsep_true at 1.
+        apply lsep_entails; now apply lprop_right.
+    Qed.
+
+    Lemma lprop_or_distr {P Q : Prop} :
+      (!! P) ∨ (!! Q) ⊣⊢@{L} !! (P \/ Q).
+    Proof.
+      split.
+      - apply lor_left; apply lprop_left;
+          intros H; apply lprop_right; auto.
+      - apply lprop_left; intros [HP|HQ];
+          [apply lor_right1 | apply lor_right2];
+          now apply lprop_right.
+    Qed.
+
+    Lemma lprop_exists_comm {T} (P : T -> Prop) :
+      !! (exists t : T, P t) ⊣⊢@{L} (∃ t : T, !! P t).
+    Proof.
+      split.
+      - apply lprop_left; intros [x HP].
+        apply lex_right with x.
+        now apply lprop_right.
+      - apply lex_left. intros x.
+        apply lprop_left; intros HP.
+        apply lprop_right. now exists x.
     Qed.
 
     Lemma lsep_disj_distr {P Q R : L} :

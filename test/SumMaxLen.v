@@ -375,10 +375,13 @@ Module Import ExampleModel.
       | None => True
       end.
 
-    (* domi: lemma is too strong: should use bi_entailment rather than equality and fix the rewrites below *)
-    Axiom interpret_assertion_pure_or_not : forall `{sailGS Σ} {Γ} P (ι : Valuation Γ),
-      is_pure P ->
-      interpret_assertion P ι = (⌜ interpret_assertion_pure P ι ⌝)%I.
+    Lemma interpret_assertion_pure_or_not `{sailGS Σ} {Γ} asn (Hasn : is_pure asn) (ι : Valuation Γ) :
+      interpret_assertion asn ι ⊣⊢ (⌜ interpret_assertion_pure asn ι ⌝)%I.
+    Proof.
+      assert (is_pure asn = true) as Hasn' by now apply Is_true_eq_true.
+      destruct (interpret_assertion_pure_equiv asn Hasn' ι) as [H1 H2].
+      apply bi.equiv_entails_2; auto.
+    Qed.
 
     Lemma adequacy_pure {Δ σ} (f : Fun Δ σ) : adequacy_pure_prop f.
     Proof.
@@ -398,12 +401,12 @@ Module Import ExampleModel.
         + cbn. now iIntros (v') "[_ Hpost]".
       - iPoseProof contracts_sound as "Hcontracts".
         iSpecialize ("c" with "Hcontracts").
-        rewrite interpret_assertion_pure_or_not.
+        unfold semTriple.
+        rewrite interpret_assertion_pure_or_not; auto.
         iSpecialize  ("c" $! PRE).
         iApply (weakestpre.wp_mono' with "c").
-        + iIntros (v') "[Hpost %]".
-          now rewrite interpret_assertion_pure_or_not.
-        + assumption.
+        iIntros (v') "[Hpost %]".
+        now rewrite interpret_assertion_pure_or_not.
     Qed.
 
     Corollary summaxlen_adequacy {Γ} (δ : CStore Γ) (γ γ' : RegStore) (μ μ' : Memory) :

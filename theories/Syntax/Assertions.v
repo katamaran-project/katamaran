@@ -407,6 +407,35 @@ Module Type AssertionsOn
       | asn_debug => True
     end.
 
+    Lemma interpret_assertion_pure_equiv {Σ} (a : Assertion Σ) (a_pure : is_pure a = true) :
+      forall (ι : Valuation Σ),
+        interpret_assertion a ι ⊣⊢ !!(interpret_assertion_pure a ι).
+    Proof.
+      induction a; cbn in *; intros ι; try discriminate a_pure.
+      - now rewrite lemp_true, land_true.
+      - apply andb_true_iff in a_pure. destruct a_pure.
+        destruct (inst b ι); auto.
+      - apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
+        apply base.elem_of_list_In. apply finite.elem_of_enum.
+      - apply andb_true_iff in a_pure. destruct a_pure.
+        destruct (inst s ι); auto.
+      - apply andb_true_iff in a_pure. destruct a_pure.
+        destruct (inst s ι); auto.
+      - destruct (inst s ι); auto.
+      - apply IHa; auto.
+      - apply IHa; auto.
+      - destruct (unionv_unfold U (inst s ι)).
+        apply H. rewrite List.forallb_forall in a_pure. apply a_pure.
+        apply base.elem_of_list_In. apply finite.elem_of_enum.
+      - apply andb_true_iff in a_pure. destruct a_pure.
+        rewrite IHa1, IHa2; auto. now rewrite lprop_sep_distr.
+      - apply andb_true_iff in a_pure. destruct a_pure.
+        rewrite IHa1, IHa2; auto. now rewrite lprop_or_distr.
+      - setoid_rewrite IHa; auto.
+        now rewrite lprop_exists_comm.
+      - apply lemp_true.
+    Qed.
+
   End ContractInt.
 
 End AssertionsOn.
