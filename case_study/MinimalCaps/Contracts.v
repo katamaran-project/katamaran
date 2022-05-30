@@ -961,7 +961,6 @@ Module MinCapsSolver := MakeSolver MinCapsBase MinCapsSignature MinCapsSpecifica
 
 Module Import MinCapsExecutor :=
   MakeExecutor MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSolver.
-Import SMut.
 
 (* Module Import MinCapsCMut := MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsSpecification. *)
 (* Import CMut. *)
@@ -998,7 +997,7 @@ Import MinCapsContractNotations.
 
 Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
   match CEnv f with
-  | Some c => ValidContractReflect c (FunDef f)
+  | Some c => SMut.ValidContractReflect c (FunDef f)
   | None => False
   end.
 
@@ -1008,123 +1007,6 @@ Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
   | None => False
   end.
 
-Record Count : Set := mkCount
-                        { block : nat
-                        ; error : nat
-                        ; debug : nat (* don't need this, just for debugging atm *)
-                        }.
-
-Definition empty_count := {| block := 0; error := 0; debug := 0 |}.
-
-Definition inc_block (c : Count) : Count :=
-  match c with
-  | {| block := b; error := e; debug := d |} =>
-      {| block := b + 1; error := e; debug := d |}
-  end.
-
-Definition inc_error (c : Count) : Count :=
-  match c with
-  | {| block := b; error := e; debug := d |} =>
-      {| block := b; error := e + 1; debug := d |}
-  end.
-
-Definition inc_debug (c : Count) : Count :=
-  match c with
-  | {| block := b; error := e; debug := d |} =>
-      {| block := b; error := e; debug := d + 1 |}
-  end.
-
-Definition plus_count (c1 c2 : Count) : Count :=
-  match c1, c2 with
-  | {| block := b1; error := e1; debug := d1 |},
-    {| block := b2; error := e2; debug := d2 |} =>
-      {| block := b1 + b2; error := e1 + e2; debug := d1 + d2 |}
-  end.
-
-Fixpoint count_leaves {Σ} (s : 𝕊 Σ) (c : Count) : Count :=
-  match s with
-  | SymProp.error _                  => inc_error c
-  | SymProp.block                    => inc_block c
-  | SymProp.debug _ s                => count_leaves s (inc_debug c)
-  | SymProp.demonicv _ s             => count_leaves s c
-  | SymProp.angelicv _ s             => count_leaves s c
-  | SymProp.assertk _ _ s            => count_leaves s c
-  | SymProp.assumek _ s              => count_leaves s c
-  | SymProp.assert_vareq _ _ _ s => count_leaves s c
-  | SymProp.assume_vareq _ _ s   => count_leaves s c
-  | SymProp.angelic_binary s1 s2     =>
-      plus_count c (plus_count (count_leaves s1 empty_count)
-                               (count_leaves s2 empty_count))
-  | SymProp.demonic_binary s1 s2     =>
-      plus_count c (plus_count (count_leaves s1 empty_count)
-                               (count_leaves s2 empty_count))
-  end.
-
-Definition contract_count_leaves {Δ τ} (c : SepContract Δ τ) (body : PROG.Stm Δ τ) (prune : forall {Σ : LCtx}, 𝕊 Σ -> 𝕊 Σ)  : Count :=
-               count_leaves
-                 (prune
-                    (Postprocessing.solve_uvars
-                       (prune
-                          (Postprocessing.solve_evars
-                             (prune
-                             (exec_contract_path default_config 1 c body)
-                           ))))) empty_count.
-
-(* Lemma shallow_exec_instr : *)
-(*   CMut.ValidContract 1 sep_contract_exec_instr fun_exec_instr. *)
-(* Proof. *)
-(*   compute. *)
-(* Admitted. *)
-
-Definition extend_postcond_with_debug {Δ τ} (c : SepContract Δ τ) : SepContract Δ τ :=
-  match c with
-  | {| sep_contract_logic_variables := lv;
-       sep_contract_localstore      := ls;
-       sep_contract_precondition    := pre;
-       sep_contract_result          := res;
-       sep_contract_postcondition   := post;
-    |} => {| sep_contract_logic_variables := lv;
-            sep_contract_localstore      := ls;
-            sep_contract_precondition    := pre;
-            sep_contract_result          := res;
-            sep_contract_postcondition   := post ∗ asn_debug;
-          |}
-  end.
-
-Definition no_prune (Σ : LCtx) : 𝕊 Σ -> 𝕊 Σ := id.
-
-Definition ContractCount {Δ τ} (f : Fun Δ τ) (prune : bool) (debug : bool) : option Count :=
-  let p := if prune then @Postprocessing.prune else no_prune in
-  let c_extend := if debug then extend_postcond_with_debug else id in
-  match CEnv f with
-  | Some c => let c_debug := c_extend c in
-              Some (contract_count_leaves c_debug (FunDef f) p)
-  | None   => None
-  end.
-
-Definition ContractCountDigestible {Δ τ} (f : Fun Δ τ) (prune : bool) (debug : bool) : option (Fun Δ τ * Count) :=
-  match ContractCount f prune debug with
-  | Some c => Some (f, c)
-  | None => None
-  end.
-
-Lemma ContractCountAll : forall {Δ τ} (f : Fun Δ τ),
-    exists c, ContractCountDigestible f false true = Some c.
-Proof.
-  destruct f; eexists; cbv.
-Admitted.
-
-(*
-Set Printing Depth 100.
-Compute (Postprocessing.solve_uvars *)
-           (* (Postprocessing.prune *)
-           (* (Postprocessing.solve_evars *)
-              (* (Postprocessing.prune *)
-              (* (exec_contract_path default_config 1 sep_contract_exec_instr fun_exec_instr))). *)
-
-(* Import List.ListNotations. *)
-(* Import SymProp.notations. *)
-
 Goal True. idtac "Timing before: minimalcaps". Abort.
 Lemma ValidContractsFun : forall {Δ τ} (f : Fun Δ τ),
     ValidContract f.
@@ -1133,45 +1015,81 @@ Proof.
 Qed.
 Goal True. idtac "Timing after: minimalcaps". Abort.
 
-(*
-Ltac debug_satisfy_forget_post :=
-  match goal with
-  | |- outcome_satisfy ?o ?P =>
-    let x := fresh "POST" in
-    generalize P; intros x
-  end.
+Goal True. idtac "Assumptions for minimalcaps contracts:". Abort.
+Print Assumptions ValidContractsFun.
 
-Ltac debug_satisfy_remember_post :=
-  match goal with
-  | |- outcome_satisfy ?o ?P =>
-    let x := fresh "POST" in
-    remember P as x
-  end.
+Section Statistics.
+  Import List.ListNotations.
+  Import SMut.Statistics.
 
-Ltac debug_satisfy_eval_cbn_inputs :=
-  match goal with
-  | |- outcome_satisfy (?f ?Σ ?ζ ?s) ?P =>
-    let Σ' := eval cbn in Σ in
-    let ζ' := eval cbn in ζ in
-    let s' := eval cbn in s in
-    change_no_check (outcome_satisfy (f Σ' ζ' s') P)
-  end.
+  Definition all_functions : list { Δ & { σ & Fun Δ σ } } :=
+    [ existT _ (existT _ read_reg);
+      existT _ (existT _ read_reg_cap);
+      existT _ (existT _ read_reg_num);
+      existT _ (existT _ write_reg);
+      existT _ (existT _ next_pc);
+      existT _ (existT _ update_pc);
+      existT _ (existT _ add_pc);
+      existT _ (existT _ read_mem);
+      existT _ (existT _ write_mem);
+      existT _ (existT _ read_allowed);
+      existT _ (existT _ write_allowed);
+      existT _ (existT _ upper_bound);
+      existT _ (existT _ within_bounds);
+      existT _ (existT _ perm_to_bits);
+      existT _ (existT _ perm_from_bits);
+      existT _ (existT _ is_sub_perm);
+      existT _ (existT _ is_within_range);
+      existT _ (existT _ abs);
+      existT _ (existT _ exec_jr);
+      existT _ (existT _ exec_jalr);
+      existT _ (existT _ exec_j);
+      existT _ (existT _ exec_jal);
+      existT _ (existT _ exec_bnez);
+      existT _ (existT _ exec_mv);
+      existT _ (existT _ exec_ld);
+      existT _ (existT _ exec_sd);
+      existT _ (existT _ exec_lea);
+      existT _ (existT _ exec_restrict);
+      existT _ (existT _ exec_restricti);
+      existT _ (existT _ exec_subseg);
+      existT _ (existT _ exec_subsegi);
+      existT _ (existT _ exec_isptr);
+      existT _ (existT _ exec_addi);
+      existT _ (existT _ exec_add);
+      existT _ (existT _ exec_sub);
+      existT _ (existT _ exec_slt);
+      existT _ (existT _ exec_slti);
+      existT _ (existT _ exec_sltu);
+      existT _ (existT _ exec_sltiu);
+      existT _ (existT _ exec_getp);
+      existT _ (existT _ exec_getb);
+      existT _ (existT _ exec_gete);
+      existT _ (existT _ exec_geta);
+      existT _ (existT _ exec_fail);
+      existT _ (existT _ exec_ret);
+      existT _ (existT _ exec_instr);
+      existT _ (existT _ exec);
+      existT _ (existT _ loop)
+    ]%list.
 
-Ltac debug_satisfy_eval_cbv :=
-  match goal with
-  | |- outcome_satisfy ?o ?P =>
-    let o' := eval cbv - [NamedEnv Val Error] in o in
-    change_no_check (outcome_satisfy o' P); cbn [outcome_satisfy]
-  end.
+  Definition all_stats : Stats :=
+    List.fold_right
+      (fun '(existT _ (existT _ f)) r =>
+         match calc_statistics f with
+         | Some (_,s) => plus_stats s r
+         | None       => r
+         end)
+      empty_stats
+      all_functions.
 
-Close Scope exp.
-Close Scope env.
+  Goal ("minimalcaps", all_stats) = ("", empty_stats).
+    idtac "Branching statistics:".
+    compute.
+    match goal with
+    | |- ?x = _ =>
+        idtac x
+    end.
+  Abort.
 
-Definition debug_config : Config :=
-  {| config_debug_function _ _ f :=
-       match f with
-       | read_mem => true
-       | _        => false
-       end
-  |}.
-*)
+End Statistics.

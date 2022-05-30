@@ -2470,6 +2470,14 @@ Module Type MutatorsOn
           {| branches := b + e; pruned := b + e - d |}
         end.
 
+      Definition plus_stats (x y : Stats) : Stats :=
+        {| branches := branches x + branches y;
+           pruned   := pruned x + pruned y
+        |}.
+
+      Definition empty_stats : Stats :=
+        {| branches := 0; pruned   := 0|}.
+
       Definition calc_statistics {Δ τ} (f : 𝑭 Δ τ) : option (𝑭 Δ τ * Stats) :=
         match CEnv f with
         | Some contract =>

@@ -435,12 +435,11 @@ Module Import ExampleModel.
   End WithIrisNotations.
 End ExampleModel.
 
-Goal True. idtac "Assumptions for symbolic_execution_soundness:". Abort.
-Print Assumptions symbolic_execution_soundness.
-Goal True. idtac "Assumptions for shallow_execution_soundness:". Abort.
-Print Assumptions shallow_execution_soundness.
-Goal True. idtac "Assumptions for summaxlen_adequacy:". Abort.
-Print Assumptions summaxlen_adequacy.
+Goal True.
+  idtac "Assumptions for symbolic_execution_soundness:". Print Assumptions symbolic_execution_soundness.
+  idtac "Assumptions for shallow_execution_soundness:". Print Assumptions shallow_execution_soundness.
+  idtac "Assumptions for summaxlen_adequacy:". Print Assumptions summaxlen_adequacy.
+Abort.
 
 Import SMut.Statistics.
 Goal forall {Δ τ} (f : Fun Δ τ),

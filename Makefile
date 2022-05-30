@@ -43,3 +43,7 @@ summaxlen: Makefile.coq
 linkedlist: Makefile.coq
 	$(Q)rm -f test/LinkedList.vo*
 	$(Q)$(MAKE) -f Makefile.coq test/LinkedList.vo
+
+minimalcaps: Makefile.coq
+	$(Q)rm -f case_study/MinimalCaps/Contracts.vo*
+	$(Q)$(MAKE) -f Makefile.coq case_study/MinimalCaps/Contracts.vo
