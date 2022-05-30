@@ -112,7 +112,7 @@ Next Obligation.
 Qed.
 Canonical IProp.
 
-Module IrisPrelims
+Module Type IrisPrelims
     (Import B    : Base)
     (Import P    : Program B)
     (Import SpecMixin : ProgSpecMixinOn B P)
@@ -247,13 +247,12 @@ Module IrisPrelims
   End Registers.
 End IrisPrelims.
 
-
 Module Type IrisParameters
-  (Import B    : Base)
-  (Import P : Program B)
+  (Import B   : Base)
+  (Import P   : Program B)
   (Import SIG : ProgramLogicSignature B)
-  (Import SEM  : Semantics B P).
-  Include IrisPrelims B P SIG SEM.
+  (Import SEM : Semantics B P)
+  (Import IP  : IrisPrelims B P SIG SEM).
   Parameter memGpreS : gFunctors -> Set.
   Parameter memGS : gFunctors -> Set.
   Parameter memΣ : gFunctors.
@@ -268,25 +267,14 @@ Module Type IrisParameters
 
   Parameter mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
                                          ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
-
-  Parameter luser_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
-  Parameter lduplicate_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
-      is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG ts) (luser_inst (sRG := sRG) mG ts ∗ luser_inst (sRG := sRG) mG ts).
 End IrisParameters.
 
-
-(*
- * The following module defines the Iris model depending solely on the ProgramLogicSignature, not only the Specification.
- * This allows us to use multiple different specifications with the same Iris model, so that the resulting triples can be combined.
- * This is important particularly in the RiscvPmp.BlockVerification proofs.
- *)
-Module Type IrisInstance
+Module Type IrisResources
   (Import B    : Base)
-  (Import SIG : ProgramLogicSignature B)
+  (Import SIG  : ProgramLogicSignature B)
   (Import SEM  : Semantics B SIG.PROG)
-  (Import IParam  : IrisParameters B SIG.PROG SIG SEM).
-Section Soundness.
-
+  (Import IPre : IrisPrelims B SIG.PROG SIG SEM)
+  (Import IP   : IrisParameters B SIG.PROG SIG SEM IPre).
   Class sailGpreS Σ := SailGpreS { (* resources for the implementation side *)
                        sailGpresS_invGpreS :> invGpreS Σ; (* for fancy updates, invariants... *)
 
@@ -294,14 +282,14 @@ Section Soundness.
                        reg_pre_inG :> inG Σ regUR;
 
                        (* ghost variable for tracking state of memory cells *)
-                       sailPreG_gen_memGpreS :> memGpreS Σ
+                       sailPreG_gen_memGpreS : memGpreS Σ
                      }.
   Class sailGS Σ := SailGS { (* resources for the implementation side *)
                        sailGS_invGS :> invGS Σ; (* for fancy updates, invariants... *)
                        sailGS_sailRegGS :> sailRegGS Σ;
 
                        (* ghost variable for tracking state of memory cells *)
-                       sailGS_memGS :> memGS Σ
+                       sailGS_memGS : memGS Σ
                      }.
 
   Global Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
@@ -312,6 +300,35 @@ Section Soundness.
     state_interp_mono _ _ _ _ := fupd_intro _ _;
                                                                                 }.
   Global Opaque iris_invGS.
+End IrisResources.
+
+Module Type IrisPredicates
+  (Import B    : Base)
+  (Import SIG  : ProgramLogicSignature B)
+  (Import SEM  : Semantics B SIG.PROG)
+  (Import IPre : IrisPrelims B SIG.PROG SIG SEM)
+  (Import IP   : IrisParameters B SIG.PROG SIG SEM IPre)
+  (Import IR   : IrisResources B SIG SEM IPre IP).
+  Parameter luser_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
+  Parameter lduplicate_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+      is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG ts) (luser_inst (sRG := sRG) mG ts ∗ luser_inst (sRG := sRG) mG ts).
+
+End IrisPredicates.
+
+(*
+ * The following module defines the Iris model depending solely on the ProgramLogicSignature, not only the Specification.
+ * This allows us to use multiple different specifications with the same Iris model, so that the resulting triples can be combined.
+ * This is important particularly in the RiscvPmp.BlockVerification proofs.
+ *)
+Module Type IrisInstance
+  (Import B     : Base)
+  (Import SIG   : ProgramLogicSignature B)
+  (Import SEM   : Semantics B SIG.PROG)
+  (Import IPre  : IrisPrelims B SIG.PROG SIG SEM)
+  (Import IP    : IrisParameters B SIG.PROG SIG SEM IPre)
+  (Import IR    : IrisResources B SIG SEM IPre IP)
+  (Import IPred : IrisPredicates B SIG SEM IPre IP IR).
+Section Soundness.
 
   Context `{sG : sailGS Σ}.
 
@@ -391,6 +408,149 @@ Section Soundness.
     iApply (regs_inv_update H); iFrame.
   Qed.
 
+  Definition semTriple {Γ τ} (δ : CStore Γ)
+             (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
+    PRE -∗ WP (MkConf s δ : expr (microsail_lang Γ τ)) ?{{ v, match v with MkValConf _ v δ' => POST v δ' end }}.
+  (* always modality needed? perhaps not because sail not higher-order? *)
+
+  Lemma wp_compat_fail {Γ τ} {s} {δ} {Q : ValConf Γ τ -> iProp Σ} :
+    (⊢ WP (MkConf (stm_fail _ s) δ) ?{{ v, Q v }})%I.
+  Proof.
+    rewrite wp_unfold. cbn.
+    iIntros (σ _ ks1 ks nt) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; [trivial|].
+    iIntros (e2 σ2 efs) "%".
+    remember (MkConf (fail s) δ) as s1.
+    destruct H.
+    inversion Heqs1. subst.
+    inversion H.
+  Qed.
+
+  Lemma wp_compat_block {Γ Δ} {τ : Ty} {δ : CStore Γ}
+        (δΔ : CStore Δ) (k : Stm (Γ ▻▻ Δ) τ) (Q : ValConf Γ τ -> iProp Σ) :
+    ⊢ (WP (MkConf k (δ ►► δΔ)) ?{{ v, match v with MkValConf _ v δ' => Q (MkValConf _ v (env.drop Δ δ')) end }} -∗
+          WP (MkConf (stm_block δΔ k) δ) ?{{ v, Q v }})%I.
+  Proof.
+    iRevert (δ δΔ k Q).
+    iLöb as "IH".
+    iIntros (δ δΔ k Q) "wpk".
+    rewrite ?wp_unfold. cbn.
+    iIntros (σ _ ks1 ks nt) "state_inv".
+    rewrite /wp_pre.
+    destruct (language.to_val (MkConf k (δ ►► δΔ))) eqn:Heqkval.
+    - destruct v as [v δ0]. apply language.of_to_val in Heqkval.
+      inversion Heqkval. subst. clear Heqkval.
+      rewrite env.drop_cat.
+      iMod "wpk" as "H".
+      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iSplitR; [trivial|].
+      iModIntro.
+      iIntros (e2 σ2 efs) "%".
+      iModIntro. iModIntro. iModIntro.
+      iMod "Hclose" as "e".
+      iDestruct "e" as "_".
+      iModIntro.
+      dependent elimination H.
+      dependent elimination s.
+      + iFrame.
+        iSplitL; [|trivial].
+        by iApply wp_value.
+      + inversion s4.
+    - iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; [trivial|].
+      iIntros (e2 σ2 efs2) "%".
+      dependent elimination H.
+      dependent elimination s.
+      + discriminate Heqkval.
+      + iModIntro. iModIntro. iModIntro.
+        iMod "Hclose" as "_".
+        iFrame.
+        iModIntro.
+        iSplitL; [|trivial].
+        iApply wp_compat_fail.
+      + iMod "Hclose" as "_".
+        cbn.
+        iMod ("wpk" $! (γ1 , μ1) 0 nil ks nt with "state_inv") as "[% wpk]".
+        iMod ("wpk" $! _ _ _ (mk_prim_step s4)) as "wpk".
+        iModIntro. iModIntro.
+        iMod "wpk".
+        iModIntro.
+        iMod "wpk" as "[Hregs [wpk' _]]".
+        iModIntro.
+        iFrame.
+        iSplitL; [|trivial].
+        iApply "IH".
+        iFrame.
+  Qed.
+
+  Lemma wp_compat_call_frame {Γ Δ} {τ : Ty} {δ : CStore Γ}
+        (δΔ : CStore Δ) (s : Stm Δ τ) (Q : ValConf Γ τ -> iProp Σ) :
+    ⊢ (WP (MkConf s δΔ) ?{{ v, match v with MkValConf _ v δ' => Q (MkValConf _ v δ) end }} -∗
+          WP (MkConf (stm_call_frame δΔ s) δ) ?{{ v, Q v }})%I.
+  Proof.
+    iRevert (δ δΔ s Q).
+    iLöb as "IH".
+    iIntros (δ δΔ s Q) "wpk".
+    rewrite ?wp_unfold.
+    cbn.
+    iIntros (σ ns ks1 ks nt) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first trivial.
+    iIntros (e2 σ2 efs) "%".
+    dependent elimination H.
+    dependent elimination s0.
+    - iMod "Hclose" as "_".
+      rewrite {1}/wp_pre.
+      rewrite (val_stuck (MkConf s9 δΔ3) (γ1 , μ1) [] _ _ [] (mk_prim_step s10)).
+      iMod ("wpk" $! (γ1 , μ1) ns nil ks nt with "Hregs") as "[% wpk]". cbn.
+      iMod ("wpk" $! _ _ _ (mk_prim_step s10)) as "wpk".
+      iModIntro. iModIntro.
+      iMod "wpk".
+      iModIntro.
+      iMod "wpk" as "[Hregs [wpk' _]]".
+      iModIntro.
+      iFrame.
+      iSplitL; last trivial.
+      iApply "IH".
+      iFrame.
+    - cbn.
+      iModIntro. iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iMod "wpk" as "Qv".
+      iModIntro.
+      iFrame.
+      iSplitL; last trivial.
+      by iApply wp_value.
+    - iModIntro. iModIntro. iModIntro.
+      iMod "Hclose" as "_".
+      iFrame.
+      iModIntro.
+      iSplitL; [|trivial].
+      iApply wp_compat_fail.
+  Qed.
+
+  Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
+    match lem with
+      {| lemma_logic_variables := Σ;
+         lemma_patterns        := θΔ;
+         lemma_precondition    := req;
+         lemma_postcondition   := ens;
+      |} =>
+      forall (ι : Valuation Σ),
+        ⊢ interpret_assertion req ι -∗
+          interpret_assertion ens ι
+    end.
+
+  Fixpoint Forall {Δ : LCtx} {struct Δ} : (Valuation Δ -> iProp Σ) -> iProp Σ :=
+    match Δ return (Valuation Δ -> iProp Σ) -> iProp Σ with
+    | ctx.nil      => fun P => P env.nil
+    | ctx.snoc Δ b => fun P => Forall (fun δ => ∀ (v : Val (type b)), P (env.snoc δ b v))
+    end%I.
+
   Lemma iris_rule_stm_read_register_wp {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) {δ : CStore Γ} :
     ⊢ (lptsreg r v -∗
                     WP (MkConf (stm_read_register r) δ) ?{{ w, lptsreg r v ∗ ⌜ w = MkValConf _ v δ ⌝ }}
@@ -432,11 +592,6 @@ Section Soundness.
     iFrame. iSplitR; auto.
     by iApply wp_value.
   Qed.
-
-  Definition semTriple {Γ τ} (δ : CStore Γ)
-             (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
-    PRE -∗ WP (MkConf s δ : expr (microsail_lang Γ τ)) ?{{ v, match v with MkValConf _ v δ' => POST v δ' end }}.
-  (* always modality needed? perhaps not because sail not higher-order? *)
 
   Lemma iris_rule_consequence {Γ σ} {δ : CStore Γ}
         {P P'} {Q Q' : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
@@ -514,79 +669,6 @@ Section Soundness.
     iSplitL; cbn; trivial.
     iApply (wp_value _ _ (fun v => match v with | MkValConf _ v' δ' => Q v' δ' end) (MkConf (stm_val _ (eval e0 δ1)) δ1)).
     by iApply "PQ".
-  Qed.
-
-  Lemma wp_compat_fail {Γ τ} {s} {δ} {Q : ValConf Γ τ -> iProp Σ} :
-    (⊢ WP (MkConf (stm_fail _ s) δ) ?{{ v, Q v }})%I.
-  Proof.
-    rewrite wp_unfold. cbn.
-    iIntros (σ _ ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    remember (MkConf (fail s) δ) as s1.
-    destruct H.
-    inversion Heqs1. subst.
-    inversion H.
-  Qed.
-
-  Lemma wp_compat_block {Γ Δ} {τ : Ty} {δ : CStore Γ}
-        (δΔ : CStore Δ) (k : Stm (Γ ▻▻ Δ) τ) (Q : ValConf Γ τ -> iProp Σ) :
-    ⊢ (WP (MkConf k (δ ►► δΔ)) ?{{ v, match v with MkValConf _ v δ' => Q (MkValConf _ v (env.drop Δ δ')) end }} -∗
-          WP (MkConf (stm_block δΔ k) δ) ?{{ v, Q v }})%I.
-  Proof.
-    iRevert (δ δΔ k Q).
-    iLöb as "IH".
-    iIntros (δ δΔ k Q) "wpk".
-    rewrite ?wp_unfold. cbn.
-    iIntros (σ _ ks1 ks nt) "state_inv".
-    rewrite /wp_pre.
-    destruct (language.to_val (MkConf k (δ ►► δΔ))) eqn:Heqkval.
-    - destruct v as [v δ0]. apply language.of_to_val in Heqkval.
-      inversion Heqkval. subst. clear Heqkval.
-      rewrite env.drop_cat.
-      iMod "wpk" as "H".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iSplitR; [trivial|].
-      iModIntro.
-      iIntros (e2 σ2 efs) "%".
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "e".
-      iDestruct "e" as "_".
-      iModIntro.
-      dependent elimination H.
-      dependent elimination s.
-      + iFrame.
-        iSplitL; [|trivial].
-        by iApply wp_value.
-      + inversion s4.
-    - iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iSplitR; [trivial|].
-      iIntros (e2 σ2 efs2) "%".
-      dependent elimination H.
-      dependent elimination s.
-      + discriminate Heqkval.
-      + iModIntro. iModIntro. iModIntro.
-        iMod "Hclose" as "_".
-        iFrame.
-        iModIntro.
-        iSplitL; [|trivial].
-        iApply wp_compat_fail.
-      + iMod "Hclose" as "_".
-        cbn.
-        iMod ("wpk" $! (γ1 , μ1) 0 nil ks nt with "state_inv") as "[% wpk]".
-        iMod ("wpk" $! _ _ _ (mk_prim_step s4)) as "wpk".
-        iModIntro. iModIntro.
-        iMod "wpk".
-        iModIntro.
-        iMod "wpk" as "[Hregs [wpk' _]]".
-        iModIntro.
-        iFrame.
-        iSplitL; [|trivial].
-        iApply "IH".
-        iFrame.
   Qed.
 
   Lemma iris_rule_stm_let {Γ} (δ : CStore Γ)
@@ -1129,82 +1211,6 @@ Section Soundness.
     by rewrite env.update_update env.update_lookup.
   Qed.
 
-  Fixpoint Forall {Δ : LCtx} {struct Δ} : (Valuation Δ -> iProp Σ) -> iProp Σ :=
-    match Δ return (Valuation Δ -> iProp Σ) -> iProp Σ with
-    | ctx.nil      => fun P => P env.nil
-    | ctx.snoc Δ b => fun P => Forall (fun δ => ∀ (v : Val (type b)), P (env.snoc δ b v))
-    end%I.
-
-  Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
-    match contract with
-    | MkSepContract _ _ ctxΣ θΔ pre result post =>
-      Forall (fun (ι : Valuation ctxΣ) =>
-        semTriple (inst θΔ ι) (interpret_assertion pre ι) body
-                  (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v)))
-    end%I.
-
-  Definition ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
-    match contract with
-    | MkSepContract _ _ ctxΣ θΔ pre result post =>
-      ∀ (ι : Valuation ctxΣ),
-        semTriple (inst θΔ ι) (interpret_assertion pre ι) body
-                  (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v))
-    end%I.
-
-  Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
-    (∀ σs σ (f : 𝑭 σs σ),
-      match cenv σs σ f with
-      | Some c => ValidContractSem (FunDef f) c
-      | None => True
-      end)%I.
-
-  Lemma wp_compat_call_frame {Γ Δ} {τ : Ty} {δ : CStore Γ}
-        (δΔ : CStore Δ) (s : Stm Δ τ) (Q : ValConf Γ τ -> iProp Σ) :
-    ⊢ (WP (MkConf s δΔ) ?{{ v, match v with MkValConf _ v δ' => Q (MkValConf _ v δ) end }} -∗
-          WP (MkConf (stm_call_frame δΔ s) δ) ?{{ v, Q v }})%I.
-  Proof.
-    iRevert (δ δΔ s Q).
-    iLöb as "IH".
-    iIntros (δ δΔ s Q) "wpk".
-    rewrite ?wp_unfold.
-    cbn.
-    iIntros (σ ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first trivial.
-    iIntros (e2 σ2 efs) "%".
-    dependent elimination H.
-    dependent elimination s0.
-    - iMod "Hclose" as "_".
-      rewrite {1}/wp_pre.
-      rewrite (val_stuck (MkConf s9 δΔ3) (γ1 , μ1) [] _ _ [] (mk_prim_step s10)).
-      iMod ("wpk" $! (γ1 , μ1) ns nil ks nt with "Hregs") as "[% wpk]". cbn.
-      iMod ("wpk" $! _ _ _ (mk_prim_step s10)) as "wpk".
-      iModIntro. iModIntro.
-      iMod "wpk".
-      iModIntro.
-      iMod "wpk" as "[Hregs [wpk' _]]".
-      iModIntro.
-      iFrame.
-      iSplitL; last trivial.
-      iApply "IH".
-      iFrame.
-    - cbn.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iMod "wpk" as "Qv".
-      iModIntro.
-      iFrame.
-      iSplitL; last trivial.
-      by iApply wp_value.
-    - iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iFrame.
-      iModIntro.
-      iSplitL; [|trivial].
-      iApply wp_compat_fail.
-  Qed.
-
   Lemma iris_rule_stm_bind {Γ} (δ : CStore Γ)
         {σ τ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
         (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
@@ -1296,18 +1302,6 @@ Section Soundness.
     iApply (iris_rule_stm_call_inline_later with "Hdef").
   Qed.
 
-  Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
-    match lem with
-      {| lemma_logic_variables := Σ;
-         lemma_patterns        := θΔ;
-         lemma_precondition    := req;
-         lemma_postcondition   := ens;
-      |} =>
-      forall (ι : Valuation Σ),
-        ⊢ interpret_assertion req ι -∗
-          interpret_assertion ens ι
-    end.
-
   Lemma iris_rule_stm_debugk
     {Γ τ} (δ : CStore Γ) (k : Stm Γ τ)
     (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
@@ -1364,6 +1358,29 @@ Section Soundness.
       iSplitL; trivial.
       now iApply wp_compat_fail.
   Qed.
+
+  Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
+    match contract with
+    | MkSepContract _ _ ctxΣ θΔ pre result post =>
+      Forall (fun (ι : Valuation ctxΣ) =>
+        semTriple (inst θΔ ι) (interpret_assertion pre ι) body
+                  (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v)))
+    end%I.
+
+  Definition ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
+    match contract with
+    | MkSepContract _ _ ctxΣ θΔ pre result post =>
+      ∀ (ι : Valuation ctxΣ),
+        semTriple (inst θΔ ι) (interpret_assertion pre ι) body
+                  (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v))
+    end%I.
+
+  Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
+    (∀ σs σ (f : 𝑭 σs σ),
+      match cenv σs σ f with
+      | Some c => ValidContractSem (FunDef f) c
+      | None => True
+      end)%I.
 
 End Soundness.
 
@@ -1532,13 +1549,16 @@ End IrisInstance.
  * This is kept to a minimum (see comment for the IrisInstance module).
  *)
 Module IrisInstanceWithContracts
-  (Import B    : Base)
-  (Import SIG  : ProgramLogicSignature B)
+  (Import B     : Base)
+  (Import SIG   : ProgramLogicSignature B)
   (Import SPEC  : Specification B SIG)
-  (Import SEM  : Semantics B SIG.PROG)
-  (Import IP   : IrisParameters B SIG.PROG SIG SEM)
-  (Import II   : IrisInstance B SIG SEM IP)
-  (Import PLOG : ProgramLogicOn B SIG SPEC).
+  (Import SEM   : Semantics B SIG.PROG)
+  (Import IPre  : IrisPrelims B SIG.PROG SIG SEM)
+  (Import IP    : IrisParameters B SIG.PROG SIG SEM IPre)
+  (Import IR    : IrisResources B SIG SEM IPre IP)
+  (Import IPred : IrisPredicates B SIG SEM IPre IP IR)
+  (Import II    : IrisInstance B SIG SEM IPre IP IR IPred)
+  (Import PLOG  : ProgramLogicOn B SIG SPEC).
 
   Section WithSailGS.
   Context `{sailGS Σ}.

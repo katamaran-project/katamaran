@@ -748,72 +748,94 @@ Module ExampleModel.
   Import ExampleProgram.
   Import ExampleSpecification.
 
-  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
+  Module ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
     Include IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
-    Section WithIrisNotations.
-      Import iris.bi.interface.
-      Import iris.bi.big_op.
-      Import iris.base_logic.lib.iprop.
-      Import iris.base_logic.lib.gen_heap.
-      Import iris.proofmode.tactics.
+  End ExampleIrisPrelims.
 
-      Class mcMemGS Σ :=
-        McMemGS {
-            (* ghost variable for tracking state of registers *)
-            mc_ghGS :> gen_heapGS Z (Z * (Z + unit)) Σ;
-            mc_invNs : namespace
-          }.
+  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSignature ExampleSemantics ExampleIrisPrelims.
+    Import ExampleIrisPrelims.
+    Import iris.bi.interface.
+    Import iris.bi.big_op.
+    Import iris.base_logic.lib.iprop.
+    Import iris.base_logic.lib.gen_heap.
+    Import iris.proofmode.tactics.
 
-      Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
-      Definition memGS : gFunctors -> Set := mcMemGS.
-      Definition memΣ : gFunctors := gen_heapΣ Z (Z * (Z + unit)).
+    Class mcMemGS Σ :=
+      McMemGS {
+          (* ghost variable for tracking state of registers *)
+          mc_ghGS :> gen_heapGS Z (Z * (Z + unit)) Σ;
+          mc_invNs : namespace
+        }.
 
-      Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
-        fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := (Z * (Z + unit))).
+    Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
+    Definition memGS : gFunctors -> Set := mcMemGS.
+    Definition memΣ : gFunctors := gen_heapΣ Z (Z * (Z + unit)).
 
-      Lemma fst_pair_id2 : forall {A} {B},
-          (λ (x : A) (y : B), (Datatypes.fst ∘ pair x) y) = (λ (x : A) (y : B), x).
-      Proof.
-        intros; reflexivity.
-      Qed.
+    Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
+      fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := (Z * (Z + unit))).
 
-      Lemma imap_pair_fst_seq {A} (l : list A) :
-        (imap pair l).*1 = seq 0 (length l).
-      Proof.
-        rewrite fmap_imap.
-        rewrite fst_pair_id2.
-        rewrite imap_seq_0.
-        rewrite list_fmap_id; reflexivity.
-      Qed.
+    Lemma fst_pair_id2 : forall {A} {B},
+        (λ (x : A) (y : B), (Datatypes.fst ∘ pair x) y) = (λ (x : A) (y : B), x).
+    Proof.
+      intros; reflexivity.
+    Qed.
 
-      Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-        fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) μ)%I.
+    Lemma imap_pair_fst_seq {A} (l : list A) :
+      (imap pair l).*1 = seq 0 (length l).
+    Proof.
+      rewrite fmap_imap.
+      rewrite fst_pair_id2.
+      rewrite imap_seq_0.
+      rewrite list_fmap_id; reflexivity.
+    Qed.
 
-      Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-        fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
+    Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+      fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) μ)%I.
 
-      Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-        ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
-      Proof.
-        iIntros (Σ μ gHP).
-        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
+    Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+      fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
 
-        iMod (gen_heap_alloc_big empty μ (map_disjoint_empty_r μ) with "inv") as "(inv & res & _)".
-        iModIntro.
-        rewrite (right_id empty union μ).
+    Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+                                                ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+    Proof.
+      iIntros (Σ μ gHP).
+      iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
 
-        iExists (McMemGS gH (nroot .@ "mem_inv")).
-        iFrame.
-      Qed.
+      iMod (gen_heap_alloc_big empty μ (map_disjoint_empty_r μ) with "inv") as "(inv & res & _)".
+      iModIntro.
+      rewrite (right_id empty union μ).
 
-      Definition ptstocons_interp `{mG : memGS Σ} (p : Z) (v : Z) (n : Z + unit) : iProp Σ :=
-        (mapsto (hG := mc_ghGS (mcMemGS := mG)) p (DfracOwn 1) (pair v n))%I.
+      iExists (McMemGS gH (nroot .@ "mem_inv")).
+      iFrame.
+    Qed.
+  End ExampleIrisParameters.
 
-      Fixpoint ptstolist_interp `{mG : memGS Σ} (p : Z + unit) (vs : list Z) : iProp Σ :=
-        match vs with
-        | nil => ⌜p = inr tt⌝
-        | v :: vs => (∃ p' pn, ⌜p = inl p'⌝ ∗ ptstocons_interp (mG := mG) p' v pn ∗ ptstolist_interp (mG := mG) pn vs)%I
+  Module ExampleIrisResources <: IrisResources DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
+    Include IrisResources DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
+  End ExampleIrisResources.
+
+  Section Predicates.
+    Import iris.bi.interface.
+    Import iris.bi.big_op.
+    Import iris.base_logic.lib.iprop.
+    Import iris.base_logic.lib.gen_heap.
+    Import iris.proofmode.tactics.
+    Import ExampleIrisParameters.
+
+    Definition ptstocons_interp `{mG : memGS Σ} (p : Z) (v : Z) (n : Z + unit) : iProp Σ :=
+      (mapsto (hG := mc_ghGS (mcMemGS := mG)) p (DfracOwn 1) (pair v n))%I.
+
+    Fixpoint ptstolist_interp `{mG : memGS Σ} (p : Z + unit) (vs : list Z) : iProp Σ :=
+      match vs with
+      | nil => ⌜p = inr tt⌝
+      | v :: vs => (∃ p' pn, ⌜p = inl p'⌝ ∗ ptstocons_interp (mG := mG) p' v pn ∗ ptstolist_interp (mG := mG) pn vs)%I
       end.
+  End Predicates.
+
+  Module ExampleIrisPredicates <: IrisPredicates DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources.
+    Import ExampleIrisPrelims.
+    Import ExampleIrisParameters.
+    Import iris.base_logic.lib.iprop.
 
     Definition luser_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
       (match p return Env Val (𝑯_Ty p) -> iProp Σ with
@@ -827,15 +849,14 @@ Module ExampleModel.
     Proof.
       destruct p; now cbn.
     Qed.
-
-    End WithIrisNotations.
-  End ExampleIrisParameters.
+  End ExampleIrisPredicates.
 
   Import ExampleIrisParameters.
+  Import ExampleIrisResources.
 
-  Include IrisInstance DefaultBase ExampleSignature ExampleSemantics ExampleIrisParameters.
+  Include IrisInstance DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
   Include ProgramLogicOn DefaultBase ExampleSignature ExampleSpecification.
-  Include IrisInstanceWithContracts DefaultBase ExampleSignature ExampleSpecification ExampleSemantics ExampleIrisParameters.
+  Include IrisInstanceWithContracts DefaultBase ExampleSignature ExampleSpecification ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
 
   Section WithIrisNotations.
     Import iris.bi.interface.

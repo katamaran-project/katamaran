@@ -8,6 +8,7 @@
 case_study/MinimalCaps/Base.v
 case_study/MinimalCaps/Contracts.v
 case_study/MinimalCaps/Machine.v
+case_study/MinimalCaps/Model.v
 -Q case_study/RiscvPmp RiscvPmp
 case_study/RiscvPmp/Base.v
 case_study/RiscvPmp/Contracts.v

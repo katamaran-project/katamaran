@@ -54,7 +54,10 @@ Import ListNotations.
 Import RiscvPmpSpecification.
 Import RiscvPmpProgram.
 Import RiscvPmpModel.
+Import RiscvPmpIrisPrelims.
 Import RiscvPmpIrisParams.
+Import RiscvPmpIrisResources.
+Import RiscvPmpIrisPredicates.
 Import RiscvPmpModel2.
 
 Section Loop. 

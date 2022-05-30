@@ -61,7 +61,7 @@ Inductive Predicate : Set :=
   ptsreg
 | ptsto
 | safe
-| expr
+| expression
 | dummy
 | gprs
 .
@@ -87,6 +87,8 @@ Section PredicateKit.
     | subperm => [ty.perm; ty.perm]
     end.
 
+  (* TODO: update perm lattice, E ⊂ R,RW *)
+  (* TODO: same for the subperm checks in Machine.v *)
   Definition decide_subperm (p p' : Val ty.perm) : bool :=
     match p with
     | O => true
@@ -117,22 +119,22 @@ Section PredicateKit.
   Definition 𝑯 := Predicate.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | ptsreg => [ty.enum regname; ty.word]
-    | ptsto  => [ty.addr; ty.memval]
-    | safe   => [ty.word]
-    | expr   => [ty.cap]
-    | dummy  => [ty.cap]
-    | gprs   => []
+    | ptsreg     => [ty.enum regname; ty.word]
+    | ptsto      => [ty.addr; ty.memval]
+    | safe       => [ty.word]
+    | expression => [ty.cap]
+    | dummy      => [ty.cap]
+    | gprs       => []
     end.
   Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
-      | ptsreg => false
-      | ptsto  => false
-      | safe   => true
-      | expr   => false (* TODO: check if it is duplicable when implemented *)
-      | dummy  => false
-      | gprs   => false
+      | ptsreg     => false
+      | ptsto      => false
+      | safe       => true
+      | expression => false (* TODO: check if it is duplicable when implemented *)
+      | dummy      => false
+      | gprs       => false
       end
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -163,6 +165,7 @@ End PredicateKit.
     Notation asn_safe w := (asn_chunk (chunk_user safe (env.nil ► (ty.word ↦ w)))).
     Notation asn_csafe c := (asn_chunk (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
     Notation asn_csafe_angelic c := (asn_chunk_angelic (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
+    Notation asn_expression c := (asn_chunk (chunk_user expression [c])).
     Notation asn_dummy c := (asn_chunk (chunk_user dummy (env.nil ► (ty.cap ↦ c)))).
     Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
     Notation asn_match_cap c p b e a asn :=

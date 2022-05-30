@@ -293,41 +293,53 @@ Module Import ExampleModel.
   Import ExampleProgram.
   Import ExampleSpecification.
 
-  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSig ExampleSemantics.
+  Module ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSig ExampleSemantics.
     Include IrisPrelims DefaultBase ExampleProgram ExampleSig ExampleSemantics.
-    Section WithIrisNotations.
-      Import iris.bi.interface.
-      Import iris.bi.big_op.
-      Import iris.base_logic.lib.iprop.
-      Import iris.base_logic.lib.gen_heap.
-      Import iris.proofmode.tactics.
+  End ExampleIrisPrelims.
 
-      Definition memGpreS : gFunctors -> Set := fun Σ => True.
-      Definition memGS : gFunctors -> Set := fun Σ => True.
-      Definition memΣ : gFunctors := gFunctors.nil.
-      Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ := fun _ _ => I.
-      Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
-      Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
-      Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-          ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
-      Proof.
-        now iIntros (Σ μ mG) "".
-      Qed.
+  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSig ExampleSemantics ExampleIrisPrelims.
+    Import ExampleIrisPrelims.
+    Import iris.bi.interface.
+    Import iris.bi.big_op.
+    Import iris.base_logic.lib.iprop.
+    Import iris.base_logic.lib.gen_heap.
+    Import iris.proofmode.tactics.
 
+    Definition memGpreS : gFunctors -> Set := fun Σ => True.
+    Definition memGS : gFunctors -> Set := fun Σ => True.
+    Definition memΣ : gFunctors := gFunctors.nil.
+    Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ := fun _ _ => I.
+    Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
+    Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ := fun Σ mG μ => True%I.
+    Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+                                                ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+    Proof.
+      now iIntros (Σ μ mG) "".
+    Qed.
+  End ExampleIrisParameters.
+
+  Module ExampleIrisResources <: IrisResources DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
+    Include IrisResources DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
+  End ExampleIrisResources.
+
+  Module ExampleIrisPredicates <: IrisPredicates DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources.
+    Import iris.base_logic.lib.iprop.
+    Import ExampleIrisPrelims.
+    Import ExampleIrisParameters.
       Definition luser_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ :=
       fun Σ sRG iG mG p ts => match p with end.
       Definition lduplicate_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
           is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG _ ts) (luser_inst (sRG := sRG) mG _ ts ∗ luser_inst (sRG := sRG) mG _ ts) :=
         fun Σ sRG iG mG p ts dup => match p with end.
-
-    End WithIrisNotations.
-  End ExampleIrisParameters.
+  End ExampleIrisPredicates.
 
   Import ExampleIrisParameters.
 
-  Include IrisInstance DefaultBase ExampleSig ExampleSemantics ExampleIrisParameters.
+  Include IrisInstance DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
   Include ProgramLogicOn DefaultBase ExampleSig ExampleSpecification.
-  Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleSpecification ExampleSemantics ExampleIrisParameters.
+  Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleSpecification ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
+
+  Import ExampleIrisResources.
 
   Lemma foreignSem `{sailGS Σ} : ForeignSem.
   Proof. intros Γ τ Δ f es δ; destruct f. Qed.
