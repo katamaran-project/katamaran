@@ -549,8 +549,8 @@ Module Type SolverOn
     Proof.
       unfold try_unify_formula; destruct fml; cbn; try (constructor; auto; fail).
       - apply try_unify_bool_spec.
-      - destruct (try_unify_eq_spec t1 t2) as [[w' ν] HYP|_]. constructor. auto.
-        destruct (try_unify_eq_spec t2 t1) as [[w' ν] HYP|_]. constructor.
+      - destruct (try_unify_eq_spec t1 t2) as [[w' ν] HYP|]. constructor. auto.
+        destruct (try_unify_eq_spec t2 t1) as [[w' ν] HYP|]. constructor.
         intros ι. specialize (HYP ι). intuition.
         now constructor.
     Qed.

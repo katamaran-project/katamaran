@@ -39,3 +39,7 @@ uninstall: Makefile.coq
 summaxlen: Makefile.coq
 	$(Q)rm -f test/SumMaxLen.vo*
 	$(Q)$(MAKE) -f Makefile.coq test/SumMaxLen.vo
+
+linkedlist: Makefile.coq
+	$(Q)rm -f test/LinkedList.vo*
+	$(Q)$(MAKE) -f Makefile.coq test/LinkedList.vo

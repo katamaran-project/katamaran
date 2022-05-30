@@ -36,6 +36,7 @@ From Coq Require Import
      Classes.RelationClasses
      Relations.Relation_Definitions
      Lists.List
+     NArith.NArith
      Program.Tactics
      Strings.String
      ZArith.BinInt.
@@ -2390,9 +2391,15 @@ Module Type MutatorsOn
         demonic_close (exec_contract c s (fun w1 ω01 _ δ1 h1 => SymProp.block) (sep_contract_localstore c) nil).
 
       Definition ValidContractWithConfig {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-        VerificationCondition (prune (solve_uvars (prune (solve_evars (prune (exec_contract_path c body)))))).
+        VerificationCondition (postprocess (exec_contract_path c body)).
 
     End Exec.
+
+    Definition VcGen {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : 𝕊 [] :=
+      postprocess (exec_contract_path default_config 1 c body).
+
+    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      VerificationCondition (VcGen c body).
 
     Definition ok {Σ} (p : 𝕊 Σ) : bool :=
       match prune p with
@@ -2407,12 +2414,6 @@ Module Type MutatorsOn
       generalize (prune p) as q. clear. intros q.
       destruct q; try discriminate; cbn; auto.
     Qed.
-
-    Definition VcGen {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : 𝕊 [] :=
-      prune (solve_uvars (prune (solve_evars (prune (exec_contract_path default_config 1 c body))))).
-
-    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
-      VerificationCondition (VcGen c body).
 
     Definition ValidContractReflect {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
       is_true (ok (VcGen c body)).
@@ -2438,6 +2439,48 @@ Module Type MutatorsOn
       unfold ValidContractWithErasure, VcGenErasure, ValidContract. intros [H].
       constructor. now rewrite <- Erasure.erase_safe.
     Qed.
+
+    Module Statistics.
+
+      Import SymProp.Statistics.
+
+      Definition extend_postcond_with_debug {Δ τ} (c : SepContract Δ τ) : SepContract Δ τ :=
+        match c with
+        | {| sep_contract_logic_variables := lvars;
+             sep_contract_localstore      := store;
+             sep_contract_precondition    := pre;
+             sep_contract_result          := res;
+             sep_contract_postcondition   := post;
+          |} => {| sep_contract_logic_variables := lvars;
+                   sep_contract_localstore      := store;
+                   sep_contract_precondition    := pre;
+                   sep_contract_result          := res;
+                   sep_contract_postcondition   := asn_sep post asn_debug;
+                |}
+        end.
+
+      Record Stats : Set :=
+        { branches : N
+        ; pruned   : N
+        }.
+
+      Definition count_to_stats (c : Count) : Stats :=
+        match c with
+        | {| block := b; error := e; debug := d |} =>
+          {| branches := b + e; pruned := b + e - d |}
+        end.
+
+      Definition calc_statistics {Δ τ} (f : 𝑭 Δ τ) : option (𝑭 Δ τ * Stats) :=
+        match CEnv f with
+        | Some contract =>
+            let contract' := extend_postcond_with_debug contract in
+            let body      := FunDef f in
+            let vc        := exec_contract_path default_config 1 contract' body in
+            Some (f, count_to_stats (count_nodes vc empty))
+        | None   => None
+        end.
+
+    End Statistics.
 
   End SMut.
 

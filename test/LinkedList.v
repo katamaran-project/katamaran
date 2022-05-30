@@ -739,6 +739,8 @@ Section DebugExample.
 
 End DebugExample.
 
+Module ExampleShalExec :=
+  MakeShallowExecutor DefaultBase ExampleSignature ExampleSpecification.
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
   MakeSemantics DefaultBase ExampleProgram.
 
@@ -1022,12 +1024,8 @@ Module ExampleModel.
 
   End WithIrisNotations.
 
-  (* Include Soundness DefaultBase ExampleSpecification ExampleSolverKit. *)
-
-  Include ShallowExecOn DefaultBase ExampleSignature ExampleSpecification.
-  Include Shallow.Soundness.Soundness DefaultBase ExampleSignature ExampleSpecification.
-  Include MutatorsOn DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
-  Include Soundness DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
+  Include Shallow.Soundness.Soundness DefaultBase ExampleSignature ExampleSpecification ExampleShalExec.
+  Include Soundness DefaultBase ExampleSignature ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
 
   Section WithIrisNotations.
     Import iris.bi.interface.
@@ -1052,9 +1050,19 @@ Module ExampleModel.
     apply valid_contract_reverseloop.
   Qed.
 
+  Goal True. idtac "Assumptions linked_list_sound:". Abort.
   Print Assumptions linked_list_sound.
 
   End WithIrisNotations.
 End ExampleModel.
 
-
+Import SMut.Statistics.
+Goal forall {Δ τ} (f : Fun Δ τ),
+  calc_statistics f = None.
+  idtac "Branching statistics:".
+  destruct f; compute;
+  match goal with
+  | |- Some ?x = None =>
+      idtac x
+  end.
+Abort.

@@ -716,20 +716,73 @@ Module Type SymPropOn
       Notation "t" := (term_val _ t) (at level 1, only printing).
     End notations.
 
-    Fixpoint size {Σ} (s : SymProp Σ) : N :=
-      match s with
-      | angelic_binary o1 o2 => 1 + size o1 + size o2
-      | demonic_binary o1 o2 => 1 + size o1 + size o2
-      | error msg => 0
-      | block => 0
-      | assertk fml msg k => 1 + size k
-      | assumek fml k => 1 + size k
-      | angelicv b k => 1 + size k
-      | demonicv b k => 1 + size k
-      | @assert_vareq _ x σ xIn t msg k => 1 + size k
-      | @assume_vareq _ x σ xIn t k => 1 + size k
-      | debug b k => 1 + size k
-      end.
+    Module Statistics.
+
+      Fixpoint size {Σ} (s : SymProp Σ) : N :=
+        match s with
+        | SymProp.angelic_binary o1 o2 => 1 + size o1 + size o2
+        | SymProp.demonic_binary o1 o2 => 1 + size o1 + size o2
+        | SymProp.error msg => 0
+        | SymProp.block => 0
+        | SymProp.assertk fml msg k => 1 + size k
+        | SymProp.assumek fml k => 1 + size k
+        | SymProp.angelicv b k => 1 + size k
+        | SymProp.demonicv b k => 1 + size k
+        | @SymProp.assert_vareq _ x σ xIn t msg k => 1 + size k
+        | @SymProp.assume_vareq _ x σ xIn t k => 1 + size k
+        | SymProp.debug b k => 1 + size k
+        end.
+
+      Record Count : Set :=
+        { block : N
+        ; error : N
+        ; debug : N
+        }.
+
+      Definition empty := {| block := 0; error := 0; debug := 0 |}.
+
+      Definition inc_block (c : Count) : Count :=
+        match c with
+        | {| block := b; error := e; debug := d |} =>
+            {| block := N.succ b; error := e; debug := d |}
+        end.
+
+      Definition inc_error (c : Count) : Count :=
+        match c with
+        | {| block := b; error := e; debug := d |} =>
+            {| block := b; error := N.succ e; debug := d |}
+        end.
+
+      Definition inc_debug (c : Count) : Count :=
+        match c with
+        | {| block := b; error := e; debug := d |} =>
+            {| block := b; error := e; debug := N.succ d |}
+        end.
+
+      (* Definition plus_count (c1 c2 : Count) : Count := *)
+      (*   match c1, c2 with *)
+      (*   | {| block := b1; error := e1; debug := d1 |}, *)
+      (*     {| block := b2; error := e2; debug := d2 |} => *)
+      (*       {| block := b1 + b2; error := e1 + e2; debug := d1 + d2 |} *)
+      (*   end. *)
+
+      Fixpoint count_nodes {Σ} (s : 𝕊 Σ) (c : Count) : Count :=
+        match s with
+        | SymProp.error _              => inc_error c
+        | SymProp.block                => inc_block c
+        | SymProp.debug _ s            => count_nodes s (inc_debug c)
+        | SymProp.demonicv _ s         => count_nodes s c
+        | SymProp.angelicv _ s         => count_nodes s c
+        | SymProp.assertk _ _ s        => count_nodes s c
+        | SymProp.assumek _ s          => count_nodes s c
+        | SymProp.assert_vareq _ _ _ s => count_nodes s c
+        | SymProp.assume_vareq _ _ s   => count_nodes s c
+        | SymProp.angelic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
+        | SymProp.demonic_binary s1 s2 => count_nodes s2 (count_nodes s1 c)
+        end.
+
+    End Statistics.
+
   End SymProp.
   Notation SymProp := SymProp.SymProp.
   Notation 𝕊 := SymProp.SymProp.
@@ -1470,7 +1523,28 @@ Module Type SymPropOn
     End Experimental.
 
   End Postprocessing.
-  Import Postprocessing.
+
+  Section PostProcess.
+
+    Import SymProp.
+    Import Postprocessing.
+
+    Definition postprocess {Σ} (P : 𝕊 Σ) : 𝕊 Σ :=
+      prune (solve_uvars (prune (solve_evars (prune P)))).
+
+    Lemma postprocess_sound {Σ} (P : 𝕊 Σ) :
+      forall ι, SymProp.safe (postprocess P) ι -> safe P ι.
+    Proof.
+      unfold postprocess. intros ι H.
+      rewrite prune_sound in H.
+      apply solve_uvars_sound in H.
+      rewrite prune_sound in H.
+      rewrite solve_evars_sound in H.
+      rewrite prune_sound in H.
+      exact H.
+    Qed.
+
+  End PostProcess.
 
   Module Erasure.
 

@@ -426,3 +426,14 @@ Goal True. idtac "Assumptions for shallow_execution_soundness:". Abort.
 Print Assumptions shallow_execution_soundness.
 Goal True. idtac "Assumptions for summaxlen_adequacy:". Abort.
 Print Assumptions summaxlen_adequacy.
+
+Import SMut.Statistics.
+Goal forall {Δ τ} (f : Fun Δ τ),
+  calc_statistics f = None.
+  idtac "Branching statistics:".
+  destruct f; compute;
+  match goal with
+  | |- Some ?x = None =>
+      idtac x
+  end.
+Abort.
