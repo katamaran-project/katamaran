@@ -87,17 +87,24 @@ Section PredicateKit.
     | subperm => [ty.perm; ty.perm]
     end.
 
-  (* TODO: update perm lattice, E ⊂ R,RW *)
-  (* TODO: same for the subperm checks in Machine.v *)
+  (* Permission Lattice:
+    RW
+     |
+     R
+     |
+     E
+     |
+     O *)
   Definition decide_subperm (p p' : Val ty.perm) : bool :=
     match p with
     | O => true
     | E => match p' with
-           | E => true
-           | _ => false
+           | O => false
+           | _ => true
            end
     | R => match p' with
            | O => false
+           | E => false
            | _ => true
            end
     | RW => match p' with

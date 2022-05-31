@@ -471,11 +471,12 @@ Section FunDefKit.
       | O =>
         stm_val ty.bool true
       | E => match: exp_var "p'" in permission with
-             | E => stm_val ty.bool true
-             | _ => stm_val ty.bool false
+             | O => stm_val ty.bool false
+             | _ => stm_val ty.bool true
              end
       | R => match: exp_var "p'" in permission with
             | O => stm_val ty.bool false
+            | E => stm_val ty.bool false
             | _ =>
               stm_val ty.bool true
             end
