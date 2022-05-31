@@ -405,20 +405,19 @@ Module Import ExampleModel.
                 (Q := fun v => interpret_assertion_pure post ι.[result∷σ ↦ v]) evals I _).
 
       iIntros (Σ' sG) "[_ _]".
-      iPoseProof (iris_rule_stm_call_forwards δ (f := f) (c := {| sep_contract_logic_variables := Σ; sep_contract_localstore := args; sep_contract_precondition := pre; sep_contract_result := result; sep_contract_postcondition := post |}) (env.map (fun _ => exp_val _) (inst args ι)) (P := interpret_assertion pre ι) (Q := fun v => interpret_assertion post ι.[result::σ ↦ v]) (eq_sym Heqcontract)) as "c".
-      - eapply rule_sep_contract.
-        + unfold DefaultBase.evals.
-          now rewrite env.map_map env.map_id.
-        + eapply Logic.sep.lsep_true.
-        + cbn. now iIntros (v') "[_ Hpost]".
-      - iPoseProof contracts_sound as "Hcontracts".
-        iSpecialize ("c" with "Hcontracts").
-        unfold semTriple.
-        rewrite interpret_assertion_pure_or_not; auto.
-        iSpecialize  ("c" $! PRE).
-        iApply (weakestpre.wp_mono' with "c").
-        iIntros (v') "[Hpost %]".
-        now rewrite interpret_assertion_pure_or_not.
+      iApply (weakestpre.wp_mono').
+      2: {
+        iApply (iris_rule_stm_call_forwards _ _ (eq_sym Heqcontract)).
+        - eapply rule_sep_contract.
+          + unfold DefaultBase.evals.
+            now rewrite env.map_map env.map_id.
+          + eapply Logic.sep.lsep_true.
+          + cbn. now iIntros (v') "[_ Hpost]".
+        - iApply contracts_sound.
+        - now rewrite interpret_assertion_pure_or_not.
+      }
+      iIntros (v') "[Hpost %]".
+      now rewrite interpret_assertion_pure_or_not.
     Qed.
 
     Corollary summaxlen_adequacy {Γ} (δ : CStore Γ) (γ γ' : RegStore) (μ μ' : Memory) :
