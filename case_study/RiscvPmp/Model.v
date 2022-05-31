@@ -62,7 +62,6 @@ Module RiscvPmpSemantics <: Semantics RiscvPmpBase RiscvPmpProgram :=
 Module RiscvPmpModel.
   Import RiscvPmpProgram.
   Import RiscvPmpSignature.
-  Import RiscvPmpSpecification.
 
   Module RiscvPmpIrisPrelims <: IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSemantics.
     Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSemantics.
