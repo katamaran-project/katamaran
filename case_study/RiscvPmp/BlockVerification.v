@@ -886,7 +886,7 @@ Module BlockVerificationDerived.
 
     Section Contract.
 
-      Let Σ1 : LCtx := ["x" :: ty_xlenbits, "y" :: ty_xlenbits].
+      Let Σ1 : LCtx := ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
       Example pre1 : Assertion Σ1 :=
         x1 ↦r term_var "x" ∗
@@ -1043,7 +1043,7 @@ Module BlockVerificationDerived2.
 
     Section Contract.
 
-      Let Σ1 : LCtx := ["x" :: ty_xlenbits, "y" :: ty_xlenbits].
+      Let Σ1 : LCtx := ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
       Example pre1 : Assertion Σ1 :=
         x1 ↦r term_var "x" ∗
@@ -1068,7 +1068,7 @@ Module BlockVerificationDerived2.
 
     Section ContractAddr.
 
-      Let Σ1 : LCtx := ["x" :: ty_xlenbits, "y" :: ty_xlenbits].
+      Let Σ1 : LCtx := ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
       Example pre1' : □ (STerm ty_xlenbits -> Assertion)  {| wctx := Σ1 ; wco := nil |} :=
         fun _ ω a =>
@@ -1267,7 +1267,7 @@ Module BlockVerificationDerived2.
       vm_compute. constructor. vm_compute. intros. auto.
     Qed.
 
-    Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code, "mpp"::ty_privilege].
+    Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].
     Let W__femtohandler : World := MkWorld Σ__femtohandler [].
 
     Example femtokernel_handler_pre : □ (WTerm ty_xlenbits -> Assertion) W__femtohandler :=
@@ -1344,19 +1344,20 @@ Module BlockVerificationDerivedSem.
   Import Katamaran.Shallow.Executor.
   Import Model.
   Import RiscvPmpModel.
+  Import RiscvPmpIrisResources.
   Module PLOG <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
     Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
   End PLOG.
 
-  Module Import RiscvPmpIrisModel := IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSemantics RiscvPmpIrisParams RiscvPmpModel PLOG.
+  Module Import RiscvPmpIrisModel := IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates RiscvPmpModel PLOG.
 
-  Lemma foreignSemBlockVerif : ForeignSem.
+  Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
   Proof.
     intros Γ τ Δ f es δ.
     destruct f; cbn.
   Admitted.
 
-  Lemma lemSemBlockVerif : LemmaSem.
+  Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.
   Proof.
     intros Δ [].
     - intros ι. now iIntros "_".
@@ -1384,26 +1385,26 @@ Module BlockVerificationDerivedSem.
     Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
     (* Include RiscvPmpExecutor. *)
     Include Katamaran.Symbolic.Sound.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-    Lemma contractsVerified : ValidContractCEnv (PI := PredicateDefIProp).
+    Lemma contractsVerified `{sailGS Σ} : ValidContractCEnv (PI := PredicateDefIProp).
     Proof.
       intros Γ τ f.
       destruct f; intros c eq; inversion eq; subst; clear eq.
-      - eapply contract_sound.
-        eapply symbolic_sound.
+      - eapply shallow_execution_soundness.
+        eapply symbolic_execution_soundness.
         eapply SMut.validcontract_reflect_sound.
         eapply RiscvPmpSpecVerif.valid_execute_rX.
-      - eapply contract_sound.
-        eapply symbolic_sound.
+      - eapply shallow_execution_soundness.
+        eapply symbolic_execution_soundness.
         eapply SMut.validcontract_reflect_sound.
         eapply RiscvPmpSpecVerif.valid_execute_wX.
     Admitted.
 
-    Lemma contractsSound : ⊢ ValidContractEnvSem CEnv.
+    Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
     Proof.
       eauto using sound, foreignSemBlockVerif, lemSemBlockVerif, contractsVerified.
     Admitted.
 
-    Lemma sound_exec_instruction {ast} :
+    Lemma sound_exec_instruction {ast} `{sailGS Σ} :
       SymProp.safe (exec_instruction (w := wnil) ast (fun _ _ res _ h => SymProp.block) env.nil []%list) env.nil ->
       ⊢ semTripleOneInstr emp%I ast emp%I.
     Proof.
@@ -1504,6 +1505,9 @@ Module BlockVerificationDerived2Sem.
   Import Model.RiscvPmpModel.
   Import Model.RiscvPmpModel2.
   Import RiscvPmpIrisParams.
+  Import RiscvPmpIrisPredicates.
+  Import RiscvPmpIrisPrelims.
+  Import RiscvPmpIrisResources.
 
   Definition semTripleOneInstrStep `{sailGS Σ} (PRE : Z -> iProp Σ) (instr : AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
     ∀ a an,
