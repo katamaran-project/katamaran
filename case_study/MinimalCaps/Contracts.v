@@ -228,6 +228,13 @@ Section ContractDefKit.
   (* mach_inv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * regInvCap(pc) *)
   Definition mach_inv {Σ} : Assertion Σ :=
     asn_gprs ∗ (regInvCap pc).
+
+  (*
+Universal Contract
+{ ∀ r ∈ GPRS . ∃ w . r → w ∗ V(w) ∗ pc ↦ c ∗ V(c) ∗ IH }
+fdeCycle()
+{ interp_loop ≡ wp Loop ⊤ }
+   *)
 End ContractDefKit.
 
 Include SpecificationMixin MinCapsBase MinCapsProgram.

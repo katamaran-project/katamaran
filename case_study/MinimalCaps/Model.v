@@ -173,7 +173,6 @@ Module MinCapsModel.
     Include IrisResources MinCapsBase MinCapsSignature MinCapsSemantics MinCapsIrisPrelims MinCapsIrisParams.
   End MinCapsIrisResources.
 
-
   Section Predicates.
     Import env.notations.
     Import MinCapsIrisPrelims.
@@ -462,7 +461,6 @@ Module MinCapsModel.
                interp_gprs interp
             -∗ reg_pointsTo pc (MkCap p b e a)
             -∗ □ interp (inr (MkCap p b e a)) -∗ interp_loop (sg := SailGS _ _ mG))).
-
 
     Lemma interp_cap_inv_weakening (b b' e e' : Addr) :
       ∀ p a a',

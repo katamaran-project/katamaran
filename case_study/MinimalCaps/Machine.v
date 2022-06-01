@@ -692,7 +692,7 @@ Section FunDefKit.
       end.
 
     Definition fun_loop : Stm [] ty.unit :=
-      let: "r" := call exec in
+      let: "r" := call exec in (* TODO: try to use this to step → get rid of ▷ *)
       if: exp_var "r"
       then call loop
       else stm_val ty.unit tt.

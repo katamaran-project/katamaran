@@ -112,6 +112,7 @@ Next Obligation.
 Qed.
 Canonical IProp.
 
+(* TODO: export, back to module instead of module type *)
 Module Type IrisPrelims
     (Import B    : Base)
     (Import P    : Program B)
@@ -255,6 +256,10 @@ Module Type IrisParameters
   (Import IP  : IrisPrelims B P SIG SEM).
   Parameter memGpreS : gFunctors -> Set.
   Parameter memGS : gFunctors -> Set.
+  (* TODO: Declare Class memGS. *)
+  (* ∨ *)
+  (* Existing Class memGS. *)
+  (* TODO: the above and change sailGS def to be :> again *)
   Parameter memΣ : gFunctors.
   Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
   Parameter mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ.
