@@ -463,17 +463,52 @@ Module MinCapsModel.
             -∗ reg_pointsTo pc (MkCap p b e a)
             -∗ □ interp (inr (MkCap p b e a)) -∗ interp_loop (sg := SailGS _ _ mG))).
 
-    Lemma interp_subperm_weaken p p' b e a :
-      p' ≠ E ->
+
+    Lemma interp_cap_inv_weakening (b b' e e' : Addr) :
+      ∀ p a a',
+      (b ≤ b')%Z →
+      (e' ≤ e)%Z →
+      interp_cap_inv (MkCap p b e a) interp -∗
+      interp_cap_inv (MkCap p b' e' a') interp.
+    Proof.
+      iIntros (p a a' Hb He) "[HA | %HA]".
+      - iLeft.
+        iIntros (l).
+        assert (Hle : (b ≤ e)%Z).
+        { eapply Z.le_trans. apply Hb.
+          eapply Z.le_trans. apply l. apply He. }
+        iSpecialize ("HA" $! Hle).
+        iDestruct "HA" as "([%Hbl %Hel] & HA)".
+        iSplit.
+        + iPureIntro; split; (eapply le_liveAddrs; first apply (conj Hbl Hel); try lia).
+        + iApply (region_addrs_submseteq $! (conj Hb He) with "HA").
+      - iRight; iPureIntro; lia.
+    Qed.
+
+    Lemma interp_subperm_weakening p p' b e a :
       Subperm p' p ->
+      IH -∗
       interp (inr (MkCap p b e a)) -∗
       interp (inr (MkCap p' b e a)).
     Proof.
-      intros HpnotE Hp; destruct p'; destruct p; inversion Hp; auto; iIntros "H";
+      intros Hp; destruct p'; destruct p eqn:Ep; inversion Hp; auto; iIntros "#IH #HA";
         rewrite !fixpoint_interp1_eq; try done.
+      - do 2 iModIntro.
+        iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
+        iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
+        done.
+        iModIntro.
+        rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv].
+        iApply (interp_cap_inv_weakening p a a (Z.le_refl b) (Z.le_refl e) with "HA").
+      - do 2 iModIntro.
+        iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
+        iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
+        done.
+        iModIntro.
+        rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv].
+        iApply (interp_cap_inv_weakening p a a (Z.le_refl b) (Z.le_refl e) with "HA").
     Qed.
 
-    (* TODO: a lot of repetition, pull it into separate lemma and apply it *)
     Lemma interp_weakening p p' b b' e e' a a' :
       p ≠ E ->
       (b ≤ b')%Z ->
@@ -483,164 +518,19 @@ Module MinCapsModel.
       interp (inr (MkCap p b e a)) -∗
       interp (inr (MkCap p' b' e' a')).
     Proof.
-      intros HpnotE Hb He Hsubperm.
-      iIntros "#IH #HA".
-      destruct (decide (b' ≤ e')%Z).
-      2: {
-        rewrite !fixpoint_interp1_eq.
-        destruct p; try done;
-        destruct p'; try done;
-        try (iRight; auto;
-             iPureIntro;
-             apply Znot_le_gt in n;
-               by apply Z.gt_lt in n).
-        do 2 iModIntro.
-        iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
-        iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
-        done.
-        iModIntro.
-        rewrite fixpoint_interp1_eq; simpl.
-        iRight;
-          iPureIntro;
-          apply Znot_le_gt in n;
-          by apply Z.gt_lt in n.
-        do 2 iModIntro.
-        iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
-        iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
-        done.
-        iModIntro.
-        rewrite fixpoint_interp1_eq; simpl.
-        iRight;
-          iPureIntro;
-          apply Znot_le_gt in n;
-          by apply Z.gt_lt in n.
-      }
+      iIntros (HpnotE Hb He Hsubperm) "#IH #HA".
       destruct p'.
       - rewrite !fixpoint_interp1_eq; done.
-      - destruct p; inversion Hsubperm.
-        + rewrite !fixpoint_interp1_eq; simpl.
-          iLeft.
-          iIntros (_).
-          iDestruct "HA" as "[HA | %]"; try lia.
-          assert (Hle : (b ≤ e)%Z).
-          { eapply Z.le_trans. apply Hb.
-            eapply Z.le_trans. apply l. apply He. }
-          iSpecialize ("HA" $! Hle).
-          iDestruct "HA" as "([%Hbl %Hel] & HA)".
-          iSplitR.
-          iPureIntro.
-          split;
-            (eapply le_liveAddrs;
-             first apply (conj Hbl Hel));
-            intuition;
-            try assumption.
-          eapply Z.le_trans; first apply l; auto.
-          eapply Z.le_trans; first apply Hb; auto.
-          iApply (region_addrs_submseteq $! (conj Hb He) with "HA").
-        + rewrite !fixpoint_interp1_eq; simpl.
-          iLeft.
-          iIntros (_).
-          iDestruct "HA" as "[HA | %]"; try lia.
-          assert (Hle : (b ≤ e)%Z).
-          { eapply Z.le_trans. apply Hb.
-            eapply Z.le_trans. apply l. apply He. }
-          iSpecialize ("HA" $! Hle).
-          iDestruct "HA" as "([%Hbl %Hel] & HA)".
-          iSplitR.
-          iPureIntro.
-          split;
-            (eapply le_liveAddrs;
-             first apply (conj Hbl Hel));
-            intuition;
-            try assumption.
-          eapply Z.le_trans; first apply l; auto.
-          eapply Z.le_trans; first apply Hb; auto.
-          iApply (region_addrs_submseteq $! (conj Hb He) with "HA").
-      - destruct p; inversion Hsubperm.
-        + rewrite !fixpoint_interp1_eq; simpl.
-          iLeft.
-          iIntros (_).
-          iDestruct "HA" as "[HA | %]"; try lia.
-          assert (Hle : (b ≤ e)%Z).
-          { eapply Z.le_trans. apply Hb.
-            eapply Z.le_trans. apply l. apply He. }
-          iSpecialize ("HA" $! Hle).
-          iDestruct "HA" as "([%Hbl %Hel] & HA)".
-          iSplitR.
-          iPureIntro.
-          split;
-            (eapply le_liveAddrs;
-             first apply (conj Hbl Hel));
-            intuition;
-            try assumption.
-          eapply Z.le_trans; first apply l; auto.
-          eapply Z.le_trans; first apply Hb; auto.
-          iApply (region_addrs_submseteq $! (conj Hb He) with "HA").
-      - destruct p; inversion Hsubperm.
-        + rewrite !fixpoint_interp1_eq.
-          do 2 iModIntro.
-          iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
-          iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
-          done.
-          iModIntro.
-          rewrite !fixpoint_interp1_eq; simpl.
-          iLeft.
-          iIntros (_).
-          iDestruct "HA" as "[HA | %]"; try lia.
-          assert (Hle : (b ≤ e)%Z).
-          { eapply Z.le_trans. apply Hb.
-            eapply Z.le_trans. apply l. apply He. }
-          iSpecialize ("HA" $! Hle).
-          iDestruct "HA" as "([%Hbl %Hel] & HA)".
-          iSplitR.
-          iPureIntro.
-          split;
-            (eapply le_liveAddrs;
-             first apply (conj Hbl Hel));
-            intuition;
-            try assumption.
-          eapply Z.le_trans; first apply l; auto.
-          eapply Z.le_trans; first apply Hb; auto.
-          iApply (region_addrs_submseteq $! (conj Hb He) with "HA").
-        + rewrite !fixpoint_interp1_eq.
-          do 2 iModIntro.
-          iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
-          iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
-          done.
-          iModIntro.
-          rewrite !fixpoint_interp1_eq; simpl.
-          iLeft.
-          iIntros (_).
-          iDestruct "HA" as "[HA | %]"; try lia.
-          assert (Hle : (b ≤ e)%Z).
-          { eapply Z.le_trans. apply Hb.
-            eapply Z.le_trans. apply l. apply He. }
-          iSpecialize ("HA" $! Hle).
-          iDestruct "HA" as "([%Hbl %Hel] & HA)".
-          iSplitR.
-          iPureIntro.
-          split;
-            (eapply le_liveAddrs;
-             first apply (conj Hbl Hel));
-            intuition;
-            try assumption.
-          eapply Z.le_trans; first apply l; auto.
-          eapply Z.le_trans; first apply Hb; auto.
-          iApply (region_addrs_submseteq $! (conj Hb He) with "HA").
-        + contradiction.
-    Qed.
-
-    Lemma subseg_interp_preserved p b b' e e' a a' :
-      p ≠ E ->
-      (b ≤ b')%Z ->
-      (e' ≤ e)%Z ->
-      IH -∗
-      interp (inr (MkCap p b e a)) -∗
-      interp (inr (MkCap p b' e' a')).
-    Proof.
-      iIntros (HpnotE Hb He) "#IH Hinterp".
-      iApply (interp_weakening with "IH Hinterp"); auto.
-      destruct p; reflexivity.
+      - destruct p eqn:Ep; inversion Hsubperm;
+          rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv];
+          iApply (interp_cap_inv_weakening p a a' Hb He with "HA").
+      - destruct p eqn:Ep; inversion Hsubperm;
+          rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv];
+          iApply (interp_cap_inv_weakening p a a' Hb He with "HA").
+      - destruct p eqn:Ep; inversion Hsubperm; last contradiction;
+          iApply (interp_subperm_weakening _ _ _ Hsubperm with "IH");
+          rewrite !fixpoint_interp1_eq;
+          iApply (interp_cap_inv_weakening p a a' Hb He with "HA").
     Qed.
   End Predicates.
 
