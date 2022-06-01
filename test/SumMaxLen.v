@@ -398,8 +398,7 @@ Module Import ExampleModel.
     Lemma adequacy_pure {Δ σ} (f : Fun Δ σ) : adequacy_pure_prop f.
     Proof.
       unfold adequacy_pure_prop.
-      remember (CEnv f) as contract.
-      destruct contract as [[Σ args pre result post]|]; try now cbn.
+      destruct (CEnv f) as [[Σ args pre result post]|] eqn:Heqcontract; try now cbn.
       intros preP postP Γ δ δ' γ γ' μ μ' ι PRE v evals.
       refine (SumMaxLen.ExampleModel.adequacy
                 (Q := fun v => interpret_assertion_pure post ι.[result∷σ ↦ v]) evals I _).
@@ -407,7 +406,7 @@ Module Import ExampleModel.
       iIntros (Σ' sG) "[_ _]".
       iApply (weakestpre.wp_mono').
       2: {
-        iApply (iris_rule_stm_call_forwards _ _ (eq_sym Heqcontract)).
+        iApply (iris_rule_stm_call_forwards _ _ Heqcontract).
         - eapply rule_sep_contract.
           + unfold DefaultBase.evals.
             now rewrite env.map_map env.map_id.
