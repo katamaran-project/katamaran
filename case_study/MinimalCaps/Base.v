@@ -37,7 +37,7 @@ Require Import Katamaran.Base.
 (*** TYPES ***)
 
 Inductive Permission : Set :=
-  O | R | RW | E.
+  O | R | RW.
 
 Inductive RegName : Set :=
   R0 | R1 | R2 | R3.
@@ -164,7 +164,7 @@ Section Finite.
     finite_from_eqdec.
 
   #[export,program] Instance Permission_finite : Finite Permission :=
-    {| enum := [O;R;RW;E] |}.
+    {| enum := [O;R;RW] |}.
 
   #[export,program] Instance RegName_finite : Finite RegName :=
     {| enum := [R0;R1;R2;R3] |}.

@@ -244,12 +244,6 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       λne interp, ([∗ list] r ∈ GPRs, (∃ w, MinCaps_ptsreg r w ∗ interp w))%I.
     Solve Obligations with solve_proper.
 
-    Definition interp_loop `{sg : sailGS Σ} : iProp Σ :=
-      (WP (MkConf (FunDef loop) env.nil) ?{{_, True}})%I.
-
-    Definition interp_expr (interp : D) : C :=
-      (λne (c : leibnizO Capability),
-        reg_pointsTo pc c ∗ interp_gprs interp -∗ (interp_loop (sg := SailGS _ _ mG)))%I.
 
     (* TODO: Check if I tried changing this one to a discrete one, should remain non-expansive so we can proof contractiveness *)
     Program Definition interp_ref_inv (a : Addr) : D -n> iPropO Σ :=
@@ -281,16 +275,6 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
               end)%I.
     Solve Obligations with solve_proper.
 
-    Program Definition enter_cond (b e a : Addr) : D -n> iPropO Σ :=
-      λne interp, (▷ □ interp_expr interp (MkCap R b e a))%I.
-    Solve Obligations with solve_proper.
-
-    Program Definition interp_cap_E (interp : D) : D :=
-      λne w, (match w with
-              | inr (MkCap E b e a) => enter_cond b e a interp
-              | _                   => False
-              end)%I.
-    Solve Obligations with solve_proper.
 
     Program Definition interp_z : D :=
       λne w, ⌜ match w with
@@ -305,7 +289,6 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
               | inr (MkCap O _ _ _)  => interp_cap_O w
               | inr (MkCap R _ _ _)  => interp_cap_R interp w
               | inr (MkCap RW _ _ _) => interp_cap_RW interp w
-              | inr (MkCap E _ _ _)  => interp_cap_E interp w
               end)%I.
 
     Global Instance interp_cap_O_contractive :
@@ -320,13 +303,6 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
     Qed.
     Global Instance interp_cap_RW_contractive :
       Contractive interp_cap_RW.
-    Proof.
-      intros n x y Hdist w.
-      destruct w; auto.
-      destruct c; destruct cap_permission; solve_contractive.
-    Qed.
-    Global Instance interp_cap_E_contractive :
-      Contractive interp_cap_E.
     Proof.
       intros n x y Hdist w.
       destruct w; auto.
@@ -423,11 +399,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
           apply (le_liveAddrs H4 (conj H1 (Z.le_trans b' e' e H3 H2))).
           apply (le_liveAddrs H4 (conj (Z.le_trans b b' e' H1 H3) H2)).
         + iApply (region_addrs_submseteq $! (conj H1 H2) with "H").
-      - iModIntro.
-        iDestruct "Hsafe" as "# Hsafe".
-        iModIntro.
-        admit.
-    Admitted.
+    Qed.
 
     Lemma specialize_range (b e addr : Addr) :
       ⊢ ⌜ (b <= addr)%Z /\ (addr <= e)%Z ⌝ -∗
@@ -451,7 +423,6 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
      | ptsreg     => fun ts => MinCaps_ptsreg (env.head (env.tail ts)) (env.head ts)
      | ptsto      => fun ts => mapsto (env.head (env.tail ts)) (DfracOwn 1) (env.head ts)
      | safe       => fun ts => interp (env.head ts)
-     | expression => fun ts => interp_expr interp (env.head ts)
      | dummy      => fun ts => True%I
      | gprs       => fun ts => interp_gprs interp
      end) ts.
@@ -536,11 +507,7 @@ Module MinCapsIrisInstanceWithContracts.
       iSplit; [done|].
       do 2 rewrite fixpoint_interp1_eq.
       destruct p; auto.
-      simpl.
-      iModIntro.
-      iModIntro.
-      (* by iIntros. *)
-    Admitted.
+    Qed.
 
     Lemma safe_sub_perm_sound :
       ValidLemma lemma_safe_sub_perm.
@@ -551,7 +518,7 @@ Module MinCapsIrisInstanceWithContracts.
       do 2 rewrite fixpoint_interp1_eq.
       destruct p; destruct p'; trivial;
         destruct Hp; try discriminate.
-    Admitted.
+    Qed.
 
     Lemma safe_within_range_sound :
       ValidLemma lemma_safe_within_range.
@@ -701,7 +668,7 @@ Module MinCapsIrisInstanceWithContracts.
       apply map_Forall_lookup_1 with (i := a) (x := v) in H0; auto.
       simpl in H0. subst.
       iAssumption.
-  Admitted.
+  Qed.
 
   Lemma wM_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
     forall a w (p : Val ty.perm) (b e : Val ty.addr),

@@ -59,7 +59,6 @@ Inductive Predicate : Set :=
   ptsreg
 | ptsto
 | safe
-| expression
 | dummy
 | gprs
 .
@@ -84,15 +83,9 @@ Section PredicateKit.
     | subperm => [ty.perm; ty.perm]
     end.
 
-  (* TODO: update perm lattice, E ⊂ R,RW *)
-  (* TODO: same for the subperm checks in Machine.v *)
   Definition decide_subperm (p p' : Val ty.perm) : bool :=
     match p with
     | O => true
-    | E => match p' with
-           | E => true
-           | _ => false
-           end
     | R => match p' with
            | O => false
            | _ => true
@@ -119,7 +112,6 @@ Section PredicateKit.
     | ptsreg     => [ty.enum regname; ty.word]
     | ptsto      => [ty.addr; ty.memval]
     | safe       => [ty.word]
-    | expression => [ty.cap]
     | dummy      => [ty.cap]
     | gprs       => []
     end.
@@ -129,7 +121,6 @@ Section PredicateKit.
       | ptsreg     => false
       | ptsto      => false
       | safe       => true
-      | expression => false (* TODO: check if it is duplicable when implemented *)
       | dummy      => false
       | gprs       => false
       end
@@ -162,7 +153,6 @@ End PredicateKit.
     Notation asn_safe w := (asn_chunk (chunk_user safe (env.nil ► (ty.word ↦ w)))).
     Notation asn_csafe c := (asn_chunk (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
     Notation asn_csafe_angelic c := (asn_chunk_angelic (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
-    Notation asn_expression c := (asn_chunk (chunk_user expression [c])).
     Notation asn_dummy c := (asn_chunk (chunk_user dummy (env.nil ► (ty.cap ↦ c)))).
     Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
     Notation asn_match_cap c p b e a asn :=

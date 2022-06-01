@@ -456,7 +456,6 @@ Section FunDefKit.
       | O  => stm_val ty.int 0%Z
       | R  => stm_val ty.int 1%Z
       | RW => stm_val ty.int 2%Z
-      | E  => stm_val ty.int 3%Z
       end.
 
     Definition fun_perm_from_bits : Stm ["i" ∷ ty.int] ty.perm :=
@@ -470,10 +469,6 @@ Section FunDefKit.
       match: exp_var "p" in permission with
       | O =>
         stm_val ty.bool true
-      | E => match: exp_var "p'" in permission with
-             | E => stm_val ty.bool true
-             | _ => stm_val ty.bool false
-             end
       | R => match: exp_var "p'" in permission with
             | O => stm_val ty.bool false
             | _ =>
