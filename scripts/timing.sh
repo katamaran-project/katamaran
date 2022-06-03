@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 set -e
 
-if ! command -v ts &> /dev/null; then
-  echo "The ts command could not be found. Please install the moreutils package."
-  exit 1
-fi
+declare -A before
+declare -A after
 
-if [ ! -f "$1" ]; then
-  echo "Usage: $0 <input file>"
-  exit 1
-fi
+REBEFORE='([0-9.]+) Timing before: (.+)'
+REAFTER='([0-9.]+) Timing after: (.+)'
 
-egrep "[0-9.]+ Timing before:" "$1" | while read -r before col2 col3 func col5
-do 
-   egrep "Timing after: ${func}" "$1" | while read -r after col2
-   do
-     awk "BEGIN {printf(\"$func %.4f\n\", $after - $before)}"
-   done
+while read line
+do
+   # echo $line
+   if [[ "$line" =~ $REBEFORE ]]; then
+     func="${BASH_REMATCH[2]}"
+     time="${BASH_REMATCH[1]}"
+     before[$func]="$time"
+   fi
+
+   if [[ "$line" =~ $REAFTER ]]; then
+     func="${BASH_REMATCH[2]}"
+     time="${BASH_REMATCH[1]}"
+     awk "BEGIN {printf(\"$func %.4f\n\", $time - ${before[$func]})}"
+   fi
 done

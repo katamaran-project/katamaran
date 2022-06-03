@@ -32,6 +32,7 @@ From Coq Require Import
      Bool.Bool
      Logic.StrictProp
      Lists.List
+     NArith.NArith
      Strings.String
      ZArith.BinInt.
 
@@ -514,3 +515,15 @@ Definition findAD {A} {B : A -> Type} {eqA: EqDec A} (a : A) :
         | right _ => find xs
         end
     end.
+
+Record Stats : Set :=
+  { branches : N
+  ; pruned   : N
+  }.
+
+Definition plus_stats (x y : Stats) : Stats :=
+  {| branches := branches x + branches y;
+     pruned   := pruned x + pruned y
+  |}.
+Definition empty_stats : Stats :=
+  {| branches := 0; pruned   := 0|}.

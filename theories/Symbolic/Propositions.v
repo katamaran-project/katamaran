@@ -512,6 +512,19 @@ Module Type SymPropOn
         + intros sp ι v. apply (sp (env.snoc ι b v)).
     Qed.
 
+    Definition safe_demonic_close {Σ : LCtx} (p : 𝕊 Σ) :
+      safe (demonic_close p) env.nil <-> forall ι : Valuation Σ, safe p ι.
+    Proof.
+      induction Σ; cbn [demonic_close] in *.
+      - split.
+        + intros s ι. now destruct (env.nilView ι).
+        + intros s. apply (s env.nil).
+      - rewrite (IHΣ (demonicv b p)); cbn.
+        split.
+        + intros sp ι. destruct (env.snocView ι) as (ι & v). auto.
+        + intros sp ι v. apply (sp (env.snoc ι b v)).
+    Qed.
+
     (* Fixpoint occurs_check_spath {Σ x} (xIn : x ∈ Σ) (p : 𝕊 Σ) : option (𝕊 (Σ - x)) := *)
     (*   match p with *)
     (*   | angelic_binary o1 o2 => *)

@@ -40,14 +40,13 @@ theories/SmallStep/Inversion.v
 theories/SmallStep/Progress.v
 theories/SmallStep/Step.v
 theories/Specification.v
-theories/Staging/CommandStep.v
+theories/Symbolic/Executor.v
 theories/Symbolic/Instantiation.v
-theories/Symbolic/Mutator.v
 theories/Symbolic/OccursCheck.v
 theories/Symbolic/PartialEvaluation.v
 theories/Symbolic/Propositions.v
 theories/Symbolic/Solver.v
-theories/Symbolic/Sound.v
+theories/Symbolic/Soundness.v
 theories/Symbolic/Worlds.v
 theories/Syntax/Assertions.v
 theories/Syntax/BinOps.v

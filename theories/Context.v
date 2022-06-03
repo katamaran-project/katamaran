@@ -143,12 +143,11 @@ Module ctx.
                        end
         end.
 
-      Global Instance eqdec_ctx_nth {Γ n b} : EqDec (nth_is Γ n b).
-      Proof. intros p q. left. apply proof_irrelevance_nth_is. Defined.
+      Global Instance eqdec_ctx_nth {Γ n b} : EqDec (nth_is Γ n b) :=
+        fun p q => left (proof_irrelevance_nth_is n b p q).
 
-      Lemma proof_irrelevance_nth_is_refl {Γ} (n : nat) (b : B) (p : nth_is Γ n b) :
-        proof_irrelevance_nth_is n b p p = eq_refl.
-      Proof. apply uip. Qed.
+      Definition proof_irrelevance_nth_is_refl {Γ} (n : nat) (b : B) (p : nth_is Γ n b) :
+        proof_irrelevance_nth_is n b p p = eq_refl := uip _ _.
 
     End WithUIP.
 

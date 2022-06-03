@@ -43,9 +43,9 @@ From Katamaran Require Import
      Sep.Hoare
      Shallow.Executor
      Shallow.Soundness
-     Symbolic.Mutator
+     Symbolic.Executor
      Symbolic.Solver
-     Symbolic.Sound
+     Symbolic.Soundness
      Symbolic.Worlds
      Symbolic.Propositions
      Semantics
@@ -211,10 +211,9 @@ Local Ltac solve :=
   auto.
 
 Module Import ExampleShalExec := MakeShallowExecutor DefaultBase ExampleSig ExampleSpecification.
-Import CMut.
 
 Goal True. idtac "Timing before: summaxlen/shallow". Abort.
-Lemma valid_contract_summaxlen_shallow : CMut.ValidContract 1 sep_contract_summaxlen fun_summaxlen.
+Lemma valid_contract_summaxlen_shallow : Shallow.ValidContract sep_contract_summaxlen fun_summaxlen.
 Proof.
   compute - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
   solve; nia.
@@ -231,10 +230,9 @@ Goal True. idtac "Timing after: summaxlen/shallow". Abort.
 (* Goal True. idtac "Timing after: summaxlen/slow". Abort. *)
 
 Goal True. idtac "Timing before: summaxlen/symbolic". Abort.
-Lemma valid_contract_summaxlen : SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
+Lemma valid_contract_summaxlen : Symbolic.ValidContract sep_contract_summaxlen fun_summaxlen.
 Proof.
-  apply SMut.validcontract_with_erasure_sound.
-  hnf.
+  apply Symbolic.validcontract_with_erasure_sound.
   compute. constructor.
   compute - [Z.mul Z.add Z.le Z.ge Z.lt].
   solve; nia.
@@ -243,8 +241,10 @@ Goal True. idtac "Timing after: summaxlen/symbolic". Abort.
 
 Section Debug.
 
-  Goal CMut.ValidContract 1 sep_contract_summaxlen fun_summaxlen.
+  Goal Shallow.ValidContract sep_contract_summaxlen fun_summaxlen.
     compute - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
+    (* We change the goal here to give more descriptive names to the quantified variables. Coq's
+       type checker makes sure that this is definitionally equal to the computed goal. *)
     change
       (forall xs : list Z, true = true ->
          (nil = xs -> exists (sm : Z * Z) (l : Z), (sm,l) = (0, 0, 0) /\
@@ -265,13 +265,13 @@ Section Debug.
   Import SymProp.
   Import SymProp.notations.
 
-  Goal SMut.ValidContract sep_contract_summaxlen fun_summaxlen.
+  Goal Symbolic.ValidContract sep_contract_summaxlen fun_summaxlen.
     compute.
     idtac "Symbolic verification condition:".
     match goal with |- VerificationCondition ?x => idtac x end.
   Abort.
 
-  Goal SMut.ValidContract sep_contract_summaxlen fun_summaxlen_with_debug.
+  Goal Symbolic.ValidContract sep_contract_summaxlen fun_summaxlen_with_debug.
     compute.
     idtac "Symbolic verification condition with debug nodes:".
     match goal with |- VerificationCondition ?x => idtac x end.
@@ -348,7 +348,7 @@ Module Import ExampleModel.
   Proof. intros Γ l. destruct l. Qed.
 
   Include Shallow.Soundness.Soundness DefaultBase ExampleSig ExampleSpecification ExampleShalExec.
-  Include Soundness DefaultBase ExampleSig ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
+  Include Symbolic.Soundness.Soundness DefaultBase ExampleSig ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
 
   Section WithIrisNotations.
     Import iris.bi.interface.
@@ -361,8 +361,8 @@ Module Import ExampleModel.
       apply (sound foreignSem lemSem).
       intros Γ τ f c.
       destruct f; inversion 1; subst.
-      apply (shallow_execution_soundness 1).
-      apply symbolic_execution_soundness.
+      apply shallow_vcgen_soundness.
+      apply symbolic_vcgen_soundness.
       apply valid_contract_summaxlen.
     Qed.
 
@@ -407,7 +407,7 @@ Module Import ExampleModel.
       iApply (weakestpre.wp_mono').
       2: {
         iApply (iris_rule_stm_call_forwards _ _ Heqcontract).
-        - eapply rule_sep_contract.
+        - eapply ProgramLogic.rule_sep_contract.
           + unfold DefaultBase.evals.
             now rewrite env.map_map env.map_id.
           + eapply Logic.sep.lsep_true.
@@ -434,18 +434,21 @@ Module Import ExampleModel.
 End ExampleModel.
 
 Goal True.
-  idtac "Assumptions for symbolic_execution_soundness:". Print Assumptions symbolic_execution_soundness.
-  idtac "Assumptions for shallow_execution_soundness:". Print Assumptions shallow_execution_soundness.
+  idtac "Assumptions for symbolic_vcgen_soundness:". Print Assumptions symbolic_vcgen_soundness.
+  idtac "Assumptions for shallow_vcgen_soundness:". Print Assumptions shallow_vcgen_soundness.
   idtac "Assumptions for summaxlen_adequacy:". Print Assumptions summaxlen_adequacy.
 Abort.
 
-Import SMut.Statistics.
-Goal forall {Δ τ} (f : Fun Δ τ),
-  calc_statistics f = None.
+Ltac calcstats fn :=
+  let smb := eval compute in (Symbolic.Statistics.calc fn) in
+  let shl := Shallow.Statistics.calc fn in
+  let row := constr:(pair fn (pair shl smb)) in
+  idtac row.
+
+Goal forall {Δ τ} (f : Fun Δ τ), f = f.
   idtac "Branching statistics:".
-  destruct f; compute;
-  match goal with
-  | |- Some ?x = None =>
-      idtac x
-  end.
+  destruct f;
+    match goal with
+    |- ?g = _ => calcstats g
+    end.
 Abort.

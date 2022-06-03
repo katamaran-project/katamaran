@@ -42,11 +42,11 @@ From Katamaran Require Import
      Semantics.Registers
      Shallow.Executor
      Shallow.Soundness
-     Symbolic.Mutator
+     Symbolic.Executor
      Symbolic.Solver
      Symbolic.Worlds
      Symbolic.Propositions
-     Symbolic.Sound
+     Symbolic.Soundness
      Program
      Specification
      Sep.Hoare
@@ -576,29 +576,25 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecifi
   Qed.
   Goal True. idtac "Timing after: llist/simplify_preverseappend_spec". Abort.
 
-  Definition simplify_user {Σ} (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ) :=
-    match p with
-    | plength => fun ts =>
-                   let (ts,n)  := env.snocView ts in
-                   let (ts,xs) := env.snocView ts in
-                   simplify_plength xs n
-    | preverse => fun ts => Some (cons (formula_user preverse ts) nil)
-    | preverseappend =>
-        fun ts =>
-          let (ts,zs) := env.snocView ts in
-          let (ts,ys) := env.snocView ts in
-          let (ts,xs) := env.snocView ts in
-          simplify_preverseappend xs ys zs
-    end.
+  Definition solve_user : SolverUserOnly :=
+    fun Σ p =>
+      match p with
+      | plength => fun ts =>
+                     let (ts,n)  := env.snocView ts in
+                     let (ts,xs) := env.snocView ts in
+                     simplify_plength xs n
+      | preverse => fun ts => Some (cons (formula_user preverse ts) nil)
+      | preverseappend =>
+          fun ts =>
+            let (ts,zs) := env.snocView ts in
+            let (ts,ys) := env.snocView ts in
+            let (ts,xs) := env.snocView ts in
+            simplify_preverseappend xs ys zs
+      end.
 
-  Lemma simplify_user_spec {Σ} (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)) :
-    option.spec
-      (fun r : List Formula Σ =>
-         forall ι : Valuation Σ,
-           inst (formula_user p ts) ι <-> instpc r ι)
-      (forall ι : Valuation Σ, ~ inst (formula_user p ts) ι)
-      (simplify_user p ts).
+  Lemma solve_user_spec : SolverUserOnlySpec solve_user.
   Proof.
+    intros Σ p ts.
     destruct p; cbv in ts; env.destroy ts.
     - apply simplify_plength_spec.
     - constructor; intros ?; cbn.
@@ -606,87 +602,11 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecifi
     - apply simplify_preverseappend_spec.
   Qed.
 
-  (* TODO: Move the rest of this module to the library. *)
-  Equations(noeqns) simplify_formula {Σ} : Formula Σ -> List Formula Σ -> option (List Formula Σ) :=
-  | formula_user p ts | k => option.map (fun r => app r k) (simplify_user p ts);
-  | f                 | k => Some (cons f k).
-
-  Lemma simplify_formula_spec {Σ} (f : Formula Σ) (k : List Formula Σ) :
-    option.spec
-      (fun r : List Formula Σ =>
-         forall ι : Valuation Σ,
-           instpc (cons f k)%list ι <-> instpc r ι)
-      (forall ι : Valuation Σ, ~ inst f ι)
-      (simplify_formula f k).
-  Proof.
-    destruct f; try (constructor; reflexivity).
-    cbn [simplify_formula]. apply option.spec_map.
-    generalize (simplify_user_spec p ts).
-    apply option.spec_monotonic.
-    - intros ? H ?. rewrite inst_pathcondition_app.
-      apply and_iff_compat_r'. intros ?. apply H.
-    - auto.
-  Qed.
-
-  Section SimplifyAll.
-
-    Import option.notations.
-    Context {Σ} (g : Formula Σ -> List Formula Σ -> option (List Formula Σ)).
-
-    Definition simplify_all {Σ} (g : Formula Σ -> List Formula Σ -> option (List Formula Σ)) :=
-      fix simplify_all (fmls k : List Formula Σ) {struct fmls} : option (List Formula Σ) :=
-        match fmls with
-        | nil => Some k
-        | cons fml0 fmls =>
-          k' <- simplify_all fmls k ;;
-          g fml0 k'
-        end.
-
-    Context (g_spec : forall f k,
-                option.spec
-                  (fun r : List Formula Σ =>
-                     forall ι : Valuation Σ,
-                       instpc (cons f k)%list ι <-> instpc r ι)
-                  (forall ι : Valuation Σ, ~ inst f ι)
-                  (g f k)).
-
-    Lemma simplify_all_spec (fmls k : List Formula Σ) :
-      option.spec
-        (fun r : List Formula Σ =>
-           forall ι : Valuation Σ,
-             instpc (fmls ++ k)%list ι <-> instpc r ι)
-        (forall ι : Valuation Σ, ~ instpc fmls ι)
-        (simplify_all g fmls k).
-    Proof.
-      induction fmls; cbn; [constructor; reflexivity|].
-      apply option.spec_bind. revert IHfmls.
-      apply option.spec_monotonic.
-      - intros tmp Htmp. specialize (g_spec a tmp). revert g_spec.
-        apply option.spec_monotonic.
-        + intros res Hres ι. rewrite (Htmp ι). apply (Hres ι).
-        + intros Hna ι [Ha ?]. now apply (Hna ι).
-      - intros Hnfmls ι [Ha Hfmls]. now apply (Hnfmls ι).
-    Qed.
-
-  End SimplifyAll.
-
   Definition solver : Solver :=
-    fun w fmls =>
-      option_map
-        (fun l => existT w (tri_id, l))
-        (simplify_all simplify_formula fmls nil).
-
+    solveruseronly_to_solver solve_user.
   Lemma solver_spec : SolverSpec solver.
   Proof.
-    intros w0 fmls. unfold solver.
-    apply option.spec_map.
-    generalize (simplify_all_spec simplify_formula simplify_formula_spec fmls nil).
-    apply option.spec_monotonic.
-    - intros r H ι Hpc. split; [constructor|].
-      specialize (H ι). rewrite inst_pathcondition_app in H.
-      cbn in H. rewrite rightid_and_true in H.
-      intros ι' Hpc'. cbn. rewrite inst_sub_id. intros. now subst.
-    - intros Hnf ι Hpc. apply Hnf.
+    apply solveruseronly_to_solver_spec, solve_user_spec.
   Qed.
 
 End ExampleSolverKit.
@@ -695,36 +615,6 @@ Module ExampleSolver := MakeSolver DefaultBase ExampleSignature ExampleSpecifica
 Module Import ExampleExecutor :=
   MakeExecutor DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
 
-Goal True. idtac "Timing before: llist/valid_contract_append". Abort.
-Lemma valid_contract_append : SMut.ValidContractReflect sep_contract_append fun_append.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_append". Abort.
-
-Goal True. idtac "Timing before: llist/valid_contract_appendloop". Abort.
-Lemma valid_contract_appendloop : SMut.ValidContractReflect sep_contract_appendloop fun_appendloop.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_appendloop". Abort.
-
-Goal True. idtac "Timing before: llist/valid_contract_length". Abort.
-Lemma valid_contract_length : SMut.ValidContractReflect sep_contract_length fun_length.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_length". Abort.
-
-Goal True. idtac "Timing before: llist/valid_contract_copy". Abort.
-Lemma valid_contract_copy : SMut.ValidContractReflect sep_contract_copy fun_copy.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_copy". Abort.
-
-Goal True. idtac "Timing before: llist/valid_contract_reverse". Abort.
-Lemma valid_contract_reverse : SMut.ValidContractReflect sep_contract_reverse fun_reverse.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_reverse". Abort.
-
-Goal True. idtac "Timing before: llist/valid_contract_reverseloop". Abort.
-Lemma valid_contract_reverseloop : SMut.ValidContractReflect sep_contract_reverseloop fun_reverseloop.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_reverseloop". Abort.
-
 Section DebugExample.
   Import SymProp.notations.
   Notation "x '∷' σ . P" := (@SymProp.EMsgThere _ (x ∷ σ) P) (at level 200, right associativity, only printing, format "x '∷' σ .  '/' P").
@@ -732,14 +622,46 @@ Section DebugExample.
   Notation "P" := (SymProp.EMsgHere P) (only printing).
   Import ListNotations.
 
-  Lemma debug_appendloop_broken : SMut.ValidContract sep_contract_appendloop fun_appendloop_broken.
+  Lemma debug_appendloop_broken : Symbolic.ValidContract sep_contract_appendloop fun_appendloop_broken.
   Proof.
     compute.
+    idtac "Verification condition with failure:".
+    match goal with |- VerificationCondition ?x => idtac x end.
   Abort.
 
 End DebugExample.
 
-Module ExampleShalExec :=
+Goal True. idtac "Timing before: llist/valid_contract_append". Abort.
+Lemma valid_contract_append : Symbolic.ValidContractReflect sep_contract_append fun_append.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing after: llist/valid_contract_append". Abort.
+
+Goal True. idtac "Timing before: llist/valid_contract_appendloop". Abort.
+Lemma valid_contract_appendloop : Symbolic.ValidContractReflect sep_contract_appendloop fun_appendloop.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing after: llist/valid_contract_appendloop". Abort.
+
+Goal True. idtac "Timing before: llist/valid_contract_length". Abort.
+Lemma valid_contract_length : Symbolic.ValidContractReflect sep_contract_length fun_length.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing after: llist/valid_contract_length". Abort.
+
+Goal True. idtac "Timing before: llist/valid_contract_copy". Abort.
+Lemma valid_contract_copy : Symbolic.ValidContractReflect sep_contract_copy fun_copy.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing after: llist/valid_contract_copy". Abort.
+
+Goal True. idtac "Timing before: llist/valid_contract_reverse". Abort.
+Lemma valid_contract_reverse : Symbolic.ValidContractReflect sep_contract_reverse fun_reverse.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing after: llist/valid_contract_reverse". Abort.
+
+Goal True. idtac "Timing before: llist/valid_contract_reverseloop". Abort.
+Lemma valid_contract_reverseloop : Symbolic.ValidContractReflect sep_contract_reverseloop fun_reverseloop.
+Proof. reflexivity. Qed.
+Goal True. idtac "Timing after: llist/valid_contract_reverseloop". Abort.
+
+Module Import ExampleShalExec :=
   MakeShallowExecutor DefaultBase ExampleSignature ExampleSpecification.
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
   MakeSemantics DefaultBase ExampleProgram.
@@ -1060,9 +982,9 @@ Module ExampleModel.
     apply (sound foreignSem lemSem).
     intros Γ τ f c.
     destruct f; inversion 1; subst;
-    apply (shallow_execution_soundness 1);
-    apply symbolic_execution_soundness;
-    apply SMut.validcontract_reflect_sound.
+    apply shallow_vcgen_soundness;
+    apply symbolic_vcgen_soundness;
+    apply Symbolic.validcontract_reflect_sound.
     apply valid_contract_append.
     apply valid_contract_appendloop.
     apply valid_contract_length.
@@ -1077,13 +999,16 @@ Module ExampleModel.
   End WithIrisNotations.
 End ExampleModel.
 
-Import SMut.Statistics.
-Goal forall {Δ τ} (f : Fun Δ τ),
-  calc_statistics f = None.
+Ltac calcstats fn :=
+  let smb := eval compute in (Symbolic.Statistics.calc fn) in
+  let shl := Shallow.Statistics.calc fn in
+  let row := constr:(pair fn (pair shl smb)) in
+  idtac row.
+
+Goal forall {Δ τ} (f : Fun Δ τ), f = f.
   idtac "Branching statistics:".
-  destruct f; compute;
-  match goal with
-  | |- Some ?x = None =>
-      idtac x
-  end.
+  destruct f;
+    match goal with
+    |- ?g = _ => calcstats g
+    end.
 Abort.

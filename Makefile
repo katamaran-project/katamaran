@@ -44,6 +44,18 @@ linkedlist: Makefile.coq
 	$(Q)rm -f test/LinkedList.vo*
 	$(Q)$(MAKE) -f Makefile.coq test/LinkedList.vo
 
-minimalcaps: Makefile.coq
+timings: Makefile.coq
+	$(Q)rm -f case_study/MinimalCaps/Contracts.vo*
+	$(Q)rm -f test/SumMaxLen.vo*
+	$(Q)rm -f test/LinkedList.vo*
+	$(Q)$(MAKE) -f Makefile.coq test/LinkedList.vo test/SumMaxLen.vo case_study/MinimalCaps/Contracts.vo | ts '%.s' | scripts/timing.sh
+
+Makefile2.coq: _CoqProject Makefile $(SRCS) case_study/MinimalCaps/Shallow.v
+	$(E) "COQ_MAKEFILE Makefile2.coq"
+	$(Q)coq_makefile -f _CoqProject -o Makefile2.coq case_study/MinimalCaps/Shallow.v
+
+minimalcaps: Makefile2.coq
 	$(Q)rm -f case_study/MinimalCaps/Contracts.vo*
 	$(Q)$(MAKE) -f Makefile.coq case_study/MinimalCaps/Contracts.vo
+	$(Q)rm -f case_study/MinimalCaps/Shallow.vo*
+	$(Q)$(MAKE) -f Makefile2.coq case_study/MinimalCaps/Shallow.vo | tr -s '[:space:]' '[\n*]' | scripts/shallow.sh
