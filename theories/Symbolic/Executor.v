@@ -2227,7 +2227,7 @@ Module Type SymbolicExecOn
                 demonic_match_list (𝑿to𝑺 xh) (𝑿to𝑺 xt) t
                   (fun _ _ => exec_aux alt_nil)
                   (fun _ _ thead ttail =>
-                     pushspops [nenv thead; ttail] (exec_aux alt_cons ))
+                     pushspops [env].[xh∷_ ↦ thead].[xt∷_↦ ttail] (exec_aux alt_cons ))
             | stm_match_sum e xinl alt_inl xinr alt_inr =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_sum (𝑿to𝑺 xinl) (𝑿to𝑺 xinr) t
@@ -2236,7 +2236,7 @@ Module Type SymbolicExecOn
             | stm_match_prod e xl xr rhs =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_prod (𝑿to𝑺 xl) (𝑿to𝑺 xr) t
-                  (fun _ _ t1 t2 => pushspops [nenv t1; t2] (exec_aux rhs))
+                  (fun _ _ t1 t2 => pushspops [env].[xl∷_ ↦ t1].[xr∷_ ↦ t2] (exec_aux rhs))
             | stm_match_enum E e alts =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_enum t (fun EK _ _ => exec_aux (alts EK))

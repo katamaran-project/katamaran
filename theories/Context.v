@@ -44,7 +44,7 @@ Delimit Scope ctx_scope with ctx.
 
 Module Binding.
 
-  (* Local Set Primitive Projections. *)
+  Local Set Primitive Projections.
   Local Set Transparent Obligations.
 
   Section WithNT.
