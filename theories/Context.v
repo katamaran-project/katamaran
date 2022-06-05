@@ -116,18 +116,24 @@ Module ctx.
       | _        , _   => False
       end.
 
-    Lemma nth_is_right_exact {Γ : Ctx B} (n : nat) (b1 b2 : B) :
-      nth_is Γ n b1 -> nth_is Γ n b2 -> b1 = b2.
-    Proof.
-      revert n.
-      induction Γ.
-      - intros ? [].
-      - cbn in *.
-        destruct n. intros e1 e2.
-        refine (eq_trans _ e2).
-        apply eq_sym. auto.
-        apply IHΓ.
-    Qed.
+    Definition proof_irrelevance_het_nth_is {b1 b2 : B} :
+      forall {Γ n} (p1 : nth_is Γ n b1) (p2 : nth_is Γ n b2),
+        existT _ p1 = existT _ p2 :=
+       fix pi Γ n {struct Γ} :=
+         match Γ with
+         | nil => fun p q => match q with end
+         | snoc Γ b =>
+           match n with
+           | O   => fun p q => match p , q with
+                                 eq_refl , eq_refl => eq_refl
+                               end
+           | S n => pi Γ n
+           end
+         end.
+
+    Corollary nth_is_right_exact {Γ : Ctx B} (n : nat) (b1 b2 : B)
+      (p1 : nth_is Γ n b1) (p2 : nth_is Γ n b2) : b1 = b2.
+    Proof. apply (f_equal projT1 (proof_irrelevance_het_nth_is p1 p2)). Qed.
 
     Section WithUIP.
 
@@ -206,16 +212,16 @@ Module ctx.
     Definition In_eqb {Γ} {b1 b2 : B} (b1inΓ : In b1 Γ) (b2inΓ : In b2 Γ) : bool :=
       Nat.eqb (in_at b1inΓ) (in_at b2inΓ).
 
-    Lemma In_eqb_spec `{UIP B} {Γ} {b1 b2 : B} (b1inΓ : In b1 Γ) (b2inΓ : In b2 Γ) :
+    Lemma In_eqb_spec {Γ} {b1 b2 : B} (b1inΓ : In b1 Γ) (b2inΓ : In b2 Γ) :
       reflect
         (existT _ b1inΓ = existT _ b2inΓ :> sigT (fun b => In b Γ))
         (In_eqb b1inΓ b2inΓ).
     Proof.
       destruct b1inΓ as [m p], b2inΓ as [n q]; cbn.
       destruct (NPeano.Nat.eqb_spec m n); constructor.
-      - subst. pose proof (nth_is_right_exact _ _ _ p q). subst.
-        f_equal. f_equal. apply proof_irrelevance_nth_is.
-      - intros e. depelim e. destruct n, m; cbn in H0; congruence.
+      - subst. pose proof (proof_irrelevance_het_nth_is p q) as Heq.
+        now dependent elimination Heq.
+      - intros e. depelim e. destruct n, m; cbn in H; congruence.
     Qed.
 
     (* These are *constructors* for In. *)
