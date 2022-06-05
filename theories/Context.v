@@ -44,7 +44,7 @@ Delimit Scope ctx_scope with ctx.
 
 Module Binding.
 
-  (* Local Set Primitive Projections. *)
+  Local Set Primitive Projections.
   Local Set Transparent Obligations.
 
   Section WithNT.
@@ -116,18 +116,24 @@ Module ctx.
       | _        , _   => False
       end.
 
-    Lemma nth_is_right_exact {Γ : Ctx B} (n : nat) (b1 b2 : B) :
-      nth_is Γ n b1 -> nth_is Γ n b2 -> b1 = b2.
-    Proof.
-      revert n.
-      induction Γ.
-      - intros ? [].
-      - cbn in *.
-        destruct n. intros e1 e2.
-        refine (eq_trans _ e2).
-        apply eq_sym. auto.
-        apply IHΓ.
-    Qed.
+    Definition proof_irrelevance_het_nth_is {b1 b2 : B} :
+      forall {Γ n} (p1 : nth_is Γ n b1) (p2 : nth_is Γ n b2),
+        existT _ p1 = existT _ p2 :=
+       fix pi Γ n {struct Γ} :=
+         match Γ with
+         | nil => fun p q => match q with end
+         | snoc Γ b =>
+           match n with
+           | O   => fun p q => match p , q with
+                                 eq_refl , eq_refl => eq_refl
+                               end
+           | S n => pi Γ n
+           end
+         end.
+
+    Corollary nth_is_right_exact {Γ : Ctx B} (n : nat) (b1 b2 : B)
+      (p1 : nth_is Γ n b1) (p2 : nth_is Γ n b2) : b1 = b2.
+    Proof. apply (f_equal projT1 (proof_irrelevance_het_nth_is p1 p2)). Qed.
 
     Section WithUIP.
 
@@ -143,12 +149,11 @@ Module ctx.
                        end
         end.
 
-      Global Instance eqdec_ctx_nth {Γ n b} : EqDec (nth_is Γ n b).
-      Proof. intros p q. left. apply proof_irrelevance_nth_is. Defined.
+      Global Instance eqdec_ctx_nth {Γ n b} : EqDec (nth_is Γ n b) :=
+        fun p q => left (proof_irrelevance_nth_is n b p q).
 
-      Lemma proof_irrelevance_nth_is_refl {Γ} (n : nat) (b : B) (p : nth_is Γ n b) :
-        proof_irrelevance_nth_is n b p p = eq_refl.
-      Proof. apply uip. Qed.
+      Definition proof_irrelevance_nth_is_refl {Γ} (n : nat) (b : B) (p : nth_is Γ n b) :
+        proof_irrelevance_nth_is n b p p = eq_refl := uip _ _.
 
     End WithUIP.
 
@@ -207,16 +212,16 @@ Module ctx.
     Definition In_eqb {Γ} {b1 b2 : B} (b1inΓ : In b1 Γ) (b2inΓ : In b2 Γ) : bool :=
       Nat.eqb (in_at b1inΓ) (in_at b2inΓ).
 
-    Lemma In_eqb_spec `{UIP B} {Γ} {b1 b2 : B} (b1inΓ : In b1 Γ) (b2inΓ : In b2 Γ) :
+    Lemma In_eqb_spec {Γ} {b1 b2 : B} (b1inΓ : In b1 Γ) (b2inΓ : In b2 Γ) :
       reflect
         (existT _ b1inΓ = existT _ b2inΓ :> sigT (fun b => In b Γ))
         (In_eqb b1inΓ b2inΓ).
     Proof.
       destruct b1inΓ as [m p], b2inΓ as [n q]; cbn.
       destruct (NPeano.Nat.eqb_spec m n); constructor.
-      - subst. pose proof (nth_is_right_exact _ _ _ p q). subst.
-        f_equal. f_equal. apply proof_irrelevance_nth_is.
-      - intros e. depelim e. destruct n, m; cbn in H0; congruence.
+      - subst. pose proof (proof_irrelevance_het_nth_is p q) as Heq.
+        now dependent elimination Heq.
+      - intros e. depelim e. destruct n, m; cbn in H; congruence.
     Qed.
 
     (* These are *constructors* for In. *)
@@ -243,19 +248,6 @@ Module ctx.
       | O   => fun p => match p with eq_refl => snocViewZero end
       | S n => fun p => snocViewSucc (MkIn n p)
       end (in_valid i).
-
-    (* Custom pattern matching in cases where the context was already refined
-       by a different match, i.e. on environments. *)
-    Definition in_case_nil {A : B -> Type} [b : B] (bIn : In b nil) : A b :=
-      match nilView bIn with end.
-    (* DEPRECATED *)
-    Definition in_case_snoc (D : B -> Type) (Γ : Ctx B) (b0 : B) (db0 : D b0)
-      (dΓ: forall b, In b Γ -> D b) (b : B) (bIn: In b (snoc Γ b0)) : D b :=
-      let (n, e) := bIn in
-      match n return nth_is (snoc Γ b0) n b -> D b with
-      | 0 => fun e => match e with eq_refl => db0 end
-      | S n => fun e => dΓ b (MkIn n e)
-      end e.
 
     Inductive InView {b : B} : forall Γ, In b Γ -> Set :=
     | inctxViewZero {Γ}                 : @InView b (snoc Γ b) in_zero
@@ -480,6 +472,26 @@ Module ctx.
 
     Definition occurs_check_view {Σ} {x y: B} (xIn : In x Σ) (yIn : In y Σ) : OccursCheckView xIn yIn :=
       occurs_check_view_index (in_valid xIn) (in_valid yIn).
+
+    Lemma occurs_check_view_refl {Σ x} (xIn : In x Σ) :
+      occurs_check_view xIn xIn = Same _.
+    Proof.
+      unfold occurs_check_view.
+      induction xIn using In_ind.
+      - reflexivity.
+      - cbn; now rewrite IHxIn.
+    Qed.
+
+    Lemma occurs_check_view_shift {Σ x y} (xIn : In x Σ) (yIn : In y (remove Σ xIn)) :
+      occurs_check_view xIn (shift_var xIn yIn) = Diff xIn yIn.
+    Proof.
+      unfold occurs_check_view, shift_var.
+      induction xIn using In_ind.
+      - reflexivity.
+      - cbn in yIn. destruct (snocView yIn); cbn.
+        + reflexivity.
+        + now rewrite (IHxIn i).
+    Qed.
 
     Lemma occurs_check_var_spec {Σ} {x y : B} (xIn : In x Σ) (yIn : In y Σ) :
       match occurs_check_var xIn yIn with

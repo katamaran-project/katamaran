@@ -51,6 +51,7 @@ Module DisjointSound
 
   Import SmallStepNotations.
   Include ProgramLogicOn B SIG SPEC.
+  Import ProgramLogic.
 
   Local Ltac sound_inversion :=
     lazymatch goal with

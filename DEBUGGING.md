@@ -1,3 +1,5 @@
+NOTE: The contents of this file is outdated.
+
 Debugging verification failures
 ========================================
 
@@ -33,20 +35,20 @@ A failed consumption of a heap chunk will provide you with a value of the
 Error
   {| dmuterr_function := "dmut_consume_chunk_evar";
      dmuterr_message := "Empty extraction";
-     dmuterr_data_type := 
-       EvarError 
+     dmuterr_data_type :=
+       EvarError
          [("reg", ty_lv), ("w", ty_word), ("result", ty_word)]
          [("w", ty_word), ("_", ty_unit)]
          (Chunk [("reg", ty_lv), ("w", ty_word), ("result", ty_word)]);
-     dmuterr_data := 
+     dmuterr_data :=
      {| evarerror_env := [Some (term_lit ty_lv R0), Some (term_var "w"), Some (term_var "w")];
-        evarerror_data := term_var "reg" ↦r term_var "w" 
+        evarerror_data := term_var "reg" ↦r term_var "w"
      |};
      dmuterr_logic_context := [("w", ty_word), ("_", ty_unit)];
      dmuterr_program_context := [("reg", ty_lv)];
      dmuterr_localstore := [term_lit ty_lv R0];
      dmuterr_pathcondition := [];
-     dmuterr_heap := [reg0 ↦ term_var "w"]%list 
+     dmuterr_heap := [reg0 ↦ term_var "w"]%list
    |}
 ```
 
@@ -68,18 +70,18 @@ TwoPointO.sout_ok_opaque [("reg", ty_lv), ("w", ty_word)]
      (sout_fail
         {| dmuterr_function := "dmut_consume_chunk_evar";
            dmuterr_message := "Empty extraction";
-           dmuterr_data_type := 
+           dmuterr_data_type :=
              EvarError
-               [("reg", ty_lv), ("w", ty_word), ("result", ty_word)] 
+               [("reg", ty_lv), ("w", ty_word), ("result", ty_word)]
                [("w", ty_word)] (Chunk [("reg", ty_lv), ("w", ty_word), ("result", ty_word)]);
-           dmuterr_data := 
+           dmuterr_data :=
            {| evarerror_env := [Some (term_lit ty_lv R0), Some (term_var "w"), Some (term_var "w")];
-              evarerror_data := term_var "reg" ↦r term_var "w" 
+              evarerror_data := term_var "reg" ↦r term_var "w"
            |};
            dmuterr_logic_context := [("w", ty_word)];
            dmuterr_program_context := [("reg", ty_lv)];
            dmuterr_localstore := [term_lit ty_lv R0];
            dmuterr_pathcondition := [];
-           dmuterr_heap := [reg0 ↦ term_var "w"]%list 
+           dmuterr_heap := [reg0 ↦ term_var "w"]%list
         |}))
 ```

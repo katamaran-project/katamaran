@@ -39,7 +39,7 @@ From Equations Require Import
 
 From Katamaran Require Import
      Semantics.Registers
-     Symbolic.Mutator
+     Symbolic.Executor
      Symbolic.Solver
      Symbolic.Worlds
      Symbolic.Propositions
@@ -504,6 +504,6 @@ Local Ltac solve :=
 (* Goal True. idtac "Timing after: example/length". Abort. *)
 
 Goal True. idtac "Timing before: example/cmp". Abort.
-Lemma valid_contract_cmp : SMut.ValidContractReflect sep_contract_cmp (FunDef cmp).
+Lemma valid_contract_cmp : Symbolic.ValidContractReflect sep_contract_cmp (FunDef cmp).
 Proof. reflexivity. Qed.
 Goal True. idtac "Timing after: example/cmp". Abort.

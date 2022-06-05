@@ -218,6 +218,9 @@ Module Type WorldsOn
     Import Entailment.
 
     Inductive Acc (w1 : World) : World -> Type :=
+    (* We special case the reflexivity case of accessibility, because there are
+       many computations that don't change the world and we would therefore
+       often run the identity substitution over the entire state. *)
     | acc_refl : Acc w1 w1
     | acc_sub {w2 : World} (ζ : Sub w1 w2) (ent : wco w2 ⊢ subst (wco w1) ζ) : Acc w1 w2.
     Global Arguments acc_refl {w} : rename.
@@ -500,5 +503,108 @@ Module Type WorldsOn
     intros w fmls. constructor. cbn. intros ι Hpc. split. auto.
     intros ι' Hpc' ->. now rewrite inst_sub_id.
   Qed.
+
+  Definition SolverUserOnly : Type :=
+    forall Σ (p : 𝑷), Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ).
+
+  Definition SolverUserOnlySpec (s : SolverUserOnly) : Prop :=
+    forall Σ (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)),
+      option.spec
+        (fun r : List Formula Σ =>
+           forall ι : Valuation Σ,
+             inst (formula_user p ts) ι <-> instpc r ι)
+        (forall ι : Valuation Σ, ~ inst (formula_user p ts) ι)
+        (s Σ p ts).
+
+  Section SimplifyAll.
+    Import option.notations.
+    Context {Σ} (g : Formula Σ -> List Formula Σ -> option (List Formula Σ)).
+
+    Definition simplify_all {Σ} (g : Formula Σ -> List Formula Σ -> option (List Formula Σ)) :=
+      fix simplify_all (fmls k : List Formula Σ) {struct fmls} : option (List Formula Σ) :=
+        match fmls with
+        | nil => Some k
+        | cons fml0 fmls =>
+          k' <- simplify_all fmls k ;;
+          g fml0 k'
+        end.
+
+    Context (g_spec : forall f k,
+                option.spec
+                  (fun r : List Formula Σ =>
+                     forall ι : Valuation Σ,
+                       instpc (cons f k)%list ι <-> instpc r ι)
+                  (forall ι : Valuation Σ, ~ inst f ι)
+                  (g f k)).
+
+    Lemma simplify_all_spec (fmls k : List Formula Σ) :
+      option.spec
+        (fun r : List Formula Σ =>
+           forall ι : Valuation Σ,
+             instpc (fmls ++ k)%list ι <-> instpc r ι)
+        (forall ι : Valuation Σ, ~ instpc fmls ι)
+        (simplify_all g fmls k).
+    Proof.
+      induction fmls; cbn; [constructor; reflexivity|].
+      apply option.spec_bind. revert IHfmls.
+      apply option.spec_monotonic.
+      - intros tmp Htmp. specialize (g_spec a tmp). revert g_spec.
+        apply option.spec_monotonic.
+        + intros res Hres ι. rewrite (Htmp ι). apply (Hres ι).
+        + intros Hna ι [Ha ?]. now apply (Hna ι).
+      - intros Hnfmls ι [Ha Hfmls]. now apply (Hnfmls ι).
+    Qed.
+
+  End SimplifyAll.
+
+  Section WithUserOnlySolver.
+
+    Context (user : SolverUserOnly).
+
+    Definition solveruseronly_simplify_formula {Σ} (f : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
+      match f with
+      | formula_user p ts => option.map (fun r => app r k) (user ts)
+      | f                 => Some (cons f k)
+      end.
+
+    Definition solveruseronly_to_solver : Solver :=
+      fun w fmls =>
+        option_map
+          (fun l => existT w (tri_id, l))
+          (simplify_all solveruseronly_simplify_formula fmls nil).
+
+    Context (user_spec : SolverUserOnlySpec user).
+
+    Lemma solveruseronly_simplify_formula_spec {Σ} (f : Formula Σ) (k : List Formula Σ) :
+      option.spec
+        (fun r : List Formula Σ =>
+           forall ι : Valuation Σ,
+             instpc (cons f k)%list ι <-> instpc r ι)
+        (forall ι : Valuation Σ, ~ inst f ι)
+        (solveruseronly_simplify_formula f k).
+    Proof.
+      destruct f; try (constructor; reflexivity).
+      cbn [solveruseronly_simplify_formula]. apply option.spec_map.
+      generalize (user_spec ts).
+      apply option.spec_monotonic.
+      - intros ? H ?. rewrite inst_pathcondition_app.
+        apply and_iff_compat_r'. intros ?. apply H.
+      - auto.
+    Qed.
+
+    Lemma solveruseronly_to_solver_spec : SolverSpec solveruseronly_to_solver.
+    Proof.
+      intros w0 fmls. unfold solveruseronly_to_solver.
+      apply option.spec_map.
+      generalize (simplify_all_spec solveruseronly_simplify_formula solveruseronly_simplify_formula_spec fmls nil).
+      apply option.spec_monotonic.
+      - intros r H ι Hpc. split; [constructor|].
+        specialize (H ι). rewrite inst_pathcondition_app in H.
+        cbn in H. rewrite rightid_and_true in H.
+        intros ι' Hpc'. cbn. rewrite inst_sub_id. intros. now subst.
+      - intros Hnf ι Hpc. apply Hnf.
+    Qed.
+
+  End WithUserOnlySolver.
 
 End WorldsOn.

@@ -1560,6 +1560,8 @@ Module IrisInstanceWithContracts
   (Import II    : IrisInstance B SIG SEM IPre IP IR IPred)
   (Import PLOG  : ProgramLogicOn B SIG SPEC).
 
+  Import ProgramLogic.
+
   Section WithSailGS.
   Context `{sailGS Σ}.
 

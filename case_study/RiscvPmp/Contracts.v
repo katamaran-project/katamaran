@@ -36,7 +36,7 @@ From Katamaran Require Import
      Notations
      Shallow.Executor
      Specification
-     Symbolic.Mutator
+     Symbolic.Executor
      Symbolic.Solver
      Symbolic.Propositions
      Symbolic.Worlds.
@@ -1726,21 +1726,18 @@ Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSpeci
 
 Module Import RiscvPmpExecutor :=
   MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolver.
-Import SMut.
-Import SMut.SMutNotations.
-Import Postprocessing.
 
 Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
 Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
   match CEnv f with
-  | Some c => ValidContractReflect c (FunDef f)
+  | Some c => Symbolic.ValidContractReflect c (FunDef f)
   | None => False
   end.
 
 Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
   match CEnv f with
-  | Some c => SMut.ValidContract c (FunDef f)
+  | Some c => Symbolic.ValidContract c (FunDef f)
   | None => False
   end.
 
@@ -1794,7 +1791,7 @@ Proof. reflexivity. Qed.
 
 Lemma valid_contract_mem_read : ValidContractDebug mem_read.
 Proof.
-  apply SMut.validcontract_with_erasure_sound.
+  apply Symbolic.validcontract_with_erasure_sound.
   compute; constructor; cbn.
   intros typ paddr p entries; repeat split; auto.
 Qed.
@@ -1804,7 +1801,7 @@ Proof. reflexivity. Qed.
 
 Lemma valid_contract_checked_mem_read : ValidContractDebug checked_mem_read.
 Proof.
-  apply SMut.validcontract_with_erasure_sound.
+  apply Symbolic.validcontract_with_erasure_sound.
   compute.
   constructor.
   cbn.
@@ -1814,7 +1811,7 @@ Qed.
 
 Lemma valid_contract_checked_mem_write : ValidContractDebug checked_mem_write.
 Proof.
-  apply SMut.validcontract_with_erasure_sound.
+  apply Symbolic.validcontract_with_erasure_sound.
   compute.
   constructor.
   cbn.
@@ -1827,7 +1824,7 @@ Proof. reflexivity. Qed.
 
 Lemma valid_contract_pmp_mem_write : ValidContractDebug pmp_mem_write.
 Proof.
-  apply SMut.validcontract_with_erasure_sound.
+  apply Symbolic.validcontract_with_erasure_sound.
   compute.
   constructor.
   cbn.
@@ -1967,11 +1964,19 @@ Proof. reflexivity. Qed.
  *)
 Lemma valid_contract_pmpCheck : ValidContractDebug pmpCheck.
 Proof.
-  apply SMut.validcontract_with_erasure_sound.
-  vm_compute.
-  constructor.
-  cbv - [Z.gt Z.gtb Z.lt Z.ltb Z.le Z.leb andb orb];
-  intros addr acc priv addr0 addr1 R0 W0 X0 A0 L0 R1 W1 X1 A1 L1;
+  apply Symbolic.validcontract_with_erasure_sound.
+  vm_compute. constructor.
+  cbv - [Z.gt Z.gtb Z.lt Z.ltb Z.le Z.leb andb orb
+         Pmp_access
+         Pmp_check_perms
+         Pmp_check_rwx
+         Sub_perm
+         Within_cfg
+         Not_within_cfg
+         Prev_addr
+         In_entries
+    ].
+  intros addr acc priv addr0 addr1 R0 W0 X0 A0 L0 R1 W1 X1 A1 L1.
   repeat
     match goal with
     | |- _ /\ _ => split; intros; subst
@@ -1991,9 +1996,7 @@ Proof.
           apply Bool.orb_prop in H as [[= ->]|[= ->]];
           try progress cbn
       end; cbn; auto.
-(* NOTE: this Qed holds, it's just quite slow *)
-(* Qed. *)
-Admitted.
+Qed.
 
 (* TODO: this is just to make sure that all contracts defined so far are valid
          (i.e. ensure no contract was defined and then forgotten to validate it) *)

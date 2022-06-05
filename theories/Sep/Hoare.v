@@ -42,6 +42,7 @@ Import ctx.notations.
 Import env.notations.
 
 Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature B) (Import SPEC : Specification B SIG).
+Module ProgramLogic.
 
   Section Triples.
 
@@ -466,4 +467,5 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
 
   Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ _ _ δ _ P s Q).
 
+End ProgramLogic.
 End ProgramLogicOn.

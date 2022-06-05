@@ -42,7 +42,7 @@ From Katamaran Require Import
      Notations
      Specification
      Shallow.Executor
-     Symbolic.Mutator
+     Symbolic.Executor
      Symbolic.Solver.
 
 Set Implicit Arguments.
@@ -927,43 +927,46 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature MinCapsSpecifi
     let ts := env.nil ► (ty.perm ↦ p) ► (ty.perm ↦ q) in
     Some (cons (formula_user subperm ts) nil).
 
-  Definition simplify_user {Σ} (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ) :=
-    match p with
-    | subperm => fun ts =>
-                   let (ts,q) := env.snocView ts in
-                   let (ts,p) := env.snocView ts in
-                   simplify_subperm p q
-    end.
-
-  Definition simplify_formula {Σ} (fml : Formula Σ) : option (List Formula Σ) :=
-    match fml with
-    | formula_user p ts => simplify_user p ts
-    | _                 => Some (cons fml nil)
-    end.
-
-  Import base.
-  Definition simplify_all {Σ} (g : Formula Σ -> option (List Formula Σ)) :=
-    fix simplify_all (fmls k : List Formula Σ) {struct fmls} : option (List Formula Σ) :=
-      match fmls with
-      | nil => Some k
-      | cons fml0 fmls =>
-        ks ← simplify_all fmls k ;
-        k0 ← g fml0 ;
-        Some (app k0 ks)
+  Definition solve_user : SolverUserOnly :=
+    fun Σ p =>
+      match p with
+      | subperm => fun ts =>
+                     let (ts,q) := env.snocView ts in
+                     let (ts,p) := env.snocView ts in
+                     simplify_subperm p q
       end.
 
-  Definition solver : Solver :=
-    fun w fmls => option_map (fun l => existT w (tri_id , l)) (simplify_all simplify_formula fmls nil).
-  Definition solver_spec : SolverSpec solver.
-  Admitted.
-End MinCapsSolverKit.
-Module MinCapsSolver := MakeSolver MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSolverKit.
+  Lemma subperm_O : forall p, Subperm O p.
+  Proof. destruct p; reflexivity. Qed.
 
+  Lemma solve_user_spec : SolverUserOnlySpec solve_user.
+  Proof.
+    intros Σ p ts.
+    destruct p; cbv in ts; env.destroy ts; cbn.
+    dependent elimination v0.
+    - constructor. cbn. intuition.
+    - dependent elimination v.
+      + destruct v0; constructor; cbn; auto; intuition. apply subperm_O.
+      + destruct v, v0; constructor; cbn; auto; unfold Subperm; intuition.
+      + dependent elimination op.
+    - dependent elimination op.
+  Qed.
+
+  Definition solver : Solver :=
+    solveruseronly_to_solver solve_user.
+
+  Lemma solver_spec : SolverSpec solver.
+  Proof.
+    apply solveruseronly_to_solver_spec, solve_user_spec.
+  Qed.
+
+End MinCapsSolverKit.
+Module MinCapsSolver :=
+  MakeSolver MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSolverKit.
 Module Import MinCapsExecutor :=
   MakeExecutor MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSolver.
-
-(* Module Import MinCapsCMut := MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsSpecification. *)
-(* Import CMut. *)
+Module Import MinCapsShallowExec :=
+  MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsSpecification.
 
 Local Ltac solve :=
   repeat
@@ -978,7 +981,7 @@ Local Ltac solve :=
        | |- _ /\ _ => constructor
        | |- VerificationCondition _ =>
          constructor;
-         cbv [SymProp.safe env.remove env.lookup ctx.in_case_snoc bop.eval is_true
+         cbv [SymProp.safe env.remove env.lookup bop.eval is_true
               inst inst_term inst_formula env.Env_rect];
          cbn
        | |- Obligation _ _ _ => constructor; cbn
@@ -997,18 +1000,18 @@ Import MinCapsContractNotations.
 
 Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
   match CEnv f with
-  | Some c => SMut.ValidContractReflect c (FunDef f)
+  | Some c => Symbolic.ValidContractReflect c (FunDef f)
   | None => False
   end.
 
 Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
   match CEnv f with
-  | Some c => SMut.ValidContract c (FunDef f)
+  | Some c => Symbolic.ValidContract c (FunDef f)
   | None => False
   end.
 
 Goal True. idtac "Timing before: minimalcaps". Abort.
-Lemma ValidContractsFun : forall {Δ τ} (f : Fun Δ τ),
+Lemma valid_contracts : forall {Δ τ} (f : Fun Δ τ),
     ValidContract f.
 Proof.
   destruct f; reflexivity.
@@ -1016,11 +1019,10 @@ Qed.
 Goal True. idtac "Timing after: minimalcaps". Abort.
 
 Goal True. idtac "Assumptions for minimalcaps contracts:". Abort.
-Print Assumptions ValidContractsFun.
+Print Assumptions valid_contracts.
 
 Section Statistics.
   Import List.ListNotations.
-  Import SMut.Statistics.
 
   Definition all_functions : list { Δ & { σ & Fun Δ σ } } :=
     [ existT _ (existT _ read_reg);
@@ -1073,23 +1075,22 @@ Section Statistics.
       existT _ (existT _ loop)
     ]%list.
 
-  Definition all_stats : Stats :=
+  Definition symbolic_stats : Stats :=
     List.fold_right
       (fun '(existT _ (existT _ f)) r =>
-         match calc_statistics f with
-         | Some (_,s) => plus_stats s r
-         | None       => r
+         match Symbolic.Statistics.calc f with
+         | Some s => plus_stats s r
+         | None   => r
          end)
       empty_stats
       all_functions.
 
-  Goal ("minimalcaps", all_stats) = ("", empty_stats).
-    idtac "Branching statistics:".
-    compute.
-    match goal with
-    | |- ?x = _ =>
-        idtac x
-    end.
+  Goal True.
+    idtac "Symbolic branching statistics:".
+    let t := eval compute in symbolic_stats in idtac t.
   Abort.
+
+  (* The counting of the shallow nodes is too slow in Ltac. Hence there is and
+     alternative command line solution. *)
 
 End Statistics.

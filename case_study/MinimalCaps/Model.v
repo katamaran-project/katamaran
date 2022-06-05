@@ -43,7 +43,7 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Specification
-     Symbolic.Mutator
+     Symbolic.Executor
      Semantics.
 
 From MinimalCaps Require Import
@@ -97,7 +97,7 @@ Module MinCapsModel.
   Module MinCapsIrisParams <: IrisParameters MinCapsBase MinCapsProgram MinCapsSignature MinCapsSemantics MinCapsIrisPrelims.
     Import MinCapsIrisPrelims.
 
-    Variable maxAddr : nat.
+    Parameter maxAddr : nat.
 
     Section WithIrisNotations.
       Import iris.bi.interface.

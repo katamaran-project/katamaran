@@ -29,6 +29,7 @@
 From Coq Require Import
      Bool.Bool
      Lists.List
+     NArith.NArith
      Program.Tactics
      Strings.String
      ZArith.BinInt.
@@ -52,32 +53,53 @@ Module Type ShallowExecOn
   (Import SIG : ProgramLogicSignature B)
   (Import SPEC : Specification B SIG).
 
-  Definition CDijkstra (A : Type) : Type :=
+  (* The pure backwards predicate transformer monad. We use this monad in some
+     of the definition of primitives that do no need access to the store or heap
+     and that can later be lifted to the proper monad. *)
+  Definition CPureSpecM (A : Type) : Type :=
     (A -> Prop) -> Prop.
 
-  Module CDijk.
+  Module CPureSpecM.
 
     Definition pure {A : Type} :
-      A -> CDijkstra A :=
+      A -> CPureSpecM A :=
       fun a POST => POST a.
 
     Definition map {A B} :
-      (A -> B) -> CDijkstra A -> CDijkstra B :=
+      (A -> B) -> CPureSpecM A -> CPureSpecM B :=
       fun f m POST => m (Basics.compose POST f).
 
     Definition bind {A B} :
-      CDijkstra A -> (A -> CDijkstra B) -> CDijkstra B :=
+      CPureSpecM A -> (A -> CPureSpecM B) -> CPureSpecM B :=
       fun m f POST => m (fun a1 => f a1 POST).
 
     Local Notation "x <- ma ;; mb" :=
       (bind ma (fun x => mb))
         (at level 80, ma at level 90, mb at level 200, right associativity).
+    Local Notation "ma ;; mb" := (bind ma (fun _ => mb)).
 
-    Definition angelic σ : CDijkstra (Val σ) :=
+    (* For counting the different execution paths of the shallow executor we use
+       different aliases for False and True to distinguish between them. TRUE
+       and FALSE represent execution paths that are pruned, i.e. do not reach
+       the end of a function, and FINISH encodes the successful execution
+       case. *)
+    Definition FALSE : Prop := False.
+    Definition TRUE : Prop := True.
+    Definition FINISH : Prop := True.
+    Global Typeclasses Opaque TRUE.
+    Global Typeclasses Opaque FALSE.
+    Global Typeclasses Opaque FINISH.
+
+    Definition error {A} : CPureSpecM A :=
+      fun POST => FALSE.
+    Definition block {A} : CPureSpecM A :=
+      fun POST => TRUE.
+
+    Definition angelic (σ : Ty) : CPureSpecM (Val σ) :=
       fun POST => exists v : Val σ, POST v.
 
     Definition angelic_ctx {N : Set} :
-      forall Δ : NCtx N Ty, CDijkstra (NamedEnv Val Δ) :=
+      forall Δ : NCtx N Ty, CPureSpecM (NamedEnv Val Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | []%ctx  => pure []
@@ -87,11 +109,11 @@ Module Type ShallowExecOn
         end.
     Arguments angelic_ctx {N} Δ.
 
-    Definition demonic σ : CDijkstra (Val σ) :=
+    Definition demonic σ : CPureSpecM (Val σ) :=
       fun POST => forall v : Val σ, POST v.
 
     Definition demonic_ctx {N : Set} :
-      forall Δ : NCtx N Ty, CDijkstra (NamedEnv Val Δ) :=
+      forall Δ : NCtx N Ty, CPureSpecM (NamedEnv Val Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
         | []      => fun k => k env.nil
@@ -100,35 +122,39 @@ Module Type ShallowExecOn
         end%ctx.
     Arguments demonic_ctx {N} Δ.
 
-    Definition assume_formula (fml : Prop) : CDijkstra unit :=
+    Definition assume_formula (fml : Prop) : CPureSpecM unit :=
       fun POST => fml -> POST tt.
 
-    Definition assert_formula (fml : Prop) : CDijkstra unit :=
+    Definition assert_formula (fml : Prop) : CPureSpecM unit :=
       fun POST => fml /\ POST tt.
 
+    (* The paper uses asserted equalities between multiple types, but the
+       symbolic executor can in fact only assert equalities between symbolic
+       terms. We mirror the structure of the symbolic execution and also
+       traverse (the statically known parts) of other data structures. *)
     Equations(noeqns) assert_eq_env {Δ : Ctx Ty}
-      (δ δ' : Env Val Δ) : CDijkstra unit :=
+      (δ δ' : Env Val Δ) : CPureSpecM unit :=
       assert_eq_env env.nil          env.nil            := pure tt;
       assert_eq_env (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assert_eq_env δ δ') (fun _ => assert_formula (t = t')).
 
     Equations(noeqns) assert_eq_nenv {N : Set} {Δ : NCtx N Ty}
-      (δ δ' : NamedEnv Val Δ) : CDijkstra unit :=
+      (δ δ' : NamedEnv Val Δ) : CPureSpecM unit :=
       assert_eq_nenv env.nil          env.nil            := pure tt;
       assert_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assert_eq_nenv δ δ') (fun _ => assert_formula (t = t')).
 
     Definition angelic_binary {A} :
-      CDijkstra A -> CDijkstra A -> CDijkstra A :=
+      CPureSpecM A -> CPureSpecM A -> CPureSpecM A :=
       fun m1 m2 POST =>
         m1 POST \/ m2 POST.
     Definition demonic_binary {A} :
-      CDijkstra A -> CDijkstra A -> CDijkstra A :=
+      CPureSpecM A -> CPureSpecM A -> CPureSpecM A :=
       fun m1 m2 POST =>
         m1 POST /\ m2 POST.
 
     Definition angelic_list {A} :
-      list A -> CDijkstra A :=
+      list A -> CPureSpecM A :=
       fix rec xs :=
         match xs with
         | nil        => fun POST => False
@@ -136,7 +162,7 @@ Module Type ShallowExecOn
         end.
 
     Definition demonic_list {A} :
-      list A -> CDijkstra A :=
+      list A -> CPureSpecM A :=
       fix rec xs :=
         match xs with
         | nil        => fun POST => True
@@ -144,15 +170,15 @@ Module Type ShallowExecOn
         end.
 
     Definition angelic_finite F `{finite.Finite F} :
-      CDijkstra F :=
+      CPureSpecM F :=
       angelic_list (finite.enum F).
 
     Definition demonic_finite F `{finite.Finite F} :
-      CDijkstra F :=
+      CPureSpecM F :=
       demonic_list (finite.enum F).
 
     Definition angelic_match_bool :
-      Val ty.bool -> CDijkstra bool :=
+      Val ty.bool -> CPureSpecM bool :=
       fun v =>
         angelic_binary
           (bind
@@ -163,7 +189,7 @@ Module Type ShallowExecOn
              (fun _ => pure false)).
 
     Definition demonic_match_bool :
-      Val ty.bool -> CDijkstra bool :=
+      Val ty.bool -> CPureSpecM bool :=
       fun v =>
         demonic_binary
           (bind
@@ -250,80 +276,122 @@ Module Type ShallowExecOn
         now rewrite IHδ, (@env.inversion_eq_snoc _ _ _ b δ δ').
     Qed.
 
-  End CDijk.
+    Fixpoint assert_eq_chunk (c1 c2 : SCChunk) : CPureSpecM unit :=
+      match c1 , c2 with
+      | scchunk_user p1 vs1 , scchunk_user p2 vs2 =>
+          match eq_dec p1 p2 with
+          | left e => assert_eq_env (eq_rect p1 (fun p => Env Val (𝑯_Ty p)) vs1 p2 e) vs2
+          | right _ => error
+          end
+      | scchunk_ptsreg r1 v1 , scchunk_ptsreg r2 v2 =>
+          match eq_dec_het r1 r2 with
+          | left e => assert_formula (eq_rect _ Val v1 _ (f_equal projT1 e) = v2)
+          | right _ => error
+          end
+      | scchunk_conj c11 c12 , scchunk_conj c21 c22 =>
+          assert_eq_chunk c11 c21 ;; assert_eq_chunk c12 c22
+      | scchunk_wand c11 c12 , scchunk_wand c21 c22 =>
+          assert_eq_chunk c11 c21 ;; assert_eq_chunk c12 c22
+      | _ , _ => error
+      end.
 
-  Definition CMut (Γ1 Γ2 : PCtx) (A : Type) : Type :=
+    Local Set Equations With UIP.
+    Lemma wp_assert_eq_chunk (c c' : SCChunk) :
+      forall POST,
+        assert_eq_chunk c c' POST <-> c = c' /\ POST tt.
+    Proof.
+      revert c'. induction c; intros c' POST; destruct c'; cbn in *;
+        unfold error, FALSE, assert_formula; try (intuition discriminate).
+      - destruct eq_dec as [e|n].
+        + rewrite wp_assert_eq_env. apply and_iff_compat_r'.
+          intros ?. destruct e; cbn. split; intros Heq.
+          * now f_equal.
+          * now dependent elimination Heq.
+        + split; try contradiction. intros [Heq Hwp]. apply n.
+          now dependent elimination Heq.
+      - destruct eq_dec_het as [e|n].
+        + apply and_iff_compat_r'. intros ?.
+          dependent elimination e; cbn.
+          split; intros Heq.
+          * now f_equal.
+          * now dependent elimination Heq.
+        + split; try contradiction. intros [Heq Hwp]. apply n.
+          now dependent elimination Heq.
+      - unfold bind. rewrite IHc1, IHc2. intuition.
+      - unfold bind. rewrite IHc1, IHc2. intuition.
+    Qed.
+
+  End CPureSpecM.
+
+  (* The main specification monad that we use for execution. It is indexed by
+     two program variable contexts Γ1 Γ2 that encode the shape of the program
+     variable store before and after execution. *)
+  Definition CHeapSpecM (Γ1 Γ2 : PCtx) (A : Type) : Type :=
     (A -> CStore Γ2 -> SCHeap -> Prop) -> CStore Γ1 -> SCHeap -> Prop.
-  Bind Scope mut_scope with CMut.
+  Bind Scope mut_scope with CHeapSpecM.
 
   Local Open Scope mut_scope.
 
-  Module CMut.
+  Module CHeapSpecM.
 
     Section Basic.
 
-      Definition dijkstra {Γ} {A : Type} :
-        CDijkstra A -> CMut Γ Γ A :=
+      Definition lift_purem {Γ} {A : Type} :
+        CPureSpecM A -> CHeapSpecM Γ Γ A :=
         fun m POST δ h => m (fun a => POST a δ h).
 
-      Definition pure {Γ A} (a : A) : CMut Γ Γ A :=
+      Definition pure {Γ A} (a : A) : CHeapSpecM Γ Γ A :=
         fun POST => POST a.
-      Definition bind {Γ1 Γ2 Γ3 A B} (ma : CMut Γ1 Γ2 A) (f : A -> CMut Γ2 Γ3 B) : CMut Γ1 Γ3 B :=
+      Definition bind {Γ1 Γ2 Γ3 A B} (ma : CHeapSpecM Γ1 Γ2 A) (f : A -> CHeapSpecM Γ2 Γ3 B) : CHeapSpecM Γ1 Γ3 B :=
         fun POST => ma (fun a => f a POST).
-      Definition bind_right {Γ1 Γ2 Γ3 A B} (ma : CMut Γ1 Γ2 A) (mb : CMut Γ2 Γ3 B) : CMut Γ1 Γ3 B :=
+      Definition bind_right {Γ1 Γ2 Γ3 A B} (ma : CHeapSpecM Γ1 Γ2 A) (mb : CHeapSpecM Γ2 Γ3 B) : CHeapSpecM Γ1 Γ3 B :=
         bind ma (fun _ => mb).
-      Definition bind_left {Γ1 Γ2 Γ3 A B} (ma : CMut Γ1 Γ2 A) (mb : CMut Γ2 Γ3 B) : CMut Γ1 Γ3 A :=
-        bind ma (fun a => bind mb (fun _ => pure a)).
-      Definition map {Γ1 Γ2 A B} (f : A -> B) (ma : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 B :=
+      (* Definition bind_left {Γ1 Γ2 Γ3 A B} (ma : CHeapSpecM Γ1 Γ2 A) (mb : CHeapSpecM Γ2 Γ3 B) : CHeapSpecM Γ1 Γ3 A := *)
+      (*   bind ma (fun a => bind mb (fun _ => pure a)). *)
+      Definition map {Γ1 Γ2 A B} (f : A -> B) (ma : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 B :=
         fun POST => ma (fun a => POST (f a)).
 
-      Definition error {Γ1 Γ2 A} (msg : string) : CMut Γ1 Γ2 A :=
-        fun POST δ h => False.
-      Definition block {Γ1 Γ2 A} : CMut Γ1 Γ2 A :=
-        fun POST δ h => True.
+      Definition error {Γ1 Γ2 A} : CHeapSpecM Γ1 Γ2 A :=
+        fun POST δ h => CPureSpecM.FALSE.
+      Definition block {Γ1 Γ2 A} : CHeapSpecM Γ1 Γ2 A :=
+        fun POST δ h => CPureSpecM.TRUE.
 
-      Definition demonic_binary {Γ1 Γ2 A} (m1 m2 : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
+      Definition demonic_binary {Γ1 Γ2 A} (m1 m2 : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
         fun POST δ h => m1 POST δ h /\ m2 POST δ h.
-      Definition angelic_binary {Γ1 Γ2 A} (m1 m2 : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A :=
+      Definition angelic_binary {Γ1 Γ2 A} (m1 m2 : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
         fun POST δ h => m1 POST δ h \/ m2 POST δ h.
 
-      (* Definition demonic {Γ1 Γ2 I A} (ms : I -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A := *)
+      (* Definition demonic {Γ1 Γ2 I A} (ms : I -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A := *)
       (*   fun POST δ h => forall i : I, ms i POST δ h. *)
-      Definition demonic {Γ} (σ : Ty) : CMut Γ Γ (Val σ) :=
+      Definition demonic {Γ} (σ : Ty) : CHeapSpecM Γ Γ (Val σ) :=
         fun POST δ h => forall v : Val σ, POST v δ h.
-      Definition angelic {Γ} (σ : Ty) : CMut Γ Γ (Val σ) :=
+      Definition angelic {Γ} (σ : Ty) : CHeapSpecM Γ Γ (Val σ) :=
         fun POST δ h => exists v : Val σ, POST v δ h.
-      (* Definition angelic {Γ1 Γ2 I A} (ms : I -> CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A := *)
+      (* Definition angelic {Γ1 Γ2 I A} (ms : I -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A := *)
       (*   fun POST δ h => exists i : I, ms i POST δ h. *)
 
       Definition angelic_ctx {N : Set} {Γ} :
-        forall Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Val Δ).
-      Proof.
-        intros Δ. apply dijkstra.
-        apply (CDijk.angelic_ctx Δ).
-      Defined.
+        forall Δ : NCtx N Ty, CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
+        fun Δ => lift_purem (CPureSpecM.angelic_ctx Δ).
       Global Arguments angelic_ctx {N Γ} Δ.
 
-      Definition angelic_list {A Γ} (xs : list A) : CMut Γ Γ A :=
-        dijkstra (CDijk.angelic_list xs).
+      Definition angelic_list {A Γ} (xs : list A) : CHeapSpecM Γ Γ A :=
+        lift_purem (CPureSpecM.angelic_list xs).
 
-      Definition angelic_finite {Γ} F `{finite.Finite F} : CMut Γ Γ F :=
-        dijkstra (CDijk.angelic_finite (F:=F)).
+      Definition angelic_finite {Γ} F `{finite.Finite F} : CHeapSpecM Γ Γ F :=
+        lift_purem (CPureSpecM.angelic_finite (F:=F)).
 
-      Definition demonic_finite {Γ} F `{finite.Finite F} : CMut Γ Γ F :=
-        dijkstra (CDijk.demonic_finite (F:=F)).
+      Definition demonic_finite {Γ} F `{finite.Finite F} : CHeapSpecM Γ Γ F :=
+        lift_purem (CPureSpecM.demonic_finite (F:=F)).
 
       Definition demonic_ctx {N : Set} {Γ} :
-        forall Δ : NCtx N Ty, CMut Γ Γ (NamedEnv Val Δ).
-      Proof.
-        intros Δ. apply dijkstra.
-        apply (CDijk.demonic_ctx Δ).
-      Defined.
+        forall Δ : NCtx N Ty, CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
+        fun Δ => lift_purem (CPureSpecM.demonic_ctx Δ).
       Global Arguments demonic_ctx {N Γ} Δ.
 
     End Basic.
 
-    Module CMutNotations.
+    Module CHeapSpecMNotations.
 
       (* Notation "'⨂' x .. y => F" := *)
       (*   (cmut_demonic (fun x => .. (cmut_demonic (fun y => F)) .. )) : mut_scope. *)
@@ -341,170 +409,110 @@ Module Type ShallowExecOn
       Notation "x <- ma ;; mb" :=
         (bind ma (fun x => mb))
           (at level 80, ma at level 90, mb at level 200, right associativity) : mut_scope.
-      Notation "ma >>= f" := (bind ma f) (at level 50, left associativity) : mut_scope.
-      Notation "m1 ;; m2" := (bind_right m1 m2) : mut_scope.
-      Notation "ma *> mb" := (bind_right ma mb) (at level 50, left associativity) : mut_scope.
-      Notation "ma <* mb" := (bind_left ma mb) (at level 50, left associativity) : mut_scope.
+      (* Notation "ma >>= f" := (bind ma f) (at level 50, left associativity) : mut_scope. *)
+      Notation "ma ;; mb" := (bind_right ma mb) : mut_scope.
+      (* Notation "ma *> mb" := (bind_right ma mb) (at level 50, left associativity) : mut_scope. *)
+      (* Notation "ma <* mb" := (bind_left ma mb) (at level 50, left associativity) : mut_scope. *)
 
-    End CMutNotations.
-    Import CMutNotations.
+    End CHeapSpecMNotations.
+    Import CHeapSpecMNotations.
     Local Open Scope mut_scope.
 
     Section AssumeAssert.
 
-      Definition assume_formula {Γ} (fml : Prop) : CMut Γ Γ unit :=
-        dijkstra (CDijk.assume_formula fml).
-      Definition assert_formula {Γ} (fml : Prop) : CMut Γ Γ unit :=
-        dijkstra (CDijk.assert_formula fml).
-      Definition assert_eq_env {Γ} {Δ : Ctx Ty} (δ δ' : Env Val Δ) : CMut Γ Γ unit :=
-        dijkstra (CDijk.assert_eq_env δ δ').
-      Definition assert_eq_nenv {N Γ} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) : CMut Γ Γ unit :=
-        dijkstra (CDijk.assert_eq_nenv δ δ').
+      Definition assume_formula {Γ} (fml : Prop) : CHeapSpecM Γ Γ unit :=
+        lift_purem (CPureSpecM.assume_formula fml).
+      Definition assert_formula {Γ} (fml : Prop) : CHeapSpecM Γ Γ unit :=
+        lift_purem (CPureSpecM.assert_formula fml).
+      Definition assert_eq_env {Γ} {Δ : Ctx Ty} (δ δ' : Env Val Δ) : CHeapSpecM Γ Γ unit :=
+        lift_purem (CPureSpecM.assert_eq_env δ δ').
+      Definition assert_eq_nenv {N Γ} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) : CHeapSpecM Γ Γ unit :=
+        lift_purem (CPureSpecM.assert_eq_nenv δ δ').
+      Definition assert_eq_chunk {Γ} (c c' : SCChunk) : CHeapSpecM Γ Γ unit :=
+        lift_purem (CPureSpecM.assert_eq_chunk c c').
 
     End AssumeAssert.
 
     Section PatternMatching.
 
-      Definition angelic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
-      Proof.
-        apply angelic_binary.
-        - eapply bind_right.
-          apply assert_formula.
-          apply (v = true).
-          apply kt.
-        - eapply bind_right.
-          apply assert_formula.
-          apply (v = false).
-          apply kf.
-      Defined.
+      Definition angelic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
+        (assert_formula (v = true);; kt) ⊕ (assert_formula (v = false);; kf).
 
-      Lemma wp_angelic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CMut Γ1 Γ2 A) :
+      Lemma wp_angelic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CHeapSpecM Γ1 Γ2 A) :
         forall POST δ h,
           angelic_match_bool v kt kf POST δ h <->
           if v then kt POST δ h else kf POST δ h.
       Proof.
         cbv [angelic_match_bool angelic_binary bind_right bind assert_formula
-             dijkstra CDijk.assert_formula is_true negb].
+             lift_purem CPureSpecM.assert_formula is_true negb].
         destruct v; intuition; discriminate.
       Qed.
 
-      Definition demonic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CMut Γ1 Γ2 A) : CMut Γ1 Γ2 A.
-      Proof.
-        apply demonic_binary.
-        - eapply bind_right.
-          apply assume_formula.
-          apply (v = true).
-          apply kt.
-        - eapply bind_right.
-          apply assume_formula.
-          apply (v = false).
-          apply kf.
-      Defined.
+      Definition demonic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
+        (assume_formula (v = true);; kt) ⊗ (assume_formula (v = false);; kf).
 
-      Lemma wp_demonic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CMut Γ1 Γ2 A) :
+      Lemma wp_demonic_match_bool {A Γ1 Γ2} (v : Val ty.bool) (kt kf : CHeapSpecM Γ1 Γ2 A) :
         forall POST δ h,
           demonic_match_bool v kt kf POST δ h <->
           if v then kt POST δ h else kf POST δ h.
       Proof.
         cbv [demonic_match_bool demonic_binary bind_right bind assume_formula
-             dijkstra CDijk.assume_formula is_true negb].
+             lift_purem CPureSpecM.assume_formula is_true negb].
         destruct v; intuition; discriminate.
       Qed.
 
-      Definition angelic_match_enum {A E} {Γ1 Γ2} :
-        Val (ty.enum E) -> (enumt E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
-      Proof.
-        intros v cont.
-        eapply bind.
-        apply (angelic_finite (F := enumt E)).
-        intros EK.
-        eapply bind_right.
-        apply (assert_formula (v = EK)).
-        apply (cont EK).
-      Defined.
+      Definition angelic_match_enum {A E} {Γ1 Γ2} (v : Val (ty.enum E))
+        (cont : enumt E -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
+        EK <- angelic_finite (F:=enumt E);;
+        assert_formula (v = EK);;
+        cont EK.
 
-      Definition demonic_match_enum {A E} {Γ1 Γ2} :
-        Val (ty.enum E) -> (enumt E -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
-      Proof.
-        intros v cont.
-        eapply bind.
-        apply (demonic_finite (F := enumt E)).
-        intros EK.
-        eapply bind_right.
-        apply (assume_formula (v = EK)).
-        apply (cont EK).
-      Defined.
+      Definition demonic_match_enum {A E} {Γ1 Γ2} (v : Val (ty.enum E))
+        (cont : enumt E -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
+        EK <- demonic_finite (F:=enumt E);;
+        assume_formula (v = EK);;
+        cont EK.
 
-      Lemma wp_angelic_match_enum {A E Γ1 Γ2} (v : Val (ty.enum E)) (k : enumt E -> CMut Γ1 Γ2 A) :
+      Lemma wp_angelic_match_enum {A E Γ1 Γ2} (v : Val (ty.enum E)) (k : enumt E -> CHeapSpecM Γ1 Γ2 A) :
         forall POST δ h,
           angelic_match_enum v k POST δ h <-> k v POST δ h.
       Proof.
         cbv [assert_formula bind bind_right angelic_match_enum angelic_finite
-             dijkstra CDijk.angelic_finite CDijk.assert_formula].
-        intros. rewrite CDijk.wp_angelic_list.
+             lift_purem CPureSpecM.angelic_finite CPureSpecM.assert_formula].
+        intros. rewrite CPureSpecM.wp_angelic_list.
         split; intros; destruct_conjs; subst; auto.
         exists v. split; auto.
         rewrite <- base.elem_of_list_In.
         apply finite.elem_of_enum.
       Qed.
 
-      Lemma wp_demonic_match_enum {A E Γ1 Γ2} (v : Val (ty.enum E)) (k : enumt E -> CMut Γ1 Γ2 A) :
+      Lemma wp_demonic_match_enum {A E Γ1 Γ2} (v : Val (ty.enum E)) (k : enumt E -> CHeapSpecM Γ1 Γ2 A) :
         forall POST δ h,
           demonic_match_enum v k POST δ h <-> k v POST δ h.
       Proof.
         cbv [assume_formula bind bind_right demonic_match_enum demonic_finite
-             dijkstra CDijk.demonic_finite CDijk.assume_formula].
-        intros. rewrite CDijk.wp_demonic_list.
+             lift_purem CPureSpecM.demonic_finite CPureSpecM.assume_formula].
+        intros. rewrite CPureSpecM.wp_demonic_list.
         split; intros; subst; auto.
         apply H; auto.
         rewrite <- base.elem_of_list_In.
         apply finite.elem_of_enum.
       Qed.
 
-      Definition angelic_match_sum {A Γ1 Γ2} {σ τ} :
-        Val (ty.sum σ τ) -> (Val σ -> CMut Γ1 Γ2 A) -> (Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
-      Proof.
-        intros v kinl kinr.
-        apply angelic_binary.
-        - eapply bind.
-          apply (angelic σ).
-          intros v1.
-          eapply bind_right.
-          apply assert_formula.
-          apply (inl v1 = v).
-          apply kinl. auto.
-        - eapply bind.
-          apply (angelic τ).
-          intros v1.
-          eapply bind_right.
-          apply assert_formula.
-          apply (inr v1 = v).
-          apply kinr. auto.
-      Defined.
+      Definition angelic_match_sum {A Γ1 Γ2} {σ τ} (v : Val (ty.sum σ τ))
+        (kinl : Val σ -> CHeapSpecM Γ1 Γ2 A) (kinr : Val τ -> CHeapSpecM Γ1 Γ2 A) :
+        CHeapSpecM Γ1 Γ2 A :=
+        (v1 <- angelic σ;; assert_formula (inl v1 = v);; kinl v1) ⊕
+        (v1 <- angelic τ;; assert_formula (inr v1 = v);; kinr v1).
 
-      Definition demonic_match_sum {A Γ1 Γ2} {σ τ} :
-        Val (ty.sum σ τ) -> (Val σ -> CMut Γ1 Γ2 A) -> (Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
-      Proof.
-        intros v kinl kinr.
-        apply demonic_binary.
-        - eapply bind.
-          apply (demonic σ).
-          intros v1.
-          eapply bind_right.
-          apply assume_formula.
-          apply (inl v1 = v).
-          apply kinl. auto.
-        - eapply bind.
-          apply (demonic τ).
-          intros v1.
-          eapply bind_right.
-          apply assume_formula.
-          apply (inr v1 = v).
-          apply kinr. auto.
-      Defined.
+      Definition demonic_match_sum {A Γ1 Γ2} {σ τ} (v : Val (ty.sum σ τ))
+        (kinl : Val σ -> CHeapSpecM Γ1 Γ2 A) (kinr : Val τ -> CHeapSpecM Γ1 Γ2 A) :
+        CHeapSpecM Γ1 Γ2 A :=
+        (v1 <- demonic σ;; assume_formula (inl v1 = v);; kinl v1) ⊗
+        (v1 <- demonic τ;; assume_formula (inr v1 = v);; kinr v1).
 
       Lemma wp_angelic_match_sum {A Γ1 Γ2} {σ τ}
-        (v : Val (ty.sum σ τ)) (kinl : Val σ -> CMut Γ1 Γ2 A) (kinr : Val τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.sum σ τ)) (kinl : Val σ -> CHeapSpecM Γ1 Γ2 A) (kinr : Val τ -> CHeapSpecM Γ1 Γ2 A) POST δ h :
         angelic_match_sum v kinl kinr POST δ h <->
         match v with
         | inl v => kinl v POST δ h
@@ -512,14 +520,14 @@ Module Type ShallowExecOn
         end.
       Proof.
         cbv [angelic_match_sum bind_right bind angelic angelic_binary
-             assert_formula dijkstra CDijk.assert_formula].
+             assert_formula lift_purem CPureSpecM.assert_formula].
         split.
         - intros []; destruct_conjs; subst; auto.
         - destruct v as [v|v]; [left|right]; exists v; intuition.
       Qed.
 
       Lemma wp_demonic_match_sum {A Γ1 Γ2} {σ τ}
-        (v : Val (ty.sum σ τ)) (kinl : Val σ -> CMut Γ1 Γ2 A) (kinr : Val τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.sum σ τ)) (kinl : Val σ -> CHeapSpecM Γ1 Γ2 A) (kinr : Val τ -> CHeapSpecM Γ1 Γ2 A) POST δ h :
         demonic_match_sum v kinl kinr POST δ h <->
         match v with
         | inl v => kinl v POST δ h
@@ -527,7 +535,7 @@ Module Type ShallowExecOn
         end.
       Proof.
         cbv [demonic_match_sum bind_right bind demonic demonic_binary
-             assume_formula dijkstra CDijk.assume_formula].
+             assume_formula lift_purem CPureSpecM.assume_formula].
         split.
         - destruct v; intuition.
         - destruct v; intuition; try discriminate;
@@ -538,7 +546,7 @@ Module Type ShallowExecOn
       Qed.
 
       Definition angelic_match_prod {A Γ1 Γ2} {σ τ} :
-        Val (ty.prod σ τ) -> (Val σ -> Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
+        Val (ty.prod σ τ) -> (Val σ -> Val τ -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A :=
         fun v k =>
           v1 <- angelic σ ;;
           v2 <- angelic τ ;;
@@ -546,14 +554,14 @@ Module Type ShallowExecOn
           k v1 v2.
 
       Lemma wp_angelic_match_prod {A Γ1 Γ2} {σ τ}
-        (v : Val (ty.prod σ τ)) (k : Val σ -> Val τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.prod σ τ)) (k : Val σ -> Val τ -> CHeapSpecM Γ1 Γ2 A) POST δ h :
         angelic_match_prod v k POST δ h <->
         match v with
         | pair v1 v2 => k v1 v2 POST δ h
         end.
       Proof.
         cbv [angelic_match_prod bind_right bind angelic angelic_binary
-             assert_formula dijkstra CDijk.assert_formula].
+             assert_formula lift_purem CPureSpecM.assert_formula].
         destruct v; intuition.
         - destruct H as (v1 & v2 & eq & H).
           inversion eq; now subst.
@@ -561,7 +569,7 @@ Module Type ShallowExecOn
       Qed.
 
       Definition demonic_match_prod {A Γ1 Γ2} {σ τ} :
-        Val (ty.prod σ τ) -> (Val σ -> Val τ -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A :=
+        Val (ty.prod σ τ) -> (Val σ -> Val τ -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A :=
         fun v k =>
           v1 <- demonic σ ;;
           v2 <- demonic τ ;;
@@ -569,40 +577,29 @@ Module Type ShallowExecOn
           k v1 v2.
 
       Lemma wp_demonic_match_prod {A Γ1 Γ2} {σ τ}
-        (v : Val (ty.prod σ τ)) (k : Val σ -> Val τ -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.prod σ τ)) (k : Val σ -> Val τ -> CHeapSpecM Γ1 Γ2 A) POST δ h :
         demonic_match_prod v k POST δ h <->
         match v with
         | pair v1 v2 => k v1 v2 POST δ h
         end.
       Proof.
         cbv [demonic_match_prod bind_right bind demonic demonic_binary
-             assume_formula dijkstra CDijk.assume_formula].
+             assume_formula lift_purem CPureSpecM.assume_formula].
         destruct v; intuition.
       Qed.
 
-      Definition angelic_match_list {A Γ1 Γ2} {σ} :
-        Val (ty.list σ) -> (CMut Γ1 Γ2 A) -> (Val σ -> Val (ty.list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
-      Proof.
-        intros v knil kcons.
-        apply angelic_binary.
-        - eapply bind_right.
-          apply assert_formula.
-          apply (nil = v).
-          apply knil.
-        - eapply bind.
-          apply (angelic σ).
-          intros vhead.
-          eapply bind.
-          apply (angelic (ty.list σ)).
-          intros vtail.
-          eapply bind_right.
-          apply assert_formula.
-          apply (cons vhead vtail = v).
-          apply (kcons vhead vtail).
-      Defined.
+      Definition angelic_match_list {A Γ1 Γ2} {σ} (v : Val (ty.list σ))
+        (knil : CHeapSpecM Γ1 Γ2 A)
+        (kcons : Val σ -> Val (ty.list σ) -> CHeapSpecM Γ1 Γ2 A) :
+        CHeapSpecM Γ1 Γ2 A :=
+        (assert_formula (nil = v);; knil) ⊕
+        (vhead <- angelic σ;;
+         vtail <- angelic (ty.list σ);;
+         assert_formula (cons vhead vtail = v);;
+         kcons vhead vtail).
 
       Lemma wp_angelic_match_list {A Γ1 Γ2} {σ}
-        (v : Val (ty.list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Val σ -> Val (ty.list σ) -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.list σ)) (knil : CHeapSpecM Γ1 Γ2 A) (kcons : Val σ -> Val (ty.list σ) -> CHeapSpecM Γ1 Γ2 A) POST δ h :
         angelic_match_list v knil kcons POST δ h <->
         match v with
         | nil => knil POST δ h
@@ -610,36 +607,25 @@ Module Type ShallowExecOn
         end.
       Proof.
         cbv [angelic_match_list bind_right bind angelic angelic_binary
-             assert_formula dijkstra CDijk.assert_formula].
+             assert_formula lift_purem CPureSpecM.assert_formula].
         split.
         - intros []; destruct_conjs; subst; auto.
         - destruct v as [|vh vt]; [left;auto|right].
           exists vh, vt. auto.
       Qed.
 
-      Definition demonic_match_list {A Γ1 Γ2} {σ} :
-        Val (ty.list σ) -> (CMut Γ1 Γ2 A) -> (Val σ -> Val (ty.list σ) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
-      Proof.
-        intros v knil kcons.
-        apply demonic_binary.
-        - eapply bind_right.
-          apply assume_formula.
-          apply (nil = v).
-          apply knil.
-        - eapply bind.
-          apply (demonic σ).
-          intros vhead.
-          eapply bind.
-          apply (demonic (ty.list σ)).
-          intros vtail.
-          eapply bind_right.
-          apply assume_formula.
-          apply (cons vhead vtail = v).
-          apply (kcons vhead vtail).
-      Defined.
+      Definition demonic_match_list {A Γ1 Γ2} {σ} (v : Val (ty.list σ))
+        (knil : CHeapSpecM Γ1 Γ2 A)
+        (kcons : Val σ -> Val (ty.list σ) -> CHeapSpecM Γ1 Γ2 A) :
+        CHeapSpecM Γ1 Γ2 A :=
+        (assume_formula (nil = v);; knil) ⊗
+        (vhead <- demonic σ;;
+         vtail <- demonic (ty.list σ);;
+         assume_formula (cons vhead vtail = v);;
+         kcons vhead vtail).
 
       Lemma wp_demonic_match_list {A Γ1 Γ2} {σ}
-        (v : Val (ty.list σ)) (knil : CMut Γ1 Γ2 A) (kcons : Val σ -> Val (ty.list σ) -> CMut Γ1 Γ2 A) POST δ h :
+        (v : Val (ty.list σ)) (knil : CHeapSpecM Γ1 Γ2 A) (kcons : Val σ -> Val (ty.list σ) -> CHeapSpecM Γ1 Γ2 A) POST δ h :
         demonic_match_list v knil kcons POST δ h <->
         match v with
         | nil => knil POST δ h
@@ -647,7 +633,7 @@ Module Type ShallowExecOn
         end.
       Proof.
         cbv [demonic_match_list bind_right bind demonic demonic_binary
-             assume_formula dijkstra CDijk.assume_formula].
+             assume_formula lift_purem CPureSpecM.assume_formula].
         split.
         - destruct v; intuition.
         - destruct v; intuition; try discriminate.
@@ -655,8 +641,8 @@ Module Type ShallowExecOn
 
       Definition angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
         (Val (ty.record R)) ->
-        (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
-        CMut Γ1 Γ2 A :=
+        (NamedEnv Val Δ -> CHeapSpecM Γ1 Γ2 A) ->
+        CHeapSpecM Γ1 Γ2 A :=
         fun v k =>
           args <- angelic_ctx Δ ;;
           assert_formula (recordv_fold R (record_pattern_match_env_reverse p args) = v) ;;
@@ -664,13 +650,13 @@ Module Type ShallowExecOn
 
       Lemma wp_angelic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ)
         (v : Val (ty.record R))
-        (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
+        (k : NamedEnv Val Δ -> CHeapSpecM Γ1 Γ2 A)
         POST δ h :
         angelic_match_record p v k POST δ h <->
         k (record_pattern_match_val p v) POST δ h.
       Proof.
-        cbv [angelic_match_record bind_right bind angelic_ctx dijkstra assert_formula CDijk.assert_formula].
-        rewrite CDijk.wp_angelic_ctx; intuition.
+        cbv [angelic_match_record bind_right bind angelic_ctx lift_purem assert_formula CPureSpecM.assert_formula].
+        rewrite CPureSpecM.wp_angelic_ctx; intuition.
         - destruct H as (vs & <- & H).
           unfold record_pattern_match_val.
           now rewrite recordv_unfold_fold, record_pattern_match_env_inverse_right.
@@ -681,8 +667,8 @@ Module Type ShallowExecOn
 
       Definition demonic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
         (Val (ty.record R)) ->
-        (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
-        CMut Γ1 Γ2 A :=
+        (NamedEnv Val Δ -> CHeapSpecM Γ1 Γ2 A) ->
+        CHeapSpecM Γ1 Γ2 A :=
         fun v k =>
           args <- demonic_ctx Δ ;;
           assume_formula (recordv_fold R (record_pattern_match_env_reverse p args) = v) ;;
@@ -690,13 +676,13 @@ Module Type ShallowExecOn
 
       Lemma wp_demonic_match_record {N : Set} {A R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ)
         (v : Val (ty.record R))
-        (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
+        (k : NamedEnv Val Δ -> CHeapSpecM Γ1 Γ2 A)
         POST δ h :
         demonic_match_record p v k POST δ h <->
         k (record_pattern_match_val p v) POST δ h.
       Proof.
-        cbv [demonic_match_record bind_right bind demonic_ctx dijkstra assume_formula CDijk.assume_formula].
-        rewrite CDijk.wp_demonic_ctx; intuition; eauto.
+        cbv [demonic_match_record bind_right bind demonic_ctx lift_purem assume_formula CPureSpecM.assume_formula].
+        rewrite CPureSpecM.wp_demonic_ctx; intuition; eauto.
         eapply H.
         - unfold record_pattern_match_val.
           now rewrite record_pattern_match_env_inverse_left, recordv_fold_unfold.
@@ -708,8 +694,8 @@ Module Type ShallowExecOn
 
       Definition angelic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         (Val (ty.tuple σs)) ->
-        (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
-        CMut Γ1 Γ2 A :=
+        (NamedEnv Val Δ -> CHeapSpecM Γ1 Γ2 A) ->
+        CHeapSpecM Γ1 Γ2 A :=
         fun v k =>
           args <- angelic_ctx Δ ;;
           assert_formula (tuple_pattern_match_val p v = args) ;;
@@ -717,13 +703,13 @@ Module Type ShallowExecOn
 
       Lemma wp_angelic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ)
         (v : Val (ty.tuple σs))
-        (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
+        (k : NamedEnv Val Δ -> CHeapSpecM Γ1 Γ2 A)
         POST δ h :
         angelic_match_tuple p v k POST δ h <->
         k (tuple_pattern_match_val p v) POST δ h.
       Proof.
-        cbv [angelic_match_tuple bind_right bind angelic_ctx dijkstra assert_formula CDijk.assert_formula].
-        rewrite CDijk.wp_angelic_ctx; intuition.
+        cbv [angelic_match_tuple bind_right bind angelic_ctx lift_purem assert_formula CPureSpecM.assert_formula].
+        rewrite CPureSpecM.wp_angelic_ctx; intuition.
         - now destruct H as (vs & <- & H).
         - exists (tuple_pattern_match_val p v).
           split; auto.
@@ -731,8 +717,8 @@ Module Type ShallowExecOn
 
       Definition demonic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         (Val (ty.tuple σs)) ->
-        (NamedEnv Val Δ -> CMut Γ1 Γ2 A) ->
-        CMut Γ1 Γ2 A :=
+        (NamedEnv Val Δ -> CHeapSpecM Γ1 Γ2 A) ->
+        CHeapSpecM Γ1 Γ2 A :=
         fun v k =>
           args <- demonic_ctx Δ ;;
           assume_formula (tuple_pattern_match_val p v = args) ;;
@@ -740,28 +726,20 @@ Module Type ShallowExecOn
 
       Lemma wp_demonic_match_tuple {N : Set} {A σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ)
         (v : Val (ty.tuple σs))
-        (k : NamedEnv Val Δ -> CMut Γ1 Γ2 A)
+        (k : NamedEnv Val Δ -> CHeapSpecM Γ1 Γ2 A)
         POST δ h :
         demonic_match_tuple p v k POST δ h <->
         k (tuple_pattern_match_val p v) POST δ h.
       Proof.
-        cbv [demonic_match_tuple bind_right bind demonic_ctx dijkstra assume_formula CDijk.assume_formula].
-        rewrite CDijk.wp_demonic_ctx; intuition; subst; auto.
+        cbv [demonic_match_tuple bind_right bind demonic_ctx lift_purem assume_formula CPureSpecM.assume_formula].
+        rewrite CPureSpecM.wp_demonic_ctx; intuition; subst; auto.
       Qed.
 
-      Definition angelic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
-        Val σ -> CMut Γ Γ (NamedEnv Val Δ).
-      Proof.
-        intros v.
-        eapply bind.
-        apply (angelic_ctx Δ).
-        intros vs.
-        eapply bind_right.
-        apply assert_formula.
-        apply (pattern_match_val p v = vs).
-        apply pure.
-        apply vs.
-      Defined.
+      Definition angelic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty}
+        (p : Pattern Δ σ) {Γ} (v : Val σ) : CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
+        vs <- angelic_ctx Δ ;;
+        assert_formula (pattern_match_val p v = vs) ;;
+        pure vs.
 
       Lemma wp_angelic_match_pattern {N : Set} {σ Γ} {Δ : NCtx N Ty} (p : Pattern Δ σ)
         (v : Val σ)
@@ -769,28 +747,20 @@ Module Type ShallowExecOn
         angelic_match_pattern (Γ := Γ) p v POST δ h <->
         POST (pattern_match_val p v) δ h.
       Proof.
-        cbv [angelic_match_pattern bind pure angelic_ctx bind_right assert_formula
-             dijkstra CDijk.assert_formula].
-        rewrite CDijk.wp_angelic_ctx.
+        cbv [angelic_match_pattern bind pure angelic_ctx assert_formula
+             lift_purem CPureSpecM.assert_formula].
+        rewrite CPureSpecM.wp_angelic_ctx.
         split.
         - now intros (vs & <- & H).
         - intros ?. exists (pattern_match_val p v).
           split; auto.
       Qed.
 
-      Definition demonic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
-        Val σ -> CMut Γ Γ (NamedEnv Val Δ).
-      Proof.
-        intros v.
-        eapply bind.
-        apply (demonic_ctx Δ).
-        intros vs.
-        eapply bind_right.
-        apply assume_formula.
-        apply (pattern_match_val p v = vs).
-        apply pure.
-        apply vs.
-      Defined.
+      Definition demonic_match_pattern {N : Set} {σ} {Δ : NCtx N Ty}
+        (p : Pattern Δ σ) {Γ} (v : Val σ) : CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
+        vs <- demonic_ctx Δ ;;
+        assume_formula (pattern_match_val p v = vs) ;;
+        pure vs.
 
       Lemma wp_demonic_match_pattern {N : Set} {σ Γ} {Δ : NCtx N Ty} (p : Pattern Δ σ)
         (v : Val σ)
@@ -799,14 +769,14 @@ Module Type ShallowExecOn
         POST (pattern_match_val p v) δ h.
       Proof.
         cbv [demonic_match_pattern bind pure demonic_ctx bind_right assume_formula
-             dijkstra CDijk.assume_formula].
-        rewrite CDijk.wp_demonic_ctx.
+             lift_purem CPureSpecM.assume_formula].
+        rewrite CPureSpecM.wp_demonic_ctx.
         intuition; subst; auto.
       Qed.
 
       Definition angelic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
-        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A.
       Proof.
         intros v k.
         eapply bind.
@@ -826,15 +796,15 @@ Module Type ShallowExecOn
 
       Lemma wp_angelic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K))
-        (v : Val (ty.union U)) (k : forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A)
+        (v : Val (ty.union U)) (k : forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A)
         POST δ h :
         angelic_match_union p v k POST δ h <->
         let (UK , vf) := unionv_unfold U v in
         k UK (pattern_match_val (p UK) vf) POST δ h.
       Proof.
         cbv [angelic_match_union bind bind_right angelic_finite assert_formula angelic
-             dijkstra CDijk.angelic_finite CDijk.assert_formula].
-        rewrite CDijk.wp_angelic_list.
+             lift_purem CPureSpecM.angelic_finite CPureSpecM.assert_formula].
+        rewrite CPureSpecM.wp_angelic_list.
         split.
         - intros (UK & HIn & vf & Heq & Hwp).
           rewrite wp_angelic_match_pattern in Hwp.
@@ -851,7 +821,7 @@ Module Type ShallowExecOn
 
       Definition demonic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
-        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A.
       Proof.
         intros v k.
         eapply bind.
@@ -871,15 +841,15 @@ Module Type ShallowExecOn
 
       Lemma wp_demonic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K))
-        (v : Val (ty.union U)) (k : forall K, NamedEnv Val (Δ K) -> CMut Γ1 Γ2 A)
+        (v : Val (ty.union U)) (k : forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A)
         POST δ h :
         demonic_match_union p v k POST δ h <->
         let (UK , vf) := unionv_unfold U v in
         k UK (pattern_match_val (p UK) vf) POST δ h.
       Proof.
         cbv [demonic_match_union bind bind_right demonic_finite assume_formula demonic
-             dijkstra CDijk.demonic_finite CDijk.assume_formula].
-        rewrite CDijk.wp_demonic_list.
+             lift_purem CPureSpecM.demonic_finite CPureSpecM.assume_formula].
+        rewrite CPureSpecM.wp_demonic_list.
         split.
         - destruct (unionv_unfold U v) as [UK vf] eqn:Heq.
           intros HYP. specialize (HYP UK).
@@ -895,7 +865,7 @@ Module Type ShallowExecOn
       Qed.
 
       Definition demonic_match_bvec {A n} {Γ1 Γ2} :
-        Val (ty.bvec n) -> (bv n -> CMut Γ1 Γ2 A) -> CMut Γ1 Γ2 A.
+        Val (ty.bvec n) -> (bv n -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A.
       Proof.
         intros v cont.
         eapply bind.
@@ -907,13 +877,13 @@ Module Type ShallowExecOn
       Defined.
       Global Arguments demonic_match_bvec : simpl never.
 
-      Lemma wp_demonic_match_bvec {A n Γ1 Γ2} (v : Val (ty.bvec n)) (k : bv n -> CMut Γ1 Γ2 A) :
+      Lemma wp_demonic_match_bvec {A n Γ1 Γ2} (v : Val (ty.bvec n)) (k : bv n -> CHeapSpecM Γ1 Γ2 A) :
         forall POST δ h,
           demonic_match_bvec v k POST δ h <-> k v POST δ h.
       Proof.
         cbv [assume_formula bind bind_right demonic_match_bvec demonic_finite
-             dijkstra CDijk.demonic_finite CDijk.assume_formula].
-        intros. rewrite CDijk.wp_demonic_list.
+             lift_purem CPureSpecM.demonic_finite CPureSpecM.assume_formula].
+        intros. rewrite CPureSpecM.wp_demonic_list.
         split; intros; subst; auto.
         apply H; auto.
         rewrite <- base.elem_of_list_In.
@@ -925,25 +895,25 @@ Module Type ShallowExecOn
     Section State.
 
       Definition pushpop {A Γ1 Γ2 x σ} (v : Val σ)
-        (d : CMut (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) A) : CMut Γ1 Γ2 A :=
+        (d : CHeapSpecM (Γ1 ▻ x∷σ) (Γ2 ▻ x∷σ) A) : CHeapSpecM Γ1 Γ2 A :=
         fun POST δ0 => d (fun a δ1 => POST a (env.tail δ1)) (δ0 ► (x∷σ ↦ v)).
       Definition pushspops {A} {Γ1 Γ2 Δ} (δΔ : CStore Δ)
-        (d : CMut (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) : CMut Γ1 Γ2 A :=
+        (d : CHeapSpecM (Γ1 ▻▻ Δ) (Γ2 ▻▻ Δ) A) : CHeapSpecM Γ1 Γ2 A :=
         fun POST δ0 => d (fun a δ1 => POST a (env.drop Δ δ1)) (δ0 ►► δΔ).
-      Definition get_local {Γ} : CMut Γ Γ (CStore Γ) :=
+      Definition get_local {Γ} : CHeapSpecM Γ Γ (CStore Γ) :=
         fun POST δ => POST δ δ.
-      Definition put_local {Γ1 Γ2} (δ : CStore Γ2) : CMut Γ1 Γ2 unit :=
+      Definition put_local {Γ1 Γ2} (δ : CStore Γ2) : CHeapSpecM Γ1 Γ2 unit :=
         fun POST _ => POST tt δ.
-      Definition get_heap {Γ} : CMut Γ Γ SCHeap :=
+      Definition get_heap {Γ} : CHeapSpecM Γ Γ SCHeap :=
         fun POST δ h => POST h δ h.
-      Definition put_heap {Γ} (h : SCHeap) : CMut Γ Γ unit :=
+      Definition put_heap {Γ} (h : SCHeap) : CHeapSpecM Γ Γ unit :=
         fun POST δ _ => POST tt δ h.
 
-      Definition eval_exp {Γ σ} (e : Exp Γ σ) : CMut Γ Γ (Val σ) :=
+      Definition eval_exp {Γ σ} (e : Exp Γ σ) : CHeapSpecM Γ Γ (Val σ) :=
         fun POST δ => POST (eval e δ) δ.
-      Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CMut Γ Γ (CStore σs) :=
+      Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) : CHeapSpecM Γ Γ (CStore σs) :=
         fun POST δ => POST (evals es δ) δ.
-      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Val σ) : CMut Γ Γ unit :=
+      Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} (v : Val σ) : CHeapSpecM Γ Γ unit :=
         fun POST δ => POST tt (δ ⟪ x ↦ v ⟫).
       Global Arguments assign {Γ} x {σ xIn} v.
 
@@ -951,10 +921,10 @@ Module Type ShallowExecOn
 
     (* Module NewProduceConsumeChunk. *)
 
-    (*   Definition angelic_heap {Γ} : CMut Γ Γ SCHeap := *)
+    (*   Definition angelic_heap {Γ} : CHeapSpecM Γ Γ SCHeap := *)
     (*     fun POST δ h => exists h', POST h' δ h. *)
 
-    (*   Definition demonic_heap {Γ} : CMut Γ Γ SCHeap := *)
+    (*   Definition demonic_heap {Γ} : CHeapSpecM Γ Γ SCHeap := *)
     (*     fun POST δ h => forall h', POST h' δ h. *)
 
     (*   Section WithHeaplet. *)
@@ -976,13 +946,13 @@ Module Type ShallowExecOn
     (*       List.fold_right (fun c h => interpret_scchunk c ✱ h) emp. *)
     (*     Global Arguments interpret_scheap !h. *)
 
-    (*     Definition produce_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit := *)
+    (*     Definition produce_chunk {Γ} (c : SCChunk) : CHeapSpecM Γ Γ unit := *)
     (*       h  <- get_heap ;; *)
     (*       h' <- demonic_heap ;; *)
     (*       assume_formula (interpret_scchunk c ✱ interpret_scheap h ⊢ interpret_scheap h') ;; *)
     (*       put_heap h'. *)
 
-    (*     Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit := *)
+    (*     Definition consume_chunk {Γ} (c : SCChunk) : CHeapSpecM Γ Γ unit := *)
     (*       h  <- get_heap ;; *)
     (*       h' <- angelic_heap ;; *)
     (*       assert_formula (interpret_scheap h ⊢ interpret_scchunk c ✱ interpret_scheap h') ;; *)
@@ -994,18 +964,19 @@ Module Type ShallowExecOn
 
     Section ProduceConsume.
 
-      Definition produce_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
+      Definition produce_chunk {Γ} (c : SCChunk) : CHeapSpecM Γ Γ unit :=
         fun POST δ h => POST tt δ (cons c h).
-      Definition consume_chunk {Γ} (c : SCChunk) : CMut Γ Γ unit :=
+
+      Definition consume_chunk {Γ} (c : SCChunk) : CHeapSpecM Γ Γ unit :=
         h         <- get_heap ;;
         '(c', h') <- angelic_list (heap_extractions h) ;;
-        assert_formula (c' = c) ;;
+        assert_eq_chunk c c' ;;
         put_heap h'.
 
       Global Arguments produce_chunk {Γ} _.
       Global Arguments consume_chunk {Γ} _.
 
-      Fixpoint produce {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
+      Fixpoint produce {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CHeapSpecM Γ Γ unit :=
         match asn with
         | asn_formula fml => assume_formula (inst fml ι)
         | asn_chunk c     => produce_chunk (inst c ι)
@@ -1041,7 +1012,7 @@ Module Type ShallowExecOn
           demonic_match_union
             alt__pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun UK ι' => produce (ι ►► ι') (alt__rhs UK))
-        | asn_sep a1 a2   => produce ι a1 *> produce ι a2
+        | asn_sep a1 a2   => _ <- produce ι a1 ;; produce ι a2
         | asn_or a1 a2 =>
           demonic_binary (produce ι a1)
                          (produce ι a2)
@@ -1051,7 +1022,7 @@ Module Type ShallowExecOn
         | asn_debug => pure tt
         end.
 
-      Fixpoint consume {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CMut Γ Γ unit :=
+      Fixpoint consume {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CHeapSpecM Γ Γ unit :=
         match asn with
         | asn_formula fml => assert_formula (inst fml ι)
         | asn_chunk c     => consume_chunk (inst c ι)
@@ -1087,7 +1058,7 @@ Module Type ShallowExecOn
           angelic_match_union
             alt__pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun UK ι' => consume (ι ►► ι') (alt__rhs UK))
-        | asn_sep a1 a2   => consume ι a1 *> consume ι a2
+        | asn_sep a1 a2   => _ <- consume ι a1;; consume ι a2
         | asn_or a1 a2 =>
           angelic_binary (consume ι a1)
                          (consume ι a2)
@@ -1101,7 +1072,7 @@ Module Type ShallowExecOn
 
     Section Exec.
 
-      Definition call_contract {Γ Δ τ} (contract : SepContract Δ τ) (args : CStore Δ) : CMut Γ Γ (Val τ) :=
+      Definition call_contract {Γ Δ τ} (contract : SepContract Δ τ) (args : CStore Δ) : CHeapSpecM Γ Γ (Val τ) :=
         match contract with
         | MkSepContract _ _ Σe δ req result ens =>
           ι <- angelic_ctx Σe ;;
@@ -1112,23 +1083,34 @@ Module Type ShallowExecOn
           pure v
         end.
 
-      Definition call_lemma {Γ Δ} (lem : Lemma Δ) (vs : CStore Δ) : CMut Γ Γ unit :=
+      Definition call_lemma {Γ Δ} (lem : Lemma Δ) (vs : CStore Δ) : CHeapSpecM Γ Γ unit :=
         match lem with
         | MkLemma _ Σe δ req ens =>
           ι <- angelic_ctx Σe ;;
+          (* TODO: this should use assert_eq_nenv instead. *)
           assert_formula (inst δ ι = vs) ;;
           consume ι req ;;
           produce ι ens
         end.
 
-      Definition Exec := forall Γ τ (s : Stm Γ τ), CMut Γ Γ (Val τ).
+      (* The paper discusses the case that a function call is replaced by
+         interpreting the contract instead. However, this is not always
+         convenient. We therefore make contracts for functions optional and if a
+         function does not have a contract, we continue executing the body of
+         the called function. A parameter [inline_fuel] bounds the number of
+         allowed levels before failing execution. Therefore, we write the
+         executor in an open-recusion style and [Exec] is the closed type of
+         such an executor. *)
+      Definition Exec := forall Γ τ (s : Stm Γ τ), CHeapSpecM Γ Γ (Val τ).
 
       Section ExecAux.
 
+        (* The executor for "inlining" a call. *)
         Variable rec : Exec.
 
+        (* The openly-recursive executor. *)
         Definition exec_aux : Exec :=
-          fix exec_aux {Γ τ} (s : Stm Γ τ) : CMut Γ Γ (Val τ) :=
+          fix exec_aux {Γ τ} (s : Stm Γ τ) : CHeapSpecM Γ Γ (Val τ) :=
             match s with
             | stm_val _ l => pure l
             | stm_exp e => eval_exp e
@@ -1139,7 +1121,7 @@ Module Type ShallowExecOn
               pushspops δ (exec_aux k)
             | stm_assign x e =>
               v <- exec_aux e ;;
-              assign x v ;;
+              _ <- assign x v ;;
               pure v
             | stm_call f es =>
               args <- eval_exps es ;;
@@ -1148,23 +1130,25 @@ Module Type ShallowExecOn
               | None   => fun POST δ => rec (FunDef f) (fun v _ => POST v δ) args
               end
             | stm_foreign f es =>
-              eval_exps es >>= call_contract (CEnvEx f)
+              ts <- eval_exps es ;;
+              call_contract (CEnvEx f) ts
             | stm_lemmak l es k =>
-              eval_exps es >>= call_lemma (LEnv l) ;;
+              ts <- eval_exps es ;;
+              _  <- call_lemma (LEnv l) ts ;;
               exec_aux k
             | stm_call_frame δ' s =>
               δ <- get_local ;;
-              put_local δ' ;;
+              _ <- put_local δ' ;;
               v <- exec_aux s ;;
-              put_local δ ;;
+              _ <- put_local δ ;;
               pure v
             | stm_if e s1 s2 =>
               v <- eval_exp e ;;
               demonic_match_bool v (exec_aux s1) (exec_aux s2)
-            | stm_seq e k => exec_aux e ;; exec_aux k
+            | stm_seq e k => _ <- exec_aux e ;; exec_aux k
             | stm_assertk e1 _ k =>
               v <- eval_exp e1 ;;
-              assume_formula (v = true) ;;
+              _ <- assume_formula (v = true) ;;
               exec_aux k
             | stm_fail _ s =>
               block
@@ -1176,14 +1160,14 @@ Module Type ShallowExecOn
             | stm_read_register reg =>
               v <- angelic τ ;;
               let c := scchunk_ptsreg reg v in
-              consume_chunk c ;;
-              produce_chunk c ;;
+              _ <- consume_chunk c ;;
+              _ <- produce_chunk c ;;
               pure v
             | stm_write_register reg e =>
               v__old <- angelic τ ;;
-              consume_chunk (scchunk_ptsreg reg v__old) ;;
+              _    <- consume_chunk (scchunk_ptsreg reg v__old) ;;
               v__new <- eval_exp e ;;
-              produce_chunk (scchunk_ptsreg reg v__new) ;;
+              _    <- produce_chunk (scchunk_ptsreg reg v__new) ;;
               pure v__new
             | @stm_match_list _ _ σ e s1 xh xt s2 =>
               v <- eval_exp e ;;
@@ -1231,14 +1215,15 @@ Module Type ShallowExecOn
 
       End ExecAux.
 
+      (* The constructed closed executor. *)
       Fixpoint exec (inline_fuel : nat) : Exec :=
         match inline_fuel with
-        | O   => fun _ _ _ => error "CMut.exec: out of fuel for inlining"
+        | O   => fun _ _ _ => error
         | S n => @exec_aux (@exec n)
         end.
       Global Arguments exec _ {_ _} s _ _ _.
 
-      (* Definition leakcheck {Γ} : CMut Γ Γ unit := *)
+      (* Definition leakcheck {Γ} : CHeapSpecM Γ Γ unit := *)
       (*   get_heap >>= fun h => *)
       (*   match h with *)
       (*   | nil => pure tt *)
@@ -1252,25 +1237,146 @@ Module Type ShallowExecOn
       Variable inline_fuel : nat.
 
       Definition exec_contract {Δ τ} (c : SepContract Δ τ) (s : Stm Δ τ) :
-       Valuation (sep_contract_logic_variables c) -> CMut Δ Δ unit :=
+       Valuation (sep_contract_logic_variables c) -> CHeapSpecM Δ Δ unit :=
         match c with
         | MkSepContract _ _ _ _ req result ens =>
           fun ι =>
-          produce ι req ;;
-          exec inline_fuel s >>= fun v =>
+          _ <- produce ι req ;;
+          v <- exec inline_fuel s ;;
           consume (env.snoc ι (result∷τ) v) ens
           (* cmut_block *)
           (* cmut_leakcheck *)
         end%mut.
 
-      Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      Definition vcgen {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
         ForallNamed (fun ι : Valuation (sep_contract_logic_variables c) =>
           let δΔ : CStore Δ := inst (sep_contract_localstore c) ι in
-          exec_contract c body ι (fun _ _ _ => True) δΔ nil).
+          (* We use the FINISH alias of True for the purpose of counting
+             nodes in a shallowly-generated VC. *)
+          exec_contract c body ι (fun _ _ _ => CPureSpecM.FINISH) δΔ nil).
 
     End WithFuel.
 
-  End CMut.
+  End CHeapSpecM.
+
+  Module Shallow.
+
+    Definition ValidContract {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
+      (* Use inline_fuel = 1 by default. *)
+      CHeapSpecM.vcgen 1 c body.
+
+    Module Statistics.
+
+      Inductive PropShape : Type :=
+      | psfork (P Q : PropShape)
+      | psquant (P : PropShape)
+      | pspruned
+      | psfinish
+      | psother.
+
+      Fixpoint shape_to_stats (s : PropShape) : Stats :=
+        match s with
+        | psfork p q => plus_stats (shape_to_stats p) (shape_to_stats q)
+        | psquant p  => shape_to_stats p
+        | pspruned   => {| branches := 1; pruned := 1 |}
+        | psfinish   => {| branches := 1; pruned := 0 |}
+        | psother     => {| branches := 0; pruned := 0 |}
+        end.
+
+      (* See: Building a Reification Tactic that Recurses Under Binders
+         http://adam.chlipala.net/cpdt/html/Cpdt.Reflection.html
+
+         This calculates a deeply-embedded PropShape for a given Prop P
+         for which we can then run shape_to_stats to calculate the
+         number of different kinds of execution paths. *)
+      Ltac reifyProp P :=
+        match eval simpl in P with
+        | forall (x : ?T), CPureSpecM.TRUE => pspruned
+        | forall (x : ?T), CPureSpecM.FALSE => pspruned
+        | forall (x : ?T), CPureSpecM.FINISH => psfinish
+        | forall (x : ?T), True => psother
+        | forall (x : ?T), False => psother
+        | forall (x : ?T), @?P1 x /\ @?P2 x =>
+          let t1 := reifyProp (forall x : T, P1 x) in
+          let t2 := reifyProp (forall x : T, P2 x) in
+            constr:(psfork t1 t2)
+        | forall (x : ?T), @?P1 x \/ @?P2 x =>
+          let t1 := reifyProp (forall x : T, P1 x) in
+          let t2 := reifyProp (forall x : T, P2 x) in
+            constr:(psfork t1 t2)
+        | forall (x : ?T), @?P1 x -> @?P2 x =>
+          let t1 := reifyProp (forall x : T, P1 x) in
+          let t2 := reifyProp (forall x : T, P2 x) in
+            constr:(psfork t1 t2)
+        | forall (x : ?T), forall (v : ?U), @?P x v =>
+          let t := reifyProp (forall xv : T * U, P (fst xv) (snd xv)) in
+            constr:(psquant t)
+        | forall (x : ?T), exists (v : ?U), @?P x v =>
+          let t := reifyProp (forall xv : T * U, P (fst xv) (snd xv)) in
+            constr:(psquant t)
+        | forall (x : ?T), _ = _ => psother
+        | forall (x : ?T), Z.le _ _ => psother
+        (* | _ => constr:(sprop P) *)
+        end.
+
+      (* This typeclass approach seems to be much faster than the reifyProp
+      tactic above. *)
+      Class ShallowStats (P : Prop) :=
+        stats : Stats.
+      Arguments stats P {_}.
+
+      Instance stats_true : ShallowStats CPureSpecM.TRUE :=
+        {| branches := 1; pruned := 1 |}.
+      Instance stats_false : ShallowStats CPureSpecM.FALSE :=
+        {| branches := 1; pruned := 1 |}.
+      Instance stats_finish : ShallowStats CPureSpecM.FINISH :=
+        {| branches := 1; pruned := 0 |}.
+      (* We do not count regular True and False towards the statistics
+         because they do not (should not) represent leaves of the shallow
+         execution. *)
+      Instance stats_true' : ShallowStats True :=
+        {| branches := 0; pruned := 0 |}.
+      Instance stats_false' : ShallowStats False :=
+        {| branches := 0; pruned := 0 |}.
+
+      Instance stats_eq {A} {x y : A} : ShallowStats (x = y) :=
+        {| branches := 0; pruned := 0 |}.
+      Instance stats_zle {x y : Z} : ShallowStats (Z.le x y) :=
+        {| branches := 0; pruned := 0 |}.
+
+      Instance stats_and `{ShallowStats P, ShallowStats Q} :
+        ShallowStats (P /\ Q) := plus_stats (stats P) (stats Q).
+      Instance stats_or `{ShallowStats P, ShallowStats Q} :
+        ShallowStats (P \/ Q) := plus_stats (stats P) (stats Q).
+      Instance stats_impl `{ShallowStats P, ShallowStats Q} :
+        ShallowStats (P -> Q) := plus_stats (stats P) (stats Q).
+
+      Axiom undefined : forall A, A.
+
+      Instance stats_forall {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
+        ShallowStats (forall a : A, B a) := SP (undefined A).
+      Instance stats_exists {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
+        ShallowStats (exists a : A, B a) := SP (undefined A).
+
+      Ltac calc fnc :=
+        let P := eval compute - [CPureSpecM.FALSE CPureSpecM.TRUE CPureSpecM.FINISH
+                                 negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb
+                                 Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge Z.of_nat
+                                 List.app List.length rev rev_append
+            ] in
+                   (match CEnv fnc with
+                    | Some c => Shallow.ValidContract c (FunDef fnc)
+                    | None => False
+                    end) in
+        let s := eval compute in (stats P) in
+          s.
+        (* let t := reifyProp (forall x : unit, P) in *)
+        (* let s := eval compute in (shape_to_stats t) in *)
+        (*   s. *)
+
+    End Statistics.
+
+  End Shallow.
 
 End ShallowExecOn.
 

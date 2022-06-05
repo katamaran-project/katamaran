@@ -263,13 +263,12 @@ Module Type InstantiationOn
     inst (sub_single xIn t) ι = env.insert xIn ι (inst t ι).
   Proof.
     rewrite env.insert_insert'.
-    apply env.lookup_extensional. intros [y τ] yIn.
+    apply env.lookup_extensional. intros y yIn.
     unfold env.insert', sub_single, inst, inst_sub, inst_env; cbn.
     rewrite env.lookup_map, ?env.lookup_tabulate.
-    pose proof (ctx.occurs_check_var_spec xIn yIn).
-    destruct (ctx.occurs_check_var xIn yIn).
-    - now dependent elimination e.
-    - now reflexivity.
+    destruct (ctx.occurs_check_view xIn yIn).
+    - now rewrite ctx.occurs_check_var_refl.
+    - now rewrite ctx.occurs_check_shift_var.
   Qed.
 
   Lemma inst_lookup {Σ0 Σ1} (ι : Valuation Σ1) (ζ : Sub Σ0 Σ1) x τ (xIn : x∷τ ∈ Σ0) :

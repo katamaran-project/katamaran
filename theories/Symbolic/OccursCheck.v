@@ -220,4 +220,69 @@ Module Type OccursCheckOn
   #[export] Instance occurs_check_laws_unit : OccursCheckLaws Unit.
   Proof. derive. Qed.
 
+  Module Experimental.
+
+    (* A generic view for the occurs check instead of the option monad
+       based implementation above. *)
+    Inductive OccursCheckView {T} {subT : Subst T} {Σ} {x : 𝑺∷Ty} (xIn : x ∈ Σ) : T Σ -> Type :=
+    | Succ (t : T (Σ - x)) : OccursCheckView xIn (subst t (sub_shift xIn))
+    | Fail t : OccursCheckView xIn t.
+
+    Class OccursCheck (T : LCtx -> Type) {subT : Subst T} : Type :=
+      occurs_check_view : forall {Σ x} (xIn : x ∈ Σ) (t : T Σ), OccursCheckView xIn t.
+    Arguments OccursCheck T {_}.
+    Arguments Succ _ {_} [_ _] _ _.
+
+    #[export] Instance OccursCheckEnv {I : Set} {T : LCtx -> I -> Set}
+           {SBT : forall i, Subst (fun Σ => T Σ i)}
+           {OCT : forall i, OccursCheck (fun Σ => T Σ i)} :
+      forall {Γ : Ctx I}, OccursCheck (fun Σ => Env (T Σ) Γ) :=
+      fix oc {Γ Σ x} xIn ts {struct ts} :
+        OccursCheckView xIn ts :=
+        match ts with
+        | env.nil  => Succ (fun Σ => Env (T Σ) _) xIn env.nil
+        | env.snoc ts b t =>
+            match oc xIn ts with
+            | Succ _ _ ts' =>
+                match occurs_check_view xIn t in (OccursCheckView _ t0)
+                (* Does this recalculate the original ts? Does it have any
+                   impact on runtime. Otherwise this can get ugly if we have to
+                   introduce an equality before pattern matching on
+                   [oc xIn ts]. *)
+                return OccursCheckView xIn (env.snoc (subst ts' (sub_shift xIn)) b t0)
+                with
+                | Succ _ _ t0 => Succ (fun Σ => Env (T Σ) _) xIn (ts' ► (b ↦ t0))
+                | Fail _ t0 => Fail xIn
+                                 (* Same as above. *)
+                                 (subst ts' (sub_shift xIn) ► (b ↦ t0))
+                end
+            | Fail _ ts => Fail xIn (ts ► (b ↦ t))
+            end
+        end.
+
+    Definition OccursCheckShiftPoint {T} {subT : Subst T} {ocT : OccursCheck T} :
+      forall {Σ x} (xIn : x ∈ Σ) (t : T (Σ - x)), Prop :=
+      fun Σ x xIn t => occurs_check_view xIn (subst t (sub_shift xIn)) = Succ T xIn t.
+
+    Class OccursCheckLaws (T : LCtx -> Type) `{Subst T, OccursCheck T} : Prop :=
+      { occurs_check_view_shift {Σ x} (xIn : x ∈ Σ) (t : T (Σ - x)) : OccursCheckShiftPoint xIn t;
+      }.
+    #[global] Arguments OccursCheckLaws T {_ _ _}.
+
+    #[export] Instance occurs_check_laws_env {I : Set} {T : LCtx -> I -> Set}
+      {ST : forall i : I, Subst (fun Σ => T Σ i)}
+      {OCT : forall i : I, OccursCheck (fun Σ => T Σ i)}
+      {OCLT : forall i : I, OccursCheckLaws (fun Σ => T Σ i)}
+      {Γ : Ctx I} :
+      OccursCheckLaws (fun Σ => Env (T Σ) Γ).
+    Proof.
+      constructor. unfold OccursCheckShiftPoint.
+      unfold occurs_check_view, subst, SubstEnv.
+      intros ? ? ? E. induction E; cbn.
+      - reflexivity.
+      - now rewrite IHE, (occurs_check_view_shift xIn db).
+    Qed.
+
+  End Experimental.
+
 End OccursCheckOn.
