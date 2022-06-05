@@ -1207,6 +1207,7 @@ Module BlockVerificationDerived2.
     Example femtokernel_default_pmpcfg : Pmpcfg_ent :=
       {| L := false; A := OFF; X := false; W := false; R := false |}.
 
+    (* DOMI: TODO: replace the pointsto chunk for 84 ↦ 42 with a corresponding invariant *)
     Example femtokernel_init_pre : □ (WTerm ty_xlenbits -> Assertion) W__femtoinit :=
       fun _ _ a =>
         (a = term_val ty_word 0) ∗
@@ -1322,14 +1323,14 @@ Module BlockVerificationDerived2.
       let vc4 := Postprocessing.solve_uvars vc3 in
       let vc5 := Postprocessing.prune vc4 in
       vc5.
-    Import SymProp.notations.
-    Set Printing Depth 200.
-    Print vc__femtohandler.
+    (* Import SymProp.notations. *)
+    (* Set Printing Depth 200. *)
+    (* Print vc__femtohandler. *)
 
     Lemma sat__femtohandler : SymProp.safe vc__femtohandler env.nil.
     Proof.
       vm_compute; auto.
-    Admitted.
+    Qed.
 
   End FemtoKernel.
 
@@ -1566,11 +1567,32 @@ Module BlockVerificationDerived2Sem.
   Import iris.base_logic.lib.invariants.
   (* This lemma transforms the postcondition of femtokernel_init into the precondition of the universal contract, so that we can use the UC to verify the invocation of untrusted code.
    *)
-  Lemma femtokernel_manualStep1 `{na_invΣ Σ, sailGS Σ} :
-    (⊢ mstatus ↦ {| MPP := Machine |} ∗
-       (mtvec ↦ 72) ∗
+
+  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ :=
+        inv femto_inv_ns (interp_ptsto (mG := sailGS_memGS) 84 42).
+
+  Definition femto_handler_pre `{sailGS Σ} mpp epc : iProp Σ :=
+      (mstatus ↦ {| MPP := mpp |}) ∗
+      (mtvec ↦ 72) ∗
+      (∃ v, mcause ↦ v) ∗
+      (mepc ↦ epc) ∗
+      cur_privilege ↦ Machine ∗
+      (∃ v, x1 ↦ v) ∗
+      (∃ v, x2 ↦ v) ∗
+      (∃ v, x3 ↦ v) ∗
+      (∃ v, x4 ↦ v) ∗
+      (∃ v, x5 ↦ v) ∗
+      (∃ v, x6 ↦ v) ∗
+      (∃ v, x7 ↦ v) ∗
+      interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
+      femto_inv_fortytwo ∗
+      pc ↦ 72.
+
+    Example femto_handler_post `{sailGS Σ} epc : iProp Σ :=
+      (mstatus ↦ {| MPP := User |}) ∗
+        (mtvec ↦ 72) ∗
         (∃ v, mcause ↦ v) ∗
-        (∃ v, mepc ↦ v) ∗
+        (mepc ↦ epc) ∗
         cur_privilege ↦ User ∗
         (∃ v, x1 ↦ v) ∗
         (∃ v, x2 ↦ v) ∗
@@ -1579,10 +1601,44 @@ Module BlockVerificationDerived2Sem.
         (∃ v, x5 ↦ v) ∗
         (∃ v, x6 ↦ v) ∗
         (∃ v, x7 ↦ v) ∗
-        (pmp0cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent0) ∗
-        (pmp1cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent1) ∗
-        (pmpaddr0 ↦ 88) ∗
-        (pmpaddr1 ↦ BlockVerificationDerived2.femto_address_max) ∗
+        interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
+        femto_inv_fortytwo ∗
+        pc ↦ epc.
+
+  Definition femto_handler_contract `{sailGS Σ} : iProp Σ :=
+    ∀ epc mpp,
+        semTriple env.nil (femto_handler_pre mpp epc) (FunDef loop) (fun _ _ => femto_handler_post epc).
+
+  Lemma femtokernel_hander_safe `{sailGS Σ} {mepcv}:
+    (⊢ mstatus ↦ {| MPP := User |} ∗
+       (mtvec ↦ 72) ∗
+        (∃ v, mcause ↦ v) ∗
+        (mepc ↦ mepcv) ∗
+        cur_privilege ↦ Machine ∗
+        interp_gprs ∗
+        interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
+        femto_inv_fortytwo ∗
+        (pc ↦ 72) ∗
+        interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs BlockVerificationDerived2.femto_pmpentries User ∗
+        (∃ v, nextpc ↦ v) ∗
+        (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
+        ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler
+        -∗
+        LoopVerification.WP_loop
+    )%I.
+  Proof.
+    iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmpentries & Hfortytwo & Hpc & Hmem & Hnextpc & Hinstrs)".
+    
+  Admitted.
+
+  Lemma femtokernel_manualStep1 `{na_invΣ Σ, sailGS Σ} :
+    (⊢ mstatus ↦ {| MPP := Machine |} ∗
+       (mtvec ↦ 72) ∗
+        (∃ v, mcause ↦ v) ∗
+        (∃ v, mepc ↦ v) ∗
+        cur_privilege ↦ User ∗
+        interp_gprs ∗
+        interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
         (interp_ptsto (mG := sailGS_memGS) 84 42) ∗
         (pc ↦ 88) ∗
         (∃ v, nextpc ↦ v) ∗
@@ -1591,10 +1647,10 @@ Module BlockVerificationDerived2Sem.
         ptstoSthL advAddrs
         ={⊤}=∗
         ∃ mepcv, LoopVerification.loop_pre User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries Machine mepcv ∗
-        inv femto_inv_ns (interp_ptsto (mG := sailGS_memGS) 84 42)
+        femto_inv_fortytwo
     )%I.
   Proof.
-    iIntros "(Hmst & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
+    iIntros "(Hmst & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
     iExists mepc.
     unfold LoopVerification.loop_pre, LoopVerification.Execution, interp_gprs.
     rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
@@ -1607,7 +1663,6 @@ Module BlockVerificationDerived2Sem.
     iSplitL "Hmcause Hpc Hmemadv".
     iSplitL "Hmemadv".
     now iApply memAdv_pmpPolicy.
-    iSplitL "". unfold interp_ptsreg. now iExists 0.
     iSplitL "Hmcause".
     now iExists mcause.
     iExists 88; iFrame.
@@ -1619,6 +1674,9 @@ Module BlockVerificationDerived2Sem.
     inversion eq.
 
     iSplitL.
+    unfold LoopVerification.Trap.
+    iModIntro.
+    iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
 
     admit.
 
