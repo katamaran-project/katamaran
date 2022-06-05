@@ -151,10 +151,14 @@ Section WithBinding.
 
     End Inversions.
 
-    Fixpoint lookup {Γ} (E : Env Γ) : forall b, b ∈ Γ -> D b :=
+    Fixpoint lookup {Γ} (E : Env Γ) : forall {b}, b ∈ Γ -> D b :=
       match E with
-      | nil       => ctx.in_case_nil
-      | snoc E db => ctx.in_case_snoc D db (lookup E)
+      | nil      => fun _ bIn => match ctx.nilView bIn with end
+      | snoc E v => fun _ bIn =>
+        match ctx.snocView bIn with
+        | ctx.snocViewZero   => v
+        | ctx.snocViewSucc i => lookup E i
+        end
       end.
 
     Inductive All (Q : forall b, D b -> Type) : forall {Γ}, Env Γ -> Type :=
@@ -252,12 +256,12 @@ Section WithBinding.
     Fixpoint update {Γ} (E : Env Γ) {struct E} :
       forall {b} (bIn : b ∈ Γ) (new : D b), Env Γ :=
       match E with
-      | nil => ctx.in_case_nil
-      | snoc E bold =>
-        ctx.in_case_snoc
-          (fun z => D z -> Env _)
-          (fun new => snoc E new)
-          (fun b0' bIn0' new => snoc (update E bIn0' new) bold)
+      | nil        => fun _ bIn => match ctx.nilView bIn with end
+      | snoc E old => fun _ bIn =>
+        match ctx.snocView bIn with
+        | ctx.snocViewZero     => snoc E
+        | ctx.snocViewSucc bIn => fun new => snoc (update E bIn new) old
+        end
       end.
 
     Definition head {Γ b} (E : Env (Γ ▻ b)) : D b :=

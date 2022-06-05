@@ -981,7 +981,7 @@ Local Ltac solve :=
        | |- _ /\ _ => constructor
        | |- VerificationCondition _ =>
          constructor;
-         cbv [SymProp.safe env.remove env.lookup ctx.in_case_snoc bop.eval is_true
+         cbv [SymProp.safe env.remove env.lookup bop.eval is_true
               inst inst_term inst_formula env.Env_rect];
          cbn
        | |- Obligation _ _ _ => constructor; cbn

@@ -249,19 +249,6 @@ Module ctx.
       | S n => fun p => snocViewSucc (MkIn n p)
       end (in_valid i).
 
-    (* Custom pattern matching in cases where the context was already refined
-       by a different match, i.e. on environments. *)
-    Definition in_case_nil {A : B -> Type} [b : B] (bIn : In b nil) : A b :=
-      match nilView bIn with end.
-    (* DEPRECATED *)
-    Definition in_case_snoc (D : B -> Type) (Γ : Ctx B) (b0 : B) (db0 : D b0)
-      (dΓ: forall b, In b Γ -> D b) (b : B) (bIn: In b (snoc Γ b0)) : D b :=
-      let (n, e) := bIn in
-      match n return nth_is (snoc Γ b0) n b -> D b with
-      | 0 => fun e => match e with eq_refl => db0 end
-      | S n => fun e => dΓ b (MkIn n e)
-      end e.
-
     Inductive InView {b : B} : forall Γ, In b Γ -> Set :=
     | inctxViewZero {Γ}                 : @InView b (snoc Γ b) in_zero
     | inctxViewSucc {Γ b'} (i : In b Γ) : @InView b (snoc Γ b') (in_succ i).
