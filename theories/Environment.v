@@ -370,9 +370,9 @@ Section WithBinding.
     (* Slower implementation of insert that is easier to reason about. *)
     Definition insert' {Γ : Ctx B} {b} (bIn : b ∈ Γ) (E : Env (Γ - b)) (v : D b) : Env Γ :=
       tabulate (fun x xIn =>
-                  match ctx.occurs_check_var bIn xIn with
-                  | inl e    => eq_rect b D v x e
-                  | inr xIn' => lookup E xIn'
+                  match ctx.occurs_check_view bIn xIn with
+                  | ctx.Same _      => v
+                  | ctx.Diff _ xIn' => lookup E xIn'
                   end).
 
     (* Slower implementation of remove that is easier to reason about. *)
@@ -463,13 +463,9 @@ Section WithBinding.
       insert xIn E v = insert' xIn E v.
     Proof.
       unfold insert'. eapply lookup_extensional. intros b' bIn.
-      rewrite lookup_tabulate.
-      pose proof (ovs := ctx.occurs_check_var_spec xIn bIn).
-      destruct (ctx.occurs_check_var xIn bIn).
-      - subst.
-        now rewrite insert_lookup.
-      - destruct ovs as (-> & neq).
-        now rewrite insert_lookup_shift.
+      rewrite lookup_tabulate. destruct ctx.occurs_check_view.
+      - now rewrite insert_lookup.
+      - now rewrite insert_lookup_shift.
     Qed.
 
     Lemma lookup_cat_left {Γ1 Γ2 x} (xIn : x ∈ Γ1) (E1 : Env Γ1) (E2 : Env Γ2) :

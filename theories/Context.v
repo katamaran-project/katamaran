@@ -480,6 +480,26 @@ Module ctx.
     Definition occurs_check_view {Σ} {x y: B} (xIn : In x Σ) (yIn : In y Σ) : OccursCheckView xIn yIn :=
       occurs_check_view_index (in_valid xIn) (in_valid yIn).
 
+    Lemma occurs_check_view_refl {Σ x} (xIn : In x Σ) :
+      occurs_check_view xIn xIn = Same _.
+    Proof.
+      unfold occurs_check_view.
+      induction xIn using In_ind.
+      - reflexivity.
+      - cbn; now rewrite IHxIn.
+    Qed.
+
+    Lemma occurs_check_view_shift {Σ x y} (xIn : In x Σ) (yIn : In y (remove Σ xIn)) :
+      occurs_check_view xIn (shift_var xIn yIn) = Diff xIn yIn.
+    Proof.
+      unfold occurs_check_view, shift_var.
+      induction xIn using In_ind.
+      - reflexivity.
+      - cbn in yIn. destruct (snocView yIn); cbn.
+        + reflexivity.
+        + now rewrite (IHxIn i).
+    Qed.
+
     Lemma occurs_check_var_spec {Σ} {x y : B} (xIn : In x Σ) (yIn : In y Σ) :
       match occurs_check_var xIn yIn with
       | inl e    => eq_rect x (fun z => In z Σ) xIn y e = yIn
