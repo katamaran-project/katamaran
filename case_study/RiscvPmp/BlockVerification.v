@@ -1678,7 +1678,7 @@ Module BlockVerificationDerived2Sem.
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
-        (interp_ptsto (mG := sailGS_memGS) 84 42) ∗
+         (interp_ptsto (mG := sailGS_memGS) 84 42) ∗
         (pc ↦ 88) ∗
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
@@ -1727,6 +1727,53 @@ Module BlockVerificationDerived2Sem.
     inversion eq.
   Qed.
 
+  Definition femto_init_pre `{sailGS Σ} : iProp Σ :=
+      (∃ v, mstatus ↦ v) ∗
+      (∃ v, mtvec ↦ v) ∗
+      (∃ v, mcause ↦ v) ∗
+      (∃ v, mepc ↦ v) ∗
+      cur_privilege ↦ Machine ∗
+      (∃ v, x1 ↦ v) ∗
+      (∃ v, x2 ↦ v) ∗
+      (∃ v, x3 ↦ v) ∗
+      (∃ v, x4 ↦ v) ∗
+      (∃ v, x5 ↦ v) ∗
+      (∃ v, x6 ↦ v) ∗
+      (∃ v, x7 ↦ v) ∗
+      pmp0cfg ↦ BlockVerificationDerived2.femtokernel_default_pmpcfg ∗
+      pmp1cfg ↦ BlockVerificationDerived2.femtokernel_default_pmpcfg ∗
+      (∃ v, pmpaddr0 ↦ v) ∗
+      (∃ v, pmpaddr1 ↦ v) ∗
+      pc ↦ 0 ∗
+      ptsto_instrs 0 BlockVerificationDerived2.femtokernel_init.
+
+    Example femto_init_post `{sailGS Σ} : iProp Σ :=
+      (∃ v, mstatus ↦ v) ∗
+        (mtvec ↦ 72) ∗
+        (∃ v, mcause ↦ v) ∗
+        (∃ v, mepc ↦ v) ∗
+        cur_privilege ↦ User ∗
+        (∃ v, x1 ↦ v) ∗
+        (∃ v, x2 ↦ v) ∗
+        (∃ v, x3 ↦ v) ∗
+        (∃ v, x4 ↦ v) ∗
+        (∃ v, x5 ↦ v) ∗
+        (∃ v, x6 ↦ v) ∗
+        (∃ v, x7 ↦ v) ∗
+        pmp0cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent0 ∗
+        pmp1cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent1 ∗
+        (pmpaddr0 ↦ 88) ∗
+        (pmpaddr1 ↦ BlockVerificationDerived2.femto_address_max) ∗
+        pc ↦ 88 ∗
+        ptsto_instrs 0 BlockVerificationDerived2.femtokernel_init.
+
+  Definition femto_init_contract `{sailGS Σ} : iProp Σ :=
+    femto_init_pre -∗
+      (femto_init_post -∗ LoopVerification.WP_loop) -∗
+          LoopVerification.WP_loop.
+
+  Axiom femto_init_verified : forall `{sailGS Σ}, ⊢ femto_init_contract.
+
   Lemma femtokernel_init_safe `{sailGS Σ} :
     ⊢ (∃ v, mstatus ↦ v) ∗
       (∃ v, mtvec ↦ v) ∗
@@ -1737,8 +1784,7 @@ Module BlockVerificationDerived2Sem.
       reg_pointsTo pmp0cfg BlockVerificationDerived2.femtokernel_default_pmpcfg ∗
       (∃ v, reg_pointsTo pmpaddr0 v) ∗
       reg_pointsTo pmp1cfg BlockVerificationDerived2.femtokernel_default_pmpcfg ∗
-      (∃ v, reg_pointsTo pmpaddr0 v) ∗
-      interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
+      (∃ v, reg_pointsTo pmpaddr1 v) ∗
       (pc ↦ 0) ∗
       (∃ v, interp_ptsto (mG := sailGS_memGS) 84 v) ∗
       ptstoSthL advAddrs ∗
@@ -1748,6 +1794,18 @@ Module BlockVerificationDerived2Sem.
       -∗
       LoopVerification.WP_loop.
   Proof.
+    iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpc & Hfortytwo & Hadv & Hnextpc & Hinit & Hhandler)".
+    unfold interp_gprs.
+    rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
+    iDestruct "Hgprs" as "(_ & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & _)".
+    iApply (femto_init_verified with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7 Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1 Hpc Hinit]").
+    - unfold femto_init_pre.
+      iFrame.
+    - iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpc & Hinit)".
+      iAssert (interp_pmp_entries BlockVerificationDerived2.femto_pmpentries) with "[Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1]" as "Hpmpents".
+      { unfold interp_pmp_entries; cbn; iFrame. }
+      (* iApply femtokernel_manualStep2. *)
+      (* iApply valid_semTriple_loop *)
   Admitted.
 
 End BlockVerificationDerived2Sem.
