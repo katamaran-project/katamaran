@@ -47,9 +47,9 @@ From Katamaran Require Import
      Sep.Logic
      Semantics
      Specification
-     Symbolic.Mutator
+     Symbolic.Executor
      Symbolic.Solver
-     Symbolic.Sound
+     Symbolic.Soundness
      Symbolic.Propositions
      Symbolic.Worlds.
 From Equations Require Import
@@ -368,8 +368,7 @@ Module RiscvPmpSpecVerif.
 
   Module Import RiscvPmpExecutor :=
     MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-  Import SMut.
-  Import SMut.SMutNotations.
+  Import Symbolic.
 
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
@@ -417,27 +416,26 @@ Module BlockVerification.
 
   Module Import RiscvPmpExecutor :=
     MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-  Import SMut.
-  Import SMut.SMutNotations.
+  Import Symbolic.
 
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
   Import ModalNotations.
   Import bv.notations.
 
-  Definition M : TYPE -> TYPE := SMut [] [].
+  Definition M : TYPE -> TYPE := SHeapSpecM [] [].
 
-  Definition pure {A} : ⊢ A -> M A := SMut.pure.
-  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SMut.bind.
-  Definition angelic {σ} : ⊢ M (STerm σ) := @SMut.angelic [] None σ.
-  Definition assert : ⊢ Formula -> M Unit := SMut.assert_formula.
-  Definition assume : ⊢ Formula -> M Unit := SMut.assume_formula.
+  Definition pure {A} : ⊢ A -> M A := SHeapSpecM.pure.
+  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SHeapSpecM.bind.
+  Definition angelic {σ} : ⊢ M (STerm σ) := @SHeapSpecM.angelic [] None σ.
+  Definition assert : ⊢ Formula -> M Unit := SHeapSpecM.assert_formula.
+  Definition assume : ⊢ Formula -> M Unit := SHeapSpecM.assume_formula.
 
-  Definition produce_chunk : ⊢ Chunk -> M Unit := SMut.produce_chunk.
-  Definition consume_chunk : ⊢ Chunk -> M Unit := SMut.consume_chunk.
+  Definition produce_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.produce_chunk.
+  Definition consume_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.consume_chunk.
 
-  Definition produce : ⊢ Assertion -> □(M Unit) := SMut.produce.
-  Definition consume : ⊢ Assertion -> □(M Unit) := SMut.consume.
+  Definition produce : ⊢ Assertion -> □(M Unit) := SHeapSpecM.produce.
+  Definition consume : ⊢ Assertion -> □(M Unit) := SHeapSpecM.consume.
 
   Notation "ω ∣ x <- ma ;; mb" :=
     (bind ma (fun _ ω x => mb))
@@ -791,25 +789,24 @@ Module BlockVerificationDerived.
 
   Module Import RiscvPmpExecutor :=
     MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-  Import SMut.
-  Import SMut.SMutNotations.
+  Import Symbolic.
 
   Import ModalNotations.
 
-  Definition M : TYPE -> TYPE := SMut [] [].
+  Definition M : TYPE -> TYPE := SHeapSpecM [] [].
 
-  Definition pure {A} : ⊢ A -> M A := SMut.pure.
-  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SMut.bind.
-  Definition angelic {σ} : ⊢ M (STerm σ) := @SMut.angelic [] None σ.
-  Definition demonic {σ} : ⊢ M (STerm σ) := @SMut.demonic [] None σ.
-  Definition assert : ⊢ Formula -> M Unit := SMut.assert_formula.
-  Definition assume : ⊢ Formula -> M Unit := SMut.assume_formula.
+  Definition pure {A} : ⊢ A -> M A := SHeapSpecM.pure.
+  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SHeapSpecM.bind.
+  Definition angelic {σ} : ⊢ M (STerm σ) := @SHeapSpecM.angelic [] None σ.
+  Definition demonic {σ} : ⊢ M (STerm σ) := @SHeapSpecM.demonic [] None σ.
+  Definition assert : ⊢ Formula -> M Unit := SHeapSpecM.assert_formula.
+  Definition assume : ⊢ Formula -> M Unit := SHeapSpecM.assume_formula.
 
-  Definition produce_chunk : ⊢ Chunk -> M Unit := SMut.produce_chunk.
-  Definition consume_chunk : ⊢ Chunk -> M Unit := SMut.consume_chunk.
+  Definition produce_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.produce_chunk.
+  Definition consume_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.consume_chunk.
 
-  Definition produce : ⊢ Assertion -> □(M Unit) := SMut.produce.
-  Definition consume : ⊢ Assertion -> □(M Unit) := SMut.consume.
+  Definition produce : ⊢ Assertion -> □(M Unit) := SHeapSpecM.produce.
+  Definition consume : ⊢ Assertion -> □(M Unit) := SHeapSpecM.consume.
 
   Notation "ω ∣ x <- ma ;; mb" :=
     (bind ma (fun _ ω x => mb))
@@ -820,7 +817,7 @@ Module BlockVerificationDerived.
   Definition exec_instruction' (i : AST) : ⊢ M (STerm ty_retired) :=
     let inline_fuel := 3%nat in
     fun w0 POST _ =>
-      exec
+      SHeapSpecM.exec
         default_config inline_fuel (FunDef execute)
         (fun w1 ω01 res _ => POST w1 ω01 res []%env)
         [term_val (type ("ast" :: ty_ast)) i]%env.
@@ -936,25 +933,24 @@ Module BlockVerificationDerived2.
 
   Module Import RiscvPmpExecutor :=
     MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-  Import SMut.
-  Import SMut.SMutNotations.
+  Import Symbolic.
 
   Import ModalNotations.
 
-  Definition M : TYPE -> TYPE := SMut [] [].
+  Definition M : TYPE -> TYPE := SHeapSpecM [] [].
 
-  Definition pure {A} : ⊢ A -> M A := SMut.pure.
-  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SMut.bind.
-  Definition angelic {σ} : ⊢ M (STerm σ) := @SMut.angelic [] None σ.
-  Definition demonic {σ} : ⊢ M (STerm σ) := @SMut.demonic [] None σ.
-  Definition assert : ⊢ Formula -> M Unit := SMut.assert_formula.
-  Definition assume : ⊢ Formula -> M Unit := SMut.assume_formula.
+  Definition pure {A} : ⊢ A -> M A := SHeapSpecM.pure.
+  Definition bind {A B} : ⊢ M A -> □(A -> M B) -> M B := SHeapSpecM.bind.
+  Definition angelic {σ} : ⊢ M (STerm σ) := @SHeapSpecM.angelic [] None σ.
+  Definition demonic {σ} : ⊢ M (STerm σ) := @SHeapSpecM.demonic [] None σ.
+  Definition assert : ⊢ Formula -> M Unit := SHeapSpecM.assert_formula.
+  Definition assume : ⊢ Formula -> M Unit := SHeapSpecM.assume_formula.
 
-  Definition produce_chunk : ⊢ Chunk -> M Unit := SMut.produce_chunk.
-  Definition consume_chunk : ⊢ Chunk -> M Unit := SMut.consume_chunk.
+  Definition produce_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.produce_chunk.
+  Definition consume_chunk : ⊢ Chunk -> M Unit := SHeapSpecM.consume_chunk.
 
-  Definition produce : ⊢ Assertion -> □(M Unit) := SMut.produce.
-  Definition consume : ⊢ Assertion -> □(M Unit) := SMut.consume.
+  Definition produce : ⊢ Assertion -> □(M Unit) := SHeapSpecM.produce.
+  Definition consume : ⊢ Assertion -> □(M Unit) := SHeapSpecM.consume.
 
   Notation "ω ∣ x <- ma ;; mb" :=
     (bind ma (fun _ ω x => mb))
@@ -969,7 +965,7 @@ Module BlockVerificationDerived2.
       ω4 ∣ _ <- T (produce (asn_chunk (chunk_user ptstoinstr [persist__term a ω2; term_val ty_ast i]))) ;;
       ω6 ∣ an <- @demonic _ _ ;;
       ω7 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg nextpc an))) ;;
-      ω8 ∣ _ <- exec default_config inline_fuel (FunDef step) ;;
+      ω8 ∣ _ <- SHeapSpecM.exec default_config inline_fuel (FunDef step) ;;
       ω9 ∣ _ <- T (consume (asn_chunk (chunk_user ptstoinstr [persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8); term_val ty_ast i]))) ;;
       ω10 ∣ na <- @angelic _ _ ;;
       ω11 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc na))) ;;
@@ -1382,21 +1378,21 @@ Module BlockVerificationDerivedSem.
     Import RiscvPmpSignature.
     Include ShallowExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
     Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include MutatorsOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+    Include SymbolicExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
     Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    (* Include RiscvPmpExecutor. *)
-    Include Katamaran.Symbolic.Sound.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-    Lemma contractsVerified `{sailGS Σ} : ValidContractCEnv (PI := PredicateDefIProp).
+    Include Katamaran.Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+
+    Lemma contractsVerified `{sailGS Σ} : ProgramLogic.ValidContractCEnv (PI := PredicateDefIProp).
     Proof.
       intros Γ τ f.
       destruct f; intros c eq; inversion eq; subst; clear eq.
-      - eapply shallow_execution_soundness.
-        eapply symbolic_execution_soundness.
-        eapply SMut.validcontract_reflect_sound.
+      - eapply shallow_vcgen_soundness.
+        eapply symbolic_vcgen_soundness.
+        eapply Symbolic.validcontract_reflect_sound.
         eapply RiscvPmpSpecVerif.valid_execute_rX.
-      - eapply shallow_execution_soundness.
-        eapply symbolic_execution_soundness.
-        eapply SMut.validcontract_reflect_sound.
+      - eapply shallow_vcgen_soundness.
+        eapply symbolic_vcgen_soundness.
+        eapply Symbolic.validcontract_reflect_sound.
         eapply RiscvPmpSpecVerif.valid_execute_wX.
     Admitted.
 
@@ -1439,20 +1435,20 @@ Module BlockVerificationDerived2Concrete.
   Include ShallowExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifSpec.
 
-  Definition M : Type -> Type := CMut [] [].
+  Definition M : Type -> Type := CHeapSpecM [] [].
 
-  Definition pure {A} : A -> M A := CMut.pure.
-  Definition bind {A B} : M A -> (A -> M B) -> M B := CMut.bind.
-  Definition angelic {σ} : M (Val σ) := @CMut.angelic [] σ.
-  Definition demonic {σ} : M (Val σ) := @CMut.demonic [] σ.
-  Definition assert : Prop -> M unit := CMut.assert_formula.
-  Definition assume : Prop -> M unit := CMut.assume_formula.
+  Definition pure {A} : A -> M A := CHeapSpecM.pure.
+  Definition bind {A B} : M A -> (A -> M B) -> M B := CHeapSpecM.bind.
+  Definition angelic {σ} : M (Val σ) := @CHeapSpecM.angelic [] σ.
+  Definition demonic {σ} : M (Val σ) := @CHeapSpecM.demonic [] σ.
+  Definition assert : Prop -> M unit := CHeapSpecM.assert_formula.
+  Definition assume : Prop -> M unit := CHeapSpecM.assume_formula.
 
-  Definition produce_chunk : SCChunk -> M unit := CMut.produce_chunk.
-  Definition consume_chunk : SCChunk -> M unit := CMut.consume_chunk.
+  Definition produce_chunk : SCChunk -> M unit := CHeapSpecM.produce_chunk.
+  Definition consume_chunk : SCChunk -> M unit := CHeapSpecM.consume_chunk.
 
-  Definition produce {Σ} : Valuation Σ -> Assertion Σ -> M unit := CMut.produce.
-  Definition consume {Σ} : Valuation Σ -> Assertion Σ -> M unit := CMut.consume.
+  Definition produce {Σ} : Valuation Σ -> Assertion Σ -> M unit := CHeapSpecM.produce.
+  Definition consume {Σ} : Valuation Σ -> Assertion Σ -> M unit := CHeapSpecM.consume.
 
   Local Notation "x <- ma ;; mb" :=
     (bind ma (fun x => mb))
@@ -1467,7 +1463,7 @@ Module BlockVerificationDerived2Concrete.
       _ <- produce_chunk (scchunk_user ptstoinstr [a; i]) ;;
       an <- @demonic _ ;;
       _ <- produce_chunk (scchunk_ptsreg nextpc an) ;;
-      _ <- CMut.exec inline_fuel (FunDef step) ;;
+      _ <- CHeapSpecM.exec inline_fuel (FunDef step) ;;
       _ <- consume_chunk (scchunk_ptsreg pc a) ;; (* TODO: a + 4! *)
       _ <- consume_chunk (scchunk_user ptstoinstr [a ; i]) ;;
       na <- @angelic _ ;;
