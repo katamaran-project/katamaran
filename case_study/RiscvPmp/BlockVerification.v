@@ -1727,5 +1727,27 @@ Module BlockVerificationDerived2Sem.
     inversion eq.
   Qed.
 
+  Lemma femtokernel_init_safe `{sailGS Σ} :
+    ⊢ (∃ v, mstatus ↦ v) ∗
+      (∃ v, mtvec ↦ v) ∗
+      (∃ v, mcause ↦ v) ∗
+      (∃ v, mepc ↦ v) ∗
+      cur_privilege ↦ Machine ∗
+      interp_gprs ∗
+      reg_pointsTo pmp0cfg BlockVerificationDerived2.femtokernel_default_pmpcfg ∗
+      (∃ v, reg_pointsTo pmpaddr0 v) ∗
+      reg_pointsTo pmp1cfg BlockVerificationDerived2.femtokernel_default_pmpcfg ∗
+      (∃ v, reg_pointsTo pmpaddr0 v) ∗
+      interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
+      (pc ↦ 0) ∗
+      (∃ v, interp_ptsto (mG := sailGS_memGS) 84 v) ∗
+      ptstoSthL advAddrs ∗
+      (∃ v, nextpc ↦ v) ∗
+      ptsto_instrs 0 BlockVerificationDerived2.femtokernel_init ∗
+      ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler
+      -∗
+      LoopVerification.WP_loop.
+  Proof.
+  Admitted.
 
 End BlockVerificationDerived2Sem.
