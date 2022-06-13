@@ -1547,7 +1547,7 @@ Module BlockVerificationDerived2Sem.
   (* (* Proof. setoid_rewrite <-decide_emp. apply big_sepM_filter'. Qed. *) *)
 
   Lemma memAdv_pmpPolicy `{sailGS Σ} :
-    (ptstoSthL advAddrs ⊢
+    (ptstoSthL (mG := sailGS_memGS) advAddrs ⊢
       interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs BlockVerificationDerived2.femto_pmpentries User)%I.
   Proof.
   Admitted.
@@ -1677,7 +1677,7 @@ Module BlockVerificationDerived2Sem.
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
         ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler ∗
-        ptstoSthL advAddrs
+        ptstoSthL (mG := sailGS_memGS) advAddrs
         ={⊤}=∗
         ∃ mpp mepcv, LoopVerification.loop_pre User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries mpp mepcv ∗
         femto_inv_fortytwo.
@@ -1781,7 +1781,7 @@ Module BlockVerificationDerived2Sem.
       (∃ v, reg_pointsTo pmpaddr1 v) ∗
       (pc ↦ 0) ∗
       interp_ptsto (mG := sailGS_memGS) 84 42 ∗
-      ptstoSthL advAddrs ∗
+      ptstoSthL (mG := sailGS_memGS) advAddrs ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs 0 BlockVerificationDerived2.femtokernel_init ∗
       ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler
