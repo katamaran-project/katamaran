@@ -187,11 +187,6 @@ Module RiscvPmpModel.
       | _ => False
       end.
 
-    Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-      [∗ list] a ∈ addrs,
-        (⌜∃ p, Pmp_access a entries m p⌝ -∗
-                                            (∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) a (DfracOwn 1) w))%I.
-
     Definition interp_ptsto (addr : Addr) (w : Word) : iProp Σ :=
       mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w. 
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
@@ -199,6 +194,10 @@ Module RiscvPmpModel.
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
     Lemma ptstoSthL_app {l1 l2} : (ptstoSthL (l1 ++ l2) ⊣⊢ ptstoSthL l1 ∗ ptstoSthL l2)%I.
     Proof. eapply big_sepL_app. Qed.
+
+    Definition interp_pmp_addr_access (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
+      [∗ list] a ∈ addrs,
+        (⌜∃ p, Pmp_access a entries m p⌝ -∗ ptstoSth a)%I.
 
     Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
       (ptstoSth addr -∗ interp_pmp_addr_access addrs entries m)%I.

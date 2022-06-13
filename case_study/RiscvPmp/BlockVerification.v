@@ -1529,12 +1529,6 @@ Module BlockVerificationDerived2Sem.
 
   Definition advAddrs := seqZ 88 (maxAddr - 88 + 1).
 
-  Definition ptstoSth `{sailGS Σ} : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto (mG := sailGS_memGS) a w)%I.
-  Definition ptstoSthL `{sailGS Σ} : list Addr -> iProp Σ :=
-    fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
-  Lemma ptstoSthL_app `{sailGS Σ} {l1 l2} : (ptstoSthL (l1 ++ l2) ⊣⊢ ptstoSthL l1 ∗ ptstoSthL l2)%I.
-  Proof. eapply big_sepL_app. Qed.
-
   (* Lemma liveAddr_split : liveAddrs = seqZ minAddr 88 ++ advAddrs. *)
   (* Proof. *)
   (*   unfold liveAddrs. *)
