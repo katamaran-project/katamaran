@@ -1670,8 +1670,8 @@ Module BlockVerificationDerived2Sem.
         inversion eq.
   Qed.
 
-  Lemma femtokernel_manualStep2 `{na_invΣ Σ, sailGS Σ} :
-    ⊢ mstatus ↦ {| MPP := Machine |} ∗
+  Lemma femtokernel_manualStep2 `{sailGS Σ} :
+    ⊢ (∃ mpp, mstatus ↦ {| MPP := mpp |}) ∗
        (mtvec ↦ 72) ∗
         (∃ v, mcause ↦ v) ∗
         (∃ v, mepc ↦ v) ∗
@@ -1685,11 +1685,11 @@ Module BlockVerificationDerived2Sem.
         ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler ∗
         ptstoSthL advAddrs
         ={⊤}=∗
-        ∃ mepcv, LoopVerification.loop_pre User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries Machine mepcv ∗
+        ∃ mpp mepcv, LoopVerification.loop_pre User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries mpp mepcv ∗
         femto_inv_fortytwo.
   Proof.
-    iIntros "(Hmst & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
-    iExists mepc.
+    iIntros "([%mpp Hmst] & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
+    iExists mpp, mepc.
     unfold LoopVerification.loop_pre, LoopVerification.Execution, interp_gprs.
     rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
     iFrame.
@@ -1786,7 +1786,7 @@ Module BlockVerificationDerived2Sem.
       reg_pointsTo pmp1cfg BlockVerificationDerived2.femtokernel_default_pmpcfg ∗
       (∃ v, reg_pointsTo pmpaddr1 v) ∗
       (pc ↦ 0) ∗
-      (∃ v, interp_ptsto (mG := sailGS_memGS) 84 v) ∗
+      interp_ptsto (mG := sailGS_memGS) 84 42 ∗
       ptstoSthL advAddrs ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs 0 BlockVerificationDerived2.femtokernel_init ∗
@@ -1804,8 +1804,22 @@ Module BlockVerificationDerived2Sem.
     - iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpc & Hinit)".
       iAssert (interp_pmp_entries BlockVerificationDerived2.femto_pmpentries) with "[Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1]" as "Hpmpents".
       { unfold interp_pmp_entries; cbn; iFrame. }
-      (* iApply femtokernel_manualStep2. *)
-      (* iApply valid_semTriple_loop *)
-  Admitted.
+      iAssert interp_gprs with "[Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7]" as "Hgprs".
+      { unfold interp_gprs.
+        rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
+        iFrame.
+        now iExists 0.
+      }
+      iApply fupd_wp.
+      iMod (femtokernel_manualStep2 with "[Hmstatus Hmtvec Hmcause Hgprs Hcurpriv Hpmpents Hfortytwo Hpc Hnextpc Hhandler Hadv Hmepc ]") as "[%mpp [%mepcv [Hlooppre Hfortytwo]]]".
+      { iFrame.
+        iDestruct "Hmstatus" as "[%mst Hmstatus]".
+        destruct mst as [mpp].
+        now iExists mpp.
+      }
+      iApply (LoopVerification.valid_semTriple_loop $! User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries mpp mepcv).
+      iModIntro.
+      iExact "Hlooppre".
+  Qed.
 
 End BlockVerificationDerived2Sem.
