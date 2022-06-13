@@ -194,7 +194,7 @@ Section PredicateKit.
   (* check_access is based on the pmpCheck algorithm, main difference
          is that we can define it less cumbersome because entries will contain
          the PMP entries in highest-priority order. *)
-  Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_access_type)) :=
+  Definition check_pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_access_type)) :=
     pmp_check a entries 0 m.
 
   Equations access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
@@ -223,12 +223,15 @@ Section PredicateKit.
   Definition Sub_perm (a1 a2 : Val ty_access_type) : Prop :=
     decide_sub_perm a1 a2 = true.
 
-  Definition Pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : Prop :=
-    match decide_pmp_access a entries m with
-    | (true, Some acc) => Sub_perm acc p
-    | (true, None)     => True
-    | (false, _)       => False
+  Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : bool :=
+    match check_pmp_access a entries m with
+    | (true, Some acc) => decide_sub_perm acc p
+    | (true, None)     => true
+    | (false, _)       => false
     end.
+
+  Definition Pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : Prop :=
+    decide_pmp_access a entries m p = true.
 
   Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
     decide_pmp_check_perms cfg acc p = true.
@@ -1649,7 +1652,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature RiscvPmpSpe
 
   Equations(noeqns) simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
   | term_val paddr | term_val entries | term_val p | acc :=
-    match decide_pmp_access paddr entries p with
+    match check_pmp_access paddr entries p with
     | (true, Some typ) => simplify_sub_perm (term_val ty_access_type typ) acc
     | (true, None)     => Some nil
     | (false, _)       => None
@@ -1982,7 +1985,7 @@ Proof.
     | |- _ /\ _ => split; intros; subst
     end;
     try progress cbn; auto;
-    cbv [Pmp_access decide_pmp_access pmp_check pmp_match_entry pmp_match_addr pmp_addr_range A];
+    cbv [Pmp_access decide_pmp_access check_pmp_access pmp_check pmp_match_entry pmp_match_addr pmp_addr_range A];
     repeat
       match goal with
       | |- context[if ?b then ?x else ?x] => rewrite (Tauto.if_same b x)

@@ -1537,20 +1537,51 @@ Module BlockVerificationDerived2Sem.
   (*   eapply seqZ_app; unfold minAddr, maxAddr; lia. *)
   (* Qed. *)
 
-  (* Lemma liveAddr_filter : filter (fun x => x >= 88)%Z liveAddrs = seqZ 88 (maxAddr - 88 - minAddr + 1). *)
-  (* Proof. now compute. (* brute-force *)Qed. *)
+  Global Instance dec_has_some_access {ents p1} : forall x, Decision (exists p2, Pmp_access x ents p1 p2).
+  Proof.
+    intros x.
+    eapply finite.exists_dec.
+    intros p2.
+    unfold Pmp_access.
+    destruct (decide_pmp_access x ents p1 p2); [left|right]; intuition.
+  Defined.
 
-  (* (* Lemma big_sepL_filter `{BiAffine PROP2} {A : Type} {l : list A} *) *)
-  (* (*     (φ : A → Prop) `{∀ x, Decision (φ x)} Φ l : *) *)
-  (* (*   ([∗ list] i ↦ x ∈ filter φ l, Φ i x) ⊣⊢ *) *)
-  (* (*   ([∗ list] i ↦ x ∈ l, ⌜φ x⌝ → Φ i x). *) *)
-  (* (* Proof. setoid_rewrite <-decide_emp. apply big_sepM_filter'. Qed. *) *)
+  Lemma liveAddr_filter_advAddr : filter
+                 (λ x : Val ty_exc_code,
+                    (∃ p : Val ty_access_type, Pmp_access x BlockVerificationDerived2.femto_pmpentries User p)%type)
+                 liveAddrs = advAddrs.
+  Proof.
+    now compute.
+  Qed.
+
+  Lemma big_sepL_filter `{BiAffine PROP} {A : Type} {l : list A}
+      {φ : A → Prop} (dec : ∀ x, Decision (φ x)) (Φ : A -> PROP) :
+    ([∗ list] x ∈ filter φ l, Φ x) ⊣⊢
+    ([∗ list] x ∈ l, ⌜φ x⌝ -∗ Φ x).
+  Proof. induction l.
+         - now cbn.
+         - cbn.
+           destruct (decide (φ a)) as [Hφ|Hnφ].
+           + rewrite big_opL_cons.
+             rewrite <-IHl.
+             iSplit; iIntros "[Ha Hl]"; iFrame; try done.
+             now iApply ("Ha" $! Hφ).
+           + rewrite <-IHl.
+             iSplit.
+             * iIntros "Hl"; iFrame; iIntros "%Hφ"; intuition.
+             * iIntros "[Ha Hl]"; now iFrame.
+  Qed.
 
   Lemma memAdv_pmpPolicy `{sailGS Σ} :
     (ptstoSthL (mG := sailGS_memGS) advAddrs ⊢
       interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs BlockVerificationDerived2.femto_pmpentries User)%I.
   Proof.
-  Admitted.
+    iIntros "Hadv".
+    unfold interp_pmp_addr_access.
+    rewrite <-(big_sepL_filter).
+    unfold ptstoSthL.
+    now rewrite <- liveAddr_filter_advAddr.
+  Qed.
 
   Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "femto_inv_ns").
 

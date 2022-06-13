@@ -392,6 +392,10 @@ Section Finite.
     Finite ASTConstructor :=
     {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KMRET;KCSR] |}.
 
+  Global Program Instance AccessType_finite :
+    Finite AccessType :=
+    {| enum := [Read; Write; ReadWrite; Execute] |}.
+
   Global Program Instance AccessTypeConstructor_finite :
     Finite AccessTypeConstructor :=
     {| enum := [KRead;KWrite;KReadWrite;KExecute] |}.
