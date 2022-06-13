@@ -1822,4 +1822,6 @@ Module BlockVerificationDerived2Sem.
       iExact "Hlooppre".
   Qed.
 
+  Print Assumptions femtokernel_init_safe.
+
 End BlockVerificationDerived2Sem.
