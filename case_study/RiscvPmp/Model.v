@@ -194,14 +194,17 @@ Module RiscvPmpModel.
 
     Definition interp_ptsto (addr : Addr) (w : Word) : iProp Σ :=
       mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w. 
+    Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
+    Definition ptstoSthL : list Addr -> iProp Σ :=
+      fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
+    Lemma ptstoSthL_app {l1 l2} : (ptstoSthL (l1 ++ l2) ⊣⊢ ptstoSthL l1 ∗ ptstoSthL l2)%I.
+    Proof. eapply big_sepL_app. Qed.
 
     Definition interp_pmp_addr_access_without (addr : Addr) (addrs : list Addr) (entries : list PmpEntryCfg) (m : Privilege) : iProp Σ :=
-      ((∃ w, mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w) -∗
-                                                                            interp_pmp_addr_access addrs entries m)%I.
+      (ptstoSth addr -∗ interp_pmp_addr_access addrs entries m)%I.
 
-    Definition interp_ptsto_instr `{sailRegGS Σ} `{mG : memGS Σ} (addr : Z) (instr : AST) : iProp Σ :=
-      (∃ v, mapsto (hG := @mc_ghGS _ mG) addr (DfracOwn 1) v ∗
-                   ⌜ pure_decode v = inr instr ⌝)%I.
+    Definition interp_ptsto_instr (addr : Z) (instr : AST) : iProp Σ :=
+      (∃ v, interp_ptsto addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
   End Predicates.
 
   Module RiscvPmpIrisPredicates <: IrisPredicates RiscvPmpBase RiscvPmpSignature RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources.
