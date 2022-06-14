@@ -372,7 +372,10 @@ Module Import ExampleModel.
       match CEnv f with
       | Some (MkSepContract _ _ Σ args pre result post) =>
           is_pure pre -> is_pure post ->
-          forall Γ (δ δ' : CStore Γ) (γ γ' : RegStore) (μ μ' : Memory) ι,
+          (* The Γ is the caller's program context and δ, δ' the caller's
+             local variable stores. *)
+          forall Γ (δ δ' : CStore Γ)
+            (γ γ' : RegStore) (μ μ' : Memory) (ι : Valuation Σ),
             interpret_assertion_pure pre ι ->
             forall v,
               (* We could make it more general and allow arbitrary expressions
