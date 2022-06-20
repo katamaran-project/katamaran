@@ -45,14 +45,9 @@ cd katamaran && make && make install
 Using
 -----
 
-The easiest way to use the library for new developments is to adapt one of our existing case studies, for example the [MinimalCaps](case_study/MinimalCaps) machine.
-The basic usage structure of Katamaran is described in the [HACKING.md](HACKING.md) file.
-
-### Debugging VC failures
-In case a generated verification condition does not hold, the output of the symbolic
-executor can be instrumented with debug information to locate the cause. More information
-about this is provided in [DEBUGGING.md](DEBUGGING.md).
-
+The basic usage structure of Katamaran is described in the [USING.md](USING.md) file.
+The easiest and recommended way to use the library for new developments is to adapt one of our existing case studies, for example the [MinimalCaps](case_study/MinimalCaps) machine.
+Some more information about the internal structure of the library is provided in the [HACKING.md](HACKING.md) file.
 
 License
 -------
