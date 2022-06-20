@@ -45,22 +45,10 @@ Import env.notations.
 
 Local Set Implicit Arguments.
 Local Set Transparent Obligations.
-(* Local Unset Elimination Schemes. *)
 
 Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
 
-  (* Inductive Effect (Γ : PCtx) : Type := *)
-  (* | eff_assign (x : 𝑿) {τ} {xInΓ : x::τ ∈ Γ} (e : Stm Γ τ) *)
-  (* | eff_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ) *)
-  (* | eff_lemma  {Δ : PCtx} (l : 𝑳 Δ) (es : NamedEnv (Exp Γ) Δ) *)
-  (* | eff_assert (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) *)
-  (* | eff_debug *)
-  (* | eff_while (e : Exp Γ ty.bool) {σ : Ty} (s : Stm Γ σ). *)
-
   Inductive Stm (Γ : PCtx) (τ : Ty) : Type :=
-  (* We avoid defining effects and statements mutually recursively. Instead, *)
-  (* we inline seqe and put up with the boilerplate. *)
-  (* | stm_seqe          (eff : Effect Γ) (k : Stm Γ τ) *)
   | stm_val           (v : Val τ)
   | stm_exp           (e : Exp Γ τ)
   | stm_let           (x : 𝑿) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (Γ ▻ x∷σ) τ)
@@ -102,81 +90,10 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
       {n} (e : Exp Γ (ty.bvec n)) (rhs : bv n -> Stm Γ τ)
   | stm_read_register (reg : 𝑹𝑬𝑮 τ)
   | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
-  (* EXPERIMENTAL *)
-  (* | stm_while  (e : Exp Γ ty.bool) {σ : Ty} (s : Stm Γ σ) : Stm Γ ty.unit *)
   | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
   | stm_debugk (k : Stm Γ τ).
 
   Derive NoConfusionHom Signature for Stm.
-
-  (* Section StmElimination. *)
-
-  (*   Variable (P : forall (Γ : PCtx) (t : Ty), Stm Γ t -> Type). *)
-
-  (*   Hypothesis (P_val   : forall (Γ : PCtx) (τ : Ty) (l : Val τ), P (stm_val Γ l)). *)
-  (*   Hypothesis (P_exp  : forall (Γ : PCtx) (τ : Ty) (e : Exp Γ τ), P (stm_exp e)). *)
-  (*   Hypothesis (P_let  : forall (Γ : PCtx) (x : 𝑿) (τ : Ty) (s : Stm Γ τ) (σ : Ty) (k : Stm (Γ ▻ (x ∶ τ)%ctx) σ), P s -> P k -> P (stm_let s k)). *)
-  (*   Hypothesis (P_block : forall (Γ Δ : PCtx) (δ : CStore Δ) (σ : Ty) (k : Stm (Γ ▻▻ Δ) σ), P k -> P (stm_block Γ δ k)). *)
-  (*   Hypothesis (P_assign : forall (Γ : PCtx) (x : 𝑿) (τ : Ty) (xInΓ : (x ∶ τ)%ctx ∈ Γ) (e : Stm Γ τ), P e -> P (stm_assign e)). *)
-  (*   Hypothesis (P_call  : forall (Γ Δ : PCtx) (σ : Ty) (f : 𝑭 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_call f es)). *)
-  (*   Hypothesis (P_call_frame  : forall (Γ Δ : PCtx) (δ : CStore Δ) (τ : Ty) (s : Stm Δ τ), P s -> P (stm_call_frame Γ δ s)). *)
-  (*   Hypothesis (P_foreign  : forall (Γ Δ : PCtx) (σ : Ty) (f : 𝑭𝑿 Δ σ) (es : NamedEnv (Exp Γ) Δ), P (stm_foreign f es)). *)
-  (*   Hypothesis (P_if  : forall (Γ : PCtx) (τ : Ty) (e : Exp Γ ty.bool) (s1 : Stm Γ τ) (s2 : Stm Γ τ), P s1 -> P s2 -> P (stm_if e s1 s2)). *)
-  (*   Hypothesis (P_seq  : forall (Γ : PCtx) (τ : Ty) (e : Stm Γ τ) (σ : Ty) (k : Stm Γ σ), P e -> P k -> P (stm_seq e k)). *)
-  (*   Hypothesis (P_assert  : forall (Γ : PCtx) (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string), P (stm_assert e1 e2)). *)
-  (*   Hypothesis (P_fail  : forall (Γ : PCtx) (τ : Ty) (s : Val ty.string), P (stm_fail Γ τ s)). *)
-  (*   Hypothesis (P_match_list : forall (Γ : PCtx) (σ τ : Ty) (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ (xh ∶ σ)%ctx ▻ (xt ∶ ty.list σ)%ctx) τ), *)
-  (*         P alt_nil -> P alt_cons -> P (stm_match_list e alt_nil alt_cons)). *)
-  (*   Hypothesis (P_match_sum : forall (Γ : PCtx) (σinl σinr τ : Ty) (e : Exp Γ (ty.sum σinl σinr)) (xinl : 𝑿) (alt_inl : Stm (Γ ▻ (xinl ∶ σinl)%ctx) τ) (xinr : 𝑿) (alt_inr : Stm (Γ ▻ (xinr ∶ σinr)%ctx) τ), *)
-  (*         P alt_inl -> P alt_inr -> P (stm_match_sum e alt_inl alt_inr)). *)
-  (*   Hypothesis (P_match_prod : forall (Γ : PCtx) (σ1 σ2 τ : Ty) (e : Exp Γ (ty.prod σ1 σ2)) (xl xr : 𝑿) (rhs : Stm (Γ ▻ (xl ∶ σ1)%ctx ▻ (xr ∶ σ2)%ctx) τ), *)
-  (*         P rhs -> P (stm_match_prod e rhs)). *)
-  (*   Hypothesis (P_match_enum : forall (Γ : PCtx) (E : 𝑬) (e : Exp Γ (ty.enum E)) (τ : Ty) (alts : 𝑬𝑲 E -> Stm Γ τ), *)
-  (*         (forall K : 𝑬𝑲 E, P (alts K)) -> P (stm_match_enum e alts)). *)
-  (*   Hypothesis (P_match_tuple : forall (Γ : PCtx) (σs : Ctx Ty) (Δ : PCtx) (e : Exp Γ (ty.tuple σs)) (p : TuplePat σs Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
-  (*         P rhs -> P (stm_match_tuple e p rhs)). *)
-  (*   Hypothesis (P_match_union : forall (Γ : PCtx) (U : 𝑼) (e : Exp Γ (ty.union U)) (τ : Ty) (alt__ctx : unionk U -> PCtx) *)
-  (*         (alt__pat : forall K : unionk U, Pattern (alt__ctx K) (unionk_ty U K)) (alt__rhs : forall K : unionk U, Stm (Γ ▻▻ alt__ctx K) τ), *)
-  (*         (forall K : unionk U, P (alt__rhs K)) -> P (stm_match_union e alt__ctx alt__pat alt__rhs)). *)
-  (*   Hypothesis (P_match_record : forall (Γ : PCtx) (R : 𝑹) (Δ : PCtx) (e : Exp Γ (ty.record R)) (p : RecordPat (recordf_ty R) Δ) (τ : Ty) (rhs : Stm (Γ ▻▻ Δ) τ), *)
-  (*         P rhs -> P (stm_match_record e p rhs)). *)
-  (*   Hypothesis (P_read_register : forall (Γ : PCtx) (τ : Ty) (reg : 𝑹𝑬𝑮 τ), *)
-  (*         P (stm_read_register Γ reg)). *)
-  (*   Hypothesis (P_write_register : forall (Γ : PCtx) (τ : Ty) (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ), *)
-  (*         P (stm_write_register reg e)). *)
-  (*   Hypothesis (P_bind : forall (Γ : PCtx) (σ τ : Ty) (s : Stm Γ σ) (k : Val σ -> Stm Γ τ), *)
-  (*         P s -> (forall l : Val σ, P (k l)) -> P (stm_bind s k)). *)
-
-  (*   Fixpoint Stm_rect {Γ : PCtx} {τ : Ty} (s : Stm Γ τ) {struct s} : P s := *)
-  (*     match s with *)
-  (*     | stm_val _ _             => ltac:(apply P_val; auto) *)
-  (*     | stm_exp _               => ltac:(apply P_exp; auto) *)
-  (*     | stm_let _ _             => ltac:(apply P_let; auto) *)
-  (*     | stm_block _ _ _         => ltac:(apply P_block; auto) *)
-  (*     | stm_assign _            => ltac:(apply P_assign; auto) *)
-  (*     | stm_call _ _            => ltac:(apply P_call; auto) *)
-  (*     | stm_call_frame _ _ _    => ltac:(apply P_call_frame; auto) *)
-  (*     | stm_foreign _ _         => ltac:(apply P_foreign; auto) *)
-  (*     | stm_if _ _ _            => ltac:(apply P_if; auto) *)
-  (*     | stm_seq _ _             => ltac:(apply P_seq; auto) *)
-  (*     | stm_assert _ _          => ltac:(apply P_assert; auto) *)
-  (*     | stm_fail _ _ _          => ltac:(apply P_fail; auto) *)
-  (*     | stm_match_list _ _ _    => ltac:(apply P_match_list; auto) *)
-  (*     | stm_match_sum _ _ _     => ltac:(apply P_match_sum; auto) *)
-  (*     | stm_match_prod _ _      => ltac:(apply P_match_prod; auto) *)
-  (*     | stm_match_enum _ _      => ltac:(apply P_match_enum; auto) *)
-  (*     | stm_match_tuple _ _ _   => ltac:(apply P_match_tuple; auto) *)
-  (*     | stm_match_union _ _ _ _ => ltac:(apply P_match_union; auto) *)
-  (*     | stm_match_record _ _ _  => ltac:(apply P_match_record; auto) *)
-  (*     | stm_read_register _ _   => ltac:(apply P_read_register; auto) *)
-  (*     | stm_write_register _ _  => ltac:(apply P_write_register; auto) *)
-  (*     | stm_bind _ _            => ltac:(apply P_bind; auto) *)
-  (*     end. *)
-
-  (* End StmElimination. *)
-
-  (* Definition Stm_rec (P : forall Γ σ, Stm Γ σ -> Set) := Stm_rect P. *)
-  (* Definition Stm_ind (P : forall Γ σ, Stm Γ σ -> Prop) := Stm_rect P. *)
 
   Arguments stm_val {Γ} τ v.
   Arguments stm_exp {Γ τ} e%exp.
@@ -298,10 +215,6 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
 
   End NameResolution.
 
-  #[deprecated(since="20220204", note="Use the tuple compatible ( x , .. , z ) notation instead.")]
-  Notation "[ x , y , .. , z ]" :=
-    (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z)
-    (at level 0, only parsing) : pat_scope.
   Notation "( x , y , .. , z )" :=
     (tuplepat_snoc .. (tuplepat_snoc (tuplepat_snoc tuplepat_nil x) y) .. z) (at level 0) : pat_scope.
 
@@ -316,9 +229,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
      "'[hv' 'let:'  x  :=  s1  'in'  '/' s2 ']'"
     ) : exp_scope.
   Notation "'let:' x :: τ := s1 'in' s2" := (stm_let x%string τ s1%exp s2%exp)
-    (at level 200, x at level 48,
-    (* format "'let:'  x  ::  τ  :=  s1  'in'  '/' s2", *) only parsing
-    ) : exp_scope.
+    (at level 200, x at level 48, only parsing) : exp_scope.
   Notation "'let:' x ∷ τ := s1 'in' s2" := (stm_let x%string τ s1%exp s2%exp)
     (at level 200, x at level 48,
      format "'[hv' 'let:'  x  ∷  τ  :=  s1  'in'  '/' s2 ']'"
@@ -407,21 +318,6 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
     (at level 0, alt1 pattern, alt2 pattern, alt3 pattern, alt4 pattern, alt5 pattern, alt6 pattern, alt7 pattern, alt8 pattern, format
      "'[hv' 'match:'  e  'in'  τ  'with'  '/' |  alt1  =>  rhs1  '/' |  alt2  =>  rhs2  '/' |  alt3  =>  rhs3  '/' |  alt4  =>  rhs4  '/' |  alt5  =>  rhs5  '/' |  alt6  =>  rhs6  '/' | alt7 => rhs7 '/' | alt8 => rhs8 '/' 'end' ']'"
     ) : exp_scope.
-
-  (* Notation "'match:' e 'in' U 'with' | alt1 x1 => rhs1 | alt2 x2 => rhs2 'end'" := *)
-  (*   (@stm_match_union _ U e _ *)
-  (*     (fun K => match K with *)
-  (*               | alt1%exp => x1 *)
-  (*               | alt2%exp => x2 *)
-  (*               end) *)
-  (*     (fun K => match K return Stm _ _ with *)
-  (*               | alt1%exp => rhs1%exp *)
-  (*               | alt2%exp => rhs2%exp *)
-  (*               end) *)
-  (*   ) *)
-  (*   (at level 0, alt1 pattern, alt2 pattern, format *)
-  (*    "'[hv' 'match:'  e  'in'  U  'with'  '/' |  alt1  x1  =>  rhs1  '/' |  alt2  x2  =>  rhs2  '/' 'end' ']'" *)
-  (*     ) : exp_scope. *)
 
   Notation "'match:' e 'with' | 'inl' p1 => rhs1 | 'inr' p2 => rhs2 'end'" :=
     (stm_match_sum e p1%string rhs1 p2%string rhs2) (at level 0, only parsing) : exp_scope.

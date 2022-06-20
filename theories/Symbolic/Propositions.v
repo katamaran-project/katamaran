@@ -207,44 +207,6 @@ Module Type SymPropOn
         | Σ ▻ b => fun k => close Σ (@demonicv Σ b k)
         end%ctx.
 
-    (* Global Instance persistent_spath : Persistent 𝕊 := *)
-    (*   (* ⊢ 𝕊 -> □𝕊 := *) *)
-    (*    fix pers (w0 : World) (p : 𝕊 w0) {w1 : World} ω01 {struct p} : 𝕊 w1 := *)
-    (*      match p with *)
-    (*      | angelic_binary p1 p2 => angelic_binary (pers w0 p1 ω01) (pers w0 p2 ω01) *)
-    (*      | demonic_binary p1 p2 => demonic_binary (pers w0 p1 ω01) (pers w0 p2 ω01) *)
-    (*      | error msg            => error (subst msg (sub_acc ω01)) *)
-    (*      | block                => block *)
-    (*      | assertk fml msg p0   => *)
-    (*          assertk (subst fml (sub_acc ω01)) (subst msg (sub_acc ω01)) *)
-    (*            (pers (wformula w0 fml) p0 (wacc_formula ω01 fml)) *)
-    (*      | assumek fml p        => *)
-    (*          assumek (subst fml (sub_acc ω01)) *)
-    (*            (pers (wformula w0 fml) p (wacc_formula ω01 fml)) *)
-    (*      | angelicv b p0        => angelicv b (pers (wsnoc w0 b) p0 (wacc_snoc ω01 b)) *)
-    (*      | demonicv b p0        => demonicv b (pers (wsnoc w0 b) p0 (wacc_snoc ω01 b)) *)
-    (*      | assert_vareq x t msg p => *)
-    (*        let ζ := subst (sub_shift _) (sub_acc ω01) in *)
-    (*        assertk *)
-    (*          (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
-    (*          (subst msg ζ) *)
-    (*          (pers (wsubst w0 x t) p *)
-    (*             (MkAcc (MkWorld (subst (wco w0) (sub_single _ t))) *)
-    (*                (MkWorld *)
-    (*                   (cons (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
-    (*                      (wco w1))) ζ)) *)
-    (*      | assume_vareq x t p => *)
-    (*        let ζ := subst (sub_shift _) (sub_acc ω01) in *)
-    (*        assumek *)
-    (*          (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
-    (*          (pers (wsubst w0 x t) p *)
-    (*             (MkAcc (MkWorld (subst (wco w0) (sub_single _ t))) *)
-    (*                (MkWorld *)
-    (*                   (cons (formula_eq (env_lookup (sub_acc ω01) _) (subst t ζ)) *)
-    (*                      (wco w1))) ζ)) *)
-    (*      | debug d p => debug (subst d (sub_acc ω01)) (pers w0 p ω01) *)
-    (*      end. *)
-
     Fixpoint assume_formulas_without_solver' {Σ}
       (fmls : List Formula Σ) (p : 𝕊 Σ) : 𝕊 Σ :=
       match fmls with
@@ -394,34 +356,6 @@ Module Type SymPropOn
       now rewrite inst_subst, inst_sub_shift.
     Qed.
 
-    (* Lemma safe_persist  {w1 w2 : World} (ω12 : w1 ⊒ w2) *)
-    (*       (o : 𝕊 w1) (ι2 : Valuation w2) : *)
-    (*   safe (persist (A := 𝕊) o ω12) ι2 <-> *)
-    (*   safe o (inst (T := Sub _) ω12 ι2). *)
-    (* Proof. *)
-    (*   revert w2 ω12 ι2. *)
-    (*   induction o; cbn; intros. *)
-    (*   - now rewrite IHo1, IHo2. *)
-    (*   - now rewrite IHo1, IHo2. *)
-    (*   - split; intros []. *)
-    (*   - reflexivity. *)
-    (*   - rewrite ?obligation_equiv. *)
-    (*     now rewrite IHo, inst_subst. *)
-    (*   - now rewrite IHo, inst_subst. *)
-    (*   - split; intros [v HYP]; exists v; revert HYP; *)
-    (*       rewrite IHo; unfold wacc_snoc, wsnoc; *)
-    (*         cbn [wctx wsub]; now rewrite inst_sub_up1. *)
-    (*   - split; intros HYP v; specialize (HYP v); revert HYP; *)
-    (*       rewrite IHo; unfold wacc_snoc, wsnoc; *)
-    (*         cbn [wctx wsub]; now rewrite inst_sub_up1. *)
-    (*   - rewrite ?obligation_equiv. *)
-    (*     rewrite IHo; unfold wsubst; cbn [wctx wsub]. cbn. *)
-    (*     now rewrite ?inst_subst, ?inst_sub_shift, <- inst_lookup. *)
-    (*   - rewrite IHo; unfold wsubst; cbn [wctx wsub]. *)
-    (*     now rewrite ?inst_subst, ?inst_sub_shift, <- inst_lookup. *)
-    (*   - now rewrite ?debug_equiv. *)
-    (* Qed. *)
-
     Lemma safe_assume_formulas_without_solver {w0 : World}
       (fmls : List Formula w0) (p : 𝕊 w0) (ι0 : Valuation w0) :
       wsafe (assume_formulas_without_solver fmls p) ι0 <->
@@ -524,55 +458,6 @@ Module Type SymPropOn
         + intros sp ι. destruct (env.snocView ι) as (ι & v). auto.
         + intros sp ι v. apply (sp (env.snoc ι b v)).
     Qed.
-
-    (* Fixpoint occurs_check_spath {Σ x} (xIn : x ∈ Σ) (p : 𝕊 Σ) : option (𝕊 (Σ - x)) := *)
-    (*   match p with *)
-    (*   | angelic_binary o1 o2 => *)
-    (*     option_ap (option_map (angelic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2) *)
-    (*   | demonic_binary o1 o2 => *)
-    (*     option_ap (option_map (demonic_binary (Σ := Σ - x)) (occurs_check_spath xIn o1)) (occurs_check_spath xIn o2) *)
-    (*   | error msg => option_map error (occurs_check xIn msg) *)
-    (*   | block => Some block *)
-    (*   | assertk P msg o => *)
-    (*     option_ap (option_ap (option_map (assertk (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check xIn msg)) (occurs_check_spath xIn o) *)
-    (*   | assumek P o => option_ap (option_map (assumek (Σ := Σ - x)) (occurs_check xIn P)) (occurs_check_spath xIn o) *)
-    (*   | angelicv b o => option_map (angelicv b) (occurs_check_spath (inctx_succ xIn) o) *)
-    (*   | demonicv b o => option_map (demonicv b) (occurs_check_spath (inctx_succ xIn) o) *)
-    (*   | @assert_vareq _ y σ yIn t msg o => *)
-    (*     match occurs_check_view yIn xIn with *)
-    (*     | Same _ => None *)
-    (*     | @Diff _ _ _ _ x xIn => *)
-    (*       option_ap *)
-    (*         (option_ap *)
-    (*            (option_map *)
-    (*               (fun (t' : Term (Σ - (y :: σ) - x) σ) (msg' : Message (Σ - (y :: σ) - x)) (o' : 𝕊 (Σ - (y :: σ) - x)) => *)
-    (*                  let e := swap_remove yIn xIn in *)
-    (*                  assert_vareq *)
-    (*                    y *)
-    (*                    (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e) *)
-    (*                    (eq_rect (Σ - (y :: σ) - x) Message msg' (Σ - x - (y :: σ)) e) *)
-    (*                    (eq_rect (Σ - (y :: σ) - x) 𝕊 o' (Σ - x - (y :: σ)) e)) *)
-    (*               (occurs_check xIn t)) *)
-    (*            (occurs_check xIn msg)) *)
-    (*         (occurs_check_spath xIn o) *)
-    (*     end *)
-    (*   | @assume_vareq _ y σ yIn t o => *)
-    (*     match occurs_check_view yIn xIn with *)
-    (*     | Same _ => Some o *)
-    (*     | @Diff _ _ _ _ x xIn => *)
-    (*       option_ap *)
-    (*         (option_map *)
-    (*            (fun (t' : Term (Σ - (y :: σ) - x) σ) (o' : 𝕊 (Σ - (y :: σ) - x)) => *)
-    (*               let e := swap_remove yIn xIn in *)
-    (*               assume_vareq *)
-    (*                 y *)
-    (*                 (eq_rect (Σ - (y :: σ) - x) (fun Σ => Term Σ σ) t' (Σ - x - (y :: σ)) e) *)
-    (*                 (eq_rect (Σ - (y :: σ) - x) 𝕊 o' (Σ - x - (y :: σ)) e)) *)
-    (*            (occurs_check xIn t)) *)
-    (*         (occurs_check_spath xIn o) *)
-    (*     end *)
-    (*   | debug b o => option_ap (option_map (debug (Σ := Σ - x)) (occurs_check xIn b)) (occurs_check_spath xIn o) *)
-    (*   end. *)
 
     Definition sequiv Σ : relation (𝕊 Σ) :=
       fun p q => forall ι, safe p ι <-> safe q ι.
@@ -772,13 +657,6 @@ Module Type SymPropOn
             {| block := b; error := e; debug := N.succ d |}
         end.
 
-      (* Definition plus_count (c1 c2 : Count) : Count := *)
-      (*   match c1, c2 with *)
-      (*   | {| block := b1; error := e1; debug := d1 |}, *)
-      (*     {| block := b2; error := e2; debug := d2 |} => *)
-      (*       {| block := b1 + b2; error := e1 + e2; debug := d1 + d2 |} *)
-      (*   end. *)
-
       Fixpoint count_nodes {Σ} (s : 𝕊 Σ) (c : Count) : Count :=
         match s with
         | SymProp.error _              => inc_error c
@@ -843,10 +721,6 @@ Module Type SymPropOn
       end.
 
     Definition demonicv_prune {Σ} b (p : 𝕊 (Σ ▻ b)) : 𝕊 Σ :=
-      (* match @occurs_check_spath AT _ (Σ ▻ b) b inctx_zero o with *)
-      (* | Some o => o *)
-      (* | None   => demonicv b o *)
-      (* end. *)
       match p with
       | block => block
       | _     => demonicv b p

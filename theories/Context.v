@@ -338,26 +338,6 @@ Module ctx.
       In_rect P fzero fsucc.
     Global Arguments In_ind [_] _.
 
-    (* Boolean equality of [nat]-fields in [In] implies equality of
-       the other field and the binding-index of [In] *)
-    Lemma in_at_exact {Γ : Ctx B} (b1 b2 : B)
-          (b1In : In b1 Γ) (b2In : In b2 Γ) :
-      @in_at _ _ b1In = @in_at _ _ b2In ->
-      b1 = b2 /\
-      (nth_is Γ (@in_at _ _ b1In) b1 = nth_is Γ (@in_at _ _ b2In) b2).
-    Proof.
-      intros.
-      assert (b1 = b2) as bindings_eq.
-      { generalize dependent b2.
-        induction b1In using In_ind; destruct b2In as [[|n] e];
-        intros; cbn in *; try congruence.
-        apply IHb1In with (MkIn n e).
-        cbn; congruence. }
-      split.
-      - exact bindings_eq.
-      - subst. f_equal. assumption.
-    Qed.
-
     Section All.
 
       Inductive All (P : B -> Type) : Ctx B -> Type :=

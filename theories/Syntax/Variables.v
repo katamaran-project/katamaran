@@ -37,39 +37,6 @@ From Katamaran Require Export
 
 Local Set Implicit Arguments.
 
-(* Module Type VarKit. *)
-(*   (* Names of expression variables. These represent mutable variables appearing *)
-(*      in programs. *) *)
-(*   Parameter Inline 𝑿 : Set. (* input: \MIX *) *)
-(*   (* For name resolution we rely on decidable equality of expression *)
-(*      variables. The functions in this module resolve to the closest binding *)
-(*      of an equal name and fill in the de Bruijn index automatically from *)
-(*      a successful resolution. *)
-(*   *) *)
-(*   Declare Instance 𝑿_eq_dec : EqDec 𝑿. *)
-
-(*   (* Names of logic variables. These represent immutable variables standing for *)
-(*      concrete value. *) *)
-(*   Parameter Inline 𝑺 : Set. (* input: \MIS *) *)
-(*   Declare Instance 𝑺_eq_dec : EqDec 𝑺. *)
-
-(*   (* Conversion of program variables to logic variables. *) *)
-(*   Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺. *)
-(*   Parameter fresh : forall T, NCtx 𝑺 T -> option 𝑺 -> 𝑺. *)
-
-(* End VarKit. *)
-
-(* Module DefaultVarKit <: VarKit. *)
-(*   (** Variables **) *)
-(*   Definition 𝑿        := string. *)
-(*   Definition 𝑿_eq_dec := string_dec. *)
-(*   Definition 𝑺        := string. *)
-(*   Definition 𝑺_eq_dec := string_dec. *)
-
-(*   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x. *)
-(*   Definition fresh := ctx.fresh. *)
-(* End DefaultVarKit. *)
-
   Class VarKit : Type :=
     { (* Program variable names. *)
       𝑿 : Set; (* input: \MIX *)

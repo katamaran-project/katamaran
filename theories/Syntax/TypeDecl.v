@@ -64,9 +64,6 @@ From Katamaran Require Import
      Syntax.Variables
      Tactics.
 
-(* Local Set Transparent Obligations. *)
-(* Local Unset Elimination Schemes. *)
-
 Import ctx.notations.
 Import env.notations.
 
@@ -327,35 +324,15 @@ Module ty.
   #[global] Arguments tuple {TK} σs%ctx_scope.
   #[global] Arguments union {TK} U.
   #[global] Arguments record {TK} R.
-  (* #[global] Arguments MkTypeDefKit {TK} &. *)
-
-  (* Record Types : Type := *)
-  (*   { typedecls   : TypeDeclKit; *)
-  (*     typedefs    :> TypeDefKit typedecls; *)
-  (*     typedeflaws :> TypeDefKitLaws typedecls; *)
-  (*   }. *)
-
-
-  (* Module DefaultVarKit <: VarKit. *)
-  (*   (** Variables **) *)
-  (*   Definition 𝑿        := string. *)
-  (*   Definition 𝑿_eq_dec := string_dec. *)
-  (*   Definition 𝑺        := string. *)
-  (*   Definition 𝑺_eq_dec := string_dec. *)
-
-  (*   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x. *)
-  (*   Definition fresh := ctx.fresh. *)
-  (* End DefaultVarKit. *)
 
 End ty.
 Export ty
   ( TypeDeclKit, enumt, uniont, recordt,
 
     TypeDenoteKit,
-
     Ty, Ty_eq_dec, Val, Val_eqb, Val_eqb_spec,
 
-    TypeDefKit, (* MkTypeDefKit, *) enum_eqdec, enumt_eqdec, enumt_finite,
+    TypeDefKit, enum_eqdec, enumt_eqdec, enumt_finite,
     enumi,
     unioni,
     recordi,
@@ -363,11 +340,9 @@ Export ty
     unionv_fold, unionv_unfold, record_eqdec, recordt_eqdec, recordf,
     recordf_ty, recordv_fold, recordv_unfold,
 
-    (* TypeDefKitLaws, *) unionv_fold_unfold, unionv_unfold_fold,
+    unionv_fold_unfold, unionv_unfold_fold,
     unionv_fold_inj, unionv_unfold_inj,
     recordv_fold_unfold, recordv_unfold_fold
-
-    (* Types, *) (* typedecls, *) (* typedefs *)
   ).
 #[export] Existing Instance ty.Ty_eq_dec.
 
@@ -402,6 +377,5 @@ Local Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit.
        recordf_ty          := Empty_set_rec _;
        recordv_fold        := Empty_set_rec _;
        recordv_unfold      := Empty_set_rec _;
-       (* unionv_fold_unfold  := Empty_set_rec _; *)
     |}; abstract (intros []).
 Defined.

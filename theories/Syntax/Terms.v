@@ -103,16 +103,8 @@ Module Type TermsOn (Import TY : Types).
     Variable (P  : forall t : Ty, Term Σ t -> Type).
     Arguments P _ _ : clear implicits.
 
-    (* Let PL (σ : Ty) : list (Term Σ σ) -> Type := *)
-    (*   List.fold_right (fun t ts => P _ t * ts)%type unit. *)
-    (* Let PV (n : nat) (es : Vector.t (Term Σ ty.bit) n) : Type := *)
-    (*   Vector.fold_right (fun e ps => P _ e * ps)%type es unit. *)
-    (* Let PE : forall σs, Env (Term Σ) σs -> Type := *)
-    (*   env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type. *)
     Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Term Σ) σs -> Type :=
       fun σs es => env.All (fun b t => P (type b) t) es.
-      (* forall rt (rIn : rt ∈ σs), P (type rt) (env.lookup es rIn). *)
-      (* env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type. *)
 
     Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
     Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
@@ -121,11 +113,7 @@ Module Type TermsOn (Import TY : Types).
     Hypothesis (P_not        : forall e : Term Σ ty.bool, P ty.bool e -> P ty.bool (term_not e)).
     Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty.sum σ1 σ2) (term_inl t)).
     Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty.sum σ1 σ2) (term_inr t)).
-    (* Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty.list σ) (term_list es)). *)
-    (* Hypothesis (P_bv         : forall (n : nat) (es : Vector.t (Term Σ ty.bit) n), PV es -> P (ty.bv n) (term_bv es)). *)
-    (* Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty.tuple σs) (term_tuple es)). *)
     Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)).
-    (* Hypothesis (P_tuple  : forall σs (IH : forall σ, ctx.In σ σs -> P σ), P (ty.tuple σs)). *)
     Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)).
 
     Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) {struct t} : P σ t :=
@@ -490,79 +478,6 @@ Module Type TermsOn (Import TY : Types).
     Proof. now rewrite <- subst_sub_comp, sub_comp_wk1_tail. Qed.
 
   End InfrastructureLemmas.
-
-  (* Section TermEquivalence. *)
-
-  (*   Context {Σ : LCtx} {σ : Ty}. *)
-
-  (*   Definition TermEqv (ι : Valuation Σ) : relation (Term Σ σ) := *)
-  (*     fun t1 t2 => inst_term t1 ι = inst_term t2 ι. *)
-
-  (*   Global Instance TermEqv_Equiv {ι} : Equivalence (TermEqv ι). *)
-  (*   Proof. split; congruence. Qed. *)
-
-  (* End TermEquivalence. *)
-
-  (* Section TermEqvB. *)
-
-  (*   Context {Σ : LCtx}. *)
-
-  (*   Fixpoint Term_eqvb {σ τ} (t1 : Term Σ σ) (t2 : Term Σ τ) {struct t1} : option bool := *)
-  (*     match t1 , t2 with *)
-  (*     | @term_var _ _ _ ς1inΣ , @term_var _ _ _ ς2inΣ => *)
-  (*       if InCtx_eqb ς1inΣ ς2inΣ *)
-  (*       then Some true *)
-  (*       else None *)
-  (*     | term_val σ v1 , term_val τ v2 => *)
-  (*       match eq_dec σ τ with *)
-  (*       | left  p => Some (Val_eqb τ (eq_rect σ Val v1 τ p) v2) *)
-  (*       | right _ => Some false *)
-  (*       end *)
-  (*     | term_neg x   , term_neg y   => Term_eqvb x y *)
-  (*     | term_not x   , term_not y   => Term_eqvb x y *)
-  (*     | term_inl x   , term_inl y   => Term_eqvb x y *)
-  (*     | term_inl _   , term_inr _   => Some false *)
-  (*     | term_inr _   , term_inl _   => Some false *)
-  (*     | term_inr x   , term_inr y   => Term_eqvb x y *)
-  (*     | _            , _            => None *)
-  (*     end. *)
-
-  (*   Local Set Equations With UIP. *)
-  (*   Lemma Term_eqvb_spec {σ} (t1 t2 : Term Σ σ) : *)
-  (*     OptionSpec *)
-  (*       (fun b : bool => forall ι : Valuation Σ, TermEqv ι t1 t2 <-> is_true b) *)
-  (*       True *)
-  (*       (Term_eqvb t1 t2). *)
-  (*   Proof. *)
-  (*     induction t1; dependent elimination t2; cbn; intros; try (solve [ constructor; auto ]). *)
-  (*     - destruct (InCtx_eqb_spec ςInΣ ςInΣ0); constructor; auto. *)
-  (*       dependent elimination e. *)
-  (*       intros ι. apply reflect_iff. constructor. reflexivity. *)
-  (*     - rewrite eq_dec_refl. cbn. constructor. *)
-  (*       intros ι. apply reflect_iff, Val_eqb_spec. *)
-  (*     - specialize (IHt1 e). revert IHt1. *)
-  (*       apply optionspec_monotonic; auto. *)
-  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
-  (*       unfold TermEqv; cbn; lia. *)
-  (*     - specialize (IHt1 e0). revert IHt1. *)
-  (*       apply optionspec_monotonic; auto. *)
-  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
-  (*       unfold TermEqv; cbn. split. *)
-  (*       + now intros ?%ssrbool.negb_inj. *)
-  (*       + congruence. *)
-  (*     - specialize (IHt1 t). revert IHt1. *)
-  (*       apply optionspec_monotonic; auto. *)
-  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
-  (*       unfold TermEqv; cbn. split; congruence. *)
-  (*     - constructor. intros ?. apply reflect_iff. constructor. discriminate. *)
-  (*     - constructor. intros ?. apply reflect_iff. constructor. discriminate. *)
-  (*     - specialize (IHt1 t0). revert IHt1. *)
-  (*       apply optionspec_monotonic; auto. *)
-  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
-  (*       unfold TermEqv; cbn. split; congruence. *)
-  (*   Qed. *)
-
-  (* End TermEqvB. *)
 
   Section SymbolicPair.
 

@@ -346,8 +346,6 @@ Module Type ShallowExecOn
         fun POST => ma (fun a => f a POST).
       Definition bind_right {Γ1 Γ2 Γ3 A B} (ma : CHeapSpecM Γ1 Γ2 A) (mb : CHeapSpecM Γ2 Γ3 B) : CHeapSpecM Γ1 Γ3 B :=
         bind ma (fun _ => mb).
-      (* Definition bind_left {Γ1 Γ2 Γ3 A B} (ma : CHeapSpecM Γ1 Γ2 A) (mb : CHeapSpecM Γ2 Γ3 B) : CHeapSpecM Γ1 Γ3 A := *)
-      (*   bind ma (fun a => bind mb (fun _ => pure a)). *)
       Definition map {Γ1 Γ2 A B} (f : A -> B) (ma : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 B :=
         fun POST => ma (fun a => POST (f a)).
 
@@ -361,14 +359,10 @@ Module Type ShallowExecOn
       Definition angelic_binary {Γ1 Γ2 A} (m1 m2 : CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
         fun POST δ h => m1 POST δ h \/ m2 POST δ h.
 
-      (* Definition demonic {Γ1 Γ2 I A} (ms : I -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A := *)
-      (*   fun POST δ h => forall i : I, ms i POST δ h. *)
       Definition demonic {Γ} (σ : Ty) : CHeapSpecM Γ Γ (Val σ) :=
         fun POST δ h => forall v : Val σ, POST v δ h.
       Definition angelic {Γ} (σ : Ty) : CHeapSpecM Γ Γ (Val σ) :=
         fun POST δ h => exists v : Val σ, POST v δ h.
-      (* Definition angelic {Γ1 Γ2 I A} (ms : I -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A := *)
-      (*   fun POST δ h => exists i : I, ms i POST δ h. *)
 
       Definition angelic_ctx {N : Set} {Γ} :
         forall Δ : NCtx N Ty, CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
@@ -393,12 +387,6 @@ Module Type ShallowExecOn
 
     Module CHeapSpecMNotations.
 
-      (* Notation "'⨂' x .. y => F" := *)
-      (*   (cmut_demonic (fun x => .. (cmut_demonic (fun y => F)) .. )) : mut_scope. *)
-
-      (* Notation "'⨁' x .. y => F" := *)
-      (*   (cmut_angelic (fun x => .. (cmut_angelic (fun y => F)) .. )) : mut_scope. *)
-
       Infix "⊗" := demonic_binary (at level 40, left associativity) : mut_scope.
       Infix "⊕" := angelic_binary (at level 50, left associativity) : mut_scope.
 
@@ -411,8 +399,6 @@ Module Type ShallowExecOn
           (at level 80, ma at level 90, mb at level 200, right associativity) : mut_scope.
       (* Notation "ma >>= f" := (bind ma f) (at level 50, left associativity) : mut_scope. *)
       Notation "ma ;; mb" := (bind_right ma mb) : mut_scope.
-      (* Notation "ma *> mb" := (bind_right ma mb) (at level 50, left associativity) : mut_scope. *)
-      (* Notation "ma <* mb" := (bind_left ma mb) (at level 50, left associativity) : mut_scope. *)
 
     End CHeapSpecMNotations.
     Import CHeapSpecMNotations.
@@ -919,49 +905,6 @@ Module Type ShallowExecOn
 
     End State.
 
-    (* Module NewProduceConsumeChunk. *)
-
-    (*   Definition angelic_heap {Γ} : CHeapSpecM Γ Γ SCHeap := *)
-    (*     fun POST δ h => exists h', POST h' δ h. *)
-
-    (*   Definition demonic_heap {Γ} : CHeapSpecM Γ Γ SCHeap := *)
-    (*     fun POST δ h => forall h', POST h' δ h. *)
-
-    (*   Section WithHeaplet. *)
-
-    (*     Context `{HL: IHeaplet L}. *)
-
-    (*     Open Scope logic. *)
-    (*     Import LogicNotations. *)
-
-    (*     Fixpoint interpret_scchunk (c : SCChunk) : L := *)
-    (*       match c with *)
-    (*       | scchunk_user p vs => luser p vs *)
-    (*       | scchunk_ptsreg r v => lptsreg r v *)
-    (*       | scchunk_conj c1 c2 => sepcon (interpret_scchunk c1) (interpret_scchunk c2) *)
-    (*       | scchunk_wand c1 c2 => wand (interpret_scchunk c1) (interpret_scchunk c2) *)
-    (*       end. *)
-
-    (*     Definition interpret_scheap : SCHeap -> L := *)
-    (*       List.fold_right (fun c h => interpret_scchunk c ✱ h) emp. *)
-    (*     Global Arguments interpret_scheap !h. *)
-
-    (*     Definition produce_chunk {Γ} (c : SCChunk) : CHeapSpecM Γ Γ unit := *)
-    (*       h  <- get_heap ;; *)
-    (*       h' <- demonic_heap ;; *)
-    (*       assume_formula (interpret_scchunk c ✱ interpret_scheap h ⊢ interpret_scheap h') ;; *)
-    (*       put_heap h'. *)
-
-    (*     Definition consume_chunk {Γ} (c : SCChunk) : CHeapSpecM Γ Γ unit := *)
-    (*       h  <- get_heap ;; *)
-    (*       h' <- angelic_heap ;; *)
-    (*       assert_formula (interpret_scheap h ⊢ interpret_scchunk c ✱ interpret_scheap h') ;; *)
-    (*       put_heap h'. *)
-
-    (*   End WithHeaplet. *)
-
-    (* End NewProduceConsumeChunk. *)
-
     Section ProduceConsume.
 
       Definition produce_chunk {Γ} (c : SCChunk) : CHeapSpecM Γ Γ unit :=
@@ -1223,13 +1166,6 @@ Module Type ShallowExecOn
         end.
       Global Arguments exec _ {_ _} s _ _ _.
 
-      (* Definition leakcheck {Γ} : CHeapSpecM Γ Γ unit := *)
-      (*   get_heap >>= fun h => *)
-      (*   match h with *)
-      (*   | nil => pure tt *)
-      (*   | _   => error "Err [cmut_leakcheck]: heap leak" *)
-      (*   end. *)
-
     End Exec.
 
     Section WithFuel.
@@ -1244,8 +1180,6 @@ Module Type ShallowExecOn
           _ <- produce ι req ;;
           v <- exec inline_fuel s ;;
           consume (env.snoc ι (result∷τ) v) ens
-          (* cmut_block *)
-          (* cmut_leakcheck *)
         end%mut.
 
       Definition vcgen {Δ τ} (c : SepContract Δ τ) (body : Stm Δ τ) : Prop :=
@@ -1368,11 +1302,7 @@ Module Type ShallowExecOn
                     | Some c => Shallow.ValidContract c (FunDef fnc)
                     | None => False
                     end) in
-        let s := eval compute in (stats P) in
-          s.
-        (* let t := reifyProp (forall x : unit, P) in *)
-        (* let s := eval compute in (shape_to_stats t) in *)
-        (*   s. *)
+        let s := eval compute in (stats P) in s.
 
     End Statistics.
 

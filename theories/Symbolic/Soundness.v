@@ -89,7 +89,7 @@ Module Soundness
      *)
   Class Refine (AT : TYPE) (A : Type) : Type :=
     refine :
-      forall (w : World) (ι : Valuation w), (* instpc (wco w) ι -> *)
+      forall (w : World) (ι : Valuation w),
         AT w -> A -> Prop.
   Global Arguments refine {_ _ _ w} ι _ _.
   (* We use the same script ℛ as in the paper. This encodes (ι,x,y) ∈ ℛ[_,_]
@@ -142,14 +142,6 @@ Module Soundness
     Refine (fun w => NamedEnv (Term w) Δ) (NamedEnv Val Δ) | 1 :=
     RefineInst.
 
-  (* Global Instance RefineChunk : Refine Chunk SCChunk := *)
-  (*   fun w ι t v => *)
-  (*     v = inst t ι. *)
-
-  (* Global Instance RefineUnit : Refine Unit unit := *)
-  (*   fun w ι t v => *)
-  (*     v = inst t ι. *)
-
   Local Hint Unfold refine RefineBox RefineProp RefineInst RefineTermVal
     RefineStore : core.
 
@@ -178,10 +170,8 @@ Module Soundness
   Ltac wsimpl :=
     repeat
       (try change (wctx (wsnoc ?w ?b)) with (wctx w ▻ b);
-       (* try change (wsub (@wred_sup ?w ?b ?t)) with (sub_snoc (sub_id (wctx w)) b t); *)
        try change (wco (wsnoc ?w ?b)) with (subst (wco w) (sub_wk1 (b:=b)));
        try change (sub_acc (@acc_refl ?w)) with (sub_id (wctx w));
-       (* try change (wsub (@wsnoc_sup ?w ?b)) with (@sub_wk1 (wctx w) b); *)
        try change (wctx (wformula ?w ?fml)) with (wctx w);
        try change (sub_acc (@acc_formula_right ?w ?fml)) with (sub_id (wctx w));
        try change (sub_acc (@acc_formulas_right ?w ?fmls)) with (sub_id (wctx w));
@@ -193,20 +183,6 @@ Module Soundness
          ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc,
          ?inst_lift, ?inst_sub_single_shift, ?inst_pathcondition_cons,
          ?sub_acc_trans, ?sub_acc_triangular, ?inst_triangular_right_inverse).
-       (* repeat *)
-       (*   match goal with *)
-       (*   | |- ℛ _ (@smut_angelic _ _ _ _ _) (@cmut_angelic _ _ _) => *)
-       (*     apply refine_angelic; auto *)
-       (*   | |- ℛ _ (smut_pure _) (cmut_pure _) => *)
-       (*     apply refine_pure; auto *)
-       (*   | |- ℛ _ (smut_bind _ _) (cmut_bind _ _) => *)
-       (*     apply refine_bind; auto *)
-       (*   | |- forall (_ : World) (_ : Valuation _), instpc (wco _) _ -> _ => *)
-       (*     let w := fresh "w" in *)
-       (*     let ι := fresh "ι" in *)
-       (*     let Hpc := fresh "Hpc" in *)
-       (*     intros w ι Hpc *)
-       (*   end). *)
 
   Lemma refine_symprop_angelic_binary
     {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
@@ -237,10 +213,9 @@ Module Soundness
     Qed.
 
     Lemma refine_bind {AT A BT B} `{Refine AT A, Refine BT B}
-          {w0 : World} (ι0 : Valuation w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
+          {w0 : World} (ι0 : Valuation w0)  :
       ℛ ι0 (@SPureSpecM.bind AT BT w0) (@CPureSpecM.bind A B).
     Proof.
-      (* cbv [ℛ RefineBox RefineImpl RefineMut RefineProp RefineInst]. *)
       intros ms mc Hm fs fc Hf.
       intros POST__s POST__c HPOST.
       unfold SPureSpecM.bind, CPureSpecM.bind.
@@ -516,26 +491,6 @@ Module Soundness
       now rewrite List.map_id.
     Qed.
 
-    (* Lemma refine_angelic_match_bool {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) *)
-    (*   (msg : Message w) : *)
-    (*   ℛ ι (@SPureSpecM.angelic_match_bool w msg) (@CPureSpecM.angelic_match_bool). *)
-    (* Proof. *)
-    (*   intros t v ->. *)
-    (*   unfold SPureSpecM.angelic_match_bool. *)
-    (*   destruct (term_get_val_spec t). *)
-    (*   - apply refine_pure; auto. *)
-    (*   - unfold SPureSpecM.angelic_match_bool'. *)
-    (*     intros POST__s POST__c HPOST. *)
-    (*     cbv [SPureSpecM.angelic_binary SPureSpecM.bind CPureSpecM.pure SPureSpecM.assert_formula]. *)
-    (*     hnf. *)
-    (*     intros δs δc Hδ hs hc Hh. *)
-    (*     hnf. rewrite CHeapSpecM.wp_angelic_match_bool. *)
-    (*     destruct a. *)
-    (*     + apply Hkt; wsimpl; eauto. *)
-    (*     + apply Hkf; wsimpl; eauto. *)
-    (*   - now apply refine_angelic_match_bool'. *)
-    (* Qed. *)
-
   End PureSpecM.
 
   Section Basics.
@@ -583,7 +538,6 @@ Module Soundness
       {Γ1 Γ2 Γ3} {w0 : World} (ι0 : Valuation w0) (* (Hpc0 : instpc (wco w0) ι0) *) :
       ℛ ι0 (@SHeapSpecM.bind Γ1 Γ2 Γ3 AT BT w0) (@CHeapSpecM.bind Γ1 Γ2 Γ3 A B).
     Proof.
-      (* cbv [ℛ RefineBox RefineImpl RefineHeapSpecM RefineProp RefineInst]. *)
       intros ms mc Hm fs fc Hf.
       intros POST__s POST__c HPOST.
       intros δs δc -> hs hc ->.
@@ -594,21 +548,6 @@ Module Soundness
       apply Hf; auto.
       eapply refine_four; eauto.
     Qed.
-
-    (* Lemma refine_bind_right {AT A BT B} `{Refine AT A, Refine BT B} *)
-    (*   {Γ1 Γ2 Γ3} {w0 : World} (ι0 : Valuation w0) (* (Hpc0 : instpc (wco w0) ι0) *) : *)
-    (*   ℛ ι0 (@SHeapSpecM.bind_right Γ1 Γ2 Γ3 AT BT w0) (@CHeapSpecM.bind_right Γ1 Γ2 Γ3 A B). *)
-    (* Proof. *)
-    (*   intros ms1 mc1 Hm1 ms2 mc2 Hm2. *)
-    (*   intros POST__s POST__c HPOST. *)
-    (*   intros δs δc -> hs hc ->. *)
-    (*   unfold SHeapSpecM.bind_right, CHeapSpecM.bind_right, CHeapSpecM.bind. *)
-    (*   apply Hm1; eauto. *)
-    (*   intros w1 ω01 ι1 -> Hpc1. *)
-    (*   intros a1 a Ha. *)
-    (*   apply Hm2; auto. *)
-    (*   eapply refine_four; eauto. *)
-    (* Qed. *)
 
     Lemma refine_angelic (x : option 𝑺) (σ : Ty)
       {Γ : PCtx} {w0 : World} (ι0 : Valuation w0)

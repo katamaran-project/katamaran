@@ -19,14 +19,11 @@ case_study/RiscvPmp/LoopVerification.v
 test/Example.v
 test/LinkedList.v
 test/SumMaxLen.v
-theories/Attic/Disjoint.v
-theories/Attic/DisjointSound.v
 theories/Base.v
 theories/Bitvector.v
 theories/Context.v
 theories/Environment.v
 theories/Iris/Model.v
-theories/Katamaran.v
 theories/Notations.v
 theories/Prelude.v
 theories/Program.v
@@ -62,6 +59,5 @@ theories/Syntax/Registers.v
 theories/Syntax/Statements.v
 theories/Syntax/Terms.v
 theories/Syntax/TypeDecl.v
-theories/Syntax/TypeDef.v
 theories/Syntax/Variables.v
 theories/Tactics.v

@@ -37,7 +37,6 @@ From Katamaran Require Import
      Syntax.BinOps
      Syntax.Terms
      Syntax.TypeDecl
-     Syntax.TypeDef
      Syntax.Variables
      Tactics.
 

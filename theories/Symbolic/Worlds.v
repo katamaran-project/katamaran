@@ -88,8 +88,6 @@ Module Type WorldsOn
       fun w => A w -> B w.
     Definition Forall {I : Type} (A : I -> TYPE) : TYPE :=
       fun w => forall i : I, A i w.
-    (* Definition Cat (A : TYPE) (Δ : LCtx) : TYPE := *)
-    (*   fun w => A (wcat w Δ). *)
 
   End Worlds.
 
@@ -323,15 +321,6 @@ Module Type WorldsOn
       - now rewrite sub_acc_trans, IHζ.
     Qed.
 
-    (* Lemma acc_triangular_app {w0 w1 w2} (ν01 : Tri w0 w1) (ν12 : Tri w1 w2) : *)
-    (*   wsub (acc_triangular (tri_comp ν01 ν12)) = *)
-    (*   subst (sub_acc (acc_triangular ν01)) (sub_acc (acc_triangular ν12)). *)
-    (* Proof. *)
-    (*   induction ν01; cbn - [SubstEnv]. *)
-    (*   - now rewrite sub_comp_id_left. *)
-    (*   - rewrite <- subst_sub_comp. now f_equal. *)
-    (* Qed. *)
-
   End Accessibility.
 
   Instance preorder_acc : CRelationClasses.PreOrder Acc :=
@@ -358,12 +347,6 @@ Module Type WorldsOn
       fun w0 a w1 ω01 w2 ω12 =>
         a w2 (acc_trans ω01 ω12).
     Global Arguments four : simpl never.
-
-    (* faster version of (four _ sub_wk1) *)
-    (* Definition four_wk1 {A} : *)
-    (*   ⊢ □A -> ∀ b, Snoc (□A) b := *)
-    (*   fun w0 a b w1 ω01 => a w1 (env_tail ω01). *)
-    (* Arguments four_wk1 {A Σ0} pc0 a b [Σ1] ζ01 : rename. *)
 
     Definition valid_box {A} :
       (⊢ A) -> (⊢ □A) :=
@@ -402,14 +385,8 @@ Module Type WorldsOn
     Import Entailment.
     Import ModalNotations.
 
-    Class Persistent (A : TYPE) (* `{LogicalRelation.LR A} *) : Type :=
-      persist     : ⊢ A -> □A.
-        (* persist_lr  : forall w0 (a : A w0) w1 (ω01 : w0 ⊒ w1), *)
-        (*     LogicalRelation.lr ω01 a (persist a ω01); *)
-        (* persist_dcl : *)
-        (*   forall w (a : A w), *)
-        (*     LogicalRelation.dcl (persist a) *)
-    (* Global Arguments Persistent A {_}. *)
+    Class Persistent (A : TYPE) : Type :=
+      persist : ⊢ A -> □A.
 
     Global Instance persistent_box {A} : Persistent □A := four.
 
@@ -436,34 +413,6 @@ Module Type WorldsOn
     Lemma ent_acc {w1 w2} (ω : w1 ⊒ w2) :
       wco w2 ⊢ persist (wco w1) ω.
     Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
-
-    (* Program Definition acc_snoc {w0 w1} (ω01 : w0 ⊒ w1) (b : 𝑺 * Ty) : *)
-    (*   wsnoc w0 b ⊒ wsnoc w1 b := *)
-    (*   match ω01 in _ ⊒ w return wsnoc w0 b ⊒ wsnoc w b with *)
-    (*   | acc_refl            => acc_refl *)
-    (*   | @acc_sub _ w2 ζ ent => @acc_sub _ (wsnoc _ b) (sub_up1 ζ) _ *)
-    (*   end. *)
-    (* Next Obligation. *)
-    (* Proof. *)
-    (*   intros. unfold wsnoc; cbn. *)
-    (*   rewrite <- subst_sub_comp. *)
-    (*   rewrite sub_comp_wk1_comm. *)
-    (*   rewrite subst_sub_comp. *)
-    (*   now apply proper_subst_entails. *)
-    (* Qed. *)
-
-    (* Program Definition acc_formula {w0 w1} (ω01 : w0 ⊒ w1) (fml : Formula w0) : *)
-    (*   wformula w0 fml ⊒ wformula w1 (persist fml ω01) := *)
-    (*   @acc_sub (MkWorld (cons fml (wco w0))) (MkWorld (cons (persist fml ω01) (wco w1))) (sub_acc ω01) _. *)
-    (* Next Obligation. *)
-    (*   intros ? ? ? ? ι. *)
-    (*   unfold wformula in *. *)
-    (*   cbn [wco wctx] in *. cbn. *)
-    (*   destruct ω01; cbn. *)
-    (*   - now rewrite ?subst_sub_id. *)
-    (*   - rewrite ?inst_pathcondition_cons. *)
-    (*     intuition. *)
-    (* Qed. *)
 
   End Persistence.
 

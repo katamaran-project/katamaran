@@ -114,17 +114,11 @@ Module Type FormulasOn
       | formula_neq t1 t2 => inst t1 ι <> inst t2 ι
       end%Z.
 
-  (* Instance lift_formula : Lift Formula Prop := *)
-  (*   fun Σ P => formula_prop env.nil P. *)
-
   Global Instance inst_subst_formula : InstSubst Formula Prop.
   Proof.
     intros ? ? ? ? f.
     induction f; cbn; repeat f_equal; apply inst_subst.
   Qed.
-
-  (* Instance inst_lift_formula : InstLift Formula Prop. *)
-  (* Proof. red. reflexivity. Qed. *)
 
   Import option.notations.
   Global Instance OccursCheckFormula : OccursCheck Formula :=
@@ -248,13 +242,6 @@ Module Type FormulasOn
     Global Instance preorder_entails {Σ} : PreOrder (@entails Σ).
     Proof. split; auto using entails_refl, entails_trans. Qed.
 
-    (* Global Instance proper_subst_pc_entails {Σ1 Σ2} : *)
-    (*   Proper ((@entails Σ1) ==> eq ==> (@entails Σ2)) (subst (T := PathCondition)) . *)
-    (* Proof. *)
-    (*   intros pc1 pc2 pc12 ι. *)
-    (*   rewrite ?inst_subst; eauto. *)
-    (* Qed. *)
-
     Lemma proper_subst_entails {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc1 pc2 : PathCondition Σ1) :
       (pc1 ⊢ pc2) -> (subst pc1 ζ12 ⊢ subst pc2 ζ12).
     Proof.
@@ -267,24 +254,6 @@ Module Type FormulasOn
     Notation "pc ⊢ a0 == a1" :=
       (entails_eq pc a0 a1)
       (at level 99, a1 at level 200, no associativity).
-
-    (* Global Instance proper_subst_entails_eq {AT A} `{InstLaws AT A} {Σ1 Σ2} {ζ : Sub Σ1 Σ2} {pc : PathCondition Σ1} : *)
-    (*   Proper ((entails_eq pc) ==> (entails_eq (subst pc ζ))) (subst ζ). *)
-    (* Proof. *)
-    (*   intros a1 a2 a12 ι. *)
-    (*   rewrite ?inst_subst; auto. *)
-    (* Qed. *)
-
-    (* Global Instance proper_subst_entails_eq_pc *)
-    (*        {Σ1 Σ2} `{InstLaws AT A} *)
-    (*        (pc : PathCondition Σ2): *)
-    (*   Proper (entails_eq pc ==> eq ==> entails_eq pc) (@subst AT _ Σ1 Σ2). *)
-    (* Proof. *)
-    (*   intros ζ1 ζ2 ζ12 a1 a2 [] ι ιpc. *)
-    (*   rewrite ?inst_subst. *)
-    (*   now rewrite (ζ12 ι ιpc). *)
-    (* Qed. *)
-
 
     (* Not sure this instance is a good idea...
        This seems to cause rewrite to take very long... *)
@@ -347,12 +316,6 @@ Module Type FormulasOn
       intros ι Hpc. specialize (ζ12 ι Hpc).
       now rewrite ?inst_subst, ζ12.
     Qed.
-
-    (* Infix "⊢" := (@entails _) (at level 80, no associativity). *)
-    (* Infix "⊢f" := (@entails_formula _) (at level 80, no associativity). *)
-    (* Notation "pc ⊢ a0 == a1" := *)
-    (*   (entails_eq pc a0 a1) *)
-    (*     (at level 80, a0 at next level, no associativity). *)
 
   End Entailment.
 

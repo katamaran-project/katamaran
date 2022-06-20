@@ -269,18 +269,6 @@ Module Type SymbolicExecOn
       apply ιvalid.
     Qed.
 
-    (* Fixpoint winstance_cat {Σ} (ι : WInstance Σ) {Δ} (ιΔ : Valuation Δ) : *)
-    (*   WInstance (wcat Σ Δ). *)
-    (* Proof. *)
-    (*   destruct ιΔ; cbn. *)
-    (*   - apply ι. *)
-    (*   - apply winstance_snoc. *)
-    (*     apply winstance_cat. *)
-    (*     apply ι. *)
-    (*     apply ιΔ. *)
-    (*     apply db. *)
-    (* Defined. *)
-
     Program Definition winstance_subst {w} (ι : WInstance w) {x σ} {xIn : x∷σ ∈ w}
       (t : Term (w - x∷σ) σ) (p : inst t (env.remove (x∷σ) (ιassign ι) xIn) = env.lookup (ιassign ι) xIn) :
       WInstance (wsubst w x t) :=
@@ -371,7 +359,6 @@ Module Type SymbolicExecOn
         (at level 80, x at next level,
           ma at next level, mb at level 200,
           right associativity, only printing).
-                               (*  *)
     Notation "x ⟨ ω ⟩" := (persist x ω) (at level 9, format "x ⟨ ω ⟩").
 
     Local Hint Extern 2 (Persistent (WTerm ?σ)) =>
@@ -569,51 +556,6 @@ Module Type SymbolicExecOn
         | None   => demonic_match_bool' t'
         end.
 
-
-    (* Definition angelic_match_enum {AT E} : *)
-    (*   ⊢ Message -> STerm (ty.enum E) -> (⌜Val (ty.enum E)⌝ -> □(𝕊 AT)) -> 𝕊 AT := *)
-    (*   fun w msg t k => *)
-    (*     match term_get_val t with *)
-    (*     | Some v => T (k v) *)
-    (*     | None => angelic_finite *)
-    (*                 msg (fun v => assert_formulak msg (formula_eq t (term_enum E v)) (k v)) *)
-    (*     end. *)
-
-    (* Definition demonic_match_enum {AT E} : *)
-    (*   ⊢ STerm (ty.enum E) -> (⌜Val (ty.enum E)⌝ -> □(𝕊 AT)) -> 𝕊 AT := *)
-    (*   fun w t k => *)
-    (*     match term_get_val t with *)
-    (*     | Some v => T (k v) *)
-    (*     | None => demonic_finite *)
-    (*                 (fun v => assume_formulak (formula_eq t (term_enum E v)) (k v)) *)
-    (*     end. *)
-
-    (* Definition angelic_match_list {AT} (x y : 𝑺) (σ : Ty) : *)
-    (*   ⊢ Message -> STerm (ty.list σ) -> □(𝕊 AT) -> □(STerm σ -> STerm (ty.list σ) -> 𝕊 AT) -> 𝕊 AT := *)
-    (*   fun w0 msg t knil kcons => *)
-    (*     angelic_binary (assert_formulak msg (formula_eq (term_val (ty.list σ) []) t) knil) *)
-    (*       (angelic x σ *)
-    (*          (fun w1 ω01 (th : Term w1 σ) => *)
-    (*           angelic y (ty.list σ) *)
-    (*             (fun w2 ω12 (tt : Term w2 (ty.list σ)) => *)
-    (*              assert_formulak (subst msg (wtrans ω01 ω12)) *)
-    (*                (formula_eq (term_binop binop_cons (subst th ω12) tt) (subst t (wtrans ω01 ω12))) *)
-    (*                (fun w3 ω23 => *)
-    (*                 four kcons (wtrans ω01 ω12) ω23 (subst th (wtrans ω12 ω23)) (subst tt ω23))))). *)
-
-    (* Definition demonic_match_list {AT} (x y : 𝑺) (σ : Ty) : *)
-    (*   ⊢ STerm (ty.list σ) -> □(𝕊 AT) -> □(STerm σ -> STerm (ty.list σ) -> 𝕊 AT) -> 𝕊 AT := *)
-    (*   fun w0 t knil kcons => *)
-    (*     demonic_binary (assume_formulak (formula_eq (term_val (ty.list σ) []) t) knil) *)
-    (*       (demonic x σ *)
-    (*          (fun w1 ω01 (th : Term w1 σ) => *)
-    (*           demonic y (ty.list σ) *)
-    (*             (fun w2 ω12 (tt : Term w2 (ty.list σ)) => *)
-    (*              assume_formulak *)
-    (*                (formula_eq (term_binop binop_cons (subst th ω12) tt) (subst t (wtrans ω01 ω12))) *)
-    (*                (fun w3 ω23 => *)
-    (*                 four kcons (wtrans ω01 ω12) ω23 (subst th (wtrans ω12 ω23)) (subst tt ω23))))). *)
-
     Definition angelic_match_sum' {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
       ⊢ AMessage -> STerm (ty.sum σ τ) ->
         □(STerm σ -> SPureSpecM A) -> □(STerm τ -> SPureSpecM A) -> SPureSpecM A :=
@@ -665,14 +607,6 @@ Module Type SymbolicExecOn
         ⟨ω3⟩ _  <- assert_formula msg⟨ω12⟩ fml;;
                   T k⟨ω12∘ω3⟩ t1⟨ω2∘ω3⟩ t2⟨ω3⟩.
 
-    (* Definition angelic_match_prod {AT} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) : *)
-    (*   ⊢ Message -> STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> 𝕊 AT) -> 𝕊 AT := *)
-    (*   fun w0 msg t k => *)
-    (*     match term_get_pair t with *)
-    (*     | Some (tσ,tτ) => T k tσ tτ *)
-    (*     | None => angelic_match_prod' x y msg t k *)
-    (*     end. *)
-
     Definition demonic_match_prod {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
       ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SPureSpecM A) -> SPureSpecM A :=
       fun _ t k =>
@@ -683,233 +617,11 @@ Module Type SymbolicExecOn
        ⟨ω3⟩ _   <- assume_formula fml;;
                   T k⟨ω12∘ω3⟩ t1⟨ω2∘ω3⟩ t2⟨ω3⟩.
 
-    (* Definition demonic_match_prod {AT} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) : *)
-    (*   ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> 𝕊 AT) -> 𝕊 AT := *)
-    (*   fun w0 t k => *)
-    (*     match term_get_pair t with *)
-    (*     | Some (tσ,tτ) => T k tσ tτ *)
-    (*     | None => demonic_match_prod' x y t k *)
-    (*     end. *)
-
-    (* Definition angelic_match_record' {N : Set} (n : N -> 𝑺) {AT R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) : *)
-    (*   ⊢ Message -> STerm (ty.record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
-    (* Proof. *)
-    (*   intros w0 msg t k. *)
-    (*   apply (angelic_freshen_ctx n Δ). *)
-    (*   intros w1 ω01 ts. *)
-    (*   apply assert_formulak. *)
-    (*   apply (subst msg ω01). *)
-    (*   apply (formula_eq (subst t ω01)). *)
-    (*   apply (term_record R (record_pattern_match_env_reverse p ts)). *)
-    (*   intros w2 ω12. *)
-    (*   apply (k w2 (acc_trans ω01 ω12) (subst ts ω12)). *)
-    (* Defined. *)
-
-    (* Definition angelic_match_record {N : Set} (n : N -> 𝑺) {AT R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) : *)
-    (*   ⊢ Message -> STerm (ty.record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
-    (* Proof. *)
-    (*   intros w0 msg t k. *)
-    (*   destruct (term_get_record t). *)
-    (*   - apply (T k). *)
-    (*     apply (record_pattern_match_env p n0). *)
-    (*   - apply (angelic_match_record' n p msg t k). *)
-    (* Defined. *)
-
-    (* Definition demonic_match_record' {N : Set} (n : N -> 𝑺) {AT R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) : *)
-    (*   ⊢ STerm (ty.record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
-    (* Proof. *)
-    (*   intros w0 t k. *)
-    (*   apply (demonic_ctx n Δ). *)
-    (*   intros w1 ω01 ts. *)
-    (*   apply assume_formulak. *)
-    (*   apply (formula_eq (subst t ω01)). *)
-    (*   apply (term_record R (record_pattern_match_env_reverse p ts)). *)
-    (*   intros w2 ω12. *)
-    (*   apply (k w2 (acc_trans ω01 ω12) (subst ts ω12)). *)
-    (* Defined. *)
-
-    (* Definition demonic_match_record {N : Set} (n : N -> 𝑺) {AT R} {Δ : NCtx N Ty} (p : RecordPat (𝑹𝑭_Ty R) Δ) : *)
-    (*   ⊢ STerm (ty.record R) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
-    (* Proof. *)
-    (*   intros w0 t k. *)
-    (*   destruct (term_get_record t). *)
-    (*   - apply (T k). *)
-    (*     apply (record_pattern_match_env p n0). *)
-    (*   - apply (demonic_match_record' n p t k). *)
-    (* Defined. *)
-
-    (* Definition angelic_match_tuple' {N : Set} (n : N -> 𝑺) {AT σs} {Δ : NCtx N Ty} (p : TuplePat σs Δ) : *)
-    (*   ⊢ Message -> STerm (ty.tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
-    (* Proof. *)
-    (*   intros w0 msg t k. *)
-    (*   apply (angelic_freshen_ctx n Δ). *)
-    (*   intros w1 ω01 ts. *)
-    (*   apply assert_formulak. *)
-    (*   apply (subst msg ω01). *)
-    (*   apply (formula_eq (subst t ω01)). *)
-    (*   apply (term_tuple (tuple_pattern_match_env_reverse p ts)). *)
-    (*   intros w2 ω12. *)
-    (*   apply (k w2 (acc_trans ω01 ω12) (subst ts ω12)). *)
-    (* Defined. *)
-
-    (* Definition angelic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs} {Δ : NCtx N Ty} (p : TuplePat σs Δ) : *)
-    (*   ⊢ Message -> STerm (ty.tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
-    (* Proof. *)
-    (*   intros w0 msg t k. *)
-    (*   destruct (term_get_tuple t). *)
-    (*   - apply (T k). *)
-    (*     apply (tuple_pattern_match_env p e). *)
-    (*   - apply (angelic_match_tuple' n p msg t k). *)
-    (* Defined. *)
-
-    (* Definition demonic_match_tuple' {N : Set} (n : N -> 𝑺) {AT σs} {Δ : NCtx N Ty} (p : TuplePat σs Δ) : *)
-    (*   ⊢ STerm (ty.tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
-    (* Proof. *)
-    (*   intros w0 t k. *)
-    (*   apply (demonic_ctx n Δ). *)
-    (*   intros w1 ω01 ts. *)
-    (*   apply assume_formulak. *)
-    (*   apply (formula_eq (subst t ω01)). *)
-    (*   apply (term_tuple (tuple_pattern_match_env_reverse p ts)). *)
-    (*   intros w2 ω12. *)
-    (*   apply (k w2 (acc_trans ω01 ω12) (subst ts ω12)). *)
-    (* Defined. *)
-
-    (* Definition demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs} {Δ : NCtx N Ty} (p : TuplePat σs Δ) : *)
-    (*   ⊢ STerm (ty.tuple σs) -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT. *)
-    (* Proof. *)
-    (*   intros w0 t k. *)
-    (*   destruct (term_get_tuple t). *)
-    (*   - apply (T k). *)
-    (*     apply (tuple_pattern_match_env p e). *)
-    (*   - apply (demonic_match_tuple' n p t k). *)
-    (* Defined. *)
-
-    (* (* TODO: move to Syntax *) *)
-    (* Definition pattern_match_env_reverse {N : Set} {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) : *)
-    (*   NamedEnv (Term Σ) Δ -> Term Σ σ := *)
-    (*   match p with *)
-    (*   | pat_var x    => fun Ex => match snocView Ex with isSnoc _ t => t end *)
-    (*   | pat_unit     => fun _ => term_val ty.unit tt *)
-    (*   | pat_pair x y => fun Exy => match snocView Exy with *)
-    (*                                  isSnoc Ex ty => *)
-    (*                                  match snocView Ex with *)
-    (*                                    isSnoc _ tx => term_binop bop.pair tx ty *)
-    (*                                  end *)
-    (*                                end *)
-    (*   | pat_tuple p  => fun EΔ => term_tuple (tuple_pattern_match_env_reverse p EΔ) *)
-    (*   | pat_record p => fun EΔ => term_record _ (record_pattern_match_env_reverse p EΔ) *)
-    (*   end. *)
-
-    (* Definition angelic_match_pattern {N : Set} (n : N -> 𝑺) {AT σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) : *)
-    (*   ⊢ Message -> STerm σ -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT := *)
-    (*   fun w0 msg t k => *)
-    (*     angelic_freshen_ctx n Δ *)
-    (*       (fun w1 ω01 (ts : (fun Σ : LCtx => NamedEnv (Term Σ) Δ) w1) => *)
-    (*        assert_formulak (subst msg ω01) (formula_eq (subst t ω01) (pattern_match_env_reverse p ts)) *)
-    (*          (fun w2 ω12 => k w2 (acc_trans ω01 ω12) (subst ts ω12))). *)
-
-    (* Definition demonic_match_pattern {N : Set} (n : N -> 𝑺) {AT σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) : *)
-    (*   ⊢ STerm σ -> □((fun Σ => NamedEnv (Term Σ) Δ) -> 𝕊 AT) -> 𝕊 AT := *)
-    (*   fun w0 t k => *)
-    (*     demonic_ctx n Δ *)
-    (*       (fun w1 ω01 (ts : (fun Σ : LCtx => NamedEnv (Term Σ) Δ) w1) => *)
-    (*        assume_formulak (formula_eq (subst t ω01) (pattern_match_env_reverse p ts)) *)
-    (*          (fun w2 ω12 => k w2 (acc_trans ω01 ω12) (subst ts ω12))). *)
-
-    (* Definition angelic_match_union' {N : Set} (n : N -> 𝑺) {AT U} {Δ : 𝑼𝑲 U -> NCtx N Ty} *)
-    (*   (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) : *)
-    (*   ⊢ Message -> STerm (ty.union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
-    (*   fun w0 msg t k => *)
-    (*     angelic_finite msg *)
-    (*       (fun K : 𝑼𝑲 U => *)
-    (*        angelic None (𝑼𝑲_Ty K) *)
-    (*          (fun w1 ω01 (t__field : Term w1 (𝑼𝑲_Ty K)) => *)
-    (*           assert_formulak (subst msg ω01) (formula_eq (term_union U K t__field) (subst t ω01)) *)
-    (*             (fun w2 ω12 => *)
-    (*              let ω02 := wtrans ω01 ω12 in *)
-    (*              angelic_match_pattern n (p K) (subst msg ω02) (subst t__field ω12) (four (k K) ω02)))). *)
-
-    (* Definition angelic_match_union {N : Set} (n : N -> 𝑺) {AT U} {Δ : 𝑼𝑲 U -> NCtx N Ty} *)
-    (*   (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) : *)
-    (*   ⊢ Message -> STerm (ty.union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
-    (*   fun w0 msg t k => *)
-    (*     match term_get_union t with *)
-    (*     | Some (existT K t__field) => angelic_match_pattern n (p K) msg t__field (k K) *)
-    (*     | None => angelic_match_union' n p msg t k *)
-    (*     end. *)
-
-    (* Definition demonic_match_union' {N : Set} (n : N -> 𝑺) {AT U} {Δ : 𝑼𝑲 U -> NCtx N Ty} *)
-    (*   (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) : *)
-    (*   ⊢ STerm (ty.union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
-    (*   fun w0 t k => *)
-    (*     demonic_finite *)
-    (*       (fun K : 𝑼𝑲 U => *)
-    (*        demonic None (𝑼𝑲_Ty K) *)
-    (*          (fun w1 ω01 (t__field : Term w1 (𝑼𝑲_Ty K)) => *)
-    (*           assume_formulak (formula_eq (term_union U K t__field) (subst t ω01)) *)
-    (*             (fun w2 ω12 => *)
-    (*              demonic_match_pattern n (p K) (subst t__field ω12) (four (k K) (acc_trans ω01 ω12))))). *)
-
-    (* Definition demonic_match_union {N : Set} (n : N -> 𝑺) {AT U} {Δ : 𝑼𝑲 U -> NCtx N Ty} *)
-    (*   (p : forall K : 𝑼𝑲 U, Pattern (Δ K) (𝑼𝑲_Ty K)) : *)
-    (*   ⊢ STerm (ty.union U) -> (∀ K, □((fun Σ => NamedEnv (Term Σ) (Δ K)) -> 𝕊 AT)) -> 𝕊 AT := *)
-    (*   fun w0 t k => *)
-    (*     match term_get_union t with *)
-    (*     | Some (existT K t__field) => demonic_match_pattern n (p K) t__field (k K) *)
-    (*     | None => demonic_match_union' n p t k *)
-    (*     end. *)
-
     Global Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
     Proof.
       intros P Q PQ.
       split; intros []; constructor; intuition.
     Qed.
-
-    (* Ltac wsimpl := *)
-    (*   repeat *)
-    (*     (try change (wctx (wsnoc ?w ?b)) with (ctx_snoc (wctx w) b); *)
-    (*      try change (sub_acc (@wred_sup ?w ?b ?t)) with (sub_snoc (sub_id (wctx w)) b t); *)
-    (*      try change (wco (wsnoc ?w ?b)) with (subst (wco w) (sub_wk1 (b:=b))); *)
-    (*      try change (sub_acc (@wrefl ?w)) with (sub_id (wctx w)); *)
-    (*      try change (sub_acc (@wsnoc_sup ?w ?b)) with (@sub_wk1 (wctx w) b); *)
-    (*      try change (wctx (wformula ?w ?fml)) with (wctx w); *)
-    (*      try change (sub_acc (acc_trans ?ω1 ?ω2)) with (subst (sub_acc ω1) (sub_acc ω2)); *)
-    (*      try change (sub_acc (@wformula_sup ?w ?fml)) with (sub_id (wctx w)); *)
-    (*      try change (wco (wformula ?w ?fml)) with (cons fml (wco w)); *)
-    (*      try change (wco (@wsubst ?w _ _ ?xIn ?t)) with (subst (wco w) (sub_single xIn t)); *)
-    (*      try change (wctx (@wsubst ?w _ _ ?xIn ?t)) with (ctx_remove xIn); *)
-    (*      try change (sub_acc (@acc_subst_right ?w _ _ ?xIn ?t)) with (sub_single xIn t); *)
-    (*      rewrite <- ?sub_comp_wk1_tail, ?inst_subst, ?subst_sub_id, *)
-    (*        ?inst_sub_id, ?inst_sub_wk1, ?inst_sub_snoc, *)
-    (*        ?inst_lift, ?inst_sub_single, ?inst_pathcondition_cons; *)
-    (*      repeat *)
-    (*        match goal with *)
-    (*        | |- Debug _ _ <-> Debug _ _ => apply proper_debug *)
-    (*        | |- (?A /\ ?B) <-> (?A /\ ?C) => apply and_iff_compat_l'; intro *)
-    (*        | |- (?A -> ?B) <-> (?A -> ?C) => apply imp_iff_compat_l'; intro *)
-    (*        | |- (exists x : ?X, _) <-> (exists y : ?X, _) => apply base.exist_proper; intro *)
-    (*        | |- (forall x : ?X, _) <-> (forall y : ?X, _) => apply base.forall_proper; intro *)
-    (*        | |- wp ?m _ ?ι -> wp ?m _ ?ι => apply wp_monotonic; intro *)
-    (*        | |- wp ?m _ ?ι <-> wp ?m _ ?ι => apply wp_equiv; intro *)
-    (*        | |- ?w ⊒ ?w => apply wrefl *)
-    (*        | |- ?POST (@inst _ _ _ ?Σ1 ?x1 ?ι1) <-> ?POST (@inst _ _ _ ?Σ2 ?x2 ?ι2) => *)
-    (*          assert (@inst _ _ _ Σ1 x1 ι1 = @inst _ _ _ Σ2 x2 ι2) as ->; auto *)
-    (*        | |- ?POST (?inst _ _ _ ?Σ1 ?x1 ?ι1) -> ?POST (@inst _ _ _ ?Σ2 ?x2 ?ι2) => *)
-    (*          assert (@inst _ _ _ Σ1 x1 ι1 = @inst _ _ _ Σ2 x2 ι2) as ->; auto *)
-    (*        | Hdcl : mapping_dcl ?f |- *)
-    (*          inst (?f ?w ?ω _) _ = inst (?f ?w ?ω _) _ => *)
-    (*          apply (Hdcl w ω w ω wrefl) *)
-    (*        | Hdcl : mapping_dcl ?f |- *)
-    (*          inst (?f ?w0 wrefl _) _ = inst (?f ?w1 ?ω01 _) _ => *)
-    (*          apply (Hdcl w0 wrefl w1 ω01 ω01) *)
-    (*        | Hdcl : mapping_dcl ?f |- *)
-    (*          inst (?f ?w1 ?ω01 _) _ = inst (?f ?w0 wrefl _) _ => *)
-    (*          symmetry; apply (Hdcl w0 wrefl w1 ω01 ω01) *)
-    (*        | Hdcl : arrow_dcl ?f |- *)
-    (*          wp (?f ?w ?ω _) _ _ -> wp (?f ?w ?ω _) _ _  => *)
-    (*          apply (Hdcl w ω w ω wrefl) *)
-    (*        end). *)
 
   End SPureSpecM.
 
@@ -956,28 +668,6 @@ Module Type SymbolicExecOn
       Definition bind_right {Γ1 Γ2 Γ3 A B} :
         ⊢ SHeapSpecM Γ1 Γ2 A -> □(SHeapSpecM Γ2 Γ3 B) -> SHeapSpecM Γ1 Γ3 B :=
         fun _ m k POST => m (fun _ ω1 _ => k _ ω1 (four POST ω1)).
-
-      (* Definition bind_left {Γ1 Γ2 Γ3 A B} `{Subst A} : *)
-      (*   ⊢ □(SHeapSpecM Γ1 Γ2 A) -> □(SHeapSpecM Γ2 Γ3 B) -> □(SHeapSpecM Γ1 Γ3 A). *)
-      (* Proof. *)
-      (*   intros w0 ma mb. *)
-      (*   apply (bbind ma). *)
-      (*   intros w1 ω01 a1 δ1 h1. *)
-      (*   apply (bind (mb w1 ω01 δ1 h1)). *)
-      (*   intros w2 ω12 [_ δ2 h2]. *)
-      (*   apply (pure). *)
-      (*   apply (subst a1 ω12). *)
-      (*   auto. *)
-      (*   auto. *)
-      (* Defined. *)
-
-      (* Definition map {Γ1 Γ2 A B} `{Subst A, Subst B} : *)
-      (*   ⊢ □(SHeapSpecM Γ1 Γ2 A) -> □(A -> B) -> □(SHeapSpecM Γ1 Γ2 B) := *)
-      (*   fun w0 ma f Σ1 ζ01 pc1 δ1 h1 => *)
-      (*     map pc1 *)
-      (*       (fun Σ2 ζ12 pc2 '(MkSHeapSpecMResult a2 δ2 h2) => *)
-      (*          MkSHeapSpecMResult (f Σ2 (subst ζ01 ζ12) pc2 a2) δ2 h2) *)
-      (*        (ma Σ1 ζ01 pc1 δ1 h1). *)
 
       Definition error {Γ1 Γ2 A D} (func : string) (msg : string) (data:D) :
         ⊢ SHeapSpecM Γ1 Γ2 A :=
@@ -1045,12 +735,6 @@ Module Type SymbolicExecOn
     End Basic.
 
     Module Import notations.
-
-      (* Notation "'⨂' x .. y => F" := *)
-      (*   (demonic (fun x => .. (demonic (fun y => F)) .. )) : mut_scope. *)
-
-      (* Notation "'⨁' x .. y => F" := *)
-      (*   (angelic (fun x => .. (angelic (fun y => F)) .. )) : mut_scope. *)
 
       (* Infix "⊗" := demonic_binary (at level 40, left associativity) : mut_scope. *)
       (* Infix "⊕" := angelic_binary (at level 50, left associativity) : mut_scope. *)
@@ -1168,24 +852,6 @@ Module Type SymbolicExecOn
     End AssumeAssert.
 
     Section PatternMatching.
-
-      (* Definition angelic_match_bool {Γ} : *)
-      (*   ⊢ STerm ty.bool -> SHeapSpecM Γ Γ ⌜bool⌝ := *)
-      (*   fun w t POST δ h => *)
-      (*     lift_purem *)
-      (*       (SPureSpecM.angelic_match_bool *)
-      (*          {| msg_function := "SHeapSpecM.angelic_match_bool"; *)
-      (*             msg_message := "pattern match assertion"; *)
-      (*             msg_program_context := Γ; *)
-      (*             msg_localstore := δ; *)
-      (*             msg_heap := h; *)
-      (*             msg_pathcondition := wco w *)
-      (*          |} t) *)
-      (*       POST δ h. *)
-
-      (* Definition demonic_match_bool {Γ} : *)
-      (*   ⊢ STerm ty.bool -> SHeapSpecM Γ Γ ⌜bool⌝ := *)
-      (*   fun w t => lift_purem (SPureSpecM.demonic_match_bool t). *)
 
       Definition angelic_match_bool' {AT} {Γ1 Γ2} :
         ⊢ STerm ty.bool -> □(SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
@@ -1744,64 +1410,6 @@ Module Type SymbolicExecOn
           else option_map (cons c') (try_consume_chunk_exact h c)
         end.
 
-      (* Equations(noeqns) match_chunk {Σ : LCtx} (c1 c2 : Chunk Σ) : List Formula Σ := *)
-      (*   match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) *)
-      (*   with eq_dec p1 p2 => { *)
-      (*     match_chunk (chunk_user p1 vs1) (chunk_user ?(p1) vs2) (left eq_refl) := formula_eqs_ctx vs1 vs2; *)
-      (*     match_chunk (chunk_user p1 vs1) (chunk_user p2 vs2) (right _) := *)
-      (*       cons (formula_bool (term_val ty.bool false)) nil *)
-      (*   }; *)
-      (*   match_chunk (chunk_ptsreg r1 t1) (chunk_ptsreg r2 t2) *)
-      (*   with eq_dec_het r1 r2 => { *)
-      (*     match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg ?(r1) v2) (left eq_refl) := cons (formula_eq v1 v2) nil; *)
-      (*     match_chunk (chunk_ptsreg r1 v1) (chunk_ptsreg r2 v2) (right _)      := *)
-      (*       cons (formula_bool (term_val ty.bool false)) nil *)
-      (*   }; *)
-      (*   match_chunk (chunk_conj c11 c12) (chunk_conj c21 c22) := *)
-      (*     app (match_chunk c11 c21) (match_chunk c12 c22); *)
-      (*   match_chunk (chunk_wand c11 c12) (chunk_wand c21 c22) := *)
-      (*     app (match_chunk c11 c21) (match_chunk c12 c22); *)
-      (*   match_chunk _ _  := cons (formula_bool (term_val ty.bool false)) nil. *)
-
-      (* Lemma inst_match_chunk {Σ : LCtx} (c1 c2 : Chunk Σ) (ι : Valuation Σ) : *)
-      (*   instpc (match_chunk c1 c2) ι <-> inst c1 ι = inst c2 ι. *)
-      (* Proof. *)
-      (*   revert c2. *)
-      (*   induction c1 as [p1 ts1|σ1 r1 t1|c11 IHc11 c12 IHc12|c11 IHc11 c12 IHc12]; *)
-      (*     intros [p2 ts2|σ2 r2 t2|c21 c22|c21 c22]; cbn; rewrite ?inst_pathcondition_cons; *)
-      (*       try (split; intros Heq; cbn in Heq; destruct_conjs; discriminate); *)
-      (*       change (inst_chunk ?c ?ι) with (inst c ι). *)
-      (*   - split. *)
-      (*     + destruct (eq_dec p1 p2) as [Heqp|Hneqp]. *)
-      (*       * destruct Heqp; cbn. rewrite inst_formula_eqs_ctx. intuition. *)
-      (*       * cbn. intros []. discriminate. *)
-      (*     + remember (inst ts1 ι) as vs1. *)
-      (*       remember (inst ts2 ι) as vs2. *)
-      (*       intros Heq. dependent elimination Heq. *)
-      (*       rewrite EqDec.eq_dec_refl. cbn. *)
-      (*       rewrite inst_formula_eqs_ctx. *)
-      (*       subst. auto. *)
-      (*   - split. *)
-      (*     + destruct (eq_dec_het r1 r2). *)
-      (*       * dependent elimination e; cbn. *)
-      (*         now intros [-> _]. *)
-      (*       * cbn. intros []. discriminate. *)
-      (*     + remember (inst t1 ι) as v1. *)
-      (*       remember (inst t2 ι) as v2. *)
-      (*       intros Heq. dependent elimination Heq. *)
-      (*       unfold eq_dec_het. *)
-      (*       rewrite EqDec.eq_dec_refl. cbn. *)
-      (*       subst. split; auto. *)
-      (*   - rewrite inst_pathcondition_app, IHc11, IHc12. *)
-      (*     split; [intuition|]. *)
-      (*     generalize (inst c11 ι), (inst c12 ι), (inst c21 ι), (inst c22 ι). *)
-      (*     clear. intros * Heq. dependent elimination Heq; auto. *)
-      (*   - rewrite inst_pathcondition_app, IHc11, IHc12. *)
-      (*     split; [intuition|]. *)
-      (*     generalize (inst c11 ι), (inst c12 ι), (inst c21 ι), (inst c22 ι). *)
-      (*     clear. intros * Heq. dependent elimination Heq; auto. *)
-      (* Qed. *)
-
       Section ConsumePreciseUser.
 
         Context {Σ} (p : 𝑯) {ΔI ΔO : Ctx Ty} (prec : 𝑯_Ty p = ΔI ▻▻ ΔO) (tsI : Env (Term Σ) ΔI) (tsO : Env (Term Σ) ΔO).
@@ -1936,13 +1544,6 @@ Module Type SymbolicExecOn
           apply (persist (A := SHeap) h' ω23).
         }
       Defined.
-
-      (* Definition smut_leakcheck {Γ Σ} : SHeapSpecM Γ Γ Unit Σ := *)
-      (*   smut_get_heap >>= fun _ _ h => *)
-      (*   match h with *)
-      (*   | nil => smut_pure tt *)
-      (*   | _   => smut_error "SHeapSpecM.leakcheck" "Heap leak" h *)
-      (*   end. *)
 
       Definition produce {Γ} :
         ⊢ Assertion -> □(SHeapSpecM Γ Γ Unit).

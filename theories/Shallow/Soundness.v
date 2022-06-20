@@ -484,8 +484,6 @@ Module Type Soundness
         now apply lwand_sep_adjoint, produce_sound.
       }
       constructor 1 with ι (frame δΓ); auto.
-      (* - apply inst_formula_eqs in Hfmls. *)
-      (*   now rewrite inst_lift in Hfmls. *)
       - intro v.
         apply lwand_sep_adjoint.
         apply lall_left with v.

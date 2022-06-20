@@ -188,24 +188,10 @@ Module Type ChunksOn
     | chunk_wand c1 c2 => scchunk_wand (inst_chunk c1 ι) (inst_chunk c2 ι)
     end.
 
-  (* Instance lift_chunk : Lift Chunk SCChunk := *)
-  (*   fix lift_chunk {Σ} (c : SCChunk) {struct c} : Chunk Σ := *)
-  (*   match c with *)
-  (*   | scchunk_user p vs => chunk_user p (lift vs) *)
-  (*   | scchunk_ptsreg r v => chunk_ptsreg r (lift v) *)
-  (*   | scchunk_conj c1 c2 => chunk_conj (lift_chunk c1) (lift_chunk c2) *)
-  (*   | scchunk_wand c1 c2 => chunk_wand (lift_chunk c1) (lift_chunk c2) *)
-  (*   end. *)
-
   Instance inst_subst_chunk : InstSubst Chunk SCChunk.
   Proof.
     intros ? ? ζ ι c; induction c; cbn; f_equal; auto; apply inst_subst.
   Qed.
-
-  (* Instance inst_lift_chunk : InstLift Chunk SCChunk. *)
-  (* Proof. *)
-  (*   intros ? ? c; induction c; cbn; f_equal; auto; apply inst_lift. *)
-  (* Qed. *)
 
   Import option.notations.
   Instance OccursCheckChunk :
