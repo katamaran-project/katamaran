@@ -65,7 +65,7 @@ Module Type SymbolicExecOn
   (Import B : Base)
   (Import SIG : ProgramLogicSignature B)
   (Import SPEC : Specification B SIG)
-  (Import SOLV : SolverKit B SIG SPEC).
+  (Import SOLV : SolverKit B SIG).
 
   Import Entailment.
   Import ModalNotations.
@@ -2010,7 +2010,7 @@ Module MakeExecutor
   (Import B    : Base)
   (Import SIG  : ProgramLogicSignature B)
   (Import SPEC : Specification B SIG)
-  (Import SOLV : SolverKit B SIG SPEC).
+  (Import SOLV : SolverKit B SIG).
 
   Include SymbolicExecOn B SIG SPEC SOLV.
 

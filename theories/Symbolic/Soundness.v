@@ -62,7 +62,7 @@ Module Soundness
   (Import B    : Base)
   (Import SIG  : ProgramLogicSignature B)
   (Import SPEC : Specification B SIG)
-  (Import SOLV : SolverKit B SIG SPEC)
+  (Import SOLV : SolverKit B SIG)
   (Import SHAL : ShallowExecOn B SIG SPEC)
   (Import SYMB : SymbolicExecOn B SIG SPEC SOLV).
 

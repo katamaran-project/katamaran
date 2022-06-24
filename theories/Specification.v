@@ -205,14 +205,14 @@ Module Type Specification (B : Base) (Import SIG : ProgramLogicSignature B).
   Include ContractDefKit B PROG SIG.
 End Specification.
 
-Module Type SolverKit (B : Base) (Import SIG : ProgramLogicSignature B) (Import SPEC : Specification B SIG).
+Module Type SolverKit (B : Base) (Import SIG : ProgramLogicSignature B).
 
   Parameter solver      : Solver.
   Parameter solver_spec : SolverSpec solver.
 
 End SolverKit.
 
-Module DefaultSolverKit (B : Base) (Import SIG : ProgramLogicSignature B) (Import SPEC : Specification B SIG) <: SolverKit B SIG SPEC.
+Module DefaultSolverKit (B : Base) (Import SIG : ProgramLogicSignature B) <: SolverKit B SIG.
 
   Definition solver : Solver := solver_null.
   Definition solver_spec : SolverSpec solver := solver_null_spec.

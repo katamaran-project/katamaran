@@ -515,7 +515,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
 
 End ExampleSpecification.
 
-Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecification.
+Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
 
   Local Unset Implicit Arguments.
   Set Equations Transparent.
@@ -610,7 +610,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature ExampleSpecifi
   Qed.
 
 End ExampleSolverKit.
-Module ExampleSolver := MakeSolver DefaultBase ExampleSignature ExampleSpecification ExampleSolverKit.
+Module ExampleSolver := MakeSolver DefaultBase ExampleSignature ExampleSolverKit.
 
 Module Import ExampleExecutor :=
   MakeExecutor DefaultBase ExampleSignature ExampleSpecification ExampleSolver.

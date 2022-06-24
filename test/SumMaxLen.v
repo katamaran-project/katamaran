@@ -187,8 +187,8 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSig.
 
 End ExampleSpecification.
 
-Module ExampleSolverKit := DefaultSolverKit DefaultBase ExampleSig ExampleSpecification.
-Module ExampleSolver := MakeSolver DefaultBase ExampleSig ExampleSpecification ExampleSolverKit.
+Module ExampleSolverKit := DefaultSolverKit DefaultBase ExampleSig.
+Module ExampleSolver := MakeSolver DefaultBase ExampleSig ExampleSolverKit.
 
 Module Import ExampleExecutor :=
   MakeExecutor DefaultBase ExampleSig ExampleSpecification ExampleSolver.

@@ -919,7 +919,7 @@ End ContractDefKit.
 
 End MinCapsSpecification.
 
-Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature MinCapsSpecification.
+Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
   Equations(noeqns) simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (List Formula Σ) :=
   | term_val p | term_val q := if decide_subperm p q then Some nil else None;
   | term_val O | q          := Some nil;
@@ -962,7 +962,7 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature MinCapsSpecifi
 
 End MinCapsSolverKit.
 Module MinCapsSolver :=
-  MakeSolver MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSolverKit.
+  MakeSolver MinCapsBase MinCapsSignature MinCapsSolverKit.
 Module Import MinCapsExecutor :=
   MakeExecutor MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSolver.
 Module Import MinCapsShallowExec :=

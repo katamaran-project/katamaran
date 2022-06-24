@@ -841,9 +841,8 @@ End SolverOn.
 Module MakeSolver
   (B : Base)
   (Import SIG : ProgramLogicSignature B)
-  (Import SPEC : Specification B SIG)
-  (SOLV : SolverKit B SIG SPEC)
-  <: SolverKit B SIG SPEC.
+  (SOLV : SolverKit B SIG)
+  <: SolverKit B SIG.
 
   Include SolverOn B SIG SIG SIG.
 

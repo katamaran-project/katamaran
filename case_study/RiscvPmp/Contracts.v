@@ -1612,7 +1612,7 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignat
 
 End RiscvPmpSpecification.
 
-Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification.
+Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   (* TODO: User predicates can be simplified smarter *)
   Equations(noeqns) decide_pmp_check_rwx {Σ} (X W R : Term Σ ty.bool) (acc : Term Σ ty_access_type) : bool :=
   | term_val true | _             | _             | term_union KExecute (term_val tt)   := true;
@@ -1725,7 +1725,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature RiscvPmpSpe
   Definition solver_spec : SolverSpec solver.
   Admitted.
 End RiscvPmpSolverKit.
-Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolverKit.
+Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
 
 Module Import RiscvPmpExecutor :=
   MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolver.
