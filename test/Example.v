@@ -352,9 +352,6 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
     Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
     Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
 
-    (* Arguments asn_prop [_] & _. *)
-    (* Arguments MkSepContractPun [_ _] & _ _ _ _. *)
-
     Definition sep_contract_abs : SepContract [ "x" ∷ ty.int ] ty.int :=
       {| sep_contract_logic_variables := ["x" ∷ ty.int];
          sep_contract_localstore      := [term_var "x"];
@@ -364,10 +361,6 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
            asn_prop
              ["x" ∷ ty.int; "result" ∷ ty.int]
              (fun x result => result = Z.abs x)
-           (* asn_if *)
-           (*   (term_binop binop_lt (term_var "x") (term_val ty.int 0)) *)
-           (*   (asn_bool (term_binop binop_eq (term_var "result") (term_neg (term_var "x")))) *)
-           (*   (asn_bool (term_binop binop_eq (term_var "result") (term_var "x"))) *)
       |}.
 
     Definition sep_contract_cmp : SepContract ["x" ∷ ty.int; "y" ∷ ty.int] (ty.enum ordering)  :=
@@ -452,18 +445,6 @@ Module ExampleSolver := MakeSolver ExampleBase ExampleSig ExampleSpecification E
 Module Import ExampleExecutor :=
   MakeExecutor ExampleBase ExampleSig ExampleSpecification ExampleSolver.
 
-(* Ltac destruct_syminstance ι := *)
-(*   repeat *)
-(*     match type of ι with *)
-(*     | Env _ (ctx.snoc _ (?s, _)) => *)
-(*       let id := string_to_ident s in *)
-(*       let fr := fresh id in *)
-(*       destruct (env.snocView ι) as [ι fr]; *)
-(*       destruct_syminstance ι *)
-(*     | Env _ ctx.nil => destruct (env.nilView ι) *)
-(*     | _ => idtac *)
-(*     end. *)
-
 Local Ltac solve :=
   repeat
     (compute
@@ -474,8 +455,6 @@ Local Ltac solve :=
       repeat
        match goal with
        | H: NamedEnv _ _ |- _ => unfold NamedEnv in H
-       (* | ι : Env _ (ctx.snoc _ _) |- _ => destruct_syminstance ι *)
-       (* | ι : Env _ ctx.nil        |- _ => destruct_syminstance ι *)
        | H: _ /\ _ |- _ => destruct H
        | H: Z.ltb _ _ = true |- _ => apply Z.ltb_lt in H
        | H: Z.ltb _ _ = false |- _ => apply Z.ltb_ge in H
@@ -494,14 +473,10 @@ Local Ltac solve :=
      auto
     ).
 
-(* Goal True. idtac "Timing before: example/length". Abort. *)
-(* Lemma valid_contract_length {σ} : SMut.ValidContract (@sep_contract_length σ) (FunDef length). *)
-(* Proof. *)
-(*   compute - [length_post]. *)
-(*   constructor. cbn. *)
-(*   solve; lia. *)
-(* Qed. *)
-(* Goal True. idtac "Timing after: example/length". Abort. *)
+Goal True. idtac "Timing before: example/length". Abort.
+Lemma valid_contract_length {σ} : Symbolic.ValidContract (@sep_contract_length σ) (FunDef length).
+Proof. constructor. compute - [length_post Val Z.add]. solve; lia. Qed.
+Goal True. idtac "Timing after: example/length". Abort.
 
 Goal True. idtac "Timing before: example/cmp". Abort.
 Lemma valid_contract_cmp : Symbolic.ValidContractReflect sep_contract_cmp (FunDef cmp).
