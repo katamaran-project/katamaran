@@ -205,13 +205,59 @@ The branching statistics of Table. 1 can be found in the `summaxlen.txt` and
 `Module Statistics` in both `theories/Shallow/Executor.v` and
 `theories/Symbolic/Executor.v`. For MinimalCaps, computing the nodes of the
 large combined shallow VC (~96k lines) is intractable in Ltac, therefore an
-alternative command line-based solution is provided. You can find the results in
-`mininmalcaps.txt`.
+alternative command line-based solution is provided. It prints the entire VC to
+standard out and counts the number of textual occurrences of the leaf
+propositions that correspond to finished and pruned execution paths. You can
+find the results in `mininmalcaps.txt`.
 
 The running times shown in Table. 1, and of the MinimalCaps case study, can be
 produced with `make timings` for which the `moreutils` packages needs to be
 installed. It measures, on the command line, the time between outputs just
 before and after the proof of a verification condition.
+
+For the evaluation of the third party we used the following sources:
+
+- Bedrock
+
+  The implementation of the framework is available on
+  [Github](https://github.com/mit-plv/bedrock/tree/e3ff3c2cba9976ac4351caaabb4bf7278bb0dcbd),
+  and more specifically the example code we used for the benchmark can be found in
+  [`Bedrock/Examples/SinglyLinkedList.v`](https://github.com/mit-plv/bedrock/blob/e3ff3c2cba9976ac4351caaabb4bf7278bb0dcbd/Bedrock/Examples/SinglyLinkedList.v).
+  For timing the individual functions, we redefined the Bedrock module
+  [`sllM`](https://github.com/mit-plv/bedrock/blob/e3ff3c2cba9976ac4351caaabb4bf7278bb0dcbd/Bedrock/Examples/SinglyLinkedList.v#L101-L154)
+  to only contain one of the functions and timed the lemma containing the verification of the specification
+  [`sllMOk`](https://github.com/mit-plv/bedrock/blob/e3ff3c2cba9976ac4351caaabb4bf7278bb0dcbd/Bedrock/Examples/SinglyLinkedList.v#L172-L176).
+
+  The Lemmas row in Table 1 of the paper contains the time to check the
+  [`nil_fwd`, `nil_bwd`, `cons_fwd`, and `cons_bwd`](https://github.com/mit-plv/bedrock/blob/master/Bedrock/Examples/SinglyLinkedList.v#L40-L61)
+  theorems.
+- Verified Software Toolchain
+
+  The implementation of VST can be found on [Github](https://github.com/PrincetonUniversity/VST/tree/b88da7af666299725050ee8ec411cbedeb85dc94).
+  The [`Lemma body_append` in `progs64/verif_append2.v`](https://github.com/PrincetonUniversity/VST/blob/b88da7af666299725050ee8ec411cbedeb85dc94/progs64/verif_append2.v#L88-L145) is the verification of the `append` function that we timed, and the [`Lemma body_reverse` in `progs64/verif_reverse2.v`](https://github.com/PrincetonUniversity/VST/blob/b88da7af666299725050ee8ec411cbedeb85dc94/progs64/verif_reverse2.v#L105-L157) the verification of the `reverse` function.
+- Separation Logic Foundations
+
+  Our benchmarks are based on [version 1.1 of the Separation Logic Foundations](https://softwarefoundations.cis.upenn.edu/slf-1.1/slf.tgz).
+  The development of linked-list is in the Representation Predicates chapter in `Repr.v`.
+  We took the timings of the `triple_append` and `triple_mcopy` lemmas which are provided and measured the time of our own solution to the `triple_mlength` exercise:
+
+  ```
+  Lemma triple_mlength : forall L p,
+    triple (mlength p)
+      (MList L p)
+      (fun r => \[r = val_int (length L)] \* (MList L p)).
+  Proof using.
+    intros. gen p. induction_wf IH: list_sub L.
+    xwp. xapp. xchange MList_if. xif; intros C; case_if; xpull.
+    { intros ->. subst. xval. xsimpl*. xchange* <- MList_nil. }
+    { intros x q L' ->. xapp. xapp. xapp.
+      xchange <- MList_cons. xsimpl*.
+      now rewrite length_cons, plus_nat_eq_plus_int, Z.add_comm.
+    }
+  Qed.
+  ```
+  For the Lemmas row in Table 1 we timed `Lemma MList_if`.
+
 
 ## Reusable badge
 
