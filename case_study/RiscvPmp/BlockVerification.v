@@ -961,15 +961,15 @@ Module BlockVerificationDerived2.
   Definition exec_instruction_any (i : AST) : ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
     let inline_fuel := 10%nat in
     fun _ a =>
-      ω2 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg pc a))) ;;
-      ω4 ∣ _ <- T (produce (asn_chunk (chunk_user ptstoinstr [persist__term a ω2; term_val ty_ast i]))) ;;
+      ω2 ∣ _ <- produce_chunk (chunk_ptsreg pc a) ;;
+      ω4 ∣ _ <- produce_chunk (chunk_user ptstoinstr [persist__term a ω2; term_val ty_ast i]) ;;
       ω6 ∣ an <- @demonic _ _ ;;
-      ω7 ∣ _ <- T (produce (asn_chunk (chunk_ptsreg nextpc an))) ;;
+      ω7 ∣ _ <- produce_chunk (chunk_ptsreg nextpc an) ;;
       ω8 ∣ _ <- SHeapSpecM.exec default_config inline_fuel (FunDef step) ;;
-      ω9 ∣ _ <- T (consume (asn_chunk (chunk_user ptstoinstr [persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8); term_val ty_ast i]))) ;;
+      ω9 ∣ _ <- consume_chunk (chunk_user ptstoinstr [persist__term a (ω2 ∘ ω4 ∘ ω6 ∘ ω7 ∘ ω8); term_val ty_ast i]) ;;
       ω10 ∣ na <- @angelic _ _ ;;
-      ω11 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg nextpc na))) ;;
-      ω12 ∣ _ <- T (consume (asn_chunk (chunk_ptsreg pc (persist__term na ω11)))) ;;
+      ω11 ∣ _ <- consume_chunk (chunk_ptsreg nextpc na) ;;
+      ω12 ∣ _ <- consume_chunk (chunk_ptsreg pc (persist__term na ω11)) ;;
       pure (persist__term na (ω11 ∘ ω12)).
 
   Definition exec_instruction (i : AST) : ⊢ M Unit :=
@@ -979,28 +979,29 @@ Module BlockVerificationDerived2.
       ω2 ∣ na <- exec_instruction_any i a ;;
       assert (formula_eq na (term_binop bop.plus (persist__term a ω2) (term_val ty_exc_code 4))).
 
-  Fixpoint exec_block_addr (b : list AST) : ⊢ STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
-    fun _ a =>
+
+  Fixpoint exec_block_addr (b : list AST) : ⊢ STerm ty_xlenbits -> STerm ty_xlenbits -> M (STerm ty_xlenbits) :=
+    fun _ ainstr apc =>
       match b with
-      | nil       => pure a
+      | nil       => pure apc
       | cons i b' =>
-        ω ∣ a' <- exec_instruction_any i a ;;
-        (* TODO: assert that a' = a + 4 *)
-        @exec_block_addr b' _ a'
+        ω1 ∣ _ <- assert (formula_eq ainstr apc) ;;
+        ω2 ∣ apc' <- exec_instruction_any i (persist__term apc ω1) ;;
+        @exec_block_addr b' _ apc' (term_binop bop.plus (persist__term ainstr (ω1 ∘ ω2)) (term_val ty_xlenbits 4))
       end.
 
   Definition exec_double_addr {Σ : World}
     (req : (□ (STerm ty_xlenbits -> Assertion)) Σ) (b : list AST) : M (STerm ty_xlenbits) Σ :=
     ω1 ∣ an <- @demonic _ _ ;;
     ω2 ∣ _ <- T (produce (req _ ω1 an)) ;;
-    @exec_block_addr b _ (persist__term an ω2).
+    @exec_block_addr b _ (persist__term an ω2) (persist__term an ω2).
 
   Definition exec_triple_addr {Σ : World}
     (req : □ (STerm ty_xlenbits -> Assertion) Σ) (b : list AST)
     (ens : (□ (STerm ty_xlenbits -> STerm ty_xlenbits -> Assertion)) Σ) : M Unit Σ :=
     ω1 ∣ a <- @demonic _ _ ;;
     ω2 ∣ _ <- T (produce (req _ ω1 a)) ;;
-    ω3 ∣ na <- @exec_block_addr b _ (persist__term a ω2) ;;
+    ω3 ∣ na <- @exec_block_addr b _ (persist__term a ω2) (persist__term a ω2) ;;
     T (consume (ens _ (ω1 ∘ ω2 ∘ ω3) (persist__term a (ω2 ∘ ω3)) na)).
 
   (* This is a VC for triples, for doubles we probably need to talk
@@ -1014,6 +1015,29 @@ Module BlockVerificationDerived2.
          (* Could include leakcheck here *)
          (fun _ _ _ _ h => SymProp.block)
          []%env []%list).
+
+  Definition simplify {Σ} : 𝕊 Σ -> 𝕊 Σ :=
+    fun P => let P2 := Postprocessing.prune P in
+          let P3 := Postprocessing.solve_evars P2 in
+          let P4 := Postprocessing.solve_uvars P3 in
+          P4.
+
+  Lemma simplify_sound {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) : SymProp.safe (simplify p) ι -> SymProp.safe p ι.
+  Proof.
+    unfold simplify.
+    intros Hs.
+    now apply (Postprocessing.prune_sound p), Postprocessing.solve_evars_sound, Postprocessing.solve_uvars_sound.
+  Qed.
+
+  Definition safeE {Σ} : 𝕊 Σ -> Prop :=
+    fun P => VerificationConditionWithErasure (Erasure.erase_symprop P).
+
+  Definition safeE_safe (p : 𝕊 wnil) (ι : Valuation wnil) : safeE p -> SymProp.safe p [].
+  Proof.
+    unfold safeE.
+    destruct 1 as [H].
+    now eapply Erasure.erase_safe'.
+  Qed.
 
   Section Example.
 
@@ -1079,14 +1103,14 @@ Module BlockVerificationDerived2.
 
     End ContractAddr.
 
-    Example vc1 : 𝕊 ε :=
-      let vc1 := BlockVerificationDerived2.VC__addr pre1' block1 post1' in
-      let vc2 := Postprocessing.prune vc1 in
-      let vc3 := Postprocessing.solve_evars vc2 in
-      let vc4 := Postprocessing.solve_uvars vc3 in
-      vc4.
+    Example vc1 : 𝕊 ε := simplify (BlockVerificationDerived2.VC__addr pre1' block1 post1').
+      (* let vc1 := BlockVerificationDerived2.VC__addr pre1' block1 post1' in *)
+      (* let vc2 := Postprocessing.prune vc1 in *)
+      (* let vc3 := Postprocessing.solve_evars vc2 in *)
+      (* let vc4 := Postprocessing.solve_uvars vc3 in *)
+      (* vc4. *)
 
-    Lemma sat_vc1' : VerificationConditionWithErasure (Erasure.erase_symprop vc1).
+    Lemma sat_vc1' : safeE vc1.
     Proof.
       compute. constructor. cbv - [Z.sub Z.add]. lia.
     Qed.
@@ -1248,21 +1272,36 @@ Module BlockVerificationDerived2.
           asn_formula (formula_eq na (a + term_val ty_xlenbits 88))
       )%exp.
 
-    Example vc__femtoinit : 𝕊 Σ__femtoinit :=
-      let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in
-      let vc2 := Postprocessing.prune vc1 in
-      let vc3 := Postprocessing.solve_evars vc2 in
-      let vc4 := Postprocessing.solve_uvars vc3 in
-      let vc5 := Postprocessing.prune vc4 in
-      vc5.
+    (* note that this computation takes longer than directly proving sat__femtoinit below *)
+    Time Example t_vc__femtoinit : 𝕊 Σ__femtoinit :=
+      Eval vm_compute in
+      simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post).
+
+    Definition vc__femtoinit : 𝕊 Σ__femtoinit :=
+      simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post).
+      (* let vc1 := VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post in *)
+      (* let vc2 := Postprocessing.prune vc1 in *)
+      (* let vc3 := Postprocessing.solve_evars vc2 in *)
+      (* let vc4 := Postprocessing.solve_uvars vc3 in *)
+      (* let vc5 := Postprocessing.prune vc4 in *)
+      (* vc5. *)
     (* Import SymProp.notations. *)
     (* Set Printing Depth 200. *)
     (* Print vc__femtoinit. *)
 
-    Lemma sat__femtoinit : VerificationConditionWithErasure (Erasure.erase_symprop vc__femtoinit).
+    Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
       vm_compute. constructor. vm_compute. intros. auto.
-    Qed.
+    Admitted.
+
+    (* Even admitting this goes OOM :-) *)
+    (* Lemma sat__femtoinit2 : SymProp.safe vc__femtoinit env.nil. *)
+    (* Admitted. *)
+    (* (* Proof. *) *)
+    (* (*   destruct sat__femtoinit as [se]. *) *)
+    (* (*   exact (proj1 (Erasure.erase_safe vc__femtoinit env.nil) se). *) *)
+    (* (* Qed. *) *)
+
 
     Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].
     Let W__femtohandler : World := MkWorld Σ__femtohandler [].
@@ -1311,22 +1350,26 @@ Module BlockVerificationDerived2.
           asn_formula (formula_eq na (persist__term (term_var "epc") ω))
       )%exp.
 
-    Time Example vc__femtohandler : 𝕊 [] :=
+    Time Example t_vc__femtohandler : 𝕊 [] :=
       Eval vm_compute in
-      let vc1 := VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post in
-      let vc2 := Postprocessing.prune vc1 in
-      let vc3 := Postprocessing.solve_evars vc2 in
-      let vc4 := Postprocessing.solve_uvars vc3 in
-      let vc5 := Postprocessing.prune vc4 in
-      vc5.
+        simplify (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post).
+    Definition vc__femtohandler : 𝕊 [] :=
+      simplify (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post).
+
+      (* let vc1 := VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post in *)
+      (* let vc2 := Postprocessing.prune vc1 in *)
+      (* let vc3 := Postprocessing.solve_evars vc2 in *)
+      (* let vc4 := Postprocessing.solve_uvars vc3 in *)
+      (* let vc5 := Postprocessing.prune vc4 in *)
+      (* vc5. *)
     (* Import SymProp.notations. *)
     (* Set Printing Depth 200. *)
     (* Print vc__femtohandler. *)
 
-    Lemma sat__femtohandler : SymProp.safe vc__femtohandler env.nil.
+    Lemma sat__femtohandler : safeE vc__femtohandler.
     Proof.
-      vm_compute; auto.
-    Qed.
+      constructor. vm_compute. intros. auto.
+    Admitted.
 
   End FemtoKernel.
 
@@ -1429,26 +1472,31 @@ Module BlockVerificationDerivedSem.
 
 End BlockVerificationDerivedSem.
 
-Module BlockVerificationDerived2Concrete.
+Module BlockVerificationDerived2Sound.
   Import Contracts.
   Import RiscvPmpSignature.
-  Include ShallowExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  Module Shal <: ShallowExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
+    Include ShallowExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  End Shal.
   Import RiscvPmpBlockVerifSpec.
 
-  Definition M : Type -> Type := CHeapSpecM [] [].
+  Module Sound := Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec BlockVerificationDerived2.RiscvPmpSolver Shal BlockVerificationDerived2.RiscvPmpExecutor.
+  Import Sound.
 
-  Definition pure {A} : A -> M A := CHeapSpecM.pure.
-  Definition bind {A B} : M A -> (A -> M B) -> M B := CHeapSpecM.bind.
-  Definition angelic {σ} : M (Val σ) := @CHeapSpecM.angelic [] σ.
-  Definition demonic {σ} : M (Val σ) := @CHeapSpecM.demonic [] σ.
-  Definition assert : Prop -> M unit := CHeapSpecM.assert_formula.
-  Definition assume : Prop -> M unit := CHeapSpecM.assume_formula.
+  Definition M : Type -> Type := Shal.CHeapSpecM [] [].
 
-  Definition produce_chunk : SCChunk -> M unit := CHeapSpecM.produce_chunk.
-  Definition consume_chunk : SCChunk -> M unit := CHeapSpecM.consume_chunk.
+  Definition pure {A} : A -> M A := Shal.CHeapSpecM.pure.
+  Definition bind {A B} : M A -> (A -> M B) -> M B := Shal.CHeapSpecM.bind.
+  Definition angelic {σ} : M (Val σ) := @Shal.CHeapSpecM.angelic [] σ.
+  Definition demonic {σ} : M (Val σ) := @Shal.CHeapSpecM.demonic [] σ.
+  Definition assert : Prop -> M unit := Shal.CHeapSpecM.assert_formula.
+  Definition assume : Prop -> M unit := Shal.CHeapSpecM.assume_formula.
 
-  Definition produce {Σ} : Valuation Σ -> Assertion Σ -> M unit := CHeapSpecM.produce.
-  Definition consume {Σ} : Valuation Σ -> Assertion Σ -> M unit := CHeapSpecM.consume.
+  Definition produce_chunk : SCChunk -> M unit := Shal.CHeapSpecM.produce_chunk.
+  Definition consume_chunk : SCChunk -> M unit := Shal.CHeapSpecM.consume_chunk.
+
+  Definition produce {Σ} : Valuation Σ -> Assertion Σ -> M unit := Shal.CHeapSpecM.produce.
+  Definition consume {Σ} : Valuation Σ -> Assertion Σ -> M unit := Shal.CHeapSpecM.consume.
 
   Local Notation "x <- ma ;; mb" :=
     (bind ma (fun x => mb))
@@ -1457,44 +1505,145 @@ Module BlockVerificationDerived2Concrete.
   Print SCChunk.
 
   Definition exec_instruction_any__c (i : AST) : Val ty_xlenbits -> M (Val ty_xlenbits) :=
-    let inline_fuel := 3%nat in
+    let inline_fuel := 10%nat in
     fun a =>
       _ <- produce_chunk (scchunk_ptsreg pc a) ;;
       _ <- produce_chunk (scchunk_user ptstoinstr [a; i]) ;;
       an <- @demonic _ ;;
       _ <- produce_chunk (scchunk_ptsreg nextpc an) ;;
-      _ <- CHeapSpecM.exec inline_fuel (FunDef step) ;;
-      _ <- consume_chunk (scchunk_ptsreg pc a) ;; (* TODO: a + 4! *)
+      _ <- Shal.CHeapSpecM.exec inline_fuel (FunDef step) ;;
       _ <- consume_chunk (scchunk_user ptstoinstr [a ; i]) ;;
       na <- @angelic _ ;;
       _ <- consume_chunk (scchunk_ptsreg nextpc na) ;;
+      _ <- consume_chunk (scchunk_ptsreg pc na) ;; (* TODO: a + 4! *)
       pure na.
 
-  Fixpoint exec_block_addr__c (b : list AST) : Val ty_xlenbits -> M (Val ty_xlenbits) :=
-    fun a =>
+  Lemma refine_exec_instruction_any  (i : AST) :
+    forall {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0),
+      refine ι0 (@BlockVerificationDerived2.exec_instruction_any i w0)
+        (exec_instruction_any__c i).
+  Proof.
+    unfold BlockVerificationDerived2.exec_instruction_any, exec_instruction_any__c.
+    intros w0 ι0 Hpc0 a a0 ->.
+    apply refine_bind.
+    apply refine_produce_chunk; auto.
+    { reflexivity.}
+    intros w1 ω1 ι1 -> Hpc1 [] [] _.
+    apply refine_bind.
+    apply refine_produce_chunk; auto.
+    { now rewrite H, <-inst_persist.}
+    intros w2 ω2 ι2 -> Hpc2 [] [] _.
+    apply refine_bind.
+    apply refine_demonic; auto.
+    intros w3 ω3 ι3 -> Hpc3 an anv ->.
+    apply refine_bind.
+    apply refine_produce_chunk; auto.
+    { reflexivity. }
+    intros w4 ω4 ι4 -> Hpc4 [] [] _.
+    apply refine_bind.
+    { apply refine_exec; auto. }
+    intros w5 ω5 ι5 -> Hpc5 res ? ->.
+    apply refine_bind.
+    apply refine_consume_chunk; auto.
+    { rewrite H.
+      unfold refine, RefineInst. cbn. repeat f_equal.
+      rewrite (inst_persist (H := inst_term) _ _ a).
+      now rewrite ?sub_acc_trans, ?inst_subst.
+    }
+    intros w6 ω6 ι6 -> Hpc6 [] ? ->.
+    apply refine_bind.
+    apply refine_angelic; auto.
+    intros w7 ω7 ι7 -> Hpc7 na ? ->.
+    apply refine_bind.
+    apply refine_consume_chunk; auto.
+    { reflexivity. }
+    intros w8 ω8 ι8 -> Hpc8 [] [] _.
+    apply refine_bind.
+    apply refine_consume_chunk; auto.
+    { unfold refine, RefineInst. cbn. repeat f_equal.
+      now rewrite (inst_persist (H := inst_term) _ _ na).
+    }
+    intros w9 ω9 ι9 -> Hpc9 [] [] _.
+    apply refine_pure; auto.
+    unfold refine, RefineTermVal, RefineInst.
+    rewrite (inst_persist (H := inst_term) _ _ na).
+    now rewrite ?sub_acc_trans, ?inst_subst.
+  Qed.
+
+  Fixpoint exec_block_addr__c (b : list AST) : Val ty_xlenbits -> Val ty_xlenbits -> M (Val ty_xlenbits) :=
+    fun ainstr apc =>
       match b with
-      | nil       => pure a
+      | nil       => pure apc
       | cons i b' =>
-        a' <- exec_instruction_any__c i a ;;
-        @exec_block_addr__c b' a'
+        _ <- assert (ainstr = apc) ;;
+        apc' <- exec_instruction_any__c i apc ;;
+        @exec_block_addr__c b' apc' (ainstr + 4)
       end.
 
-  (* Definition exec_double_addr__c *)
-  (*   (req : (Val ty_xlenbits -> Prop)) (b : list AST) : M (Val ty_xlenbits) := *)
-  (*   an <- @demonic _ ;; *)
-  (*   _ <- produce (req an) ;; *)
-  (*   @exec_block_addr__c b _ an. *)
+  Lemma refine_exec_block_addr  (b : list AST) :
+    forall {w0 : World} {ι0 : Valuation w0} (Hpc0 : instpc (wco w0) ι0),
+      refine ι0 (@BlockVerificationDerived2.exec_block_addr b w0)
+        (exec_block_addr__c b).
+  Proof.
+    induction b.
+    - intros w0 ι0 Hpc0 a ? ->.
+      now apply refine_pure.
+    - intros w0 ι0 Hpc0 ainstr ? -> apc ? ->.
+      cbn.
+      apply refine_bind.
+      apply refine_assert_formula; auto.
+      intros w1 ω1 ι1 -> Hpc1 [] [] _.
+      apply refine_bind.
+      apply refine_exec_instruction_any; auto.
+      unfold refine, RefineTermVal, RefineInst.
+      now rewrite (inst_persist (H := inst_term)).
+      intros w2 ω2 ι2 -> Hpc2 napc ? ->.
+      apply IHb; auto.
+      { reflexivity. }
+      unfold refine, RefineTermVal, RefineInst.
+      cbn. f_equal.
+      change (inst_term ?t ?ι) with (inst t ι).
+      rewrite (inst_persist (H := inst_term) (acc_trans ω1 ω2) _ ainstr).
+      now rewrite ?sub_acc_trans, ?inst_subst.
+  Qed.
 
-End BlockVerificationDerived2Concrete.
+  (* DOMI: Prop is the wrong thing here: but what is the right thing? HProp for `{PredicateDef HProp}? *)
+  Definition exec_double_addr__c
+    (req : (Val ty_xlenbits -> Prop)) (b : list AST) : M (Val ty_xlenbits) :=
+    an <- @demonic _ ;;
+    _ <- assume (req an) ;;
+    @exec_block_addr__c b an an.
+
+  Definition exec_triple_addr__c
+    (req : Val ty_xlenbits -> Prop) (b : list AST)
+    (ens : Val ty_xlenbits -> Val ty_xlenbits -> Prop) : M unit :=
+    a <- @demonic _ ;;
+    _ <- assume (req a) ;;
+    na <- @exec_block_addr__c b a a ;;
+    assert (ens a na).
+
+  Import ModalNotations.
+
+  (* Lemma refine_exec_triple_addr {Σ} (b : list AST) *)
+  (*   (req : □ (STerm ty_xlenbits -> Assertion) Σ) *)
+  (*   (ens : (□ (STerm ty_xlenbits -> STerm ty_xlenbits -> Assertion)) Σ) *)
+  (*   (req__c : Val ty_xlenbits -> Prop) *)
+  (*   (ens__c : Val ty_xlenbits -> Val ty_xlenbits -> Prop) : *)
+  (*   forall {ι0 : Valuation Σ} (Hpc0 : instpc (wco Σ) ι0), *)
+  (*     refine ι0 req req__c -> *)
+  (*     refine ι0 (@BlockVerificationDerived2.exec_triple_addr Σ req b ens) *)
+  (*       (exec_triple_addr__c req__c b ens__c). *)
+  (* Proof. *)
+
+End BlockVerificationDerived2Sound.
 
 Module BlockVerificationDerived2Sem.
   Import Contracts.
   Import RiscvPmpSignature.
-  Import BlockVerificationDerivedSem.
   Import RiscvPmpBlockVerifSpec.
   Import weakestpre.
   Import tactics.
-  Import BlockVerificationDerived.
+  Import BlockVerificationDerived2.
   Import Shallow.Executor.
   Import ctx.resolution.
   Import ctx.notations.
@@ -1526,6 +1675,33 @@ Module BlockVerificationDerived2Sem.
     | cons inst insts => (interp_ptsto_instr (mG := sailGS_memGS) a inst ∗ ptsto_instrs (a + 4) insts)%I
     | nil => True%I
     end.
+
+  Definition semTripleBlock `{sailGS Σ} (PRE : Z -> iProp Σ) (instrs : list AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
+    (∀ a an,
+    (PRE a ∗ lptsreg pc a ∗ ptsto_instrs a instrs) -∗
+      (lptsreg pc an ∗ ptsto_instrs a instrs ∗ POST a an -∗ LoopVerification.WP_loop) -∗
+      LoopVerification.WP_loop)%I.
+
+  Lemma sound_exec_triple_addr `{sailGS Σ} {Γ} {pre post instrs} {ι} :
+    SymProp.safe
+      (exec_triple_addr (Σ := Γ) pre instrs post (λ w1 _ _ _ _ , SymProp.block) [env] []%list) ι ->
+    ⊢ semTripleBlock (λ a : Z, interpret_assertion (T pre (term_val ty_exc_code a)) ι) instrs
+      (λ a na : Z, interpret_assertion (T post (term_val ty_exc_code a) (term_val ty_exc_code na)) ι).
+  Proof.
+  Admitted.
+
+  Lemma sound_VC__addr `{sailGS Σ} {Γ} {pre post instrs} :
+    safeE (simplify (BlockVerificationDerived2.VC__addr (Σ := Γ) pre instrs post)) ->
+    forall ι,
+    ⊢ semTripleBlock (fun a => interpret_assertion (T pre (term_val ty_xlenbits a%Z)) ι)
+      instrs
+      (fun a na => interpret_assertion (T post (term_val ty_xlenbits a%Z) (term_val ty_xlenbits na%Z)) ι).
+  Proof.
+    intros Hverif%(safeE_safe env.nil)%simplify_sound ι.
+    rewrite SymProp.safe_demonic_close in Hverif.
+    specialize (Hverif ι).
+    now apply sound_exec_triple_addr.
+  Qed.
 
   Definition advAddrs := seqZ 88 (maxAddr - 88 + 1).
 
@@ -1634,7 +1810,29 @@ Module BlockVerificationDerived2Sem.
           (femto_handler_post epc -∗ LoopVerification.WP_loop) -∗
           LoopVerification.WP_loop.
 
-  Axiom femto_handler_verified : forall `{sailGS Σ}, ⊢ femto_handler_contract.
+  Import env.notations.
+  Lemma femto_handler_verified : forall `{sailGS Σ}, ⊢ femto_handler_contract.
+  Proof.
+    iIntros (Σ sG epc mpp) "".
+    pose (BlockVerificationDerived2.sat__femtohandler) as Hhandler.
+    unfold vc__femtohandler in Hhandler.
+    cbn in epc.
+    iPoseProof (sound_VC__addr Hhandler (env.snoc (env.snoc env.nil (_::ty_exc_code) epc) _ mpp)) as "Hverif".
+    iIntros "Hpre Hk".
+    iApply ("Hverif" $! 72 epc with "[Hpre] [Hk]").
+    - iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hhandler)".
+      cbn.
+      unfold femto_inv_fortytwo.
+      iFrame.
+      iSplitR; trivial.
+      admit.
+    - iIntros "(Hpc & Hhandler & (Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo & _)))".
+      cbn.
+      iApply "Hk".
+      unfold femto_handler_post.
+      iFrame.
+      admit.
+  Admitted.
 
   Lemma femtokernel_hander_safe `{sailGS Σ} {mepcv}:
     ⊢ mstatus ↦ {| MPP := User |} ∗
