@@ -363,8 +363,8 @@ Module RiscvPmpSpecVerif.
   Import RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpProgram.
-  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolverKit.
+  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature.
+  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
 
   Module Import RiscvPmpExecutor :=
     MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
@@ -411,8 +411,8 @@ Module BlockVerification.
   Import Contracts.
   Import RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
-  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolverKit.
+  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature.
+  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
 
   Module Import RiscvPmpExecutor :=
     MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
@@ -784,8 +784,8 @@ Module BlockVerificationDerived.
   Import RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
 
-  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolverKit.
+  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature.
+  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
 
   Module Import RiscvPmpExecutor :=
     MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
@@ -928,8 +928,8 @@ Module BlockVerificationDerived2.
   Import RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
 
-  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolverKit.
+  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature.
+  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
 
   Module Import RiscvPmpExecutor :=
     MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
