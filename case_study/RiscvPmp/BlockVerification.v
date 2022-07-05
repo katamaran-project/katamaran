@@ -1577,7 +1577,7 @@ Module BlockVerificationDerived2Sound.
       | cons i b' =>
         _ <- assert (ainstr = apc) ;;
         apc' <- exec_instruction_any__c i apc ;;
-        @exec_block_addr__c b' apc' (ainstr + 4)
+        @exec_block_addr__c b' (ainstr + 4) apc'
       end.
 
   Lemma refine_exec_block_addr  (b : list AST) :
@@ -1599,12 +1599,13 @@ Module BlockVerificationDerived2Sound.
       now rewrite (inst_persist (H := inst_term)).
       intros w2 ω2 ι2 -> Hpc2 napc ? ->.
       apply IHb; auto.
+      {unfold refine, RefineTermVal, RefineInst.
+        cbn. f_equal.
+        change (inst_term ?t ?ι) with (inst t ι).
+        rewrite (inst_persist (H := inst_term) (acc_trans ω1 ω2) _ ainstr).
+        now rewrite ?sub_acc_trans, ?inst_subst.
+      }
       { reflexivity. }
-      unfold refine, RefineTermVal, RefineInst.
-      cbn. f_equal.
-      change (inst_term ?t ?ι) with (inst t ι).
-      rewrite (inst_persist (H := inst_term) (acc_trans ω1 ω2) _ ainstr).
-      now rewrite ?sub_acc_trans, ?inst_subst.
   Qed.
 
   (* DOMI: Prop is the wrong thing here: but what is the right thing? HProp for `{PredicateDef HProp}? *)
