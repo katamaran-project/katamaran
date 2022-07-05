@@ -118,7 +118,7 @@ Module Type AssertionsOn
       | asn_match_union U s ctx pat rhs =>
         asn_match_union U (subst s ζ) ctx pat (fun K => sub_assertion (rhs K) (sub_up ζ _))
       | asn_sep a1 a2 => asn_sep (sub_assertion a1 ζ) (sub_assertion a2 ζ)
-      | asn_or a1 a2  => asn_sep (sub_assertion a1 ζ) (sub_assertion a2 ζ)
+      | asn_or a1 a2  => asn_or (sub_assertion a1 ζ) (sub_assertion a2 ζ)
       | asn_exist ς τ a => asn_exist ς τ (sub_assertion a (sub_up1 ζ))
       | asn_debug => asn_debug
       end.
