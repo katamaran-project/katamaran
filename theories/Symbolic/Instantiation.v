@@ -214,11 +214,54 @@ Module Type InstantiationOn
     inst (sub_snoc ζ b t) ι = env.snoc (inst ζ ι) b (inst t ι).
   Proof. reflexivity. Qed.
 
+  Lemma inst_env_cat {T : Set} {AT : LCtx -> T -> Set} {A : T -> Set}
+     {instAT : forall τ : T, Inst (fun Σ : LCtx => AT Σ τ) (A τ)}
+     {Σ : LCtx} {Γ Δ : Ctx T} (EΓ : Env (fun τ => AT Σ τ) Γ) (EΔ : Env (fun τ => AT Σ τ) Δ)
+     (ι : Valuation Σ) :
+    inst (EΓ ►► EΔ) ι = inst EΓ ι ►► inst EΔ ι.
+  Proof.
+    unfold inst, inst_env; cbn.
+    now rewrite env.map_cat.
+  Qed.
+
+  Lemma inst_sub_cat {Σ Γ Δ : LCtx} (ζΓ : Sub Γ Σ) (ζΔ : Sub Δ Σ) (ι : Valuation Σ) :
+    inst (A := Valuation _) (ζΓ ►► ζΔ) ι = inst ζΓ ι ►► inst ζΔ ι.
+  Proof.
+    apply (@inst_env_cat (𝑺 ∷ Ty) (fun Σ b => Term Σ (type b))).
+  Qed.
+
+  Lemma inst_sub_cat_left {Σ Δ : LCtx} (ι : Valuation Δ) (ιΔ : Valuation Σ) :
+    inst (sub_cat_left Δ) (ιΔ ►► ι) = ιΔ.
+  Proof.
+    eapply env.lookup_extensional.
+    intros b bInΔ.
+    unfold inst, inst_sub, inst_env, sub_cat_left.
+    rewrite ?env.lookup_map, env.lookup_tabulate. cbn.
+    now rewrite env.lookup_cat_left.
+  Qed.
+
+  Lemma inst_sub_cat_right {Σ Δ : LCtx} (ι : Valuation Δ) (ιΔ : Valuation Σ) :
+    inst (sub_cat_right Δ) (ιΔ ►► ι) = ι.
+  Proof.
+    eapply env.lookup_extensional.
+    intros b bInΔ.
+    unfold inst, inst_sub, inst_env, sub_cat_right.
+    rewrite ?env.lookup_map, env.lookup_tabulate. cbn.
+    now rewrite env.lookup_cat_right.
+  Qed.
+
   Lemma inst_sub_up1 {Σ1 Σ2 b} (ζ12 : Sub Σ1 Σ2) (ι2 : Valuation Σ2) (v : Val (type b)) :
     inst (sub_up1 ζ12) (ι2 ► (b ↦ v)) = inst ζ12 ι2 ► (b ↦ v).
   Proof.
     destruct b; unfold sub_up1.
     now rewrite inst_sub_snoc, inst_subst, inst_sub_wk1.
+  Qed.
+
+  Lemma inst_sub_up {Σ1 Σ2 Δ} (ζ12 : Sub Σ1 Σ2) (ι2 : Valuation Σ2) (ι : Valuation Δ) :
+    inst (sub_up ζ12 Δ) (ι2 ►► ι) = inst ζ12 ι2 ►► ι.
+  Proof.
+    unfold sub_up.
+    now rewrite inst_sub_cat, inst_subst, inst_sub_cat_left, inst_sub_cat_right.
   Qed.
 
   Lemma inst_sub_shift {Σ} (ι : Valuation Σ) {b} (bIn : b ∈ Σ) :

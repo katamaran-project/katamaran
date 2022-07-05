@@ -1497,22 +1497,6 @@ Module Soundness
     hnf. cbn. now rewrite peval_chunk_sound.
   Qed.
 
-  Lemma inst_env_cat {T : Set} {AT : LCtx -> T -> Set} {A : T -> Set}
-     {instAT : forall τ : T, Inst (fun Σ : LCtx => AT Σ τ) (A τ)}
-     {Σ : LCtx} {Γ Δ : Ctx T} (EΓ : Env (fun τ => AT Σ τ) Γ) (EΔ : Env (fun τ => AT Σ τ) Δ)
-     (ι : Valuation Σ) :
-    inst (EΓ ►► EΔ) ι = inst EΓ ι ►► inst EΔ ι.
-  Proof.
-    unfold inst, inst_env; cbn.
-    now rewrite env.map_cat.
-  Qed.
-
-  Lemma inst_sub_cat {Σ Γ Δ : LCtx} (ζΓ : Sub Γ Σ) (ζΔ : Sub Δ Σ) (ι : Valuation Σ) :
-    inst (A := Valuation _) (ζΓ ►► ζΔ) ι = inst ζΓ ι ►► inst ζΔ ι.
-  Proof.
-    apply (@inst_env_cat (𝑺 ∷ Ty) (fun Σ b => Term Σ (type b))).
-  Qed.
-
   Lemma refine_produce {Γ Σ0 pc0} (asn : Assertion Σ0) :
     let w0 := @MkWorld Σ0 pc0 in
     forall
