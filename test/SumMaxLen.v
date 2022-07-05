@@ -26,6 +26,11 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* This file contains the verification of the single summaxlen function. It is
+   a function with a pure contract, and we can thus show a simple pure adequacy
+   result for it. Unfortunately, this file has a lot of overhead instantiating
+   the Iris model for a function that does not use separation logic. *)
+
 From Coq Require Import
      Lists.List
      Logic.FinFun
@@ -62,10 +67,13 @@ Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope ctx_scope.
 
-(*** PROGRAM ***)
-
+(* We use the default base because this example does not use any types other
+   than the standard ones already available. We also don't make any use of
+   registers (global variables). *)
 Import DefaultBase.
 
+(* The [Program] module defines the program consisting of only the [summaxlen]
+   function. *)
 Module Import ExampleProgram <: Program DefaultBase.
 
   Section FunDeclKit.
@@ -75,11 +83,14 @@ Module Import ExampleProgram <: Program DefaultBase.
     .
 
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
+    (* We do not have any foreign functions. *)
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := fun _ _ => Empty_set.
+    (* We do not make use of explicit ghost lemmas in the program. *)
     Definition 𝑳 : PCtx -> Set := fun _ => Empty_set.
 
   End FunDeclKit.
 
+  (* Include the definition of statements etc to define the body of [summaxlen]. *)
   Include FunDeclMixin DefaultBase.
 
   Section FunDefKit.
@@ -95,6 +106,7 @@ Module Import ExampleProgram <: Program DefaultBase.
     Local Notation "'xs'"   := (@exp_var _ "xs" _ _) : exp_scope.
     Local Notation "'ys'"   := (@exp_var _ "ys" _ _) : exp_scope.
 
+    (* The implementation of the [summaxlen] function as a μSail statement. *)
     Definition fun_summaxlen : Stm ["xs" ∷ ty.list ty.int] (ty.prod (ty.prod ty.int ty.int) ty.int) :=
       stm_match_list xs (stm_val (ty.prod (ty.prod ty.int ty.int) ty.int) (0,0,0))
         "y" "ys"
@@ -108,6 +120,7 @@ Module Import ExampleProgram <: Program DefaultBase.
            end
          end).
 
+    (* A variant of the [summaxlen] function to demonstrate the explicit debug ghost statement. *)
     Definition fun_summaxlen_with_debug : Stm ["xs" ∷ ty.list ty.int] (ty.prod (ty.prod ty.int ty.int) ty.int) :=
       stm_match_list xs (stm_val (ty.prod (ty.prod ty.int ty.int) ty.int) (0,0,0))
         "y" "ys"
@@ -121,6 +134,7 @@ Module Import ExampleProgram <: Program DefaultBase.
              end
          end).
 
+    (* The library expects a map [FunDef] from function names to function bodies. *)
     Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       match f in Fun Δ τ return Stm Δ τ with
       | summaxlen => fun_summaxlen
@@ -128,8 +142,11 @@ Module Import ExampleProgram <: Program DefaultBase.
 
   End FunDefKit.
 
+  (* We pull in the default implementation of a store for registers. *)
   Include DefaultRegStoreKit DefaultBase.
 
+  (* We do not have any foreign functions in this example and therefore
+     instantiate the library with some dummy definitions. *)
   Section ForeignKit.
     Definition Memory : Set := unit.
     Definition ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
@@ -143,6 +160,9 @@ Module Import ExampleProgram <: Program DefaultBase.
 
 End ExampleProgram.
 
+(* The program logic signature contains all the necessary definitions
+   pertaining to user-defined pure and spatial predicates. We do not have
+   any in this example, so use default definitions provided by the library. *)
 Module Import ExampleSig <: ProgramLogicSignature DefaultBase.
   Module PROG := ExampleProgram.
   Import ctx.resolution.
@@ -152,6 +172,7 @@ Module Import ExampleSig <: ProgramLogicSignature DefaultBase.
   Include SpecificationMixin DefaultBase ExampleProgram.
 End ExampleSig.
 
+(* The specification module defines the contract for the [summaxlen] function. *)
 Module Import ExampleSpecification <: Specification DefaultBase ExampleSig.
 
   Import ctx.resolution.
@@ -177,22 +198,29 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSig.
       | summaxlen => Some sep_contract_summaxlen
       end.
 
+  (* No foreign functions. *)
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with end.
 
+  (* No ghost lemmas. *)
   Definition LEnv : LemmaEnv :=
     fun Δ l =>
       match l with end.
 
 End ExampleSpecification.
 
+(* We do not provide any user-defined simplifier/solver. Just rely on the generic
+   one defined by the framework. *)
 Module ExampleSolverKit := DefaultSolverKit DefaultBase ExampleSig.
 Module ExampleSolver := MakeSolver DefaultBase ExampleSig ExampleSolverKit.
 
+(* Use the specification and the solver module to compose the symbolic executor
+   and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
   MakeExecutor DefaultBase ExampleSig ExampleSpecification ExampleSolver.
 
+(* Some simple Ltac tactic to solve the shallow and symbolic VCs. *)
 Local Ltac solve :=
   repeat
     (repeat
@@ -210,8 +238,11 @@ Local Ltac solve :=
      try progress subst);
   auto.
 
+(* Also instantiate the shallow verification condition generator. *)
 Module Import ExampleShalExec := MakeShallowExecutor DefaultBase ExampleSig ExampleSpecification.
 
+(* This computes and proves the shallow VC. Make sure to not unfold the
+   definition of the binary operators and Coq predicates used in the example. *)
 Goal True. idtac "Timing before: summaxlen/shallow". Abort.
 Lemma valid_contract_summaxlen_shallow : Shallow.ValidContract sep_contract_summaxlen fun_summaxlen.
 Proof.
@@ -220,27 +251,31 @@ Proof.
 Qed.
 Goal True. idtac "Timing after: summaxlen/shallow". Abort.
 
-(* Goal True. idtac "Timing before: summaxlen/slow". Abort. *)
-(* Lemma valid_contract_summaxlen_slow : SMut.ValidContract sep_contract_summaxlen fun_summaxlen. *)
-(* Proof. *)
-(*   compute. constructor. *)
-(*   compute - [Z.mul Z.add Z.le Z.ge Z.lt]. *)
-(*   solve; nia. *)
-(* Time Qed. *)
-(* Goal True. idtac "Timing after: summaxlen/slow". Abort. *)
-
+(* This computes and proves the symbolic VC. Note that this VC is not solved
+   completely automatically. The VCG returns a residual VC that we still need to
+   proof manually in Coq. This VC however is simpler than the shallow one
+   generated above. *)
 Goal True. idtac "Timing before: summaxlen/symbolic". Abort.
 Lemma valid_contract_summaxlen : Symbolic.ValidContract sep_contract_summaxlen fun_summaxlen.
 Proof.
+  (* Interactive handling of the instrinsically-typed term representation used
+     throughout the Katamaran codebase is unfortunately very slow. Therefore, we
+     calculate a symbolic proposition with some of the typing information
+     removed. Specifically, we remove the context containment proofs from the
+     variable case of symbolic terms and all variable context indexing. When
+     transforming the symbolic propositions to shallow ones, we simply
+     re-typecheck the variable case. *)
   apply Symbolic.validcontract_with_erasure_sound.
   compute. constructor.
   compute - [Z.mul Z.add Z.le Z.ge Z.lt].
+  (* We solve the remaining obligations using nia. *)
   solve; nia.
 Qed.
 Goal True. idtac "Timing after: summaxlen/symbolic". Abort.
 
 Section Debug.
 
+  (* A simple goal to print the shallow verification condition. *)
   Goal Shallow.ValidContract sep_contract_summaxlen fun_summaxlen.
     compute - [negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge].
     (* We change the goal here to give more descriptive names to the quantified variables. Coq's
@@ -265,12 +300,16 @@ Section Debug.
   Import SymProp.
   Import SymProp.notations.
 
+  (* Simple goal to print the produced symbolic VC. This is essentially like
+     [Lemma valid_contract_summaxlen], but without the erasure step. *)
   Goal Symbolic.ValidContract sep_contract_summaxlen fun_summaxlen.
     compute.
     idtac "Symbolic verification condition:".
     match goal with |- VerificationCondition ?x => idtac x end.
   Abort.
 
+  (* Print the VC for the variant of the [summaxlen] function that contains the
+     explicit debug ghost statement. *)
   Goal Symbolic.ValidContract sep_contract_summaxlen fun_summaxlen_with_debug.
     compute.
     idtac "Symbolic verification condition with debug nodes:".
@@ -286,9 +325,12 @@ Section Debug.
 
 End Debug.
 
+(* Instantiate the operational semantics. *)
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
   MakeSemantics DefaultBase ExampleProgram.
 
+(* This module contains the instantiation of the Iris model with trivial
+   definitions for this example. *)
 Module Import ExampleModel.
   Import ExampleProgram.
   Import ExampleSpecification.
@@ -297,6 +339,8 @@ Module Import ExampleModel.
     Include IrisPrelims DefaultBase ExampleProgram ExampleSig ExampleSemantics.
   End ExampleIrisPrelims.
 
+  (* There is no memory, so use trivial definitions to instantiate the ghost
+     state and its requirements. *)
   Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSig ExampleSemantics ExampleIrisPrelims.
     Import ExampleIrisPrelims.
     Import iris.bi.interface.
@@ -318,10 +362,13 @@ Module Import ExampleModel.
     Qed.
   End ExampleIrisParameters.
 
+  (* Combine the memory and register ghost states. *)
   Module ExampleIrisResources <: IrisResources DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
     Include IrisResources DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
   End ExampleIrisResources.
 
+  (* There are no user-defined spatial predicates, also use trivial definitions
+  here. *)
   Module ExampleIrisPredicates <: IrisPredicates DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources.
     Import iris.base_logic.lib.iprop.
     Import ExampleIrisPrelims.
@@ -335,18 +382,23 @@ Module Import ExampleModel.
 
   Import ExampleIrisParameters.
 
+  (* Finally, include the constructed operational model, the axiomatic program
+     logic, and the Iris implementation of the axioms. *)
   Include IrisInstance DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
   Include ProgramLogicOn DefaultBase ExampleSig ExampleSpecification.
   Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleSpecification ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
 
   Import ExampleIrisResources.
 
+  (* Verification of the absent foreign functions. *)
   Lemma foreignSem `{sailGS Σ} : ForeignSem.
   Proof. intros Γ τ Δ f es δ; destruct f. Qed.
 
+  (* Verification of the absent ghost lemmas. *)
   Lemma lemSem `{sailGS Σ} : LemmaSem.
   Proof. intros Γ l. destruct l. Qed.
 
+  (* Import the soundness proofs for the shallow and symbolic executors. *)
   Include Shallow.Soundness.Soundness DefaultBase ExampleSig ExampleSpecification ExampleShalExec.
   Include Symbolic.Soundness.Soundness DefaultBase ExampleSig ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
 
@@ -356,6 +408,7 @@ Module Import ExampleModel.
     Import iris.base_logic.lib.iprop.
     Import iris.proofmode.tactics.
 
+    (* Show that all the contracts are sound in the Iris model. *)
     Lemma contracts_sound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
     Proof.
       apply (sound foreignSem lemSem).
@@ -368,6 +421,10 @@ Module Import ExampleModel.
 
     Import ExampleSemantics.SmallStepNotations.
 
+    (* This is an adequacy proposition that holds for functions with a pure
+       contract, i.e. a contract that does not use any spatial predicates. For
+       such function an contracts we can state adequacy just in terms of the
+       operational semantics without exposing other parts of the Iris model. *)
     Definition adequacy_pure_prop (Δ : PCtx) (σ : Ty) (f : Fun Δ σ) : Prop :=
       match CEnv f with
       | Some (MkSepContract _ _ Σ args pre result post) =>
@@ -398,6 +455,8 @@ Module Import ExampleModel.
       apply bi.equiv_entails_2; auto.
     Qed.
 
+    (* Derive the pure adequacy lemma from the more general lemma
+       ExampleModel.adequacy defined in the library. *)
     Lemma adequacy_pure {Δ σ} (f : Fun Δ σ) : adequacy_pure_prop f.
     Proof.
       unfold adequacy_pure_prop.
@@ -422,6 +481,7 @@ Module Import ExampleModel.
       now rewrite interpret_assertion_pure_or_not.
     Qed.
 
+    (* Finally, instantitate the pure adequacy lemma for the summaxlen example. *)
     Corollary summaxlen_adequacy {Γ} (δ : CStore Γ) (γ γ' : RegStore) (μ μ' : Memory) :
       forall (xs : list Z) (s m l : Z),
         ⟨ γ, μ, δ, call summaxlen (exp_val (ty.list ty.int) xs) ⟩ --->*
@@ -442,12 +502,16 @@ Goal True.
   idtac "Assumptions for summaxlen_adequacy:". Print Assumptions summaxlen_adequacy.
 Abort.
 
+(* This tactic calculates the number of different execution branches explored by
+   the shallow and symbolic executor for the body of the function [fn]. *)
 Ltac calcstats fn :=
   let smb := eval compute in (Symbolic.Statistics.calc fn) in
   let shl := Shallow.Statistics.calc fn in
   let row := constr:(pair fn (pair shl smb)) in
   idtac row.
 
+(* We print the statistics for every μSail function defined in the program, i.e.
+   just the [summaxlen] function in this case. *)
 Goal forall {Δ τ} (f : Fun Δ τ), f = f.
   idtac "Branching statistics:".
   destruct f;

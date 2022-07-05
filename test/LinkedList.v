@@ -26,6 +26,18 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
+(* This file contains a toy example verifying the correctness of simple
+   functions operating on singly-linked lists. It is essentially based on the
+   definitions of linked list first defined in
+
+     John C. Reynolds. 2000.
+     Intuitionistic reasoning about shared mutable data structure.
+
+   We instantiate the framework to get a symbolic verification condition
+   generator and also instantiate the Iris model with a suitable definition of
+   memory.
+  *)
+
 From Coq Require Import
      Lists.List
      Logic.FinFun
@@ -63,15 +75,23 @@ Import ctx.resolution.
 Import env.notations.
 Local Open Scope string_scope.
 
-(*** TERMS ***)
-
+(* We use the default base because this example does not use any types other
+   than the standard ones already available. We also don't make any use of
+   registers (global variables). *)
 Import DefaultBase.
+(* We use this notation in every place an int represents a memory address.
+   Unfortunately, this Notation is also used for integers that are not
+   addreses. *)
 Notation ptr   := ty.int.
 Notation llist := (ty.option ptr).
 
+(* The [Program] module contains the declaration and definition of the functions
+   that make up the program. *)
 Module Import ExampleProgram <: Program DefaultBase.
 
   Section FunDeclKit.
+    (* We define the signatures of μSail functions. Their bodies are defined
+       later.*)
     Inductive Fun : PCtx -> Ty -> Set :=
     | append      : Fun [ "p" ∷ llist; "q" ∷ llist ] llist
     | appendloop  : Fun [ "p" ∷ ptr; "q" ∷ llist ] ty.unit
@@ -81,17 +101,23 @@ Module Import ExampleProgram <: Program DefaultBase.
     | reverseloop : Fun [ "p" ∷ llist; "q" ∷ llist ] llist
     .
 
+    (* These are foreign functions that will be implemented in Coq. They should
+       be considered to be primitives provided by a runtime system. *)
     Inductive FunX : PCtx -> Ty -> Set :=
     | mkcons : FunX [ "x" ∷ ty.int; "xs" ∷ llist ] ptr
     | fst    : FunX [ "p" ∷ ptr ] ty.int
     | snd    : FunX [ "p" ∷ ptr ] llist
-    (* | setfst : FunX [ "p" ∷ ptr, "x" ∷ ty.int ] ty.unit *)
+    (* | setfst : FunX [ "p" ∷ ptr; "x" ∷ ty.int ] ty.unit *)
     | setsnd : FunX [ "p" ∷ ptr; "xs" ∷ llist ] ty.unit
     .
 
     Definition 𝑭  : PCtx -> Ty -> Set := Fun.
     Definition 𝑭𝑿 : PCtx -> Ty -> Set := FunX.
 
+    (* The ghost lemmas for opening and closing the recursive linked list
+       predicate ptstolist. This predicate is defined later in this file, but
+       since the ghost lemmas are used in statements, their signatures are
+       already defined here. *)
     Inductive Lem : NCtx 𝑿 Ty -> Set :=
     | open_nil      : Lem [ ]
     | open_cons     : Lem [ "p" ∷ ptr ]
@@ -102,6 +128,8 @@ Module Import ExampleProgram <: Program DefaultBase.
 
   End FunDeclKit.
 
+  (* A mixin provided by the library pulling in definitions of statements etc.
+     which rely on the declared functions and ghost lemmas. *)
   Include FunDeclMixin DefaultBase.
 
   Section FunDefKit.
@@ -114,6 +142,9 @@ Module Import ExampleProgram <: Program DefaultBase.
 
     Notation "'lemma' f args" := (stm_lemma f args%env) (at level 10, f at next level) : exp_scope.
 
+    (* The append function, taking two linked lists [p],[q] and appending [q] to
+       [p] by destructively updating the last heap-allocated pair. Both lists
+       are allowed to be empty. *)
     Definition fun_append : Stm [ "p" ∷ llist; "q" ∷ llist ] llist :=
       match: exp_var "p" with
       | inl "x" =>
@@ -124,6 +155,9 @@ Module Import ExampleProgram <: Program DefaultBase.
         exp_var "q"
       end.
 
+    (* The loop that recurses to the last pair. The first argument needs to be a
+       valid address pointing to a pair, i.e. it represents a non-empty linked
+       list. *)
     Definition fun_appendloop : Stm [ "p" ∷ ptr; "q" ∷ llist ] ty.unit :=
       lemma open_cons [exp_var "p"] ;;
       let: "mbn" := foreign snd (exp_var "p") in
@@ -131,10 +165,13 @@ Module Import ExampleProgram <: Program DefaultBase.
       | inl "x" => call appendloop (exp_var "x") (exp_var "q")
       | inr "tt" =>
           lemma close_nil [exp_var "tt"] ;;
+          (* Do the destructive update. *)
           foreign setsnd (exp_var "p") (exp_var "q")
       end;;
       lemma close_cons [exp_var "p"].
 
+    (* An example with the first lemma call removed. The intention is to demonstrate
+       the error reporting capabilities of the library. *)
     Definition fun_appendloop_broken : Stm [ "p" ∷ ptr; "q" ∷ llist ] ty.unit :=
       (* lemma open_cons [exp_var "p"] ;; *)
       let: "mbn" := foreign snd (exp_var "p") in
@@ -146,6 +183,7 @@ Module Import ExampleProgram <: Program DefaultBase.
       end;;
       lemma close_cons [exp_var "p"].
 
+    (* A recursive function calculating the length of a heap-allocated list. *)
     Definition fun_length : Stm [ "p" ∷ llist ] ty.int :=
       match: exp_var "p" with
       | inl "x" =>
@@ -160,6 +198,8 @@ Module Import ExampleProgram <: Program DefaultBase.
         stm_val ty.int 0%Z
       end.
 
+    (* Make a deep copy of a linked list, i.e. allocate new pairs that hold
+       the same elements in the same order as the given list. *)
     Definition fun_copy : Stm [ "p" ∷ llist ] llist :=
       match: exp_var "p" with
       | inl "x" =>
@@ -178,10 +218,14 @@ Module Import ExampleProgram <: Program DefaultBase.
         exp_val llist (inr tt)
       end.
 
+    (* In-place reversing of a linked list. This changes the order of all
+       pointers in the list, destructively updating the given list. *)
     Definition fun_reverse : Stm [ "p" ∷ llist ] llist :=
       lemma open_nil [] ;;
       call reverseloop (exp_var "p") (exp_val llist (inr tt)).
 
+    (* The loop for the reversal with an accumulator [q]. This reverses [p]
+       and appends [q] to that result. *)
     Definition fun_reverseloop : Stm [ "p" ∷ llist; "q" ∷ llist ] llist :=
       match: exp_var "p" with
       | inl "x" =>
@@ -195,6 +239,8 @@ Module Import ExampleProgram <: Program DefaultBase.
         exp_var "q"
       end.
 
+    (* Combine all the separately-defined function bodies into a single map from
+       function names to their bodies. *)
     Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
       match f in Fun Δ τ return Stm Δ τ with
       | append     => fun_append
@@ -207,17 +253,30 @@ Module Import ExampleProgram <: Program DefaultBase.
 
   End FunDefKit.
 
+  (* We pull in the default implementation of a store for registers. *)
   Include DefaultRegStoreKit DefaultBase.
 
+  (* In this section we define the foreign functions. *)
   Section ForeignKit.
 
     Import iris.proofmode.tactics.
+
+    (* The type of memory we use for this example. A mapping from addresses
+       represented as integers to pairs. *)
     Definition Memory : Set := gmap Z (Z * (Z + unit)).
 
-    Equations(noeqns) ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
+    (* This defines a "stepping relation" for the foreign functions. Since all
+       these functions are deterministic, we write them in a functional instead
+       of a relational style. *)
+    Equations(noeqns) ForeignCall {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs)
+      (res : string + Val σ) (γ γ' : RegStore) (μ μ' : Memory) : Prop :=
+      (* mkcons allocates a new pair and initializes it with the given values
+         [x] and [xs]*)
       ForeignCall mkcons (env.snoc (env.snoc env.nil _ x) _ xs) res γ γ' μ μ' :=
+        (* Determinate the next free address. *)
         let next := infinite_fresh (elements (dom (gset Z) μ)) in
         γ' = γ /\
+        (* Allocate the pair at [next]. *)
         μ' = (<[next := (x, xs)]> μ) /\
         res = inr next;
       ForeignCall fst (env.snoc env.nil _ z) res γ γ' μ μ' :=
@@ -236,6 +295,7 @@ Module Import ExampleProgram <: Program DefaultBase.
         | Some (elem, _) => γ' = γ /\  μ' = <[z := (elem, xs)]> μ /\ res = inr tt
         end.
 
+    (* Show the progress of the foreign function stepping relation. *)
     Lemma ForeignProgress {σs σ} (f : 𝑭𝑿 σs σ) (args : NamedEnv Val σs) γ μ :
       exists γ' μ' res, ForeignCall f args res γ γ' μ μ'.
     Proof.
@@ -261,15 +321,21 @@ Module Import ExampleProgram <: Program DefaultBase.
 
 End ExampleProgram.
 
+(* These are user-defined pure predicates that we use to encode the functional
+   correctness of some of the linked list functions that are otherwise not
+   encodable in the assertion language. The assertion language has a primitive
+   list append, but no operators for the other functions. *)
 Inductive PurePredicate : Set :=
 | plength
 | preverse
 | preverseappend
 .
 
+(* The following datatype defines the spatial predicates that are used in the
+   example. *)
 Inductive Predicate : Set :=
-| ptstocons
-| ptstolist
+| ptstocons (* A points-to predicate for a single heap allocated pair. *)
+| ptstolist (* A points-to predicate for a heap allocated linked list. *)
 .
 
 Section TransparentObligations.
@@ -283,17 +349,23 @@ End TransparentObligations.
 Derive EqDec for PurePredicate.
 Derive EqDec for Predicate.
 
+(* The program logic signature contains all the necessary definitions
+   pertaining to user-defined pure and spatial predicates. These definitions
+   are enough to instantiate the assertion language for pre- and
+   postconditions used in function contracts. *)
 Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
   Module PROG := ExampleProgram.
   Import DefaultBase.
 
   Definition 𝑷 := PurePredicate.
+  (* Maps each pure predicate to a list of arguments with their types. *)
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
     match p with
     | plength => [ty.list ty.int; ty.int]
     | preverse => [ty.list ty.int; ty.list ty.int]
     | preverseappend => [ty.list ty.int; ty.list ty.int; ty.list ty.int]
     end.
+  (* Interprets a pure predicate name as a Coq proposition. *)
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
     | plength => fun xs l => Z.of_nat (Datatypes.length xs) = l
@@ -306,16 +378,21 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
   Section HeapPredicateDeclKit.
 
     Definition 𝑯 := Predicate.
+  (* Maps each spatial predicate to a list of arguments with their types. *)
     Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
       match p with
       | ptstocons => [ptr; ty.int; llist]
       | ptstolist => [llist; ty.list ty.int]
       end.
     Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
+
+    (* None of the predicates is duplicable. *)
     Global Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
       {| is_duplicable p := false |}.
 
     Local Arguments Some {_} &.
+    (* Defines precieness for both predicates. The address forms the input
+       in both cases and the pointed-to values are the outputs. *)
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
       | ptstocons => Some (MkPrecise [ptr] [ptr; llist] eq_refl)
@@ -324,15 +401,19 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
 
   End HeapPredicateDeclKit.
 
+  (* A mixin that defines Formulas, Chunks and assertions to write contract. *)
   Include ContractDeclMixin DefaultBase ExampleProgram.
+  (* A mixin that defines Worlds and symbolic propositions for the executor. *)
   Include SpecificationMixin DefaultBase ExampleProgram.
 End ExampleSignature.
 
+(* The specification module contains the contracts for all μSail and foreign functions. *)
 Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature.
   Section ContractDefKit.
 
     Import ctx.resolution.
 
+    (* We define notatiosn for more convenience. *)
     Local Notation "p '↦l' xs" := (asn_chunk (chunk_user ptstolist (env.nil ► (llist ↦ p) ► (ty.list ty.int ↦ xs)))) (at level 70).
     Local Notation "p '∗' q" := (asn_sep p q).
     Local Notation "p '↦p' ( x , xs )" := (asn_chunk (chunk_user ptstocons (env.nil ► (ptr ↦ p) ► (ty.int ↦ x) ► (llist ↦ xs)))) (at level 70).
@@ -482,6 +563,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
            asn_formula (formula_eq (term_var "xs") (term_val (ty.list ty.int) nil))
       |}.
 
+    (* The following maps μSail function names to their contracts. *)
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
         match f with
@@ -493,6 +575,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
         | reverseloop => Some (sep_contract_reverseloop)
         end.
 
+    (* And this definition maps foreign functions to their contracts. *)
     Definition CEnvEx : SepContractEnvEx :=
       fun Δ τ f =>
         match f with
@@ -502,6 +585,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
         | setsnd => sep_contract_setsnd
         end.
 
+    (* And finally a mapping from ghost lemmas to the entailments they encode. *)
     Definition LEnv : LemmaEnv :=
       fun Δ l =>
         match l with
@@ -515,12 +599,18 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
 
 End ExampleSpecification.
 
+(* The SolverKit module is the user-defined part of the solver that is linked
+   with a generic part in MakeSolver. Here we can automatically simplify or
+   solve the user-defined predicate case of formulas. We also prove correctness
+   by showing that all runs of the simplifier produce unsolved residual formulas
+   (that are hopefully simpler) that are equivalent to the input. *)
 Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
 
   Local Unset Implicit Arguments.
   Set Equations Transparent.
   Import ListNotations.
 
+  (* Simplification of the [plength] predicate with arguments [xs] and [n]. *)
   Equations simplify_plength {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) : option (List Formula Σ) :=
   | term_binop bop.cons x xs | term_binop bop.plus (term_val ?(ty.int) 1%Z) n :=
     Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list;
@@ -528,6 +618,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
   | xs          | n          :=
     Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list.
 
+  (* Prove that the simplifier of [plength] is sound and complete. *)
   Goal True. idtac "Timing before: llist/simplify_plength_spec". Abort.
   Lemma simplify_plength_spec {Σ} (xs : Term Σ (ty.list ty.int)) (n : Term Σ ty.int) :
     let f := formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n)) in
@@ -547,6 +638,8 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
   Qed.
   Goal True. idtac "Timing after: llist/simplify_plength_spec". Abort.
 
+  (* Simplification of the [preverseappend] predicate with arguments [xs], [ys],
+     and [zs]. *)
   Equations simplify_preverseappend {Σ} (xs ys zs: Term Σ (ty.list ty.int)) : option (List Formula Σ) :=
   (* | term_binop binop_cons x xs | term_binop binop_plus (term_val ?(ty.int) 1%Z) n := *)
   (*   Some [formula_user plength (env.nil ► (_ ↦ xs) ► (ty.int ↦ n))]%list; *)
@@ -556,6 +649,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
   | xs | ys | zs          :=
     Some [formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_  ↦ ys) ► (_  ↦ zs))]%list.
 
+  (* Prove that the simplifier of [preverseappend] is sound and complete. *)
   Goal True. idtac "Timing before: llist/simplify_preverseappend_spec". Abort.
   Lemma simplify_preverseappend_spec {Σ} (xs ys zs : Term Σ (ty.list ty.int)) :
     let f := formula_user preverseappend (env.nil ► (_ ↦ xs) ► (_ ↦ ys) ► (_ ↦ zs)) in
@@ -576,6 +670,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
   Qed.
   Goal True. idtac "Timing after: llist/simplify_preverseappend_spec". Abort.
 
+  (* Combined the solvers to a solver for the [formula_user] case. *)
   Definition solve_user : SolverUserOnly :=
     fun Σ p =>
       match p with
@@ -592,6 +687,7 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
             simplify_preverseappend xs ys zs
       end.
 
+  (* Combine the correctness proofs. *)
   Lemma solve_user_spec : SolverUserOnlySpec solve_user.
   Proof.
     intros Σ p ts.
@@ -602,6 +698,8 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
     - apply simplify_preverseappend_spec.
   Qed.
 
+  (* Lift the solver for the [formula_user] case to a solver over any set
+     of formulas. *)
   Definition solver : Solver :=
     solveruseronly_to_solver solve_user.
   Lemma solver_spec : SolverSpec solver.
@@ -612,6 +710,8 @@ Module ExampleSolverKit <: SolverKit DefaultBase ExampleSignature.
 End ExampleSolverKit.
 Module ExampleSolver := MakeSolver DefaultBase ExampleSignature ExampleSolverKit.
 
+(* Use the specification and the solver module to compose the symbolic executor
+   and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
   MakeExecutor DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
 
@@ -631,41 +731,57 @@ Section DebugExample.
 
 End DebugExample.
 
-Goal True. idtac "Timing before: llist/valid_contract_append". Abort.
-Lemma valid_contract_append : Symbolic.ValidContractReflect sep_contract_append fun_append.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_append". Abort.
+(* In this section we use the symbolic VCG to verify the contracts of all the
+   μSail functions. In this case, the automation provided by the user-defined
+   and generic solvers, and the explicit ghost lemma invocations in the function
+   definition provide enough instructions to solve the verification conditions
+   fully automatically. We therefore use the reflective version of the VCGs
+   [ValidContractReflect] and prove each VC by reflexivity. *)
+Section ContractVerification.
 
-Goal True. idtac "Timing before: llist/valid_contract_appendloop". Abort.
-Lemma valid_contract_appendloop : Symbolic.ValidContractReflect sep_contract_appendloop fun_appendloop.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_appendloop". Abort.
+  Goal True. idtac "Timing before: llist/valid_contract_append". Abort.
+  Lemma valid_contract_append : Symbolic.ValidContractReflect sep_contract_append fun_append.
+  Proof. reflexivity. Qed.
+  Goal True. idtac "Timing after: llist/valid_contract_append". Abort.
 
-Goal True. idtac "Timing before: llist/valid_contract_length". Abort.
-Lemma valid_contract_length : Symbolic.ValidContractReflect sep_contract_length fun_length.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_length". Abort.
+  Goal True. idtac "Timing before: llist/valid_contract_appendloop". Abort.
+  Lemma valid_contract_appendloop : Symbolic.ValidContractReflect sep_contract_appendloop fun_appendloop.
+  Proof. reflexivity. Qed.
+  Goal True. idtac "Timing after: llist/valid_contract_appendloop". Abort.
 
-Goal True. idtac "Timing before: llist/valid_contract_copy". Abort.
-Lemma valid_contract_copy : Symbolic.ValidContractReflect sep_contract_copy fun_copy.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_copy". Abort.
+  Goal True. idtac "Timing before: llist/valid_contract_length". Abort.
+  Lemma valid_contract_length : Symbolic.ValidContractReflect sep_contract_length fun_length.
+  Proof. reflexivity. Qed.
+  Goal True. idtac "Timing after: llist/valid_contract_length". Abort.
 
-Goal True. idtac "Timing before: llist/valid_contract_reverse". Abort.
-Lemma valid_contract_reverse : Symbolic.ValidContractReflect sep_contract_reverse fun_reverse.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_reverse". Abort.
+  Goal True. idtac "Timing before: llist/valid_contract_copy". Abort.
+  Lemma valid_contract_copy : Symbolic.ValidContractReflect sep_contract_copy fun_copy.
+  Proof. reflexivity. Qed.
+  Goal True. idtac "Timing after: llist/valid_contract_copy". Abort.
 
-Goal True. idtac "Timing before: llist/valid_contract_reverseloop". Abort.
-Lemma valid_contract_reverseloop : Symbolic.ValidContractReflect sep_contract_reverseloop fun_reverseloop.
-Proof. reflexivity. Qed.
-Goal True. idtac "Timing after: llist/valid_contract_reverseloop". Abort.
+  Goal True. idtac "Timing before: llist/valid_contract_reverse". Abort.
+  Lemma valid_contract_reverse : Symbolic.ValidContractReflect sep_contract_reverse fun_reverse.
+  Proof. reflexivity. Qed.
+  Goal True. idtac "Timing after: llist/valid_contract_reverse". Abort.
 
+  Goal True. idtac "Timing before: llist/valid_contract_reverseloop". Abort.
+  Lemma valid_contract_reverseloop : Symbolic.ValidContractReflect sep_contract_reverseloop fun_reverseloop.
+  Proof. reflexivity. Qed.
+  Goal True. idtac "Timing after: llist/valid_contract_reverseloop". Abort.
+
+End ContractVerification.
+
+(* Also instantiate the shallow executor for the soundness proofs and the
+   statistics. *)
 Module Import ExampleShalExec :=
   MakeShallowExecutor DefaultBase ExampleSignature ExampleSpecification.
+(* Instantiate the operational semantics which is an input to the Iris model. *)
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
   MakeSemantics DefaultBase ExampleProgram.
 
+(* This module contains the instantiation of the Iris model. It contains the
+   definition of several user-defined modules that are inputs to the generic
+   module functors defined in the library. *)
 Module ExampleModel.
   Import ExampleProgram.
   Import ExampleSpecification.
@@ -674,6 +790,9 @@ Module ExampleModel.
     Include IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
   End ExampleIrisPrelims.
 
+  (* The construction of the model is split up into several steps. First, the
+     [IrisParameters] define the ghost state for memory which is then combined
+     with the ghost state for registers in the [IrisResources] module below. *)
   Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSignature ExampleSemantics ExampleIrisPrelims.
     Import ExampleIrisPrelims.
     Import iris.bi.interface.
@@ -684,7 +803,7 @@ Module ExampleModel.
 
     Class mcMemGS Σ :=
       McMemGS {
-          (* ghost variable for tracking state of registers *)
+          (* ghost variable for tracking the memory state. *)
           mc_ghGS :> gen_heapGS Z (Z * (Z + unit)) Σ;
           mc_invNs : namespace
         }.
@@ -736,6 +855,10 @@ Module ExampleModel.
     Include IrisResources DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
   End ExampleIrisResources.
 
+  (* After instantiating [IrisResources] we have access to the Iris base logic
+     with the given ghost state and can interpret the user-defined predicates in
+     this logic. This is then provided to the library as part of the
+     [IrisPredicates] module. *)
   Section Predicates.
     Import iris.bi.interface.
     Import iris.bi.big_op.
@@ -744,9 +867,11 @@ Module ExampleModel.
     Import iris.proofmode.tactics.
     Import ExampleIrisParameters.
 
+    (* This is the interpretation of the points to pair predicate in Iris. *)
     Definition ptstocons_interp `{mG : memGS Σ} (p : Z) (v : Z) (n : Z + unit) : iProp Σ :=
       (mapsto (hG := mc_ghGS (mcMemGS := mG)) p (DfracOwn 1) (pair v n))%I.
 
+    (* This is the recursive definition of the points to list predicate in Iris. *)
     Fixpoint ptstolist_interp `{mG : memGS Σ} (p : Z + unit) (vs : list Z) : iProp Σ :=
       match vs with
       | nil => ⌜p = inr tt⌝
@@ -754,32 +879,53 @@ Module ExampleModel.
       end.
   End Predicates.
 
+  (* This module packages the interpretation of the user-defined predicates
+     to instantiate the rest of the Iris model. *)
   Module ExampleIrisPredicates <: IrisPredicates DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources.
     Import ExampleIrisPrelims.
     Import ExampleIrisParameters.
     Import iris.base_logic.lib.iprop.
 
+    (* Pattern match on the generic representation of abstract predicates map them
+       to their Iris definition. *)
     Definition luser_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
       (match p return Env Val (𝑯_Ty p) -> iProp Σ with
       | ptstocons => fun ts => ptstocons_interp (mG := mG) (env.head (env.tail (env.tail ts))) (env.head (env.tail ts)) (env.head ts)
       | ptstolist => fun ts => ptstolist_interp (mG := mG) (env.head (env.tail ts)) (env.head ts)
        end) ts.
 
+    (* This definition verifies the soundness if duplicability. However, this
+       example does not contain any predicates marked as duplicable and therefore
+       the proof is trivial *)
     Definition lduplicate_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
       is_duplicable p = true -> luser_inst mG p ts -∗ luser_inst mG p ts ∗ luser_inst mG p ts.
     Proof.
       destruct p; now cbn.
     Qed.
+
   End ExampleIrisPredicates.
 
   Import ExampleIrisParameters.
   Import ExampleIrisResources.
 
+  (* At this point we have enough information to instantiate the program logic
+     of Iris. *)
   Include IrisInstance DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
+
+  (* Include our axiomatic program logic. Note that the program logic is
+     parameterized over a given set of contracts while the Iris program logic in
+     [IrisInstance] is constructed from the operational semantics without
+     refering to contracts at all. The [IrisInstanceWithContracts] of the
+     library links the two by showing that all axiomatic program logic rules are
+     admissible, provided all the function contracts hold. We split up the
+     construction of the model in this way to allow combinations of multiple
+     different set of contracts for a single program. *)
   Include ProgramLogicOn DefaultBase ExampleSignature ExampleSpecification.
   Include IrisInstanceWithContracts DefaultBase ExampleSignature ExampleSpecification ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
 
+  (* In this section we verify the contracts of the foreign functions defined in
+     Coq and the entailments encoded in ghost lemmas using Iris Proof Mode. *)
   Section WithIrisNotations.
     Import iris.bi.interface.
     Import iris.bi.big_op.
@@ -967,8 +1113,9 @@ Module ExampleModel.
 
   End WithIrisNotations.
 
+  (* Import the soundness proofs for the shallow and symbolic executors. *)
   Include Shallow.Soundness.Soundness DefaultBase ExampleSignature ExampleSpecification ExampleShalExec.
-  Include Soundness DefaultBase ExampleSignature ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
+  Include Symbolic.Soundness.Soundness DefaultBase ExampleSignature ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
 
   Section WithIrisNotations.
     Import iris.bi.interface.
@@ -977,6 +1124,7 @@ Module ExampleModel.
     Import iris.program_logic.weakestpre.
     Import iris.base_logic.lib.gen_heap.
 
+  (* Show that all the contracts are sound in the Iris model. *)
   Lemma linked_list_sound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
   Proof.
     apply (sound foreignSem lemSem).
@@ -999,12 +1147,15 @@ Module ExampleModel.
   End WithIrisNotations.
 End ExampleModel.
 
+(* This tactic calculates the number of different execution branches explored by
+   the shallow and symbolic executor for the body of the function [fn]. *)
 Ltac calcstats fn :=
   let smb := eval compute in (Symbolic.Statistics.calc fn) in
   let shl := Shallow.Statistics.calc fn in
   let row := constr:(pair fn (pair shl smb)) in
   idtac row.
 
+(* We print the statistics for every μSail function defined in the program. *)
 Goal forall {Δ τ} (f : Fun Δ τ), f = f.
   idtac "Branching statistics:".
   destruct f;
