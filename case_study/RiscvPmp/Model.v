@@ -90,8 +90,7 @@ Module RiscvPmpModel.
     Class mcMemGS Σ :=
       McMemGS {
           (* ghost variable for tracking state of registers *)
-          mc_ghGS :> gh.gen_heapGS Addr MemVal Σ;
-          mc_invNs : namespace
+          mc_ghGS :> gh.gen_heapGS Addr MemVal Σ
         }.
 
     Definition memGpreS : gFunctors -> Set := fun Σ => gh.gen_heapGpreS Z MemVal Σ.
@@ -134,13 +133,14 @@ Module RiscvPmpModel.
       iIntros (Σ μ gHP).
 
       iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Addr) (V := MemVal) empty) as (gH) "[inv _]".
+
       pose (memmap := initMemMap μ).
       iMod (gen_heap_alloc_big empty memmap (map_disjoint_empty_r memmap) with "inv") as "(inv & res & _)".
       iModIntro.
 
       rewrite (right_id empty union memmap).
 
-      iExists (McMemGS gH (nroot .@ "addr_inv")).
+      iExists (McMemGS gH).
       iFrame.
       iExists memmap.
       iFrame.
