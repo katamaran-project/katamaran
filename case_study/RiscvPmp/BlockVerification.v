@@ -1618,16 +1618,44 @@ Module BlockVerificationDerived2Sound.
 
   Import ModalNotations.
 
-  (* Lemma refine_exec_triple_addr {Σ} (b : list AST) *)
-  (*   (req : □ (STerm ty_xlenbits -> Assertion) Σ) *)
-  (*   (ens : (□ (STerm ty_xlenbits -> STerm ty_xlenbits -> Assertion)) Σ) *)
-  (*   (req__c : Val ty_xlenbits -> Prop) *)
-  (*   (ens__c : Val ty_xlenbits -> Val ty_xlenbits -> Prop) : *)
-  (*   forall {ι0 : Valuation Σ} (Hpc0 : instpc (wco Σ) ι0), *)
-  (*     refine ι0 req req__c -> *)
-  (*     refine ι0 (@BlockVerificationDerived2.exec_triple_addr Σ req b ens) *)
-  (*       (exec_triple_addr__c req__c b ens__c). *)
-  (* Proof. *)
+  Lemma refine_exec_triple_addr {Σ : World}
+    (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
+    (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) :
+    forall {ι0 : Valuation Σ} (Hpc0 : instpc (wco Σ) ι0),
+      refine ι0 (@BlockVerificationDerived2.exec_triple_addr Σ req b ens)
+        (exec_triple_addr__c ι0 req b ens).
+  Proof.
+    intros ι0 Hpc0.
+    unfold BlockVerificationDerived2.exec_triple_addr, exec_triple_addr__c.
+    eapply refine_bind.
+    { eapply refine_demonic; auto. }
+    intros w1 ω1 ι1 -> Hpc1 a ? ->.
+    eapply refine_bind.
+    { eapply refine_produce; auto.
+      cbn.
+      now rewrite inst_subst, inst_sub_wk1.
+    }
+    intros w2 ω2 ι2 -> Hpc2 [] [] _.
+    eapply refine_bind.
+    {eapply refine_exec_block_addr; auto;
+        unfold refine, RefineTermVal, RefineInst in *;
+        change (persist__term a ω2) with (persist a ω2);
+        now rewrite inst_persist.
+    }
+    intros w3 ω3 ι3 -> Hpc3 na ? ->.
+    eapply refine_consume; auto.
+    cbn -[sub_wk1].
+    now rewrite ?inst_subst, ?inst_sub_wk1.
+    cbn [acc_snoc_left sub_acc].
+    refine (eq_trans _ (eq_sym (inst_sub_snoc ι3 (sub_snoc (sub_acc (ω1 ∘ ω2 ∘ ω3)) ("a"∷ty_exc_code) (persist__term a (ω2 ∘ ω3))) ("an"::ty_exc_code) na))).
+    f_equal.
+    rewrite inst_sub_snoc.
+    rewrite <-?inst_subst.
+    rewrite H, ?sub_acc_trans.
+    repeat f_equal.
+    change (persist__term a (ω2 ∘ ω3)) with (persist a (ω2 ∘ ω3)).
+    now rewrite inst_persist, sub_acc_trans, inst_subst.
+  Qed.
 
 End BlockVerificationDerived2Sound.
 
