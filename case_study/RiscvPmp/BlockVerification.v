@@ -991,23 +991,24 @@ Module BlockVerificationDerived2.
       end.
 
   Definition exec_double_addr {Σ : World}
-    (req : (□ (STerm ty_xlenbits -> Assertion)) Σ) (b : list AST) : M (STerm ty_xlenbits) Σ :=
+    (req : Assertion (Σ ▻ ("a":: ty_xlenbits))) (b : list AST) : M (STerm ty_xlenbits) Σ :=
     ω1 ∣ an <- @demonic _ _ ;;
-    ω2 ∣ _ <- T (produce (req _ ω1 an)) ;;
+    ω2 ∣ _ <- produce (w := wsnoc _ _) req (acc_snoc_left ω1 _ an);;
     @exec_block_addr b _ (persist__term an ω2) (persist__term an ω2).
 
   Definition exec_triple_addr {Σ : World}
-    (req : □ (STerm ty_xlenbits -> Assertion) Σ) (b : list AST)
-    (ens : (□ (STerm ty_xlenbits -> STerm ty_xlenbits -> Assertion)) Σ) : M Unit Σ :=
+    (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
+    (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) : M Unit Σ :=
     ω1 ∣ a <- @demonic _ _ ;;
-    ω2 ∣ _ <- T (produce (req _ ω1 a)) ;;
+    ω2 ∣ _ <- produce (w := wsnoc _ _) req (acc_snoc_left ω1 _ a) ;;
     ω3 ∣ na <- @exec_block_addr b _ (persist__term a ω2) (persist__term a ω2) ;;
-    T (consume (ens _ (ω1 ∘ ω2 ∘ ω3) (persist__term a (ω2 ∘ ω3)) na)).
+    consume (w := wsnoc (wsnoc _ ("a"::ty_xlenbits)) ("an"::ty_xlenbits)) ens
+      (acc_snoc_left (acc_snoc_left (ω1 ∘ ω2 ∘ ω3) _ (persist__term a (ω2 ∘ ω3))) ("an"::ty_xlenbits) na).
 
   (* This is a VC for triples, for doubles we probably need to talk
      about the continuation of a block. *)
-  Definition VC__addr {Σ : LCtx} (req : □ (STerm ty_xlenbits -> Assertion) {| wctx := Σ; wco := nil |}) (b : list AST)
-    (ens : (□ (STerm ty_xlenbits -> STerm ty_xlenbits -> Assertion)) {| wctx := Σ; wco := nil |}) : 𝕊 ε :=
+  Definition VC__addr {Σ : LCtx} (req : Assertion {| wctx := Σ ▻ ("a":: ty_xlenbits); wco := nil |}) (b : list AST)
+    (ens : Assertion {| wctx := Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits); wco := nil |}) : 𝕊 ε :=
     SymProp.demonic_close
       (@exec_triple_addr
          {| wctx := Σ; wco := nil |}
@@ -1090,16 +1091,13 @@ Module BlockVerificationDerived2.
 
       Let Σ1 : LCtx := ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
 
-      Example pre1' : □ (STerm ty_xlenbits -> Assertion)  {| wctx := Σ1 ; wco := nil |} :=
-        fun _ ω a =>
-        persist (A := Assertion) (x1 ↦r term_var "x") ω ∗
-        persist (A := Assertion) (x2 ↦r term_var "y") ω.
+      Example pre1' : Assertion  {| wctx := Σ1 ▻ ("a"::ty_xlenbits) ; wco := nil |} :=
+        (x1 ↦r term_var "x") ∗ x2 ↦r term_var "y".
 
-      Example post1' : □ (STerm ty_xlenbits -> STerm ty_xlenbits -> Assertion)  {| wctx := Σ1 ; wco := nil |} :=
-        fun _ ω a an =>
-          persist (A := Assertion) (x1 ↦r term_var "y") ω ∗
-          persist (A := Assertion) (x2 ↦r term_var "x") ω ∗
-          asn_formula (formula_eq an (term_binop bop.plus a (term_val _ (Z.of_nat 12 : Val ty.int)))).
+      Example post1' : Assertion  {| wctx := Σ1 ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := nil |} :=
+          x1 ↦r term_var "y" ∗
+          x2 ↦r term_var "x" ∗
+          asn_formula (formula_eq (term_var "an") (term_binop bop.plus (term_var "a") (term_val _ (Z.of_nat 12 : Val ty.int)))).
 
     End ContractAddr.
 
@@ -1228,9 +1226,8 @@ Module BlockVerificationDerived2.
       {| L := false; A := OFF; X := false; W := false; R := false |}.
 
     (* DOMI: TODO: replace the pointsto chunk for 84 ↦ 42 with a corresponding invariant *)
-    Example femtokernel_init_pre : □ (WTerm ty_xlenbits -> Assertion) W__femtoinit :=
-      fun _ _ a =>
-        (a = term_val ty_word 0) ∗
+    Example femtokernel_init_pre : Assertion {| wctx := [] ▻ ("a"::ty_xlenbits) ; wco := nil |} :=
+        (term_var "a" = term_val ty_word 0) ∗
       (∃ "v", mstatus ↦ term_var "v") ∗
       (∃ "v", mtvec ↦ term_var "v") ∗
       (∃ "v", mcause ↦ term_var "v") ∗
@@ -1247,13 +1244,12 @@ Module BlockVerificationDerived2.
       (pmp1cfg ↦ term_val ty_pmpcfg_ent femtokernel_default_pmpcfg)  ∗
       (∃ "v", pmpaddr0 ↦ term_var "v") ∗
       (∃ "v", pmpaddr1 ↦ term_var "v") ∗
-      (a + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42)%exp.
+      (term_var "a" + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42)%exp.
 
-    Example femtokernel_init_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femtoinit :=
-      fun _ _ a na =>
+    Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := nil |} :=
       (
         (∃ "v", mstatus ↦ term_var "v") ∗
-          (mtvec ↦ (a + term_val ty_xlenbits 72)) ∗
+          (mtvec ↦ (term_var "a" + term_val ty_xlenbits 72)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
           cur_privilege ↦ term_val ty_privilege User ∗
@@ -1266,10 +1262,10 @@ Module BlockVerificationDerived2.
           (∃ "v", x7 ↦ term_var "v") ∗
           (pmp0cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
           (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
-          (pmpaddr0 ↦ a + term_val ty_xlenbits 88) ∗
+          (pmpaddr0 ↦ term_var "a" + term_val ty_xlenbits 88) ∗
           (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
-          (a + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42) ∗
-          asn_formula (formula_eq na (a + term_val ty_xlenbits 88))
+          (term_var "a" + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42) ∗
+          asn_formula (formula_eq (term_var "an") (term_var "a" + term_val ty_xlenbits 88))
       )%exp.
 
     (* note that this computation takes longer than directly proving sat__femtoinit below *)
@@ -1306,13 +1302,12 @@ Module BlockVerificationDerived2.
     Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].
     Let W__femtohandler : World := MkWorld Σ__femtohandler [].
 
-    Example femtokernel_handler_pre : □ (WTerm ty_xlenbits -> Assertion) W__femtohandler :=
-      fun _ ω a =>
-        (asn_eq a (term_val ty_word 72)) ∗
-      (mstatus ↦ term_record rmstatus [ persist__term (term_var "mpp") ω ]) ∗
+    Example femtokernel_handler_pre : Assertion {| wctx := ["epc"::ty_exc_code; "mpp"::ty_privilege; "a" :: ty_xlenbits]; wco := nil |} :=
+        (asn_eq (term_var "a") (term_val ty_word 72)) ∗
+      (mstatus ↦ term_record rmstatus [ term_var "mpp" ]) ∗
       (mtvec ↦ term_val ty_word 72) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
-      (mepc ↦ persist__term (term_var "epc") ω) ∗
+      (mepc ↦ term_var "epc") ∗
       cur_privilege ↦ term_val ty_privilege Machine ∗
       (∃ "v", x1 ↦ term_var "v") ∗
       (∃ "v", x2 ↦ term_var "v") ∗
@@ -1323,18 +1318,17 @@ Module BlockVerificationDerived2.
       (∃ "v", x7 ↦ term_var "v") ∗
       (pmp0cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
       (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
-      (pmpaddr0 ↦ a + term_val ty_xlenbits 16) ∗
+      (pmpaddr0 ↦ term_var "a" + term_val ty_xlenbits 16) ∗
       (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
-      (a + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42)%exp.
+      (term_var "a" + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42)%exp.
 
-    Example femtokernel_handler_post : □ (WTerm ty_xlenbits -> WTerm ty_xlenbits -> Assertion) W__femtohandler :=
-      fun _ ω a na =>
+    Example femtokernel_handler_post : Assertion {| wctx := ["epc"::ty_exc_code; "mpp"::ty_privilege; "a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := nil |} :=
       (
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word 72) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
-          (mepc ↦ persist__term (term_var "epc") ω) ∗
-          cur_privilege ↦ persist__term (term_var "mpp") ω ∗
+          (mepc ↦ term_var "epc") ∗
+          cur_privilege ↦ term_var "mpp" ∗
           (∃ "v", x1 ↦ term_var "v") ∗
           (∃ "v", x2 ↦ term_var "v") ∗
           (∃ "v", x3 ↦ term_var "v") ∗
@@ -1344,10 +1338,10 @@ Module BlockVerificationDerived2.
           (∃ "v", x7 ↦ term_var "v") ∗
           (pmp0cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent0) ∗
           (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
-          (pmpaddr0 ↦ a + term_val ty_xlenbits 16) ∗
+          (pmpaddr0 ↦ term_var "a" + term_val ty_xlenbits 16) ∗
           (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
-          (a + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42) ∗
-          asn_formula (formula_eq na (persist__term (term_var "epc") ω))
+          (term_var "a" + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42) ∗
+          asn_formula (formula_eq (term_var "an") (term_var "epc"))
       )%exp.
 
     Time Example t_vc__femtohandler : 𝕊 [] :=
@@ -1608,20 +1602,19 @@ Module BlockVerificationDerived2Sound.
       { reflexivity. }
   Qed.
 
-  (* DOMI: Prop is the wrong thing here: but what is the right thing? HProp for `{PredicateDef HProp}? *)
-  Definition exec_double_addr__c
-    (req : (Val ty_xlenbits -> Prop)) (b : list AST) : M (Val ty_xlenbits) :=
+  Definition exec_double_addr__c {Σ : World} (ι : Valuation Σ)
+    (req : Assertion (wsnoc Σ ("a"::ty_xlenbits))) (b : list AST) : M (Val ty_xlenbits) :=
     an <- @demonic _ ;;
-    _ <- assume (req an) ;;
+    _ <- produce (env.snoc ι ("a"::ty_xlenbits) an) req ;;
     @exec_block_addr__c b an an.
 
-  Definition exec_triple_addr__c
-    (req : Val ty_xlenbits -> Prop) (b : list AST)
-    (ens : Val ty_xlenbits -> Val ty_xlenbits -> Prop) : M unit :=
+  Definition exec_triple_addr__c {Σ : World} (ι : Valuation Σ)
+    (req : Assertion (Σ ▻ ("a"::ty_xlenbits))) (b : list AST)
+    (ens : Assertion (Σ ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits))) : M unit :=
     a <- @demonic _ ;;
-    _ <- assume (req a) ;;
+    _ <- produce (ι ► ( _ ↦ a )) req ;;
     na <- @exec_block_addr__c b a a ;;
-    assert (ens a na).
+    consume (ι ► ( ("a"::ty_xlenbits) ↦ a ) ► ( ("an"::ty_xlenbits) ↦ na )) ens.
 
   Import ModalNotations.
 
@@ -1686,22 +1679,22 @@ Module BlockVerificationDerived2Sem.
   Lemma sound_exec_triple_addr `{sailGS Σ} {Γ} {pre post instrs} {ι} :
     SymProp.safe
       (exec_triple_addr (Σ := Γ) pre instrs post (λ w1 _ _ _ _ , SymProp.block) [env] []%list) ι ->
-    ⊢ semTripleBlock (λ a : Z, interpret_assertion (T pre (term_val ty_exc_code a)) ι) instrs
-      (λ a na : Z, interpret_assertion (T post (term_val ty_exc_code a) (term_val ty_exc_code na)) ι).
+    ⊢ semTripleBlock (λ a : Z, interpret_assertion pre (ι.[("a"::ty_xlenbits) ↦ a])) instrs
+      (λ a na : Z, interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
   Proof.
   Admitted.
 
   Lemma sound_VC__addr `{sailGS Σ} {Γ} {pre post instrs} :
     safeE (simplify (BlockVerificationDerived2.VC__addr (Σ := Γ) pre instrs post)) ->
     forall ι,
-    ⊢ semTripleBlock (fun a => interpret_assertion (T pre (term_val ty_xlenbits a%Z)) ι)
+    ⊢ semTripleBlock (fun a => interpret_assertion pre (ι.[("a"::ty_xlenbits) ↦ a]))
       instrs
-      (fun a na => interpret_assertion (T post (term_val ty_xlenbits a%Z) (term_val ty_xlenbits na%Z)) ι).
+      (fun a na => interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
   Proof.
     intros Hverif%(safeE_safe env.nil)%simplify_sound ι.
     rewrite SymProp.safe_demonic_close in Hverif.
     specialize (Hverif ι).
-    now apply sound_exec_triple_addr.
+    exact (sound_exec_triple_addr Hverif).
   Qed.
 
   Definition advAddrs := seqZ 88 (maxAddr - 88 + 1).
