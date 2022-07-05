@@ -987,7 +987,7 @@ Module BlockVerificationDerived2.
       | cons i b' =>
         ω1 ∣ _ <- assert (formula_eq ainstr apc) ;;
         ω2 ∣ apc' <- exec_instruction_any i (persist__term apc ω1) ;;
-        @exec_block_addr b' _ apc' (term_binop bop.plus (persist__term ainstr (ω1 ∘ ω2)) (term_val ty_xlenbits 4))
+        @exec_block_addr b' _ (term_binop bop.plus (persist__term ainstr (ω1 ∘ ω2)) (term_val ty_xlenbits 4)) apc'
       end.
 
   Definition exec_double_addr {Σ : World}
@@ -1291,8 +1291,8 @@ Module BlockVerificationDerived2.
 
     Lemma sat__femtoinit : safeE vc__femtoinit.
     Proof.
-      vm_compute. constructor. vm_compute. intros. auto.
-    Admitted.
+      constructor. vm_compute. intros. auto.
+    Qed.
 
     (* Even admitting this goes OOM :-) *)
     (* Lemma sat__femtoinit2 : SymProp.safe vc__femtoinit env.nil. *)
@@ -1369,7 +1369,7 @@ Module BlockVerificationDerived2.
     Lemma sat__femtohandler : safeE vc__femtohandler.
     Proof.
       constructor. vm_compute. intros. auto.
-    Admitted.
+    Qed.
 
   End FemtoKernel.
 
