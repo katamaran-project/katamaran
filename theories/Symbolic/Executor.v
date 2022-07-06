@@ -241,16 +241,16 @@ Module Type SymbolicExecOn
 
   End DebugInfo.
 
-  Module WorldInstance.
+  Module WorldValuation.
 
-    Record WInstance (w : World) : Set :=
-      MkWInstance
+    Record WValuation (w : World) : Set :=
+      MkWValuation
         { ιassign :> Valuation w;
           ιvalid  : instpc (wco w) ιassign;
         }.
 
-    Program Definition winstance_formula {w} (ι : WInstance w) (fml : Formula w) (p : inst (A := Prop) fml ι) :
-      WInstance (wformula w fml) :=
+    Program Definition winstance_formula {w} (ι : WValuation w) (fml : Formula w) (p : inst (A := Prop) fml ι) :
+      WValuation (wformula w fml) :=
       {| ιassign := ι; |}.
     Next Obligation.
     Proof.
@@ -259,8 +259,8 @@ Module Type SymbolicExecOn
       apply ιvalid.
     Qed.
 
-    Program Definition winstance_snoc {w} (ι : WInstance w) {b : 𝑺 ∷ Ty} (v : Val (type b)) :
-      WInstance (wsnoc w b) :=
+    Program Definition winstance_snoc {w} (ι : WValuation w) {b : 𝑺 ∷ Ty} (v : Val (type b)) :
+      WValuation (wsnoc w b) :=
       {| ιassign := env.snoc (ιassign ι) b v; |}.
     Next Obligation.
     Proof.
@@ -269,17 +269,17 @@ Module Type SymbolicExecOn
       apply ιvalid.
     Qed.
 
-    Program Definition winstance_subst {w} (ι : WInstance w) {x σ} {xIn : x∷σ ∈ w}
+    Program Definition winstance_subst {w} (ι : WValuation w) {x σ} {xIn : x∷σ ∈ w}
       (t : Term (w - x∷σ) σ) (p : inst t (env.remove (x∷σ) (ιassign ι) xIn) = env.lookup (ιassign ι) xIn) :
-      WInstance (wsubst w x t) :=
-      @MkWInstance (wsubst w x t) (env.remove _ (ιassign ι) xIn) _.
+      WValuation (wsubst w x t) :=
+      @MkWValuation (wsubst w x t) (env.remove _ (ιassign ι) xIn) _.
     Next Obligation.
       intros * p. cbn. rewrite inst_subst, <- inst_sub_shift in *.
       rewrite inst_sub_single_shift; auto using ιvalid.
     Qed.
 
-    Program Definition instacc {w0 w1} (ω01 : w0 ⊒ w1) : WInstance w1 -> WInstance w0 :=
-      match ω01 in (_ ⊒ w) return (WInstance w -> WInstance w0) with
+    Program Definition instacc {w0 w1} (ω01 : w0 ⊒ w1) : WValuation w1 -> WValuation w0 :=
+      match ω01 in (_ ⊒ w) return (WValuation w -> WValuation w0) with
       | acc_refl            => fun ι => ι
       | @acc_sub _ w1 ζ ent => fun ι1 => {| ιassign := inst ζ ι1; |}
       end.
@@ -291,7 +291,7 @@ Module Type SymbolicExecOn
       apply ιvalid.
     Qed.
 
-  End WorldInstance.
+  End WorldValuation.
 
   Definition PROP : TYPE :=
     fun _ => Prop.
@@ -378,9 +378,10 @@ Module Type SymbolicExecOn
     Definition demonic (x : option 𝑺) σ :
       ⊢ SPureSpecM (STerm σ) :=
       fun w k =>
-        let y := fresh w x in
-        demonicv
-          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
+        let ℓ  := fresh w x in
+        let w' := wsnoc w (ℓ∷σ) in
+        let ω  := acc_snoc_right in
+        demonicv (ℓ∷σ) (k w' ω (@term_var _ ℓ σ ctx.in_zero)).
     Global Arguments demonic x σ {w} k.
 
     Definition demonic_ctx {N : Set} (n : N -> 𝑺) :
