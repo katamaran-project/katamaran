@@ -357,6 +357,22 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase Contracts.RiscvPmpSi
       end.
 End RiscvPmpBlockVerifSpec.
 
+Module RiscvPmpModelBlockVerif.
+  Import Model.RiscvPmpModel.
+  Import Contracts.RiscvPmpSignature.
+  Import RiscvPmpBlockVerifSpec.
+  Import RiscvPmpProgram.
+  Import RiscvPmpIrisPrelims.
+  Import RiscvPmpIrisParams.
+  Import RiscvPmpIrisResources.
+
+  Module PLOG <: ProgramLogicOn RiscvPmpBase Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
+    Include ProgramLogicOn RiscvPmpBase Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  End PLOG.
+  Module RiscvPmpIrisBlockVerifModel := IrisInstanceWithContracts RiscvPmpBase Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec Model.RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates Model.RiscvPmpModel PLOG.
+
+End RiscvPmpModelBlockVerif.
+
 Module RiscvPmpSpecVerif.
 
   Import Contracts.
@@ -1476,6 +1492,7 @@ Module BlockVerificationDerived2Sound.
 
   Module Sound := Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec BlockVerificationDerived2.RiscvPmpSolver Shal BlockVerificationDerived2.RiscvPmpExecutor.
   Import Sound.
+  Include Katamaran.Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec BlockVerificationDerived2.RiscvPmpSolver Shal BlockVerificationDerived2.RiscvPmpExecutor.
 
   Definition M : Type -> Type := Shal.CHeapSpecM [] [].
 
@@ -1495,8 +1512,6 @@ Module BlockVerificationDerived2Sound.
   Local Notation "x <- ma ;; mb" :=
     (bind ma (fun x => mb))
       (at level 80, ma at level 90, mb at level 200, right associativity).
-
-  Print SCChunk.
 
   Definition exec_instruction_any__c (i : AST) : Val ty_xlenbits -> M (Val ty_xlenbits) :=
     let inline_fuel := 10%nat in
@@ -1654,7 +1669,7 @@ Module BlockVerificationDerived2Sound.
     rewrite H, ?sub_acc_trans.
     repeat f_equal.
     change (persist__term a (ω2 ∘ ω3)) with (persist a (ω2 ∘ ω3)).
-    now rewrite inst_persist, sub_acc_trans, inst_subst.
+    now rewrite (inst_persist (ω2 ∘ ω3) ι3 a), sub_acc_trans, inst_subst.
   Qed.
 
 End BlockVerificationDerived2Sound.
@@ -1676,17 +1691,55 @@ Module BlockVerificationDerived2Sem.
   Import RiscvPmpIrisPredicates.
   Import RiscvPmpIrisPrelims.
   Import RiscvPmpIrisResources.
+  Import BlockVerificationDerived2Sound.
+  Import RiscvPmpModelBlockVerif.PLOG.
+  Import Sound.
 
-  Definition semTripleOneInstrStep `{sailGS Σ} (PRE : Z -> iProp Σ) (instr : AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
-    ∀ a an,
-    semTriple [] (PRE a ∗ lptsreg pc a ∗ interp_ptsto_instr (mG := sailGS_memGS) a instr)
+  Include Katamaran.Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec Shal RiscvPmpModelBlockVerif.PLOG.
+
+  Definition semTripleOneInstrStep `{sailGS Σ} (PRE : iProp Σ) (instr : AST) (POST : Z -> iProp Σ) (a : Z) : iProp Σ :=
+    ∀ an,
+    semTriple [] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr (mG := sailGS_memGS) a instr)
       (FunDef RiscvPmpProgram.step)
-      (fun ret _ => lptsreg pc an ∗ interp_ptsto_instr (mG := sailGS_memGS) a instr ∗ POST a an)%I.
+      (fun ret _ => (∃ v, lptsreg nextpc v) ∗ lptsreg pc an ∗ interp_ptsto_instr (mG := sailGS_memGS) a instr ∗ POST an)%I.
 
-  Lemma sound_exec_instruction2 `{sailGS Σ} {instr} :
-    SymProp.safe (exec_instruction (w := wnil) instr (fun _ _ res _ h => SymProp.block) env.nil []%list) env.nil ->
-    ⊢ semTripleOneInstrStep (fun _ => emp)%I instr (fun _ _ => emp)%I.
+  Lemma sound_exec_instruction_any `{sailGS Σ} {instr} (h : SCHeap) (POST : Val ty_xlenbits -> CStore [ctx] -> iProp Σ) :
+    forall a,
+    exec_instruction_any__c instr a (fun res => liftP (POST res)) [] h ->
+    ⊢ semTripleOneInstrStep (interpret_scheap h)%I instr (fun an => POST an [])%I a.
   Proof.
+    intros a.
+    intros Hverif.
+    iIntros (an) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
+    unfold exec_instruction_any__c, bind, Shal.CHeapSpecM.bind, produce_chunk, Shal.CHeapSpecM.produce_chunk, demonic, Shal.CHeapSpecM.demonic, consume_chunk in Hverif.
+    specialize (Hverif an).
+    assert (ProgramLogic.Triple [] (interpret_scheap (scchunk_ptsreg nextpc an :: scchunk_user ptstoinstr [a; instr] :: scchunk_ptsreg pc a :: h)%list) (FunDef RiscvPmpProgram.step) (fun res => (fun δ' => interp_ptsto_instr (mG := sailGS_memGS) a instr ∗ (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I)).
+    { apply (exec_sound 10).
+      refine (exec_monotonic 10 _ _ _ _ _ _ Hverif).
+      intros [] δ0 h0 HYP.
+      cbn.
+      refine (consume_chunk_sound (scchunk_user ptstoinstr [a; instr]) (fun δ' => (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I δ0 h0 _).
+      refine (consume_chunk_monotonic _ _ _ _ _ HYP).
+      intros [] h1 [an' Hrest]; revert Hrest.
+      cbn.
+      iIntros (HYP') "Hh1".
+      iExists an'.
+      iStopProof.
+      refine (consume_chunk_sound (scchunk_ptsreg nextpc an') (fun δ' => lptsreg pc an' ∗ POST an' δ')%I δ0 h1 _).
+      refine (consume_chunk_monotonic _ _ _ _ _ HYP').
+      intros [] h2 HYP2.
+      refine (consume_chunk_sound (scchunk_ptsreg pc an') (fun δ' => POST an' δ')%I δ0 h2 _).
+      refine (consume_chunk_monotonic _ _ _ _ _ HYP2).
+      now intros [] h3 HYP3.
+    }
+    apply RiscvPmpModelBlockVerif.RiscvPmpIrisBlockVerifModel.sound_stm in H0.
+    unfold semTriple in H0.
+    iApply wp_mono.
+    {admit.
+    }
+    iApply H0.
+    iApply BlockVerificationDerivedSem.ValidContractsBlockVerif.contractsSound.
+    { cbn. iFrame. admit. }
   Admitted.
 
   Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
@@ -1704,12 +1757,16 @@ Module BlockVerificationDerived2Sem.
       (lptsreg pc an ∗ ptsto_instrs a instrs ∗ POST a an -∗ LoopVerification.WP_loop) -∗
       LoopVerification.WP_loop)%I.
 
-  Lemma sound_exec_triple_addr `{sailGS Σ} {Γ} {pre post instrs} {ι} :
-    SymProp.safe
-      (exec_triple_addr (Σ := Γ) pre instrs post (λ w1 _ _ _ _ , SymProp.block) [env] []%list) ι ->
+  Lemma sound_exec_triple_addr__c `{sailGS Σ} {W : World} {pre post instrs} {ι : Valuation W} :
+      (exec_triple_addr__c ι pre instrs post (λ _ _ _ , True) [env] []%list) ->
     ⊢ semTripleBlock (λ a : Z, interpret_assertion pre (ι.[("a"::ty_xlenbits) ↦ a])) instrs
       (λ a na : Z, interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
   Proof.
+    intros Hexec.
+    iIntros (a an) "(Hpre & Hpc & Hinstrs) Hk".
+    specialize (Hexec a).
+    unfold bind, Shal.CHeapSpecM.bind in Hexec.
+    setoid_rewrite consume_sound in Hexec.
   Admitted.
 
   Lemma sound_VC__addr `{sailGS Σ} {Γ} {pre post instrs} :
