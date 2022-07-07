@@ -906,7 +906,7 @@ Module Type SymPropOn
         now destruct eq.
       Qed.
 
-      Lemma env_insert_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx}
+      Lemma env_insert_app {x : LVar} {σ : Ty} {Σ0 Σe : LCtx}
             (bIn : x∷σ ∈ Σe) (v : Val σ)
             {ι : Valuation Σ0} {ιe : Valuation (Σe - x∷σ)} :
             (ι ►► env.insert bIn ιe v) =
@@ -926,7 +926,7 @@ Module Type SymPropOn
                  with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx.snoc (@ctx.remove_in_cat_right _ Σ0 Σe _ {| ctx.in_at := n; ctx.in_valid := eq |})))).
           rewrite eq_trans_refl_l.
           cbn.
-          rewrite (eq_sym_map_distr (fun f : 𝑺 ∷ Ty -> LCtx => f b)).
+          rewrite (eq_sym_map_distr (fun f : LVar ∷ Ty -> LCtx => f b)).
           rewrite eq_sym_map_distr.
           rewrite f_equal_compose.
           rewrite (map_subst_map (P := fun x => Valuation (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
@@ -934,7 +934,7 @@ Module Type SymPropOn
           now rewrite IHΣe.
       Qed.
 
-      Lemma env_remove_app {x : 𝑺} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x∷σ ∈ Σe)
+      Lemma env_remove_app {x : LVar} {σ : Ty} {Σ0 Σe : LCtx} (bIn : x∷σ ∈ Σe)
         (ι : Valuation Σ0) (ιe : Valuation Σe) :
         env.remove (x∷σ) (ι ►► ιe) (ctx.in_cat_right bIn) =
         eq_rect (Σ0 ▻▻ Σe - x∷σ) (fun Σ : LCtx => Valuation Σ) (ι ►► env.remove (x∷σ) ιe bIn)
@@ -949,7 +949,7 @@ Module Type SymPropOn
                  with (f_equal (fun f => f b) (eq_trans eq_refl (f_equal ctx.snoc (@ctx.remove_in_cat_right _ Σ0 Σe _ i)))).
           rewrite eq_trans_refl_l.
           cbn.
-          rewrite (eq_sym_map_distr (fun f : 𝑺 ∷ Ty -> LCtx => f b)).
+          rewrite (eq_sym_map_distr (fun f : LVar ∷ Ty -> LCtx => f b)).
           rewrite eq_sym_map_distr.
           rewrite f_equal_compose.
           rewrite (map_subst_map (P := fun x => Valuation (ctx.snoc x b)) (fun a : LCtx => a ▻ b) (fun _ x => x) ).
@@ -1384,7 +1384,7 @@ Module Type SymPropOn
                       SolveUvars.plug uc (SymProp.angelic_binary (p Σ eph') (q Σ eph'))
           end.
 
-      Definition angelicv {Σ} (b : 𝑺 ∷ Ty) (p : EProp (Σ ▻ b)) : EProp Σ :=
+      Definition angelicv {Σ} (b : LVar ∷ Ty) (p : EProp (Σ ▻ b)) : EProp Σ :=
         fun Σ0 eph =>
           match eph with
           | inl ec => p Σ0 (inl (SolveEvars.ectx_snoc ec b))
@@ -1438,7 +1438,7 @@ Module Type SymPropOn
     Import SymProp.
 
     Inductive ETerm : Set :=
-    | eterm_var     (ℓ : 𝑺) (n : nat)
+    | eterm_var     (ℓ : LVar) (n : nat)
     | eterm_val     (σ : Ty) (v : Val σ)
     | eterm_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (t1 : ETerm) (t2 : ETerm)
     | eterm_neg     (t : ETerm)
@@ -1466,16 +1466,16 @@ Module Type SymPropOn
     | eblock
     | eassertk (fml : EFormula) (k : ESymProp)
     | eassumek (fml : EFormula) (k : ESymProp)
-    | eangelicv (b : 𝑺∷Ty) (k : ESymProp)
-    | edemonicv (b : 𝑺∷Ty) (k : ESymProp)
+    | eangelicv (b : LVar∷Ty) (k : ESymProp)
+    | edemonicv (b : LVar∷Ty) (k : ESymProp)
     | eassert_vareq
-        (x : 𝑺)
+        (x : LVar)
         (σ : Ty)
         (n : nat)
         (t : ETerm)
         (k : ESymProp)
     | eassume_vareq
-        (x : 𝑺)
+        (x : LVar)
         (σ : Ty)
         (n : nat)
         (t : ETerm)
@@ -1795,7 +1795,7 @@ Module Type SymPropOn
     Import SymProp.
 
     Inductive ETerm : Ty -> Set :=
-    | eterm_var     (ℓ : 𝑺) (σ : Ty) (n : nat) : ETerm σ
+    | eterm_var     (ℓ : LVar) (σ : Ty) (n : nat) : ETerm σ
     | eterm_val     (σ : Ty) (v : Val σ) : ETerm σ
     | eterm_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (t1 : ETerm σ1) (t2 : ETerm σ2) : ETerm σ3
     | eterm_neg     (t : ETerm ty.int) : ETerm ty.int
@@ -1823,16 +1823,16 @@ Module Type SymPropOn
     | eblock
     | eassertk (fml : EFormula) (k : ESymProp)
     | eassumek (fml : EFormula) (k : ESymProp)
-    | eangelicv (b : 𝑺∷Ty) (k : ESymProp)
-    | edemonicv (b : 𝑺∷Ty) (k : ESymProp)
+    | eangelicv (b : LVar∷Ty) (k : ESymProp)
+    | edemonicv (b : LVar∷Ty) (k : ESymProp)
     | eassert_vareq
-        (x : 𝑺)
+        (x : LVar)
         (σ : Ty)
         (n : nat)
         (t : ETerm σ)
         (k : ESymProp)
     | eassume_vareq
-        (x : 𝑺)
+        (x : LVar)
         (σ : Ty)
         (n : nat)
         (t : ETerm σ)

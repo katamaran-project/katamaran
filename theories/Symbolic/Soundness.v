@@ -231,7 +231,7 @@ Module Soundness
       ℛ ι0 (SPureSpecM.error (A := AT) msg) CPureSpecM.error.
     Proof. intros POST__s POST__c HPOST. auto. Qed.
 
-    Lemma refine_angelic (x : option 𝑺) (σ : Ty) :
+    Lemma refine_angelic (x : option LVar) (σ : Ty) :
       forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         ℛ ι0 (@SPureSpecM.angelic x σ w0) (@CPureSpecM.angelic σ).
     Proof.
@@ -243,7 +243,7 @@ Module Soundness
       reflexivity.
     Qed.
 
-    Lemma refine_angelic_ctx {N : Set} {n : N -> 𝑺} {Δ : NCtx N Ty} :
+    Lemma refine_angelic_ctx {N : Set} {n : N -> LVar} {Δ : NCtx N Ty} :
       forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         ℛ ι0 (@SPureSpecM.angelic_ctx N n w0 Δ) (@CPureSpecM.angelic_ctx N Δ).
     Proof.
@@ -263,12 +263,12 @@ Module Soundness
         reflexivity.
     Qed.
 
-    Lemma refine_demonic (x : option 𝑺) (σ : Ty) :
+    Lemma refine_demonic (x : option LVar) (σ : Ty) :
       forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         ℛ ι0 (@SPureSpecM.demonic x σ w0) (@CPureSpecM.demonic σ).
     Proof.
       intros w0 ι0 Hpc0 POST__s POST__c HPOST; cbn.
-        (* x : option 𝑺 *)
+        (* x : option LVar *)
         (* σ : Ty *)
         (* w0 : World *)
         (* ι0 : Valuation w0 *)
@@ -279,7 +279,7 @@ Module Soundness
         (* ============================ *)
         (* ℛ ι0 (SPureSpecM.demonic x σ POST__s) (CPureSpecM.demonic σ POST__c) *)
       intros Hwp v. cbn in Hwp. specialize (Hwp v). remember (fresh w0 x) as ℓ.
-        (* x : option 𝑺 *)
+        (* x : option LVar *)
         (* σ : Ty *)
         (* w0 : World *)
         (* ι0 : Valuation w0 *)
@@ -288,7 +288,7 @@ Module Soundness
         (* POST__c : Val σ -> Prop *)
         (* HPOST : ℛ ι0 POST__s POST__c *)
         (* v : Val σ *)
-        (* ℓ : 𝑺 *)
+        (* ℓ : LVar *)
         (* Heqℓ : ℓ = fresh w0 x *)
         (* Hwp : wsafe (POST__s (wsnoc w0 (ℓ∷σ)) acc_snoc_right (term_var ℓ)) ι0.[ℓ∷σ ↦ v] *)
         (* ============================ *)
@@ -297,7 +297,7 @@ Module Soundness
         [ (* Boilerplate #1 *) cbn; now rewrite inst_sub_wk1
         | (* Boilerplate #2 *) cbn; now rewrite inst_subst, inst_sub_wk1
         |].
-        (* x : option 𝑺 *)
+        (* x : option LVar *)
         (* σ : Ty *)
         (* w0 : World *)
         (* ι0 : Valuation w0 *)
@@ -306,14 +306,14 @@ Module Soundness
         (* POST__c : Val σ -> Prop *)
         (* HPOST : ℛ ι0 POST__s POST__c *)
         (* v : Val σ *)
-        (* ℓ : 𝑺 *)
+        (* ℓ : LVar *)
         (* Heqℓ : ℓ = fresh w0 x *)
         (* ============================ *)
         (* ℛ ι0.[ℓ∷σ ↦ v] (term_var ℓ) v *)
       reflexivity.
     Qed.
 
-    Lemma refine_demonic_ctx {N : Set} {n : N -> 𝑺} {Δ : NCtx N Ty} :
+    Lemma refine_demonic_ctx {N : Set} {n : N -> LVar} {Δ : NCtx N Ty} :
       forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         ℛ ι0 (@SPureSpecM.demonic_ctx N n w0 Δ) (@CPureSpecM.demonic_ctx N Δ).
     Proof.
@@ -549,7 +549,7 @@ Module Soundness
       eapply refine_four; eauto.
     Qed.
 
-    Lemma refine_angelic (x : option 𝑺) (σ : Ty)
+    Lemma refine_angelic (x : option LVar) (σ : Ty)
       {Γ : PCtx} {w0 : World} (ι0 : Valuation w0)
       (Hpc0 : instpc (wco w0) ι0) :
       ℛ ι0 (@SHeapSpecM.angelic Γ x σ w0) (@CHeapSpecM.angelic Γ σ).
@@ -565,7 +565,7 @@ Module Soundness
     Qed.
     Hint Resolve refine_angelic : core.
 
-    Lemma refine_demonic (x : option 𝑺) (σ : Ty)
+    Lemma refine_demonic (x : option LVar) (σ : Ty)
       {Γ : PCtx} {w0 : World} (ι0 : Valuation w0)
       (Hpc0 : instpc (wco w0) ι0) :
       ℛ ι0 (@SHeapSpecM.demonic Γ x σ w0) (@CHeapSpecM.demonic Γ σ).
@@ -581,7 +581,7 @@ Module Soundness
     Qed.
     Hint Resolve refine_demonic : core.
 
-    Lemma refine_angelic_ctx {N : Set} (n : N -> 𝑺) {Γ : PCtx} (Δ : NCtx N Ty) :
+    Lemma refine_angelic_ctx {N : Set} (n : N -> LVar) {Γ : PCtx} (Δ : NCtx N Ty) :
       forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         ℛ ι0 (@SHeapSpecM.angelic_ctx N n Γ w0 Δ) (@CHeapSpecM.angelic_ctx N Γ Δ).
     Proof.
@@ -590,7 +590,7 @@ Module Soundness
       now apply PureSpecM.refine_angelic_ctx.
     Qed.
 
-    Lemma refine_demonic_ctx {N : Set} (n : N -> 𝑺) {Γ : PCtx} (Δ : NCtx N Ty) :
+    Lemma refine_demonic_ctx {N : Set} (n : N -> LVar) {Γ : PCtx} (Δ : NCtx N Ty) :
       forall {w0 : World} (ι0 : Valuation w0) (Hpc0 : instpc (wco w0) ι0),
         ℛ ι0 (@SHeapSpecM.demonic_ctx N n Γ w0 Δ) (@CHeapSpecM.demonic_ctx N Γ Δ).
     Proof.
@@ -1069,7 +1069,7 @@ Module Soundness
           now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_angelic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Refine AT A} {Γ1 Γ2}
+    Lemma refine_angelic_match_record' {N : Set} (n : N -> LVar) {R AT A} `{Refine AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (recordf_ty R) Δ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       ℛ ι (@SHeapSpecM.angelic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CHeapSpecM.angelic_match_record N A R Γ1 Γ2 Δ p).
@@ -1088,7 +1088,7 @@ Module Soundness
         now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_angelic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Refine AT A} {Γ1 Γ2}
+    Lemma refine_angelic_match_record {N : Set} (n : N -> LVar) {R AT A} `{Refine AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (recordf_ty R) Δ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       ℛ ι (@SHeapSpecM.angelic_match_record N n AT R Γ1 Γ2 Δ p w) (@CHeapSpecM.angelic_match_record N A R Γ1 Γ2 Δ p).
@@ -1111,7 +1111,7 @@ Module Soundness
       - apply refine_angelic_match_record'; auto.
     Qed.
 
-    Lemma refine_demonic_match_record' {N : Set} (n : N -> 𝑺) {R AT A} `{Refine AT A} {Γ1 Γ2}
+    Lemma refine_demonic_match_record' {N : Set} (n : N -> LVar) {R AT A} `{Refine AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (recordf_ty R) Δ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       ℛ ι (@SHeapSpecM.demonic_match_record' N n AT R Γ1 Γ2 Δ p w) (@CHeapSpecM.demonic_match_record N A R Γ1 Γ2 Δ p).
@@ -1130,7 +1130,7 @@ Module Soundness
         now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_demonic_match_record {N : Set} (n : N -> 𝑺) {R AT A} `{Refine AT A} {Γ1 Γ2}
+    Lemma refine_demonic_match_record {N : Set} (n : N -> LVar) {R AT A} `{Refine AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : RecordPat (recordf_ty R) Δ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       ℛ ι (@SHeapSpecM.demonic_match_record N n AT R Γ1 Γ2 Δ p w) (@CHeapSpecM.demonic_match_record N A R Γ1 Γ2 Δ p).
@@ -1153,7 +1153,7 @@ Module Soundness
       - apply refine_demonic_match_record'; auto.
     Qed.
 
-    Lemma refine_angelic_match_tuple {N : Set} (n : N -> 𝑺) {σs AT A} `{Refine AT A} {Γ1 Γ2}
+    Lemma refine_angelic_match_tuple {N : Set} (n : N -> LVar) {σs AT A} `{Refine AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : TuplePat σs Δ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       ℛ ι (@SHeapSpecM.angelic_match_tuple N n AT σs Γ1 Γ2 Δ p w) (@CHeapSpecM.angelic_match_tuple N A σs Γ1 Γ2 Δ p).
@@ -1179,7 +1179,7 @@ Module Soundness
         now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_demonic_match_tuple {N : Set} (n : N -> 𝑺) {σs AT A} `{Refine AT A} {Γ1 Γ2}
+    Lemma refine_demonic_match_tuple {N : Set} (n : N -> LVar) {σs AT A} `{Refine AT A} {Γ1 Γ2}
       {Δ : NCtx N Ty} {p : TuplePat σs Δ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       ℛ ι (@SHeapSpecM.demonic_match_tuple N n AT σs Γ1 Γ2 Δ p w) (@CHeapSpecM.demonic_match_tuple N A σs Γ1 Γ2 Δ p).
@@ -1205,7 +1205,7 @@ Module Soundness
         now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_angelic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty}
+    Lemma refine_angelic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty}
           {p : Pattern Δ σ} {Γ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) {msg} :
       ℛ ι (@SHeapSpecM.angelic_match_pattern N n σ Δ p Γ w msg) (@CHeapSpecM.angelic_match_pattern N σ Δ p Γ).
@@ -1229,7 +1229,7 @@ Module Soundness
         now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_angelic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Refine AT A} {Γ1 Γ2 : PCtx} {U : unioni}
+    Lemma refine_angelic_match_union {N : Set} (n : N -> LVar) {AT A} `{Refine AT A} {Γ1 Γ2 : PCtx} {U : unioni}
       {Δ : unionk U -> NCtx N Ty} {p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       ℛ ι (@SHeapSpecM.angelic_match_union N n AT Γ1 Γ2 U Δ p w) (@CHeapSpecM.angelic_match_union N A Γ1 Γ2 U Δ p).
@@ -1259,7 +1259,7 @@ Module Soundness
           now rewrite ?sub_acc_trans, ?inst_subst.
     Qed.
 
-    Lemma refine_demonic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty}
+    Lemma refine_demonic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty}
           {p : Pattern Δ σ} {Γ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       ℛ ι (@SHeapSpecM.demonic_match_pattern N n σ Δ p Γ w) (@CHeapSpecM.demonic_match_pattern N σ Δ p Γ).
@@ -1283,7 +1283,7 @@ Module Soundness
         now rewrite <- inst_persist.
     Qed.
 
-    Lemma refine_demonic_match_union {N : Set} (n : N -> 𝑺) {AT A} `{Refine AT A} {Γ1 Γ2 : PCtx} {U : unioni}
+    Lemma refine_demonic_match_union {N : Set} (n : N -> LVar) {AT A} `{Refine AT A} {Γ1 Γ2 : PCtx} {U : unioni}
       {Δ : unionk U -> NCtx N Ty} {p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
       ℛ ι (@SHeapSpecM.demonic_match_union N n AT Γ1 Γ2 U Δ p w) (@CHeapSpecM.demonic_match_union N A Γ1 Γ2 U Δ p).

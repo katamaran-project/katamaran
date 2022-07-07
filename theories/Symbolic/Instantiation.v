@@ -53,9 +53,9 @@ Module Type InstantiationOn
   (Import TY : Types)
   (Import TM : TermsOn TY).
 
-  Local Notation LCtx := (NCtx 𝑺 Ty).
-  Local Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Val (@type 𝑺 Ty xt)) Σ).
-  Local Notation CStore := (@NamedEnv 𝑿 Ty Val).
+  Local Notation LCtx := (NCtx LVar Ty).
+  Local Notation Valuation Σ := (@Env (Binding LVar Ty) (fun xt : Binding LVar Ty => Val (@type LVar Ty xt)) Σ).
+  Local Notation CStore := (@NamedEnv PVar Ty Val).
 
   (* This type class connects a symbolic representation of a type with its
      concrete / semi-concrete counterpart. The method 'inst' will instantiate
@@ -227,7 +227,7 @@ Module Type InstantiationOn
   Lemma inst_sub_cat {Σ Γ Δ : LCtx} (ζΓ : Sub Γ Σ) (ζΔ : Sub Δ Σ) (ι : Valuation Σ) :
     inst (A := Valuation _) (ζΓ ►► ζΔ) ι = inst ζΓ ι ►► inst ζΔ ι.
   Proof.
-    apply (@inst_env_cat (𝑺 ∷ Ty) (fun Σ b => Term Σ (type b))).
+    apply (@inst_env_cat (LVar ∷ Ty) (fun Σ b => Term Σ (type b))).
   Qed.
 
   Lemma inst_sub_cat_left {Σ Δ : LCtx} (ι : Valuation Δ) (ιΔ : Valuation Σ) :
@@ -288,7 +288,7 @@ Module Type InstantiationOn
       now rewrite env.lookup_tabulate.
   Qed.
 
-  Lemma sub_single_zero {Σ : LCtx} {x : 𝑺} {σ : Ty} (t : Term Σ σ) :
+  Lemma sub_single_zero {Σ : LCtx} {x : LVar} {σ : Ty} (t : Term Σ σ) :
     (sub_single ctx.in_zero t) = env.snoc (sub_id Σ) (x∷σ) t.
   Proof.
     eapply env.lookup_extensional.

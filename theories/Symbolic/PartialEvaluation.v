@@ -52,8 +52,8 @@ Module Type PartialEvaluationOn
   (Import TM : TermsOn TY)
   (Import IN : InstantiationOn TY TM).
 
-  Local Notation LCtx := (NCtx 𝑺 Ty).
-  Local Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Val (@type 𝑺 Ty xt)) Σ).
+  Local Notation LCtx := (NCtx LVar Ty).
+  Local Notation Valuation Σ := (@Env (Binding LVar Ty) (fun xt : Binding LVar Ty => Val (@type LVar Ty xt)) Σ).
 
   Section WithLCtx.
     Context {Σ : LCtx}.

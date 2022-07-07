@@ -241,16 +241,16 @@ Module Type SymbolicExecOn
 
   End DebugInfo.
 
-  Module WorldValuation.
+  Module WorldInstance.
 
-    Record WValuation (w : World) : Set :=
-      MkWValuation
+    Record WInstance (w : World) : Set :=
+      MkWInstance
         { ιassign :> Valuation w;
           ιvalid  : instpc (wco w) ιassign;
         }.
 
-    Program Definition winstance_formula {w} (ι : WValuation w) (fml : Formula w) (p : inst (A := Prop) fml ι) :
-      WValuation (wformula w fml) :=
+    Program Definition winstance_formula {w} (ι : WInstance w) (fml : Formula w) (p : inst (A := Prop) fml ι) :
+      WInstance (wformula w fml) :=
       {| ιassign := ι; |}.
     Next Obligation.
     Proof.
@@ -259,8 +259,8 @@ Module Type SymbolicExecOn
       apply ιvalid.
     Qed.
 
-    Program Definition winstance_snoc {w} (ι : WValuation w) {b : 𝑺 ∷ Ty} (v : Val (type b)) :
-      WValuation (wsnoc w b) :=
+    Program Definition winstance_snoc {w} (ι : WInstance w) {b : LVar ∷ Ty} (v : Val (type b)) :
+      WInstance (wsnoc w b) :=
       {| ιassign := env.snoc (ιassign ι) b v; |}.
     Next Obligation.
     Proof.
@@ -269,17 +269,17 @@ Module Type SymbolicExecOn
       apply ιvalid.
     Qed.
 
-    Program Definition winstance_subst {w} (ι : WValuation w) {x σ} {xIn : x∷σ ∈ w}
+    Program Definition winstance_subst {w} (ι : WInstance w) {x σ} {xIn : x∷σ ∈ w}
       (t : Term (w - x∷σ) σ) (p : inst t (env.remove (x∷σ) (ιassign ι) xIn) = env.lookup (ιassign ι) xIn) :
-      WValuation (wsubst w x t) :=
-      @MkWValuation (wsubst w x t) (env.remove _ (ιassign ι) xIn) _.
+      WInstance (wsubst w x t) :=
+      @MkWInstance (wsubst w x t) (env.remove _ (ιassign ι) xIn) _.
     Next Obligation.
       intros * p. cbn. rewrite inst_subst, <- inst_sub_shift in *.
       rewrite inst_sub_single_shift; auto using ιvalid.
     Qed.
 
-    Program Definition instacc {w0 w1} (ω01 : w0 ⊒ w1) : WValuation w1 -> WValuation w0 :=
-      match ω01 in (_ ⊒ w) return (WValuation w -> WValuation w0) with
+    Program Definition instacc {w0 w1} (ω01 : w0 ⊒ w1) : WInstance w1 -> WInstance w0 :=
+      match ω01 in (_ ⊒ w) return (WInstance w -> WInstance w0) with
       | acc_refl            => fun ι => ι
       | @acc_sub _ w1 ζ ent => fun ι1 => {| ιassign := inst ζ ι1; |}
       end.
@@ -291,7 +291,7 @@ Module Type SymbolicExecOn
       apply ιvalid.
     Qed.
 
-  End WorldValuation.
+  End WorldInstance.
 
   Definition PROP : TYPE :=
     fun _ => Prop.
@@ -340,7 +340,7 @@ Module Type SymbolicExecOn
       fun w POST => SymProp.block.
     Global Arguments block {A w}.
 
-    Definition angelic (x : option 𝑺) σ :
+    Definition angelic (x : option LVar) σ :
       ⊢ SPureSpecM (STerm σ) :=
       fun w k =>
         let y := fresh w x in
@@ -364,7 +364,7 @@ Module Type SymbolicExecOn
     Local Hint Extern 2 (Persistent (WTerm ?σ)) =>
       refine (@persistent_subst (STerm σ) (@SubstTerm σ)) : typeclass_instances.
 
-    Definition angelic_ctx {N : Set} (n : N -> 𝑺) :
+    Definition angelic_ctx {N : Set} (n : N -> LVar) :
       ⊢ ∀ Δ : NCtx N Ty, SPureSpecM (fun w => NamedEnv (Term w) Δ) :=
       fix rec {w} Δ {struct Δ} :=
         match Δ with
@@ -375,16 +375,15 @@ Module Type SymbolicExecOn
          end.
     Global Arguments angelic_ctx {N} n [w] Δ : rename.
 
-    Definition demonic (x : option 𝑺) σ :
+    Definition demonic (x : option LVar) σ :
       ⊢ SPureSpecM (STerm σ) :=
       fun w k =>
-        let ℓ  := fresh w x in
-        let w' := wsnoc w (ℓ∷σ) in
-        let ω  := acc_snoc_right in
-        demonicv (ℓ∷σ) (k w' ω (@term_var _ ℓ σ ctx.in_zero)).
+        let y := fresh w x in
+        demonicv
+          (y∷σ) (k (wsnoc w (y∷σ)) acc_snoc_right (@term_var _ y σ ctx.in_zero)).
     Global Arguments demonic x σ {w} k.
 
-    Definition demonic_ctx {N : Set} (n : N -> 𝑺) :
+    Definition demonic_ctx {N : Set} (n : N -> LVar) :
       ⊢ ∀ Δ : NCtx N Ty, SPureSpecM (fun w => NamedEnv (Term w) Δ) :=
       fix demonic_ctx {w} Δ {struct Δ} :=
         match Δ with
@@ -557,7 +556,7 @@ Module Type SymbolicExecOn
         | None   => demonic_match_bool' t'
         end.
 
-    Definition angelic_match_sum' {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
+    Definition angelic_match_sum' {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
       ⊢ AMessage -> STerm (ty.sum σ τ) ->
         □(STerm σ -> SPureSpecM A) -> □(STerm τ -> SPureSpecM A) -> SPureSpecM A :=
       fun _ msg t kinl kinr =>
@@ -569,7 +568,7 @@ Module Type SymbolicExecOn
            ⟨ω2⟩ _  <- assert_formula msg⟨ω1⟩ (formula_eq (term_inr tr) t⟨ω1⟩);;
                      T kinr⟨ω1∘ω2⟩ tr⟨ω2⟩).
 
-    Definition angelic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
+    Definition angelic_match_sum {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
       ⊢ AMessage -> STerm (ty.sum σ τ) -> □(STerm σ -> SPureSpecM A) -> □(STerm τ -> SPureSpecM A) -> SPureSpecM A :=
       fun w0 msg t kinl kinr =>
         match term_get_sum t with
@@ -578,7 +577,7 @@ Module Type SymbolicExecOn
         | None => angelic_match_sum' x y msg t kinl kinr
         end.
 
-    Definition demonic_match_sum' {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
+    Definition demonic_match_sum' {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
       ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SPureSpecM A) -> □(STerm τ -> SPureSpecM A) -> SPureSpecM A :=
       fun w0 t kinl kinr =>
        demonic_binary
@@ -589,7 +588,7 @@ Module Type SymbolicExecOn
           ⟨ω2⟩ _  <- assume_formula (formula_eq (term_inr t1) t⟨ω1⟩);;
                     T kinr⟨ω1∘ω2⟩ t1⟨ω2⟩).
 
-    Definition demonic_match_sum {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
+    Definition demonic_match_sum {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
       ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SPureSpecM A) -> □(STerm τ -> SPureSpecM A) -> SPureSpecM A :=
       fun w0 t kinl kinr =>
         match term_get_sum t with
@@ -598,7 +597,7 @@ Module Type SymbolicExecOn
         | None => demonic_match_sum' x y t kinl kinr
         end.
 
-    Definition angelic_match_prod {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
+    Definition angelic_match_prod {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
       ⊢ AMessage -> STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SPureSpecM A) -> SPureSpecM A :=
       fun _ msg t k =>
         ⟨ω1⟩ t1 <- angelic (Some x) σ;;
@@ -608,7 +607,7 @@ Module Type SymbolicExecOn
         ⟨ω3⟩ _  <- assert_formula msg⟨ω12⟩ fml;;
                   T k⟨ω12∘ω3⟩ t1⟨ω2∘ω3⟩ t2⟨ω3⟩.
 
-    Definition demonic_match_prod {A} (x : 𝑺) (σ : Ty) (y : 𝑺) (τ : Ty) :
+    Definition demonic_match_prod {A} (x : LVar) (σ : Ty) (y : LVar) (τ : Ty) :
       ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SPureSpecM A) -> SPureSpecM A :=
       fun _ t k =>
         ⟨ω1⟩ t1 <- demonic (Some x) σ;;
@@ -709,12 +708,12 @@ Module Type SymbolicExecOn
         fun w => lift_purem (SPureSpecM.demonic_finite (w:=w)).
       Global Arguments demonic_finite {Γ} [_] {_ _} {w}.
 
-      Definition angelic {Γ} (x : option 𝑺) σ :
+      Definition angelic {Γ} (x : option LVar) σ :
         ⊢ SHeapSpecM Γ Γ (STerm σ) :=
         fun w => lift_purem (SPureSpecM.angelic x σ (w:=w)).
       Global Arguments angelic {Γ} x σ {w}.
 
-      Definition demonic {Γ} (x : option 𝑺) σ :
+      Definition demonic {Γ} (x : option LVar) σ :
         ⊢ SHeapSpecM Γ Γ (STerm σ) :=
         fun w => lift_purem (SPureSpecM.demonic x σ (w:=w)).
       Global Arguments demonic {Γ} x σ {w}.
@@ -723,12 +722,12 @@ Module Type SymbolicExecOn
         ⊢ (SStore Γ1 -> SHeap -> DT) -> (SHeapSpecM Γ1 Γ2 AT) -> (SHeapSpecM Γ1 Γ2 AT) :=
         fun _ d m POST δ h => SymProp.debug (MkAMessage _ (d δ h)) (m POST δ h).
 
-      Definition angelic_ctx {N : Set} (n : N -> 𝑺) {Γ} :
+      Definition angelic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
         fun w0 Δ => lift_purem (SPureSpecM.angelic_ctx n Δ).
       Global Arguments angelic_ctx {N} n {Γ} [w] Δ : rename.
 
-      Definition demonic_ctx {N : Set} (n : N -> 𝑺) {Γ} :
+      Definition demonic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
         fun w0 Δ => lift_purem (SPureSpecM.demonic_ctx n Δ).
       Global Arguments demonic_ctx {N} n {Γ} [w] Δ : rename.
@@ -926,7 +925,7 @@ Module Type SymbolicExecOn
             <$> persist__term t
             <*> (fun (w1 : World) (ω01 : w0 ⊒ w1) (EK : enumt E) => four (k EK) ω01).
 
-      Definition angelic_match_sum {AT Γ1 Γ2} (x y : 𝑺) {σ τ} :
+      Definition angelic_match_sum {AT Γ1 Γ2} (x y : LVar) {σ τ} :
         ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SHeapSpecM Γ1 Γ2 AT) -> □(STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
       fun w0 t kinl kinr =>
         angelic_binary
@@ -937,7 +936,7 @@ Module Type SymbolicExecOn
            ⟨ω2⟩ _  <- assert_formula (formula_eq (term_inr tr) t⟨ω1⟩);;
                      T kinr⟨ω1∘ω2⟩ tr⟨ω2⟩).
 
-      Definition demonic_match_sum {AT Γ1 Γ2} (x y : 𝑺) {σ τ} :
+      Definition demonic_match_sum {AT Γ1 Γ2} (x y : LVar) {σ τ} :
         ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SHeapSpecM Γ1 Γ2 AT) -> □(STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
         fun w0 t kinl kinr =>
           demonic_binary
@@ -948,7 +947,7 @@ Module Type SymbolicExecOn
              ⟨ω2⟩ _  <- assume_formula (formula_eq (term_inr t1) t⟨ω1⟩);;
                        T kinr⟨ω1∘ω2⟩ t1⟨ω2⟩).
 
-      Definition demonic_match_sum_lifted {AT Γ1 Γ2} (x y : 𝑺) {σ τ} :
+      Definition demonic_match_sum_lifted {AT Γ1 Γ2} (x y : LVar) {σ τ} :
         ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SHeapSpecM Γ1 Γ2 AT) -> □(STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t kinl kinr POST δ0 h0.
@@ -968,7 +967,7 @@ Module Type SymbolicExecOn
         - intros w1 ω01 [ [δ1 h1] a1]. apply POST. auto. auto. auto. auto.
       Defined.
 
-      Definition angelic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
+      Definition angelic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
         ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t knil kcons.
@@ -1009,11 +1008,11 @@ Module Type SymbolicExecOn
           apply (persist__term ttail ω23).
       Defined.
 
-      Definition box_angelic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
+      Definition box_angelic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
         ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t knil kcons => angelic_match_list x y <$> persist__term t <*> four knil <*> four kcons.
 
-      Definition demonic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
+      Definition demonic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
         ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t knil kcons.
@@ -1038,11 +1037,11 @@ Module Type SymbolicExecOn
           apply (persist__term ttail ω23).
       Defined.
 
-      Definition box_demonic_match_list {AT Γ1 Γ2} (x y : 𝑺) {σ} :
+      Definition box_demonic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
         ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t knil kcons => demonic_match_list x y <$> persist__term t <*> four knil <*> four kcons.
 
-      Definition angelic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
+      Definition angelic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
         ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
@@ -1066,11 +1065,11 @@ Module Type SymbolicExecOn
         apply (persist__term tτ ω23).
       Defined.
 
-      Definition box_angelic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
+      Definition box_angelic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
         ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_prod x y <$> persist__term t <*> four k.
 
-      Definition demonic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
+      Definition demonic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
         ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
@@ -1087,11 +1086,11 @@ Module Type SymbolicExecOn
         apply (persist__term tτ ω23).
       Defined.
 
-      Definition box_demonic_match_prod {AT} {Γ1 Γ2} (x y : 𝑺) {σ τ} :
+      Definition box_demonic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
         ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_prod x y <$> persist__term t <*> four k.
 
-      Definition angelic_match_record' {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+      Definition angelic_match_record' {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
         ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
@@ -1113,7 +1112,7 @@ Module Type SymbolicExecOn
         apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
-      Definition angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+      Definition angelic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
         ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
@@ -1123,11 +1122,11 @@ Module Type SymbolicExecOn
         - apply (angelic_match_record' n p t k).
       Defined.
 
-      Definition box_angelic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+      Definition box_angelic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
         ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_record n p <$> persist__term t <*> four k.
 
-      Definition demonic_match_record' {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+      Definition demonic_match_record' {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
         ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
@@ -1142,7 +1141,7 @@ Module Type SymbolicExecOn
         apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
-      Definition demonic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+      Definition demonic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
         ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
@@ -1152,11 +1151,11 @@ Module Type SymbolicExecOn
         - apply (demonic_match_record' n p t k).
       Defined.
 
-      Definition box_demonic_match_record {N : Set} (n : N -> 𝑺) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
+      Definition box_demonic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
         ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_record n p <$> persist__term t <*> four k.
 
-      Definition angelic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
+      Definition angelic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
@@ -1178,11 +1177,11 @@ Module Type SymbolicExecOn
         apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
-      Definition box_angelic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
+      Definition box_angelic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_tuple n p <$> persist__term t <*> four k.
 
-      Definition demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
+      Definition demonic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
         intros w0 t k.
@@ -1197,11 +1196,11 @@ Module Type SymbolicExecOn
         apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
-      Definition box_demonic_match_tuple {N : Set} (n : N -> 𝑺) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
+      Definition box_demonic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_tuple n p <$> persist__term t <*> four k.
 
-      Definition angelic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
+      Definition angelic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
         ⊢ (SStore Γ -> SHeap -> AMessage) -> STerm σ -> SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ).
       Proof.
         intros w0 msg t.
@@ -1216,7 +1215,7 @@ Module Type SymbolicExecOn
         apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
-      Definition demonic_match_pattern {N : Set} (n : N -> 𝑺) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
+      Definition demonic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
         ⊢ STerm σ -> SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ).
       Proof.
         intros w0 t.
@@ -1231,7 +1230,7 @@ Module Type SymbolicExecOn
         apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
       Defined.
 
-      Definition angelic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
+      Definition angelic_match_union {N : Set} (n : N -> LVar) {AT Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
         ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
@@ -1273,7 +1272,7 @@ Module Type SymbolicExecOn
         apply (acc_trans ω01 (acc_trans ω12 ω23)).
       Defined.
 
-      Definition box_angelic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
+      Definition box_angelic_match_union {N : Set} (n : N -> LVar) {AT Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
         ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> □(SHeapSpecM Γ1 Γ2 AT).
       Proof.
@@ -1281,7 +1280,7 @@ Module Type SymbolicExecOn
         intros w1 ω01 UK. apply (four (k UK) ω01).
       Defined.
 
-      Definition demonic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
+      Definition demonic_match_union {N : Set} (n : N -> LVar) {AT Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
         ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT.
       Proof.
@@ -1303,7 +1302,7 @@ Module Type SymbolicExecOn
         apply (acc_trans ω01 (acc_trans ω12 ω23)).
       Defined.
 
-      Definition box_demonic_match_union {N : Set} (n : N -> 𝑺) {AT Γ1 Γ2 U}
+      Definition box_demonic_match_union {N : Set} (n : N -> LVar) {AT Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
         ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> □(SHeapSpecM Γ1 Γ2 AT).
       Proof.
@@ -1826,33 +1825,33 @@ Module Type SymbolicExecOn
                 block (w:=w0)
             | stm_match_list e alt_nil xh xt alt_cons =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_list (𝑿to𝑺 xh) (𝑿to𝑺 xt) t
+                demonic_match_list (PVartoLVar xh) (PVartoLVar xt) t
                   (fun _ _ => exec_aux alt_nil)
                   (fun _ _ thead ttail =>
                      pushspops [env].[xh∷_ ↦ thead].[xt∷_↦ ttail] (exec_aux alt_cons ))
             | stm_match_sum e xinl alt_inl xinr alt_inr =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_sum (𝑿to𝑺 xinl) (𝑿to𝑺 xinr) t
+                demonic_match_sum (PVartoLVar xinl) (PVartoLVar xinr) t
                   (fun _ _ tl => pushpop tl (exec_aux alt_inl))
                   (fun _ _ tr => pushpop tr (exec_aux alt_inr))
             | stm_match_prod e xl xr rhs =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_prod (𝑿to𝑺 xl) (𝑿to𝑺 xr) t
+                demonic_match_prod (PVartoLVar xl) (PVartoLVar xr) t
                   (fun _ _ t1 t2 => pushspops [env].[xl∷_ ↦ t1].[xr∷_ ↦ t2] (exec_aux rhs))
             | stm_match_enum E e alts =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_enum t (fun EK _ _ => exec_aux (alts EK))
             | stm_match_tuple e pat rhs =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_tuple 𝑿to𝑺 pat t
+                demonic_match_tuple PVartoLVar pat t
                   (fun _ _ ts => pushspops ts (exec_aux rhs))
             | stm_match_union U e alt__pat alt__rhs =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_union 𝑿to𝑺 alt__pat t
+                demonic_match_union PVartoLVar alt__pat t
                   (fun UK _ _ ts => pushspops ts (exec_aux (alt__rhs UK)))
             | stm_match_record R e pat rhs =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
-                demonic_match_record 𝑿to𝑺 pat t
+                demonic_match_record PVartoLVar pat t
                   (fun _ _ ts => pushspops ts (exec_aux rhs))
             | stm_match_bvec n e rhs =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;

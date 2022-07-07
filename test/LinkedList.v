@@ -118,13 +118,13 @@ Module Import ExampleProgram <: Program DefaultBase.
        predicate ptstolist. This predicate is defined later in this file, but
        since the ghost lemmas are used in statements, their signatures are
        already defined here. *)
-    Inductive Lem : NCtx 𝑿 Ty -> Set :=
+    Inductive Lem : PCtx -> Set :=
     | open_nil      : Lem [ ]
     | open_cons     : Lem [ "p" ∷ ptr ]
     | close_nil     : Lem [ "p" ∷ ty.unit ]
     | close_cons    : Lem [ "p" ∷ ptr ].
 
-    Definition 𝑳 : NCtx 𝑿 Ty -> Set := Lem.
+    Definition 𝑳 : PCtx -> Set := Lem.
 
   End FunDeclKit.
 

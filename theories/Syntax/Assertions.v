@@ -56,13 +56,13 @@ Module Type AssertionsOn
   | asn_chunk_angelic (c : Chunk Σ)
   | asn_if   (b : Term Σ ty.bool) (a1 a2 : Assertion Σ)
   | asn_match_enum (E : enumi) (k : Term Σ (ty.enum E)) (alts : forall (K : enumt E), Assertion Σ)
-  | asn_match_sum (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : 𝑺) (alt_inl : Assertion (Σ ▻ xl∷σ)) (xr : 𝑺) (alt_inr : Assertion (Σ ▻ xr∷τ))
+  | asn_match_sum (σ τ : Ty) (s : Term Σ (ty.sum σ τ)) (xl : LVar) (alt_inl : Assertion (Σ ▻ xl∷σ)) (xr : LVar) (alt_inr : Assertion (Σ ▻ xr∷τ))
   | asn_match_list
-      {σ : Ty} (s : Term Σ (ty.list σ)) (alt_nil : Assertion Σ) (xh xt : 𝑺)
+      {σ : Ty} (s : Term Σ (ty.list σ)) (alt_nil : Assertion Σ) (xh xt : LVar)
       (alt_cons : Assertion (Σ ▻ xh∷σ ▻ xt∷ty.list σ))
   | asn_match_prod
       {σ1 σ2 : Ty} (s : Term Σ (ty.prod σ1 σ2))
-      (xl xr : 𝑺) (rhs : Assertion (Σ ▻ xl∷σ1 ▻ xr∷σ2))
+      (xl xr : LVar) (rhs : Assertion (Σ ▻ xl∷σ1 ▻ xr∷σ2))
   | asn_match_tuple
       {σs : Ctx Ty} {Δ : LCtx} (s : Term Σ (ty.tuple σs))
       (p : TuplePat σs Δ) (rhs : Assertion (Σ ▻▻ Δ))
@@ -76,7 +76,7 @@ Module Type AssertionsOn
       (alt__rhs : forall (K : unionk U), Assertion (Σ ▻▻ alt__ctx K))
   | asn_sep  (a1 a2 : Assertion Σ)
   | asn_or   (a1 a2 : Assertion Σ)
-  | asn_exist (ς : 𝑺) (τ : Ty) (a : Assertion (Σ ▻ ς∷τ))
+  | asn_exist (ς : LVar) (τ : Ty) (a : Assertion (Σ ▻ ς∷τ))
   | asn_debug.
   Bind Scope asn_scope with Assertion.
 
@@ -118,7 +118,7 @@ Module Type AssertionsOn
       | asn_match_union U s ctx pat rhs =>
         asn_match_union U (subst s ζ) ctx pat (fun K => sub_assertion (rhs K) (sub_up ζ _))
       | asn_sep a1 a2 => asn_sep (sub_assertion a1 ζ) (sub_assertion a2 ζ)
-      | asn_or a1 a2  => asn_or (sub_assertion a1 ζ) (sub_assertion a2 ζ)
+      | asn_or a1 a2  => asn_sep (sub_assertion a1 ζ) (sub_assertion a2 ζ)
       | asn_exist ς τ a => asn_exist ς τ (sub_assertion a (sub_up1 ζ))
       | asn_debug => asn_debug
       end.
@@ -165,7 +165,7 @@ Module Type AssertionsOn
       { sep_contract_logic_variables  : LCtx;
         sep_contract_localstore       : SStore Δ sep_contract_logic_variables;
         sep_contract_precondition     : Assertion sep_contract_logic_variables;
-        sep_contract_result           : 𝑺;
+        sep_contract_result           : LVar;
         sep_contract_postcondition    : Assertion (sep_contract_logic_variables ▻ sep_contract_result∷τ);
       }.
 
@@ -223,7 +223,7 @@ Module Type AssertionsOn
   Section Experimental.
 
     Definition sep_contract_pun_logvars (Δ : PCtx) (Σ : LCtx) : LCtx :=
-      ctx.map (fun '(x∷σ) => (𝑿to𝑺 x∷σ)) Δ ▻▻ Σ.
+      ctx.map (fun '(x∷σ) => (PVartoLVar x∷σ)) Δ ▻▻ Σ.
 
     Record SepContractPun (Δ : PCtx) (τ : Ty) : Type :=
       MkSepContractPun
@@ -231,7 +231,7 @@ Module Type AssertionsOn
           sep_contract_pun_precondition      : Assertion
                                                  (sep_contract_pun_logvars
                                                     Δ sep_contract_pun_logic_variables);
-          sep_contract_pun_result            : 𝑺;
+          sep_contract_pun_result            : LVar;
           sep_contract_pun_postcondition     : Assertion
                                                  (sep_contract_pun_logvars Δ
                                                                            sep_contract_pun_logic_variables
@@ -251,9 +251,9 @@ Module Type AssertionsOn
             (env.tabulate (fun '(x∷σ) xIn =>
                              @term_var
                                (sep_contract_pun_logvars Δ Σ)
-                               (𝑿to𝑺 x)
+                               (PVartoLVar x)
                                σ
-                               (ctx.in_cat_left Σ (ctx.in_map (fun '(y∷τ) => (𝑿to𝑺 y∷τ)) xIn))))
+                               (ctx.in_cat_left Σ (ctx.in_map (fun '(y∷τ) => (PVartoLVar y∷τ)) xIn))))
             req result ens
         end.
 
