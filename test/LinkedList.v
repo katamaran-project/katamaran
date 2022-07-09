@@ -373,7 +373,7 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
     | preverseappend => fun xs ys zs => zs = rev_append xs ys
     end.
 
-  Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
+  #[export] Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
 
   Section HeapPredicateDeclKit.
 
@@ -384,10 +384,10 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
       | ptstocons => [ptr; ty.int; llist]
       | ptstolist => [llist; ty.list ty.int]
       end.
-    Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
+    #[export] Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
 
     (* None of the predicates is duplicable. *)
-    Global Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
+    #[export] Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
       {| is_duplicable p := false |}.
 
     Local Arguments Some {_} &.

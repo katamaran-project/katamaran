@@ -114,7 +114,7 @@ End Finite.
 Module Import ExampleBase <: Base.
   Import stdpp.finite.
 
-  Instance typedeclkit : TypeDeclKit :=
+  #[export] Instance typedeclkit : TypeDeclKit :=
     {| enumi := Enums;
        unioni := Unions;
        recordi := Records;
@@ -133,7 +133,7 @@ Module Import ExampleBase <: Base.
   Definition record_denote (R : Records) : Set :=
     match R with end.
 
-  Instance typedenotekit : TypeDenoteKit typedeclkit :=
+  #[export] Instance typedenotekit : TypeDenoteKit typedeclkit :=
     {| enumt := enum_denote;
        uniont := union_denote;
        recordt := record_denote;
@@ -178,20 +178,20 @@ Module Import ExampleBase <: Base.
   Definition record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) :=
     match R with end.
 
-  Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
+  #[export] Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
+  #[export] Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Instance eqdec_union_denote U : EqDec (union_denote U) :=
+  #[export] Instance eqdec_union_denote U : EqDec (union_denote U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance eqdec_union_constructors U : EqDec (union_constructors U) :=
+  #[export] Instance eqdec_union_constructors U : EqDec (union_constructors U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance finite_union_constructors U : finite.Finite (union_constructors U) :=
+  #[export] Instance finite_union_constructors U : finite.Finite (union_constructors U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance eqdec_record_denote R : EqDec (record_denote R) :=
+  #[export] Instance eqdec_record_denote R : EqDec (record_denote R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
-  #[refine] Instance typedefkit : TypeDefKit typedenotekit :=
+  #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
     {| unionk         := union_constructors;
        unionk_ty      := union_constructor_type;
        unionv_fold    := union_fold;
@@ -208,7 +208,7 @@ Module Import ExampleBase <: Base.
     - abstract (intros []).
   Defined.
 
-  Instance varkit : VarKit := DefaultVarKit.
+  #[export] Instance varkit : VarKit := DefaultVarKit.
 
   Include DefaultRegDeclKit.
   Include BaseMixin.

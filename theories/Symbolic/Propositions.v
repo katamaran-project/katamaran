@@ -72,13 +72,13 @@ Module Type SymPropOn
         }.
     Global Arguments MkMessage {Σ} _ _ _ _ _ _.
 
-    Global Instance SubstMessage : Subst Message :=
+    #[export] Instance SubstMessage : Subst Message :=
       fun Σ1 msg Σ2 ζ12 =>
         match msg with
         | MkMessage f m Γ δ h pc => MkMessage f m Γ (subst δ ζ12) (subst h ζ12) (subst pc ζ12)
         end.
 
-    Global Instance SubstLawsMessage : SubstLaws Message.
+    #[export] Instance SubstLawsMessage : SubstLaws Message.
     Proof.
       constructor.
       - intros ? []; cbn; now rewrite ?subst_sub_id.
@@ -86,7 +86,7 @@ Module Type SymPropOn
     Qed.
 
     Import option.notations.
-    Global Instance OccursCheckMessage : OccursCheck Message :=
+    #[export] Instance OccursCheckMessage : OccursCheck Message :=
       fun Σ x xIn msg =>
         match msg with
         | MkMessage f m Γ δ h pc =>
@@ -102,20 +102,20 @@ Module Type SymPropOn
     | MkAMessage {BT} {subB : Subst BT} {sublawsB : SubstLaws BT} {occB: OccursCheck BT} : BT Σ -> AMessage Σ
     .
 
-    Global Instance SubstAMessage : Subst AMessage :=
+    #[export] Instance SubstAMessage : Subst AMessage :=
       fun Σ1 msg Σ2 ζ12 =>
         match msg with
         | @MkAMessage _ BT subB sublB occB msg => MkAMessage _ (subst msg ζ12)
         end.
 
-    Global Instance SubstLawsAMessage : SubstLaws AMessage.
+    #[export] Instance SubstLawsAMessage : SubstLaws AMessage.
     Proof.
       constructor.
       - intros ? []; cbn; now rewrite ?subst_sub_id.
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    Global Instance OccursCheckAMessage : OccursCheck AMessage :=
+    #[export] Instance OccursCheckAMessage : OccursCheck AMessage :=
       fun Σ x xIn msg =>
         match msg with
         | MkAMessage _ msg =>
@@ -473,7 +473,7 @@ Module Type SymPropOn
     Definition sequiv_trans {Σ} : Transitive (sequiv Σ).
     Proof. intros p q r pq qr ι. now transitivity (safe q ι). Qed.
 
-    Instance sequiv_equivalence {Σ} : Equivalence (sequiv Σ).
+    #[export] Instance sequiv_equivalence {Σ} : Equivalence (sequiv Σ).
     Proof. split; auto using sequiv_refl, sequiv_sym, sequiv_trans. Qed.
 
     Definition simpl Σ : relation (𝕊 Σ) :=
@@ -487,88 +487,87 @@ Module Type SymPropOn
     Definition simpl_trans {Σ} : Transitive (simpl Σ).
     Proof. intros p q r pq qr ι. auto. Qed.
 
-    Instance simpl_preorder {Σ} : PreOrder (simpl Σ).
+    #[export] Instance simpl_preorder {Σ} : PreOrder (simpl Σ).
     Proof. split; auto using simpl_refl, simpl_trans. Qed.
 
-    Instance simpl_rewriterelation {Σ} : RewriteRelation (sequiv Σ).
+    #[export] Instance simpl_rewriterelation {Σ} : RewriteRelation (sequiv Σ).
     Defined.
 
-    Instance proper_angelic_close0 {Σ Σe} : Proper (sequiv (Σ ▻▻ Σe) ==> sequiv Σ) (angelic_close0 Σe).
+    #[export] Instance proper_angelic_close0 {Σ Σe} : Proper (sequiv (Σ ▻▻ Σe) ==> sequiv Σ) (angelic_close0 Σe).
     Proof. intros p q pq ι. rewrite ?safe_angelic_close0. now apply base.exist_proper. Qed.
 
-    Instance proper_angelic_binary {Σ} : Proper (sequiv Σ ==> sequiv Σ ==> sequiv Σ) (@angelic_binary Σ).
+    #[export] Instance proper_angelic_binary {Σ} : Proper (sequiv Σ ==> sequiv Σ ==> sequiv Σ) (@angelic_binary Σ).
     Proof.
       unfold sequiv.
       intros p1 p2 p12 q1 q2 q12 ι; cbn.
       now rewrite p12, q12.
     Qed.
 
-    Instance proper_angelic_binary_impl {Σ} : Proper (simpl Σ ==> simpl Σ ==> simpl Σ) (@angelic_binary Σ).
+    #[export] Instance proper_angelic_binary_impl {Σ} : Proper (simpl Σ ==> simpl Σ ==> simpl Σ) (@angelic_binary Σ).
     Proof.
       unfold simpl.
       intros p1 p2 p12 q1 q2 q12 ι; cbn.
       intros []; auto.
     Qed.
 
-
-    Instance proper_demonic_close0 {Σ Σu} : Proper (sequiv (Σ ▻▻ Σu) ==> sequiv Σ) (demonic_close0 Σu).
+    #[export] Instance proper_demonic_close0 {Σ Σu} : Proper (sequiv (Σ ▻▻ Σu) ==> sequiv Σ) (demonic_close0 Σu).
     Proof. intros p q pq ι. rewrite ?safe_demonic_close0. now apply base.forall_proper. Qed.
 
-    Instance proper_demonic_close0_impl {Σ Σu} : Proper (simpl (Σ ▻▻ Σu) ==> simpl Σ) (demonic_close0 Σu).
+    #[export] Instance proper_demonic_close0_impl {Σ Σu} : Proper (simpl (Σ ▻▻ Σu) ==> simpl Σ) (demonic_close0 Σu).
     Proof.
       unfold simpl. intros p q pq ι. rewrite ?safe_demonic_close0.
       intros HYP ιu. apply pq, HYP.
     Qed.
 
-    Instance proper_demonic_binary {Σ} : Proper (sequiv Σ ==> sequiv Σ ==> sequiv Σ) (@demonic_binary Σ).
+    #[export] Instance proper_demonic_binary {Σ} : Proper (sequiv Σ ==> sequiv Σ ==> sequiv Σ) (@demonic_binary Σ).
     Proof.
       unfold sequiv.
       intros p1 p2 p12 q1 q2 q12 ι; cbn.
       now rewrite p12, q12.
     Qed.
 
-    Instance proper_demonic_binary_impl {Σ} : Proper (simpl Σ ==> simpl Σ ==> simpl Σ) (@demonic_binary Σ).
+    #[export] Instance proper_demonic_binary_impl {Σ} : Proper (simpl Σ ==> simpl Σ ==> simpl Σ) (@demonic_binary Σ).
     Proof. intros p1 p2 p12 q1 q2 q12 ι. cbn. intuition. Qed.
 
-    Instance proper_assumek {Σ} (fml : Formula Σ) : Proper (sequiv Σ ==> sequiv Σ) (assumek fml).
+    #[export] Instance proper_assumek {Σ} (fml : Formula Σ) : Proper (sequiv Σ ==> sequiv Σ) (assumek fml).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_assertk {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertk fml msg).
+    #[export] Instance proper_assertk {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (sequiv Σ ==> sequiv Σ) (assertk fml msg).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_assertk_impl {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (simpl Σ ==> simpl Σ) (assertk fml msg).
+    #[export] Instance proper_assertk_impl {Σ} (fml : Formula Σ) (msg : AMessage Σ) : Proper (simpl Σ ==> simpl Σ) (assertk fml msg).
     Proof. unfold simpl. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_assume_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
+    #[export] Instance proper_assume_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assume_vareq x t).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_assume_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
+    #[export] Instance proper_assume_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) :
       Proper (simpl (Σ - x∷σ) ==> simpl Σ) (assume_vareq x t).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_assert_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
+    #[export] Instance proper_assert_vareq {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
       Proper (sequiv (Σ - x∷σ) ==> sequiv Σ) (assert_vareq x t msg).
     Proof. unfold sequiv. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_assert_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
+    #[export] Instance proper_assert_vareq_impl {Σ x σ} (xIn : x∷σ ∈ Σ) (t : Term (Σ - x∷σ) σ) (msg : AMessage (Σ - x∷σ)) :
       Proper (simpl (Σ - x∷σ) ==> simpl Σ) (assert_vareq x t msg).
     Proof. unfold simpl. intros p q pq ι. cbn. intuition. Qed.
 
-    Instance proper_angelicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (angelicv b).
+    #[export] Instance proper_angelicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (angelicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.exist_proper. Qed.
 
-    Instance proper_angelicv_impl {Σ b} : Proper (simpl (Σ ▻ b) ==> simpl Σ) (angelicv b).
+    #[export] Instance proper_angelicv_impl {Σ b} : Proper (simpl (Σ ▻ b) ==> simpl Σ) (angelicv b).
     Proof. unfold simpl. intros p q pq ι [v H]. exists v. now apply pq. Qed.
 
-    Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
+    #[export] Instance proper_demonicv {Σ b} : Proper (sequiv (Σ ▻ b) ==> sequiv Σ) (demonicv b).
     Proof. unfold sequiv. intros p q pq ι. cbn. now apply base.forall_proper. Qed.
 
-    Instance proper_debug {Σ} {bt : AMessage Σ} :
+    #[export] Instance proper_debug {Σ} {bt : AMessage Σ} :
       Proper (sequiv Σ ==> sequiv Σ) (debug bt).
     Proof. unfold sequiv. intros p q pq ι. cbn. now rewrite ?debug_equiv. Qed.
 
-    Instance proper_debug_impl {Σ} {bt : AMessage Σ} :
+    #[export] Instance proper_debug_impl {Σ} {bt : AMessage Σ} :
       Proper (simpl Σ ==> simpl Σ) (debug bt).
     Proof. unfold sequiv. intros p q pq ι. cbn. apply pq. Qed.
 
@@ -1029,11 +1028,11 @@ Module Type SymPropOn
         | debug b p              => plug ec (debug b (push ectx_refl p))
         end.
 
-      Instance proper_assert_msgs_formulas {Σ} (mfs : List (Pair AMessage Formula) Σ) :
+      #[export] Instance proper_assert_msgs_formulas {Σ} (mfs : List (Pair AMessage Formula) Σ) :
         Proper (sequiv Σ ==> sequiv Σ) (assert_msgs_formulas mfs).
       Proof. intros p q pq ι. rewrite ?safe_assert_msgs_formulas. intuition. Qed.
 
-      Instance proper_plug {Σ1 Σ2} (ec : ECtx Σ1 Σ2) :
+      #[export] Instance proper_plug {Σ1 Σ2} (ec : ECtx Σ1 Σ2) :
         Proper (sequiv Σ2 ==> sequiv Σ1) (plug ec).
       Proof.
         intros p q pq. destruct ec; cbn.
@@ -1245,22 +1244,22 @@ Module Type SymPropOn
         | debug b p              => plug ec (debug b (push uctx_refl p))
         end.
 
-      Instance proper_assume_formulas {Σ} (mfs : List Formula Σ) :
+      #[export] Instance proper_assume_formulas {Σ} (mfs : List Formula Σ) :
         Proper (sequiv Σ ==> sequiv Σ) (assume_formulas mfs).
       Proof. intros p q pq ι. rewrite ?safe_assume_formulas. intuition. Qed.
 
-      Instance proper_assume_formulas_impl {Σ} (mfs : List Formula Σ) :
+      #[export] Instance proper_assume_formulas_impl {Σ} (mfs : List Formula Σ) :
         Proper (simpl Σ ==> simpl Σ) (assume_formulas mfs).
       Proof. intros p q pq ι. rewrite ?safe_assume_formulas. intuition. Qed.
 
-      Instance proper_plug {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
+      #[export] Instance proper_plug {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
         Proper (sequiv Σ2 ==> sequiv Σ1) (plug ec).
       Proof.
         intros p q pq. destruct ec; cbn.
         now apply proper_demonic_close0, proper_assume_formulas.
       Qed.
 
-      Instance proper_plug_impl {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
+      #[export] Instance proper_plug_impl {Σ1 Σ2} (ec : UCtx Σ1 Σ2) :
         Proper (simpl Σ2 ==> simpl Σ1) (plug ec).
       Proof.
         intros p q pq. destruct ec; cbn.

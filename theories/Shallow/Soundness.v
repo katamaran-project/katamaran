@@ -50,6 +50,7 @@ Module Type Soundness
   (Import EXEC : ShallowExecOn B SIG SPEC)
   (Import HOAR : ProgramLogicOn B SIG SPEC).
 
+  Import sep.instances.
   Import sep.notations.
   Import CHeapSpecM.
   Import ProgramLogic.

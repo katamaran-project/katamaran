@@ -96,7 +96,7 @@ Module Type AssertionsOn
   Notation asn_true := (asn_bool (term_val ty.bool true)).
   Notation asn_false := (asn_bool (term_val ty.bool false)).
 
-  Global Instance sub_assertion : Subst Assertion :=
+  #[export] Instance sub_assertion : Subst Assertion :=
     fix sub_assertion {Σ1} (a : Assertion Σ1) {Σ2} (ζ : Sub Σ1 Σ2) {struct a} : Assertion Σ2 :=
       match a with
       | asn_formula fml => asn_formula (subst fml ζ)
@@ -406,6 +406,8 @@ Module Type AssertionsOn
       | asn_exist ς τ a => exists (v : Val τ), interpret_assertion_pure a (ι ► (ς∷τ ↦ v))
       | asn_debug => True
     end.
+
+    Import sep.instances.
 
     Lemma interpret_assertion_pure_equiv {Σ} (a : Assertion Σ) (a_pure : is_pure a = true) :
       forall (ι : Valuation Σ),

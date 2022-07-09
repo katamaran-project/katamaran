@@ -84,7 +84,7 @@ Module ctx.
   Section WithBinding.
     Context {B : Set}.
 
-    Global Instance eq_dec_ctx (eqB : EqDec B) : EqDec (Ctx B) :=
+    Instance eq_dec_ctx (eqB : EqDec B) : EqDec (Ctx B) :=
       fix eq_dec_ctx (Γ Δ : Ctx B) {struct Γ} : dec_eq Γ Δ :=
         match Γ , Δ with
         | nil      , nil      => left eq_refl
@@ -149,7 +149,7 @@ Module ctx.
                        end
         end.
 
-      Global Instance eqdec_ctx_nth {Γ n b} : EqDec (nth_is Γ n b) :=
+      Instance eqdec_ctx_nth {Γ n b} : EqDec (nth_is Γ n b) :=
         fun p q => left (proof_irrelevance_nth_is n b p q).
 
       Definition proof_irrelevance_nth_is_refl {Γ} (n : nat) (b : B) (p : nth_is Γ n b) :
@@ -175,7 +175,7 @@ Module ctx.
       Global Arguments in_at [_ _] _.
       Global Arguments in_valid [_ _] _.
 
-      Global Program Instance NoConfusionPackage_In {uip_B : UIP B} {b Γ} : NoConfusionPackage (In b Γ) :=
+      #[program] Instance NoConfusionPackage_In {uip_B : UIP B} {b Γ} : NoConfusionPackage (In b Γ) :=
          {| NoConfusion xIn yIn := NoConfusion (in_at xIn) (in_at yIn);
             noConfusion xIn yIn (e : NoConfusion (in_at xIn) (in_at yIn)) :=
               match noConfusion e in _ = y
@@ -712,6 +712,8 @@ Module ctx.
 
 End ctx.
 Export ctx (Ctx).
+#[export] Existing Instance ctx.eq_dec_ctx.
+
 Notation NCtx N T := (Ctx (Binding N T)).
 Bind Scope ctx_scope with Ctx.
 Bind Scope ctx_scope with NCtx.

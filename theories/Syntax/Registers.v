@@ -38,18 +38,18 @@ Local Set Implicit Arguments.
 Module Type RegDeclKit (Import T : Types).
   (* Names of registers. *)
   Parameter Inline 𝑹𝑬𝑮 : Ty -> Set.
-  Declare Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮).
-  Declare Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮).
+  #[export] Declare Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮).
+  #[export] Declare Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮).
 End RegDeclKit.
 
 Module DefaultRegDeclKit (Import T : Types) <: RegDeclKit T.
   Definition 𝑹𝑬𝑮 : Ty -> Set := fun _ => Empty_set.
-  Definition 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮) := sigma_eqdec _ _.
+  #[export] Instance 𝑹𝑬𝑮_eq_dec : EqDec (sigT 𝑹𝑬𝑮) := sigma_eqdec _ _.
 
   Local Obligation Tactic :=
     finite_from_eqdec.
 
-  Program Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮) :=
+  #[export,program] Instance 𝑹𝑬𝑮_finite : finite.Finite (sigT 𝑹𝑬𝑮) :=
     {| finite.enum := nil |}.
 
 End DefaultRegDeclKit.

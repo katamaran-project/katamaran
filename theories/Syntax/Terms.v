@@ -208,9 +208,9 @@ Module Type TermsOn (Import TY : Types).
       | term_record R ts          => term_record R (env.map (fun _ t => sub_term t ζ) ts)
       end.
 
-    Global Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=
+    #[export] Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=
       @sub_term σ.
-    Global Polymorphic Instance SubstList {A} `{Subst A} : Subst (List A) :=
+    #[export,universes(polymorphic=yes)] Instance SubstList {A} `{Subst A} : Subst (List A) :=
       fix substlist {Σ1} xs {Σ2} ζ :=
         match xs with
         | nil => nil
@@ -221,9 +221,9 @@ Module Type TermsOn (Import TY : Types).
       subst xs ζ = List.map (fun x => subst x ζ) xs.
     Proof. induction xs; cbn; f_equal; auto. Qed.
 
-    Global Instance SubstConst {A} `{finite.Finite A} : Subst (Const A) :=
+    #[export] Instance SubstConst {A} `{finite.Finite A} : Subst (Const A) :=
       fun _ x _ _ => x.
-    Global Instance SubstEnv {B : Set} {A : Ctx _ -> B -> Set} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
+    #[export] Instance SubstEnv {B : Set} {A : Ctx _ -> B -> Set} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
       Subst (fun Σ => Env (A Σ) Δ) :=
       fun Σ1 xs Σ2 ζ => env.map (fun b a => subst (T := fun Σ => A Σ b) a ζ) xs.
 
@@ -281,7 +281,7 @@ Module Type TermsOn (Import TY : Types).
 
     Global Arguments SubstLaws T {_}.
 
-    Global Instance SubstLawsTerm {σ} : SubstLaws (fun Σ => Term Σ σ).
+    #[export] Instance SubstLawsTerm {σ} : SubstLaws (fun Σ => Term Σ σ).
     Proof.
       constructor.
       { intros ? t.
@@ -296,7 +296,7 @@ Module Type TermsOn (Import TY : Types).
       }
     Qed.
 
-    Global Polymorphic Instance SubstLawsList {A} `{SubstLaws A} : SubstLaws (List A).
+    #[export,universes(polymorphic=yes)] Instance SubstLawsList {A} `{SubstLaws A} : SubstLaws (List A).
     Proof.
       constructor.
       { intros ? t.
@@ -307,10 +307,10 @@ Module Type TermsOn (Import TY : Types).
       }
     Qed.
 
-    Global Instance SubstLawsConst {A} `{finite.Finite A} : SubstLaws (Const A).
+    #[export] Instance SubstLawsConst {A} `{finite.Finite A} : SubstLaws (Const A).
     Proof. constructor; reflexivity. Qed.
 
-    Global Instance SubstLawsEnv {B : Set} {A : Ctx _ -> B -> Set}
+    #[export] Instance SubstLawsEnv {B : Set} {A : Ctx _ -> B -> Set}
       `{forall b, Subst (fun Σ => A Σ b), forall b, SubstLaws (fun Σ => A Σ b)}
       {Δ : Ctx B} :
       SubstLaws (fun Σ => Env (A Σ) Δ).
@@ -483,10 +483,10 @@ Module Type TermsOn (Import TY : Types).
 
     Definition Pair (A B : LCtx -> Type) (Σ : LCtx) : Type :=
       A Σ * B Σ.
-    Global Instance SubstPair {A B} `{Subst A, Subst B} : Subst (Pair A B) :=
+    #[export] Instance SubstPair {A B} `{Subst A, Subst B} : Subst (Pair A B) :=
       fun _ '(a,b) _ ζ => (subst a ζ, subst b ζ).
 
-    Global Instance SubstLawsPair {A B} `{SubstLaws A, SubstLaws B} : SubstLaws (Pair A B).
+    #[export] Instance SubstLawsPair {A B} `{SubstLaws A, SubstLaws B} : SubstLaws (Pair A B).
     Proof.
       constructor.
       { intros ? [t1 t2]; cbn.
@@ -503,10 +503,10 @@ Module Type TermsOn (Import TY : Types).
 
     Definition Option (A : LCtx -> Type) (Σ : LCtx) : Type :=
       option (A Σ).
-    Global Instance SubstOption {A} `{Subst A} : Subst (Option A) :=
+    #[export] Instance SubstOption {A} `{Subst A} : Subst (Option A) :=
       fun _ ma _ ζ => option_map (fun a => subst a ζ) ma.
 
-    Global Instance SubstLawsOption {A} `{SubstLaws A} : SubstLaws (Option A).
+    #[export] Instance SubstLawsOption {A} `{SubstLaws A} : SubstLaws (Option A).
     Proof.
       constructor.
       { intros ? [t|]; cbn.
@@ -525,9 +525,9 @@ Module Type TermsOn (Import TY : Types).
   Section SymbolicUnit.
 
     Definition Unit : LCtx -> Type := fun _ => unit.
-    Global Instance SubstUnit : Subst Unit :=
+    #[export] Instance SubstUnit : Subst Unit :=
       fun _ t _ _ => t.
-    Global Instance SubstLawsUnit : SubstLaws Unit.
+    #[export] Instance SubstLawsUnit : SubstLaws Unit.
     Proof. constructor; reflexivity. Qed.
 
   End SymbolicUnit.
@@ -537,9 +537,9 @@ Module Type TermsOn (Import TY : Types).
     Definition SStore (Γ : PCtx) (Σ : LCtx) : Type :=
       NamedEnv (Term Σ) Γ.
 
-    Global Instance subst_localstore {Γ} : Subst (SStore Γ) :=
+    #[export] Instance subst_localstore {Γ} : Subst (SStore Γ) :=
       SubstEnv.
-    Global Instance substlaws_localstore {Γ} : SubstLaws (SStore Γ) :=
+    #[export] Instance substlaws_localstore {Γ} : SubstLaws (SStore Γ) :=
       SubstLawsEnv.
 
     Lemma subst_lookup {Γ Σ Σ' x σ} (xInΓ : x∷σ ∈ Γ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :

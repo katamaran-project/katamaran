@@ -348,34 +348,33 @@ Export ty
 
 Module Type Types.
 
-  Declare Instance typedeclkit   : TypeDeclKit.
-  Declare Instance typedenotekit : TypeDenoteKit typedeclkit.
-  Declare Instance typedefkit    : TypeDefKit typedenotekit.
-  Declare Instance varkit        : VarKit.
+  #[export] Declare Instance typedeclkit   : TypeDeclKit.
+  #[export] Declare Instance typedenotekit : TypeDenoteKit typedeclkit.
+  #[export] Declare Instance typedefkit    : TypeDefKit typedenotekit.
+  #[export] Declare Instance varkit        : VarKit.
 
 End Types.
 
-Local Instance DefaultTypeDeclKit : TypeDeclKit :=
+#[local] Instance DefaultTypeDeclKit : TypeDeclKit :=
   {| enumi := Empty_set;
      unioni := Empty_set;
      recordi := Empty_set;
   |}.
 
-Local Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit :=
+#[local] Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit :=
   {| enumt _ := Empty_set;
      uniont _ := Empty_set;
      recordt _ := Empty_set;
   |}.
 
-Local Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit.
-  refine
-    {| unionk _            := Empty_set;
-       unionk_ty _ _       := ty.unit;
-       unionv_fold         := Empty_set_rec _;
-       unionv_unfold       := Empty_set_rec _;
-       recordf             := Empty_set;
-       recordf_ty          := Empty_set_rec _;
-       recordv_fold        := Empty_set_rec _;
-       recordv_unfold      := Empty_set_rec _;
-    |}; abstract (intros []).
-Defined.
+#[local,refine] Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit :=
+  {| unionk _            := Empty_set;
+     unionk_ty _ _       := ty.unit;
+     unionv_fold         := Empty_set_rec _;
+     unionv_unfold       := Empty_set_rec _;
+     recordf             := Empty_set;
+     recordf_ty          := Empty_set_rec _;
+     recordv_fold        := Empty_set_rec _;
+     recordv_unfold      := Empty_set_rec _;
+  |}.
+Proof. all: abstract (intros []). Defined.
