@@ -64,20 +64,20 @@ Module Type TermsOn (Import TY : Types).
   (* Experimental features *)
   | term_union   {U : unioni} (K : unionk U) (e : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
   | term_record  (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
-  Global Arguments term_var {_} _ {_ _}.
-  Global Arguments term_val {_} _ _.
-  Global Arguments term_neg {_} _.
-  Global Arguments term_not {_} _.
-  Global Arguments term_inl {_ _ _} _.
-  Global Arguments term_inr {_ _ _} _.
-  Global Arguments term_union {_} _ _.
-  Global Arguments term_record {_} _ _.
+  #[global] Arguments term_var {_} _ {_ _}.
+  #[global] Arguments term_val {_} _ _.
+  #[global] Arguments term_neg {_} _.
+  #[global] Arguments term_not {_} _.
+  #[global] Arguments term_inl {_ _ _} _.
+  #[global] Arguments term_inr {_ _ _} _.
+  #[global] Arguments term_union {_} _ _.
+  #[global] Arguments term_record {_} _ _.
   Bind Scope exp_scope with Term.
   Derive NoConfusion Signature for Term.
 
   Definition term_enum {Σ} (E : enumi) (k : enumt E) : Term Σ (ty.enum E) :=
     term_val (ty.enum E) k.
-  Global Arguments term_enum {_} _ _.
+  #[global] Arguments term_enum {_} _ _.
 
   Fixpoint term_list {Σ σ} (ts : list (Term Σ σ)) : Term Σ (ty.list σ) :=
     match ts with
@@ -193,7 +193,7 @@ Module Type TermsOn (Import TY : Types).
 
     Class Subst (T : LCtx -> Type) : Type :=
       subst : forall {Σ1 : LCtx}, T Σ1 -> forall {Σ2 : LCtx}, Sub Σ1 Σ2 -> T Σ2.
-    Global Arguments subst {T _ Σ1} t {Σ2} ζ.
+    #[global] Arguments subst {T _ Σ1} t {Σ2} ζ.
 
     Fixpoint sub_term {σ Σ1} (t : Term Σ1 σ) {Σ2} (ζ : Sub Σ1 Σ2) {struct t} : Term Σ2 σ :=
       match t with
@@ -230,11 +230,11 @@ Module Type TermsOn (Import TY : Types).
     Definition sub_id Σ : Sub Σ Σ :=
       @env.tabulate _ (fun b => Term _ (type b)) _
                     (fun '(ς∷σ) ςIn => @term_var Σ ς σ ςIn).
-    Global Arguments sub_id : clear implicits.
+    #[global] Arguments sub_id : clear implicits.
 
     Definition sub_snoc {Σ1 Σ2 : LCtx} (ζ : Sub Σ1 Σ2) b (t : Term Σ2 (type b)) :
       Sub (Σ1 ▻ b) Σ2 := env.snoc ζ b t.
-    Global Arguments sub_snoc {_ _} _ _ _.
+    #[global] Arguments sub_snoc {_ _} _ _ _.
 
     Definition sub_shift {Σ b} (bIn : b ∈ Σ) : Sub (Σ - b) Σ :=
       env.tabulate
@@ -279,7 +279,7 @@ Module Type TermsOn (Import TY : Types).
           subst t (subst ζ1 ζ2) = subst (subst t ζ1) ζ2;
       }.
 
-    Global Arguments SubstLaws T {_}.
+    #[global] Arguments SubstLaws T {_}.
 
     #[export] Instance SubstLawsTerm {σ} : SubstLaws (fun Σ => Term Σ σ).
     Proof.

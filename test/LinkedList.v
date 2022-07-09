@@ -390,7 +390,7 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
     #[export] Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
       {| is_duplicable p := false |}.
 
-    Local Arguments Some {_} &.
+    #[local] Arguments Some {_} &.
     (* Defines precieness for both predicates. The address forms the input
        in both cases and the pointed-to values are the outputs. *)
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
