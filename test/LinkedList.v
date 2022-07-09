@@ -786,7 +786,7 @@ Module ExampleModel.
   Import ExampleProgram.
   Import ExampleSpecification.
 
-  Module ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
+  Module Import ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
     Include IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
   End ExampleIrisPrelims.
 
@@ -794,7 +794,6 @@ Module ExampleModel.
      [IrisParameters] define the ghost state for memory which is then combined
      with the ghost state for registers in the [IrisResources] module below. *)
   Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSignature ExampleSemantics ExampleIrisPrelims.
-    Import ExampleIrisPrelims.
     Import iris.bi.interface.
     Import iris.bi.big_op.
     Import iris.base_logic.lib.iprop.

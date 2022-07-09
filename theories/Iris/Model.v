@@ -196,7 +196,7 @@ Module Type IrisPrelims
 
     Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-    Global Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf _ v δ).
+    #[export] Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf _ v δ).
       intros; eapply of_to_val; by cbn.
     Defined.
 
@@ -207,10 +207,10 @@ Module Type IrisPrelims
     Definition SomeReg : Type := sigT 𝑹𝑬𝑮.
     Definition SomeVal : Type := sigT Val.
 
-    Global Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
-    Global Instance countable_SomeReg : countable.Countable SomeReg := finite.finite_countable.
+    #[export] Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
+    #[export] Instance countable_SomeReg : countable.Countable SomeReg := finite.finite_countable.
 
-    Global Instance eqDec_SomeVal : EqDec SomeVal.
+    #[export] Instance eqDec_SomeVal : EqDec SomeVal.
     Proof.
       intros [τ1 v1] [τ2 v2].
       destruct (Ty_eq_dec τ1 τ2).
@@ -292,7 +292,7 @@ Module Type IrisResources
                        sailGS_memGS : memGS Σ
                      }.
 
-  Global Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
+  #[export] Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
     iris_invGS := sailGS_invGS;
     state_interp σ ns κs nt := (regs_inv σ.1 ∗ mem_inv sailGS_memGS σ.2)%I;
     fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
@@ -332,7 +332,7 @@ Section Soundness.
 
   Context `{sG : sailGS Σ}.
 
-  Global Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
+  #[export] Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
     {| lptsreg σ r v        := reg_pointsTo r v;
        luser p ts           := luser_inst sailGS_memGS ts;
        lduplicate p ts Hdup := lduplicate_inst (sRG := sailGS_sailRegGS) sailGS_memGS ts Hdup

@@ -98,30 +98,30 @@ Module Soundness
 
   (* This instance can be used for any (first-class) symbolic data that can be
      instantiated with a valuation, i.e. symbolic terms, stores, heaps etc. *)
-  Global Instance RefineInst {AT A} `{instA : Inst AT A} : Refine AT A :=
+  #[export] Instance RefineInst {AT A} `{instA : Inst AT A} : Refine AT A :=
     fun w ι t v =>
       v = inst t ι.
   Global Arguments RefineInst {_ _ _} w ι t v /.
 
   (* Relatedness of symbolic and shallow propositions. The driving base case! *)
-  Global Instance RefineProp : Refine 𝕊 Prop :=
+  #[export] Instance RefineProp : Refine 𝕊 Prop :=
     fun w ι SP P => (wsafe SP ι -> P)%type.
 
-  Global Instance RefineBox {AT A} `{Refine AT A} : Refine (Box AT) A :=
+  #[export] Instance RefineBox {AT A} `{Refine AT A} : Refine (Box AT) A :=
     fun w0 ι0 a0 a =>
       forall (w1 : World) (ω01 : w0 ⊒ w1) (ι1 : Valuation w1),
         ι0 = inst (sub_acc ω01) ι1 ->
         instpc (wco w1) ι1 ->
         ℛ ι1 (a0 w1 ω01) a.
 
-  Global Instance RefineImpl {AT A BT B} `{Refine AT A, Refine BT B} :
+  #[export] Instance RefineImpl {AT A BT B} `{Refine AT A, Refine BT B} :
     Refine (Impl AT BT) (A -> B) :=
     fun w ι fs fc =>
       forall (ta : AT w) (a : A),
         ℛ ι ta a ->
         ℛ ι (fs ta) (fc a).
 
-  Global Instance RefineForall {𝑲} {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
+  #[export] Instance RefineForall {𝑲} {AT : forall K : 𝑲, TYPE} {A : forall K : 𝑲, Type}
     {refA : forall K, Refine (AT K) (A K)} :
     Refine (@Forall 𝑲 AT) (forall K : 𝑲, A K) :=
     fun w ι fs fc =>
@@ -129,16 +129,16 @@ Module Soundness
         ℛ ι (fs K) (fc K).
 
   (* Try to help type class resolution. :( )*)
-  Global Instance RefineHeapSpecM {Γ1 Γ2 AT A} `{Refine AT A} :
+  #[export] Instance RefineHeapSpecM {Γ1 Γ2 AT A} `{Refine AT A} :
     Refine (SHeapSpecM Γ1 Γ2 AT) (CHeapSpecM Γ1 Γ2 A) := RefineImpl.
-  Global Instance RefineTermVal {σ} : Refine (STerm σ) (Val σ) :=
+  #[export] Instance RefineTermVal {σ} : Refine (STerm σ) (Val σ) :=
     RefineInst (AT := STerm σ).
-  Global Instance RefineStore {Δ : PCtx} :
+  #[export] Instance RefineStore {Δ : PCtx} :
     Refine (SStore Δ) (CStore Δ) := RefineInst.
-  Global Instance RefineEnv {Δ : Ctx Ty} :
+  #[export] Instance RefineEnv {Δ : Ctx Ty} :
     Refine (fun w => Env (Term w) Δ) (Env Val Δ) | 1 :=
     RefineInst.
-  Global Instance RefineNamedEnv {N : Set} {Δ : NCtx N Ty} :
+  #[export] Instance RefineNamedEnv {N : Set} {Δ : NCtx N Ty} :
     Refine (fun w => NamedEnv (Term w) Δ) (NamedEnv Val Δ) | 1 :=
     RefineInst.
 

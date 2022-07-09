@@ -90,7 +90,7 @@ Module MinCapsModel.
   Import MinCapsProgram.
   Import MinCapsSpecification.
 
-  Module MinCapsIrisPrelims <: IrisPrelims MinCapsBase MinCapsProgram MinCapsSignature MinCapsSemantics.
+  Module Import MinCapsIrisPrelims <: IrisPrelims MinCapsBase MinCapsProgram MinCapsSignature MinCapsSemantics.
     Include IrisPrelims MinCapsBase MinCapsProgram MinCapsSignature MinCapsSemantics.
   End MinCapsIrisPrelims.
 
@@ -498,6 +498,7 @@ Module MinCapsModel2.
   Import MinCapsSignature.
   Import MinCapsSpecification.
   Import MinCapsProgram.
+  Import MinCapsIrisPrelims.
   Import MinCapsIrisParams.
   Import MinCapsIrisResources.
   Module Import MinCapsIrisModel := IrisInstanceWithContracts MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSemantics MinCapsIrisPrelims MinCapsIrisParams MinCapsIrisResources MinCapsIrisPredicates MinCapsModel MinCapsModel.
