@@ -1454,16 +1454,16 @@ Module BlockVerificationDerivedSem.
       eauto using sound, foreignSemBlockVerif, lemSemBlockVerif, contractsVerified.
     Admitted.
 
-    Lemma sound_exec_instruction {ast} `{sailGS Σ} :
-      SymProp.safe (exec_instruction (w := wnil) ast (fun _ _ res _ h => SymProp.block) env.nil []%list) env.nil ->
-      ⊢ semTripleOneInstr emp%I ast emp%I.
-    Proof.
-      unfold exec_instruction, exec_instruction', assert.
-      iIntros (safe_exec) "".
-      rewrite <-SymProp.safe_debug_safe in safe_exec.
-      rewrite <-SymProp.wsafe_safe in safe_exec.
-      iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif).
-    Admitted.
+    (* Lemma sound_exec_instruction {ast} `{sailGS Σ} : *)
+    (*   SymProp.safe (exec_instruction (w := wnil) ast (fun _ _ res _ h => SymProp.block) env.nil []%list) env.nil -> *)
+    (*   ⊢ semTripleOneInstr emp%I ast emp%I. *)
+    (* Proof. *)
+    (*   unfold exec_instruction, exec_instruction', assert. *)
+    (*   iIntros (safe_exec) "". *)
+    (*   rewrite <-SymProp.safe_debug_safe in safe_exec. *)
+    (*   rewrite <-SymProp.wsafe_safe in safe_exec. *)
+    (*   iApply (sound_stm foreignSemBlockVerif lemSemBlockVerif). *)
+    (* Admitted. *)
     (*   - refine (exec_sound 3 _ _ _ []%list _). *)
     (*     enough (CMut.bind (CMut.exec 3 (FunDef execute)) (fun v => CMut.assert_formula (v = RETIRE_SUCCESS)) (fun _ _ _ => True) [ast] []%list). *)
     (*     + unfold CMut.bind, CMut.assert_formula, CMut.dijkstra, CDijk.assert_formula in H0. *)
@@ -1698,10 +1698,28 @@ Module BlockVerificationDerived2Sem.
   Include Katamaran.Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec Shal RiscvPmpModelBlockVerif.PLOG.
 
   Definition semTripleOneInstrStep `{sailGS Σ} (PRE : iProp Σ) (instr : AST) (POST : Z -> iProp Σ) (a : Z) : iProp Σ :=
-    ∀ an,
     semTriple [] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr (mG := sailGS_memGS) a instr)
       (FunDef RiscvPmpProgram.step)
-      (fun ret _ => (∃ v, lptsreg nextpc v) ∗ lptsreg pc an ∗ interp_ptsto_instr (mG := sailGS_memGS) a instr ∗ POST an)%I.
+      (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr (mG := sailGS_memGS) a instr)%I.
+
+  Lemma mono_exec_instruction_any__c {i a} : Monotonic' (exec_instruction_any__c i a).
+    cbv [Monotonic' exec_instruction_any__c bind Shal.CHeapSpecM.bind produce_chunk Shal.CHeapSpecM.produce_chunk demonic Shal.CHeapSpecM.demonic angelic Shal.CHeapSpecM.angelic pure Shal.CHeapSpecM.pure].
+    intros δ P Q PQ h eP v.
+    destruct (env.nilView δ).
+    specialize (eP v); revert eP.
+    apply exec_monotonic.
+    clear -PQ. intros _ δ h.
+    destruct (env.nilView δ).
+    apply consume_chunk_monotonic.
+    clear -PQ. intros _ h.
+    intros [v H]; exists v; revert H.
+    apply consume_chunk_monotonic.
+    clear -PQ; intros _ h.
+    apply consume_chunk_monotonic.
+    clear -PQ; intros _ h.
+    now apply PQ.
+  Qed.
+
 
   Lemma sound_exec_instruction_any `{sailGS Σ} {instr} (h : SCHeap) (POST : Val ty_xlenbits -> CStore [ctx] -> iProp Σ) :
     forall a,
@@ -1710,37 +1728,46 @@ Module BlockVerificationDerived2Sem.
   Proof.
     intros a.
     intros Hverif.
-    iIntros (an) "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
+    iIntros "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
     unfold exec_instruction_any__c, bind, Shal.CHeapSpecM.bind, produce_chunk, Shal.CHeapSpecM.produce_chunk, demonic, Shal.CHeapSpecM.demonic, consume_chunk in Hverif.
-    specialize (Hverif an).
-    assert (ProgramLogic.Triple [] (interpret_scheap (scchunk_ptsreg nextpc an :: scchunk_user ptstoinstr [a; instr] :: scchunk_ptsreg pc a :: h)%list) (FunDef RiscvPmpProgram.step) (fun res => (fun δ' => interp_ptsto_instr (mG := sailGS_memGS) a instr ∗ (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I)).
+    specialize (Hverif npc).
+    assert (ProgramLogic.Triple [] (interpret_scheap (scchunk_ptsreg nextpc npc :: scchunk_user ptstoinstr [a; instr] :: scchunk_ptsreg pc a :: h)%list) (FunDef RiscvPmpProgram.step) (fun res => (fun δ' => interp_ptsto_instr (mG := sailGS_memGS) a instr ∗ (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I)) as Htriple.
     { apply (exec_sound 10).
       refine (exec_monotonic 10 _ _ _ _ _ _ Hverif).
       intros [] δ0 h0 HYP.
       cbn.
       refine (consume_chunk_sound (scchunk_user ptstoinstr [a; instr]) (fun δ' => (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I δ0 h0 _).
       refine (consume_chunk_monotonic _ _ _ _ _ HYP).
-      intros [] h1 [an' Hrest]; revert Hrest.
+      intros [] h1 [an Hrest]; revert Hrest.
       cbn.
       iIntros (HYP') "Hh1".
-      iExists an'.
+      iExists an.
       iStopProof.
-      refine (consume_chunk_sound (scchunk_ptsreg nextpc an') (fun δ' => lptsreg pc an' ∗ POST an' δ')%I δ0 h1 _).
+      refine (consume_chunk_sound (scchunk_ptsreg nextpc an) (fun δ' => lptsreg pc an ∗ POST an δ')%I δ0 h1 _).
       refine (consume_chunk_monotonic _ _ _ _ _ HYP').
       intros [] h2 HYP2.
-      refine (consume_chunk_sound (scchunk_ptsreg pc an') (fun δ' => POST an' δ')%I δ0 h2 _).
+      refine (consume_chunk_sound (scchunk_ptsreg pc an) (fun δ' => POST an δ')%I δ0 h2 _).
       refine (consume_chunk_monotonic _ _ _ _ _ HYP2).
       now intros [] h3 HYP3.
     }
-    apply RiscvPmpModelBlockVerif.RiscvPmpIrisBlockVerifModel.sound_stm in H0.
-    unfold semTriple in H0.
-    iApply wp_mono.
-    {admit.
+    apply RiscvPmpModelBlockVerif.RiscvPmpIrisBlockVerifModel.sound_stm in Htriple.
+    unfold semTriple in Htriple.
+    iApply (wp_mono _ _ _
+              (fun v => interp_ptsto_instr a instr ∗ (∃ v0 : Val ty_exc_code,
+                           (lptsreg nextpc v0 : iProp Σ) ∗ (lptsreg pc v0 : iProp Σ) ∗ POST v0 (valconf_store v)))%I).
+    { iIntros ([[] store]) "[Hinstr [%an (Hnextpc & Hpc & HPOST)]]".
+      destruct (env.nilView store).
+      iFrame.
+      iExists an.
+      iFrame.
     }
-    iApply H0.
-    iApply BlockVerificationDerivedSem.ValidContractsBlockVerif.contractsSound.
-    { cbn. iFrame. admit. }
-  Admitted.
+    { iApply Htriple.
+      iApply BlockVerificationDerivedSem.ValidContractsBlockVerif.contractsSound.
+      { cbn. now iFrame. }
+    }
+    apply BlockVerificationDerivedSem.foreignSemBlockVerif.
+    apply BlockVerificationDerivedSem.lemSemBlockVerif.
+  Qed.
 
   Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
   Local Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 79).
@@ -1750,6 +1777,26 @@ Module BlockVerificationDerived2Sem.
     | cons inst insts => (interp_ptsto_instr (mG := sailGS_memGS) a inst ∗ ptsto_instrs (a + 4) insts)%I
     | nil => True%I
     end.
+
+  Lemma sound_exec_block_addr `{sailGS Σ} {instrs ainstr apc} (h : SCHeap) (POST : Val ty_xlenbits -> CStore [ctx] -> iProp Σ) :
+    exec_block_addr__c instrs ainstr apc (fun res => liftP (POST res)) [] h ->
+    ⊢ ((interpret_scheap h ∗ lptsreg pc apc ∗ ptsto_instrs ainstr instrs) -∗
+            (∀ an, lptsreg pc an ∗ ptsto_instrs ainstr instrs ∗ POST an [] ∗ ⌜ an = (apc + length instrs)%Z ⌝ -∗ LoopVerification.WP_loop) -∗
+            LoopVerification.WP_loop)%I.
+  Proof.
+    induction instrs as [|instr instrs]; cbn.
+    - iIntros (Hverif) "(Hpre & Hpc & _) Hk".
+      iApply "Hk"; iFrame.
+      iSplitR; auto.
+      iSplitL.
+      now iApply Hverif.
+      iPureIntro. now lia.
+    - unfold bind, Shal.CHeapSpecM.bind, assert, Shal.CHeapSpecM.assert_formula.
+      unfold Shal.CHeapSpecM.lift_purem, Shal.CPureSpecM.assert_formula.
+      intros [-> Hverif].
+      unfold LoopVerification.WP_loop at 2, FunDef, fun_loop.
+      (* eapply sound_exec_instruction_any in Hverif. *)
+  Admitted.
 
   Definition semTripleBlock `{sailGS Σ} (PRE : Z -> iProp Σ) (instrs : list AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
     (∀ a an,
@@ -1766,7 +1813,7 @@ Module BlockVerificationDerived2Sem.
     iIntros (a an) "(Hpre & Hpc & Hinstrs) Hk".
     specialize (Hexec a).
     unfold bind, Shal.CHeapSpecM.bind in Hexec.
-    setoid_rewrite consume_sound in Hexec.
+    unfold produce in Hexec.
   Admitted.
 
   Lemma sound_VC__addr `{sailGS Σ} {Γ} {pre post instrs} :
@@ -1779,8 +1826,7 @@ Module BlockVerificationDerived2Sem.
     intros Hverif%(safeE_safe env.nil)%simplify_sound ι.
     rewrite SymProp.safe_demonic_close in Hverif.
     specialize (Hverif ι).
-    exact (sound_exec_triple_addr Hverif).
-  Qed.
+  Admitted.
 
   Definition advAddrs := seqZ 88 (maxAddr - 88 + 1).
 
