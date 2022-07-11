@@ -1780,12 +1780,12 @@ Module BlockVerificationDerived2Sem.
   Lemma sound_exec_block_addr `{sailGS Σ} {instrs ainstr apc} (h : SCHeap) (POST : Val ty_xlenbits -> CStore [ctx] -> iProp Σ) :
     exec_block_addr__c instrs ainstr apc (fun res => liftP (POST res)) [] h ->
     ⊢ ((interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs) -∗
-            (∀ an, lptsreg pc an ∗ ptsto_instrs ainstr instrs ∗ POST an [] -∗ LoopVerification.WP_loop) -∗
+            (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs ∗ POST an [] -∗ LoopVerification.WP_loop) -∗
             LoopVerification.WP_loop)%I.
   Proof.
     revert ainstr apc h POST.
     induction instrs as [|instr instrs]; cbn; intros ainstr apc h POST.
-    - iIntros (Hverif) "(Hpre & Hpc & _) Hk".
+    - iIntros (Hverif) "(Hpre & Hpc & Hnpc & _) Hk".
       iApply "Hk"; iFrame.
       iSplitR; auto.
       now iApply Hverif.
@@ -1796,9 +1796,9 @@ Module BlockVerificationDerived2Sem.
       assert (⊢ semTripleOneInstrStep (interpret_scheap h)%I instr
                 (fun an =>
                    lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (apc + 4) instrs -∗
-                   (∀ an2 : Z, pc ↦ an2 ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ LoopVerification.WP_loop) -∗
+                   (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ LoopVerification.WP_loop) -∗
                      LoopVerification.WP_loop) apc)%I as Hverif2.
-      { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (apc + 4) instrs -∗ (∀ an2 : Z, pc ↦ an2 ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ LoopVerification.WP_loop) -∗ LoopVerification.WP_loop)%I).
+      { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (apc + 4) instrs -∗ (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ LoopVerification.WP_loop) -∗ LoopVerification.WP_loop)%I).
         revert Hverif.
         eapply mono_exec_instruction_any__c.
         intros an h2.
@@ -1821,7 +1821,7 @@ Module BlockVerificationDerived2Sem.
         iApply (iris_rule_stm_call_inline env.nil RiscvPmpProgram.loop env.nil True%I (fun v => True%I) with "[Hk Hk2 Hinstr] [$]").
         iIntros "_".
         iApply "Hk2".
-        iIntros (an2) "(Hpc & Hinstrs & HPOST)".
+        iIntros (an2) "(Hpc & Hnpc & Hinstrs & HPOST)".
         iApply "Hk".
         iFrame.
         now iIntros.
@@ -1830,8 +1830,8 @@ Module BlockVerificationDerived2Sem.
 
   Definition semTripleBlock `{sailGS Σ} (PRE : Z -> iProp Σ) (instrs : list AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
     (∀ a an,
-    (PRE a ∗ lptsreg pc a ∗ ptsto_instrs a instrs) -∗
-      (lptsreg pc an ∗ ptsto_instrs a instrs ∗ POST a an -∗ LoopVerification.WP_loop) -∗
+    (PRE a ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
+      (lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ LoopVerification.WP_loop) -∗
       LoopVerification.WP_loop)%I.
 
   Lemma sound_exec_triple_addr__c `{sailGS Σ} {W : World} {pre post instrs} {ι : Valuation W} :
@@ -1840,10 +1840,20 @@ Module BlockVerificationDerived2Sem.
       (λ a na : Z, interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
   Proof.
     intros Hexec.
-    iIntros (a an) "(Hpre & Hpc & Hinstrs) Hk".
+    iIntros (a an) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
     specialize (Hexec a).
-    unfold bind, Shal.CHeapSpecM.bind in Hexec.
-    unfold produce in Hexec.
+    unfold bind, Shal.CHeapSpecM.bind, produce in Hexec.
+    assert (interpret_scheap []%list ∗ interpret_assertion pre ι.[("a"::ty_exc_code) ↦ a] ⊢ semTripleBlock (fun a : Z => True)%I instrs (fun a na : Z => interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na]))) as Hverif.
+    { refine (@produce_sound _ _ _ _ (ι.[("a"::ty_exc_code) ↦ a]) pre (fun _ => semTripleBlock (fun a : Z => True)%I instrs (fun a na : Z => interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na]))) [env] []%list _).
+      revert Hexec.
+      apply produce_monotonic.
+      unfold consume.
+      intros _ h Hexec.
+      cbn.
+      admit.
+    }
+    iApply (Hverif with "[Hpre] [Hpc Hnpc Hinstrs]");
+      cbn; iFrame.
   Admitted.
 
   Lemma sound_VC__addr `{sailGS Σ} {Γ} {pre post instrs} :
