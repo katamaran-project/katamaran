@@ -410,7 +410,7 @@ Section Soundness.
 
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
-    PRE -∗ WP (MkConf s δ : expr (microsail_lang Γ τ)) ?{{ v, match v with MkValConf _ v δ' => POST v δ' end }}.
+    PRE -∗ WP (MkConf s δ : expr (microsail_lang Γ τ)) ?{{ v, POST (valconf_val v) (valconf_store v) }}.
   (* always modality needed? perhaps not because sail not higher-order? *)
 
   Lemma wp_compat_fail {Γ τ} {s} {δ} {Q : ValConf Γ τ -> iProp Σ} :
@@ -611,13 +611,9 @@ Section Soundness.
         (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I.
   Proof.
     iIntros "trips [HR HP]".
-    iApply (wp_mono _ _ _ (fun v => R ∗ match v with MkValConf _ v δ' => Q v δ' end)%I).
-    - iIntros (v) "[R Q]".
-      destruct v.
-      by iFrame.
-    - iApply (wp_frame_l _ _ (MkConf s δ) (fun v => match v with MkValConf _ v δ' => Q v δ' end) R).
-      iFrame.
-      by iApply "trips".
+    iApply (wp_frame_l _ _ (MkConf s δ) (fun v => match v with MkValConf _ v δ' => Q v δ' end) R).
+    iFrame.
+    by iApply "trips".
   Qed.
 
   Lemma iris_rule_pull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ)
@@ -1283,9 +1279,8 @@ Section Soundness.
     iModIntro. iFrame.
     iSplitL; [|trivial].
     iApply wp_compat_call_frame.
-    iApply (wp_mono _ _ _ (fun v => match v with MkValConf _ v0 _ => Q v0 end)).
-    {
-      iIntros ([σ' v]) "Qv".
+    iApply (wp_mono _ _ _ (fun v => Q (valconf_val v))).
+    { iIntros ([σ' v]) "Qv".
       by iFrame.
     }
     iApply ("tripbody" with "P").

@@ -1780,11 +1780,12 @@ Module BlockVerificationDerived2Sem.
 
   Lemma sound_exec_block_addr `{sailGS Σ} {instrs ainstr apc} (h : SCHeap) (POST : Val ty_xlenbits -> CStore [ctx] -> iProp Σ) :
     exec_block_addr__c instrs ainstr apc (fun res => liftP (POST res)) [] h ->
-    ⊢ ((interpret_scheap h ∗ lptsreg pc apc ∗ ptsto_instrs ainstr instrs) -∗
-            (∀ an, lptsreg pc an ∗ ptsto_instrs ainstr instrs ∗ POST an [] ∗ ⌜ an = (apc + length instrs)%Z ⌝ -∗ LoopVerification.WP_loop) -∗
+    ⊢ ((interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs) -∗
+            (∀ an, lptsreg pc an ∗ ptsto_instrs ainstr instrs ∗ POST an [] ∗ ⌜ an = (apc + 4 * length instrs)%Z ⌝ -∗ LoopVerification.WP_loop) -∗
             LoopVerification.WP_loop)%I.
   Proof.
-    induction instrs as [|instr instrs]; cbn.
+    revert ainstr apc h POST.
+    induction instrs as [|instr instrs]; cbn; intros ainstr apc h POST.
     - iIntros (Hverif) "(Hpre & Hpc & _) Hk".
       iApply "Hk"; iFrame.
       iSplitR; auto.
@@ -1795,7 +1796,42 @@ Module BlockVerificationDerived2Sem.
       unfold Shal.CHeapSpecM.lift_purem, Shal.CPureSpecM.assert_formula.
       intros [-> Hverif].
       unfold LoopVerification.WP_loop at 2, FunDef, fun_loop.
-      (* eapply sound_exec_instruction_any in Hverif. *)
+      assert (⊢ semTripleOneInstrStep (interpret_scheap h)%I instr
+                (fun an =>
+                   lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (apc + 4) instrs -∗
+                   (∀ an2 : Z, pc ↦ an2 ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] ∗
+                                ⌜an2 = (an + 4 * length instrs)%Z⌝ -∗ LoopVerification.WP_loop) -∗
+                     LoopVerification.WP_loop) apc)%I as Hverif2.
+      { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (apc + 4) instrs -∗ (∀ an2 : Z, pc ↦ an2 ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] ∗ ⌜an2 = (an + 4 * length instrs)%Z⌝ -∗ LoopVerification.WP_loop) -∗ LoopVerification.WP_loop)%I).
+        revert Hverif.
+        eapply mono_exec_instruction_any__c.
+        intros an h2.
+        unfold liftP; cbn.
+        iIntros (Hverif) "Hh2 (Hpc & Hnpc & Hinstrs) Hk".
+        iApply (IHinstrs (apc + 4)%Z an _ _ Hverif with "[$]").
+        iIntros (an2) "(Hpc & Hinstrs & HPOST & %eq)".
+        iApply "Hk"; now iFrame.
+      }
+      iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs) Hk".
+      iApply (iris_rule_stm_seq _ _ _ _ _ (fun _ _ => True%I) with "[] [Hk Hinstrs] [Hinstr Hpc Hh Hnpc]").
+      + iPoseProof Hverif2 as "Hverif2".
+        unfold semTripleOneInstrStep.
+        iApply (iris_rule_stm_call_inline env.nil RiscvPmpProgram.step env.nil with "Hverif2").
+      + iIntros (δ) "(([%an (Hnpc & Hpc & Hk2)] & Hinstr) & <-)".
+        iSpecialize ("Hk2" with "[Hpc Hnpc Hinstrs]").
+        iFrame. now iExists an.
+        iApply (wp_mono _ _ _ (fun v => True ∧ _)%I (fun v => True%I)).
+        all: cycle 1.
+        iApply (iris_rule_stm_call_inline env.nil RiscvPmpProgram.loop env.nil True%I (fun v => True%I) with "[Hk Hk2 Hinstr] [$]").
+        iIntros "_".
+        iApply "Hk2".
+        iIntros (an2) "(Hpc & Hinstrs & HPOST & %eq)".
+        iApply "Hk".
+        iFrame.
+        iPureIntro.
+        admit.
+        now iIntros.
+      + iFrame.
   Admitted.
 
   Definition semTripleBlock `{sailGS Σ} (PRE : Z -> iProp Σ) (instrs : list AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
