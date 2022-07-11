@@ -50,11 +50,11 @@ Local Unset Elimination Schemes.
 
 Module Type TermsOn (Import TY : Types).
 
-  Local Notation PCtx := (NCtx 𝑿 Ty).
-  Local Notation LCtx := (NCtx 𝑺 Ty).
+  Local Notation PCtx := (NCtx PVar Ty).
+  Local Notation LCtx := (NCtx LVar Ty).
 
   Inductive Term (Σ : LCtx) : Ty -> Set :=
-  | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : ς∷σ ∈ Σ} : Term Σ σ
+  | term_var     (ς : LVar) (σ : Ty) {ςInΣ : ς∷σ ∈ Σ} : Term Σ σ
   | term_val     (σ : Ty) : Val σ -> Term Σ σ
   | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
   | term_neg     (e : Term Σ ty.int) : Term Σ ty.int
@@ -106,7 +106,7 @@ Module Type TermsOn (Import TY : Types).
     Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Term Σ) σs -> Type :=
       fun σs es => env.All (fun b t => P (type b) t) es.
 
-    Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
+    Hypothesis (P_var        : forall (ς : LVar) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
     Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
     Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
     Hypothesis (P_neg        : forall e : Term Σ ty.int, P ty.int e -> P ty.int (term_neg e)).

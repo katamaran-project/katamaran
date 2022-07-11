@@ -54,7 +54,7 @@ Module ProgramLogic.
     Inductive CTriple {Δ σ} (δΔ : CStore Δ) (pre : L) (post : Val σ -> L) :
       SepContract Δ σ -> Prop :=
     | rule_sep_contract
-        (result : 𝑺)
+        (result : LVar)
         (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : Valuation Σ)
         (req : Assertion Σ) (ens : Assertion (Σ ▻ result∷σ))
         (frame : L) :
@@ -102,7 +102,7 @@ Module ProgramLogic.
         (P ⊢ Q (eval e δ) δ) ->
         ⦃ P ⦄ stm_exp e ; δ ⦃ Q ⦄
     | rule_stm_let
-        (x : 𝑿) (σ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
+        (x : PVar) (σ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
         (P : L) (Q : Val σ -> CStore Γ -> L)
         (R : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
@@ -137,7 +137,7 @@ Module ProgramLogic.
         ⦃ ⊤ ⦄ stm_fail τ s ; δ ⦃ Q ⦄
     | rule_stm_match_list
         {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
-        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
+        (xh xt : PVar) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ∧ !! (eval e δ = nil) ⦄ alt_nil ; δ ⦃ Q ⦄ ->
         (forall (v : Val σ) (vs : Val (ty.list σ)),
@@ -146,7 +146,7 @@ Module ProgramLogic.
            ⦃ fun v' δ' => Q v' (env.tail (env.tail δ')) ⦄) ->
         ⦃ P ⦄ stm_match_list e alt_nil xh xt alt_cons ; δ ⦃ Q ⦄
     | rule_stm_match_sum
-        {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty.sum σl σr)}
+        {xl xr : PVar} {σl σr : Ty} {e : Exp Γ (ty.sum σl σr)}
         {alt_inl : Stm (Γ ▻ xl∷σl) τ}
         {alt_inr : Stm (Γ ▻ xr∷σr) τ}
         {P : L} {Q : Val τ -> CStore Γ -> L} :
@@ -154,7 +154,7 @@ Module ProgramLogic.
         (forall (v : Val σr), ⦃ P ∧ !! (eval e δ = inr v) ⦄ alt_inr ; env.snoc δ (xr∷σr) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
         ⦃ P ⦄ stm_match_sum e xl alt_inl xr alt_inr ; δ ⦃ Q ⦄
     | rule_stm_match_prod
-        {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty.prod σl σr)}
+        {xl xr : PVar} {σl σr : Ty} {e : Exp Γ (ty.prod σl σr)}
         {rhs : Stm (Γ ▻ xl∷σl ▻ xr∷σr) τ}
         {P : L} {Q : Val τ -> CStore Γ -> L} :
         (forall (vl : Val σl) (vr : Val σr),
@@ -209,12 +209,12 @@ Module ProgramLogic.
           stm_write_register r w ; δ
         ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ) ∧ lptsreg r v' ⦄
     | rule_stm_assign_backwards
-        (x : 𝑿) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
+        (x : PVar) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
         (P : L) (R : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ fun v δ' => R v (δ' ⟪ x ↦ v ⟫)%env ⦄ ->
         ⦃ P ⦄ stm_assign x s ; δ ⦃ R ⦄
     | rule_stm_assign_forwards
-        (x : 𝑿) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
+        (x : PVar) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
         (P : L) (R : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ R ⦄ ->
         ⦃ P ⦄

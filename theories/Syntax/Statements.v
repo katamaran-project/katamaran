@@ -51,9 +51,9 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Inductive Stm (Γ : PCtx) (τ : Ty) : Type :=
   | stm_val           (v : Val τ)
   | stm_exp           (e : Exp Γ τ)
-  | stm_let           (x : 𝑿) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (Γ ▻ x∷σ) τ)
+  | stm_let           (x : PVar) (σ : Ty) (s__σ : Stm Γ σ) (s__τ : Stm (Γ ▻ x∷σ) τ)
   | stm_block         (Δ : PCtx) (δ : CStore Δ) (s : Stm (Γ ▻▻ Δ) τ)
-  | stm_assign        (x : 𝑿) {xInΓ : x∷τ ∈ Γ} (s : Stm Γ τ)
+  | stm_assign        (x : PVar) {xInΓ : x∷τ ∈ Γ} (s : Stm Γ τ)
   | stm_call          {Δ : PCtx} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
   | stm_call_frame    (Δ : PCtx) (δ : CStore Δ) (s : Stm Δ τ)
   | stm_foreign       {Δ : PCtx} (f : 𝑭𝑿 Δ τ) (es : NamedEnv (Exp Γ) Δ)
@@ -63,15 +63,15 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   | stm_assertk       (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
   | stm_fail          (s : Val ty.string)
   | stm_match_list
-      {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ) (xh xt : 𝑿)
+      {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ) (xh xt : PVar)
       (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
   | stm_match_sum
       {σinl σinr : Ty} (e : Exp Γ (ty.sum σinl σinr))
-      (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
-      (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
+      (xinl : PVar) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
+      (xinr : PVar) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
   | stm_match_prod
       {σ1 σ2 : Ty} (e : Exp Γ (ty.prod σ1 σ2))
-      (xl xr : 𝑿) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
+      (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
   | stm_match_enum
       {E : enumi} (e : Exp Γ (ty.enum E))
       (alts : forall (K : enumt E), Stm Γ τ)
@@ -199,11 +199,11 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
        ctx.resolve. Unfortunately, Coq decides to fail immediately. This can be
        can be solved using bidirectionality hints, but is brittle.
      *)
-    Definition exp_smart_var {Γ : PCtx} (x : 𝑿) {p : IsSome (ctx.resolve Γ x)} :
+    Definition exp_smart_var {Γ : PCtx} (x : PVar) {p : IsSome (ctx.resolve Γ x)} :
       Exp Γ (fromSome (ctx.resolve Γ x) p) :=
       @exp_var Γ x (fromSome (ctx.resolve Γ x) p) (ctx.resolve_mk_in Γ x p).
 
-    Definition stm_smart_assign {Γ : PCtx} (x : 𝑿) {p : IsSome (ctx.resolve Γ x)} :
+    Definition stm_smart_assign {Γ : PCtx} (x : PVar) {p : IsSome (ctx.resolve Γ x)} :
       Stm Γ (fromSome (ctx.resolve Γ x) p) -> Stm Γ (fromSome (ctx.resolve Γ x) p) :=
       @stm_assign Γ (fromSome _ p) x (ctx.resolve_mk_in Γ x p).
 

@@ -61,7 +61,7 @@ Module Type WorldsOn
 
     (* This adds one new logic variable binding [b] to the world, i.e. after
        "allocating" it in a quantifier in the proposition. *)
-    Definition wsnoc (w : World) (b : 𝑺 ∷ Ty) : World :=
+    Definition wsnoc (w : World) (b : LVar ∷ Ty) : World :=
       @MkWorld (wctx w ▻ b) (subst (wco w) sub_wk1).
     (* Add [Δ] many logic variables to the world [w]. *)
     Definition wcat (w : World) (Δ : LCtx) : World :=
@@ -255,10 +255,10 @@ Module Type WorldsOn
       wco w2 ⊢ subst (wco w1) (sub_acc ω).
     Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
 
-    Definition acc_snoc_right {w} {b : 𝑺 ∷ Ty} : w ⊒ wsnoc w b :=
+    Definition acc_snoc_right {w} {b : LVar ∷ Ty} : w ⊒ wsnoc w b :=
       @acc_sub w (wsnoc w b) sub_wk1 (entails_refl (subst (wco w) sub_wk1)).
 
-    Program Definition acc_snoc_left {w1 w2} (ω12 : w1 ⊒ w2) (b : 𝑺 ∷ Ty) (t : Term w2 (type b)) :
+    Program Definition acc_snoc_left {w1 w2} (ω12 : w1 ⊒ w2) (b : LVar ∷ Ty) (t : Term w2 (type b)) :
       wsnoc w1 b ⊒ w2 := acc_sub (sub_snoc (sub_acc ω12) b t) _.
     Next Obligation.
     Proof.

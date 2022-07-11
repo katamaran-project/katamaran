@@ -672,7 +672,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_let {Γ} (δ : CStore Γ)
-        (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
+        (x : PVar) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
         (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
         (R : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s Q -∗
@@ -727,7 +727,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_let_forwards {Γ} (δ : CStore Γ)
-        (x : 𝑿) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
+        (x : PVar) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
         (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
         (R : Val τ -> CStore (Γ ▻ x∷σ) -> iProp Σ) :
         ⊢ (semTriple δ P s Q -∗
@@ -889,7 +889,7 @@ Section Soundness.
 
   Lemma iris_rule_stm_match_list {Γ} (δ : CStore Γ)
         {σ τ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
-        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
+        (xh xt : PVar) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ (P ∧ bi_pure (eval e δ = []%list)) alt_nil (fun v' δ' => Q v' δ') -∗
                      (∀ v vs, semTriple (env.snoc (env.snoc δ (xh∷σ) v) (xt∷ty.list σ) vs) (P ∧ bi_pure (eval e δ = cons v vs)) alt_cons (fun v' δ' => Q v' (env.tail (env.tail δ')))) -∗
@@ -924,8 +924,8 @@ Section Soundness.
 
   Lemma iris_rule_stm_match_sum {Γ} (δ : CStore Γ)
         (σinl σinr τ : Ty) (e : Exp Γ (ty.sum σinl σinr))
-                         (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
-                         (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
+                         (xinl : PVar) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
+                         (xinr : PVar) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ)
                          (P : iProp Σ)
                          (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ ((∀ v, semTriple (env.snoc δ (xinl∷σinl) v) (P ∧ ⌜ eval e δ = inl v ⌝) alt_inl (fun v' δ' => Q v' (env.tail δ'))) -∗
@@ -961,7 +961,7 @@ Section Soundness.
 
   Lemma iris_rule_stm_match_prod {Γ} (δ : CStore Γ)
         {σ1 σ2 τ : Ty} (e : Exp Γ (ty.prod σ1 σ2))
-        (xl xr : 𝑿) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
+        (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ)
         (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
         ⊢ ((∀ vl vr,
             semTriple (env.snoc (env.snoc δ (xl∷σ1) vl) (xr∷σ2) vr)
@@ -1142,7 +1142,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_assign_forwards {Γ} (δ : CStore Γ)
-        (x : 𝑿) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
+        (x : PVar) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
         (P : iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s R -∗
                      semTriple δ P (stm_assign x s) (fun v__new δ' => ∃ v__old, R v__new (@env.update _ _ _ δ' (x∷_)  _ v__old) ∧ bi_pure (env.lookup δ' xIn = v__new)))%I.
@@ -1197,7 +1197,7 @@ Section Soundness.
   Qed.
 
   Lemma iris_rule_stm_assign_backwards {Γ} (δ : CStore Γ)
-        (x : 𝑿) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
+        (x : PVar) (σ : Ty) (xIn : x∷σ ∈ Γ) (s : Stm Γ σ)
         (P : iProp Σ) (R : Val σ -> CStore Γ -> iProp Σ) :
         ⊢ (semTriple δ P s (fun v δ' => R v (@env.update _ _ _ δ' (x∷_) _ v)) -∗
            semTriple δ P (stm_assign x s) R)%I.
@@ -1566,8 +1566,8 @@ Module IrisInstanceWithContracts
   Context `{sailGS Σ}.
 
   Definition ForeignSem :=
-    ∀ (Γ : NCtx 𝑿 Ty) (τ : Ty)
-      (Δ : NCtx 𝑿 Ty) f (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
+    ∀ (Γ : PCtx) (τ : Ty)
+      (Δ : PCtx) f (es : NamedEnv (Exp Γ) Δ) (δ : CStore Γ),
       match CEnvEx f with
       | MkSepContract _ _ Σ' θΔ req result ens =>
         forall (ι : Valuation Σ'),
@@ -1577,7 +1577,7 @@ Module IrisInstanceWithContracts
       end.
 
   Definition LemmaSem : Prop :=
-    forall (Δ : NCtx 𝑿 Ty) (l : 𝑳 Δ),
+    forall (Δ : PCtx) (l : 𝑳 Δ),
       ValidLemma (LEnv l).
 
   Lemma iris_rule_stm_call_forwards `{sG : sailGS Σ} {Γ} (δ : CStore Γ)

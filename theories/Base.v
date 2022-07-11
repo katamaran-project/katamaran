@@ -52,10 +52,10 @@ Module Type BaseMixin (Import TY : Types).
     OccursCheckOn TY <+ InstantiationOn TY <+
     PartialEvaluationOn TY.
 
-  Notation PCtx := (NCtx 𝑿 Ty).
-  Notation LCtx := (NCtx 𝑺 Ty).
-  Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Val (@type 𝑺 Ty xt)) Σ).
-  Notation CStore := (@NamedEnv 𝑿 Ty Val).
+  Notation PCtx := (NCtx PVar Ty).
+  Notation LCtx := (NCtx LVar Ty).
+  Notation Valuation Σ := (@Env (Binding LVar Ty) (fun xt : Binding LVar Ty => Val (@type LVar Ty xt)) Σ).
+  Notation CStore := (@NamedEnv PVar Ty Val).
 
   (* Preciseness for spatial predicates *)
   Record Precise {P : Set} (F : P -> Ctx Ty) (p : P) : Set :=

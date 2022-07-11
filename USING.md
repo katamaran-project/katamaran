@@ -1,6 +1,34 @@
 # Using Katamaran
 
-This file described how the framework can be used for a new development, i.e. a new instruction set architecture.
+This file described how the framework can be used for a new development, i.e. a new instruction set architecture, and provides information on more general usage concerns like variable binding etc.
+To understand the structure of the library including, we recommend reading this file in conjunction with the linked list toy example that can be found in [test/LinkedList.v](test/LinkedList.v).
+It instantiates the complete library including a user-defined solver and the Iris model, and shows the definition of many user-defined modules and the application of the librarie's module functors.
+
+For a new development, you can also adapt one of the existing case studies, e.g. [MinimalCaps](https://github.com/katamaran-project/katamaran/tree/main/case_study/MinimalCaps) or [RISC-V PMP](https://github.com/katamaran-project/katamaran/tree/main/case_study/RiscvPmp).
+
+## Variable binding
+In the development, two kinds of variables are explicitly represented:
+- *program variables* which are variables that stand for a mutable entry in a (local) program variable store, and which are used to represent function paramaters, and are used in program statements and expressions.
+- *logic variables* which are variables that stand for a value and are used in contracts and symbolic propositions.
+
+Both kinds of variables share a lot of code in the implementation, and both are represented using an intrinsically-typed de Bruijn representation, but tries to hide that fact for the user. Specifically, the user can write his programs and contracts using names (strings) instead and the library provides some typeclass-based machinery to perform name resolution and fill in de Bruijn indices automatically.
+The de Bruijn indices are the ground source of truth for all purposes, but the names are also kept around as "decoration".
+Logic variable names are also refreshed during computations ([`Definition fresh`](theories/Context.v)) and we try to preserve user-given names as much as possible, but we currently do not prove that logic variable names are sufficiently fresh and that no shadowing occurs.
+Program variable names are allowed to use shadowing.
+
+The file [Context.v](theories/Context.v) provides most of the variable binding-related definitions.
+An (ordered) context [`Inductive Ctx`](theories/Context.v) is a list of bindings that represent a set of variables in scope.
+This datatype parameterized over a type of bindings `B`, and is thus a bit more general because it is also used in the representation of tuples and records, heap predicates etc..
+For variable bindings the `B` parameter is always instantited to [`Record Binding`](theories/Context.v) that consists of a name and a type for a variable. 
+This instantiation is then used to represent program variable contexts [`Notation PCtx`(theories/Base.v) and logic variable contexts [`Notation LCtx`](theories/Base.v).
+
+Variables are represented using context containment proofs [`Class In (b : B) (Γ : Ctx B)`](theories/Context.v) that consist of a witness (de Bruijn index) and a proof that the binding `(b : B)` is the binding at that position in the context `(Γ : Ctx B)`.
+A hook into the typeclass instance resolution (in [`Module resolution`](theories/Context.v)) provides a computationally reflective procedure to resolve the last context entry with a given name and constructs the context containment witness [`Fixpoint resolve_mk_in`](theories/Context.v).
+Such a technique was independently developed in the Koika language and described in: [Pit-Claudel and Bourgeat. "An experience report on writing usable DSLs in Coq." CoqPL’21](https://people.csail.mit.edu/bthom/coqpl21.pdf).
+
+Environments [`Inductive Env`](theories/Environment.v) map variables to different kinds of data.
+A program variable store is a mapping of program variables to values [`Notation CStore`](theories/Base.v) or to symbolic terms [`Definition SStore`](theories/Syntax/Terms.v).
+Mappings of logic variables to values are valuations [`Notation Valuation`](theories/Base.v) and mappings of logic variables to symbolic terms (in another context) are substitutions [`Definition Sub`](theories/Syntax/Terms.v).
 
 ## Programs and specifications
 The framework uses modules and module functors, i.e. modules parameterized by other modules.
@@ -20,8 +48,6 @@ We describe these user-provided modules on a high level and give pointers to the
 
 The base and program modules together contain the necessary details to instantiate [μSail's operational semantics (`Module MakeSemantics`)](theories/Semantics.v).
 The signature, specification and solver modules together instantiate the [shallow (`Module MakeShallowExecutor`)](theories/Shallow/Executor.v) and [symbolic (`Module MakeExecutor`)](theories/Symbolic/Executor.v) verification condition generators, the [axiomatic program logic (`Module Type ProgramLogicOn`)](theories/Sep/Hoare.v) and the [shallow (`Module Soundness`)](theories/Shallow/Soundness.v) and [symbolic (`Module Soundness`)](theories/Symbolic/Soundness.v) soundness lemmas.
-
-The easiest way is to use the library is to adapt one of the existing case studies, e.g. [MinimalCaps](https://github.com/katamaran-project/katamaran/tree/main/case_study/MinimalCaps) or [RISC-V PMP](https://github.com/katamaran-project/katamaran/tree/main/case_study/RiscvPmp), or to use one of the [toy examples](https://github.com/katamaran-project/katamaran/tree/main/test), which show the definition of the user-defined modules and the application of the librarie's module functors.
 
 
 ## Iris program logic model

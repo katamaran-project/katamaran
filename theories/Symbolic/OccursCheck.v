@@ -51,7 +51,7 @@ Module Type OccursCheckOn
   (Import TY : Types)
   (Import TM : TermsOn TY).
 
-  Local Notation LCtx := (NCtx 𝑺 Ty).
+  Local Notation LCtx := (NCtx LVar Ty).
 
   Class OccursCheck (T : LCtx -> Type) : Type :=
     occurs_check : forall {Σ x} (xIn : x ∈ Σ) (t : T Σ), option (T (Σ - x)).
@@ -223,7 +223,7 @@ Module Type OccursCheckOn
 
     (* A generic view for the occurs check instead of the option monad
        based implementation above. *)
-    Inductive OccursCheckView {T} {subT : Subst T} {Σ} {x : 𝑺∷Ty} (xIn : x ∈ Σ) : T Σ -> Type :=
+    Inductive OccursCheckView {T} {subT : Subst T} {Σ} {x : LVar∷Ty} (xIn : x ∈ Σ) : T Σ -> Type :=
     | Succ (t : T (Σ - x)) : OccursCheckView xIn (subst t (sub_shift xIn))
     | Fail t : OccursCheckView xIn t.
 

@@ -52,13 +52,13 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , (stm_exp e) ⟩ ---> ⟨ γ , μ , δ , stm_val τ (eval e δ) ⟩
 
   | step_stm_let_value
-      (x : 𝑿) (σ : Ty) (v : Val σ) (k : Stm (Γ ▻ x∷σ) τ) :
+      (x : PVar) (σ : Ty) (v : Val σ) (k : Stm (Γ ▻ x∷σ) τ) :
       ⟨ γ , μ , δ , stm_let x σ (stm_val σ v) k ⟩ ---> ⟨ γ , μ , δ , stm_block (env.snoc env.nil (x∷σ) v) k ⟩
   | step_stm_let_fail
-      (x : 𝑿) (σ : Ty) (s : string) (k : Stm (Γ ▻ x∷σ) τ) :
+      (x : PVar) (σ : Ty) (s : string) (k : Stm (Γ ▻ x∷σ) τ) :
       ⟨ γ , μ , δ, stm_let x σ (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | step_stm_let_step
-      (x : 𝑿) (σ : Ty) (s s' : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
+      (x : PVar) (σ : Ty) (s s' : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
       (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) :
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_let x σ s k ⟩ ---> ⟨ γ', μ' , δ' , stm_let x σ s' k ⟩
@@ -116,13 +116,13 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , k ⟩
 
   | step_stm_assign_value
-      (x : 𝑿) {xInΓ : x∷τ ∈ Γ} (v : Val τ) :
+      (x : PVar) {xInΓ : x∷τ ∈ Γ} (v : Val τ) :
       ⟨ γ , μ , δ , stm_assign x (stm_val τ v) ⟩ ---> ⟨ γ , μ , δ ⟪ x ↦ v ⟫ , stm_val τ v ⟩
   | step_stm_assign_fail
-      (x : 𝑿) {xInΓ : x∷τ ∈ Γ} (s : string) :
+      (x : PVar) {xInΓ : x∷τ ∈ Γ} (s : string) :
       ⟨ γ , μ , δ , stm_assign x (stm_fail τ s) ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
   | step_stm_assign_step
-      (x : 𝑿) {xInΓ : x∷τ ∈ Γ} (s s' : Stm Γ τ)
+      (x : PVar) {xInΓ : x∷τ ∈ Γ} (s s' : Stm Γ τ)
       (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) :
       ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
       ⟨ γ , μ , δ , stm_assign x s ⟩ ---> ⟨ γ' , μ' , δ' , stm_assign x s' ⟩
@@ -137,7 +137,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
 
   | step_stm_match_list
       {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
-      (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ) :
+      (xh xt : PVar) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ) :
       ⟨ γ , μ , δ , stm_match_list e alt_nil xh xt alt_cons ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
                 | nil => alt_nil
@@ -146,8 +146,8 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟩
   | step_stm_match_sum
       {σinl σinr : Ty} (e : Exp Γ (ty.sum σinl σinr))
-      (xinl : 𝑿) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
-      (xinr : 𝑿) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ) :
+      (xinl : PVar) (alt_inl : Stm (Γ ▻ xinl∷σinl) τ)
+      (xinr : PVar) (alt_inr : Stm (Γ ▻ xinr∷σinr) τ) :
       ⟨ γ , μ , δ , stm_match_sum e xinl alt_inl xinr alt_inr ⟩ --->
       ⟨ γ , μ , δ , match eval e δ with
                 | inl v => stm_block (env.snoc env.nil (xinl∷σinl) v) alt_inl
@@ -155,7 +155,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
                 end
       ⟩
   | step_stm_match_prod
-      {σ1 σ2 : Ty} (e : Exp Γ (ty.prod σ1 σ2)) (xl xr : 𝑿)
+      {σ1 σ2 : Ty} (e : Exp Γ (ty.prod σ1 σ2)) (xl xr : PVar)
       (rhs : Stm (Γ ▻ xl∷σ1 ▻ xr∷σ2) τ) :
       ⟨ γ , μ , δ , stm_match_prod e xl xr rhs ⟩ --->
       ⟨ γ , μ , δ , let (vl , vr) := eval e δ in

@@ -48,11 +48,11 @@ Local Unset Elimination Schemes.
 
 Module Type ExpressionsOn (Import TY : Types).
 
-  Local Notation PCtx := (NCtx 𝑿 Ty).
-  Local Notation CStore := (@NamedEnv 𝑿 Ty Val).
+  Local Notation PCtx := (NCtx PVar Ty).
+  Local Notation CStore := (@NamedEnv PVar Ty Val).
 
   (* Intrinsically well-typed expressions. The context Γ of mutable variables
-     contains names 𝑿 and types Ty, but the names are not computationally
+     contains names PVar and types Ty, but the names are not computationally
      relevant. The underlying representation is still a de Bruijn index based
      one. The names are meant for human consumption and we also provide name
      resolution infrastructure in the NameResolution module to fill in de
@@ -64,7 +64,7 @@ Module Type ExpressionsOn (Import TY : Types).
      constructor below and use the type class mechanism to copy these
      locally. *)
   Inductive Exp (Γ : PCtx) : Ty -> Set :=
-  | exp_var     (x : 𝑿) (σ : Ty) (xInΓ : x∷σ ∈ Γ) : Exp Γ σ
+  | exp_var     (x : PVar) (σ : Ty) (xInΓ : x∷σ ∈ Γ) : Exp Γ σ
   | exp_val     (σ : Ty) : Val σ -> Exp Γ σ
   | exp_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ σ3
   | exp_neg     (e : Exp Γ ty.int) : Exp Γ ty.int
@@ -99,7 +99,7 @@ Module Type ExpressionsOn (Import TY : Types).
     Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Exp Γ) σs -> Type :=
       env.Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
 
-    Hypothesis (P_var     : forall (x : 𝑿) (σ : Ty) (xInΓ : x∷σ ∈ Γ), P σ (exp_var x)).
+    Hypothesis (P_var     : forall (x : PVar) (σ : Ty) (xInΓ : x∷σ ∈ Γ), P σ (exp_var x)).
     Hypothesis (P_val     : forall (σ : Ty) (l : Val σ), P σ (exp_val σ l)).
     Hypothesis (P_binop   : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1), P σ1 e1 -> forall e2 : Exp Γ σ2, P σ2 e2 -> P σ3 (exp_binop op e1 e2)).
     Hypothesis (P_neg     : forall e : Exp Γ ty.int, P ty.int e -> P ty.int (exp_neg e)).
