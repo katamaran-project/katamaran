@@ -156,7 +156,6 @@ Module ty.
     Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
 
   End WithTypeDecl.
-  (* #[export] Existing Instance Ty_eq_dec. *)
 
   Class TypeDenoteKit (TDC : TypeDeclKit) : Type :=
     { (* Mapping enum type constructor names to enum types *)
@@ -192,21 +191,21 @@ Module ty.
   End WithTypeDenote.
 
   Class TypeDefKit {TDC : TypeDeclKit} (TDN : TypeDenoteKit TDC) : Type :=
-    { enum_eqdec   :> EqDec enumi;
-      union_eqdec  :> EqDec unioni;
-      record_eqdec :> EqDec recordi;
+    { enum_eqdec   : EqDec enumi;
+      union_eqdec  : EqDec unioni;
+      record_eqdec : EqDec recordi;
 
-      enumt_eqdec E  :> EqDec (enumt E);
-      enumt_finite E :> finite.Finite (enumt E);
+      enumt_eqdec E  : EqDec (enumt E);
+      enumt_finite E : finite.Finite (enumt E);
 
-      uniont_eqdec U  :> EqDec (uniont U);
+      uniont_eqdec U  : EqDec (uniont U);
       (* Names of union data constructors. *)
       unionk          : unioni -> Set;
-      unionk_eqdec U  :> EqDec (unionk U);
-      unionk_finite U :> finite.Finite (unionk U);
+      unionk_eqdec U  : EqDec (unionk U);
+      unionk_finite U : finite.Finite (unionk U);
       unionk_ty U     : unionk U -> Ty;
 
-      recordt_eqdec R  :> EqDec (recordt R);
+      recordt_eqdec R  : EqDec (recordt R);
       (* Record field names. *)
       recordf          : Set;
       (* Record field types. *)
@@ -228,13 +227,26 @@ Module ty.
       recordv_unfold_fold R v : recordv_unfold R (recordv_fold R v) = v;
     }.
 
+  (* Coq 8.16 will start generating coercions for [:>] in Class definitions. Not
+     sure what the implications are and if we want that. For now, manually
+     declare the necessary fields as superclass instances. *)
+  #[export] Existing Instance enum_eqdec.
+  #[export] Existing Instance union_eqdec.
+  #[export] Existing Instance record_eqdec.
+  #[export] Existing Instance enumt_eqdec.
+  #[export] Existing Instance enumt_finite.
+  #[export] Existing Instance uniont_eqdec.
+  #[export] Existing Instance unionk_eqdec.
+  #[export] Existing Instance unionk_finite.
+  #[export] Existing Instance recordt_eqdec.
+
   Section WithTypeDef.
 
     Context {TDC : TypeDeclKit}.
     Context {TDN : TypeDenoteKit TDC}.
     Context {TDF : TypeDefKit TDN}.
 
-    Instance Ty_eq_dec : EqDec Ty :=
+    #[export] Instance Ty_eq_dec : EqDec Ty :=
       fix ty_eqdec (σ τ : Ty) {struct σ} : dec_eq σ τ :=
         match σ , τ with
         | int        , int        => left eq_refl
@@ -330,7 +342,7 @@ Export ty
   ( TypeDeclKit, enumt, uniont, recordt,
 
     TypeDenoteKit,
-    Ty, Ty_eq_dec, Val, Val_eqb, Val_eqb_spec,
+    Ty, Val, Val_eqb, Val_eqb_spec,
 
     TypeDefKit, enum_eqdec, enumt_eqdec, enumt_finite,
     enumi,
@@ -344,7 +356,19 @@ Export ty
     unionv_fold_inj, unionv_unfold_inj,
     recordv_fold_unfold, recordv_unfold_fold
   ).
+(* Reexport all instances from the ty submodule. Coq >= 8.15 can do this with
+     Export (hints) ty.
+   but we currently still support Coq 8.14. *)
 #[export] Existing Instance ty.Ty_eq_dec.
+#[export] Existing Instance ty.enum_eqdec.
+#[export] Existing Instance ty.union_eqdec.
+#[export] Existing Instance ty.record_eqdec.
+#[export] Existing Instance ty.enumt_eqdec.
+#[export] Existing Instance ty.enumt_finite.
+#[export] Existing Instance ty.uniont_eqdec.
+#[export] Existing Instance ty.unionk_eqdec.
+#[export] Existing Instance ty.unionk_finite.
+#[export] Existing Instance ty.recordt_eqdec.
 
 Module Type Types.
 

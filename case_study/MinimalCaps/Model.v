@@ -109,9 +109,10 @@ Module MinCapsModel.
 
       Class mcMemGS Σ := McMemGS {
                             (* ghost variable for tracking state of registers *)
-                            mc_ghG :> gh.gen_heapGS Z MemVal Σ;
+                            mc_ghG : gh.gen_heapGS Z MemVal Σ;
                             mc_invNs : namespace
                           }.
+      #[export] Existing Instance mc_ghG.
 
       Definition memGpreS : gFunctors -> Set := fun Σ => gh.gen_heapGpreS Z MemVal Σ.
       Definition memGS : gFunctors -> Set := mcMemGS.

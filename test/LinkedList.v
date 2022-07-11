@@ -803,9 +803,10 @@ Module ExampleModel.
     Class mcMemGS Σ :=
       McMemGS {
           (* ghost variable for tracking the memory state. *)
-          mc_ghGS :> gen_heapGS Z (Z * (Z + unit)) Σ;
+          mc_ghGS : gen_heapGS Z (Z * (Z + unit)) Σ;
           mc_invNs : namespace
         }.
+    #[export] Existing Instance mc_ghGS.
 
     Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
     Definition memGS : gFunctors -> Set := mcMemGS.
