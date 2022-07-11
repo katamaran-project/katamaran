@@ -1752,21 +1752,20 @@ Module BlockVerificationDerived2Sem.
     }
     apply RiscvPmpModelBlockVerif.RiscvPmpIrisBlockVerifModel.sound_stm in Htriple.
     unfold semTriple in Htriple.
-    iApply (wp_mono _ _ _
-              (fun v => interp_ptsto_instr a instr ∗ (∃ v0 : Val ty_exc_code,
-                           (lptsreg nextpc v0 : iProp Σ) ∗ (lptsreg pc v0 : iProp Σ) ∗ POST v0 (valconf_store v)))%I).
-    { iIntros ([[] store]) "[Hinstr [%an (Hnextpc & Hpc & HPOST)]]".
-      destruct (env.nilView store).
-      iFrame.
-      iExists an.
-      iFrame.
-    }
+    iApply wp_mono.
+    all: cycle 1.
     { iApply Htriple.
       iApply BlockVerificationDerivedSem.ValidContractsBlockVerif.contractsSound.
       { cbn. now iFrame. }
     }
     apply BlockVerificationDerivedSem.foreignSemBlockVerif.
     apply BlockVerificationDerivedSem.lemSemBlockVerif.
+    { iIntros ([[] store]) "[Hinstr [%an (Hnextpc & Hpc & HPOST)]]".
+      destruct (env.nilView store).
+      iFrame.
+      iExists an.
+      iFrame.
+    }
   Qed.
 
   Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
