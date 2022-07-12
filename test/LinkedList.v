@@ -373,7 +373,7 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
     | preverseappend => fun xs ys zs => zs = rev_append xs ys
     end.
 
-  Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
+  #[export] Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
 
   Section HeapPredicateDeclKit.
 
@@ -384,13 +384,13 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
       | ptstocons => [ptr; ty.int; llist]
       | ptstolist => [llist; ty.list ty.int]
       end.
-    Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
+    #[export] Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
 
     (* None of the predicates is duplicable. *)
-    Global Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
+    #[export] Instance 𝑯_is_dup : IsDuplicable 𝑯 :=
       {| is_duplicable p := false |}.
 
-    Local Arguments Some {_} &.
+    #[local] Arguments Some {_} &.
     (* Defines precieness for both predicates. The address forms the input
        in both cases and the pointed-to values are the outputs. *)
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
@@ -786,7 +786,7 @@ Module ExampleModel.
   Import ExampleProgram.
   Import ExampleSpecification.
 
-  Module ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
+  Module Import ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
     Include IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
   End ExampleIrisPrelims.
 
@@ -794,7 +794,6 @@ Module ExampleModel.
      [IrisParameters] define the ghost state for memory which is then combined
      with the ghost state for registers in the [IrisResources] module below. *)
   Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSignature ExampleSemantics ExampleIrisPrelims.
-    Import ExampleIrisPrelims.
     Import iris.bi.interface.
     Import iris.bi.big_op.
     Import iris.base_logic.lib.iprop.
@@ -804,9 +803,10 @@ Module ExampleModel.
     Class mcMemGS Σ :=
       McMemGS {
           (* ghost variable for tracking the memory state. *)
-          mc_ghGS :> gen_heapGS Z (Z * (Z + unit)) Σ;
+          mc_ghGS : gen_heapGS Z (Z * (Z + unit)) Σ;
           mc_invNs : namespace
         }.
+    #[export] Existing Instance mc_ghGS.
 
     Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
     Definition memGS : gFunctors -> Set := mcMemGS.

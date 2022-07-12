@@ -343,77 +343,77 @@ Section Finite.
   Local Obligation Tactic :=
     finite_from_eqdec.
 
-  Global Program Instance Privilege_finite : Finite Privilege :=
+  #[export,program] Instance Privilege_finite : Finite Privilege :=
     {| enum := [User;Machine] |}.
 
-  Global Program Instance CSRIdx_finite : Finite CSRIdx :=
+  #[export,program] Instance CSRIdx_finite : Finite CSRIdx :=
     {| enum := [MStatus;MTvec;MCause;MEpc;MPMP0CFG;MPMP1CFG;MPMPADDR0;MPMPADDR1] |}.
 
-  Global Program Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
+  #[export,program] Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
     {| enum := [PMP0CFG;PMP1CFG] |}.
 
-  Global Program Instance PmpAddrIdx_finite : Finite PmpAddrIdx :=
+  #[export,program] Instance PmpAddrIdx_finite : Finite PmpAddrIdx :=
     {| enum := [PMPADDR0;PMPADDR1] |}.
 
-  Global Program Instance PmpAddrMatchType_finite : Finite PmpAddrMatchType :=
+  #[export,program] Instance PmpAddrMatchType_finite : Finite PmpAddrMatchType :=
     {| enum := [OFF;TOR] |}.
 
-  Global Program Instance PmpMatch_finite : Finite PmpMatch :=
+  #[export,program] Instance PmpMatch_finite : Finite PmpMatch :=
     {| enum := [PMP_Success;PMP_Continue;PMP_Fail] |}.
 
-  Global Program Instance PmpAddrMatch_finite : Finite PmpAddrMatch :=
+  #[export,program] Instance PmpAddrMatch_finite : Finite PmpAddrMatch :=
     {| enum := [PMP_NoMatch;PMP_PartialMatch;PMP_Match] |}.
 
-  Global Program Instance ROP_finite :
+  #[export,program] Instance ROP_finite :
     Finite ROP :=
     {| enum := [RISCV_ADD;RISCV_SUB] |}.
 
-  Global Program Instance IOP_finite :
+  #[export,program] Instance IOP_finite :
     Finite IOP :=
     {| enum := [RISCV_ADDI] |}.
 
-  Global Program Instance UOP_finite :
+  #[export,program] Instance UOP_finite :
     Finite UOP :=
     {| enum := [RISCV_LUI;RISCV_AUIPC] |}.
 
-  Global Program Instance BOP_finite :
+  #[export,program] Instance BOP_finite :
     Finite BOP :=
     {| enum := [RISCV_BEQ;RISCV_BNE;RISCV_BLT;RISCV_BGE;RISCV_BLTU;RISCV_BGEU] |}.
 
-  Global Program Instance CSROP_finite :
+  #[export,program] Instance CSROP_finite :
     Finite CSROP :=
     {| enum := [CSRRW] |}.
 
-  Global Program Instance Retired_finite :
+  #[export,program] Instance Retired_finite :
     Finite Retired :=
     {| enum := [RETIRE_SUCCESS; RETIRE_FAIL] |}.
 
-  Global Program Instance ASTConstructor_finite :
+  #[export,program] Instance ASTConstructor_finite :
     Finite ASTConstructor :=
     {| enum := [KRTYPE;KITYPE;KUTYPE;KBTYPE;KRISCV_JAL;KRISCV_JALR;KLOAD;KSTORE;KECALL;KMRET;KCSR] |}.
 
-  Global Program Instance AccessType_finite :
+  #[export,program] Instance AccessType_finite :
     Finite AccessType :=
     {| enum := [Read; Write; ReadWrite; Execute] |}.
 
-  Global Program Instance AccessTypeConstructor_finite :
+  #[export,program] Instance AccessTypeConstructor_finite :
     Finite AccessTypeConstructor :=
     {| enum := [KRead;KWrite;KReadWrite;KExecute] |}.
 
-  Global Program Instance ExceptionTypeConstructor_finite :
+  #[export,program] Instance ExceptionTypeConstructor_finite :
     Finite ExceptionTypeConstructor :=
     {| enum := [KE_Fetch_Access_Fault;KE_Load_Access_Fault;KE_SAMO_Access_Fault;
                 KE_U_EnvCall;KE_M_EnvCall;KE_Illegal_Instr] |}.
 
-  Global Program Instance MemoryOpResultConstructor_finite :
+  #[export,program] Instance MemoryOpResultConstructor_finite :
     Finite MemoryOpResultConstructor :=
     {| enum := [KMemValue;KMemException] |}.
 
-  Global Program Instance FetchResultConstructor_finite :
+  #[export,program] Instance FetchResultConstructor_finite :
     Finite FetchResultConstructor :=
     {| enum := [KF_Base;KF_Error] |}.
 
-  Global Program Instance CtlResultConstructor_finite :
+  #[export,program] Instance CtlResultConstructor_finite :
     Finite CtlResultConstructor :=
     {| enum := [KCTL_TRAP;KCTL_MRET] |}.
 
@@ -426,7 +426,7 @@ Module Export RiscvPmpBase <: Base.
   Import env.notations.
   Import stdpp.finite.
 
-  Instance typedeclkit : TypeDeclKit :=
+  #[export] Instance typedeclkit : TypeDeclKit :=
     {| enumi := Enums;
        unioni := Unions;
        recordi := Records;
@@ -550,17 +550,17 @@ Module Export RiscvPmpBase <: Base.
                             end
     end.
 
-  Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
+  #[export] Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
+  #[export] Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Instance eqdec_union_denote U : EqDec (union_denote U) :=
+  #[export] Instance eqdec_union_denote U : EqDec (union_denote U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance eqdec_union_constructor U : EqDec (union_constructor U) :=
+  #[export] Instance eqdec_union_constructor U : EqDec (union_constructor U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance finite_union_constructor U : finite.Finite (union_constructor U) :=
+  #[export] Instance finite_union_constructor U : finite.Finite (union_constructor U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance eqdec_record_denote R : EqDec (record_denote R) :=
+  #[export] Instance eqdec_record_denote R : EqDec (record_denote R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
   Definition union_unfold (U : unioni) : uniont U -> { K & Val (union_constructor_type U K) } :=
@@ -685,7 +685,7 @@ Module Export RiscvPmpBase <: Base.
                            (_ ∷ ty.bool             ; R p) ];
   | rmstatus    | m => [kv ("MPP" ∷ ty_privilege; MPP m) ].
 
-  #[refine] Instance typedefkit : TypeDefKit typedenotekit :=
+  #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
     {| unionk           := union_constructor;
        unionk_ty        := union_constructor_type;
        recordf          := string;
@@ -711,7 +711,7 @@ Module Export RiscvPmpBase <: Base.
   Canonical typedenotekit.
   Canonical typedefkit.
 
-  Instance varkit : VarKit := DefaultVarKit.
+  #[export] Instance varkit : VarKit := DefaultVarKit.
 
   Section RegDeclKit.
 

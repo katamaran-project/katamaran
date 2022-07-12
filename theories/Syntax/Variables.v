@@ -44,11 +44,12 @@ Class VarKit : Type :=
        The functions in this module resolve to the closest binding of an equal
        name and fill in the de Bruijn index automatically from a successful
        resolution. *)
-    PVar_eq_dec :> EqDec PVar;
+    PVar_eq_dec : EqDec PVar;
 
     (* Names of logic variables. These represent immutable variables standing
        for concrete value. *)
-    LVar : Set; LVar_eq_dec :> EqDec LVar;
+    LVar : Set;
+    LVar_eq_dec : EqDec LVar;
 
     (* Conversion of program variables to logic variables. *)
     PVartoLVar : PVar -> LVar;
@@ -57,6 +58,8 @@ Class VarKit : Type :=
        and that tries to reuse an optional old name. *)
     fresh : forall T, NCtx LVar T -> option LVar -> LVar;
   }.
+#[export] Existing Instance PVar_eq_dec.
+#[export] Existing Instance LVar_eq_dec.
 
 Definition DefaultVarKit : VarKit :=
   {| PVar := string;

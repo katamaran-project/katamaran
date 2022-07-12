@@ -125,7 +125,7 @@ Section WithBinding.
       Context {eqdec_b : EqDec B}.
       Context {eqdec_d : forall b, EqDec (D b) }.
 
-      Global Instance eq_dec_env {Γ} : EqDec (Env Γ).
+      Instance eq_dec_env {Γ} : EqDec (Env Γ).
       Proof. eqdec_proof. Defined.
 
     End TransparentObligations.
@@ -736,6 +736,7 @@ Ltac destroy x :=
 
 End env.
 Export env (Env).
+#[export] Existing Instance env.eq_dec_env.
 Bind Scope env_scope with Env.
 Import env.
 

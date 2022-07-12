@@ -46,7 +46,9 @@ Module ProgramLogic.
 
   Section Triples.
 
+    Import sep.instances.
     Import sep.notations.
+
     Context {L : SepLogic} {PI : PredicateDef L}.
 
     (* Hoare triples for SepContract *)
@@ -333,7 +335,7 @@ Module ProgramLogic.
       ⦃ WP s POST δ ⦄ s ; δ ⦃ POST ⦄.
     Proof. apply rule_exist; intros P; now apply rule_pull. Qed.
 
-    Global Instance proper_triple {Γ δ τ} :
+    #[export] Instance proper_triple {Γ δ τ} :
       Proper (lequiv ==> eq ==> pointwise_relation _ (pointwise_relation _ lequiv) ==> iff) (@Triple Γ δ τ).
     Proof.
       intros P Q pq s s' eq__s R S rs; subst s'.

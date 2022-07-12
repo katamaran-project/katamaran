@@ -196,7 +196,7 @@ Module Type IrisPrelims
 
     Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
 
-    Global Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf _ v δ).
+    #[export] Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf _ v δ).
       intros; eapply of_to_val; by cbn.
     Defined.
 
@@ -207,13 +207,13 @@ Module Type IrisPrelims
     Definition SomeReg : Type := sigT 𝑹𝑬𝑮.
     Definition SomeVal : Type := sigT Val.
 
-    Global Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
-    Global Instance countable_SomeReg : countable.Countable SomeReg := finite.finite_countable.
+    #[export] Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
+    #[export] Instance countable_SomeReg : countable.Countable SomeReg := finite.finite_countable.
 
-    Global Instance eqDec_SomeVal : EqDec SomeVal.
+    #[export] Instance eqDec_SomeVal : EqDec SomeVal.
     Proof.
       intros [τ1 v1] [τ2 v2].
-      destruct (Ty_eq_dec τ1 τ2).
+      destruct (eq_dec τ1 τ2).
       - subst.
         destruct (Val_eqb_spec _ v1 v2).
         + left. congruence.
@@ -231,9 +231,10 @@ Module Type IrisPrelims
 
     Class sailRegGS Σ := SailRegGS {
                             (* ghost variable for tracking state of registers *)
-                            reg_inG :> inG Σ regUR;
+                            reg_inG : inG Σ regUR;
                             reg_gv_name : gname;
                           }.
+    #[export] Existing Instance reg_inG.
 
     Definition reg_pointsTo `{sailRegGS Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) : iProp Σ :=
       own reg_gv_name (◯ {[ existT _ r := Excl (existT _ v) ]}).
@@ -276,23 +277,27 @@ Module Type IrisResources
   (Import IPre : IrisPrelims B SIG.PROG SIG SEM)
   (Import IP   : IrisParameters B SIG.PROG SIG SEM IPre).
   Class sailGpreS Σ := SailGpreS { (* resources for the implementation side *)
-                       sailGpresS_invGpreS :> invGpreS Σ; (* for fancy updates, invariants... *)
+                       sailGpresS_invGpreS : invGpreS Σ; (* for fancy updates, invariants... *)
 
                        (* ghost variable for tracking state of registers *)
-                       reg_pre_inG :> inG Σ regUR;
+                       reg_pre_inG : inG Σ regUR;
 
                        (* ghost variable for tracking state of memory cells *)
                        sailPreG_gen_memGpreS : memGpreS Σ
                      }.
+  #[export] Existing Instance sailGpresS_invGpreS.
+  #[export] Existing Instance reg_pre_inG.
   Class sailGS Σ := SailGS { (* resources for the implementation side *)
-                       sailGS_invGS :> invGS Σ; (* for fancy updates, invariants... *)
-                       sailGS_sailRegGS :> sailRegGS Σ;
+                       sailGS_invGS : invGS Σ; (* for fancy updates, invariants... *)
+                       sailGS_sailRegGS : sailRegGS Σ;
 
                        (* ghost variable for tracking state of memory cells *)
                        sailGS_memGS : memGS Σ
                      }.
+  #[export] Existing Instance sailGS_invGS.
+  #[export] Existing Instance sailGS_sailRegGS.
 
-  Global Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
+  #[export] Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
     iris_invGS := sailGS_invGS;
     state_interp σ ns κs nt := (regs_inv σ.1 ∗ mem_inv sailGS_memGS σ.2)%I;
     fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
@@ -330,9 +335,11 @@ Module Type IrisInstance
   (Import IPred : IrisPredicates B SIG SEM IPre IP IR).
 Section Soundness.
 
+  Import SmallStepNotations.
+
   Context `{sG : sailGS Σ}.
 
-  Global Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
+  #[export] Instance PredicateDefIProp : PredicateDef (IProp Σ) :=
     {| lptsreg σ r v        := reg_pointsTo r v;
        luser p ts           := luser_inst sailGS_memGS ts;
        lduplicate p ts Hdup := lduplicate_inst (sRG := sailGS_sailRegGS) sailGS_memGS ts Hdup

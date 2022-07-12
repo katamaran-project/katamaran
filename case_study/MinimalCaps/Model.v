@@ -90,7 +90,7 @@ Module MinCapsModel.
   Import MinCapsProgram.
   Import MinCapsSpecification.
 
-  Module MinCapsIrisPrelims <: IrisPrelims MinCapsBase MinCapsProgram MinCapsSignature MinCapsSemantics.
+  Module Import MinCapsIrisPrelims <: IrisPrelims MinCapsBase MinCapsProgram MinCapsSignature MinCapsSemantics.
     Include IrisPrelims MinCapsBase MinCapsProgram MinCapsSignature MinCapsSemantics.
   End MinCapsIrisPrelims.
 
@@ -109,9 +109,10 @@ Module MinCapsModel.
 
       Class mcMemGS Σ := McMemGS {
                             (* ghost variable for tracking state of registers *)
-                            mc_ghG :> gh.gen_heapGS Z MemVal Σ;
+                            mc_ghG : gh.gen_heapGS Z MemVal Σ;
                             mc_invNs : namespace
                           }.
+      #[export] Existing Instance mc_ghG.
 
       Definition memGpreS : gFunctors -> Set := fun Σ => gh.gen_heapGpreS Z MemVal Σ.
       Definition memGS : gFunctors -> Set := mcMemGS.
@@ -498,6 +499,7 @@ Module MinCapsModel2.
   Import MinCapsSignature.
   Import MinCapsSpecification.
   Import MinCapsProgram.
+  Import MinCapsIrisPrelims.
   Import MinCapsIrisParams.
   Import MinCapsIrisResources.
   Module Import MinCapsIrisModel := IrisInstanceWithContracts MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSemantics MinCapsIrisPrelims MinCapsIrisParams MinCapsIrisResources MinCapsIrisPredicates MinCapsModel MinCapsModel.

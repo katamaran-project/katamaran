@@ -130,24 +130,22 @@ Section Equality.
 
   Local Set Transparent Obligations.
 
-  Global Instance Z_eqdec : EqDec Z := Z.eq_dec.
-  Global Instance string_eqdec : EqDec string := string_dec.
+  #[export] Instance Z_eqdec : EqDec Z := Z.eq_dec.
+  #[export] Instance string_eqdec : EqDec string := string_dec.
   Derive NoConfusion EqDec for Empty_set.
   Derive Signature NoConfusion NoConfusionHom for Vector.t.
 
-  Global Instance option_eqdec `{EqDec A} : EqDec (option A).
+  #[export] Instance option_eqdec `{EqDec A} : EqDec (option A).
   Proof. eqdec_proof. Defined.
-  Global Instance vector_eqdec `{EqDec A} {n} : EqDec (Vector.t A n).
+  #[export] Instance vector_eqdec `{EqDec A} {n} : EqDec (Vector.t A n).
   Proof. eqdec_proof. Defined.
 
   Definition eq_dec_het {I} {A : I -> Type} `{eqdec : EqDec (sigT A)}
     {i1 i2} (x1 : A i1) (x2 : A i2) : dec_eq (existT i1 x1) (existT i2 x2) :=
     eq_dec (existT i1 x1) (existT i2 x2).
 
-  Import stdpp.base.
-
-  Global Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
-    EqDecision A | 10 := eqdec.
+  #[export] Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
+    stdpp.base.EqDecision A | 10 := eqdec.
 
 End Equality.
 
@@ -180,7 +178,7 @@ Section Countable.
 
   Import stdpp.countable.
 
-  Global Program Instance Countable_sigT {A B} {EqDecA : EqDecision A} {CountA: Countable A}
+  #[export,refine] Instance Countable_sigT {A B} {EqDecA : EqDecision A} {CountA: Countable A}
     {EqDecB : forall (a:A), EqDecision (B a)} {CountB: forall a, Countable (B a)} :
     @Countable (sigT B) (sigma_eqdec EqDecA EqDecB)  :=
     {| encode x := prod_encode (encode (projT1 x)) (encode (projT2 x));
@@ -189,8 +187,8 @@ Section Countable.
          b ← (prod_decode_snd p ≫= decode);
          mret (existT a b)
     |}.
-  Next Obligation.
-    intros ? ? ? ? ? ? [a b].
+  Proof.
+    intros [a b].
     rewrite prod_decode_encode_fst; cbn.
     rewrite decode_encode; cbn.
     rewrite prod_decode_encode_snd; cbn.

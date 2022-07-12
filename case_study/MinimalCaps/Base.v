@@ -164,13 +164,13 @@ Section Finite.
   Local Obligation Tactic :=
     finite_from_eqdec.
 
-  Global Program Instance Permission_finite : Finite Permission :=
+  #[export,program] Instance Permission_finite : Finite Permission :=
     {| enum := [O;R;RW;E] |}.
 
-  Global Program Instance RegName_finite : Finite RegName :=
+  #[export,program] Instance RegName_finite : Finite RegName :=
     {| enum := [R0;R1;R2;R3] |}.
 
-  Global Program Instance InstructionConstructor_finite :
+  #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
     {| enum := [kjr;kjalr;kj;kjal;kbnez;kmv;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kgetp;kgetb;kgete;kgeta;kfail;kret] |}.
 
@@ -184,7 +184,7 @@ Module Export MinCapsBase <: Base.
 
   Local Open Scope string_scope.
 
-  Instance typedeclkit : TypeDeclKit :=
+  #[export] Instance typedeclkit : TypeDeclKit :=
     {| enumi := Enums;
        unioni := Unions;
        recordi := Records;
@@ -261,17 +261,17 @@ Module Export MinCapsBase <: Base.
       end
     end.
 
-  Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
+  #[export] Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
+  #[export] Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Instance eqdec_union_denote U : EqDec (union_denote U) :=
+  #[export] Instance eqdec_union_denote U : EqDec (union_denote U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance eqdec_union_constructor U : EqDec (union_constructor U) :=
+  #[export] Instance eqdec_union_constructor U : EqDec (union_constructor U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance finite_union_constructor U : finite.Finite (union_constructor U) :=
+  #[export] Instance finite_union_constructor U : finite.Finite (union_constructor U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance eqdec_record_denote R : EqDec (record_denote R) :=
+  #[export] Instance eqdec_record_denote R : EqDec (record_denote R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
   Definition union_fold (U : unioni) : { K & Val (union_constructor_type U K) } -> uniont U :=
@@ -373,7 +373,7 @@ Module Export MinCapsBase <: Base.
           ► ("cap_cursor"     ∷ ty.addr ↦ cap_cursor c)
     end%env.
 
-  #[refine] Instance typedefkit : TypeDefKit typedenotekit :=
+  #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
     {| unionk           := union_constructor;
        unionk_ty        := union_constructor_type;
        recordf          := string;
@@ -422,7 +422,7 @@ Module Export MinCapsBase <: Base.
     Local Obligation Tactic :=
       finite_from_eqdec.
 
-    Program Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) :=
+    #[export,program] Instance 𝑹𝑬𝑮_finite : Finite (sigT Reg) :=
       {| enum := [ existT _ pc; existT _ reg0; existT _ reg1; existT _ reg2; existT _ reg3 ] |}.
 
   End RegDeclKit.

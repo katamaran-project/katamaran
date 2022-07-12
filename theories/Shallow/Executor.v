@@ -1259,37 +1259,39 @@ Module Type ShallowExecOn
         stats : Stats.
       Arguments stats P {_}.
 
-      Instance stats_true : ShallowStats CPureSpecM.TRUE :=
+      (* We make these instances global so that users can simply use the
+         calc tactic qualified without importing the rest of this module. *)
+      #[global] Instance stats_true : ShallowStats CPureSpecM.TRUE :=
         {| branches := 1; pruned := 1 |}.
-      Instance stats_false : ShallowStats CPureSpecM.FALSE :=
+      #[global] Instance stats_false : ShallowStats CPureSpecM.FALSE :=
         {| branches := 1; pruned := 1 |}.
-      Instance stats_finish : ShallowStats CPureSpecM.FINISH :=
+      #[global] Instance stats_finish : ShallowStats CPureSpecM.FINISH :=
         {| branches := 1; pruned := 0 |}.
       (* We do not count regular True and False towards the statistics
          because they do not (should not) represent leaves of the shallow
          execution. *)
-      Instance stats_true' : ShallowStats True :=
+      #[global] Instance stats_true' : ShallowStats True :=
         {| branches := 0; pruned := 0 |}.
-      Instance stats_false' : ShallowStats False :=
-        {| branches := 0; pruned := 0 |}.
-
-      Instance stats_eq {A} {x y : A} : ShallowStats (x = y) :=
-        {| branches := 0; pruned := 0 |}.
-      Instance stats_zle {x y : Z} : ShallowStats (Z.le x y) :=
+      #[global] Instance stats_false' : ShallowStats False :=
         {| branches := 0; pruned := 0 |}.
 
-      Instance stats_and `{ShallowStats P, ShallowStats Q} :
+      #[global] Instance stats_eq {A} {x y : A} : ShallowStats (x = y) :=
+        {| branches := 0; pruned := 0 |}.
+      #[global] Instance stats_zle {x y : Z} : ShallowStats (Z.le x y) :=
+        {| branches := 0; pruned := 0 |}.
+
+      #[global] Instance stats_and `{ShallowStats P, ShallowStats Q} :
         ShallowStats (P /\ Q) := plus_stats (stats P) (stats Q).
-      Instance stats_or `{ShallowStats P, ShallowStats Q} :
+      #[global] Instance stats_or `{ShallowStats P, ShallowStats Q} :
         ShallowStats (P \/ Q) := plus_stats (stats P) (stats Q).
-      Instance stats_impl `{ShallowStats P, ShallowStats Q} :
+      #[global] Instance stats_impl `{ShallowStats P, ShallowStats Q} :
         ShallowStats (P -> Q) := plus_stats (stats P) (stats Q).
 
       Axiom undefined : forall A, A.
 
-      Instance stats_forall {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
+      #[global] Instance stats_forall {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
         ShallowStats (forall a : A, B a) := SP (undefined A).
-      Instance stats_exists {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
+      #[global] Instance stats_exists {A} {B : A -> Prop} {SP : forall a, ShallowStats (B a)} :
         ShallowStats (exists a : A, B a) := SP (undefined A).
 
       Ltac calc fnc :=

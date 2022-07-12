@@ -94,7 +94,7 @@ Module sep.
   Arguments lsep {_} _ _.
   Arguments lwand {_} _ _.
 
-  Module notations.
+  Module Import notations.
     Open Scope logic_scope.
     Notation "P ⊢ Q" := (lentails P%L Q%L) : type_scope.
     Notation "P '⊢@{' L } Q" := (@lentails L P%L Q%L) (only parsing) : type_scope.
@@ -118,15 +118,12 @@ Module sep.
     Infix "∗" := lsep : logic_scope.
     Infix "-∗" := lwand : logic_scope.
   End notations.
-  Import notations.
 
-  Section Facts.
+  Module Import instances.
 
-    Global Existing Instance lentails_preorder.
+    #[export] Existing Instance lentails_preorder.
 
-    Context {L : SepLogic}.
-
-    Global Instance lequiv_equivalence : Equivalence (@lequiv L).
+    #[export] Instance lequiv_equivalence {L} : Equivalence (@lequiv L).
     Proof.
       constructor.
       - intros P. split; reflexivity.
@@ -135,7 +132,7 @@ Module sep.
         split; transitivity Q; auto.
     Qed.
 
-    Global Instance proper_lentails :
+    #[export] Instance proper_lentails {L} :
       Proper (lequiv ==> lequiv ==> iff) (@lentails L).
     Proof.
       intros P Q [pq qp] R S [rs sr]. split.
@@ -143,19 +140,19 @@ Module sep.
       - intros qs. transitivity Q; auto. transitivity S; auto.
     Qed.
 
-    Global Instance proper_land : Proper (lequiv ==> lequiv ==> lequiv) (@land L).
+    #[export] Instance proper_land {L} : Proper (lequiv ==> lequiv ==> lequiv) (@land L).
     Proof.
       intros P Q [pq qp] R S [rs sr].
       split; (apply land_right; [apply land_left1 | apply land_left2]); assumption.
     Qed.
 
-    Global Instance proper_lor : Proper (lequiv ==> lequiv ==> lequiv) (@lor L).
+    #[export] Instance proper_lor {L} : Proper (lequiv ==> lequiv ==> lequiv) (@lor L).
     Proof.
       intros P Q [pq qp] R S [rs sr].
       split; (apply lor_left; [ apply lor_right1 | apply lor_right2]); assumption.
     Qed.
 
-    Global Instance proper_limpl : Proper (lequiv ==> lequiv ==> lequiv) (@limpl L).
+    #[export] Instance proper_limpl {L} : Proper (lequiv ==> lequiv ==> lequiv) (@limpl L).
     Proof.
       intros P Q pq R S rs.
       split; apply limpl_and_adjoint;
@@ -164,25 +161,49 @@ Module sep.
         ]; apply limpl_and_adjoint; reflexivity.
     Qed.
 
-    Global Instance proper_lprop : Proper (iff ==> lequiv) (@lprop L).
+    #[export] Instance proper_lprop {L} : Proper (iff ==> lequiv) (@lprop L).
     Proof.
       intros P Q pq.
       split; apply lprop_left; intro; now apply lprop_right, pq.
     Qed.
 
-    Global Instance proper_lex T : Proper (pointwise_relation T lequiv ==> lequiv) (@lex L T).
+    #[export] Instance proper_lex {L} T : Proper (pointwise_relation T lequiv ==> lequiv) (@lex L T).
     Proof.
       intros P Q pq.
       split; apply lex_left; intro x;
         apply (@lex_right _ _ x), (pq x).
     Qed.
 
-    Global Instance proper_lall T : Proper (pointwise_relation T lequiv ==> lequiv) (@lall L T).
+    #[export] Instance proper_lall {L} T : Proper (pointwise_relation T lequiv ==> lequiv) (@lall L T).
     Proof.
       intros P Q pq.
       split; apply lall_right; intro x;
         apply (@lall_left _ _ x), (pq x).
     Qed.
+
+    #[export] Instance proper_lsep {L} : Proper (lequiv ==> lequiv ==> lequiv) (@lsep L).
+    Proof.
+      intros P Q [pq qp] R S [rs sr].
+      split; now apply lsep_entails.
+    Qed.
+
+    #[export] Instance proper_lwand {L} : Proper (lequiv ==> lequiv ==> lequiv) (@lwand L).
+    Proof.
+      intros P Q pq R S rs.
+      split.
+      - apply lwand_sep_adjoint.
+        rewrite <- pq, <- rs.
+        now apply lwand_sep_adjoint.
+      - apply lwand_sep_adjoint.
+        rewrite pq, rs.
+        now apply lwand_sep_adjoint.
+    Qed.
+
+  End instances.
+
+  Section Facts.
+
+    Context {L : SepLogic}.
 
     Lemma ltrue_right {P : L} : P ⊢ ⊤.
     Proof. now apply lprop_right. Qed.
@@ -282,24 +303,6 @@ Module sep.
     Lemma lprop_float {P : L} {Q : Prop} :
       (P ∧ !! Q) ⊣⊢ (!! Q ∧ P).
     Proof. apply land_comm. Qed.
-
-    Global Instance proper_lsep : Proper (lequiv ==> lequiv ==> lequiv) (@lsep L).
-    Proof.
-      intros P Q [pq qp] R S [rs sr].
-      split; now apply lsep_entails.
-    Qed.
-
-    Global Instance proper_lwand : Proper (lequiv ==> lequiv ==> lequiv) (@lwand L).
-    Proof.
-      intros P Q pq R S rs.
-      split.
-      - apply lwand_sep_adjoint.
-        rewrite <- pq, <- rs.
-        now apply lwand_sep_adjoint.
-      - apply lwand_sep_adjoint.
-        rewrite pq, rs.
-        now apply lwand_sep_adjoint.
-    Qed.
 
     Lemma lemp_true :
       lemp ⊣⊢@{L} ⊤.

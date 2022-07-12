@@ -122,14 +122,14 @@ Module Type SymbolicExecOn
           debug_assert_formula_formula         : Formula Σ;
         }.
 
-    Global Instance SubstDebugCall : Subst DebugCall :=
+    #[export] Instance SubstDebugCall : Subst DebugCall :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
         | MkDebugCall f c ts pc δ h =>
           MkDebugCall f c (subst ts ζ01) (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
-    Global Instance SubstLawsDebugCall : SubstLaws DebugCall.
+    #[export] Instance SubstLawsDebugCall : SubstLaws DebugCall.
     Proof.
       constructor.
       - intros ? []; cbn; now rewrite ?subst_sub_id.
@@ -137,7 +137,7 @@ Module Type SymbolicExecOn
     Qed.
 
     Import option.notations.
-    Global Instance OccursCheckDebugCall : OccursCheck DebugCall :=
+    #[export] Instance OccursCheckDebugCall : OccursCheck DebugCall :=
       fun Σ x xIn d =>
         match d with
         | MkDebugCall f c ts pc δ h =>
@@ -148,21 +148,21 @@ Module Type SymbolicExecOn
             Some (MkDebugCall f c ts' pc' δ' h')
         end.
 
-    Global Instance SubstDebugStm : Subst DebugStm :=
+    #[export] Instance SubstDebugStm : Subst DebugStm :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
         | MkDebugStm s pc δ h =>
           MkDebugStm s (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
-    Global Instance SubstLawsDebugStm : SubstLaws DebugStm.
+    #[export] Instance SubstLawsDebugStm : SubstLaws DebugStm.
     Proof.
       constructor.
       - intros ? []; cbn; now rewrite ?subst_sub_id.
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    Global Instance OccursCheckDebugStm : OccursCheck DebugStm :=
+    #[export] Instance OccursCheckDebugStm : OccursCheck DebugStm :=
       fun Σ x xIn d =>
         match d with
         | MkDebugStm s pc δ h =>
@@ -172,21 +172,21 @@ Module Type SymbolicExecOn
             Some (MkDebugStm s pc' δ' h')
         end.
 
-    Global Instance SubstDebugAsn : Subst DebugAsn :=
+    #[export] Instance SubstDebugAsn : Subst DebugAsn :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
         | MkDebugAsn pc δ h =>
           MkDebugAsn (subst pc ζ01) (subst δ ζ01) (subst h ζ01)
         end.
 
-    Global Instance SubstLawsDebugAsn : SubstLaws DebugAsn.
+    #[export] Instance SubstLawsDebugAsn : SubstLaws DebugAsn.
     Proof.
       constructor.
       - intros ? []; cbn; now rewrite ?subst_sub_id.
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    Global Instance OccursCheckDebugAsn : OccursCheck DebugAsn :=
+    #[export] Instance OccursCheckDebugAsn : OccursCheck DebugAsn :=
       fun Σ x xIn d =>
         match d with
         | MkDebugAsn pc δ h =>
@@ -196,14 +196,14 @@ Module Type SymbolicExecOn
             Some (MkDebugAsn pc' δ' h')
         end.
 
-    Global Instance SubstDebugConsumeChunk : Subst DebugConsumeChunk :=
+    #[export] Instance SubstDebugConsumeChunk : Subst DebugConsumeChunk :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
         | MkDebugConsumeChunk pc δ h c =>
           MkDebugConsumeChunk (subst pc ζ01) (subst δ ζ01) (subst h ζ01) (subst c ζ01)
         end.
 
-    Global Instance OccursCheckDebugConsumeChunk : OccursCheck DebugConsumeChunk :=
+    #[export] Instance OccursCheckDebugConsumeChunk : OccursCheck DebugConsumeChunk :=
       fun Σ x xIn d =>
         match d with
         | MkDebugConsumeChunk pc δ h c =>
@@ -214,21 +214,21 @@ Module Type SymbolicExecOn
             Some (MkDebugConsumeChunk pc' δ' h'  c')
         end.
 
-    Global Instance SubstDebugAssertFormula : Subst DebugAssertFormula :=
+    #[export] Instance SubstDebugAssertFormula : Subst DebugAssertFormula :=
       fun Σ0 d Σ1 ζ01 =>
         match d with
         | MkDebugAssertFormula pc δ h fml =>
           MkDebugAssertFormula (subst pc ζ01) (subst δ ζ01) (subst h ζ01) (subst fml ζ01)
         end.
 
-    Global Instance SubstLawsDebugAssertFormula : SubstLaws DebugAssertFormula.
+    #[export] Instance SubstLawsDebugAssertFormula : SubstLaws DebugAssertFormula.
     Proof.
       constructor.
       - intros ? []; cbn; now rewrite ?subst_sub_id.
       - intros ? ? ? ? ? []; cbn; now rewrite ?subst_sub_comp.
     Qed.
 
-    Global Instance OccursCheckDebugAssertFormula : OccursCheck DebugAssertFormula :=
+    #[export] Instance OccursCheckDebugAssertFormula : OccursCheck DebugAssertFormula :=
       fun Σ x xIn d =>
         match d with
         | MkDebugAssertFormula pc δ h fml =>
@@ -309,7 +309,7 @@ Module Type SymbolicExecOn
       constructor; now rewrite safe_debug_safe in H.
     Qed.
 
-    Global Instance proper_vc : Proper (sequiv ctx.nil ==> iff) VerificationCondition.
+    #[export] Instance proper_vc : Proper (sequiv ctx.nil ==> iff) VerificationCondition.
     Proof. intros p q pq. split; intros []; constructor; now apply pq. Qed.
 
     Inductive VerificationConditionWithErasure (p : Erasure.ESymProp) : Prop :=
@@ -617,7 +617,7 @@ Module Type SymbolicExecOn
        ⟨ω3⟩ _   <- assume_formula fml;;
                   T k⟨ω12∘ω3⟩ t1⟨ω2∘ω3⟩ t2⟨ω3⟩.
 
-    Global Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
+    #[export] Instance proper_debug {B Σ b} : Proper (iff ==> iff) (@Debug B Σ b).
     Proof.
       intros P Q PQ.
       split; intros []; constructor; intuition.

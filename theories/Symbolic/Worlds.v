@@ -323,7 +323,7 @@ Module Type WorldsOn
 
   End Accessibility.
 
-  Instance preorder_acc : CRelationClasses.PreOrder Acc :=
+  #[export] Instance preorder_acc : CRelationClasses.PreOrder Acc :=
     CRelationClasses.Build_PreOrder Acc (@acc_refl) (@acc_trans).
 
   Declare Scope modal.
@@ -388,9 +388,9 @@ Module Type WorldsOn
     Class Persistent (A : TYPE) : Type :=
       persist : ⊢ A -> □A.
 
-    Global Instance persistent_box {A} : Persistent □A := four.
+    #[export] Instance persistent_box {A} : Persistent □A := four.
 
-    Global Instance persistent_subst {A} `{Subst A} : Persistent A :=
+    #[export] Instance persistent_subst {A} `{Subst A} : Persistent A :=
       fun w0 x w1 ω01 =>
         match ω01 with
         | acc_refl => x

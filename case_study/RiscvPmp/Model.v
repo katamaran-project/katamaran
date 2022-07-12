@@ -90,8 +90,9 @@ Module RiscvPmpModel.
     Class mcMemGS Σ :=
       McMemGS {
           (* ghost variable for tracking state of registers *)
-          mc_ghGS :> gh.gen_heapGS Addr MemVal Σ
+          mc_ghGS : gh.gen_heapGS Addr MemVal Σ
         }.
+    #[export] Existing Instance mc_ghGS.
 
     Definition memGpreS : gFunctors -> Set := fun Σ => gh.gen_heapGpreS Z MemVal Σ.
     Definition memGS : gFunctors -> Set := mcMemGS.
