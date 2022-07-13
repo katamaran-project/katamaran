@@ -318,7 +318,7 @@ Section Debug.
     match goal with
     | |- context[SymProp.assumek
                    (formula_ge _ _)
-                   (SymProp.debug (MkAMessage _ ?x) _)] =>
+                   (SymProp.debug (MkAMessage ?x) _)] =>
         idtac x
     end.
   Abort.

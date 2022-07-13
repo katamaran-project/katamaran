@@ -214,7 +214,6 @@ Module sep.
     Lemma land_assoc {P Q R : L} :
       (P ∧ Q) ∧ R ⊣⊢ P ∧ (Q ∧ R).
     Proof.
-
       split; repeat apply land_right.
       - now apply land_left1, land_left1.
       - now apply land_left1, land_left2.
@@ -224,10 +223,30 @@ Module sep.
       - now apply land_left2, land_left2.
     Qed.
 
+    Lemma land_false {P : L} : P ∧ ⊥ ⊣⊢ ⊥.
+    Proof.
+      split.
+      - apply land_left2, lfalse_left.
+      - apply lfalse_left.
+    Qed.
+
+    Lemma lfalse_and {P : L} : ⊥ ∧ P ⊣⊢ ⊥.
+    Proof.
+      split.
+      - apply land_left1, lfalse_left.
+      - apply lfalse_left.
+    Qed.
+
+    Lemma lex_false {T} : (∃ _ : T, ⊥) ⊣⊢@{L} ⊥.
+    Proof.
+      split.
+      - apply lex_left. intros _. apply lfalse_left.
+      - apply lfalse_left.
+    Qed.
+
     Lemma land_comm {P Q : L} :
       P ∧ Q ⊣⊢ Q ∧ P.
     Proof.
-
       split; (apply land_right; [ now apply land_left2 | now apply land_left1 ]).
     Qed.
 

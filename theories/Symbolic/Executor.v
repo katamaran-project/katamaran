@@ -458,14 +458,14 @@ Module Type SymbolicExecOn
         ⟨ ω ⟩ _ <- assert_eq_nenv msg δ δ' ;;
         assert_formula msg⟨ω⟩ (formula_eq t⟨ω⟩ t'⟨ω⟩).
 
-    Definition assert_eq_chunk : ⊢ AMessage -> Chunk -> Chunk -> □(SPureSpecM Unit).
-      refine (
+    Definition assert_eq_chunk : ⊢ AMessage -> Chunk -> Chunk -> □(SPureSpecM Unit) :=
       fix assert_eq w0 msg c1 c2 w1 ω01 {struct c1} :=
         match c1 , c2 with
         | chunk_user p1 vs1 as c1 , chunk_user p2 vs2 as c2 =>
             match eq_dec p1 p2 with
             | left e => assert_eq_env msg⟨ω01⟩
-                          (eq_rect p1 (fun p => Env (Term w1) (𝑯_Ty p)) vs1⟨ω01⟩ p2 e) vs2⟨ω01⟩
+                          (eq_rect p1 (fun p => Env (Term w1) (𝑯_Ty p)) vs1⟨ω01⟩ p2 e)
+                          (persist (A := fun w => (fun Σ => Env (Term Σ) _) (wctx w)) vs2 ω01)
             | right _ => error msg⟨ω01⟩
             end
         | chunk_ptsreg r1 v1 as c1 , chunk_ptsreg r2 v2 as c2 =>
@@ -481,9 +481,7 @@ Module Type SymbolicExecOn
             ⟨ ω12 ⟩ _ <- assert_eq _ msg c11 c21 w1 ω01 ;;
             assert_eq _ msg c12 c22 _ (ω01 ∘ ω12)
         | _ , _ => error msg⟨ω01⟩
-        end).
-      refine (persistent_subst).
-    Defined.
+        end.
 
     Definition angelic_binary {A} :
       ⊢ SPureSpecM A -> SPureSpecM A -> SPureSpecM A :=
@@ -669,19 +667,9 @@ Module Type SymbolicExecOn
         ⊢ SHeapSpecM Γ1 Γ2 A -> □(SHeapSpecM Γ2 Γ3 B) -> SHeapSpecM Γ1 Γ3 B :=
         fun _ m k POST => m (fun _ ω1 _ => k _ ω1 (four POST ω1)).
 
-      Definition error {Γ1 Γ2 A D} (func : string) (msg : string) (data:D) :
-        ⊢ SHeapSpecM Γ1 Γ2 A :=
-        fun w _ δ h =>
-          error
-            (EMsgHere
-               {| msg_function := func;
-                  msg_message := msg;
-                  msg_program_context := Γ1;
-                  msg_localstore := δ;
-                  msg_heap := h;
-                  msg_pathcondition := wco w
-               |}).
-      Global Arguments error {_ _ _ _} func msg data {w} _ _.
+      Definition error {Γ1 Γ2 M A} {subM : Subst M} {occM : OccursCheck M} :
+        ⊢ (SStore Γ1 -> SHeap -> M) -> SHeapSpecM Γ1 Γ2 A :=
+        fun w msg _ δ h => SymProp.error (EMsgHere (msg δ h)).
 
       Definition block {Γ1 Γ2 A} :
         ⊢ SHeapSpecM Γ1 Γ2 A := fun _ POST δ h => block.
@@ -699,14 +687,15 @@ Module Type SymbolicExecOn
         ⊢ (SStore Γ -> SHeap -> M) -> List A -> SHeapSpecM Γ Γ A :=
         fun w msg xs POST δ h => lift_purem (SPureSpecM.angelic_list (msg δ h) xs) POST δ h.
 
-      Definition angelic_finite {Γ} F `{finite.Finite F} :
+      Definition angelic_finite F `{finite.Finite F} {Γ} :
         ⊢ (SStore Γ -> SHeap -> AMessage) -> SHeapSpecM Γ Γ ⌜F⌝ :=
         fun w msg POST δ h => lift_purem (SPureSpecM.angelic_finite (msg δ h)) POST δ h.
+      #[global] Arguments angelic_finite F {_ _ Γ w}.
 
-      Definition demonic_finite {Γ} F `{finite.Finite F} :
+      Definition demonic_finite F `{finite.Finite F} {Γ} :
         ⊢ SHeapSpecM Γ Γ ⌜F⌝ :=
         fun w => lift_purem (SPureSpecM.demonic_finite (w:=w)).
-      Global Arguments demonic_finite {Γ} [_] {_ _} {w}.
+      #[global] Arguments demonic_finite F {_ _ Γ w}.
 
       Definition angelic {Γ} (x : option LVar) σ :
         ⊢ SHeapSpecM Γ Γ (STerm σ) :=
@@ -720,7 +709,7 @@ Module Type SymbolicExecOn
 
       Definition debug {AT DT} `{Subst DT, SubstLaws DT, OccursCheck DT} {Γ1 Γ2} :
         ⊢ (SStore Γ1 -> SHeap -> DT) -> (SHeapSpecM Γ1 Γ2 AT) -> (SHeapSpecM Γ1 Γ2 AT) :=
-        fun _ d m POST δ h => SymProp.debug (MkAMessage _ (d δ h)) (m POST δ h).
+        fun _ d m POST δ h => SymProp.debug (MkAMessage (d δ h)) (m POST δ h).
 
       Definition angelic_ctx {N : Set} (n : N -> LVar) {Γ} :
         ⊢ ∀ Δ : NCtx N Ty, SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
@@ -749,7 +738,11 @@ Module Type SymbolicExecOn
           (at level 80, x at next level,
             ma at next level, mb at level 200,
             right associativity) : mut_scope.
-                               (*  *)
+      Notation "⟨ ω ⟩ ' x <- ma ;; mb" :=
+        (bind ma (fun _ ω x => mb))
+          (at level 80, x pattern,
+           ma at next level, mb at level 200,
+           right associativity) : mut_scope.
       Notation "x ⟨ ω ⟩" := (persist x ω) (at level 9, format "x ⟨ ω ⟩").
 
     End notations.
@@ -759,11 +752,8 @@ Module Type SymbolicExecOn
 
       (* Add the provided formula to the path condition. *)
       Definition assume_formula {Γ} :
-        ⊢ Formula -> SHeapSpecM Γ Γ Unit.
-      Proof.
-        intros w0 fml. apply lift_purem.
-        apply (SPureSpecM.assume_formula fml).
-      Defined.
+        ⊢ Formula -> SHeapSpecM Γ Γ Unit :=
+        fun w0 fml => lift_purem (SPureSpecM.assume_formula fml).
 
       Definition box_assume_formula {Γ} :
         ⊢ Formula -> □(SHeapSpecM Γ Γ Unit) :=
@@ -774,7 +764,7 @@ Module Type SymbolicExecOn
         fun w0 fml POST δ0 h0 =>
           lift_purem
             (SPureSpecM.assert_formula
-               (MkAMessage _ (MkDebugAssertFormula (wco w0) δ0 h0 fml)) fml)
+               (MkAMessage (MkDebugAssertFormula (wco w0) δ0 h0 fml)) fml)
             POST δ0 h0.
 
       Definition box_assert_formula {Γ} :
@@ -782,25 +772,18 @@ Module Type SymbolicExecOn
         fun w0 fml => assert_formula <$> persist fml.
 
       Definition assert_formulas {Γ} :
-        ⊢ List Formula -> SHeapSpecM Γ Γ Unit.
-      Proof.
-        intros w0 fmls POST δ0 h0.
-        eapply lift_purem.
-        apply SPureSpecM.assert_formulas.
-        apply (MkAMessage _ (BT := Message)).
-        apply
-          {| msg_function := "smut_assert_formula";
-             msg_message := "Proof obligation";
-             msg_program_context := Γ;
-             msg_localstore := δ0;
-             msg_heap := h0;
-             msg_pathcondition := wco w0
-          |}.
-        apply fmls.
-        apply POST.
-        apply δ0.
-        apply h0.
-      Defined.
+        ⊢ List Formula -> SHeapSpecM Γ Γ Unit :=
+        fun w0 fmls POST δ0 h0 =>
+          lift_purem
+            (SPureSpecM.assert_formulas
+               (MkAMessage
+                  {| msg_function := "smut_assert_formula";
+                     msg_message := "Proof obligation";
+                     msg_program_context := Γ;
+                     msg_localstore := δ0;
+                     msg_heap := h0;
+                     msg_pathcondition := wco w0
+                  |}) fmls) POST δ0 h0.
 
       Definition assert_eq_env {Γ} {Δ : Ctx Ty} :
         let E := fun w : World => Env (Term w) Δ in
@@ -808,7 +791,7 @@ Module Type SymbolicExecOn
         fun w0 E1 E2 POST δ0 h0 =>
           lift_purem
             (SPureSpecM.assert_eq_env
-               (MkAMessage w0
+               (MkAMessage
                   {| msg_function := "smut/assert_eq_env";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
@@ -824,7 +807,7 @@ Module Type SymbolicExecOn
         fun w0 E1 E2 POST δ0 h0 =>
           lift_purem
             (SPureSpecM.assert_eq_nenv
-               (MkAMessage w0
+               (MkAMessage
                   {| msg_function := "smut/assert_eq_env";
                      msg_message := "Proof obligation";
                      msg_program_context := Γ;
@@ -834,20 +817,20 @@ Module Type SymbolicExecOn
                   |}) E1 E2)
             POST δ0 h0.
 
-      Definition assert_eq_chunk {Γ} : ⊢ Chunk -> Chunk -> SHeapSpecM Γ Γ Unit.
-      Proof.
-        intros w0 c1 c2 POST δ0 h0.
-        refine (lift_purem _ POST δ0 h0). apply T.
-        refine (SPureSpecM.assert_eq_chunk _ c1 c2).
-        apply (MkAMessage w0
-                  {| msg_function := "SHeapSpecM.assert_eq_chunk";
-                     msg_message := "Proof obligation";
-                     msg_program_context := Γ;
-                     msg_localstore := δ0;
-                     msg_heap := h0;
-                     msg_pathcondition := wco w0
-                  |}).
-      Defined.
+      Definition assert_eq_chunk {Γ} :
+        ⊢ Chunk -> Chunk -> SHeapSpecM Γ Γ Unit :=
+        fun w0 c1 c2 POST δ0 h0 =>
+          lift_purem
+            (T (SPureSpecM.assert_eq_chunk
+                  (MkAMessage
+                     {| msg_function := "SHeapSpecM.assert_eq_chunk";
+                        msg_message := "Proof obligation";
+                        msg_program_context := Γ;
+                        msg_localstore := δ0;
+                        msg_heap := h0;
+                        msg_pathcondition := wco w0
+                     |}) c1 c2))
+         POST δ0 h0.
 
     End AssumeAssert.
 
@@ -898,9 +881,9 @@ Module Type SymbolicExecOn
       Definition angelic_match_enum {AT E} {Γ1 Γ2} :
         ⊢ STerm (ty.enum E) -> (⌜enumt E⌝ -> □(SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
         fun w0 t cont =>
-          ⟨ ω01 ⟩ EK <- angelic_finite (F := enumt E)
+          ⟨ ω01 ⟩ EK <- angelic_finite (enumt E)
                           (fun δ h =>
-                             MkAMessage w0
+                             MkAMessage
                                {| msg_function := "SHeapSpecM.angelic_match_enum";
                                   msg_message := "pattern match assertion";
                                   msg_program_context := Γ1;
@@ -914,7 +897,7 @@ Module Type SymbolicExecOn
       Definition demonic_match_enum {A E} {Γ1 Γ2} :
         ⊢ STerm (ty.enum E) -> (⌜enumt E⌝ -> □(SHeapSpecM Γ1 Γ2 A)) -> SHeapSpecM Γ1 Γ2 A :=
         fun w0 t cont =>
-          ⟨ ω01 ⟩ EK <- demonic_finite (F := enumt E) ;;
+          ⟨ ω01 ⟩ EK <- demonic_finite (enumt E) ;;
           ⟨ ω12 ⟩ _ <- assume_formula (formula_eq (persist__term t ω01) (term_enum E EK)) ;;
           cont EK _ (ω01 ∘ ω12).
 
@@ -947,375 +930,185 @@ Module Type SymbolicExecOn
              ⟨ω2⟩ _  <- assume_formula (formula_eq (term_inr t1) t⟨ω1⟩);;
                        T kinr⟨ω1∘ω2⟩ t1⟨ω2⟩).
 
-      Definition demonic_match_sum_lifted {AT Γ1 Γ2} (x y : LVar) {σ τ} :
-        ⊢ STerm (ty.sum σ τ) -> □(STerm σ -> SHeapSpecM Γ1 Γ2 AT) -> □(STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t kinl kinr POST δ0 h0.
-        eapply (SPureSpecM.demonic_match_sum (A := fun w => SStore Γ2 w * SHeap w * AT w)%type x _ y _ _ t).
-        - intros w1 ω01 t' POSTl.
-          apply kinl. auto. auto.
-          intros w2 ω12 a2 δ2 h2.
-          apply POSTl. auto. auto.
-          apply (persist (A := SStore _) δ0 ω01).
-          apply (persist (A := SHeap) h0 ω01).
-        - intros w1 ω01 t' POSTr.
-          apply kinr. auto. auto.
-          intros w2 ω12 a2 δ2 h2.
-          apply POSTr. auto. auto.
-          apply (persist (A := SStore _) δ0 ω01).
-          apply (persist (A := SHeap) h0 ω01).
-        - intros w1 ω01 [ [δ1 h1] a1]. apply POST. auto. auto. auto. auto.
-      Defined.
-
       Definition angelic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
-        ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t knil kcons.
-        apply angelic_binary.
-        - eapply bind.
-          apply assert_formula.
-          (* apply *)
-          (*   {| msg_function        := "SHeapSpecM.angelic_match_list"; *)
-          (*      msg_message         := "pattern match assertion"; *)
-          (*      msg_program_context := Γ1; *)
-          (*      msg_localstore      := δ0; *)
-          (*      msg_heap            := h0; *)
-          (*      msg_pathcondition   := wco w0; *)
-          (*   |}. *)
-          apply (formula_eq (term_val (ty.list σ) []%list) t).
-          intros w1 ω01 _.
-          apply knil. auto.
-        - eapply bind.
-          apply (angelic (Some x) σ).
-          intros w1 ω01 thead.
-          eapply bind.
-          apply (angelic (Some y) (ty.list σ)).
-          intros w2 ω12 ttail.
-          eapply bind.
-          apply assert_formula.
-          (* apply *)
-          (*   {| msg_function        := "SHeapSpecM.angelic_match_list"; *)
-          (*      msg_message         := "pattern match assertion"; *)
-          (*      msg_program_context := Γ1; *)
-          (*      msg_localstore      := subst δ0 (acc_trans ω01 ω12); *)
-          (*      msg_heap            := subst h0 (acc_trans ω01 ω12); *)
-          (*      msg_pathcondition   := wco w2; *)
-          (*   |}. *)
-          apply (formula_eq (term_binop bop.cons (persist__term thead ω12) ttail) (persist__term t (acc_trans ω01 ω12))).
-          intros w3 ω23 _.
-          apply (four kcons (acc_trans ω01 ω12)). auto.
-          apply (persist__term thead (acc_trans ω12 ω23)).
-          apply (persist__term ttail ω23).
-      Defined.
+        ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t knil kcons =>
+          angelic_binary
+            (⟨ω1⟩ _     <- assert_formula (formula_eq (term_val (ty.list σ) nil) t) ;;
+             knil _ ω1)
+            (⟨ω1⟩ thead <- angelic (Some x) σ ;;
+             ⟨ω2⟩ ttail <- angelic (Some y) (ty.list σ);;
+             let ω12 := ω1 ∘ ω2 in
+             ⟨ω3⟩ _     <- assert_formula (formula_eq (term_binop bop.cons thead⟨ω2⟩ ttail) t⟨ω12⟩);;
+             kcons _ (ω12 ∘ ω3) thead⟨ω2 ∘ ω3⟩ ttail⟨ω3⟩).
 
       Definition box_angelic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
         ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t knil kcons => angelic_match_list x y <$> persist__term t <*> four knil <*> four kcons.
 
       Definition demonic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
-        ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t knil kcons.
-        apply demonic_binary.
-        - eapply bind.
-          apply assume_formula.
-          apply (formula_eq (term_val (ty.list σ) []%list) t).
-          intros w1 ω01 _.
-          apply knil. auto.
-        - eapply bind.
-          apply (demonic (Some x) σ).
-          intros w1 ω01 thead.
-          eapply bind.
-          apply (demonic (Some y) (ty.list σ)).
-          intros w2 ω12 ttail.
-          eapply bind.
-          apply assume_formula.
-          apply (formula_eq (term_binop bop.cons (persist__term thead ω12) ttail) (persist__term t (acc_trans ω01 ω12))).
-          intros w3 ω23 _.
-          apply (four kcons (acc_trans ω01 ω12)). auto.
-          apply (persist__term thead (acc_trans ω12 ω23)).
-          apply (persist__term ttail ω23).
-      Defined.
+        ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t knil kcons =>
+          demonic_binary
+            (⟨ω1⟩ _     <- assume_formula (formula_eq (term_val (ty.list σ) nil) t) ;;
+             knil _ ω1)
+            (⟨ω1⟩ thead <- demonic (Some x) σ ;;
+             ⟨ω2⟩ ttail <- demonic (Some y) (ty.list σ);;
+             let ω12 := ω1 ∘ ω2 in
+             ⟨ω3⟩ _     <- assume_formula (formula_eq (term_binop bop.cons thead⟨ω2⟩ ttail) t⟨ω12⟩);;
+             kcons _ (ω12 ∘ ω3) thead⟨ω2 ∘ ω3⟩ ttail⟨ω3⟩).
 
       Definition box_demonic_match_list {AT Γ1 Γ2} (x y : LVar) {σ} :
         ⊢ STerm (ty.list σ) -> □(SHeapSpecM Γ1 Γ2 AT) -> □(STerm σ -> STerm (ty.list σ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t knil kcons => demonic_match_list x y <$> persist__term t <*> four knil <*> four kcons.
 
       Definition angelic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
-        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t k.
-        apply (bind (angelic (Some x) σ)).
-        intros w1 ω01 tσ.
-        apply (bind (angelic (Some y) τ)).
-        intros w2 ω12 tτ.
-        eapply bind.
-        apply assert_formula.
-          (* {| msg_function        := "SHeapSpecM.angelic_match_prod"; *)
-          (*    msg_message         := "pattern match assertion"; *)
-          (*    msg_program_context := Γ1; *)
-          (*    msg_localstore      := subst δ0 (acc_trans ω01 ω12); *)
-          (*    msg_heap            := subst h0 (acc_trans ω01 ω12); *)
-          (*    msg_pathcondition   := wco w2; *)
-          (* |}. *)
-        apply (formula_eq (term_binop bop.pair (persist__term tσ ω12) tτ) (persist__term t (acc_trans ω01 ω12))).
-        intros w3 ω23 _.
-        apply (four k (acc_trans ω01 ω12)). auto.
-        apply (persist__term tσ (acc_trans ω12 ω23)).
-        apply (persist__term tτ ω23).
-      Defined.
+        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ tσ <- angelic (Some x) σ ;;
+          ⟨ ω2 ⟩ tτ <- angelic (Some y) τ ;;
+          let ω12 := ω1 ∘ ω2 in
+          ⟨ ω3 ⟩ _  <- assert_formula (formula_eq (term_binop bop.pair tσ⟨ω2⟩ tτ) t⟨ω12⟩) ;;
+          k _ (ω12 ∘ ω3) tσ⟨ω2 ∘ ω3⟩ tτ⟨ω3⟩.
 
       Definition box_angelic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
         ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_prod x y <$> persist__term t <*> four k.
 
       Definition demonic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
-        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t k.
-        apply (bind (demonic (Some x) σ)).
-        intros w1 ω01 tσ.
-        apply (bind (demonic (Some y) τ)).
-        intros w2 ω12 tτ.
-        eapply bind.
-        apply assume_formula.
-        apply (formula_eq (term_binop bop.pair (persist__term tσ ω12) tτ) (persist__term t (acc_trans ω01 ω12))).
-        intros w3 ω23 _.
-        apply (four k (acc_trans ω01 ω12)). auto.
-        apply (persist__term tσ (acc_trans ω12 ω23)).
-        apply (persist__term tτ ω23).
-      Defined.
+        ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ tσ <- demonic (Some x) σ ;;
+          ⟨ ω2 ⟩ tτ <- demonic (Some y) τ ;;
+          let ω12 := ω1 ∘ ω2 in
+          ⟨ ω3 ⟩ _  <- assume_formula (formula_eq (term_binop bop.pair tσ⟨ω2⟩ tτ) t⟨ω12⟩) ;;
+          k _ (ω12 ∘ ω3) tσ⟨ω2 ∘ ω3⟩ tτ⟨ω3⟩.
 
       Definition box_demonic_match_prod {AT} {Γ1 Γ2} (x y : LVar) {σ τ} :
         ⊢ STerm (ty.prod σ τ) -> □(STerm σ -> STerm τ -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_prod x y <$> persist__term t <*> four k.
 
       Definition angelic_match_record' {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
-        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t k.
-        eapply bind.
-        apply (angelic_ctx n Δ).
-        intros w1 ω01 ts.
-        eapply bind.
-        apply assert_formula.
-          (* {| msg_function        := "SHeapSpecM.angelic_match_record"; *)
-          (*    msg_message         := "pattern match assertion"; *)
-          (*    msg_program_context := Γ1; *)
-          (*    msg_localstore      := subst δ0 (acc_trans ω01 ω12); *)
-          (*    msg_heap            := subst h0 (acc_trans ω01 ω12); *)
-          (*    msg_pathcondition   := wco w2; *)
-          (* |}. *)
-        apply (formula_eq (term_record R (record_pattern_match_env_reverse p ts)) (persist__term t ω01)).
-        intros w2 ω12 _.
-        apply (four k ω01). auto.
-        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
-      Defined.
+        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ ts <- angelic_ctx n Δ ;;
+          ⟨ ω2 ⟩ _  <- assert_formula (formula_eq (term_record R (record_pattern_match_env_reverse p ts)) t⟨ω1⟩) ;;
+          k _ (ω1 ∘ ω2) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω2).
 
       Definition angelic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
-        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t k.
-        destruct (term_get_record t).
-        - apply (T k).
-          apply (record_pattern_match_env p n0).
-        - apply (angelic_match_record' n p t k).
-      Defined.
+        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          match term_get_record t with
+          | Some a => T k (record_pattern_match_env p a)
+          | None => angelic_match_record' n p t k
+          end.
 
       Definition box_angelic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
         ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_record n p <$> persist__term t <*> four k.
 
       Definition demonic_match_record' {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
-        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t k.
-        eapply bind.
-        apply (demonic_ctx n Δ).
-        intros w1 ω01 ts.
-        eapply bind.
-        apply assume_formula.
-        apply (formula_eq (term_record R (record_pattern_match_env_reverse p ts)) (persist__term t ω01)).
-        intros w2 ω12 _.
-        apply (four k ω01). auto.
-        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
-      Defined.
+        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ ts <- demonic_ctx n Δ ;;
+          ⟨ ω2 ⟩ _  <- assume_formula (formula_eq (term_record R (record_pattern_match_env_reverse p ts)) t⟨ω1⟩) ;;
+          k _ (ω1 ∘ ω2) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω2).
 
       Definition demonic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
-        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t k.
-        destruct (term_get_record t).
-        - apply (T k).
-          apply (record_pattern_match_env p n0).
-        - apply (demonic_match_record' n p t k).
-      Defined.
+        ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          match term_get_record t with
+          | Some a => T k (record_pattern_match_env p a)
+          | None => demonic_match_record' n p t k
+          end.
 
       Definition box_demonic_match_record {N : Set} (n : N -> LVar) {AT R Γ1 Γ2} {Δ : NCtx N Ty} (p : RecordPat (recordf_ty R) Δ) :
         ⊢ STerm (ty.record R) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_record n p <$> persist__term t <*> four k.
 
       Definition angelic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t k.
-        eapply bind.
-        apply (angelic_ctx n Δ).
-        intros w1 ω01 ts.
-        eapply bind.
-        apply assert_formula.
-          (* {| msg_function        := "SHeapSpecM.angelic_match_tuple"; *)
-          (*    msg_message         := "pattern match assertion"; *)
-          (*    msg_program_context := Γ1; *)
-          (*    msg_localstore      := subst δ0 (acc_trans ω01 ω12); *)
-          (*    msg_heap            := subst h0 (acc_trans ω01 ω12); *)
-          (*    msg_pathcondition   := wco w2; *)
-        (* |}. *)
-        apply (formula_eq (term_tuple (tuple_pattern_match_env_reverse p ts)) (persist__term t ω01)).
-        intros w2 ω12 _.
-        apply (four k ω01). auto.
-        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
-      Defined.
+        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ ts <- angelic_ctx n Δ ;;
+          ⟨ ω2 ⟩ _  <- assert_formula (formula_eq (term_tuple (tuple_pattern_match_env_reverse p ts)) t⟨ω1⟩) ;;
+          k _ (ω1 ∘ ω2) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω2).
 
       Definition box_angelic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => angelic_match_tuple n p <$> persist__term t <*> four k.
 
       Definition demonic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
-        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t k.
-        eapply bind.
-        apply (demonic_ctx n Δ).
-        intros w1 ω01 ts.
-        eapply bind.
-        apply assume_formula.
-        apply (formula_eq (term_tuple (tuple_pattern_match_env_reverse p ts)) (persist__term t ω01)).
-        intros w2 ω12 _.
-        apply (four k ω01). auto.
-        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
-      Defined.
+        ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ ts <- demonic_ctx n Δ ;;
+          ⟨ ω2 ⟩ _  <- assume_formula (formula_eq (term_tuple (tuple_pattern_match_env_reverse p ts)) t⟨ω1⟩) ;;
+          k _ (ω1 ∘ ω2) (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω2).
 
       Definition box_demonic_match_tuple {N : Set} (n : N -> LVar) {AT σs Γ1 Γ2} {Δ : NCtx N Ty} (p : TuplePat σs Δ) :
         ⊢ STerm (ty.tuple σs) -> □((fun w => NamedEnv (Term w) Δ) -> SHeapSpecM Γ1 Γ2 AT) -> □(SHeapSpecM Γ1 Γ2 AT) :=
         fun w0 t k => demonic_match_tuple n p <$> persist__term t <*> four k.
 
       Definition angelic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
-        ⊢ (SStore Γ -> SHeap -> AMessage) -> STerm σ -> SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ).
-      Proof.
-        intros w0 msg t.
-        eapply (bind).
-        apply (angelic_ctx n Δ).
-        intros w1 ω01 ts.
-        eapply bind.
-        apply assert_formula.
-        apply (formula_eq (pattern_match_env_reverse p ts) (persist__term t ω01)).
-        intros w2 ω12 _.
-        apply pure.
-        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
-      Defined.
+        ⊢ STerm σ -> SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
+        fun w0 t =>
+          ⟨ ω1 ⟩ ts <- angelic_ctx n Δ;;
+          ⟨ ω2 ⟩ _  <- assert_formula (formula_eq (pattern_match_env_reverse p ts) t⟨ω1⟩) ;;
+          pure (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω2).
 
       Definition demonic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty} (p : Pattern Δ σ) {Γ} :
-        ⊢ STerm σ -> SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ).
-      Proof.
-        intros w0 t.
-        eapply (bind).
-        apply (demonic_ctx n Δ).
-        intros w1 ω01 ts.
-        eapply bind.
-        apply assume_formula.
-        apply (formula_eq (pattern_match_env_reverse p ts) (persist__term t ω01)).
-        intros w2 ω12 _.
-        apply pure.
-        apply (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω12).
-      Defined.
+        ⊢ STerm σ -> SHeapSpecM Γ Γ (fun w => NamedEnv (Term w) Δ) :=
+        fun w0 t =>
+          ⟨ ω1 ⟩ ts <- demonic_ctx n Δ;;
+          ⟨ ω2 ⟩ _  <- assume_formula (formula_eq (pattern_match_env_reverse p ts) t⟨ω1⟩) ;;
+          pure (persist (A := fun w => (fun Σ => NamedEnv (Term Σ) Δ) (wctx w)) ts ω2).
 
       Definition angelic_match_union {N : Set} (n : N -> LVar) {AT Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
-        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t cont.
-        eapply bind.
-        apply (angelic_finite (F := unionk U)).
-        intros δ h.
-        apply (MkAMessage _ (BT := Message)).
-        apply
-            {| msg_function        := "SHeapSpecM.angelic_match_union";
-               msg_message         := "pattern match assertion";
-               msg_program_context := Γ1;
-               msg_localstore      := δ;
-               msg_heap            := h;
-               msg_pathcondition   := wco w0;
-            |}.
-        intros w1 ω01 UK.
-        eapply bind.
-        apply (angelic None (unionk_ty U UK)).
-        intros w2 ω12 t__field.
-        eapply bind.
-        apply assert_formula.
-        apply (formula_eq (term_union U UK t__field) (persist__term t (acc_trans ω01 ω12))).
-        intros w3 ω23 _.
-        eapply bind.
-        apply (angelic_match_pattern n (p UK)).
-        intros δ h.
-        apply (MkAMessage _ (BT := Message)).
-        apply
-            {| msg_function        := "SHeapSpecM.angelic_match_union";
-               msg_message         := "pattern match assertion";
-               msg_program_context := Γ1;
-               msg_localstore      := δ;
-               msg_heap            := h;
-               msg_pathcondition   := wco w3;
-            |}.
-        apply (persist__term t__field ω23).
-        apply (four (cont UK)).
-        apply (acc_trans ω01 (acc_trans ω12 ω23)).
-      Defined.
+        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t cont =>
+          ⟨ ω1 ⟩ UK <- angelic_finite (unionk U)
+                         (fun δ h =>
+                            MkAMessage
+                              {| msg_function := "SHeapSpecM.angelic_match_union";
+                                 msg_message := "pattern match assertion";
+                                 msg_program_context := Γ1;
+                                 msg_localstore := δ;
+                                 msg_heap := h;
+                                 msg_pathcondition := wco w0
+                              |});;
+          ⟨ ω2 ⟩ t__field <- angelic None (unionk_ty U UK) ;;
+          let ω12 := ω1 ∘ ω2 in
+          ⟨ ω3 ⟩ _      <- assert_formula (formula_eq (term_union U UK t__field) t⟨ω12⟩) ;;
+          ⟨ ω4 ⟩ ts     <- angelic_match_pattern n (p UK) t__field⟨ω3⟩ ;;
+          cont UK _ (ω12 ∘ ω3 ∘ ω4) ts.
 
       Definition box_angelic_match_union {N : Set} (n : N -> LVar) {AT Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
-        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> □(SHeapSpecM Γ1 Γ2 AT).
-      Proof.
-        refine (fun w0 t k => angelic_match_union n p <$> persist__term t <*> _).
-        intros w1 ω01 UK. apply (four (k UK) ω01).
-      Defined.
+        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> □(SHeapSpecM Γ1 Γ2 AT) :=
+        fun w0 t k w1 ω01 => angelic_match_union n p t⟨ω01⟩ (fun UK => four (k UK) ω01).
 
       Definition demonic_match_union {N : Set} (n : N -> LVar) {AT Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
-        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT.
-      Proof.
-        intros w0 t cont.
-        eapply bind.
-        apply (demonic_finite (F := unionk U)).
-        intros w1 ω01 UK.
-        eapply bind.
-        apply (demonic None (unionk_ty U UK)).
-        intros w2 ω12 t__field.
-        eapply bind.
-        apply assume_formula.
-        apply (formula_eq (term_union U UK t__field) (persist__term t (acc_trans ω01 ω12))).
-        intros w3 ω23 _.
-        eapply bind.
-        apply (demonic_match_pattern n (p UK)).
-        apply (persist__term t__field ω23).
-        apply (four (cont UK)).
-        apply (acc_trans ω01 (acc_trans ω12 ω23)).
-      Defined.
+        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t cont =>
+          ⟨ ω1 ⟩ UK <- demonic_finite (unionk U) ;;
+          ⟨ ω2 ⟩ t__field <- demonic None (unionk_ty U UK) ;;
+          let ω12 := ω1 ∘ ω2 in
+          ⟨ ω3 ⟩ _      <- assume_formula (formula_eq (term_union U UK t__field) t⟨ω12⟩) ;;
+          ⟨ ω4 ⟩ ts     <- demonic_match_pattern n (p UK) t__field⟨ω3⟩ ;;
+          cont UK _ (ω12 ∘ ω3 ∘ ω4) ts.
 
       Definition box_demonic_match_union {N : Set} (n : N -> LVar) {AT Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
-        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> □(SHeapSpecM Γ1 Γ2 AT).
-      Proof.
-        refine (fun w0 t k => demonic_match_union n p <$> persist__term t <*> _).
-        intros w1 ω01 UK. apply (four (k UK) ω01).
-      Defined.
+        ⊢ STerm (ty.union U) -> (∀ K, □((fun w => NamedEnv (Term w) (Δ K)) -> SHeapSpecM Γ1 Γ2 AT)) -> □(SHeapSpecM Γ1 Γ2 AT) :=
+        fun w0 t k w1 ω01 => demonic_match_union n p t⟨ω01⟩ (fun UK => four (k UK) ω01).
 
       Definition angelic_match_bvec' {AT n} {Γ1 Γ2} :
         ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
         fun w0 t k =>
-          ⟨ ω1 ⟩ b <- angelic_finite
+          ⟨ ω1 ⟩ b <- angelic_finite (bv n)
                         (fun (δ : SStore Γ1 w0) (h : SHeap w0) =>
-                           (MkAMessage _ {| msg_function := "SHeapSpecM.angelic_match_bvec";
+                           (MkAMessage {| msg_function := "SHeapSpecM.angelic_match_bvec";
                               msg_message := "pattern match assertion";
                               msg_program_context := Γ1;
                               msg_localstore := δ;
@@ -1337,7 +1130,7 @@ Module Type SymbolicExecOn
       Definition demonic_match_bvec' {AT n} {Γ1 Γ2} :
         ⊢ STerm (ty.bvec n) -> (⌜bv n⌝ -> □(SHeapSpecM Γ1 Γ2 AT)) -> SHeapSpecM Γ1 Γ2 AT :=
         fun w0 t k =>
-          ⟨ ω1 ⟩ b <- demonic_finite (F := bv n) ;;
+          ⟨ ω1 ⟩ b <- demonic_finite (bv n) ;;
           let s1 := term_val (ty.bvec n) b in
           let t1 := persist__term t ω1 in
           ⟨ ω2 ⟩ _ <- assume_formula (formula_eq s1 t1) ;;
@@ -1379,14 +1172,9 @@ Module Type SymbolicExecOn
         fun w POST δ => T POST (peval (seval_exp δ e)) δ.
 
       Definition eval_exps {Γ} {σs : PCtx} (es : NamedEnv (Exp Γ) σs) :
-        ⊢ SHeapSpecM Γ Γ (SStore σs).
-        intros w POST δ h.
-        apply (T POST).
-        refine (env.map _ es).
-        intros b e. apply peval. apply (seval_exp δ e).
-        auto.
-        auto.
-      Defined.
+        ⊢ SHeapSpecM Γ Γ (SStore σs) :=
+        fun w POST δ =>
+          T POST (env.map (fun (b : PVar∷Ty) (e : Exp Γ (type b)) => peval (seval_exp δ e)) es) δ.
 
       Definition assign {Γ} x {σ} {xIn : x∷σ ∈ Γ} : ⊢ STerm σ -> SHeapSpecM Γ Γ Unit :=
         fun w0 t POST δ => T POST tt (δ ⟪ x ↦ t ⟫).
@@ -1479,193 +1267,179 @@ Module Type SymbolicExecOn
         end.
 
       Definition consume_chunk {Γ} :
-        ⊢ Chunk -> SHeapSpecM Γ Γ Unit.
-      Proof.
-        intros w0 c.
-        eapply bind.
-        apply get_heap.
-        intros w1 ω01 h.
-        pose proof (peval_chunk (persist c ω01)) as c1. clear c.
-        destruct (try_consume_chunk_exact h c1) as [h'|].
-        { apply put_heap. apply h'. }
-        destruct (try_consume_chunk_precise h c1) as [[h' eqs]|].
-        { eapply bind.
-          apply put_heap. apply h'.
-          intros w2 ω12 _.
-          apply assert_formulas.
-          apply (persist (A := List Formula) eqs ω12).
-        }
-        { intros _ δ1 h1.
-          apply
-            (SymProp.error
-               (EMsgHere
-                  {| debug_consume_chunk_program_context := Γ;
-                     debug_consume_chunk_pathcondition := wco w1;
-                     debug_consume_chunk_localstore := δ1;
-                     debug_consume_chunk_heap := h1;
-                     debug_consume_chunk_chunk := c1
-                  |})).
-        }
-      Defined.
+        ⊢ Chunk -> SHeapSpecM Γ Γ Unit :=
+        fun w0 c =>
+          ⟨ ω1 ⟩ h <- get_heap (w := _) ;;
+          match try_consume_chunk_exact h (peval_chunk c⟨ω1⟩) with
+          | Some h' => put_heap h'
+          | None =>
+            match try_consume_chunk_precise h (peval_chunk c⟨ω1⟩) with
+            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_formulas Fs⟨ω2⟩
+            | None =>
+              error
+                (fun δ1 h1 =>
+                   {| debug_consume_chunk_program_context := Γ;
+                      debug_consume_chunk_pathcondition := wco _;
+                      debug_consume_chunk_localstore := δ1;
+                      debug_consume_chunk_heap := h1;
+                      debug_consume_chunk_chunk := peval_chunk c⟨ω1⟩
+                   |})
+              end
+          end.
 
       Definition consume_chunk_angelic {Γ} :
-        ⊢ Chunk -> SHeapSpecM Γ Γ Unit.
-      Proof.
-        intros w0 c.
-        eapply bind.
-        apply get_heap.
-        intros w1 ω01 h.
-        pose proof (peval_chunk (persist c ω01)) as c1. clear c.
-        destruct (try_consume_chunk_exact h c1) as [h'|].
-        { apply put_heap. apply h'. }
-        destruct (try_consume_chunk_precise h c1) as [[h' eqs]|].
-        { eapply bind.
-          apply put_heap. apply h'.
-          intros w2 ω12 _.
-          apply assert_formulas.
-          apply (persist (A := List Formula) eqs ω12).
-        }
-        { eapply bind.
-          refine (angelic_list
+        ⊢ Chunk -> SHeapSpecM Γ Γ Unit :=
+        fun w0 c =>
+          ⟨ ω1 ⟩ h <- get_heap (w := _) ;;
+          match try_consume_chunk_exact h (peval_chunk c⟨ω1⟩) with
+          | Some h' => put_heap h'
+          | None =>
+            match try_consume_chunk_precise h (peval_chunk c⟨ω1⟩) with
+            | Some (h', Fs) => ⟨ ω2 ⟩ _ <- put_heap h' ;; assert_formulas Fs⟨ω2⟩
+            | None =>
+                ⟨ ω2 ⟩ '(c',h') <-
+                  angelic_list
                     (A := Pair Chunk SHeap)
-                    (fun δ h =>
+                    (fun δ1 h1 =>
                        {| debug_consume_chunk_program_context := Γ;
-                          debug_consume_chunk_pathcondition := wco w1;
-                          debug_consume_chunk_localstore := δ;
-                          debug_consume_chunk_heap := h;
-                          debug_consume_chunk_chunk := c1
-                        |})
-                    (heap_extractions h)).
-          intros w2 ω12 [c' h'].
-          eapply bind.
-          apply (assert_eq_chunk (persist c1 ω12) c').
-          intros w3 ω23 _.
-          apply put_heap.
-          apply (persist (A := SHeap) h' ω23).
-        }
-      Defined.
+                          debug_consume_chunk_pathcondition := wco _;
+                          debug_consume_chunk_localstore := δ1;
+                          debug_consume_chunk_heap := h1;
+                          debug_consume_chunk_chunk := peval_chunk c⟨ω1⟩
+                       |})
+                    (heap_extractions h);;
+                ⟨ ω3 ⟩ _ <- assert_eq_chunk (peval_chunk c⟨ω1 ∘ ω2⟩) c' ;;
+                put_heap h'⟨ω3⟩
+              end
+          end.
 
       Definition produce {Γ} :
-        ⊢ Assertion -> □(SHeapSpecM Γ Γ Unit).
-      Proof.
-        refine (fix produce w0 asn {struct asn} := _).
-        destruct asn.
-        - apply (box_assume_formula fml).
-        - apply (produce_chunk <$> persist c).
-        - apply (produce_chunk <$> persist c).
-        - apply (demonic_match_bool <$> persist__term b <*> four (produce _ asn1) <*> four (produce _ asn2)).
-        - intros w1 ω01.
-          apply (demonic_match_enum
-                    (persist__term k ω01)
-                    (fun EK : enumt E => four (produce w0 (alts EK)) ω01)).
-        - refine (demonic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr <$> persist__term s <*> four _ <*> four _).
-          intros w1 ω01 t1.
-          apply (produce (wsnoc w0 (xl∷σ)) asn1).
-          apply (acc_snoc_left ω01 (xl∷σ) t1).
-          intros w1 ω01 t1.
-          apply (produce (wsnoc w0 (xr∷τ)) asn2).
-          apply (acc_snoc_left ω01 (xr∷τ) t1).
-        - apply (box_demonic_match_list xh xt s).
-          + apply (produce _ asn1).
-          + intros w1 ω01 thead ttail.
-            apply (produce (wsnoc (wsnoc w0 (xh∷_)) (xt∷_)) asn2 w1).
-            apply (acc_snoc_left (acc_snoc_left ω01 (xh∷_) thead) (xt∷_) ttail).
-        - apply (box_demonic_match_prod xl xr s).
-          intros w1 ω01 t1 t2.
-          apply (produce (wsnoc (wsnoc w0 (xl∷σ1)) (xr∷σ2)) asn w1).
-          apply (acc_snoc_left (acc_snoc_left ω01 (xl∷σ1) t1) (xr∷σ2) t2).
-        - apply (box_demonic_match_tuple id p s).
-          intros w1 ω01 ts.
-          apply (produce (wcat w0 Δ) asn w1).
-          apply acc_cat_left; auto.
-        - apply (box_demonic_match_record id p s).
-          intros w1 ω01 ts.
-          apply (produce (wcat w0 Δ) asn w1).
-          apply acc_cat_left; auto.
-        - apply (box_demonic_match_union id alt__pat s).
-          intros UK w1 ω01 ts.
-          apply (produce (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1).
-          apply acc_cat_left; auto.
-        - intros w1 ω01.
-          eapply bind.
-          apply (produce _ asn1 _ ω01).
-          intros w2 ω12 _.
-          apply (produce _ asn2 _ (ω01 ∘ ω12)).
-        - apply (demonic_binary <$> produce _ asn1 <*> produce _ asn2).
-        - intros w1 ω01.
-          eapply bind.
-          apply (@demonic _ (Some ς) τ).
-          intros w2 ω12 t2.
-          apply (produce (wsnoc w0 (ς∷τ)) asn w2).
-          apply (acc_snoc_left (acc_trans ω01 ω12) (ς∷τ) t2).
-        - intros w1 ω01.
-          eapply (debug (DT := DebugAsn)).
-          intros δ h.
-          apply (MkDebugAsn (wco w1) δ h).
-          apply pure.
-          constructor.
-      Defined.
+        ⊢ Assertion -> □(SHeapSpecM Γ Γ Unit) :=
+        fix produce w0 asn :=
+          match asn with
+          | asn_formula fml => box_assume_formula fml
+          | asn_chunk c => produce_chunk <$> persist c
+          | asn_chunk_angelic c => produce_chunk <$> persist c
+          | asn_if b a1 a2 =>
+            demonic_match_bool
+              <$> persist__term b
+              <*> four (produce w0 a1)
+              <*> four (produce w0 a2)
+          | asn_match_enum E k alts =>
+            fun w1 ω01 =>
+              demonic_match_enum k⟨ω01⟩
+                (fun EK => four (produce w0 (alts EK)) ω01)
+          | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+            demonic_match_sum xl xr
+              <$> persist__term s
+              <*> four (fun w1 ω01 t1 => produce (wsnoc w0 (xl∷σ)) alt_inl w1 (acc_snoc_left ω01 (xl∷σ) t1))
+              <*> four (fun w1 ω01 t1 => produce (wsnoc w0 (xr∷τ)) alt_inr w1 (acc_snoc_left ω01 (xr∷τ) t1))
+           | asn_match_list s alt_nil xh xt alt_cons =>
+             box_demonic_match_list xh xt s (produce w0 alt_nil)
+               (fun w1 ω01 thead ttail =>
+                  produce (wsnoc (wsnoc w0 (xh∷_)) (xt∷ty.list _)) alt_cons w1
+                    (acc_snoc_left (acc_snoc_left ω01 (xh∷_) thead) (xt∷ty.list _) ttail))
+           | asn_match_prod s xl xr rhs =>
+             box_demonic_match_prod xl xr s
+               (fun w1 ω01 t1 t2 =>
+                  produce (wsnoc (wsnoc w0 (xl∷_)) (xr∷_)) rhs w1
+                    (acc_snoc_left (acc_snoc_left ω01 (xl∷_) t1) (xr∷_) t2))
+           | asn_match_tuple s p rhs =>
+             box_demonic_match_tuple id p s
+               (fun w1 ω01 ts =>
+                  produce (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
+           | asn_match_record R s p rhs =>
+             box_demonic_match_record id p s
+               (fun w1 ω01 ts =>
+                  produce (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
+           | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+             box_demonic_match_union id alt__pat s
+               (fun UK w1 ω01 ts =>
+                  produce (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1 (acc_cat_left ω01 ts))
+           | asn_sep a1 a2 =>
+             fun w1 ω01 =>
+               ⟨ ω12 ⟩ _ <- produce w0 a1 w1 ω01 ;;
+               produce w0 a2 _ (ω01 ∘ ω12)
+          | asn_or a1 a2 => demonic_binary <$> produce w0 a1 <*> produce w0 a2
+          | asn_exist ς τ a =>
+            fun w1 ω01 =>
+              ⟨ ω12 ⟩ t2 <- demonic (Some ς) τ;;
+              produce (wsnoc w0 (ς∷τ)) a _ (acc_snoc_left (ω01 ∘ ω12) (ς∷τ) t2)
+          | asn_debug =>
+            fun w1 _ =>
+              debug
+                (fun δ1 h1 =>
+                   {| debug_asn_program_context := Γ;
+                      debug_asn_pathcondition := wco w1;
+                      debug_asn_localstore := δ1;
+                      debug_asn_heap := h1
+                   |})
+                (pure tt)
+         end.
 
       Definition consume {Γ} :
-        ⊢ Assertion -> □(SHeapSpecM Γ Γ Unit).
-      Proof.
-        refine (fix consume w0 asn {struct asn} := _).
-        destruct asn.
-        - apply (box_assert_formula fml).
-        - apply (consume_chunk <$> persist c).
-        - apply (consume_chunk_angelic <$> persist c).
-        - apply (angelic_match_bool <$> persist__term b <*> four (consume _ asn1) <*> four (consume _ asn2)).
-        - intros w1 ω01.
-          apply (angelic_match_enum
-                    (persist__term k ω01)
-                    (fun EK : enumt E => four (consume w0 (alts EK)) ω01)).
-        - refine (angelic_match_sum (AT := Unit) (Γ1 := Γ) (Γ2 := Γ) xl xr <$> persist__term s <*> four _ <*> four _).
-          intros w1 ω01 t1.
-          apply (consume (wsnoc w0 (xl∷σ)) asn1).
-          apply (acc_snoc_left ω01 (xl∷σ) t1).
-          intros w1 ω01 t1.
-          apply (consume (wsnoc w0 (xr∷τ)) asn2).
-          apply (acc_snoc_left ω01 (xr∷τ) t1).
-        - apply (box_angelic_match_list xh xt s).
-          + apply (consume _ asn1).
-          + intros w1 ω01 thead ttail.
-            apply (consume (wsnoc (wsnoc w0 (xh∷_)) (xt∷_)) asn2 w1).
-            apply (acc_snoc_left (acc_snoc_left ω01 (xh∷_) thead) (xt∷_) ttail).
-        - apply (box_angelic_match_prod xl xr s).
-          intros w1 ω01 t1 t2.
-          apply (consume (wsnoc (wsnoc w0 (xl∷σ1)) (xr∷σ2)) asn w1).
-          apply (acc_snoc_left (acc_snoc_left ω01 (xl∷σ1) t1) (xr∷σ2) t2).
-        - apply (box_angelic_match_tuple id p s).
-          intros w1 ω01 ts.
-          apply (consume (wcat w0 Δ) asn w1).
-          apply acc_cat_left; auto.
-        - apply (box_angelic_match_record id p s).
-          intros w1 ω01 ts.
-          apply (consume (wcat w0 Δ) asn w1).
-          apply acc_cat_left; auto.
-        - apply (box_angelic_match_union id alt__pat s).
-          intros UK w1 ω01 ts.
-          apply (consume (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1).
-          apply acc_cat_left; auto.
-        - intros w1 ω01.
-          eapply bind.
-          apply (consume _ asn1 _ ω01).
-          intros w2 ω12 _.
-          apply (consume _ asn2 _ (ω01 ∘ ω12)).
-        - apply (angelic_binary <$> consume _ asn1 <*> consume _ asn2).
-        - intros w1 ω01.
-          eapply bind.
-          apply (@angelic _ (Some ς) τ).
-          intros w2 ω12 t2.
-          apply (consume (wsnoc w0 (ς∷τ)) asn w2).
-          apply (acc_snoc_left (acc_trans ω01 ω12) (ς∷τ) t2).
-        - intros w1 ω01.
-          apply (debug (DT := DebugAsn)).
-          intros δ h.
-          apply (MkDebugAsn (wco w1) δ h).
-          apply pure.
-          constructor.
-      Defined.
+        ⊢ Assertion -> □(SHeapSpecM Γ Γ Unit) :=
+        fix consume w0 asn :=
+          match asn with
+          | asn_formula fml => box_assert_formula fml
+          | asn_chunk c => consume_chunk <$> persist c
+          | asn_chunk_angelic c => consume_chunk_angelic <$> persist c
+          | asn_if b a1 a2 =>
+            angelic_match_bool
+              <$> persist__term b
+              <*> four (consume w0 a1)
+              <*> four (consume w0 a2)
+          | asn_match_enum E k alts =>
+            fun w1 ω01 =>
+              angelic_match_enum k⟨ω01⟩
+                (fun EK => four (consume w0 (alts EK)) ω01)
+          | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+            angelic_match_sum xl xr
+              <$> persist__term s
+              <*> four (fun w1 ω01 t1 => consume (wsnoc w0 (xl∷σ)) alt_inl w1 (acc_snoc_left ω01 (xl∷σ) t1))
+              <*> four (fun w1 ω01 t1 => consume (wsnoc w0 (xr∷τ)) alt_inr w1 (acc_snoc_left ω01 (xr∷τ) t1))
+          | asn_match_list s alt_nil xh xt alt_cons =>
+            box_angelic_match_list xh xt s (consume w0 alt_nil)
+              (fun w1 ω01 thead ttail =>
+                 consume (wsnoc (wsnoc w0 (xh∷_)) (xt∷ty.list _)) alt_cons w1
+                   (acc_snoc_left (acc_snoc_left ω01 (xh∷_) thead) (xt∷ty.list _) ttail))
+          | asn_match_prod s xl xr rhs =>
+            box_angelic_match_prod xl xr s
+              (fun w1 ω01 t1 t2 =>
+                 consume (wsnoc (wsnoc w0 (xl∷_)) (xr∷_)) rhs w1
+                   (acc_snoc_left (acc_snoc_left ω01 (xl∷_) t1) (xr∷_) t2))
+          | asn_match_tuple s p rhs =>
+            box_angelic_match_tuple id p s
+              (fun w1 ω01 ts =>
+                 consume (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
+          | asn_match_record R s p rhs =>
+            box_angelic_match_record id p s
+              (fun w1 ω01 ts =>
+                 consume (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
+          | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+            box_angelic_match_union id alt__pat s
+              (fun UK w1 ω01 ts =>
+                 consume (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1 (acc_cat_left ω01 ts))
+          | asn_sep a1 a2 =>
+            fun w1 ω01 =>
+              ⟨ ω12 ⟩ _ <- consume w0 a1 w1 ω01 ;;
+              consume w0 a2 _ (ω01 ∘ ω12)
+          | asn_or a1 a2 => angelic_binary <$> consume w0 a1 <*> consume w0 a2
+          | asn_exist ς τ a =>
+            fun w1 ω01 =>
+              ⟨ ω12 ⟩ t2 <- angelic (Some ς) τ;;
+              consume (wsnoc w0 (ς∷τ)) a _ (acc_snoc_left (ω01 ∘ ω12) (ς∷τ) t2)
+          | asn_debug =>
+            fun w1 ω01 =>
+              debug
+                (fun δ1 h1 =>
+                 {| debug_asn_program_context := Γ;
+                    debug_asn_pathcondition := wco w1;
+                    debug_asn_localstore := δ1;
+                    debug_asn_heap := h1
+                 |})
+                (pure tt)
+          end.
 
     End ProduceConsume.
 
@@ -1674,66 +1448,36 @@ Module Type SymbolicExecOn
       Variable cfg : Config.
 
       Definition call_contract {Γ Δ τ} (c : SepContract Δ τ) :
-        ⊢ SStore Δ -> SHeapSpecM Γ Γ (STerm τ).
-      Proof.
-        destruct c as [Σe δe req result ens].
-        intros w0 args.
-        eapply bind.
-        apply (angelic_ctx id Σe).
-        intros w1 ω01 evars.
-        eapply bind.
-        apply (assert_eq_nenv (subst δe evars)).
-        refine (persist args ω01).
-        intros w2 ω12 _.
-        eapply bind.
-        apply (consume (w := @MkWorld Σe nil) req).
-        refine (acc_trans _ ω12).
-        constructor 2 with evars. cbn. constructor.
-        intros w3 ω23 _.
-        eapply bind.
-        apply (demonic (Some result)).
-        intros w4 ω34 res.
-        eapply bind.
-        apply (produce
-                 (w := @MkWorld (Σe ▻ result∷τ) nil)
-                 ens).
-        constructor 2 with (sub_snoc (persist (A := Sub _) evars (acc_trans ω12 (acc_trans ω23 ω34))) (result∷τ) res).
-        cbn. constructor.
-        intros w5 ω45 _. clear - res ω45.
-        apply pure.
-        apply (persist__term res ω45).
-      Defined.
+        ⊢ SStore Δ -> SHeapSpecM Γ Γ (STerm τ) :=
+        match c with
+        | MkSepContract _ _ Σe δe req result ens =>
+          fun w0 args =>
+            ⟨ ω1 ⟩ evars <- angelic_ctx id Σe ;;
+            ⟨ ω2 ⟩ _     <- assert_eq_nenv (subst δe evars) args⟨ω1⟩ ;;
+
+            ⟨ ω3 ⟩ _     <- (let we := @MkWorld Σe nil in
+                            consume (w := we)
+                              req (@acc_sub we _ evars (fun _ _ => I) ∘ ω2)) ;;
+            ⟨ ω4 ⟩ res   <- demonic (Some result) τ;;
+            ⟨ ω5 ⟩ _     <- (let we := @MkWorld (Σe ▻ result∷τ) nil in
+                            let evars' := persist (A := Sub _) evars (ω2 ∘ ω3 ∘ ω4) in
+                            let ζ      := sub_snoc evars' (result∷τ) res in
+                            produce (w := we) ens (@acc_sub we _ ζ (fun _ _ => I))) ;;
+            pure res⟨ω5⟩
+       end.
 
       Definition call_lemma {Γ Δ} (lem : Lemma Δ) :
-        ⊢ SStore Δ -> SHeapSpecM Γ Γ Unit.
-      Proof.
-        destruct lem as [Σe δe req ens].
-        intros w0 args.
-        eapply bind.
-        apply (angelic_ctx id Σe).
-        intros w1 ω01 evars.
-        eapply bind.
-        apply (assert_formulas
-                 (* {| *)
-                 (*   msg_function := "SHeapSpecM.call"; *)
-                 (*   msg_message := "argument pattern match"; *)
-                 (*   msg_program_context := Γ; *)
-                 (*   msg_localstore := subst δ0 ω01; *)
-                 (*   msg_heap := subst h0 ω01; *)
-                 (*   msg_pathcondition := wco w1; *)
-                 (* |} *) (formula_eqs_nctx (subst δe evars) (persist args ω01))).
-        intros w2 ω12 _.
-        eapply bind.
-        apply (consume (w := @MkWorld Σe nil) req).
-        refine (acc_trans _ ω12).
-        constructor 2 with evars. cbn. constructor.
-        intros w3 ω23 _.
-        apply (produce
-                 (w := @MkWorld Σe nil)
-                 ens).
-        constructor 2 with (persist (A := Sub _) evars (acc_trans ω12 ω23)).
-        cbn. constructor.
-      Defined.
+        ⊢ SStore Δ -> SHeapSpecM Γ Γ Unit :=
+        match lem with
+        | MkLemma _ Σe δe req ens =>
+          fun w0 args =>
+            ⟨ ω1 ⟩ evars <- angelic_ctx id Σe ;;
+            ⟨ ω2 ⟩ _     <- assert_eq_nenv (subst δe evars) args⟨ω1⟩ ;;
+            let we := @MkWorld Σe nil in
+            ⟨ ω3 ⟩ _     <- consume (w := we) req (@acc_sub we _ evars (fun _ _ => I) ∘ ω2) ;;
+                           (let evars' := persist (A := Sub _) evars (ω2 ∘ ω3) in
+                            produce (w := we) ens (@acc_sub we _ evars' (fun _ _ => I)))
+        end.
 
       Definition call_contract_debug {Γ Δ τ} (f : 𝑭 Δ τ) (c : SepContract Δ τ) :
         ⊢ SStore Δ -> SHeapSpecM Γ Γ (STerm τ) :=
@@ -1868,7 +1612,15 @@ Module Type SymbolicExecOn
                 ⟨ ω34 ⟩ _ <- T (produce (asn_chunk (chunk_ptsreg reg tnew))) ;;
                 pure (persist__term tnew ω34)
             | stm_bind _ _ =>
-                error "SHeapSpecM.exec" "stm_bind not supported" tt
+                error
+                  (fun δ h =>
+                     {| msg_function := "SHeapSpecM.exec";
+                        msg_message := "stm_bind not supported";
+                        msg_program_context := _;
+                        msg_localstore := δ;
+                        msg_heap := h;
+                        msg_pathcondition := wco w0
+                  |})
             | stm_debugk k =>
                 debug
                   (fun (δ0 : SStore Γ w0) (h0 : SHeap w0) =>
@@ -1887,7 +1639,16 @@ Module Type SymbolicExecOn
       (* The constructed closed executor. *)
       Fixpoint exec (inline_fuel : nat) : Exec :=
         match inline_fuel with
-        | O   => fun _ _ _ _ => error "SHeapSpecM.exec" "out of fuel for inlining" tt
+        | O   => fun _ _ _ _ =>
+                   error
+                     (fun δ h =>
+                        {| msg_function := "SHeapSpecM.exec";
+                           msg_message := "out of fuel for inlining";
+                           msg_program_context := _;
+                           msg_localstore := δ;
+                           msg_heap := h;
+                           msg_pathcondition := wco _
+                        |})
         | S n => @exec_aux (@exec n)
         end.
       Global Arguments exec _ {_ _} _ {w} _ _ _.

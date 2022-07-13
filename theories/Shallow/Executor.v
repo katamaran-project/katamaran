@@ -116,9 +116,10 @@ Module Type ShallowExecOn
       forall Δ : NCtx N Ty, CPureSpecM (NamedEnv Val Δ) :=
       fix rec Δ {struct Δ} :=
         match Δ with
-        | []      => fun k => k env.nil
-        | Δ ▻ x∷σ => fun k =>
-            demonic σ (fun v => rec Δ (fun EΔ => k (EΔ ► (x∷σ ↦ v))))
+        | []      => pure env.nil
+        | Δ ▻ x∷σ => v  <- demonic σ;;
+                     vs <- rec Δ;;
+                     pure (vs ► (x∷σ ↦ v))
         end%ctx.
     Arguments demonic_ctx {N} Δ.
 
@@ -172,10 +173,12 @@ Module Type ShallowExecOn
     Definition angelic_finite F `{finite.Finite F} :
       CPureSpecM F :=
       angelic_list (finite.enum F).
+    #[global] Arguments angelic_finite F {_ _}.
 
     Definition demonic_finite F `{finite.Finite F} :
       CPureSpecM F :=
       demonic_list (finite.enum F).
+    #[global] Arguments demonic_finite F {_ _}.
 
     Definition angelic_match_bool :
       Val ty.bool -> CPureSpecM bool :=
@@ -206,10 +209,8 @@ Module Type ShallowExecOn
       - split.
         + now exists env.nil.
         + intros [vs ?]. now destruct (env.nilView vs).
-      - destruct b as [x σ].
-        unfold angelic. split.
-        + intros [v Hwp]. apply IHΔ in Hwp.
-          destruct Hwp as [vs HPOST].
+      - destruct b as [x σ]. cbv [angelic bind pure]. split.
+        + intros [v Hwp%IHΔ]. destruct Hwp as [vs HPOST].
           now exists (env.snoc vs (x∷σ) v).
         + intros [vs Hwp]. destruct (env.snocView vs) as [vs v].
           exists v. apply IHΔ. now exists vs.
@@ -223,8 +224,7 @@ Module Type ShallowExecOn
         + intros ? vs.
           now destruct (env.nilView vs).
         + now intuition.
-      - destruct b as [x σ].
-        unfold demonic. split.
+      - destruct b as [x σ]. cbv [demonic bind pure]. split.
         + intros Hwp vs.
           destruct (env.snocView vs) as [vs v].
           now eapply (IHΔ (fun vs => POST (env.snoc vs _ v))).
@@ -367,21 +367,23 @@ Module Type ShallowExecOn
       Definition angelic_ctx {N : Set} {Γ} :
         forall Δ : NCtx N Ty, CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
         fun Δ => lift_purem (CPureSpecM.angelic_ctx Δ).
-      Global Arguments angelic_ctx {N Γ} Δ.
+      #[global] Arguments angelic_ctx {N Γ} Δ.
 
       Definition angelic_list {A Γ} (xs : list A) : CHeapSpecM Γ Γ A :=
         lift_purem (CPureSpecM.angelic_list xs).
 
-      Definition angelic_finite {Γ} F `{finite.Finite F} : CHeapSpecM Γ Γ F :=
-        lift_purem (CPureSpecM.angelic_finite (F:=F)).
+      Definition angelic_finite F `{finite.Finite F} {Γ} : CHeapSpecM Γ Γ F :=
+        lift_purem (CPureSpecM.angelic_finite F).
+      #[global] Arguments angelic_finite F {_ _ Γ}.
 
-      Definition demonic_finite {Γ} F `{finite.Finite F} : CHeapSpecM Γ Γ F :=
-        lift_purem (CPureSpecM.demonic_finite (F:=F)).
+      Definition demonic_finite F `{finite.Finite F} {Γ} : CHeapSpecM Γ Γ F :=
+        lift_purem (CPureSpecM.demonic_finite F).
+      #[global] Arguments demonic_finite F {_ _ Γ}.
 
       Definition demonic_ctx {N : Set} {Γ} :
         forall Δ : NCtx N Ty, CHeapSpecM Γ Γ (NamedEnv Val Δ) :=
         fun Δ => lift_purem (CPureSpecM.demonic_ctx Δ).
-      Global Arguments demonic_ctx {N Γ} Δ.
+      #[global] Arguments demonic_ctx {N Γ} Δ.
 
     End Basic.
 
@@ -449,13 +451,13 @@ Module Type ShallowExecOn
 
       Definition angelic_match_enum {A E} {Γ1 Γ2} (v : Val (ty.enum E))
         (cont : enumt E -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        EK <- angelic_finite (F:=enumt E);;
+        EK <- angelic_finite (enumt E);;
         assert_formula (v = EK);;
         cont EK.
 
       Definition demonic_match_enum {A E} {Γ1 Γ2} (v : Val (ty.enum E))
         (cont : enumt E -> CHeapSpecM Γ1 Γ2 A) : CHeapSpecM Γ1 Γ2 A :=
-        EK <- demonic_finite (F:=enumt E);;
+        EK <- demonic_finite (enumt E);;
         assume_formula (v = EK);;
         cont EK.
 
@@ -762,23 +764,13 @@ Module Type ShallowExecOn
 
       Definition angelic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
-        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A.
-      Proof.
-        intros v k.
-        eapply bind.
-        apply (angelic_finite (F := unionk U)).
-        intros UK.
-        eapply bind.
-        apply (angelic (unionk_ty U UK)).
-        intros v__field.
-        eapply bind_right.
-        apply assert_formula.
-        apply (unionv_fold U (existT UK v__field) = v).
-        eapply bind.
-        apply (angelic_match_pattern (p UK)).
-        apply v__field.
-        apply (k UK).
-      Defined.
+        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A :=
+        fun v POST =>
+          UK     <- angelic_finite (unionk U);;
+          v__field <- angelic (unionk_ty U UK);;
+          assert_formula (unionv_fold U (existT UK v__field) = v);;
+          x      <- angelic_match_pattern (p UK) v__field;;
+          POST UK x.
 
       Lemma wp_angelic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K))
@@ -807,23 +799,13 @@ Module Type ShallowExecOn
 
       Definition demonic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K)) :
-        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A.
-      Proof.
-        intros v k.
-        eapply bind.
-        apply (demonic_finite (F := unionk U)).
-        intros UK.
-        eapply bind.
-        apply (demonic (unionk_ty U UK)).
-        intros v__field.
-        eapply bind_right.
-        apply assume_formula.
-        apply (unionv_fold U (existT UK v__field) = v).
-        eapply bind.
-        apply (demonic_match_pattern (p UK)).
-        apply v__field.
-        apply (k UK).
-      Defined.
+        Val (ty.union U) -> (forall K, NamedEnv Val (Δ K) -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A :=
+        fun v POST =>
+          UK     <- demonic_finite (unionk U);;
+          v__field <- demonic (unionk_ty U UK);;
+          assume_formula (unionv_fold U (existT UK v__field) = v);;
+          x      <- demonic_match_pattern (p UK) v__field;;
+          POST UK x.
 
       Lemma wp_demonic_match_union {N : Set} {A Γ1 Γ2 U}
         {Δ : unionk U -> NCtx N Ty} (p : forall K : unionk U, Pattern (Δ K) (unionk_ty U K))
@@ -851,17 +833,12 @@ Module Type ShallowExecOn
       Qed.
 
       Definition demonic_match_bvec {A n} {Γ1 Γ2} :
-        Val (ty.bvec n) -> (bv n -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A.
-      Proof.
-        intros v cont.
-        eapply bind.
-        apply (demonic_finite (F := bv n)).
-        intros u.
-        eapply bind_right.
-        apply (assume_formula (v = u)).
-        apply (cont u).
-      Defined.
-      Global Arguments demonic_match_bvec : simpl never.
+        Val (ty.bvec n) -> (bv n -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A :=
+        fun v POST =>
+          u <- demonic_finite (bv n);;
+          assume_formula (v = u);;
+          POST u.
+      #[global] Arguments demonic_match_bvec : simpl never.
 
       Lemma wp_demonic_match_bvec {A n Γ1 Γ2} (v : Val (ty.bvec n)) (k : bv n -> CHeapSpecM Γ1 Γ2 A) :
         forall POST δ h,
@@ -1030,8 +1007,7 @@ Module Type ShallowExecOn
         match lem with
         | MkLemma _ Σe δ req ens =>
           ι <- angelic_ctx Σe ;;
-          (* TODO: this should use assert_eq_nenv instead. *)
-          assert_formula (inst δ ι = vs) ;;
+          assert_eq_nenv (inst δ ι) vs ;;
           consume ι req ;;
           produce ι ens
         end.

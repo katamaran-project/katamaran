@@ -516,8 +516,9 @@ Module Soundness
       ℛ ι (@SHeapSpecM.block Γ1 Γ2 AT w) CHeapSpecM.block.
     Proof. unfold ℛ, RefineHeapSpecM, RefineImpl. auto. Qed.
 
-    Lemma refine_error {AT A D} `{Refine AT A} {Γ1 Γ2} {w : World} {ι: Valuation w} (func msg : string) (d : D) (cm : CHeapSpecM Γ1 Γ2 A) :
-      ℛ ι (@SHeapSpecM.error Γ1 Γ2 AT D func msg d w) cm.
+    Lemma refine_error {AT A M} `{Refine AT A, Subst M, OccursCheck M} {Γ1 Γ2}
+      {w : World} {ι: Valuation w} msg (cm : CHeapSpecM Γ1 Γ2 A) :
+      ℛ ι (@SHeapSpecM.error Γ1 Γ2 M AT _ _ w msg) cm.
     Proof.
       intros POST__s POST__c HPOST.
       intros δs δc Hδ hs hc Hh [].
@@ -651,7 +652,7 @@ Module Soundness
 
     Lemma refine_angelic_finite {F} `{finite.Finite F} {Γ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) msg :
-      ℛ (AT := SHeapSpecM Γ Γ (Const F)) ι (@SHeapSpecM.angelic_finite Γ F _ _ w msg) (@CHeapSpecM.angelic_finite Γ F _ _).
+      ℛ (AT := SHeapSpecM Γ Γ (Const F)) ι (@SHeapSpecM.angelic_finite F _ _ Γ w msg) (@CHeapSpecM.angelic_finite F _ _ Γ).
     Proof.
       unfold SHeapSpecM.angelic_finite, CHeapSpecM.angelic_finite.
       intros POST__s POST__c HPOST.
@@ -662,7 +663,7 @@ Module Soundness
 
     Lemma refine_demonic_finite {F} `{finite.Finite F} {Γ}
       {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
-      ℛ (AT := SHeapSpecM Γ Γ (Const F)) ι (@SHeapSpecM.demonic_finite Γ F _ _ w) (@CHeapSpecM.demonic_finite Γ F _ _).
+      ℛ (AT := SHeapSpecM Γ Γ (Const F)) ι (@SHeapSpecM.demonic_finite F _ _ Γ w) (@CHeapSpecM.demonic_finite F _ _ Γ).
     Proof.
       unfold SHeapSpecM.demonic_finite, CHeapSpecM.demonic_finite.
       intros POST__s POST__c HPOST.
@@ -1207,8 +1208,8 @@ Module Soundness
 
     Lemma refine_angelic_match_pattern {N : Set} (n : N -> LVar) {σ} {Δ : NCtx N Ty}
           {p : Pattern Δ σ} {Γ}
-      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) {msg} :
-      ℛ ι (@SHeapSpecM.angelic_match_pattern N n σ Δ p Γ w msg) (@CHeapSpecM.angelic_match_pattern N σ Δ p Γ).
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
+      ℛ ι (@SHeapSpecM.angelic_match_pattern N n σ Δ p Γ w) (@CHeapSpecM.angelic_match_pattern N σ Δ p Γ).
     Proof.
       intros t v ->.
       intros k k__c Hk.
@@ -1847,7 +1848,7 @@ Module Soundness
       inversion Hch'; subst; clear Hch'.
       apply refine_bind.
       - apply refine_assert_eq_chunk; auto. hnf.
-        now rewrite inst_persist, peval_chunk_sound, inst_persist.
+        now rewrite peval_chunk_sound, inst_persist, sub_acc_trans, inst_subst.
       - intros w3 ω23 ι3 -> Hpc3 _ _ _.
         apply refine_put_heap; auto.
         now rewrite <- inst_persist.
@@ -2023,11 +2024,9 @@ Module Soundness
     intros w1 ω01 ι1 -> Hpc1.
     intros evars__s evars__c Hevars.
     apply refine_bind.
-    apply refine_assert_formulas; auto.
-    { rewrite inst_formula_eqs_nctx.
-      rewrite inst_persist, inst_subst.
-      rewrite Hargs, Hevars.
-      reflexivity.
+    { apply refine_assert_eq_nenv; auto; hnf.
+      now rewrite Hevars, inst_subst.
+      now rewrite Hargs, inst_persist.
     }
     intros w2 ω12 ι2 -> Hpc2 _ _ _.
     apply refine_bind.

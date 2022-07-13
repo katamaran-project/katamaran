@@ -101,11 +101,12 @@ Module Type SymPropOn
     Inductive AMessage (Σ : LCtx) : Type :=
     | MkAMessage {BT} {subB : Subst BT} {sublawsB : SubstLaws BT} {occB: OccursCheck BT} : BT Σ -> AMessage Σ
     .
+    #[global] Arguments MkAMessage {Σ BT _ _ _} _.
 
     #[export] Instance SubstAMessage : Subst AMessage :=
       fun Σ1 msg Σ2 ζ12 =>
         match msg with
-        | @MkAMessage _ BT subB sublB occB msg => MkAMessage _ (subst msg ζ12)
+        | @MkAMessage _ BT subB sublB occB msg => MkAMessage (subst msg ζ12)
         end.
 
     #[export] Instance SubstLawsAMessage : SubstLaws AMessage.
@@ -118,9 +119,9 @@ Module Type SymPropOn
     #[export] Instance OccursCheckAMessage : OccursCheck AMessage :=
       fun Σ x xIn msg =>
         match msg with
-        | MkAMessage _ msg =>
+        | MkAMessage msg =>
             msg' <- occurs_check xIn msg;;
-            Some (MkAMessage _ msg')
+            Some (MkAMessage msg')
         end.
 
   End Messages.
@@ -234,24 +235,22 @@ Module Type SymPropOn
       assert_formulas_without_solver' msg fmls p.
     Global Arguments assert_formulas_without_solver {_} msg fmls p.
 
-    Fixpoint assume_triangular {w1 w2} (ν : Tri w1 w2) :
-      𝕊 w2 -> 𝕊 w1.
-    Proof.
-      destruct ν; intros o; cbn in o.
-      - exact o.
-      - apply (@assume_vareq w1 x σ xIn t).
-        eapply (assume_triangular _ _ ν o).
-    Defined.
+    Fixpoint assume_triangular {w1 w2} (ξ : Tri w1 w2) : 𝕊 w2 -> 𝕊 w1 :=
+      match ξ with
+      | tri_id         => fun P => P
+      | tri_cons x t ξ => fun P => assume_vareq x t (assume_triangular ξ P)
+      end.
 
-    Fixpoint assert_triangular {w1 w2} (msg : AMessage (wctx w1)) (ζ : Tri w1 w2) :
-      (AMessage w2 -> 𝕊 w2) -> 𝕊 w1.
-    Proof.
-      destruct ζ; intros o; cbn in o.
-      - apply o. apply msg.
-      - apply (@assert_vareq w1 x σ xIn t).
-        apply (subst msg (sub_single xIn t)).
-        refine (assert_triangular (wsubst w1 x t) _ (subst msg (sub_single xIn t)) ζ o).
-    Defined.
+    Fixpoint assert_triangular {w1 w2} (msg : AMessage (wctx w1)) (ξ : Tri w1 w2) :
+      (AMessage w2 -> 𝕊 w2) -> 𝕊 w1 :=
+      match ξ with
+      | tri_id         => fun P => P msg
+      | tri_cons x t ξ =>
+          fun P =>
+            let ζ    := sub_single _ t in
+            let msg' := subst msg ζ in
+            assert_vareq x t msg' (assert_triangular msg' ξ P)
+         end.
 
     Fixpoint safe {Σ} (p : 𝕊 Σ) (ι : Valuation Σ) : Prop :=
       (* ⊢ 𝕊 -> Valuation -> PROP := *)

@@ -153,16 +153,17 @@ Module Type Soundness
         Monotonic (call_lemma (Γ := Γ) lem δΔ).
       Proof.
         destruct lem; intros P Q PQ δ h;
-          cbv [call_lemma bind
+          cbv [call_lemma bind bind_right
                angelic_ctx lift_purem assert_formula
                CPureSpecM.assert_formula].
         rewrite ?CPureSpecM.wp_angelic_ctx.
         intros [ι Hwp]. exists ι. revert Hwp.
+        unfold assert_eq_nenv, lift_purem.
+        rewrite ?CPureSpecM.wp_assert_eq_nenv.
         intros [Hfmls Hwp]; split; auto; revert Hwp.
         apply consume_monotonic. intros _ ?.
         apply produce_monotonic; auto.
       Qed.
-
 
       Lemma call_contract_monotonic {Γ Δ τ} (c : SepContract Δ τ) (δΔ : CStore Δ) :
         Monotonic (call_contract (Γ := Γ) c δΔ).
@@ -498,11 +499,12 @@ Module Type Soundness
       LTriple δΔ (interpret_scheap h) (POST δΓ) lem.
     Proof.
       destruct lem as [Σe δe req ens].
-      unfold call_lemma. unfold bind.
+      unfold call_lemma. unfold bind_right, bind.
       unfold angelic_ctx, lift_purem.
       rewrite CPureSpecM.wp_angelic_ctx.
       intros [ι Hwp]; revert Hwp.
-      unfold assert_formula, lift_purem, CPureSpecM.assert_formula.
+      unfold assert_eq_nenv, lift_purem.
+      rewrite CPureSpecM.wp_assert_eq_nenv.
       intros [Hfmls HYP].
       pose (fun δ => interpret_assertion ens ι -∗ POST δ) as frame.
       assert (interpret_scheap h ⊢ frame δΓ ∗ interpret_assertion req ι ).
