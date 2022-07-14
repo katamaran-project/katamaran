@@ -1,15 +1,15 @@
 # Hacking on Katamaran
 
 This file gives an overview of the different components that make up the framework.
-The intention is to give necessary pointers to the codebase for understanding and extending it.
-Instructions that are geared towards using the library can be found in the [USING file](USING.md) instead.
+The intention is to provide necessary pointers for understanding and extending the codebase.
+Instructions geared towards using the library can be found in the [USING file](USING.md) instead.
 
 
 ## Overview of the library files
 
 | File                         | Description                                                                                                                                                                                                                                                                                                                                                  |
 |------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Context.v                    | Variable contexts. Used for describing both, program and logic variables that are in scope. Moreover, contexts are also used as just a list of types to describe the fields of records, tuples, and the argument types of user-defined predicates.                                                                                                           |
+| Context.v                    | Variable contexts. They are used to describe both program and logic variables that are in scope. Moreover, contexts are used as just a list of types to define the fields of records, tuples, and the argument types of user-defined predicates.                                                                                                           |
 | Environment.v                | Environments are mappings of variables to data like local variable stores, valuations and substitution. This is also used as the representation of tuples and of the arguments (shallow and symbolic) of predicates.                                                                                                                                         |
 | Bitvector.v                  | Contains the definition of length-indexed bitvectors and supporting functions.                                                                                                                                                                                                                                                                               |
 | Notation.v                   | Contains a non-exhaustive list of reserved notations that are used in the codebase.                                                                                                                                                                                                                                                                          |
@@ -64,29 +64,29 @@ Instructions that are geared towards using the library can be found in the [USIN
 
 ## Modules and records
 
-The framework make extensive use of Coq modules for parametrization which has several tradeoffs.
+The framework extensively uses Coq modules for parametrization, which has several tradeoffs.
 The downside is the general complexity of the modules, their duck-typed nature, and the fact that they are second-class.
-The benefits include that we can hide parameters even when using `Set Printing Implicit`.
-We currently consider the modules a necessary evil, because they help (or rather seem to help because I don't fully understand their impact) with the performance of the executors.
-Essentially, putting definitions into a module as opposed into a dependent record that is passed around, delays delta expansion of the fields of the module.
+The benefits include that hiding parameters even when using `Set Printing Implicit`.
+We currently consider the modules a necessary evil because they help (or rather seem to help because I don't fully understand their impact) with the performance of the executors.
+Essentially, putting definitions into a module as opposed to a dependent record that is passed around delays delta expansion of the fields of the module.
 There is currently no other way to control evaluation order in this fashion.
 
 A downside of the approach is a larger memory footprint of the library.
-To remedy this we have started moving parts of the library out of the modules and into records instead.
-See for example the `TypeDeclKit`, `TypeDenoteKit` and `TypeDefKit` of the `Base` module.
-However, this is fragile and subsequent changes to the module / record hierarchy should be evaluated for their impact on running time.
+To remedy this, we have started moving parts of the library out of the modules and into records instead.
+See, for example, the `TypeDeclKit`, `TypeDenoteKit` and `TypeDefKit` of the `Base` module.
+However, this is fragile, and subsequent changes to the module / record hierarchy should be evaluated for their impact on running time.
 For instance, merging `TypeDenoteKit` and `TypeDefKit` results in a 1.3x slowdown which is still acceptable, but merging all three of the `Type*Kit`s results in a 10x slowdown.
 
 
 ## Libraries
 
-We make heavy use of the stdpp and equations library. Sometimes the notations defines in these libraries clash, so prefer to selectively import them in sections.
-A huge downside of the stdpp library is that a lot of the definitions are opaque and are supposed to be used in combination with `vm_compute`.
-For some reason, for most cases when we run our symbolic executor `vm_compute` is slower than `compute` (and `vm_compute; reflexivity` slower than `reflexivity`).
-Therefore, we are currently avoiding using stdpp in the context of symbolic execution when computation could be blocked by an opaque definition.
+We make heavy use of the stdpp and equations library. Sometimes the notations defined in these libraries clash, so we prefer to import them in sections selectively.
+A huge downside of the stdpp library is that many of the definitions are opaque and supposed to be used in combination with `vm_compute`.
+For some reason, in most cases, when we run our symbolic executor, `vm_compute` is slower than `compute` (and `vm_compute; reflexivity` slower than `reflexivity`).
+Therefore, we are currently avoiding using stdpp in the context of symbolic execution when an opaque definition could block computation.
 
 ## Axioms
 
 The library is currently axiom-free (not even fun.ext. or prop.ext.).
-Try to keep it that way and avoid introducing axioms when possible.
-But let's be pragmatic, if there is a good reason to assume an axiom we allow it.
+So try to keep it that way and avoid introducing axioms when possible.
+But let's be pragmatic; if there is a good reason to assume an axiom, we allow it.
