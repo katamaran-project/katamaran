@@ -1849,8 +1849,8 @@ Module BlockVerificationDerived2Sem.
 
   Definition semTripleBlock `{sailGS Σ} (PRE : Z -> iProp Σ) (instrs : list AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
     (∀ a,
-    (PRE a ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
-      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ LoopVerification.WP_loop) -∗
+    (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs) -∗
+      (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ LoopVerification.WP_loop) -∗
       LoopVerification.WP_loop)%I.
 
   Lemma sound_exec_triple_addr__c `{sailGS Σ} {W : World} {pre post instrs} {ι : Valuation W} :
@@ -1985,7 +1985,7 @@ Module BlockVerificationDerived2Sem.
    *)
 
   Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ :=
-        inv femto_inv_ns (interp_ptsto (mG := sailGS_memGS) 84 42).
+        (interp_ptsto (mG := sailGS_memGS) 84 42).
 
   Definition femto_handler_pre `{sailGS Σ} mpp epc : iProp Σ :=
       (mstatus ↦ {| MPP := mpp |}) ∗
@@ -2003,6 +2003,7 @@ Module BlockVerificationDerived2Sem.
       interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
       femto_inv_fortytwo ∗
       pc ↦ 72 ∗
+      (∃ v, nextpc ↦ v) ∗
       ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler.
 
     Example femto_handler_post `{sailGS Σ} epc : iProp Σ :=
@@ -2021,6 +2022,7 @@ Module BlockVerificationDerived2Sem.
         interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
         femto_inv_fortytwo ∗
         pc ↦ epc ∗
+        (∃ v, nextpc ↦ v) ∗
         ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler.
 
   Definition femto_handler_contract `{sailGS Σ} : iProp Σ :=
@@ -2035,23 +2037,19 @@ Module BlockVerificationDerived2Sem.
     iIntros (Σ sG epc mpp) "".
     pose (BlockVerificationDerived2.sat__femtohandler) as Hhandler.
     unfold vc__femtohandler in Hhandler.
-    cbn in epc.
     iPoseProof (sound_VC__addr Hhandler (env.snoc (env.snoc env.nil (_::ty_exc_code) epc) _ mpp)) as "Hverif".
     iIntros "Hpre Hk".
-    iApply ("Hverif" $! 72 epc with "[Hpre] [Hk]").
-    - iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hhandler)".
+    iApply ("Hverif" $! 72 with "[Hpre] [Hk]").
+    - iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hnpc & Hhandler)".
       cbn.
       unfold femto_inv_fortytwo.
-      iFrame.
-      iSplitR; trivial.
-      admit.
-      admit.
-    - iIntros "(Hpc & Hhandler & (Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo & _)))".
+      now iFrame.
+    - iIntros (an) "(Hpc & Hnpc & Hhandler & (Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo & %eq & _)))".
       cbn.
       iApply "Hk".
       unfold femto_handler_post.
+      cbn in eq; destruct eq.
       iFrame.
-      admit.
   Admitted.
 
   Lemma femtokernel_hander_safe `{sailGS Σ} {mepcv}:
