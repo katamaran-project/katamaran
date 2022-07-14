@@ -1978,6 +1978,7 @@ Module BlockVerificationDerived2Sem.
     now rewrite <- liveAddr_filter_advAddr.
   Qed.
 
+  (* DOMI: for simplicity, we're currently treating the femtokernel invariant on the private state not as a shared invariant but as a piece of private state to be framed off during every invocation of the adversary.  This is fine since for now we're assuming no concurrency... *)
   Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "femto_inv_ns").
 
   Import iris.base_logic.lib.invariants.
