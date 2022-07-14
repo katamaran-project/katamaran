@@ -1908,10 +1908,19 @@ Module BlockVerificationDerived2Sem.
       instrs
       (fun a na => interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
   Proof.
-    intros Hverif%(safeE_safe env.nil)%simplify_sound ι.
-    rewrite SymProp.safe_demonic_close in Hverif.
-    specialize (Hverif ι).
-  Admitted.
+    intros Hverif ι.
+    eapply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := [] |}) (pre := pre) (post := post) (instrs := instrs)).
+    eapply (refine_exec_triple_addr (Σ := {| wctx := Γ ; wco := [] |}) I (ta := λ w1 _ _ _ _, SymProp.block)).
+    all: cycle 3.
+    - rewrite SymProp.wsafe_safe SymProp.safe_debug_safe.
+      eapply (safeE_safe env.nil), simplify_sound in Hverif.
+      rewrite SymProp.safe_demonic_close in Hverif.
+      now eapply Hverif.
+    - unfold  BlockVerificationDerived2Sound.refine, BlockVerificationDerived2Sound.RefineBox, BlockVerificationDerived2Sound.RefineImpl, BlockVerificationDerived2Sound.refine, BlockVerificationDerived2Sound.RefineProp.
+      now intros.
+    - reflexivity.
+    - reflexivity.
+  Qed.
 
   Definition advAddrs := seqZ 88 (maxAddr - 88 + 1).
 
