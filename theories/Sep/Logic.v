@@ -328,7 +328,7 @@ Module sep.
       apply lsep_leak.
     Qed.
 
-    Lemma lsep_true {P : L} : ⊤ ∗ P ⊣⊢ P.
+    Lemma lsep_true (P : L) : ⊤ ∗ P ⊣⊢ P.
     Proof.
       rewrite <- lemp_true.
       rewrite lsep_comm.
@@ -387,6 +387,16 @@ Module sep.
         + now apply lor_right2.
     Qed.
 
+    Lemma lsep_exists_comm {A} {P : A -> L} {Q : L} :
+      (∃ x : A, P x) ∗ Q ⊣⊢ (∃ x : A, P x ∗ Q).
+    Proof.
+      split.
+      - apply lwand_sep_adjoint, lex_left; intros x.
+        apply lwand_sep_adjoint, (lex_right x); reflexivity.
+      - apply lex_left; intros x. apply proper_lsep_entails; [|easy].
+        now apply (lex_right x).
+    Qed.
+
     Lemma land_prop_left {P : Prop} {Q R : L} :
       (P -> Q ⊢ R) -> (!! P ∧ Q ⊢ R).
     Proof.
@@ -395,6 +405,64 @@ Module sep.
         apply limpl_and_adjoint.
         rewrite land_comm, land_true.
         auto.
+    Qed.
+
+    Lemma lwand_curry {P Q R : L} :
+      ((P ∗ Q) -∗ R) ⊣⊢ (P -∗ (Q -∗ R)).
+    Proof.
+      split.
+      - rewrite <- lwand_sep_adjoint.
+        rewrite <- lwand_sep_adjoint.
+        rewrite <- lsep_assoc.
+        rewrite lwand_sep_adjoint.
+        reflexivity.
+      - rewrite <- lwand_sep_adjoint.
+        rewrite lsep_assoc.
+        rewrite lwand_sep_adjoint.
+        rewrite lwand_sep_adjoint.
+        reflexivity.
+    Qed.
+
+    Lemma lwand_disj_distr {P Q R : L} :
+      ((P ∨ Q) -∗ R) ⊣⊢ ((P -∗ R) ∧ (Q -∗ R)).
+    Proof.
+      split.
+      - apply land_right.
+        + rewrite (lor_right1 _ P P Q) at 2; reflexivity.
+        + rewrite (lor_right2 _ Q P Q) at 2; reflexivity.
+      - apply lwand_sep_adjoint.
+        rewrite lsep_comm.
+        apply lwand_sep_adjoint.
+        apply lor_left.
+        + apply lwand_sep_adjoint.
+          rewrite lsep_comm.
+          apply lwand_sep_adjoint.
+          now apply land_left1.
+        + apply lwand_sep_adjoint.
+          rewrite lsep_comm.
+          apply lwand_sep_adjoint.
+          now apply land_left2.
+    Qed.
+
+    Lemma lwand_exists_comm {A} {P : A -> L} {Q : L} :
+      ((∃ x : A, P x) -∗ Q) ⊣⊢ (∀ x : A, P x -∗ Q).
+    Proof.
+      split.
+      - apply lall_right. intros x.
+        apply proper_lwand_entails; [|easy].
+        now apply (lex_right x).
+      - apply lwand_sep_adjoint. rewrite lsep_comm.
+        apply lwand_sep_adjoint. apply lex_left. intros x.
+        apply lwand_sep_adjoint. rewrite lsep_comm.
+        apply lwand_sep_adjoint. now apply (lall_left x).
+    Qed.
+
+    Lemma lwand_emp {P : L} :
+      (lemp -∗ P) ⊣⊢ P.
+    Proof.
+      split.
+      - rewrite <- lsep_emp. now apply lwand_sep_adjoint.
+      - apply lwand_sep_adjoint. now rewrite lsep_emp.
     Qed.
 
   End Facts.
