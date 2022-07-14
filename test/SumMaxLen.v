@@ -468,12 +468,20 @@ Module Import ExampleModel.
       iIntros (Σ' sG) "[_ _]".
       iApply (weakestpre.wp_mono').
       2: {
-        iApply (iris_rule_stm_call_forwards _ _ Heqcontract).
+        iApply (iris_rule_stm_call_forwards
+                  (P := interpret_assertion pre ι)
+                  (Q := fun v => interpret_assertion post ι.[result∷σ ↦ v])
+                  _ _ Heqcontract).
         - eapply ProgramLogic.rule_sep_contract.
-          + unfold DefaultBase.evals.
-            now rewrite env.map_map env.map_id.
-          + eapply Logic.sep.lsep_true.
-          + cbn. now iIntros (v') "[_ Hpost]".
+          cbv [Logic.sep.lentails Logic.sep.lex Logic.sep.land Logic.sep.lprop
+               Logic.sep.lsep Logic.sep.lall Logic.sep.lwand IProp].
+          iIntros "pre".
+          iExists ι.
+          unfold DefaultBase.evals.
+          rewrite env.map_map env.map_id.
+          iSplit; [trivial|].
+          iSplitL; [trivial|].
+          now iIntros (v0) "post".
         - iApply contracts_sound.
         - now rewrite interpret_assertion_pure_or_not.
       }

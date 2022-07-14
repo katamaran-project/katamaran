@@ -472,24 +472,16 @@ Module Type Soundness
       intros [ι Hwp]; revert Hwp.
       unfold assert_eq_nenv, lift_purem.
       rewrite CPureSpecM.wp_assert_eq_nenv.
-      intros [Hfmls Hwp]; revert Hwp.
-      pose (fun δ => ∀ v, interpret_assertion ens (env.snoc ι (result∷_) v) -∗ POST v δ) as frame.
+      intros [Hfmls Hwp]. constructor.
+      apply (lex_right ι). apply land_right.
+      { now apply lprop_right. }
+      apply (consume_sound (fun δ => ∀ v, interpret_assertion ens (env.snoc ι (result∷_) v) -∗ POST v δ)).
+      revert Hwp. apply consume_monotonic.
+      intros _ h2. unfold demonic.
       intros HYP.
-      assert (interpret_scheap h ⊢ frame δΓ ∗ interpret_assertion req ι ).
-      { rewrite lsep_comm.
-        apply (consume_sound frame).
-        revert HYP. apply consume_monotonic.
-        intros ? h2. unfold demonic.
-        intros HYP.
-        apply lall_right; intro v.
-        specialize (HYP v).
-        now apply lwand_sep_adjoint, produce_sound.
-      }
-      constructor 1 with ι (frame δΓ); auto.
-      - intro v.
-        apply lwand_sep_adjoint.
-        apply lall_left with v.
-        reflexivity.
+      apply lall_right; intro v.
+      specialize (HYP v).
+      now apply lwand_sep_adjoint, produce_sound.
     Qed.
 
     Lemma call_lemma_sound {Γ Δ} (δΓ : CStore Γ) (δΔ : CStore Δ)
@@ -505,18 +497,17 @@ Module Type Soundness
       intros [ι Hwp]; revert Hwp.
       unfold assert_eq_nenv, lift_purem.
       rewrite CPureSpecM.wp_assert_eq_nenv.
-      intros [Hfmls HYP].
-      pose (fun δ => interpret_assertion ens ι -∗ POST δ) as frame.
-      assert (interpret_scheap h ⊢ frame δΓ ∗ interpret_assertion req ι ).
-      { rewrite lsep_comm.
-        apply (consume_sound frame).
-        revert HYP. apply consume_monotonic.
-        intros _ h2 HYP. subst frame. unfold liftP.
+      intros [Hfmls Hwp]. constructor.
+      apply (lex_right ι). apply land_right.
+      { now apply lprop_right. }
+      transitivity (interpret_assertion req ι ∗ (∀ _ : Val ty.unit, interpret_assertion ens ι -∗ POST δΓ)).
+      - apply (consume_sound (fun δ => ∀ v, interpret_assertion ens ι -∗ POST δΓ) δΓ).
+        revert Hwp. apply consume_monotonic.
+        intros _ h2. intros HYP.
+        apply lall_right; intro v.
         now apply lwand_sep_adjoint, produce_sound.
-      }
-      constructor 1 with ι (frame δΓ); auto.
-      - apply lwand_sep_adjoint.
-        reflexivity.
+      - apply proper_lsep_entails; [easy|].
+        now apply (lall_left tt).
     Qed.
 
     Definition SoundExec (rec : Exec) :=

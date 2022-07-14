@@ -1536,11 +1536,11 @@ Module BlockVerificationDerived2Sound.
     intros w0 ι0 Hpc0 a a0 ->.
     apply refine_bind.
     apply refine_produce_chunk; auto.
-    { reflexivity.}
+    { reflexivity. }
     intros w1 ω1 ι1 -> Hpc1 [] [] _.
     apply refine_bind.
     apply refine_produce_chunk; auto.
-    { now rewrite H, <-inst_persist.}
+    { now rewrite H, <-inst_persist. }
     intros w2 ω2 ι2 -> Hpc2 [] [] _.
     apply refine_bind.
     apply refine_demonic; auto.

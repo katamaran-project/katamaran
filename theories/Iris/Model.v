@@ -1598,7 +1598,6 @@ Module IrisInstanceWithContracts
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
-    unfold language.prim_step in H0; cbn in H0.
     dependent elimination H0.
     dependent elimination s.
     iModIntro. iModIntro. iModIntro.
@@ -1607,22 +1606,18 @@ Module IrisInstanceWithContracts
     iFrame.
     iSplitL; [|trivial].
     destruct ctrip.
-    iPoseProof (H1 with "P") as "[fr req]".
-    iApply wp_compat_call_frame.
-    rewrite H0.
-    iApply (wp_mono _ _ _ (fun v => frame ∗ match v with
-                                            | MkValConf _ v _ => interpret_assertion ens (env.snoc ι (result∷σ) v)
-                                            end)%I).
-    - intros [v δ']; cbn.
-      iIntros "[fr ens]".
-      iSplitL; [|trivial].
-      iApply (H2 v).
-      by iFrame.
-    - iSpecialize ("cenv" $! _ _ f0).
-      rewrite ceq.
-      iSpecialize ("cenv" $! ι with "req").
-      iApply wp_frame_l.
-      by iFrame.
+    cbv [lentails lex land lprop lsep lall lwand IProp] in H0.
+    iPoseProof (H0 with "P") as (ι Heq) "[req consr]". clear H0.
+    iApply wp_compat_call_frame. rewrite Heq.
+    iSpecialize ("cenv" $! _ _ f0).
+    rewrite ceq.
+    iPoseProof ("cenv" $! ι with "req") as "wpf0".
+    iApply (wp_frame_wand with "consr").
+    iApply (wp_mono with "wpf0").
+    intros [v δ3]; cbn.
+    iIntros "ens consr".
+    iSplitL; [|trivial].
+    by iApply "consr".
   Qed.
 
   Lemma iris_rule_stm_call_frame {Γ} (δ : CStore Γ)
@@ -1650,17 +1645,14 @@ Module IrisInstanceWithContracts
     intros contractF ctrip extSem.
     destruct ctrip; cbn in extSem.
     iIntros "P".
-    iPoseProof (H1 with "P") as "[frm pre]".
-    iApply (wp_mono _ _ _ (fun v => frame ∗ match v with MkValConf _ v δ' => interpret_assertion (HProp := IProp Σ) ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ) end)%I).
-    - intros v.
-      destruct v.
-      iIntros "[frame [pre %]]".
-      subst.
-      iApply H2.
-      by iFrame.
-    - iApply wp_frame_l.
-      iFrame.
-      by iApply (extSem ι H0).
+    cbv [lentails lex land lprop lsep lall lwand IProp] in H0.
+    iPoseProof (H0 with "P") as (ι Heq) "[req consr]". clear H0.
+    iPoseProof (extSem ι Heq with "req") as "wpf".
+    iApply (wp_frame_wand with "consr").
+    iApply (wp_mono with "wpf").
+    intros [v δ3]; cbn.
+    iIntros "[ens %] consr". subst.
+    by iApply "consr".
   Qed.
 
   Lemma iris_rule_stm_lemmak
@@ -1676,8 +1668,6 @@ Module IrisInstanceWithContracts
     revert ltrip lemSem.
     generalize (LEnv l) as contractL.
     intros contractL ltrip lemSem.
-    dependent elimination ltrip; cbn in lemSem.
-    specialize (lemSem ι).
     iIntros "tripk P".
     rewrite wp_unfold. cbn.
     iIntros (σ ns ks1 ks nt) "Hregs".
@@ -1691,9 +1681,9 @@ Module IrisInstanceWithContracts
     iModIntro; iFrame.
     iSplitL; [|trivial].
     iApply "tripk".
-    iApply l1.
-    iPoseProof (l0 with "P") as "[frm pre]".
-    iFrame.
+    dependent elimination ltrip; cbn in lemSem.
+    iPoseProof (l with "P") as (ι Heq) "[req consr]". clear l.
+    iApply "consr".
     by iApply lemSem.
   Qed.
 
