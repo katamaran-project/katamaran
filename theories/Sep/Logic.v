@@ -29,6 +29,7 @@
 From Coq Require Import
      Classes.Morphisms
      Classes.RelationClasses
+     Program.Basics
      Setoid.
 
 From Katamaran Require Import
@@ -82,17 +83,20 @@ Module sep.
       #[canonical=no] lsep_leak P             : P ⊢ lemp;
     }.
 
-  Arguments lequiv {_} _ _.
-  Arguments lentails {_} _ _.
-  Arguments land {_} _ _.
-  Arguments lor {_} _ _.
-  Arguments limpl {_} _ _.
-  Arguments lprop {_} _.
-  Arguments lex {_} [_] _.
-  Arguments lall {_} [_] _.
-  Arguments lemp {_}.
-  Arguments lsep {_} _ _.
-  Arguments lwand {_} _ _.
+  #[global] Arguments lequiv {_} _ _.
+  #[global] Arguments lentails {_} _ _.
+  #[global] Arguments land {_} _ _.
+  #[global] Arguments lor {_} _ _.
+  #[global] Arguments limpl {_} _ _.
+  #[global] Arguments lprop {_} _.
+  #[global] Arguments lex {_} [_] _.
+  #[global] Arguments lall {_} [_] _.
+  #[global] Arguments lemp {_}.
+  #[global] Arguments lsep {_} _ _.
+  #[global] Arguments lwand {_} _ _.
+
+  #[global] Arguments lex_right {_} [_] _.
+  #[global] Arguments lall_left {_} [_] _.
 
   Module Import notations.
     Open Scope logic_scope.
@@ -132,72 +136,74 @@ Module sep.
         split; transitivity Q; auto.
     Qed.
 
-    #[export] Instance proper_lentails {L} :
-      Proper (lequiv ==> lequiv ==> iff) (@lentails L).
-    Proof.
-      intros P Q [pq qp] R S [rs sr]. split.
-      - intros pr. transitivity P; auto. transitivity R; auto.
-      - intros qs. transitivity Q; auto. transitivity S; auto.
-    Qed.
+    #[export] Instance lequiv_entails_subrelation {L} :
+      subrelation (@lequiv L) (@lentails L).
+    Proof. firstorder. Qed.
 
-    #[export] Instance proper_land {L} : Proper (lequiv ==> lequiv ==> lequiv) (@land L).
-    Proof.
-      intros P Q [pq qp] R S [rs sr].
-      split; (apply land_right; [apply land_left1 | apply land_left2]); assumption.
-    Qed.
+    #[export] Instance lequiv_flip_entails_subrelation {L} :
+      subrelation (@lequiv L) (flip (@lentails L)).
+    Proof. firstorder. Qed.
 
-    #[export] Instance proper_lor {L} : Proper (lequiv ==> lequiv ==> lequiv) (@lor L).
-    Proof.
-      intros P Q [pq qp] R S [rs sr].
-      split; (apply lor_left; [ apply lor_right1 | apply lor_right2]); assumption.
-    Qed.
+    #[export] Instance proper_land_entails {L} :
+      Proper (lentails ==> lentails ==> lentails) (@land L).
+    Proof. intros P Q pq R S rs. apply land_right; [apply land_left1 | apply land_left2]; assumption. Qed.
 
-    #[export] Instance proper_limpl {L} : Proper (lequiv ==> lequiv ==> lequiv) (@limpl L).
+    #[export] Instance proper_land_equiv {L} :
+      Proper (lequiv ==> lequiv ==> lequiv) (@land L).
+    Proof. intros P Q [pq qp] R S [rs sr]. split; now apply proper_land_entails. Qed.
+
+    #[export] Instance proper_lor_entails {L} : Proper (lentails ==> lentails ==> lentails) (@lor L).
+    Proof. intros P Q pq R S rs. apply lor_left; [ apply lor_right1 | apply lor_right2]; assumption. Qed.
+
+    #[export] Instance proper_lor_equiv {L} : Proper (lequiv ==> lequiv ==> lequiv) (@lor L).
+    Proof. intros P Q [pq qp] R S [rs sr]. split; now apply proper_lor_entails. Qed.
+
+    #[export] Instance proper_limpl_entails {L} : Proper (lentails --> lentails ==> lentails) (@limpl L).
     Proof.
       intros P Q pq R S rs.
-      split; apply limpl_and_adjoint;
-        [ rewrite <- pq, <- rs
-        | rewrite pq, rs
-        ]; apply limpl_and_adjoint; reflexivity.
+      apply limpl_and_adjoint.
+      rewrite <- pq, <- rs.
+      apply limpl_and_adjoint.
+      reflexivity.
     Qed.
 
-    #[export] Instance proper_lprop {L} : Proper (iff ==> lequiv) (@lprop L).
-    Proof.
-      intros P Q pq.
-      split; apply lprop_left; intro; now apply lprop_right, pq.
-    Qed.
+    #[export] Instance proper_limpl_equiv {L} : Proper (lequiv ==> lequiv ==> lequiv) (@limpl L).
+    Proof. intros P Q [pq] R S [rs]. split; apply proper_limpl_entails; auto. Qed.
 
-    #[export] Instance proper_lex {L} T : Proper (pointwise_relation T lequiv ==> lequiv) (@lex L T).
-    Proof.
-      intros P Q pq.
-      split; apply lex_left; intro x;
-        apply (@lex_right _ _ x), (pq x).
-    Qed.
+    #[export] Instance proper_lprop_entails {L} : Proper (impl ==> lentails) (@lprop L).
+    Proof. intros P Q pq. apply lprop_left; intro; now apply lprop_right, pq. Qed.
 
-    #[export] Instance proper_lall {L} T : Proper (pointwise_relation T lequiv ==> lequiv) (@lall L T).
-    Proof.
-      intros P Q pq.
-      split; apply lall_right; intro x;
-        apply (@lall_left _ _ x), (pq x).
-    Qed.
+    #[export] Instance proper_lprop_equiv {L} : Proper (iff ==> lequiv) (@lprop L).
+    Proof. intros P Q pq. split; apply proper_lprop_entails; unfold impl; apply pq. Qed.
 
-    #[export] Instance proper_lsep {L} : Proper (lequiv ==> lequiv ==> lequiv) (@lsep L).
-    Proof.
-      intros P Q [pq qp] R S [rs sr].
-      split; now apply lsep_entails.
-    Qed.
+    #[export] Instance proper_lex_entails {L} T : Proper (pointwise_relation T lentails ==> lentails) (@lex L T).
+    Proof. intros P Q pq. apply lex_left; intro x; apply (lex_right x), (pq x). Qed.
 
-    #[export] Instance proper_lwand {L} : Proper (lequiv ==> lequiv ==> lequiv) (@lwand L).
+    #[export] Instance proper_lex_equiv {L} T : Proper (pointwise_relation T lequiv ==> lequiv) (@lex L T).
+    Proof. intros P Q pq. split; apply lex_left; intro x; apply (lex_right x), (pq x). Qed.
+
+    #[export] Instance proper_lall_entails {L} T : Proper (pointwise_relation T lentails ==> lentails) (@lall L T).
+    Proof. intros P Q pq. apply lall_right; intro x; apply (lall_left x), (pq x). Qed.
+
+    #[export] Instance proper_lall_equiv {L} T : Proper (pointwise_relation T lequiv ==> lequiv) (@lall L T).
+    Proof. intros P Q pq. split; apply lall_right; intro x; apply (lall_left x), (pq x). Qed.
+
+    #[export] Instance proper_lsep_entails {L} : Proper (lentails ==> lentails ==> lentails) (@lsep L).
+    Proof. intros P Q pq R S rs. now apply lsep_entails. Qed.
+
+    #[export] Instance proper_lsep_equiv {L} : Proper (lequiv ==> lequiv ==> lequiv) (@lsep L).
+    Proof. intros P Q [pq qp] R S [rs sr]. split; now apply lsep_entails. Qed.
+
+    #[export] Instance proper_lwand_entails {L} : Proper (lentails --> lentails ==> lentails) (@lwand L).
     Proof.
       intros P Q pq R S rs.
-      split.
-      - apply lwand_sep_adjoint.
-        rewrite <- pq, <- rs.
-        now apply lwand_sep_adjoint.
-      - apply lwand_sep_adjoint.
-        rewrite pq, rs.
-        now apply lwand_sep_adjoint.
+      apply lwand_sep_adjoint.
+      rewrite <- pq, <- rs.
+      now apply lwand_sep_adjoint.
     Qed.
+
+    #[export] Instance proper_lwand_equiv {L} : Proper (lequiv ==> lequiv ==> lequiv) (@lwand L).
+    Proof. intros P Q [pq qp] R S [rs sr]. split; now apply proper_lwand_entails. Qed.
 
   End instances.
 
@@ -266,15 +272,6 @@ Module sep.
       - apply land_right.
         + reflexivity.
         + apply ltrue_right.
-    Qed.
-
-    Lemma land_intro2 {P Q R S : L} :
-      (P ⊢ Q) -> (R ⊢ S) -> (P ∧ R ⊢ Q ∧ S).
-    Proof.
-      intros pq rs.
-      apply land_right.
-      apply land_left1, pq.
-      apply land_left2, rs.
     Qed.
 
     Lemma lor_assoc {P Q R : L} :
@@ -388,6 +385,16 @@ Module sep.
       - apply lor_left; apply lsep_entails; try reflexivity.
         + now apply lor_right1.
         + now apply lor_right2.
+    Qed.
+
+    Lemma land_prop_left {P : Prop} {Q R : L} :
+      (P -> Q ⊢ R) -> (!! P ∧ Q ⊢ R).
+    Proof.
+      rewrite limpl_and_adjoint.
+      - intros H. apply lprop_left. intros HP.
+        apply limpl_and_adjoint.
+        rewrite land_comm, land_true.
+        auto.
     Qed.
 
   End Facts.

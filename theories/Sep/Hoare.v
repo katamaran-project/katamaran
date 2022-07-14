@@ -335,7 +335,14 @@ Module ProgramLogic.
       ⦃ WP s POST δ ⦄ s ; δ ⦃ POST ⦄.
     Proof. apply rule_exist; intros P; now apply rule_pull. Qed.
 
-    #[export] Instance proper_triple {Γ δ τ} :
+    #[export] Instance proper_triple_entails {Γ δ τ} :
+      Proper (Basics.flip lentails ==> eq ==> pointwise_relation _ (pointwise_relation _ lentails) ==> Basics.impl) (@Triple Γ δ τ).
+    Proof.
+      intros P Q qp s s' eq__s R S rs H; subst s'.
+      eapply rule_consequence. apply qp. apply rs. apply H.
+    Qed.
+
+    #[export] Instance proper_triple_equiv {Γ δ τ} :
       Proper (lequiv ==> eq ==> pointwise_relation _ (pointwise_relation _ lequiv) ==> iff) (@Triple Γ δ τ).
     Proof.
       intros P Q pq s s' eq__s R S rs; subst s'.
