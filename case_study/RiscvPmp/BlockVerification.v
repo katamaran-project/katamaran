@@ -1264,7 +1264,8 @@ Module BlockVerificationDerived2.
 
     Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := nil |} :=
       (
-        (∃ "v", mstatus ↦ term_var "v") ∗
+        asn_formula (formula_eq (term_var "an") (term_var "a" + term_val ty_xlenbits 88)) ∗
+          (∃ "v", mstatus ↦ term_var "v") ∗
           (mtvec ↦ (term_var "a" + term_val ty_xlenbits 72)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (∃ "v", mepc ↦ term_var "v") ∗
@@ -1280,8 +1281,7 @@ Module BlockVerificationDerived2.
           (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
           (pmpaddr0 ↦ term_var "a" + term_val ty_xlenbits 88) ∗
           (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
-          (term_var "a" + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42) ∗
-          asn_formula (formula_eq (term_var "an") (term_var "a" + term_val ty_xlenbits 88))
+          (term_var "a" + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42)
       )%exp.
 
     (* note that this computation takes longer than directly proving sat__femtoinit below *)
@@ -1776,6 +1776,7 @@ Module BlockVerificationDerived2Sem.
     | cons inst insts => (interp_ptsto_instr (mG := sailGS_memGS) a inst ∗ ptsto_instrs (a + 4) insts)%I
     | nil => True%I
     end.
+  Arguments ptsto_instrs {Σ H} a%Z_scope instrs%list_scope : simpl never.
 
   Lemma mono_exec_block_addr {instrs ainstr apc} : Monotonic' (exec_block_addr__c instrs ainstr apc).
   Proof.
@@ -2035,12 +2036,11 @@ Module BlockVerificationDerived2Sem.
   Import env.notations.
   Lemma femto_handler_verified : forall `{sailGS Σ}, ⊢ femto_handler_contract.
   Proof.
-    iIntros (Σ sG epc mpp) "".
-    pose (BlockVerificationDerived2.sat__femtohandler) as Hhandler.
-    unfold vc__femtohandler in Hhandler.
-    iPoseProof (sound_VC__addr Hhandler (env.snoc (env.snoc env.nil (_::ty_exc_code) epc) _ mpp)) as "Hverif".
-    iIntros "Hpre Hk".
-    iApply ("Hverif" $! 72 with "[Hpre] [Hk]").
+    iIntros (Σ sG epc mpp) "Hpre Hk".
+    iApply (sound_VC__addr $! 72 with "[Hpre] [Hk]").
+    - exact BlockVerificationDerived2.sat__femtohandler.
+    Unshelve.
+    exact (env.snoc (env.snoc env.nil (_::ty_exc_code) epc) _ mpp).
     - iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hnpc & Hhandler)".
       cbn.
       unfold femto_inv_fortytwo.
@@ -2076,11 +2076,11 @@ Module BlockVerificationDerived2Sem.
     iLöb as "Hind".
     iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmpentries & Hfortytwo & Hpc & Hmem & Hnextpc & Hinstrs)".
 
-    iApply (femto_handler_verified $! mepcv User with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmpentries Hfortytwo Hpc Hinstrs] [Hmem Hnextpc]").
+    iApply (femto_handler_verified $! mepcv User with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmpentries Hfortytwo Hpc Hinstrs Hnextpc] [Hmem]").
     - unfold femto_handler_pre; iFrame.
       iDestruct "Hgprs" as "(? & ? & ? & ? & ? & ? & ? & ? & _)".
       now iFrame.
-    - iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmpentries & Hfortytwo & Hpc & Hinstrs)".
+    - iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmpentries & Hfortytwo & Hpc & Hnextpc & Hinstrs)".
       iApply LoopVerification.valid_semTriple_loop.
       iSplitL "Hmem Hnextpc Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7 Hpmpentries Hpc".
       + unfold LoopVerification.Execution.
@@ -2136,41 +2136,42 @@ Module BlockVerificationDerived2Sem.
     rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
     iFrame.
 
-    iMod (inv_alloc femto_inv_ns ⊤ (interp_ptsto (mG := sailGS_memGS) 84 42) with "Hfortytwo") as "#Hinv".
-    change (inv femto_inv_ns (84 ↦ₘ 42)) with femto_inv_fortytwo.
-    iModIntro.
+  (*   iMod (inv_alloc femto_inv_ns ⊤ (interp_ptsto (mG := sailGS_memGS) 84 42) with "Hfortytwo") as "#Hinv". *)
+  (*   change (inv femto_inv_ns (84 ↦ₘ 42)) with femto_inv_fortytwo. *)
+  (*   iModIntro. *)
 
-    iSplitR ""; try done.
-    iSplitL "Hmcause Hpc Hmemadv".
-    iSplitL "Hmemadv".
-    now iApply memAdv_pmpPolicy.
-    iSplitL "Hmcause".
-    now iExists mcause.
-    iExists 88; iFrame.
+  (*   iSplitR ""; try done. *)
+  (*   iSplitL "Hmcause Hpc Hmemadv". *)
+  (*   iSplitL "Hmemadv". *)
+  (*   now iApply memAdv_pmpPolicy. *)
+  (*   iSplitL "Hmcause". *)
+  (*   now iExists mcause. *)
+  (*   iExists 88; iFrame. *)
 
-    iSplitL "".
-    iModIntro.
-    unfold LoopVerification.CSRMod.
-    iIntros "(_ & _ & _ & %eq & _)".
-    inversion eq.
+  (*   iSplitL "". *)
+  (*   iModIntro. *)
+  (*   unfold LoopVerification.CSRMod. *)
+  (*   iIntros "(_ & _ & _ & %eq & _)". *)
+  (*   inversion eq. *)
 
-    iSplitL.
-    unfold LoopVerification.Trap.
-    iModIntro.
-    iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
-    iApply femtokernel_hander_safe.
-    iFrame.
-    iSplitR; try done.
-    now iExists _.
+  (*   iSplitL. *)
+  (*   unfold LoopVerification.Trap. *)
+  (*   iModIntro. *)
+  (*   iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)". *)
+  (*   iApply femtokernel_hander_safe. *)
+  (*   iFrame. *)
+  (*   iSplitR; try done. *)
+  (*   now iExists _. *)
 
-    iModIntro.
-    unfold LoopVerification.Recover.
-    iIntros "(_ & _ & _ & %eq & _)".
-    inversion eq.
-  Qed.
+  (*   iModIntro. *)
+  (*   unfold LoopVerification.Recover. *)
+  (*   iIntros "(_ & _ & _ & %eq & _)". *)
+  (*   inversion eq. *)
+  (* Qed. *)
+  Admitted.
 
   Definition femto_init_pre `{sailGS Σ} : iProp Σ :=
-      (∃ v, mstatus ↦ v) ∗
+      ((∃ v, mstatus ↦ v) ∗
       (∃ v, mtvec ↦ v) ∗
       (∃ v, mcause ↦ v) ∗
       (∃ v, mepc ↦ v) ∗
@@ -2186,11 +2187,13 @@ Module BlockVerificationDerived2Sem.
       pmp1cfg ↦ BlockVerificationDerived2.femtokernel_default_pmpcfg ∗
       (∃ v, pmpaddr0 ↦ v) ∗
       (∃ v, pmpaddr1 ↦ v) ∗
+      femto_inv_fortytwo) ∗
       pc ↦ 0 ∗
+      (∃ v, nextpc ↦ v) ∗
       ptsto_instrs 0 BlockVerificationDerived2.femtokernel_init.
 
     Example femto_init_post `{sailGS Σ} : iProp Σ :=
-      (∃ v, mstatus ↦ v) ∗
+      ((∃ v, mstatus ↦ v) ∗
         (mtvec ↦ 72) ∗
         (∃ v, mcause ↦ v) ∗
         (∃ v, mepc ↦ v) ∗
@@ -2206,7 +2209,9 @@ Module BlockVerificationDerived2Sem.
         pmp1cfg ↦ BlockVerificationDerived2.femto_pmpcfg_ent1 ∗
         (pmpaddr0 ↦ 88) ∗
         (pmpaddr1 ↦ BlockVerificationDerived2.femto_address_max) ∗
+        femto_inv_fortytwo) ∗
         pc ↦ 88 ∗
+        (∃ v, nextpc ↦ v) ∗
         ptsto_instrs 0 BlockVerificationDerived2.femtokernel_init.
 
   Definition femto_init_contract `{sailGS Σ} : iProp Σ :=
@@ -2214,7 +2219,25 @@ Module BlockVerificationDerived2Sem.
       (femto_init_post -∗ LoopVerification.WP_loop) -∗
           LoopVerification.WP_loop.
 
-  Axiom femto_init_verified : forall `{sailGS Σ}, ⊢ femto_init_contract.
+  Lemma femto_init_verified : forall `{sailGS Σ}, ⊢ femto_init_contract.
+  Proof.
+    iIntros (Σ sG) "Hpre Hk".
+    iApply (sound_VC__addr $! 0 with "[Hpre] [Hk]").
+    - exact BlockVerificationDerived2.sat__femtoinit.
+    Unshelve.
+    exact env.nil.
+    - unfold femto_init_pre.
+      unfold interpret_assertion; cbn -[ptsto_instrs].
+      iDestruct "Hpre" as "[Hpre1 Hpre2]".
+      now iFrame.
+    - iIntros (an) "Hpost".
+      iApply "Hk".
+      unfold femto_init_post.
+      cbn -[ptsto_instrs].
+      iDestruct "Hpost" as "(Hpc & Hnpc & Hhandler & ([%eq _] & Hrest))".
+      subst.
+      iFrame.
+  Qed.
 
   Lemma femtokernel_init_safe `{sailGS Σ} :
     ⊢ (∃ v, mstatus ↦ v) ∗
