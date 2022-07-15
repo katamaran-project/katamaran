@@ -2219,6 +2219,7 @@ Module BlockVerificationDerived2Sem.
       (femto_init_post -∗ LoopVerification.WP_loop) -∗
           LoopVerification.WP_loop.
 
+  (* Note: temporarily make femtokernel_init_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_init_pre.
 
   Lemma femto_init_verified : forall `{sailGS Σ}, ⊢ femto_init_contract.
@@ -2241,6 +2242,7 @@ Module BlockVerificationDerived2Sem.
       iFrame.
   Qed.
 
+  (* see above *)
   Transparent femtokernel_init_pre.
 
   Lemma femtokernel_init_safe `{sailGS Σ} :
