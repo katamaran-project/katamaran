@@ -1318,9 +1318,9 @@ Module BlockVerificationDerived2.
     Let Σ__femtohandler : LCtx := ["epc"::ty_exc_code; "mpp"::ty_privilege].
     Let W__femtohandler : World := MkWorld Σ__femtohandler [].
 
-    Example femtokernel_handler_pre : Assertion {| wctx := ["epc"::ty_exc_code; "mpp"::ty_privilege; "a" :: ty_xlenbits]; wco := nil |} :=
+    Example femtokernel_handler_pre : Assertion {| wctx := ["epc"::ty_exc_code; "a" :: ty_xlenbits]; wco := nil |} :=
         (asn_eq (term_var "a") (term_val ty_word 72)) ∗
-      (mstatus ↦ term_record rmstatus [ term_var "mpp" ]) ∗
+      (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
       (mtvec ↦ term_val ty_word 72) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
       (mepc ↦ term_var "epc") ∗
@@ -1338,13 +1338,13 @@ Module BlockVerificationDerived2.
       (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
       (term_var "a" + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42)%exp.
 
-    Example femtokernel_handler_post : Assertion {| wctx := ["epc"::ty_exc_code; "mpp"::ty_privilege; "a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := nil |} :=
+    Example femtokernel_handler_post : Assertion {| wctx := ["epc"::ty_exc_code; "a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := nil |} :=
       (
           (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
           (mtvec ↦ term_val ty_word 72) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
           (mepc ↦ term_var "epc") ∗
-          cur_privilege ↦ term_var "mpp" ∗
+          cur_privilege ↦ term_val ty_privilege User ∗
           (∃ "v", x1 ↦ term_var "v") ∗
           (∃ "v", x2 ↦ term_var "v") ∗
           (∃ "v", x3 ↦ term_var "v") ∗
@@ -1989,8 +1989,8 @@ Module BlockVerificationDerived2Sem.
   Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ :=
         (interp_ptsto (mG := sailGS_memGS) 84 42).
 
-  Definition femto_handler_pre `{sailGS Σ} mpp epc : iProp Σ :=
-      (mstatus ↦ {| MPP := mpp |}) ∗
+  Definition femto_handler_pre `{sailGS Σ} epc : iProp Σ :=
+      (mstatus ↦ {| MPP := User |}) ∗
       (mtvec ↦ 72) ∗
       (∃ v, mcause ↦ v) ∗
       (mepc ↦ epc) ∗
@@ -2028,19 +2028,22 @@ Module BlockVerificationDerived2Sem.
         ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler.
 
   Definition femto_handler_contract `{sailGS Σ} : iProp Σ :=
-    ∀ epc mpp,
-        femto_handler_pre mpp epc -∗
+    ∀ epc,
+        femto_handler_pre epc -∗
           (femto_handler_post epc -∗ LoopVerification.WP_loop) -∗
           LoopVerification.WP_loop.
+
+  (* Note: temporarily make femtokernel_init_pre opaque to prevent Gallina typechecker from taking extremely long *)
+  Opaque femtokernel_handler_pre.
 
   Import env.notations.
   Lemma femto_handler_verified : forall `{sailGS Σ}, ⊢ femto_handler_contract.
   Proof.
-    iIntros (Σ sG epc mpp) "Hpre Hk".
+    iIntros (Σ sG epc) "Hpre Hk".
     iApply (sound_VC__addr $! 72 with "[Hpre] [Hk]").
     - exact BlockVerificationDerived2.sat__femtohandler.
     Unshelve.
-    exact (env.snoc (env.snoc env.nil (_::ty_exc_code) epc) _ mpp).
+    exact (env.snoc env.nil (_::ty_exc_code) epc).
     - iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hnpc & Hhandler)".
       cbn.
       unfold femto_inv_fortytwo.
@@ -2050,8 +2053,10 @@ Module BlockVerificationDerived2Sem.
       iApply "Hk".
       unfold femto_handler_post.
       cbn in eq; destruct eq.
-      iFrame.
-  Admitted.
+      now iFrame.
+  Qed.
+
+  Transparent femtokernel_handler_pre.
 
   Lemma femtokernel_hander_safe `{sailGS Σ} {mepcv}:
     ⊢ mstatus ↦ {| MPP := User |} ∗
@@ -2076,7 +2081,7 @@ Module BlockVerificationDerived2Sem.
     iLöb as "Hind".
     iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmpentries & Hfortytwo & Hpc & Hmem & Hnextpc & Hinstrs)".
 
-    iApply (femto_handler_verified $! mepcv User with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmpentries Hfortytwo Hpc Hinstrs Hnextpc] [Hmem]").
+    iApply (femto_handler_verified $! mepcv with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hgprs Hpmpentries Hfortytwo Hpc Hinstrs Hnextpc] [Hmem]").
     - unfold femto_handler_pre; iFrame.
       iDestruct "Hgprs" as "(? & ? & ? & ? & ? & ? & ? & ? & _)".
       now iFrame.
