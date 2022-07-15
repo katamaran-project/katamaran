@@ -2219,6 +2219,8 @@ Module BlockVerificationDerived2Sem.
       (femto_init_post -∗ LoopVerification.WP_loop) -∗
           LoopVerification.WP_loop.
 
+  Opaque femtokernel_init_pre.
+
   Lemma femto_init_verified : forall `{sailGS Σ}, ⊢ femto_init_contract.
   Proof.
     iIntros (Σ sG) "Hpre Hk".
@@ -2238,6 +2240,8 @@ Module BlockVerificationDerived2Sem.
       subst.
       iFrame.
   Qed.
+
+  Transparent femtokernel_init_pre.
 
   Lemma femtokernel_init_safe `{sailGS Σ} :
     ⊢ (∃ v, mstatus ↦ v) ∗
