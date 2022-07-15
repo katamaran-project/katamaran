@@ -110,11 +110,11 @@ Module sep.
     Infix "→" := limpl : logic_scope.
     Notation "'∃' x .. y , P " :=
       (lex (fun x => .. (lex (fun y => P)) ..))
-      (at level 200, x binder, y binder, right associativity,
+      (at level 99, x binder, y binder, right associativity,
       format "'[  ' '[  ' ∃  x  ..  y ']' ,  '/' P ']'") : logic_scope.
     Notation "'∀' x .. y , P " :=
       (lall (fun x => .. (lall (fun y => P)) ..))
-      (at level 200, x binder, y binder, right associativity,
+      (at level 99, x binder, y binder, right associativity,
       format "'[  ' '[  ' ∀  x  ..  y ']' ,  '/' P ']'") : logic_scope.
     Notation "'!!' e" := (lprop e) : logic_scope.
     Notation "⊤" := (lprop True) : logic_scope.
@@ -457,12 +457,105 @@ Module sep.
         apply lwand_sep_adjoint. now apply (lall_left x).
     Qed.
 
-    Lemma lwand_emp {P : L} :
+    Lemma lwand_emp (P : L) :
       (lemp -∗ P) ⊣⊢ P.
     Proof.
       split.
       - rewrite <- lsep_emp. now apply lwand_sep_adjoint.
       - apply lwand_sep_adjoint. now rewrite lsep_emp.
+    Qed.
+
+    Lemma lentails_apply {P Q : L} :
+      (⊤ ⊢ P) -> ((P → Q) ⊢ Q).
+    Proof.
+      intros H. transitivity ((P → Q) ∧ P).
+      - apply land_right. easy.
+        transitivity (@lprop L True); auto.
+        apply ltrue_right.
+      - apply limpl_and_adjoint. easy.
+    Qed.
+
+    Lemma lentails_apply' {P Q R : L} :
+      (R ⊢ P) -> ((P → Q) ∧ R ⊢ Q).
+    Proof.
+      intros H. transitivity ((P → Q) ∧ P).
+      apply proper_land_entails; easy.
+      apply limpl_and_adjoint; easy.
+    Qed.
+
+    Lemma limpl_false {P : L} :
+      (⊥ → P) ⊣⊢ ⊤.
+    Proof.
+      split.
+      - apply ltrue_right.
+      - apply limpl_and_adjoint. rewrite land_false.
+        apply lfalse_left.
+    Qed.
+
+    Lemma lall_true {A} :
+      (∀ x : A, ⊤) ⊣⊢@{L} ⊤.
+    Proof.
+      split.
+      - apply ltrue_right.
+      - apply lall_right. intros _. apply ltrue_right.
+    Qed.
+
+    Lemma lprop_intro_impl {P : Prop} (Q R : L) :
+      (P -> Q ⊢ R) ->
+      (Q ⊢ !! P → R).
+    Proof.
+      intros H.
+      apply limpl_and_adjoint.
+      rewrite land_comm.
+      apply limpl_and_adjoint.
+      apply lprop_left. intros HP.
+      apply limpl_and_adjoint.
+      rewrite land_comm, land_true.
+      now apply H.
+    Qed.
+
+    Lemma lprop_intro_wand {P : Prop} (Q R : L) :
+      (P -> Q ⊢ R) ->
+      (Q ⊢ !! P -∗ R).
+    Proof.
+      intros H.
+      apply lwand_sep_adjoint.
+      rewrite lsep_comm.
+      apply lwand_sep_adjoint.
+      apply lprop_left. intros HP.
+      apply lwand_sep_adjoint.
+      rewrite lsep_true.
+      now apply H.
+    Qed.
+
+    Lemma lprop_wand_impl {P : Prop} {Q : L} :
+      (!! P -∗ Q) ⊣⊢ (!! P → Q).
+    Proof.
+      split.
+      - apply lprop_intro_impl. intros HP.
+        rewrite <- (lwand_emp Q) at 2.
+        apply proper_lwand_entails; [|easy].
+        now apply lprop_right.
+      - apply lprop_intro_wand. intros HP.
+        rewrite <- land_true.
+        apply limpl_and_adjoint.
+        apply proper_limpl_entails; [|easy].
+        now apply lprop_right.
+    Qed.
+
+    Lemma lprop_sep_and {P : Prop} {Q : L} :
+      (!! P ∗ Q) ⊣⊢ (!! P ∧ Q).
+    Proof.
+      split.
+      - apply land_right.
+        + apply lwand_sep_adjoint.
+          apply lprop_left; intros Hfml.
+          now apply lwand_sep_adjoint, lprop_right.
+        + rewrite <- (lsep_true Q) at 2.
+          apply proper_lsep_entails; [apply ltrue_right|easy].
+      - apply land_prop_left; intros Hfml. rewrite <- lsep_true at 1.
+        apply proper_lsep_entails; [|easy].
+        now apply lprop_right.
     Qed.
 
   End Facts.
