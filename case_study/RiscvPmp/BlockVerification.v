@@ -2127,8 +2127,7 @@ Module BlockVerificationDerived2Sem.
         ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler ∗
         ptstoSthL (mG := sailGS_memGS) advAddrs
         ={⊤}=∗
-        ∃ mpp mepcv, LoopVerification.loop_pre User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries mpp mepcv ∗
-        femto_inv_fortytwo.
+        ∃ mpp mepcv, LoopVerification.loop_pre User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries mpp mepcv.
   Proof.
     iIntros "([%mpp Hmst] & Hmtvec & [%mcause Hmcause] & [%mepc Hmepc] & Hcurpriv & Hgprs & Hpmpcfg & Hfortytwo & Hpc & Hnpc & Hhandler & Hmemadv)".
     iExists mpp, mepc.
@@ -2138,37 +2137,34 @@ Module BlockVerificationDerived2Sem.
 
   (*   iMod (inv_alloc femto_inv_ns ⊤ (interp_ptsto (mG := sailGS_memGS) 84 42) with "Hfortytwo") as "#Hinv". *)
   (*   change (inv femto_inv_ns (84 ↦ₘ 42)) with femto_inv_fortytwo. *)
-  (*   iModIntro. *)
+    iModIntro.
 
-  (*   iSplitR ""; try done. *)
-  (*   iSplitL "Hmcause Hpc Hmemadv". *)
-  (*   iSplitL "Hmemadv". *)
-  (*   now iApply memAdv_pmpPolicy. *)
-  (*   iSplitL "Hmcause". *)
-  (*   now iExists mcause. *)
-  (*   iExists 88; iFrame. *)
+    iSplitL "Hmcause Hpc Hmemadv".
+    iSplitL "Hmemadv".
+    now iApply memAdv_pmpPolicy.
+    iSplitL "Hmcause".
+    now iExists mcause.
+    iExists 88; iFrame.
 
-  (*   iSplitL "". *)
-  (*   iModIntro. *)
-  (*   unfold LoopVerification.CSRMod. *)
-  (*   iIntros "(_ & _ & _ & %eq & _)". *)
-  (*   inversion eq. *)
+    iSplitL "".
+    iModIntro.
+    unfold LoopVerification.CSRMod.
+    iIntros "(_ & _ & _ & %eq & _)".
+    inversion eq.
 
-  (*   iSplitL. *)
-  (*   unfold LoopVerification.Trap. *)
-  (*   iModIntro. *)
-  (*   iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)". *)
-  (*   iApply femtokernel_hander_safe. *)
-  (*   iFrame. *)
-  (*   iSplitR; try done. *)
-  (*   now iExists _. *)
+    iSplitL.
+    unfold LoopVerification.Trap.
+    iModIntro.
+    iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
+    iApply femtokernel_hander_safe.
+    iFrame.
+    now iExists _.
 
-  (*   iModIntro. *)
-  (*   unfold LoopVerification.Recover. *)
-  (*   iIntros "(_ & _ & _ & %eq & _)". *)
-  (*   inversion eq. *)
-  (* Qed. *)
-  Admitted.
+    iModIntro.
+    unfold LoopVerification.Recover.
+    iIntros "(_ & _ & _ & %eq & _)".
+    inversion eq.
+  Qed.
 
   Definition femto_init_pre `{sailGS Σ} : iProp Σ :=
       ((∃ v, mstatus ↦ v) ∗
@@ -2269,10 +2265,10 @@ Module BlockVerificationDerived2Sem.
     unfold interp_gprs.
     rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
     iDestruct "Hgprs" as "(_ & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & _)".
-    iApply (femto_init_verified with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7 Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1 Hpc Hinit]").
+    iApply (femto_init_verified with "[Hmstatus Hmtvec Hmcause Hmepc Hcurpriv Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7 Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1 Hpc Hinit Hfortytwo Hnextpc]").
     - unfold femto_init_pre.
       iFrame.
-    - iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpc & Hinit)".
+    - iIntros "((Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hfortytwo) & Hpc & Hnextpc & Hinit)".
       iAssert (interp_pmp_entries BlockVerificationDerived2.femto_pmpentries) with "[Hpmp0cfg Hpmpaddr0 Hpmp1cfg Hpmpaddr1]" as "Hpmpents".
       { unfold interp_pmp_entries; cbn; iFrame. }
       iAssert interp_gprs with "[Hx1 Hx2 Hx3 Hx4 Hx5 Hx6 Hx7]" as "Hgprs".
@@ -2282,7 +2278,7 @@ Module BlockVerificationDerived2Sem.
         now iExists 0.
       }
       iApply fupd_wp.
-      iMod (femtokernel_manualStep2 with "[Hmstatus Hmtvec Hmcause Hgprs Hcurpriv Hpmpents Hfortytwo Hpc Hnextpc Hhandler Hadv Hmepc ]") as "[%mpp [%mepcv [Hlooppre Hfortytwo]]]".
+      iMod (femtokernel_manualStep2 with "[Hmstatus Hmtvec Hmcause Hgprs Hcurpriv Hpmpents Hfortytwo Hpc Hnextpc Hhandler Hadv Hmepc ]") as "[%mpp [%mepcv Hlooppre]]".
       { iFrame.
         iDestruct "Hmstatus" as "[%mst Hmstatus]".
         destruct mst as [mpp].
