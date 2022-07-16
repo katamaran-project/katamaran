@@ -261,15 +261,17 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase Contracts.RiscvPmpSi
        sep_contract_localstore      := [term_var "paddr"];
        sep_contract_precondition    := term_var "paddr" ↦ₘ term_var "w";
        sep_contract_result          := "result_read_ram";
-       sep_contract_postcondition   := term_var "result_read_ram" = term_var "w";
+       sep_contract_postcondition   := term_var "paddr" ↦ₘ term_var "w" ∗
+                                       term_var "result_read_ram" = term_var "w";
     |}.
 
   Definition sep_contract_write_ram : SepContractFunX write_ram :=
     {| sep_contract_logic_variables := ["paddr" :: ty.int; "data" :: ty_word];
        sep_contract_localstore      := [term_var "paddr"; term_var "data"];
-       sep_contract_precondition    := asn_true;
+       sep_contract_precondition    := ∃ "w", (term_var "paddr" ↦ₘ term_var "w");
        sep_contract_result          := "result_write_ram";
-       sep_contract_postcondition   := asn_true;
+       sep_contract_postcondition   := term_var "paddr" ↦ₘ term_var "data" ∗
+                                       term_var "result_write_ram" = term_val ty.int 1%Z;
     |}.
 
   Definition sep_contract_decode    : SepContractFunX decode :=
@@ -1401,10 +1403,102 @@ Module BlockVerificationDerivedSem.
 
   Module Import RiscvPmpIrisModel := IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates RiscvPmpModel PLOG.
 
+  Lemma read_ram_sound `{sailGS Σ} {Γ} (es : NamedEnv (Exp Γ) ["paddr"∷ty_exc_code]) (δ : CStore Γ) :
+    ∀ paddr w,
+      evals es δ = [env].["paddr"∷ty_exc_code ↦ paddr]
+      → ⊢ semTriple δ (interp_ptsto (mG := sailGS_memGS) paddr w) (stm_foreign read_ram es)
+          (λ (v : Z) (δ' : NamedEnv Val Γ), (interp_ptsto (mG := sailGS_memGS) paddr w ∗ ⌜v = w⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (paddr w Heq) "ptsto_addr_w".
+    rewrite wp_unfold. cbn.
+    iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+    iDestruct "Hmem" as (memmap) "[Hmem' %]".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first easy.
+    iIntros (e2 σ'' efs Hstep).
+    dependent elimination Hstep.
+    dependent elimination s.
+    rewrite Heq in f1. cbv in f1.
+    dependent elimination f1. cbn.
+    do 3 iModIntro.
+    unfold interp_ptsto.
+    iAssert (⌜ memmap !! paddr = Some w ⌝)%I with "[ptsto_addr_w Hmem']" as "%".
+    { iApply (gen_heap.gen_heap_valid with "Hmem' ptsto_addr_w"). }
+    iMod "Hclose" as "_".
+    iModIntro.
+    iSplitL "Hmem' Hregs".
+    iSplitL "Hregs"; first iFrame.
+    iExists memmap.
+    iSplitL "Hmem'"; first iFrame.
+    iPureIntro; assumption.
+    iSplitL; last easy.
+    apply map_Forall_lookup_1 with (i := paddr) (x := w) in H0; auto.
+    cbn in H0. subst.
+    iApply wp_value.
+    Unshelve.
+    3: exact (RiscvPmpIrisPrelims.MkValConf ty.int (μ'3 paddr) δ1).
+    constructor. cbn.
+    iSplitL; last easy.
+    iSplitL; last easy.
+    iAssumption.
+  Qed.
+
+  Lemma write_ram_sound `{sailGS Σ} {Γ}
+    (es : NamedEnv (Exp Γ) ["paddr"∷ty_exc_code; "data"∷ty_exc_code]) (δ : CStore Γ) :
+    ∀ paddr data : Z,
+      evals es δ = [env].["paddr"∷ty_exc_code ↦ paddr].["data"∷ty_exc_code ↦ data]
+      → ⊢ semTriple δ (∃ v : Z, interp_ptsto (mG := sailGS_memGS) paddr v)
+            (stm_foreign write_ram es)
+            (λ (v : Z) (δ' : NamedEnv Val Γ),
+              (interp_ptsto (mG := sailGS_memGS) paddr data ∗ ⌜v = 1%Z⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (paddr data Heq) "[% ptsto_addr]".
+    rewrite wp_unfold. cbn.
+    iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+    iDestruct "Hmem" as (memmap) "[Hmem' %]".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first easy.
+    iIntros (e2 σ'' efs Hstep).
+    dependent elimination Hstep.
+    dependent elimination s.
+    rewrite Heq in f1. cbn in f1.
+    dependent elimination f1. cbn.
+    do 3 iModIntro.
+    unfold interp_ptsto.
+    iMod (gen_heap.gen_heap_update _ _ _ data with "Hmem' ptsto_addr") as "[Hmem' ptsto_addr]".
+    iMod "Hclose" as "_".
+    iModIntro.
+    iSplitL "Hmem' Hregs".
+    iSplitL "Hregs"; first iFrame.
+    iExists (<[paddr:=data]> memmap).
+    iSplitL "Hmem'"; first iFrame.
+    iPureIntro.
+    { apply map_Forall_lookup.
+      intros i x Hl.
+      unfold fun_write_ram.
+      destruct (Z.eqb_spec paddr i).
+      + subst. apply (lookup_insert_rev memmap i); assumption.
+      + rewrite -> map_Forall_lookup in H0.
+        rewrite -> lookup_insert_ne in Hl; auto.
+    }
+    iSplitL; last easy.
+    iApply wp_value.
+    Unshelve.
+    3: exact (RiscvPmpIrisPrelims.MkValConf ty.int 1%Z δ1).
+    constructor. cbn.
+    iSplitL; trivial.
+    iSplitL; trivial.
+  Qed.
+
   Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
   Proof.
     intros Γ τ Δ f es δ.
     destruct f; cbn.
+    - intros *; apply read_ram_sound.
+    - intros *; apply write_ram_sound.
+    - admit.
   Admitted.
 
   Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.
