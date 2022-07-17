@@ -1406,8 +1406,8 @@ Module BlockVerificationDerivedSem.
   Lemma read_ram_sound `{sailGS Σ} {Γ} (es : NamedEnv (Exp Γ) ["paddr"∷ty_exc_code]) (δ : CStore Γ) :
     ∀ paddr w,
       evals es δ = [env].["paddr"∷ty_exc_code ↦ paddr]
-      → ⊢ semTriple δ (interp_ptsto (mG := sailGS_memGS) paddr w) (stm_foreign read_ram es)
-          (λ (v : Z) (δ' : NamedEnv Val Γ), (interp_ptsto (mG := sailGS_memGS) paddr w ∗ ⌜v = w⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+      → ⊢ semTriple δ (interp_ptsto paddr w) (stm_foreign read_ram es)
+          (λ (v : Z) (δ' : NamedEnv Val Γ), (interp_ptsto paddr w ∗ ⌜v = w⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (paddr w Heq) "ptsto_addr_w".
     rewrite wp_unfold. cbn.
@@ -1448,10 +1448,10 @@ Module BlockVerificationDerivedSem.
     (es : NamedEnv (Exp Γ) ["paddr"∷ty_exc_code; "data"∷ty_exc_code]) (δ : CStore Γ) :
     ∀ paddr data : Z,
       evals es δ = [env].["paddr"∷ty_exc_code ↦ paddr].["data"∷ty_exc_code ↦ data]
-      → ⊢ semTriple δ (∃ v : Z, interp_ptsto (mG := sailGS_memGS) paddr v)
+      → ⊢ semTriple δ (∃ v : Z, interp_ptsto paddr v)
             (stm_foreign write_ram es)
             (λ (v : Z) (δ' : NamedEnv Val Γ),
-              (interp_ptsto (mG := sailGS_memGS) paddr data ∗ ⌜v = 1%Z⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+              (interp_ptsto paddr data ∗ ⌜v = 1%Z⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (paddr data Heq) "[% ptsto_addr]".
     rewrite wp_unfold. cbn.
@@ -1792,9 +1792,9 @@ Module BlockVerificationDerived2Sem.
   Include Katamaran.Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec Shal RiscvPmpModelBlockVerif.PLOG.
 
   Definition semTripleOneInstrStep `{sailGS Σ} (PRE : iProp Σ) (instr : AST) (POST : Z -> iProp Σ) (a : Z) : iProp Σ :=
-    semTriple [] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr (mG := sailGS_memGS) a instr)
+    semTriple [] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
       (FunDef RiscvPmpProgram.step)
-      (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr (mG := sailGS_memGS) a instr)%I.
+      (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a instr)%I.
 
   Lemma mono_exec_instruction_any__c {i a} : Monotonic' (exec_instruction_any__c i a).
     cbv [Monotonic' exec_instruction_any__c bind Shal.CHeapSpecM.bind produce_chunk Shal.CHeapSpecM.produce_chunk demonic Shal.CHeapSpecM.demonic angelic Shal.CHeapSpecM.angelic pure Shal.CHeapSpecM.pure].
@@ -1825,7 +1825,7 @@ Module BlockVerificationDerived2Sem.
     iIntros "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
     unfold exec_instruction_any__c, bind, Shal.CHeapSpecM.bind, produce_chunk, Shal.CHeapSpecM.produce_chunk, demonic, Shal.CHeapSpecM.demonic, consume_chunk in Hverif.
     specialize (Hverif npc).
-    assert (ProgramLogic.Triple [] (interpret_scheap (scchunk_ptsreg nextpc npc :: scchunk_user ptstoinstr [a; instr] :: scchunk_ptsreg pc a :: h)%list) (FunDef RiscvPmpProgram.step) (fun res => (fun δ' => interp_ptsto_instr (mG := sailGS_memGS) a instr ∗ (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I)) as Htriple.
+    assert (ProgramLogic.Triple [] (interpret_scheap (scchunk_ptsreg nextpc npc :: scchunk_user ptstoinstr [a; instr] :: scchunk_ptsreg pc a :: h)%list) (FunDef RiscvPmpProgram.step) (fun res => (fun δ' => interp_ptsto_instr a instr ∗ (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I)) as Htriple.
     { apply (exec_sound 10).
       refine (exec_monotonic 10 _ _ _ _ _ _ Hverif).
       intros [] δ0 h0 HYP.
@@ -1867,7 +1867,7 @@ Module BlockVerificationDerived2Sem.
 
   Fixpoint ptsto_instrs `{sailGS Σ} (a : Z) (instrs : list AST) : iProp Σ :=
     match instrs with
-    | cons inst insts => (interp_ptsto_instr (mG := sailGS_memGS) a inst ∗ ptsto_instrs (a + 4) insts)%I
+    | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (a + 4) insts)%I
     | nil => True%I
     end.
   Arguments ptsto_instrs {Σ H} a%Z_scope instrs%list_scope : simpl never.
@@ -2063,8 +2063,8 @@ Module BlockVerificationDerived2Sem.
   Qed.
 
   Lemma memAdv_pmpPolicy `{sailGS Σ} :
-    (ptstoSthL (mG := sailGS_memGS) advAddrs ⊢
-      interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs BlockVerificationDerived2.femto_pmpentries User)%I.
+    (ptstoSthL advAddrs ⊢
+      interp_pmp_addr_access liveAddrs BlockVerificationDerived2.femto_pmpentries User)%I.
   Proof.
     iIntros "Hadv".
     unfold interp_pmp_addr_access.
@@ -2081,7 +2081,7 @@ Module BlockVerificationDerived2Sem.
 
   (* DOMI: for simplicity, we're currently treating the femtokernel invariant on the private state not as a shared invariant but as a piece of private state to be framed off during every invocation of the adversary.  This is fine since for now we're assuming no concurrency... *)
   Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ :=
-        (interp_ptsto (mG := sailGS_memGS) 84 42).
+        (interp_ptsto 84 42).
 
   Definition femto_handler_pre `{sailGS Σ} epc : iProp Σ :=
       (mstatus ↦ {| MPP := User |}) ∗
@@ -2162,7 +2162,7 @@ Module BlockVerificationDerived2Sem.
         interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
         femto_inv_fortytwo ∗
         (pc ↦ 72) ∗
-        interp_pmp_addr_access (mG := sailGS_memGS) liveAddrs BlockVerificationDerived2.femto_pmpentries User ∗
+        interp_pmp_addr_access liveAddrs BlockVerificationDerived2.femto_pmpentries User ∗
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
         ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler
@@ -2219,12 +2219,12 @@ Module BlockVerificationDerived2Sem.
         cur_privilege ↦ User ∗
         interp_gprs ∗
         interp_pmp_entries BlockVerificationDerived2.femto_pmpentries ∗
-         (interp_ptsto (mG := sailGS_memGS) 84 42) ∗
+         (interp_ptsto 84 42) ∗
         (pc ↦ 88) ∗
         (∃ v, nextpc ↦ v) ∗
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
         ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler ∗
-        ptstoSthL (mG := sailGS_memGS) advAddrs
+        ptstoSthL advAddrs
         ={⊤}=∗
         ∃ mpp mepcv, LoopVerification.loop_pre User User 72 72 BlockVerificationDerived2.femto_pmpentries BlockVerificationDerived2.femto_pmpentries mpp mepcv.
   Proof.
@@ -2352,8 +2352,8 @@ Module BlockVerificationDerived2Sem.
       reg_pointsTo pmp1cfg BlockVerificationDerived2.femtokernel_default_pmpcfg ∗
       (∃ v, reg_pointsTo pmpaddr1 v) ∗
       (pc ↦ 0) ∗
-      interp_ptsto (mG := sailGS_memGS) 84 42 ∗
-      ptstoSthL (mG := sailGS_memGS) advAddrs ∗
+      interp_ptsto 84 42 ∗
+      ptstoSthL advAddrs ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs 0 BlockVerificationDerived2.femtokernel_init ∗
       ptsto_instrs 72 BlockVerificationDerived2.femtokernel_handler

@@ -255,7 +255,13 @@ Module Type IrisParameters
   (Import SEM : Semantics B P)
   (Import IP  : IrisPrelims B P SIG SEM).
   Parameter memGpreS : gFunctors -> Set.
-  Parameter memGS : gFunctors -> Set.
+  (* The memGS field will normally always be instantiated to a type class. We
+     inline this field, so that instances declared by the library, e.g. the
+     [sailGS_memGS] superclass instance below, will always be instances for the
+     user-provided class instead of the [memGS] alias. In your client code, you
+     should always refer to your typeclass and refrain from using the [memGS]
+     alias completely. *)
+  Parameter Inline memGS : gFunctors -> Set.
   Parameter memΣ : gFunctors.
   Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
   Parameter mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ.
@@ -296,6 +302,16 @@ Module Type IrisResources
                      }.
   #[export] Existing Instance sailGS_invGS.
   #[export] Existing Instance sailGS_sailRegGS.
+
+  (* We declare the memGS field as a class so that we can define the
+     [sailGS_memGS] field as an instance as well. Currently, the [Existing
+     Class] command does not support specifying a locality
+     (local/export/global), so it is not clear what the scope of this command
+     is. Because [memGS] will be inline on module functor applications, the
+     [sailGS_memGS] instance will refer to the user-provided class instead of
+     the [memGS] field. *)
+  Existing Class memGS.
+  #[export] Existing Instance sailGS_memGS.
 
   #[export] Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
     iris_invGS := sailGS_invGS;

@@ -104,15 +104,15 @@ Module RiscvPmpModel.
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
       fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Addr) (V := MemVal).
 
-    Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+    Definition mem_inv : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        (∃ memmap, gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) memmap ∗
-                                   ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
+        (∃ memmap, gen_heap_interp memmap ∗
+           ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
-    Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+    Definition mem_res : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        ([∗ map] l↦v ∈ initMemMap μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v) %I.
+        ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v) %I.
 
     Lemma initMemMap_works μ : map_Forall (λ (a : Addr) (v : MemVal), μ a = v) (initMemMap μ).
     Proof.
@@ -129,7 +129,7 @@ Module RiscvPmpModel.
     Qed.
 
     Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-      ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+      ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
     Proof.
       iIntros (Σ μ gHP).
 
@@ -163,7 +163,7 @@ Module RiscvPmpModel.
     Import RiscvPmpIrisPrelims.
     Import RiscvPmpIrisParams.
 
-    Context `{sailRegGS Σ} `{invGS Σ} `{mG : memGS Σ}.
+    Context `{sailRegGS Σ} `{invGS Σ} `{mG : mcMemGS Σ}.
 
     Definition reg_file : gset (bv 3) := list_to_set (finite.enum (bv 3)).
 
@@ -189,7 +189,7 @@ Module RiscvPmpModel.
       end.
 
     Definition interp_ptsto (addr : Addr) (w : Word) : iProp Σ :=
-      mapsto (hG := mc_ghGS (mcMemGS := mG)) addr (DfracOwn 1) w. 
+      mapsto addr (DfracOwn 1) w.
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
     Definition ptstoSthL : list Addr -> iProp Σ :=
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
@@ -218,19 +218,19 @@ Module RiscvPmpModel.
     Import RiscvPmpIrisResources.
     Import Contracts.
 
-    Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
+    Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
       match p return Env Val (𝑯_Ty p) -> iProp Σ with
       | pmp_entries                   => fun ts => interp_pmp_entries (env.head ts)
-      | pmp_addr_access               => fun ts => interp_pmp_addr_access (mG := mG) liveAddrs (env.head (env.tail ts)) (env.head ts)
-      | pmp_addr_access_without       => fun ts => interp_pmp_addr_access_without (mG := mG) (env.head (env.tail (env.tail ts))) liveAddrs (env.head (env.tail ts)) (env.head ts)
+      | pmp_addr_access               => fun ts => interp_pmp_addr_access liveAddrs (env.head (env.tail ts)) (env.head ts)
+      | pmp_addr_access_without       => fun ts => interp_pmp_addr_access_without (env.head (env.tail (env.tail ts))) liveAddrs (env.head (env.tail ts)) (env.head ts)
       | gprs                          => fun _  => interp_gprs
-      | ptsto                         => fun ts => interp_ptsto (mG := mG) (env.head (env.tail ts)) (env.head ts)
+      | ptsto                         => fun ts => interp_ptsto (env.head (env.tail ts)) (env.head ts)
       | encodes_instr                 => fun _ => True%I
       | ptstomem                      => fun _ => True%I
-      | ptstoinstr                    => fun ts  => interp_ptsto_instr (mG := mG) (env.head (env.tail ts)) (env.head ts)%I
+      | ptstoinstr                    => fun ts  => interp_ptsto_instr (env.head (env.tail ts)) (env.head ts)%I
       end.
 
-    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
+    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
         (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
@@ -263,11 +263,11 @@ Module RiscvPmpModel2.
   → ⊢ semTriple δ
         ((⌜Sub_perm Read t⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
          interp_pmp_entries entries ∗
-         (⌜Pmp_access paddr entries p t⌝ ∧ emp) ∗ interp_ptsto (mG := sailGS_memGS) paddr w)
+         (⌜Pmp_access paddr entries p t⌝ ∧ emp) ∗ interp_ptsto paddr w)
         (stm_foreign read_ram es)
         (λ (v : Z) (δ' : CStore Γ),
            ((⌜v = w⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
-            interp_ptsto (mG := sailGS_memGS) paddr w ∗
+            interp_ptsto paddr w ∗
             interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (paddr w t entries p Heq) "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
@@ -313,9 +313,9 @@ Module RiscvPmpModel2.
           ((⌜Sub_perm Write t⌝ ∧ emp) ∗ reg_pointsTo cur_privilege p ∗
                                       interp_pmp_entries entries ∗
                                       (⌜Pmp_access paddr entries p t⌝ ∧ emp) ∗
-                                      (∃ v : Z, interp_ptsto (mG := sailGS_memGS) paddr v)) (stm_foreign write_ram es)
+                                      (∃ v : Z, interp_ptsto paddr v)) (stm_foreign write_ram es)
           (λ (_ : Z) (δ' : CStore Γ),
-            (reg_pointsTo cur_privilege p ∗ interp_ptsto (mG := sailGS_memGS) paddr data ∗
+            (reg_pointsTo cur_privilege p ∗ interp_ptsto paddr data ∗
                           interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (paddr data t entries p Heq) "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".

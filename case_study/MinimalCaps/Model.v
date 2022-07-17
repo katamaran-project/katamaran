@@ -121,10 +121,10 @@ Module MinCapsModel.
       Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
         fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := MemVal).
 
-      Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+      Definition mem_inv : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
         fun {Σ} hG μ =>
-          (∃ memmap, gen_heap_interp (hG := mc_ghG (mcMemGS := hG)) memmap ∗
-                                     ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
+          (∃ memmap, gen_heap_interp memmap ∗
+             ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
           )%I.
 
       Definition liveAddrs : list Addr := seqZ 0 maxAddr.
@@ -144,12 +144,12 @@ Module MinCapsModel.
         by destruct el as (a' & <- & _).
       Qed.
 
-      Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+      Definition mem_res : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
         fun {Σ} hG μ =>
-          ([∗ map] l↦v ∈ initMemMap μ, mapsto (hG := mc_ghG (mcMemGS := hG)) l (DfracOwn 1) v) %I.
+          ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v) %I.
 
       Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-                                                  ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+                                                  ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
       Proof.
         iIntros (Σ μ gHP).
 
@@ -184,7 +184,7 @@ Module MinCapsModel.
     Import iris.bi.big_op.
     Import iris.base_logic.lib.iprop.
     Import iris.base_logic.lib.gen_heap.
-    Context {Σ} `{sailRegGS Σ} `{invGS Σ} {mG : memGS Σ}.
+    Context {Σ} `{sailRegGS Σ} `{invGS Σ} {mG : mcMemGS Σ}.
 
     Definition MinCaps_ptsreg (reg : RegName) (v : Z + Capability) : iProp Σ :=
       match reg with
@@ -262,7 +262,7 @@ Module MinCapsModel.
 
     (* TODO: Check if I tried changing this one to a discrete one, should remain non-expansive so we can proof contractiveness *)
     Program Definition interp_ref_inv (a : Addr) : D -n> iPropO Σ :=
-      λne P, (∃ w, mapsto (hG := mc_ghG (mcMemGS := mG)) a (DfracOwn 1) w ∗ P w)%I.
+      λne P, (∃ w, mapsto a (DfracOwn 1) w ∗ P w)%I.
     Solve Obligations with solve_proper.
 
     Definition interp_cap_inv (c : Capability) (interp : D) :iProp Σ := 
@@ -270,7 +270,7 @@ Module MinCapsModel.
       | MkCap _ b e a =>
           (⌜(b <= e)%Z⌝ →
            ⌜b ∈ liveAddrs /\ e ∈ liveAddrs⌝ ∗
-                               [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemGS := mG) .@ a) (interp_ref_inv a interp))
+                               [∗ list] a ∈ (region_addrs b e), inv (mc_invNs .@ a) (interp_ref_inv a interp))
           ∨ ⌜(e < b)%Z⌝
       end.
 
@@ -368,8 +368,8 @@ Module MinCapsModel.
 
     Lemma region_addrs_submseteq  (b' e' b e : Addr) :
       ⊢ ⌜ (b <= b')%Z /\ (e' <= e)%Z ⌝ -∗
-                                          ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemGS := mG) .@ a) (∃ w, mapsto (hG := mc_ghG (mcMemGS := mG)) a (DfracOwn 1) w ∗ fixpoint interp1 w))%I -∗
-                                                                                                                                                                                                         ([∗ list] a ∈ (region_addrs b' e'), inv (mc_invNs (mcMemGS := mG) .@ a) (∃ w, mapsto (hG := mc_ghG (mcMemGS := mG)) a (DfracOwn 1) w ∗ fixpoint interp1 w))%I.
+        ([∗ list] a ∈ (region_addrs b e), inv (mc_invNs .@ a) (∃ w, mapsto a (DfracOwn 1) w ∗ fixpoint interp1 w))%I -∗
+        ([∗ list] a ∈ (region_addrs b' e'), inv (mc_invNs .@ a) (∃ w, mapsto a (DfracOwn 1) w ∗ fixpoint interp1 w))%I.
     Proof.
       iIntros "[% %] Hregion".
       iApply (big_sepL_submseteq _ (region_addrs b' e') (region_addrs b e)).
@@ -389,10 +389,8 @@ Module MinCapsModel.
     Lemma safe_sub_range (b' e' b e : Addr) :
       forall p a,
         ⊢ ⌜ (b <= b')%Z /\ (e' <= e)%Z ⌝ -∗
-                                            interp
-                                            (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) -∗
-                                                                                                                              interp
-                                                                                                                              (inr {| cap_permission := p; cap_begin := b'; cap_end := e'; cap_cursor := a |}).
+          interp (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) -∗
+          interp (inr {| cap_permission := p; cap_begin := b'; cap_end := e'; cap_cursor := a |}).
     Proof.
       iIntros (p a) "/= [% %] Hsafe".
       do 2 rewrite fixpoint_interp1_eq.
@@ -442,9 +440,9 @@ Module MinCapsModel.
 
     Lemma specialize_range (b e addr : Addr) :
       ⊢ ⌜ (b <= addr)%Z /\ (addr <= e)%Z ⌝ -∗
-                                              (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
-                                                                    [∗ list] a ∈ (region_addrs b e), inv (mc_invNs (mcMemGS := mG) .@ a) (∃ w, mapsto (hG := mc_ghG (mcMemGS := mG)) a (DfracOwn 1) w ∗ fixpoint interp1 w))%I -∗
-                                                                                                                                                                                                                                  (inv (mc_invNs (mcMemGS := mG) .@ addr) (∃ w, mapsto (hG := mc_ghG (mcMemGS := mG)) addr (DfracOwn 1) w ∗ fixpoint interp1 w))%I.
+        (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
+         [∗ list] a ∈ (region_addrs b e), inv (mc_invNs .@ a) (∃ w, mapsto a (DfracOwn 1) w ∗ fixpoint interp1 w))%I -∗
+        (inv (mc_invNs .@ addr) (∃ w, mapsto addr (DfracOwn 1) w ∗ fixpoint interp1 w))%I.
     Proof.
       iIntros "[% %] [[% %] Hrange]".
       iApply (big_sepL_elem_of with "Hrange").
@@ -467,17 +465,17 @@ Module MinCapsModel.
     Import iris.base_logic.lib.iprop.
     Import iris.base_logic.lib.gen_heap.
 
-    Definition luser_inst {Σ} `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
+    Definition luser_inst {Σ} `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
       (match p return Env Val (𝑯_Ty p) -> iProp Σ with
        | ptsreg     => fun ts => MinCaps_ptsreg (env.head (env.tail ts)) (env.head ts)
-       | ptsto      => fun ts => mapsto (hG := mc_ghG (mcMemGS := mG)) (env.head (env.tail ts)) (DfracOwn 1) (env.head ts)
-       | safe       => fun ts => interp (mG := mG) (env.head ts)
-       | expression => fun ts => interp_expr (mG := mG) (interp (mG := mG)) (env.head ts)
+       | ptsto      => fun ts => mapsto (env.head (env.tail ts)) (DfracOwn 1) (env.head ts)
+       | safe       => fun ts => interp (env.head ts)
+       | expression => fun ts => interp_expr interp (env.head ts)
        | dummy      => fun ts => True%I
-       | gprs       => fun ts => interp_gprs (interp (mG := mG))
+       | gprs       => fun ts => interp_gprs interp
        end) ts.
 
-    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) :
+    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
         (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
@@ -621,12 +619,11 @@ Module MinCapsModel2.
     forall a (p : Val ty.perm) (b e : Val ty.addr),
       evals es δ = env.snoc env.nil (MkB _ ty.addr) a ->
       ⊢ semTriple δ
-        (interp (mG := sailGS_memGS)
-                (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |})
+        (interp (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |})
                 ∗ (⌜Subperm R p⌝ ∧ emp) ∗ ⌜(b <=? a)%Z && (a <=? e)%Z = true⌝ ∧ emp)
         (stm_foreign rM es)%env
         (λ (v : Z + Capability) (δ' : CStore Γ),
-          (interp (mG := sailGS_memGS) v) ∗ ⌜δ' = δ⌝).
+          (interp v) ∗ ⌜δ' = δ⌝).
   Proof.
     intros a p b e Heq.
     iIntros "[#Hsafe [[%Hsubp _] [%Hbounds _]]]".
@@ -737,8 +734,8 @@ Module MinCapsModel2.
       evals es δ = env.snoc (env.snoc env.nil (MkB _ ty.addr) a)
                             (MkB _ ty.memval) w
       → ⊢ semTriple δ
-          (interp (mG := sailGS_memGS) w
-                  ∗ interp (mG := sailGS_memGS)
+          (interp w
+                  ∗ interp
                   (inr {|
                        cap_permission := p;
                        cap_begin := b;
