@@ -55,8 +55,8 @@ Module Type ContractDecl (B : Base) (P : Program B) :=
 
 Module Type ContractDefKit (B : Base) (Import P : Program B) (Import PD : ContractDecl B P).
 
-  Parameter Inline CEnv   : SepContractEnv.
-  Parameter Inline CEnvEx : SepContractEnvEx.
-  Parameter Inline LEnv   : LemmaEnv.
+  Parameter CEnv   : SepContractEnv.
+  Parameter CEnvEx : SepContractEnvEx.
+  Parameter LEnv   : LemmaEnv.
 
 End ContractDefKit.
