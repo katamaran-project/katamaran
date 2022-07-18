@@ -39,13 +39,13 @@ From Equations Require Import
 
 From Katamaran Require Import
      Environment
-     Iris.Base
+     Iris.Logic
      Iris.Model
+     Semantics
      Sep.Hoare
      Sep.Logic
      Specification
      Symbolic.Executor
-     Semantics
      MinimalCaps.Machine
      MinimalCaps.Contracts.
 

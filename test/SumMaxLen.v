@@ -43,23 +43,23 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
-     Iris.Base
+     Iris.Logic
      Iris.Model
+     Program
+     Semantics
      Semantics.Registers
      Sep.Hoare
      Shallow.Executor
      Shallow.Soundness
+     Signature
+     Specification
      Symbolic.Executor
+     Symbolic.Propositions
      Symbolic.Solver
      Symbolic.Soundness
      Symbolic.Worlds
-     Symbolic.Propositions
-     Semantics
-     Signature
-     Specification
-     Syntax.Terms
-     Program
-     Syntax.Predicates.
+     Syntax.Predicates
+     Syntax.Terms.
 
 Set Implicit Arguments.
 Import ctx.notations.

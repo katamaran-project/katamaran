@@ -1,5 +1,6 @@
 -arg "-w all"
 -arg "-w -disj-pattern-notation"
+-arg "-w -notation-incompatible-format"
 -arg "-w -notation-overridden"
 -Q case_study/MinimalCaps Katamaran.MinimalCaps
 case_study/MinimalCaps/Base.v
@@ -21,7 +22,7 @@ theories/Base.v
 theories/Bitvector.v
 theories/Context.v
 theories/Environment.v
-theories/Iris/Base.v
+theories/Iris/Logic.v
 theories/Iris/Model.v
 theories/Notations.v
 theories/Prelude.v

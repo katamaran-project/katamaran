@@ -32,13 +32,13 @@ From Coq Require Import
 From Katamaran Require Import
      Bitvector
      Environment
+     Iris.Logic
+     Iris.Model
      Program
-     Specification
+     Semantics
      Sep.Hoare
      Sep.Logic
-     Semantics
-     Iris.Base
-     Iris.Model
+     Specification
      RiscvPmp.Machine
      RiscvPmp.Contracts.
 From Equations Require Import

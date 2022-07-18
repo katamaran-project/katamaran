@@ -32,8 +32,7 @@ From stdpp Require
      finite.
 From Equations Require Import
      Equations.
-From Katamaran Require Import
-     Base.
+Require Import Katamaran.Base.
 
 (*** TYPES ***)
 

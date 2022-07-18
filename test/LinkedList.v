@@ -50,21 +50,21 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     Iris.Logic
+     Iris.Model
      Notations
-     Semantics.Registers
-     Shallow.Executor
-     Shallow.Soundness
-     Symbolic.Solver
-     Symbolic.Executor
-     Symbolic.Soundness
-     Signature
      Program
-     Specification
+     Semantics
+     Semantics.Registers
      Sep.Hoare
      Sep.Logic
-     Semantics
-     Iris.Base
-     Iris.Model.
+     Shallow.Executor
+     Shallow.Soundness
+     Signature
+     Specification
+     Symbolic.Executor
+     Symbolic.Solver
+     Symbolic.Soundness.
 
 From stdpp Require decidable finite list fin_maps infinite.
 From iris.proofmode Require string_ident tactics.

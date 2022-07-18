@@ -34,19 +34,19 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 From Katamaran Require Import
-     Iris.Base
+     Iris.Logic
      Iris.Model
      Notations
-     Shallow.Executor
-     Shallow.Soundness
+     Semantics
      Sep.Hoare
      Sep.Logic
-     Semantics
+     Shallow.Executor
+     Shallow.Soundness
      Specification
      Symbolic.Executor
+     Symbolic.Propositions
      Symbolic.Solver
      Symbolic.Soundness
-     Symbolic.Propositions
      Symbolic.Worlds
      RiscvPmp.Machine.
 From Katamaran Require
