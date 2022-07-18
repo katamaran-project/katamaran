@@ -32,10 +32,10 @@ From Coq Require Import
      ZArith.BinInt.
 
 From Katamaran Require Import
+     Base
      Prelude
-     Symbolic.Worlds
-     Specification
-     Base.
+     Signature
+     Symbolic.Worlds.
 
 From Equations Require Import
      Equations.
@@ -45,11 +45,7 @@ Import env.notations.
 
 Local Set Implicit Arguments.
 
-Module Type SolverOn
-  (Import B    : Base)
-  (Import PK   : PredicateKit B)
-  (Import FML  : FormulasOn B PK)
-  (Import WRLD : WorldsOn B PK FML).
+Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
 
   Module Solver.
 
@@ -840,11 +836,11 @@ End SolverOn.
 
 Module MakeSolver
   (B : Base)
-  (Import SIG : ProgramLogicSignature B)
+  (Import SIG : Signature B)
   (SOLV : SolverKit B SIG)
   <: SolverKit B SIG.
 
-  Include SolverOn B SIG SIG SIG.
+  Include SolverOn B SIG.
 
   Definition solver : Solver :=
     Solver.generic SOLV.solver.

@@ -326,14 +326,11 @@ Module Type WorldsOn
   #[export] Instance preorder_acc : CRelationClasses.PreOrder Acc :=
     CRelationClasses.Build_PreOrder Acc (@acc_refl) (@acc_trans).
 
-  Declare Scope modal.
-  Delimit Scope modal with modal.
-
   Section S4.
 
     Notation "⊢ A" := (Valid A%modal) (at level 100).
-    Notation "A -> B" := (Impl A%modal B%modal) : modal.
-    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal.
+    Notation "A -> B" := (Impl A%modal B%modal) : modal_scope.
+    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal_scope.
 
     Definition K {A B} :
       ⊢ □(A -> B) -> (□A -> □B) :=
@@ -366,13 +363,13 @@ Module Type WorldsOn
   Module ModalNotations.
 
     Notation "⊢ A" := (Valid A%modal) (at level 100).
-    Notation "A -> B" := (Impl A%modal B%modal) : modal.
-    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal.
-    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal.
+    Notation "A -> B" := (Impl A%modal B%modal) : modal_scope.
+    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal_scope.
+    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal_scope.
     Notation "'∀' x .. y , P " :=
       (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
         (at level 99, x binder, y binder, right associativity)
-      : modal.
+      : modal_scope.
     Notation "w1 ⊒ w2" := (Acc w1 w2) (at level 80).
     Notation "f <$> a" := (fmap_box f a) (at level 40, left associativity).
     Notation "f <*> a" := (K f a) (at level 40, left associativity).

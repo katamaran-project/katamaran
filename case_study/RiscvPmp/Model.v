@@ -63,11 +63,11 @@ Module RiscvPmpModel.
   Import RiscvPmpProgram.
   Import RiscvPmpSignature.
 
-  Module RiscvPmpIrisPrelims <: IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSemantics.
-    Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSemantics.
+  Module RiscvPmpIrisPrelims <: IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpSignature.
+    Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpSignature.
   End RiscvPmpIrisPrelims.
 
-  Module RiscvPmpIrisParams <: IrisParameters RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSemantics RiscvPmpIrisPrelims.
+  Module RiscvPmpIrisParams <: IrisParameters RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpSignature RiscvPmpIrisPrelims.
     Import iris.bi.interface.
     Import iris.bi.big_op.
     Import iris.base_logic.lib.iprop.
@@ -150,8 +150,8 @@ Module RiscvPmpModel.
     Qed.
   End RiscvPmpIrisParams.
 
-  Module RiscvPmpIrisResources <: IrisResources RiscvPmpBase RiscvPmpSignature RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams.
-    Include IrisResources RiscvPmpBase RiscvPmpSignature RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams.
+  Module RiscvPmpIrisResources <: IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpSignature RiscvPmpIrisPrelims RiscvPmpIrisParams.
+    Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpSignature RiscvPmpIrisPrelims RiscvPmpIrisParams.
   End RiscvPmpIrisResources.
 
   Section Predicates.
@@ -207,7 +207,9 @@ Module RiscvPmpModel.
       (∃ v, interp_ptsto addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
   End Predicates.
 
-  Module RiscvPmpIrisPredicates <: IrisPredicates RiscvPmpBase RiscvPmpSignature RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources.
+  Module RiscvPmpIrisPredicates <:
+    IrisPredicates RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+      RiscvPmpSignature RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources.
     Import iris.bi.interface.
     Import iris.bi.big_op.
     Import iris.base_logic.lib.iprop.
@@ -242,8 +244,9 @@ Module RiscvPmpModel.
     Qed.
   End RiscvPmpIrisPredicates.
 
-  Include IrisInstance RiscvPmpBase RiscvPmpSignature RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates.
-  Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification.
+  Include IrisInstance RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpSignature RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates.
+  Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
 
 End RiscvPmpModel.
 
@@ -255,7 +258,10 @@ Module RiscvPmpModel2.
   Import RiscvPmpIrisPrelims.
   Import RiscvPmpIrisParams.
   Import RiscvPmpIrisResources.
-  Module Import RiscvPmpIrisModel := IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates RiscvPmpModel RiscvPmpModel.
+  Module Import RiscvPmpIrisModel :=
+    IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+      RiscvPmpSignature RiscvPmpSpecification RiscvPmpIrisPrelims
+      RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates RiscvPmpModel RiscvPmpModel.
 
   Lemma read_ram_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
     forall paddr w t entries p,

@@ -46,9 +46,9 @@ From Equations Require Import
      Equations.
 From Katamaran Require Import
      Prelude
+     Signature
      Symbolic.Propositions
      Symbolic.Worlds
-     Syntax.ContractDecl
      Specification
      Base.
 
@@ -63,8 +63,9 @@ Set Implicit Arguments.
 
 Module Type SymbolicExecOn
   (Import B : Base)
-  (Import SIG : ProgramLogicSignature B)
-  (Import SPEC : Specification B SIG)
+  (Import PROG : Program B)
+  (Import SIG : Signature B)
+  (Import SPEC : Specification B PROG SIG)
   (Import SOLV : SolverKit B SIG).
 
   Import Entailment.
@@ -1769,10 +1770,11 @@ End SymbolicExecOn.
 
 Module MakeExecutor
   (Import B    : Base)
-  (Import SIG  : ProgramLogicSignature B)
-  (Import SPEC : Specification B SIG)
+  (Import PROG : Program B)
+  (Import SIG  : Signature B)
+  (Import SPEC : Specification B PROG SIG)
   (Import SOLV : SolverKit B SIG).
 
-  Include SymbolicExecOn B SIG SPEC SOLV.
+  Include SymbolicExecOn B PROG SIG SPEC SOLV.
 
 End MakeExecutor.

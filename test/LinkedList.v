@@ -54,11 +54,10 @@ From Katamaran Require Import
      Semantics.Registers
      Shallow.Executor
      Shallow.Soundness
-     Symbolic.Executor
      Symbolic.Solver
-     Symbolic.Worlds
-     Symbolic.Propositions
+     Symbolic.Executor
      Symbolic.Soundness
+     Signature
      Program
      Specification
      Sep.Hoare
@@ -353,8 +352,7 @@ Derive EqDec for Predicate.
    pertaining to user-defined pure and spatial predicates. These definitions
    are enough to instantiate the assertion language for pre- and
    postconditions used in function contracts. *)
-Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
-  Module PROG := ExampleProgram.
+Module Import ExampleSignature <: Signature DefaultBase.
   Import DefaultBase.
 
   Definition 𝑷 := PurePredicate.
@@ -401,14 +399,14 @@ Module Import ExampleSignature <: ProgramLogicSignature DefaultBase.
 
   End HeapPredicateDeclKit.
 
-  (* A mixin that defines Formulas, Chunks and assertions to write contract. *)
-  Include ContractDeclMixin DefaultBase ExampleProgram.
-  (* A mixin that defines Worlds and symbolic propositions for the executor. *)
-  Include SpecificationMixin DefaultBase ExampleProgram.
+  (* A mixin that defines Formulas, Chunks and assertions to write contract and
+     that defines Worlds and symbolic propositions for the executor. *)
+  Include PredicateMixin DefaultBase.
 End ExampleSignature.
 
 (* The specification module contains the contracts for all μSail and foreign functions. *)
-Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature.
+Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram ExampleSignature.
+  Include SpecificationMixin DefaultBase ExampleProgram ExampleSignature.
   Section ContractDefKit.
 
     Import ctx.resolution.
@@ -563,6 +561,8 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleSignature
            asn_formula (formula_eq (term_var "xs") (term_val (ty.list ty.int) nil))
       |}.
 
+
+
     (* The following maps μSail function names to their contracts. *)
     Definition CEnv : SepContractEnv :=
       fun Δ τ f =>
@@ -713,7 +713,7 @@ Module ExampleSolver := MakeSolver DefaultBase ExampleSignature ExampleSolverKit
 (* Use the specification and the solver module to compose the symbolic executor
    and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
-  MakeExecutor DefaultBase ExampleSignature ExampleSpecification ExampleSolver.
+  MakeExecutor DefaultBase ExampleProgram ExampleSignature ExampleSpecification ExampleSolver.
 
 Section DebugExample.
   Import SymProp.notations.
@@ -774,7 +774,7 @@ End ContractVerification.
 (* Also instantiate the shallow executor for the soundness proofs and the
    statistics. *)
 Module Import ExampleShalExec :=
-  MakeShallowExecutor DefaultBase ExampleSignature ExampleSpecification.
+  MakeShallowExecutor DefaultBase ExampleProgram ExampleSignature ExampleSpecification.
 (* Instantiate the operational semantics which is an input to the Iris model. *)
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
   MakeSemantics DefaultBase ExampleProgram.
@@ -786,14 +786,14 @@ Module ExampleModel.
   Import ExampleProgram.
   Import ExampleSpecification.
 
-  Module Import ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
-    Include IrisPrelims DefaultBase ExampleProgram ExampleSignature ExampleSemantics.
+  Module Import ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSemantics ExampleSignature .
+    Include IrisPrelims DefaultBase ExampleProgram ExampleSemantics ExampleSignature.
   End ExampleIrisPrelims.
 
   (* The construction of the model is split up into several steps. First, the
      [IrisParameters] define the ghost state for memory which is then combined
      with the ghost state for registers in the [IrisResources] module below. *)
-  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSignature ExampleSemantics ExampleIrisPrelims.
+  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisPrelims.
     Import iris.bi.interface.
     Import iris.bi.big_op.
     Import iris.base_logic.lib.iprop.
@@ -851,8 +851,8 @@ Module ExampleModel.
     Qed.
   End ExampleIrisParameters.
 
-  Module ExampleIrisResources <: IrisResources DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
-    Include IrisResources DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
+  Module ExampleIrisResources <: IrisResources DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisPrelims ExampleIrisParameters.
+    Include IrisResources DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisPrelims ExampleIrisParameters.
   End ExampleIrisResources.
 
   (* After instantiating [IrisResources] we have access to the Iris base logic
@@ -881,7 +881,7 @@ Module ExampleModel.
 
   (* This module packages the interpretation of the user-defined predicates
      to instantiate the rest of the Iris model. *)
-  Module ExampleIrisPredicates <: IrisPredicates DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources.
+  Module ExampleIrisPredicates <: IrisPredicates DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources.
     Import ExampleIrisPrelims.
     Import ExampleIrisParameters.
     Import iris.base_logic.lib.iprop.
@@ -911,7 +911,7 @@ Module ExampleModel.
 
   (* At this point we have enough information to instantiate the program logic
      of Iris. *)
-  Include IrisInstance DefaultBase ExampleSignature ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
+  Include IrisInstance DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
 
   (* Include our axiomatic program logic. Note that the program logic is
      parameterized over a given set of contracts while the Iris program logic in
@@ -921,8 +921,8 @@ Module ExampleModel.
      admissible, provided all the function contracts hold. We split up the
      construction of the model in this way to allow combinations of multiple
      different set of contracts for a single program. *)
-  Include ProgramLogicOn DefaultBase ExampleSignature ExampleSpecification.
-  Include IrisInstanceWithContracts DefaultBase ExampleSignature ExampleSpecification ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
+  Include ProgramLogicOn DefaultBase ExampleProgram ExampleSignature ExampleSpecification.
+  Include IrisInstanceWithContracts DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleSpecification ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
 
   (* In this section we verify the contracts of the foreign functions defined in
      Coq and the entailments encoded in ghost lemmas using Iris Proof Mode. *)
@@ -934,9 +934,6 @@ Module ExampleModel.
     Import iris.base_logic.lib.gen_heap.
     Import iris.proofmode.string_ident.
     Import iris.proofmode.tactics.
-
-    (* Import PROG to reset the access path of notations. *)
-    Import PROG.
 
     Ltac destruct_syminstance ι :=
       repeat
@@ -1114,8 +1111,8 @@ Module ExampleModel.
   End WithIrisNotations.
 
   (* Import the soundness proofs for the shallow and symbolic executors. *)
-  Include Shallow.Soundness.Soundness DefaultBase ExampleSignature ExampleSpecification ExampleShalExec.
-  Include Symbolic.Soundness.Soundness DefaultBase ExampleSignature ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
+  Include Shallow.Soundness.Soundness DefaultBase ExampleProgram ExampleSignature ExampleSpecification ExampleShalExec.
+  Include Symbolic.Soundness.Soundness DefaultBase ExampleProgram ExampleSignature ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
 
   Section WithIrisNotations.
     Import iris.bi.interface.

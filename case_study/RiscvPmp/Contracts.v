@@ -87,9 +87,7 @@ End TransparentObligations.
 Derive EqDec for PurePredicate.
 Derive EqDec for Predicate.
 
-Module Import RiscvPmpSignature <: ProgramLogicSignature RiscvPmpBase.
-Module PROG := RiscvPmpProgram.
-
+Module Import RiscvPmpSignature <: Signature RiscvPmpBase.
 Import RiscvPmpBase.
 Section PredicateKit.
   Definition 𝑷 := PurePredicate.
@@ -358,7 +356,7 @@ Section PredicateKit.
 
 End PredicateKit.
 
-Include ContractDeclMixin RiscvPmpBase RiscvPmpProgram.
+Include PredicateMixin RiscvPmpBase.
 
 Section ContractDefKit.
 
@@ -390,7 +388,6 @@ Section ContractDefKit.
   Local Notation asn_expand_pmpcfg_ent cfg := (asn_match_record rpmpcfg_ent cfg
     (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
     (asn_true)).
-
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty.int) : Term Σ ty.bool :=
     term_binop bop.eq e1 e2.
@@ -452,13 +449,13 @@ Section ContractDefKit.
       (cons (term_val ty_pmpcfgidx PMP0CFG ,ₜ term_val ty_pmpaddridx PMPADDR0)
             (cons (term_val ty_pmpcfgidx PMP1CFG ,ₜ term_val ty_pmpaddridx PMPADDR1) nil)).
 
-  End ContractDefKit.
-  Include SpecificationMixin RiscvPmpBase RiscvPmpProgram.
+End ContractDefKit.
 End RiscvPmpSignature.
 
-Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpSignature.
-  Section Contracts.
+Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
+  Include SpecificationMixin RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
 
+  Section Contracts.
   Section ContractDefKit.
 
     Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 70).
@@ -1728,7 +1725,7 @@ End RiscvPmpSolverKit.
 Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
 
 Module Import RiscvPmpExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolver.
+  MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification RiscvPmpSolver.
 
 Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
@@ -2012,4 +2009,3 @@ Proof.
   destruct f; simpl; trivial;
     try reflexivity.
 Admitted.
-

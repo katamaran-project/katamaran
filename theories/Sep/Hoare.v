@@ -27,21 +27,23 @@
 (******************************************************************************)
 
 From Coq Require Import
-     Classes.Morphisms.
+  Classes.Morphisms.
 
 From Katamaran Require Import
-     Context
-     Environment
-     Notations
-     Sep.Logic
-     Specification
-     Syntax.ContractDecl
-     Base.
+  Context
+  Environment
+  Notations
+  Sep.Logic
+  Specification.
 
 Import ctx.notations.
 Import env.notations.
 
-Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature B) (Import SPEC : Specification B SIG).
+Module Type ProgramLogicOn
+  (Import B : Base)
+  (Import PROG : Program B)
+  (Import SIG : Signature B)
+  (Import SPEC : Specification B PROG SIG).
 Module ProgramLogic.
 
   Section Triples.

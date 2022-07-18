@@ -77,8 +77,7 @@ End TransparentObligations.
 Derive EqDec for PurePredicate.
 Derive EqDec for Predicate.
 
-Module Import MinCapsSignature <: ProgramLogicSignature MinCapsBase.
-  Module PROG := MinCapsProgram.
+Module Import MinCapsSignature <: Signature MinCapsBase.
 
 Section PredicateKit.
   Definition 𝑷 := PurePredicate.
@@ -149,7 +148,7 @@ Section PredicateKit.
 
 End PredicateKit.
 
-  Include ContractDeclMixin MinCapsBase MinCapsProgram.
+  Include PredicateMixin MinCapsBase.
 
   Module MinCapsContractNotations.
     Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 70).
@@ -223,11 +222,10 @@ Section ContractDefKit.
     asn_gprs ∗ (regInvCap pc).
 End ContractDefKit.
 
-Include SpecificationMixin MinCapsBase MinCapsProgram.
-
 End MinCapsSignature.
 
-Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsSignature.
+Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram MinCapsSignature.
+  Include SpecificationMixin MinCapsBase MinCapsProgram MinCapsSignature.
   Import MinCapsContractNotations.
 
   Section ContractDefKit.
@@ -964,9 +962,9 @@ End MinCapsSolverKit.
 Module MinCapsSolver :=
   MakeSolver MinCapsBase MinCapsSignature MinCapsSolverKit.
 Module Import MinCapsExecutor :=
-  MakeExecutor MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSolver.
+  MakeExecutor MinCapsBase MinCapsProgram MinCapsSignature MinCapsSpecification MinCapsSolver.
 Module Import MinCapsShallowExec :=
-  MakeShallowExecutor MinCapsBase MinCapsSignature MinCapsSpecification.
+  MakeShallowExecutor MinCapsBase MinCapsProgram MinCapsSignature MinCapsSpecification.
 
 Local Ltac solve :=
   repeat

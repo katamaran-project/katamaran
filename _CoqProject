@@ -12,6 +12,7 @@ case_study/RiscvPmp/Contracts.v
 case_study/RiscvPmp/Machine.v
 case_study/RiscvPmp/Model.v
 case_study/RiscvPmp/LoopVerification.v
+case_study/RiscvPmp/BlockVerification.v
 -R theories Katamaran
 test/Example.v
 test/LinkedList.v
@@ -30,6 +31,7 @@ theories/Sep/Hoare.v
 theories/Sep/Logic.v
 theories/Shallow/Executor.v
 theories/Shallow/Soundness.v
+theories/Signature.v
 theories/SmallStep/Inversion.v
 theories/SmallStep/Progress.v
 theories/SmallStep/Step.v
@@ -45,7 +47,6 @@ theories/Symbolic/Worlds.v
 theories/Syntax/Assertions.v
 theories/Syntax/BinOps.v
 theories/Syntax/Chunks.v
-theories/Syntax/ContractDecl.v
 theories/Syntax/Expressions.v
 theories/Syntax/Formulas.v
 theories/Syntax/FunDecl.v

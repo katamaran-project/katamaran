@@ -42,7 +42,7 @@ We describe these user-provided modules on a high level and give pointers to the
   This is a prerequisite to use the syntax of statements ([`Inductive Stm`](theories/Syntax/Statements.v)) and expressions ([`Inductive Exp`](theories/Syntax/Expressions.v)) to define functions.
 - With the types in place, the *program module* ([`Module Type Program`](theories/Program.v)) contains the declaration (type signatures) and definition of the μSail and foreign functions, and the definition of the underlying type of memory, to which the foreign functions have access.
   The program module also includes the type signature declaration of lemmas, that can be used in lemma ghost statements.
-- The *program logic signature module* ([`Module Type ProgramLogicSignature`](theories/Specification.v)) declares user-defined abstract pure and special predicates.
+- The *signature module* ([`Module Type Signature`](theories/Signature.v)) declares user-defined abstract pure and special predicates.
   These are the necessary parameters for the assertion language ([`Inductive Assertion`](theories/Syntax/Assertions.v)) used in pre- and postconditions.
 - The *specification module* ([`Module Type Specification`](theories/Specification.v)) contains the definitions of contracts for the functions of the program.
 - Finally, the *solver module* ([`Module Type SolverKit`](theories/Specification.v)) provides user-defined heuristics for solving pure proof obligations.

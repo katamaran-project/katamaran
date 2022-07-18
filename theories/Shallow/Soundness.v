@@ -30,12 +30,12 @@ From Coq Require Import
      Strings.String
      ZArith.BinInt.
 From Katamaran Require Import
+     Signature
      Sep.Hoare
      Sep.Logic
      Specification
      Prelude
      Program
-     Syntax.ContractDecl
      Shallow.Executor.
 
 Set Implicit Arguments.
@@ -45,10 +45,11 @@ Import env.notations.
 
 Module Type Soundness
   (Import B : Base)
-  (Import SIG : ProgramLogicSignature B)
-  (Import SPEC : Specification B SIG)
-  (Import EXEC : ShallowExecOn B SIG SPEC)
-  (Import HOAR : ProgramLogicOn B SIG SPEC).
+  (Import PROG : Program B)
+  (Import SIG : Signature B)
+  (Import SPEC : Specification B PROG SIG)
+  (Import EXEC : ShallowExecOn B PROG SIG SPEC)
+  (Import HOAR : ProgramLogicOn B PROG SIG SPEC).
 
   Import sep.instances.
   Import sep.notations.

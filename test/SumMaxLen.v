@@ -54,11 +54,11 @@ From Katamaran Require Import
      Symbolic.Worlds
      Symbolic.Propositions
      Semantics
+     Signature
      Specification
      Syntax.Terms
      Program
-     Syntax.Predicates
-     Syntax.ContractDecl.
+     Syntax.Predicates.
 
 Set Implicit Arguments.
 Import ctx.notations.
@@ -163,17 +163,14 @@ End ExampleProgram.
 (* The program logic signature contains all the necessary definitions
    pertaining to user-defined pure and spatial predicates. We do not have
    any in this example, so use default definitions provided by the library. *)
-Module Import ExampleSig <: ProgramLogicSignature DefaultBase.
-  Module PROG := ExampleProgram.
-  Import ctx.resolution.
-
+Module Import ExampleSig <: Signature DefaultBase.
   Include DefaultPredicateKit DefaultBase.
-  Include ContractDeclMixin DefaultBase ExampleProgram.
-  Include SpecificationMixin DefaultBase ExampleProgram.
+  Include PredicateMixin DefaultBase.
 End ExampleSig.
 
 (* The specification module defines the contract for the [summaxlen] function. *)
-Module Import ExampleSpecification <: Specification DefaultBase ExampleSig.
+Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram ExampleSig.
+  Include SpecificationMixin DefaultBase ExampleProgram ExampleSig.
 
   Import ctx.resolution.
 
@@ -218,7 +215,7 @@ Module ExampleSolver := MakeSolver DefaultBase ExampleSig ExampleSolverKit.
 (* Use the specification and the solver module to compose the symbolic executor
    and symbolic verification condition generator. *)
 Module Import ExampleExecutor :=
-  MakeExecutor DefaultBase ExampleSig ExampleSpecification ExampleSolver.
+  MakeExecutor DefaultBase ExampleProgram ExampleSig ExampleSpecification ExampleSolver.
 
 (* Some simple Ltac tactic to solve the shallow and symbolic VCs. *)
 Local Ltac solve :=
@@ -239,7 +236,8 @@ Local Ltac solve :=
   auto.
 
 (* Also instantiate the shallow verification condition generator. *)
-Module Import ExampleShalExec := MakeShallowExecutor DefaultBase ExampleSig ExampleSpecification.
+Module Import ExampleShalExec :=
+  MakeShallowExecutor DefaultBase ExampleProgram ExampleSig ExampleSpecification.
 
 (* This computes and proves the shallow VC. Make sure to not unfold the
    definition of the binary operators and Coq predicates used in the example. *)
@@ -335,13 +333,13 @@ Module Import ExampleModel.
   Import ExampleProgram.
   Import ExampleSpecification.
 
-  Module ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSig ExampleSemantics.
-    Include IrisPrelims DefaultBase ExampleProgram ExampleSig ExampleSemantics.
+  Module ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSemantics ExampleSig.
+    Include IrisPrelims DefaultBase ExampleProgram ExampleSemantics ExampleSig.
   End ExampleIrisPrelims.
 
   (* There is no memory, so use trivial definitions to instantiate the ghost
      state and its requirements. *)
-  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSig ExampleSemantics ExampleIrisPrelims.
+  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSemantics ExampleSig ExampleIrisPrelims.
     Import ExampleIrisPrelims.
     Import iris.bi.interface.
     Import iris.bi.big_op.
@@ -363,13 +361,18 @@ Module Import ExampleModel.
   End ExampleIrisParameters.
 
   (* Combine the memory and register ghost states. *)
-  Module ExampleIrisResources <: IrisResources DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
-    Include IrisResources DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters.
+  Module ExampleIrisResources <:
+    IrisResources DefaultBase ExampleProgram ExampleSemantics ExampleSig
+      ExampleIrisPrelims ExampleIrisParameters.
+    Include IrisResources DefaultBase ExampleProgram ExampleSemantics
+      ExampleSig ExampleIrisPrelims ExampleIrisParameters.
   End ExampleIrisResources.
 
   (* There are no user-defined spatial predicates, also use trivial definitions
   here. *)
-  Module ExampleIrisPredicates <: IrisPredicates DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources.
+  Module ExampleIrisPredicates <:
+    IrisPredicates DefaultBase ExampleProgram ExampleSemantics ExampleSig
+      ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources.
     Import iris.base_logic.lib.iprop.
     Import ExampleIrisPrelims.
     Import ExampleIrisParameters.
@@ -384,9 +387,12 @@ Module Import ExampleModel.
 
   (* Finally, include the constructed operational model, the axiomatic program
      logic, and the Iris implementation of the axioms. *)
-  Include IrisInstance DefaultBase ExampleSig ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
-  Include ProgramLogicOn DefaultBase ExampleSig ExampleSpecification.
-  Include IrisInstanceWithContracts DefaultBase ExampleSig ExampleSpecification ExampleSemantics ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
+  Include IrisInstance DefaultBase ExampleProgram ExampleSemantics ExampleSig
+    ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
+  Include ProgramLogicOn DefaultBase ExampleProgram ExampleSig ExampleSpecification.
+  Include IrisInstanceWithContracts DefaultBase ExampleProgram ExampleSemantics
+    ExampleSig ExampleSpecification ExampleIrisPrelims ExampleIrisParameters
+    ExampleIrisResources ExampleIrisPredicates.
 
   Import ExampleIrisResources.
 
@@ -399,8 +405,10 @@ Module Import ExampleModel.
   Proof. intros Γ l. destruct l. Qed.
 
   (* Import the soundness proofs for the shallow and symbolic executors. *)
-  Include Shallow.Soundness.Soundness DefaultBase ExampleSig ExampleSpecification ExampleShalExec.
-  Include Symbolic.Soundness.Soundness DefaultBase ExampleSig ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
+  Include Shallow.Soundness.Soundness DefaultBase ExampleProgram ExampleSig
+    ExampleSpecification ExampleShalExec.
+  Include Symbolic.Soundness.Soundness DefaultBase ExampleProgram ExampleSig
+    ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
 
   Section WithIrisNotations.
     Import iris.bi.interface.

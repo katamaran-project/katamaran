@@ -27,36 +27,31 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Katamaran Require Import
+From Katamaran Require Export
      Base
      Program
      Syntax.Formulas
      Syntax.Chunks
      Syntax.Predicates
-     Syntax.Assertions.
+     Syntax.Assertions
+     Symbolic.Propositions
+     Symbolic.Worlds.
 
-Local Set Implicit Arguments.
+Module Type PredicateMixin (B : Base) (PK : PredicateKit B) :=
+  FormulasOn B PK <+ ChunksOn B PK <+ AssertionsOn B PK <+ WorldsOn B PK <+ SymPropOn B PK.
+Module Type Signature (B : Base) :=
+  PredicateKit B <+ PredicateMixin B.
 
-Module Type ContractDeclMixin (B : Base) (Import P : Program B) (PK : PredicateKit B).
+Module Type SolverKit (B : Base) (Import SIG : Signature B).
+  Local Set Implicit Arguments.
 
-  Include FormulasOn B PK <+ ChunksOn B PK <+ AssertionsOn B PK.
+  Parameter solver      : Solver.
+  Parameter solver_spec : SolverSpec solver.
+End SolverKit.
 
-  Definition SepContractEnv : Type :=
-    forall Δ τ (f : 𝑭 Δ τ), option (SepContract Δ τ).
-  Definition SepContractEnvEx : Type :=
-    forall Δ τ (f : 𝑭𝑿 Δ τ), SepContract Δ τ.
-  Definition LemmaEnv : Type :=
-    forall Δ (l : 𝑳 Δ), Lemma Δ.
+Module DefaultSolverKit (B : Base) (Import SIG : Signature B) <: SolverKit B SIG.
 
-End ContractDeclMixin.
+  Definition solver : Solver := solver_null.
+  Definition solver_spec : SolverSpec solver := solver_null_spec.
 
-Module Type ContractDecl (B : Base) (P : Program B) :=
-  PredicateKit B <+ ContractDeclMixin B P.
-
-Module Type ContractDefKit (B : Base) (Import P : Program B) (Import PD : ContractDecl B P).
-
-  Parameter CEnv   : SepContractEnv.
-  Parameter CEnvEx : SepContractEnvEx.
-  Parameter LEnv   : LemmaEnv.
-
-End ContractDefKit.
+End DefaultSolverKit.

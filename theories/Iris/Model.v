@@ -50,6 +50,7 @@ From Katamaran Require Import
      SmallStep.Inversion
      Sep.Logic
      Sep.Hoare
+     Signature
      Specification
      Semantics
      Prelude.
@@ -114,9 +115,9 @@ Canonical IProp.
 
 Module Type IrisPrelims
     (Import B    : Base)
-    (Import P    : Program B)
-    (Import SpecMixin : ProgSpecMixinOn B P)
-    (Import SEM  : Semantics B P).
+    (Import PROG : Program B)
+    (Import SEM  : Semantics B PROG)
+    (Import SIG  : Signature B).
 
   Import SmallStepNotations.
 
@@ -249,11 +250,11 @@ Module Type IrisPrelims
 End IrisPrelims.
 
 Module Type IrisParameters
-  (Import B   : Base)
-  (Import P   : Program B)
-  (Import SIG : ProgramLogicSignature B)
-  (Import SEM : Semantics B P)
-  (Import IP  : IrisPrelims B P SIG SEM).
+  (Import B    : Base)
+  (Import PROG : Program B)
+  (Import SEM  : Semantics B PROG)
+  (Import SIG  : Signature B)
+  (Import IP   : IrisPrelims B PROG SEM SIG).
   Parameter memGpreS : gFunctors -> Set.
   (* The memGS field will normally always be instantiated to a type class. We
      inline this field, so that instances declared by the library, e.g. the
@@ -278,10 +279,11 @@ End IrisParameters.
 
 Module Type IrisResources
   (Import B    : Base)
-  (Import SIG  : ProgramLogicSignature B)
-  (Import SEM  : Semantics B SIG.PROG)
-  (Import IPre : IrisPrelims B SIG.PROG SIG SEM)
-  (Import IP   : IrisParameters B SIG.PROG SIG SEM IPre).
+  (Import PROG : Program B)
+  (Import SEM  : Semantics B PROG)
+  (Import SIG  : Signature B)
+  (Import IPre : IrisPrelims B PROG SEM SIG)
+  (Import IP   : IrisParameters B PROG SEM SIG IPre).
   Class sailGpreS Σ := SailGpreS { (* resources for the implementation side *)
                        sailGpresS_invGpreS : invGpreS Σ; (* for fancy updates, invariants... *)
 
@@ -325,11 +327,12 @@ End IrisResources.
 
 Module Type IrisPredicates
   (Import B    : Base)
-  (Import SIG  : ProgramLogicSignature B)
-  (Import SEM  : Semantics B SIG.PROG)
-  (Import IPre : IrisPrelims B SIG.PROG SIG SEM)
-  (Import IP   : IrisParameters B SIG.PROG SIG SEM IPre)
-  (Import IR   : IrisResources B SIG SEM IPre IP).
+  (Import PROG : Program B)
+  (Import SEM  : Semantics B PROG)
+  (Import SIG  : Signature B)
+  (Import IPre : IrisPrelims B PROG SEM SIG)
+  (Import IP   : IrisParameters B PROG SEM SIG IPre)
+  (Import IR   : IrisResources B PROG SEM SIG IPre IP).
   Parameter luser_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
   Parameter lduplicate_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
       is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG ts) (luser_inst (sRG := sRG) mG ts ∗ luser_inst (sRG := sRG) mG ts).
@@ -343,12 +346,13 @@ End IrisPredicates.
  *)
 Module Type IrisInstance
   (Import B     : Base)
-  (Import SIG   : ProgramLogicSignature B)
-  (Import SEM   : Semantics B SIG.PROG)
-  (Import IPre  : IrisPrelims B SIG.PROG SIG SEM)
-  (Import IP    : IrisParameters B SIG.PROG SIG SEM IPre)
-  (Import IR    : IrisResources B SIG SEM IPre IP)
-  (Import IPred : IrisPredicates B SIG SEM IPre IP IR).
+  (Import PROG  : Program B)
+  (Import SEM   : Semantics B PROG)
+  (Import SIG   : Signature B)
+  (Import IPre  : IrisPrelims B PROG SEM SIG)
+  (Import IP    : IrisParameters B PROG SEM SIG IPre)
+  (Import IR    : IrisResources B PROG SEM SIG IPre IP)
+  (Import IPred : IrisPredicates B PROG SEM SIG IPre IP IR).
 Section Soundness.
 
   Import SmallStepNotations.
@@ -1393,13 +1397,6 @@ Section Soundness.
                   (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v))
     end%I.
 
-  Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
-    (∀ σs σ (f : 𝑭 σs σ),
-      match cenv σs σ f with
-      | Some c => ValidContractSem (FunDef f) c
-      | None => True
-      end)%I.
-
 End Soundness.
 
 Section Adequacy.
@@ -1568,19 +1565,26 @@ End IrisInstance.
  *)
 Module IrisInstanceWithContracts
   (Import B     : Base)
-  (Import SIG   : ProgramLogicSignature B)
-  (Import SPEC  : Specification B SIG)
-  (Import SEM   : Semantics B SIG.PROG)
-  (Import IPre  : IrisPrelims B SIG.PROG SIG SEM)
-  (Import IP    : IrisParameters B SIG.PROG SIG SEM IPre)
-  (Import IR    : IrisResources B SIG SEM IPre IP)
-  (Import IPred : IrisPredicates B SIG SEM IPre IP IR)
-  (Import II    : IrisInstance B SIG SEM IPre IP IR IPred)
-  (Import PLOG  : ProgramLogicOn B SIG SPEC).
+  (Import PROG  : Program B)
+  (Import SEM   : Semantics B PROG)
+  (Import SIG   : Signature B)
+  (Import SPEC  : Specification B PROG SIG)
+  (Import IPre  : IrisPrelims B PROG SEM SIG)
+  (Import IP    : IrisParameters B PROG SEM SIG IPre)
+  (Import IR    : IrisResources B PROG SEM SIG IPre IP)
+  (Import IPred : IrisPredicates B PROG SEM SIG IPre IP IR)
+  (Import II    : IrisInstance B PROG SEM SIG IPre IP IR IPred)
+  (Import PLOG  : ProgramLogicOn B PROG SIG SPEC).
 
-  Import ProgramLogic.
+  Definition ValidContractEnvSem `{sailGS Σ} (cenv : SepContractEnv) : iProp Σ :=
+    (∀ σs σ (f : 𝑭 σs σ),
+      match cenv σs σ f with
+      | Some c => ValidContractSem (FunDef f) c
+      | None => True
+      end)%I.
 
   Section WithSailGS.
+  Import ProgramLogic.
   Context `{sailGS Σ}.
 
   Definition ForeignSem :=

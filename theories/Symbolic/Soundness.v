@@ -43,13 +43,10 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     Signature
      Shallow.Executor
      Specification
      Symbolic.Executor
-     Symbolic.Solver
-     Symbolic.Worlds
-     Symbolic.Propositions
-     Syntax.ContractDecl
      Program
      Tactics.
 
@@ -60,11 +57,12 @@ Import env.notations.
 
 Module Soundness
   (Import B    : Base)
-  (Import SIG  : ProgramLogicSignature B)
-  (Import SPEC : Specification B SIG)
+  (Import PROG : Program B)
+  (Import SIG  : Signature B)
+  (Import SPEC : Specification B PROG SIG)
   (Import SOLV : SolverKit B SIG)
-  (Import SHAL : ShallowExecOn B SIG SPEC)
-  (Import SYMB : SymbolicExecOn B SIG SPEC SOLV).
+  (Import SHAL : ShallowExecOn B PROG SIG SPEC)
+  (Import SYMB : SymbolicExecOn B PROG SIG SPEC SOLV).
 
   Import ModalNotations.
   Import SymProp.

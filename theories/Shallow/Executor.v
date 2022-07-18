@@ -38,6 +38,7 @@ From Equations Require Import
 From Katamaran Require Import
      Notations
      Prelude
+     Signature
      Specification.
 
 From stdpp Require base list option.
@@ -50,8 +51,9 @@ Set Implicit Arguments.
 
 Module Type ShallowExecOn
   (Import B : Base)
-  (Import SIG : ProgramLogicSignature B)
-  (Import SPEC : Specification B SIG).
+  (Import PROG : Program B)
+  (Import SIG : Signature B)
+  (Import SPEC : Specification B PROG SIG).
 
   (* The pure backwards predicate transformer monad. We use this monad in some
      of the definition of primitives that do no need access to the store or heap
@@ -1290,9 +1292,10 @@ End ShallowExecOn.
 
 Module MakeShallowExecutor
   (Import B    : Base)
-  (Import SIG : ProgramLogicSignature B)
-  (Import SPEC : Specification B SIG).
+  (Import PROG : Program B)
+  (Import SIG : Signature B)
+  (Import SPEC : Specification B PROG SIG).
 
-  Include ShallowExecOn B SIG SPEC.
+  Include ShallowExecOn B PROG SIG SPEC.
 
 End MakeShallowExecutor.

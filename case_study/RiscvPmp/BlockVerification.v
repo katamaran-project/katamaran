@@ -76,7 +76,8 @@ Module ns := stdpp.namespaces.
 
 (*   Definition pmp_entry_cfg := ty_prod ty_pmpcfg_ent ty_xlenbits. *)
 
-Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase Contracts.RiscvPmpSignature.
+Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature.
+  Include SpecificationMixin RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature.
   Import Contracts.RiscvPmpSignature.
   Import Contracts.
   Section ContractDefKit.
@@ -368,10 +369,10 @@ Module RiscvPmpModelBlockVerif.
   Import RiscvPmpIrisParams.
   Import RiscvPmpIrisResources.
 
-  Module PLOG <: ProgramLogicOn RiscvPmpBase Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include ProgramLogicOn RiscvPmpBase Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  Module PLOG <: ProgramLogicOn RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
+    Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
   End PLOG.
-  Module RiscvPmpIrisBlockVerifModel := IrisInstanceWithContracts RiscvPmpBase Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec Model.RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates Model.RiscvPmpModel PLOG.
+  Module RiscvPmpIrisBlockVerifModel := IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram Model.RiscvPmpSemantics Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates Model.RiscvPmpModel PLOG.
 
 End RiscvPmpModelBlockVerif.
 
@@ -385,7 +386,7 @@ Module RiscvPmpSpecVerif.
   Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
 
   Module Import RiscvPmpExecutor :=
-    MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+    MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
   Import Symbolic.
 
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
@@ -433,7 +434,7 @@ Module BlockVerification.
   Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
 
   Module Import RiscvPmpExecutor :=
-    MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+    MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
   Import Symbolic.
 
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
@@ -806,7 +807,7 @@ Module BlockVerificationDerived.
   Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
 
   Module Import RiscvPmpExecutor :=
-    MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+    MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
   Import Symbolic.
 
   Import ModalNotations.
@@ -950,7 +951,7 @@ Module BlockVerificationDerived2.
   Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
 
   Module Import RiscvPmpExecutor :=
-    MakeExecutor RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+    MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
   Import Symbolic.
 
   Import ModalNotations.
@@ -1397,11 +1398,14 @@ Module BlockVerificationDerivedSem.
   Import Model.
   Import RiscvPmpModel.
   Import RiscvPmpIrisResources.
-  Module PLOG <: ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  Module PLOG <: ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
+    Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
   End PLOG.
 
-  Module Import RiscvPmpIrisModel := IrisInstanceWithContracts RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSemantics RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates RiscvPmpModel PLOG.
+  Module Import RiscvPmpIrisModel :=
+    IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+      RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpIrisPrelims
+      RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates RiscvPmpModel PLOG.
 
   Lemma read_ram_sound `{sailGS Σ} {Γ} (es : NamedEnv (Exp Γ) ["paddr"∷ty_exc_code]) (δ : CStore Γ) :
     ∀ paddr w,
@@ -1523,11 +1527,11 @@ Module BlockVerificationDerivedSem.
   Module ValidContractsBlockVerif.
     Import Contracts.
     Import RiscvPmpSignature.
-    Include ShallowExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include SymbolicExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-    Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include Katamaran.Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+    Include ShallowExecOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
+    Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
+    Include SymbolicExecOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+    Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
+    Include Katamaran.Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
 
     Lemma contractsVerified `{sailGS Σ} : ProgramLogic.ValidContractCEnv (PI := PredicateDefIProp).
     Proof.
@@ -1579,14 +1583,14 @@ End BlockVerificationDerivedSem.
 Module BlockVerificationDerived2Sound.
   Import Contracts.
   Import RiscvPmpSignature.
-  Module Shal <: ShallowExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include ShallowExecOn RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  Module Shal <: ShallowExecOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
+    Include ShallowExecOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
   End Shal.
   Import RiscvPmpBlockVerifSpec.
 
-  Module Sound := Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec BlockVerificationDerived2.RiscvPmpSolver Shal BlockVerificationDerived2.RiscvPmpExecutor.
+  Module Sound := Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec BlockVerificationDerived2.RiscvPmpSolver Shal BlockVerificationDerived2.RiscvPmpExecutor.
   Import Sound.
-  Include Katamaran.Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec BlockVerificationDerived2.RiscvPmpSolver Shal BlockVerificationDerived2.RiscvPmpExecutor.
+  Include Katamaran.Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec BlockVerificationDerived2.RiscvPmpSolver Shal BlockVerificationDerived2.RiscvPmpExecutor.
 
   Definition M : Type -> Type := Shal.CHeapSpecM [] [].
 
@@ -1789,7 +1793,7 @@ Module BlockVerificationDerived2Sem.
   Import RiscvPmpModelBlockVerif.PLOG.
   Import Sound.
 
-  Include Katamaran.Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpSignature RiscvPmpBlockVerifSpec Shal RiscvPmpModelBlockVerif.PLOG.
+  Include Katamaran.Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec Shal RiscvPmpModelBlockVerif.PLOG.
 
   Definition semTripleOneInstrStep `{sailGS Σ} (PRE : iProp Σ) (instr : AST) (POST : Z -> iProp Σ) (a : Z) : iProp Σ :=
     semTriple [] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)

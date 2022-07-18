@@ -38,15 +38,12 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     Signature
      Semantics.Registers
      Symbolic.Executor
      Symbolic.Solver
-     Symbolic.Worlds
-     Symbolic.Propositions
      Specification
-     Program
-     Syntax.Predicates
-     Syntax.ContractDecl.
+     Program.
 
 From stdpp Require decidable finite.
 
@@ -335,18 +332,15 @@ Module Import ExampleProgram <: Program ExampleBase.
 
 End ExampleProgram.
 
-Module Import ExampleSig <: ProgramLogicSignature ExampleBase.
-  Module PROG := ExampleProgram.
-  Import ctx.resolution.
-
+Module Import ExampleSig <: Signature ExampleBase.
   Include DefaultPredicateKit ExampleBase.
-  Include ContractDeclMixin ExampleBase ExampleProgram.
-  Include SpecificationMixin ExampleBase ExampleProgram.
+  Include PredicateMixin ExampleBase.
 End ExampleSig.
 
-Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
-  Include ExampleSig.
+Module Import ExampleSpecification <: Specification ExampleBase ExampleProgram ExampleSig.
+  Include SpecificationMixin ExampleBase ExampleProgram ExampleSig.
   Import ctx.resolution.
+
   Section ContractDefKit.
 
     Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
@@ -443,7 +437,7 @@ Module ExampleSolverKit := DefaultSolverKit ExampleBase ExampleSig.
 Module ExampleSolver := MakeSolver ExampleBase ExampleSig ExampleSolverKit.
 
 Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleSig ExampleSpecification ExampleSolver.
+  MakeExecutor ExampleBase ExampleProgram ExampleSig ExampleSpecification ExampleSolver.
 
 Local Ltac solve :=
   repeat

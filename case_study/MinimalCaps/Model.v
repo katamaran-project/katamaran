@@ -90,11 +90,11 @@ Module MinCapsModel.
   Import MinCapsProgram.
   Import MinCapsSpecification.
 
-  Module Import MinCapsIrisPrelims <: IrisPrelims MinCapsBase MinCapsProgram MinCapsSignature MinCapsSemantics.
-    Include IrisPrelims MinCapsBase MinCapsProgram MinCapsSignature MinCapsSemantics.
+  Module Import MinCapsIrisPrelims <: IrisPrelims MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature.
+    Include IrisPrelims MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature.
   End MinCapsIrisPrelims.
 
-  Module MinCapsIrisParams <: IrisParameters MinCapsBase MinCapsProgram MinCapsSignature MinCapsSemantics MinCapsIrisPrelims.
+  Module MinCapsIrisParams <: IrisParameters MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisPrelims.
     Import MinCapsIrisPrelims.
 
     Parameter maxAddr : nat.
@@ -170,8 +170,8 @@ Module MinCapsModel.
     End WithIrisNotations.
   End MinCapsIrisParams.
 
-  Module MinCapsIrisResources <: IrisResources MinCapsBase MinCapsSignature MinCapsSemantics MinCapsIrisPrelims MinCapsIrisParams.
-    Include IrisResources MinCapsBase MinCapsSignature MinCapsSemantics MinCapsIrisPrelims MinCapsIrisParams.
+  Module MinCapsIrisResources <: IrisResources MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisPrelims MinCapsIrisParams.
+    Include IrisResources MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisPrelims MinCapsIrisParams.
   End MinCapsIrisResources.
 
 
@@ -455,7 +455,7 @@ Module MinCapsModel.
            destruct c; destruct cap_permission; apply _. Qed.
   End Predicates.
 
-  Module MinCapsIrisPredicates <: IrisPredicates MinCapsBase MinCapsSignature MinCapsSemantics MinCapsIrisPrelims MinCapsIrisParams MinCapsIrisResources.
+  Module MinCapsIrisPredicates <: IrisPredicates MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisPrelims MinCapsIrisParams MinCapsIrisResources.
     Import env.notations.
     Import MinCapsIrisPrelims.
     Import MinCapsIrisParams.
@@ -487,8 +487,8 @@ Module MinCapsModel.
     Qed.
   End MinCapsIrisPredicates.
 
-  Include IrisInstance MinCapsBase MinCapsSignature MinCapsSemantics MinCapsIrisPrelims MinCapsIrisParams MinCapsIrisResources MinCapsIrisPredicates.
-  Include ProgramLogicOn MinCapsBase MinCapsSignature MinCapsSpecification.
+  Include IrisInstance MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisPrelims MinCapsIrisParams MinCapsIrisResources MinCapsIrisPredicates.
+  Include ProgramLogicOn MinCapsBase MinCapsProgram MinCapsSignature MinCapsSpecification.
 
 End MinCapsModel.
 
@@ -500,7 +500,10 @@ Module MinCapsModel2.
   Import MinCapsIrisPrelims.
   Import MinCapsIrisParams.
   Import MinCapsIrisResources.
-  Module Import MinCapsIrisModel := IrisInstanceWithContracts MinCapsBase MinCapsSignature MinCapsSpecification MinCapsSemantics MinCapsIrisPrelims MinCapsIrisParams MinCapsIrisResources MinCapsIrisPredicates MinCapsModel MinCapsModel.
+  Module Import MinCapsIrisModel :=
+    IrisInstanceWithContracts MinCapsBase MinCapsProgram MinCapsSemantics
+      MinCapsSignature MinCapsSpecification MinCapsIrisPrelims MinCapsIrisParams
+      MinCapsIrisResources MinCapsIrisPredicates MinCapsModel MinCapsModel.
 
   Section Lemmas.
     Context {Σ} `{sg : sailGS Σ}.
