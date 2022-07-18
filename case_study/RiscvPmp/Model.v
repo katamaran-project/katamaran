@@ -40,6 +40,7 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Semantics
+     Iris.Base
      Iris.Model.
 From Equations Require Import
      Equations.
@@ -59,31 +60,29 @@ Module gh := iris.base_logic.lib.gen_heap.
 Module RiscvPmpSemantics <: Semantics RiscvPmpBase RiscvPmpProgram :=
   MakeSemantics RiscvPmpBase RiscvPmpProgram.
 
-Module RiscvPmpModel.
-  Import RiscvPmpProgram.
-  Import RiscvPmpSignature.
+Import RiscvPmpProgram.
+Import RiscvPmpSignature.
 
-  Module RiscvPmpIrisPrelims <: IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpSignature.
-    Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpSignature.
-  End RiscvPmpIrisPrelims.
+Ltac destruct_syminstance ι :=
+  repeat
+    match type of ι with
+    | Env _ (ctx.snoc _ (MkB ?s _)) =>
+        let id := string_to_ident s in
+        let fr := fresh id in
+        destruct (env.snocView ι) as [ι fr];
+        destruct_syminstance ι
+    | Env _ ctx.nil => destruct (env.nilView ι)
+    | _ => idtac
+    end.
 
-  Module RiscvPmpIrisParams <: IrisParameters RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpSignature RiscvPmpIrisPrelims.
+Module Import RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+  Include IrisPrelims RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+
+  Section RiscvPmpIrisParams.
     Import iris.bi.interface.
     Import iris.bi.big_op.
     Import iris.base_logic.lib.iprop.
     Import iris.base_logic.lib.gen_heap.
-
-    Ltac destruct_syminstance ι :=
-      repeat
-        match type of ι with
-        | Env _ (ctx.snoc _ (MkB ?s _)) =>
-            let id := string_to_ident s in
-            let fr := fresh id in
-            destruct (env.snocView ι) as [ι fr];
-            destruct_syminstance ι
-        | Env _ ctx.nil => destruct (env.nilView ι)
-        | _ => idtac
-        end.
 
     Definition MemVal : Set := Word.
 
@@ -150,18 +149,20 @@ Module RiscvPmpModel.
     Qed.
   End RiscvPmpIrisParams.
 
-  Module RiscvPmpIrisResources <: IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpSignature RiscvPmpIrisPrelims RiscvPmpIrisParams.
-    Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics RiscvPmpSignature RiscvPmpIrisPrelims RiscvPmpIrisParams.
-  End RiscvPmpIrisResources.
+  Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
 
-  Section Predicates.
+End RiscvPmpIrisBase.
+
+Module Import RiscvPmpIrisInstance <:
+  IrisInstance RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpSignature RiscvPmpIrisBase.
+
+  Section WithSailGS.
     Import iris.bi.interface.
     Import iris.bi.big_op.
     Import iris.base_logic.lib.iprop.
     Import iris.base_logic.lib.gen_heap.
     Import Contracts.
-    Import RiscvPmpIrisPrelims.
-    Import RiscvPmpIrisParams.
 
     Context `{sailRegGS Σ} `{invGS Σ} `{mG : mcMemGS Σ}.
 
@@ -205,24 +206,14 @@ Module RiscvPmpModel.
 
     Definition interp_ptsto_instr (addr : Z) (instr : AST) : iProp Σ :=
       (∃ v, interp_ptsto addr v ∗ ⌜ pure_decode v = inr instr ⌝)%I.
-  End Predicates.
 
-  Module RiscvPmpIrisPredicates <:
-    IrisPredicates RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-      RiscvPmpSignature RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources.
-    Import iris.bi.interface.
-    Import iris.bi.big_op.
-    Import iris.base_logic.lib.iprop.
-    Import iris.base_logic.lib.gen_heap.
-    Import env.notations.
-    Import RiscvPmpIrisPrelims.
-    Import RiscvPmpIrisParams.
-    Import RiscvPmpIrisResources.
-    Import Contracts.
+  End WithSailGS.
 
-    Definition luser_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
+  Section RiscvPmpIrisPredicates.
+
+    Definition luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
       match p return Env Val (𝑯_Ty p) -> iProp Σ with
-      | pmp_entries                   => fun ts => interp_pmp_entries (env.head ts)
+      | Contracts.pmp_entries         => fun ts => interp_pmp_entries (env.head ts)
       | pmp_addr_access               => fun ts => interp_pmp_addr_access liveAddrs (env.head (env.tail ts)) (env.head ts)
       | pmp_addr_access_without       => fun ts => interp_pmp_addr_access_without (env.head (env.tail (env.tail ts))) liveAddrs (env.head (env.tail ts)) (env.head ts)
       | gprs                          => fun _  => interp_gprs
@@ -232,36 +223,32 @@ Module RiscvPmpModel.
       | ptstoinstr                    => fun ts  => interp_ptsto_instr (env.head (env.tail ts)) (env.head ts)%I
       end.
 
-    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) :
+    Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
-        (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
+        (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
     Proof.
       iIntros (p ts hdup) "H".
       destruct p; inversion hdup;
         iDestruct "H" as "#H";
         auto.
     Qed.
+
   End RiscvPmpIrisPredicates.
 
-  Include IrisInstance RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-    RiscvPmpSignature RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates.
-  Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
+  Include IrisSignatureRules RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpSignature RiscvPmpIrisBase.
 
-End RiscvPmpModel.
+End RiscvPmpIrisInstance.
 
 Module RiscvPmpModel2.
-  Import RiscvPmpModel.
   Import RiscvPmpSignature.
   Import RiscvPmpSpecification.
   Import RiscvPmpProgram.
-  Import RiscvPmpIrisPrelims.
-  Import RiscvPmpIrisParams.
-  Import RiscvPmpIrisResources.
-  Module Import RiscvPmpIrisModel :=
-    IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-      RiscvPmpSignature RiscvPmpSpecification RiscvPmpIrisPrelims
-      RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates RiscvPmpModel RiscvPmpModel.
+
+  Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpSpecification.
+  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+      RiscvPmpSignature RiscvPmpSpecification RiscvPmpIrisBase RiscvPmpIrisInstance.
 
   Lemma read_ram_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
     forall paddr w t entries p,
@@ -543,4 +530,5 @@ Module RiscvPmpModel2.
       eauto using open_gprs_sound, close_gprs_sound, open_pmp_entries_sound,
       close_pmp_entries_sound, update_pmp_entries_sound, extract_pmp_ptsto_sound, return_pmp_ptsto_sound.
   Qed.
+
 End RiscvPmpModel2.

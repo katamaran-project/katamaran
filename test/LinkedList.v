@@ -63,6 +63,7 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Semantics
+     Iris.Base
      Iris.Model.
 
 From stdpp Require decidable finite list fin_maps infinite.
@@ -775,6 +776,7 @@ End ContractVerification.
    statistics. *)
 Module Import ExampleShalExec :=
   MakeShallowExecutor DefaultBase ExampleProgram ExampleSignature ExampleSpecification.
+
 (* Instantiate the operational semantics which is an input to the Iris model. *)
 Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
   MakeSemantics DefaultBase ExampleProgram.
@@ -783,365 +785,364 @@ Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
    definition of several user-defined modules that are inputs to the generic
    module functors defined in the library. *)
 Module ExampleModel.
+
   Import ExampleProgram.
   Import ExampleSpecification.
 
-  Module Import ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSemantics ExampleSignature .
-    Include IrisPrelims DefaultBase ExampleProgram ExampleSemantics ExampleSignature.
-  End ExampleIrisPrelims.
-
   (* The construction of the model is split up into several steps. First, the
-     [IrisParameters] define the ghost state for memory which is then combined
-     with the ghost state for registers in the [IrisResources] module below. *)
-  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisPrelims.
-    Import iris.bi.interface.
-    Import iris.bi.big_op.
-    Import iris.base_logic.lib.iprop.
-    Import iris.base_logic.lib.gen_heap.
-    Import iris.proofmode.tactics.
+     [IrisBase] defines the operational model that only depends on the program
+     and the operational semantics, but not the signature or defined function
+     contracts. *)
+  Module Import ExampleIrisBase <: IrisBase DefaultBase ExampleProgram ExampleSemantics.
 
-    Class mcMemGS Σ :=
-      McMemGS {
-          (* ghost variable for tracking the memory state. *)
-          mc_ghGS : gen_heapGS Z (Z * (Z + unit)) Σ;
-          mc_invNs : namespace
-        }.
-    #[export] Existing Instance mc_ghGS.
+    (* Instantiates with the step relation and sets up the ghost state for
+       registers. *)
+    Include IrisPrelims DefaultBase ExampleProgram ExampleSemantics.
 
-    Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
-    Definition memGS : gFunctors -> Set := mcMemGS.
-    Definition memΣ : gFunctors := gen_heapΣ Z (Z * (Z + unit)).
+    (* The [IrisParameters] define the ghost state for memory which is provided
+       by the user. This is then combined with the ghost state for registers in
+       the [IrisResources] mixin below. *)
+    Section ExampleIrisParameters.
+      Import iris.bi.interface.
+      Import iris.bi.big_op.
+      Import iris.base_logic.lib.iprop.
+      Import iris.base_logic.lib.gen_heap.
+      Import iris.proofmode.tactics.
 
-    Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
-      fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := (Z * (Z + unit))).
+      Class mcMemGS Σ :=
+        McMemGS {
+            (* ghost variable for tracking the memory state. *)
+            mc_ghGS : gen_heapGS Z (Z * (Z + unit)) Σ;
+            mc_invNs : namespace
+          }.
+      #[export] Existing Instance mc_ghGS.
 
-    Lemma fst_pair_id2 : forall {A} {B},
-        (λ (x : A) (y : B), (Datatypes.fst ∘ pair x) y) = (λ (x : A) (y : B), x).
-    Proof.
-      intros; reflexivity.
-    Qed.
+      Definition memGpreS : gFunctors -> Set := fun Σ => gen_heapGpreS Z (Z * (Z + unit)) Σ.
+      Definition memGS : gFunctors -> Set := mcMemGS.
+      Definition memΣ : gFunctors := gen_heapΣ Z (Z * (Z + unit)).
 
-    Lemma imap_pair_fst_seq {A} (l : list A) :
-      (imap pair l).*1 = seq 0 (length l).
-    Proof.
-      rewrite fmap_imap.
-      rewrite fst_pair_id2.
-      rewrite imap_seq_0.
-      rewrite list_fmap_id; reflexivity.
-    Qed.
+      Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
+        fun {Σ} => subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := (Z * (Z + unit))).
 
-    Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-      fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) μ)%I.
+      Lemma fst_pair_id2 : forall {A} {B},
+          (λ (x : A) (y : B), (Datatypes.fst ∘ pair x) y) = (λ (x : A) (y : B), x).
+      Proof.
+        intros; reflexivity.
+      Qed.
 
-    Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
-      fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
+      Lemma imap_pair_fst_seq {A} (l : list A) :
+        (imap pair l).*1 = seq 0 (length l).
+      Proof.
+        rewrite fmap_imap.
+        rewrite fst_pair_id2.
+        rewrite imap_seq_0.
+        rewrite list_fmap_id; reflexivity.
+      Qed.
 
-    Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-                                                ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
-    Proof.
-      iIntros (Σ μ gHP).
-      iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
+      Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+        fun {Σ} hG μ => (gen_heap_interp (hG := mc_ghGS (mcMemGS := hG)) μ)%I.
 
-      iMod (gen_heap_alloc_big empty μ (map_disjoint_empty_r μ) with "inv") as "(inv & res & _)".
-      iModIntro.
-      rewrite (right_id empty union μ).
+      Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
+        fun {Σ} hG μ => ([∗ map] l↦v ∈ μ, mapsto (hG := mc_ghGS (mcMemGS := hG)) l (DfracOwn 1) v)%I.
 
-      iExists (McMemGS gH (nroot .@ "mem_inv")).
-      iFrame.
-    Qed.
-  End ExampleIrisParameters.
+      Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
+                                                  ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+      Proof.
+        iIntros (Σ μ gHP).
+        iMod (gen_heap_init (gen_heapGpreS0 := gHP) (L := Z) (V := (Z * (Z + unit))) empty) as (gH) "[inv _]".
 
-  Module ExampleIrisResources <: IrisResources DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisPrelims ExampleIrisParameters.
-    Include IrisResources DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisPrelims ExampleIrisParameters.
-  End ExampleIrisResources.
+        iMod (gen_heap_alloc_big empty μ (map_disjoint_empty_r μ) with "inv") as "(inv & res & _)".
+        iModIntro.
+        rewrite (right_id empty union μ).
 
-  (* After instantiating [IrisResources] we have access to the Iris base logic
+        iExists (McMemGS gH (nroot .@ "mem_inv")).
+        iFrame.
+      Qed.
+    End ExampleIrisParameters.
+
+    Include IrisResources DefaultBase ExampleProgram ExampleSemantics.
+
+  End ExampleIrisBase.
+
+  (* After instantiating [IrisBase] we have access to the Iris base logic
      with the given ghost state and can interpret the user-defined predicates in
      this logic. This is then provided to the library as part of the
-     [IrisPredicates] module. *)
-  Section Predicates.
-    Import iris.bi.interface.
-    Import iris.bi.big_op.
-    Import iris.base_logic.lib.iprop.
+     [IrisInstance] module. *)
+  Module Import ExampleIrisInstance <:
+    IrisInstance DefaultBase ExampleProgram ExampleSemantics ExampleSignature
+      ExampleIrisBase.
+
     Import iris.base_logic.lib.gen_heap.
+    Import iris.base_logic.lib.iprop.
+    Import iris.bi.big_op.
+    Import iris.bi.interface.
     Import iris.proofmode.tactics.
-    Import ExampleIrisParameters.
 
     (* This is the interpretation of the points to pair predicate in Iris. *)
-    Definition ptstocons_interp `{mG : memGS Σ} (p : Z) (v : Z) (n : Z + unit) : iProp Σ :=
-      (mapsto (hG := mc_ghGS (mcMemGS := mG)) p (DfracOwn 1) (pair v n))%I.
+    Definition ptstocons_interp `{mG : mcMemGS Σ} (p : Z) (v : Z) (n : Z + unit) : iProp Σ :=
+      (mapsto p (DfracOwn 1) (pair v n))%I.
 
     (* This is the recursive definition of the points to list predicate in Iris. *)
-    Fixpoint ptstolist_interp `{mG : memGS Σ} (p : Z + unit) (vs : list Z) : iProp Σ :=
+    Fixpoint ptstolist_interp `{mG : mcMemGS Σ} (p : Z + unit) (vs : list Z) : iProp Σ :=
       match vs with
       | nil => ⌜p = inr tt⌝
-      | v :: vs => (∃ p' pn, ⌜p = inl p'⌝ ∗ ptstocons_interp (mG := mG) p' v pn ∗ ptstolist_interp (mG := mG) pn vs)%I
+      | v :: vs => (∃ p' pn, ⌜p = inl p'⌝ ∗ ptstocons_interp p' v pn ∗ ptstolist_interp pn vs)%I
       end.
-  End Predicates.
-
-  (* This module packages the interpretation of the user-defined predicates
-     to instantiate the rest of the Iris model. *)
-  Module ExampleIrisPredicates <: IrisPredicates DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources.
-    Import ExampleIrisPrelims.
-    Import ExampleIrisParameters.
-    Import iris.base_logic.lib.iprop.
 
     (* Pattern match on the generic representation of abstract predicates map them
        to their Iris definition. *)
-    Definition luser_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
+    Definition luser_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : mcMemGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
       (match p return Env Val (𝑯_Ty p) -> iProp Σ with
-      | ptstocons => fun ts => ptstocons_interp (mG := mG) (env.head (env.tail (env.tail ts))) (env.head (env.tail ts)) (env.head ts)
-      | ptstolist => fun ts => ptstolist_interp (mG := mG) (env.head (env.tail ts)) (env.head ts)
+      | ptstocons => fun ts => ptstocons_interp (env.head (env.tail (env.tail ts))) (env.head (env.tail ts)) (env.head ts)
+      | ptstolist => fun ts => ptstolist_interp (env.head (env.tail ts)) (env.head ts)
        end) ts.
 
     (* This definition verifies the soundness if duplicability. However, this
        example does not contain any predicates marked as duplicable and therefore
        the proof is trivial *)
-    Definition lduplicate_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) :
+    Definition lduplicate_inst `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : mcMemGS Σ) :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
       is_duplicable p = true -> luser_inst mG p ts -∗ luser_inst mG p ts ∗ luser_inst mG p ts.
     Proof.
       destruct p; now cbn.
     Qed.
 
-  End ExampleIrisPredicates.
+    (* At this point we have enough information to instantiate the program logic
+       rules of Iris that do not refer to specific contracts. *)
+    Include IrisSignatureRules DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisBase.
 
-  Import ExampleIrisParameters.
-  Import ExampleIrisResources.
+  End ExampleIrisInstance.
 
-  (* At this point we have enough information to instantiate the program logic
-     of Iris. *)
-  Include IrisInstance DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
+  (* The [IrisInstanceWithContracts] implements the program logic rules that can
+     refer to the [Specification] module, which contains the contracts for
+     functions. These rules therefore include function call rules and the rule
+     for a ghost lemma statement. We split up the construction of the model in
+     this way to allow combinations of multiple different set of contracts for a
+     single program. *)
+  Module ExampleIrisInstanceWithContracts.
+    (* Include our axiomatic program logic. Note that the program logic is
+       parameterized over a given set of contracts so it is included here
+       instead of [IrisInstance].  *)
+    Include ProgramLogicOn DefaultBase ExampleProgram
+      ExampleSignature ExampleSpecification.
+    Include IrisInstanceWithContracts DefaultBase
+      ExampleProgram ExampleSemantics ExampleSignature ExampleSpecification
+      ExampleIrisBase ExampleIrisInstance.
 
-  (* Include our axiomatic program logic. Note that the program logic is
-     parameterized over a given set of contracts while the Iris program logic in
-     [IrisInstance] is constructed from the operational semantics without
-     refering to contracts at all. The [IrisInstanceWithContracts] of the
-     library links the two by showing that all axiomatic program logic rules are
-     admissible, provided all the function contracts hold. We split up the
-     construction of the model in this way to allow combinations of multiple
-     different set of contracts for a single program. *)
-  Include ProgramLogicOn DefaultBase ExampleProgram ExampleSignature ExampleSpecification.
-  Include IrisInstanceWithContracts DefaultBase ExampleProgram ExampleSemantics ExampleSignature ExampleSpecification ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
+    (* Import the soundness proofs for the shallow and symbolic executors. *)
+    Include Shallow.Soundness.Soundness DefaultBase ExampleProgram
+      ExampleSignature ExampleSpecification ExampleShalExec.
+    Include Symbolic.Soundness.Soundness DefaultBase ExampleProgram
+      ExampleSignature ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
 
-  (* In this section we verify the contracts of the foreign functions defined in
-     Coq and the entailments encoded in ghost lemmas using Iris Proof Mode. *)
-  Section WithIrisNotations.
-    Import iris.bi.interface.
-    Import iris.bi.big_op.
-    Import iris.base_logic.lib.iprop.
-    Import iris.program_logic.weakestpre.
-    Import iris.base_logic.lib.gen_heap.
-    Import iris.proofmode.string_ident.
-    Import iris.proofmode.tactics.
+    (* In this section we verify the contracts of the foreign functions defined in
+       Coq and the entailments encoded in ghost lemmas using Iris Proof Mode. *)
+    Section WithIrisNotations.
+      Import iris.bi.interface.
+      Import iris.bi.big_op.
+      Import iris.base_logic.lib.iprop.
+      Import iris.program_logic.weakestpre.
+      Import iris.base_logic.lib.gen_heap.
+      Import iris.proofmode.string_ident.
+      Import iris.proofmode.tactics.
 
-    Ltac destruct_syminstance ι :=
-      repeat
-        match type of ι with
-        | Env _ (ctx.snoc _ (MkB ?s _)) =>
-            let id := string_to_ident s in
-            let fr := fresh id in
-            destruct (env.snocView ι) as [ι fr];
-            destruct_syminstance ι
+      Ltac destruct_syminstance ι :=
+        repeat
+          match type of ι with
+          | Env _ (ctx.snoc _ (MkB ?s _)) =>
+              let id := string_to_ident s in
+              let fr := fresh id in
+              destruct (env.snocView ι) as [ι fr];
+              destruct_syminstance ι
         | Env _ ctx.nil => destruct (env.nilView ι)
         | _ => idtac
         end.
 
-    Lemma mkcons_sound `{sailGS Σ} {Γ δ} :
-      forall (x : Exp Γ ptr) (xs : Exp Γ llist),
-        ⊢ semTriple δ (⌜true = true⌝ ∧ emp) (foreign mkcons x xs)
-          (λ (v : Val ptr) (δ' : CStore Γ),
-            ptstocons_interp (mG := sailGS_memGS) v (eval x δ) (eval xs δ) ∗ ⌜δ' = δ⌝).
-    Proof.
-      iIntros (x xs) "_".
-      rewrite wp_unfold. cbn.
-      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-      unfold mem_inv.
-      iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
-      iModIntro.
-      iSplitR; first by intuition.
-      iIntros (e2 σ'' efs) "%".
-      dependent elimination H0.
-      dependent elimination s.
-      cbn in f1.
-      destruct_conjs; subst.
-      do 3 iModIntro.
-      cbn.
-      iMod "Hclose2" as "_".
-      iMod (gen_heap_alloc μ1 (infinite_fresh (A := Z) (elements (dom (gset Z) μ1))) (eval x δ1, eval xs δ1) with "Hmem") as "[Hmem [Hres _]]".
-      { rewrite <-not_elem_of_dom, <-elem_of_elements.
-        now eapply infinite_is_fresh.
-      }
-      iModIntro.
-      iFrame.
-      iSplitL; last done.
-      iApply wp_value.
-      now iFrame.
-    Qed.
-
-    Lemma fst_sound `{sailGS Σ} {Γ δ} :
-      forall (ep : Exp Γ ptr) (vx : Val ty.int) (vxs : Val llist),
-        let vp := eval ep δ in
-        ⊢ semTriple δ
-          (ptstocons_interp (mG := sailGS_memGS) vp vx vxs)
-          (foreign fst ep)
-          (λ (v : Z) (δ' : CStore Γ),
-            ((⌜v = vx⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜ δ' = δ⌝).
-    Proof.
-      iIntros (ep vx vxs vp) "Hres".
-      rewrite wp_unfold.
-      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-      iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
-      iModIntro.
-      iSplitR; first done.
-      iIntros (e2 σ'' efs) "%".
-      dependent elimination H0.
-      dependent elimination s.
-      cbn in f1.
-      unfold mem_inv.
-      do 3 iModIntro.
-      iMod "Hclose2" as "_".
-      iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs) with "Hmem Hres") as "%".
-      rewrite H0 in f1.
-      destruct_conjs; subst.
-      iModIntro.
-      iFrame.
-      iSplitL; last done.
-      iApply wp_value.
-      now iFrame.
-    Qed.
-
-    Lemma snd_sound `{sailGS Σ} {Γ δ} :
-      forall (ep : Exp Γ ptr) (vx : Val ptr) (vxs : Val llist),
-        let vp := eval ep δ in
-        ⊢ semTriple δ
-          (ptstocons_interp (mG := sailGS_memGS) vp vx vxs)
-          (foreign snd ep)
-          (λ (v : Z + ()) (δ' : CStore Γ),
-            ((⌜v = vxs⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜ δ' = δ⌝).
-    Proof.
-      iIntros (ep vx vxs vp) "Hres".
-      rewrite wp_unfold.
-      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-      iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
-      iModIntro.
-      iSplitR; first done.
-      iIntros (e2 σ'' efs) "%".
-      dependent elimination H0.
-      dependent elimination s.
-      cbn in f1.
-      unfold mem_inv.
-      do 3 iModIntro.
-      iMod "Hclose2" as "_".
-      iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs) with "Hmem Hres") as "%".
-      rewrite H0 in f1.
-      destruct_conjs; subst.
-      iModIntro.
-      iFrame.
-      iSplitL; last done.
-      iApply wp_value.
-      now iFrame.
-    Qed.
-
-    Lemma setsnd_sound`{sailGS Σ}  {Γ δ} :
-      forall (ep : Exp Γ ptr) (exs : Exp Γ llist) (vx : Val ptr),
-        let vp := eval ep δ in let vxs := eval exs δ in
-        ⊢ semTriple δ
-        (∃ v : Z + (), ptstocons_interp (mG := sailGS_memGS) vp vx v)
-        (foreign setsnd ep exs)
-        (λ (v : ()) (δ' : CStore Γ),
-           ((⌜v = tt⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜δ' = δ⌝).
-    Proof.
-      iIntros (ep exs vx vp vxs) "Hres".
-      iDestruct "Hres" as (vxs__old) "Hres".
-      rewrite wp_unfold.
-      iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
-      iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
-      iModIntro.
-      iSplitR; first by intuition.
-      iIntros (e2 σ'' efs) "%".
-      dependent elimination H0. cbn.
-      dependent elimination s.
-      cbn in f1.
-      unfold mem_inv.
-      do 3 iModIntro.
-      iMod "Hclose2" as "_".
-      iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs__old) with "Hmem Hres") as "%".
-      rewrite H0 in f1.
-      destruct_conjs; subst.
-      iMod (gen_heap_update μ1 vp (vx,vxs__old) (vx,vxs) with "Hmem Hres") as "[Hmem Hres]".
-      iModIntro.
-      iFrame.
-      iApply wp_value.
-      now iFrame.
-    Qed.
-
-    Lemma foreignSem `{sailGS Σ} : ForeignSem.
-    Proof.
-      intros Γ τ Δ f es δ; destruct f; env.destroy es;
-        intros ι; env.destroy ι; cbn; intros Heq; env.destroy Heq; subst;
-        eauto using mkcons_sound, fst_sound, snd_sound, setsnd_sound.
-    Qed.
-
-    Goal True. idtac "Timing before: llist/lemmas". Abort.
-    Lemma lemSem `{sailGS Σ} : LemmaSem.
-    Proof.
-      intros Γ l.
-      destruct l; cbn; intros ι; destruct_syminstance ι; cbn.
-      - auto.
-      - iIntros "Hres".
-        destruct xs; cbn.
-        { iDestruct "Hres" as "%". inversion H0. }
-        iDestruct "Hres" as (p' pn) "[% [Hp' Hpn]]".
-        inversion H0; subst.
-        iExists pn.
+      Lemma mkcons_sound `{sailGS Σ} {Γ δ} :
+        forall (x : Exp Γ ptr) (xs : Exp Γ llist),
+          ⊢ semTriple δ (⌜true = true⌝ ∧ emp) (foreign mkcons x xs)
+            (λ (v : Val ptr) (δ' : CStore Γ),
+              ptstocons_interp (mG := sailGS_memGS) v (eval x δ) (eval xs δ) ∗ ⌜δ' = δ⌝).
+      Proof.
+        iIntros (x xs) "_".
+        rewrite wp_unfold. cbn.
+        iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+        unfold mem_inv.
+        iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+        iModIntro.
+        iSplitR; first by intuition.
+        iIntros (e2 σ'' efs) "%".
+        dependent elimination H0.
+        dependent elimination s.
+        cbn in f1.
+        destruct_conjs; subst.
+        do 3 iModIntro.
+        cbn.
+        iMod "Hclose2" as "_".
+        iMod (gen_heap_alloc μ1 (infinite_fresh (A := Z) (elements (dom (gset Z) μ1))) (eval x δ1, eval xs δ1) with "Hmem") as "[Hmem [Hres _]]".
+        { rewrite <-not_elem_of_dom, <-elem_of_elements.
+          now eapply infinite_is_fresh.
+        }
+        iModIntro.
         iFrame.
-      - iIntros "Hres".
-        destruct xs; cbn.
-        + now destruct p.
-        + iDestruct "Hres" as (p' pn) "[% _]".
-          inversion H0.
-      - iIntros "[Hp Hn]".
-        iExists p.
-        iExists n.
+        iSplitL; last done.
+        iApply wp_value.
         now iFrame.
-    Qed.
-    Goal True. idtac "Timing after: llist/lemmas". Abort.
+      Qed.
 
-  End WithIrisNotations.
+      Lemma fst_sound `{sailGS Σ} {Γ δ} :
+        forall (ep : Exp Γ ptr) (vx : Val ty.int) (vxs : Val llist),
+          let vp := eval ep δ in
+          ⊢ semTriple δ
+            (ptstocons_interp (mG := sailGS_memGS) vp vx vxs)
+            (foreign fst ep)
+            (λ (v : Z) (δ' : CStore Γ),
+              ((⌜v = vx⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜ δ' = δ⌝).
+      Proof.
+        iIntros (ep vx vxs vp) "Hres".
+        rewrite wp_unfold.
+        iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+        iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+        iModIntro.
+        iSplitR; first done.
+        iIntros (e2 σ'' efs) "%".
+        dependent elimination H0.
+        dependent elimination s.
+        cbn in f1.
+        unfold mem_inv.
+        do 3 iModIntro.
+        iMod "Hclose2" as "_".
+        iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs) with "Hmem Hres") as "%".
+        rewrite H0 in f1.
+        destruct_conjs; subst.
+        iModIntro.
+        iFrame.
+        iSplitL; last done.
+        iApply wp_value.
+        now iFrame.
+      Qed.
 
-  (* Import the soundness proofs for the shallow and symbolic executors. *)
-  Include Shallow.Soundness.Soundness DefaultBase ExampleProgram ExampleSignature ExampleSpecification ExampleShalExec.
-  Include Symbolic.Soundness.Soundness DefaultBase ExampleProgram ExampleSignature ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
+      Lemma snd_sound `{sailGS Σ} {Γ δ} :
+        forall (ep : Exp Γ ptr) (vx : Val ptr) (vxs : Val llist),
+          let vp := eval ep δ in
+          ⊢ semTriple δ
+            (ptstocons_interp (mG := sailGS_memGS) vp vx vxs)
+            (foreign snd ep)
+            (λ (v : Z + ()) (δ' : CStore Γ),
+              ((⌜v = vxs⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜ δ' = δ⌝).
+      Proof.
+        iIntros (ep vx vxs vp) "Hres".
+        rewrite wp_unfold.
+        iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+        iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+        iModIntro.
+        iSplitR; first done.
+        iIntros (e2 σ'' efs) "%".
+        dependent elimination H0.
+        dependent elimination s.
+        cbn in f1.
+        unfold mem_inv.
+        do 3 iModIntro.
+        iMod "Hclose2" as "_".
+        iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs) with "Hmem Hres") as "%".
+        rewrite H0 in f1.
+        destruct_conjs; subst.
+        iModIntro.
+        iFrame.
+        iSplitL; last done.
+        iApply wp_value.
+        now iFrame.
+      Qed.
 
-  Section WithIrisNotations.
-    Import iris.bi.interface.
-    Import iris.bi.big_op.
-    Import iris.base_logic.lib.iprop.
-    Import iris.program_logic.weakestpre.
-    Import iris.base_logic.lib.gen_heap.
+      Lemma setsnd_sound `{sailGS Σ} {Γ δ} :
+        forall (ep : Exp Γ ptr) (exs : Exp Γ llist) (vx : Val ptr),
+          let vp := eval ep δ in let vxs := eval exs δ in
+          ⊢ semTriple δ
+          (∃ v : Z + (), ptstocons_interp (mG := sailGS_memGS) vp vx v)
+          (foreign setsnd ep exs)
+          (λ (v : ()) (δ' : CStore Γ),
+             ((⌜v = tt⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜δ' = δ⌝).
+      Proof.
+        iIntros (ep exs vx vp vxs) "Hres".
+        iDestruct "Hres" as (vxs__old) "Hres".
+        rewrite wp_unfold.
+        iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+        iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
+        iModIntro.
+        iSplitR; first by intuition.
+        iIntros (e2 σ'' efs) "%".
+        dependent elimination H0. cbn.
+        dependent elimination s.
+        cbn in f1.
+        unfold mem_inv.
+        do 3 iModIntro.
+        iMod "Hclose2" as "_".
+        iPoseProof (gen_heap_valid μ1 vp (DfracOwn 1) (vx,vxs__old) with "Hmem Hres") as "%".
+        rewrite H0 in f1.
+        destruct_conjs; subst.
+        iMod (gen_heap_update μ1 vp (vx,vxs__old) (vx,vxs) with "Hmem Hres") as "[Hmem Hres]".
+        iModIntro.
+        iFrame.
+        iApply wp_value.
+        now iFrame.
+      Qed.
 
-  (* Show that all the contracts are sound in the Iris model. *)
-  Lemma linked_list_sound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
-  Proof.
-    apply (sound foreignSem lemSem).
-    intros Γ τ f c.
-    destruct f; inversion 1; subst;
-    apply shallow_vcgen_soundness;
-    apply symbolic_vcgen_soundness;
-    apply Symbolic.validcontract_reflect_sound.
-    apply valid_contract_append.
-    apply valid_contract_appendloop.
-    apply valid_contract_length.
-    apply valid_contract_copy.
-    apply valid_contract_reverse.
-    apply valid_contract_reverseloop.
-  Qed.
+      Lemma foreignSem `{sailGS Σ} : ForeignSem.
+      Proof.
+        intros Γ τ Δ f es δ; destruct f; env.destroy es;
+          intros ι; env.destroy ι; cbn; intros Heq; env.destroy Heq; subst;
+          eauto using mkcons_sound, fst_sound, snd_sound, setsnd_sound.
+      Qed.
 
-  Goal True. idtac "Assumptions linked_list_sound:". Abort.
-  Print Assumptions linked_list_sound.
+      Goal True. idtac "Timing before: llist/lemmas". Abort.
+      Lemma lemSem `{sailGS Σ} : LemmaSem.
+      Proof.
+        intros Γ l.
+        destruct l; cbn; intros ι; destruct_syminstance ι; cbn.
+        - auto.
+        - iIntros "Hres".
+          destruct xs; cbn.
+          { iDestruct "Hres" as "%". inversion H0. }
+          iDestruct "Hres" as (p' pn) "[% [Hp' Hpn]]".
+          inversion H0; subst.
+          iExists pn.
+          iFrame.
+        - iIntros "Hres".
+          destruct xs; cbn.
+          + now destruct p.
+          + iDestruct "Hres" as (p' pn) "[% _]".
+            inversion H0.
+        - iIntros "[Hp Hn]".
+          iExists p.
+          iExists n.
+          now iFrame.
+      Qed.
+      Goal True. idtac "Timing after: llist/lemmas". Abort.
 
-  End WithIrisNotations.
+      (* Show that all the contracts are sound in the Iris model. *)
+      Lemma linked_list_sound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
+      Proof.
+        apply (sound foreignSem lemSem).
+        intros Γ τ f c.
+        destruct f; inversion 1; subst;
+          apply shallow_vcgen_soundness;
+          apply symbolic_vcgen_soundness;
+          apply Symbolic.validcontract_reflect_sound.
+        apply valid_contract_append.
+        apply valid_contract_appendloop.
+        apply valid_contract_length.
+        apply valid_contract_copy.
+        apply valid_contract_reverse.
+        apply valid_contract_reverseloop.
+      Qed.
+
+      Goal True. idtac "Assumptions linked_list_sound:". Abort.
+      Print Assumptions linked_list_sound.
+
+    End WithIrisNotations.
+
+  End ExampleIrisInstanceWithContracts.
+
 End ExampleModel.
 
 (* This tactic calculates the number of different execution branches explored by

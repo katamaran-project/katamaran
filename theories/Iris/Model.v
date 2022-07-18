@@ -46,6 +46,7 @@ From iris Require Import
      proofmode.tactics.
 
 From Katamaran Require Import
+     Iris.Base
      SmallStep.Step
      SmallStep.Inversion
      Sep.Logic
@@ -60,279 +61,12 @@ Import env.notations.
 
 Set Implicit Arguments.
 
-Section TransparentObligations.
-  Local Set Transparent Obligations.
-  (* Derive NoConfusion for SomeReg. *)
-  (* Derive NoConfusion for SomeVal. *)
-  Derive NoConfusion for iris.algebra.excl.excl.
-End TransparentObligations.
-
-Program Definition IProp Σ : SepLogic :=
-  {| lcar              := iProp Σ;
-     lentails          := bi_entails;
-     sep.land          := bi_and;
-     sep.lor           := bi_or;
-     limpl             := bi_impl;
-     lprop             := bi_pure;
-     lex               := @bi_exist _;
-     lall              := @bi_forall _;
-     lemp              := bi_emp;
-     lsep              := bi_sep;
-     lwand             := bi_wand;
-     lentails_preorder := bi.entails_po;
-     land_right        := bi.and_intro;
-     land_left1        := bi.and_elim_l';
-     land_left2        := bi.and_elim_r';
-     lor_left          := bi.or_elim;
-     lor_right1        := bi.or_intro_l';
-     lor_right2        := bi.or_intro_r';
-     lex_right         := fun B x P Q => @bi.exist_intro' _ B P Q x;
-     lex_left          := @bi.exist_elim _;
-     lall_left         := fun B x P Q => transitivity (bi.forall_elim x);
-     lall_right        := fun B => bi.forall_intro;
-     limpl_and_adjoint := fun P Q R => conj (bi.impl_intro_r P Q R) (bi.impl_elim_l' P Q R);
-     lprop_left        := bi.pure_elim';
-     lprop_right       := bi.pure_intro;
-     lsep_assoc        := fun P Q R => proj1 (bi.equiv_entails _ _) (bi.sep_assoc P Q R);
-     lsep_comm         := fun P Q => proj1 (bi.equiv_entails _ _) (bi.sep_comm P Q);
-     lwand_sep_adjoint := fun P Q R => conj (bi.wand_intro_r P Q R) (bi.wand_elim_l' P Q R);
-     lsep_andp_prop    := _;
-     lsep_entails      := fun P P' Q Q' => bi.sep_mono P Q P' Q';
-     lsep_emp          := fun P => proj1 (bi.equiv_entails _ _) (bi.sep_emp P);
-     lsep_leak         := _;
-  |}.
-Next Obligation.
-  intros Σ P R Q. split.
-  - iIntros "[P [% R]]".
-    by iSplit; iFrame.
-  - iIntros "[% [P R]]".
-    by iFrame.
-Qed.
-Next Obligation.
-  now iIntros (Σ P) "HP".
-Qed.
-Canonical IProp.
-
-Module Type IrisPrelims
-    (Import B    : Base)
-    (Import PROG : Program B)
-    (Import SEM  : Semantics B PROG)
-    (Import SIG  : Signature B).
-
-  Import SmallStepNotations.
-
-  Section Language.
-
-    (* The "expressions" of the LanguageMixin are configurations consisting of a
-       statement and a local variable store. *)
-    Record Conf (Γ : PCtx) τ : Type :=
-      MkConf
-        { conf_stm   : Stm Γ τ;
-          conf_store : CStore Γ
-        }.
-
-    Section TransparentObligations.
-      Local Set Transparent Obligations.
-      Derive NoConfusion for Conf.
-    End TransparentObligations.
-
-    (* The "values" of the LanguageMixin are final configurations consisting of a
-       value and a store. We only keep the store around for technical reasons,
-       essentially to validate of_to_val. *)
-    Section ValConf.
-      Local Set Primitive Projections.
-      Record ValConf (Γ : PCtx) τ : Type :=
-        MkValConf
-          { valconf_val   : Val τ;
-            valconf_store : CStore Γ
-          }.
-    End ValConf.
-
-    Definition of_val {Γ} {τ} (v : ValConf Γ τ) : Conf Γ τ :=
-      match v with
-        MkValConf _ v δ => MkConf (stm_val _ v) δ
-      end.
-
-    Definition to_val {Γ} {τ} (t : Conf Γ τ) : option (ValConf Γ τ) :=
-      match t with
-      | MkConf (stm_val _ v) δ => Some (MkValConf _ v δ)
-      | _                      => None
-      end.
-
-    Lemma to_of_val {Γ} {τ} (v : ValConf Γ τ) : to_val (of_val v) = Some v.
-    Proof.
-      by destruct v.
-    Qed.
-
-    Lemma of_to_val {Γ} {τ} (s : Conf Γ τ) v : to_val s = Some v → of_val v = s.
-    Proof.
-      destruct s as [s δ]; destruct s; try done.
-      by intros [= <-].
-    Qed.
-
-    Lemma val_head_stuck_step {τ} {Γ : PCtx} γ1 γ2 μ1 μ2 (δ1 : CStore Γ) δ2 (s1 : Stm Γ τ) s2 :
-      ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ -> to_val (MkConf s1 δ1) = None.
-    Proof.
-      by induction 1.
-    Qed.
-
-    Definition observation := Empty_set.
-
-    Definition State := prod RegStore Memory.
-
-    Inductive prim_step {Γ τ} : Conf Γ τ -> State -> list Empty_set -> Conf Γ τ -> State -> list (Conf Γ τ) -> Prop :=
-    | mk_prim_step γ1 γ2 μ1 μ2 (δ1 : CStore Γ) (δ2 : CStore Γ) s1 s2 :
-        ⟨ γ1, μ1, δ1, s1 ⟩ ---> ⟨ γ2, μ2, δ2, s2 ⟩ ->
-        prim_step (MkConf s1 δ1) (γ1 , μ1) nil (MkConf s2 δ2) (γ2 , μ2) nil
-    .
-
-    Lemma val_head_stuck {Γ τ} (e1 : Conf Γ τ) s1 ls e2 s2 {ks} : prim_step e1 s1 ls e2 s2 ks → to_val e1 = None.
-    Proof.
-      induction 1.
-      by eapply val_head_stuck_step.
-    Qed.
-
-    Lemma microsail_lang_mixin Γ τ : LanguageMixin of_val to_val (@prim_step Γ τ).
-    Proof. split; eauto using to_of_val, of_to_val, val_head_stuck. Qed.
-
-    Canonical Structure microsail_lang Γ τ : language := Language (microsail_lang_mixin Γ τ).
-
-    #[export] Instance intoVal_valconf {Γ τ δ v} : IntoVal (MkConf (Γ := Γ) (τ := τ) (stm_val _ v) δ) (MkValConf _ v δ).
-      intros; eapply of_to_val; by cbn.
-    Defined.
-
-  End Language.
-
-  Section Registers.
-
-    Definition SomeReg : Type := sigT 𝑹𝑬𝑮.
-    Definition SomeVal : Type := sigT Val.
-
-    #[export] Instance eqDec_SomeReg : EqDec SomeReg := 𝑹𝑬𝑮_eq_dec.
-    #[export] Instance countable_SomeReg : countable.Countable SomeReg := finite.finite_countable.
-
-    #[export] Instance eqDec_SomeVal : EqDec SomeVal.
-    Proof.
-      intros [τ1 v1] [τ2 v2].
-      destruct (eq_dec τ1 τ2).
-      - subst.
-        destruct (Val_eqb_spec _ v1 v2).
-        + left. congruence.
-        + right. intros H.
-          Local Set Equations With UIP.
-          by dependent elimination H.
-      - right. intros H.
-        by dependent elimination H.
-    Qed.
-
-    Definition regUR := authR (gmapUR SomeReg (exclR (leibnizO SomeVal))).
-    (* Definition regUR' : cmra := *)
-    (*   authR (discrete_funUR (A := SomeReg) *)
-    (*            (fun '(existT σ r) => excl_auth.excl_authUR (leibnizO (Val σ)))). *)
-
-    Class sailRegGS Σ := SailRegGS {
-                            (* ghost variable for tracking state of registers *)
-                            reg_inG : inG Σ regUR;
-                            reg_gv_name : gname;
-                          }.
-    #[export] Existing Instance reg_inG.
-
-    Definition reg_pointsTo `{sailRegGS Σ} {τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) : iProp Σ :=
-      own reg_gv_name (◯ {[ existT _ r := Excl (existT _ v) ]}).
-
-    Definition regs_inv `{sailRegGS Σ} (regstore : RegStore) : iProp Σ :=
-      (∃ regsmap,
-          own reg_gv_name (● regsmap) ∗
-          ⌜ map_Forall (K := SomeReg) (A := excl SomeVal) (fun reg v => match reg with | existT _ reg => Excl (existT _ (read_register regstore reg)) = v end ) regsmap ⌝
-      )%I.
-
-  End Registers.
-End IrisPrelims.
-
-Module Type IrisParameters
-  (Import B    : Base)
-  (Import PROG : Program B)
-  (Import SEM  : Semantics B PROG)
-  (Import SIG  : Signature B)
-  (Import IP   : IrisPrelims B PROG SEM SIG).
-  Parameter memGpreS : gFunctors -> Set.
-  (* The memGS field will normally always be instantiated to a type class. We
-     inline this field, so that instances declared by the library, e.g. the
-     [sailGS_memGS] superclass instance below, will always be instances for the
-     user-provided class instead of the [memGS] alias. In your client code, you
-     should always refer to your typeclass and refrain from using the [memGS]
-     alias completely. *)
-  Parameter Inline memGS : gFunctors -> Set.
-  Parameter memΣ : gFunctors.
-  Parameter memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ.
-  Parameter mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ.
-  Parameter mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ.
-
-    (* Definition mem_inv `{sailG Σ} (μ : Z -> option Z) : iProp Σ := *)
-    (*   (∃ memmap, gen_heap_ctx memmap ∗ *)
-    (*      ⌜ map_Forall (fun (a : Z) v => μ a = Some v) memmap ⌝ *)
-    (*   )%I. *)
-
-  Parameter mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-                                         ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
-End IrisParameters.
-
-Module Type IrisResources
-  (Import B    : Base)
-  (Import PROG : Program B)
-  (Import SEM  : Semantics B PROG)
-  (Import SIG  : Signature B)
-  (Import IPre : IrisPrelims B PROG SEM SIG)
-  (Import IP   : IrisParameters B PROG SEM SIG IPre).
-  Class sailGpreS Σ := SailGpreS { (* resources for the implementation side *)
-                       sailGpresS_invGpreS : invGpreS Σ; (* for fancy updates, invariants... *)
-
-                       (* ghost variable for tracking state of registers *)
-                       reg_pre_inG : inG Σ regUR;
-
-                       (* ghost variable for tracking state of memory cells *)
-                       sailPreG_gen_memGpreS : memGpreS Σ
-                     }.
-  #[export] Existing Instance sailGpresS_invGpreS.
-  #[export] Existing Instance reg_pre_inG.
-  Class sailGS Σ := SailGS { (* resources for the implementation side *)
-                       sailGS_invGS : invGS Σ; (* for fancy updates, invariants... *)
-                       sailGS_sailRegGS : sailRegGS Σ;
-
-                       (* ghost variable for tracking state of memory cells *)
-                       sailGS_memGS : memGS Σ
-                     }.
-  #[export] Existing Instance sailGS_invGS.
-  #[export] Existing Instance sailGS_sailRegGS.
-
-  (* We declare the memGS field as a class so that we can define the
-     [sailGS_memGS] field as an instance as well. Currently, the [Existing
-     Class] command does not support specifying a locality
-     (local/export/global), so it is not clear what the scope of this command
-     is. Because [memGS] will be inline on module functor applications, the
-     [sailGS_memGS] instance will refer to the user-provided class instead of
-     the [memGS] field. *)
-  Existing Class memGS.
-  #[export] Existing Instance sailGS_memGS.
-
-  #[export] Instance sailGS_irisGS {Γ τ} `{sailGS Σ} : irisGS (microsail_lang Γ τ) Σ := {
-    iris_invGS := sailGS_invGS;
-    state_interp σ ns κs nt := (regs_inv σ.1 ∗ mem_inv sailGS_memGS σ.2)%I;
-    fork_post _ := True%I; (* no threads forked in sail, so this is fine *)
-    num_laters_per_step _ := 0;
-    state_interp_mono _ _ _ _ := fupd_intro _ _;
-                                                                                }.
-  Global Opaque iris_invGS.
-End IrisResources.
-
 Module Type IrisPredicates
   (Import B    : Base)
   (Import PROG : Program B)
   (Import SEM  : Semantics B PROG)
   (Import SIG  : Signature B)
-  (Import IPre : IrisPrelims B PROG SEM SIG)
-  (Import IP   : IrisParameters B PROG SEM SIG IPre)
-  (Import IR   : IrisResources B PROG SEM SIG IPre IP).
+  (Import IB   : IrisBase B PROG SEM).
   Parameter luser_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ.
   Parameter lduplicate_inst : forall `{sRG : sailRegGS Σ} `{invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
       is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG ts) (luser_inst (sRG := sRG) mG ts ∗ luser_inst (sRG := sRG) mG ts).
@@ -340,19 +74,17 @@ Module Type IrisPredicates
 End IrisPredicates.
 
 (*
- * The following module defines the Iris model depending solely on the ProgramLogicSignature, not only the Specification.
+ * The following module defines the Iris model depending solely on the Signature, not only the Specification.
  * This allows us to use multiple different specifications with the same Iris model, so that the resulting triples can be combined.
  * This is important particularly in the RiscvPmp.BlockVerification proofs.
  *)
-Module Type IrisInstance
+Module Type IrisSignatureRules
   (Import B     : Base)
   (Import PROG  : Program B)
   (Import SEM   : Semantics B PROG)
   (Import SIG   : Signature B)
-  (Import IPre  : IrisPrelims B PROG SEM SIG)
-  (Import IP    : IrisParameters B PROG SEM SIG IPre)
-  (Import IR    : IrisResources B PROG SEM SIG IPre IP)
-  (Import IPred : IrisPredicates B PROG SEM SIG IPre IP IR).
+  (Import IB    : IrisBase B PROG SEM)
+  (Import IPred : IrisPredicates B PROG SEM SIG IB).
 Section Soundness.
 
   Import SmallStepNotations.
@@ -1557,10 +1289,13 @@ Section Adequacy.
           by iIntros ([δ3 v]).
   Qed.
 End Adequacy.
-End IrisInstance.
+End IrisSignatureRules.
+
+Module Type IrisInstance (B : Base) (PROG : Program B) (SEM : Semantics B PROG) (SIG : Signature B) (IB : IrisBase B PROG SEM) :=
+  IrisPredicates B PROG SEM SIG IB <+ IrisSignatureRules B PROG SEM SIG IB.
 
 (*
- * The following module defines the parts of the Iris model that must depend on the Specification, not just on the ProgramLogicSignature.
+ * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature.
  * This is kept to a minimum (see comment for the IrisInstance module).
  *)
 Module IrisInstanceWithContracts
@@ -1569,23 +1304,20 @@ Module IrisInstanceWithContracts
   (Import SEM   : Semantics B PROG)
   (Import SIG   : Signature B)
   (Import SPEC  : Specification B PROG SIG)
-  (Import IPre  : IrisPrelims B PROG SEM SIG)
-  (Import IP    : IrisParameters B PROG SEM SIG IPre)
-  (Import IR    : IrisResources B PROG SEM SIG IPre IP)
-  (Import IPred : IrisPredicates B PROG SEM SIG IPre IP IR)
-  (Import II    : IrisInstance B PROG SEM SIG IPre IP IR IPred)
+  (Import IB    : IrisBase B PROG SEM)
+  (Import II    : IrisInstance B PROG SEM SIG IB)
   (Import PLOG  : ProgramLogicOn B PROG SIG SPEC).
 
-  Definition ValidContractEnvSem `{sailGS Σ} (cenv : SepContractEnv) : iProp Σ :=
+  Section WithSailGS.
+  Import ProgramLogic.
+  Context {Σ} {sG : sailGS Σ}.
+
+  Definition ValidContractEnvSem (cenv : SepContractEnv) : iProp Σ :=
     (∀ σs σ (f : 𝑭 σs σ),
       match cenv σs σ f with
       | Some c => ValidContractSem (FunDef f) c
       | None => True
       end)%I.
-
-  Section WithSailGS.
-  Import ProgramLogic.
-  Context `{sailGS Σ}.
 
   Definition ForeignSem :=
     ∀ (Γ : PCtx) (τ : Ty)
@@ -1602,7 +1334,7 @@ Module IrisInstanceWithContracts
     forall (Δ : PCtx) (l : 𝑳 Δ),
       ValidLemma (LEnv l).
 
-  Lemma iris_rule_stm_call_forwards `{sG : sailGS Σ} {Γ} (δ : CStore Γ)
+  Lemma iris_rule_stm_call_forwards {Γ} (δ : CStore Γ)
         {Δ σ} (f : 𝑭 Δ σ) (c : SepContract Δ σ) (es : NamedEnv (Exp Γ) Δ)
         (P : iProp Σ)
         (Q : Val σ -> iProp Σ) :
@@ -1618,7 +1350,7 @@ Module IrisInstanceWithContracts
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
-    dependent elimination H0.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1626,8 +1358,8 @@ Module IrisInstanceWithContracts
     iFrame.
     iSplitL; [|trivial].
     destruct ctrip.
-    cbv [lentails lex land lprop lsep lall lwand IProp] in H0.
-    iPoseProof (H0 with "P") as (ι Heq) "[req consr]". clear H0.
+    cbv [lentails lex land lprop lsep lall lwand IProp] in H.
+    iPoseProof (H with "P") as (ι Heq) "[req consr]". clear H.
     iApply wp_compat_call_frame. rewrite Heq.
     iSpecialize ("cenv" $! _ _ f0).
     rewrite ceq.
@@ -1665,8 +1397,8 @@ Module IrisInstanceWithContracts
     intros contractF ctrip extSem.
     destruct ctrip; cbn in extSem.
     iIntros "P".
-    cbv [lentails lex land lprop lsep lall lwand IProp] in H0.
-    iPoseProof (H0 with "P") as (ι Heq) "[req consr]". clear H0.
+    cbv [lentails lex land lprop lsep lall lwand IProp] in H.
+    iPoseProof (H with "P") as (ι Heq) "[req consr]". clear H.
     iPoseProof (extSem ι Heq with "req") as "wpf".
     iApply (wp_frame_wand with "consr").
     iApply (wp_mono with "wpf").
@@ -1694,7 +1426,7 @@ Module IrisInstanceWithContracts
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e3 σ2 efs) "%".
-    dependent elimination H0.
+    dependent elimination H.
     dependent elimination s.
     iModIntro. iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1723,9 +1455,9 @@ Module IrisInstanceWithContracts
     - by iApply iris_rule_pull.
     - by iApply iris_rule_exist.
     - iApply iris_rule_stm_val.
-      by iApply H0.
+      by iApply H.
     - iApply iris_rule_stm_exp.
-      by iApply H0.
+      by iApply H.
     - by iApply iris_rule_stm_let.
     - by iApply iris_rule_stm_block.
     - by iApply iris_rule_stm_if.

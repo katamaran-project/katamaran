@@ -43,6 +43,7 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     Iris.Base
      Iris.Model
      Semantics.Registers
      Sep.Hoare
@@ -330,22 +331,20 @@ Module ExampleSemantics <: Semantics DefaultBase ExampleProgram :=
 (* This module contains the instantiation of the Iris model with trivial
    definitions for this example. *)
 Module Import ExampleModel.
+
   Import ExampleProgram.
   Import ExampleSpecification.
-
-  Module ExampleIrisPrelims <: IrisPrelims DefaultBase ExampleProgram ExampleSemantics ExampleSig.
-    Include IrisPrelims DefaultBase ExampleProgram ExampleSemantics ExampleSig.
-  End ExampleIrisPrelims.
+  Import iris.bi.interface.
+  Import iris.bi.big_op.
+  Import iris.base_logic.lib.iprop.
+  Import iris.base_logic.lib.gen_heap.
+  Import iris.proofmode.tactics.
 
   (* There is no memory, so use trivial definitions to instantiate the ghost
      state and its requirements. *)
-  Module ExampleIrisParameters <: IrisParameters DefaultBase ExampleProgram ExampleSemantics ExampleSig ExampleIrisPrelims.
-    Import ExampleIrisPrelims.
-    Import iris.bi.interface.
-    Import iris.bi.big_op.
-    Import iris.base_logic.lib.iprop.
-    Import iris.base_logic.lib.gen_heap.
-    Import iris.proofmode.tactics.
+  Module Import ExampleIrisBase <: IrisBase DefaultBase ExampleProgram ExampleSemantics.
+
+    Include IrisPrelims DefaultBase ExampleProgram ExampleSemantics.
 
     Definition memGpreS : gFunctors -> Set := fun Σ => True.
     Definition memGS : gFunctors -> Set := fun Σ => True.
@@ -358,63 +357,48 @@ Module Import ExampleModel.
     Proof.
       now iIntros (Σ μ mG) "".
     Qed.
-  End ExampleIrisParameters.
 
-  (* Combine the memory and register ghost states. *)
-  Module ExampleIrisResources <:
-    IrisResources DefaultBase ExampleProgram ExampleSemantics ExampleSig
-      ExampleIrisPrelims ExampleIrisParameters.
-    Include IrisResources DefaultBase ExampleProgram ExampleSemantics
-      ExampleSig ExampleIrisPrelims ExampleIrisParameters.
-  End ExampleIrisResources.
+    (* Combine the memory and register ghost states. *)
+    Include IrisResources DefaultBase ExampleProgram ExampleSemantics.
 
-  (* There are no user-defined spatial predicates, also use trivial definitions
-  here. *)
-  Module ExampleIrisPredicates <:
-    IrisPredicates DefaultBase ExampleProgram ExampleSemantics ExampleSig
-      ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources.
-    Import iris.base_logic.lib.iprop.
-    Import ExampleIrisPrelims.
-    Import ExampleIrisParameters.
-      Definition luser_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ :=
-      fun Σ sRG iG mG p ts => match p with end.
-      Definition lduplicate_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
-          is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG _ ts) (luser_inst (sRG := sRG) mG _ ts ∗ luser_inst (sRG := sRG) mG _ ts) :=
-        fun Σ sRG iG mG p ts dup => match p with end.
-  End ExampleIrisPredicates.
-
-  Import ExampleIrisParameters.
+  End ExampleIrisBase.
 
   (* Finally, include the constructed operational model, the axiomatic program
      logic, and the Iris implementation of the axioms. *)
-  Include IrisInstance DefaultBase ExampleProgram ExampleSemantics ExampleSig
-    ExampleIrisPrelims ExampleIrisParameters ExampleIrisResources ExampleIrisPredicates.
-  Include ProgramLogicOn DefaultBase ExampleProgram ExampleSig ExampleSpecification.
-  Include IrisInstanceWithContracts DefaultBase ExampleProgram ExampleSemantics
-    ExampleSig ExampleSpecification ExampleIrisPrelims ExampleIrisParameters
-    ExampleIrisResources ExampleIrisPredicates.
+  Module Import ExampleIrisInstance <:
+    IrisInstance DefaultBase ExampleProgram ExampleSemantics ExampleSig
+      ExampleIrisBase.
 
-  Import ExampleIrisResources.
+    (* There are no user-defined spatial predicates, also use trivial definitions
+       here. *)
+    Section ExampleIrisPredicates.
+      Import iris.base_logic.lib.iprop.
+      Definition luser_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)), iProp Σ :=
+        fun Σ sRG iG mG p ts => match p with end.
+      Definition lduplicate_inst : forall `{sRG : sailRegGS Σ} `{wsat.invGS.invGS Σ} (mG : memGS Σ) (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+          is_duplicable p = true -> bi_entails (luser_inst (sRG := sRG) mG _ ts) (luser_inst (sRG := sRG) mG _ ts ∗ luser_inst (sRG := sRG) mG _ ts) :=
+        fun Σ sRG iG mG p ts dup => match p with end.
+    End ExampleIrisPredicates.
 
-  (* Verification of the absent foreign functions. *)
-  Lemma foreignSem `{sailGS Σ} : ForeignSem.
-  Proof. intros Γ τ Δ f es δ; destruct f. Qed.
+    Include IrisSignatureRules DefaultBase ExampleProgram ExampleSemantics ExampleSig
+      ExampleIrisBase.
+    Include ProgramLogicOn DefaultBase ExampleProgram ExampleSig ExampleSpecification.
+    Include IrisInstanceWithContracts DefaultBase ExampleProgram ExampleSemantics
+      ExampleSig ExampleSpecification ExampleIrisBase.
 
-  (* Verification of the absent ghost lemmas. *)
-  Lemma lemSem `{sailGS Σ} : LemmaSem.
-  Proof. intros Γ l. destruct l. Qed.
+    (* Verification of the absent foreign functions. *)
+    Lemma foreignSem `{sailGS Σ} : ForeignSem.
+    Proof. intros Γ τ Δ f es δ; destruct f. Qed.
 
-  (* Import the soundness proofs for the shallow and symbolic executors. *)
-  Include Shallow.Soundness.Soundness DefaultBase ExampleProgram ExampleSig
-    ExampleSpecification ExampleShalExec.
-  Include Symbolic.Soundness.Soundness DefaultBase ExampleProgram ExampleSig
-    ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
+    (* Verification of the absent ghost lemmas. *)
+    Lemma lemSem `{sailGS Σ} : LemmaSem.
+    Proof. intros Γ l. destruct l. Qed.
 
-  Section WithIrisNotations.
-    Import iris.bi.interface.
-    Import iris.base_logic.lib.iprop.
-    Import iris.base_logic.lib.iprop.
-    Import iris.proofmode.tactics.
+    (* Import the soundness proofs for the shallow and symbolic executors. *)
+    Include Shallow.Soundness.Soundness DefaultBase ExampleProgram ExampleSig
+      ExampleSpecification ExampleShalExec.
+    Include Symbolic.Soundness.Soundness DefaultBase ExampleProgram ExampleSig
+      ExampleSpecification ExampleSolver ExampleShalExec ExampleExecutor.
 
     (* Show that all the contracts are sound in the Iris model. *)
     Lemma contracts_sound `{sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
@@ -470,7 +454,7 @@ Module Import ExampleModel.
       unfold adequacy_pure_prop.
       destruct (CEnv f) as [[Σ args pre result post]|] eqn:Heqcontract; try now cbn.
       intros preP postP Γ δ δ' γ γ' μ μ' ι PRE v evals.
-      refine (SumMaxLen.ExampleModel.adequacy
+      refine (adequacy
                 (Q := fun v => interpret_assertion_pure post ι.[result∷σ ↦ v]) evals I _).
 
       iIntros (Σ' sG) "[_ _]".
@@ -509,14 +493,15 @@ Module Import ExampleModel.
       cbn. intuition.
     Qed.
 
-  End WithIrisNotations.
-End ExampleModel.
+  End ExampleIrisInstance.
 
-Goal True.
-  idtac "Assumptions for symbolic_vcgen_soundness:". Print Assumptions symbolic_vcgen_soundness.
-  idtac "Assumptions for shallow_vcgen_soundness:". Print Assumptions shallow_vcgen_soundness.
-  idtac "Assumptions for summaxlen_adequacy:". Print Assumptions summaxlen_adequacy.
-Abort.
+  Goal True.
+    idtac "Assumptions for symbolic_vcgen_soundness:". Print Assumptions symbolic_vcgen_soundness.
+    idtac "Assumptions for shallow_vcgen_soundness:". Print Assumptions shallow_vcgen_soundness.
+    idtac "Assumptions for summaxlen_adequacy:". Print Assumptions summaxlen_adequacy.
+  Abort.
+
+End ExampleModel.
 
 (* This tactic calculates the number of different execution branches explored by
    the shallow and symbolic executor for the body of the function [fn]. *)

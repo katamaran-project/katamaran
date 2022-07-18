@@ -53,11 +53,8 @@ Set Implicit Arguments.
 Import ListNotations.
 Import RiscvPmpSpecification.
 Import RiscvPmpProgram.
-Import RiscvPmpModel.
-Import RiscvPmpIrisPrelims.
-Import RiscvPmpIrisParams.
-Import RiscvPmpIrisResources.
-Import RiscvPmpIrisPredicates.
+Import RiscvPmpIrisBase.
+Import RiscvPmpIrisInstance.
 Import RiscvPmpModel2.
 
 Section Loop. 

@@ -39,6 +39,7 @@ From RiscvPmp Require
      LoopVerification
      .
 From Katamaran Require Import
+     Iris.Base
      Iris.Model
      Notations
      Shallow.Executor
@@ -360,34 +361,15 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Cont
       end.
 End RiscvPmpBlockVerifSpec.
 
-Module RiscvPmpModelBlockVerif.
-  Import Model.RiscvPmpModel.
-  Import Contracts.RiscvPmpSignature.
-  Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpProgram.
-  Import RiscvPmpIrisPrelims.
-  Import RiscvPmpIrisParams.
-  Import RiscvPmpIrisResources.
-
-  Module PLOG <: ProgramLogicOn RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
-  End PLOG.
-  Module RiscvPmpIrisBlockVerifModel := IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram Model.RiscvPmpSemantics Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpIrisPrelims RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates Model.RiscvPmpModel PLOG.
-
-End RiscvPmpModelBlockVerif.
+Module RiscvPmpBlockVerifShalExecutor :=
+  MakeShallowExecutor RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
+Module RiscvPmpBlockVerifExecutor :=
+  MakeExecutor RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec Contracts.RiscvPmpSolver.
 
 Module RiscvPmpSpecVerif.
-
-  Import Contracts.
-  Import RiscvPmpSignature.
+  Import Contracts.RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
-  Import RiscvPmpProgram.
-  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature.
-  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
-
-  Module Import RiscvPmpExecutor :=
-    MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-  Import Symbolic.
+  Import RiscvPmpBlockVerifExecutor.Symbolic.
 
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
@@ -425,17 +407,21 @@ Module RiscvPmpSpecVerif.
 
 End RiscvPmpSpecVerif.
 
+Module RiscvPmpIrisInstanceWithContracts.
+  Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram Model.RiscvPmpSemantics
+    Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec Model.RiscvPmpIrisBase Model.RiscvPmpIrisInstance.
+  Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature
+    RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
+  Include Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature
+    RiscvPmpBlockVerifSpec Contracts.RiscvPmpSolver RiscvPmpBlockVerifShalExecutor RiscvPmpBlockVerifExecutor.
+End RiscvPmpIrisInstanceWithContracts.
+
+
 Module BlockVerification.
-
-  Import Contracts.
-  Import RiscvPmpSignature.
+  Import Contracts.RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
-  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature.
-  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
-
-  Module Import RiscvPmpExecutor :=
-    MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-  Import Symbolic.
+  Import RiscvPmpBlockVerifExecutor.
 
   Notation "r '↦' val" := (chunk_ptsreg r val) (at level 79).
 
@@ -761,7 +747,7 @@ Module BlockVerification.
 
     Local Notation "p '∗' q" := (asn_sep p q).
     Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
-    Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
+    Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user Contracts.ptstomem [a; n; xs])) (at level 79).
     Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
 
     Example memcpy_pre : Assertion Σ1 :=
@@ -796,18 +782,12 @@ Module BlockVerification.
 
 End BlockVerification.
 
-
 Module BlockVerificationDerived.
 
   Import Contracts.
   Import RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
-
-  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature.
-  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
-
-  Module Import RiscvPmpExecutor :=
-    MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+  Import RiscvPmpBlockVerifExecutor.
   Import Symbolic.
 
   Import ModalNotations.
@@ -946,12 +926,7 @@ Module BlockVerificationDerived2.
   Import Contracts.
   Import RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
-
-  Module RiscvPmpSolverKit := DefaultSolverKit RiscvPmpBase RiscvPmpSignature.
-  Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.
-
-  Module Import RiscvPmpExecutor :=
-    MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+  Import RiscvPmpBlockVerifExecutor.
   Import Symbolic.
 
   Import ModalNotations.
@@ -1390,22 +1365,13 @@ End BlockVerificationDerived2.
 
 Module BlockVerificationDerivedSem.
   Import Contracts.
+  Import Model.RiscvPmpIrisBase.
+  Import Model.RiscvPmpIrisInstance.
   Import RiscvPmpBlockVerifSpec.
   Import weakestpre.
   Import tactics.
   Import BlockVerificationDerived.
-  Import Katamaran.Shallow.Executor.
-  Import Model.
-  Import RiscvPmpModel.
-  Import RiscvPmpIrisResources.
-  Module PLOG <: ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
-  End PLOG.
-
-  Module Import RiscvPmpIrisModel :=
-    IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
-      RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpIrisPrelims
-      RiscvPmpIrisParams RiscvPmpIrisResources RiscvPmpIrisPredicates RiscvPmpModel PLOG.
+  Import RiscvPmpIrisInstanceWithContracts.
 
   Lemma read_ram_sound `{sailGS Σ} {Γ} (es : NamedEnv (Exp Γ) ["paddr"∷ty_exc_code]) (δ : CStore Γ) :
     ∀ paddr w,
@@ -1440,9 +1406,6 @@ Module BlockVerificationDerivedSem.
     apply map_Forall_lookup_1 with (i := paddr) (x := w) in H0; auto.
     cbn in H0. subst.
     iApply wp_value.
-    Unshelve.
-    3: exact (RiscvPmpIrisPrelims.MkValConf ty.int (μ'3 paddr) δ1).
-    constructor. cbn.
     iSplitL; last easy.
     iSplitL; last easy.
     iAssumption.
@@ -1489,9 +1452,6 @@ Module BlockVerificationDerivedSem.
     }
     iSplitL; last easy.
     iApply wp_value.
-    Unshelve.
-    3: exact (RiscvPmpIrisPrelims.MkValConf ty.int 1%Z δ1).
-    constructor. cbn.
     iSplitL; trivial.
     iSplitL; trivial.
   Qed.
@@ -1525,13 +1485,9 @@ Module BlockVerificationDerivedSem.
     semTriple [a : Val (type ("ast" :: ty_ast))]%env PRE (FunDef execute) (fun ret _ => ⌜ret = RETIRE_SUCCESS⌝ ∗ POST)%I.
 
   Module ValidContractsBlockVerif.
-    Import Contracts.
-    Import RiscvPmpSignature.
-    Include ShallowExecOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include SymbolicExecOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
-    Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include Katamaran.Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
+    Import Contracts.RiscvPmpSignature.
+    Import RiscvPmpBlockVerifExecutor.
+    Import Symbolic.
 
     Lemma contractsVerified `{sailGS Σ} : ProgramLogic.ValidContractCEnv (PI := PredicateDefIProp).
     Proof.
@@ -1583,29 +1539,24 @@ End BlockVerificationDerivedSem.
 Module BlockVerificationDerived2Sound.
   Import Contracts.
   Import RiscvPmpSignature.
-  Module Shal <: ShallowExecOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
-    Include ShallowExecOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
-  End Shal.
   Import RiscvPmpBlockVerifSpec.
+  Import RiscvPmpBlockVerifShalExecutor.
+  Import RiscvPmpIrisInstanceWithContracts.
 
-  Module Sound := Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec BlockVerificationDerived2.RiscvPmpSolver Shal BlockVerificationDerived2.RiscvPmpExecutor.
-  Import Sound.
-  Include Katamaran.Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec BlockVerificationDerived2.RiscvPmpSolver Shal BlockVerificationDerived2.RiscvPmpExecutor.
+  Definition M : Type -> Type := CHeapSpecM [] [].
 
-  Definition M : Type -> Type := Shal.CHeapSpecM [] [].
+  Definition pure {A} : A -> M A := CHeapSpecM.pure.
+  Definition bind {A B} : M A -> (A -> M B) -> M B := CHeapSpecM.bind.
+  Definition angelic {σ} : M (Val σ) := @CHeapSpecM.angelic [] σ.
+  Definition demonic {σ} : M (Val σ) := @CHeapSpecM.demonic [] σ.
+  Definition assert : Prop -> M unit := CHeapSpecM.assert_formula.
+  Definition assume : Prop -> M unit := CHeapSpecM.assume_formula.
 
-  Definition pure {A} : A -> M A := Shal.CHeapSpecM.pure.
-  Definition bind {A B} : M A -> (A -> M B) -> M B := Shal.CHeapSpecM.bind.
-  Definition angelic {σ} : M (Val σ) := @Shal.CHeapSpecM.angelic [] σ.
-  Definition demonic {σ} : M (Val σ) := @Shal.CHeapSpecM.demonic [] σ.
-  Definition assert : Prop -> M unit := Shal.CHeapSpecM.assert_formula.
-  Definition assume : Prop -> M unit := Shal.CHeapSpecM.assume_formula.
+  Definition produce_chunk : SCChunk -> M unit := CHeapSpecM.produce_chunk.
+  Definition consume_chunk : SCChunk -> M unit := CHeapSpecM.consume_chunk.
 
-  Definition produce_chunk : SCChunk -> M unit := Shal.CHeapSpecM.produce_chunk.
-  Definition consume_chunk : SCChunk -> M unit := Shal.CHeapSpecM.consume_chunk.
-
-  Definition produce {Σ} : Valuation Σ -> Assertion Σ -> M unit := Shal.CHeapSpecM.produce.
-  Definition consume {Σ} : Valuation Σ -> Assertion Σ -> M unit := Shal.CHeapSpecM.consume.
+  Definition produce {Σ} : Valuation Σ -> Assertion Σ -> M unit := CHeapSpecM.produce.
+  Definition consume {Σ} : Valuation Σ -> Assertion Σ -> M unit := CHeapSpecM.consume.
 
   Local Notation "x <- ma ;; mb" :=
     (bind ma (fun x => mb))
@@ -1618,7 +1569,7 @@ Module BlockVerificationDerived2Sound.
       _ <- produce_chunk (scchunk_user ptstoinstr [a; i]) ;;
       an <- @demonic _ ;;
       _ <- produce_chunk (scchunk_ptsreg nextpc an) ;;
-      _ <- Shal.CHeapSpecM.exec inline_fuel (FunDef step) ;;
+      _ <- CHeapSpecM.exec inline_fuel (FunDef step) ;;
       _ <- consume_chunk (scchunk_user ptstoinstr [a ; i]) ;;
       na <- @angelic _ ;;
       _ <- consume_chunk (scchunk_ptsreg nextpc na) ;;
@@ -1783,17 +1734,19 @@ Module BlockVerificationDerived2Sem.
   Import ctx.resolution.
   Import ctx.notations.
   Import env.notations.
-  Import Model.RiscvPmpModel.
-  Import Model.RiscvPmpModel2.
-  Import RiscvPmpIrisParams.
-  Import RiscvPmpIrisPredicates.
-  Import RiscvPmpIrisPrelims.
-  Import RiscvPmpIrisResources.
+  Import Model.RiscvPmpIrisBase.
+  Import Model.RiscvPmpIrisInstance.
+  Import RiscvPmpIrisInstanceWithContracts.
+  Import RiscvPmpBlockVerifShalExecutor.
+  (* Import Model.RiscvPmpModel. *)
+  (* Import Model.RiscvPmpModel2. *)
+  (* Import RiscvPmpIrisParams. *)
+  (* Import RiscvPmpIrisPredicates. *)
+  (* Import RiscvPmpIrisPrelims. *)
+  (* Import RiscvPmpIrisResources. *)
   Import BlockVerificationDerived2Sound.
-  Import RiscvPmpModelBlockVerif.PLOG.
-  Import Sound.
-
-  Include Katamaran.Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec Shal RiscvPmpModelBlockVerif.PLOG.
+  (* Import RiscvPmpModelBlockVerif.PLOG. *)
+  (* Import Sound. *)
 
   Definition semTripleOneInstrStep `{sailGS Σ} (PRE : iProp Σ) (instr : AST) (POST : Z -> iProp Σ) (a : Z) : iProp Σ :=
     semTriple [] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
@@ -1801,7 +1754,7 @@ Module BlockVerificationDerived2Sem.
       (fun ret _ => (∃ an, lptsreg nextpc an ∗ lptsreg pc an ∗ POST an) ∗ interp_ptsto_instr a instr)%I.
 
   Lemma mono_exec_instruction_any__c {i a} : Monotonic' (exec_instruction_any__c i a).
-    cbv [Monotonic' exec_instruction_any__c bind Shal.CHeapSpecM.bind produce_chunk Shal.CHeapSpecM.produce_chunk demonic Shal.CHeapSpecM.demonic angelic Shal.CHeapSpecM.angelic pure Shal.CHeapSpecM.pure].
+    cbv [Monotonic' exec_instruction_any__c bind CHeapSpecM.bind produce_chunk CHeapSpecM.produce_chunk demonic CHeapSpecM.demonic angelic CHeapSpecM.angelic pure CHeapSpecM.pure].
     intros δ P Q PQ h eP v.
     destruct (env.nilView δ).
     specialize (eP v); revert eP.
@@ -1827,7 +1780,7 @@ Module BlockVerificationDerived2Sem.
     intros a.
     intros Hverif.
     iIntros "(Hheap & [%npc Hnpc] & Hpc & Hinstrs)".
-    unfold exec_instruction_any__c, bind, Shal.CHeapSpecM.bind, produce_chunk, Shal.CHeapSpecM.produce_chunk, demonic, Shal.CHeapSpecM.demonic, consume_chunk in Hverif.
+    unfold exec_instruction_any__c, bind, CHeapSpecM.bind, produce_chunk, CHeapSpecM.produce_chunk, demonic, CHeapSpecM.demonic, consume_chunk in Hverif.
     specialize (Hverif npc).
     assert (ProgramLogic.Triple [] (interpret_scheap (scchunk_ptsreg nextpc npc :: scchunk_user ptstoinstr [a; instr] :: scchunk_ptsreg pc a :: h)%list) (FunDef RiscvPmpProgram.step) (fun res => (fun δ' => interp_ptsto_instr a instr ∗ (∃ v, lptsreg nextpc v ∗ lptsreg pc v ∗ POST v δ'))%I)) as Htriple.
     { apply (exec_sound 10).
@@ -1848,7 +1801,7 @@ Module BlockVerificationDerived2Sem.
       refine (consume_chunk_monotonic _ _ _ _ _ HYP2).
       now intros [] h3 HYP3.
     }
-    apply RiscvPmpModelBlockVerif.RiscvPmpIrisBlockVerifModel.sound_stm in Htriple.
+    apply sound_stm in Htriple.
     unfold semTriple in Htriple.
     iApply wp_mono.
     all: cycle 1.
@@ -1881,10 +1834,10 @@ Module BlockVerificationDerived2Sem.
     revert ainstr apc.
     induction instrs; cbn.
     - intros ainstr apc δ P Q PQ h.
-      cbv [pure Shal.CHeapSpecM.pure].
+      cbv [pure CHeapSpecM.pure].
       eapply PQ.
     - intros ainstr apc.
-      cbv [Monotonic' bind Shal.CHeapSpecM.bind assert Shal.CHeapSpecM.assert_formula Shal.CHeapSpecM.lift_purem Shal.CPureSpecM.assert_formula].
+      cbv [Monotonic' bind CHeapSpecM.bind assert CHeapSpecM.assert_formula CHeapSpecM.lift_purem CPureSpecM.assert_formula].
       intros δ P Q PQ h [<- Hverif].
       split; [reflexivity|].
       revert Hverif.
@@ -1907,8 +1860,8 @@ Module BlockVerificationDerived2Sem.
       iApply "Hk"; iFrame.
       iSplitR; auto.
       now iApply Hverif.
-    - unfold bind, Shal.CHeapSpecM.bind, assert, Shal.CHeapSpecM.assert_formula.
-      unfold Shal.CHeapSpecM.lift_purem, Shal.CPureSpecM.assert_formula.
+    - unfold bind, CHeapSpecM.bind, assert, CHeapSpecM.assert_formula.
+      unfold CHeapSpecM.lift_purem, CPureSpecM.assert_formula.
       intros [-> Hverif].
       unfold LoopVerification.WP_loop at 2, FunDef, fun_loop.
       assert (⊢ semTripleOneInstrStep (interpret_scheap h)%I instr
@@ -1960,7 +1913,7 @@ Module BlockVerificationDerived2Sem.
     intros Hexec.
     iIntros (a) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
     specialize (Hexec a).
-    unfold bind, Shal.CHeapSpecM.bind, produce in Hexec.
+    unfold bind, CHeapSpecM.bind, produce in Hexec.
     assert (interpret_scheap []%list ∗ interpret_assertion pre ι.[("a"::ty_exc_code) ↦ a] ⊢ 
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
       (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ LoopVerification.WP_loop) -∗
@@ -2015,7 +1968,7 @@ Module BlockVerificationDerived2Sem.
       eapply (safeE_safe env.nil), simplify_sound in Hverif.
       rewrite SymProp.safe_demonic_close in Hverif.
       now eapply Hverif.
-    - unfold  BlockVerificationDerived2Sound.refine, BlockVerificationDerived2Sound.RefineBox, BlockVerificationDerived2Sound.RefineImpl, BlockVerificationDerived2Sound.refine, BlockVerificationDerived2Sound.RefineProp.
+    - unfold refine, RefineBox, RefineImpl, refine, RefineProp.
       now intros.
     - reflexivity.
     - reflexivity.
