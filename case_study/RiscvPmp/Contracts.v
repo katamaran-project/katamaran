@@ -30,8 +30,6 @@ From Coq Require Import
      ZArith.ZArith
      Lists.List
      Strings.String.
-From RiscvPmp Require Import
-     Machine.
 From Katamaran Require Import
      Notations
      Shallow.Executor
@@ -39,7 +37,8 @@ From Katamaran Require Import
      Symbolic.Executor
      Symbolic.Solver
      Symbolic.Propositions
-     Symbolic.Worlds.
+     Symbolic.Worlds
+     RiscvPmp.Machine.
 From Equations Require Import
      Equations.
 

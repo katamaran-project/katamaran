@@ -45,10 +45,9 @@ From Katamaran Require Import
      Sep.Logic
      Specification
      Symbolic.Executor
-     Semantics.
-
-From MinimalCaps Require Import
-     Machine Contracts.
+     Semantics
+     MinimalCaps.Machine
+     MinimalCaps.Contracts.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.

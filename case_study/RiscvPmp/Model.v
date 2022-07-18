@@ -29,9 +29,6 @@
 From Coq Require Import
      Program.Tactics
      Lists.List.
-From RiscvPmp Require Import
-     Machine
-     Contracts.
 From Katamaran Require Import
      Bitvector
      Environment
@@ -41,7 +38,9 @@ From Katamaran Require Import
      Sep.Logic
      Semantics
      Iris.Base
-     Iris.Model.
+     Iris.Model
+     RiscvPmp.Machine
+     RiscvPmp.Contracts.
 From Equations Require Import
      Equations.
 

@@ -26,9 +26,6 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From MinimalCaps Require Import
-     Machine.
-
 From Coq Require Import
      Program.Tactics
      Strings.String
@@ -39,6 +36,7 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     MinimalCaps.Machine
      Notations
      Specification
      Shallow.Executor

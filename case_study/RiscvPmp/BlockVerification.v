@@ -31,13 +31,8 @@ From Coq Require Import
      Lists.List
      micromega.Lia
      Strings.String.
-From RiscvPmp Require Import
-     Machine.
-From RiscvPmp Require
-     Model
-     Contracts
-     LoopVerification
-     .
+From Equations Require Import
+     Equations.
 From Katamaran Require Import
      Iris.Base
      Iris.Model
@@ -52,9 +47,12 @@ From Katamaran Require Import
      Symbolic.Solver
      Symbolic.Soundness
      Symbolic.Propositions
-     Symbolic.Worlds.
-From Equations Require Import
-     Equations.
+     Symbolic.Worlds
+     RiscvPmp.Machine.
+From Katamaran Require
+     RiscvPmp.Model
+     RiscvPmp.Contracts
+     RiscvPmp.LoopVerification.
 From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.

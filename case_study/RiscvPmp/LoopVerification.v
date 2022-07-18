@@ -28,10 +28,6 @@
 
 From Coq Require Import
      Lists.List.
-From RiscvPmp Require Import
-     Machine
-     Model
-     Contracts.
 From Katamaran Require Import
      Bitvector
      Environment
@@ -40,7 +36,10 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Semantics
-     Iris.Model.
+     Iris.Model
+     RiscvPmp.Machine
+     RiscvPmp.Model
+     RiscvPmp.Contracts.
 
 From iris.base_logic Require lib.gen_heap lib.iprop.
 From iris.base_logic Require Export invariants.

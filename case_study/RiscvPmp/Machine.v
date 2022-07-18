@@ -36,8 +36,8 @@ From Katamaran Require Import
      Semantics.Registers
      Program
      Syntax.BinOps.
-From RiscvPmp Require Export
-     Base.
+From Katamaran Require Export
+     RiscvPmp.Base.
 
 From stdpp Require Import decidable finite.
 
