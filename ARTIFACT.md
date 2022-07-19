@@ -278,7 +278,6 @@ We see two reuse scenarios for our development.
    proves (for a subset of RISC-V) a security property for its optional Physical
    Memory Protection feature
    https://github.com/katamaran-project/katamaran/tree/main/case_study/RiscvPmp
-   (CAREFUL, NOT ANONYMIZED).
 
 As per the guidelines, we tried to make the build process as easy as possible
 and made sure that it compiles with the up-do-date dependencies. An earlier
@@ -331,14 +330,14 @@ corresponding definition in the codebase.
 | Fig. 8 rule #5                       | theories/Sep/Hoare.v             | `rule_stm_assign_backwards`                                          |                                                                               |
 | Lemma 2.1                            | theories/Shallow/Soundness.v     | `Lemma exec_aux_sound`                                               |                                                                               |
 | Corollary 2.2                        | theories/Shallow/Soundness.v     | `Lemma vcgen_sound`                                                  |                                                                               |
-| Fig. 9 Formula                       | theories/Syntax/Formulas.v       | `Inductive Formula`                                                  |                                                                               |
-| Fig. 9 Pathcond                      | theories/Syntax/Formulas.v       | `Definition PathCondition`                                           |                                                                               |
-| Fig. 9 SymProp                       | theories/Symbolic/Propositions.v | `Inductive SymProp`                                                  |                                                                               |
+| Fig. 9 Formulas 𝔽                    | theories/Syntax/Formulas.v       | `Inductive Formula`                                                  |                                                                               |
+| Fig. 9 Pathcond ℂ                    | theories/Syntax/Formulas.v       | `Definition PathCondition`                                           |                                                                               |
+| Fig. 9 Symbolic Propositions 𝕊       | theories/Symbolic/Propositions.v | `Inductive SymProp`                                                  |                                                                               |
 | Section 3.2 entailments ⊢            | theories/Syntax/Formulas.v       | `Definition entails` + `Definition entails_formula`                  |                                                                               |
 | Section 3.2 triangular substitutions | theories/Symbolic/Worlds.v       | `Inductive Tri`                                                      |                                                                               |
 | Fig. 10 solver                       | theories/Symbolic/Worlds.v       | `Definition Solver` + `Definition SolverSpec`                        |                                                                               |
 | Fig. 11 World                        | theories/Symbolic/Worlds.v       | `Record World`                                                       | This also defines a coercion from World to LCtx.                              |
-| Fig. 11 accessibility ⊑              | theories/Symbolic/Worlds.v       | `Inductive Acc`                                                      |                                                                               |
+| Fig. 11 accessibility ⊒              | theories/Symbolic/Worlds.v       | `Inductive Acc`                                                      |                                                                               |
 | Fig. 11 Valid `⊢ A`                  | theories/Symbolic/Worlds.v       | `Definition Valid`                                                   |                                                                               |
 | Fig. 11 Implication `A → B`          | theories/Symbolic/Worlds.v       | `Definition Impl`                                                    |                                                                               |
 | Fig. 11 Box `□A`                     | theories/Symbolic/Worlds.v       | `Definition Box`                                                     |                                                                               |
@@ -387,7 +386,7 @@ corresponding definition in the codebase.
 | Section 5 Valuation : World → Type   | theories/Symbolic/Executor.v     | `Record WValuation`                                                  | The record is unused and the fields are always passed separately in the code. |
 | Fig 19. R≲                           | theories/Symbolic/Soundness.v    | `Class Refine`                                                       |                                                                               |
 | Fig 19. R≲[Val,val]                  | theories/Symbolic/Soundness.v    | `Instance RefineInst`                                                |                                                                               |
-| Fig 19. R≲[SymProp,Prop]             | theories/Symbolic/Soundness.v    | `Instance RefineProp`                                                |                                                                               |
+| Fig 19. R≲[𝕊,ℙ]                      | theories/Symbolic/Soundness.v    | `Instance RefineProp`                                                |                                                                               |
 | Fig 19. R≲[□A,a]                     | theories/Symbolic/Soundness.v    | `Instance RefineBox`                                                 |                                                                               |
 | Fig 19. R≲[A→B,a→b]                  | theories/Symbolic/Soundness.v    | `Instance RefineImpl`                                                |                                                                               |
 | Lemma 5.1 proof VC,vc ∈ R≲           | theories/Symbolic/Soundness.v    | `Lemma refine_vcgen`                                                 |                                                                               |

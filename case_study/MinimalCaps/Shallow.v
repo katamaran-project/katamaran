@@ -28,8 +28,9 @@
 
 From Coq Require Import
      ZArith.ZArith.
-From MinimalCaps Require Import
-     Contracts Machine.
+From Katamaran.MinimalCaps Require Import
+     Contracts
+     Machine.
 
 Import MinCapsProgram.
 Import MinCapsSpecification.
