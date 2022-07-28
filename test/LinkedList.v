@@ -50,7 +50,7 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
-     Iris.Logic
+     Iris.Instance
      Iris.Model
      Notations
      Program

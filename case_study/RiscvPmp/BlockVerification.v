@@ -34,7 +34,7 @@ From Coq Require Import
 From Equations Require Import
      Equations.
 From Katamaran Require Import
-     Iris.Logic
+     Iris.Instance
      Iris.Model
      Notations
      Semantics
@@ -48,12 +48,14 @@ From Katamaran Require Import
      Symbolic.Solver
      Symbolic.Soundness
      Symbolic.Worlds
+     RiscvPmp.IrisModel
+     RiscvPmp.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.Sig.
 From Katamaran Require
-     RiscvPmp.Model
      RiscvPmp.Contracts
-     RiscvPmp.LoopVerification.
+     RiscvPmp.LoopVerification
+     RiscvPmp.Model.
 From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
@@ -406,8 +408,8 @@ End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
   Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
-  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram Model.RiscvPmpSemantics
-    RiscvPmpSignature RiscvPmpBlockVerifSpec Model.RiscvPmpIrisBase Model.RiscvPmpIrisInstance.
+  Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics
+    RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpIrisBase RiscvPmpIrisInstance.
   Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature
     RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
   Include Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature
@@ -1359,8 +1361,8 @@ End BlockVerificationDerived2.
 
 Module BlockVerificationDerivedSem.
   Import Contracts.
-  Import Model.RiscvPmpIrisBase.
-  Import Model.RiscvPmpIrisInstance.
+  Import RiscvPmpIrisBase.
+  Import RiscvPmpIrisInstance.
   Import RiscvPmpBlockVerifSpec.
   Import weakestpre.
   Import tactics.
@@ -1725,8 +1727,8 @@ Module BlockVerificationDerived2Sem.
   Import ctx.resolution.
   Import ctx.notations.
   Import env.notations.
-  Import Model.RiscvPmpIrisBase.
-  Import Model.RiscvPmpIrisInstance.
+  Import RiscvPmpIrisBase.
+  Import RiscvPmpIrisInstance.
   Import RiscvPmpIrisInstanceWithContracts.
   Import RiscvPmpBlockVerifShalExecutor.
   (* Import Model.RiscvPmpModel. *)

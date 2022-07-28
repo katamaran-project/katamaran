@@ -39,7 +39,7 @@ From Equations Require Import
 
 From Katamaran Require Import
      Environment
-     Iris.Logic
+     Iris.Instance
      Iris.Model
      Semantics
      Sep.Hoare

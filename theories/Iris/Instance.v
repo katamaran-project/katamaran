@@ -61,6 +61,18 @@ Import env.notations.
 
 Set Implicit Arguments.
 
+(* The following three modules define the Iris instance of the program logic
+   depending solely on the operational semantics (through IrisBase) and the
+   user-defined predicates (in IrisPredicates), but without depending on a
+   Specification module. The program logic rules of this subset are implemented
+   in IrisSignatureRules, which is combined with IrisPredicates to form
+   IrisInstance.
+
+   This split allows us to use multiple different specifications with the same
+   Iris model, so that the resulting triples can be combined. This is important
+   particularly when combining specifications of universal contracts for unknown
+   code with known code verifications, e.g. as in the RiscvPmp.BlockVerification
+   proofs. *)
 Module Type IrisPredicates
   (Import B    : Base)
   (Import PROG : Program B)
@@ -73,11 +85,6 @@ Module Type IrisPredicates
 
 End IrisPredicates.
 
-(*
- * The following module defines the Iris model depending solely on the Signature, not only the Specification.
- * This allows us to use multiple different specifications with the same Iris model, so that the resulting triples can be combined.
- * This is important particularly in the RiscvPmp.BlockVerification proofs.
- *)
 Module Type IrisSignatureRules
   (Import B     : Base)
   (Import PROG  : Program B)
@@ -1296,7 +1303,7 @@ Module Type IrisInstance (B : Base) (PROG : Program B) (SEM : Semantics B PROG) 
 
 (*
  * The following module defines the parts of the Iris model that must depend on the Specification, not just on the Signature.
- * This is kept to a minimum (see comment for the IrisInstance module).
+ * This is kept to a minimum (see comment for the IrisPredicates module).
  *)
 Module IrisInstanceWithContracts
   (Import B     : Base)
