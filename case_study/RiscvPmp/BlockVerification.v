@@ -48,7 +48,8 @@ From Katamaran Require Import
      Symbolic.Solver
      Symbolic.Soundness
      Symbolic.Worlds
-     RiscvPmp.Machine.
+     RiscvPmp.Machine
+     RiscvPmp.Sig.
 From Katamaran Require
      RiscvPmp.Model
      RiscvPmp.Contracts
@@ -75,9 +76,8 @@ Module ns := stdpp.namespaces.
 
 (*   Definition pmp_entry_cfg := ty_prod ty_pmpcfg_ent ty_xlenbits. *)
 
-Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature.
-  Include SpecificationMixin RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature.
-  Import Contracts.RiscvPmpSignature.
+Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
+  Include SpecificationMixin RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
   Import Contracts.
   Section ContractDefKit.
 
@@ -360,12 +360,11 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Cont
 End RiscvPmpBlockVerifSpec.
 
 Module RiscvPmpBlockVerifShalExecutor :=
-  MakeShallowExecutor RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  MakeShallowExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
 Module RiscvPmpBlockVerifExecutor :=
-  MakeExecutor RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec Contracts.RiscvPmpSolver.
+  MakeExecutor RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec RiscvPmpSolver.
 
 Module RiscvPmpSpecVerif.
-  Import Contracts.RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifExecutor.Symbolic.
 
@@ -406,18 +405,17 @@ Module RiscvPmpSpecVerif.
 End RiscvPmpSpecVerif.
 
 Module RiscvPmpIrisInstanceWithContracts.
-  Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec.
+  Include ProgramLogicOn RiscvPmpBase RiscvPmpProgram RiscvPmpSignature RiscvPmpBlockVerifSpec.
   Include IrisInstanceWithContracts RiscvPmpBase RiscvPmpProgram Model.RiscvPmpSemantics
-    Contracts.RiscvPmpSignature RiscvPmpBlockVerifSpec Model.RiscvPmpIrisBase Model.RiscvPmpIrisInstance.
-  Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature
+    RiscvPmpSignature RiscvPmpBlockVerifSpec Model.RiscvPmpIrisBase Model.RiscvPmpIrisInstance.
+  Include Shallow.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature
     RiscvPmpBlockVerifSpec RiscvPmpBlockVerifShalExecutor.
-  Include Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpProgram Contracts.RiscvPmpSignature
-    RiscvPmpBlockVerifSpec Contracts.RiscvPmpSolver RiscvPmpBlockVerifShalExecutor RiscvPmpBlockVerifExecutor.
+  Include Symbolic.Soundness.Soundness RiscvPmpBase RiscvPmpProgram RiscvPmpSignature
+    RiscvPmpBlockVerifSpec RiscvPmpSolver RiscvPmpBlockVerifShalExecutor RiscvPmpBlockVerifExecutor.
 End RiscvPmpIrisInstanceWithContracts.
 
 
 Module BlockVerification.
-  Import Contracts.RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifExecutor.
 
@@ -745,7 +743,7 @@ Module BlockVerification.
 
     Local Notation "p '∗' q" := (asn_sep p q).
     Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
-    Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user Contracts.ptstomem [a; n; xs])) (at level 79).
+    Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
     Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
 
     Example memcpy_pre : Assertion Σ1 :=
@@ -783,7 +781,6 @@ End BlockVerification.
 Module BlockVerificationDerived.
 
   Import Contracts.
-  Import RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifExecutor.
   Import Symbolic.
@@ -922,7 +919,6 @@ End BlockVerificationDerived.
 Module BlockVerificationDerived2.
 
   Import Contracts.
-  Import RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifExecutor.
   Import Symbolic.
@@ -1483,7 +1479,6 @@ Module BlockVerificationDerivedSem.
     semTriple [a : Val (type ("ast" :: ty_ast))]%env PRE (FunDef execute) (fun ret _ => ⌜ret = RETIRE_SUCCESS⌝ ∗ POST)%I.
 
   Module ValidContractsBlockVerif.
-    Import Contracts.RiscvPmpSignature.
     Import RiscvPmpBlockVerifExecutor.
     Import Symbolic.
 
@@ -1536,7 +1531,6 @@ End BlockVerificationDerivedSem.
 
 Module BlockVerificationDerived2Sound.
   Import Contracts.
-  Import RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifShalExecutor.
   Import RiscvPmpIrisInstanceWithContracts.
@@ -1723,7 +1717,6 @@ End BlockVerificationDerived2Sound.
 
 Module BlockVerificationDerived2Sem.
   Import Contracts.
-  Import RiscvPmpSignature.
   Import RiscvPmpBlockVerifSpec.
   Import weakestpre.
   Import tactics.

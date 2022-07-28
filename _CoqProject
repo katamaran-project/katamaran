@@ -12,6 +12,7 @@ case_study/RiscvPmp/Base.v
 case_study/RiscvPmp/Contracts.v
 case_study/RiscvPmp/Machine.v
 case_study/RiscvPmp/Model.v
+case_study/RiscvPmp/Sig.v
 case_study/RiscvPmp/LoopVerification.v
 case_study/RiscvPmp/BlockVerification.v
 -R theories Katamaran

@@ -40,7 +40,8 @@ From Katamaran Require Import
      Sep.Logic
      Specification
      RiscvPmp.Machine
-     RiscvPmp.Contracts.
+     RiscvPmp.Contracts
+     RiscvPmp.Sig.
 From Equations Require Import
      Equations.
 
@@ -212,7 +213,7 @@ Module Import RiscvPmpIrisInstance <:
 
     Definition luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
       match p return Env Val (𝑯_Ty p) -> iProp Σ with
-      | Contracts.pmp_entries         => fun ts => interp_pmp_entries (env.head ts)
+      | pmp_entries                   => fun ts => interp_pmp_entries (env.head ts)
       | pmp_addr_access               => fun ts => interp_pmp_addr_access liveAddrs (env.head (env.tail ts)) (env.head ts)
       | pmp_addr_access_without       => fun ts => interp_pmp_addr_access_without (env.head (env.tail (env.tail ts))) liveAddrs (env.head (env.tail ts)) (env.head ts)
       | gprs                          => fun _  => interp_gprs
