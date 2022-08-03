@@ -53,6 +53,26 @@ Import ctx.resolution.
 Import ctx.notations.
 Import env.notations.
 
+Module Assembly.
+  (* Instruction synonyms. *)
+  Definition ADD (rd rs1 rs2 : RegIdx) : AST :=
+    RTYPE rs2 rs1 rd RISCV_ADD.
+  Definition SUB (rd rs1 rs2 : RegIdx) : AST :=
+    RTYPE rs2 rs1 rd RISCV_SUB.
+  Definition BEQ (rs1 rs2 : RegIdx) (imm : Z) : AST :=
+    BTYPE imm rs2 rs1 RISCV_BEQ.
+  Definition BNE (rs1 rs2 : RegIdx) (imm : Z) : AST :=
+    BTYPE imm rs2 rs1 RISCV_BNE.
+  Definition ADDI (rd rs1 : RegIdx) (imm : Z) : AST :=
+    ITYPE imm rs1 rd RISCV_ADDI.
+  Definition JALR (rd rs1 : RegIdx) (imm : Z) : AST :=
+    RISCV_JALR imm rs1 rd.
+  Definition RET : AST :=
+    JALR (bv.of_N 0) (bv.of_N 1) 0%Z.
+  Definition MV (rd rs1 : RegIdx) : AST :=
+    ADDI rd rs1 0%Z.
+End Assembly.
+
 Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
   Include SpecificationMixin RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
   Section ContractDefKit.

@@ -16,6 +16,7 @@ case_study/RiscvPmp/IrisInstance.v
 case_study/RiscvPmp/Model.v
 case_study/RiscvPmp/Sig.v
 case_study/RiscvPmp/LoopVerification.v
+case_study/RiscvPmp/BlockVer/Examples.v
 case_study/RiscvPmp/BlockVer/Spec.v
 case_study/RiscvPmp/BlockVerification.v
 -R theories Katamaran
