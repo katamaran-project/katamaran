@@ -215,10 +215,10 @@ Import BlockVerificationDerived2.
           (term_var "a" + (term_val ty_xlenbits 84) ↦ₘ term_val ty_xlenbits 42)
       )%exp.
 
-    (* note that this computation takes longer than directly proving sat__femtoinit below *)
-    Time Example t_vc__femtoinit : 𝕊 Σ__femtoinit :=
-      Eval vm_compute in
-      simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post).
+    (* (* note that this computation takes longer than directly proving sat__femtoinit below *) *)
+    (* Time Example t_vc__femtoinit : 𝕊 Σ__femtoinit := *)
+    (*   Eval vm_compute in *)
+    (*   simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post). *)
 
     Definition vc__femtoinit : 𝕊 Σ__femtoinit :=
       simplify (VC__addr femtokernel_init_pre femtokernel_init femtokernel_init_post).
@@ -291,9 +291,9 @@ Import BlockVerificationDerived2.
           asn_formula (formula_eq (term_var "an") (term_var "epc"))
       )%exp.
 
-    Time Example t_vc__femtohandler : 𝕊 [] :=
-      Eval vm_compute in
-        simplify (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post).
+    (* Time Example t_vc__femtohandler : 𝕊 [] := *)
+    (*   Eval vm_compute in *)
+    (*     simplify (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post). *)
     Definition vc__femtohandler : 𝕊 [] :=
       simplify (VC__addr femtokernel_handler_pre femtokernel_handler femtokernel_handler_post).
 
