@@ -436,6 +436,25 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
 End RiscvPmpSignature.
 
 Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
+
+  Definition simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (List Formula Σ) :=
+    match term_get_val a1 , term_get_val a2 with
+    | Some a1 , Some a2 => if decide_sub_perm a1 a2 then Some nil else None
+    | _       , _       => Some (cons (formula_user sub_perm [a1;a2]) nil)
+    end.
+
+  Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
+    match term_get_val paddr , term_get_val es , term_get_val p with
+    | Some paddr , Some entries , Some p =>
+      match check_pmp_access paddr entries p with
+      | (true, Some typ) => simplify_sub_perm (term_val ty_access_type typ) acc
+      | (true, None)     => Some nil
+      | (false, _)       => None
+      end
+    | _ , _ , _ =>
+      Some (cons (formula_user pmp_access [paddr; es; p; acc]) nil)
+    end.
+
   (* TODO: User predicates can be simplified smarter *)
   Equations(noeqns) decide_pmp_check_rwx {Σ} (X W R : Term Σ ty.bool) (acc : Term Σ ty_access_type) : bool :=
   | term_val true | _             | _             | term_union KExecute (term_val tt)   := true;
@@ -443,10 +462,6 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   | _             | _             | term_val true | term_union KRead (term_val tt)      := true;
   | _             | term_val true | term_val true | term_union KReadWrite (term_val tt) := true;
   | _             | _             | _             | _                                   := false.
-
-  Equations(noeqns) simplify_sub_perm {Σ} (a1 a2 : Term Σ ty_access_type) : option (List Formula Σ) :=
-  | term_val a1 | term_val a2 := if decide_sub_perm a1 a2 then Some nil else None;
-  | a1          | a2          := Some (cons (formula_user sub_perm [a1;a2]) nil).
 
   Equations(noeqns) simplify_pmp_check_rwx {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
   | term_record pmpcfg_ent [_;_;X;W;R] | acc          :=
@@ -473,79 +488,79 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   | cfg          | entries          | prev          :=
     Some (cons (formula_user prev_addr [cfg; entries; prev]) nil).
 
-  Equations(noeqns) simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
-  | term_val paddr | term_val entries | term_val p | acc :=
-    match check_pmp_access paddr entries p with
-    | (true, Some typ) => simplify_sub_perm (term_val ty_access_type typ) acc
-    | (true, None)     => Some nil
-    | (false, _)       => None
-    end
-  | paddr          | entries          | p          | acc          :=
-    Some (cons (formula_user pmp_access [paddr; entries; p; acc]) nil).
 
-  Definition simplify_user {Σ} (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ) :=
-    match p with
-    | pmp_access      => fun ts =>
-                           let (ts,perm)    := env.snocView ts in
-                           let (ts,priv)    := env.snocView ts in
-                           let (ts,entries) := env.snocView ts in
-                           let (ts,paddr)   := env.snocView ts in
-                           simplify_pmp_access paddr entries priv perm
-    | pmp_check_perms => fun ts =>
-                           let (ts,priv)    := env.snocView ts in
-                           let (ts,acc) := env.snocView ts in
-                           let (ts,cfg)   := env.snocView ts in
-                           simplify_pmp_check_perms cfg acc priv
-    | pmp_check_rwx   => fun ts =>
-                           let (ts,acc) := env.snocView ts in
-                           let (ts,cfg)   := env.snocView ts in
-                           simplify_pmp_check_rwx cfg acc
-    | sub_perm        => fun ts =>
-                           let (ts,a2) := env.snocView ts in
-                           let (ts,a1) := env.snocView ts in
-                           simplify_sub_perm a1 a2
-    | within_cfg      => fun ts =>
-                           let (ts,addr) := env.snocView ts in
-                           let (ts,prev_addr)     := env.snocView ts in
-                           let (ts,cfg)     := env.snocView ts in
-                           let (ts,paddr)   := env.snocView ts in
-                           simplify_within_cfg paddr cfg prev_addr addr
-    | not_within_cfg  => fun ts =>
-                           let (ts,entries) := env.snocView ts in
-                           let (ts,paddr)   := env.snocView ts in
-                           Some (cons (formula_user not_within_cfg [paddr; entries]) nil)
-    | prev_addr       => fun ts =>
-                           let (ts,prev)    := env.snocView ts in
-                           let (ts,entries) := env.snocView ts in
-                           let (ts,cfg)     := env.snocView ts in
-                           simplify_prev_addr cfg entries prev
-    | in_entries      => fun ts =>
-                           let (ts,prev)    := env.snocView ts in
-                           let (ts,entries) := env.snocView ts in
-                           let (ts,cfg)     := env.snocView ts in
-                           Some (cons (formula_user in_entries [cfg; entries; prev]) nil)
-    end.
+  Equations(noeqns) simplify_user [Σ] (p : 𝑷) : Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ) :=
+  | pmp_access             | [ paddr; entries; priv; perm ] => simplify_pmp_access paddr entries priv perm
+  | pmp_check_perms        | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
+  | pmp_check_rwx          | [ cfg; acc ]                   => simplify_pmp_check_rwx cfg acc
+  | sub_perm               | [ a1; a2 ]                     => simplify_sub_perm a1 a2
+  | within_cfg             | [ paddr; cfg; prevaddr; addr]  => simplify_within_cfg paddr cfg prevaddr addr
+  | not_within_cfg         | [ paddr; entries ]             => Some (cons (formula_user not_within_cfg [paddr; entries]) nil)
+  | prev_addr              | [ cfg; entries; prev ]         => simplify_prev_addr cfg entries prev
+  | in_entries             | [ cfg; entries; prev ]         => Some (cons (formula_user in_entries [cfg; entries; prev]) nil).
 
-  Definition simplify_formula {Σ} (fml : Formula Σ) : option (List Formula Σ) :=
-    match fml with
-    | formula_user p ts => simplify_user p ts
-    | _                 => Some (cons fml nil)
-    end.
+  Local Ltac lsolve :=
+    repeat
+      lazymatch goal with
+      | |- option.spec _ _ (match @term_get_val ?Σ ?σ ?v with _ => _ end) =>
+          destruct (@term_get_val_spec Σ σ v); subst;
+          try progress cbn - [simplify_sub_perm]
+      | |- option.spec _ _ (match check_pmp_access _ _ _ with _ => _ end) =>
+          unfold Pmp_access, decide_pmp_access;
+          let o := fresh "o" in
+          destruct check_pmp_access as [[] o]; [destruct o|]
+      | |- option.spec _ _ (Some _) =>
+          constructor; cbn; try intuition fail
+      | |- option.spec _ _ None =>
+          constructor; cbn; try intuition fail
+      end; auto.
 
-  Import base.
-  Definition simplify_all {Σ} (g : Formula Σ -> option (List Formula Σ)) :=
-    fix simplify_all (fmls k : List Formula Σ) {struct fmls} : option (List Formula Σ) :=
-      match fmls with
-      | nil => Some k
-      | cons fml0 fmls =>
-        ks ← simplify_all fmls k ;
-        k0 ← g fml0 ;
-        Some (app k0 ks)
-      end.
+  Lemma simplify_sub_perm_spec {Σ} (a1 a2 : Term Σ ty_access_type) :
+    option.spec
+      (fun r => forall ι, Sub_perm (inst a1 ι) (inst a2 ι) <-> instpc r ι)
+      (forall ι, ~ Sub_perm (inst a1 ι) (inst a2 ι))
+      (simplify_sub_perm a1 a2).
+  Proof.
+    unfold simplify_sub_perm. lsolve.
+    destruct decide_sub_perm eqn:?; constructor;
+      intros ?; intuition; constructor.
+  Qed.
+
+  Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_exc_code)
+    (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege)
+    (acc : Term Σ ty_access_type) :
+    option.spec
+      (fun r => forall ι,
+           Pmp_access (inst paddr ι) (inst es ι) (inst p ι) (inst acc ι) <->
+             instpc r ι)
+      (forall ι, ~ Pmp_access (inst paddr ι) (inst es ι) (inst p ι) (inst acc ι))
+      (simplify_pmp_access paddr es p acc).
+  Proof.
+    unfold simplify_pmp_access. lsolve.
+    apply (simplify_sub_perm_spec (term_val _ _)).
+  Qed.
+
+  Lemma simplify_user_spec : SolverUserOnlySpec simplify_user.
+  Proof.
+    intros Σ p ts.
+    destruct p; cbv in ts; env.destroy ts; cbn.
+    - simple apply simplify_pmp_access_spec.
+    - admit.
+    - admit.
+    - simple apply simplify_sub_perm_spec.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+  Admitted.
 
   Definition solver : Solver :=
-    fun w fmls => option_map (fun l => existT w (tri_id , l)) (simplify_all simplify_formula fmls nil).
-  Definition solver_spec : SolverSpec solver.
-  Admitted.
+    solveruseronly_to_solver simplify_user.
+
+  Lemma solver_spec : SolverSpec solver.
+  Proof.
+    apply solveruseronly_to_solver_spec, simplify_user_spec.
+  Qed.
+
 End RiscvPmpSolverKit.
 Module RiscvPmpSolver := MakeSolver RiscvPmpBase RiscvPmpSignature RiscvPmpSolverKit.

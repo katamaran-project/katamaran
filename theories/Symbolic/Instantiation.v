@@ -381,7 +381,7 @@ Module Type InstantiationOn
 
     Lemma term_get_val_spec {Σ σ} (s : Term Σ σ) :
       option.wlp
-        (fun v => forall ι : Valuation Σ, inst s ι = v)
+        (fun v => s = term_val _ v)
         (term_get_val s).
     Proof. destruct s; constructor; auto. Qed.
 

@@ -1338,7 +1338,7 @@ Module Soundness
       intros t v ->.
       intros c c__c Hc.
       unfold SHeapSpecM.demonic_match_bvec.
-      destruct (term_get_val_spec t).
+      destruct (term_get_val_spec t); subst.
       - intros P2 Pc2 HP2.
         intros c2 cc2 Hc2.
         intros s2 sc2 Hs2.
