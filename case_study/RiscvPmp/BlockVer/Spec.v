@@ -371,7 +371,7 @@ Module RiscvPmpSpecVerif.
   Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
     match CEnv f with
     | Some c => ValidContractReflect c (FunDef f)
-    | None => False
+    | None => True
     end.
 
   Lemma valid_execute_rX : ValidContract rX.
@@ -389,14 +389,19 @@ Module RiscvPmpSpecVerif.
   Lemma valid_execute_tick_pc : ValidContract tick_pc.
   Proof. reflexivity. Qed.
 
-  Lemma defined_contracts_valid : forall {Δ τ} (f : Fun Δ τ),
-      match CEnv f with
-      | Some c => ValidContract f
-      | None => True
-      end.
+  Lemma valid_execute_mem_read : ValidContract mem_read.
+  Proof. Admitted.
+
+  Lemma valid_contracts {Δ τ} (f : Fun Δ τ) :
+    ValidContract f.
   Proof.
-    destruct f; try now cbv.
-  Admitted.
+    unfold ValidContract; destruct f; cbn [CEnv]; try exact I.
+    - apply valid_execute_rX.
+    - apply valid_execute_wX.
+    - apply valid_execute_tick_pc.
+    - apply valid_execute_mem_read.
+    - apply valid_execute_fetch.
+  Qed.
 
 End RiscvPmpSpecVerif.
 
@@ -555,25 +560,16 @@ Module RiscvPmpIrisInstanceWithContracts.
     - intros ι. now iIntros "_".
   Qed.
 
+  Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifExecutor.Symbolic.
-
-  Lemma contractsVerified `{sailGS Σ} : ProgramLogic.ValidContractCEnv (PI := PredicateDefIProp).
-  Proof.
-    intros Γ τ f.
-    destruct f; intros c eq; inversion eq; subst; clear eq.
-    - eapply shallow_vcgen_soundness.
-      eapply symbolic_vcgen_soundness.
-      eapply validcontract_reflect_sound.
-      eapply RiscvPmpSpecVerif.valid_execute_rX.
-    - eapply shallow_vcgen_soundness.
-      eapply symbolic_vcgen_soundness.
-      eapply validcontract_reflect_sound.
-      eapply RiscvPmpSpecVerif.valid_execute_wX.
-  Admitted.
 
   Lemma contractsSound `{sailGS Σ} : ⊢ ValidContractEnvSem RiscvPmpBlockVerifSpec.CEnv.
   Proof.
-    eauto using sound, foreignSemBlockVerif, lemSemBlockVerif, contractsVerified.
-  Admitted.
+    apply (sound foreignSemBlockVerif lemSemBlockVerif).
+    intros Γ τ f c Heq.
+    apply shallow_vcgen_soundness, symbolic_vcgen_soundness, validcontract_reflect_sound.
+    generalize (RiscvPmpSpecVerif.valid_contracts f).
+    unfold RiscvPmpSpecVerif.ValidContract. now rewrite Heq.
+  Qed.
 
 End RiscvPmpIrisInstanceWithContracts.
