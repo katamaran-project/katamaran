@@ -19,6 +19,7 @@ case_study/RiscvPmp/LoopVerification.v
 case_study/RiscvPmp/BlockVer/Examples.v
 case_study/RiscvPmp/BlockVer/Spec.v
 case_study/RiscvPmp/BlockVerification.v
+case_study/RiscvPmp/FemtoKernel.v
 -R theories Katamaran
 test/Example.v
 test/LinkedList.v
