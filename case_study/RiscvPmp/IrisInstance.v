@@ -95,27 +95,26 @@ Module RiscvPmpIrisInstance <:
 
   Section RiscvPmpIrisPredicates.
 
-    Definition luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} (p : Predicate) : Env Val (𝑯_Ty p) -> iProp Σ :=
-      match p return Env Val (𝑯_Ty p) -> iProp Σ with
-      | pmp_entries                   => fun ts => interp_pmp_entries (env.head ts)
-      | pmp_addr_access               => fun ts => interp_pmp_addr_access liveAddrs (env.head (env.tail ts)) (env.head ts)
-      | pmp_addr_access_without       => fun ts => interp_pmp_addr_access_without (env.head (env.tail (env.tail ts))) liveAddrs (env.head (env.tail ts)) (env.head ts)
-      | gprs                          => fun _  => interp_gprs
-      | ptsto                         => fun ts => interp_ptsto (env.head (env.tail ts)) (env.head ts)
-      | encodes_instr                 => fun _ => True%I
-      | ptstomem                      => fun _ => True%I
-      | ptstoinstr                    => fun ts  => interp_ptsto_instr (env.head (env.tail ts)) (env.head ts)%I
-      end.
+    Import env.notations.
+
+    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
+      (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
+    | pmp_entries             | [ v ]                => interp_pmp_entries v
+    | pmp_addr_access         | [ entries; m ]       => interp_pmp_addr_access liveAddrs entries m
+    | pmp_addr_access_without | [ addr; entries; m ] => interp_pmp_addr_access_without addr liveAddrs entries m
+    | gprs                    | _                    => interp_gprs
+    | ptsto                   | [ addr; w ]          => interp_ptsto addr w
+    | encodes_instr           | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
+    | ptstomem                | _                    => True%I
+    | ptstoinstr              | [ addr; instr ]      => interp_ptsto_instr addr instr.
 
     Definition lduplicate_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ} :
       forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
         is_duplicable p = true ->
         (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
     Proof.
-      iIntros (p ts hdup) "H".
-      destruct p; inversion hdup;
-        iDestruct "H" as "#H";
-        auto.
+      destruct p; intros ts Heq; try discriminate Heq;
+        clear Heq; cbn in *; env.destroy ts; auto.
     Qed.
 
   End RiscvPmpIrisPredicates.

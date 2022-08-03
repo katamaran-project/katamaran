@@ -503,14 +503,45 @@ Module RiscvPmpIrisInstanceWithContracts.
     iSplitL; trivial.
   Qed.
 
+  Lemma decode_sound `{sailGS Σ} {Γ}
+    (es : NamedEnv (Exp Γ) ["bv"∷ty_exc_code]) (δ : CStore Γ) :
+    ∀ code instr,
+      evals es δ = [env].["bv"∷ty_exc_code ↦ code]
+      → ⊢ semTriple δ ⌜pure_decode code = inr instr⌝ (stm_foreign RiscvPmpProgram.decode es)
+            (λ (v : AST) (δ' : NamedEnv Val Γ), (⌜v = instr⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+  Proof.
+    iIntros (code instr Heq) "%Hdecode".
+    rewrite wp_unfold. cbn.
+    iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
+    iDestruct "Hmem" as (memmap) "[Hmem' %]".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro.
+    iSplitR; first easy.
+    iIntros (e2 σ'' efs Hstep).
+    dependent elimination Hstep.
+    dependent elimination s.
+    rewrite Heq in f1. cbv in f1.
+    dependent elimination f1. rewrite Hdecode. cbn.
+    do 3 iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro.
+    iSplitL "Hmem' Hregs".
+    iSplitL "Hregs"; first iFrame.
+    iExists memmap.
+    iSplitL "Hmem'"; first iFrame.
+    iPureIntro; assumption.
+    iSplitL; last easy.
+    iApply wp_value; auto.
+  Qed.
+
   Lemma foreignSemBlockVerif `{sailGS Σ} : ForeignSem.
   Proof.
     intros Γ τ Δ f es δ.
     destruct f; cbn.
     - intros *; apply read_ram_sound.
     - intros *; apply write_ram_sound.
-    - admit.
-  Admitted.
+    - intros *; apply decode_sound.
+  Qed.
 
   Lemma lemSemBlockVerif `{sailGS Σ} : LemmaSem.
   Proof.
