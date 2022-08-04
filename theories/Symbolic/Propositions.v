@@ -1813,6 +1813,7 @@ Module Type SymPropOn
     | eformula_lt (t1 t2 : ETerm ty.int)
     | eformula_eq (σ : Ty) (t1 t2 : ETerm σ)
     | eformula_neq (σ : Ty) (t1 t2 : ETerm σ).
+    Arguments eformula_user : clear implicits.
 
     Inductive ESymProp : Type :=
     | eangelic_binary (o1 o2 : ESymProp)
@@ -2102,6 +2103,8 @@ Module Type SymPropOn
       inst_symprop (erase_valuation ι) (erase_symprop p) ->
       safe p ι.
     Proof. apply erase_safe. Qed.
+
+    Arguments eterm_var _ {_ _}.
 
   End Erasure.
 

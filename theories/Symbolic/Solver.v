@@ -296,8 +296,7 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
 
     Definition simplify_formula {Σ} (fml : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
       match fml with
-      (* TODO: partial evaluation of ts *)
-      | formula_user p ts => Some (cons fml k)
+      | formula_user p ts => Some (cons (formula_user p (pevals ts)) k)
       | formula_bool t    => simplify_formula_bool (peval t) k
       | formula_prop ζ P  => Some (cons fml k)
       | formula_ge t1 t2  => simplify_formula_bool (peval (term_binop bop.ge t1 t2)) k
@@ -418,7 +417,9 @@ Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
         (simplify_formula fml k).
     Proof.
       destruct fml; cbn - [peval].
-      - constructor; intros ι. now rewrite inst_pathcondition_cons.
+      - constructor; intros ι.
+        rewrite inst_pathcondition_cons.
+        cbn. now rewrite pevals_sound.
       - generalize (simplify_formula_bool_spec (peval t) k).
         apply option.spec_monotonic; cbn; intros; specialize (H ι);
           now rewrite (peval_sound t) in H.
