@@ -64,7 +64,7 @@ Section Loop.
      Definition step_sem_contract := 
        Eval cbn  in ValidContractSemCurried fun_step sep_contract_step.
 
-     Local Notation "r '↦' val" := (reg_pointsTo r val).
+     Local Notation "r '↦' val" := (reg_pointsTo r val) (at level 70).
 
      Definition PmpEntry : Set := Pmpcfg_ent * Z.
      Definition PtstosPred : Type := Privilege -> Privilege -> Z -> Z -> list PmpEntry -> list PmpEntry -> Privilege -> Z -> Z -> iProp Σ.

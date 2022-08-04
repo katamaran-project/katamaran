@@ -77,18 +77,15 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Include SpecificationMixin RiscvPmpBase RiscvPmpProgram RiscvPmpSignature.
   Section ContractDefKit.
 
-  Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
-  Notation "a '↦ᵢ' t" := (asn_chunk (chunk_user ptstoinstr [a; t])) (at level 70).
-  Notation "p '∗' q" := (asn_sep p q).
-  Notation "a '=' b" := (asn_eq a b).
-  Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
-  Notation "a '∨' b" := (asn_or a b).
+  Import asn.notations.
+  Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
+  Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
   Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
-  Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty.unit opt xl alt_inl "_" alt_inr).
-  Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
+  Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+  Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
 
   Definition term_eqb {Σ} (e1 e2 : Term Σ ty_regno) : Term Σ ty.bool :=
     term_binop bop.eq e1 e2.
@@ -122,26 +119,25 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     | ctx.nil => fun asn => asn
     | ctx.snoc Γ (x :: τ) =>
       fun asn =>
-        @asn_exists Σ Γ (asn_exist x τ asn)
+        @asn_exists Σ Γ (asn.exist x τ asn)
     end.
 
   Definition asn_with_reg {Σ} (r : Term Σ ty_regno) (asn : Reg ty_xlenbits -> Assertion Σ) (asn_default : Assertion Σ) : Assertion Σ :=
-     asn_if (r =? term_val ty_regno (bv.of_N 0)) (asn_default)
-    (asn_if (r =? term_val ty_regno (bv.of_N 1)) (asn x1)
-    (asn_if (r =? term_val ty_regno (bv.of_N 2)) (asn x2)
-    (asn_if (r =? term_val ty_regno (bv.of_N 3)) (asn x3)
-    (asn_if (r =? term_val ty_regno (bv.of_N 4)) (asn x4)
-    (asn_if (r =? term_val ty_regno (bv.of_N 5)) (asn x5)
-    (asn_if (r =? term_val ty_regno (bv.of_N 6)) (asn x6)
-    (asn_if (r =? term_val ty_regno (bv.of_N 7)) (asn x7)
-     asn_false))))))).
+     asn.match_bool (r =? term_val ty_regno (bv.of_N 0)) (asn_default)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 1)) (asn x1)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 2)) (asn x2)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 3)) (asn x3)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 4)) (asn x4)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 5)) (asn x5)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 6)) (asn x6)
+    (asn.match_bool (r =? term_val ty_regno (bv.of_N 7)) (asn x7)
+     ⊥))))))).
 
   Definition asn_reg_ptsto {Σ} (r : Term Σ ty_regno) (w : Term Σ ty_word) : Assertion Σ :=
-    asn_with_reg r (fun r => asn_chunk (chunk_ptsreg r w)) (asn_eq w (term_val ty.int 0%Z)).
+    asn_with_reg r (fun r => asn.chunk (chunk_ptsreg r w)) (w = term_val ty.int 0%Z).
 
   Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
 
-  Notation "r '↦' val" := (asn_chunk (asn_reg_ptsto [r; val])) (at level 79).
   (* TODO: abstract away the concrete type, look into unions for that *)
   (* TODO: length of list should be 16, no duplicates *)
   Definition pmp_entries {Σ} : Term Σ (ty.list (ty.prod ty_pmpcfgidx ty_pmpaddridx)) :=
@@ -151,19 +147,19 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
 
   End ContractDefKit.
 
-  Local Notation "r '↦' val" := (asn_reg_ptsto r val) (at level 79).
-  Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
-  Local Notation "a '↦ᵢ' t" := (asn_chunk (chunk_user ptstoinstr [a; t])) (at level 70).
-  Local Notation "p '∗' q" := (asn_sep p q).
-  Local Notation "a '=' b" := (asn_eq a b).
-  Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
-  Local Notation "a '∨' b" := (asn_or a b).
+  Import asn.notations.
+  (* TODO: This notation is already defined with a different meaning in
+     asn.notations. Resolve this.
+   *)
+  Local Notation "r '↦' val" := (asn_reg_ptsto r val) : asn_scope.
+  Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
+  Local Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
   Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
   Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
-  Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty.unit opt xl alt_inl "_" alt_inr).
-  Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
+  Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+  Local Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
   Local Notation "e1 ',ₜ' e2" := (term_binop bop.pair e1 e2) (at level 100).
   Import bv.notations.
 
@@ -183,18 +179,18 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
        sep_contract_precondition    := term_var "rs" ↦ term_var "w";
        sep_contract_result          := "result_wX";
        sep_contract_postcondition   := term_var "result_wX" = term_val ty.unit tt ∗
-                                       asn_if (term_eqb (term_var "rs") (term_val ty_regno [bv 0]))
-                                         (term_var "rs" ↦ term_val ty.int 0%Z)
-                                         (term_var "rs" ↦ term_var "v")
+                                       if: term_eqb (term_var "rs") (term_val ty_regno [bv 0])
+                                       then term_var "rs" ↦ term_val ty.int 0%Z
+                                       else term_var "rs" ↦ term_var "v"
     |}.
 
   Definition sep_contract_fetch : SepContractFun fetch :=
     {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "w" :: ty.int];
        sep_contract_localstore      := [];
-       sep_contract_precondition    := asn_chunk (chunk_ptsreg pc (term_var "a")) ∗
+       sep_contract_precondition    := asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
                                                  term_var "a" ↦ₘ term_var "w";
        sep_contract_result          := "result_fetch";
-       sep_contract_postcondition   := asn_chunk (chunk_ptsreg pc (term_var "a")) ∗
+       sep_contract_postcondition   := asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
                                                  term_var "a" ↦ₘ term_var "w" ∗
                                                  term_var "result_fetch" = term_union fetch_result KF_Base (term_var "w");
     |}.
@@ -202,14 +198,14 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Definition sep_contract_fetch_instr : SepContractFun fetch :=
     {| sep_contract_logic_variables := ["a" :: ty_xlenbits; "i" :: ty_ast];
        sep_contract_localstore      := [];
-       sep_contract_precondition    := asn_chunk (chunk_ptsreg pc (term_var "a")) ∗
+       sep_contract_precondition    := asn.chunk (chunk_ptsreg pc (term_var "a")) ∗
                                                  term_var "a" ↦ᵢ term_var "i";
        sep_contract_result          := "result_fetch";
        sep_contract_postcondition   :=
-         asn_chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ term_var "i" ∗
-         asn_exist "w" _
+         asn.chunk (chunk_ptsreg pc (term_var "a")) ∗ term_var "a" ↦ᵢ term_var "i" ∗
+         asn.exist "w" _
            (term_var "result_fetch" = term_union fetch_result KF_Base (term_var "w") ∗
-            asn_chunk (chunk_user encodes_instr [term_var "w"; term_var "i"]));
+            asn.chunk (chunk_user encodes_instr [term_var "w"; term_var "i"]));
     |}.
 
   Definition sep_contract_mem_read : SepContractFun mem_read :=
@@ -225,11 +221,11 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Definition sep_contract_tick_pc : SepContractFun tick_pc :=
     {| sep_contract_logic_variables := ["ao" :: ty_xlenbits; "an" :: ty_xlenbits];
        sep_contract_localstore      := [];
-       sep_contract_precondition    := asn_chunk (chunk_ptsreg pc (term_var "ao")) ∗
-                                                 asn_chunk (chunk_ptsreg nextpc (term_var "an"));
+       sep_contract_precondition    := asn.chunk (chunk_ptsreg pc (term_var "ao")) ∗
+                                                 asn.chunk (chunk_ptsreg nextpc (term_var "an"));
        sep_contract_result          := "result_tick_pc";
-       sep_contract_postcondition   := asn_chunk (chunk_ptsreg pc (term_var "an")) ∗
-                                                 asn_chunk (chunk_ptsreg nextpc (term_var "an")) ∗
+       sep_contract_postcondition   := asn.chunk (chunk_ptsreg pc (term_var "an")) ∗
+                                                 asn.chunk (chunk_ptsreg nextpc (term_var "an")) ∗
                                                  term_var "result_tick_pc" = term_val ty.unit tt;
     |}.
 
@@ -273,7 +269,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Definition sep_contract_decode    : SepContractFunX decode :=
     {| sep_contract_logic_variables := ["code" :: ty.int; "instr" :: ty_ast];
        sep_contract_localstore      := [term_var "code"];
-       sep_contract_precondition    := asn_chunk (chunk_user encodes_instr [term_var "code"; term_var "instr"]);
+       sep_contract_precondition    := asn.chunk (chunk_user encodes_instr [term_var "code"; term_var "instr"]);
        sep_contract_result          := "result_decode";
        sep_contract_postcondition   := term_var "result_decode" = term_var "instr";
     |}.
@@ -296,50 +292,50 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Definition lemma_open_gprs : SepLemma open_gprs :=
     {| lemma_logic_variables := ctx.nil;
        lemma_patterns        := env.nil;
-       lemma_precondition    := asn_true;
-       lemma_postcondition   := asn_true;
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
     |}.
 
   Definition lemma_close_gprs : SepLemma close_gprs :=
     {| lemma_logic_variables := ctx.nil;
        lemma_patterns        := env.nil;
-       lemma_precondition    := asn_true;
-       lemma_postcondition   := asn_true;
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
     |}.
 
   Definition lemma_open_pmp_entries : SepLemma open_pmp_entries :=
     {| lemma_logic_variables := ctx.nil;
        lemma_patterns        := env.nil;
-       lemma_precondition    := asn_true;
-       lemma_postcondition   := asn_true;
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
     |}.
 
   Definition lemma_close_pmp_entries : SepLemma close_pmp_entries :=
     {| lemma_logic_variables := ctx.nil;
        lemma_patterns        := env.nil;
-       lemma_precondition    := asn_true;
-       lemma_postcondition   := asn_true;
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
     |}.
 
   Definition lemma_update_pmp_entries : SepLemma update_pmp_entries :=
     {| lemma_logic_variables := ctx.nil;
        lemma_patterns        := env.nil;
-       lemma_precondition    := asn_true;
-       lemma_postcondition   := asn_true;
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
     |}.
 
   Definition lemma_extract_pmp_ptsto : SepLemma extract_pmp_ptsto :=
     {| lemma_logic_variables := ["paddr" :: ty_xlenbits];
        lemma_patterns        := [term_var "paddr"];
-       lemma_precondition    := asn_true;
-       lemma_postcondition   := asn_true;
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
     |}.
 
   Definition lemma_return_pmp_ptsto : SepLemma return_pmp_ptsto :=
     {| lemma_logic_variables := ["paddr" :: ty_xlenbits];
        lemma_patterns        := [term_var "paddr"];
-       lemma_precondition    := asn_true;
-       lemma_postcondition   := asn_true;
+       lemma_precondition    := ⊤;
+       lemma_postcondition   := ⊤;
     |}.
 
   Definition LEnv : LemmaEnv :=

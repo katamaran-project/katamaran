@@ -158,13 +158,10 @@ Import BlockVerificationDerived2.
       ; MRET
       ].
 
-    Local Notation "p '∗' q" := (asn_sep p q).
-    Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
-    Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
-    Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
-    Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+    Import asn.notations.
+    Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
+    Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
     Local Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
-    Local Notation "a '=' b" := (asn_eq a b).
 
     Let Σ__femtoinit : LCtx := [].
     Let W__femtoinit : World := MkWorld Σ__femtoinit [].
@@ -195,7 +192,7 @@ Import BlockVerificationDerived2.
 
     Example femtokernel_init_post : Assertion  {| wctx := [] ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := nil |} :=
       (
-        asn_formula (formula_eq (term_var "an") (term_var "a" + term_val ty_xlenbits 88)) ∗
+        asn.formula (formula_eq (term_var "an") (term_var "a" + term_val ty_xlenbits 88)) ∗
           (∃ "v", mstatus ↦ term_var "v") ∗
           (mtvec ↦ (term_var "a" + term_val ty_xlenbits 72)) ∗
           (∃ "v", mcause ↦ term_var "v") ∗
@@ -250,7 +247,7 @@ Import BlockVerificationDerived2.
     Let W__femtohandler : World := MkWorld Σ__femtohandler [].
 
     Example femtokernel_handler_pre : Assertion {| wctx := ["epc"::ty_exc_code; "a" :: ty_xlenbits]; wco := nil |} :=
-        (asn_eq (term_var "a") (term_val ty_word 72)) ∗
+        (term_var "a" = term_val ty_word 72) ∗
       (mstatus ↦ term_val (ty.record rmstatus) {| MPP := User |}) ∗
       (mtvec ↦ term_val ty_word 72) ∗
       (∃ "v", mcause ↦ term_var "v") ∗
@@ -288,7 +285,7 @@ Import BlockVerificationDerived2.
           (pmpaddr0 ↦ term_var "a" + term_val ty_xlenbits 16) ∗
           (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
           (term_var "a" + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42) ∗
-          asn_formula (formula_eq (term_var "an") (term_var "epc"))
+          asn.formula (formula_eq (term_var "an") (term_var "epc"))
       )%exp.
 
     (* Time Example t_vc__femtohandler : 𝕊 [] := *)
@@ -667,7 +664,7 @@ Import BlockVerificationDerived2.
     Unshelve.
     exact env.nil.
     - unfold femto_init_pre.
-      unfold interpret_assertion; cbn -[ptsto_instrs].
+      unfold asn.interpret; cbn -[ptsto_instrs].
       iDestruct "Hpre" as "[Hpre1 Hpre2]".
       now iFrame.
     - iIntros (an) "Hpost".

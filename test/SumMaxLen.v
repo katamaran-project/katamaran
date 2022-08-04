@@ -167,6 +167,7 @@ End ExampleProgram.
 Module Import ExampleSig <: Signature DefaultBase.
   Include DefaultPredicateKit DefaultBase.
   Include PredicateMixin DefaultBase.
+  Include SignatureMixin DefaultBase.
 End ExampleSig.
 
 (* The specification module defines the contract for the [summaxlen] function. *)
@@ -174,20 +175,20 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
   Include SpecificationMixin DefaultBase ExampleProgram ExampleSig.
 
   Import ctx.resolution.
+  Import asn.notations.
 
   Definition sep_contract_summaxlen : SepContract [ "xs" ∷ ty.list ty.int ] (ty.prod (ty.prod ty.int ty.int) ty.int) :=
     {| sep_contract_logic_variables := ["xs" ∷ ty.list ty.int ];
        sep_contract_localstore      := [term_var "xs"];
-       sep_contract_precondition    := asn_true;
+       sep_contract_precondition    := ⊤;
        sep_contract_result          := "result";
        sep_contract_postcondition   :=
-         asn_match_prod
+         asn.match_prod
            (term_var "result") "sm" "l"
-           (asn_match_prod
+           (asn.match_prod
               (term_var "sm") "s" "m"
-              (asn_sep
-                 (asn_formula (formula_le (term_var "s") (term_binop bop.times (term_var "m") (term_var "l"))))
-                 (asn_formula (formula_le (term_val ty.int 0) (term_var "l")))));
+              (term_var "s" <= term_binop bop.times (term_var "m") (term_var "l") ∗
+               term_val ty.int 0 <= term_var "l"));
     |}.
 
   Definition CEnv : SepContractEnv :=
@@ -420,12 +421,12 @@ Module Import ExampleModel.
     Definition adequacy_pure_prop (Δ : PCtx) (σ : Ty) (f : Fun Δ σ) : Prop :=
       match CEnv f with
       | Some (MkSepContract _ _ Σ args pre result post) =>
-          is_pure pre -> is_pure post ->
+          asn.is_pure pre -> asn.is_pure post ->
           (* The Γ is the caller's program context and δ, δ' the caller's
              local variable stores. *)
           forall Γ (δ δ' : CStore Γ)
             (γ γ' : RegStore) (μ μ' : Memory) (ι : Valuation Σ),
-            interpret_assertion_pure pre ι ->
+            asn.interpret_pure pre ι ->
             forall v,
               (* We could make it more general and allow arbitrary expressions
               as the arguments instead of values. But this is just form
@@ -433,17 +434,17 @@ Module Import ExampleModel.
               ⟨ γ, μ, δ, stm_call f (env.map (fun _ => exp_val _) (inst args ι)) ⟩
                 --->*
               ⟨ γ', μ', δ', stm_val σ v ⟩  ->
-              interpret_assertion_pure post ι.[result∷σ ↦ v]
+              asn.interpret_pure post ι.[result∷σ ↦ v]
                 (* removed the following: annoying to express in a contract... *)
                 (* /\ δ = δ' *)
       | None => True
       end.
 
-    Lemma interpret_assertion_pure_or_not `{sailGS Σ} {Γ} asn (Hasn : is_pure asn) (ι : Valuation Γ) :
-      interpret_assertion asn ι ⊣⊢ (⌜ interpret_assertion_pure asn ι ⌝)%I.
+    Lemma interpret_assertion_pure_or_not `{sailGS Σ} {Γ} A (Hasn : asn.is_pure A) (ι : Valuation Γ) :
+      asn.interpret A ι ⊣⊢ (⌜ asn.interpret_pure A ι ⌝)%I.
     Proof.
-      assert (is_pure asn = true) as Hasn' by now apply Is_true_eq_true.
-      destruct (interpret_assertion_pure_equiv asn Hasn' ι) as [H1 H2].
+      assert (asn.is_pure A = true) as Hasn' by now apply Is_true_eq_true.
+      destruct (asn.interpret_pure_equiv A Hasn' ι) as [H1 H2].
       apply bi.equiv_entails_2; auto.
     Qed.
 
@@ -455,14 +456,14 @@ Module Import ExampleModel.
       destruct (CEnv f) as [[Σ args pre result post]|] eqn:Heqcontract; try now cbn.
       intros preP postP Γ δ δ' γ γ' μ μ' ι PRE v evals.
       refine (adequacy
-                (Q := fun v => interpret_assertion_pure post ι.[result∷σ ↦ v]) evals I _).
+                (Q := fun v => asn.interpret_pure post ι.[result∷σ ↦ v]) evals I _).
 
       iIntros (Σ' sG) "[_ _]".
       iApply (weakestpre.wp_mono').
       2: {
         iApply (iris_rule_stm_call_forwards
-                  (P := interpret_assertion pre ι)
-                  (Q := fun v => interpret_assertion post ι.[result∷σ ↦ v])
+                  (P := asn.interpret pre ι)
+                  (Q := fun v => asn.interpret post ι.[result∷σ ↦ v])
                   _ _ Heqcontract).
         - eapply ProgramLogic.rule_sep_contract.
           cbv [Logic.sep.lentails Logic.sep.lex Logic.sep.land Logic.sep.lprop

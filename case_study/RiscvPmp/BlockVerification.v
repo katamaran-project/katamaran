@@ -791,20 +791,20 @@ Module BlockVerificationDerived2Sem.
 
   Lemma sound_exec_triple_addr__c `{sailGS Σ} {W : World} {pre post instrs} {ι : Valuation W} :
       (exec_triple_addr__c ι pre instrs post (λ _ _ _ , True) [env] []%list) ->
-    ⊢ semTripleBlock (λ a : Z, interpret_assertion pre (ι.[("a"::ty_xlenbits) ↦ a])) instrs
-      (λ a na : Z, interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
+    ⊢ semTripleBlock (λ a : Z, asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a])) instrs
+      (λ a na : Z, asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
   Proof.
     intros Hexec.
     iIntros (a) "(Hpre & Hpc & Hnpc & Hinstrs) Hk".
     specialize (Hexec a).
     unfold bind, CHeapSpecM.bind, produce in Hexec.
-    assert (interpret_scheap []%list ∗ interpret_assertion pre ι.[("a"::ty_exc_code) ↦ a] ⊢ 
+    assert (interpret_scheap []%list ∗ asn.interpret pre ι.[("a"::ty_exc_code) ↦ a] ⊢
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
-      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ LoopVerification.WP_loop) -∗
+      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ LoopVerification.WP_loop) -∗
       LoopVerification.WP_loop)%I as Hverif.
     { refine (@produce_sound _ _ _ _ (ι.[("a"::ty_exc_code) ↦ a]) pre (fun _ =>
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
-      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ LoopVerification.WP_loop) -∗
+      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ LoopVerification.WP_loop) -∗
       LoopVerification.WP_loop)%I [env] []%list _).
       revert Hexec.
       apply produce_monotonic.
@@ -814,14 +814,14 @@ Module BlockVerificationDerived2Sem.
       assert (
           ⊢ ((interpret_scheap h ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
                (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗
-                        interpret_assertion post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ an]
+                        asn.interpret post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ an]
                          -∗ LoopVerification.WP_loop) -∗
                LoopVerification.WP_loop)%I) as Hverifblock.
       { eapply (sound_exec_block_addr h
-                  (fun an δ => interpret_assertion post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ an])%I).
+                  (fun an δ => asn.interpret post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ an])%I).
         refine (mono_exec_block_addr _ _ _ _ _ Hexec).
         intros res h2 Hcons. cbn.
-        rewrite <-(bi.sep_True (interpret_assertion post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ res] : iProp Σ)).
+        rewrite <-(bi.sep_True (asn.interpret post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ res] : iProp Σ)).
         eapply (consume_sound (fun _ => True%I : iProp Σ)).
         revert Hcons.
         refine (consume_monotonic _ _ _ _ _).
@@ -840,9 +840,9 @@ Module BlockVerificationDerived2Sem.
   Lemma sound_VC__addr `{sailGS Σ} {Γ} {pre post instrs} :
     safeE (simplify (BlockVerificationDerived2.VC__addr (Σ := Γ) pre instrs post)) ->
     forall ι,
-    ⊢ semTripleBlock (fun a => interpret_assertion pre (ι.[("a"::ty_xlenbits) ↦ a]))
+    ⊢ semTripleBlock (fun a => asn.interpret pre (ι.[("a"::ty_xlenbits) ↦ a]))
       instrs
-      (fun a na => interpret_assertion post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
+      (fun a na => asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ na])).
   Proof.
     intros Hverif ι.
     eapply (sound_exec_triple_addr__c (W := {| wctx := Γ ; wco := [] |}) (pre := pre) (post := post) (instrs := instrs)).

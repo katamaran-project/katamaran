@@ -37,10 +37,10 @@ From Katamaran Require Export
      Symbolic.Propositions
      Symbolic.Worlds.
 
-Module Type PredicateMixin (B : Base) (PK : PredicateKit B) :=
+Module Type SignatureMixin (B : Base) (PK : PredicateKit B) :=
   FormulasOn B PK <+ ChunksOn B PK <+ AssertionsOn B PK <+ WorldsOn B PK <+ SymPropOn B PK.
 Module Type Signature (B : Base) :=
-  PredicateKit B <+ PredicateMixin B.
+  PredicateKit B <+ SignatureMixin B.
 
 Module Type SolverKit (B : Base) (Import SIG : Signature B).
   Local Set Implicit Arguments.

@@ -39,6 +39,7 @@ From Coq Require Import
 From Katamaran Require Import
      Prelude
      Tactics
+     Sep.Logic
      Syntax.Predicates
      Syntax.Registers
      Base.
@@ -235,5 +236,30 @@ Module Type ChunksOn
     unfold inst, inst_env. rewrite env.map_map.
     apply env.map_ext. auto using peval_sound.
   Qed.
+
+  Section Interpretation.
+    Import sep.notations.
+    Context {HProp} `{PI : PredicateDef HProp}.
+
+    Fixpoint interpret_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : HProp :=
+      match c with
+      | chunk_user p ts => luser p (inst ts ι)
+      | chunk_ptsreg r t => lptsreg r (inst t ι)
+      | chunk_conj c1 c2 => interpret_chunk c1 ι ∗ interpret_chunk c2 ι
+      | chunk_wand c1 c2 => interpret_chunk c1 ι -∗ interpret_chunk c2 ι
+      end.
+
+    Fixpoint interpret_scchunk (c : SCChunk) : HProp :=
+      match c with
+      | scchunk_user p vs => luser p vs
+      | scchunk_ptsreg r v => lptsreg r v
+      | scchunk_conj c1 c2 => interpret_scchunk c1 ∗ interpret_scchunk c2
+      | scchunk_wand c1 c2 => interpret_scchunk c1 -∗ interpret_scchunk c2
+      end.
+
+    Definition interpret_scheap : SCHeap -> HProp :=
+      List.fold_right (fun c h => interpret_scchunk c ∗ h) lemp.
+    Arguments interpret_scheap !h.
+  End Interpretation.
 
 End ChunksOn.

@@ -349,37 +349,11 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
   End PredicateKit.
 
   Include PredicateMixin RiscvPmpBase.
+  Include SignatureMixin RiscvPmpBase.
 
   Section ContractDefKit.
 
-    Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 70).
-    Local Notation "a '↦ₘ' t" := (asn_chunk (chunk_user ptsto [a; t])) (at level 70).
-    Local Notation "p '∗' q" := (asn_sep p q).
-    Local Notation "a '=' b" := (asn_eq a b).
-    Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
-    Local Notation "a '∨' b" := (asn_or a b).
-    Local Notation "p '⊑' q" := (asn_formula (formula_user sub_perm [p;q])) (at level 70).
-    Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
-    Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
-    Local Notation "a &&ₜ b" := (term_binop bop.and a b) (at level 80).
-    Local Notation "a ||ₜ b" := (term_binop bop.or a b) (at level 85).
-    Local Notation asn_match_option T opt xl alt_inl alt_inr := (asn_match_sum T ty.unit opt xl alt_inl "_" alt_inr).
-    Local Notation asn_pmp_entries l := (asn_chunk (chunk_user pmp_entries [l])).
-    (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
-    (* Local Notation asn_pmp_entries_angelic l := (asn_chunk_angelic (chunk_user pmp_entries [l])). *)
-    Local Notation asn_pmp_addr_access l m := (asn_chunk (chunk_user pmp_addr_access [l; m])).
-    Local Notation asn_pmp_addr_access_without a l m := (asn_chunk (chunk_user pmp_addr_access_without [a;l; m])).
-    Local Notation asn_gprs := (asn_chunk (chunk_user gprs env.nil)).
-    Local Notation asn_within_cfg a cfg prev_addr addr := (asn_formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
-    Local Notation asn_not_within_cfg a es := (asn_formula (formula_user not_within_cfg [a; es])).
-    Local Notation asn_prev_addr cfg es prev := (asn_formula (formula_user prev_addr [cfg; es; prev])).
-    Local Notation asn_in_entries idx e es := (asn_formula (formula_user in_entries [idx; e; es])).
-    Local Notation asn_pmp_access addr es m p := (asn_formula (formula_user pmp_access [addr;es;m;p])).
-    Local Notation asn_pmp_check_perms cfg acc p := (asn_formula (formula_user pmp_check_perms [cfg;acc;p])).
-    Local Notation asn_pmp_check_rwx cfg acc := (asn_formula (formula_user pmp_check_rwx [cfg;acc])).
-    Local Notation asn_expand_pmpcfg_ent cfg := (asn_match_record rpmpcfg_ent cfg
-      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
-      (asn_true)).
+    Import asn.notations.
 
     Definition term_eqb {Σ} (e1 e2 : Term Σ ty.int) : Term Σ ty.bool :=
       term_binop bop.eq e1 e2.
@@ -399,22 +373,16 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
                          σ
                          (ctx.in_cat_left Σ (ctx.in_map (fun '(y::τ) => y::τ) xIn)))).
 
-    Fixpoint asn_exists {Σ} (Γ : NCtx string Ty) : Assertion (Σ ▻▻ Γ) -> Assertion Σ :=
-      match Γ return Assertion (Σ ▻▻ Γ) -> Assertion Σ with
-      | ctx.nil => fun asn => asn
-      | ctx.snoc Γ (x :: τ) =>
-        fun asn =>
-          @asn_exists Σ Γ (asn_exist x τ asn)
-      end.
-
     Definition asn_with_reg {Σ} (r : Term Σ ty.int) (asn : Reg ty_xlenbits -> Assertion Σ) (asn_default : Assertion Σ) : Assertion Σ :=
-      asn_if (r =? z_term 1)
-             (asn x1)
-             (asn_if (r =? z_term 2)
-                     (asn x2)
-                     (asn_if (r =? z_term 3)
-                             (asn x3)
-                             asn_default)).
+      if: r =? z_term 1
+      then asn x1
+      else
+        if: r =? z_term 2
+        then asn x2
+        else
+          if: r =? z_term 3
+          then asn x3
+          else asn_default.
 
     Definition asn_and_regs {Σ} (f : Reg ty_xlenbits -> Assertion Σ) : Assertion Σ :=
       f x1 ∗ f x2 ∗ f x3 ∗ f x4 ∗ f x5 ∗ f x6 ∗ f x7.
@@ -433,6 +401,30 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
               (cons (term_val ty_pmpcfgidx PMP1CFG ,ₜ term_val ty_pmpaddridx PMPADDR1) nil)).
 
   End ContractDefKit.
+
+  Module notations.
+    Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
+    Notation "p '⊑' q" := (asn.formula (formula_user sub_perm [p;q])) (at level 70).
+
+    Notation asn_bool t := (asn.formula (formula_bool t)).
+    Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+    Notation asn_pmp_entries l := (asn.chunk (chunk_user pmp_entries [l])).
+    (* TODO: check if I can reproduce the issue with angelic stuff, I think it was checked_mem_read, with the correct postcondition *)
+    (* Notation asn_pmp_entries_angelic l := (asn.chunk_angelic (chunk_user pmp_entries [l])). *)
+    Notation asn_pmp_addr_access l m := (asn.chunk (chunk_user pmp_addr_access [l; m])).
+    Notation asn_pmp_addr_access_without a l m := (asn.chunk (chunk_user pmp_addr_access_without [a;l; m])).
+    Notation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).
+    Notation asn_within_cfg a cfg prev_addr addr := (asn.formula (formula_user within_cfg [a; cfg; prev_addr; addr])).
+    Notation asn_not_within_cfg a es := (asn.formula (formula_user not_within_cfg [a; es])).
+    Notation asn_prev_addr cfg es prev := (asn.formula (formula_user prev_addr [cfg; es; prev])).
+    Notation asn_in_entries idx e es := (asn.formula (formula_user in_entries [idx; e; es])).
+    Notation asn_pmp_access addr es m p := (asn.formula (formula_user pmp_access [addr;es;m;p])).
+    Notation asn_pmp_check_perms cfg acc p := (asn.formula (formula_user pmp_check_perms [cfg;acc;p])).
+    Notation asn_pmp_check_rwx cfg acc := (asn.formula (formula_user pmp_check_rwx [cfg;acc])).
+    Notation asn_expand_pmpcfg_ent cfg := (asn.match_record rpmpcfg_ent cfg
+      (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc (recordpat_snoc recordpat_nil "L" "L") "A" "A") "X" "X") "W" "W") "R" "R")
+      (asn.formula (formula_bool (term_val ty.bool true)))).
+  End notations.
 End RiscvPmpSignature.
 
 Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.

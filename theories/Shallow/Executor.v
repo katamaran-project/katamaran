@@ -900,94 +900,94 @@ Module Type ShallowExecOn
 
       Fixpoint produce {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CHeapSpecM Γ Γ unit :=
         match asn with
-        | asn_formula fml => assume_formula (inst fml ι)
-        | asn_chunk c     => produce_chunk (inst c ι)
-        | asn_chunk_angelic c => produce_chunk (inst c ι)
-        | asn_if b a1 a2  => demonic_match_bool (inst b ι) (produce ι a1) (produce ι a2)
-        | asn_match_enum E k alts =>
+        | asn.formula fml => assume_formula (inst fml ι)
+        | asn.chunk c     => produce_chunk (inst c ι)
+        | asn.chunk_angelic c => produce_chunk (inst c ι)
+        | asn.match_bool b a1 a2  => demonic_match_bool (inst b ι) (produce ι a1) (produce ι a2)
+        | asn.match_enum E k alts =>
           demonic_match_enum
             (inst (T := fun Σ => Term Σ _) k ι)
             (fun K => produce ι (alts K))
-        | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+        | asn.match_sum σ τ s xl alt_inl xr alt_inr =>
           demonic_match_sum
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun v => produce (env.snoc ι (xl∷σ) v) alt_inl)
             (fun v => produce (env.snoc ι (xr∷τ) v) alt_inr)
-        | asn_match_list s alt_nil xh xt alt_cons =>
+        | asn.match_list s alt_nil xh xt alt_cons =>
           demonic_match_list
             (inst (T := fun Σ => Term Σ _) s ι)
             (produce ι alt_nil)
             (fun vh vt => produce (ι ► (xh∷_ ↦ vh) ► (xt∷ty.list _ ↦ vt)) alt_cons)
-        | asn_match_prod s xl xr rhs =>
+        | asn.match_prod s xl xr rhs =>
           demonic_match_prod
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun vl vr => produce (ι ► (xl∷_ ↦ vl) ► (xr∷_ ↦ vr)) rhs)
-        | asn_match_tuple s p rhs =>
+        | asn.match_tuple s p rhs =>
           demonic_match_tuple p
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => produce (ι ►► ι') rhs)
-        | asn_match_record R s p rhs =>
+        | asn.match_record R s p rhs =>
           demonic_match_record p
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => produce (ι ►► ι') rhs)
-        | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+        | asn.match_union U s alt__ctx alt__pat alt__rhs =>
           demonic_match_union
             alt__pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun UK ι' => produce (ι ►► ι') (alt__rhs UK))
-        | asn_sep a1 a2   => _ <- produce ι a1 ;; produce ι a2
-        | asn_or a1 a2 =>
+        | asn.sep a1 a2   => _ <- produce ι a1 ;; produce ι a2
+        | asn.or a1 a2 =>
           demonic_binary (produce ι a1)
                          (produce ι a2)
-        | asn_exist ς τ a =>
+        | asn.exist ς τ a =>
           v <- demonic τ ;;
           produce (env.snoc ι (ς∷τ) v) a
-        | asn_debug => pure tt
+        | asn.debug => pure tt
         end.
 
       Fixpoint consume {Γ Σ} (ι : Valuation Σ) (asn : Assertion Σ) : CHeapSpecM Γ Γ unit :=
         match asn with
-        | asn_formula fml => assert_formula (inst fml ι)
-        | asn_chunk c     => consume_chunk (inst c ι)
-        | asn_chunk_angelic c     => consume_chunk (inst c ι)
-        | asn_if b a1 a2  => angelic_match_bool (inst b ι) (consume ι a1) (consume ι a2)
-        | asn_match_enum E k alts =>
+        | asn.formula fml => assert_formula (inst fml ι)
+        | asn.chunk c     => consume_chunk (inst c ι)
+        | asn.chunk_angelic c     => consume_chunk (inst c ι)
+        | asn.match_bool b a1 a2  => angelic_match_bool (inst b ι) (consume ι a1) (consume ι a2)
+        | asn.match_enum E k alts =>
           angelic_match_enum
             (inst (T := fun Σ => Term Σ _) k ι)
             (fun K => consume ι (alts K))
-        | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+        | asn.match_sum σ τ s xl alt_inl xr alt_inr =>
           angelic_match_sum
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun v => consume (env.snoc ι (xl∷σ) v) alt_inl)
             (fun v => consume (env.snoc ι (xr∷τ) v) alt_inr)
-        | asn_match_list s alt_nil xh xt alt_cons =>
+        | asn.match_list s alt_nil xh xt alt_cons =>
           angelic_match_list
             (inst (T := fun Σ => Term Σ _) s ι)
             (consume ι alt_nil)
             (fun vh vt => consume (ι ► (xh∷_ ↦ vh) ► (xt∷ty.list _ ↦ vt)) alt_cons)
-        | asn_match_prod s xl xr rhs =>
+        | asn.match_prod s xl xr rhs =>
           angelic_match_prod
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun vl vr => consume (ι ► (xl∷_ ↦ vl) ► (xr∷_ ↦ vr)) rhs)
-        | asn_match_tuple s p rhs =>
+        | asn.match_tuple s p rhs =>
           angelic_match_tuple p
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => consume (ι ►► ι') rhs)
-        | asn_match_record R s p rhs =>
+        | asn.match_record R s p rhs =>
           angelic_match_record p
             (inst (T := fun Σ => Term Σ _) s ι)
             (fun ι' => consume (ι ►► ι') rhs)
-        | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+        | asn.match_union U s alt__ctx alt__pat alt__rhs =>
           angelic_match_union
             alt__pat (inst (T := fun Σ => Term Σ _) s ι)
             (fun UK ι' => consume (ι ►► ι') (alt__rhs UK))
-        | asn_sep a1 a2   => _ <- consume ι a1;; consume ι a2
-        | asn_or a1 a2 =>
+        | asn.sep a1 a2   => _ <- consume ι a1;; consume ι a2
+        | asn.or a1 a2 =>
           angelic_binary (consume ι a1)
                          (consume ι a2)
-        | asn_exist ς τ a =>
+        | asn.exist ς τ a =>
           v <- angelic τ ;;
           consume (env.snoc ι (ς∷τ) v) a
-        | asn_debug => pure tt
+        | asn.debug => pure tt
         end.
 
     End ProduceConsume.

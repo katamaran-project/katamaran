@@ -403,6 +403,7 @@ Module Import ExampleSignature <: Signature DefaultBase.
   (* A mixin that defines Formulas, Chunks and assertions to write contract and
      that defines Worlds and symbolic propositions for the executor. *)
   Include PredicateMixin DefaultBase.
+  Include SignatureMixin DefaultBase.
 End ExampleSignature.
 
 (* The specification module contains the contracts for all μSail and foreign functions. *)
@@ -411,16 +412,16 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
   Section ContractDefKit.
 
     Import ctx.resolution.
+    Import asn.notations.
 
-    (* We define notatiosn for more convenience. *)
-    Local Notation "p '↦l' xs" := (asn_chunk (chunk_user ptstolist (env.nil ► (llist ↦ p) ► (ty.list ty.int ↦ xs)))) (at level 70).
-    Local Notation "p '∗' q" := (asn_sep p q).
-    Local Notation "p '↦p' ( x , xs )" := (asn_chunk (chunk_user ptstocons (env.nil ► (ptr ↦ p) ► (ty.int ↦ x) ► (llist ↦ xs)))) (at level 70).
+    (* We define notations for more convenience. *)
+    Local Notation "p '↦l' xs" := (asn.chunk (chunk_user ptstolist (env.nil ► (llist ↦ p) ► (ty.list ty.int ↦ xs)))) (at level 70).
+    Local Notation "p '↦p' ( x , xs )" := (asn.chunk (chunk_user ptstocons (env.nil ► (ptr ↦ p) ► (ty.int ↦ x) ► (llist ↦ xs)))) (at level 70).
 
     Arguments formula_prop [Σ] Σ' ζ _.
 
     Definition asn_append {Σ : LCtx} (xs ys zs : Term Σ (ty.list ty.int)) : Assertion Σ :=
-      asn_formula (formula_eq (term_binop bop.append xs ys) zs).
+      term_binop bop.append xs ys = zs.
 
     Definition sep_contract_append : SepContract [ "p" ∷ llist; "q" ∷ llist ] llist :=
       {| sep_contract_logic_variables := ["p" ∷ llist; "q" ∷ llist; "xs" ∷ ty.list ty.int; "ys" ∷ ty.list ty.int];
@@ -428,7 +429,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := term_var "p" ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn_exist "zs" (ty.list ty.int)
+           asn.exist "zs" (ty.list ty.int)
              (term_var "result" ↦l term_var "zs" ∗
               asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
       |}.
@@ -439,8 +440,8 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := term_inl (term_var "p") ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn_formula (formula_eq (term_var "result") (term_val ty.unit tt)) ∗
-           asn_exist "zs" (ty.list ty.int)
+           asn.formula (formula_eq (term_var "result") (term_val ty.unit tt)) ∗
+           asn.exist "zs" (ty.list ty.int)
              (term_inl (term_var "p") ↦l term_var "zs" ∗
               asn_append (term_var "xs") (term_var "ys") (term_var "zs"));
       |}.
@@ -451,7 +452,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := term_var "p" ↦l term_var "xs";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn_formula (formula_user plength [term_var "xs"; term_var "result"]) ∗
+           asn.formula (formula_user plength [term_var "xs"; term_var "result"]) ∗
            term_var "p" ↦l term_var "xs"
       |}.
 
@@ -471,9 +472,9 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := term_var "p" ↦l term_var "xs";
          sep_contract_result          := "r";
          sep_contract_postcondition   :=
-           asn_exist "zs" (ty.list ty.int)
+           asn.exist "zs" (ty.list ty.int)
              (term_var "r" ↦l term_var "zs" ∗
-              asn_formula (formula_user preverse [term_var "xs"; term_var "zs"]));
+              asn.formula (formula_user preverse [term_var "xs"; term_var "zs"]));
       |}.
 
     Definition sep_contract_reverseloop : SepContract [ "p" ∷ llist; "q" ∷ llist ] llist :=
@@ -482,15 +483,15 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := term_var "p" ↦l term_var "xs" ∗ term_var "q" ↦l term_var "ys";
          sep_contract_result          := "r";
          sep_contract_postcondition   :=
-           asn_exist "zs" (ty.list ty.int)
+           asn.exist "zs" (ty.list ty.int)
              (term_var "r" ↦l term_var "zs" ∗
-              asn_formula (formula_user preverseappend [term_var "xs"; term_var "ys"; term_var "zs"]));
+              asn.formula (formula_user preverseappend [term_var "xs"; term_var "ys"; term_var "zs"]));
       |}.
 
     Definition sep_contract_mkcons : SepContract [ "x" ∷ ty.int; "xs" ∷ llist ] ptr :=
       {| sep_contract_logic_variables := ["x" ∷ ty.int; "xs" ∷ llist];
          sep_contract_localstore      := [term_var "x"; term_var "xs"];
-         sep_contract_precondition    := asn_true;
+         sep_contract_precondition    := ⊤;
          sep_contract_result          := "p";
          sep_contract_postcondition   := term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
@@ -501,7 +502,7 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := term_var "p" ↦p ( term_var "x" , term_var "xs" );
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn_formula (formula_eq (term_var "result") (term_var "x")) ∗
+           asn.formula (formula_eq (term_var "result") (term_var "x")) ∗
            term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
 
@@ -511,24 +512,24 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          sep_contract_precondition    := term_var "p" ↦p ( term_var "x" , term_var "xs" );
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           asn_formula (formula_eq (term_var "result") (term_var "xs")) ∗
+           asn.formula (formula_eq (term_var "result") (term_var "xs")) ∗
            term_var "p" ↦p ( term_var "x" , term_var "xs" );
       |}.
 
     Definition sep_contract_setsnd : SepContract [ "p" ∷ ptr; "xs" ∷ llist ] ty.unit :=
       {| sep_contract_logic_variables := ["p" ∷ ty.int; "x" ∷ ty.int; "xs" ∷ llist];
          sep_contract_localstore      := [term_var "p"; term_var "xs"];
-         sep_contract_precondition    := asn_exist "ys" llist (term_var "p" ↦p ( term_var "x" , term_var "ys"));
+         sep_contract_precondition    := asn.exist "ys" llist (term_var "p" ↦p ( term_var "x" , term_var "ys"));
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-         asn_formula (formula_eq (term_var "result") (term_val ty.unit tt)) ∗
+         asn.formula (formula_eq (term_var "result") (term_val ty.unit tt)) ∗
          term_var "p" ↦p ( term_var "x" , term_var "xs");
       |}.
 
     Definition sep_lemma_open_nil : Lemma [ ] :=
       {| lemma_logic_variables := [];
          lemma_patterns        := [];
-         lemma_precondition    := asn_true;
+         lemma_precondition    := ⊤;
          lemma_postcondition   := term_val llist (inr tt) ↦l term_val (ty.list ty.int) nil;
       |}.
 
@@ -537,10 +538,10 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          lemma_patterns        := [term_var "p"];
          lemma_precondition    := term_inl (term_var "p") ↦l term_var "xs";
          lemma_postcondition   :=
-           asn_match_list (term_var "xs")
-             asn_false
+           asn.match_list (term_var "xs")
+             ⊥
              "y" "ys"
-             (asn_exist "n" llist
+             (asn.exist "n" llist
                 (term_var "p" ↦p (term_var "y", term_var "n") ∗
                 term_var "n" ↦l term_var "ys"))
       |}.
@@ -558,8 +559,8 @@ Module Import ExampleSpecification <: Specification DefaultBase ExampleProgram E
          lemma_patterns        := [term_var "p"];
          lemma_precondition    := term_inr (term_var "p") ↦l term_var "xs";
          lemma_postcondition   :=
-           asn_formula (formula_eq (term_var "p") (term_val ty.unit tt)) ∗
-           asn_formula (formula_eq (term_var "xs") (term_val (ty.list ty.int) nil))
+           asn.formula (formula_eq (term_var "p") (term_val ty.unit tt)) ∗
+           asn.formula (formula_eq (term_var "xs") (term_val (ty.list ty.int) nil))
       |}.
 
 

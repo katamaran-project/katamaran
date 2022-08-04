@@ -60,16 +60,16 @@ Module ProgramLogic.
     | rule_sep_contract
         (result : LVar) (Σ  : LCtx) (θΔ : SStore Δ Σ)
         (req : Assertion Σ) (ens : Assertion (Σ ▻ result∷σ)) :
-        (pre ⊢ ∃ ι : Valuation Σ, !! (δΔ = inst θΔ ι) ∧ interpret_assertion req ι ∗
-                 ∀ v : Val σ, interpret_assertion ens (env.snoc ι (result∷σ) v) -∗ post v) ->
+        (pre ⊢ ∃ ι : Valuation Σ, !! (δΔ = inst θΔ ι) ∧ asn.interpret req ι ∗
+                 ∀ v : Val σ, asn.interpret ens (env.snoc ι (result∷σ) v) -∗ post v) ->
         CTriple δΔ pre post (MkSepContract _ _ _ θΔ req result ens).
 
     Inductive LTriple {Δ} (δΔ : CStore Δ) (pre post : L) :
       Lemma Δ -> Prop :=
     | rule_ltriple
         (Σ  : LCtx) (θΔ : SStore Δ Σ) (req ens : Assertion Σ) :
-        (pre ⊢ ∃ ι : Valuation Σ, !! (δΔ = inst θΔ ι) ∧ interpret_assertion req ι ∗
-                 (interpret_assertion ens ι -∗ post)) ->
+        (pre ⊢ ∃ ι : Valuation Σ, !! (δΔ = inst θΔ ι) ∧ asn.interpret req ι ∗
+                 (asn.interpret ens ι -∗ post)) ->
         LTriple δΔ pre post (MkLemma _ _ θΔ req ens).
 
     Inductive Triple {Γ : PCtx} (δ : CStore Γ) {τ : Ty} :

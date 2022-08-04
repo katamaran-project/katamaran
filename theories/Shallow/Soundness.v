@@ -361,7 +361,7 @@ Module Type Soundness
     Lemma consume_sound {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         consume ι asn (fun _ => liftP POST) δ h ->
-        interpret_scheap h ⊢ interpret_assertion asn ι ∗ POST δ.
+        interpret_scheap h ⊢ asn.interpret asn ι ∗ POST δ.
     Proof.
       revert POST. induction asn; cbn - [inst inst_term]; intros POST δ1 h1.
       - now apply assert_formula_sound.
@@ -383,14 +383,14 @@ Module Type Soundness
       - rewrite wp_angelic_match_union.
         destruct (unionv_unfold U (inst s ι)); auto.
       - unfold bind. intros Hwp. rewrite <- lsep_assoc.
-        apply (IHasn1 ι (fun δ => interpret_assertion asn2 ι ∗ POST δ) δ1 h1); clear IHasn1.
+        apply (IHasn1 ι (fun δ => asn.interpret asn2 ι ∗ POST δ) δ1 h1); clear IHasn1.
         revert Hwp. apply consume_monotonic. intros _ h2.
         now apply (IHasn2 ι POST δ1 h2).
       - intros []; rewrite lsep_disj_distr.
         + apply lor_right1; apply IHasn1; assumption.
         + apply lor_right2; apply IHasn2; assumption.
       - intros [v Hwp].
-        transitivity (interpret_assertion asn (env.snoc ι (ς∷τ) v) ∗ POST δ1).
+        transitivity (asn.interpret asn (env.snoc ι (ς∷τ) v) ∗ POST δ1).
         + now apply IHasn.
         + apply lsep_entails.
           apply lex_right with v.
@@ -402,7 +402,7 @@ Module Type Soundness
     Lemma produce_sound {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         produce ι asn (fun _ => liftP POST) δ h ->
-        interpret_scheap h ∗ interpret_assertion asn ι ⊢ POST δ.
+        interpret_scheap h ∗ asn.interpret asn ι ⊢ POST δ.
         (* Alternatively, we could write this as
              interpret_scheap h ⊢ interpret_assertion asn ι -∗ POST δ.
            which more closely resembles the assume guard. Why didn't we do this? *)
@@ -431,7 +431,7 @@ Module Type Soundness
       - unfold bind. intros Hwp.
         rewrite lsep_assoc.
         apply lwand_sep_adjoint.
-        apply (IHasn1 ι (fun δ => interpret_assertion asn2 ι -∗ POST δ) δ1 h1 ); clear IHasn1.
+        apply (IHasn1 ι (fun δ => asn.interpret asn2 ι -∗ POST δ) δ1 h1 ); clear IHasn1.
         revert Hwp. apply produce_monotonic. intros _ h2 Hwp.
         unfold liftP. apply lwand_sep_adjoint.
         now apply (IHasn2 ι POST δ1 h2).
@@ -454,7 +454,7 @@ Module Type Soundness
     Lemma produce_sound' {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         produce ι asn (fun _ => liftP POST) δ h ->
-        interpret_assertion asn ι ⊢ interpret_scheap h -∗ POST δ.
+        asn.interpret asn ι ⊢ interpret_scheap h -∗ POST δ.
     Proof.
       intros. apply lwand_sep_adjoint. rewrite lsep_comm.
       now apply produce_sound.
@@ -476,7 +476,7 @@ Module Type Soundness
       intros [Hfmls Hwp]. constructor.
       apply (lex_right ι). apply land_right.
       { now apply lprop_right. }
-      apply (consume_sound (fun δ => ∀ v, interpret_assertion ens (env.snoc ι (result∷_) v) -∗ POST v δ)).
+      apply (consume_sound (fun δ => ∀ v, asn.interpret ens (env.snoc ι (result∷_) v) -∗ POST v δ)).
       revert Hwp. apply consume_monotonic.
       intros _ h2. unfold demonic.
       intros HYP.
@@ -501,8 +501,8 @@ Module Type Soundness
       intros [Hfmls Hwp]. constructor.
       apply (lex_right ι). apply land_right.
       { now apply lprop_right. }
-      transitivity (interpret_assertion req ι ∗ (∀ _ : Val ty.unit, interpret_assertion ens ι -∗ POST δΓ)).
-      - apply (consume_sound (fun δ => ∀ v, interpret_assertion ens ι -∗ POST δΓ) δΓ).
+      transitivity (asn.interpret req ι ∗ (∀ _ : Val ty.unit, asn.interpret ens ι -∗ POST δΓ)).
+      - apply (consume_sound (fun δ => ∀ v, asn.interpret ens ι -∗ POST δΓ) δΓ).
         revert Hwp. apply consume_monotonic.
         intros _ h2. intros HYP.
         apply lall_right; intro v.
@@ -745,7 +745,7 @@ Module Type Soundness
       - specialize (HYP ι). remember (inst δΣ ι) as δ.
         eapply rule_consequence_left.
         apply rule_wp.
-        transitivity (interpret_scheap nil -∗ WP body (fun (v : Val τ) (_ : CStore Δ) => interpret_assertion ens (env.snoc ι (result∷τ) v)) δ).
+        transitivity (interpret_scheap nil -∗ WP body (fun (v : Val τ) (_ : CStore Δ) => asn.interpret ens (env.snoc ι (result∷τ) v)) δ).
         apply produce_sound'.
         2: {
           rewrite <- lsep_emp.
@@ -756,7 +756,7 @@ Module Type Soundness
         intros _ h2 HYP. apply exec_sound' with n.
         revert HYP. apply exec_monotonic.
         intros v3 δ3 h3 HYP.
-        enough (interpret_scheap h3 ⊢ interpret_assertion ens (env.snoc ι (result∷τ) v3) ∗ lemp)
+        enough (interpret_scheap h3 ⊢ asn.interpret ens (env.snoc ι (result∷τ) v3) ∗ lemp)
           by now rewrite lsep_emp in H.
         change lemp with ((fun _ => @lemp L) δ3).
         apply (consume_sound (asn := ens)).

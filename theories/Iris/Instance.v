@@ -307,8 +307,8 @@ Section Soundness.
          lemma_postcondition   := ens;
       |} =>
       forall (ι : Valuation Σ),
-        ⊢ interpret_assertion req ι -∗
-          interpret_assertion ens ι
+        ⊢ asn.interpret req ι -∗
+          asn.interpret ens ι
     end.
 
   Fixpoint Forall {Δ : LCtx} {struct Δ} : (Valuation Δ -> iProp Σ) -> iProp Σ :=
@@ -1124,16 +1124,16 @@ Section Soundness.
     match contract with
     | MkSepContract _ _ ctxΣ θΔ pre result post =>
       Forall (fun (ι : Valuation ctxΣ) =>
-        semTriple (inst θΔ ι) (interpret_assertion pre ι) body
-                  (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v)))
+        semTriple (inst θΔ ι) (asn.interpret pre ι) body
+                  (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
     end%I.
 
   Definition ValidContractSem {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
     match contract with
     | MkSepContract _ _ ctxΣ θΔ pre result post =>
       ∀ (ι : Valuation ctxΣ),
-        semTriple (inst θΔ ι) (interpret_assertion pre ι) body
-                  (fun v δ' => interpret_assertion post (env.snoc ι (result∷σ) v))
+        semTriple (inst θΔ ι) (asn.interpret pre ι) body
+                  (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v))
     end%I.
 
 End Soundness.
@@ -1333,8 +1333,8 @@ Module IrisInstanceWithContracts
       | MkSepContract _ _ Σ' θΔ req result ens =>
         forall (ι : Valuation Σ'),
         evals es δ = inst θΔ ι ->
-        ⊢ semTriple δ (interpret_assertion req ι) (stm_foreign f es)
-          (fun v δ' => interpret_assertion ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
+        ⊢ semTriple δ (asn.interpret req ι) (stm_foreign f es)
+          (fun v δ' => asn.interpret ens (env.snoc ι (result∷τ) v) ∗ bi_pure (δ' = δ))
       end.
 
   Definition LemmaSem : Prop :=

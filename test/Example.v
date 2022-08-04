@@ -335,6 +335,7 @@ End ExampleProgram.
 Module Import ExampleSig <: Signature ExampleBase.
   Include DefaultPredicateKit ExampleBase.
   Include PredicateMixin ExampleBase.
+  Include SignatureMixin ExampleBase.
 End ExampleSig.
 
 Module Import ExampleSpecification <: Specification ExampleBase ExampleProgram ExampleSig.
@@ -343,66 +344,66 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleProgram E
 
   Section ContractDefKit.
 
-    Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
-    Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
+    Import asn.notations.
+    Notation asn_prop Σ P := (asn.formula (@formula_prop Σ Σ (sub_id Σ) P)).
 
     Definition sep_contract_abs : SepContract [ "x" ∷ ty.int ] ty.int :=
       {| sep_contract_logic_variables := ["x" ∷ ty.int];
          sep_contract_localstore      := [term_var "x"];
-         sep_contract_precondition    := asn_true;
+         sep_contract_precondition    := ⊤;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            asn_prop
              ["x" ∷ ty.int; "result" ∷ ty.int]
-             (fun x result => result = Z.abs x)
+             (fun x result => result = Z.abs x)%type
       |}.
 
     Definition sep_contract_cmp : SepContract ["x" ∷ ty.int; "y" ∷ ty.int] (ty.enum ordering)  :=
        {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
           sep_contract_localstore      := [term_var "x"; term_var "y"];
-          sep_contract_precondition    := asn_true;
+          sep_contract_precondition    := ⊤;
           sep_contract_result          := "result";
           sep_contract_postcondition   :=
-            asn_match_enum
+            asn.match_enum
               ordering (term_var "result")
               (fun result =>
                  match result with
-                 | LT => asn_bool (term_binop bop.lt (term_var "x") (term_var "y"))
-                 | EQ => asn_bool (term_binop bop.eq (term_var "x") (term_var "y"))
-                 | GT => asn_bool (term_binop bop.gt (term_var "x") (term_var "y"))
+                 | LT => term_var "x" < term_var "y"
+                 | EQ => term_var "x" = term_var "y"
+                 | GT => term_var "x" > term_var "y"
                  end)
        |}.
 
     Definition sep_contract_gcd : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int :=
       {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
          sep_contract_localstore      := [term_var "x"; term_var "y"];
-         sep_contract_precondition    := asn_true;
+         sep_contract_precondition    := ⊤;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           @asn_prop
+           asn_prop
              ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
-             (fun x y result => result = Z.gcd x y)
+             (fun x y result => result = Z.gcd x y)%type
       |}.
 
     Definition sep_contract_gcdloop : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int :=
       {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
          sep_contract_localstore      := [term_var "x"; term_var "y"];
          sep_contract_precondition    :=
-           asn_bool (term_binop bop.le (term_val ty.int 0) (term_var "x")) ✱
-                    asn_bool (term_binop bop.le (term_val ty.int 0) (term_var "y"));
+           term_val ty.int 0 <= term_var "x" ∗
+           term_val ty.int 0 <= term_var "y";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           @asn_prop
+           asn_prop
              ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
-             (fun x y result => result = Z.gcd x y)
+             (fun x y result => result = Z.gcd x y)%type
       |}.
 
     Definition length_post {σ} (xs : list (Val σ)) (result : Val ty.int) :=
-      result = Z.of_nat (@Datatypes.length (Val σ) xs).
+      (result = Z.of_nat (@Datatypes.length (Val σ) xs))%type.
     Definition sep_contract_length {σ} : SepContract [ "xs" ∷ ty.list σ ] ty.int :=
       {| sep_contract_logic_variables := ["xs" ∷ ty.list σ ];
          sep_contract_localstore      := [term_var "xs"];
-         sep_contract_precondition    := asn_true;
+         sep_contract_precondition    := ⊤;
          sep_contract_result          := "result";
          sep_contract_postcondition   := asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post
       |}.

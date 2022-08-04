@@ -1318,55 +1318,55 @@ Module Type SymbolicExecOn
         ⊢ Assertion -> □(SHeapSpecM Γ Γ Unit) :=
         fix produce w0 asn :=
           match asn with
-          | asn_formula fml => box_assume_formula fml
-          | asn_chunk c => produce_chunk <$> persist c
-          | asn_chunk_angelic c => produce_chunk <$> persist c
-          | asn_if b a1 a2 =>
+          | asn.formula fml => box_assume_formula fml
+          | asn.chunk c => produce_chunk <$> persist c
+          | asn.chunk_angelic c => produce_chunk <$> persist c
+          | asn.match_bool b a1 a2 =>
             demonic_match_bool
               <$> persist__term b
               <*> four (produce w0 a1)
               <*> four (produce w0 a2)
-          | asn_match_enum E k alts =>
+          | asn.match_enum E k alts =>
             fun w1 ω01 =>
               demonic_match_enum k⟨ω01⟩
                 (fun EK => four (produce w0 (alts EK)) ω01)
-          | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+          | asn.match_sum σ τ s xl alt_inl xr alt_inr =>
             demonic_match_sum xl xr
               <$> persist__term s
               <*> four (fun w1 ω01 t1 => produce (wsnoc w0 (xl∷σ)) alt_inl w1 (acc_snoc_left ω01 (xl∷σ) t1))
               <*> four (fun w1 ω01 t1 => produce (wsnoc w0 (xr∷τ)) alt_inr w1 (acc_snoc_left ω01 (xr∷τ) t1))
-           | asn_match_list s alt_nil xh xt alt_cons =>
+           | asn.match_list s alt_nil xh xt alt_cons =>
              box_demonic_match_list xh xt s (produce w0 alt_nil)
                (fun w1 ω01 thead ttail =>
                   produce (wsnoc (wsnoc w0 (xh∷_)) (xt∷ty.list _)) alt_cons w1
                     (acc_snoc_left (acc_snoc_left ω01 (xh∷_) thead) (xt∷ty.list _) ttail))
-           | asn_match_prod s xl xr rhs =>
+           | asn.match_prod s xl xr rhs =>
              box_demonic_match_prod xl xr s
                (fun w1 ω01 t1 t2 =>
                   produce (wsnoc (wsnoc w0 (xl∷_)) (xr∷_)) rhs w1
                     (acc_snoc_left (acc_snoc_left ω01 (xl∷_) t1) (xr∷_) t2))
-           | asn_match_tuple s p rhs =>
+           | asn.match_tuple s p rhs =>
              box_demonic_match_tuple id p s
                (fun w1 ω01 ts =>
                   produce (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
-           | asn_match_record R s p rhs =>
+           | asn.match_record R s p rhs =>
              box_demonic_match_record id p s
                (fun w1 ω01 ts =>
                   produce (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
-           | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+           | asn.match_union U s alt__ctx alt__pat alt__rhs =>
              box_demonic_match_union id alt__pat s
                (fun UK w1 ω01 ts =>
                   produce (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1 (acc_cat_left ω01 ts))
-           | asn_sep a1 a2 =>
+           | asn.sep a1 a2 =>
              fun w1 ω01 =>
                ⟨ ω12 ⟩ _ <- produce w0 a1 w1 ω01 ;;
                produce w0 a2 _ (ω01 ∘ ω12)
-          | asn_or a1 a2 => demonic_binary <$> produce w0 a1 <*> produce w0 a2
-          | asn_exist ς τ a =>
+          | asn.or a1 a2 => demonic_binary <$> produce w0 a1 <*> produce w0 a2
+          | asn.exist ς τ a =>
             fun w1 ω01 =>
               ⟨ ω12 ⟩ t2 <- demonic (Some ς) τ;;
               produce (wsnoc w0 (ς∷τ)) a _ (acc_snoc_left (ω01 ∘ ω12) (ς∷τ) t2)
-          | asn_debug =>
+          | asn.debug =>
             fun w1 _ =>
               debug
                 (fun δ1 h1 =>
@@ -1382,55 +1382,55 @@ Module Type SymbolicExecOn
         ⊢ Assertion -> □(SHeapSpecM Γ Γ Unit) :=
         fix consume w0 asn :=
           match asn with
-          | asn_formula fml => box_assert_formula fml
-          | asn_chunk c => consume_chunk <$> persist c
-          | asn_chunk_angelic c => consume_chunk_angelic <$> persist c
-          | asn_if b a1 a2 =>
+          | asn.formula fml => box_assert_formula fml
+          | asn.chunk c => consume_chunk <$> persist c
+          | asn.chunk_angelic c => consume_chunk_angelic <$> persist c
+          | asn.match_bool b a1 a2 =>
             angelic_match_bool
               <$> persist__term b
               <*> four (consume w0 a1)
               <*> four (consume w0 a2)
-          | asn_match_enum E k alts =>
+          | asn.match_enum E k alts =>
             fun w1 ω01 =>
               angelic_match_enum k⟨ω01⟩
                 (fun EK => four (consume w0 (alts EK)) ω01)
-          | asn_match_sum σ τ s xl alt_inl xr alt_inr =>
+          | asn.match_sum σ τ s xl alt_inl xr alt_inr =>
             angelic_match_sum xl xr
               <$> persist__term s
               <*> four (fun w1 ω01 t1 => consume (wsnoc w0 (xl∷σ)) alt_inl w1 (acc_snoc_left ω01 (xl∷σ) t1))
               <*> four (fun w1 ω01 t1 => consume (wsnoc w0 (xr∷τ)) alt_inr w1 (acc_snoc_left ω01 (xr∷τ) t1))
-          | asn_match_list s alt_nil xh xt alt_cons =>
+          | asn.match_list s alt_nil xh xt alt_cons =>
             box_angelic_match_list xh xt s (consume w0 alt_nil)
               (fun w1 ω01 thead ttail =>
                  consume (wsnoc (wsnoc w0 (xh∷_)) (xt∷ty.list _)) alt_cons w1
                    (acc_snoc_left (acc_snoc_left ω01 (xh∷_) thead) (xt∷ty.list _) ttail))
-          | asn_match_prod s xl xr rhs =>
+          | asn.match_prod s xl xr rhs =>
             box_angelic_match_prod xl xr s
               (fun w1 ω01 t1 t2 =>
                  consume (wsnoc (wsnoc w0 (xl∷_)) (xr∷_)) rhs w1
                    (acc_snoc_left (acc_snoc_left ω01 (xl∷_) t1) (xr∷_) t2))
-          | asn_match_tuple s p rhs =>
+          | asn.match_tuple s p rhs =>
             box_angelic_match_tuple id p s
               (fun w1 ω01 ts =>
                  consume (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
-          | asn_match_record R s p rhs =>
+          | asn.match_record R s p rhs =>
             box_angelic_match_record id p s
               (fun w1 ω01 ts =>
                  consume (wcat w0 _) rhs w1 (acc_cat_left ω01 ts))
-          | asn_match_union U s alt__ctx alt__pat alt__rhs =>
+          | asn.match_union U s alt__ctx alt__pat alt__rhs =>
             box_angelic_match_union id alt__pat s
               (fun UK w1 ω01 ts =>
                  consume (wcat w0 (alt__ctx UK)) (alt__rhs UK) w1 (acc_cat_left ω01 ts))
-          | asn_sep a1 a2 =>
+          | asn.sep a1 a2 =>
             fun w1 ω01 =>
               ⟨ ω12 ⟩ _ <- consume w0 a1 w1 ω01 ;;
               consume w0 a2 _ (ω01 ∘ ω12)
-          | asn_or a1 a2 => angelic_binary <$> consume w0 a1 <*> consume w0 a2
-          | asn_exist ς τ a =>
+          | asn.or a1 a2 => angelic_binary <$> consume w0 a1 <*> consume w0 a2
+          | asn.exist ς τ a =>
             fun w1 ω01 =>
               ⟨ ω12 ⟩ t2 <- angelic (Some ς) τ;;
               consume (wsnoc w0 (ς∷τ)) a _ (acc_snoc_left (ω01 ∘ ω12) (ς∷τ) t2)
-          | asn_debug =>
+          | asn.debug =>
             fun w1 ω01 =>
               debug
                 (fun δ1 h1 =>
@@ -1603,14 +1603,14 @@ Module Type SymbolicExecOn
                 demonic_match_bvec t (fun bs _ _ => exec_aux (rhs bs))
             | stm_read_register reg =>
                 ⟨ ω01 ⟩ t <- angelic None _ ;;
-                ⟨ ω12 ⟩ _ <- T (consume (asn_chunk (chunk_ptsreg reg t))) ;;
-                ⟨ ω23 ⟩ _ <- T (produce (asn_chunk (chunk_ptsreg reg (persist__term t ω12))));;
+                ⟨ ω12 ⟩ _ <- T (consume (asn.chunk (chunk_ptsreg reg t))) ;;
+                ⟨ ω23 ⟩ _ <- T (produce (asn.chunk (chunk_ptsreg reg (persist__term t ω12))));;
                 pure (persist__term t (ω12 ∘ ω23))
             | stm_write_register reg e =>
                 ⟨ ω01 ⟩ told <- angelic None _ ;;
-                ⟨ ω12 ⟩ _    <- T (consume (asn_chunk (chunk_ptsreg reg told))) ;;
+                ⟨ ω12 ⟩ _    <- T (consume (asn.chunk (chunk_ptsreg reg told))) ;;
                 ⟨ ω23 ⟩ tnew <- eval_exp e (w:=_) ;;
-                ⟨ ω34 ⟩ _ <- T (produce (asn_chunk (chunk_ptsreg reg tnew))) ;;
+                ⟨ ω34 ⟩ _ <- T (produce (asn.chunk (chunk_ptsreg reg tnew))) ;;
                 pure (persist__term tnew ω34)
             | stm_bind _ _ =>
                 error
@@ -1742,7 +1742,7 @@ Module Type SymbolicExecOn
                    sep_contract_localstore      := store;
                    sep_contract_precondition    := pre;
                    sep_contract_result          := res;
-                   sep_contract_postcondition   := asn_sep post asn_debug;
+                   sep_contract_postcondition   := asn.sep post asn.debug;
                 |}
         end.
 

@@ -52,7 +52,7 @@ Import ListNotations.
 
 Module SWAP.
 
-  Notation "p '∗' q" := (asn_sep p q).
+  Import asn.notations.
 
   Example block1 : list AST :=
 	[ ADD [bv 1] [bv 1] [bv 2]
@@ -61,8 +61,6 @@ Module SWAP.
 	].
 
   Definition Σ1 : LCtx := ["x" :: ty_xlenbits; "y" :: ty_xlenbits].
-
-  Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
 
   Example pre1 : Assertion Σ1 :=
 	x1 ↦ term_var "x" ∗
@@ -96,7 +94,7 @@ Module SWAP.
 	Example post1' : Assertion	{| wctx := Σ1 ▻ ("a"::ty_xlenbits) ▻ ("an"::ty_xlenbits) ; wco := nil |} :=
 		x1 ↦ term_var "y" ∗
 		x2 ↦ term_var "x" ∗
-		asn_formula (formula_eq (term_var "an") (term_binop bop.plus (term_var "a") (term_val _ (Z.of_nat 12 : Val ty.int)))).
+		term_var "an" = term_binop bop.plus (term_var "a") (term_val _ (Z.of_nat 12 : Val ty.int)).
 
   End ContractAddr.
 
@@ -163,9 +161,7 @@ Module SUM.
   Example sum : list AST :=
 	block_sum ++ block_l3 ++ block_l4.
 
-  Local Notation "p '∗' q" := (asn_sep p q).
-  Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
-  Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+  Import asn.notations.
   Local Notation "x - y" := (term_binop bop.minus x y) : exp_scope.
   Local Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
   Local Notation "x * y" := (term_binop bop.times x y) : exp_scope.
@@ -175,16 +171,16 @@ Module SUM.
 	Let Σ1 : LCtx := ["n" ∷ ty.int].
 
 	Example sum_pre : Assertion Σ1 :=
-	  asn_exist "s" _ (ra0 ↦ term_var "s") ∗
+	  asn.exist "s" _ (ra0 ↦ term_var "s") ∗
 	  ra4 ↦ term_var "n" ∗
-	  asn_exist "i" _ (ra5 ↦ term_var "i") ∗
-	  asn_bool (term_binop bop.le (term_val ty.int 0%Z) (term_var "n")).
+	  asn.exist "i" _ (ra5 ↦ term_var "i") ∗
+	  term_val ty.int 0%Z <= term_var "n".
 
 	Example sum_post : Assertion Σ1 :=
 	  ra0 ↦ term_val ty.int 0%Z ∗
 	  ra4 ↦ term_var "n" ∗
 	  ra5 ↦ term_val ty.int 0%Z ∗
-	  asn_bool (term_binop bop.le (term_val ty.int 0%Z) (term_var "n")).
+	  term_val ty.int 0%Z <= term_var "n".
 
 	Example vc_sum : 𝕊 Σ1 :=
 	  BlockVerification.VC sum_pre block_sum sum_post.
@@ -289,10 +285,9 @@ Module MEMCOPY.
 		["dst" :: ty_xlenbits; "src" :: ty_xlenbits; "size" :: ty.int;
 		 "srcval" :: ty.list ty_word; "ret" :: ty_xlenbits].
 
-  Local Notation "p '∗' q" := (asn_sep p q).
-  Local Notation "r '↦' val" := (asn_chunk (chunk_ptsreg r val)) (at level 79).
-  Local Notation "a '↦[' n ']' xs" := (asn_chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
-  Local Notation "'∃' w ',' a" := (asn_exist w _ a) (at level 79, right associativity).
+  Import asn.notations.
+  Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
+  Local Notation "'∃' w ',' a" := (asn.exist w _ a) (at level 79, right associativity).
 
   Example memcpy_pre : Assertion Σ1 :=
 	pc	↦ term_val ty_xlenbits 0%Z ∗
@@ -318,7 +313,7 @@ Module MEMCOPY.
 	ra0 ↦ term_var "dst" ∗
 	ra1 ↦ term_var "src" ∗
 	ra2 ↦ term_var "size" ∗
-	asn_formula (formula_neq (term_var "size") (term_val ty.int 0)) ∗
+	asn.formula (formula_neq (term_var "size") (term_val ty.int 0)) ∗
 	term_var "src" ↦[ term_var "size" ] term_var "srcval" ∗
 	(∃ "dstval", term_var "dst" ↦[ term_var "size" ] term_var "dstval").
 
