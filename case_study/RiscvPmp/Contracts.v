@@ -754,11 +754,11 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
     {| sep_contract_logic_variables := [paddr :: ty_xlenbits; data :: ty_xlenbits; p :: ty_privilege; "entries" :: ty.list ty_pmpentry; acc :: ty_access_type];
        sep_contract_localstore      := [term_var paddr; term_var data];
        sep_contract_precondition    :=
-          term_union access_type KWrite (term_val ty.unit tt) ⊑ term_var acc
+          asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc)
+          ∗ term_union access_type KWrite (term_val ty.unit tt) ⊑ term_var acc
           ∗ cur_privilege ↦ term_var p
           ∗ asn_pmp_entries (term_var "entries")
-          ∗ asn_pmp_addr_access (term_var "entries") (term_var p)
-          ∗ asn_pmp_access (term_var paddr) (term_var "entries") (term_var p) (term_var acc);
+          ∗ asn_pmp_addr_access (term_var "entries") (term_var p);
        sep_contract_result          := "result_checked_mem_write";
        sep_contract_postcondition   :=
          cur_privilege ↦ term_var p
@@ -926,6 +926,8 @@ Module Import RiscvPmpSpecification <: Specification RiscvPmpBase RiscvPmpProgra
                                   | PMP_Success  =>
                                       asn_bool (term_var prev_pmpaddr <=ₜ term_var addr &&ₜ term_var addr <ₜ term_var pmpaddr) ∗
                                       asn_pmp_check_perms entry (term_var acc) (term_var priv)
+
+                                      ∗ term_var A = term_val ty_pmpaddrmatchtype TOR
                                   end);
     |}.
 
@@ -1293,6 +1295,8 @@ Proof.
   constructor.
   cbn.
   firstorder.
+  - exists Write; firstorder.
+  - exists ReadWrite; firstorder.
 Qed.
 
 Lemma valid_contract_pmpCheckRWX : ValidContract pmpCheckRWX.
@@ -1415,6 +1419,20 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_execute_CSR : ValidContract execute_CSR.
 Proof. reflexivity. Qed.
 
+Lemma pmp_check_perms_gives_access :
+  forall acc p L0 A0 X0 W0 R0,
+    Pmp_check_perms {| L := L0; A := A0; X := X0; W := W0; R := R0 |} acc p ->
+    decide_access_pmp_perm acc
+      (pmp_get_perms {| L := L0; A := A0; X := X0; W := W0; R := R0 |} p) = true.
+Proof.
+  intros; destruct p, acc, L0, X0, W0, R0;
+    simpl; cbv in H; subst; auto.
+Qed.
+
+Lemma Zle_lt_ltb : forall x y z,
+    x <= y -> y < z -> z <? x = false.
+Proof. intros; intuition. Qed.
+
 (* TODO: the pmpCheck contract requires some manual proof effort in the case
          that no pmp entry matches (i.e. we end up in the final check of
          the unrolled loop, more specifically the match on the privilege level,
@@ -1442,25 +1460,39 @@ Proof.
     ].
   intros addr acc priv addr0 addr1 R0 W0 X0 A0 L0 R1 W1 X1 A1 L1.
   repeat
-    match goal with
-    | |- _ /\ _ => split; intros; subst
-    end;
-    try progress cbn; auto;
+    (intros;
+     match goal with
+     | |- _ /\ _ => split; intros; subst; auto
+     end);
     cbv [Pmp_access decide_pmp_access check_pmp_access pmp_check pmp_match_entry pmp_match_addr pmp_addr_range A];
-    repeat
-      match goal with
-      | |- context[if ?b then ?x else ?x] => rewrite (Tauto.if_same b x)
-      | |- context[(?b || true)%bool]=> rewrite (Bool.orb_true_r b)
-      | |- context[match ?amt in PmpAddrMatchType with | _ => _ end] =>
-          destruct amt; try progress cbn
-      | H: ?x < ?y |- context[?x <? ?y] =>
-          rewrite (proj2 (Z.ltb_lt _ _) H);
-          try progress cbn
-      | H: (?x || ?y)%bool = true |- _ =>
-          apply Bool.orb_prop in H as [[= ->]|[= ->]];
-          try progress cbn
-      end; cbn; auto.
-Admitted.
+    repeat match goal with
+           | |- context[if ?b then ?x else ?x] => rewrite (Tauto.if_same b x)
+           | |- context[(?b || true)%bool]=> rewrite (Bool.orb_true_r b)
+           | |- context[match ?amt in PmpAddrMatchType with | _ => _ end] =>
+               destruct amt; try progress cbn
+           | H: ?x < ?y |- context[?x <? ?y] =>
+               rewrite (proj2 (Z.ltb_lt _ _) H);
+               try progress cbn
+           | H: ?x <= ?y |- context[?x <=? ?y] =>
+               rewrite (proj2 (Z.leb_le _ _) H);
+               try progress cbn
+           | H: ?x <= ?y |- context[?y <? ?x] =>
+               rewrite (proj2 (Z.ltb_ge _ _) H);
+               try progress cbn
+           | H: ?x < ?y |- context[?y <=? ?x] =>
+               rewrite (proj2 (Z.leb_gt _ _) H);
+               try progress cbn
+           | H1: ?x <= ?y, H2: ?y < ?z |- context[?z <? ?x] =>
+               rewrite (Zle_lt_ltb H1 H2);
+               try progress cbn
+           | H: (?x || ?y)%bool = true |- _ =>
+               apply Bool.orb_prop in H as [[= ->]|[= ->]];
+               try progress cbn
+           | H: Some OFF = Some TOR |- _ =>
+               inversion H
+           end; cbn; auto.
+  all: apply pmp_check_perms_gives_access; first assumption.
+Qed.
 
 (* TODO: this is just to make sure that all contracts defined so far are valid
          (i.e. ensure no contract was defined and then forgotten to validate it) *)

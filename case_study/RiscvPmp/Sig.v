@@ -51,6 +51,7 @@ Inductive PurePredicate : Set :=
 | pmp_check_perms
 | pmp_check_rwx
 | sub_perm
+| access_pmp_perm
 | within_cfg
 | not_within_cfg
 | prev_addr
@@ -89,6 +90,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_check_perms => [ty_pmpcfg_ent; ty_access_type; ty_privilege]
       | pmp_check_rwx   => [ty_pmpcfg_ent; ty_access_type]
       | sub_perm        => [ty_access_type; ty_access_type]
+      | access_pmp_perm => [ty_access_type; ty_pmpcfgperm]
       | within_cfg      => [ty_xlenbits; ty_pmpcfg_ent; ty_xlenbits; ty_xlenbits]
       | not_within_cfg  => [ty_xlenbits; ty.list ty_pmpentry]
       | prev_addr       => [ty_pmpcfgidx; ty.list ty_pmpentry; ty_xlenbits]
@@ -109,14 +111,22 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           end
       end.
 
-    Definition pmp_get_RWX (cfg : Val ty_pmpcfg_ent) : Val ty_access_type :=
+    Definition pmp_get_RWX (cfg : Val ty_pmpcfg_ent) (p : Val ty_privilege) : Val ty_pmpcfgperm :=
       match cfg with
-      | {| L := _; A := _; X := X; W := W; R := R |} =>
-          match X, W, R with
-          | false, false, true => Read
-          | false, true, false => Write
-          | true, false, false => Execute
-          | _, _, _ => ReadWrite
+      | {| L := L; A := _; X := X; W := W; R := R |} =>
+          match L, p with
+          | false, Machine => PmpRWX
+          | _,     _       =>
+              match X, W, R with
+              | false, false, true  => PmpR
+              | false, true,  false => PmpW
+              | false, true,  true  => PmpRW
+              | true,  false, false => PmpX
+              | true,  false, true  => PmpRX
+              | true,  true,  false => PmpWX
+              | true,  true,  true  => PmpRWX
+              | _,     _,     _     => PmpO
+              end
           end
       end.
 
@@ -130,14 +140,14 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
           pmp_check_RWX cfg acc
       end.
 
-    Definition pmp_get_perms (cfg : Val ty_pmpcfg_ent) (p : Val ty_privilege) : option (Val ty_access_type) :=
+    Definition pmp_get_perms (cfg : Val ty_pmpcfg_ent) (p : Val ty_privilege) : Val ty_pmpcfgperm :=
       match p with
       | Machine =>
           if L cfg
-          then Some (pmp_get_RWX cfg)
-          else None
+          then pmp_get_RWX cfg p
+          else PmpRWX
       | User =>
-          Some (pmp_get_RWX cfg)
+          pmp_get_RWX cfg p
       end.
 
     Definition pmp_addr_range (cfg : Pmpcfg_ent) (hi lo : Xlenbits) : PmpAddrRange :=
@@ -167,7 +177,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | PMP_Match        => PMP_Success
       end.
 
-    Fixpoint pmp_check (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_access_type)) :=
+    Fixpoint pmp_check (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (prev : Val ty_xlenbits) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
       match entries with
       | [] => match m with
               | Machine => (true, None)
@@ -175,7 +185,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
               end
       | (cfg , addr) :: entries =>
           match pmp_match_entry a m cfg prev addr with
-          | PMP_Success  => (true, pmp_get_perms cfg m)
+          | PMP_Success  => (true, Some (pmp_get_perms cfg m))
           | PMP_Fail     => (false, None)
           | PMP_Continue => pmp_check a entries addr m
           end
@@ -184,7 +194,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     (* check_access is based on the pmpCheck algorithm, main difference
            is that we can define it less cumbersome because entries will contain
            the PMP entries in highest-priority order. *)
-    Definition check_pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_access_type)) :=
+    Definition check_pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) : (bool * option (Val ty_pmpcfgperm)) :=
       pmp_check a entries 0 m.
 
     Equations(noeqns) access_type_eqb (a1 a2 : Val ty_access_type) : bool :=
@@ -213,15 +223,32 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition Sub_perm (a1 a2 : Val ty_access_type) : Prop :=
       decide_sub_perm a1 a2 = true.
 
-    Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : bool :=
+    Equations(noeqns) decide_access_pmp_perm (a : Val ty_access_type) (p : Val ty_pmpcfgperm) : bool :=
+    | Read      | PmpR   := true;
+    | Read      | PmpRW  := true;
+    | Read      | PmpRX  := true;
+    | Write     | PmpW   := true;
+    | Write     | PmpRW  := true;
+    | Write     | PmpWX  := true;
+    | ReadWrite | PmpRW  := true;
+    | Execute   | PmpX   := true;
+    | Execute   | PmpRX  := true;
+    | Execute   | PmpWX  := true;
+    | _         | PmpRWX := true;
+    | _         | _      := false.
+
+    Definition Access_pmp_perm (a : Val ty_access_type) (p : Val ty_pmpcfgperm) : Prop :=
+      decide_access_pmp_perm a p = true.
+
+    Definition decide_pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : bool :=
       match check_pmp_access a entries m with
-      | (true, Some acc) => decide_sub_perm acc p
+      | (true, Some p) => decide_access_pmp_perm acc p
       | (true, None)     => true
       | (false, _)       => false
       end.
 
-    Definition Pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (p : Val ty_access_type) : Prop :=
-      decide_pmp_access a entries m p = true.
+    Definition Pmp_access (a : Val ty_xlenbits) (entries : Val (ty.list ty_pmpentry)) (m : Val ty_privilege) (acc : Val ty_access_type) : Prop :=
+      decide_pmp_access a entries m acc = true.
 
     Definition Pmp_check_perms (cfg : Val ty_pmpcfg_ent) (acc : Val ty_access_type) (p : Val ty_privilege) : Prop :=
       decide_pmp_check_perms cfg acc p = true.
@@ -295,6 +322,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_check_perms => Pmp_check_perms
       | pmp_check_rwx   => Pmp_check_rwx
       | sub_perm        => Sub_perm
+      | access_pmp_perm => Access_pmp_perm
       | within_cfg      => Within_cfg
       | not_within_cfg  => Not_within_cfg
       | prev_addr       => Prev_addr
@@ -435,11 +463,19 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     | _       , _       => Some (cons (formula_user sub_perm [a1;a2]) nil)
     end.
 
+  Definition simplify_access_pmp_perm {Σ} (a : Term Σ ty_access_type) (p : Term Σ ty_pmpcfgperm) : option (List Formula Σ) :=
+    match term_get_val a , term_get_val p with
+    | Some a , Some p => if decide_access_pmp_perm a p then Some nil else None
+    | _      , _      => Some (cons (formula_user access_pmp_perm [a;p]) nil)
+    end.
+
+  (* TODO: simplify_access_pmp_perm *)
+
   Definition simplify_pmp_access {Σ} (paddr : Term Σ ty_xlenbits) (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege) (acc : Term Σ ty_access_type) : option (List Formula Σ) :=
     match term_get_val paddr , term_get_val es , term_get_val p with
     | Some paddr , Some entries , Some p =>
       match check_pmp_access paddr entries p with
-      | (true, Some typ) => simplify_sub_perm (term_val ty_access_type typ) acc
+      | (true, Some typ) => simplify_access_pmp_perm acc (term_val ty_pmpcfgperm typ)
       | (true, None)     => Some nil
       | (false, _)       => None
       end
@@ -504,6 +540,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
   | pmp_check_perms        | [ cfg; acc; priv ]             => simplify_pmp_check_perms cfg acc priv
   | pmp_check_rwx          | [ cfg; acc ]                   => simplify_pmp_check_rwx cfg acc
   | sub_perm               | [ a1; a2 ]                     => simplify_sub_perm a1 a2
+  | access_pmp_perm        | [ a; p ]                       => simplify_access_pmp_perm a p
   | within_cfg             | [ paddr; cfg; prevaddr; addr]  => simplify_within_cfg paddr cfg prevaddr addr
   | not_within_cfg         | [ paddr; entries ]             => Some (cons (formula_user not_within_cfg [paddr; entries]) nil)
   | prev_addr              | [ cfg; entries; prev ]         => simplify_prev_addr cfg entries prev
@@ -544,6 +581,20 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       intros ?; intuition; constructor.
   Qed.
 
+  Lemma simplify_access_pmp_perm_spec {Σ} (acc : Term Σ ty_access_type) (p : Term Σ ty_pmpcfgperm) :
+  option.spec
+    (fun r : PathCondition Σ =>
+     forall ι : Env (fun xt : string∷Ty => Val (type xt)) Σ,
+     Access_pmp_perm (inst acc ι) (inst p ι) <-> instpc r ι)
+    (forall ι : Env (fun xt : string∷Ty => Val (type xt)) Σ,
+    ~ Access_pmp_perm (inst acc ι) (inst p ι))
+    (simplify_access_pmp_perm acc p).
+  Proof.
+    unfold simplify_access_pmp_perm. lsolve.
+    destruct decide_access_pmp_perm eqn:?; constructor;
+      intros ?; intuition; constructor.
+  Qed.
+
   Lemma simplify_pmp_access_spec {Σ} (paddr : Term Σ ty_exc_code)
     (es : Term Σ (ty.list ty_pmpentry)) (p : Term Σ ty_privilege)
     (acc : Term Σ ty_access_type) :
@@ -555,7 +606,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
       (simplify_pmp_access paddr es p acc).
   Proof.
     unfold simplify_pmp_access. lsolve.
-    apply (simplify_sub_perm_spec (term_val _ _)).
+    apply (simplify_access_pmp_perm_spec acc (term_val _ _)).
   Qed.
 
   Lemma simplify_pmp_check_rwx_spec {Σ} (cfg : Term Σ ty_pmpcfg_ent) (acc : Term Σ ty_access_type) :
@@ -624,6 +675,7 @@ Module RiscvPmpSolverKit <: SolverKit RiscvPmpBase RiscvPmpSignature.
     - simple apply simplify_pmp_check_perms_spec.
     - simple apply simplify_pmp_check_rwx_spec.
     - simple apply simplify_sub_perm_spec.
+    - simple apply simplify_access_pmp_perm_spec.
     - simple apply simplify_within_cfg_spec.
     - lsolve.
     - simple apply simplify_prev_addr_spec.

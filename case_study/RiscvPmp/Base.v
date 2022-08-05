@@ -75,6 +75,16 @@ Inductive PmpCfgIdx : Set :=
 | PMP1CFG
 .
 
+Inductive PmpCfgPerm : Set :=
+| PmpO
+| PmpR
+| PmpW
+| PmpX
+| PmpRW
+| PmpRX
+| PmpWX
+| PmpRWX.
+
 Inductive PmpAddrIdx : Set :=
 | PMPADDR0
 | PMPADDR1
@@ -134,6 +144,7 @@ Inductive Enums : Set :=
 | privilege
 | csridx
 | pmpcfgidx
+| pmpcfgperm
 | pmpaddridx
 | pmpaddrmatchtype
 | pmpmatch
@@ -278,6 +289,7 @@ Section TransparentObligations.
   Derive NoConfusion for Privilege.
   Derive NoConfusion for CSRIdx.
   Derive NoConfusion for PmpCfgIdx.
+  Derive NoConfusion for PmpCfgPerm.
   Derive NoConfusion for PmpAddrIdx.
   Derive NoConfusion for PmpAddrMatchType.
   Derive NoConfusion for PmpMatch.
@@ -310,6 +322,7 @@ Derive EqDec for Enums.
 Derive EqDec for Privilege.
 Derive EqDec for CSRIdx.
 Derive EqDec for PmpCfgIdx.
+Derive EqDec for PmpCfgPerm.
 Derive EqDec for PmpAddrIdx.
 Derive EqDec for PmpAddrMatchType.
 Derive EqDec for PmpMatch.
@@ -351,6 +364,9 @@ Section Finite.
 
   #[export,program] Instance PmpCfgIdx_finite : Finite PmpCfgIdx :=
     {| enum := [PMP0CFG;PMP1CFG] |}.
+
+  #[export,program] Instance PmpCfgPerm_finite : Finite PmpCfgPerm :=
+    {| enum := [PmpO; PmpR; PmpW; PmpX; PmpRW; PmpRX; PmpWX; PmpRWX] |}.
 
   #[export,program] Instance PmpAddrIdx_finite : Finite PmpAddrIdx :=
     {| enum := [PMPADDR0;PMPADDR1] |}.
@@ -441,6 +457,7 @@ Module Export RiscvPmpBase <: Base.
   Notation ty_privilege        := (ty.enum privilege).
   Notation ty_csridx           := (ty.enum csridx).
   Notation ty_pmpcfgidx        := (ty.enum pmpcfgidx).
+  Notation ty_pmpcfgperm       := (ty.enum pmpcfgperm).
   Notation ty_pmpaddridx       := (ty.enum pmpaddridx).
   Notation ty_pmpaddrmatchtype := (ty.enum pmpaddrmatchtype).
   Notation ty_pmpmatch         := (ty.enum pmpmatch).
@@ -469,6 +486,7 @@ Module Export RiscvPmpBase <: Base.
     | privilege        => Privilege
     | csridx           => CSRIdx
     | pmpcfgidx        => PmpCfgIdx
+    | pmpcfgperm       => PmpCfgPerm
     | pmpaddridx       => PmpAddrIdx
     | pmpaddrmatchtype => PmpAddrMatchType
     | pmpmatch         => PmpMatch
