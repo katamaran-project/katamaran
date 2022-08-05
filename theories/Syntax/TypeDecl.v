@@ -67,19 +67,6 @@ From Katamaran Require Import
 Import ctx.notations.
 Import env.notations.
 
-(* TODO: Move me *)
-Inductive Bit : Set := bitone | bitzero.
-
-Definition Bit_eqb (b1 : Bit) (b2 : Bit) : bool :=
-  match b1, b2 with
-  | bitone , bitone  => true
-  | bitzero, bitzero => true
-  | _      , _       => false
-  end.
-
-Lemma Bit_eqb_spec (b1 b2 : Bit) : reflect (b1 = b2) (Bit_eqb b1 b2).
-Proof. destruct b1, b2; cbn; constructor; congruence. Qed.
-
 Module ty.
 
   Class TypeDeclKit : Type :=
@@ -99,7 +86,6 @@ Module ty.
     Inductive Ty : Set :=
     | int
     | bool
-    | bit
     | string
     | list (σ : Ty)
     | prod (σ τ : Ty)
@@ -121,7 +107,6 @@ Module ty.
 
       Hypothesis (P_int    : P int).
       Hypothesis (P_bool   : P bool).
-      Hypothesis (P_bit    : P bit).
       Hypothesis (P_string : P string).
       Hypothesis (P_list   : forall σ, P σ -> P (list σ)).
       Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (prod σ τ)).
@@ -137,7 +122,6 @@ Module ty.
         match σ with
         | int      => ltac:(apply P_int)
         | bool     => ltac:(apply P_bool)
-        | bit      => ltac:(apply P_bit)
         | string   => ltac:(apply P_string)
         | list σ   => ltac:(apply P_list; auto)
         | prod σ τ => ltac:(apply P_prod; auto)
@@ -175,7 +159,6 @@ Module ty.
       match σ with
       | int => Z
       | bool => Datatypes.bool
-      | bit => Bit
       | string => String.string
       | list σ' => Datatypes.list (Val σ')
       | prod σ1 σ2 => Val σ1 * Val σ2
@@ -251,7 +234,6 @@ Module ty.
         match σ , τ with
         | int        , int        => left eq_refl
         | bool       , bool       => left eq_refl
-        | bit        , bit        => left eq_refl
         | string     , string     => left eq_refl
         | list σ     , list τ     => f_equal_dec list noConfusion_inv (ty_eqdec σ τ)
         | prod σ1 σ2 , prod τ1 τ2 => f_equal2_dec prod noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
@@ -271,7 +253,6 @@ Module ty.
       match σ return Val σ -> Val σ -> Datatypes.bool with
       | int      => Z.eqb
       | bool     => Bool.eqb
-      | bit      => Bit_eqb
       | string   => String.eqb
       | list σ   => list_beq (Val_eqb σ)
       | prod σ τ => prod_beq (Val_eqb σ) (Val_eqb τ)
@@ -289,7 +270,6 @@ Module ty.
       induction σ; cbn.
       - apply Z.eqb_spec.
       - apply Bool.eqb_spec.
-      - apply Bit_eqb_spec.
       - apply String.eqb_spec.
       - apply list_beq_spec; auto.
       - destruct x as [x1 x2], y as [y1 y2]...
@@ -325,7 +305,6 @@ Module ty.
   End WithTypeDef.
   #[global] Arguments int {TK}.
   #[global] Arguments bool {TK}.
-  #[global] Arguments bit {TK}.
   #[global] Arguments string {TK}.
   #[global] Arguments list {TK} σ.
   #[global] Arguments prod {TK} σ τ.

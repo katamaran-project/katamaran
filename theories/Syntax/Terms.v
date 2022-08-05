@@ -91,7 +91,7 @@ Module Type TermsOn (Import TY : Types).
     | env.snoc es _ e => term_binop bop.tuple_snoc (term_tuple es) e
     end.
 
-  Fixpoint term_bvec {Σ n} (es : Vector.t (Term Σ ty.bit) n) : Term Σ (ty.bvec n) :=
+  Fixpoint term_bvec {Σ n} (es : Vector.t (Term Σ ty.bool) n) : Term Σ (ty.bvec n) :=
     match es with
     | Vector.nil       => term_val (ty.bvec 0) bv.nil
     | Vector.cons e es => term_binop bop.bvcons e (term_bvec es)
