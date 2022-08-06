@@ -53,10 +53,6 @@ From Katamaran Require Import
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
      RiscvPmp.Sig.
-From Katamaran Require
-     RiscvPmp.Contracts
-     RiscvPmp.LoopVerification
-     RiscvPmp.Model.
 From iris.base_logic Require lib.gen_heap lib.iprop invariants.
 From iris.bi Require interface big_op.
 From iris.algebra Require dfrac.
@@ -182,7 +178,6 @@ End BlockVerification.
 
 Module BlockVerificationDerived.
 
-  Import Contracts.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifExecutor.
   Import Symbolic.
@@ -260,7 +255,6 @@ End BlockVerificationDerived.
 
 Module BlockVerificationDerived2.
 
-  Import Contracts.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifExecutor.
   Import Symbolic.
@@ -373,7 +367,6 @@ Module BlockVerificationDerived2.
 End BlockVerificationDerived2.
 
 Module BlockVerificationDerivedSem.
-  Import Contracts.
   Import RiscvPmpIrisBase.
   Import RiscvPmpIrisInstance.
   Import RiscvPmpBlockVerifSpec.
@@ -423,7 +416,6 @@ Module BlockVerificationDerivedSem.
 End BlockVerificationDerivedSem.
 
 Module BlockVerificationDerived2Sound.
-  Import Contracts.
   Import RiscvPmpBlockVerifSpec.
   Import RiscvPmpBlockVerifShalExecutor.
   Import RiscvPmpIrisInstanceWithContracts.
@@ -609,7 +601,6 @@ Module BlockVerificationDerived2Sound.
 End BlockVerificationDerived2Sound.
 
 Module BlockVerificationDerived2Sem.
-  Import Contracts.
   Import RiscvPmpBlockVerifSpec.
   Import weakestpre.
   Import tactics.
@@ -622,15 +613,7 @@ Module BlockVerificationDerived2Sem.
   Import RiscvPmpIrisInstance.
   Import RiscvPmpIrisInstanceWithContracts.
   Import RiscvPmpBlockVerifShalExecutor.
-  (* Import Model.RiscvPmpModel. *)
-  (* Import Model.RiscvPmpModel2. *)
-  (* Import RiscvPmpIrisParams. *)
-  (* Import RiscvPmpIrisPredicates. *)
-  (* Import RiscvPmpIrisPrelims. *)
-  (* Import RiscvPmpIrisResources. *)
   Import BlockVerificationDerived2Sound.
-  (* Import RiscvPmpModelBlockVerif.PLOG. *)
-  (* Import Sound. *)
 
   Definition semTripleOneInstrStep `{sailGS Σ} (PRE : iProp Σ) (instr : AST) (POST : Z -> iProp Σ) (a : Z) : iProp Σ :=
     semTriple [] (PRE ∗ (∃ v, lptsreg nextpc v) ∗ lptsreg pc a ∗ interp_ptsto_instr a instr)
@@ -735,8 +718,8 @@ Module BlockVerificationDerived2Sem.
   Lemma sound_exec_block_addr `{sailGS Σ} {instrs ainstr apc} (h : SCHeap) (POST : Val ty_xlenbits -> CStore [ctx] -> iProp Σ) :
     exec_block_addr__c instrs ainstr apc (fun res => liftP (POST res)) [] h ->
     ⊢ ((interpret_scheap h ∗ lptsreg pc apc ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs) -∗
-            (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs ∗ POST an [] -∗ LoopVerification.WP_loop) -∗
-            LoopVerification.WP_loop)%I.
+            (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs ainstr instrs ∗ POST an [] -∗ WP_loop) -∗
+            WP_loop)%I.
   Proof.
     revert ainstr apc h POST.
     induction instrs as [|instr instrs]; cbn; intros ainstr apc h POST.
@@ -747,13 +730,13 @@ Module BlockVerificationDerived2Sem.
     - unfold bind, CHeapSpecM.bind, assert, CHeapSpecM.assert_formula.
       unfold CHeapSpecM.lift_purem, CPureSpecM.assert_formula.
       intros [-> Hverif].
-      unfold LoopVerification.WP_loop at 2, FunDef, fun_loop.
+      unfold WP_loop at 2, FunDef, fun_loop.
       assert (⊢ semTripleOneInstrStep (interpret_scheap h)%I instr
                 (fun an =>
                    lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (apc + 4) instrs -∗
-                   (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ LoopVerification.WP_loop) -∗
-                     LoopVerification.WP_loop) apc)%I as Hverif2.
-      { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (apc + 4) instrs -∗ (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ LoopVerification.WP_loop) -∗ LoopVerification.WP_loop)%I).
+                   (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ WP_loop) -∗
+                     WP_loop) apc)%I as Hverif2.
+      { apply (sound_exec_instruction_any (fun an δ => (lptsreg pc an : iProp Σ) ∗ (∃ v, lptsreg nextpc v : iProp Σ) ∗ ptsto_instrs (apc + 4) instrs -∗ (∀ an2 : Z, pc ↦ an2 ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs (apc + 4) instrs ∗ POST an2 [env] -∗ WP_loop) -∗ WP_loop)%I).
         revert Hverif.
         eapply mono_exec_instruction_any__c.
         intros an h2.
@@ -786,8 +769,8 @@ Module BlockVerificationDerived2Sem.
   Definition semTripleBlock `{sailGS Σ} (PRE : Z -> iProp Σ) (instrs : list AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
     (∀ a,
     (PRE a ∗ pc ↦ a ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs) -∗
-      (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ LoopVerification.WP_loop) -∗
-      LoopVerification.WP_loop)%I.
+      (∀ an, pc ↦ an ∗ (∃ v, nextpc ↦ v) ∗ ptsto_instrs a instrs ∗ POST a an -∗ WP_loop) -∗
+      WP_loop)%I.
 
   Lemma sound_exec_triple_addr__c `{sailGS Σ} {W : World} {pre post instrs} {ι : Valuation W} :
       (exec_triple_addr__c ι pre instrs post (λ _ _ _ , True) [env] []%list) ->
@@ -800,12 +783,12 @@ Module BlockVerificationDerived2Sem.
     unfold bind, CHeapSpecM.bind, produce in Hexec.
     assert (interpret_scheap []%list ∗ asn.interpret pre ι.[("a"::ty_exc_code) ↦ a] ⊢
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
-      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ LoopVerification.WP_loop) -∗
-      LoopVerification.WP_loop)%I as Hverif.
+      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
+      WP_loop)%I as Hverif.
     { refine (@produce_sound _ _ _ _ (ι.[("a"::ty_exc_code) ↦ a]) pre (fun _ =>
     (True ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
-      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ LoopVerification.WP_loop) -∗
-      LoopVerification.WP_loop)%I [env] []%list _).
+      (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗ asn.interpret post (ι.[("a"::ty_xlenbits) ↦ a].[("an"::ty_xlenbits) ↦ an]) -∗ WP_loop) -∗
+      WP_loop)%I [env] []%list _).
       revert Hexec.
       apply produce_monotonic.
       unfold consume.
@@ -815,8 +798,8 @@ Module BlockVerificationDerived2Sem.
           ⊢ ((interpret_scheap h ∗ lptsreg pc a ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs) -∗
                (∀ an, lptsreg pc an ∗ (∃ v, lptsreg nextpc v) ∗ ptsto_instrs a instrs ∗
                         asn.interpret post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ an]
-                         -∗ LoopVerification.WP_loop) -∗
-               LoopVerification.WP_loop)%I) as Hverifblock.
+                         -∗ WP_loop) -∗
+               WP_loop)%I) as Hverifblock.
       { eapply (sound_exec_block_addr h
                   (fun an δ => asn.interpret post ι.["a"∷ty_exc_code ↦ a].["an"∷ty_exc_code ↦ an])%I).
         refine (mono_exec_block_addr _ _ _ _ _ Hexec).

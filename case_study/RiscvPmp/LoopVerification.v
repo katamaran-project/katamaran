@@ -155,9 +155,6 @@ Section Loop.
      Axiom step_iprop : ⊢ semTriple_step.
      Axiom init_model_iprop : ⊢ semTriple_init_model.
 
-     Definition WP_loop : iProp Σ :=
-       (WP (MkConf (FunDef loop) env.nil) ?{{_, True}})%I.
-
      Definition loop_pre (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) : iProp Σ :=
          (
           Execution m cp h i entries es mpp mepc_v ∗

@@ -34,8 +34,8 @@ From Coq Require Import
 From Katamaran Require Import
      Notations
      Semantics
-     RiscvPmp.BlockVerification
      RiscvPmp.BlockVer.Spec
+     RiscvPmp.BlockVer.Verifier
      RiscvPmp.Machine
      RiscvPmp.Sig.
 

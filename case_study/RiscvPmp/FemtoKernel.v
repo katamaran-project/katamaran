@@ -35,7 +35,7 @@ From Katamaran Require Import
      Notations
      Specification
      RiscvPmp.BlockVer.Spec
-     RiscvPmp.BlockVerification
+     RiscvPmp.BlockVer.Verifier
      RiscvPmp.IrisModel
      RiscvPmp.IrisInstance
      RiscvPmp.Machine
@@ -463,8 +463,8 @@ Import BlockVerificationDerived2.
   Definition femto_handler_contract `{sailGS Σ} : iProp Σ :=
     ∀ epc,
         femto_handler_pre epc -∗
-          (femto_handler_post epc -∗ LoopVerification.WP_loop) -∗
-          LoopVerification.WP_loop.
+          (femto_handler_post epc -∗ WP_loop) -∗
+          WP_loop.
 
   (* Note: temporarily make femtokernel_init_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_handler_pre.
@@ -506,7 +506,7 @@ Import BlockVerificationDerived2.
         (* ptsto_instrs 0 femtokernel_init ∗  (domi: init code not actually needed anymore, can be dropped) *)
         ptsto_instrs 72 femtokernel_handler
         -∗
-        LoopVerification.WP_loop.
+        WP_loop.
   Proof.
     unfold interp_gprs; cbn -[interp_pmp_entries].
     rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
@@ -650,8 +650,8 @@ Import BlockVerificationDerived2.
 
   Definition femto_init_contract `{sailGS Σ} : iProp Σ :=
     femto_init_pre -∗
-      (femto_init_post -∗ LoopVerification.WP_loop) -∗
-          LoopVerification.WP_loop.
+      (femto_init_post -∗ WP_loop) -∗
+          WP_loop.
 
   (* Note: temporarily make femtokernel_init_pre opaque to prevent Gallina typechecker from taking extremely long *)
   Opaque femtokernel_init_pre.
@@ -697,7 +697,7 @@ Import BlockVerificationDerived2.
       ptsto_instrs 0 femtokernel_init ∗
       ptsto_instrs 72 femtokernel_handler
       -∗
-      LoopVerification.WP_loop.
+      WP_loop.
   Proof.
     iIntros "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hgprs & Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1 & Hpc & Hfortytwo & Hadv & Hnextpc & Hinit & Hhandler)".
     unfold interp_gprs.

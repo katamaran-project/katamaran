@@ -27,6 +27,7 @@
 (******************************************************************************)
 
 From Katamaran Require Import
+     Environment
      Iris.Model
      RiscvPmp.Machine.
 From iris Require Import
@@ -113,5 +114,10 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
   End RiscvPmpIrisParams.
 
   Include IrisResources RiscvPmpBase RiscvPmpProgram RiscvPmpSemantics.
+
+  Import iris.program_logic.weakestpre.
+
+  Definition WP_loop `{sg : sailGS Σ} : iProp Σ :=
+    (WP (MkConf (FunDef loop) env.nil) ?{{_, True}})%I.
 
 End RiscvPmpIrisBase.
