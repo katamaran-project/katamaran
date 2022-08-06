@@ -67,3 +67,7 @@ theories/Syntax/Terms.v
 theories/Syntax/TypeDecl.v
 theories/Syntax/Variables.v
 theories/Tactics.v
+
+theories/Staging/CommandStep.v
+theories/Staging/NewShallow/Executor.v
+theories/Staging/NewShallow/Soundness.v
