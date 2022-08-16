@@ -775,3 +775,15 @@ Module Type Soundness
   End Soundness.
 
 End Soundness.
+
+Module MakeShallowSoundness
+  (Import B : Base)
+  (Import PROG : Program B)
+  (Import SIG : Signature B)
+  (Import SPEC : Specification B PROG SIG)
+  (Import EXEC : ShallowExecOn B PROG SIG SPEC)
+  (Import HOAR : ProgramLogicOn B PROG SIG SPEC).
+
+  Include Soundness B PROG SIG SPEC EXEC HOAR.
+
+End MakeShallowSoundness.

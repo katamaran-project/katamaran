@@ -2303,3 +2303,15 @@ Module Soundness
   (* Print Assumptions symbolic_vcgen_soundness. *)
 
 End Soundness.
+
+Module MakeSymbolicSoundness
+  (Import B    : Base)
+  (Import PROG : Program B)
+  (Import SIG  : Signature B)
+  (Import SPEC : Specification B PROG SIG)
+  (Import SOLV : SolverKit B SIG)
+  (Import SHAL : ShallowExecOn B PROG SIG SPEC)
+  (Import SYMB : SymbolicExecOn B PROG SIG SPEC SOLV).
+
+  Include Soundness B PROG SIG SPEC SOLV SHAL SYMB.
+End MakeSymbolicSoundness.
