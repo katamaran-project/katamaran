@@ -37,8 +37,6 @@ Module ProgressOn (Import B : Base) (Import P : Program B) (Import STEP : SmallS
 
   Local Ltac progress_can_form :=
     match goal with
-    (* | [ H: CStore (ctx_snoc _ _) |- _ ] => pose proof (can_form_store_snoc H) *)
-    (* | [ H: CStore ctx_nil |- _ ] => pose proof (can_form_store_nil H) *)
     | [ H: CStore (ctx.cat _ _) |- _ ] => destruct (env.catView H)
     | [ H: Final ?s |- _ ] => destruct s; cbn in H
     end; destruct_conjs; subst; try contradiction.
@@ -60,9 +58,6 @@ Module ProgressOn (Import B : Base) (Import P : Program B) (Import STEP : SmallS
     | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStore (ctx.cat ?Γ ?Δ)), _),
         γ : RegStore, μ : Memory, δ1: CStore ?Γ, δ2: CStore ?Δ |- _
       ] => specialize (IH γ μ (env.cat δ1 δ2)); T
-    (* | [ IH: (forall (δ : CStore (ctx_snoc ctx_nil (?x , ?σ))), _), *)
-    (*     v: Val ?σ |- _ *)
-    (*   ] => specialize (IH (env.snoc env.nil x σ v)); T *)
     | [ IH: (forall (γ : RegStore) (μ : Memory) (δ : CStore ?Γ), _),
         γ : RegStore, δ: CStore ?Γ |- _
       ] => solve [ specialize (IH γ μ δ); T | clear IH; T ]

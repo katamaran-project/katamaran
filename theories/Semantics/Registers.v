@@ -41,7 +41,6 @@ Module Type RegStoreKit (Import B : Base).
      instantiate it with their own data structure and [read_regsiter]/[write_register]
      functions *)
   Parameter RegStore : Type.
-  (* Definition RegStore : Type := forall σ, 𝑹𝑬𝑮 σ -> Val σ. *)
   Parameter read_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ), Val σ.
   Parameter write_register : forall (γ : RegStore) {σ} (r : 𝑹𝑬𝑮 σ) (v : Val σ), RegStore.
 
@@ -52,15 +51,6 @@ Module Type RegStoreKit (Import B : Base).
     forall (γ : RegStore) {σ τ} (r__σ : 𝑹𝑬𝑮 σ) (r__τ : 𝑹𝑬𝑮 τ) (v__σ : Val σ),
       existT _ r__σ <> existT _ r__τ ->
       read_register (write_register γ r__σ v__σ) r__τ = read_register γ r__τ.
-
-  (* Parameter write_read : *)
-  (*   forall (γ : RegStore) {σ τ} (r__σ : 𝑹𝑬𝑮 σ) (r__τ : 𝑹𝑬𝑮 τ), *)
-  (*     read_register (write_register γ r (read_register γ r)) r__τ = *)
-  (*     read_register γ r__τ. *)
-
-  (* Parameter write_write : forall (γ : RegStore) σ (r : 𝑹𝑬𝑮 σ) (v1 v2 : Val σ), *)
-  (*     write_register (write_register γ r v1) r v2 = write_register γ r v2. *)
-
 
 End RegStoreKit.
 

@@ -48,11 +48,11 @@ Local Unset Elimination Schemes.
 
 Module Type ExpressionsOn (Import TY : Types).
 
-  Local Notation PCtx := (NCtx 𝑿 Ty).
-  Local Notation CStore := (@NamedEnv 𝑿 Ty Val).
+  Local Notation PCtx := (NCtx PVar Ty).
+  Local Notation CStore := (@NamedEnv PVar Ty Val).
 
   (* Intrinsically well-typed expressions. The context Γ of mutable variables
-     contains names 𝑿 and types Ty, but the names are not computationally
+     contains names PVar and types Ty, but the names are not computationally
      relevant. The underlying representation is still a de Bruijn index based
      one. The names are meant for human consumption and we also provide name
      resolution infrastructure in the NameResolution module to fill in de
@@ -64,7 +64,7 @@ Module Type ExpressionsOn (Import TY : Types).
      constructor below and use the type class mechanism to copy these
      locally. *)
   Inductive Exp (Γ : PCtx) : Ty -> Set :=
-  | exp_var     (x : 𝑿) (σ : Ty) (xInΓ : x∷σ ∈ Γ) : Exp Γ σ
+  | exp_var     (x : PVar) (σ : Ty) (xInΓ : x∷σ ∈ Γ) : Exp Γ σ
   | exp_val     (σ : Ty) : Val σ -> Exp Γ σ
   | exp_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1) (e2 : Exp Γ σ2) : Exp Γ σ3
   | exp_neg     (e : Exp Γ ty.int) : Exp Γ ty.int
@@ -73,7 +73,7 @@ Module Type ExpressionsOn (Import TY : Types).
   | exp_inr     {σ1 σ2 : Ty} : Exp Γ σ2 -> Exp Γ (ty.sum σ1 σ2)
   | exp_list    {σ : Ty} (es : list (Exp Γ σ)) : Exp Γ (ty.list σ)
   (* Experimental features *)
-  | exp_bvec    {n} (es : Vector.t (Exp Γ ty.bit) n) : Exp Γ (ty.bvec n)
+  | exp_bvec    {n} (es : Vector.t (Exp Γ ty.bool) n) : Exp Γ (ty.bvec n)
   | exp_tuple   {σs : Ctx Ty} (es : Env (Exp Γ) σs) : Exp Γ (ty.tuple σs)
   | exp_union   {U : unioni} (K : unionk U) (e : Exp Γ (unionk_ty U K)) : Exp Γ (ty.union U)
   | exp_record  (R : recordi) (es : NamedEnv (Exp Γ) (recordf_ty R)) : Exp Γ (ty.record R).
@@ -92,14 +92,14 @@ Module Type ExpressionsOn (Import TY : Types).
 
     Let PL (σ : Ty) : list (Exp Γ σ) -> Type :=
       List.fold_right (fun e es => P _ e * es)%type unit.
-    Let PV (n : nat) (es : Vector.t (Exp Γ ty.bit) n) : Type :=
+    Let PV (n : nat) (es : Vector.t (Exp Γ ty.bool) n) : Type :=
       Vector.fold_right (fun e ps => P _ e * ps)%type es unit.
     Let PE : forall σs, Env (Exp Γ) σs -> Type :=
       env.Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
     Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Exp Γ) σs -> Type :=
       env.Env_rect (fun _ _ => Type) unit (fun _ es IHes _ e => IHes * P _ e)%type.
 
-    Hypothesis (P_var     : forall (x : 𝑿) (σ : Ty) (xInΓ : x∷σ ∈ Γ), P σ (exp_var x)).
+    Hypothesis (P_var     : forall (x : PVar) (σ : Ty) (xInΓ : x∷σ ∈ Γ), P σ (exp_var x)).
     Hypothesis (P_val     : forall (σ : Ty) (l : Val σ), P σ (exp_val σ l)).
     Hypothesis (P_binop   : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Exp Γ σ1), P σ1 e1 -> forall e2 : Exp Γ σ2, P σ2 e2 -> P σ3 (exp_binop op e1 e2)).
     Hypothesis (P_neg     : forall e : Exp Γ ty.int, P ty.int e -> P ty.int (exp_neg e)).
@@ -107,7 +107,7 @@ Module Type ExpressionsOn (Import TY : Types).
     Hypothesis (P_inl     : forall (σ1 σ2 : Ty) (e : Exp Γ σ1), P σ1 e -> P (ty.sum σ1 σ2) (exp_inl e)).
     Hypothesis (P_inr     : forall (σ1 σ2 : Ty) (e : Exp Γ σ2), P σ2 e -> P (ty.sum σ1 σ2) (exp_inr e)).
     Hypothesis (P_list    : forall (σ : Ty) (es : list (Exp Γ σ)), PL es -> P (ty.list σ) (exp_list es)).
-    Hypothesis (P_bvec    : forall (n : nat) (es : Vector.t (Exp Γ ty.bit) n), PV es -> P (ty.bvec n) (exp_bvec es)).
+    Hypothesis (P_bvec    : forall (n : nat) (es : Vector.t (Exp Γ ty.bool) n), PV es -> P (ty.bvec n) (exp_bvec es)).
     Hypothesis (P_tuple   : forall (σs : Ctx Ty) (es : Env (Exp Γ) σs), PE es -> P (ty.tuple σs) (exp_tuple es)).
     Hypothesis (P_union   : forall (U : unioni) (K : unionk U) (e : Exp Γ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (exp_union U K e)).
     Hypothesis (P_record  : forall (R : recordi) (es : NamedEnv (Exp Γ) (recordf_ty R)), PNE es -> P (ty.record R) (exp_record R es)).
@@ -144,12 +144,8 @@ Module Type ExpressionsOn (Import TY : Types).
     | exp_inr e           => inr (eval e δ)
     | exp_list es         => List.map (fun e => eval e δ) es
     | exp_bvec es         => Vector.t_rect
-                               _ (fun m (_ : Vector.t (Exp Γ ty.bit) m) => bv m)
-                               bv.nil (fun eb m _ (vs : bv m) =>
-                                          match eval eb δ with
-                                          | bitzero => bv.cons false vs
-                                          | bitone => bv.cons true vs
-                                          end)
+                               _ (fun m (_ : Vector.t (Exp Γ ty.bool) m) => bv m)
+                               bv.nil (fun eb m _ => bv.cons (eval eb δ))
                                _ es
     | exp_tuple es        => env.Env_rect
                                (fun σs _ => Val (ty.tuple σs))

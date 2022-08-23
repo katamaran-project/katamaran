@@ -35,8 +35,8 @@ From Katamaran Require Import
      Program
      Semantics.Registers
      Syntax.BinOps.
-From MinimalCaps Require Export
-     Base.
+From Katamaran Require Export
+     MinimalCaps.Base.
 
 From stdpp Require Import finite decidable.
 

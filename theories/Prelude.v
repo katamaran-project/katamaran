@@ -32,6 +32,7 @@ From Coq Require Import
      Bool.Bool
      Logic.StrictProp
      Lists.List
+     NArith.NArith
      Strings.String
      ZArith.BinInt.
 
@@ -129,24 +130,22 @@ Section Equality.
 
   Local Set Transparent Obligations.
 
-  Global Instance Z_eqdec : EqDec Z := Z.eq_dec.
-  Global Instance string_eqdec : EqDec string := string_dec.
+  #[export] Instance Z_eqdec : EqDec Z := Z.eq_dec.
+  #[export] Instance string_eqdec : EqDec string := string_dec.
   Derive NoConfusion EqDec for Empty_set.
   Derive Signature NoConfusion NoConfusionHom for Vector.t.
 
-  Global Instance option_eqdec `{EqDec A} : EqDec (option A).
+  #[export] Instance option_eqdec `{EqDec A} : EqDec (option A).
   Proof. eqdec_proof. Defined.
-  Global Instance vector_eqdec `{EqDec A} {n} : EqDec (Vector.t A n).
+  #[export] Instance vector_eqdec `{EqDec A} {n} : EqDec (Vector.t A n).
   Proof. eqdec_proof. Defined.
 
   Definition eq_dec_het {I} {A : I -> Type} `{eqdec : EqDec (sigT A)}
     {i1 i2} (x1 : A i1) (x2 : A i2) : dec_eq (existT i1 x1) (existT i2 x2) :=
     eq_dec (existT i1 x1) (existT i2 x2).
 
-  Import stdpp.base.
-
-  Global Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
-    EqDecision A | 10 := eqdec.
+  #[export] Instance EqDecision_from_EqDec `{eqdec : EqDec A} :
+    stdpp.base.EqDecision A | 10 := eqdec.
 
 End Equality.
 
@@ -179,7 +178,7 @@ Section Countable.
 
   Import stdpp.countable.
 
-  Global Program Instance Countable_sigT {A B} {EqDecA : EqDecision A} {CountA: Countable A}
+  #[export,refine] Instance Countable_sigT {A B} {EqDecA : EqDecision A} {CountA: Countable A}
     {EqDecB : forall (a:A), EqDecision (B a)} {CountB: forall a, Countable (B a)} :
     @Countable (sigT B) (sigma_eqdec EqDecA EqDecB)  :=
     {| encode x := prod_encode (encode (projT1 x)) (encode (projT2 x));
@@ -188,8 +187,8 @@ Section Countable.
          b ← (prod_decode_snd p ≫= decode);
          mret (existT a b)
     |}.
-  Next Obligation.
-    intros ? ? ? ? ? ? [a b].
+  Proof.
+    intros [a b].
     rewrite prod_decode_encode_fst; cbn.
     rewrite decode_encode; cbn.
     rewrite prod_decode_encode_snd; cbn.
@@ -225,6 +224,22 @@ Module option.
   Arguments map {A B} f !o.
   Arguments bind {A B} !a f.
 
+  Module Import notations.
+
+    Notation "' x <- ma ;; mb" :=
+      (bind ma (fun x => mb))
+        (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
+          format "' x  <-  ma  ;;  mb").
+    Notation "x <- ma ;; mb" :=
+      (bind ma (fun x => mb))
+        (at level 80, ma at next level, mb at level 200, right associativity).
+    Notation "f <$> a" := (map f a) (at level 40, left associativity).
+    Notation "f <*> a" :=
+      (match f with Some g => map g a | None => None end)
+        (at level 40, left associativity).
+
+  End notations.
+
   (* Easy eq patterns *)
   Lemma map_eq_some {A B} (f : A -> B) (o : option A) (a : A) :
     o = Some a ->
@@ -239,19 +254,6 @@ Module option.
     - now intros (a & -> & <-).
     - destruct o as [a|]; [ now exists a | discriminate ].
   Qed.
-
-  (* (* Not lazy in (a : option A). Avoid! *) *)
-  (* Definition ap {A B} (f : option (A -> B)) (a : option A) : option B := *)
-  (*   match f with *)
-  (*   | Some f => map f a *)
-  (*   | None => None *)
-  (*   end. *)
-
-  (* Local Notation aplazy f a := *)
-  (*   (match f with *)
-  (*    | Some g => map g a *)
-  (*    | None   => None *)
-  (*    end). *)
 
   (* Variant of Bool.reflect and BoolSpec for options, i.e.
      a weakest pre without effect observation. *)
@@ -348,18 +350,13 @@ Module option.
     spec S N (map f o) <-> spec (fun a => S (f a)) N o.
   Proof. do 2 rewrite spec_match; now destruct o. Qed.
 
-  (* Lemma spec_ap {A B S N} (f : option (A -> B)) (o : option A) : *)
-  (*   spec S N (ap f o) <-> *)
-  (*   spec (fun f => spec (fun a => S (f a)) N o) N f. *)
-  (* Proof. *)
-  (*   do 2 rewrite spec_match. destruct f; auto. *)
-  (*   rewrite spec_match; now destruct o. *)
-  (* Qed. *)
-
-  (* Lemma spec_aplazy {A B S N} (f : option (A -> B)) (o : option A) : *)
-  (*   spec S N (aplazy f o) <-> *)
-  (*   spec (fun f => spec (fun a => S (f a)) N o) N f. *)
-  (* Proof. apply spec_ap. Qed. *)
+  Lemma spec_ap {A B S N} (f : option (A -> B)) (o : option A) :
+    spec S N (f <*> o) <->
+    spec (fun f => spec (fun a => S (f a)) N o) N f.
+  Proof.
+    do 2 rewrite spec_match. destruct f; auto.
+    rewrite spec_match; now destruct o.
+  Qed.
 
   Lemma spec_monotonic {A} (S1 S2 : A -> Prop) (N1 N2 : Prop)
     (fS : forall a, S1 a -> S2 a) (fN: N1 -> N2) :
@@ -371,18 +368,13 @@ Module option.
     wp S (map f o) <-> wp (fun a => S (f a)) o.
   Proof. do 2 rewrite wp_match; now destruct o. Qed.
 
-  (* Lemma wp_ap {A B S} (f : option (A -> B)) (o : option A) : *)
-  (*   wp S (ap f o) <-> *)
-  (*   wp (fun f => wp (fun a => S (f a)) o) f. *)
-  (* Proof. *)
-  (*   do 2 rewrite wp_match. destruct f; auto. *)
-  (*   rewrite wp_match; now destruct o. *)
-  (* Qed. *)
-
-  (* Lemma wp_aplazy {A B S} (f : option (A -> B)) (o : option A) : *)
-  (*   wp S (aplazy f o) <-> *)
-  (*   wp (fun f => wp (fun a => S (f a)) o) f. *)
-  (* Proof. apply wp_ap. Qed. *)
+  Lemma wp_ap {A B S} (f : option (A -> B)) (o : option A) :
+    wp S (f <*> o) <->
+    wp (fun f => wp (fun a => S (f a)) o) f.
+  Proof.
+    do 2 rewrite wp_match. destruct f; auto.
+    rewrite wp_match; now destruct o.
+  Qed.
 
   Lemma wp_monotonic {A} (S1 S2 : A -> Prop) (fS : forall a, S1 a -> S2 a)  :
     forall (o : option A), wp S1 o -> wp S2 o.
@@ -392,39 +384,17 @@ Module option.
     wlp S (map f o) <-> wlp (fun a => S (f a)) o.
   Proof. do 2 rewrite wlp_match; now destruct o. Qed.
 
-  (* Lemma wlp_ap {A B S} (f : option (A -> B)) (o : option A) : *)
-  (*   wlp S (ap f o) <-> *)
-  (*   wlp (fun f => wlp (fun a => S (f a)) o) f. *)
-  (* Proof. *)
-  (*   do 2 rewrite wlp_match. destruct f; auto. *)
-  (*   rewrite wlp_match; now destruct o. *)
-  (* Qed. *)
-
-  (* Lemma wlp_aplazy {A B S} (f : option (A -> B)) (o : option A) : *)
-  (*   wlp S (aplazy f o) <-> *)
-  (*   wlp (fun f => wlp (fun a => S (f a)) o) f. *)
-  (* Proof. *)
-  (*   do 2 rewrite wlp_match. destruct f; auto. *)
-  (*   rewrite wlp_match; now destruct o. *)
-  (* Qed. *)
+  Lemma wlp_ap {A B S} (f : option (A -> B)) (o : option A) :
+    wlp S (f <*> o) <->
+    wlp (fun f => wlp (fun a => S (f a)) o) f.
+  Proof.
+    do 2 rewrite wlp_match. destruct f; auto.
+    rewrite wlp_match; now destruct o.
+  Qed.
 
   Lemma wlp_monotonic {A} (S1 S2 : A -> Prop) (fS : forall a, S1 a -> S2 a)  :
     forall (o : option A), wlp S1 o -> wlp S2 o.
   Proof. intros ? []; constructor; auto. Qed.
-
-  Module Import notations.
-
-    Notation "' x <- ma ;; mb" :=
-      (bind ma (fun x => mb))
-        (at level 80, x pattern, ma at next level, mb at level 200, right associativity,
-          format "' x  <-  ma  ;;  mb").
-    Notation "x <- ma ;; mb" :=
-      (bind ma (fun x => mb))
-        (at level 80, ma at next level, mb at level 200, right associativity).
-    Notation "f <$> a" := (map f a) (at level 40, left associativity).
-    (* Notation "f <*> a" := (ap f a) (at level 40, left associativity). *)
-
-  End notations.
 
   Module tactics.
 
@@ -433,9 +403,11 @@ Module option.
       | |- wp _ (Some _) => constructor
       | |- wp _ (map _ _) => apply wp_map
       | |- wp _ (bind _ _) => apply wp_bind_intro
+      | |- wp _ (_ <*> _) => apply wp_ap
       | |- wlp _ (Some _) => constructor
       | |- wlp _ (map _ _) => apply wlp_map
       | |- wlp _ (bind _ _) => apply wlp_bind_intro
+      | |- wlp _ (_ <*> _) => apply wlp_ap
       | H: wp _ ?x |- wp _ ?x => revert H; apply wp_monotonic; intros
       | H: wlp _ ?x |- wlp _ ?x => revert H; apply wlp_monotonic; intros
       end.
@@ -489,7 +461,6 @@ Lemma forall_and_compat {A} (P Q : A -> Prop):
   (forall a, P a /\ Q a) <-> (forall a, P a) /\ (forall a, Q a).
 Proof. firstorder. Qed.
 
-
 Declare Scope alt_scope.
 Declare Scope asn_scope.
 Declare Scope exp_scope.
@@ -514,3 +485,15 @@ Definition findAD {A} {B : A -> Type} {eqA: EqDec A} (a : A) :
         | right _ => find xs
         end
     end.
+
+Record Stats : Set :=
+  { branches : N
+  ; pruned   : N
+  }.
+
+Definition plus_stats (x y : Stats) : Stats :=
+  {| branches := branches x + branches y;
+     pruned   := pruned x + pruned y
+  |}.
+Definition empty_stats : Stats :=
+  {| branches := 0; pruned   := 0|}.

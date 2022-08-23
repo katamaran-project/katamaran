@@ -33,11 +33,12 @@ From Equations Require Import
      Equations.
 Require Import Equations.Prop.EqDec.
 From Katamaran Require Import
-     Semantics.Registers
      Program
+     Semantics
+     Semantics.Registers
      Syntax.BinOps.
-From RiscvPmp Require Export
-     Base.
+From Katamaran Require Export
+     RiscvPmp.Base.
 
 From stdpp Require Import decidable finite.
 
@@ -1105,3 +1106,6 @@ Module Import RiscvPmpProgram <: Program RiscvPmpBase.
   Include ProgramMixin RiscvPmpBase.
 
 End RiscvPmpProgram.
+
+Module RiscvPmpSemantics <: Semantics RiscvPmpBase RiscvPmpProgram :=
+  MakeSemantics RiscvPmpBase RiscvPmpProgram.

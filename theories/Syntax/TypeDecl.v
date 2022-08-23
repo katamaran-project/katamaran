@@ -64,24 +64,8 @@ From Katamaran Require Import
      Syntax.Variables
      Tactics.
 
-(* Local Set Transparent Obligations. *)
-(* Local Unset Elimination Schemes. *)
-
 Import ctx.notations.
 Import env.notations.
-
-(* TODO: Move me *)
-Inductive Bit : Set := bitone | bitzero.
-
-Definition Bit_eqb (b1 : Bit) (b2 : Bit) : bool :=
-  match b1, b2 with
-  | bitone , bitone  => true
-  | bitzero, bitzero => true
-  | _      , _       => false
-  end.
-
-Lemma Bit_eqb_spec (b1 b2 : Bit) : reflect (b1 = b2) (Bit_eqb b1 b2).
-Proof. destruct b1, b2; cbn; constructor; congruence. Qed.
 
 Module ty.
 
@@ -102,7 +86,6 @@ Module ty.
     Inductive Ty : Set :=
     | int
     | bool
-    | bit
     | string
     | list (σ : Ty)
     | prod (σ τ : Ty)
@@ -124,7 +107,6 @@ Module ty.
 
       Hypothesis (P_int    : P int).
       Hypothesis (P_bool   : P bool).
-      Hypothesis (P_bit    : P bit).
       Hypothesis (P_string : P string).
       Hypothesis (P_list   : forall σ, P σ -> P (list σ)).
       Hypothesis (P_prod   : forall σ τ, P σ -> P τ -> P (prod σ τ)).
@@ -140,7 +122,6 @@ Module ty.
         match σ with
         | int      => ltac:(apply P_int)
         | bool     => ltac:(apply P_bool)
-        | bit      => ltac:(apply P_bit)
         | string   => ltac:(apply P_string)
         | list σ   => ltac:(apply P_list; auto)
         | prod σ τ => ltac:(apply P_prod; auto)
@@ -159,7 +140,6 @@ Module ty.
     Definition Ty_ind (P : Ty -> Prop) := Ty_rect P.
 
   End WithTypeDecl.
-  (* #[export] Existing Instance Ty_eq_dec. *)
 
   Class TypeDenoteKit (TDC : TypeDeclKit) : Type :=
     { (* Mapping enum type constructor names to enum types *)
@@ -179,7 +159,6 @@ Module ty.
       match σ with
       | int => Z
       | bool => Datatypes.bool
-      | bit => Bit
       | string => String.string
       | list σ' => Datatypes.list (Val σ')
       | prod σ1 σ2 => Val σ1 * Val σ2
@@ -195,21 +174,21 @@ Module ty.
   End WithTypeDenote.
 
   Class TypeDefKit {TDC : TypeDeclKit} (TDN : TypeDenoteKit TDC) : Type :=
-    { enum_eqdec   :> EqDec enumi;
-      union_eqdec  :> EqDec unioni;
-      record_eqdec :> EqDec recordi;
+    { enum_eqdec   : EqDec enumi;
+      union_eqdec  : EqDec unioni;
+      record_eqdec : EqDec recordi;
 
-      enumt_eqdec E  :> EqDec (enumt E);
-      enumt_finite E :> finite.Finite (enumt E);
+      enumt_eqdec E  : EqDec (enumt E);
+      enumt_finite E : finite.Finite (enumt E);
 
-      uniont_eqdec U  :> EqDec (uniont U);
+      uniont_eqdec U  : EqDec (uniont U);
       (* Names of union data constructors. *)
       unionk          : unioni -> Set;
-      unionk_eqdec U  :> EqDec (unionk U);
-      unionk_finite U :> finite.Finite (unionk U);
+      unionk_eqdec U  : EqDec (unionk U);
+      unionk_finite U : finite.Finite (unionk U);
       unionk_ty U     : unionk U -> Ty;
 
-      recordt_eqdec R  :> EqDec (recordt R);
+      recordt_eqdec R  : EqDec (recordt R);
       (* Record field names. *)
       recordf          : Set;
       (* Record field types. *)
@@ -231,18 +210,30 @@ Module ty.
       recordv_unfold_fold R v : recordv_unfold R (recordv_fold R v) = v;
     }.
 
+  (* Coq 8.16 will start generating coercions for [:>] in Class definitions. Not
+     sure what the implications are and if we want that. For now, manually
+     declare the necessary fields as superclass instances. *)
+  #[export] Existing Instance enum_eqdec.
+  #[export] Existing Instance union_eqdec.
+  #[export] Existing Instance record_eqdec.
+  #[export] Existing Instance enumt_eqdec.
+  #[export] Existing Instance enumt_finite.
+  #[export] Existing Instance uniont_eqdec.
+  #[export] Existing Instance unionk_eqdec.
+  #[export] Existing Instance unionk_finite.
+  #[export] Existing Instance recordt_eqdec.
+
   Section WithTypeDef.
 
     Context {TDC : TypeDeclKit}.
     Context {TDN : TypeDenoteKit TDC}.
     Context {TDF : TypeDefKit TDN}.
 
-    Instance Ty_eq_dec : EqDec Ty :=
+    #[export] Instance Ty_eq_dec : EqDec Ty :=
       fix ty_eqdec (σ τ : Ty) {struct σ} : dec_eq σ τ :=
         match σ , τ with
         | int        , int        => left eq_refl
         | bool       , bool       => left eq_refl
-        | bit        , bit        => left eq_refl
         | string     , string     => left eq_refl
         | list σ     , list τ     => f_equal_dec list noConfusion_inv (ty_eqdec σ τ)
         | prod σ1 σ2 , prod τ1 τ2 => f_equal2_dec prod noConfusion_inv (ty_eqdec σ1 τ1) (ty_eqdec σ2 τ2)
@@ -262,7 +253,6 @@ Module ty.
       match σ return Val σ -> Val σ -> Datatypes.bool with
       | int      => Z.eqb
       | bool     => Bool.eqb
-      | bit      => Bit_eqb
       | string   => String.eqb
       | list σ   => list_beq (Val_eqb σ)
       | prod σ τ => prod_beq (Val_eqb σ) (Val_eqb τ)
@@ -280,7 +270,6 @@ Module ty.
       induction σ; cbn.
       - apply Z.eqb_spec.
       - apply Bool.eqb_spec.
-      - apply Bit_eqb_spec.
       - apply String.eqb_spec.
       - apply list_beq_spec; auto.
       - destruct x as [x1 x2], y as [y1 y2]...
@@ -316,7 +305,6 @@ Module ty.
   End WithTypeDef.
   #[global] Arguments int {TK}.
   #[global] Arguments bool {TK}.
-  #[global] Arguments bit {TK}.
   #[global] Arguments string {TK}.
   #[global] Arguments list {TK} σ.
   #[global] Arguments prod {TK} σ τ.
@@ -327,35 +315,15 @@ Module ty.
   #[global] Arguments tuple {TK} σs%ctx_scope.
   #[global] Arguments union {TK} U.
   #[global] Arguments record {TK} R.
-  (* #[global] Arguments MkTypeDefKit {TK} &. *)
-
-  (* Record Types : Type := *)
-  (*   { typedecls   : TypeDeclKit; *)
-  (*     typedefs    :> TypeDefKit typedecls; *)
-  (*     typedeflaws :> TypeDefKitLaws typedecls; *)
-  (*   }. *)
-
-
-  (* Module DefaultVarKit <: VarKit. *)
-  (*   (** Variables **) *)
-  (*   Definition 𝑿        := string. *)
-  (*   Definition 𝑿_eq_dec := string_dec. *)
-  (*   Definition 𝑺        := string. *)
-  (*   Definition 𝑺_eq_dec := string_dec. *)
-
-  (*   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x. *)
-  (*   Definition fresh := ctx.fresh. *)
-  (* End DefaultVarKit. *)
 
 End ty.
 Export ty
   ( TypeDeclKit, enumt, uniont, recordt,
 
     TypeDenoteKit,
+    Ty, Val, Val_eqb, Val_eqb_spec,
 
-    Ty, Ty_eq_dec, Val, Val_eqb, Val_eqb_spec,
-
-    TypeDefKit, (* MkTypeDefKit, *) enum_eqdec, enumt_eqdec, enumt_finite,
+    TypeDefKit, enum_eqdec, enumt_eqdec, enumt_finite,
     enumi,
     unioni,
     recordi,
@@ -363,45 +331,53 @@ Export ty
     unionv_fold, unionv_unfold, record_eqdec, recordt_eqdec, recordf,
     recordf_ty, recordv_fold, recordv_unfold,
 
-    (* TypeDefKitLaws, *) unionv_fold_unfold, unionv_unfold_fold,
+    unionv_fold_unfold, unionv_unfold_fold,
     unionv_fold_inj, unionv_unfold_inj,
     recordv_fold_unfold, recordv_unfold_fold
-
-    (* Types, *) (* typedecls, *) (* typedefs *)
   ).
+(* Reexport all instances from the ty submodule. Coq >= 8.15 can do this with
+     Export (hints) ty.
+   but we currently still support Coq 8.14. *)
 #[export] Existing Instance ty.Ty_eq_dec.
+#[export] Existing Instance ty.enum_eqdec.
+#[export] Existing Instance ty.union_eqdec.
+#[export] Existing Instance ty.record_eqdec.
+#[export] Existing Instance ty.enumt_eqdec.
+#[export] Existing Instance ty.enumt_finite.
+#[export] Existing Instance ty.uniont_eqdec.
+#[export] Existing Instance ty.unionk_eqdec.
+#[export] Existing Instance ty.unionk_finite.
+#[export] Existing Instance ty.recordt_eqdec.
 
 Module Type Types.
 
-  Declare Instance typedeclkit   : TypeDeclKit.
-  Declare Instance typedenotekit : TypeDenoteKit typedeclkit.
-  Declare Instance typedefkit    : TypeDefKit typedenotekit.
-  Declare Instance varkit        : VarKit.
+  #[export] Declare Instance typedeclkit   : TypeDeclKit.
+  #[export] Declare Instance typedenotekit : TypeDenoteKit typedeclkit.
+  #[export] Declare Instance typedefkit    : TypeDefKit typedenotekit.
+  #[export] Declare Instance varkit        : VarKit.
 
 End Types.
 
-Local Instance DefaultTypeDeclKit : TypeDeclKit :=
+#[local] Instance DefaultTypeDeclKit : TypeDeclKit :=
   {| enumi := Empty_set;
      unioni := Empty_set;
      recordi := Empty_set;
   |}.
 
-Local Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit :=
+#[local] Instance DefaultTypeDenoteKit : TypeDenoteKit DefaultTypeDeclKit :=
   {| enumt _ := Empty_set;
      uniont _ := Empty_set;
      recordt _ := Empty_set;
   |}.
 
-Local Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit.
-  refine
-    {| unionk _            := Empty_set;
-       unionk_ty _ _       := ty.unit;
-       unionv_fold         := Empty_set_rec _;
-       unionv_unfold       := Empty_set_rec _;
-       recordf             := Empty_set;
-       recordf_ty          := Empty_set_rec _;
-       recordv_fold        := Empty_set_rec _;
-       recordv_unfold      := Empty_set_rec _;
-       (* unionv_fold_unfold  := Empty_set_rec _; *)
-    |}; abstract (intros []).
-Defined.
+#[local,refine] Instance DefaultTypeDefKit : TypeDefKit DefaultTypeDenoteKit :=
+  {| unionk _            := Empty_set;
+     unionk_ty _ _       := ty.unit;
+     unionv_fold         := Empty_set_rec _;
+     unionv_unfold       := Empty_set_rec _;
+     recordf             := Empty_set;
+     recordf_ty          := Empty_set_rec _;
+     recordv_fold        := Empty_set_rec _;
+     recordv_unfold      := Empty_set_rec _;
+  |}.
+Proof. all: abstract (intros []). Defined.

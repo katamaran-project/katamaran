@@ -32,10 +32,10 @@ From Coq Require Import
      ZArith.BinInt.
 
 From Katamaran Require Import
+     Base
      Prelude
-     Symbolic.Worlds
-     Specification
-     Base.
+     Signature
+     Symbolic.Worlds.
 
 From Equations Require Import
      Equations.
@@ -45,11 +45,7 @@ Import env.notations.
 
 Local Set Implicit Arguments.
 
-Module Type SolverOn
-  (Import B    : Base)
-  (Import PK   : PredicateKit B)
-  (Import FML  : FormulasOn B PK)
-  (Import WRLD : WorldsOn B PK FML).
+Module Type SolverOn (Import B : Base) (Import SIG : Signature B).
 
   Module Solver.
 
@@ -300,8 +296,7 @@ Module Type SolverOn
 
     Definition simplify_formula {Σ} (fml : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
       match fml with
-      (* TODO: partial evaluation of ts *)
-      | formula_user p ts => Some (cons fml k)
+      | formula_user p ts => Some (cons (formula_user p (pevals ts)) k)
       | formula_bool t    => simplify_formula_bool (peval t) k
       | formula_prop ζ P  => Some (cons fml k)
       | formula_ge t1 t2  => simplify_formula_bool (peval (term_binop bop.ge t1 t2)) k
@@ -422,7 +417,9 @@ Module Type SolverOn
         (simplify_formula fml k).
     Proof.
       destruct fml; cbn - [peval].
-      - constructor; intros ι. now rewrite inst_pathcondition_cons.
+      - constructor; intros ι.
+        rewrite inst_pathcondition_cons.
+        cbn. now rewrite pevals_sound.
       - generalize (simplify_formula_bool_spec (peval t) k).
         apply option.spec_monotonic; cbn; intros; specialize (H ι);
           now rewrite (peval_sound t) in H.
@@ -840,12 +837,11 @@ End SolverOn.
 
 Module MakeSolver
   (B : Base)
-  (Import SIG : ProgramLogicSignature B)
-  (Import SPEC : Specification B SIG)
-  (SOLV : SolverKit B SIG SPEC)
-  <: SolverKit B SIG SPEC.
+  (Import SIG : Signature B)
+  (SOLV : SolverKit B SIG)
+  <: SolverKit B SIG.
 
-  Include SolverOn B SIG SIG SIG.
+  Include SolverOn B SIG.
 
   Definition solver : Solver :=
     Solver.generic SOLV.solver.

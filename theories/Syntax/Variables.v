@@ -37,67 +37,35 @@ From Katamaran Require Export
 
 Local Set Implicit Arguments.
 
-(* Module Type VarKit. *)
-(*   (* Names of expression variables. These represent mutable variables appearing *)
-(*      in programs. *) *)
-(*   Parameter Inline 𝑿 : Set. (* input: \MIX *) *)
-(*   (* For name resolution we rely on decidable equality of expression *)
-(*      variables. The functions in this module resolve to the closest binding *)
-(*      of an equal name and fill in the de Bruijn index automatically from *)
-(*      a successful resolution. *)
-(*   *) *)
-(*   Declare Instance 𝑿_eq_dec : EqDec 𝑿. *)
+Class VarKit : Type :=
+  { (* Program variable names. *)
+    PVar : Set;
+    (* For name resolution we rely on decidable equality of program variables.
+       The functions in this module resolve to the closest binding of an equal
+       name and fill in the de Bruijn index automatically from a successful
+       resolution. *)
+    PVar_eq_dec : EqDec PVar;
 
-(*   (* Names of logic variables. These represent immutable variables standing for *)
-(*      concrete value. *) *)
-(*   Parameter Inline 𝑺 : Set. (* input: \MIS *) *)
-(*   Declare Instance 𝑺_eq_dec : EqDec 𝑺. *)
+    (* Names of logic variables. These represent immutable variables standing
+       for concrete value. *)
+    LVar : Set;
+    LVar_eq_dec : EqDec LVar;
 
-(*   (* Conversion of program variables to logic variables. *) *)
-(*   Parameter Inline 𝑿to𝑺 : 𝑿 -> 𝑺. *)
-(*   Parameter fresh : forall T, NCtx 𝑺 T -> option 𝑺 -> 𝑺. *)
+    (* Conversion of program variables to logic variables. *)
+    PVartoLVar : PVar -> LVar;
 
-(* End VarKit. *)
+    (* Generation of logic variable names that is fresh for a given context
+       and that tries to reuse an optional old name. *)
+    fresh : forall T, NCtx LVar T -> option LVar -> LVar;
+  }.
+#[export] Existing Instance PVar_eq_dec.
+#[export] Existing Instance LVar_eq_dec.
 
-(* Module DefaultVarKit <: VarKit. *)
-(*   (** Variables **) *)
-(*   Definition 𝑿        := string. *)
-(*   Definition 𝑿_eq_dec := string_dec. *)
-(*   Definition 𝑺        := string. *)
-(*   Definition 𝑺_eq_dec := string_dec. *)
-
-(*   Definition 𝑿to𝑺 (x : 𝑿) : 𝑺 := x. *)
-(*   Definition fresh := ctx.fresh. *)
-(* End DefaultVarKit. *)
-
-  Class VarKit : Type :=
-    { (* Program variable names. *)
-      𝑿 : Set; (* input: \MIX *)
-      (* For name resolution we rely on decidable equality of program *)
-  (*        variables. The functions in this module resolve to the closest binding *)
-  (*        of an equal name and fill in the de Bruijn index automatically from *)
-  (*        a successful resolution. *)
-  (*      *)
-      𝑿_eq_dec :> EqDec 𝑿;
-
-      (* Names of logic variables. These represent immutable variables standing for *)
-  (*        concrete value. *)
-      𝑺 : Set; (* input: \MIS *)
-      𝑺_eq_dec :> EqDec 𝑺;
-
-      (* Conversion of program variables to logic variables. *)
-      𝑿to𝑺 : 𝑿 -> 𝑺;
-
-      (* Generation of logic variable names that is fresh for a given context *)
-  (*        and that tries to reuse an optional old name. *)
-      fresh : forall T, NCtx 𝑺 T -> option 𝑺 -> 𝑺;
-    }.
-
-  Definition DefaultVarKit : VarKit :=
-    {| 𝑿        := string;
-       𝑿_eq_dec := string_dec;
-       𝑺        := string;
-       𝑺_eq_dec := string_dec;
-       𝑿to𝑺 x   := x;
-       fresh    := ctx.fresh;
-    |}.
+Definition DefaultVarKit : VarKit :=
+  {| PVar := string;
+     PVar_eq_dec := string_dec;
+     LVar := string;
+     LVar_eq_dec := string_dec;
+     PVartoLVar x := x;
+     fresh := ctx.fresh;
+  |}.

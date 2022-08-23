@@ -39,6 +39,7 @@ From Coq Require Import
 From Katamaran Require Import
      Prelude
      Tactics
+     Sep.Logic
      Syntax.Predicates
      Syntax.Registers
      Base.
@@ -101,7 +102,7 @@ Module Type ChunksOn
     Derive NoConfusion for Chunk.
   End TransparentObligations.
 
-  Instance scchunk_isdup : IsDuplicable SCChunk := {
+  #[export] Instance scchunk_isdup : IsDuplicable SCChunk := {
     is_duplicable := fun c => match c with
                            | scchunk_user p _ => is_duplicable p
                            | scchunk_ptsreg _ _ => false
@@ -110,7 +111,7 @@ Module Type ChunksOn
                            end
     }.
 
-  Instance chunk_isdup {Σ} : IsDuplicable (Chunk Σ) := {
+  #[export] Instance chunk_isdup {Σ} : IsDuplicable (Chunk Σ) := {
     is_duplicable := fun c => match c with
                            | chunk_user p _ => is_duplicable p
                            | chunk_ptsreg _ _ => false
@@ -161,7 +162,7 @@ Module Type ChunksOn
           end.
   Qed.
 
-  Instance SubstChunk : Subst Chunk :=
+  #[export] Instance SubstChunk : Subst Chunk :=
     fix sub_chunk {Σ1} (c : Chunk Σ1) {Σ2} (ζ : Sub Σ1 Σ2) {struct c} : Chunk Σ2 :=
       match c with
       | chunk_user p ts => chunk_user p (subst ts ζ)
@@ -172,14 +173,14 @@ Module Type ChunksOn
         chunk_wand (sub_chunk c1 ζ) (sub_chunk c2 ζ)
       end.
 
-  Instance substlaws_chunk : SubstLaws Chunk.
+  #[export] Instance substlaws_chunk : SubstLaws Chunk.
   Proof.
     constructor.
     { intros ? c. induction c; cbn; f_equal; auto; apply subst_sub_id. }
     { intros ? ? ? ? ? c. induction c; cbn; f_equal; auto; apply subst_sub_comp. }
   Qed.
 
-  Instance inst_chunk : Inst Chunk SCChunk :=
+  #[export] Instance inst_chunk : Inst Chunk SCChunk :=
     fix inst_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : SCChunk :=
     match c with
     | chunk_user p ts => scchunk_user p (inst ts ι)
@@ -188,27 +189,13 @@ Module Type ChunksOn
     | chunk_wand c1 c2 => scchunk_wand (inst_chunk c1 ι) (inst_chunk c2 ι)
     end.
 
-  (* Instance lift_chunk : Lift Chunk SCChunk := *)
-  (*   fix lift_chunk {Σ} (c : SCChunk) {struct c} : Chunk Σ := *)
-  (*   match c with *)
-  (*   | scchunk_user p vs => chunk_user p (lift vs) *)
-  (*   | scchunk_ptsreg r v => chunk_ptsreg r (lift v) *)
-  (*   | scchunk_conj c1 c2 => chunk_conj (lift_chunk c1) (lift_chunk c2) *)
-  (*   | scchunk_wand c1 c2 => chunk_wand (lift_chunk c1) (lift_chunk c2) *)
-  (*   end. *)
-
-  Instance inst_subst_chunk : InstSubst Chunk SCChunk.
+  #[export] Instance inst_subst_chunk : InstSubst Chunk SCChunk.
   Proof.
     intros ? ? ζ ι c; induction c; cbn; f_equal; auto; apply inst_subst.
   Qed.
 
-  (* Instance inst_lift_chunk : InstLift Chunk SCChunk. *)
-  (* Proof. *)
-  (*   intros ? ? c; induction c; cbn; f_equal; auto; apply inst_lift. *)
-  (* Qed. *)
-
   Import option.notations.
-  Instance OccursCheckChunk :
+  #[export] Instance OccursCheckChunk :
     OccursCheck Chunk :=
     fun Σ b bIn =>
       fix occurs_check_chunk (c : Chunk Σ) : option (Chunk (Σ - b)) :=
@@ -228,9 +215,9 @@ Module Type ChunksOn
   Definition SCHeap : Type := list SCChunk.
   Definition SHeap : LCtx -> Type := fun Σ => list (Chunk Σ).
 
-  Instance inst_heap : Inst SHeap SCHeap :=
+  #[export] Instance inst_heap : Inst SHeap SCHeap :=
     inst_list.
-  Instance inst_subst_heap : InstSubst SHeap SCHeap.
+  #[export] Instance inst_subst_heap : InstSubst SHeap SCHeap.
   Proof. apply inst_subst_list. Qed.
 
   Fixpoint peval_chunk {Σ} (c : Chunk Σ) : Chunk Σ :=
@@ -249,5 +236,30 @@ Module Type ChunksOn
     unfold inst, inst_env. rewrite env.map_map.
     apply env.map_ext. auto using peval_sound.
   Qed.
+
+  Section Interpretation.
+    Import sep.notations.
+    Context {HProp} `{PI : PredicateDef HProp}.
+
+    Fixpoint interpret_chunk {Σ} (c : Chunk Σ) (ι : Valuation Σ) {struct c} : HProp :=
+      match c with
+      | chunk_user p ts => luser p (inst ts ι)
+      | chunk_ptsreg r t => lptsreg r (inst t ι)
+      | chunk_conj c1 c2 => interpret_chunk c1 ι ∗ interpret_chunk c2 ι
+      | chunk_wand c1 c2 => interpret_chunk c1 ι -∗ interpret_chunk c2 ι
+      end.
+
+    Fixpoint interpret_scchunk (c : SCChunk) : HProp :=
+      match c with
+      | scchunk_user p vs => luser p vs
+      | scchunk_ptsreg r v => lptsreg r v
+      | scchunk_conj c1 c2 => interpret_scchunk c1 ∗ interpret_scchunk c2
+      | scchunk_wand c1 c2 => interpret_scchunk c1 -∗ interpret_scchunk c2
+      end.
+
+    Definition interpret_scheap : SCHeap -> HProp :=
+      List.fold_right (fun c h => interpret_scchunk c ∗ h) lemp.
+    Arguments interpret_scheap !h.
+  End Interpretation.
 
 End ChunksOn.

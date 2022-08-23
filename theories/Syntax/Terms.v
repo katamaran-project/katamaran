@@ -50,11 +50,11 @@ Local Unset Elimination Schemes.
 
 Module Type TermsOn (Import TY : Types).
 
-  Local Notation PCtx := (NCtx 𝑿 Ty).
-  Local Notation LCtx := (NCtx 𝑺 Ty).
+  Local Notation PCtx := (NCtx PVar Ty).
+  Local Notation LCtx := (NCtx LVar Ty).
 
   Inductive Term (Σ : LCtx) : Ty -> Set :=
-  | term_var     (ς : 𝑺) (σ : Ty) {ςInΣ : ς∷σ ∈ Σ} : Term Σ σ
+  | term_var     (ς : LVar) (σ : Ty) {ςInΣ : ς∷σ ∈ Σ} : Term Σ σ
   | term_val     (σ : Ty) : Val σ -> Term Σ σ
   | term_binop   {σ1 σ2 σ3 : Ty} (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2) : Term Σ σ3
   | term_neg     (e : Term Σ ty.int) : Term Σ ty.int
@@ -64,20 +64,20 @@ Module Type TermsOn (Import TY : Types).
   (* Experimental features *)
   | term_union   {U : unioni} (K : unionk U) (e : Term Σ (unionk_ty U K)) : Term Σ (ty.union U)
   | term_record  (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) : Term Σ (ty.record R).
-  Global Arguments term_var {_} _ {_ _}.
-  Global Arguments term_val {_} _ _.
-  Global Arguments term_neg {_} _.
-  Global Arguments term_not {_} _.
-  Global Arguments term_inl {_ _ _} _.
-  Global Arguments term_inr {_ _ _} _.
-  Global Arguments term_union {_} _ _.
-  Global Arguments term_record {_} _ _.
+  #[global] Arguments term_var {_} _ {_ _}.
+  #[global] Arguments term_val {_} _ _.
+  #[global] Arguments term_neg {_} _.
+  #[global] Arguments term_not {_} _.
+  #[global] Arguments term_inl {_ _ _} _.
+  #[global] Arguments term_inr {_ _ _} _.
+  #[global] Arguments term_union {_} _ _.
+  #[global] Arguments term_record {_} _ _.
   Bind Scope exp_scope with Term.
   Derive NoConfusion Signature for Term.
 
   Definition term_enum {Σ} (E : enumi) (k : enumt E) : Term Σ (ty.enum E) :=
     term_val (ty.enum E) k.
-  Global Arguments term_enum {_} _ _.
+  #[global] Arguments term_enum {_} _ _.
 
   Fixpoint term_list {Σ σ} (ts : list (Term Σ σ)) : Term Σ (ty.list σ) :=
     match ts with
@@ -91,7 +91,7 @@ Module Type TermsOn (Import TY : Types).
     | env.snoc es _ e => term_binop bop.tuple_snoc (term_tuple es) e
     end.
 
-  Fixpoint term_bvec {Σ n} (es : Vector.t (Term Σ ty.bit) n) : Term Σ (ty.bvec n) :=
+  Fixpoint term_bvec {Σ n} (es : Vector.t (Term Σ ty.bool) n) : Term Σ (ty.bvec n) :=
     match es with
     | Vector.nil       => term_val (ty.bvec 0) bv.nil
     | Vector.cons e es => term_binop bop.bvcons e (term_bvec es)
@@ -103,29 +103,17 @@ Module Type TermsOn (Import TY : Types).
     Variable (P  : forall t : Ty, Term Σ t -> Type).
     Arguments P _ _ : clear implicits.
 
-    (* Let PL (σ : Ty) : list (Term Σ σ) -> Type := *)
-    (*   List.fold_right (fun t ts => P _ t * ts)%type unit. *)
-    (* Let PV (n : nat) (es : Vector.t (Term Σ ty.bit) n) : Type := *)
-    (*   Vector.fold_right (fun e ps => P _ e * ps)%type es unit. *)
-    (* Let PE : forall σs, Env (Term Σ) σs -> Type := *)
-    (*   env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type. *)
     Let PNE : forall (σs : NCtx recordf Ty), NamedEnv (Term Σ) σs -> Type :=
       fun σs es => env.All (fun b t => P (type b) t) es.
-      (* forall rt (rIn : rt ∈ σs), P (type rt) (env.lookup es rIn). *)
-      (* env.Env_rect (fun _ _ => Type) unit (fun _ ts IHts _ t => IHts * P _ t)%type. *)
 
-    Hypothesis (P_var        : forall (ς : 𝑺) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
+    Hypothesis (P_var        : forall (ς : LVar) (σ : Ty) (ςInΣ : ς∷σ ∈ Σ), P σ (term_var ς)).
     Hypothesis (P_val        : forall (σ : Ty) (v : Val σ), P σ (term_val σ v)).
     Hypothesis (P_binop      : forall (σ1 σ2 σ3 : Ty) (op : BinOp σ1 σ2 σ3) (e1 : Term Σ σ1) (e2 : Term Σ σ2), P σ1 e1 -> P σ2 e2 -> P σ3 (term_binop op e1 e2)).
     Hypothesis (P_neg        : forall e : Term Σ ty.int, P ty.int e -> P ty.int (term_neg e)).
     Hypothesis (P_not        : forall e : Term Σ ty.bool, P ty.bool e -> P ty.bool (term_not e)).
     Hypothesis (P_inl        : forall (σ1 σ2 : Ty) (t : Term Σ σ1), P σ1 t -> P (ty.sum σ1 σ2) (term_inl t)).
     Hypothesis (P_inr        : forall (σ1 σ2 : Ty) (t : Term Σ σ2), P σ2 t -> P (ty.sum σ1 σ2) (term_inr t)).
-    (* Hypothesis (P_list       : forall (σ : Ty) (es : list (Term Σ σ)), PL es -> P (ty.list σ) (term_list es)). *)
-    (* Hypothesis (P_bv         : forall (n : nat) (es : Vector.t (Term Σ ty.bit) n), PV es -> P (ty.bv n) (term_bv es)). *)
-    (* Hypothesis (P_tuple      : forall (σs : Ctx Ty) (es : Env (Term Σ) σs), PE es -> P (ty.tuple σs) (term_tuple es)). *)
     Hypothesis (P_union      : forall (U : unioni) (K : unionk U) (e : Term Σ (unionk_ty U K)), P (unionk_ty U K) e -> P (ty.union U) (term_union U K e)).
-    (* Hypothesis (P_tuple  : forall σs (IH : forall σ, ctx.In σ σs -> P σ), P (ty.tuple σs)). *)
     Hypothesis (P_record     : forall (R : recordi) (es : NamedEnv (Term Σ) (recordf_ty R)) (IH : PNE es), P (ty.record R) (term_record R es)).
 
     Fixpoint Term_rect (σ : Ty) (t : Term Σ σ) {struct t} : P σ t :=
@@ -205,7 +193,7 @@ Module Type TermsOn (Import TY : Types).
 
     Class Subst (T : LCtx -> Type) : Type :=
       subst : forall {Σ1 : LCtx}, T Σ1 -> forall {Σ2 : LCtx}, Sub Σ1 Σ2 -> T Σ2.
-    Global Arguments subst {T _ Σ1} t {Σ2} ζ.
+    #[global] Arguments subst {T _ Σ1} t {Σ2} ζ.
 
     Fixpoint sub_term {σ Σ1} (t : Term Σ1 σ) {Σ2} (ζ : Sub Σ1 Σ2) {struct t} : Term Σ2 σ :=
       match t with
@@ -220,9 +208,9 @@ Module Type TermsOn (Import TY : Types).
       | term_record R ts          => term_record R (env.map (fun _ t => sub_term t ζ) ts)
       end.
 
-    Global Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=
+    #[export] Instance SubstTerm {σ} : Subst (fun Σ => Term Σ σ) :=
       @sub_term σ.
-    Global Polymorphic Instance SubstList {A} `{Subst A} : Subst (List A) :=
+    #[export,universes(polymorphic=yes)] Instance SubstList {A} `{Subst A} : Subst (List A) :=
       fix substlist {Σ1} xs {Σ2} ζ :=
         match xs with
         | nil => nil
@@ -233,20 +221,20 @@ Module Type TermsOn (Import TY : Types).
       subst xs ζ = List.map (fun x => subst x ζ) xs.
     Proof. induction xs; cbn; f_equal; auto. Qed.
 
-    Global Instance SubstConst {A} `{finite.Finite A} : Subst (Const A) :=
+    #[export] Instance SubstConst {A} `{finite.Finite A} : Subst (Const A) :=
       fun _ x _ _ => x.
-    Global Instance SubstEnv {B : Set} {A : Ctx _ -> B -> Set} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
+    #[export] Instance SubstEnv {B : Set} {A : Ctx _ -> B -> Set} `{forall b, Subst (fun Σ => A Σ b)} {Δ : Ctx B} :
       Subst (fun Σ => Env (A Σ) Δ) :=
       fun Σ1 xs Σ2 ζ => env.map (fun b a => subst (T := fun Σ => A Σ b) a ζ) xs.
 
     Definition sub_id Σ : Sub Σ Σ :=
       @env.tabulate _ (fun b => Term _ (type b)) _
                     (fun '(ς∷σ) ςIn => @term_var Σ ς σ ςIn).
-    Global Arguments sub_id : clear implicits.
+    #[global] Arguments sub_id : clear implicits.
 
     Definition sub_snoc {Σ1 Σ2 : LCtx} (ζ : Sub Σ1 Σ2) b (t : Term Σ2 (type b)) :
       Sub (Σ1 ▻ b) Σ2 := env.snoc ζ b t.
-    Global Arguments sub_snoc {_ _} _ _ _.
+    #[global] Arguments sub_snoc {_ _} _ _ _.
 
     Definition sub_shift {Σ b} (bIn : b ∈ Σ) : Sub (Σ - b) Σ :=
       env.tabulate
@@ -291,9 +279,9 @@ Module Type TermsOn (Import TY : Types).
           subst t (subst ζ1 ζ2) = subst (subst t ζ1) ζ2;
       }.
 
-    Global Arguments SubstLaws T {_}.
+    #[global] Arguments SubstLaws T {_}.
 
-    Global Instance SubstLawsTerm {σ} : SubstLaws (fun Σ => Term Σ σ).
+    #[export] Instance SubstLawsTerm {σ} : SubstLaws (fun Σ => Term Σ σ).
     Proof.
       constructor.
       { intros ? t.
@@ -308,7 +296,7 @@ Module Type TermsOn (Import TY : Types).
       }
     Qed.
 
-    Global Polymorphic Instance SubstLawsList {A} `{SubstLaws A} : SubstLaws (List A).
+    #[export,universes(polymorphic=yes)] Instance SubstLawsList {A} `{SubstLaws A} : SubstLaws (List A).
     Proof.
       constructor.
       { intros ? t.
@@ -319,10 +307,10 @@ Module Type TermsOn (Import TY : Types).
       }
     Qed.
 
-    Global Instance SubstLawsConst {A} `{finite.Finite A} : SubstLaws (Const A).
+    #[export] Instance SubstLawsConst {A} `{finite.Finite A} : SubstLaws (Const A).
     Proof. constructor; reflexivity. Qed.
 
-    Global Instance SubstLawsEnv {B : Set} {A : Ctx _ -> B -> Set}
+    #[export] Instance SubstLawsEnv {B : Set} {A : Ctx _ -> B -> Set}
       `{forall b, Subst (fun Σ => A Σ b), forall b, SubstLaws (fun Σ => A Σ b)}
       {Δ : Ctx B} :
       SubstLaws (fun Σ => Env (A Σ) Δ).
@@ -491,87 +479,14 @@ Module Type TermsOn (Import TY : Types).
 
   End InfrastructureLemmas.
 
-  (* Section TermEquivalence. *)
-
-  (*   Context {Σ : LCtx} {σ : Ty}. *)
-
-  (*   Definition TermEqv (ι : Valuation Σ) : relation (Term Σ σ) := *)
-  (*     fun t1 t2 => inst_term t1 ι = inst_term t2 ι. *)
-
-  (*   Global Instance TermEqv_Equiv {ι} : Equivalence (TermEqv ι). *)
-  (*   Proof. split; congruence. Qed. *)
-
-  (* End TermEquivalence. *)
-
-  (* Section TermEqvB. *)
-
-  (*   Context {Σ : LCtx}. *)
-
-  (*   Fixpoint Term_eqvb {σ τ} (t1 : Term Σ σ) (t2 : Term Σ τ) {struct t1} : option bool := *)
-  (*     match t1 , t2 with *)
-  (*     | @term_var _ _ _ ς1inΣ , @term_var _ _ _ ς2inΣ => *)
-  (*       if InCtx_eqb ς1inΣ ς2inΣ *)
-  (*       then Some true *)
-  (*       else None *)
-  (*     | term_val σ v1 , term_val τ v2 => *)
-  (*       match eq_dec σ τ with *)
-  (*       | left  p => Some (Val_eqb τ (eq_rect σ Val v1 τ p) v2) *)
-  (*       | right _ => Some false *)
-  (*       end *)
-  (*     | term_neg x   , term_neg y   => Term_eqvb x y *)
-  (*     | term_not x   , term_not y   => Term_eqvb x y *)
-  (*     | term_inl x   , term_inl y   => Term_eqvb x y *)
-  (*     | term_inl _   , term_inr _   => Some false *)
-  (*     | term_inr _   , term_inl _   => Some false *)
-  (*     | term_inr x   , term_inr y   => Term_eqvb x y *)
-  (*     | _            , _            => None *)
-  (*     end. *)
-
-  (*   Local Set Equations With UIP. *)
-  (*   Lemma Term_eqvb_spec {σ} (t1 t2 : Term Σ σ) : *)
-  (*     OptionSpec *)
-  (*       (fun b : bool => forall ι : Valuation Σ, TermEqv ι t1 t2 <-> is_true b) *)
-  (*       True *)
-  (*       (Term_eqvb t1 t2). *)
-  (*   Proof. *)
-  (*     induction t1; dependent elimination t2; cbn; intros; try (solve [ constructor; auto ]). *)
-  (*     - destruct (InCtx_eqb_spec ςInΣ ςInΣ0); constructor; auto. *)
-  (*       dependent elimination e. *)
-  (*       intros ι. apply reflect_iff. constructor. reflexivity. *)
-  (*     - rewrite eq_dec_refl. cbn. constructor. *)
-  (*       intros ι. apply reflect_iff, Val_eqb_spec. *)
-  (*     - specialize (IHt1 e). revert IHt1. *)
-  (*       apply optionspec_monotonic; auto. *)
-  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
-  (*       unfold TermEqv; cbn; lia. *)
-  (*     - specialize (IHt1 e0). revert IHt1. *)
-  (*       apply optionspec_monotonic; auto. *)
-  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
-  (*       unfold TermEqv; cbn. split. *)
-  (*       + now intros ?%ssrbool.negb_inj. *)
-  (*       + congruence. *)
-  (*     - specialize (IHt1 t). revert IHt1. *)
-  (*       apply optionspec_monotonic; auto. *)
-  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
-  (*       unfold TermEqv; cbn. split; congruence. *)
-  (*     - constructor. intros ?. apply reflect_iff. constructor. discriminate. *)
-  (*     - constructor. intros ?. apply reflect_iff. constructor. discriminate. *)
-  (*     - specialize (IHt1 t0). revert IHt1. *)
-  (*       apply optionspec_monotonic; auto. *)
-  (*       intros ? H ι. specialize (H ι). rewrite <- H. *)
-  (*       unfold TermEqv; cbn. split; congruence. *)
-  (*   Qed. *)
-
-  (* End TermEqvB. *)
-
   Section SymbolicPair.
 
     Definition Pair (A B : LCtx -> Type) (Σ : LCtx) : Type :=
       A Σ * B Σ.
-    Global Instance SubstPair {A B} `{Subst A, Subst B} : Subst (Pair A B) :=
+    #[export] Instance SubstPair {A B} `{Subst A, Subst B} : Subst (Pair A B) :=
       fun _ '(a,b) _ ζ => (subst a ζ, subst b ζ).
 
-    Global Instance SubstLawsPair {A B} `{SubstLaws A, SubstLaws B} : SubstLaws (Pair A B).
+    #[export] Instance SubstLawsPair {A B} `{SubstLaws A, SubstLaws B} : SubstLaws (Pair A B).
     Proof.
       constructor.
       { intros ? [t1 t2]; cbn.
@@ -588,10 +503,10 @@ Module Type TermsOn (Import TY : Types).
 
     Definition Option (A : LCtx -> Type) (Σ : LCtx) : Type :=
       option (A Σ).
-    Global Instance SubstOption {A} `{Subst A} : Subst (Option A) :=
+    #[export] Instance SubstOption {A} `{Subst A} : Subst (Option A) :=
       fun _ ma _ ζ => option_map (fun a => subst a ζ) ma.
 
-    Global Instance SubstLawsOption {A} `{SubstLaws A} : SubstLaws (Option A).
+    #[export] Instance SubstLawsOption {A} `{SubstLaws A} : SubstLaws (Option A).
     Proof.
       constructor.
       { intros ? [t|]; cbn.
@@ -610,9 +525,9 @@ Module Type TermsOn (Import TY : Types).
   Section SymbolicUnit.
 
     Definition Unit : LCtx -> Type := fun _ => unit.
-    Global Instance SubstUnit : Subst Unit :=
+    #[export] Instance SubstUnit : Subst Unit :=
       fun _ t _ _ => t.
-    Global Instance SubstLawsUnit : SubstLaws Unit.
+    #[export] Instance SubstLawsUnit : SubstLaws Unit.
     Proof. constructor; reflexivity. Qed.
 
   End SymbolicUnit.
@@ -622,9 +537,9 @@ Module Type TermsOn (Import TY : Types).
     Definition SStore (Γ : PCtx) (Σ : LCtx) : Type :=
       NamedEnv (Term Σ) Γ.
 
-    Global Instance subst_localstore {Γ} : Subst (SStore Γ) :=
+    #[export] Instance subst_localstore {Γ} : Subst (SStore Γ) :=
       SubstEnv.
-    Global Instance substlaws_localstore {Γ} : SubstLaws (SStore Γ) :=
+    #[export] Instance substlaws_localstore {Γ} : SubstLaws (SStore Γ) :=
       SubstLawsEnv.
 
     Lemma subst_lookup {Γ Σ Σ' x σ} (xInΓ : x∷σ ∈ Γ) (ζ : Sub Σ Σ') (δ : SStore Γ Σ) :

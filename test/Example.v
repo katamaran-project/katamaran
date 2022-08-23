@@ -38,15 +38,12 @@ From Equations Require Import
      Equations.
 
 From Katamaran Require Import
+     Signature
      Semantics.Registers
-     Symbolic.Mutator
+     Symbolic.Executor
      Symbolic.Solver
-     Symbolic.Worlds
-     Symbolic.Propositions
      Specification
-     Program
-     Syntax.Predicates
-     Syntax.ContractDecl.
+     Program.
 
 From stdpp Require decidable finite.
 
@@ -114,7 +111,7 @@ End Finite.
 Module Import ExampleBase <: Base.
   Import stdpp.finite.
 
-  Instance typedeclkit : TypeDeclKit :=
+  #[export] Instance typedeclkit : TypeDeclKit :=
     {| enumi := Enums;
        unioni := Unions;
        recordi := Records;
@@ -133,7 +130,7 @@ Module Import ExampleBase <: Base.
   Definition record_denote (R : Records) : Set :=
     match R with end.
 
-  Instance typedenotekit : TypeDenoteKit typedeclkit :=
+  #[export] Instance typedenotekit : TypeDenoteKit typedeclkit :=
     {| enumt := enum_denote;
        uniont := union_denote;
        recordt := record_denote;
@@ -178,20 +175,20 @@ Module Import ExampleBase <: Base.
   Definition record_unfold (R : recordi) : recordt R -> NamedEnv Val (record_field_type R) :=
     match R with end.
 
-  Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
+  #[export] Instance eqdec_enum_denote E : EqDec (enum_denote E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
+  #[export] Instance finite_enum_denote E : finite.Finite (enum_denote E) :=
     ltac:(destruct E; auto with typeclass_instances).
-  Instance eqdec_union_denote U : EqDec (union_denote U) :=
+  #[export] Instance eqdec_union_denote U : EqDec (union_denote U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance eqdec_union_constructors U : EqDec (union_constructors U) :=
+  #[export] Instance eqdec_union_constructors U : EqDec (union_constructors U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance finite_union_constructors U : finite.Finite (union_constructors U) :=
+  #[export] Instance finite_union_constructors U : finite.Finite (union_constructors U) :=
     ltac:(destruct U; cbn; auto with typeclass_instances).
-  Instance eqdec_record_denote R : EqDec (record_denote R) :=
+  #[export] Instance eqdec_record_denote R : EqDec (record_denote R) :=
     ltac:(destruct R; auto with typeclass_instances).
 
-  #[refine] Instance typedefkit : TypeDefKit typedenotekit :=
+  #[export,refine] Instance typedefkit : TypeDefKit typedenotekit :=
     {| unionk         := union_constructors;
        unionk_ty      := union_constructor_type;
        unionv_fold    := union_fold;
@@ -208,7 +205,7 @@ Module Import ExampleBase <: Base.
     - abstract (intros []).
   Defined.
 
-  Instance varkit : VarKit := DefaultVarKit.
+  #[export] Instance varkit : VarKit := DefaultVarKit.
 
   Include DefaultRegDeclKit.
   Include BaseMixin.
@@ -335,87 +332,78 @@ Module Import ExampleProgram <: Program ExampleBase.
 
 End ExampleProgram.
 
-Module Import ExampleSig <: ProgramLogicSignature ExampleBase.
-  Module PROG := ExampleProgram.
-  Import ctx.resolution.
-
+Module Import ExampleSig <: Signature ExampleBase.
   Include DefaultPredicateKit ExampleBase.
-  Include ContractDeclMixin ExampleBase ExampleProgram.
-  Include SpecificationMixin ExampleBase ExampleProgram.
+  Include PredicateMixin ExampleBase.
+  Include SignatureMixin ExampleBase.
 End ExampleSig.
 
-Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
-  Include ExampleSig.
+Module Import ExampleSpecification <: Specification ExampleBase ExampleProgram ExampleSig.
+  Include SpecificationMixin ExampleBase ExampleProgram ExampleSig.
   Import ctx.resolution.
+
   Section ContractDefKit.
 
-    Local Notation "r '↦' t" := (asn_chunk (chunk_ptsreg r t)) (at level 100).
-    Local Notation "p '✱' q" := (asn_sep p q) (at level 150).
-
-    (* Arguments asn_prop [_] & _. *)
-    (* Arguments MkSepContractPun [_ _] & _ _ _ _. *)
+    Import asn.notations.
+    Notation asn_prop Σ P := (asn.formula (@formula_prop Σ Σ (sub_id Σ) P)).
 
     Definition sep_contract_abs : SepContract [ "x" ∷ ty.int ] ty.int :=
       {| sep_contract_logic_variables := ["x" ∷ ty.int];
          sep_contract_localstore      := [term_var "x"];
-         sep_contract_precondition    := asn_true;
+         sep_contract_precondition    := ⊤;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
            asn_prop
              ["x" ∷ ty.int; "result" ∷ ty.int]
-             (fun x result => result = Z.abs x)
-           (* asn_if *)
-           (*   (term_binop binop_lt (term_var "x") (term_val ty.int 0)) *)
-           (*   (asn_bool (term_binop binop_eq (term_var "result") (term_neg (term_var "x")))) *)
-           (*   (asn_bool (term_binop binop_eq (term_var "result") (term_var "x"))) *)
+             (fun x result => result = Z.abs x)%type
       |}.
 
     Definition sep_contract_cmp : SepContract ["x" ∷ ty.int; "y" ∷ ty.int] (ty.enum ordering)  :=
        {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
           sep_contract_localstore      := [term_var "x"; term_var "y"];
-          sep_contract_precondition    := asn_true;
+          sep_contract_precondition    := ⊤;
           sep_contract_result          := "result";
           sep_contract_postcondition   :=
-            asn_match_enum
+            asn.match_enum
               ordering (term_var "result")
               (fun result =>
                  match result with
-                 | LT => asn_bool (term_binop bop.lt (term_var "x") (term_var "y"))
-                 | EQ => asn_bool (term_binop bop.eq (term_var "x") (term_var "y"))
-                 | GT => asn_bool (term_binop bop.gt (term_var "x") (term_var "y"))
+                 | LT => term_var "x" < term_var "y"
+                 | EQ => term_var "x" = term_var "y"
+                 | GT => term_var "x" > term_var "y"
                  end)
        |}.
 
     Definition sep_contract_gcd : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int :=
       {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
          sep_contract_localstore      := [term_var "x"; term_var "y"];
-         sep_contract_precondition    := asn_true;
+         sep_contract_precondition    := ⊤;
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           @asn_prop
+           asn_prop
              ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
-             (fun x y result => result = Z.gcd x y)
+             (fun x y result => result = Z.gcd x y)%type
       |}.
 
     Definition sep_contract_gcdloop : SepContract [ "x" ∷ ty.int; "y" ∷ ty.int ] ty.int :=
       {| sep_contract_logic_variables := ["x" ∷ ty.int; "y" ∷ ty.int];
          sep_contract_localstore      := [term_var "x"; term_var "y"];
          sep_contract_precondition    :=
-           asn_bool (term_binop bop.le (term_val ty.int 0) (term_var "x")) ✱
-                    asn_bool (term_binop bop.le (term_val ty.int 0) (term_var "y"));
+           term_val ty.int 0 <= term_var "x" ∗
+           term_val ty.int 0 <= term_var "y";
          sep_contract_result          := "result";
          sep_contract_postcondition   :=
-           @asn_prop
+           asn_prop
              ["x" ∷ ty.int; "y" ∷ ty.int; "result" ∷ ty.int]
-             (fun x y result => result = Z.gcd x y)
+             (fun x y result => result = Z.gcd x y)%type
       |}.
 
     Definition length_post {σ} (xs : list (Val σ)) (result : Val ty.int) :=
-      result = Z.of_nat (@Datatypes.length (Val σ) xs).
+      (result = Z.of_nat (@Datatypes.length (Val σ) xs))%type.
     Definition sep_contract_length {σ} : SepContract [ "xs" ∷ ty.list σ ] ty.int :=
       {| sep_contract_logic_variables := ["xs" ∷ ty.list σ ];
          sep_contract_localstore      := [term_var "xs"];
-         sep_contract_precondition    := asn_true;
+         sep_contract_precondition    := ⊤;
          sep_contract_result          := "result";
          sep_contract_postcondition   := asn_prop ["xs"∷ty.list σ; "result"∷ty.int] length_post
       |}.
@@ -446,23 +434,11 @@ Module Import ExampleSpecification <: Specification ExampleBase ExampleSig.
 
 End ExampleSpecification.
 
-Module ExampleSolverKit := DefaultSolverKit ExampleBase ExampleSig ExampleSpecification.
-Module ExampleSolver := MakeSolver ExampleBase ExampleSig ExampleSpecification ExampleSolverKit.
+Module ExampleSolverKit := DefaultSolverKit ExampleBase ExampleSig.
+Module ExampleSolver := MakeSolver ExampleBase ExampleSig ExampleSolverKit.
 
 Module Import ExampleExecutor :=
-  MakeExecutor ExampleBase ExampleSig ExampleSpecification ExampleSolver.
-
-(* Ltac destruct_syminstance ι := *)
-(*   repeat *)
-(*     match type of ι with *)
-(*     | Env _ (ctx.snoc _ (?s, _)) => *)
-(*       let id := string_to_ident s in *)
-(*       let fr := fresh id in *)
-(*       destruct (env.snocView ι) as [ι fr]; *)
-(*       destruct_syminstance ι *)
-(*     | Env _ ctx.nil => destruct (env.nilView ι) *)
-(*     | _ => idtac *)
-(*     end. *)
+  MakeExecutor ExampleBase ExampleProgram ExampleSig ExampleSpecification ExampleSolver.
 
 Local Ltac solve :=
   repeat
@@ -474,8 +450,6 @@ Local Ltac solve :=
       repeat
        match goal with
        | H: NamedEnv _ _ |- _ => unfold NamedEnv in H
-       (* | ι : Env _ (ctx.snoc _ _) |- _ => destruct_syminstance ι *)
-       (* | ι : Env _ ctx.nil        |- _ => destruct_syminstance ι *)
        | H: _ /\ _ |- _ => destruct H
        | H: Z.ltb _ _ = true |- _ => apply Z.ltb_lt in H
        | H: Z.ltb _ _ = false |- _ => apply Z.ltb_ge in H
@@ -494,16 +468,12 @@ Local Ltac solve :=
      auto
     ).
 
-(* Goal True. idtac "Timing before: example/length". Abort. *)
-(* Lemma valid_contract_length {σ} : SMut.ValidContract (@sep_contract_length σ) (FunDef length). *)
-(* Proof. *)
-(*   compute - [length_post]. *)
-(*   constructor. cbn. *)
-(*   solve; lia. *)
-(* Qed. *)
-(* Goal True. idtac "Timing after: example/length". Abort. *)
+Goal True. idtac "Timing before: example/length". Abort.
+Lemma valid_contract_length {σ} : Symbolic.ValidContract (@sep_contract_length σ) (FunDef length).
+Proof. constructor. compute - [length_post Val Z.add]. solve; lia. Qed.
+Goal True. idtac "Timing after: example/length". Abort.
 
 Goal True. idtac "Timing before: example/cmp". Abort.
-Lemma valid_contract_cmp : SMut.ValidContractReflect sep_contract_cmp (FunDef cmp).
+Lemma valid_contract_cmp : Symbolic.ValidContractReflect sep_contract_cmp (FunDef cmp).
 Proof. reflexivity. Qed.
 Goal True. idtac "Timing after: example/cmp". Abort.

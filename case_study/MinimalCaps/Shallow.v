@@ -1,5 +1,5 @@
 (******************************************************************************)
-(* Copyright (c) 2019 Steven Keuchel                                          *)
+(* Copyright (c) 2022 Steven Keuchel                                          *)
 (* All rights reserved.                                                       *)
 (*                                                                            *)
 (* Redistribution and use in source and binary forms, with or without         *)
@@ -26,5 +26,32 @@
 (* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.               *)
 (******************************************************************************)
 
-From Katamaran Require Export
-     Base Program.
+From Coq Require Import
+     ZArith.ZArith.
+From Katamaran.MinimalCaps Require Import
+     Contracts
+     Machine.
+
+Import MinCapsProgram.
+Import MinCapsSpecification.
+Import MinCapsShallowExec.
+
+Definition all_shallow_vcs : Prop :=
+  List.fold_right
+    (fun '(existT _ (existT _ f)) r =>
+       match CEnv f with
+       | Some c => Shallow.ValidContract c (FunDef f) /\ r
+       | None   => r
+       end)
+    True
+    all_functions.
+
+Set Printing Depth 500.
+Goal True.
+  idtac "Shallow VC:".
+  let P := eval compute - [CPureSpecM.FALSE CPureSpecM.TRUE CPureSpecM.FINISH
+                           negb Z.mul Z.opp Z.compare Z.add Z.geb Z.eqb
+                           Z.leb Z.gtb Z.ltb Z.le Z.lt Z.gt Z.ge]
+      in all_shallow_vcs
+  in idtac P.
+Abort.

@@ -1,32 +1,34 @@
 -arg "-w all"
--arg "-w -deprecated-instance-without-locality"
--arg "-w -deprecated-native-compiler-option"
 -arg "-w -disj-pattern-notation"
+-arg "-w -notation-incompatible-format"
 -arg "-w -notation-overridden"
--arg "-native-compiler no"
--Q case_study/MinimalCaps MinimalCaps
+-Q case_study/MinimalCaps Katamaran.MinimalCaps
 case_study/MinimalCaps/Base.v
 case_study/MinimalCaps/Contracts.v
 case_study/MinimalCaps/Machine.v
 case_study/MinimalCaps/Model.v
--Q case_study/RiscvPmp RiscvPmp
+-Q case_study/RiscvPmp Katamaran.RiscvPmp
 case_study/RiscvPmp/Base.v
 case_study/RiscvPmp/Contracts.v
 case_study/RiscvPmp/Machine.v
+case_study/RiscvPmp/IrisModel.v
+case_study/RiscvPmp/IrisInstance.v
 case_study/RiscvPmp/Model.v
+case_study/RiscvPmp/Sig.v
 case_study/RiscvPmp/LoopVerification.v
+case_study/RiscvPmp/BlockVer/Examples.v
+case_study/RiscvPmp/BlockVer/Spec.v
+case_study/RiscvPmp/BlockVer/Verifier.v
 -R theories Katamaran
 test/Example.v
 test/LinkedList.v
 test/SumMaxLen.v
-theories/Attic/Disjoint.v
-theories/Attic/DisjointSound.v
 theories/Base.v
 theories/Bitvector.v
 theories/Context.v
 theories/Environment.v
+theories/Iris/Instance.v
 theories/Iris/Model.v
-theories/Katamaran.v
 theories/Notations.v
 theories/Prelude.v
 theories/Program.v
@@ -36,23 +38,22 @@ theories/Sep/Hoare.v
 theories/Sep/Logic.v
 theories/Shallow/Executor.v
 theories/Shallow/Soundness.v
+theories/Signature.v
 theories/SmallStep/Inversion.v
 theories/SmallStep/Progress.v
 theories/SmallStep/Step.v
 theories/Specification.v
-theories/Staging/CommandStep.v
+theories/Symbolic/Executor.v
 theories/Symbolic/Instantiation.v
-theories/Symbolic/Mutator.v
 theories/Symbolic/OccursCheck.v
 theories/Symbolic/PartialEvaluation.v
 theories/Symbolic/Propositions.v
 theories/Symbolic/Solver.v
-theories/Symbolic/Sound.v
+theories/Symbolic/Soundness.v
 theories/Symbolic/Worlds.v
 theories/Syntax/Assertions.v
 theories/Syntax/BinOps.v
 theories/Syntax/Chunks.v
-theories/Syntax/ContractDecl.v
 theories/Syntax/Expressions.v
 theories/Syntax/Formulas.v
 theories/Syntax/FunDecl.v
@@ -63,6 +64,9 @@ theories/Syntax/Registers.v
 theories/Syntax/Statements.v
 theories/Syntax/Terms.v
 theories/Syntax/TypeDecl.v
-theories/Syntax/TypeDef.v
 theories/Syntax/Variables.v
 theories/Tactics.v
+
+theories/Staging/CommandStep.v
+theories/Staging/NewShallow/Executor.v
+theories/Staging/NewShallow/Soundness.v

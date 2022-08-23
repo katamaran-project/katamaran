@@ -38,7 +38,6 @@ From Katamaran Require Import
      Syntax.BinOps
      Syntax.Terms
      Syntax.TypeDecl
-     Syntax.TypeDef
      Syntax.Variables.
 
 Import ctx.notations.
@@ -53,8 +52,8 @@ Module Type PartialEvaluationOn
   (Import TM : TermsOn TY)
   (Import IN : InstantiationOn TY TM).
 
-  Local Notation LCtx := (NCtx 𝑺 Ty).
-  Local Notation Valuation Σ := (@Env (Binding 𝑺 Ty) (fun xt : Binding 𝑺 Ty => Val (@type 𝑺 Ty xt)) Σ).
+  Local Notation LCtx := (NCtx LVar Ty).
+  Local Notation Valuation Σ := (@Env (Binding LVar Ty) (fun xt : Binding LVar Ty => Val (@type LVar Ty xt)) Σ).
 
   Section WithLCtx.
     Context {Σ : LCtx}.
@@ -117,6 +116,12 @@ Module Type PartialEvaluationOn
     | term_val _ v := term_val (ty.sum _ _) (@inr (Val _) (Val _) v);
     | t            := term_inr t.
 
+    Definition peval_union {U K} (t : Term Σ (unionk_ty U K)) : Term Σ (ty.union U) :=
+      match term_get_val t with
+      | Some v => term_val (ty.union U) (unionv_fold U (existT K v))
+      | None   => term_union U K t
+      end.
+
     Equations(noeqns) peval [σ] (t : Term Σ σ) : Term Σ σ :=
     | term_var ς                 := term_var ς;
     | term_val _ v               := term_val _ v;
@@ -125,9 +130,8 @@ Module Type PartialEvaluationOn
     | term_not t                 := peval_not (peval t);
     | term_inl t                 := peval_inl (peval t);
     | term_inr t                 := peval_inr (peval t);
-    (* TODO: Finish the cases below. *)
-    | @term_union _ U K t        := @term_union _ U K (peval t);
-    | @term_record _ R ts        := @term_record _ R ts.
+    | term_union U K t           := peval_union (peval t);
+    | @term_record _ R ts        := term_record R (env.map (fun b => peval (σ := type b)) ts).
 
     Lemma peval_neg_sound (t : Term Σ ty.int) :
       forall (ι : Valuation Σ),
@@ -149,6 +153,14 @@ Module Type PartialEvaluationOn
         inst (peval_inr (σ1 := σ1) t) ι = inst (term_inr t) ι.
     Proof. destruct t; cbn; auto. Qed.
 
+    Lemma peval_union_sound {U K} (t : Term Σ (unionk_ty U K)) :
+      forall (ι : Valuation Σ),
+        inst (peval_union t) ι = inst (term_union U K t) ι.
+    Proof.
+      intros ι. unfold peval_union.
+      destruct (term_get_val_spec t); cbn; subst; reflexivity.
+    Qed.
+
     Lemma peval_sound [σ] (t : Term Σ σ) :
       forall (ι : Valuation Σ),
         inst (peval t) ι = inst t ι.
@@ -163,8 +175,20 @@ Module Type PartialEvaluationOn
       - now rewrite peval_not_sound, IHt.
       - now rewrite peval_inl_sound, IHt.
       - now rewrite peval_inr_sound, IHt.
-      - now rewrite IHt.
-      - reflexivity.
+      - now rewrite peval_union_sound, IHt.
+      - f_equal. induction IH; cbn; f_equal; auto.
+    Qed.
+
+    Definition pevals [Δ] : Env (Term Σ) Δ -> Env (Term Σ) Δ :=
+      env.map peval.
+
+    Lemma pevals_sound [Δ] (ts : Env (Term Σ) Δ) :
+      forall (ι : Valuation Σ),
+        inst (pevals ts) ι = inst ts ι.
+    Proof.
+      intros ι. cbv [inst pevals inst_env].
+      rewrite env.map_map. apply env.map_ext.
+      intros. apply peval_sound.
     Qed.
 
   End WithLCtx.

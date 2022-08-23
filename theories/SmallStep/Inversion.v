@@ -106,7 +106,7 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
     Qed.
 
     Lemma step_inversion_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
-          {x : 𝑿} {xInΓ : x∷σ ∈ Γ} {s1 t : Stm Γ σ} (final : Final s1)
+          {x : PVar} {xInΓ : x∷σ ∈ Γ} {s1 t : Stm Γ σ} (final : Final s1)
           (step : ⟨ γ1, μ1, δ1, stm_assign x s1 ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
       γ3 = γ1 /\ μ3 = μ1 /\
       ((exists msg, s1 = stm_fail _ msg /\ t = stm_fail _ msg /\ δ3 = δ1) \/
@@ -303,7 +303,7 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
   Qed.
 
   Lemma steps_inversion_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
-    (x : 𝑿) (xInΓ : x∷σ ∈ Γ) (s1 t : Stm Γ σ) (final : Final t)
+    (x : PVar) (xInΓ : x∷σ ∈ Γ) (s1 t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_assign x s1 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     exists γ2 μ2 δ2 δ2' s1',
       ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s1' ⟩ /\ Final s1' /\
@@ -406,7 +406,7 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
   Qed.
 
   Lemma steps_inversion_ex_assign {Γ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
-    (x : 𝑿) (xInΓ : x∷σ ∈ Γ) (s1 t : Stm Γ σ) (final : Final t)
+    (x : PVar) (xInΓ : x∷σ ∈ Γ) (s1 t : Stm Γ σ) (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_assign x s1 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
     (exists msg,
         ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ3, μ3, δ3, stm_fail _ msg ⟩ /\

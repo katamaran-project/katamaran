@@ -61,7 +61,7 @@ Module Type WorldsOn
 
     (* This adds one new logic variable binding [b] to the world, i.e. after
        "allocating" it in a quantifier in the proposition. *)
-    Definition wsnoc (w : World) (b : 𝑺 ∷ Ty) : World :=
+    Definition wsnoc (w : World) (b : LVar ∷ Ty) : World :=
       @MkWorld (wctx w ▻ b) (subst (wco w) sub_wk1).
     (* Add [Δ] many logic variables to the world [w]. *)
     Definition wcat (w : World) (Δ : LCtx) : World :=
@@ -88,8 +88,6 @@ Module Type WorldsOn
       fun w => A w -> B w.
     Definition Forall {I : Type} (A : I -> TYPE) : TYPE :=
       fun w => forall i : I, A i w.
-    (* Definition Cat (A : TYPE) (Δ : LCtx) : TYPE := *)
-    (*   fun w => A (wcat w Δ). *)
 
   End Worlds.
 
@@ -218,6 +216,9 @@ Module Type WorldsOn
     Import Entailment.
 
     Inductive Acc (w1 : World) : World -> Type :=
+    (* We special case the reflexivity case of accessibility, because there are
+       many computations that don't change the world and we would therefore
+       often run the identity substitution over the entire state. *)
     | acc_refl : Acc w1 w1
     | acc_sub {w2 : World} (ζ : Sub w1 w2) (ent : wco w2 ⊢ subst (wco w1) ζ) : Acc w1 w2.
     Global Arguments acc_refl {w} : rename.
@@ -254,10 +255,10 @@ Module Type WorldsOn
       wco w2 ⊢ subst (wco w1) (sub_acc ω).
     Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
 
-    Definition acc_snoc_right {w} {b : 𝑺 ∷ Ty} : w ⊒ wsnoc w b :=
+    Definition acc_snoc_right {w} {b : LVar ∷ Ty} : w ⊒ wsnoc w b :=
       @acc_sub w (wsnoc w b) sub_wk1 (entails_refl (subst (wco w) sub_wk1)).
 
-    Program Definition acc_snoc_left {w1 w2} (ω12 : w1 ⊒ w2) (b : 𝑺 ∷ Ty) (t : Term w2 (type b)) :
+    Program Definition acc_snoc_left {w1 w2} (ω12 : w1 ⊒ w2) (b : LVar ∷ Ty) (t : Term w2 (type b)) :
       wsnoc w1 b ⊒ w2 := acc_sub (sub_snoc (sub_acc ω12) b t) _.
     Next Obligation.
     Proof.
@@ -320,28 +321,16 @@ Module Type WorldsOn
       - now rewrite sub_acc_trans, IHζ.
     Qed.
 
-    (* Lemma acc_triangular_app {w0 w1 w2} (ν01 : Tri w0 w1) (ν12 : Tri w1 w2) : *)
-    (*   wsub (acc_triangular (tri_comp ν01 ν12)) = *)
-    (*   subst (sub_acc (acc_triangular ν01)) (sub_acc (acc_triangular ν12)). *)
-    (* Proof. *)
-    (*   induction ν01; cbn - [SubstEnv]. *)
-    (*   - now rewrite sub_comp_id_left. *)
-    (*   - rewrite <- subst_sub_comp. now f_equal. *)
-    (* Qed. *)
-
   End Accessibility.
 
-  Instance preorder_acc : CRelationClasses.PreOrder Acc :=
+  #[export] Instance preorder_acc : CRelationClasses.PreOrder Acc :=
     CRelationClasses.Build_PreOrder Acc (@acc_refl) (@acc_trans).
-
-  Declare Scope modal.
-  Delimit Scope modal with modal.
 
   Section S4.
 
     Notation "⊢ A" := (Valid A%modal) (at level 100).
-    Notation "A -> B" := (Impl A%modal B%modal) : modal.
-    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal.
+    Notation "A -> B" := (Impl A%modal B%modal) : modal_scope.
+    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal_scope.
 
     Definition K {A B} :
       ⊢ □(A -> B) -> (□A -> □B) :=
@@ -355,12 +344,6 @@ Module Type WorldsOn
       fun w0 a w1 ω01 w2 ω12 =>
         a w2 (acc_trans ω01 ω12).
     Global Arguments four : simpl never.
-
-    (* faster version of (four _ sub_wk1) *)
-    (* Definition four_wk1 {A} : *)
-    (*   ⊢ □A -> ∀ b, Snoc (□A) b := *)
-    (*   fun w0 a b w1 ω01 => a w1 (env_tail ω01). *)
-    (* Arguments four_wk1 {A Σ0} pc0 a b [Σ1] ζ01 : rename. *)
 
     Definition valid_box {A} :
       (⊢ A) -> (⊢ □A) :=
@@ -380,13 +363,13 @@ Module Type WorldsOn
   Module ModalNotations.
 
     Notation "⊢ A" := (Valid A%modal) (at level 100).
-    Notation "A -> B" := (Impl A%modal B%modal) : modal.
-    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal.
-    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal.
+    Notation "A -> B" := (Impl A%modal B%modal) : modal_scope.
+    Notation "□ A" := (Box A%modal) (at level 9, format "□ A", right associativity) : modal_scope.
+    Notation "⌜ A ⌝" := (fun (w : World) => Const A%type w) (at level 0, format "⌜ A ⌝") : modal_scope.
     Notation "'∀' x .. y , P " :=
       (Forall (fun x => .. (Forall (fun y => P%modal)) ..))
         (at level 99, x binder, y binder, right associativity)
-      : modal.
+      : modal_scope.
     Notation "w1 ⊒ w2" := (Acc w1 w2) (at level 80).
     Notation "f <$> a" := (fmap_box f a) (at level 40, left associativity).
     Notation "f <*> a" := (K f a) (at level 40, left associativity).
@@ -399,18 +382,12 @@ Module Type WorldsOn
     Import Entailment.
     Import ModalNotations.
 
-    Class Persistent (A : TYPE) (* `{LogicalRelation.LR A} *) : Type :=
-      persist     : ⊢ A -> □A.
-        (* persist_lr  : forall w0 (a : A w0) w1 (ω01 : w0 ⊒ w1), *)
-        (*     LogicalRelation.lr ω01 a (persist a ω01); *)
-        (* persist_dcl : *)
-        (*   forall w (a : A w), *)
-        (*     LogicalRelation.dcl (persist a) *)
-    (* Global Arguments Persistent A {_}. *)
+    Class Persistent (A : TYPE) : Type :=
+      persist : ⊢ A -> □A.
 
-    Global Instance persistent_box {A} : Persistent □A := four.
+    #[export] Instance persistent_box {A} : Persistent □A := four.
 
-    Global Instance persistent_subst {A} `{Subst A} : Persistent A :=
+    #[export] Instance persistent_subst {A} `{Subst A} : Persistent A :=
       fun w0 x w1 ω01 =>
         match ω01 with
         | acc_refl => x
@@ -433,34 +410,6 @@ Module Type WorldsOn
     Lemma ent_acc {w1 w2} (ω : w1 ⊒ w2) :
       wco w2 ⊢ persist (wco w1) ω.
     Proof. destruct ω; cbn; now rewrite ?subst_sub_id. Qed.
-
-    (* Program Definition acc_snoc {w0 w1} (ω01 : w0 ⊒ w1) (b : 𝑺 * Ty) : *)
-    (*   wsnoc w0 b ⊒ wsnoc w1 b := *)
-    (*   match ω01 in _ ⊒ w return wsnoc w0 b ⊒ wsnoc w b with *)
-    (*   | acc_refl            => acc_refl *)
-    (*   | @acc_sub _ w2 ζ ent => @acc_sub _ (wsnoc _ b) (sub_up1 ζ) _ *)
-    (*   end. *)
-    (* Next Obligation. *)
-    (* Proof. *)
-    (*   intros. unfold wsnoc; cbn. *)
-    (*   rewrite <- subst_sub_comp. *)
-    (*   rewrite sub_comp_wk1_comm. *)
-    (*   rewrite subst_sub_comp. *)
-    (*   now apply proper_subst_entails. *)
-    (* Qed. *)
-
-    (* Program Definition acc_formula {w0 w1} (ω01 : w0 ⊒ w1) (fml : Formula w0) : *)
-    (*   wformula w0 fml ⊒ wformula w1 (persist fml ω01) := *)
-    (*   @acc_sub (MkWorld (cons fml (wco w0))) (MkWorld (cons (persist fml ω01) (wco w1))) (sub_acc ω01) _. *)
-    (* Next Obligation. *)
-    (*   intros ? ? ? ? ι. *)
-    (*   unfold wformula in *. *)
-    (*   cbn [wco wctx] in *. cbn. *)
-    (*   destruct ω01; cbn. *)
-    (*   - now rewrite ?subst_sub_id. *)
-    (*   - rewrite ?inst_pathcondition_cons. *)
-    (*     intuition. *)
-    (* Qed. *)
 
   End Persistence.
 
@@ -500,5 +449,108 @@ Module Type WorldsOn
     intros w fmls. constructor. cbn. intros ι Hpc. split. auto.
     intros ι' Hpc' ->. now rewrite inst_sub_id.
   Qed.
+
+  Definition SolverUserOnly : Type :=
+    forall Σ (p : 𝑷), Env (Term Σ) (𝑷_Ty p) -> option (List Formula Σ).
+
+  Definition SolverUserOnlySpec (s : SolverUserOnly) : Prop :=
+    forall Σ (p : 𝑷) (ts : Env (Term Σ) (𝑷_Ty p)),
+      option.spec
+        (fun r : List Formula Σ =>
+           forall ι : Valuation Σ,
+             inst (formula_user p ts) ι <-> instpc r ι)
+        (forall ι : Valuation Σ, ~ inst (formula_user p ts) ι)
+        (s Σ p ts).
+
+  Section SimplifyAll.
+    Import option.notations.
+    Context {Σ} (g : Formula Σ -> List Formula Σ -> option (List Formula Σ)).
+
+    Definition simplify_all {Σ} (g : Formula Σ -> List Formula Σ -> option (List Formula Σ)) :=
+      fix simplify_all (fmls k : List Formula Σ) {struct fmls} : option (List Formula Σ) :=
+        match fmls with
+        | nil => Some k
+        | cons fml0 fmls =>
+          k' <- simplify_all fmls k ;;
+          g fml0 k'
+        end.
+
+    Context (g_spec : forall f k,
+                option.spec
+                  (fun r : List Formula Σ =>
+                     forall ι : Valuation Σ,
+                       instpc (cons f k)%list ι <-> instpc r ι)
+                  (forall ι : Valuation Σ, ~ inst f ι)
+                  (g f k)).
+
+    Lemma simplify_all_spec (fmls k : List Formula Σ) :
+      option.spec
+        (fun r : List Formula Σ =>
+           forall ι : Valuation Σ,
+             instpc (fmls ++ k)%list ι <-> instpc r ι)
+        (forall ι : Valuation Σ, ~ instpc fmls ι)
+        (simplify_all g fmls k).
+    Proof.
+      induction fmls; cbn; [constructor; reflexivity|].
+      apply option.spec_bind. revert IHfmls.
+      apply option.spec_monotonic.
+      - intros tmp Htmp. specialize (g_spec a tmp). revert g_spec.
+        apply option.spec_monotonic.
+        + intros res Hres ι. rewrite (Htmp ι). apply (Hres ι).
+        + intros Hna ι [Ha ?]. now apply (Hna ι).
+      - intros Hnfmls ι [Ha Hfmls]. now apply (Hnfmls ι).
+    Qed.
+
+  End SimplifyAll.
+
+  Section WithUserOnlySolver.
+
+    Context (user : SolverUserOnly).
+
+    Definition solveruseronly_simplify_formula {Σ} (f : Formula Σ) (k : List Formula Σ) : option (List Formula Σ) :=
+      match f with
+      | formula_user p ts => option.map (fun r => app r k) (user ts)
+      | f                 => Some (cons f k)
+      end.
+
+    Definition solveruseronly_to_solver : Solver :=
+      fun w fmls =>
+        option_map
+          (fun l => existT w (tri_id, l))
+          (simplify_all solveruseronly_simplify_formula fmls nil).
+
+    Context (user_spec : SolverUserOnlySpec user).
+
+    Lemma solveruseronly_simplify_formula_spec {Σ} (f : Formula Σ) (k : List Formula Σ) :
+      option.spec
+        (fun r : List Formula Σ =>
+           forall ι : Valuation Σ,
+             instpc (cons f k)%list ι <-> instpc r ι)
+        (forall ι : Valuation Σ, ~ inst f ι)
+        (solveruseronly_simplify_formula f k).
+    Proof.
+      destruct f; try (constructor; reflexivity).
+      cbn [solveruseronly_simplify_formula]. apply option.spec_map.
+      generalize (user_spec ts).
+      apply option.spec_monotonic.
+      - intros ? H ?. rewrite inst_pathcondition_app.
+        apply and_iff_compat_r'. intros ?. apply H.
+      - auto.
+    Qed.
+
+    Lemma solveruseronly_to_solver_spec : SolverSpec solveruseronly_to_solver.
+    Proof.
+      intros w0 fmls. unfold solveruseronly_to_solver.
+      apply option.spec_map.
+      generalize (simplify_all_spec solveruseronly_simplify_formula solveruseronly_simplify_formula_spec fmls nil).
+      apply option.spec_monotonic.
+      - intros r H ι Hpc. split; [constructor|].
+        specialize (H ι). rewrite inst_pathcondition_app in H.
+        cbn in H. rewrite rightid_and_true in H.
+        intros ι' Hpc'. cbn. rewrite inst_sub_id. intros. now subst.
+      - intros Hnf ι Hpc. apply Hnf.
+    Qed.
+
+  End WithUserOnlySolver.
 
 End WorldsOn.

@@ -79,7 +79,7 @@ Module Type FormulasOn
     formula_eqs_nctx (env.snoc δ _ t) (env.snoc δ' _ t') :=
       formula_eq t t' :: formula_eqs_nctx δ δ'.
 
-  Global Instance sub_formula : Subst Formula :=
+  #[export] Instance sub_formula : Subst Formula :=
     fun Σ1 fml Σ2 ζ =>
       match fml with
       | formula_user p ts => formula_user p (subst ts ζ)
@@ -93,14 +93,14 @@ Module Type FormulasOn
       | formula_neq t1 t2 => formula_neq (subst t1 ζ) (subst t2 ζ)
       end.
 
-  Global Instance substlaws_formula : SubstLaws Formula.
+  #[export] Instance substlaws_formula : SubstLaws Formula.
   Proof.
     constructor.
     { intros ? []; cbn; f_equal; apply subst_sub_id. }
     { intros ? ? ? ? ? []; cbn; f_equal; apply subst_sub_comp. }
   Qed.
 
-  Global Instance inst_formula : Inst Formula Prop :=
+  #[export] Instance inst_formula : Inst Formula Prop :=
     fun {Σ} (fml : Formula Σ) (ι : Valuation Σ) =>
       match fml with
       | formula_user p ts => env.uncurry (𝑷_inst p) (inst ts ι)
@@ -114,20 +114,14 @@ Module Type FormulasOn
       | formula_neq t1 t2 => inst t1 ι <> inst t2 ι
       end%Z.
 
-  (* Instance lift_formula : Lift Formula Prop := *)
-  (*   fun Σ P => formula_prop env.nil P. *)
-
-  Global Instance inst_subst_formula : InstSubst Formula Prop.
+  #[export] Instance inst_subst_formula : InstSubst Formula Prop.
   Proof.
     intros ? ? ? ? f.
     induction f; cbn; repeat f_equal; apply inst_subst.
   Qed.
 
-  (* Instance inst_lift_formula : InstLift Formula Prop. *)
-  (* Proof. red. reflexivity. Qed. *)
-
   Import option.notations.
-  Global Instance OccursCheckFormula : OccursCheck Formula :=
+  #[export] Instance OccursCheckFormula : OccursCheck Formula :=
     fun Σ x xIn fml =>
       match fml with
       | formula_user p ts => option.map (formula_user p) (occurs_check xIn ts)
@@ -141,7 +135,7 @@ Module Type FormulasOn
       | formula_neq t1 t2 => t1' <- occurs_check xIn t1 ;; t2' <- occurs_check xIn t2 ;; Some (formula_neq t1' t2')
       end.
 
-  Global Instance occurs_check_laws_formula : OccursCheckLaws Formula.
+  #[export] Instance occurs_check_laws_formula : OccursCheckLaws Formula.
   Proof. occurs_check_derive. Qed.
 
   (* The path condition expresses a set of constraints on the logic variables
@@ -151,14 +145,14 @@ Module Type FormulasOn
     Definition PathCondition (Σ : LCtx) : Type :=
       list (Formula Σ).
 
-    Global Instance inst_pathcondition : Inst PathCondition Prop :=
+    #[export] Instance inst_pathcondition : Inst PathCondition Prop :=
       fix inst_pc {Σ} (pc : list (Formula Σ)) (ι : Valuation Σ) : Prop :=
         match pc with
         | nil => True
         | cons f pc => inst f ι /\ inst_pc pc ι
         end.
 
-    Global Instance inst_subst_pathcondition : InstSubst PathCondition Prop.
+    #[export] Instance inst_subst_pathcondition : InstSubst PathCondition Prop.
     Proof.
       intros Σ Σ' ζ ι pc.
       induction pc; cbn; f_equal; auto using inst_subst.
@@ -245,15 +239,8 @@ Module Type FormulasOn
     Definition entails_trans {Σ} : Transitive (@entails Σ).
     Proof. unfold Transitive, entails; eauto. Qed.
 
-    Global Instance preorder_entails {Σ} : PreOrder (@entails Σ).
+    #[export] Instance preorder_entails {Σ} : PreOrder (@entails Σ).
     Proof. split; auto using entails_refl, entails_trans. Qed.
-
-    (* Global Instance proper_subst_pc_entails {Σ1 Σ2} : *)
-    (*   Proper ((@entails Σ1) ==> eq ==> (@entails Σ2)) (subst (T := PathCondition)) . *)
-    (* Proof. *)
-    (*   intros pc1 pc2 pc12 ι. *)
-    (*   rewrite ?inst_subst; eauto. *)
-    (* Qed. *)
 
     Lemma proper_subst_entails {Σ1 Σ2} (ζ12 : Sub Σ1 Σ2) (pc1 pc2 : PathCondition Σ1) :
       (pc1 ⊢ pc2) -> (subst pc1 ζ12 ⊢ subst pc2 ζ12).
@@ -268,27 +255,9 @@ Module Type FormulasOn
       (entails_eq pc a0 a1)
       (at level 99, a1 at level 200, no associativity).
 
-    (* Global Instance proper_subst_entails_eq {AT A} `{InstLaws AT A} {Σ1 Σ2} {ζ : Sub Σ1 Σ2} {pc : PathCondition Σ1} : *)
-    (*   Proper ((entails_eq pc) ==> (entails_eq (subst pc ζ))) (subst ζ). *)
-    (* Proof. *)
-    (*   intros a1 a2 a12 ι. *)
-    (*   rewrite ?inst_subst; auto. *)
-    (* Qed. *)
-
-    (* Global Instance proper_subst_entails_eq_pc *)
-    (*        {Σ1 Σ2} `{InstLaws AT A} *)
-    (*        (pc : PathCondition Σ2): *)
-    (*   Proper (entails_eq pc ==> eq ==> entails_eq pc) (@subst AT _ Σ1 Σ2). *)
-    (* Proof. *)
-    (*   intros ζ1 ζ2 ζ12 a1 a2 [] ι ιpc. *)
-    (*   rewrite ?inst_subst. *)
-    (*   now rewrite (ζ12 ι ιpc). *)
-    (* Qed. *)
-
-
     (* Not sure this instance is a good idea...
        This seems to cause rewrite to take very long... *)
-    Global Instance proper_entails_pc_iff
+    #[export] Instance proper_entails_pc_iff
            {Σ} (pc : PathCondition Σ):
          Proper (entails_eq pc ==> iff) (entails pc).
     Proof.
@@ -299,7 +268,7 @@ Module Type FormulasOn
         congruence.
     Qed.
 
-    Global Instance proper_entails_formula_iff
+    #[export] Instance proper_entails_formula_iff
            {Σ} (pc : PathCondition Σ):
          Proper (entails_eq pc ==> iff) (entails_formula pc).
     Proof.
@@ -310,17 +279,17 @@ Module Type FormulasOn
         congruence.
     Qed.
 
-    Global Instance proper_entails_eq_impl {AT A} {Σ} {Γ} : Proper (flip (@entails Σ) ==> eq ==> eq ==> impl) (@entails_eq AT A Γ Σ).
+    #[export] Instance proper_entails_eq_impl {AT A} {Σ} {Γ} : Proper (flip (@entails Σ) ==> eq ==> eq ==> impl) (@entails_eq AT A Γ Σ).
     Proof.
       intros pc1 pc2 pc21 a1 _ [] a2 _ [] eq1 ι ιpc2; eauto.
     Qed.
 
-    Global Instance proper_entails_eq_flip_impl {AT A} `{Inst AT A} {Σ} : Proper ((@entails Σ) ==> eq ==> eq ==> flip impl) entails_eq.
+    #[export] Instance proper_entails_eq_flip_impl {AT A} `{Inst AT A} {Σ} : Proper ((@entails Σ) ==> eq ==> eq ==> flip impl) entails_eq.
     Proof.
       intros pc1 pc2 pc21 a1 _ [] a2 _ [] eq1 ι ιpc2; eauto.
     Qed.
 
-    Global Instance equiv_entails_eq `{instA : Inst AT A} {Σ} {pc : PathCondition Σ} : Equivalence (entails_eq pc).
+    #[export] Instance equiv_entails_eq `{instA : Inst AT A} {Σ} {pc : PathCondition Σ} : Equivalence (entails_eq pc).
     Proof.
       split.
       - intuition.
@@ -331,14 +300,14 @@ Module Type FormulasOn
         intuition.
     Qed.
 
-    Global Instance proper_entails_eq_flip_impl_pc {AT A} `{Inst AT A} {Σ} {pc : PathCondition Σ}: Proper (entails_eq pc ==> entails_eq pc ==> iff) (entails_eq pc).
+    #[export] Instance proper_entails_eq_flip_impl_pc {AT A} `{Inst AT A} {Σ} {pc : PathCondition Σ}: Proper (entails_eq pc ==> entails_eq pc ==> iff) (entails_eq pc).
     Proof.
       split; intros Heq.
       - transitivity x; [|transitivity x0]; easy.
       - transitivity y; [|transitivity y0]; easy.
     Qed.
 
-    Global Instance proper_entails_eq_sub_comp
+    #[export] Instance proper_entails_eq_sub_comp
            {Σ1 Σ2 Σ3} {ζ : Sub Σ1 Σ2} (pc : PathCondition Σ3):
       Proper (entails_eq pc ==> entails_eq pc) (subst ζ).
     Proof.
@@ -347,12 +316,6 @@ Module Type FormulasOn
       intros ι Hpc. specialize (ζ12 ι Hpc).
       now rewrite ?inst_subst, ζ12.
     Qed.
-
-    (* Infix "⊢" := (@entails _) (at level 80, no associativity). *)
-    (* Infix "⊢f" := (@entails_formula _) (at level 80, no associativity). *)
-    (* Notation "pc ⊢ a0 == a1" := *)
-    (*   (entails_eq pc a0 a1) *)
-    (*     (at level 80, a0 at next level, no associativity). *)
 
   End Entailment.
 

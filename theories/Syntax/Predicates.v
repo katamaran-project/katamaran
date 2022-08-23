@@ -31,6 +31,7 @@ From Katamaran Require Import
      Context
      Environment
      Prelude
+     Sep.Logic
      Base.
 
 From Equations Require Import
@@ -48,7 +49,7 @@ Module Type PurePredicateKit (Import B : Base).
   Parameter Inline 𝑷_Ty : 𝑷 -> Ctx Ty.
   Parameter Inline 𝑷_inst : forall p : 𝑷, env.abstract Val (𝑷_Ty p) Prop.
 
-  Declare Instance 𝑷_eq_dec : EqDec 𝑷.
+  #[export] Declare Instance 𝑷_eq_dec : EqDec 𝑷.
 
 End PurePredicateKit.
 
@@ -59,23 +60,35 @@ Module Type HeapPredicateKit (Import B : Base).
   (* Predicate field types. *)
   Parameter Inline 𝑯_Ty : 𝑯 -> Ctx Ty.
   (* Duplicable? *)
-  Declare Instance 𝑯_is_dup : IsDuplicable 𝑯.
+  #[export] Declare Instance 𝑯_is_dup : IsDuplicable 𝑯.
 
-  Declare Instance 𝑯_eq_dec : EqDec 𝑯.
+  #[export] Declare Instance 𝑯_eq_dec : EqDec 𝑯.
 
   Parameter 𝑯_precise : forall p : 𝑯, option (Precise 𝑯_Ty p).
 
 End HeapPredicateKit.
 
+Module Type PredicateMixin (Import B : Base) (Import PP : PurePredicateKit B) (Import HP : HeapPredicateKit B).
+  Import sep.notations.
+  Class PredicateDef (HProp : SepLogic) : Type :=
+  { lptsreg    : forall {σ : Ty}, 𝑹𝑬𝑮 σ -> Val σ -> HProp;
+    luser      : forall (p : 𝑯), Env Val (𝑯_Ty p) -> HProp;
+    lduplicate : forall (p : 𝑯) (ts : Env Val (𝑯_Ty p)),
+      is_duplicable p = true ->
+      @luser p ts ⊢ @luser p ts ∗ @luser p ts;
+  }.
+  Arguments luser {_ _} p _.
+End PredicateMixin.
+
 Module Type PredicateKit (B : Base) :=
-  PurePredicateKit B <+ HeapPredicateKit B.
+  PurePredicateKit B <+ HeapPredicateKit B <+ PredicateMixin B.
 
 Module DefaultPurePredicateKit (Import B : Base) <: PurePredicateKit B.
 
   Definition 𝑷 := Empty_set.
   Definition 𝑷_Ty : 𝑷 -> Ctx Ty := fun p => match p with end.
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop := match p with end.
-  Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
+  #[export] Instance 𝑷_eq_dec : EqDec 𝑷 := fun p => match p with end.
 
 End DefaultPurePredicateKit.
 
@@ -83,8 +96,8 @@ Module DefaultHeapPredicateKit (Import B : Base) <: HeapPredicateKit B.
 
   Definition 𝑯 := Empty_set.
   Definition 𝑯_Ty : 𝑯 -> Ctx Ty := fun p => match p with end.
-  Instance 𝑯_eq_dec : EqDec 𝑯 := fun p => match p with end.
-  Instance 𝑯_is_dup : IsDuplicable 𝑯 := { is_duplicable := fun p => match p with end }.
+  #[export] Instance 𝑯_eq_dec : EqDec 𝑯 := fun p => match p with end.
+  #[export] Instance 𝑯_is_dup : IsDuplicable 𝑯 := { is_duplicable := fun p => match p with end }.
   Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) := None.
 
 End DefaultHeapPredicateKit.

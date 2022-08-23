@@ -125,7 +125,7 @@ Section WithBinding.
       Context {eqdec_b : EqDec B}.
       Context {eqdec_d : forall b, EqDec (D b) }.
 
-      Global Instance eq_dec_env {Γ} : EqDec (Env Γ).
+      Instance eq_dec_env {Γ} : EqDec (Env Γ).
       Proof. eqdec_proof. Defined.
 
     End TransparentObligations.
@@ -151,10 +151,14 @@ Section WithBinding.
 
     End Inversions.
 
-    Fixpoint lookup {Γ} (E : Env Γ) : forall b, b ∈ Γ -> D b :=
+    Fixpoint lookup {Γ} (E : Env Γ) : forall {b}, b ∈ Γ -> D b :=
       match E with
-      | nil       => ctx.in_case_nil
-      | snoc E db => ctx.in_case_snoc D db (lookup E)
+      | nil      => fun _ bIn => match ctx.nilView bIn with end
+      | snoc E v => fun _ bIn =>
+        match ctx.snocView bIn with
+        | ctx.snocViewZero   => v
+        | ctx.snocViewSucc i => lookup E i
+        end
       end.
 
     Inductive All (Q : forall b, D b -> Type) : forall {Γ}, Env Γ -> Type :=
@@ -252,12 +256,12 @@ Section WithBinding.
     Fixpoint update {Γ} (E : Env Γ) {struct E} :
       forall {b} (bIn : b ∈ Γ) (new : D b), Env Γ :=
       match E with
-      | nil => ctx.in_case_nil
-      | snoc E bold =>
-        ctx.in_case_snoc
-          (fun z => D z -> Env _)
-          (fun new => snoc E new)
-          (fun b0' bIn0' new => snoc (update E bIn0' new) bold)
+      | nil        => fun _ bIn => match ctx.nilView bIn with end
+      | snoc E old => fun _ bIn =>
+        match ctx.snocView bIn with
+        | ctx.snocViewZero     => snoc E
+        | ctx.snocViewSucc bIn => fun new => snoc (update E bIn new) old
+        end
       end.
 
     Definition head {Γ b} (E : Env (Γ ▻ b)) : D b :=
@@ -370,9 +374,9 @@ Section WithBinding.
     (* Slower implementation of insert that is easier to reason about. *)
     Definition insert' {Γ : Ctx B} {b} (bIn : b ∈ Γ) (E : Env (Γ - b)) (v : D b) : Env Γ :=
       tabulate (fun x xIn =>
-                  match ctx.occurs_check_var bIn xIn with
-                  | inl e    => eq_rect b D v x e
-                  | inr xIn' => lookup E xIn'
+                  match ctx.occurs_check_view bIn xIn with
+                  | ctx.Same _      => v
+                  | ctx.Diff _ xIn' => lookup E xIn'
                   end).
 
     (* Slower implementation of remove that is easier to reason about. *)
@@ -463,13 +467,9 @@ Section WithBinding.
       insert xIn E v = insert' xIn E v.
     Proof.
       unfold insert'. eapply lookup_extensional. intros b' bIn.
-      rewrite lookup_tabulate.
-      pose proof (ovs := ctx.occurs_check_var_spec xIn bIn).
-      destruct (ctx.occurs_check_var xIn bIn).
-      - subst.
-        now rewrite insert_lookup.
-      - destruct ovs as (-> & neq).
-        now rewrite insert_lookup_shift.
+      rewrite lookup_tabulate. destruct ctx.occurs_check_view.
+      - now rewrite insert_lookup.
+      - now rewrite insert_lookup_shift.
     Qed.
 
     Lemma lookup_cat_left {Γ1 Γ2 x} (xIn : x ∈ Γ1) (E1 : Env Γ1) (E2 : Env Γ2) :
@@ -736,6 +736,7 @@ Ltac destroy x :=
 
 End env.
 Export env (Env).
+#[export] Existing Instance env.eq_dec_env.
 Bind Scope env_scope with Env.
 Import env.
 

@@ -27,25 +27,30 @@
 (******************************************************************************)
 
 From Coq Require Import
-     Classes.Morphisms.
+  Classes.Morphisms.
 
 From Katamaran Require Import
-     Context
-     Environment
-     Notations
-     Sep.Logic
-     Specification
-     Syntax.ContractDecl
-     Base.
+  Context
+  Environment
+  Notations
+  Sep.Logic
+  Specification.
 
 Import ctx.notations.
 Import env.notations.
 
-Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature B) (Import SPEC : Specification B SIG).
+Module Type ProgramLogicOn
+  (Import B : Base)
+  (Import PROG : Program B)
+  (Import SIG : Signature B)
+  (Import SPEC : Specification B PROG SIG).
+Module ProgramLogic.
 
   Section Triples.
 
+    Import sep.instances.
     Import sep.notations.
+
     Context {L : SepLogic} {PI : PredicateDef L}.
 
     (* Hoare triples for SepContract *)
@@ -53,24 +58,18 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
     Inductive CTriple {Δ σ} (δΔ : CStore Δ) (pre : L) (post : Val σ -> L) :
       SepContract Δ σ -> Prop :=
     | rule_sep_contract
-        (result : 𝑺)
-        (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : Valuation Σ)
-        (req : Assertion Σ) (ens : Assertion (Σ ▻ result∷σ))
-        (frame : L) :
-        δΔ = inst θΔ ι ->
-        (pre ⊢ frame ∗ interpret_assertion req ι) ->
-        (forall v, frame ∗ interpret_assertion ens (env.snoc ι (result∷σ) v) ⊢ post v) ->
+        (result : LVar) (Σ  : LCtx) (θΔ : SStore Δ Σ)
+        (req : Assertion Σ) (ens : Assertion (Σ ▻ result∷σ)) :
+        (pre ⊢ ∃ ι : Valuation Σ, !! (δΔ = inst θΔ ι) ∧ asn.interpret req ι ∗
+                 ∀ v : Val σ, asn.interpret ens (env.snoc ι (result∷σ) v) -∗ post v) ->
         CTriple δΔ pre post (MkSepContract _ _ _ θΔ req result ens).
 
     Inductive LTriple {Δ} (δΔ : CStore Δ) (pre post : L) :
       Lemma Δ -> Prop :=
     | rule_ltriple
-        (Σ  : LCtx) (θΔ : SStore Δ Σ) (ι : Valuation Σ)
-        (req ens : Assertion Σ)
-        (frame : L) :
-        δΔ = inst θΔ ι ->
-        (pre ⊢ frame ∗ interpret_assertion req ι) ->
-        (frame ∗ interpret_assertion ens ι ⊢ post) ->
+        (Σ  : LCtx) (θΔ : SStore Δ Σ) (req ens : Assertion Σ) :
+        (pre ⊢ ∃ ι : Valuation Σ, !! (δΔ = inst θΔ ι) ∧ asn.interpret req ι ∗
+                 (asn.interpret ens ι -∗ post)) ->
         LTriple δΔ pre post (MkLemma _ _ θΔ req ens).
 
     Inductive Triple {Γ : PCtx} (δ : CStore Γ) {τ : Ty} :
@@ -101,7 +100,7 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
         (P ⊢ Q (eval e δ) δ) ->
         ⦃ P ⦄ stm_exp e ; δ ⦃ Q ⦄
     | rule_stm_let
-        (x : 𝑿) (σ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
+        (x : PVar) (σ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
         (P : L) (Q : Val σ -> CStore Γ -> L)
         (R : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ Q ⦄ ->
@@ -136,7 +135,7 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
         ⦃ ⊤ ⦄ stm_fail τ s ; δ ⦃ Q ⦄
     | rule_stm_match_list
         {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
-        (xh xt : 𝑿) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
+        (xh xt : PVar) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ∧ !! (eval e δ = nil) ⦄ alt_nil ; δ ⦃ Q ⦄ ->
         (forall (v : Val σ) (vs : Val (ty.list σ)),
@@ -145,7 +144,7 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
            ⦃ fun v' δ' => Q v' (env.tail (env.tail δ')) ⦄) ->
         ⦃ P ⦄ stm_match_list e alt_nil xh xt alt_cons ; δ ⦃ Q ⦄
     | rule_stm_match_sum
-        {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty.sum σl σr)}
+        {xl xr : PVar} {σl σr : Ty} {e : Exp Γ (ty.sum σl σr)}
         {alt_inl : Stm (Γ ▻ xl∷σl) τ}
         {alt_inr : Stm (Γ ▻ xr∷σr) τ}
         {P : L} {Q : Val τ -> CStore Γ -> L} :
@@ -153,7 +152,7 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
         (forall (v : Val σr), ⦃ P ∧ !! (eval e δ = inr v) ⦄ alt_inr ; env.snoc δ (xr∷σr) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
         ⦃ P ⦄ stm_match_sum e xl alt_inl xr alt_inr ; δ ⦃ Q ⦄
     | rule_stm_match_prod
-        {xl xr : 𝑿} {σl σr : Ty} {e : Exp Γ (ty.prod σl σr)}
+        {xl xr : PVar} {σl σr : Ty} {e : Exp Γ (ty.prod σl σr)}
         {rhs : Stm (Γ ▻ xl∷σl ▻ xr∷σr) τ}
         {P : L} {Q : Val τ -> CStore Γ -> L} :
         (forall (vl : Val σl) (vr : Val σr),
@@ -208,12 +207,12 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
           stm_write_register r w ; δ
         ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ) ∧ lptsreg r v' ⦄
     | rule_stm_assign_backwards
-        (x : 𝑿) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
+        (x : PVar) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
         (P : L) (R : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ fun v δ' => R v (δ' ⟪ x ↦ v ⟫)%env ⦄ ->
         ⦃ P ⦄ stm_assign x s ; δ ⦃ R ⦄
     | rule_stm_assign_forwards
-        (x : 𝑿) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
+        (x : PVar) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
         (P : L) (R : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ R ⦄ ->
         ⦃ P ⦄
@@ -325,51 +324,6 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
       - apply lfalse_left.
     Qed.
 
-    (* Lemma rule_forall' {Γ σ} {δ : CStore Γ} {s : Stm Γ σ} *)
-    (*   {A : Type} {P : A -> L} {Q : A -> Val σ -> CStore Γ -> L} *)
-    (*   (hyp : forall x, δ ⊢ ⦃ P x ⦄ s ⦃ Q x ⦄) (x : A) : *)
-    (*   δ ⊢ ⦃ ∀ x, P x ⦄ s ⦃ fun v δ' => ∀ x, Q x v δ' ⦄. *)
-    (* Proof. *)
-    (*   apply rule_forall; [ intros | assumption ]. *)
-    (*   apply (rule_consequence_left (P x0 ∧ P x)). *)
-    (*   - apply (rule_consequence_left (P x0)). *)
-    (*     + apply hyp. *)
-    (*     + apply land_left1. *)
-    (*       apply entails_refl. *)
-    (*   - apply land_right. *)
-    (*     + apply lall_left with x0. *)
-    (*       apply entails_refl. *)
-    (*     + apply lall_left with x. *)
-    (*       apply entails_refl. *)
-    (* Qed. *)
-
-    (* Lemma rule_conj {Γ σ} {δ : CStore Γ} {s : Stm Γ σ} *)
-    (*   {P : L} {Q1 Q2 : Val σ -> CStore Γ -> L} : *)
-    (*   δ ⊢ ⦃ P ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P ⦄ s ⦃ Q2 ⦄ -> *)
-    (*   δ ⊢ ⦃ P ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄. *)
-    (* Proof. *)
-    (*   intros H1 H2. *)
-    (*   apply (rule_consequence_right (fun v δ' => ∀ b : bool, if b then Q1 v δ' else Q2 v δ')). *)
-    (*   - apply rule_forall. *)
-    (*     intros []; auto. *)
-    (*     apply true. *)
-    (*   - intros. *)
-    (*     apply land_right. *)
-    (*     + apply lall_left with true, entails_refl. *)
-    (*     + apply lall_left with false, entails_refl. *)
-    (* Qed. *)
-
-    (* Lemma rule_conj' {Γ σ} {δ : CStore Γ} {s : Stm Γ σ} *)
-    (*   {P1 P2 : L} {Q1 Q2 : Val σ -> CStore Γ -> L} : *)
-    (*   δ ⊢ ⦃ P1 ⦄ s ⦃ Q1 ⦄ -> δ ⊢ ⦃ P2 ⦄ s ⦃ Q2 ⦄ -> *)
-    (*   δ ⊢ ⦃ P1 ∧ P2 ⦄ s ⦃ fun v δ' => Q1 v δ' ∧ Q2 v δ' ⦄. *)
-    (* Proof. *)
-    (*   intros H1 H2. *)
-    (*   apply rule_conj. *)
-    (*   - apply (rule_consequence_left _ H1), land_left1, entails_refl. *)
-    (*   - apply (rule_consequence_left _ H2), land_left2, entails_refl. *)
-    (* Qed. *)
-
     Definition WP {Γ τ} (s : Stm Γ τ) (POST :  Val τ -> CStore Γ -> L) : CStore Γ -> L :=
       fun δ => ∃ (P : L), P ∧ !! (⦃ P ⦄ s; δ ⦃ POST ⦄).
 
@@ -377,7 +331,14 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
       ⦃ WP s POST δ ⦄ s ; δ ⦃ POST ⦄.
     Proof. apply rule_exist; intros P; now apply rule_pull. Qed.
 
-    Global Instance proper_triple {Γ δ τ} :
+    #[export] Instance proper_triple_entails {Γ δ τ} :
+      Proper (Basics.flip lentails ==> eq ==> pointwise_relation _ (pointwise_relation _ lentails) ==> Basics.impl) (@Triple Γ δ τ).
+    Proof.
+      intros P Q qp s s' eq__s R S rs H; subst s'.
+      eapply rule_consequence. apply qp. apply rs. apply H.
+    Qed.
+
+    #[export] Instance proper_triple_equiv {Γ δ τ} :
       Proper (lequiv ==> eq ==> pointwise_relation _ (pointwise_relation _ lequiv) ==> iff) (@Triple Γ δ τ).
     Proof.
       intros P Q pq s s' eq__s R S rs; subst s'.
@@ -466,4 +427,5 @@ Module Type ProgramLogicOn (Import B : Base) (Import SIG : ProgramLogicSignature
 
   Notation "⦃ P ⦄ s ; δ ⦃ Q ⦄" := (@Triple _ _ _ δ _ P s Q).
 
+End ProgramLogic.
 End ProgramLogicOn.
