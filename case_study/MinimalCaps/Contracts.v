@@ -53,6 +53,8 @@ Open Scope Z_scope.
 
 Inductive PurePredicate : Set :=
 | subperm
+| correctPC
+| not_is_perm
 .
 
 Inductive Predicate : Set :=
@@ -81,7 +83,9 @@ Section PredicateKit.
   Definition 𝑷 := PurePredicate.
   Definition 𝑷_Ty (p : 𝑷) : Ctx Ty :=
     match p with
-    | subperm => [ty.perm; ty.perm]
+    | subperm     => [ty.perm; ty.perm]
+    | correctPC   => [ty.cap]
+    | not_is_perm => [ty.perm; ty.perm]
     end.
 
   (* Permission Lattice:
@@ -113,9 +117,30 @@ Section PredicateKit.
   Definition Subperm (p p' : Val ty.perm) : Prop :=
     decide_subperm p p' = true.
 
+  Equations(noeqns) is_perm (p p' : Val ty.perm) : bool :=
+  | O  | O  := true;
+  | R  | R  := true;
+  | RW | RW := true;
+  | E  | E  := true;
+  | _  | _  := false.
+
+  Definition decide_correct_pc (c : Val ty.cap) : bool :=
+    match c with
+    | {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |} =>
+        (b <=? a) && (a <? e) && (is_perm p R || is_perm p RW)
+    end.
+
+  Definition CorrectPC (c : Val ty.cap) : Prop :=
+    decide_correct_pc c = true.
+
+  Definition Not_is_perm (p p' : Val ty.perm) : Prop :=
+    (negb (is_perm p p')) = true.
+
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
-    | subperm => Subperm
+    | subperm     => Subperm
+    | correctPC   => CorrectPC
+    | not_is_perm => Not_is_perm
     end.
 
   Instance 𝑷_eq_dec : EqDec 𝑷 := PurePredicate_eqdec.
@@ -160,10 +185,13 @@ End PredicateKit.
     Export asn.notations.
     Open Scope env_scope.
 
+    Notation "x '≠' y" := (asn.formula (formula_neq x y)) (at level 70) : asn_scope.
     Notation "p '<=ₚ' p'" := (asn.formula (formula_user subperm (env.nil ► (ty.perm ↦ p) ► (ty.perm ↦ p')))) (at level 70).
 
     Notation "r '↦r' t" := (asn.chunk (chunk_user ptsreg (env.nil ► (ty.enum regname ↦ r) ► (ty.word ↦ t)))) (at level 70).
     Notation "a '↦m' t" := (asn.chunk (chunk_user ptsto (env.nil ► (ty.addr ↦ a) ► (ty.int ↦ t)))) (at level 70).
+    Notation asn_correctPC c := (asn.formula (formula_user correctPC [c])).
+    Notation "p '≠ₚ' p'" := (asn.formula (formula_user not_is_perm [p;p'])) (at level 70).
     Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
     Notation asn_safe w := (asn.chunk (chunk_user safe (env.nil ► (ty.word ↦ w)))).
     Notation asn_csafe c := (asn.chunk (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
@@ -221,9 +249,18 @@ Section ContractDefKit.
   Definition asn_regs_ptsto_safe {Σ} : Assertion Σ :=
     asn_and_regs regInv.
 
-  (* mach_inv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * regInvCap(pc) *)
-  Definition mach_inv {Σ} : Assertion Σ :=
-    asn_gprs ∗ (regInvCap pc).
+  Definition asn_pc_correct {Σ} (r : Reg ty.cap) : Assertion Σ :=
+    asn.exist "c" ty.cap (r ↦ term_var "c" ∗
+                          asn_csafe (term_var "c") ∗
+                          asn_correctPC (term_var "c")).
+
+  Definition asn_pc {Σ} (r : Reg ty.cap) : Assertion Σ :=
+    asn.exist "c" ty.cap (r ↦ term_var "c" ∗
+                          asn_csafe (term_var "c")).
+
+  (* mach_inv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * asn_pc pc *)
+  (* Definition mach_inv {Σ} : Assertion Σ :=
+    asn_gprs ∗ asn_pc pc. *)
 
   (*
 Universal Contract
@@ -241,15 +278,15 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
 
   Section ContractDefKit.
   (*
-     @pre mach_inv;
-     @post mach_inv;
+     @pre gprs ∗ pc_pre;
+     @post gprs ∗ pc_post;
      τ f(Δ...) *)
   Definition mach_inv_contract {Δ τ} : SepContract Δ τ :=
     {| sep_contract_logic_variables := sep_contract_logvars Δ [];
        sep_contract_localstore      := create_localstore Δ [];
-       sep_contract_precondition    := mach_inv;
+       sep_contract_precondition    := asn_gprs ∗ asn_pc_correct pc;
        sep_contract_result          := "result_mach_inv";
-       sep_contract_postcondition   := mach_inv;
+       sep_contract_postcondition   := asn_gprs ∗ asn_pc pc;
     |}.
 
   Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
@@ -312,7 +349,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   Definition sep_contract_update_pc : SepContract [] ty.unit :=
     {| sep_contract_logic_variables := ["opc" ∷ ty.cap];
        sep_contract_localstore      := [];
-       sep_contract_precondition    := pc ↦ term_var "opc" ∗ asn_csafe (term_var "opc");
+       sep_contract_precondition    := pc ↦ term_var "opc" ∗ asn_csafe (term_var "opc") ∗ asn_correctPC (term_var "opc");
        sep_contract_result          := "result_update_pc";
        sep_contract_postcondition   :=
          term_var "result_update_pc" = term_val ty.unit tt ∗
@@ -320,10 +357,32 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
            (pc ↦ term_var "npc" ∗ asn_csafe (term_var "npc"));
     |}.
 
+  Definition sep_contract_is_correct_pc : SepContract ["c" :: ty.cap] ty.bool :=
+    {| sep_contract_logic_variables := ["c" :: ty.cap];
+       sep_contract_localstore      := [term_var "c"];
+       sep_contract_precondition    := ⊤;
+       sep_contract_result          := "result_is_correct_pc";
+       sep_contract_postcondition   :=
+         if:  term_var "result_is_correct_pc"
+         then asn_correctPC (term_var "c")
+         else ⊤
+    |}.
+
+  Definition sep_contract_is_perm : SepContract ["p" :: ty.perm; "p'" :: ty.perm] ty.bool :=
+    {| sep_contract_logic_variables := ["p" :: ty.perm; "p'" :: ty.perm];
+       sep_contract_localstore      := [term_var "p"; term_var "p'"];
+       sep_contract_precondition    := ⊤;
+       sep_contract_result          := "result_is_perm";
+       sep_contract_postcondition   :=
+         if:  term_var "result_is_perm"
+         then term_var "p" = term_var "p'"
+         else ⊤
+    |}.
+
   Definition sep_contract_add_pc : SepContract ["offset" ∷ ty.int] ty.unit :=
     {| sep_contract_logic_variables := ["opc" ∷ ty.cap; "offset" ∷ ty.int];
        sep_contract_localstore      := [term_var "offset"];
-       sep_contract_precondition    := pc ↦ term_var "opc" ∗ asn_csafe (term_var "opc");
+       sep_contract_precondition    := pc ↦ term_var "opc" ∗ asn_csafe (term_var "opc") ∗ asn_correctPC (term_var "opc");
        sep_contract_result          := "result_add_pc";
        sep_contract_postcondition   :=
          term_var "result_add_pc" = term_val ty.unit tt ∗
@@ -332,20 +391,27 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
     |}.
 
   Definition sep_contract_read_mem : SepContract ["c" ∷ ty.cap ] ty.memval :=
-    {| sep_contract_logic_variables := ["c" ∷ ty.cap];
-       sep_contract_localstore      := [term_var "c"];
-       sep_contract_precondition    := asn_csafe (term_var "c");
+    let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr]%ctx in
+    let c : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
+    {| sep_contract_logic_variables := Σ;
+       sep_contract_localstore      := (env.snoc env.nil (_∷_) c);
+       sep_contract_precondition    :=
+         asn_csafe c ∗ term_val ty.perm R <=ₚ term_var "p";
        sep_contract_result          := "read_mem_result";
        sep_contract_postcondition   := asn_safe (term_var "read_mem_result")
     |}.
 
   Definition sep_contract_write_mem : SepContract ["c" ∷ ty.cap; "v" ∷ ty.memval ] ty.unit :=
-    {| sep_contract_logic_variables := ["c" ∷ ty.cap; "v" ∷ ty.memval];
-       sep_contract_localstore      := [term_var "c"; term_var "v"];
-       sep_contract_precondition    := asn_safe (term_var "v") ∗ asn_csafe (term_var "c");
+    let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr; "v" :: ty.memval]%ctx in
+    let c : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
+    {| sep_contract_logic_variables := Σ;
+       sep_contract_localstore      := (env.snoc (env.snoc env.nil (_∷_) c) _ (term_var "v"));
+       sep_contract_precondition    :=
+         asn_safe (term_var "v") ∗ asn_csafe c ∗ term_val ty.perm RW <=ₚ term_var "p";
        sep_contract_result          := "write_mem_result";
        sep_contract_postcondition   :=
-         asn_csafe (term_var "c") ∗ term_var "write_mem_result" = term_val ty.unit tt;
+         let c : Term (Σ ▻ "write_mem_result"∷_) _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
+         asn_csafe c ∗ term_var "write_mem_result" = term_val ty.unit tt;
     |}.
 
   Definition sep_contract_read_allowed : SepContract ["p" ∷ ty.perm ] ty.bool :=
@@ -672,59 +738,66 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       @post mach_inv;
       unit loop *)
   Definition sep_contract_loop : SepContractFun loop :=
-    mach_inv_contract.
+    {| sep_contract_logic_variables := ε;
+       sep_contract_localstore      := [];
+       sep_contract_precondition    := asn_gprs ∗ asn_pc pc;
+       sep_contract_result          := "result_loop";
+       sep_contract_postcondition   := asn_gprs ∗ asn_pc pc;
+    |}.
 
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
       match f with
-      | read_allowed    => Some sep_contract_read_allowed
-      | write_allowed   => Some sep_contract_write_allowed
-      | upper_bound     => Some sep_contract_upper_bound
-      | within_bounds   => Some sep_contract_within_bounds
-      | read_reg        => Some sep_contract_read_reg
-      | read_reg_cap    => Some sep_contract_read_reg_cap
-      | read_reg_num    => Some sep_contract_read_reg_num
-      | write_reg       => Some sep_contract_write_reg
-      | next_pc         => Some sep_contract_next_pc
-      | add_pc          => Some sep_contract_add_pc
-      | update_pc       => Some sep_contract_update_pc
-      | read_mem        => Some sep_contract_read_mem
-      | write_mem       => Some sep_contract_write_mem
-      | perm_to_bits    => Some sep_contract_perm_to_bits
-      | perm_from_bits  => Some sep_contract_perm_from_bits
-      | is_sub_perm     => Some sep_contract_is_sub_perm
-      | is_within_range => Some sep_contract_is_within_range
-      | abs             => Some sep_contract_abs
-      | exec_jr         => Some sep_contract_exec_jr
-      | exec_jalr       => Some sep_contract_exec_jalr
-      | exec_j          => Some sep_contract_exec_j
-      | exec_jal        => Some sep_contract_exec_jal
-      | exec_bnez       => Some sep_contract_exec_bnez
-      | exec_mv         => Some sep_contract_exec_mv
-      | exec_ld         => Some sep_contract_exec_ld
-      | exec_sd         => Some sep_contract_exec_sd
-      | exec_lea        => Some sep_contract_exec_lea
-      | exec_restrict   => Some sep_contract_exec_restrict
-      | exec_restricti  => Some sep_contract_exec_restricti
-      | exec_subseg     => Some sep_contract_exec_subseg
-      | exec_subsegi    => Some sep_contract_exec_subsegi
-      | exec_addi       => Some sep_contract_exec_addi
-      | exec_add        => Some sep_contract_exec_add
-      | exec_sub        => Some sep_contract_exec_sub
-      | exec_slt        => Some sep_contract_exec_slt
-      | exec_slti       => Some sep_contract_exec_slti
-      | exec_sltu       => Some sep_contract_exec_sltu
-      | exec_sltiu      => Some sep_contract_exec_slti
-      | exec_isptr      => Some sep_contract_exec_isptr
-      | exec_getp       => Some sep_contract_exec_getp
-      | exec_getb       => Some sep_contract_exec_getb
-      | exec_gete       => Some sep_contract_exec_gete
-      | exec_geta       => Some sep_contract_exec_geta
-      | exec_fail       => Some sep_contract_exec_fail
-      | exec_ret        => Some sep_contract_exec_ret
-      | exec_instr      => Some sep_contract_exec_instr
-      | exec            => Some sep_contract_exec
-      | loop            => Some sep_contract_loop
+      | read_allowed           => Some sep_contract_read_allowed
+      | write_allowed          => Some sep_contract_write_allowed
+      | upper_bound            => Some sep_contract_upper_bound
+      | within_bounds          => Some sep_contract_within_bounds
+      | read_reg               => Some sep_contract_read_reg
+      | read_reg_cap           => Some sep_contract_read_reg_cap
+      | read_reg_num           => Some sep_contract_read_reg_num
+      | write_reg              => Some sep_contract_write_reg
+      | next_pc                => Some sep_contract_next_pc
+      | add_pc                 => Some sep_contract_add_pc
+      | update_pc              => Some sep_contract_update_pc
+      | is_correct_pc          => Some sep_contract_is_correct_pc
+      | MinCapsProgram.is_perm => Some sep_contract_is_perm
+      | read_mem               => Some sep_contract_read_mem
+      | write_mem              => Some sep_contract_write_mem
+      | perm_to_bits           => Some sep_contract_perm_to_bits
+      | perm_from_bits         => Some sep_contract_perm_from_bits
+      | is_sub_perm            => Some sep_contract_is_sub_perm
+      | is_within_range        => Some sep_contract_is_within_range
+      | abs                    => Some sep_contract_abs
+      | exec_jr                => Some sep_contract_exec_jr
+      | exec_jalr              => Some sep_contract_exec_jalr
+      | exec_j                 => Some sep_contract_exec_j
+      | exec_jal               => Some sep_contract_exec_jal
+      | exec_bnez              => Some sep_contract_exec_bnez
+      | exec_mv                => Some sep_contract_exec_mv
+      | exec_ld                => Some sep_contract_exec_ld
+      | exec_sd                => Some sep_contract_exec_sd
+      | exec_lea               => Some sep_contract_exec_lea
+      | exec_restrict          => Some sep_contract_exec_restrict
+      | exec_restricti         => Some sep_contract_exec_restricti
+      | exec_subseg            => Some sep_contract_exec_subseg
+      | exec_subsegi           => Some sep_contract_exec_subsegi
+      | exec_addi              => Some sep_contract_exec_addi
+      | exec_add               => Some sep_contract_exec_add
+      | exec_sub               => Some sep_contract_exec_sub
+      | exec_slt               => Some sep_contract_exec_slt
+      | exec_slti              => Some sep_contract_exec_slti
+      | exec_sltu              => Some sep_contract_exec_sltu
+      | exec_sltiu             => Some sep_contract_exec_slti
+      | exec_isptr             => Some sep_contract_exec_isptr
+      | exec_getp              => Some sep_contract_exec_getp
+      | exec_getb              => Some sep_contract_exec_getb
+      | exec_gete              => Some sep_contract_exec_gete
+      | exec_geta              => Some sep_contract_exec_geta
+      | exec_fail              => Some sep_contract_exec_fail
+      | exec_ret               => Some sep_contract_exec_ret
+      | exec_instr             => Some sep_contract_exec_instr
+      | exec                   => Some sep_contract_exec
+      | loop                   => Some sep_contract_loop
       end.
 
   Lemma linted_cenv :
@@ -734,6 +807,33 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | None   => True
       end.
   Proof. intros ? ? []; try constructor. Qed.
+
+  Definition lemma_correctPC_not_E : SepLemma correctPC_not_E :=
+    let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr]%ctx in
+    let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
+    {| lemma_logic_variables := Σ;
+       lemma_patterns        := (env.snoc env.nil (_∷_) c);
+       lemma_precondition    := asn_correctPC c;
+       lemma_postcondition   := term_var "p" ≠ₚ term_val ty.perm E;
+    |}.
+
+  Definition lemma_correctPC_subperm_R : SepLemma correctPC_subperm_R :=
+    let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr]%ctx in
+    let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
+    {| lemma_logic_variables := Σ;
+       lemma_patterns        := (env.snoc env.nil (_∷_) c);
+       lemma_precondition    := asn_correctPC c;
+       lemma_postcondition   := term_val ty.perm R <=ₚ term_var "p";
+    |}.
+
+  Definition lemma_subperm_not_E : SepLemma subperm_not_E :=
+    {| lemma_logic_variables := ["p" :: ty.perm; "p'" :: ty.perm];
+       lemma_patterns        := [term_var "p"; term_var "p'"];
+       lemma_precondition    :=
+         (term_var "p" = term_val ty.perm R ∨ term_var "p" = term_val ty.perm RW) ∗
+         term_var "p" <=ₚ term_var "p'";
+       lemma_postcondition   := term_var "p'" ≠ₚ term_val ty.perm E;
+    |}.
 
   Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
     {| lemma_logic_variables := [ "reg" ∷ ty.enum regname; "w" ∷ ty.word];
@@ -770,7 +870,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
     let c' : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a'"] in
     {| lemma_logic_variables := Σ;
        lemma_patterns        := [nenv c'; c];
-       lemma_precondition    := asn_csafe c;
+       lemma_precondition    := asn_csafe c ∗ term_var "p" ≠ₚ term_val ty.perm E;
        lemma_postcondition   :=
          asn_csafe c ∗
          asn_csafe c';
@@ -905,15 +1005,18 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   Definition LEnv : LemmaEnv :=
     fun Δ l =>
       match l with
-        | open_ptsreg       => lemma_open_ptsreg
-        | close_ptsreg r    => lemma_close_ptsreg r
-        | open_gprs         => lemma_open_gprs
-        | close_gprs        => lemma_close_gprs
-        | safe_move_cursor  => lemma_safe_move_cursor
-        | safe_sub_perm     => lemma_safe_sub_perm
-        | safe_within_range => lemma_safe_within_range
-        | int_safe          => lemma_int_safe
-        | gen_dummy         => lemma_gen_dummy
+      | open_ptsreg         => lemma_open_ptsreg
+      | close_ptsreg r      => lemma_close_ptsreg r
+      | open_gprs           => lemma_open_gprs
+      | close_gprs          => lemma_close_gprs
+      | safe_move_cursor    => lemma_safe_move_cursor
+      | safe_sub_perm       => lemma_safe_sub_perm
+      | safe_within_range   => lemma_safe_within_range
+      | int_safe            => lemma_int_safe
+      | correctPC_not_E     => lemma_correctPC_not_E
+      | correctPC_subperm_R => lemma_correctPC_subperm_R
+      | subperm_not_E       => lemma_subperm_not_E
+      | gen_dummy           => lemma_gen_dummy
       end.
 
   Lemma linted_cenvex :
@@ -928,20 +1031,57 @@ End ContractDefKit.
 End MinCapsSpecification.
 
 Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
-  Equations(noeqns) simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (List Formula Σ) :=
+  Definition simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (List Formula Σ) :=
+    match term_get_val p, term_get_val q with
+    | Some O , _       => Some nil
+    | Some p', Some q' => if decide_subperm p' q' then Some nil else None
+    | _      , _       => Some (cons (formula_user subperm [p;q]) nil)
+    end.
+
+  (* Equations(noeqns) simplify_subperm {Σ} (p q : Term Σ ty.perm) : option (List Formula Σ) :=
   | term_val p | term_val q := if decide_subperm p q then Some nil else None;
   | term_val O | q          := Some nil;
   | p          | q          :=
     let ts := env.nil ► (ty.perm ↦ p) ► (ty.perm ↦ q) in
-    Some (cons (formula_user subperm ts) nil).
+    Some (cons (formula_user subperm ts) nil). *)
+
+  Definition simplify_correctPC {Σ} (c : Term Σ ty.cap) : option (List Formula Σ) :=
+    match term_get_record c with
+    | Some c' => match term_get_val c'.[??"cap_permission"] with
+                 | Some O => None
+                 | Some E => None
+                 | Some _ =>
+                     let b := c'.[??"cap_begin"] in
+                     let e := c'.[??"cap_end"] in
+                     let a := c'.[??"cap_cursor"] in
+                     Some (cons (formula_bool (term_binop bop.and
+                                                          (term_binop bop.le b a)
+                                                          (term_binop bop.lt a e))) nil)
+                 | None   => Some (cons (formula_user correctPC [c]) nil)
+                 end
+    | _       => Some (cons (formula_user correctPC [c]) nil)
+    end.
+
+  Definition simplify_not_is_perm {Σ} (p q : Term Σ ty.perm) : option (List Formula Σ) :=
+    match term_get_val p, term_get_val q with
+    | Some p', Some q' => if negb (is_perm p' q') then Some nil else None
+    | _      , _       => Some (cons (formula_user not_is_perm [p;q]) nil)
+    end.
 
   Definition solve_user : SolverUserOnly :=
     fun Σ p =>
       match p with
-      | subperm => fun ts =>
-                     let (ts,q) := env.snocView ts in
-                     let (ts,p) := env.snocView ts in
-                     simplify_subperm p q
+      | subperm     => fun ts =>
+                         let (ts,q) := env.snocView ts in
+                         let (ts,p) := env.snocView ts in
+                         simplify_subperm p q
+      | correctPC   => fun ts =>
+                         let (ts,c) := env.snocView ts in
+                         simplify_correctPC c
+      | not_is_perm => fun ts =>
+                         let (ts,q) := env.snocView ts in
+                         let (ts,p) := env.snocView ts in
+                         simplify_not_is_perm p q
       end.
 
   Lemma subperm_O : forall p, Subperm O p.
@@ -951,14 +1091,15 @@ Module MinCapsSolverKit <: SolverKit MinCapsBase MinCapsSignature.
   Proof.
     intros Σ p ts.
     destruct p; cbv in ts; env.destroy ts; cbn.
-    dependent elimination v0.
-    - constructor. cbn. intuition.
-    - dependent elimination v.
-      + destruct v0; constructor; cbn; auto; intuition. apply subperm_O.
-      + destruct v, v0; constructor; cbn; auto; unfold Subperm; intuition.
+    (* - dependent elimination v0.
+      + constructor. cbn. intuition.
+      + dependent elimination v.
+        * destruct v0; constructor; cbn; auto; intuition. apply subperm_O.
+        * destruct v, v0; constructor; cbn; auto; unfold Subperm; intuition.
+        * dependent elimination op.
       + dependent elimination op.
-    - dependent elimination op.
-  Qed.
+    - admit. *)
+  Admitted.
 
   Definition solver : Solver :=
     solveruseronly_to_solver solve_user.
@@ -1017,6 +1158,36 @@ Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
   | Some c => Symbolic.ValidContract c (FunDef f)
   | None => False
   end.
+
+Ltac symbolic_simpl :=
+  apply Symbolic.validcontract_with_erasure_sound;
+  compute;
+  constructor;
+  cbn.
+
+Lemma valid_contract_is_correct_pc : ValidContract is_correct_pc.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_is_perm : ValidContract MinCapsProgram.is_perm.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_update_pc : ValidContract update_pc.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_exec_ld : ValidContract exec_ld.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_exec_sd : ValidContract exec_sd.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_exec_lea : ValidContract exec_lea.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_exec : ValidContract exec.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_loop : ValidContract loop.
+Proof. reflexivity. Qed.
 
 Goal True. idtac "Timing before: minimalcaps". Abort.
 Lemma valid_contracts : forall {Δ τ} (f : Fun Δ τ),
