@@ -551,20 +551,25 @@ Section FunDefKit.
       let: "new_begin" :: ty.int := call read_reg_num (exp_var "hv1") in
       let: "new_end" :: ty.int := call read_reg_num (exp_var "hv2") in
       let*: ["perm", "begin", "end", "cursor"] := (exp_var "c") in
-      (let: "b" :: ty.bool := call is_within_range (exp_var "new_begin") (exp_var "new_end")
-                                   (exp_var "begin") (exp_var "end") in
-       stm_assert (exp_var "b") (exp_string "Err: [subseg] tried to increase range of authority") ;;
-       let: "c'" :: cap := exp_record capability
-                                      [ exp_var "perm";
-                                        exp_var "new_begin";
-                                        exp_var "new_end";
-                                        exp_var "cursor"
-                                      ] in
-       use lemma gen_dummy [exp_var "c'"] ;;
-       use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
-       call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
-       call update_pc ;;
-       stm_val ty.bool true).
+      (match: exp_var "perm" in permission with
+       | E => fail "Err: [subseg] not permitted on enter capability"
+       | _ =>
+           let: "b" :: ty.bool :=
+             call is_within_range (exp_var "new_begin") (exp_var "new_end")
+                                  (exp_var "begin")     (exp_var "end") in
+           stm_assert (exp_var "b") (exp_string "Err: [subseg] tried to increase range of authority") ;;
+           let: "c'" :: cap := exp_record capability
+                                          [ exp_var "perm";
+                                            exp_var "new_begin";
+                                            exp_var "new_end";
+                                            exp_var "cursor"
+                                          ] in
+           use lemma gen_dummy [exp_var "c'"] ;;
+           use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
+           call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+           call update_pc ;;
+           stm_val ty.bool true
+       end).
 
     Definition fun_exec_subsegi : Stm ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int]
                                       ty.bool :=
@@ -572,20 +577,25 @@ Section FunDefKit.
       let: "new_begin" :: ty.int := call read_reg_num (exp_var "hv") in
       let: "new_end" :: ty.int := exp_var "immediate" in
       let*: ["perm", "begin", "end", "cursor"] := (exp_var "c") in
-      (let: "b" :: ty.bool := call is_within_range (exp_var "new_begin") (exp_var "new_end")
-                                   (exp_var "begin") (exp_var "end") in
-       stm_assert (exp_var "b") (exp_string "Err: [subsegi] tried to increase range of authority") ;;
-       let: "c'" :: cap := exp_record capability
-                                      [ exp_var "perm";
-                                        exp_var "new_begin";
-                                        exp_var "new_end";
-                                        exp_var "cursor"
-                                      ] in
-       use lemma gen_dummy [exp_var "c'"] ;;
-       use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
-       call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
-       call update_pc ;;
-       stm_val ty.bool true).
+      (match: exp_var "perm" in permission with
+       | E => fail "Err: [subsegi] not permitted on enter capability"
+       | _ =>
+           let: "b" :: ty.bool :=
+             call is_within_range (exp_var "new_begin") (exp_var "new_end")
+                                  (exp_var "begin")     (exp_var "end") in
+           stm_assert (exp_var "b") (exp_string "Err: [subsegi] tried to increase range of authority") ;;
+           let: "c'" :: cap := exp_record capability
+                                          [ exp_var "perm";
+                                            exp_var "new_begin";
+                                            exp_var "new_end";
+                                            exp_var "cursor"
+                                          ] in
+           use lemma gen_dummy [exp_var "c'"] ;;
+           use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
+           call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+           call update_pc ;;
+           stm_val ty.bool true
+      end).
 
     Definition fun_exec_isptr : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: w :: ty.word := call read_reg (exp_var "lv2") in

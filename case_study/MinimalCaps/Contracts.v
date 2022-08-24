@@ -118,6 +118,10 @@ Section PredicateKit.
   Definition Subperm (p p' : Val ty.perm) : Prop :=
     decide_subperm p p' = true.
 
+  Lemma Subperm_refl : forall (p : Val ty.perm),
+      Subperm p p.
+  Proof. destruct p; simpl; reflexivity. Qed.
+
   Equations(noeqns) is_perm (p p' : Val ty.perm) : bool :=
   | O  | O  := true;
   | R  | R  := true;
@@ -136,6 +140,14 @@ Section PredicateKit.
 
   Definition Not_is_perm (p p' : Val ty.perm) : Prop :=
     (negb (is_perm p p')) = true.
+
+  Lemma Not_is_perm_prop (p p' : Val ty.perm) :
+    Not_is_perm p p' -> p <> p'.
+  Proof. unfold Not_is_perm; destruct p, p'; intros; auto. Qed.
+
+  Lemma Not_is_perm_iff (p p' : Val ty.perm) :
+    Not_is_perm p p' <-> p <> p'.
+  Proof. unfold Not_is_perm; destruct p, p'; split; intros; auto. Qed.
 
   Definition 𝑷_inst (p : 𝑷) : env.abstract Val (𝑷_Ty p) Prop :=
     match p with
@@ -903,6 +915,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        lemma_precondition    :=
          asn_csafe c ∗
          asn_dummy c' ∗
+         term_var "p" ≠ₚ term_val ty.perm E ∗
+         asn_IH ∗
          asn.formula
          (formula_bool
             (term_binop bop.and

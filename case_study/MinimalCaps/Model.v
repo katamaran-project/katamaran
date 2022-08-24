@@ -376,60 +376,6 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
         + apply submseteq_cons; trivial.
     Qed.
 
-    (* TODO: should be possible to get rid of this once the Model and ghost stmts etc
-             are updated sufficiently. *)
-    Lemma safe_sub_range (b' e' b e a a' : Addr) :
-      forall p,
-        ⊢ ⌜ (b <= b')%Z /\ (e' <= e)%Z ⌝ -∗
-          interp (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) -∗
-          interp (inr {| cap_permission := p; cap_begin := b'; cap_end := e'; cap_cursor := a' |}).
-    Proof.
-      iIntros (p) "/= [% %] Hsafe".
-      do 2 rewrite fixpoint_interp1_eq.
-      induction p; try (by iFrame); try iDestruct "Hsafe" as "/= [Hsafe | %]";
-        try (iRight; iPureIntro; lia).
-      - iLeft.
-        iIntros "%".
-        iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
-        { iPureIntro; lia. }
-        iAssert (
-            ⌜b ∈ liveAddrs ∧ e ∈ liveAddrs⌝
-                               ∗ ([∗ list] a0 ∈ region_addrs b e, inv (mc_invNs.@a0)
-                                                                      (∃ w,
-                                                                          mapsto a0 (DfracOwn 1) w
-                                                                                 ∗ fixpoint interp1 w))
-          )%I with "[Htmp Hsafe]" as "Hsafe".
-        { iApply ("Hsafe" with "Htmp"). }
-        iDestruct "Hsafe" as "[% H]".
-        iSplitR.
-        + iPureIntro; split.
-          apply (le_liveAddrs H4 (conj H1 (Z.le_trans b' e' e H3 H2))).
-          apply (le_liveAddrs H4 (conj (Z.le_trans b b' e' H1 H3) H2)).
-        + iApply (region_addrs_submseteq $! (conj H1 H2) with "H").
-      - iLeft.
-        iIntros "%".
-        iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
-        { iPureIntro; lia. }
-        iAssert (
-            ⌜b ∈ liveAddrs ∧ e ∈ liveAddrs⌝
-                               ∗ ([∗ list] a0 ∈ region_addrs b e, inv (mc_invNs.@a0)
-                                                                      (∃ w,
-                                                                          mapsto a0 (DfracOwn 1) w
-                                                                                 ∗ fixpoint interp1 w))
-          )%I with "[Htmp Hsafe]" as "Hsafe".
-        { iApply ("Hsafe" with "Htmp"). }
-        iDestruct "Hsafe" as "[% H]".
-        iSplitR.
-        + iPureIntro; split.
-          apply (le_liveAddrs H4 (conj H1 (Z.le_trans b' e' e H3 H2))).
-          apply (le_liveAddrs H4 (conj (Z.le_trans b b' e' H1 H3) H2)).
-        + iApply (region_addrs_submseteq $! (conj H1 H2) with "H").
-      - iModIntro.
-        iDestruct "Hsafe" as "# Hsafe".
-        iModIntro.
-        admit.
-    Admitted.
-
     Lemma specialize_range (b e addr : Addr) :
       ⊢ ⌜ (b <= addr)%Z /\ (addr <= e)%Z ⌝ -∗
         (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
@@ -656,15 +602,14 @@ Module MinCapsIrisInstanceWithContracts.
       ValidLemma lemma_safe_within_range.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      iIntros "[#Hsafe [_ Hp]]".
+      iIntros "(#Hsafe & _ & [%Hp _] & #IH & [%Hbounds _])".
       iSplit; [done|].
-      iDestruct "Hp" as (H) "_".
-      unfold is_true in H;
-        apply andb_prop in H;
-        destruct H as [Hb He];
+      unfold is_true in Hbounds;
+        apply andb_prop in Hbounds;
+        destruct Hbounds as [Hb He];
         apply Zle_is_le_bool in Hb;
         apply Zle_is_le_bool in He.
-      iApply (safe_sub_range $! (conj Hb He) with "Hsafe").
+      iApply (interp_weakening _ _ (Not_is_perm_prop Hp) Hb He (Subperm_refl p) with "IH Hsafe").
     Qed.
 
   End Lemmas.
@@ -800,7 +745,7 @@ Module MinCapsIrisInstanceWithContracts.
       apply map_Forall_lookup_1 with (i := a) (x := v) in H0; auto.
       simpl in H0. subst.
       iAssumption.
-  Admitted.
+  Qed.
 
   Lemma wM_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
     forall a w (p : Val ty.perm) (b e : Val ty.addr),
