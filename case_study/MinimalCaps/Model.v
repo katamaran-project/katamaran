@@ -382,7 +382,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       forall p,
         ⊢ ⌜ (b <= b')%Z /\ (e' <= e)%Z ⌝ -∗
           interp (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) -∗
-          interp (inr {| cap_permission := p; cap_begin := b'; cap_end := e'; cap_cursor := a |}).
+          interp (inr {| cap_permission := p; cap_begin := b'; cap_end := e'; cap_cursor := a' |}).
     Proof.
       iIntros (p) "/= [% %] Hsafe".
       do 2 rewrite fixpoint_interp1_eq.
@@ -530,6 +530,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
      | expression => fun ts => interp_expr interp (env.head ts)
      | dummy      => fun ts => True%I
      | gprs       => fun ts => interp_gprs interp
+     | ih         => fun ts => IH
      end) ts.
 
   Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) :
@@ -646,12 +647,10 @@ Module MinCapsIrisInstanceWithContracts.
       ValidLemma lemma_safe_sub_perm.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      iIntros "[#Hsafe %Hp]".
+      iIntros "(#Hsafe & [%Hp _] & #H)".
       iSplit; [done|].
-      rewrite ?fixpoint_interp1_eq.
-      destruct p; destruct p'; trivial;
-        destruct Hp; try discriminate.
-    Admitted.
+      iApply (interp_subperm_weakening _ _ _ Hp with "H Hsafe").
+    Qed.
 
     Lemma safe_within_range_sound :
       ValidLemma lemma_safe_within_range.
@@ -666,7 +665,7 @@ Module MinCapsIrisInstanceWithContracts.
         apply Zle_is_le_bool in Hb;
         apply Zle_is_le_bool in He.
       iApply (safe_sub_range $! (conj Hb He) with "Hsafe").
-    Admitted.
+    Qed.
 
   End Lemmas.
 

@@ -64,6 +64,7 @@ Inductive Predicate : Set :=
 | expression
 | dummy
 | gprs
+| ih
 .
 
 Section TransparentObligations.
@@ -154,6 +155,7 @@ Section PredicateKit.
     | expression => [ty.cap]
     | dummy      => [ty.cap]
     | gprs       => []
+    | ih         => []
     end.
   Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
@@ -164,6 +166,7 @@ Section PredicateKit.
       | expression => false (* TODO: check if it is duplicable when implemented *)
       | dummy      => false
       | gprs       => false
+      | ih         => true
       end
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -193,6 +196,7 @@ End PredicateKit.
     Notation asn_correctPC c := (asn.formula (formula_user correctPC [c])).
     Notation "p '≠ₚ' p'" := (asn.formula (formula_user not_is_perm [p;p'])) (at level 70).
     Notation asn_match_option T opt xl alt_inl alt_inr := (asn.match_sum T ty.unit opt xl alt_inl "_" alt_inr).
+    Notation asn_IH := (asn.chunk (chunk_user ih [])).
     Notation asn_safe w := (asn.chunk (chunk_user safe (env.nil ► (ty.word ↦ w)))).
     Notation asn_csafe c := (asn.chunk (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
     Notation asn_csafe_angelic c := (asn.chunk_angelic (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
@@ -284,7 +288,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   Definition mach_inv_contract {Δ τ} : SepContract Δ τ :=
     {| sep_contract_logic_variables := sep_contract_logvars Δ [];
        sep_contract_localstore      := create_localstore Δ [];
-       sep_contract_precondition    := asn_gprs ∗ asn_pc_correct pc;
+       sep_contract_precondition    := asn_gprs ∗ asn_pc_correct pc ∗ asn_IH;
        sep_contract_result          := "result_mach_inv";
        sep_contract_postcondition   := asn_gprs ∗ asn_pc pc;
     |}.
@@ -740,9 +744,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   Definition sep_contract_loop : SepContractFun loop :=
     {| sep_contract_logic_variables := ε;
        sep_contract_localstore      := [];
-       sep_contract_precondition    := asn_gprs ∗ asn_pc pc;
+       sep_contract_precondition    := asn_gprs ∗ asn_pc pc ∗ asn_IH;
        sep_contract_result          := "result_loop";
-       sep_contract_postcondition   := asn_gprs ∗ asn_pc pc;
+       sep_contract_postcondition   := asn_gprs ∗ asn_pc pc ∗ asn_IH;
     |}.
 
   Definition CEnv : SepContractEnv :=
@@ -879,7 +883,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
     {| lemma_logic_variables := Σ;
        lemma_patterns        := [nenv c'; c];
        lemma_precondition    :=
-         asn_csafe c ∗ term_var "p'" <=ₚ term_var "p";
+         asn_csafe c ∗ term_var "p'" <=ₚ term_var "p" ∗ asn_IH;
        lemma_postcondition   :=
          asn_csafe c ∗
          asn_csafe c';
