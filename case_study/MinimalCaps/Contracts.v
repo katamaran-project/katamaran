@@ -808,15 +808,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       end.
   Proof. intros ? ? []; try constructor. Qed.
 
-  Definition lemma_correctPC_not_E : SepLemma correctPC_not_E :=
-    let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr]%ctx in
-    let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
-    {| lemma_logic_variables := Σ;
-       lemma_patterns        := (env.snoc env.nil (_∷_) c);
-       lemma_precondition    := asn_correctPC c;
-       lemma_postcondition   := term_var "p" ≠ₚ term_val ty.perm E;
-    |}.
-
   Definition lemma_correctPC_subperm_R : SepLemma correctPC_subperm_R :=
     let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr]%ctx in
     let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
@@ -1013,7 +1004,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | safe_sub_perm       => lemma_safe_sub_perm
       | safe_within_range   => lemma_safe_within_range
       | int_safe            => lemma_int_safe
-      | correctPC_not_E     => lemma_correctPC_not_E
       | correctPC_subperm_R => lemma_correctPC_subperm_R
       | subperm_not_E       => lemma_subperm_not_E
       | gen_dummy           => lemma_gen_dummy

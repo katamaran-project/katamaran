@@ -604,21 +604,6 @@ Module MinCapsIrisInstanceWithContracts.
       rewrite fixpoint_interp1_eq; auto.
     Qed.
 
-    Lemma correctPC_not_E_sound :
-      ValidLemma lemma_correctPC_not_E.
-    Proof.
-      intros ι. destruct_syminstance ι. cbn.
-      iIntros "(%Hpc & _)".
-      iSplitL; auto.
-      iPureIntro.
-      unfold CorrectPC in Hpc.
-      cbn in Hpc.
-      unfold Not_is_perm.
-      apply andb_prop in Hpc; destruct Hpc as [_ Hpc].
-      apply orb_prop in Hpc; destruct Hpc as [H|H];
-        destruct p; auto.
-    Qed.
-
     Lemma correctPC_subperm_R_sound :
       ValidLemma lemma_correctPC_subperm_R.
     Proof.
@@ -910,8 +895,8 @@ Module MinCapsIrisInstanceWithContracts.
   Proof.
     intros Δ []; eauto using
                        open_ptsreg_sound, close_ptsreg_sound,
-      open_gprs_sound, close_gprs_sound, int_safe_sound, correctPC_not_E_sound,
-      correctPC_subperm_R_sound, subperm_not_E_sound, safe_move_cursor_sound, safe_sub_perm_sound,
+      open_gprs_sound, close_gprs_sound, int_safe_sound, correctPC_subperm_R_sound,
+      subperm_not_E_sound, safe_move_cursor_sound, safe_sub_perm_sound,
       safe_within_range_sound, gen_dummy_sound.
   Qed.
 

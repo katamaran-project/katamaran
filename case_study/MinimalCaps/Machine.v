@@ -129,7 +129,6 @@ Section FunDeclKit.
   | safe_sub_perm              : Lem ["c'" :: ty.cap; "c" :: ty.cap]
   | safe_within_range          : Lem ["c'" :: ty.cap; "c" :: ty.cap]
   | int_safe                   : Lem ["i" :: ty.int]
-  | correctPC_not_E            : Lem ["c" :: ty.cap]
   | correctPC_subperm_R        : Lem ["c" :: ty.cap]
   | subperm_not_E              : Lem ["p" :: ty.perm; "p'" :: ty.perm]
   | gen_dummy                  : Lem ["c" :: ty.cap]
@@ -192,6 +191,13 @@ Section FunDefKit.
        "cap_cursor" cur)
     s) (at level 10) : exp_scope.
 
+  Definition lemma_correctPC_not_E {Γ} (cap : Stm Γ ty.cap) : Stm Γ ty.unit :=
+    let: "c" := cap in
+    use lemma correctPC_subperm_R [exp_var "c"] ;;
+    let*: ["perm" , "beg" , "end" , "cur"] := (exp_var "c") in
+    (let: "tmp" := exp_val ty.perm R in
+     use lemma subperm_not_E [exp_var "tmp"; exp_var "perm"]).
+
   Definition fun_read_reg : Stm ["rreg" ∷ ty.enum regname] ty.word :=
     use lemma open_gprs ;;
     let: "x" := match: exp_var "rreg" in regname with
@@ -239,7 +245,7 @@ Section FunDefKit.
   Definition fun_update_pc : Stm [] ty.unit :=
     let: "opc" := stm_read_register pc in
     let: "npc" := call next_pc in
-    use lemma correctPC_not_E [exp_var "opc"] ;;
+    lemma_correctPC_not_E (exp_var "opc") ;;
     use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
     stm_write_register pc (exp_var "npc") ;;
     stm_val ty.unit tt.
@@ -281,7 +287,7 @@ Section FunDefKit.
                                  exp_var "beg";
                                  exp_var "end";
                                  exp_var "cur" + exp_var "offset" ]) in
-     use lemma correctPC_not_E [exp_var "opc"] ;;
+     lemma_correctPC_not_E (exp_var "opc") ;;
      use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
      stm_write_register pc (exp_var "npc") ;;
      stm_val ty.unit tt).
@@ -647,7 +653,7 @@ Section FunDefKit.
     Definition fun_exec_jalr : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
-      use lemma correctPC_not_E [exp_var "opc"] ;;
+      lemma_correctPC_not_E (exp_var "opc") ;;
       use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
       call write_reg (exp_var "lv1") (exp_inr (exp_var "npc")) ;;
       call exec_jr (exp_var "lv2").
@@ -659,7 +665,7 @@ Section FunDefKit.
     Definition fun_exec_jal : Stm [lv ∷ ty.lv; offset ∷ ty.int] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
-      use lemma correctPC_not_E [exp_var "opc"] ;;
+      lemma_correctPC_not_E (exp_var "opc") ;;
       use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
       call write_reg lv (exp_inr (exp_var "npc")) ;;
       call exec_j offset.
