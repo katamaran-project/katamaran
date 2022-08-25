@@ -61,6 +61,7 @@ Section FunDeclKit.
                           ] ty.unit
   | next_pc         : Fun [] ty.cap
   | update_pc       : Fun [] ty.unit
+  | update_pc_perm  : Fun ["c" :: ty.cap] ty.cap
   | is_correct_pc   : Fun ["c" :: ty.cap] ty.bool
   | is_perm         : Fun ["p" :: ty.perm; "p'" :: ty.perm] ty.bool
   | add_pc          : Fun ["offset" ∷ ty.int] ty.unit
@@ -131,6 +132,7 @@ Section FunDeclKit.
   | int_safe                   : Lem ["i" :: ty.int]
   | correctPC_subperm_R        : Lem ["c" :: ty.cap]
   | subperm_not_E              : Lem ["p" :: ty.perm; "p'" :: ty.perm]
+  | jump_E                     : Lem ["c" :: ty.cap]
   | gen_dummy                  : Lem ["c" :: ty.cap]
   .
 
@@ -249,6 +251,18 @@ Section FunDefKit.
     use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
     stm_write_register pc (exp_var "npc") ;;
     stm_val ty.unit tt.
+
+  Definition fun_update_pc_perm : Stm ["c" :: ty.cap] ty.cap :=
+    let*: ["p" , "b" , "e" , "a"] := (exp_var "c") in
+    (match: exp_var "p" in permission with
+     | E => let: "p" := exp_val ty.perm R in
+            exp_record capability
+                       [ exp_var "p" ;
+                         exp_var "b" ;
+                         exp_var "e" ;
+                         exp_var "a" ]
+     | _ => exp_var "c"
+     end).
 
   Definition fun_is_correct_pc : Stm ["c" :: ty.cap] ty.bool :=
     let*: ["perm" , "beg" , "end" , "cur"] := (exp_var "c") in
@@ -657,7 +671,11 @@ Section FunDefKit.
 
     Definition fun_exec_jr : Stm ["lv" ∷ ty.lv] ty.bool :=
       let: "c" :: ty.cap := call read_reg_cap (exp_var "lv") in
+      let: "c" := call update_pc_perm (exp_var "c") in
       stm_write_register pc (exp_var "c") ;;
+      (* gprs ∗ pc ↦ c ∗ safe c *)
+      (* TODO: invoke lemma to derive wp_loop? *)
+      (* wp_loop *)
       stm_val ty.bool true.
 
     Definition fun_exec_jalr : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
@@ -777,6 +795,7 @@ Section FunDefKit.
     | write_reg       => fun_write_reg
     | next_pc         => fun_next_pc
     | update_pc       => fun_update_pc
+    | update_pc_perm  => fun_update_pc_perm
     | is_correct_pc   => fun_is_correct_pc
     | is_perm         => fun_is_perm
     | add_pc          => fun_add_pc

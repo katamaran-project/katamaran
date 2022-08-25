@@ -207,9 +207,9 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       lia.
     Qed.
 
-    (* Notation D := (MemVal -d> iPropO Σ).
-         Notation C := (Capability -d> iPropO Σ).
-         Implicit Type w : MemVal. *)
+    (* Notation D := (MemVal -d> iPropO Σ). *)
+    (* Notation C := (Capability -d> iPropO Σ). *)
+    (* Implicit Type w : MemVal. *)
     Notation D := ((leibnizO MemVal) -n> iPropO Σ). (* TODO: try -d>, drop leibnizO, might not need λne *)
     Notation C := ((leibnizO Capability) -n> iPropO Σ). (* TODO: try -d>, drop leibnizO, might not need λne *)
     Implicit Type w : (leibnizO MemVal).
@@ -477,6 +477,7 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
      | dummy      => fun ts => True%I
      | gprs       => fun ts => interp_gprs interp
      | ih         => fun ts => IH
+     | wp_loop    => fun ts => interp_loop (sg := SailGS _ _ mG)
      end) ts.
 
   Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) :
