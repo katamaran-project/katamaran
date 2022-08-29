@@ -284,6 +284,12 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       λne interp, (▷ □ interp_expr interp (MkCap R b e a))%I.
     Solve Obligations with solve_proper.
 
+    Program Definition interp_expression (interp : D) : C :=
+      λne c, (match c with
+                   | {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |} =>
+                       ⌜p = R⌝ ∧ enter_cond b e a interp
+                   end)%I.
+
     Program Definition interp_cap_E (interp : D) : D :=
       λne w, (match w with
               | inr (MkCap E b e a) => enter_cond b e a interp
@@ -468,28 +474,29 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
     Qed.
   End Predicates.
 
-  Definition luser_inst {Σ} `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
-    (match p return Env Val (𝑯_Ty p) -> iProp Σ with
-     | ptsreg     => fun ts => MinCaps_ptsreg (env.head (env.tail ts)) (env.head ts)
-     | ptsto      => fun ts => mapsto (env.head (env.tail ts)) (DfracOwn 1) (env.head ts)
-     | safe       => fun ts => interp (env.head ts)
-     | expression => fun ts => interp_expr interp (env.head ts)
-     | dummy      => fun ts => True%I
-     | gprs       => fun ts => interp_gprs interp
-     | ih         => fun ts => IH
-     | wp_loop    => fun ts => interp_loop (sg := SailGS _ _ mG)
-     end) ts.
+  Section MinimalCapsPredicates.
+    Import env.notations.
 
-  Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) :
-    forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
-      is_duplicable p = true ->
-      (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
-  Proof.
-    iIntros (p ts hdup) "H".
-    destruct p; inversion hdup;
-      iDestruct "H" as "#H";
-      auto.
-  Qed.
+    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
+             (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
+    | ptsreg  | [r; v] => MinCaps_ptsreg r v
+    | ptsto   | [a; v] => mapsto a (DfracOwn 1) v
+    | safe    | [c]    => interp c
+    | expr    | [c]    => interp_expression interp c
+    | gprs    | []     => interp_gprs interp
+    | ih      | []     => IH
+    | wp_loop | []     => interp_loop (sg := SailGS _ _ _).
+
+    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) :
+      forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
+        is_duplicable p = true ->
+        (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
+    Proof.
+      destruct p; intros ts Heq; try discriminate Heq;
+        clear Heq; cbn in *; env.destroy ts; auto.
+    Qed.
+
+  End MinimalCapsPredicates.
 
   Include IrisSignatureRules MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisBase.
 
@@ -503,11 +510,14 @@ Module MinCapsIrisInstanceWithContracts.
   Section Lemmas.
     Context {Σ} `{sg : sailGS Σ}.
 
-    Lemma gen_dummy_sound :
-      ValidLemma lemma_gen_dummy.
+    Lemma safe_to_execute_sound :
+      ValidLemma lemma_safe_to_execute.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      auto.
+      iIntros "(#H & [-> _])".
+      iExists R; iFrame.
+      rewrite ?fixpoint_interp1_eq.
+      iSimpl in "H"; auto.
     Qed.
 
     Lemma open_ptsreg_sound :
@@ -603,7 +613,7 @@ Module MinCapsIrisInstanceWithContracts.
       ValidLemma lemma_safe_within_range.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      iIntros "(#Hsafe & _ & [%Hp _] & #IH & [%Hbounds _])".
+      iIntros "(#Hsafe & [%Hp _] & #IH & [%Hbounds _])".
       iSplit; [done|].
       unfold is_true in Hbounds;
         apply andb_prop in Hbounds;
@@ -842,7 +852,7 @@ Module MinCapsIrisInstanceWithContracts.
                        open_ptsreg_sound, close_ptsreg_sound,
       open_gprs_sound, close_gprs_sound, int_safe_sound, correctPC_subperm_R_sound,
       subperm_not_E_sound, safe_move_cursor_sound, safe_sub_perm_sound,
-      safe_within_range_sound, gen_dummy_sound.
+      safe_within_range_sound, safe_to_execute_sound.
   Qed.
 
 End MinCapsIrisInstanceWithContracts.

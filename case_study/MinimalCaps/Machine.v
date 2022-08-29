@@ -110,6 +110,7 @@ Section FunDeclKit.
   | exec_ret        : Fun [] ty.bool
   | exec_instr      : Fun ["i" ∷ ty.instr] ty.bool
   | exec            : Fun [] ty.bool
+  | step            : Fun [] ty.unit
   | loop            : Fun [] ty.unit
   .
 
@@ -132,8 +133,7 @@ Section FunDeclKit.
   | int_safe                   : Lem ["i" :: ty.int]
   | correctPC_subperm_R        : Lem ["c" :: ty.cap]
   | subperm_not_E              : Lem ["p" :: ty.perm; "p'" :: ty.perm]
-  | jump_E                     : Lem ["c" :: ty.cap]
-  | gen_dummy                  : Lem ["c" :: ty.cap]
+  | safe_to_execute            : Lem ["c" :: ty.cap]
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -215,7 +215,9 @@ Section FunDefKit.
     let: w := call read_reg (exp_var "creg") in
     match: w with
     | inl i => fail "Err [read_reg_cap]: expect register to hold a capability"
-    | inr c => stm_exp c
+    | inr c =>
+        let*: ["p", "b", "e", "a"] := exp_var "c" in (* force record *)
+        (exp_var "c")
     end.
 
   Definition fun_read_reg_num : Stm ["nreg" ∷ ty.enum regname ] ty.int :=
@@ -256,6 +258,7 @@ Section FunDefKit.
     let*: ["p" , "b" , "e" , "a"] := (exp_var "c") in
     (match: exp_var "p" in permission with
      | E => let: "p" := exp_val ty.perm R in
+            use lemma safe_to_execute [exp_var "c"] ;;
             exp_record capability
                        [ exp_var "p" ;
                          exp_var "b" ;
@@ -578,7 +581,6 @@ Section FunDefKit.
                                             exp_var "new_end";
                                             exp_var "cursor"
                                           ] in
-           use lemma gen_dummy [exp_var "c'"] ;;
            use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
            call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
            call update_pc ;;
@@ -604,7 +606,6 @@ Section FunDefKit.
                                             exp_var "new_end";
                                             exp_var "cursor"
                                           ] in
-           use lemma gen_dummy [exp_var "c'"] ;;
            use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
            call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
            call update_pc ;;
@@ -673,9 +674,6 @@ Section FunDefKit.
       let: "c" :: ty.cap := call read_reg_cap (exp_var "lv") in
       let: "c" := call update_pc_perm (exp_var "c") in
       stm_write_register pc (exp_var "c") ;;
-      (* gprs ∗ pc ↦ c ∗ safe c *)
-      (* TODO: invoke lemma to derive wp_loop? *)
-      (* wp_loop *)
       stm_val ty.bool true.
 
     Definition fun_exec_jalr : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
@@ -773,17 +771,18 @@ Section FunDefKit.
        | inr c => fail "Err [exec]: instructions cannot be capabilities"
        end).
 
-    Definition fun_loop : Stm [] ty.unit :=
+    Definition fun_step : Stm [] ty.unit :=
       let: "tmp1" := stm_read_register pc in
       let: "tmp2" := call is_correct_pc (exp_var "tmp1") in
       if: exp_var "tmp2"
       then
-        let: "r" := call exec in (* TODO: try to use this to step → get rid of ▷ *)
-        if: exp_var "r"
-        then call loop
-        else stm_val ty.unit tt
+        call exec ;;
+        stm_val ty.unit tt
       else
-        fail "Err [loop]: incorrect PC".
+        fail "Err [step]: incorrect PC".
+
+    Definition fun_loop : Stm [] ty.unit :=
+      call step ;; call loop.
 
   End ExecStore.
 
@@ -839,6 +838,7 @@ Section FunDefKit.
     | exec_ret        => fun_exec_ret
     | exec_instr      => fun_exec_instr
     | exec            => fun_exec
+    | step            => fun_step
     | loop            => fun_loop
     end.
 

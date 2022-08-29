@@ -61,8 +61,7 @@ Inductive Predicate : Set :=
   ptsreg
 | ptsto
 | safe
-| expression
-| dummy
+| expr
 | gprs
 | ih
 | wp_loop
@@ -162,26 +161,24 @@ Section PredicateKit.
   Definition 𝑯 := Predicate.
   Definition 𝑯_Ty (p : 𝑯) : Ctx Ty :=
     match p with
-    | ptsreg     => [ty.enum regname; ty.word]
-    | ptsto      => [ty.addr; ty.memval]
-    | safe       => [ty.word]
-    | expression => [ty.cap]
-    | dummy      => [ty.cap]
-    | gprs       => []
-    | ih         => []
-    | wp_loop    => []
+    | ptsreg  => [ty.enum regname; ty.word]
+    | ptsto   => [ty.addr; ty.memval]
+    | safe    => [ty.word]
+    | expr    => [ty.cap]
+    | gprs    => []
+    | ih      => []
+    | wp_loop => []
     end.
   Global Instance 𝑯_is_dup : IsDuplicable Predicate := {
     is_duplicable p :=
       match p with
-      | ptsreg     => false
-      | ptsto      => false
-      | safe       => true
-      | expression => false (* TODO: check if it is duplicable when implemented *)
-      | dummy      => false
-      | gprs       => false
-      | ih         => true
-      | wp_loop    => false
+      | ptsreg  => false
+      | ptsto   => false
+      | safe    => true
+      | expr    => false (* TODO: check if it is duplicable when implemented *)
+      | gprs    => false
+      | ih      => true
+      | wp_loop => false
       end
     }.
   Instance 𝑯_eq_dec : EqDec 𝑯 := Predicate_eqdec.
@@ -216,8 +213,7 @@ End PredicateKit.
     Notation asn_safe w := (asn.chunk (chunk_user safe (env.nil ► (ty.word ↦ w)))).
     Notation asn_csafe c := (asn.chunk (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
     Notation asn_csafe_angelic c := (asn.chunk_angelic (chunk_user safe (env.nil ► (ty.word ↦ (term_inr c))))).
-    Notation asn_expression c := (asn.chunk (chunk_user expression [c])).
-    Notation asn_dummy c := (asn.chunk (chunk_user dummy (env.nil ► (ty.cap ↦ c)))).
+    Notation asn_expr c := (asn.chunk (chunk_user expr [c])).
     Notation asn_gprs := (asn.chunk (chunk_user gprs env.nil)).
     Notation asn_match_cap c p b e a asn :=
       (asn.match_record
@@ -274,13 +270,17 @@ Section ContractDefKit.
                           asn_csafe (term_var "c") ∗
                           asn_correctPC (term_var "c")).
 
-  Definition asn_pc {Σ} (r : Reg ty.cap) : Assertion Σ :=
+  Definition asn_pc_safe {Σ} (r : Reg ty.cap) : Assertion Σ :=
     asn.exist "c" ty.cap (r ↦ term_var "c" ∗
                           asn_csafe (term_var "c")).
 
-  (* mach_inv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * asn_pc pc *)
+  Definition asn_pc_expr {Σ} (r : Reg ty.cap) : Assertion Σ :=
+    asn.exist "c" ty.cap (r ↦ term_var "c" ∗
+                          asn_expr (term_var "c")).
+
+  (* mach_inv = regInv(r1) * regInv(r2) * regInv(r3) * regInv(r4) * asn_pc_safe pc *)
   (* Definition mach_inv {Σ} : Assertion Σ :=
-    asn_gprs ∗ asn_pc pc. *)
+    asn_gprs ∗ asn_pc_safe pc. *)
 
   (*
 Universal Contract
@@ -306,7 +306,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        sep_contract_localstore      := create_localstore Δ [];
        sep_contract_precondition    := asn_gprs ∗ asn_pc_correct pc ∗ asn_IH;
        sep_contract_result          := "result_mach_inv";
-       sep_contract_postcondition   := asn_gprs ∗ asn_pc pc;
+       sep_contract_postcondition   := asn_gprs ∗ (asn_pc_safe pc ∨ asn_pc_expr pc);
     |}.
 
   Definition mach_inv_jump_contract {Δ τ} : SepContract Δ τ :=
@@ -314,7 +314,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        sep_contract_localstore      := create_localstore Δ [];
        sep_contract_precondition    := asn_gprs ∗ asn_pc_correct pc ∗ asn_IH;
        sep_contract_result          := "result_mach_inv";
-       sep_contract_postcondition   := (asn_gprs ∗ asn_pc pc) ∨ asn_WP_loop;
+       sep_contract_postcondition   := (asn_gprs ∗ asn_pc_safe pc) ∨ asn_WP_loop;
     |}.
 
   Definition SepContractFun {Δ τ} (f : Fun Δ τ) : Type :=
@@ -339,7 +339,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        sep_contract_localstore      := [term_var "creg"];
        sep_contract_precondition    := asn_gprs;
        sep_contract_result          := "result_read_reg_cap";
-       sep_contract_postcondition   := asn_gprs ∗ asn_csafe (term_var "result_read_reg_cap")
+       sep_contract_postcondition   := asn_gprs ∗ (* asn_csafe (term_var "result_read_reg_cap") *)
+            asn_match_cap (term_var "result_read_reg_cap") "p" "b" "e" "a"
+            (asn_csafe (term_var "result_read_reg_cap"));
     |}.
 
   Definition sep_contract_read_reg_num : SepContractFun read_reg_num :=
@@ -390,17 +392,18 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
     let c : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
     {| sep_contract_logic_variables := Σ;
        sep_contract_localstore      := (env.snoc env.nil (_∷_) c);
-       sep_contract_precondition    := asn_csafe c ∗ asn_IH;
+       sep_contract_precondition    := asn_csafe c;
        sep_contract_result          := "result_update_pc_perm";
        sep_contract_postcondition   :=
          asn.exist "p'" ty.perm
-           (let c : Term _ _ := term_record capability [term_var "p'"; term_var "b"; term_var "e"; term_var "a"] in
-            term_var "result_update_pc_perm" = c ∗
+           (let c : Term _ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
+            let c' : Term _ _ := term_record capability [term_var "p'"; term_var "b"; term_var "e"; term_var "a"] in
+            term_var "result_update_pc_perm" = c' ∗
             term_var "p'" ≠ₚ term_val ty.perm E ∗
             asn.match_enum permission (term_var "p")
                            (fun p => match p with
-                                     | E => term_var "p" = term_val ty.perm E
-                                     | _ => ⊤
+                                     | E => asn_expr c'
+                                     | _ => asn_csafe c' ∗ c = c'
                                      end))
     |}.
 
@@ -516,7 +519,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       @post mach_inv;
       bool exec_jr(lv : lv) *)
   Definition sep_contract_exec_jr : SepContractFun exec_jr :=
-    mach_inv_jump_contract.
+    mach_inv_contract.
 
   (*
       @pre mach_inv;
@@ -784,13 +787,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       @pre mach_inv;
       @post mach_inv;
       unit loop *)
-  Definition sep_contract_loop : SepContractFun loop :=
-    {| sep_contract_logic_variables := ε;
-       sep_contract_localstore      := [];
-       sep_contract_precondition    := asn_gprs ∗ asn_pc pc ∗ asn_IH;
-       sep_contract_result          := "result_loop";
-       sep_contract_postcondition   := (asn_gprs ∗ asn_pc pc ∗ asn_IH) ∨ asn_WP_loop;
-    |}.
+  Definition sep_contract_step : SepContractFun step :=
+    mach_inv_contract.
 
   Definition CEnv : SepContractEnv :=
     fun Δ τ f =>
@@ -845,7 +843,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | exec_ret               => Some sep_contract_exec_ret
       | exec_instr             => Some sep_contract_exec_instr
       | exec                   => Some sep_contract_exec
-      | loop                   => Some sep_contract_loop
+      | step                   => Some sep_contract_step
+      | loop                   => None
       end.
 
   Lemma linted_cenv :
@@ -874,13 +873,16 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        lemma_postcondition   := term_var "p'" ≠ₚ term_val ty.perm E;
     |}.
 
-  Definition lemma_jump_E : SepLemma jump_E :=
+  Definition lemma_safe_to_execute : SepLemma safe_to_execute :=
     let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr]%ctx in
     let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
     {| lemma_logic_variables := Σ;
        lemma_patterns        := (env.snoc env.nil (_∷_) c);
-       lemma_precondition    := term_var "p" = term_val ty.perm E ∗ asn_csafe c ∗ asn_IH;
-       lemma_postcondition   := asn_WP_loop;
+       lemma_precondition    := asn_csafe c ∗ term_var "p" = term_val ty.perm E;
+       lemma_postcondition   :=
+         asn.exist "p'" ty.perm
+                   (let c : Term _ _ := term_record capability [term_var "p'"; term_var "b"; term_var "e"; term_var "a"] in
+                    term_var "p'" = term_val ty.perm R ∗ asn_expr c);
     |}.
 
   Definition lemma_open_ptsreg : SepLemma open_ptsreg :=
@@ -955,7 +957,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        lemma_patterns        := [nenv c'; c];
        lemma_precondition    :=
          asn_csafe c ∗
-         asn_dummy c' ∗
          term_var "p" ≠ₚ term_val ty.perm E ∗
          asn_IH ∗
          asn.formula
@@ -1037,13 +1038,6 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        sep_contract_postcondition   := ⊤;
     |}.
 
-  Definition lemma_gen_dummy : SepLemma gen_dummy :=
-    {| lemma_logic_variables := ["c" ∷ ty.cap];
-       lemma_patterns        := [term_var "c"];
-       lemma_precondition    := ⊤;
-       lemma_postcondition   := asn_dummy (term_var "c");
-    |}.
-
   Definition CEnvEx : SepContractEnvEx :=
     fun Δ τ f =>
       match f with
@@ -1065,8 +1059,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | int_safe            => lemma_int_safe
       | correctPC_subperm_R => lemma_correctPC_subperm_R
       | subperm_not_E       => lemma_subperm_not_E
-      | jump_E              => lemma_jump_E
-      | gen_dummy           => lemma_gen_dummy
+      | safe_to_execute     => lemma_safe_to_execute
       end.
 
   Lemma linted_cenvex :
@@ -1270,7 +1263,7 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_update_pc_perm : ValidContract update_pc_perm.
 Proof. reflexivity. Qed.
 
-Lemma valid_contract_loop : ValidContract loop.
+Lemma valid_contract_step : ValidContract step.
 Proof. reflexivity. Qed.
 
 Lemma valid_contract_exec_ld : ValidContract exec_ld.
@@ -1282,16 +1275,13 @@ Proof. reflexivity. Qed.
 Lemma valid_contract_exec_lea : ValidContract exec_lea.
 Proof. reflexivity. Qed.
 
-(* TODO: simplify, should be able to automate it more (back to refl!) *)
-Lemma valid_contract_exec_jr : ValidContractDebug exec_jr.
-Proof.
-  symbolic_simpl.
-  intros.
-  destruct v1 eqn:?; intuition.
-  exists cap_cursor, cap_end, cap_begin, cap_permission; auto.
-Admitted.
+Lemma valid_contract_exec_jr : ValidContract exec_jr.
+Proof. reflexivity. Qed.
 
 Lemma valid_contract_exec : ValidContract exec.
+Proof. reflexivity. Qed.
+
+Lemma valid_contract_read_reg_cap : ValidContract read_reg_cap.
 Proof. reflexivity. Qed.
 
 Goal True. idtac "Timing before: minimalcaps". Abort.
@@ -1357,6 +1347,7 @@ Section Statistics.
       existT _ (existT _ exec_ret);
       existT _ (existT _ exec_instr);
       existT _ (existT _ exec);
+      existT _ (existT _ step);
       existT _ (existT _ loop)
     ]%list.
 
