@@ -1203,98 +1203,304 @@ Module Import MinCapsExecutor :=
 Module Import MinCapsShallowExec :=
   MakeShallowExecutor MinCapsBase MinCapsProgram MinCapsSignature MinCapsSpecification.
 
-Local Ltac solve :=
-  repeat
-    (repeat
-       match goal with
-       | H: _ /\ _ |- _ => destruct H
-       | H: Empty_set |- _ => destruct H
-       | |- forall _, _ => cbn [Val snd]; intro
-       | |- False \/ _ =>  right
-       | |- _ \/ False =>  left
-       | |- _ \/ exists _, _ =>  left (* avoid existentials, bit fishy but fine for now *)
-       | |- _ /\ _ => constructor
-       | |- VerificationCondition _ =>
-         constructor;
-         cbv [SymProp.safe env.remove env.lookup bop.eval is_true
-              inst inst_term inst_formula env.Env_rect];
-         cbn
-       | |- Obligation _ _ _ => constructor; cbn
-       | |- Debug _ _ => constructor
-       | |- Debug _ True \/ _ => left
-       | |- (_ \/ _) \/ _ => rewrite or_assoc
-       | |- context[Z.leb ?x ?y] =>
-         destruct (Z.leb_spec x y)
-       end;
-     cbn [List.length andb is_true Val snd];
-     subst; try congruence; try lia;
-     auto
-    ).
+Module MinCapsValidContracts.
+  Import MinCapsExecutor.
 
-Import MinCapsContractNotations.
+  Local Ltac solve :=
+    repeat
+      (repeat
+         match goal with
+         | H: _ /\ _ |- _ => destruct H
+         | H: Empty_set |- _ => destruct H
+         | |- forall _, _ => cbn [Val snd]; intro
+         | |- False \/ _ =>  right
+         | |- _ \/ False =>  left
+         | |- _ \/ exists _, _ =>  left (* avoid existentials, bit fishy but fine for now *)
+         | |- _ /\ _ => constructor
+         | |- VerificationCondition _ =>
+             constructor;
+             cbv [SymProp.safe env.remove env.lookup bop.eval is_true
+                               inst inst_term inst_formula env.Env_rect];
+             cbn
+         | |- Obligation _ _ _ => constructor; cbn
+         | |- Debug _ _ => constructor
+         | |- Debug _ True \/ _ => left
+         | |- (_ \/ _) \/ _ => rewrite or_assoc
+         | |- context[Z.leb ?x ?y] =>
+             destruct (Z.leb_spec x y)
+         end;
+       cbn [List.length andb is_true Val snd];
+       subst; try congruence; try lia;
+       auto
+      ).
 
-Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
-  match CEnv f with
-  | Some c => Symbolic.ValidContractReflect c (FunDef f)
-  | None => False
-  end.
+  Import MinCapsContractNotations.
 
-Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
-  match CEnv f with
-  | Some c => Symbolic.ValidContract c (FunDef f)
-  | None => False
-  end.
+  Definition ValidContract {Δ τ} (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => Symbolic.ValidContractReflect c (FunDef f)
+    | None => False
+    end.
 
-Ltac symbolic_simpl :=
-  apply Symbolic.validcontract_with_erasure_sound;
-  compute;
-  constructor;
-  cbn.
+  Definition ValidContractDebug {Δ τ} (f : Fun Δ τ) : Prop :=
+    match CEnv f with
+    | Some c => Symbolic.ValidContract c (FunDef f)
+    | None => False
+    end.
 
-Lemma valid_contract_is_correct_pc : ValidContract is_correct_pc.
-Proof. reflexivity. Qed.
+  Ltac symbolic_simpl :=
+    apply Symbolic.validcontract_with_erasure_sound;
+    compute;
+    constructor;
+    cbn.
 
-Lemma valid_contract_is_perm : ValidContract MinCapsProgram.is_perm.
-Proof. reflexivity. Qed.
+  Lemma valid_contract_read_reg : ValidContract read_reg.
+  Proof. reflexivity. Qed.
 
-Lemma valid_contract_update_pc : ValidContract update_pc.
-Proof. reflexivity. Qed.
+  Lemma valid_contract_read_reg_cap : ValidContract read_reg_cap.
+  Proof. reflexivity. Qed.
 
-Lemma valid_contract_update_pc_perm : ValidContract update_pc_perm.
-Proof. reflexivity. Qed.
+  Lemma valid_contract_read_reg_num : ValidContract read_reg_num.
+  Proof. reflexivity. Qed.
 
-Lemma valid_contract_step : ValidContract step.
-Proof. reflexivity. Qed.
+  Lemma valid_contract_write_reg : ValidContract write_reg.
+  Proof. reflexivity. Qed.
 
-Lemma valid_contract_exec_ld : ValidContract exec_ld.
-Proof. reflexivity. Qed.
+  Lemma valid_contract_next_pc : ValidContract next_pc.
+  Proof. reflexivity. Qed.
 
-Lemma valid_contract_exec_sd : ValidContract exec_sd.
-Proof. reflexivity. Qed.
+  Lemma valid_contract_update_pc : ValidContract update_pc.
+  Proof. reflexivity. Qed.
 
-Lemma valid_contract_exec_lea : ValidContract exec_lea.
-Proof. reflexivity. Qed.
+  Lemma valid_contract_update_pc_perm : ValidContract update_pc_perm.
+  Proof. reflexivity. Qed.
 
-Lemma valid_contract_exec_jr : ValidContract exec_jr.
-Proof. reflexivity. Qed.
+  Lemma valid_contract_is_correct_pc : ValidContract is_correct_pc.
+  Proof. reflexivity. Qed.
 
-Lemma valid_contract_exec : ValidContract exec.
-Proof. reflexivity. Qed.
+  Lemma valid_contract_is_perm : ValidContract MinCapsProgram.is_perm.
+  Proof. reflexivity. Qed.
 
-Lemma valid_contract_read_reg_cap : ValidContract read_reg_cap.
-Proof. reflexivity. Qed.
+  Lemma valid_contract_add_pc : ValidContract add_pc.
+  Proof. reflexivity. Qed.
 
-Goal True. idtac "Timing before: minimalcaps". Abort.
-Lemma valid_contracts : forall {Δ τ} (f : Fun Δ τ),
-    ValidContract f.
-Proof.
+  Lemma valid_contract_read_mem : ValidContract read_mem.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_write_mem : ValidContract write_mem.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_read_allowed : ValidContract read_allowed.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_write_allowed : ValidContract write_allowed.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_upper_bound : ValidContract upper_bound.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_within_bounds : ValidContract within_bounds.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_perm_to_bits : ValidContract perm_to_bits.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_perm_from_bits : ValidContract perm_from_bits.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_is_sub_perm : ValidContract is_sub_perm.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_is_within_range : ValidContract is_within_range.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_abs : ValidContract abs.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_jr : ValidContract exec_jr.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_jalr : ValidContract exec_jalr.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_j : ValidContract exec_j.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_jal : ValidContract exec_jal.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_bnez : ValidContract exec_bnez.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_mv : ValidContract exec_mv.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_ld : ValidContract exec_ld.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_sd : ValidContract exec_sd.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_lea : ValidContract exec_lea.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_restrict : ValidContract exec_restrict.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_restricti : ValidContract exec_restricti.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_subseg : ValidContract exec_subseg.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_subsegi : ValidContract exec_subsegi.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_isptr : ValidContract exec_isptr.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_addi : ValidContract exec_addi.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_add : ValidContract exec_add.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_sub : ValidContract exec_sub.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_slt : ValidContract exec_slt.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_slti : ValidContract exec_slti.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_sltu : ValidContract exec_sltu.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_sltiu : ValidContract exec_sltiu.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_getp : ValidContract exec_getp.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_getb : ValidContract exec_getb.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_gete : ValidContract exec_gete.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_geta : ValidContract exec_geta.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_fail : ValidContract exec_fail.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_ret : ValidContract exec_ret.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_instr : ValidContract exec_instr.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec : ValidContract exec.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_step : ValidContract step.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
+      CEnv f = Some c ->
+      ValidContract f ->
+      Symbolic.ValidContract c (FunDef f).
+  Proof.
+    intros ? ? f c Hcenv Hvc.
+    unfold ValidContract in Hvc.
+    rewrite Hcenv in Hvc.
+    apply Symbolic.validcontract_reflect_sound.
+    apply Hvc.
+  Qed.
+
+  Lemma valid_contract_debug : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
+      CEnv f = Some c ->
+      ValidContractDebug f ->
+      Symbolic.ValidContract c (FunDef f).
+  Proof.
+    intros ? ? f c Hcenv Hvc.
+    unfold ValidContractDebug in Hvc.
+    rewrite Hcenv in Hvc.
+    apply Hvc.
+  Qed.
+
+  Lemma ValidContracts : forall {Δ τ} (f : Fun Δ τ) (c : SepContract Δ τ),
+      CEnv f = Some c ->
+      Symbolic.ValidContract c (FunDef f).
+  Proof.
+    intros; destruct f.
+    - apply (valid_contract _ H valid_contract_read_reg).
+    - apply (valid_contract _ H valid_contract_read_reg_cap).
+    - apply (valid_contract _ H valid_contract_read_reg_num).
+    - apply (valid_contract _ H valid_contract_write_reg).
+    - apply (valid_contract _ H valid_contract_next_pc).
+    - apply (valid_contract _ H valid_contract_update_pc).
+    - apply (valid_contract _ H valid_contract_update_pc_perm).
+    - apply (valid_contract _ H valid_contract_is_correct_pc).
+    - apply (valid_contract _ H valid_contract_is_perm).
+    - apply (valid_contract _ H valid_contract_add_pc).
+    - apply (valid_contract _ H valid_contract_read_mem).
+    - apply (valid_contract _ H valid_contract_write_mem).
+    - apply (valid_contract _ H valid_contract_read_allowed).
+    - apply (valid_contract _ H valid_contract_write_allowed).
+    - apply (valid_contract _ H valid_contract_upper_bound).
+    - apply (valid_contract _ H valid_contract_within_bounds).
+    - apply (valid_contract _ H valid_contract_perm_to_bits).
+    - apply (valid_contract _ H valid_contract_perm_from_bits).
+    - apply (valid_contract _ H valid_contract_is_sub_perm).
+    - apply (valid_contract _ H valid_contract_is_within_range).
+    - apply (valid_contract _ H valid_contract_abs).
+    - apply (valid_contract _ H valid_contract_exec_jr).
+    - apply (valid_contract _ H valid_contract_exec_jalr).
+    - apply (valid_contract _ H valid_contract_exec_j).
+    - apply (valid_contract _ H valid_contract_exec_jal).
+    - apply (valid_contract _ H valid_contract_exec_bnez).
+    - apply (valid_contract _ H valid_contract_exec_mv).
+    - apply (valid_contract _ H valid_contract_exec_ld).
+    - apply (valid_contract _ H valid_contract_exec_sd).
+    - apply (valid_contract _ H valid_contract_exec_lea).
+    - apply (valid_contract _ H valid_contract_exec_restrict).
+    - apply (valid_contract _ H valid_contract_exec_restricti).
+    - apply (valid_contract _ H valid_contract_exec_subseg).
+    - apply (valid_contract _ H valid_contract_exec_subsegi).
+    - apply (valid_contract _ H valid_contract_exec_isptr).
+    - apply (valid_contract _ H valid_contract_exec_addi).
+    - apply (valid_contract _ H valid_contract_exec_add).
+    - apply (valid_contract _ H valid_contract_exec_sub).
+    - apply (valid_contract _ H valid_contract_exec_slt).
+    - apply (valid_contract _ H valid_contract_exec_slti).
+    - apply (valid_contract _ H valid_contract_exec_sltu).
+    - apply (valid_contract _ H valid_contract_exec_sltiu).
+    - apply (valid_contract _ H valid_contract_exec_getp).
+    - apply (valid_contract _ H valid_contract_exec_getb).
+    - apply (valid_contract _ H valid_contract_exec_gete).
+    - apply (valid_contract _ H valid_contract_exec_geta).
+    - apply (valid_contract _ H valid_contract_exec_fail).
+    - apply (valid_contract _ H valid_contract_exec_ret).
+    - apply (valid_contract _ H valid_contract_exec_instr).
+    - apply (valid_contract _ H valid_contract_exec).
+    - apply (valid_contract _ H valid_contract_step).
+    - cbn in H; inversion H.
+  Qed.
+
+  Goal True. idtac "Timing before: minimalcaps". Abort.
+  Lemma valid_contracts : forall {Δ τ} (f : Fun Δ τ),
+      ValidContract f.
+  Proof.
   (* destruct f; reflexivity.
 Qed. *)
-Admitted.
-Goal True. idtac "Timing after: minimalcaps". Abort.
+  Admitted.
+  Goal True. idtac "Timing after: minimalcaps". Abort.
 
-Goal True. idtac "Assumptions for minimalcaps contracts:". Abort.
-Print Assumptions valid_contracts.
+  Goal True. idtac "Assumptions for minimalcaps contracts:". Abort.
+  Print Assumptions valid_contracts.
+End MinCapsValidContracts.
 
 Section Statistics.
   Import List.ListNotations.
