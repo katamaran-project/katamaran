@@ -78,8 +78,6 @@ Section Loop.
 
   Local Notation "r '↦' val" := (reg_pointsTo r val) (at level 70).
 
-  Print step_sem_contract.
-
   Definition Step_pre : iProp Σ :=
     interp_gprs interp ∗
     (∃ c, pc ↦ c ∗ interp (inr c) ∗ ⌜CorrectPC c⌝) ∗
@@ -106,7 +104,7 @@ Section Loop.
     apply ValidContracts; assumption.
   Qed.
 
-  Lemma valid_step_semTriple : ⊢ semTriple_step.
+  Lemma valid_semTriple_step : ⊢ semTriple_step.
   Proof.
     unfold semTriple_step.
     iIntros.
@@ -172,15 +170,13 @@ Section Loop.
 
   Lemma valid_semTriple_loop : ⊢ semTriple_loop.
   Proof.
-    iLöb as "H".
-    Print Step_pre.
     iIntros "(Hgprs & [%c (Hpc & #Hsafe & %Hcor)] & #IH)".
     cbn - [interp interp_gprs].
     unfold fun_loop.
     iApply (iris_rule_stm_seq [env] (stm_call step _) (stm_call loop _)
                                 _ (fun δ => Step_post ∧ ⌜[env] = δ⌝)%I (fun _ _ => True%I)).
     - iApply (iris_rule_stm_call_inline [env] step [env] Step_pre (fun _ => Step_post)).
-      iApply valid_step_semTriple.
+      iApply valid_semTriple_step.
     - iIntros.
       destruct (env.nilView δ').
       iApply simplify_semTriple_pre_add.
