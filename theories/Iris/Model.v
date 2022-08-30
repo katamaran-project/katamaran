@@ -97,6 +97,7 @@ Next Obligation.
 Qed.
 Canonical IProp.
 
+(* TODO: export, back to module instead of module type *)
 Module Type IrisPrelims
     (Import B    : Base)
     (Import PROG : Program B)

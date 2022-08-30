@@ -103,7 +103,7 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
 
     Class mcMemGS Σ := McMemGS {
                           (* ghost variable for tracking state of registers *)
-                          mc_ghG : gh.gen_heapGS Z MemVal Σ;
+                          mc_ghG :> gh.gen_heapGS Z MemVal Σ;
                           mc_invNs : namespace
                         }.
     #[export] Existing Instance mc_ghG.
@@ -115,10 +115,10 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
     Definition memΣ_GpreS : forall {Σ}, subG memΣ Σ -> memGpreS Σ :=
       fun {Σ} => gh.subG_gen_heapGpreS (Σ := Σ) (L := Z) (V := MemVal).
 
-    Definition mem_inv : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
+    Definition mem_inv : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        (∃ memmap, gen_heap_interp memmap ∗
-           ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
+        (∃ memmap, gen_heap_interp (hG := mc_ghG (mcMemGS := hG)) memmap ∗
+          ⌜ map_Forall (fun a v => μ a = v) memmap ⌝
         )%I.
 
     Definition liveAddrs : list Addr := seqZ 0 maxAddr.
@@ -138,12 +138,12 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
       by destruct el as (a' & <- & _).
     Qed.
 
-    Definition mem_res : forall {Σ}, mcMemGS Σ -> Memory -> iProp Σ :=
+    Definition mem_res : forall {Σ}, memGS Σ -> Memory -> iProp Σ :=
       fun {Σ} hG μ =>
-        ([∗ map] l↦v ∈ initMemMap μ, mapsto l (DfracOwn 1) v) %I.
+        ([∗ map] l↦v ∈ initMemMap μ, mapsto (hG := mc_ghG (mcMemGS := hG)) l (DfracOwn 1) v) %I.
 
     Lemma mem_inv_init : forall Σ (μ : Memory), memGpreS Σ ->
-                                                ⊢ |==> ∃ mG : mcMemGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
+                                                ⊢ |==> ∃ mG : memGS Σ, (mem_inv mG μ ∗ mem_res mG μ)%I.
     Proof.
       iIntros (Σ μ gHP).
 
@@ -164,7 +164,6 @@ Module Import MinCapsIrisBase <: IrisBase MinCapsBase MinCapsProgram MinCapsSema
   End WithIrisNotations.
 
   Include IrisResources MinCapsBase MinCapsProgram MinCapsSemantics.
-
 End MinCapsIrisBase.
 
 Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisBase.
@@ -208,9 +207,9 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
       lia.
     Qed.
 
-    (* Notation D := (MemVal -d> iPropO Σ).
-         Notation C := (Capability -d> iPropO Σ).
-         Implicit Type w : MemVal. *)
+    (* Notation D := (MemVal -d> iPropO Σ). *)
+    (* Notation C := (Capability -d> iPropO Σ). *)
+    (* Implicit Type w : MemVal. *)
     Notation D := ((leibnizO MemVal) -n> iPropO Σ). (* TODO: try -d>, drop leibnizO, might not need λne *)
     Notation C := ((leibnizO Capability) -n> iPropO Σ). (* TODO: try -d>, drop leibnizO, might not need λne *)
     Implicit Type w : (leibnizO MemVal).
@@ -284,6 +283,12 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
     Program Definition enter_cond (b e a : Addr) : D -n> iPropO Σ :=
       λne interp, (▷ □ interp_expr interp (MkCap R b e a))%I.
     Solve Obligations with solve_proper.
+
+    Program Definition interp_expression (interp : D) : C :=
+      λne c, (match c with
+                   | {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |} =>
+                       ⌜p = R⌝ ∧ enter_cond b e a interp
+                   end)%I.
 
     Program Definition interp_cap_E (interp : D) : D :=
       λne w, (match w with
@@ -377,58 +382,6 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
         + apply submseteq_cons; trivial.
     Qed.
 
-    Lemma safe_sub_range (b' e' b e : Addr) :
-      forall p a,
-        ⊢ ⌜ (b <= b')%Z /\ (e' <= e)%Z ⌝ -∗
-          interp (inr {| cap_permission := p; cap_begin := b; cap_end := e; cap_cursor := a |}) -∗
-          interp (inr {| cap_permission := p; cap_begin := b'; cap_end := e'; cap_cursor := a |}).
-    Proof.
-      iIntros (p a) "/= [% %] Hsafe".
-      do 2 rewrite fixpoint_interp1_eq.
-      destruct p; try (by iFrame); simpl; try iDestruct "Hsafe" as "/= [Hsafe | %]";
-        try (iRight; iPureIntro; lia).
-      - iLeft.
-        iIntros "%".
-        iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
-        { iPureIntro; lia. }
-        iAssert (
-            ⌜b ∈ liveAddrs ∧ e ∈ liveAddrs⌝
-                               ∗ ([∗ list] a0 ∈ region_addrs b e, inv (mc_invNs.@a0)
-                                                                      (∃ w,
-                                                                          mapsto a0 (DfracOwn 1) w
-                                                                                 ∗ fixpoint interp1 w))
-          )%I with "[Htmp Hsafe]" as "Hsafe".
-        { iApply ("Hsafe" with "Htmp"). }
-        iDestruct "Hsafe" as "[% H]".
-        iSplitR.
-        + iPureIntro; split.
-          apply (le_liveAddrs H4 (conj H1 (Z.le_trans b' e' e H3 H2))).
-          apply (le_liveAddrs H4 (conj (Z.le_trans b b' e' H1 H3) H2)).
-        + iApply (region_addrs_submseteq $! (conj H1 H2) with "H").
-      - iLeft.
-        iIntros "%".
-        iAssert (⌜ (b <= e)%Z ⌝)%I as "-# Htmp".
-        { iPureIntro; lia. }
-        iAssert (
-            ⌜b ∈ liveAddrs ∧ e ∈ liveAddrs⌝
-                               ∗ ([∗ list] a0 ∈ region_addrs b e, inv (mc_invNs.@a0)
-                                                                      (∃ w,
-                                                                          mapsto a0 (DfracOwn 1) w
-                                                                                 ∗ fixpoint interp1 w))
-          )%I with "[Htmp Hsafe]" as "Hsafe".
-        { iApply ("Hsafe" with "Htmp"). }
-        iDestruct "Hsafe" as "[% H]".
-        iSplitR.
-        + iPureIntro; split.
-          apply (le_liveAddrs H4 (conj H1 (Z.le_trans b' e' e H3 H2))).
-          apply (le_liveAddrs H4 (conj (Z.le_trans b b' e' H1 H3) H2)).
-        + iApply (region_addrs_submseteq $! (conj H1 H2) with "H").
-      - iModIntro.
-        iDestruct "Hsafe" as "# Hsafe".
-        iModIntro.
-        admit.
-    Admitted.
-
     Lemma specialize_range (b e addr : Addr) :
       ⊢ ⌜ (b <= addr)%Z /\ (addr <= e)%Z ⌝ -∗
         (⌜ b ∈ liveAddrs /\ e ∈ liveAddrs ⌝ ∗
@@ -444,28 +397,106 @@ Module Import MinCapsIrisInstance <: IrisInstance MinCapsBase MinCapsProgram Min
     Global Instance interp_Persistent (w : leibnizO MemVal) : Persistent (interp w).
     Proof. destruct w; simpl; rewrite fixpoint_interp1_eq; simpl; first apply _.
            destruct c; destruct cap_permission; apply _. Qed.
+
+    Definition IH : iProp Σ :=
+      (□ ▷ (∀ p b e a,
+               interp_gprs interp
+            -∗ reg_pointsTo pc (MkCap p b e a)
+            -∗ □ interp (inr (MkCap p b e a)) -∗ interp_loop (sg := SailGS _ _ mG))).
+
+    Lemma interp_cap_inv_weakening (b b' e e' : Addr) :
+      ∀ p a a',
+      (b ≤ b')%Z →
+      (e' ≤ e)%Z →
+      interp_cap_inv (MkCap p b e a) interp -∗
+      interp_cap_inv (MkCap p b' e' a') interp.
+    Proof.
+      iIntros (p a a' Hb He) "[HA | %HA]".
+      - iLeft.
+        iIntros (l).
+        assert (Hle : (b ≤ e)%Z).
+        { eapply Z.le_trans. apply Hb.
+          eapply Z.le_trans. apply l. apply He. }
+        iSpecialize ("HA" $! Hle).
+        iDestruct "HA" as "([%Hbl %Hel] & HA)".
+        iSplit.
+        + iPureIntro; split; (eapply le_liveAddrs; first apply (conj Hbl Hel); try lia).
+        + iApply (region_addrs_submseteq $! (conj Hb He) with "HA").
+      - iRight; iPureIntro; lia.
+    Qed.
+
+    Lemma interp_subperm_weakening p p' b e a :
+      Subperm p' p ->
+      IH -∗
+      interp (inr (MkCap p b e a)) -∗
+      interp (inr (MkCap p' b e a)).
+    Proof.
+      intros Hp; destruct p'; destruct p eqn:Ep; inversion Hp; auto; iIntros "#IH #HA";
+        rewrite !fixpoint_interp1_eq; try done.
+      - do 2 iModIntro.
+        iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
+        iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
+        done.
+        iModIntro.
+        rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv].
+        iApply (interp_cap_inv_weakening p a a (Z.le_refl b) (Z.le_refl e) with "HA").
+      - do 2 iModIntro.
+        iIntros "(Hpc & Hreg0 & Hreg1 & Hreg2 & Hreg3 & _)".
+        iApply ("IH" with "[-Hpc IH HA] Hpc"); try iFrame.
+        done.
+        iModIntro.
+        rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv].
+        iApply (interp_cap_inv_weakening p a a (Z.le_refl b) (Z.le_refl e) with "HA").
+    Qed.
+
+    Lemma interp_weakening p p' b b' e e' a a' :
+      p ≠ E ->
+      (b ≤ b')%Z ->
+      (e' ≤ e)%Z ->
+      Subperm p' p ->
+      IH -∗
+      interp (inr (MkCap p b e a)) -∗
+      interp (inr (MkCap p' b' e' a')).
+    Proof.
+      iIntros (HpnotE Hb He Hsubperm) "#IH #HA".
+      destruct p'.
+      - rewrite !fixpoint_interp1_eq; done.
+      - destruct p eqn:Ep; inversion Hsubperm;
+          rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv];
+          iApply (interp_cap_inv_weakening p a a' Hb He with "HA").
+      - destruct p eqn:Ep; inversion Hsubperm;
+          rewrite !fixpoint_interp1_eq; cbn - [interp_cap_inv];
+          iApply (interp_cap_inv_weakening p a a' Hb He with "HA").
+      - destruct p eqn:Ep; inversion Hsubperm; last contradiction;
+          iApply (interp_subperm_weakening _ _ _ Hsubperm with "IH");
+          rewrite !fixpoint_interp1_eq;
+          iApply (interp_cap_inv_weakening p a a' Hb He with "HA").
+    Qed.
   End Predicates.
 
-  Definition luser_inst {Σ} `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
-    (match p return Env Val (𝑯_Ty p) -> iProp Σ with
-     | ptsreg     => fun ts => MinCaps_ptsreg (env.head (env.tail ts)) (env.head ts)
-     | ptsto      => fun ts => mapsto (env.head (env.tail ts)) (DfracOwn 1) (env.head ts)
-     | safe       => fun ts => interp (env.head ts)
-     | expression => fun ts => interp_expr interp (env.head ts)
-     | dummy      => fun ts => True%I
-     | gprs       => fun ts => interp_gprs interp
-     end) ts.
+  Section MinimalCapsPredicates.
+    Import env.notations.
 
-  Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) :
-    forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
-      is_duplicable p = true ->
-      (luser_inst mG p ts) ⊢ (luser_inst mG p ts ∗ luser_inst mG p ts).
-  Proof.
-    iIntros (p ts hdup) "H".
-    destruct p; inversion hdup;
-      iDestruct "H" as "#H";
-      auto.
-  Qed.
+    Equations(noeqns) luser_inst `{sailRegGS Σ, invGS Σ, mcMemGS Σ}
+             (p : Predicate) (ts : Env Val (𝑯_Ty p)) : iProp Σ :=
+    | ptsreg  | [r; v] => MinCaps_ptsreg r v
+    | ptsto   | [a; v] => mapsto a (DfracOwn 1) v
+    | safe    | [c]    => interp c
+    | expr    | [c]    => interp_expression interp c
+    | gprs    | []     => interp_gprs interp
+    | ih      | []     => IH
+    | wp_loop | []     => interp_loop (sg := SailGS _ _ _).
+
+    Definition lduplicate_inst `{sailRegGS Σ} `{invGS Σ} (mG : mcMemGS Σ) :
+      forall (p : Predicate) (ts : Env Val (𝑯_Ty p)),
+        is_duplicable p = true ->
+        (luser_inst p ts) ⊢ (luser_inst p ts ∗ luser_inst p ts).
+    Proof.
+      destruct p; intros ts Heq; try discriminate Heq;
+        clear Heq; cbn in *; env.destroy ts; auto.
+    Qed.
+
+  End MinimalCapsPredicates.
 
   Include IrisSignatureRules MinCapsBase MinCapsProgram MinCapsSemantics MinCapsSignature MinCapsIrisBase.
 
@@ -479,11 +510,14 @@ Module MinCapsIrisInstanceWithContracts.
   Section Lemmas.
     Context {Σ} `{sg : sailGS Σ}.
 
-    Lemma gen_dummy_sound :
-      ValidLemma lemma_gen_dummy.
+    Lemma safe_to_execute_sound :
+      ValidLemma lemma_safe_to_execute.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      auto.
+      iIntros "(#H & [-> _])".
+      iExists R; iFrame.
+      rewrite ?fixpoint_interp1_eq.
+      iSimpl in "H"; auto.
     Qed.
 
     Lemma open_ptsreg_sound :
@@ -528,44 +562,65 @@ Module MinCapsIrisInstanceWithContracts.
       rewrite fixpoint_interp1_eq; auto.
     Qed.
 
+    Lemma correctPC_subperm_R_sound :
+      ValidLemma lemma_correctPC_subperm_R.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      iIntros "(%Hpc & _)"; iSplit; auto.
+      iPureIntro.
+      unfold Subperm.
+      unfold CorrectPC in Hpc.
+      cbn in *.
+      apply andb_prop in Hpc; destruct Hpc as [_ Hpc].
+      apply orb_prop in Hpc; destruct Hpc as [H|H];
+        destruct p; auto.
+    Qed.
+
+    Lemma subperm_not_E_sound :
+      ValidLemma lemma_subperm_not_E.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      iIntros "(%H & %Hsub & _)".
+      iSplitL; auto.
+      iPureIntro.
+      destruct H as [[-> _]|[-> _]];
+        unfold Subperm in Hsub;
+        unfold Not_is_perm; destruct p'; auto.
+    Qed.
+
     Lemma safe_move_cursor_sound :
       ValidLemma lemma_safe_move_cursor.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      iIntros "#Hsafe".
-      iSplit; [done|].
-      do 2 rewrite fixpoint_interp1_eq.
+      iIntros "(#Hsafe & (% & _))".
+      iSplit; first done.
+      rewrite ?fixpoint_interp1_eq.
       destruct p; auto.
-      simpl.
-      iModIntro.
-      iModIntro.
-      (* by iIntros. *)
-    Admitted.
+      unfold Not_is_perm, MinCapsSignature.is_perm in H.
+      discriminate.
+    Qed.
 
     Lemma safe_sub_perm_sound :
       ValidLemma lemma_safe_sub_perm.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      iIntros "[#Hsafe %Hp]".
+      iIntros "(#Hsafe & [%Hp _] & #H)".
       iSplit; [done|].
-      do 2 rewrite fixpoint_interp1_eq.
-      destruct p; destruct p'; trivial;
-        destruct Hp; try discriminate.
-    Admitted.
+      iApply (interp_subperm_weakening _ _ _ Hp with "H Hsafe").
+    Qed.
 
     Lemma safe_within_range_sound :
       ValidLemma lemma_safe_within_range.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      iIntros "[#Hsafe [_ Hp]]".
+      iIntros "(#Hsafe & [%Hp _] & #IH & [%Hbounds _])".
       iSplit; [done|].
-      iDestruct "Hp" as (H) "_".
-      unfold is_true in H;
-        apply andb_prop in H;
-        destruct H as [Hb He];
+      unfold is_true in Hbounds;
+        apply andb_prop in Hbounds;
+        destruct Hbounds as [Hb He];
         apply Zle_is_le_bool in Hb;
         apply Zle_is_le_bool in He.
-      iApply (safe_sub_range $! (conj Hb He) with "Hsafe").
+      iApply (interp_weakening _ _ (Not_is_perm_prop Hp) Hb He (Subperm_refl p) with "IH Hsafe").
     Qed.
 
   End Lemmas.
@@ -701,7 +756,7 @@ Module MinCapsIrisInstanceWithContracts.
       apply map_Forall_lookup_1 with (i := a) (x := v) in H0; auto.
       simpl in H0. subst.
       iAssumption.
-  Admitted.
+  Qed.
 
   Lemma wM_sound `{sg : sailGS Σ} `{invGS} {Γ es δ} :
     forall a w (p : Val ty.perm) (b e : Val ty.addr),
@@ -795,9 +850,9 @@ Module MinCapsIrisInstanceWithContracts.
   Proof.
     intros Δ []; eauto using
                        open_ptsreg_sound, close_ptsreg_sound,
-      open_gprs_sound, close_gprs_sound, int_safe_sound,
-      safe_move_cursor_sound, safe_sub_perm_sound,
-      safe_within_range_sound, gen_dummy_sound.
+      open_gprs_sound, close_gprs_sound, int_safe_sound, correctPC_subperm_R_sound,
+      subperm_not_E_sound, safe_move_cursor_sound, safe_sub_perm_sound,
+      safe_within_range_sound, safe_to_execute_sound.
   Qed.
 
 End MinCapsIrisInstanceWithContracts.

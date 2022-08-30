@@ -61,6 +61,9 @@ Section FunDeclKit.
                           ] ty.unit
   | next_pc         : Fun [] ty.cap
   | update_pc       : Fun [] ty.unit
+  | update_pc_perm  : Fun ["c" :: ty.cap] ty.cap
+  | is_correct_pc   : Fun ["c" :: ty.cap] ty.bool
+  | is_perm         : Fun ["p" :: ty.perm; "p'" :: ty.perm] ty.bool
   | add_pc          : Fun ["offset" ∷ ty.int] ty.unit
   | read_mem        : Fun ["c"   ∷ ty.cap ] ty.memval
   | write_mem       : Fun ["c"   ∷ ty.cap;
@@ -107,6 +110,7 @@ Section FunDeclKit.
   | exec_ret        : Fun [] ty.bool
   | exec_instr      : Fun ["i" ∷ ty.instr] ty.bool
   | exec            : Fun [] ty.bool
+  | step            : Fun [] ty.unit
   | loop            : Fun [] ty.unit
   .
 
@@ -119,15 +123,17 @@ Section FunDeclKit.
   .
 
   Inductive Lem : PCtx -> Set :=
-  | open_ptsreg                : Lem ["reg" ∷ ty.enum regname]
+  | open_ptsreg                : Lem ["reg" :: ty.enum regname]
   | close_ptsreg (R : RegName) : Lem []
   | open_gprs                  : Lem []
   | close_gprs                 : Lem []
-  | safe_move_cursor           : Lem ["c'" ∷ ty.cap; "c" ∷ ty.cap]
-  | safe_sub_perm              : Lem ["c'" ∷ ty.cap; "c" ∷ ty.cap]
-  | safe_within_range          : Lem ["c'" ∷ ty.cap; "c" ∷ ty.cap]
-  | int_safe                   : Lem ["i" ∷ ty.int]
-  | gen_dummy                  : Lem ["c" ∷ ty.cap]
+  | safe_move_cursor           : Lem ["c'" :: ty.cap; "c" :: ty.cap]
+  | safe_sub_perm              : Lem ["c'" :: ty.cap; "c" :: ty.cap]
+  | safe_within_range          : Lem ["c'" :: ty.cap; "c" :: ty.cap]
+  | int_safe                   : Lem ["i" :: ty.int]
+  | correctPC_subperm_R        : Lem ["c" :: ty.cap]
+  | subperm_not_E              : Lem ["p" :: ty.perm; "p'" :: ty.perm]
+  | safe_to_execute            : Lem ["c" :: ty.cap]
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -187,6 +193,13 @@ Section FunDefKit.
        "cap_cursor" cur)
     s) (at level 10) : exp_scope.
 
+  Definition lemma_correctPC_not_E {Γ} (cap : Stm Γ ty.cap) : Stm Γ ty.unit :=
+    let: "c" := cap in
+    use lemma correctPC_subperm_R [exp_var "c"] ;;
+    let*: ["perm" , "beg" , "end" , "cur"] := (exp_var "c") in
+    (let: "tmp" := exp_val ty.perm R in
+     use lemma subperm_not_E [exp_var "tmp"; exp_var "perm"]).
+
   Definition fun_read_reg : Stm ["rreg" ∷ ty.enum regname] ty.word :=
     use lemma open_gprs ;;
     let: "x" := match: exp_var "rreg" in regname with
@@ -202,7 +215,9 @@ Section FunDefKit.
     let: w := call read_reg (exp_var "creg") in
     match: w with
     | inl i => fail "Err [read_reg_cap]: expect register to hold a capability"
-    | inr c => stm_exp c
+    | inr c =>
+        let*: ["p", "b", "e", "a"] := exp_var "c" in (* force record *)
+        (exp_var "c")
     end.
 
   Definition fun_read_reg_num : Stm ["nreg" ∷ ty.enum regname ] ty.int :=
@@ -234,9 +249,52 @@ Section FunDefKit.
   Definition fun_update_pc : Stm [] ty.unit :=
     let: "opc" := stm_read_register pc in
     let: "npc" := call next_pc in
+    lemma_correctPC_not_E (exp_var "opc") ;;
     use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
     stm_write_register pc (exp_var "npc") ;;
     stm_val ty.unit tt.
+
+  Definition fun_update_pc_perm : Stm ["c" :: ty.cap] ty.cap :=
+    let*: ["p" , "b" , "e" , "a"] := (exp_var "c") in
+    (match: exp_var "p" in permission with
+     | E => let: "p" := exp_val ty.perm R in
+            use lemma safe_to_execute [exp_var "c"] ;;
+            exp_record capability
+                       [ exp_var "p" ;
+                         exp_var "b" ;
+                         exp_var "e" ;
+                         exp_var "a" ]
+     | _ => exp_var "c"
+     end).
+
+  Definition fun_is_correct_pc : Stm ["c" :: ty.cap] ty.bool :=
+    let*: ["perm" , "beg" , "end" , "cur"] := (exp_var "c") in
+    (let: "tmp1" := call is_perm (exp_var "perm") (exp_val ty.perm R) in
+     let: "tmp2" := call is_perm (exp_var "perm") (exp_val ty.perm RW) in
+     if: (exp_var "beg" <= exp_var "cur") && (exp_var "cur" < exp_var "end")
+          && (exp_var "tmp1" || exp_var "tmp2")
+     then stm_val ty.bool true
+     else stm_val ty.bool false).
+
+  Definition fun_is_perm : Stm ["p" :: ty.perm; "p'" :: ty.perm] ty.bool :=
+    match: exp_var "p" in permission with
+    | O  => match: exp_var "p'" in permission with
+            | O => stm_val ty.bool true
+            | _ => stm_val ty.bool false
+            end
+    | R  => match: exp_var "p'" in permission with
+            | R => stm_val ty.bool true
+            | _ => stm_val ty.bool false
+            end
+    | RW => match: exp_var "p'" in permission with
+            | RW => stm_val ty.bool true
+            | _  => stm_val ty.bool false
+            end
+    | E  => match: exp_var "p'" in permission with
+            | E => stm_val ty.bool true
+            | _ => stm_val ty.bool false
+            end
+    end.
 
   Definition fun_add_pc : Stm ["offset" ∷ ty.int] ty.unit :=
     let: "opc" := stm_read_register pc in
@@ -246,6 +304,7 @@ Section FunDefKit.
                                  exp_var "beg";
                                  exp_var "end";
                                  exp_var "cur" + exp_var "offset" ]) in
+     lemma_correctPC_not_E (exp_var "opc") ;;
      use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
      stm_write_register pc (exp_var "npc") ;;
      stm_val ty.unit tt).
@@ -292,7 +351,11 @@ Section FunDefKit.
                                        exp_var "end";
                                        exp_var "cursor" + exp_var "immediate"
                                      ] in
+       let: p :: bool := call write_allowed (exp_var "perm") in
+       stm_assert p (exp_string "Err: [store] no read permission") ;;
        let: w :: ty.word := call read_reg hv in
+       let: "tmp" := exp_val ty.perm RW in
+       use lemma subperm_not_E [exp_var "tmp"; exp_var "perm"] ;;
        use lemma safe_move_cursor [exp_var "c"; exp_var "base_cap"] ;;
        call write_mem c w ;;
        call update_pc ;;
@@ -307,6 +370,10 @@ Section FunDefKit.
                                        exp_var "end";
                                        exp_var "cursor" + exp_var "immediate"
                                      ] in
+       let: p :: bool := call read_allowed (exp_var "perm") in
+       stm_assert p (exp_string "Err: [load] no read permission") ;;                 
+       let: "tmp" := exp_val ty.perm R in
+       use lemma subperm_not_E [exp_var "tmp"; exp_var "perm"] ;;
        use lemma safe_move_cursor [exp_var "c"; exp_var "base_cap"] ;;
        let: n :: ty.memval := call read_mem c in
        call write_reg lv n ;;
@@ -317,16 +384,20 @@ Section FunDefKit.
       let: "base_cap" :: cap  := call read_reg_cap (exp_var "lv") in
       let: "offset" :: ty.int := call read_reg_num (exp_var "hv") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "base_cap") in
-      (let: "c" :: cap := exp_record capability
-                                     [ exp_var "perm";
-                                       exp_var "beg";
-                                       exp_var "end";
-                                       exp_var "cursor" + exp_var "offset"
-                                     ] in
-       use lemma safe_move_cursor [exp_var "c"; exp_var "base_cap"] ;;
-       call write_reg (exp_var "lv") (exp_inr (exp_var "c")) ;;
-       call update_pc ;;
-       stm_val ty.bool true).
+      (match: exp_var "perm" in permission with
+       | E => fail "Err: [lea] not permitted on enter capability"
+       | _ =>
+           let: "c" :: cap := exp_record capability
+                                         [ exp_var "perm";
+                                           exp_var "beg";
+                                           exp_var "end";
+                                           exp_var "cursor" + exp_var "offset"
+                                         ] in
+           use lemma safe_move_cursor [exp_var "c"; exp_var "base_cap"] ;;
+           call write_reg (exp_var "lv") (exp_inr (exp_var "c")) ;;
+           call update_pc ;;
+           stm_val ty.bool true
+       end).
 
     Definition fun_exec_restrict : Stm ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool :=
       let: "c" :: cap  := call read_reg_cap (exp_var "lv") in
@@ -471,11 +542,12 @@ Section FunDefKit.
       | O =>
         stm_val ty.bool true
       | E => match: exp_var "p'" in permission with
-             | E => stm_val ty.bool true
-             | _ => stm_val ty.bool false
+             | O => stm_val ty.bool false
+             | _ => stm_val ty.bool true
              end
       | R => match: exp_var "p'" in permission with
             | O => stm_val ty.bool false
+            | E => stm_val ty.bool false
             | _ =>
               stm_val ty.bool true
             end
@@ -496,20 +568,24 @@ Section FunDefKit.
       let: "new_begin" :: ty.int := call read_reg_num (exp_var "hv1") in
       let: "new_end" :: ty.int := call read_reg_num (exp_var "hv2") in
       let*: ["perm", "begin", "end", "cursor"] := (exp_var "c") in
-      (let: "b" :: ty.bool := call is_within_range (exp_var "new_begin") (exp_var "new_end")
-                                   (exp_var "begin") (exp_var "end") in
-       stm_assert (exp_var "b") (exp_string "Err: [subseg] tried to increase range of authority") ;;
-       let: "c'" :: cap := exp_record capability
-                                      [ exp_var "perm";
-                                        exp_var "new_begin";
-                                        exp_var "new_end";
-                                        exp_var "cursor"
-                                      ] in
-       use lemma gen_dummy [exp_var "c'"] ;;
-       use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
-       call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
-       call update_pc ;;
-       stm_val ty.bool true).
+      (match: exp_var "perm" in permission with
+       | E => fail "Err: [subseg] not permitted on enter capability"
+       | _ =>
+           let: "b" :: ty.bool :=
+             call is_within_range (exp_var "new_begin") (exp_var "new_end")
+                                  (exp_var "begin")     (exp_var "end") in
+           stm_assert (exp_var "b") (exp_string "Err: [subseg] tried to increase range of authority") ;;
+           let: "c'" :: cap := exp_record capability
+                                          [ exp_var "perm";
+                                            exp_var "new_begin";
+                                            exp_var "new_end";
+                                            exp_var "cursor"
+                                          ] in
+           use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
+           call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+           call update_pc ;;
+           stm_val ty.bool true
+       end).
 
     Definition fun_exec_subsegi : Stm ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int]
                                       ty.bool :=
@@ -517,20 +593,24 @@ Section FunDefKit.
       let: "new_begin" :: ty.int := call read_reg_num (exp_var "hv") in
       let: "new_end" :: ty.int := exp_var "immediate" in
       let*: ["perm", "begin", "end", "cursor"] := (exp_var "c") in
-      (let: "b" :: ty.bool := call is_within_range (exp_var "new_begin") (exp_var "new_end")
-                                   (exp_var "begin") (exp_var "end") in
-       stm_assert (exp_var "b") (exp_string "Err: [subsegi] tried to increase range of authority") ;;
-       let: "c'" :: cap := exp_record capability
-                                      [ exp_var "perm";
-                                        exp_var "new_begin";
-                                        exp_var "new_end";
-                                        exp_var "cursor"
-                                      ] in
-       use lemma gen_dummy [exp_var "c'"] ;;
-       use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
-       call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
-       call update_pc ;;
-       stm_val ty.bool true).
+      (match: exp_var "perm" in permission with
+       | E => fail "Err: [subsegi] not permitted on enter capability"
+       | _ =>
+           let: "b" :: ty.bool :=
+             call is_within_range (exp_var "new_begin") (exp_var "new_end")
+                                  (exp_var "begin")     (exp_var "end") in
+           stm_assert (exp_var "b") (exp_string "Err: [subsegi] tried to increase range of authority") ;;
+           let: "c'" :: cap := exp_record capability
+                                          [ exp_var "perm";
+                                            exp_var "new_begin";
+                                            exp_var "new_end";
+                                            exp_var "cursor"
+                                          ] in
+           use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
+           call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
+           call update_pc ;;
+           stm_val ty.bool true
+      end).
 
     Definition fun_exec_isptr : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: w :: ty.word := call read_reg (exp_var "lv2") in
@@ -592,12 +672,14 @@ Section FunDefKit.
 
     Definition fun_exec_jr : Stm ["lv" ∷ ty.lv] ty.bool :=
       let: "c" :: ty.cap := call read_reg_cap (exp_var "lv") in
+      let: "c" := call update_pc_perm (exp_var "c") in
       stm_write_register pc (exp_var "c") ;;
       stm_val ty.bool true.
 
     Definition fun_exec_jalr : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
+      lemma_correctPC_not_E (exp_var "opc") ;;
       use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
       call write_reg (exp_var "lv1") (exp_inr (exp_var "npc")) ;;
       call exec_jr (exp_var "lv2").
@@ -609,6 +691,7 @@ Section FunDefKit.
     Definition fun_exec_jal : Stm [lv ∷ ty.lv; offset ∷ ty.int] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
+      lemma_correctPC_not_E (exp_var "opc") ;;
       use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
       call write_reg lv (exp_inr (exp_var "npc")) ;;
       call exec_j offset.
@@ -666,35 +749,40 @@ Section FunDefKit.
 
     Definition fun_read_mem : Stm ["c" ∷ ty.cap] ty.memval :=
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
-      (let: p :: bool := call read_allowed (exp_var "perm") in
-       stm_assert p (exp_string "Err: [read_mem] no read permission") ;;
-       let: q :: bool := call within_bounds c in
+      (let: q :: bool := call within_bounds c in
        stm_assert q (exp_string "Err: [read_mem] out of bounds") ;;
        foreign rM (exp_var "cursor")).
 
     Definition fun_write_mem : Stm ["c" ∷ ty.cap; "v" ∷ ty.memval] ty.unit :=
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
-      (let: p :: bool := call write_allowed (exp_var "perm") in
-       stm_assert p (exp_string "Err: [write_mem] no read permission") ;;
-       let: q :: bool := call within_bounds c in
+      (let: q :: bool := call within_bounds c in
        stm_assert q (exp_string "Err: [write_mem] out of bounds") ;;
        foreign wM (exp_var "cursor") (exp_var "v")).
 
     Definition fun_exec : Stm [] ty.bool :=
       let: "c" := stm_read_register pc in
-      let: n :: ty.memval := call read_mem c in
-      match: n with
-      | inl n => 
-        let: i :: ty.instr := foreign dI n in
-        call exec_instr i
-      | inr c => fail "Err [exec]: instructions cannot be capabilities"
-      end.
+      (let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
+       use lemma correctPC_subperm_R [exp_var "c"] ;;
+       let: n :: ty.memval := call read_mem c in
+       match: n with
+       | inl n => 
+           let: i :: ty.instr := foreign dI n in
+           call exec_instr i
+       | inr c => fail "Err [exec]: instructions cannot be capabilities"
+       end).
+
+    Definition fun_step : Stm [] ty.unit :=
+      let: "tmp1" := stm_read_register pc in
+      let: "tmp2" := call is_correct_pc (exp_var "tmp1") in
+      if: exp_var "tmp2"
+      then
+        call exec ;;
+        stm_val ty.unit tt
+      else
+        fail "Err [step]: incorrect PC".
 
     Definition fun_loop : Stm [] ty.unit :=
-      let: "r" := call exec in
-      if: exp_var "r"
-      then call loop
-      else stm_val ty.unit tt.
+      call step ;; call loop.
 
   End ExecStore.
 
@@ -706,6 +794,9 @@ Section FunDefKit.
     | write_reg       => fun_write_reg
     | next_pc         => fun_next_pc
     | update_pc       => fun_update_pc
+    | update_pc_perm  => fun_update_pc_perm
+    | is_correct_pc   => fun_is_correct_pc
+    | is_perm         => fun_is_perm
     | add_pc          => fun_add_pc
     | read_mem        => fun_read_mem
     | write_mem       => fun_write_mem
@@ -747,6 +838,7 @@ Section FunDefKit.
     | exec_ret        => fun_exec_ret
     | exec_instr      => fun_exec_instr
     | exec            => fun_exec
+    | step            => fun_step
     | loop            => fun_loop
     end.
 
