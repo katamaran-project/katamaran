@@ -38,6 +38,7 @@ From Katamaran Require Import
 
 Import ctx.notations.
 Import env.notations.
+Import SigTNotations.
 
 Set Implicit Arguments.
 
@@ -227,7 +228,7 @@ Module CInterpreter (Import B : Base)
       | nil      => exec s1
       | cons h t =>
         pushspops
-          (env.snoc (env.snoc env.nil (xh∷σ) h) (xt∷ty.list σ) t)
+          [kv (xh∷σ; h); (xt∷ty.list σ; t)]
           (exec s2)
       end
     | stm_match_sum e xinl s1 xinr s2 =>
@@ -241,7 +242,7 @@ Module CInterpreter (Import B : Base)
       match v with
       | (vl,vr) =>
         pushspops
-          (env.snoc (env.snoc env.nil (xl∷_) vl) (xr∷_) vr)
+          [nenv vl; vr]
           (exec s)
       end
     | stm_match_tuple e p rhs =>
@@ -259,6 +260,12 @@ Module CInterpreter (Import B : Base)
     | stm_match_bvec n e rhs =>
       v <- eval_exp e ;;
       exec (rhs v)
+    | stm_match_bvec_split m n e xl xr rhs =>
+      v <- eval_exp e ;;
+      let (vl,vr) := bv.appView m n v in
+      pushspops
+        [kv (xl∷ty.bvec m; vl); (xr∷ty.bvec n; vr)]
+        (exec rhs)
     | stm_bind s k =>
       v <- exec s ;;
       exec (k v)

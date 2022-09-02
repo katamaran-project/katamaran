@@ -88,6 +88,9 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
       (p : RecordPat (recordf_ty R) Δ) (rhs : Stm (Γ ▻▻ Δ) τ)
   | stm_match_bvec
       {n} (e : Exp Γ (ty.bvec n)) (rhs : bv n -> Stm Γ τ)
+  | stm_match_bvec_split
+      {m n} (e : Exp Γ (ty.bvec (m + n))) (xl xr : PVar)
+      (rhs : Stm (Γ ▻ xl ∷ ty.bvec m ▻ xr ∷ ty.bvec n) τ)
   | stm_read_register (reg : 𝑹𝑬𝑮 τ)
   | stm_write_register (reg : 𝑹𝑬𝑮 τ) (e : Exp Γ τ)
   | stm_bind   {σ : Ty} (s : Stm Γ σ) (k : Val σ -> Stm Γ τ)
@@ -116,6 +119,7 @@ Module Type StatementsOn (Import B : Base) (Import F : FunDeclKit B).
   Arguments stm_match_union {Γ τ} U e {alt__ctx} alt__pat alt__rhs.
   Arguments stm_match_record {Γ%ctx τ} R {Δ%ctx} e%exp p%pat rhs%exp.
   Arguments stm_match_bvec {Γ τ} n%nat_scope e%exp rhs%exp.
+  Arguments stm_match_bvec_split {Γ τ} (m n)%nat_scope e%exp xl xr rhs%exp.
   Arguments stm_read_register {Γ τ} reg.
   Arguments stm_write_register {Γ τ} reg e%exp.
   Bind Scope exp_scope with Stm.

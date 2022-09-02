@@ -375,6 +375,20 @@ Module bv.
         destruct (proofirr wfxs wfys). reflexivity.
     Qed.
 
+    Lemma app_inj [m n] (x1 y1 : bv m) (x2 y2 : bv n) :
+      app x1 x2 = app y1 y2 -> x1 = y1 /\ x2 = y2.
+    Proof.
+      induction x1 using bv_rect.
+      - destruct (nilView y1). rewrite ?app_nil. intuition.
+      - destruct (consView y1) as [c y1]. rewrite ?app_cons.
+        intros [H1 H2]%cons_inj. specialize (IHx1 y1 H2). intuition.
+    Qed.
+
+    Lemma appView_app [m n] (x : bv m) (y : bv n) :
+      appView m n (app x y) = isapp x y.
+    Proof.
+    Abort.
+
   End ListLike.
 
   Section Finite.

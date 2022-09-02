@@ -1145,6 +1145,19 @@ Module Type SymbolicExecOn
           | None   => demonic_match_bvec' t k
           end.
 
+      Definition demonic_match_bvec_split {AT m n} (x y : LVar) {Γ1 Γ2} :
+        ⊢ STerm (ty.bvec (m + n)) -> □(STerm (ty.bvec m) -> STerm (ty.bvec n) -> SHeapSpecM Γ1 Γ2 AT) -> SHeapSpecM Γ1 Γ2 AT :=
+        fun w0 t k =>
+          ⟨ ω1 ⟩ t1 <- demonic (Some x) (ty.bvec m) ;;
+          ⟨ ω2 ⟩ t2 <- demonic (Some y) (ty.bvec n) ;;
+          let ω12 := ω1 ∘ ω2 in
+          let t   := persist__term t ω12 in
+          let t1  := persist__term t1 ω2 in
+          ⟨ ω3 ⟩ _  <- assume_formula (formula_eq (term_binop (@bop.bvapp _ m n) t1 t2) t) ;;
+          let t1 := persist__term t1 ω3 in
+          let t2 := persist__term t2 ω3 in
+          k _ (ω12 ∘ ω3) t1 t2.
+
     End PatternMatching.
 
     Section State.
@@ -1601,6 +1614,10 @@ Module Type SymbolicExecOn
             | stm_match_bvec n e rhs =>
                 ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
                 demonic_match_bvec t (fun bs _ _ => exec_aux (rhs bs))
+            | stm_match_bvec_split m n e xl xr rhs =>
+                ⟨ ω01 ⟩ t <- eval_exp e (w:=w0) ;;
+                demonic_match_bvec_split (PVartoLVar xl) (PVartoLVar xr) t
+                  (fun _ _ t1 t2 => pushspops [env].[xl∷_ ↦ t1].[xr∷_ ↦ t2] (exec_aux rhs))
             | stm_read_register reg =>
                 ⟨ ω01 ⟩ t <- angelic None _ ;;
                 ⟨ ω12 ⟩ _ <- T (consume (asn.chunk (chunk_ptsreg reg t))) ;;

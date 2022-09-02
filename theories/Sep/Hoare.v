@@ -195,6 +195,15 @@ Module ProgramLogic.
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ rhs (eval e δ) ; δ ⦃ Q ⦄ ->
         ⦃ P ⦄ stm_match_bvec n e rhs ; δ ⦃ Q ⦄
+    | rule_stm_match_bvec_split
+        {m n : nat} (e : Exp Γ (ty.bvec (m + n))) {xl xr : PVar}
+        (rhs : Stm (Γ ▻ xl ∷ ty.bvec m ▻ xr ∷ ty.bvec n) τ)
+        (P : L) (Q : Val τ -> CStore Γ -> L) :
+        (forall (vl : Val (ty.bvec m)) (vr : Val (ty.bvec n)),
+           ⦃ P ∧ !! (eval e δ = bv.app vl vr) ⦄
+             rhs ; env.snoc (env.snoc δ (xl∷ty.bvec m) vl) (xr∷ty.bvec n) vr
+           ⦃ fun v δ' => Q v (env.tail (env.tail δ')) ⦄) ->
+        ⦃ P ⦄ stm_match_bvec_split m n e xl xr rhs ; δ ⦃ Q ⦄
     | rule_stm_read_register
         (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
         ⦃ lptsreg r v ⦄

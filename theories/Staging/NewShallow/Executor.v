@@ -47,6 +47,7 @@ From stdpp Require base list option.
 Import ctx.notations.
 Import env.notations.
 Import ListNotations.
+Import SigTNotations.
 
 Set Implicit Arguments.
 
@@ -860,6 +861,39 @@ Module Type ShallowExecOn
         (* apply finite.elem_of_enum. *)
       Admitted.
 
+      Definition demonic_match_bvec_split {A m n} {Γ1 Γ2} :
+        Val (ty.bvec (m + n)) ->
+        (bv m -> bv n -> CHeapSpecM Γ1 Γ2 A) -> CHeapSpecM Γ1 Γ2 A :=
+        fun v POST =>
+          v1 <- demonic (ty.bvec m) ;;
+          v2 <- demonic (ty.bvec n) ;;
+          assume_formula (bv.app v1 v2 = v) ;;
+          POST v1 v2.
+      #[global] Arguments demonic_match_bvec_split : simpl never.
+
+      Lemma wp_demonic_match_bvec_split {A m n Γ1 Γ2}
+        (v : Val (ty.bvec (m + n))) (k : bv m -> bv n -> CHeapSpecM Γ1 Γ2 A) :
+        forall POST δ,
+          demonic_match_bvec_split v k POST δ ⊣⊢
+          match bv.appView m n v with
+          | bv.isapp xs ys => k xs ys POST δ
+          end.
+      Proof.
+        intros POST δ.
+        cbv [demonic_match_bvec_split bind demonic bind_right
+           assume_formula lift_purem CPureSpecM.assume_formula].
+        destruct (bv.appView m n v) as [v1 v2].
+        split.
+        - apply (lall_left v1).
+          apply (lall_left v2).
+          apply lentails_apply.
+          now apply lprop_right.
+        - apply lall_right; intros v1'.
+          apply lall_right; intros v2'.
+          apply lprop_intro_impl; intros [H1 H2]%bv.app_inj.
+          now subst.
+      Qed.
+
     End PatternMatching.
 
     Section State.
@@ -1116,6 +1150,14 @@ Module Type ShallowExecOn
               demonic_match_bvec
                 v
                 (fun u => exec_aux (rhs u))
+            | stm_match_bvec_split m n e xl xr rhs =>
+              v <- eval_exp e ;;
+              demonic_match_bvec_split
+                v
+                (fun vl vr =>
+                   pushspops
+                     [kv (xl∷ty.bvec m; vl); (xr∷ty.bvec n; vr)]
+                     (exec_aux rhs))
             | stm_bind s k =>
               v <- exec_aux s ;;
               exec_aux (k v)

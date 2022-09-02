@@ -43,6 +43,7 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
 
   Import ctx.notations.
   Import env.notations.
+  Import SigTNotations.
 
   Inductive Step {Γ : PCtx} {τ : Ty} (γ : RegStore) (μ : Memory) (δ : CStore Γ) :
     forall (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s1 s2 : Stm Γ τ), Prop :=
@@ -190,6 +191,17 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ , stm_match_bvec n e rhs ⟩ --->
       ⟨ γ , μ , δ , rhs (eval e δ) ⟩
 
+  | step_stm_match_bvec_split
+      {m n} (e : Exp Γ (ty.bvec (m + n))) (xl xr : PVar)
+      (rhs : Stm (Γ ▻ xl ∷ ty.bvec m ▻ xr ∷ ty.bvec n) τ) :
+      ⟨ γ , μ , δ , stm_match_bvec_split m n e xl xr rhs ⟩ --->
+      ⟨ γ , μ , δ ,
+        let v       := eval e δ in
+        let (vl,vr) := bv.appView m n v in
+        let δΔ      := [kv (xl∷ty.bvec m; vl); (xr∷ty.bvec n; vr)] in
+        stm_block δΔ rhs
+      ⟩
+
   | step_stm_read_register
       (r : 𝑹𝑬𝑮 τ) :
       ⟨ γ, μ , δ, stm_read_register r ⟩ ---> ⟨ γ, μ , δ, stm_val τ (read_register γ r) ⟩
@@ -246,25 +258,26 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
         | stm_bind ?s' _       => microsail_stm_is_final s'
         end
       | lazymatch head s with
-        | @stm_call           => idtac
-        | @stm_foreign        => idtac
-        | @stm_lemmak         => idtac
-        | @stm_assertk        => idtac
-        | @stm_fail           => idtac
-        | @stm_exp            => idtac
-        | @stm_if             => idtac
-        | @stm_val            => idtac
-        | @stm_match_sum      => idtac
-        | @stm_match_list     => idtac
-        | @stm_match_prod     => idtac
-        | @stm_match_enum     => idtac
-        | @stm_match_tuple    => idtac
-        | @stm_match_union    => idtac
-        | @stm_match_record   => idtac
-        | @stm_match_bvec     => idtac
-        | @stm_read_register  => idtac
-        | @stm_write_register => idtac
-        | @stm_debugk         => idtac
+        | @stm_call             => idtac
+        | @stm_foreign          => idtac
+        | @stm_lemmak           => idtac
+        | @stm_assertk          => idtac
+        | @stm_fail             => idtac
+        | @stm_exp              => idtac
+        | @stm_if               => idtac
+        | @stm_val              => idtac
+        | @stm_match_sum        => idtac
+        | @stm_match_list       => idtac
+        | @stm_match_prod       => idtac
+        | @stm_match_enum       => idtac
+        | @stm_match_tuple      => idtac
+        | @stm_match_union      => idtac
+        | @stm_match_record     => idtac
+        | @stm_match_bvec       => idtac
+        | @stm_match_bvec_split => idtac
+        | @stm_read_register    => idtac
+        | @stm_write_register   => idtac
+        | @stm_debugk           => idtac
         end
       ].
 

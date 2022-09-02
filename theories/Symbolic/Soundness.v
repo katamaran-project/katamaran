@@ -1348,6 +1348,29 @@ Module Soundness
       - apply refine_demonic_match_bvec'; auto.
     Qed.
 
+    Lemma refine_demonic_match_bvec_split {AT A} `{Refine AT A} {m n : nat} {xl xr : LVar} {Γ1 Γ2 : PCtx}
+      {w : World} (ι : Valuation w) (Hpc : instpc (wco w) ι) :
+      ℛ ι (@SHeapSpecM.demonic_match_bvec_split AT m n xl xr Γ1 Γ2 w) (@CHeapSpecM.demonic_match_bvec_split A m n Γ1 Γ2).
+    Proof.
+      intros t v ->.
+      intros ks kc Hk.
+      unfold SHeapSpecM.demonic_match_bvec_split, CHeapSpecM.demonic_match_bvec_split.
+      apply refine_bind.
+      apply refine_demonic; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros ts1 vs1 ->.
+      apply refine_bind.
+      apply refine_demonic; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros ts2 vs2 ->.
+      apply refine_bind.
+      apply refine_assume_formula; cbn; wsimpl; auto.
+      now rewrite <- ?inst_persist, (persist_trans (A := STerm _)).
+      intros w3 ω23 ι3 -> Hpc3.
+      intros _ _ _.
+      apply Hk; wsimpl; hnf; rewrite <- ?inst_persist; auto.
+    Qed.
+
   End PatternMatching.
 
   Section State.
@@ -2208,6 +2231,16 @@ Module Soundness
       intros v1 v2 ->.
       intros w2 ω12 ι2 -> Hpc2.
       auto.
+    - apply refine_bind; auto.
+      intros POST__s POST__c HPOST.
+      apply refine_eval_exp; auto.
+      intros w1 ω01 ι1 -> Hpc1.
+      intros t12 v12 Htv12.
+      apply refine_demonic_match_bvec_split; auto.
+      intros w2 ω12 ι2 -> Hpc2.
+      intros t1 v1 ->.
+      intros t2 v2 ->.
+      apply refine_pushspops; auto.
     - apply refine_bind; auto.
       apply refine_angelic; auto.
       intros w1 ω01 ι1 -> Hpc1 t v Htv. hnf in Htv; subst.

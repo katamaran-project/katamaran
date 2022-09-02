@@ -878,6 +878,35 @@ Section Soundness.
     by iApply "triprhs".
   Qed.
 
+  Lemma iris_rule_stm_match_bvec_split {Γ} (δ : CStore Γ)
+        {m n : nat} (e : Exp Γ (ty.bvec (m + n))) {τ : Ty}
+        (xl xr : PVar) (rhs : Stm (Γ ▻ xl∷ty.bvec m ▻ xr∷ty.bvec n) τ)
+        (P : iProp Σ) (Q : Val τ -> CStore Γ -> iProp Σ) :
+    ⊢ ((∀ vl vr,
+           semTriple (env.snoc (env.snoc δ (xl∷ty.bvec m) vl) (xr∷ty.bvec n) vr)
+             (P ∧ bi_pure (eval e δ = bv.app vl vr)) rhs (fun v δ' => Q v (env.tail (env.tail δ')))) -∗
+          semTriple δ P (stm_match_bvec_split m n e xl xr rhs) Q)%I.
+  Proof.
+    iIntros "triprhs P".
+    rewrite wp_unfold. cbn.
+    iIntros (σ _ ks1 ks nt) "Hregs".
+    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+    iModIntro. iSplitR; [trivial|].
+    iIntros (e2 σ' efs) "%".
+    unfold language.prim_step in H; cbn in H.
+    dependent elimination H.
+    dependent elimination s. cbn.
+    remember (eval e12 δ1) as scrutinee.
+    destruct (bv.appView m0 n1 scrutinee) as [v1 v2].
+    iModIntro. iModIntro. iModIntro.
+    iMod "Hclose" as "_".
+    iModIntro. iFrame.
+    iSplitL; [|trivial].
+    iApply (wp_compat_block (env.snoc (env.snoc env.nil (xl1∷ty.bvec m0) v1) (xr1∷ty.bvec n1) v2)).
+    iApply ("triprhs" $! v1 v2).
+    by iFrame.
+  Qed.
+
   Lemma iris_rule_stm_read_register {Γ} (δ : CStore Γ)
         {σ : Ty} (r : 𝑹𝑬𝑮 σ) (v : Val σ) :
         ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v))%I.
@@ -1456,7 +1485,7 @@ Module IrisInstanceWithContracts
           semTriple δ PRE s POST)%I.
   Proof.
     iIntros (PRE POST extSem lemSem triple) "#vcenv".
-    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
+    iInduction triple as [x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x|x] "trips".
     - by iApply iris_rule_consequence.
     - by iApply iris_rule_frame.
     - by iApply iris_rule_pull.
@@ -1479,6 +1508,7 @@ Module IrisInstanceWithContracts
     - by iApply iris_rule_stm_match_union.
     - by iApply iris_rule_stm_match_record.
     - by iApply iris_rule_stm_match_bvec.
+    - by iApply iris_rule_stm_match_bvec_split.
     - by iApply iris_rule_stm_read_register.
     - by iApply iris_rule_stm_write_register.
     - by iApply iris_rule_stm_assign_backwards.

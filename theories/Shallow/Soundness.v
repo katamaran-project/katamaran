@@ -236,6 +236,8 @@ Module Type Soundness
           apply IHs; auto.
         - rewrite ?wp_demonic_match_bvec.
           apply H; auto.
+        - rewrite ?wp_demonic_match_bvec_split.
+          destruct bv.appView. apply IHs; auto.
         - intros [v Hwp]; exists v; revert Hwp.
           apply consume_chunk_monotonic. auto.
         - intros [v Hwp]; exists v; revert Hwp.
@@ -671,6 +673,14 @@ Module Type Soundness
       - (* stm_match_bvec *)
         rewrite wp_demonic_match_bvec in HYP.
         now apply rule_stm_match_bvec, H.
+
+      - (* stm_match_bvec_split *)
+        rewrite wp_demonic_match_bvec_split in HYP.
+        apply rule_stm_match_bvec_split. cbn; intros.
+        apply rule_pull; intro Heval. apply IHs.
+        remember (eval e δ1). destruct bv.appView.
+        apply bv.app_inj in Heval.
+        now destruct Heval; subst.
 
       - (* stm_read_register *)
         destruct HYP as [v HYP].
