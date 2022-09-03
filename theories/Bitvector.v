@@ -338,6 +338,14 @@ Module bv.
     | isapp (xs : bv m) (ys : bv n) : AppView _ _ (app xs ys).
 
     Import EqNotations.
+
+    Definition cvapp {m n} {x : bv (S m)} (y : bv n) :
+      ConsView x -> ConsView (app x y) :=
+      fun (cv : ConsView x) =>
+        match cv with
+          cvcons b x0 => rew <- [ConsView] (app_cons b x0 y) in cvcons b (app x0 y)
+        end.
+
     Definition avcons {m n} b {xs} (axs : AppView m n xs) :
       AppView (S m) n (cons b xs) :=
       match axs with
@@ -384,11 +392,46 @@ Module bv.
         intros [H1 H2]%cons_inj. specialize (IHx1 y1 H2). intuition.
     Qed.
 
+    Lemma consView_cons {m} b (x : bv m)  :
+      consView (cons b x) = cvcons b x.
+    Proof.
+      destruct x as [[|x0] p]; now destruct b.
+    Qed.
+
+    Lemma consView_app {m n} (x : bv (S m)) (y : bv n) :
+      consView (app x y) = cvapp y (consView x).
+    Proof.
+      unfold cvapp.
+      destruct (consView x).
+      rewrite <-(f_equal_dep _ consView (eq_sym (app_cons b xs y))).
+      now rewrite consView_cons.
+    Qed.
+
+    Lemma match_rew {m : nat} {x y : bv (S m)} {D : forall (x : bv (S m)), Set}(eq : y = x) {f : forall (b : bool) (x : bv m), D (cons b x)} (v : ConsView x) :
+      match rew <- eq in v in ConsView b0 return D b0 with
+      | cvcons b0 xs0 => f b0 xs0
+      end =
+        rew <- eq in match v in ConsView b0 return D b0 with
+        | cvcons b0 xs0 => f b0 xs0
+        end.
+    Proof.
+       now subst.
+    Qed.
+
     Lemma appView_app [m n] (x : bv m) (y : bv n) :
       appView m n (app x y) = isapp x y.
     Proof.
-    Abort.
-
+      induction m.
+      - now destruct (nilView x).
+      - cbn.
+        rewrite consView_app.
+        destruct (consView x).
+        cbn.
+        rewrite match_rew .
+        rewrite IHm.
+        cbn.
+        now rewrite rew_opp_l.
+    Qed.
   End ListLike.
 
   Section Finite.
