@@ -81,9 +81,7 @@ Section FunDeclKit.
   | is_within_range : Fun ["b'" ∷ ty.addr; "e'" ∷ ty.addr;
                            "b" ∷ ty.addr; "e" ∷ ty.addr] ty.bool
   | abs             : Fun ["i" ∷ ty.int] ty.int
-  | exec_jr         : Fun ["lv" ∷ ty.lv] ty.bool
   | exec_jalr       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv ] ty.bool
-  | exec_j          : Fun ["offset" ∷ ty.int] ty.bool
   | exec_jal        : Fun ["lv" ∷ ty.lv; "offset" ∷ ty.int] ty.bool
   | exec_bnez       : Fun ["lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
   | exec_mv         : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv ] ty.bool
@@ -203,7 +201,9 @@ Section FunDefKit.
   Definition fun_read_reg : Stm ["rreg" ∷ ty.enum regname] ty.word :=
     use lemma open_gprs ;;
     let: "x" := match: exp_var "rreg" in regname with
-                | R0 => stm_read_register reg0
+                | R0 =>
+                    use lemma int_safe [exp_val ty.int 0%Z] ;;
+                    exp_inl (exp_val ty.int 0%Z)
                 | R1 => stm_read_register reg1
                 | R2 => stm_read_register reg2
                 | R3 => stm_read_register reg3
@@ -230,10 +230,10 @@ Section FunDefKit.
   Definition fun_write_reg : Stm ["wreg" ∷ ty.enum regname; "w" ∷ ty.word] ty.unit :=
     use lemma open_gprs ;;
     match: exp_var "wreg" in regname with
-    | R0 => stm_write_register reg0 (exp_var "w")
-    | R1 => stm_write_register reg1 (exp_var "w")
-    | R2 => stm_write_register reg2 (exp_var "w")
-    | R3 => stm_write_register reg3 (exp_var "w")
+    | R0 => stm_val ty.unit tt
+    | R1 => stm_write_register reg1 (exp_var "w") ;; stm_val ty.unit tt
+    | R2 => stm_write_register reg2 (exp_var "w") ;; stm_val ty.unit tt
+    | R3 => stm_write_register reg3 (exp_var "w") ;; stm_val ty.unit tt
     end ;;
     use lemma close_gprs.
 
@@ -670,22 +670,15 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_jr : Stm ["lv" ∷ ty.lv] ty.bool :=
-      let: "c" :: ty.cap := call read_reg_cap (exp_var "lv") in
-      let: "c" := call update_pc_perm (exp_var "c") in
-      stm_write_register pc (exp_var "c") ;;
-      stm_val ty.bool true.
-
     Definition fun_exec_jalr : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
       lemma_correctPC_not_E (exp_var "opc") ;;
       use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
       call write_reg (exp_var "lv1") (exp_inr (exp_var "npc")) ;;
-      call exec_jr (exp_var "lv2").
-
-    Definition fun_exec_j : Stm [offset ∷ ty.int] ty.bool :=
-      call add_pc (exp_binop bop.times offset (exp_int 2)) ;;
+      let: "c" :: ty.cap := call read_reg_cap (exp_var "lv2") in
+      let: "c" := call update_pc_perm (exp_var "c") in
+      stm_write_register pc (exp_var "c") ;;
       stm_val ty.bool true.
 
     Definition fun_exec_jal : Stm [lv ∷ ty.lv; offset ∷ ty.int] ty.bool :=
@@ -694,7 +687,8 @@ Section FunDefKit.
       lemma_correctPC_not_E (exp_var "opc") ;;
       use lemma safe_move_cursor [exp_var "npc"; exp_var "opc"] ;;
       call write_reg lv (exp_inr (exp_var "npc")) ;;
-      call exec_j offset.
+      call add_pc (exp_binop bop.times offset (exp_int 2)) ;;
+      stm_val ty.bool true.
 
     Definition fun_exec_bnez : Stm ["lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool :=
       let: "c" :: ty.int := call read_reg_num (exp_var "lv") in
@@ -707,9 +701,7 @@ Section FunDefKit.
         instruction (exp_var i)
         (fun K =>
            match K with
-           | kjr        => MkAlt (pat_var lv) (call exec_jr lv)
            | kjalr      => MkAlt (pat_pair "lv1" "lv2") (call exec_jalr (exp_var "lv1") (exp_var "lv2"))
-           | kj         => MkAlt (pat_var offset) (call exec_j offset)
            | kjal       => MkAlt (pat_pair lv offset) (call exec_jal lv offset)
            | kbnez      => MkAlt (pat_pair lv immediate) (call exec_bnez lv immediate)
            | kmv        => MkAlt (pat_pair lv hv) (call exec_mv lv hv)
@@ -809,9 +801,7 @@ Section FunDefKit.
     | is_sub_perm     => fun_is_sub_perm
     | is_within_range => fun_is_within_range
     | abs             => fun_abs
-    | exec_jr         => fun_exec_jr
     | exec_jalr       => fun_exec_jalr
-    | exec_j          => fun_exec_j
     | exec_jal        => fun_exec_jal
     | exec_bnez       => fun_exec_bnez
     | exec_mv         => fun_exec_mv

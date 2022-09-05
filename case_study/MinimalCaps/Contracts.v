@@ -517,22 +517,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_jr(lv : lv) *)
-  Definition sep_contract_exec_jr : SepContractFun exec_jr :=
-    mach_inv_contract.
-
-  (*
-      @pre mach_inv;
-      @post mach_inv;
       bool exec_jalr(lv1 : lv, lv2 : lv) *)
   Definition sep_contract_exec_jalr : SepContractFun exec_jalr :=
-    mach_inv_contract.
-
-  (*
-      @pre mach_inv;
-      @post mach_inv;
-      bool exec_j(offset : Z) *)
-  Definition sep_contract_exec_j : SepContractFun exec_j :=
     mach_inv_contract.
 
   (*
@@ -814,9 +800,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | is_sub_perm            => Some sep_contract_is_sub_perm
       | is_within_range        => Some sep_contract_is_within_range
       | abs                    => Some sep_contract_abs
-      | exec_jr                => Some sep_contract_exec_jr
       | exec_jalr              => Some sep_contract_exec_jalr
-      | exec_j                 => Some sep_contract_exec_j
       | exec_jal               => Some sep_contract_exec_jal
       | exec_bnez              => Some sep_contract_exec_bnez
       | exec_mv                => Some sep_contract_exec_mv
@@ -1317,13 +1301,7 @@ Module MinCapsValidContracts.
   Lemma valid_contract_abs : ValidContract abs.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_jr : ValidContract exec_jr.
-  Proof. reflexivity. Qed.
-
   Lemma valid_contract_exec_jalr : ValidContract exec_jalr.
-  Proof. reflexivity. Qed.
-
-  Lemma valid_contract_exec_j : ValidContract exec_j.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_jal : ValidContract exec_jal.
@@ -1456,9 +1434,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_is_sub_perm).
     - apply (valid_contract _ H valid_contract_is_within_range).
     - apply (valid_contract _ H valid_contract_abs).
-    - apply (valid_contract _ H valid_contract_exec_jr).
     - apply (valid_contract _ H valid_contract_exec_jalr).
-    - apply (valid_contract _ H valid_contract_exec_j).
     - apply (valid_contract _ H valid_contract_exec_jal).
     - apply (valid_contract _ H valid_contract_exec_bnez).
     - apply (valid_contract _ H valid_contract_exec_mv).
@@ -1524,9 +1500,7 @@ Section Statistics.
       existT _ (existT _ is_sub_perm);
       existT _ (existT _ is_within_range);
       existT _ (existT _ abs);
-      existT _ (existT _ exec_jr);
       existT _ (existT _ exec_jalr);
-      existT _ (existT _ exec_j);
       existT _ (existT _ exec_jal);
       existT _ (existT _ exec_bnez);
       existT _ (existT _ exec_mv);

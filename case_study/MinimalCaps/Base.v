@@ -47,9 +47,7 @@ Definition HV : Set := RegName.
 Definition RV : Set := LV + Z.
 
 Inductive Instruction : Set :=
-| jr        (lv : LV)
 | jalr      (lv1 : LV) (lv2 : LV)
-| j         (offset : Z)
 | jal       (lv : LV) (offset : Z)
 | bnez      (lv : LV) (immediate : Z)
 | mv        (lv : LV) (hv : HV)
@@ -76,9 +74,7 @@ Inductive Instruction : Set :=
 | ret.
 
 Inductive InstructionConstructor : Set :=
-| kjr
 | kjalr
-| kj
 | kjal
 | kbnez
 | kmv
@@ -171,7 +167,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjr;kjalr;kj;kjal;kbnez;kmv;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kgetp;kgetb;kgete;kgeta;kfail;kret] |}.
+    {| enum := [kjalr;kjal;kbnez;kmv;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kgetp;kgetb;kgete;kgeta;kfail;kret] |}.
 
 End Finite.
 
@@ -230,9 +226,7 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun K =>
       match K with
-      | kjr        => ty.lv
       | kjalr      => ty.prod ty.lv ty.lv
-      | kj         => ty.int
       | kjal       => ty.prod ty.lv ty.int
       | kbnez      => ty.prod ty.lv ty.int
       | kmv        => ty.prod ty.lv ty.hv
@@ -277,9 +271,7 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun Kv =>
       match Kv with
-      | existT kjr       lv                          => jr lv
       | existT kjalr     (lv1 , lv2)                 => jalr lv1 lv2
-      | existT kj        offset                      => j offset
       | existT kjal      (lv , offset)               => jal lv offset
       | existT kbnez     (lv , immediate)            => bnez lv immediate
       | existT kmv       (lv , hv)                   => mv lv hv
@@ -311,9 +303,7 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun Kv =>
       match Kv with
-      | jr  lv                   => existT kjr        lv
       | jalr lv1 lv2             => existT kjalr      (lv1 , lv2)
-      | j offset                 => existT kj         offset
       | jal lv offset            => existT kjal       (lv , offset)
       | bnez lv immediate        => existT kbnez      (lv , immediate)
       | mv lv hv                 => existT kmv        (lv , hv)
