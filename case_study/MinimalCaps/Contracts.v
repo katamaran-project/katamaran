@@ -580,15 +580,15 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_subseg(lv : lv, hv1 hv2 : ty.hv) *)
-  Definition sep_contract_exec_subseg : SepContractFun exec_subseg :=
+      bool exec_csetbounds(lv : lv, hv1 hv2 : ty.hv) *)
+  Definition sep_contract_exec_csetbounds : SepContractFun exec_csetbounds :=
     mach_inv_contract.
 
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_subsegi(lv : lv, hv : ty.hv, immediate : Z) *)
-  Definition sep_contract_exec_subsegi : SepContractFun exec_subsegi :=
+      bool exec_csetboundsimm(lv : lv, hv : ty.hv, immediate : Z) *)
+  Definition sep_contract_exec_csetboundsimm : SepContractFun exec_csetboundsimm :=
     mach_inv_contract.
 
   (*
@@ -809,8 +809,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | exec_cincoffsetimm     => Some sep_contract_exec_cincoffsetimm
       | exec_restrict          => Some sep_contract_exec_restrict
       | exec_restricti         => Some sep_contract_exec_restricti
-      | exec_subseg            => Some sep_contract_exec_subseg
-      | exec_subsegi           => Some sep_contract_exec_subsegi
+      | exec_csetbounds        => Some sep_contract_exec_csetbounds
+      | exec_csetboundsimm     => Some sep_contract_exec_csetboundsimm
       | exec_addi              => Some sep_contract_exec_addi
       | exec_add               => Some sep_contract_exec_add
       | exec_sub               => Some sep_contract_exec_sub
@@ -1328,10 +1328,10 @@ Module MinCapsValidContracts.
   Lemma valid_contract_exec_restricti : ValidContract exec_restricti.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_subseg : ValidContract exec_subseg.
+  Lemma valid_contract_exec_csetbounds : ValidContract exec_csetbounds.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_subsegi : ValidContract exec_subsegi.
+  Lemma valid_contract_exec_csetboundsimm : ValidContract exec_csetboundsimm.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_isptr : ValidContract exec_isptr.
@@ -1443,8 +1443,8 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_exec_cincoffsetimm).
     - apply (valid_contract _ H valid_contract_exec_restrict).
     - apply (valid_contract _ H valid_contract_exec_restricti).
-    - apply (valid_contract _ H valid_contract_exec_subseg).
-    - apply (valid_contract _ H valid_contract_exec_subsegi).
+    - apply (valid_contract _ H valid_contract_exec_csetbounds).
+    - apply (valid_contract _ H valid_contract_exec_csetboundsimm).
     - apply (valid_contract _ H valid_contract_exec_isptr).
     - apply (valid_contract _ H valid_contract_exec_addi).
     - apply (valid_contract _ H valid_contract_exec_add).
@@ -1509,8 +1509,8 @@ Section Statistics.
       existT _ (existT _ exec_cincoffsetimm);
       existT _ (existT _ exec_restrict);
       existT _ (existT _ exec_restricti);
-      existT _ (existT _ exec_subseg);
-      existT _ (existT _ exec_subsegi);
+      existT _ (existT _ exec_csetbounds);
+      existT _ (existT _ exec_csetboundsimm);
       existT _ (existT _ exec_isptr);
       existT _ (existT _ exec_addi);
       existT _ (existT _ exec_add);

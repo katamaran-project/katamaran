@@ -63,8 +63,8 @@ Inductive Instruction : Set :=
 | cincoffsetimm (lv : LV) (hv : HV)
 | restrict      (lv : LV) (hv : HV)
 | restricti     (lv : LV) (immediate : Z)
-| subseg        (lv : LV) (hv1 hv2 : HV)
-| subsegi       (lv : LV) (hv : HV) (immediate : Z)
+| csetbounds    (lv : LV) (hv1 hv2 : HV)
+| csetboundsimm (lv : LV) (hv : HV) (immediate : Z)
 | isptr         (lv : LV) (lv' : HV)
 | cgetperm      (lv lv' : LV)
 | cgetbase      (lv lv' : LV)
@@ -90,8 +90,8 @@ Inductive InstructionConstructor : Set :=
 | kcincoffsetimm
 | krestrict
 | krestricti
-| ksubseg
-| ksubsegi
+| kcsetbounds
+| kcsetboundsimm
 | kisptr
 | kcgetperm
 | kcgetbase
@@ -167,7 +167,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffsetimm;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
+    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffsetimm;krestrict;krestricti;kcsetbounds;kcsetboundsimm;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
 
 End Finite.
 
@@ -242,8 +242,8 @@ Module Export MinCapsBase <: Base.
       | kcincoffsetimm => ty.prod ty.lv ty.hv
       | krestrict      => ty.prod ty.lv ty.hv
       | krestricti     => ty.prod ty.lv ty.int
-      | ksubseg        => ty.tuple [ty.lv; ty.hv; ty.hv]
-      | ksubsegi       => ty.tuple [ty.lv; ty.hv; ty.int]
+      | kcsetbounds    => ty.tuple [ty.lv; ty.hv; ty.hv]
+      | kcsetboundsimm => ty.tuple [ty.lv; ty.hv; ty.int]
       | kisptr         => ty.prod ty.lv ty.lv
       | kcgetperm      => ty.prod ty.lv ty.lv
       | kcgetbase      => ty.prod ty.lv ty.lv
@@ -271,31 +271,31 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun Kv =>
       match Kv with
-      | existT kjalr     (lv1 , lv2)                  => jalr lv1 lv2
-      | existT kjal      (lv , offset)                => jal lv offset
-      | existT kbne      (tt , lv1 , lv2 , immediate) => bne lv1 lv2 immediate
-      | existT kcmove    (lv , hv)                    => cmove lv hv
-      | existT kld       (tt , lv , hv , immediate)   => ld lv hv immediate
-      | existT ksd       (tt , hv , lv , immediate)   => sd hv lv immediate
-      | existT kaddi     (tt , lv , hv , immediate)   => addi lv hv immediate
-      | existT kadd      (tt , lv1 , lv2 , lv3)       => add lv1 lv2 lv3
-      | existT ksub      (tt , lv1 , lv2 , lv3)       => sub lv1 lv2 lv3
-      | existT kslt      (tt , lv1 , lv2 , lv3)       => slt lv1 lv2 lv3
-      | existT kslti     (tt , lv , hv , immediate)   => slti lv hv immediate
-      | existT ksltu     (tt , lv1 , lv2 , lv3)       => sltu lv1 lv2 lv3
-      | existT ksltiu    (tt , lv , hv , immediate)   => sltiu lv hv immediate
-      | existT kcincoffsetimm (lv , hv)               => cincoffsetimm lv hv
-      | existT krestrict (lv , hv)                    => restrict lv hv
-      | existT krestricti (lv , immediate)            => restricti lv immediate
-      | existT ksubseg   (tt , lv , hv1 , hv2)        => subseg lv hv1 hv2
-      | existT ksubsegi  (tt , lv , hv  , immediate)  => subsegi lv hv immediate
-      | existT kisptr    (lv , lv')                   => isptr lv lv'
-      | existT kcgetperm (lv , lv')                   => cgetperm lv lv'
-      | existT kcgetbase (lv , lv')                   => cgetbase lv lv'
-      | existT kcgetlen  (lv , lv')                   => cgetlen lv lv'
-      | existT kcgetaddr (lv , lv')                   => cgetaddr lv lv'
-      | existT kfail     tt                           => fail
-      | existT kret      tt                           => ret
+      | existT kjalr     (lv1 , lv2)                       => jalr lv1 lv2
+      | existT kjal      (lv , offset)                     => jal lv offset
+      | existT kbne      (tt , lv1 , lv2 , immediate)      => bne lv1 lv2 immediate
+      | existT kcmove    (lv , hv)                         => cmove lv hv
+      | existT kld       (tt , lv , hv , immediate)        => ld lv hv immediate
+      | existT ksd       (tt , hv , lv , immediate)        => sd hv lv immediate
+      | existT kaddi     (tt , lv , hv , immediate)        => addi lv hv immediate
+      | existT kadd      (tt , lv1 , lv2 , lv3)            => add lv1 lv2 lv3
+      | existT ksub      (tt , lv1 , lv2 , lv3)            => sub lv1 lv2 lv3
+      | existT kslt      (tt , lv1 , lv2 , lv3)            => slt lv1 lv2 lv3
+      | existT kslti     (tt , lv , hv , immediate)        => slti lv hv immediate
+      | existT ksltu     (tt , lv1 , lv2 , lv3)            => sltu lv1 lv2 lv3
+      | existT ksltiu    (tt , lv , hv , immediate)        => sltiu lv hv immediate
+      | existT kcincoffsetimm (lv , hv)                    => cincoffsetimm lv hv
+      | existT krestrict (lv , hv)                         => restrict lv hv
+      | existT krestricti (lv , immediate)                 => restricti lv immediate
+      | existT kcsetbounds (tt , lv , hv1 , hv2)           => csetbounds lv hv1 hv2
+      | existT kcsetboundsimm  (tt , lv , hv , immediate)  => csetboundsimm lv hv immediate
+      | existT kisptr    (lv , lv')                        => isptr lv lv'
+      | existT kcgetperm (lv , lv')                        => cgetperm lv lv'
+      | existT kcgetbase (lv , lv')                        => cgetbase lv lv'
+      | existT kcgetlen  (lv , lv')                        => cgetlen lv lv'
+      | existT kcgetaddr (lv , lv')                        => cgetaddr lv lv'
+      | existT kfail     tt                                => fail
+      | existT kret      tt                                => ret
       end
     end.
 
@@ -303,31 +303,31 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun Kv =>
       match Kv with
-      | jalr lv1 lv2             => existT kjalr      (lv1 , lv2)
-      | jal lv offset            => existT kjal       (lv , offset)
-      | bne lv1 lv2 immediate    => existT kbne       (tt , lv1 , lv2 , immediate)
-      | cmove lv hv              => existT kcmove     (lv , hv)
-      | ld lv hv immediate       => existT kld        (tt , lv , hv , immediate)
-      | sd hv lv immediate       => existT ksd        (tt , hv , lv , immediate)
-      | addi lv hv immediate     => existT kaddi      (tt , lv , hv , immediate)
-      | add lv1 lv2 lv3          => existT kadd       (tt , lv1 , lv2 , lv3)
-      | sub lv1 lv2 lv3          => existT ksub       (tt , lv1 , lv2 , lv3)
-      | slt lv1 lv2 lv3          => existT kslt       (tt , lv1 , lv2 , lv3)
-      | slti lv hv immediate     => existT kslti      (tt , lv , hv , immediate)
-      | sltu lv1 lv2 lv3         => existT ksltu      (tt , lv1 , lv2 , lv3)
-      | sltiu lv hv immediate    => existT ksltiu     (tt , lv , hv , immediate)
-      | cincoffsetimm lv hv      => existT kcincoffsetimm (lv , hv)
-      | restrict lv hv           => existT krestrict  (lv , hv)
-      | restricti lv immediate   => existT krestricti (lv , immediate)
-      | subseg lv hv1 hv2        => existT ksubseg    (tt, lv , hv1 , hv2)
-      | subsegi lv hv immediate  => existT ksubsegi   (tt, lv , hv , immediate)
-      | isptr lv lv'             => existT kisptr     (lv , lv')
-      | cgetperm lv lv'          => existT kcgetperm  (lv , lv')
-      | cgetbase lv lv'          => existT kcgetbase  (lv , lv')
-      | cgetlen lv lv'           => existT kcgetlen   (lv , lv')
-      | cgetaddr lv lv'          => existT kcgetaddr  (lv , lv')
-      | fail                     => existT kfail      tt
-      | ret                      => existT kret       tt
+      | jalr lv1 lv2                  => existT kjalr      (lv1 , lv2)
+      | jal lv offset                 => existT kjal       (lv , offset)
+      | bne lv1 lv2 immediate         => existT kbne       (tt , lv1 , lv2 , immediate)
+      | cmove lv hv                   => existT kcmove     (lv , hv)
+      | ld lv hv immediate            => existT kld        (tt , lv , hv , immediate)
+      | sd hv lv immediate            => existT ksd        (tt , hv , lv , immediate)
+      | addi lv hv immediate          => existT kaddi      (tt , lv , hv , immediate)
+      | add lv1 lv2 lv3               => existT kadd       (tt , lv1 , lv2 , lv3)
+      | sub lv1 lv2 lv3               => existT ksub       (tt , lv1 , lv2 , lv3)
+      | slt lv1 lv2 lv3               => existT kslt       (tt , lv1 , lv2 , lv3)
+      | slti lv hv immediate          => existT kslti      (tt , lv , hv , immediate)
+      | sltu lv1 lv2 lv3              => existT ksltu      (tt , lv1 , lv2 , lv3)
+      | sltiu lv hv immediate         => existT ksltiu     (tt , lv , hv , immediate)
+      | cincoffsetimm lv hv           => existT kcincoffsetimm (lv , hv)
+      | restrict lv hv                => existT krestrict  (lv , hv)
+      | restricti lv immediate        => existT krestricti (lv , immediate)
+      | csetbounds lv hv1 hv2         => existT kcsetbounds (tt, lv , hv1 , hv2)
+      | csetboundsimm lv hv immediate => existT kcsetboundsimm (tt, lv , hv , immediate)
+      | isptr lv lv'                  => existT kisptr     (lv , lv')
+      | cgetperm lv lv'               => existT kcgetperm  (lv , lv')
+      | cgetbase lv lv'               => existT kcgetbase  (lv , lv')
+      | cgetlen lv lv'                => existT kcgetlen   (lv , lv')
+      | cgetaddr lv lv'               => existT kcgetaddr  (lv , lv')
+      | fail                          => existT kfail      tt
+      | ret                           => existT kret       tt
       end
     end.
 

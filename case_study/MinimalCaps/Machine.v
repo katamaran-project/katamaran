@@ -90,8 +90,8 @@ Section FunDeclKit.
   | exec_cincoffsetimm : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool
   | exec_restrict      : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool
   | exec_restricti     : Fun ["lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
-  | exec_subseg        : Fun ["lv" ∷ ty.lv; "hv1" ∷ ty.hv; "hv2" ∷ ty.hv] ty.bool
-  | exec_subsegi       : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
+  | exec_csetbounds    : Fun ["lv" ∷ ty.lv; "hv1" ∷ ty.hv; "hv2" ∷ ty.hv] ty.bool
+  | exec_csetboundsimm : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
   | exec_isptr         : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
   | exec_addi          : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
   | exec_add           : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
@@ -562,55 +562,56 @@ Section FunDefKit.
                                           "b" ∷ ty.addr; "e" ∷ ty.addr] ty.bool :=
       (exp_var "b" <= exp_var "b'") && (exp_var "e'" <= exp_var "e").
 
-    Definition fun_exec_subseg : Stm ["lv" ∷ ty.lv; "hv1" ∷ ty.hv; "hv2" ∷ ty.hv]
+    Definition fun_exec_csetbounds : Stm ["lv" ∷ ty.lv; "hv1" ∷ ty.hv; "hv2" ∷ ty.hv]
                                      ty.bool :=
-      let: c :: cap := call read_reg_cap (exp_var "lv") in
-      let: "new_begin" :: ty.int := call read_reg_num (exp_var "hv1") in
-      let: "new_end" :: ty.int := call read_reg_num (exp_var "hv2") in
-      let*: ["perm", "begin", "end", "cursor"] := (exp_var "c") in
-      (match: exp_var "perm" in permission with
-       | E => fail "Err: [subseg] not permitted on enter capability"
+      let: c :: cap := call read_reg_cap (exp_var "hv1") in
+      let*: ["p", "b", "e", "a"] := exp_var "c" in
+      let: "new_begin" :: ty.int :=  exp_var "a" in
+      let: "rs_val" :: ty.int := call read_reg_num (exp_var "hv2") in
+      let: "new_end" :: ty.int := (exp_var "new_begin") + (exp_var "rs_val") in
+      match: exp_var "p" in permission with
+       | E => fail "Err: [csetbounds] not permitted on enter capability"
        | _ =>
            let: "b" :: ty.bool :=
              call is_within_range (exp_var "new_begin") (exp_var "new_end")
-                                  (exp_var "begin")     (exp_var "end") in
-           stm_assert (exp_var "b") (exp_string "Err: [subseg] tried to increase range of authority") ;;
+                                  (exp_var "b")         (exp_var "e") in
+           stm_assert (exp_var "b") (exp_string "Err: [csetbounds] tried to increase range of authority") ;;
            let: "c'" :: cap := exp_record capability
-                                          [ exp_var "perm";
+                                          [ exp_var "p";
                                             exp_var "new_begin";
                                             exp_var "new_end";
-                                            exp_var "cursor"
+                                            exp_var "a"
                                           ] in
            use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
            call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
            call update_pc ;;
            stm_val ty.bool true
-       end).
+       end.
 
-    Definition fun_exec_subsegi : Stm ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int]
+    Definition fun_exec_csetboundsimm : Stm ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int]
                                       ty.bool :=
-      let: c :: cap := call read_reg_cap (exp_var "lv") in
-      let: "new_begin" :: ty.int := call read_reg_num (exp_var "hv") in
-      let: "new_end" :: ty.int := exp_var "immediate" in
-      let*: ["perm", "begin", "end", "cursor"] := (exp_var "c") in
-      (match: exp_var "perm" in permission with
-       | E => fail "Err: [subsegi] not permitted on enter capability"
+      let: c :: cap := call read_reg_cap (exp_var "hv") in
+      let*: ["p", "b", "e", "a"] := exp_var "c" in
+      let: "new_begin" :: ty.int :=  exp_var "a" in
+      let: "new_end" :: ty.int := (exp_var "new_begin") + (exp_var "immediate") in
+      match: exp_var "p" in permission with
+       | E => fail "Err: [csetboundsimm] not permitted on enter capability"
        | _ =>
            let: "b" :: ty.bool :=
              call is_within_range (exp_var "new_begin") (exp_var "new_end")
-                                  (exp_var "begin")     (exp_var "end") in
-           stm_assert (exp_var "b") (exp_string "Err: [subsegi] tried to increase range of authority") ;;
+                                  (exp_var "b")         (exp_var "e") in
+           stm_assert (exp_var "b") (exp_string "Err: [csetboundsimm] tried to increase range of authority") ;;
            let: "c'" :: cap := exp_record capability
-                                          [ exp_var "perm";
+                                          [ exp_var "p";
                                             exp_var "new_begin";
                                             exp_var "new_end";
-                                            exp_var "cursor"
+                                            exp_var "a"
                                           ] in
            use lemma safe_within_range [exp_var "c'"; exp_var "c"] ;;
            call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
            call update_pc ;;
            stm_val ty.bool true
-      end).
+       end.
 
     Definition fun_exec_isptr : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: w :: ty.word := call read_reg (exp_var "lv2") in
@@ -721,10 +722,10 @@ Section FunDefKit.
                                      (call exec_restrict lv hv)
            | krestricti     => MkAlt (pat_pair lv immediate)
                                      (call exec_restricti lv immediate)
-           | ksubseg        => MkAlt (pat_tuple (lv , "hv1" , "hv2"))
-                                     (call exec_subseg lv (exp_var "hv1") (exp_var "hv2"))
-           | ksubsegi       => MkAlt (pat_tuple (lv , hv , immediate))
-                                     (call exec_subsegi lv hv immediate)
+           | kcsetbounds    => MkAlt (pat_tuple (lv , "hv1" , "hv2"))
+                                     (call exec_csetbounds lv (exp_var "hv1") (exp_var "hv2"))
+           | kcsetboundsimm => MkAlt (pat_tuple (lv , hv , immediate))
+                                     (call exec_csetboundsimm lv hv immediate)
            | kaddi          => MkAlt (pat_tuple (lv , hv , immediate))
                                      (call exec_addi lv hv immediate)
            | kadd           => MkAlt (pat_tuple ("lv1" , "lv2" , "lv3"))
@@ -826,8 +827,8 @@ Section FunDefKit.
     | exec_cincoffsetimm => fun_exec_cincoffsetimm
     | exec_restrict      => fun_exec_restrict
     | exec_restricti     => fun_exec_restricti
-    | exec_subseg        => fun_exec_subseg
-    | exec_subsegi       => fun_exec_subsegi
+    | exec_csetbounds    => fun_exec_csetbounds
+    | exec_csetboundsimm => fun_exec_csetboundsimm
     | exec_addi          => fun_exec_addi
     | exec_add           => fun_exec_add
     | exec_sub           => fun_exec_sub
