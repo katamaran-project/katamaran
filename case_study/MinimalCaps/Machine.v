@@ -92,7 +92,7 @@ Section FunDeclKit.
   | exec_candperm      : Fun ["lv" :: ty.lv; "hv1" :: ty.hv; "hv2" :: ty.hv] ty.bool
   | exec_csetbounds    : Fun ["lv" ∷ ty.lv; "hv1" ∷ ty.hv; "hv2" ∷ ty.hv] ty.bool
   | exec_csetboundsimm : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
-  | exec_isptr         : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
+  | exec_cgettag       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
   | exec_addi          : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
   | exec_add           : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
   | exec_sub           : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
@@ -614,7 +614,7 @@ Section FunDefKit.
            stm_val ty.bool true
        end.
 
-    Definition fun_exec_isptr : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
+    Definition fun_exec_cgettag : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: w :: ty.word := call read_reg (exp_var "lv2") in
       match: w with
       | inl i =>
@@ -739,8 +739,8 @@ Section FunDefKit.
                                      (call exec_sltu (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
            | ksltiu         => MkAlt (pat_tuple (lv , hv , immediate))
                                      (call exec_sltiu lv hv immediate)
-           | kisptr         => MkAlt (pat_pair "lv1" "lv2")
-                                     (call exec_isptr (exp_var "lv1") (exp_var "lv2"))
+           | kcgettag       => MkAlt (pat_pair "lv1" "lv2")
+                                     (call exec_cgettag (exp_var "lv1") (exp_var "lv2"))
            | kcgetperm      => MkAlt (pat_pair "lv1" "lv2")
                                      (call exec_cgetperm (exp_var "lv1") (exp_var "lv2"))
            | kcgetbase      => MkAlt (pat_pair "lv1" "lv2")
@@ -835,7 +835,7 @@ Section FunDefKit.
     | exec_slti          => fun_exec_slti
     | exec_sltu          => fun_exec_sltu
     | exec_sltiu         => fun_exec_sltiu
-    | exec_isptr         => fun_exec_isptr
+    | exec_cgettag       => fun_exec_cgettag
     | exec_cgetperm      => fun_exec_cgetperm
     | exec_cgetbase      => fun_exec_cgetbase
     | exec_cgetlen       => fun_exec_cgetlen

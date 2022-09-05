@@ -64,7 +64,7 @@ Inductive Instruction : Set :=
 | candperm      (lv : LV) (hv1 hv2 : HV)
 | csetbounds    (lv : LV) (hv1 hv2 : HV)
 | csetboundsimm (lv : LV) (hv : HV) (immediate : Z)
-| isptr         (lv : LV) (lv' : HV)
+| cgettag       (lv : LV) (lv' : HV)
 | cgetperm      (lv lv' : LV)
 | cgetbase      (lv lv' : LV)
 | cgetlen       (lv lv' : LV)
@@ -90,7 +90,7 @@ Inductive InstructionConstructor : Set :=
 | kcandperm
 | kcsetbounds
 | kcsetboundsimm
-| kisptr
+| kcgettag
 | kcgetperm
 | kcgetbase
 | kcgetlen
@@ -165,7 +165,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffsetimm;kcandperm;kcsetbounds;kcsetboundsimm;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
+    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffsetimm;kcandperm;kcsetbounds;kcsetboundsimm;kcgettag;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
 
 End Finite.
 
@@ -241,7 +241,7 @@ Module Export MinCapsBase <: Base.
       | kcandperm      => ty.tuple [ty.lv; ty.hv; ty.hv]
       | kcsetbounds    => ty.tuple [ty.lv; ty.hv; ty.hv]
       | kcsetboundsimm => ty.tuple [ty.lv; ty.hv; ty.int]
-      | kisptr         => ty.prod ty.lv ty.lv
+      | kcgettag       => ty.prod ty.lv ty.lv
       | kcgetperm      => ty.prod ty.lv ty.lv
       | kcgetbase      => ty.prod ty.lv ty.lv
       | kcgetlen       => ty.prod ty.lv ty.lv
@@ -285,7 +285,7 @@ Module Export MinCapsBase <: Base.
       | existT kcandperm (tt , lv , hv1 , hv2)             => candperm lv hv1 hv2
       | existT kcsetbounds (tt , lv , hv1 , hv2)           => csetbounds lv hv1 hv2
       | existT kcsetboundsimm  (tt , lv , hv , immediate)  => csetboundsimm lv hv immediate
-      | existT kisptr    (lv , lv')                        => isptr lv lv'
+      | existT kcgettag  (lv , lv')                        => cgettag lv lv'
       | existT kcgetperm (lv , lv')                        => cgetperm lv lv'
       | existT kcgetbase (lv , lv')                        => cgetbase lv lv'
       | existT kcgetlen  (lv , lv')                        => cgetlen lv lv'
@@ -316,7 +316,7 @@ Module Export MinCapsBase <: Base.
       | candperm lv hv1 hv2           => existT kcandperm  (tt , lv , hv1 , hv2)
       | csetbounds lv hv1 hv2         => existT kcsetbounds (tt, lv , hv1 , hv2)
       | csetboundsimm lv hv immediate => existT kcsetboundsimm (tt, lv , hv , immediate)
-      | isptr lv lv'                  => existT kisptr     (lv , lv')
+      | cgettag lv lv'                => existT kcgettag     (lv , lv')
       | cgetperm lv lv'               => existT kcgetperm  (lv , lv')
       | cgetbase lv lv'               => existT kcgetbase  (lv , lv')
       | cgetlen lv lv'                => existT kcgetlen   (lv , lv')

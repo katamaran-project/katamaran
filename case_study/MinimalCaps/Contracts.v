@@ -717,8 +717,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_isptr(lv1 : lv, lv2 : lv) *)
-  Definition sep_contract_exec_isptr : SepContractFun exec_isptr :=
+      bool exec_cgettag(lv1 : lv, lv2 : lv) *)
+  Definition sep_contract_exec_cgettag : SepContractFun exec_cgettag :=
     mach_inv_contract.
 
   (*
@@ -824,7 +824,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | exec_slti              => Some sep_contract_exec_slti
       | exec_sltu              => Some sep_contract_exec_sltu
       | exec_sltiu             => Some sep_contract_exec_slti
-      | exec_isptr             => Some sep_contract_exec_isptr
+      | exec_cgettag           => Some sep_contract_exec_cgettag
       | exec_cgetperm          => Some sep_contract_exec_cgetperm
       | exec_cgetbase          => Some sep_contract_exec_cgetbase
       | exec_cgetlen           => Some sep_contract_exec_cgetlen
@@ -1340,7 +1340,7 @@ Module MinCapsValidContracts.
   Lemma valid_contract_exec_csetboundsimm : ValidContract exec_csetboundsimm.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_isptr : ValidContract exec_isptr.
+  Lemma valid_contract_exec_cgettag : ValidContract exec_cgettag.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_addi : ValidContract exec_addi.
@@ -1451,7 +1451,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_exec_candperm).
     - apply (valid_contract _ H valid_contract_exec_csetbounds).
     - apply (valid_contract _ H valid_contract_exec_csetboundsimm).
-    - apply (valid_contract _ H valid_contract_exec_isptr).
+    - apply (valid_contract _ H valid_contract_exec_cgettag).
     - apply (valid_contract _ H valid_contract_exec_addi).
     - apply (valid_contract _ H valid_contract_exec_add).
     - apply (valid_contract _ H valid_contract_exec_sub).
@@ -1517,7 +1517,7 @@ Section Statistics.
       existT _ (existT _ exec_candperm);
       existT _ (existT _ exec_csetbounds);
       existT _ (existT _ exec_csetboundsimm);
-      existT _ (existT _ exec_isptr);
+      existT _ (existT _ exec_cgettag);
       existT _ (existT _ exec_addi);
       existT _ (existT _ exec_add);
       existT _ (existT _ exec_sub);
