@@ -84,7 +84,7 @@ Section FunDeclKit.
   | exec_jalr       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv ] ty.bool
   | exec_jal        : Fun ["lv" ∷ ty.lv; "offset" ∷ ty.int] ty.bool
   | exec_bne        : Fun ["lv1" ∷ ty.lv; "lv2" :: ty.lv; "immediate" ∷ ty.int] ty.bool
-  | exec_mv         : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv ] ty.bool
+  | exec_cmove      : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv ] ty.bool
   | exec_ld         : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
   | exec_sd         : Fun ["hv" ∷ ty.hv; "lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
   | exec_lea        : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool
@@ -664,7 +664,7 @@ Section FunDefKit.
     Definition fun_exec_ret : Stm [] ty.bool :=
       stm_exp exp_false.
 
-    Definition fun_exec_mv : Stm [lv ∷ ty.lv; hv ∷ ty.hv] ty.bool :=
+    Definition fun_exec_cmove : Stm [lv ∷ ty.lv; hv ∷ ty.hv] ty.bool :=
       let: w :: word := call read_reg hv in
       call write_reg lv w ;;
       call update_pc ;;
@@ -706,7 +706,7 @@ Section FunDefKit.
            | kjal       => MkAlt (pat_pair lv offset) (call exec_jal lv offset)
            | kbne       => MkAlt (pat_tuple ("lv1" , "lv2" , immediate))
                                  (call exec_bne (exp_var "lv1") (exp_var "lv2") immediate)
-           | kmv        => MkAlt (pat_pair lv hv) (call exec_mv lv hv)
+           | kcmove     => MkAlt (pat_pair lv hv) (call exec_cmove lv hv)
            | kld        => MkAlt (pat_tuple (lv , hv , immediate))
                             (call exec_ld lv hv immediate)
            | ksd        => MkAlt (pat_tuple (hv , lv , immediate))
@@ -806,7 +806,7 @@ Section FunDefKit.
     | exec_jalr       => fun_exec_jalr
     | exec_jal        => fun_exec_jal
     | exec_bne        => fun_exec_bne
-    | exec_mv         => fun_exec_mv
+    | exec_cmove      => fun_exec_cmove
     | exec_ld         => fun_exec_ld
     | exec_sd         => fun_exec_sd
     | exec_lea        => fun_exec_lea

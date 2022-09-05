@@ -50,7 +50,7 @@ Inductive Instruction : Set :=
 | jalr      (lv1 : LV) (lv2 : LV)
 | jal       (lv : LV) (offset : Z)
 | bne       (lv1 : LV) (lv2 : LV) (immediate : Z)
-| mv        (lv : LV) (hv : HV)
+| cmove     (lv : LV) (hv : HV)
 | ld        (lv : LV) (hv : HV) (immediate : Z)
 | sd        (hv : HV) (lv : LV) (immediate : Z)
 | addi      (lv : LV) (hv : HV) (immediate : Z)
@@ -77,7 +77,7 @@ Inductive InstructionConstructor : Set :=
 | kjalr
 | kjal
 | kbne
-| kmv
+| kcmove
 | kld
 | ksd
 | kaddi
@@ -167,7 +167,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjalr;kjal;kbne;kmv;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kgetp;kgetb;kgete;kgeta;kfail;kret] |}.
+    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kgetp;kgetb;kgete;kgeta;kfail;kret] |}.
 
 End Finite.
 
@@ -229,7 +229,7 @@ Module Export MinCapsBase <: Base.
       | kjalr      => ty.prod ty.lv ty.lv
       | kjal       => ty.prod ty.lv ty.int
       | kbne       => ty.tuple [ty.lv; ty.lv; ty.int]
-      | kmv        => ty.prod ty.lv ty.hv
+      | kcmove     => ty.prod ty.lv ty.hv
       | kld        => ty.tuple [ty.lv; ty.hv; ty.int]
       | ksd        => ty.tuple [ty.hv; ty.lv; ty.int]
       | kaddi      => ty.tuple [ty.lv; ty.hv; ty.int]
@@ -274,7 +274,7 @@ Module Export MinCapsBase <: Base.
       | existT kjalr     (lv1 , lv2)                  => jalr lv1 lv2
       | existT kjal      (lv , offset)                => jal lv offset
       | existT kbne      (tt , lv1 , lv2 , immediate) => bne lv1 lv2 immediate
-      | existT kmv       (lv , hv)                    => mv lv hv
+      | existT kcmove    (lv , hv)                    => cmove lv hv
       | existT kld       (tt , lv , hv , immediate)   => ld lv hv immediate
       | existT ksd       (tt , hv , lv , immediate)   => sd hv lv immediate
       | existT kaddi     (tt , lv , hv , immediate)   => addi lv hv immediate
@@ -306,7 +306,7 @@ Module Export MinCapsBase <: Base.
       | jalr lv1 lv2             => existT kjalr      (lv1 , lv2)
       | jal lv offset            => existT kjal       (lv , offset)
       | bne lv1 lv2 immediate    => existT kbne       (tt , lv1 , lv2 , immediate)
-      | mv lv hv                 => existT kmv        (lv , hv)
+      | cmove lv hv              => existT kcmove     (lv , hv)
       | ld lv hv immediate       => existT kld        (tt , lv , hv , immediate)
       | sd hv lv immediate       => existT ksd        (tt , hv , lv , immediate)
       | addi lv hv immediate     => existT kaddi      (tt , lv , hv , immediate)

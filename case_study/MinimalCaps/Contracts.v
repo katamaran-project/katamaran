@@ -538,8 +538,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_mv(lv : lv, hv : ty.hv) *)
-  Definition sep_contract_exec_mv : SepContractFun exec_mv :=
+      bool exec_cmove(lv : lv, hv : ty.hv) *)
+  Definition sep_contract_exec_cmove : SepContractFun exec_cmove :=
     mach_inv_contract.
 
   (*
@@ -803,7 +803,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | exec_jalr              => Some sep_contract_exec_jalr
       | exec_jal               => Some sep_contract_exec_jal
       | exec_bne               => Some sep_contract_exec_bne
-      | exec_mv                => Some sep_contract_exec_mv
+      | exec_cmove             => Some sep_contract_exec_cmove
       | exec_ld                => Some sep_contract_exec_ld
       | exec_sd                => Some sep_contract_exec_sd
       | exec_lea               => Some sep_contract_exec_lea
@@ -1310,7 +1310,7 @@ Module MinCapsValidContracts.
   Lemma valid_contract_exec_bne : ValidContract exec_bne.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_mv : ValidContract exec_mv.
+  Lemma valid_contract_exec_cmove : ValidContract exec_cmove.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_ld : ValidContract exec_ld.
@@ -1437,7 +1437,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_exec_jalr).
     - apply (valid_contract _ H valid_contract_exec_jal).
     - apply (valid_contract _ H valid_contract_exec_bne).
-    - apply (valid_contract _ H valid_contract_exec_mv).
+    - apply (valid_contract _ H valid_contract_exec_cmove).
     - apply (valid_contract _ H valid_contract_exec_ld).
     - apply (valid_contract _ H valid_contract_exec_sd).
     - apply (valid_contract _ H valid_contract_exec_lea).
@@ -1503,7 +1503,7 @@ Section Statistics.
       existT _ (existT _ exec_jalr);
       existT _ (existT _ exec_jal);
       existT _ (existT _ exec_bne);
-      existT _ (existT _ exec_mv);
+      existT _ (existT _ exec_cmove);
       existT _ (existT _ exec_ld);
       existT _ (existT _ exec_sd);
       existT _ (existT _ exec_lea);
