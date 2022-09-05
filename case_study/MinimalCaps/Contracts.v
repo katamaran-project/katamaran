@@ -559,8 +559,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_lea(lv : lv, hv : ty.hv) *)
-  Definition sep_contract_exec_lea : SepContractFun exec_lea :=
+      bool exec_cincoffsetimm(lv : lv, hv : ty.hv) *)
+  Definition sep_contract_exec_cincoffsetimm : SepContractFun exec_cincoffsetimm :=
     mach_inv_contract.
 
   (*
@@ -806,7 +806,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | exec_cmove             => Some sep_contract_exec_cmove
       | exec_ld                => Some sep_contract_exec_ld
       | exec_sd                => Some sep_contract_exec_sd
-      | exec_lea               => Some sep_contract_exec_lea
+      | exec_cincoffsetimm     => Some sep_contract_exec_cincoffsetimm
       | exec_restrict          => Some sep_contract_exec_restrict
       | exec_restricti         => Some sep_contract_exec_restricti
       | exec_subseg            => Some sep_contract_exec_subseg
@@ -1319,7 +1319,7 @@ Module MinCapsValidContracts.
   Lemma valid_contract_exec_sd : ValidContract exec_sd.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_lea : ValidContract exec_lea.
+  Lemma valid_contract_exec_cincoffsetimm : ValidContract exec_cincoffsetimm.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_restrict : ValidContract exec_restrict.
@@ -1440,7 +1440,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_exec_cmove).
     - apply (valid_contract _ H valid_contract_exec_ld).
     - apply (valid_contract _ H valid_contract_exec_sd).
-    - apply (valid_contract _ H valid_contract_exec_lea).
+    - apply (valid_contract _ H valid_contract_exec_cincoffsetimm).
     - apply (valid_contract _ H valid_contract_exec_restrict).
     - apply (valid_contract _ H valid_contract_exec_restricti).
     - apply (valid_contract _ H valid_contract_exec_subseg).
@@ -1506,7 +1506,7 @@ Section Statistics.
       existT _ (existT _ exec_cmove);
       existT _ (existT _ exec_ld);
       existT _ (existT _ exec_sd);
-      existT _ (existT _ exec_lea);
+      existT _ (existT _ exec_cincoffsetimm);
       existT _ (existT _ exec_restrict);
       existT _ (existT _ exec_restricti);
       existT _ (existT _ exec_subseg);

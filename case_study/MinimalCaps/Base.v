@@ -47,29 +47,29 @@ Definition HV : Set := RegName.
 Definition RV : Set := LV + Z.
 
 Inductive Instruction : Set :=
-| jalr      (lv1 : LV) (lv2 : LV)
-| jal       (lv : LV) (offset : Z)
-| bne       (lv1 : LV) (lv2 : LV) (immediate : Z)
-| cmove     (lv : LV) (hv : HV)
-| ld        (lv : LV) (hv : HV) (immediate : Z)
-| sd        (hv : HV) (lv : LV) (immediate : Z)
-| addi      (lv : LV) (hv : HV) (immediate : Z)
-| add       (lv1 : LV) (lv2 : LV) (lv3 : LV)
-| sub       (lv1 : LV) (lv2 : LV) (lv3 : LV)
-| slt       (lv1 : LV) (lv2 : LV) (lv3 : LV)
-| slti      (lv : LV) (hv : HV) (immediate : Z)
-| sltu      (lv1 : LV) (lv2 : LV) (lv3 : LV)
-| sltiu     (lv : LV) (hv : HV) (immediate : Z)
-| lea       (lv : LV) (hv : HV)
-| restrict  (lv : LV) (hv : HV)
-| restricti (lv : LV) (immediate : Z)
-| subseg    (lv : LV) (hv1 hv2 : HV)
-| subsegi   (lv : LV) (hv : HV) (immediate : Z)
-| isptr     (lv : LV) (lv' : HV)
-| cgetperm  (lv lv' : LV)
-| cgetbase  (lv lv' : LV)
-| cgetlen   (lv lv' : LV)
-| cgetaddr  (lv lv' : LV)
+| jalr          (lv1 : LV) (lv2 : LV)
+| jal           (lv : LV) (offset : Z)
+| bne           (lv1 : LV) (lv2 : LV) (immediate : Z)
+| cmove         (lv : LV) (hv : HV)
+| ld            (lv : LV) (hv : HV) (immediate : Z)
+| sd            (hv : HV) (lv : LV) (immediate : Z)
+| addi          (lv : LV) (hv : HV) (immediate : Z)
+| add           (lv1 : LV) (lv2 : LV) (lv3 : LV)
+| sub           (lv1 : LV) (lv2 : LV) (lv3 : LV)
+| slt           (lv1 : LV) (lv2 : LV) (lv3 : LV)
+| slti          (lv : LV) (hv : HV) (immediate : Z)
+| sltu          (lv1 : LV) (lv2 : LV) (lv3 : LV)
+| sltiu         (lv : LV) (hv : HV) (immediate : Z)
+| cincoffsetimm (lv : LV) (hv : HV)
+| restrict      (lv : LV) (hv : HV)
+| restricti     (lv : LV) (immediate : Z)
+| subseg        (lv : LV) (hv1 hv2 : HV)
+| subsegi       (lv : LV) (hv : HV) (immediate : Z)
+| isptr         (lv : LV) (lv' : HV)
+| cgetperm      (lv lv' : LV)
+| cgetbase      (lv lv' : LV)
+| cgetlen       (lv lv' : LV)
+| cgetaddr      (lv lv' : LV)
 | fail
 | ret.
 
@@ -87,7 +87,7 @@ Inductive InstructionConstructor : Set :=
 | kslti
 | ksltu
 | ksltiu
-| klea
+| kcincoffsetimm
 | krestrict
 | krestricti
 | ksubseg
@@ -167,7 +167,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
+    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffsetimm;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
 
 End Finite.
 
@@ -226,31 +226,31 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun K =>
       match K with
-      | kjalr      => ty.prod ty.lv ty.lv
-      | kjal       => ty.prod ty.lv ty.int
-      | kbne       => ty.tuple [ty.lv; ty.lv; ty.int]
-      | kcmove     => ty.prod ty.lv ty.hv
-      | kld        => ty.tuple [ty.lv; ty.hv; ty.int]
-      | ksd        => ty.tuple [ty.hv; ty.lv; ty.int]
-      | kaddi      => ty.tuple [ty.lv; ty.hv; ty.int]
-      | kadd       => ty.tuple [ty.lv; ty.lv; ty.lv]
-      | ksub       => ty.tuple [ty.lv; ty.lv; ty.lv]
-      | kslt       => ty.tuple [ty.lv; ty.lv; ty.lv]
-      | kslti      => ty.tuple [ty.lv; ty.hv; ty.int]
-      | ksltu      => ty.tuple [ty.lv; ty.lv; ty.lv]
-      | ksltiu     => ty.tuple [ty.lv; ty.hv; ty.int]
-      | klea       => ty.prod ty.lv ty.hv
-      | krestrict  => ty.prod ty.lv ty.hv
-      | krestricti => ty.prod ty.lv ty.int
-      | ksubseg    => ty.tuple [ty.lv; ty.hv; ty.hv]
-      | ksubsegi   => ty.tuple [ty.lv; ty.hv; ty.int]
-      | kisptr     => ty.prod ty.lv ty.lv
-      | kcgetperm  => ty.prod ty.lv ty.lv
-      | kcgetbase  => ty.prod ty.lv ty.lv
-      | kcgetlen   => ty.prod ty.lv ty.lv
-      | kcgetaddr  => ty.prod ty.lv ty.lv
-      | kfail      => ty.unit
-      | kret       => ty.unit
+      | kjalr          => ty.prod ty.lv ty.lv
+      | kjal           => ty.prod ty.lv ty.int
+      | kbne           => ty.tuple [ty.lv; ty.lv; ty.int]
+      | kcmove         => ty.prod ty.lv ty.hv
+      | kld            => ty.tuple [ty.lv; ty.hv; ty.int]
+      | ksd            => ty.tuple [ty.hv; ty.lv; ty.int]
+      | kaddi          => ty.tuple [ty.lv; ty.hv; ty.int]
+      | kadd           => ty.tuple [ty.lv; ty.lv; ty.lv]
+      | ksub           => ty.tuple [ty.lv; ty.lv; ty.lv]
+      | kslt           => ty.tuple [ty.lv; ty.lv; ty.lv]
+      | kslti          => ty.tuple [ty.lv; ty.hv; ty.int]
+      | ksltu          => ty.tuple [ty.lv; ty.lv; ty.lv]
+      | ksltiu         => ty.tuple [ty.lv; ty.hv; ty.int]
+      | kcincoffsetimm => ty.prod ty.lv ty.hv
+      | krestrict      => ty.prod ty.lv ty.hv
+      | krestricti     => ty.prod ty.lv ty.int
+      | ksubseg        => ty.tuple [ty.lv; ty.hv; ty.hv]
+      | ksubsegi       => ty.tuple [ty.lv; ty.hv; ty.int]
+      | kisptr         => ty.prod ty.lv ty.lv
+      | kcgetperm      => ty.prod ty.lv ty.lv
+      | kcgetbase      => ty.prod ty.lv ty.lv
+      | kcgetlen       => ty.prod ty.lv ty.lv
+      | kcgetaddr      => ty.prod ty.lv ty.lv
+      | kfail          => ty.unit
+      | kret           => ty.unit
       end
     end.
 
@@ -281,10 +281,10 @@ Module Export MinCapsBase <: Base.
       | existT kadd      (tt , lv1 , lv2 , lv3)       => add lv1 lv2 lv3
       | existT ksub      (tt , lv1 , lv2 , lv3)       => sub lv1 lv2 lv3
       | existT kslt      (tt , lv1 , lv2 , lv3)       => slt lv1 lv2 lv3
-      | existT kslti     (tt , lv , hv , immediate)    => slti lv hv immediate
+      | existT kslti     (tt , lv , hv , immediate)   => slti lv hv immediate
       | existT ksltu     (tt , lv1 , lv2 , lv3)       => sltu lv1 lv2 lv3
       | existT ksltiu    (tt , lv , hv , immediate)   => sltiu lv hv immediate
-      | existT klea      (lv , hv)                    => lea lv hv
+      | existT kcincoffsetimm (lv , hv)               => cincoffsetimm lv hv
       | existT krestrict (lv , hv)                    => restrict lv hv
       | existT krestricti (lv , immediate)            => restricti lv immediate
       | existT ksubseg   (tt , lv , hv1 , hv2)        => subseg lv hv1 hv2
@@ -316,7 +316,7 @@ Module Export MinCapsBase <: Base.
       | slti lv hv immediate     => existT kslti      (tt , lv , hv , immediate)
       | sltu lv1 lv2 lv3         => existT ksltu      (tt , lv1 , lv2 , lv3)
       | sltiu lv hv immediate    => existT ksltiu     (tt , lv , hv , immediate)
-      | lea lv hv                => existT klea       (lv , hv)
+      | cincoffsetimm lv hv      => existT kcincoffsetimm (lv , hv)
       | restrict lv hv           => existT krestrict  (lv , hv)
       | restricti lv immediate   => existT krestricti (lv , immediate)
       | subseg lv hv1 hv2        => existT ksubseg    (tt, lv , hv1 , hv2)

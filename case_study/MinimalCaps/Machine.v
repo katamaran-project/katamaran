@@ -53,63 +53,63 @@ Module Export MinCapsProgram <: Program MinCapsBase.
 
 Section FunDeclKit.
   Inductive Fun : PCtx -> Ty -> Set :=
-  | read_reg        : Fun ["rreg" ∷ ty.enum regname ] ty.word
-  | read_reg_cap    : Fun ["creg" ∷ ty.enum regname ] ty.cap
-  | read_reg_num    : Fun ["nreg" ∷ ty.enum regname ] ty.int
-  | write_reg       : Fun ["wreg" ∷ ty.enum regname;
-                           "w"  ∷ ty.word
-                          ] ty.unit
-  | next_pc         : Fun [] ty.cap
-  | update_pc       : Fun [] ty.unit
-  | update_pc_perm  : Fun ["c" :: ty.cap] ty.cap
-  | is_correct_pc   : Fun ["c" :: ty.cap] ty.bool
-  | is_perm         : Fun ["p" :: ty.perm; "p'" :: ty.perm] ty.bool
-  | add_pc          : Fun ["offset" ∷ ty.int] ty.unit
-  | read_mem        : Fun ["c"   ∷ ty.cap ] ty.memval
-  | write_mem       : Fun ["c"   ∷ ty.cap;
-                           "v"   ∷ ty.memval
-                          ] ty.unit
-  | read_allowed    : Fun ["p"   ∷ ty.perm ] ty.bool
-  | write_allowed   : Fun ["p"   ∷ ty.perm ] ty.bool
-  | upper_bound     : Fun ["a"   ∷ ty.addr;
-                           "e"   ∷ ty.addr
-                          ] ty.bool
-  | within_bounds   : Fun ["c"   ∷ ty.cap ] ty.bool
-  | perm_to_bits    : Fun ["p" ∷ ty.perm] ty.int
-  | perm_from_bits  : Fun ["i" ∷ ty.int] ty.perm
-  | is_sub_perm     : Fun ["p" ∷ ty.perm; "p'" ∷ ty.perm] ty.bool
-  | is_within_range : Fun ["b'" ∷ ty.addr; "e'" ∷ ty.addr;
-                           "b" ∷ ty.addr; "e" ∷ ty.addr] ty.bool
-  | abs             : Fun ["i" ∷ ty.int] ty.int
-  | exec_jalr       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv ] ty.bool
-  | exec_jal        : Fun ["lv" ∷ ty.lv; "offset" ∷ ty.int] ty.bool
-  | exec_bne        : Fun ["lv1" ∷ ty.lv; "lv2" :: ty.lv; "immediate" ∷ ty.int] ty.bool
-  | exec_cmove      : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv ] ty.bool
-  | exec_ld         : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
-  | exec_sd         : Fun ["hv" ∷ ty.hv; "lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
-  | exec_lea        : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool
-  | exec_restrict   : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool
-  | exec_restricti  : Fun ["lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
-  | exec_subseg     : Fun ["lv" ∷ ty.lv; "hv1" ∷ ty.hv; "hv2" ∷ ty.hv] ty.bool
-  | exec_subsegi    : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
-  | exec_isptr      : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
-  | exec_addi       : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
-  | exec_add        : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
-  | exec_sub        : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
-  | exec_slt        : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
-  | exec_slti       : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
-  | exec_sltu       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
-  | exec_sltiu      : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
-  | exec_cgetperm   : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
-  | exec_cgetbase   : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
-  | exec_cgetlen    : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
-  | exec_cgetaddr   : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
-  | exec_fail       : Fun [] ty.bool
-  | exec_ret        : Fun [] ty.bool
-  | exec_instr      : Fun ["i" ∷ ty.instr] ty.bool
-  | exec            : Fun [] ty.bool
-  | step            : Fun [] ty.unit
-  | loop            : Fun [] ty.unit
+  | read_reg           : Fun ["rreg" ∷ ty.enum regname ] ty.word
+  | read_reg_cap       : Fun ["creg" ∷ ty.enum regname ] ty.cap
+  | read_reg_num       : Fun ["nreg" ∷ ty.enum regname ] ty.int
+  | write_reg          : Fun ["wreg" ∷ ty.enum regname;
+                              "w"  ∷ ty.word
+                             ] ty.unit
+  | next_pc            : Fun [] ty.cap
+  | update_pc          : Fun [] ty.unit
+  | update_pc_perm     : Fun ["c" :: ty.cap] ty.cap
+  | is_correct_pc      : Fun ["c" :: ty.cap] ty.bool
+  | is_perm            : Fun ["p" :: ty.perm; "p'" :: ty.perm] ty.bool
+  | add_pc             : Fun ["offset" ∷ ty.int] ty.unit
+  | read_mem           : Fun ["c"   ∷ ty.cap ] ty.memval
+  | write_mem          : Fun ["c"   ∷ ty.cap;
+                              "v"   ∷ ty.memval
+                             ] ty.unit
+  | read_allowed       : Fun ["p"   ∷ ty.perm ] ty.bool
+  | write_allowed      : Fun ["p"   ∷ ty.perm ] ty.bool
+  | upper_bound        : Fun ["a"   ∷ ty.addr;
+                              "e"   ∷ ty.addr
+                             ] ty.bool
+  | within_bounds      : Fun ["c"   ∷ ty.cap ] ty.bool
+  | perm_to_bits       : Fun ["p" ∷ ty.perm] ty.int
+  | perm_from_bits     : Fun ["i" ∷ ty.int] ty.perm
+  | is_sub_perm        : Fun ["p" ∷ ty.perm; "p'" ∷ ty.perm] ty.bool
+  | is_within_range    : Fun ["b'" ∷ ty.addr; "e'" ∷ ty.addr;
+                              "b" ∷ ty.addr; "e" ∷ ty.addr] ty.bool
+  | abs                : Fun ["i" ∷ ty.int] ty.int
+  | exec_jalr          : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv ] ty.bool
+  | exec_jal           : Fun ["lv" ∷ ty.lv; "offset" ∷ ty.int] ty.bool
+  | exec_bne           : Fun ["lv1" ∷ ty.lv; "lv2" :: ty.lv; "immediate" ∷ ty.int] ty.bool
+  | exec_cmove         : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv ] ty.bool
+  | exec_ld            : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
+  | exec_sd            : Fun ["hv" ∷ ty.hv; "lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
+  | exec_cincoffsetimm : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool
+  | exec_restrict      : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool
+  | exec_restricti     : Fun ["lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
+  | exec_subseg        : Fun ["lv" ∷ ty.lv; "hv1" ∷ ty.hv; "hv2" ∷ ty.hv] ty.bool
+  | exec_subsegi       : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
+  | exec_isptr         : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
+  | exec_addi          : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
+  | exec_add           : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
+  | exec_sub           : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
+  | exec_slt           : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
+  | exec_slti          : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
+  | exec_sltu          : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
+  | exec_sltiu         : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
+  | exec_cgetperm      : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
+  | exec_cgetbase      : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
+  | exec_cgetlen       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
+  | exec_cgetaddr      : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
+  | exec_fail          : Fun [] ty.bool
+  | exec_ret           : Fun [] ty.bool
+  | exec_instr         : Fun ["i" ∷ ty.instr] ty.bool
+  | exec               : Fun [] ty.bool
+  | step               : Fun [] ty.unit
+  | loop               : Fun [] ty.unit
   .
 
   Inductive FunX : PCtx -> Ty -> Set :=
@@ -380,12 +380,12 @@ Section FunDefKit.
        call update_pc ;;
        stm_val ty.bool true).
 
-    Definition fun_exec_lea : Stm ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool :=
+    Definition fun_exec_cincoffsetimm : Stm ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool :=
       let: "base_cap" :: cap  := call read_reg_cap (exp_var "lv") in
       let: "offset" :: ty.int := call read_reg_num (exp_var "hv") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "base_cap") in
       (match: exp_var "perm" in permission with
-       | E => fail "Err: [lea] not permitted on enter capability"
+       | E => fail "Err: [cincoffsetimm] not permitted on enter capability"
        | _ =>
            let: "c" :: cap := exp_record capability
                                          [ exp_var "perm";
@@ -703,43 +703,56 @@ Section FunDefKit.
         instruction (exp_var i)
         (fun K =>
            match K with
-           | kjalr      => MkAlt (pat_pair "lv1" "lv2") (call exec_jalr (exp_var "lv1") (exp_var "lv2"))
-           | kjal       => MkAlt (pat_pair lv offset) (call exec_jal lv offset)
-           | kbne       => MkAlt (pat_tuple ("lv1" , "lv2" , immediate))
-                                 (call exec_bne (exp_var "lv1") (exp_var "lv2") immediate)
-           | kcmove     => MkAlt (pat_pair lv hv) (call exec_cmove lv hv)
-           | kld        => MkAlt (pat_tuple (lv , hv , immediate))
-                            (call exec_ld lv hv immediate)
-           | ksd        => MkAlt (pat_tuple (hv , lv , immediate))
-                            (call exec_sd hv lv immediate)
-           | klea       => MkAlt (pat_pair lv hv) (call exec_lea lv hv)
-           | krestrict  => MkAlt (pat_pair lv hv) (call exec_restrict lv hv)
-           | krestricti => MkAlt (pat_pair lv immediate) (call exec_restricti lv immediate)
-           | ksubseg    => MkAlt (pat_tuple (lv , "hv1" , "hv2"))
-                            (call exec_subseg lv (exp_var "hv1") (exp_var "hv2"))
-           | ksubsegi   => MkAlt (pat_tuple (lv , hv , immediate))
-                            (call exec_subsegi lv hv immediate)
-           | kaddi      => MkAlt (pat_tuple (lv , hv , immediate))
-                            (call exec_addi lv hv immediate)
-           | kadd       => MkAlt (pat_tuple ("lv1" , "lv2" , "lv3"))
-                            (call exec_add (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
-           | ksub       => MkAlt (pat_tuple ("lv1" , "lv2" , "lv3"))
-                            (call exec_sub (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
-           | kslt       => MkAlt (pat_tuple ("lv1" , "lv2" , "lv3"))
-                            (call exec_slt (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
-           | kslti      => MkAlt (pat_tuple (lv , hv , immediate))
-                            (call exec_slti lv hv immediate)
-           | ksltu      => MkAlt (pat_tuple ("lv1" , "lv2" , "lv3"))
-                            (call exec_sltu (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
-           | ksltiu     => MkAlt (pat_tuple (lv , hv , immediate))
-                            (call exec_sltiu lv hv immediate)
-           | kisptr     => MkAlt (pat_pair "lv1" "lv2") (call exec_isptr (exp_var "lv1") (exp_var "lv2"))
-           | kcgetperm  => MkAlt (pat_pair "lv1" "lv2") (call exec_cgetperm (exp_var "lv1") (exp_var "lv2"))
-           | kcgetbase  => MkAlt (pat_pair "lv1" "lv2") (call exec_cgetbase (exp_var "lv1") (exp_var "lv2"))
-           | kcgetlen   => MkAlt (pat_pair "lv1" "lv2") (call exec_cgetlen (exp_var "lv1") (exp_var "lv2"))
-           | kcgetaddr  => MkAlt (pat_pair "lv1" "lv2") (call exec_cgetaddr (exp_var "lv1") (exp_var "lv2"))
-           | kfail      => MkAlt pat_unit (call exec_fail)
-           | kret       => MkAlt pat_unit (call exec_ret)
+           | kjalr          => MkAlt (pat_pair "lv1" "lv2")
+                                     (call exec_jalr (exp_var "lv1") (exp_var "lv2"))
+           | kjal           => MkAlt (pat_pair lv offset)
+                                     (call exec_jal lv offset)
+           | kbne           => MkAlt (pat_tuple ("lv1" , "lv2" , immediate))
+                                     (call exec_bne (exp_var "lv1") (exp_var "lv2") immediate)
+           | kcmove         => MkAlt (pat_pair lv hv)
+                                     (call exec_cmove lv hv)
+           | kld            => MkAlt (pat_tuple (lv , hv , immediate))
+                                     (call exec_ld lv hv immediate)
+           | ksd            => MkAlt (pat_tuple (hv , lv , immediate))
+                                     (call exec_sd hv lv immediate)
+           | kcincoffsetimm => MkAlt (pat_pair lv hv)
+                                     (call exec_cincoffsetimm lv hv)
+           | krestrict      => MkAlt (pat_pair lv hv)
+                                     (call exec_restrict lv hv)
+           | krestricti     => MkAlt (pat_pair lv immediate)
+                                     (call exec_restricti lv immediate)
+           | ksubseg        => MkAlt (pat_tuple (lv , "hv1" , "hv2"))
+                                     (call exec_subseg lv (exp_var "hv1") (exp_var "hv2"))
+           | ksubsegi       => MkAlt (pat_tuple (lv , hv , immediate))
+                                     (call exec_subsegi lv hv immediate)
+           | kaddi          => MkAlt (pat_tuple (lv , hv , immediate))
+                                     (call exec_addi lv hv immediate)
+           | kadd           => MkAlt (pat_tuple ("lv1" , "lv2" , "lv3"))
+                                     (call exec_add (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
+           | ksub           => MkAlt (pat_tuple ("lv1" , "lv2" , "lv3"))
+                                     (call exec_sub (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
+           | kslt           => MkAlt (pat_tuple ("lv1" , "lv2" , "lv3"))
+                                     (call exec_slt (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
+           | kslti          => MkAlt (pat_tuple (lv , hv , immediate))
+                                     (call exec_slti lv hv immediate)
+           | ksltu          => MkAlt (pat_tuple ("lv1" , "lv2" , "lv3"))
+                                     (call exec_sltu (exp_var "lv1") (exp_var "lv2") (exp_var "lv3"))
+           | ksltiu         => MkAlt (pat_tuple (lv , hv , immediate))
+                                     (call exec_sltiu lv hv immediate)
+           | kisptr         => MkAlt (pat_pair "lv1" "lv2")
+                                     (call exec_isptr (exp_var "lv1") (exp_var "lv2"))
+           | kcgetperm      => MkAlt (pat_pair "lv1" "lv2")
+                                     (call exec_cgetperm (exp_var "lv1") (exp_var "lv2"))
+           | kcgetbase      => MkAlt (pat_pair "lv1" "lv2")
+                                     (call exec_cgetbase (exp_var "lv1") (exp_var "lv2"))
+           | kcgetlen       => MkAlt (pat_pair "lv1" "lv2")
+                                     (call exec_cgetlen (exp_var "lv1") (exp_var "lv2"))
+           | kcgetaddr      => MkAlt (pat_pair "lv1" "lv2")
+                                     (call exec_cgetaddr (exp_var "lv1") (exp_var "lv2"))
+           | kfail          => MkAlt pat_unit
+                                     (call exec_fail)
+           | kret           => MkAlt pat_unit
+                                     (call exec_ret)
            end).
 
     Definition fun_read_mem : Stm ["c" ∷ ty.cap] ty.memval :=
@@ -783,56 +796,56 @@ Section FunDefKit.
 
   Definition FunDef {Δ τ} (f : Fun Δ τ) : Stm Δ τ :=
     match f with
-    | read_reg        => fun_read_reg
-    | read_reg_cap    => fun_read_reg_cap
-    | read_reg_num    => fun_read_reg_num
-    | write_reg       => fun_write_reg
-    | next_pc         => fun_next_pc
-    | update_pc       => fun_update_pc
-    | update_pc_perm  => fun_update_pc_perm
-    | is_correct_pc   => fun_is_correct_pc
-    | is_perm         => fun_is_perm
-    | add_pc          => fun_add_pc
-    | read_mem        => fun_read_mem
-    | write_mem       => fun_write_mem
-    | read_allowed    => fun_read_allowed
-    | write_allowed   => fun_write_allowed
-    | upper_bound     => fun_upper_bound
-    | within_bounds   => fun_within_bounds
-    | perm_to_bits    => fun_perm_to_bits
-    | perm_from_bits  => fun_perm_from_bits
-    | is_sub_perm     => fun_is_sub_perm
-    | is_within_range => fun_is_within_range
-    | abs             => fun_abs
-    | exec_jalr       => fun_exec_jalr
-    | exec_jal        => fun_exec_jal
-    | exec_bne        => fun_exec_bne
-    | exec_cmove      => fun_exec_cmove
-    | exec_ld         => fun_exec_ld
-    | exec_sd         => fun_exec_sd
-    | exec_lea        => fun_exec_lea
-    | exec_restrict   => fun_exec_restrict
-    | exec_restricti  => fun_exec_restricti
-    | exec_subseg     => fun_exec_subseg
-    | exec_subsegi    => fun_exec_subsegi
-    | exec_addi       => fun_exec_addi
-    | exec_add        => fun_exec_add
-    | exec_sub        => fun_exec_sub
-    | exec_slt        => fun_exec_slt
-    | exec_slti       => fun_exec_slti
-    | exec_sltu       => fun_exec_sltu
-    | exec_sltiu      => fun_exec_sltiu
-    | exec_isptr      => fun_exec_isptr
-    | exec_cgetperm   => fun_exec_cgetperm
-    | exec_cgetbase   => fun_exec_cgetbase
-    | exec_cgetlen    => fun_exec_cgetlen
-    | exec_cgetaddr   => fun_exec_cgetaddr
-    | exec_fail       => fun_exec_fail
-    | exec_ret        => fun_exec_ret
-    | exec_instr      => fun_exec_instr
-    | exec            => fun_exec
-    | step            => fun_step
-    | loop            => fun_loop
+    | read_reg           => fun_read_reg
+    | read_reg_cap       => fun_read_reg_cap
+    | read_reg_num       => fun_read_reg_num
+    | write_reg          => fun_write_reg
+    | next_pc            => fun_next_pc
+    | update_pc          => fun_update_pc
+    | update_pc_perm     => fun_update_pc_perm
+    | is_correct_pc      => fun_is_correct_pc
+    | is_perm            => fun_is_perm
+    | add_pc             => fun_add_pc
+    | read_mem           => fun_read_mem
+    | write_mem          => fun_write_mem
+    | read_allowed       => fun_read_allowed
+    | write_allowed      => fun_write_allowed
+    | upper_bound        => fun_upper_bound
+    | within_bounds      => fun_within_bounds
+    | perm_to_bits       => fun_perm_to_bits
+    | perm_from_bits     => fun_perm_from_bits
+    | is_sub_perm        => fun_is_sub_perm
+    | is_within_range    => fun_is_within_range
+    | abs                => fun_abs
+    | exec_jalr          => fun_exec_jalr
+    | exec_jal           => fun_exec_jal
+    | exec_bne           => fun_exec_bne
+    | exec_cmove         => fun_exec_cmove
+    | exec_ld            => fun_exec_ld
+    | exec_sd            => fun_exec_sd
+    | exec_cincoffsetimm => fun_exec_cincoffsetimm
+    | exec_restrict      => fun_exec_restrict
+    | exec_restricti     => fun_exec_restricti
+    | exec_subseg        => fun_exec_subseg
+    | exec_subsegi       => fun_exec_subsegi
+    | exec_addi          => fun_exec_addi
+    | exec_add           => fun_exec_add
+    | exec_sub           => fun_exec_sub
+    | exec_slt           => fun_exec_slt
+    | exec_slti          => fun_exec_slti
+    | exec_sltu          => fun_exec_sltu
+    | exec_sltiu         => fun_exec_sltiu
+    | exec_isptr         => fun_exec_isptr
+    | exec_cgetperm      => fun_exec_cgetperm
+    | exec_cgetbase      => fun_exec_cgetbase
+    | exec_cgetlen       => fun_exec_cgetlen
+    | exec_cgetaddr      => fun_exec_cgetaddr
+    | exec_fail          => fun_exec_fail
+    | exec_ret           => fun_exec_ret
+    | exec_instr         => fun_exec_instr
+    | exec               => fun_exec
+    | step               => fun_step
+    | loop               => fun_loop
     end.
 
 End FunDefKit.
