@@ -83,7 +83,7 @@ Section FunDeclKit.
   | abs             : Fun ["i" ∷ ty.int] ty.int
   | exec_jalr       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv ] ty.bool
   | exec_jal        : Fun ["lv" ∷ ty.lv; "offset" ∷ ty.int] ty.bool
-  | exec_bnez       : Fun ["lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
+  | exec_bne        : Fun ["lv1" ∷ ty.lv; "lv2" :: ty.lv; "immediate" ∷ ty.int] ty.bool
   | exec_mv         : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv ] ty.bool
   | exec_ld         : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
   | exec_sd         : Fun ["hv" ∷ ty.hv; "lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
@@ -690,9 +690,10 @@ Section FunDefKit.
       call add_pc (exp_binop bop.times offset (exp_int 2)) ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_bnez : Stm ["lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool :=
-      let: "c" :: ty.int := call read_reg_num (exp_var "lv") in
-      stm_if (exp_binop bop.eq (exp_var "c") (exp_int 0))
+    Definition fun_exec_bne : Stm ["lv1" ∷ ty.lv; "lv2" :: ty.lv; "immediate" ∷ ty.int] ty.bool :=
+      let: "a" :: ty.int := call read_reg_num (exp_var "lv1") in
+      let: "b" :: ty.int := call read_reg_num (exp_var "lv2") in
+      stm_if (exp_binop bop.eq (exp_var "a") (exp_var "b"))
              (call update_pc ;; stm_val ty.bool true)
              (call add_pc (exp_var "immediate") ;; stm_val ty.bool true).
 
@@ -703,7 +704,8 @@ Section FunDefKit.
            match K with
            | kjalr      => MkAlt (pat_pair "lv1" "lv2") (call exec_jalr (exp_var "lv1") (exp_var "lv2"))
            | kjal       => MkAlt (pat_pair lv offset) (call exec_jal lv offset)
-           | kbnez      => MkAlt (pat_pair lv immediate) (call exec_bnez lv immediate)
+           | kbne       => MkAlt (pat_tuple ("lv1" , "lv2" , immediate))
+                                 (call exec_bne (exp_var "lv1") (exp_var "lv2") immediate)
            | kmv        => MkAlt (pat_pair lv hv) (call exec_mv lv hv)
            | kld        => MkAlt (pat_tuple (lv , hv , immediate))
                             (call exec_ld lv hv immediate)
@@ -803,7 +805,7 @@ Section FunDefKit.
     | abs             => fun_abs
     | exec_jalr       => fun_exec_jalr
     | exec_jal        => fun_exec_jal
-    | exec_bnez       => fun_exec_bnez
+    | exec_bne        => fun_exec_bne
     | exec_mv         => fun_exec_mv
     | exec_ld         => fun_exec_ld
     | exec_sd         => fun_exec_sd

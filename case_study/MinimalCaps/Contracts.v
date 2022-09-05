@@ -531,8 +531,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_bnez(lv : lv, immediate : Z) *)
-  Definition sep_contract_exec_bnez : SepContractFun exec_bnez :=
+      bool exec_bne(lv1 : lv, lv2: lv, immediate : Z) *)
+  Definition sep_contract_exec_bne : SepContractFun exec_bne :=
     mach_inv_contract.
 
   (*
@@ -802,7 +802,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | abs                    => Some sep_contract_abs
       | exec_jalr              => Some sep_contract_exec_jalr
       | exec_jal               => Some sep_contract_exec_jal
-      | exec_bnez              => Some sep_contract_exec_bnez
+      | exec_bne               => Some sep_contract_exec_bne
       | exec_mv                => Some sep_contract_exec_mv
       | exec_ld                => Some sep_contract_exec_ld
       | exec_sd                => Some sep_contract_exec_sd
@@ -1307,7 +1307,7 @@ Module MinCapsValidContracts.
   Lemma valid_contract_exec_jal : ValidContract exec_jal.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_bnez : ValidContract exec_bnez.
+  Lemma valid_contract_exec_bne : ValidContract exec_bne.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_mv : ValidContract exec_mv.
@@ -1436,7 +1436,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_abs).
     - apply (valid_contract _ H valid_contract_exec_jalr).
     - apply (valid_contract _ H valid_contract_exec_jal).
-    - apply (valid_contract _ H valid_contract_exec_bnez).
+    - apply (valid_contract _ H valid_contract_exec_bne).
     - apply (valid_contract _ H valid_contract_exec_mv).
     - apply (valid_contract _ H valid_contract_exec_ld).
     - apply (valid_contract _ H valid_contract_exec_sd).
@@ -1502,7 +1502,7 @@ Section Statistics.
       existT _ (existT _ abs);
       existT _ (existT _ exec_jalr);
       existT _ (existT _ exec_jal);
-      existT _ (existT _ exec_bnez);
+      existT _ (existT _ exec_bne);
       existT _ (existT _ exec_mv);
       existT _ (existT _ exec_ld);
       existT _ (existT _ exec_sd);

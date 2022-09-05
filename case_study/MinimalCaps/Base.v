@@ -49,7 +49,7 @@ Definition RV : Set := LV + Z.
 Inductive Instruction : Set :=
 | jalr      (lv1 : LV) (lv2 : LV)
 | jal       (lv : LV) (offset : Z)
-| bnez      (lv : LV) (immediate : Z)
+| bne       (lv1 : LV) (lv2 : LV) (immediate : Z)
 | mv        (lv : LV) (hv : HV)
 | ld        (lv : LV) (hv : HV) (immediate : Z)
 | sd        (hv : HV) (lv : LV) (immediate : Z)
@@ -76,7 +76,7 @@ Inductive Instruction : Set :=
 Inductive InstructionConstructor : Set :=
 | kjalr
 | kjal
-| kbnez
+| kbne
 | kmv
 | kld
 | ksd
@@ -167,7 +167,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjalr;kjal;kbnez;kmv;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kgetp;kgetb;kgete;kgeta;kfail;kret] |}.
+    {| enum := [kjalr;kjal;kbne;kmv;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kgetp;kgetb;kgete;kgeta;kfail;kret] |}.
 
 End Finite.
 
@@ -228,7 +228,7 @@ Module Export MinCapsBase <: Base.
       match K with
       | kjalr      => ty.prod ty.lv ty.lv
       | kjal       => ty.prod ty.lv ty.int
-      | kbnez      => ty.prod ty.lv ty.int
+      | kbne       => ty.tuple [ty.lv; ty.lv; ty.int]
       | kmv        => ty.prod ty.lv ty.hv
       | kld        => ty.tuple [ty.lv; ty.hv; ty.int]
       | ksd        => ty.tuple [ty.hv; ty.lv; ty.int]
@@ -271,31 +271,31 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun Kv =>
       match Kv with
-      | existT kjalr     (lv1 , lv2)                 => jalr lv1 lv2
-      | existT kjal      (lv , offset)               => jal lv offset
-      | existT kbnez     (lv , immediate)            => bnez lv immediate
-      | existT kmv       (lv , hv)                   => mv lv hv
-      | existT kld       (tt , lv , hv , immediate)  => ld lv hv immediate
-      | existT ksd       (tt , hv , lv , immediate)  => sd hv lv immediate
-      | existT kaddi     (tt , lv , hv , immediate)  => addi lv hv immediate
-      | existT kadd      (tt , lv1 , lv2 , lv3)      => add lv1 lv2 lv3
-      | existT ksub      (tt , lv1 , lv2 , lv3)      => sub lv1 lv2 lv3
-      | existT kslt      (tt , lv1 , lv2 , lv3)      => slt lv1 lv2 lv3
-      | existT kslti     (tt , lv , hv , immediate)  => slti lv hv immediate
-      | existT ksltu     (tt , lv1 , lv2 , lv3)      => sltu lv1 lv2 lv3
-      | existT ksltiu    (tt , lv , hv , immediate)  => sltiu lv hv immediate
-      | existT klea      (lv , hv)                   => lea lv hv
-      | existT krestrict (lv , hv)                   => restrict lv hv
-      | existT krestricti (lv , immediate)           => restricti lv immediate
-      | existT ksubseg   (tt , lv , hv1 , hv2)       => subseg lv hv1 hv2
-      | existT ksubsegi  (tt , lv , hv  , immediate) => subsegi lv hv immediate
-      | existT kisptr    (lv , lv')                  => isptr lv lv'
-      | existT kgetp     (lv , lv')                  => getp lv lv'
-      | existT kgetb     (lv , lv')                  => getb lv lv'
-      | existT kgete     (lv , lv')                  => gete lv lv'
-      | existT kgeta     (lv , lv')                  => geta lv lv'
-      | existT kfail     tt                          => fail
-      | existT kret      tt                          => ret
+      | existT kjalr     (lv1 , lv2)                  => jalr lv1 lv2
+      | existT kjal      (lv , offset)                => jal lv offset
+      | existT kbne      (tt , lv1 , lv2 , immediate) => bne lv1 lv2 immediate
+      | existT kmv       (lv , hv)                    => mv lv hv
+      | existT kld       (tt , lv , hv , immediate)   => ld lv hv immediate
+      | existT ksd       (tt , hv , lv , immediate)   => sd hv lv immediate
+      | existT kaddi     (tt , lv , hv , immediate)   => addi lv hv immediate
+      | existT kadd      (tt , lv1 , lv2 , lv3)       => add lv1 lv2 lv3
+      | existT ksub      (tt , lv1 , lv2 , lv3)       => sub lv1 lv2 lv3
+      | existT kslt      (tt , lv1 , lv2 , lv3)       => slt lv1 lv2 lv3
+      | existT kslti     (tt , lv , hv , immediate)    => slti lv hv immediate
+      | existT ksltu     (tt , lv1 , lv2 , lv3)       => sltu lv1 lv2 lv3
+      | existT ksltiu    (tt , lv , hv , immediate)   => sltiu lv hv immediate
+      | existT klea      (lv , hv)                    => lea lv hv
+      | existT krestrict (lv , hv)                    => restrict lv hv
+      | existT krestricti (lv , immediate)            => restricti lv immediate
+      | existT ksubseg   (tt , lv , hv1 , hv2)        => subseg lv hv1 hv2
+      | existT ksubsegi  (tt , lv , hv  , immediate)  => subsegi lv hv immediate
+      | existT kisptr    (lv , lv')                   => isptr lv lv'
+      | existT kgetp     (lv , lv')                   => getp lv lv'
+      | existT kgetb     (lv , lv')                   => getb lv lv'
+      | existT kgete     (lv , lv')                   => gete lv lv'
+      | existT kgeta     (lv , lv')                   => geta lv lv'
+      | existT kfail     tt                           => fail
+      | existT kret      tt                           => ret
       end
     end.
 
@@ -305,7 +305,7 @@ Module Export MinCapsBase <: Base.
       match Kv with
       | jalr lv1 lv2             => existT kjalr      (lv1 , lv2)
       | jal lv offset            => existT kjal       (lv , offset)
-      | bnez lv immediate        => existT kbnez      (lv , immediate)
+      | bne lv1 lv2 immediate    => existT kbne       (tt , lv1 , lv2 , immediate)
       | mv lv hv                 => existT kmv        (lv , hv)
       | ld lv hv immediate       => existT kld        (tt , lv , hv , immediate)
       | sd hv lv immediate       => existT ksd        (tt , hv , lv , immediate)
