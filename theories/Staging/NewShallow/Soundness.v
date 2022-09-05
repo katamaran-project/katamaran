@@ -457,9 +457,7 @@ Module Type Soundness
         rewrite wp_demonic_match_bvec_split.
         apply rule_stm_match_bvec_split; cbn; intros;
           apply rule_pull; intro Heval.
-        remember (eval e δ1). destruct bv.appView.
-        apply bv.app_inj in Heval.
-        now destruct Heval; subst.
+        now rewrite Heval, bv.appView_app.
 
       - (* stm_read_register *)
         apply rule_exist. intros v.

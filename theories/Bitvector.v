@@ -339,12 +339,11 @@ Module bv.
 
     Import EqNotations.
 
-    Definition cvapp {m n} {x : bv (S m)} (y : bv n) :
-      ConsView x -> ConsView (app x y) :=
-      fun (cv : ConsView x) =>
-        match cv with
-          cvcons b x0 => rew <- [ConsView] (app_cons b x0 y) in cvcons b (app x0 y)
-        end.
+    Definition cvapp {m n} {x : bv (S m)} (cv : ConsView x) (y : bv n) :
+      ConsView (app x y) :=
+      match cv with
+      | cvcons b x => rew <- app_cons b x y in cvcons b (app x y)
+      end.
 
     Definition avcons {m n} b {xs} (axs : AppView m n xs) :
       AppView (S m) n (cons b xs) :=
@@ -399,9 +398,8 @@ Module bv.
     Qed.
 
     Lemma consView_app {m n} (x : bv (S m)) (y : bv n) :
-      consView (app x y) = cvapp y (consView x).
+      consView (app x y) = cvapp (consView x) y.
     Proof.
-      unfold cvapp.
       destruct (consView x).
       rewrite <-(f_equal_dep _ consView (eq_sym (app_cons b xs y))).
       now rewrite consView_cons.
@@ -421,15 +419,14 @@ Module bv.
     Lemma appView_app [m n] (x : bv m) (y : bv n) :
       appView m n (app x y) = isapp x y.
     Proof.
-      induction m.
-      - now destruct (nilView x).
+      induction x using bv_rect.
+      - reflexivity.
       - cbn.
         rewrite consView_app.
-        destruct (consView x).
+        rewrite consView_cons.
         cbn.
-        rewrite match_rew .
-        rewrite IHm.
-        cbn.
+        rewrite match_rew.
+        rewrite IHx. cbn.
         now rewrite rew_opp_l.
     Qed.
   End ListLike.
