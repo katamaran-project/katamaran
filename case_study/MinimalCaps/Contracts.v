@@ -718,29 +718,29 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_getp(lv1 : lv, lv2 : lv) *)
-  Definition sep_contract_exec_getp : SepContractFun exec_getp :=
+      bool exec_cgetperm(lv1 : lv, lv2 : lv) *)
+  Definition sep_contract_exec_cgetperm : SepContractFun exec_cgetperm :=
     mach_inv_contract.
 
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_getb(lv1 : lv, lv2 : lv) *)
-  Definition sep_contract_exec_getb : SepContractFun exec_getb :=
+      bool exec_cgetbase(lv1 : lv, lv2 : lv) *)
+  Definition sep_contract_exec_cgetbase : SepContractFun exec_cgetbase :=
     mach_inv_contract.
 
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_gete(lv1 : lv, lv2 : lv) *)
-  Definition sep_contract_exec_gete : SepContractFun exec_gete :=
+      bool exec_cgetlen(lv1 : lv, lv2 : lv) *)
+  Definition sep_contract_exec_cgetlen : SepContractFun exec_cgetlen :=
     mach_inv_contract.
 
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_geta(lv1 : lv, lv2 : lv) *)
-  Definition sep_contract_exec_geta : SepContractFun exec_geta :=
+      bool exec_cgetaddr(lv1 : lv, lv2 : lv) *)
+  Definition sep_contract_exec_cgetaddr : SepContractFun exec_cgetaddr :=
     mach_inv_contract.
 
   (* @pre mach_inv;
@@ -819,10 +819,10 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | exec_sltu              => Some sep_contract_exec_sltu
       | exec_sltiu             => Some sep_contract_exec_slti
       | exec_isptr             => Some sep_contract_exec_isptr
-      | exec_getp              => Some sep_contract_exec_getp
-      | exec_getb              => Some sep_contract_exec_getb
-      | exec_gete              => Some sep_contract_exec_gete
-      | exec_geta              => Some sep_contract_exec_geta
+      | exec_cgetperm          => Some sep_contract_exec_cgetperm
+      | exec_cgetbase          => Some sep_contract_exec_cgetbase
+      | exec_cgetlen           => Some sep_contract_exec_cgetlen
+      | exec_cgetaddr          => Some sep_contract_exec_cgetaddr
       | exec_fail              => Some sep_contract_exec_fail
       | exec_ret               => Some sep_contract_exec_ret
       | exec_instr             => Some sep_contract_exec_instr
@@ -1358,16 +1358,16 @@ Module MinCapsValidContracts.
   Lemma valid_contract_exec_sltiu : ValidContract exec_sltiu.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_getp : ValidContract exec_getp.
+  Lemma valid_contract_exec_cgetperm : ValidContract exec_cgetperm.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_getb : ValidContract exec_getb.
+  Lemma valid_contract_exec_cgetbase : ValidContract exec_cgetbase.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_gete : ValidContract exec_gete.
+  Lemma valid_contract_exec_cgetlen : ValidContract exec_cgetlen.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_geta : ValidContract exec_geta.
+  Lemma valid_contract_exec_cgetaddr : ValidContract exec_cgetaddr.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_fail : ValidContract exec_fail.
@@ -1453,10 +1453,10 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_exec_slti).
     - apply (valid_contract _ H valid_contract_exec_sltu).
     - apply (valid_contract _ H valid_contract_exec_sltiu).
-    - apply (valid_contract _ H valid_contract_exec_getp).
-    - apply (valid_contract _ H valid_contract_exec_getb).
-    - apply (valid_contract _ H valid_contract_exec_gete).
-    - apply (valid_contract _ H valid_contract_exec_geta).
+    - apply (valid_contract _ H valid_contract_exec_cgetperm).
+    - apply (valid_contract _ H valid_contract_exec_cgetbase).
+    - apply (valid_contract _ H valid_contract_exec_cgetlen).
+    - apply (valid_contract _ H valid_contract_exec_cgetaddr).
     - apply (valid_contract _ H valid_contract_exec_fail).
     - apply (valid_contract _ H valid_contract_exec_ret).
     - apply (valid_contract _ H valid_contract_exec_instr).
@@ -1519,10 +1519,10 @@ Section Statistics.
       existT _ (existT _ exec_slti);
       existT _ (existT _ exec_sltu);
       existT _ (existT _ exec_sltiu);
-      existT _ (existT _ exec_getp);
-      existT _ (existT _ exec_getb);
-      existT _ (existT _ exec_gete);
-      existT _ (existT _ exec_geta);
+      existT _ (existT _ exec_cgetperm);
+      existT _ (existT _ exec_cgetbase);
+      existT _ (existT _ exec_cgetlen);
+      existT _ (existT _ exec_cgetaddr);
       existT _ (existT _ exec_fail);
       existT _ (existT _ exec_ret);
       existT _ (existT _ exec_instr);

@@ -66,10 +66,10 @@ Inductive Instruction : Set :=
 | subseg    (lv : LV) (hv1 hv2 : HV)
 | subsegi   (lv : LV) (hv : HV) (immediate : Z)
 | isptr     (lv : LV) (lv' : HV)
-| getp      (lv lv' : LV)
-| getb      (lv lv' : LV)
-| gete      (lv lv' : LV)
-| geta      (lv lv' : LV)
+| cgetperm  (lv lv' : LV)
+| cgetbase  (lv lv' : LV)
+| cgetlen   (lv lv' : LV)
+| cgetaddr  (lv lv' : LV)
 | fail
 | ret.
 
@@ -93,10 +93,10 @@ Inductive InstructionConstructor : Set :=
 | ksubseg
 | ksubsegi
 | kisptr
-| kgetp
-| kgetb
-| kgete
-| kgeta
+| kcgetperm
+| kcgetbase
+| kcgetlen
+| kcgetaddr
 | kfail
 | kret.
 
@@ -167,7 +167,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kgetp;kgetb;kgete;kgeta;kfail;kret] |}.
+    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;klea;krestrict;krestricti;ksubseg;ksubsegi;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
 
 End Finite.
 
@@ -245,10 +245,10 @@ Module Export MinCapsBase <: Base.
       | ksubseg    => ty.tuple [ty.lv; ty.hv; ty.hv]
       | ksubsegi   => ty.tuple [ty.lv; ty.hv; ty.int]
       | kisptr     => ty.prod ty.lv ty.lv
-      | kgetp      => ty.prod ty.lv ty.lv
-      | kgetb      => ty.prod ty.lv ty.lv
-      | kgete      => ty.prod ty.lv ty.lv
-      | kgeta      => ty.prod ty.lv ty.lv
+      | kcgetperm  => ty.prod ty.lv ty.lv
+      | kcgetbase  => ty.prod ty.lv ty.lv
+      | kcgetlen   => ty.prod ty.lv ty.lv
+      | kcgetaddr  => ty.prod ty.lv ty.lv
       | kfail      => ty.unit
       | kret       => ty.unit
       end
@@ -290,10 +290,10 @@ Module Export MinCapsBase <: Base.
       | existT ksubseg   (tt , lv , hv1 , hv2)        => subseg lv hv1 hv2
       | existT ksubsegi  (tt , lv , hv  , immediate)  => subsegi lv hv immediate
       | existT kisptr    (lv , lv')                   => isptr lv lv'
-      | existT kgetp     (lv , lv')                   => getp lv lv'
-      | existT kgetb     (lv , lv')                   => getb lv lv'
-      | existT kgete     (lv , lv')                   => gete lv lv'
-      | existT kgeta     (lv , lv')                   => geta lv lv'
+      | existT kcgetperm (lv , lv')                   => cgetperm lv lv'
+      | existT kcgetbase (lv , lv')                   => cgetbase lv lv'
+      | existT kcgetlen  (lv , lv')                   => cgetlen lv lv'
+      | existT kcgetaddr (lv , lv')                   => cgetaddr lv lv'
       | existT kfail     tt                           => fail
       | existT kret      tt                           => ret
       end
@@ -322,10 +322,10 @@ Module Export MinCapsBase <: Base.
       | subseg lv hv1 hv2        => existT ksubseg    (tt, lv , hv1 , hv2)
       | subsegi lv hv immediate  => existT ksubsegi   (tt, lv , hv , immediate)
       | isptr lv lv'             => existT kisptr     (lv , lv')
-      | getp lv lv'              => existT kgetp      (lv , lv')
-      | getb lv lv'              => existT kgetb      (lv , lv')
-      | gete lv lv'              => existT kgete      (lv , lv')
-      | geta lv lv'              => existT kgeta      (lv , lv')
+      | cgetperm lv lv'          => existT kcgetperm  (lv , lv')
+      | cgetbase lv lv'          => existT kcgetbase  (lv , lv')
+      | cgetlen lv lv'           => existT kcgetlen   (lv , lv')
+      | cgetaddr lv lv'          => existT kcgetaddr  (lv , lv')
       | fail                     => existT kfail      tt
       | ret                      => existT kret       tt
       end

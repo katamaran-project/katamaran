@@ -100,10 +100,10 @@ Section FunDeclKit.
   | exec_slti       : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
   | exec_sltu       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv; "lv3" ∷ ty.lv] ty.bool
   | exec_sltiu      : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
-  | exec_getp       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
-  | exec_getb       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
-  | exec_gete       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
-  | exec_geta       : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
+  | exec_cgetperm   : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
+  | exec_cgetbase   : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
+  | exec_cgetlen    : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
+  | exec_cgetaddr   : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
   | exec_fail       : Fun [] ty.bool
   | exec_ret        : Fun [] ty.bool
   | exec_instr      : Fun ["i" ∷ ty.instr] ty.bool
@@ -625,7 +625,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_getp : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
+    Definition fun_exec_cgetperm : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "lv2") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       let: "i" :: ty.int := call perm_to_bits (exp_var "perm") in
@@ -634,7 +634,7 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_getb : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
+    Definition fun_exec_cgetbase : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "lv2") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       use lemma int_safe [exp_var "beg"] ;;
@@ -642,15 +642,16 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_gete : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
+    Definition fun_exec_cgetlen : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "lv2") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
-      use lemma int_safe [exp_var "end"] ;;
-      call write_reg (exp_var "lv1") (exp_inl (exp_var "end")) ;;
+      let: "res" := (exp_var "end") - (exp_var "beg") in
+      use lemma int_safe [exp_var "res"] ;;
+      call write_reg (exp_var "lv1") (exp_inl (exp_var "res")) ;;
       call update_pc ;;
       stm_val ty.bool true.
 
-    Definition fun_exec_geta : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
+    Definition fun_exec_cgetaddr : Stm ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool :=
       let: c :: cap := call read_reg_cap (exp_var "lv2") in
       let*: ["perm", "beg", "end", "cursor"] := (exp_var "c") in
       use lemma int_safe [exp_var "cursor"] ;;
@@ -733,10 +734,10 @@ Section FunDefKit.
            | ksltiu     => MkAlt (pat_tuple (lv , hv , immediate))
                             (call exec_sltiu lv hv immediate)
            | kisptr     => MkAlt (pat_pair "lv1" "lv2") (call exec_isptr (exp_var "lv1") (exp_var "lv2"))
-           | kgetp      => MkAlt (pat_pair "lv1" "lv2") (call exec_getp (exp_var "lv1") (exp_var "lv2"))
-           | kgetb      => MkAlt (pat_pair "lv1" "lv2") (call exec_getb (exp_var "lv1") (exp_var "lv2"))
-           | kgete      => MkAlt (pat_pair "lv1" "lv2") (call exec_gete (exp_var "lv1") (exp_var "lv2"))
-           | kgeta      => MkAlt (pat_pair "lv1" "lv2") (call exec_geta (exp_var "lv1") (exp_var "lv2"))
+           | kcgetperm  => MkAlt (pat_pair "lv1" "lv2") (call exec_cgetperm (exp_var "lv1") (exp_var "lv2"))
+           | kcgetbase  => MkAlt (pat_pair "lv1" "lv2") (call exec_cgetbase (exp_var "lv1") (exp_var "lv2"))
+           | kcgetlen   => MkAlt (pat_pair "lv1" "lv2") (call exec_cgetlen (exp_var "lv1") (exp_var "lv2"))
+           | kcgetaddr  => MkAlt (pat_pair "lv1" "lv2") (call exec_cgetaddr (exp_var "lv1") (exp_var "lv2"))
            | kfail      => MkAlt pat_unit (call exec_fail)
            | kret       => MkAlt pat_unit (call exec_ret)
            end).
@@ -822,10 +823,10 @@ Section FunDefKit.
     | exec_sltu       => fun_exec_sltu
     | exec_sltiu      => fun_exec_sltiu
     | exec_isptr      => fun_exec_isptr
-    | exec_getp       => fun_exec_getp
-    | exec_getb       => fun_exec_getb
-    | exec_gete       => fun_exec_gete
-    | exec_geta       => fun_exec_geta
+    | exec_cgetperm   => fun_exec_cgetperm
+    | exec_cgetbase   => fun_exec_cgetbase
+    | exec_cgetlen    => fun_exec_cgetlen
+    | exec_cgetaddr   => fun_exec_cgetaddr
     | exec_fail       => fun_exec_fail
     | exec_ret        => fun_exec_ret
     | exec_instr      => fun_exec_instr
