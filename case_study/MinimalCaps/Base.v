@@ -42,33 +42,33 @@ Inductive Permission : Set :=
 Inductive RegName : Set :=
   R0 | R1 | R2 | R3.
 
-Definition LV : Set := RegName.
-Definition HV : Set := RegName.
-Definition RV : Set := LV + Z.
+Definition Dst : Set := RegName.
+Definition Src : Set := RegName.
+Definition Imm : Set := Z.
 
 Inductive Instruction : Set :=
-| jalr          (lv1 : LV) (lv2 : LV)
-| jal           (lv : LV) (offset : Z)
-| bne           (lv1 : LV) (lv2 : LV) (immediate : Z)
-| cmove         (lv : LV) (hv : HV)
-| ld            (lv : LV) (hv : HV) (immediate : Z)
-| sd            (hv : HV) (lv : LV) (immediate : Z)
-| addi          (lv : LV) (hv : HV) (immediate : Z)
-| add           (lv1 : LV) (lv2 : LV) (lv3 : LV)
-| sub           (lv1 : LV) (lv2 : LV) (lv3 : LV)
-| slt           (lv1 : LV) (lv2 : LV) (lv3 : LV)
-| slti          (lv : LV) (hv : HV) (immediate : Z)
-| sltu          (lv1 : LV) (lv2 : LV) (lv3 : LV)
-| sltiu         (lv : LV) (hv : HV) (immediate : Z)
-| cincoffsetimm (lv : LV) (hv : HV)
-| candperm      (lv : LV) (hv1 hv2 : HV)
-| csetbounds    (lv : LV) (hv1 hv2 : HV)
-| csetboundsimm (lv : LV) (hv : HV) (immediate : Z)
-| cgettag       (lv : LV) (lv' : HV)
-| cgetperm      (lv lv' : LV)
-| cgetbase      (lv lv' : LV)
-| cgetlen       (lv lv' : LV)
-| cgetaddr      (lv lv' : LV)
+| jalr          (cd  : Dst) (cs  : Src) (imm : Imm)
+| jal           (cd  : Dst) (imm : Imm)
+| bne           (rs1 : Src) (rs2 : Src) (imm : Imm)
+| ld            (cd  : Dst) (cs  : Src) (imm : Imm)
+| sd            (rs1 : Src) (rs2 : Src) (imm : Imm)
+| addi          (rd  : Dst) (rs  : Src) (imm : Imm)
+| add           (rd  : Dst) (rs1 : Src) (rs2 : Src)
+| sub           (rd  : Dst) (rs1 : Src) (rs2 : Src)
+| slt           (rd  : Dst) (rs1 : Src) (rs2 : Src)
+| slti          (rd  : Dst) (rs  : Src) (imm : Imm)
+| sltu          (rd  : Dst) (rs1 : Src) (rs2 : Src)
+| sltiu         (rd  : Dst) (rs  : Src) (imm : Imm)
+| cmove         (cd  : Dst) (cs  : Src)
+| cincoffset    (cd  : Dst) (cs  : Src) (rs : Src)
+| candperm      (cd  : Dst) (cs  : Src) (rs : Src)
+| csetbounds    (cd  : Dst) (cs  : Src) (rs : Src)
+| csetboundsimm (cd  : Dst) (cs  : Src) (imm : Imm)
+| cgettag       (rd  : Dst) (cd  : Src)
+| cgetperm      (rd  : Dst) (cs  : Src)
+| cgetbase      (rd  : Dst) (cs  : Src)
+| cgetlen       (rd  : Dst) (cs  : Src)
+| cgetaddr      (rd  : Dst) (cs  : Src)
 | fail
 | ret.
 
@@ -86,7 +86,7 @@ Inductive InstructionConstructor : Set :=
 | kslti
 | ksltu
 | ksltiu
-| kcincoffsetimm
+| kcincoffset
 | kcandperm
 | kcsetbounds
 | kcsetboundsimm
@@ -165,7 +165,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffsetimm;kcandperm;kcsetbounds;kcsetboundsimm;kcgettag;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
+    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffset;kcandperm;kcsetbounds;kcsetboundsimm;kcgettag;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
 
 End Finite.
 
@@ -183,9 +183,8 @@ Module Export MinCapsBase <: Base.
        recordi := Records;
     |}.
 
-  Notation "ty.hv" := (ty.enum regname).
-  Notation "ty.lv" := (ty.enum regname).
-  Notation "ty.rv" := (ty.sum (ty.enum regname) ty.int).
+  Notation "ty.dst" := (ty.enum regname).
+  Notation "ty.src" := (ty.enum regname).
   Notation "ty.cap" := (ty.record capability).
   Notation "ty.word" := (ty.sum ty.int ty.cap).
   Notation "ty.memval" := (ty.word).
@@ -224,28 +223,28 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun K =>
       match K with
-      | kjalr          => ty.prod ty.lv ty.lv
-      | kjal           => ty.prod ty.lv ty.int
-      | kbne           => ty.tuple [ty.lv; ty.lv; ty.int]
-      | kcmove         => ty.prod ty.lv ty.hv
-      | kld            => ty.tuple [ty.lv; ty.hv; ty.int]
-      | ksd            => ty.tuple [ty.hv; ty.lv; ty.int]
-      | kaddi          => ty.tuple [ty.lv; ty.hv; ty.int]
-      | kadd           => ty.tuple [ty.lv; ty.lv; ty.lv]
-      | ksub           => ty.tuple [ty.lv; ty.lv; ty.lv]
-      | kslt           => ty.tuple [ty.lv; ty.lv; ty.lv]
-      | kslti          => ty.tuple [ty.lv; ty.hv; ty.int]
-      | ksltu          => ty.tuple [ty.lv; ty.lv; ty.lv]
-      | ksltiu         => ty.tuple [ty.lv; ty.hv; ty.int]
-      | kcincoffsetimm => ty.prod ty.lv ty.hv
-      | kcandperm      => ty.tuple [ty.lv; ty.hv; ty.hv]
-      | kcsetbounds    => ty.tuple [ty.lv; ty.hv; ty.hv]
-      | kcsetboundsimm => ty.tuple [ty.lv; ty.hv; ty.int]
-      | kcgettag       => ty.prod ty.lv ty.lv
-      | kcgetperm      => ty.prod ty.lv ty.lv
-      | kcgetbase      => ty.prod ty.lv ty.lv
-      | kcgetlen       => ty.prod ty.lv ty.lv
-      | kcgetaddr      => ty.prod ty.lv ty.lv
+      | kjalr          => ty.tuple [ty.dst; ty.src; ty.int]
+      | kjal           => ty.prod ty.dst ty.int
+      | kbne           => ty.tuple [ty.src; ty.src; ty.int]
+      | kld            => ty.tuple [ty.dst; ty.src; ty.int]
+      | ksd            => ty.tuple [ty.src; ty.src; ty.int]
+      | kaddi          => ty.tuple [ty.dst; ty.src; ty.int]
+      | kadd           => ty.tuple [ty.dst; ty.src; ty.src]
+      | ksub           => ty.tuple [ty.dst; ty.src; ty.src]
+      | kslt           => ty.tuple [ty.dst; ty.src; ty.src]
+      | kslti          => ty.tuple [ty.dst; ty.src; ty.int]
+      | ksltu          => ty.tuple [ty.dst; ty.src; ty.src]
+      | ksltiu         => ty.tuple [ty.dst; ty.src; ty.int]
+      | kcmove         => ty.prod ty.dst ty.src
+      | kcincoffset    => ty.tuple [ty.dst; ty.src; ty.src]
+      | kcandperm      => ty.tuple [ty.dst; ty.src; ty.src]
+      | kcsetbounds    => ty.tuple [ty.dst; ty.src; ty.src]
+      | kcsetboundsimm => ty.tuple [ty.dst; ty.src; ty.int]
+      | kcgettag       => ty.prod ty.dst ty.src
+      | kcgetperm      => ty.prod ty.dst ty.src
+      | kcgetbase      => ty.prod ty.dst ty.src
+      | kcgetlen       => ty.prod ty.dst ty.src
+      | kcgetaddr      => ty.prod ty.dst ty.src
       | kfail          => ty.unit
       | kret           => ty.unit
       end
@@ -268,30 +267,30 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun Kv =>
       match Kv with
-      | existT kjalr     (lv1 , lv2)                       => jalr lv1 lv2
-      | existT kjal      (lv , offset)                     => jal lv offset
-      | existT kbne      (tt , lv1 , lv2 , immediate)      => bne lv1 lv2 immediate
-      | existT kcmove    (lv , hv)                         => cmove lv hv
-      | existT kld       (tt , lv , hv , immediate)        => ld lv hv immediate
-      | existT ksd       (tt , hv , lv , immediate)        => sd hv lv immediate
-      | existT kaddi     (tt , lv , hv , immediate)        => addi lv hv immediate
-      | existT kadd      (tt , lv1 , lv2 , lv3)            => add lv1 lv2 lv3
-      | existT ksub      (tt , lv1 , lv2 , lv3)            => sub lv1 lv2 lv3
-      | existT kslt      (tt , lv1 , lv2 , lv3)            => slt lv1 lv2 lv3
-      | existT kslti     (tt , lv , hv , immediate)        => slti lv hv immediate
-      | existT ksltu     (tt , lv1 , lv2 , lv3)            => sltu lv1 lv2 lv3
-      | existT ksltiu    (tt , lv , hv , immediate)        => sltiu lv hv immediate
-      | existT kcincoffsetimm (lv , hv)                    => cincoffsetimm lv hv
-      | existT kcandperm (tt , lv , hv1 , hv2)             => candperm lv hv1 hv2
-      | existT kcsetbounds (tt , lv , hv1 , hv2)           => csetbounds lv hv1 hv2
-      | existT kcsetboundsimm  (tt , lv , hv , immediate)  => csetboundsimm lv hv immediate
-      | existT kcgettag  (lv , lv')                        => cgettag lv lv'
-      | existT kcgetperm (lv , lv')                        => cgetperm lv lv'
-      | existT kcgetbase (lv , lv')                        => cgetbase lv lv'
-      | existT kcgetlen  (lv , lv')                        => cgetlen lv lv'
-      | existT kcgetaddr (lv , lv')                        => cgetaddr lv lv'
-      | existT kfail     tt                                => fail
-      | existT kret      tt                                => ret
+      | existT kjalr          (tt , cd , cs , imm)   => jalr          cd  cs  imm
+      | existT kjal           (cd , imm)             => jal           cd  imm
+      | existT kbne           (tt , rs1 , rs2 , imm) => bne           rs1 rs2 imm
+      | existT kld            (tt , cd , cs , imm)   => ld            cd  cs  imm
+      | existT ksd            (tt , rs1 , rs2, imm)  => sd            rs1 rs2 imm
+      | existT kaddi          (tt , rd , rs , imm)   => addi          rd  rs  imm
+      | existT kadd           (tt , rd , rs1 , rs2)  => add           rd  rs1 rs2
+      | existT ksub           (tt , rd , rs1 , rs2)  => sub           rd  rs1 rs2
+      | existT kslt           (tt , rd , rs1 , rs2)  => slt           rd  rs1 rs2
+      | existT kslti          (tt , rd , rs , imm)   => slti          rd  rs  imm
+      | existT ksltu          (tt , rd , rs1 , rs2)  => sltu          rd  rs1 rs2
+      | existT ksltiu         (tt , rd , rs , imm)   => sltiu         rd  rs  imm
+      | existT kcmove         (cd , cs)              => cmove         cd  cs
+      | existT kcincoffset    (tt , cd , cs , rs)    => cincoffset    cd  cs  rs
+      | existT kcandperm      (tt , cd , cs , rs)    => candperm      cd  cs  rs
+      | existT kcsetbounds    (tt , cd , cs , rs)    => csetbounds    cd  cs  rs
+      | existT kcsetboundsimm (tt , cd , cs , imm)   => csetboundsimm cd  cs  imm
+      | existT kcgettag       (rd , cs)              => cgettag       rd  cs
+      | existT kcgetperm      (rd , cs)              => cgetperm      rd  cs
+      | existT kcgetbase      (rd , cs)              => cgetbase      rd  cs
+      | existT kcgetlen       (rd , cs)              => cgetlen       rd  cs
+      | existT kcgetaddr      (rd , cs)              => cgetaddr      rd  cs
+      | existT kfail          tt                     => fail
+      | existT kret           tt                     => ret
       end
     end.
 
@@ -299,30 +298,30 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun Kv =>
       match Kv with
-      | jalr lv1 lv2                  => existT kjalr      (lv1 , lv2)
-      | jal lv offset                 => existT kjal       (lv , offset)
-      | bne lv1 lv2 immediate         => existT kbne       (tt , lv1 , lv2 , immediate)
-      | cmove lv hv                   => existT kcmove     (lv , hv)
-      | ld lv hv immediate            => existT kld        (tt , lv , hv , immediate)
-      | sd hv lv immediate            => existT ksd        (tt , hv , lv , immediate)
-      | addi lv hv immediate          => existT kaddi      (tt , lv , hv , immediate)
-      | add lv1 lv2 lv3               => existT kadd       (tt , lv1 , lv2 , lv3)
-      | sub lv1 lv2 lv3               => existT ksub       (tt , lv1 , lv2 , lv3)
-      | slt lv1 lv2 lv3               => existT kslt       (tt , lv1 , lv2 , lv3)
-      | slti lv hv immediate          => existT kslti      (tt , lv , hv , immediate)
-      | sltu lv1 lv2 lv3              => existT ksltu      (tt , lv1 , lv2 , lv3)
-      | sltiu lv hv immediate         => existT ksltiu     (tt , lv , hv , immediate)
-      | cincoffsetimm lv hv           => existT kcincoffsetimm (lv , hv)
-      | candperm lv hv1 hv2           => existT kcandperm  (tt , lv , hv1 , hv2)
-      | csetbounds lv hv1 hv2         => existT kcsetbounds (tt, lv , hv1 , hv2)
-      | csetboundsimm lv hv immediate => existT kcsetboundsimm (tt, lv , hv , immediate)
-      | cgettag lv lv'                => existT kcgettag     (lv , lv')
-      | cgetperm lv lv'               => existT kcgetperm  (lv , lv')
-      | cgetbase lv lv'               => existT kcgetbase  (lv , lv')
-      | cgetlen lv lv'                => existT kcgetlen   (lv , lv')
-      | cgetaddr lv lv'               => existT kcgetaddr  (lv , lv')
-      | fail                          => existT kfail      tt
-      | ret                           => existT kret       tt
+      | jalr          cd  cs  imm => existT kjalr          (tt , cd , cs , imm)
+      | jal           cd  imm     => existT kjal           (cd , imm)
+      | bne           rs1 rs2 imm => existT kbne           (tt , rs1 , rs2 , imm)
+      | ld            cd  cs  imm => existT kld            (tt , cd , cs , imm)
+      | sd            rs1 rs2 imm => existT ksd            (tt , rs1 , rs2 , imm)
+      | addi          rd  rs  imm => existT kaddi          (tt , rd , rs , imm)
+      | add           rd  rs1 rs2 => existT kadd           (tt , rd , rs1 , rs2)
+      | sub           rd  rs1 rs2 => existT ksub           (tt , rd , rs1 , rs2)
+      | slt           rd  rs1 rs2 => existT kslt           (tt , rd , rs1 , rs2)
+      | slti          rd  rs  imm => existT kslti          (tt , rd , rs , imm)
+      | sltu          rd  rs1 rs2 => existT ksltu          (tt , rd , rs1 , rs2)
+      | sltiu         rd  rs  imm => existT ksltiu         (tt , rd , rs , imm)
+      | cmove         cd  cs      => existT kcmove         (cd , cs)
+      | cincoffset    cd  cs  rs  => existT kcincoffset    (tt , cd , cs , rs)
+      | candperm      cd  cs  rs  => existT kcandperm      (tt , cd , cs , rs)
+      | csetbounds    cd  cs  rs  => existT kcsetbounds    (tt, cd , cs , rs)
+      | csetboundsimm cd  cs  imm => existT kcsetboundsimm (tt, cd , cs , imm)
+      | cgettag       rd  cs      => existT kcgettag       (rd , cs)
+      | cgetperm      rd  cs      => existT kcgetperm      (rd , cs)
+      | cgetbase      rd  cs      => existT kcgetbase      (rd , cs)
+      | cgetlen       rd  cs      => existT kcgetlen       (rd , cs)
+      | cgetaddr      rd  cs      => existT kcgetaddr      (rd , cs)
+      | fail                      => existT kfail          tt
+      | ret                       => existT kret           tt
       end
     end.
 
