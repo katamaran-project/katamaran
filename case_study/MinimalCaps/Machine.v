@@ -77,6 +77,7 @@ Section FunDeclKit.
   | within_bounds      : Fun ["c"   ∷ ty.cap ] ty.bool
   | perm_to_bits       : Fun ["p" ∷ ty.perm] ty.int
   | perm_from_bits     : Fun ["i" ∷ ty.int] ty.perm
+  | and_perm           : Fun ["p1" :: ty.perm; "p2" :: ty.perm] ty.perm
   | is_sub_perm        : Fun ["p" ∷ ty.perm; "p'" ∷ ty.perm] ty.bool
   | is_within_range    : Fun ["b'" ∷ ty.addr; "e'" ∷ ty.addr;
                               "b" ∷ ty.addr; "e" ∷ ty.addr] ty.bool
@@ -88,8 +89,7 @@ Section FunDeclKit.
   | exec_ld            : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
   | exec_sd            : Fun ["hv" ∷ ty.hv; "lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
   | exec_cincoffsetimm : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool
-  | exec_restrict      : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool
-  | exec_restricti     : Fun ["lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool
+  | exec_candperm      : Fun ["lv" :: ty.lv; "hv1" :: ty.hv; "hv2" :: ty.hv] ty.bool
   | exec_csetbounds    : Fun ["lv" ∷ ty.lv; "hv1" ∷ ty.hv; "hv2" ∷ ty.hv] ty.bool
   | exec_csetboundsimm : Fun ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool
   | exec_isptr         : Fun ["lv1" ∷ ty.lv; "lv2" ∷ ty.lv] ty.bool
@@ -399,41 +399,21 @@ Section FunDefKit.
            stm_val ty.bool true
        end).
 
-    Definition fun_exec_restrict : Stm ["lv" ∷ ty.lv; "hv" ∷ ty.hv] ty.bool :=
-      let: "c" :: cap  := call read_reg_cap (exp_var "lv") in
-      let: "n" :: ty.int := call read_reg_num (exp_var "hv") in
-      let*: ["p", "beg", "end", "cursor"] := (exp_var "c") in
-      (let: "p'" :: ty.perm := call perm_from_bits (exp_var "n") in
-       let: "le" :: ty.bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
-       stm_assert (exp_var "le") (exp_string "Err: [restrict] tried to increase permission") ;;
-       let: "c'" :: cap := exp_record capability
-                                      [ exp_var "p'";
-                                        exp_var "beg";
-                                        exp_var "end";
-                                        exp_var "cursor"
-                                      ] in
-       use lemma safe_sub_perm [exp_var "c'"; exp_var "c"] ;;
-       call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
-       call update_pc ;;
-       stm_val ty.bool true).
-
-    Definition fun_exec_restricti : Stm ["lv" ∷ ty.lv; "immediate" ∷ ty.int] ty.bool :=
-      let: "c" :: cap  := call read_reg_cap (exp_var "lv") in
-      let: "n" :: ty.int := exp_var "immediate" in
-      let*: ["p", "beg", "end", "cursor"] := (exp_var "c") in
-      (let: "p'" :: ty.perm := call perm_from_bits (exp_var "n") in
-       let: "le" :: ty.bool := call is_sub_perm (exp_var "p'") (exp_var "p") in
-       stm_assert (exp_var "le") (exp_string "Err: [restricti] tried to increase permission") ;;
-       let: "c'" :: cap := exp_record capability
-                                      [ exp_var "p'";
-                                        exp_var "beg";
-                                        exp_var "end";
-                                        exp_var "cursor"
-                                      ] in
-       use lemma safe_sub_perm [exp_var "c'"; exp_var "c"] ;;
-       call write_reg (exp_var "lv") (exp_inr (exp_var "c'")) ;;
-       call update_pc ;;
-       stm_val ty.bool true).
+    Definition fun_exec_candperm : Stm ["lv" :: ty.lv; "hv1" :: ty.hv; "hv2" :: ty.hv] ty.bool :=
+      let: "cs_val" := call read_reg_cap (exp_var "hv1") in
+      let: "rs_val" := call read_reg_num (exp_var "hv2") in
+      let*: ["p", "b", "e", "a"] := exp_var "cs_val" in
+      let: "p'" := call perm_from_bits (exp_var "rs_val") in
+      let: "new_p"  := call and_perm (exp_var "p") (exp_var "p'") in
+      let: "new_cap" :: cap := exp_record capability
+                                          [ exp_var "new_p";
+                                            exp_var "b";
+                                            exp_var "e";
+                                            exp_var "a"
+                                          ] in
+       use lemma safe_sub_perm [exp_var "new_cap"; exp_var "cs_val"] ;;
+      call write_reg (exp_var "lv") (exp_inr (exp_var "new_cap")) ;;
+      stm_val ty.bool true.
 
     Definition fun_exec_addi : Stm ["lv" ∷ ty.lv; "hv" ∷ ty.hv; "immediate" ∷ ty.int] ty.bool :=
       let: "v" :: ty.int := call read_reg_num (exp_var "hv") in
@@ -531,11 +511,32 @@ Section FunDefKit.
       end.
 
     Definition fun_perm_from_bits : Stm ["i" ∷ ty.int] ty.perm :=
-      if: exp_var "i" = (exp_val ty.int 1%Z)
-      then stm_val ty.perm R
-      else if: exp_var "i" = (exp_val ty.int 2%Z)
-           then stm_val ty.perm RW
-           else stm_val ty.perm O.
+      if: exp_var "i" = exp_val ty.int 1%Z
+      then exp_val ty.perm R
+      else if: exp_var "i" = exp_val ty.int 2%Z
+           then exp_val ty.perm RW
+           else if: exp_var "i" = exp_val ty.int 3%Z
+                then exp_val ty.perm E
+                else exp_val ty.perm O.
+
+    Definition fun_and_perm : Stm ["p1" :: ty.perm; "p2" :: ty.perm] ty.perm :=
+      match: exp_var "p1" in permission with
+      | O  => exp_val ty.perm O
+      | R  => match: exp_var "p2" in permission with
+              | R  => exp_val ty.perm R
+              | RW => exp_val ty.perm R
+              | _  => exp_val ty.perm O
+              end
+      | RW => match: exp_var "p2" in permission with
+              | R  => exp_val ty.perm R
+              | RW => exp_val ty.perm RW
+              | _  => exp_val ty.perm O
+              end
+      | E  => match: exp_var "p2" in permission with
+              | E => exp_val ty.perm E
+              | _ => exp_val ty.perm O
+              end
+      end.
 
     Definition fun_is_sub_perm : Stm ["p" ∷ ty.perm; "p'" ∷ ty.perm] ty.bool :=
       match: exp_var "p" in permission with
@@ -718,10 +719,8 @@ Section FunDefKit.
                                      (call exec_sd hv lv immediate)
            | kcincoffsetimm => MkAlt (pat_pair lv hv)
                                      (call exec_cincoffsetimm lv hv)
-           | krestrict      => MkAlt (pat_pair lv hv)
-                                     (call exec_restrict lv hv)
-           | krestricti     => MkAlt (pat_pair lv immediate)
-                                     (call exec_restricti lv immediate)
+           | kcandperm      => MkAlt (pat_tuple (lv , "hv1" , "hv2"))
+                                     (call exec_candperm lv (exp_var "hv1") (exp_var "hv2"))
            | kcsetbounds    => MkAlt (pat_tuple (lv , "hv1" , "hv2"))
                                      (call exec_csetbounds lv (exp_var "hv1") (exp_var "hv2"))
            | kcsetboundsimm => MkAlt (pat_tuple (lv , hv , immediate))
@@ -815,6 +814,7 @@ Section FunDefKit.
     | within_bounds      => fun_within_bounds
     | perm_to_bits       => fun_perm_to_bits
     | perm_from_bits     => fun_perm_from_bits
+    | and_perm           => fun_and_perm
     | is_sub_perm        => fun_is_sub_perm
     | is_within_range    => fun_is_within_range
     | abs                => fun_abs
@@ -825,8 +825,7 @@ Section FunDefKit.
     | exec_ld            => fun_exec_ld
     | exec_sd            => fun_exec_sd
     | exec_cincoffsetimm => fun_exec_cincoffsetimm
-    | exec_restrict      => fun_exec_restrict
-    | exec_restricti     => fun_exec_restricti
+    | exec_candperm      => fun_exec_candperm
     | exec_csetbounds    => fun_exec_csetbounds
     | exec_csetboundsimm => fun_exec_csetboundsimm
     | exec_addi          => fun_exec_addi

@@ -566,15 +566,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   (*
       @pre mach_inv;
       @post mach_inv;
-      bool exec_restrict(lv : lv, hv : ty.hv) *)
-  Definition sep_contract_exec_restrict : SepContractFun exec_restrict :=
-    mach_inv_contract.
-
-  (*
-      @pre mach_inv;
-      @post mach_inv;
-      bool exec_restricti(lv : lv, immediate : Z) *)
-  Definition sep_contract_exec_restricti : SepContractFun exec_restricti :=
+      bool exec_candperm(lv : lv, hv1 : hv, hv2: hv) *)
+  Definition sep_contract_exec_candperm : SepContractFun exec_candperm :=
     mach_inv_contract.
 
   (*
@@ -662,6 +655,19 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        sep_contract_precondition    := ⊤;
        sep_contract_result          := "result";
        sep_contract_postcondition   := ⊤;
+    |}.
+
+  (*
+      @pre true;
+      @post result <=ₚ p1 ∗ result <=ₚ p2;
+      perm and_perm(p1 : perm, p2 : perm) *)
+  Definition sep_contract_and_perm : SepContractFun and_perm :=
+    {| sep_contract_logic_variables := ["p1" :: ty.perm; "p2" :: ty.perm];
+       sep_contract_localstore      := [term_var "p1"; term_var "p2"];
+       sep_contract_precondition    := ⊤;
+       sep_contract_result          := "result_and_perm";
+       sep_contract_postcondition   :=
+         term_var "result_and_perm" <=ₚ term_var "p1" ∗ term_var "result_and_perm" <=ₚ term_var "p2";
     |}.
 
   (*
@@ -797,6 +803,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | write_mem              => Some sep_contract_write_mem
       | perm_to_bits           => Some sep_contract_perm_to_bits
       | perm_from_bits         => Some sep_contract_perm_from_bits
+      | and_perm               => Some sep_contract_and_perm
       | is_sub_perm            => Some sep_contract_is_sub_perm
       | is_within_range        => Some sep_contract_is_within_range
       | abs                    => Some sep_contract_abs
@@ -807,8 +814,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | exec_ld                => Some sep_contract_exec_ld
       | exec_sd                => Some sep_contract_exec_sd
       | exec_cincoffsetimm     => Some sep_contract_exec_cincoffsetimm
-      | exec_restrict          => Some sep_contract_exec_restrict
-      | exec_restricti         => Some sep_contract_exec_restricti
+      | exec_candperm          => Some sep_contract_exec_candperm
       | exec_csetbounds        => Some sep_contract_exec_csetbounds
       | exec_csetboundsimm     => Some sep_contract_exec_csetboundsimm
       | exec_addi              => Some sep_contract_exec_addi
@@ -1292,6 +1298,9 @@ Module MinCapsValidContracts.
   Lemma valid_contract_perm_from_bits : ValidContract perm_from_bits.
   Proof. reflexivity. Qed.
 
+  Lemma valid_contract_and_perm : ValidContract and_perm.
+  Proof. reflexivity. Qed.
+
   Lemma valid_contract_is_sub_perm : ValidContract is_sub_perm.
   Proof. reflexivity. Qed.
 
@@ -1322,10 +1331,7 @@ Module MinCapsValidContracts.
   Lemma valid_contract_exec_cincoffsetimm : ValidContract exec_cincoffsetimm.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_restrict : ValidContract exec_restrict.
-  Proof. reflexivity. Qed.
-
-  Lemma valid_contract_exec_restricti : ValidContract exec_restricti.
+  Lemma valid_contract_exec_candperm : ValidContract exec_candperm.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_csetbounds : ValidContract exec_csetbounds.
@@ -1431,6 +1437,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_within_bounds).
     - apply (valid_contract _ H valid_contract_perm_to_bits).
     - apply (valid_contract _ H valid_contract_perm_from_bits).
+    - apply (valid_contract _ H valid_contract_and_perm).
     - apply (valid_contract _ H valid_contract_is_sub_perm).
     - apply (valid_contract _ H valid_contract_is_within_range).
     - apply (valid_contract _ H valid_contract_abs).
@@ -1441,8 +1448,7 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_exec_ld).
     - apply (valid_contract _ H valid_contract_exec_sd).
     - apply (valid_contract _ H valid_contract_exec_cincoffsetimm).
-    - apply (valid_contract _ H valid_contract_exec_restrict).
-    - apply (valid_contract _ H valid_contract_exec_restricti).
+    - apply (valid_contract _ H valid_contract_exec_candperm).
     - apply (valid_contract _ H valid_contract_exec_csetbounds).
     - apply (valid_contract _ H valid_contract_exec_csetboundsimm).
     - apply (valid_contract _ H valid_contract_exec_isptr).
@@ -1497,6 +1503,7 @@ Section Statistics.
       existT _ (existT _ within_bounds);
       existT _ (existT _ perm_to_bits);
       existT _ (existT _ perm_from_bits);
+      existT _ (existT _ and_perm);
       existT _ (existT _ is_sub_perm);
       existT _ (existT _ is_within_range);
       existT _ (existT _ abs);
@@ -1507,8 +1514,7 @@ Section Statistics.
       existT _ (existT _ exec_ld);
       existT _ (existT _ exec_sd);
       existT _ (existT _ exec_cincoffsetimm);
-      existT _ (existT _ exec_restrict);
-      existT _ (existT _ exec_restricti);
+      existT _ (existT _ exec_candperm);
       existT _ (existT _ exec_csetbounds);
       existT _ (existT _ exec_csetboundsimm);
       existT _ (existT _ exec_isptr);

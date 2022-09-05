@@ -61,8 +61,7 @@ Inductive Instruction : Set :=
 | sltu          (lv1 : LV) (lv2 : LV) (lv3 : LV)
 | sltiu         (lv : LV) (hv : HV) (immediate : Z)
 | cincoffsetimm (lv : LV) (hv : HV)
-| restrict      (lv : LV) (hv : HV)
-| restricti     (lv : LV) (immediate : Z)
+| candperm      (lv : LV) (hv1 hv2 : HV)
 | csetbounds    (lv : LV) (hv1 hv2 : HV)
 | csetboundsimm (lv : LV) (hv : HV) (immediate : Z)
 | isptr         (lv : LV) (lv' : HV)
@@ -88,8 +87,7 @@ Inductive InstructionConstructor : Set :=
 | ksltu
 | ksltiu
 | kcincoffsetimm
-| krestrict
-| krestricti
+| kcandperm
 | kcsetbounds
 | kcsetboundsimm
 | kisptr
@@ -167,7 +165,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffsetimm;krestrict;krestricti;kcsetbounds;kcsetboundsimm;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
+    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffsetimm;kcandperm;kcsetbounds;kcsetboundsimm;kisptr;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
 
 End Finite.
 
@@ -240,8 +238,7 @@ Module Export MinCapsBase <: Base.
       | ksltu          => ty.tuple [ty.lv; ty.lv; ty.lv]
       | ksltiu         => ty.tuple [ty.lv; ty.hv; ty.int]
       | kcincoffsetimm => ty.prod ty.lv ty.hv
-      | krestrict      => ty.prod ty.lv ty.hv
-      | krestricti     => ty.prod ty.lv ty.int
+      | kcandperm      => ty.tuple [ty.lv; ty.hv; ty.hv]
       | kcsetbounds    => ty.tuple [ty.lv; ty.hv; ty.hv]
       | kcsetboundsimm => ty.tuple [ty.lv; ty.hv; ty.int]
       | kisptr         => ty.prod ty.lv ty.lv
@@ -285,8 +282,7 @@ Module Export MinCapsBase <: Base.
       | existT ksltu     (tt , lv1 , lv2 , lv3)            => sltu lv1 lv2 lv3
       | existT ksltiu    (tt , lv , hv , immediate)        => sltiu lv hv immediate
       | existT kcincoffsetimm (lv , hv)                    => cincoffsetimm lv hv
-      | existT krestrict (lv , hv)                         => restrict lv hv
-      | existT krestricti (lv , immediate)                 => restricti lv immediate
+      | existT kcandperm (tt , lv , hv1 , hv2)             => candperm lv hv1 hv2
       | existT kcsetbounds (tt , lv , hv1 , hv2)           => csetbounds lv hv1 hv2
       | existT kcsetboundsimm  (tt , lv , hv , immediate)  => csetboundsimm lv hv immediate
       | existT kisptr    (lv , lv')                        => isptr lv lv'
@@ -317,8 +313,7 @@ Module Export MinCapsBase <: Base.
       | sltu lv1 lv2 lv3              => existT ksltu      (tt , lv1 , lv2 , lv3)
       | sltiu lv hv immediate         => existT ksltiu     (tt , lv , hv , immediate)
       | cincoffsetimm lv hv           => existT kcincoffsetimm (lv , hv)
-      | restrict lv hv                => existT krestrict  (lv , hv)
-      | restricti lv immediate        => existT krestricti (lv , immediate)
+      | candperm lv hv1 hv2           => existT kcandperm  (tt , lv , hv1 , hv2)
       | csetbounds lv hv1 hv2         => existT kcsetbounds (tt, lv , hv1 , hv2)
       | csetboundsimm lv hv immediate => existT kcsetboundsimm (tt, lv , hv , immediate)
       | isptr lv lv'                  => existT kisptr     (lv , lv')
