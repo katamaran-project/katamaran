@@ -592,12 +592,13 @@ Module MinCapsIrisInstanceWithContracts.
       ValidLemma lemma_safe_move_cursor.
     Proof.
       intros ι. destruct_syminstance ι. cbn.
-      iIntros "(#Hsafe & (% & _))".
+      iIntros "(#Hsafe & [[% _] |[% _]])".
       iSplit; first done.
       rewrite ?fixpoint_interp1_eq.
       destruct p; auto.
       unfold Not_is_perm, MinCapsSignature.is_perm in H.
       discriminate.
+      subst; now iSplit.
     Qed.
 
     Lemma safe_sub_perm_sound :
@@ -621,6 +622,15 @@ Module MinCapsIrisInstanceWithContracts.
         apply Zle_is_le_bool in Hb;
         apply Zle_is_le_bool in He.
       iApply (interp_weakening _ _ (Not_is_perm_prop Hp) Hb He (Subperm_refl p) with "IH Hsafe").
+    Qed.
+
+    Lemma rewrite_add_r_0_sound :
+      ValidLemma lemma_rewrite_add_r_0.
+    Proof.
+      intros ι. destruct_syminstance ι. cbn.
+      iIntros "(% & _)".
+      iPureIntro.
+      lia.
     Qed.
 
   End Lemmas.
@@ -852,7 +862,7 @@ Module MinCapsIrisInstanceWithContracts.
                        open_ptsreg_sound, close_ptsreg_sound,
       open_gprs_sound, close_gprs_sound, int_safe_sound, correctPC_subperm_R_sound,
       subperm_not_E_sound, safe_move_cursor_sound, safe_sub_perm_sound,
-      safe_within_range_sound, safe_to_execute_sound.
+      safe_within_range_sound, safe_to_execute_sound, rewrite_add_r_0_sound.
   Qed.
 
 End MinCapsIrisInstanceWithContracts.

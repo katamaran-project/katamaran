@@ -75,6 +75,9 @@ Section FunDeclKit.
   | is_sub_perm        : Fun ["p" :: ty.perm; "p'" :: ty.perm] ty.bool
   | is_within_range    : Fun ["b'" :: ty.addr; "e'" :: ty.addr; "b" :: ty.addr; "e" :: ty.addr] ty.bool
   | abs                : Fun ["i" :: ty.int] ty.int
+  | is_not_zero        : Fun ["i" :: ty.int] ty.bool
+  | can_incr_cursor    : Fun ["c" :: ty.cap; "imm" :: ty.int] ty.bool
+  | exec_jalr_cap      : Fun ["cd"  :: ty.dst; "cs"  :: ty.src] ty.bool
   | exec_jalr          : Fun ["cd"  :: ty.dst; "cs"  :: ty.src; "imm" :: ty.int] ty.bool
   | exec_jal           : Fun ["cd"  :: ty.dst; "imm" :: ty.int] ty.bool
   | exec_bne           : Fun ["rs1" :: ty.src; "rs2" :: ty.src; "imm" :: ty.int] ty.bool
@@ -125,6 +128,7 @@ Section FunDeclKit.
   | correctPC_subperm_R        : Lem ["c" :: ty.cap]
   | subperm_not_E              : Lem ["p" :: ty.perm; "p'" :: ty.perm]
   | safe_to_execute            : Lem ["c" :: ty.cap]
+  | rewrite_add_r_0            : Lem ["a" :: ty.int; "b" :: ty.int]
   .
 
   Definition 𝑭  : PCtx -> Ty -> Set := Fun.
@@ -426,6 +430,24 @@ Section FunDefKit.
       then exp_var "i" * (exp_val ty.int (-1)%Z)
       else exp_var "i".
 
+    Definition fun_is_not_zero : Stm ["i" :: ty.int] ty.bool :=
+      if: exp_var "i" = exp_val ty.int 0%Z
+      then stm_val ty.bool false
+      else stm_val ty.bool true.
+
+    Definition fun_can_incr_cursor : Stm ["c" :: ty.cap; "imm" :: ty.int] ty.bool :=
+      let*: ["p", "b", "e", "a"] := exp_var "c" in
+      let: "tmp1" := call is_perm (exp_var "p") (exp_val ty.perm E) in
+      if: exp_var "tmp1"
+      then
+        let: "tmp2" := call is_not_zero (exp_var "imm") in
+        if: exp_var "tmp2"
+        then stm_val ty.bool false
+        else
+          use lemma rewrite_add_r_0 [exp_var "a"; exp_var "imm"] ;;
+          stm_val ty.bool true
+      else stm_val ty.bool true.
+
     Definition fun_exec_slt : Stm ["rd" :: ty.dst; "rs1" :: ty.src; "rs2" :: ty.src] ty.bool :=
       let: "v1" :: int := call read_reg_num (exp_var "rs1") in
       let: "v2" :: int := call read_reg_num (exp_var "rs2") in
@@ -651,6 +673,9 @@ Section FunDefKit.
       call update_pc ;;
       stm_val ty.bool true.
 
+    Definition fun_exec_jalr_cap : Stm ["cd" :: ty.dst; "cs" :: ty.src] ty.bool :=
+      call exec_jalr (exp_var "cd") (exp_var "cs") (exp_val ty.int 0%Z).
+
     Definition fun_exec_jalr : Stm ["cd" :: ty.dst; "cs" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
@@ -659,15 +684,19 @@ Section FunDefKit.
       call write_reg (exp_var "cd") (exp_inr (exp_var "npc")) ;;
       let: "c" :: ty.cap := call read_reg_cap (exp_var "cs") in
       let*: ["p", "b", "e", "a"] := exp_var "c" in
-      let: "c'" := (exp_record capability
-                              [ exp_var "p";
-                                exp_var "b";
-                                exp_var "e";
-                                exp_var "a" + exp_var "imm"]) in
-      use lemma safe_move_cursor [exp_var "c'"; exp_var "c"] ;;
-      let: "c'" := call update_pc_perm (exp_var "c'") in
-      stm_write_register pc (exp_var "c'") ;;
-      stm_val ty.bool true.
+      let: "tmp" := call can_incr_cursor (exp_var "c") (exp_var "imm") in
+      if: exp_not (exp_var "tmp")
+      then fail "Err: [jalr] cannot increment cursor of enter capability"
+      else
+        let: "c'" := (exp_record capability
+                                 [ exp_var "p";
+                                   exp_var "b";
+                                   exp_var "e";
+                                   exp_var "a" + exp_var "imm"]) in
+        use lemma safe_move_cursor [exp_var "c'"; exp_var "c"] ;;
+        let: "c'" := call update_pc_perm (exp_var "c'") in
+        stm_write_register pc (exp_var "c'") ;;
+        stm_val ty.bool true.
 
     Definition fun_exec_jal : Stm ["cd" :: ty.dst; "imm" :: ty.int] ty.bool :=
       let: "opc" := stm_read_register pc in
@@ -690,6 +719,8 @@ Section FunDefKit.
         instruction (exp_var i)
         (fun K =>
            match K with
+           | kjalr_cap      => MkAlt (pat_pair "cd" "cs")
+                                     (call exec_jalr_cap (exp_var "cd") (exp_var "cs"))
            | kjalr          => MkAlt (pat_tuple ("cd" , "cs" , "imm"))
                                      (call exec_jalr (exp_var "cd") (exp_var "cs") (exp_var "imm"))
            | kjal           => MkAlt (pat_pair "cd" "imm")
@@ -803,6 +834,9 @@ Section FunDefKit.
     | is_sub_perm        => fun_is_sub_perm
     | is_within_range    => fun_is_within_range
     | abs                => fun_abs
+    | is_not_zero        => fun_is_not_zero
+    | can_incr_cursor    => fun_can_incr_cursor
+    | exec_jalr_cap      => fun_exec_jalr_cap
     | exec_jalr          => fun_exec_jalr
     | exec_jal           => fun_exec_jal
     | exec_bne           => fun_exec_bne

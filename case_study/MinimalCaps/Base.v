@@ -47,6 +47,7 @@ Definition Src : Set := RegName.
 Definition Imm : Set := Z.
 
 Inductive Instruction : Set :=
+| jalr_cap      (cd  : Dst) (cs  : Src)
 | jalr          (cd  : Dst) (cs  : Src) (imm : Imm)
 | jal           (cd  : Dst) (imm : Imm)
 | bne           (rs1 : Src) (rs2 : Src) (imm : Imm)
@@ -73,6 +74,7 @@ Inductive Instruction : Set :=
 | ret.
 
 Inductive InstructionConstructor : Set :=
+| kjalr_cap
 | kjalr
 | kjal
 | kbne
@@ -165,7 +167,7 @@ Section Finite.
 
   #[export,program] Instance InstructionConstructor_finite :
     Finite InstructionConstructor :=
-    {| enum := [kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffset;kcandperm;kcsetbounds;kcsetboundsimm;kcgettag;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
+    {| enum := [kjalr_cap;kjalr;kjal;kbne;kcmove;kld;ksd;kcincoffset;kcandperm;kcsetbounds;kcsetboundsimm;kcgettag;kaddi;kadd;ksub;kslt;kslti;ksltu;ksltiu;kcgetperm;kcgetbase;kcgetlen;kcgetaddr;kfail;kret] |}.
 
 End Finite.
 
@@ -223,6 +225,7 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun K =>
       match K with
+      | kjalr_cap      => ty.prod ty.dst ty.src
       | kjalr          => ty.tuple [ty.dst; ty.src; ty.int]
       | kjal           => ty.prod ty.dst ty.int
       | kbne           => ty.tuple [ty.src; ty.src; ty.int]
@@ -267,6 +270,7 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun Kv =>
       match Kv with
+      | existT kjalr_cap      (cd , cs)              => jalr_cap      cd  cs
       | existT kjalr          (tt , cd , cs , imm)   => jalr          cd  cs  imm
       | existT kjal           (cd , imm)             => jal           cd  imm
       | existT kbne           (tt , rs1 , rs2 , imm) => bne           rs1 rs2 imm
@@ -298,6 +302,7 @@ Module Export MinCapsBase <: Base.
     match U with
     | instruction => fun Kv =>
       match Kv with
+      | jalr_cap      cd  cs      => existT kjalr_cap      (cd , cs)
       | jalr          cd  cs  imm => existT kjalr          (tt , cd , cs , imm)
       | jal           cd  imm     => existT kjal           (cd , imm)
       | bne           rs1 rs2 imm => existT kbne           (tt , rs1 , rs2 , imm)

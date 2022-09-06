@@ -423,7 +423,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        sep_contract_postcondition   :=
          if:  term_var "result_is_perm"
          then term_var "p" = term_var "p'"
-         else ⊤
+         else term_var "p" ≠ₚ term_var "p'";
     |}.
 
   Definition sep_contract_add_pc : SepContract ["offset" :: ty.int] ty.unit :=
@@ -505,6 +505,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
                             (term_binop bop.le (term_var "b") (term_var "a"))
                             (term_binop bop.le (term_var "a") (term_var "e")));
     |}.
+
+  Definition sep_contract_exec_jalr_cap : SepContractFun exec_jalr_cap :=
+    mach_inv_contract.
 
   Definition sep_contract_exec_jalr : SepContractFun exec_jalr :=
     mach_inv_contract.
@@ -590,6 +593,33 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
        sep_contract_postcondition   := ⊤;
     |}.
 
+  Definition sep_contract_is_not_zero : SepContractFun is_not_zero :=
+    {| sep_contract_logic_variables := ["i" :: ty.int];
+       sep_contract_localstore      := [term_var "i"];
+       sep_contract_precondition    := ⊤;
+       sep_contract_result          := "result_is_not_zero";
+       sep_contract_postcondition   :=
+         if: term_var "result_is_not_zero"
+         then term_var "i" ≠ term_val ty.int 0%Z
+         else term_var "i" = term_val ty.int 0
+    |}.
+
+  Definition sep_contract_can_incr_cursor : SepContractFun can_incr_cursor :=
+    let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr; "imm" :: ty.int]%ctx in
+    let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
+    {| sep_contract_logic_variables := Σ;
+       sep_contract_localstore      := [nenv c; term_var "imm"];
+       sep_contract_precondition    := ⊤;
+       sep_contract_result          := "result_can_incr_cursor";
+       sep_contract_postcondition   :=
+         if: term_var "result_can_incr_cursor"
+         then 
+            term_var "p" ≠ₚ term_val ty.perm E
+            ∨
+           (term_var "p" = term_val ty.perm E ∗ term_var "imm" = term_val ty.int 0%Z ∗ term_var "a" = term_binop bop.plus (term_var "a") (term_var "imm"))
+         else term_var "p" = term_val ty.perm E ∗ term_var "imm" ≠ term_val ty.int 0%Z
+    |}.
+
   Definition sep_contract_is_sub_perm : SepContractFun is_sub_perm :=
     {| sep_contract_logic_variables := ["p" :: ty.perm; "p'" :: ty.perm];
        sep_contract_localstore      := [term_var "p"; term_var "p'"];
@@ -669,6 +699,9 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | is_sub_perm            => Some sep_contract_is_sub_perm
       | is_within_range        => Some sep_contract_is_within_range
       | abs                    => Some sep_contract_abs
+      | is_not_zero            => Some sep_contract_is_not_zero
+      | can_incr_cursor        => Some sep_contract_can_incr_cursor
+      | exec_jalr_cap          => Some sep_contract_exec_jalr_cap
       | exec_jalr              => Some sep_contract_exec_jalr
       | exec_jal               => Some sep_contract_exec_jal
       | exec_bne               => Some sep_contract_exec_bne
@@ -767,15 +800,23 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
     |}.
 
   Definition lemma_safe_move_cursor : SepLemma safe_move_cursor :=
-    let Σ : LCtx := ["p" ∷ ty.perm; "b" ∷ ty.addr; "e" ∷ ty.addr; "a" ∷ ty.addr; "a'" ∷ ty.addr]%ctx in
+    let Σ : LCtx := ["p" :: ty.perm; "b" :: ty.addr; "e" :: ty.addr; "a" :: ty.addr; "a'" :: ty.addr]%ctx in
     let c  : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a"] in
     let c' : Term Σ _ := term_record capability [term_var "p"; term_var "b"; term_var "e"; term_var "a'"] in
     {| lemma_logic_variables := Σ;
        lemma_patterns        := [nenv c'; c];
-       lemma_precondition    := asn_csafe c ∗ term_var "p" ≠ₚ term_val ty.perm E;
+       lemma_precondition    := asn_csafe c ∗ (term_var "p" ≠ₚ term_val ty.perm E ∨ term_var "a" = (term_var "a'"));
        lemma_postcondition   :=
          asn_csafe c ∗
          asn_csafe c';
+    |}.
+
+  Definition lemma_rewrite_add_r_0 : SepLemma rewrite_add_r_0 :=
+    {| lemma_logic_variables := ["a" :: ty.int; "b" :: ty.int];
+       lemma_patterns        := [term_var "a"; term_var "b"];
+       lemma_precondition    := term_var "b" = term_val ty.int 0%Z;
+       lemma_postcondition   :=
+         term_var "a" = term_binop bop.plus (term_var "a") (term_var "b");
     |}.
 
   (*
@@ -912,6 +953,7 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | correctPC_subperm_R => lemma_correctPC_subperm_R
       | subperm_not_E       => lemma_subperm_not_E
       | safe_to_execute     => lemma_safe_to_execute
+      | rewrite_add_r_0     => lemma_rewrite_add_r_0
       end.
 
   Lemma linted_cenvex :
@@ -1172,7 +1214,16 @@ Module MinCapsValidContracts.
   Lemma valid_contract_abs : ValidContract abs.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_jalr : ValidContractDebug exec_jalr.
+  Lemma valid_contract_is_not_zero : ValidContract is_not_zero.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_can_incr_cursor : ValidContract can_incr_cursor.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_jalr_cap : ValidContract exec_jalr_cap.
+  Proof. reflexivity. Qed.
+
+  Lemma valid_contract_exec_jalr : ValidContract exec_jalr.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_jal : ValidContract exec_jal.
@@ -1190,7 +1241,7 @@ Module MinCapsValidContracts.
   Lemma valid_contract_exec_sd : ValidContract exec_sd.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_cincoffsetimm : ValidContract exec_cincoffsetimm.
+  Lemma valid_contract_exec_cincoffset : ValidContract exec_cincoffset.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_candperm : ValidContract exec_candperm.
@@ -1303,17 +1354,14 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_is_sub_perm).
     - apply (valid_contract _ H valid_contract_is_within_range).
     - apply (valid_contract _ H valid_contract_abs).
+    - apply (valid_contract _ H valid_contract_is_not_zero).
+    - apply (valid_contract _ H valid_contract_can_incr_cursor).
+    - apply (valid_contract _ H valid_contract_exec_jalr_cap).
     - apply (valid_contract _ H valid_contract_exec_jalr).
     - apply (valid_contract _ H valid_contract_exec_jal).
     - apply (valid_contract _ H valid_contract_exec_bne).
-    - apply (valid_contract _ H valid_contract_exec_cmove).
     - apply (valid_contract _ H valid_contract_exec_ld).
     - apply (valid_contract _ H valid_contract_exec_sd).
-    - apply (valid_contract _ H valid_contract_exec_cincoffsetimm).
-    - apply (valid_contract _ H valid_contract_exec_candperm).
-    - apply (valid_contract _ H valid_contract_exec_csetbounds).
-    - apply (valid_contract _ H valid_contract_exec_csetboundsimm).
-    - apply (valid_contract _ H valid_contract_exec_cgettag).
     - apply (valid_contract _ H valid_contract_exec_addi).
     - apply (valid_contract _ H valid_contract_exec_add).
     - apply (valid_contract _ H valid_contract_exec_sub).
@@ -1321,6 +1369,12 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_exec_slti).
     - apply (valid_contract _ H valid_contract_exec_sltu).
     - apply (valid_contract _ H valid_contract_exec_sltiu).
+    - apply (valid_contract _ H valid_contract_exec_cmove).
+    - apply (valid_contract _ H valid_contract_exec_cincoffset).
+    - apply (valid_contract _ H valid_contract_exec_candperm).
+    - apply (valid_contract _ H valid_contract_exec_csetbounds).
+    - apply (valid_contract _ H valid_contract_exec_csetboundsimm).
+    - apply (valid_contract _ H valid_contract_exec_cgettag).
     - apply (valid_contract _ H valid_contract_exec_cgetperm).
     - apply (valid_contract _ H valid_contract_exec_cgetbase).
     - apply (valid_contract _ H valid_contract_exec_cgetlen).
@@ -1369,13 +1423,16 @@ Section Statistics.
       existT _ (existT _ is_sub_perm);
       existT _ (existT _ is_within_range);
       existT _ (existT _ abs);
+      existT _ (existT _ is_not_zero);
+      existT _ (existT _ can_incr_cursor);
+      existT _ (existT _ exec_jalr_cap);
       existT _ (existT _ exec_jalr);
       existT _ (existT _ exec_jal);
       existT _ (existT _ exec_bne);
       existT _ (existT _ exec_cmove);
       existT _ (existT _ exec_ld);
       existT _ (existT _ exec_sd);
-      existT _ (existT _ exec_cincoffsetimm);
+      existT _ (existT _ exec_cincoffset);
       existT _ (existT _ exec_candperm);
       existT _ (existT _ exec_csetbounds);
       existT _ (existT _ exec_csetboundsimm);
