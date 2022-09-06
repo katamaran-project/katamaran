@@ -78,8 +78,8 @@ Section FunDeclKit.
   | is_not_zero        : Fun ["i" :: ty.int] ty.bool
   | can_incr_cursor    : Fun ["c" :: ty.cap; "imm" :: ty.int] ty.bool
   | exec_jalr_cap      : Fun ["cd"  :: ty.dst; "cs"  :: ty.src] ty.bool
-  | exec_jalr          : Fun ["cd"  :: ty.dst; "cs"  :: ty.src; "imm" :: ty.int] ty.bool
-  | exec_jal           : Fun ["cd"  :: ty.dst; "imm" :: ty.int] ty.bool
+  | exec_cjalr         : Fun ["cd"  :: ty.dst; "cs"  :: ty.src; "imm" :: ty.int] ty.bool
+  | exec_cjal          : Fun ["cd"  :: ty.dst; "imm" :: ty.int] ty.bool
   | exec_bne           : Fun ["rs1" :: ty.src; "rs2" :: ty.src; "imm" :: ty.int] ty.bool
   | exec_ld            : Fun ["cd"  :: ty.dst; "cs"  :: ty.src; "imm" :: ty.int] ty.bool
   | exec_sd            : Fun ["rs1" :: ty.src; "rs2" :: ty.src; "imm" :: ty.int] ty.bool
@@ -674,9 +674,9 @@ Section FunDefKit.
       stm_val ty.bool true.
 
     Definition fun_exec_jalr_cap : Stm ["cd" :: ty.dst; "cs" :: ty.src] ty.bool :=
-      call exec_jalr (exp_var "cd") (exp_var "cs") (exp_val ty.int 0%Z).
+      call exec_cjalr (exp_var "cd") (exp_var "cs") (exp_val ty.int 0%Z).
 
-    Definition fun_exec_jalr : Stm ["cd" :: ty.dst; "cs" :: ty.src; "imm" :: ty.int] ty.bool :=
+    Definition fun_exec_cjalr : Stm ["cd" :: ty.dst; "cs" :: ty.src; "imm" :: ty.int] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
       lemma_correctPC_not_E (exp_var "opc") ;;
@@ -686,7 +686,7 @@ Section FunDefKit.
       let*: ["p", "b", "e", "a"] := exp_var "c" in
       let: "tmp" := call can_incr_cursor (exp_var "c") (exp_var "imm") in
       if: exp_not (exp_var "tmp")
-      then fail "Err: [jalr] cannot increment cursor of enter capability"
+      then fail "Err: [cjalr] cannot increment cursor of enter capability"
       else
         let: "c'" := (exp_record capability
                                  [ exp_var "p";
@@ -698,7 +698,7 @@ Section FunDefKit.
         stm_write_register pc (exp_var "c'") ;;
         stm_val ty.bool true.
 
-    Definition fun_exec_jal : Stm ["cd" :: ty.dst; "imm" :: ty.int] ty.bool :=
+    Definition fun_exec_cjal : Stm ["cd" :: ty.dst; "imm" :: ty.int] ty.bool :=
       let: "opc" := stm_read_register pc in
       let: "npc" := call next_pc in
       lemma_correctPC_not_E (exp_var "opc") ;;
@@ -721,10 +721,10 @@ Section FunDefKit.
            match K with
            | kjalr_cap      => MkAlt (pat_pair "cd" "cs")
                                      (call exec_jalr_cap (exp_var "cd") (exp_var "cs"))
-           | kjalr          => MkAlt (pat_tuple ("cd" , "cs" , "imm"))
-                                     (call exec_jalr (exp_var "cd") (exp_var "cs") (exp_var "imm"))
-           | kjal           => MkAlt (pat_pair "cd" "imm")
-                                     (call exec_jal (exp_var "cd") (exp_var "imm"))
+           | kcjalr         => MkAlt (pat_tuple ("cd" , "cs" , "imm"))
+                                     (call exec_cjalr (exp_var "cd") (exp_var "cs") (exp_var "imm"))
+           | kcjal          => MkAlt (pat_pair "cd" "imm")
+                                     (call exec_cjal (exp_var "cd") (exp_var "imm"))
            | kbne           => MkAlt (pat_tuple ("rs1" , "rs2" , "imm"))
                                      (call exec_bne (exp_var "rs1") (exp_var "rs2") (exp_var "imm"))
            | kcmove         => MkAlt (pat_pair "cd" "cs")
@@ -837,8 +837,8 @@ Section FunDefKit.
     | is_not_zero        => fun_is_not_zero
     | can_incr_cursor    => fun_can_incr_cursor
     | exec_jalr_cap      => fun_exec_jalr_cap
-    | exec_jalr          => fun_exec_jalr
-    | exec_jal           => fun_exec_jal
+    | exec_cjalr         => fun_exec_cjalr
+    | exec_cjal          => fun_exec_cjal
     | exec_bne           => fun_exec_bne
     | exec_cmove         => fun_exec_cmove
     | exec_ld            => fun_exec_ld

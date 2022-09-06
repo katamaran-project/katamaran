@@ -509,10 +509,10 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
   Definition sep_contract_exec_jalr_cap : SepContractFun exec_jalr_cap :=
     mach_inv_contract.
 
-  Definition sep_contract_exec_jalr : SepContractFun exec_jalr :=
+  Definition sep_contract_exec_cjalr : SepContractFun exec_cjalr :=
     mach_inv_contract.
 
-  Definition sep_contract_exec_jal : SepContractFun exec_jal :=
+  Definition sep_contract_exec_cjal : SepContractFun exec_cjal :=
     mach_inv_contract.
 
   Definition sep_contract_exec_bne : SepContractFun exec_bne :=
@@ -702,8 +702,8 @@ Module Import MinCapsSpecification <: Specification MinCapsBase MinCapsProgram M
       | is_not_zero            => Some sep_contract_is_not_zero
       | can_incr_cursor        => Some sep_contract_can_incr_cursor
       | exec_jalr_cap          => Some sep_contract_exec_jalr_cap
-      | exec_jalr              => Some sep_contract_exec_jalr
-      | exec_jal               => Some sep_contract_exec_jal
+      | exec_cjalr             => Some sep_contract_exec_cjalr
+      | exec_cjal              => Some sep_contract_exec_cjal
       | exec_bne               => Some sep_contract_exec_bne
       | exec_cmove             => Some sep_contract_exec_cmove
       | exec_ld                => Some sep_contract_exec_ld
@@ -1223,10 +1223,10 @@ Module MinCapsValidContracts.
   Lemma valid_contract_exec_jalr_cap : ValidContract exec_jalr_cap.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_jalr : ValidContract exec_jalr.
+  Lemma valid_contract_exec_cjalr : ValidContract exec_cjalr.
   Proof. reflexivity. Qed.
 
-  Lemma valid_contract_exec_jal : ValidContract exec_jal.
+  Lemma valid_contract_exec_cjal : ValidContract exec_cjal.
   Proof. reflexivity. Qed.
 
   Lemma valid_contract_exec_bne : ValidContract exec_bne.
@@ -1357,8 +1357,8 @@ Module MinCapsValidContracts.
     - apply (valid_contract _ H valid_contract_is_not_zero).
     - apply (valid_contract _ H valid_contract_can_incr_cursor).
     - apply (valid_contract _ H valid_contract_exec_jalr_cap).
-    - apply (valid_contract _ H valid_contract_exec_jalr).
-    - apply (valid_contract _ H valid_contract_exec_jal).
+    - apply (valid_contract _ H valid_contract_exec_cjalr).
+    - apply (valid_contract _ H valid_contract_exec_cjal).
     - apply (valid_contract _ H valid_contract_exec_bne).
     - apply (valid_contract _ H valid_contract_exec_ld).
     - apply (valid_contract _ H valid_contract_exec_sd).
@@ -1426,8 +1426,8 @@ Section Statistics.
       existT _ (existT _ is_not_zero);
       existT _ (existT _ can_incr_cursor);
       existT _ (existT _ exec_jalr_cap);
-      existT _ (existT _ exec_jalr);
-      existT _ (existT _ exec_jal);
+      existT _ (existT _ exec_cjalr);
+      existT _ (existT _ exec_cjal);
       existT _ (existT _ exec_bne);
       existT _ (existT _ exec_cmove);
       existT _ (existT _ exec_ld);
