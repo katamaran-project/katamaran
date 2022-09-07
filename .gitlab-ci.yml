@@ -17,4 +17,5 @@ stages:
       - "_build"
 
 8.15.2_iris-3.6.0_equations-1.3:   {<<: *build, image: "ghcr.io/katamaran-project/coq:8.15.2_iris-3.6.0_equations-1.3"}
+8.16.0_iris-3.6.0_equations-1.3:   {<<: *build, image: "ghcr.io/katamaran-project/coq:8.16.0_iris-3.6.0_equations-1.3"}
 dev:   {<<: *build, image: "ghcr.io/katamaran-project/coq:dev"}
