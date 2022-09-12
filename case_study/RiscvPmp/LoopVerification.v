@@ -345,10 +345,9 @@ Section Loop.
 
   Definition loop_pre (m : Privilege) (h i mepc_v : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Z)) : iProp Σ :=
     (Step_pre m h i mepc_v mpp entries ∗
-              (Execution m h mepc_v mpp entries -∗ WP_loop) ∗
-              (CSRMod m entries -∗ WP_loop) ∗
-              (Trap m i h mepc_v entries -∗ WP_loop) ∗
-              (Recover m h mepc_v mpp entries -∗ WP_loop))%I.
+              ▷ (CSRMod m entries -∗ WP_loop) ∗
+              ▷ (Trap m i h mepc_v entries -∗ WP_loop) ∗
+              ▷ (Recover m h mepc_v mpp entries -∗ WP_loop))%I.
 
   Definition semTriple_loop : iProp Σ :=
     (∀ (m : Privilege) (h i mepc_v : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Z)),
@@ -357,33 +356,49 @@ Section Loop.
                   (fun _ _ => True))%I.
 
   Lemma valid_semTriple_loop : ⊢ semTriple_loop.
-  Proof.
-    iIntros (m h i mepc_v mpp entries) "(Hsteppre & Hexe & Hcsrmod & Htrap & Hrec)".
-    cbn.
-    unfold fun_loop.
-    iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) _ _ (fun _ _ => True%I)) with "[] [Hexe Hcsrmod Htrap Hrec] Hsteppre").
-    - iApply (iris_rule_stm_call_inline env.nil step env.nil (Step_pre m h i mepc_v mpp entries) (fun _ => step_post m i h mepc_v mpp entries)).
-      cbn.
-      iApply valid_step_semTriple.
-    - iIntros.
-      destruct (env.nilView δ').
-      unfold semTriple.
-      iIntros "(Hpost & %)".
-      iRevert "Hpost".
-      fold (semTriple [env] (step_post m i h mepc_v mpp entries) (call loop) (fun _ _ => True)%I).
-      iApply (@iris_rule_consequence _ _ _ _ _ _ (step_post m i h mepc_v mpp entries) _ (fun v δ => True ∧ ⌜[env] = δ⌝)%I _ _ _).
-      iApply (iris_rule_stm_call_inline env.nil loop env.nil (step_post m i h mepc_v mpp entries) (fun _ => True)%I).
-      cbn.
-      unfold semTriple.
-      iIntros "[H | [H | [H | H]]]".
-      + iApply ("Hexe" with "H").
-      + iApply ("Hcsrmod" with "H").
-      + iApply ("Htrap" with "H").
-      + iApply ("Hrec" with "H").
-        Unshelve.
-        iIntros "H"; iExact "H".
-        now iIntros.
-  Qed.
+  Admitted.
+
+  (* Definition loop_pre (m : Privilege) (h i mepc_v : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Z)) : iProp Σ := *)
+  (*   (Step_pre m h i mepc_v mpp entries ∗ *)
+  (*             (Execution m h mepc_v mpp entries -∗ WP_loop) ∗ *)
+  (*             (CSRMod m entries -∗ WP_loop) ∗ *)
+  (*             (Trap m i h mepc_v entries -∗ WP_loop) ∗ *)
+  (*             (Recover m h mepc_v mpp entries -∗ WP_loop))%I. *)
+
+  (* Definition semTriple_loop : iProp Σ := *)
+  (*   (∀ (m : Privilege) (h i mepc_v : Xlenbits) (mpp : Privilege) (entries : list (Pmpcfg_ent * Z)), *)
+  (*       semTriple env.nil (loop_pre m h i mepc_v mpp entries) *)
+  (*                 (FunDef loop) *)
+  (*                 (fun _ _ => True))%I. *)
+
+  (* Lemma valid_semTriple_loop : ⊢ semTriple_loop. *)
+  (* Proof. *)
+  (*   iIntros (m h i mepc_v mpp entries) "(Hsteppre & Hexe & Hcsrmod & Htrap & Hrec)". *)
+  (*   cbn. *)
+  (*   unfold fun_loop. *)
+  (*   iApply ((iris_rule_stm_seq env.nil (stm_call step _) (stm_call loop _) _ _ (fun _ _ => True%I)) with "[] [Hexe Hcsrmod Htrap Hrec] Hsteppre"). *)
+  (*   - iApply (iris_rule_stm_call_inline env.nil step env.nil (Step_pre m h i mepc_v mpp entries) (fun _ => step_post m i h mepc_v mpp entries)). *)
+  (*     cbn. *)
+  (*     iApply valid_step_semTriple. *)
+  (*   - iIntros. *)
+  (*     destruct (env.nilView δ'). *)
+  (*     unfold semTriple. *)
+  (*     iIntros "(Hpost & %)". *)
+  (*     iRevert "Hpost". *)
+  (*     fold (semTriple [env] (step_post m i h mepc_v mpp entries) (call loop) (fun _ _ => True)%I). *)
+  (*     iApply (@iris_rule_consequence _ _ _ _ _ _ (step_post m i h mepc_v mpp entries) _ (fun v δ => True ∧ ⌜[env] = δ⌝)%I _ _ _). *)
+  (*     iApply (iris_rule_stm_call_inline env.nil loop env.nil (step_post m i h mepc_v mpp entries) (fun _ => True)%I). *)
+  (*     cbn. *)
+  (*     unfold semTriple. *)
+  (*     iIntros "[H | [H | [H | H]]]". *)
+  (*     + iApply ("Hexe" with "H"). *)
+  (*     + iApply ("Hcsrmod" with "H"). *)
+  (*     + iApply ("Htrap" with "H"). *)
+  (*     + iApply ("Hrec" with "H"). *)
+  (*       Unshelve. *)
+  (*       iIntros "H"; iExact "H". *)
+  (*       now iIntros. *)
+  (* Qed. *)
 
   Section OldLoop.
     Definition loop_pre' (m cp : Privilege) (h i : Z) (entries es : list (Pmpcfg_ent * Z)) (mpp : Privilege) (mepc_v : Z) : iProp Σ :=
