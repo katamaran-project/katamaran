@@ -64,6 +64,7 @@ Inductive Predicate : Set :=
 | pmp_addr_access_without
 | gprs
 | ptsto
+| ptsto_readonly
 | encodes_instr
 | ptstomem
 | ptstoinstr
@@ -339,6 +340,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
       | pmp_addr_access_without => [ty_xlenbits; ty.list ty_pmpentry; ty_privilege]
       | gprs                    => ctx.nil
       | ptsto                   => [ty_xlenbits; ty_xlenbits]
+      | ptsto_readonly          => [ty_xlenbits; ty_xlenbits]
       | encodes_instr           => [ty.int; ty_ast]
       | ptstomem                => [ty_xlenbits; ty.int; ty.list ty_word]
       | ptstoinstr              => [ty_xlenbits; ty_ast]
@@ -352,6 +354,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
         | pmp_addr_access_without => false
         | gprs                    => false
         | ptsto                   => false
+        | ptsto_readonly          => true
         | encodes_instr           => true
         | ptstomem                => false
         | ptstoinstr              => false
@@ -365,6 +368,7 @@ Module Export RiscvPmpSignature <: Signature RiscvPmpBase.
     Definition 𝑯_precise (p : 𝑯) : option (Precise 𝑯_Ty p) :=
       match p with
       | ptsto                   => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
+      | ptsto_readonly          => Some (MkPrecise [ty_xlenbits] [ty_word] eq_refl)
       | pmp_entries             => Some (MkPrecise ε [ty.list ty_pmpentry] eq_refl)
       | pmp_addr_access         => Some (MkPrecise ε [ty.list ty_pmpentry; ty_privilege] eq_refl)
       | pmp_addr_access_without => Some (MkPrecise [ty_xlenbits] [ty.list ty_pmpentry; ty_privilege] eq_refl)

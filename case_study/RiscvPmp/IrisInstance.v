@@ -38,6 +38,8 @@ From Katamaran Require Import
 
 From iris.base_logic Require Import invariants lib.iprop lib.gen_heap.
 From iris.proofmode Require Import tactics.
+From stdpp Require namespaces.
+Module ns := stdpp.namespaces.
 
 Set Implicit Arguments.
 
@@ -73,8 +75,11 @@ Module RiscvPmpIrisInstance <:
       | _ => False
       end.
 
+  Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "ptsto_readonly").
     Definition interp_ptsto (addr : Addr) (w : Word) : iProp Σ :=
       mapsto addr (DfracOwn 1) w.
+    Definition interp_ptsto_readonly (addr : Addr) (w : Word) : iProp Σ :=
+      inv femto_inv_ns (interp_ptsto addr w).
     Definition ptstoSth : Addr -> iProp Σ := fun a => (∃ w, interp_ptsto a w)%I.
     Definition ptstoSthL : list Addr -> iProp Σ :=
       fun addrs => ([∗ list] k↦a ∈ addrs, ptstoSth a)%I.
@@ -104,6 +109,7 @@ Module RiscvPmpIrisInstance <:
     | pmp_addr_access_without | [ addr; entries; m ] => interp_pmp_addr_access_without addr liveAddrs entries m
     | gprs                    | _                    => interp_gprs
     | ptsto                   | [ addr; w ]          => interp_ptsto addr w
+    | ptsto_readonly          | [ addr; w ]          => interp_ptsto_readonly addr w
     | encodes_instr           | [ code; instr ]      => ⌜ pure_decode code = inr instr ⌝%I
     | ptstomem                | _                    => True%I
     | ptstoinstr              | [ addr; instr ]      => interp_ptsto_instr addr instr.

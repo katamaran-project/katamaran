@@ -60,6 +60,8 @@ Import env.notations.
 Import ListNotations.
 Open Scope ctx_scope.
 
+Module inv := invariants.
+
 Import BlockVerificationDerived2.
 
   Section FemtoKernel.
@@ -121,7 +123,7 @@ Import BlockVerificationDerived2.
             Z.lor l (Z.lor a (Z.lor x (Z.lor w r)))
         end%Z.
 
-    Definition femto_address_max := 2^30.
+    Definition femto_address_max : Z := 2^30.
     Definition femto_pmpcfg_ent0 : Pmpcfg_ent := MkPmpcfg_ent false OFF false false false.
     Definition femto_pmpcfg_ent0_bits : Val ty_xlenbits := pure_pmpcfg_ent_to_bits femto_pmpcfg_ent0.
     Definition femto_pmpcfg_ent1 : Pmpcfg_ent := MkPmpcfg_ent false TOR true true true.
@@ -161,6 +163,7 @@ Import BlockVerificationDerived2.
     Import asn.notations.
     Local Notation "a '↦[' n ']' xs" := (asn.chunk (chunk_user ptstomem [a; n; xs])) (at level 79).
     Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
+    Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user ptsto_readonly [a; t])) (at level 70).
     Local Notation "x + y" := (term_binop bop.plus x y) : exp_scope.
 
     Let Σ__femtoinit : LCtx := [].
@@ -264,7 +267,7 @@ Import BlockVerificationDerived2.
       (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
       (pmpaddr0 ↦ term_var "a" + term_val ty_xlenbits 16) ∗
       (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
-      (term_var "a" + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42)%exp.
+      (term_var "a" + (term_val ty_xlenbits 12) ↦ᵣ term_val ty_xlenbits 42)%exp.
 
     Example femtokernel_handler_post : Assertion {| wctx := ["epc"::ty_exc_code; "a" :: ty_xlenbits; "an"::ty_xlenbits]; wco := nil |} :=
       (
@@ -284,7 +287,7 @@ Import BlockVerificationDerived2.
           (pmp1cfg ↦ term_val (ty.record rpmpcfg_ent) femto_pmpcfg_ent1) ∗
           (pmpaddr0 ↦ term_var "a" + term_val ty_xlenbits 16) ∗
           (pmpaddr1 ↦ term_val ty_xlenbits femto_address_max) ∗
-          (term_var "a" + (term_val ty_xlenbits 12) ↦ₘ term_val ty_xlenbits 42) ∗
+          (term_var "a" + (term_val ty_xlenbits 12) ↦ᵣ term_val ty_xlenbits 42) ∗
           asn.formula (formula_eq (term_var "an") (term_var "epc"))
       )%exp.
 
@@ -302,6 +305,7 @@ Import BlockVerificationDerived2.
       (* vc5. *)
     (* Import SymProp.notations. *)
     (* Set Printing Depth 200. *)
+    (* Compute vc__femtohandler. *)
     (* Print vc__femtohandler. *)
 
     Lemma sat__femtohandler : safeE vc__femtohandler.
@@ -409,15 +413,10 @@ Import BlockVerificationDerived2.
     now rewrite <- liveAddr_filter_advAddr.
   Qed.
 
-  Definition femto_inv_ns : ns.namespace := (ns.ndot ns.nroot "femto_inv_ns").
-
-  Import iris.base_logic.lib.invariants.
-  (* This lemma transforms the postcondition of femtokernel_init into the precondition of the universal contract, so that we can use the UC to verify the invocation of untrusted code.
-   *)
-
   (* DOMI: for simplicity, we're currently treating the femtokernel invariant on the private state not as a shared invariant but as a piece of private state to be framed off during every invocation of the adversary.  This is fine since for now we're assuming no concurrency... *)
-  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ :=
-        (interp_ptsto 84 42).
+  Definition ptsto_readonly `{sailGS Σ} addr v : iProp Σ :=
+        inv.inv femto_inv_ns (interp_ptsto addr v).
+  Definition femto_inv_fortytwo `{sailGS Σ} : iProp Σ := ptsto_readonly 84 42.
 
   Local Notation "a '↦' t" := (reg_pointsTo a t) (at level 79).
   (* Local Notation "a '↦ₘ' t" := (interp_ptsto a t) (at level 79). *)
@@ -479,7 +478,7 @@ Import BlockVerificationDerived2.
     exact (env.snoc env.nil (_::ty_exc_code) epc).
     - iDestruct "Hpre" as "(Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmpaddr0 & Hpmp1cfg & Hpmpaddr1) & Hfortytwo & Hpc & Hnpc & Hhandler)".
       cbn.
-      unfold femto_inv_fortytwo.
+      iFrame.
       now iFrame.
     - iIntros (an) "(Hpc & Hnpc & Hhandler & (Hmstatus & Hmtvec & Hmcause & Hmepc & Hcurpriv & Hx1 & Hx2 & Hx3 & Hx4 & Hx5 & Hx6 & Hx7 & (Hpmp0cfg & Hpmp1cfg & Hpmpaddr0 & Hpmpaddr1 & Hfortytwo & %eq & _)))".
       cbn.
@@ -574,8 +573,8 @@ Import BlockVerificationDerived2.
     rewrite ?big_opS_union ?big_opS_singleton ?big_opS_empty; try set_solver.
     iFrame.
 
-  (*   iMod (inv_alloc femto_inv_ns ⊤ (interp_ptsto (mG := sailGS_memGS) 84 42) with "Hfortytwo") as "#Hinv". *)
-  (*   change (inv femto_inv_ns (84 ↦ₘ 42)) with femto_inv_fortytwo. *)
+    iMod (inv.inv_alloc femto_inv_ns ⊤ (interp_ptsto 84 42) with "Hfortytwo") as "#Hinv".
+    change (inv.inv femto_inv_ns (interp_ptsto 84 42)) with femto_inv_fortytwo.
     iModIntro.
 
     iSplitL "Hmcause Hmemadv".
@@ -595,6 +594,8 @@ Import BlockVerificationDerived2.
     iIntros "(Hmem & Hgprs & Hpmpents & Hmcause & Hcurpriv & Hnpc & Hpc & Hmtvec & Hmstatus & Hmepc)".
     iApply femtokernel_hander_safe.
     iFrame.
+    iSplitL "".
+    now iFrame.
     now iExists _.
 
     iModIntro.
@@ -620,7 +621,7 @@ Import BlockVerificationDerived2.
       pmp1cfg ↦ femtokernel_default_pmpcfg ∗
       (∃ v, pmpaddr0 ↦ v) ∗
       (∃ v, pmpaddr1 ↦ v) ∗
-      femto_inv_fortytwo) ∗
+      interp_ptsto 84 42) ∗
       pc ↦ 0 ∗
       (∃ v, nextpc ↦ v) ∗
       ptsto_instrs 0 femtokernel_init.
@@ -642,7 +643,7 @@ Import BlockVerificationDerived2.
         pmp1cfg ↦ femto_pmpcfg_ent1 ∗
         (pmpaddr0 ↦ 88) ∗
         (pmpaddr1 ↦ femto_address_max) ∗
-        femto_inv_fortytwo) ∗
+        interp_ptsto 84 42) ∗
         pc ↦ 88 ∗
         (∃ v, nextpc ↦ v) ∗
         ptsto_instrs 0 femtokernel_init.

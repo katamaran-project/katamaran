@@ -79,6 +79,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
 
   Import asn.notations.
   Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
+  Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user ptsto_readonly [a; t])) (at level 70).
   Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
@@ -153,6 +154,7 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
    *)
   Local Notation "r '↦' val" := (asn_reg_ptsto r val) : asn_scope.
   Local Notation "a '↦ₘ' t" := (asn.chunk (chunk_user ptsto [a; t])) (at level 70).
+  Local Notation "a '↦ᵣ' t" := (asn.chunk (chunk_user ptsto_readonly [a; t])) (at level 70).
   Local Notation "a '↦ᵢ' t" := (asn.chunk (chunk_user ptstoinstr [a; t])) (at level 70).
   Local Notation "a <ₜ b" := (term_binop bop.lt a b) (at level 60).
   Local Notation "a <=ₜ b" := (term_binop bop.le a b) (at level 60).
@@ -209,13 +211,13 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
     |}.
 
   Definition sep_contract_mem_read : SepContractFun mem_read :=
-    {| sep_contract_logic_variables := ["typ" :: ty_access_type; "paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "typ" :: ty_access_type; "paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
        sep_contract_localstore      := [term_var "typ"; term_var "paddr"];
-       sep_contract_precondition    := term_var "paddr" ↦ₘ term_var "w";
+       sep_contract_precondition    := asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w");
        sep_contract_result          := "result_mem_read";
        sep_contract_postcondition   :=
       term_var "result_mem_read" = term_union memory_op_result KMemValue (term_var "w") ∗
-                                              term_var "paddr" ↦ₘ term_var "w";
+                                     asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w");
     |}.
 
   Definition sep_contract_tick_pc : SepContractFun tick_pc :=
@@ -249,12 +251,14 @@ Module RiscvPmpBlockVerifSpec <: Specification RiscvPmpBase RiscvPmpProgram Risc
   Proof. intros ? ? []; try constructor. Qed.
 
   Definition sep_contract_read_ram : SepContractFunX read_ram :=
-    {| sep_contract_logic_variables := ["paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
+    {| sep_contract_logic_variables := ["inv" :: ty.bool; "paddr" :: ty_xlenbits; "w" :: ty_xlenbits];
        sep_contract_localstore      := [term_var "paddr"];
-       sep_contract_precondition    := term_var "paddr" ↦ₘ term_var "w";
+       sep_contract_precondition    := asn.match_bool (term_var "inv") (term_var "paddr" ↦ᵣ term_var "w") (term_var "paddr" ↦ₘ term_var "w");
        sep_contract_result          := "result_read_ram";
-       sep_contract_postcondition   := term_var "paddr" ↦ₘ term_var "w" ∗
-                                       term_var "result_read_ram" = term_var "w";
+       sep_contract_postcondition   := asn.match_bool (term_var "inv")
+                                         (term_var "paddr" ↦ᵣ term_var "w")
+                                         (term_var "paddr" ↦ₘ term_var "w") ∗
+                                            term_var "result_read_ram" = term_var "w";
     |}.
 
   Definition sep_contract_write_ram : SepContractFunX write_ram :=
@@ -422,41 +426,73 @@ Module RiscvPmpIrisInstanceWithContracts.
   Import iris.proofmode.tactics.
 
   Lemma read_ram_sound `{sailGS Σ} {Γ} (es : NamedEnv (Exp Γ) ["paddr"∷ty_exc_code]) (δ : CStore Γ) :
-    ∀ paddr w,
+    ∀ (b : bool) paddr w,
       evals es δ = [env].["paddr"∷ty_exc_code ↦ paddr]
-      → ⊢ semTriple δ (interp_ptsto paddr w) (stm_foreign read_ram es)
-          (λ (v : Z) (δ' : NamedEnv Val Γ), (interp_ptsto paddr w ∗ ⌜v = w⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
+      → ⊢ semTriple δ
+          (if b then interp_ptsto_readonly paddr w else interp_ptsto paddr w)
+          (stm_foreign read_ram es)
+          (λ (v : Z) (δ' : NamedEnv Val Γ), ((if b then interp_ptsto_readonly paddr w else interp_ptsto paddr w) ∗ ⌜v = w⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
-    iIntros (paddr w Heq) "ptsto_addr_w".
+    iIntros (b paddr w Heq) "ptsto_addr_w".
     rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first easy.
-    iIntros (e2 σ'' efs Hstep).
-    dependent elimination Hstep.
-    dependent elimination s.
-    rewrite Heq in f1. cbv in f1.
-    dependent elimination f1. cbn.
-    do 3 iModIntro.
-    unfold interp_ptsto.
-    iAssert (⌜ memmap !! paddr = Some w ⌝)%I with "[ptsto_addr_w Hmem']" as "%".
-    { iApply (gen_heap.gen_heap_valid with "Hmem' ptsto_addr_w"). }
-    iMod "Hclose" as "_".
-    iModIntro.
-    iSplitL "Hmem' Hregs".
-    iSplitL "Hregs"; first iFrame.
-    iExists memmap.
-    iSplitL "Hmem'"; first iFrame.
-    iPureIntro; assumption.
-    iSplitL; last easy.
-    apply map_Forall_lookup_1 with (i := paddr) (x := w) in H0; auto.
-    cbn in H0. subst.
-    iApply wp_value.
-    iSplitL; last easy.
-    iSplitL; last easy.
-    iAssumption.
+    destruct b.
+    - iDestruct "ptsto_addr_w" as "#ptsto_addr_w".
+      unfold interp_ptsto_readonly.
+      iInv "ptsto_addr_w" as "Hptsto" "Hclose_ptsto".
+      iMod (fupd_mask_subseteq empty) as "Hclose_rest"; first set_solver.
+      iModIntro.
+      iSplitR; first done.
+      iIntros (e2 σ'' efs Hstep).
+      dependent elimination Hstep.
+      dependent elimination s.
+      rewrite Heq in f1. cbv in f1.
+      dependent elimination f1. cbn.
+      do 3 iModIntro.
+      unfold interp_ptsto.
+      iAssert (⌜ memmap !! paddr = Some w ⌝)%I with "[Hptsto Hmem']" as "%".
+      { iApply (gen_heap.gen_heap_valid with "Hmem' Hptsto"). }
+      iMod "Hclose_rest" as "_".
+      iMod ("Hclose_ptsto" with "Hptsto") as "_".
+      iModIntro.
+      iSplitL "Hmem' Hregs".
+      iSplitL "Hregs"; first iFrame.
+      iExists memmap.
+      iSplitL "Hmem'"; first iFrame.
+      iPureIntro; assumption.
+      iSplitL; last easy.
+      apply map_Forall_lookup_1 with (i := paddr) (x := w) in H0; auto.
+      cbn in H0. subst.
+      iApply wp_value.
+      iSplitL; last easy.
+      now iSplitL.
+    - iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
+      iModIntro.
+      iSplitR; first easy.
+      iIntros (e2 σ'' efs Hstep).
+      dependent elimination Hstep.
+      dependent elimination s.
+      rewrite Heq in f1. cbv in f1.
+      dependent elimination f1. cbn.
+      do 3 iModIntro.
+      unfold interp_ptsto.
+      iAssert (⌜ memmap !! paddr = Some w ⌝)%I with "[ptsto_addr_w Hmem']" as "%".
+      { iApply (gen_heap.gen_heap_valid with "Hmem' ptsto_addr_w"). }
+      iMod "Hclose" as "_".
+      iModIntro.
+      iSplitL "Hmem' Hregs".
+      iSplitL "Hregs"; first iFrame.
+      iExists memmap.
+      iSplitL "Hmem'"; first iFrame.
+      iPureIntro; assumption.
+      iSplitL; last easy.
+      apply map_Forall_lookup_1 with (i := paddr) (x := w) in H0; auto.
+      cbn in H0. subst.
+      iApply wp_value.
+      iSplitL; last easy.
+      iSplitL; last easy.
+      iAssumption.
   Qed.
 
   Lemma write_ram_sound `{sailGS Σ} {Γ}
