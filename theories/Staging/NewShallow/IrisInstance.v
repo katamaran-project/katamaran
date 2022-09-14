@@ -104,96 +104,6 @@ Section Soundness.
        lduplicate p ts Hdup := lduplicate_inst (sRG := sailGS_sailRegGS) sailGS_memGS ts Hdup
     |}.
 
-  Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
-    ⊢ (regs_inv regstore -∗ reg_pointsTo r v -∗ ⌜read_register regstore r = v⌝)%I.
-  Proof.
-    iDestruct 1 as (regsmap) "[Hregs %]".
-    iIntros "Hreg".
-    iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl regsv]%auth_both_valid.
-    iPureIntro.
-    specialize (Hl 0).
-    setoid_rewrite (singleton_includedN_l 0 regsmap (existT _ r) _) in Hl.
-    destruct Hl as [y [eq1%discrete%leibniz_equiv eq2%cmra_discrete_included_r]];
-      auto with typeclass_instances.
-    specialize (regsv (existT _ r)).
-    rewrite eq1 in regsv.
-    destruct y as [y|]; [|inversion regsv].
-    setoid_rewrite Excl_included in eq2.
-    apply leibniz_equiv in eq2. subst.
-    specialize (H (existT _ r) (Excl (existT _ v)) eq1); cbn in H.
-    Local Set Equations With UIP.
-    by dependent elimination H.
-  Qed.
-
-  Lemma regs_inv_update {τ} {r} {v : Val τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeVal))} {regstore : RegStore} :
-    map_Forall (K := SomeReg) (A := excl SomeVal) (λ r' v', match r' with
-                         | existT τ r'' => Excl (existT _ (read_register regstore r'')) = v'
-                         end) regsmap ->
-    (own reg_gv_name (● <[existT _ r:=Excl (existT _ v)]> regsmap)) -∗ regs_inv (write_register regstore r v).
-  Proof.
-    iIntros (regseq) "Hownregs".
-    iExists (<[existT _ r:=Excl (existT _ v)]> regsmap).
-    iFrame.
-    iPureIntro.
-    apply (map_Forall_lookup_2 _ (<[existT _ r:=Excl (existT _ v)]> regsmap)).
-    intros [τ' r'] x eq1.
-    destruct (eq_dec_het r r') as [eq2|neq].
-    + dependent elimination eq2.
-      rewrite lookup_insert in eq1.
-      apply (inj Some) in eq1.
-      by rewrite <- eq1, (read_write regstore r v).
-    + assert (existT _ r ≠ existT _ r') as neq2.
-      * intros eq2.
-        dependent elimination eq2.
-        now apply neq.
-      * rewrite (lookup_insert_ne _ _ _ _ neq2) in eq1.
-        rewrite (read_write_distinct _ _ neq).
-        apply (map_Forall_lookup_1 _ _ _ _ regseq eq1).
-  Qed.
-
-  Lemma reg_update regstore {τ} r (v1 v2 : Val τ) :
-    regs_inv regstore -∗ reg_pointsTo r v1 ==∗ regs_inv (write_register regstore r v2) ∗ reg_pointsTo r v2.
-  Proof.
-    iDestruct 1 as (regsmap) "[Hregs %]".
-    rewrite /reg_pointsTo.
-    iIntros "Hreg".
-    iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl%cmra_discrete_included_r regsmapv]%auth_both_valid.
-    setoid_rewrite (singleton_included_l regsmap (existT _ r) _) in Hl.
-    destruct Hl as [y [eq1%leibniz_equiv eq2]].
-    specialize (regsmapv (existT _ r)).
-    rewrite eq1 in regsmapv.
-    destruct y as [y|]; inversion regsmapv.
-    iMod (own_update_2 with "Hregs Hreg") as "[Hregs Hreg]".
-    {
-      eapply auth_update.
-      apply (singleton_local_update regsmap (existT _ r) (Excl y) (Excl (existT _ v1)) (Excl (existT _ v2)) (Excl (existT _ v2)) eq1).
-      by eapply exclusive_local_update.
-    }
-    iModIntro.
-    iFrame.
-    iApply (regs_inv_update H); iFrame.
-  Qed.
-
-  Definition semWP [Γ τ] (s : Stm Γ τ)
-    (POST : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ) : iProp Σ :=
-    WP {| conf_stm := s; conf_store := δ |} ?{{ v, POST (valconf_val v) (valconf_store v) }}.
-
-  Lemma semWP_mono [Γ τ] (s : Stm Γ τ) (P Q : Val τ → CStore Γ → iProp Σ) :
-    (forall v δ, P v δ -∗ Q v δ) -> (forall δ, semWP s P δ -∗ semWP s Q δ).
-  Proof.
-    unfold semWP. intros PQ δ.
-    apply wp_mono. now intros [].
-  Qed.
-
-  Lemma semWP_strong_mono [Γ τ] (s : Stm Γ τ) (P Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ) :
-    ⊢ (∀ v δ, P v δ -∗ Q v δ) -∗ (semWP s P δ -∗ semWP s Q δ).
-  Proof.
-    unfold semWP. iIntros "PQ WP".
-    iApply (wp_strong_mono with "WP"); auto.
-    iIntros ([v δΓ]) "X"; cbn.
-    iModIntro. by iApply "PQ".
-  Qed.
-
   Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
     match lem with
       {| lemma_logic_variables := Σ;
@@ -252,11 +162,6 @@ Section Soundness.
   (*   iDestruct "Px" as (x) "Px". *)
   (*   by iApply "trips". *)
   (* Qed. *)
-
-  Definition semTriple {Γ τ} (δ : CStore Γ) (PRE : iProp Σ) (s : Stm Γ τ)
-    (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
-    PRE -∗ semWP s POST δ.
-  (* always modality needed? perhaps not because sail not higher-order? *)
 
   (* Lemma iris_rule_noop {Γ σ} {δ : CStore Γ} *)
   (*       {P} {Q : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} : *)
@@ -437,7 +342,7 @@ Section Adequacy.
       pose proof (memΣ_GpreS (Σ := sailΣ) _) as mPG.
       iMod (mem_inv_init μ mPG) as (memG) "[Hmem Rmem]".
       iModIntro.
-      iExists (fun σ _ => regs_inv (H := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv memG (σ.2))%I.
+      iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv memG (σ.2))%I.
       iExists _.
       iSplitR "Hs2 Rmem".
       * iSplitL "Hs1".
@@ -770,12 +675,12 @@ Module IrisInstanceWithContracts
       by iApply semWP_fail.
   Qed.
 
-  Lemma semWP_call {Γ τ Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
-    (POST : Val τ → CStore Γ → iProp Σ) (δΓ : CStore Γ) :
-    ▷ semWP (FunDef f) (fun vτ _ => POST vτ δΓ) (evals es δΓ) -∗
-    semWP (stm_call f es) POST δΓ.
+  Lemma semWP_call {Γ τ Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ) :
+    ⊢ ∀ (Q : Val τ → CStore Γ → iProp Σ) (δΓ : CStore Γ),
+        ▷ semWP (FunDef f) (fun vτ _ => Q vτ δΓ) (evals es δΓ) -∗
+        semWP (stm_call f es) Q δΓ.
   Proof.
-    iIntros "wpbody".
+    iIntros (Q δΓ) "wpbody".
     unfold semWP at 2.
     rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "Hregs".
@@ -1151,11 +1056,10 @@ Module IrisInstanceWithContracts
     forall {Γ τ} (s : Stm Γ τ),
       ⊢ semWP' s ≼ semWP s.
   Proof.
-    unfold semWP', ref.
+    unfold ref.
     intros Γ τ [].
-    - apply rule_val.
-    - cbn.
-      apply rule_exp.
+    - iIntros (Q δΓ). rewrite semWP_val. auto.
+    - apply rule_exp.
     - apply rule_let.
     - apply rule_block.
     - apply rule_assign.
@@ -1165,23 +1069,22 @@ Module IrisInstanceWithContracts
     - apply rule_lemma; auto.
     - apply rule_if.
     - apply rule_seq.
-    - cbn.
-      apply rule_assertk.
+    - apply rule_assertk.
     - apply rule_fail.
-    - admit.
-    - cbn. apply rule_match_list.
-    - cbn. apply rule_match_sum.
-    - cbn. apply rule_match_enum.
-    - cbn. apply rule_match_tuple.
-    - cbn. apply rule_match_union.
-    - cbn. apply rule_match_record.
-    - cbn. apply rule_match_bvec.
-    - cbn. apply rule_match_bvec_split.
+    - apply rule_match_list.
+    - apply rule_match_sum.
+    - apply rule_match_prod.
+    - apply rule_match_enum.
+    - apply rule_match_tuple.
+    - apply rule_match_union.
+    - apply rule_match_record.
+    - apply rule_match_bvec.
+    - apply rule_match_bvec_split.
     - apply rule_read_register.
-    - cbn. apply rule_write_register.
+    - apply rule_write_register.
     - apply rule_bind.
     - apply rule_debug.
-  Admitted.
+  Qed.
 
   Lemma sound_stm (extSem : ForeignSem) (lemSem : LemmaSem) :
     forall {Γ τ} (s : Stm Γ τ) (Q : Val τ → CStore Γ → iProp Σ) (δ : CStore Γ),

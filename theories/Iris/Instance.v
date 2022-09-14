@@ -104,200 +104,10 @@ Section Soundness.
        lduplicate p ts Hdup := lduplicate_inst (sRG := sailGS_sailRegGS) sailGS_memGS ts Hdup
     |}.
 
-  Lemma reg_valid regstore {τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) :
-    ⊢ (regs_inv regstore -∗ reg_pointsTo r v -∗ ⌜read_register regstore r = v⌝)%I.
-  Proof.
-    iDestruct 1 as (regsmap) "[Hregs %]".
-    iIntros "Hreg".
-    iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl regsv]%auth_both_valid.
-    iPureIntro.
-    specialize (Hl 0).
-    setoid_rewrite (singleton_includedN_l 0 regsmap (existT _ r) _) in Hl.
-    destruct Hl as [y [eq1%discrete%leibniz_equiv eq2%cmra_discrete_included_r]];
-      auto with typeclass_instances.
-    specialize (regsv (existT _ r)).
-    rewrite eq1 in regsv.
-    destruct y as [y|]; [|inversion regsv].
-    setoid_rewrite Excl_included in eq2.
-    apply leibniz_equiv in eq2. subst.
-    specialize (H (existT _ r) (Excl (existT _ v)) eq1); cbn in H.
-    Local Set Equations With UIP.
-    by dependent elimination H.
-  Qed.
-
-  Lemma regs_inv_update {τ} {r} {v : Val τ} {regsmap : gmapUR SomeReg (exclR (leibnizO SomeVal))} {regstore : RegStore} :
-    map_Forall (K := SomeReg) (A := excl SomeVal) (λ r' v', match r' with
-                         | existT τ r'' => Excl (existT _ (read_register regstore r'')) = v'
-                         end) regsmap ->
-    (own reg_gv_name (● <[existT _ r:=Excl (existT _ v)]> regsmap)) -∗ regs_inv (write_register regstore r v).
-  Proof.
-    iIntros (regseq) "Hownregs".
-    iExists (<[existT _ r:=Excl (existT _ v)]> regsmap).
-    iFrame.
-    iPureIntro.
-    apply (map_Forall_lookup_2 _ (<[existT _ r:=Excl (existT _ v)]> regsmap)).
-    intros [τ' r'] x eq1.
-    destruct (eq_dec_het r r') as [eq2|neq].
-    + dependent elimination eq2.
-      rewrite lookup_insert in eq1.
-      apply (inj Some) in eq1.
-      by rewrite <- eq1, (read_write regstore r v).
-    + assert (existT _ r ≠ existT _ r') as neq2.
-      * intros eq2.
-        dependent elimination eq2.
-        now apply neq.
-      * rewrite (lookup_insert_ne _ _ _ _ neq2) in eq1.
-        rewrite (read_write_distinct _ _ neq).
-        apply (map_Forall_lookup_1 _ _ _ _ regseq eq1).
-  Qed.
-
-  Lemma reg_update regstore {τ} r (v1 v2 : Val τ) :
-    regs_inv regstore -∗ reg_pointsTo r v1 ==∗ regs_inv (write_register regstore r v2) ∗ reg_pointsTo r v2.
-  Proof.
-    iDestruct 1 as (regsmap) "[Hregs %]".
-    rewrite /reg_pointsTo.
-    iIntros "Hreg".
-    iDestruct (own_valid_2 with "Hregs Hreg") as %[Hl%cmra_discrete_included_r regsmapv]%auth_both_valid.
-    setoid_rewrite (singleton_included_l regsmap (existT _ r) _) in Hl.
-    destruct Hl as [y [eq1%leibniz_equiv eq2]].
-    specialize (regsmapv (existT _ r)).
-    rewrite eq1 in regsmapv.
-    destruct y as [y|]; inversion regsmapv.
-    iMod (own_update_2 with "Hregs Hreg") as "[Hregs Hreg]".
-    {
-      eapply auth_update.
-      apply (singleton_local_update regsmap (existT _ r) (Excl y) (Excl (existT _ v1)) (Excl (existT _ v2)) (Excl (existT _ v2)) eq1).
-      by eapply exclusive_local_update.
-    }
-    iModIntro.
-    iFrame.
-    iApply (regs_inv_update H); iFrame.
-  Qed.
-
   Definition semTriple {Γ τ} (δ : CStore Γ)
              (PRE : iProp Σ) (s : Stm Γ τ) (POST : Val τ -> CStore Γ -> iProp Σ) : iProp Σ :=
-    PRE -∗ WP (MkConf s δ : expr (microsail_lang Γ τ)) ?{{ v, POST (valconf_val v) (valconf_store v) }}.
+    PRE -∗ semWP s POST δ.
   (* always modality needed? perhaps not because sail not higher-order? *)
-
-  Lemma wp_compat_fail {Γ τ} {s} {δ} {Q : ValConf Γ τ -> iProp Σ} :
-    (⊢ WP (MkConf (stm_fail _ s) δ) ?{{ v, Q v }})%I.
-  Proof.
-    rewrite wp_unfold. cbn.
-    iIntros (σ _ ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    remember (MkConf (fail s) δ) as s1.
-    destruct H.
-    inversion Heqs1. subst.
-    inversion H.
-  Qed.
-
-  Lemma wp_compat_block {Γ Δ} {τ : Ty} {δ : CStore Γ}
-        (δΔ : CStore Δ) (k : Stm (Γ ▻▻ Δ) τ) (Q : ValConf Γ τ -> iProp Σ) :
-    ⊢ (WP (MkConf k (δ ►► δΔ)) ?{{ v, match v with MkValConf _ v δ' => Q (MkValConf _ v (env.drop Δ δ')) end }} -∗
-          WP (MkConf (stm_block δΔ k) δ) ?{{ v, Q v }})%I.
-  Proof.
-    iRevert (δ δΔ k Q).
-    iLöb as "IH".
-    iIntros (δ δΔ k Q) "wpk".
-    rewrite ?wp_unfold. cbn.
-    iIntros (σ _ ks1 ks nt) "state_inv".
-    rewrite /wp_pre.
-    destruct (language.to_val (MkConf k (δ ►► δΔ))) eqn:Heqkval.
-    - destruct v as [v δ0]. apply language.of_to_val in Heqkval.
-      inversion Heqkval. subst. clear Heqkval.
-      rewrite env.drop_cat.
-      iMod "wpk" as "H".
-      iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iSplitR; [trivial|].
-      iModIntro.
-      iIntros (e2 σ2 efs) "%".
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "e".
-      iDestruct "e" as "_".
-      iModIntro.
-      dependent elimination H.
-      dependent elimination s.
-      + iFrame.
-        iSplitL; [|trivial].
-        by iApply wp_value.
-      + inversion s4.
-    - iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-      iModIntro.
-      iSplitR; [trivial|].
-      iIntros (e2 σ2 efs2) "%".
-      dependent elimination H.
-      dependent elimination s.
-      + discriminate Heqkval.
-      + iModIntro. iModIntro. iModIntro.
-        iMod "Hclose" as "_".
-        iFrame.
-        iModIntro.
-        iSplitL; [|trivial].
-        iApply wp_compat_fail.
-      + iMod "Hclose" as "_".
-        cbn.
-        iMod ("wpk" $! (γ1 , μ1) 0 nil ks nt with "state_inv") as "[% wpk]".
-        iMod ("wpk" $! _ _ _ (mk_prim_step s4)) as "wpk".
-        iModIntro. iModIntro.
-        iMod "wpk".
-        iModIntro.
-        iMod "wpk" as "[Hregs [wpk' _]]".
-        iModIntro.
-        iFrame.
-        iSplitL; [|trivial].
-        iApply "IH".
-        iFrame.
-  Qed.
-
-  Lemma wp_compat_call_frame {Γ Δ} {τ : Ty} {δ : CStore Γ}
-        (δΔ : CStore Δ) (s : Stm Δ τ) (Q : ValConf Γ τ -> iProp Σ) :
-    ⊢ (WP (MkConf s δΔ) ?{{ v, match v with MkValConf _ v δ' => Q (MkValConf _ v δ) end }} -∗
-          WP (MkConf (stm_call_frame δΔ s) δ) ?{{ v, Q v }})%I.
-  Proof.
-    iRevert (δ δΔ s Q).
-    iLöb as "IH".
-    iIntros (δ δΔ s Q) "wpk".
-    rewrite ?wp_unfold.
-    cbn.
-    iIntros (σ ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; first trivial.
-    iIntros (e2 σ2 efs) "%".
-    dependent elimination H.
-    dependent elimination s0.
-    - iMod "Hclose" as "_".
-      rewrite {1}/wp_pre.
-      rewrite (val_stuck (MkConf s9 δΔ3) (γ1 , μ1) [] _ _ [] (mk_prim_step s10)).
-      iMod ("wpk" $! (γ1 , μ1) ns nil ks nt with "Hregs") as "[% wpk]". cbn.
-      iMod ("wpk" $! _ _ _ (mk_prim_step s10)) as "wpk".
-      iModIntro. iModIntro.
-      iMod "wpk".
-      iModIntro.
-      iMod "wpk" as "[Hregs [wpk' _]]".
-      iModIntro.
-      iFrame.
-      iSplitL; last trivial.
-      iApply "IH".
-      iFrame.
-    - cbn.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iMod "wpk" as "Qv".
-      iModIntro.
-      iFrame.
-      iSplitL; last trivial.
-      by iApply wp_value.
-    - iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iFrame.
-      iModIntro.
-      iSplitL; [|trivial].
-      iApply wp_compat_fail.
-  Qed.
 
   Definition ValidLemma {Δ} (lem : Lemma Δ) : Prop :=
     match lem with
@@ -310,54 +120,6 @@ Section Soundness.
         ⊢ asn.interpret req ι -∗
           asn.interpret ens ι
     end.
-
-  Fixpoint Forall {Δ : LCtx} {struct Δ} : (Valuation Δ -> iProp Σ) -> iProp Σ :=
-    match Δ return (Valuation Δ -> iProp Σ) -> iProp Σ with
-    | ctx.nil      => fun P => P env.nil
-    | ctx.snoc Δ b => fun P => Forall (fun δ => ∀ (v : Val (type b)), P (env.snoc δ b v))
-    end%I.
-
-  Lemma iris_rule_stm_read_register_wp {Γ τ} (r : 𝑹𝑬𝑮 τ) (v : Val τ) {δ : CStore Γ} :
-    ⊢ (lptsreg r v -∗
-                    WP (MkConf (stm_read_register r) δ) ?{{ w, lptsreg r v ∗ ⌜ w = MkValConf _ v δ ⌝ }}
-      )%I.
-  Proof.
-    iIntros "Hreg".
-    iApply (wp_mask_mono _ empty); auto.
-    rewrite wp_unfold; cbn.
-    iIntros (σ _ ls _ n) "[Hregs Hmem]".
-    iDestruct (@reg_valid with "Hregs Hreg") as %<-.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    remember (MkConf (stm_read_register r) δ) as t.
-    destruct H as [γ1 γ2 σ1 σ2 δ1 δ2 s1 s2 step].
-    dependent elimination Heqt.
-    destruct (steps_inversion_read_register step) as [<- [<- [<- ->]]].
-    iModIntro. iModIntro. iModIntro.
-    iFrame. iSplitR ""; auto.
-    by iApply wp_value.
-  Qed.
-
-  Lemma iris_rule_stm_write_register_wp {Γ} {τ} (r : 𝑹𝑬𝑮 τ) (δ : CStore Γ) (v : Val τ) e :
-    ⊢ (reg_pointsTo r v -∗
-                    WP (MkConf (stm_write_register r e) δ : expr (microsail_lang Γ τ)) ?{{ w, reg_pointsTo r (eval e δ) ∗ bi_pure (w = MkValConf _ (eval e δ) δ) }}
-    )%I.
-  Proof.
-    iIntros "Hreg".
-    iApply (wp_mask_mono _ empty); auto.
-    rewrite wp_unfold; cbn.
-    iIntros (σ _ ls _ n) "[Hregs Hmem]".
-    iMod (reg_update σ.1 r v (eval e δ) with "Hregs Hreg") as "[Hregs Hreg]".
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    dependent elimination H.
-    destruct (steps_inversion_write_register s) as [-> [<- [<- ->]]].
-    iModIntro. iModIntro. iModIntro.
-    iFrame. iSplitR; auto.
-    by iApply wp_value.
-  Qed.
 
   Lemma iris_rule_consequence {Γ σ} {δ : CStore Γ}
         {P P'} {Q Q' : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} :
@@ -406,7 +168,7 @@ Section Soundness.
         ⊢ ((P -∗ Q v δ)%I -∗ semTriple δ P (stm_val τ v) Q)%I.
   Proof.
     iIntros "PQ P".
-    iApply wp_value.
+    iApply semWP_val.
     by iApply "PQ".
   Qed.
 
@@ -416,21 +178,8 @@ Section Soundness.
         ⊢ ((P -∗ Q (eval e δ) δ) -∗ semTriple δ P (stm_exp e) Q)%I.
   Proof.
     iIntros "PQ P".
-    iApply (wp_mask_mono _ empty); auto.
-    rewrite wp_unfold.
-    iIntros ([regs μ] ns k ks nt) "[Hregs Hmem]".
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    remember (MkConf (stm_exp e) δ) as t.
-    destruct H.
-    dependent elimination Heqt.
-    dependent elimination H.
-    iModIntro. iModIntro. iModIntro.
-    iFrame.
-    iSplitL; cbn; trivial.
-    iApply (wp_value _ _ (fun v => match v with | MkValConf _ v' δ' => Q v' δ' end) (MkConf (stm_val _ (eval e0 δ1)) δ1)).
-    by iApply "PQ".
+    iApply semWP_exp.
+    now iApply "PQ".
   Qed.
 
   Lemma iris_rule_stm_let {Γ} (δ : CStore Γ)
@@ -443,69 +192,9 @@ Section Soundness.
                      semTriple δ P (let: x := s in k) R).
   Proof.
     iIntros "trips tripk P".
-    iPoseProof ("trips" with "P") as "wpv".
-    iRevert (s δ) "wpv".
-    iLöb as "IH".
-    iIntros (s δ) "wpv".
-    rewrite (wp_unfold _ _ (MkConf (stm_let _ _ _ k) _)). cbn.
-    iIntros ([regs μ] ns ks1 ks nt) "state_inv".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 [regs2 μ2] efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s0.
-    + cbn. rewrite wp_unfold. cbn.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iMod "wpv".
-      iPoseProof ("tripk" $! v _ with "wpv") as "wpk".
-      iModIntro.
-      iFrame; iSplitL; auto.
-      by iApply (wp_compat_block (env.snoc env.nil (x0∷σ0) v) _ (fun v0 => match v0 with | MkValConf _ v1 δ' => R v1 δ' end )).
-    + iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iFrame; iSplitL; auto.
-      by iApply wp_compat_fail.
-    + cbn.
-      rewrite wp_unfold.
-      unfold wp_pre.
-      rewrite (val_stuck (MkConf s1 δ1) _ [] _ _ [] (mk_prim_step s3)).
-      iSpecialize ("wpv" $! (γ1 , μ1) ns nil nil nt with "state_inv"). cbn.
-      iMod "Hclose" as "_".
-      iMod "wpv" as "[_ wpv]".
-      iSpecialize ("wpv" $! (MkConf s' δ') _ nil (mk_prim_step s3)). cbn.
-      iMod "wpv".
-      iModIntro. iModIntro.
-      iMod "wpv".
-      iModIntro.
-      iMod "wpv" as "[Hregs [wps _]]".
-      iModIntro.
-      iFrame.
-      iSpecialize ("IH" with "tripk").
-      iSpecialize ("IH" with "wps").
-      iFrame.
-  Qed.
-
-  Lemma iris_rule_stm_let_forwards {Γ} (δ : CStore Γ)
-        (x : PVar) (σ τ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
-        (P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ)
-        (R : Val τ -> CStore (Γ ▻ x∷σ) -> iProp Σ) :
-        ⊢ (semTriple δ P s Q -∗
-                     (∀ (v : Val σ) (δ' : CStore Γ), semTriple (env.snoc δ' (x∷σ) v) (Q v δ') k R ) -∗
-                     semTriple δ P (let: x := s in k) (fun v δ' => ∃ v__let, R v (env.snoc δ' (x∷σ) v__let)))%I.
-  Proof.
-    (* proof should be generalizable beyond Iris model? *)
-    iIntros "trips tripk".
-    iApply (iris_rule_stm_let δ s k P Q (fun v δ' => ∃ v__let, R v (env.snoc δ' (x∷σ) v__let))%I with "trips").
-    iIntros (v δ') "Qv".
-    iPoseProof ("tripk" with "Qv") as "wpk".
-    iApply (wp_mono with "wpk").
-    iIntros (v') "Rv".
-    destruct v' as [v0 δ0].
-    iExists (env.head δ0).
-    by dependent elimination δ0.
+    iSpecialize ("trips" with "P").
+    iApply semWP_let. iRevert "trips".
+    by iApply semWP_strong_mono.
   Qed.
 
   Lemma iris_rule_stm_block {Γ} (δ : CStore Γ)
@@ -515,9 +204,8 @@ Section Soundness.
         ⊢ (semTriple (δ ►► δΔ) P k (fun v δ'' => R v (env.drop Δ δ'')) -∗
                    semTriple δ P (stm_block δΔ k) R)%I.
   Proof.
-    iIntros "tripk P".
-    iPoseProof ("tripk" with "P") as "wpk".
-    by iApply (wp_compat_block δΔ k (fun v => match v with | MkValConf _ v' δ' => R v' δ' end) with "wpk").
+    iIntros "tripk P". iPoseProof ("tripk" with "P") as "wpk".
+    by iApply semWP_block.
   Qed.
 
   Lemma iris_rule_stm_if {Γ} (δ : CStore Γ)
@@ -528,19 +216,8 @@ Section Soundness.
                    semTriple δ P (stm_if e s1 s2) Q)%I.
   Proof.
     iIntros "trips1 trips2 P".
-    rewrite wp_unfold. cbn.
-    iIntros (σ _ ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro; iFrame.
-    iSplitL; [|trivial].
-    destruct (eval e1 δ1).
+    iApply semWP_if.
+    destruct eval.
     - iApply "trips1".
       by iFrame.
     - iApply "trips2".
@@ -576,43 +253,8 @@ Section Soundness.
   Proof.
     iIntros "trips1 trips2 P".
     iPoseProof ("trips1" with "P") as "wps1".
-    iRevert (s1 δ) "wps1".
-    iLöb as "IH".
-    iIntros (s1 δ) "wps1".
-    rewrite (wp_unfold _ _ (MkConf (stm_seq _ _) _)). cbn.
-    iIntros ([regs μ] ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s; cbn.
-    + rewrite wp_unfold.
-      unfold wp_pre.
-      rewrite (val_stuck (MkConf s7 δ1) (γ1 , μ1) [] _ _ [] (mk_prim_step s8)).
-      iSpecialize ("wps1" $! (γ1 , μ1) ns nil nil nt with "Hregs"). cbn.
-      iMod "Hclose" as "_".
-      iMod "wps1" as "[_ wps1]". cbn.
-      iMod ("wps1" $! (MkConf s'0 δ'1) _ nil (mk_prim_step s8)) as "wps1".
-      iModIntro. iModIntro. iModIntro.
-      iMod "wps1".
-      iMod "wps1" as "[Hregs [wps' _]]".
-      iFrame.
-      iSplitL; [|trivial].
-      iModIntro.
-      iSpecialize ("IH" with "trips2").
-      by iApply "IH".
-    + rewrite wp_unfold; cbn.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iMod "wps1" as "wps1".
-      iPoseProof ("trips2" $! δ1 with "wps1") as "wps2".
-      by iFrame.
-    + iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iFrame; iSplitL; auto.
-      by iApply wp_compat_fail.
+    iApply semWP_seq. iRevert "wps1".
+    iApply semWP_strong_mono. by iFrame.
   Qed.
 
   Lemma iris_rule_stm_assertk {Γ τ} (δ : CStore Γ)
@@ -622,22 +264,8 @@ Section Soundness.
        semTriple δ P (stm_assertk e1 e2 k) Q)%I.
   Proof.
     iIntros "tripk P".
-    rewrite wp_unfold. cbn.
-    iIntros (σ ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e3 σ2 efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro; iFrame.
-    iSplitL; [|trivial].
-    destruct (eval e3 δ1) eqn:Heqc.
-    - iApply "tripk".
-      by iFrame.
-    - iApply wp_compat_fail.
+    iApply semWP_assertk. iIntros (->).
+    iApply "tripk". by iFrame.
   Qed.
 
   Lemma iris_rule_stm_fail {Γ} (δ : CStore Γ)
@@ -646,7 +274,7 @@ Section Soundness.
           ⊢ semTriple δ True%I (stm_fail τ s) Q.
   Proof.
     iIntros (Q) "_".
-    iApply wp_compat_fail.
+    by iApply semWP_fail.
   Qed.
 
   Lemma iris_rule_stm_match_list {Γ} (δ : CStore Γ)
@@ -658,29 +286,11 @@ Section Soundness.
                      semTriple δ P (stm_match_list e alt_nil xh xt alt_cons) Q)%I.
   Proof.
     iIntros "tripnil tripcons P".
-    rewrite wp_unfold. cbn.
-    iIntros (σ1 _ ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e3 σ2 efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    remember (eval e4 δ1) as scrutinee.
-    destruct scrutinee as [|l ls].
-    - iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro. iFrame.
-      iSplitL; [|trivial].
-      iApply "tripnil".
+    iApply semWP_match_list.
+    destruct eval as [|l ls].
+    - iApply "tripnil".
       by iFrame.
-    - iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro.
-      iFrame.
-      iSplitL; [|trivial].
-      iApply (wp_compat_block (env.snoc (env.snoc env.nil (xh0∷σ6) l) (xt0∷ty.list σ6) ls)).
-      iApply "tripcons".
+    - iApply "tripcons".
       by iFrame.
   Qed.
 
@@ -695,29 +305,11 @@ Section Soundness.
         semTriple δ P (stm_match_sum e xinl alt_inl xinr alt_inr) Q)%I.
   Proof.
     iIntros "tripinl tripinr P".
-    rewrite wp_unfold. cbn.
-    iIntros (σ1 _ ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    remember (eval e5 δ1) as scrutinee.
-    destruct scrutinee as [v1|v2].
-    - iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro. iFrame.
-      iSplitL; [|trivial].
-      iApply (wp_compat_block (env.snoc env.nil (xinl0∷σinl0) v1)).
-      iApply ("tripinl" $! v1).
+    iApply semWP_match_sum.
+    destruct eval as [v1|v2].
+    - iApply ("tripinl" $! v1).
       by iFrame.
-    - iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iModIntro. iFrame.
-      iSplitL; [|trivial].
-      iApply (wp_compat_block (env.snoc env.nil (xinr0∷σinr0) v2)).
-      iApply ("tripinr" $! v2).
+    - iApply ("tripinr" $! v2).
       by iFrame.
   Qed.
 
@@ -731,13 +323,13 @@ Section Soundness.
           semTriple δ P (stm_match_prod e xl xr rhs) Q)%I.
   Proof.
     iIntros "trippair P".
-    rewrite wp_unfold. cbn.
+    unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ _ ks1 ks nt) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ' efs) "%".
-    unfold language.prim_step in H; cbn in H.
     dependent elimination H.
+    fold_semWP.
     dependent elimination s.
     remember (eval e6 δ1) as scrutinee.
     destruct scrutinee as [v1 v2].
@@ -745,7 +337,7 @@ Section Soundness.
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply (wp_compat_block (env.snoc (env.snoc env.nil (xl0∷σ8) v1) (xr0∷σ9) v2)).
+    iApply (semWP_block [env].[xl0∷σ4 ↦ v1].[xr0∷σ5 ↦ v2] rhs0).
     iApply ("trippair" $! v1 v2).
     by iFrame.
   Qed.
@@ -758,18 +350,7 @@ Section Soundness.
           semTriple δ P (stm_match_enum E e alts) Q)%I.
   Proof.
     iIntros "tripalt P".
-    rewrite wp_unfold. cbn.
-    iIntros (σ _ ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e2 σ' efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro. iFrame.
-    iSplitL; [|trivial].
+    iApply semWP_match_enum.
     by iApply "tripalt".
   Qed.
 
@@ -781,19 +362,7 @@ Section Soundness.
        semTriple δ P (stm_match_tuple e p rhs) Q)%I.
   Proof.
     iIntros "triptup P".
-    rewrite wp_unfold. cbn.
-    iIntros (σ ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e2 σ' efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro. iFrame.
-    iSplitL; [|trivial].
-    iApply (wp_compat_block (tuple_pattern_match_val p0 (eval e8 δ1))).
+    iApply semWP_match_tuple.
     by iApply "triptup".
   Qed.
 
@@ -809,26 +378,10 @@ Section Soundness.
           )%I.
   Proof.
     iIntros "tripunion P".
-    rewrite wp_unfold. cbn.
-    iIntros (σ1 ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro. iFrame.
-    iSplitL; [|trivial].
-    remember (unionv_unfold U0 (eval e9 δ1)) as scrutinee.
-    destruct scrutinee as [K v].
-    iApply (wp_compat_block (pattern_match_val (alt__pat K) v)).
-    iSpecialize ("tripunion" $! K v).
-    rewrite Heqscrutinee.
-    rewrite unionv_fold_unfold.
-    iApply "tripunion".
-    by iFrame.
+    iApply semWP_match_union.
+    destruct unionv_unfold eqn:?.
+    iApply "tripunion". iFrame.
+    now rewrite <- Heqs, unionv_fold_unfold.
   Qed.
 
   Lemma iris_rule_stm_match_record {Γ} (δ : CStore Γ)
@@ -839,19 +392,7 @@ Section Soundness.
         semTriple δ P (stm_match_record R e p rhs) Q)%I.
   Proof.
     iIntros "triprec P".
-    rewrite wp_unfold. cbn.
-    iIntros (σ1 ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e2 σ2 efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro. iFrame.
-    iSplitL; [|trivial].
-    iApply (wp_compat_block (record_pattern_match_val p1 (eval e10 δ1))).
+    iApply semWP_match_record.
     by iApply "triprec".
   Qed.
 
@@ -863,18 +404,7 @@ Section Soundness.
           semTriple δ P (stm_match_bvec n e rhs) Q)%I.
   Proof.
     iIntros "triprhs P".
-    rewrite wp_unfold. cbn.
-    iIntros (σ _ ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e2 σ' efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s.
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro. iFrame.
-    iSplitL; [|trivial].
+    iApply semWP_match_bvec.
     by iApply "triprhs".
   Qed.
 
@@ -888,22 +418,9 @@ Section Soundness.
           semTriple δ P (stm_match_bvec_split m n e xl xr rhs) Q)%I.
   Proof.
     iIntros "triprhs P".
-    rewrite wp_unfold. cbn.
-    iIntros (σ _ ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro. iSplitR; [trivial|].
-    iIntros (e2 σ' efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s. cbn.
-    remember (eval e12 δ1) as scrutinee.
-    destruct (bv.appView m0 n1 scrutinee) as [v1 v2].
-    iModIntro. iModIntro. iModIntro.
-    iMod "Hclose" as "_".
-    iModIntro. iFrame.
-    iSplitL; [|trivial].
-    iApply (wp_compat_block (env.snoc (env.snoc env.nil (xl1∷ty.bvec m0) v1) (xr1∷ty.bvec n1) v2)).
-    iApply ("triprhs" $! v1 v2).
+    iApply semWP_match_bvec_split.
+    destruct bv.appView as [xs ys].
+    iApply ("triprhs" $! xs ys).
     by iFrame.
   Qed.
 
@@ -912,10 +429,11 @@ Section Soundness.
         ⊢ (semTriple δ (lptsreg r v) (stm_read_register r) (fun v' δ' => ⌜ δ' = δ ⌝ ∧ ⌜ v' = v ⌝ ∧ lptsreg r v))%I.
   Proof.
     iIntros "Hreg".
-    iApply wp_mono; [| iApply (iris_rule_stm_read_register_wp with "Hreg") ].
-    iIntros ([δ' v']) "[Hreg %]".
-    inversion H.
-    by iFrame.
+    iApply semWP_read_register.
+    iExists v.
+    iFrame.
+    iIntros "Hreg".
+    repeat iSplit; auto.
   Qed.
 
   Lemma iris_rule_stm_write_register {Γ} (δ : CStore Γ)
@@ -926,10 +444,11 @@ Section Soundness.
                   (fun v' δ' => ⌜δ' = δ⌝ ∧ ⌜v' = eval w δ⌝ ∧ lptsreg r v')%I.
   Proof.
     iIntros "Hreg".
-    iApply wp_mono; [|iApply (iris_rule_stm_write_register_wp with "Hreg")].
-    iIntros (v') "[Hreg %]".
-    rewrite H.
-    by iFrame.
+    iApply semWP_write_register.
+    iExists v.
+    iFrame.
+    iIntros "Hreg".
+    repeat iSplit; auto.
   Qed.
 
   Lemma iris_rule_stm_assign_forwards {Γ} (δ : CStore Γ)
@@ -940,51 +459,15 @@ Section Soundness.
   Proof.
     iIntros "trips P".
     iPoseProof ("trips" with "P") as "wpv".
-    iRevert (s δ) "wpv".
-    iLöb as "IH".
-    iIntros (s δ) "wpv".
-    rewrite (wp_unfold _ _ (MkConf (stm_assign _ s) _)). cbn.
-    iIntros ([regs μ] ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 [regs2 μ2] efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s0.
-    cbn.
-    + rewrite wp_unfold; cbn.
-      iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      iMod "wpv" as "wpv".
-      iModIntro.
-      iFrame.
-      iSplitL; [|trivial].
-      iApply wp_value.
-      cbn.
-      iExists (env.lookup δ1 xInΓ).
-      rewrite env.update_update env.update_lookup env.lookup_update.
-      by iFrame.
-    + iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      cbn.
-      iFrame; iSplitL; auto.
-      by iApply wp_compat_fail.
-    + rewrite wp_unfold.
-      unfold wp_pre.
-      rewrite (val_stuck (MkConf s13 δ1) _ [] _ _ [] (mk_prim_step s14)).
-      iSpecialize ("wpv" $! _ ns nil nil nt with "Hregs"). cbn.
-      iMod "Hclose".
-      iMod "wpv" as "[_ wpv]".
-      iSpecialize ("wpv" $! _ _ nil (mk_prim_step s14)).
-      iMod "wpv" as "wpv".
-      iModIntro. iModIntro.
-      iMod "wpv".
-      iModIntro.
-      iMod "wpv" as "[Hregs [wps _]]".
-      iModIntro.
-      iFrame.
-      by iApply "IH".
+    iApply semWP_assign.
+    iRevert "wpv".
+    iApply semWP_strong_mono.
+    iIntros (v δ') "R".
+    iExists (δ'.[??x]).
+    iSplit.
+    - rewrite env.update_update.
+      by rewrite env.update_lookup.
+    - by rewrite env.lookup_update.
   Qed.
 
   Lemma iris_rule_stm_assign_backwards {Γ} (δ : CStore Γ)
@@ -994,12 +477,8 @@ Section Soundness.
            semTriple δ P (stm_assign x s) R)%I.
   Proof.
     iIntros "trips P".
-    iPoseProof (iris_rule_stm_assign_forwards _ with "trips P") as "wpas".
-    iApply (wp_mono with "wpas").
-    iIntros ([v' δ']) "Rv".
-    iDestruct "Rv" as (v__old) "[Rv %]".
-    rewrite <-H.
-    by rewrite env.update_update env.update_lookup.
+    iPoseProof ("trips" with "P") as "wpv".
+    by iApply semWP_assign.
   Qed.
 
   Lemma iris_rule_stm_bind {Γ} (δ : CStore Γ)
@@ -1013,45 +492,8 @@ Section Soundness.
   Proof.
     iIntros "trips tripk P".
     iPoseProof ("trips" with "P") as "wpv".
-    iRevert (s δ) "wpv".
-    iLöb as "IH".
-    iIntros (s δ) "wpv".
-    rewrite (wp_unfold _ _ (MkConf (stm_bind _ k) _)). cbn.
-    iIntros ([regs μ] ns ks1 ks nt) "Hregs".
-    iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
-    iModIntro.
-    iSplitR; [trivial|].
-    iIntros (e2 [regs2 μ2] efs) "%".
-    unfold language.prim_step in H; cbn in H.
-    dependent elimination H.
-    dependent elimination s0.
-    + rewrite wp_unfold. cbn.
-      unfold wp_pre.
-      rewrite (val_stuck (MkConf s17 δ1) (γ1 , μ1) [] _ _ [] (mk_prim_step s18)).
-      iSpecialize ("wpv" $! (γ1 , μ1) ns nil nil nt with "Hregs"). cbn.
-      iMod "Hclose".
-      iMod "wpv" as "[_ wpv]".
-      iSpecialize ("wpv" $! _ _ nil (mk_prim_step s18)).
-      iMod "wpv" as "wpv".
-      iModIntro. iModIntro.
-      iMod "wpv".
-      iModIntro.
-      iMod "wpv" as "[Hregs [wps _]]".
-      iModIntro.
-      iFrame.
-      iApply ("IH" with "tripk wps").
-    + iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      rewrite wp_unfold; cbn.
-      iMod "wpv" as "wpv".
-      iPoseProof ("tripk" with "wpv") as "wpk".
-      iModIntro.
-      by iFrame.
-    + iModIntro. iModIntro. iModIntro.
-      iMod "Hclose" as "_".
-      cbn.
-      iFrame; iSplitL; auto.
-      by iApply wp_compat_fail.
+    iApply semWP_bind. iRevert "wpv".
+    by iApply semWP_strong_mono.
   Qed.
 
   Lemma iris_rule_stm_call_inline_later
@@ -1062,23 +504,23 @@ Section Soundness.
       semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')).
   Proof.
     iIntros "tripbody P".
-    rewrite wp_unfold. cbn.
+    unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e2 σ'' efs) "%".
     dependent elimination H.
+    fold_semWP.
     dependent elimination s.
     iModIntro. iModIntro. iModIntro.
+    iPoseProof ("tripbody" with "P") as "wpbody".
     iMod "Hclose" as "_".
     iModIntro. iFrame.
     iSplitL; [|trivial].
-    iApply wp_compat_call_frame.
-    iApply (wp_mono _ _ _ (fun v => Q (valconf_val v))).
-    { iIntros ([σ' v]) "Qv".
-      by iFrame.
-    }
-    iApply ("tripbody" with "P").
+    iApply semWP_call_frame.
+    iRevert "wpbody".
+    iApply semWP_strong_mono.
+    auto.
   Qed.
 
   Lemma iris_rule_stm_call_inline
@@ -1099,7 +541,7 @@ Section Soundness.
        semTriple δ P (stm_debugk k) Q)%I.
   Proof.
     iIntros "tripk P".
-    rewrite wp_unfold. cbn.
+    unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ ns ks1 ks nt) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
@@ -1124,7 +566,7 @@ Section Soundness.
                  semTriple δ P s Q.
   Proof.
     iIntros (Hnv Hnoop) "HPQ HP".
-    rewrite wp_unfold.
+    unfold semWP. rewrite wp_unfold.
     unfold wp_pre.
     rewrite Hnv. cbn.
     iIntros (σ' ns ks1 ks nt) "Hregs".
@@ -1146,13 +588,13 @@ Section Soundness.
       iModIntro.
       iFrame.
       iSplitL; trivial.
-      now iApply wp_compat_fail.
+      now iApply semWP_fail.
   Qed.
 
   Definition ValidContractSemCurried {Δ σ} (body : Stm Δ σ) (contract : SepContract Δ σ) : iProp Σ :=
     match contract with
     | MkSepContract _ _ ctxΣ θΔ pre result post =>
-      Forall (fun (ι : Valuation ctxΣ) =>
+      sep.Forall (fun (ι : Valuation ctxΣ) =>
         semTriple (inst θΔ ι) (asn.interpret pre ι) body
                   (fun v δ' => asn.interpret post (env.snoc ι (result∷σ) v)))
     end%I.
@@ -1309,7 +751,7 @@ Section Adequacy.
       pose proof (memΣ_GpreS (Σ := sailΣ) _) as mPG.
       iMod (mem_inv_init μ mPG) as (memG) "[Hmem Rmem]".
       iModIntro.
-      iExists (fun σ _ => regs_inv (H := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv memG (σ.2))%I.
+      iExists (fun σ _ => regs_inv (srGS := (SailRegGS _ spec_name)) (σ.1) ∗ mem_inv memG (σ.2))%I.
       iExists _.
       iSplitR "Hs2 Rmem".
       * iSplitL "Hs1".
@@ -1380,13 +822,14 @@ Module IrisInstanceWithContracts
            semTriple δ P (stm_call f es) (fun v δ' => Q v ∧ bi_pure (δ = δ')))%I.
   Proof.
     iIntros (ceq ctrip) "cenv P".
-    rewrite wp_unfold. cbn.
+    unfold semWP. rewrite wp_unfold. cbn.
     iIntros ([regs μ] ns ks1 ks nt) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro.
     iSplitR; [trivial|].
     iIntros (e2 [regs2 μ2] efs) "%".
     dependent elimination H.
+    fold_semWP.
     dependent elimination s.
     iModIntro. iModIntro. iModIntro.
     iMod "Hclose" as "_".
@@ -1396,7 +839,7 @@ Module IrisInstanceWithContracts
     destruct ctrip.
     cbv [lentails lex land lprop lsep lall lwand IProp] in H.
     iPoseProof (H with "P") as (ι Heq) "[req consr]". clear H.
-    iApply wp_compat_call_frame. rewrite Heq.
+    iApply semWP_call_frame. rewrite Heq.
     iSpecialize ("cenv" $! _ _ f0).
     rewrite ceq.
     iPoseProof ("cenv" $! ι with "req") as "wpf0".
@@ -1416,7 +859,7 @@ Module IrisInstanceWithContracts
   Proof.
     iIntros "trips P".
     iSpecialize ("trips" with "P").
-    by iApply wp_compat_call_frame.
+    by iApply semWP_call_frame.
   Qed.
 
   Lemma iris_rule_stm_foreign
@@ -1457,12 +900,13 @@ Module IrisInstanceWithContracts
     generalize (LEnv l) as contractL.
     intros contractL ltrip lemSem.
     iIntros "tripk P".
-    rewrite wp_unfold. cbn.
+    unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ ns ks1 ks nt) "Hregs".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
     iModIntro. iSplitR; [trivial|].
     iIntros (e3 σ2 efs) "%".
     dependent elimination H.
+    fold_semWP.
     dependent elimination s.
     iModIntro. iModIntro. iModIntro.
     iMod "Hclose" as "_".

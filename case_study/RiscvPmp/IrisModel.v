@@ -118,6 +118,6 @@ Module RiscvPmpIrisBase <: IrisBase RiscvPmpBase RiscvPmpProgram RiscvPmpSemanti
   Import iris.program_logic.weakestpre.
 
   Definition WP_loop `{sg : sailGS Σ} : iProp Σ :=
-    (WP (MkConf (FunDef loop) env.nil) ?{{_, True}})%I.
+    semWP (FunDef loop) (fun _ _ => True%I) env.nil.
 
 End RiscvPmpIrisBase.

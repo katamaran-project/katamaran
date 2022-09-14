@@ -102,7 +102,7 @@ Module RiscvPmpModel2.
             interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (paddr w t entries p Heq) "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
-    rewrite wp_unfold.
+    unfold semWP. rewrite wp_unfold.
     cbn.
     iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -150,7 +150,7 @@ Module RiscvPmpModel2.
                           interp_pmp_entries entries) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (paddr data t entries p Heq) "((%Hperm & _) & Hcp & Hes & (%Hpmp & _) & H)".
-    rewrite wp_unfold.
+    unfold semWP. rewrite wp_unfold.
     cbn.
     iIntros (? ? ? ? ?) "[Hregs [% (Hmem & %Hmap)]]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -207,6 +207,7 @@ Module RiscvPmpModel2.
     iModIntro.
     iModIntro.
     dependent elimination H.
+    fold_semWP.
     dependent elimination s.
     rewrite Heq in f1.
     cbn in f1.
@@ -221,7 +222,7 @@ Module RiscvPmpModel2.
     iPureIntro; assumption.
     iSplitL; trivial.
     destruct (pure_decode bv) eqn:Ed.
-    iApply wp_compat_fail.
+    by rewrite semWP_fail.
     iApply wp_value.
     iSplitL; first iPureIntro; auto.
   Qed.

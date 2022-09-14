@@ -45,21 +45,6 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
 
   Section StepInversionFinal.
 
-    Lemma step_inversion_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-          {δ1 δ3 : CStore Γ}
-          {s : Stm Γ τ} {k : Stm (Γ ▻ x∷τ) σ} {t : Stm Γ σ} (final : Final s)
-          (step : ⟨ γ1, μ1, δ1, stm_let x τ s k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
-      γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\
-      ((exists msg, s = stm_fail _ msg /\ t = stm_fail _ msg) \/
-       (exists v,   s = stm_val τ v    /\ t = stm_block (env.snoc env.nil (x∷τ) v) k)
-      ).
-    Proof.
-      dependent elimination step.
-      - intuition. right. eexists. intuition.
-      - intuition. left. eexists. intuition.
-      - dependent elimination s2; contradiction.
-    Qed.
-
     Lemma step_inversion_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
           {δ1 δ3 : CStore Γ}
           {δ : CStore Δ} {k : Stm (Γ ▻▻ Δ) σ} {t : Stm Γ σ} (final : Final k)
@@ -72,23 +57,10 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       dependent elimination step.
       - intuition. right. eexists. intuition.
       - intuition. left. eexists. intuition.
-      - revert s3. generalize (δ1 ►► δΔ1)%env (δ'0 ►► δΔ')%env. clear δΔ1.
+      - match goal with
+          H: ⟨_,_,?δ1,_⟩ ---> ⟨_,_,?δ2,_⟩ |- _ => revert H; generalize δ1 δ2
+        end.
         intros ? ? s. dependent elimination s; contradiction.
-    Qed.
-
-    Lemma step_inversion_seq {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-          {δ1 δ3 : CStore Γ}
-          {s1 : Stm Γ τ} {s2 : Stm Γ σ} {t : Stm Γ σ} (final : Final s1)
-          (step : ⟨ γ1, μ1, δ1, stm_seq s1 s2 ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
-      γ3 = γ1 /\ μ3 = μ1 /\ δ3 = δ1 /\
-      ((exists msg, s1 = stm_fail _ msg /\ t = stm_fail _ msg) \/
-       (exists v,   s1 = stm_val τ v    /\ t = s2)
-      ).
-    Proof.
-      dependent elimination step.
-      - dependent elimination s7; cbn in *; try contradiction.
-      - intuition. right. eexists. intuition.
-      - intuition. left. eexists. intuition.
     Qed.
 
     Lemma step_inversion_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
@@ -100,7 +72,10 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       ).
     Proof.
       dependent elimination step.
-      - dependent elimination s8; cbn in *; contradiction.
+      - match goal with
+          H: ⟨_,_,?δ1,_⟩ ---> ⟨_,_,?δ2,_⟩ |- _ =>
+            dependent elimination H; cbn in *; try contradiction
+        end.
       - intuition. right. eexists. intuition.
       - intuition. left. eexists. intuition.
     Qed.
@@ -116,7 +91,10 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       dependent elimination step.
       - intuition. right. eexists. intuition.
       - intuition. left. eexists. intuition.
-      - dependent elimination s13; cbn in *; try contradiction.
+      - match goal with
+          H: ⟨_,_,?δ1,_⟩ ---> ⟨_,_,?δ2,_⟩ |- _ =>
+            dependent elimination H; cbn in *; try contradiction
+        end.
     Qed.
 
     Lemma step_inversion_bind {Γ σ τ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
@@ -128,7 +106,10 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       ).
     Proof.
       dependent elimination step.
-      - dependent elimination s17; cbn in *; try contradiction.
+      - match goal with
+          H: ⟨_,_,?δ1,_⟩ ---> ⟨_,_,?δ2,_⟩ |- _ =>
+            dependent elimination H; cbn in *; try contradiction
+        end.
       - intuition. right. eexists. intuition.
       - intuition. left. eexists. intuition.
     Qed.
@@ -229,12 +210,8 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       | [ |- True ] => constructor
       | [ |- ⟨ _, _, _, stm_val _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ ] => constructor 1
       | [ |- ⟨ _, _, _, stm_fail _ _ ⟩ --->* ⟨ _, _, _, _ ⟩ ] => constructor 1
-      | [ |- ⟨ _, _, _, stm_let _ _ (stm_val _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_let_value
-      | [ |- ⟨ _, _, _, stm_let _ _ (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_let_fail
       | [ |- ⟨ _, _, _, stm_block _ (stm_val _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_block_value
       | [ |- ⟨ _, _, _, stm_block _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_block_fail
-      | [ |- ⟨ _, _, _, stm_seq (stm_val _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_seq_value
-      | [ |- ⟨ _, _, _, stm_seq (stm_fail _ _) _ ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_seq_fail
       | [ |- ⟨ _, _, _, stm_call_frame _ (stm_val _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call_frame_value
       | [ |- ⟨ _, _, _, stm_call_frame _ (stm_fail _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_call_frame_fail
       | [ |- ⟨ _, _, _, stm_assign _ (stm_val _ _) ⟩ ---> ⟨ _, _, _, _ ⟩ ] => apply step_stm_assign_value
@@ -251,20 +228,6 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       | dependent elimination step; steps_inversion_inster; steps_inversion_solve
       ].
 
-  Lemma steps_inversion_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : CStore Γ}
-    {s1 : Stm Γ τ} {s2 : Stm (Γ ▻ x∷τ) σ} {t : Stm Γ σ} (final : Final t)
-    (steps : ⟨ γ1, μ1, δ1, stm_let x τ s1 s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
-    exists (γ2 : RegStore) (μ2 : Memory) (δ2 : CStore Γ) (s1' : Stm Γ τ),
-      ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s1' ⟩ /\ Final s1' /\
-      exists (s0 : Stm Γ σ),
-          ⟨ γ2, μ2, δ2, stm_let x τ s1' s2 ⟩ ---> ⟨ γ2, μ2, δ2, s0 ⟩ /\
-          ⟨ γ2, μ2, δ2, s0 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩.
-  Proof.
-    remember (stm_let x τ s1 s2) as s. revert steps s1 s2 Heqs.
-    steps_inversion_induction.
-  Qed.
-
   Lemma steps_inversion_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
     {δΔ : CStore Δ} {k : Stm (Γ ▻▻ Δ) σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_block δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
@@ -273,19 +236,6 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
       ⟨ γ3, μ3, δ3, stm_block δΔ' k' ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩.
   Proof.
     remember (stm_block δΔ k) as s. revert steps δΔ k Heqs.
-    steps_inversion_induction.
-  Qed.
-
-  Lemma steps_inversion_seq {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
-    (s1 : Stm Γ τ) (s2 : Stm Γ σ) (t : Stm Γ σ) (final : Final t)
-    (steps : ⟨ γ1, μ1, δ1, stm_seq s1 s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
-    exists γ2 μ2 δ2 s1',
-      ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, s1' ⟩ /\ Final s1' /\
-      exists (s0 : Stm Γ σ),
-        ⟨ γ2, μ2, δ2, stm_seq s1' s2 ⟩ ---> ⟨ γ2, μ2, δ2 , s0 ⟩ /\
-        ⟨ γ2, μ2, δ2 , s0 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩.
-  Proof.
-    remember (stm_seq s1 s2) as s. revert steps s1 s2 Heqs.
     steps_inversion_induction.
   Qed.
 
@@ -328,26 +278,6 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
     steps_inversion_induction.
   Qed.
 
-  Lemma steps_inversion_ex_let {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : CStore Γ}
-    {s1 : Stm Γ τ} {s2 : Stm (Γ ▻ x∷τ) σ} {t : Stm Γ σ} (final : Final t)
-    (steps : ⟨ γ1, μ1, δ1, stm_let x τ s1 s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
-    (exists msg,
-        ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ3, μ3, δ3, stm_fail _ msg ⟩ /\
-        t = stm_fail _ msg) \/
-    (exists γ2 μ2 δ2 v,
-        ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_val _ v ⟩ /\
-        ⟨ γ2, μ2, δ2, stm_block (env.snoc env.nil (x∷τ) v) s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
-  Proof.
-    apply (steps_inversion_let final) in steps.
-    destruct_propositional steps; subst.
-    apply (step_inversion_let H5) in H7.
-    destruct_propositional H7; subst.
-    - apply steps_inversion_fail in H8; destruct_conjs; subst.
-      left. steps_inversion_solve. auto.
-    - right. steps_inversion_solve.
-  Qed.
-
   Lemma steps_inversion_ex_block {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
     {δΔ : CStore Δ} {k : Stm (Γ ▻▻ Δ) σ} {t : Stm Γ σ} (final : Final t)
     (steps : ⟨ γ1, μ1, δ1, stm_block δΔ k ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
@@ -364,25 +294,6 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
     destruct_propositional H4; subst.
     - left. steps_inversion_solve. auto.
     - right. steps_inversion_solve. auto.
-  Qed.
-
-  Lemma steps_inversion_ex_seq {Γ τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
-    {s1 : Stm Γ τ} {s2 : Stm Γ σ} {t : Stm Γ σ} (final : Final t)
-    (steps : ⟨ γ1, μ1, δ1, stm_seq s1 s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩) :
-    (exists msg,
-        ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ3, μ3, δ3, stm_fail _ msg ⟩ /\
-        t = stm_fail _ msg) \/
-    (exists γ2 μ2 δ2 v,
-        ⟨ γ1, μ1, δ1, s1 ⟩ --->* ⟨ γ2, μ2, δ2, stm_val _ v ⟩ /\
-        ⟨ γ2, μ2, δ2, s2 ⟩ --->* ⟨ γ3, μ3, δ3, t ⟩).
-  Proof.
-    apply (steps_inversion_seq final) in steps.
-    destruct_propositional steps; subst.
-    apply (step_inversion_seq H5) in H7.
-    destruct_propositional H7; subst.
-    - apply steps_inversion_fail in H8; destruct_conjs; subst.
-      left. steps_inversion_solve. auto.
-    - right. steps_inversion_solve.
   Qed.
 
   Lemma steps_inversion_ex_call_frame {Γ Δ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory} {δ1 δ3 : CStore Γ}
@@ -442,17 +353,6 @@ Module Type InversionOn (Import B : Base) (Import P : Program B) (Import STEP : 
     - apply steps_inversion_fail in H8; destruct_conjs; subst.
       left. steps_inversion_solve. auto.
     - right. steps_inversion_solve; auto.
-  Qed.
-
-  Lemma step_inversion_let_val {Γ x τ σ} {γ1 γ3 : RegStore} {μ1 μ3 : Memory}
-    {δ1 δ3 : CStore Γ}
-    {v : Val τ} {k : Stm (Γ ▻ x∷τ) σ} {t : Stm Γ σ}
-    (steps : ⟨ γ1, μ1, δ1, stm_let x τ (stm_val τ v) k ⟩ ---> ⟨ γ3, μ3, δ3, t ⟩) :
-    γ3 = γ1 /\ μ1 = μ3 /\ δ1 = δ3 /\ t = stm_block (env.snoc env.nil (x∷τ) v) k.
-  Proof.
-    dependent elimination steps.
-    - intuition.
-    - dependent elimination s1.
   Qed.
 
 End InversionOn.

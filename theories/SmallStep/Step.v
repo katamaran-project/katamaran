@@ -52,17 +52,11 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       (e : Exp Γ τ) :
       ⟨ γ , μ , δ , (stm_exp e) ⟩ ---> ⟨ γ , μ , δ , stm_val τ (eval e δ) ⟩
 
-  | step_stm_let_value
-      (x : PVar) (σ : Ty) (v : Val σ) (k : Stm (Γ ▻ x∷σ) τ) :
-      ⟨ γ , μ , δ , stm_let x σ (stm_val σ v) k ⟩ ---> ⟨ γ , μ , δ , stm_block (env.snoc env.nil (x∷σ) v) k ⟩
-  | step_stm_let_fail
-      (x : PVar) (σ : Ty) (s : string) (k : Stm (Γ ▻ x∷σ) τ) :
-      ⟨ γ , μ , δ, stm_let x σ (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
-  | step_stm_let_step
-      (x : PVar) (σ : Ty) (s s' : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ)
-      (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) :
-      ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
-      ⟨ γ , μ , δ , stm_let x σ s k ⟩ ---> ⟨ γ', μ' , δ' , stm_let x σ s' k ⟩
+  | step_stm_let
+      (x : PVar) (σ : Ty) (s : Stm Γ σ) (k : Stm (Γ ▻ x∷σ) τ) :
+      ⟨ γ , μ , δ , stm_let x σ s k ⟩ --->
+      ⟨ γ, μ , δ , stm_bind s (fun v => stm_block (env.snoc env.nil (x∷σ) v) k) ⟩
+
   | step_stm_block_value
       (Δ : PCtx) (δΔ : CStore Δ) (v : Val τ) :
       ⟨ γ , μ , δ , stm_block δΔ (stm_val τ v) ⟩ ---> ⟨ γ , μ , δ , stm_val τ v ⟩
@@ -75,17 +69,9 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
       ⟨ γ , μ , δ ►► δΔ , k ⟩ ---> ⟨ γ', μ' , δ' ►► δΔ' , k' ⟩ ->
       ⟨ γ , μ , δ , stm_block δΔ k ⟩ ---> ⟨ γ' , μ' , δ' , stm_block δΔ' k' ⟩
 
-  | step_stm_seq_step
-      (σ : Ty) (s s' : Stm Γ σ) (k : Stm Γ τ)
-      (γ' : RegStore) (μ' : Memory) (δ' : CStore Γ) :
-      ⟨ γ , μ , δ , s ⟩ ---> ⟨ γ' , μ' , δ' , s' ⟩ ->
-      ⟨ γ , μ , δ , stm_seq s k ⟩ ---> ⟨ γ' , μ' , δ' , stm_seq s' k ⟩
-  | step_stm_seq_value
-      (σ : Ty) (v : Val σ) (k : Stm Γ τ) :
-      ⟨ γ , μ , δ , stm_seq (stm_val σ v) k ⟩ ---> ⟨ γ , μ , δ , k ⟩
-  | step_stm_seq_fail
-      (σ : Ty) (s : string) (k : Stm Γ τ) :
-      ⟨ γ , μ , δ , stm_seq (stm_fail σ s) k ⟩ ---> ⟨ γ , μ , δ , stm_fail τ s ⟩
+  | step_stm_seq
+      (σ : Ty) (s : Stm Γ σ) (k : Stm Γ τ) :
+      ⟨ γ , μ , δ , stm_seq s k ⟩ ---> ⟨ γ , μ , δ , stm_bind s (fun _ => k) ⟩
 
   | step_stm_call
       {Δ} {f : 𝑭 Δ τ} (es : NamedEnv (Exp Γ) Δ) :
@@ -251,21 +237,21 @@ Module Type SmallStepOn (Import B : Base) (Import P : Program B).
     first
       [ lazymatch s with
         | stm_call_frame _ ?s' => microsail_stm_is_final s'
-        | stm_let _ _ ?s' _    => microsail_stm_is_final s'
         | stm_block _ ?s'      => microsail_stm_is_final s'
-        | stm_seq ?s' _        => microsail_stm_is_final s'
         | stm_assign _ ?s'     => microsail_stm_is_final s'
         | stm_bind ?s' _       => microsail_stm_is_final s'
         end
       | lazymatch head s with
+        | @stm_val              => idtac
+        | @stm_exp              => idtac
+        | @stm_seq              => idtac
+        | @stm_let              => idtac
         | @stm_call             => idtac
         | @stm_foreign          => idtac
         | @stm_lemmak           => idtac
         | @stm_assertk          => idtac
         | @stm_fail             => idtac
-        | @stm_exp              => idtac
         | @stm_if               => idtac
-        | @stm_val              => idtac
         | @stm_match_sum        => idtac
         | @stm_match_list       => idtac
         | @stm_match_prod       => idtac

@@ -434,7 +434,7 @@ Module RiscvPmpIrisInstanceWithContracts.
           (λ (v : Z) (δ' : NamedEnv Val Γ), ((if b then interp_ptsto_readonly paddr w else interp_ptsto paddr w) ∗ ⌜v = w⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (b paddr w Heq) "ptsto_addr_w".
-    rewrite wp_unfold. cbn.
+    unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
     destruct b.
@@ -446,6 +446,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       iSplitR; first done.
       iIntros (e2 σ'' efs Hstep).
       dependent elimination Hstep.
+      fold_semWP.
       dependent elimination s.
       rewrite Heq in f1. cbv in f1.
       dependent elimination f1. cbn.
@@ -472,6 +473,7 @@ Module RiscvPmpIrisInstanceWithContracts.
       iSplitR; first easy.
       iIntros (e2 σ'' efs Hstep).
       dependent elimination Hstep.
+      fold_semWP.
       dependent elimination s.
       rewrite Heq in f1. cbv in f1.
       dependent elimination f1. cbn.
@@ -505,7 +507,7 @@ Module RiscvPmpIrisInstanceWithContracts.
               (interp_ptsto paddr data ∗ ⌜v = 1%Z⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (paddr data Heq) "[% ptsto_addr]".
-    rewrite wp_unfold. cbn.
+    unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -513,6 +515,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iSplitR; first easy.
     iIntros (e2 σ'' efs Hstep).
     dependent elimination Hstep.
+    fold_semWP.
     dependent elimination s.
     rewrite Heq in f1. cbn in f1.
     dependent elimination f1. cbn.
@@ -548,7 +551,7 @@ Module RiscvPmpIrisInstanceWithContracts.
             (λ (v : AST) (δ' : NamedEnv Val Γ), (⌜v = instr⌝ ∧ emp) ∗ ⌜δ' = δ⌝).
   Proof.
     iIntros (code instr Heq) "%Hdecode".
-    rewrite wp_unfold. cbn.
+    unfold semWP. rewrite wp_unfold. cbn.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
     iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver.
@@ -556,6 +559,7 @@ Module RiscvPmpIrisInstanceWithContracts.
     iSplitR; first easy.
     iIntros (e2 σ'' efs Hstep).
     dependent elimination Hstep.
+    fold_semWP.
     dependent elimination s.
     rewrite Heq in f1. cbv in f1.
     dependent elimination f1. rewrite Hdecode. cbn.

@@ -966,7 +966,7 @@ Module ExampleModel.
               ptstocons_interp (mG := sailGS_memGS) v (eval x δ) (eval xs δ) ∗ ⌜δ' = δ⌝).
       Proof.
         iIntros (x xs) "_".
-        rewrite wp_unfold. cbn.
+        unfold semWP. rewrite wp_unfold. cbn.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
         unfold mem_inv.
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
@@ -1001,7 +1001,7 @@ Module ExampleModel.
               ((⌜v = vx⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜ δ' = δ⌝).
       Proof.
         iIntros (ep vx vxs vp) "Hres".
-        rewrite wp_unfold.
+        unfold semWP. rewrite wp_unfold.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro.
@@ -1033,7 +1033,7 @@ Module ExampleModel.
               ((⌜v = vxs⌝ ∧ emp) ∗ ptstocons_interp (mG := sailGS_memGS) vp vx vxs) ∗ ⌜ δ' = δ⌝).
       Proof.
         iIntros (ep vx vxs vp) "Hres".
-        rewrite wp_unfold.
+        unfold semWP. rewrite wp_unfold.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro.
@@ -1066,7 +1066,7 @@ Module ExampleModel.
       Proof.
         iIntros (ep exs vx vp vxs) "Hres".
         iDestruct "Hres" as (vxs__old) "Hres".
-        rewrite wp_unfold.
+        unfold semWP. rewrite wp_unfold.
         iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
         iMod (fupd_mask_subseteq empty) as "Hclose2"; first set_solver.
         iModIntro.

@@ -667,7 +667,7 @@ Module MinCapsIrisInstanceWithContracts.
     intros a p b e Heq.
     iIntros "[#Hsafe [[%Hsubp _] [%Hbounds _]]]".
     apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
-    rewrite wp_unfold. cbn.
+    unfold semWP. rewrite wp_unfold. cbn.
     destruct p; try discriminate.
     (* TODO: clean this up! *)
     - iAssert (inv (mc_invNs.@a) (∃ w, gen_heap.mapsto a (dfrac.DfracOwn 1) w ∗ interp w))%I as "Hown".
@@ -789,7 +789,7 @@ Module MinCapsIrisInstanceWithContracts.
     intros a w p b e Heq.
     iIntros "[#Hwsafe [#Hsafe [[%Hsubp _] [%Hbounds _]]]]".
     apply andb_prop in Hbounds as [Hb%Zle_is_le_bool He%Zle_is_le_bool].
-    rewrite wp_unfold. cbn.
+    unfold semWP. rewrite wp_unfold. cbn.
     destruct p; try discriminate. clear Hsubp.
     iIntros (σ' ns ks1 ks nt) "[Hregs Hmem]".
     iDestruct "Hmem" as (memmap) "[Hmem' %]".
