@@ -65,16 +65,18 @@ Module Type BaseMixin (Import TY : Types).
     Definition pattern_match_env_reverse {Σ : LCtx} {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
       NamedEnv (Term Σ) Δ -> Term Σ σ :=
       match p with
-      | pat_var x    => fun Ex => match env.snocView Ex with env.isSnoc _ t => t end
-      | pat_unit     => fun _ => term_val ty.unit tt
-      | pat_pair x y => fun Exy => match env.snocView Exy with
-                                     env.isSnoc Ex ty =>
-                                     match env.snocView Ex with
-                                       env.isSnoc _ tx => term_binop bop.pair tx ty
-                                     end
-                                   end
-      | pat_tuple p  => fun EΔ => term_tuple (tuple_pattern_match_env_reverse p EΔ)
-      | pat_record p => fun EΔ => term_record _ (record_pattern_match_env_reverse p EΔ)
+      | pat_var x          => fun Ex => match env.snocView Ex with env.isSnoc _ t => t end
+      | pat_unit           => fun _ => term_val ty.unit tt
+      | pat_pair x y       => fun Exy =>
+                                let (Ex,ty) := env.snocView Exy in
+                                let (E,tx)  := env.snocView Ex in
+                                term_binop bop.pair tx ty
+      | pat_tuple p        => fun EΔ => term_tuple (tuple_pattern_match_env_reverse p EΔ)
+      | pat_record p       => fun EΔ => term_record _ (record_pattern_match_env_reverse p EΔ)
+      | pat_bvec_split x y => fun Exy =>
+                                let (Ex,ty) := env.snocView Exy in
+                                let (E,tx)  := env.snocView Ex in
+                                term_binop bop.bvapp tx ty
       end.
 
     Lemma inst_tuple_pattern_match {Σ : LCtx} {σs : Ctx Ty} {Δ : NCtx N Ty}
@@ -140,6 +142,7 @@ Module Type BaseMixin (Import TY : Types).
       - cbn.
         f_equal.
         apply inst_record_pattern_match_reverse.
+      - cbn. now destruct env.snocView, env.snocView.
     Qed.
 
   End PatternMatching.

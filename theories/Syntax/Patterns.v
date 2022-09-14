@@ -63,7 +63,8 @@ Module Type PatternsOn (Import TY : Types).
     | pat_unit : Pattern [] ty.unit
     | pat_pair (x y : N) {σ τ : Ty} : Pattern [ x∷σ; y∷τ ] (ty.prod σ τ)
     | pat_tuple {σs Δ} (p : TuplePat σs Δ) : Pattern Δ (ty.tuple σs)
-    | pat_record {R Δ} (p : RecordPat (recordf_ty R) Δ) : Pattern Δ (ty.record R).
+    | pat_record {R Δ} (p : RecordPat (recordf_ty R) Δ) : Pattern Δ (ty.record R)
+    | pat_bvec_split (xl xr : N) {m n} : Pattern [ xl∷ty.bvec m; xr∷ty.bvec n] (ty.bvec (m + n)).
 
     Definition tuple_pattern_match_env {T : Ty -> Set} :
       forall {σs : Ctx Ty} {Δ : NCtx N Ty},
@@ -169,21 +170,25 @@ Module Type PatternsOn (Import TY : Types).
       | pat_pair x y => fun '(u , v) => [nenv u;v]
       | pat_tuple p => tuple_pattern_match_val p
       | pat_record p => record_pattern_match_val p
+      | pat_bvec_split x y => fun v => let (vx,vy) := bv.appView _ _ v in
+                                       [env].[x∷ty.bvec _ ↦ vx].[y∷ty.bvec _ ↦ vy]
       end.
 
     Definition pattern_match_env_val_reverse {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ) :
       NamedEnv Val Δ -> Val σ :=
       match p with
-      | pat_var x    => fun Ex => match env.snocView Ex with env.isSnoc _ t => t end
-      | pat_unit     => fun _ => tt
-      | pat_pair x y => fun Exy => match env.snocView Exy with
-                                     env.isSnoc Ex ty =>
-                                     match env.snocView Ex with
-                                       env.isSnoc _ tx => (tx, ty)
-                                     end
-                                   end
-      | pat_tuple p  => fun EΔ => envrec.of_env (tuple_pattern_match_env_reverse p EΔ)
-      | pat_record p => fun EΔ => recordv_fold _ (record_pattern_match_env_reverse p EΔ)
+      | pat_var x          => fun Ex => match env.snocView Ex with env.isSnoc _ t => t end
+      | pat_unit           => fun _  => tt
+      | pat_pair x y       => fun Exy =>
+                                      let (Ex,vy) := env.snocView Exy in
+                                      let (E,vx)  := env.snocView Ex in
+                                      (vx, vy)
+      | pat_tuple p        => fun EΔ  => envrec.of_env (tuple_pattern_match_env_reverse p EΔ)
+      | pat_record p       => fun EΔ  => recordv_fold _ (record_pattern_match_env_reverse p EΔ)
+      | pat_bvec_split x y => fun Exy =>
+                                let (Ex,vy) := env.snocView Exy in
+                                let (E,vx)  := env.snocView Ex in
+                                bv.app vx vy
       end.
 
     Lemma pattern_match_val_inverse_left {σ : Ty} {Δ : NCtx N Ty} {p : Pattern Δ σ}
@@ -197,6 +202,7 @@ Module Type PatternsOn (Import TY : Types).
         now rewrite tuple_pattern_match_env_inverse_left, envrec.of_to_env.
       - unfold record_pattern_match_val.
         now rewrite record_pattern_match_env_inverse_left, recordv_fold_unfold.
+      - now destruct bv.appView.
     Qed.
 
     Lemma pattern_match_val_inverse_right {σ : Ty} {Δ : NCtx N Ty} (p : Pattern Δ σ)
@@ -214,6 +220,9 @@ Module Type PatternsOn (Import TY : Types).
         now rewrite envrec.to_of_env, tuple_pattern_match_env_inverse_right.
       - unfold record_pattern_match_val.
         now rewrite recordv_unfold_fold, record_pattern_match_env_inverse_right.
+      - destruct env.snocView, env.snocView.
+        destruct (env.nilView E).
+        now rewrite bv.appView_app.
     Qed.
 
   End Patterns.
