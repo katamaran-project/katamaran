@@ -259,7 +259,15 @@ Module Type ChunksOn
 
     Definition interpret_scheap : SCHeap -> HProp :=
       List.fold_right (fun c h => interpret_scchunk c ∗ h) lemp.
-    Arguments interpret_scheap !h.
+    #[global] Arguments interpret_scheap !h.
+
+    Lemma interpret_scchunk_inst {Σ} (c : Chunk Σ) (ι : Valuation Σ) :
+      interpret_scchunk (inst c ι) = interpret_chunk c ι.
+    Proof.
+      induction c; cbn [interpret_chunk];
+        try rewrite <- IHc1, <- IHc2; reflexivity.
+    Qed.
+
   End Interpretation.
 
 End ChunksOn.

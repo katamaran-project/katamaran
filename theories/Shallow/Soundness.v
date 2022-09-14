@@ -353,13 +353,6 @@ Module Type Soundness
       now apply HYP.
     Qed.
 
-    Lemma interpret_scchunk_inst {Σ} (c : Chunk Σ) (ι : Valuation Σ) :
-      interpret_scchunk (inst c ι) = interpret_chunk c ι.
-    Proof.
-      induction c; cbn [interpret_chunk];
-        try rewrite <- IHc1, <- IHc2; reflexivity.
-    Qed.
-
     Lemma consume_sound {Γ Σ} {ι : Valuation Σ} {asn : Assertion Σ} (POST : CStore Γ -> L) :
       forall δ h,
         consume ι asn (fun _ => liftP POST) δ h ->

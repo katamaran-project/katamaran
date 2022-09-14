@@ -33,6 +33,8 @@ From Coq Require Import
      Setoid.
 
 From Katamaran Require Import
+     Context
+     Environment
      Notations.
 
 Local Set Implicit Arguments.
@@ -98,6 +100,19 @@ Module sep.
   #[global] Arguments lex_right {_} [_] _.
   #[global] Arguments lall_left {_} [_] _.
 
+  Section Derived.
+
+    Context {L : SepLogic}.
+
+    Definition Forall (B : Set) (D : B -> Set) :=
+      fix Forall {Δ : Ctx B} : (Env D Δ -> L) -> L :=
+        match Δ with
+        | ctx.nil      => fun P => P env.nil
+        | ctx.snoc Δ b => fun P => Forall (fun E => lall (fun v => P (env.snoc E b v)))
+        end.
+
+  End Derived.
+
   Module Import notations.
     Open Scope logic_scope.
     Notation "P ⊢ Q" := (lentails P%L Q%L) : type_scope.
@@ -143,6 +158,19 @@ Module sep.
     #[export] Instance lequiv_flip_entails_subrelation {L} :
       subrelation (@lequiv L) (flip (@lentails L)).
     Proof. firstorder. Qed.
+
+    #[export] Instance proper_entails_equiv_iff {L} :
+      Proper (lequiv ==> lequiv ==> iff) (@lentails L).
+    Proof. intros P Q pq R S rs. split; now rewrite pq, rs. Qed.
+
+    #[export] Instance proper_entails_entails_impl {L} :
+      Proper (lentails --> lentails ==> impl) (@lentails L).
+    Proof.
+      unfold Proper, respectful, flip, impl.
+      intros P Q qp R S rs pr.
+      transitivity P; auto.
+      transitivity R; auto.
+    Qed.
 
     #[export] Instance proper_land_entails {L} :
       Proper (lentails ==> lentails ==> lentails) (@land L).
@@ -428,8 +456,10 @@ Module sep.
     Proof.
       split.
       - apply land_right.
-        + rewrite (lor_right1 _ P P Q) at 2; reflexivity.
-        + rewrite (lor_right2 _ Q P Q) at 2; reflexivity.
+        + apply proper_lwand_entails. apply lor_right1.
+          reflexivity. reflexivity.
+        + apply proper_lwand_entails. apply lor_right2.
+          reflexivity. reflexivity.
       - apply lwand_sep_adjoint.
         rewrite lsep_comm.
         apply lwand_sep_adjoint.
