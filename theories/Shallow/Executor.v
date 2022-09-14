@@ -148,6 +148,18 @@ Module Type ShallowExecOn
       assert_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
         bind (assert_eq_nenv δ δ') (fun _ => assert_formula (t = t')).
 
+    Equations(noeqns) assume_eq_env {Δ : Ctx Ty}
+      (δ δ' : Env Val Δ) : CPureSpecM unit :=
+      assume_eq_env env.nil          env.nil            := pure tt;
+      assume_eq_env (env.snoc δ _ t) (env.snoc δ' _ t') :=
+        bind (assume_eq_env δ δ') (fun _ => assume_formula (t = t')).
+
+    Equations(noeqns) assume_eq_nenv {N : Set} {Δ : NCtx N Ty}
+      (δ δ' : NamedEnv Val Δ) : CPureSpecM unit :=
+      assume_eq_nenv env.nil          env.nil            := pure tt;
+      assume_eq_nenv (env.snoc δ _ t) (env.snoc δ' _ t') :=
+        bind (assume_eq_nenv δ δ') (fun _ => assume_formula (t = t')).
+
     Definition angelic_binary {A} :
       CPureSpecM A -> CPureSpecM A -> CPureSpecM A :=
       fun m1 m2 POST =>
@@ -277,6 +289,30 @@ Module Type ShallowExecOn
       - destruct (env.snocView δ') as [δ']; cbn in *.
         unfold bind, assert_formula.
         now rewrite IHδ, (@env.inversion_eq_snoc _ _ _ b δ δ').
+    Qed.
+
+    Lemma wp_assume_eq_env {Δ : Ctx Ty} (δ δ' : Env Val Δ) :
+      forall POST,
+        assume_eq_env δ δ' POST <-> (δ = δ' -> POST tt).
+    Proof.
+      induction δ; intros POST.
+      - destruct (env.nilView δ'). intuition.
+      - destruct (env.snocView δ'); cbn.
+        unfold bind, assume_formula.
+        rewrite IHδ, env.inversion_eq_snoc.
+        intuition.
+    Qed.
+
+    Lemma wp_assume_eq_nenv {N} {Δ : NCtx N Ty} (δ δ' : NamedEnv Val Δ) :
+      forall POST,
+        assume_eq_nenv δ δ' POST <-> (δ = δ' -> POST tt).
+    Proof.
+      induction δ; intros POST.
+      - destruct (env.nilView δ'). intuition.
+      - destruct (env.snocView δ') as [δ']; cbn in *.
+        unfold bind, assume_formula.
+        rewrite IHδ, (@env.inversion_eq_snoc _ _ _ b δ δ').
+        intuition.
     Qed.
 
     Fixpoint assert_eq_chunk (c1 c2 : SCChunk) : CPureSpecM unit :=
