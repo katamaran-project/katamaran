@@ -453,33 +453,23 @@ Module Import ExampleModel.
     Lemma adequacy_pure {Δ σ} (f : Fun Δ σ) : adequacy_pure_prop f.
     Proof.
       unfold adequacy_pure_prop.
-      destruct (CEnv f) as [[Σ args pre result post]|] eqn:Heqcontract; try now cbn.
+      destruct (CEnv f) as [[Σ args pre result post]|] eqn:Heqc; [|easy].
       intros preP postP Γ δ δ' γ γ' μ μ' ι PRE v evals.
       refine (adequacy
                 (Q := fun v => asn.interpret_pure post ι.[result∷σ ↦ v]) evals I _).
-
-      iIntros (Σ' sG) "[_ _]".
-      iApply (weakestpre.wp_mono').
-      2: {
-        iApply (iris_rule_stm_call_forwards
-                  (P := asn.interpret pre ι)
-                  (Q := fun v => asn.interpret post ι.[result∷σ ↦ v])
-                  _ _ Heqcontract).
-        - eapply ProgramLogic.rule_sep_contract.
-          cbv [Logic.sep.lentails Logic.sep.lex Logic.sep.land Logic.sep.lprop
-               Logic.sep.lsep Logic.sep.lall Logic.sep.lwand IProp].
-          iIntros "pre".
-          iExists ι.
-          unfold DefaultBase.evals.
-          rewrite env.map_map env.map_id.
-          iSplit; [trivial|].
-          iSplitL; [trivial|].
-          now iIntros (v0) "post".
-        - iApply contracts_sound.
-        - now rewrite interpret_assertion_pure_or_not.
-      }
-      iIntros (v') "[Hpost %]".
-      now rewrite interpret_assertion_pure_or_not.
+      iIntros (Σ' sG).
+      iApply (iris_rule_stm_call _ _ _ _ Heqc).
+      - cbn.
+        iIntros "_".
+        iExists ι.
+        unfold DefaultBase.evals.
+        rewrite env.map_map env.map_id.
+        rewrite interpret_assertion_pure_or_not; auto.
+        iSplit; [trivial|].
+        iSplitL; [trivial|].
+        iIntros (v0) "post".
+        by rewrite interpret_assertion_pure_or_not.
+      - iApply contracts_sound.
     Qed.
 
     (* Finally, instantitate the pure adequacy lemma for the summaxlen example. *)

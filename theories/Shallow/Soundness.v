@@ -459,7 +459,7 @@ Module Type Soundness
           (h : SCHeap) (POST : Val τ -> CStore Γ -> L)
           (c : SepContract Δ τ) :
       call_contract c δΔ (fun a => liftP (POST a)) δΓ h ->
-      CTriple δΔ (interpret_scheap h) (fun v => POST v δΓ) c.
+      CTriple (interpret_scheap h) c δΔ  (fun v => POST v δΓ).
     Proof.
       destruct c as [Σe δe req result ens].
       unfold call_contract. unfold bind_right, bind.
@@ -468,7 +468,7 @@ Module Type Soundness
       intros [ι Hwp]; revert Hwp.
       unfold assert_eq_nenv, lift_purem.
       rewrite CPureSpecM.wp_assert_eq_nenv.
-      intros [Hfmls Hwp]. constructor.
+      intros [Hfmls Hwp]. cbn.
       apply (lex_right ι). apply land_right.
       { now apply lprop_right. }
       apply (consume_sound (fun δ => ∀ v, asn.interpret ens (env.snoc ι (result∷_) v) -∗ POST v δ)).
@@ -551,30 +551,20 @@ Module Type Soundness
         now apply rule_stm_block, IHs.
 
       - (* stm_assign *)
-        now apply rule_stm_assign_backwards, IHs.
+        now apply rule_stm_assign, IHs.
 
       - (* stm_call *)
         destruct (CEnv f) as [c|] eqn:Heq; cbn in HYP.
-        + apply rule_stm_call_backwards with c.
+        + apply rule_stm_call with c.
           assumption.
           now apply call_contract_sound.
-        + unfold eval_exps in HYP.
-          apply rec_sound in HYP.
-          eapply rule_consequence_right.
-          apply rule_stm_call_inline.
-          apply HYP. cbn. intros v δ.
-          rewrite lprop_float.
-          apply limpl_and_adjoint.
-          apply lprop_left. intros ->.
-          apply limpl_and_adjoint.
-          apply land_left2.
-          reflexivity.
+        + now apply rule_stm_call_inline, rec_sound.
 
       - (* stm_call_frame *)
         now apply rule_stm_call_frame, IHs.
 
       - (* stm_foreign *)
-        apply rule_stm_foreign_backwards.
+        apply rule_stm_foreign.
         now apply call_contract_sound.
 
       - (* stm_lemmak *)
@@ -594,31 +584,23 @@ Module Type Soundness
 
       - (* stm_if *)
         rewrite wp_demonic_match_bool in HYP.
-        apply rule_stm_if; apply rule_pull; intro Heval; rewrite Heval in *; auto.
+        apply rule_stm_if; intro Heval; rewrite Heval in HYP; auto.
 
       - (* stm_seq *)
-        eapply rule_consequence_left.
-        eapply rule_stm_seq; intros; apply rule_wp.
-
-        apply lex_right with (interpret_scheap h1).
-        apply land_right.
-        reflexivity.
-        apply lprop_right.
-        apply IHs1; clear IHs1.
-        revert HYP; apply exec_aux_monotonic; auto.
-        intros v2 δ2 h2 HYP.
-
-        apply lex_right with (interpret_scheap h2).
-        apply land_right.
-        reflexivity.
-        apply lprop_right.
-        now apply IHs2.
+        apply rule_stm_seq with (WP s2 POST).
+        + apply IHs1. revert HYP.
+          apply exec_aux_monotonic; auto.
+          intros _ δ1' h1' H.
+          specialize (IHs2 POST δ1' h1' H).
+          unfold liftP, WP.
+          apply lex_right with (interpret_scheap h1').
+          apply land_right. reflexivity.
+          apply lprop_right. assumption.
+        + apply rule_wp.
 
       - (* stm_assert *)
-        apply rule_stm_assert, rule_pull;
-          intro Heval; rewrite Heval in HYP.
-        specialize (HYP eq_refl). cbn in HYP.
-        now apply IHs.
+        apply rule_stm_assert; intro Heval.
+        now apply IHs, HYP.
 
       - (* stm_fail *)
         eapply rule_consequence_left.
@@ -627,22 +609,18 @@ Module Type Soundness
 
       - (* stm_match_list *)
         rewrite wp_demonic_match_list in HYP.
-        apply rule_stm_match_list; cbn; intros;
-          apply rule_pull; intro Heval; rewrite Heval in HYP.
-        + now apply IHs1.
-        + now apply IHs2.
+        apply rule_stm_match_list; cbn; intros * Heval;
+          rewrite Heval in HYP; auto.
 
       - (* stm_match_sum *)
         rewrite wp_demonic_match_sum in HYP.
-        apply rule_stm_match_sum; cbn; intros;
-          apply rule_pull; intro Heval; rewrite Heval in HYP; cbn in HYP.
-        + now apply IHs1.
-        + now apply IHs2.
+        apply rule_stm_match_sum; cbn; intros * Heval;
+          rewrite Heval in HYP; auto.
 
       - (* stm_match_prod *)
         rewrite wp_demonic_match_prod in HYP.
-        apply rule_stm_match_prod; cbn; intros;
-          apply rule_pull; intro Heval; rewrite Heval in HYP; cbn in HYP.
+        apply rule_stm_match_prod; cbn; intros * Heval;
+          rewrite Heval in HYP; cbn in HYP.
         now apply IHs.
 
       - (* stm_match_enum *)
@@ -655,8 +633,8 @@ Module Type Soundness
 
       - (* stm_match_union *)
         rewrite wp_demonic_match_union in HYP.
-        apply rule_stm_match_union; cbn; intros;
-          apply rule_pull; intro Heval; rewrite Heval, unionv_unfold_fold in HYP.
+        apply rule_stm_match_union; cbn; intros * Heval;
+          rewrite Heval, unionv_unfold_fold in HYP.
         now apply H.
 
       - (* stm_match_record *)
@@ -669,8 +647,8 @@ Module Type Soundness
 
       - (* stm_match_bvec_split *)
         rewrite wp_demonic_match_bvec_split in HYP.
-        apply rule_stm_match_bvec_split. cbn; intros.
-        apply rule_pull; intro Heval; rewrite Heval, bv.appView_app in HYP.
+        apply rule_stm_match_bvec_split. cbn; intros * Heval;
+          rewrite Heval, bv.appView_app in HYP.
         now apply IHs.
 
       - (* stm_read_register *)

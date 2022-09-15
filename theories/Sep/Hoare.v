@@ -55,14 +55,12 @@ Module ProgramLogic.
 
     (* Hoare triples for SepContract *)
 
-    Inductive CTriple {Δ σ} (δΔ : CStore Δ) (pre : L) (post : Val σ -> L) :
-      SepContract Δ σ -> Prop :=
-    | rule_sep_contract
-        (result : LVar) (Σ  : LCtx) (θΔ : SStore Δ Σ)
-        (req : Assertion Σ) (ens : Assertion (Σ ▻ result∷σ)) :
-        (pre ⊢ ∃ ι : Valuation Σ, !! (δΔ = inst θΔ ι) ∧ asn.interpret req ι ∗
-                 ∀ v : Val σ, asn.interpret ens (env.snoc ι (result∷σ) v) -∗ post v) ->
-        CTriple δΔ pre post (MkSepContract _ _ _ θΔ req result ens).
+    Definition CTriple {Δ σ} (pre : L) (c : SepContract Δ σ) (δΔ : CStore Δ) (post : Val σ -> L) : Prop :=
+      match c with
+      | MkSepContract _ _ Σe θΔ req result ens =>
+          pre ⊢ ∃ ι : Valuation Σe, !! (δΔ = inst θΔ ι) ∧ asn.interpret req ι ∗
+                ∀ v : Val σ, asn.interpret ens (env.snoc ι (result∷σ) v) -∗ post v
+      end.
 
     Inductive LTriple {Δ} (δΔ : CStore Δ) (pre post : L) :
       Lemma Δ -> Prop :=
@@ -116,8 +114,8 @@ Module ProgramLogic.
     | rule_stm_if
         {e : Exp Γ ty.bool} {s1 s2 : Stm Γ τ}
         {P : L} {Q : Val τ -> CStore Γ -> L} :
-        ⦃ P ∧ !!(eval e δ = true) ⦄ s1 ; δ ⦃ Q ⦄ ->
-        ⦃ P ∧ !!(eval e δ = false) ⦄ s2 ; δ ⦃ Q ⦄ ->
+        (eval e δ = true -> ⦃ P ⦄ s1 ; δ ⦃ Q ⦄) ->
+        (eval e δ = false -> ⦃ P ⦄ s2 ; δ ⦃ Q ⦄) ->
         ⦃ P ⦄ stm_if e s1 s2 ; δ ⦃ Q ⦄
     | rule_stm_seq
         (σ : Ty) (s1 : Stm Γ σ) (s2 : Stm Γ τ)
@@ -128,7 +126,7 @@ Module ProgramLogic.
     | rule_stm_assert
         (e1 : Exp Γ ty.bool) (e2 : Exp Γ ty.string) (k : Stm Γ τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ P ∧ !! (eval e1 δ = true) ⦄ k ; δ ⦃ Q ⦄ ->
+        (eval e1 δ = true -> ⦃ P ⦄ k ; δ ⦃ Q ⦄) ->
         ⦃ P ⦄ stm_assertk e1 e2 k ; δ ⦃ Q ⦄
     | rule_stm_fail
         (s : Val ty.string) (Q : Val τ -> CStore Γ -> L) :
@@ -137,9 +135,10 @@ Module ProgramLogic.
         {σ : Ty} (e : Exp Γ (ty.list σ)) (alt_nil : Stm Γ τ)
         (xh xt : PVar) (alt_cons : Stm (Γ ▻ xh∷σ ▻ xt∷ty.list σ) τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
-        ⦃ P ∧ !! (eval e δ = nil) ⦄ alt_nil ; δ ⦃ Q ⦄ ->
+        (eval e δ = nil -> ⦃ P ⦄ alt_nil ; δ ⦃ Q ⦄) ->
         (forall (v : Val σ) (vs : Val (ty.list σ)),
-           ⦃ P ∧ !! (eval e δ = cons v vs) ⦄
+           eval e δ = cons v vs ->
+           ⦃ P ⦄
              alt_cons ; env.snoc (env.snoc δ (xh∷σ) v) (xt∷ty.list σ) vs
            ⦃ fun v' δ' => Q v' (env.tail (env.tail δ')) ⦄) ->
         ⦃ P ⦄ stm_match_list e alt_nil xh xt alt_cons ; δ ⦃ Q ⦄
@@ -148,15 +147,16 @@ Module ProgramLogic.
         {alt_inl : Stm (Γ ▻ xl∷σl) τ}
         {alt_inr : Stm (Γ ▻ xr∷σr) τ}
         {P : L} {Q : Val τ -> CStore Γ -> L} :
-        (forall (v : Val σl), ⦃ P ∧ !! (eval e δ = inl v) ⦄ alt_inl ; env.snoc δ (xl∷σl) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
-        (forall (v : Val σr), ⦃ P ∧ !! (eval e δ = inr v) ⦄ alt_inr ; env.snoc δ (xr∷σr) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
+        (forall (v : Val σl), eval e δ = inl v -> ⦃ P ⦄ alt_inl ; env.snoc δ (xl∷σl) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
+        (forall (v : Val σr), eval e δ = inr v -> ⦃ P ⦄ alt_inr ; env.snoc δ (xr∷σr) v ⦃ fun v' δ' => Q v' (env.tail δ') ⦄) ->
         ⦃ P ⦄ stm_match_sum e xl alt_inl xr alt_inr ; δ ⦃ Q ⦄
     | rule_stm_match_prod
         {xl xr : PVar} {σl σr : Ty} {e : Exp Γ (ty.prod σl σr)}
         {rhs : Stm (Γ ▻ xl∷σl ▻ xr∷σr) τ}
         {P : L} {Q : Val τ -> CStore Γ -> L} :
         (forall (vl : Val σl) (vr : Val σr),
-           ⦃ P ∧ !! (eval e δ = (vl,vr)) ⦄
+           eval e δ = (vl,vr) ->
+           ⦃ P ⦄
              rhs ; env.snoc (env.snoc δ (xl∷σl) vl) (xr∷σr) vr
            ⦃ fun v δ' => Q v (env.tail (env.tail δ')) ⦄) ->
         ⦃ P ⦄ stm_match_prod e xl xr rhs ; δ ⦃ Q ⦄
@@ -179,7 +179,8 @@ Module ProgramLogic.
         (alt__r : forall (K : unionk U), Stm (Γ ▻▻ alt__Δ K) τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         (forall (K : unionk U) (v : Val (unionk_ty U K)),
-           ⦃ P ∧ !! (eval e δ = unionv_fold U (existT K v)) ⦄
+           eval e δ = unionv_fold U (existT K v) ->
+           ⦃ P ⦄
              alt__r K ; env.cat δ (pattern_match_val (alt__p K) v)
            ⦃ fun v δ' => Q v (env.drop (alt__Δ K) δ') ⦄) ->
         ⦃ P ⦄ stm_match_union U e alt__p alt__r ; δ ⦃ Q ⦄
@@ -200,7 +201,8 @@ Module ProgramLogic.
         (rhs : Stm (Γ ▻ xl ∷ ty.bvec m ▻ xr ∷ ty.bvec n) τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         (forall (vl : Val (ty.bvec m)) (vr : Val (ty.bvec n)),
-           ⦃ P ∧ !! (eval e δ = bv.app vl vr) ⦄
+           eval e δ = bv.app vl vr ->
+           ⦃ P ⦄
              rhs ; env.snoc (env.snoc δ (xl∷ty.bvec m) vl) (xr∷ty.bvec n) vr
            ⦃ fun v δ' => Q v (env.tail (env.tail δ')) ⦄) ->
         ⦃ P ⦄ stm_match_bvec_split m n e xl xr rhs ; δ ⦃ Q ⦄
@@ -215,38 +217,31 @@ Module ProgramLogic.
         ⦃ lptsreg r v ⦄
           stm_write_register r w ; δ
         ⦃ fun v' δ' => !!(δ' = δ) ∧ !!(v' = eval w δ) ∧ lptsreg r v' ⦄
-    | rule_stm_assign_backwards
+    | rule_stm_assign
         (x : PVar) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
         (P : L) (R : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δ ⦃ fun v δ' => R v (δ' ⟪ x ↦ v ⟫)%env ⦄ ->
         ⦃ P ⦄ stm_assign x s ; δ ⦃ R ⦄
-    | rule_stm_assign_forwards
-        (x : PVar) (xIn : x∷τ ∈ Γ) (s : Stm Γ τ)
-        (P : L) (R : Val τ -> CStore Γ -> L) :
-        ⦃ P ⦄ s ; δ ⦃ R ⦄ ->
-        ⦃ P ⦄
-          stm_assign x s ; δ
-        ⦃ fun v__new δ' => ∃ v__old, R v__new (δ' ⟪ x ↦ v__old ⟫)%env ∧ !!(env.lookup δ' xIn = v__new) ⦄
-    | rule_stm_call_forwards
+    | rule_stm_call
         {Δ} {f : 𝑭 Δ τ} {es : NamedEnv (Exp Γ) Δ} {c : SepContract Δ τ}
-        {P : L} {Q : Val τ -> L} :
+        (P : L) (Q : Val τ -> CStore Γ -> L) :
         CEnv f = Some c ->
-        CTriple (evals es δ) P Q c ->
-        ⦃ P ⦄ stm_call f es ; δ ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
+        CTriple P c (evals es δ) (fun v => Q v δ) ->
+        ⦃ P ⦄ stm_call f es ; δ ⦃ Q ⦄
     | rule_stm_call_inline
         {Δ} (f : 𝑭 Δ τ) (es : NamedEnv (Exp Γ) Δ)
-        (P : L) (Q : Val τ -> L) :
-        ⦃ P ⦄ FunDef f ; evals es δ ⦃ fun v _ => Q v ⦄ ->
-        ⦃ P ⦄ stm_call f es ; δ ⦃ fun v δ' => Q v ∧ !!(δ = δ') ⦄
+        (P : L) (Q : Val τ -> CStore Γ -> L) :
+        ⦃ P ⦄ FunDef f ; evals es δ ⦃ fun v _ => Q v δ ⦄ ->
+        ⦃ P ⦄ stm_call f es ; δ ⦃ Q ⦄
     | rule_stm_call_frame
         (Δ : PCtx) (δΔ : CStore Δ) (s : Stm Δ τ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
         ⦃ P ⦄ s ; δΔ ⦃ fun v _ => Q v δ ⦄ ->
         ⦃ P ⦄ stm_call_frame δΔ s ; δ ⦃ Q ⦄
-    | rule_stm_foreign_backwards
+    | rule_stm_foreign
         {Δ} {f : 𝑭𝑿 Δ τ} (es : NamedEnv (Exp Γ) Δ)
         (P : L) (Q : Val τ -> CStore Γ -> L) :
-        CTriple (evals es δ) P (fun v => Q v δ) (CEnvEx f) ->
+        CTriple P (CEnvEx f) (evals es δ) (fun v => Q v δ) ->
         ⦃ P ⦄ stm_foreign f es ; δ ⦃ Q ⦄
     | rule_stm_lemmak
         {Δ} {l : 𝑳 Δ} (es : NamedEnv (Exp Γ) Δ) (k : Stm Γ τ)
@@ -400,25 +395,6 @@ Module ProgramLogic.
       rewrite lsep_comm.
       apply lwand_sep_adjoint.
       reflexivity.
-    Qed.
-
-    Lemma rule_stm_call_backwards {Γ δ Δ σ} {f : 𝑭 Δ σ} {es : NamedEnv (Exp Γ) Δ}
-      (P : L) (Q : Val σ -> CStore Γ -> L) (c : SepContract Δ σ) :
-      CEnv f = Some c ->
-      CTriple (evals es δ) P (fun v => Q v δ) c ->
-      ⦃ P ⦄ stm_call f es ; δ ⦃ Q ⦄.
-    Proof.
-      intros Heq HYP.
-      eapply rule_consequence_right.
-      apply rule_stm_call_forwards with c.
-      assumption.
-      apply HYP.
-      cbn; intros v δ1.
-      rewrite land_comm.
-      apply limpl_and_adjoint.
-      apply lprop_left. intro. subst δ1.
-      apply limpl_and_adjoint.
-      now apply land_left2.
     Qed.
 
     Definition ValidContract {Γ τ} (c : SepContract Γ τ) (body : Stm Γ τ) : Prop :=

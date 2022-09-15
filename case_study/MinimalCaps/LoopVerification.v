@@ -80,8 +80,7 @@ Section Loop.
 
   Definition Step_pre : iProp Σ :=
     interp_gprs interp ∗
-    (∃ c, pc ↦ c ∗ interp (inr c) ∗ ⌜CorrectPC c⌝) ∗
-    IH.
+    (∃ c, pc ↦ c ∗ interp (inr c) ∗ ⌜CorrectPC c⌝).
 
   Definition Step_post : iProp Σ :=
     interp_gprs interp ∗
@@ -90,36 +89,21 @@ Section Loop.
      (∃ c, pc ↦ c ∗ interp_expression interp c)).
 
   Definition semTriple_step : iProp Σ :=
-    semTriple [env] Step_pre (FunDef step) (fun _ _ => Step_post).
+    IH -∗ semTriple [env] Step_pre (FunDef step) (fun _ _ => Step_post).
 
   Lemma valid_step_contract : ⊢ ValidContractSem fun_step sep_contract_step.
   Proof.
-    iApply (sound $! _ _ step).
-    exact foreignSem.
-    exact lemSem.
-    unfold ProgramLogic.ValidContractCEnv.
-    intros.
-    apply shallow_vcgen_soundness.
-    apply symbolic_vcgen_soundness.
-    apply ValidContracts; assumption.
+     iApply (contracts_sound $! _ _ step).
   Qed.
 
   Lemma valid_semTriple_step : ⊢ semTriple_step.
   Proof.
-    unfold semTriple_step.
-    iIntros.
-    iApply (@iris_rule_consequence _ _ _ _ [env] Step_pre _ _ _ fun_step _ _).
-    iApply valid_step_contract.
-    Unshelve.
-    3: exact [env].
+    iIntros "IH (Hregs & [%c (Hpc & Hsafe & Hcorrect)])".
+    iApply (valid_step_contract $! [env]).
     unfold Step_pre.
-    cbn - [interp_gprs].
-    iIntros "(Hgprs & [%c (Hpc & Hsafe & Hcorrect)] & IH)".
+    cbn - [interp_gprs interp].
     iFrame.
     iExists c; iFrame.
-    unfold Step_post.
-    iIntros (v _) "(Hgprs & [H|H])";
-      cbn - [interp interp_gprs interp_expression]; iFrame.
   Qed.
 
   Lemma simplify_semTriple_pre_add : forall Γ (e : CStore Γ) τ δ P Q (s : Stm Γ τ),
@@ -166,41 +150,30 @@ Section Loop.
   Qed.
 
   Definition semTriple_loop : iProp Σ :=
-    semTriple [env] Step_pre (FunDef loop) (fun _ _ => True%I).
+    IH -∗ semTriple [env] Step_pre (FunDef loop) (fun _ _ => True%I).
 
-  Lemma valid_semTriple_loop : ⊢ semTriple_loop.
+  Lemma valid_semContract_loop : ⊢ semTriple_loop.
   Proof.
-    iIntros "(Hgprs & [%c (Hpc & #Hsafe & %Hcor)] & #IH)".
-    cbn - [interp interp_gprs].
-    unfold fun_loop.
-    iApply (iris_rule_stm_seq [env] (stm_call step _) (stm_call loop _)
-                                _ (fun δ => Step_post ∧ ⌜[env] = δ⌝)%I (fun _ _ => True%I)).
-    - iApply (iris_rule_stm_call_inline [env] step [env] Step_pre (fun _ => Step_post)).
-      iApply valid_semTriple_step.
-    - iIntros.
-      destruct (env.nilView δ').
-      iApply simplify_semTriple_pre_add.
-      iApply simplify_semTriple_post_remove; first constructor.
-      cbn - [interp interp_gprs].
-      iIntros "(Hgprs & [[%c' [Hpc' #Hsafe']] | [%c' [Hpc' Hexpr]]])".
-      + iApply (iris_rule_stm_call_inline_later [env] loop [env] True%I (fun _ => True%I) with "[Hgprs Hpc']"); auto.
-        iModIntro.
-        iIntros "_".
-        destruct c' as [p b e a]; iApply ("IH" $! p b e a with "Hgprs Hpc' Hsafe'").
-      + destruct c' as [p b e a]; cbn - [interp interp_gprs]; iDestruct "Hexpr" as "[%Hp Hexpr]"; try discriminate; subst.
-        iApply (iris_rule_stm_call_inline_later [env] loop [env] True%I (fun _ => True%I) with "[Hgprs Hpc' Hexpr]"); auto.
-        iModIntro.
-        iDestruct "Hexpr" as "#Hexpr".
-        iIntros "_". iApply "Hexpr".
-        iSplitR "Hgprs".
-        iAssumption.
-        iAssumption.
-    - unfold Step_pre.
+    iIntros "#IH Hpre".
+    unfold FunDef, fun_loop.
+    iApply (semWP_seq (call step) (call loop)).
+    iApply semWP_call_inline.
+    iPoseProof (valid_semTriple_step with "IH Hpre") as "trip_step".
+    iRevert "trip_step".
+    iApply semWP_strong_mono.
+    iIntros (_ _) "Hpost".
+    iApply (semWP_call_inline_later loop).
+    iDestruct "Hpost" as "(Hgprs & [[%c [Hpc' #Hsafe']] | [%c [Hpc' Hexpr]]])".
+    - iModIntro.
+      destruct c as [p b e a].
+      by iApply ("IH" $! p b e a with "Hgprs Hpc'").
+    - destruct c as [p b e a].
+      cbn - [interp_gprs interp].
+      iDestruct "Hexpr" as "[%Hp Hexpr]".
+      subst.
+      iModIntro.
+      iDestruct "Hexpr" as "#Hexpr".
+      iApply "Hexpr".
       iFrame.
-      iSplit; try iAssumption.
-      iExists c; iFrame.
-      iSplit.
-      + iApply "Hsafe".
-      + iPureIntro; auto.
   Qed.
 End Loop.

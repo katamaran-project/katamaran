@@ -45,7 +45,10 @@ From Katamaran Require Import
      Sep.Hoare
      Sep.Logic
      Specification
+     Shallow.Executor
+     Shallow.Soundness
      Symbolic.Executor
+     Symbolic.Soundness
      MinimalCaps.Machine
      MinimalCaps.Contracts.
 
@@ -863,6 +866,21 @@ Module MinCapsIrisInstanceWithContracts.
       open_gprs_sound, close_gprs_sound, int_safe_sound, correctPC_subperm_R_sound,
       subperm_not_E_sound, safe_move_cursor_sound, safe_sub_perm_sound,
       safe_within_range_sound, safe_to_execute_sound, rewrite_add_r_0_sound.
+  Qed.
+
+  (* Import the soundness proofs for the shallow and symbolic executors. *)
+  Include Symbolic.Soundness.Soundness MinCapsBase MinCapsProgram MinCapsSignature
+    MinCapsSpecification MinCapsSolver MinCapsShallowExec MinCapsExecutor.
+  Include Shallow.Soundness.Soundness MinCapsBase MinCapsProgram MinCapsSignature
+    MinCapsSpecification MinCapsShallowExec.
+
+  Lemma contracts_sound `{sg : sailGS Σ} : ⊢ ValidContractEnvSem CEnv.
+  Proof.
+    apply (sound foreignSem lemSem).
+    intros Γ τ f c Heq.
+    apply shallow_vcgen_soundness.
+    apply symbolic_vcgen_soundness.
+    now apply MinCapsValidContracts.ValidContracts.
   Qed.
 
 End MinCapsIrisInstanceWithContracts.

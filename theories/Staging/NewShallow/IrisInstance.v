@@ -122,82 +122,6 @@ Section Soundness.
     | ctx.snoc Δ b => fun P => Forall (fun δ => ∀ (v : Val (type b)), P (env.snoc δ b v))
     end%I.
 
-  (* Lemma iris_rule_consequence {Γ σ} {δ : CStore Γ} *)
-  (*       {P P'} {Q Q' : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} : *)
-  (*       (P ⊢ P') -> (forall v δ', Q' v δ' ⊢ Q v δ') -> *)
-  (*       semTriple δ P' s Q' -∗ semTriple δ P s Q. *)
-  (* Proof. *)
-  (*   iIntros (PP QQ) "trips P". *)
-  (*   iApply (wp_mono _ _ _ (fun v => match v with MkValConf _ v δ' => Q' v δ' end)). *)
-  (*   + intros [v δ']; cbn. *)
-  (*     apply QQ. *)
-  (*   + iApply "trips". *)
-  (*     iApply PP; iFrame. *)
-  (* Qed. *)
-
-  (* Lemma iris_rule_frame {Γ σ} {δ : CStore Γ} *)
-  (*       (R P : iProp Σ) (Q : Val σ -> CStore Γ -> iProp Σ) (s : Stm Γ σ) : *)
-  (*       (⊢ semTriple δ P s Q -∗ semTriple δ (R ∗ P) s (fun v δ' => R ∗ Q v δ'))%I. *)
-  (* Proof. *)
-  (*   iIntros "trips [HR HP]". *)
-  (*   iApply (wp_frame_l _ _ (MkConf s δ) (fun v => match v with MkValConf _ v δ' => Q v δ' end) R). *)
-  (*   iFrame. *)
-  (*   by iApply "trips". *)
-  (* Qed. *)
-
-  (* Lemma iris_rule_pull {σ Γ} (δ : CStore Γ) (s : Stm Γ σ) *)
-  (*       (P : iProp Σ) (Q : Prop) (R : Val σ -> CStore Γ -> iProp Σ) : *)
-  (*       (⊢ (⌜ Q ⌝ → semTriple δ P s R) -∗ semTriple δ (P ∧ bi_pure Q) s R)%I. *)
-  (* Proof. *)
-  (*   iIntros "QP [P %]". *)
-  (*   by iApply "QP". *)
-  (* Qed. *)
-
-  (* Lemma iris_rule_exist {σ Γ} (δ : CStore Γ) *)
-  (*       (s : Stm Γ σ) {A : Type} {P : A -> iProp Σ} *)
-  (*       {Q :  Val σ -> CStore Γ -> iProp Σ} : *)
-  (*       ⊢ ((∀ x, semTriple δ (P x) s Q) -∗ semTriple δ (∃ x, P x) s Q)%I. *)
-  (* Proof. *)
-  (*   iIntros "trips Px". *)
-  (*   iDestruct "Px" as (x) "Px". *)
-  (*   by iApply "trips". *)
-  (* Qed. *)
-
-  (* Lemma iris_rule_noop {Γ σ} {δ : CStore Γ} *)
-  (*       {P} {Q : Val σ -> CStore Γ -> iProp Σ} {s : Stm Γ σ} : *)
-  (*   language.to_val (MkConf s δ) = None -> *)
-  (*   (forall {s' γ γ' μ μ' δ'}, ⟨ γ, μ, δ, s ⟩ ---> ⟨ γ', μ', δ', s' ⟩ -> *)
-  (*                           (γ' = γ) /\ (μ' = μ) /\ (δ' = δ) /\ *)
-  (*                           ((exists v, s' = stm_val _ v) \/ (exists msg, s' = stm_fail _ msg))) -> *)
-  (*   (∀ v, P ={⊤}=∗ Q v δ) -∗ *)
-  (*                semTriple δ P s Q. *)
-  (* Proof. *)
-  (*   iIntros (Hnv Hnoop) "HPQ HP". *)
-  (*   rewrite wp_unfold. *)
-  (*   unfold wp_pre. *)
-  (*   rewrite Hnv. cbn. *)
-  (*   iIntros (σ' ns ks1 ks nt) "Hregs". *)
-  (*   iMod (fupd_mask_subseteq empty) as "Hclose"; first set_solver. *)
-  (*   iModIntro. *)
-  (*   iSplitR; first done. *)
-  (*   iIntros (e2 σ'' efs) "%". *)
-  (*   dependent elimination H. *)
-  (*   destruct (Hnoop _ _ _ _ _ _ s0) as (-> & -> & -> & [[v ->]|[msg ->]]). *)
-  (*   - do 3 iModIntro. *)
-  (*     iMod "Hclose" as "_". *)
-  (*     iMod ("HPQ" with "HP") as "HQ". *)
-  (*     iModIntro. *)
-  (*     iFrame. *)
-  (*     iSplitL; trivial. *)
-  (*     now iApply wp_value. *)
-  (*   - do 3 iModIntro. *)
-  (*     iMod "Hclose" as "_". *)
-  (*     iModIntro. *)
-  (*     iFrame. *)
-  (*     iSplitL; trivial. *)
-  (*     now iApply wp_compat_fail. *)
-  (* Qed. *)
-
 End Soundness.
 
 Section Adequacy.
@@ -389,23 +313,6 @@ Module IrisInstanceWithContracts
   Definition LemmaSem : Prop :=
     forall (Δ : PCtx) (l : 𝑳 Δ),
       ValidLemma (LEnv l).
-
-  Ltac fold_semWP :=
-    first
-      [ progress
-          change_no_check
-          (wp MaybeStuck top
-              {| conf_stm := ?s; conf_store := ?δ |}
-              (fun v => ?POST (valconf_val v) (valconf_store v)))
-        with (semWP s POST δ)
-      | progress
-          change_no_check
-          (wp MaybeStuck top
-              {| conf_stm := ?s; conf_store := ?δ |}
-              ?POST)
-        with (semWP s (fun v δ' => POST (MkValConf _ v δ')) δ);
-        try (progress (cbn [valconf_val valconf_store]))
-      ].
 
   Definition semCall [Δ τ] (f : 𝑭 Δ τ) (args : CStore Δ) (Q : Val τ -> iProp Σ) :
     iProp Σ := ▷ CHeapSpecM.exec_call_inline semWP f args Q.

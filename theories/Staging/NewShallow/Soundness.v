@@ -63,9 +63,9 @@ Module Type Soundness
 
     Lemma call_contract_sound {Δ τ}
       (c : SepContract Δ τ) (δΔ : CStore Δ) (POST : Val τ -> L) :
-      CTriple δΔ (CPureSpecM.call_contract c δΔ POST) POST c.
+      CTriple (CPureSpecM.call_contract c δΔ POST) c δΔ POST.
     Proof.
-      destruct c as [Σe δe req result ens]. constructor.
+      unfold CTriple. destruct c as [Σe δe req result ens].
       now rewrite CPureSpecM.equiv_call_contract.
     Qed.
 
@@ -100,26 +100,21 @@ Module Type Soundness
         now apply rule_stm_block, IHs.
 
       - (* stm_assign *)
-        now apply rule_stm_assign_backwards, IHs.
+        now apply rule_stm_assign, IHs.
 
       - (* stm_call *)
         destruct (CEnv f) as [c|] eqn:Heq.
-        + apply rule_stm_call_backwards with c.
+        + apply rule_stm_call with c.
           assumption.
           now apply call_contract_sound.
-        + unfold eval_exps.
-          eapply rule_consequence_right.
-          apply rule_stm_call_inline.
+        + apply rule_stm_call_inline.
           apply rec_sound.
-          intros v δ; cbn.
-          rewrite lprop_float.
-          apply land_prop_left; now intros ->.
 
       - (* stm_call_frame *)
         now apply rule_stm_call_frame, IHs.
 
       - (* stm_foreign *)
-        apply rule_stm_foreign_backwards.
+        apply rule_stm_foreign.
         apply call_contract_sound.
 
       - (* stm_lemmak *)
@@ -129,14 +124,13 @@ Module Type Soundness
         apply IHs.
 
       - (* stm_if *)
-        apply rule_stm_if; apply rule_pull; intro Heval; rewrite Heval in *; auto.
+        apply rule_stm_if; intros ->; auto.
 
       - (* stm_seq *)
         eapply rule_stm_seq. apply IHs1. intros δ2. apply IHs2.
 
       - (* stm_assert *)
-        apply rule_stm_assert, rule_pull;
-          intro Heval; rewrite Heval.
+        apply rule_stm_assert; intro Heval.
         eapply rule_consequence_left. apply IHs.
         now apply lentails_apply, lprop_right.
 
@@ -146,21 +140,13 @@ Module Type Soundness
         apply ltrue_right.
 
       - (* stm_match_list *)
-        apply rule_stm_match_list; cbn; intros;
-          apply rule_pull; intro Heval; rewrite Heval.
-        + now apply IHs1.
-        + now apply IHs2.
+        apply rule_stm_match_list; cbn; intros * ->; auto.
 
       - (* stm_match_sum *)
-        apply rule_stm_match_sum; cbn; intros;
-          apply rule_pull; intro Heval; rewrite Heval.
-        + now apply IHs1.
-        + now apply IHs2.
+        apply rule_stm_match_sum; cbn; intros * ->; auto.
 
       - (* stm_match_prod *)
-        apply rule_stm_match_prod; cbn; intros;
-          apply rule_pull; intro Heval; rewrite Heval.
-        now apply IHs.
+        apply rule_stm_match_prod; cbn; intros * ->; auto.
 
       - (* stm_match_enum *)
         now apply rule_stm_match_enum, H.
@@ -169,9 +155,8 @@ Module Type Soundness
         now apply rule_stm_match_tuple, IHs.
 
       - (* stm_match_union *)
-        apply rule_stm_match_union; cbn; intros;
-          apply rule_pull; intro Heval; rewrite Heval, unionv_unfold_fold.
-        now apply H.
+        apply rule_stm_match_union; cbn; intros * ->.
+        now rewrite unionv_unfold_fold.
 
       - (* stm_match_record *)
         now apply rule_stm_match_record, IHs.
@@ -180,9 +165,8 @@ Module Type Soundness
         now apply rule_stm_match_bvec, H.
 
       - (* stm_match_bvec_split *)
-        apply rule_stm_match_bvec_split; cbn; intros;
-          apply rule_pull; intro Heval.
-        now rewrite Heval, bv.appView_app.
+        apply rule_stm_match_bvec_split; cbn; intros * ->.
+        now rewrite bv.appView_app.
 
       - (* stm_read_register *)
         apply rule_exist. intros v.

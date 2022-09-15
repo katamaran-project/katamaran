@@ -485,7 +485,7 @@ Section Loop.
         fold (semTriple env.nil (loop_pre' m Machine h i entries es' mpp mepc_v) (call loop) (fun _ _ => True)%I).
         iApply (@iris_rule_consequence _ _ _ _ _ _ (loop_pre' m Machine h i entries es' mpp mepc_v) _ _ _).
         3: {
-          iApply (iris_rule_stm_call_inline env.nil loop env.nil _ (fun _ => True%I)).
+          iApply (iris_rule_stm_call_inline env.nil loop env.nil _ (fun _ _ => True%I)).
           iApply valid_semTriple_loop'.
         }
         now iIntros.

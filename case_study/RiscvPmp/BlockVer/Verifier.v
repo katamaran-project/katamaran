@@ -694,7 +694,7 @@ Module BlockVerificationDerived2Sem.
     | cons inst insts => (interp_ptsto_instr a inst ∗ ptsto_instrs (a + 4) insts)%I
     | nil => True%I
     end.
-  Arguments ptsto_instrs {Σ H} a%Z_scope instrs%list_scope : simpl never.
+  (* Arguments ptsto_instrs {Σ H} a%Z_scope instrs%list_scope : simpl never. *)
 
   Lemma mono_exec_block_addr {instrs ainstr apc} : Monotonic' (exec_block_addr__c instrs ainstr apc).
   Proof.
@@ -747,23 +747,19 @@ Module BlockVerificationDerived2Sem.
         iApply "Hk"; now iFrame.
       }
       iIntros "(Hh & Hpc & Hnpc & Hinstr & Hinstrs) Hk".
-      iApply (iris_rule_stm_seq _ _ _ _ _ (fun _ _ => True%I) with "[] [Hk Hinstrs] [Hinstr Hpc Hh Hnpc]").
-      + iPoseProof Hverif2 as "Hverif2".
-        unfold semTripleOneInstrStep.
-        iApply (iris_rule_stm_call_inline env.nil RiscvPmpProgram.step env.nil with "Hverif2").
-      + iIntros (δ) "(([%an (Hnpc & Hpc & Hk2)] & Hinstr) & <-)".
-        iSpecialize ("Hk2" with "[Hpc Hnpc Hinstrs]").
-        iFrame. now iExists an.
-        iApply (wp_mono _ _ _ (fun v => True ∧ _)%I (fun v => True%I)).
-        all: cycle 1.
-        iApply (iris_rule_stm_call_inline env.nil RiscvPmpProgram.loop env.nil True%I (fun v => True%I) with "[Hk Hk2 Hinstr] [$]").
-        iIntros "_".
-        iApply "Hk2".
-        iIntros (an2) "(Hpc & Hnpc & Hinstrs & HPOST)".
-        iApply "Hk".
-        iFrame.
-        now iIntros.
-      + iFrame.
+      iApply semWP_seq.
+      iApply semWP_call_inline.
+      iPoseProof (Hverif2 with "[Hh Hnpc Hpc Hinstr]") as "Hverif2".
+      iFrame. iRevert "Hverif2".
+      iApply semWP_strong_mono. cbn.
+      iIntros (_ _) "([%an (Hnpc & Hpc & Hk2)] & Hinstr)".
+      iSpecialize ("Hk2" with "[Hpc Hnpc Hinstrs]").
+      iFrame. now iExists an.
+      iApply (semWP_call_inline loop).
+      iApply "Hk2".
+      iIntros (an2) "(Hpc & Hnpc & Hinstrs & HPOST)".
+      iApply "Hk".
+      iFrame.
   Qed.
 
   Definition semTripleBlock `{sailGS Σ} (PRE : Z -> iProp Σ) (instrs : list AST) (POST : Z -> Z -> iProp Σ) : iProp Σ :=
